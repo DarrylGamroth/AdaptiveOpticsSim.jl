@@ -40,6 +40,7 @@ export Source, SourceParams, wavelength
 export compute_psf!, ensure_psf_state!
 export ZernikeBasis, compute_zernike!, noll_to_nm
 export KolmogorovAtmosphere, KolmogorovParams, KolmogorovState
+export update_psd!, phase_screen_von_karman!
 export advance!, propagate!
 export DeformableMirror, DeformableMirrorParams, DeformableMirrorState, build_influence_functions!, apply!
 export ShackHartmann, ShackHartmannParams, ShackHartmannState, update_valid_mask!, measure!
