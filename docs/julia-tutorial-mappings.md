@@ -37,7 +37,8 @@ propagate!(ws, src, tel, cam)       # PSF image on detector
 
 Trait-based sensing mode switch (diffractive vs. geometric):
 ```julia
-sensing_mode(::ShackHartmann) = Geometric()
+wfs = ShackHartmann(tel; n_subap=20, mode=Geometric())
+# sensing_mode(wfs) returns Geometric() from the type parameter.
 ```
 
 ## Asterism and PSF Grid (from `tutorials/how_to_asterism.py`)

@@ -1,10 +1,9 @@
 using Statistics
 
-struct PyramidParams{T<:AbstractFloat,M<:SensingMode}
+struct PyramidParams{T<:AbstractFloat}
     n_subap::Int
     threshold::T
     modulation::T
-    mode::M
 end
 
 mutable struct PyramidState{T<:AbstractFloat,A<:AbstractMatrix{Bool},V<:AbstractVector{T}}
@@ -12,7 +11,7 @@ mutable struct PyramidState{T<:AbstractFloat,A<:AbstractMatrix{Bool},V<:Abstract
     slopes::V
 end
 
-struct PyramidWFS{P<:PyramidParams,S<:PyramidState} <: AbstractWFS
+struct PyramidWFS{M<:SensingMode,P<:PyramidParams,S<:PyramidState} <: AbstractWFS
     params::P
     state::S
 end
@@ -23,17 +22,17 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
     if tel.params.resolution % n_subap != 0
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     end
-    params = PyramidParams{T, typeof(mode)}(n_subap, T(threshold), T(modulation), mode)
+    params = PyramidParams{T}(n_subap, T(threshold), T(modulation))
     valid_mask = backend{Bool}(undef, n_subap, n_subap)
     slopes = backend{T}(undef, 2 * n_subap * n_subap)
     fill!(slopes, zero(T))
     state = PyramidState{T, typeof(valid_mask), typeof(slopes)}(valid_mask, slopes)
-    wfs = PyramidWFS(params, state)
+    wfs = PyramidWFS{typeof(mode), typeof(params), typeof(state)}(params, state)
     update_valid_mask!(wfs, tel)
     return wfs
 end
 
-sensing_mode(wfs::PyramidWFS) = wfs.params.mode
+sensing_mode(::PyramidWFS{M}) where {M} = M()
 
 function update_valid_mask!(wfs::PyramidWFS, tel::Telescope)
     n = tel.params.resolution
@@ -90,12 +89,12 @@ function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope)
     return measure!(Geometric(), wfs, tel)
 end
 
-function measure!(wfs::PyramidWFS, tel::Telescope, mode::SensingMode=sensing_mode(wfs))
-    return measure!(mode, wfs, tel)
+function measure!(wfs::PyramidWFS, tel::Telescope)
+    return measure!(sensing_mode(wfs), wfs, tel)
 end
 
-function measure!(wfs::PyramidWFS, tel::Telescope, src::AbstractSource, mode::SensingMode=sensing_mode(wfs))
-    slopes = measure!(mode, wfs, tel)
+function measure!(wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
+    slopes = measure!(sensing_mode(wfs), wfs, tel)
     if is_lgs(src)
         n_sub = wfs.params.n_subap
         factor = lgs_elongation_factor(src)

@@ -1,9 +1,8 @@
 using Statistics
 
-struct ShackHartmannParams{T<:AbstractFloat,M<:SensingMode}
+struct ShackHartmannParams{T<:AbstractFloat}
     n_subap::Int
     threshold::T
-    mode::M
 end
 
 mutable struct ShackHartmannState{T<:AbstractFloat,A<:AbstractMatrix{Bool},V<:AbstractVector{T}}
@@ -11,7 +10,7 @@ mutable struct ShackHartmannState{T<:AbstractFloat,A<:AbstractMatrix{Bool},V<:Ab
     slopes::V
 end
 
-struct ShackHartmann{P<:ShackHartmannParams,S<:ShackHartmannState} <: AbstractWFS
+struct ShackHartmann{M<:SensingMode,P<:ShackHartmannParams,S<:ShackHartmannState} <: AbstractWFS
     params::P
     state::S
 end
@@ -21,17 +20,17 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     if tel.params.resolution % n_subap != 0
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     end
-    params = ShackHartmannParams{T, typeof(mode)}(n_subap, T(threshold), mode)
+    params = ShackHartmannParams{T}(n_subap, T(threshold))
     valid_mask = backend{Bool}(undef, n_subap, n_subap)
     slopes = backend{T}(undef, 2 * n_subap * n_subap)
     fill!(slopes, zero(T))
     state = ShackHartmannState{T, typeof(valid_mask), typeof(slopes)}(valid_mask, slopes)
-    wfs = ShackHartmann(params, state)
+    wfs = ShackHartmann{typeof(mode), typeof(params), typeof(state)}(params, state)
     update_valid_mask!(wfs, tel)
     return wfs
 end
 
-sensing_mode(wfs::ShackHartmann) = wfs.params.mode
+sensing_mode(::ShackHartmann{M}) where {M} = M()
 
 function update_valid_mask!(wfs::ShackHartmann, tel::Telescope)
     n = tel.params.resolution
@@ -88,12 +87,12 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope)
     return measure!(Geometric(), wfs, tel)
 end
 
-function measure!(wfs::ShackHartmann, tel::Telescope, mode::SensingMode=sensing_mode(wfs))
-    return measure!(mode, wfs, tel)
+function measure!(wfs::ShackHartmann, tel::Telescope)
+    return measure!(sensing_mode(wfs), wfs, tel)
 end
 
-function measure!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource, mode::SensingMode=sensing_mode(wfs))
-    slopes = measure!(mode, wfs, tel)
+function measure!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
+    slopes = measure!(sensing_mode(wfs), wfs, tel)
     if is_lgs(src)
         n_sub = wfs.params.n_subap
         factor = lgs_elongation_factor(src)

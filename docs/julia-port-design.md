@@ -50,6 +50,9 @@ struct Diffractive <: SensingMode end
 struct Geometric  <: SensingMode end
 
 sensing_mode(::AbstractWFS) = Diffractive()
+
+# WFS types carry the sensing mode as a type parameter (e.g.,
+# `ShackHartmann{Geometric}`), not as a field.
 ```
 
 Example: `sense!(::Geometric, wfs, tel, ws)` uses gradients only; diffractive
