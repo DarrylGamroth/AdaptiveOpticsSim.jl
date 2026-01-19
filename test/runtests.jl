@@ -82,3 +82,14 @@ end
     @test size(frame) == (4, 4)
     @test sum(frame) == sum(psf)
 end
+
+@testset "Asterism PSF" begin
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src1 = Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0))
+    src2 = Source(band=:I, magnitude=0.0, coordinates=(1.0, 90.0))
+    ast = Asterism([src1, src2])
+    psf = compute_psf!(tel, ast; zero_padding=2)
+    @test length(tel.state.psf_list) == 2
+    @test size(psf) == (32, 32)
+    @test sum(psf) >= sum(tel.state.psf_list[1])
+end

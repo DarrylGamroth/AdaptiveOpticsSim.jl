@@ -27,6 +27,7 @@ include("Optics/psf.jl")
 include("Optics/zernike.jl")
 include("Optics/deformable_mirror.jl")
 include("Optics/detector.jl")
+include("Optics/asterism.jl")
 include("Atmosphere/kolmogorov.jl")
 include("WFS/shack_hartmann.jl")
 include("Calibration/interaction_matrix.jl")
@@ -39,6 +40,7 @@ export Workspace, ensure_psf_buffers!
 export bin2d, poisson_noise!, poisson_sample
 export Telescope, TelescopeParams, TelescopeState, generate_pupil!, reset_opd!, apply_opd!
 export Source, SourceParams, wavelength
+export Asterism, coordinates_xy_arcsec, compute_psf!, psf_pixel_scale_arcsec
 export compute_psf!, ensure_psf_state!
 export ZernikeBasis, compute_zernike!, noll_to_nm
 export KolmogorovAtmosphere, KolmogorovParams, KolmogorovState

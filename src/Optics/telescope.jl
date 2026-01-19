@@ -10,6 +10,7 @@ mutable struct TelescopeState{T, Aopd<:AbstractMatrix{T}, Apsf<:AbstractMatrix{T
     pupil::Amask
     opd::Aopd
     psf::Apsf
+    psf_list::Vector{Apsf}
 end
 
 struct Telescope{P<:TelescopeParams,S<:TelescopeState} <: AbstractOpticalElement
@@ -42,7 +43,7 @@ function Telescope(; resolution::Int,
     psf = backend{T}(undef, resolution, resolution)
     fill!(psf, zero(T))
 
-    state = TelescopeState{T, typeof(opd), typeof(psf), typeof(pupil)}(pupil, opd, psf)
+    state = TelescopeState{T, typeof(opd), typeof(psf), typeof(pupil)}(pupil, opd, psf, Vector{typeof(psf)}())
     return Telescope(params, state)
 end
 
