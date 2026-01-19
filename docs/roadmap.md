@@ -15,6 +15,50 @@
 - [x] P1: DM mis-registration (shift/rotation/anamorphosis) and custom influence functions.
 - [x] P1: Geometric WFS sensing mode (gradient-only) option.
 
+## OOPAO Feature Parity (Module-level)
+- [x] `Telescope.py` -> `src/Optics/telescope.jl`
+- [x] `Source.py` -> `src/Optics/source.jl`
+- [x] `Atmosphere.py` (basic phase screens, multi-layer) -> `src/Atmosphere/kolmogorov.jl`, `src/Atmosphere/multilayer.jl`
+- [x] `ShackHartmann.py` -> `src/WFS/shack_hartmann.jl`
+- [x] `Pyramid.py` -> `src/WFS/pyramid.jl`
+- [x] `BioEdge.py` -> `src/WFS/bioedge.jl`
+- [x] `DeformableMirror.py` -> `src/Optics/deformable_mirror.jl`
+- [x] `Detector.py` -> `src/Optics/detector.jl`
+- [x] `Asterism.py` -> `src/Optics/asterism.jl`
+- [x] `MisRegistration.py` -> `src/Optics/misregistration.jl`
+- [x] `Zernike.py` -> `src/Optics/zernike.jl`
+- [ ] `GainSensingCamera.py` -> not yet implemented
+- [ ] `LiFT.py` -> not yet implemented
+- [ ] `NCPA.py` -> not yet implemented
+- [ ] `OPD_map.py` -> not yet implemented
+- [ ] `phaseStats.py` -> not yet implemented
+- [ ] `SpatialFilter.py` -> not yet implemented
+- [ ] `SPRINT.py` -> not yet implemented
+- [ ] `calibration/ao_calibration.py` -> partial (interaction matrix + reconstructor)
+- [ ] `calibration/InteractionMatrix.py` -> partial (interaction matrix only)
+- [ ] `calibration/CalibrationVault.py` -> not yet implemented
+- [ ] `calibration/compute_KL_modal_basis.py` -> not yet implemented
+- [ ] `calibration/get_modal_basis.py` -> not yet implemented
+- [ ] `calibration/getFittingError.py` -> not yet implemented
+- [ ] `calibration/get_fast_atmosphere.py` -> not yet implemented
+- [ ] `calibration/initialization_AO.py` -> not yet implemented
+- [ ] `calibration/initialization_AO_PWFS.py` -> not yet implemented
+- [ ] `calibration/initialization_AO_SHWFS.py` -> not yet implemented
+- [ ] `closed_loop/run_cl.py` -> not yet implemented
+- [ ] `closed_loop/run_cl_first_stage.py` -> not yet implemented
+- [ ] `closed_loop/run_cl_from_phase_screens.py` -> not yet implemented
+- [ ] `closed_loop/run_cl_long_push_pull.py` -> not yet implemented
+- [ ] `closed_loop/run_cl_sinusoidal_modulation.py` -> not yet implemented
+- [ ] `closed_loop/run_cl_two_stages.py` -> not yet implemented
+- [ ] `closed_loop/run_cl_two_stages_atm_change.py` -> not yet implemented
+- [ ] `mis_registration_identification_algorithm/*` -> not yet implemented
+- [ ] `tools/displayTools.py` -> not yet implemented
+- [ ] `tools/OopaoGUI.py` -> not yet implemented
+- [ ] `tools/interpolateGeometricalTransformation.py` -> not yet implemented
+- [ ] `tools/interpolate_influence_functions.py` -> not yet implemented
+- [ ] `tools/set_paralleling_setup.py` -> not yet implemented
+- [ ] `tools/tools.py` -> not yet implemented
+
 ## Phase 0: Setup
 - Create package skeleton and CI with Julia versions.
 - Define core interfaces, traits, and basic error types.
