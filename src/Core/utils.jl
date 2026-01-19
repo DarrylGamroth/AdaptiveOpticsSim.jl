@@ -32,6 +32,52 @@ function bin2d(input::AbstractMatrix, binning::Int)
     return out
 end
 
+function bin2d!(out::AbstractMatrix, input::AbstractMatrix, binning::Int)
+    if binning < 1
+        throw(InvalidConfiguration("binning must be >= 1"))
+    end
+    if binning == 1
+        if size(out) != size(input)
+            throw(DimensionMismatchError("output size must match input when binning=1"))
+        end
+        out .= input
+        return out
+    end
+    n, m = size(input)
+    n_out = div(n, binning)
+    m_out = div(m, binning)
+    if size(out) != (n_out, m_out)
+        throw(DimensionMismatchError("output size does not match binned dimensions"))
+    end
+    @inbounds for i in 1:n_out, j in 1:m_out
+        acc = zero(eltype(out))
+        for ii in 1:binning, jj in 1:binning
+            acc += input[(i - 1) * binning + ii, (j - 1) * binning + jj]
+        end
+        out[i, j] = acc
+    end
+    return out
+end
+
+function fftfreq!(dest::AbstractVector, n::Int; d::Real=1, offset::Real=0)
+    if length(dest) != n
+        throw(DimensionMismatchError("fftfreq! destination length must match n"))
+    end
+    val = 1 / (n * d)
+    @inbounds for i in 1:n
+        k = i - 1
+        if k <= n ÷ 2
+            dest[i] = k * val
+        else
+            dest[i] = (k - n) * val
+        end
+    end
+    if offset != 0
+        dest .+= offset
+    end
+    return dest
+end
+
 function poisson_sample(rng::AbstractRNG, λ::Real)
     if λ <= 0
         return 0

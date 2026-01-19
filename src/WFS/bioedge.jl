@@ -1,9 +1,9 @@
 using Statistics
 
-struct BioEdgeParams{T<:AbstractFloat}
+struct BioEdgeParams{T<:AbstractFloat,M<:SensingMode}
     n_subap::Int
     threshold::T
-    mode::SensingMode
+    mode::M
 end
 
 mutable struct BioEdgeState{T<:AbstractFloat,A<:AbstractMatrix{Bool},V<:AbstractVector{T}}
@@ -23,7 +23,7 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     if tel.params.resolution % n_subap != 0
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     end
-    params = BioEdgeParams{T}(n_subap, T(threshold), mode)
+    params = BioEdgeParams{T, typeof(mode)}(n_subap, T(threshold), mode)
     valid_mask = backend{Bool}(undef, n_subap, n_subap)
     edge_mask = backend{Bool}(undef, size(tel.state.pupil))
     slopes = backend{T}(undef, 2 * n_subap * n_subap)
@@ -89,17 +89,15 @@ function measure!(mode::Geometric, wfs::BioEdgeWFS, tel::Telescope)
             sy = 0.0
             count_x = 0
             count_y = 0
-            @views subap = tel.state.opd[xs:xe, ys:ye]
-            @views edge = wfs.state.edge_mask[xs:xe, ys:ye]
-            for x in 1:(size(subap, 1) - 1), y in 1:size(subap, 2)
-                if edge[x, y]
-                    sx += subap[x + 1, y] - subap[x, y]
+            for x in xs:(xe - 1), y in ys:ye
+                if wfs.state.edge_mask[x, y]
+                    sx += tel.state.opd[x + 1, y] - tel.state.opd[x, y]
                     count_x += 1
                 end
             end
-            for x in 1:size(subap, 1), y in 1:(size(subap, 2) - 1)
-                if edge[x, y]
-                    sy += subap[x, y + 1] - subap[x, y]
+            for x in xs:xe, y in ys:(ye - 1)
+                if wfs.state.edge_mask[x, y]
+                    sy += tel.state.opd[x, y + 1] - tel.state.opd[x, y]
                     count_y += 1
                 end
             end
@@ -118,11 +116,11 @@ function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope)
     return measure!(Geometric(), wfs, tel)
 end
 
-function measure!(wfs::BioEdgeWFS, tel::Telescope; mode::SensingMode=sensing_mode(wfs))
+function measure!(wfs::BioEdgeWFS, tel::Telescope, mode::SensingMode=sensing_mode(wfs))
     return measure!(mode, wfs, tel)
 end
 
-function measure!(wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource; mode::SensingMode=sensing_mode(wfs))
+function measure!(wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource, mode::SensingMode=sensing_mode(wfs))
     slopes = measure!(mode, wfs, tel)
     if is_lgs(src)
         n_sub = wfs.params.n_subap

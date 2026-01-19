@@ -6,13 +6,14 @@ struct KolmogorovParams{T<:AbstractFloat}
     L0::T
 end
 
-mutable struct KolmogorovState{T<:AbstractFloat,A<:AbstractMatrix{T},B<:AbstractMatrix{Complex{T}},V<:AbstractVector{T}}
+mutable struct KolmogorovState{T<:AbstractFloat,A<:AbstractMatrix{T},B<:AbstractMatrix{Complex{T}},V<:AbstractVector{T},P}
     opd::A
     psd::A
     spectrum::B
     noise_re::A
     noise_im::A
     freqs::V
+    ifft_plan::P
     last_delta::T
     last_r0::T
     last_L0::T
@@ -32,16 +33,18 @@ function KolmogorovAtmosphere(tel::Telescope; r0::Real, L0::Real=25.0, T::Type{<
     noise_re = backend{T}(undef, n, n)
     noise_im = backend{T}(undef, n, n)
     freqs = backend{T}(undef, n)
+    ifft_plan = FFTW.plan_ifft!(spectrum)
     fill!(opd, zero(T))
     fill!(psd, zero(T))
     fill!(spectrum, zero(eltype(spectrum)))
-    state = KolmogorovState{T, typeof(opd), typeof(spectrum), typeof(freqs)}(
+    state = KolmogorovState{T, typeof(opd), typeof(spectrum), typeof(freqs), typeof(ifft_plan)}(
         opd,
         psd,
         spectrum,
         noise_re,
         noise_im,
         freqs,
+        ifft_plan,
         T(-1),
         T(-1),
         T(-1),
@@ -52,8 +55,8 @@ end
 function update_psd!(atm::KolmogorovAtmosphere, delta::Real)
     n = size(atm.state.opd, 1)
     T = eltype(atm.state.opd)
-    freqs = FFTW.fftfreq(n, delta)
-    atm.state.freqs .= freqs
+    fftfreq!(atm.state.freqs, n; d=delta)
+    freqs = atm.state.freqs
 
     r0 = atm.params.r0
     L0 = atm.params.L0
@@ -75,12 +78,16 @@ function ensure_psd!(atm::KolmogorovAtmosphere, delta::Real)
     return atm
 end
 
-function advance!(atm::KolmogorovAtmosphere, tel::Telescope; rng::AbstractRNG=Random.default_rng())
+function advance!(atm::KolmogorovAtmosphere, tel::Telescope, rng::AbstractRNG)
     n = tel.params.resolution
     delta = tel.params.diameter / n
     ensure_psd!(atm, delta)
     phase_screen_von_karman!(atm.state.opd, atm, delta, rng)
     return atm
+end
+
+function advance!(atm::KolmogorovAtmosphere, tel::Telescope; rng::AbstractRNG=Random.default_rng())
+    return advance!(atm, tel, rng)
 end
 
 function phase_screen_von_karman!(out::AbstractMatrix, atm::KolmogorovAtmosphere, delta::Real, rng::AbstractRNG)
@@ -91,7 +98,7 @@ function phase_screen_von_karman!(out::AbstractMatrix, atm::KolmogorovAtmosphere
     randn!(rng, atm.state.noise_re)
     randn!(rng, atm.state.noise_im)
     @. atm.state.spectrum = complex(atm.state.noise_re, atm.state.noise_im) * sqrt(atm.state.psd)
-    FFTW.ifft!(atm.state.spectrum)
+    mul!(atm.state.spectrum, atm.state.ifft_plan, atm.state.spectrum)
     @inbounds for i in 1:n, j in 1:n
         out[i, j] = real(atm.state.spectrum[i, j]) * (n * delta)
     end

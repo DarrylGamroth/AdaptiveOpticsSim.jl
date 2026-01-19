@@ -8,6 +8,7 @@ end
 
 mutable struct MultiLayerState{T<:AbstractFloat,A<:AbstractMatrix{T}}
     opd::A
+    shift_buffer::A
 end
 
 struct MultiLayerAtmosphere{P<:MultiLayerParams,S<:MultiLayerState} <: AbstractAtmosphere
@@ -46,13 +47,15 @@ function MultiLayerAtmosphere(tel::Telescope;
     end
 
     opd = backend{T}(undef, tel.params.resolution, tel.params.resolution)
+    shift_buffer = backend{T}(undef, tel.params.resolution, tel.params.resolution)
     fill!(opd, zero(T))
-    state = MultiLayerState{T, typeof(opd)}(opd)
+    fill!(shift_buffer, zero(T))
+    state = MultiLayerState{T, typeof(opd)}(opd, shift_buffer)
 
     return MultiLayerAtmosphere(params, layers, state)
 end
 
-function advance!(atm::MultiLayerAtmosphere, tel::Telescope; rng::AbstractRNG=Random.default_rng())
+function advance!(atm::MultiLayerAtmosphere, tel::Telescope, rng::AbstractRNG)
     n = tel.params.resolution
     delta = tel.params.diameter / n
     dt = tel.params.sampling_time
@@ -60,14 +63,18 @@ function advance!(atm::MultiLayerAtmosphere, tel::Telescope; rng::AbstractRNG=Ra
     fill!(atm.state.opd, zero(eltype(atm.state.opd)))
 
     for (i, layer) in enumerate(atm.layers)
-        advance!(layer, tel; rng=rng)
+        advance!(layer, tel, rng)
         dx = atm.params.wind_speed[i] * cosd(atm.params.wind_direction[i]) * dt / delta
         dy = atm.params.wind_speed[i] * sind(atm.params.wind_direction[i]) * dt / delta
-        shifted = circshift(layer.state.opd, (round(Int, dy), round(Int, dx)))
-        atm.state.opd .+= shifted
+        circshift!(atm.state.shift_buffer, layer.state.opd, (round(Int, dy), round(Int, dx)))
+        atm.state.opd .+= atm.state.shift_buffer
     end
 
     return atm
+end
+
+function advance!(atm::MultiLayerAtmosphere, tel::Telescope; rng::AbstractRNG=Random.default_rng())
+    return advance!(atm, tel, rng)
 end
 
 function propagate!(atm::MultiLayerAtmosphere, tel::Telescope)
