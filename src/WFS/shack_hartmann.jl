@@ -92,11 +92,13 @@ function measure!(wfs::ShackHartmann, tel::Telescope)
 end
 
 function measure!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
+    return measure!(sensing_mode(wfs), wfs, tel)
+end
+
+function measure!(wfs::ShackHartmann, tel::Telescope, src::LGSSource)
     slopes = measure!(sensing_mode(wfs), wfs, tel)
-    if is_lgs(src)
-        n_sub = wfs.params.n_subap
-        factor = lgs_elongation_factor(src)
-        @views slopes[n_sub * n_sub + 1:end] .*= factor
-    end
+    n_sub = wfs.params.n_subap
+    factor = lgs_elongation_factor(src)
+    @views slopes[n_sub * n_sub + 1:end] .*= factor
     return slopes
 end

@@ -64,6 +64,8 @@ export ModalReconstructor, reconstruct!, reconstruct
 export AbstractController, DiscreteIntegratorController, update!
 export AbstractOpticalElement, AbstractSource, AbstractAtmosphere, AbstractWFS
 export AbstractDetector, AbstractDeformableMirror, SensingMode, Diffractive, Geometric
+export NoiseModel, NoiseNone, NoisePhoton, NoiseReadout, NoisePhotonReadout
+export DMApplyMode, DMAdditive, DMReplace
 export ParallelConfig, with_parallel_config
 
 end # module AdaptiveOptics

@@ -57,13 +57,20 @@ function build_influence_functions!(dm::DeformableMirror, tel::Telescope)
     return dm
 end
 
-function apply!(dm::DeformableMirror, tel::Telescope; additive::Bool=true)
+function apply!(dm::DeformableMirror, tel::Telescope, ::DMAdditive)
     opd_vec = reshape(dm.state.opd, :)
     mul!(opd_vec, dm.state.modes, dm.state.coefs)
-    if additive
-        tel.state.opd .+= dm.state.opd
-    else
-        tel.state.opd .= dm.state.opd
-    end
+    tel.state.opd .+= dm.state.opd
     return tel
+end
+
+function apply!(dm::DeformableMirror, tel::Telescope, ::DMReplace)
+    opd_vec = reshape(dm.state.opd, :)
+    mul!(opd_vec, dm.state.modes, dm.state.coefs)
+    tel.state.opd .= dm.state.opd
+    return tel
+end
+
+function apply!(dm::DeformableMirror, tel::Telescope; additive::Bool=true)
+    return additive ? apply!(dm, tel, DMAdditive()) : apply!(dm, tel, DMReplace())
 end

@@ -2,7 +2,6 @@ using Random
 
 struct DetectorParams{T<:AbstractFloat}
     integration_time::T
-    photon_noise::Bool
     readout_noise::T
     qe::T
     psf_sampling::Int
@@ -15,7 +14,7 @@ mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T}}
     noise_buffer::A
 end
 
-struct Detector{P<:DetectorParams,S<:DetectorState} <: AbstractDetector
+struct Detector{N<:NoiseModel,P<:DetectorParams,S<:DetectorState} <: AbstractDetector
     params::P
     state::S
 end
@@ -23,7 +22,7 @@ end
 function Detector(; integration_time::Real=1.0, photon_noise::Bool=true, readout_noise::Real=0.0,
     qe::Real=1.0, psf_sampling::Int=1, binning::Int=1, T::Type{<:AbstractFloat}=Float64, backend=Array)
 
-    params = DetectorParams{T}(T(integration_time), photon_noise, T(readout_noise), T(qe), psf_sampling, binning)
+    params = DetectorParams{T}(T(integration_time), T(readout_noise), T(qe), psf_sampling, binning)
     frame = backend{T}(undef, 1, 1)
     bin_buffer = backend{T}(undef, 1, 1)
     noise_buffer = backend{T}(undef, 1, 1)
@@ -31,10 +30,12 @@ function Detector(; integration_time::Real=1.0, photon_noise::Bool=true, readout
     fill!(bin_buffer, zero(T))
     fill!(noise_buffer, zero(T))
     state = DetectorState{T, typeof(frame)}(frame, bin_buffer, noise_buffer)
-    return Detector(params, state)
+    N = photon_noise ? (readout_noise > 0 ? NoisePhotonReadout : NoisePhoton) :
+        (readout_noise > 0 ? NoiseReadout : NoiseNone)
+    return Detector{N, typeof(params), typeof(state)}(params, state)
 end
 
-function capture!(det::Detector, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
+function fill_frame!(det::Detector, psf::AbstractMatrix{T}) where {T}
     n_in, m_in = size(psf)
     if det.params.binning > 1
         n_out = div(n_in, det.params.binning)
@@ -46,16 +47,32 @@ function capture!(det::Detector, psf::AbstractMatrix{T}, rng::AbstractRNG) where
         ensure_buffers!(det, n_in, m_in, n_in, m_in)
         @. det.state.frame = psf * det.params.qe * det.params.integration_time
     end
+    return det.state.frame
+end
 
-    if det.params.photon_noise
-        poisson_noise!(rng, det.state.frame)
-    end
+function capture!(det::Detector{NoiseNone}, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
+    fill_frame!(det, psf)
+    return det.state.frame
+end
 
-    if det.params.readout_noise > 0
-        randn!(rng, det.state.noise_buffer)
-        det.state.frame .+= det.params.readout_noise .* det.state.noise_buffer
-    end
+function capture!(det::Detector{NoisePhoton}, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
+    fill_frame!(det, psf)
+    poisson_noise!(rng, det.state.frame)
+    return det.state.frame
+end
 
+function capture!(det::Detector{NoiseReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
+    fill_frame!(det, psf)
+    randn!(rng, det.state.noise_buffer)
+    det.state.frame .+= det.params.readout_noise .* det.state.noise_buffer
+    return det.state.frame
+end
+
+function capture!(det::Detector{NoisePhotonReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
+    fill_frame!(det, psf)
+    poisson_noise!(rng, det.state.frame)
+    randn!(rng, det.state.noise_buffer)
+    det.state.frame .+= det.params.readout_noise .* det.state.noise_buffer
     return det.state.frame
 end
 
