@@ -57,8 +57,8 @@ ws = Workspace(tel; rng=MersenneTwister(0x1234))
 - Optionally persist the phase screen sequence to disk (HDF5/FITS) for replay.
 
 ## Noise models
-- `Detector` and `WFS` noise use the shared RNG.
-- Support `noise=:none` for deterministic baselines.
+- `Detector` noise uses the shared RNG and the noise model trait.
+- Deterministic baseline: `Detector(photon_noise=false, readout_noise=0.0)` creates `Detector{NoiseNone}`.
 
 ## Testing approach
 - Unit test: two runs with identical seed produce equal PSF arrays.

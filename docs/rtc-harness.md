@@ -17,7 +17,8 @@ sensor telemetry in real time (or accelerated time) for validation.
 ```julia
 while running
     cmd = read_command!(adapter, t_now)
-    apply!(dm, cmd)
+    dm.state.coefs .= cmd
+    apply!(dm, tel, DMReplace())
     advance!(atm, tel)
     propagate!(ws, ngs, atm, tel, dm, wfs)
     telemetry = pack_telemetry(wfs, tel, t_now)

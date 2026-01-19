@@ -25,11 +25,12 @@ atm = KolmogorovAtmosphere(tel; r0=0.15, L0=25.0,
 initialize!(atm, tel)
 advance!(atm, tel)
 
-wfs = ShackHartmann(n_subap=20, sampling=:shannon, photon_noise=true)
+wfs = ShackHartmann(tel; n_subap=20, mode=Geometric())
 cam = Detector(integration_time=tel.params.sampling_time, photon_noise=true,
-               readout_noise=0.0, qe=1.0, psf_sampling=2, binning=1)
+               readout_noise=0.5, qe=1.0, psf_sampling=2, binning=1)
+# Detector noise model is encoded in the type: Detector{NoisePhotonReadout, ...}
 
-ws = Workspace(tel)
+ws = Workspace(tel.params.resolution)
 
 propagate!(ws, ngs, atm, tel, wfs)  # slopes, valid mask, spot cubes
 propagate!(ws, src, tel, cam)       # PSF image on detector
@@ -52,7 +53,7 @@ for x in range(-6.0, 6.0; length=5), y in range(-6.0, 6.0; length=5)
 end
 
 ast = Asterism(sources)
-dm = DeformableMirror(tel; n_subap=20)
+dm = DeformableMirror(tel; n_act=20)
 
 propagate!(ws, ast, atm, tel, dm, cam)
 
@@ -90,7 +91,8 @@ for k in 1:n_iter
     advance!(atm, tel)
     propagate!(ws, ngs, atm, tel, wfs)
     dm_command = reconstruct!(recon, wfs.slopes)
-    apply!(dm, dm_command)
+    dm.state.coefs .= dm_command
+    apply!(dm, tel, DMAdditive())
     propagate!(ws, ngs, atm, tel, dm, cam)
 end
 ```
@@ -107,7 +109,8 @@ for k in 1:n_iter
     advance!(atm, tel)
     propagate!(ws, ngs, atm, tel, wfs)
     dm_command = reconstruct!(recon, wfs.slopes)
-    apply!(dm, dm_command)
+    dm.state.coefs .= dm_command
+    apply!(dm, tel, DMAdditive())
     @debug "Loop step complete" iter=k wfe_rms=compute_wfe(tel)
 end
 @info "AO loop complete"

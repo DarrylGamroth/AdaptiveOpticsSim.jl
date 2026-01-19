@@ -53,10 +53,25 @@ sensing_mode(::AbstractWFS) = Diffractive()
 
 # WFS types carry the sensing mode as a type parameter (e.g.,
 # `ShackHartmann{Geometric}`), not as a field.
+
+abstract type NoiseModel end
+struct NoiseNone <: NoiseModel end
+struct NoisePhoton <: NoiseModel end
+struct NoiseReadout <: NoiseModel end
+struct NoisePhotonReadout <: NoiseModel end
+
+abstract type DMApplyMode end
+struct DMAdditive <: DMApplyMode end
+struct DMReplace <: DMApplyMode end
 ```
 
 Example: `sense!(::Geometric, wfs, tel, ws)` uses gradients only; diffractive
 uses a propagated intensity model.
+
+Noise and apply-mode logic follow the same pattern:
+- `Detector{NoiseNone}`/`Detector{NoisePhoton}`/... are set by the constructor.
+- `apply!(dm, tel, DMAdditive())` and `apply!(dm, tel, DMReplace())` dispatch
+  without runtime conditionals.
 
 ## Dataflow and propagation
 Pipeline modeled as explicit functions on an `OpticalChain` or direct calls.
