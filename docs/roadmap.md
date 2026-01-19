@@ -80,12 +80,18 @@
 - Add a fast-path config/trait layer that explicitly opts into simplified models for speed, leaving high-fidelity models as opt-in (`src/Core/parallel.jl`, `src/Core/types.jl`) [E:low, R:low].
 
 ## Reference Packages and Candidate Algorithms
-- OOMAO (MATLAB): KL basis from HHt/PSD, slope covariance modeling, LQG/predictive control, tomographic reconstructor design.
-- Soapy (Python): end-to-end AO loop patterns, multi-WFS/DM configurations, turbulence propagation variants.
-- COMPASS (C/Fortran): GPU-accelerated AO pipeline patterns, advanced tomography, predictive control.
-- MAOS (C): LGS cone-effect modeling, multi-DM MCAO/MOAO workflows, Monte-Carlo validation.
-- PASSATA / YAO (IDL): multi-object AO workflows, WFS/DM trade studies, reconstructor variants.
-- HCIPy / POPPY / PROPER (Python): wave-optics propagation, coronagraph/PSF modeling, diffractive WFS baselines.
+- OOMAO (MATLAB): maps to KL basis from HHt/PSD, slope covariance, LQG/predictive control, and tomography upgrades.
+- Soapy (Python): maps to diffractive WFS propagation, LGS modeling variants, and full end-to-end loop structure.
+- COMPASS (C/Fortran): maps to GPU-oriented diffractive WFS and tomography pipelines, plus predictive control.
+- MAOS (C): maps to LGS elongation/cone-effect modeling and multi-DM MCAO/MOAO workflows.
+- PASSATA / YAO (IDL): maps to reconstructor variants and multi-object AO workflows.
+- HCIPy / POPPY / PROPER (Python): maps to diffractive WFS propagation, PSF/coronagraph modeling.
+
+## Suggested Near-Term Priorities
+- Implement diffractive WFS propagation with planned FFTs (largest fidelity jump).
+- Add sub-harmonic augmentation to phase screens (improves low-frequency statistics).
+- Replace LGS slope scaling with elongated PSF modeling (better LGS realism).
+- Add KL basis from HHt/PSD (better modal basis fidelity).
 
 ## Phase 0: Setup
 - Create package skeleton and CI with Julia versions.
