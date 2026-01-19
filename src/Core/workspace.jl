@@ -14,7 +14,7 @@ function Workspace(n::Int; T=Float64, backend=Array, rng=MersenneTwister(0))
     return Workspace(rng, pupil_field, fft_buffer, psf_buffer)
 end
 
-function Workspace(ref::AbstractArray, n::Int; T=real(eltype(ref)), rng=MersenneTwister(0))
+function Workspace(ref::AbstractArray{S}, n::Int; T::Type{<:Real}=real(S), rng=MersenneTwister(0)) where {S}
     pupil_field = similar(ref, Complex{T}, n, n)
     fft_buffer = similar(pupil_field)
     psf_buffer = similar(ref, T, n, n)
