@@ -28,6 +28,9 @@ include("Optics/zernike.jl")
 include("Optics/deformable_mirror.jl")
 include("Atmosphere/kolmogorov.jl")
 include("WFS/shack_hartmann.jl")
+include("Calibration/interaction_matrix.jl")
+include("Calibration/reconstructor.jl")
+include("Control/controller.jl")
 
 export PROJECT_STATUS
 export AdaptiveOpticsError, InvalidConfiguration, DimensionMismatchError
@@ -40,6 +43,9 @@ export KolmogorovAtmosphere, KolmogorovParams, KolmogorovState
 export advance!, propagate!
 export DeformableMirror, DeformableMirrorParams, DeformableMirrorState, build_influence_functions!, apply!
 export ShackHartmann, ShackHartmannParams, ShackHartmannState, update_valid_mask!, measure!
+export InteractionMatrix, interaction_matrix
+export ModalReconstructor, reconstruct!, reconstruct
+export AbstractController, DiscreteIntegratorController, update!
 export AbstractOpticalElement, AbstractSource, AbstractAtmosphere, AbstractWFS
 export AbstractDetector, AbstractDeformableMirror, SensingMode, Diffractive, Geometric
 export ParallelConfig, with_parallel_config

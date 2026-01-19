@@ -48,3 +48,19 @@ end
     @test length(slopes) == 2 * 4 * 4
     @test maximum(slopes) > 0
 end
+
+@testset "Calibration and control" begin
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
+    wfs = ShackHartmann(tel; n_subap=2)
+    imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
+    @test size(imat.matrix) == (length(wfs.state.slopes), length(dm.state.coefs))
+
+    recon = ModalReconstructor(imat; gain=1.0)
+    cmd = reconstruct(recon, wfs.state.slopes)
+    @test length(cmd) == length(dm.state.coefs)
+
+    ctrl = DiscreteIntegratorController(length(wfs.state.slopes); gain=0.1, tau=0.02)
+    dm_cmd = update!(ctrl, wfs.state.slopes, 0.01)
+    @test length(dm_cmd) == length(wfs.state.slopes)
+end
