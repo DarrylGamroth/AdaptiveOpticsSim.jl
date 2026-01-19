@@ -58,7 +58,7 @@ ws = Workspace(tel; rng=MersenneTwister(0x1234))
 
 ## Noise models
 - `Detector` noise uses the shared RNG and the noise model trait.
-- Deterministic baseline: `Detector(photon_noise=false, readout_noise=0.0)` creates `Detector{NoiseNone}`.
+- Deterministic baseline: `Detector(noise=NoiseNone())` creates `Detector{NoiseNone}`.
 
 ## Testing approach
 - Unit test: two runs with identical seed produce equal PSF arrays.

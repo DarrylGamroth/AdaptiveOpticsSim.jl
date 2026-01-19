@@ -93,7 +93,7 @@ end
 
 @testset "Detector" begin
     psf = fill(1.0, 8, 8)
-    det = Detector(integration_time=1.0, photon_noise=false, readout_noise=0.0, qe=1.0, binning=2)
+    det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=2)
     frame = capture!(det, psf; rng=MersenneTwister(2))
     @test size(frame) == (4, 4)
     @test sum(frame) == sum(psf)

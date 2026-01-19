@@ -26,9 +26,9 @@ initialize!(atm, tel)
 advance!(atm, tel)
 
 wfs = ShackHartmann(tel; n_subap=20, mode=Geometric())
-cam = Detector(integration_time=tel.params.sampling_time, photon_noise=true,
+cam = Detector(integration_time=tel.params.sampling_time, noise=NoisePhotonReadout(),
                readout_noise=0.5, qe=1.0, psf_sampling=2, binning=1)
-# Detector noise model is encoded in the type: Detector{NoisePhotonReadout, ...}
+# Detector noise model is encoded in the type via the `noise` parameter.
 
 ws = Workspace(tel.params.resolution)
 

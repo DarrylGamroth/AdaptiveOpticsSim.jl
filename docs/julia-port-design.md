@@ -69,7 +69,7 @@ Example: `sense!(::Geometric, wfs, tel, ws)` uses gradients only; diffractive
 uses a propagated intensity model.
 
 Noise and apply-mode logic follow the same pattern:
-- `Detector{NoiseNone}`/`Detector{NoisePhoton}`/... are set by the constructor.
+- `Detector{NoiseNone}`/`Detector{NoisePhoton}`/... are set by the `noise=` argument.
 - `apply!(dm, tel, DMAdditive())` and `apply!(dm, tel, DMReplace())` dispatch
   without runtime conditionals.
 

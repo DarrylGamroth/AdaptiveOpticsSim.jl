@@ -19,9 +19,8 @@ struct Detector{N<:NoiseModel,P<:DetectorParams,S<:DetectorState} <: AbstractDet
     state::S
 end
 
-function Detector(; integration_time::Real=1.0, photon_noise::Bool=true, readout_noise::Real=0.0,
-    qe::Real=1.0, psf_sampling::Int=1, binning::Int=1, T::Type{<:AbstractFloat}=Float64, backend=Array)
-
+function _build_detector(noise::NoiseModel; integration_time::Real, readout_noise::Real, qe::Real,
+    psf_sampling::Int, binning::Int, T::Type{<:AbstractFloat}, backend)
     params = DetectorParams{T}(T(integration_time), T(readout_noise), T(qe), psf_sampling, binning)
     frame = backend{T}(undef, 1, 1)
     bin_buffer = backend{T}(undef, 1, 1)
@@ -30,9 +29,50 @@ function Detector(; integration_time::Real=1.0, photon_noise::Bool=true, readout
     fill!(bin_buffer, zero(T))
     fill!(noise_buffer, zero(T))
     state = DetectorState{T, typeof(frame)}(frame, bin_buffer, noise_buffer)
-    N = photon_noise ? (readout_noise > 0 ? NoisePhotonReadout : NoisePhoton) :
-        (readout_noise > 0 ? NoiseReadout : NoiseNone)
-    return Detector{N, typeof(params), typeof(state)}(params, state)
+    return Detector{typeof(noise), typeof(params), typeof(state)}(params, state)
+end
+
+function Detector(; integration_time::Real=1.0, readout_noise::Real=0.0, qe::Real=1.0,
+    psf_sampling::Int=1, binning::Int=1, noise::NoiseModel=NoisePhoton(),
+    T::Type{<:AbstractFloat}=Float64, backend=Array)
+    return Detector(noise; integration_time=integration_time, readout_noise=readout_noise, qe=qe,
+        psf_sampling=psf_sampling, binning=binning, T=T, backend=backend)
+end
+
+function Detector(::NoiseNone; integration_time::Real=1.0, readout_noise::Real=0.0, qe::Real=1.0,
+    psf_sampling::Int=1, binning::Int=1, T::Type{<:AbstractFloat}=Float64, backend=Array)
+    if readout_noise != 0
+        throw(InvalidConfiguration("readout_noise must be 0 for NoiseNone"))
+    end
+    return _build_detector(NoiseNone(); integration_time=integration_time, readout_noise=readout_noise, qe=qe,
+        psf_sampling=psf_sampling, binning=binning, T=T, backend=backend)
+end
+
+function Detector(::NoisePhoton; integration_time::Real=1.0, readout_noise::Real=0.0, qe::Real=1.0,
+    psf_sampling::Int=1, binning::Int=1, T::Type{<:AbstractFloat}=Float64, backend=Array)
+    if readout_noise != 0
+        throw(InvalidConfiguration("readout_noise must be 0 for NoisePhoton"))
+    end
+    return _build_detector(NoisePhoton(); integration_time=integration_time, readout_noise=readout_noise, qe=qe,
+        psf_sampling=psf_sampling, binning=binning, T=T, backend=backend)
+end
+
+function Detector(::NoiseReadout; integration_time::Real=1.0, readout_noise::Real=0.0, qe::Real=1.0,
+    psf_sampling::Int=1, binning::Int=1, T::Type{<:AbstractFloat}=Float64, backend=Array)
+    if readout_noise <= 0
+        throw(InvalidConfiguration("readout_noise must be > 0 for NoiseReadout"))
+    end
+    return _build_detector(NoiseReadout(); integration_time=integration_time, readout_noise=readout_noise, qe=qe,
+        psf_sampling=psf_sampling, binning=binning, T=T, backend=backend)
+end
+
+function Detector(::NoisePhotonReadout; integration_time::Real=1.0, readout_noise::Real=0.0, qe::Real=1.0,
+    psf_sampling::Int=1, binning::Int=1, T::Type{<:AbstractFloat}=Float64, backend=Array)
+    if readout_noise <= 0
+        throw(InvalidConfiguration("readout_noise must be > 0 for NoisePhotonReadout"))
+    end
+    return _build_detector(NoisePhotonReadout(); integration_time=integration_time, readout_noise=readout_noise, qe=qe,
+        psf_sampling=psf_sampling, binning=binning, T=T, backend=backend)
 end
 
 function fill_frame!(det::Detector, psf::AbstractMatrix{T}) where {T}
