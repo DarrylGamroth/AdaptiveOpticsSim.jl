@@ -5,15 +5,15 @@
 - Phases 6-7 pending (I/O helpers, reference dataset validation, docs/tutorial ports).
 
 ## AO Feature Checklist
-- [ ] Detector modeling (photon/read noise, QE, binning, PSF sampling).
-- [ ] Multi-source/asterism support and off-axis PSF handling.
-- [ ] Pyramid WFS implementation.
-- [ ] BioEdge WFS implementation.
-- [ ] LGS-specific sensing paths (elongation, sodium profile).
-- [ ] Multi-layer atmosphere with wind and frozen-flow evolution.
-- [ ] Spiders and user-defined pupil masks.
-- [ ] DM mis-registration (shift/rotation/anamorphosis) and custom influence functions.
-- [ ] Geometric WFS sensing mode (gradient-only) option.
+- [ ] P0: Detector modeling (photon/read noise, QE, binning, PSF sampling).
+- [ ] P0: Multi-source/asterism support and off-axis PSF handling.
+- [ ] P1: Pyramid WFS implementation.
+- [ ] P1: BioEdge WFS implementation.
+- [ ] P1: LGS-specific sensing paths (elongation, sodium profile).
+- [ ] P0: Multi-layer atmosphere with wind and frozen-flow evolution.
+- [ ] P0: Spiders and user-defined pupil masks.
+- [ ] P1: DM mis-registration (shift/rotation/anamorphosis) and custom influence functions.
+- [ ] P1: Geometric WFS sensing mode (gradient-only) option.
 
 ## Phase 0: Setup
 - Create package skeleton and CI with Julia versions.
