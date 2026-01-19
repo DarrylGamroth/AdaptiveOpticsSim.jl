@@ -79,6 +79,14 @@
 - Add pyramid/BioEdge response models that depend on modulation and optical gain (beyond slope proxy) (`src/WFS/pyramid.jl`, `src/WFS/bioedge.jl`) [E:med, R:med].
 - Add a fast-path config/trait layer that explicitly opts into simplified models for speed, leaving high-fidelity models as opt-in (`src/Core/parallel.jl`, `src/Core/types.jl`) [E:low, R:low].
 
+## Reference Packages and Candidate Algorithms
+- OOMAO (MATLAB): KL basis from HHt/PSD, slope covariance modeling, LQG/predictive control, tomographic reconstructor design.
+- Soapy (Python): end-to-end AO loop patterns, multi-WFS/DM configurations, turbulence propagation variants.
+- COMPASS (C/Fortran): GPU-accelerated AO pipeline patterns, advanced tomography, predictive control.
+- MAOS (C): LGS cone-effect modeling, multi-DM MCAO/MOAO workflows, Monte-Carlo validation.
+- PASSATA / YAO (IDL): multi-object AO workflows, WFS/DM trade studies, reconstructor variants.
+- HCIPy / POPPY / PROPER (Python): wave-optics propagation, coronagraph/PSF modeling, diffractive WFS baselines.
+
 ## Phase 0: Setup
 - Create package skeleton and CI with Julia versions.
 - Define core interfaces, traits, and basic error types.
