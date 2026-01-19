@@ -7,10 +7,7 @@ function pad_center!(dest::AbstractMatrix, src::AbstractMatrix)
     end
     ox = div(nx - sx, 2)
     oy = div(ny - sy, 2)
-    dx0 = firstindex(dest, 1) + ox
-    dy0 = firstindex(dest, 2) + oy
-    dest_inds = CartesianIndices((dx0:dx0+sx-1, dy0:dy0+sy-1))
-    copyto!(dest, dest_inds, src, CartesianIndices(src))
+    @views dest[ox+1:ox+sx, oy+1:oy+sy] .= src
     return dest
 end
 
@@ -25,18 +22,12 @@ function bin2d(input::AbstractMatrix, binning::Int)
     n_out = div(n, binning)
     m_out = div(m, binning)
     out = similar(input, n_out, m_out)
-    i0_in = firstindex(input, 1)
-    j0_in = firstindex(input, 2)
-    i0_out = firstindex(out, 1)
-    j0_out = firstindex(out, 2)
-    @inbounds for oi in 1:n_out, oj in 1:m_out
+    @inbounds for i in 1:n_out, j in 1:m_out
         acc = zero(eltype(out))
-        base_i = i0_in + (oi - 1) * binning
-        base_j = j0_in + (oj - 1) * binning
         for ii in 1:binning, jj in 1:binning
-            acc += input[base_i + (ii - 1), base_j + (jj - 1)]
+            acc += input[(i - 1) * binning + ii, (j - 1) * binning + jj]
         end
-        out[i0_out + (oi - 1), j0_out + (oj - 1)] = acc
+        out[i, j] = acc
     end
     return out
 end
@@ -49,7 +40,7 @@ function bin2d!(out::AbstractMatrix, input::AbstractMatrix, binning::Int)
         if size(out) != size(input)
             throw(DimensionMismatchError("output size must match input when binning=1"))
         end
-        copyto!(out, CartesianIndices(out), input, CartesianIndices(input))
+        out .= input
         return out
     end
     n, m = size(input)
@@ -58,18 +49,12 @@ function bin2d!(out::AbstractMatrix, input::AbstractMatrix, binning::Int)
     if size(out) != (n_out, m_out)
         throw(DimensionMismatchError("output size does not match binned dimensions"))
     end
-    i0_in = firstindex(input, 1)
-    j0_in = firstindex(input, 2)
-    i0_out = firstindex(out, 1)
-    j0_out = firstindex(out, 2)
-    @inbounds for oi in 1:n_out, oj in 1:m_out
+    @inbounds for i in 1:n_out, j in 1:m_out
         acc = zero(eltype(out))
-        base_i = i0_in + (oi - 1) * binning
-        base_j = j0_in + (oj - 1) * binning
         for ii in 1:binning, jj in 1:binning
-            acc += input[base_i + (ii - 1), base_j + (jj - 1)]
+            acc += input[(i - 1) * binning + ii, (j - 1) * binning + jj]
         end
-        out[i0_out + (oi - 1), j0_out + (oj - 1)] = acc
+        out[i, j] = acc
     end
     return out
 end
@@ -79,9 +64,8 @@ function fftfreq!(dest::AbstractVector, n::Int; d::Real=1, offset::Real=0)
         throw(DimensionMismatchError("fftfreq! destination length must match n"))
     end
     val = 1 / (n * d)
-    i0 = firstindex(dest)
-    @inbounds for i in axes(dest, 1)
-        k = i - i0
+    @inbounds for i in 1:n
+        k = i - 1
         if k <= n ÷ 2
             dest[i] = k * val
         else

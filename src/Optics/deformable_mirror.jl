@@ -33,10 +33,7 @@ function DeformableMirror(tel::Telescope; n_act::Int, influence_width::Real=0.2,
 end
 
 function build_influence_functions!(dm::DeformableMirror, tel::Telescope)
-    pupil = tel.state.pupil
-    ax1 = axes(pupil, 1)
-    ax2 = axes(pupil, 2)
-    n = length(ax1)
+    n = tel.params.resolution
     n_act = dm.params.n_act
     sigma = dm.params.influence_width
     xs = range(-1.0, 1.0; length=n_act)
@@ -45,19 +42,15 @@ function build_influence_functions!(dm::DeformableMirror, tel::Telescope)
     cx = (n + 1) / 2
     cy = (n + 1) / 2
     scale = n / 2
-    i0 = first(ax1)
-    j0 = first(ax2)
 
     idx = 1
     @inbounds for x0 in xs, y0 in ys
         x_m, y_m = apply_misregistration(x0, y0, dm.params.misregistration)
-        for i in ax1, j in ax2
-            ii = i - i0 + 1
-            jj = j - j0 + 1
-            x = (ii - cx) / scale
-            y = (jj - cy) / scale
+        for i in 1:n, j in 1:n
+            x = (i - cx) / scale
+            y = (j - cy) / scale
             r2 = (x - x_m)^2 + (y - y_m)^2
-            dm.state.modes[(jj - 1) * n + ii, idx] = exp(-r2 / (2 * sigma^2)) * pupil[i, j]
+            dm.state.modes[(j - 1) * n + i, idx] = exp(-r2 / (2 * sigma^2)) * tel.state.pupil[i, j]
         end
         idx += 1
     end

@@ -48,22 +48,16 @@ function Telescope(; resolution::Int,
 end
 
 function generate_pupil!(pupil::AbstractMatrix{Bool}, params::TelescopeParams)
-    ax1 = axes(pupil, 1)
-    ax2 = axes(pupil, 2)
-    n = length(ax1)
+    n = params.resolution
     r_outer = 1.0
     r_inner = params.central_obstruction
     cx = (n + 1) / 2
     cy = (n + 1) / 2
     scale = n / 2
-    i0 = firstindex(pupil, 1)
-    j0 = firstindex(pupil, 2)
 
-    @inbounds for i in ax1, j in ax2
-        ii = i - i0 + 1
-        jj = j - j0 + 1
-        x = (ii - cx) / scale
-        y = (jj - cy) / scale
+    @inbounds for i in 1:n, j in 1:n
+        x = (i - cx) / scale
+        y = (j - cy) / scale
         r = sqrt(x^2 + y^2)
         pupil[i, j] = (r <= r_outer) & (r >= r_inner)
     end
@@ -92,10 +86,7 @@ function set_pupil!(tel::Telescope, pupil::AbstractMatrix{Bool})
 end
 
 function apply_spiders!(tel::Telescope; thickness::Real, angles::AbstractVector, offset_x::Real=0.0, offset_y::Real=0.0)
-    pupil = tel.state.pupil
-    ax1 = axes(pupil, 1)
-    ax2 = axes(pupil, 2)
-    n = length(ax1)
+    n = tel.params.resolution
     radius = tel.params.diameter / 2
     thickness_norm = thickness / radius
     offset_x_norm = offset_x / radius
@@ -104,21 +95,17 @@ function apply_spiders!(tel::Telescope; thickness::Real, angles::AbstractVector,
     cx = (n + 1) / 2
     cy = (n + 1) / 2
     scale = n / 2
-    i0 = firstindex(pupil, 1)
-    j0 = firstindex(pupil, 2)
 
     for angle in angles
         θ = deg2rad(angle)
         a = -sin(θ)
         b = cos(θ)
-        @inbounds for i in ax1, j in ax2
-            ii = i - i0 + 1
-            jj = j - j0 + 1
-            x = (ii - cx) / scale - offset_x_norm
-            y = (jj - cy) / scale - offset_y_norm
+        @inbounds for i in 1:n, j in 1:n
+            x = (i - cx) / scale - offset_x_norm
+            y = (j - cy) / scale - offset_y_norm
             dist = abs(a * x + b * y)
             if dist <= thickness_norm
-                pupil[i, j] = false
+                tel.state.pupil[i, j] = false
             end
         end
     end
