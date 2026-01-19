@@ -7,6 +7,7 @@ struct MultiLayerParams{T<:AbstractFloat,
     wind_speed::V2
     wind_direction::V3
     altitude::V4
+    r0::T
     L0::T
 end
 
@@ -41,6 +42,7 @@ function MultiLayerAtmosphere(tel::Telescope;
         T.(wind_speed),
         T.(wind_direction),
         T.(altitude),
+        T(r0),
         T(L0),
     )
 
