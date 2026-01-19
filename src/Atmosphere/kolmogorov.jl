@@ -13,6 +13,9 @@ mutable struct KolmogorovState{T<:AbstractFloat,A<:AbstractMatrix{T},B<:Abstract
     noise_re::A
     noise_im::A
     freqs::V
+    last_delta::T
+    last_r0::T
+    last_L0::T
 end
 
 struct KolmogorovAtmosphere{P<:KolmogorovParams,S<:KolmogorovState} <: AbstractAtmosphere
@@ -32,7 +35,17 @@ function KolmogorovAtmosphere(tel::Telescope; r0::Real, L0::Real=25.0, T::Type{<
     fill!(opd, zero(T))
     fill!(psd, zero(T))
     fill!(spectrum, zero(eltype(spectrum)))
-    state = KolmogorovState{T, typeof(opd), typeof(spectrum), typeof(freqs)}(opd, psd, spectrum, noise_re, noise_im, freqs)
+    state = KolmogorovState{T, typeof(opd), typeof(spectrum), typeof(freqs)}(
+        opd,
+        psd,
+        spectrum,
+        noise_re,
+        noise_im,
+        freqs,
+        T(-1),
+        T(-1),
+        T(-1),
+    )
     return KolmogorovAtmosphere(params, state)
 end
 
@@ -52,12 +65,20 @@ function update_psd!(atm::KolmogorovAtmosphere, delta::Real)
     return atm
 end
 
-function advance!(atm::KolmogorovAtmosphere, tel::Telescope; rng::AbstractRNG=Random.default_rng(), reuse_psd::Bool=true)
+function ensure_psd!(atm::KolmogorovAtmosphere, delta::Real)
+    if atm.state.last_delta != delta || atm.state.last_r0 != atm.params.r0 || atm.state.last_L0 != atm.params.L0
+        update_psd!(atm, delta)
+        atm.state.last_delta = delta
+        atm.state.last_r0 = atm.params.r0
+        atm.state.last_L0 = atm.params.L0
+    end
+    return atm
+end
+
+function advance!(atm::KolmogorovAtmosphere, tel::Telescope; rng::AbstractRNG=Random.default_rng())
     n = tel.params.resolution
     delta = tel.params.diameter / n
-    if reuse_psd
-        update_psd!(atm, delta)
-    end
+    ensure_psd!(atm, delta)
     phase_screen_von_karman!(atm.state.opd, atm, delta, rng)
     return atm
 end
