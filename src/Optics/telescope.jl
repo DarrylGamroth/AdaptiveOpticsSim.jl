@@ -48,6 +48,7 @@ function Telescope(; resolution::Int,
 end
 
 function generate_pupil!(pupil::AbstractMatrix{Bool}, params::TelescopeParams)
+    Base.require_one_based_indexing(pupil)
     n = params.resolution
     r_outer = 1.0
     r_inner = params.central_obstruction
@@ -86,6 +87,7 @@ function set_pupil!(tel::Telescope, pupil::AbstractMatrix{Bool})
 end
 
 function apply_spiders!(tel::Telescope; thickness::Real, angles::AbstractVector, offset_x::Real=0.0, offset_y::Real=0.0)
+    Base.require_one_based_indexing(tel.state.pupil)
     n = tel.params.resolution
     radius = tel.params.diameter / 2
     thickness_norm = thickness / radius

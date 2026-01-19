@@ -35,6 +35,7 @@ end
 sensing_mode(::PyramidWFS{M}) where {M} = M()
 
 function update_valid_mask!(wfs::PyramidWFS, tel::Telescope)
+    Base.require_one_based_indexing(tel.state.pupil)
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
     sub = div(n, n_sub)
@@ -50,6 +51,7 @@ function update_valid_mask!(wfs::PyramidWFS, tel::Telescope)
 end
 
 function measure!(mode::Geometric, wfs::PyramidWFS, tel::Telescope)
+    Base.require_one_based_indexing(tel.state.opd)
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
     sub = div(n, n_sub)

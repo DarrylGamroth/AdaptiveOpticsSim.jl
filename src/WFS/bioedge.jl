@@ -37,6 +37,7 @@ end
 sensing_mode(::BioEdgeWFS{M}) where {M} = M()
 
 function update_valid_mask!(wfs::BioEdgeWFS, tel::Telescope)
+    Base.require_one_based_indexing(tel.state.pupil)
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
     sub = div(n, n_sub)
@@ -52,6 +53,7 @@ function update_valid_mask!(wfs::BioEdgeWFS, tel::Telescope)
 end
 
 function update_edge_mask!(wfs::BioEdgeWFS, tel::Telescope)
+    Base.require_one_based_indexing(wfs.state.edge_mask, tel.state.pupil)
     n = tel.params.resolution
     mask = wfs.state.edge_mask
     @inbounds for i in 1:n, j in 1:n
@@ -73,6 +75,7 @@ function update_edge_mask!(wfs::BioEdgeWFS, tel::Telescope)
 end
 
 function measure!(mode::Geometric, wfs::BioEdgeWFS, tel::Telescope)
+    Base.require_one_based_indexing(tel.state.opd)
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
     sub = div(n, n_sub)

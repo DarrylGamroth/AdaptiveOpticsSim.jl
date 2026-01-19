@@ -33,6 +33,7 @@ function DeformableMirror(tel::Telescope; n_act::Int, influence_width::Real=0.2,
 end
 
 function build_influence_functions!(dm::DeformableMirror, tel::Telescope)
+    Base.require_one_based_indexing(tel.state.pupil, dm.state.modes)
     n = tel.params.resolution
     n_act = dm.params.n_act
     sigma = dm.params.influence_width

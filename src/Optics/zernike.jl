@@ -41,6 +41,7 @@ function zernike_radial(n::Int, m::Int, r::Real)
 end
 
 function compute_zernike!(zb::ZernikeBasis, tel::Telescope)
+    Base.require_one_based_indexing(zb.modes, tel.state.pupil)
     n = tel.params.resolution
     cx = (n + 1) / 2
     cy = (n + 1) / 2

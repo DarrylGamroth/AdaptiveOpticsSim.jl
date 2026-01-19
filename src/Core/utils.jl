@@ -1,4 +1,5 @@
 function pad_center!(dest::AbstractMatrix, src::AbstractMatrix)
+    Base.require_one_based_indexing(dest, src)
     fill!(dest, zero(eltype(dest)))
     nx, ny = size(dest)
     sx, sy = size(src)
@@ -12,6 +13,7 @@ function pad_center!(dest::AbstractMatrix, src::AbstractMatrix)
 end
 
 function bin2d(input::AbstractMatrix, binning::Int)
+    Base.require_one_based_indexing(input)
     if binning < 1
         throw(InvalidConfiguration("binning must be >= 1"))
     end
@@ -33,6 +35,7 @@ function bin2d(input::AbstractMatrix, binning::Int)
 end
 
 function bin2d!(out::AbstractMatrix, input::AbstractMatrix, binning::Int)
+    Base.require_one_based_indexing(out, input)
     if binning < 1
         throw(InvalidConfiguration("binning must be >= 1"))
     end
@@ -60,6 +63,7 @@ function bin2d!(out::AbstractMatrix, input::AbstractMatrix, binning::Int)
 end
 
 function fftfreq!(dest::AbstractVector, n::Int; d::Real=1, offset::Real=0)
+    Base.require_one_based_indexing(dest)
     if length(dest) != n
         throw(DimensionMismatchError("fftfreq! destination length must match n"))
     end
