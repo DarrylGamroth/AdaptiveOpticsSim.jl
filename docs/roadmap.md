@@ -59,6 +59,25 @@
 - [ ] `tools/set_paralleling_setup.py` -> not yet implemented
 - [ ] `tools/tools.py` -> not yet implemented
 
+## Simplifications vs OOPAO (Current State)
+- WFS diffractive models fall back to geometric slopes; no full diffractive propagation yet.
+- LGS elongation modeled as a simple slope scaling rather than PSF elongation physics.
+- `ft_sh_phase_screen` omits sub-harmonics; uses the base FFT Von Karman screen.
+- LiFT “analytical” mode uses finite-difference derivatives, not closed-form Jacobians.
+- GainSensingCamera uses serial FFTs without parallel batching or detector metadata coupling.
+- NCPA KL basis uses DM-mode covariance (`MᵀM`), not full HHt atmospheric covariance.
+- SPRINT/mis-registration uses direct finite differences without saved sensitivity matrices,
+  FITS I/O, or WFS-space mis-registration branches.
+
+## Candidate Algorithm Upgrades (Similar Results)
+- Add sub-harmonic augmentation to `ft_sh_phase_screen` for better low-frequency tilt statistics.
+- Implement diffractive WFS paths via pupil→focal propagation with detector sampling, using planned FFTs.
+- Replace LGS slope scaling with focal-plane elongated PSF modeling or sodium layer convolution.
+- Implement LiFT analytic Jacobians via FFT-based convolutional formulation (per Chambouleyron et al.).
+- Add KL basis from atmospheric covariance (HHt/PSD) instead of DM-mode covariance.
+- Implement SPRINT fast path with precomputed/serialized sensitivity matrices (optional on-disk cache).
+- Add pyramid/BioEdge response models that depend on modulation and optical gain (beyond slope proxy).
+
 ## Phase 0: Setup
 - Create package skeleton and CI with Julia versions.
 - Define core interfaces, traits, and basic error types.
