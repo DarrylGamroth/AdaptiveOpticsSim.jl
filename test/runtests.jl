@@ -63,7 +63,7 @@ end
     tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
     dm.state.coefs .= 0.1
-    apply!(dm, tel; additive=false)
+    apply!(dm, tel, DMReplace())
     @test sum(abs.(tel.state.opd)) > 0
 
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution

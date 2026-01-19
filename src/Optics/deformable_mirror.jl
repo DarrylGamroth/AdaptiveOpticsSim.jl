@@ -70,7 +70,3 @@ function apply!(dm::DeformableMirror, tel::Telescope, ::DMReplace)
     tel.state.opd .= dm.state.opd
     return tel
 end
-
-function apply!(dm::DeformableMirror, tel::Telescope; additive::Bool=true)
-    return additive ? apply!(dm, tel, DMAdditive()) : apply!(dm, tel, DMReplace())
-end

@@ -16,7 +16,7 @@ n_iter = 5
 for k in 1:n_iter
     advance!(atm, tel; rng=rng)
     propagate!(atm, tel)
-    apply!(dm, tel; additive=true)
+    apply!(dm, tel, DMAdditive())
     measure!(wfs, tel)
 
     reconstruct!(cmd, recon, wfs.state.slopes)

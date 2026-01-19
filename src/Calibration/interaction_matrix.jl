@@ -17,7 +17,7 @@ function interaction_matrix(dm::DeformableMirror, wfs::ShackHartmann, tel::Teles
     for k in 1:n_act
         fill!(coefs, zero(T))
         coefs[k] = T(amplitude)
-        apply!(dm, tel; additive=false)
+        apply!(dm, tel, DMReplace())
         measure!(wfs, tel)
         mat[:, k] .= wfs.state.slopes
     end

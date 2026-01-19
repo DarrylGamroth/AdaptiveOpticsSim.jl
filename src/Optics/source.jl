@@ -62,7 +62,4 @@ end
 
 wavelength(src::LGSSource) = src.params.wavelength
 
-is_lgs(::AbstractSource) = false
-is_lgs(::LGSSource) = true
-
 lgs_elongation_factor(src::LGSSource) = src.params.elongation_factor
