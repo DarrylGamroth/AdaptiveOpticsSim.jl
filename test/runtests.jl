@@ -1,5 +1,6 @@
 using Test
 using AdaptiveOptics
+using Random
 
 @test AdaptiveOptics.PROJECT_STATUS == :in_development
 
@@ -21,4 +22,13 @@ end
     @test noll_to_nm(2) == (1, -1)
     @test noll_to_nm(3) == (1, 1)
     @test noll_to_nm(4) == (2, -2)
+end
+
+@testset "Atmosphere propagation" begin
+    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+    advance!(atm, tel; rng=MersenneTwister(1))
+    propagate!(atm, tel)
+    @test size(atm.state.opd) == (32, 32)
+    @test sum(abs.(tel.state.opd)) > 0
 end

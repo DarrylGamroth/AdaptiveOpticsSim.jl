@@ -25,6 +25,7 @@ include("Optics/telescope.jl")
 include("Optics/source.jl")
 include("Optics/psf.jl")
 include("Optics/zernike.jl")
+include("Atmosphere/kolmogorov.jl")
 
 export PROJECT_STATUS
 export AdaptiveOpticsError, InvalidConfiguration, DimensionMismatchError
@@ -33,6 +34,8 @@ export Telescope, TelescopeParams, TelescopeState, generate_pupil!, reset_opd!, 
 export Source, SourceParams, wavelength
 export compute_psf!, ensure_psf_state!
 export ZernikeBasis, compute_zernike!, noll_to_nm
+export KolmogorovAtmosphere, KolmogorovParams, KolmogorovState
+export advance!, propagate!
 export AbstractOpticalElement, AbstractSource, AbstractAtmosphere, AbstractWFS
 export AbstractDetector, AbstractDeformableMirror, SensingMode, Diffractive, Geometric
 export ParallelConfig, with_parallel_config

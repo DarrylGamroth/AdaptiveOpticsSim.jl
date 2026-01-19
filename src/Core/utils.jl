@@ -37,3 +37,12 @@ function pad_center!(dest::AbstractMatrix, src::AbstractMatrix)
 end
 
 backend_type(A::AbstractArray) = Base.typename(typeof(A)).wrapper
+
+function fftfreq(n::Int, d::Real=1)
+    val = 1 / (n * d)
+    if iseven(n)
+        return vcat(0:(n ÷ 2 - 1), -n ÷ 2:-1) .* val
+    else
+        return vcat(0:((n - 1) ÷ 2), -((n - 1) ÷ 2):-1) .* val
+    end
+end
