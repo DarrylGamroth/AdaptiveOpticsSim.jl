@@ -43,6 +43,22 @@ end
     @test psd_snapshot != atm.state.psd
 end
 
+@testset "Multi-layer atmosphere" begin
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    atm = MultiLayerAtmosphere(tel;
+        r0=0.2,
+        L0=25.0,
+        fractional_r0=[0.5, 0.5],
+        wind_speed=[5.0, 10.0],
+        wind_direction=[0.0, 90.0],
+        altitude=[0.0, 5000.0],
+    )
+    advance!(atm, tel; rng=MersenneTwister(3))
+    propagate!(atm, tel)
+    @test size(atm.state.opd) == (16, 16)
+    @test sum(abs.(tel.state.opd)) > 0
+end
+
 @testset "Deformable mirror and WFS" begin
     tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)

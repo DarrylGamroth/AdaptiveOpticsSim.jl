@@ -29,6 +29,7 @@ include("Optics/deformable_mirror.jl")
 include("Optics/detector.jl")
 include("Optics/asterism.jl")
 include("Atmosphere/kolmogorov.jl")
+include("Atmosphere/multilayer.jl")
 include("WFS/shack_hartmann.jl")
 include("Calibration/interaction_matrix.jl")
 include("Calibration/reconstructor.jl")
@@ -45,6 +46,7 @@ export compute_psf!, ensure_psf_state!
 export ZernikeBasis, compute_zernike!, noll_to_nm
 export KolmogorovAtmosphere, KolmogorovParams, KolmogorovState
 export update_psd!, ensure_psd!, phase_screen_von_karman!
+export MultiLayerAtmosphere, MultiLayerParams, MultiLayerState
 export advance!, propagate!
 export DeformableMirror, DeformableMirrorParams, DeformableMirrorState, build_influence_functions!, apply!
 export Detector, DetectorParams, DetectorState, capture!
