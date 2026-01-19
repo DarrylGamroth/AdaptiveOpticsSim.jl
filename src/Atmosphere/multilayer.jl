@@ -1,8 +1,12 @@
-struct MultiLayerParams{T<:AbstractFloat}
-    r0_fractions::Vector{T}
-    wind_speed::Vector{T}
-    wind_direction::Vector{T}
-    altitude::Vector{T}
+struct MultiLayerParams{T<:AbstractFloat,
+    V1<:AbstractVector{T},
+    V2<:AbstractVector{T},
+    V3<:AbstractVector{T},
+    V4<:AbstractVector{T}}
+    r0_fractions::V1
+    wind_speed::V2
+    wind_direction::V3
+    altitude::V4
     L0::T
 end
 
@@ -32,7 +36,7 @@ function MultiLayerAtmosphere(tel::Telescope;
         throw(InvalidConfiguration("layer parameter lengths must match fractional_r0"))
     end
 
-    params = MultiLayerParams{T}(
+    params = MultiLayerParams(
         T.(fractional_r0),
         T.(wind_speed),
         T.(wind_direction),
