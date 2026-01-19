@@ -37,6 +37,10 @@ end
     psd_snapshot = copy(atm.state.psd)
     ensure_psd!(atm, delta)
     @test psd_snapshot == atm.state.psd
+
+    atm = KolmogorovAtmosphere(tel; r0=0.1, L0=25.0)
+    ensure_psd!(atm, delta)
+    @test psd_snapshot != atm.state.psd
 end
 
 @testset "Deformable mirror and WFS" begin
