@@ -27,31 +27,31 @@
 - [x] `Asterism.py` -> `src/Optics/asterism.jl`
 - [x] `MisRegistration.py` -> `src/Optics/misregistration.jl`
 - [x] `Zernike.py` -> `src/Optics/zernike.jl`
-- [ ] `GainSensingCamera.py` -> not yet implemented
-- [ ] `LiFT.py` -> not yet implemented
-- [ ] `NCPA.py` -> not yet implemented
-- [ ] `OPD_map.py` -> not yet implemented
-- [ ] `phaseStats.py` -> not yet implemented
-- [ ] `SpatialFilter.py` -> not yet implemented
-- [ ] `SPRINT.py` -> not yet implemented
-- [ ] `calibration/ao_calibration.py` -> partial (interaction matrix + reconstructor)
-- [ ] `calibration/InteractionMatrix.py` -> partial (interaction matrix only)
-- [ ] `calibration/CalibrationVault.py` -> not yet implemented
-- [ ] `calibration/compute_KL_modal_basis.py` -> not yet implemented
-- [ ] `calibration/get_modal_basis.py` -> not yet implemented
-- [ ] `calibration/getFittingError.py` -> not yet implemented
-- [ ] `calibration/get_fast_atmosphere.py` -> not yet implemented
-- [ ] `calibration/initialization_AO.py` -> not yet implemented
-- [ ] `calibration/initialization_AO_PWFS.py` -> not yet implemented
-- [ ] `calibration/initialization_AO_SHWFS.py` -> not yet implemented
-- [ ] `closed_loop/run_cl.py` -> not yet implemented
-- [ ] `closed_loop/run_cl_first_stage.py` -> not yet implemented
-- [ ] `closed_loop/run_cl_from_phase_screens.py` -> not yet implemented
-- [ ] `closed_loop/run_cl_long_push_pull.py` -> not yet implemented
-- [ ] `closed_loop/run_cl_sinusoidal_modulation.py` -> not yet implemented
-- [ ] `closed_loop/run_cl_two_stages.py` -> not yet implemented
-- [ ] `closed_loop/run_cl_two_stages_atm_change.py` -> not yet implemented
-- [ ] `mis_registration_identification_algorithm/*` -> not yet implemented
+- [x] `GainSensingCamera.py` -> `src/Calibration/gain_sensing_camera.jl`
+- [x] `LiFT.py` -> `src/WFS/lift.jl`
+- [x] `NCPA.py` -> `src/Optics/ncpa.jl`
+- [x] `OPD_map.py` -> `src/Optics/opd_map.jl`
+- [x] `phaseStats.py` -> `src/Atmosphere/phase_stats.jl`
+- [x] `SpatialFilter.py` -> `src/Optics/spatial_filter.jl`
+- [x] `SPRINT.py` -> `src/Calibration/misregistration_identification.jl`
+- [x] `calibration/ao_calibration.py` -> `src/Calibration/ao_calibration.jl`
+- [x] `calibration/InteractionMatrix.py` -> `src/Calibration/interaction_matrix.jl`
+- [x] `calibration/CalibrationVault.py` -> `src/Calibration/calibration_vault.jl`
+- [x] `calibration/compute_KL_modal_basis.py` -> `src/Calibration/modal_basis.jl`
+- [x] `calibration/get_modal_basis.py` -> `src/Calibration/modal_basis.jl`
+- [x] `calibration/getFittingError.py` -> `src/Calibration/fitting_error.jl`
+- [x] `calibration/get_fast_atmosphere.py` -> `src/Calibration/fast_atmosphere.jl`
+- [x] `calibration/initialization_AO.py` -> `src/Calibration/initialization.jl`
+- [x] `calibration/initialization_AO_PWFS.py` -> `src/Calibration/initialization.jl`
+- [x] `calibration/initialization_AO_SHWFS.py` -> `src/Calibration/initialization.jl`
+- [x] `closed_loop/run_cl.py` -> `examples/closed_loop/run_cl.jl`
+- [x] `closed_loop/run_cl_first_stage.py` -> `examples/closed_loop/run_cl_first_stage.jl`
+- [x] `closed_loop/run_cl_from_phase_screens.py` -> `examples/closed_loop/run_cl_from_phase_screens.jl`
+- [x] `closed_loop/run_cl_long_push_pull.py` -> `examples/closed_loop/run_cl_long_push_pull.jl`
+- [x] `closed_loop/run_cl_sinusoidal_modulation.py` -> `examples/closed_loop/run_cl_sinusoidal_modulation.jl`
+- [x] `closed_loop/run_cl_two_stages.py` -> `examples/closed_loop/run_cl_two_stages.jl`
+- [x] `closed_loop/run_cl_two_stages_atm_change.py` -> `examples/closed_loop/run_cl_two_stages_atm_change.jl`
+- [x] `mis_registration_identification_algorithm/*` -> `src/Calibration/misregistration_identification.jl`
 - [ ] `tools/displayTools.py` -> not yet implemented
 - [ ] `tools/OopaoGUI.py` -> not yet implemented
 - [ ] `tools/interpolateGeometricalTransformation.py` -> not yet implemented
