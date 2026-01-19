@@ -60,23 +60,24 @@
 - [ ] `tools/tools.py` -> not yet implemented
 
 ## Simplifications vs OOPAO (Current State)
-- WFS diffractive models fall back to geometric slopes; no full diffractive propagation yet.
-- LGS elongation modeled as a simple slope scaling rather than PSF elongation physics.
-- `ft_sh_phase_screen` omits sub-harmonics; uses the base FFT Von Karman screen.
-- LiFT “analytical” mode uses finite-difference derivatives, not closed-form Jacobians.
-- GainSensingCamera uses serial FFTs without parallel batching or detector metadata coupling.
-- NCPA KL basis uses DM-mode covariance (`MᵀM`), not full HHt atmospheric covariance.
+- WFS diffractive models fall back to geometric slopes; no full diffractive propagation yet (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`, `src/WFS/bioedge.jl`).
+- LGS elongation modeled as a simple slope scaling rather than PSF elongation physics (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`).
+- `ft_sh_phase_screen` omits sub-harmonics; uses the base FFT Von Karman screen (`src/Atmosphere/phase_stats.jl`).
+- LiFT “analytical” mode uses finite-difference derivatives, not closed-form Jacobians (`src/WFS/lift.jl`).
+- GainSensingCamera uses serial FFTs without parallel batching or detector metadata coupling (`src/Calibration/gain_sensing_camera.jl`).
+- NCPA KL basis uses DM-mode covariance (`MᵀM`), not full HHt atmospheric covariance (`src/Calibration/modal_basis.jl`, `src/Optics/ncpa.jl`).
 - SPRINT/mis-registration uses direct finite differences without saved sensitivity matrices,
-  FITS I/O, or WFS-space mis-registration branches.
+  FITS I/O, or WFS-space mis-registration branches (`src/Calibration/misregistration_identification.jl`).
 
 ## Candidate Algorithm Upgrades (Similar Results)
-- Add sub-harmonic augmentation to `ft_sh_phase_screen` for better low-frequency tilt statistics.
-- Implement diffractive WFS paths via pupil→focal propagation with detector sampling, using planned FFTs.
-- Replace LGS slope scaling with focal-plane elongated PSF modeling or sodium layer convolution.
-- Implement LiFT analytic Jacobians via FFT-based convolutional formulation (per Chambouleyron et al.).
-- Add KL basis from atmospheric covariance (HHt/PSD) instead of DM-mode covariance.
-- Implement SPRINT fast path with precomputed/serialized sensitivity matrices (optional on-disk cache).
-- Add pyramid/BioEdge response models that depend on modulation and optical gain (beyond slope proxy).
+- Add sub-harmonic augmentation to `ft_sh_phase_screen` for better low-frequency tilt statistics (`src/Atmosphere/phase_stats.jl`) [E:med, R:low].
+- Implement diffractive WFS paths via pupil→focal propagation with detector sampling, using planned FFTs (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`, `src/WFS/bioedge.jl`, `src/Optics/psf.jl`) [E:high, R:med].
+- Replace LGS slope scaling with focal-plane elongated PSF modeling or sodium layer convolution (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`) [E:med, R:med].
+- Implement LiFT analytic Jacobians via FFT-based convolutional formulation (Chambouleyron et al.) (`src/WFS/lift.jl`) [E:med, R:med].
+- Add KL basis from atmospheric covariance (HHt/PSD) instead of DM-mode covariance (`src/Calibration/modal_basis.jl`) [E:high, R:med].
+- Implement SPRINT fast path with precomputed/serialized sensitivity matrices (optional on-disk cache) (`src/Calibration/misregistration_identification.jl`) [E:med, R:low].
+- Add pyramid/BioEdge response models that depend on modulation and optical gain (beyond slope proxy) (`src/WFS/pyramid.jl`, `src/WFS/bioedge.jl`) [E:med, R:med].
+- Add a fast-path config/trait layer that explicitly opts into simplified models for speed, leaving high-fidelity models as opt-in (`src/Core/parallel.jl`, `src/Core/types.jl`) [E:low, R:low].
 
 ## Phase 0: Setup
 - Create package skeleton and CI with Julia versions.
