@@ -1,5 +1,9 @@
 # Julia Port Roadmap (Draft)
 
+## Status
+- Phases 1-5 implemented in `AdaptiveOptics.jl`.
+- Phases 6-7 pending (I/O helpers, reference dataset validation, docs/tutorial ports).
+
 ## Phase 0: Setup
 - Create package skeleton and CI with Julia versions.
 - Define core interfaces, traits, and basic error types.
