@@ -25,7 +25,9 @@ include("Optics/telescope.jl")
 include("Optics/source.jl")
 include("Optics/psf.jl")
 include("Optics/zernike.jl")
+include("Optics/deformable_mirror.jl")
 include("Atmosphere/kolmogorov.jl")
+include("WFS/shack_hartmann.jl")
 
 export PROJECT_STATUS
 export AdaptiveOpticsError, InvalidConfiguration, DimensionMismatchError
@@ -36,6 +38,8 @@ export compute_psf!, ensure_psf_state!
 export ZernikeBasis, compute_zernike!, noll_to_nm
 export KolmogorovAtmosphere, KolmogorovParams, KolmogorovState
 export advance!, propagate!
+export DeformableMirror, DeformableMirrorParams, DeformableMirrorState, build_influence_functions!, apply!
+export ShackHartmann, ShackHartmannParams, ShackHartmannState, update_valid_mask!, measure!
 export AbstractOpticalElement, AbstractSource, AbstractAtmosphere, AbstractWFS
 export AbstractDetector, AbstractDeformableMirror, SensingMode, Diffractive, Geometric
 export ParallelConfig, with_parallel_config

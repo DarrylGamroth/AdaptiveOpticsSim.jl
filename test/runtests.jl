@@ -32,3 +32,19 @@ end
     @test size(atm.state.opd) == (32, 32)
     @test sum(abs.(tel.state.opd)) > 0
 end
+
+@testset "Deformable mirror and WFS" begin
+    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
+    dm.state.coefs .= 0.1
+    apply!(dm, tel; additive=false)
+    @test sum(abs.(tel.state.opd)) > 0
+
+    for i in 1:tel.params.resolution, j in 1:tel.params.resolution
+        tel.state.opd[i, j] = i
+    end
+    wfs = ShackHartmann(tel; n_subap=4)
+    slopes = measure!(wfs, tel)
+    @test length(slopes) == 2 * 4 * 4
+    @test maximum(slopes) > 0
+end
