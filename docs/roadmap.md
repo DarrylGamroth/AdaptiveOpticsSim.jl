@@ -4,6 +4,17 @@
 - Phases 1-5 implemented in `AdaptiveOptics.jl`.
 - Phases 6-7 pending (I/O helpers, reference dataset validation, docs/tutorial ports).
 
+## AO Feature Checklist
+- [ ] Detector modeling (photon/read noise, QE, binning, PSF sampling).
+- [ ] Multi-source/asterism support and off-axis PSF handling.
+- [ ] Pyramid WFS implementation.
+- [ ] BioEdge WFS implementation.
+- [ ] LGS-specific sensing paths (elongation, sodium profile).
+- [ ] Multi-layer atmosphere with wind and frozen-flow evolution.
+- [ ] Spiders and user-defined pupil masks.
+- [ ] DM mis-registration (shift/rotation/anamorphosis) and custom influence functions.
+- [ ] Geometric WFS sensing mode (gradient-only) option.
+
 ## Phase 0: Setup
 - Create package skeleton and CI with Julia versions.
 - Define core interfaces, traits, and basic error types.
