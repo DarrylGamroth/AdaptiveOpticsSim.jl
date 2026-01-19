@@ -31,6 +31,12 @@ end
     propagate!(atm, tel)
     @test size(atm.state.opd) == (32, 32)
     @test sum(abs.(tel.state.opd)) > 0
+
+    delta = tel.params.diameter / tel.params.resolution
+    ensure_psd!(atm, delta)
+    psd_snapshot = copy(atm.state.psd)
+    ensure_psd!(atm, delta)
+    @test psd_snapshot == atm.state.psd
 end
 
 @testset "Deformable mirror and WFS" begin
