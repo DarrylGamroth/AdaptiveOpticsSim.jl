@@ -34,7 +34,7 @@ include("Control/controller.jl")
 
 export PROJECT_STATUS
 export AdaptiveOpticsError, InvalidConfiguration, DimensionMismatchError
-export Workspace, ensure_psf_buffers!, backend_type
+export Workspace, ensure_psf_buffers!
 export Telescope, TelescopeParams, TelescopeState, generate_pupil!, reset_opd!, apply_opd!
 export Source, SourceParams, wavelength
 export compute_psf!, ensure_psf_state!

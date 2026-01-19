@@ -14,6 +14,13 @@ function Workspace(n::Int; T=Float64, backend=Array, rng=MersenneTwister(0))
     return Workspace(rng, pupil_field, fft_buffer, psf_buffer)
 end
 
+function Workspace(ref::AbstractArray, n::Int; T=real(eltype(ref)), rng=MersenneTwister(0))
+    pupil_field = similar(ref, Complex{T}, n, n)
+    fft_buffer = similar(pupil_field)
+    psf_buffer = similar(ref, T, n, n)
+    return Workspace(rng, pupil_field, fft_buffer, psf_buffer)
+end
+
 function ensure_psf_buffers!(ws::Workspace, n::Int)
     if size(ws.pupil_field, 1) != n || size(ws.pupil_field, 2) != n
         ws.pupil_field = similar(ws.pupil_field, n, n)

@@ -16,7 +16,7 @@ function compute_psf!(tel::Telescope, src::Source; zero_padding::Int=1, ws::Unio
     T = eltype(tel.state.opd)
 
     if ws === nothing
-        ws = Workspace(n_pad; T=T, backend=backend_type(tel.state.opd))
+        ws = Workspace(tel.state.opd, n_pad; T=T)
     else
         ensure_psf_buffers!(ws, n_pad)
     end

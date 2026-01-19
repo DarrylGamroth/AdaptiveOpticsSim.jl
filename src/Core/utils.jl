@@ -10,5 +10,3 @@ function pad_center!(dest::AbstractMatrix, src::AbstractMatrix)
     @views dest[ox+1:ox+sx, oy+1:oy+sy] .= src
     return dest
 end
-
-backend_type(A::AbstractArray) = Base.typename(typeof(A)).wrapper
