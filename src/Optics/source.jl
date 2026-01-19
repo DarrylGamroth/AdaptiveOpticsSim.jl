@@ -34,3 +34,35 @@ function Source(; band::Symbol=:I, magnitude::Real=0.0, coordinates=(0.0, 0.0), 
 end
 
 wavelength(src::Source) = src.params.wavelength
+
+struct LGSSourceParams{T<:AbstractFloat}
+    magnitude::T
+    coordinates::NTuple{2,T}
+    wavelength::T
+    altitude::T
+    elongation_factor::T
+end
+
+struct LGSSource{P<:LGSSourceParams} <: AbstractSource
+    params::P
+end
+
+function LGSSource(; magnitude::Real=0.0, coordinates=(0.0, 0.0), wavelength::Real=589e-9,
+    altitude::Real=90000.0, elongation_factor::Real=1.2, T::Type{<:AbstractFloat}=Float64)
+
+    params = LGSSourceParams{T}(
+        T(magnitude),
+        (T(coordinates[1]), T(coordinates[2])),
+        T(wavelength),
+        T(altitude),
+        T(elongation_factor),
+    )
+    return LGSSource(params)
+end
+
+wavelength(src::LGSSource) = src.params.wavelength
+
+is_lgs(::AbstractSource) = false
+is_lgs(::LGSSource) = true
+
+lgs_elongation_factor(src::LGSSource) = src.params.elongation_factor

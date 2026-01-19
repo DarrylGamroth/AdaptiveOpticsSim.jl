@@ -1,39 +1,41 @@
 using Statistics
 
-struct ShackHartmannParams{T<:AbstractFloat}
+struct PyramidParams{T<:AbstractFloat}
     n_subap::Int
     threshold::T
+    modulation::T
     mode::SensingMode
 end
 
-mutable struct ShackHartmannState{T<:AbstractFloat,A<:AbstractMatrix{Bool},V<:AbstractVector{T}}
+mutable struct PyramidState{T<:AbstractFloat,A<:AbstractMatrix{Bool},V<:AbstractVector{T}}
     valid_mask::A
     slopes::V
 end
 
-struct ShackHartmann{P<:ShackHartmannParams,S<:ShackHartmannState} <: AbstractWFS
+struct PyramidWFS{P<:PyramidParams,S<:PyramidState} <: AbstractWFS
     params::P
     state::S
 end
 
-function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
+function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulation::Real=2.0,
     mode::SensingMode=Geometric(), T::Type{<:AbstractFloat}=Float64, backend=Array)
+
     if tel.params.resolution % n_subap != 0
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     end
-    params = ShackHartmannParams{T}(n_subap, T(threshold), mode)
+    params = PyramidParams{T}(n_subap, T(threshold), T(modulation), mode)
     valid_mask = backend{Bool}(undef, n_subap, n_subap)
     slopes = backend{T}(undef, 2 * n_subap * n_subap)
     fill!(slopes, zero(T))
-    state = ShackHartmannState{T, typeof(valid_mask), typeof(slopes)}(valid_mask, slopes)
-    wfs = ShackHartmann(params, state)
+    state = PyramidState{T, typeof(valid_mask), typeof(slopes)}(valid_mask, slopes)
+    wfs = PyramidWFS(params, state)
     update_valid_mask!(wfs, tel)
     return wfs
 end
 
-sensing_mode(wfs::ShackHartmann) = wfs.params.mode
+sensing_mode(wfs::PyramidWFS) = wfs.params.mode
 
-function update_valid_mask!(wfs::ShackHartmann, tel::Telescope)
+function update_valid_mask!(wfs::PyramidWFS, tel::Telescope)
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
     sub = div(n, n_sub)
@@ -48,7 +50,7 @@ function update_valid_mask!(wfs::ShackHartmann, tel::Telescope)
     return wfs
 end
 
-function measure!(mode::Geometric, wfs::ShackHartmann, tel::Telescope)
+function measure!(mode::Geometric, wfs::PyramidWFS, tel::Telescope)
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
     sub = div(n, n_sub)
@@ -73,27 +75,27 @@ function measure!(mode::Geometric, wfs::ShackHartmann, tel::Telescope)
                 sy += subap[x, y + 1] - subap[x, y]
                 count_y += 1
             end
-            wfs.state.slopes[idx] = sx / max(count_x, 1)
-            wfs.state.slopes[idx + n_sub * n_sub] = sy / max(count_y, 1)
+            gain = 1 / (1 + wfs.params.modulation)
+            wfs.state.slopes[idx] = gain * sx / max(count_x, 1)
+            wfs.state.slopes[idx + n_sub * n_sub] = gain * sy / max(count_y, 1)
         else
             wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
             wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
         end
         idx += 1
     end
-
     return wfs.state.slopes
 end
 
-function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope)
+function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope)
     return measure!(Geometric(), wfs, tel)
 end
 
-function measure!(wfs::ShackHartmann, tel::Telescope; mode::SensingMode=sensing_mode(wfs))
+function measure!(wfs::PyramidWFS, tel::Telescope; mode::SensingMode=sensing_mode(wfs))
     return measure!(mode, wfs, tel)
 end
 
-function measure!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource; mode::SensingMode=sensing_mode(wfs))
+function measure!(wfs::PyramidWFS, tel::Telescope, src::AbstractSource; mode::SensingMode=sensing_mode(wfs))
     slopes = measure!(mode, wfs, tel)
     if is_lgs(src)
         n_sub = wfs.params.n_subap

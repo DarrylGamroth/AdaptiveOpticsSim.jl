@@ -127,3 +127,26 @@ end
     dm2 = DeformableMirror(tel2; n_act=2, influence_width=0.3, misregistration=mis)
     @test dm1.state.modes != dm2.state.modes
 end
+
+@testset "Pyramid, BioEdge, and LGS" begin
+    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    for i in 1:tel.params.resolution, j in 1:tel.params.resolution
+        tel.state.opd[i, j] = i
+    end
+
+    pyr = PyramidWFS(tel; n_subap=4, modulation=1.0)
+    pyr_slopes = measure!(pyr, tel)
+    @test length(pyr_slopes) == 2 * 4 * 4
+
+    bio = BioEdgeWFS(tel; n_subap=4)
+    bio_slopes = measure!(bio, tel)
+    @test length(bio_slopes) == 2 * 4 * 4
+
+    sh = ShackHartmann(tel; n_subap=4)
+    ngs = Source(band=:I, magnitude=0.0)
+    lgs = LGSSource(elongation_factor=2.0)
+    slopes_ngs = measure!(sh, tel, ngs)
+    slopes_lgs = measure!(sh, tel, lgs)
+    n = sh.params.n_subap * sh.params.n_subap
+    @test slopes_lgs[n+1:end] ≈ slopes_ngs[n+1:end] .* 2.0
+end

@@ -1,39 +1,43 @@
 using Statistics
 
-struct ShackHartmannParams{T<:AbstractFloat}
+struct BioEdgeParams{T<:AbstractFloat}
     n_subap::Int
     threshold::T
     mode::SensingMode
 end
 
-mutable struct ShackHartmannState{T<:AbstractFloat,A<:AbstractMatrix{Bool},V<:AbstractVector{T}}
+mutable struct BioEdgeState{T<:AbstractFloat,A<:AbstractMatrix{Bool},V<:AbstractVector{T}}
     valid_mask::A
+    edge_mask::A
     slopes::V
 end
 
-struct ShackHartmann{P<:ShackHartmannParams,S<:ShackHartmannState} <: AbstractWFS
+struct BioEdgeWFS{P<:BioEdgeParams,S<:BioEdgeState} <: AbstractWFS
     params::P
     state::S
 end
 
-function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
+function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     mode::SensingMode=Geometric(), T::Type{<:AbstractFloat}=Float64, backend=Array)
+
     if tel.params.resolution % n_subap != 0
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     end
-    params = ShackHartmannParams{T}(n_subap, T(threshold), mode)
+    params = BioEdgeParams{T}(n_subap, T(threshold), mode)
     valid_mask = backend{Bool}(undef, n_subap, n_subap)
+    edge_mask = backend{Bool}(undef, size(tel.state.pupil))
     slopes = backend{T}(undef, 2 * n_subap * n_subap)
     fill!(slopes, zero(T))
-    state = ShackHartmannState{T, typeof(valid_mask), typeof(slopes)}(valid_mask, slopes)
-    wfs = ShackHartmann(params, state)
+    state = BioEdgeState{T, typeof(valid_mask), typeof(slopes)}(valid_mask, edge_mask, slopes)
+    wfs = BioEdgeWFS(params, state)
     update_valid_mask!(wfs, tel)
+    update_edge_mask!(wfs, tel)
     return wfs
 end
 
-sensing_mode(wfs::ShackHartmann) = wfs.params.mode
+sensing_mode(wfs::BioEdgeWFS) = wfs.params.mode
 
-function update_valid_mask!(wfs::ShackHartmann, tel::Telescope)
+function update_valid_mask!(wfs::BioEdgeWFS, tel::Telescope)
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
     sub = div(n, n_sub)
@@ -48,7 +52,28 @@ function update_valid_mask!(wfs::ShackHartmann, tel::Telescope)
     return wfs
 end
 
-function measure!(mode::Geometric, wfs::ShackHartmann, tel::Telescope)
+function update_edge_mask!(wfs::BioEdgeWFS, tel::Telescope)
+    n = tel.params.resolution
+    mask = wfs.state.edge_mask
+    @inbounds for i in 1:n, j in 1:n
+        if tel.state.pupil[i, j]
+            neighbor = false
+            for di in -1:1, dj in -1:1
+                ii = i + di
+                jj = j + dj
+                if ii < 1 || ii > n || jj < 1 || jj > n || !tel.state.pupil[ii, jj]
+                    neighbor = true
+                end
+            end
+            mask[i, j] = neighbor
+        else
+            mask[i, j] = false
+        end
+    end
+    return wfs
+end
+
+function measure!(mode::Geometric, wfs::BioEdgeWFS, tel::Telescope)
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
     sub = div(n, n_sub)
@@ -65,13 +90,18 @@ function measure!(mode::Geometric, wfs::ShackHartmann, tel::Telescope)
             count_x = 0
             count_y = 0
             @views subap = tel.state.opd[xs:xe, ys:ye]
+            @views edge = wfs.state.edge_mask[xs:xe, ys:ye]
             for x in 1:(size(subap, 1) - 1), y in 1:size(subap, 2)
-                sx += subap[x + 1, y] - subap[x, y]
-                count_x += 1
+                if edge[x, y]
+                    sx += subap[x + 1, y] - subap[x, y]
+                    count_x += 1
+                end
             end
             for x in 1:size(subap, 1), y in 1:(size(subap, 2) - 1)
-                sy += subap[x, y + 1] - subap[x, y]
-                count_y += 1
+                if edge[x, y]
+                    sy += subap[x, y + 1] - subap[x, y]
+                    count_y += 1
+                end
             end
             wfs.state.slopes[idx] = sx / max(count_x, 1)
             wfs.state.slopes[idx + n_sub * n_sub] = sy / max(count_y, 1)
@@ -81,19 +111,18 @@ function measure!(mode::Geometric, wfs::ShackHartmann, tel::Telescope)
         end
         idx += 1
     end
-
     return wfs.state.slopes
 end
 
-function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope)
+function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope)
     return measure!(Geometric(), wfs, tel)
 end
 
-function measure!(wfs::ShackHartmann, tel::Telescope; mode::SensingMode=sensing_mode(wfs))
+function measure!(wfs::BioEdgeWFS, tel::Telescope; mode::SensingMode=sensing_mode(wfs))
     return measure!(mode, wfs, tel)
 end
 
-function measure!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource; mode::SensingMode=sensing_mode(wfs))
+function measure!(wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource; mode::SensingMode=sensing_mode(wfs))
     slopes = measure!(mode, wfs, tel)
     if is_lgs(src)
         n_sub = wfs.params.n_subap

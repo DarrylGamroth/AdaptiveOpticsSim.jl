@@ -32,6 +32,8 @@ include("Optics/asterism.jl")
 include("Atmosphere/kolmogorov.jl")
 include("Atmosphere/multilayer.jl")
 include("WFS/shack_hartmann.jl")
+include("WFS/pyramid.jl")
+include("WFS/bioedge.jl")
 include("Calibration/interaction_matrix.jl")
 include("Calibration/reconstructor.jl")
 include("Control/controller.jl")
@@ -42,7 +44,8 @@ export Workspace, ensure_psf_buffers!
 export bin2d, poisson_noise!, poisson_sample
 export Telescope, TelescopeParams, TelescopeState, generate_pupil!, reset_opd!, apply_opd!
 export set_pupil!, apply_spiders!
-export Source, SourceParams, wavelength
+export Source, SourceParams, LGSSource, LGSSourceParams, wavelength
+export is_lgs, lgs_elongation_factor
 export Asterism, coordinates_xy_arcsec, compute_psf!, psf_pixel_scale_arcsec
 export compute_psf!, ensure_psf_state!
 export ZernikeBasis, compute_zernike!, noll_to_nm
@@ -54,6 +57,8 @@ export DeformableMirror, DeformableMirrorParams, DeformableMirrorState, build_in
 export Misregistration, apply_misregistration
 export Detector, DetectorParams, DetectorState, capture!
 export ShackHartmann, ShackHartmannParams, ShackHartmannState, update_valid_mask!, measure!
+export PyramidWFS, PyramidParams, PyramidState
+export BioEdgeWFS, BioEdgeParams, BioEdgeState
 export InteractionMatrix, interaction_matrix
 export ModalReconstructor, reconstruct!, reconstruct
 export AbstractController, DiscreteIntegratorController, update!
