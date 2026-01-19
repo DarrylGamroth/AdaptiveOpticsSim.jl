@@ -19,6 +19,28 @@ struct Detector{N<:NoiseModel,P<:DetectorParams,S<:DetectorState} <: AbstractDet
     state::S
 end
 
+normalize_noise(noise::NoiseModel) = noise
+
+function normalize_noise(noises::Tuple{Vararg{NoiseModel}})
+    if isempty(noises)
+        return NoiseNone()
+    end
+    has_photon = false
+    has_readout = false
+    for noise in noises
+        has_photon |= noise isa NoisePhoton || noise isa NoisePhotonReadout
+        has_readout |= noise isa NoiseReadout || noise isa NoisePhotonReadout
+    end
+    if has_photon && has_readout
+        return NoisePhotonReadout()
+    elseif has_photon
+        return NoisePhoton()
+    elseif has_readout
+        return NoiseReadout()
+    end
+    return NoiseNone()
+end
+
 function _build_detector(noise::NoiseModel; integration_time::Real, readout_noise::Real, qe::Real,
     psf_sampling::Int, binning::Int, T::Type{<:AbstractFloat}, backend)
     params = DetectorParams{T}(T(integration_time), T(readout_noise), T(qe), psf_sampling, binning)
@@ -33,9 +55,10 @@ function _build_detector(noise::NoiseModel; integration_time::Real, readout_nois
 end
 
 function Detector(; integration_time::Real=1.0, readout_noise::Real=0.0, qe::Real=1.0,
-    psf_sampling::Int=1, binning::Int=1, noise::NoiseModel=NoisePhoton(),
+    psf_sampling::Int=1, binning::Int=1, noise=NoisePhoton(),
     T::Type{<:AbstractFloat}=Float64, backend=Array)
-    return Detector(noise; integration_time=integration_time, readout_noise=readout_noise, qe=qe,
+    normalized = normalize_noise(noise)
+    return Detector(normalized; integration_time=integration_time, readout_noise=readout_noise, qe=qe,
         psf_sampling=psf_sampling, binning=binning, T=T, backend=backend)
 end
 

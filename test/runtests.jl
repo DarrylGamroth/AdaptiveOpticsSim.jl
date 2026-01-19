@@ -97,6 +97,10 @@ end
     frame = capture!(det, psf; rng=MersenneTwister(2))
     @test size(frame) == (4, 4)
     @test sum(frame) == sum(psf)
+
+    det_tuple = Detector(integration_time=1.0, noise=(NoisePhoton(), NoiseReadout()),
+        readout_noise=0.5, qe=1.0, binning=1)
+    @test det_tuple isa Detector{NoisePhotonReadout}
 end
 
 @testset "Asterism PSF" begin
