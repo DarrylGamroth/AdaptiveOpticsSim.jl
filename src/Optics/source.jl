@@ -20,7 +20,7 @@ struct Source{P<:SourceParams} <: AbstractSource
     params::P
 end
 
-function Source(; band::Symbol=:I, magnitude::Real=0.0, coordinates=(0.0, 0.0), wavelength=nothing, T=Float64)
+function Source(; band::Symbol=:I, magnitude::Real=0.0, coordinates=(0.0, 0.0), wavelength=nothing, T::Type{<:AbstractFloat}=Float64)
     if wavelength === nothing
         if haskey(BAND_WAVELENGTHS, band)
             wavelength = BAND_WAVELENGTHS[band]

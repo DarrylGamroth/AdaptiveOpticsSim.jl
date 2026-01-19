@@ -15,7 +15,7 @@ struct ShackHartmann{P<:ShackHartmannParams,S<:ShackHartmannState} <: AbstractWF
     state::S
 end
 
-function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1, T=Float64, backend=Array)
+function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1, T::Type{<:AbstractFloat}=Float64, backend=Array)
     if tel.params.resolution % n_subap != 0
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     end

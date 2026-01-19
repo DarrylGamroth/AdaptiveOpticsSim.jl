@@ -3,7 +3,7 @@ struct ZernikeBasis{T<:AbstractFloat}
     modes::Array{T,3}
 end
 
-function ZernikeBasis(tel::Telescope, n_modes::Int; T=Float64)
+function ZernikeBasis(tel::Telescope, n_modes::Int; T::Type{<:AbstractFloat}=Float64)
     n = tel.params.resolution
     modes = zeros(T, n, n, n_modes)
     return ZernikeBasis{T}(n_modes, modes)

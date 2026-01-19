@@ -16,7 +16,7 @@ struct DeformableMirror{P<:DeformableMirrorParams,S<:DeformableMirrorState} <: A
     state::S
 end
 
-function DeformableMirror(tel::Telescope; n_act::Int, influence_width::Real=0.2, T=Float64, backend=Array)
+function DeformableMirror(tel::Telescope; n_act::Int, influence_width::Real=0.2, T::Type{<:AbstractFloat}=Float64, backend=Array)
     params = DeformableMirrorParams{T}(n_act, T(influence_width))
     n = tel.params.resolution
     opd = backend{T}(undef, n, n)

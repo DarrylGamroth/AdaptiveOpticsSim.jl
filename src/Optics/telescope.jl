@@ -22,7 +22,7 @@ function Telescope(; resolution::Int,
     sampling_time::Real,
     central_obstruction::Real=0.0,
     fov_arcsec::Real=0.0,
-    T=Float64,
+    T::Type{<:AbstractFloat}=Float64,
     backend=Array)
 
     params = TelescopeParams{T}(
