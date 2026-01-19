@@ -2,6 +2,29 @@ using Test
 using AdaptiveOptics
 using Random
 
+function assert_source_interface(src)
+    @test hasmethod(wavelength, Tuple{typeof(src)})
+end
+
+function assert_atmosphere_interface(atm, tel)
+    @test applicable(advance!, atm, tel)
+    @test applicable(propagate!, atm, tel)
+end
+
+function assert_wfs_interface(wfs, tel)
+    @test applicable(update_valid_mask!, wfs, tel)
+    @test applicable(measure!, wfs, tel)
+end
+
+function assert_detector_interface(det, psf)
+    @test applicable(capture!, det, psf)
+end
+
+function assert_dm_interface(dm, tel)
+    @test applicable(build_influence_functions!, dm, tel)
+    @test applicable(apply!, dm, tel, DMAdditive())
+end
+
 @test AdaptiveOptics.PROJECT_STATUS == :in_development
 
 @testset "Telescope and PSF" begin
@@ -242,4 +265,22 @@ end
     est = estimate_misregistration(meta, meta.calib0.D; misregistration_zero=Misregistration())
     @test est.shift_x ≈ 0.0
     @test est.shift_y ≈ 0.0
+end
+
+@testset "Interface conformance" begin
+    tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = Source(band=:I, magnitude=0.0)
+    lgs = LGSSource()
+    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+    wfs = ShackHartmann(tel; n_subap=2)
+    dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
+    det = Detector(noise=NoiseNone())
+    psf = fill(1.0, 8, 8)
+
+    assert_source_interface(src)
+    assert_source_interface(lgs)
+    assert_atmosphere_interface(atm, tel)
+    assert_wfs_interface(wfs, tel)
+    assert_dm_interface(dm, tel)
+    assert_detector_interface(det, psf)
 end
