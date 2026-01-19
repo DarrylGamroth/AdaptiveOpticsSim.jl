@@ -1,5 +1,5 @@
-struct Asterism{S<:AbstractSource} <: AbstractSource
-    sources::Vector{S}
+struct Asterism{S<:AbstractSource,V<:AbstractVector{S}} <: AbstractSource
+    sources::V
 end
 
 Base.length(ast::Asterism) = length(ast.sources)
