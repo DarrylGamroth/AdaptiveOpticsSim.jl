@@ -70,7 +70,7 @@ uses a propagated intensity model.
 
 Noise and apply-mode logic follow the same pattern:
 - `Detector{NoiseNone}`/`Detector{NoisePhoton}`/... are set by the `noise=` argument
-  (accepts either a single `NoiseModel` or a tuple like `(NoisePhoton(), NoiseReadout())`).
+  (accepts either a single `NoiseModel` or a tuple like `(NoisePhoton(), NoiseReadout(0.5))`).
 - `apply!(dm, tel, DMAdditive())` and `apply!(dm, tel, DMReplace())` dispatch
   without runtime conditionals.
 
