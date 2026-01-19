@@ -26,6 +26,7 @@ include("Optics/source.jl")
 include("Optics/psf.jl")
 include("Optics/zernike.jl")
 include("Optics/deformable_mirror.jl")
+include("Optics/detector.jl")
 include("Atmosphere/kolmogorov.jl")
 include("WFS/shack_hartmann.jl")
 include("Calibration/interaction_matrix.jl")
@@ -35,6 +36,7 @@ include("Control/controller.jl")
 export PROJECT_STATUS
 export AdaptiveOpticsError, InvalidConfiguration, DimensionMismatchError
 export Workspace, ensure_psf_buffers!
+export bin2d, poisson_noise!, poisson_sample
 export Telescope, TelescopeParams, TelescopeState, generate_pupil!, reset_opd!, apply_opd!
 export Source, SourceParams, wavelength
 export compute_psf!, ensure_psf_state!
@@ -43,6 +45,7 @@ export KolmogorovAtmosphere, KolmogorovParams, KolmogorovState
 export update_psd!, ensure_psd!, phase_screen_von_karman!
 export advance!, propagate!
 export DeformableMirror, DeformableMirrorParams, DeformableMirrorState, build_influence_functions!, apply!
+export Detector, DetectorParams, DetectorState, capture!
 export ShackHartmann, ShackHartmannParams, ShackHartmannState, update_valid_mask!, measure!
 export InteractionMatrix, interaction_matrix
 export ModalReconstructor, reconstruct!, reconstruct
