@@ -39,7 +39,7 @@ function phase_screen_von_karman(r0::Real, L0::Real, n::Int, delta::Real, rng::A
     noise = complex.(noise_re, noise_im)
 
     spectrum = noise .* sqrt.(psd)
-    screen = real.(ifft(spectrum))
+    screen = real.(FFTW.ifft(spectrum))
     return screen .* (n * delta)
 end
 
