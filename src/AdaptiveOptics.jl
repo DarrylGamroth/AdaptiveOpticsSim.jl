@@ -25,6 +25,7 @@ include("Optics/telescope.jl")
 include("Optics/source.jl")
 include("Optics/psf.jl")
 include("Optics/zernike.jl")
+include("Optics/misregistration.jl")
 include("Optics/deformable_mirror.jl")
 include("Optics/detector.jl")
 include("Optics/asterism.jl")
@@ -40,6 +41,7 @@ export AdaptiveOpticsError, InvalidConfiguration, DimensionMismatchError
 export Workspace, ensure_psf_buffers!
 export bin2d, poisson_noise!, poisson_sample
 export Telescope, TelescopeParams, TelescopeState, generate_pupil!, reset_opd!, apply_opd!
+export set_pupil!, apply_spiders!
 export Source, SourceParams, wavelength
 export Asterism, coordinates_xy_arcsec, compute_psf!, psf_pixel_scale_arcsec
 export compute_psf!, ensure_psf_state!
@@ -49,6 +51,7 @@ export update_psd!, ensure_psd!, phase_screen_von_karman!
 export MultiLayerAtmosphere, MultiLayerParams, MultiLayerState
 export advance!, propagate!
 export DeformableMirror, DeformableMirrorParams, DeformableMirrorState, build_influence_functions!, apply!
+export Misregistration, apply_misregistration
 export Detector, DetectorParams, DetectorState, capture!
 export ShackHartmann, ShackHartmannParams, ShackHartmannState, update_valid_mask!, measure!
 export InteractionMatrix, interaction_matrix

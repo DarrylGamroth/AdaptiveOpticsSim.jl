@@ -109,3 +109,21 @@ end
     @test size(psf) == (32, 32)
     @test sum(psf) >= sum(tel.state.psf_list[1])
 end
+
+@testset "Pupil masks and misregistration" begin
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    base_sum = sum(tel.state.pupil)
+    apply_spiders!(tel; thickness=0.5, angles=[0.0, 90.0])
+    @test sum(tel.state.pupil) < base_sum
+
+    custom = trues(16, 16)
+    custom[:, 9:end] .= false
+    set_pupil!(tel, custom)
+    @test sum(tel.state.pupil) == sum(custom)
+
+    tel2 = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    dm1 = DeformableMirror(tel2; n_act=2, influence_width=0.3)
+    mis = Misregistration(shift_x=0.1, shift_y=0.0, rotation_deg=5.0, T=Float64)
+    dm2 = DeformableMirror(tel2; n_act=2, influence_width=0.3, misregistration=mis)
+    @test dm1.state.modes != dm2.state.modes
+end

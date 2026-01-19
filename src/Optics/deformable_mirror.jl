@@ -3,6 +3,7 @@ using LinearAlgebra
 struct DeformableMirrorParams{T<:AbstractFloat}
     n_act::Int
     influence_width::T
+    misregistration::Misregistration{T}
 end
 
 mutable struct DeformableMirrorState{T<:AbstractFloat,A<:AbstractMatrix{T},M<:AbstractMatrix{T},V<:AbstractVector{T}}
@@ -16,8 +17,9 @@ struct DeformableMirror{P<:DeformableMirrorParams,S<:DeformableMirrorState} <: A
     state::S
 end
 
-function DeformableMirror(tel::Telescope; n_act::Int, influence_width::Real=0.2, T::Type{<:AbstractFloat}=Float64, backend=Array)
-    params = DeformableMirrorParams{T}(n_act, T(influence_width))
+function DeformableMirror(tel::Telescope; n_act::Int, influence_width::Real=0.2,
+    T::Type{<:AbstractFloat}=Float64, misregistration::Misregistration=Misregistration(T=T), backend=Array)
+    params = DeformableMirrorParams{T}(n_act, T(influence_width), misregistration)
     n = tel.params.resolution
     opd = backend{T}(undef, n, n)
     fill!(opd, zero(T))
@@ -43,10 +45,11 @@ function build_influence_functions!(dm::DeformableMirror, tel::Telescope)
 
     idx = 1
     @inbounds for x0 in xs, y0 in ys
+        x_m, y_m = apply_misregistration(x0, y0, dm.params.misregistration)
         for i in 1:n, j in 1:n
             x = (i - cx) / scale
             y = (j - cy) / scale
-            r2 = (x - x0)^2 + (y - y0)^2
+            r2 = (x - x_m)^2 + (y - y_m)^2
             dm.state.modes[(j - 1) * n + i, idx] = exp(-r2 / (2 * sigma^2)) * tel.state.pupil[i, j]
         end
         idx += 1

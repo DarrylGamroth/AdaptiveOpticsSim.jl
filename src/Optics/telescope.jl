@@ -76,3 +76,38 @@ function apply_opd!(tel::Telescope, opd::AbstractMatrix)
     tel.state.opd .= opd
     return tel
 end
+
+function set_pupil!(tel::Telescope, pupil::AbstractMatrix{Bool})
+    if size(pupil) != size(tel.state.pupil)
+        throw(DimensionMismatchError("pupil mask size does not match telescope resolution"))
+    end
+    tel.state.pupil .= pupil
+    return tel
+end
+
+function apply_spiders!(tel::Telescope; thickness::Real, angles::AbstractVector, offset_x::Real=0.0, offset_y::Real=0.0)
+    n = tel.params.resolution
+    radius = tel.params.diameter / 2
+    thickness_norm = thickness / radius
+    offset_x_norm = offset_x / radius
+    offset_y_norm = offset_y / radius
+
+    cx = (n + 1) / 2
+    cy = (n + 1) / 2
+    scale = n / 2
+
+    for angle in angles
+        θ = deg2rad(angle)
+        a = -sin(θ)
+        b = cos(θ)
+        @inbounds for i in 1:n, j in 1:n
+            x = (i - cx) / scale - offset_x_norm
+            y = (j - cy) / scale - offset_y_norm
+            dist = abs(a * x + b * y)
+            if dist <= thickness_norm
+                tel.state.pupil[i, j] = false
+            end
+        end
+    end
+    return tel
+end
