@@ -1,12 +1,12 @@
-struct ZernikeBasis{T<:AbstractFloat}
+struct ZernikeBasis{T<:AbstractFloat,A<:AbstractArray{T,3}}
     n_modes::Int
-    modes::Array{T,3}
+    modes::A
 end
 
 function ZernikeBasis(tel::Telescope, n_modes::Int; T::Type{<:AbstractFloat}=Float64)
     n = tel.params.resolution
     modes = zeros(T, n, n, n_modes)
-    return ZernikeBasis{T}(n_modes, modes)
+    return ZernikeBasis{T, typeof(modes)}(n_modes, modes)
 end
 
 function noll_to_nm(j::Int)

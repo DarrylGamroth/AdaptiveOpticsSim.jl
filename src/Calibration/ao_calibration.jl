@@ -1,8 +1,12 @@
-struct AOCalibration{T<:AbstractFloat}
-    basis::Matrix{T}
-    projector::Union{Nothing,Matrix{T}}
-    M2C::Matrix{T}
-    calibration::CalibrationVault{T,Matrix{T}}
+struct AOCalibration{T<:AbstractFloat,
+    B<:AbstractMatrix{T},
+    P<:AbstractMatrix{T},
+    M<:AbstractMatrix{T},
+    C<:CalibrationVault{T}}
+    basis::B
+    projector::Union{Nothing,P}
+    M2C::M
+    calibration::C
 end
 
 function ao_calibration(tel::Telescope, dm::DeformableMirror, wfs::AbstractWFS;
@@ -14,6 +18,6 @@ function ao_calibration(tel::Telescope, dm::DeformableMirror, wfs::AbstractWFS;
     end
 
     imat = interaction_matrix(dm, wfs, tel, basis.M2C; amplitude=amplitude)
-    calib = CalibrationVault(Matrix(imat.matrix))
-    return AOCalibration(basis.basis, basis.projector, Matrix(basis.M2C), calib)
+    calib = CalibrationVault(imat.matrix)
+    return AOCalibration(basis.basis, basis.projector, basis.M2C, calib)
 end

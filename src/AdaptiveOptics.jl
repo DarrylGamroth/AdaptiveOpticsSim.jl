@@ -35,6 +35,7 @@ include("Optics/spatial_filter.jl")
 include("Atmosphere/kolmogorov.jl")
 include("Atmosphere/multilayer.jl")
 include("Atmosphere/phase_stats.jl")
+include("WFS/sensing_modes.jl")
 include("WFS/shack_hartmann.jl")
 include("WFS/pyramid.jl")
 include("WFS/bioedge.jl")
@@ -63,14 +64,15 @@ export Asterism, coordinates_xy_arcsec, compute_psf!, psf_pixel_scale_arcsec
 export compute_psf!, ensure_psf_state!
 export ZernikeBasis, compute_zernike!, noll_to_nm
 export OPDMap
-export NCPA
-export SpatialFilter, set_spatial_filter!, filter!
+export NCPA, NCPABasis, KLBasis, ZernikeModalBasis, M2CBasis
+export SpatialFilter, SpatialFilterShape, CircularFilter, SquareFilter, FoucaultFilter
+export set_spatial_filter!, filter!
 export KolmogorovAtmosphere, KolmogorovParams, KolmogorovState
 export update_psd!, ensure_psd!, phase_screen_von_karman!
 export MultiLayerAtmosphere, MultiLayerParams, MultiLayerState
 export advance!, propagate!
 export phase_variance, phase_covariance, phase_spectrum, covariance_matrix
-export ft_phase_screen, ft_sh_phase_screen
+export ft_phase_screen, ft_sh_phase_screen, PhaseStatsWorkspace
 export DeformableMirror, DeformableMirrorParams, DeformableMirrorState, build_influence_functions!, apply!
 export Misregistration, apply_misregistration
 export Detector, DetectorParams, DetectorState, capture!

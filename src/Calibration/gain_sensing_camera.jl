@@ -1,17 +1,49 @@
 using FFTW
 using Logging
 
+mutable struct GSCFFTWorkspace{T<:AbstractFloat,
+    C<:AbstractMatrix{Complex{T}},
+    Pf,
+    Pi}
+    buffer::C
+    fft_out::C
+    ifft_out::C
+    fft_plan::Pf
+    ifft_plan::Pi
+end
+
+function GSCFFTWorkspace(n::Int; T::Type{<:AbstractFloat}=Float64, backend=Array)
+    buffer = backend{Complex{T}}(undef, n, n)
+    fft_out = similar(buffer)
+    ifft_out = similar(buffer)
+    fft_plan = FFTW.plan_fft!(buffer)
+    ifft_plan = FFTW.plan_ifft!(buffer)
+    return GSCFFTWorkspace{T, typeof(buffer), typeof(fft_plan), typeof(ifft_plan)}(
+        buffer,
+        fft_out,
+        ifft_out,
+        fft_plan,
+        ifft_plan,
+    )
+end
+
 mutable struct GainSensingCamera{T<:AbstractFloat,
     C<:AbstractMatrix{Complex{T}},
-    B<:AbstractArray{T,3}}
+    B<:AbstractArray{T,3},
+    BP<:AbstractArray{Complex{T},3},
+    IR<:AbstractMatrix{T},
+    SV<:AbstractVector{Complex{T}},
+    OG<:AbstractVector{T},
+    W<:GSCFFTWorkspace{T}}
     mask::C
     basis::B
     n_modes::Int
     calibration_ready::Bool
-    basis_product::Union{Nothing,Array{Complex{T},3}}
-    ir_calib::Union{Nothing,Matrix{T}}
-    sensi_calib::Union{Nothing,Vector{Complex{T}}}
-    og::Vector{T}
+    basis_product::Union{Nothing,BP}
+    ir_calib::Union{Nothing,IR}
+    sensi_calib::Union{Nothing,SV}
+    og::OG
+    fftws::W
 end
 
 function GainSensingCamera(mask::AbstractMatrix, basis::AbstractArray;
@@ -26,7 +58,11 @@ function GainSensingCamera(mask::AbstractMatrix, basis::AbstractArray;
     end
     n_modes = size(basis_t, 3)
     og = ones(T, n_modes)
-    gsc = GainSensingCamera{T, typeof(mask_c), typeof(basis_t)}(
+    fftws = GSCFFTWorkspace(size(mask_c, 1); T=T)
+    bp_probe = similar(fftws.buffer, Complex{T}, size(mask_c, 1), size(mask_c, 2), 1)
+    ir_probe = similar(mask_c, T, size(mask_c, 1), size(mask_c, 2))
+    sensi_probe = similar(og, Complex{T})
+    gsc = GainSensingCamera{T, typeof(mask_c), typeof(basis_t), typeof(bp_probe), typeof(ir_probe), typeof(sensi_probe), typeof(og), typeof(fftws)}(
         mask_c,
         basis_t,
         n_modes,
@@ -35,6 +71,7 @@ function GainSensingCamera(mask::AbstractMatrix, basis::AbstractArray;
         nothing,
         nothing,
         og,
+        fftws,
     )
     if n_jobs < 1
         @warn "n_jobs must be >= 1; using 1 instead."
@@ -49,9 +86,9 @@ function calibrate!(gsc::GainSensingCamera, frame::AbstractMatrix; n_jobs::Int=1
     end
     @info "GainSensingCamera calibration started"
     frame_norm = frame ./ total
-    gsc.basis_product = split_basis_product(gsc.basis; n_jobs=max(n_jobs, 1))
-    gsc.ir_calib = impulse_response(gsc.mask, frame_norm)
-    gsc.sensi_calib = sensitivity(gsc.ir_calib, gsc.ir_calib, gsc.basis_product)
+    gsc.basis_product = split_basis_product(gsc.basis, gsc.fftws; n_jobs=max(n_jobs, 1))
+    gsc.ir_calib = impulse_response(gsc.mask, frame_norm, gsc.fftws)
+    gsc.sensi_calib = sensitivity(gsc.ir_calib, gsc.ir_calib, gsc.basis_product, gsc.fftws)
     gsc.calibration_ready = true
     fill!(gsc.og, one(eltype(gsc.og)))
     @info "GainSensingCamera calibration complete"
@@ -73,8 +110,8 @@ function compute_optical_gains!(gsc::GainSensingCamera, frame::AbstractMatrix)
         throw(InvalidConfiguration("frame sum must be > 0 for optical gain computation"))
     end
     frame_norm = frame ./ total
-    ir_sky = impulse_response(gsc.mask, frame_norm)
-    sensi_sky = sensitivity(ir_sky, gsc.ir_calib, gsc.basis_product)
+    ir_sky = impulse_response(gsc.mask, frame_norm, gsc.fftws)
+    sensi_sky = sensitivity(ir_sky, gsc.ir_calib, gsc.basis_product, gsc.fftws)
     @. gsc.og = real(sensi_sky / gsc.sensi_calib)
     return gsc.og
 end
@@ -89,28 +126,34 @@ function pad_basis(basis::AbstractArray{T,3}, size_out::Int) where {T}
     return out
 end
 
-function fft2c(mat::AbstractMatrix)
-    shifted = FFTW.fftshift(mat, (1, 2))
-    return FFTW.fftshift(fft(shifted), (1, 2)) / size(mat, 1)
+function fft2c!(out::AbstractMatrix{Complex{T}}, ws::GSCFFTWorkspace{T}, input::AbstractMatrix) where {T}
+    FFTW.fftshift!(ws.buffer, input)
+    mul!(ws.buffer, ws.fft_plan, ws.buffer)
+    FFTW.fftshift!(out, ws.buffer)
+    out ./= size(out, 1)
+    return out
 end
 
-function ifft2c(mat::AbstractMatrix)
-    shifted = FFTW.fftshift(mat, (1, 2))
-    return FFTW.fftshift(ifft(shifted), (1, 2)) * size(mat, 1)
+function ifft2c!(out::AbstractMatrix{Complex{T}}, ws::GSCFFTWorkspace{T}, input::AbstractMatrix) where {T}
+    FFTW.fftshift!(ws.buffer, input)
+    mul!(ws.buffer, ws.ifft_plan, ws.buffer)
+    FFTW.fftshift!(out, ws.buffer)
+    out .*= size(out, 1)
+    return out
 end
 
-function split_basis_product(basis::AbstractArray{T,3}; n_jobs::Int=10) where {T<:AbstractFloat}
+function split_basis_product(basis::AbstractArray{T,3}, ws::GSCFFTWorkspace{T}; n_jobs::Int=10) where {T<:AbstractFloat}
     n_modes = size(basis, 3)
     n_chunks = ceil(Int, n_modes / max(n_jobs, 1))
-    out = Array{Complex{T}}(undef, size(basis, 1), size(basis, 2), n_modes)
+    out = similar(ws.buffer, Complex{T}, size(basis, 1), size(basis, 2), n_modes)
     idx = 1
     for _ in 1:n_chunks
         last = min(idx + n_jobs - 1, n_modes)
         for k in idx:last
             @views begin
-                fft_b = fft2c(basis[:, :, k])
-                ifft_b = ifft2c(basis[:, :, k])
-                out[:, :, k] .= fft_b .* ifft_b
+                fft2c!(ws.fft_out, ws, basis[:, :, k])
+                ifft2c!(ws.ifft_out, ws, basis[:, :, k])
+                out[:, :, k] .= ws.fft_out .* ws.ifft_out
             end
         end
         idx = last + 1
@@ -118,16 +161,23 @@ function split_basis_product(basis::AbstractArray{T,3}; n_jobs::Int=10) where {T
     return out
 end
 
-function impulse_response(mask::AbstractMatrix, frame::AbstractMatrix)
-    fft_mask = fft2c(mask)
-    fft_field = fft2c(mask .* frame)
-    return 2 .* imag.(conj.(fft_mask) .* fft_field)
+function impulse_response(mask::AbstractMatrix, frame::AbstractMatrix, ws::GSCFFTWorkspace)
+    fft2c!(ws.fft_out, ws, mask)
+    fft2c!(ws.ifft_out, ws, mask .* frame)
+    return 2 .* imag.(conj.(ws.fft_out) .* ws.ifft_out)
 end
 
-function sensitivity(IR_1::AbstractMatrix, IR_2::AbstractMatrix, basis_product::AbstractArray)
-    fft_IR_1 = vec(fft2c(IR_1))
-    ifft_IR_2 = vec(ifft2c(IR_2))
+function sensitivity(IR_1::AbstractMatrix, IR_2::AbstractMatrix, basis_product::AbstractArray, ws::GSCFFTWorkspace)
+    fft2c!(ws.fft_out, ws, IR_1)
+    fft_IR_1 = vec(ws.fft_out)
+    ifft2c!(ws.ifft_out, ws, IR_2)
+    ifft_IR_2 = vec(ws.ifft_out)
     product = fft_IR_1 .* ifft_IR_2
     basis_mat = reshape(basis_product, size(IR_1, 1) * size(IR_1, 2), size(basis_product, 3))
     return vec(transpose(product) * basis_mat)
+end
+
+function sensitivity(IR_1::AbstractMatrix, IR_2::AbstractMatrix, basis_product::AbstractArray)
+    ws = GSCFFTWorkspace(size(IR_1, 1); T=eltype(IR_1))
+    return sensitivity(IR_1, IR_2, basis_product, ws)
 end

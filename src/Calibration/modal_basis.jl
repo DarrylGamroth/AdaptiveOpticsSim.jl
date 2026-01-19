@@ -1,10 +1,13 @@
 using LinearAlgebra
 using Statistics
 
-struct ModalBasis{T<:AbstractFloat,M<:AbstractMatrix{T},B<:AbstractMatrix{T}}
+struct ModalBasis{T<:AbstractFloat,
+    M<:AbstractMatrix{T},
+    B<:AbstractMatrix{T},
+    P<:AbstractMatrix{T}}
     M2C::M
     basis::B
-    projector::Union{Nothing,Matrix{T}}
+    projector::Union{Nothing,P}
 end
 
 function dm_basis(dm::DeformableMirror, tel::Telescope)

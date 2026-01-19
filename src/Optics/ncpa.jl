@@ -1,26 +1,31 @@
 using Random
 using Statistics
 
-struct NCPA{T<:AbstractFloat,A<:AbstractMatrix{T},B<:AbstractArray{T,3},V<:AbstractVector{T}} <: AbstractOpticalElement
+abstract type NCPABasis end
+struct KLBasis <: NCPABasis end
+struct ZernikeModalBasis <: NCPABasis end
+struct M2CBasis <: NCPABasis end
+
+struct NCPA{T<:AbstractFloat,A<:AbstractMatrix{T},B,V} <: AbstractOpticalElement
     opd::A
-    basis::Union{Nothing,B}
-    coeffs::Union{Nothing,V}
+    basis::B
+    coeffs::V
 end
 
 function NCPA(tel::Telescope, dm::DeformableMirror, atm::AbstractAtmosphere;
-    modal_basis::Symbol=:KL, coefficients=nothing, f2=nothing, seed::Integer=5,
+    basis::NCPABasis=KLBasis(), coefficients=nothing, f2=nothing, seed::Integer=5,
     M2C::Union{Nothing,AbstractMatrix}=nothing)
 
     T = eltype(tel.state.opd)
     if f2 === nothing
         if coefficients === nothing
             opd = copy(tel.state.pupil)
-            return NCPA{T, typeof(opd), Array{T,3}, Vector{T}}(opd, nothing, nothing)
+            return NCPA{T, typeof(opd), Nothing, Nothing}(opd, nothing, nothing)
         end
         coeffs = T.(coefficients)
-        basis = ncpa_basis(tel, dm; modal_basis=modal_basis, n_modes=length(coeffs), M2C=M2C)
-        opd = combine_basis(basis, coeffs, tel.state.pupil)
-        return NCPA{T, typeof(opd), typeof(basis), typeof(coeffs)}(opd, basis, coeffs)
+        basis_grid = ncpa_basis(basis, tel, dm; n_modes=length(coeffs), M2C=M2C)
+        opd = combine_basis(basis_grid, coeffs, tel.state.pupil)
+        return NCPA{T, typeof(opd), typeof(basis_grid), typeof(coeffs)}(opd, basis_grid, coeffs)
     end
 
     f2_params = collect(f2)
@@ -29,36 +34,39 @@ function NCPA(tel::Telescope, dm::DeformableMirror, atm::AbstractAtmosphere;
     end
     amplitude, start_mode, end_mode, cutoff = f2_params
     n_modes = Int(end_mode)
-    basis = ncpa_basis(tel, dm; modal_basis=modal_basis, n_modes=n_modes, M2C=M2C)
+    basis_grid = ncpa_basis(basis, tel, dm; n_modes=n_modes, M2C=M2C)
     rng = MersenneTwister(seed)
     coeffs = zeros(T, n_modes)
     for i in Int(start_mode):Int(end_mode)
         coeffs[i] = T(randn(rng)) / sqrt(T(i) + T(cutoff))
     end
-    opd = combine_basis(basis, coeffs, tel.state.pupil)
+    opd = combine_basis(basis_grid, coeffs, tel.state.pupil)
     σ = std(opd[tel.state.pupil])
     if σ > 0
         opd .*= T(amplitude) / σ
     end
-    return NCPA{T, typeof(opd), typeof(basis), typeof(coeffs)}(opd, basis, coeffs)
+    return NCPA{T, typeof(opd), typeof(basis_grid), typeof(coeffs)}(opd, basis_grid, coeffs)
 end
 
-function ncpa_basis(tel::Telescope, dm::DeformableMirror; modal_basis::Symbol=:KL, n_modes::Int=1,
+function ncpa_basis(::KLBasis, tel::Telescope, dm::DeformableMirror; n_modes::Int=1,
     M2C::Union{Nothing,AbstractMatrix}=nothing)
-    if modal_basis == :KL
-        _, basis = kl_modal_basis(dm, tel; n_modes=n_modes)
-        return basis
-    elseif modal_basis == :Zernike
-        zb = ZernikeBasis(tel, n_modes)
-        compute_zernike!(zb, tel)
-        return zb.modes
-    elseif modal_basis == :M2C
-        if M2C === nothing
-            throw(InvalidConfiguration("M2C matrix must be provided when modal_basis = :M2C"))
-        end
-        return basis_from_m2c(dm, tel, M2C)
+    _, basis = kl_modal_basis(dm, tel; n_modes=n_modes)
+    return basis
+end
+
+function ncpa_basis(::ZernikeModalBasis, tel::Telescope, dm::DeformableMirror; n_modes::Int=1,
+    M2C::Union{Nothing,AbstractMatrix}=nothing)
+    zb = ZernikeBasis(tel, n_modes)
+    compute_zernike!(zb, tel)
+    return zb.modes
+end
+
+function ncpa_basis(::M2CBasis, tel::Telescope, dm::DeformableMirror; n_modes::Int=1,
+    M2C::Union{Nothing,AbstractMatrix}=nothing)
+    if M2C === nothing
+        throw(InvalidConfiguration("M2C matrix must be provided when basis = M2CBasis()"))
     end
-    throw(InvalidConfiguration("Unsupported modal_basis: $(modal_basis)"))
+    return basis_from_m2c(dm, tel, M2C)
 end
 
 function combine_basis(basis::AbstractArray{T,3}, coeffs::AbstractVector{T}, pupil::AbstractMatrix{Bool}) where {T<:AbstractFloat}

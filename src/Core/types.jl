@@ -1,29 +1,17 @@
+"""Base type for optical elements."""
 abstract type AbstractOpticalElement end
+
+"""Sources must provide wavelength(src)."""
 abstract type AbstractSource <: AbstractOpticalElement end
+
+"""Atmospheres implement advance!(atm, tel; rng) and propagate!(atm, tel)."""
 abstract type AbstractAtmosphere <: AbstractOpticalElement end
+
+"""Wavefront sensors implement measure!(wfs, tel[, src]) and update_valid_mask!(wfs, tel)."""
 abstract type AbstractWFS <: AbstractOpticalElement end
+
+"""Detectors implement capture!(det, psf; rng)."""
 abstract type AbstractDetector <: AbstractOpticalElement end
+
+"""Deformable mirrors implement build_influence_functions!(dm, tel) and apply!(dm, tel, mode)."""
 abstract type AbstractDeformableMirror <: AbstractOpticalElement end
-
-abstract type SensingMode end
-struct Diffractive <: SensingMode end
-struct Geometric <: SensingMode end
-
-sensing_mode(::AbstractWFS) = Diffractive()
-
-abstract type NoiseModel end
-struct NoiseNone <: NoiseModel end
-struct NoisePhoton <: NoiseModel end
-struct NoiseReadout{T<:AbstractFloat} <: NoiseModel
-    sigma::T
-end
-struct NoisePhotonReadout{T<:AbstractFloat} <: NoiseModel
-    sigma::T
-end
-
-NoiseReadout(sigma::Real) = NoiseReadout{Float64}(float(sigma))
-NoisePhotonReadout(sigma::Real) = NoisePhotonReadout{Float64}(float(sigma))
-
-abstract type DMApplyMode end
-struct DMAdditive <: DMApplyMode end
-struct DMReplace <: DMApplyMode end

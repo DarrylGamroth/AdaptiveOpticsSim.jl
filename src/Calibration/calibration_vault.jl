@@ -1,17 +1,28 @@
 using LinearAlgebra
 
-struct CalibrationVault{T<:AbstractFloat,D<:AbstractMatrix{T}}
+struct CalibrationVault{T<:AbstractFloat,
+    D<:AbstractMatrix{T},
+    M<:AbstractMatrix{T},
+    V<:AbstractVector{T}}
     D::D
-    M::Union{Nothing,Matrix{T}}
-    Mtrunc::Union{Nothing,Matrix{T}}
-    singular_values::Vector{T}
+    M::Union{Nothing,M}
+    Mtrunc::Union{Nothing,M}
+    singular_values::V
     cond::T
     n_trunc::Int
 end
 
 function CalibrationVault(D::AbstractMatrix{T}; n_trunc::Int=0, invert::Bool=true) where {T<:AbstractFloat}
     if !invert
-        return CalibrationVault{T, typeof(D)}(D, nothing, nothing, T[], T(NaN), 0)
+        empty_vals = similar(D, T, 0)
+        return CalibrationVault{T, typeof(D), Matrix{T}, typeof(empty_vals)}(
+            D,
+            nothing,
+            nothing,
+            empty_vals,
+            T(NaN),
+            0,
+        )
     end
     if n_trunc < 0
         throw(InvalidConfiguration("n_trunc must be >= 0"))
@@ -35,7 +46,7 @@ function CalibrationVault(D::AbstractMatrix{T}; n_trunc::Int=0, invert::Bool=tru
     inv_s_trunc = inv_s[1:n_keep]
     Mtrunc = Matrix(Vtrunc * Diagonal(inv_s_trunc) * Utrunc')
     cond = s[1] / s[end - n_trunc]
-    return CalibrationVault{T, typeof(D)}(D, Minv, Mtrunc, collect(s), cond, n_trunc)
+    return CalibrationVault{T, typeof(D), typeof(Minv), typeof(s)}(D, Minv, Mtrunc, s, cond, n_trunc)
 end
 
 function CalibrationVault(D::AbstractMatrix{S}; n_trunc::Int=0, invert::Bool=true) where {S<:Real}

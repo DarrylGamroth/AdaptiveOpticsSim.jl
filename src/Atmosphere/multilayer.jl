@@ -16,9 +16,9 @@ mutable struct MultiLayerState{T<:AbstractFloat,A<:AbstractMatrix{T}}
     shift_buffer::A
 end
 
-struct MultiLayerAtmosphere{P<:MultiLayerParams,S<:MultiLayerState} <: AbstractAtmosphere
+struct MultiLayerAtmosphere{P<:MultiLayerParams,S<:MultiLayerState,L<:AbstractVector{<:KolmogorovAtmosphere}} <: AbstractAtmosphere
     params::P
-    layers::Vector{KolmogorovAtmosphere}
+    layers::L
     state::S
 end
 

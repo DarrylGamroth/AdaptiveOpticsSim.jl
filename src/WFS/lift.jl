@@ -1,29 +1,29 @@
 using LinearAlgebra
 using Logging
 
-struct LiFTParams{T<:AbstractFloat}
-    diversity_opd::Matrix{T}
+struct LiFTParams{T<:AbstractFloat,A<:AbstractMatrix{T}}
+    diversity_opd::A
     iterations::Int
     img_resolution::Int
     zero_padding::Int
     numerical::Bool
 end
 
-mutable struct LiFTState{T<:AbstractFloat}
-    workspace::Workspace
-    psf_buffer::Matrix{T}
+mutable struct LiFTState{T<:AbstractFloat,W<:Workspace,B<:AbstractMatrix{T}}
+    workspace::W
+    psf_buffer::B
 end
 
-struct LiFT{P<:LiFTParams,S<:LiFTState,B<:AbstractArray{<:AbstractFloat,3},SRC<:AbstractSource}
+struct LiFT{P<:LiFTParams,S<:LiFTState,B<:AbstractArray{<:AbstractFloat,3},SRC<:AbstractSource,D<:AbstractDetector}
     tel::Telescope
     src::SRC
-    det::Detector
+    det::D
     basis::B
     params::P
     state::S
 end
 
-function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Detector;
+function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::AbstractDetector;
     diversity_opd::AbstractMatrix, iterations::Int=5, img_resolution::Int=0,
     numerical::Bool=false, ang_pixel_arcsec=nothing)
 
@@ -45,8 +45,8 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::De
     end
     params = LiFTParams(float.(diversity_opd), iterations, img_resolution, zero_padding, numerical)
     ws = Workspace(tel.state.opd, tel.params.resolution * zero_padding; T=eltype(tel.state.opd))
-    psf_buffer = zeros(eltype(tel.state.opd), img_resolution, img_resolution)
-    state = LiFTState{eltype(tel.state.opd)}(ws, psf_buffer)
+    psf_buffer = similar(tel.state.opd, eltype(tel.state.opd), img_resolution, img_resolution)
+    state = LiFTState(ws, psf_buffer)
     return LiFT(tel, src, det, basis, params, state)
 end
 

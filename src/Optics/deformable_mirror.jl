@@ -1,5 +1,9 @@
 using LinearAlgebra
 
+abstract type DMApplyMode end
+struct DMAdditive <: DMApplyMode end
+struct DMReplace <: DMApplyMode end
+
 struct DeformableMirrorParams{T<:AbstractFloat}
     n_act::Int
     influence_width::T

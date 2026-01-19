@@ -2,6 +2,39 @@ using FFTW
 using Random
 using SpecialFunctions
 
+mutable struct PhaseStatsWorkspace{T<:AbstractFloat,
+    C<:AbstractMatrix{Complex{T}},
+    R<:AbstractMatrix{T},
+    V<:AbstractVector{T},
+    P}
+    spectrum::C
+    buffer::C
+    psd::R
+    noise_re::R
+    noise_im::R
+    freqs::V
+    ifft_plan::P
+end
+
+function PhaseStatsWorkspace(n::Int; T::Type{<:AbstractFloat}=Float64, backend=Array)
+    spectrum = backend{Complex{T}}(undef, n, n)
+    buffer = similar(spectrum)
+    psd = backend{T}(undef, n, n)
+    noise_re = backend{T}(undef, n, n)
+    noise_im = backend{T}(undef, n, n)
+    freqs = backend{T}(undef, n)
+    ifft_plan = FFTW.plan_ifft!(buffer)
+    return PhaseStatsWorkspace{T, typeof(spectrum), typeof(psd), typeof(freqs), typeof(ifft_plan)}(
+        spectrum,
+        buffer,
+        psd,
+        noise_re,
+        noise_im,
+        freqs,
+        ifft_plan,
+    )
+end
+
 function phase_variance(r0::Real, L0::Real; cn2::Real=1.0)
     L0r0 = (L0 / r0)^(5 / 3)
     cst = (24 * gamma(6 / 5))^(5 / 6) * (gamma(11 / 6) * gamma(5 / 6)) / (2 * pi^(8 / 3))
@@ -38,36 +71,42 @@ function covariance_matrix(rho1::AbstractVector, rho2::AbstractVector, atm::Kolm
 end
 
 function ft_phase_screen(atm::KolmogorovAtmosphere, n::Int, delta::Real;
-    l0::Real=1e-10, rng::AbstractRNG=Random.default_rng(), return_psd::Bool=false)
+    l0::Real=1e-10, rng::AbstractRNG=Random.default_rng(), return_psd::Bool=false,
+    ws::Union{Nothing,PhaseStatsWorkspace}=nothing)
 
-    freqs = zeros(Float64, n)
-    fftfreq!(freqs, n; d=delta)
+    if ws === nothing
+        ws = PhaseStatsWorkspace(n; T=eltype(atm.state.opd))
+    end
+    fftfreq!(ws.freqs, n; d=delta)
     del_f = 1 / (n * delta)
 
     r0 = atm.params.r0
     L0 = atm.params.L0
     fm = 5.92 / l0 / (2 * pi)
     f0 = 1 / L0
-    psd = zeros(Float64, n, n)
 
     @inbounds for i in 1:n, j in 1:n
-        f = sqrt(freqs[i]^2 + freqs[j]^2)
-        psd[i, j] = 0.023 * r0^(-5 / 3) * exp(-((f / fm)^2)) / ((f^2 + f0^2)^(11 / 6))
+        f = sqrt(ws.freqs[i]^2 + ws.freqs[j]^2)
+        ws.psd[i, j] = 0.023 * r0^(-5 / 3) * exp(-((f / fm)^2)) / ((f^2 + f0^2)^(11 / 6))
     end
-    psd[div(n, 2) + 1, div(n, 2) + 1] = 0
+    ws.psd[div(n, 2) + 1, div(n, 2) + 1] = 0
 
-    noise_re = randn(rng, n, n)
-    noise_im = randn(rng, n, n)
-    cn = complex.(noise_re, noise_im) .* sqrt.(psd) .* del_f
-    phs = real(ifft(FFTW.fftshift(cn))) * n
+    randn!(rng, ws.noise_re)
+    randn!(rng, ws.noise_im)
+    @. ws.spectrum = complex(ws.noise_re, ws.noise_im) * sqrt(ws.psd) * del_f
+    FFTW.fftshift!(ws.buffer, ws.spectrum)
+    mul!(ws.buffer, ws.ifft_plan, ws.buffer)
+    FFTW.fftshift!(ws.spectrum, ws.buffer)
+    phs = real.(ws.spectrum) .* n
     if return_psd
-        return phs, psd
+        return phs, ws.psd
     end
     return phs
 end
 
 function ft_sh_phase_screen(atm::KolmogorovAtmosphere, n::Int, delta::Real;
-    l0::Real=1e-10, rng::AbstractRNG=Random.default_rng(), return_psd::Bool=false)
+    l0::Real=1e-10, rng::AbstractRNG=Random.default_rng(), return_psd::Bool=false,
+    ws::Union{Nothing,PhaseStatsWorkspace}=nothing)
     # Sub-harmonics are omitted for now; this is a frequency-domain screen.
-    return ft_phase_screen(atm, n, delta; l0=l0, rng=rng, return_psd=return_psd)
+    return ft_phase_screen(atm, n, delta; l0=l0, rng=rng, return_psd=return_psd, ws=ws)
 end

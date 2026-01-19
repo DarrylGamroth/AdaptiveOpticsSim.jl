@@ -182,14 +182,14 @@ end
     apply!(map, tel, DMReplace())
     @test sum(tel.state.opd) ≈ 64.0
 
-    ncpa = NCPA(tel, dm, atm; modal_basis=:Zernike, coefficients=[0.0, 1e-9, 2e-9])
+    ncpa = NCPA(tel, dm, atm; basis=ZernikeModalBasis(), coefficients=[0.0, 1e-9, 2e-9])
     @test size(ncpa.opd) == (8, 8)
 end
 
 @testset "Spatial filter" begin
     tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
-    sf = SpatialFilter(tel; shape=:circular, diameter=4, zero_padding=2)
+    sf = SpatialFilter(tel; shape=CircularFilter(), diameter=4, zero_padding=2)
     phase, amp = filter!(sf, tel, src)
     @test size(phase) == (8, 8)
     @test size(amp) == (8, 8)

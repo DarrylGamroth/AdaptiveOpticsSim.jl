@@ -2,11 +2,14 @@ using LinearAlgebra
 
 const MISREG_FIELDS = (:shift_x, :shift_y, :rotation_deg, :radial_scaling, :tangential_scaling)
 
-struct MetaSensitivity{T<:AbstractFloat}
-    meta::CalibrationVault{T,Matrix{T}}
-    calib0::CalibrationVault{T,Matrix{T}}
+struct MetaSensitivity{T<:AbstractFloat,
+    M<:CalibrationVault{T},
+    C<:CalibrationVault{T},
+    V<:AbstractVector{Symbol}}
+    meta::M
+    calib0::C
     epsilon::Misregistration{T}
-    field_order::Vector{Symbol}
+    field_order::V
 end
 
 mutable struct SPRINT{T<:AbstractFloat}
@@ -27,7 +30,7 @@ function compute_meta_sensitivity_matrix(tel::Telescope, dm::DeformableMirror, w
     dm0 = DeformableMirror(tel; n_act=dm.params.n_act, influence_width=dm.params.influence_width,
         misregistration=misregistration_zero, T=T)
     calib0 = interaction_matrix(dm0, wfs, tel, basis; amplitude=1e-9)
-    calib0_vault = CalibrationVault(Matrix(calib0.matrix))
+    calib0_vault = CalibrationVault(calib0.matrix)
 
     n_elements = length(calib0.matrix)
     meta = zeros(T, n_elements, length(fields))
@@ -55,7 +58,7 @@ end
 function estimate_misregistration(meta::MetaSensitivity, calib_in::AbstractMatrix;
     misregistration_zero::Misregistration, precision::Int=3, gain_estimation::Real=1.0)
 
-    calib_in_vault = CalibrationVault(Matrix(calib_in))
+    calib_in_vault = CalibrationVault(calib_in)
     diff = vec(calib_in_vault.D .- meta.calib0.D)
     if meta.meta.M === nothing
         throw(InvalidConfiguration("meta sensitivity matrix is not inverted"))

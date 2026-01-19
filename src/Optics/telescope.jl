@@ -6,11 +6,15 @@ struct TelescopeParams{T<:AbstractFloat}
     fov_arcsec::T
 end
 
-mutable struct TelescopeState{T, Aopd<:AbstractMatrix{T}, Apsf<:AbstractMatrix{T}, Amask<:AbstractMatrix{Bool}}
+mutable struct TelescopeState{T,
+    Aopd<:AbstractMatrix{T},
+    Apsf<:AbstractMatrix{T},
+    Amask<:AbstractMatrix{Bool},
+    Vpsf<:AbstractVector{Apsf}}
     pupil::Amask
     opd::Aopd
     psf::Apsf
-    psf_list::Vector{Apsf}
+    psf_list::Vpsf
 end
 
 struct Telescope{P<:TelescopeParams,S<:TelescopeState} <: AbstractOpticalElement
@@ -43,7 +47,13 @@ function Telescope(; resolution::Int,
     psf = backend{T}(undef, resolution, resolution)
     fill!(psf, zero(T))
 
-    state = TelescopeState{T, typeof(opd), typeof(psf), typeof(pupil)}(pupil, opd, psf, Vector{typeof(psf)}())
+    psf_list = Vector{typeof(psf)}()
+    state = TelescopeState{T, typeof(opd), typeof(psf), typeof(pupil), typeof(psf_list)}(
+        pupil,
+        opd,
+        psf,
+        psf_list,
+    )
     return Telescope(params, state)
 end
 
