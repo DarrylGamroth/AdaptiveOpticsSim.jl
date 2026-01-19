@@ -24,7 +24,7 @@ function KolmogorovAtmosphere(tel::Telescope; r0::Real, L0::Real=25.0, T=Float64
 end
 
 function phase_screen_von_karman(r0::Real, L0::Real, n::Int, delta::Real, rng::AbstractRNG, T)
-    fx = fftfreq(n, delta)
+    fx = FFTW.fftfreq(n, delta)
     fy = fx
     psd = Array{T}(undef, n, n)
 

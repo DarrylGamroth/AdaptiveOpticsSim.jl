@@ -33,6 +33,6 @@ function compute_psf!(tel::Telescope, src::Source; zero_padding::Int=1, ws::Unio
     @. ws.psf_buffer = abs2(ws.fft_buffer)
 
     ensure_psf_state!(tel, n_pad)
-    fftshift!(tel.state.psf, ws.psf_buffer)
+    FFTW.fftshift!(tel.state.psf, ws.psf_buffer)
     return tel.state.psf
 end
