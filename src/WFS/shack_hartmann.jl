@@ -164,6 +164,16 @@ function measure!(wfs::ShackHartmann, tel::Telescope, src::LGSSource)
     return measure!(sensing_mode(wfs), wfs, tel, src)
 end
 
+function measure!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource, det::AbstractDetector;
+    rng::AbstractRNG=Random.default_rng())
+    return measure!(sensing_mode(wfs), wfs, tel, src, det; rng=rng)
+end
+
+function measure!(wfs::ShackHartmann, tel::Telescope, ast::Asterism, det::AbstractDetector;
+    rng::AbstractRNG=Random.default_rng())
+    return measure!(sensing_mode(wfs), wfs, tel, ast, det; rng=rng)
+end
+
 function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
     Base.require_one_based_indexing(tel.state.opd)
     n = tel.params.resolution
@@ -186,6 +196,41 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
                 wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
                 wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
             else
+                wfs.state.slopes[idx] = sx / (total * center)
+                wfs.state.slopes[idx + n_sub * n_sub] = sy / (total * center)
+            end
+        else
+            wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
+            wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
+        end
+        idx += 1
+    end
+    return wfs.state.slopes
+end
+
+function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
+    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    Base.require_one_based_indexing(tel.state.opd)
+    n = tel.params.resolution
+    n_sub = wfs.params.n_subap
+    sub = div(n, n_sub)
+    pad = size(wfs.state.field, 1)
+    ox = div(pad - sub, 2)
+    oy = div(pad - sub, 2)
+    idx = 1
+
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        xs = (i - 1) * sub + 1
+        ys = (j - 1) * sub + 1
+        xe = min(i * sub, n)
+        ye = min(j * sub, n)
+        if wfs.state.valid_mask[i, j]
+            total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx, det, rng)
+            if total <= 0
+                wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
+                wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
+            else
+                center = (eltype(wfs.state.slopes)(size(det.state.frame, 1)) + one(eltype(wfs.state.slopes))) / 2
                 wfs.state.slopes[idx] = sx / (total * center)
                 wfs.state.slopes[idx + n_sub * n_sub] = sy / (total * center)
             end
@@ -244,6 +289,53 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
     return wfs.state.slopes
 end
 
+function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asterism,
+    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    Base.require_one_based_indexing(tel.state.opd)
+    if isempty(ast.sources)
+        throw(InvalidConfiguration("asterism must contain at least one source"))
+    end
+    wavelength(ast)
+    n = tel.params.resolution
+    n_sub = wfs.params.n_subap
+    sub = div(n, n_sub)
+    pad = size(wfs.state.field, 1)
+    ox = div(pad - sub, 2)
+    oy = div(pad - sub, 2)
+    idx = 1
+
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        xs = (i - 1) * sub + 1
+        ys = (j - 1) * sub + 1
+        xe = min(i * sub, n)
+        ye = min(j * sub, n)
+        if wfs.state.valid_mask[i, j]
+            total_sum = zero(eltype(wfs.state.slopes))
+            sx_sum = zero(eltype(wfs.state.slopes))
+            sy_sum = zero(eltype(wfs.state.slopes))
+            for src in ast.sources
+                total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx, det, rng)
+                total_sum += total
+                sx_sum += sx
+                sy_sum += sy
+            end
+            if total_sum <= 0
+                wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
+                wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
+            else
+                center = (eltype(wfs.state.slopes)(size(det.state.frame, 1)) + one(eltype(wfs.state.slopes))) / 2
+                wfs.state.slopes[idx] = sx_sum / (total_sum * center)
+                wfs.state.slopes[idx + n_sub * n_sub] = sy_sum / (total_sum * center)
+            end
+        else
+            wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
+            wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
+        end
+        idx += 1
+    end
+    return wfs.state.slopes
+end
+
 function compute_intensity!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int)
     phase_scale = (2 * pi) / wavelength(src)
@@ -283,6 +375,23 @@ function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
     compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
     apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
     return centroid_from_intensity(wfs.state.intensity, pad)
+end
+
+function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
+    xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int, ::Int, ::Int,
+    det::AbstractDetector, rng::AbstractRNG)
+    compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+    frame = capture!(det, wfs.state.intensity; rng=rng)
+    return centroid_from_intensity(frame, size(frame, 1))
+end
+
+function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
+    xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int, ::Int, idx::Int,
+    det::AbstractDetector, rng::AbstractRNG)
+    compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+    apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
+    frame = capture!(det, wfs.state.intensity; rng=rng)
+    return centroid_from_intensity(frame, size(frame, 1))
 end
 
 function apply_lgs_elongation!(::LGSProfileNone, wfs::ShackHartmann, ::Telescope, src::LGSSource, ::Int)
