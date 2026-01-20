@@ -62,9 +62,10 @@
 
 ## Simplifications vs OOPAO (Current State)
 - WFS diffractive models use FFT propagation; Shack-Hartmann now supports pixel-scale
-  and subaperture sampling controls (binning + crop/pad), but Pyramid/BioEdge transfer
-  functions are still simplified and BioEdge uses a phase-gradient surrogate
-  (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`, `src/WFS/bioedge.jl`).
+  and subaperture sampling controls (binning + crop/pad), Pyramid/BioEdge support
+  detector-style binning, but transfer functions are still simplified and BioEdge
+  uses a phase-gradient surrogate (`src/WFS/shack_hartmann.jl`,
+  `src/WFS/pyramid.jl`, `src/WFS/bioedge.jl`).
 - LGS elongation uses Na-profile convolution for Shack-Hartmann, Pyramid, and BioEdge; the
   Pyramid/BioEdge path currently averages Na-profile kernels across subapertures rather
   than modeling per-subap kernels (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`,
