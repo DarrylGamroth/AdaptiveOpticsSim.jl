@@ -198,10 +198,30 @@ function measure!(wfs::PyramidWFS, tel::Telescope, src::LGSSource)
     return measure!(sensing_mode(wfs), wfs, tel, src)
 end
 
+function measure!(wfs::PyramidWFS, tel::Telescope, src::AbstractSource, det::AbstractDetector;
+    rng::AbstractRNG=Random.default_rng())
+    return measure!(sensing_mode(wfs), wfs, tel, src, det; rng=rng)
+end
+
+function measure!(wfs::PyramidWFS, tel::Telescope, ast::Asterism, det::AbstractDetector;
+    rng::AbstractRNG=Random.default_rng())
+    return measure!(sensing_mode(wfs), wfs, tel, ast, det; rng=rng)
+end
+
 function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
     n_sub = wfs.params.n_subap
     pyramid_intensity!(wfs.state.intensity, wfs, tel, src)
     pyramid_slopes!(wfs, n_sub)
+    @. wfs.state.slopes *= wfs.state.optical_gain
+    return wfs.state.slopes
+end
+
+function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::AbstractSource,
+    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    n_sub = wfs.params.n_subap
+    pyramid_intensity!(wfs.state.intensity, wfs, tel, src)
+    frame = capture!(det, wfs.state.intensity; rng=rng)
+    pyramid_slopes!(wfs, n_sub, frame)
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
 end
@@ -219,6 +239,25 @@ function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, ast::Asterism)
     end
     n_sub = wfs.params.n_subap
     pyramid_slopes!(wfs, n_sub)
+    @. wfs.state.slopes *= wfs.state.optical_gain
+    return wfs.state.slopes
+end
+
+function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, ast::Asterism,
+    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    Base.require_one_based_indexing(tel.state.opd)
+    if isempty(ast.sources)
+        throw(InvalidConfiguration("asterism must contain at least one source"))
+    end
+    wavelength(ast)
+    fill!(wfs.state.intensity, zero(eltype(wfs.state.intensity)))
+    for src in ast.sources
+        pyramid_intensity!(wfs.state.temp, wfs, tel, src)
+        wfs.state.intensity .+= wfs.state.temp
+    end
+    n_sub = wfs.params.n_subap
+    frame = capture!(det, wfs.state.intensity; rng=rng)
+    pyramid_slopes!(wfs, n_sub, frame)
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
 end
@@ -352,7 +391,10 @@ function build_modulation_phases!(wfs::PyramidWFS, tel::Telescope)
 end
 
 function pyramid_slopes!(wfs::PyramidWFS, n_sub::Int)
-    intensity = wfs.state.intensity
+    return pyramid_slopes!(wfs, n_sub, wfs.state.intensity)
+end
+
+function pyramid_slopes!(wfs::PyramidWFS, n_sub::Int, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
     pad = size(intensity, 1)
     half = div(pad, 2)
     pupil_size = half
