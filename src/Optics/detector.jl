@@ -127,16 +127,38 @@ end
 
 function fill_frame!(det::Detector, psf::AbstractMatrix{T}) where {T}
     n_in, m_in = size(psf)
-    if det.params.binning > 1
-        n_out = div(n_in, det.params.binning)
-        m_out = div(m_in, det.params.binning)
-        ensure_buffers!(det, n_in, m_in, n_out, m_out)
-        @. det.state.bin_buffer = psf * det.params.qe * det.params.integration_time
-        bin2d!(det.state.frame, det.state.bin_buffer, det.params.binning)
-    else
-        ensure_buffers!(det, n_in, m_in, n_in, m_in)
-        @. det.state.frame = psf * det.params.qe * det.params.integration_time
+    sampling = det.params.psf_sampling
+    binning = det.params.binning
+    if sampling < 1 || binning < 1
+        throw(InvalidConfiguration("psf_sampling and binning must be >= 1"))
     end
+    if n_in % sampling != 0 || m_in % sampling != 0
+        throw(DimensionMismatchError("psf_sampling must evenly divide input dimensions"))
+    end
+    n_mid = div(n_in, sampling)
+    m_mid = div(m_in, sampling)
+    if n_mid % binning != 0 || m_mid % binning != 0
+        throw(DimensionMismatchError("binning must evenly divide sampled dimensions"))
+    end
+    n_out = div(n_mid, binning)
+    m_out = div(m_mid, binning)
+    ensure_buffers!(det, n_mid, m_mid, n_out, m_out)
+
+    if sampling > 1
+        bin2d!(det.state.bin_buffer, psf, sampling)
+        if binning > 1
+            bin2d!(det.state.frame, det.state.bin_buffer, binning)
+        else
+            det.state.frame .= det.state.bin_buffer
+        end
+    else
+        if binning > 1
+            bin2d!(det.state.frame, psf, binning)
+        else
+            det.state.frame .= psf
+        end
+    end
+    @. det.state.frame *= det.params.qe * det.params.integration_time
     return det.state.frame
 end
 
@@ -170,12 +192,12 @@ function capture!(det::Detector, psf::AbstractMatrix{T}; rng::AbstractRNG=Random
     return capture!(det, psf, rng)
 end
 
-function ensure_buffers!(det::Detector, n_in::Int, m_in::Int, n_out::Int, m_out::Int)
+function ensure_buffers!(det::Detector, n_mid::Int, m_mid::Int, n_out::Int, m_out::Int)
     if size(det.state.frame) != (n_out, m_out)
         det.state.frame = similar(det.state.frame, n_out, m_out)
     end
-    if size(det.state.bin_buffer) != (n_in, m_in)
-        det.state.bin_buffer = similar(det.state.bin_buffer, n_in, m_in)
+    if size(det.state.bin_buffer) != (n_mid, m_mid)
+        det.state.bin_buffer = similar(det.state.bin_buffer, n_mid, m_mid)
     end
     if size(det.state.noise_buffer) != (n_out, m_out)
         det.state.noise_buffer = similar(det.state.noise_buffer, n_out, m_out)

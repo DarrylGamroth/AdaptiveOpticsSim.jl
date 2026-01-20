@@ -135,6 +135,11 @@ end
     @test size(frame) == (4, 4)
     @test sum(frame) == sum(psf)
 
+    det_sampling = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, psf_sampling=2, binning=2)
+    frame_sampling = capture!(det_sampling, psf; rng=MersenneTwister(2))
+    @test size(frame_sampling) == (2, 2)
+    @test sum(frame_sampling) == sum(psf)
+
     det_tuple = Detector(integration_time=1.0, noise=(NoisePhoton(), NoiseReadout(0.5)),
         qe=1.0, binning=1)
     @test det_tuple.noise isa NoisePhotonReadout
