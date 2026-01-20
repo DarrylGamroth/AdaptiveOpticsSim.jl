@@ -4,6 +4,9 @@ struct ShackHartmannParams{T<:AbstractFloat}
     n_subap::Int
     threshold::T
     diffraction_padding::Int
+    pixel_scale::Union{T,Nothing}
+    n_pix_subap::Union{Int,Nothing}
+    shannon_sampling::Bool
 end
 
 mutable struct ShackHartmannState{T<:AbstractFloat,
@@ -11,6 +14,8 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     V<:AbstractVector{T},
     C<:AbstractMatrix{Complex{T}},
     R<:AbstractMatrix{T},
+    RB<:AbstractMatrix{T},
+    RS<:AbstractMatrix{T},
     P,
     Pi,
     K<:AbstractVector{T},
@@ -21,11 +26,16 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     fft_buffer::C
     intensity::R
     temp::R
+    bin_buffer::RB
+    spot::RS
     fft_plan::P
     ifft_plan::Pi
     elongation_kernel::K
     lgs_kernel_fft::KF
     lgs_kernel_tag::UInt
+    effective_padding::Int
+    binning_pixel_scale::Int
+    sampled_n_pix_subap::Int
 end
 
 struct ShackHartmann{M<:SensingMode,P<:ShackHartmannParams,S<:ShackHartmannState} <: AbstractWFS
@@ -34,11 +44,15 @@ struct ShackHartmann{M<:SensingMode,P<:ShackHartmannParams,S<:ShackHartmannState
 end
 
 function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
-    diffraction_padding::Int=2, mode::SensingMode=Geometric(), T::Type{<:AbstractFloat}=Float64, backend=Array)
+    diffraction_padding::Int=2, pixel_scale=nothing, n_pix_subap=nothing,
+    shannon_sampling::Bool=true, mode::SensingMode=Geometric(),
+    T::Type{<:AbstractFloat}=Float64, backend=Array)
     if tel.params.resolution % n_subap != 0
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     end
-    params = ShackHartmannParams{T}(n_subap, T(threshold), diffraction_padding)
+    pixel_scale_t = pixel_scale === nothing ? nothing : T(pixel_scale)
+    params = ShackHartmannParams{T}(n_subap, T(threshold), diffraction_padding,
+        pixel_scale_t, n_pix_subap, shannon_sampling)
     valid_mask = backend{Bool}(undef, n_subap, n_subap)
     slopes = backend{T}(undef, 2 * n_subap * n_subap)
     fill!(slopes, zero(T))
@@ -48,6 +62,8 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     fft_buffer = similar(field)
     intensity = backend{T}(undef, pad, pad)
     temp = similar(intensity)
+    bin_buffer = backend{T}(undef, sub, sub)
+    spot = similar(bin_buffer)
     fft_plan = plan_fft!(fft_buffer)
     ifft_plan = plan_ifft!(fft_buffer)
     elongation_kernel = backend{T}(undef, 1)
@@ -58,6 +74,8 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         typeof(slopes),
         typeof(field),
         typeof(intensity),
+        typeof(bin_buffer),
+        typeof(spot),
         typeof(fft_plan),
         typeof(ifft_plan),
         typeof(elongation_kernel),
@@ -69,11 +87,16 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         fft_buffer,
         intensity,
         temp,
+        bin_buffer,
+        spot,
         fft_plan,
         ifft_plan,
         elongation_kernel,
         lgs_kernel_fft,
         UInt(0),
+        diffraction_padding,
+        1,
+        sub,
     )
     wfs = ShackHartmann{typeof(mode), typeof(params), typeof(state)}(params, state)
     update_valid_mask!(wfs, tel)
@@ -96,6 +119,98 @@ function update_valid_mask!(wfs::ShackHartmann, tel::Telescope)
         wfs.state.valid_mask[i, j] = mean(subap_pupil) > wfs.params.threshold
     end
     return wfs
+end
+
+function ensure_sh_buffers!(wfs::ShackHartmann, pad::Int)
+    if size(wfs.state.field) != (pad, pad)
+        wfs.state.field = similar(wfs.state.field, pad, pad)
+        wfs.state.fft_buffer = similar(wfs.state.fft_buffer, pad, pad)
+        wfs.state.intensity = similar(wfs.state.intensity, pad, pad)
+        wfs.state.temp = similar(wfs.state.temp, pad, pad)
+        wfs.state.fft_plan = plan_fft!(wfs.state.fft_buffer)
+        wfs.state.ifft_plan = plan_ifft!(wfs.state.fft_buffer)
+    end
+    return wfs
+end
+
+@inline function sh_pixel_scale_init(d_subap::Real, padding::Int, src::AbstractSource)
+    return lgs_pixel_scale(d_subap, padding, wavelength(src))
+end
+
+function prepare_sampling!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
+    sub = div(tel.params.resolution, wfs.params.n_subap)
+    padding = wfs.params.diffraction_padding
+    pixel_scale_req = wfs.params.pixel_scale
+    d_subap = tel.params.diameter / wfs.params.n_subap
+    pixel_scale_init = sh_pixel_scale_init(d_subap, padding, src)
+
+    if pixel_scale_req !== nothing
+        while pixel_scale_req / pixel_scale_init < 0.95
+            padding += 1
+            pixel_scale_init = sh_pixel_scale_init(d_subap, padding, src)
+        end
+    end
+
+    binning_pixel_scale = if pixel_scale_req === nothing
+        wfs.params.shannon_sampling ? 1 : 2
+    else
+        factor = pixel_scale_req / pixel_scale_init
+        lower = max(1, floor(Int, factor))
+        upper = max(1, ceil(Int, factor))
+        abs(lower * pixel_scale_init - pixel_scale_req) <= abs(upper * pixel_scale_init - pixel_scale_req) ? lower : upper
+    end
+
+    pad = sub * padding
+    while pad % binning_pixel_scale != 0
+        padding += 1
+        pad = sub * padding
+        pixel_scale_init = sh_pixel_scale_init(d_subap, padding, src)
+        if pixel_scale_req !== nothing
+            factor = pixel_scale_req / pixel_scale_init
+            lower = max(1, floor(Int, factor))
+            upper = max(1, ceil(Int, factor))
+            binning_pixel_scale = abs(lower * pixel_scale_init - pixel_scale_req) <= abs(upper * pixel_scale_init - pixel_scale_req) ? lower : upper
+        end
+    end
+
+    n_pix_subap = wfs.params.n_pix_subap === nothing ? sub : wfs.params.n_pix_subap
+    if isodd(n_pix_subap)
+        throw(InvalidConfiguration("n_pix_subap must be even"))
+    end
+
+    if padding != wfs.state.effective_padding || pad != size(wfs.state.field, 1)
+        ensure_sh_buffers!(wfs, pad)
+        wfs.state.lgs_kernel_fft = similar(wfs.state.fft_buffer, Complex{eltype(wfs.state.fft_buffer)}, 0, 0, 0)
+        wfs.state.lgs_kernel_tag = UInt(0)
+        wfs.state.effective_padding = padding
+    end
+
+    if n_pix_subap != wfs.state.sampled_n_pix_subap
+        wfs.state.spot = similar(wfs.state.spot, n_pix_subap, n_pix_subap)
+        wfs.state.sampled_n_pix_subap = n_pix_subap
+    end
+
+    wfs.state.binning_pixel_scale = binning_pixel_scale
+    return wfs
+end
+
+function sample_spot!(wfs::ShackHartmann, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
+    binning = wfs.state.binning_pixel_scale
+    spot_in = intensity
+    if binning > 1
+        pad = size(intensity, 1)
+        if pad % binning != 0
+            throw(InvalidConfiguration("lenslet sampling is not divisible by binning_pixel_scale"))
+        end
+        n_binned = div(pad, binning)
+        if size(wfs.state.bin_buffer) != (n_binned, n_binned)
+            wfs.state.bin_buffer = similar(wfs.state.bin_buffer, n_binned, n_binned)
+        end
+        bin2d!(wfs.state.bin_buffer, intensity, binning)
+        spot_in = wfs.state.bin_buffer
+    end
+    center_resize2d!(wfs.state.spot, spot_in)
+    return wfs.state.spot
 end
 
 function measure!(mode::Geometric, wfs::ShackHartmann, tel::Telescope)
@@ -175,13 +290,13 @@ end
 
 function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
     Base.require_one_based_indexing(tel.state.opd)
+    prepare_sampling!(wfs, tel, src)
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
     sub = div(n, n_sub)
     pad = size(wfs.state.field, 1)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
-    center = (pad + 1) / 2
     idx = 1
 
     @inbounds for i in 1:n_sub, j in 1:n_sub
@@ -190,7 +305,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
         xe = min(i * sub, n)
         ye = min(j * sub, n)
         if wfs.state.valid_mask[i, j]
-            total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
+            total, sx, sy, center = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
             if total <= 0
                 wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
                 wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
@@ -210,6 +325,7 @@ end
 function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
     Base.require_one_based_indexing(tel.state.opd)
+    prepare_sampling!(wfs, tel, src)
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
     sub = div(n, n_sub)
@@ -224,12 +340,11 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
         xe = min(i * sub, n)
         ye = min(j * sub, n)
         if wfs.state.valid_mask[i, j]
-            total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx, det, rng)
+            total, sx, sy, center = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx, det, rng)
             if total <= 0
                 wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
                 wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
             else
-                center = (eltype(wfs.state.slopes)(size(det.state.frame, 1)) + one(eltype(wfs.state.slopes))) / 2
                 wfs.state.slopes[idx] = sx / (total * center)
                 wfs.state.slopes[idx + n_sub * n_sub] = sy / (total * center)
             end
@@ -248,13 +363,13 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
         throw(InvalidConfiguration("asterism must contain at least one source"))
     end
     wavelength(ast)
+    prepare_sampling!(wfs, tel, ast.sources[1])
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
     sub = div(n, n_sub)
     pad = size(wfs.state.field, 1)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
-    center = (pad + 1) / 2
     idx = 1
 
     @inbounds for i in 1:n_sub, j in 1:n_sub
@@ -266,8 +381,9 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
             total_sum = zero(eltype(wfs.state.slopes))
             sx_sum = zero(eltype(wfs.state.slopes))
             sy_sum = zero(eltype(wfs.state.slopes))
+            center = one(eltype(wfs.state.slopes))
             for src in ast.sources
-                total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
+                total, sx, sy, center = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
                 total_sum += total
                 sx_sum += sx
                 sy_sum += sy
@@ -295,6 +411,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
         throw(InvalidConfiguration("asterism must contain at least one source"))
     end
     wavelength(ast)
+    prepare_sampling!(wfs, tel, ast.sources[1])
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
     sub = div(n, n_sub)
@@ -312,8 +429,9 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
             total_sum = zero(eltype(wfs.state.slopes))
             sx_sum = zero(eltype(wfs.state.slopes))
             sy_sum = zero(eltype(wfs.state.slopes))
+            center = one(eltype(wfs.state.slopes))
             for src in ast.sources
-                total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx, det, rng)
+                total, sx, sy, center = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx, det, rng)
                 total_sum += total
                 sx_sum += sx
                 sy_sum += sy
@@ -322,7 +440,6 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
                 wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
                 wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
             else
-                center = (eltype(wfs.state.slopes)(size(det.state.frame, 1)) + one(eltype(wfs.state.slopes))) / 2
                 wfs.state.slopes[idx] = sx_sum / (total_sum * center)
                 wfs.state.slopes[idx + n_sub * n_sub] = sy_sum / (total_sum * center)
             end
@@ -347,41 +464,45 @@ function compute_intensity!(wfs::ShackHartmann, tel::Telescope, src::AbstractSou
     return wfs.state.intensity
 end
 
-@inline function centroid_from_intensity(intensity::AbstractMatrix{T}, pad::Int) where {T<:AbstractFloat}
+@inline function centroid_from_intensity(intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
     total = sum(intensity)
     if total <= 0
-        return zero(T), zero(T), zero(T)
+        return zero(T), zero(T), zero(T), one(T)
     end
     sx = zero(T)
     sy = zero(T)
+    pad = size(intensity, 1)
     center = (T(pad) + one(T)) / 2
     @inbounds for x in 1:pad, y in 1:pad
         val = intensity[x, y]
         sx += (x - center) * val
         sy += (y - center) * val
     end
-    return total, sx, sy
+    return total, sx, sy, center
 end
 
 function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int, pad::Int, ::Int)
     compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
-    return centroid_from_intensity(wfs.state.intensity, pad)
+    spot = sample_spot!(wfs, wfs.state.intensity)
+    return centroid_from_intensity(spot)
 end
 
 function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
     xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int, pad::Int, idx::Int)
     compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
     apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
-    return centroid_from_intensity(wfs.state.intensity, pad)
+    spot = sample_spot!(wfs, wfs.state.intensity)
+    return centroid_from_intensity(spot)
 end
 
 function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int, ::Int, ::Int,
     det::AbstractDetector, rng::AbstractRNG)
     compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
-    frame = capture!(det, wfs.state.intensity; rng=rng)
-    return centroid_from_intensity(frame, size(frame, 1))
+    spot = sample_spot!(wfs, wfs.state.intensity)
+    frame = capture!(det, spot; rng=rng)
+    return centroid_from_intensity(frame)
 end
 
 function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
@@ -389,8 +510,9 @@ function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
     det::AbstractDetector, rng::AbstractRNG)
     compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
     apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
-    frame = capture!(det, wfs.state.intensity; rng=rng)
-    return centroid_from_intensity(frame, size(frame, 1))
+    spot = sample_spot!(wfs, wfs.state.intensity)
+    frame = capture!(det, spot; rng=rng)
+    return centroid_from_intensity(frame)
 end
 
 function apply_lgs_elongation!(::LGSProfileNone, wfs::ShackHartmann, ::Telescope, src::LGSSource, ::Int)
@@ -459,7 +581,7 @@ function lgs_spot_kernels_fft(tel::Telescope, wfs::ShackHartmann, src::LGSSource
 
     pixel_scale = lgs_pixel_scale(
         tel.params.diameter / wfs.params.n_subap,
-        wfs.params.diffraction_padding,
+        wfs.state.effective_padding,
         wavelength(src),
     )
     fwhm_px = src.params.fwhm_spot_up / pixel_scale

@@ -12,6 +12,25 @@ function pad_center!(dest::AbstractMatrix, src::AbstractMatrix)
     return dest
 end
 
+function center_resize2d!(dest::AbstractMatrix, src::AbstractMatrix)
+    Base.require_one_based_indexing(dest, src)
+    fill!(dest, zero(eltype(dest)))
+    nx, ny = size(dest)
+    sx, sy = size(src)
+    ox = div(nx - sx, 2)
+    oy = div(ny - sy, 2)
+    dx = max(1, 1 + ox)
+    dy = max(1, 1 + oy)
+    sx_start = max(1, 1 - ox)
+    sy_start = max(1, 1 - oy)
+    len_x = min(nx - dx + 1, sx - sx_start + 1)
+    len_y = min(ny - dy + 1, sy - sy_start + 1)
+    if len_x > 0 && len_y > 0
+        @views dest[dx:dx+len_x-1, dy:dy+len_y-1] .= src[sx_start:sx_start+len_x-1, sy_start:sy_start+len_y-1]
+    end
+    return dest
+end
+
 function fftshift2d!(dest::AbstractMatrix, src::AbstractMatrix)
     Base.require_one_based_indexing(dest, src)
     n, m = size(src)

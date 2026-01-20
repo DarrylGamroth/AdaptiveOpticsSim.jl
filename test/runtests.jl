@@ -219,6 +219,10 @@ end
     sh_profile_slopes = measure!(sh_profile, tel, lgs_profile)
     @test all(isfinite, sh_profile_slopes)
 
+    sh_sampled = ShackHartmann(tel; n_subap=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
+    sh_sampled_slopes = measure!(sh_sampled, tel, ngs)
+    @test length(sh_sampled_slopes) == 2 * 4 * 4
+
     pyr_profile = PyramidWFS(tel; n_subap=4, mode=Diffractive())
     pyr_profile_slopes = measure!(pyr_profile, tel, lgs_profile)
     @test all(isfinite, pyr_profile_slopes)
