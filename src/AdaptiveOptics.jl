@@ -83,7 +83,8 @@ export BioEdgeWFS, BioEdgeParams, BioEdgeState
 export LiFT, lift_interaction_matrix
 export InteractionMatrix, interaction_matrix
 export CalibrationVault, with_truncation
-export ModalBasis, dm_basis, kl_modal_basis, modal_basis, basis_from_m2c, basis_projector
+export ModalBasis, KLBasisMethod, KLDMModes, KLHHtPSD
+export dm_basis, kl_modal_basis, modal_basis, basis_from_m2c, basis_projector
 export AOCalibration, ao_calibration
 export fitting_error, fitting_error_dm
 export fast_atmosphere
