@@ -35,12 +35,15 @@ end
 
 wavelength(src::Source) = src.params.wavelength
 
-struct LGSSourceParams{T<:AbstractFloat}
+struct LGSSourceParams{T<:AbstractFloat,A}
     magnitude::T
     coordinates::NTuple{2,T}
     wavelength::T
     altitude::T
     elongation_factor::T
+    laser_coordinates::NTuple{2,T}
+    na_profile::A
+    fwhm_spot_up::T
 end
 
 struct LGSSource{P<:LGSSourceParams} <: AbstractSource
@@ -48,14 +51,29 @@ struct LGSSource{P<:LGSSourceParams} <: AbstractSource
 end
 
 function LGSSource(; magnitude::Real=0.0, coordinates=(0.0, 0.0), wavelength::Real=589e-9,
-    altitude::Real=90000.0, elongation_factor::Real=1.2, T::Type{<:AbstractFloat}=Float64)
+    altitude::Real=90000.0, elongation_factor::Real=1.2, laser_coordinates=(0.0, 0.0),
+    na_profile=nothing, fwhm_spot_up::Real=0.0, T::Type{<:AbstractFloat}=Float64)
 
-    params = LGSSourceParams{T}(
+    alt_val = T(altitude)
+    if na_profile !== nothing
+        if size(na_profile, 1) != 2
+            throw(InvalidConfiguration("na_profile must be a 2xN matrix of (altitude, weight)"))
+        end
+        weights = na_profile[2, :]
+        if sum(weights) > 0
+            alt_val = T(sum(na_profile[1, :] .* weights) / sum(weights))
+        end
+    end
+
+    params = LGSSourceParams{T, typeof(na_profile)}(
         T(magnitude),
         (T(coordinates[1]), T(coordinates[2])),
         T(wavelength),
-        T(altitude),
+        alt_val,
         T(elongation_factor),
+        (T(laser_coordinates[1]), T(laser_coordinates[2])),
+        na_profile,
+        T(fwhm_spot_up),
     )
     return LGSSource(params)
 end
@@ -63,3 +81,7 @@ end
 wavelength(src::LGSSource) = src.params.wavelength
 
 lgs_elongation_factor(src::LGSSource) = src.params.elongation_factor
+
+function lgs_has_profile(src::LGSSource)
+    return src.params.na_profile !== nothing
+end

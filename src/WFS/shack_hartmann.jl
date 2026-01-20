@@ -13,7 +13,9 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     C<:AbstractMatrix{Complex{T}},
     R<:AbstractMatrix{T},
     P,
-    K<:AbstractVector{T}}
+    Pi,
+    K<:AbstractVector{T},
+    KF<:AbstractArray{Complex{T},3}}
     valid_mask::A
     slopes::V
     field::C
@@ -21,7 +23,10 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     intensity::R
     temp::R
     fft_plan::P
+    ifft_plan::Pi
     elongation_kernel::K
+    lgs_kernel_fft::KF
+    lgs_kernel_tag::UInt
 end
 
 struct ShackHartmann{M<:SensingMode,P<:ShackHartmannParams,S<:ShackHartmannState} <: AbstractWFS
@@ -45,7 +50,9 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     intensity = backend{T}(undef, pad, pad)
     temp = similar(intensity)
     fft_plan = FFTW.plan_fft!(fft_buffer)
+    ifft_plan = FFTW.plan_ifft!(fft_buffer)
     elongation_kernel = backend{T}(undef, 1)
+    lgs_kernel_fft = backend{Complex{T}}(undef, 0, 0, 0)
     state = ShackHartmannState{
         T,
         typeof(valid_mask),
@@ -53,7 +60,9 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         typeof(field),
         typeof(intensity),
         typeof(fft_plan),
+        typeof(ifft_plan),
         typeof(elongation_kernel),
+        typeof(lgs_kernel_fft),
     }(
         valid_mask,
         slopes,
@@ -62,7 +71,10 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         intensity,
         temp,
         fft_plan,
+        ifft_plan,
         elongation_kernel,
+        lgs_kernel_fft,
+        UInt(0),
     )
     wfs = ShackHartmann{typeof(mode), typeof(params), typeof(state)}(params, state)
     update_valid_mask!(wfs, tel)
@@ -178,12 +190,24 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
             @. wfs.state.intensity = abs2(wfs.state.fft_buffer)
 
             if src isa LGSSource
-                wfs.state.elongation_kernel = apply_elongation!(
-                    wfs.state.intensity,
-                    lgs_elongation_factor(src),
-                    wfs.state.temp,
-                    wfs.state.elongation_kernel,
-                )
+                if lgs_has_profile(src)
+                    ensure_lgs_kernels!(wfs, tel, src)
+                    apply_lgs_convolution!(
+                        wfs.state.intensity,
+                        wfs.state.lgs_kernel_fft,
+                        wfs.state.fft_buffer,
+                        wfs.state.fft_plan,
+                        wfs.state.ifft_plan,
+                        idx,
+                    )
+                else
+                    wfs.state.elongation_kernel = apply_elongation!(
+                        wfs.state.intensity,
+                        lgs_elongation_factor(src),
+                        wfs.state.temp,
+                        wfs.state.elongation_kernel,
+                    )
+                end
             end
 
             total = sum(wfs.state.intensity)
@@ -208,4 +232,137 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
         idx += 1
     end
     return wfs.state.slopes
+end
+
+function ensure_lgs_kernels!(wfs::ShackHartmann, tel::Telescope, src::LGSSource)
+    na_profile = src.params.na_profile
+    if na_profile === nothing
+        return wfs
+    end
+    pad = size(wfs.state.intensity, 1)
+    n_sub = wfs.params.n_subap
+    tag = objectid(na_profile) ⊻ hash(src.params.laser_coordinates) ⊻ hash(src.params.fwhm_spot_up) ⊻ hash(pad)
+    if size(wfs.state.lgs_kernel_fft, 1) == pad &&
+        size(wfs.state.lgs_kernel_fft, 3) == n_sub * n_sub &&
+        wfs.state.lgs_kernel_tag == tag
+        return wfs
+    end
+    wfs.state.lgs_kernel_fft = lgs_spot_kernels_fft(tel, wfs, src, pad)
+    wfs.state.lgs_kernel_tag = tag
+    return wfs
+end
+
+function apply_lgs_convolution!(intensity::AbstractMatrix{T}, kernels_fft::AbstractArray{Complex{T},3},
+    fft_buffer::AbstractMatrix{Complex{T}}, fft_plan, ifft_plan, idx::Int) where {T<:AbstractFloat}
+    if size(kernels_fft, 3) < idx
+        return intensity
+    end
+    n = size(intensity, 1)
+    @inbounds for i in 1:n, j in 1:n
+        fft_buffer[i, j] = complex(intensity[i, j], zero(T))
+    end
+    mul!(fft_buffer, fft_plan, fft_buffer)
+    @views @. fft_buffer *= kernels_fft[:, :, idx]
+    mul!(fft_buffer, ifft_plan, fft_buffer)
+    scale = T(1) / (n * n)
+    @inbounds for i in 1:n, j in 1:n
+        intensity[i, j] = real(fft_buffer[i, j]) * scale
+    end
+    return intensity
+end
+
+function lgs_spot_kernels_fft(tel::Telescope, wfs::ShackHartmann, src::LGSSource, pad::Int)
+    T = eltype(wfs.state.intensity)
+    n_sub = wfs.params.n_subap
+    na_profile = src.params.na_profile
+    if !(wfs.state.intensity isa Array)
+        throw(InvalidConfiguration("LGS Na-profile kernels currently require Array backend"))
+    end
+    altitudes = na_profile[1, :]
+    weights = na_profile[2, :]
+    if length(altitudes) == 0
+        return similar(wfs.state.fft_buffer, Complex{T}, 0, 0, 0)
+    end
+
+    pixel_scale = lgs_pixel_scale(tel, wfs, src)
+    fwhm_px = src.params.fwhm_spot_up / pixel_scale
+    sigma_px = fwhm_px / (2 * sqrt(2 * log(T(2))))
+    center = (pad + 1) / 2
+
+    x_subap = range(-tel.params.diameter / 2, tel.params.diameter / 2; length=n_sub)
+    y_subap = range(-tel.params.diameter / 2, tel.params.diameter / 2; length=n_sub)
+    kernels_fft = similar(wfs.state.fft_buffer, Complex{T}, pad, pad, n_sub * n_sub)
+
+    x0 = src.params.laser_coordinates[2]
+    y0 = -src.params.laser_coordinates[1]
+    ref_idx = Int(cld(length(altitudes), 2))
+    ref_vec = lgs_reference_vector(tel, x0, y0, altitudes[ref_idx])
+
+    idx = 1
+    for iy in 1:n_sub, ix in 1:n_sub
+        kernel = similar(wfs.state.intensity)
+        fill!(kernel, zero(T))
+        for k in 1:length(altitudes)
+            vec = lgs_reference_vector(tel, x0, y0, altitudes[k]) .- ref_vec
+            shift_x, shift_y = lgs_spot_shift(vec, tel, x_subap[ix], y_subap[iy], pixel_scale)
+            gaussian_shift!(kernel, sigma_px, center + shift_x, center + shift_y, weights[k])
+        end
+        total = sum(kernel)
+        if total > 0
+            kernel ./= total
+        end
+        fft_buffer = wfs.state.fft_buffer
+        @inbounds for i in 1:pad, j in 1:pad
+            fft_buffer[i, j] = complex(kernel[i, j], zero(T))
+        end
+        mul!(fft_buffer, wfs.state.fft_plan, fft_buffer)
+        @views kernels_fft[:, :, idx] .= fft_buffer
+        idx += 1
+    end
+
+    return kernels_fft
+end
+
+function lgs_reference_vector(tel::Telescope, x0::Real, y0::Real, altitude::Real)
+    x = (tel.params.diameter / 4) * (x0 / altitude)
+    y = (tel.params.diameter / 4) * (y0 / altitude)
+    z = (tel.params.diameter^2) / (8 * altitude) / (2 * sqrt(3))
+    return (x, y, z)
+end
+
+function lgs_spot_shift(vec::Tuple{T,T,T}, tel::Telescope, x_subap::Real, y_subap::Real,
+    pixel_scale::Real) where {T<:Real}
+    dx0 = vec[1] * (4 / tel.params.diameter)
+    dy0 = vec[2] * (4 / tel.params.diameter)
+    dx1 = vec[3] * (sqrt(3) * (4 / tel.params.diameter)^2) * x_subap
+    dy1 = vec[3] * (sqrt(3) * (4 / tel.params.diameter)^2) * y_subap
+    shift_x = 206265 * (dx0 + dx1) / pixel_scale
+    shift_y = 206265 * (dy0 + dy1) / pixel_scale
+    return shift_x, shift_y
+end
+
+function lgs_pixel_scale(tel::Telescope, wfs::ShackHartmann, src::LGSSource)
+    d_subap = tel.params.diameter / wfs.params.n_subap
+    return 206265 * wavelength(src) / d_subap / wfs.params.diffraction_padding
+end
+
+function gaussian_shift!(kernel::AbstractMatrix{T}, sigma::Real, cx::Real, cy::Real,
+    weight::Real) where {T<:AbstractFloat}
+    if weight == 0
+        return kernel
+    end
+    n = size(kernel, 1)
+    if sigma <= 0
+        ix = clamp(round(Int, cx), 1, n)
+        iy = clamp(round(Int, cy), 1, n)
+        kernel[ix, iy] += T(weight)
+        return kernel
+    end
+    inv_2sigma2 = T(0.5) / (T(sigma) * T(sigma))
+    @inbounds for i in 1:n, j in 1:n
+        dx = T(i) - T(cx)
+        dy = T(j) - T(cy)
+        kernel[i, j] += T(weight) * exp(-(dx * dx + dy * dy) * inv_2sigma2)
+    end
+    return kernel
 end
