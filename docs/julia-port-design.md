@@ -87,6 +87,17 @@ struct OpticalChain
 end
 ```
 
+## LGS elongation modeling (note)
+Elongation models should be explicit and swappable, not hard-wired into WFS
+implementations. Keep a fast default, but allow higher-fidelity choices.
+
+Candidate models (no implementation yet):
+- 1D Gaussian focal-plane blur (fast, current default intent).
+- Sodium-layer convolution along line-of-sight (more accurate).
+- Geometric elongation scaling for legacy compatibility.
+
+Prefer a small trait or parameter (e.g., `ElongationModel`) rather than flags.
+
 ## State and workspace
 - Parameter structs are immutable; evolving data lives in `mutable struct` state.
 - A `Workspace` holds scratch buffers sized from `TelescopeParams`.
@@ -180,7 +191,9 @@ allocations, and GPU/CPU parity.
 Suggested benchmarks:
 - PSF generation (single source, fixed zero-padding).
 - WFS slope computation (fixed subaperture count).
+- Diffractive WFS + LGS elongation (FFT-heavy path).
 - Reconstructor application (matrix-vector and modal reconstructor).
+- KL basis build (DM modes and HHt/PSD).
 - Closed-loop step (single iteration, deterministic inputs).
 
 Metrics:
