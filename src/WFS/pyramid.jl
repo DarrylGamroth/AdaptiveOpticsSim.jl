@@ -19,6 +19,7 @@ mutable struct PyramidState{T<:AbstractFloat,
     Pf,
     Pi,
     K<:AbstractVector{T},
+    Kf<:AbstractMatrix{Complex{T}},
     Vg<:AbstractVector{T}}
     valid_mask::A
     slopes::V
@@ -33,6 +34,8 @@ mutable struct PyramidState{T<:AbstractFloat,
     fft_plan::Pf
     ifft_plan::Pi
     elongation_kernel::K
+    lgs_kernel_fft::Kf
+    lgs_kernel_tag::UInt
     optical_gain::Vg
     shift_x::NTuple{4,Int}
     shift_y::NTuple{4,Int}
@@ -69,6 +72,7 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
     fft_plan = FFTW.plan_fft!(focal_field)
     ifft_plan = FFTW.plan_ifft!(pupil_field)
     elongation_kernel = backend{T}(undef, 1)
+    lgs_kernel_fft = backend{Complex{T}}(undef, 0, 0)
     optical_gain = similar(slopes)
     fill!(optical_gain, one(T))
     state = PyramidState{
@@ -81,6 +85,7 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
         typeof(fft_plan),
         typeof(ifft_plan),
         typeof(elongation_kernel),
+        typeof(lgs_kernel_fft),
         typeof(optical_gain),
     }(
         valid_mask,
@@ -96,6 +101,8 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
         fft_plan,
         ifft_plan,
         elongation_kernel,
+        lgs_kernel_fft,
+        UInt(0),
         optical_gain,
         (0, 0, 0, 0),
         (0, 0, 0, 0),
@@ -260,13 +267,61 @@ end
 
 function pyramid_intensity!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::Telescope, src::LGSSource) where {T<:AbstractFloat}
     pyramid_intensity_core!(out, wfs, tel, src)
+    apply_lgs_elongation!(lgs_profile(src), out, wfs, tel, src)
+    return out
+end
+
+function apply_lgs_elongation!(::LGSProfileNone, out::AbstractMatrix{T}, wfs::PyramidWFS,
+    ::Telescope, src::LGSSource) where {T<:AbstractFloat}
     wfs.state.elongation_kernel = apply_elongation!(
         out,
         lgs_elongation_factor(src),
         wfs.state.scratch,
         wfs.state.elongation_kernel,
     )
-    return out
+    return wfs
+end
+
+function apply_lgs_elongation!(::LGSProfileNaProfile, out::AbstractMatrix{T}, wfs::PyramidWFS,
+    tel::Telescope, src::LGSSource) where {T<:AbstractFloat}
+    ensure_lgs_kernel!(wfs, tel, src)
+    apply_lgs_convolution!(
+        out,
+        wfs.state.lgs_kernel_fft,
+        wfs.state.focal_field,
+        wfs.state.fft_plan,
+        wfs.state.pupil_field,
+        wfs.state.ifft_plan,
+    )
+    return wfs
+end
+
+function ensure_lgs_kernel!(wfs::PyramidWFS, tel::Telescope, src::LGSSource)
+    na_profile = src.params.na_profile
+    if na_profile === nothing
+        return wfs
+    end
+    if !(wfs.state.intensity isa Array)
+        throw(InvalidConfiguration("LGS Na-profile kernels currently require Array backend"))
+    end
+    pad = size(wfs.state.intensity, 1)
+    tag = objectid(na_profile) ⊻ hash(src.params.laser_coordinates) ⊻ hash(src.params.fwhm_spot_up) ⊻
+        hash(pad) ⊻ hash(wfs.params.n_subap)
+    if size(wfs.state.lgs_kernel_fft, 1) == pad && wfs.state.lgs_kernel_tag == tag
+        return wfs
+    end
+    pixel_scale = lgs_pixel_scale(tel.params.diameter, wfs.params.diffraction_padding, wavelength(src))
+    wfs.state.lgs_kernel_fft = lgs_average_kernel_fft(
+        tel,
+        src,
+        pad,
+        wfs.params.n_subap,
+        pixel_scale,
+        wfs.state.focal_field,
+        wfs.state.fft_plan,
+    )
+    wfs.state.lgs_kernel_tag = tag
+    return wfs
 end
 
 function build_modulation_phases!(wfs::PyramidWFS, tel::Telescope)

@@ -9,11 +9,22 @@ end
 mutable struct BioEdgeState{T<:AbstractFloat,
     A<:AbstractMatrix{Bool},
     V<:AbstractVector{T},
-    SF<:SpatialFilter}
+    SF<:SpatialFilter,
+    C<:AbstractMatrix{Complex{T}},
+    Pf,
+    Pi,
+    K<:AbstractVector{T},
+    Kf<:AbstractMatrix{Complex{T}}}
     valid_mask::A
     edge_mask::A
     slopes::V
     spatial_filter::SF
+    fft_buffer::C
+    fft_plan::Pf
+    ifft_plan::Pi
+    elongation_kernel::K
+    lgs_kernel_fft::Kf
+    lgs_kernel_tag::UInt
     optical_gain::V
 end
 
@@ -34,13 +45,34 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     slopes = backend{T}(undef, 2 * n_subap * n_subap)
     fill!(slopes, zero(T))
     sf = SpatialFilter(tel; shape=FoucaultFilter(), zero_padding=diffraction_padding, T=T, backend=backend)
+    fft_buffer = backend{Complex{T}}(undef, tel.params.resolution, tel.params.resolution)
+    fft_plan = FFTW.plan_fft!(fft_buffer)
+    ifft_plan = FFTW.plan_ifft!(fft_buffer)
+    elongation_kernel = backend{T}(undef, 1)
+    lgs_kernel_fft = backend{Complex{T}}(undef, 0, 0)
     optical_gain = similar(slopes)
     fill!(optical_gain, one(T))
-    state = BioEdgeState{T, typeof(valid_mask), typeof(slopes), typeof(sf)}(
+    state = BioEdgeState{
+        T,
+        typeof(valid_mask),
+        typeof(slopes),
+        typeof(sf),
+        typeof(fft_buffer),
+        typeof(fft_plan),
+        typeof(ifft_plan),
+        typeof(elongation_kernel),
+        typeof(lgs_kernel_fft),
+    }(
         valid_mask,
         edge_mask,
         slopes,
         sf,
+        fft_buffer,
+        fft_plan,
+        ifft_plan,
+        elongation_kernel,
+        lgs_kernel_fft,
+        UInt(0),
         optical_gain,
     )
     wfs = BioEdgeWFS{typeof(mode), typeof(params), typeof(state)}(params, state)
@@ -160,6 +192,16 @@ end
 
 function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource)
     phase, _ = filter!(wfs.state.spatial_filter, tel, src)
+    return bioedge_slopes!(wfs, tel, phase)
+end
+
+function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, src::LGSSource)
+    phase, _ = filter!(wfs.state.spatial_filter, tel, src)
+    apply_lgs_elongation!(lgs_profile(src), phase, wfs, tel, src)
+    return bioedge_slopes!(wfs, tel, phase)
+end
+
+function bioedge_slopes!(wfs::BioEdgeWFS, tel::Telescope, phase::AbstractMatrix)
     Base.require_one_based_indexing(phase)
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
@@ -198,6 +240,59 @@ function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, src::AbstractS
     end
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
+end
+
+function apply_lgs_elongation!(::LGSProfileNone, phase::AbstractMatrix{T}, wfs::BioEdgeWFS,
+    ::Telescope, src::LGSSource) where {T<:AbstractFloat}
+    tmp = wfs.state.spatial_filter.state.amplitude
+    wfs.state.elongation_kernel = apply_elongation!(
+        phase,
+        lgs_elongation_factor(src),
+        tmp,
+        wfs.state.elongation_kernel,
+    )
+    return wfs
+end
+
+function apply_lgs_elongation!(::LGSProfileNaProfile, phase::AbstractMatrix{T}, wfs::BioEdgeWFS,
+    tel::Telescope, src::LGSSource) where {T<:AbstractFloat}
+    ensure_lgs_kernel!(wfs, tel, src)
+    apply_lgs_convolution!(
+        phase,
+        wfs.state.lgs_kernel_fft,
+        wfs.state.fft_buffer,
+        wfs.state.fft_plan,
+        wfs.state.ifft_plan,
+    )
+    return wfs
+end
+
+function ensure_lgs_kernel!(wfs::BioEdgeWFS, tel::Telescope, src::LGSSource)
+    na_profile = src.params.na_profile
+    if na_profile === nothing
+        return wfs
+    end
+    if !(wfs.state.fft_buffer isa Array)
+        throw(InvalidConfiguration("LGS Na-profile kernels currently require Array backend"))
+    end
+    pad = size(wfs.state.fft_buffer, 1)
+    tag = objectid(na_profile) ⊻ hash(src.params.laser_coordinates) ⊻ hash(src.params.fwhm_spot_up) ⊻
+        hash(pad) ⊻ hash(wfs.params.n_subap)
+    if size(wfs.state.lgs_kernel_fft, 1) == pad && wfs.state.lgs_kernel_tag == tag
+        return wfs
+    end
+    pixel_scale = lgs_pixel_scale(tel.params.diameter, wfs.params.diffraction_padding, wavelength(src))
+    wfs.state.lgs_kernel_fft = lgs_average_kernel_fft(
+        tel,
+        src,
+        pad,
+        wfs.params.n_subap,
+        pixel_scale,
+        wfs.state.fft_buffer,
+        wfs.state.fft_plan,
+    )
+    wfs.state.lgs_kernel_tag = tag
+    return wfs
 end
 
 function set_optical_gain!(wfs::BioEdgeWFS, gain::Real)
