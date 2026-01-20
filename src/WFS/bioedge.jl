@@ -4,6 +4,7 @@ struct BioEdgeParams{T<:AbstractFloat}
     n_subap::Int
     threshold::T
     diffraction_padding::Int
+    binning::Int
 end
 
 mutable struct BioEdgeState{T<:AbstractFloat,
@@ -11,6 +12,7 @@ mutable struct BioEdgeState{T<:AbstractFloat,
     V<:AbstractVector{T},
     SF<:SpatialFilter,
     C<:AbstractMatrix{Complex{T}},
+    R<:AbstractMatrix{T},
     Pf,
     Pi,
     K<:AbstractVector{T},
@@ -20,12 +22,15 @@ mutable struct BioEdgeState{T<:AbstractFloat,
     slopes::V
     spatial_filter::SF
     fft_buffer::C
+    binned_phase::R
+    edge_mask_binned::A
     fft_plan::Pf
     ifft_plan::Pi
     elongation_kernel::K
     lgs_kernel_fft::Kf
     lgs_kernel_tag::UInt
     optical_gain::V
+    binned_resolution::Int
 end
 
 struct BioEdgeWFS{M<:SensingMode,P<:BioEdgeParams,S<:BioEdgeState} <: AbstractWFS
@@ -34,18 +39,24 @@ struct BioEdgeWFS{M<:SensingMode,P<:BioEdgeParams,S<:BioEdgeState} <: AbstractWF
 end
 
 function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
-    diffraction_padding::Int=2, mode::SensingMode=Geometric(), T::Type{<:AbstractFloat}=Float64, backend=Array)
+    diffraction_padding::Int=2, binning::Int=1,
+    mode::SensingMode=Geometric(), T::Type{<:AbstractFloat}=Float64, backend=Array)
 
     if tel.params.resolution % n_subap != 0
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     end
-    params = BioEdgeParams{T}(n_subap, T(threshold), diffraction_padding)
+    if binning < 1
+        throw(InvalidConfiguration("binning must be >= 1"))
+    end
+    params = BioEdgeParams{T}(n_subap, T(threshold), diffraction_padding, binning)
     valid_mask = backend{Bool}(undef, n_subap, n_subap)
     edge_mask = backend{Bool}(undef, size(tel.state.pupil))
     slopes = backend{T}(undef, 2 * n_subap * n_subap)
     fill!(slopes, zero(T))
     sf = SpatialFilter(tel; shape=FoucaultFilter(), zero_padding=diffraction_padding, T=T, backend=backend)
     fft_buffer = backend{Complex{T}}(undef, tel.params.resolution, tel.params.resolution)
+    binned_phase = backend{T}(undef, tel.params.resolution, tel.params.resolution)
+    edge_mask_binned = similar(edge_mask)
     fft_plan = plan_fft!(fft_buffer)
     ifft_plan = plan_ifft!(fft_buffer)
     elongation_kernel = backend{T}(undef, 1)
@@ -58,6 +69,7 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         typeof(slopes),
         typeof(sf),
         typeof(fft_buffer),
+        typeof(binned_phase),
         typeof(fft_plan),
         typeof(ifft_plan),
         typeof(elongation_kernel),
@@ -68,12 +80,15 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         slopes,
         sf,
         fft_buffer,
+        binned_phase,
+        edge_mask_binned,
         fft_plan,
         ifft_plan,
         elongation_kernel,
         lgs_kernel_fft,
         UInt(0),
         optical_gain,
+        tel.params.resolution,
     )
     wfs = BioEdgeWFS{typeof(mode), typeof(params), typeof(state)}(params, state)
     update_valid_mask!(wfs, tel)
@@ -119,6 +134,55 @@ function update_edge_mask!(wfs::BioEdgeWFS, tel::Telescope)
         end
     end
     return wfs
+end
+
+function prepare_bioedge_sampling!(wfs::BioEdgeWFS, tel::Telescope)
+    binning = wfs.params.binning
+    if binning < 1
+        throw(InvalidConfiguration("binning must be >= 1"))
+    end
+    n = tel.params.resolution
+    if n % binning != 0
+        throw(InvalidConfiguration("binning must evenly divide telescope resolution"))
+    end
+    n_binned = div(n, binning)
+    if n_binned != wfs.state.binned_resolution
+        wfs.state.binned_phase = similar(wfs.state.binned_phase, n_binned, n_binned)
+        wfs.state.edge_mask_binned = similar(wfs.state.edge_mask_binned, n_binned, n_binned)
+        wfs.state.binned_resolution = n_binned
+    end
+    if binning > 1
+        bin_edge_mask!(wfs.state.edge_mask_binned, wfs.state.edge_mask, binning)
+    end
+    return wfs
+end
+
+function bin_edge_mask!(out::AbstractMatrix{Bool}, mask::AbstractMatrix{Bool}, binning::Int)
+    Base.require_one_based_indexing(out, mask)
+    n, m = size(mask)
+    n_out = div(n, binning)
+    m_out = div(m, binning)
+    if size(out) != (n_out, m_out)
+        throw(DimensionMismatchError("edge_mask_binned size mismatch"))
+    end
+    @inbounds for i in 1:n_out, j in 1:m_out
+        val = false
+        for ii in 1:binning, jj in 1:binning
+            val |= mask[(i - 1) * binning + ii, (j - 1) * binning + jj]
+        end
+        out[i, j] = val
+    end
+    return out
+end
+
+function sample_bioedge_phase!(wfs::BioEdgeWFS, phase::AbstractMatrix{T}) where {T<:AbstractFloat}
+    binning = wfs.params.binning
+    if binning == 1
+        return phase, wfs.state.edge_mask
+    end
+    bin2d!(wfs.state.binned_phase, phase, binning)
+    wfs.state.binned_phase ./= binning * binning
+    return wfs.state.binned_phase, wfs.state.edge_mask_binned
 end
 
 function measure!(mode::Geometric, wfs::BioEdgeWFS, tel::Telescope)
@@ -192,18 +256,22 @@ end
 
 function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource)
     phase, _ = filter!(wfs.state.spatial_filter, tel, src)
-    return bioedge_slopes!(wfs, tel, phase)
+    prepare_bioedge_sampling!(wfs, tel)
+    phase_sampled, mask = sample_bioedge_phase!(wfs, phase)
+    return bioedge_slopes!(wfs, phase_sampled, mask)
 end
 
 function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, src::LGSSource)
     phase, _ = filter!(wfs.state.spatial_filter, tel, src)
     apply_lgs_elongation!(lgs_profile(src), phase, wfs, tel, src)
-    return bioedge_slopes!(wfs, tel, phase)
+    prepare_bioedge_sampling!(wfs, tel)
+    phase_sampled, mask = sample_bioedge_phase!(wfs, phase)
+    return bioedge_slopes!(wfs, phase_sampled, mask)
 end
 
-function bioedge_slopes!(wfs::BioEdgeWFS, tel::Telescope, phase::AbstractMatrix)
-    Base.require_one_based_indexing(phase)
-    n = tel.params.resolution
+function bioedge_slopes!(wfs::BioEdgeWFS, phase::AbstractMatrix, edge_mask::AbstractMatrix{Bool})
+    Base.require_one_based_indexing(phase, edge_mask)
+    n = size(phase, 1)
     n_sub = wfs.params.n_subap
     sub = div(n, n_sub)
     idx = 1
@@ -219,13 +287,13 @@ function bioedge_slopes!(wfs::BioEdgeWFS, tel::Telescope, phase::AbstractMatrix)
             count_x = 0
             count_y = 0
             for x in xs:(xe - 1), y in ys:ye
-                if wfs.state.edge_mask[x, y]
+                if edge_mask[x, y]
                     sx += phase[x + 1, y] - phase[x, y]
                     count_x += 1
                 end
             end
             for x in xs:xe, y in ys:(ye - 1)
-                if wfs.state.edge_mask[x, y]
+                if edge_mask[x, y]
                     sy += phase[x, y + 1] - phase[x, y]
                     count_y += 1
                 end

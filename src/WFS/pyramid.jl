@@ -7,6 +7,9 @@ struct PyramidParams{T<:AbstractFloat}
     modulation_points::Int
     mask_scale::T
     diffraction_padding::Int
+    n_pix_separation::Union{Int,Nothing}
+    n_pix_edge::Union{Int,Nothing}
+    binning::Int
 end
 
 mutable struct PyramidState{T<:AbstractFloat,
@@ -14,6 +17,7 @@ mutable struct PyramidState{T<:AbstractFloat,
     V<:AbstractVector{T},
     C<:AbstractMatrix{Complex{T}},
     R<:AbstractMatrix{T},
+    RB<:AbstractMatrix{T},
     C3<:AbstractArray{Complex{T},3},
     Pf,
     Pi,
@@ -30,6 +34,7 @@ mutable struct PyramidState{T<:AbstractFloat,
     intensity::R
     temp::R
     scratch::R
+    binned_intensity::RB
     fft_plan::Pf
     ifft_plan::Pi
     elongation_kernel::K
@@ -38,6 +43,7 @@ mutable struct PyramidState{T<:AbstractFloat,
     optical_gain::Vg
     shift_x::NTuple{4,Int}
     shift_y::NTuple{4,Int}
+    effective_resolution::Int
 end
 
 struct PyramidWFS{M<:SensingMode,P<:PyramidParams,S<:PyramidState} <: AbstractWFS
@@ -47,6 +53,7 @@ end
 
 function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulation::Real=2.0,
     modulation_points::Int=1, mask_scale::Real=1.0, diffraction_padding::Int=2,
+    n_pix_separation=nothing, n_pix_edge=nothing, binning::Int=1,
     mode::SensingMode=Geometric(), T::Type{<:AbstractFloat}=Float64, backend=Array)
 
     if tel.params.resolution % n_subap != 0
@@ -55,11 +62,19 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
     if modulation_points < 1
         throw(InvalidConfiguration("modulation_points must be >= 1"))
     end
-    params = PyramidParams{T}(n_subap, T(threshold), T(modulation), modulation_points, T(mask_scale), diffraction_padding)
+    if binning < 1
+        throw(InvalidConfiguration("binning must be >= 1"))
+    end
+    params = PyramidParams{T}(n_subap, T(threshold), T(modulation), modulation_points, T(mask_scale),
+        diffraction_padding, n_pix_separation, n_pix_edge, binning)
     valid_mask = backend{Bool}(undef, n_subap, n_subap)
     slopes = backend{T}(undef, 2 * n_subap * n_subap)
     fill!(slopes, zero(T))
     pad = tel.params.resolution * diffraction_padding
+    if n_pix_separation !== nothing
+        edge = n_pix_edge === nothing ? div(n_pix_separation, 2) : n_pix_edge
+        pad = Int(round((n_subap * 2 + n_pix_separation + 2 * edge) * tel.params.resolution / n_subap))
+    end
     field = backend{Complex{T}}(undef, pad, pad)
     focal_field = similar(field)
     pupil_field = similar(field)
@@ -68,6 +83,7 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
     intensity = backend{T}(undef, pad, pad)
     temp = similar(intensity)
     scratch = similar(intensity)
+    binned_intensity = similar(intensity)
     fft_plan = plan_fft!(focal_field)
     ifft_plan = plan_ifft!(pupil_field)
     elongation_kernel = backend{T}(undef, 1)
@@ -80,6 +96,7 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
         typeof(slopes),
         typeof(field),
         typeof(intensity),
+        typeof(binned_intensity),
         typeof(modulation_phases),
         typeof(fft_plan),
         typeof(ifft_plan),
@@ -97,6 +114,7 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
         intensity,
         temp,
         scratch,
+        binned_intensity,
         fft_plan,
         ifft_plan,
         elongation_kernel,
@@ -105,6 +123,7 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
         optical_gain,
         (0, 0, 0, 0),
         (0, 0, 0, 0),
+        pad,
     )
     wfs = PyramidWFS{typeof(mode), typeof(params), typeof(state)}(params, state)
     update_valid_mask!(wfs, tel)
@@ -129,6 +148,60 @@ function update_valid_mask!(wfs::PyramidWFS, tel::Telescope)
         wfs.state.valid_mask[i, j] = mean(subap_pupil) > wfs.params.threshold
     end
     return wfs
+end
+
+function ensure_pyramid_buffers!(wfs::PyramidWFS, pad::Int)
+    if size(wfs.state.field) != (pad, pad)
+        wfs.state.field = similar(wfs.state.field, pad, pad)
+        wfs.state.focal_field = similar(wfs.state.focal_field, pad, pad)
+        wfs.state.pupil_field = similar(wfs.state.pupil_field, pad, pad)
+        wfs.state.pyramid_mask = similar(wfs.state.pyramid_mask, pad, pad)
+        wfs.state.intensity = similar(wfs.state.intensity, pad, pad)
+        wfs.state.temp = similar(wfs.state.temp, pad, pad)
+        wfs.state.scratch = similar(wfs.state.scratch, pad, pad)
+        wfs.state.binned_intensity = similar(wfs.state.binned_intensity, pad, pad)
+        wfs.state.fft_plan = plan_fft!(wfs.state.focal_field)
+        wfs.state.ifft_plan = plan_ifft!(wfs.state.pupil_field)
+        wfs.state.lgs_kernel_fft = similar(wfs.state.focal_field, Complex{eltype(wfs.state.focal_field)}, 0, 0)
+        wfs.state.lgs_kernel_tag = UInt(0)
+        wfs.state.effective_resolution = pad
+        build_pyramid_mask!(wfs.state.pyramid_mask, wfs.params.mask_scale)
+    end
+    return wfs
+end
+
+function prepare_pyramid_sampling!(wfs::PyramidWFS, tel::Telescope)
+    n_sub = wfs.params.n_subap
+    pad = tel.params.resolution * wfs.params.diffraction_padding
+    if wfs.params.n_pix_separation !== nothing
+        edge = wfs.params.n_pix_edge === nothing ? div(wfs.params.n_pix_separation, 2) : wfs.params.n_pix_edge
+        pad = Int(round((n_sub * 2 + wfs.params.n_pix_separation + 2 * edge) * tel.params.resolution / n_sub))
+    end
+    if pad < tel.params.resolution
+        throw(InvalidConfiguration("pyramid padding must be >= telescope resolution"))
+    end
+    if pad % wfs.params.binning != 0
+        throw(InvalidConfiguration("pyramid binning must evenly divide padded resolution"))
+    end
+    ensure_pyramid_buffers!(wfs, pad)
+    return wfs
+end
+
+function sample_pyramid_intensity!(wfs::PyramidWFS, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
+    binning = wfs.params.binning
+    if binning == 1
+        return intensity
+    end
+    pad = size(intensity, 1)
+    if pad % binning != 0
+        throw(InvalidConfiguration("pyramid binning must evenly divide padded resolution"))
+    end
+    n_binned = div(pad, binning)
+    if size(wfs.state.binned_intensity) != (n_binned, n_binned)
+        wfs.state.binned_intensity = similar(wfs.state.binned_intensity, n_binned, n_binned)
+    end
+    bin2d!(wfs.state.binned_intensity, intensity, binning)
+    return wfs.state.binned_intensity
 end
 
 function measure!(mode::Geometric, wfs::PyramidWFS, tel::Telescope)
@@ -210,7 +283,8 @@ end
 function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
     n_sub = wfs.params.n_subap
     pyramid_intensity!(wfs.state.intensity, wfs, tel, src)
-    pyramid_slopes!(wfs, n_sub)
+    intensity = sample_pyramid_intensity!(wfs, wfs.state.intensity)
+    pyramid_slopes!(wfs, n_sub, intensity)
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
 end
@@ -219,7 +293,8 @@ function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::AbstractS
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
     n_sub = wfs.params.n_subap
     pyramid_intensity!(wfs.state.intensity, wfs, tel, src)
-    frame = capture!(det, wfs.state.intensity; rng=rng)
+    intensity = sample_pyramid_intensity!(wfs, wfs.state.intensity)
+    frame = capture!(det, intensity; rng=rng)
     pyramid_slopes!(wfs, n_sub, frame)
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
@@ -237,7 +312,8 @@ function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, ast::Asterism)
         wfs.state.intensity .+= wfs.state.temp
     end
     n_sub = wfs.params.n_subap
-    pyramid_slopes!(wfs, n_sub)
+    intensity = sample_pyramid_intensity!(wfs, wfs.state.intensity)
+    pyramid_slopes!(wfs, n_sub, intensity)
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
 end
@@ -255,7 +331,8 @@ function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, ast::Asterism,
         wfs.state.intensity .+= wfs.state.temp
     end
     n_sub = wfs.params.n_subap
-    frame = capture!(det, wfs.state.intensity; rng=rng)
+    intensity = sample_pyramid_intensity!(wfs, wfs.state.intensity)
+    frame = capture!(det, intensity; rng=rng)
     pyramid_slopes!(wfs, n_sub, frame)
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
@@ -275,6 +352,7 @@ function build_pyramid_mask!(mask::AbstractMatrix{Complex{T}}, modulation::T) wh
 end
 
 function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::Telescope, src::AbstractSource) where {T<:AbstractFloat}
+    prepare_pyramid_sampling!(wfs, tel)
     n = tel.params.resolution
     pad = size(wfs.state.field, 1)
     ox = div(pad - n, 2)

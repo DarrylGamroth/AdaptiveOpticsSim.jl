@@ -223,6 +223,14 @@ end
     sh_sampled_slopes = measure!(sh_sampled, tel, ngs)
     @test length(sh_sampled_slopes) == 2 * 4 * 4
 
+    pyr_sampled = PyramidWFS(tel; n_subap=4, mode=Diffractive(), n_pix_separation=4, binning=2)
+    pyr_sampled_slopes = measure!(pyr_sampled, tel, ngs)
+    @test length(pyr_sampled_slopes) == 2 * 4 * 4
+
+    bio_sampled = BioEdgeWFS(tel; n_subap=4, mode=Diffractive(), binning=2)
+    bio_sampled_slopes = measure!(bio_sampled, tel, ngs)
+    @test length(bio_sampled_slopes) == 2 * 4 * 4
+
     pyr_profile = PyramidWFS(tel; n_subap=4, mode=Diffractive())
     pyr_profile_slopes = measure!(pyr_profile, tel, lgs_profile)
     @test all(isfinite, pyr_profile_slopes)
