@@ -194,7 +194,9 @@ function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVecto
         if scale != one(T)
             model_psf .*= scale
         end
-        @. residual = vec(psf_in) - vec(model_psf)
+        @inbounds for idx in eachindex(model_psf)
+            residual[idx] = psf_in[idx] - model_psf[idx]
+        end
         lift_interaction_matrix!(H, lift, coeffs, mode_ids; flux_norm=scale)
 
         if use_iter_weight
@@ -228,13 +230,20 @@ function weight_vector!(out::AbstractVector{T}, psf::AbstractMatrix{T}, R_n,
     σ = readout_noise(det)
     σ2 = T(σ * σ)
     if R_n === :model || R_n === :iterative
-        @. out = inv(max(vec(psf) + σ2, eps(T)))
+        vals = vec(psf)
+        @inbounds for idx in eachindex(out)
+            denom = vals[idx] + σ2
+            out[idx] = inv(max(denom, eps(T)))
+        end
         return out
     elseif R_n === nothing
         fill!(out, T(1) / max(σ2, eps(T)))
         return out
     elseif R_n isa AbstractMatrix
-        @. out = inv(max(vec(R_n), eps(T)))
+        vals = vec(R_n)
+        @inbounds for idx in eachindex(out)
+            out[idx] = inv(max(vals[idx], eps(T)))
+        end
         return out
     end
     throw(InvalidConfiguration("R_n must be :model, :iterative, a matrix, or nothing"))
