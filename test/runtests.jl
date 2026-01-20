@@ -214,6 +214,14 @@ end
     sh_profile_slopes = measure!(sh_profile, tel, lgs_profile)
     @test all(isfinite, sh_profile_slopes)
 
+    pyr_profile = PyramidWFS(tel; n_subap=4, mode=Diffractive())
+    pyr_profile_slopes = measure!(pyr_profile, tel, lgs_profile)
+    @test all(isfinite, pyr_profile_slopes)
+
+    bio_profile = BioEdgeWFS(tel; n_subap=4, mode=Diffractive())
+    bio_profile_slopes = measure!(bio_profile, tel, lgs_profile)
+    @test all(isfinite, bio_profile_slopes)
+
     pyr = PyramidWFS(tel; n_subap=4, mode=Diffractive())
     @test_throws InvalidConfiguration measure!(pyr, tel)
     pyr_slopes = measure!(pyr, tel, ngs)

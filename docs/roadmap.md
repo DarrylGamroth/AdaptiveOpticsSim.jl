@@ -63,8 +63,10 @@
 ## Simplifications vs OOPAO (Current State)
 - WFS diffractive models use FFT propagation but simplified transfer functions and detector sampling
   (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`, `src/WFS/bioedge.jl`).
-- LGS elongation uses Na-profile convolution for Shack-Hartmann, but Pyramid/BioEdge still
-  rely on a 1D Gaussian blur (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`).
+- LGS elongation uses Na-profile convolution for Shack-Hartmann, Pyramid, and BioEdge; the
+  Pyramid/BioEdge path currently averages Na-profile kernels across subapertures rather
+  than modeling per-subap kernels (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`,
+  `src/WFS/bioedge.jl`).
 - `ft_sh_phase_screen` uses a simple 3x3 sub-harmonic grid (no layer-specific outer-scale tuning)
   (`src/Atmosphere/phase_stats.jl`).
 - LiFT analytical mode uses FFT-based Jacobians with object convolution and readout-weighted
