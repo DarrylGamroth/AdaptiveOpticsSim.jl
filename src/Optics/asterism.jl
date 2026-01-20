@@ -4,6 +4,19 @@ end
 
 Base.length(ast::Asterism) = length(ast.sources)
 
+function wavelength(ast::Asterism)
+    if isempty(ast.sources)
+        throw(InvalidConfiguration("asterism must contain at least one source"))
+    end
+    w0 = wavelength(ast.sources[1])
+    for src in ast.sources[2:end]
+        if wavelength(src) != w0
+            throw(InvalidConfiguration("asterism sources must share a common wavelength"))
+        end
+    end
+    return w0
+end
+
 function coordinates_xy_arcsec(src::Source)
     r = src.params.coordinates[1]
     theta = src.params.coordinates[2]

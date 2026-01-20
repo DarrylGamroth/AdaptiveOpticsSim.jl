@@ -221,6 +221,14 @@ end
     @test_throws InvalidConfiguration measure!(bio, tel)
     bio_slopes = measure!(bio, tel, ngs)
     @test length(bio_slopes) == 2 * 4 * 4
+
+    ast = Asterism([ngs, Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0))])
+    sh_ast = ShackHartmann(tel; n_subap=4, mode=Diffractive())
+    sh_ast_slopes = measure!(sh_ast, tel, ast)
+    @test length(sh_ast_slopes) == 2 * 4 * 4
+    pyr_ast = PyramidWFS(tel; n_subap=4, mode=Diffractive())
+    pyr_ast_slopes = measure!(pyr_ast, tel, ast)
+    @test length(pyr_ast_slopes) == 2 * 4 * 4
 end
 @testset "Calibration vault and modal basis" begin
     D = rand(4, 3)
@@ -288,7 +296,9 @@ end
     lift = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=2, img_resolution=8, numerical=true)
     H = lift_interaction_matrix(lift, zeros(3), [1, 2])
     @test size(H) == (64, 2)
-    lift_analytic = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=2, img_resolution=8, numerical=false)
+    kernel = [0.0 1.0 0.0; 1.0 4.0 1.0; 0.0 1.0 0.0]
+    lift_analytic = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=2,
+        img_resolution=8, numerical=false, object_kernel=kernel)
     H_analytic = lift_interaction_matrix(lift_analytic, zeros(3), [1, 2])
     @test size(H_analytic) == (64, 2)
     psf = compute_psf!(tel, src; zero_padding=1)

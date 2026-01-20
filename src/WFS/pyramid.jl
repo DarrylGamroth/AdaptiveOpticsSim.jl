@@ -29,6 +29,7 @@ mutable struct PyramidState{T<:AbstractFloat,
     modulation_phases::C3
     intensity::R
     temp::R
+    scratch::R
     fft_plan::Pf
     ifft_plan::Pi
     elongation_kernel::K
@@ -64,6 +65,7 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
     modulation_phases = backend{Complex{T}}(undef, tel.params.resolution, tel.params.resolution, modulation_points)
     intensity = backend{T}(undef, pad, pad)
     temp = similar(intensity)
+    scratch = similar(intensity)
     fft_plan = FFTW.plan_fft!(focal_field)
     ifft_plan = FFTW.plan_ifft!(pupil_field)
     elongation_kernel = backend{T}(undef, 1)
@@ -90,6 +92,7 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
         modulation_phases,
         intensity,
         temp,
+        scratch,
         fft_plan,
         ifft_plan,
         elongation_kernel,
@@ -189,39 +192,25 @@ function measure!(wfs::PyramidWFS, tel::Telescope, src::LGSSource)
 end
 
 function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
-    Base.require_one_based_indexing(tel.state.opd)
-    n = tel.params.resolution
-    pad = size(wfs.state.field, 1)
-    ox = div(pad - n, 2)
-    oy = div(pad - n, 2)
-    phase_scale = (2 * pi) / wavelength(src)
     n_sub = wfs.params.n_subap
-    idx = 1
+    pyramid_intensity!(wfs.state.intensity, wfs, tel, src)
+    pyramid_slopes!(wfs, n_sub)
+    @. wfs.state.slopes *= wfs.state.optical_gain
+    return wfs.state.slopes
+end
 
+function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, ast::Asterism)
+    Base.require_one_based_indexing(tel.state.opd)
+    if isempty(ast.sources)
+        throw(InvalidConfiguration("asterism must contain at least one source"))
+    end
+    wavelength(ast)
     fill!(wfs.state.intensity, zero(eltype(wfs.state.intensity)))
-    for p in 1:wfs.params.modulation_points
-        fill!(wfs.state.field, zero(eltype(wfs.state.field)))
-        @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = tel.state.pupil *
-            wfs.state.modulation_phases[:, :, p] * cis(phase_scale * tel.state.opd)
-        copyto!(wfs.state.focal_field, wfs.state.field)
-        mul!(wfs.state.focal_field, wfs.state.fft_plan, wfs.state.focal_field)
-        @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.pyramid_mask
-        copyto!(wfs.state.pupil_field, wfs.state.focal_field)
-        mul!(wfs.state.pupil_field, wfs.state.ifft_plan, wfs.state.pupil_field)
-        @. wfs.state.temp = abs2(wfs.state.pupil_field)
+    for src in ast.sources
+        pyramid_intensity!(wfs.state.temp, wfs, tel, src)
         wfs.state.intensity .+= wfs.state.temp
     end
-    wfs.state.intensity ./= wfs.params.modulation_points
-
-    if src isa LGSSource
-        wfs.state.elongation_kernel = apply_elongation!(
-            wfs.state.intensity,
-            lgs_elongation_factor(src),
-            wfs.state.temp,
-            wfs.state.elongation_kernel,
-        )
-    end
-
+    n_sub = wfs.params.n_subap
     pyramid_slopes!(wfs, n_sub)
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
@@ -238,6 +227,39 @@ function build_pyramid_mask!(mask::AbstractMatrix{Complex{T}}, modulation::T) wh
         mask[i, j] = cis(phase)
     end
     return mask
+end
+
+function pyramid_intensity!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::Telescope, src::AbstractSource) where {T<:AbstractFloat}
+    n = tel.params.resolution
+    pad = size(wfs.state.field, 1)
+    ox = div(pad - n, 2)
+    oy = div(pad - n, 2)
+    phase_scale = (2 * pi) / wavelength(src)
+
+    fill!(out, zero(T))
+    for p in 1:wfs.params.modulation_points
+        fill!(wfs.state.field, zero(eltype(wfs.state.field)))
+        @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = tel.state.pupil *
+            wfs.state.modulation_phases[:, :, p] * cis(phase_scale * tel.state.opd)
+        copyto!(wfs.state.focal_field, wfs.state.field)
+        mul!(wfs.state.focal_field, wfs.state.fft_plan, wfs.state.focal_field)
+        @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.pyramid_mask
+        copyto!(wfs.state.pupil_field, wfs.state.focal_field)
+        mul!(wfs.state.pupil_field, wfs.state.ifft_plan, wfs.state.pupil_field)
+        @. wfs.state.temp = abs2(wfs.state.pupil_field)
+        out .+= wfs.state.temp
+    end
+    out ./= wfs.params.modulation_points
+
+    if src isa LGSSource
+        wfs.state.elongation_kernel = apply_elongation!(
+            out,
+            lgs_elongation_factor(src),
+            wfs.state.scratch,
+            wfs.state.elongation_kernel,
+        )
+    end
+    return out
 end
 
 function build_modulation_phases!(wfs::PyramidWFS, tel::Telescope)

@@ -172,7 +172,6 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
     pad = size(wfs.state.field, 1)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
-    phase_scale = (2 * pi) / wavelength(src)
     center = (pad + 1) / 2
     idx = 1
 
@@ -182,46 +181,11 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
         xe = min(i * sub, n)
         ye = min(j * sub, n)
         if wfs.state.valid_mask[i, j]
-            fill!(wfs.state.field, zero(eltype(wfs.state.field)))
-            @views @. wfs.state.field[ox+1:ox+sub, oy+1:oy+sub] = tel.state.pupil[xs:xe, ys:ye] *
-                cis(phase_scale * tel.state.opd[xs:xe, ys:ye])
-            copyto!(wfs.state.fft_buffer, wfs.state.field)
-            mul!(wfs.state.fft_buffer, wfs.state.fft_plan, wfs.state.fft_buffer)
-            @. wfs.state.intensity = abs2(wfs.state.fft_buffer)
-
-            if src isa LGSSource
-                if lgs_has_profile(src)
-                    ensure_lgs_kernels!(wfs, tel, src)
-                    apply_lgs_convolution!(
-                        wfs.state.intensity,
-                        wfs.state.lgs_kernel_fft,
-                        wfs.state.fft_buffer,
-                        wfs.state.fft_plan,
-                        wfs.state.ifft_plan,
-                        idx,
-                    )
-                else
-                    wfs.state.elongation_kernel = apply_elongation!(
-                        wfs.state.intensity,
-                        lgs_elongation_factor(src),
-                        wfs.state.temp,
-                        wfs.state.elongation_kernel,
-                    )
-                end
-            end
-
-            total = sum(wfs.state.intensity)
+            total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
             if total <= 0
                 wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
                 wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
             else
-                sx = zero(eltype(wfs.state.slopes))
-                sy = zero(eltype(wfs.state.slopes))
-                for x in 1:pad, y in 1:pad
-                    val = wfs.state.intensity[x, y]
-                    sx += (x - center) * val
-                    sy += (y - center) * val
-                end
                 wfs.state.slopes[idx] = sx / (total * center)
                 wfs.state.slopes[idx + n_sub * n_sub] = sy / (total * center)
             end
@@ -232,6 +196,104 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
         idx += 1
     end
     return wfs.state.slopes
+end
+
+function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asterism)
+    Base.require_one_based_indexing(tel.state.opd)
+    if isempty(ast.sources)
+        throw(InvalidConfiguration("asterism must contain at least one source"))
+    end
+    wavelength(ast)
+    n = tel.params.resolution
+    n_sub = wfs.params.n_subap
+    sub = div(n, n_sub)
+    pad = size(wfs.state.field, 1)
+    ox = div(pad - sub, 2)
+    oy = div(pad - sub, 2)
+    center = (pad + 1) / 2
+    idx = 1
+
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        xs = (i - 1) * sub + 1
+        ys = (j - 1) * sub + 1
+        xe = min(i * sub, n)
+        ye = min(j * sub, n)
+        if wfs.state.valid_mask[i, j]
+            total_sum = zero(eltype(wfs.state.slopes))
+            sx_sum = zero(eltype(wfs.state.slopes))
+            sy_sum = zero(eltype(wfs.state.slopes))
+            for src in ast.sources
+                total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
+                total_sum += total
+                sx_sum += sx
+                sy_sum += sy
+            end
+            if total_sum <= 0
+                wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
+                wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
+            else
+                wfs.state.slopes[idx] = sx_sum / (total_sum * center)
+                wfs.state.slopes[idx + n_sub * n_sub] = sy_sum / (total_sum * center)
+            end
+        else
+            wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
+            wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
+        end
+        idx += 1
+    end
+    return wfs.state.slopes
+end
+
+function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
+    xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int, pad::Int, idx::Int)
+    phase_scale = (2 * pi) / wavelength(src)
+    fill!(wfs.state.field, zero(eltype(wfs.state.field)))
+    @views @. wfs.state.field[ox+1:ox+sub, oy+1:oy+sub] =
+        tel.state.pupil[xs:xe, ys:ye] * cis(phase_scale * tel.state.opd[xs:xe, ys:ye])
+    copyto!(wfs.state.fft_buffer, wfs.state.field)
+    mul!(wfs.state.fft_buffer, wfs.state.fft_plan, wfs.state.fft_buffer)
+    @. wfs.state.intensity = abs2(wfs.state.fft_buffer)
+
+    if src isa LGSSource
+        apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
+    end
+
+    total = sum(wfs.state.intensity)
+    if total <= 0
+        return zero(eltype(wfs.state.slopes)), zero(eltype(wfs.state.slopes)), zero(eltype(wfs.state.slopes))
+    end
+    sx = zero(eltype(wfs.state.slopes))
+    sy = zero(eltype(wfs.state.slopes))
+    center = (pad + 1) / 2
+    @inbounds for x in 1:pad, y in 1:pad
+        val = wfs.state.intensity[x, y]
+        sx += (x - center) * val
+        sy += (y - center) * val
+    end
+    return total, sx, sy
+end
+
+function apply_lgs_elongation!(::LGSProfileNone, wfs::ShackHartmann, ::Telescope, src::LGSSource, ::Int)
+    wfs.state.elongation_kernel = apply_elongation!(
+        wfs.state.intensity,
+        lgs_elongation_factor(src),
+        wfs.state.temp,
+        wfs.state.elongation_kernel,
+    )
+    return wfs
+end
+
+function apply_lgs_elongation!(::LGSProfileNaProfile, wfs::ShackHartmann, tel::Telescope, src::LGSSource, idx::Int)
+    ensure_lgs_kernels!(wfs, tel, src)
+    apply_lgs_convolution!(
+        wfs.state.intensity,
+        wfs.state.lgs_kernel_fft,
+        wfs.state.fft_buffer,
+        wfs.state.fft_plan,
+        wfs.state.ifft_plan,
+        idx,
+    )
+    return wfs
 end
 
 function ensure_lgs_kernels!(wfs::ShackHartmann, tel::Telescope, src::LGSSource)

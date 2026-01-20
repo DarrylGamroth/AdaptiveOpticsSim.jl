@@ -9,6 +9,10 @@ const BAND_WAVELENGTHS = Dict(
     :K => 2.19e-6,
 )
 
+abstract type LGSProfile end
+struct LGSProfileNone <: LGSProfile end
+struct LGSProfileNaProfile <: LGSProfile end
+
 struct SourceParams{T<:AbstractFloat}
     band::Symbol
     magnitude::T
@@ -85,3 +89,6 @@ lgs_elongation_factor(src::LGSSource) = src.params.elongation_factor
 function lgs_has_profile(src::LGSSource)
     return src.params.na_profile !== nothing
 end
+
+lgs_profile(::LGSSource{<:LGSSourceParams{<:AbstractFloat,Nothing}}) = LGSProfileNone()
+lgs_profile(::LGSSource{<:LGSSourceParams{<:AbstractFloat,<:AbstractMatrix}}) = LGSProfileNaProfile()
