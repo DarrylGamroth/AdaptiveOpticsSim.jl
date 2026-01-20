@@ -1,13 +1,27 @@
+using FFTW
 using Statistics
 
 struct ShackHartmannParams{T<:AbstractFloat}
     n_subap::Int
     threshold::T
+    diffraction_padding::Int
 end
 
-mutable struct ShackHartmannState{T<:AbstractFloat,A<:AbstractMatrix{Bool},V<:AbstractVector{T}}
+mutable struct ShackHartmannState{T<:AbstractFloat,
+    A<:AbstractMatrix{Bool},
+    V<:AbstractVector{T},
+    C<:AbstractMatrix{Complex{T}},
+    R<:AbstractMatrix{T},
+    P,
+    K<:AbstractVector{T}}
     valid_mask::A
     slopes::V
+    field::C
+    fft_buffer::C
+    intensity::R
+    temp::R
+    fft_plan::P
+    elongation_kernel::K
 end
 
 struct ShackHartmann{M<:SensingMode,P<:ShackHartmannParams,S<:ShackHartmannState} <: AbstractWFS
@@ -16,15 +30,40 @@ struct ShackHartmann{M<:SensingMode,P<:ShackHartmannParams,S<:ShackHartmannState
 end
 
 function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
-    mode::SensingMode=Geometric(), T::Type{<:AbstractFloat}=Float64, backend=Array)
+    diffraction_padding::Int=2, mode::SensingMode=Geometric(), T::Type{<:AbstractFloat}=Float64, backend=Array)
     if tel.params.resolution % n_subap != 0
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     end
-    params = ShackHartmannParams{T}(n_subap, T(threshold))
+    params = ShackHartmannParams{T}(n_subap, T(threshold), diffraction_padding)
     valid_mask = backend{Bool}(undef, n_subap, n_subap)
     slopes = backend{T}(undef, 2 * n_subap * n_subap)
     fill!(slopes, zero(T))
-    state = ShackHartmannState{T, typeof(valid_mask), typeof(slopes)}(valid_mask, slopes)
+    sub = div(tel.params.resolution, n_subap)
+    pad = max(sub, sub * diffraction_padding)
+    field = backend{Complex{T}}(undef, pad, pad)
+    fft_buffer = similar(field)
+    intensity = backend{T}(undef, pad, pad)
+    temp = similar(intensity)
+    fft_plan = FFTW.plan_fft!(fft_buffer)
+    elongation_kernel = backend{T}(undef, 1)
+    state = ShackHartmannState{
+        T,
+        typeof(valid_mask),
+        typeof(slopes),
+        typeof(field),
+        typeof(intensity),
+        typeof(fft_plan),
+        typeof(elongation_kernel),
+    }(
+        valid_mask,
+        slopes,
+        field,
+        fft_buffer,
+        intensity,
+        temp,
+        fft_plan,
+        elongation_kernel,
+    )
     wfs = ShackHartmann{typeof(mode), typeof(params), typeof(state)}(params, state)
     update_valid_mask!(wfs, tel)
     return wfs
@@ -85,8 +124,20 @@ function measure!(mode::Geometric, wfs::ShackHartmann, tel::Telescope)
     return wfs.state.slopes
 end
 
-function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope)
+function measure!(::Geometric, wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
     return measure!(Geometric(), wfs, tel)
+end
+
+function measure!(::Geometric, wfs::ShackHartmann, tel::Telescope, src::LGSSource)
+    slopes = measure!(Geometric(), wfs, tel)
+    n_sub = wfs.params.n_subap
+    factor = lgs_elongation_factor(src)
+    @views slopes[n_sub * n_sub + 1:end] .*= factor
+    return slopes
+end
+
+function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope)
+    throw(InvalidConfiguration("Diffractive ShackHartmann requires a source; call measure!(wfs, tel, src)."))
 end
 
 function measure!(wfs::ShackHartmann, tel::Telescope)
@@ -94,13 +145,67 @@ function measure!(wfs::ShackHartmann, tel::Telescope)
 end
 
 function measure!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
-    return measure!(sensing_mode(wfs), wfs, tel)
+    return measure!(sensing_mode(wfs), wfs, tel, src)
 end
 
 function measure!(wfs::ShackHartmann, tel::Telescope, src::LGSSource)
-    slopes = measure!(sensing_mode(wfs), wfs, tel)
+    return measure!(sensing_mode(wfs), wfs, tel, src)
+end
+
+function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
+    Base.require_one_based_indexing(tel.state.opd)
+    n = tel.params.resolution
     n_sub = wfs.params.n_subap
-    factor = lgs_elongation_factor(src)
-    @views slopes[n_sub * n_sub + 1:end] .*= factor
-    return slopes
+    sub = div(n, n_sub)
+    pad = size(wfs.state.field, 1)
+    ox = div(pad - sub, 2)
+    oy = div(pad - sub, 2)
+    phase_scale = (2 * pi) / wavelength(src)
+    center = (pad + 1) / 2
+    idx = 1
+
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        xs = (i - 1) * sub + 1
+        ys = (j - 1) * sub + 1
+        xe = min(i * sub, n)
+        ye = min(j * sub, n)
+        if wfs.state.valid_mask[i, j]
+            fill!(wfs.state.field, zero(eltype(wfs.state.field)))
+            @views @. wfs.state.field[ox+1:ox+sub, oy+1:oy+sub] = tel.state.pupil[xs:xe, ys:ye] *
+                cis(phase_scale * tel.state.opd[xs:xe, ys:ye])
+            copyto!(wfs.state.fft_buffer, wfs.state.field)
+            mul!(wfs.state.fft_buffer, wfs.state.fft_plan, wfs.state.fft_buffer)
+            @. wfs.state.intensity = abs2(wfs.state.fft_buffer)
+
+            if src isa LGSSource
+                wfs.state.elongation_kernel = apply_elongation!(
+                    wfs.state.intensity,
+                    lgs_elongation_factor(src),
+                    wfs.state.temp,
+                    wfs.state.elongation_kernel,
+                )
+            end
+
+            total = sum(wfs.state.intensity)
+            if total <= 0
+                wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
+                wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
+            else
+                sx = zero(eltype(wfs.state.slopes))
+                sy = zero(eltype(wfs.state.slopes))
+                for x in 1:pad, y in 1:pad
+                    val = wfs.state.intensity[x, y]
+                    sx += (x - center) * val
+                    sy += (y - center) * val
+                end
+                wfs.state.slopes[idx] = sx / (total * center)
+                wfs.state.slopes[idx + n_sub * n_sub] = sy / (total * center)
+            end
+        else
+            wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
+            wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
+        end
+        idx += 1
+    end
+    return wfs.state.slopes
 end
