@@ -12,6 +12,29 @@ function pad_center!(dest::AbstractMatrix, src::AbstractMatrix)
     return dest
 end
 
+function fftshift2d!(dest::AbstractMatrix, src::AbstractMatrix)
+    Base.require_one_based_indexing(dest, src)
+    n, m = size(src)
+    if size(dest) != (n, m)
+        throw(DimensionMismatchError("fftshift2d! destination size must match source"))
+    end
+    if dest === src
+        tmp = similar(src)
+        fftshift2d!(tmp, src)
+        copyto!(dest, tmp)
+        return dest
+    end
+    sx = n ÷ 2
+    sy = m ÷ 2
+    @views begin
+        dest[1:n-sx, 1:m-sy] .= src[sx+1:n, sy+1:m]
+        dest[1:n-sx, m-sy+1:m] .= src[sx+1:n, 1:sy]
+        dest[n-sx+1:n, 1:m-sy] .= src[1:sx, sy+1:m]
+        dest[n-sx+1:n, m-sy+1:m] .= src[1:sx, 1:sy]
+    end
+    return dest
+end
+
 function bin2d(input::AbstractMatrix, binning::Int)
     Base.require_one_based_indexing(input)
     if binning < 1

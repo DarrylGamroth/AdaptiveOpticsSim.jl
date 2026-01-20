@@ -1,4 +1,3 @@
-using FFTW
 using LinearAlgebra
 using Logging
 

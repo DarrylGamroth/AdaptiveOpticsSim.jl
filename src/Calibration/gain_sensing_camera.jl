@@ -1,4 +1,3 @@
-using FFTW
 using Logging
 
 mutable struct GSCFFTWorkspace{T<:AbstractFloat,
@@ -16,8 +15,8 @@ function GSCFFTWorkspace(n::Int; T::Type{<:AbstractFloat}=Float64, backend=Array
     buffer = backend{Complex{T}}(undef, n, n)
     fft_out = similar(buffer)
     ifft_out = similar(buffer)
-    fft_plan = FFTW.plan_fft!(buffer)
-    ifft_plan = FFTW.plan_ifft!(buffer)
+    fft_plan = plan_fft!(buffer)
+    ifft_plan = plan_ifft!(buffer)
     return GSCFFTWorkspace{T, typeof(buffer), typeof(fft_plan), typeof(ifft_plan)}(
         buffer,
         fft_out,
@@ -127,17 +126,17 @@ function pad_basis(basis::AbstractArray{T,3}, size_out::Int) where {T}
 end
 
 function fft2c!(out::AbstractMatrix{Complex{T}}, ws::GSCFFTWorkspace{T}, input::AbstractMatrix) where {T}
-    FFTW.fftshift!(ws.buffer, input)
+    fftshift2d!(ws.buffer, input)
     mul!(ws.buffer, ws.fft_plan, ws.buffer)
-    FFTW.fftshift!(out, ws.buffer)
+    fftshift2d!(out, ws.buffer)
     out ./= size(out, 1)
     return out
 end
 
 function ifft2c!(out::AbstractMatrix{Complex{T}}, ws::GSCFFTWorkspace{T}, input::AbstractMatrix) where {T}
-    FFTW.fftshift!(ws.buffer, input)
+    fftshift2d!(ws.buffer, input)
     mul!(ws.buffer, ws.ifft_plan, ws.buffer)
-    FFTW.fftshift!(out, ws.buffer)
+    fftshift2d!(out, ws.buffer)
     out .*= size(out, 1)
     return out
 end

@@ -2,7 +2,8 @@ module AdaptiveOptics
 
 __precompile__(true)
 
-using FFTW
+using AbstractFFTs
+import FFTW
 using LinearAlgebra
 using Logging
 using Random

@@ -1,4 +1,3 @@
-using FFTW
 using Random
 using SpecialFunctions
 
@@ -23,7 +22,7 @@ function PhaseStatsWorkspace(n::Int; T::Type{<:AbstractFloat}=Float64, backend=A
     noise_re = backend{T}(undef, n, n)
     noise_im = backend{T}(undef, n, n)
     freqs = backend{T}(undef, n)
-    ifft_plan = FFTW.plan_ifft!(buffer)
+    ifft_plan = plan_ifft!(buffer)
     return PhaseStatsWorkspace{T, typeof(spectrum), typeof(psd), typeof(freqs), typeof(ifft_plan)}(
         spectrum,
         buffer,
@@ -94,9 +93,9 @@ function ft_phase_screen(atm::KolmogorovAtmosphere, n::Int, delta::Real;
     randn!(rng, ws.noise_re)
     randn!(rng, ws.noise_im)
     @. ws.spectrum = complex(ws.noise_re, ws.noise_im) * sqrt(ws.psd) * del_f
-    FFTW.fftshift!(ws.buffer, ws.spectrum)
+    fftshift2d!(ws.buffer, ws.spectrum)
     mul!(ws.buffer, ws.ifft_plan, ws.buffer)
-    FFTW.fftshift!(ws.spectrum, ws.buffer)
+    fftshift2d!(ws.spectrum, ws.buffer)
     phs = real.(ws.spectrum) .* n
     if return_psd
         return phs, ws.psd

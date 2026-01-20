@@ -90,7 +90,7 @@ function kl_modal_basis(::KLHHtPSD, dm::DeformableMirror, tel::Telescope, atm::A
 
     F = Matrix{Complex{T}}(undef, n * n, mode_count)
     buffer = Matrix{Complex{T}}(undef, n, n)
-    fft_plan = FFTW.plan_fft!(buffer)
+    fft_plan = plan_fft!(buffer)
     @inbounds for k in 1:mode_count
         mode = reshape(view(dm.state.modes, :, k), n, n)
         @inbounds for i in 1:n, j in 1:n

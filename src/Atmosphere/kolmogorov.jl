@@ -1,4 +1,3 @@
-using FFTW
 using Random
 
 struct KolmogorovParams{T<:AbstractFloat}
@@ -33,7 +32,7 @@ function KolmogorovAtmosphere(tel::Telescope; r0::Real, L0::Real=25.0, T::Type{<
     noise_re = backend{T}(undef, n, n)
     noise_im = backend{T}(undef, n, n)
     freqs = backend{T}(undef, n)
-    ifft_plan = FFTW.plan_ifft!(spectrum)
+    ifft_plan = plan_ifft!(spectrum)
     fill!(opd, zero(T))
     fill!(psd, zero(T))
     fill!(spectrum, zero(eltype(spectrum)))

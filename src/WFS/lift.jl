@@ -418,6 +418,6 @@ function focal_field_from_opd!(dest::AbstractMatrix{Complex{T}}, lift::LiFT,
 
     copyto!(ws.fft_buffer, ws.pupil_field)
     mul!(ws.fft_buffer, ws.fft_plan, ws.fft_buffer)
-    FFTW.fftshift!(ws.pupil_field, ws.fft_buffer)
+    fftshift2d!(ws.pupil_field, ws.fft_buffer)
     return center_crop!(dest, ws.pupil_field)
 end

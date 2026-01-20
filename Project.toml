@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["AdaptiveOptics.jl Contributors"]
 
 [deps]
+AbstractFFTs = "621f4979-c628-5d54-868e-fcf4e3e8185c"
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
@@ -24,6 +25,7 @@ AdaptiveOpticsJSON3Ext = "JSON3"
 AdaptiveOpticsTablesExt = "Tables"
 
 [compat]
+AbstractFFTs = "1.5"
 CSV = "0.10"
 FFTW = "1.10.0"
 JSON3 = "1"

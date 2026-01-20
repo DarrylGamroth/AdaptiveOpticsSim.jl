@@ -1,4 +1,3 @@
-using FFTW
 import Base: filter!
 
 abstract type SpatialFilterShape end
@@ -43,8 +42,8 @@ function SpatialFilter(tel::Telescope; shape::SpatialFilterShape=CircularFilter(
     field = similar(mask)
     fft_buffer = similar(mask)
     filtered_field = similar(mask)
-    fft_plan = FFTW.plan_fft!(fft_buffer)
-    ifft_plan = FFTW.plan_ifft!(filtered_field)
+    fft_plan = plan_fft!(fft_buffer)
+    ifft_plan = plan_ifft!(filtered_field)
     phase = backend{T}(undef, tel.params.resolution, tel.params.resolution)
     amplitude = similar(phase)
     state = SpatialFilterState{T, typeof(mask), typeof(phase), typeof(fft_plan), typeof(ifft_plan)}(
@@ -77,7 +76,7 @@ function set_spatial_filter!(sf::SpatialFilter{CircularFilter})
     end
 
     @views sf.state.mask[1:end-1, 1:end-1] .= sf.state.mask[2:end, 2:end]
-    FFTW.fftshift!(sf.state.mask_shifted, sf.state.mask)
+    fftshift2d!(sf.state.mask_shifted, sf.state.mask)
     return sf
 end
 
@@ -93,7 +92,7 @@ function set_spatial_filter!(sf::SpatialFilter{SquareFilter})
     @views @. sf.state.mask[xs:xe, xs:xe] = (1 + im) / sqrt(2)
 
     @views sf.state.mask[1:end-1, 1:end-1] .= sf.state.mask[2:end, 2:end]
-    FFTW.fftshift!(sf.state.mask_shifted, sf.state.mask)
+    fftshift2d!(sf.state.mask_shifted, sf.state.mask)
     return sf
 end
 
@@ -105,7 +104,7 @@ function set_spatial_filter!(sf::SpatialFilter{FoucaultFilter})
     end
 
     @views sf.state.mask[1:end-1, 1:end-1] .= sf.state.mask[2:end, 2:end]
-    FFTW.fftshift!(sf.state.mask_shifted, sf.state.mask)
+    fftshift2d!(sf.state.mask_shifted, sf.state.mask)
     return sf
 end
 
@@ -117,8 +116,8 @@ function ensure_spatial_filter_buffers!(sf::SpatialFilter, n::Int, n_pad::Int)
         sf.state.filtered_field = similar(sf.state.filtered_field, n_pad, n_pad)
         sf.state.mask = similar(sf.state.mask, n_pad, n_pad)
         sf.state.mask_shifted = similar(sf.state.mask_shifted, n_pad, n_pad)
-        sf.state.fft_plan = FFTW.plan_fft!(sf.state.fft_buffer)
-        sf.state.ifft_plan = FFTW.plan_ifft!(sf.state.filtered_field)
+        sf.state.fft_plan = plan_fft!(sf.state.fft_buffer)
+        sf.state.ifft_plan = plan_ifft!(sf.state.filtered_field)
         resized = true
     end
     if size(sf.state.phase) != (n, n)

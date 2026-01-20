@@ -1,4 +1,3 @@
-using FFTW
 using Statistics
 
 struct PyramidParams{T<:AbstractFloat}
@@ -69,8 +68,8 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
     intensity = backend{T}(undef, pad, pad)
     temp = similar(intensity)
     scratch = similar(intensity)
-    fft_plan = FFTW.plan_fft!(focal_field)
-    ifft_plan = FFTW.plan_ifft!(pupil_field)
+    fft_plan = plan_fft!(focal_field)
+    ifft_plan = plan_ifft!(pupil_field)
     elongation_kernel = backend{T}(undef, 1)
     lgs_kernel_fft = backend{Complex{T}}(undef, 0, 0)
     optical_gain = similar(slopes)

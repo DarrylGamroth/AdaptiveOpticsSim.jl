@@ -1,5 +1,3 @@
-using FFTW
-
 function ensure_psf_state!(tel::Telescope, n::Int)
     if size(tel.state.psf) != (n, n)
         tel.state.psf = similar(tel.state.psf, n, n)
@@ -29,7 +27,7 @@ function compute_psf!(tel::Telescope, src::Source, ws::Workspace, zero_padding::
     @. ws.psf_buffer = abs2(ws.fft_buffer)
 
     ensure_psf_state!(tel, n_pad)
-    FFTW.fftshift!(tel.state.psf, ws.psf_buffer)
+    fftshift2d!(tel.state.psf, ws.psf_buffer)
     return tel.state.psf
 end
 

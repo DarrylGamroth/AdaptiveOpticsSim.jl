@@ -1,4 +1,3 @@
-using FFTW
 using Statistics
 
 struct ShackHartmannParams{T<:AbstractFloat}
@@ -49,8 +48,8 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     fft_buffer = similar(field)
     intensity = backend{T}(undef, pad, pad)
     temp = similar(intensity)
-    fft_plan = FFTW.plan_fft!(fft_buffer)
-    ifft_plan = FFTW.plan_ifft!(fft_buffer)
+    fft_plan = plan_fft!(fft_buffer)
+    ifft_plan = plan_ifft!(fft_buffer)
     elongation_kernel = backend{T}(undef, 1)
     lgs_kernel_fft = backend{Complex{T}}(undef, 0, 0, 0)
     state = ShackHartmannState{
