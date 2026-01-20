@@ -28,6 +28,8 @@ mutable struct LiFTState{T<:AbstractFloat,
     residual_buffer::V
     weight_buffer::V
     H_buffer::B
+    normal_buffer::B
+    rhs_buffer::V
 end
 
 struct LiFT{M<:LiFTMode,P<:LiFTParams,S<:LiFTState,B<:AbstractArray{<:AbstractFloat,3},SRC<:AbstractSource,D<:AbstractDetector}
@@ -71,8 +73,10 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
     residual_buffer = similar(psf_buffer, eltype(psf_buffer), img_resolution * img_resolution)
     weight_buffer = similar(residual_buffer)
     H_buffer = similar(psf_buffer, eltype(psf_buffer), img_resolution * img_resolution, size(basis, 3))
+    normal_buffer = similar(psf_buffer, eltype(psf_buffer), size(basis, 3), size(basis, 3))
+    rhs_buffer = similar(residual_buffer, size(basis, 3))
     state = LiFTState(ws, psf_buffer, amp_buffer, focal_buffer, mode_buffer, conv_buffer,
-        opd_buffer, residual_buffer, weight_buffer, H_buffer)
+        opd_buffer, residual_buffer, weight_buffer, H_buffer, normal_buffer, rhs_buffer)
     mode = numerical ? LiFTNumerical() : LiFTAnalytic()
     return LiFT{typeof(mode), typeof(params), typeof(state), typeof(basis), typeof(src), typeof(det)}(
         tel,
@@ -170,12 +174,15 @@ function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVecto
     coeffs = coeffs0 === nothing ? zeros(T, maximum(mode_ids)) : copy(coeffs0)
 
     residual = lift.state.residual_buffer
-    weight = lift.state.weight_buffer
+    sqrtw = lift.state.weight_buffer
     use_iter_weight = R_n === :model || R_n === :iterative
     if !use_iter_weight
-        weight_vector!(weight, psf_in, R_n, lift.det)
+        weight_vector!(sqrtw, psf_in, R_n, lift.det)
+        sqrt_weights!(sqrtw)
     end
     H = @view lift.state.H_buffer[:, 1:n_modes]
+    normal = @view lift.state.normal_buffer[1:n_modes, 1:n_modes]
+    rhs = @view lift.state.rhs_buffer[1:n_modes]
     for iter in 1:lift.params.iterations
         current_opd = prepare_opd!(lift, coeffs)
         model_psf = psf_from_opd!(lift, current_opd)
@@ -200,11 +207,13 @@ function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVecto
         lift_interaction_matrix!(H, lift, coeffs, mode_ids; flux_norm=scale)
 
         if use_iter_weight
-            weight_vector!(weight, model_psf, R_n, lift.det)
+            weight_vector!(sqrtw, model_psf, R_n, lift.det)
+            sqrt_weights!(sqrtw)
         end
-        W = Diagonal(weight)
-        normal = H' * W * H
-        rhs = H' * W * residual
+        apply_row_weights!(H, sqrtw)
+        apply_vec_weights!(residual, sqrtw)
+        mul!(normal, adjoint(H), H)
+        mul!(rhs, adjoint(H), residual)
         delta = try
             normal \ rhs
         catch err
@@ -223,6 +232,31 @@ function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVecto
     end
 
     return coeffs[mode_ids]
+end
+
+@inline function sqrt_weights!(weights::AbstractVector{T}) where {T<:AbstractFloat}
+    @inbounds for idx in eachindex(weights)
+        weights[idx] = sqrt(weights[idx])
+    end
+    return weights
+end
+
+@inline function apply_row_weights!(mat::AbstractMatrix{T}, weights::AbstractVector{T}) where {T<:AbstractFloat}
+    n_rows, n_cols = size(mat)
+    @inbounds for i in 1:n_rows
+        w = weights[i]
+        for j in 1:n_cols
+            mat[i, j] *= w
+        end
+    end
+    return mat
+end
+
+@inline function apply_vec_weights!(vec::AbstractVector{T}, weights::AbstractVector{T}) where {T<:AbstractFloat}
+    @inbounds for i in eachindex(vec)
+        vec[i] *= weights[i]
+    end
+    return vec
 end
 
 function weight_vector!(out::AbstractVector{T}, psf::AbstractMatrix{T}, R_n,
