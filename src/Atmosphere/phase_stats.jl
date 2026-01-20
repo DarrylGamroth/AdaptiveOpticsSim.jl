@@ -106,7 +106,42 @@ end
 
 function ft_sh_phase_screen(atm::KolmogorovAtmosphere, n::Int, delta::Real;
     l0::Real=1e-10, rng::AbstractRNG=Random.default_rng(), return_psd::Bool=false,
-    ws::Union{Nothing,PhaseStatsWorkspace}=nothing)
-    # Sub-harmonics are omitted for now; this is a frequency-domain screen.
-    return ft_phase_screen(atm, n, delta; l0=l0, rng=rng, return_psd=return_psd, ws=ws)
+    ws::Union{Nothing,PhaseStatsWorkspace}=nothing, subharmonics::Bool=true, n_levels::Int=3)
+    phs, psd = ft_phase_screen(atm, n, delta; l0=l0, rng=rng, return_psd=true, ws=ws)
+    if subharmonics
+        add_subharmonics!(phs, atm.params.r0, atm.params.L0, delta, l0; rng=rng, n_levels=n_levels)
+    end
+    if return_psd
+        return phs, psd
+    end
+    return phs
+end
+
+function add_subharmonics!(phs::AbstractMatrix{T}, r0::Real, L0::Real, delta::Real, l0::Real;
+    rng::AbstractRNG=Random.default_rng(), n_levels::Int=3) where {T<:AbstractFloat}
+    n = size(phs, 1)
+    fm = 5.92 / l0 / (2 * pi)
+    f0 = 1 / L0
+    D = n * delta
+    offset = n ÷ 2
+    delta_t = T(delta)
+    for p in 1:n_levels
+        del_f = 1 / (D * 3^p)
+        for fx in -1:1, fy in -1:1
+            if fx == 0 && fy == 0
+                continue
+            end
+            f = sqrt((fx * del_f)^2 + (fy * del_f)^2)
+            psd = 0.023 * r0^(-5 / 3) * exp(-((f / fm)^2)) / ((f^2 + f0^2)^(11 / 6))
+            amp = sqrt(psd) * del_f
+            coeff = (randn(rng) + im * randn(rng)) * amp
+            @inbounds for i in 1:n, j in 1:n
+                xi = (i - 1 - offset) * delta_t
+                yj = (j - 1 - offset) * delta_t
+                phase = 2 * pi * ((fx * del_f) * xi + (fy * del_f) * yj)
+                phs[i, j] += real(coeff * cis(phase))
+            end
+        end
+    end
+    return phs
 end
