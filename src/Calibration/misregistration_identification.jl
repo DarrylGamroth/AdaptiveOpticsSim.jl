@@ -1,4 +1,5 @@
 using LinearAlgebra
+using Serialization
 
 const MISREG_FIELDS = (:shift_x, :shift_y, :rotation_deg, :radial_scaling, :tangential_scaling)
 
@@ -16,13 +17,23 @@ mutable struct SPRINT{T<:AbstractFloat}
     meta::MetaSensitivity{T}
     misregistration_zero::Misregistration{T}
     misregistration_out::Misregistration{T}
+    cache_path::Union{Nothing,String}
+    save_sensitivity::Bool
+    recompute_sensitivity::Bool
+    wfs_mis_registered::Bool
 end
 
 function compute_meta_sensitivity_matrix(tel::Telescope, dm::DeformableMirror, wfs::AbstractWFS,
     basis::AbstractMatrix; misregistration_zero::Misregistration=Misregistration(T=eltype(tel.state.opd)),
     epsilon::Misregistration=Misregistration(shift_x=1e-3, shift_y=1e-3, rotation_deg=1e-3, radial_scaling=1e-3,
         tangential_scaling=1e-3, T=eltype(tel.state.opd)),
-    n_mis_reg::Int=3, field_order::AbstractVector{Symbol}=collect(MISREG_FIELDS))
+    n_mis_reg::Int=3, field_order::AbstractVector{Symbol}=collect(MISREG_FIELDS),
+    cache_path::Union{Nothing,String}=nothing, save_sensitivity::Bool=true, recompute_sensitivity::Bool=false,
+    wfs_mis_registered::Bool=false)
+
+    if cache_path !== nothing && !recompute_sensitivity && isfile(cache_path)
+        return deserialize(cache_path)
+    end
 
     T = eltype(tel.state.opd)
     fields = collect(field_order)[1:min(n_mis_reg, length(field_order))]
@@ -39,20 +50,39 @@ function compute_meta_sensitivity_matrix(tel::Telescope, dm::DeformableMirror, w
         if eps_val == 0
             throw(InvalidConfiguration("epsilon for $(field) must be non-zero"))
         end
-        mis_p = update_misregistration(misregistration_zero, field, getfield(misregistration_zero, field) + eps_val)
-        mis_n = update_misregistration(misregistration_zero, field, getfield(misregistration_zero, field) - eps_val)
+        if wfs_mis_registered
+            if field != :shift_x && field != :shift_y
+                throw(InvalidConfiguration("wfs_mis_registered supports shift_x/shift_y only"))
+            end
+            sx = field == :shift_x ? (misregistration_zero.shift_x + eps_val) : misregistration_zero.shift_x
+            sy = field == :shift_y ? (misregistration_zero.shift_y + eps_val) : misregistration_zero.shift_y
+            apply_shift_wfs!(wfs; sx=sx, sy=sy)
+            imat_p = interaction_matrix(dm, wfs, tel, basis; amplitude=1e-9)
+            sx = field == :shift_x ? (misregistration_zero.shift_x - eps_val) : misregistration_zero.shift_x
+            sy = field == :shift_y ? (misregistration_zero.shift_y - eps_val) : misregistration_zero.shift_y
+            apply_shift_wfs!(wfs; sx=sx, sy=sy)
+            imat_n = interaction_matrix(dm, wfs, tel, basis; amplitude=1e-9)
+            apply_shift_wfs!(wfs; sx=0, sy=0)
+        else
+            mis_p = update_misregistration(misregistration_zero, field, getfield(misregistration_zero, field) + eps_val)
+            mis_n = update_misregistration(misregistration_zero, field, getfield(misregistration_zero, field) - eps_val)
 
-        dm_p = DeformableMirror(tel; n_act=dm.params.n_act, influence_width=dm.params.influence_width,
-            misregistration=mis_p, T=T)
-        dm_n = DeformableMirror(tel; n_act=dm.params.n_act, influence_width=dm.params.influence_width,
-            misregistration=mis_n, T=T)
-        imat_p = interaction_matrix(dm_p, wfs, tel, basis; amplitude=1e-9)
-        imat_n = interaction_matrix(dm_n, wfs, tel, basis; amplitude=1e-9)
+            dm_p = DeformableMirror(tel; n_act=dm.params.n_act, influence_width=dm.params.influence_width,
+                misregistration=mis_p, T=T)
+            dm_n = DeformableMirror(tel; n_act=dm.params.n_act, influence_width=dm.params.influence_width,
+                misregistration=mis_n, T=T)
+            imat_p = interaction_matrix(dm_p, wfs, tel, basis; amplitude=1e-9)
+            imat_n = interaction_matrix(dm_n, wfs, tel, basis; amplitude=1e-9)
+        end
         meta[:, idx] .= vec((imat_p.matrix .- imat_n.matrix) ./ (2 * eps_val))
     end
 
     meta_vault = CalibrationVault(meta)
-    return MetaSensitivity(meta_vault, calib0_vault, epsilon, fields)
+    out = MetaSensitivity(meta_vault, calib0_vault, epsilon, fields)
+    if cache_path !== nothing && save_sensitivity
+        serialize(cache_path, out)
+    end
+    return out
 end
 
 function estimate_misregistration(meta::MetaSensitivity, calib_in::AbstractMatrix;
@@ -78,21 +108,53 @@ function SPRINT(tel::Telescope, dm::DeformableMirror, wfs::AbstractWFS, basis::A
     misregistration_zero::Misregistration=Misregistration(T=eltype(tel.state.opd)),
     epsilon::Misregistration=Misregistration(shift_x=1e-3, shift_y=1e-3, rotation_deg=1e-3, radial_scaling=1e-3,
         tangential_scaling=1e-3, T=eltype(tel.state.opd)),
-    n_mis_reg::Int=3, field_order::AbstractVector{Symbol}=collect(MISREG_FIELDS))
+    n_mis_reg::Int=3, field_order::AbstractVector{Symbol}=collect(MISREG_FIELDS),
+    cache_path::Union{Nothing,String}=nothing, save_sensitivity::Bool=true, recompute_sensitivity::Bool=false,
+    wfs_mis_registered::Bool=false)
 
     meta = compute_meta_sensitivity_matrix(tel, dm, wfs, basis;
         misregistration_zero=misregistration_zero,
         epsilon=epsilon,
         n_mis_reg=n_mis_reg,
-        field_order=field_order)
-    return SPRINT(meta, misregistration_zero, misregistration_zero)
+        field_order=field_order,
+        cache_path=cache_path,
+        save_sensitivity=save_sensitivity,
+        recompute_sensitivity=recompute_sensitivity,
+        wfs_mis_registered=wfs_mis_registered)
+    return SPRINT(meta, misregistration_zero, misregistration_zero, cache_path, save_sensitivity,
+        recompute_sensitivity, wfs_mis_registered)
 end
 
-function estimate!(sprint::SPRINT, calib_in::AbstractMatrix; precision::Int=3, gain_estimation::Real=1.0)
-    sprint.misregistration_out = estimate_misregistration(sprint.meta, calib_in;
-        misregistration_zero=sprint.misregistration_zero,
-        precision=precision,
-        gain_estimation=gain_estimation)
+function estimate!(sprint::SPRINT, calib_in::AbstractMatrix; precision::Int=3, gain_estimation::Real=1.0,
+    n_update_zero_point::Int=0, tel::Union{Nothing,Telescope}=nothing,
+    dm::Union{Nothing,DeformableMirror}=nothing, wfs::Union{Nothing,AbstractWFS}=nothing,
+    basis::Union{Nothing,AbstractMatrix}=nothing)
+    if n_update_zero_point > 0
+        if tel === nothing || dm === nothing || wfs === nothing || basis === nothing
+            throw(InvalidConfiguration("tel, dm, wfs, and basis are required for zero-point updates"))
+        end
+        sprint.misregistration_out = sprint.misregistration_zero
+        for _ in 1:n_update_zero_point
+            sprint.misregistration_out = estimate_misregistration(sprint.meta, calib_in;
+                misregistration_zero=sprint.misregistration_out,
+                precision=precision,
+                gain_estimation=gain_estimation)
+            sprint.meta = compute_meta_sensitivity_matrix(tel, dm, wfs, basis;
+                misregistration_zero=sprint.misregistration_out,
+                epsilon=sprint.meta.epsilon,
+                n_mis_reg=length(sprint.meta.field_order),
+                field_order=sprint.meta.field_order,
+                cache_path=sprint.cache_path,
+                save_sensitivity=sprint.save_sensitivity,
+                recompute_sensitivity=true,
+                wfs_mis_registered=sprint.wfs_mis_registered)
+        end
+    else
+        sprint.misregistration_out = estimate_misregistration(sprint.meta, calib_in;
+            misregistration_zero=sprint.misregistration_zero,
+            precision=precision,
+            gain_estimation=gain_estimation)
+    end
     return sprint.misregistration_out
 end
 
