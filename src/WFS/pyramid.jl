@@ -518,7 +518,13 @@ end
 function pyramid_slopes!(wfs::PyramidWFS, tel::Telescope, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
     pad = size(intensity, 1)
     n_sub = wfs.params.n_subap
-    binning = wfs.params.binning
+    if wfs.state.effective_resolution % pad != 0
+        throw(InvalidConfiguration("pyramid intensity size must divide padded resolution"))
+    end
+    binning = div(wfs.state.effective_resolution, pad)
+    if tel.params.resolution % binning != 0
+        throw(InvalidConfiguration("pyramid binning must evenly divide telescope resolution"))
+    end
     pupil_size = div(tel.params.resolution, binning)
     sep = wfs.params.n_pix_separation === nothing ? 0 : wfs.params.n_pix_separation
     pix_per_subap = tel.params.resolution / n_sub

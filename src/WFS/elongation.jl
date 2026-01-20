@@ -47,6 +47,10 @@ end
     return 206265 * float(wavelength) / float(diameter) / diffraction_padding
 end
 
+@inline function lgs_pixel_scale(diameter::Real, diffraction_padding::Real, wavelength::Real)
+    return 206265 * float(wavelength) / float(diameter) / float(diffraction_padding)
+end
+
 @inline function lgs_pixel_scale(diameter::Real, diffraction_padding::Int, src::LGSSource)
     return lgs_pixel_scale(diameter, diffraction_padding, wavelength(src))
 end
