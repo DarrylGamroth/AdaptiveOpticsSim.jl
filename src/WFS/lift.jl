@@ -178,7 +178,7 @@ function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVecto
     use_iter_weight = R_n === :model || R_n === :iterative
     if !use_iter_weight
         weight_vector!(sqrtw, psf_in, R_n, lift.det)
-        sqrt_weights!(sqrtw)
+        map!(sqrt, sqrtw, sqrtw)
     end
     H = @view lift.state.H_buffer[:, 1:n_modes]
     normal = @view lift.state.normal_buffer[1:n_modes, 1:n_modes]
@@ -208,7 +208,7 @@ function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVecto
 
         if use_iter_weight
             weight_vector!(sqrtw, model_psf, R_n, lift.det)
-            sqrt_weights!(sqrtw)
+            map!(sqrt, sqrtw, sqrtw)
         end
         apply_row_weights!(H, sqrtw)
         apply_vec_weights!(residual, sqrtw)
@@ -232,13 +232,6 @@ function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVecto
     end
 
     return coeffs[mode_ids]
-end
-
-@inline function sqrt_weights!(weights::AbstractVector{T}) where {T<:AbstractFloat}
-    @inbounds for idx in eachindex(weights)
-        weights[idx] = sqrt(weights[idx])
-    end
-    return weights
 end
 
 @inline function apply_row_weights!(mat::AbstractMatrix{T}, weights::AbstractVector{T}) where {T<:AbstractFloat}
