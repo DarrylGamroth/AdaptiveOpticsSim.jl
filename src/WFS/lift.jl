@@ -16,13 +16,18 @@ end
 mutable struct LiFTState{T<:AbstractFloat,
     W<:Workspace,
     B<:AbstractMatrix{T},
-    C<:AbstractMatrix{Complex{T}}}
+    C<:AbstractMatrix{Complex{T}},
+    V<:AbstractVector{T}}
     workspace::W
     psf_buffer::B
     amp_buffer::B
     focal_buffer::C
     mode_buffer::C
     conv_buffer::B
+    opd_buffer::B
+    residual_buffer::V
+    weight_buffer::V
+    H_buffer::B
 end
 
 struct LiFT{M<:LiFTMode,P<:LiFTParams,S<:LiFTState,B<:AbstractArray{<:AbstractFloat,3},SRC<:AbstractSource,D<:AbstractDetector}
@@ -62,7 +67,12 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
     focal_buffer = similar(psf_buffer, Complex{eltype(psf_buffer)})
     mode_buffer = similar(focal_buffer)
     conv_buffer = similar(psf_buffer)
-    state = LiFTState(ws, psf_buffer, amp_buffer, focal_buffer, mode_buffer, conv_buffer)
+    opd_buffer = similar(amp_buffer)
+    residual_buffer = similar(psf_buffer, eltype(psf_buffer), img_resolution * img_resolution)
+    weight_buffer = similar(residual_buffer)
+    H_buffer = similar(psf_buffer, eltype(psf_buffer), img_resolution * img_resolution, size(basis, 3))
+    state = LiFTState(ws, psf_buffer, amp_buffer, focal_buffer, mode_buffer, conv_buffer,
+        opd_buffer, residual_buffer, weight_buffer, H_buffer)
     mode = numerical ? LiFTNumerical() : LiFTAnalytic()
     return LiFT{typeof(mode), typeof(params), typeof(state), typeof(basis), typeof(src), typeof(det)}(
         tel,
@@ -74,56 +84,82 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
     )
 end
 
-function lift_interaction_matrix(lift::LiFT{LiFTNumerical}, coefficients::AbstractVector,
+@inline function prepare_opd!(lift::LiFT, coeffs::AbstractVector)
+    combine_basis!(lift.state.opd_buffer, lift.basis, coeffs, lift.tel.state.pupil)
+    @. lift.state.opd_buffer += lift.params.diversity_opd
+    return lift.state.opd_buffer
+end
+
+function lift_interaction_matrix!(H::AbstractMatrix, lift::LiFT{LiFTNumerical}, coefficients::AbstractVector,
     mode_ids::AbstractVector; flux_norm::Real=1.0)
     T = eltype(lift.state.psf_buffer)
     n_modes = length(mode_ids)
     psf_size = lift.params.img_resolution
-    H = zeros(T, psf_size * psf_size, n_modes)
+    if size(H, 1) < psf_size * psf_size || size(H, 2) < n_modes
+        throw(InvalidConfiguration("H buffer size does not match LiFT dimensions"))
+    end
     delta = T(1e-9)
 
-    initial_opd = combine_basis(lift.basis, coefficients, lift.tel.state.pupil) .+ lift.params.diversity_opd
-    for (idx, mode_id) in enumerate(mode_ids)
-        mode = lift.basis[:, :, mode_id]
-        psf_p = psf_from_opd!(lift, initial_opd .+ delta .* mode; flux_norm=flux_norm)
-        psf_m = psf_from_opd!(lift, initial_opd .- delta .* mode; flux_norm=flux_norm)
-        deriv = (psf_p .- psf_m) ./ (2 * delta)
-        maybe_object_convolve!(lift, deriv)
-        H[:, idx] .= reshape(deriv, :)
+    initial_opd = prepare_opd!(lift, coefficients)
+    opd_work = lift.state.amp_buffer
+    @inbounds for (idx, mode_id) in enumerate(mode_ids)
+        @views mode = lift.basis[:, :, mode_id]
+        @. opd_work = initial_opd + delta * mode
+        psf_p = psf_from_opd!(lift, opd_work; flux_norm=flux_norm)
+        copyto!(lift.state.conv_buffer, psf_p)
+        @. opd_work = initial_opd - delta * mode
+        psf_m = psf_from_opd!(lift, opd_work; flux_norm=flux_norm)
+        @. lift.state.psf_buffer = (lift.state.conv_buffer - psf_m) / (2 * delta)
+        maybe_object_convolve!(lift, lift.state.psf_buffer)
+        @views H[:, idx] .= reshape(lift.state.psf_buffer, :)
     end
     return H
 end
 
-function lift_interaction_matrix(lift::LiFT{LiFTAnalytic}, coefficients::AbstractVector,
+function lift_interaction_matrix!(H::AbstractMatrix, lift::LiFT{LiFTAnalytic}, coefficients::AbstractVector,
     mode_ids::AbstractVector; flux_norm::Real=1.0)
     T = eltype(lift.state.psf_buffer)
     n_modes = length(mode_ids)
     psf_size = lift.params.img_resolution
-    H = zeros(T, psf_size * psf_size, n_modes)
-
-    initial_opd = combine_basis(lift.basis, coefficients, lift.tel.state.pupil) .+ lift.params.diversity_opd
-
-    fill!(lift.state.amp_buffer, zero(T))
-    @inbounds for i in 1:size(lift.state.amp_buffer, 1), j in 1:size(lift.state.amp_buffer, 2)
-        lift.state.amp_buffer[i, j] = lift.tel.state.pupil[i, j] ? sqrt(T(flux_norm)) : zero(T)
+    if size(H, 1) < psf_size * psf_size || size(H, 2) < n_modes
+        throw(InvalidConfiguration("H buffer size does not match LiFT dimensions"))
     end
+
+    initial_opd = prepare_opd!(lift, coefficients)
+
+    amp_scale = sqrt(T(flux_norm))
+    @. lift.state.amp_buffer = ifelse(lift.tel.state.pupil, amp_scale, zero(T))
 
     focal_field_from_opd!(lift.state.focal_buffer, lift, lift.state.amp_buffer, initial_opd)
     Pd = conj.(lift.state.focal_buffer)
 
     k = T(2 * pi) / wavelength(lift.src)
-    for (idx, mode_id) in enumerate(mode_ids)
-        mode = lift.basis[:, :, mode_id]
-        @inbounds for i in 1:size(lift.state.amp_buffer, 1), j in 1:size(lift.state.amp_buffer, 2)
-            lift.state.amp_buffer[i, j] = lift.tel.state.pupil[i, j] ? sqrt(T(flux_norm)) * mode[i, j] : zero(T)
-        end
+    @inbounds for (idx, mode_id) in enumerate(mode_ids)
+        @views mode = lift.basis[:, :, mode_id]
+        @. lift.state.amp_buffer = ifelse(lift.tel.state.pupil, amp_scale * mode, zero(T))
         focal_field_from_opd!(lift.state.mode_buffer, lift, lift.state.amp_buffer, initial_opd)
         @. lift.state.psf_buffer = real(im * lift.state.mode_buffer * Pd)
         lift.state.psf_buffer .*= 2 * k
         maybe_object_convolve!(lift, lift.state.psf_buffer)
-        H[:, idx] .= reshape(lift.state.psf_buffer, :)
+        @views H[:, idx] .= reshape(lift.state.psf_buffer, :)
     end
     return H
+end
+
+function lift_interaction_matrix(lift::LiFT{LiFTNumerical}, coefficients::AbstractVector,
+    mode_ids::AbstractVector; flux_norm::Real=1.0)
+    T = eltype(lift.state.psf_buffer)
+    psf_size = lift.params.img_resolution
+    H = zeros(T, psf_size * psf_size, length(mode_ids))
+    return lift_interaction_matrix!(H, lift, coefficients, mode_ids; flux_norm=flux_norm)
+end
+
+function lift_interaction_matrix(lift::LiFT{LiFTAnalytic}, coefficients::AbstractVector,
+    mode_ids::AbstractVector; flux_norm::Real=1.0)
+    T = eltype(lift.state.psf_buffer)
+    psf_size = lift.params.img_resolution
+    H = zeros(T, psf_size * psf_size, length(mode_ids))
+    return lift_interaction_matrix!(H, lift, coefficients, mode_ids; flux_norm=flux_norm)
 end
 
 function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVector;
@@ -133,9 +169,15 @@ function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVecto
     n_modes = length(mode_ids)
     coeffs = coeffs0 === nothing ? zeros(T, maximum(mode_ids)) : copy(coeffs0)
 
-    weight = nothing
+    residual = lift.state.residual_buffer
+    weight = lift.state.weight_buffer
+    use_iter_weight = R_n === :model || R_n === :iterative
+    if !use_iter_weight
+        weight_vector!(weight, psf_in, R_n, lift.det)
+    end
+    H = @view lift.state.H_buffer[:, 1:n_modes]
     for iter in 1:lift.params.iterations
-        current_opd = combine_basis(lift.basis, coeffs, lift.tel.state.pupil) .+ lift.params.diversity_opd
+        current_opd = prepare_opd!(lift, coeffs)
         model_psf = psf_from_opd!(lift, current_opd)
         scale = one(T)
         if optimize_norm == :sum
@@ -152,11 +194,11 @@ function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVecto
         if scale != one(T)
             model_psf .*= scale
         end
-        residual = reshape(psf_in .- model_psf, :)
-        H = lift_interaction_matrix(lift, coeffs, mode_ids; flux_norm=scale)
+        @. residual = vec(psf_in) - vec(model_psf)
+        lift_interaction_matrix!(H, lift, coeffs, mode_ids; flux_norm=scale)
 
-        if weight === nothing || R_n === :iterative
-            weight = weight_vector(model_psf, R_n, lift.det)
+        if use_iter_weight
+            weight_vector!(weight, model_psf, R_n, lift.det)
         end
         W = Diagonal(weight)
         normal = H' * W * H
@@ -181,18 +223,26 @@ function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVecto
     return coeffs[mode_ids]
 end
 
-function weight_vector(psf::AbstractMatrix{T}, R_n, det::AbstractDetector) where {T<:AbstractFloat}
+function weight_vector!(out::AbstractVector{T}, psf::AbstractMatrix{T}, R_n,
+    det::AbstractDetector) where {T<:AbstractFloat}
     σ = readout_noise(det)
     σ2 = T(σ * σ)
     if R_n === :model || R_n === :iterative
-        vals = reshape(psf, :)
-        return 1 ./ max.(vals .+ σ2, eps(T))
+        @. out = inv(max(vec(psf) + σ2, eps(T)))
+        return out
     elseif R_n === nothing
-        return fill(T(1) / max(σ2, eps(T)), length(psf))
+        fill!(out, T(1) / max(σ2, eps(T)))
+        return out
     elseif R_n isa AbstractMatrix
-        return 1 ./ max.(reshape(R_n, :), eps(T))
+        @. out = inv(max(vec(R_n), eps(T)))
+        return out
     end
     throw(InvalidConfiguration("R_n must be :model, :iterative, a matrix, or nothing"))
+end
+
+function weight_vector(psf::AbstractMatrix{T}, R_n, det::AbstractDetector) where {T<:AbstractFloat}
+    out = similar(psf, T, length(psf))
+    return weight_vector!(out, psf, R_n, det)
 end
 
 function psf_from_opd!(lift::LiFT, opd::AbstractMatrix; flux_norm::Real=1.0)

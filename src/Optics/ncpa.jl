@@ -69,15 +69,22 @@ function ncpa_basis(::M2CBasis, tel::Telescope, dm::DeformableMirror; n_modes::I
     return basis_from_m2c(dm, tel, M2C)
 end
 
-function combine_basis(basis::AbstractArray{T,3}, coeffs::AbstractVector{T}, pupil::AbstractMatrix{Bool}) where {T<:AbstractFloat}
+function combine_basis!(opd::AbstractMatrix{T}, basis::AbstractArray{T,3},
+    coeffs::AbstractVector{T}, pupil::AbstractMatrix{Bool}) where {T<:AbstractFloat}
     n_modes = min(size(basis, 3), length(coeffs))
-    n, m = size(basis, 1), size(basis, 2)
-    opd = zeros(T, n, m)
+    fill!(opd, zero(T))
     @inbounds for k in 1:n_modes
-        opd .+= coeffs[k] .* basis[:, :, k]
+        @views @. opd += coeffs[k] * basis[:, :, k]
     end
-    opd .*= pupil
+    @. opd *= pupil
     return opd
+end
+
+function combine_basis(basis::AbstractArray{T,3}, coeffs::AbstractVector{T},
+    pupil::AbstractMatrix{Bool}) where {T<:AbstractFloat}
+    n, m = size(basis, 1), size(basis, 2)
+    opd = similar(basis, T, n, m)
+    return combine_basis!(opd, basis, coeffs, pupil)
 end
 
 function apply!(ncpa::NCPA, tel::Telescope, ::DMAdditive)
