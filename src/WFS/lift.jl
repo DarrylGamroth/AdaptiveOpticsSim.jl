@@ -1,12 +1,15 @@
 using LinearAlgebra
 using Logging
 
+abstract type LiFTMode end
+struct LiFTAnalytic <: LiFTMode end
+struct LiFTNumerical <: LiFTMode end
+
 struct LiFTParams{T<:AbstractFloat,A<:AbstractMatrix{T},K}
     diversity_opd::A
     iterations::Int
     img_resolution::Int
     zero_padding::Int
-    numerical::Bool
     object_kernel::K
 end
 
@@ -22,7 +25,7 @@ mutable struct LiFTState{T<:AbstractFloat,
     conv_buffer::B
 end
 
-struct LiFT{P<:LiFTParams,S<:LiFTState,B<:AbstractArray{<:AbstractFloat,3},SRC<:AbstractSource,D<:AbstractDetector}
+struct LiFT{M<:LiFTMode,P<:LiFTParams,S<:LiFTState,B<:AbstractArray{<:AbstractFloat,3},SRC<:AbstractSource,D<:AbstractDetector}
     tel::Telescope
     src::SRC
     det::D
@@ -52,7 +55,7 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
         img_resolution = tel.params.resolution * zero_padding
     end
     kernel = object_kernel === nothing ? nothing : eltype(tel.state.opd).(object_kernel)
-    params = LiFTParams(float.(diversity_opd), iterations, img_resolution, zero_padding, numerical, kernel)
+    params = LiFTParams(float.(diversity_opd), iterations, img_resolution, zero_padding, kernel)
     ws = Workspace(tel.state.opd, tel.params.resolution * zero_padding; T=eltype(tel.state.opd))
     psf_buffer = similar(tel.state.opd, eltype(tel.state.opd), img_resolution, img_resolution)
     amp_buffer = similar(tel.state.opd, eltype(tel.state.opd), tel.params.resolution, tel.params.resolution)
@@ -60,10 +63,19 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
     mode_buffer = similar(focal_buffer)
     conv_buffer = similar(psf_buffer)
     state = LiFTState(ws, psf_buffer, amp_buffer, focal_buffer, mode_buffer, conv_buffer)
-    return LiFT(tel, src, det, basis, params, state)
+    mode = numerical ? LiFTNumerical() : LiFTAnalytic()
+    return LiFT{typeof(mode), typeof(params), typeof(state), typeof(basis), typeof(src), typeof(det)}(
+        tel,
+        src,
+        det,
+        basis,
+        params,
+        state,
+    )
 end
 
-function lift_interaction_matrix(lift::LiFT, coefficients::AbstractVector, mode_ids::AbstractVector; flux_norm::Real=1.0)
+function lift_interaction_matrix(lift::LiFT{LiFTNumerical}, coefficients::AbstractVector,
+    mode_ids::AbstractVector; flux_norm::Real=1.0)
     T = eltype(lift.state.psf_buffer)
     n_modes = length(mode_ids)
     psf_size = lift.params.img_resolution
@@ -71,17 +83,25 @@ function lift_interaction_matrix(lift::LiFT, coefficients::AbstractVector, mode_
     delta = T(1e-9)
 
     initial_opd = combine_basis(lift.basis, coefficients, lift.tel.state.pupil) .+ lift.params.diversity_opd
-    if lift.params.numerical
-        for (idx, mode_id) in enumerate(mode_ids)
-            mode = lift.basis[:, :, mode_id]
-            psf_p = psf_from_opd!(lift, initial_opd .+ delta .* mode; flux_norm=flux_norm)
-            psf_m = psf_from_opd!(lift, initial_opd .- delta .* mode; flux_norm=flux_norm)
-            deriv = (psf_p .- psf_m) ./ (2 * delta)
-            maybe_object_convolve!(lift, deriv)
-            H[:, idx] .= reshape(deriv, :)
-        end
-        return H
+    for (idx, mode_id) in enumerate(mode_ids)
+        mode = lift.basis[:, :, mode_id]
+        psf_p = psf_from_opd!(lift, initial_opd .+ delta .* mode; flux_norm=flux_norm)
+        psf_m = psf_from_opd!(lift, initial_opd .- delta .* mode; flux_norm=flux_norm)
+        deriv = (psf_p .- psf_m) ./ (2 * delta)
+        maybe_object_convolve!(lift, deriv)
+        H[:, idx] .= reshape(deriv, :)
     end
+    return H
+end
+
+function lift_interaction_matrix(lift::LiFT{LiFTAnalytic}, coefficients::AbstractVector,
+    mode_ids::AbstractVector; flux_norm::Real=1.0)
+    T = eltype(lift.state.psf_buffer)
+    n_modes = length(mode_ids)
+    psf_size = lift.params.img_resolution
+    H = zeros(T, psf_size * psf_size, n_modes)
+
+    initial_opd = combine_basis(lift.basis, coefficients, lift.tel.state.pupil) .+ lift.params.diversity_opd
 
     fill!(lift.state.amp_buffer, zero(T))
     @inbounds for i in 1:size(lift.state.amp_buffer, 1), j in 1:size(lift.state.amp_buffer, 2)
@@ -212,12 +232,12 @@ function readout_noise(det::Detector{NoisePhotonReadout})
     return det.noise.sigma
 end
 
-function maybe_object_convolve!(lift::LiFT, mat::AbstractMatrix)
-    kernel = lift.params.object_kernel
-    if kernel === nothing
-        return mat
-    end
-    conv2d_same!(lift.state.conv_buffer, mat, kernel)
+function maybe_object_convolve!(lift::LiFT{<:LiFTMode,<:LiFTParams{<:AbstractFloat,<:AbstractMatrix,Nothing}}, mat::AbstractMatrix)
+    return mat
+end
+
+function maybe_object_convolve!(lift::LiFT{<:LiFTMode,<:LiFTParams{<:AbstractFloat,<:AbstractMatrix,<:AbstractMatrix}}, mat::AbstractMatrix)
+    conv2d_same!(lift.state.conv_buffer, mat, lift.params.object_kernel)
     copyto!(mat, lift.state.conv_buffer)
     return mat
 end

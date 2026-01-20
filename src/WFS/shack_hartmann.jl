@@ -244,8 +244,8 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
     return wfs.state.slopes
 end
 
-function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
-    xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int, pad::Int, idx::Int)
+function compute_intensity!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
+    xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int)
     phase_scale = (2 * pi) / wavelength(src)
     fill!(wfs.state.field, zero(eltype(wfs.state.field)))
     @views @. wfs.state.field[ox+1:ox+sub, oy+1:oy+sub] =
@@ -253,24 +253,36 @@ function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     copyto!(wfs.state.fft_buffer, wfs.state.field)
     mul!(wfs.state.fft_buffer, wfs.state.fft_plan, wfs.state.fft_buffer)
     @. wfs.state.intensity = abs2(wfs.state.fft_buffer)
+    return wfs.state.intensity
+end
 
-    if src isa LGSSource
-        apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
-    end
-
-    total = sum(wfs.state.intensity)
+@inline function centroid_from_intensity(intensity::AbstractMatrix{T}, pad::Int) where {T<:AbstractFloat}
+    total = sum(intensity)
     if total <= 0
-        return zero(eltype(wfs.state.slopes)), zero(eltype(wfs.state.slopes)), zero(eltype(wfs.state.slopes))
+        return zero(T), zero(T), zero(T)
     end
-    sx = zero(eltype(wfs.state.slopes))
-    sy = zero(eltype(wfs.state.slopes))
-    center = (pad + 1) / 2
+    sx = zero(T)
+    sy = zero(T)
+    center = (T(pad) + one(T)) / 2
     @inbounds for x in 1:pad, y in 1:pad
-        val = wfs.state.intensity[x, y]
+        val = intensity[x, y]
         sx += (x - center) * val
         sy += (y - center) * val
     end
     return total, sx, sy
+end
+
+function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
+    xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int, pad::Int, ::Int)
+    compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+    return centroid_from_intensity(wfs.state.intensity, pad)
+end
+
+function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
+    xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int, pad::Int, idx::Int)
+    compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+    apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
+    return centroid_from_intensity(wfs.state.intensity, pad)
 end
 
 function apply_lgs_elongation!(::LGSProfileNone, wfs::ShackHartmann, ::Telescope, src::LGSSource, ::Int)

@@ -229,7 +229,7 @@ function build_pyramid_mask!(mask::AbstractMatrix{Complex{T}}, modulation::T) wh
     return mask
 end
 
-function pyramid_intensity!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::Telescope, src::AbstractSource) where {T<:AbstractFloat}
+function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::Telescope, src::AbstractSource) where {T<:AbstractFloat}
     n = tel.params.resolution
     pad = size(wfs.state.field, 1)
     ox = div(pad - n, 2)
@@ -251,14 +251,21 @@ function pyramid_intensity!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::Telesc
     end
     out ./= wfs.params.modulation_points
 
-    if src isa LGSSource
-        wfs.state.elongation_kernel = apply_elongation!(
-            out,
-            lgs_elongation_factor(src),
-            wfs.state.scratch,
-            wfs.state.elongation_kernel,
-        )
-    end
+    return out
+end
+
+function pyramid_intensity!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::Telescope, src::AbstractSource) where {T<:AbstractFloat}
+    return pyramid_intensity_core!(out, wfs, tel, src)
+end
+
+function pyramid_intensity!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::Telescope, src::LGSSource) where {T<:AbstractFloat}
+    pyramid_intensity_core!(out, wfs, tel, src)
+    wfs.state.elongation_kernel = apply_elongation!(
+        out,
+        lgs_elongation_factor(src),
+        wfs.state.scratch,
+        wfs.state.elongation_kernel,
+    )
     return out
 end
 
