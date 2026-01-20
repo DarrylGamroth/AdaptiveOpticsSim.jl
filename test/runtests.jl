@@ -1,6 +1,8 @@
 using Test
 using AdaptiveOptics
 using Random
+using Tables
+using TOML
 
 function assert_source_interface(src)
     @test hasmethod(wavelength, Tuple{typeof(src)})
@@ -347,4 +349,30 @@ end
     assert_wfs_interface(wfs, tel)
     assert_dm_interface(dm, tel)
     assert_detector_interface(det, psf)
+end
+
+@testset "Telemetry and config" begin
+    telemetry = Telemetry()
+    record!(telemetry, 1, 0.0; wfe_rms=1.0, strehl=0.5, loop_gain=0.2)
+    @test length(telemetry) == 1
+    row = telemetry[1]
+    @test row.iter == 1
+    @test row.strehl ≈ 0.5
+
+    @test Tables.istable(Telemetry)
+    @test Tables.rowaccess(Telemetry)
+    rows = collect(Tables.rows(telemetry))
+    @test length(rows) == 1
+    @test rows[1].loop_gain ≈ 0.2
+
+    tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = Source(band=:I, magnitude=0.0)
+    cfg = snapshot_config(tel=tel, src=src)
+    @test haskey(cfg, "tel")
+    @test haskey(cfg, "src")
+    path, io = mktemp()
+    close(io)
+    write_config_toml(path, cfg)
+    parsed = TOML.parsefile(path)
+    @test parsed["tel"]["resolution"] == tel.params.resolution
 end
