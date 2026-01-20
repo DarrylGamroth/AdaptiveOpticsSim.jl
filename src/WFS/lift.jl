@@ -41,6 +41,30 @@ struct LiFT{M<:LiFTMode,P<:LiFTParams,S<:LiFTState,B<:AbstractArray{<:AbstractFl
     state::S
 end
 
+abstract type LiFTWeightingMode end
+abstract type LiFTWeightingStatic <: LiFTWeightingMode end
+abstract type LiFTWeightingDynamic <: LiFTWeightingMode end
+
+struct LiFTWeightModel <: LiFTWeightingDynamic end
+struct LiFTWeightIterative <: LiFTWeightingDynamic end
+struct LiFTWeightNone <: LiFTWeightingStatic end
+struct LiFTWeightMatrix{M<:AbstractMatrix} <: LiFTWeightingStatic
+    R_n::M
+end
+
+weight_mode(mode::LiFTWeightingMode) = mode
+weight_mode(::Nothing) = LiFTWeightNone()
+weight_mode(R_n::AbstractMatrix) = LiFTWeightMatrix(R_n)
+function weight_mode(R_n::Symbol)
+    if R_n === :model
+        return LiFTWeightModel()
+    elseif R_n === :iterative
+        return LiFTWeightIterative()
+    end
+    throw(InvalidConfiguration("R_n must be :model, :iterative, a matrix, or nothing"))
+end
+weight_mode(::Any) = throw(InvalidConfiguration("R_n must be :model, :iterative, a matrix, or nothing"))
+
 function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::AbstractDetector;
     diversity_opd::AbstractMatrix, iterations::Int=5, img_resolution::Int=0,
     numerical::Bool=false, ang_pixel_arcsec=nothing, object_kernel=nothing)
@@ -168,6 +192,12 @@ end
 
 function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVector;
     coeffs0=nothing, R_n=nothing, optimize_norm::Symbol=:sum, check_convergence::Bool=true)
+    return reconstruct(lift, psf_in, mode_ids, weight_mode(R_n);
+        coeffs0=coeffs0, optimize_norm=optimize_norm, check_convergence=check_convergence)
+end
+
+function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVector, mode::LiFTWeightingMode;
+    coeffs0=nothing, optimize_norm::Symbol=:sum, check_convergence::Bool=true)
 
     T = eltype(lift.state.psf_buffer)
     n_modes = length(mode_ids)
@@ -175,14 +205,11 @@ function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVecto
 
     residual = lift.state.residual_buffer
     sqrtw = lift.state.weight_buffer
-    use_iter_weight = R_n === :model || R_n === :iterative
-    if !use_iter_weight
-        weight_vector!(sqrtw, psf_in, R_n, lift.det)
-        map!(sqrt, sqrtw, sqrtw)
-    end
     H = @view lift.state.H_buffer[:, 1:n_modes]
     normal = @view lift.state.normal_buffer[1:n_modes, 1:n_modes]
     rhs = @view lift.state.rhs_buffer[1:n_modes]
+    init_weights!(sqrtw, mode, psf_in, lift.det)
+    diagw = Diagonal(sqrtw)
     for iter in 1:lift.params.iterations
         current_opd = prepare_opd!(lift, coeffs)
         model_psf = psf_from_opd!(lift, current_opd)
@@ -206,12 +233,9 @@ function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVecto
         end
         lift_interaction_matrix!(H, lift, coeffs, mode_ids; flux_norm=scale)
 
-        if use_iter_weight
-            weight_vector!(sqrtw, model_psf, R_n, lift.det)
-            map!(sqrt, sqrtw, sqrtw)
-        end
-        apply_row_weights!(H, sqrtw)
-        apply_vec_weights!(residual, sqrtw)
+        update_weights!(sqrtw, mode, model_psf, lift.det)
+        lmul!(diagw, H)
+        lmul!(diagw, residual)
         mul!(normal, adjoint(H), H)
         mul!(rhs, adjoint(H), residual)
         delta = try
@@ -234,51 +258,72 @@ function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVecto
     return coeffs[mode_ids]
 end
 
-@inline function apply_row_weights!(mat::AbstractMatrix{T}, weights::AbstractVector{T}) where {T<:AbstractFloat}
-    n_rows, n_cols = size(mat)
-    @inbounds for i in 1:n_rows
-        w = weights[i]
-        for j in 1:n_cols
-            mat[i, j] *= w
-        end
-    end
-    return mat
+@inline function init_weights!(sqrtw::AbstractVector{T}, ::LiFTWeightingDynamic,
+    ::AbstractMatrix{T}, ::AbstractDetector) where {T<:AbstractFloat}
+    return sqrtw
 end
 
-@inline function apply_vec_weights!(vec::AbstractVector{T}, weights::AbstractVector{T}) where {T<:AbstractFloat}
-    @inbounds for i in eachindex(vec)
-        vec[i] *= weights[i]
+@inline function init_weights!(sqrtw::AbstractVector{T}, mode::LiFTWeightingStatic,
+    psf_in::AbstractMatrix{T}, det::AbstractDetector) where {T<:AbstractFloat}
+    weight_vector!(sqrtw, psf_in, mode, det)
+    map!(sqrt, sqrtw, sqrtw)
+    return sqrtw
+end
+
+@inline function update_weights!(sqrtw::AbstractVector{T}, ::LiFTWeightingStatic,
+    ::AbstractMatrix{T}, ::AbstractDetector) where {T<:AbstractFloat}
+    return sqrtw
+end
+
+@inline function update_weights!(sqrtw::AbstractVector{T}, mode::LiFTWeightingDynamic,
+    model_psf::AbstractMatrix{T}, det::AbstractDetector) where {T<:AbstractFloat}
+    weight_vector!(sqrtw, model_psf, mode, det)
+    map!(sqrt, sqrtw, sqrtw)
+    return sqrtw
+end
+
+function weight_vector!(out::AbstractVector{T}, psf::AbstractMatrix{T}, ::LiFTWeightModel,
+    det::AbstractDetector) where {T<:AbstractFloat}
+    σ = readout_noise(det)
+    σ2 = T(σ * σ)
+    vals = vec(psf)
+    @inbounds for idx in eachindex(out)
+        denom = vals[idx] + σ2
+        out[idx] = inv(max(denom, eps(T)))
     end
-    return vec
+    return out
+end
+
+function weight_vector!(out::AbstractVector{T}, psf::AbstractMatrix{T}, ::LiFTWeightIterative,
+    det::AbstractDetector) where {T<:AbstractFloat}
+    return weight_vector!(out, psf, LiFTWeightModel(), det)
+end
+
+function weight_vector!(out::AbstractVector{T}, ::AbstractMatrix{T}, ::LiFTWeightNone,
+    det::AbstractDetector) where {T<:AbstractFloat}
+    σ = readout_noise(det)
+    σ2 = T(σ * σ)
+    fill!(out, T(1) / max(σ2, eps(T)))
+    return out
+end
+
+function weight_vector!(out::AbstractVector{T}, ::AbstractMatrix{T}, mode::LiFTWeightMatrix,
+    ::AbstractDetector) where {T<:AbstractFloat}
+    vals = vec(mode.R_n)
+    @inbounds for idx in eachindex(out)
+        out[idx] = inv(max(vals[idx], eps(T)))
+    end
+    return out
 end
 
 function weight_vector!(out::AbstractVector{T}, psf::AbstractMatrix{T}, R_n,
     det::AbstractDetector) where {T<:AbstractFloat}
-    σ = readout_noise(det)
-    σ2 = T(σ * σ)
-    if R_n === :model || R_n === :iterative
-        vals = vec(psf)
-        @inbounds for idx in eachindex(out)
-            denom = vals[idx] + σ2
-            out[idx] = inv(max(denom, eps(T)))
-        end
-        return out
-    elseif R_n === nothing
-        fill!(out, T(1) / max(σ2, eps(T)))
-        return out
-    elseif R_n isa AbstractMatrix
-        vals = vec(R_n)
-        @inbounds for idx in eachindex(out)
-            out[idx] = inv(max(vals[idx], eps(T)))
-        end
-        return out
-    end
-    throw(InvalidConfiguration("R_n must be :model, :iterative, a matrix, or nothing"))
+    return weight_vector!(out, psf, weight_mode(R_n), det)
 end
 
 function weight_vector(psf::AbstractMatrix{T}, R_n, det::AbstractDetector) where {T<:AbstractFloat}
     out = similar(psf, T, length(psf))
-    return weight_vector!(out, psf, R_n, det)
+    return weight_vector!(out, psf, weight_mode(R_n), det)
 end
 
 function psf_from_opd!(lift::LiFT, opd::AbstractMatrix; flux_norm::Real=1.0)
