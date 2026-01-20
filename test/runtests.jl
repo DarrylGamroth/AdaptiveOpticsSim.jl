@@ -66,6 +66,18 @@ end
     @test psd_snapshot != atm.state.psd
 end
 
+@testset "Sub-harmonic phase screens" begin
+    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+    delta = tel.params.diameter / tel.params.resolution
+    rng = MersenneTwister(11)
+    ws = PhaseStatsWorkspace(32; T=Float64)
+    phs_base = ft_sh_phase_screen(atm, 32, delta; rng=rng, ws=ws, subharmonics=false)
+    rng = MersenneTwister(11)
+    phs_sh = ft_sh_phase_screen(atm, 32, delta; rng=rng, ws=ws, subharmonics=true)
+    @test sum(abs.(phs_sh .- phs_base)) > 0
+end
+
 @testset "Multi-layer atmosphere" begin
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     atm = MultiLayerAtmosphere(tel;
@@ -178,6 +190,32 @@ end
     @test slopes_lgs[n+1:end] ≈ slopes_ngs[n+1:end] .* 2.0
 end
 
+@testset "Diffractive WFS" begin
+    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    for i in 1:tel.params.resolution, j in 1:tel.params.resolution
+        tel.state.opd[i, j] = i
+    end
+    ngs = Source(band=:I, magnitude=0.0)
+    lgs = LGSSource(elongation_factor=1.5)
+
+    sh = ShackHartmann(tel; n_subap=4, mode=Diffractive())
+    @test_throws InvalidConfiguration measure!(sh, tel)
+    sh_slopes = measure!(sh, tel, ngs)
+    @test length(sh_slopes) == 2 * 4 * 4
+    @test all(isfinite, sh_slopes)
+    sh_lgs = measure!(sh, tel, lgs)
+    @test all(isfinite, sh_lgs)
+
+    pyr = PyramidWFS(tel; n_subap=4, mode=Diffractive())
+    @test_throws InvalidConfiguration measure!(pyr, tel)
+    pyr_slopes = measure!(pyr, tel, ngs)
+    @test length(pyr_slopes) == 2 * 4 * 4
+
+    bio = BioEdgeWFS(tel; n_subap=4, mode=Diffractive())
+    @test_throws InvalidConfiguration measure!(bio, tel)
+    bio_slopes = measure!(bio, tel, ngs)
+    @test length(bio_slopes) == 2 * 4 * 4
+end
 @testset "Calibration vault and modal basis" begin
     D = rand(4, 3)
     vault = CalibrationVault(D)
@@ -195,6 +233,13 @@ end
     @test size(fit) == size(opd)
     @test size(corr) == size(opd)
     @test size(turb) == size(opd)
+
+    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+    M2C, basis_hht = kl_modal_basis(KLHHtPSD(), dm, tel, atm; n_modes=2)
+    @test size(M2C, 2) == 2
+    @test size(basis_hht, 3) == 2
+    basis2 = modal_basis(dm, tel; n_modes=2, method=KLHHtPSD(), atm=atm)
+    @test size(basis2.M2C, 2) == 2
 end
 
 @testset "OPD maps and NCPA" begin
