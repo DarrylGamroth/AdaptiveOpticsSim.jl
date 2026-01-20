@@ -331,17 +331,8 @@ function apply_lgs_convolution!(intensity::AbstractMatrix{T}, kernels_fft::Abstr
     if size(kernels_fft, 3) < idx
         return intensity
     end
-    n = size(intensity, 1)
-    @inbounds for i in 1:n, j in 1:n
-        fft_buffer[i, j] = complex(intensity[i, j], zero(T))
-    end
-    mul!(fft_buffer, fft_plan, fft_buffer)
-    @views @. fft_buffer *= kernels_fft[:, :, idx]
-    mul!(fft_buffer, ifft_plan, fft_buffer)
-    scale = T(1) / (n * n)
-    @inbounds for i in 1:n, j in 1:n
-        intensity[i, j] = real(fft_buffer[i, j]) * scale
-    end
+    kernel = @view kernels_fft[:, :, idx]
+    apply_lgs_convolution!(intensity, kernel, fft_buffer, fft_plan, ifft_plan)
     return intensity
 end
 
@@ -358,7 +349,11 @@ function lgs_spot_kernels_fft(tel::Telescope, wfs::ShackHartmann, src::LGSSource
         return similar(wfs.state.fft_buffer, Complex{T}, 0, 0, 0)
     end
 
-    pixel_scale = lgs_pixel_scale(tel, wfs, src)
+    pixel_scale = lgs_pixel_scale(
+        tel.params.diameter / wfs.params.n_subap,
+        wfs.params.diffraction_padding,
+        wavelength(src),
+    )
     fwhm_px = src.params.fwhm_spot_up / pixel_scale
     sigma_px = fwhm_px / (2 * sqrt(2 * log(T(2))))
     center = (pad + 1) / 2
@@ -373,18 +368,10 @@ function lgs_spot_kernels_fft(tel::Telescope, wfs::ShackHartmann, src::LGSSource
     ref_vec = lgs_reference_vector(tel, x0, y0, altitudes[ref_idx])
 
     idx = 1
+    kernel = similar(wfs.state.intensity)
     for iy in 1:n_sub, ix in 1:n_sub
-        kernel = similar(wfs.state.intensity)
-        fill!(kernel, zero(T))
-        for k in 1:length(altitudes)
-            vec = lgs_reference_vector(tel, x0, y0, altitudes[k]) .- ref_vec
-            shift_x, shift_y = lgs_spot_shift(vec, tel, x_subap[ix], y_subap[iy], pixel_scale)
-            gaussian_shift!(kernel, sigma_px, center + shift_x, center + shift_y, weights[k])
-        end
-        total = sum(kernel)
-        if total > 0
-            kernel ./= total
-        end
+        lgs_spot_kernel!(kernel, tel, src, altitudes, weights, pixel_scale, sigma_px, center,
+            x_subap[ix], y_subap[iy], ref_vec)
         fft_buffer = wfs.state.fft_buffer
         @inbounds for i in 1:pad, j in 1:pad
             fft_buffer[i, j] = complex(kernel[i, j], zero(T))
@@ -395,48 +382,4 @@ function lgs_spot_kernels_fft(tel::Telescope, wfs::ShackHartmann, src::LGSSource
     end
 
     return kernels_fft
-end
-
-function lgs_reference_vector(tel::Telescope, x0::Real, y0::Real, altitude::Real)
-    x = (tel.params.diameter / 4) * (x0 / altitude)
-    y = (tel.params.diameter / 4) * (y0 / altitude)
-    z = (tel.params.diameter^2) / (8 * altitude) / (2 * sqrt(3))
-    return (x, y, z)
-end
-
-function lgs_spot_shift(vec::Tuple{T,T,T}, tel::Telescope, x_subap::Real, y_subap::Real,
-    pixel_scale::Real) where {T<:Real}
-    dx0 = vec[1] * (4 / tel.params.diameter)
-    dy0 = vec[2] * (4 / tel.params.diameter)
-    dx1 = vec[3] * (sqrt(3) * (4 / tel.params.diameter)^2) * x_subap
-    dy1 = vec[3] * (sqrt(3) * (4 / tel.params.diameter)^2) * y_subap
-    shift_x = 206265 * (dx0 + dx1) / pixel_scale
-    shift_y = 206265 * (dy0 + dy1) / pixel_scale
-    return shift_x, shift_y
-end
-
-function lgs_pixel_scale(tel::Telescope, wfs::ShackHartmann, src::LGSSource)
-    d_subap = tel.params.diameter / wfs.params.n_subap
-    return 206265 * wavelength(src) / d_subap / wfs.params.diffraction_padding
-end
-
-function gaussian_shift!(kernel::AbstractMatrix{T}, sigma::Real, cx::Real, cy::Real,
-    weight::Real) where {T<:AbstractFloat}
-    if weight == 0
-        return kernel
-    end
-    n = size(kernel, 1)
-    if sigma <= 0
-        ix = clamp(round(Int, cx), 1, n)
-        iy = clamp(round(Int, cy), 1, n)
-        kernel[ix, iy] += T(weight)
-        return kernel
-    end
-    inv_2sigma2 = T(0.5) / (T(sigma) * T(sigma))
-    @inbounds for i in 1:n, j in 1:n
-        dx = T(i) - T(cx)
-        dy = T(j) - T(cy)
-        kernel[i, j] += T(weight) * exp(-(dx * dx + dy * dy) * inv_2sigma2)
-    end
-    return kernel
 end
