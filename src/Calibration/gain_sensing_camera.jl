@@ -144,19 +144,27 @@ end
 
 function split_basis_product(basis::AbstractArray{T,3}, ws::GSCFFTWorkspace{T}; n_jobs::Int=10) where {T<:AbstractFloat}
     n_modes = size(basis, 3)
-    n_chunks = ceil(Int, n_modes / max(n_jobs, 1))
     out = similar(ws.buffer, Complex{T}, size(basis, 1), size(basis, 2), n_modes)
-    idx = 1
-    for _ in 1:n_chunks
-        last = min(idx + n_jobs - 1, n_modes)
-        for k in idx:last
+    jobs = max(1, n_jobs)
+    if jobs == 1 || Base.Threads.nthreads() == 1
+        for k in 1:n_modes
             @views begin
                 fft2c!(ws.fft_out, ws, basis[:, :, k])
                 ifft2c!(ws.ifft_out, ws, basis[:, :, k])
                 out[:, :, k] .= ws.fft_out .* ws.ifft_out
             end
         end
-        idx = last + 1
+        return out
+    end
+
+    ws_list = [GSCFFTWorkspace(size(basis, 1); T=T) for _ in 1:Base.Threads.nthreads()]
+    Base.Threads.@threads for k in 1:n_modes
+        ws_local = ws_list[Base.Threads.threadid()]
+        @views begin
+            fft2c!(ws_local.fft_out, ws_local, basis[:, :, k])
+            ifft2c!(ws_local.ifft_out, ws_local, basis[:, :, k])
+            out[:, :, k] .= ws_local.fft_out .* ws_local.ifft_out
+        end
     end
     return out
 end
