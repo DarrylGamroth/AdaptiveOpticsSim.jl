@@ -9,9 +9,15 @@ struct LiFTParams{T<:AbstractFloat,A<:AbstractMatrix{T}}
     numerical::Bool
 end
 
-mutable struct LiFTState{T<:AbstractFloat,W<:Workspace,B<:AbstractMatrix{T}}
+mutable struct LiFTState{T<:AbstractFloat,
+    W<:Workspace,
+    B<:AbstractMatrix{T},
+    C<:AbstractMatrix{Complex{T}}}
     workspace::W
     psf_buffer::B
+    amp_buffer::B
+    focal_buffer::C
+    mode_buffer::C
 end
 
 struct LiFT{P<:LiFTParams,S<:LiFTState,B<:AbstractArray{<:AbstractFloat,3},SRC<:AbstractSource,D<:AbstractDetector}
@@ -46,7 +52,10 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
     params = LiFTParams(float.(diversity_opd), iterations, img_resolution, zero_padding, numerical)
     ws = Workspace(tel.state.opd, tel.params.resolution * zero_padding; T=eltype(tel.state.opd))
     psf_buffer = similar(tel.state.opd, eltype(tel.state.opd), img_resolution, img_resolution)
-    state = LiFTState(ws, psf_buffer)
+    amp_buffer = similar(tel.state.opd, eltype(tel.state.opd), tel.params.resolution, tel.params.resolution)
+    focal_buffer = similar(psf_buffer, Complex{eltype(psf_buffer)})
+    mode_buffer = similar(focal_buffer)
+    state = LiFTState(ws, psf_buffer, amp_buffer, focal_buffer, mode_buffer)
     return LiFT(tel, src, det, basis, params, state)
 end
 
@@ -58,15 +67,35 @@ function lift_interaction_matrix(lift::LiFT, coefficients::AbstractVector, mode_
     delta = T(1e-9)
 
     initial_opd = combine_basis(lift.basis, coefficients, lift.tel.state.pupil) .+ lift.params.diversity_opd
+    if lift.params.numerical
+        for (idx, mode_id) in enumerate(mode_ids)
+            mode = lift.basis[:, :, mode_id]
+            psf_p = psf_from_opd!(lift, initial_opd .+ delta .* mode; flux_norm=flux_norm)
+            psf_m = psf_from_opd!(lift, initial_opd .- delta .* mode; flux_norm=flux_norm)
+            deriv = (psf_p .- psf_m) ./ (2 * delta)
+            H[:, idx] .= reshape(deriv, :)
+        end
+        return H
+    end
+
+    fill!(lift.state.amp_buffer, zero(T))
+    @inbounds for i in 1:size(lift.state.amp_buffer, 1), j in 1:size(lift.state.amp_buffer, 2)
+        lift.state.amp_buffer[i, j] = lift.tel.state.pupil[i, j] ? sqrt(T(flux_norm)) : zero(T)
+    end
+
+    focal_field_from_opd!(lift.state.focal_buffer, lift, lift.state.amp_buffer, initial_opd)
+    Pd = conj.(lift.state.focal_buffer)
+
+    k = T(2 * pi) / wavelength(lift.src)
     for (idx, mode_id) in enumerate(mode_ids)
         mode = lift.basis[:, :, mode_id]
-        psf_p = psf_from_opd!(lift, initial_opd .+ delta .* mode; flux_norm=flux_norm)
-        psf_m = psf_from_opd!(lift, initial_opd .- delta .* mode; flux_norm=flux_norm)
-        deriv = (psf_p .- psf_m) ./ (2 * delta)
-        H[:, idx] .= reshape(deriv, :)
-    end
-    if !lift.params.numerical
-        @debug "LiFT analytical mode uses finite differences for now"
+        @inbounds for i in 1:size(lift.state.amp_buffer, 1), j in 1:size(lift.state.amp_buffer, 2)
+            lift.state.amp_buffer[i, j] = lift.tel.state.pupil[i, j] ? sqrt(T(flux_norm)) * mode[i, j] : zero(T)
+        end
+        focal_field_from_opd!(lift.state.mode_buffer, lift, lift.state.amp_buffer, initial_opd)
+        @. lift.state.psf_buffer = real(im * lift.state.mode_buffer * Pd)
+        lift.state.psf_buffer .*= 2 * k
+        H[:, idx] .= reshape(lift.state.psf_buffer, :)
     end
     return H
 end
@@ -132,4 +161,23 @@ function center_crop!(dest::AbstractMatrix, src::AbstractMatrix)
     cy = div(size(src, 2) - n, 2)
     @views copyto!(dest, src[cx+1:cx+n, cy+1:cy+n])
     return dest
+end
+
+function focal_field_from_opd!(dest::AbstractMatrix{Complex{T}}, lift::LiFT,
+    amplitude::AbstractMatrix{T}, opd::AbstractMatrix) where {T<:AbstractFloat}
+    n = lift.tel.params.resolution
+    n_pad = n * lift.params.zero_padding
+    ws = lift.state.workspace
+    ensure_psf_buffers!(ws, n_pad)
+
+    phase_scale = T(2 * pi) / wavelength(lift.src)
+    ox = div(n_pad - n, 2)
+    oy = div(n_pad - n, 2)
+    fill!(ws.pupil_field, zero(eltype(ws.pupil_field)))
+    @views @. ws.pupil_field[ox+1:ox+n, oy+1:oy+n] = amplitude * cis(phase_scale * opd)
+
+    copyto!(ws.fft_buffer, ws.pupil_field)
+    mul!(ws.fft_buffer, ws.fft_plan, ws.fft_buffer)
+    FFTW.fftshift!(ws.pupil_field, ws.fft_buffer)
+    return center_crop!(dest, ws.pupil_field)
 end
