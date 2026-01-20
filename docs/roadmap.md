@@ -66,8 +66,8 @@
   rely on a 1D Gaussian blur (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`).
 - `ft_sh_phase_screen` uses a simple 3x3 sub-harmonic grid (no layer-specific outer-scale tuning)
   (`src/Atmosphere/phase_stats.jl`).
-- LiFT analytical mode uses FFT-based Jacobians but omits object convolution and
-  detector-weighted noise models (`src/WFS/lift.jl`).
+- LiFT analytical mode uses FFT-based Jacobians with object convolution and readout-weighted
+  noise, but does not model detector binning explicitly (`src/WFS/lift.jl`).
 - GainSensingCamera uses threaded FFT batching but still ignores detector metadata
   coupling (`src/Calibration/gain_sensing_camera.jl`).
 - NCPA KL basis defaults to DM-mode covariance (`MᵀM`); HHt/PSD option is available but not default
