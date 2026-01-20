@@ -2,7 +2,8 @@
 
 ## Status
 - Phases 1-5 implemented in `AdaptiveOptics.jl`.
-- Phases 6-7 pending (I/O helpers, reference dataset validation, docs/tutorial ports).
+- Phase 6 in progress (telemetry + config export done; more I/O helpers pending).
+- Phase 7 pending (reference dataset validation + docs/tutorial ports).
 
 ## AO Feature Checklist
 - [x] P0: Detector modeling (photon/read noise, QE, binning, PSF sampling).
@@ -132,9 +133,9 @@
 - Benchmark suite for CPU/GPU with standardized scenarios (PSF, WFS, reconstructor).
 
 ## Phase 6: IO and telemetry
-- Optional I/O helpers (FITS/HDF5/CSV) in an extension module.
-- Tables.jl telemetry output for metrics.
-- Config and provenance export (TOML/JSON).
+- [~] Optional I/O helpers (CSV telemetry via extension; FITS/HDF5 pending).
+- [x] Tables.jl telemetry output for metrics.
+- [x] Config and provenance export (TOML + JSON3 extension).
 
 ## Phase 7: Documentation and validation
 - Port most tutorials as Julia scripts/notebooks (prioritize core AO workflows).
