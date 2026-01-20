@@ -206,6 +206,12 @@ end
     sh_lgs = measure!(sh, tel, lgs)
     @test all(isfinite, sh_lgs)
 
+    na_profile = [80000.0 90000.0 100000.0; 0.2 0.6 0.2]
+    lgs_profile = LGSSource(elongation_factor=1.2, na_profile=na_profile, fwhm_spot_up=1.0)
+    sh_profile = ShackHartmann(tel; n_subap=4, mode=Diffractive())
+    sh_profile_slopes = measure!(sh_profile, tel, lgs_profile)
+    @test all(isfinite, sh_profile_slopes)
+
     pyr = PyramidWFS(tel; n_subap=4, mode=Diffractive())
     @test_throws InvalidConfiguration measure!(pyr, tel)
     pyr_slopes = measure!(pyr, tel, ngs)
@@ -282,6 +288,9 @@ end
     lift = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=2, img_resolution=8, numerical=true)
     H = lift_interaction_matrix(lift, zeros(3), [1, 2])
     @test size(H) == (64, 2)
+    lift_analytic = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=2, img_resolution=8, numerical=false)
+    H_analytic = lift_interaction_matrix(lift_analytic, zeros(3), [1, 2])
+    @test size(H_analytic) == (64, 2)
     psf = compute_psf!(tel, src; zero_padding=1)
     coeffs = reconstruct(lift, psf, [1, 2])
     @test length(coeffs) == 2
