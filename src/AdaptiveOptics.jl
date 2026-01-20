@@ -17,9 +17,11 @@ const PROJECT_STATUS = :in_development
 
 include("Core/errors.jl")
 include("Core/types.jl")
+include("Core/config.jl")
 include("Core/utils.jl")
 include("Core/workspace.jl")
 include("Core/parallel.jl")
+include("Core/telemetry.jl")
 
 include("Optics/telescope.jl")
 include("Optics/source.jl")
@@ -56,6 +58,9 @@ include("Control/controller.jl")
 export PROJECT_STATUS
 export AdaptiveOpticsError, InvalidConfiguration, DimensionMismatchError
 export Workspace, ensure_psf_buffers!
+export Telemetry, TelemetryRow, record!
+export snapshot_config, write_config_toml, write_config_json
+export write_telemetry_csv
 export bin2d, poisson_noise!, poisson_sample
 export Telescope, TelescopeParams, TelescopeState, generate_pupil!, reset_opd!, apply_opd!
 export set_pupil!, apply_spiders!
