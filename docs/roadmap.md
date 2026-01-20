@@ -61,8 +61,10 @@
 - [ ] `tools/tools.py` -> not yet implemented
 
 ## Simplifications vs OOPAO (Current State)
-- WFS diffractive models use FFT propagation but simplified transfer functions and detector sampling
-  (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`, `src/WFS/bioedge.jl`).
+- WFS diffractive models use FFT propagation; optional Detector-based binning/noise is
+  available for Shack-Hartmann and Pyramid, but transfer functions remain simplified
+  and BioEdge still uses a phase-gradient surrogate (`src/WFS/shack_hartmann.jl`,
+  `src/WFS/pyramid.jl`, `src/WFS/bioedge.jl`).
 - LGS elongation uses Na-profile convolution for Shack-Hartmann, Pyramid, and BioEdge; the
   Pyramid/BioEdge path currently averages Na-profile kernels across subapertures rather
   than modeling per-subap kernels (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`,

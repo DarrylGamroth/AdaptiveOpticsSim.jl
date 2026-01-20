@@ -232,6 +232,14 @@ end
     bio_slopes = measure!(bio, tel, ngs)
     @test length(bio_slopes) == 2 * 4 * 4
 
+    det = Detector(noise=NoiseNone(), binning=2)
+    sh_det = ShackHartmann(tel; n_subap=4, mode=Diffractive())
+    sh_det_slopes = measure!(sh_det, tel, ngs, det)
+    @test length(sh_det_slopes) == 2 * 4 * 4
+    pyr_det = PyramidWFS(tel; n_subap=4, mode=Diffractive())
+    pyr_det_slopes = measure!(pyr_det, tel, ngs, det)
+    @test length(pyr_det_slopes) == 2 * 4 * 4
+
     ast = Asterism([ngs, Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0))])
     sh_ast = ShackHartmann(tel; n_subap=4, mode=Diffractive())
     sh_ast_slopes = measure!(sh_ast, tel, ast)
