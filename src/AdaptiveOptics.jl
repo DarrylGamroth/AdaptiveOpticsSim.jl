@@ -80,6 +80,7 @@ export Detector, DetectorParams, DetectorState, capture!
 export ShackHartmann, ShackHartmannParams, ShackHartmannState, update_valid_mask!, measure!
 export PyramidWFS, PyramidParams, PyramidState
 export BioEdgeWFS, BioEdgeParams, BioEdgeState
+export apply_shift_wfs!, set_optical_gain!
 export LiFT, lift_interaction_matrix
 export InteractionMatrix, interaction_matrix
 export CalibrationVault, with_truncation

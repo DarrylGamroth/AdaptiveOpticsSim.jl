@@ -10,6 +10,10 @@ abstract type AbstractAtmosphere <: AbstractOpticalElement end
 """Wavefront sensors implement measure!(wfs, tel[, src]) and update_valid_mask!(wfs, tel)."""
 abstract type AbstractWFS <: AbstractOpticalElement end
 
+function apply_shift_wfs!(::AbstractWFS; sx, sy)
+    throw(InvalidConfiguration("apply_shift_wfs! is not supported for this WFS"))
+end
+
 """Detectors implement capture!(det, psf; rng)."""
 abstract type AbstractDetector <: AbstractOpticalElement end
 

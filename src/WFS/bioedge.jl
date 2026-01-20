@@ -14,6 +14,7 @@ mutable struct BioEdgeState{T<:AbstractFloat,
     edge_mask::A
     slopes::V
     spatial_filter::SF
+    optical_gain::V
 end
 
 struct BioEdgeWFS{M<:SensingMode,P<:BioEdgeParams,S<:BioEdgeState} <: AbstractWFS
@@ -33,7 +34,15 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     slopes = backend{T}(undef, 2 * n_subap * n_subap)
     fill!(slopes, zero(T))
     sf = SpatialFilter(tel; shape=FoucaultFilter(), zero_padding=diffraction_padding, T=T, backend=backend)
-    state = BioEdgeState{T, typeof(valid_mask), typeof(slopes), typeof(sf)}(valid_mask, edge_mask, slopes, sf)
+    optical_gain = similar(slopes)
+    fill!(optical_gain, one(T))
+    state = BioEdgeState{T, typeof(valid_mask), typeof(slopes), typeof(sf)}(
+        valid_mask,
+        edge_mask,
+        slopes,
+        sf,
+        optical_gain,
+    )
     wfs = BioEdgeWFS{typeof(mode), typeof(params), typeof(state)}(params, state)
     update_valid_mask!(wfs, tel)
     update_edge_mask!(wfs, tel)
@@ -117,6 +126,7 @@ function measure!(mode::Geometric, wfs::BioEdgeWFS, tel::Telescope)
         end
         idx += 1
     end
+    @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
 end
 
@@ -186,5 +196,19 @@ function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, src::AbstractS
         end
         idx += 1
     end
+    @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
+end
+
+function set_optical_gain!(wfs::BioEdgeWFS, gain::Real)
+    fill!(wfs.state.optical_gain, gain)
+    return wfs
+end
+
+function set_optical_gain!(wfs::BioEdgeWFS, gain::AbstractVector)
+    if length(gain) != length(wfs.state.optical_gain)
+        throw(InvalidConfiguration("optical_gain length must match slope vector"))
+    end
+    copyto!(wfs.state.optical_gain, gain)
+    return wfs
 end
