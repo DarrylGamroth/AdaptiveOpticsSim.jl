@@ -95,8 +95,8 @@ function phase_screen_von_karman!(out::AbstractMatrix, atm::KolmogorovAtmosphere
     if size(out) != (n, n)
         throw(DimensionMismatchError("output must be square"))
     end
-    randn!(rng, atm.state.noise_re)
-    randn!(rng, atm.state.noise_im)
+    randn_backend!(rng, atm.state.noise_re)
+    randn_backend!(rng, atm.state.noise_im)
     @. atm.state.spectrum = complex(atm.state.noise_re, atm.state.noise_im) * sqrt(atm.state.psd)
     mul!(atm.state.spectrum, atm.state.ifft_plan, atm.state.spectrum)
     @. out = real(atm.state.spectrum) * (n * delta)

@@ -1,3 +1,15 @@
+@kernel function elongation_apply_kernel!(tmp, intensity, kernel, half::Int, n1::Int, n2::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n1 && j <= n2
+        acc = zero(eltype(tmp))
+        @inbounds for k in -half:half
+            jj = clamp(j + k, 1, n2)
+            acc += intensity[i, jj] * kernel[k + half + 1]
+        end
+        @inbounds tmp[i, j] = acc
+    end
+end
+
 @inline function ensure_kernel(kernel::Vector{T}, needed::Int) where {T}
     if length(kernel) < needed
         resize!(kernel, needed)
@@ -24,13 +36,21 @@ function apply_elongation!(intensity::AbstractMatrix{T}, factor::Real, tmp::Abst
     half = max(1, ceil(Int, 2 * sigma))
     needed = 2 * half + 1
     kernel = ensure_kernel(kernel, needed)
+    host_kernel = Vector{T}(undef, needed)
     @inbounds for k in -half:half
-        kernel[k + half + 1] = exp(-T(0.5) * (T(k) / sigma)^2)
+        host_kernel[k + half + 1] = exp(-T(0.5) * (T(k) / sigma)^2)
     end
-    view_kernel = @view kernel[1:needed]
-    view_kernel ./= sum(view_kernel)
+    host_kernel ./= sum(host_kernel)
+    @views copyto!(kernel[1:needed], host_kernel)
 
     n1, n2 = size(intensity)
+    _apply_elongation!(execution_style(intensity), intensity, tmp, kernel, half, n1, n2)
+    copyto!(intensity, tmp)
+    return kernel
+end
+
+function _apply_elongation!(::ScalarCPUStyle, intensity::AbstractMatrix{T}, tmp::AbstractMatrix{T},
+    kernel::AbstractVector{T}, half::Int, n1::Int, n2::Int) where {T<:AbstractFloat}
     @inbounds for i in 1:n1, j in 1:n2
         acc = zero(T)
         for k in -half:half
@@ -39,8 +59,13 @@ function apply_elongation!(intensity::AbstractMatrix{T}, factor::Real, tmp::Abst
         end
         tmp[i, j] = acc
     end
-    copyto!(intensity, tmp)
-    return kernel
+    return tmp
+end
+
+function _apply_elongation!(style::AcceleratorStyle, intensity::AbstractMatrix{T}, tmp::AbstractMatrix{T},
+    kernel::AbstractVector{T}, half::Int, n1::Int, n2::Int) where {T<:AbstractFloat}
+    launch_kernel!(style, elongation_apply_kernel!, tmp, intensity, kernel, half, n1, n2; ndrange=size(intensity))
+    return tmp
 end
 
 @inline function lgs_pixel_scale(diameter::Real, diffraction_padding::Int, wavelength::Real)
@@ -120,16 +145,12 @@ function apply_lgs_convolution!(intensity::AbstractMatrix{T}, kernel_fft::Abstra
         return intensity
     end
     n = size(intensity, 1)
-    @inbounds for i in 1:n, j in 1:n
-        fft_buffer[i, j] = complex(intensity[i, j], zero(T))
-    end
+    @. fft_buffer = complex(intensity, zero(T))
     mul!(fft_buffer, fft_plan, fft_buffer)
     @. fft_buffer *= kernel_fft
     mul!(fft_buffer, ifft_plan, fft_buffer)
     scale = T(1) / (n * n)
-    @inbounds for i in 1:n, j in 1:n
-        intensity[i, j] = real(fft_buffer[i, j]) * scale
-    end
+    @. intensity = real(fft_buffer) * scale
     return intensity
 end
 
@@ -140,17 +161,13 @@ function apply_lgs_convolution!(intensity::AbstractMatrix{T}, kernel_fft::Abstra
         return intensity
     end
     n = size(intensity, 1)
-    @inbounds for i in 1:n, j in 1:n
-        fft_buffer[i, j] = complex(intensity[i, j], zero(T))
-    end
+    @. fft_buffer = complex(intensity, zero(T))
     mul!(fft_buffer, fft_plan, fft_buffer)
     @. fft_buffer *= kernel_fft
     copyto!(ifft_buffer, fft_buffer)
     mul!(ifft_buffer, ifft_plan, ifft_buffer)
     scale = T(1) / (n * n)
-    @inbounds for i in 1:n, j in 1:n
-        intensity[i, j] = real(ifft_buffer[i, j]) * scale
-    end
+    @. intensity = real(ifft_buffer) * scale
     return intensity
 end
 
@@ -172,7 +189,7 @@ function lgs_average_kernel_fft(tel::Telescope, src::LGSSource, pad::Int, n_suba
 
     x_subap = range(-tel.params.diameter / 2, tel.params.diameter / 2; length=n_subap)
     y_subap = range(-tel.params.diameter / 2, tel.params.diameter / 2; length=n_subap)
-    kernel = similar(fft_buffer, T, pad, pad)
+    kernel = Matrix{T}(undef, pad, pad)
     temp = similar(kernel)
     fill!(kernel, zero(T))
 
@@ -188,9 +205,7 @@ function lgs_average_kernel_fft(tel::Telescope, src::LGSSource, pad::Int, n_suba
     end
     kernel ./= max(n_subap * n_subap, 1)
 
-    @inbounds for i in 1:pad, j in 1:pad
-        fft_buffer[i, j] = complex(kernel[i, j], zero(T))
-    end
+    @. fft_buffer = complex(kernel, zero(T))
     mul!(fft_buffer, fft_plan, fft_buffer)
     kernel_fft = similar(fft_buffer, Complex{T}, pad, pad)
     copyto!(kernel_fft, fft_buffer)

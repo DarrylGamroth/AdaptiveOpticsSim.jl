@@ -106,18 +106,7 @@ end
 sensing_mode(::ShackHartmann{M}) where {M} = M()
 
 function update_valid_mask!(wfs::ShackHartmann, tel::Telescope)
-    Base.require_one_based_indexing(tel.state.pupil)
-    n = tel.params.resolution
-    n_sub = wfs.params.n_subap
-    sub = div(n, n_sub)
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = min(i * sub, n)
-        ye = min(j * sub, n)
-        subap_pupil = @view tel.state.pupil[xs:xe, ys:ye]
-        wfs.state.valid_mask[i, j] = mean(subap_pupil) > wfs.params.threshold
-    end
+    set_valid_subapertures!(wfs.state.valid_mask, tel.state.pupil, wfs.params.threshold)
     return wfs
 end
 
@@ -214,39 +203,7 @@ function sample_spot!(wfs::ShackHartmann, intensity::AbstractMatrix{T}) where {T
 end
 
 function measure!(mode::Geometric, wfs::ShackHartmann, tel::Telescope)
-    Base.require_one_based_indexing(tel.state.opd)
-    n = tel.params.resolution
-    n_sub = wfs.params.n_subap
-    sub = div(n, n_sub)
-    idx = 1
-
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = min(i * sub, n)
-        ye = min(j * sub, n)
-        if wfs.state.valid_mask[i, j]
-            sx = 0.0
-            sy = 0.0
-            count_x = 0
-            count_y = 0
-            for x in xs:(xe - 1), y in ys:ye
-                sx += tel.state.opd[x + 1, y] - tel.state.opd[x, y]
-                count_x += 1
-            end
-            for x in xs:xe, y in ys:(ye - 1)
-                sy += tel.state.opd[x, y + 1] - tel.state.opd[x, y]
-                count_y += 1
-            end
-            wfs.state.slopes[idx] = sx / max(count_x, 1)
-            wfs.state.slopes[idx + n_sub * n_sub] = sy / max(count_y, 1)
-        else
-            wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
-            wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
-        end
-        idx += 1
-    end
-
+    geometric_slopes!(wfs.state.slopes, tel.state.opd, wfs.state.valid_mask)
     return wfs.state.slopes
 end
 
@@ -570,9 +527,6 @@ function lgs_spot_kernels_fft(tel::Telescope, wfs::ShackHartmann, src::LGSSource
     T = eltype(wfs.state.intensity)
     n_sub = wfs.params.n_subap
     na_profile = src.params.na_profile
-    if !(wfs.state.intensity isa Array)
-        throw(InvalidConfiguration("LGS Na-profile kernels currently require Array backend"))
-    end
     altitudes = na_profile[1, :]
     weights = na_profile[2, :]
     if length(altitudes) == 0
@@ -598,14 +552,12 @@ function lgs_spot_kernels_fft(tel::Telescope, wfs::ShackHartmann, src::LGSSource
     ref_vec = lgs_reference_vector(tel, x0, y0, altitudes[ref_idx])
 
     idx = 1
-    kernel = similar(wfs.state.intensity)
+    kernel = Matrix{T}(undef, pad, pad)
     for iy in 1:n_sub, ix in 1:n_sub
         lgs_spot_kernel!(kernel, tel, src, altitudes, weights, pixel_scale, sigma_px, center,
             x_subap[ix], y_subap[iy], ref_vec)
         fft_buffer = wfs.state.fft_buffer
-        @inbounds for i in 1:pad, j in 1:pad
-            fft_buffer[i, j] = complex(kernel[i, j], zero(T))
-        end
+        @. fft_buffer = complex(kernel, zero(T))
         mul!(fft_buffer, wfs.state.fft_plan, fft_buffer)
         @views kernels_fft[:, :, idx] .= fft_buffer
         idx += 1

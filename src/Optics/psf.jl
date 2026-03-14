@@ -5,6 +5,16 @@ function ensure_psf_state!(tel::Telescope, n::Int)
     return tel
 end
 
+function ensure_psf_workspace!(tel::Telescope, n::Int)
+    T = eltype(tel.state.opd)
+    if tel.state.psf_workspace === nothing
+        tel.state.psf_workspace = Workspace(tel.state.opd, n; T=T)
+    else
+        ensure_psf_buffers!(tel.state.psf_workspace, n)
+    end
+    return tel.state.psf_workspace
+end
+
 function compute_psf!(tel::Telescope, src::Source, ws::Workspace, zero_padding::Int=1)
     n = tel.params.resolution
     if zero_padding < 1
@@ -35,8 +45,7 @@ function compute_psf!(tel::Telescope, src::Source; zero_padding::Int=1, ws::Unio
     n = tel.params.resolution
     if ws === nothing
         n_pad = n * zero_padding
-        T = eltype(tel.state.opd)
-        ws = Workspace(tel.state.opd, n_pad; T=T)
+        ws = ensure_psf_workspace!(tel, n_pad)
     end
     return compute_psf!(tel, src, ws, zero_padding)
 end

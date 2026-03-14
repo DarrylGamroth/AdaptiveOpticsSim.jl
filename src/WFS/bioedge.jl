@@ -1,5 +1,55 @@
 using Statistics
 
+@kernel function edge_mask_kernel!(mask, pupil, n::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= n
+        if @inbounds pupil[i, j]
+            neighbor = false
+            @inbounds for di in -1:1, dj in -1:1
+                ii = i + di
+                jj = j + dj
+                if ii < 1 || ii > n || jj < 1 || jj > n || !pupil[ii, jj]
+                    neighbor = true
+                end
+            end
+            mask[i, j] = neighbor
+        else
+            @inbounds mask[i, j] = false
+        end
+    end
+end
+
+@kernel function bioedge_phasor_kernel!(phasor, scale, n::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= n
+        phase = scale * (i + j - 2)
+        @inbounds phasor[i, j] = cis(phase)
+    end
+end
+
+@kernel function bioedge_masks_kernel!(masks, one_c, zero_c, half::Int, n::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= n
+        left = j <= half
+        top = i <= half
+        @inbounds masks[i, j, 1] = left ? one_c : zero_c
+        @inbounds masks[i, j, 2] = left ? zero_c : one_c
+        @inbounds masks[i, j, 3] = top ? one_c : zero_c
+        @inbounds masks[i, j, 4] = top ? zero_c : one_c
+    end
+end
+
+@kernel function bin_edge_mask_kernel!(out, mask, binning::Int, n_out::Int, m_out::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n_out && j <= m_out
+        val = false
+        @inbounds for ii in 1:binning, jj in 1:binning
+            val |= mask[(i - 1) * binning + ii, (j - 1) * binning + jj]
+        end
+        @inbounds out[i, j] = val
+    end
+end
+
 struct BioEdgeParams{T<:AbstractFloat}
     n_subap::Int
     threshold::T
@@ -142,32 +192,24 @@ end
 sensing_mode(::BioEdgeWFS{M}) where {M} = M()
 
 function update_valid_mask!(wfs::BioEdgeWFS, tel::Telescope)
-    Base.require_one_based_indexing(tel.state.pupil)
-    n = tel.params.resolution
-    n_sub = wfs.params.n_subap
-    sub = div(n, n_sub)
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = min(i * sub, n)
-        ye = min(j * sub, n)
-        subap_pupil = @view tel.state.pupil[xs:xe, ys:ye]
-        wfs.state.valid_mask[i, j] = mean(subap_pupil) > wfs.params.threshold
-    end
+    set_valid_subapertures!(wfs.state.valid_mask, tel.state.pupil, wfs.params.threshold)
     return wfs
 end
 
 function update_edge_mask!(wfs::BioEdgeWFS, tel::Telescope)
     Base.require_one_based_indexing(wfs.state.edge_mask, tel.state.pupil)
-    n = tel.params.resolution
-    mask = wfs.state.edge_mask
+    _update_edge_mask!(execution_style(wfs.state.edge_mask), wfs.state.edge_mask, tel.state.pupil, tel.params.resolution)
+    return wfs
+end
+
+function _update_edge_mask!(::ScalarCPUStyle, mask::AbstractMatrix{Bool}, pupil::AbstractMatrix{Bool}, n::Int)
     @inbounds for i in 1:n, j in 1:n
-        if tel.state.pupil[i, j]
+        if pupil[i, j]
             neighbor = false
             for di in -1:1, dj in -1:1
                 ii = i + di
                 jj = j + dj
-                if ii < 1 || ii > n || jj < 1 || jj > n || !tel.state.pupil[ii, jj]
+                if ii < 1 || ii > n || jj < 1 || jj > n || !pupil[ii, jj]
                     neighbor = true
                 end
             end
@@ -176,10 +218,20 @@ function update_edge_mask!(wfs::BioEdgeWFS, tel::Telescope)
             mask[i, j] = false
         end
     end
-    return wfs
+    return mask
+end
+
+function _update_edge_mask!(style::AcceleratorStyle, mask::AbstractMatrix{Bool}, pupil::AbstractMatrix{Bool}, n::Int)
+    launch_kernel!(style, edge_mask_kernel!, mask, pupil, n; ndrange=size(mask))
+    return mask
 end
 
 function build_bioedge_phasor!(phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+    _build_bioedge_phasor!(execution_style(phasor), phasor)
+    return phasor
+end
+
+function _build_bioedge_phasor!(::ScalarCPUStyle, phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
     n = size(phasor, 1)
     scale = -T(pi) * (n + 1) / n
     @inbounds for i in 1:n, j in 1:n
@@ -189,9 +241,20 @@ function build_bioedge_phasor!(phasor::AbstractMatrix{Complex{T}}) where {T<:Abs
     return phasor
 end
 
+function _build_bioedge_phasor!(style::AcceleratorStyle, phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+    n = size(phasor, 1)
+    scale = -T(pi) * (n + 1) / n
+    launch_kernel!(style, bioedge_phasor_kernel!, phasor, scale, n; ndrange=size(phasor))
+    return phasor
+end
+
 function build_bioedge_masks!(wfs::BioEdgeWFS)
     masks = wfs.state.bioedge_masks
-    T = eltype(wfs.state.slopes)
+    _build_bioedge_masks!(execution_style(masks), masks, eltype(wfs.state.slopes))
+    return masks
+end
+
+function _build_bioedge_masks!(::ScalarCPUStyle, masks::AbstractArray{Complex{T},3}, ::Type{T}) where {T<:AbstractFloat}
     one_c = complex(one(T), zero(T))
     zero_c = complex(zero(T), zero(T))
     n = size(masks, 1)
@@ -204,6 +267,15 @@ function build_bioedge_masks!(wfs::BioEdgeWFS)
         masks[i, j, 3] = top ? one_c : zero_c
         masks[i, j, 4] = top ? zero_c : one_c
     end
+    return masks
+end
+
+function _build_bioedge_masks!(style::AcceleratorStyle, masks::AbstractArray{Complex{T},3}, ::Type{T}) where {T<:AbstractFloat}
+    n = size(masks, 1)
+    half = n ÷ 2
+    one_c = complex(one(T), zero(T))
+    zero_c = complex(zero(T), zero(T))
+    launch_kernel!(style, bioedge_masks_kernel!, masks, one_c, zero_c, half, n; ndrange=(n, n))
     return masks
 end
 
@@ -272,6 +344,11 @@ function bin_edge_mask!(out::AbstractMatrix{Bool}, mask::AbstractMatrix{Bool}, b
     if size(out) != (n_out, m_out)
         throw(DimensionMismatchError("edge_mask_binned size mismatch"))
     end
+    _bin_edge_mask!(execution_style(out), out, mask, binning, n_out, m_out)
+    return out
+end
+
+function _bin_edge_mask!(::ScalarCPUStyle, out::AbstractMatrix{Bool}, mask::AbstractMatrix{Bool}, binning::Int, n_out::Int, m_out::Int)
     @inbounds for i in 1:n_out, j in 1:m_out
         val = false
         for ii in 1:binning, jj in 1:binning
@@ -279,6 +356,11 @@ function bin_edge_mask!(out::AbstractMatrix{Bool}, mask::AbstractMatrix{Bool}, b
         end
         out[i, j] = val
     end
+    return out
+end
+
+function _bin_edge_mask!(style::AcceleratorStyle, out::AbstractMatrix{Bool}, mask::AbstractMatrix{Bool}, binning::Int, n_out::Int, m_out::Int)
+    launch_kernel!(style, bin_edge_mask_kernel!, out, mask, binning, n_out, m_out; ndrange=size(out))
     return out
 end
 
@@ -379,42 +461,7 @@ function bioedge_intensity!(out::AbstractMatrix{T}, wfs::BioEdgeWFS, tel::Telesc
 end
 
 function measure!(mode::Geometric, wfs::BioEdgeWFS, tel::Telescope)
-    Base.require_one_based_indexing(tel.state.opd)
-    n = tel.params.resolution
-    n_sub = wfs.params.n_subap
-    sub = div(n, n_sub)
-    idx = 1
-
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = min(i * sub, n)
-        ye = min(j * sub, n)
-        if wfs.state.valid_mask[i, j]
-            sx = 0.0
-            sy = 0.0
-            count_x = 0
-            count_y = 0
-            for x in xs:(xe - 1), y in ys:ye
-                if wfs.state.edge_mask[x, y]
-                    sx += tel.state.opd[x + 1, y] - tel.state.opd[x, y]
-                    count_x += 1
-                end
-            end
-            for x in xs:xe, y in ys:(ye - 1)
-                if wfs.state.edge_mask[x, y]
-                    sy += tel.state.opd[x, y + 1] - tel.state.opd[x, y]
-                    count_y += 1
-                end
-            end
-            wfs.state.slopes[idx] = sx / max(count_x, 1)
-            wfs.state.slopes[idx + n_sub * n_sub] = sy / max(count_y, 1)
-        else
-            wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
-            wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
-        end
-        idx += 1
-    end
+    edge_geometric_slopes!(wfs.state.slopes, tel.state.opd, wfs.state.valid_mask, wfs.state.edge_mask)
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
 end
@@ -460,42 +507,7 @@ function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, src::LGSSource
 end
 
 function bioedge_slopes!(wfs::BioEdgeWFS, phase::AbstractMatrix, edge_mask::AbstractMatrix{Bool})
-    Base.require_one_based_indexing(phase, edge_mask)
-    n = size(phase, 1)
-    n_sub = wfs.params.n_subap
-    sub = div(n, n_sub)
-    idx = 1
-
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = min(i * sub, n)
-        ye = min(j * sub, n)
-        if wfs.state.valid_mask[i, j]
-            sx = 0.0
-            sy = 0.0
-            count_x = 0
-            count_y = 0
-            for x in xs:(xe - 1), y in ys:ye
-                if edge_mask[x, y]
-                    sx += phase[x + 1, y] - phase[x, y]
-                    count_x += 1
-                end
-            end
-            for x in xs:xe, y in ys:(ye - 1)
-                if edge_mask[x, y]
-                    sy += phase[x, y + 1] - phase[x, y]
-                    count_y += 1
-                end
-            end
-            wfs.state.slopes[idx] = sx / max(count_x, 1)
-            wfs.state.slopes[idx + n_sub * n_sub] = sy / max(count_y, 1)
-        else
-            wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
-            wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
-        end
-        idx += 1
-    end
+    edge_geometric_slopes!(wfs.state.slopes, phase, wfs.state.valid_mask, edge_mask)
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
 end
@@ -521,34 +533,8 @@ function bioedge_slopes_intensity!(wfs::BioEdgeWFS, tel::Telescope, intensity::A
     oy3 = edge_pix
     ox4 = edge_pix + pad
     oy4 = edge_pix + pad
-    idx = 1
-
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        if wfs.state.valid_mask[i, j]
-            q1 = quadrant_sum(intensity, xs, ys, sub, ox1, oy1, 0, 0)
-            q2 = quadrant_sum(intensity, xs, ys, sub, ox2, oy2, 0, 0)
-            q3 = quadrant_sum(intensity, xs, ys, sub, ox3, oy3, 0, 0)
-            q4 = quadrant_sum(intensity, xs, ys, sub, ox4, oy4, 0, 0)
-            left = q1 + q3
-            right = q2 + q4
-            bottom = q1 + q2
-            top = q3 + q4
-            total = left + right
-            if total <= 0
-                wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
-                wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
-            else
-                wfs.state.slopes[idx] = (right - left) / total
-                wfs.state.slopes[idx + n_sub * n_sub] = (top - bottom) / total
-            end
-        else
-            wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
-            wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
-        end
-        idx += 1
-    end
+    _pyramid_slopes!(execution_style(wfs.state.slopes), wfs.state.slopes, intensity, wfs.state.valid_mask, sub, n_sub, size(intensity, 1),
+        n_sub * n_sub, ox1, oy1, ox2, oy2, ox3, oy3, ox4, oy4, (0, 0, 0, 0), (0, 0, 0, 0))
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
 end
@@ -582,9 +568,6 @@ function ensure_lgs_kernel!(wfs::BioEdgeWFS, tel::Telescope, src::LGSSource)
     na_profile = src.params.na_profile
     if na_profile === nothing
         return wfs
-    end
-    if !(wfs.state.fft_buffer isa Array)
-        throw(InvalidConfiguration("LGS Na-profile kernels currently require Array backend"))
     end
     pad = size(wfs.state.fft_buffer, 1)
     tag = objectid(na_profile) ⊻ hash(src.params.laser_coordinates) ⊻ hash(src.params.fwhm_spot_up) ⊻

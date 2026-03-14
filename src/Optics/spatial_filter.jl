@@ -1,5 +1,16 @@
 import Base: filter!
 
+@kernel function circular_filter_mask_kernel!(mask, threshold2, center, n::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= n
+        x = i - center
+        y = j - center
+        r2 = x^2 + y^2
+        value = r2 <= threshold2
+        @inbounds mask[i, j] = (value + im * value) / sqrt(2)
+    end
+end
+
 abstract type SpatialFilterShape end
 struct CircularFilter <: SpatialFilterShape end
 struct SquareFilter <: SpatialFilterShape end
@@ -63,6 +74,11 @@ function SpatialFilter(tel::Telescope; shape::SpatialFilterShape=CircularFilter(
 end
 
 function set_spatial_filter!(sf::SpatialFilter{CircularFilter})
+    _set_spatial_filter!(execution_style(sf.state.mask), sf, CircularFilter())
+    return sf
+end
+
+function _set_spatial_filter!(::ScalarCPUStyle, sf::SpatialFilter, ::CircularFilter)
     n = sf.params.resolution
     diameter_padded = sf.params.diameter * sf.params.zero_padding
     center = (n + 1) / 2
@@ -75,8 +91,16 @@ function set_spatial_filter!(sf::SpatialFilter{CircularFilter})
         sf.state.mask[i, j] = (value + im * value) / sqrt(2)
     end
 
-    @views sf.state.mask[1:end-1, 1:end-1] .= sf.state.mask[2:end, 2:end]
-    fftshift2d!(sf.state.mask_shifted, sf.state.mask)
+    finalize_spatial_filter_mask!(sf)
+    return sf
+end
+
+function _set_spatial_filter!(style::AcceleratorStyle, sf::SpatialFilter, ::CircularFilter)
+    n = sf.params.resolution
+    diameter_padded = sf.params.diameter * sf.params.zero_padding
+    center = (n + 1) / 2
+    launch_kernel!(style, circular_filter_mask_kernel!, sf.state.mask, diameter_padded^2, center, n; ndrange=size(sf.state.mask))
+    finalize_spatial_filter_mask!(sf)
     return sf
 end
 
@@ -91,19 +115,23 @@ function set_spatial_filter!(sf::SpatialFilter{SquareFilter})
     xe = min(n, cx + half)
     @views @. sf.state.mask[xs:xe, xs:xe] = (1 + im) / sqrt(2)
 
-    @views sf.state.mask[1:end-1, 1:end-1] .= sf.state.mask[2:end, 2:end]
-    fftshift2d!(sf.state.mask_shifted, sf.state.mask)
+    finalize_spatial_filter_mask!(sf)
     return sf
 end
 
 function set_spatial_filter!(sf::SpatialFilter{FoucaultFilter})
     n = sf.params.resolution
     fill!(sf.state.mask, zero(eltype(sf.state.mask)))
-    @inbounds for i in 1:floor(Int, n / 2), j in 1:n
-        sf.state.mask[i, j] = (1 + im) / sqrt(2)
-    end
+    @views @. sf.state.mask[1:floor(Int, n / 2), :] = (1 + im) / sqrt(2)
+    finalize_spatial_filter_mask!(sf)
+    return sf
+end
 
-    @views sf.state.mask[1:end-1, 1:end-1] .= sf.state.mask[2:end, 2:end]
+function finalize_spatial_filter_mask!(sf::SpatialFilter)
+    tmp = similar(sf.state.mask)
+    fill!(tmp, zero(eltype(tmp)))
+    @views tmp[1:end-1, 1:end-1] .= sf.state.mask[2:end, 2:end]
+    copyto!(sf.state.mask, tmp)
     fftshift2d!(sf.state.mask_shifted, sf.state.mask)
     return sf
 end

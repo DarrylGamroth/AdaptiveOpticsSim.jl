@@ -1,5 +1,94 @@
 using Statistics
 
+@kernel function pyramid_phasor_kernel!(phasor, scale, n::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= n
+        phase = scale * (i + j - 2)
+        @inbounds phasor[i, j] = cis(phase)
+    end
+end
+
+@kernel function pyramid_mask_kernel!(mask, r, norma, start, step, n::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= n
+        x = start + (i - 1) * step
+        y = start + (j - 1) * step
+        p1 = x * r + y * r
+        p2 = -x * r + y * r
+        p3 = -x * r - y * r
+        p4 = x * r - y * r
+        phase = -max(max(p1, p2), max(p3, p4)) * norma
+        @inbounds mask[i, j] = cis(phase)
+    end
+end
+
+@kernel function modulation_phases_kernel!(phases, mod_amp, center, n_pts::Int, n::Int)
+    i, j, p = @index(Global, NTuple)
+    if i <= n && j <= n && p <= n_pts
+        x = (i - center) / n
+        y = (j - center) / n
+        angle = 2 * π * (p - 1) / n_pts
+        phase = 2 * π * mod_amp * (x * cos(angle) + y * sin(angle))
+        @inbounds phases[i, j, p] = cis(phase)
+    end
+end
+
+@kernel function pyramid_slopes_kernel!(slopes, intensity, valid_mask, sub::Int, n_sub::Int, pad::Int, offset::Int,
+    ox1::Int, oy1::Int, ox2::Int, oy2::Int, ox3::Int, oy3::Int, ox4::Int, oy4::Int,
+    sx1::Int, sy1::Int, sx2::Int, sy2::Int, sx3::Int, sy3::Int, sx4::Int, sy4::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n_sub && j <= n_sub
+        idx = (i - 1) * n_sub + j
+        xs = (i - 1) * sub + 1
+        ys = (j - 1) * sub + 1
+        if @inbounds valid_mask[i, j]
+            q1 = zero(eltype(slopes))
+            q2 = zero(eltype(slopes))
+            q3 = zero(eltype(slopes))
+            q4 = zero(eltype(slopes))
+            @inbounds for di in 0:(sub - 1), dj in 0:(sub - 1)
+                x = xs + di - 1
+                y = ys + dj - 1
+                x1 = ox1 + x + sx1
+                y1 = oy1 + y + sy1
+                x2 = ox2 + x + sx2
+                y2 = oy2 + y + sy2
+                x3 = ox3 + x + sx3
+                y3 = oy3 + y + sy3
+                x4 = ox4 + x + sx4
+                y4 = oy4 + y + sy4
+                if 1 <= x1 <= pad && 1 <= y1 <= pad
+                    q1 += intensity[x1, y1]
+                end
+                if 1 <= x2 <= pad && 1 <= y2 <= pad
+                    q2 += intensity[x2, y2]
+                end
+                if 1 <= x3 <= pad && 1 <= y3 <= pad
+                    q3 += intensity[x3, y3]
+                end
+                if 1 <= x4 <= pad && 1 <= y4 <= pad
+                    q4 += intensity[x4, y4]
+                end
+            end
+            left = q1 + q3
+            right = q2 + q4
+            bottom = q1 + q2
+            top = q3 + q4
+            total = left + right
+            if total <= 0
+                slopes[idx] = zero(eltype(slopes))
+                slopes[idx + offset] = zero(eltype(slopes))
+            else
+                slopes[idx] = (right - left) / total
+                slopes[idx + offset] = (top - bottom) / total
+            end
+        else
+            slopes[idx] = zero(eltype(slopes))
+            slopes[idx + offset] = zero(eltype(slopes))
+        end
+    end
+end
+
 struct PyramidParams{T<:AbstractFloat}
     n_subap::Int
     threshold::T
@@ -140,18 +229,7 @@ end
 sensing_mode(::PyramidWFS{M}) where {M} = M()
 
 function update_valid_mask!(wfs::PyramidWFS, tel::Telescope)
-    Base.require_one_based_indexing(tel.state.pupil)
-    n = tel.params.resolution
-    n_sub = wfs.params.n_subap
-    sub = div(n, n_sub)
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = min(i * sub, n)
-        ye = min(j * sub, n)
-        subap_pupil = @view tel.state.pupil[xs:xe, ys:ye]
-        wfs.state.valid_mask[i, j] = mean(subap_pupil) > wfs.params.threshold
-    end
+    set_valid_subapertures!(wfs.state.valid_mask, tel.state.pupil, wfs.params.threshold)
     return wfs
 end
 
@@ -215,40 +293,9 @@ function sample_pyramid_intensity!(wfs::PyramidWFS, intensity::AbstractMatrix{T}
 end
 
 function measure!(mode::Geometric, wfs::PyramidWFS, tel::Telescope)
-    Base.require_one_based_indexing(tel.state.opd)
-    n = tel.params.resolution
-    n_sub = wfs.params.n_subap
-    sub = div(n, n_sub)
-    idx = 1
-
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = min(i * sub, n)
-        ye = min(j * sub, n)
-        if wfs.state.valid_mask[i, j]
-            sx = 0.0
-            sy = 0.0
-            count_x = 0
-            count_y = 0
-            for x in xs:(xe - 1), y in ys:ye
-                sx += tel.state.opd[x + 1, y] - tel.state.opd[x, y]
-                count_x += 1
-            end
-            for x in xs:xe, y in ys:(ye - 1)
-                sy += tel.state.opd[x, y + 1] - tel.state.opd[x, y]
-                count_y += 1
-            end
-            gain = 1 / (1 + wfs.params.modulation)
-            wfs.state.slopes[idx] = gain * sx / max(count_x, 1)
-            wfs.state.slopes[idx + n_sub * n_sub] = gain * sy / max(count_y, 1)
-        else
-            wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
-            wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
-        end
-        idx += 1
-    end
-    @. wfs.state.slopes *= wfs.state.optical_gain
+    geometric_slopes!(wfs.state.slopes, tel.state.opd, wfs.state.valid_mask)
+    gain = inv(1 + wfs.params.modulation)
+    @. wfs.state.slopes = gain * wfs.state.slopes * wfs.state.optical_gain
     return wfs.state.slopes
 end
 
@@ -349,6 +396,11 @@ function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, ast::Asterism,
 end
 
 function build_pyramid_phasor!(phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+    _build_pyramid_phasor!(execution_style(phasor), phasor)
+    return phasor
+end
+
+function _build_pyramid_phasor!(::ScalarCPUStyle, phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
     n = size(phasor, 1)
     scale = -T(pi) * (n + 1) / n
     @inbounds for i in 1:n, j in 1:n
@@ -358,9 +410,20 @@ function build_pyramid_phasor!(phasor::AbstractMatrix{Complex{T}}) where {T<:Abs
     return phasor
 end
 
+function _build_pyramid_phasor!(style::AcceleratorStyle, phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+    n = size(phasor, 1)
+    scale = -T(pi) * (n + 1) / n
+    launch_kernel!(style, pyramid_phasor_kernel!, phasor, scale, n; ndrange=size(phasor))
+    return phasor
+end
+
 function build_pyramid_mask!(wfs::PyramidWFS, tel::Telescope)
     mask = wfs.state.pyramid_mask
-    T = eltype(wfs.state.slopes)
+    _build_pyramid_mask!(execution_style(mask), mask, wfs, tel)
+    return mask
+end
+
+function _build_pyramid_mask!(::ScalarCPUStyle, mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, tel::Telescope) where {T<:AbstractFloat}
     n = size(mask, 1)
     n_sub = wfs.params.n_subap
     sep = wfs.params.n_pix_separation === nothing ? 0 : wfs.params.n_pix_separation
@@ -383,6 +446,19 @@ function build_pyramid_mask!(wfs::PyramidWFS, tel::Telescope)
         phase = -max(max(p1, p2), max(p3, p4)) * norma
         mask[i, j] = cis(phase)
     end
+    return mask
+end
+
+function _build_pyramid_mask!(style::AcceleratorStyle, mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, tel::Telescope) where {T<:AbstractFloat}
+    n = size(mask, 1)
+    n_sub = wfs.params.n_subap
+    sep = wfs.params.n_pix_separation === nothing ? 0 : wfs.params.n_pix_separation
+    r = (T(n_sub) + T(sep)) * wfs.params.mask_scale / 2
+    norma = T(tel.params.resolution) / T(n_sub)
+    lim = T(pi)
+    start = wfs.params.psf_centering ? -lim * (one(T) - one(T) / T(n)) : -lim
+    step = T(2) * lim / T(n)
+    launch_kernel!(style, pyramid_mask_kernel!, mask, r, norma, start, step, n; ndrange=size(mask))
     return mask
 end
 
@@ -460,9 +536,6 @@ function ensure_lgs_kernel!(wfs::PyramidWFS, tel::Telescope, src::LGSSource)
     if na_profile === nothing
         return wfs
     end
-    if !(wfs.state.intensity isa Array)
-        throw(InvalidConfiguration("LGS Na-profile kernels currently require Array backend"))
-    end
     pad = size(wfs.state.intensity, 1)
     tag = objectid(na_profile) ⊻ hash(src.params.laser_coordinates) ⊻ hash(src.params.fwhm_spot_up) ⊻
         hash(pad) ⊻ hash(wfs.params.n_subap)
@@ -494,7 +567,11 @@ function build_modulation_phases!(wfs::PyramidWFS, tel::Telescope)
         fill!(phases, one(eltype(phases)))
         return phases
     end
-    T = eltype(wfs.state.slopes)
+    _build_modulation_phases!(execution_style(phases), phases, mod, center, n_pts, n)
+    return phases
+end
+
+function _build_modulation_phases!(::ScalarCPUStyle, phases::AbstractArray{Complex{T},3}, mod, center, n_pts::Int, n::Int) where {T<:AbstractFloat}
     x_coords = Vector{T}(undef, n)
     for i in 1:n
         x_coords[i] = (i - center) / n
@@ -508,6 +585,11 @@ function build_modulation_phases!(wfs::PyramidWFS, tel::Telescope)
             phases[i, j, p] = cis(phase)
         end
     end
+    return phases
+end
+
+function _build_modulation_phases!(style::AcceleratorStyle, phases::AbstractArray{Complex{T},3}, mod, center, n_pts::Int, n::Int) where {T<:AbstractFloat}
+    launch_kernel!(style, modulation_phases_kernel!, phases, T(mod), T(center), n_pts, n; ndrange=size(phases))
     return phases
 end
 
@@ -545,14 +627,19 @@ function pyramid_slopes!(wfs::PyramidWFS, tel::Telescope, intensity::AbstractMat
     oy3 = edge_pix
     ox4 = edge_pix + pupil_size + sep_pix
     oy4 = edge_pix + pupil_size + sep_pix
-    shift_x = wfs.state.shift_x
-    shift_y = wfs.state.shift_y
-    idx = 1
+    _pyramid_slopes!(execution_style(wfs.state.slopes), wfs.state.slopes, intensity, wfs.state.valid_mask, sub, n_sub, pad,
+        n_sub * n_sub, ox1, oy1, ox2, oy2, ox3, oy3, ox4, oy4, wfs.state.shift_x, wfs.state.shift_y)
+    return wfs.state.slopes
+end
 
+function _pyramid_slopes!(::ScalarCPUStyle, slopes::AbstractVector, intensity::AbstractMatrix{T}, valid_mask::AbstractMatrix{Bool},
+    sub::Int, n_sub::Int, ::Int, offset::Int, ox1::Int, oy1::Int, ox2::Int, oy2::Int, ox3::Int, oy3::Int, ox4::Int, oy4::Int,
+    shift_x::NTuple{4,Int}, shift_y::NTuple{4,Int}) where {T<:AbstractFloat}
+    idx = 1
     @inbounds for i in 1:n_sub, j in 1:n_sub
         xs = (i - 1) * sub + 1
         ys = (j - 1) * sub + 1
-        if wfs.state.valid_mask[i, j]
+        if valid_mask[i, j]
             q1 = quadrant_sum(intensity, xs, ys, sub, ox1, oy1, shift_x[1], shift_y[1])
             q2 = quadrant_sum(intensity, xs, ys, sub, ox2, oy2, shift_x[2], shift_y[2])
             q3 = quadrant_sum(intensity, xs, ys, sub, ox3, oy3, shift_x[3], shift_y[3])
@@ -563,19 +650,29 @@ function pyramid_slopes!(wfs::PyramidWFS, tel::Telescope, intensity::AbstractMat
             top = q3 + q4
             total = left + right
             if total <= 0
-                wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
-                wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
+                slopes[idx] = zero(eltype(slopes))
+                slopes[idx + offset] = zero(eltype(slopes))
             else
-                wfs.state.slopes[idx] = (right - left) / total
-                wfs.state.slopes[idx + n_sub * n_sub] = (top - bottom) / total
+                slopes[idx] = (right - left) / total
+                slopes[idx + offset] = (top - bottom) / total
             end
         else
-            wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
-            wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
+            slopes[idx] = zero(eltype(slopes))
+            slopes[idx + offset] = zero(eltype(slopes))
         end
         idx += 1
     end
-    return wfs.state.slopes
+    return slopes
+end
+
+function _pyramid_slopes!(style::AcceleratorStyle, slopes::AbstractVector, intensity::AbstractMatrix, valid_mask::AbstractMatrix{Bool},
+    sub::Int, n_sub::Int, pad::Int, offset::Int, ox1::Int, oy1::Int, ox2::Int, oy2::Int, ox3::Int, oy3::Int, ox4::Int, oy4::Int,
+    shift_x::NTuple{4,Int}, shift_y::NTuple{4,Int})
+    launch_kernel!(style, pyramid_slopes_kernel!, slopes, intensity, valid_mask, sub, n_sub, pad, offset,
+        ox1, oy1, ox2, oy2, ox3, oy3, ox4, oy4,
+        shift_x[1], shift_y[1], shift_x[2], shift_y[2], shift_x[3], shift_y[3], shift_x[4], shift_y[4];
+        ndrange=(n_sub, n_sub))
+    return slopes
 end
 
 function quadrant_sum(intensity::AbstractMatrix{T}, xs::Int, ys::Int, sub::Int,

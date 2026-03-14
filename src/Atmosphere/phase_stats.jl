@@ -90,8 +90,8 @@ function ft_phase_screen(atm::KolmogorovAtmosphere, n::Int, delta::Real;
     end
     ws.psd[div(n, 2) + 1, div(n, 2) + 1] = 0
 
-    randn!(rng, ws.noise_re)
-    randn!(rng, ws.noise_im)
+    randn_backend!(rng, ws.noise_re)
+    randn_backend!(rng, ws.noise_im)
     @. ws.spectrum = complex(ws.noise_re, ws.noise_im) * sqrt(ws.psd) * del_f
     fftshift2d!(ws.buffer, ws.spectrum)
     mul!(ws.buffer, ws.ifft_plan, ws.buffer)

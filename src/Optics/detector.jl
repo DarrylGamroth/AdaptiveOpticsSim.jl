@@ -175,7 +175,7 @@ end
 
 function capture!(det::Detector{NoiseReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
     fill_frame!(det, psf)
-    randn!(rng, det.state.noise_buffer)
+    randn_backend!(rng, det.state.noise_buffer)
     det.state.frame .+= det.noise.sigma .* det.state.noise_buffer
     return det.state.frame
 end
@@ -183,7 +183,7 @@ end
 function capture!(det::Detector{NoisePhotonReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
     fill_frame!(det, psf)
     poisson_noise!(rng, det.state.frame)
-    randn!(rng, det.state.noise_buffer)
+    randn_backend!(rng, det.state.noise_buffer)
     det.state.frame .+= det.noise.sigma .* det.state.noise_buffer
     return det.state.frame
 end

@@ -47,6 +47,10 @@ end
     @test size(psf) == (64, 64)
     @test maximum(psf) > 0
     @test isfinite(sum(psf))
+    @test tel.state.psf_workspace !== nothing
+    cached_ws = tel.state.psf_workspace
+    compute_psf!(tel, src; zero_padding=2)
+    @test tel.state.psf_workspace === cached_ws
 end
 
 @testset "Zernike basis" begin
@@ -459,8 +463,8 @@ end
     @test size(detector.frame_sampled, 1) < size(detector.frame_native, 1)
 
     asterism = run_tutorial_example("asterism.jl")
-    @test length(asterism.per_source_psf) == 4
-    @test sum(asterism.combined_psf) >= sum(asterism.per_source_psf[1])
+    @test size(asterism.per_source_psf, 3) == 4
+    @test sum(asterism.combined_psf) >= sum(@view asterism.per_source_psf[:, :, 1])
 
     spatial = run_tutorial_example("spatial_filter.jl")
     @test size(spatial.filtered_phase) == size(spatial.filtered_amplitude)

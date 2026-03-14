@@ -26,6 +26,22 @@ function GSCFFTWorkspace(n::Int; T::Type{<:AbstractFloat}=Float64, backend=Array
     )
 end
 
+function GSCFFTWorkspace(ref::AbstractMatrix; T::Type{<:AbstractFloat}=real(eltype(ref)))
+    n = size(ref, 1)
+    buffer = similar(ref, Complex{T}, n, n)
+    fft_out = similar(buffer)
+    ifft_out = similar(buffer)
+    fft_plan = plan_fft_backend!(buffer)
+    ifft_plan = plan_ifft_backend!(buffer)
+    return GSCFFTWorkspace{T, typeof(buffer), typeof(fft_plan), typeof(ifft_plan)}(
+        buffer,
+        fft_out,
+        ifft_out,
+        fft_plan,
+        ifft_plan,
+    )
+end
+
 mutable struct GainSensingCamera{T<:AbstractFloat,
     C<:AbstractMatrix{Complex{T}},
     B<:AbstractArray{T,3},
@@ -56,8 +72,9 @@ function GainSensingCamera(mask::AbstractMatrix, basis::AbstractArray;
         basis_t = pad_basis(basis_t, size(mask_c, 1))
     end
     n_modes = size(basis_t, 3)
-    og = ones(T, n_modes)
-    fftws = GSCFFTWorkspace(size(mask_c, 1); T=T)
+    og = similar(vec(mask_c), T, n_modes)
+    fill!(og, one(T))
+    fftws = GSCFFTWorkspace(mask_c; T=T)
     bp_probe = similar(fftws.buffer, Complex{T}, size(mask_c, 1), size(mask_c, 2), 1)
     ir_probe = similar(mask_c, T, size(mask_c, 1), size(mask_c, 2))
     sensi_probe = similar(og, Complex{T})
@@ -120,7 +137,8 @@ function pad_basis(basis::AbstractArray{T,3}, size_out::Int) where {T}
         throw(InvalidConfiguration("size_out must be larger than basis size"))
     end
     pad = div(size_out - size(basis, 1), 2)
-    out = zeros(T, size_out, size_out, size(basis, 3))
+    out = similar(basis, T, size_out, size_out, size(basis, 3))
+    fill!(out, zero(T))
     @views out[pad+1:pad+size(basis, 1), pad+1:pad+size(basis, 2), :] .= basis
     return out
 end
@@ -145,7 +163,7 @@ function split_basis_product(basis::AbstractArray{T,3}, ws::GSCFFTWorkspace{T}; 
     n_modes = size(basis, 3)
     out = similar(ws.buffer, Complex{T}, size(basis, 1), size(basis, 2), n_modes)
     jobs = max(1, n_jobs)
-    if jobs == 1 || Base.Threads.nthreads() == 1
+    if jobs == 1 || Base.Threads.nthreads() == 1 || !(ws.buffer isa Array)
         for k in 1:n_modes
             @views begin
                 fft2c!(ws.fft_out, ws, basis[:, :, k])
@@ -156,7 +174,7 @@ function split_basis_product(basis::AbstractArray{T,3}, ws::GSCFFTWorkspace{T}; 
         return out
     end
 
-    ws_list = [GSCFFTWorkspace(size(basis, 1); T=T, backend=typeof(ws.buffer).name.wrapper) for _ in 1:Base.Threads.nthreads()]
+    ws_list = [GSCFFTWorkspace(ws.buffer; T=T) for _ in 1:Base.Threads.nthreads()]
     Base.Threads.@threads for k in 1:n_modes
         ws_local = ws_list[Base.Threads.threadid()]
         @views begin
