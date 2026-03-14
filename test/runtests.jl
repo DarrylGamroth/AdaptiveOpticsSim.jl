@@ -4,6 +4,8 @@ using Random
 using Tables
 using TOML
 
+include("reference_harness.jl")
+
 function assert_source_interface(src)
     @test hasmethod(wavelength, Tuple{typeof(src)})
 end
@@ -408,4 +410,32 @@ end
     write_config_toml(path, cfg)
     parsed = TOML.parsefile(path)
     @test parsed["tel"]["resolution"] == tel.params.resolution
+end
+
+@testset "Reference harness fixture" begin
+    root = mktempdir()
+    create_reference_fixture(root)
+    bundle = load_reference_bundle(root)
+    @test length(bundle.cases) == 2
+    for case in bundle.cases
+        result = validate_reference_case(case)
+        @test size(result.actual) == size(result.expected)
+        @test result.ok
+    end
+end
+
+@testset "OOPAO reference regression" begin
+    root = default_reference_root()
+    if has_reference_bundle(root)
+        bundle = load_reference_bundle(root)
+        @test !isempty(bundle.cases)
+        for case in bundle.cases
+            result = validate_reference_case(case)
+            @test size(result.actual) == size(result.expected)
+            @test result.ok
+        end
+    else
+        @info "Skipping OOPAO reference regression; no manifest found" root=root
+        @test true
+    end
 end
