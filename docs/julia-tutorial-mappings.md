@@ -1,118 +1,89 @@
-# Tutorial Mapping Sketches (Julia)
+# Tutorial Mapping Guide
 
-These examples map existing OOPAO tutorials to an idiomatic Julia API in
-AdaptiveOptics.jl. They are not complete implementations, but show how the
-object graph and propagation steps can translate to multiple dispatch and
-explicit state.
+This document maps high-value OOPAO tutorials to deterministic Julia examples in
+`examples/tutorials/`. The Julia versions favor multiple dispatch, explicit
+state transitions, and small runnable scripts over notebook-style mutation.
 
-## Shack-Hartmann WFS (from `tutorials/AO_closed_loop_ShackHartmann_WFS.py`)
+## How to run
 
-```julia
-using AdaptiveOptics
+From the package root:
 
-nsub = 20
-tel = Telescope(resolution=6nsub, diameter=8.0, sampling_time=1e-3,
-                central_obstruction=0.1, fov_arcsec=0.0)
-
-ngs = Source(band=:I, magnitude=8.0, coordinates=(0.0, 0.0))
-src = Source(band=:K, magnitude=8.0, coordinates=(0.0, 0.0))
-
-atm = KolmogorovAtmosphere(tel; r0=0.15, L0=25.0,
-                           fractional_r0=[0.45,0.1,0.1,0.25,0.1],
-                           wind_speed=[10,12,11,15,20],
-                           wind_direction=[0,72,144,216,288],
-                           altitude=[0,1000,5000,10000,12000])
-initialize!(atm, tel)
-advance!(atm, tel)
-
-wfs = ShackHartmann(tel; n_subap=20, mode=Geometric())
-cam = Detector(integration_time=tel.params.sampling_time, noise=NoisePhotonReadout(0.5),
-               qe=1.0, psf_sampling=2, binning=1)
-# Detector noise model is encoded in the type via the `noise` parameter.
-# You can also compose noise with a tuple: noise=(NoisePhoton(), NoiseReadout(0.5)).
-
-ws = Workspace(tel.params.resolution)
-
-propagate!(ws, ngs, atm, tel, wfs)  # slopes, valid mask, spot cubes
-propagate!(ws, src, tel, cam)       # PSF image on detector
+```bash
+julia --project examples/tutorials/image_formation.jl
+julia --project examples/tutorials/closed_loop_pyramid.jl
 ```
 
-Trait-based sensing mode switch (diffractive vs. geometric):
-```julia
-wfs = ShackHartmann(tel; n_subap=20, mode=Geometric())
-# sensing_mode(wfs) returns Geometric() from the type parameter.
-```
+Each script exposes a `main()` function and logs a short completion summary with
+`Logging.jl`.
 
-## Asterism and PSF Grid (from `tutorials/how_to_asterism.py`)
+## Mapping table
 
-```julia
-sources = Source[]
-for x in range(-6.0, 6.0; length=5), y in range(-6.0, 6.0; length=5)
-    r = hypot(x, y)
-    θ = rad2deg(atan(y, x))
-    push!(sources, Source(band=:I, magnitude=0.0, coordinates=(r, θ)))
-end
+| OOPAO tutorial | Julia example | Coverage |
+| --- | --- | --- |
+| `tutorials/image_formation.py` | `examples/tutorials/image_formation.jl` | Telescope, source, PSF, Zernike aberrations |
+| `tutorials/how_to_detector.py` | `examples/tutorials/detector.jl` | Detector sampling, binning, noise model wiring |
+| `tutorials/how_to_multi_sources.py` | `examples/tutorials/asterism.jl` | Multiple sources combined through `Asterism` |
+| `tutorials/how_to_asterism.py` | `examples/tutorials/asterism.jl` | Per-source PSFs and combined field |
+| `tutorials/how_to_spatial_filter.py` | `examples/tutorials/spatial_filter.jl` | Spatial filtering without baking optics into the telescope type |
+| `tutorials/how_to_NCPA.py` | `examples/tutorials/ncpa.jl` | Basis-driven NCPA synthesis and application |
+| `tutorials/how_to_LIFT.ipynb` | `examples/tutorials/lift.jl` | LiFT setup and coefficient recovery |
+| `tutorials/how_to_SPRINT.py` | `examples/tutorials/sprint.jl` | Mis-registration sensitivity and estimation |
+| `tutorials/AO_closed_loop_ShackHartmann_WFS.py` | `examples/tutorials/closed_loop_shack_hartmann.jl` | Deterministic diffractive SH loop |
+| `tutorials/AO_closed_loop_Pyramid_WFS.py` | `examples/tutorials/closed_loop_pyramid.jl` | Deterministic diffractive Pyramid loop |
+| `tutorials/AO_closed_loop_BioEdge_WFS.py` | `examples/tutorials/closed_loop_bioedge.jl` | Deterministic diffractive BioEdge loop |
+| `tutorials/AO_closed_loop_Pyramid_WFS_GSC.py` | not yet ported | Gain-sensing-camera workflow remains separate from the core examples |
 
-ast = Asterism(sources)
-dm = DeformableMirror(tel; n_act=20)
+## Julia patterns behind the mapping
 
-propagate!(ws, ast, atm, tel, dm, cam)
+- OOPAO’s `ngs*tel*wfs` chain becomes explicit function calls such as
+  `compute_psf!(tel, src)` or `measure!(wfs, tel, src)`.
+- WFS sensing mode is encoded in the WFS type parameter via
+  `mode=Geometric()` or `mode=Diffractive()`, not a mutable string flag.
+- Detector noise is encoded by the detector’s `noise` type, for example
+  `Detector(noise=(NoisePhoton(), NoiseReadout(0.5)))`.
+- Closed-loop examples preallocate their work buffers and use `reconstruct!`
+  for the hot path.
 
-# Results:
-# tel.state.psf -> combined PSF
-# tel.state.psf_list[i] -> per-source PSF
-```
+## Representative translations
 
-## Image Formation + Zernike (from `tutorials/image_formation.py`)
-
-```julia
-tel = Telescope(resolution=120, diameter=8.0, sampling_time=1e-3,
-                central_obstruction=0.1)
-ngs = Source(band=:I, magnitude=10.0)
-
-ws = Workspace(tel)
-propagate!(ws, ngs, tel)
-psf = compute_psf!(ws, tel; zero_padding=4)
-
-Z = ZernikeBasis(tel, n_modes=100)
-modes = compute!(Z, tel)
-
-amp = 100e-9
-n = 80
-apply_opd!(tel, modes[:, :, n] .* amp)
-
-psf_aberr = compute_psf!(ws, tel; zero_padding=8)
-```
-
-## Closed-loop sketch (minimal)
+### Image formation
 
 ```julia
-recon = ModalReconstructor(interaction_matrix)
-for k in 1:n_iter
-    advance!(atm, tel)
-    propagate!(ws, ngs, atm, tel, wfs)
-    dm_command = reconstruct!(recon, wfs.slopes)
-    dm.state.coefs .= dm_command
-    apply!(dm, tel, DMAdditive())
-    propagate!(ws, ngs, atm, tel, dm, cam)
-end
+tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
+src = Source(band=:I, magnitude=10.0)
+psf = compute_psf!(tel, src; zero_padding=2)
 ```
 
-## Logging example
+### Diffractive WFS measurement
+
+```julia
+wfs = PyramidWFS(tel; n_subap=4, mode=Diffractive(), modulation=1.0, modulation_points=4)
+slopes = measure!(wfs, tel, src)
+```
+
+### Closed loop
+
+```julia
+imat = interaction_matrix(dm, wfs, tel, src; amplitude=1e-9)
+recon = ModalReconstructor(imat; gain=0.4)
+cmd = similar(dm.state.coefs)
+
+advance!(atm, tel; rng=rng)
+propagate!(atm, tel)
+measure!(wfs, tel, src)
+reconstruct!(cmd, recon, wfs.state.slopes)
+dm.state.coefs .= -cmd
+apply!(dm, tel, DMAdditive())
+```
+
+## Logging in examples
+
+Use structured logging instead of print statements:
 
 ```julia
 using Logging
 
-global_logger(ConsoleLogger(stderr, Logging.Info))
-
-@info "Starting AO loop" n_iter=100
-for k in 1:n_iter
-    advance!(atm, tel)
-    propagate!(ws, ngs, atm, tel, wfs)
-    dm_command = reconstruct!(recon, wfs.slopes)
-    dm.state.coefs .= dm_command
-    apply!(dm, tel, DMAdditive())
-    @debug "Loop step complete" iter=k wfe_rms=compute_wfe(tel)
-end
-@info "AO loop complete"
+@info "Closed-loop Pyramid tutorial complete" final_residual=result.residual_after[end]
 ```
+
+That keeps examples composable in scripts, tests, and notebooks.

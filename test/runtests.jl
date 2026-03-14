@@ -6,6 +6,15 @@ using TOML
 
 include("reference_harness.jl")
 
+function run_tutorial_example(name::AbstractString)
+    path = joinpath(dirname(@__DIR__), "examples", "tutorials", name)
+    mod = Module(Symbol("Tutorial_", replace(basename(name), "." => "_")))
+    Core.eval(mod, :(include(path::AbstractString) = Base.include($mod, path)))
+    Base.include(mod, path)
+    main_fn = Core.eval(mod, :main)
+    return Base.invokelatest(main_fn)
+end
+
 function assert_source_interface(src)
     @test hasmethod(wavelength, Tuple{typeof(src)})
 end
@@ -437,5 +446,44 @@ end
     else
         @info "Skipping OOPAO reference regression; no manifest found" root=root
         @test true
+    end
+end
+
+@testset "Tutorial examples" begin
+    image = run_tutorial_example("image_formation.jl")
+    @test size(image.psf_nominal) == size(image.psf_aberrated)
+    @test maximum(image.psf_nominal) > maximum(image.psf_aberrated)
+
+    detector = run_tutorial_example("detector.jl")
+    @test sum(detector.frame_native) ≈ sum(detector.psf)
+    @test size(detector.frame_sampled, 1) < size(detector.frame_native, 1)
+
+    asterism = run_tutorial_example("asterism.jl")
+    @test length(asterism.per_source_psf) == 4
+    @test sum(asterism.combined_psf) >= sum(asterism.per_source_psf[1])
+
+    spatial = run_tutorial_example("spatial_filter.jl")
+    @test size(spatial.filtered_phase) == size(spatial.filtered_amplitude)
+    @test all(isfinite, spatial.filtered_phase)
+
+    ncpa = run_tutorial_example("ncpa.jl")
+    @test size(ncpa.psf, 1) == 2 * size(ncpa.ncpa_opd, 1)
+    @test size(ncpa.psf, 2) == 2 * size(ncpa.ncpa_opd, 2)
+    @test maximum(ncpa.psf) > 0
+
+    lift = run_tutorial_example("lift.jl")
+    @test length(lift.coeffs_true) == length(lift.coeffs_fit)
+    @test all(isfinite, lift.coeffs_fit)
+
+    sprint = run_tutorial_example("sprint.jl")
+    @test isfinite(sprint.estimate.shift_x)
+    @test isfinite(sprint.estimate.shift_y)
+
+    for name in ("closed_loop_shack_hartmann.jl", "closed_loop_pyramid.jl", "closed_loop_bioedge.jl")
+        loop = run_tutorial_example(name)
+        @test length(loop.residual_before) == length(loop.residual_after)
+        @test all(isfinite, loop.residual_before)
+        @test all(isfinite, loop.residual_after)
+        @test maximum(loop.final_psf) > 0
     end
 end
