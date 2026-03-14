@@ -4,6 +4,7 @@
 - Phases 1-5 implemented in `AdaptiveOptics.jl`.
 - Phase 6 in progress (telemetry + config export done; more I/O helpers pending).
 - Phase 7 complete (user guide, API reference, tutorial ports, and committed OOPAO reference bundle in place).
+- Full functional parity with Python OOPAO is not complete and is now the gating priority before further feature expansion.
 
 ## AO Feature Checklist
 - [x] P0: Detector modeling (photon/read noise, QE, binning, PSF sampling).
@@ -82,6 +83,28 @@
 - SPRINT/mis-registration supports cached sensitivity matrices (Serialization) and
   optional WFS shifts, but no FITS I/O (`src/Calibration/misregistration_identification.jl`).
 
+## Functional Parity Gate (Current Blocking Gaps)
+- [ ] Expand deterministic OOPAO reference coverage beyond geometric Shack-Hartmann to:
+  PSF formation, diffractive Shack-Hartmann, Pyramid, BioEdge, Gain Sensing Camera,
+  LiFT, and closed-loop traces.
+- [ ] Match OOPAO PSF export conventions and normalization exactly enough to support
+  reproducible array-level regression for image formation.
+- [ ] Close diffractive WFS fidelity gaps:
+  BioEdge grey-width/length and rooftop mask variants;
+  Pyramid/BioEdge per-subaperture Na-profile kernels instead of averaged kernels.
+- [ ] Port and validate OOPAO transfer-function workflow
+  (`tutorials/AO_transfer_function.py`) with matching outputs.
+- [ ] Port and validate OOPAO GSC closed-loop workflow
+  (`tutorials/AO_closed_loop_Pyramid_WFS_GSC.py`) against Python outputs.
+- [ ] Port and validate OOPAO tomography workflow
+  (`tutorials/how_to_tomography.py`) or explicitly document it as unsupported.
+- [ ] Audit calibration/output conventions against OOPAO for:
+  slope ordering/units outside geometric SH, PSF sampling conventions, detector coupling,
+  and closed-loop telemetry traces.
+- [ ] Add parity tests for every supported OOPAO tutorial/workflow, not just smoke tests.
+- [ ] Keep the current simplifications only where they are proven numerically equivalent
+  or are explicitly marked as fast-path approximations.
+
 ## Candidate Algorithm Upgrades (Similar Results)
 - (DONE) Add sub-harmonic augmentation to `ft_sh_phase_screen` for better low-frequency tilt statistics (`src/Atmosphere/phase_stats.jl`) [E:med, R:low].
 - (DONE, simplified) Implement diffractive WFS paths via pupil→focal propagation with planned FFTs (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`, `src/WFS/bioedge.jl`) [E:high, R:med].
@@ -101,22 +124,25 @@
 - HCIPy / POPPY / PROPER (Python): maps to diffractive WFS propagation, PSF/coronagraph modeling.
 
 ## Suggested Near-Term Priorities
-- [x] Implement diffractive WFS propagation with planned FFTs (largest fidelity jump).
-- [x] Add sub-harmonic augmentation to phase screens (improves low-frequency statistics).
-- [x] Replace LGS slope scaling with elongated PSF modeling (better LGS realism).
-- [x] Add KL basis from HHt/PSD (better modal basis fidelity).
+- [ ] Expand the OOPAO reference bundle to cover PSF, diffractive SH, Pyramid, BioEdge, LiFT,
+  GSC, and at least one closed-loop trace per major WFS.
+- [ ] Port OOPAO transfer-function and GSC/tomography workflows before adding new non-parity features.
+- [ ] Resolve remaining diffractive/LGS fidelity gaps that currently prevent direct
+  Python-to-Julia array comparison.
+- [ ] Turn every parity claim into a deterministic regression test against OOPAO outputs.
 
 ## Next 10 Tasks
-1. Expand the OOPAO reference bundle beyond geometric Shack-Hartmann to PSF and diffractive WFS cases once the remaining convention/parity gaps are understood.
-2. Expand the benchmark suite to cover PSF, SH, Pyramid, BioEdge, LiFT, reconstructor, and one closed-loop step.
-3. Track allocations in benchmark outputs so hot-path regressions are visible.
-4. Bring up a first `CuArray` path for PSF and one diffractive WFS with `CUDA.allowscalar(false)` checks.
-5. Add CPU/GPU parity tests and document expected tolerances.
-6. Improve BioEdge mask fidelity with grey-width/length and rooftop options.
-7. Replace averaged Pyramid/BioEdge Na-profile kernels with per-subaperture kernels where fidelity matters.
-8. Move non-FFT stencil/reduction kernels behind trait-selected `KernelAbstractions.jl` implementations.
-9. Add backend traits that make CPU, threaded CPU, and GPU execution choices explicit at compile time.
-10. Port the remaining OOPAO workflows that still sit outside `examples/tutorials/`, especially Gain Sensing Camera and transfer-function workflows.
+1. Generate deterministic OOPAO PSF reference datasets and add exact regression tests.
+2. Generate deterministic OOPAO diffractive Shack-Hartmann reference datasets and add regression tests.
+3. Generate deterministic OOPAO Pyramid reference datasets and add regression tests.
+4. Generate deterministic OOPAO BioEdge reference datasets and add regression tests.
+5. Port `tutorials/AO_transfer_function.py` and validate it against OOPAO outputs.
+6. Port `tutorials/AO_closed_loop_Pyramid_WFS_GSC.py` and validate it against OOPAO outputs.
+7. Decide whether tomography is in-scope for core parity now; if yes, port `tutorials/how_to_tomography.py`
+   and add regression coverage, otherwise document the scope cut explicitly.
+8. Replace averaged Pyramid/BioEdge Na-profile kernels with per-subaperture kernels where OOPAO does so.
+9. Add BioEdge grey-width/length and rooftop mask variants needed for direct parity.
+10. After the above, re-run the parity audit and only then resume GPU-specific expansion.
 
 ## Phase 0: Setup
 - Create package skeleton and CI with Julia versions.
@@ -166,3 +192,10 @@ Current validation scope:
 - `test/reference_data/` commits two deterministic OOPAO geometric Shack-Hartmann cases.
 - The reference harness applies a documented convention adapter for OOPAO SH slope ordering and units.
 - PSF and diffractive WFS parity remain active follow-on work, but phase 7 no longer depends on them.
+
+## Phase 8: Full OOPAO Functional Parity
+- [ ] Every supported OOPAO workflow has deterministic Julia vs OOPAO regression coverage.
+- [ ] PSF, diffractive WFS, LiFT, GSC, and closed-loop traces match OOPAO within documented tolerances.
+- [ ] Transfer-function workflow is ported and validated.
+- [ ] Any unsupported OOPAO workflow is explicitly documented as out-of-scope rather than implied complete.
+- [ ] Only after this phase is complete should non-parity feature work resume.
