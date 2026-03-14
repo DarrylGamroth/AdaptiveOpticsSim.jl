@@ -206,9 +206,27 @@ function compute_reference_actual(case::ReferenceCase)
     throw(InvalidConfiguration("unsupported reference case kind '$(case.kind)'"))
 end
 
+function adapt_reference_actual(case::ReferenceCase, actual)
+    compare = get(case.config, "compare", nothing)
+    compare === nothing && return actual
+
+    adapted = copy(actual)
+    if get(compare, "swap_halves", false)
+        if ndims(adapted) != 1 || isodd(length(adapted))
+            throw(InvalidConfiguration("swap_halves compare option requires an even-length vector"))
+        end
+        n = div(length(adapted), 2)
+        adapted = vcat(@view(adapted[n+1:end]), @view(adapted[1:n]))
+    end
+    if haskey(compare, "scale")
+        adapted .*= Float64(compare["scale"])
+    end
+    return adapted
+end
+
 function validate_reference_case(case::ReferenceCase)
     expected = load_reference_array(case)
-    actual = compute_reference_actual(case)
+    actual = adapt_reference_actual(case, compute_reference_actual(case))
     if size(actual) != size(expected)
         return (ok=false, actual=actual, expected=expected, maxabs=Inf)
     end

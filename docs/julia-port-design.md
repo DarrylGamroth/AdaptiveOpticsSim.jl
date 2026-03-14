@@ -291,17 +291,54 @@ Use Julia's package extension mechanism or a thin `AdaptiveOpticsIO.jl` / `Adapt
 package if preferred.
 
 ## GPU strategy
-Provide GPU-backed workspaces and dispatch based on a trait, e.g.
-`supports_gpu(::WFS)` and `array_backend(::Workspace)`. Keep core algorithms
-backend-agnostic with `AbstractArray`.
+Provide GPU-backed workspaces and dispatch based on explicit backend traits, not
+runtime symbols. Keep core algorithms backend-agnostic with `AbstractArray`,
+but make the execution path a compile-time choice wherever practical.
+
+Sketch:
+```julia
+abstract type ExecutionStyle end
+struct CPUStyle <: ExecutionStyle end
+struct ThreadedCPUStyle <: ExecutionStyle end
+struct GPUStyle{B} <: ExecutionStyle
+    backend::B
+end
+
+execution_style(::Type{<:Array}) = CPUStyle()
+# execution_style(::Type{<:CuArray}) = GPUStyle(CUDABackend())
+```
+
+Intended rule:
+- dispatch on physics first (`Geometric()` vs `Diffractive()`),
+- dispatch on backend second (`CPUStyle()` vs `GPUStyle(...)`),
+- keep data layout and workspace ownership explicit.
 
 Guidelines:
 - Make array backends explicit (`backend=Array` or `backend=CuArray`).
 - Avoid scalar indexing on GPU; call `CUDA.allowscalar(false)` in tests.
 - Preallocate GPU workspaces; minimize host-device transfers.
 - Use `AbstractFFTs.jl` so `FFTW` and `CUFFT` share the same API.
-- Use `KernelAbstractions.jl` for kernels that should run on CPU and GPU.
+- Use `KernelAbstractions.jl` for non-FFT kernels that should run on CPU and GPU
+  from one implementation.
 - Keep noise generation backend-aware (CPU RNG vs GPU RNG).
+
+Priority `KernelAbstractions.jl` targets:
+- subaperture binning and rebinning,
+- slope-map reductions,
+- focal-plane mask application,
+- per-subaperture centroid accumulation,
+- LiFT weighting updates and other dense elementwise/reduction kernels.
+
+Do not force everything through `KernelAbstractions.jl`:
+- FFT-heavy paths should stay on `AbstractFFTs.jl`.
+- Small orchestration logic should remain plain Julia dispatch.
+- Only move kernels once the array layout is stable enough that a shared CPU/GPU
+  implementation stays readable.
+
+Migration note:
+- direct `FFTW.plan_fft!` storage is acceptable for current CPU paths,
+  but long-term FFT workspaces should be abstracted behind backend-aware plan
+  constructors so `FFTW` is not the only viable implementation detail.
 
 ## ModelingToolkit integration (control layer)
 ModelingToolkit.jl is a good fit for the AO control loop (filters, delays, DM

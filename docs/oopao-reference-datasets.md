@@ -1,34 +1,29 @@
-# OOPAO Reference Dataset Plan (Draft)
+# OOPAO Reference Datasets
 
-This document outlines which reference outputs to capture from OOPAO to validate
-AdaptiveOptics.jl with deterministic comparisons.
+This document describes the deterministic OOPAO bundles used to cross-validate
+AdaptiveOptics.jl.
 
 ## Principles
 - Use fixed seeds and deterministic settings.
 - Store small, representative datasets.
 - Compare with tolerances, not bitwise equality.
 
-## Candidate datasets
-1) PSF baseline
-   - Tutorial: `tutorials/image_formation.py`
-   - Outputs: PSF array, cropped PSF, pixel scale, Strehl (if computed)
-   - Notes: Use a single source and fixed zero-padding.
+## Current committed bundle
 
-2) Zernike modes
-   - Tutorial: `tutorials/image_formation.py`
-   - Outputs: First N Zernike modes, cross-product matrix stats
+The repository now commits a small bundle under `test/reference_data/` with two
+OOPAO-generated geometric Shack-Hartmann cases:
 
-3) Shack-Hartmann slopes
-   - Tutorial: `tutorials/AO_closed_loop_ShackHartmann_WFS.py`
-   - Outputs: slopes vector, valid subaperture mask, subaperture spot cube
+1. `shack_hartmann_geometric_ramp_xy`
+2. `shack_hartmann_geometric_ramp_y`
 
-4) Asterism PSF grid
-   - Tutorial: `tutorials/how_to_asterism.py`
-   - Outputs: PSF grid (per-source), combined PSF
+These cases are small, deterministic, and currently stable enough to keep in
+CI. They deliberately target the part of the port where we already understand
+the OOPAO convention mapping.
 
-5) Atmospheric phase screen
-   - Tutorial: `tutorials/image_formation.py` or minimal script
-   - Outputs: OPD screen at fixed time step(s)
+Not yet committed:
+- PSF parity, which still differs in normalization and shape details.
+- Diffractive Shack-Hartmann, Pyramid, and BioEdge parity, which still differ in
+  units and/or signal construction.
 
 ## Reference configuration
 - Seed: fixed RNG seed (documented per dataset).
@@ -55,6 +50,7 @@ Current expectations:
   - `shape`
   - `atol` / `rtol`
   - nested config tables (`telescope`, `source`, `opd`, `wfs`, `compute`)
+  - optional `compare` rules for known convention adapters
 
 This lets the Julia test suite reconstruct the scenario, compute the local
 result, and compare it to the OOPAO-generated reference array.
@@ -85,27 +81,40 @@ magnitude = 0.0
 zero_padding = 2
 ```
 
+For OOPAO geometric Shack-Hartmann data, the committed bundle also uses:
+
+```toml
+[cases.shack_hartmann_geometric_ramp_xy.compare]
+swap_halves = true
+scale = 7.5949367088607559e6
+```
+
+That adapter is intentional. OOPAO’s exported `signal_2D` ordering and
+calibrated slope units do not match the raw OPD-gradient convention currently
+returned by AdaptiveOptics.jl.
+
 For now the harness uses plain text arrays (`DelimitedFiles`) because that keeps
 the validation path dependency-light. If `.npz` becomes more convenient, we can
 add a test-only reader later without changing the manifest structure.
 
-## Podman container (recommended)
-Use the repo's `Containerfile` + `environment.yml` to build a reproducible
-environment for generating reference outputs.
+## Generation workflow
 
-Note: `aotools` is pinned via pip in `environment.yml` to ensure availability.
+The generator lives in `scripts/generate_oopao_reference_bundle.py`.
 
-Build:
-```
-podman build -t oopao-ref -f Containerfile .
-```
+Recommended approach:
+1. Build a reproducible Python 3.8 image with the OOPAO dependency stack.
+2. Mount both the OOPAO checkout and the AdaptiveOptics.jl checkout.
+3. Copy OOPAO to a writable temporary directory inside the container before
+   import. OOPAO writes `precision_oopao.npy` into its package root at import
+   time.
+4. Run the generator and point it at a bundle directory.
 
-Run (mount local repo, install editable, generate outputs):
-```
-podman run --rm -v "$PWD":/workspace:Z oopao-ref \
-  python -m pip install -e .
-```
+The committed geometric SH bundle was generated this way and then copied into
+`test/reference_data/`.
 
 ## Tolerances
 - Record per-dataset tolerances (relative and absolute).
 - Note expected deviations for CPU vs GPU and `Float32` vs `Float64`.
+
+For the current committed SH cases, tolerances are effectively exact once the
+documented convention adapter is applied.

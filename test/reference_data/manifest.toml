@@ -1,0 +1,67 @@
+version = 1
+
+[cases.shack_hartmann_geometric_ramp_xy]
+kind = "shack_hartmann_slopes"
+data = "shack_hartmann_geometric_ramp_xy.txt"
+shape = [32]
+atol = 9.9999999999999998e-13
+rtol = 9.9999999999999998e-13
+
+[cases.shack_hartmann_geometric_ramp_xy.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.shack_hartmann_geometric_ramp_xy.source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0000000000000000e+00
+
+[cases.shack_hartmann_geometric_ramp_xy.opd]
+kind = "ramp"
+scale_x = 5.0000000000000001e-09
+scale_y = -2.0000000000000001e-09
+bias = 0.0000000000000000e+00
+
+[cases.shack_hartmann_geometric_ramp_xy.wfs]
+n_subap = 4
+threshold = 0.0000000000000000e+00
+mode = "geometric"
+
+[cases.shack_hartmann_geometric_ramp_xy.compare]
+swap_halves = true
+scale = 7.5949367088607559e+06
+
+[cases.shack_hartmann_geometric_ramp_y]
+kind = "shack_hartmann_slopes"
+data = "shack_hartmann_geometric_ramp_y.txt"
+shape = [32]
+atol = 9.9999999999999998e-13
+rtol = 9.9999999999999998e-13
+
+[cases.shack_hartmann_geometric_ramp_y.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.shack_hartmann_geometric_ramp_y.source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0000000000000000e+00
+
+[cases.shack_hartmann_geometric_ramp_y.opd]
+kind = "ramp"
+scale_x = 0.0000000000000000e+00
+scale_y = 4.0000000000000002e-09
+bias = 0.0000000000000000e+00
+
+[cases.shack_hartmann_geometric_ramp_y.wfs]
+n_subap = 4
+threshold = 0.0000000000000000e+00
+mode = "geometric"
+
+[cases.shack_hartmann_geometric_ramp_y.compare]
+swap_halves = true
+scale = 7.5949367088607559e+06

@@ -11,3 +11,8 @@ This matrix records the concrete artifacts that close phase 7.
 | P7-5 | Publish an API reference | `docs/api-reference.md` | Manual review plus README links | Covered |
 | P7-6 | Document backend-selection strategy around traits and `KernelAbstractions.jl` | `docs/user-guide.md`, `docs/julia-port-design.md` | Manual review | Covered |
 | P7-7 | Keep tutorial ports tied to deterministic, testable workflows | `examples/tutorials/common.jl`, `test/runtests.jl` | Tutorial smoke testset | Covered |
+
+Current OOPAO bundle scope:
+- Geometric Shack-Hartmann only, with an explicit convention adapter.
+- PSF and diffractive WFS parity stay on the forward roadmap and are not hidden
+  behind overly loose tolerances.

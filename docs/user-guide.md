@@ -96,6 +96,8 @@ See `docs/julia-tutorial-mappings.md` for the full mapping back to OOPAO.
 - `test/reference_data/` stores a small deterministic OOPAO bundle for
   cross-validation.
 - `ENV["ADAPTIVEOPTICS_REFERENCE_ROOT"]` can point to an alternate bundle.
+- The committed bundle currently targets geometric Shack-Hartmann parity. PSF
+  and diffractive WFS parity remain active follow-on work.
 
 See `docs/oopao-reference-datasets.md` for the bundle contract.
 

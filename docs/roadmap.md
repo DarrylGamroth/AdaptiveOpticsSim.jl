@@ -3,7 +3,7 @@
 ## Status
 - Phases 1-5 implemented in `AdaptiveOptics.jl`.
 - Phase 6 in progress (telemetry + config export done; more I/O helpers pending).
-- Phase 7 in progress (reference harness scaffolded; datasets + tutorial ports pending).
+- Phase 7 complete (user guide, API reference, tutorial ports, and committed OOPAO reference bundle in place).
 
 ## AO Feature Checklist
 - [x] P0: Detector modeling (photon/read noise, QE, binning, PSF sampling).
@@ -107,16 +107,16 @@
 - [x] Add KL basis from HHt/PSD (better modal basis fidelity).
 
 ## Next 10 Tasks
-1. Build the OOPAO reference regression harness and manifest format.
-2. Generate the first deterministic OOPAO reference bundle for PSF + Shack-Hartmann + Pyramid.
-3. Add regression tests that compare Julia outputs to OOPAO within per-case tolerances.
-4. Expand the benchmark suite to cover PSF, SH, Pyramid, BioEdge, LiFT, reconstructor, and one closed-loop step.
-5. Track allocations in benchmark outputs so hot-path regressions are visible.
-6. Bring up a first `CuArray` path for PSF and one diffractive WFS with `CUDA.allowscalar(false)` checks.
-7. Add CPU/GPU parity tests and document expected tolerances.
-8. Improve BioEdge mask fidelity with grey-width/length and rooftop options.
-9. Replace averaged Pyramid/BioEdge Na-profile kernels with per-subaperture kernels where fidelity matters.
-10. Port the highest-value tutorials as deterministic examples tied to regression coverage.
+1. Expand the OOPAO reference bundle beyond geometric Shack-Hartmann to PSF and diffractive WFS cases once the remaining convention/parity gaps are understood.
+2. Expand the benchmark suite to cover PSF, SH, Pyramid, BioEdge, LiFT, reconstructor, and one closed-loop step.
+3. Track allocations in benchmark outputs so hot-path regressions are visible.
+4. Bring up a first `CuArray` path for PSF and one diffractive WFS with `CUDA.allowscalar(false)` checks.
+5. Add CPU/GPU parity tests and document expected tolerances.
+6. Improve BioEdge mask fidelity with grey-width/length and rooftop options.
+7. Replace averaged Pyramid/BioEdge Na-profile kernels with per-subaperture kernels where fidelity matters.
+8. Move non-FFT stencil/reduction kernels behind trait-selected `KernelAbstractions.jl` implementations.
+9. Add backend traits that make CPU, threaded CPU, and GPU execution choices explicit at compile time.
+10. Port the remaining OOPAO workflows that still sit outside `examples/tutorials/`, especially Gain Sensing Camera and transfer-function workflows.
 
 ## Phase 0: Setup
 - Create package skeleton and CI with Julia versions.
@@ -156,7 +156,13 @@
 - [x] Config and provenance export (TOML + JSON3 extension).
 
 ## Phase 7: Documentation and validation
-- Port most tutorials as Julia scripts/notebooks (prioritize core AO workflows).
-- Add deterministic regression suite against OOPAO outputs.
-- Maintain a small set of OOPAO reference datasets for cross-validation.
-- Publish user guide and API reference.
+- [x] Port most tutorials as Julia scripts/notebooks (prioritize core AO workflows).
+- [x] Add deterministic regression suite against OOPAO outputs.
+- [x] Maintain a small set of OOPAO reference datasets for cross-validation.
+- [x] Publish user guide and API reference.
+
+Current validation scope:
+- `examples/tutorials/` now covers the core OOPAO workflows used most often in practice.
+- `test/reference_data/` commits two deterministic OOPAO geometric Shack-Hartmann cases.
+- The reference harness applies a documented convention adapter for OOPAO SH slope ordering and units.
+- PSF and diffractive WFS parity remain active follow-on work, but phase 7 no longer depends on them.
