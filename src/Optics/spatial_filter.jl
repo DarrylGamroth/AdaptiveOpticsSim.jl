@@ -42,8 +42,8 @@ function SpatialFilter(tel::Telescope; shape::SpatialFilterShape=CircularFilter(
     field = similar(mask)
     fft_buffer = similar(mask)
     filtered_field = similar(mask)
-    fft_plan = plan_fft!(fft_buffer)
-    ifft_plan = plan_ifft!(filtered_field)
+    fft_plan = plan_fft_backend!(fft_buffer)
+    ifft_plan = plan_ifft_backend!(filtered_field)
     phase = backend{T}(undef, tel.params.resolution, tel.params.resolution)
     amplitude = similar(phase)
     state = SpatialFilterState{T, typeof(mask), typeof(phase), typeof(fft_plan), typeof(ifft_plan)}(
@@ -116,8 +116,8 @@ function ensure_spatial_filter_buffers!(sf::SpatialFilter, n::Int, n_pad::Int)
         sf.state.filtered_field = similar(sf.state.filtered_field, n_pad, n_pad)
         sf.state.mask = similar(sf.state.mask, n_pad, n_pad)
         sf.state.mask_shifted = similar(sf.state.mask_shifted, n_pad, n_pad)
-        sf.state.fft_plan = plan_fft!(sf.state.fft_buffer)
-        sf.state.ifft_plan = plan_ifft!(sf.state.filtered_field)
+        sf.state.fft_plan = plan_fft_backend!(sf.state.fft_buffer)
+        sf.state.ifft_plan = plan_ifft_backend!(sf.state.filtered_field)
         resized = true
     end
     if size(sf.state.phase) != (n, n)

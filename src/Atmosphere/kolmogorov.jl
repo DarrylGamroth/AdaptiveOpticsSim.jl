@@ -30,9 +30,9 @@ function KolmogorovAtmosphere(tel::Telescope; r0::Real, L0::Real=25.0, T::Type{<
     psd = backend{T}(undef, n, n)
     spectrum = backend{Complex{T}}(undef, n, n)
     noise_re = backend{T}(undef, n, n)
-    noise_im = backend{T}(undef, n, n)
+   noise_im = backend{T}(undef, n, n)
     freqs = backend{T}(undef, n)
-    ifft_plan = plan_ifft!(spectrum)
+    ifft_plan = plan_ifft_backend!(spectrum)
     fill!(opd, zero(T))
     fill!(psd, zero(T))
     fill!(spectrum, zero(eltype(spectrum)))
@@ -59,11 +59,12 @@ function update_psd!(atm::KolmogorovAtmosphere, delta::Real)
 
     r0 = atm.params.r0
     L0 = atm.params.L0
-    @inbounds for i in 1:n, j in 1:n
-        f = sqrt(freqs[i]^2 + freqs[j]^2)
-        k = 2 * pi * f
-        atm.state.psd[i, j] = T(0.023) * r0^(-T(5) / T(3)) * (k^2 + (T(1) / L0)^2)^(-T(11) / T(6))
-    end
+    freq_x = reshape(freqs, n, 1)
+    freq_y = reshape(freqs, 1, n)
+    coeff = T(0.023) * r0^(-T(5) / T(3))
+    inv_L0 = T(1) / L0
+    two_pi_sq = T(2 * pi)^2
+    @. atm.state.psd = coeff * (two_pi_sq * (freq_x^2 + freq_y^2) + inv_L0^2)^(-T(11) / T(6))
     return atm
 end
 
@@ -98,9 +99,7 @@ function phase_screen_von_karman!(out::AbstractMatrix, atm::KolmogorovAtmosphere
     randn!(rng, atm.state.noise_im)
     @. atm.state.spectrum = complex(atm.state.noise_re, atm.state.noise_im) * sqrt(atm.state.psd)
     mul!(atm.state.spectrum, atm.state.ifft_plan, atm.state.spectrum)
-    @inbounds for i in 1:n, j in 1:n
-        out[i, j] = real(atm.state.spectrum[i, j]) * (n * delta)
-    end
+    @. out = real(atm.state.spectrum) * (n * delta)
     return out
 end
 

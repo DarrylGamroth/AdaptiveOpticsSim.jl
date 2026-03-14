@@ -14,7 +14,7 @@ function main(; resolution::Int=24, zero_padding::Int=2)
     @info "Asterism tutorial complete" n_sources=length(asterism) psf_size=size(psf)
     return (
         combined_psf=psf,
-        per_source_psf=copy(tel.state.psf_list),
+        per_source_psf=copy(tel.state.psf_stack),
     )
 end
 

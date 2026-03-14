@@ -64,8 +64,8 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     temp = similar(intensity)
     bin_buffer = backend{T}(undef, sub, sub)
     spot = similar(bin_buffer)
-    fft_plan = plan_fft!(fft_buffer)
-    ifft_plan = plan_ifft!(fft_buffer)
+    fft_plan = plan_fft_backend!(fft_buffer)
+    ifft_plan = plan_ifft_backend!(fft_buffer)
     elongation_kernel = backend{T}(undef, 1)
     lgs_kernel_fft = backend{Complex{T}}(undef, 0, 0, 0)
     state = ShackHartmannState{
@@ -127,8 +127,8 @@ function ensure_sh_buffers!(wfs::ShackHartmann, pad::Int)
         wfs.state.fft_buffer = similar(wfs.state.fft_buffer, pad, pad)
         wfs.state.intensity = similar(wfs.state.intensity, pad, pad)
         wfs.state.temp = similar(wfs.state.temp, pad, pad)
-        wfs.state.fft_plan = plan_fft!(wfs.state.fft_buffer)
-        wfs.state.ifft_plan = plan_ifft!(wfs.state.fft_buffer)
+        wfs.state.fft_plan = plan_fft_backend!(wfs.state.fft_buffer)
+        wfs.state.ifft_plan = plan_ifft_backend!(wfs.state.fft_buffer)
     end
     return wfs
 end

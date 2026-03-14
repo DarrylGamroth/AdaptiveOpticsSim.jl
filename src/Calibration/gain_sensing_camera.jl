@@ -15,8 +15,8 @@ function GSCFFTWorkspace(n::Int; T::Type{<:AbstractFloat}=Float64, backend=Array
     buffer = backend{Complex{T}}(undef, n, n)
     fft_out = similar(buffer)
     ifft_out = similar(buffer)
-    fft_plan = plan_fft!(buffer)
-    ifft_plan = plan_ifft!(buffer)
+    fft_plan = plan_fft_backend!(buffer)
+    ifft_plan = plan_ifft_backend!(buffer)
     return GSCFFTWorkspace{T, typeof(buffer), typeof(fft_plan), typeof(ifft_plan)}(
         buffer,
         fft_out,
@@ -156,7 +156,7 @@ function split_basis_product(basis::AbstractArray{T,3}, ws::GSCFFTWorkspace{T}; 
         return out
     end
 
-    ws_list = [GSCFFTWorkspace(size(basis, 1); T=T) for _ in 1:Base.Threads.nthreads()]
+    ws_list = [GSCFFTWorkspace(size(basis, 1); T=T, backend=typeof(ws.buffer).name.wrapper) for _ in 1:Base.Threads.nthreads()]
     Base.Threads.@threads for k in 1:n_modes
         ws_local = ws_list[Base.Threads.threadid()]
         @views begin

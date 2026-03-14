@@ -4,6 +4,7 @@ __precompile__(true)
 
 using AbstractFFTs
 import FFTW
+using KernelAbstractions
 using LinearAlgebra
 using Logging
 using Random
@@ -18,6 +19,7 @@ const PROJECT_STATUS = :in_development
 
 include("Core/errors.jl")
 include("Core/types.jl")
+include("Core/backends.jl")
 include("Core/config.jl")
 include("Core/utils.jl")
 include("Core/workspace.jl")

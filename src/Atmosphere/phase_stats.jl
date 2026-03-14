@@ -22,7 +22,7 @@ function PhaseStatsWorkspace(n::Int; T::Type{<:AbstractFloat}=Float64, backend=A
     noise_re = backend{T}(undef, n, n)
     noise_im = backend{T}(undef, n, n)
     freqs = backend{T}(undef, n)
-    ifft_plan = plan_ifft!(buffer)
+    ifft_plan = plan_ifft_backend!(buffer)
     return PhaseStatsWorkspace{T, typeof(spectrum), typeof(psd), typeof(freqs), typeof(ifft_plan)}(
         spectrum,
         buffer,

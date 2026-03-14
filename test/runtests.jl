@@ -162,9 +162,9 @@ end
     src2 = Source(band=:I, magnitude=0.0, coordinates=(1.0, 90.0))
     ast = Asterism([src1, src2])
     psf = compute_psf!(tel, ast; zero_padding=2)
-    @test length(tel.state.psf_list) == 2
+    @test size(tel.state.psf_stack, 3) == 2
     @test size(psf) == (32, 32)
-    @test sum(psf) >= sum(tel.state.psf_list[1])
+    @test sum(psf) >= sum(@view tel.state.psf_stack[:, :, 1])
 end
 
 @testset "Pupil masks and misregistration" begin
