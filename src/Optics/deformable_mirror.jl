@@ -12,6 +12,7 @@ end
 
 mutable struct DeformableMirrorState{T<:AbstractFloat,A<:AbstractMatrix{T},M<:AbstractMatrix{T},V<:AbstractVector{T}}
     opd::A
+    opd_vec::V
     modes::M
     coefs::V
 end
@@ -27,10 +28,11 @@ function DeformableMirror(tel::Telescope; n_act::Int, influence_width::Real=0.2,
     n = tel.params.resolution
     opd = backend{T}(undef, n, n)
     fill!(opd, zero(T))
+    opd_vec = reshape(opd, :)
     modes = backend{T}(undef, n * n, n_act * n_act)
     coefs = backend{T}(undef, n_act * n_act)
     fill!(coefs, zero(T))
-    state = DeformableMirrorState{T, typeof(opd), typeof(modes), typeof(coefs)}(opd, modes, coefs)
+    state = DeformableMirrorState{T, typeof(opd), typeof(modes), typeof(opd_vec)}(opd, opd_vec, modes, coefs)
     dm = DeformableMirror(params, state)
     build_influence_functions!(dm, tel)
     return dm
@@ -63,15 +65,13 @@ function build_influence_functions!(dm::DeformableMirror, tel::Telescope)
 end
 
 function apply!(dm::DeformableMirror, tel::Telescope, ::DMAdditive)
-    opd_vec = reshape(dm.state.opd, :)
-    mul!(opd_vec, dm.state.modes, dm.state.coefs)
+    mul!(dm.state.opd_vec, dm.state.modes, dm.state.coefs)
     tel.state.opd .+= dm.state.opd
     return tel
 end
 
 function apply!(dm::DeformableMirror, tel::Telescope, ::DMReplace)
-    opd_vec = reshape(dm.state.opd, :)
-    mul!(opd_vec, dm.state.modes, dm.state.coefs)
+    mul!(dm.state.opd_vec, dm.state.modes, dm.state.coefs)
     tel.state.opd .= dm.state.opd
     return tel
 end

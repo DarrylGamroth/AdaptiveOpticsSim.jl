@@ -11,7 +11,7 @@ mutable struct TelescopeState{T,
     Apsf<:AbstractMatrix{T},
     Amask<:AbstractMatrix{Bool},
     Spsf<:AbstractArray{T,3},
-    W<:Union{Nothing,Workspace}}
+    W<:Workspace}
     pupil::Amask
     opd::Aopd
     psf::Apsf
@@ -50,8 +50,8 @@ function Telescope(; resolution::Int,
     fill!(psf, zero(T))
 
     psf_stack = backend{T}(undef, resolution, resolution, 0)
-    psf_workspace = nothing
-    state = TelescopeState{T, typeof(opd), typeof(psf), typeof(pupil), typeof(psf_stack), Union{Nothing,Workspace}}(
+    psf_workspace = Workspace(opd, resolution; T=T)
+    state = TelescopeState{T, typeof(opd), typeof(psf), typeof(pupil), typeof(psf_stack), typeof(psf_workspace)}(
         pupil,
         opd,
         psf,

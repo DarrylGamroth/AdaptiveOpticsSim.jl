@@ -6,12 +6,7 @@ function ensure_psf_state!(tel::Telescope, n::Int)
 end
 
 function ensure_psf_workspace!(tel::Telescope, n::Int)
-    T = eltype(tel.state.opd)
-    if tel.state.psf_workspace === nothing
-        tel.state.psf_workspace = Workspace(tel.state.opd, n; T=T)
-    else
-        ensure_psf_buffers!(tel.state.psf_workspace, n)
-    end
+    ensure_psf_buffers!(tel.state.psf_workspace, n)
     return tel.state.psf_workspace
 end
 
@@ -41,11 +36,18 @@ function compute_psf!(tel::Telescope, src::Source, ws::Workspace, zero_padding::
     return tel.state.psf
 end
 
+function compute_psf!(tel::Telescope, src::Source, zero_padding::Int)
+    if zero_padding < 1
+        throw(InvalidConfiguration("zero_padding must be >= 1"))
+    end
+    n_pad = tel.params.resolution * zero_padding
+    ws = ensure_psf_workspace!(tel, n_pad)
+    return compute_psf!(tel, src, ws, zero_padding)
+end
+
 function compute_psf!(tel::Telescope, src::Source; zero_padding::Int=1, ws::Union{Workspace,Nothing}=nothing)
-    n = tel.params.resolution
     if ws === nothing
-        n_pad = n * zero_padding
-        ws = ensure_psf_workspace!(tel, n_pad)
+        return compute_psf!(tel, src, zero_padding)
     end
     return compute_psf!(tel, src, ws, zero_padding)
 end
