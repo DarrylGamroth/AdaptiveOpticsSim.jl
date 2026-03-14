@@ -41,6 +41,54 @@ AdaptiveOptics.jl with deterministic comparisons.
   - Metadata as JSON or TOML (units, seeds, tolerances).
 - Optionally mirror in FITS for astronomy workflows, but keep optional.
 
+## Harness contract
+AdaptiveOptics.jl now includes a test-side reference harness in
+`test/reference_harness.jl`.
+
+Current expectations:
+- The harness looks for a bundle root in `ENV["ADAPTIVEOPTICS_REFERENCE_ROOT"]`.
+- If the environment variable is unset, it falls back to `test/reference_data/`.
+- The bundle must contain a `manifest.toml`.
+- Each case in the manifest records:
+  - `kind` (`psf`, `shack_hartmann_slopes`, `pyramid_slopes`, `bioedge_slopes`)
+  - `data` path
+  - `shape`
+  - `atol` / `rtol`
+  - nested config tables (`telescope`, `source`, `opd`, `wfs`, `compute`)
+
+This lets the Julia test suite reconstruct the scenario, compute the local
+result, and compare it to the OOPAO-generated reference array.
+
+Example manifest sketch:
+```toml
+version = 1
+
+[cases.psf_baseline]
+kind = "psf"
+data = "psf_baseline.txt"
+shape = [64, 64]
+atol = 1e-8
+rtol = 1e-8
+
+[cases.psf_baseline.telescope]
+resolution = 32
+diameter = 8.0
+sampling_time = 1e-3
+central_obstruction = 0.2
+
+[cases.psf_baseline.source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0
+
+[cases.psf_baseline.compute]
+zero_padding = 2
+```
+
+For now the harness uses plain text arrays (`DelimitedFiles`) because that keeps
+the validation path dependency-light. If `.npz` becomes more convenient, we can
+add a test-only reader later without changing the manifest structure.
+
 ## Podman container (recommended)
 Use the repo's `Containerfile` + `environment.yml` to build a reproducible
 environment for generating reference outputs.

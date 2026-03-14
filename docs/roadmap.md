@@ -3,7 +3,7 @@
 ## Status
 - Phases 1-5 implemented in `AdaptiveOptics.jl`.
 - Phase 6 in progress (telemetry + config export done; more I/O helpers pending).
-- Phase 7 pending (reference dataset validation + docs/tutorial ports).
+- Phase 7 in progress (reference harness scaffolded; datasets + tutorial ports pending).
 
 ## AO Feature Checklist
 - [x] P0: Detector modeling (photon/read noise, QE, binning, PSF sampling).
@@ -105,6 +105,18 @@
 - [x] Add sub-harmonic augmentation to phase screens (improves low-frequency statistics).
 - [x] Replace LGS slope scaling with elongated PSF modeling (better LGS realism).
 - [x] Add KL basis from HHt/PSD (better modal basis fidelity).
+
+## Next 10 Tasks
+1. Build the OOPAO reference regression harness and manifest format.
+2. Generate the first deterministic OOPAO reference bundle for PSF + Shack-Hartmann + Pyramid.
+3. Add regression tests that compare Julia outputs to OOPAO within per-case tolerances.
+4. Expand the benchmark suite to cover PSF, SH, Pyramid, BioEdge, LiFT, reconstructor, and one closed-loop step.
+5. Track allocations in benchmark outputs so hot-path regressions are visible.
+6. Bring up a first `CuArray` path for PSF and one diffractive WFS with `CUDA.allowscalar(false)` checks.
+7. Add CPU/GPU parity tests and document expected tolerances.
+8. Improve BioEdge mask fidelity with grey-width/length and rooftop options.
+9. Replace averaged Pyramid/BioEdge Na-profile kernels with per-subaperture kernels where fidelity matters.
+10. Port the highest-value tutorials as deterministic examples tied to regression coverage.
 
 ## Phase 0: Setup
 - Create package skeleton and CI with Julia versions.
