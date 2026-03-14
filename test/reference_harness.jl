@@ -1,4 +1,5 @@
 using DelimitedFiles
+using KernelAbstractions
 
 struct ReferenceCase
     id::String
@@ -204,6 +205,30 @@ function compute_reference_actual(case::ReferenceCase)
         return copy(measure!(wfs, tel, src))
     end
     throw(InvalidConfiguration("unsupported reference case kind '$(case.kind)'"))
+end
+
+function compute_reference_actual_ka_cpu(case::ReferenceCase)
+    tel = build_reference_telescope(case.config["telescope"])
+    if haskey(case.config, "opd")
+        apply_reference_opd!(tel, case.config["opd"])
+    end
+    if case.kind === :shack_hartmann_slopes
+        src = build_reference_source(case.config["source"])
+        wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
+        mode_name = lowercase(String(get(case.config["wfs"], "mode", "geometric")))
+        if mode_name != "geometric"
+            throw(InvalidConfiguration("KA CPU reference path currently supports only geometric Shack-Hartmann cases"))
+        end
+        update_valid_mask!(wfs, tel)
+        n_sub = wfs.params.n_subap
+        sub = div(tel.params.resolution, n_sub)
+        offset = n_sub * n_sub
+        slopes = similar(wfs.state.slopes)
+        style = AdaptiveOptics.AcceleratorStyle(KernelAbstractions.CPU())
+        AdaptiveOptics._geometric_slopes!(style, slopes, tel.state.opd, wfs.state.valid_mask, sub, n_sub, offset)
+        return slopes
+    end
+    throw(InvalidConfiguration("KA CPU reference path not implemented for reference kind '$(case.kind)'"))
 end
 
 function adapt_reference_actual(case::ReferenceCase, actual)
