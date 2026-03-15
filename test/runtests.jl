@@ -543,6 +543,11 @@ end
     @test all(isfinite, transfer.rejection_db)
     @test all(isfinite, transfer.closed_loop_db)
 
+    tomography = run_tutorial_example("tomography.jl")
+    @test all(isfinite, tomography.wavefront[.!isnan.(tomography.wavefront)])
+    @test length(tomography.commands) == 4
+    @test all(isfinite, tomography.commands)
+
     for name in ("closed_loop_shack_hartmann.jl", "closed_loop_pyramid.jl", "closed_loop_bioedge.jl")
         loop = run_tutorial_example(name)
         @test length(loop.residual_before) == length(loop.residual_after)

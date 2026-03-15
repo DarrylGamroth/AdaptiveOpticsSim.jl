@@ -32,8 +32,22 @@ formation, diffractive WFS, LiFT Jacobians, compact closed-loop traces, GSC
 optical-gain and gain-updated closed-loop behavior, and analytical
 transfer-function paths.
 
+The same `test/reference_data/` bundle also commits deterministic pyTomoAO
+tomography references for:
+
+1. `tomography_model_gamma`
+2. `tomography_model_cxx`
+3. `tomography_model_cox`
+4. `tomography_model_cnz`
+5. `tomography_model_reconstructor`
+6. `tomography_model_wavefront`
+7. `tomography_im_reconstructor`
+8. `tomography_im_wavefront`
+9. `tomography_kapa_model_wavefront`
+10. `tomography_kapa_model_dm_commands`
+11. `tomography_kapa_model_dm_commands_masked`
+
 Still not committed:
-- Tomography datasets/workflows.
 - Full atmosphere-replay closed-loop tutorial traces.
 
 ## Reference configuration
@@ -114,7 +128,8 @@ the manifest structure.
 
 ## Generation workflow
 
-The generator lives in `scripts/generate_oopao_reference_bundle.py`.
+The OOPAO generator lives in `scripts/generate_oopao_reference_bundle.py`.
+The pyTomoAO generator lives in `scripts/generate_pytomoao_reference_bundle.py`.
 
 Recommended approach:
 1. Build a reproducible Python 3.8 image with the OOPAO dependency stack.

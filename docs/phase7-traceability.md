@@ -16,7 +16,9 @@ Current OOPAO bundle scope:
 - PSF, geometric Shack-Hartmann, diffractive Shack-Hartmann, Pyramid, BioEdge,
   LiFT interaction matrices, compact closed-loop traces for Shack-Hartmann,
   Pyramid, BioEdge, and GSC, GSC optical gains, and transfer-function rejection.
+- The committed pyTomoAO bundle now also covers compact tomography operators,
+  reconstructed wavefronts, and KAPA benchmark DM-command reconstruction.
 - Geometric Shack-Hartmann still uses an explicit convention adapter where OOPAO
   and AdaptiveOptics.jl intentionally expose different public slope ordering and
   units.
-- Full atmosphere-replay closed-loop traces and tomography remain on the forward roadmap.
+- Full atmosphere-replay closed-loop traces remain on the forward roadmap.

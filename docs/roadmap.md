@@ -104,15 +104,17 @@
   (`tutorials/AO_transfer_function.py`) with matching outputs.
 - [ ] Port and validate the full atmosphere-driven OOPAO GSC closed-loop workflow
   (`tutorials/AO_closed_loop_Pyramid_WFS_GSC.py`) beyond the current compact regression trace.
-- [ ] Port and validate OOPAO tomography workflow
-  (`tutorials/how_to_tomography.py`) or explicitly document it as unsupported.
+- [x] Port and validate the pyTomoAO-backed tomography workflow needed for
+  OOPAO parity, including model-based wavefront reconstruction and assembled
+  DM commands against the KAPA benchmark configuration.
 - [x] Julia tomography subsystem now exists under `src/Tomography/` with typed
   parameter objects, geometry helpers, DM fitting, sparse gradient assembly,
   model-based covariance/reconstructor operators (`Gamma`, `Cxx`, `Cox`, `Cnz`,
   `RecStatSA`), the IM-based reconstructor path, and committed pyTomoAO compact
   numerical regression for the model/IM operators and reconstructed wavefronts.
-- [ ] Extend tomography parity from the current compact pyTomoAO bundle to the
-  full OOPAO `how_to_tomography.py` workflow.
+- [x] Extend tomography parity from the current compact pyTomoAO bundle to a
+  tutorial-scale pyTomoAO workflow with committed KAPA wavefront and DM-command
+  regressions.
 - [ ] Audit calibration/output conventions against OOPAO for:
   slope ordering/units outside geometric SH, PSF sampling conventions, detector coupling,
   and closed-loop telemetry traces.
@@ -141,23 +143,19 @@
 ## Suggested Near-Term Priorities
 - [x] Expand the OOPAO reference bundle to cover at least one compact closed-loop trace per major WFS
   on top of the existing PSF, diffractive SH, Pyramid, BioEdge, LiFT, GSC, and transfer-function cases.
-- [ ] Port the remaining GSC closed-loop and tomography workflows before adding new non-parity features.
+- [ ] Port the remaining atmosphere-driven GSC closed-loop workflow before adding new non-parity features.
 - [ ] Resolve remaining diffractive/LGS fidelity gaps that currently prevent direct
   Python-to-Julia array comparison.
 - [ ] Turn every parity claim into a deterministic regression test against OOPAO outputs.
 
 ## Next 10 Tasks
-1. Decide whether tomography is in-scope for core parity now; if yes, port `tutorials/how_to_tomography.py`
-   and add regression coverage, otherwise document the scope cut explicitly.
-2. Replace averaged Pyramid/BioEdge Na-profile kernels with per-subaperture kernels where OOPAO does so.
-3. Audit remaining calibration/output conventions against OOPAO telemetry exports.
-4. Decide whether the compact closed-loop traces should be expanded to full tutorial traces with atmosphere replay.
-5. Validate the remaining atmosphere-driven GSC closed-loop telemetry against OOPAO outputs.
-6. Validate LiFT iterative reconstruction outputs, not just the analytic interaction matrix.
-7. Extend pyTomoAO tomography parity from the committed compact bundle to full tutorial-sized traces.
-8. Port the remaining `how_to_tomography.py` workflow details and validate them against `pyTomoAO`.
-9. Decide whether the remaining tomography work stays in core or moves behind an extension/package split later.
-10. Only then resume GPU-specific expansion.
+1. Replace averaged Pyramid/BioEdge Na-profile kernels with per-subaperture kernels where OOPAO does so.
+2. Audit remaining calibration/output conventions against OOPAO telemetry exports.
+3. Decide whether the compact closed-loop traces should be expanded to full tutorial traces with atmosphere replay.
+4. Validate the remaining atmosphere-driven GSC closed-loop telemetry against OOPAO outputs.
+5. Validate LiFT iterative reconstruction outputs, not just the analytic interaction matrix.
+6. Decide whether any future tomography expansion stays in core or moves behind an extension/package split later.
+7. Only then resume GPU-specific expansion.
 
 ## Phase 0: Setup
 - Create package skeleton and CI with Julia versions.
@@ -206,23 +204,24 @@ Current validation scope:
 - `examples/tutorials/` now covers the core OOPAO workflows used most often in practice.
 - `test/reference_data/` now commits deterministic OOPAO PSF, geometric Shack-Hartmann,
   diffractive Shack-Hartmann, Pyramid, BioEdge, GSC optical-gain, and transfer-function cases.
-- `test/reference_data/` also commits deterministic pyTomoAO compact tomography cases for
-  `Gamma`, `Cxx`, `Cox`, `Cnz`, both reconstructors, and both reconstructed wavefront maps.
+- `test/reference_data/` also commits deterministic pyTomoAO tomography cases for
+  `Gamma`, `Cxx`, `Cox`, `Cnz`, both reconstructors, both reconstructed wavefront maps,
+  and KAPA benchmark DM-command assembly.
 - The reference harness applies a documented convention adapter only where OOPAO and Julia
   intentionally expose different public conventions in geometric Shack-Hartmann mode.
 - Local expanded bundle audits now cover PSF, diffractive SH/Pyramid/BioEdge, GSC optical gains,
   transfer functions, and pyTomoAO tomography operators.
 - PSF, diffractive Shack-Hartmann, Pyramid, BioEdge, GSC optical gains, and transfer functions
   are now regression-backed against the committed OOPAO bundle.
-- Compact tomography operators and reconstructions are now regression-backed against the
-  committed pyTomoAO bundle.
+- Compact tomography operators and reconstructions, plus KAPA benchmark wavefront and
+  DM-command reconstruction, are now regression-backed against the committed pyTomoAO bundle.
 - pyTomoAO-specific row-major ordering is now handled only in the reference harness;
   the `AdaptiveOptics.jl` tomography implementation remains native Julia column-major internally.
 
 ## Phase 8: Full OOPAO Functional Parity
 - [ ] Every supported OOPAO workflow has deterministic Julia vs OOPAO regression coverage.
 - [ ] PSF, diffractive WFS, LiFT, GSC closed-loop behavior, and closed-loop traces match OOPAO within documented tolerances.
-- [ ] Tomography parity covers the pyTomoAO-backed OOPAO workflow with validated model-based or IM-based reconstructors.
+- [x] Tomography parity covers the pyTomoAO-backed OOPAO workflow with validated model-based or IM-based reconstructors.
 - [x] Transfer-function workflow is ported and validated.
 - [ ] Any unsupported OOPAO workflow is explicitly documented as out-of-scope rather than implied complete.
 - [ ] Only after this phase is complete should non-parity feature work resume.
