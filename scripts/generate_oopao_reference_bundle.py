@@ -13,6 +13,7 @@ from pathlib import Path
 import numpy as np
 
 from OOPAO.BioEdge import BioEdge
+from OOPAO.GainSensingCamera import GainSensingCamera
 from OOPAO.Pyramid import Pyramid
 from OOPAO.ShackHartmann import ShackHartmann
 from OOPAO.Source import Source
@@ -53,12 +54,18 @@ def write_manifest(path: Path, cases: dict[str, dict]) -> None:
                 f'kind = "{case["kind"]}"',
                 f'data = "{case["data"]}"',
                 f"shape = [{', '.join(str(x) for x in case['shape'])}]",
+            ]
+        )
+        if "storage_order" in case:
+            lines.append(f'storage_order = "{case["storage_order"]}"')
+        lines.extend(
+            [
                 f"atol = {case['atol']:.16e}",
                 f"rtol = {case['rtol']:.16e}",
                 "",
             ]
         )
-        for section in ("telescope", "source", "opd", "wfs", "compute", "compare"):
+        for section in ("telescope", "source", "opd", "wfs", "basis", "compute", "compare"):
             if section not in case:
                 continue
             lines.append(f"[cases.{case_id}.{section}]")
@@ -82,6 +89,23 @@ def toml_literal(value):
     raise TypeError(f"unsupported TOML value: {value!r}")
 
 
+def cartesian_polynomial_basis(tel: Telescope, n_modes: int = 4) -> np.ndarray:
+    x = np.linspace(-1.0, 1.0, tel.resolution, endpoint=False)
+    y = np.linspace(-1.0, 1.0, tel.resolution, endpoint=False)
+    xx, yy = np.meshgrid(x, y, indexing="ij")
+    pupil = np.asarray(tel.pupil, dtype=float)
+    basis = np.zeros((tel.resolution, tel.resolution, n_modes), dtype=np.float64)
+    if n_modes >= 1:
+        basis[:, :, 0] = pupil * xx
+    if n_modes >= 2:
+        basis[:, :, 1] = pupil * yy
+    if n_modes >= 3:
+        basis[:, :, 2] = pupil * xx * yy
+    if n_modes >= 4:
+        basis[:, :, 3] = pupil * (xx**2 - yy**2)
+    return basis
+
+
 def psf_case(root: Path) -> dict:
     tel = make_telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.2)
     src = make_source(band="I", magnitude=0.0)
@@ -94,6 +118,7 @@ def psf_case(root: Path) -> dict:
         "kind": "psf",
         "data": rel,
         "shape": list(data.shape),
+        "storage_order": "C",
         "atol": 1e-8,
         "rtol": 1e-8,
         "telescope": {
@@ -323,6 +348,113 @@ def bioedge_case(root: Path) -> dict:
     }
 
 
+def gsc_case(root: Path) -> dict:
+    tel = make_telescope(resolution=24, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = make_source(band="R", magnitude=8.0)
+    src ** tel
+    wfs = Pyramid(
+        nSubap=4,
+        telescope=tel,
+        modulation=3.0,
+        lightRatio=0.0,
+        postProcessing="slopesMaps",
+        psfCentering=True,
+        n_pix_separation=2,
+        n_pix_edge=1,
+        binning=1,
+    )
+    basis = cartesian_polynomial_basis(tel, 4)
+    gsc = GainSensingCamera(wfs.mask, basis)
+    src.OPD_no_pupil = np.zeros((tel.resolution, tel.resolution), dtype=np.float64)
+    tel * wfs
+    wfs * wfs.focal_plane_camera
+    wfs.focal_plane_camera * gsc
+    amplitude = 5e-8
+    mode_index = 1
+    src.OPD_no_pupil = amplitude * basis[:, :, mode_index - 1]
+    tel * wfs
+    wfs * wfs.focal_plane_camera
+    wfs.focal_plane_camera * gsc
+    data = np.asarray(gsc.og, dtype=np.float64).reshape(-1)
+    rel = "gain_sensing_camera_optical_gains.txt"
+    write_array(root / rel, data)
+    return {
+        "kind": "gsc_optical_gains",
+        "data": rel,
+        "shape": [int(data.size)],
+        "atol": 5e-10,
+        "rtol": 5e-10,
+        "telescope": {
+            "resolution": 24,
+            "diameter": 8.0,
+            "sampling_time": 1e-3,
+            "central_obstruction": 0.0,
+        },
+        "source": {
+            "kind": "ngs",
+            "band": "R",
+            "magnitude": 8.0,
+        },
+        "opd": {
+            "kind": "basis_mode",
+            "mode_index": mode_index,
+            "amplitude": amplitude,
+        },
+        "wfs": {
+            "n_subap": 4,
+            "threshold": 0.0,
+            "mode": "diffractive",
+            "modulation": 3.0,
+            "modulation_points": int(wfs.nTheta),
+            "diffraction_padding": 2,
+            "psf_centering": True,
+            "n_pix_separation": 2,
+            "n_pix_edge": 1,
+            "binning": 1,
+        },
+        "basis": {
+            "kind": "cartesian_polynomials",
+            "n_modes": 4,
+        },
+    }
+
+
+def transfer_function_case(root: Path) -> dict:
+    fs = 300.0
+    n_freq = 512
+    loop_gains = np.array([0.2, 0.6], dtype=np.float64)
+    freq = np.linspace(fs / n_freq, fs / 2, n_freq - 1, dtype=np.float64)
+    Ti = 1.0 / fs
+    Tau = Ti / 2
+    Tdm = Ti / 2
+    S = 1j * 2.0 * np.pi * freq
+    H_WFS = np.exp(-Ti / 2 * S)
+    H_RTC = np.exp(-Tau * S)
+    H_DM = np.exp(-Tdm * S)
+    H_DAC = (1.0 - np.exp(-S * Ti)) / (S * Ti)
+    out = np.zeros((freq.size, loop_gains.size), dtype=np.float64)
+    for idx, gain in enumerate(loop_gains):
+        CC = gain / (1.0 - np.exp(-S * Ti))
+        H_OL = H_WFS * H_RTC * H_DAC * H_DM * CC
+        H_ER = 1.0 / (1.0 + H_OL)
+        out[:, idx] = 20.0 * np.log10(np.abs(H_ER))
+    rel = "transfer_function_rejection.txt"
+    write_array(root / rel, out)
+    return {
+        "kind": "transfer_function_rejection",
+        "data": rel,
+        "shape": list(out.shape),
+        "storage_order": "C",
+        "atol": 1e-12,
+        "rtol": 1e-12,
+        "compute": {
+            "fs": fs,
+            "n_freq": n_freq,
+            "loop_gains": loop_gains.tolist(),
+        },
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("output", type=Path, help="Bundle output directory")
@@ -347,6 +479,8 @@ def main() -> None:
         "shack_hartmann_diffractive_ramp": sh_diffractive_case(root),
         "pyramid_diffractive_ramp": pyramid_case(root),
         "bioedge_diffractive_ramp": bioedge_case(root),
+        "gain_sensing_camera_optical_gains": gsc_case(root),
+        "transfer_function_rejection": transfer_function_case(root),
     }
     write_manifest(root / "manifest.toml", cases)
 

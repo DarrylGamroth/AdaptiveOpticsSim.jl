@@ -1,5 +1,27 @@
 version = 1
 
+[cases.psf_baseline]
+kind = "psf"
+data = "psf_baseline.txt"
+shape = [64, 64]
+storage_order = "C"
+atol = 1.0000000000000000e-08
+rtol = 1.0000000000000000e-08
+
+[cases.psf_baseline.telescope]
+resolution = 32
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 2.0000000000000001e-01
+
+[cases.psf_baseline.source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0000000000000000e+00
+
+[cases.psf_baseline.compute]
+zero_padding = 2
+
 [cases.shack_hartmann_geometric_ramp_xy]
 kind = "shack_hartmann_slopes"
 data = "shack_hartmann_geometric_ramp_xy.txt"
@@ -65,3 +87,156 @@ mode = "geometric"
 [cases.shack_hartmann_geometric_ramp_y.compare]
 swap_halves = true
 scale = 7.5949367088607559e+06
+
+[cases.shack_hartmann_diffractive_ramp]
+kind = "shack_hartmann_slopes"
+data = "shack_hartmann_diffractive_ramp.txt"
+shape = [32]
+atol = 2.0000000000000001e-04
+rtol = 1.0000000000000000e-02
+
+[cases.shack_hartmann_diffractive_ramp.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.shack_hartmann_diffractive_ramp.source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0000000000000000e+00
+
+[cases.shack_hartmann_diffractive_ramp.opd]
+kind = "ramp"
+scale_x = 5.0000000000000001e-09
+scale_y = -2.0000000000000001e-09
+bias = 0.0000000000000000e+00
+
+[cases.shack_hartmann_diffractive_ramp.wfs]
+n_subap = 4
+threshold = 0.0000000000000000e+00
+mode = "diffractive"
+pixel_scale = 5.9999999999999998e-02
+n_pix_subap = 8
+
+[cases.pyramid_diffractive_ramp]
+kind = "pyramid_slopes"
+data = "pyramid_diffractive_ramp.txt"
+shape = [8]
+atol = 2.0000000000000000e-03
+rtol = 5.0000000000000003e-02
+
+[cases.pyramid_diffractive_ramp.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.pyramid_diffractive_ramp.source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0000000000000000e+00
+
+[cases.pyramid_diffractive_ramp.opd]
+kind = "ramp"
+scale_x = 5.0000000000000001e-09
+scale_y = -2.0000000000000001e-09
+bias = 0.0000000000000000e+00
+
+[cases.pyramid_diffractive_ramp.wfs]
+n_subap = 4
+threshold = 0.0000000000000000e+00
+mode = "diffractive"
+modulation = 1.0000000000000000e+00
+modulation_points = 8
+diffraction_padding = 2
+psf_centering = true
+n_pix_separation = 4
+binning = 2
+
+[cases.bioedge_diffractive_ramp]
+kind = "bioedge_slopes"
+data = "bioedge_diffractive_ramp.txt"
+shape = [32]
+atol = 2.0000000000000000e-03
+rtol = 5.0000000000000003e-02
+
+[cases.bioedge_diffractive_ramp.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.bioedge_diffractive_ramp.source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0000000000000000e+00
+
+[cases.bioedge_diffractive_ramp.opd]
+kind = "ramp"
+scale_x = 5.0000000000000001e-09
+scale_y = -2.0000000000000001e-09
+bias = 0.0000000000000000e+00
+
+[cases.bioedge_diffractive_ramp.wfs]
+n_subap = 4
+threshold = 0.0000000000000000e+00
+mode = "diffractive"
+modulation = 1.0000000000000000e+00
+modulation_points = 8
+diffraction_padding = 2
+psf_centering = true
+n_pix_separation = 4
+binning = 2
+
+[cases.gain_sensing_camera_optical_gains]
+kind = "gsc_optical_gains"
+data = "gain_sensing_camera_optical_gains.txt"
+shape = [4]
+atol = 5.0000000000000003e-10
+rtol = 5.0000000000000003e-10
+
+[cases.gain_sensing_camera_optical_gains.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.gain_sensing_camera_optical_gains.source]
+kind = "ngs"
+band = "R"
+magnitude = 8.0000000000000000e+00
+
+[cases.gain_sensing_camera_optical_gains.opd]
+kind = "basis_mode"
+mode_index = 1
+amplitude = 4.9999999999999998e-08
+
+[cases.gain_sensing_camera_optical_gains.wfs]
+n_subap = 4
+threshold = 0.0000000000000000e+00
+mode = "diffractive"
+modulation = 3.0000000000000000e+00
+modulation_points = 20
+diffraction_padding = 2
+psf_centering = true
+n_pix_separation = 2
+n_pix_edge = 1
+binning = 1
+
+[cases.gain_sensing_camera_optical_gains.basis]
+kind = "cartesian_polynomials"
+n_modes = 4
+
+[cases.transfer_function_rejection]
+kind = "transfer_function_rejection"
+data = "transfer_function_rejection.txt"
+shape = [511, 2]
+storage_order = "C"
+atol = 9.9999999999999998e-13
+rtol = 9.9999999999999998e-13
+
+[cases.transfer_function_rejection.compute]
+fs = 3.0000000000000000e+02
+n_freq = 512
+loop_gains = [2.0000000000000001e-01, 5.9999999999999998e-01]

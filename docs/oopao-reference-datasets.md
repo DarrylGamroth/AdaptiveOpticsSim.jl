@@ -10,20 +10,26 @@ AdaptiveOptics.jl.
 
 ## Current committed bundle
 
-The repository now commits a small bundle under `test/reference_data/` with two
-OOPAO-generated geometric Shack-Hartmann cases:
+The repository now commits a deterministic OOPAO bundle under
+`test/reference_data/` covering:
 
-1. `shack_hartmann_geometric_ramp_xy`
-2. `shack_hartmann_geometric_ramp_y`
+1. `psf_baseline`
+2. `shack_hartmann_geometric_ramp_xy`
+3. `shack_hartmann_geometric_ramp_y`
+4. `shack_hartmann_diffractive_ramp`
+5. `pyramid_diffractive_ramp`
+6. `bioedge_diffractive_ramp`
+7. `gain_sensing_camera_optical_gains`
+8. `transfer_function_rejection`
 
-These cases are small, deterministic, and currently stable enough to keep in
-CI. They deliberately target the part of the port where we already understand
-the OOPAO convention mapping.
+These cases are stable enough to keep in CI and now cover the main image
+formation, diffractive WFS, GSC optical-gain, and analytical transfer-function
+paths.
 
-Not yet committed:
-- PSF parity, which still differs in normalization and shape details.
-- Diffractive Shack-Hartmann, Pyramid, and BioEdge parity, which still differ in
-  units and/or signal construction.
+Still not committed:
+- LiFT reference datasets.
+- Closed-loop trace datasets.
+- Tomography datasets/workflows.
 
 ## Reference configuration
 - Seed: fixed RNG seed (documented per dataset).
@@ -48,6 +54,7 @@ Current expectations:
   - `kind` (`psf`, `shack_hartmann_slopes`, `pyramid_slopes`, `bioedge_slopes`)
   - `data` path
   - `shape`
+  - optional `storage_order` (`F` by default, `C` for NumPy row-major arrays)
   - `atol` / `rtol`
   - nested config tables (`telescope`, `source`, `opd`, `wfs`, `compute`)
   - optional `compare` rules for known convention adapters
@@ -63,6 +70,7 @@ version = 1
 kind = "psf"
 data = "psf_baseline.txt"
 shape = [64, 64]
+storage_order = "C"
 atol = 1e-8
 rtol = 1e-8
 
@@ -94,8 +102,10 @@ calibrated slope units do not match the raw OPD-gradient convention currently
 returned by AdaptiveOptics.jl.
 
 For now the harness uses plain text arrays (`DelimitedFiles`) because that keeps
-the validation path dependency-light. If `.npz` becomes more convenient, we can
-add a test-only reader later without changing the manifest structure.
+the validation path dependency-light. `storage_order = "C"` is used for
+multi-dimensional NumPy exports so Julia reshapes them correctly. If `.npz`
+becomes more convenient, we can add a test-only reader later without changing
+the manifest structure.
 
 ## Generation workflow
 

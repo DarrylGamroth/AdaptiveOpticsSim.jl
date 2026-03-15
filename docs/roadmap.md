@@ -88,16 +88,16 @@
 ## Functional Parity Gate (Current Blocking Gaps)
 - [x] The committed OOPAO reference bundle now matches
   `psf_baseline`, `shack_hartmann_diffractive_ramp`,
-  `pyramid_diffractive_ramp`, and `bioedge_diffractive_ramp`
+  `pyramid_diffractive_ramp`, `bioedge_diffractive_ramp`,
+  `gain_sensing_camera_optical_gains`, and `transfer_function_rejection`
   within their documented tolerances.
 - [ ] Expand deterministic OOPAO reference coverage beyond geometric Shack-Hartmann to:
-  PSF formation, diffractive Shack-Hartmann, Pyramid, BioEdge, Gain Sensing Camera,
-  LiFT, and closed-loop traces.
+  LiFT and closed-loop traces.
 - [x] Match OOPAO PSF export conventions and normalization exactly enough to support
   reproducible array-level regression for image formation.
 - [ ] Close remaining diffractive WFS fidelity gaps:
   Pyramid/BioEdge per-subaperture Na-profile kernels instead of averaged kernels.
-- [ ] Port and validate OOPAO transfer-function workflow
+- [x] Port and validate OOPAO transfer-function workflow
   (`tutorials/AO_transfer_function.py`) with matching outputs.
 - [ ] Port and validate OOPAO GSC closed-loop workflow
   (`tutorials/AO_closed_loop_Pyramid_WFS_GSC.py`) against Python outputs.
@@ -130,23 +130,23 @@
 
 ## Suggested Near-Term Priorities
 - [ ] Expand the OOPAO reference bundle to cover PSF, diffractive SH, Pyramid, BioEdge, LiFT,
-  GSC, and at least one closed-loop trace per major WFS.
-- [ ] Port OOPAO transfer-function and GSC/tomography workflows before adding new non-parity features.
+  and at least one closed-loop trace per major WFS.
+- [ ] Port the remaining GSC closed-loop and tomography workflows before adding new non-parity features.
 - [ ] Resolve remaining diffractive/LGS fidelity gaps that currently prevent direct
   Python-to-Julia array comparison.
 - [ ] Turn every parity claim into a deterministic regression test against OOPAO outputs.
 
 ## Next 10 Tasks
-1. Generate deterministic OOPAO PSF reference datasets and add exact regression tests.
-2. Generate deterministic OOPAO diffractive Shack-Hartmann reference datasets and add regression tests.
-3. Generate deterministic OOPAO Pyramid reference datasets and add regression tests.
-4. Generate deterministic OOPAO BioEdge reference datasets and add regression tests.
-5. Port `tutorials/AO_transfer_function.py` and validate it against OOPAO outputs.
-6. Port `tutorials/AO_closed_loop_Pyramid_WFS_GSC.py` and validate it against OOPAO outputs.
-7. Decide whether tomography is in-scope for core parity now; if yes, port `tutorials/how_to_tomography.py`
+1. Generate deterministic OOPAO LiFT reference datasets and add regression tests.
+2. Generate deterministic OOPAO closed-loop trace datasets for Shack-Hartmann.
+3. Generate deterministic OOPAO closed-loop trace datasets for Pyramid.
+4. Generate deterministic OOPAO closed-loop trace datasets for BioEdge.
+5. Port the remaining `tutorials/AO_closed_loop_Pyramid_WFS_GSC.py` behavior and validate it against OOPAO outputs.
+6. Decide whether tomography is in-scope for core parity now; if yes, port `tutorials/how_to_tomography.py`
    and add regression coverage, otherwise document the scope cut explicitly.
-8. Replace averaged Pyramid/BioEdge Na-profile kernels with per-subaperture kernels where OOPAO does so.
-9. Expand the committed OOPAO bundle so PSF and diffractive SH/Pyramid/BioEdge parity are regression-backed.
+7. Replace averaged Pyramid/BioEdge Na-profile kernels with per-subaperture kernels where OOPAO does so.
+8. Expand the committed OOPAO bundle so LiFT and closed-loop traces are regression-backed.
+9. Audit remaining calibration/output conventions against OOPAO telemetry exports.
 10. After the above, re-run the parity audit and only then resume GPU-specific expansion.
 
 ## Phase 0: Setup
@@ -195,16 +195,17 @@
 Current validation scope:
 - `examples/tutorials/` now covers the core OOPAO workflows used most often in practice.
 - `test/reference_data/` now commits deterministic OOPAO PSF, geometric Shack-Hartmann,
-  diffractive Shack-Hartmann, Pyramid, and BioEdge cases.
+  diffractive Shack-Hartmann, Pyramid, BioEdge, GSC optical-gain, and transfer-function cases.
 - The reference harness applies a documented convention adapter only where OOPAO and Julia
   intentionally expose different public conventions in geometric Shack-Hartmann mode.
-- Local expanded bundle audits now cover PSF plus diffractive SH/Pyramid/BioEdge.
-- PSF, diffractive Shack-Hartmann, Pyramid, and BioEdge are now regression-backed against
-  the committed OOPAO bundle.
+- Local expanded bundle audits now cover PSF, diffractive SH/Pyramid/BioEdge, GSC optical gains,
+  and transfer functions.
+- PSF, diffractive Shack-Hartmann, Pyramid, BioEdge, GSC optical gains, and transfer functions
+  are now regression-backed against the committed OOPAO bundle.
 
 ## Phase 8: Full OOPAO Functional Parity
 - [ ] Every supported OOPAO workflow has deterministic Julia vs OOPAO regression coverage.
-- [ ] PSF, diffractive WFS, LiFT, GSC, and closed-loop traces match OOPAO within documented tolerances.
-- [ ] Transfer-function workflow is ported and validated.
+- [ ] PSF, diffractive WFS, LiFT, GSC closed-loop behavior, and closed-loop traces match OOPAO within documented tolerances.
+- [x] Transfer-function workflow is ported and validated.
 - [ ] Any unsupported OOPAO workflow is explicitly documented as out-of-scope rather than implied complete.
 - [ ] Only after this phase is complete should non-parity feature work resume.

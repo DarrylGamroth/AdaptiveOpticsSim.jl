@@ -71,7 +71,15 @@ function load_reference_array(case::ReferenceCase)
     if length(flat) != n_expected
         throw(DimensionMismatchError("reference data for '$(case.id)' has $(length(flat)) values, expected $(n_expected)"))
     end
-    return reshape(copy(flat), case.shape)
+    storage_order = uppercase(String(get(case.config, "storage_order", "F")))
+    data = copy(flat)
+    if storage_order == "F" || length(case.shape) == 1
+        return reshape(data, case.shape)
+    elseif storage_order == "C"
+        reshaped = reshape(data, reverse(case.shape))
+        return permutedims(reshaped, reverse(1:length(case.shape)))
+    end
+    throw(InvalidConfiguration("unsupported storage order '$storage_order' for reference case '$(case.id)'"))
 end
 
 function parse_sensing_mode(name)
@@ -124,6 +132,50 @@ function build_reference_source(cfg::AbstractDict{<:AbstractString,<:Any})
     throw(InvalidConfiguration("unknown source kind '$kind'"))
 end
 
+function build_reference_basis(cfg::AbstractDict{<:AbstractString,<:Any}, tel::Telescope)
+    kind = lowercase(String(get(cfg, "kind", "cartesian_polynomials")))
+    n_modes = Int(get(cfg, "n_modes", 4))
+    if kind == "cartesian_polynomials"
+        n = tel.params.resolution
+        basis = zeros(Float64, n, n, n_modes)
+        x = collect(range(-1.0, 1.0; length=n + 1))[1:n]
+        y = collect(range(-1.0, 1.0; length=n + 1))[1:n]
+        @inbounds for j in 1:n, i in 1:n
+            px = x[i]
+            py = y[j]
+            pupil = tel.state.pupil[i, j] ? 1.0 : 0.0
+            if n_modes >= 1
+                basis[i, j, 1] = pupil * px
+            end
+            if n_modes >= 2
+                basis[i, j, 2] = pupil * py
+            end
+            if n_modes >= 3
+                basis[i, j, 3] = pupil * px * py
+            end
+            if n_modes >= 4
+                basis[i, j, 4] = pupil * (px * px - py * py)
+            end
+        end
+        return basis
+    end
+    throw(InvalidConfiguration("unknown basis kind '$kind'"))
+end
+
+function transfer_functions(freq::AbstractVector{T}, loop_gain::T, Ti::T, Tau::T, Tdm::T) where {T<:AbstractFloat}
+    S = complex.(zero(T), T(2π)) .* freq
+    H_wfs = exp.(-Ti * S / 2)
+    H_rtc = exp.(-Tau * S)
+    H_dm = exp.(-Tdm * S)
+    H_dac = (one(T) .- exp.(-S * Ti)) ./ (S * Ti)
+    CC = loop_gain ./ (one(T) .- exp.(-S * Ti))
+    H_ol = H_wfs .* H_rtc .* H_dac .* H_dm .* CC
+    H_cl = H_ol ./ (one(T) .+ H_ol)
+    H_er = one.(H_ol) ./ (one.(H_ol) .+ H_ol)
+    H_n = H_cl ./ H_wfs
+    return H_er, H_cl, H_ol, H_n
+end
+
 function apply_reference_opd!(tel::Telescope, cfg::AbstractDict{<:AbstractString,<:Any})
     kind = lowercase(String(get(cfg, "kind", "zeros")))
     if kind == "zeros"
@@ -142,6 +194,21 @@ function apply_reference_opd!(tel::Telescope, cfg::AbstractDict{<:AbstractString
         return tel
     end
     throw(InvalidConfiguration("unknown OPD initializer '$kind'"))
+end
+
+function apply_reference_opd!(tel::Telescope, cfg::AbstractDict{<:AbstractString,<:Any},
+    basis::AbstractArray{<:Real,3})
+    kind = lowercase(String(get(cfg, "kind", "zeros")))
+    if kind == "basis_mode"
+        mode_index = Int(get(cfg, "mode_index", 1))
+        amplitude = Float64(get(cfg, "amplitude", 0.0))
+        if !(1 <= mode_index <= size(basis, 3))
+            throw(InvalidConfiguration("basis mode index $(mode_index) is out of bounds"))
+        end
+        @views @. tel.state.opd = amplitude * basis[:, :, mode_index]
+        return tel
+    end
+    return apply_reference_opd!(tel, cfg)
 end
 
 function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:Any}, tel::Telescope)
@@ -211,18 +278,53 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
 end
 
 function compute_reference_actual(case::ReferenceCase)
-    tel = build_reference_telescope(case.config["telescope"])
-    if haskey(case.config, "opd")
-        apply_reference_opd!(tel, case.config["opd"])
-    end
     if case.kind === :psf
+        tel = build_reference_telescope(case.config["telescope"])
         src = build_reference_source(case.config["source"])
+        if haskey(case.config, "opd")
+            apply_reference_opd!(tel, case.config["opd"])
+        end
         zero_padding = Int(get(case.config["compute"], "zero_padding", 2))
         return copy(compute_psf!(tel, src; zero_padding=zero_padding))
     elseif case.kind in (:shack_hartmann_slopes, :pyramid_slopes, :bioedge_slopes)
+        tel = build_reference_telescope(case.config["telescope"])
+        if haskey(case.config, "opd")
+            apply_reference_opd!(tel, case.config["opd"])
+        end
         src = build_reference_source(case.config["source"])
         wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
         return copy(measure!(wfs, tel, src))
+    elseif case.kind === :gsc_optical_gains
+        tel = build_reference_telescope(case.config["telescope"])
+        src = build_reference_source(case.config["source"])
+        wfs = build_reference_wfs(:pyramid_slopes, case.config["wfs"], tel)
+        basis = build_reference_basis(case.config["basis"], tel)
+        gsc = GainSensingCamera(wfs.state.pyramid_mask, basis)
+        calibration_frame = similar(wfs.state.intensity)
+        reset_opd!(tel)
+        pyramid_modulation_frame!(calibration_frame, wfs, tel, src)
+        calibrate!(gsc, calibration_frame)
+        if haskey(case.config, "opd")
+            apply_reference_opd!(tel, case.config["opd"], basis)
+        end
+        frame = similar(calibration_frame)
+        pyramid_modulation_frame!(frame, wfs, tel, src)
+        return copy(compute_optical_gains!(gsc, frame))
+    elseif case.kind === :transfer_function_rejection
+        compute_cfg = case.config["compute"]
+        fs = Float64(get(compute_cfg, "fs", 300.0))
+        n_freq = Int(get(compute_cfg, "n_freq", 512))
+        loop_gains = Float64.(get(compute_cfg, "loop_gains", [0.2, 0.6]))
+        freq = collect(range(fs / n_freq, fs / 2; length=n_freq - 1))
+        Ti = Float64(1 / fs)
+        Tau = Ti / 2
+        Tdm = Ti / 2
+        rejection = Matrix{Float64}(undef, length(freq), length(loop_gains))
+        for (idx, gain) in pairs(loop_gains)
+            H_er, _, _, _ = transfer_functions(freq, gain, Ti, Tau, Tdm)
+            rejection[:, idx] .= 20 .* log10.(abs.(H_er))
+        end
+        return rejection
     end
     throw(InvalidConfiguration("unsupported reference case kind '$(case.kind)'"))
 end
@@ -349,6 +451,22 @@ function create_reference_fixture(root::AbstractString)
     sh_ref = compute_reference_actual(parse_reference_case("shack_hartmann_slopes", sh_case, root))
     write_reference_array(joinpath(root, sh_case["data"]), sh_ref)
     manifest["cases"]["shack_hartmann_slopes"] = sh_case
+
+    transfer_case = Dict{String,Any}(
+        "kind" => "transfer_function_rejection",
+        "data" => "transfer_function_rejection.txt",
+        "shape" => [255, 2],
+        "atol" => 1e-12,
+        "rtol" => 1e-12,
+        "compute" => Dict(
+            "fs" => 300.0,
+            "n_freq" => 256,
+            "loop_gains" => [0.2, 0.6],
+        ),
+    )
+    transfer_ref = compute_reference_actual(parse_reference_case("transfer_function_rejection", transfer_case, root))
+    write_reference_array(joinpath(root, transfer_case["data"]), transfer_ref)
+    manifest["cases"]["transfer_function_rejection"] = transfer_case
 
     open(reference_manifest_path(root), "w") do io
         TOML.print(io, manifest)

@@ -471,7 +471,7 @@ end
     root = mktempdir()
     create_reference_fixture(root)
     bundle = load_reference_bundle(root)
-    @test length(bundle.cases) == 2
+    @test length(bundle.cases) == 3
     for case in bundle.cases
         result = validate_reference_case(case)
         @test size(result.actual) == size(result.expected)
@@ -524,6 +524,17 @@ end
     sprint = run_tutorial_example("sprint.jl")
     @test isfinite(sprint.estimate.shift_x)
     @test isfinite(sprint.estimate.shift_y)
+
+    gsc = run_tutorial_example("gain_sensing_camera.jl")
+    @test length(gsc.optical_gains) == 4
+    @test all(isfinite, gsc.optical_gains)
+    @test sum(gsc.calibration_frame) > 0
+    @test sum(gsc.frame) > 0
+
+    transfer = run_tutorial_example("transfer_function.jl")
+    @test size(transfer.rejection_db, 2) == length(transfer.loop_gains)
+    @test all(isfinite, transfer.rejection_db)
+    @test all(isfinite, transfer.closed_loop_db)
 
     for name in ("closed_loop_shack_hartmann.jl", "closed_loop_pyramid.jl", "closed_loop_bioedge.jl")
         loop = run_tutorial_example(name)

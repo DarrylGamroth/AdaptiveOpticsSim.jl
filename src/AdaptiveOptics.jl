@@ -87,6 +87,7 @@ export Misregistration, apply_misregistration
 export Detector, DetectorParams, DetectorState, capture!
 export ShackHartmann, ShackHartmannParams, ShackHartmannState, update_valid_mask!, measure!
 export PyramidWFS, PyramidParams, PyramidState
+export pyramid_modulation_frame!
 export BioEdgeWFS, BioEdgeParams, BioEdgeState
 export apply_shift_wfs!, set_optical_gain!
 export LiFT, lift_interaction_matrix, lift_interaction_matrix!

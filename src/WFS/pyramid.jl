@@ -726,6 +726,43 @@ function pyramid_intensity!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::Telesc
     return out
 end
 
+function pyramid_modulation_frame!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::Telescope,
+    src::AbstractSource) where {T<:AbstractFloat}
+    prepare_pyramid_sampling!(wfs, tel)
+    n = tel.params.resolution
+    pad = size(wfs.state.field, 1)
+    if size(out) != (pad, pad)
+        throw(DimensionMismatchError("modulation frame size must match pyramid sampling"))
+    end
+    ox = div(pad - n, 2)
+    oy = div(pad - n, 2)
+    phase_scale = (2 * pi) / wavelength(src)
+    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2 /
+        wfs.params.modulation_points))
+
+    fill!(out, zero(T))
+    for p in 1:wfs.params.modulation_points
+        fill!(wfs.state.field, zero(eltype(wfs.state.field)))
+        @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * tel.state.pupil *
+            wfs.state.modulation_phases[:, :, p] * cis(phase_scale * tel.state.opd)
+        copyto!(wfs.state.focal_field, wfs.state.field)
+        if wfs.params.psf_centering
+            @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.phasor
+            mul!(wfs.state.focal_field, wfs.state.fft_plan, wfs.state.focal_field)
+        else
+            mul!(wfs.state.focal_field, wfs.state.fft_plan, wfs.state.focal_field)
+            @. wfs.state.intensity = abs2(wfs.state.focal_field)
+            fftshift2d!(wfs.state.temp, wfs.state.intensity)
+            out .+= wfs.state.temp
+            continue
+        end
+        @. wfs.state.temp = abs2(wfs.state.focal_field)
+        out .+= wfs.state.temp
+    end
+    out ./= wfs.params.modulation_points
+    return out
+end
+
 function apply_lgs_elongation!(::LGSProfileNone, out::AbstractMatrix{T}, wfs::PyramidWFS,
     ::Telescope, src::LGSSource) where {T<:AbstractFloat}
     wfs.state.elongation_kernel = apply_elongation!(

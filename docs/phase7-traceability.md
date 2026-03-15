@@ -13,6 +13,9 @@ This matrix records the concrete artifacts that close phase 7.
 | P7-7 | Keep tutorial ports tied to deterministic, testable workflows | `examples/tutorials/common.jl`, `test/runtests.jl` | Tutorial smoke testset | Covered |
 
 Current OOPAO bundle scope:
-- Geometric Shack-Hartmann only, with an explicit convention adapter.
-- PSF and diffractive WFS parity stay on the forward roadmap and are not hidden
-  behind overly loose tolerances.
+- PSF, geometric Shack-Hartmann, diffractive Shack-Hartmann, Pyramid, BioEdge,
+  GSC optical gains, and transfer-function rejection.
+- Geometric Shack-Hartmann still uses an explicit convention adapter where OOPAO
+  and AdaptiveOptics.jl intentionally expose different public slope ordering and
+  units.
+- LiFT, closed-loop traces, and tomography remain on the forward roadmap.

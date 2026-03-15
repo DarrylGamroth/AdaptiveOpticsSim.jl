@@ -84,6 +84,8 @@ Runnable example ports live under `examples/tutorials/`. Start with:
 
 - `examples/tutorials/image_formation.jl`
 - `examples/tutorials/detector.jl`
+- `examples/tutorials/transfer_function.jl`
+- `examples/tutorials/gain_sensing_camera.jl`
 - `examples/tutorials/closed_loop_shack_hartmann.jl`
 - `examples/tutorials/closed_loop_pyramid.jl`
 - `examples/tutorials/closed_loop_bioedge.jl`
@@ -96,8 +98,10 @@ See `docs/julia-tutorial-mappings.md` for the full mapping back to OOPAO.
 - `test/reference_data/` stores a small deterministic OOPAO bundle for
   cross-validation.
 - `ENV["ADAPTIVEOPTICS_REFERENCE_ROOT"]` can point to an alternate bundle.
-- The committed bundle currently targets geometric Shack-Hartmann parity. PSF
-  and diffractive WFS parity remain active follow-on work.
+- The committed bundle currently covers PSF, geometric/diffractive
+  Shack-Hartmann, Pyramid, BioEdge, GSC optical gains, and the analytical
+  transfer-function workflow. LiFT, closed-loop traces, and tomography remain
+  follow-on parity work.
 
 See `docs/oopao-reference-datasets.md` for the bundle contract.
 
