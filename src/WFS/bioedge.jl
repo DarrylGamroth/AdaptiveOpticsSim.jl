@@ -683,7 +683,7 @@ function bioedge_signal!(wfs::BioEdgeWFS, tel::Telescope, frame::AbstractMatrix{
     src::Union{Nothing,AbstractSource}) where {T<:AbstractFloat}
     center = round(Int, wfs.state.nominal_detector_resolution / wfs.params.binning / 2)
     n_pixels = center
-    count = 0
+    count = div(length(wfs.state.slopes), 2)
     norma = zero(T)
     @inbounds for j in 1:n_pixels, i in 1:n_pixels
         q1 = frame[center - n_pixels + i, center - n_pixels + j]
@@ -691,7 +691,6 @@ function bioedge_signal!(wfs::BioEdgeWFS, tel::Telescope, frame::AbstractMatrix{
         q3 = frame[center + i, center + j]
         q4 = frame[center + i, center - n_pixels + j]
         if wfs.state.valid_i4q[i, j]
-            count += 1
             norma += q1 + q2 + q3 + q4
         end
     end
@@ -711,10 +710,6 @@ function bioedge_signal!(wfs::BioEdgeWFS, tel::Telescope, frame::AbstractMatrix{
             wfs.state.slopes[idx + count] = wfs.state.signal_2d[i + n_pixels, j]
             idx += 1
         end
-    end
-    if idx <= count
-        fill!(@view(wfs.state.slopes[idx:count]), zero(T))
-        fill!(@view(wfs.state.slopes[count + idx:end]), zero(T))
     end
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
@@ -748,6 +743,22 @@ function update_bioedge_valid_signal!(wfs::BioEdgeWFS)
     return wfs
 end
 
+function resize_bioedge_slope_buffers!(wfs::BioEdgeWFS)
+    n_valid = count(wfs.state.valid_i4q)
+    if n_valid == 0
+        throw(InvalidConfiguration("bioedge valid pixel selection produced no valid signals"))
+    end
+    n_slopes = 2 * n_valid
+    if length(wfs.state.slopes) != n_slopes
+        wfs.state.slopes = similar(wfs.state.slopes, n_slopes)
+    end
+    if length(wfs.state.optical_gain) != n_slopes
+        wfs.state.optical_gain = similar(wfs.state.optical_gain, n_slopes)
+        fill!(wfs.state.optical_gain, one(eltype(wfs.state.optical_gain)))
+    end
+    return wfs
+end
+
 function select_bioedge_valid_i4q!(wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource)
     n_pixels = max(1, round(Int, wfs.state.nominal_detector_resolution / (2 * wfs.params.binning)))
     if size(wfs.state.valid_i4q) != (n_pixels, n_pixels)
@@ -766,6 +777,7 @@ function select_bioedge_valid_i4q!(wfs::BioEdgeWFS, tel::Telescope, src::Abstrac
     if iszero(wfs.params.light_ratio)
         fill!(wfs.state.valid_i4q, true)
         update_bioedge_valid_signal!(wfs)
+        resize_bioedge_slope_buffers!(wfs)
         return wfs
     end
 
@@ -802,6 +814,7 @@ function select_bioedge_valid_i4q!(wfs::BioEdgeWFS, tel::Telescope, src::Abstrac
         wfs.state.valid_i4q[i, j] = (q1 + q2 + q3 + q4) >= cutoff
     end
     update_bioedge_valid_signal!(wfs)
+    resize_bioedge_slope_buffers!(wfs)
     return wfs
 end
 

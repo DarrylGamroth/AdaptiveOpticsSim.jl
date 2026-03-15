@@ -471,14 +471,18 @@ end
 function reference_interaction_matrix(wfs::AbstractWFS, tel::Telescope, src::AbstractSource,
     basis::AbstractArray{<:Real,3}; amplitude::Real)
     n_modes = size(basis, 3)
-    mat = Matrix{Float64}(undef, length(wfs.state.slopes), n_modes)
+    mat = nothing
     opd_base = copy(tel.state.opd)
     @inbounds for k in 1:n_modes
         @views @. tel.state.opd = Float64(amplitude) * basis[:, :, k]
         measure!(wfs, tel, src)
+        if mat === nothing
+            mat = Matrix{Float64}(undef, length(wfs.state.slopes), n_modes)
+        end
         mat[:, k] .= wfs.state.slopes
     end
     tel.state.opd .= opd_base
+    mat === nothing && throw(InvalidConfiguration("reference interaction matrix requires at least one mode"))
     return mat
 end
 

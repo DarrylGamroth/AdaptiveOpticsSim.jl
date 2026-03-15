@@ -14,9 +14,8 @@ end
 
 function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS, tel::Telescope; amplitude::Real=1.0)
     n_act = length(dm.state.coefs)
-    n_slopes = length(wfs.state.slopes)
     T = eltype(dm.state.coefs)
-    mat = zeros(T, n_slopes, n_act)
+    mat = nothing
 
     opd_base = copy(tel.state.opd)
     coefs = dm.state.coefs
@@ -26,19 +25,22 @@ function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS, tel::Telesco
         coefs[k] = T(amplitude)
         apply!(dm, tel, DMReplace())
         _measure_for_calibration!(wfs, tel, nothing)
+        if mat === nothing
+            mat = zeros(T, length(wfs.state.slopes), n_act)
+        end
         mat[:, k] .= wfs.state.slopes
     end
 
     tel.state.opd .= opd_base
+    mat === nothing && throw(InvalidConfiguration("interaction matrix requires at least one actuator"))
     return InteractionMatrix{T, typeof(mat)}(mat, T(amplitude))
 end
 
 function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS, tel::Telescope,
     src::AbstractSource; amplitude::Real=1.0)
     n_act = length(dm.state.coefs)
-    n_slopes = length(wfs.state.slopes)
     T = eltype(dm.state.coefs)
-    mat = zeros(T, n_slopes, n_act)
+    mat = nothing
 
     opd_base = copy(tel.state.opd)
     coefs = dm.state.coefs
@@ -48,10 +50,14 @@ function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS, tel::Telesco
         coefs[k] = T(amplitude)
         apply!(dm, tel, DMReplace())
         _measure_for_calibration!(wfs, tel, src)
+        if mat === nothing
+            mat = zeros(T, length(wfs.state.slopes), n_act)
+        end
         mat[:, k] .= wfs.state.slopes
     end
 
     tel.state.opd .= opd_base
+    mat === nothing && throw(InvalidConfiguration("interaction matrix requires at least one actuator"))
     return InteractionMatrix{T, typeof(mat)}(mat, T(amplitude))
 end
 
@@ -61,10 +67,9 @@ function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS, tel::Telesco
     if size(commands, 1) != n_act
         throw(DimensionMismatchError("command matrix row count must match DM coefficients"))
     end
-    n_slopes = length(wfs.state.slopes)
     n_modes = size(commands, 2)
     T = eltype(dm.state.coefs)
-    mat = zeros(T, n_slopes, n_modes)
+    mat = nothing
 
     opd_base = copy(tel.state.opd)
     coefs = dm.state.coefs
@@ -73,10 +78,14 @@ function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS, tel::Telesco
         @views coefs .= T(amplitude) .* commands[:, k]
         apply!(dm, tel, DMReplace())
         _measure_for_calibration!(wfs, tel, nothing)
+        if mat === nothing
+            mat = zeros(T, length(wfs.state.slopes), n_modes)
+        end
         mat[:, k] .= wfs.state.slopes
     end
 
     tel.state.opd .= opd_base
+    mat === nothing && throw(InvalidConfiguration("interaction matrix requires at least one command mode"))
     return InteractionMatrix{T, typeof(mat)}(mat, T(amplitude))
 end
 
@@ -86,10 +95,9 @@ function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS, tel::Telesco
     if size(commands, 1) != n_act
         throw(DimensionMismatchError("command matrix row count must match DM coefficients"))
     end
-    n_slopes = length(wfs.state.slopes)
     n_modes = size(commands, 2)
     T = eltype(dm.state.coefs)
-    mat = zeros(T, n_slopes, n_modes)
+    mat = nothing
 
     opd_base = copy(tel.state.opd)
     coefs = dm.state.coefs
@@ -98,9 +106,13 @@ function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS, tel::Telesco
         @views coefs .= T(amplitude) .* commands[:, k]
         apply!(dm, tel, DMReplace())
         _measure_for_calibration!(wfs, tel, src)
+        if mat === nothing
+            mat = zeros(T, length(wfs.state.slopes), n_modes)
+        end
         mat[:, k] .= wfs.state.slopes
     end
 
     tel.state.opd .= opd_base
+    mat === nothing && throw(InvalidConfiguration("interaction matrix requires at least one command mode"))
     return InteractionMatrix{T, typeof(mat)}(mat, T(amplitude))
 end
