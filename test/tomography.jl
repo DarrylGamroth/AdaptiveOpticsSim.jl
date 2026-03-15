@@ -45,6 +45,10 @@
     )
     @test n_valid_subapertures(wfs) == 5
     @test size(valid_lenslet_support(wfs)) == (7, 7)
+    @test support_diameter(wfs) ≈ 8.2 * 7 / 40
+    gamma, grid_mask = sparse_gradient_matrix(valid_lenslet_support(wfs))
+    @test size(gamma, 1) == 2 * n_valid_subapertures(wfs)
+    @test count(grid_mask) > 0
 
     dm = TomographyDMParams(
         heights_m=[0.0, 1000.0],
@@ -89,26 +93,26 @@ end
         wind_direction_deg=[0.0],
         wind_speed=[10.0],
     )
-    lgs = LGSAsterismParams(radius_arcsec=7.6, wavelength=589e-9, base_height_m=90_000.0, n_lgs=4)
+    lgs = LGSAsterismParams(radius_arcsec=7.6, wavelength=589e-9, base_height_m=90_000.0, n_lgs=1)
     wfs = LGSWFSParams(
         diameter=8.0,
-        n_lenslet=2,
+        n_lenslet=1,
         n_px=8,
         field_stop_size_arcsec=2.0,
-        valid_lenslet_map=trues(2, 2),
-        lenslet_rotation_rad=zeros(4),
-        lenslet_offset=zeros(2, 4),
+        valid_lenslet_map=trues(1, 1),
+        lenslet_rotation_rad=zeros(1),
+        lenslet_offset=zeros(2, 1),
     )
     tomo = TomographyParams(n_fit_src=1, fov_optimization_arcsec=0.0)
     dm = TomographyDMParams(
         heights_m=[0.0],
         pitch_m=[0.5],
         cross_coupling=0.2,
-        n_actuators=[2],
-        valid_actuators=trues(2, 2),
+        n_actuators=[1],
+        valid_actuators=trues(1, 1),
     )
-    imat = [1.0 0.0 1.0; 0.0 1.0 1.0]
-    grid_mask = trues(2, 2)
+    imat = reshape([1.0, 0.5], 2, 1)
+    grid_mask = trues(1, 1)
     recon = build_reconstructor(
         InteractionMatrixTomography(),
         imat,
@@ -119,16 +123,21 @@ end
         tomo,
         dm;
         fitting=fitting,
-        rcond=0.0,
     )
     slopes = [1.0, 2.0]
-    @test reconstruct_wavefront(recon, slopes) ≈ pinv(imat) * slopes
-    out = zeros(3)
+    expected = (recon.operators.cox * transpose(imat)) / Matrix(imat * recon.operators.cxx * transpose(imat) .+ recon.operators.cnz) * slopes
+    @test reconstruct_wavefront(recon, slopes) ≈ expected
+    out = zeros(1)
     reconstruct_wavefront!(out, recon, slopes)
-    @test out ≈ pinv(imat) * slopes
+    @test out ≈ expected
+    mapped = reconstruct_wavefront_map(recon, slopes)
+    @test size(mapped) == (1, 1)
+    @test mapped[1, 1] ≈ expected[1]
     @test recon.fitting === fitting
+    @test recon.operators.cxx isa AbstractMatrix
+    @test recon.operators.cox isa AbstractMatrix
 
-    @test_throws UnsupportedAlgorithm build_reconstructor(
+    model = build_reconstructor(
         ModelBasedTomography(),
         atm,
         lgs,
@@ -136,4 +145,9 @@ end
         tomo,
         dm,
     )
+    @test size(model.operators.gamma, 1) == 2
+    @test size(model.reconstructor, 2) == 2
+    model_map = reconstruct_wavefront_map(model, [0.1, -0.2])
+    @test size(model_map) == size(model.grid_mask)
+    @test count(isnan, model_map) > 0
 end

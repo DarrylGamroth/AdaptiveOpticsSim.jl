@@ -8,6 +8,8 @@ using KernelAbstractions
 using LinearAlgebra
 using Logging
 using Random
+using SparseArrays
+using SpecialFunctions
 using Statistics
 
 """
@@ -115,11 +117,13 @@ export ParallelConfig, with_parallel_config
 export TomographyAtmosphereParams, LGSAsterismParams, LGSWFSParams
 export TomographyParams, TomographyDMParams, TomographyFitting
 export AbstractTomographyMethod, ModelBasedTomography, InteractionMatrixTomography
-export TomographicReconstructor, build_reconstructor
+export TomographyOperators, TomographicReconstructor, build_reconstructor
 export airmass, layer_altitude_m, wind_direction_rad, wind_velocity_components
 export lgs_height_m, lgs_directions!, lgs_directions
 export optimization_geometry!, optimization_geometry, direction_vectors!, direction_vectors
-export n_valid_subapertures, valid_lenslet_support, dm_valid_support
+export n_valid_subapertures, valid_lenslet_support, dm_valid_support, support_diameter
+export sparse_gradient_matrix, auto_correlation, cross_correlation
 export fit_commands!, fit_commands, reconstruct_wavefront!, reconstruct_wavefront
+export reconstruct_wavefront_map!, reconstruct_wavefront_map
 
 end # module AdaptiveOptics

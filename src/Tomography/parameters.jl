@@ -250,6 +250,10 @@ function valid_lenslet_support(params::LGSWFSParams)
     return support
 end
 
+@inline function support_diameter(params::LGSWFSParams)
+    return params.diameter * size(valid_lenslet_support(params), 1) / params.n_lenslet
+end
+
 function dm_valid_support(params::TomographyDMParams)
     support = falses(size(params.valid_actuators) .+ 4)
     @views support[3:end-2, 3:end-2] .= params.valid_actuators
