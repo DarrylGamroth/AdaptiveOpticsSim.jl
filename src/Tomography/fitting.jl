@@ -17,13 +17,10 @@ function TomographyFitting(
         throw(InvalidConfiguration("influence_functions must have at least one column"))
     regularization >= 0 || throw(InvalidConfiguration("regularization must be non-negative"))
 
-    gram = Matrix{T}(undef, size(influence_functions, 2), size(influence_functions, 2))
-    mul!(gram, adjoint(influence_functions), influence_functions)
-    @inbounds for k in axes(gram, 1)
-        gram[k, k] += T(regularization)
-    end
-    rhs = Matrix(adjoint(influence_functions))
-    fitting_matrix = gram \ rhs
+    # Match pyTomoAO/NumPy fitting behavior with a pseudoinverse rather than
+    # a regularized normal-equations solve.
+    pinv_rtol = regularization == sqrt(eps(T)) ? T(1e-15) : T(regularization)
+    fitting_matrix = pinv(Matrix(influence_functions); rtol=pinv_rtol)
     return TomographyFitting{T, typeof(fitting_matrix)}(
         Matrix(influence_functions),
         fitting_matrix,

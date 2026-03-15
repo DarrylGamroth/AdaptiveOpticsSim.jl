@@ -319,7 +319,7 @@ function auto_correlation(
                     atmosphere.L0,
                     atmosphere.fractional_r0[layer],
                 )
-                block .+= transpose(@view cov[mask_vec, mask_vec])
+                block .+= @view cov[mask_vec, mask_vec]
             end
             rows = (igs - 1) * n_valid + 1:igs * n_valid
             cols = (jgs - 1) * n_valid + 1:jgs * n_valid

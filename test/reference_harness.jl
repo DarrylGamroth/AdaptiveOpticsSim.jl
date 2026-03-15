@@ -94,6 +94,18 @@ function parse_sensing_mode(name)
     throw(InvalidConfiguration("unknown sensing mode '$name'"))
 end
 
+function parse_slope_order(name)
+    lname = lowercase(String(name))
+    if lname == "simu"
+        return SimulationSlopes()
+    elseif lname == "keck"
+        return InterleavedSlopes()
+    elseif lname == "inverted"
+        return InvertedSlopes()
+    end
+    throw(InvalidConfiguration("unknown slope order '$name'"))
+end
+
 function build_reference_telescope(cfg::AbstractDict{<:AbstractString,<:Any})
     return Telescope(
         resolution=Int(cfg["resolution"]),
@@ -297,6 +309,55 @@ end
 function pytomoao_im_mask(case::ReferenceCase)
     dm = build_reference_tomography_dm(case.config["dm"])
     return dm.valid_actuators
+end
+
+function pytomoao_actuator_positions(mask::AbstractMatrix{Bool})
+    positions = CartesianIndex{2}[]
+    for i in axes(mask, 1), j in axes(mask, 2)
+        mask[i, j] && push!(positions, CartesianIndex(i, j))
+    end
+    return positions
+end
+
+function pytomoao_actuator_permutation(dm::TomographyDMParams)
+    support = dm_valid_support(dm)
+    col_positions = findall(support)
+    col_index = Dict{CartesianIndex{2},Int}(idx => k for (k, idx) in enumerate(col_positions))
+    return Int[col_index[idx] for idx in pytomoao_actuator_positions(support)]
+end
+
+function adapt_actuator_rows_to_pytomoao(actual::AbstractMatrix, dm::TomographyDMParams)
+    perm = pytomoao_actuator_permutation(dm)
+    return actual[perm, :]
+end
+
+function adapt_actuator_vector_to_pytomoao(actual::AbstractVector, dm::TomographyDMParams)
+    perm = pytomoao_actuator_permutation(dm)
+    return actual[perm]
+end
+
+function build_reference_tomography_slopes(
+    compute_cfg::AbstractDict{<:AbstractString,<:Any},
+    wfs::LGSWFSParams,
+    asterism::LGSAsterismParams,
+)
+    if haskey(compute_cfg, "slopes")
+        return Float64.(compute_cfg["slopes"])
+    end
+    generator = lowercase(String(get(compute_cfg, "slopes_generator", "")))
+    if generator == "pytomoao_tiptilt"
+        n_valid = n_valid_subapertures(wfs)
+        amp_pos = Float64(get(compute_cfg, "positive_amplitude", 4.0))
+        amp_neg = Float64(get(compute_cfg, "negative_amplitude", -4.0))
+        n_channels = Int(get(compute_cfg, "n_channels", asterism.n_lgs))
+        base = zeros(Float64, 2 * n_valid)
+        if n_valid > 1
+            base[1:n_valid-1] .= amp_pos
+        end
+        base[n_valid+1:end] .= amp_neg
+        return repeat(base, n_channels)
+    end
+    throw(InvalidConfiguration("reference tomography slopes are missing and no supported generator was provided"))
 end
 
 function adapt_phase_matrix_to_pytomoao(actual::AbstractMatrix, mask::AbstractMatrix{Bool})
@@ -652,6 +713,8 @@ function compute_reference_actual(case::ReferenceCase)
         :tomography_model_cnz,
         :tomography_model_reconstructor,
         :tomography_model_wavefront,
+        :tomography_model_command_matrix,
+        :tomography_model_dm_commands,
         :tomography_im_reconstructor,
         :tomography_im_wavefront,
     )
@@ -668,6 +731,8 @@ function compute_reference_actual(case::ReferenceCase)
             :tomography_model_cnz,
             :tomography_model_reconstructor,
             :tomography_model_wavefront,
+            :tomography_model_command_matrix,
+            :tomography_model_dm_commands,
         )
             recon = build_reconstructor(ModelBasedTomography(), atmosphere, asterism, wfs, tomography, dm)
             if case.kind === :tomography_model_gamma
@@ -680,8 +745,25 @@ function compute_reference_actual(case::ReferenceCase)
                 return Matrix(recon.operators.cnz)
             elseif case.kind === :tomography_model_reconstructor
                 return Matrix(recon.reconstructor)
+            elseif case.kind === :tomography_model_command_matrix || case.kind === :tomography_model_dm_commands
+                assembly = get(compute_cfg, "assembly", Dict{String,Any}())
+                command_recon = assemble_reconstructor_and_fitting(
+                    recon,
+                    dm;
+                    n_channels=Int(get(assembly, "n_channels", asterism.n_lgs)),
+                    slope_order=parse_slope_order(get(assembly, "slope_order", "simu")),
+                    scaling_factor=Float64(get(assembly, "scaling_factor", 1.65e7)),
+                )
+                if haskey(assembly, "mask_actuators")
+                    mask_actuators!(command_recon, Int.(assembly["mask_actuators"]))
+                end
+                if case.kind === :tomography_model_command_matrix
+                    return Matrix(command_recon.matrix)
+                end
+                slopes = build_reference_tomography_slopes(compute_cfg, wfs, asterism)
+                return dm_commands(command_recon, slopes)
             end
-            slopes = Float64.(compute_cfg["slopes"])
+            slopes = build_reference_tomography_slopes(compute_cfg, wfs, asterism)
             return reconstruct_wavefront_map(recon, slopes)
         else
             imat = matrix_from_rows(compute_cfg["interaction_matrix"])
@@ -785,6 +867,10 @@ function adapt_reference_actual(case::ReferenceCase, actual)
         return adapt_wavefront_map_to_pytomoao(actual, pytomoao_model_mask(case))
     elseif case.kind === :tomography_im_wavefront
         return adapt_wavefront_map_to_pytomoao(actual, pytomoao_im_mask(case))
+    elseif case.kind === :tomography_model_command_matrix
+        return adapt_actuator_rows_to_pytomoao(actual, build_reference_tomography_dm(case.config["dm"]))
+    elseif case.kind === :tomography_model_dm_commands
+        return adapt_actuator_vector_to_pytomoao(actual, build_reference_tomography_dm(case.config["dm"]))
     end
 
     compare = get(case.config, "compare", nothing)
