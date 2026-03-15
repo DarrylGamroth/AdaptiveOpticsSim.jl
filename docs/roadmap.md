@@ -105,6 +105,10 @@
   (`tutorials/AO_transfer_function.py`) with matching outputs.
 - [ ] Port and validate the full atmosphere-driven OOPAO GSC closed-loop workflow
   (`tutorials/AO_closed_loop_Pyramid_WFS_GSC.py`) beyond the current compact regression trace.
+  The main Pyramid incidence-flux mismatch from modulation-point averaging has
+  been corrected, and local atmosphere-replay comparisons are materially closer,
+  but the current replay trajectory still runs into an unstable high-OPD regime
+  where Julia/OOPAO diverge before the case is useful as a committed parity gate.
 - [x] Port and validate the pyTomoAO-backed tomography workflow needed for
   OOPAO parity, including model-based wavefront reconstruction and assembled
   DM commands against the KAPA benchmark configuration.

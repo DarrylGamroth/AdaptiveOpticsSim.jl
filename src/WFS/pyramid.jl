@@ -772,8 +772,6 @@ function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::T
         @. wfs.state.temp = abs2(wfs.state.pupil_field)
         out .+= wfs.state.temp
     end
-    out ./= wfs.params.modulation_points
-
     return out
 end
 
@@ -820,7 +818,6 @@ function pyramid_modulation_frame!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel:
         @. wfs.state.temp = abs2(wfs.state.focal_field)
         out .+= wfs.state.temp
     end
-    out ./= wfs.params.modulation_points
     return out
 end
 

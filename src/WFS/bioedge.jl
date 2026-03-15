@@ -604,7 +604,6 @@ function bioedge_intensity_core!(out::AbstractMatrix{T}, wfs::BioEdgeWFS, tel::T
             @views out[oxq+1:oxq+pad, oyq+1:oyq+pad] .+= wfs.state.temp
         end
     end
-    out ./= wfs.params.modulation_points
     return out
 end
 
