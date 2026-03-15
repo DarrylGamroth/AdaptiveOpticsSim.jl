@@ -41,6 +41,10 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     binning_pixel_scale::Int
     sampled_n_pix_subap::Int
     phasor_ratio::T
+    reference_signal_2d::RB
+    slopes_units::T
+    calibrated::Bool
+    calibration_wavelength::T
 end
 
 struct ShackHartmann{M<:SensingMode,P<:ShackHartmannParams,S<:ShackHartmannState} <: AbstractWFS
@@ -106,6 +110,10 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         1,
         sub,
         T(NaN),
+        backend{T}(undef, 2 * n_subap, n_subap),
+        one(T),
+        false,
+        zero(T),
     )
     wfs = ShackHartmann{typeof(mode), typeof(params), typeof(state)}(params, state)
     update_valid_mask!(wfs, tel)
@@ -129,6 +137,7 @@ function ensure_sh_buffers!(wfs::ShackHartmann, pad::Int)
         wfs.state.fft_plan = plan_fft_backend!(wfs.state.fft_buffer)
         wfs.state.ifft_plan = plan_ifft_backend!(wfs.state.fft_buffer)
         wfs.state.phasor_ratio = eltype(wfs.state.slopes)(NaN)
+        wfs.state.calibrated = false
     end
     return wfs
 end
@@ -280,6 +289,7 @@ end
 function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
     Base.require_one_based_indexing(tel.state.opd)
     prepare_sampling!(wfs, tel, src)
+    ensure_sh_calibration!(wfs, tel, src)
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
     sub = div(n, n_sub)
@@ -294,13 +304,13 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
         xe = min(i * sub, n)
         ye = min(j * sub, n)
         if wfs.state.valid_mask[i, j]
-            total, sx, sy, center = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
+            total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
             if total <= 0
                 wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
                 wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
             else
-                wfs.state.slopes[idx] = sx / (total * center)
-                wfs.state.slopes[idx + n_sub * n_sub] = sy / (total * center)
+                wfs.state.slopes[idx] = (sy - wfs.state.reference_signal_2d[idx]) / wfs.state.slopes_units
+                wfs.state.slopes[idx + n_sub * n_sub] = (sx - wfs.state.reference_signal_2d[idx + n_sub * n_sub]) / wfs.state.slopes_units
             end
         else
             wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
@@ -315,6 +325,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
     Base.require_one_based_indexing(tel.state.opd)
     prepare_sampling!(wfs, tel, src)
+    ensure_sh_calibration!(wfs, tel, src)
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
     sub = div(n, n_sub)
@@ -329,13 +340,13 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
         xe = min(i * sub, n)
         ye = min(j * sub, n)
         if wfs.state.valid_mask[i, j]
-            total, sx, sy, center = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx, det, rng)
+            total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx, det, rng)
             if total <= 0
                 wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
                 wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
             else
-                wfs.state.slopes[idx] = sx / (total * center)
-                wfs.state.slopes[idx + n_sub * n_sub] = sy / (total * center)
+                wfs.state.slopes[idx] = (sy - wfs.state.reference_signal_2d[idx]) / wfs.state.slopes_units
+                wfs.state.slopes[idx + n_sub * n_sub] = (sx - wfs.state.reference_signal_2d[idx + n_sub * n_sub]) / wfs.state.slopes_units
             end
         else
             wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
@@ -353,6 +364,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
     end
     wavelength(ast)
     prepare_sampling!(wfs, tel, ast.sources[1])
+    ensure_sh_calibration!(wfs, tel, ast.sources[1])
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
     sub = div(n, n_sub)
@@ -370,9 +382,8 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
             total_sum = zero(eltype(wfs.state.slopes))
             sx_sum = zero(eltype(wfs.state.slopes))
             sy_sum = zero(eltype(wfs.state.slopes))
-            center = one(eltype(wfs.state.slopes))
             for src in ast.sources
-                total, sx, sy, center = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
+                total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
                 total_sum += total
                 sx_sum += sx
                 sy_sum += sy
@@ -381,8 +392,9 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
                 wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
                 wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
             else
-                wfs.state.slopes[idx] = sx_sum / (total_sum * center)
-                wfs.state.slopes[idx + n_sub * n_sub] = sy_sum / (total_sum * center)
+                nsrc = length(ast.sources)
+                wfs.state.slopes[idx] = ((sy_sum / nsrc) - wfs.state.reference_signal_2d[idx]) / wfs.state.slopes_units
+                wfs.state.slopes[idx + n_sub * n_sub] = ((sx_sum / nsrc) - wfs.state.reference_signal_2d[idx + n_sub * n_sub]) / wfs.state.slopes_units
             end
         else
             wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
@@ -401,6 +413,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
     end
     wavelength(ast)
     prepare_sampling!(wfs, tel, ast.sources[1])
+    ensure_sh_calibration!(wfs, tel, ast.sources[1])
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
     sub = div(n, n_sub)
@@ -418,9 +431,8 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
             total_sum = zero(eltype(wfs.state.slopes))
             sx_sum = zero(eltype(wfs.state.slopes))
             sy_sum = zero(eltype(wfs.state.slopes))
-            center = one(eltype(wfs.state.slopes))
             for src in ast.sources
-                total, sx, sy, center = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx, det, rng)
+                total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx, det, rng)
                 total_sum += total
                 sx_sum += sx
                 sy_sum += sy
@@ -429,8 +441,9 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
                 wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
                 wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
             else
-                wfs.state.slopes[idx] = sx_sum / (total_sum * center)
-                wfs.state.slopes[idx + n_sub * n_sub] = sy_sum / (total_sum * center)
+                nsrc = length(ast.sources)
+                wfs.state.slopes[idx] = ((sy_sum / nsrc) - wfs.state.reference_signal_2d[idx]) / wfs.state.slopes_units
+                wfs.state.slopes[idx + n_sub * n_sub] = ((sx_sum / nsrc) - wfs.state.reference_signal_2d[idx + n_sub * n_sub]) / wfs.state.slopes_units
             end
         else
             wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
@@ -459,7 +472,7 @@ end
 @inline function centroid_from_intensity!(intensity::AbstractMatrix{T}, threshold::T) where {T<:AbstractFloat}
     peak = maximum(intensity)
     if peak <= 0
-        return zero(T), zero(T), zero(T), one(T)
+        return zero(T), zero(T), zero(T)
     end
     cutoff = threshold * peak
     total = zero(T)
@@ -467,21 +480,20 @@ end
     sy = zero(T)
     n1 = size(intensity, 1)
     n2 = size(intensity, 2)
-    center = (T(n1) - one(T)) / 2
     @inbounds for x in 1:n1, y in 1:n2
         val = intensity[x, y]
         if val < cutoff
             intensity[x, y] = zero(T)
         else
             total += val
-            sx += (T(x - 1) - center) * val
-            sy += (T(y - 1) - center) * val
+            sx += T(x - 1) * val
+            sy += T(y - 1) * val
         end
     end
     if total <= 0
-        return zero(T), zero(T), zero(T), one(T)
+        return zero(T), zero(T), zero(T)
     end
-    return total, sx, sy, center
+    return total, sx / total, sy / total
 end
 
 function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
@@ -516,6 +528,87 @@ function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
     spot = sample_spot!(wfs, wfs.state.intensity)
     frame = capture!(det, spot; rng=rng)
     return centroid_from_intensity!(frame, wfs.params.threshold_cog)
+end
+
+function sh_reference_signal!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
+    n = tel.params.resolution
+    n_sub = wfs.params.n_subap
+    sub = div(n, n_sub)
+    pad = size(wfs.state.field, 1)
+    ox = div(pad - sub, 2)
+    oy = div(pad - sub, 2)
+    idx = 1
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        xs = (i - 1) * sub + 1
+        ys = (j - 1) * sub + 1
+        xe = min(i * sub, n)
+        ye = min(j * sub, n)
+        if wfs.state.valid_mask[i, j]
+            total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
+            if total <= 0
+                wfs.state.reference_signal_2d[idx] = zero(eltype(wfs.state.reference_signal_2d))
+                wfs.state.reference_signal_2d[idx + n_sub * n_sub] = zero(eltype(wfs.state.reference_signal_2d))
+            else
+                wfs.state.reference_signal_2d[idx] = sy
+                wfs.state.reference_signal_2d[idx + n_sub * n_sub] = sx
+            end
+        else
+            wfs.state.reference_signal_2d[idx] = zero(eltype(wfs.state.reference_signal_2d))
+            wfs.state.reference_signal_2d[idx + n_sub * n_sub] = zero(eltype(wfs.state.reference_signal_2d))
+        end
+        idx += 1
+    end
+    return wfs
+end
+
+function ensure_sh_calibration!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
+    λ = eltype(wfs.state.slopes)(wavelength(src))
+    if wfs.state.calibrated && wfs.state.calibration_wavelength == λ
+        return wfs
+    end
+    opd_saved = copy(tel.state.opd)
+    fill!(tel.state.opd, zero(eltype(tel.state.opd)))
+    sh_reference_signal!(wfs, tel, src)
+    copyto!(tel.state.opd, opd_saved)
+
+    T = eltype(wfs.state.slopes)
+    n = tel.params.resolution
+    pixel_scale_init = sh_pixel_scale_init(tel.params.diameter / wfs.params.n_subap, wfs.state.effective_padding, src)
+    pixel_scale = T(wfs.state.binning_pixel_scale) * pixel_scale_init
+    rad2arcsec = T(180 * 3600 / π)
+    scale = T(tel.params.diameter) * pixel_scale / (T(2π) * rad2arcsec)
+    xvals = collect(range(-T(π), T(π); length=n + 1))[1:n]
+    @inbounds for j in 1:n, i in 1:n
+        tel.state.opd[i, j] = (xvals[j] + xvals[i]) * scale
+    end
+    n_sub = wfs.params.n_subap
+    sub = div(n, n_sub)
+    pad = size(wfs.state.field, 1)
+    ox = div(pad - sub, 2)
+    oy = div(pad - sub, 2)
+    idx = 1
+    acc = zero(T)
+    count = 0
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        xs = (i - 1) * sub + 1
+        ys = (j - 1) * sub + 1
+        xe = min(i * sub, n)
+        ye = min(j * sub, n)
+        if wfs.state.valid_mask[i, j]
+            total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
+            if total > 0
+                acc += sy - wfs.state.reference_signal_2d[idx]
+                acc += sx - wfs.state.reference_signal_2d[idx + n_sub * n_sub]
+                count += 2
+            end
+        end
+        idx += 1
+    end
+    wfs.state.slopes_units = count == 0 ? one(T) : abs(acc / count)
+    copyto!(tel.state.opd, opd_saved)
+    wfs.state.calibrated = true
+    wfs.state.calibration_wavelength = λ
+    return wfs
 end
 
 function apply_lgs_elongation!(::LGSProfileNone, wfs::ShackHartmann, ::Telescope, src::LGSSource, ::Int)

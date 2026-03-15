@@ -134,7 +134,7 @@ function apply_reference_opd!(tel::Telescope, cfg::AbstractDict{<:AbstractString
         scale_y = Float64(get(cfg, "scale_y", 0.0))
         bias = Float64(get(cfg, "bias", 0.0))
         @inbounds for j in axes(tel.state.opd, 2), i in axes(tel.state.opd, 1)
-            tel.state.opd[i, j] = bias + scale_x * i + scale_y * j
+            tel.state.opd[i, j] = bias + scale_x * (i - 1) + scale_y * (j - 1)
         end
         return tel
     elseif kind == "constant"

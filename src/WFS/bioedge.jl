@@ -53,6 +53,7 @@ end
 struct BioEdgeParams{T<:AbstractFloat,M}
     n_subap::Int
     threshold::T
+    light_ratio::T
     modulation::T
     modulation_points::Int
     extra_modulation_factor::Int
@@ -101,8 +102,16 @@ mutable struct BioEdgeState{T<:AbstractFloat,
     lgs_kernel_fft::Kf
     lgs_kernel_tag::UInt
     optical_gain::V
+    valid_i4q::A
+    valid_signal::A
+    signal_2d::R
+    reference_signal_2d::R
+    camera_frame::R
     binned_resolution::Int
     effective_resolution::Int
+    nominal_detector_resolution::Int
+    calibrated::Bool
+    calibration_wavelength::T
 end
 
 struct BioEdgeWFS{M<:SensingMode,P<:BioEdgeParams,S<:BioEdgeState} <: AbstractWFS
@@ -111,7 +120,7 @@ struct BioEdgeWFS{M<:SensingMode,P<:BioEdgeParams,S<:BioEdgeState} <: AbstractWF
 end
 
 function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
-    modulation::Real=0.0, modulation_points::Union{Int,Nothing}=nothing,
+    light_ratio::Real=0.0, modulation::Real=0.0, modulation_points::Union{Int,Nothing}=nothing,
     extra_modulation_factor::Int=0, delta_theta::Real=0.0, user_modulation_path=nothing,
     grey_width::Real=0.0, grey_length=false,
     diffraction_padding::Int=2, psf_centering::Bool=true, n_pix_separation=nothing,
@@ -129,6 +138,7 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     params = BioEdgeParams{T,typeof(user_modulation_path)}(
         n_subap,
         T(threshold),
+        T(light_ratio),
         T(modulation),
         n_mod,
         extra_modulation_factor,
@@ -162,6 +172,12 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     temp = backend{T}(undef, pad, pad)
     scratch = similar(temp)
     binned_intensity = similar(intensity)
+    nominal_detector_resolution = max(1, round(Int, n_subap * pad / tel.params.resolution))
+    camera_frame = backend{T}(undef, 2 * nominal_detector_resolution, 2 * nominal_detector_resolution)
+    valid_i4q = backend{Bool}(undef, nominal_detector_resolution ÷ 2, nominal_detector_resolution ÷ 2)
+    valid_signal = backend{Bool}(undef, nominal_detector_resolution, nominal_detector_resolution ÷ 2)
+    signal_2d = backend{T}(undef, nominal_detector_resolution, nominal_detector_resolution ÷ 2)
+    reference_signal_2d = similar(signal_2d)
     fft_buffer = similar(field)
     binned_phase = backend{T}(undef, tel.params.resolution, tel.params.resolution)
     edge_mask_binned = similar(edge_mask)
@@ -207,8 +223,16 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         lgs_kernel_fft,
         UInt(0),
         optical_gain,
+        valid_i4q,
+        valid_signal,
+        signal_2d,
+        reference_signal_2d,
+        camera_frame,
         tel.params.resolution,
         pad,
+        nominal_detector_resolution,
+        false,
+        zero(T),
     )
     wfs = BioEdgeWFS{typeof(mode), typeof(params), typeof(state)}(params, state)
     update_valid_mask!(wfs, tel)
@@ -383,6 +407,7 @@ function ensure_bioedge_buffers!(wfs::BioEdgeWFS, pad::Int, tel::Telescope)
         wfs.state.lgs_kernel_fft = similar(wfs.state.focal_field, Complex{eltype(wfs.state.focal_field)}, 0, 0)
         wfs.state.lgs_kernel_tag = UInt(0)
         wfs.state.effective_resolution = pad
+        wfs.state.calibrated = false
         build_bioedge_phasor!(wfs.state.phasor)
         build_bioedge_masks!(wfs)
     end
@@ -461,21 +486,58 @@ function sample_bioedge_phase!(wfs::BioEdgeWFS, phase::AbstractMatrix{T}) where 
     return wfs.state.binned_phase, wfs.state.edge_mask_binned
 end
 
-function sample_bioedge_intensity!(wfs::BioEdgeWFS, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
-    binning = wfs.params.binning
-    if binning == 1
-        return intensity
+function resize_bioedge_signal_buffers!(wfs::BioEdgeWFS, frame_rows::Int)
+    nominal = wfs.state.nominal_detector_resolution
+    n_pixels = max(1, round(Int, nominal / (2 * wfs.params.binning)))
+    if size(wfs.state.valid_i4q) != (n_pixels, n_pixels)
+        wfs.state.valid_i4q = similar(wfs.state.valid_i4q, n_pixels, n_pixels)
     end
-    pad = size(intensity, 1)
-    if pad % binning != 0
-        throw(InvalidConfiguration("bioedge binning must evenly divide padded resolution"))
+    if size(wfs.state.valid_signal) != (2 * n_pixels, n_pixels)
+        wfs.state.valid_signal = similar(wfs.state.valid_signal, 2 * n_pixels, n_pixels)
     end
-    n_binned = div(pad, binning)
-    if size(wfs.state.binned_intensity) != (n_binned, n_binned)
-        wfs.state.binned_intensity = similar(wfs.state.binned_intensity, n_binned, n_binned)
+    if size(wfs.state.signal_2d) != (2 * n_pixels, n_pixels)
+        wfs.state.signal_2d = similar(wfs.state.signal_2d, 2 * n_pixels, n_pixels)
+        wfs.state.reference_signal_2d = similar(wfs.state.reference_signal_2d, 2 * n_pixels, n_pixels)
+    elseif size(wfs.state.reference_signal_2d) != (2 * n_pixels, n_pixels)
+        wfs.state.reference_signal_2d = similar(wfs.state.reference_signal_2d, 2 * n_pixels, n_pixels)
     end
-    bin2d!(wfs.state.binned_intensity, intensity, binning)
-    return wfs.state.binned_intensity
+    if size(wfs.state.camera_frame) != (frame_rows, frame_rows)
+        wfs.state.camera_frame = similar(wfs.state.camera_frame, frame_rows, frame_rows)
+    end
+    fill!(wfs.state.valid_signal, false)
+    @views begin
+        wfs.state.valid_signal[1:n_pixels, :] .= wfs.state.valid_i4q
+        wfs.state.valid_signal[n_pixels+1:end, :] .= wfs.state.valid_i4q
+    end
+    return wfs
+end
+
+function sample_bioedge_intensity!(wfs::BioEdgeWFS, tel::Telescope, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
+    sub = div(tel.params.resolution, wfs.params.n_subap)
+    if size(intensity, 1) % sub != 0
+        throw(InvalidConfiguration("bioedge intensity size must be divisible by telescope pixels per subaperture"))
+    end
+    n_camera = div(size(intensity, 1), sub)
+    if size(wfs.state.camera_frame) != (n_camera, n_camera)
+        wfs.state.camera_frame = similar(wfs.state.camera_frame, n_camera, n_camera)
+    end
+    bin2d!(wfs.state.camera_frame, intensity, sub)
+    frame = wfs.state.camera_frame
+    wfs.state.nominal_detector_resolution = round(Int, wfs.params.n_subap * wfs.state.effective_resolution / tel.params.resolution)
+    if wfs.params.binning != 1
+        target = div(wfs.state.nominal_detector_resolution, wfs.params.binning)
+        factor = div(size(frame, 1), target)
+        if factor < 1 || size(frame, 1) % target != 0
+            throw(InvalidConfiguration("bioedge detector binning is not compatible with the sampled frame"))
+        end
+        if size(wfs.state.binned_intensity) != (target, target)
+            wfs.state.binned_intensity = similar(wfs.state.binned_intensity, target, target)
+        end
+        bin2d!(wfs.state.binned_intensity, frame, factor)
+        frame = wfs.state.binned_intensity
+    end
+    resize_bioedge_signal_buffers!(wfs, size(frame, 1))
+    return frame
 end
 
 function bioedge_intensity_core!(out::AbstractMatrix{T}, wfs::BioEdgeWFS, tel::Telescope,
@@ -588,15 +650,17 @@ function measure!(wfs::BioEdgeWFS, tel::Telescope, src::LGSSource)
 end
 
 function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource)
+    ensure_bioedge_calibration!(wfs, tel, src)
     bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
-    intensity = sample_bioedge_intensity!(wfs, wfs.state.intensity)
-    return bioedge_slopes_intensity!(wfs, tel, intensity)
+    intensity = sample_bioedge_intensity!(wfs, tel, wfs.state.intensity)
+    return bioedge_signal!(wfs, tel, intensity)
 end
 
 function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, src::LGSSource)
+    ensure_bioedge_calibration!(wfs, tel, src)
     bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
-    intensity = sample_bioedge_intensity!(wfs, wfs.state.intensity)
-    return bioedge_slopes_intensity!(wfs, tel, intensity)
+    intensity = sample_bioedge_intensity!(wfs, tel, wfs.state.intensity)
+    return bioedge_signal!(wfs, tel, intensity)
 end
 
 function bioedge_slopes!(wfs::BioEdgeWFS, phase::AbstractMatrix, edge_mask::AbstractMatrix{Bool})
@@ -606,30 +670,83 @@ function bioedge_slopes!(wfs::BioEdgeWFS, phase::AbstractMatrix, edge_mask::Abst
 end
 
 function bioedge_slopes_intensity!(wfs::BioEdgeWFS, tel::Telescope, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
-    pad = div(size(intensity, 1), 2)
-    n_sub = wfs.params.n_subap
-    binning = wfs.params.binning
-    pupil_size = div(tel.params.resolution, binning)
-    edge_pix = div(pad - pupil_size, 2)
-    if edge_pix < 0
-        throw(InvalidConfiguration("bioedge padding is too small for pupil extraction"))
+    return bioedge_signal!(wfs, tel, intensity)
+end
+
+function bioedge_signal!(wfs::BioEdgeWFS, ::Telescope, frame::AbstractMatrix{T}) where {T<:AbstractFloat}
+    center = round(Int, wfs.state.nominal_detector_resolution / wfs.params.binning / 2)
+    n_pixels = center
+    max_i4q = zero(T)
+    @inbounds for j in 1:n_pixels, i in 1:n_pixels
+        q1 = frame[center - n_pixels + i, center - n_pixels + j]
+        q2 = frame[center - n_pixels + i, center + j]
+        q3 = frame[center + i, center + j]
+        q4 = frame[center + i, center - n_pixels + j]
+        i4q = q1 + q2 + q3 + q4
+        if i4q > max_i4q
+            max_i4q = i4q
+        end
     end
-    sub = div(pupil_size, n_sub)
-    if sub < 1
-        throw(InvalidConfiguration("bioedge pupil size is too small for n_subap"))
+    cutoff = wfs.params.light_ratio * max_i4q
+    count = 0
+    norma = zero(T)
+    @inbounds for j in 1:n_pixels, i in 1:n_pixels
+        q1 = frame[center - n_pixels + i, center - n_pixels + j]
+        q2 = frame[center - n_pixels + i, center + j]
+        q3 = frame[center + i, center + j]
+        q4 = frame[center + i, center - n_pixels + j]
+        i4q = q1 + q2 + q3 + q4
+        valid = i4q >= cutoff
+        wfs.state.valid_i4q[i, j] = valid
+        wfs.state.valid_signal[i, j] = valid
+        wfs.state.valid_signal[i + n_pixels, j] = valid
+        if valid
+            count += 1
+            norma += i4q
+        end
     end
-    ox1 = edge_pix
-    oy1 = edge_pix
-    ox2 = edge_pix
-    oy2 = edge_pix + pad
-    ox3 = edge_pix + pad
-    oy3 = edge_pix
-    ox4 = edge_pix + pad
-    oy4 = edge_pix + pad
-    _pyramid_slopes!(execution_style(wfs.state.slopes), wfs.state.slopes, intensity, wfs.state.valid_mask, sub, n_sub, size(intensity, 1),
-        n_sub * n_sub, ox1, oy1, ox2, oy2, ox3, oy3, ox4, oy4, (0, 0, 0, 0), (0, 0, 0, 0))
+    norma = count == 0 ? one(T) : norma / count
+    idx = 1
+    @inbounds for j in 1:n_pixels, i in 1:n_pixels
+        q1 = frame[center - n_pixels + i, center - n_pixels + j]
+        q2 = frame[center - n_pixels + i, center + j]
+        q3 = frame[center + i, center + j]
+        q4 = frame[center + i, center - n_pixels + j]
+        sx = (q1 - q2 + q4 - q3) / norma
+        sy = (q1 - q4 + q2 - q3) / norma
+        wfs.state.signal_2d[i, j] = sx - wfs.state.reference_signal_2d[i, j]
+        wfs.state.signal_2d[i + n_pixels, j] = sy - wfs.state.reference_signal_2d[i + n_pixels, j]
+        if wfs.state.valid_i4q[i, j]
+            wfs.state.slopes[idx] = wfs.state.signal_2d[i, j]
+            wfs.state.slopes[idx + count] = wfs.state.signal_2d[i + n_pixels, j]
+            idx += 1
+        end
+    end
+    if idx <= count
+        fill!(@view(wfs.state.slopes[idx:count]), zero(T))
+        fill!(@view(wfs.state.slopes[count + idx:end]), zero(T))
+    end
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
+end
+
+function ensure_bioedge_calibration!(wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource)
+    λ = eltype(wfs.state.slopes)(wavelength(src))
+    if wfs.state.calibrated && wfs.state.calibration_wavelength == λ
+        return wfs
+    end
+    opd_saved = copy(tel.state.opd)
+    fill!(tel.state.opd, zero(eltype(tel.state.opd)))
+    bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
+    frame = sample_bioedge_intensity!(wfs, tel, wfs.state.intensity)
+    fill!(wfs.state.reference_signal_2d, zero(eltype(wfs.state.reference_signal_2d)))
+    bioedge_signal!(wfs, tel, frame)
+    copyto!(wfs.state.reference_signal_2d, wfs.state.signal_2d)
+    fill!(wfs.state.slopes, zero(eltype(wfs.state.slopes)))
+    copyto!(tel.state.opd, opd_saved)
+    wfs.state.calibrated = true
+    wfs.state.calibration_wavelength = λ
+    return wfs
 end
 
 function apply_lgs_elongation!(::LGSProfileNone, intensity::AbstractMatrix{T}, wfs::BioEdgeWFS,

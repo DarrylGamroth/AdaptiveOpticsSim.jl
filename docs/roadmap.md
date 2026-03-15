@@ -86,18 +86,18 @@
   optional WFS shifts, but no FITS I/O (`src/Calibration/misregistration_identification.jl`).
 
 ## Functional Parity Gate (Current Blocking Gaps)
-- [ ] Local OOPAO bundle expansion on March 14, 2026 confirmed the next failing
-  reference cases are `psf_baseline`, `shack_hartmann_diffractive_ramp`,
-  `pyramid_diffractive_ramp`, and `bioedge_diffractive_ramp`; geometric
-  Shack-Hartmann remains the only committed Python-backed parity fixture.
+- [ ] Local OOPAO bundle expansion now matches `psf_baseline`,
+  `pyramid_diffractive_ramp`, and `bioedge_diffractive_ramp` within the
+  documented case tolerances. `shack_hartmann_diffractive_ramp` is improved but
+  still carries a small residual centroid/calibration mismatch.
 - [ ] Expand deterministic OOPAO reference coverage beyond geometric Shack-Hartmann to:
   PSF formation, diffractive Shack-Hartmann, Pyramid, BioEdge, Gain Sensing Camera,
   LiFT, and closed-loop traces.
-- [ ] Match OOPAO PSF export conventions and normalization exactly enough to support
+- [x] Match OOPAO PSF export conventions and normalization exactly enough to support
   reproducible array-level regression for image formation.
 - [ ] Close diffractive WFS fidelity gaps:
   Pyramid/BioEdge per-subaperture Na-profile kernels instead of averaged kernels;
-  remaining detector-coupled signal-processing differences.
+  remaining Shack-Hartmann detector/cog calibration differences.
 - [ ] Port and validate OOPAO transfer-function workflow
   (`tutorials/AO_transfer_function.py`) with matching outputs.
 - [ ] Port and validate OOPAO GSC closed-loop workflow
@@ -147,7 +147,7 @@
 7. Decide whether tomography is in-scope for core parity now; if yes, port `tutorials/how_to_tomography.py`
    and add regression coverage, otherwise document the scope cut explicitly.
 8. Replace averaged Pyramid/BioEdge Na-profile kernels with per-subaperture kernels where OOPAO does so.
-9. Expand the committed OOPAO bundle so the new SH/Pyramid/BioEdge parity knobs are regression-backed.
+9. Expand the committed OOPAO bundle so PSF and diffractive SH/Pyramid/BioEdge parity are regression-backed.
 10. After the above, re-run the parity audit and only then resume GPU-specific expansion.
 
 ## Phase 0: Setup
@@ -197,7 +197,9 @@ Current validation scope:
 - `examples/tutorials/` now covers the core OOPAO workflows used most often in practice.
 - `test/reference_data/` commits two deterministic OOPAO geometric Shack-Hartmann cases.
 - The reference harness applies a documented convention adapter for OOPAO SH slope ordering and units.
-- PSF and diffractive WFS parity remain active follow-on work, but phase 7 no longer depends on them.
+- Local expanded bundle audits now cover PSF plus diffractive SH/Pyramid/BioEdge.
+- PSF, Pyramid, and BioEdge are now within the documented bundle tolerances locally; diffractive
+  Shack-Hartmann still needs a final calibration pass before the expanded bundle should be committed.
 
 ## Phase 8: Full OOPAO Functional Parity
 - [ ] Every supported OOPAO workflow has deterministic Julia vs OOPAO regression coverage.

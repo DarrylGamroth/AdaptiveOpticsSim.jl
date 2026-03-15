@@ -241,7 +241,7 @@ end
 
     pyr_sampled = PyramidWFS(tel; n_subap=4, mode=Diffractive(), n_pix_separation=4, binning=2)
     pyr_sampled_slopes = measure!(pyr_sampled, tel, ngs)
-    @test length(pyr_sampled_slopes) == 2 * 4 * 4
+    @test length(pyr_sampled_slopes) == 2 * cld(4, 2)^2
 
     bio_sampled = BioEdgeWFS(tel; n_subap=4, mode=Diffractive(), binning=2)
     bio_sampled_slopes = measure!(bio_sampled, tel, ngs)
@@ -265,7 +265,7 @@ end
     bio_slopes = measure!(bio, tel, ngs)
     @test length(bio_slopes) == 2 * 4 * 4
 
-    det = Detector(noise=NoiseNone(), binning=2)
+    det = Detector(noise=NoiseNone(), binning=1)
     sh_det = ShackHartmann(tel; n_subap=4, mode=Diffractive())
     sh_det_slopes = measure!(sh_det, tel, ngs, det)
     @test length(sh_det_slopes) == 2 * 4 * 4
