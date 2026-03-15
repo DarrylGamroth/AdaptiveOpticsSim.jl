@@ -302,6 +302,60 @@ function closed_loop_trace(wfs::AbstractWFS, tel::Telescope, src::AbstractSource
     return trace
 end
 
+function gsc_closed_loop_trace(tel::Telescope, src::AbstractSource, wfs::PyramidWFS,
+    control_basis::AbstractArray{<:Real,3}, forcing_coeffs::AbstractMatrix{<:Real};
+    gain::Real, frame_delay::Int, calibration_amplitude::Real, psf_zero_padding::Int,
+    og_floor::Real)
+    n_iter, n_modes = size(forcing_coeffs)
+    H = reference_interaction_matrix(wfs, tel, src, control_basis; amplitude=calibration_amplitude)
+    recon = pinv(H)
+    control_coeffs = zeros(Float64, n_modes)
+    delayed_slopes = zeros(Float64, size(H, 1))
+    forcing_opd = zeros(Float64, size(tel.state.opd))
+    correction_opd = similar(forcing_opd)
+    residual_opd = similar(forcing_opd)
+    gsc = GainSensingCamera(wfs.state.pyramid_mask, control_basis)
+    calibration_frame = similar(wfs.state.intensity)
+    reset_opd!(tel)
+    pyramid_modulation_frame!(calibration_frame, wfs, tel, src)
+    calibrate!(gsc, calibration_frame)
+    frame = similar(calibration_frame)
+    og_safe = similar(gsc.og)
+    psf_ref = begin
+        reset_opd!(tel)
+        copy(compute_psf!(tel, src; zero_padding=psf_zero_padding))
+    end
+    trace = Matrix{Float64}(undef, n_iter, 6)
+
+    for iter in 1:n_iter
+        @views combine_reference_modes!(forcing_opd, control_basis, forcing_coeffs[iter, :])
+        combine_reference_modes!(correction_opd, control_basis, control_coeffs)
+        @. residual_opd = forcing_opd - correction_opd
+        tel.state.opd .= residual_opd
+        trace[iter, 1] = pupil_rms_nm(forcing_opd, tel.state.pupil)
+        trace[iter, 2] = pupil_rms_nm(residual_opd, tel.state.pupil)
+        psf = compute_psf!(tel, src; zero_padding=psf_zero_padding)
+        trace[iter, 3] = strehl_ratio(psf, psf_ref)
+        slopes = measure!(wfs, tel, src)
+        trace[iter, 4] = norm(slopes)
+        pyramid_modulation_frame!(frame, wfs, tel, src)
+        og = compute_optical_gains!(gsc, frame)
+        @. og_safe = max(abs(og), og_floor)
+        trace[iter, 5] = sum(og_safe) / length(og_safe)
+        if frame_delay == 1
+            delayed_slopes .= slopes
+        end
+        control_coeffs .+= gain .* ((recon * delayed_slopes) ./ og_safe)
+        trace[iter, 6] = norm(control_coeffs)
+        if frame_delay == 2
+            delayed_slopes .= slopes
+        elseif frame_delay != 1
+            throw(InvalidConfiguration("unsupported frame delay $(frame_delay)"))
+        end
+    end
+    return trace
+end
+
 function transfer_functions(freq::AbstractVector{T}, loop_gain::T, Ti::T, Tau::T, Tdm::T) where {T<:AbstractFloat}
     S = complex.(zero(T), T(2π)) .* freq
     H_wfs = exp.(-Ti * S / 2)
@@ -502,6 +556,20 @@ function compute_reference_actual(case::ReferenceCase)
             frame_delay=Int(get(compute_cfg, "frame_delay", 2)),
             calibration_amplitude=Float64(get(compute_cfg, "calibration_amplitude", 1e-9)),
             psf_zero_padding=Int(get(compute_cfg, "psf_zero_padding", 2)))
+    elseif case.kind === :gsc_closed_loop_trace
+        tel = build_reference_telescope(case.config["telescope"])
+        src = build_reference_source(case.config["source"])
+        basis = build_reference_basis(case.config["basis"], tel)
+        wfs = build_reference_wfs(Symbol(case.config["wfs"]["kind"]), case.config["wfs"], tel)
+        wfs isa PyramidWFS || throw(InvalidConfiguration("GSC closed-loop trace requires a PyramidWFS"))
+        compute_cfg = case.config["compute"]
+        forcing_coeffs = matrix_from_rows(get(compute_cfg, "forcing_coefficients", Any[]))
+        return gsc_closed_loop_trace(tel, src, wfs, basis, forcing_coeffs;
+            gain=Float64(get(compute_cfg, "gain", 0.4)),
+            frame_delay=Int(get(compute_cfg, "frame_delay", 2)),
+            calibration_amplitude=Float64(get(compute_cfg, "calibration_amplitude", 1e-9)),
+            psf_zero_padding=Int(get(compute_cfg, "psf_zero_padding", 2)),
+            og_floor=Float64(get(compute_cfg, "og_floor", 0.05)))
     end
     throw(InvalidConfiguration("unsupported reference case kind '$(case.kind)'"))
 end
@@ -730,6 +798,55 @@ function create_reference_fixture(root::AbstractString)
     closed_loop_ref = compute_reference_actual(parse_reference_case("closed_loop_trace", closed_loop_case, root))
     write_reference_array(joinpath(root, closed_loop_case["data"]), closed_loop_ref)
     manifest["cases"]["closed_loop_trace"] = closed_loop_case
+
+    gsc_closed_loop_case = Dict{String,Any}(
+        "kind" => "gsc_closed_loop_trace",
+        "data" => "gsc_closed_loop_trace.txt",
+        "shape" => [4, 6],
+        "atol" => 1e-12,
+        "rtol" => 1e-12,
+        "telescope" => Dict(
+            "resolution" => 16,
+            "diameter" => 8.0,
+            "sampling_time" => 1e-3,
+            "central_obstruction" => 0.0,
+        ),
+        "source" => Dict(
+            "kind" => "ngs",
+            "band" => "R",
+            "magnitude" => 8.0,
+        ),
+        "basis" => Dict(
+            "kind" => "cartesian_polynomials",
+            "n_modes" => 4,
+        ),
+        "wfs" => Dict(
+            "kind" => "pyramid_slopes",
+            "n_subap" => 4,
+            "mode" => "diffractive",
+            "threshold" => 0.0,
+            "modulation" => 3.0,
+            "modulation_points" => 8,
+            "n_pix_separation" => 2,
+            "n_pix_edge" => 1,
+        ),
+        "compute" => Dict(
+            "gain" => 0.2,
+            "frame_delay" => 2,
+            "calibration_amplitude" => 1e-9,
+            "psf_zero_padding" => 2,
+            "og_floor" => 0.05,
+            "forcing_coefficients" => [
+                [2e-8, -1e-8, 5e-9, -2.5e-9],
+                [1.5e-8, 5e-9, -7.5e-9, 5e-9],
+                [-1e-8, 1.25e-8, 5e-9, -5e-9],
+                [5e-9, -7.5e-9, 1e-8, 2.5e-9],
+            ],
+        ),
+    )
+    gsc_closed_loop_ref = compute_reference_actual(parse_reference_case("gsc_closed_loop_trace", gsc_closed_loop_case, root))
+    write_reference_array(joinpath(root, gsc_closed_loop_case["data"]), gsc_closed_loop_ref)
+    manifest["cases"]["gsc_closed_loop_trace"] = gsc_closed_loop_case
 
     open(reference_manifest_path(root), "w") do io
         TOML.print(io, manifest)

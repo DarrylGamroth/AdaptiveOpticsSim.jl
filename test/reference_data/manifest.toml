@@ -398,3 +398,44 @@ frame_delay = 2
 calibration_amplitude = 1.0000000000000001e-09
 psf_zero_padding = 2
 forcing_coefficients = [[2.0000000000000000e-08, -1.0000000000000000e-08, 5.0000000000000001e-09, -2.5000000000000001e-09], [1.4999999999999999e-08, 5.0000000000000001e-09, -7.4999999999999993e-09, 5.0000000000000001e-09], [-1.0000000000000000e-08, 1.2499999999999999e-08, 5.0000000000000001e-09, -5.0000000000000001e-09], [5.0000000000000001e-09, -7.4999999999999993e-09, 1.0000000000000000e-08, 2.5000000000000001e-09]]
+
+[cases.gsc_closed_loop_trace]
+kind = "gsc_closed_loop_trace"
+data = "gsc_closed_loop_trace.txt"
+shape = [4, 6]
+storage_order = "C"
+atol = 2.0000000000000001e-04
+rtol = 1.0000000000000000e-03
+
+[cases.gsc_closed_loop_trace.telescope]
+resolution = 16
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.gsc_closed_loop_trace.source]
+kind = "ngs"
+band = "R"
+magnitude = 8.0000000000000000e+00
+
+[cases.gsc_closed_loop_trace.wfs]
+kind = "pyramid_slopes"
+n_subap = 4
+mode = "diffractive"
+threshold = 5.0000000000000000e-01
+modulation = 3.0000000000000000e+00
+n_pix_separation = 2
+n_pix_edge = 1
+binning = 1
+
+[cases.gsc_closed_loop_trace.basis]
+kind = "cartesian_polynomials"
+n_modes = 4
+
+[cases.gsc_closed_loop_trace.compute]
+gain = 2.0000000000000001e-01
+frame_delay = 2
+calibration_amplitude = 1.0000000000000001e-09
+psf_zero_padding = 2
+og_floor = 5.0000000000000003e-02
+forcing_coefficients = [[2.0000000000000000e-08, -1.0000000000000000e-08, 5.0000000000000001e-09, -2.5000000000000001e-09], [1.4999999999999999e-08, 5.0000000000000001e-09, -7.4999999999999993e-09, 5.0000000000000001e-09], [-1.0000000000000000e-08, 1.2499999999999999e-08, 5.0000000000000001e-09, -5.0000000000000001e-09], [5.0000000000000001e-09, -7.4999999999999993e-09, 1.0000000000000000e-08, 2.5000000000000001e-09]]

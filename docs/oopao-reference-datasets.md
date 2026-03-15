@@ -25,10 +25,12 @@ The repository now commits a deterministic OOPAO bundle under
 10. `closed_loop_shack_hartmann_trace`
 11. `closed_loop_pyramid_trace`
 12. `closed_loop_bioedge_trace`
+13. `gsc_closed_loop_trace`
 
 These cases are stable enough to keep in CI and now cover the main image
 formation, diffractive WFS, LiFT Jacobians, compact closed-loop traces, GSC
-optical-gain, and analytical transfer-function paths.
+optical-gain and gain-updated closed-loop behavior, and analytical
+transfer-function paths.
 
 Still not committed:
 - Tomography datasets/workflows.

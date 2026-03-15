@@ -91,7 +91,8 @@
   `pyramid_diffractive_ramp`, `bioedge_diffractive_ramp`,
   `gain_sensing_camera_optical_gains`, `transfer_function_rejection`,
   `lift_interaction_matrix`, `closed_loop_shack_hartmann_trace`,
-  `closed_loop_pyramid_trace`, and `closed_loop_bioedge_trace`
+  `closed_loop_pyramid_trace`, `closed_loop_bioedge_trace`,
+  and `gsc_closed_loop_trace`
   within their documented tolerances.
 - [x] Expand deterministic OOPAO reference coverage beyond geometric Shack-Hartmann to:
   LiFT and compact closed-loop traces for Shack-Hartmann, Pyramid, and BioEdge.
@@ -101,8 +102,8 @@
   Pyramid/BioEdge per-subaperture Na-profile kernels instead of averaged kernels.
 - [x] Port and validate OOPAO transfer-function workflow
   (`tutorials/AO_transfer_function.py`) with matching outputs.
-- [ ] Port and validate OOPAO GSC closed-loop workflow
-  (`tutorials/AO_closed_loop_Pyramid_WFS_GSC.py`) against Python outputs.
+- [ ] Port and validate the full atmosphere-driven OOPAO GSC closed-loop workflow
+  (`tutorials/AO_closed_loop_Pyramid_WFS_GSC.py`) beyond the current compact regression trace.
 - [ ] Port and validate OOPAO tomography workflow
   (`tutorials/how_to_tomography.py`) or explicitly document it as unsupported.
 - [ ] Audit calibration/output conventions against OOPAO for:
@@ -139,16 +140,16 @@
 - [ ] Turn every parity claim into a deterministic regression test against OOPAO outputs.
 
 ## Next 10 Tasks
-1. Port the remaining `tutorials/AO_closed_loop_Pyramid_WFS_GSC.py` behavior and validate it against OOPAO outputs.
-2. Decide whether tomography is in-scope for core parity now; if yes, port `tutorials/how_to_tomography.py`
+1. Decide whether tomography is in-scope for core parity now; if yes, port `tutorials/how_to_tomography.py`
    and add regression coverage, otherwise document the scope cut explicitly.
-3. Replace averaged Pyramid/BioEdge Na-profile kernels with per-subaperture kernels where OOPAO does so.
-4. Audit remaining calibration/output conventions against OOPAO telemetry exports.
-5. Add compact closed-loop trace coverage to the parity/workflow traceability docs.
-6. Decide whether the compact closed-loop traces should be expanded to full tutorial traces with atmosphere replay.
-7. Validate the remaining GSC closed-loop telemetry against OOPAO outputs.
-8. Validate LiFT iterative reconstruction outputs, not just the analytic interaction matrix.
-9. Re-run the parity audit against the expanded reference bundle.
+2. Replace averaged Pyramid/BioEdge Na-profile kernels with per-subaperture kernels where OOPAO does so.
+3. Audit remaining calibration/output conventions against OOPAO telemetry exports.
+4. Decide whether the compact closed-loop traces should be expanded to full tutorial traces with atmosphere replay.
+5. Validate the remaining atmosphere-driven GSC closed-loop telemetry against OOPAO outputs.
+6. Validate LiFT iterative reconstruction outputs, not just the analytic interaction matrix.
+7. Port pyTomoAO-style parameter objects for tomography geometry and DM fitting.
+8. Port pyTomoAO’s model-based tomographic reconstructor path (`Cxx`, `Cox`, `Cnz`, `RecStatSA`) as Julia operators.
+9. Add IM-based tomography parity using OOPAO/pyTomoAO reference interaction matrices.
 10. Only then resume GPU-specific expansion.
 
 ## Phase 0: Setup
@@ -208,6 +209,7 @@ Current validation scope:
 ## Phase 8: Full OOPAO Functional Parity
 - [ ] Every supported OOPAO workflow has deterministic Julia vs OOPAO regression coverage.
 - [ ] PSF, diffractive WFS, LiFT, GSC closed-loop behavior, and closed-loop traces match OOPAO within documented tolerances.
+- [ ] Tomography parity covers the pyTomoAO-backed OOPAO workflow with validated model-based or IM-based reconstructors.
 - [x] Transfer-function workflow is ported and validated.
 - [ ] Any unsupported OOPAO workflow is explicitly documented as out-of-scope rather than implied complete.
 - [ ] Only after this phase is complete should non-parity feature work resume.

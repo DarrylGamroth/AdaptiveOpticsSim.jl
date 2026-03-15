@@ -683,6 +683,117 @@ def closed_loop_trace_case(root: Path, *, case_id: str, kind: str) -> dict:
     }
 
 
+def gsc_closed_loop_trace_case(root: Path) -> dict:
+    tel = make_telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = make_source(band="R", magnitude=8.0)
+    src ** tel
+    basis = cartesian_polynomial_basis(tel, 4)
+    wfs = Pyramid(
+        nSubap=4,
+        telescope=tel,
+        lightRatio=0.5,
+        modulation=3.0,
+        binning=1,
+        n_pix_separation=2,
+        n_pix_edge=1,
+        postProcessing="slopesMaps_incidence_flux",
+    )
+    gsc = GainSensingCamera(mask=wfs.mask, basis=basis)
+    ngs = src
+    ngs ** tel * wfs
+    wfs.focal_plane_camera.resolution = wfs.nRes
+    wfs * wfs.focal_plane_camera
+    wfs.focal_plane_camera * gsc
+    H = reference_interaction_matrix("pyramid_slopes", wfs, tel, src, basis, 1e-9)
+    recon = np.linalg.pinv(H)
+    forcing_coeffs = np.array(
+        [
+            [2.0e-8, -1.0e-8, 0.5e-8, -0.25e-8],
+            [1.5e-8, 0.5e-8, -0.75e-8, 0.5e-8],
+            [-1.0e-8, 1.25e-8, 0.5e-8, -0.5e-8],
+            [0.5e-8, -0.75e-8, 1.0e-8, 0.25e-8],
+        ],
+        dtype=np.float64,
+    )
+    gain = 0.2
+    frame_delay = 2
+    og_floor = 0.05
+    zero_padding = 2
+    control_coeffs = np.zeros(basis.shape[2], dtype=np.float64)
+    delayed_signal = np.zeros(H.shape[0], dtype=np.float64)
+    tel.resetOPD()
+    tel.computePSF(zeroPaddingFactor=zero_padding)
+    psf_ref = np.asarray(tel.PSF, dtype=np.float64).copy()
+    trace = np.zeros((forcing_coeffs.shape[0], 6), dtype=np.float64)
+
+    for idx, coeffs in enumerate(forcing_coeffs):
+        forcing_opd = combine_modes(basis, coeffs)
+        correction_opd = combine_modes(basis, control_coeffs)
+        residual_opd = forcing_opd - correction_opd
+        tel.resetOPD()
+        tel.OPD_no_pupil = residual_opd
+        trace[idx, 0] = pupil_rms_nm(forcing_opd, tel.pupil)
+        trace[idx, 1] = pupil_rms_nm(residual_opd, tel.pupil)
+        tel.computePSF(zeroPaddingFactor=zero_padding)
+        trace[idx, 2] = strehlMeter(np.asarray(tel.PSF, dtype=np.float64), tel, PSF_ref=psf_ref, zeroPaddingFactor=zero_padding, display=False)
+        signal = measure_signal("pyramid_slopes", wfs, tel, src)
+        trace[idx, 3] = float(np.linalg.norm(signal))
+        wfs * wfs.focal_plane_camera
+        wfs.focal_plane_camera * gsc
+        og_safe = np.maximum(np.abs(np.asarray(gsc.og, dtype=np.float64)), og_floor)
+        trace[idx, 4] = float(np.mean(og_safe))
+        if frame_delay == 1:
+            delayed_signal[:] = signal
+        control_coeffs += gain * ((recon @ delayed_signal) / og_safe)
+        trace[idx, 5] = float(np.linalg.norm(control_coeffs))
+        if frame_delay == 2:
+            delayed_signal[:] = signal
+
+    rel = "gsc_closed_loop_trace.txt"
+    write_array(root / rel, trace)
+    return {
+        "kind": "gsc_closed_loop_trace",
+        "data": rel,
+        "shape": list(trace.shape),
+        "storage_order": "C",
+        "atol": 2e-4,
+        "rtol": 1e-3,
+        "telescope": {
+            "resolution": 16,
+            "diameter": 8.0,
+            "sampling_time": 1e-3,
+            "central_obstruction": 0.0,
+        },
+        "source": {
+            "kind": "ngs",
+            "band": "R",
+            "magnitude": 8.0,
+        },
+        "basis": {
+            "kind": "cartesian_polynomials",
+            "n_modes": 4,
+        },
+        "wfs": {
+            "kind": "pyramid_slopes",
+            "n_subap": 4,
+            "mode": "diffractive",
+            "threshold": 0.5,
+            "modulation": 3.0,
+            "n_pix_separation": 2,
+            "n_pix_edge": 1,
+            "binning": 1,
+        },
+        "compute": {
+            "gain": gain,
+            "frame_delay": frame_delay,
+            "calibration_amplitude": 1e-9,
+            "psf_zero_padding": zero_padding,
+            "og_floor": og_floor,
+            "forcing_coefficients": forcing_coeffs.tolist(),
+        },
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("output", type=Path, help="Bundle output directory")
@@ -713,6 +824,7 @@ def main() -> None:
         "closed_loop_shack_hartmann_trace": closed_loop_trace_case(root, case_id="closed_loop_shack_hartmann_trace", kind="shack_hartmann_slopes"),
         "closed_loop_pyramid_trace": closed_loop_trace_case(root, case_id="closed_loop_pyramid_trace", kind="pyramid_slopes"),
         "closed_loop_bioedge_trace": closed_loop_trace_case(root, case_id="closed_loop_bioedge_trace", kind="bioedge_slopes"),
+        "gsc_closed_loop_trace": gsc_closed_loop_trace_case(root),
     }
     write_manifest(root / "manifest.toml", cases)
 

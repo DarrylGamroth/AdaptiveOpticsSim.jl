@@ -477,7 +477,7 @@ end
     root = mktempdir()
     create_reference_fixture(root)
     bundle = load_reference_bundle(root)
-    @test length(bundle.cases) == 5
+    @test length(bundle.cases) == 6
     for case in bundle.cases
         result = validate_reference_case(case)
         @test size(result.actual) == size(result.expected)
