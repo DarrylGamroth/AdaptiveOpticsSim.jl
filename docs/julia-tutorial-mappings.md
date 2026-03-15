@@ -29,9 +29,9 @@ Each script exposes a `main()` function and logs a short completion summary with
 | `tutorials/how_to_LIFT.ipynb` | `examples/tutorials/lift.jl` | LiFT setup and coefficient recovery |
 | `tutorials/how_to_SPRINT.py` | `examples/tutorials/sprint.jl` | Mis-registration sensitivity and estimation |
 | `tutorials/AO_transfer_function.py` | `examples/tutorials/transfer_function.jl` | Closed-loop rejection and closed-loop transfer functions |
-| `tutorials/AO_closed_loop_ShackHartmann_WFS.py` | `examples/tutorials/closed_loop_shack_hartmann.jl` | Deterministic diffractive SH loop |
-| `tutorials/AO_closed_loop_Pyramid_WFS.py` | `examples/tutorials/closed_loop_pyramid.jl` | Deterministic diffractive Pyramid loop |
-| `tutorials/AO_closed_loop_BioEdge_WFS.py` | `examples/tutorials/closed_loop_bioedge.jl` | Deterministic diffractive BioEdge loop |
+| `tutorials/AO_closed_loop_ShackHartmann_WFS.py` | `examples/tutorials/closed_loop_shack_hartmann.jl` | Deterministic diffractive SH loop; compact OOPAO regression trace committed |
+| `tutorials/AO_closed_loop_Pyramid_WFS.py` | `examples/tutorials/closed_loop_pyramid.jl` | Deterministic diffractive Pyramid loop; compact OOPAO regression trace committed |
+| `tutorials/AO_closed_loop_BioEdge_WFS.py` | `examples/tutorials/closed_loop_bioedge.jl` | Deterministic diffractive BioEdge loop; compact OOPAO regression trace committed |
 | `tutorials/AO_closed_loop_Pyramid_WFS_GSC.py` | `examples/tutorials/gain_sensing_camera.jl` | Pyramid modulation-frame and gain-sensing-camera optical-gain workflow; the full closed-loop GSC tutorial is still being completed |
 | `tutorials/how_to_tomography.py` | not yet ported | Tomography/reconstructor stack is still missing from the Julia implementation |
 

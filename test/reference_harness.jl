@@ -1,5 +1,7 @@
 using DelimitedFiles
+using FFTW
 using KernelAbstractions
+using LinearAlgebra
 
 struct ReferenceCase
     id::String
@@ -181,6 +183,123 @@ function build_reference_basis(cfg::AbstractDict{<:AbstractString,<:Any}, tel::T
         return basis
     end
     throw(InvalidConfiguration("unknown basis kind '$kind'"))
+end
+
+function matrix_from_rows(rows)
+    n_row = length(rows)
+    n_col = n_row == 0 ? 0 : length(rows[1])
+    mat = Matrix{Float64}(undef, n_row, n_col)
+    @inbounds for i in 1:n_row
+        row = rows[i]
+        length(row) == n_col || throw(DimensionMismatchError("reference row lengths must match"))
+        for j in 1:n_col
+            mat[i, j] = Float64(row[j])
+        end
+    end
+    return mat
+end
+
+function combine_reference_modes!(dest::AbstractMatrix{T}, basis::AbstractArray{<:Real,3},
+    coeffs::AbstractVector{<:Real}) where {T<:AbstractFloat}
+    fill!(dest, zero(T))
+    n_modes = min(size(basis, 3), length(coeffs))
+    @inbounds for k in 1:n_modes
+        coeff = T(coeffs[k])
+        @views @. dest += coeff * basis[:, :, k]
+    end
+    return dest
+end
+
+function pupil_rms_nm(opd::AbstractMatrix{<:Real}, pupil::AbstractMatrix{Bool})
+    acc = 0.0
+    n = 0
+    @inbounds for j in axes(opd, 2), i in axes(opd, 1)
+        if pupil[i, j]
+            val = Float64(opd[i, j])
+            acc += val * val
+            n += 1
+        end
+    end
+    return 1e9 * sqrt(acc / n)
+end
+
+function center_crop(src::AbstractMatrix, size_out::Int)
+    n, m = size(src)
+    size_out <= min(n, m) || throw(DimensionMismatchError("crop size exceeds source size"))
+    sx = fld(n - size_out, 2) + 1
+    sy = fld(m - size_out, 2) + 1
+    return @view src[sx:sx+size_out-1, sy:sy+size_out-1]
+end
+
+function strehl_ratio(psf::AbstractMatrix{T}, psf_ref::AbstractMatrix{T}) where {T<:AbstractFloat}
+    size_min = min(size(psf, 1), size(psf_ref, 1))
+    psf_crop = center_crop(psf, size_min)
+    ref_crop = center_crop(psf_ref, size_min)
+    otf = abs.(fft(psf_crop))
+    otf_ref = abs.(fft(ref_crop))
+    shifted = similar(otf)
+    shifted_ref = similar(otf_ref)
+    AdaptiveOptics.fftshift2d!(shifted, otf)
+    AdaptiveOptics.fftshift2d!(shifted_ref, otf_ref)
+    shifted ./= maximum(shifted)
+    shifted_ref ./= maximum(shifted_ref)
+    return 100.0 * sum(shifted) / sum(shifted_ref)
+end
+
+function reference_interaction_matrix(wfs::AbstractWFS, tel::Telescope, src::AbstractSource,
+    basis::AbstractArray{<:Real,3}; amplitude::Real)
+    n_modes = size(basis, 3)
+    mat = Matrix{Float64}(undef, length(wfs.state.slopes), n_modes)
+    opd_base = copy(tel.state.opd)
+    @inbounds for k in 1:n_modes
+        @views @. tel.state.opd = Float64(amplitude) * basis[:, :, k]
+        measure!(wfs, tel, src)
+        mat[:, k] .= wfs.state.slopes
+    end
+    tel.state.opd .= opd_base
+    return mat
+end
+
+function closed_loop_trace(wfs::AbstractWFS, tel::Telescope, src::AbstractSource,
+    control_basis::AbstractArray{<:Real,3}, forcing_coeffs::AbstractMatrix{<:Real};
+    gain::Real, frame_delay::Int, calibration_amplitude::Real, psf_zero_padding::Int)
+    n_iter, n_modes = size(forcing_coeffs)
+    H = reference_interaction_matrix(wfs, tel, src, control_basis; amplitude=calibration_amplitude)
+    recon = pinv(H)
+    control_coeffs = zeros(Float64, n_modes)
+    delayed_slopes = zeros(Float64, size(H, 1))
+    forcing_opd = zeros(Float64, size(tel.state.opd))
+    correction_opd = similar(forcing_opd)
+    residual_opd = similar(forcing_opd)
+    psf_ref = begin
+        reset_opd!(tel)
+        copy(compute_psf!(tel, src; zero_padding=psf_zero_padding))
+    end
+    trace = Matrix{Float64}(undef, n_iter, 5)
+
+    for iter in 1:n_iter
+        @views combine_reference_modes!(forcing_opd, control_basis, forcing_coeffs[iter, :])
+        combine_reference_modes!(correction_opd, control_basis, control_coeffs)
+        @. residual_opd = forcing_opd - correction_opd
+        tel.state.opd .= residual_opd
+        trace[iter, 1] = pupil_rms_nm(forcing_opd, tel.state.pupil)
+        trace[iter, 2] = pupil_rms_nm(residual_opd, tel.state.pupil)
+        psf = compute_psf!(tel, src; zero_padding=psf_zero_padding)
+        trace[iter, 3] = strehl_ratio(psf, psf_ref)
+        slopes = measure!(wfs, tel, src)
+        trace[iter, 4] = norm(slopes)
+        if frame_delay == 1
+            delayed_slopes .= slopes
+        end
+        control_coeffs .+= gain .* (recon * delayed_slopes)
+        trace[iter, 5] = norm(control_coeffs)
+        if frame_delay == 2
+            delayed_slopes .= slopes
+        elseif frame_delay != 1
+            throw(InvalidConfiguration("unsupported frame delay $(frame_delay)"))
+        end
+    end
+    return trace
 end
 
 function transfer_functions(freq::AbstractVector{T}, loop_gain::T, Ti::T, Tau::T, Tdm::T) where {T<:AbstractFloat}
@@ -371,6 +490,18 @@ function compute_reference_actual(case::ReferenceCase)
             @views stack[:, :, idx] .= reshape(H[:, idx], img_resolution, img_resolution)
         end
         return stack
+    elseif case.kind === :closed_loop_trace
+        tel = build_reference_telescope(case.config["telescope"])
+        src = build_reference_source(case.config["source"])
+        basis = build_reference_basis(case.config["basis"], tel)
+        wfs = build_reference_wfs(Symbol(case.config["wfs"]["kind"]), case.config["wfs"], tel)
+        compute_cfg = case.config["compute"]
+        forcing_coeffs = matrix_from_rows(get(compute_cfg, "forcing_coefficients", Any[]))
+        return closed_loop_trace(wfs, tel, src, basis, forcing_coeffs;
+            gain=Float64(get(compute_cfg, "gain", 0.4)),
+            frame_delay=Int(get(compute_cfg, "frame_delay", 2)),
+            calibration_amplitude=Float64(get(compute_cfg, "calibration_amplitude", 1e-9)),
+            psf_zero_padding=Int(get(compute_cfg, "psf_zero_padding", 2)))
     end
     throw(InvalidConfiguration("unsupported reference case kind '$(case.kind)'"))
 end
@@ -555,6 +686,50 @@ function create_reference_fixture(root::AbstractString)
     lift_ref = compute_reference_actual(parse_reference_case("lift_interaction_matrix", lift_case, root))
     write_reference_array(joinpath(root, lift_case["data"]), lift_ref)
     manifest["cases"]["lift_interaction_matrix"] = lift_case
+
+    closed_loop_case = Dict{String,Any}(
+        "kind" => "closed_loop_trace",
+        "data" => "closed_loop_trace.txt",
+        "shape" => [4, 5],
+        "atol" => 1e-12,
+        "rtol" => 1e-12,
+        "telescope" => Dict(
+            "resolution" => 16,
+            "diameter" => 8.0,
+            "sampling_time" => 1e-3,
+            "central_obstruction" => 0.0,
+        ),
+        "source" => Dict(
+            "kind" => "ngs",
+            "band" => "I",
+            "magnitude" => 0.0,
+        ),
+        "basis" => Dict(
+            "kind" => "cartesian_polynomials",
+            "n_modes" => 2,
+        ),
+        "wfs" => Dict(
+            "kind" => "shack_hartmann_slopes",
+            "n_subap" => 4,
+            "mode" => "geometric",
+            "threshold" => 0.1,
+        ),
+        "compute" => Dict(
+            "gain" => 0.4,
+            "frame_delay" => 2,
+            "calibration_amplitude" => 1e-9,
+            "psf_zero_padding" => 2,
+            "forcing_coefficients" => [
+                [2e-8, -1e-8],
+                [1.5e-8, 0.5e-8],
+                [-1e-8, 1.25e-8],
+                [0.5e-8, -0.75e-8],
+            ],
+        ),
+    )
+    closed_loop_ref = compute_reference_actual(parse_reference_case("closed_loop_trace", closed_loop_case, root))
+    write_reference_array(joinpath(root, closed_loop_case["data"]), closed_loop_ref)
+    manifest["cases"]["closed_loop_trace"] = closed_loop_case
 
     open(reference_manifest_path(root), "w") do io
         TOML.print(io, manifest)

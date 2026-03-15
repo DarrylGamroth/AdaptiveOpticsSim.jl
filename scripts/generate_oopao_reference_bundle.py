@@ -20,6 +20,7 @@ from OOPAO.Pyramid import Pyramid
 from OOPAO.ShackHartmann import ShackHartmann
 from OOPAO.Source import Source
 from OOPAO.Telescope import Telescope
+from OOPAO.tools.tools import strehlMeter
 
 
 def make_telescope(*, resolution: int, diameter: float, sampling_time: float, central_obstruction: float) -> Telescope:
@@ -106,6 +107,72 @@ def cartesian_polynomial_basis(tel: Telescope, n_modes: int = 4) -> np.ndarray:
     if n_modes >= 4:
         basis[:, :, 3] = pupil * (xx**2 - yy**2)
     return basis
+
+
+def combine_modes(basis: np.ndarray, coeffs: np.ndarray) -> np.ndarray:
+    out = np.zeros(basis.shape[:2], dtype=np.float64)
+    for idx in range(min(basis.shape[2], coeffs.size)):
+        out += float(coeffs[idx]) * basis[:, :, idx]
+    return out
+
+
+def pupil_rms_nm(opd: np.ndarray, pupil: np.ndarray) -> float:
+    values = np.asarray(opd, dtype=np.float64)[np.asarray(pupil) > 0]
+    return float(1e9 * np.sqrt(np.mean(values**2)))
+
+
+def make_reference_wfs(kind: str, tel: Telescope):
+    if kind == "shack_hartmann_slopes":
+        return ShackHartmann(
+            nSubap=4,
+            telescope=tel,
+            lightRatio=0.0,
+            is_geometric=False,
+            pixel_scale=0.06,
+            n_pixel_per_subaperture=8,
+        )
+    if kind == "pyramid_slopes":
+        return Pyramid(
+            nSubap=4,
+            telescope=tel,
+            lightRatio=0.0,
+            modulation=1.0,
+            n_pix_separation=4,
+            n_pix_edge=0,
+            postProcessing="slopesMaps",
+        )
+    if kind == "bioedge_slopes":
+        return BioEdge(
+            nSubap=4,
+            telescope=tel,
+            modulation=1.0,
+            grey_width=0.0,
+            grey_length=False,
+            lightRatio=0.0,
+            n_pix_separation=4,
+            n_pix_edge=2,
+            binning=2,
+            postProcessing="slopesMaps",
+        )
+    raise ValueError(f"unsupported WFS kind {kind!r}")
+
+
+def measure_signal(kind: str, wfs, tel: Telescope, src: Source) -> np.ndarray:
+    tel * wfs
+    if kind == "shack_hartmann_slopes":
+        return np.asarray(wfs.signal, dtype=np.float64).copy()
+    return np.asarray(wfs.signal, dtype=np.float64).reshape(-1).copy()
+
+
+def reference_interaction_matrix(kind: str, wfs, tel: Telescope, src: Source, basis: np.ndarray, amplitude: float) -> np.ndarray:
+    n_modes = basis.shape[2]
+    mat = np.zeros((measure_signal(kind, wfs, tel, src).size, n_modes), dtype=np.float64)
+    for idx in range(n_modes):
+        tel.resetOPD()
+        tel.OPD_no_pupil = amplitude * basis[:, :, idx]
+        mat[:, idx] = measure_signal(kind, wfs, tel, src)
+    tel.resetOPD()
+    return mat
 
 
 def psf_case(root: Path) -> dict:
@@ -512,6 +579,110 @@ def lift_case(root: Path) -> dict:
     }
 
 
+def closed_loop_trace_case(root: Path, *, case_id: str, kind: str) -> dict:
+    tel = make_telescope(resolution=24, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = make_source(band="I", magnitude=0.0)
+    src ** tel
+    basis = cartesian_polynomial_basis(tel, 4)
+    wfs = make_reference_wfs(kind, tel)
+    forcing_coeffs = np.array(
+        [
+            [2.0e-8, -1.0e-8, 0.5e-8, -0.25e-8],
+            [1.5e-8, 0.5e-8, -0.75e-8, 0.5e-8],
+            [-1.0e-8, 1.25e-8, 0.5e-8, -0.5e-8],
+            [0.5e-8, -0.75e-8, 1.0e-8, 0.25e-8],
+            [0.25e-8, 0.5e-8, -1.25e-8, 0.75e-8],
+            [-0.75e-8, -0.25e-8, 0.75e-8, -1.0e-8],
+        ],
+        dtype=np.float64,
+    )
+    if kind == "bioedge_slopes":
+        forcing_coeffs = forcing_coeffs[:4, :]
+    gain = 0.2 if kind == "bioedge_slopes" else 0.4
+    frame_delay = 2
+    calibration_amplitude = 1e-9
+    zero_padding = 2
+    H = reference_interaction_matrix(kind, wfs, tel, src, basis, calibration_amplitude)
+    recon = np.linalg.pinv(H)
+    control_coeffs = np.zeros(basis.shape[2], dtype=np.float64)
+    delayed_signal = np.zeros(H.shape[0], dtype=np.float64)
+    tel.resetOPD()
+    tel.computePSF(zeroPaddingFactor=zero_padding)
+    psf_ref = np.asarray(tel.PSF, dtype=np.float64).copy()
+    trace = np.zeros((forcing_coeffs.shape[0], 5), dtype=np.float64)
+
+    for idx, coeffs in enumerate(forcing_coeffs):
+        forcing_opd = combine_modes(basis, coeffs)
+        correction_opd = combine_modes(basis, control_coeffs)
+        residual_opd = forcing_opd - correction_opd
+        tel.resetOPD()
+        tel.OPD_no_pupil = residual_opd
+        trace[idx, 0] = pupil_rms_nm(forcing_opd, tel.pupil)
+        trace[idx, 1] = pupil_rms_nm(residual_opd, tel.pupil)
+        tel.computePSF(zeroPaddingFactor=zero_padding)
+        trace[idx, 2] = strehlMeter(
+            np.asarray(tel.PSF, dtype=np.float64),
+            tel,
+            PSF_ref=psf_ref,
+            zeroPaddingFactor=zero_padding,
+            display=False,
+        )
+        signal = measure_signal(kind, wfs, tel, src)
+        trace[idx, 3] = float(np.linalg.norm(signal))
+        if frame_delay == 1:
+            delayed_signal[:] = signal
+        control_coeffs += gain * (recon @ delayed_signal)
+        trace[idx, 4] = float(np.linalg.norm(control_coeffs))
+        if frame_delay == 2:
+            delayed_signal[:] = signal
+
+    rel = f"{case_id}.txt"
+    write_array(root / rel, trace)
+    wfs_section = {"kind": kind, "n_subap": 4, "mode": "diffractive", "threshold": 0.0}
+    if kind == "shack_hartmann_slopes":
+        wfs_section["pixel_scale"] = 0.06
+        wfs_section["n_pix_subap"] = 8
+    elif kind in ("pyramid_slopes", "bioedge_slopes"):
+        wfs_section["modulation"] = 1.0
+        wfs_section["n_pix_separation"] = 4
+        wfs_section["n_pix_edge"] = 0 if kind == "pyramid_slopes" else 2
+        if kind == "bioedge_slopes":
+            wfs_section["grey_width"] = 0.0
+            wfs_section["grey_length"] = False
+            wfs_section["binning"] = 2
+    return {
+        "kind": "closed_loop_trace",
+        "data": rel,
+        "shape": list(trace.shape),
+        "storage_order": "C",
+        "atol": 2e-4,
+        "rtol": 1e-3,
+        "telescope": {
+            "resolution": 24,
+            "diameter": 8.0,
+            "sampling_time": 1e-3,
+            "central_obstruction": 0.0,
+        },
+        "source": {
+            "kind": "ngs",
+            "band": "I",
+            "magnitude": 0.0,
+        },
+        "basis": {
+            "kind": "cartesian_polynomials",
+            "n_modes": int(basis.shape[2]),
+        },
+        "wfs": wfs_section,
+        "compute": {
+            "gain": gain,
+            "frame_delay": frame_delay,
+            "calibration_amplitude": calibration_amplitude,
+            "psf_zero_padding": zero_padding,
+            "forcing_coefficients": forcing_coeffs.tolist(),
+        },
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("output", type=Path, help="Bundle output directory")
@@ -539,6 +710,9 @@ def main() -> None:
         "gain_sensing_camera_optical_gains": gsc_case(root),
         "transfer_function_rejection": transfer_function_case(root),
         "lift_interaction_matrix": lift_case(root),
+        "closed_loop_shack_hartmann_trace": closed_loop_trace_case(root, case_id="closed_loop_shack_hartmann_trace", kind="shack_hartmann_slopes"),
+        "closed_loop_pyramid_trace": closed_loop_trace_case(root, case_id="closed_loop_pyramid_trace", kind="pyramid_slopes"),
+        "closed_loop_bioedge_trace": closed_loop_trace_case(root, case_id="closed_loop_bioedge_trace", kind="bioedge_slopes"),
     }
     write_manifest(root / "manifest.toml", cases)
 

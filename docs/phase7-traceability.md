@@ -14,8 +14,9 @@ This matrix records the concrete artifacts that close phase 7.
 
 Current OOPAO bundle scope:
 - PSF, geometric Shack-Hartmann, diffractive Shack-Hartmann, Pyramid, BioEdge,
-  LiFT interaction matrices, GSC optical gains, and transfer-function rejection.
+  LiFT interaction matrices, compact closed-loop traces for Shack-Hartmann,
+  Pyramid, and BioEdge, GSC optical gains, and transfer-function rejection.
 - Geometric Shack-Hartmann still uses an explicit convention adapter where OOPAO
   and AdaptiveOptics.jl intentionally expose different public slope ordering and
   units.
-- Closed-loop traces and tomography remain on the forward roadmap.
+- Full atmosphere-replay closed-loop traces and tomography remain on the forward roadmap.
