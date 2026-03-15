@@ -151,23 +151,37 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
     if kind === :shack_hartmann_slopes
         pixel_scale = get(cfg, "pixel_scale", nothing)
         n_pix_subap = get(cfg, "n_pix_subap", nothing)
+        threshold_cog = Float64(get(cfg, "threshold_cog", 0.01))
+        threshold_convolution = Float64(get(cfg, "threshold_convolution", 0.05))
+        half_pixel_shift = Bool(get(cfg, "half_pixel_shift", false))
         if pixel_scale === nothing && n_pix_subap === nothing
-            return ShackHartmann(tel; n_subap=n_subap, threshold=threshold, mode=mode)
+            return ShackHartmann(tel; n_subap=n_subap, threshold=threshold, mode=mode,
+                threshold_cog=threshold_cog, threshold_convolution=threshold_convolution,
+                half_pixel_shift=half_pixel_shift)
         elseif n_pix_subap === nothing
             return ShackHartmann(tel; n_subap=n_subap, threshold=threshold, mode=mode,
-                pixel_scale=Float64(pixel_scale))
+                pixel_scale=Float64(pixel_scale), threshold_cog=threshold_cog,
+                threshold_convolution=threshold_convolution, half_pixel_shift=half_pixel_shift)
         elseif pixel_scale === nothing
             return ShackHartmann(tel; n_subap=n_subap, threshold=threshold, mode=mode,
-                n_pix_subap=Int(n_pix_subap))
+                n_pix_subap=Int(n_pix_subap), threshold_cog=threshold_cog,
+                threshold_convolution=threshold_convolution, half_pixel_shift=half_pixel_shift)
         end
         return ShackHartmann(tel; n_subap=n_subap, threshold=threshold, mode=mode,
-            pixel_scale=Float64(pixel_scale), n_pix_subap=Int(n_pix_subap))
+            pixel_scale=Float64(pixel_scale), n_pix_subap=Int(n_pix_subap),
+            threshold_cog=threshold_cog, threshold_convolution=threshold_convolution,
+            half_pixel_shift=half_pixel_shift)
     elseif kind === :pyramid_slopes
         return PyramidWFS(tel;
             n_subap=n_subap,
             threshold=threshold,
             modulation=Float64(get(cfg, "modulation", 0.0)),
-            modulation_points=Int(get(cfg, "modulation_points", 1)),
+            modulation_points=get(cfg, "modulation_points", nothing),
+            extra_modulation_factor=Int(get(cfg, "extra_modulation_factor", 0)),
+            old_mask=Bool(get(cfg, "old_mask", false)),
+            rooftop=Float64(get(cfg, "rooftop", 0.0)),
+            theta_rotation=Float64(get(cfg, "theta_rotation", 0.0)),
+            delta_theta=Float64(get(cfg, "delta_theta", 0.0)),
             diffraction_padding=Int(get(cfg, "diffraction_padding", 2)),
             psf_centering=Bool(get(cfg, "psf_centering", true)),
             n_pix_separation=get(cfg, "n_pix_separation", nothing),
@@ -179,6 +193,12 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
         return BioEdgeWFS(tel;
             n_subap=n_subap,
             threshold=threshold,
+            modulation=Float64(get(cfg, "modulation", 0.0)),
+            modulation_points=get(cfg, "modulation_points", nothing),
+            extra_modulation_factor=Int(get(cfg, "extra_modulation_factor", 0)),
+            delta_theta=Float64(get(cfg, "delta_theta", 0.0)),
+            grey_width=Float64(get(cfg, "grey_width", 0.0)),
+            grey_length=get(cfg, "grey_length", false),
             diffraction_padding=Int(get(cfg, "diffraction_padding", 2)),
             psf_centering=Bool(get(cfg, "psf_centering", true)),
             n_pix_separation=get(cfg, "n_pix_separation", nothing),

@@ -63,7 +63,8 @@
 
 ## Simplifications vs OOPAO (Current State)
 - WFS diffractive models use FFT propagation; Shack-Hartmann supports pixel-scale
-  and subaperture sampling controls (binning + crop/pad). Pyramid now models PSF
+  and subaperture sampling controls (binning + crop/pad), plus OOPAO-style
+  spot-centering phasors and centroid/convolution thresholds. Pyramid now models PSF
   centering, old/new mask variants, rooftop tuning, rotation, and OOPAO-style
   modulation-path construction. BioEdge now uses a diffractive mask stack with
   modulation and grey-width/grey-length mask variants instead of the
@@ -92,7 +93,6 @@
   reproducible array-level regression for image formation.
 - [ ] Close diffractive WFS fidelity gaps:
   Pyramid/BioEdge per-subaperture Na-profile kernels instead of averaged kernels;
-  exact Shack-Hartmann phasor/threshold conventions;
   remaining detector-coupled signal-processing differences.
 - [ ] Port and validate OOPAO transfer-function workflow
   (`tutorials/AO_transfer_function.py`) with matching outputs.
@@ -143,7 +143,7 @@
 7. Decide whether tomography is in-scope for core parity now; if yes, port `tutorials/how_to_tomography.py`
    and add regression coverage, otherwise document the scope cut explicitly.
 8. Replace averaged Pyramid/BioEdge Na-profile kernels with per-subaperture kernels where OOPAO does so.
-9. Match Shack-Hartmann half-pixel-shift and centroid/convolution threshold conventions.
+9. Expand the committed OOPAO bundle so the new SH/Pyramid/BioEdge parity knobs are regression-backed.
 10. After the above, re-run the parity audit and only then resume GPU-specific expansion.
 
 ## Phase 0: Setup

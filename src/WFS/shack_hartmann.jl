@@ -3,6 +3,9 @@ using Statistics
 struct ShackHartmannParams{T<:AbstractFloat}
     n_subap::Int
     threshold::T
+    threshold_cog::T
+    threshold_convolution::T
+    half_pixel_shift::Bool
     diffraction_padding::Int
     pixel_scale::Union{T,Nothing}
     n_pix_subap::Union{Int,Nothing}
@@ -23,6 +26,7 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     valid_mask::A
     slopes::V
     field::C
+    phasor::C
     fft_buffer::C
     intensity::R
     temp::R
@@ -36,6 +40,7 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     effective_padding::Int
     binning_pixel_scale::Int
     sampled_n_pix_subap::Int
+    phasor_ratio::T
 end
 
 struct ShackHartmann{M<:SensingMode,P<:ShackHartmannParams,S<:ShackHartmannState} <: AbstractWFS
@@ -44,6 +49,7 @@ struct ShackHartmann{M<:SensingMode,P<:ShackHartmannParams,S<:ShackHartmannState
 end
 
 function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
+    threshold_cog::Real=0.01, threshold_convolution::Real=0.05, half_pixel_shift::Bool=false,
     diffraction_padding::Int=2, pixel_scale=nothing, n_pix_subap=nothing,
     shannon_sampling::Bool=true, mode::SensingMode=Geometric(),
     T::Type{<:AbstractFloat}=Float64, backend=Array)
@@ -51,7 +57,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     end
     pixel_scale_t = pixel_scale === nothing ? nothing : T(pixel_scale)
-    params = ShackHartmannParams{T}(n_subap, T(threshold), diffraction_padding,
+    params = ShackHartmannParams{T}(n_subap, T(threshold), T(threshold_cog), T(threshold_convolution), half_pixel_shift, diffraction_padding,
         pixel_scale_t, n_pix_subap, shannon_sampling)
     valid_mask = backend{Bool}(undef, n_subap, n_subap)
     slopes = backend{T}(undef, 2 * n_subap * n_subap)
@@ -59,6 +65,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     sub = div(tel.params.resolution, n_subap)
     pad = max(sub, sub * diffraction_padding)
     field = backend{Complex{T}}(undef, pad, pad)
+    phasor = similar(field)
     fft_buffer = similar(field)
     intensity = backend{T}(undef, pad, pad)
     temp = similar(intensity)
@@ -84,6 +91,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         valid_mask,
         slopes,
         field,
+        phasor,
         fft_buffer,
         intensity,
         temp,
@@ -97,6 +105,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         diffraction_padding,
         1,
         sub,
+        T(NaN),
     )
     wfs = ShackHartmann{typeof(mode), typeof(params), typeof(state)}(params, state)
     update_valid_mask!(wfs, tel)
@@ -113,12 +122,32 @@ end
 function ensure_sh_buffers!(wfs::ShackHartmann, pad::Int)
     if size(wfs.state.field) != (pad, pad)
         wfs.state.field = similar(wfs.state.field, pad, pad)
+        wfs.state.phasor = similar(wfs.state.phasor, pad, pad)
         wfs.state.fft_buffer = similar(wfs.state.fft_buffer, pad, pad)
         wfs.state.intensity = similar(wfs.state.intensity, pad, pad)
         wfs.state.temp = similar(wfs.state.temp, pad, pad)
         wfs.state.fft_plan = plan_fft_backend!(wfs.state.fft_buffer)
         wfs.state.ifft_plan = plan_ifft_backend!(wfs.state.fft_buffer)
+        wfs.state.phasor_ratio = eltype(wfs.state.slopes)(NaN)
     end
+    return wfs
+end
+
+function build_sh_phasor!(wfs::ShackHartmann, ratio::T) where {T<:AbstractFloat}
+    if size(wfs.state.phasor, 1) == 0
+        return wfs
+    end
+    if isequal(wfs.state.phasor_ratio, ratio)
+        return wfs
+    end
+    n = size(wfs.state.phasor, 1)
+    scale = -T(π) * (T(n) + one(T) + ratio) / T(n)
+    host = Matrix{Complex{T}}(undef, n, n)
+    @inbounds for i in 1:n, j in 1:n
+        host[i, j] = cis(scale * (i + j - 2))
+    end
+    copyto!(wfs.state.phasor, host)
+    wfs.state.phasor_ratio = ratio
     return wfs
 end
 
@@ -180,6 +209,9 @@ function prepare_sampling!(wfs::ShackHartmann, tel::Telescope, src::AbstractSour
     end
 
     wfs.state.binning_pixel_scale = binning_pixel_scale
+    T = eltype(wfs.state.slopes)
+    half_shift_ratio = wfs.params.half_pixel_shift ? T(binning_pixel_scale) : zero(T)
+    build_sh_phasor!(wfs, half_shift_ratio)
     return wfs
 end
 
@@ -415,25 +447,37 @@ function compute_intensity!(wfs::ShackHartmann, tel::Telescope, src::AbstractSou
     fill!(wfs.state.field, zero(eltype(wfs.state.field)))
     @views @. wfs.state.field[ox+1:ox+sub, oy+1:oy+sub] =
         tel.state.pupil[xs:xe, ys:ye] * cis(phase_scale * tel.state.opd[xs:xe, ys:ye])
+    @. wfs.state.field *= wfs.state.phasor
     copyto!(wfs.state.fft_buffer, wfs.state.field)
     mul!(wfs.state.fft_buffer, wfs.state.fft_plan, wfs.state.fft_buffer)
     @. wfs.state.intensity = abs2(wfs.state.fft_buffer)
     return wfs.state.intensity
 end
 
-@inline function centroid_from_intensity(intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
-    total = sum(intensity)
-    if total <= 0
+@inline function centroid_from_intensity!(intensity::AbstractMatrix{T}, threshold::T) where {T<:AbstractFloat}
+    peak = maximum(intensity)
+    if peak <= 0
         return zero(T), zero(T), zero(T), one(T)
     end
+    cutoff = threshold * peak
+    total = zero(T)
     sx = zero(T)
     sy = zero(T)
-    pad = size(intensity, 1)
-    center = (T(pad) + one(T)) / 2
-    @inbounds for x in 1:pad, y in 1:pad
+    n1 = size(intensity, 1)
+    n2 = size(intensity, 2)
+    center = (T(n1) - one(T)) / 2
+    @inbounds for x in 1:n1, y in 1:n2
         val = intensity[x, y]
-        sx += (x - center) * val
-        sy += (y - center) * val
+        if val < cutoff
+            intensity[x, y] = zero(T)
+        else
+            total += val
+            sx += (T(x - 1) - center) * val
+            sy += (T(y - 1) - center) * val
+        end
+    end
+    if total <= 0
+        return zero(T), zero(T), zero(T), one(T)
     end
     return total, sx, sy, center
 end
@@ -442,7 +486,7 @@ function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int, pad::Int, ::Int)
     compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
     spot = sample_spot!(wfs, wfs.state.intensity)
-    return centroid_from_intensity(spot)
+    return centroid_from_intensity!(spot, wfs.params.threshold_cog)
 end
 
 function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
@@ -450,7 +494,7 @@ function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
     compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
     apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
     spot = sample_spot!(wfs, wfs.state.intensity)
-    return centroid_from_intensity(spot)
+    return centroid_from_intensity!(spot, wfs.params.threshold_cog)
 end
 
 function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
@@ -459,7 +503,7 @@ function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
     spot = sample_spot!(wfs, wfs.state.intensity)
     frame = capture!(det, spot; rng=rng)
-    return centroid_from_intensity(frame)
+    return centroid_from_intensity!(frame, wfs.params.threshold_cog)
 end
 
 function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
@@ -469,7 +513,7 @@ function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
     apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
     spot = sample_spot!(wfs, wfs.state.intensity)
     frame = capture!(det, spot; rng=rng)
-    return centroid_from_intensity(frame)
+    return centroid_from_intensity!(frame, wfs.params.threshold_cog)
 end
 
 function apply_lgs_elongation!(::LGSProfileNone, wfs::ShackHartmann, ::Telescope, src::LGSSource, ::Int)
@@ -556,6 +600,19 @@ function lgs_spot_kernels_fft(tel::Telescope, wfs::ShackHartmann, src::LGSSource
     for iy in 1:n_sub, ix in 1:n_sub
         lgs_spot_kernel!(kernel, tel, src, altitudes, weights, pixel_scale, sigma_px, center,
             x_subap[ix], y_subap[iy], ref_vec)
+        peak = maximum(kernel)
+        if peak > 0
+            cutoff = wfs.params.threshold_convolution * peak
+            @inbounds for j in axes(kernel, 2), i in axes(kernel, 1)
+                if kernel[i, j] < cutoff
+                    kernel[i, j] = zero(T)
+                end
+            end
+            total = sum(kernel)
+            if total > 0
+                kernel ./= total
+            end
+        end
         fft_buffer = wfs.state.fft_buffer
         @. fft_buffer = complex(kernel, zero(T))
         mul!(fft_buffer, wfs.state.fft_plan, fft_buffer)

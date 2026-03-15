@@ -285,6 +285,17 @@ end
 @testset "OOPAO parity knobs" begin
     tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
+    for i in 1:tel.params.resolution, j in 1:tel.params.resolution
+        tel.state.opd[i, j] = i + j / 10
+    end
+
+    sh_plain = ShackHartmann(tel; n_subap=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
+    sh_shift = ShackHartmann(tel; n_subap=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8,
+        half_pixel_shift=true)
+    sh_thresh = ShackHartmann(tel; n_subap=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8,
+        threshold_cog=0.2)
+    @test measure!(sh_plain, tel, src) != measure!(sh_shift, tel, src)
+    @test measure!(sh_plain, tel, src) != measure!(sh_thresh, tel, src)
 
     pyr_auto = PyramidWFS(tel; n_subap=4, mode=Diffractive(), modulation=1.0)
     @test size(pyr_auto.state.modulation_phases, 3) == 8
