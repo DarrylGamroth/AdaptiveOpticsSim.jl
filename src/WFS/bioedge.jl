@@ -486,6 +486,8 @@ function bioedge_intensity_core!(out::AbstractMatrix{T}, wfs::BioEdgeWFS, tel::T
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
     phase_scale = (2 * pi) / wavelength(src)
+    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2 /
+        wfs.params.modulation_points))
 
     fill!(out, zero(T))
     profile = apply_lgs ? lgs_profile(src) : LGSProfileNone()
@@ -495,7 +497,7 @@ function bioedge_intensity_core!(out::AbstractMatrix{T}, wfs::BioEdgeWFS, tel::T
 
     @inbounds for p in 1:wfs.params.modulation_points
         fill!(wfs.state.field, zero(eltype(wfs.state.field)))
-        @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = tel.state.pupil *
+        @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * tel.state.pupil *
             wfs.state.modulation_phases[:, :, p] * cis(phase_scale * tel.state.opd)
         copyto!(wfs.state.focal_field, wfs.state.field)
         if wfs.params.psf_centering

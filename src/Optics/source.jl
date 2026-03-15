@@ -9,6 +9,17 @@ const BAND_WAVELENGTHS = Dict(
     :K => 2.19e-6,
 )
 
+const BAND_ZEROPOINTS = Dict(
+    :U => 1.96e12 / 368,
+    :B => 5.38e12 / 368,
+    :V => 3.64e12 / 368,
+    :R => 4.01e12 / 368,
+    :I => 2.69e12 / 368,
+    :J => 1.90e12 / 368,
+    :H => 1.10e12 / 368,
+    :K => 0.70e12 / 368,
+)
+
 abstract type LGSProfile end
 struct LGSProfileNone <: LGSProfile end
 struct LGSProfileNaProfile <: LGSProfile end
@@ -18,6 +29,7 @@ struct SourceParams{T<:AbstractFloat}
     magnitude::T
     coordinates::NTuple{2,T}
     wavelength::T
+    n_photon::T
 end
 
 struct Source{P<:SourceParams} <: AbstractSource
@@ -33,11 +45,17 @@ function Source(; band::Symbol=:I, magnitude::Real=0.0, coordinates=(0.0, 0.0), 
         end
     end
     coords = (T(coordinates[1]), T(coordinates[2]))
-    params = SourceParams{T}(band, T(magnitude), coords, T(wavelength))
+    n_photon = if haskey(BAND_ZEROPOINTS, band)
+        T(BAND_ZEROPOINTS[band] * 10.0^(-0.4 * magnitude))
+    else
+        one(T)
+    end
+    params = SourceParams{T}(band, T(magnitude), coords, T(wavelength), n_photon)
     return Source(params)
 end
 
 wavelength(src::Source) = src.params.wavelength
+photon_flux(src::Source) = src.params.n_photon
 
 struct LGSSourceParams{T<:AbstractFloat,A}
     magnitude::T
@@ -48,6 +66,7 @@ struct LGSSourceParams{T<:AbstractFloat,A}
     laser_coordinates::NTuple{2,T}
     na_profile::A
     fwhm_spot_up::T
+    n_photon::T
 end
 
 struct LGSSource{P<:LGSSourceParams} <: AbstractSource
@@ -78,11 +97,13 @@ function LGSSource(; magnitude::Real=0.0, coordinates=(0.0, 0.0), wavelength::Re
         (T(laser_coordinates[1]), T(laser_coordinates[2])),
         na_profile,
         T(fwhm_spot_up),
+        one(T),
     )
     return LGSSource(params)
 end
 
 wavelength(src::LGSSource) = src.params.wavelength
+photon_flux(src::LGSSource) = src.params.n_photon
 
 lgs_elongation_factor(src::LGSSource) = src.params.elongation_factor
 

@@ -22,17 +22,25 @@ function compute_psf!(tel::Telescope, src::Source, ws::Workspace, zero_padding::
 
     fill!(ws.pupil_field, zero(eltype(ws.pupil_field)))
     phase_scale = T(2 * pi) / wavelength(src)
+    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
     ox = div(n_pad - n, 2)
     oy = div(n_pad - n, 2)
-    @views @. ws.pupil_field[ox+1:ox+n, oy+1:oy+n] = tel.state.pupil * cis(phase_scale * tel.state.opd)
+    @views @. ws.pupil_field[ox+1:ox+n, oy+1:oy+n] = amp_scale * tel.state.pupil * cis(phase_scale * tel.state.opd)
+    if iseven(n_pad)
+        phase_shift = -T(pi) * (T(n_pad) + one(T)) / T(n_pad)
+        @inbounds for j in 1:n_pad, i in 1:n_pad
+            ws.pupil_field[i, j] *= cis(phase_shift * (i + j - 2))
+        end
+    end
 
     copyto!(ws.fft_buffer, ws.pupil_field)
     mul!(ws.fft_buffer, ws.fft_plan, ws.fft_buffer)
 
-    @. ws.psf_buffer = abs2(ws.fft_buffer)
+    fft_scale = inv(T(n_pad))
+    @. ws.psf_buffer = abs2(ws.fft_buffer) * (fft_scale * fft_scale)
 
     ensure_psf_state!(tel, n_pad)
-    fftshift2d!(tel.state.psf, ws.psf_buffer)
+    copyto!(tel.state.psf, ws.psf_buffer)
     return tel.state.psf
 end
 
