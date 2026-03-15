@@ -1,3 +1,5 @@
+const ARCSEC_PER_RAD = 180 * 3600 / π
+
 @kernel function elongation_apply_kernel!(tmp, intensity, kernel, half::Int, n1::Int, n2::Int)
     i, j = @index(Global, NTuple)
     if i <= n1 && j <= n2
@@ -69,11 +71,11 @@ function _apply_elongation!(style::AcceleratorStyle, intensity::AbstractMatrix{T
 end
 
 @inline function lgs_pixel_scale(diameter::Real, diffraction_padding::Int, wavelength::Real)
-    return 206265 * float(wavelength) / float(diameter) / diffraction_padding
+    return ARCSEC_PER_RAD * float(wavelength) / float(diameter) / diffraction_padding
 end
 
 @inline function lgs_pixel_scale(diameter::Real, diffraction_padding::Real, wavelength::Real)
-    return 206265 * float(wavelength) / float(diameter) / float(diffraction_padding)
+    return ARCSEC_PER_RAD * float(wavelength) / float(diameter) / float(diffraction_padding)
 end
 
 @inline function lgs_pixel_scale(diameter::Real, diffraction_padding::Int, src::LGSSource)
@@ -93,8 +95,8 @@ function lgs_spot_shift(vec::Tuple{T,T,T}, tel::Telescope, x_subap::Real, y_suba
     dy0 = vec[2] * (4 / tel.params.diameter)
     dx1 = vec[3] * (sqrt(3) * (4 / tel.params.diameter)^2) * x_subap
     dy1 = vec[3] * (sqrt(3) * (4 / tel.params.diameter)^2) * y_subap
-    shift_x = 206265 * (dx0 + dx1) / pixel_scale
-    shift_y = 206265 * (dy0 + dy1) / pixel_scale
+    shift_x = ARCSEC_PER_RAD * (dx0 + dx1) / pixel_scale
+    shift_y = ARCSEC_PER_RAD * (dy0 + dy1) / pixel_scale
     return shift_x, shift_y
 end
 

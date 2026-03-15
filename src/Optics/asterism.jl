@@ -26,7 +26,7 @@ function coordinates_xy_arcsec(src::Source)
 end
 
 function psf_pixel_scale_arcsec(tel::Telescope, src::Source, zero_padding::Int)
-    return 206265 * wavelength(src) / tel.params.diameter / zero_padding
+    return (180 * 3600 / π) * wavelength(src) / tel.params.diameter / zero_padding
 end
 
 function shift_psf!(out::AbstractMatrix, psf::AbstractMatrix, dx::Real, dy::Real)

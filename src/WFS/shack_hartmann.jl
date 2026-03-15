@@ -19,6 +19,7 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     R<:AbstractMatrix{T},
     RB<:AbstractMatrix{T},
     RS<:AbstractMatrix{T},
+    RC<:AbstractArray{T,3},
     P,
     Pi,
     K<:AbstractVector{T},
@@ -32,6 +33,7 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     temp::R
     bin_buffer::RB
     spot::RS
+    spot_cube::RC
     fft_plan::P
     ifft_plan::Pi
     elongation_kernel::K
@@ -75,6 +77,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     temp = similar(intensity)
     bin_buffer = backend{T}(undef, sub, sub)
     spot = similar(bin_buffer)
+    spot_cube = backend{T}(undef, n_subap * n_subap, sub, sub)
     fft_plan = plan_fft_backend!(fft_buffer)
     ifft_plan = plan_ifft_backend!(fft_buffer)
     elongation_kernel = backend{T}(undef, 1)
@@ -87,6 +90,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         typeof(intensity),
         typeof(bin_buffer),
         typeof(spot),
+        typeof(spot_cube),
         typeof(fft_plan),
         typeof(ifft_plan),
         typeof(elongation_kernel),
@@ -101,6 +105,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         temp,
         bin_buffer,
         spot,
+        spot_cube,
         fft_plan,
         ifft_plan,
         elongation_kernel,
@@ -214,6 +219,8 @@ function prepare_sampling!(wfs::ShackHartmann, tel::Telescope, src::AbstractSour
 
     if n_pix_subap != wfs.state.sampled_n_pix_subap
         wfs.state.spot = similar(wfs.state.spot, n_pix_subap, n_pix_subap)
+        wfs.state.spot_cube = similar(wfs.state.spot_cube, eltype(wfs.state.spot_cube),
+            wfs.params.n_subap * wfs.params.n_subap, n_pix_subap, n_pix_subap)
         wfs.state.sampled_n_pix_subap = n_pix_subap
     end
 
@@ -290,34 +297,9 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
     Base.require_one_based_indexing(tel.state.opd)
     prepare_sampling!(wfs, tel, src)
     ensure_sh_calibration!(wfs, tel, src)
-    n = tel.params.resolution
-    n_sub = wfs.params.n_subap
-    sub = div(n, n_sub)
-    pad = size(wfs.state.field, 1)
-    ox = div(pad - sub, 2)
-    oy = div(pad - sub, 2)
-    idx = 1
-
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = min(i * sub, n)
-        ye = min(j * sub, n)
-        if wfs.state.valid_mask[i, j]
-            total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
-            if total <= 0
-                wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
-                wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
-            else
-                wfs.state.slopes[idx] = (sy - wfs.state.reference_signal_2d[idx]) / wfs.state.slopes_units
-                wfs.state.slopes[idx + n_sub * n_sub] = (sx - wfs.state.reference_signal_2d[idx + n_sub * n_sub]) / wfs.state.slopes_units
-            end
-        else
-            wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
-            wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
-        end
-        idx += 1
-    end
+    peak = sampled_spots_peak!(wfs, tel, src)
+    sh_signal_from_spots!(wfs, peak, wfs.params.threshold_cog)
+    subtract_reference_and_scale!(wfs)
     return wfs.state.slopes
 end
 
@@ -326,34 +308,9 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
     Base.require_one_based_indexing(tel.state.opd)
     prepare_sampling!(wfs, tel, src)
     ensure_sh_calibration!(wfs, tel, src)
-    n = tel.params.resolution
-    n_sub = wfs.params.n_subap
-    sub = div(n, n_sub)
-    pad = size(wfs.state.field, 1)
-    ox = div(pad - sub, 2)
-    oy = div(pad - sub, 2)
-    idx = 1
-
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = min(i * sub, n)
-        ye = min(j * sub, n)
-        if wfs.state.valid_mask[i, j]
-            total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx, det, rng)
-            if total <= 0
-                wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
-                wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
-            else
-                wfs.state.slopes[idx] = (sy - wfs.state.reference_signal_2d[idx]) / wfs.state.slopes_units
-                wfs.state.slopes[idx + n_sub * n_sub] = (sx - wfs.state.reference_signal_2d[idx + n_sub * n_sub]) / wfs.state.slopes_units
-            end
-        else
-            wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
-            wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
-        end
-        idx += 1
-    end
+    peak = sampled_spots_peak!(wfs, tel, src, det, rng)
+    sh_signal_from_spots!(wfs, peak, wfs.params.threshold_cog)
+    subtract_reference_and_scale!(wfs)
     return wfs.state.slopes
 end
 
@@ -474,7 +431,10 @@ end
     if peak <= 0
         return zero(T), zero(T), zero(T)
     end
-    cutoff = threshold * peak
+    return centroid_from_intensity_cutoff!(intensity, threshold * peak)
+end
+
+@inline function centroid_from_intensity_cutoff!(intensity::AbstractMatrix{T}, cutoff::T) where {T<:AbstractFloat}
     total = zero(T)
     sx = zero(T)
     sy = zero(T)
@@ -494,6 +454,187 @@ end
         return zero(T), zero(T), zero(T)
     end
     return total, sx / total, sy / total
+end
+
+@inline function sh_spot_view(wfs::ShackHartmann, idx::Int)
+    return @view wfs.state.spot_cube[idx, :, :]
+end
+
+function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
+    n = tel.params.resolution
+    n_sub = wfs.params.n_subap
+    sub = div(n, n_sub)
+    pad = size(wfs.state.field, 1)
+    ox = div(pad - sub, 2)
+    oy = div(pad - sub, 2)
+    peak = zero(eltype(wfs.state.slopes))
+    idx = 1
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        spot_view = sh_spot_view(wfs, idx)
+        if wfs.state.valid_mask[i, j]
+            xs = (i - 1) * sub + 1
+            ys = (j - 1) * sub + 1
+            xe = min(i * sub, n)
+            ye = min(j * sub, n)
+            compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+            sample_spot!(wfs, wfs.state.intensity)
+            copyto!(spot_view, wfs.state.spot)
+            peak = max(peak, maximum(spot_view))
+        else
+            fill!(spot_view, zero(eltype(spot_view)))
+        end
+        idx += 1
+    end
+    return peak
+end
+
+function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::LGSSource)
+    n = tel.params.resolution
+    n_sub = wfs.params.n_subap
+    sub = div(n, n_sub)
+    pad = size(wfs.state.field, 1)
+    ox = div(pad - sub, 2)
+    oy = div(pad - sub, 2)
+    peak = zero(eltype(wfs.state.slopes))
+    idx = 1
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        spot_view = sh_spot_view(wfs, idx)
+        if wfs.state.valid_mask[i, j]
+            xs = (i - 1) * sub + 1
+            ys = (j - 1) * sub + 1
+            xe = min(i * sub, n)
+            ye = min(j * sub, n)
+            compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+            apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
+            sample_spot!(wfs, wfs.state.intensity)
+            copyto!(spot_view, wfs.state.spot)
+            peak = max(peak, maximum(spot_view))
+        else
+            fill!(spot_view, zero(eltype(spot_view)))
+        end
+        idx += 1
+    end
+    return peak
+end
+
+function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
+    det::AbstractDetector, rng::AbstractRNG)
+    n = tel.params.resolution
+    n_sub = wfs.params.n_subap
+    sub = div(n, n_sub)
+    pad = size(wfs.state.field, 1)
+    ox = div(pad - sub, 2)
+    oy = div(pad - sub, 2)
+    peak = zero(eltype(wfs.state.slopes))
+    idx = 1
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        spot_view = sh_spot_view(wfs, idx)
+        if wfs.state.valid_mask[i, j]
+            xs = (i - 1) * sub + 1
+            ys = (j - 1) * sub + 1
+            xe = min(i * sub, n)
+            ye = min(j * sub, n)
+            compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+            sample_spot!(wfs, wfs.state.intensity)
+            frame = capture!(det, wfs.state.spot; rng=rng)
+            copyto!(spot_view, frame)
+            peak = max(peak, maximum(spot_view))
+        else
+            fill!(spot_view, zero(eltype(spot_view)))
+        end
+        idx += 1
+    end
+    return peak
+end
+
+function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
+    det::AbstractDetector, rng::AbstractRNG)
+    n = tel.params.resolution
+    n_sub = wfs.params.n_subap
+    sub = div(n, n_sub)
+    pad = size(wfs.state.field, 1)
+    ox = div(pad - sub, 2)
+    oy = div(pad - sub, 2)
+    peak = zero(eltype(wfs.state.slopes))
+    idx = 1
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        spot_view = sh_spot_view(wfs, idx)
+        if wfs.state.valid_mask[i, j]
+            xs = (i - 1) * sub + 1
+            ys = (j - 1) * sub + 1
+            xe = min(i * sub, n)
+            ye = min(j * sub, n)
+            compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+            apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
+            sample_spot!(wfs, wfs.state.intensity)
+            frame = capture!(det, wfs.state.spot; rng=rng)
+            copyto!(spot_view, frame)
+            peak = max(peak, maximum(spot_view))
+        else
+            fill!(spot_view, zero(eltype(spot_view)))
+        end
+        idx += 1
+    end
+    return peak
+end
+
+function sh_signal_from_spots!(wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}
+    n_sub = wfs.params.n_subap
+    idx = 1
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        if wfs.state.valid_mask[i, j]
+            total, sx, sy = centroid_from_intensity_cutoff!(sh_spot_view(wfs, idx), cutoff)
+            if total <= 0
+                wfs.state.slopes[idx] = zero(T)
+                wfs.state.slopes[idx + n_sub * n_sub] = zero(T)
+            else
+                wfs.state.slopes[idx] = sy
+                wfs.state.slopes[idx + n_sub * n_sub] = sx
+            end
+        else
+            wfs.state.slopes[idx] = zero(T)
+            wfs.state.slopes[idx + n_sub * n_sub] = zero(T)
+        end
+        idx += 1
+    end
+    return wfs.state.slopes
+end
+
+function sh_signal_from_spots!(wfs::ShackHartmann, peak::T, threshold::T) where {T<:AbstractFloat}
+    cutoff = peak <= 0 ? zero(T) : threshold * peak
+    return sh_signal_from_spots!(wfs, cutoff)
+end
+
+function mean_valid_signal(signal::AbstractVector{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
+    n_sub = size(valid_mask, 1)
+    offset = n_sub * n_sub
+    acc = zero(T)
+    count = 0
+    idx = 1
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        if valid_mask[i, j]
+            acc += signal[idx]
+            acc += signal[idx + offset]
+            count += 2
+        end
+        idx += 1
+    end
+    return count == 0 ? one(T) : acc / count
+end
+
+function subtract_reference_and_scale!(wfs::ShackHartmann)
+    inv_units = inv(wfs.state.slopes_units)
+    @inbounds for idx in eachindex(wfs.state.slopes)
+        wfs.state.slopes[idx] = (wfs.state.slopes[idx] - wfs.state.reference_signal_2d[idx]) * inv_units
+    end
+    return wfs.state.slopes
+end
+
+function subtract_reference!(wfs::ShackHartmann)
+    @inbounds for idx in eachindex(wfs.state.slopes)
+        wfs.state.slopes[idx] -= wfs.state.reference_signal_2d[idx]
+    end
+    return wfs.state.slopes
 end
 
 function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
@@ -531,33 +672,9 @@ function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
 end
 
 function sh_reference_signal!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
-    n = tel.params.resolution
-    n_sub = wfs.params.n_subap
-    sub = div(n, n_sub)
-    pad = size(wfs.state.field, 1)
-    ox = div(pad - sub, 2)
-    oy = div(pad - sub, 2)
-    idx = 1
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = min(i * sub, n)
-        ye = min(j * sub, n)
-        if wfs.state.valid_mask[i, j]
-            total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
-            if total <= 0
-                wfs.state.reference_signal_2d[idx] = zero(eltype(wfs.state.reference_signal_2d))
-                wfs.state.reference_signal_2d[idx + n_sub * n_sub] = zero(eltype(wfs.state.reference_signal_2d))
-            else
-                wfs.state.reference_signal_2d[idx] = sy
-                wfs.state.reference_signal_2d[idx + n_sub * n_sub] = sx
-            end
-        else
-            wfs.state.reference_signal_2d[idx] = zero(eltype(wfs.state.reference_signal_2d))
-            wfs.state.reference_signal_2d[idx + n_sub * n_sub] = zero(eltype(wfs.state.reference_signal_2d))
-        end
-        idx += 1
-    end
+    peak = sampled_spots_peak!(wfs, tel, src)
+    sh_signal_from_spots!(wfs, peak, wfs.params.threshold_cog)
+    copyto!(wfs.state.reference_signal_2d, wfs.state.slopes)
     return wfs
 end
 
@@ -581,30 +698,13 @@ function ensure_sh_calibration!(wfs::ShackHartmann, tel::Telescope, src::Abstrac
     @inbounds for j in 1:n, i in 1:n
         tel.state.opd[i, j] = (xvals[j] + xvals[i]) * scale
     end
-    n_sub = wfs.params.n_subap
-    sub = div(n, n_sub)
-    pad = size(wfs.state.field, 1)
-    ox = div(pad - sub, 2)
-    oy = div(pad - sub, 2)
-    idx = 1
-    acc = zero(T)
-    count = 0
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = min(i * sub, n)
-        ye = min(j * sub, n)
-        if wfs.state.valid_mask[i, j]
-            total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
-            if total > 0
-                acc += sy - wfs.state.reference_signal_2d[idx]
-                acc += sx - wfs.state.reference_signal_2d[idx + n_sub * n_sub]
-                count += 2
-            end
-        end
-        idx += 1
+    peak = sampled_spots_peak!(wfs, tel, src)
+    sh_signal_from_spots!(wfs, peak, wfs.params.threshold_cog)
+    subtract_reference!(wfs)
+    wfs.state.slopes_units = mean_valid_signal(wfs.state.slopes, wfs.state.valid_mask)
+    if !isfinite(wfs.state.slopes_units) || wfs.state.slopes_units == zero(T)
+        wfs.state.slopes_units = one(T)
     end
-    wfs.state.slopes_units = count == 0 ? one(T) : abs(acc / count)
     copyto!(tel.state.opd, opd_saved)
     wfs.state.calibrated = true
     wfs.state.calibration_wavelength = λ

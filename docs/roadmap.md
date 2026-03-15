@@ -86,18 +86,17 @@
   optional WFS shifts, but no FITS I/O (`src/Calibration/misregistration_identification.jl`).
 
 ## Functional Parity Gate (Current Blocking Gaps)
-- [ ] Local OOPAO bundle expansion now matches `psf_baseline`,
-  `pyramid_diffractive_ramp`, and `bioedge_diffractive_ramp` within the
-  documented case tolerances. `shack_hartmann_diffractive_ramp` is improved but
-  still carries a small residual centroid/calibration mismatch.
+- [x] The committed OOPAO reference bundle now matches
+  `psf_baseline`, `shack_hartmann_diffractive_ramp`,
+  `pyramid_diffractive_ramp`, and `bioedge_diffractive_ramp`
+  within their documented tolerances.
 - [ ] Expand deterministic OOPAO reference coverage beyond geometric Shack-Hartmann to:
   PSF formation, diffractive Shack-Hartmann, Pyramid, BioEdge, Gain Sensing Camera,
   LiFT, and closed-loop traces.
 - [x] Match OOPAO PSF export conventions and normalization exactly enough to support
   reproducible array-level regression for image formation.
-- [ ] Close diffractive WFS fidelity gaps:
-  Pyramid/BioEdge per-subaperture Na-profile kernels instead of averaged kernels;
-  remaining Shack-Hartmann detector/cog calibration differences.
+- [ ] Close remaining diffractive WFS fidelity gaps:
+  Pyramid/BioEdge per-subaperture Na-profile kernels instead of averaged kernels.
 - [ ] Port and validate OOPAO transfer-function workflow
   (`tutorials/AO_transfer_function.py`) with matching outputs.
 - [ ] Port and validate OOPAO GSC closed-loop workflow
@@ -195,11 +194,13 @@
 
 Current validation scope:
 - `examples/tutorials/` now covers the core OOPAO workflows used most often in practice.
-- `test/reference_data/` commits two deterministic OOPAO geometric Shack-Hartmann cases.
-- The reference harness applies a documented convention adapter for OOPAO SH slope ordering and units.
+- `test/reference_data/` now commits deterministic OOPAO PSF, geometric Shack-Hartmann,
+  diffractive Shack-Hartmann, Pyramid, and BioEdge cases.
+- The reference harness applies a documented convention adapter only where OOPAO and Julia
+  intentionally expose different public conventions in geometric Shack-Hartmann mode.
 - Local expanded bundle audits now cover PSF plus diffractive SH/Pyramid/BioEdge.
-- PSF, Pyramid, and BioEdge are now within the documented bundle tolerances locally; diffractive
-  Shack-Hartmann still needs a final calibration pass before the expanded bundle should be committed.
+- PSF, diffractive Shack-Hartmann, Pyramid, and BioEdge are now regression-backed against
+  the committed OOPAO bundle.
 
 ## Phase 8: Full OOPAO Functional Parity
 - [ ] Every supported OOPAO workflow has deterministic Julia vs OOPAO regression coverage.
