@@ -2,12 +2,19 @@ using LinearAlgebra
 using SparseArrays
 
 abstract type AbstractTomographyMethod end
+abstract type AbstractSlopeOrder end
 
 const PYTOMOAO_DEFAULT_CROSS_SAMPLING = 49
 
 struct ModelBasedTomography <: AbstractTomographyMethod end
 
 struct InteractionMatrixTomography <: AbstractTomographyMethod end
+
+struct SimulationSlopes <: AbstractSlopeOrder end
+
+struct InterleavedSlopes <: AbstractSlopeOrder end
+
+struct InvertedSlopes <: AbstractSlopeOrder end
 
 struct TomographyOperators{G,M,CX,CO,CN,RS,T}
     gamma::G
@@ -42,6 +49,20 @@ struct TomographicReconstructor{
     dm::DP
     fitting::F
     operators::O
+end
+
+mutable struct TomographyCommandReconstructor{
+    T<:AbstractFloat,
+    M<:AbstractMatrix{T},
+    F<:TomographyFitting,
+    R<:TomographicReconstructor,
+    O<:AbstractSlopeOrder,
+}
+    matrix::M
+    fitting::F
+    reconstructor::R
+    slope_order::O
+    scaling_factor::T
 end
 
 @inline _fried_parameter(params::TomographyAtmosphereParams{T}) where {T<:AbstractFloat} =
@@ -441,6 +462,164 @@ function build_reconstructor(
         fitting,
         operators,
     )
+end
+
+function swap_xy_blocks(
+    matrix::AbstractMatrix{T},
+    n_valid_subap::Integer;
+    n_channels::Integer=1,
+) where {T}
+    cols_per_channel = 2 * Int(n_valid_subap)
+    size(matrix, 2) == cols_per_channel * Int(n_channels) ||
+        throw(DimensionMismatchError("matrix column count must equal 2*n_valid_subap*n_channels"))
+    reordered = Matrix{T}(undef, size(matrix))
+    @inbounds for channel in 1:Int(n_channels)
+        channel_start = (channel - 1) * cols_per_channel
+        src_x = channel_start + Int(n_valid_subap) + 1:channel_start + cols_per_channel
+        src_y = channel_start + 1:channel_start + Int(n_valid_subap)
+        dst = channel_start + 1:channel_start + cols_per_channel
+        reordered[:, dst] .= matrix[:, vcat(src_x, src_y)]
+    end
+    return reordered
+end
+
+function interleave_xy_columns(
+    matrix::AbstractMatrix{T},
+    n_valid_subap::Integer;
+    n_channels::Integer=1,
+) where {T}
+    cols_per_channel = 2 * Int(n_valid_subap)
+    size(matrix, 2) == cols_per_channel * Int(n_channels) ||
+        throw(DimensionMismatchError("matrix column count must equal 2*n_valid_subap*n_channels"))
+    reordered = Matrix{T}(undef, size(matrix))
+    @inbounds for channel in 1:Int(n_channels)
+        channel_start = (channel - 1) * cols_per_channel
+        for subap in 1:Int(n_valid_subap)
+            reordered[:, channel_start + 2subap - 1] .= matrix[:, channel_start + subap]
+            reordered[:, channel_start + 2subap] .= matrix[:, channel_start + Int(n_valid_subap) + subap]
+        end
+    end
+    return reordered
+end
+
+prepare_slope_order(
+    ::InvertedSlopes,
+    matrix::AbstractMatrix,
+    n_valid_subap::Integer;
+    n_channels::Integer=1,
+) = Matrix(matrix)
+
+function prepare_slope_order(
+    ::SimulationSlopes,
+    matrix::AbstractMatrix,
+    n_valid_subap::Integer;
+    n_channels::Integer=1,
+)
+    return swap_xy_blocks(matrix, n_valid_subap; n_channels=n_channels)
+end
+
+function prepare_slope_order(
+    ::InterleavedSlopes,
+    matrix::AbstractMatrix,
+    n_valid_subap::Integer;
+    n_channels::Integer=1,
+)
+    swapped = swap_xy_blocks(matrix, n_valid_subap; n_channels=n_channels)
+    return interleave_xy_columns(swapped, n_valid_subap; n_channels=n_channels)
+end
+
+function assemble_reconstructor_and_fitting(
+    reconstructor::TomographicReconstructor{ModelBasedTomography,T},
+    dm::TomographyDMParams{T};
+    n_channels::Integer=reconstructor.asterism.n_lgs,
+    slope_order::AbstractSlopeOrder=SimulationSlopes(),
+    scaling_factor::Real=1.65e7,
+    fitting::Union{Nothing,TomographyFitting}=nothing,
+    regularization::Real=sqrt(eps(T)),
+    w1::Real=2,
+    w2::Real=-1,
+    sigma1::Real=1.0,
+    sigma2::Real=1.7,
+    stretch_factor::Real=1.03,
+) where {T<:AbstractFloat}
+    n_valid = n_valid_subapertures(reconstructor.wfs)
+    n_channels >= 1 || throw(InvalidConfiguration("n_channels must be positive"))
+    base = n_channels == 1 ?
+        reconstructor.reconstructor[:, 1:2*n_valid] :
+        reconstructor.reconstructor
+    ordered = prepare_slope_order(slope_order, base, n_valid; n_channels=n_channels)
+    fit = isnothing(fitting) ?
+        TomographyFitting(
+            dm;
+            regularization=regularization,
+            resolution=size(reconstructor.grid_mask, 1),
+            w1=w1,
+            w2=w2,
+            sigma1=sigma1,
+            sigma2=sigma2,
+            stretch_factor=stretch_factor,
+        ) :
+        fitting
+    modes = fit.influence_functions[vec(reconstructor.grid_mask), :]
+    masked_fitting = TomographyFitting(modes; regularization=regularization, resolution=size(reconstructor.grid_mask, 1))
+    matrix = -masked_fitting.fitting_matrix * ordered * T(scaling_factor)
+    return TomographyCommandReconstructor(
+        matrix,
+        masked_fitting,
+        reconstructor,
+        slope_order,
+        T(scaling_factor),
+    )
+end
+
+function mask_actuators!(
+    reconstructor::TomographyCommandReconstructor,
+    actuator_indices,
+)
+    reconstructor.matrix[actuator_indices, :] .= zero(eltype(reconstructor.matrix))
+    return reconstructor
+end
+
+function dm_commands!(
+    out::AbstractVector{T},
+    reconstructor::TomographyCommandReconstructor{T},
+    slopes::AbstractVector{T},
+) where {T<:AbstractFloat}
+    size(reconstructor.matrix, 1) == length(out) ||
+        throw(DimensionMismatchError("output length must match command matrix row count"))
+    size(reconstructor.matrix, 2) == length(slopes) ||
+        throw(DimensionMismatchError("slopes length must match command matrix column count"))
+    mul!(out, reconstructor.matrix, slopes)
+    return out
+end
+
+function dm_commands(
+    reconstructor::TomographyCommandReconstructor{T},
+    slopes::AbstractVector{T},
+) where {T<:AbstractFloat}
+    out = Vector{T}(undef, size(reconstructor.matrix, 1))
+    return dm_commands!(out, reconstructor, slopes)
+end
+
+function dm_commands!(
+    out::AbstractVector{T},
+    reconstructor::TomographicReconstructor{InteractionMatrixTomography,T},
+    slopes::AbstractVector{T},
+) where {T<:AbstractFloat}
+    size(reconstructor.reconstructor, 1) == length(out) ||
+        throw(DimensionMismatchError("output length must match reconstructor row count"))
+    size(reconstructor.reconstructor, 2) == length(slopes) ||
+        throw(DimensionMismatchError("slopes length must match reconstructor column count"))
+    mul!(out, reconstructor.reconstructor, slopes)
+    return out
+end
+
+function dm_commands(
+    reconstructor::TomographicReconstructor{InteractionMatrixTomography,T},
+    slopes::AbstractVector{T},
+) where {T<:AbstractFloat}
+    out = Vector{T}(undef, size(reconstructor.reconstructor, 1))
+    return dm_commands!(out, reconstructor, slopes)
 end
 
 function build_reconstructor(

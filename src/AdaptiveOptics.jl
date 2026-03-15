@@ -117,13 +117,17 @@ export ParallelConfig, with_parallel_config
 export TomographyAtmosphereParams, LGSAsterismParams, LGSWFSParams
 export TomographyParams, TomographyDMParams, TomographyFitting
 export AbstractTomographyMethod, ModelBasedTomography, InteractionMatrixTomography
-export TomographyOperators, TomographicReconstructor, build_reconstructor
+export AbstractSlopeOrder, SimulationSlopes, InterleavedSlopes, InvertedSlopes
+export TomographyOperators, TomographicReconstructor, TomographyCommandReconstructor
+export build_reconstructor, assemble_reconstructor_and_fitting
 export airmass, layer_altitude_m, wind_direction_rad, wind_velocity_components
 export lgs_height_m, lgs_directions!, lgs_directions
 export optimization_geometry!, optimization_geometry, direction_vectors!, direction_vectors
 export n_valid_subapertures, valid_lenslet_support, dm_valid_support, support_diameter
 export sparse_gradient_matrix, auto_correlation, cross_correlation
-export fit_commands!, fit_commands, reconstruct_wavefront!, reconstruct_wavefront
+export influence_functions, fit_commands!, fit_commands, reconstruct_wavefront!, reconstruct_wavefront
 export reconstruct_wavefront_map!, reconstruct_wavefront_map
+export swap_xy_blocks, interleave_xy_columns, prepare_slope_order
+export mask_actuators!, dm_commands!, dm_commands
 
 end # module AdaptiveOptics
