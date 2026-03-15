@@ -281,6 +281,36 @@ end
     pyr_ast_slopes = measure!(pyr_ast, tel, ast)
     @test length(pyr_ast_slopes) == 2 * 4 * 4
 end
+
+@testset "OOPAO parity knobs" begin
+    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = Source(band=:I, magnitude=0.0)
+
+    pyr_auto = PyramidWFS(tel; n_subap=4, mode=Diffractive(), modulation=1.0)
+    @test size(pyr_auto.state.modulation_phases, 3) == 8
+
+    pyr_path = PyramidWFS(tel; n_subap=4, mode=Diffractive(), modulation=0.0,
+        user_modulation_path=((1.0, 0.0), (0.0, 1.0)))
+    @test size(pyr_path.state.modulation_phases, 3) == 2
+
+    pyr_default = PyramidWFS(tel; n_subap=4, mode=Diffractive(), modulation=1.0)
+    pyr_rooftop = PyramidWFS(tel; n_subap=4, mode=Diffractive(), modulation=1.0,
+        rooftop=0.5, theta_rotation=0.2)
+    pyr_old = PyramidWFS(tel; n_subap=4, mode=Diffractive(), modulation=1.0, old_mask=true)
+    @test pyr_default.state.pyramid_mask != pyr_rooftop.state.pyramid_mask
+    @test pyr_default.state.pyramid_mask != pyr_old.state.pyramid_mask
+
+    bio_plain = BioEdgeWFS(tel; n_subap=4, mode=Diffractive(), modulation=1.0)
+    bio_gray = BioEdgeWFS(tel; n_subap=4, mode=Diffractive(), modulation=1.0,
+        grey_width=0.5, grey_length=1.0)
+    amps = real.(bio_gray.state.bioedge_masks[:, :, 1])
+    @test any(x -> 0 < x < 1, amps)
+    @test bio_plain.state.bioedge_masks != bio_gray.state.bioedge_masks
+
+    bio_gray_slopes = measure!(bio_gray, tel, src)
+    @test length(bio_gray_slopes) == 2 * 4 * 4
+    @test all(isfinite, bio_gray_slopes)
+end
 @testset "Calibration vault and modal basis" begin
     D = rand(4, 3)
     vault = CalibrationVault(D)

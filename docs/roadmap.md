@@ -64,9 +64,10 @@
 ## Simplifications vs OOPAO (Current State)
 - WFS diffractive models use FFT propagation; Shack-Hartmann supports pixel-scale
   and subaperture sampling controls (binning + crop/pad). Pyramid now models PSF
-  centering and pupil separation in the mask and slope extraction. BioEdge now uses
-  a diffractive mask stack instead of the phase-gradient surrogate, but the mask
-  is still a binary split (no grey-width/length or rooftop tuning yet)
+  centering, old/new mask variants, rooftop tuning, rotation, and OOPAO-style
+  modulation-path construction. BioEdge now uses a diffractive mask stack with
+  modulation and grey-width/grey-length mask variants instead of the
+  phase-gradient surrogate
   (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`, `src/WFS/bioedge.jl`).
 - LGS elongation uses Na-profile convolution for Shack-Hartmann, Pyramid, and BioEdge; the
   Pyramid/BioEdge path currently averages Na-profile kernels across subapertures rather
@@ -90,8 +91,9 @@
 - [ ] Match OOPAO PSF export conventions and normalization exactly enough to support
   reproducible array-level regression for image formation.
 - [ ] Close diffractive WFS fidelity gaps:
-  BioEdge grey-width/length and rooftop mask variants;
-  Pyramid/BioEdge per-subaperture Na-profile kernels instead of averaged kernels.
+  Pyramid/BioEdge per-subaperture Na-profile kernels instead of averaged kernels;
+  exact Shack-Hartmann phasor/threshold conventions;
+  remaining detector-coupled signal-processing differences.
 - [ ] Port and validate OOPAO transfer-function workflow
   (`tutorials/AO_transfer_function.py`) with matching outputs.
 - [ ] Port and validate OOPAO GSC closed-loop workflow
@@ -141,7 +143,7 @@
 7. Decide whether tomography is in-scope for core parity now; if yes, port `tutorials/how_to_tomography.py`
    and add regression coverage, otherwise document the scope cut explicitly.
 8. Replace averaged Pyramid/BioEdge Na-profile kernels with per-subaperture kernels where OOPAO does so.
-9. Add BioEdge grey-width/length and rooftop mask variants needed for direct parity.
+9. Match Shack-Hartmann half-pixel-shift and centroid/convolution threshold conventions.
 10. After the above, re-run the parity audit and only then resume GPU-specific expansion.
 
 ## Phase 0: Setup

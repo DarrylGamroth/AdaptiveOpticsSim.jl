@@ -89,11 +89,17 @@ end
     end
 end
 
-struct PyramidParams{T<:AbstractFloat}
+struct PyramidParams{T<:AbstractFloat,M}
     n_subap::Int
     threshold::T
     modulation::T
     modulation_points::Int
+    extra_modulation_factor::Int
+    old_mask::Bool
+    rooftop::T
+    theta_rotation::T
+    delta_theta::T
+    user_modulation_path::M
     mask_scale::T
     diffraction_padding::Int
     psf_centering::Bool
@@ -143,20 +149,31 @@ struct PyramidWFS{M<:SensingMode,P<:PyramidParams,S<:PyramidState} <: AbstractWF
 end
 
 function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulation::Real=2.0,
-    modulation_points::Int=1, mask_scale::Real=1.0, diffraction_padding::Int=2,
+    modulation_points::Union{Int,Nothing}=nothing, extra_modulation_factor::Int=0,
+    old_mask::Bool=false, rooftop::Real=0.0, theta_rotation::Real=0.0, delta_theta::Real=0.0,
+    user_modulation_path=nothing, mask_scale::Real=1.0, diffraction_padding::Int=2,
     psf_centering::Bool=true, n_pix_separation=nothing, n_pix_edge=nothing, binning::Int=1,
     mode::SensingMode=Geometric(), T::Type{<:AbstractFloat}=Float64, backend=Array)
 
     if tel.params.resolution % n_subap != 0
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     end
-    if modulation_points < 1
-        throw(InvalidConfiguration("modulation_points must be >= 1"))
-    end
     if binning < 1
         throw(InvalidConfiguration("binning must be >= 1"))
     end
-    params = PyramidParams{T}(n_subap, T(threshold), T(modulation), modulation_points, T(mask_scale),
+    n_mod = resolve_modulation_points(T(modulation), modulation_points, extra_modulation_factor, user_modulation_path)
+    params = PyramidParams{T,typeof(user_modulation_path)}(
+        n_subap,
+        T(threshold),
+        T(modulation),
+        n_mod,
+        extra_modulation_factor,
+        old_mask,
+        T(rooftop),
+        T(theta_rotation),
+        T(delta_theta),
+        user_modulation_path,
+        T(mask_scale),
         diffraction_padding, psf_centering, n_pix_separation, n_pix_edge, binning)
     valid_mask = backend{Bool}(undef, n_subap, n_subap)
     slopes = backend{T}(undef, 2 * n_subap * n_subap)
@@ -171,7 +188,7 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
     pupil_field = similar(field)
     pyramid_mask = similar(field)
     phasor = similar(field)
-    modulation_phases = backend{Complex{T}}(undef, tel.params.resolution, tel.params.resolution, modulation_points)
+    modulation_phases = backend{Complex{T}}(undef, tel.params.resolution, tel.params.resolution, n_mod)
     intensity = backend{T}(undef, pad, pad)
     temp = similar(intensity)
     scratch = similar(intensity)
@@ -227,6 +244,24 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
 end
 
 sensing_mode(::PyramidWFS{M}) where {M} = M()
+
+function resolve_modulation_points(modulation::T, modulation_points::Union{Int,Nothing},
+    extra_modulation_factor::Int, user_modulation_path) where {T<:AbstractFloat}
+    if user_modulation_path !== nothing
+        n = length(user_modulation_path)
+        n >= 1 || throw(InvalidConfiguration("user_modulation_path must contain at least one point"))
+        return n
+    end
+    if modulation == 0
+        return 1
+    end
+    if modulation_points === nothing
+        perimeter = T(2 * π) * modulation
+        return max(1, 4 * Int(extra_modulation_factor + ceil(perimeter / 4)))
+    end
+    modulation_points >= 1 || throw(InvalidConfiguration("modulation_points must be >= 1"))
+    return modulation_points
+end
 
 function update_valid_mask!(wfs::PyramidWFS, tel::Telescope)
     set_valid_subapertures!(wfs.state.valid_mask, tel.state.pupil, wfs.params.threshold)
@@ -419,8 +454,117 @@ end
 
 function build_pyramid_mask!(wfs::PyramidWFS, tel::Telescope)
     mask = wfs.state.pyramid_mask
-    _build_pyramid_mask!(execution_style(mask), mask, wfs, tel)
+    copyto!(mask, host_pyramid_mask(wfs, tel))
     return mask
+end
+
+function host_pyramid_mask(wfs::PyramidWFS, tel::Telescope)
+    n = size(wfs.state.pyramid_mask, 1)
+    T = eltype(wfs.state.slopes)
+    host = Matrix{Complex{T}}(undef, n, n)
+    if wfs.params.old_mask
+        build_pyramid_mask_old_host!(host, wfs, tel)
+    else
+        build_pyramid_mask_new_host!(host, wfs, tel)
+    end
+    return host
+end
+
+function build_pyramid_mask_new_host!(mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, tel::Telescope) where {T<:AbstractFloat}
+    n = size(mask, 1)
+    n_sub = wfs.params.n_subap
+    sep = wfs.params.n_pix_separation === nothing ? 0 : wfs.params.n_pix_separation
+    rooftop_pixels = wfs.params.rooftop * wfs.params.diffraction_padding / sqrt(T(2))
+    norma = T(tel.params.resolution) / T(n_sub)
+    lim = T(π)
+    if wfs.params.psf_centering
+        xvals = range(-lim * (one(T) - one(T) / T(n)), lim * (one(T) - one(T) / T(n)); length=n)
+    else
+        xvals = range(-lim, lim; length=n + 1)[1:n]
+    end
+    r = (T(n_sub) + T(sep)) / 2
+    sx = wfs.state.shift_x
+    sy = wfs.state.shift_y
+    θ = wfs.params.theta_rotation
+    cθ = cos(θ)
+    sθ = sin(θ)
+    @inbounds for i in 1:n, j in 1:n
+        x_ = xvals[i]
+        y_ = xvals[j]
+        x = x_ * cθ - y_ * sθ
+        y = y_ * cθ + x_ * sθ
+        p1 = x * r + x_ * sx[1] + y * r - y_ * sy[1] + rooftop_pixels
+        p2 = -x * r + x_ * sx[2] + y * r - y_ * sy[2]
+        p3 = -x * r + x_ * sx[3] - y * r - y_ * sy[3] + rooftop_pixels
+        p4 = x * r + x_ * sx[4] - y * r - y_ * sy[4]
+        phase = -max(max(p1, p2), max(p3, p4)) * norma
+        mask[i, j] = cis(phase)
+    end
+    return mask
+end
+
+function build_pyramid_mask_old_host!(mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, tel::Telescope) where {T<:AbstractFloat}
+    n_tot = size(mask, 1)
+    n_sub = wfs.params.n_subap
+    sep = wfs.params.n_pix_separation === nothing ? 0 : wfs.params.n_pix_separation
+    sx = wfs.state.shift_x
+    sy = wfs.state.shift_y
+    norma = (T(tel.params.resolution) / T(n_sub)) / 4
+    fill!(mask, complex(zero(T), zero(T)))
+    if wfs.params.psf_centering
+        tip = centered_grid(T, n_tot ÷ 2, true)
+        tilt = centered_grid(T, n_tot ÷ 2, true)
+        Tip = repeat(tip', n_tot ÷ 2, 1)
+        Tilt = repeat(tilt, 1, n_tot ÷ 2)
+        Tip .-= mean(Tip)
+        Tilt .-= mean(Tilt)
+        q = T(n_sub + sep)
+        @views begin
+            mask[1:n_tot÷2, 1:n_tot÷2] .= cis.((Tip .* (q + sx[1]) .+ Tilt .* (q - sy[1])) .* norma)
+            mask[1:n_tot÷2, n_tot÷2+1:end] .= cis.((-Tip .* (q - sx[2]) .+ Tilt .* (q - sy[2])) .* norma)
+            mask[n_tot÷2+1:end, n_tot÷2+1:end] .= cis.((-Tip .* (q - sx[3]) .- Tilt .* (q + sy[3])) .* norma)
+            mask[n_tot÷2+1:end, 1:n_tot÷2] .= cis.((Tip .* (q + sx[4]) .- Tilt .* (q + sy[4])) .* norma)
+        end
+    else
+        d_pix = T(π) / T(n_tot)
+        lim_p = T(π)
+        lim_m = T(π) - 2 * d_pix
+        tip1 = axis_values(T, n_tot ÷ 2 + 1, -lim_p, lim_p; endpoint=true)
+        tip2 = axis_values(T, n_tot ÷ 2 + 1, -lim_p, lim_p; endpoint=true)
+        tip3 = axis_values(T, n_tot ÷ 2 - 1, -lim_m, lim_m; endpoint=false)
+        tip4 = axis_values(T, n_tot ÷ 2 - 1, -lim_m, lim_m; endpoint=false)
+        tilt1 = axis_values(T, n_tot ÷ 2 + 1, -lim_p, lim_p; endpoint=true)
+        tilt2 = axis_values(T, n_tot ÷ 2 - 1, -lim_m, lim_m; endpoint=false)
+        tilt3 = axis_values(T, n_tot ÷ 2 - 1, -lim_m, lim_m; endpoint=false)
+        tilt4 = axis_values(T, n_tot ÷ 2 + 1, -lim_p, lim_p; endpoint=true)
+        Tip1 = repeat(tip1', length(tilt1), 1); Tilt1 = repeat(tilt1, 1, length(tip1))
+        Tip2 = repeat(tip2', length(tilt2), 1); Tilt2 = repeat(tilt2, 1, length(tip2))
+        Tip3 = repeat(tip3', length(tilt3), 1); Tilt3 = repeat(tilt3, 1, length(tip3))
+        Tip4 = repeat(tip4', length(tilt4), 1); Tilt4 = repeat(tilt4, 1, length(tip4))
+        Tip1 .-= mean(Tip1); Tilt1 .-= mean(Tilt1)
+        Tip2 .-= mean(Tip2); Tilt2 .-= mean(Tilt2)
+        Tip3 .-= mean(Tip3); Tilt3 .-= mean(Tilt3)
+        Tip4 .-= mean(Tip4); Tilt4 .-= mean(Tilt4)
+        q = T(n_sub + sep)
+        @views begin
+            mask[1:n_tot÷2+1, 1:n_tot÷2+1] .= cis.((Tip1 .* (q + sx[1]) .+ Tilt1 .* (q - sy[1])) .* norma)
+            mask[1:n_tot÷2+1, n_tot÷2:end] .= cis.((-Tip4 .* (q - sx[2]) .+ Tilt4 .* (q - sy[2])) .* norma)
+            mask[n_tot÷2:end, n_tot÷2:end] .= cis.((-Tip3 .* (q - sx[3]) .- Tilt3 .* (q + sy[3])) .* norma)
+            mask[n_tot÷2:end, 1:n_tot÷2+1] .= cis.((Tip2 .* (q + sx[4]) .- Tilt2 .* (q + sy[4])) .* norma)
+        end
+    end
+    return mask
+end
+
+centered_grid(::Type{T}, n::Int, endpoint::Bool) where {T<:AbstractFloat} =
+    repeat(axis_values(T, n, -T(π), T(π); endpoint=endpoint), 1, 1)
+
+function axis_values(::Type{T}, n::Int, lo::T, hi::T; endpoint::Bool) where {T<:AbstractFloat}
+    if endpoint
+        return reshape(collect(range(lo, hi; length=n)), n, 1)
+    end
+    vals = collect(range(lo, hi; length=n + 1))
+    return reshape(vals[1:n], n, 1)
 end
 
 function _build_pyramid_mask!(::ScalarCPUStyle, mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, tel::Telescope) where {T<:AbstractFloat}
@@ -558,16 +702,44 @@ function ensure_lgs_kernel!(wfs::PyramidWFS, tel::Telescope, src::LGSSource)
 end
 
 function build_modulation_phases!(wfs::PyramidWFS, tel::Telescope)
-    n = tel.params.resolution
-    center = (n + 1) / 2
-    mod = wfs.params.modulation
-    n_pts = wfs.params.modulation_points
     phases = wfs.state.modulation_phases
-    if n_pts == 1 || mod == 0
-        fill!(phases, one(eltype(phases)))
+    copyto!(phases, host_modulation_phases(eltype(wfs.state.slopes), tel, wfs.params.modulation,
+        wfs.params.modulation_points, wfs.params.delta_theta, wfs.params.user_modulation_path))
+    return phases
+end
+
+function host_modulation_phases(::Type{T}, tel::Telescope, modulation::T, n_pts::Int,
+    delta_theta::T, user_modulation_path) where {T<:AbstractFloat}
+    n = tel.params.resolution
+    phases = Array{Complex{T}}(undef, n, n, n_pts)
+    if n_pts == 1 && modulation == 0 && user_modulation_path === nothing
+        fill!(phases, complex(one(T), zero(T)))
         return phases
     end
-    _build_modulation_phases!(execution_style(phases), phases, mod, center, n_pts, n)
+    tip_vals = collect(range(-T(π), T(π); length=n))
+    Tilt = reshape(tip_vals, n, 1)
+    Tip = reshape(tip_vals, 1, n)
+    pupil = tel.state.pupil
+    if user_modulation_path === nothing
+        @inbounds for p in 1:n_pts
+            θ = delta_theta + T(2 * π * (p - 1) / n_pts)
+            mx = modulation * cos(θ)
+            my = modulation * sin(θ)
+            for i in 1:n, j in 1:n
+                phase = pupil[i, j] ? (mx * Tip[j] + my * Tilt[i]) : zero(T)
+                phases[i, j, p] = cis(phase)
+            end
+        end
+    else
+        @inbounds for p in 1:n_pts
+            mx = T(user_modulation_path[p][1])
+            my = T(user_modulation_path[p][2])
+            for i in 1:n, j in 1:n
+                phase = pupil[i, j] ? (mx * Tip[j] + my * Tilt[i]) : zero(T)
+                phases[i, j, p] = cis(phase)
+            end
+        end
+    end
     return phases
 end
 

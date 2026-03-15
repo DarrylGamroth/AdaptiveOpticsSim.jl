@@ -50,9 +50,16 @@ end
     end
 end
 
-struct BioEdgeParams{T<:AbstractFloat}
+struct BioEdgeParams{T<:AbstractFloat,M}
     n_subap::Int
     threshold::T
+    modulation::T
+    modulation_points::Int
+    extra_modulation_factor::Int
+    delta_theta::T
+    user_modulation_path::M
+    grey_width::T
+    grey_length::Union{Bool,T}
     diffraction_padding::Int
     psf_centering::Bool
     n_pix_separation::Union{Int,Nothing}
@@ -80,6 +87,7 @@ mutable struct BioEdgeState{T<:AbstractFloat,
     pupil_field::C
     bioedge_masks::C3
     phasor::C
+    modulation_phases::C3
     intensity::R
     temp::R
     scratch::R
@@ -103,6 +111,9 @@ struct BioEdgeWFS{M<:SensingMode,P<:BioEdgeParams,S<:BioEdgeState} <: AbstractWF
 end
 
 function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
+    modulation::Real=0.0, modulation_points::Union{Int,Nothing}=nothing,
+    extra_modulation_factor::Int=0, delta_theta::Real=0.0, user_modulation_path=nothing,
+    grey_width::Real=0.0, grey_length=false,
     diffraction_padding::Int=2, psf_centering::Bool=true, n_pix_separation=nothing,
     n_pix_edge=nothing, binning::Int=1,
     mode::SensingMode=Geometric(), T::Type{<:AbstractFloat}=Float64, backend=Array)
@@ -113,8 +124,24 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     if binning < 1
         throw(InvalidConfiguration("binning must be >= 1"))
     end
-    params = BioEdgeParams{T}(n_subap, T(threshold), diffraction_padding, psf_centering,
-        n_pix_separation, n_pix_edge, binning)
+    grey_length_val = grey_length === false ? false : T(grey_length)
+    n_mod = resolve_modulation_points(T(modulation), modulation_points, extra_modulation_factor, user_modulation_path)
+    params = BioEdgeParams{T,typeof(user_modulation_path)}(
+        n_subap,
+        T(threshold),
+        T(modulation),
+        n_mod,
+        extra_modulation_factor,
+        T(delta_theta),
+        user_modulation_path,
+        T(grey_width),
+        grey_length_val,
+        diffraction_padding,
+        psf_centering,
+        n_pix_separation,
+        n_pix_edge,
+        binning,
+    )
     valid_mask = backend{Bool}(undef, n_subap, n_subap)
     edge_mask = backend{Bool}(undef, size(tel.state.pupil))
     slopes = backend{T}(undef, 2 * n_subap * n_subap)
@@ -130,6 +157,7 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     pupil_field = similar(field)
     bioedge_masks = backend{Complex{T}}(undef, pad, pad, 4)
     phasor = similar(field)
+    modulation_phases = backend{Complex{T}}(undef, tel.params.resolution, tel.params.resolution, n_mod)
     intensity = backend{T}(undef, 2 * pad, 2 * pad)
     temp = backend{T}(undef, pad, pad)
     scratch = similar(temp)
@@ -165,6 +193,7 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         pupil_field,
         bioedge_masks,
         phasor,
+        modulation_phases,
         intensity,
         temp,
         scratch,
@@ -186,6 +215,7 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     update_edge_mask!(wfs, tel)
     build_bioedge_phasor!(wfs.state.phasor)
     build_bioedge_masks!(wfs)
+    build_modulation_phases!(wfs, tel)
     return wfs
 end
 
@@ -250,9 +280,66 @@ end
 
 function build_bioedge_masks!(wfs::BioEdgeWFS)
     masks = wfs.state.bioedge_masks
-    _build_bioedge_masks!(execution_style(masks), masks, eltype(wfs.state.slopes))
+    copyto!(masks, host_bioedge_masks(wfs))
     return masks
 end
+
+function build_modulation_phases!(wfs::BioEdgeWFS, tel::Telescope)
+    copyto!(wfs.state.modulation_phases, host_modulation_phases(eltype(wfs.state.slopes), tel,
+        wfs.params.modulation, wfs.params.modulation_points, wfs.params.delta_theta,
+        wfs.params.user_modulation_path))
+    return wfs.state.modulation_phases
+end
+
+function host_bioedge_masks(wfs::BioEdgeWFS)
+    T = eltype(wfs.state.slopes)
+    n = size(wfs.state.bioedge_masks, 1)
+    host = Array{Complex{T}}(undef, n, n, 4)
+    build_bioedge_masks_host!(host, wfs)
+    return host
+end
+
+function build_bioedge_masks_host!(masks::AbstractArray{Complex{T},3}, wfs::BioEdgeWFS) where {T<:AbstractFloat}
+    n = size(masks, 1)
+    half = n ÷ 2
+    bw = zeros(T, n)
+    bw[1:half] .= one(T)
+    r = round(Int, wfs.params.diffraction_padding * wfs.params.grey_width)
+    if r > 0
+        gradient = vcat(segment_values(one(T), T(0.5), r), segment_values(T(0.5), zero(T), r))
+        lo = max(1, half - r + 1)
+        hi = min(n, half + r)
+        bw[lo:hi] .= gradient[1:(hi - lo + 1)]
+    end
+    X = repeat(reshape(bw, 1, :), n, 1)
+    A = sqrt.(X)
+    if wfs.params.grey_length !== false
+        r_grey = wfs.params.diffraction_padding
+        r_length = round(Int, r_grey * wfs.params.grey_length)
+        top_stop = max(1, half - r_length)
+        bot_start = min(n + 1, half + r_length + 1)
+        if top_stop >= 1
+            A[1:top_stop, 1:half] .= one(T)
+            A[1:top_stop, half+1:end] .= zero(T)
+        end
+        if bot_start <= n
+            A[bot_start:end, 1:half] .= one(T)
+            A[bot_start:end, half+1:end] .= zero(T)
+        end
+    end
+    B = sqrt.(max.(zero(T), one(T) .- A .^ 2))
+    C = permutedims(A)
+    D = permutedims(B)
+    @views begin
+        masks[:, :, 1] .= complex.(A, zero(T))
+        masks[:, :, 2] .= complex.(B, zero(T))
+        masks[:, :, 3] .= complex.(C, zero(T))
+        masks[:, :, 4] .= complex.(D, zero(T))
+    end
+    return masks
+end
+
+segment_values(a::T, b::T, n::Int) where {T<:AbstractFloat} = n == 1 ? T[a] : collect(range(a, b; length=n))
 
 function _build_bioedge_masks!(::ScalarCPUStyle, masks::AbstractArray{Complex{T},3}, ::Type{T}) where {T<:AbstractFloat}
     one_c = complex(one(T), zero(T))
@@ -401,52 +488,56 @@ function bioedge_intensity_core!(out::AbstractMatrix{T}, wfs::BioEdgeWFS, tel::T
     phase_scale = (2 * pi) / wavelength(src)
 
     fill!(out, zero(T))
-    fill!(wfs.state.field, zero(eltype(wfs.state.field)))
-    @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = tel.state.pupil * cis(phase_scale * tel.state.opd)
-    copyto!(wfs.state.focal_field, wfs.state.field)
-    if wfs.params.psf_centering
-        @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.phasor
-        mul!(wfs.state.focal_field, wfs.state.fft_plan, wfs.state.focal_field)
-    else
-        mul!(wfs.state.focal_field, wfs.state.fft_plan, wfs.state.focal_field)
-        fftshift2d!(wfs.state.fft_buffer, wfs.state.focal_field)
-    end
-
-    focal_source = wfs.params.psf_centering ? wfs.state.focal_field : wfs.state.fft_buffer
-    lgs_fft_buffer = wfs.params.psf_centering ? wfs.state.fft_buffer : wfs.state.focal_field
-    lgs_ifft_buffer = wfs.state.pupil_field
     profile = apply_lgs ? lgs_profile(src) : LGSProfileNone()
     if apply_lgs && profile isa LGSProfileNaProfile
         ensure_lgs_kernel!(wfs, tel, src)
     end
 
-    @inbounds for k in 1:4
-        @views @. wfs.state.pupil_field = focal_source * wfs.state.bioedge_masks[:, :, k]
-        mul!(wfs.state.pupil_field, wfs.state.ifft_plan, wfs.state.pupil_field)
-        @. wfs.state.temp = abs2(wfs.state.pupil_field)
-        if apply_lgs
-            if profile isa LGSProfileNone
-                wfs.state.elongation_kernel = apply_elongation!(
-                    wfs.state.temp,
-                    lgs_elongation_factor(src),
-                    wfs.state.scratch,
-                    wfs.state.elongation_kernel,
-                )
-            else
-                apply_lgs_convolution!(
-                    wfs.state.temp,
-                    wfs.state.lgs_kernel_fft,
-                    lgs_fft_buffer,
-                    wfs.state.fft_plan,
-                    lgs_ifft_buffer,
-                    wfs.state.ifft_plan,
-                )
-            end
+    @inbounds for p in 1:wfs.params.modulation_points
+        fill!(wfs.state.field, zero(eltype(wfs.state.field)))
+        @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = tel.state.pupil *
+            wfs.state.modulation_phases[:, :, p] * cis(phase_scale * tel.state.opd)
+        copyto!(wfs.state.focal_field, wfs.state.field)
+        if wfs.params.psf_centering
+            @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.phasor
+            mul!(wfs.state.focal_field, wfs.state.fft_plan, wfs.state.focal_field)
+        else
+            mul!(wfs.state.focal_field, wfs.state.fft_plan, wfs.state.focal_field)
+            fftshift2d!(wfs.state.fft_buffer, wfs.state.focal_field)
         end
-        oxq = k in (3, 4) ? pad : 0
-        oyq = k in (2, 4) ? pad : 0
-        @views out[oxq+1:oxq+pad, oyq+1:oyq+pad] .= wfs.state.temp
+
+        focal_source = wfs.params.psf_centering ? wfs.state.focal_field : wfs.state.fft_buffer
+        lgs_fft_buffer = wfs.params.psf_centering ? wfs.state.fft_buffer : wfs.state.focal_field
+        lgs_ifft_buffer = wfs.state.pupil_field
+        @inbounds for k in 1:4
+            @views @. wfs.state.pupil_field = focal_source * wfs.state.bioedge_masks[:, :, k]
+            mul!(wfs.state.pupil_field, wfs.state.ifft_plan, wfs.state.pupil_field)
+            @. wfs.state.temp = abs2(wfs.state.pupil_field)
+            if apply_lgs
+                if profile isa LGSProfileNone
+                    wfs.state.elongation_kernel = apply_elongation!(
+                        wfs.state.temp,
+                        lgs_elongation_factor(src),
+                        wfs.state.scratch,
+                        wfs.state.elongation_kernel,
+                    )
+                else
+                    apply_lgs_convolution!(
+                        wfs.state.temp,
+                        wfs.state.lgs_kernel_fft,
+                        lgs_fft_buffer,
+                        wfs.state.fft_plan,
+                        lgs_ifft_buffer,
+                        wfs.state.ifft_plan,
+                    )
+                end
+            end
+            oxq = k in (3, 4) ? pad : 0
+            oyq = k in (2, 4) ? pad : 0
+            @views out[oxq+1:oxq+pad, oyq+1:oyq+pad] .+= wfs.state.temp
+        end
     end
+    out ./= wfs.params.modulation_points
     return out
 end
 
