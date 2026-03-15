@@ -261,6 +261,70 @@ function build_reference_tomography_dm(cfg::AbstractDict{<:AbstractString,<:Any}
     )
 end
 
+function row_major_mask_positions(mask::AbstractMatrix{Bool})
+    positions = CartesianIndex{2}[]
+    for i in axes(mask, 1), j in axes(mask, 2)
+        mask[i, j] && push!(positions, CartesianIndex(i, j))
+    end
+    return positions
+end
+
+function pytomoao_phase_permutation(mask::AbstractMatrix{Bool})
+    col_positions = findall(mask)
+    col_index = Dict{CartesianIndex{2},Int}(idx => k for (k, idx) in enumerate(col_positions))
+    return Int[col_index[idx] for idx in row_major_mask_positions(mask)]
+end
+
+function pytomoao_phase_block_permutation(mask::AbstractMatrix{Bool}, n_blocks::Integer)
+    base = pytomoao_phase_permutation(mask)
+    n_phase = length(base)
+    perm = Vector{Int}(undef, n_blocks * n_phase)
+    for block in 1:n_blocks
+        offset = (block - 1) * n_phase
+        @inbounds for k in eachindex(base)
+            perm[offset + k] = offset + base[k]
+        end
+    end
+    return perm
+end
+
+function pytomoao_model_mask(case::ReferenceCase)
+    wfs = build_reference_tomography_wfs(case.config["wfs"])
+    _, grid_mask = sparse_gradient_matrix(valid_lenslet_support(wfs); over_sampling=2)
+    return grid_mask
+end
+
+function pytomoao_im_mask(case::ReferenceCase)
+    dm = build_reference_tomography_dm(case.config["dm"])
+    return dm.valid_actuators
+end
+
+function adapt_phase_matrix_to_pytomoao(actual::AbstractMatrix, mask::AbstractMatrix{Bool})
+    perm = pytomoao_phase_permutation(mask)
+    return actual[perm, perm]
+end
+
+function adapt_phase_sensor_matrix_to_pytomoao(actual::AbstractMatrix, mask::AbstractMatrix{Bool}, n_blocks::Integer)
+    row_perm = pytomoao_phase_permutation(mask)
+    col_perm = pytomoao_phase_block_permutation(mask, n_blocks)
+    return actual[row_perm, col_perm]
+end
+
+function adapt_reconstructor_rows_to_pytomoao(actual::AbstractMatrix, mask::AbstractMatrix{Bool})
+    row_perm = pytomoao_phase_permutation(mask)
+    return actual[row_perm, :]
+end
+
+function adapt_wavefront_map_to_pytomoao(actual::AbstractMatrix{T}, mask::AbstractMatrix{Bool}) where {T}
+    values = actual[mask]
+    row_positions = row_major_mask_positions(mask)
+    adapted = fill(T(NaN), size(actual))
+    @inbounds for (k, idx) in enumerate(row_positions)
+        adapted[idx] = values[k]
+    end
+    return adapted
+end
+
 function combine_reference_modes!(dest::AbstractMatrix{T}, basis::AbstractArray{<:Real,3},
     coeffs::AbstractVector{<:Real}) where {T<:AbstractFloat}
     fill!(dest, zero(T))
@@ -717,6 +781,12 @@ function compute_reference_actual_ka_cpu(case::ReferenceCase)
 end
 
 function adapt_reference_actual(case::ReferenceCase, actual)
+    if case.kind === :tomography_model_wavefront
+        return adapt_wavefront_map_to_pytomoao(actual, pytomoao_model_mask(case))
+    elseif case.kind === :tomography_im_wavefront
+        return adapt_wavefront_map_to_pytomoao(actual, pytomoao_im_mask(case))
+    end
+
     compare = get(case.config, "compare", nothing)
     compare === nothing && return actual
 

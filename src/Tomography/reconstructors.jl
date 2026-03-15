@@ -245,7 +245,7 @@ function auto_correlation(
 ) where {T<:AbstractFloat}
     sampling = size(grid_mask, 1)
     size(grid_mask, 2) == sampling || throw(DimensionMismatchError("grid_mask must be square"))
-    mask_vec = vec(permutedims(grid_mask))
+    mask_vec = vec(grid_mask)
     n_valid = count(mask_vec)
     n_gs = asterism.n_lgs
     result = zeros(T, n_gs * n_valid, n_gs * n_valid)
@@ -321,7 +321,7 @@ function cross_correlation(
     sampling = isnothing(grid_mask) ? PYTOMOAO_DEFAULT_CROSS_SAMPLING : size(grid_mask, 1)
     mask = isnothing(grid_mask) ? trues(sampling, sampling) : grid_mask
     size(mask, 2) == sampling || throw(DimensionMismatchError("grid_mask must be square"))
-    row_mask = _row_major_mask(mask)
+    row_mask = vec(mask)
     n_row = count(row_mask)
     n_fit = tomography.n_fit_src^2
     n_gs = asterism.n_lgs
@@ -396,10 +396,6 @@ function _fit_source_average(cross::Array{T,3}, weights::AbstractVector{T}) wher
     end
     return out
 end
-
-@inline _row_major_mask(mask::AbstractMatrix{Bool}) = vec(permutedims(mask))
-
-@inline _row_major_true_positions(mask::AbstractMatrix{Bool}) = findall(_row_major_mask(mask))
 
 function build_reconstructor(
     ::InteractionMatrixTomography,
@@ -487,8 +483,8 @@ function build_reconstructor(
     cxx = auto_correlation(atmosphere, asterism, wfs, grid_mask)
     cross = cross_correlation(atmosphere, asterism, wfs, tomography)
     cox_full = _fit_source_average(cross, _equal_fit_source_weights(tomography))
-    row_positions = _row_major_true_positions(grid_mask)
-    col_positions = findall(repeat(_row_major_mask(grid_mask), asterism.n_lgs))
+    row_positions = findall(vec(grid_mask))
+    col_positions = findall(repeat(vec(grid_mask), asterism.n_lgs))
     cox = cox_full[row_positions, col_positions]
     css_signal = Matrix(gamma * cxx * transpose(gamma))
     diagonal = diag(css_signal)
@@ -553,9 +549,7 @@ function reconstruct_wavefront_map!(
         throw(DimensionMismatchError("output map size must match reconstructor grid mask"))
     wavefront = reconstruct_wavefront(reconstructor, slopes)
     fill!(out, masked_value)
-    for (k, idx) in enumerate(findall(permutedims(reconstructor.grid_mask)))
-        out[idx[2], idx[1]] = wavefront[k]
-    end
+    out[reconstructor.grid_mask] .= wavefront
     return out
 end
 

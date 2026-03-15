@@ -216,6 +216,8 @@ Current validation scope:
   are now regression-backed against the committed OOPAO bundle.
 - Compact tomography operators and reconstructions are now regression-backed against the
   committed pyTomoAO bundle.
+- pyTomoAO-specific row-major ordering is now handled only in the reference harness;
+  the `AdaptiveOptics.jl` tomography implementation remains native Julia column-major internally.
 
 ## Phase 8: Full OOPAO Functional Parity
 - [ ] Every supported OOPAO workflow has deterministic Julia vs OOPAO regression coverage.

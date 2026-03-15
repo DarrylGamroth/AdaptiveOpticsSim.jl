@@ -150,4 +150,26 @@ end
     model_map = reconstruct_wavefront_map(model, [0.1, -0.2])
     @test size(model_map) == size(model.grid_mask)
     @test count(isnan, model_map) > 0
+
+    native_mask = Bool[
+        1 0
+        1 1
+    ]
+    native_recon = TomographicReconstructor(
+        InteractionMatrixTomography(),
+        Matrix{Float64}(I, 3, 3),
+        native_mask,
+        atm,
+        lgs,
+        wfs,
+        tomo,
+        dm,
+        nothing,
+        nothing,
+    )
+    native_map = reconstruct_wavefront_map(native_recon, [1.0, 2.0, 3.0])
+    @test native_map ≈ [
+        1.0 NaN
+        2.0 3.0
+    ] nans=true
 end
