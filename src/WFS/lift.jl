@@ -347,19 +347,19 @@ function center_crop!(dest::AbstractMatrix, src::AbstractMatrix)
     return dest
 end
 
-function readout_noise(det::Detector{NoiseNone})
+function readout_noise(det::Detector{<:NoiseNone})
     return 0.0
 end
 
-function readout_noise(det::Detector{NoisePhoton})
+function readout_noise(det::Detector{<:NoisePhoton})
     return 0.0
 end
 
-function readout_noise(det::Detector{NoiseReadout})
+function readout_noise(det::Detector{<:NoiseReadout})
     return det.noise.sigma
 end
 
-function readout_noise(det::Detector{NoisePhotonReadout})
+function readout_noise(det::Detector{<:NoisePhotonReadout})
     return det.noise.sigma
 end
 

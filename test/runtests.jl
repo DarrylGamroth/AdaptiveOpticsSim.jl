@@ -396,6 +396,12 @@ end
     psf = compute_psf!(tel, src; zero_padding=1)
     coeffs = reconstruct(lift, psf, [1, 2])
     @test length(coeffs) == 2
+    det_readout = Detector(noise=NoiseReadout(1e-3), psf_sampling=1)
+    lift_readout = LiFT(tel, src, basis, det_readout; diversity_opd=diversity, iterations=2,
+        img_resolution=8, numerical=true)
+    coeffs_readout = reconstruct(lift_readout, psf, [1, 2])
+    @test length(coeffs_readout) == 2
+    @test all(isfinite, coeffs_readout)
 end
 
 @testset "Phase statistics" begin
