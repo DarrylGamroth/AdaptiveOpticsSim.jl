@@ -7,6 +7,8 @@ AdaptiveOptics.jl.
 - Use fixed seeds and deterministic settings.
 - Store small, representative datasets.
 - Compare with tolerances, not bitwise equality.
+- Validate user-visible workflows and scientifically relevant outputs; do not
+  require internal implementation details to match OOPAO exactly.
 
 ## Current committed bundle
 

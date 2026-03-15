@@ -7,12 +7,16 @@ inheritance and hidden mutation.
 
 ## Goals
 - Preserve OOPAO capabilities with a Julia-centric API.
+- Achieve feature parity and numerical fidelity against OOPAO reference
+  workflows without requiring a line-by-line implementation port.
 - Make hot paths allocation-free and type-stable.
 - Enable GPU backends without rewriting core algorithms.
 - Keep configuration explicit and reproducible.
 
 ## Non-goals
 - 1:1 translation of Python classes and operator overloading.
+- Matching Python internal storage order, class layout, or implementation
+  strategy where Julia has a better native design.
 - Implicit global state or hidden mutability.
 
 ## Package layout (proposed)

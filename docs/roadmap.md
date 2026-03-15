@@ -4,7 +4,8 @@
 - Phases 1-5 implemented in `AdaptiveOptics.jl`.
 - Phase 6 in progress (telemetry + config export done; more I/O helpers pending).
 - Phase 7 complete (user guide, API reference, tutorial ports, and committed OOPAO reference bundle in place).
-- Full functional parity with Python OOPAO is not complete and is now the gating priority before further feature expansion.
+- Full feature parity and numerical fidelity with Python OOPAO are not complete
+  and are now the gating priority before further feature expansion.
 
 ## AO Feature Checklist
 - [x] P0: Detector modeling (photon/read noise, QE, binning, PSF sampling).
@@ -85,7 +86,7 @@
 - SPRINT/mis-registration supports cached sensitivity matrices (Serialization) and
   optional WFS shifts, but no FITS I/O (`src/Calibration/misregistration_identification.jl`).
 
-## Functional Parity Gate (Current Blocking Gaps)
+## Feature Parity and Numerical Fidelity Gate (Current Blocking Gaps)
 - [x] The committed OOPAO reference bundle now matches
   `psf_baseline`, `shack_hartmann_diffractive_ramp`,
   `pyramid_diffractive_ramp`, `bioedge_diffractive_ramp`,
@@ -118,7 +119,8 @@
 - [ ] Audit calibration/output conventions against OOPAO for:
   slope ordering/units outside geometric SH, PSF sampling conventions, detector coupling,
   and closed-loop telemetry traces.
-- [ ] Add parity tests for every supported OOPAO tutorial/workflow, not just smoke tests.
+- [ ] Add regression-backed fidelity tests for every supported OOPAO tutorial/workflow,
+  not just smoke tests.
 - [ ] Keep the current simplifications only where they are proven numerically equivalent
   or are explicitly marked as fast-path approximations.
 
@@ -146,7 +148,7 @@
 - [ ] Port the remaining atmosphere-driven GSC closed-loop workflow before adding new non-parity features.
 - [ ] Resolve remaining diffractive/LGS fidelity gaps that currently prevent direct
   Python-to-Julia array comparison.
-- [ ] Turn every parity claim into a deterministic regression test against OOPAO outputs.
+- [ ] Turn every feature-parity claim into a deterministic regression test against OOPAO outputs.
 
 ## Next 10 Tasks
 1. Replace averaged Pyramid/BioEdge Na-profile kernels with per-subaperture kernels where OOPAO does so.
@@ -218,10 +220,10 @@ Current validation scope:
 - pyTomoAO-specific row-major ordering is now handled only in the reference harness;
   the `AdaptiveOptics.jl` tomography implementation remains native Julia column-major internally.
 
-## Phase 8: Full OOPAO Functional Parity
+## Phase 8: Full OOPAO Feature Parity and Numerical Fidelity
 - [ ] Every supported OOPAO workflow has deterministic Julia vs OOPAO regression coverage.
 - [ ] PSF, diffractive WFS, LiFT, GSC closed-loop behavior, and closed-loop traces match OOPAO within documented tolerances.
-- [x] Tomography parity covers the pyTomoAO-backed OOPAO workflow with validated model-based or IM-based reconstructors.
+- [x] Tomography feature parity covers the pyTomoAO-backed OOPAO workflow with validated model-based or IM-based reconstructors.
 - [x] Transfer-function workflow is ported and validated.
 - [ ] Any unsupported OOPAO workflow is explicitly documented as out-of-scope rather than implied complete.
 - [ ] Only after this phase is complete should non-parity feature work resume.
