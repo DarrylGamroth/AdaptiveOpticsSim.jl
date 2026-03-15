@@ -55,6 +55,7 @@ struct BioEdgeParams{T<:AbstractFloat,M,N<:WFSNormalization}
     threshold::T
     light_ratio::T
     normalization::N
+    calib_modulation::T
     modulation::T
     modulation_points::Int
     extra_modulation_factor::Int
@@ -123,6 +124,7 @@ end
 function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     light_ratio::Real=0.0, modulation::Real=0.0, modulation_points::Union{Int,Nothing}=nothing,
     normalization::WFSNormalization=MeanValidFluxNormalization(),
+    calib_modulation::Real=min(50.0, tel.params.resolution / 2 - 1),
     extra_modulation_factor::Int=0, delta_theta::Real=0.0, user_modulation_path=nothing,
     grey_width::Real=0.0, grey_length=false,
     diffraction_padding::Int=2, psf_centering::Bool=true, n_pix_separation=nothing,
@@ -142,6 +144,7 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         T(threshold),
         T(light_ratio),
         normalization,
+        T(calib_modulation),
         T(modulation),
         n_mod,
         extra_modulation_factor,
@@ -494,6 +497,7 @@ function resize_bioedge_signal_buffers!(wfs::BioEdgeWFS, frame_rows::Int)
     n_pixels = max(1, round(Int, nominal / (2 * wfs.params.binning)))
     if size(wfs.state.valid_i4q) != (n_pixels, n_pixels)
         wfs.state.valid_i4q = similar(wfs.state.valid_i4q, n_pixels, n_pixels)
+        fill!(wfs.state.valid_i4q, false)
     end
     if size(wfs.state.valid_signal) != (2 * n_pixels, n_pixels)
         wfs.state.valid_signal = similar(wfs.state.valid_signal, 2 * n_pixels, n_pixels)
@@ -507,11 +511,7 @@ function resize_bioedge_signal_buffers!(wfs::BioEdgeWFS, frame_rows::Int)
     if size(wfs.state.camera_frame) != (frame_rows, frame_rows)
         wfs.state.camera_frame = similar(wfs.state.camera_frame, frame_rows, frame_rows)
     end
-    fill!(wfs.state.valid_signal, false)
-    @views begin
-        wfs.state.valid_signal[1:n_pixels, :] .= wfs.state.valid_i4q
-        wfs.state.valid_signal[n_pixels+1:end, :] .= wfs.state.valid_i4q
-    end
+    update_bioedge_valid_signal!(wfs)
     return wfs
 end
 
@@ -684,18 +684,6 @@ function bioedge_signal!(wfs::BioEdgeWFS, tel::Telescope, frame::AbstractMatrix{
     src::Union{Nothing,AbstractSource}) where {T<:AbstractFloat}
     center = round(Int, wfs.state.nominal_detector_resolution / wfs.params.binning / 2)
     n_pixels = center
-    max_i4q = zero(T)
-    @inbounds for j in 1:n_pixels, i in 1:n_pixels
-        q1 = frame[center - n_pixels + i, center - n_pixels + j]
-        q2 = frame[center - n_pixels + i, center + j]
-        q3 = frame[center + i, center + j]
-        q4 = frame[center + i, center - n_pixels + j]
-        i4q = q1 + q2 + q3 + q4
-        if i4q > max_i4q
-            max_i4q = i4q
-        end
-    end
-    cutoff = wfs.params.light_ratio * max_i4q
     count = 0
     norma = zero(T)
     @inbounds for j in 1:n_pixels, i in 1:n_pixels
@@ -703,14 +691,9 @@ function bioedge_signal!(wfs::BioEdgeWFS, tel::Telescope, frame::AbstractMatrix{
         q2 = frame[center - n_pixels + i, center + j]
         q3 = frame[center + i, center + j]
         q4 = frame[center + i, center - n_pixels + j]
-        i4q = q1 + q2 + q3 + q4
-        valid = i4q >= cutoff
-        wfs.state.valid_i4q[i, j] = valid
-        wfs.state.valid_signal[i, j] = valid
-        wfs.state.valid_signal[i + n_pixels, j] = valid
-        if valid
+        if wfs.state.valid_i4q[i, j]
             count += 1
-            norma += i4q
+            norma += q1 + q2 + q3 + q4
         end
     end
     norma = bioedge_normalization(wfs.params.normalization, wfs, tel, src, count, norma)
@@ -756,6 +739,73 @@ function bioedge_normalization(::IncidenceFluxNormalization, ::BioEdgeWFS, ::Tel
     return one(typeof(summed_i4q))
 end
 
+function update_bioedge_valid_signal!(wfs::BioEdgeWFS)
+    n_pixels = size(wfs.state.valid_i4q, 1)
+    fill!(wfs.state.valid_signal, false)
+    @views begin
+        wfs.state.valid_signal[1:n_pixels, :] .= wfs.state.valid_i4q
+        wfs.state.valid_signal[n_pixels+1:end, :] .= wfs.state.valid_i4q
+    end
+    return wfs
+end
+
+function select_bioedge_valid_i4q!(wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource)
+    n_pixels = max(1, round(Int, wfs.state.nominal_detector_resolution / (2 * wfs.params.binning)))
+    if size(wfs.state.valid_i4q) != (n_pixels, n_pixels)
+        wfs.state.valid_i4q = similar(wfs.state.valid_i4q, n_pixels, n_pixels)
+        fill!(wfs.state.valid_i4q, false)
+    end
+    if size(wfs.state.valid_signal) != (2 * n_pixels, n_pixels)
+        wfs.state.valid_signal = similar(wfs.state.valid_signal, 2 * n_pixels, n_pixels)
+    end
+    if size(wfs.state.signal_2d) != (2 * n_pixels, n_pixels)
+        wfs.state.signal_2d = similar(wfs.state.signal_2d, 2 * n_pixels, n_pixels)
+        wfs.state.reference_signal_2d = similar(wfs.state.reference_signal_2d, 2 * n_pixels, n_pixels)
+    elseif size(wfs.state.reference_signal_2d) != (2 * n_pixels, n_pixels)
+        wfs.state.reference_signal_2d = similar(wfs.state.reference_signal_2d, 2 * n_pixels, n_pixels)
+    end
+    if iszero(wfs.params.light_ratio)
+        fill!(wfs.state.valid_i4q, true)
+        update_bioedge_valid_signal!(wfs)
+        return wfs
+    end
+
+    copyto!(wfs.state.modulation_phases, host_modulation_phases(
+        eltype(wfs.state.slopes),
+        tel,
+        wfs.params.calib_modulation,
+        wfs.params.modulation_points,
+        wfs.params.delta_theta,
+        wfs.params.user_modulation_path,
+    ))
+    bioedge_intensity!(wfs.state.temp, wfs, tel, src)
+    frame = sample_bioedge_intensity!(wfs, tel, wfs.state.temp)
+    build_modulation_phases!(wfs, tel)
+
+    center = round(Int, wfs.state.nominal_detector_resolution / wfs.params.binning / 2)
+    max_i4q = zero(eltype(frame))
+    @inbounds for j in 1:n_pixels, i in 1:n_pixels
+        q1 = frame[center - n_pixels + i, center - n_pixels + j]
+        q2 = frame[center - n_pixels + i, center + j]
+        q3 = frame[center + i, center + j]
+        q4 = frame[center + i, center - n_pixels + j]
+        i4q = q1 + q2 + q3 + q4
+        if i4q > max_i4q
+            max_i4q = i4q
+        end
+    end
+    cutoff = wfs.params.light_ratio * max_i4q
+    @inbounds for j in 1:n_pixels, i in 1:n_pixels
+        q1 = frame[center - n_pixels + i, center - n_pixels + j]
+        q2 = frame[center - n_pixels + i, center + j]
+        q3 = frame[center + i, center + j]
+        q4 = frame[center + i, center - n_pixels + j]
+        wfs.state.valid_i4q[i, j] = (q1 + q2 + q3 + q4) >= cutoff
+    end
+    update_bioedge_valid_signal!(wfs)
+    return wfs
+end
+
 function ensure_bioedge_calibration!(wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource)
     λ = eltype(wfs.state.slopes)(wavelength(src))
     if wfs.state.calibrated && wfs.state.calibration_wavelength == λ
@@ -763,6 +813,7 @@ function ensure_bioedge_calibration!(wfs::BioEdgeWFS, tel::Telescope, src::Abstr
     end
     opd_saved = copy(tel.state.opd)
     fill!(tel.state.opd, zero(eltype(tel.state.opd)))
+    select_bioedge_valid_i4q!(wfs, tel, src)
     bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
     frame = sample_bioedge_intensity!(wfs, tel, wfs.state.intensity)
     fill!(wfs.state.reference_signal_2d, zero(eltype(wfs.state.reference_signal_2d)))
