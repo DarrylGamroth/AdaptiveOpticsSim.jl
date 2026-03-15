@@ -86,6 +86,10 @@
   optional WFS shifts, but no FITS I/O (`src/Calibration/misregistration_identification.jl`).
 
 ## Functional Parity Gate (Current Blocking Gaps)
+- [ ] Local OOPAO bundle expansion on March 14, 2026 confirmed the next failing
+  reference cases are `psf_baseline`, `shack_hartmann_diffractive_ramp`,
+  `pyramid_diffractive_ramp`, and `bioedge_diffractive_ramp`; geometric
+  Shack-Hartmann remains the only committed Python-backed parity fixture.
 - [ ] Expand deterministic OOPAO reference coverage beyond geometric Shack-Hartmann to:
   PSF formation, diffractive Shack-Hartmann, Pyramid, BioEdge, Gain Sensing Camera,
   LiFT, and closed-loop traces.

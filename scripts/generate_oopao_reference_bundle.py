@@ -329,6 +329,7 @@ def main() -> None:
     root = args.output.resolve()
     root.mkdir(parents=True, exist_ok=True)
     cases = {
+        "psf_baseline": psf_case(root),
         "shack_hartmann_geometric_ramp_xy": sh_geometric_case(
             root,
             case_id="shack_hartmann_geometric_ramp_xy",
@@ -341,6 +342,9 @@ def main() -> None:
             scale_x=0.0,
             scale_y=4e-9,
         ),
+        "shack_hartmann_diffractive_ramp": sh_diffractive_case(root),
+        "pyramid_diffractive_ramp": pyramid_case(root),
+        "bioedge_diffractive_ramp": bioedge_case(root),
     }
     write_manifest(root / "manifest.toml", cases)
 
