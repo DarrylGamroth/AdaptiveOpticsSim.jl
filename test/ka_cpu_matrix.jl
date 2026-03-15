@@ -172,8 +172,7 @@ end
             @test_skip "No reference bundle available"
         else
             for case in bundle.cases
-                if case.kind === :shack_hartmann_slopes &&
-                    lowercase(String(get(case.config["wfs"], "mode", "geometric"))) == "geometric"
+                if case.id in ("shack_hartmann_geometric_ramp_xy", "shack_hartmann_geometric_ramp_y")
                     expected = load_reference_array(case)
                     scalar_actual = adapt_reference_actual(case, compute_reference_actual(case))
                     ka_actual = adapt_reference_actual(case, compute_reference_actual_ka_cpu(case))

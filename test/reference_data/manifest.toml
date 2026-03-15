@@ -1,5 +1,278 @@
 version = 1
 
+[cases.bioedge_diffractive_ramp]
+kind = "bioedge_slopes"
+data = "bioedge_diffractive_ramp.txt"
+shape = [32]
+atol = 2.0000000000000000e-03
+rtol = 5.0000000000000003e-02
+
+[cases.bioedge_diffractive_ramp.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.bioedge_diffractive_ramp.source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0000000000000000e+00
+
+[cases.bioedge_diffractive_ramp.opd]
+kind = "ramp"
+scale_x = 5.0000000000000001e-09
+scale_y = -2.0000000000000001e-09
+bias = 0.0000000000000000e+00
+
+[cases.bioedge_diffractive_ramp.wfs]
+n_subap = 4
+threshold = 0.0000000000000000e+00
+mode = "diffractive"
+modulation = 1.0000000000000000e+00
+modulation_points = 8
+diffraction_padding = 2
+psf_centering = true
+n_pix_separation = 4
+binning = 2
+
+[cases.closed_loop_bioedge_trace]
+kind = "closed_loop_trace"
+data = "closed_loop_bioedge_trace.txt"
+shape = [4, 5]
+storage_order = "C"
+atol = 2.0000000000000001e-04
+rtol = 1.0000000000000000e-03
+
+[cases.closed_loop_bioedge_trace.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.closed_loop_bioedge_trace.source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0000000000000000e+00
+
+[cases.closed_loop_bioedge_trace.wfs]
+kind = "bioedge_slopes"
+n_subap = 4
+mode = "diffractive"
+threshold = 0.0000000000000000e+00
+modulation = 1.0000000000000000e+00
+n_pix_separation = 4
+n_pix_edge = 2
+grey_width = 0.0000000000000000e+00
+grey_length = false
+binning = 2
+
+[cases.closed_loop_bioedge_trace.basis]
+kind = "cartesian_polynomials"
+n_modes = 4
+
+[cases.closed_loop_bioedge_trace.compute]
+gain = 2.0000000000000001e-01
+frame_delay = 2
+calibration_amplitude = 1.0000000000000001e-09
+psf_zero_padding = 2
+forcing_coefficients = [[2.0000000000000000e-08, -1.0000000000000000e-08, 5.0000000000000001e-09, -2.5000000000000001e-09], [1.4999999999999999e-08, 5.0000000000000001e-09, -7.4999999999999993e-09, 5.0000000000000001e-09], [-1.0000000000000000e-08, 1.2499999999999999e-08, 5.0000000000000001e-09, -5.0000000000000001e-09], [5.0000000000000001e-09, -7.4999999999999993e-09, 1.0000000000000000e-08, 2.5000000000000001e-09]]
+
+[cases.closed_loop_pyramid_trace]
+kind = "closed_loop_trace"
+data = "closed_loop_pyramid_trace.txt"
+shape = [6, 5]
+storage_order = "C"
+atol = 2.0000000000000001e-04
+rtol = 1.0000000000000000e-03
+
+[cases.closed_loop_pyramid_trace.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.closed_loop_pyramid_trace.source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0000000000000000e+00
+
+[cases.closed_loop_pyramid_trace.wfs]
+kind = "pyramid_slopes"
+n_subap = 4
+mode = "diffractive"
+threshold = 0.0000000000000000e+00
+modulation = 1.0000000000000000e+00
+n_pix_separation = 4
+n_pix_edge = 0
+
+[cases.closed_loop_pyramid_trace.basis]
+kind = "cartesian_polynomials"
+n_modes = 4
+
+[cases.closed_loop_pyramid_trace.compute]
+gain = 4.0000000000000002e-01
+frame_delay = 2
+calibration_amplitude = 1.0000000000000001e-09
+psf_zero_padding = 2
+forcing_coefficients = [[2.0000000000000000e-08, -1.0000000000000000e-08, 5.0000000000000001e-09, -2.5000000000000001e-09], [1.4999999999999999e-08, 5.0000000000000001e-09, -7.4999999999999993e-09, 5.0000000000000001e-09], [-1.0000000000000000e-08, 1.2499999999999999e-08, 5.0000000000000001e-09, -5.0000000000000001e-09], [5.0000000000000001e-09, -7.4999999999999993e-09, 1.0000000000000000e-08, 2.5000000000000001e-09], [2.5000000000000001e-09, 5.0000000000000001e-09, -1.2499999999999999e-08, 7.4999999999999993e-09], [-7.4999999999999993e-09, -2.5000000000000001e-09, 7.4999999999999993e-09, -1.0000000000000000e-08]]
+
+[cases.closed_loop_shack_hartmann_trace]
+kind = "closed_loop_trace"
+data = "closed_loop_shack_hartmann_trace.txt"
+shape = [6, 5]
+storage_order = "C"
+atol = 2.0000000000000001e-04
+rtol = 1.0000000000000000e-03
+
+[cases.closed_loop_shack_hartmann_trace.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.closed_loop_shack_hartmann_trace.source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0000000000000000e+00
+
+[cases.closed_loop_shack_hartmann_trace.wfs]
+kind = "shack_hartmann_slopes"
+n_subap = 4
+mode = "diffractive"
+threshold = 0.0000000000000000e+00
+pixel_scale = 5.9999999999999998e-02
+n_pix_subap = 8
+
+[cases.closed_loop_shack_hartmann_trace.basis]
+kind = "cartesian_polynomials"
+n_modes = 4
+
+[cases.closed_loop_shack_hartmann_trace.compute]
+gain = 4.0000000000000002e-01
+frame_delay = 2
+calibration_amplitude = 1.0000000000000001e-09
+psf_zero_padding = 2
+forcing_coefficients = [[2.0000000000000000e-08, -1.0000000000000000e-08, 5.0000000000000001e-09, -2.5000000000000001e-09], [1.4999999999999999e-08, 5.0000000000000001e-09, -7.4999999999999993e-09, 5.0000000000000001e-09], [-1.0000000000000000e-08, 1.2499999999999999e-08, 5.0000000000000001e-09, -5.0000000000000001e-09], [5.0000000000000001e-09, -7.4999999999999993e-09, 1.0000000000000000e-08, 2.5000000000000001e-09], [2.5000000000000001e-09, 5.0000000000000001e-09, -1.2499999999999999e-08, 7.4999999999999993e-09], [-7.4999999999999993e-09, -2.5000000000000001e-09, 7.4999999999999993e-09, -1.0000000000000000e-08]]
+
+[cases.gain_sensing_camera_optical_gains]
+kind = "gsc_optical_gains"
+data = "gain_sensing_camera_optical_gains.txt"
+shape = [4]
+atol = 5.0000000000000003e-10
+rtol = 5.0000000000000003e-10
+
+[cases.gain_sensing_camera_optical_gains.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.gain_sensing_camera_optical_gains.source]
+kind = "ngs"
+band = "R"
+magnitude = 8.0000000000000000e+00
+
+[cases.gain_sensing_camera_optical_gains.opd]
+kind = "basis_mode"
+mode_index = 1
+amplitude = 4.9999999999999998e-08
+
+[cases.gain_sensing_camera_optical_gains.wfs]
+n_subap = 4
+threshold = 0.0000000000000000e+00
+mode = "diffractive"
+modulation = 3.0000000000000000e+00
+modulation_points = 20
+diffraction_padding = 2
+psf_centering = true
+n_pix_separation = 2
+n_pix_edge = 1
+binning = 1
+
+[cases.gain_sensing_camera_optical_gains.basis]
+kind = "cartesian_polynomials"
+n_modes = 4
+
+[cases.gsc_closed_loop_trace]
+kind = "gsc_closed_loop_trace"
+data = "gsc_closed_loop_trace.txt"
+shape = [4, 6]
+storage_order = "C"
+atol = 2.0000000000000001e-04
+rtol = 1.0000000000000000e-03
+
+[cases.gsc_closed_loop_trace.telescope]
+resolution = 16
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.gsc_closed_loop_trace.source]
+kind = "ngs"
+band = "R"
+magnitude = 8.0000000000000000e+00
+
+[cases.gsc_closed_loop_trace.wfs]
+kind = "pyramid_slopes"
+n_subap = 4
+mode = "diffractive"
+threshold = 5.0000000000000000e-01
+modulation = 3.0000000000000000e+00
+n_pix_separation = 2
+n_pix_edge = 1
+binning = 1
+
+[cases.gsc_closed_loop_trace.basis]
+kind = "cartesian_polynomials"
+n_modes = 4
+
+[cases.gsc_closed_loop_trace.compute]
+gain = 2.0000000000000001e-01
+frame_delay = 2
+calibration_amplitude = 1.0000000000000001e-09
+psf_zero_padding = 2
+og_floor = 5.0000000000000003e-02
+forcing_coefficients = [[2.0000000000000000e-08, -1.0000000000000000e-08, 5.0000000000000001e-09, -2.5000000000000001e-09], [1.4999999999999999e-08, 5.0000000000000001e-09, -7.4999999999999993e-09, 5.0000000000000001e-09], [-1.0000000000000000e-08, 1.2499999999999999e-08, 5.0000000000000001e-09, -5.0000000000000001e-09], [5.0000000000000001e-09, -7.4999999999999993e-09, 1.0000000000000000e-08, 2.5000000000000001e-09]]
+
+[cases.lift_interaction_matrix]
+kind = "lift_interaction_matrix"
+data = "lift_interaction_matrix.txt"
+shape = [48, 48, 4]
+storage_order = "C"
+atol = 1.0000000000000000e-04
+rtol = 1.0000000000000000e-10
+
+[cases.lift_interaction_matrix.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.lift_interaction_matrix.source]
+kind = "ngs"
+band = "I"
+magnitude = 8.0000000000000000e+00
+
+[cases.lift_interaction_matrix.basis]
+kind = "cartesian_polynomials"
+n_modes = 4
+
+[cases.lift_interaction_matrix.detector]
+noise = "readout"
+readout_sigma = 1.0000000000000000e+00
+integration_time = 1.0000000000000000e+00
+qe = 1.0000000000000000e+00
+psf_sampling = 2
+binning = 1
+
+[cases.lift_interaction_matrix.compute]
+img_resolution = 48
+mode_ids = [1, 2, 3, 4]
+coefficients = [0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00]
+iterations = 3
+numerical = false
+flux_norm = 1.0000000000000000e+00
+
 [cases.psf_baseline]
 kind = "psf"
 data = "psf_baseline.txt"
@@ -21,6 +294,72 @@ magnitude = 0.0000000000000000e+00
 
 [cases.psf_baseline.compute]
 zero_padding = 2
+
+[cases.pyramid_diffractive_ramp]
+kind = "pyramid_slopes"
+data = "pyramid_diffractive_ramp.txt"
+shape = [8]
+atol = 2.0000000000000000e-03
+rtol = 5.0000000000000003e-02
+
+[cases.pyramid_diffractive_ramp.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.pyramid_diffractive_ramp.source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0000000000000000e+00
+
+[cases.pyramid_diffractive_ramp.opd]
+kind = "ramp"
+scale_x = 5.0000000000000001e-09
+scale_y = -2.0000000000000001e-09
+bias = 0.0000000000000000e+00
+
+[cases.pyramid_diffractive_ramp.wfs]
+n_subap = 4
+threshold = 0.0000000000000000e+00
+mode = "diffractive"
+modulation = 1.0000000000000000e+00
+modulation_points = 8
+diffraction_padding = 2
+psf_centering = true
+n_pix_separation = 4
+binning = 2
+
+[cases.shack_hartmann_diffractive_ramp]
+kind = "shack_hartmann_slopes"
+data = "shack_hartmann_diffractive_ramp.txt"
+shape = [32]
+atol = 2.0000000000000001e-04
+rtol = 1.0000000000000000e-02
+
+[cases.shack_hartmann_diffractive_ramp.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.shack_hartmann_diffractive_ramp.source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0000000000000000e+00
+
+[cases.shack_hartmann_diffractive_ramp.opd]
+kind = "ramp"
+scale_x = 5.0000000000000001e-09
+scale_y = -2.0000000000000001e-09
+bias = 0.0000000000000000e+00
+
+[cases.shack_hartmann_diffractive_ramp.wfs]
+n_subap = 4
+threshold = 0.0000000000000000e+00
+mode = "diffractive"
+pixel_scale = 5.9999999999999998e-02
+n_pix_subap = 8
 
 [cases.shack_hartmann_geometric_ramp_xy]
 kind = "shack_hartmann_slopes"
@@ -88,145 +427,375 @@ mode = "geometric"
 swap_halves = true
 scale = 7.5949367088607559e+06
 
-[cases.shack_hartmann_diffractive_ramp]
-kind = "shack_hartmann_slopes"
-data = "shack_hartmann_diffractive_ramp.txt"
-shape = [32]
-atol = 2.0000000000000001e-04
-rtol = 1.0000000000000000e-02
+[cases.tomography_im_reconstructor]
+kind = "tomography_im_reconstructor"
+data = "tomography_im_reconstructor.txt"
+shape = [4, 8]
+storage_order = "C"
+atol = 1.0000000000000001e-09
+rtol = 9.9999999999999995e-08
 
-[cases.shack_hartmann_diffractive_ramp.telescope]
-resolution = 24
+[cases.tomography_im_reconstructor.atmosphere]
+zenith_angle_deg = 0.0000000000000000e+00
+altitude_km = [0.0000000000000000e+00]
+L0 = 2.5000000000000000e+01
+r0_zenith = 2.0000000000000001e-01
+fractional_r0 = [1.0000000000000000e+00]
+wavelength = 4.9999999999999998e-07
+wind_direction_deg = [0.0000000000000000e+00]
+wind_speed = [1.0000000000000000e+01]
+
+[cases.tomography_im_reconstructor.asterism]
+radius_arcsec = 7.5999999999999996e+00
+wavelength = 5.8899999999999999e-07
+base_height_m = 9.0000000000000000e+04
+n_lgs = 1
+
+[cases.tomography_im_reconstructor.wfs]
 diameter = 8.0000000000000000e+00
-sampling_time = 1.0000000000000000e-03
-central_obstruction = 0.0000000000000000e+00
+n_lenslet = 2
+n_px = 4
+field_stop_size_arcsec = 2.0000000000000000e+00
+valid_lenslet_map = [[1, 1], [1, 1]]
+lenslet_rotation_rad = [0.0000000000000000e+00]
+lenslet_offset = [[0.0000000000000000e+00], [0.0000000000000000e+00]]
 
-[cases.shack_hartmann_diffractive_ramp.source]
-kind = "ngs"
-band = "I"
-magnitude = 0.0000000000000000e+00
+[cases.tomography_im_reconstructor.tomography]
+n_fit_src = 1
+fov_optimization_arcsec = 0.0000000000000000e+00
+fit_src_height_m = "Inf"
 
-[cases.shack_hartmann_diffractive_ramp.opd]
-kind = "ramp"
-scale_x = 5.0000000000000001e-09
-scale_y = -2.0000000000000001e-09
-bias = 0.0000000000000000e+00
+[cases.tomography_im_reconstructor.dm]
+heights_m = [0.0000000000000000e+00]
+pitch_m = [5.0000000000000000e-01]
+cross_coupling = 2.0000000000000001e-01
+n_actuators = [2]
+valid_actuators = [[1, 1], [1, 1]]
 
-[cases.shack_hartmann_diffractive_ramp.wfs]
-n_subap = 4
-threshold = 0.0000000000000000e+00
-mode = "diffractive"
-pixel_scale = 5.9999999999999998e-02
-n_pix_subap = 8
+[cases.tomography_im_reconstructor.compute]
+interaction_matrix = [[1.0000000000000000e+00, 0.0000000000000000e+00, 2.0000000000000001e-01, 0.0000000000000000e+00], [0.0000000000000000e+00, 1.0000000000000000e+00, 0.0000000000000000e+00, 2.0000000000000001e-01], [5.0000000000000000e-01, 1.0000000000000001e-01, 0.0000000000000000e+00, 0.0000000000000000e+00], [0.0000000000000000e+00, 5.0000000000000000e-01, 1.0000000000000001e-01, 0.0000000000000000e+00], [0.0000000000000000e+00, 0.0000000000000000e+00, 1.0000000000000000e+00, 0.0000000000000000e+00], [0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00, 1.0000000000000000e+00], [2.5000000000000000e-01, 0.0000000000000000e+00, 2.5000000000000000e-01, 0.0000000000000000e+00], [0.0000000000000000e+00, 2.5000000000000000e-01, 0.0000000000000000e+00, 2.5000000000000000e-01]]
 
-[cases.pyramid_diffractive_ramp]
-kind = "pyramid_slopes"
-data = "pyramid_diffractive_ramp.txt"
-shape = [8]
-atol = 2.0000000000000000e-03
-rtol = 5.0000000000000003e-02
+[cases.tomography_im_wavefront]
+kind = "tomography_im_wavefront"
+data = "tomography_im_wavefront.txt"
+shape = [2, 2]
+storage_order = "C"
+atol = 1.0000000000000001e-09
+rtol = 9.9999999999999995e-08
 
-[cases.pyramid_diffractive_ramp.telescope]
-resolution = 24
+[cases.tomography_im_wavefront.atmosphere]
+zenith_angle_deg = 0.0000000000000000e+00
+altitude_km = [0.0000000000000000e+00]
+L0 = 2.5000000000000000e+01
+r0_zenith = 2.0000000000000001e-01
+fractional_r0 = [1.0000000000000000e+00]
+wavelength = 4.9999999999999998e-07
+wind_direction_deg = [0.0000000000000000e+00]
+wind_speed = [1.0000000000000000e+01]
+
+[cases.tomography_im_wavefront.asterism]
+radius_arcsec = 7.5999999999999996e+00
+wavelength = 5.8899999999999999e-07
+base_height_m = 9.0000000000000000e+04
+n_lgs = 1
+
+[cases.tomography_im_wavefront.wfs]
 diameter = 8.0000000000000000e+00
-sampling_time = 1.0000000000000000e-03
-central_obstruction = 0.0000000000000000e+00
+n_lenslet = 2
+n_px = 4
+field_stop_size_arcsec = 2.0000000000000000e+00
+valid_lenslet_map = [[1, 1], [1, 1]]
+lenslet_rotation_rad = [0.0000000000000000e+00]
+lenslet_offset = [[0.0000000000000000e+00], [0.0000000000000000e+00]]
 
-[cases.pyramid_diffractive_ramp.source]
-kind = "ngs"
-band = "I"
-magnitude = 0.0000000000000000e+00
+[cases.tomography_im_wavefront.tomography]
+n_fit_src = 1
+fov_optimization_arcsec = 0.0000000000000000e+00
+fit_src_height_m = "Inf"
 
-[cases.pyramid_diffractive_ramp.opd]
-kind = "ramp"
-scale_x = 5.0000000000000001e-09
-scale_y = -2.0000000000000001e-09
-bias = 0.0000000000000000e+00
+[cases.tomography_im_wavefront.dm]
+heights_m = [0.0000000000000000e+00]
+pitch_m = [5.0000000000000000e-01]
+cross_coupling = 2.0000000000000001e-01
+n_actuators = [2]
+valid_actuators = [[1, 1], [1, 1]]
 
-[cases.pyramid_diffractive_ramp.wfs]
-n_subap = 4
-threshold = 0.0000000000000000e+00
-mode = "diffractive"
-modulation = 1.0000000000000000e+00
-modulation_points = 8
-diffraction_padding = 2
-psf_centering = true
-n_pix_separation = 4
-binning = 2
+[cases.tomography_im_wavefront.compute]
+interaction_matrix = [[1.0000000000000000e+00, 0.0000000000000000e+00, 2.0000000000000001e-01, 0.0000000000000000e+00], [0.0000000000000000e+00, 1.0000000000000000e+00, 0.0000000000000000e+00, 2.0000000000000001e-01], [5.0000000000000000e-01, 1.0000000000000001e-01, 0.0000000000000000e+00, 0.0000000000000000e+00], [0.0000000000000000e+00, 5.0000000000000000e-01, 1.0000000000000001e-01, 0.0000000000000000e+00], [0.0000000000000000e+00, 0.0000000000000000e+00, 1.0000000000000000e+00, 0.0000000000000000e+00], [0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00, 1.0000000000000000e+00], [2.5000000000000000e-01, 0.0000000000000000e+00, 2.5000000000000000e-01, 0.0000000000000000e+00], [0.0000000000000000e+00, 2.5000000000000000e-01, 0.0000000000000000e+00, 2.5000000000000000e-01]]
+slopes = [2.0000000000000001e-01, -1.0000000000000001e-01, 2.9999999999999999e-01, -2.0000000000000001e-01, 1.4999999999999999e-01, -5.0000000000000003e-02, 1.0000000000000001e-01, -1.4999999999999999e-01]
 
-[cases.bioedge_diffractive_ramp]
-kind = "bioedge_slopes"
-data = "bioedge_diffractive_ramp.txt"
-shape = [32]
-atol = 2.0000000000000000e-03
-rtol = 5.0000000000000003e-02
+[cases.tomography_model_cnz]
+kind = "tomography_model_cnz"
+data = "tomography_model_cnz.txt"
+shape = [8, 8]
+storage_order = "C"
+atol = 9.9999999999999998e-13
+rtol = 9.9999999999999998e-13
 
-[cases.bioedge_diffractive_ramp.telescope]
-resolution = 24
+[cases.tomography_model_cnz.atmosphere]
+zenith_angle_deg = 0.0000000000000000e+00
+altitude_km = [0.0000000000000000e+00]
+L0 = 2.5000000000000000e+01
+r0_zenith = 2.0000000000000001e-01
+fractional_r0 = [1.0000000000000000e+00]
+wavelength = 4.9999999999999998e-07
+wind_direction_deg = [0.0000000000000000e+00]
+wind_speed = [1.0000000000000000e+01]
+
+[cases.tomography_model_cnz.asterism]
+radius_arcsec = 7.5999999999999996e+00
+wavelength = 5.8899999999999999e-07
+base_height_m = 9.0000000000000000e+04
+n_lgs = 1
+
+[cases.tomography_model_cnz.wfs]
 diameter = 8.0000000000000000e+00
-sampling_time = 1.0000000000000000e-03
-central_obstruction = 0.0000000000000000e+00
+n_lenslet = 2
+n_px = 4
+field_stop_size_arcsec = 2.0000000000000000e+00
+valid_lenslet_map = [[1, 1], [1, 1]]
+lenslet_rotation_rad = [0.0000000000000000e+00]
+lenslet_offset = [[0.0000000000000000e+00], [0.0000000000000000e+00]]
 
-[cases.bioedge_diffractive_ramp.source]
-kind = "ngs"
-band = "I"
-magnitude = 0.0000000000000000e+00
+[cases.tomography_model_cnz.tomography]
+n_fit_src = 1
+fov_optimization_arcsec = 0.0000000000000000e+00
+fit_src_height_m = "Inf"
 
-[cases.bioedge_diffractive_ramp.opd]
-kind = "ramp"
-scale_x = 5.0000000000000001e-09
-scale_y = -2.0000000000000001e-09
-bias = 0.0000000000000000e+00
+[cases.tomography_model_cnz.dm]
+heights_m = [0.0000000000000000e+00]
+pitch_m = [5.0000000000000000e-01]
+cross_coupling = 2.0000000000000001e-01
+n_actuators = [2]
+valid_actuators = [[1, 1], [1, 1]]
 
-[cases.bioedge_diffractive_ramp.wfs]
-n_subap = 4
-threshold = 0.0000000000000000e+00
-mode = "diffractive"
-modulation = 1.0000000000000000e+00
-modulation_points = 8
-diffraction_padding = 2
-psf_centering = true
-n_pix_separation = 4
-binning = 2
-
-[cases.gain_sensing_camera_optical_gains]
-kind = "gsc_optical_gains"
-data = "gain_sensing_camera_optical_gains.txt"
-shape = [4]
+[cases.tomography_model_cox]
+kind = "tomography_model_cox"
+data = "tomography_model_cox.txt"
+shape = [25, 25]
+storage_order = "C"
 atol = 5.0000000000000003e-10
-rtol = 5.0000000000000003e-10
+rtol = 4.9999999999999998e-08
 
-[cases.gain_sensing_camera_optical_gains.telescope]
-resolution = 24
+[cases.tomography_model_cox.atmosphere]
+zenith_angle_deg = 0.0000000000000000e+00
+altitude_km = [0.0000000000000000e+00]
+L0 = 2.5000000000000000e+01
+r0_zenith = 2.0000000000000001e-01
+fractional_r0 = [1.0000000000000000e+00]
+wavelength = 4.9999999999999998e-07
+wind_direction_deg = [0.0000000000000000e+00]
+wind_speed = [1.0000000000000000e+01]
+
+[cases.tomography_model_cox.asterism]
+radius_arcsec = 7.5999999999999996e+00
+wavelength = 5.8899999999999999e-07
+base_height_m = 9.0000000000000000e+04
+n_lgs = 1
+
+[cases.tomography_model_cox.wfs]
 diameter = 8.0000000000000000e+00
-sampling_time = 1.0000000000000000e-03
-central_obstruction = 0.0000000000000000e+00
+n_lenslet = 2
+n_px = 4
+field_stop_size_arcsec = 2.0000000000000000e+00
+valid_lenslet_map = [[1, 1], [1, 1]]
+lenslet_rotation_rad = [0.0000000000000000e+00]
+lenslet_offset = [[0.0000000000000000e+00], [0.0000000000000000e+00]]
 
-[cases.gain_sensing_camera_optical_gains.source]
-kind = "ngs"
-band = "R"
-magnitude = 8.0000000000000000e+00
+[cases.tomography_model_cox.tomography]
+n_fit_src = 1
+fov_optimization_arcsec = 0.0000000000000000e+00
+fit_src_height_m = "Inf"
 
-[cases.gain_sensing_camera_optical_gains.opd]
-kind = "basis_mode"
-mode_index = 1
-amplitude = 4.9999999999999998e-08
+[cases.tomography_model_cox.dm]
+heights_m = [0.0000000000000000e+00]
+pitch_m = [5.0000000000000000e-01]
+cross_coupling = 2.0000000000000001e-01
+n_actuators = [2]
+valid_actuators = [[1, 1], [1, 1]]
 
-[cases.gain_sensing_camera_optical_gains.wfs]
-n_subap = 4
-threshold = 0.0000000000000000e+00
-mode = "diffractive"
-modulation = 3.0000000000000000e+00
-modulation_points = 20
-diffraction_padding = 2
-psf_centering = true
-n_pix_separation = 2
-n_pix_edge = 1
-binning = 1
+[cases.tomography_model_cxx]
+kind = "tomography_model_cxx"
+data = "tomography_model_cxx.txt"
+shape = [25, 25]
+storage_order = "C"
+atol = 5.0000000000000003e-10
+rtol = 4.9999999999999998e-08
 
-[cases.gain_sensing_camera_optical_gains.basis]
-kind = "cartesian_polynomials"
-n_modes = 4
+[cases.tomography_model_cxx.atmosphere]
+zenith_angle_deg = 0.0000000000000000e+00
+altitude_km = [0.0000000000000000e+00]
+L0 = 2.5000000000000000e+01
+r0_zenith = 2.0000000000000001e-01
+fractional_r0 = [1.0000000000000000e+00]
+wavelength = 4.9999999999999998e-07
+wind_direction_deg = [0.0000000000000000e+00]
+wind_speed = [1.0000000000000000e+01]
+
+[cases.tomography_model_cxx.asterism]
+radius_arcsec = 7.5999999999999996e+00
+wavelength = 5.8899999999999999e-07
+base_height_m = 9.0000000000000000e+04
+n_lgs = 1
+
+[cases.tomography_model_cxx.wfs]
+diameter = 8.0000000000000000e+00
+n_lenslet = 2
+n_px = 4
+field_stop_size_arcsec = 2.0000000000000000e+00
+valid_lenslet_map = [[1, 1], [1, 1]]
+lenslet_rotation_rad = [0.0000000000000000e+00]
+lenslet_offset = [[0.0000000000000000e+00], [0.0000000000000000e+00]]
+
+[cases.tomography_model_cxx.tomography]
+n_fit_src = 1
+fov_optimization_arcsec = 0.0000000000000000e+00
+fit_src_height_m = "Inf"
+
+[cases.tomography_model_cxx.dm]
+heights_m = [0.0000000000000000e+00]
+pitch_m = [5.0000000000000000e-01]
+cross_coupling = 2.0000000000000001e-01
+n_actuators = [2]
+valid_actuators = [[1, 1], [1, 1]]
+
+[cases.tomography_model_gamma]
+kind = "tomography_model_gamma"
+data = "tomography_model_gamma.txt"
+shape = [8, 25]
+storage_order = "C"
+atol = 9.9999999999999998e-13
+rtol = 9.9999999999999998e-13
+
+[cases.tomography_model_gamma.atmosphere]
+zenith_angle_deg = 0.0000000000000000e+00
+altitude_km = [0.0000000000000000e+00]
+L0 = 2.5000000000000000e+01
+r0_zenith = 2.0000000000000001e-01
+fractional_r0 = [1.0000000000000000e+00]
+wavelength = 4.9999999999999998e-07
+wind_direction_deg = [0.0000000000000000e+00]
+wind_speed = [1.0000000000000000e+01]
+
+[cases.tomography_model_gamma.asterism]
+radius_arcsec = 7.5999999999999996e+00
+wavelength = 5.8899999999999999e-07
+base_height_m = 9.0000000000000000e+04
+n_lgs = 1
+
+[cases.tomography_model_gamma.wfs]
+diameter = 8.0000000000000000e+00
+n_lenslet = 2
+n_px = 4
+field_stop_size_arcsec = 2.0000000000000000e+00
+valid_lenslet_map = [[1, 1], [1, 1]]
+lenslet_rotation_rad = [0.0000000000000000e+00]
+lenslet_offset = [[0.0000000000000000e+00], [0.0000000000000000e+00]]
+
+[cases.tomography_model_gamma.tomography]
+n_fit_src = 1
+fov_optimization_arcsec = 0.0000000000000000e+00
+fit_src_height_m = "Inf"
+
+[cases.tomography_model_gamma.dm]
+heights_m = [0.0000000000000000e+00]
+pitch_m = [5.0000000000000000e-01]
+cross_coupling = 2.0000000000000001e-01
+n_actuators = [2]
+valid_actuators = [[1, 1], [1, 1]]
+
+[cases.tomography_model_reconstructor]
+kind = "tomography_model_reconstructor"
+data = "tomography_model_reconstructor.txt"
+shape = [25, 8]
+storage_order = "C"
+atol = 1.0000000000000001e-09
+rtol = 9.9999999999999995e-08
+
+[cases.tomography_model_reconstructor.atmosphere]
+zenith_angle_deg = 0.0000000000000000e+00
+altitude_km = [0.0000000000000000e+00]
+L0 = 2.5000000000000000e+01
+r0_zenith = 2.0000000000000001e-01
+fractional_r0 = [1.0000000000000000e+00]
+wavelength = 4.9999999999999998e-07
+wind_direction_deg = [0.0000000000000000e+00]
+wind_speed = [1.0000000000000000e+01]
+
+[cases.tomography_model_reconstructor.asterism]
+radius_arcsec = 7.5999999999999996e+00
+wavelength = 5.8899999999999999e-07
+base_height_m = 9.0000000000000000e+04
+n_lgs = 1
+
+[cases.tomography_model_reconstructor.wfs]
+diameter = 8.0000000000000000e+00
+n_lenslet = 2
+n_px = 4
+field_stop_size_arcsec = 2.0000000000000000e+00
+valid_lenslet_map = [[1, 1], [1, 1]]
+lenslet_rotation_rad = [0.0000000000000000e+00]
+lenslet_offset = [[0.0000000000000000e+00], [0.0000000000000000e+00]]
+
+[cases.tomography_model_reconstructor.tomography]
+n_fit_src = 1
+fov_optimization_arcsec = 0.0000000000000000e+00
+fit_src_height_m = "Inf"
+
+[cases.tomography_model_reconstructor.dm]
+heights_m = [0.0000000000000000e+00]
+pitch_m = [5.0000000000000000e-01]
+cross_coupling = 2.0000000000000001e-01
+n_actuators = [2]
+valid_actuators = [[1, 1], [1, 1]]
+
+[cases.tomography_model_wavefront]
+kind = "tomography_model_wavefront"
+data = "tomography_model_wavefront.txt"
+shape = [13, 13]
+storage_order = "C"
+atol = 1.0000000000000001e-09
+rtol = 9.9999999999999995e-08
+
+[cases.tomography_model_wavefront.atmosphere]
+zenith_angle_deg = 0.0000000000000000e+00
+altitude_km = [0.0000000000000000e+00]
+L0 = 2.5000000000000000e+01
+r0_zenith = 2.0000000000000001e-01
+fractional_r0 = [1.0000000000000000e+00]
+wavelength = 4.9999999999999998e-07
+wind_direction_deg = [0.0000000000000000e+00]
+wind_speed = [1.0000000000000000e+01]
+
+[cases.tomography_model_wavefront.asterism]
+radius_arcsec = 7.5999999999999996e+00
+wavelength = 5.8899999999999999e-07
+base_height_m = 9.0000000000000000e+04
+n_lgs = 1
+
+[cases.tomography_model_wavefront.wfs]
+diameter = 8.0000000000000000e+00
+n_lenslet = 2
+n_px = 4
+field_stop_size_arcsec = 2.0000000000000000e+00
+valid_lenslet_map = [[1, 1], [1, 1]]
+lenslet_rotation_rad = [0.0000000000000000e+00]
+lenslet_offset = [[0.0000000000000000e+00], [0.0000000000000000e+00]]
+
+[cases.tomography_model_wavefront.tomography]
+n_fit_src = 1
+fov_optimization_arcsec = 0.0000000000000000e+00
+fit_src_height_m = "Inf"
+
+[cases.tomography_model_wavefront.dm]
+heights_m = [0.0000000000000000e+00]
+pitch_m = [5.0000000000000000e-01]
+cross_coupling = 2.0000000000000001e-01
+n_actuators = [2]
+valid_actuators = [[1, 1], [1, 1]]
+
+[cases.tomography_model_wavefront.compute]
+slopes = [1.0000000000000001e-01, -2.0000000000000001e-01, 5.0000000000000003e-02, 1.4999999999999999e-01, -1.0000000000000001e-01, 2.5000000000000000e-01, -5.0000000000000003e-02, 2.0000000000000001e-01]
 
 [cases.transfer_function_rejection]
 kind = "transfer_function_rejection"
@@ -240,202 +809,3 @@ rtol = 9.9999999999999998e-13
 fs = 3.0000000000000000e+02
 n_freq = 512
 loop_gains = [2.0000000000000001e-01, 5.9999999999999998e-01]
-
-[cases.lift_interaction_matrix]
-kind = "lift_interaction_matrix"
-data = "lift_interaction_matrix.txt"
-shape = [48, 48, 4]
-storage_order = "C"
-atol = 1.0000000000000000e-04
-rtol = 1.0000000000000000e-10
-
-[cases.lift_interaction_matrix.telescope]
-resolution = 24
-diameter = 8.0000000000000000e+00
-sampling_time = 1.0000000000000000e-03
-central_obstruction = 0.0000000000000000e+00
-
-[cases.lift_interaction_matrix.source]
-kind = "ngs"
-band = "I"
-magnitude = 8.0000000000000000e+00
-
-[cases.lift_interaction_matrix.basis]
-kind = "cartesian_polynomials"
-n_modes = 4
-
-[cases.lift_interaction_matrix.detector]
-noise = "readout"
-readout_sigma = 1.0000000000000000e+00
-integration_time = 1.0000000000000000e+00
-qe = 1.0000000000000000e+00
-psf_sampling = 2
-binning = 1
-
-[cases.lift_interaction_matrix.compute]
-img_resolution = 48
-mode_ids = [1, 2, 3, 4]
-coefficients = [0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00]
-iterations = 3
-numerical = false
-flux_norm = 1.0000000000000000e+00
-
-[cases.closed_loop_shack_hartmann_trace]
-kind = "closed_loop_trace"
-data = "closed_loop_shack_hartmann_trace.txt"
-shape = [6, 5]
-storage_order = "C"
-atol = 2.0000000000000001e-04
-rtol = 1.0000000000000000e-03
-
-[cases.closed_loop_shack_hartmann_trace.telescope]
-resolution = 24
-diameter = 8.0000000000000000e+00
-sampling_time = 1.0000000000000000e-03
-central_obstruction = 0.0000000000000000e+00
-
-[cases.closed_loop_shack_hartmann_trace.source]
-kind = "ngs"
-band = "I"
-magnitude = 0.0000000000000000e+00
-
-[cases.closed_loop_shack_hartmann_trace.wfs]
-kind = "shack_hartmann_slopes"
-n_subap = 4
-mode = "diffractive"
-threshold = 0.0000000000000000e+00
-pixel_scale = 5.9999999999999998e-02
-n_pix_subap = 8
-
-[cases.closed_loop_shack_hartmann_trace.basis]
-kind = "cartesian_polynomials"
-n_modes = 4
-
-[cases.closed_loop_shack_hartmann_trace.compute]
-gain = 4.0000000000000002e-01
-frame_delay = 2
-calibration_amplitude = 1.0000000000000001e-09
-psf_zero_padding = 2
-forcing_coefficients = [[2.0000000000000000e-08, -1.0000000000000000e-08, 5.0000000000000001e-09, -2.5000000000000001e-09], [1.4999999999999999e-08, 5.0000000000000001e-09, -7.4999999999999993e-09, 5.0000000000000001e-09], [-1.0000000000000000e-08, 1.2499999999999999e-08, 5.0000000000000001e-09, -5.0000000000000001e-09], [5.0000000000000001e-09, -7.4999999999999993e-09, 1.0000000000000000e-08, 2.5000000000000001e-09], [2.5000000000000001e-09, 5.0000000000000001e-09, -1.2499999999999999e-08, 7.4999999999999993e-09], [-7.4999999999999993e-09, -2.5000000000000001e-09, 7.4999999999999993e-09, -1.0000000000000000e-08]]
-
-[cases.closed_loop_pyramid_trace]
-kind = "closed_loop_trace"
-data = "closed_loop_pyramid_trace.txt"
-shape = [6, 5]
-storage_order = "C"
-atol = 2.0000000000000001e-04
-rtol = 1.0000000000000000e-03
-
-[cases.closed_loop_pyramid_trace.telescope]
-resolution = 24
-diameter = 8.0000000000000000e+00
-sampling_time = 1.0000000000000000e-03
-central_obstruction = 0.0000000000000000e+00
-
-[cases.closed_loop_pyramid_trace.source]
-kind = "ngs"
-band = "I"
-magnitude = 0.0000000000000000e+00
-
-[cases.closed_loop_pyramid_trace.wfs]
-kind = "pyramid_slopes"
-n_subap = 4
-mode = "diffractive"
-threshold = 0.0000000000000000e+00
-modulation = 1.0000000000000000e+00
-n_pix_separation = 4
-n_pix_edge = 0
-
-[cases.closed_loop_pyramid_trace.basis]
-kind = "cartesian_polynomials"
-n_modes = 4
-
-[cases.closed_loop_pyramid_trace.compute]
-gain = 4.0000000000000002e-01
-frame_delay = 2
-calibration_amplitude = 1.0000000000000001e-09
-psf_zero_padding = 2
-forcing_coefficients = [[2.0000000000000000e-08, -1.0000000000000000e-08, 5.0000000000000001e-09, -2.5000000000000001e-09], [1.4999999999999999e-08, 5.0000000000000001e-09, -7.4999999999999993e-09, 5.0000000000000001e-09], [-1.0000000000000000e-08, 1.2499999999999999e-08, 5.0000000000000001e-09, -5.0000000000000001e-09], [5.0000000000000001e-09, -7.4999999999999993e-09, 1.0000000000000000e-08, 2.5000000000000001e-09], [2.5000000000000001e-09, 5.0000000000000001e-09, -1.2499999999999999e-08, 7.4999999999999993e-09], [-7.4999999999999993e-09, -2.5000000000000001e-09, 7.4999999999999993e-09, -1.0000000000000000e-08]]
-
-[cases.closed_loop_bioedge_trace]
-kind = "closed_loop_trace"
-data = "closed_loop_bioedge_trace.txt"
-shape = [4, 5]
-storage_order = "C"
-atol = 2.0000000000000001e-04
-rtol = 1.0000000000000000e-03
-
-[cases.closed_loop_bioedge_trace.telescope]
-resolution = 24
-diameter = 8.0000000000000000e+00
-sampling_time = 1.0000000000000000e-03
-central_obstruction = 0.0000000000000000e+00
-
-[cases.closed_loop_bioedge_trace.source]
-kind = "ngs"
-band = "I"
-magnitude = 0.0000000000000000e+00
-
-[cases.closed_loop_bioedge_trace.wfs]
-kind = "bioedge_slopes"
-n_subap = 4
-mode = "diffractive"
-threshold = 0.0000000000000000e+00
-modulation = 1.0000000000000000e+00
-n_pix_separation = 4
-n_pix_edge = 2
-grey_width = 0.0000000000000000e+00
-grey_length = false
-binning = 2
-
-[cases.closed_loop_bioedge_trace.basis]
-kind = "cartesian_polynomials"
-n_modes = 4
-
-[cases.closed_loop_bioedge_trace.compute]
-gain = 2.0000000000000001e-01
-frame_delay = 2
-calibration_amplitude = 1.0000000000000001e-09
-psf_zero_padding = 2
-forcing_coefficients = [[2.0000000000000000e-08, -1.0000000000000000e-08, 5.0000000000000001e-09, -2.5000000000000001e-09], [1.4999999999999999e-08, 5.0000000000000001e-09, -7.4999999999999993e-09, 5.0000000000000001e-09], [-1.0000000000000000e-08, 1.2499999999999999e-08, 5.0000000000000001e-09, -5.0000000000000001e-09], [5.0000000000000001e-09, -7.4999999999999993e-09, 1.0000000000000000e-08, 2.5000000000000001e-09]]
-
-[cases.gsc_closed_loop_trace]
-kind = "gsc_closed_loop_trace"
-data = "gsc_closed_loop_trace.txt"
-shape = [4, 6]
-storage_order = "C"
-atol = 2.0000000000000001e-04
-rtol = 1.0000000000000000e-03
-
-[cases.gsc_closed_loop_trace.telescope]
-resolution = 16
-diameter = 8.0000000000000000e+00
-sampling_time = 1.0000000000000000e-03
-central_obstruction = 0.0000000000000000e+00
-
-[cases.gsc_closed_loop_trace.source]
-kind = "ngs"
-band = "R"
-magnitude = 8.0000000000000000e+00
-
-[cases.gsc_closed_loop_trace.wfs]
-kind = "pyramid_slopes"
-n_subap = 4
-mode = "diffractive"
-threshold = 5.0000000000000000e-01
-modulation = 3.0000000000000000e+00
-n_pix_separation = 2
-n_pix_edge = 1
-binning = 1
-
-[cases.gsc_closed_loop_trace.basis]
-kind = "cartesian_polynomials"
-n_modes = 4
-
-[cases.gsc_closed_loop_trace.compute]
-gain = 2.0000000000000001e-01
-frame_delay = 2
-calibration_amplitude = 1.0000000000000001e-09
-psf_zero_padding = 2
-og_floor = 5.0000000000000003e-02
-forcing_coefficients = [[2.0000000000000000e-08, -1.0000000000000000e-08, 5.0000000000000001e-09, -2.5000000000000001e-09], [1.4999999999999999e-08, 5.0000000000000001e-09, -7.4999999999999993e-09, 5.0000000000000001e-09], [-1.0000000000000000e-08, 1.2499999999999999e-08, 5.0000000000000001e-09, -5.0000000000000001e-09], [5.0000000000000001e-09, -7.4999999999999993e-09, 1.0000000000000000e-08, 2.5000000000000001e-09]]

@@ -106,11 +106,13 @@
   (`tutorials/AO_closed_loop_Pyramid_WFS_GSC.py`) beyond the current compact regression trace.
 - [ ] Port and validate OOPAO tomography workflow
   (`tutorials/how_to_tomography.py`) or explicitly document it as unsupported.
-- [~] Julia tomography subsystem now exists under `src/Tomography/` with typed
+- [x] Julia tomography subsystem now exists under `src/Tomography/` with typed
   parameter objects, geometry helpers, DM fitting, sparse gradient assembly,
   model-based covariance/reconstructor operators (`Gamma`, `Cxx`, `Cox`, `Cnz`,
-  `RecStatSA`), and the IM-based reconstructor path; the remaining work is
-  pyTomoAO/OOPAO numerical regression and workflow parity.
+  `RecStatSA`), the IM-based reconstructor path, and committed pyTomoAO compact
+  numerical regression for the model/IM operators and reconstructed wavefronts.
+- [ ] Extend tomography parity from the current compact pyTomoAO bundle to the
+  full OOPAO `how_to_tomography.py` workflow.
 - [ ] Audit calibration/output conventions against OOPAO for:
   slope ordering/units outside geometric SH, PSF sampling conventions, detector coupling,
   and closed-loop telemetry traces.
@@ -152,11 +154,9 @@
 4. Decide whether the compact closed-loop traces should be expanded to full tutorial traces with atmosphere replay.
 5. Validate the remaining atmosphere-driven GSC closed-loop telemetry against OOPAO outputs.
 6. Validate LiFT iterative reconstruction outputs, not just the analytic interaction matrix.
-7. Add pyTomoAO-backed numerical regression for the new `src/Tomography/` operators and
-   reconstructors, keeping the Julian typed API while matching Python outputs.
-8. Validate the model-based tomographic reconstructor path (`Gamma`, `Cxx`, `Cox`, `Cnz`, `RecStatSA`)
-   against pyTomoAO reference matrices and tutorial traces.
-9. Add IM-based tomography parity using OOPAO/pyTomoAO reference interaction matrices and committed reference data.
+7. Extend pyTomoAO tomography parity from the committed compact bundle to full tutorial-sized traces.
+8. Port the remaining `how_to_tomography.py` workflow details and validate them against `pyTomoAO`.
+9. Decide whether the remaining tomography work stays in core or moves behind an extension/package split later.
 10. Only then resume GPU-specific expansion.
 
 ## Phase 0: Setup
@@ -206,12 +206,16 @@ Current validation scope:
 - `examples/tutorials/` now covers the core OOPAO workflows used most often in practice.
 - `test/reference_data/` now commits deterministic OOPAO PSF, geometric Shack-Hartmann,
   diffractive Shack-Hartmann, Pyramid, BioEdge, GSC optical-gain, and transfer-function cases.
+- `test/reference_data/` also commits deterministic pyTomoAO compact tomography cases for
+  `Gamma`, `Cxx`, `Cox`, `Cnz`, both reconstructors, and both reconstructed wavefront maps.
 - The reference harness applies a documented convention adapter only where OOPAO and Julia
   intentionally expose different public conventions in geometric Shack-Hartmann mode.
 - Local expanded bundle audits now cover PSF, diffractive SH/Pyramid/BioEdge, GSC optical gains,
-  and transfer functions.
+  transfer functions, and pyTomoAO tomography operators.
 - PSF, diffractive Shack-Hartmann, Pyramid, BioEdge, GSC optical gains, and transfer functions
   are now regression-backed against the committed OOPAO bundle.
+- Compact tomography operators and reconstructions are now regression-backed against the
+  committed pyTomoAO bundle.
 
 ## Phase 8: Full OOPAO Functional Parity
 - [ ] Every supported OOPAO workflow has deterministic Julia vs OOPAO regression coverage.

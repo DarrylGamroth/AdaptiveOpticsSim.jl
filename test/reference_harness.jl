@@ -199,6 +199,68 @@ function matrix_from_rows(rows)
     return mat
 end
 
+function parse_reference_real(value)
+    if value isa AbstractString
+        lowercase(String(value)) == "inf" && return Inf
+    end
+    return Float64(value)
+end
+
+function build_reference_tomography_atmosphere(cfg::AbstractDict{<:AbstractString,<:Any})
+    return TomographyAtmosphereParams(
+        zenith_angle_deg=Float64(cfg["zenith_angle_deg"]),
+        altitude_km=Float64.(cfg["altitude_km"]),
+        L0=Float64(cfg["L0"]),
+        r0_zenith=Float64(cfg["r0_zenith"]),
+        fractional_r0=Float64.(cfg["fractional_r0"]),
+        wavelength=Float64(cfg["wavelength"]),
+        wind_direction_deg=Float64.(cfg["wind_direction_deg"]),
+        wind_speed=Float64.(cfg["wind_speed"]),
+    )
+end
+
+function build_reference_tomography_asterism(cfg::AbstractDict{<:AbstractString,<:Any})
+    return LGSAsterismParams(
+        radius_arcsec=Float64(cfg["radius_arcsec"]),
+        wavelength=Float64(cfg["wavelength"]),
+        base_height_m=Float64(cfg["base_height_m"]),
+        n_lgs=Int(cfg["n_lgs"]),
+    )
+end
+
+function build_reference_tomography_wfs(cfg::AbstractDict{<:AbstractString,<:Any})
+    valid_lenslet_map = convert.(Bool, matrix_from_rows(cfg["valid_lenslet_map"]))
+    lenslet_offset = matrix_from_rows(cfg["lenslet_offset"])
+    return LGSWFSParams(
+        diameter=Float64(cfg["diameter"]),
+        n_lenslet=Int(cfg["n_lenslet"]),
+        n_px=Int(cfg["n_px"]),
+        field_stop_size_arcsec=Float64(cfg["field_stop_size_arcsec"]),
+        valid_lenslet_map=valid_lenslet_map,
+        lenslet_rotation_rad=Float64.(cfg["lenslet_rotation_rad"]),
+        lenslet_offset=lenslet_offset,
+    )
+end
+
+function build_reference_tomography_params(cfg::AbstractDict{<:AbstractString,<:Any})
+    return TomographyParams(
+        n_fit_src=Int(cfg["n_fit_src"]),
+        fov_optimization_arcsec=Float64(cfg["fov_optimization_arcsec"]),
+        fit_src_height_m=parse_reference_real(get(cfg, "fit_src_height_m", Inf)),
+    )
+end
+
+function build_reference_tomography_dm(cfg::AbstractDict{<:AbstractString,<:Any})
+    valid_actuators = convert.(Bool, matrix_from_rows(cfg["valid_actuators"]))
+    return TomographyDMParams(
+        heights_m=Float64.(cfg["heights_m"]),
+        pitch_m=Float64.(cfg["pitch_m"]),
+        cross_coupling=Float64(cfg["cross_coupling"]),
+        n_actuators=Int.(cfg["n_actuators"]),
+        valid_actuators=valid_actuators,
+    )
+end
+
 function combine_reference_modes!(dest::AbstractMatrix{T}, basis::AbstractArray{<:Real,3},
     coeffs::AbstractVector{<:Real}) where {T<:AbstractFloat}
     fill!(dest, zero(T))
@@ -519,6 +581,62 @@ function compute_reference_actual(case::ReferenceCase)
             rejection[:, idx] .= 20 .* log10.(abs.(H_er))
         end
         return rejection
+    elseif case.kind in (
+        :tomography_model_gamma,
+        :tomography_model_cxx,
+        :tomography_model_cox,
+        :tomography_model_cnz,
+        :tomography_model_reconstructor,
+        :tomography_model_wavefront,
+        :tomography_im_reconstructor,
+        :tomography_im_wavefront,
+    )
+        atmosphere = build_reference_tomography_atmosphere(case.config["atmosphere"])
+        asterism = build_reference_tomography_asterism(case.config["asterism"])
+        wfs = build_reference_tomography_wfs(case.config["wfs"])
+        tomography = build_reference_tomography_params(case.config["tomography"])
+        dm = build_reference_tomography_dm(case.config["dm"])
+        compute_cfg = get(case.config, "compute", Dict{String,Any}())
+        if case.kind in (
+            :tomography_model_gamma,
+            :tomography_model_cxx,
+            :tomography_model_cox,
+            :tomography_model_cnz,
+            :tomography_model_reconstructor,
+            :tomography_model_wavefront,
+        )
+            recon = build_reconstructor(ModelBasedTomography(), atmosphere, asterism, wfs, tomography, dm)
+            if case.kind === :tomography_model_gamma
+                return Matrix(recon.operators.gamma)
+            elseif case.kind === :tomography_model_cxx
+                return Matrix(recon.operators.cxx)
+            elseif case.kind === :tomography_model_cox
+                return Matrix(recon.operators.cox)
+            elseif case.kind === :tomography_model_cnz
+                return Matrix(recon.operators.cnz)
+            elseif case.kind === :tomography_model_reconstructor
+                return Matrix(recon.reconstructor)
+            end
+            slopes = Float64.(compute_cfg["slopes"])
+            return reconstruct_wavefront_map(recon, slopes)
+        else
+            imat = matrix_from_rows(compute_cfg["interaction_matrix"])
+            recon = build_reconstructor(
+                InteractionMatrixTomography(),
+                imat,
+                dm.valid_actuators,
+                atmosphere,
+                asterism,
+                wfs,
+                tomography,
+                dm,
+            )
+            if case.kind === :tomography_im_reconstructor
+                return Matrix(recon.reconstructor)
+            end
+            slopes = Float64.(compute_cfg["slopes"])
+            return reconstruct_wavefront_map(recon, slopes)
+        end
     elseif case.kind === :lift_interaction_matrix
         tel = build_reference_telescope(case.config["telescope"])
         src = build_reference_source(case.config["source"])
@@ -622,8 +740,14 @@ function validate_reference_case(case::ReferenceCase)
     if size(actual) != size(expected)
         return (ok=false, actual=actual, expected=expected, maxabs=Inf)
     end
-    maxabs = maximum(abs, actual .- expected)
-    ok = isapprox(actual, expected; atol=case.atol, rtol=case.rtol)
+    expected_nan = isnan.(expected)
+    actual_nan = isnan.(actual)
+    if expected_nan != actual_nan
+        return (ok=false, actual=actual, expected=expected, maxabs=Inf)
+    end
+    finite_mask = .!expected_nan
+    maxabs = any(finite_mask) ? maximum(abs, actual[finite_mask] .- expected[finite_mask]) : 0.0
+    ok = isapprox(actual[finite_mask], expected[finite_mask]; atol=case.atol, rtol=case.rtol)
     return (ok=ok, actual=actual, expected=expected, maxabs=maxabs)
 end
 

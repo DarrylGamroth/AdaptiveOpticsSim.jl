@@ -1,0 +1,51 @@
+lgs_wfs_parameters:
+  D: 8.0
+  nLenslet: 2
+  nPx: 4
+  fieldStopSize: 2.0
+  nLGS: 1
+  validLLMap:
+  - - 1
+    - 1
+  - - 1
+    - 1
+  wfsLensletsRotation:
+  - 0.0
+  wfsLensletsOffset:
+  - - 0.0
+  - - 0.0
+dm_parameters:
+  dmHeights:
+  - 0.0
+  dmPitch:
+  - 0.5
+  dmCrossCoupling: 0.2
+  nActuators:
+  - 2
+  validActuators:
+  - - 1
+    - 1
+  - - 1
+    - 1
+atmosphere_parameters:
+  nLayer: 1
+  zenithAngleInDeg: 0.0
+  altitude:
+  - 0.0
+  L0: 25.0
+  r0: 0.2
+  fractionnalR0:
+  - 1.0
+  wavelength: 5.0e-07
+  windDirection:
+  - 0.0
+  windSpeed:
+  - 10.0
+lgs_asterism:
+  radiusAst: 7.6
+  LGSwavelength: 5.89e-07
+  baseLGSHeight: 90000.0
+  nLGS: 1
+tomography_parameters:
+  fovOptimization: 0.0
+  nFitSrc: 1

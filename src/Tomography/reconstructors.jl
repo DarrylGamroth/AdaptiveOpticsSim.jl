@@ -3,6 +3,8 @@ using SparseArrays
 
 abstract type AbstractTomographyMethod end
 
+const PYTOMOAO_DEFAULT_CROSS_SAMPLING = 49
+
 struct ModelBasedTomography <: AbstractTomographyMethod end
 
 struct InteractionMatrixTomography <: AbstractTomographyMethod end
@@ -47,6 +49,48 @@ end
 
 @inline _equal_fit_source_weights(params::TomographyParams{T}) where {T<:AbstractFloat} =
     fill(inv(T(params.n_fit_src^2)), params.n_fit_src^2)
+
+function _kv56_scalar(z::Complex{T}) where {T<:AbstractFloat}
+    gamma_1_6 = T(5.56631600178)
+    gamma_11_6 = T(0.94065585824)
+    v = T(5) / T(6)
+    z_abs = abs(z)
+    if z_abs < T(2)
+        sum_a = zero(Complex{T})
+        sum_b = zero(Complex{T})
+        term_a = (T(0.5) * z)^v / gamma_11_6
+        term_b = (T(0.5) * z)^(-v) / gamma_1_6
+        sum_a += term_a
+        sum_b += term_b
+        z_sq_over_4 = (T(0.5) * z)^2
+        k = 1
+        tol = T(1e-15)
+        while k <= 1000
+            factor_a = z_sq_over_4 / (T(k) * (T(k) + v))
+            term_a *= factor_a
+            sum_a += term_a
+            factor_b = z_sq_over_4 / (T(k) * (T(k) - v))
+            term_b *= factor_b
+            sum_b += term_b
+            if abs(term_a) < tol * abs(sum_a) && abs(term_b) < tol * abs(sum_b)
+                break
+            end
+            k += 1
+        end
+        return T(π) * (sum_b - sum_a)
+    end
+    z_inv = inv(z)
+    sum_terms = one(Complex{T}) +
+        (T(2) / T(9)) * z_inv +
+        (-T(7) / T(81)) * z_inv^2 +
+        (T(175) / T(2187)) * z_inv^3 +
+        (-T(2275) / T(19683)) * z_inv^4 +
+        (T(5005) / T(177147)) * z_inv^5
+    prefactor = sqrt(T(π) / (T(2) * z)) * exp(-z)
+    return prefactor * sum_terms
+end
+
+@inline _kv56_scalar(z::T) where {T<:AbstractFloat} = _kv56_scalar(complex(z))
 
 function _guide_star_grid(
     sampling::Integer,
@@ -115,7 +159,7 @@ function _covariance_matrix(
                 out[i, j] = var_term * fractional_r0
             else
                 u = T(2π) * rho / L0
-                out[i, j] = cst * u^(T(5) / T(6)) * besselk(T(5) / T(6), u) * fractional_r0
+                out[i, j] = cst * u^(T(5) / T(6)) * real(_kv56_scalar(u)) * fractional_r0
             end
         end
     end
@@ -274,10 +318,10 @@ function cross_correlation(
     tomography::TomographyParams{T};
     grid_mask::Union{Nothing,AbstractMatrix{Bool}}=nothing,
 ) where {T<:AbstractFloat}
-    sampling = isnothing(grid_mask) ? 2 * size(valid_lenslet_support(wfs), 1) + 1 : size(grid_mask, 1)
+    sampling = isnothing(grid_mask) ? PYTOMOAO_DEFAULT_CROSS_SAMPLING : size(grid_mask, 1)
     mask = isnothing(grid_mask) ? trues(sampling, sampling) : grid_mask
     size(mask, 2) == sampling || throw(DimensionMismatchError("grid_mask must be square"))
-    row_mask = vec(permutedims(mask))
+    row_mask = _row_major_mask(mask)
     n_row = count(row_mask)
     n_fit = tomography.n_fit_src^2
     n_gs = asterism.n_lgs
@@ -352,6 +396,10 @@ function _fit_source_average(cross::Array{T,3}, weights::AbstractVector{T}) wher
     end
     return out
 end
+
+@inline _row_major_mask(mask::AbstractMatrix{Bool}) = vec(permutedims(mask))
+
+@inline _row_major_true_positions(mask::AbstractMatrix{Bool}) = findall(_row_major_mask(mask))
 
 function build_reconstructor(
     ::InteractionMatrixTomography,
@@ -439,9 +487,9 @@ function build_reconstructor(
     cxx = auto_correlation(atmosphere, asterism, wfs, grid_mask)
     cross = cross_correlation(atmosphere, asterism, wfs, tomography)
     cox_full = _fit_source_average(cross, _equal_fit_source_weights(tomography))
-    row_mask = vec(permutedims(grid_mask))
-    col_mask = repeat(row_mask, asterism.n_lgs)
-    cox = cox_full[row_mask, col_mask]
+    row_positions = _row_major_true_positions(grid_mask)
+    col_positions = findall(repeat(_row_major_mask(grid_mask), asterism.n_lgs))
+    cox = cox_full[row_positions, col_positions]
     css_signal = Matrix(gamma * cxx * transpose(gamma))
     diagonal = diag(css_signal)
     mean_diag = sum(diagonal) / length(diagonal)
@@ -505,7 +553,9 @@ function reconstruct_wavefront_map!(
         throw(DimensionMismatchError("output map size must match reconstructor grid mask"))
     wavefront = reconstruct_wavefront(reconstructor, slopes)
     fill!(out, masked_value)
-    out[reconstructor.grid_mask] .= wavefront
+    for (k, idx) in enumerate(findall(permutedims(reconstructor.grid_mask)))
+        out[idx[2], idx[1]] = wavefront[k]
+    end
     return out
 end
 
