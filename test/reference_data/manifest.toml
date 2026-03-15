@@ -240,3 +240,42 @@ rtol = 9.9999999999999998e-13
 fs = 3.0000000000000000e+02
 n_freq = 512
 loop_gains = [2.0000000000000001e-01, 5.9999999999999998e-01]
+
+[cases.lift_interaction_matrix]
+kind = "lift_interaction_matrix"
+data = "lift_interaction_matrix.txt"
+shape = [48, 48, 4]
+storage_order = "C"
+atol = 1.0000000000000000e-04
+rtol = 1.0000000000000000e-10
+
+[cases.lift_interaction_matrix.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.lift_interaction_matrix.source]
+kind = "ngs"
+band = "I"
+magnitude = 8.0000000000000000e+00
+
+[cases.lift_interaction_matrix.basis]
+kind = "cartesian_polynomials"
+n_modes = 4
+
+[cases.lift_interaction_matrix.detector]
+noise = "readout"
+readout_sigma = 1.0000000000000000e+00
+integration_time = 1.0000000000000000e+00
+qe = 1.0000000000000000e+00
+psf_sampling = 2
+binning = 1
+
+[cases.lift_interaction_matrix.compute]
+img_resolution = 48
+mode_ids = [1, 2, 3, 4]
+coefficients = [0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00]
+iterations = 3
+numerical = false
+flux_norm = 1.0000000000000000e+00

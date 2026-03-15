@@ -87,10 +87,11 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
     end
     kernel = object_kernel === nothing ? nothing : eltype(tel.state.opd).(object_kernel)
     params = LiFTParams(float.(diversity_opd), iterations, img_resolution, zero_padding, kernel)
-    ws = Workspace(tel.state.opd, tel.params.resolution * zero_padding; T=eltype(tel.state.opd))
+    oversampling = lift_oversampling(zero_padding)
+    ws = Workspace(tel.state.opd, lift_pad_size(tel.params.resolution, zero_padding); T=eltype(tel.state.opd))
     psf_buffer = similar(tel.state.opd, eltype(tel.state.opd), img_resolution, img_resolution)
     amp_buffer = similar(tel.state.opd, eltype(tel.state.opd), tel.params.resolution, tel.params.resolution)
-    focal_buffer = similar(psf_buffer, Complex{eltype(psf_buffer)})
+    focal_buffer = similar(psf_buffer, Complex{eltype(psf_buffer)}, img_resolution * oversampling, img_resolution * oversampling)
     mode_buffer = similar(focal_buffer)
     conv_buffer = similar(psf_buffer)
     opd_buffer = similar(amp_buffer)
@@ -155,10 +156,11 @@ function lift_interaction_matrix!(H::AbstractMatrix, lift::LiFT{LiFTAnalytic}, c
 
     initial_opd = prepare_opd!(lift, coefficients)
 
-    amp_scale = sqrt(T(flux_norm))
+    amp_scale = sqrt(T(photon_flux(lift.src) * flux_norm *
+        lift.tel.params.sampling_time * (lift.tel.params.diameter / lift.tel.params.resolution)^2))
     @. lift.state.amp_buffer = ifelse(lift.tel.state.pupil, amp_scale, zero(T))
 
-    focal_field_from_opd!(lift.state.focal_buffer, lift, lift.state.amp_buffer, initial_opd)
+    oversampling = focal_field_from_opd!(lift.state.focal_buffer, lift, lift.state.amp_buffer, initial_opd)
     Pd = conj.(lift.state.focal_buffer)
 
     k = T(2 * pi) / wavelength(lift.src)
@@ -166,8 +168,7 @@ function lift_interaction_matrix!(H::AbstractMatrix, lift::LiFT{LiFTAnalytic}, c
         @views mode = lift.basis[:, :, mode_id]
         @. lift.state.amp_buffer = ifelse(lift.tel.state.pupil, amp_scale * mode, zero(T))
         focal_field_from_opd!(lift.state.mode_buffer, lift, lift.state.amp_buffer, initial_opd)
-        @. lift.state.psf_buffer = real(im * lift.state.mode_buffer * Pd)
-        lift.state.psf_buffer .*= 2 * k
+        field_derivative!(lift.state.psf_buffer, lift.state.mode_buffer, Pd, oversampling, 2 * k)
         maybe_object_convolve!(lift, lift.state.psf_buffer)
         @views H[:, idx] .= reshape(lift.state.psf_buffer, :)
     end
@@ -327,10 +328,11 @@ function weight_vector(psf::AbstractMatrix{T}, R_n, det::AbstractDetector) where
 end
 
 function psf_from_opd!(lift::LiFT, opd::AbstractMatrix; flux_norm::Real=1.0)
-    lift.tel.state.opd .= opd
-    psf = compute_psf!(lift.tel, lift.src, lift.state.workspace, lift.params.zero_padding)
-    psf .*= flux_norm
-    center_crop!(lift.state.psf_buffer, psf)
+    amp_scale = sqrt(eltype(lift.state.psf_buffer)(photon_flux(lift.src) * flux_norm *
+        lift.tel.params.sampling_time * (lift.tel.params.diameter / lift.tel.params.resolution)^2))
+    @. lift.state.amp_buffer = ifelse(lift.tel.state.pupil, amp_scale, zero(eltype(lift.state.amp_buffer)))
+    oversampling = focal_field_from_opd!(lift.state.focal_buffer, lift, lift.state.amp_buffer, opd)
+    field_intensity!(lift.state.psf_buffer, lift.state.focal_buffer, oversampling)
     maybe_object_convolve!(lift, lift.state.psf_buffer)
     return lift.state.psf_buffer
 end
@@ -403,21 +405,101 @@ end
     return i
 end
 
+@inline function lift_oversampling(zero_padding::Int)
+    zero_padding < 1 && throw(InvalidConfiguration("LiFT zero_padding must be >= 1"))
+    return zero_padding < 2 ? cld(2, zero_padding) : 1
+end
+
+@inline function lift_pad_size(resolution::Int, zero_padding::Int)
+    oversampling = lift_oversampling(zero_padding)
+    nominal = zero_padding * oversampling * resolution
+    pad_width = cld(nominal - resolution, 2)
+    return resolution + 2 * pad_width
+end
+
 function focal_field_from_opd!(dest::AbstractMatrix{Complex{T}}, lift::LiFT,
     amplitude::AbstractMatrix{T}, opd::AbstractMatrix) where {T<:AbstractFloat}
     n = lift.tel.params.resolution
-    n_pad = n * lift.params.zero_padding
+    oversampling = lift_oversampling(lift.params.zero_padding)
+    n_pad = lift_pad_size(n, lift.params.zero_padding)
+    img_size = lift.params.img_resolution * oversampling
     ws = lift.state.workspace
     ensure_psf_buffers!(ws, n_pad)
+    if size(dest) != (img_size, img_size)
+        throw(DimensionMismatchError("LiFT focal field buffer size must match oversampled image size"))
+    end
 
     phase_scale = T(2 * pi) / wavelength(lift.src)
-    ox = div(n_pad - n, 2)
-    oy = div(n_pad - n, 2)
+    ox = cld(n_pad - n, 2)
+    oy = cld(n_pad - n, 2)
     fill!(ws.pupil_field, zero(eltype(ws.pupil_field)))
     @views @. ws.pupil_field[ox+1:ox+n, oy+1:oy+n] = amplitude * cis(phase_scale * opd)
+    if iseven(lift.params.img_resolution)
+        phase_shift = -T(pi) * (T(n_pad) + one(T)) / T(n_pad)
+        @inbounds for j in 1:n_pad, i in 1:n_pad
+            ws.pupil_field[i, j] *= cis(phase_shift * (i + j - 2))
+        end
+    end
 
     copyto!(ws.fft_buffer, ws.pupil_field)
     mul!(ws.fft_buffer, ws.fft_plan, ws.fft_buffer)
-    fftshift2d!(ws.pupil_field, ws.fft_buffer)
-    return center_crop!(dest, ws.pupil_field)
+    ws.fft_buffer ./= T(n_pad)
+
+    shift_pix = if n_pad % 2 == img_size % 2
+        0
+    elseif iseven(n_pad)
+        1
+    else
+        -1
+    end
+    start = Int(ceil(n_pad / 2)) - div(img_size, 2) + (1 - (n_pad % 2))
+    stop = Int(ceil(n_pad / 2)) + div(img_size, 2) + shift_pix
+    @views copyto!(dest, ws.fft_buffer[start:stop, start:stop])
+    return oversampling
+end
+
+function field_intensity!(dest::AbstractMatrix{T}, field::AbstractMatrix{Complex{T}}, oversampling::Int) where {T<:AbstractFloat}
+    if oversampling == 1
+        @. dest = abs2(field)
+        return dest
+    end
+    n_out, m_out = size(dest)
+    if size(field) != (n_out * oversampling, m_out * oversampling)
+        throw(DimensionMismatchError("LiFT field size does not match oversampled PSF dimensions"))
+    end
+    @inbounds for j in 1:m_out, i in 1:n_out
+        acc = zero(T)
+        xs = (i - 1) * oversampling + 1
+        ys = (j - 1) * oversampling + 1
+        for jj in ys:ys+oversampling-1, ii in xs:xs+oversampling-1
+            acc += abs2(field[ii, jj])
+        end
+        dest[i, j] = acc
+    end
+    return dest
+end
+
+function field_derivative!(dest::AbstractMatrix{T}, buf::AbstractMatrix{Complex{T}},
+    Pd::AbstractMatrix{Complex{T}}, oversampling::Int, scale::T) where {T<:AbstractFloat}
+    if size(buf) != size(Pd)
+        throw(DimensionMismatchError("LiFT focal fields must have matching sizes"))
+    end
+    if oversampling == 1
+        @. dest = scale * real(im * buf * Pd)
+        return dest
+    end
+    n_out, m_out = size(dest)
+    if size(buf) != (n_out * oversampling, m_out * oversampling)
+        throw(DimensionMismatchError("LiFT derivative field size does not match oversampled image size"))
+    end
+    @inbounds for j in 1:m_out, i in 1:n_out
+        acc = zero(T)
+        xs = (i - 1) * oversampling + 1
+        ys = (j - 1) * oversampling + 1
+        for jj in ys:ys+oversampling-1, ii in xs:xs+oversampling-1
+            acc += real(im * buf[ii, jj] * Pd[ii, jj])
+        end
+        dest[i, j] = scale * acc
+    end
+    return dest
 end

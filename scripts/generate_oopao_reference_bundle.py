@@ -13,7 +13,9 @@ from pathlib import Path
 import numpy as np
 
 from OOPAO.BioEdge import BioEdge
+from OOPAO.Detector import Detector
 from OOPAO.GainSensingCamera import GainSensingCamera
+from OOPAO.LiFT import LiFT
 from OOPAO.Pyramid import Pyramid
 from OOPAO.ShackHartmann import ShackHartmann
 from OOPAO.Source import Source
@@ -65,7 +67,7 @@ def write_manifest(path: Path, cases: dict[str, dict]) -> None:
                 "",
             ]
         )
-        for section in ("telescope", "source", "opd", "wfs", "basis", "compute", "compare"):
+        for section in ("telescope", "source", "opd", "wfs", "basis", "detector", "compute", "compare"):
             if section not in case:
                 continue
             lines.append(f"[cases.{case_id}.{section}]")
@@ -455,6 +457,61 @@ def transfer_function_case(root: Path) -> dict:
     }
 
 
+def lift_case(root: Path) -> dict:
+    tel = make_telescope(resolution=24, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = make_source(band="I", magnitude=8.0)
+    src ** tel
+    basis = cartesian_polynomial_basis(tel, 4)
+    det = Detector(photonNoise=False, readoutNoise=1.0, QE=1.0, psf_sampling=2, binning=1)
+    diversity = np.zeros((tel.resolution, tel.resolution), dtype=np.float64)
+    lift = LiFT(tel, basis, det, diversity_OPD=diversity, iterations=3, img_resolution=48, numerical=False)
+    coeffs = np.zeros(4, dtype=np.float64)
+    mode_ids = [0, 1, 2, 3]
+    H = lift.generateLIFTinteractionMatrices(coeffs, mode_ids, flux_norm=1.0)
+    stack = np.stack([H[:, idx].reshape((48, 48), order="C") for idx in range(H.shape[1])], axis=2)
+    rel = "lift_interaction_matrix.txt"
+    write_array(root / rel, stack)
+    return {
+        "kind": "lift_interaction_matrix",
+        "data": rel,
+        "shape": list(stack.shape),
+        "storage_order": "C",
+        "atol": 1e-4,
+        "rtol": 1e-10,
+        "telescope": {
+            "resolution": 24,
+            "diameter": 8.0,
+            "sampling_time": 1e-3,
+            "central_obstruction": 0.0,
+        },
+        "source": {
+            "kind": "ngs",
+            "band": "I",
+            "magnitude": 8.0,
+        },
+        "basis": {
+            "kind": "cartesian_polynomials",
+            "n_modes": 4,
+        },
+        "detector": {
+            "noise": "readout",
+            "readout_sigma": 1.0,
+            "integration_time": 1.0,
+            "qe": 1.0,
+            "psf_sampling": 2,
+            "binning": 1,
+        },
+        "compute": {
+            "img_resolution": 48,
+            "mode_ids": [1, 2, 3, 4],
+            "coefficients": coeffs.tolist(),
+            "iterations": 3,
+            "numerical": False,
+            "flux_norm": 1.0,
+        },
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("output", type=Path, help="Bundle output directory")
@@ -481,6 +538,7 @@ def main() -> None:
         "bioedge_diffractive_ramp": bioedge_case(root),
         "gain_sensing_camera_optical_gains": gsc_case(root),
         "transfer_function_rejection": transfer_function_case(root),
+        "lift_interaction_matrix": lift_case(root),
     }
     write_manifest(root / "manifest.toml", cases)
 

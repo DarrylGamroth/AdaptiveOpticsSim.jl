@@ -21,13 +21,13 @@ The repository now commits a deterministic OOPAO bundle under
 6. `bioedge_diffractive_ramp`
 7. `gain_sensing_camera_optical_gains`
 8. `transfer_function_rejection`
+9. `lift_interaction_matrix`
 
 These cases are stable enough to keep in CI and now cover the main image
-formation, diffractive WFS, GSC optical-gain, and analytical transfer-function
-paths.
+formation, diffractive WFS, LiFT Jacobians, GSC optical-gain, and analytical
+transfer-function paths.
 
 Still not committed:
-- LiFT reference datasets.
 - Closed-loop trace datasets.
 - Tomography datasets/workflows.
 

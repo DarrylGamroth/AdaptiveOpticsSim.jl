@@ -132,6 +132,27 @@ function build_reference_source(cfg::AbstractDict{<:AbstractString,<:Any})
     throw(InvalidConfiguration("unknown source kind '$kind'"))
 end
 
+function build_reference_detector(cfg::AbstractDict{<:AbstractString,<:Any})
+    noise_name = lowercase(String(get(cfg, "noise", "none")))
+    integration_time = Float64(get(cfg, "integration_time", 1.0))
+    qe = Float64(get(cfg, "qe", 1.0))
+    psf_sampling = Int(get(cfg, "psf_sampling", 1))
+    binning = Int(get(cfg, "binning", 1))
+    noise = if noise_name == "none"
+        NoiseNone()
+    elseif noise_name == "photon"
+        NoisePhoton()
+    elseif noise_name == "readout"
+        NoiseReadout(Float64(get(cfg, "readout_sigma", 1.0)))
+    elseif noise_name == "photon_readout"
+        NoisePhotonReadout(Float64(get(cfg, "readout_sigma", 1.0)))
+    else
+        throw(InvalidConfiguration("unknown detector noise kind '$noise_name'"))
+    end
+    return Detector(noise; integration_time=integration_time, qe=qe,
+        psf_sampling=psf_sampling, binning=binning)
+end
+
 function build_reference_basis(cfg::AbstractDict{<:AbstractString,<:Any}, tel::Telescope)
     kind = lowercase(String(get(cfg, "kind", "cartesian_polynomials")))
     n_modes = Int(get(cfg, "n_modes", 4))
@@ -325,6 +346,31 @@ function compute_reference_actual(case::ReferenceCase)
             rejection[:, idx] .= 20 .* log10.(abs.(H_er))
         end
         return rejection
+    elseif case.kind === :lift_interaction_matrix
+        tel = build_reference_telescope(case.config["telescope"])
+        src = build_reference_source(case.config["source"])
+        basis = build_reference_basis(case.config["basis"], tel)
+        det = build_reference_detector(case.config["detector"])
+        diversity = zeros(Float64, size(tel.state.opd))
+        if haskey(case.config, "diversity")
+            apply_reference_opd!(tel, case.config["diversity"])
+            diversity .= tel.state.opd
+            reset_opd!(tel)
+        end
+        compute_cfg = case.config["compute"]
+        img_resolution = Int(get(compute_cfg, "img_resolution", det.params.psf_sampling * tel.params.resolution))
+        numerical = Bool(get(compute_cfg, "numerical", false))
+        mode_ids = Int.(get(compute_cfg, "mode_ids", collect(1:size(basis, 3))))
+        flux_norm = Float64(get(compute_cfg, "flux_norm", 1.0))
+        coeffs = Float64.(get(compute_cfg, "coefficients", zeros(length(mode_ids))))
+        lift = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=Int(get(compute_cfg, "iterations", 3)),
+            img_resolution=img_resolution, numerical=numerical)
+        H = lift_interaction_matrix(lift, coeffs, mode_ids; flux_norm=flux_norm)
+        stack = Array{Float64}(undef, img_resolution, img_resolution, length(mode_ids))
+        for (idx, _) in pairs(mode_ids)
+            @views stack[:, :, idx] .= reshape(H[:, idx], img_resolution, img_resolution)
+        end
+        return stack
     end
     throw(InvalidConfiguration("unsupported reference case kind '$(case.kind)'"))
 end
@@ -467,6 +513,48 @@ function create_reference_fixture(root::AbstractString)
     transfer_ref = compute_reference_actual(parse_reference_case("transfer_function_rejection", transfer_case, root))
     write_reference_array(joinpath(root, transfer_case["data"]), transfer_ref)
     manifest["cases"]["transfer_function_rejection"] = transfer_case
+
+    lift_case = Dict{String,Any}(
+        "kind" => "lift_interaction_matrix",
+        "data" => "lift_interaction_matrix.txt",
+        "shape" => [16, 16, 2],
+        "atol" => 1e-12,
+        "rtol" => 1e-12,
+        "telescope" => Dict(
+            "resolution" => 8,
+            "diameter" => 8.0,
+            "sampling_time" => 1e-3,
+            "central_obstruction" => 0.0,
+        ),
+        "source" => Dict(
+            "kind" => "ngs",
+            "band" => "I",
+            "magnitude" => 0.0,
+        ),
+        "basis" => Dict(
+            "kind" => "cartesian_polynomials",
+            "n_modes" => 2,
+        ),
+        "detector" => Dict(
+            "noise" => "readout",
+            "readout_sigma" => 1.0,
+            "integration_time" => 1.0,
+            "qe" => 1.0,
+            "psf_sampling" => 2,
+            "binning" => 1,
+        ),
+        "compute" => Dict(
+            "img_resolution" => 16,
+            "mode_ids" => [1, 2],
+            "coefficients" => [0.0, 0.0],
+            "iterations" => 3,
+            "numerical" => false,
+            "flux_norm" => 1.0,
+        ),
+    )
+    lift_ref = compute_reference_actual(parse_reference_case("lift_interaction_matrix", lift_case, root))
+    write_reference_array(joinpath(root, lift_case["data"]), lift_ref)
+    manifest["cases"]["lift_interaction_matrix"] = lift_case
 
     open(reference_manifest_path(root), "w") do io
         TOML.print(io, manifest)
