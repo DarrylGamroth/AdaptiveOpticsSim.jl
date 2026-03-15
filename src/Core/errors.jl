@@ -9,4 +9,8 @@ struct DimensionMismatchError <: AdaptiveOpticsError
     msg::String
 end
 
+struct UnsupportedAlgorithm <: AdaptiveOpticsError
+    msg::String
+end
+
 Base.showerror(io::IO, e::AdaptiveOpticsError) = print(io, e.msg)

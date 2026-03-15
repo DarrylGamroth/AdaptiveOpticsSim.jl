@@ -57,9 +57,13 @@ include("Calibration/initialization.jl")
 include("Calibration/gain_sensing_camera.jl")
 include("Calibration/misregistration_identification.jl")
 include("Control/controller.jl")
+include("Tomography/parameters.jl")
+include("Tomography/geometry.jl")
+include("Tomography/fitting.jl")
+include("Tomography/reconstructors.jl")
 
 export PROJECT_STATUS
-export AdaptiveOpticsError, InvalidConfiguration, DimensionMismatchError
+export AdaptiveOpticsError, InvalidConfiguration, DimensionMismatchError, UnsupportedAlgorithm
 export Workspace, ensure_psf_buffers!
 export Telemetry, TelemetryRow, record!
 export snapshot_config, write_config_toml, write_config_json
@@ -108,5 +112,14 @@ export AbstractDetector, AbstractDeformableMirror, SensingMode, Diffractive, Geo
 export NoiseModel, NoiseNone, NoisePhoton, NoiseReadout, NoisePhotonReadout
 export DMApplyMode, DMAdditive, DMReplace
 export ParallelConfig, with_parallel_config
+export TomographyAtmosphereParams, LGSAsterismParams, LGSWFSParams
+export TomographyParams, TomographyDMParams, TomographyFitting
+export AbstractTomographyMethod, ModelBasedTomography, InteractionMatrixTomography
+export TomographicReconstructor, build_reconstructor
+export airmass, layer_altitude_m, wind_direction_rad, wind_velocity_components
+export lgs_height_m, lgs_directions!, lgs_directions
+export optimization_geometry!, optimization_geometry, direction_vectors!, direction_vectors
+export n_valid_subapertures, valid_lenslet_support, dm_valid_support
+export fit_commands!, fit_commands, reconstruct_wavefront!, reconstruct_wavefront
 
 end # module AdaptiveOptics

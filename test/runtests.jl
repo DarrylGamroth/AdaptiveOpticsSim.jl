@@ -6,6 +6,7 @@ using TOML
 
 include("reference_harness.jl")
 include("ka_cpu_matrix.jl")
+include("tomography.jl")
 
 function run_tutorial_example(name::AbstractString)
     path = joinpath(dirname(@__DIR__), "examples", "tutorials", name)

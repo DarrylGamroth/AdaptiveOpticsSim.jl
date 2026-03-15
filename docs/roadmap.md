@@ -106,6 +106,9 @@
   (`tutorials/AO_closed_loop_Pyramid_WFS_GSC.py`) beyond the current compact regression trace.
 - [ ] Port and validate OOPAO tomography workflow
   (`tutorials/how_to_tomography.py`) or explicitly document it as unsupported.
+- [~] Initial Julia tomography subsystem now exists under `src/Tomography/` with typed
+  parameter objects, geometry helpers, DM fitting, and an IM-based reconstructor scaffold;
+  the model-based `Cxx`/`Cox`/`Cnz`/`RecStatSA` path remains to be ported.
 - [ ] Audit calibration/output conventions against OOPAO for:
   slope ordering/units outside geometric SH, PSF sampling conventions, detector coupling,
   and closed-loop telemetry traces.
@@ -147,9 +150,10 @@
 4. Decide whether the compact closed-loop traces should be expanded to full tutorial traces with atmosphere replay.
 5. Validate the remaining atmosphere-driven GSC closed-loop telemetry against OOPAO outputs.
 6. Validate LiFT iterative reconstruction outputs, not just the analytic interaction matrix.
-7. Port pyTomoAO-style parameter objects for tomography geometry and DM fitting.
+7. Expand the new `src/Tomography/` subsystem from typed params/geometry/IM scaffold to full
+   pyTomoAO parity, keeping multiple dispatch and traits instead of Python-style classes.
 8. Port pyTomoAO’s model-based tomographic reconstructor path (`Cxx`, `Cox`, `Cnz`, `RecStatSA`) as Julia operators.
-9. Add IM-based tomography parity using OOPAO/pyTomoAO reference interaction matrices.
+9. Add IM-based tomography parity using OOPAO/pyTomoAO reference interaction matrices and committed reference data.
 10. Only then resume GPU-specific expansion.
 
 ## Phase 0: Setup
