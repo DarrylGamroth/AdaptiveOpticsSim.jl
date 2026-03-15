@@ -111,6 +111,7 @@ export ModalReconstructor, reconstruct!, reconstruct
 export AbstractController, DiscreteIntegratorController, update!
 export AbstractOpticalElement, AbstractSource, AbstractAtmosphere, AbstractWFS
 export AbstractDetector, AbstractDeformableMirror, SensingMode, Diffractive, Geometric
+export WFSNormalization, MeanValidFluxNormalization, IncidenceFluxNormalization
 export NoiseModel, NoiseNone, NoisePhoton, NoiseReadout, NoisePhotonReadout
 export DMApplyMode, DMAdditive, DMReplace
 export ParallelConfig, with_parallel_config

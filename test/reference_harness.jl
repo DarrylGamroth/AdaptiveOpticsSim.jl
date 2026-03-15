@@ -84,6 +84,30 @@ function load_reference_array(case::ReferenceCase)
     throw(InvalidConfiguration("unsupported storage order '$storage_order' for reference case '$(case.id)'"))
 end
 
+function load_reference_aux_array(
+    case::ReferenceCase,
+    relpath::AbstractString,
+    shape,
+    storage_order::AbstractString="F",
+)
+    path = joinpath(dirname(case.data_path), relpath)
+    flat = vec(readdlm(path, Float64))
+    dims = Tuple(Int.(shape))
+    n_expected = prod(dims)
+    if length(flat) != n_expected
+        throw(DimensionMismatchError("reference aux data '$relpath' for '$(case.id)' has $(length(flat)) values, expected $(n_expected)"))
+    end
+    data = copy(flat)
+    order = uppercase(String(storage_order))
+    if order == "F" || length(dims) == 1
+        return reshape(data, dims)
+    elseif order == "C"
+        reshaped = reshape(data, reverse(dims))
+        return permutedims(reshaped, reverse(1:length(dims)))
+    end
+    throw(InvalidConfiguration("unsupported storage order '$storage_order' for aux data '$relpath' in case '$(case.id)'"))
+end
+
 function parse_sensing_mode(name)
     lname = lowercase(String(name))
     if lname == "geometric"
@@ -92,6 +116,16 @@ function parse_sensing_mode(name)
         return Diffractive()
     end
     throw(InvalidConfiguration("unknown sensing mode '$name'"))
+end
+
+function parse_wfs_normalization(name)
+    lname = lowercase(String(name))
+    if lname in ("mean_valid_flux", "mean_flux", "slopesmaps")
+        return MeanValidFluxNormalization()
+    elseif lname in ("incidence_flux", "slopesmaps_incidence_flux")
+        return IncidenceFluxNormalization()
+    end
+    throw(InvalidConfiguration("unknown WFS normalization '$name'"))
 end
 
 function parse_slope_order(name)
@@ -112,6 +146,7 @@ function build_reference_telescope(cfg::AbstractDict{<:AbstractString,<:Any})
         diameter=Float64(cfg["diameter"]),
         sampling_time=Float64(cfg["sampling_time"]),
         central_obstruction=Float64(get(cfg, "central_obstruction", 0.0)),
+        fov_arcsec=Float64(get(cfg, "fov_arcsec", 0.0)),
     )
 end
 
@@ -543,6 +578,90 @@ function gsc_closed_loop_trace(tel::Telescope, src::AbstractSource, wfs::Pyramid
     return trace
 end
 
+function gsc_atmosphere_replay_trace(
+    tel::Telescope,
+    ngs::AbstractSource,
+    sci::AbstractSource,
+    wfs::PyramidWFS,
+    control_basis::AbstractArray{<:Real,3},
+    forcing_ngs::AbstractArray{<:Real,3},
+    forcing_src::AbstractArray{<:Real,3};
+    gain::Real,
+    frame_delay::Int,
+    calibration_amplitude::Real,
+    psf_zero_padding::Int,
+    og_floor::Real,
+)
+    size(forcing_ngs) == size(forcing_src) ||
+        throw(DimensionMismatchError("forcing_ngs and forcing_src must have matching shapes"))
+    size(forcing_ngs, 1) == size(tel.state.opd, 1) == size(forcing_ngs, 2) == size(tel.state.opd, 2) ||
+        throw(DimensionMismatchError("forcing OPD stack must match telescope resolution"))
+
+    n_iter = size(forcing_ngs, 3)
+    n_modes = size(control_basis, 3)
+    H = reference_interaction_matrix(wfs, tel, ngs, control_basis; amplitude=calibration_amplitude)
+    recon = pinv(H)
+    control_coeffs = zeros(Float64, n_modes)
+    delayed_slopes = zeros(Float64, size(H, 1))
+    correction_opd = zeros(Float64, size(tel.state.opd))
+    residual_ngs = similar(correction_opd)
+    residual_src = similar(correction_opd)
+    gsc = GainSensingCamera(wfs.state.pyramid_mask, control_basis)
+    calibration_frame = similar(wfs.state.intensity)
+    reset_opd!(tel)
+    pyramid_modulation_frame!(calibration_frame, wfs, tel, ngs)
+    calibrate!(gsc, calibration_frame)
+    frame = similar(calibration_frame)
+    og_safe = similar(gsc.og)
+
+    ngs_psf_ref = begin
+        reset_opd!(tel)
+        copy(compute_psf!(tel, ngs; zero_padding=psf_zero_padding))
+    end
+    sci_psf_ref = begin
+        reset_opd!(tel)
+        copy(compute_psf!(tel, sci; zero_padding=psf_zero_padding))
+    end
+
+    trace = Matrix{Float64}(undef, n_iter, 7)
+    for iter in 1:n_iter
+        forcing_ngs_i = @view forcing_ngs[:, :, iter]
+        forcing_src_i = @view forcing_src[:, :, iter]
+        combine_reference_modes!(correction_opd, control_basis, control_coeffs)
+        @. residual_ngs = forcing_ngs_i - correction_opd
+        @. residual_src = forcing_src_i - correction_opd
+
+        apply_opd!(tel, residual_ngs)
+        trace[iter, 1] = pupil_rms_nm(forcing_ngs_i, tel.state.pupil)
+        trace[iter, 2] = pupil_rms_nm(residual_ngs, tel.state.pupil)
+        ngs_psf = compute_psf!(tel, ngs; zero_padding=psf_zero_padding)
+        trace[iter, 4] = strehl_ratio(ngs_psf, ngs_psf_ref)
+        slopes = measure!(wfs, tel, ngs)
+        trace[iter, 6] = norm(slopes)
+        pyramid_modulation_frame!(frame, wfs, tel, ngs)
+        og = compute_optical_gains!(gsc, frame)
+        @. og_safe = max(abs(og), og_floor)
+
+        apply_opd!(tel, residual_src)
+        trace[iter, 3] = pupil_rms_nm(residual_src, tel.state.pupil)
+        src_psf = compute_psf!(tel, sci; zero_padding=psf_zero_padding)
+        trace[iter, 5] = strehl_ratio(src_psf, sci_psf_ref)
+
+        if frame_delay == 1
+            delayed_slopes .= slopes
+        end
+        control_coeffs .+= gain .* ((recon * delayed_slopes) ./ og_safe)
+        trace[iter, 7] = sum(og_safe) / length(og_safe)
+        if frame_delay == 2
+            delayed_slopes .= slopes
+        elseif frame_delay != 1
+            throw(InvalidConfiguration("unsupported frame delay $(frame_delay)"))
+        end
+    end
+
+    return trace
+end
+
 function transfer_functions(freq::AbstractVector{T}, loop_gain::T, Ti::T, Tau::T, Tdm::T) where {T<:AbstractFloat}
     S = complex.(zero(T), T(2π)) .* freq
     H_wfs = exp.(-Ti * S / 2)
@@ -624,6 +743,8 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
             n_subap=n_subap,
             threshold=threshold,
             modulation=Float64(get(cfg, "modulation", 0.0)),
+            light_ratio=Float64(get(cfg, "light_ratio", 0.0)),
+            normalization=parse_wfs_normalization(get(cfg, "normalization", "mean_valid_flux")),
             modulation_points=get(cfg, "modulation_points", nothing),
             extra_modulation_factor=Int(get(cfg, "extra_modulation_factor", 0)),
             old_mask=Bool(get(cfg, "old_mask", false)),
@@ -642,6 +763,8 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
             n_subap=n_subap,
             threshold=threshold,
             modulation=Float64(get(cfg, "modulation", 0.0)),
+            light_ratio=Float64(get(cfg, "light_ratio", 0.0)),
+            normalization=parse_wfs_normalization(get(cfg, "normalization", "mean_valid_flux")),
             modulation_points=get(cfg, "modulation_points", nothing),
             extra_modulation_factor=Int(get(cfg, "extra_modulation_factor", 0)),
             delta_theta=Float64(get(cfg, "delta_theta", 0.0)),
@@ -830,6 +953,32 @@ function compute_reference_actual(case::ReferenceCase)
         forcing_coeffs = matrix_from_rows(get(compute_cfg, "forcing_coefficients", Any[]))
         return gsc_closed_loop_trace(tel, src, wfs, basis, forcing_coeffs;
             gain=Float64(get(compute_cfg, "gain", 0.4)),
+            frame_delay=Int(get(compute_cfg, "frame_delay", 2)),
+            calibration_amplitude=Float64(get(compute_cfg, "calibration_amplitude", 1e-9)),
+            psf_zero_padding=Int(get(compute_cfg, "psf_zero_padding", 2)),
+            og_floor=Float64(get(compute_cfg, "og_floor", 0.05)))
+    elseif case.kind === :gsc_atmosphere_replay_trace
+        tel = build_reference_telescope(case.config["telescope"])
+        ngs = build_reference_source(case.config["source"])
+        sci = build_reference_source(case.config["science_source"])
+        basis = build_reference_basis(case.config["basis"], tel)
+        wfs = build_reference_wfs(Symbol(case.config["wfs"]["kind"]), case.config["wfs"], tel)
+        wfs isa PyramidWFS || throw(InvalidConfiguration("GSC atmosphere replay trace requires a PyramidWFS"))
+        compute_cfg = case.config["compute"]
+        ngs_stack = load_reference_aux_array(
+            case,
+            compute_cfg["forcing_ngs_data"],
+            compute_cfg["forcing_shape"],
+            get(compute_cfg, "forcing_storage_order", "C"),
+        )
+        src_stack = load_reference_aux_array(
+            case,
+            compute_cfg["forcing_src_data"],
+            compute_cfg["forcing_shape"],
+            get(compute_cfg, "forcing_storage_order", "C"),
+        )
+        return gsc_atmosphere_replay_trace(tel, ngs, sci, wfs, basis, ngs_stack, src_stack;
+            gain=Float64(get(compute_cfg, "gain", 0.2)),
             frame_delay=Int(get(compute_cfg, "frame_delay", 2)),
             calibration_amplitude=Float64(get(compute_cfg, "calibration_amplitude", 1e-9)),
             psf_zero_padding=Int(get(compute_cfg, "psf_zero_padding", 2)),

@@ -537,6 +537,8 @@ end
     @test all(isfinite, gsc.optical_gains)
     @test sum(gsc.calibration_frame) > 0
     @test sum(gsc.frame) > 0
+    @test size(gsc.atmosphere_trace, 2) == 7
+    @test all(isfinite, gsc.atmosphere_trace)
 
     transfer = run_tutorial_example("transfer_function.jl")
     @test size(transfer.rejection_db, 2) == length(transfer.loop_gains)

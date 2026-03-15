@@ -89,10 +89,11 @@ end
     end
 end
 
-struct PyramidParams{T<:AbstractFloat,M}
+struct PyramidParams{T<:AbstractFloat,M,N<:WFSNormalization}
     n_subap::Int
     threshold::T
     light_ratio::T
+    normalization::N
     modulation::T
     modulation_points::Int
     extra_modulation_factor::Int
@@ -159,6 +160,7 @@ end
 
 function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulation::Real=2.0,
     light_ratio::Real=0.0,
+    normalization::WFSNormalization=MeanValidFluxNormalization(),
     modulation_points::Union{Int,Nothing}=nothing, extra_modulation_factor::Int=0,
     old_mask::Bool=false, rooftop::Real=0.0, theta_rotation::Real=0.0, delta_theta::Real=0.0,
     user_modulation_path=nothing, mask_scale::Real=1.0, diffraction_padding::Int=2,
@@ -172,10 +174,11 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
         throw(InvalidConfiguration("binning must be >= 1"))
     end
     n_mod = resolve_modulation_points(T(modulation), modulation_points, extra_modulation_factor, user_modulation_path)
-    params = PyramidParams{T,typeof(user_modulation_path)}(
+    params = PyramidParams{T,typeof(user_modulation_path),typeof(normalization)}(
         n_subap,
         T(threshold),
         T(light_ratio),
+        normalization,
         T(modulation),
         n_mod,
         extra_modulation_factor,
@@ -448,7 +451,7 @@ function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::AbstractS
     ensure_pyramid_calibration!(wfs, tel, src)
     pyramid_intensity!(wfs.state.intensity, wfs, tel, src)
     intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
-    pyramid_signal!(wfs, tel, intensity)
+    pyramid_signal!(wfs, tel, intensity, src)
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
 end
@@ -460,7 +463,7 @@ function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::AbstractS
     intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
     frame = capture!(det, intensity; rng=rng)
     resize_pyramid_signal_buffers!(wfs, size(frame, 1))
-    pyramid_signal!(wfs, tel, frame)
+    pyramid_signal!(wfs, tel, frame, src)
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
 end
@@ -887,6 +890,11 @@ function pyramid_slopes!(wfs::PyramidWFS, tel::Telescope, intensity::AbstractMat
 end
 
 function pyramid_signal!(wfs::PyramidWFS, tel::Telescope, frame::AbstractMatrix{T}) where {T<:AbstractFloat}
+    return pyramid_signal!(wfs, tel, frame, nothing)
+end
+
+function pyramid_signal!(wfs::PyramidWFS, tel::Telescope, frame::AbstractMatrix{T},
+    src::Union{Nothing,AbstractSource}) where {T<:AbstractFloat}
     n_extra = round(Int, (something(wfs.params.n_pix_separation, 0) / 2) / wfs.params.binning)
     center = round(Int, wfs.state.nominal_detector_resolution / wfs.params.binning / 2)
     n_pixels = cld(wfs.params.n_subap, wfs.params.binning)
@@ -919,7 +927,7 @@ function pyramid_signal!(wfs::PyramidWFS, tel::Telescope, frame::AbstractMatrix{
             norma += i4q
         end
     end
-    norma = count == 0 ? one(T) : norma / count
+    norma = pyramid_normalization(wfs.params.normalization, wfs, tel, src, count, norma)
     idx = 1
     @inbounds for j in 1:n_pixels, i in 1:n_pixels
         q1 = frame[center - n_extra - n_pixels + i, center - n_extra - n_pixels + j]
@@ -943,6 +951,24 @@ function pyramid_signal!(wfs::PyramidWFS, tel::Telescope, frame::AbstractMatrix{
     return wfs.state.slopes
 end
 
+function pyramid_normalization(::MeanValidFluxNormalization, ::PyramidWFS, ::Telescope,
+    ::Union{Nothing,AbstractSource}, count::Int, summed_i4q)
+    T = typeof(summed_i4q)
+    return count == 0 ? one(T) : summed_i4q / count
+end
+
+function pyramid_normalization(::IncidenceFluxNormalization, wfs::PyramidWFS, tel::Telescope,
+    src::AbstractSource, ::Int, summed_i4q)
+    T = typeof(summed_i4q)
+    sub_area = (tel.params.diameter / wfs.params.n_subap)^2
+    return T(photon_flux(src) * tel.params.sampling_time * sub_area)
+end
+
+function pyramid_normalization(::IncidenceFluxNormalization, ::PyramidWFS, ::Telescope,
+    ::Nothing, ::Int, summed_i4q)
+    return one(typeof(summed_i4q))
+end
+
 function ensure_pyramid_calibration!(wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
     λ = eltype(wfs.state.slopes)(wavelength(src))
     if wfs.state.calibrated && wfs.state.calibration_wavelength == λ
@@ -953,7 +979,7 @@ function ensure_pyramid_calibration!(wfs::PyramidWFS, tel::Telescope, src::Abstr
     pyramid_intensity!(wfs.state.intensity, wfs, tel, src)
     frame = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
     fill!(wfs.state.reference_signal_2d, zero(eltype(wfs.state.reference_signal_2d)))
-    pyramid_signal!(wfs, tel, frame)
+    pyramid_signal!(wfs, tel, frame, src)
     copyto!(wfs.state.reference_signal_2d, wfs.state.signal_2d)
     fill!(wfs.state.slopes, zero(eltype(wfs.state.slopes)))
     copyto!(tel.state.opd, opd_saved)

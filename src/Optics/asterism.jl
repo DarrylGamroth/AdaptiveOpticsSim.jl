@@ -46,7 +46,7 @@ function compute_psf!(tel::Telescope, ast::Asterism; zero_padding::Int=1, ws::Un
     shifted = similar(tel.state.psf, T, n_pad, n_pad)
 
     for (i, src) in enumerate(ast.sources)
-        psf = compute_psf!(tel, src; zero_padding=zero_padding, ws=ws)
+        psf = compute_psf_centered!(tel, src, something(ws, ensure_psf_workspace!(tel, n_pad)), zero_padding)
         scale = psf_pixel_scale_arcsec(tel, src, zero_padding)
         dx_arcsec, dy_arcsec = coordinates_xy_arcsec(src)
         shift_psf!(shifted, psf, dx_arcsec / scale, dy_arcsec / scale)

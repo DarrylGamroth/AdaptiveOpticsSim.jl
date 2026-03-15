@@ -10,7 +10,7 @@ function ensure_psf_workspace!(tel::Telescope, n::Int)
     return tel.state.psf_workspace
 end
 
-function compute_psf!(tel::Telescope, src::Source, ws::Workspace, zero_padding::Int=1)
+function compute_psf_centered!(tel::Telescope, src::Source, ws::Workspace, zero_padding::Int=1)
     n = tel.params.resolution
     if zero_padding < 1
         throw(InvalidConfiguration("zero_padding must be >= 1"))
@@ -41,6 +41,17 @@ function compute_psf!(tel::Telescope, src::Source, ws::Workspace, zero_padding::
 
     ensure_psf_state!(tel, n_pad)
     copyto!(tel.state.psf, ws.psf_buffer)
+    return tel.state.psf
+end
+
+function compute_psf!(tel::Telescope, src::Source, ws::Workspace, zero_padding::Int=1)
+    psf = compute_psf_centered!(tel, src, ws, zero_padding)
+    if iszero(src.params.coordinates[1])
+        return psf
+    end
+    scale = psf_pixel_scale_arcsec(tel, src, zero_padding)
+    dx_arcsec, dy_arcsec = coordinates_xy_arcsec(src)
+    shift_psf!(tel.state.psf, ws.psf_buffer, dx_arcsec / scale, dy_arcsec / scale)
     return tel.state.psf
 end
 

@@ -12,6 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
+from OOPAO.Atmosphere import Atmosphere
 from OOPAO.BioEdge import BioEdge
 from OOPAO.Detector import Detector
 from OOPAO.GainSensingCamera import GainSensingCamera
@@ -23,19 +24,34 @@ from OOPAO.Telescope import Telescope
 from OOPAO.tools.tools import strehlMeter
 
 
-def make_telescope(*, resolution: int, diameter: float, sampling_time: float, central_obstruction: float) -> Telescope:
+def make_telescope(*, resolution: int, diameter: float, sampling_time: float, central_obstruction: float, fov_arcsec: float = 0.0) -> Telescope:
     return Telescope(
         resolution=resolution,
         diameter=diameter,
         samplingTime=sampling_time,
         centralObstruction=central_obstruction,
         display_optical_path=False,
-        fov=0,
+        fov=fov_arcsec,
     )
 
 
-def make_source(*, band: str, magnitude: float) -> Source:
-    return Source(optBand=band, magnitude=magnitude, coordinates=[0, 0])
+def make_source(*, band: str, magnitude: float, coordinates: tuple[float, float] = (0.0, 0.0)) -> Source:
+    return Source(optBand=band, magnitude=magnitude, coordinates=list(coordinates))
+
+
+def make_atmosphere(tel: Telescope) -> Atmosphere:
+    atm = Atmosphere(
+        telescope=tel,
+        r0=0.15,
+        L0=25,
+        fractionalR0=[0.45, 0.1, 0.1, 0.25, 0.1],
+        windSpeed=[10, 12, 11, 15, 20],
+        windDirection=[0, 72, 144, 216, 288],
+        altitude=[0, 1000, 5000, 10000, 12000],
+    )
+    atm.initializeAtmosphere(tel)
+    atm.generateNewPhaseScreen(seed=10)
+    return atm
 
 
 def apply_ramp_opd(tel: Telescope, *, scale_x: float, scale_y: float, bias: float = 0.0) -> None:
@@ -68,7 +84,17 @@ def write_manifest(path: Path, cases: dict[str, dict]) -> None:
                 "",
             ]
         )
-        for section in ("telescope", "source", "opd", "wfs", "basis", "detector", "compute", "compare"):
+        for section in (
+            "telescope",
+            "source",
+            "science_source",
+            "opd",
+            "wfs",
+            "basis",
+            "detector",
+            "compute",
+            "compare",
+        ):
             if section not in case:
                 continue
             lines.append(f"[cases.{case_id}.{section}]")
@@ -684,7 +710,7 @@ def closed_loop_trace_case(root: Path, *, case_id: str, kind: str) -> dict:
 
 
 def gsc_closed_loop_trace_case(root: Path) -> dict:
-    tel = make_telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = make_telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0, fov_arcsec=1.0)
     src = make_source(band="R", magnitude=8.0)
     src ** tel
     basis = cartesian_polynomial_basis(tel, 4)
@@ -763,6 +789,7 @@ def gsc_closed_loop_trace_case(root: Path) -> dict:
             "diameter": 8.0,
             "sampling_time": 1e-3,
             "central_obstruction": 0.0,
+            "fov_arcsec": 1.0,
         },
         "source": {
             "kind": "ngs",
@@ -778,6 +805,8 @@ def gsc_closed_loop_trace_case(root: Path) -> dict:
             "n_subap": 4,
             "mode": "diffractive",
             "threshold": 0.5,
+            "light_ratio": 0.5,
+            "normalization": "incidence_flux",
             "modulation": 3.0,
             "n_pix_separation": 2,
             "n_pix_edge": 1,
@@ -790,6 +819,172 @@ def gsc_closed_loop_trace_case(root: Path) -> dict:
             "psf_zero_padding": zero_padding,
             "og_floor": og_floor,
             "forcing_coefficients": forcing_coeffs.tolist(),
+        },
+    }
+
+
+def gsc_atmosphere_replay_trace_case(root: Path) -> dict:
+    tel = make_telescope(
+        resolution=16,
+        diameter=8.0,
+        sampling_time=1e-3,
+        central_obstruction=0.0,
+        fov_arcsec=1.0,
+    )
+    ngs = make_source(band="R", magnitude=8.0)
+    sci = make_source(band="K", magnitude=8.0, coordinates=(0.5, 0.0))
+    ngs ** tel
+    basis = cartesian_polynomial_basis(tel, 4)
+    wfs = Pyramid(
+        nSubap=4,
+        telescope=tel,
+        lightRatio=0.5,
+        modulation=3.0,
+        binning=1,
+        n_pix_separation=2,
+        n_pix_edge=1,
+        postProcessing="slopesMaps_incidence_flux",
+    )
+    gsc = GainSensingCamera(mask=wfs.mask, basis=basis)
+    ngs ** tel * wfs
+    wfs.focal_plane_camera.resolution = wfs.nRes
+    wfs * wfs.focal_plane_camera
+    wfs.focal_plane_camera * gsc
+
+    H = reference_interaction_matrix("pyramid_slopes", wfs, tel, ngs, basis, 1e-9)
+    recon = np.linalg.pinv(H)
+    gain = 0.2
+    frame_delay = 2
+    og_floor = 0.05
+    zero_padding = 2
+    n_iter = 6
+
+    atm = make_atmosphere(tel)
+    forcing_ngs = np.zeros((tel.resolution, tel.resolution, n_iter), dtype=np.float64)
+    forcing_src = np.zeros_like(forcing_ngs)
+    for idx in range(n_iter):
+        atm.update()
+        atm * ngs * tel
+        forcing_ngs[:, :, idx] = np.asarray(tel.OPD, dtype=np.float64).copy()
+        atm * sci * tel
+        forcing_src[:, :, idx] = np.asarray(tel.OPD, dtype=np.float64).copy()
+
+    tel.resetOPD()
+    ngs ** tel
+    tel.computePSF(zeroPaddingFactor=zero_padding)
+    ngs_psf_ref = np.asarray(tel.PSF, dtype=np.float64).copy()
+    tel.resetOPD()
+    sci ** tel
+    tel.computePSF(zeroPaddingFactor=zero_padding)
+    src_psf_ref = np.asarray(tel.PSF, dtype=np.float64).copy()
+
+    control_coeffs = np.zeros(basis.shape[2], dtype=np.float64)
+    delayed_signal = np.zeros(H.shape[0], dtype=np.float64)
+    trace = np.zeros((n_iter, 7), dtype=np.float64)
+
+    for idx in range(n_iter):
+        correction_opd = combine_modes(basis, control_coeffs)
+        residual_ngs = forcing_ngs[:, :, idx] - correction_opd
+        residual_src = forcing_src[:, :, idx] - correction_opd
+
+        ngs ** tel
+        tel.OPD_no_pupil = residual_ngs
+        tel * wfs
+        tel.computePSF(zeroPaddingFactor=zero_padding)
+        trace[idx, 0] = pupil_rms_nm(forcing_ngs[:, :, idx], tel.pupil)
+        trace[idx, 1] = pupil_rms_nm(residual_ngs, tel.pupil)
+        trace[idx, 3] = strehlMeter(
+            np.asarray(tel.PSF, dtype=np.float64),
+            tel,
+            PSF_ref=ngs_psf_ref,
+            zeroPaddingFactor=zero_padding,
+            display=False,
+        )
+        signal = np.asarray(wfs.signal, dtype=np.float64).reshape(-1)
+        trace[idx, 5] = float(np.linalg.norm(signal))
+        wfs * wfs.focal_plane_camera
+        wfs.focal_plane_camera * gsc
+        og_safe = np.maximum(np.abs(np.asarray(gsc.og, dtype=np.float64)), og_floor)
+
+        sci ** tel
+        tel.OPD_no_pupil = residual_src
+        tel.computePSF(zeroPaddingFactor=zero_padding)
+        trace[idx, 2] = pupil_rms_nm(residual_src, tel.pupil)
+        trace[idx, 4] = strehlMeter(
+            np.asarray(tel.PSF, dtype=np.float64),
+            tel,
+            PSF_ref=src_psf_ref,
+            zeroPaddingFactor=zero_padding,
+            display=False,
+        )
+
+        if frame_delay == 1:
+            delayed_signal[:] = signal
+        control_coeffs += gain * ((recon @ delayed_signal) / og_safe)
+        trace[idx, 6] = float(np.mean(og_safe))
+        if frame_delay == 2:
+            delayed_signal[:] = signal
+
+    trace_rel = "gsc_atmosphere_replay_trace.txt"
+    ngs_rel = "gsc_atmosphere_replay_ngs_opd.txt"
+    src_rel = "gsc_atmosphere_replay_src_opd.txt"
+    write_array(root / trace_rel, trace)
+    write_array(root / ngs_rel, forcing_ngs)
+    write_array(root / src_rel, forcing_src)
+    return {
+        "kind": "gsc_atmosphere_replay_trace",
+        "data": trace_rel,
+        "shape": list(trace.shape),
+        "storage_order": "C",
+        "atol": 5e-4,
+        "rtol": 5e-3,
+        "telescope": {
+            "resolution": 16,
+            "diameter": 8.0,
+            "sampling_time": 1e-3,
+            "central_obstruction": 0.0,
+            "fov_arcsec": 1.0,
+        },
+        "source": {
+            "kind": "ngs",
+            "band": "R",
+            "magnitude": 8.0,
+        },
+        "science_source": {
+            "kind": "ngs",
+            "band": "K",
+            "magnitude": 8.0,
+            "coordinates": [0.5, 0.0],
+        },
+        "basis": {
+            "kind": "cartesian_polynomials",
+            "n_modes": 4,
+        },
+        "wfs": {
+            "kind": "pyramid_slopes",
+            "n_subap": 4,
+            "mode": "diffractive",
+            "threshold": 0.5,
+            "light_ratio": 0.5,
+            "normalization": "incidence_flux",
+            "modulation": 3.0,
+            "modulation_points": int(wfs.nTheta),
+            "diffraction_padding": 2,
+            "psf_centering": True,
+            "n_pix_separation": 2,
+            "n_pix_edge": 1,
+            "binning": 1,
+        },
+        "compute": {
+            "gain": gain,
+            "frame_delay": frame_delay,
+            "calibration_amplitude": 1e-9,
+            "psf_zero_padding": zero_padding,
+            "og_floor": og_floor,
+            "forcing_ngs_data": ngs_rel,
+            "forcing_src_data": src_rel,
+            "forcing_shape": list(forcing_ngs.shape),
+            "forcing_storage_order": "C",
         },
     }
 

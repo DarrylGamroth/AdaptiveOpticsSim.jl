@@ -50,10 +50,11 @@ end
     end
 end
 
-struct BioEdgeParams{T<:AbstractFloat,M}
+struct BioEdgeParams{T<:AbstractFloat,M,N<:WFSNormalization}
     n_subap::Int
     threshold::T
     light_ratio::T
+    normalization::N
     modulation::T
     modulation_points::Int
     extra_modulation_factor::Int
@@ -121,6 +122,7 @@ end
 
 function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     light_ratio::Real=0.0, modulation::Real=0.0, modulation_points::Union{Int,Nothing}=nothing,
+    normalization::WFSNormalization=MeanValidFluxNormalization(),
     extra_modulation_factor::Int=0, delta_theta::Real=0.0, user_modulation_path=nothing,
     grey_width::Real=0.0, grey_length=false,
     diffraction_padding::Int=2, psf_centering::Bool=true, n_pix_separation=nothing,
@@ -135,10 +137,11 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     end
     grey_length_val = grey_length === false ? false : T(grey_length)
     n_mod = resolve_modulation_points(T(modulation), modulation_points, extra_modulation_factor, user_modulation_path)
-    params = BioEdgeParams{T,typeof(user_modulation_path)}(
+    params = BioEdgeParams{T,typeof(user_modulation_path),typeof(normalization)}(
         n_subap,
         T(threshold),
         T(light_ratio),
+        normalization,
         T(modulation),
         n_mod,
         extra_modulation_factor,
@@ -653,14 +656,14 @@ function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, src::AbstractS
     ensure_bioedge_calibration!(wfs, tel, src)
     bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
     intensity = sample_bioedge_intensity!(wfs, tel, wfs.state.intensity)
-    return bioedge_signal!(wfs, tel, intensity)
+    return bioedge_signal!(wfs, tel, intensity, src)
 end
 
 function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, src::LGSSource)
     ensure_bioedge_calibration!(wfs, tel, src)
     bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
     intensity = sample_bioedge_intensity!(wfs, tel, wfs.state.intensity)
-    return bioedge_signal!(wfs, tel, intensity)
+    return bioedge_signal!(wfs, tel, intensity, src)
 end
 
 function bioedge_slopes!(wfs::BioEdgeWFS, phase::AbstractMatrix, edge_mask::AbstractMatrix{Bool})
@@ -673,7 +676,12 @@ function bioedge_slopes_intensity!(wfs::BioEdgeWFS, tel::Telescope, intensity::A
     return bioedge_signal!(wfs, tel, intensity)
 end
 
-function bioedge_signal!(wfs::BioEdgeWFS, ::Telescope, frame::AbstractMatrix{T}) where {T<:AbstractFloat}
+function bioedge_signal!(wfs::BioEdgeWFS, tel::Telescope, frame::AbstractMatrix{T}) where {T<:AbstractFloat}
+    return bioedge_signal!(wfs, tel, frame, nothing)
+end
+
+function bioedge_signal!(wfs::BioEdgeWFS, tel::Telescope, frame::AbstractMatrix{T},
+    src::Union{Nothing,AbstractSource}) where {T<:AbstractFloat}
     center = round(Int, wfs.state.nominal_detector_resolution / wfs.params.binning / 2)
     n_pixels = center
     max_i4q = zero(T)
@@ -705,7 +713,7 @@ function bioedge_signal!(wfs::BioEdgeWFS, ::Telescope, frame::AbstractMatrix{T})
             norma += i4q
         end
     end
-    norma = count == 0 ? one(T) : norma / count
+    norma = bioedge_normalization(wfs.params.normalization, wfs, tel, src, count, norma)
     idx = 1
     @inbounds for j in 1:n_pixels, i in 1:n_pixels
         q1 = frame[center - n_pixels + i, center - n_pixels + j]
@@ -730,6 +738,24 @@ function bioedge_signal!(wfs::BioEdgeWFS, ::Telescope, frame::AbstractMatrix{T})
     return wfs.state.slopes
 end
 
+function bioedge_normalization(::MeanValidFluxNormalization, ::BioEdgeWFS, ::Telescope,
+    ::Union{Nothing,AbstractSource}, count::Int, summed_i4q)
+    T = typeof(summed_i4q)
+    return count == 0 ? one(T) : summed_i4q / count
+end
+
+function bioedge_normalization(::IncidenceFluxNormalization, wfs::BioEdgeWFS, tel::Telescope,
+    src::AbstractSource, ::Int, summed_i4q)
+    T = typeof(summed_i4q)
+    sub_area = (tel.params.diameter / wfs.params.n_subap)^2
+    return T(photon_flux(src) * tel.params.sampling_time * sub_area)
+end
+
+function bioedge_normalization(::IncidenceFluxNormalization, ::BioEdgeWFS, ::Telescope,
+    ::Nothing, ::Int, summed_i4q)
+    return one(typeof(summed_i4q))
+end
+
 function ensure_bioedge_calibration!(wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource)
     λ = eltype(wfs.state.slopes)(wavelength(src))
     if wfs.state.calibrated && wfs.state.calibration_wavelength == λ
@@ -740,7 +766,7 @@ function ensure_bioedge_calibration!(wfs::BioEdgeWFS, tel::Telescope, src::Abstr
     bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
     frame = sample_bioedge_intensity!(wfs, tel, wfs.state.intensity)
     fill!(wfs.state.reference_signal_2d, zero(eltype(wfs.state.reference_signal_2d)))
-    bioedge_signal!(wfs, tel, frame)
+    bioedge_signal!(wfs, tel, frame, src)
     copyto!(wfs.state.reference_signal_2d, wfs.state.signal_2d)
     fill!(wfs.state.slopes, zero(eltype(wfs.state.slopes)))
     copyto!(tel.state.opd, opd_saved)
