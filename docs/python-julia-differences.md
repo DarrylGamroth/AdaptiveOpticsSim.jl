@@ -66,7 +66,7 @@ The biggest differences today are:
 | Telescope constructor surface | `Telescope.py` supports user-defined pupil, pupil reflectivity, display of optical path, petal-related flags, coronagraph property, and internal optical-path bookkeeping | `src/Optics/telescope.jl` now supports user pupil and pupil-reflectivity maps directly; optical-path printing, petal flags, and coronagraph state are still not part of the current core surface | Julia prioritized the simulation-relevant optics surface first and left the UI/state-display layer out of core | Reduced gap |
 | Pupil reflectivity / flux map | OOPAO tracks `pupilReflectivity` and source `fluxMap` directly on the coupled telescope/source path | Julia now exposes `set_pupil_reflectivity!` and `flux_map(tel, src)` while keeping source objects free of mutable telescope-coupled state | Same practical capability, with a cleaner separation between source state and telescope state | Equivalent |
 | Off-axis behavior | OOPAO has `fov`, off-axis logic, and comments noting some of it is not fully implemented | Julia explicitly supports off-axis PSF shifts for single sources and asterisms | This is a Julian cleanup and a practical parity improvement rather than a mismatch | Intentional improvement |
-| Optical-path tracing | OOPAO stores `optical_path` and can print it | Julia does not expose the same path-tracing UI | Logging/telemetry were preferred over mutable print-oriented state | Gap, low priority |
+| Optical-path tracing | OOPAO stores `optical_path` and can print it | Julia now provides stateless `optical_path(...)` / `print_optical_path(...)` helpers instead of mutable source-side path bookkeeping | Keeps the display surface without reintroducing hidden mutable coupling | Reduced gap |
 
 ## Detector Differences
 
@@ -74,7 +74,7 @@ The biggest differences today are:
 |---|---|---|---|---|
 | Detector physics surface | OOPAO detector models integration buffering, sensor type (`CCD/CMOS/EMCCD`), gain, ADC bits, FWC saturation, dark current, background noise/map, and digitalization | `src/Optics/detector.jl` now models sensor type, gain ordering, ADC quantization, FWC saturation, dark current, explicit integration buffering, background flux/map handling, QE, PSF sampling, binning, photon noise, and readout noise | Julia added the detector-electronics path without changing the low-latency capture surface | Equivalent except integer output type |
 | Integration buffering | OOPAO accumulates frames until `integrationTime` is reached | Julia supports the same feature explicitly through `capture!(det, psf; sample_time=...)`, with `readout_ready(det)` exposing whether a completed readout is available | Julia keeps buffering explicit instead of coupling it implicitly to telescope relay semantics | Equivalent |
-| Output precision / quantization | OOPAO supports `bits`, `output_precision`, `digitalization` | Julia models detector quantization levels via `bits`/`full_well`, but keeps the returned frame in the detector floating-point backend type instead of casting to an integer storage type | Preserves backend-generic arrays and avoids changing the runtime frame type | Reduced gap |
+| Output precision / quantization | OOPAO supports `bits`, `output_precision`, `digitalization` | Julia models detector quantization levels via `bits`/`full_well` and now exposes a typed output buffer/return frame when digital output is requested | Same practical surface, but with an explicit internal analog frame plus typed output view | Equivalent |
 | Sensor-specific gain path | OOPAO distinguishes EMCCD vs CCD/CMOS behavior | Julia now uses typed sensor selectors `CCDSensor()` / `CMOSSensor()` / `EMCCDSensor()` to apply gain in the correct stage of the readout path | Same feature, more Julian API surface | Equivalent |
 | Noise composition API | OOPAO uses mutable booleans and numeric properties (`photonNoise`, `readoutNoise`, etc.) | Julia uses typed noise models such as `NoisePhoton`, `NoiseReadout`, `NoisePhotonReadout` | More idiomatic Julia and easier dispatch | Intentional |
 
@@ -150,9 +150,7 @@ The biggest differences today are:
 
 These are the differences that still matter for parity work.
 
-1. Detector output storage remains backend floating-point even when quantized,
-   rather than casting to an integer output precision the way OOPAO can.
-2. The OOPAO `tools/*` layer and display/GUI ecosystem are not ported.
+1. The OOPAO `tools/*` layer and display/GUI ecosystem are not ported.
 
 ## Diagnostic Stress Cases
 

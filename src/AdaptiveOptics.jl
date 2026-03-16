@@ -73,7 +73,7 @@ export write_telemetry_csv
 export bin2d, poisson_noise!, poisson_sample
 export Telescope, TelescopeParams, TelescopeState, generate_pupil!, reset_opd!, apply_opd!
 export set_pupil!, set_pupil_reflectivity!, flux_map, apply_spiders!
-export Source, SourceParams, LGSSource, LGSSourceParams, wavelength
+export Source, SourceParams, LGSSource, LGSSourceParams, wavelength, optical_path, print_optical_path
 export lgs_elongation_factor
 export Asterism, coordinates_xy_arcsec, compute_psf!, psf_pixel_scale_arcsec
 export compute_psf!, ensure_psf_state!
@@ -90,7 +90,7 @@ export phase_variance, phase_covariance, phase_spectrum, covariance_matrix
 export ft_phase_screen, ft_sh_phase_screen, PhaseStatsWorkspace
 export DeformableMirror, DeformableMirrorParams, DeformableMirrorState, build_influence_functions!, apply!
 export Misregistration, apply_misregistration
-export Detector, DetectorParams, DetectorState, capture!, readout_ready, reset_integration!
+export Detector, DetectorParams, DetectorState, capture!, output_frame, readout_ready, reset_integration!
 export SensorType, CCDSensor, CMOSSensor, EMCCDSensor
 export ShackHartmann, ShackHartmannParams, ShackHartmannState, update_valid_mask!, measure!
 export PyramidWFS, PyramidParams, PyramidState

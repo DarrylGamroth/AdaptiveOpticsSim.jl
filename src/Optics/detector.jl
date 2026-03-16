@@ -35,13 +35,15 @@ struct DetectorParams{T<:AbstractFloat,S<:SensorType}
     bits::Union{Nothing,Int}
     full_well::Union{Nothing,T}
     sensor::S
+    output_precision::Union{Nothing,DataType}
 end
 
-mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T}}
+mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O}
     frame::A
     bin_buffer::A
     noise_buffer::A
     accum_buffer::A
+    output_buffer::O
     integrated_time::T
     readout_ready::Bool
 end
@@ -55,6 +57,7 @@ struct Detector{N<:NoiseModel,P<:DetectorParams,S<:DetectorState,BF<:BackgroundM
 end
 
 readout_ready(det::Detector) = det.state.readout_ready
+output_frame(det::Detector) = det.state.output_buffer === nothing ? det.state.frame : det.state.output_buffer
 
 function reset_integration!(det::Detector)
     fill!(det.state.accum_buffer, zero(eltype(det.state.accum_buffer)))
@@ -135,13 +138,24 @@ function background_model(map::AbstractMatrix; T::Type{<:AbstractFloat}, backend
     return BackgroundFrame{T, typeof(background)}(background)
 end
 
+function resolve_output_precision(bits::Union{Nothing,Int}, output_precision::Union{Nothing,DataType})
+    output_precision !== nothing && return output_precision
+    bits === 8 && return UInt8
+    bits === 16 && return UInt16
+    bits === 32 && return UInt32
+    bits === 64 && return UInt64
+    return nothing
+end
+
 function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     psf_sampling::Int, binning::Int, gain::Real, dark_current::Real,
     bits::Union{Nothing,Int}, full_well::Union{Nothing,Real}, sensor::SensorType,
-    background_flux, background_map, T::Type{<:AbstractFloat}, backend)
+    output_precision::Union{Nothing,DataType}, background_flux, background_map,
+    T::Type{<:AbstractFloat}, backend)
     full_well_t = full_well === nothing ? nothing : T(full_well)
     flux_model = background_model(background_flux; T=T, backend=backend)
     map_model = background_model(background_map; T=T, backend=backend)
+    output_precision_t = resolve_output_precision(bits, output_precision)
     params = DetectorParams{T, typeof(sensor)}(
         T(integration_time),
         T(qe),
@@ -152,16 +166,27 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
         bits,
         full_well_t,
         sensor,
+        output_precision_t,
     )
     frame = backend{T}(undef, 1, 1)
     bin_buffer = backend{T}(undef, 1, 1)
     noise_buffer = backend{T}(undef, 1, 1)
     accum_buffer = backend{T}(undef, 1, 1)
+    output_buffer = output_precision_t === nothing ? nothing : backend{output_precision_t}(undef, 1, 1)
     fill!(frame, zero(T))
     fill!(bin_buffer, zero(T))
     fill!(noise_buffer, zero(T))
     fill!(accum_buffer, zero(T))
-    state = DetectorState{T, typeof(frame)}(frame, bin_buffer, noise_buffer, accum_buffer, zero(T), true)
+    output_buffer === nothing || fill!(output_buffer, zero(eltype(output_buffer)))
+    state = DetectorState{T, typeof(frame), typeof(output_buffer)}(
+        frame,
+        bin_buffer,
+        noise_buffer,
+        accum_buffer,
+        output_buffer,
+        zero(T),
+        true,
+    )
     return Detector{typeof(noise), typeof(params), typeof(state), typeof(flux_model), typeof(map_model)}(
         noise,
         params,
@@ -175,27 +200,30 @@ function Detector(; integration_time::Real=1.0, qe::Real=1.0,
     psf_sampling::Int=1, binning::Int=1, noise=NoisePhoton(),
     gain::Real=1.0, dark_current::Real=0.0, bits::Union{Nothing,Int}=nothing,
     full_well::Union{Nothing,Real}=nothing, sensor::SensorType=CCDSensor(),
-    background_flux=nothing, background_map=nothing,
+    output_precision::Union{Nothing,DataType}=nothing, background_flux=nothing, background_map=nothing,
     T::Type{<:AbstractFloat}=Float64, backend=Array)
     normalized = normalize_noise(noise)
     return Detector(normalized; integration_time=integration_time, qe=qe,
         psf_sampling=psf_sampling, binning=binning, gain=gain,
         dark_current=dark_current, bits=bits, full_well=full_well,
-        sensor=sensor, background_flux=background_flux, background_map=background_map,
+        sensor=sensor, output_precision=output_precision,
+        background_flux=background_flux, background_map=background_map,
         T=T, backend=backend)
 end
 
 function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
     psf_sampling::Int=1, binning::Int=1, gain::Real=1.0, dark_current::Real=0.0,
     bits::Union{Nothing,Int}=nothing, full_well::Union{Nothing,Real}=nothing,
-    sensor::SensorType=CCDSensor(), background_flux=nothing, background_map=nothing,
+    sensor::SensorType=CCDSensor(), output_precision::Union{Nothing,DataType}=nothing,
+    background_flux=nothing, background_map=nothing,
     T::Type{<:AbstractFloat}=Float64, backend=Array)
     converted = convert_noise(noise, T)
     validated = validate_noise(converted)
     return _build_detector(validated; integration_time=integration_time, qe=qe,
         psf_sampling=psf_sampling, binning=binning, gain=gain,
         dark_current=dark_current, bits=bits, full_well=full_well,
-        sensor=sensor, background_flux=background_flux, background_map=background_map,
+        sensor=sensor, output_precision=output_precision,
+        background_flux=background_flux, background_map=background_map,
         T=T, backend=backend)
 end
 
@@ -377,10 +405,24 @@ function finalize_capture!(det::Detector, rng::AbstractRNG, exposure_time::Real)
     return det.state.frame
 end
 
+function write_output_frame!(det::Detector)
+    output = det.state.output_buffer
+    output === nothing && return det.state.frame
+    output_eltype = eltype(output)
+    if output_eltype <: Integer
+        lo = typemin(output_eltype)
+        hi = typemax(output_eltype)
+        @. output = output_eltype(clamp(round(det.state.frame), lo, hi))
+    else
+        copyto!(output, det.state.frame)
+    end
+    return output
+end
+
 function capture!(det::Detector, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
     capture_signal!(det, psf, rng, det.params.integration_time)
     finalize_capture!(det, rng, det.params.integration_time)
-    return det.state.frame
+    return write_output_frame!(det)
 end
 
 function capture!(det::Detector, psf::AbstractMatrix{T}; rng::AbstractRNG=Random.default_rng(),
@@ -410,7 +452,7 @@ function capture!(det::Detector, psf::AbstractMatrix{T}; rng::AbstractRNG=Random
         det.state.integrated_time = zero(det.state.integrated_time)
         det.state.readout_ready = true
     end
-    return det.state.frame
+    return write_output_frame!(det)
 end
 
 function ensure_buffers!(det::Detector, n_mid::Int, m_mid::Int, n_out::Int, m_out::Int)
@@ -428,6 +470,10 @@ function ensure_buffers!(det::Detector, n_mid::Int, m_mid::Int, n_out::Int, m_ou
         fill!(det.state.accum_buffer, zero(eltype(det.state.accum_buffer)))
         det.state.integrated_time = zero(det.state.integrated_time)
         det.state.readout_ready = true
+    end
+    if det.state.output_buffer !== nothing && size(det.state.output_buffer) != (n_out, m_out)
+        det.state.output_buffer = similar(det.state.output_buffer, n_out, m_out)
+        fill!(det.state.output_buffer, zero(eltype(det.state.output_buffer)))
     end
     return det
 end

@@ -56,6 +56,7 @@ end
 
 wavelength(src::Source) = src.params.wavelength
 photon_flux(src::Source) = src.params.n_photon
+optical_tag(src::Source) = "source($(src.params.band))"
 
 struct LGSSourceParams{T<:AbstractFloat,A}
     magnitude::T
@@ -104,6 +105,13 @@ end
 
 wavelength(src::LGSSource) = src.params.wavelength
 photon_flux(src::LGSSource) = src.params.n_photon
+optical_tag(::LGSSource) = "lgs"
+
+optical_tag(x) = lowercase(string(nameof(typeof(x))))
+
+optical_path(parts...) = join(optical_tag.(parts), " -> ")
+print_optical_path(io::IO, parts...) = print(io, optical_path(parts...))
+print_optical_path(parts...) = print_optical_path(stdout, parts...)
 
 lgs_elongation_factor(src::LGSSource) = src.params.elongation_factor
 

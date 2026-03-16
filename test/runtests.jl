@@ -61,6 +61,7 @@ end
     fmap = flux_map(tel_dim, src)
     @test size(fmap) == size(tel_dim.state.pupil)
     @test maximum(fmap) > 0
+    @test optical_path(src, tel_dim) == "source(I) -> telescope"
 end
 
 @testset "Zernike basis" begin
@@ -175,8 +176,17 @@ end
 
     det_adc = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1, bits=8, full_well=10.0)
     frame_adc = capture!(det_adc, fill(10.0, 4, 4); rng=MersenneTwister(2))
-    @test maximum(frame_adc) == 255.0
-    @test minimum(frame_adc) >= 0.0
+    @test frame_adc isa Matrix{UInt8}
+    @test output_frame(det_adc) === frame_adc
+    @test maximum(frame_adc) == 0xff
+    @test minimum(frame_adc) >= 0x00
+    @test eltype(det_adc.state.frame) == Float64
+
+    det_adc_float = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        bits=8, full_well=10.0, output_precision=Float32)
+    frame_adc_float = capture!(det_adc_float, fill(10.0, 4, 4); rng=MersenneTwister(2))
+    @test frame_adc_float isa Matrix{Float32}
+    @test maximum(frame_adc_float) == Float32(255.0)
 
     det_dark = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1, dark_current=100.0)
     frame_dark = capture!(det_dark, zeros(4, 4); rng=MersenneTwister(2))
