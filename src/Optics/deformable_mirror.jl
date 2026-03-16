@@ -52,7 +52,7 @@ function build_influence_functions!(dm::DeformableMirror, tel::Telescope)
 
     idx = 1
     @inbounds for x0 in xs, y0 in ys
-        x_m, y_m = apply_misregistration(x0, y0, dm.params.misregistration)
+        x_m, y_m = apply_misregistration(dm.params.misregistration, x0, y0)
         for i in 1:n, j in 1:n
             x = (i - cx) / scale
             y = (j - cy) / scale

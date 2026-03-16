@@ -2,11 +2,15 @@ struct MultiLayerParams{T<:AbstractFloat,
     V1<:AbstractVector{T},
     V2<:AbstractVector{T},
     V3<:AbstractVector{T},
-    V4<:AbstractVector{T}}
+    V4<:AbstractVector{T},
+    V5<:AbstractVector{T},
+    V6<:AbstractVector{T}}
     r0_fractions::V1
     wind_speed::V2
     wind_direction::V3
     altitude::V4
+    wind_velocity_x::V5
+    wind_velocity_y::V6
     r0::T
     L0::T
 end
@@ -42,6 +46,8 @@ function MultiLayerAtmosphere(tel::Telescope;
         T.(wind_speed),
         T.(wind_direction),
         T.(altitude),
+        T[T(wind_speed[i]) * cosd(T(wind_direction[i])) for i in 1:n_layers],
+        T[T(wind_speed[i]) * sind(T(wind_direction[i])) for i in 1:n_layers],
         T(r0),
         T(L0),
     )
@@ -70,8 +76,8 @@ function advance!(atm::MultiLayerAtmosphere, tel::Telescope, rng::AbstractRNG)
 
     for (i, layer) in enumerate(atm.layers)
         advance!(layer, tel, rng)
-        dx = atm.params.wind_speed[i] * cosd(atm.params.wind_direction[i]) * dt / delta
-        dy = atm.params.wind_speed[i] * sind(atm.params.wind_direction[i]) * dt / delta
+        dx = atm.params.wind_velocity_x[i] * dt / delta
+        dy = atm.params.wind_velocity_y[i] * dt / delta
         circshift!(atm.state.shift_buffer, layer.state.opd, (round(Int, dy), round(Int, dx)))
         atm.state.opd .+= atm.state.shift_buffer
     end

@@ -20,20 +20,24 @@ function Misregistration(; shift_x::Real=0.0, shift_y::Real=0.0, rotation_deg::R
     )
 end
 
-function apply_misregistration(x::Real, y::Real, mis::Misregistration)
+function apply_misregistration(mis::Misregistration, x::Real, y::Real)
     θ = deg2rad(mis.anamorphosis_angle)
-    x1 = cos(θ) * x + sin(θ) * y
-    y1 = -sin(θ) * x + cos(θ) * y
+    sθ, cθ = sincos(θ)
+    x1 = cθ * x + sθ * y
+    y1 = -sθ * x + cθ * y
 
     x1 *= mis.tangential_scaling
     y1 *= mis.radial_scaling
 
-    x2 = cos(θ) * x1 - sin(θ) * y1
-    y2 = sin(θ) * x1 + cos(θ) * y1
+    x2 = cθ * x1 - sθ * y1
+    y2 = sθ * x1 + cθ * y1
 
     φ = deg2rad(mis.rotation_deg)
-    xr = cos(φ) * x2 - sin(φ) * y2
-    yr = sin(φ) * x2 + cos(φ) * y2
+    sφ, cφ = sincos(φ)
+    xr = cφ * x2 - sφ * y2
+    yr = sφ * x2 + cφ * y2
 
     return xr - mis.shift_x, yr - mis.shift_y
 end
+
+apply_misregistration(x::Real, y::Real, mis::Misregistration) = apply_misregistration(mis, x, y)

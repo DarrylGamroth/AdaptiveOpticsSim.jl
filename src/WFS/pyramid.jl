@@ -28,7 +28,8 @@ end
         x = (i - center) / n
         y = (j - center) / n
         angle = 2 * π * (p - 1) / n_pts
-        phase = 2 * π * mod_amp * (x * cos(angle) + y * sin(angle))
+        s, c = sincos(angle)
+        phase = 2 * π * mod_amp * (x * c + y * s)
         @inbounds phases[i, j, p] = cis(phase)
     end
 end
@@ -908,8 +909,9 @@ function host_modulation_phases(::Type{T}, tel::Telescope, modulation::T, n_pts:
     if user_modulation_path === nothing
         @inbounds for p in 1:n_pts
             θ = delta_theta + T(2 * π * (p - 1) / n_pts)
-            mx = modulation * cos(θ)
-            my = modulation * sin(θ)
+            sθ, cθ = sincos(θ)
+            mx = modulation * cθ
+            my = modulation * sθ
             for i in 1:n, j in 1:n
                 phase = pupil[i, j] ? (mx * Tip[j] + my * Tilt[i]) : zero(T)
                 phases[i, j, p] = cis(phase)
@@ -935,8 +937,7 @@ function _build_modulation_phases!(::ScalarCPUStyle, phases::AbstractArray{Compl
     end
     @inbounds for p in 1:n_pts
         angle = 2 * pi * (p - 1) / n_pts
-        c = cos(angle)
-        s = sin(angle)
+        s, c = sincos(angle)
         for i in 1:n, j in 1:n
             phase = 2 * pi * mod * (x_coords[i] * c + x_coords[j] * s)
             phases[i, j, p] = cis(phase)

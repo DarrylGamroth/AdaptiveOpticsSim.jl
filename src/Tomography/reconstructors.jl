@@ -121,8 +121,7 @@ function _guide_star_grid(
     offset_y::T,
 ) where {T<:AbstractFloat}
     coords = sampling == 1 ? range(zero(T), zero(T); length=1) : range(-diameter / 2, diameter / 2; length=sampling)
-    c = cos(rotation_angle_rad)
-    s = sin(rotation_angle_rad)
+    s, c = sincos(rotation_angle_rad)
     xr = Matrix{T}(undef, sampling, sampling)
     yr = Matrix{T}(undef, sampling, sampling)
     @inbounds for j in 1:sampling

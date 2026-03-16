@@ -157,8 +157,9 @@ function _apply_spiders!(::ScalarCPUStyle, pupil::AbstractMatrix{Bool}, angles::
     offset_x_norm::Real, offset_y_norm::Real, cx::Real, cy::Real, scale::Real, n::Int)
     for angle in angles
         θ = deg2rad(angle)
-        a = -sin(θ)
-        b = cos(θ)
+        sθ, cθ = sincos(θ)
+        a = -sθ
+        b = cθ
         @inbounds for i in 1:n, j in 1:n
             x = (i - cx) / scale - offset_x_norm
             y = (j - cy) / scale - offset_y_norm
@@ -175,8 +176,9 @@ function _apply_spiders!(style::AcceleratorStyle, pupil::AbstractMatrix{Bool}, a
     offset_x_norm::Real, offset_y_norm::Real, cx::Real, cy::Real, scale::Real, n::Int)
     for angle in angles
         θ = deg2rad(angle)
-        a = -sin(θ)
-        b = cos(θ)
+        sθ, cθ = sincos(θ)
+        a = -sθ
+        b = cθ
         launch_kernel!(style, apply_spider_kernel!, pupil, thickness_norm, a, b, offset_x_norm, offset_y_norm, cx, cy, scale, n;
             ndrange=size(pupil))
     end

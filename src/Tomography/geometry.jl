@@ -45,8 +45,9 @@ function direction_vectors!(
         throw(DimensionMismatchError("direction vector output width must match angle vector lengths"))
     @inbounds for k in eachindex(zenith, azimuth)
         tangent = tan(zenith[k])
-        out[1, k] = tangent * cos(azimuth[k])
-        out[2, k] = tangent * sin(azimuth[k])
+        s, c = sincos(azimuth[k])
+        out[1, k] = tangent * c
+        out[2, k] = tangent * s
         out[3, k] = one(T)
     end
     return out
