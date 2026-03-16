@@ -1,3 +1,23 @@
+@kernel function apply_centering_phase_kernel!(field, phase_shift, n::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= n
+        @inbounds field[i, j] *= cis(phase_shift * (i + j - 2))
+    end
+end
+
+function apply_centering_phase!(::ScalarCPUStyle, field::AbstractMatrix{T}, phase_shift::T) where {T<:AbstractFloat}
+    n, m = size(field)
+    @inbounds for j in 1:m, i in 1:n
+        field[i, j] *= cis(phase_shift * (i + j - 2))
+    end
+    return field
+end
+
+function apply_centering_phase!(style::AcceleratorStyle, field::AbstractMatrix{T}, phase_shift::T) where {T<:AbstractFloat}
+    launch_kernel!(style, apply_centering_phase_kernel!, field, phase_shift, size(field, 1); ndrange=size(field))
+    return field
+end
+
 function ensure_psf_state!(tel::Telescope, n::Int)
     if size(tel.state.psf) != (n, n)
         tel.state.psf = similar(tel.state.psf, n, n)
@@ -28,9 +48,7 @@ function compute_psf_centered!(tel::Telescope, src::Source, ws::Workspace, zero_
     @views @. ws.pupil_field[ox+1:ox+n, oy+1:oy+n] = amp_scale * sqrt(tel.state.pupil_reflectivity) * cispi(opd_to_cycles * tel.state.opd)
     if iseven(n_pad)
         phase_shift = -T(pi) * (T(n_pad) + one(T)) / T(n_pad)
-        @inbounds for j in 1:n_pad, i in 1:n_pad
-            ws.pupil_field[i, j] *= cis(phase_shift * (i + j - 2))
-        end
+        apply_centering_phase!(execution_style(ws.pupil_field), ws.pupil_field, phase_shift)
     end
 
     copyto!(ws.fft_buffer, ws.pupil_field)

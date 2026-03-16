@@ -905,7 +905,7 @@ function host_modulation_phases(::Type{T}, tel::Telescope, modulation::T, n_pts:
     tip_vals = range(-T(π), T(π); length=n)
     Tilt = reshape(tip_vals, n, 1)
     Tip = reshape(tip_vals, 1, n)
-    pupil = tel.state.pupil
+    pupil = Array(tel.state.pupil)
     if user_modulation_path === nothing
         @inbounds for p in 1:n_pts
             θ = delta_theta + T(2 * π * (p - 1) / n_pts)
