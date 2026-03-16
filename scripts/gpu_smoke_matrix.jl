@@ -27,7 +27,7 @@ function main()
 
     tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
         central_obstruction=0.0f0, T=T, backend=CuArray)
-    src = Source(band=:I, magnitude=0.0)
+    src = Source(band=:I, magnitude=0.0, T=T)
     lgs = LGSSource(; magnitude=0.0, wavelength=589e-9, altitude=90_000.0,
         laser_coordinates=(0.0, 0.0), T=T)
 
@@ -153,6 +153,46 @@ function main()
         @assert slopes isa CuArray
         @assert frame isa CuArray
         return frame
+    end
+
+    record!(failures, "interaction_matrix_reconstructor") do
+        cal_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
+            central_obstruction=0.0f0, T=T, backend=CuArray)
+        dm = DeformableMirror(cal_tel; n_act=4, influence_width=0.3, T=T, backend=CuArray)
+        wfs = ShackHartmann(cal_tel; n_subap=4, mode=Diffractive(), T=T, backend=CuArray)
+        imat = interaction_matrix(dm, wfs, cal_tel; amplitude=T(0.05))
+        recon = ModalReconstructor(imat; gain=one(T))
+        measure!(wfs, cal_tel, src)
+        cmds = reconstruct(recon, wfs.state.slopes)
+        @assert imat.matrix isa CuArray
+        @assert cmds isa CuArray
+        return cmds
+    end
+
+    record!(failures, "gain_sensing_camera") do
+        mask = CUDA.fill(one(T), 8, 8)
+        basis = CUDA.rand(T, 8, 8, 3)
+        frame = abs.(CUDA.randn(T, 8, 8))
+        gsc = GainSensingCamera(mask, basis; T=T)
+        calibrate!(gsc, frame)
+        og = compute_optical_gains!(gsc, frame)
+        @assert og isa CuArray
+        return og
+    end
+
+    record!(failures, "lift") do
+        lift_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
+            central_obstruction=0.0f0, T=T, backend=CuArray)
+        lift_src = Source(band=:I, magnitude=8.0, T=T)
+        basis = CUDA.rand(T, 16, 16, 3)
+        diversity = CUDA.zeros(T, 16, 16)
+        det = Detector(NoiseNone(); psf_sampling=2, T=T, backend=CuArray)
+        lift = LiFT(lift_tel, lift_src, basis, det; diversity_opd=diversity,
+            iterations=2, img_resolution=32, solve_mode=LiFTSolveAuto())
+        psf = compute_psf!(lift_tel, lift_src; zero_padding=2)
+        coeffs = reconstruct(lift, psf, [1, 2])
+        @assert coeffs isa CuArray
+        return coeffs
     end
 
     if !isempty(failures)
