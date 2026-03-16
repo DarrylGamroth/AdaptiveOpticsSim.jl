@@ -51,7 +51,10 @@ tomography references for:
 11. `tomography_kapa_model_dm_commands_masked`
 
 Still not committed:
-- Full atmosphere-replay closed-loop tutorial traces.
+- Full long-horizon atmosphere-replay closed-loop tutorial traces. Local audits
+  now show that the delayed-control path and residual-RMS telemetry track OOPAO
+  closely, but Strehl and later slope norms still drift once both codes enter a
+  huge-OPD nonlinear regime, so the long replay remains diagnostic-only.
 
 ## Reference configuration
 - Seed: fixed RNG seed (documented per dataset).

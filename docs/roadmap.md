@@ -71,9 +71,12 @@
   modulation and grey-width/grey-length mask variants instead of the
   phase-gradient surrogate
   (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`, `src/WFS/bioedge.jl`).
-- LGS elongation uses Na-profile convolution for Shack-Hartmann, Pyramid, and BioEdge; the
-  Pyramid/BioEdge path currently averages Na-profile kernels across subapertures rather
-  than modeling per-subap kernels (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`,
+- LGS elongation uses Na-profile convolution for Shack-Hartmann, Pyramid, and BioEdge.
+  Shack-Hartmann uses per-subaperture Na-profile kernels in the OOPAO-compatible path;
+  Pyramid/BioEdge currently use averaged Na-profile kernels as a Julia-side extension.
+  OOPAO does not appear to expose an equivalent per-subaperture Na-profile path for
+  Pyramid/BioEdge in the main code/tutorial surface, so this is no longer tracked as a
+  blocking OOPAO parity gap (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`,
   `src/WFS/bioedge.jl`).
 - `ft_sh_phase_screen` uses a simple 3x3 sub-harmonic grid (no layer-specific outer-scale tuning)
   (`src/Atmosphere/phase_stats.jl`).
@@ -99,17 +102,17 @@
   LiFT and compact closed-loop traces for Shack-Hartmann, Pyramid, and BioEdge.
 - [x] Match OOPAO PSF export conventions and normalization exactly enough to support
   reproducible array-level regression for image formation.
-- [ ] Close remaining diffractive WFS fidelity gaps:
-  Pyramid/BioEdge per-subaperture Na-profile kernels instead of averaged kernels.
 - [x] Port and validate OOPAO transfer-function workflow
   (`tutorials/AO_transfer_function.py`) with matching outputs.
 - [ ] Port and validate the full atmosphere-driven OOPAO GSC closed-loop workflow
   (`tutorials/AO_closed_loop_Pyramid_WFS_GSC.py`) beyond the current compact regression trace.
   The main Pyramid incidence-flux mismatch from modulation-point averaging has
   been corrected, a bounded atmosphere-replay parity case is now committed, and
-  local long-horizon replay comparisons are materially closer, but the full
-  tutorial-scale replay still runs into an unstable high-OPD regime where
-  Julia/OOPAO diverge before the case is useful as a strict parity gate.
+  local long-horizon replay diagnostics now show that the control coefficients,
+  optical-gain floor behavior, and residual-RMS telemetry track OOPAO closely.
+  The remaining drift is concentrated in nonlinear observables (mainly Strehl and
+  later slope norms) once the replay enters a huge-OPD regime, so the full
+  tutorial-scale replay remains diagnostic-only rather than a strict parity gate.
 - [x] Port and validate the pyTomoAO-backed tomography workflow needed for
   OOPAO parity, including model-based wavefront reconstruction and assembled
   DM commands against the KAPA benchmark configuration.
@@ -151,14 +154,15 @@
 - [x] Expand the OOPAO reference bundle to cover at least one compact closed-loop trace per major WFS
   on top of the existing PSF, diffractive SH, Pyramid, BioEdge, LiFT, GSC, and transfer-function cases.
 - [ ] Port the remaining atmosphere-driven GSC closed-loop workflow before adding new non-parity features.
-- [ ] Resolve remaining diffractive/LGS fidelity gaps that currently prevent direct
-  Python-to-Julia array comparison.
+- [ ] Tighten the remaining large-aberration nonlinear observable drift in the
+  atmosphere-driven Pyramid/GSC replay before promoting the long-horizon case to
+  a strict regression gate.
 - [ ] Turn every feature-parity claim into a deterministic regression test against OOPAO outputs.
 
 ## Next 10 Tasks
-1. Replace averaged Pyramid/BioEdge Na-profile kernels with per-subaperture kernels where OOPAO does so.
-2. Audit remaining calibration/output conventions against OOPAO telemetry exports.
-3. Decide whether the compact closed-loop traces should be expanded to full tutorial traces with atmosphere replay.
+1. Audit remaining calibration/output conventions against OOPAO telemetry exports.
+2. Decide whether the compact closed-loop traces should be expanded to full tutorial traces with atmosphere replay.
+3. Tighten the remaining large-aberration Strehl/slope drift in the long-horizon GSC replay.
 4. Validate the remaining atmosphere-driven GSC closed-loop telemetry against OOPAO outputs.
 5. Validate LiFT iterative reconstruction outputs, not just the analytic interaction matrix.
 6. Decide whether any future tomography expansion stays in core or moves behind an extension/package split later.
