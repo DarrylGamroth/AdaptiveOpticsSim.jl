@@ -9,7 +9,7 @@ end
 
 CUDA.allowscalar(false)
 
-function record!(failures::Vector{String}, name::AbstractString, f::Function)
+function record!(f::Function, failures::Vector{String}, name::AbstractString)
     try
         result = f()
         println(name, " ok :: ", typeof(result))
