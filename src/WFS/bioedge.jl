@@ -723,45 +723,30 @@ end
 
 function bioedge_signal!(::AcceleratorStyle, wfs::BioEdgeWFS, tel::Telescope, frame::AbstractMatrix{T},
     src::Union{Nothing,AbstractSource}) where {T<:AbstractFloat}
-    host_frame = Array(frame)
-    host_valid_i4q = Array(wfs.state.valid_i4q)
-    host_reference = Array(wfs.state.reference_signal_2d)
-    host_signal = Matrix{T}(undef, size(host_reference)...)
     count = div(length(wfs.state.slopes), 2)
-    host_slopes = Vector{T}(undef, 2 * count)
-    host_gain = Array(wfs.state.optical_gain)
     center = round(Int, wfs.state.nominal_detector_resolution / wfs.params.binning / 2)
     n_pixels = center
-    norma = zero(T)
-    @inbounds for j in 1:n_pixels, i in 1:n_pixels
-        q1 = host_frame[center - n_pixels + i, center - n_pixels + j]
-        q2 = host_frame[center - n_pixels + i, center + j]
-        q3 = host_frame[center + i, center + j]
-        q4 = host_frame[center + i, center - n_pixels + j]
-        if host_valid_i4q[i, j]
-            norma += q1 + q2 + q3 + q4
-        end
-    end
-    norma = bioedge_normalization(wfs.params.normalization, wfs, tel, src, count, norma)
-    idx = 1
-    @inbounds for i in 1:n_pixels, j in 1:n_pixels
-        q1 = host_frame[center - n_pixels + i, center - n_pixels + j]
-        q2 = host_frame[center - n_pixels + i, center + j]
-        q3 = host_frame[center + i, center + j]
-        q4 = host_frame[center + i, center - n_pixels + j]
-        sx = (q1 - q2 + q4 - q3) / norma
-        sy = (q1 - q4 + q2 - q3) / norma
-        host_signal[i, j] = sx - host_reference[i, j]
-        host_signal[i + n_pixels, j] = sy - host_reference[i + n_pixels, j]
-        if host_valid_i4q[i, j]
-            host_slopes[idx] = host_signal[i, j]
-            host_slopes[idx + count] = host_signal[i + n_pixels, j]
-            idx += 1
-        end
-    end
-    @. host_slopes = host_slopes * host_gain
-    copyto!(wfs.state.signal_2d, host_signal)
-    copyto!(wfs.state.slopes, host_slopes)
+    rows_lo = center - n_pixels + 1:center
+    rows_hi = center + 1:center + n_pixels
+    cols_lo = center - n_pixels + 1:center
+    cols_hi = center + 1:center + n_pixels
+    q1 = @view frame[rows_lo, cols_lo]
+    q2 = @view frame[rows_lo, cols_hi]
+    q3 = @view frame[rows_hi, cols_hi]
+    q4 = @view frame[rows_hi, cols_lo]
+    sx = @view wfs.state.signal_2d[1:n_pixels, :]
+    sy = @view wfs.state.signal_2d[n_pixels+1:2*n_pixels, :]
+    refx = @view wfs.state.reference_signal_2d[1:n_pixels, :]
+    refy = @view wfs.state.reference_signal_2d[n_pixels+1:2*n_pixels, :]
+    i4q = @view wfs.state.temp[1:n_pixels, 1:n_pixels]
+    @. i4q = q1 + q2 + q3 + q4
+    norma = bioedge_normalization(wfs.params.normalization, wfs, tel, src, count, sum(i4q[wfs.state.valid_i4q]))
+    @. sx = (q1 - q2 + q4 - q3) / norma - refx
+    @. sy = (q1 - q4 + q2 - q3) / norma - refy
+    valid_i4q_t = permutedims(wfs.state.valid_i4q)
+    copyto!(@view(wfs.state.slopes[1:count]), permutedims(sx)[valid_i4q_t])
+    copyto!(@view(wfs.state.slopes[count+1:2*count]), permutedims(sy)[valid_i4q_t])
+    @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
 end
 
@@ -903,29 +888,22 @@ function select_bioedge_valid_i4q!(::AcceleratorStyle, wfs::BioEdgeWFS, tel::Tel
         wfs.params.user_modulation_path,
     ))
     bioedge_intensity!(wfs.state.temp, wfs, tel, src)
-    frame = Array(sample_bioedge_intensity!(wfs, tel, wfs.state.temp))
+    frame = sample_bioedge_intensity!(wfs, tel, wfs.state.temp)
     build_modulation_phases!(wfs, tel)
 
     center = round(Int, wfs.state.nominal_detector_resolution / wfs.params.binning / 2)
-    host_valid_i4q = Matrix{Bool}(undef, n_pixels, n_pixels)
-    max_i4q = zero(eltype(frame))
-    @inbounds for j in 1:n_pixels, i in 1:n_pixels
-        q1 = frame[center - n_pixels + i, center - n_pixels + j]
-        q2 = frame[center - n_pixels + i, center + j]
-        q3 = frame[center + i, center + j]
-        q4 = frame[center + i, center - n_pixels + j]
-        i4q = q1 + q2 + q3 + q4
-        max_i4q = max(max_i4q, i4q)
-    end
-    cutoff = wfs.params.light_ratio * max_i4q
-    @inbounds for j in 1:n_pixels, i in 1:n_pixels
-        q1 = frame[center - n_pixels + i, center - n_pixels + j]
-        q2 = frame[center - n_pixels + i, center + j]
-        q3 = frame[center + i, center + j]
-        q4 = frame[center + i, center - n_pixels + j]
-        host_valid_i4q[i, j] = (q1 + q2 + q3 + q4) >= cutoff
-    end
-    copyto!(wfs.state.valid_i4q, host_valid_i4q)
+    rows_lo = center - n_pixels + 1:center
+    rows_hi = center + 1:center + n_pixels
+    cols_lo = center - n_pixels + 1:center
+    cols_hi = center + 1:center + n_pixels
+    q1 = @view frame[rows_lo, cols_lo]
+    q2 = @view frame[rows_lo, cols_hi]
+    q3 = @view frame[rows_hi, cols_hi]
+    q4 = @view frame[rows_hi, cols_lo]
+    i4q = @view wfs.state.signal_2d[1:n_pixels, :]
+    @. i4q = q1 + q2 + q3 + q4
+    cutoff = wfs.params.light_ratio * maximum(i4q)
+    @. wfs.state.valid_i4q = i4q >= cutoff
     update_bioedge_valid_signal!(wfs)
     resize_bioedge_slope_buffers!(wfs)
     return wfs
