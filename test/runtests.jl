@@ -1,5 +1,5 @@
 using Test
-using AdaptiveOptics
+using AdaptiveOpticsSim
 using Random
 using Tables
 using TOML
@@ -40,7 +40,7 @@ function assert_dm_interface(dm, tel)
     @test applicable(apply!, dm, tel, DMAdditive())
 end
 
-@test AdaptiveOptics.PROJECT_STATUS == :in_development
+@test AdaptiveOpticsSim.PROJECT_STATUS == :in_development
 
 @testset "Telescope and PSF" begin
     tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.2)
@@ -484,7 +484,7 @@ end
     psf = compute_psf!(tel, src; zero_padding=1)
     coeffs = reconstruct(lift, psf, [1, 2])
     @test length(coeffs) == 2
-    @test AdaptiveOptics.effective_solve_mode(AdaptiveOptics.ScalarCPUStyle(), LiFTSolveAuto()) isa LiFTSolveQR
+    @test AdaptiveOpticsSim.effective_solve_mode(AdaptiveOpticsSim.ScalarCPUStyle(), LiFTSolveAuto()) isa LiFTSolveQR
     diag = diagnostics(lift)
     @test diag.used_qr isa Bool
     @test isfinite(diag.residual_norm)

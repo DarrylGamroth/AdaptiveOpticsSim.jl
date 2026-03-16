@@ -1,7 +1,7 @@
 # OOPAO Reference Datasets
 
 This document describes the deterministic OOPAO bundles used to cross-validate
-AdaptiveOptics.jl.
+AdaptiveOpticsSim.jl.
 
 ## Principles
 - Use fixed seeds and deterministic settings.
@@ -75,7 +75,7 @@ Diagnostic-only, not committed as a parity gate:
 - Optionally mirror in FITS for astronomy workflows, but keep optional.
 
 ## Harness contract
-AdaptiveOptics.jl now includes a test-side reference harness in
+AdaptiveOpticsSim.jl now includes a test-side reference harness in
 `test/reference_harness.jl`.
 
 Current expectations:
@@ -131,7 +131,7 @@ scale = 7.5949367088607559e6
 
 That adapter is intentional. OOPAO’s exported `signal_2D` ordering and
 calibrated slope units do not match the raw OPD-gradient convention currently
-returned by AdaptiveOptics.jl.
+returned by AdaptiveOpticsSim.jl.
 
 For now the harness uses plain text arrays (`DelimitedFiles`) because that keeps
 the validation path dependency-light. `storage_order = "C"` is used for
@@ -146,7 +146,7 @@ The pyTomoAO generator lives in `scripts/generate_pytomoao_reference_bundle.py`.
 
 Recommended approach:
 1. Build a reproducible Python 3.8 image with the OOPAO dependency stack.
-2. Mount both the OOPAO checkout and the AdaptiveOptics.jl checkout.
+2. Mount both the OOPAO checkout and the AdaptiveOpticsSim.jl checkout.
 3. Copy OOPAO to a writable temporary directory inside the container before
    import. OOPAO writes `precision_oopao.npy` into its package root at import
    time.

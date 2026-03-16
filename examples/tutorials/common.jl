@@ -1,4 +1,4 @@
-using AdaptiveOptics
+using AdaptiveOpticsSim
 using Logging
 using Random
 using Statistics

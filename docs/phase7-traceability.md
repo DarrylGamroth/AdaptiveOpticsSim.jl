@@ -19,6 +19,6 @@ Current OOPAO bundle scope:
 - The committed pyTomoAO bundle now also covers compact tomography operators,
   reconstructed wavefronts, and KAPA benchmark DM-command reconstruction.
 - Geometric Shack-Hartmann still uses an explicit convention adapter where OOPAO
-  and AdaptiveOptics.jl intentionally expose different public slope ordering and
+  and AdaptiveOpticsSim.jl intentionally expose different public slope ordering and
   units.
 - Full atmosphere-replay closed-loop traces remain on the forward roadmap.

@@ -1,7 +1,7 @@
 using KernelAbstractions
 
-const KA_CPU_STYLE = AdaptiveOptics.AcceleratorStyle(KernelAbstractions.CPU())
-const SCALAR_CPU_STYLE = AdaptiveOptics.ScalarCPUStyle()
+const KA_CPU_STYLE = AdaptiveOpticsSim.AcceleratorStyle(KernelAbstractions.CPU())
+const SCALAR_CPU_STYLE = AdaptiveOpticsSim.ScalarCPUStyle()
 
 function ka_cpu_close(actual, expected; atol=1e-12, rtol=1e-12)
     return actual == expected || isapprox(actual, expected; atol=atol, rtol=rtol)
@@ -13,26 +13,26 @@ end
 
         scalar_fftshift = similar(src)
         ka_fftshift = similar(src)
-        AdaptiveOptics._fftshift2d!(SCALAR_CPU_STYLE, scalar_fftshift, src)
-        AdaptiveOptics._fftshift2d!(KA_CPU_STYLE, ka_fftshift, src)
+        AdaptiveOpticsSim._fftshift2d!(SCALAR_CPU_STYLE, scalar_fftshift, src)
+        AdaptiveOpticsSim._fftshift2d!(KA_CPU_STYLE, ka_fftshift, src)
         @test ka_fftshift == scalar_fftshift
 
         scalar_shift = similar(src)
         ka_shift = similar(src)
-        AdaptiveOptics._circshift2d!(SCALAR_CPU_STYLE, scalar_shift, src, (1, -1))
-        AdaptiveOptics._circshift2d!(KA_CPU_STYLE, ka_shift, src, (1, -1))
+        AdaptiveOpticsSim._circshift2d!(SCALAR_CPU_STYLE, scalar_shift, src, (1, -1))
+        AdaptiveOpticsSim._circshift2d!(KA_CPU_STYLE, ka_shift, src, (1, -1))
         @test ka_shift == scalar_shift
 
         scalar_bin = Matrix{Float64}(undef, 2, 2)
         ka_bin = similar(scalar_bin)
-        AdaptiveOptics._bin2d!(SCALAR_CPU_STYLE, scalar_bin, src, 2)
-        AdaptiveOptics._bin2d!(KA_CPU_STYLE, ka_bin, src, 2)
+        AdaptiveOpticsSim._bin2d!(SCALAR_CPU_STYLE, scalar_bin, src, 2)
+        AdaptiveOpticsSim._bin2d!(KA_CPU_STYLE, ka_bin, src, 2)
         @test ka_bin == scalar_bin
 
         scalar_freqs = Vector{Float64}(undef, 8)
         ka_freqs = similar(scalar_freqs)
-        AdaptiveOptics._fftfreq!(SCALAR_CPU_STYLE, scalar_freqs, 8, 0.25, 0.0)
-        AdaptiveOptics._fftfreq!(KA_CPU_STYLE, ka_freqs, 8, 0.25, 0.0)
+        AdaptiveOpticsSim._fftfreq!(SCALAR_CPU_STYLE, scalar_freqs, 8, 0.25, 0.0)
+        AdaptiveOpticsSim._fftfreq!(KA_CPU_STYLE, ka_freqs, 8, 0.25, 0.0)
         @test ka_freqs == scalar_freqs
     end
 
@@ -40,15 +40,15 @@ end
         params = TelescopeParams{Float64}(16, 8.0, 1e-3, 0.15, 0.0)
         scalar_pupil = Matrix{Bool}(undef, 16, 16)
         ka_pupil = similar(scalar_pupil)
-        AdaptiveOptics._generate_pupil!(SCALAR_CPU_STYLE, scalar_pupil, params)
-        AdaptiveOptics._generate_pupil!(KA_CPU_STYLE, ka_pupil, params)
+        AdaptiveOpticsSim._generate_pupil!(SCALAR_CPU_STYLE, scalar_pupil, params)
+        AdaptiveOpticsSim._generate_pupil!(KA_CPU_STYLE, ka_pupil, params)
         @test ka_pupil == scalar_pupil
 
         scalar_spiders = copy(scalar_pupil)
         ka_spiders = copy(ka_pupil)
         angles = [0.0, 45.0, 90.0]
-        AdaptiveOptics._apply_spiders!(SCALAR_CPU_STYLE, scalar_spiders, angles, 0.1, 0.0, 0.0, 8.5, 8.5, 8.0, 16)
-        AdaptiveOptics._apply_spiders!(KA_CPU_STYLE, ka_spiders, angles, 0.1, 0.0, 0.0, 8.5, 8.5, 8.0, 16)
+        AdaptiveOpticsSim._apply_spiders!(SCALAR_CPU_STYLE, scalar_spiders, angles, 0.1, 0.0, 0.0, 8.5, 8.5, 8.0, 16)
+        AdaptiveOpticsSim._apply_spiders!(KA_CPU_STYLE, ka_spiders, angles, 0.1, 0.0, 0.0, 8.5, 8.5, 8.0, 16)
         @test ka_spiders == scalar_spiders
     end
 
@@ -58,15 +58,15 @@ end
         threshold = 0.4
         scalar_valid = Matrix{Bool}(undef, 2, 2)
         ka_valid = similar(scalar_valid)
-        AdaptiveOptics._set_valid_subapertures!(SCALAR_CPU_STYLE, scalar_valid, pupil, threshold, 4, 2)
-        AdaptiveOptics._set_valid_subapertures!(KA_CPU_STYLE, ka_valid, pupil, threshold, 4, 2)
+        AdaptiveOpticsSim._set_valid_subapertures!(SCALAR_CPU_STYLE, scalar_valid, pupil, threshold, 4, 2)
+        AdaptiveOpticsSim._set_valid_subapertures!(KA_CPU_STYLE, ka_valid, pupil, threshold, 4, 2)
         @test ka_valid == scalar_valid
 
         opd = reshape(collect(1.0:64.0), 8, 8)
         scalar_slopes = Vector{Float64}(undef, 8)
         ka_slopes = similar(scalar_slopes)
-        AdaptiveOptics._geometric_slopes!(SCALAR_CPU_STYLE, scalar_slopes, opd, scalar_valid, 4, 2, 4)
-        AdaptiveOptics._geometric_slopes!(KA_CPU_STYLE, ka_slopes, opd, ka_valid, 4, 2, 4)
+        AdaptiveOpticsSim._geometric_slopes!(SCALAR_CPU_STYLE, scalar_slopes, opd, scalar_valid, 4, 2, 4)
+        AdaptiveOpticsSim._geometric_slopes!(KA_CPU_STYLE, ka_slopes, opd, ka_valid, 4, 2, 4)
         @test ka_slopes == scalar_slopes
 
         edge_mask = falses(8, 8)
@@ -76,8 +76,8 @@ end
         edge_mask[end, :] .= true
         scalar_edge_slopes = Vector{Float64}(undef, 8)
         ka_edge_slopes = similar(scalar_edge_slopes)
-        AdaptiveOptics._edge_geometric_slopes!(SCALAR_CPU_STYLE, scalar_edge_slopes, opd, scalar_valid, edge_mask, 4, 2, 4)
-        AdaptiveOptics._edge_geometric_slopes!(KA_CPU_STYLE, ka_edge_slopes, opd, ka_valid, edge_mask, 4, 2, 4)
+        AdaptiveOpticsSim._edge_geometric_slopes!(SCALAR_CPU_STYLE, scalar_edge_slopes, opd, scalar_valid, edge_mask, 4, 2, 4)
+        AdaptiveOpticsSim._edge_geometric_slopes!(KA_CPU_STYLE, ka_edge_slopes, opd, ka_valid, edge_mask, 4, 2, 4)
         @test ka_edge_slopes == scalar_edge_slopes
     end
 
@@ -87,21 +87,21 @@ end
 
         scalar_phasor = similar(wfs.state.phasor)
         ka_phasor = similar(wfs.state.phasor)
-        AdaptiveOptics._build_pyramid_phasor!(SCALAR_CPU_STYLE, scalar_phasor)
-        AdaptiveOptics._build_pyramid_phasor!(KA_CPU_STYLE, ka_phasor)
+        AdaptiveOpticsSim._build_pyramid_phasor!(SCALAR_CPU_STYLE, scalar_phasor)
+        AdaptiveOpticsSim._build_pyramid_phasor!(KA_CPU_STYLE, ka_phasor)
         @test ka_cpu_close(ka_phasor, scalar_phasor)
 
         scalar_mask = similar(wfs.state.pyramid_mask)
         ka_mask = similar(wfs.state.pyramid_mask)
-        AdaptiveOptics._build_pyramid_mask!(SCALAR_CPU_STYLE, scalar_mask, wfs, tel)
-        AdaptiveOptics._build_pyramid_mask!(KA_CPU_STYLE, ka_mask, wfs, tel)
+        AdaptiveOpticsSim._build_pyramid_mask!(SCALAR_CPU_STYLE, scalar_mask, wfs, tel)
+        AdaptiveOpticsSim._build_pyramid_mask!(KA_CPU_STYLE, ka_mask, wfs, tel)
         @test ka_cpu_close(ka_mask, scalar_mask)
 
         scalar_phases = similar(wfs.state.modulation_phases)
         ka_phases = similar(wfs.state.modulation_phases)
-        AdaptiveOptics._build_modulation_phases!(SCALAR_CPU_STYLE, scalar_phases, wfs.params.modulation,
+        AdaptiveOpticsSim._build_modulation_phases!(SCALAR_CPU_STYLE, scalar_phases, wfs.params.modulation,
             (tel.params.resolution + 1) / 2, wfs.params.modulation_points, tel.params.resolution)
-        AdaptiveOptics._build_modulation_phases!(KA_CPU_STYLE, ka_phases, wfs.params.modulation,
+        AdaptiveOpticsSim._build_modulation_phases!(KA_CPU_STYLE, ka_phases, wfs.params.modulation,
             (tel.params.resolution + 1) / 2, wfs.params.modulation_points, tel.params.resolution)
         @test ka_cpu_close(ka_phases, scalar_phases)
 
@@ -109,9 +109,9 @@ end
         scalar_slopes = similar(wfs.state.slopes)
         ka_slopes = similar(wfs.state.slopes)
         valid_mask = trues(4, 4)
-        AdaptiveOptics._pyramid_slopes!(SCALAR_CPU_STYLE, scalar_slopes, intensity, valid_mask, 2, 4, 16, 16,
+        AdaptiveOpticsSim._pyramid_slopes!(SCALAR_CPU_STYLE, scalar_slopes, intensity, valid_mask, 2, 4, 16, 16,
             0, 0, 0, 8, 8, 0, 8, 8, (0, 0, 0, 0), (0, 0, 0, 0))
-        AdaptiveOptics._pyramid_slopes!(KA_CPU_STYLE, ka_slopes, intensity, valid_mask, 2, 4, 16, 16,
+        AdaptiveOpticsSim._pyramid_slopes!(KA_CPU_STYLE, ka_slopes, intensity, valid_mask, 2, 4, 16, 16,
             0, 0, 0, 8, 8, 0, 8, 8, (0, 0, 0, 0), (0, 0, 0, 0))
         @test ka_slopes == scalar_slopes
     end
@@ -122,28 +122,28 @@ end
 
         scalar_edge_mask = similar(wfs.state.edge_mask)
         ka_edge_mask = similar(wfs.state.edge_mask)
-        AdaptiveOptics._update_edge_mask!(SCALAR_CPU_STYLE, scalar_edge_mask, tel.state.pupil, tel.params.resolution)
-        AdaptiveOptics._update_edge_mask!(KA_CPU_STYLE, ka_edge_mask, tel.state.pupil, tel.params.resolution)
+        AdaptiveOpticsSim._update_edge_mask!(SCALAR_CPU_STYLE, scalar_edge_mask, tel.state.pupil, tel.params.resolution)
+        AdaptiveOpticsSim._update_edge_mask!(KA_CPU_STYLE, ka_edge_mask, tel.state.pupil, tel.params.resolution)
         @test ka_edge_mask == scalar_edge_mask
 
         scalar_phasor = similar(wfs.state.phasor)
         ka_phasor = similar(wfs.state.phasor)
-        AdaptiveOptics._build_bioedge_phasor!(SCALAR_CPU_STYLE, scalar_phasor)
-        AdaptiveOptics._build_bioedge_phasor!(KA_CPU_STYLE, ka_phasor)
+        AdaptiveOpticsSim._build_bioedge_phasor!(SCALAR_CPU_STYLE, scalar_phasor)
+        AdaptiveOpticsSim._build_bioedge_phasor!(KA_CPU_STYLE, ka_phasor)
         @test ka_cpu_close(ka_phasor, scalar_phasor)
 
         scalar_masks = similar(wfs.state.bioedge_masks)
         ka_masks = similar(wfs.state.bioedge_masks)
-        AdaptiveOptics._build_bioedge_masks!(SCALAR_CPU_STYLE, scalar_masks, Float64)
-        AdaptiveOptics._build_bioedge_masks!(KA_CPU_STYLE, ka_masks, Float64)
+        AdaptiveOpticsSim._build_bioedge_masks!(SCALAR_CPU_STYLE, scalar_masks, Float64)
+        AdaptiveOpticsSim._build_bioedge_masks!(KA_CPU_STYLE, ka_masks, Float64)
         @test ka_cpu_close(ka_masks, scalar_masks)
 
         mask = falses(8, 8)
         mask[1:2:end, :] .= true
         scalar_binned = Matrix{Bool}(undef, 4, 4)
         ka_binned = similar(scalar_binned)
-        AdaptiveOptics._bin_edge_mask!(SCALAR_CPU_STYLE, scalar_binned, mask, 2, 4, 4)
-        AdaptiveOptics._bin_edge_mask!(KA_CPU_STYLE, ka_binned, mask, 2, 4, 4)
+        AdaptiveOpticsSim._bin_edge_mask!(SCALAR_CPU_STYLE, scalar_binned, mask, 2, 4, 4)
+        AdaptiveOpticsSim._bin_edge_mask!(KA_CPU_STYLE, ka_binned, mask, 2, 4, 4)
         @test ka_binned == scalar_binned
     end
 
@@ -155,13 +155,13 @@ end
         ka_tmp = similar(intensity)
         scalar_kernel = Vector{Float64}(undef, 1)
         ka_kernel = similar(scalar_kernel)
-        AdaptiveOptics._apply_elongation!(SCALAR_CPU_STYLE, scalar_intensity, scalar_tmp,
-            AdaptiveOptics.apply_elongation!(scalar_intensity, 1.6, scalar_tmp, scalar_kernel), 1, 8, 8)
-        ka_kernel = AdaptiveOptics.apply_elongation!(ka_intensity, 1.6, ka_tmp, ka_kernel)
+        AdaptiveOpticsSim._apply_elongation!(SCALAR_CPU_STYLE, scalar_intensity, scalar_tmp,
+            AdaptiveOpticsSim.apply_elongation!(scalar_intensity, 1.6, scalar_tmp, scalar_kernel), 1, 8, 8)
+        ka_kernel = AdaptiveOpticsSim.apply_elongation!(ka_intensity, 1.6, ka_tmp, ka_kernel)
         scalar_baseline = copy(scalar_intensity)
         ka_probe = copy(intensity)
         ka_tmp2 = similar(ka_probe)
-        AdaptiveOptics._apply_elongation!(KA_CPU_STYLE, ka_probe, ka_tmp2, ka_kernel, 1, 8, 8)
+        AdaptiveOpticsSim._apply_elongation!(KA_CPU_STYLE, ka_probe, ka_tmp2, ka_kernel, 1, 8, 8)
         copyto!(ka_probe, ka_tmp2)
         @test ka_cpu_close(ka_probe, scalar_baseline)
     end

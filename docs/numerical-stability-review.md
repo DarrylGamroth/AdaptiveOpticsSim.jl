@@ -5,7 +5,7 @@ Commit reviewed: `ca8a97d`
 
 ## Scope
 
-This review focuses on numerical stability risks in the current `AdaptiveOptics.jl`
+This review focuses on numerical stability risks in the current `AdaptiveOpticsSim.jl`
 implementation, not on line-by-line equivalence with OOPAO. The target is feature
 parity with equal or better numerical behavior where practical.
 

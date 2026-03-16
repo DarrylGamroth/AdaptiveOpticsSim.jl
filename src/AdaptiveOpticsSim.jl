@@ -1,4 +1,4 @@
-module AdaptiveOptics
+module AdaptiveOpticsSim
 
 __precompile__(true)
 
@@ -13,7 +13,7 @@ using SpecialFunctions
 using Statistics
 
 """
-AdaptiveOptics.jl
+AdaptiveOpticsSim.jl
 
 Julia adaptive optics simulation toolkit (in development).
 """
@@ -65,7 +65,7 @@ include("Tomography/fitting.jl")
 include("Tomography/reconstructors.jl")
 
 export PROJECT_STATUS
-export AdaptiveOpticsError, InvalidConfiguration, DimensionMismatchError, UnsupportedAlgorithm
+export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError, UnsupportedAlgorithm
 export Workspace, ensure_psf_buffers!
 export Telemetry, TelemetryRow, record!
 export snapshot_config, write_config_toml, write_config_json
@@ -136,4 +136,4 @@ export reconstruct_wavefront_map!, reconstruct_wavefront_map
 export swap_xy_blocks, interleave_xy_columns, prepare_slope_order
 export mask_actuators!, dm_commands!, dm_commands
 
-end # module AdaptiveOptics
+end # module AdaptiveOpticsSim

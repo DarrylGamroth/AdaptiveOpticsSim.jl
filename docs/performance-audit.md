@@ -1,7 +1,7 @@
 # Performance Audit
 
 This document records a measured performance review of the current
-`AdaptiveOptics.jl` implementation after the recent no-behavior-change cleanup
+`AdaptiveOpticsSim.jl` implementation after the recent no-behavior-change cleanup
 pass.
 
 Scope of this audit:
@@ -36,7 +36,7 @@ measured cases:
 
 - `compute_optical_gains!`
 - `lift_interaction_matrix!`
-- `AdaptiveOptics.reconstruct` for LiFT
+- `AdaptiveOpticsSim.reconstruct` for LiFT
 - `interaction_matrix`
 - `build_reconstructor(ModelBasedTomography(), ...)`
 - `assemble_reconstructor_and_fitting`
@@ -55,7 +55,7 @@ Measured allocations for representative calls:
 | `compute_optical_gains!` | `250016` bytes |
 | `calibrate!` for `GainSensingCamera` | `596728` bytes |
 | `lift_interaction_matrix!` | `40120` bytes |
-| `AdaptiveOptics.reconstruct(lift, ...)` | `132096` bytes |
+| `AdaptiveOpticsSim.reconstruct(lift, ...)` | `132096` bytes |
 | `LiFT(...)` constructor | `351920` bytes |
 | `interaction_matrix(dm, wfs, tel, src)` | `10304` bytes |
 | `reconstruct_wavefront!` | `3360` bytes |
@@ -87,7 +87,7 @@ The constructor allocation is acceptable as setup work.
 The two more important LiFT findings are:
 
 - `lift_interaction_matrix!` still allocates nontrivially
-- `AdaptiveOptics.reconstruct(lift, ...)` allocates more noticeably
+- `AdaptiveOpticsSim.reconstruct(lift, ...)` allocates more noticeably
 
 Likely sources in `src/WFS/lift.jl`:
 
@@ -197,7 +197,7 @@ Updated allocations:
 | `compute_optical_gains!` | `250016` bytes | `0` bytes |
 | `calibrate!` for `GainSensingCamera` | `596728` bytes | `18712` bytes |
 | `lift_interaction_matrix!` | `40120` bytes | `1696` bytes |
-| `AdaptiveOptics.reconstruct` for LiFT (`Auto`, scalar CPU) | `132096` bytes | `2432` bytes |
+| `AdaptiveOpticsSim.reconstruct` for LiFT (`Auto`, scalar CPU) | `132096` bytes | `2432` bytes |
 | `reconstruct!` for LiFT (`Auto`, scalar CPU) | n/a | `2208` bytes |
 | `reconstruct!` for LiFT (normal-equation mode) | n/a | `1984` bytes |
 

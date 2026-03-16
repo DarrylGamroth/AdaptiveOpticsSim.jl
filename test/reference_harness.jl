@@ -475,8 +475,8 @@ function strehl_ratio(psf::AbstractMatrix{T}, psf_ref::AbstractMatrix{T}) where 
     otf_ref = abs.(fft(ref_crop))
     shifted = similar(otf)
     shifted_ref = similar(otf_ref)
-    AdaptiveOptics.fftshift2d!(shifted, otf)
-    AdaptiveOptics.fftshift2d!(shifted_ref, otf_ref)
+    AdaptiveOpticsSim.fftshift2d!(shifted, otf)
+    AdaptiveOpticsSim.fftshift2d!(shifted_ref, otf_ref)
     shifted ./= maximum(shifted)
     shifted_ref ./= maximum(shifted_ref)
     return 100.0 * sum(shifted) / sum(shifted_ref)
@@ -1042,8 +1042,8 @@ function compute_reference_actual_ka_cpu(case::ReferenceCase)
         sub = div(tel.params.resolution, n_sub)
         offset = n_sub * n_sub
         slopes = similar(wfs.state.slopes)
-        style = AdaptiveOptics.AcceleratorStyle(KernelAbstractions.CPU())
-        AdaptiveOptics._geometric_slopes!(style, slopes, tel.state.opd, wfs.state.valid_mask, sub, n_sub, offset)
+        style = AdaptiveOpticsSim.AcceleratorStyle(KernelAbstractions.CPU())
+        AdaptiveOpticsSim._geometric_slopes!(style, slopes, tel.state.opd, wfs.state.valid_mask, sub, n_sub, offset)
         return slopes
     end
     throw(InvalidConfiguration("KA CPU reference path not implemented for reference kind '$(case.kind)'"))

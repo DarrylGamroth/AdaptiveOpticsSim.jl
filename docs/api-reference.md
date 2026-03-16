@@ -11,7 +11,7 @@ than by source file.
 - `write_telemetry_csv`
 - `bin2d`, `poisson_noise!`, `poisson_sample`
 - `ParallelConfig`, `with_parallel_config`
-- Exceptions: `AdaptiveOpticsError`, `InvalidConfiguration`,
+- Exceptions: `AdaptiveOpticsSimError`, `InvalidConfiguration`,
   `DimensionMismatchError`
 
 ## Optical elements

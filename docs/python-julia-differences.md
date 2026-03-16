@@ -1,8 +1,8 @@
-# Python OOPAO vs AdaptiveOptics.jl
+# Python OOPAO vs AdaptiveOpticsSim.jl
 
 This document records the concrete differences between the Python OOPAO stack
 (`OOPAO`, plus `pyTomoAO` where tomography is involved) and the Julia port
-`AdaptiveOptics.jl`.
+`AdaptiveOpticsSim.jl`.
 
 The goal is not line-by-line implementation parity. The goal is:
 
@@ -47,13 +47,13 @@ The biggest differences today are:
 
 ## Intentional Architectural Differences
 
-| Area | Python OOPAO / pyTomoAO | Julia AdaptiveOptics.jl | Why Julia differs | Status |
+| Area | Python OOPAO / pyTomoAO | Julia AdaptiveOpticsSim.jl | Why Julia differs | Status |
 |---|---|---|---|---|
-| Package structure | Many classes across `OOPAO/*.py` and external `pyTomoAO` | One top-level `AdaptiveOptics` module with subareas under `src/` | Idiomatic Julia favors one package surface with multiple dispatch instead of class trees and external manager objects | Intentional |
+| Package structure | Many classes across `OOPAO/*.py` and external `pyTomoAO` | One top-level `AdaptiveOpticsSim` module with subareas under `src/` | Idiomatic Julia favors one package surface with multiple dispatch instead of class trees and external manager objects | Intentional |
 | Programming model | OO objects with mutable state and operator overloading like `src*tel*wfs` | Explicit functions like `compute_psf!`, `measure!`, `capture!`, `advance!`, `reconstruct!` | Clearer dispatch, easier testing, easier zero-allocation hot paths | Intentional |
 | Type system | Runtime duck typing, class attributes, NumPy/CuPy conventions | Parametric structs, traits, backend dispatch, structured interfaces in `src/Core/types.jl` | Needed for performance, specialization, GPU portability, and SciML-style APIs | Intentional |
 | Array layout | NumPy row-major assumptions are common, especially in tomography exports | Julia internals are column-major; Python ordering is adapted only at reference boundaries | Native Julia memory order is the right internal choice for performance and readability | Intentional |
-| Errors | `OopaoError`, warnings, and many `print(...)` diagnostics | `AdaptiveOpticsError`, `InvalidConfiguration`, `DimensionMismatchError`, `UnsupportedAlgorithm`, plus `Logging` | More testable and composable; avoids side effects in library code | Intentional |
+| Errors | `OopaoError`, warnings, and many `print(...)` diagnostics | `AdaptiveOpticsSimError`, `InvalidConfiguration`, `DimensionMismatchError`, `UnsupportedAlgorithm`, plus `Logging` | More testable and composable; avoids side effects in library code | Intentional |
 | Randomness | Several Python components seed from wall-clock time or local random states | Julia centralizes RNG and supports deterministic fixed-seed workflows | Deterministic regression and RTC-style repeatability were explicit design goals | Intentional |
 | FFT handling | OOPAO relies on NumPy FFTs and some ad hoc GPU/CuPy branching | Julia caches FFT plans in long-lived objects and uses backend-aware FFT dispatch | Reduces allocations and planning overhead; enables a cleaner CPU/GPU path split | Intentional |
 | Parallelism | OOPAO uses `joblib`, helper tools like `set_paralleling_setup.py`, and module-specific choices | Julia uses threads and backend traits; `KernelAbstractions` is reserved for accelerator-friendly kernels | Simpler coarse-grained policy, less nested oversubscription, better fit for Julia runtime | Intentional |

@@ -1,16 +1,16 @@
-"""Base exception type for AdaptiveOptics.jl."""
-abstract type AdaptiveOpticsError <: Exception end
+"""Base exception type for AdaptiveOpticsSim.jl."""
+abstract type AdaptiveOpticsSimError <: Exception end
 
-struct InvalidConfiguration <: AdaptiveOpticsError
+struct InvalidConfiguration <: AdaptiveOpticsSimError
     msg::String
 end
 
-struct DimensionMismatchError <: AdaptiveOpticsError
+struct DimensionMismatchError <: AdaptiveOpticsSimError
     msg::String
 end
 
-struct UnsupportedAlgorithm <: AdaptiveOpticsError
+struct UnsupportedAlgorithm <: AdaptiveOpticsSimError
     msg::String
 end
 
-Base.showerror(io::IO, e::AdaptiveOpticsError) = print(io, e.msg)
+Base.showerror(io::IO, e::AdaptiveOpticsSimError) = print(io, e.msg)

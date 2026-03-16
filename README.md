@@ -1,4 +1,4 @@
-# AdaptiveOptics.jl
+# AdaptiveOpticsSim.jl
 
 Julia adaptive optics simulation toolkit (in development). This package is an
 idiomatic Julia port of OOPAO with a focus on performance, reproducibility, and
@@ -7,7 +7,7 @@ extensible modeling.
 ## Quick start
 
 ```julia
-using AdaptiveOptics
+using AdaptiveOpticsSim
 
 tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)

@@ -1,6 +1,6 @@
-# LLM Agent Instructions for AdaptiveOptics.jl
+# LLM Agent Instructions for AdaptiveOpticsSim.jl
 #
-# Project name: AdaptiveOptics.jl (Julia port of OOPAO).
+# Project name: AdaptiveOpticsSim.jl (Julia port of OOPAO).
 #
 # Core design principles:
 # - Use multiple dispatch + traits; avoid OO-style inheritance patterns.

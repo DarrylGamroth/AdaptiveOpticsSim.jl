@@ -1,7 +1,7 @@
-# Julia Design Sketch for AdaptiveOptics.jl
+# Julia Design Sketch for AdaptiveOpticsSim.jl
 
 This document sketches an idiomatic Julia design for porting OOPAO into
-AdaptiveOptics.jl. It favors
+AdaptiveOpticsSim.jl. It favors
 multiple dispatch, explicit state, and preallocated workspaces over OO-style
 inheritance and hidden mutation.
 
@@ -20,7 +20,7 @@ inheritance and hidden mutation.
 - Implicit global state or hidden mutability.
 
 ## Package layout (proposed)
-- `AdaptiveOptics.jl` root module
+- `AdaptiveOpticsSim.jl` root module
 - `Core/` interfaces, shared types, traits, workspaces
 - `Optics/` telescope, DM, Zernike, propagation utilities
 - `Atmosphere/` phase screens, turbulence models
@@ -251,15 +251,15 @@ domain errors for common failures.
 
 Sketch:
 ```julia
-abstract type AdaptiveOpticsError <: Exception end
-struct InvalidConfiguration <: AdaptiveOpticsError
+abstract type AdaptiveOpticsSimError <: Exception end
+struct InvalidConfiguration <: AdaptiveOpticsSimError
     msg::String
 end
-struct DimensionMismatchError <: AdaptiveOpticsError
+struct DimensionMismatchError <: AdaptiveOpticsSimError
     msg::String
 end
 
-Base.showerror(io::IO, e::AdaptiveOpticsError) = print(io, e.msg)
+Base.showerror(io::IO, e::AdaptiveOpticsSimError) = print(io, e.msg)
 ```
 
 Use `throw(InvalidConfiguration("..."))` for invalid inputs and `@assert` only

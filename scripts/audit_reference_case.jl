@@ -2,7 +2,7 @@ using TOML
 using LinearAlgebra
 using Statistics
 
-using AdaptiveOptics
+using AdaptiveOpticsSim
 
 include(joinpath(@__DIR__, "..", "test", "reference_harness.jl"))
 

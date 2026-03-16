@@ -1,4 +1,4 @@
-using AdaptiveOptics
+using AdaptiveOpticsSim
 using BenchmarkTools
 
 function bench_psf()

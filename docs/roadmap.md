@@ -1,7 +1,7 @@
 # Julia Port Roadmap (Draft)
 
 ## Status
-- Phases 1-5 implemented in `AdaptiveOptics.jl`.
+- Phases 1-5 implemented in `AdaptiveOpticsSim.jl`.
 - Phase 6 in progress (telemetry + config export done; more I/O helpers pending).
 - Phase 7 complete (user guide, API reference, tutorial ports, and committed OOPAO reference bundle in place).
 - Core feature parity and numerical fidelity with Python OOPAO are effectively
@@ -241,7 +241,7 @@ Current validation scope:
 - Compact tomography operators and reconstructions, plus KAPA benchmark wavefront and
   DM-command reconstruction, are now regression-backed against the committed pyTomoAO bundle.
 - pyTomoAO-specific row-major ordering is now handled only in the reference harness;
-  the `AdaptiveOptics.jl` tomography implementation remains native Julia column-major internally.
+  the `AdaptiveOpticsSim.jl` tomography implementation remains native Julia column-major internally.
 
 ## Phase 8: Full OOPAO Feature Parity and Numerical Fidelity
 - [ ] Every supported OOPAO workflow has deterministic Julia vs OOPAO regression coverage.

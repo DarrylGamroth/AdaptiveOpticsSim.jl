@@ -1,6 +1,6 @@
 # User Guide
 
-AdaptiveOptics.jl is an idiomatic Julia adaptive-optics toolkit. The package
+AdaptiveOpticsSim.jl is an idiomatic Julia adaptive-optics toolkit. The package
 keeps the OOPAO feature set recognizable, but shifts the design toward
 multiple dispatch, explicit state, and deterministic execution.
 
@@ -21,7 +21,7 @@ multiple dispatch, explicit state, and deterministic execution.
 ### PSF generation
 
 ```julia
-using AdaptiveOptics
+using AdaptiveOpticsSim
 
 tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)

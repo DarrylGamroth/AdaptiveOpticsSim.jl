@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate deterministic pyTomoAO reference data for AdaptiveOptics.jl."""
+"""Generate deterministic pyTomoAO reference data for AdaptiveOpticsSim.jl."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a deterministic OOPAO reference bundle for AdaptiveOptics.jl tests.
+"""Generate a deterministic OOPAO reference bundle for AdaptiveOpticsSim.jl tests.
 
 Run this inside an environment where OOPAO and its Python dependencies are
 available. The output format matches `test/reference_harness.jl`.
