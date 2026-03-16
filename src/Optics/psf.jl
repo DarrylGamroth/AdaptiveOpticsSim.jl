@@ -5,7 +5,7 @@
     end
 end
 
-function apply_centering_phase!(::ScalarCPUStyle, field::AbstractMatrix{T}, phase_shift::T) where {T<:AbstractFloat}
+function apply_centering_phase!(::ScalarCPUStyle, field::AbstractMatrix{Complex{T}}, phase_shift::T) where {T<:AbstractFloat}
     n, m = size(field)
     @inbounds for j in 1:m, i in 1:n
         field[i, j] *= cis(phase_shift * (i + j - 2))
@@ -13,7 +13,7 @@ function apply_centering_phase!(::ScalarCPUStyle, field::AbstractMatrix{T}, phas
     return field
 end
 
-function apply_centering_phase!(style::AcceleratorStyle, field::AbstractMatrix{T}, phase_shift::T) where {T<:AbstractFloat}
+function apply_centering_phase!(style::AcceleratorStyle, field::AbstractMatrix{Complex{T}}, phase_shift::T) where {T<:AbstractFloat}
     launch_kernel!(style, apply_centering_phase_kernel!, field, phase_shift, size(field, 1); ndrange=size(field))
     return field
 end
