@@ -397,11 +397,25 @@ end
     psf = compute_psf!(tel, src; zero_padding=1)
     coeffs = reconstruct(lift, psf, [1, 2])
     @test length(coeffs) == 2
+    @test AdaptiveOptics.effective_solve_mode(AdaptiveOptics.ScalarCPUStyle(), LiFTSolveAuto()) isa LiFTSolveQR
+    diag = diagnostics(lift)
+    @test diag.used_qr isa Bool
+    @test isfinite(diag.residual_norm)
+    @test isfinite(diag.weighted_residual_norm)
+    @test isfinite(diag.update_norm)
+    @test isfinite(diag.condition_ratio) || isinf(diag.condition_ratio)
     lift_normal = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=2,
         img_resolution=8, numerical=true, solve_mode=LiFTSolveNormalEquations())
     coeffs_normal = reconstruct(lift_normal, psf, [1, 2])
     @test length(coeffs_normal) == 2
     @test all(isfinite, coeffs_normal)
+    @test !diagnostics(lift_normal).used_qr
+    lift_damped = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=2,
+        img_resolution=8, numerical=true, damping=LiFTLevenbergMarquardt())
+    coeffs_damped = reconstruct(lift_damped, psf, [1, 2])
+    @test length(coeffs_damped) == 2
+    @test all(isfinite, coeffs_damped)
+    @test diagnostics(lift_damped).regularization >= 0
     det_readout = Detector(noise=NoiseReadout(1e-3), psf_sampling=1)
     lift_readout = LiFT(tel, src, basis, det_readout; diversity_opd=diversity, iterations=2,
         img_resolution=8, numerical=true)

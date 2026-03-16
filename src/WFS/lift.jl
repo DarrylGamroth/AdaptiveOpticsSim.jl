@@ -6,16 +6,39 @@ struct LiFTAnalytic <: LiFTMode end
 struct LiFTNumerical <: LiFTMode end
 
 abstract type LiFTSolveMode end
+struct LiFTSolveAuto <: LiFTSolveMode end
 struct LiFTSolveQR <: LiFTSolveMode end
 struct LiFTSolveNormalEquations <: LiFTSolveMode end
 
-struct LiFTParams{T<:AbstractFloat,A<:AbstractMatrix{T},K,S<:LiFTSolveMode}
+abstract type LiFTDampingMode end
+struct LiFTDampingNone <: LiFTDampingMode end
+struct LiFTLevenbergMarquardt{T<:AbstractFloat} <: LiFTDampingMode
+    lambda0::T
+    growth::T
+    condition_rtol::T
+end
+
+LiFTLevenbergMarquardt(; lambda0::Real=1e-6, growth::Real=10.0, condition_rtol::Real=sqrt(eps(Float64))) =
+    LiFTLevenbergMarquardt(float(lambda0), float(growth), float(condition_rtol))
+
+struct LiFTParams{T<:AbstractFloat,A<:AbstractMatrix{T},K,S<:LiFTSolveMode,D<:LiFTDampingMode}
     diversity_opd::A
     iterations::Int
     img_resolution::Int
     zero_padding::Int
     object_kernel::K
     solve_mode::S
+    damping::D
+end
+
+mutable struct LiFTDiagnostics{T<:AbstractFloat}
+    residual_norm::T
+    weighted_residual_norm::T
+    update_norm::T
+    condition_ratio::T
+    regularization::T
+    used_qr::Bool
+    used_fallback::Bool
 end
 
 mutable struct LiFTState{T<:AbstractFloat,
@@ -37,6 +60,7 @@ mutable struct LiFTState{T<:AbstractFloat,
     normal_buffer::B
     factor_buffer::B
     rhs_buffer::V
+    diagnostics::LiFTDiagnostics{T}
 end
 
 struct LiFT{M<:LiFTMode,P<:LiFTParams,S<:LiFTState,B<:AbstractArray{<:AbstractFloat,3},SRC<:AbstractSource,D<:AbstractDetector}
@@ -75,7 +99,8 @@ weight_mode(::Any) = throw(InvalidConfiguration("R_n must be :model, :iterative,
 function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::AbstractDetector;
     diversity_opd::AbstractMatrix, iterations::Int=5, img_resolution::Int=0,
     numerical::Bool=false, ang_pixel_arcsec=nothing, object_kernel=nothing,
-    solve_mode::LiFTSolveMode=LiFTSolveQR())
+    solve_mode::LiFTSolveMode=LiFTSolveAuto(), damping::LiFTDampingMode=LiFTDampingNone())
+    T = eltype(tel.state.opd)
 
     if size(basis, 1) != tel.params.resolution || size(basis, 2) != tel.params.resolution
         throw(InvalidConfiguration("basis resolution must match telescope resolution"))
@@ -93,12 +118,12 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
     if img_resolution <= 0
         img_resolution = tel.params.resolution * zero_padding
     end
-    kernel = object_kernel === nothing ? nothing : eltype(tel.state.opd).(object_kernel)
-    params = LiFTParams(float.(diversity_opd), iterations, img_resolution, zero_padding, kernel, solve_mode)
+    kernel = object_kernel === nothing ? nothing : T.(object_kernel)
+    params = LiFTParams(float.(diversity_opd), iterations, img_resolution, zero_padding, kernel, solve_mode, damping)
     oversampling = lift_oversampling(zero_padding)
-    ws = Workspace(tel.state.opd, lift_pad_size(tel.params.resolution, zero_padding); T=eltype(tel.state.opd))
-    psf_buffer = similar(tel.state.opd, eltype(tel.state.opd), img_resolution, img_resolution)
-    amp_buffer = similar(tel.state.opd, eltype(tel.state.opd), tel.params.resolution, tel.params.resolution)
+    ws = Workspace(tel.state.opd, lift_pad_size(tel.params.resolution, zero_padding); T=T)
+    psf_buffer = similar(tel.state.opd, T, img_resolution, img_resolution)
+    amp_buffer = similar(tel.state.opd, T, tel.params.resolution, tel.params.resolution)
     focal_buffer = similar(psf_buffer, Complex{eltype(psf_buffer)}, img_resolution * oversampling, img_resolution * oversampling)
     mode_buffer = similar(focal_buffer)
     pd_buffer = similar(focal_buffer)
@@ -110,8 +135,9 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
     normal_buffer = similar(psf_buffer, eltype(psf_buffer), size(basis, 3), size(basis, 3))
     factor_buffer = similar(normal_buffer)
     rhs_buffer = similar(residual_buffer, size(basis, 3))
+    diagnostics = LiFTDiagnostics(T(NaN), T(NaN), T(NaN), T(NaN), zero(T), false, false)
     state = LiFTState(ws, psf_buffer, amp_buffer, focal_buffer, mode_buffer, pd_buffer, conv_buffer,
-        opd_buffer, residual_buffer, weight_buffer, H_buffer, normal_buffer, factor_buffer, rhs_buffer)
+        opd_buffer, residual_buffer, weight_buffer, H_buffer, normal_buffer, factor_buffer, rhs_buffer, diagnostics)
     mode = numerical ? LiFTNumerical() : LiFTAnalytic()
     return LiFT{typeof(mode), typeof(params), typeof(state), typeof(basis), typeof(src), typeof(det)}(
         tel,
@@ -122,6 +148,8 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
         state,
     )
 end
+
+diagnostics(lift::LiFT) = lift.state.diagnostics
 
 @inline function prepare_opd!(lift::LiFT, coeffs::AbstractVector)
     combine_basis!(lift.state.opd_buffer, lift.basis, coeffs, lift.tel.state.pupil)
@@ -223,6 +251,9 @@ function reconstruct!(coeffs::AbstractVector{T}, lift::LiFT, psf_in::AbstractMat
     normal = @view lift.state.normal_buffer[1:n_modes, 1:n_modes]
     factor = @view lift.state.factor_buffer[1:n_modes, 1:n_modes]
     rhs = @view lift.state.rhs_buffer[1:n_modes]
+    diag = lift.state.diagnostics
+    style = execution_style(H)
+    effective_mode = effective_solve_mode(style, lift.params.solve_mode)
     init_weights!(sqrtw, mode, psf_in, lift.det)
     for iter in 1:lift.params.iterations
         current_opd = prepare_opd!(lift, coeffs)
@@ -245,18 +276,21 @@ function reconstruct!(coeffs::AbstractVector{T}, lift::LiFT, psf_in::AbstractMat
         @inbounds for idx in eachindex(model_psf)
             residual[idx] = psf_in[idx] - model_psf[idx]
         end
+        diag.residual_norm = norm(residual)
         lift_interaction_matrix!(H, lift, coeffs, mode_ids; flux_norm=scale)
 
         update_weights!(sqrtw, mode, model_psf, lift.det)
         apply_row_weights!(H, sqrtw, n_modes)
         apply_vec_weights!(residual, sqrtw)
+        diag.weighted_residual_norm = norm(residual)
         mul!(normal, adjoint(H), H)
         mul!(rhs, adjoint(H), residual)
-        delta = solve_lift_system!(residual, rhs, H, normal, factor, lift.params.solve_mode)
+        delta = solve_lift_system!(diag, residual, rhs, H, normal, factor, effective_mode, lift.params.damping)
+        diag.update_norm = delta_norm(delta, n_modes, effective_mode)
         for (j, mode_id) in enumerate(mode_ids)
-            coeffs[mode_id] += delta_component(delta, j, lift.params.solve_mode)
+            coeffs[mode_id] += delta_component(delta, j, effective_mode)
         end
-        if check_convergence && delta_norm(delta, n_modes, lift.params.solve_mode) / max(norm(coeffs), eps(T)) < 1e-3
+        if check_convergence && diag.update_norm / max(norm(coeffs), eps(T)) < 1e-3
             break
         end
     end
@@ -291,9 +325,15 @@ end
     return mat
 end
 
-function solve_normal_system!(rhs::AbstractVector{T}, factor::AbstractMatrix{T}, normal::AbstractMatrix{T}) where {T<:AbstractFloat}
+@inline effective_solve_mode(::ScalarCPUStyle, ::LiFTSolveAuto) = LiFTSolveQR()
+@inline effective_solve_mode(::AcceleratorStyle, ::LiFTSolveAuto) = LiFTSolveNormalEquations()
+@inline effective_solve_mode(::ExecutionStyle, mode::LiFTSolveMode) = mode
+
+function solve_normal_system!(diag::LiFTDiagnostics{T}, rhs::AbstractVector{T}, factor::AbstractMatrix{T},
+    normal::AbstractMatrix{T}, ::LiFTDampingNone) where {T<:AbstractFloat}
     copyto!(factor, normal)
     chol = cholesky!(Hermitian(factor), check=false)
+    λ = zero(T)
     if !issuccess(chol)
         λ = regularization_load(normal)
         @inbounds for i in axes(factor, 1)
@@ -308,34 +348,77 @@ function solve_normal_system!(rhs::AbstractVector{T}, factor::AbstractMatrix{T},
             chol = cholesky!(Hermitian(factor), check=false)
             if !issuccess(chol)
                 rhs .= pinv(normal) * rhs
+                diag.regularization = λ
+                diag.used_fallback = true
                 return rhs
             end
         end
     end
     ldiv!(chol, rhs)
+    diag.regularization = λ
     return rhs
 end
 
-function solve_lift_system!(residual::AbstractVector{T}, rhs::AbstractVector{T},
-    H::AbstractMatrix{T}, normal::AbstractMatrix{T}, factor::AbstractMatrix{T},
-    ::LiFTSolveQR) where {T<:AbstractFloat}
-    try
-        qr_factor = qr!(H)
-        ldiv!(qr_factor, residual)
-        return residual
-    catch err
-        if err isa SingularException
-            solve_normal_system!(rhs, factor, normal)
+function solve_normal_system!(diag::LiFTDiagnostics{T}, rhs::AbstractVector{T}, factor::AbstractMatrix{T},
+    normal::AbstractMatrix{T}, damping::LiFTLevenbergMarquardt) where {T<:AbstractFloat}
+    copyto!(factor, normal)
+    λ = damping_lambda(damping, normal)
+    if λ > zero(T)
+        @inbounds for i in axes(factor, 1)
+            factor[i, i] += λ
+        end
+    end
+    chol = cholesky!(Hermitian(factor), check=false)
+    while !issuccess(chol)
+        λ = max(λ * T(damping.growth), regularization_load(normal))
+        copyto!(factor, normal)
+        @inbounds for i in axes(factor, 1)
+            factor[i, i] += λ
+        end
+        chol = cholesky!(Hermitian(factor), check=false)
+        if λ > T(1e12)
+            rhs .= pinv(normal) * rhs
+            diag.regularization = λ
+            diag.used_fallback = true
             return rhs
         end
-        rethrow()
     end
+    ldiv!(chol, rhs)
+    diag.regularization = λ
+    return rhs
 end
 
-function solve_lift_system!(residual::AbstractVector{T}, rhs::AbstractVector{T},
+function solve_lift_system!(diag::LiFTDiagnostics{T}, residual::AbstractVector{T}, rhs::AbstractVector{T},
     H::AbstractMatrix{T}, normal::AbstractMatrix{T}, factor::AbstractMatrix{T},
-    ::LiFTSolveNormalEquations) where {T<:AbstractFloat}
-    solve_normal_system!(rhs, factor, normal)
+    effective_mode::LiFTSolveMode, damping::LiFTDampingMode) where {T<:AbstractFloat}
+    diag.used_qr = effective_mode isa LiFTSolveQR
+    diag.used_fallback = false
+    diag.regularization = zero(T)
+    if effective_mode isa LiFTSolveQR
+        qr_factor = qr!(H)
+        cond_ratio = qr_condition_ratio(qr_factor, size(normal, 1))
+        diag.condition_ratio = cond_ratio
+        if cond_ratio > damping_condition_limit(T, damping)
+            diag.used_qr = false
+            diag.used_fallback = true
+            solve_normal_system!(diag, rhs, factor, normal, damping)
+            return rhs
+        end
+        try
+            ldiv!(qr_factor, residual)
+            return residual
+        catch err
+            if err isa SingularException
+                diag.used_qr = false
+                diag.used_fallback = true
+                solve_normal_system!(diag, rhs, factor, normal, damping)
+                return rhs
+            end
+            rethrow()
+        end
+    end
+    diag.condition_ratio = normal_condition_ratio(normal)
+    solve_normal_system!(diag, rhs, factor, normal, damping)
     return rhs
 end
 
@@ -357,6 +440,41 @@ function regularization_load(normal::AbstractMatrix{T}) where {T<:AbstractFloat}
     end
     mean_diag = n == 0 ? zero(T) : diag_sum / T(n)
     return max(sqrt(eps(T)) * max(mean_diag, one(T)), eps(T))
+end
+
+function damping_lambda(damping::LiFTLevenbergMarquardt, normal::AbstractMatrix{T}) where {T<:AbstractFloat}
+    base = regularization_load(normal)
+    return max(T(damping.lambda0) * max(base, one(T)), base)
+end
+
+@inline damping_condition_limit(::Type{T}, ::LiFTDampingNone) where {T<:AbstractFloat} = inv(sqrt(eps(T)))
+@inline damping_condition_limit(::Type{T}, damping::LiFTLevenbergMarquardt) where {T<:AbstractFloat} =
+    inv(max(T(damping.condition_rtol), eps(T)))
+
+function qr_condition_ratio(qr_factor, n_modes::Int)
+    T = real(eltype(qr_factor.factors))
+    maxabs = zero(T)
+    minabs = typemax(T)
+    @inbounds for i in 1:n_modes
+        d = abs(qr_factor.factors[i, i])
+        maxabs = max(maxabs, d)
+        minabs = min(minabs, d)
+    end
+    maxabs == zero(T) && return T(Inf)
+    return maxabs / max(minabs, eps(T))
+end
+
+function normal_condition_ratio(normal::AbstractMatrix{T}) where {T<:AbstractFloat}
+    maxabs = zero(T)
+    minabs = typemax(T)
+    n = min(size(normal, 1), size(normal, 2))
+    @inbounds for i in 1:n
+        d = abs(normal[i, i])
+        maxabs = max(maxabs, d)
+        minabs = min(minabs, d)
+    end
+    maxabs == zero(T) && return T(Inf)
+    return maxabs / max(minabs, eps(T))
 end
 
 @inline function init_weights!(sqrtw::AbstractVector{T}, ::LiFTWeightingDynamic,

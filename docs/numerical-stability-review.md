@@ -92,9 +92,11 @@ File:
 - [src/WFS/lift.jl](/home/dgamroth/workspaces/codex/AdaptiveOptics.jl/src/WFS/lift.jl#L237)
 
 Current behavior:
-- LiFT now defaults to a direct weighted QR solve.
+- LiFT now defaults to `LiFTSolveAuto()`.
+- `LiFTSolveAuto()` resolves to QR on scalar CPU arrays and to the
+  normal-equation path on accelerator backends.
 - An explicit `LiFTSolveNormalEquations()` compatibility mode still exists.
-- Rank-deficient QR cases currently fall back to the regularized normal-equation path.
+- Rank-deficient QR cases currently fall back to a damped normal-equation path.
 
 Risk:
 - The default path is materially better than pure normal equations, but there is
@@ -106,7 +108,7 @@ Impact:
 - Iterative convergence can degrade or stall in high-dynamic-range cases.
 
 Recommendation:
-- Keep QR as the default weighted least-squares path.
+- Keep backend-aware `Auto` solve selection, with QR preferred on scalar CPU.
 - Add optional Levenberg-Marquardt damping for the nonlinear iteration.
 - Track residual norm, update norm, and Jacobian conditioning per iteration.
 
@@ -174,5 +176,6 @@ Recommendation:
 ## Status
 
 This is a findings document. The LiFT item has been partially addressed by moving
-the default solve path from normal equations to QR, but damping/conditioning work
-is still open.
+the scalar CPU default away from normal equations, adding backend-aware solve
+selection, and exposing damping/conditioning diagnostics. More advanced damping
+policy and stronger conditioning diagnostics are still open.

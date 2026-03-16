@@ -197,8 +197,8 @@ Updated allocations:
 | `compute_optical_gains!` | `250016` bytes | `0` bytes |
 | `calibrate!` for `GainSensingCamera` | `596728` bytes | `18712` bytes |
 | `lift_interaction_matrix!` | `40120` bytes | `1696` bytes |
-| `AdaptiveOptics.reconstruct` for LiFT (QR default) | `132096` bytes | `2432` bytes |
-| `reconstruct!` for LiFT (QR default) | n/a | `2272` bytes |
+| `AdaptiveOptics.reconstruct` for LiFT (`Auto`, scalar CPU) | `132096` bytes | `2432` bytes |
+| `reconstruct!` for LiFT (`Auto`, scalar CPU) | n/a | `2208` bytes |
 | `reconstruct!` for LiFT (normal-equation mode) | n/a | `1984` bytes |
 
 Interpretation:
@@ -207,11 +207,12 @@ Interpretation:
   evaluation.
 - `calibrate!` still allocates, but only at setup scale for basis-product and
   calibration-buffer construction.
-- LiFT now defaults to a direct QR-based least-squares solve for better
-  conditioning, while keeping a typed normal-equation mode as an explicit
-  compatibility/throughput option.
-- The QR default costs slightly more than the normal-equation mode, but it
-  avoids making the less stable solve path the default behavior.
+- LiFT now defaults to `LiFTSolveAuto()`.
+- `LiFTSolveAuto()` resolves to QR on the scalar CPU path and to the
+  normal-equation path on accelerator backends, which keeps the design GPU-ready
+  without pretending we have a validated GPU QR implementation yet.
+- On scalar CPU, `Auto` prefers QR for conditioning but may still fall back to a
+  damped normal-equation solve when the Jacobian is effectively rank-deficient.
 
 That means the next worthwhile LiFT improvement, if needed, is adding damping or
 explicit conditioning diagnostics on top of the QR solve rather than chasing

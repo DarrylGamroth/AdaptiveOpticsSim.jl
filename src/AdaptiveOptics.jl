@@ -97,7 +97,9 @@ export pyramid_modulation_frame!
 export BioEdgeWFS, BioEdgeParams, BioEdgeState
 export apply_shift_wfs!, set_optical_gain!
 export LiFT, lift_interaction_matrix, lift_interaction_matrix!
-export LiFTSolveMode, LiFTSolveQR, LiFTSolveNormalEquations
+export LiFTSolveMode, LiFTSolveAuto, LiFTSolveQR, LiFTSolveNormalEquations
+export LiFTDampingMode, LiFTDampingNone, LiFTLevenbergMarquardt
+export LiFTDiagnostics, diagnostics
 export InteractionMatrix, interaction_matrix
 export CalibrationVault, with_truncation
 export ModalBasis, KLBasisMethod, KLDMModes, KLHHtPSD
