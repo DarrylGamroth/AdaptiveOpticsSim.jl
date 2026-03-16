@@ -1,6 +1,20 @@
 using LinearAlgebra
 using Logging
 
+@kernel function lift_scatter_update_kernel!(coeffs, delta, mode_ids, n_modes::Int)
+    i = @index(Global, Linear)
+    if i <= n_modes
+        @inbounds coeffs[mode_ids[i]] += delta[i]
+    end
+end
+
+@kernel function lift_gather_kernel!(out, coeffs, mode_ids, n_modes::Int)
+    i = @index(Global, Linear)
+    if i <= n_modes
+        @inbounds out[i] = coeffs[mode_ids[i]]
+    end
+end
+
 abstract type LiFTMode end
 struct LiFTAnalytic <: LiFTMode end
 struct LiFTNumerical <: LiFTMode end
@@ -45,7 +59,8 @@ mutable struct LiFTState{T<:AbstractFloat,
     W<:Workspace,
     B<:AbstractMatrix{T},
     C<:AbstractMatrix{Complex{T}},
-    V<:AbstractVector{T}}
+    V<:AbstractVector{T},
+    I<:AbstractVector{Int}}
     workspace::W
     psf_buffer::B
     amp_buffer::B
@@ -60,6 +75,7 @@ mutable struct LiFTState{T<:AbstractFloat,
     normal_buffer::B
     factor_buffer::B
     rhs_buffer::V
+    mode_id_buffer::I
     diagnostics::LiFTDiagnostics{T}
 end
 
@@ -135,9 +151,11 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
     normal_buffer = similar(psf_buffer, eltype(psf_buffer), size(basis, 3), size(basis, 3))
     factor_buffer = similar(normal_buffer)
     rhs_buffer = similar(residual_buffer, size(basis, 3))
+    mode_id_buffer = similar(rhs_buffer, Int, size(basis, 3))
     diagnostics = LiFTDiagnostics(T(NaN), T(NaN), T(NaN), T(NaN), zero(T), false, false)
     state = LiFTState(ws, psf_buffer, amp_buffer, focal_buffer, mode_buffer, pd_buffer, conv_buffer,
-        opd_buffer, residual_buffer, weight_buffer, H_buffer, normal_buffer, factor_buffer, rhs_buffer, diagnostics)
+        opd_buffer, residual_buffer, weight_buffer, H_buffer, normal_buffer, factor_buffer, rhs_buffer, mode_id_buffer,
+        diagnostics)
     mode = numerical ? LiFTNumerical() : LiFTAnalytic()
     return LiFT{typeof(mode), typeof(params), typeof(state), typeof(basis), typeof(src), typeof(det)}(
         tel,
@@ -234,10 +252,19 @@ end
 function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVector;
     coeffs0=nothing, R_n=nothing, optimize_norm::Symbol=:sum, check_convergence::Bool=true)
     T = eltype(lift.state.psf_buffer)
-    coeffs = coeffs0 === nothing ? zeros(T, maximum(mode_ids)) : copy(coeffs0)
+    coeffs = similar(lift.state.rhs_buffer, T, maximum(mode_ids))
+    if coeffs0 === nothing
+        fill!(coeffs, zero(T))
+    else
+        copyto!(coeffs, coeffs0)
+    end
     reconstruct!(coeffs, lift, psf_in, mode_ids, weight_mode(R_n);
         optimize_norm=optimize_norm, check_convergence=check_convergence)
-    return coeffs[mode_ids]
+    mode_ids_buf = @view lift.state.mode_id_buffer[1:length(mode_ids)]
+    copyto!(mode_ids_buf, mode_ids)
+    out = similar(lift.state.rhs_buffer, T, length(mode_ids))
+    gather_selected_coefficients!(execution_style(coeffs), out, coeffs, mode_ids_buf, length(mode_ids))
+    return out
 end
 
 function reconstruct!(coeffs::AbstractVector{T}, lift::LiFT, psf_in::AbstractMatrix{T}, mode_ids::AbstractVector,
@@ -252,9 +279,11 @@ function reconstruct!(coeffs::AbstractVector{T}, lift::LiFT, psf_in::AbstractMat
     normal = @view lift.state.normal_buffer[1:n_modes, 1:n_modes]
     factor = @view lift.state.factor_buffer[1:n_modes, 1:n_modes]
     rhs = @view lift.state.rhs_buffer[1:n_modes]
+    mode_ids_buf = @view lift.state.mode_id_buffer[1:n_modes]
     diag = lift.state.diagnostics
     style = execution_style(H)
     effective_mode = effective_solve_mode(style, lift.params.solve_mode)
+    copyto!(mode_ids_buf, mode_ids)
     init_weights!(sqrtw, mode, psf_in, lift.det)
     for iter in 1:lift.params.iterations
         current_opd = prepare_opd!(lift, coeffs)
@@ -287,7 +316,7 @@ function reconstruct!(coeffs::AbstractVector{T}, lift::LiFT, psf_in::AbstractMat
         mul!(rhs, adjoint(H), residual)
         delta = solve_lift_system!(diag, residual, rhs, H, normal, factor, effective_mode, lift.params.damping)
         diag.update_norm = delta_norm(delta, n_modes, effective_mode)
-        update_coefficients!(coeffs, delta, mode_ids, effective_mode, style)
+        update_coefficients!(coeffs, delta, mode_ids_buf, effective_mode, style)
         if check_convergence && diag.update_norm / max(norm(coeffs), eps(T)) < 1e-3
             break
         end
@@ -430,15 +459,21 @@ end
     return coeffs
 end
 
-@inline function update_coefficients!(coeffs::AbstractVector{T}, delta::AbstractVector, mode_ids::AbstractVector,
-    ::LiFTSolveMode, ::AcceleratorStyle) where {T<:AbstractFloat}
-    n_modes = length(mode_ids)
-    delta_host = Vector{T}(undef, n_modes)
-    copyto!(delta_host, @view(delta[1:n_modes]))
-    for (j, mode_id) in enumerate(mode_ids)
-        coeffs[mode_id] += delta_host[j]
-    end
+@inline function update_coefficients!(coeffs::AbstractVector, delta::AbstractVector, mode_ids::AbstractVector,
+    ::LiFTSolveMode, style::AcceleratorStyle)
+    launch_kernel!(style, lift_scatter_update_kernel!, coeffs, delta, mode_ids, length(mode_ids); ndrange=length(mode_ids))
+    synchronize_backend!(style)
     return coeffs
+end
+
+@inline gather_selected_coefficients!(::ScalarCPUStyle, out::AbstractVector, coeffs::AbstractVector,
+    mode_ids::AbstractVector, n_modes::Int) = copyto!(out, coeffs[mode_ids])
+
+@inline function gather_selected_coefficients!(style::AcceleratorStyle, out::AbstractVector, coeffs::AbstractVector,
+    mode_ids::AbstractVector, n_modes::Int)
+    launch_kernel!(style, lift_gather_kernel!, out, coeffs, mode_ids, n_modes; ndrange=n_modes)
+    synchronize_backend!(style)
+    return out
 end
 
 @inline function delta_norm(delta::AbstractVector{T}, n_modes::Int, ::LiFTSolveQR) where {T<:AbstractFloat}
