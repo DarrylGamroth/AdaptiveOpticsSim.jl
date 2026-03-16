@@ -54,7 +54,9 @@ Still not committed:
 - Full long-horizon atmosphere-replay closed-loop tutorial traces. Local audits
   now show that the delayed-control path and residual-RMS telemetry track OOPAO
   closely, but Strehl and later slope norms still drift once both codes enter a
-  huge-OPD nonlinear regime, so the long replay remains diagnostic-only.
+  huge-OPD nonlinear regime. Row-4 focal-plane/GSC diagnostics also show that
+  very small control-vector differences can push the gain-sensing frame onto a
+  different nonlinear branch, so the long replay remains diagnostic-only.
 
 ## Reference configuration
 - Seed: fixed RNG seed (documented per dataset).

@@ -8,19 +8,32 @@ include(joinpath(@__DIR__, "..", "test", "reference_harness.jl"))
 
 function summarize_diff(actual, expected)
     diff = actual .- expected
+    rel = similar(diff, Float64)
+    @. rel = abs(diff) / max(abs(expected), eps(Float64))
     println("shape: ", size(actual))
     println("maxabs: ", maximum(abs, diff))
+    println("maxrel: ", maximum(rel))
     println("rms: ", sqrt(sum(abs2, diff) / length(diff)))
 
     if ndims(actual) == 2
-        println("\nper-column maxabs:")
+        println("\nper-column maxabs/maxrel:")
         for j in axes(actual, 2)
-            println("  col ", j, ": ", maximum(abs.(diff[:, j])))
+            println(
+                "  col ", j, ": ",
+                maximum(abs.(diff[:, j])),
+                " / ",
+                maximum(rel[:, j]),
+            )
         end
 
-        println("\nper-row maxabs:")
+        println("\nper-row maxabs/maxrel:")
         for i in axes(actual, 1)
-            println("  row ", i, ": ", maximum(abs.(diff[i, :])))
+            println(
+                "  row ", i, ": ",
+                maximum(abs.(diff[i, :])),
+                " / ",
+                maximum(rel[i, :]),
+            )
         end
     end
 end
