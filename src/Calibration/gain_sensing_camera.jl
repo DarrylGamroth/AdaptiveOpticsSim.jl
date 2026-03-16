@@ -51,12 +51,16 @@ mutable struct GainSensingCamera{T<:AbstractFloat,
     OG<:AbstractVector{T},
     W<:GSCFFTWorkspace{T}}
     mask::C
+    mask_fft::C
     basis::B
     n_modes::Int
     calibration_ready::Bool
     basis_product::Union{Nothing,BP}
     ir_calib::Union{Nothing,IR}
     sensi_calib::Union{Nothing,SV}
+    frame_buffer::IR
+    ir_buffer::IR
+    sensi_buffer::SV
     og::OG
     fftws::W
 end
@@ -75,17 +79,23 @@ function GainSensingCamera(mask::AbstractMatrix, basis::AbstractArray;
     og = similar(vec(mask_c), T, n_modes)
     fill!(og, one(T))
     fftws = GSCFFTWorkspace(mask_c; T=T)
+    mask_fft = similar(mask_c)
+    fft2c!(mask_fft, fftws, mask_c)
     bp_probe = similar(fftws.buffer, Complex{T}, size(mask_c, 1), size(mask_c, 2), 1)
     ir_probe = similar(mask_c, T, size(mask_c, 1), size(mask_c, 2))
     sensi_probe = similar(og, Complex{T})
     gsc = GainSensingCamera{T, typeof(mask_c), typeof(basis_t), typeof(bp_probe), typeof(ir_probe), typeof(sensi_probe), typeof(og), typeof(fftws)}(
         mask_c,
+        mask_fft,
         basis_t,
         n_modes,
         false,
         nothing,
         nothing,
         nothing,
+        similar(ir_probe),
+        similar(ir_probe),
+        similar(sensi_probe),
         og,
         fftws,
     )
@@ -101,10 +111,14 @@ function calibrate!(gsc::GainSensingCamera, frame::AbstractMatrix; n_jobs::Int=1
         throw(InvalidConfiguration("frame sum must be > 0 for calibration"))
     end
     @info "GainSensingCamera calibration started"
-    frame_norm = frame ./ total
+    normalize_frame!(gsc.frame_buffer, frame, total)
     gsc.basis_product = split_basis_product(gsc.basis, gsc.fftws; n_jobs=max(n_jobs, 1))
-    gsc.ir_calib = impulse_response(gsc.mask, frame_norm, gsc.fftws)
-    gsc.sensi_calib = sensitivity(gsc.ir_calib, gsc.ir_calib, gsc.basis_product, gsc.fftws)
+    ir_calib = gsc.ir_calib === nothing ? similar(gsc.ir_buffer) : gsc.ir_calib
+    sensi_calib = gsc.sensi_calib === nothing ? similar(gsc.sensi_buffer) : gsc.sensi_calib
+    impulse_response!(ir_calib, gsc, gsc.frame_buffer)
+    sensitivity!(sensi_calib, gsc, ir_calib, ir_calib)
+    gsc.ir_calib = ir_calib
+    gsc.sensi_calib = sensi_calib
     gsc.calibration_ready = true
     fill!(gsc.og, one(eltype(gsc.og)))
     @info "GainSensingCamera calibration complete"
@@ -121,15 +135,25 @@ function compute_optical_gains!(gsc::GainSensingCamera, frame::AbstractMatrix)
     if !gsc.calibration_ready
         throw(InvalidConfiguration("GainSensingCamera must be calibrated before computing optical gains"))
     end
+    ir_calib = gsc.ir_calib
+    ir_calib === nothing && throw(InvalidConfiguration("GainSensingCamera calibration IR is not available"))
+    sensi_calib = gsc.sensi_calib
+    sensi_calib === nothing && throw(InvalidConfiguration("GainSensingCamera calibration sensitivity is not available"))
     total = sum(frame)
     if total <= 0
         throw(InvalidConfiguration("frame sum must be > 0 for optical gain computation"))
     end
-    frame_norm = frame ./ total
-    ir_sky = impulse_response(gsc.mask, frame_norm, gsc.fftws)
-    sensi_sky = sensitivity(ir_sky, gsc.ir_calib, gsc.basis_product, gsc.fftws)
-    @. gsc.og = real(sensi_sky / gsc.sensi_calib)
+    normalize_frame!(gsc.frame_buffer, frame, total)
+    impulse_response!(gsc.ir_buffer, gsc, gsc.frame_buffer)
+    sensitivity!(gsc.sensi_buffer, gsc, gsc.ir_buffer, ir_calib)
+    @. gsc.og = real(gsc.sensi_buffer / sensi_calib)
     return gsc.og
+end
+
+function normalize_frame!(out::AbstractMatrix{T}, frame::AbstractMatrix, total::Real) where {T<:AbstractFloat}
+    inv_total = inv(T(total))
+    @. out = frame * inv_total
+    return out
 end
 
 function pad_basis(basis::AbstractArray{T,3}, size_out::Int) where {T}
@@ -186,20 +210,60 @@ function split_basis_product(basis::AbstractArray{T,3}, ws::GSCFFTWorkspace{T}; 
     return out
 end
 
+function impulse_response!(out::AbstractMatrix{T}, gsc::GainSensingCamera{T}, frame::AbstractMatrix) where {T<:AbstractFloat}
+    @. gsc.fftws.fft_out = gsc.mask * frame
+    fft2c!(gsc.fftws.ifft_out, gsc.fftws, gsc.fftws.fft_out)
+    @. out = 2 * imag(conj(gsc.mask_fft) * gsc.fftws.ifft_out)
+    return out
+end
+
+function sensitivity!(out::AbstractVector{Complex{T}}, gsc::GainSensingCamera{T},
+    IR_1::AbstractMatrix, IR_2::AbstractMatrix) where {T<:AbstractFloat}
+    fft2c!(gsc.fftws.fft_out, gsc.fftws, IR_1)
+    ifft2c!(gsc.fftws.ifft_out, gsc.fftws, IR_2)
+    basis_product = gsc.basis_product
+    basis_product === nothing && throw(InvalidConfiguration("GainSensingCamera basis product is not available"))
+    n_modes = size(basis_product, 3)
+    npix = size(IR_1, 1) * size(IR_1, 2)
+    basis_mat = reshape(basis_product, npix, n_modes)
+    fft_vals = vec(gsc.fftws.fft_out)
+    ifft_vals = vec(gsc.fftws.ifft_out)
+    @inbounds for mode in 1:n_modes
+        acc = zero(Complex{T})
+        for idx in 1:npix
+            acc += fft_vals[idx] * ifft_vals[idx] * basis_mat[idx, mode]
+        end
+        out[mode] = acc
+    end
+    return out
+end
+
 function impulse_response(mask::AbstractMatrix, frame::AbstractMatrix, ws::GSCFFTWorkspace)
-    fft2c!(ws.fft_out, ws, mask)
-    fft2c!(ws.ifft_out, ws, mask .* frame)
-    return 2 .* imag.(conj.(ws.fft_out) .* ws.ifft_out)
+    mask_fft = similar(frame, Complex{real(eltype(ws.buffer))}, size(frame)...)
+    fft2c!(mask_fft, ws, mask)
+    tmp = similar(ws.buffer)
+    @. tmp = mask * frame
+    fft2c!(ws.ifft_out, ws, tmp)
+    return 2 .* imag.(conj.(mask_fft) .* ws.ifft_out)
 end
 
 function sensitivity(IR_1::AbstractMatrix, IR_2::AbstractMatrix, basis_product::AbstractArray, ws::GSCFFTWorkspace)
     fft2c!(ws.fft_out, ws, IR_1)
-    fft_IR_1 = vec(ws.fft_out)
     ifft2c!(ws.ifft_out, ws, IR_2)
-    ifft_IR_2 = vec(ws.ifft_out)
-    product = fft_IR_1 .* ifft_IR_2
-    basis_mat = reshape(basis_product, size(IR_1, 1) * size(IR_1, 2), size(basis_product, 3))
-    return vec(transpose(product) * basis_mat)
+    npix = size(IR_1, 1) * size(IR_1, 2)
+    n_modes = size(basis_product, 3)
+    basis_mat = reshape(basis_product, npix, n_modes)
+    out = similar(vec(IR_1), Complex{real(eltype(ws.buffer))}, n_modes)
+    fft_vals = vec(ws.fft_out)
+    ifft_vals = vec(ws.ifft_out)
+    @inbounds for mode in 1:n_modes
+        acc = zero(eltype(out))
+        for idx in 1:npix
+            acc += fft_vals[idx] * ifft_vals[idx] * basis_mat[idx, mode]
+        end
+        out[mode] = acc
+    end
+    return out
 end
 
 function sensitivity(IR_1::AbstractMatrix, IR_2::AbstractMatrix, basis_product::AbstractArray)

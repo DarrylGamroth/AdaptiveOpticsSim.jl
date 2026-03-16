@@ -39,5 +39,3 @@ function apply_misregistration(mis::Misregistration, x::Real, y::Real)
 
     return xr - mis.shift_x, yr - mis.shift_y
 end
-
-apply_misregistration(x::Real, y::Real, mis::Misregistration) = apply_misregistration(mis, x, y)

@@ -23,6 +23,7 @@ mutable struct LiFTState{T<:AbstractFloat,
     amp_buffer::B
     focal_buffer::C
     mode_buffer::C
+    pd_buffer::C
     conv_buffer::B
     opd_buffer::B
     residual_buffer::V
@@ -93,6 +94,7 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
     amp_buffer = similar(tel.state.opd, eltype(tel.state.opd), tel.params.resolution, tel.params.resolution)
     focal_buffer = similar(psf_buffer, Complex{eltype(psf_buffer)}, img_resolution * oversampling, img_resolution * oversampling)
     mode_buffer = similar(focal_buffer)
+    pd_buffer = similar(focal_buffer)
     conv_buffer = similar(psf_buffer)
     opd_buffer = similar(amp_buffer)
     residual_buffer = similar(psf_buffer, eltype(psf_buffer), img_resolution * img_resolution)
@@ -100,7 +102,7 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
     H_buffer = similar(psf_buffer, eltype(psf_buffer), img_resolution * img_resolution, size(basis, 3))
     normal_buffer = similar(psf_buffer, eltype(psf_buffer), size(basis, 3), size(basis, 3))
     rhs_buffer = similar(residual_buffer, size(basis, 3))
-    state = LiFTState(ws, psf_buffer, amp_buffer, focal_buffer, mode_buffer, conv_buffer,
+    state = LiFTState(ws, psf_buffer, amp_buffer, focal_buffer, mode_buffer, pd_buffer, conv_buffer,
         opd_buffer, residual_buffer, weight_buffer, H_buffer, normal_buffer, rhs_buffer)
     mode = numerical ? LiFTNumerical() : LiFTAnalytic()
     return LiFT{typeof(mode), typeof(params), typeof(state), typeof(basis), typeof(src), typeof(det)}(
@@ -161,7 +163,8 @@ function lift_interaction_matrix!(H::AbstractMatrix, lift::LiFT{LiFTAnalytic}, c
     @. lift.state.amp_buffer = ifelse(lift.tel.state.pupil, amp_scale, zero(T))
 
     oversampling = focal_field_from_opd!(lift.state.focal_buffer, lift, lift.state.amp_buffer, initial_opd)
-    Pd = conj.(lift.state.focal_buffer)
+    conjugate_field!(lift.state.pd_buffer, lift.state.focal_buffer)
+    Pd = lift.state.pd_buffer
 
     k = T(2 * pi) / wavelength(lift.src)
     @inbounds for (idx, mode_id) in enumerate(mode_ids)
@@ -193,16 +196,18 @@ end
 
 function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVector;
     coeffs0=nothing, R_n=nothing, optimize_norm::Symbol=:sum, check_convergence::Bool=true)
-    return reconstruct(lift, psf_in, mode_ids, weight_mode(R_n);
-        coeffs0=coeffs0, optimize_norm=optimize_norm, check_convergence=check_convergence)
+    T = eltype(lift.state.psf_buffer)
+    coeffs = coeffs0 === nothing ? zeros(T, maximum(mode_ids)) : copy(coeffs0)
+    reconstruct!(coeffs, lift, psf_in, mode_ids, weight_mode(R_n);
+        optimize_norm=optimize_norm, check_convergence=check_convergence)
+    return coeffs[mode_ids]
 end
 
-function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVector, mode::LiFTWeightingMode;
-    coeffs0=nothing, optimize_norm::Symbol=:sum, check_convergence::Bool=true)
-
-    T = eltype(lift.state.psf_buffer)
+function reconstruct!(coeffs::AbstractVector{T}, lift::LiFT, psf_in::AbstractMatrix{T}, mode_ids::AbstractVector,
+    mode::LiFTWeightingMode; optimize_norm::Symbol=:sum, check_convergence::Bool=true) where {T<:AbstractFloat}
+    maximum(mode_ids) <= length(coeffs) ||
+        throw(DimensionMismatchError("coefficient buffer length must cover requested mode ids"))
     n_modes = length(mode_ids)
-    coeffs = coeffs0 === nothing ? zeros(T, maximum(mode_ids)) : copy(coeffs0)
 
     residual = lift.state.residual_buffer
     sqrtw = lift.state.weight_buffer
@@ -210,7 +215,6 @@ function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVecto
     normal = @view lift.state.normal_buffer[1:n_modes, 1:n_modes]
     rhs = @view lift.state.rhs_buffer[1:n_modes]
     init_weights!(sqrtw, mode, psf_in, lift.det)
-    diagw = Diagonal(sqrtw)
     for iter in 1:lift.params.iterations
         current_opd = prepare_opd!(lift, coeffs)
         model_psf = psf_from_opd!(lift, current_opd)
@@ -235,8 +239,8 @@ function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVecto
         lift_interaction_matrix!(H, lift, coeffs, mode_ids; flux_norm=scale)
 
         update_weights!(sqrtw, mode, model_psf, lift.det)
-        lmul!(diagw, H)
-        lmul!(diagw, residual)
+        apply_row_weights!(H, sqrtw, n_modes)
+        apply_vec_weights!(residual, sqrtw)
         mul!(normal, adjoint(H), H)
         mul!(rhs, adjoint(H), residual)
         delta = try
@@ -256,7 +260,34 @@ function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVecto
         end
     end
 
-    return coeffs[mode_ids]
+    return coeffs
+end
+
+function reconstruct!(coeffs::AbstractVector, lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVector;
+    coeffs0=nothing, R_n=nothing, optimize_norm::Symbol=:sum, check_convergence::Bool=true)
+    if coeffs0 === nothing
+        fill!(coeffs, zero(eltype(coeffs)))
+    else
+        copyto!(coeffs, coeffs0)
+    end
+    return reconstruct!(coeffs, lift, psf_in, mode_ids, weight_mode(R_n);
+        optimize_norm=optimize_norm, check_convergence=check_convergence)
+end
+
+@inline function apply_vec_weights!(vec::AbstractVector{T}, weights::AbstractVector{T}) where {T<:AbstractFloat}
+    @inbounds for idx in eachindex(vec, weights)
+        vec[idx] *= weights[idx]
+    end
+    return vec
+end
+
+@inline function apply_row_weights!(mat::AbstractMatrix{T}, weights::AbstractVector{T}, n_cols::Int) where {T<:AbstractFloat}
+    @inbounds for col in 1:n_cols
+        for row in eachindex(weights)
+            mat[row, col] *= weights[row]
+        end
+    end
+    return mat
 end
 
 @inline function init_weights!(sqrtw::AbstractVector{T}, ::LiFTWeightingDynamic,
@@ -500,6 +531,13 @@ function field_derivative!(dest::AbstractMatrix{T}, buf::AbstractMatrix{Complex{
             acc += real(im * buf[ii, jj] * Pd[ii, jj])
         end
         dest[i, j] = scale * acc
+    end
+    return dest
+end
+
+function conjugate_field!(dest::AbstractMatrix{Complex{T}}, src::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+    @inbounds for idx in eachindex(dest, src)
+        dest[idx] = conj(src[idx])
     end
     return dest
 end
