@@ -207,7 +207,8 @@ function lift_interaction_matrix!(H::AbstractMatrix, lift::LiFT{LiFTAnalytic}, c
         @views mode = lift.basis[:, :, mode_id]
         @. lift.state.amp_buffer = ifelse(lift.tel.state.pupil, amp_scale * mode, zero(T))
         focal_field_from_opd!(lift.state.mode_buffer, lift, lift.state.amp_buffer, initial_opd)
-        field_derivative!(lift.state.psf_buffer, lift.state.mode_buffer, Pd, oversampling, 2 * k)
+        field_derivative!(lift.state.psf_buffer, lift.state.mode_buffer, Pd, oversampling, 2 * k,
+            lift.state.workspace.psf_buffer)
         maybe_object_convolve!(lift, lift.state.psf_buffer)
         @views H[:, idx] .= reshape(lift.state.psf_buffer, :)
     end
@@ -550,7 +551,7 @@ function psf_from_opd!(lift::LiFT, opd::AbstractMatrix; flux_norm::Real=1.0)
         lift.tel.params.sampling_time * (lift.tel.params.diameter / lift.tel.params.resolution)^2))
     @. lift.state.amp_buffer = ifelse(lift.tel.state.pupil, amp_scale, zero(eltype(lift.state.amp_buffer)))
     oversampling = focal_field_from_opd!(lift.state.focal_buffer, lift, lift.state.amp_buffer, opd)
-    field_intensity!(lift.state.psf_buffer, lift.state.focal_buffer, oversampling)
+    field_intensity!(lift.state.psf_buffer, lift.state.focal_buffer, oversampling, lift.state.workspace.psf_buffer)
     maybe_object_convolve!(lift, lift.state.psf_buffer)
     return lift.state.psf_buffer
 end
@@ -654,9 +655,7 @@ function focal_field_from_opd!(dest::AbstractMatrix{Complex{T}}, lift::LiFT,
     @views @. ws.pupil_field[ox+1:ox+n, oy+1:oy+n] = amplitude * cispi(opd_to_cycles * opd)
     if iseven(lift.params.img_resolution)
         phase_shift = -T(pi) * (T(n_pad) + one(T)) / T(n_pad)
-        @inbounds for j in 1:n_pad, i in 1:n_pad
-            ws.pupil_field[i, j] *= cis(phase_shift * (i + j - 2))
-        end
+        apply_centering_phase!(execution_style(ws.pupil_field), ws.pupil_field, phase_shift)
     end
 
     copyto!(ws.fft_buffer, ws.pupil_field)
@@ -676,7 +675,8 @@ function focal_field_from_opd!(dest::AbstractMatrix{Complex{T}}, lift::LiFT,
     return oversampling
 end
 
-function field_intensity!(dest::AbstractMatrix{T}, field::AbstractMatrix{Complex{T}}, oversampling::Int) where {T<:AbstractFloat}
+function field_intensity!(dest::AbstractMatrix{T}, field::AbstractMatrix{Complex{T}}, oversampling::Int,
+    scratch::AbstractMatrix{T}) where {T<:AbstractFloat}
     if oversampling == 1
         @. dest = abs2(field)
         return dest
@@ -685,20 +685,16 @@ function field_intensity!(dest::AbstractMatrix{T}, field::AbstractMatrix{Complex
     if size(field) != (n_out * oversampling, m_out * oversampling)
         throw(DimensionMismatchError("LiFT field size does not match oversampled PSF dimensions"))
     end
-    @inbounds for j in 1:m_out, i in 1:n_out
-        acc = zero(T)
-        xs = (i - 1) * oversampling + 1
-        ys = (j - 1) * oversampling + 1
-        for jj in ys:ys+oversampling-1, ii in xs:xs+oversampling-1
-            acc += abs2(field[ii, jj])
-        end
-        dest[i, j] = acc
+    if size(scratch) != size(field)
+        throw(DimensionMismatchError("LiFT scratch buffer size must match oversampled field size"))
     end
+    @. scratch = abs2(field)
+    bin2d!(dest, scratch, oversampling)
     return dest
 end
 
 function field_derivative!(dest::AbstractMatrix{T}, buf::AbstractMatrix{Complex{T}},
-    Pd::AbstractMatrix{Complex{T}}, oversampling::Int, scale::T) where {T<:AbstractFloat}
+    Pd::AbstractMatrix{Complex{T}}, oversampling::Int, scale::T, scratch::AbstractMatrix{T}) where {T<:AbstractFloat}
     if size(buf) != size(Pd)
         throw(DimensionMismatchError("LiFT focal fields must have matching sizes"))
     end
@@ -710,15 +706,12 @@ function field_derivative!(dest::AbstractMatrix{T}, buf::AbstractMatrix{Complex{
     if size(buf) != (n_out * oversampling, m_out * oversampling)
         throw(DimensionMismatchError("LiFT derivative field size does not match oversampled image size"))
     end
-    @inbounds for j in 1:m_out, i in 1:n_out
-        acc = zero(T)
-        xs = (i - 1) * oversampling + 1
-        ys = (j - 1) * oversampling + 1
-        for jj in ys:ys+oversampling-1, ii in xs:xs+oversampling-1
-            acc += real(im * buf[ii, jj] * Pd[ii, jj])
-        end
-        dest[i, j] = scale * acc
+    if size(scratch) != size(buf)
+        throw(DimensionMismatchError("LiFT scratch buffer size must match oversampled derivative field size"))
     end
+    @. scratch = real(im * buf * Pd)
+    bin2d!(dest, scratch, oversampling)
+    @. dest = scale * dest
     return dest
 end
 
