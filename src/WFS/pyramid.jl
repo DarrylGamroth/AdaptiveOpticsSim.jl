@@ -760,7 +760,7 @@ function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::T
     pad = size(wfs.state.field, 1)
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
-    phase_scale = (2 * pi) / wavelength(src)
+    opd_to_cycles = T(2) / wavelength(src)
     amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2 /
         wfs.params.modulation_points))
 
@@ -768,7 +768,7 @@ function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::T
     for p in 1:wfs.params.modulation_points
         fill!(wfs.state.field, zero(eltype(wfs.state.field)))
         @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * tel.state.pupil *
-            wfs.state.modulation_phases[:, :, p] * cis(phase_scale * tel.state.opd)
+            wfs.state.modulation_phases[:, :, p] * cispi(opd_to_cycles * tel.state.opd)
         copyto!(wfs.state.focal_field, wfs.state.field)
         if wfs.params.psf_centering
             @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.phasor
@@ -808,7 +808,7 @@ function pyramid_modulation_frame!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel:
     end
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
-    phase_scale = (2 * pi) / wavelength(src)
+    opd_to_cycles = T(2) / wavelength(src)
     amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2 /
         wfs.params.modulation_points))
 
@@ -816,7 +816,7 @@ function pyramid_modulation_frame!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel:
     for p in 1:wfs.params.modulation_points
         fill!(wfs.state.field, zero(eltype(wfs.state.field)))
         @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * tel.state.pupil *
-            wfs.state.modulation_phases[:, :, p] * cis(phase_scale * tel.state.opd)
+            wfs.state.modulation_phases[:, :, p] * cispi(opd_to_cycles * tel.state.opd)
         copyto!(wfs.state.focal_field, wfs.state.field)
         if wfs.params.psf_centering
             @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.phasor
@@ -979,7 +979,7 @@ function pyramid_signal!(wfs::PyramidWFS, tel::Telescope, frame::AbstractMatrix{
     end
     norma = pyramid_normalization(wfs.params.normalization, wfs, tel, src, count, norma)
     idx = 1
-    @inbounds for j in 1:n_pixels, i in 1:n_pixels
+    @inbounds for i in 1:n_pixels, j in 1:n_pixels
         q1 = frame[center - n_extra - n_pixels + i, center - n_extra - n_pixels + j]
         q2 = frame[center - n_extra - n_pixels + i, center + n_extra + j]
         q3 = frame[center + n_extra + i, center + n_extra + j]

@@ -164,10 +164,10 @@ function filter!(sf::SpatialFilter, tel::Telescope, src::AbstractSource)
     ensure_spatial_filter_buffers!(sf, n, n_pad)
 
     fill!(sf.state.field, zero(eltype(sf.state.field)))
-    phase_scale = (2 * pi) / wavelength(src)
+    opd_to_cycles = eltype(sf.state.field)(2) / wavelength(src)
     ox = div(n_pad - n, 2)
     oy = div(n_pad - n, 2)
-    @views @. sf.state.field[ox+1:ox+n, oy+1:oy+n] = tel.state.pupil * cis(phase_scale * tel.state.opd)
+    @views @. sf.state.field[ox+1:ox+n, oy+1:oy+n] = tel.state.pupil * cispi(opd_to_cycles * tel.state.opd)
 
     copyto!(sf.state.fft_buffer, sf.state.field)
     mul!(sf.state.fft_buffer, sf.state.fft_plan, sf.state.fft_buffer)

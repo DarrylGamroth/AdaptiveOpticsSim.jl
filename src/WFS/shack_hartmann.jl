@@ -413,12 +413,12 @@ end
 
 function compute_intensity!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int)
-    phase_scale = (2 * pi) / wavelength(src)
+    opd_to_cycles = eltype(wfs.state.intensity)(2) / wavelength(src)
     amp_scale = sqrt(eltype(wfs.state.intensity)(photon_flux(src) * tel.params.sampling_time *
         (tel.params.diameter / tel.params.resolution)^2))
     fill!(wfs.state.field, zero(eltype(wfs.state.field)))
     @views @. wfs.state.field[ox+1:ox+sub, oy+1:oy+sub] =
-        amp_scale * tel.state.pupil[xs:xe, ys:ye] * cis(phase_scale * tel.state.opd[xs:xe, ys:ye])
+        amp_scale * tel.state.pupil[xs:xe, ys:ye] * cispi(opd_to_cycles * tel.state.opd[xs:xe, ys:ye])
     @. wfs.state.field *= wfs.state.phasor
     copyto!(wfs.state.fft_buffer, wfs.state.field)
     mul!(wfs.state.fft_buffer, wfs.state.fft_plan, wfs.state.fft_buffer)

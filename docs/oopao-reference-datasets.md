@@ -28,10 +28,11 @@ The repository now commits a deterministic OOPAO bundle under
 11. `closed_loop_pyramid_trace`
 12. `closed_loop_bioedge_trace`
 13. `gsc_closed_loop_trace`
+14. `gsc_atmosphere_replay_trace_bounded`
 
 These cases are stable enough to keep in CI and now cover the main image
 formation, diffractive WFS, LiFT Jacobians, compact closed-loop traces, GSC
-optical-gain and gain-updated closed-loop behavior, and analytical
+optical-gain, bounded atmosphere-replay, gain-updated closed-loop behavior, and analytical
 transfer-function paths.
 
 The same `test/reference_data/` bundle also commits deterministic pyTomoAO

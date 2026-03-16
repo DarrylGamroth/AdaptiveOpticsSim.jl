@@ -21,11 +21,11 @@ function compute_psf_centered!(tel::Telescope, src::Source, ws::Workspace, zero_
     ensure_psf_buffers!(ws, n_pad)
 
     fill!(ws.pupil_field, zero(eltype(ws.pupil_field)))
-    phase_scale = T(2 * pi) / wavelength(src)
+    opd_to_cycles = T(2) / wavelength(src)
     amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
     ox = div(n_pad - n, 2)
     oy = div(n_pad - n, 2)
-    @views @. ws.pupil_field[ox+1:ox+n, oy+1:oy+n] = amp_scale * tel.state.pupil * cis(phase_scale * tel.state.opd)
+    @views @. ws.pupil_field[ox+1:ox+n, oy+1:oy+n] = amp_scale * tel.state.pupil * cispi(opd_to_cycles * tel.state.opd)
     if iseven(n_pad)
         phase_shift = -T(pi) * (T(n_pad) + one(T)) / T(n_pad)
         @inbounds for j in 1:n_pad, i in 1:n_pad

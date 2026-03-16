@@ -823,7 +823,7 @@ def gsc_closed_loop_trace_case(root: Path) -> dict:
     }
 
 
-def gsc_atmosphere_replay_trace_case(root: Path) -> dict:
+def gsc_atmosphere_replay_trace_case(root: Path, *, case_id: str = "gsc_atmosphere_replay_trace", n_iter: int = 6) -> dict:
     tel = make_telescope(
         resolution=16,
         diameter=8.0,
@@ -857,8 +857,6 @@ def gsc_atmosphere_replay_trace_case(root: Path) -> dict:
     frame_delay = 2
     og_floor = 0.05
     zero_padding = 2
-    n_iter = 6
-
     atm = make_atmosphere(tel)
     forcing_ngs = np.zeros((tel.resolution, tel.resolution, n_iter), dtype=np.float64)
     forcing_src = np.zeros_like(forcing_ngs)
@@ -925,9 +923,9 @@ def gsc_atmosphere_replay_trace_case(root: Path) -> dict:
         if frame_delay == 2:
             delayed_signal[:] = signal
 
-    trace_rel = "gsc_atmosphere_replay_trace.txt"
-    ngs_rel = "gsc_atmosphere_replay_ngs_opd.txt"
-    src_rel = "gsc_atmosphere_replay_src_opd.txt"
+    trace_rel = f"{case_id}.txt"
+    ngs_rel = f"{case_id}_ngs_opd.txt"
+    src_rel = f"{case_id}_src_opd.txt"
     write_array(root / trace_rel, trace)
     write_array(root / ngs_rel, forcing_ngs)
     write_array(root / src_rel, forcing_src)
@@ -1020,6 +1018,11 @@ def main() -> None:
         "closed_loop_pyramid_trace": closed_loop_trace_case(root, case_id="closed_loop_pyramid_trace", kind="pyramid_slopes"),
         "closed_loop_bioedge_trace": closed_loop_trace_case(root, case_id="closed_loop_bioedge_trace", kind="bioedge_slopes"),
         "gsc_closed_loop_trace": gsc_closed_loop_trace_case(root),
+        "gsc_atmosphere_replay_trace_bounded": gsc_atmosphere_replay_trace_case(
+            root,
+            case_id="gsc_atmosphere_replay_trace_bounded",
+            n_iter=2,
+        ),
     }
     write_manifest(root / "manifest.toml", cases)
 

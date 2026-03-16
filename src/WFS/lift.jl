@@ -429,11 +429,11 @@ function focal_field_from_opd!(dest::AbstractMatrix{Complex{T}}, lift::LiFT,
         throw(DimensionMismatchError("LiFT focal field buffer size must match oversampled image size"))
     end
 
-    phase_scale = T(2 * pi) / wavelength(lift.src)
+    opd_to_cycles = T(2) / wavelength(lift.src)
     ox = cld(n_pad - n, 2)
     oy = cld(n_pad - n, 2)
     fill!(ws.pupil_field, zero(eltype(ws.pupil_field)))
-    @views @. ws.pupil_field[ox+1:ox+n, oy+1:oy+n] = amplitude * cis(phase_scale * opd)
+    @views @. ws.pupil_field[ox+1:ox+n, oy+1:oy+n] = amplitude * cispi(opd_to_cycles * opd)
     if iseven(lift.params.img_resolution)
         phase_shift = -T(pi) * (T(n_pad) + one(T)) / T(n_pad)
         @inbounds for j in 1:n_pad, i in 1:n_pad

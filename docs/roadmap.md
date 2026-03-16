@@ -93,7 +93,7 @@
   `gain_sensing_camera_optical_gains`, `transfer_function_rejection`,
   `lift_interaction_matrix`, `closed_loop_shack_hartmann_trace`,
   `closed_loop_pyramid_trace`, `closed_loop_bioedge_trace`,
-  and `gsc_closed_loop_trace`
+  `gsc_closed_loop_trace`, and `gsc_atmosphere_replay_trace_bounded`
   within their documented tolerances.
 - [x] Expand deterministic OOPAO reference coverage beyond geometric Shack-Hartmann to:
   LiFT and compact closed-loop traces for Shack-Hartmann, Pyramid, and BioEdge.
@@ -106,9 +106,10 @@
 - [ ] Port and validate the full atmosphere-driven OOPAO GSC closed-loop workflow
   (`tutorials/AO_closed_loop_Pyramid_WFS_GSC.py`) beyond the current compact regression trace.
   The main Pyramid incidence-flux mismatch from modulation-point averaging has
-  been corrected, and local atmosphere-replay comparisons are materially closer,
-  but the current replay trajectory still runs into an unstable high-OPD regime
-  where Julia/OOPAO diverge before the case is useful as a committed parity gate.
+  been corrected, a bounded atmosphere-replay parity case is now committed, and
+  local long-horizon replay comparisons are materially closer, but the full
+  tutorial-scale replay still runs into an unstable high-OPD regime where
+  Julia/OOPAO diverge before the case is useful as a strict parity gate.
 - [x] Port and validate the pyTomoAO-backed tomography workflow needed for
   OOPAO parity, including model-based wavefront reconstruction and assembled
   DM commands against the KAPA benchmark configuration.
