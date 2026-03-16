@@ -15,8 +15,8 @@ This review is based on direct inspection of the current code in:
 - `OOPAO/OOPAO/*.py`
 - `tutorials/*.py`
 - `../pyTomoAO/pyTomoAO/*.py`
-- `../AdaptiveOptics.jl/src/**/*.jl`
-- `../AdaptiveOptics.jl/docs/*.md`
+- `../AdaptiveOpticsSim.jl/src/**/*.jl`
+- `../AdaptiveOpticsSim.jl/docs/*.md`
 
 ## How to read this
 

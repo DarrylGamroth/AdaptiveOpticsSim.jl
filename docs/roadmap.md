@@ -223,6 +223,8 @@
 - [x] Port most tutorials as Julia scripts/notebooks (prioritize core AO workflows).
 - [x] Add deterministic regression suite against OOPAO outputs.
 - [x] Maintain a small set of OOPAO reference datasets for cross-validation.
+- [x] Make OOPAO reference-bundle regeneration reproducible from a pinned upstream
+  repo/ref instead of assuming a manually prepared local checkout.
 - [x] Publish user guide and API reference.
 
 Current validation scope:

@@ -34,9 +34,9 @@ reconstructors:
 ### High: Unconstrained pseudoinverse use in modal reconstruction
 
 Files:
-- [src/Calibration/reconstructor.jl](/home/dgamroth/workspaces/codex/AdaptiveOptics.jl/src/Calibration/reconstructor.jl#L8)
-- [src/Calibration/calibration_vault.jl](/home/dgamroth/workspaces/codex/AdaptiveOptics.jl/src/Calibration/calibration_vault.jl#L31)
-- [src/Calibration/modal_basis.jl](/home/dgamroth/workspaces/codex/AdaptiveOptics.jl/src/Calibration/modal_basis.jl#L29)
+- [src/Calibration/reconstructor.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Calibration/reconstructor.jl#L8)
+- [src/Calibration/calibration_vault.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Calibration/calibration_vault.jl#L31)
+- [src/Calibration/modal_basis.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Calibration/modal_basis.jl#L29)
 
 Current behavior:
 - `ModalReconstructor` builds `pinv(imat.matrix)`.
@@ -63,10 +63,10 @@ Recommendation:
 ### High: Tomography solve path relies on heuristic diagonal loading
 
 Files:
-- [src/Tomography/reconstructors.jl](/home/dgamroth/workspaces/codex/AdaptiveOptics.jl/src/Tomography/reconstructors.jl#L441)
-- [src/Tomography/reconstructors.jl](/home/dgamroth/workspaces/codex/AdaptiveOptics.jl/src/Tomography/reconstructors.jl#L443)
-- [src/Tomography/reconstructors.jl](/home/dgamroth/workspaces/codex/AdaptiveOptics.jl/src/Tomography/reconstructors.jl#L671)
-- [src/Tomography/reconstructors.jl](/home/dgamroth/workspaces/codex/AdaptiveOptics.jl/src/Tomography/reconstructors.jl#L673)
+- [src/Tomography/reconstructors.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Tomography/reconstructors.jl#L441)
+- [src/Tomography/reconstructors.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Tomography/reconstructors.jl#L443)
+- [src/Tomography/reconstructors.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Tomography/reconstructors.jl#L671)
+- [src/Tomography/reconstructors.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Tomography/reconstructors.jl#L673)
 
 Current behavior:
 - `Cnz` is synthesized with simple heuristics like `1e-3 * α` or `mean_diag / 10`.
@@ -89,7 +89,7 @@ Recommendation:
 ### Medium: LiFT still needs explicit damping / conditioning policy
 
 File:
-- [src/WFS/lift.jl](/home/dgamroth/workspaces/codex/AdaptiveOptics.jl/src/WFS/lift.jl#L237)
+- [src/WFS/lift.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/WFS/lift.jl#L237)
 
 Current behavior:
 - LiFT now defaults to `LiFTSolveAuto()`.
@@ -115,7 +115,7 @@ Recommendation:
 ### Medium: Gain Sensing Camera optical gains lack a calibration-sensitivity floor
 
 File:
-- [src/Calibration/gain_sensing_camera.jl](/home/dgamroth/workspaces/codex/AdaptiveOptics.jl/src/Calibration/gain_sensing_camera.jl#L120)
+- [src/Calibration/gain_sensing_camera.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Calibration/gain_sensing_camera.jl#L120)
 
 Current behavior:
 - Optical gains are computed as `real(sensi_sky / sensi_calib)`.
@@ -135,8 +135,8 @@ Recommendation:
 ### Medium: Custom covariance / Bessel approximations need validation at regime boundaries
 
 Files:
-- [src/Atmosphere/phase_stats.jl](/home/dgamroth/workspaces/codex/AdaptiveOptics.jl/src/Atmosphere/phase_stats.jl#L47)
-- [src/Tomography/reconstructors.jl](/home/dgamroth/workspaces/codex/AdaptiveOptics.jl/src/Tomography/reconstructors.jl#L74)
+- [src/Atmosphere/phase_stats.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Atmosphere/phase_stats.jl#L47)
+- [src/Tomography/reconstructors.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Tomography/reconstructors.jl#L74)
 
 Current behavior:
 - `phase_covariance` uses a direct `besselk` expression with a special case only at exact zero.

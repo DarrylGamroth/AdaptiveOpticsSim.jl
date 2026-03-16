@@ -146,14 +146,33 @@ The pyTomoAO generator lives in `scripts/generate_pytomoao_reference_bundle.py`.
 
 Recommended approach:
 1. Build a reproducible Python 3.8 image with the OOPAO dependency stack.
-2. Mount both the OOPAO checkout and the AdaptiveOpticsSim.jl checkout.
-3. Copy OOPAO to a writable temporary directory inside the container before
-   import. OOPAO writes `precision_oopao.npy` into its package root at import
+2. Run the generator with a pinned OOPAO upstream repo/ref. The script will
+   clone OOPAO into a writable temporary directory before import. This matters
+   because OOPAO writes `precision_oopao.npy` into its package root at import
    time.
-4. Run the generator and point it at a bundle directory.
+3. Point the generator at a bundle directory.
 
 The committed geometric SH bundle was generated this way and then copied into
 `test/reference_data/`.
+
+Recommended CI/local command:
+
+```bash
+python3 scripts/generate_oopao_reference_bundle.py /tmp/oopao-bundle \
+  --oopao-repo https://github.com/cheritier/OOPAO.git \
+  --oopao-ref 085d5e50ace0d20fe13cc2da20129d5400166973
+```
+
+If you already have a local writable OOPAO checkout and want to use that
+instead, pass `--oopao-path /path/to/OOPAO`.
+
+The generated `manifest.toml` now records:
+- `metadata.oopao.repo_url`
+- `metadata.oopao.requested_ref`
+- `metadata.oopao.resolved_commit`
+
+That provenance is intended to make CI artifacts and reference-bundle refreshes
+auditable across machines.
 
 ## Tolerances
 - Record per-dataset tolerances (relative and absolute).

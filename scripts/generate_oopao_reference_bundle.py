@@ -1,27 +1,92 @@
 #!/usr/bin/env python3
 """Generate a deterministic OOPAO reference bundle for AdaptiveOpticsSim.jl tests.
 
-Run this inside an environment where OOPAO and its Python dependencies are
-available. The output format matches `test/reference_harness.jl`.
+The script can either use an existing OOPAO checkout or clone a pinned checkout
+from GitHub into a writable temporary directory before import. The output
+format matches `test/reference_harness.jl`.
 """
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import subprocess
+import sys
+import tempfile
 
 import numpy as np
 
-from OOPAO.Atmosphere import Atmosphere
-from OOPAO.BioEdge import BioEdge
-from OOPAO.Detector import Detector
-from OOPAO.GainSensingCamera import GainSensingCamera
-from OOPAO.LiFT import LiFT
-from OOPAO.Pyramid import Pyramid
-from OOPAO.ShackHartmann import ShackHartmann
-from OOPAO.Source import Source
-from OOPAO.Telescope import Telescope
-from OOPAO.tools.tools import strehlMeter
+DEFAULT_OOPAO_REPO = "https://github.com/cheritier/OOPAO.git"
+DEFAULT_OOPAO_REF = "085d5e50ace0d20fe13cc2da20129d5400166973"
+
+Atmosphere = None
+BioEdge = None
+Detector = None
+GainSensingCamera = None
+LiFT = None
+Pyramid = None
+ShackHartmann = None
+Source = None
+Telescope = None
+strehlMeter = None
+
+
+def run_git(*args: str, cwd: Path | None = None) -> str:
+    proc = subprocess.run(
+        ["git", *args],
+        cwd=str(cwd) if cwd is not None else None,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return proc.stdout.strip()
+
+
+def clone_oopao_checkout(repo_url: str, repo_ref: str, workspace: Path) -> tuple[Path, str]:
+    checkout = workspace / "OOPAO"
+    run_git("clone", "--filter=blob:none", "--no-checkout", repo_url, str(checkout))
+    run_git("fetch", "--depth", "1", "origin", repo_ref, cwd=checkout)
+    run_git("checkout", "--detach", "FETCH_HEAD", cwd=checkout)
+    commit = run_git("rev-parse", "HEAD", cwd=checkout)
+    return checkout, commit
+
+
+def prepare_oopao_checkout(args: argparse.Namespace) -> tuple[Path, str, tempfile.TemporaryDirectory[str] | None]:
+    if args.oopao_path is not None:
+        checkout = args.oopao_path.resolve()
+        commit = run_git("rev-parse", "HEAD", cwd=checkout)
+        return checkout, commit, None
+    workspace = tempfile.TemporaryDirectory(prefix="oopao-checkout-")
+    checkout, commit = clone_oopao_checkout(args.oopao_repo, args.oopao_ref, Path(workspace.name))
+    return checkout, commit, workspace
+
+
+def bootstrap_oopao(checkout: Path) -> None:
+    global Atmosphere, BioEdge, Detector, GainSensingCamera, LiFT
+    global Pyramid, ShackHartmann, Source, Telescope, strehlMeter
+
+    sys.path.insert(0, str(checkout))
+    from OOPAO.Atmosphere import Atmosphere as _Atmosphere
+    from OOPAO.BioEdge import BioEdge as _BioEdge
+    from OOPAO.Detector import Detector as _Detector
+    from OOPAO.GainSensingCamera import GainSensingCamera as _GainSensingCamera
+    from OOPAO.LiFT import LiFT as _LiFT
+    from OOPAO.Pyramid import Pyramid as _Pyramid
+    from OOPAO.ShackHartmann import ShackHartmann as _ShackHartmann
+    from OOPAO.Source import Source as _Source
+    from OOPAO.Telescope import Telescope as _Telescope
+    from OOPAO.tools.tools import strehlMeter as _strehlMeter
+
+    Atmosphere = _Atmosphere
+    BioEdge = _BioEdge
+    Detector = _Detector
+    GainSensingCamera = _GainSensingCamera
+    LiFT = _LiFT
+    Pyramid = _Pyramid
+    ShackHartmann = _ShackHartmann
+    Source = _Source
+    Telescope = _Telescope
+    strehlMeter = _strehlMeter
 
 
 def make_telescope(*, resolution: int, diameter: float, sampling_time: float, central_obstruction: float, fov_arcsec: float = 0.0) -> Telescope:
@@ -64,8 +129,13 @@ def write_array(path: Path, data: np.ndarray) -> None:
     np.savetxt(path, np.asarray(data, dtype=np.float64).reshape(-1), fmt="%.18e")
 
 
-def write_manifest(path: Path, cases: dict[str, dict]) -> None:
+def write_manifest(path: Path, cases: dict[str, dict], metadata: dict[str, str] | None = None) -> None:
     lines = ["version = 1", ""]
+    if metadata:
+        lines.append("[metadata.oopao]")
+        for key, value in metadata.items():
+            lines.append(f'{key} = "{value}"')
+        lines.append("")
     for case_id, case in cases.items():
         lines.extend(
             [
@@ -1133,42 +1203,69 @@ def gsc_atmosphere_replay_trace_case(root: Path, *, case_id: str = "gsc_atmosphe
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("output", type=Path, help="Bundle output directory")
+    parser.add_argument(
+        "--oopao-path",
+        type=Path,
+        default=None,
+        help="use an existing writable OOPAO checkout instead of cloning",
+    )
+    parser.add_argument(
+        "--oopao-repo",
+        default=DEFAULT_OOPAO_REPO,
+        help=f"OOPAO git repo URL to clone (default: {DEFAULT_OOPAO_REPO})",
+    )
+    parser.add_argument(
+        "--oopao-ref",
+        default=DEFAULT_OOPAO_REF,
+        help=f"OOPAO git ref/commit to checkout when cloning (default: {DEFAULT_OOPAO_REF})",
+    )
     args = parser.parse_args()
 
     root = args.output.resolve()
     root.mkdir(parents=True, exist_ok=True)
-    cases = {
-        "psf_baseline": psf_case(root),
-        "shack_hartmann_geometric_ramp_xy": sh_geometric_case(
-            root,
-            case_id="shack_hartmann_geometric_ramp_xy",
-            scale_x=5e-9,
-            scale_y=-2e-9,
-        ),
-        "shack_hartmann_geometric_ramp_y": sh_geometric_case(
-            root,
-            case_id="shack_hartmann_geometric_ramp_y",
-            scale_x=0.0,
-            scale_y=4e-9,
-        ),
-        "shack_hartmann_diffractive_ramp": sh_diffractive_case(root),
-        "pyramid_diffractive_ramp": pyramid_case(root),
-        "bioedge_diffractive_ramp": bioedge_case(root),
-        "gain_sensing_camera_optical_gains": gsc_case(root),
-        "transfer_function_rejection": transfer_function_case(root),
-        "lift_interaction_matrix": lift_case(root),
-        "closed_loop_shack_hartmann_trace": closed_loop_trace_case(root, case_id="closed_loop_shack_hartmann_trace", kind="shack_hartmann_slopes"),
-        "closed_loop_pyramid_trace": closed_loop_trace_case(root, case_id="closed_loop_pyramid_trace", kind="pyramid_slopes"),
-        "closed_loop_bioedge_trace": closed_loop_trace_case(root, case_id="closed_loop_bioedge_trace", kind="bioedge_slopes"),
-        "gsc_closed_loop_trace": gsc_closed_loop_trace_case(root),
-        "gsc_atmosphere_replay_trace_bounded": gsc_atmosphere_replay_trace_case(
-            root,
-            case_id="gsc_atmosphere_replay_trace_bounded",
-            n_iter=2,
-        ),
-    }
-    cases.update(gsc_branch_step_cases(root))
-    write_manifest(root / "manifest.toml", cases)
+    checkout, commit, workspace = prepare_oopao_checkout(args)
+    try:
+        bootstrap_oopao(checkout)
+        cases = {
+            "psf_baseline": psf_case(root),
+            "shack_hartmann_geometric_ramp_xy": sh_geometric_case(
+                root,
+                case_id="shack_hartmann_geometric_ramp_xy",
+                scale_x=5e-9,
+                scale_y=-2e-9,
+            ),
+            "shack_hartmann_geometric_ramp_y": sh_geometric_case(
+                root,
+                case_id="shack_hartmann_geometric_ramp_y",
+                scale_x=0.0,
+                scale_y=4e-9,
+            ),
+            "shack_hartmann_diffractive_ramp": sh_diffractive_case(root),
+            "pyramid_diffractive_ramp": pyramid_case(root),
+            "bioedge_diffractive_ramp": bioedge_case(root),
+            "gain_sensing_camera_optical_gains": gsc_case(root),
+            "transfer_function_rejection": transfer_function_case(root),
+            "lift_interaction_matrix": lift_case(root),
+            "closed_loop_shack_hartmann_trace": closed_loop_trace_case(root, case_id="closed_loop_shack_hartmann_trace", kind="shack_hartmann_slopes"),
+            "closed_loop_pyramid_trace": closed_loop_trace_case(root, case_id="closed_loop_pyramid_trace", kind="pyramid_slopes"),
+            "closed_loop_bioedge_trace": closed_loop_trace_case(root, case_id="closed_loop_bioedge_trace", kind="bioedge_slopes"),
+            "gsc_closed_loop_trace": gsc_closed_loop_trace_case(root),
+            "gsc_atmosphere_replay_trace_bounded": gsc_atmosphere_replay_trace_case(
+                root,
+                case_id="gsc_atmosphere_replay_trace_bounded",
+                n_iter=2,
+            ),
+        }
+        cases.update(gsc_branch_step_cases(root))
+        metadata = {
+            "repo_url": args.oopao_repo if args.oopao_path is None else str(checkout),
+            "requested_ref": args.oopao_ref if args.oopao_path is None else "local-checkout",
+            "resolved_commit": commit,
+        }
+        write_manifest(root / "manifest.toml", cases, metadata=metadata)
+    finally:
+        if workspace is not None:
+            workspace.cleanup()
 
 
 if __name__ == "__main__":

@@ -21,6 +21,14 @@ julia --project examples/tutorials/image_formation.jl
 julia --project examples/tutorials/closed_loop_pyramid.jl
 ```
 
+Reference-bundle regeneration can be pinned directly to OOPAO upstream:
+
+```bash
+python3 scripts/generate_oopao_reference_bundle.py /tmp/oopao-bundle \
+  --oopao-repo https://github.com/cheritier/OOPAO.git \
+  --oopao-ref 085d5e50ace0d20fe13cc2da20129d5400166973
+```
+
 ## Documentation
 
 - `docs/user-guide.md`
