@@ -29,11 +29,14 @@ The repository now commits a deterministic OOPAO bundle under
 12. `closed_loop_bioedge_trace`
 13. `gsc_closed_loop_trace`
 14. `gsc_atmosphere_replay_trace_bounded`
+15. `gsc_branch_step_modulation_frame`
+16. `gsc_branch_step_optical_gains`
+17. `gsc_branch_step_signal`
 
 These cases are stable enough to keep in CI and now cover the main image
 formation, diffractive WFS, LiFT Jacobians, compact closed-loop traces, GSC
-optical-gain, bounded atmosphere-replay, gain-updated closed-loop behavior, and analytical
-transfer-function paths.
+optical-gain, bounded atmosphere-replay, gain-updated closed-loop behavior,
+the first nonlinear GSC branch step, and analytical transfer-function paths.
 
 The same `test/reference_data/` bundle also commits deterministic pyTomoAO
 tomography references for:
@@ -57,6 +60,9 @@ Still not committed:
   huge-OPD nonlinear regime. Row-4 focal-plane/GSC diagnostics also show that
   very small control-vector differences can push the gain-sensing frame onto a
   different nonlinear branch, so the long replay remains diagnostic-only.
+  The committed `gsc_branch_step_*` cases isolate that first branch point and
+  regression-test the residual OPD, Pyramid signal, modulation frame, and
+  optical gains at fixed inputs.
 
 ## Reference configuration
 - Seed: fixed RNG seed (documented per dataset).

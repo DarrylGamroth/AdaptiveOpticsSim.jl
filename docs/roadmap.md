@@ -96,8 +96,9 @@
   `gain_sensing_camera_optical_gains`, `transfer_function_rejection`,
   `lift_interaction_matrix`, `closed_loop_shack_hartmann_trace`,
   `closed_loop_pyramid_trace`, `closed_loop_bioedge_trace`,
-  `gsc_closed_loop_trace`, and `gsc_atmosphere_replay_trace_bounded`
-  within their documented tolerances.
+  `gsc_closed_loop_trace`, `gsc_atmosphere_replay_trace_bounded`,
+  `gsc_branch_step_modulation_frame`, `gsc_branch_step_optical_gains`, and
+  `gsc_branch_step_signal` within their documented tolerances.
 - [x] Expand deterministic OOPAO reference coverage beyond geometric Shack-Hartmann to:
   LiFT and compact closed-loop traces for Shack-Hartmann, Pyramid, and BioEdge.
 - [x] Match OOPAO PSF export conventions and normalization exactly enough to support
@@ -108,10 +109,12 @@
   (`tutorials/AO_closed_loop_Pyramid_WFS_GSC.py`) beyond the current compact regression trace.
   The main Pyramid incidence-flux mismatch from modulation-point averaging has
   been corrected, a bounded atmosphere-replay parity case is now committed, and
-  local long-horizon replay diagnostics now show that the control coefficients,
+  the first nonlinear branch step is now regression-backed at the fixed-input
+  level for Pyramid signals, modulation frames, and optical gains. Local
+  long-horizon replay diagnostics now show that the control coefficients,
   optical-gain floor behavior, and residual-RMS telemetry track OOPAO closely.
-  The remaining drift is concentrated in nonlinear observables (mainly Strehl and
-  later slope norms) once the replay enters a huge-OPD regime, so the full
+  The remaining drift is concentrated in nonlinear observables (mainly Strehl
+  and later slope norms) once the replay enters a huge-OPD regime, so the full
   tutorial-scale replay remains diagnostic-only rather than a strict parity gate.
 - [x] Port and validate the pyTomoAO-backed tomography workflow needed for
   OOPAO parity, including model-based wavefront reconstruction and assembled

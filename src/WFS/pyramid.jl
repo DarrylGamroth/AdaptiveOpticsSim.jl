@@ -763,6 +763,7 @@ function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::T
     opd_to_cycles = T(2) / wavelength(src)
     amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2 /
         wfs.params.modulation_points))
+    fft_scale2 = inv(T(pad) * T(pad))
 
     fill!(out, zero(T))
     for p in 1:wfs.params.modulation_points
@@ -803,6 +804,7 @@ function pyramid_modulation_frame!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel:
     prepare_pyramid_sampling!(wfs, tel)
     n = tel.params.resolution
     pad = size(wfs.state.field, 1)
+    fft_scale2 = inv(T(pad) * T(pad))
     if size(out) != (pad, pad)
         throw(DimensionMismatchError("modulation frame size must match pyramid sampling"))
     end
@@ -823,12 +825,12 @@ function pyramid_modulation_frame!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel:
             mul!(wfs.state.focal_field, wfs.state.fft_plan, wfs.state.focal_field)
         else
             mul!(wfs.state.focal_field, wfs.state.fft_plan, wfs.state.focal_field)
-            @. wfs.state.intensity = abs2(wfs.state.focal_field)
+            @. wfs.state.intensity = abs2(wfs.state.focal_field) * fft_scale2
             fftshift2d!(wfs.state.temp, wfs.state.intensity)
             out .+= wfs.state.temp
             continue
         end
-        @. wfs.state.temp = abs2(wfs.state.focal_field)
+        @. wfs.state.temp = abs2(wfs.state.focal_field) * fft_scale2
         out .+= wfs.state.temp
     end
     return out

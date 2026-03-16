@@ -514,6 +514,149 @@ def gsc_case(root: Path) -> dict:
     }
 
 
+def gsc_branch_step_cases(root: Path) -> dict[str, dict]:
+    tel = make_telescope(
+        resolution=16,
+        diameter=8.0,
+        sampling_time=1e-3,
+        central_obstruction=0.0,
+        fov_arcsec=1.0,
+    )
+    ngs = make_source(band="R", magnitude=8.0)
+    ngs ** tel
+    basis = cartesian_polynomial_basis(tel, 4)
+    wfs = Pyramid(
+        nSubap=4,
+        telescope=tel,
+        lightRatio=0.5,
+        modulation=3.0,
+        binning=1,
+        n_pix_separation=2,
+        n_pix_edge=1,
+        postProcessing="slopesMaps_incidence_flux",
+    )
+    gsc = GainSensingCamera(mask=wfs.mask, basis=basis)
+    ngs ** tel * wfs
+    wfs.focal_plane_camera.resolution = wfs.nRes
+    wfs * wfs.focal_plane_camera
+    wfs.focal_plane_camera * gsc
+
+    H = reference_interaction_matrix("pyramid_slopes", wfs, tel, ngs, basis, 1e-9)
+    recon = np.linalg.pinv(H)
+    gain = 0.2
+    og_floor = 0.05
+    branch_iteration = 4
+
+    atm = make_atmosphere(tel)
+    forcing_ngs = np.zeros((tel.resolution, tel.resolution, 6), dtype=np.float64)
+    for idx in range(forcing_ngs.shape[2]):
+        atm.update()
+        atm * ngs * tel
+        forcing_ngs[:, :, idx] = np.asarray(tel.OPD, dtype=np.float64).copy()
+
+    control_coeffs = np.zeros(basis.shape[2], dtype=np.float64)
+    delayed_signal = np.zeros(H.shape[0], dtype=np.float64)
+    for idx in range(branch_iteration - 1):
+        correction_opd = combine_modes(basis, control_coeffs)
+        residual_ngs = forcing_ngs[:, :, idx] - correction_opd
+        ngs ** tel
+        tel.OPD_no_pupil = residual_ngs
+        tel * wfs
+        signal = np.asarray(wfs.signal, dtype=np.float64).reshape(-1)
+        wfs * wfs.focal_plane_camera
+        wfs.focal_plane_camera * gsc
+        og_safe = np.maximum(np.abs(np.asarray(gsc.og, dtype=np.float64)), og_floor)
+        control_coeffs += gain * ((recon @ delayed_signal) / og_safe)
+        delayed_signal[:] = signal
+
+    correction_opd = combine_modes(basis, control_coeffs)
+    residual_ngs = forcing_ngs[:, :, branch_iteration - 1] - correction_opd
+    ngs ** tel
+    tel.OPD_no_pupil = residual_ngs
+    tel * wfs
+    signal = np.asarray(wfs.signal, dtype=np.float64).reshape(-1)
+    wfs * wfs.focal_plane_camera
+    frame = np.asarray(wfs.focal_plane_camera.frame, dtype=np.float64).copy()
+    wfs.focal_plane_camera * gsc
+    optical_gains = np.asarray(gsc.og, dtype=np.float64).reshape(-1)
+
+    residual_rel = "gsc_branch_step_residual_opd.txt"
+    frame_rel = "gsc_branch_step_modulation_frame.txt"
+    og_rel = "gsc_branch_step_optical_gains.txt"
+    signal_rel = "gsc_branch_step_signal.txt"
+    write_array(root / residual_rel, residual_ngs)
+    write_array(root / frame_rel, frame)
+    write_array(root / og_rel, optical_gains)
+    write_array(root / signal_rel, signal)
+
+    common = {
+        "telescope": {
+            "resolution": 16,
+            "diameter": 8.0,
+            "sampling_time": 1e-3,
+            "central_obstruction": 0.0,
+            "fov_arcsec": 1.0,
+        },
+        "source": {
+            "kind": "ngs",
+            "band": "R",
+            "magnitude": 8.0,
+        },
+        "basis": {
+            "kind": "cartesian_polynomials",
+            "n_modes": 4,
+        },
+        "wfs": {
+            "kind": "pyramid_slopes",
+            "n_subap": 4,
+            "mode": "diffractive",
+            "threshold": 0.5,
+            "light_ratio": 0.5,
+            "normalization": "incidence_flux",
+            "modulation": 3.0,
+            "n_pix_separation": 2,
+            "n_pix_edge": 1,
+            "binning": 1,
+        },
+        "compute": {
+            "calibration_amplitude": 1e-9,
+            "branch_iteration": branch_iteration,
+            "control_coefficients": control_coeffs.tolist(),
+            "residual_opd_data": residual_rel,
+            "residual_shape": list(residual_ngs.shape),
+            "residual_storage_order": "C",
+        },
+    }
+
+    return {
+        "gsc_branch_step_modulation_frame": {
+            "kind": "gsc_modulation_frame",
+            "data": frame_rel,
+            "shape": list(frame.shape),
+            "storage_order": "C",
+            "atol": 5e-8,
+            "rtol": 1e-6,
+            **common,
+        },
+        "gsc_branch_step_optical_gains": {
+            "kind": "gsc_optical_gains",
+            "data": og_rel,
+            "shape": [int(optical_gains.size)],
+            "atol": 5e-9,
+            "rtol": 5e-7,
+            **common,
+        },
+        "gsc_branch_step_signal": {
+            "kind": "pyramid_slopes",
+            "data": signal_rel,
+            "shape": [int(signal.size)],
+            "atol": 5e-9,
+            "rtol": 5e-7,
+            **common,
+        },
+    }
+
+
 def transfer_function_case(root: Path) -> dict:
     fs = 300.0
     n_freq = 512
@@ -1024,6 +1167,7 @@ def main() -> None:
             n_iter=2,
         ),
     }
+    cases.update(gsc_branch_step_cases(root))
     write_manifest(root / "manifest.toml", cases)
 
 

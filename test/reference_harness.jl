@@ -108,6 +108,20 @@ function load_reference_aux_array(
     throw(InvalidConfiguration("unsupported storage order '$storage_order' for aux data '$relpath' in case '$(case.id)'"))
 end
 
+function load_case_residual_opd(case::ReferenceCase)
+    compute_cfg = get(case.config, "compute", nothing)
+    compute_cfg === nothing && return nothing
+    if !haskey(compute_cfg, "residual_opd_data")
+        return nothing
+    end
+    return load_reference_aux_array(
+        case,
+        compute_cfg["residual_opd_data"],
+        compute_cfg["residual_shape"],
+        get(compute_cfg, "residual_storage_order", "C"),
+    )
+end
+
 function parse_sensing_mode(name)
     lname = lowercase(String(name))
     if lname == "geometric"
@@ -796,11 +810,14 @@ function compute_reference_actual(case::ReferenceCase)
         return copy(compute_psf!(tel, src; zero_padding=zero_padding))
     elseif case.kind in (:shack_hartmann_slopes, :pyramid_slopes, :bioedge_slopes)
         tel = build_reference_telescope(case.config["telescope"])
-        if haskey(case.config, "opd")
-            apply_reference_opd!(tel, case.config["opd"])
-        end
         src = build_reference_source(case.config["source"])
         wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
+        residual = load_case_residual_opd(case)
+        if residual !== nothing
+            apply_opd!(tel, residual)
+        elseif haskey(case.config, "opd")
+            apply_reference_opd!(tel, case.config["opd"])
+        end
         return copy(measure!(wfs, tel, src))
     elseif case.kind === :gsc_optical_gains
         tel = build_reference_telescope(case.config["telescope"])
@@ -812,12 +829,29 @@ function compute_reference_actual(case::ReferenceCase)
         reset_opd!(tel)
         pyramid_modulation_frame!(calibration_frame, wfs, tel, src)
         calibrate!(gsc, calibration_frame)
-        if haskey(case.config, "opd")
+        residual = load_case_residual_opd(case)
+        if residual !== nothing
+            apply_opd!(tel, residual)
+        elseif haskey(case.config, "opd")
             apply_reference_opd!(tel, case.config["opd"], basis)
         end
         frame = similar(calibration_frame)
         pyramid_modulation_frame!(frame, wfs, tel, src)
         return copy(compute_optical_gains!(gsc, frame))
+    elseif case.kind === :gsc_modulation_frame
+        tel = build_reference_telescope(case.config["telescope"])
+        src = build_reference_source(case.config["source"])
+        wfs = build_reference_wfs(:pyramid_slopes, case.config["wfs"], tel)
+        basis = build_reference_basis(case.config["basis"], tel)
+        residual = load_case_residual_opd(case)
+        if residual !== nothing
+            apply_opd!(tel, residual)
+        elseif haskey(case.config, "opd")
+            apply_reference_opd!(tel, case.config["opd"], basis)
+        end
+        frame = similar(wfs.state.intensity)
+        pyramid_modulation_frame!(frame, wfs, tel, src)
+        return copy(frame)
     elseif case.kind === :transfer_function_rejection
         compute_cfg = case.config["compute"]
         fs = Float64(get(compute_cfg, "fs", 300.0))

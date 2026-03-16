@@ -498,3 +498,133 @@ forcing_ngs_data = "gsc_atmosphere_replay_trace_bounded_ngs_opd.txt"
 forcing_src_data = "gsc_atmosphere_replay_trace_bounded_src_opd.txt"
 forcing_shape = [16, 16, 2]
 forcing_storage_order = "C"
+
+[cases.gsc_branch_step_modulation_frame]
+kind = "gsc_modulation_frame"
+data = "gsc_branch_step_modulation_frame.txt"
+shape = [48, 48]
+storage_order = "C"
+atol = 5.0000000000000001e-08
+rtol = 9.9999999999999995e-07
+
+[cases.gsc_branch_step_modulation_frame.telescope]
+resolution = 16
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+fov_arcsec = 1.0000000000000000e+00
+
+[cases.gsc_branch_step_modulation_frame.source]
+kind = "ngs"
+band = "R"
+magnitude = 8.0000000000000000e+00
+
+[cases.gsc_branch_step_modulation_frame.wfs]
+kind = "pyramid_slopes"
+n_subap = 4
+mode = "diffractive"
+threshold = 5.0000000000000000e-01
+light_ratio = 5.0000000000000000e-01
+normalization = "incidence_flux"
+modulation = 3.0000000000000000e+00
+n_pix_separation = 2
+n_pix_edge = 1
+binning = 1
+
+[cases.gsc_branch_step_modulation_frame.basis]
+kind = "cartesian_polynomials"
+n_modes = 4
+
+[cases.gsc_branch_step_modulation_frame.compute]
+calibration_amplitude = 1.0000000000000001e-09
+branch_iteration = 4
+control_coefficients = [-1.7909322019632393e+02, -6.2645250555750579e+02, 2.6611675477362922e+02, -6.3801789636203324e+01]
+residual_opd_data = "gsc_branch_step_residual_opd.txt"
+residual_shape = [16, 16]
+residual_storage_order = "C"
+
+[cases.gsc_branch_step_optical_gains]
+kind = "gsc_optical_gains"
+data = "gsc_branch_step_optical_gains.txt"
+shape = [4]
+atol = 5.0000000000000001e-09
+rtol = 4.9999999999999998e-07
+
+[cases.gsc_branch_step_optical_gains.telescope]
+resolution = 16
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+fov_arcsec = 1.0000000000000000e+00
+
+[cases.gsc_branch_step_optical_gains.source]
+kind = "ngs"
+band = "R"
+magnitude = 8.0000000000000000e+00
+
+[cases.gsc_branch_step_optical_gains.wfs]
+kind = "pyramid_slopes"
+n_subap = 4
+mode = "diffractive"
+threshold = 5.0000000000000000e-01
+light_ratio = 5.0000000000000000e-01
+normalization = "incidence_flux"
+modulation = 3.0000000000000000e+00
+n_pix_separation = 2
+n_pix_edge = 1
+binning = 1
+
+[cases.gsc_branch_step_optical_gains.basis]
+kind = "cartesian_polynomials"
+n_modes = 4
+
+[cases.gsc_branch_step_optical_gains.compute]
+calibration_amplitude = 1.0000000000000001e-09
+branch_iteration = 4
+control_coefficients = [-1.7909322019632393e+02, -6.2645250555750579e+02, 2.6611675477362922e+02, -6.3801789636203324e+01]
+residual_opd_data = "gsc_branch_step_residual_opd.txt"
+residual_shape = [16, 16]
+residual_storage_order = "C"
+
+[cases.gsc_branch_step_signal]
+kind = "pyramid_slopes"
+data = "gsc_branch_step_signal.txt"
+shape = [24]
+atol = 5.0000000000000001e-09
+rtol = 4.9999999999999998e-07
+
+[cases.gsc_branch_step_signal.telescope]
+resolution = 16
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+fov_arcsec = 1.0000000000000000e+00
+
+[cases.gsc_branch_step_signal.source]
+kind = "ngs"
+band = "R"
+magnitude = 8.0000000000000000e+00
+
+[cases.gsc_branch_step_signal.wfs]
+kind = "pyramid_slopes"
+n_subap = 4
+mode = "diffractive"
+threshold = 5.0000000000000000e-01
+light_ratio = 5.0000000000000000e-01
+normalization = "incidence_flux"
+modulation = 3.0000000000000000e+00
+n_pix_separation = 2
+n_pix_edge = 1
+binning = 1
+
+[cases.gsc_branch_step_signal.basis]
+kind = "cartesian_polynomials"
+n_modes = 4
+
+[cases.gsc_branch_step_signal.compute]
+calibration_amplitude = 1.0000000000000001e-09
+branch_iteration = 4
+control_coefficients = [-1.7909322019632393e+02, -6.2645250555750579e+02, 2.6611675477362922e+02, -6.3801789636203324e+01]
+residual_opd_data = "gsc_branch_step_residual_opd.txt"
+residual_shape = [16, 16]
+residual_storage_order = "C"
