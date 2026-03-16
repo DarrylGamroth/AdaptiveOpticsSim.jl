@@ -64,6 +64,7 @@ mutable struct LiFTState{T<:AbstractFloat,
     workspace::W
     psf_buffer::B
     amp_buffer::B
+    field_scratch::B
     focal_buffer::C
     mode_buffer::C
     pd_buffer::C
@@ -140,7 +141,9 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
     ws = Workspace(tel.state.opd, lift_pad_size(tel.params.resolution, zero_padding); T=T)
     psf_buffer = similar(tel.state.opd, T, img_resolution, img_resolution)
     amp_buffer = similar(tel.state.opd, T, tel.params.resolution, tel.params.resolution)
-    focal_buffer = similar(psf_buffer, Complex{eltype(psf_buffer)}, img_resolution * oversampling, img_resolution * oversampling)
+    focal_size = img_resolution * oversampling
+    field_scratch = similar(psf_buffer, T, focal_size, focal_size)
+    focal_buffer = similar(psf_buffer, Complex{eltype(psf_buffer)}, focal_size, focal_size)
     mode_buffer = similar(focal_buffer)
     pd_buffer = similar(focal_buffer)
     conv_buffer = similar(psf_buffer)
@@ -153,7 +156,7 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
     rhs_buffer = similar(residual_buffer, size(basis, 3))
     mode_id_buffer = similar(rhs_buffer, Int, size(basis, 3))
     diagnostics = LiFTDiagnostics(T(NaN), T(NaN), T(NaN), T(NaN), zero(T), false, false)
-    state = LiFTState(ws, psf_buffer, amp_buffer, focal_buffer, mode_buffer, pd_buffer, conv_buffer,
+    state = LiFTState(ws, psf_buffer, amp_buffer, field_scratch, focal_buffer, mode_buffer, pd_buffer, conv_buffer,
         opd_buffer, residual_buffer, weight_buffer, H_buffer, normal_buffer, factor_buffer, rhs_buffer, mode_id_buffer,
         diagnostics)
     mode = numerical ? LiFTNumerical() : LiFTAnalytic()
@@ -226,7 +229,7 @@ function lift_interaction_matrix!(H::AbstractMatrix, lift::LiFT{LiFTAnalytic}, c
         @. lift.state.amp_buffer = ifelse(lift.tel.state.pupil, amp_scale * mode, zero(T))
         focal_field_from_opd!(lift.state.mode_buffer, lift, lift.state.amp_buffer, initial_opd)
         field_derivative!(lift.state.psf_buffer, lift.state.mode_buffer, Pd, oversampling, 2 * k,
-            lift.state.workspace.psf_buffer)
+            lift.state.field_scratch)
         maybe_object_convolve!(lift, lift.state.psf_buffer)
         @views H[:, idx] .= reshape(lift.state.psf_buffer, :)
     end
@@ -577,7 +580,7 @@ function psf_from_opd!(lift::LiFT, opd::AbstractMatrix; flux_norm::Real=1.0)
         lift.tel.params.sampling_time * (lift.tel.params.diameter / lift.tel.params.resolution)^2))
     @. lift.state.amp_buffer = ifelse(lift.tel.state.pupil, amp_scale, zero(eltype(lift.state.amp_buffer)))
     oversampling = focal_field_from_opd!(lift.state.focal_buffer, lift, lift.state.amp_buffer, opd)
-    field_intensity!(lift.state.psf_buffer, lift.state.focal_buffer, oversampling, lift.state.workspace.psf_buffer)
+    field_intensity!(lift.state.psf_buffer, lift.state.focal_buffer, oversampling, lift.state.field_scratch)
     maybe_object_convolve!(lift, lift.state.psf_buffer)
     return lift.state.psf_buffer
 end
