@@ -778,7 +778,7 @@ function ensure_sh_calibration!(wfs::ShackHartmann, tel::Telescope, src::Abstrac
     pixel_scale_init = sh_pixel_scale_init(tel.params.diameter / wfs.params.n_subap, wfs.state.effective_padding, src)
     pixel_scale = T(wfs.state.binning_pixel_scale) * pixel_scale_init
     rad2arcsec = T(180 * 3600 / π)
-    scale = T(tel.params.diameter) * pixel_scale / (T(2π) * rad2arcsec)
+    scale = T(T(tel.params.diameter) * pixel_scale / (T(2π) * rad2arcsec))
     fill_calibration_ramp!(execution_style(tel.state.opd), tel.state.opd, scale, n)
     peak = sampled_spots_peak!(wfs, tel, src)
     sh_signal_from_spots!(wfs, peak, wfs.params.threshold_cog)
