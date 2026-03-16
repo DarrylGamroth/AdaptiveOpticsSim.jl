@@ -369,7 +369,8 @@ function build_bioedge_masks_host!(masks::AbstractArray{Complex{T},3}, wfs::BioE
     return masks
 end
 
-segment_values(a::T, b::T, n::Int) where {T<:AbstractFloat} = n == 1 ? T[a] : collect(range(a, b; length=n))
+segment_values(a::T, b::T, n::Int) where {T<:AbstractFloat} =
+    n == 1 ? reshape(fill(a, 1), :) : range(a, b; length=n)
 
 function _build_bioedge_masks!(::ScalarCPUStyle, masks::AbstractArray{Complex{T},3}, ::Type{T}) where {T<:AbstractFloat}
     one_c = complex(one(T), zero(T))

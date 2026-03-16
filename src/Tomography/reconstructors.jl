@@ -120,24 +120,20 @@ function _guide_star_grid(
     offset_x::T,
     offset_y::T,
 ) where {T<:AbstractFloat}
-    coords = if sampling == 1
-        T[zero(T)]
-    else
-        collect(range(-one(T), one(T); length=sampling) .* (diameter / 2))
-    end
-    x = repeat(reshape(coords, 1, :), sampling, 1)
-    y = repeat(reshape(coords, :, 1), 1, sampling)
+    coords = sampling == 1 ? range(zero(T), zero(T); length=1) : range(-diameter / 2, diameter / 2; length=sampling)
     c = cos(rotation_angle_rad)
     s = sin(rotation_angle_rad)
-    xvec = vec(x)
-    yvec = vec(y)
-    xr = similar(xvec)
-    yr = similar(yvec)
-    @inbounds for k in eachindex(xvec, yvec)
-        xr[k] = xvec[k] * c - yvec[k] * s - offset_x * diameter
-        yr[k] = yvec[k] * c + xvec[k] * s - offset_y * diameter
+    xr = Matrix{T}(undef, sampling, sampling)
+    yr = Matrix{T}(undef, sampling, sampling)
+    @inbounds for j in 1:sampling
+        y = coords[j]
+        for i in 1:sampling
+            x = coords[i]
+            xr[j, i] = x * c - y * s - offset_x * diameter
+            yr[j, i] = y * c + x * s - offset_y * diameter
+        end
     end
-    return reshape(xr, sampling, sampling), reshape(yr, sampling, sampling)
+    return xr, yr
 end
 
 function _scaled_shifted_coords(

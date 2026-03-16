@@ -28,11 +28,9 @@ function NCPA(tel::Telescope, dm::DeformableMirror, atm::AbstractAtmosphere;
         return NCPA{T, typeof(opd), typeof(basis_grid), typeof(coeffs)}(opd, basis_grid, coeffs)
     end
 
-    f2_params = collect(f2)
-    if length(f2_params) != 4
+    length(f2) == 4 ||
         throw(InvalidConfiguration("f2 must be (amplitude, start_mode, end_mode, cutoff)"))
-    end
-    amplitude, start_mode, end_mode, cutoff = f2_params
+    amplitude, start_mode, end_mode, cutoff = f2
     n_modes = Int(end_mode)
     basis_grid = ncpa_basis(basis, tel, dm; n_modes=n_modes, M2C=M2C)
     rng = MersenneTwister(seed)

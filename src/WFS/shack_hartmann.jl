@@ -694,7 +694,7 @@ function ensure_sh_calibration!(wfs::ShackHartmann, tel::Telescope, src::Abstrac
     pixel_scale = T(wfs.state.binning_pixel_scale) * pixel_scale_init
     rad2arcsec = T(180 * 3600 / π)
     scale = T(tel.params.diameter) * pixel_scale / (T(2π) * rad2arcsec)
-    xvals = collect(range(-T(π), T(π); length=n + 1))[1:n]
+    xvals = range(-T(π); step=T(2π) / n, length=n)
     @inbounds for j in 1:n, i in 1:n
         tel.state.opd[i, j] = (xvals[j] + xvals[i]) * scale
     end

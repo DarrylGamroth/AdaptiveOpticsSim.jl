@@ -34,7 +34,7 @@ function TomographyFitting(dm::DeformableMirror; regularization::Real=sqrt(eps(e
 end
 
 function _extract_actuator_coordinates(valid_actuators::AbstractMatrix{Bool})
-    return collect(findall(valid_actuators))
+    return findall(valid_actuators)
 end
 
 function _map_actuators_to_grid(
@@ -81,8 +81,6 @@ function influence_functions(
 
     n_modes = count(dm.valid_actuators)
     modes = Matrix{T}(undef, Int(resolution)^2, n_modes)
-    yy = collect(T, 0:Int(resolution)-1)
-    xx = collect(T, 0:Int(resolution)-1)
     two_sigma1_sq = T(2) * T(sigma1)^2
     two_sigma2_sq = T(2) * T(sigma2)^2
     norm1 = T(w1) / (T(2π) * T(sigma1)^2)
@@ -90,9 +88,11 @@ function influence_functions(
 
     @inbounds for (mode_idx, (cy, cx)) in pairs(mapped)
         col = 1
-        for y in yy
-            for x in xx
-                r2 = (x - cx)^2 + (y - cy)^2
+        for y in 0:Int(resolution)-1
+            y_t = T(y)
+            for x in 0:Int(resolution)-1
+                x_t = T(x)
+                r2 = (x_t - cx)^2 + (y_t - cy)^2
                 modes[col, mode_idx] = norm1 * exp(-r2 / two_sigma1_sq) +
                     norm2 * exp(-r2 / two_sigma2_sq)
                 col += 1

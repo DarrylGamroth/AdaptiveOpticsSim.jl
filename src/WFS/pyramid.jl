@@ -705,14 +705,13 @@ function build_pyramid_mask_old_host!(mask::AbstractMatrix{Complex{T}}, wfs::Pyr
 end
 
 centered_grid(::Type{T}, n::Int, endpoint::Bool) where {T<:AbstractFloat} =
-    repeat(axis_values(T, n, -T(π), T(π); endpoint=endpoint), 1, 1)
+    axis_values(T, n, -T(π), T(π); endpoint=endpoint)
 
 function axis_values(::Type{T}, n::Int, lo::T, hi::T; endpoint::Bool) where {T<:AbstractFloat}
     if endpoint
-        return reshape(collect(range(lo, hi; length=n)), n, 1)
+        return reshape(range(lo, hi; length=n), n, 1)
     end
-    vals = collect(range(lo, hi; length=n + 1))
-    return reshape(vals[1:n], n, 1)
+    return reshape(range(lo; step=(hi - lo) / n, length=n), n, 1)
 end
 
 function _build_pyramid_mask!(::ScalarCPUStyle, mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, tel::Telescope) where {T<:AbstractFloat}
@@ -902,7 +901,7 @@ function host_modulation_phases(::Type{T}, tel::Telescope, modulation::T, n_pts:
         fill!(phases, complex(one(T), zero(T)))
         return phases
     end
-    tip_vals = collect(range(-T(π), T(π); length=n))
+    tip_vals = range(-T(π), T(π); length=n)
     Tilt = reshape(tip_vals, n, 1)
     Tip = reshape(tip_vals, 1, n)
     pupil = tel.state.pupil
