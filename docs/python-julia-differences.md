@@ -72,7 +72,7 @@ The biggest differences today are:
 
 | Area | Python behavior | Julia behavior | Why it differs | Status |
 |---|---|---|---|---|
-| Detector physics surface | OOPAO detector models integration buffering, sensor type (`CCD/CMOS/EMCCD`), gain, ADC bits, FWC saturation, dark current, background noise/map, and digitalization | `src/Optics/detector.jl` now models sensor type, gain ordering, ADC quantization, FWC saturation, dark current, explicit integration buffering, QE, PSF sampling, binning, photon noise, and readout noise; background maps are still separate work | Julia added the detector-electronics path without changing the low-latency capture surface | Reduced gap |
+| Detector physics surface | OOPAO detector models integration buffering, sensor type (`CCD/CMOS/EMCCD`), gain, ADC bits, FWC saturation, dark current, background noise/map, and digitalization | `src/Optics/detector.jl` now models sensor type, gain ordering, ADC quantization, FWC saturation, dark current, explicit integration buffering, background flux/map handling, QE, PSF sampling, binning, photon noise, and readout noise | Julia added the detector-electronics path without changing the low-latency capture surface | Equivalent except integer output type |
 | Integration buffering | OOPAO accumulates frames until `integrationTime` is reached | Julia supports the same feature explicitly through `capture!(det, psf; sample_time=...)`, with `readout_ready(det)` exposing whether a completed readout is available | Julia keeps buffering explicit instead of coupling it implicitly to telescope relay semantics | Equivalent |
 | Output precision / quantization | OOPAO supports `bits`, `output_precision`, `digitalization` | Julia models detector quantization levels via `bits`/`full_well`, but keeps the returned frame in the detector floating-point backend type instead of casting to an integer storage type | Preserves backend-generic arrays and avoids changing the runtime frame type | Reduced gap |
 | Sensor-specific gain path | OOPAO distinguishes EMCCD vs CCD/CMOS behavior | Julia now uses typed sensor selectors `CCDSensor()` / `CMOSSensor()` / `EMCCDSensor()` to apply gain in the correct stage of the readout path | Same feature, more Julian API surface | Equivalent |
@@ -154,9 +154,8 @@ These are the differences that still matter for parity work.
    closed. Compact traces, bounded replay, and the first nonlinear branch step
    are regression-backed; the long huge-OPD replay still drifts in later
    observables.
-2. Detector modeling in Julia is still narrower than OOPAO. If future parity
-   work depends on saturation, quantization, dark current, or buffered
-   integration, those features still need to be added.
+2. Detector output storage remains backend floating-point even when quantized,
+   rather than casting to an integer output precision the way OOPAO can.
 3. The OOPAO `tools/*` layer and display/GUI ecosystem are not ported.
 
 ## Differences That Are Not Bugs

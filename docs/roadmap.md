@@ -9,7 +9,8 @@
 
 ## AO Feature Checklist
 - [x] P0: Detector modeling (photon/read noise, QE, binning, PSF sampling,
-  gain/sensor staging, dark current, saturation, ADC quantization).
+  gain/sensor staging, dark current, saturation, ADC quantization, background
+  flux/map handling).
 - [x] P0: Multi-source/asterism support and off-axis PSF handling.
 - [x] P1: Pyramid WFS implementation.
 - [x] P1: BioEdge WFS implementation.

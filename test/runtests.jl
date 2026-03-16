@@ -195,6 +195,16 @@ end
     reset_integration!(det_buffered)
     @test readout_ready(det_buffered)
     @test det_buffered.state.integrated_time == 0.0
+
+    det_background_flux = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        background_flux=2.0)
+    frame_background_flux = capture!(det_background_flux, zeros(4, 4); rng=MersenneTwister(2))
+    @test sum(frame_background_flux) > 0
+
+    det_background_map = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        background_map=fill(1.0, 4, 4))
+    frame_background_map = capture!(det_background_map, zeros(4, 4); rng=MersenneTwister(2))
+    @test frame_background_map == fill(-1.0, 4, 4)
 end
 
 @testset "Asterism PSF" begin

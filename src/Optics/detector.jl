@@ -2,6 +2,7 @@ using Random
 
 abstract type NoiseModel end
 abstract type SensorType end
+abstract type BackgroundModel end
 struct NoiseNone <: NoiseModel end
 struct NoisePhoton <: NoiseModel end
 struct NoiseReadout{T<:AbstractFloat} <: NoiseModel
@@ -13,6 +14,13 @@ end
 struct CCDSensor <: SensorType end
 struct CMOSSensor <: SensorType end
 struct EMCCDSensor <: SensorType end
+struct NoBackground <: BackgroundModel end
+struct ScalarBackground{T<:AbstractFloat} <: BackgroundModel
+    level::T
+end
+struct BackgroundFrame{T<:AbstractFloat,A<:AbstractMatrix{T}} <: BackgroundModel
+    map::A
+end
 
 NoiseReadout(sigma::Real) = NoiseReadout{Float64}(float(sigma))
 NoisePhotonReadout(sigma::Real) = NoisePhotonReadout{Float64}(float(sigma))
@@ -38,10 +46,12 @@ mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T}}
     readout_ready::Bool
 end
 
-struct Detector{N<:NoiseModel,P<:DetectorParams,S<:DetectorState} <: AbstractDetector
+struct Detector{N<:NoiseModel,P<:DetectorParams,S<:DetectorState,BF<:BackgroundModel,BM<:BackgroundModel} <: AbstractDetector
     noise::N
     params::P
     state::S
+    background_flux::BF
+    background_map::BM
 end
 
 readout_ready(det::Detector) = det.state.readout_ready
@@ -117,11 +127,21 @@ function validate_noise(noise::NoisePhotonReadout)
     return noise
 end
 
+background_model(::Nothing; T::Type{<:AbstractFloat}, backend) = NoBackground()
+background_model(level::Real; T::Type{<:AbstractFloat}, backend) = ScalarBackground{T}(T(level))
+function background_model(map::AbstractMatrix; T::Type{<:AbstractFloat}, backend)
+    background = backend{T}(undef, size(map)...)
+    copyto!(background, T.(map))
+    return BackgroundFrame{T, typeof(background)}(background)
+end
+
 function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     psf_sampling::Int, binning::Int, gain::Real, dark_current::Real,
     bits::Union{Nothing,Int}, full_well::Union{Nothing,Real}, sensor::SensorType,
-    T::Type{<:AbstractFloat}, backend)
+    background_flux, background_map, T::Type{<:AbstractFloat}, backend)
     full_well_t = full_well === nothing ? nothing : T(full_well)
+    flux_model = background_model(background_flux; T=T, backend=backend)
+    map_model = background_model(background_map; T=T, backend=backend)
     params = DetectorParams{T, typeof(sensor)}(
         T(integration_time),
         T(qe),
@@ -142,31 +162,41 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     fill!(noise_buffer, zero(T))
     fill!(accum_buffer, zero(T))
     state = DetectorState{T, typeof(frame)}(frame, bin_buffer, noise_buffer, accum_buffer, zero(T), true)
-    return Detector{typeof(noise), typeof(params), typeof(state)}(noise, params, state)
+    return Detector{typeof(noise), typeof(params), typeof(state), typeof(flux_model), typeof(map_model)}(
+        noise,
+        params,
+        state,
+        flux_model,
+        map_model,
+    )
 end
 
 function Detector(; integration_time::Real=1.0, qe::Real=1.0,
     psf_sampling::Int=1, binning::Int=1, noise=NoisePhoton(),
     gain::Real=1.0, dark_current::Real=0.0, bits::Union{Nothing,Int}=nothing,
     full_well::Union{Nothing,Real}=nothing, sensor::SensorType=CCDSensor(),
+    background_flux=nothing, background_map=nothing,
     T::Type{<:AbstractFloat}=Float64, backend=Array)
     normalized = normalize_noise(noise)
     return Detector(normalized; integration_time=integration_time, qe=qe,
         psf_sampling=psf_sampling, binning=binning, gain=gain,
         dark_current=dark_current, bits=bits, full_well=full_well,
-        sensor=sensor, T=T, backend=backend)
+        sensor=sensor, background_flux=background_flux, background_map=background_map,
+        T=T, backend=backend)
 end
 
 function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
     psf_sampling::Int=1, binning::Int=1, gain::Real=1.0, dark_current::Real=0.0,
     bits::Union{Nothing,Int}=nothing, full_well::Union{Nothing,Real}=nothing,
-    sensor::SensorType=CCDSensor(), T::Type{<:AbstractFloat}=Float64, backend=Array)
+    sensor::SensorType=CCDSensor(), background_flux=nothing, background_map=nothing,
+    T::Type{<:AbstractFloat}=Float64, backend=Array)
     converted = convert_noise(noise, T)
     validated = validate_noise(converted)
     return _build_detector(validated; integration_time=integration_time, qe=qe,
         psf_sampling=psf_sampling, binning=binning, gain=gain,
         dark_current=dark_current, bits=bits, full_well=full_well,
-        sensor=sensor, T=T, backend=backend)
+        sensor=sensor, background_flux=background_flux, background_map=background_map,
+        T=T, backend=backend)
 end
 
 function fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real) where {T}
@@ -212,24 +242,48 @@ end
 
 function capture_signal!(det::Detector{NoiseNone}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
     fill_frame!(det, psf, exposure_time)
+    apply_background_flux!(det.background_flux, det, rng, exposure_time)
     return nothing
 end
 
 function capture_signal!(det::Detector{NoisePhoton}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
     fill_frame!(det, psf, exposure_time)
     poisson_noise!(rng, det.state.frame)
+    apply_background_flux!(det.background_flux, det, rng, exposure_time)
     return nothing
 end
 
 function capture_signal!(det::Detector{<:NoiseReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
     fill_frame!(det, psf, exposure_time)
+    apply_background_flux!(det.background_flux, det, rng, exposure_time)
     return nothing
 end
 
 function capture_signal!(det::Detector{<:NoisePhotonReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
     fill_frame!(det, psf, exposure_time)
     poisson_noise!(rng, det.state.frame)
+    apply_background_flux!(det.background_flux, det, rng, exposure_time)
     return nothing
+end
+
+apply_background_flux!(::NoBackground, det::Detector, rng::AbstractRNG, exposure_time::Real) = det.state.frame
+
+function apply_background_flux!(background::ScalarBackground, det::Detector, rng::AbstractRNG, exposure_time::Real)
+    fill!(det.state.noise_buffer, background.level * exposure_time)
+    poisson_noise!(rng, det.state.noise_buffer)
+    det.state.frame .+= det.state.noise_buffer
+    return det.state.frame
+end
+
+function apply_background_flux!(background::BackgroundFrame, det::Detector, rng::AbstractRNG, exposure_time::Real)
+    if size(background.map) != size(det.state.frame)
+        throw(DimensionMismatchError("background_flux size must match detector frame size"))
+    end
+    copyto!(det.state.noise_buffer, background.map)
+    det.state.noise_buffer .*= exposure_time
+    poisson_noise!(rng, det.state.noise_buffer)
+    det.state.frame .+= det.state.noise_buffer
+    return det.state.frame
 end
 
 function apply_dark_current!(det::Detector, rng::AbstractRNG, exposure_time::Real)
@@ -297,6 +351,21 @@ function apply_quantization!(det::Detector)
     return det.state.frame
 end
 
+subtract_background_map!(::NoBackground, det::Detector) = det.state.frame
+
+function subtract_background_map!(background::ScalarBackground, det::Detector)
+    det.state.frame .-= background.level
+    return det.state.frame
+end
+
+function subtract_background_map!(background::BackgroundFrame, det::Detector)
+    if size(background.map) != size(det.state.frame)
+        throw(DimensionMismatchError("background_map size must match detector frame size"))
+    end
+    det.state.frame .-= background.map
+    return det.state.frame
+end
+
 function finalize_capture!(det::Detector, rng::AbstractRNG, exposure_time::Real)
     apply_dark_current!(det, rng, exposure_time)
     apply_saturation!(det)
@@ -304,6 +373,7 @@ function finalize_capture!(det::Detector, rng::AbstractRNG, exposure_time::Real)
     apply_readout_noise!(det, rng)
     apply_post_readout_gain!(det.params.sensor, det)
     apply_quantization!(det)
+    subtract_background_map!(det.background_map, det)
     return det.state.frame
 end
 
