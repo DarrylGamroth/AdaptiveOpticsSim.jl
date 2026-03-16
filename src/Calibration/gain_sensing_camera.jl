@@ -288,18 +288,9 @@ function sensitivity!(out::AbstractVector{Complex{T}}, gsc::GainSensingCamera{T}
     ifft2c!(gsc.fftws.ifft_out, gsc.fftws, IR_2)
     basis_product = gsc.basis_product
     basis_product === nothing && throw(InvalidConfiguration("GainSensingCamera basis product is not available"))
-    n_modes = size(basis_product, 3)
-    npix = size(IR_1, 1) * size(IR_1, 2)
-    basis_mat = reshape(basis_product, npix, n_modes)
-    fft_vals = vec(gsc.fftws.fft_out)
-    ifft_vals = vec(gsc.fftws.ifft_out)
-    @inbounds for mode in 1:n_modes
-        acc = zero(Complex{T})
-        for idx in 1:npix
-            acc += fft_vals[idx] * ifft_vals[idx] * basis_mat[idx, mode]
-        end
-        out[mode] = acc
-    end
+    basis_mat = reshape(basis_product, :, size(basis_product, 3))
+    @. gsc.fftws.buffer = gsc.fftws.fft_out * gsc.fftws.ifft_out
+    mul!(out, adjoint(basis_mat), vec(gsc.fftws.buffer))
     return out
 end
 
@@ -315,19 +306,10 @@ end
 function sensitivity(IR_1::AbstractMatrix, IR_2::AbstractMatrix, basis_product::AbstractArray, ws::GSCFFTWorkspace)
     fft2c!(ws.fft_out, ws, IR_1)
     ifft2c!(ws.ifft_out, ws, IR_2)
-    npix = size(IR_1, 1) * size(IR_1, 2)
-    n_modes = size(basis_product, 3)
-    basis_mat = reshape(basis_product, npix, n_modes)
-    out = similar(vec(IR_1), Complex{real(eltype(ws.buffer))}, n_modes)
-    fft_vals = vec(ws.fft_out)
-    ifft_vals = vec(ws.ifft_out)
-    @inbounds for mode in 1:n_modes
-        acc = zero(eltype(out))
-        for idx in 1:npix
-            acc += fft_vals[idx] * ifft_vals[idx] * basis_mat[idx, mode]
-        end
-        out[mode] = acc
-    end
+    basis_mat = reshape(basis_product, :, size(basis_product, 3))
+    out = similar(vec(IR_1), Complex{real(eltype(ws.buffer))}, size(basis_product, 3))
+    @. ws.buffer = ws.fft_out * ws.ifft_out
+    mul!(out, adjoint(basis_mat), vec(ws.buffer))
     return out
 end
 
