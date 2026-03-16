@@ -90,7 +90,7 @@ export phase_variance, phase_covariance, phase_spectrum, covariance_matrix
 export ft_phase_screen, ft_sh_phase_screen, PhaseStatsWorkspace
 export DeformableMirror, DeformableMirrorParams, DeformableMirrorState, build_influence_functions!, apply!
 export Misregistration, apply_misregistration
-export Detector, DetectorParams, DetectorState, capture!
+export Detector, DetectorParams, DetectorState, capture!, readout_ready, reset_integration!
 export SensorType, CCDSensor, CMOSSensor, EMCCDSensor
 export ShackHartmann, ShackHartmannParams, ShackHartmannState, update_valid_mask!, measure!
 export PyramidWFS, PyramidParams, PyramidState

@@ -184,6 +184,17 @@ end
     frame_ccd = copy(capture!(det_ccd, zero_psf; rng=rng_ccd))
     frame_emccd = copy(capture!(det_emccd, zero_psf; rng=rng_emccd))
     @test frame_ccd ≈ 10 .* frame_emccd
+
+    det_buffered = Detector(integration_time=2.0, noise=NoiseNone(), qe=1.0, binning=1)
+    frame_partial = copy(capture!(det_buffered, fill(1.0, 4, 4); rng=MersenneTwister(2), sample_time=1.0))
+    @test !readout_ready(det_buffered)
+    @test sum(frame_partial) == 16.0
+    frame_buffered = copy(capture!(det_buffered, fill(1.0, 4, 4); rng=MersenneTwister(2), sample_time=1.0))
+    @test readout_ready(det_buffered)
+    @test sum(frame_buffered) == 32.0
+    reset_integration!(det_buffered)
+    @test readout_ready(det_buffered)
+    @test det_buffered.state.integrated_time == 0.0
 end
 
 @testset "Asterism PSF" begin

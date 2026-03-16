@@ -33,12 +33,24 @@ mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T}}
     frame::A
     bin_buffer::A
     noise_buffer::A
+    accum_buffer::A
+    integrated_time::T
+    readout_ready::Bool
 end
 
 struct Detector{N<:NoiseModel,P<:DetectorParams,S<:DetectorState} <: AbstractDetector
     noise::N
     params::P
     state::S
+end
+
+readout_ready(det::Detector) = det.state.readout_ready
+
+function reset_integration!(det::Detector)
+    fill!(det.state.accum_buffer, zero(eltype(det.state.accum_buffer)))
+    det.state.integrated_time = zero(det.state.integrated_time)
+    det.state.readout_ready = true
+    return det
 end
 
 normalize_noise(noise::NoiseModel) = noise
@@ -124,10 +136,12 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     frame = backend{T}(undef, 1, 1)
     bin_buffer = backend{T}(undef, 1, 1)
     noise_buffer = backend{T}(undef, 1, 1)
+    accum_buffer = backend{T}(undef, 1, 1)
     fill!(frame, zero(T))
     fill!(bin_buffer, zero(T))
     fill!(noise_buffer, zero(T))
-    state = DetectorState{T, typeof(frame)}(frame, bin_buffer, noise_buffer)
+    fill!(accum_buffer, zero(T))
+    state = DetectorState{T, typeof(frame)}(frame, bin_buffer, noise_buffer, accum_buffer, zero(T), true)
     return Detector{typeof(noise), typeof(params), typeof(state)}(noise, params, state)
 end
 
@@ -155,7 +169,7 @@ function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
         sensor=sensor, T=T, backend=backend)
 end
 
-function fill_frame!(det::Detector, psf::AbstractMatrix{T}) where {T}
+function fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real) where {T}
     n_in, m_in = size(psf)
     sampling = det.params.psf_sampling
     binning = det.params.binning
@@ -188,34 +202,38 @@ function fill_frame!(det::Detector, psf::AbstractMatrix{T}) where {T}
             det.state.frame .= psf
         end
     end
-    @. det.state.frame *= det.params.qe * det.params.integration_time
+    @. det.state.frame *= det.params.qe * exposure_time
     return det.state.frame
 end
 
-function capture_signal!(det::Detector{NoiseNone}, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
-    fill_frame!(det, psf)
+function fill_frame!(det::Detector, psf::AbstractMatrix{T}) where {T}
+    return fill_frame!(det, psf, det.params.integration_time)
+end
+
+function capture_signal!(det::Detector{NoiseNone}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
+    fill_frame!(det, psf, exposure_time)
     return nothing
 end
 
-function capture_signal!(det::Detector{NoisePhoton}, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
-    fill_frame!(det, psf)
+function capture_signal!(det::Detector{NoisePhoton}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
+    fill_frame!(det, psf, exposure_time)
     poisson_noise!(rng, det.state.frame)
     return nothing
 end
 
-function capture_signal!(det::Detector{<:NoiseReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
-    fill_frame!(det, psf)
+function capture_signal!(det::Detector{<:NoiseReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
+    fill_frame!(det, psf, exposure_time)
     return nothing
 end
 
-function capture_signal!(det::Detector{<:NoisePhotonReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
-    fill_frame!(det, psf)
+function capture_signal!(det::Detector{<:NoisePhotonReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
+    fill_frame!(det, psf, exposure_time)
     poisson_noise!(rng, det.state.frame)
     return nothing
 end
 
-function apply_dark_current!(det::Detector, rng::AbstractRNG)
-    dark_signal = det.params.dark_current * det.params.integration_time
+function apply_dark_current!(det::Detector, rng::AbstractRNG, exposure_time::Real)
+    dark_signal = det.params.dark_current * exposure_time
     if dark_signal <= 0
         return det.state.frame
     end
@@ -279,8 +297,8 @@ function apply_quantization!(det::Detector)
     return det.state.frame
 end
 
-function finalize_capture!(det::Detector, rng::AbstractRNG)
-    apply_dark_current!(det, rng)
+function finalize_capture!(det::Detector, rng::AbstractRNG, exposure_time::Real)
+    apply_dark_current!(det, rng, exposure_time)
     apply_saturation!(det)
     apply_pre_readout_gain!(det.params.sensor, det)
     apply_readout_noise!(det, rng)
@@ -290,13 +308,39 @@ function finalize_capture!(det::Detector, rng::AbstractRNG)
 end
 
 function capture!(det::Detector, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
-    capture_signal!(det, psf, rng)
-    finalize_capture!(det, rng)
+    capture_signal!(det, psf, rng, det.params.integration_time)
+    finalize_capture!(det, rng, det.params.integration_time)
     return det.state.frame
 end
 
-function capture!(det::Detector, psf::AbstractMatrix{T}; rng::AbstractRNG=Random.default_rng()) where {T}
-    return capture!(det, psf, rng)
+function capture!(det::Detector, psf::AbstractMatrix{T}; rng::AbstractRNG=Random.default_rng(),
+    sample_time::Union{Nothing,Real}=nothing) where {T}
+    if sample_time === nothing
+        return capture!(det, psf, rng)
+    end
+    dt = eltype(det.state.frame)(sample_time)
+    if dt <= 0
+        throw(InvalidConfiguration("sample_time must be > 0"))
+    end
+    if det.params.integration_time < dt
+        throw(InvalidConfiguration("sample_time must be <= detector integration_time"))
+    end
+    capture_signal!(det, psf, rng, dt)
+    if size(det.state.accum_buffer) != size(det.state.frame)
+        det.state.accum_buffer = similar(det.state.frame, size(det.state.frame)...)
+        fill!(det.state.accum_buffer, zero(eltype(det.state.accum_buffer)))
+    end
+    det.state.accum_buffer .+= det.state.frame
+    det.state.integrated_time += dt
+    det.state.readout_ready = false
+    if det.state.integrated_time + eps(dt) >= det.params.integration_time
+        det.state.frame .= det.state.accum_buffer
+        finalize_capture!(det, rng, det.state.integrated_time)
+        fill!(det.state.accum_buffer, zero(eltype(det.state.accum_buffer)))
+        det.state.integrated_time = zero(det.state.integrated_time)
+        det.state.readout_ready = true
+    end
+    return det.state.frame
 end
 
 function ensure_buffers!(det::Detector, n_mid::Int, m_mid::Int, n_out::Int, m_out::Int)
@@ -308,6 +352,12 @@ function ensure_buffers!(det::Detector, n_mid::Int, m_mid::Int, n_out::Int, m_ou
     end
     if size(det.state.noise_buffer) != (n_out, m_out)
         det.state.noise_buffer = similar(det.state.noise_buffer, n_out, m_out)
+    end
+    if size(det.state.accum_buffer) != (n_out, m_out)
+        det.state.accum_buffer = similar(det.state.accum_buffer, n_out, m_out)
+        fill!(det.state.accum_buffer, zero(eltype(det.state.accum_buffer)))
+        det.state.integrated_time = zero(det.state.integrated_time)
+        det.state.readout_ready = true
     end
     return det
 end
