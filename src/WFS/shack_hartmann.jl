@@ -689,12 +689,14 @@ end
 
 function subtract_reference_and_scale!(wfs::ShackHartmann)
     inv_units = inv(wfs.state.slopes_units)
-    @. wfs.state.slopes = (wfs.state.slopes - wfs.state.reference_signal_2d) * inv_units
+    ref = vec(wfs.state.reference_signal_2d)
+    @. wfs.state.slopes = (wfs.state.slopes - ref) * inv_units
     return wfs.state.slopes
 end
 
 function subtract_reference!(wfs::ShackHartmann)
-    @. wfs.state.slopes = wfs.state.slopes - wfs.state.reference_signal_2d
+    ref = vec(wfs.state.reference_signal_2d)
+    @. wfs.state.slopes = wfs.state.slopes - ref
     return wfs.state.slopes
 end
 
