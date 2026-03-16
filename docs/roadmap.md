@@ -83,8 +83,9 @@
 - LiFT analytical mode uses FFT-based Jacobians with object convolution and readout-weighted
   noise; binned detector frames are supported by treating `img_resolution` in detector
   pixels, matching the practical OOPAO surface (`src/WFS/lift.jl`).
-- GainSensingCamera uses threaded FFT batching but still ignores detector metadata
-  coupling (`src/Calibration/gain_sensing_camera.jl`).
+- GainSensingCamera uses threaded FFT batching and can attach detector metadata
+  snapshots without coupling detector physics into the optical-gain math
+  (`src/Calibration/gain_sensing_camera.jl`).
 - NCPA KL basis defaults to DM-mode covariance (`MᵀM`); HHt/PSD option is available but not default
   (`src/Calibration/modal_basis.jl`, `src/Optics/ncpa.jl`).
 - SPRINT/mis-registration supports cached sensitivity matrices (Serialization) and

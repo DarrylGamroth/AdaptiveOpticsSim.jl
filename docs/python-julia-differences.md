@@ -96,7 +96,7 @@ The biggest differences today are:
 |---|---|---|---|---|
 | Calibration workflow | OOPAO calibrates from focal-plane frames and prints progress | Julia mirrors the same optical-gain math but uses cached FFT workspaces and logging | Same algorithm, more reusable implementation | Intentional |
 | Parallel FFT batching | OOPAO splits basis products into chunks using `n_jobs` loops | Julia uses thread-aware FFT workspaces in `split_basis_product` | Better fit for Julia threading and cached plan reuse | Intentional |
-| Detector metadata | OOPAO GSC can carry detector-related properties through the focal-plane camera object | Julia `GainSensingCamera` still ignores detector metadata coupling | Core optical-gain calculation was prioritized first | Gap |
+| Detector metadata | OOPAO GSC can carry detector-related properties through the focal-plane camera object | Julia `GainSensingCamera` can attach an explicit detector metadata snapshot without coupling detector physics into the optical-gain math | Keeps the optical-gain path clean while preserving the useful display/metadata surface | Equivalent |
 | Long-horizon atmosphere replay | OOPAO tutorial `AO_closed_loop_Pyramid_WFS_GSC.py` exists as a full workflow | Julia matches compact traces, bounded replay, and the first nonlinear branch step, but the long huge-OPD replay is still diagnostic-only | Remaining mismatch is workflow-level nonlinear drift, not basic GSC math | Gap |
 
 ## LiFT Differences
@@ -157,8 +157,7 @@ These are the differences that still matter for parity work.
 2. Detector modeling in Julia is still narrower than OOPAO. If future parity
    work depends on saturation, quantization, dark current, or buffered
    integration, those features still need to be added.
-3. GainSensingCamera still ignores detector metadata coupling in Julia.
-4. The OOPAO `tools/*` layer and display/GUI ecosystem are not ported.
+3. The OOPAO `tools/*` layer and display/GUI ecosystem are not ported.
 
 ## Differences That Are Not Bugs
 

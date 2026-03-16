@@ -1,5 +1,14 @@
 using Logging
 
+struct GSCDetectorMetadata{T<:AbstractFloat}
+    integration_time::T
+    qe::T
+    psf_sampling::Int
+    binning::Int
+    noise::Symbol
+    readout_sigma::Union{Nothing,T}
+end
+
 mutable struct GSCFFTWorkspace{T<:AbstractFloat,
     C<:AbstractMatrix{Complex{T}},
     Pf,
@@ -63,10 +72,11 @@ mutable struct GainSensingCamera{T<:AbstractFloat,
     sensi_buffer::SV
     og::OG
     fftws::W
+    detector_metadata::Union{Nothing,GSCDetectorMetadata{T}}
 end
 
 function GainSensingCamera(mask::AbstractMatrix, basis::AbstractArray;
-    n_jobs::Int=10, T::Type{<:AbstractFloat}=Float64)
+    n_jobs::Int=10, T::Type{<:AbstractFloat}=Float64, detector::Union{Nothing,Detector}=nothing)
     mask_c = Complex{T}.(mask)
     basis_t = T.(basis)
     if size(basis_t, 3) == 1 && ndims(basis_t) == 2
@@ -84,6 +94,7 @@ function GainSensingCamera(mask::AbstractMatrix, basis::AbstractArray;
     bp_probe = similar(fftws.buffer, Complex{T}, size(mask_c, 1), size(mask_c, 2), 1)
     ir_probe = similar(mask_c, T, size(mask_c, 1), size(mask_c, 2))
     sensi_probe = similar(og, Complex{T})
+    metadata = detector === nothing ? nothing : GSCDetectorMetadata(detector; T=T)
     gsc = GainSensingCamera{T, typeof(mask_c), typeof(basis_t), typeof(bp_probe), typeof(ir_probe), typeof(sensi_probe), typeof(og), typeof(fftws)}(
         mask_c,
         mask_fft,
@@ -98,11 +109,65 @@ function GainSensingCamera(mask::AbstractMatrix, basis::AbstractArray;
         similar(sensi_probe),
         og,
         fftws,
+        metadata,
     )
     if n_jobs < 1
         @warn "n_jobs must be >= 1; using 1 instead."
     end
     return gsc
+end
+
+noise_symbol(::NoiseNone) = :none
+noise_symbol(::NoisePhoton) = :photon
+noise_symbol(::NoiseReadout) = :readout
+noise_symbol(::NoisePhotonReadout) = :photon_readout
+
+readout_sigma(::NoiseNone, ::Type{T}) where {T<:AbstractFloat} = nothing
+readout_sigma(::NoisePhoton, ::Type{T}) where {T<:AbstractFloat} = nothing
+readout_sigma(noise::NoiseReadout, ::Type{T}) where {T<:AbstractFloat} = T(noise.sigma)
+readout_sigma(noise::NoisePhotonReadout, ::Type{T}) where {T<:AbstractFloat} = T(noise.sigma)
+
+function GSCDetectorMetadata(det::Detector; T::Type{<:AbstractFloat}=eltype(det.state.frame))
+    return GSCDetectorMetadata{T}(
+        T(det.params.integration_time),
+        T(det.params.qe),
+        det.params.psf_sampling,
+        det.params.binning,
+        noise_symbol(det.noise),
+        readout_sigma(det.noise, T),
+    )
+end
+
+detector_metadata(gsc::GainSensingCamera) = gsc.detector_metadata
+
+function attach_detector!(gsc::GainSensingCamera{T}, det::Detector) where {T<:AbstractFloat}
+    gsc.detector_metadata = GSCDetectorMetadata(det; T=T)
+    return gsc
+end
+
+function detach_detector!(gsc::GainSensingCamera)
+    gsc.detector_metadata = nothing
+    return gsc
+end
+
+function Base.show(io::IO, ::MIME"text/plain", gsc::GainSensingCamera)
+    print(io, "GainSensingCamera(")
+    print(io, "calibrated=", gsc.calibration_ready)
+    print(io, ", n_modes=", gsc.n_modes)
+    metadata = gsc.detector_metadata
+    if metadata !== nothing
+        print(io, ", detector=(")
+        print(io, "integration_time=", metadata.integration_time)
+        print(io, ", qe=", metadata.qe)
+        print(io, ", psf_sampling=", metadata.psf_sampling)
+        print(io, ", binning=", metadata.binning)
+        print(io, ", noise=", metadata.noise)
+        if metadata.readout_sigma !== nothing
+            print(io, ", readout_sigma=", metadata.readout_sigma)
+        end
+        print(io, ")")
+    end
+    print(io, ")")
 end
 
 function calibrate!(gsc::GainSensingCamera, frame::AbstractMatrix; n_jobs::Int=10)

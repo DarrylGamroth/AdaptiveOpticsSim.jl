@@ -108,7 +108,8 @@ export AOCalibration, ao_calibration
 export fitting_error, fitting_error_dm
 export fast_atmosphere
 export AOSimulation, initialize_ao_pyramid, initialize_ao_shwfs
-export GainSensingCamera, calibrate!, reset_calibration!, compute_optical_gains!
+export GainSensingCamera, GSCDetectorMetadata, detector_metadata, attach_detector!, detach_detector!
+export calibrate!, reset_calibration!, compute_optical_gains!
 export MetaSensitivity, compute_meta_sensitivity_matrix, estimate_misregistration, SPRINT, estimate!
 export ModalReconstructor, reconstruct!, reconstruct
 export AbstractController, DiscreteIntegratorController, update!

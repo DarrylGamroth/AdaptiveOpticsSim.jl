@@ -378,6 +378,24 @@ end
     calibrate!(gsc, frame)
     og = compute_optical_gains!(gsc, frame)
     @test length(og) == 3
+    @test detector_metadata(gsc) === nothing
+
+    det = Detector(noise=NoiseReadout(1e-3), integration_time=2.0, qe=0.8, psf_sampling=2, binning=4)
+    gsc_with_det = GainSensingCamera(mask, basis; detector=det)
+    metadata = detector_metadata(gsc_with_det)
+    @test metadata isa GSCDetectorMetadata
+    @test metadata.integration_time == 2.0
+    @test metadata.qe == 0.8
+    @test metadata.psf_sampling == 2
+    @test metadata.binning == 4
+    @test metadata.noise == :readout
+    @test metadata.readout_sigma == 1e-3
+    @test occursin("psf_sampling=2", sprint(show, MIME"text/plain"(), gsc_with_det))
+
+    detach_detector!(gsc_with_det)
+    @test detector_metadata(gsc_with_det) === nothing
+    attach_detector!(gsc_with_det, det)
+    @test detector_metadata(gsc_with_det) isa GSCDetectorMetadata
 end
 
 @testset "LiFT" begin
