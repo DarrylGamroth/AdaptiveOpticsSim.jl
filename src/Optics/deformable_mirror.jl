@@ -1,5 +1,16 @@
 using LinearAlgebra
 
+@kernel function dm_mode_kernel!(mode, pupil, x_m, y_m, cx, cy, scale, sigma2, n::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= n
+        x = (i - cx) / scale
+        y = (j - cy) / scale
+        r2 = (x - x_m)^2 + (y - y_m)^2
+        val = exp(-r2 / (2 * sigma2))
+        @inbounds mode[(j - 1) * n + i] = ifelse(pupil[i, j], val, zero(eltype(mode)))
+    end
+end
+
 abstract type DMApplyMode end
 struct DMAdditive <: DMApplyMode end
 struct DMReplace <: DMApplyMode end
@@ -39,6 +50,10 @@ function DeformableMirror(tel::Telescope; n_act::Int, influence_width::Real=0.2,
 end
 
 function build_influence_functions!(dm::DeformableMirror, tel::Telescope)
+    return build_influence_functions!(execution_style(dm.state.modes), dm, tel)
+end
+
+function build_influence_functions!(::ScalarCPUStyle, dm::DeformableMirror, tel::Telescope)
     Base.require_one_based_indexing(tel.state.pupil, dm.state.modes)
     n = tel.params.resolution
     n_act = dm.params.n_act
@@ -61,6 +76,30 @@ function build_influence_functions!(dm::DeformableMirror, tel::Telescope)
         end
         idx += 1
     end
+    return dm
+end
+
+function build_influence_functions!(style::AcceleratorStyle, dm::DeformableMirror, tel::Telescope)
+    Base.require_one_based_indexing(tel.state.pupil, dm.state.modes)
+    n = tel.params.resolution
+    n_act = dm.params.n_act
+    T = eltype(dm.state.modes)
+    sigma2 = T(dm.params.influence_width)^2
+    xs = range(T(-1), T(1); length=n_act)
+    ys = range(T(-1), T(1); length=n_act)
+
+    cx = T((n + 1) / 2)
+    cy = T((n + 1) / 2)
+    scale = T(n / 2)
+
+    idx = 1
+    for x0 in xs, y0 in ys
+        x_m, y_m = apply_misregistration(dm.params.misregistration, x0, y0)
+        launch_kernel!(style, dm_mode_kernel!, @view(dm.state.modes[:, idx]), tel.state.pupil,
+            T(x_m), T(y_m), cx, cy, scale, sigma2, n; ndrange=(n, n))
+        idx += 1
+    end
+    synchronize_backend!(style)
     return dm
 end
 
