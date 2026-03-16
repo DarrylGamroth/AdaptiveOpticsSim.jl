@@ -397,6 +397,10 @@ function resize_pyramid_slope_buffers!(wfs::PyramidWFS)
 end
 
 function select_pyramid_valid_i4q!(wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
+    return select_pyramid_valid_i4q!(execution_style(wfs.state.valid_i4q), wfs, tel, src)
+end
+
+function select_pyramid_valid_i4q!(::ScalarCPUStyle, wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
     n_pixels = cld(wfs.params.n_subap, wfs.params.binning)
     if size(wfs.state.valid_i4q) != (n_pixels, n_pixels)
         wfs.state.valid_i4q = similar(wfs.state.valid_i4q, n_pixels, n_pixels)
@@ -441,6 +445,56 @@ function select_pyramid_valid_i4q!(wfs::PyramidWFS, tel::Telescope, src::Abstrac
         q4 = frame[center + n_extra + i, center - n_extra - n_pixels + j]
         wfs.state.valid_i4q[i, j] = (q1 + q2 + q3 + q4) >= cutoff
     end
+    update_pyramid_valid_signal!(wfs)
+    resize_pyramid_slope_buffers!(wfs)
+    return wfs
+end
+
+function select_pyramid_valid_i4q!(::AcceleratorStyle, wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
+    n_pixels = cld(wfs.params.n_subap, wfs.params.binning)
+    if size(wfs.state.valid_i4q) != (n_pixels, n_pixels)
+        wfs.state.valid_i4q = similar(wfs.state.valid_i4q, n_pixels, n_pixels)
+    end
+    if iszero(wfs.params.light_ratio)
+        fill!(wfs.state.valid_i4q, true)
+        update_pyramid_valid_signal!(wfs)
+        resize_pyramid_slope_buffers!(wfs)
+        return wfs
+    end
+
+    copyto!(wfs.state.modulation_phases, host_modulation_phases(
+        eltype(wfs.state.slopes),
+        tel,
+        wfs.params.calib_modulation,
+        wfs.params.modulation_points,
+        wfs.params.delta_theta,
+        wfs.params.user_modulation_path,
+    ))
+    pyramid_intensity!(wfs.state.temp, wfs, tel, src)
+    frame = Array(sample_pyramid_intensity!(wfs, tel, wfs.state.temp))
+    build_modulation_phases!(wfs, tel)
+
+    n_extra = round(Int, (something(wfs.params.n_pix_separation, 0) / 2) / wfs.params.binning)
+    center = round(Int, wfs.state.nominal_detector_resolution / wfs.params.binning / 2)
+    host_valid_i4q = Matrix{Bool}(undef, n_pixels, n_pixels)
+    max_i4q = zero(eltype(frame))
+    @inbounds for j in 1:n_pixels, i in 1:n_pixels
+        q1 = frame[center - n_extra - n_pixels + i, center - n_extra - n_pixels + j]
+        q2 = frame[center - n_extra - n_pixels + i, center + n_extra + j]
+        q3 = frame[center + n_extra + i, center + n_extra + j]
+        q4 = frame[center + n_extra + i, center - n_extra - n_pixels + j]
+        i4q = q1 + q2 + q3 + q4
+        max_i4q = max(max_i4q, i4q)
+    end
+    cutoff = wfs.params.light_ratio * max_i4q
+    @inbounds for j in 1:n_pixels, i in 1:n_pixels
+        q1 = frame[center - n_extra - n_pixels + i, center - n_extra - n_pixels + j]
+        q2 = frame[center - n_extra - n_pixels + i, center + n_extra + j]
+        q3 = frame[center + n_extra + i, center + n_extra + j]
+        q4 = frame[center + n_extra + i, center - n_extra - n_pixels + j]
+        host_valid_i4q[i, j] = (q1 + q2 + q3 + q4) >= cutoff
+    end
+    copyto!(wfs.state.valid_i4q, host_valid_i4q)
     update_pyramid_valid_signal!(wfs)
     resize_pyramid_slope_buffers!(wfs)
     return wfs
@@ -965,6 +1019,11 @@ end
 
 function pyramid_signal!(wfs::PyramidWFS, tel::Telescope, frame::AbstractMatrix{T},
     src::Union{Nothing,AbstractSource}) where {T<:AbstractFloat}
+    return pyramid_signal!(execution_style(frame), wfs, tel, frame, src)
+end
+
+function pyramid_signal!(::ScalarCPUStyle, wfs::PyramidWFS, tel::Telescope, frame::AbstractMatrix{T},
+    src::Union{Nothing,AbstractSource}) where {T<:AbstractFloat}
     n_extra = round(Int, (something(wfs.params.n_pix_separation, 0) / 2) / wfs.params.binning)
     center = round(Int, wfs.state.nominal_detector_resolution / wfs.params.binning / 2)
     n_pixels = cld(wfs.params.n_subap, wfs.params.binning)
@@ -996,6 +1055,49 @@ function pyramid_signal!(wfs::PyramidWFS, tel::Telescope, frame::AbstractMatrix{
             idx += 1
         end
     end
+    return wfs.state.slopes
+end
+
+function pyramid_signal!(::AcceleratorStyle, wfs::PyramidWFS, tel::Telescope, frame::AbstractMatrix{T},
+    src::Union{Nothing,AbstractSource}) where {T<:AbstractFloat}
+    host_frame = Array(frame)
+    host_valid_i4q = Array(wfs.state.valid_i4q)
+    host_reference = Array(wfs.state.reference_signal_2d)
+    host_signal = Matrix{T}(undef, size(host_reference)...)
+    count = div(length(wfs.state.slopes), 2)
+    host_slopes = Vector{T}(undef, 2 * count)
+    n_extra = round(Int, (something(wfs.params.n_pix_separation, 0) / 2) / wfs.params.binning)
+    center = round(Int, wfs.state.nominal_detector_resolution / wfs.params.binning / 2)
+    n_pixels = cld(wfs.params.n_subap, wfs.params.binning)
+    norma = zero(T)
+    @inbounds for j in 1:n_pixels, i in 1:n_pixels
+        q1 = host_frame[center - n_extra - n_pixels + i, center - n_extra - n_pixels + j]
+        q2 = host_frame[center - n_extra - n_pixels + i, center + n_extra + j]
+        q3 = host_frame[center + n_extra + i, center + n_extra + j]
+        q4 = host_frame[center + n_extra + i, center - n_extra - n_pixels + j]
+        if host_valid_i4q[i, j]
+            norma += q1 + q2 + q3 + q4
+        end
+    end
+    norma = pyramid_normalization(wfs.params.normalization, wfs, tel, src, count, norma)
+    idx = 1
+    @inbounds for i in 1:n_pixels, j in 1:n_pixels
+        q1 = host_frame[center - n_extra - n_pixels + i, center - n_extra - n_pixels + j]
+        q2 = host_frame[center - n_extra - n_pixels + i, center + n_extra + j]
+        q3 = host_frame[center + n_extra + i, center + n_extra + j]
+        q4 = host_frame[center + n_extra + i, center - n_extra - n_pixels + j]
+        sx = (q1 - q2 + q4 - q3) / norma
+        sy = (q1 - q4 + q2 - q3) / norma
+        host_signal[i, j] = sx - host_reference[i, j]
+        host_signal[i + n_pixels, j] = sy - host_reference[i + n_pixels, j]
+        if host_valid_i4q[i, j]
+            host_slopes[idx] = host_signal[i, j]
+            host_slopes[idx + count] = host_signal[i + n_pixels, j]
+            idx += 1
+        end
+    end
+    copyto!(wfs.state.signal_2d, host_signal)
+    copyto!(wfs.state.slopes, host_slopes)
     return wfs.state.slopes
 end
 
