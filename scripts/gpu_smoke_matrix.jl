@@ -28,7 +28,8 @@ function main()
     tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
         central_obstruction=0.0f0, T=T, backend=CuArray)
     src = Source(band=:I, magnitude=0.0)
-    lgs = LGSSource(; band=:Na, magnitude=0.0, altitude=90_000.0, launch_coordinates=(0.0, 0.0))
+    lgs = LGSSource(; magnitude=0.0, wavelength=589e-9, altitude=90_000.0,
+        laser_coordinates=(0.0, 0.0), T=T)
 
     record!(failures, "psf_source") do
         psf = compute_psf!(tel, src; zero_padding=2)
