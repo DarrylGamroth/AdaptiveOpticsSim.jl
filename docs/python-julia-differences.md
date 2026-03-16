@@ -106,7 +106,7 @@ The biggest differences today are:
 | Mode selection | OOPAO uses `numerical` boolean and string-like weighting control in `Reconstruct` | Julia uses `LiFTAnalytic` / `LiFTNumerical` types and weighting-mode dispatch | More idiomatic Julia and easier specialization | Intentional |
 | Object convolution | OOPAO keeps `self.object` and convolves if present | Julia uses `object_kernel` in params and a typed `maybe_object_convolve!` path | Same feature, cleaner state model | Intentional |
 | Interaction matrix | OOPAO and Julia both support analytic and numerical Jacobians | Julia regression-backs the interaction matrix path against OOPAO | Equivalent in validated cases | Equivalent |
-| Iterative reconstruction weighting | OOPAO supports detector-driven weighting and iterative/model/static choices | Julia supports these weighting modes, but detector binning is not explicitly modeled in the LiFT weighting path | Binning was deferred because the initial parity target was the Jacobian/operator path | Gap |
+| Iterative reconstruction weighting | OOPAO supports detector-driven weighting and iterative/model/static choices | Julia supports the same weighting modes and accepts detector-pixel inputs directly for binned data when `img_resolution` is specified in detector pixels | Both implementations treat LiFT image size in detector-pixel terms rather than modeling detector binning as a separate internal weighting stage | Equivalent |
 | Solve path | OOPAO uses vectorized NumPy/CuPy reconstruction logic | Julia uses preallocated buffers and mutating linear algebra | Same mathematical target, different implementation | Intentional |
 
 ## Calibration / Reconstruction Differences
@@ -158,8 +158,7 @@ These are the differences that still matter for parity work.
    work depends on saturation, quantization, dark current, or buffered
    integration, those features still need to be added.
 3. GainSensingCamera still ignores detector metadata coupling in Julia.
-4. LiFT still does not model detector binning explicitly in the weighting path.
-5. The OOPAO `tools/*` layer and display/GUI ecosystem are not ported.
+4. The OOPAO `tools/*` layer and display/GUI ecosystem are not ported.
 
 ## Differences That Are Not Bugs
 

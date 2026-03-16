@@ -416,6 +416,13 @@ end
     @test length(coeffs_damped) == 2
     @test all(isfinite, coeffs_damped)
     @test diagnostics(lift_damped).regularization >= 0
+    det_binned = Detector(noise=NoiseNone(), psf_sampling=1, binning=2)
+    frame_binned = capture!(det_binned, psf; rng=MersenneTwister(3))
+    lift_binned = LiFT(tel, src, basis, det_binned; diversity_opd=diversity, iterations=2,
+        img_resolution=size(frame_binned, 1), numerical=true)
+    coeffs_binned = reconstruct(lift_binned, frame_binned, [1, 2])
+    @test length(coeffs_binned) == 2
+    @test all(isfinite, coeffs_binned)
     det_readout = Detector(noise=NoiseReadout(1e-3), psf_sampling=1)
     lift_readout = LiFT(tel, src, basis, det_readout; diversity_opd=diversity, iterations=2,
         img_resolution=8, numerical=true)
