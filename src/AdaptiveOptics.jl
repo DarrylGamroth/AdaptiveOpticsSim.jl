@@ -91,6 +91,7 @@ export ft_phase_screen, ft_sh_phase_screen, PhaseStatsWorkspace
 export DeformableMirror, DeformableMirrorParams, DeformableMirrorState, build_influence_functions!, apply!
 export Misregistration, apply_misregistration
 export Detector, DetectorParams, DetectorState, capture!
+export SensorType, CCDSensor, CMOSSensor, EMCCDSensor
 export ShackHartmann, ShackHartmannParams, ShackHartmannState, update_valid_mask!, measure!
 export PyramidWFS, PyramidParams, PyramidState
 export pyramid_modulation_frame!

@@ -160,6 +160,30 @@ end
     det_tuple = Detector(integration_time=1.0, noise=(NoisePhoton(), NoiseReadout(0.5)),
         qe=1.0, binning=1)
     @test det_tuple.noise isa NoisePhotonReadout
+
+    det_sat = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1, full_well=5.0)
+    frame_sat = capture!(det_sat, fill(10.0, 4, 4); rng=MersenneTwister(2))
+    @test maximum(frame_sat) == 5.0
+
+    det_adc = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1, bits=8, full_well=10.0)
+    frame_adc = capture!(det_adc, fill(10.0, 4, 4); rng=MersenneTwister(2))
+    @test maximum(frame_adc) == 255.0
+    @test minimum(frame_adc) >= 0.0
+
+    det_dark = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1, dark_current=100.0)
+    frame_dark = capture!(det_dark, zeros(4, 4); rng=MersenneTwister(2))
+    @test sum(frame_dark) > 0
+
+    zero_psf = zeros(4, 4)
+    rng_ccd = MersenneTwister(7)
+    rng_emccd = MersenneTwister(7)
+    det_ccd = Detector(integration_time=1.0, noise=NoiseReadout(1.0), qe=1.0, binning=1,
+        gain=10.0, sensor=CCDSensor())
+    det_emccd = Detector(integration_time=1.0, noise=NoiseReadout(1.0), qe=1.0, binning=1,
+        gain=10.0, sensor=EMCCDSensor())
+    frame_ccd = copy(capture!(det_ccd, zero_psf; rng=rng_ccd))
+    frame_emccd = copy(capture!(det_emccd, zero_psf; rng=rng_emccd))
+    @test frame_ccd ≈ 10 .* frame_emccd
 end
 
 @testset "Asterism PSF" begin

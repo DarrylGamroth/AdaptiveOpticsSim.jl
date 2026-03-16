@@ -1,6 +1,7 @@
 using Random
 
 abstract type NoiseModel end
+abstract type SensorType end
 struct NoiseNone <: NoiseModel end
 struct NoisePhoton <: NoiseModel end
 struct NoiseReadout{T<:AbstractFloat} <: NoiseModel
@@ -9,15 +10,23 @@ end
 struct NoisePhotonReadout{T<:AbstractFloat} <: NoiseModel
     sigma::T
 end
+struct CCDSensor <: SensorType end
+struct CMOSSensor <: SensorType end
+struct EMCCDSensor <: SensorType end
 
 NoiseReadout(sigma::Real) = NoiseReadout{Float64}(float(sigma))
 NoisePhotonReadout(sigma::Real) = NoisePhotonReadout{Float64}(float(sigma))
 
-struct DetectorParams{T<:AbstractFloat}
+struct DetectorParams{T<:AbstractFloat,S<:SensorType}
     integration_time::T
     qe::T
     psf_sampling::Int
     binning::Int
+    gain::T
+    dark_current::T
+    bits::Union{Nothing,Int}
+    full_well::Union{Nothing,T}
+    sensor::S
 end
 
 mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T}}
@@ -97,8 +106,21 @@ function validate_noise(noise::NoisePhotonReadout)
 end
 
 function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
-    psf_sampling::Int, binning::Int, T::Type{<:AbstractFloat}, backend)
-    params = DetectorParams{T}(T(integration_time), T(qe), psf_sampling, binning)
+    psf_sampling::Int, binning::Int, gain::Real, dark_current::Real,
+    bits::Union{Nothing,Int}, full_well::Union{Nothing,Real}, sensor::SensorType,
+    T::Type{<:AbstractFloat}, backend)
+    full_well_t = full_well === nothing ? nothing : T(full_well)
+    params = DetectorParams{T, typeof(sensor)}(
+        T(integration_time),
+        T(qe),
+        psf_sampling,
+        binning,
+        T(gain),
+        T(dark_current),
+        bits,
+        full_well_t,
+        sensor,
+    )
     frame = backend{T}(undef, 1, 1)
     bin_buffer = backend{T}(undef, 1, 1)
     noise_buffer = backend{T}(undef, 1, 1)
@@ -111,18 +133,26 @@ end
 
 function Detector(; integration_time::Real=1.0, qe::Real=1.0,
     psf_sampling::Int=1, binning::Int=1, noise=NoisePhoton(),
+    gain::Real=1.0, dark_current::Real=0.0, bits::Union{Nothing,Int}=nothing,
+    full_well::Union{Nothing,Real}=nothing, sensor::SensorType=CCDSensor(),
     T::Type{<:AbstractFloat}=Float64, backend=Array)
     normalized = normalize_noise(noise)
     return Detector(normalized; integration_time=integration_time, qe=qe,
-        psf_sampling=psf_sampling, binning=binning, T=T, backend=backend)
+        psf_sampling=psf_sampling, binning=binning, gain=gain,
+        dark_current=dark_current, bits=bits, full_well=full_well,
+        sensor=sensor, T=T, backend=backend)
 end
 
 function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
-    psf_sampling::Int=1, binning::Int=1, T::Type{<:AbstractFloat}=Float64, backend=Array)
+    psf_sampling::Int=1, binning::Int=1, gain::Real=1.0, dark_current::Real=0.0,
+    bits::Union{Nothing,Int}=nothing, full_well::Union{Nothing,Real}=nothing,
+    sensor::SensorType=CCDSensor(), T::Type{<:AbstractFloat}=Float64, backend=Array)
     converted = convert_noise(noise, T)
     validated = validate_noise(converted)
     return _build_detector(validated; integration_time=integration_time, qe=qe,
-        psf_sampling=psf_sampling, binning=binning, T=T, backend=backend)
+        psf_sampling=psf_sampling, binning=binning, gain=gain,
+        dark_current=dark_current, bits=bits, full_well=full_well,
+        sensor=sensor, T=T, backend=backend)
 end
 
 function fill_frame!(det::Detector, psf::AbstractMatrix{T}) where {T}
@@ -162,29 +192,106 @@ function fill_frame!(det::Detector, psf::AbstractMatrix{T}) where {T}
     return det.state.frame
 end
 
-function capture!(det::Detector{NoiseNone}, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
+function capture_signal!(det::Detector{NoiseNone}, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
     fill_frame!(det, psf)
-    return det.state.frame
+    return nothing
 end
 
-function capture!(det::Detector{NoisePhoton}, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
+function capture_signal!(det::Detector{NoisePhoton}, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
     fill_frame!(det, psf)
     poisson_noise!(rng, det.state.frame)
+    return nothing
+end
+
+function capture_signal!(det::Detector{<:NoiseReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
+    fill_frame!(det, psf)
+    return nothing
+end
+
+function capture_signal!(det::Detector{<:NoisePhotonReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
+    fill_frame!(det, psf)
+    poisson_noise!(rng, det.state.frame)
+    return nothing
+end
+
+function apply_dark_current!(det::Detector, rng::AbstractRNG)
+    dark_signal = det.params.dark_current * det.params.integration_time
+    if dark_signal <= 0
+        return det.state.frame
+    end
+    fill!(det.state.noise_buffer, dark_signal)
+    poisson_noise!(rng, det.state.noise_buffer)
+    det.state.frame .+= det.state.noise_buffer
     return det.state.frame
 end
 
-function capture!(det::Detector{NoiseReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
-    fill_frame!(det, psf)
+function apply_saturation!(det::Detector)
+    full_well = det.params.full_well
+    full_well === nothing && return det.state.frame
+    clamp!(det.state.frame, zero(eltype(det.state.frame)), full_well)
+    return det.state.frame
+end
+
+apply_pre_readout_gain!(::CCDSensor, det::Detector) = det.state.frame
+apply_pre_readout_gain!(::CMOSSensor, det::Detector) = det.state.frame
+function apply_pre_readout_gain!(::EMCCDSensor, det::Detector)
+    det.state.frame .*= det.params.gain
+    return det.state.frame
+end
+
+apply_readout_noise!(det::Detector{NoiseNone}, rng::AbstractRNG) = det.state.frame
+apply_readout_noise!(det::Detector{NoisePhoton}, rng::AbstractRNG) = det.state.frame
+function apply_readout_noise!(det::Detector{<:NoiseReadout}, rng::AbstractRNG)
+    randn_backend!(rng, det.state.noise_buffer)
+    det.state.frame .+= det.noise.sigma .* det.state.noise_buffer
+    return det.state.frame
+end
+function apply_readout_noise!(det::Detector{<:NoisePhotonReadout}, rng::AbstractRNG)
     randn_backend!(rng, det.state.noise_buffer)
     det.state.frame .+= det.noise.sigma .* det.state.noise_buffer
     return det.state.frame
 end
 
-function capture!(det::Detector{NoisePhotonReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
-    fill_frame!(det, psf)
-    poisson_noise!(rng, det.state.frame)
-    randn_backend!(rng, det.state.noise_buffer)
-    det.state.frame .+= det.noise.sigma .* det.state.noise_buffer
+apply_post_readout_gain!(::EMCCDSensor, det::Detector) = det.state.frame
+function apply_post_readout_gain!(::CCDSensor, det::Detector)
+    det.state.frame .*= det.params.gain
+    return det.state.frame
+end
+function apply_post_readout_gain!(::CMOSSensor, det::Detector)
+    det.state.frame .*= det.params.gain
+    return det.state.frame
+end
+
+function apply_quantization!(det::Detector)
+    bits = det.params.bits
+    bits === nothing && return det.state.frame
+    levels = exp2(eltype(det.state.frame)(bits))
+    full_well = det.params.full_well
+    if full_well === nothing
+        peak = maximum(det.state.frame)
+        if peak > 0
+            det.state.frame .*= levels / peak
+        end
+    else
+        det.state.frame .*= (levels - one(levels)) / full_well
+        clamp!(det.state.frame, zero(eltype(det.state.frame)), levels - one(levels))
+    end
+    return det.state.frame
+end
+
+function finalize_capture!(det::Detector, rng::AbstractRNG)
+    apply_dark_current!(det, rng)
+    apply_saturation!(det)
+    apply_pre_readout_gain!(det.params.sensor, det)
+    apply_readout_noise!(det, rng)
+    apply_post_readout_gain!(det.params.sensor, det)
+    apply_quantization!(det)
+    return det.state.frame
+end
+
+function capture!(det::Detector, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
+    capture_signal!(det, psf, rng)
+    finalize_capture!(det, rng)
     return det.state.frame
 end
 
