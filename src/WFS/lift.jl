@@ -337,18 +337,13 @@ function reconstruct!(coeffs::AbstractVector, lift::LiFT, psf_in::AbstractMatrix
 end
 
 @inline function apply_vec_weights!(vec::AbstractVector{T}, weights::AbstractVector{T}) where {T<:AbstractFloat}
-    @inbounds for idx in eachindex(vec, weights)
-        vec[idx] *= weights[idx]
-    end
+    @. vec *= weights
     return vec
 end
 
 @inline function apply_row_weights!(mat::AbstractMatrix{T}, weights::AbstractVector{T}, n_cols::Int) where {T<:AbstractFloat}
-    @inbounds for col in 1:n_cols
-        for row in eachindex(weights)
-            mat[row, col] *= weights[row]
-        end
-    end
+    row_weights = reshape(weights, :, 1)
+    @views @. mat[:, 1:n_cols] *= row_weights
     return mat
 end
 
@@ -363,15 +358,11 @@ function solve_normal_system!(diag::LiFTDiagnostics{T}, rhs::AbstractVector{T}, 
     λ = zero(T)
     if !issuccess(chol)
         λ = regularization_load(normal)
-        @inbounds for i in axes(factor, 1)
-            factor[i, i] += λ
-        end
+        @views factor[diagind(factor)] .+= λ
         chol = cholesky!(Hermitian(factor), check=false)
         if !issuccess(chol)
             λ *= T(10)
-            @inbounds for i in axes(factor, 1)
-                factor[i, i] += λ
-            end
+            @views factor[diagind(factor)] .+= λ
             chol = cholesky!(Hermitian(factor), check=false)
             if !issuccess(chol)
                 rhs .= pinv(normal) * rhs
@@ -391,17 +382,13 @@ function solve_normal_system!(diag::LiFTDiagnostics{T}, rhs::AbstractVector{T}, 
     copyto!(factor, normal)
     λ = damping_lambda(damping, normal)
     if λ > zero(T)
-        @inbounds for i in axes(factor, 1)
-            factor[i, i] += λ
-        end
+        @views factor[diagind(factor)] .+= λ
     end
     chol = cholesky!(Hermitian(factor), check=false)
     while !issuccess(chol)
         λ = max(λ * T(damping.growth), regularization_load(normal))
         copyto!(factor, normal)
-        @inbounds for i in axes(factor, 1)
-            factor[i, i] += λ
-        end
+        @views factor[diagind(factor)] .+= λ
         chol = cholesky!(Hermitian(factor), check=false)
         if λ > T(1e12)
             rhs .= pinv(normal) * rhs
@@ -485,11 +472,9 @@ end
 end
 
 function regularization_load(normal::AbstractMatrix{T}) where {T<:AbstractFloat}
-    diag_sum = zero(T)
     n = min(size(normal, 1), size(normal, 2))
-    @inbounds for i in 1:n
-        diag_sum += abs(normal[i, i])
-    end
+    diagvals = @view normal[diagind(normal)]
+    diag_sum = sum(abs, diagvals)
     mean_diag = n == 0 ? zero(T) : diag_sum / T(n)
     return max(sqrt(eps(T)) * max(mean_diag, one(T)), eps(T))
 end
@@ -517,14 +502,9 @@ function qr_condition_ratio(qr_factor, n_modes::Int)
 end
 
 function normal_condition_ratio(normal::AbstractMatrix{T}) where {T<:AbstractFloat}
-    maxabs = zero(T)
-    minabs = typemax(T)
-    n = min(size(normal, 1), size(normal, 2))
-    @inbounds for i in 1:n
-        d = abs(normal[i, i])
-        maxabs = max(maxabs, d)
-        minabs = min(minabs, d)
-    end
+    diagvals = abs.(@view normal[diagind(normal)])
+    maxabs = maximum(diagvals)
+    minabs = minimum(diagvals)
     maxabs == zero(T) && return T(Inf)
     return maxabs / max(minabs, eps(T))
 end
@@ -558,10 +538,7 @@ function weight_vector!(out::AbstractVector{T}, psf::AbstractMatrix{T}, ::LiFTWe
     σ = readout_noise(det)
     σ2 = T(σ * σ)
     vals = vec(psf)
-    @inbounds for idx in eachindex(out)
-        denom = vals[idx] + σ2
-        out[idx] = inv(max(denom, eps(T)))
-    end
+    @. out = inv(max(vals + σ2, eps(T)))
     return out
 end
 
@@ -581,9 +558,7 @@ end
 function weight_vector!(out::AbstractVector{T}, ::AbstractMatrix{T}, mode::LiFTWeightMatrix,
     ::AbstractDetector) where {T<:AbstractFloat}
     vals = vec(mode.R_n)
-    @inbounds for idx in eachindex(out)
-        out[idx] = inv(max(vals[idx], eps(T)))
-    end
+    @. out = inv(max(vals, eps(T)))
     return out
 end
 
@@ -767,8 +742,6 @@ function field_derivative!(dest::AbstractMatrix{T}, buf::AbstractMatrix{Complex{
 end
 
 function conjugate_field!(dest::AbstractMatrix{Complex{T}}, src::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
-    @inbounds for idx in eachindex(dest, src)
-        dest[idx] = conj(src[idx])
-    end
+    @. dest = conj(src)
     return dest
 end
