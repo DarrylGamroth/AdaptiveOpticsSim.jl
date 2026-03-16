@@ -12,6 +12,10 @@ end
     return measure!(wfs, tel, src)
 end
 
+@inline function _interaction_matrix_buffer(ref::AbstractArray{T}, n_rows::Int, n_cols::Int) where {T}
+    return similar(ref, T, n_rows, n_cols)
+end
+
 function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS, tel::Telescope; amplitude::Real=1.0)
     n_act = length(dm.state.coefs)
     T = eltype(dm.state.coefs)
@@ -22,13 +26,13 @@ function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS, tel::Telesco
 
     for k in 1:n_act
         fill!(coefs, zero(T))
-        coefs[k] = T(amplitude)
+        @views coefs[k:k] .= T(amplitude)
         apply!(dm, tel, DMReplace())
         _measure_for_calibration!(wfs, tel, nothing)
         if mat === nothing
-            mat = zeros(T, length(wfs.state.slopes), n_act)
+            mat = _interaction_matrix_buffer(tel.state.opd, length(wfs.state.slopes), n_act)
         end
-        mat[:, k] .= wfs.state.slopes
+        copyto!(@view(mat[:, k]), wfs.state.slopes)
     end
 
     tel.state.opd .= opd_base
@@ -47,13 +51,13 @@ function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS, tel::Telesco
 
     for k in 1:n_act
         fill!(coefs, zero(T))
-        coefs[k] = T(amplitude)
+        @views coefs[k:k] .= T(amplitude)
         apply!(dm, tel, DMReplace())
         _measure_for_calibration!(wfs, tel, src)
         if mat === nothing
-            mat = zeros(T, length(wfs.state.slopes), n_act)
+            mat = _interaction_matrix_buffer(tel.state.opd, length(wfs.state.slopes), n_act)
         end
-        mat[:, k] .= wfs.state.slopes
+        copyto!(@view(mat[:, k]), wfs.state.slopes)
     end
 
     tel.state.opd .= opd_base
@@ -79,9 +83,9 @@ function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS, tel::Telesco
         apply!(dm, tel, DMReplace())
         _measure_for_calibration!(wfs, tel, nothing)
         if mat === nothing
-            mat = zeros(T, length(wfs.state.slopes), n_modes)
+            mat = _interaction_matrix_buffer(tel.state.opd, length(wfs.state.slopes), n_modes)
         end
-        mat[:, k] .= wfs.state.slopes
+        copyto!(@view(mat[:, k]), wfs.state.slopes)
     end
 
     tel.state.opd .= opd_base
@@ -107,9 +111,9 @@ function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS, tel::Telesco
         apply!(dm, tel, DMReplace())
         _measure_for_calibration!(wfs, tel, src)
         if mat === nothing
-            mat = zeros(T, length(wfs.state.slopes), n_modes)
+            mat = _interaction_matrix_buffer(tel.state.opd, length(wfs.state.slopes), n_modes)
         end
-        mat[:, k] .= wfs.state.slopes
+        copyto!(@view(mat[:, k]), wfs.state.slopes)
     end
 
     tel.state.opd .= opd_base
