@@ -197,8 +197,8 @@ Updated allocations:
 | `compute_optical_gains!` | `250016` bytes | `0` bytes |
 | `calibrate!` for `GainSensingCamera` | `596728` bytes | `18712` bytes |
 | `lift_interaction_matrix!` | `40120` bytes | `1696` bytes |
-| `AdaptiveOptics.reconstruct` for LiFT | `132096` bytes | `2432` bytes |
-| `reconstruct!` for LiFT | n/a | `2272` bytes |
+| `AdaptiveOptics.reconstruct` for LiFT | `132096` bytes | `2144` bytes |
+| `reconstruct!` for LiFT | n/a | `1984` bytes |
 
 Interpretation:
 
@@ -206,9 +206,10 @@ Interpretation:
   evaluation.
 - `calibrate!` still allocates, but only at setup scale for basis-product and
   calibration-buffer construction.
-- LiFT runtime allocations are substantially reduced, though the solve step
-  still allocates for the `\\` result vector and singular fallback path.
+- LiFT runtime allocations are substantially reduced. The remaining steady-state
+  solve cost is now limited to factorization object overhead and the cold
+  singular fallback path.
 
 That means the next worthwhile optimization, if needed, is to replace the
-LiFT solve path with a reusable factorization / destination-buffer update rather
+LiFT solve path with a more numerically robust least-squares strategy rather
 than chasing smaller setup allocations.

@@ -30,6 +30,7 @@ mutable struct LiFTState{T<:AbstractFloat,
     weight_buffer::V
     H_buffer::B
     normal_buffer::B
+    factor_buffer::B
     rhs_buffer::V
 end
 
@@ -101,9 +102,10 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
     weight_buffer = similar(residual_buffer)
     H_buffer = similar(psf_buffer, eltype(psf_buffer), img_resolution * img_resolution, size(basis, 3))
     normal_buffer = similar(psf_buffer, eltype(psf_buffer), size(basis, 3), size(basis, 3))
+    factor_buffer = similar(normal_buffer)
     rhs_buffer = similar(residual_buffer, size(basis, 3))
     state = LiFTState(ws, psf_buffer, amp_buffer, focal_buffer, mode_buffer, pd_buffer, conv_buffer,
-        opd_buffer, residual_buffer, weight_buffer, H_buffer, normal_buffer, rhs_buffer)
+        opd_buffer, residual_buffer, weight_buffer, H_buffer, normal_buffer, factor_buffer, rhs_buffer)
     mode = numerical ? LiFTNumerical() : LiFTAnalytic()
     return LiFT{typeof(mode), typeof(params), typeof(state), typeof(basis), typeof(src), typeof(det)}(
         tel,
@@ -213,6 +215,7 @@ function reconstruct!(coeffs::AbstractVector{T}, lift::LiFT, psf_in::AbstractMat
     sqrtw = lift.state.weight_buffer
     H = @view lift.state.H_buffer[:, 1:n_modes]
     normal = @view lift.state.normal_buffer[1:n_modes, 1:n_modes]
+    factor = @view lift.state.factor_buffer[1:n_modes, 1:n_modes]
     rhs = @view lift.state.rhs_buffer[1:n_modes]
     init_weights!(sqrtw, mode, psf_in, lift.det)
     for iter in 1:lift.params.iterations
@@ -243,19 +246,11 @@ function reconstruct!(coeffs::AbstractVector{T}, lift::LiFT, psf_in::AbstractMat
         apply_vec_weights!(residual, sqrtw)
         mul!(normal, adjoint(H), H)
         mul!(rhs, adjoint(H), residual)
-        delta = try
-            normal \ rhs
-        catch err
-            if err isa SingularException
-                pinv(normal) * rhs
-            else
-                rethrow()
-            end
-        end
+        solve_normal_system!(rhs, factor, normal)
         for (j, mode_id) in enumerate(mode_ids)
-            coeffs[mode_id] += delta[j]
+            coeffs[mode_id] += rhs[j]
         end
-        if check_convergence && norm(delta) / max(norm(coeffs), eps(T)) < 1e-3
+        if check_convergence && norm(rhs) / max(norm(coeffs), eps(T)) < 1e-3
             break
         end
     end
@@ -288,6 +283,41 @@ end
         end
     end
     return mat
+end
+
+function solve_normal_system!(rhs::AbstractVector{T}, factor::AbstractMatrix{T}, normal::AbstractMatrix{T}) where {T<:AbstractFloat}
+    copyto!(factor, normal)
+    chol = cholesky!(Hermitian(factor), check=false)
+    if !issuccess(chol)
+        λ = regularization_load(normal)
+        @inbounds for i in axes(factor, 1)
+            factor[i, i] += λ
+        end
+        chol = cholesky!(Hermitian(factor), check=false)
+        if !issuccess(chol)
+            λ *= T(10)
+            @inbounds for i in axes(factor, 1)
+                factor[i, i] += λ
+            end
+            chol = cholesky!(Hermitian(factor), check=false)
+            if !issuccess(chol)
+                rhs .= pinv(normal) * rhs
+                return rhs
+            end
+        end
+    end
+    ldiv!(chol, rhs)
+    return rhs
+end
+
+function regularization_load(normal::AbstractMatrix{T}) where {T<:AbstractFloat}
+    diag_sum = zero(T)
+    n = min(size(normal, 1), size(normal, 2))
+    @inbounds for i in 1:n
+        diag_sum += abs(normal[i, i])
+    end
+    mean_diag = n == 0 ? zero(T) : diag_sum / T(n)
+    return max(sqrt(eps(T)) * max(mean_diag, one(T)), eps(T))
 end
 
 @inline function init_weights!(sqrtw::AbstractVector{T}, ::LiFTWeightingDynamic,
