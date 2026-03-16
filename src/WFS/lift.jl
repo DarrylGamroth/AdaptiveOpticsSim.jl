@@ -5,12 +5,17 @@ abstract type LiFTMode end
 struct LiFTAnalytic <: LiFTMode end
 struct LiFTNumerical <: LiFTMode end
 
-struct LiFTParams{T<:AbstractFloat,A<:AbstractMatrix{T},K}
+abstract type LiFTSolveMode end
+struct LiFTSolveQR <: LiFTSolveMode end
+struct LiFTSolveNormalEquations <: LiFTSolveMode end
+
+struct LiFTParams{T<:AbstractFloat,A<:AbstractMatrix{T},K,S<:LiFTSolveMode}
     diversity_opd::A
     iterations::Int
     img_resolution::Int
     zero_padding::Int
     object_kernel::K
+    solve_mode::S
 end
 
 mutable struct LiFTState{T<:AbstractFloat,
@@ -69,7 +74,8 @@ weight_mode(::Any) = throw(InvalidConfiguration("R_n must be :model, :iterative,
 
 function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::AbstractDetector;
     diversity_opd::AbstractMatrix, iterations::Int=5, img_resolution::Int=0,
-    numerical::Bool=false, ang_pixel_arcsec=nothing, object_kernel=nothing)
+    numerical::Bool=false, ang_pixel_arcsec=nothing, object_kernel=nothing,
+    solve_mode::LiFTSolveMode=LiFTSolveQR())
 
     if size(basis, 1) != tel.params.resolution || size(basis, 2) != tel.params.resolution
         throw(InvalidConfiguration("basis resolution must match telescope resolution"))
@@ -88,7 +94,7 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
         img_resolution = tel.params.resolution * zero_padding
     end
     kernel = object_kernel === nothing ? nothing : eltype(tel.state.opd).(object_kernel)
-    params = LiFTParams(float.(diversity_opd), iterations, img_resolution, zero_padding, kernel)
+    params = LiFTParams(float.(diversity_opd), iterations, img_resolution, zero_padding, kernel, solve_mode)
     oversampling = lift_oversampling(zero_padding)
     ws = Workspace(tel.state.opd, lift_pad_size(tel.params.resolution, zero_padding); T=eltype(tel.state.opd))
     psf_buffer = similar(tel.state.opd, eltype(tel.state.opd), img_resolution, img_resolution)
@@ -246,11 +252,11 @@ function reconstruct!(coeffs::AbstractVector{T}, lift::LiFT, psf_in::AbstractMat
         apply_vec_weights!(residual, sqrtw)
         mul!(normal, adjoint(H), H)
         mul!(rhs, adjoint(H), residual)
-        solve_normal_system!(rhs, factor, normal)
+        delta = solve_lift_system!(residual, rhs, H, normal, factor, lift.params.solve_mode)
         for (j, mode_id) in enumerate(mode_ids)
-            coeffs[mode_id] += rhs[j]
+            coeffs[mode_id] += delta_component(delta, j, lift.params.solve_mode)
         end
-        if check_convergence && norm(rhs) / max(norm(coeffs), eps(T)) < 1e-3
+        if check_convergence && delta_norm(delta, n_modes, lift.params.solve_mode) / max(norm(coeffs), eps(T)) < 1e-3
             break
         end
     end
@@ -308,6 +314,39 @@ function solve_normal_system!(rhs::AbstractVector{T}, factor::AbstractMatrix{T},
     end
     ldiv!(chol, rhs)
     return rhs
+end
+
+function solve_lift_system!(residual::AbstractVector{T}, rhs::AbstractVector{T},
+    H::AbstractMatrix{T}, normal::AbstractMatrix{T}, factor::AbstractMatrix{T},
+    ::LiFTSolveQR) where {T<:AbstractFloat}
+    try
+        qr_factor = qr!(H)
+        ldiv!(qr_factor, residual)
+        return residual
+    catch err
+        if err isa SingularException
+            solve_normal_system!(rhs, factor, normal)
+            return rhs
+        end
+        rethrow()
+    end
+end
+
+function solve_lift_system!(residual::AbstractVector{T}, rhs::AbstractVector{T},
+    H::AbstractMatrix{T}, normal::AbstractMatrix{T}, factor::AbstractMatrix{T},
+    ::LiFTSolveNormalEquations) where {T<:AbstractFloat}
+    solve_normal_system!(rhs, factor, normal)
+    return rhs
+end
+
+@inline delta_component(delta::AbstractVector, j::Int, ::LiFTSolveMode) = delta[j]
+
+@inline function delta_norm(delta::AbstractVector{T}, n_modes::Int, ::LiFTSolveQR) where {T<:AbstractFloat}
+    return norm(@view delta[1:n_modes])
+end
+
+@inline function delta_norm(delta::AbstractVector{T}, n_modes::Int, ::LiFTSolveNormalEquations) where {T<:AbstractFloat}
+    return norm(delta)
 end
 
 function regularization_load(normal::AbstractMatrix{T}) where {T<:AbstractFloat}

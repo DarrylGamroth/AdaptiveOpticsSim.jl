@@ -86,25 +86,27 @@ Recommendation:
 - Use Cholesky or LDLt with explicit fallback behavior.
 - Derive `Cnz` from detector/noise assumptions or expose a structured user policy.
 
-### High: LiFT uses normal equations for the weighted solve
+### Medium: LiFT still needs explicit damping / conditioning policy
 
 File:
 - [src/WFS/lift.jl](/home/dgamroth/workspaces/codex/AdaptiveOptics.jl/src/WFS/lift.jl#L237)
 
 Current behavior:
-- LiFT forms weighted normal equations `H' * H` and solves `normal \\ rhs`.
-- Singular fallback is `pinv(normal) * rhs`.
+- LiFT now defaults to a direct weighted QR solve.
+- An explicit `LiFTSolveNormalEquations()` compatibility mode still exists.
+- Rank-deficient QR cases currently fall back to the regularized normal-equation path.
 
 Risk:
-- Normal equations square the condition number.
-- Singular fallback is numerically weak for the cases where robustness matters most.
+- The default path is materially better than pure normal equations, but there is
+  still no explicit damping or conditioning policy.
+- The rank-deficient fallback still uses the weaker normal-equation solve.
 
 Impact:
 - Mode estimates may become unstable for weakly observed modes or noisy PSFs.
 - Iterative convergence can degrade or stall in high-dynamic-range cases.
 
 Recommendation:
-- Solve weighted least squares directly on the weighted Jacobian via QR or SVD.
+- Keep QR as the default weighted least-squares path.
 - Add optional Levenberg-Marquardt damping for the nonlinear iteration.
 - Track residual norm, update norm, and Jacobian conditioning per iteration.
 
@@ -160,7 +162,7 @@ Recommendation:
 ## Recommended Next Steps
 
 1. Add a configurable inverse-policy layer for reconstructors and calibration objects.
-2. Replace LiFT normal equations with QR/SVD-based weighted least squares.
+2. Add damping and conditioning diagnostics to the LiFT QR solve.
 3. Refactor tomography solve paths to use structured factorizations and explicit noise models.
 4. Add GSC sensitivity flooring and weak-mode diagnostics.
 5. Add numerical sweep tests for:
@@ -171,4 +173,6 @@ Recommendation:
 
 ## Status
 
-This is a findings document only. No stability fixes are tracked as complete yet.
+This is a findings document. The LiFT item has been partially addressed by moving
+the default solve path from normal equations to QR, but damping/conditioning work
+is still open.

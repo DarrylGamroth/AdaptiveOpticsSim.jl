@@ -397,6 +397,11 @@ end
     psf = compute_psf!(tel, src; zero_padding=1)
     coeffs = reconstruct(lift, psf, [1, 2])
     @test length(coeffs) == 2
+    lift_normal = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=2,
+        img_resolution=8, numerical=true, solve_mode=LiFTSolveNormalEquations())
+    coeffs_normal = reconstruct(lift_normal, psf, [1, 2])
+    @test length(coeffs_normal) == 2
+    @test all(isfinite, coeffs_normal)
     det_readout = Detector(noise=NoiseReadout(1e-3), psf_sampling=1)
     lift_readout = LiFT(tel, src, basis, det_readout; diversity_opd=diversity, iterations=2,
         img_resolution=8, numerical=true)

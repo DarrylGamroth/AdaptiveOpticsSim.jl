@@ -197,8 +197,9 @@ Updated allocations:
 | `compute_optical_gains!` | `250016` bytes | `0` bytes |
 | `calibrate!` for `GainSensingCamera` | `596728` bytes | `18712` bytes |
 | `lift_interaction_matrix!` | `40120` bytes | `1696` bytes |
-| `AdaptiveOptics.reconstruct` for LiFT | `132096` bytes | `2144` bytes |
-| `reconstruct!` for LiFT | n/a | `1984` bytes |
+| `AdaptiveOptics.reconstruct` for LiFT (QR default) | `132096` bytes | `2432` bytes |
+| `reconstruct!` for LiFT (QR default) | n/a | `2272` bytes |
+| `reconstruct!` for LiFT (normal-equation mode) | n/a | `1984` bytes |
 
 Interpretation:
 
@@ -206,10 +207,12 @@ Interpretation:
   evaluation.
 - `calibrate!` still allocates, but only at setup scale for basis-product and
   calibration-buffer construction.
-- LiFT runtime allocations are substantially reduced. The remaining steady-state
-  solve cost is now limited to factorization object overhead and the cold
-  singular fallback path.
+- LiFT now defaults to a direct QR-based least-squares solve for better
+  conditioning, while keeping a typed normal-equation mode as an explicit
+  compatibility/throughput option.
+- The QR default costs slightly more than the normal-equation mode, but it
+  avoids making the less stable solve path the default behavior.
 
-That means the next worthwhile optimization, if needed, is to replace the
-LiFT solve path with a more numerically robust least-squares strategy rather
-than chasing smaller setup allocations.
+That means the next worthwhile LiFT improvement, if needed, is adding damping or
+explicit conditioning diagnostics on top of the QR solve rather than chasing
+smaller setup allocations.
