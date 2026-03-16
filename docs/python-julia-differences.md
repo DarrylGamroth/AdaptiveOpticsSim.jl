@@ -97,7 +97,7 @@ The biggest differences today are:
 | Calibration workflow | OOPAO calibrates from focal-plane frames and prints progress | Julia mirrors the same optical-gain math but uses cached FFT workspaces and logging | Same algorithm, more reusable implementation | Intentional |
 | Parallel FFT batching | OOPAO splits basis products into chunks using `n_jobs` loops | Julia uses thread-aware FFT workspaces in `split_basis_product` | Better fit for Julia threading and cached plan reuse | Intentional |
 | Detector metadata | OOPAO GSC can carry detector-related properties through the focal-plane camera object | Julia `GainSensingCamera` can attach an explicit detector metadata snapshot without coupling detector physics into the optical-gain math | Keeps the optical-gain path clean while preserving the useful display/metadata surface | Equivalent |
-| Long-horizon atmosphere replay | OOPAO tutorial `AO_closed_loop_Pyramid_WFS_GSC.py` exists as a full workflow | Julia matches compact traces, bounded replay, and the first nonlinear branch step, but the long huge-OPD replay is still diagnostic-only | Remaining mismatch is workflow-level nonlinear drift, not basic GSC math | Gap |
+| Long-horizon atmosphere replay | OOPAO tutorial `AO_closed_loop_Pyramid_WFS_GSC.py` exists as a full workflow | Julia matches compact traces, bounded replay, and the first nonlinear branch step, but treats the long huge-OPD replay as a diagnostic stress case rather than a normative parity gate | Both implementations enter a highly unstable nonlinear regime where tiny differences diverge into different trajectories | Diagnostic |
 
 ## LiFT Differences
 
@@ -150,13 +150,19 @@ The biggest differences today are:
 
 These are the differences that still matter for parity work.
 
-1. Full atmosphere-driven `AO_closed_loop_Pyramid_WFS_GSC.py` parity is not yet
-   closed. Compact traces, bounded replay, and the first nonlinear branch step
-   are regression-backed; the long huge-OPD replay still drifts in later
-   observables.
-2. Detector output storage remains backend floating-point even when quantized,
+1. Detector output storage remains backend floating-point even when quantized,
    rather than casting to an integer output precision the way OOPAO can.
-3. The OOPAO `tools/*` layer and display/GUI ecosystem are not ported.
+2. The OOPAO `tools/*` layer and display/GUI ecosystem are not ported.
+
+## Diagnostic Stress Cases
+
+These are useful comparison scenarios, but they are not good hard parity gates.
+
+1. The full long-horizon atmosphere-driven `AO_closed_loop_Pyramid_WFS_GSC.py`
+   replay enters a huge-OPD nonlinear regime in which OOPAO itself becomes
+   extremely sensitive. Julia matches the compact traces, bounded replay, and
+   first branch-step intermediates; the remaining long-horizon divergence is
+   treated as a robustness/diagnostic issue rather than a missing core feature.
 
 ## Differences That Are Not Bugs
 

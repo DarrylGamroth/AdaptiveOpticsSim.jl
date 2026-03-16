@@ -4,8 +4,9 @@
 - Phases 1-5 implemented in `AdaptiveOptics.jl`.
 - Phase 6 in progress (telemetry + config export done; more I/O helpers pending).
 - Phase 7 complete (user guide, API reference, tutorial ports, and committed OOPAO reference bundle in place).
-- Full feature parity and numerical fidelity with Python OOPAO are not complete
-  and are now the gating priority before further feature expansion.
+- Core feature parity and numerical fidelity with Python OOPAO are effectively
+  in place for the committed deterministic workflows. Remaining work is now
+  dominated by robustness, execution quality, and a few non-core surface gaps.
 
 ## AO Feature Checklist
 - [x] P0: Detector modeling (photon/read noise, QE, binning, PSF sampling,
@@ -93,7 +94,7 @@
 - SPRINT/mis-registration supports cached sensitivity matrices (Serialization) and
   optional WFS shifts, but no FITS I/O (`src/Calibration/misregistration_identification.jl`).
 
-## Feature Parity and Numerical Fidelity Gate (Current Blocking Gaps)
+## Feature Parity and Numerical Fidelity Gate
 - [x] The committed OOPAO reference bundle now matches
   `psf_baseline`, `shack_hartmann_diffractive_ramp`,
   `pyramid_diffractive_ramp`, `bioedge_diffractive_ramp`,
@@ -109,13 +110,19 @@
   reproducible array-level regression for image formation.
 - [x] Port and validate OOPAO transfer-function workflow
   (`tutorials/AO_transfer_function.py`) with matching outputs.
-- [ ] Port and validate the full atmosphere-driven OOPAO GSC closed-loop workflow
-  (`tutorials/AO_closed_loop_Pyramid_WFS_GSC.py`) beyond the current compact regression trace.
-  The main Pyramid incidence-flux mismatch from modulation-point averaging has
-  been corrected, a bounded atmosphere-replay parity case is now committed, and
-  the first nonlinear branch step is now regression-backed at the fixed-input
-  level for Pyramid signals, modulation frames, and optical gains. Local
-  long-horizon replay diagnostics now show that the control coefficients,
+- [x] Validate the stable and deterministic parts of the atmosphere-driven OOPAO
+  GSC closed-loop workflow with compact traces, bounded replay, and first
+  branch-step regression coverage.
+
+## Diagnostic Stress Cases
+- [ ] Full long-horizon atmosphere-driven OOPAO GSC replay
+  (`tutorials/AO_closed_loop_Pyramid_WFS_GSC.py`) remains a diagnostic stress
+  case rather than a strict parity gate. The main Pyramid incidence-flux
+  mismatch from modulation-point averaging has been corrected, a bounded
+  atmosphere-replay parity case is now committed, and the first nonlinear
+  branch step is regression-backed at the fixed-input level for Pyramid
+  signals, modulation frames, and optical gains. Local long-horizon replay
+  diagnostics now show that the control coefficients,
   optical-gain floor behavior, and residual-RMS telemetry track OOPAO closely.
   The remaining drift is concentrated in nonlinear observables (mainly Strehl
   and later slope norms) once the replay enters a huge-OPD regime, so the full

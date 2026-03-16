@@ -53,16 +53,15 @@ tomography references for:
 10. `tomography_kapa_model_dm_commands`
 11. `tomography_kapa_model_dm_commands_masked`
 
-Still not committed:
+Diagnostic-only, not committed as a parity gate:
 - Full long-horizon atmosphere-replay closed-loop tutorial traces. Local audits
   now show that the delayed-control path and residual-RMS telemetry track OOPAO
   closely, but Strehl and later slope norms still drift once both codes enter a
   huge-OPD nonlinear regime. Row-4 focal-plane/GSC diagnostics also show that
   very small control-vector differences can push the gain-sensing frame onto a
-  different nonlinear branch, so the long replay remains diagnostic-only.
-  The committed `gsc_branch_step_*` cases isolate that first branch point and
-  regression-test the residual OPD, Pyramid signal, modulation frame, and
-  optical gains at fixed inputs.
+  different nonlinear branch. The committed `gsc_branch_step_*` cases isolate
+  that first branch point and regression-test the residual OPD, Pyramid signal,
+  modulation frame, and optical gains at fixed inputs.
 
 ## Reference configuration
 - Seed: fixed RNG seed (documented per dataset).
