@@ -72,7 +72,7 @@ export snapshot_config, write_config_toml, write_config_json
 export write_telemetry_csv
 export bin2d, poisson_noise!, poisson_sample
 export Telescope, TelescopeParams, TelescopeState, generate_pupil!, reset_opd!, apply_opd!
-export set_pupil!, apply_spiders!
+export set_pupil!, set_pupil_reflectivity!, flux_map, apply_spiders!
 export Source, SourceParams, LGSSource, LGSSourceParams, wavelength
 export lgs_elongation_factor
 export Asterism, coordinates_xy_arcsec, compute_psf!, psf_pixel_scale_arcsec

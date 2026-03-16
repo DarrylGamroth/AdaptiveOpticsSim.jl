@@ -10,9 +10,11 @@ mutable struct TelescopeState{T,
     Aopd<:AbstractMatrix{T},
     Apsf<:AbstractMatrix{T},
     Amask<:AbstractMatrix{Bool},
+    Aref<:AbstractMatrix{T},
     Spsf<:AbstractArray{T,3},
     W<:Workspace}
     pupil::Amask
+    pupil_reflectivity::Aref
     opd::Aopd
     psf::Apsf
     psf_stack::Spsf
@@ -29,6 +31,7 @@ function Telescope(; resolution::Int,
     sampling_time::Real,
     central_obstruction::Real=0.0,
     fov_arcsec::Real=0.0,
+    pupil_reflectivity::Union{Real,AbstractMatrix}=1.0,
     T::Type{<:AbstractFloat}=Float64,
     backend=Array)
 
@@ -42,6 +45,7 @@ function Telescope(; resolution::Int,
 
     pupil = backend{Bool}(undef, resolution, resolution)
     generate_pupil!(pupil, params)
+    reflectivity = initialize_reflectivity(pupil, pupil_reflectivity, T, backend)
 
     opd = backend{T}(undef, resolution, resolution)
     fill!(opd, zero(T))
@@ -51,8 +55,9 @@ function Telescope(; resolution::Int,
 
     psf_stack = backend{T}(undef, resolution, resolution, 0)
     psf_workspace = Workspace(opd, resolution; T=T)
-    state = TelescopeState{T, typeof(opd), typeof(psf), typeof(pupil), typeof(psf_stack), typeof(psf_workspace)}(
+    state = TelescopeState{T, typeof(opd), typeof(psf), typeof(pupil), typeof(reflectivity), typeof(psf_stack), typeof(psf_workspace)}(
         pupil,
+        reflectivity,
         opd,
         psf,
         psf_stack,
@@ -121,6 +126,23 @@ function reset_opd!(tel::Telescope)
     return tel
 end
 
+function initialize_reflectivity(pupil::AbstractMatrix{Bool}, reflectivity::Real, ::Type{T}, backend) where {T<:AbstractFloat}
+    out = backend{T}(undef, size(pupil)...)
+    fill!(out, T(reflectivity))
+    out .*= pupil
+    return out
+end
+
+function initialize_reflectivity(pupil::AbstractMatrix{Bool}, reflectivity::AbstractMatrix, ::Type{T}, backend) where {T<:AbstractFloat}
+    if size(reflectivity) != size(pupil)
+        throw(DimensionMismatchError("pupil_reflectivity size does not match telescope resolution"))
+    end
+    out = backend{T}(undef, size(pupil)...)
+    copyto!(out, T.(reflectivity))
+    out .*= pupil
+    return out
+end
+
 function apply_opd!(tel::Telescope, opd::AbstractMatrix)
     if size(opd) != size(tel.state.opd)
         throw(DimensionMismatchError("OPD size does not match telescope resolution"))
@@ -134,7 +156,30 @@ function set_pupil!(tel::Telescope, pupil::AbstractMatrix{Bool})
         throw(DimensionMismatchError("pupil mask size does not match telescope resolution"))
     end
     tel.state.pupil .= pupil
+    tel.state.pupil_reflectivity .= pupil
     return tel
+end
+
+function set_pupil_reflectivity!(tel::Telescope, reflectivity::Real)
+    fill!(tel.state.pupil_reflectivity, eltype(tel.state.pupil_reflectivity)(reflectivity))
+    tel.state.pupil_reflectivity .*= tel.state.pupil
+    return tel
+end
+
+function set_pupil_reflectivity!(tel::Telescope, reflectivity::AbstractMatrix)
+    if size(reflectivity) != size(tel.state.pupil_reflectivity)
+        throw(DimensionMismatchError("pupil_reflectivity size does not match telescope resolution"))
+    end
+    tel.state.pupil_reflectivity .= reflectivity
+    tel.state.pupil_reflectivity .*= tel.state.pupil
+    return tel
+end
+
+function flux_map(tel::Telescope, src::AbstractSource)
+    scale = photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
+    out = similar(tel.state.pupil_reflectivity)
+    @. out = scale * tel.state.pupil_reflectivity
+    return out
 end
 
 function apply_spiders!(tel::Telescope; thickness::Real, angles::AbstractVector, offset_x::Real=0.0, offset_y::Real=0.0)

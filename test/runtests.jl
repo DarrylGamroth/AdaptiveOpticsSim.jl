@@ -53,6 +53,14 @@ end
     cached_ws = tel.state.psf_workspace
     compute_psf!(tel, src; zero_padding=2)
     @test tel.state.psf_workspace === cached_ws
+
+    tel_dim = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.2,
+        pupil_reflectivity=0.25)
+    psf_dim = compute_psf!(tel_dim, src; zero_padding=2)
+    @test sum(psf_dim) ≈ 0.25 * sum(psf)
+    fmap = flux_map(tel_dim, src)
+    @test size(fmap) == size(tel_dim.state.pupil)
+    @test maximum(fmap) > 0
 end
 
 @testset "Zernike basis" begin
@@ -228,6 +236,12 @@ end
     custom[:, 9:end] .= false
     set_pupil!(tel, custom)
     @test sum(tel.state.pupil) == sum(custom)
+    @test tel.state.pupil_reflectivity == Float64.(custom)
+
+    reflectivity = fill(0.5, 16, 16)
+    set_pupil_reflectivity!(tel, reflectivity)
+    @test tel.state.pupil_reflectivity[:, 1:8] == fill(0.5, 16, 8)
+    @test tel.state.pupil_reflectivity[:, 9:end] == fill(0.0, 16, 8)
 
     tel2 = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm1 = DeformableMirror(tel2; n_act=2, influence_width=0.3)
