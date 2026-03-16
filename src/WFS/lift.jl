@@ -274,9 +274,8 @@ function reconstruct!(coeffs::AbstractVector{T}, lift::LiFT, psf_in::AbstractMat
         if scale != one(T)
             model_psf .*= scale
         end
-        @inbounds for idx in eachindex(model_psf)
-            residual[idx] = psf_in[idx] - model_psf[idx]
-        end
+        copyto!(residual, vec(psf_in))
+        residual .-= vec(model_psf)
         diag.residual_norm = norm(residual)
         lift_interaction_matrix!(H, lift, coeffs, mode_ids; flux_norm=scale)
 
@@ -288,9 +287,7 @@ function reconstruct!(coeffs::AbstractVector{T}, lift::LiFT, psf_in::AbstractMat
         mul!(rhs, adjoint(H), residual)
         delta = solve_lift_system!(diag, residual, rhs, H, normal, factor, effective_mode, lift.params.damping)
         diag.update_norm = delta_norm(delta, n_modes, effective_mode)
-        for (j, mode_id) in enumerate(mode_ids)
-            coeffs[mode_id] += delta_component(delta, j, effective_mode)
-        end
+        update_coefficients!(coeffs, delta, mode_ids, effective_mode, style)
         if check_convergence && diag.update_norm / max(norm(coeffs), eps(T)) < 1e-3
             break
         end
@@ -424,6 +421,25 @@ function solve_lift_system!(diag::LiFTDiagnostics{T}, residual::AbstractVector{T
 end
 
 @inline delta_component(delta::AbstractVector, j::Int, ::LiFTSolveMode) = delta[j]
+
+@inline function update_coefficients!(coeffs::AbstractVector, delta::AbstractVector, mode_ids::AbstractVector,
+    mode::LiFTSolveMode, ::ScalarCPUStyle)
+    for (j, mode_id) in enumerate(mode_ids)
+        coeffs[mode_id] += delta_component(delta, j, mode)
+    end
+    return coeffs
+end
+
+@inline function update_coefficients!(coeffs::AbstractVector{T}, delta::AbstractVector, mode_ids::AbstractVector,
+    ::LiFTSolveMode, ::AcceleratorStyle) where {T<:AbstractFloat}
+    n_modes = length(mode_ids)
+    delta_host = Vector{T}(undef, n_modes)
+    copyto!(delta_host, @view(delta[1:n_modes]))
+    for (j, mode_id) in enumerate(mode_ids)
+        coeffs[mode_id] += delta_host[j]
+    end
+    return coeffs
+end
 
 @inline function delta_norm(delta::AbstractVector{T}, n_modes::Int, ::LiFTSolveQR) where {T<:AbstractFloat}
     return norm(@view delta[1:n_modes])
