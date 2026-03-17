@@ -21,11 +21,15 @@ struct TikhonovInverse{T<:AbstractFloat} <: InversePolicy
     atol::T
 end
 
-TSVDInverse(; rtol::Real=eps(Float64), atol::Real=0.0, n_trunc::Integer=0) =
-    TSVDInverse(float(rtol), float(atol), Int(n_trunc))
+function TSVDInverse(; rtol::Real=eps(Float64), atol::Real=0.0, n_trunc::Integer=0)
+    T = promote_type(typeof(float(rtol)), typeof(float(atol)))
+    return TSVDInverse(T(rtol), T(atol), Int(n_trunc))
+end
 
-TikhonovInverse(lambda::Real; rtol::Real=eps(Float64), atol::Real=0.0) =
-    TikhonovInverse(float(lambda), float(rtol), float(atol))
+function TikhonovInverse(lambda::Real; rtol::Real=eps(Float64), atol::Real=0.0)
+    T = promote_type(typeof(float(lambda)), typeof(float(rtol)), typeof(float(atol)))
+    return TikhonovInverse(T(lambda), T(rtol), T(atol))
+end
 
 default_modal_inverse_policy(::Type{T}) where {T<:AbstractFloat} = TSVDInverse(rtol=sqrt(eps(T)))
 default_calibration_inverse_policy(::Type{T}) where {T<:AbstractFloat} = TSVDInverse(rtol=sqrt(eps(T)))
