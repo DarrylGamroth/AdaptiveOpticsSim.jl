@@ -28,6 +28,36 @@ julia --project=. scripts/gpu_sync_audit_cuda.jl
 The `spiders` workstation is the current real-hardware validation host for this
 workflow.
 
+## Warmed CPU vs CUDA Snapshot on `spiders`
+
+With the warmed audit scripts on `spiders`, the compact reference case currently
+looks like this:
+
+- CPU runtime step mean: about `1.45e4 ns`
+- CUDA runtime step mean: about `1.30e6 ns`
+- CPU modal build: about `5.16e4 ns`
+- CUDA modal build: about `7.86e5 ns`
+- CPU interaction-matrix tomography build: about `5.83e3 ns`
+- CUDA interaction-matrix tomography build: about `1.46e6 ns`
+- CPU model-based tomography build: about `7.72e8 ns`
+- CUDA model-based tomography build: about `9.03e7 ns`
+
+For this compact audit case, the interpretation is:
+
+- CPU is clearly better for the tiny steady-state runtime loop.
+- CPU is also better for tiny modal and interaction-matrix builder cases.
+- CUDA is already materially better for the heavier model-based tomography
+  builder.
+
+So the package is currently in the expected regime:
+
+- use CPU for small, latency-dominated compact cases,
+- use GPU when the builder/reconstructor workload is large enough to amortize
+  device overhead.
+
+The next benchmarking task should therefore be a size sweep to find the
+practical crossover points, not more guessing from a single compact case.
+
 ## Validated GPU-Resident Surface
 
 The following paths are currently validated on CUDA with
