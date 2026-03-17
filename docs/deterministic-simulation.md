@@ -27,8 +27,8 @@ reproducible run-to-run with identical inputs and configuration.
 
 2) Deterministic configuration:
    - Fixed seed.
-   - Single-threaded FFT and BLAS.
-   - Optional fixed FFTW wisdom/plan.
+   - Single-threaded FFT provider and BLAS.
+   - Optional fixed FFT-provider wisdom/plan where supported.
 
 3) Record and replay:
    - Optional logging of commands and RNG state.
@@ -39,14 +39,14 @@ reproducible run-to-run with identical inputs and configuration.
 struct DeterministicConfig
     seed::UInt64
     threads::Int
-    fftw_threads::Int
+    fft_threads::Int
     use_gpu::Bool
 end
 
 function init_deterministic!(cfg::DeterministicConfig)
     Random.seed!(cfg.seed)
     BLAS.set_num_threads(cfg.threads)
-    FFTW.set_num_threads(cfg.fftw_threads)
+    set_fft_provider_threads!(cfg.fft_threads)
 end
 
 ws = Workspace(tel; rng=MersenneTwister(0x1234))

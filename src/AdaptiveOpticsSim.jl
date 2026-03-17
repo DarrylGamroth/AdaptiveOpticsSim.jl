@@ -3,7 +3,6 @@ module AdaptiveOpticsSim
 __precompile__(true)
 
 using AbstractFFTs
-import FFTW
 using KernelAbstractions
 using LinearAlgebra
 using Logging
@@ -122,6 +121,7 @@ export WFSNormalization, MeanValidFluxNormalization, IncidenceFluxNormalization
 export NoiseModel, NoiseNone, NoisePhoton, NoiseReadout, NoisePhotonReadout
 export DMApplyMode, DMAdditive, DMReplace
 export ParallelConfig, with_parallel_config
+export set_fft_provider_threads!
 export gpu_backend_loaded, gpu_backend_array_type, gpu_backend_name, available_gpu_backends
 export disable_scalar_backend!, backend_rand, backend_randn, backend_zeros, backend_fill
 export GPUBackendTag, CUDABackendTag, MetalBackendTag, AMDGPUBackendTag

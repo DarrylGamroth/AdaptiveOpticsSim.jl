@@ -1,3 +1,5 @@
+import FFTW
+
 abstract type ExecutionStyle end
 
 abstract type GPUBackendTag end
@@ -40,6 +42,7 @@ allocate_array(backend, ::Type{T}, dims::Vararg{Int,N}) where {T,N} = backend{T}
 
 plan_fft_backend!(buffer) = plan_fft!(buffer)
 plan_ifft_backend!(buffer) = plan_ifft!(buffer)
+set_fft_provider_threads!(n::Integer) = FFTW.set_num_threads(n)
 
 @inline synchronize_backend!(::ScalarCPUStyle) = nothing
 @inline synchronize_backend!(style::AcceleratorStyle) = KernelAbstractions.synchronize(style.backend)

@@ -163,20 +163,20 @@ Avoid nested parallelism and oversubscription.
 Guidelines:
 - Prefer outer-loop threading; keep inner FFT/WFS kernels single-threaded unless
   profiling proves otherwise.
-- Coordinate CPU thread counts with FFTW/BLAS threads.
+- Coordinate CPU thread counts with FFT-provider/BLAS threads.
 - For deterministic mode, set all thread counts to 1.
 
 Sketch:
 ```julia
 struct ParallelConfig
     threads::Int
-    fftw_threads::Int
+    fft_threads::Int
     blas_threads::Int
 end
 
 function with_parallel_config(cfg::ParallelConfig, f)
     Base.Threads.nthreads() == cfg.threads || @warn "start Julia with JULIA_NUM_THREADS"
-    FFTW.set_num_threads(cfg.fftw_threads)
+    set_fft_provider_threads!(cfg.fft_threads)
     BLAS.set_num_threads(cfg.blas_threads)
     return f()
 end
@@ -321,7 +321,7 @@ Guidelines:
 - Make array backends explicit (`backend=Array` or `backend=CuArray`).
 - Avoid scalar indexing on GPU; call `CUDA.allowscalar(false)` in tests.
 - Preallocate GPU workspaces; minimize host-device transfers.
-- Use `AbstractFFTs.jl` so `FFTW` and `CUFFT` share the same API.
+- Use `AbstractFFTs.jl` so FFT providers share the same planning/execution API.
 - Use `KernelAbstractions.jl` for non-FFT kernels that should run on CPU and GPU
   from one implementation.
 - Keep noise generation backend-aware (CPU RNG vs GPU RNG).
@@ -340,9 +340,8 @@ Do not force everything through `KernelAbstractions.jl`:
   implementation stays readable.
 
 Migration note:
-- direct `FFTW.plan_fft!` storage is acceptable for current CPU paths,
-  but long-term FFT workspaces should be abstracted behind backend-aware plan
-  constructors so `FFTW` is not the only viable implementation detail.
+- FFT workspaces should be created through backend-aware helper functions so the
+  core depends on the `AbstractFFTs` interface rather than a specific provider.
 
 ## ModelingToolkit integration (control layer)
 ModelingToolkit.jl is a good fit for the AO control loop (filters, delays, DM
