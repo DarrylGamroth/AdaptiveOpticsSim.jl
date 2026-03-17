@@ -218,9 +218,12 @@ Current status of that backlog:
   Interaction-matrix tomography reconstruction, model-based tomography
   reconstructor outputs, and tomography command assembly now preserve the
   selected build backend instead of forcing host `Matrix`/`Vector` outputs.
-  Model-based covariance assembly still originates on CPU-style arrays before
-  being materialized onto the selected backend, so a fully accelerator-native
-  tomography builder is still future work.
+  Tomography covariance fill, fit-source averaging, and noise-covariance
+  assembly now also dispatch through the selected build backend, including
+  accelerator kernels for the matrix-fill stages. The remaining gap is that
+  guide-star coordinate generation and some sparse/operator assembly steps are
+  still CPU-originating before backend materialization, so a fully
+  accelerator-native tomography builder is still future work.
 - [ ] Add multi-WFS / multi-DM aggregation for MOAO, MCAO, and woofer/tweeter RTC scenarios.
 - [ ] Add specialized HIL-relevant sensors:
   `ZernikeSensor`, `CurvatureSensor`, and distributed/multi-WFS aggregation.

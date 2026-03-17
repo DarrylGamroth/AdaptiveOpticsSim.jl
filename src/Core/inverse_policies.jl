@@ -51,6 +51,8 @@ prepare_build_matrix(backend::GPUArrayBuildBackend, A::AbstractMatrix) = materia
 
 materialize_build(::NativeBuildBackend, A::AbstractMatrix) = A
 materialize_build(::CPUBuildBackend, A::AbstractMatrix) = Matrix(A)
+materialize_build(::NativeBuildBackend, A::AbstractVector) = A
+materialize_build(::CPUBuildBackend, A::AbstractVector) = Vector(A)
 
 function _backend_array(::Type{B}, ::Type{T}, dims::Vararg{Int,N}) where {B,T,N}
     return backend_fill(B, zero(T), dims...)
@@ -62,6 +64,12 @@ end
 
 function materialize_build(::GPUArrayBuildBackend{B}, A::AbstractMatrix{T}) where {B,T}
     out = _backend_array(B, T, size(A)...)
+    copyto!(out, A)
+    return out
+end
+
+function materialize_build(::GPUArrayBuildBackend{B}, A::AbstractVector{T}) where {B,T}
+    out = _backend_array(B, T, length(A))
     copyto!(out, A)
     return out
 end
