@@ -131,7 +131,7 @@ export GPUBackendTag, CUDABackendTag, MetalBackendTag, AMDGPUBackendTag
 export TomographyAtmosphereParams, LGSAsterismParams, LGSWFSParams
 export TomographyParams, TomographyDMParams, TomographyFitting
 export AbstractTomographyMethod, ModelBasedTomography, InteractionMatrixTomography
-export TomographyNoiseModel, RelativeSignalNoise, ScalarMeasurementNoise, DiagonalMeasurementNoise
+export TomographyNoiseModel, RelativeSignalNoise, ScalarMeasurementNoise, DiagonalMeasurementNoise, PhotonReadoutSlopeNoise
 export AbstractSlopeOrder, SimulationSlopes, InterleavedSlopes, InvertedSlopes
 export TomographyOperators, TomographicReconstructor, TomographyCommandReconstructor
 export build_reconstructor, assemble_reconstructor_and_fitting

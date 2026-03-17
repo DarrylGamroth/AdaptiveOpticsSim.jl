@@ -29,8 +29,36 @@ struct DiagonalMeasurementNoise{T<:AbstractFloat,V<:AbstractVector{T}} <: Tomogr
     variances::V
 end
 
+struct PhotonReadoutSlopeNoise{T<:AbstractFloat} <: TomographyNoiseModel
+    photons_per_subaperture::T
+    readout_sigma::T
+    qe::T
+    n_pixels::Int
+    excess_noise::T
+end
+
 RelativeSignalNoise(fraction::Real) = RelativeSignalNoise(float(fraction))
 ScalarMeasurementNoise(variance::Real) = ScalarMeasurementNoise(float(variance))
+
+function PhotonReadoutSlopeNoise(; photons_per_subaperture::Real, readout_sigma::Real=0.0,
+    qe::Real=1.0, n_pixels::Integer=1, excess_noise::Real=1.0)
+    T = promote_type(typeof(float(photons_per_subaperture)), typeof(float(readout_sigma)),
+        typeof(float(qe)), typeof(float(excess_noise)))
+    return PhotonReadoutSlopeNoise{T}(T(photons_per_subaperture), T(readout_sigma), T(qe), Int(n_pixels), T(excess_noise))
+end
+
+function PhotonReadoutSlopeNoise(det::Detector; photons_per_subaperture::Real, excess_noise::Real=1.0)
+    T = eltype(det.state.frame)
+    sigma = det.noise isa NoiseReadout ? T(det.noise.sigma) :
+        det.noise isa NoisePhotonReadout ? T(det.noise.sigma) : zero(T)
+    return PhotonReadoutSlopeNoise(
+        photons_per_subaperture=T(photons_per_subaperture),
+        readout_sigma=sigma,
+        qe=det.params.qe,
+        n_pixels=max(det.params.binning^2, 1),
+        excess_noise=T(excess_noise),
+    )
+end
 
 struct TomographyOperators{G,M,CX,CO,CN,RS,T}
     gamma::G
@@ -457,6 +485,16 @@ function tomography_noise_covariance(model::DiagonalMeasurementNoise{T},
     variances = similar(model.variances)
     @. variances = max(model.variances, eps(T))
     return Diagonal(variances)
+end
+
+function tomography_noise_covariance(model::PhotonReadoutSlopeNoise{T},
+    reference_diag::AbstractVector{T}) where {T<:AbstractFloat}
+    n = length(reference_diag)
+    photoelectrons = max(model.photons_per_subaperture * model.qe, eps(T))
+    shot = (model.excess_noise^2) / photoelectrons
+    readout = model.n_pixels * model.readout_sigma^2 / (photoelectrons^2)
+    σ2 = max(shot + readout, eps(T))
+    return Diagonal(fill(σ2, n))
 end
 
 function build_reconstructor(

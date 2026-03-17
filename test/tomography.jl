@@ -152,6 +152,22 @@ end
     )
     @test diag(recon_noise.operators.cnz) == fill(1e-2, 2)
 
+    det = Detector(noise=NoiseReadout(0.2), qe=0.8, binning=2)
+    detector_noise = PhotonReadoutSlopeNoise(det; photons_per_subaperture=1000.0, excess_noise=1.2)
+    recon_detector_noise = build_reconstructor(
+        InteractionMatrixTomography(),
+        imat,
+        grid_mask,
+        atm,
+        lgs,
+        wfs,
+        tomo,
+        dm;
+        fitting=fitting,
+        noise_model=detector_noise,
+    )
+    @test all(diag(recon_detector_noise.operators.cnz) .> 0)
+
     model = build_reconstructor(
         ModelBasedTomography(),
         atm,
