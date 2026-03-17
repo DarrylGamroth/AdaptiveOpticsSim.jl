@@ -228,5 +228,9 @@ On the representative CPU baseline:
 - warmed `sense!` allocates `0` bytes
 - warmed `step!` allocates `0` bytes
 
+The same runtime API is also now validated on CUDA through the GPU smoke
+matrix, including runtime-only and runtime-plus-science-detector cases under
+`CUDA.allowscalar(false)`.
+
 That runtime path is now suitable as the baseline for the next GPU-resident and
 RTC-facing execution work.

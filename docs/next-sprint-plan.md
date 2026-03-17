@@ -72,6 +72,16 @@ The sprint is successful when all of the following are true:
 4. The runtime API is backend-parametric and does not bake in CPU-only array
    types.
 
+## Current Status
+
+This sprint has now hit its original targets:
+
+1. `ClosedLoopRuntime`, `sense!`, `step!`, and `set_command!` are implemented.
+2. The representative warmed CPU runtime path is allocation-free.
+3. The full CPU test suite passes with runtime allocation regression coverage.
+4. The same runtime API has been validated on CUDA with
+   `CUDA.allowscalar(false)` through the package GPU smoke matrix.
+
 ## Out of Scope
 
 Not targeted in this sprint:
