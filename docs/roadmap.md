@@ -224,6 +224,9 @@ Current status of that backlog:
   guide-star coordinate generation and some sparse/operator assembly steps are
   still CPU-originating before backend materialization, so a fully
   accelerator-native tomography builder is still future work.
+- [x] Add maintained CUDA validation entry points for runtime and builder paths.
+  `scripts/gpu_smoke_cuda.jl` and `scripts/gpu_builder_cuda.jl` are now the
+  standard CUDA validation pair, and both have been exercised on `spiders`.
 - [ ] Add multi-WFS / multi-DM aggregation for MOAO, MCAO, and woofer/tweeter RTC scenarios.
 - [ ] Add specialized HIL-relevant sensors:
   `ZernikeSensor`, `CurvatureSensor`, and distributed/multi-WFS aggregation.

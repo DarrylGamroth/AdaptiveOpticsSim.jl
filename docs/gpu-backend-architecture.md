@@ -90,6 +90,8 @@ AdaptiveOpticsSim.jl/
   scripts/
     gpu_smoke_matrix.jl
     gpu_smoke_cuda.jl
+    gpu_builder_contract.jl
+    gpu_builder_cuda.jl
     gpu_smoke_metal.jl
     gpu_smoke_amdgpu.jl
   test/
@@ -242,6 +244,13 @@ We should define support levels clearly.
 - known limitations are documented
 
 Only Level 3 should be described as supported in user-facing docs.
+
+Current CUDA status:
+
+- runtime smoke: validated
+- builder smoke: validated for modal/calibration and compact tomography paths
+- support level: between Level 2 and Level 3 operationally, but still missing
+  automated CI on actual CUDA hardware
 
 ## FFT Strategy
 
