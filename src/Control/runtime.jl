@@ -1,3 +1,10 @@
+@kernel function apply_command_kernel!(coefs, cmd, sign, n::Int)
+    i = @index(Global, Linear)
+    if i <= n
+        @inbounds coefs[i] = sign * cmd[i]
+    end
+end
+
 mutable struct ClosedLoopRuntime{SIM<:AOSimulation,TEL,A,S,DM,W,R,V,WD,SD,RNG,T<:AbstractFloat}
     simulation::SIM
     tel::TEL
@@ -14,11 +21,20 @@ mutable struct ClosedLoopRuntime{SIM<:AOSimulation,TEL,A,S,DM,W,R,V,WD,SD,RNG,T<
     science_zero_padding::Int
 end
 
-@inline function apply_command!(coefs::AbstractVector{T}, cmd::AbstractVector{T}, sign::T) where {T<:AbstractFloat}
+@inline function apply_command!(::ScalarCPUStyle, coefs::AbstractVector{T}, cmd::AbstractVector{T}, sign::T) where {T<:AbstractFloat}
     @inbounds for i in eachindex(coefs, cmd)
         coefs[i] = sign * cmd[i]
     end
     return coefs
+end
+
+@inline function apply_command!(style::AcceleratorStyle, coefs::AbstractVector{T}, cmd::AbstractVector{T}, sign::T) where {T<:AbstractFloat}
+    launch_kernel!(style, apply_command_kernel!, coefs, cmd, sign, length(coefs); ndrange=length(coefs))
+    return coefs
+end
+
+@inline function apply_command!(coefs::AbstractVector{T}, cmd::AbstractVector{T}, sign::T) where {T<:AbstractFloat}
+    apply_command!(execution_style(coefs), coefs, cmd, sign)
 end
 
 function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
