@@ -465,6 +465,17 @@ function stable_hermitian_right_division(rhs::AbstractMatrix{T}, css::AbstractMa
     return transpose(lu(css) \ transpose(rhs))
 end
 
+function stable_hermitian_right_division(
+    backend::BuildBackend,
+    rhs::AbstractMatrix{T},
+    css::AbstractMatrix{T},
+) where {T<:AbstractFloat}
+    return materialize_build(backend, rhs, stable_hermitian_right_division(
+        prepare_build_matrix(backend, rhs),
+        prepare_build_matrix(backend, css),
+    ))
+end
+
 function tomography_noise_covariance(model::RelativeSignalNoise{T},
     reference_diag::AbstractVector{T}) where {T<:AbstractFloat}
     variances = similar(reference_diag)
@@ -509,6 +520,7 @@ function build_reconstructor(
     fitting::Union{Nothing,TomographyFitting}=nothing,
     α::Real=10,
     noise_model::TomographyNoiseModel=RelativeSignalNoise(1e-3 * α),
+    build_backend::BuildBackend=default_build_backend(interaction_matrix),
 ) where {T<:AbstractFloat}
     size(interaction_matrix, 1) > 0 ||
         throw(InvalidConfiguration("interaction_matrix must have at least one row"))
@@ -518,15 +530,18 @@ function build_reconstructor(
     cxx = auto_correlation(atmosphere, asterism, wfs, grid_mask)
     cross = cross_correlation(atmosphere, asterism, wfs, tomography; grid_mask=grid_mask)
     cox = _fit_source_average(cross, _equal_fit_source_weights(tomography))
-    css_signal = Matrix(interaction_matrix * cxx * transpose(interaction_matrix))
+    cxx_native = materialize_build(build_backend, interaction_matrix, cxx)
+    cox_native = materialize_build(build_backend, interaction_matrix, cox)
+    css_signal = interaction_matrix * cxx_native * transpose(interaction_matrix)
     cnz = tomography_noise_covariance(noise_model, diag(css_signal))
-    css = Matrix(css_signal .+ cnz)
-    recstat = stable_hermitian_right_division(cox * transpose(interaction_matrix), css)
+    css = css_signal .+ cnz
+    recstat = stable_hermitian_right_division(build_backend, cox_native * transpose(interaction_matrix), css)
+    native_mask = materialize_build(build_backend, interaction_matrix, grid_mask)
     operators = TomographyOperators(
         nothing,
-        Matrix(grid_mask),
-        cxx,
-        cox,
+        native_mask,
+        cxx_native,
+        cox_native,
         cnz,
         recstat,
         one(T),
@@ -534,7 +549,7 @@ function build_reconstructor(
     return TomographicReconstructor(
         InteractionMatrixTomography(),
         recstat,
-        Matrix(grid_mask),
+        native_mask,
         atmosphere,
         asterism,
         wfs,
@@ -553,7 +568,7 @@ function swap_xy_blocks(
     cols_per_channel = 2 * Int(n_valid_subap)
     size(matrix, 2) == cols_per_channel * Int(n_channels) ||
         throw(DimensionMismatchError("matrix column count must equal 2*n_valid_subap*n_channels"))
-    reordered = Matrix{T}(undef, size(matrix))
+    reordered = similar(matrix, T, size(matrix))
     @inbounds for channel in 1:Int(n_channels)
         channel_start = (channel - 1) * cols_per_channel
         src_x = channel_start + Int(n_valid_subap) + 1:channel_start + cols_per_channel
@@ -572,7 +587,7 @@ function interleave_xy_columns(
     cols_per_channel = 2 * Int(n_valid_subap)
     size(matrix, 2) == cols_per_channel * Int(n_channels) ||
         throw(DimensionMismatchError("matrix column count must equal 2*n_valid_subap*n_channels"))
-    reordered = Matrix{T}(undef, size(matrix))
+    reordered = similar(matrix, T, size(matrix))
     @inbounds for channel in 1:Int(n_channels)
         channel_start = (channel - 1) * cols_per_channel
         for subap in 1:Int(n_valid_subap)
@@ -588,7 +603,7 @@ prepare_slope_order(
     matrix::AbstractMatrix,
     n_valid_subap::Integer;
     n_channels::Integer=1,
-) = Matrix(matrix)
+) = copy(matrix)
 
 function prepare_slope_order(
     ::SimulationSlopes,
@@ -622,6 +637,7 @@ function assemble_reconstructor_and_fitting(
     sigma1::Real=1.0,
     sigma2::Real=1.7,
     stretch_factor::Real=1.03,
+    build_backend::BuildBackend=default_build_backend(reconstructor.reconstructor),
 ) where {T<:AbstractFloat}
     n_valid = n_valid_subapertures(reconstructor.wfs)
     n_channels >= 1 || throw(InvalidConfiguration("n_channels must be positive"))
@@ -643,7 +659,8 @@ function assemble_reconstructor_and_fitting(
         fitting
     modes = fit.influence_functions[vec(reconstructor.grid_mask), :]
     masked_fitting = TomographyFitting(modes; regularization=regularization, resolution=size(reconstructor.grid_mask, 1))
-    matrix = -masked_fitting.fitting_matrix * ordered * T(scaling_factor)
+    fitting_matrix = materialize_build(build_backend, reconstructor.reconstructor, masked_fitting.fitting_matrix)
+    matrix = -(fitting_matrix * ordered) * T(scaling_factor)
     return TomographyCommandReconstructor(
         matrix,
         masked_fitting,
@@ -678,7 +695,7 @@ function dm_commands(
     reconstructor::TomographyCommandReconstructor{T},
     slopes::AbstractVector{T},
 ) where {T<:AbstractFloat}
-    out = Vector{T}(undef, size(reconstructor.matrix, 1))
+    out = similar(slopes, T, size(reconstructor.matrix, 1))
     return dm_commands!(out, reconstructor, slopes)
 end
 
@@ -699,7 +716,7 @@ function dm_commands(
     reconstructor::TomographicReconstructor{InteractionMatrixTomography,T},
     slopes::AbstractVector{T},
 ) where {T<:AbstractFloat}
-    out = Vector{T}(undef, size(reconstructor.reconstructor, 1))
+    out = similar(slopes, T, size(reconstructor.reconstructor, 1))
     return dm_commands!(out, reconstructor, slopes)
 end
 
@@ -715,6 +732,7 @@ function build_reconstructor(
     fitting::Union{Nothing,TomographyFitting}=nothing,
     α::Real=10,
     noise_model::TomographyNoiseModel=RelativeSignalNoise(1e-3 * α),
+    build_backend::BuildBackend=default_build_backend(imat.matrix),
 )
     return build_reconstructor(
         InteractionMatrixTomography(),
@@ -728,6 +746,7 @@ function build_reconstructor(
         fitting=fitting,
         α=α,
         noise_model=noise_model,
+        build_backend=build_backend,
     )
 end
 
@@ -796,7 +815,7 @@ function reconstruct_wavefront(
     reconstructor::TomographicReconstructor{<:AbstractTomographyMethod,T},
     slopes::AbstractVector{T},
 ) where {T<:AbstractFloat}
-    out = Vector{T}(undef, size(reconstructor.reconstructor, 1))
+    out = similar(slopes, T, size(reconstructor.reconstructor, 1))
     return reconstruct_wavefront!(out, reconstructor, slopes)
 end
 

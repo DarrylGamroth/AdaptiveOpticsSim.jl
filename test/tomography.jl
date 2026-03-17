@@ -152,6 +152,21 @@ end
     )
     @test diag(recon_noise.operators.cnz) == fill(1e-2, 2)
 
+    recon_cpu = build_reconstructor(
+        InteractionMatrixTomography(),
+        imat,
+        grid_mask,
+        atm,
+        lgs,
+        wfs,
+        tomo,
+        dm;
+        fitting=fitting,
+        build_backend=CPUBuildBackend(),
+    )
+    @test recon_cpu.reconstructor isa Matrix
+    @test recon_cpu.grid_mask isa Matrix{Bool}
+
     det = Detector(noise=NoiseReadout(0.2), qe=0.8, binning=2)
     detector_noise = PhotonReadoutSlopeNoise(det; photons_per_subaperture=1000.0, excess_noise=1.2)
     recon_detector_noise = build_reconstructor(
@@ -214,6 +229,9 @@ end
         1.0 NaN
         2.0 3.0
     ] nans=true
+
+    cmds = dm_commands(recon, slopes)
+    @test length(cmds) == size(recon.reconstructor, 1)
 end
 
 @testset "Tomography Command Assembly" begin
@@ -263,6 +281,12 @@ end
         scaling_factor=2.0,
     )
     @test size(cmd_recon.matrix, 2) == 2
+    cmd_recon_cpu = assemble_reconstructor_and_fitting(
+        model_recon,
+        dm;
+        build_backend=CPUBuildBackend(),
+    )
+    @test cmd_recon_cpu.matrix isa Matrix
     commands = dm_commands(cmd_recon, [0.1, -0.2])
     @test length(commands) == count(dm.valid_actuators)
     original = copy(cmd_recon.matrix)

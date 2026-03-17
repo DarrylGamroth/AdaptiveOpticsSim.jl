@@ -49,6 +49,14 @@ prepare_build_matrix(::CPUBuildBackend, A::AbstractMatrix) = Matrix(A)
 materialize_build(::NativeBuildBackend, A::AbstractMatrix) = A
 materialize_build(::CPUBuildBackend, A::AbstractMatrix) = Matrix(A)
 
+function materialize_build(::NativeBuildBackend, ref::AbstractMatrix, data::AbstractMatrix)
+    out = similar(ref, eltype(data), size(data)...)
+    copyto!(out, data)
+    return out
+end
+
+materialize_build(::CPUBuildBackend, ::AbstractMatrix, data::AbstractMatrix) = Matrix(data)
+
 function materialize_build(::NativeBuildBackend, ref::AbstractVector{T}, data::AbstractVector{T}) where {T}
     out = similar(ref, T, length(data))
     copyto!(out, data)
