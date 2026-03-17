@@ -119,11 +119,32 @@ end
     i = @index(Global, Linear)
     if i <= n
         T = eltype(out)
-        u1 = uniform01(T, splitmix64(seed + UInt64(2 * i - 1)))
-        u2 = uniform01(T, splitmix64(seed + UInt64(2 * i)))
-        radius = sqrt(T(-2) * log(u1))
-        phase = T(2 * pi) * u2
-        @inbounds out[i] = radius * cos(phase)
+        @inbounds out[i] = normal01(T, seed + UInt64(2 * i - 1), seed + UInt64(2 * i))
+    end
+end
+
+@kernel function poisson_noise_kernel!(img, seed::UInt64, n::Int)
+    i = @index(Global, Linear)
+    if i <= n
+        T = eltype(img)
+        λ = @inbounds img[i]
+        if λ <= zero(T)
+            @inbounds img[i] = zero(T)
+        elseif λ < T(30)
+            limit = exp(-λ)
+            prod = one(T)
+            count = 0
+            key = seed + UInt64(0x9e3779b97f4a7c15) * UInt64(i)
+            while prod > limit
+                count += 1
+                prod *= uniform01(T, splitmix64(key + UInt64(count)))
+            end
+            @inbounds img[i] = T(count - 1)
+        else
+            z = normal01(T, seed + UInt64(2 * i - 1), seed + UInt64(2 * i))
+            sample = floor(λ + sqrt(λ) * z + T(0.5))
+            @inbounds img[i] = max(zero(T), sample)
+        end
     end
 end
 
@@ -137,6 +158,14 @@ end
 @inline function uniform01(::Type{T}, x::UInt64) where {T<:AbstractFloat}
     u = T(ldexp(Float64(x >>> 11), -53))
     return clamp(u, eps(T), prevfloat(one(T)))
+end
+
+@inline function normal01(::Type{T}, x1::UInt64, x2::UInt64) where {T<:AbstractFloat}
+    u1 = uniform01(T, splitmix64(x1))
+    u2 = uniform01(T, splitmix64(x2))
+    radius = sqrt(T(-2) * log(u1))
+    phase = T(2 * pi) * u2
+    return radius * cos(phase)
 end
 
 function pad_center!(dest::AbstractMatrix, src::AbstractMatrix)
@@ -355,11 +384,9 @@ function _poisson_noise!(::ScalarCPUStyle, rng::AbstractRNG, img::AbstractMatrix
     return img
 end
 
-function _poisson_noise!(::AcceleratorStyle, rng::AbstractRNG, img::AbstractMatrix{T}) where {T}
-    host = Matrix{T}(undef, size(img))
-    copyto!(host, img)
-    _poisson_noise!(ScalarCPUStyle(), rng, host)
-    copyto!(img, host)
+function _poisson_noise!(style::AcceleratorStyle, rng::AbstractRNG, img::AbstractMatrix{T}) where {T<:AbstractFloat}
+    seed = rand(rng, UInt64)
+    launch_kernel!(style, poisson_noise_kernel!, img, seed, length(img); ndrange=length(img))
     return img
 end
 
