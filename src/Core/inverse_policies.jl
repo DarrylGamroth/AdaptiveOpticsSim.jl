@@ -1,4 +1,5 @@
 using LinearAlgebra
+using SparseArrays
 
 abstract type InversePolicy end
 abstract type BuildBackend end
@@ -72,6 +73,12 @@ function materialize_build(::GPUArrayBuildBackend{B}, A::AbstractMatrix{T}) wher
     return out
 end
 
+function materialize_build(::GPUArrayBuildBackend{B}, A::SparseMatrixCSC{T}) where {B,T}
+    out = _backend_array(B, T, size(A)...)
+    copyto!(out, Matrix(A))
+    return out
+end
+
 function materialize_build(::GPUArrayBuildBackend{B}, A::BitMatrix) where {B}
     out = _backend_array(B, Bool, size(A)...)
     copyto!(out, Matrix{Bool}(A))
@@ -101,6 +108,12 @@ materialize_build(::CPUBuildBackend, ::AbstractMatrix, data::AbstractMatrix) = M
 function materialize_build(::GPUArrayBuildBackend{B}, ref::AbstractMatrix, data::AbstractMatrix) where {B}
     out = _backend_array(B, eltype(data), size(data)...)
     copyto!(out, data)
+    return out
+end
+
+function materialize_build(::GPUArrayBuildBackend{B}, ref::AbstractMatrix, data::SparseMatrixCSC{T}) where {B,T}
+    out = _backend_array(B, T, size(data)...)
+    copyto!(out, Matrix(data))
     return out
 end
 
