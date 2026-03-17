@@ -92,6 +92,8 @@ function GainSensingCamera(mask::AbstractMatrix, basis::AbstractArray;
     n_modes = size(basis_t, 3)
     og = similar(vec(mask_c), T, n_modes)
     fill!(og, one(T))
+    weak_mask = similar(og, Bool)
+    fill!(weak_mask, false)
     fftws = GSCFFTWorkspace(mask_c; T=T)
     mask_fft = similar(mask_c)
     fft2c!(mask_fft, fftws, mask_c)
@@ -99,7 +101,7 @@ function GainSensingCamera(mask::AbstractMatrix, basis::AbstractArray;
     ir_probe = similar(mask_c, T, size(mask_c, 1), size(mask_c, 2))
     sensi_probe = similar(og, Complex{T})
     metadata = detector === nothing ? nothing : GSCDetectorMetadata(detector; T=T)
-    gsc = GainSensingCamera{T, typeof(mask_c), typeof(basis_t), typeof(bp_probe), typeof(ir_probe), typeof(sensi_probe), typeof(og), BitVector, typeof(fftws)}(
+    gsc = GainSensingCamera{T, typeof(mask_c), typeof(basis_t), typeof(bp_probe), typeof(ir_probe), typeof(sensi_probe), typeof(og), typeof(weak_mask), typeof(fftws)}(
         mask_c,
         mask_fft,
         basis_t,
@@ -113,7 +115,7 @@ function GainSensingCamera(mask::AbstractMatrix, basis::AbstractArray;
         similar(ir_probe),
         similar(sensi_probe),
         og,
-        falses(n_modes),
+        weak_mask,
         fftws,
         metadata,
     )
@@ -221,15 +223,26 @@ function compute_optical_gains!(gsc::GainSensingCamera, frame::AbstractMatrix)
     normalize_frame!(gsc.frame_buffer, frame, total)
     impulse_response!(gsc.ir_buffer, gsc, gsc.frame_buffer)
     sensitivity!(gsc.sensi_buffer, gsc, gsc.ir_buffer, ir_calib)
-    compute_optical_gains!(gsc.og, gsc.sensi_buffer, sensi_calib, gsc.weak_mode_mask)
+    compute_optical_gains!(execution_style(gsc.og), gsc.og, gsc.sensi_buffer, sensi_calib, gsc.weak_mode_mask)
     return gsc.og
 end
 
 function compute_optical_gains!(out::AbstractVector{T}, sensi_sky::AbstractVector, sensi_calib::AbstractVector,
     weak_mode_mask::AbstractVector{Bool}) where {T<:AbstractFloat}
+    return compute_optical_gains!(execution_style(out), out, sensi_sky, sensi_calib, weak_mode_mask)
+end
+
+function compute_optical_gains!(::ScalarCPUStyle, out::AbstractVector{T}, sensi_sky::AbstractVector, sensi_calib::AbstractVector,
+    weak_mode_mask::AbstractVector{Bool}) where {T<:AbstractFloat}
     @inbounds for i in eachindex(out, sensi_sky, sensi_calib, weak_mode_mask)
         out[i] = weak_mode_mask[i] ? one(T) : real(sensi_sky[i] / sensi_calib[i])
     end
+    return out
+end
+
+function compute_optical_gains!(::AcceleratorStyle, out::AbstractVector{T}, sensi_sky::AbstractVector, sensi_calib::AbstractVector,
+    weak_mode_mask::AbstractVector{Bool}) where {T<:AbstractFloat}
+    @. out = ifelse(weak_mode_mask, one(T), real(sensi_sky / sensi_calib))
     return out
 end
 
