@@ -223,12 +223,10 @@ smaller setup allocations.
 The package now also has a persistent `ClosedLoopRuntime` with `sense!` and
 `step!` for repeated closed-loop execution.
 
-On the initial representative CPU baseline:
+On the representative CPU baseline:
 
-- warmed `step!` currently allocates about `240` bytes
-- the path is already persistent and benchmarked
-- the remaining allocation appears to be thin wrapper overhead, not large
-  buffer churn
+- warmed `sense!` allocates `0` bytes
+- warmed `step!` allocates `0` bytes
 
-This is good enough for regression gating while the runtime API stabilizes, but
-it is not yet the final zero-allocation target for the sprint.
+That runtime path is now suitable as the baseline for the next GPU-resident and
+RTC-facing execution work.

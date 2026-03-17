@@ -186,7 +186,7 @@ end
     step!(runtime)
     @test length(runtime.command) == length(dm.state.coefs)
     @test size(output_frame(det)) == (32, 32)
-    @test closed_loop_runtime_allocations() <= 256
+    @test closed_loop_runtime_allocations() == 0
 end
 
 @testset "Detector" begin
