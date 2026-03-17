@@ -463,6 +463,18 @@ end
     end
 end
 
+@kernel function zero_invalid_spots_kernel!(spot_cube, valid_mask, n_sub::Int, n1::Int, n2::Int)
+    idx, x, y = @index(Global, NTuple)
+    n_spots = n_sub * n_sub
+    if idx <= n_spots && x <= n1 && y <= n2
+        i = (idx - 1) ÷ n_sub + 1
+        j = idx - (i - 1) * n_sub
+        if !(@inbounds valid_mask[i, j])
+            @inbounds spot_cube[idx, x, y] = zero(eltype(spot_cube))
+        end
+    end
+end
+
 @inline function centroid_from_intensity!(intensity::AbstractMatrix{T}, threshold::T) where {T<:AbstractFloat}
     return centroid_from_intensity!(execution_style(intensity), intensity, threshold)
 end
@@ -515,10 +527,11 @@ end
     return @view wfs.state.spot_cube[idx, :, :]
 end
 
-host_mask_view(::ScalarCPUStyle, valid_mask::AbstractMatrix{Bool}) = valid_mask
-host_mask_view(::AcceleratorStyle, valid_mask::AbstractMatrix{Bool}) = Array(valid_mask)
-
 function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
+    return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src)
+end
+
+function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
     sub = div(n, n_sub)
@@ -527,10 +540,9 @@ function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::AbstractSo
     oy = div(pad - sub, 2)
     peak = zero(eltype(wfs.state.slopes))
     idx = 1
-    valid_mask = host_mask_view(execution_style(wfs.state.valid_mask), wfs.state.valid_mask)
     @inbounds for i in 1:n_sub, j in 1:n_sub
         spot_view = sh_spot_view(wfs, idx)
-        if valid_mask[i, j]
+        if wfs.state.valid_mask[i, j]
             xs = (i - 1) * sub + 1
             ys = (j - 1) * sub + 1
             xe = min(i * sub, n)
@@ -547,7 +559,34 @@ function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::AbstractSo
     return peak
 end
 
+function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
+    n = tel.params.resolution
+    n_sub = wfs.params.n_subap
+    sub = div(n, n_sub)
+    pad = size(wfs.state.field, 1)
+    ox = div(pad - sub, 2)
+    oy = div(pad - sub, 2)
+    idx = 1
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        xs = (i - 1) * sub + 1
+        ys = (j - 1) * sub + 1
+        xe = min(i * sub, n)
+        ye = min(j * sub, n)
+        compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+        sample_spot!(wfs, wfs.state.intensity)
+        copyto!(sh_spot_view(wfs, idx), wfs.state.spot)
+        idx += 1
+    end
+    launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
+        n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
+    return maximum(wfs.state.spot_cube)
+end
+
 function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::LGSSource)
+    return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src)
+end
+
+function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::LGSSource)
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
     sub = div(n, n_sub)
@@ -556,10 +595,9 @@ function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::LGSSource)
     oy = div(pad - sub, 2)
     peak = zero(eltype(wfs.state.slopes))
     idx = 1
-    valid_mask = host_mask_view(execution_style(wfs.state.valid_mask), wfs.state.valid_mask)
     @inbounds for i in 1:n_sub, j in 1:n_sub
         spot_view = sh_spot_view(wfs, idx)
-        if valid_mask[i, j]
+        if wfs.state.valid_mask[i, j]
             xs = (i - 1) * sub + 1
             ys = (j - 1) * sub + 1
             xe = min(i * sub, n)
@@ -575,10 +613,39 @@ function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::LGSSource)
         idx += 1
     end
     return peak
+end
+
+function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::LGSSource)
+    n = tel.params.resolution
+    n_sub = wfs.params.n_subap
+    sub = div(n, n_sub)
+    pad = size(wfs.state.field, 1)
+    ox = div(pad - sub, 2)
+    oy = div(pad - sub, 2)
+    idx = 1
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        xs = (i - 1) * sub + 1
+        ys = (j - 1) * sub + 1
+        xe = min(i * sub, n)
+        ye = min(j * sub, n)
+        compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+        apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
+        sample_spot!(wfs, wfs.state.intensity)
+        copyto!(sh_spot_view(wfs, idx), wfs.state.spot)
+        idx += 1
+    end
+    launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
+        n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
+    return maximum(wfs.state.spot_cube)
 end
 
 function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     det::AbstractDetector, rng::AbstractRNG)
+    return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src, det, rng)
+end
+
+function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
+    det::AbstractDetector, rng::AbstractRNG)
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
     sub = div(n, n_sub)
@@ -587,10 +654,9 @@ function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::AbstractSo
     oy = div(pad - sub, 2)
     peak = zero(eltype(wfs.state.slopes))
     idx = 1
-    valid_mask = host_mask_view(execution_style(wfs.state.valid_mask), wfs.state.valid_mask)
     @inbounds for i in 1:n_sub, j in 1:n_sub
         spot_view = sh_spot_view(wfs, idx)
-        if valid_mask[i, j]
+        if wfs.state.valid_mask[i, j]
             xs = (i - 1) * sub + 1
             ys = (j - 1) * sub + 1
             xe = min(i * sub, n)
@@ -608,7 +674,37 @@ function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::AbstractSo
     return peak
 end
 
+function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
+    det::AbstractDetector, rng::AbstractRNG)
+    n = tel.params.resolution
+    n_sub = wfs.params.n_subap
+    sub = div(n, n_sub)
+    pad = size(wfs.state.field, 1)
+    ox = div(pad - sub, 2)
+    oy = div(pad - sub, 2)
+    idx = 1
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        xs = (i - 1) * sub + 1
+        ys = (j - 1) * sub + 1
+        xe = min(i * sub, n)
+        ye = min(j * sub, n)
+        compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+        sample_spot!(wfs, wfs.state.intensity)
+        frame = capture!(det, wfs.state.spot; rng=rng)
+        copyto!(sh_spot_view(wfs, idx), frame)
+        idx += 1
+    end
+    launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
+        n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
+    return maximum(wfs.state.spot_cube)
+end
+
 function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
+    det::AbstractDetector, rng::AbstractRNG)
+    return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src, det, rng)
+end
+
+function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::LGSSource,
     det::AbstractDetector, rng::AbstractRNG)
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
@@ -618,10 +714,9 @@ function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
     oy = div(pad - sub, 2)
     peak = zero(eltype(wfs.state.slopes))
     idx = 1
-    valid_mask = host_mask_view(execution_style(wfs.state.valid_mask), wfs.state.valid_mask)
     @inbounds for i in 1:n_sub, j in 1:n_sub
         spot_view = sh_spot_view(wfs, idx)
-        if valid_mask[i, j]
+        if wfs.state.valid_mask[i, j]
             xs = (i - 1) * sub + 1
             ys = (j - 1) * sub + 1
             xe = min(i * sub, n)
@@ -638,6 +733,32 @@ function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
         idx += 1
     end
     return peak
+end
+
+function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::LGSSource,
+    det::AbstractDetector, rng::AbstractRNG)
+    n = tel.params.resolution
+    n_sub = wfs.params.n_subap
+    sub = div(n, n_sub)
+    pad = size(wfs.state.field, 1)
+    ox = div(pad - sub, 2)
+    oy = div(pad - sub, 2)
+    idx = 1
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        xs = (i - 1) * sub + 1
+        ys = (j - 1) * sub + 1
+        xe = min(i * sub, n)
+        ye = min(j * sub, n)
+        compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+        apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
+        sample_spot!(wfs, wfs.state.intensity)
+        frame = capture!(det, wfs.state.spot; rng=rng)
+        copyto!(sh_spot_view(wfs, idx), frame)
+        idx += 1
+    end
+    launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
+        n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
+    return maximum(wfs.state.spot_cube)
 end
 
 function sh_signal_from_spots!(wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}
@@ -703,7 +824,8 @@ function mean_valid_signal(::ScalarCPUStyle, signal::AbstractVector{T}, valid_ma
 end
 
 function mean_valid_signal(::AcceleratorStyle, signal::AbstractVector{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
-    return mean_valid_signal(ScalarCPUStyle(), Array(signal), Array(valid_mask))
+    count = sum(valid_mask)
+    return count == 0 ? one(T) : sum(signal) / (T(2) * T(count))
 end
 
 function subtract_reference_and_scale!(wfs::ShackHartmann)
