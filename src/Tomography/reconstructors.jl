@@ -750,68 +750,74 @@ function _build_diagonal_noise(backend::GPUArrayBuildBackend{B}, variances::Abst
     return out
 end
 
-function tomography_noise_covariance(::NativeBuildBackend, model::RelativeSignalNoise{T},
-    reference_diag::AbstractVector{T}) where {T<:AbstractFloat}
-    variances = similar(reference_diag)
-    @. variances = max(model.fraction * max(reference_diag, eps(T)), eps(T))
+function tomography_noise_covariance(::NativeBuildBackend, model::RelativeSignalNoise{S},
+    reference_diag::AbstractVector{T}) where {S<:AbstractFloat,T<:AbstractFloat}
+    variances = similar(reference_diag, T)
+    fraction = T(model.fraction)
+    @. variances = max(fraction * max(reference_diag, eps(T)), eps(T))
     return _build_diagonal_noise(NativeBuildBackend(), variances)
 end
 
-function tomography_noise_covariance(backend::BuildBackend, model::RelativeSignalNoise{T},
-    reference_diag::AbstractVector{T}) where {T<:AbstractFloat}
-    variances = similar(reference_diag)
-    @. variances = max(model.fraction * max(reference_diag, eps(T)), eps(T))
+function tomography_noise_covariance(backend::BuildBackend, model::RelativeSignalNoise{S},
+    reference_diag::AbstractVector{T}) where {S<:AbstractFloat,T<:AbstractFloat}
+    variances = similar(reference_diag, T)
+    fraction = T(model.fraction)
+    @. variances = max(fraction * max(reference_diag, eps(T)), eps(T))
     return _build_diagonal_noise(backend, variances)
 end
 
-function tomography_noise_covariance(::NativeBuildBackend, model::ScalarMeasurementNoise{T},
-    reference_diag::AbstractVector{T}) where {T<:AbstractFloat}
+function tomography_noise_covariance(::NativeBuildBackend, model::ScalarMeasurementNoise{S},
+    reference_diag::AbstractVector{T}) where {S<:AbstractFloat,T<:AbstractFloat}
     n = length(reference_diag)
-    return Diagonal(fill(max(model.variance, eps(T)), n))
+    return Diagonal(fill(max(T(model.variance), eps(T)), n))
 end
 
-function tomography_noise_covariance(backend::BuildBackend, model::ScalarMeasurementNoise{T},
-    reference_diag::AbstractVector{T}) where {T<:AbstractFloat}
-    variances = similar(reference_diag)
-    fill!(variances, max(model.variance, eps(T)))
+function tomography_noise_covariance(backend::BuildBackend, model::ScalarMeasurementNoise{S},
+    reference_diag::AbstractVector{T}) where {S<:AbstractFloat,T<:AbstractFloat}
+    variances = similar(reference_diag, T)
+    fill!(variances, max(T(model.variance), eps(T)))
     return _build_diagonal_noise(backend, variances)
 end
 
-function tomography_noise_covariance(::NativeBuildBackend, model::DiagonalMeasurementNoise{T},
-    reference_diag::AbstractVector{T}) where {T<:AbstractFloat}
+function tomography_noise_covariance(::NativeBuildBackend, model::DiagonalMeasurementNoise{S},
+    reference_diag::AbstractVector{T}) where {S<:AbstractFloat,T<:AbstractFloat}
     length(model.variances) == length(reference_diag) ||
         throw(DimensionMismatchError("tomography noise variances must match slope dimension"))
-    variances = similar(model.variances)
-    @. variances = max(model.variances, eps(T))
+    variances = similar(reference_diag, T)
+    @inbounds for i in eachindex(variances, model.variances)
+        variances[i] = max(T(model.variances[i]), eps(T))
+    end
     return Diagonal(variances)
 end
 
-function tomography_noise_covariance(backend::BuildBackend, model::DiagonalMeasurementNoise{T},
-    reference_diag::AbstractVector{T}) where {T<:AbstractFloat}
+function tomography_noise_covariance(backend::BuildBackend, model::DiagonalMeasurementNoise{S},
+    reference_diag::AbstractVector{T}) where {S<:AbstractFloat,T<:AbstractFloat}
     length(model.variances) == length(reference_diag) ||
         throw(DimensionMismatchError("tomography noise variances must match slope dimension"))
-    variances = similar(model.variances)
-    @. variances = max(model.variances, eps(T))
+    variances = similar(reference_diag, T)
+    @inbounds for i in eachindex(variances, model.variances)
+        variances[i] = max(T(model.variances[i]), eps(T))
+    end
     return _build_diagonal_noise(backend, variances)
 end
 
-function tomography_noise_covariance(::NativeBuildBackend, model::PhotonReadoutSlopeNoise{T},
-    reference_diag::AbstractVector{T}) where {T<:AbstractFloat}
+function tomography_noise_covariance(::NativeBuildBackend, model::PhotonReadoutSlopeNoise{S},
+    reference_diag::AbstractVector{T}) where {S<:AbstractFloat,T<:AbstractFloat}
     n = length(reference_diag)
-    photoelectrons = max(model.photons_per_subaperture * model.qe, eps(T))
-    shot = (model.excess_noise^2) / photoelectrons
-    readout = model.n_pixels * model.readout_sigma^2 / (photoelectrons^2)
+    photoelectrons = max(T(model.photons_per_subaperture) * T(model.qe), eps(T))
+    shot = T(model.excess_noise)^2 / photoelectrons
+    readout = T(model.n_pixels) * T(model.readout_sigma)^2 / (photoelectrons^2)
     σ2 = max(shot + readout, eps(T))
     return Diagonal(fill(σ2, n))
 end
 
-function tomography_noise_covariance(backend::BuildBackend, model::PhotonReadoutSlopeNoise{T},
-    reference_diag::AbstractVector{T}) where {T<:AbstractFloat}
-    photoelectrons = max(model.photons_per_subaperture * model.qe, eps(T))
-    shot = (model.excess_noise^2) / photoelectrons
-    readout = model.n_pixels * model.readout_sigma^2 / (photoelectrons^2)
+function tomography_noise_covariance(backend::BuildBackend, model::PhotonReadoutSlopeNoise{S},
+    reference_diag::AbstractVector{T}) where {S<:AbstractFloat,T<:AbstractFloat}
+    photoelectrons = max(T(model.photons_per_subaperture) * T(model.qe), eps(T))
+    shot = T(model.excess_noise)^2 / photoelectrons
+    readout = T(model.n_pixels) * T(model.readout_sigma)^2 / (photoelectrons^2)
     σ2 = max(shot + readout, eps(T))
-    variances = similar(reference_diag)
+    variances = similar(reference_diag, T)
     fill!(variances, σ2)
     return _build_diagonal_noise(backend, variances)
 end
