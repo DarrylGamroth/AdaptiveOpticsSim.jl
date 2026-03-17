@@ -23,26 +23,33 @@ This review is based on direct inspection of the current code in:
 - `Intentional` means the Julia behavior is different by design.
 - `Gap` means the Julia port is not yet equivalent at the feature or workflow
   level.
+- `Deferred` means the difference is real, but it is outside the current core
+  parity target.
+- `Diagnostic` means the scenario is useful for comparison, but it is not a
+  good hard parity gate.
 - `Extension` means Julia supports something beyond the main OOPAO surface.
 
 ## Executive Summary
 
-The Julia port is already close to OOPAO in core optics, atmosphere, SH/Pyramid/
-BioEdge sensing, GSC optical gains, LiFT interaction matrices, compact
-closed-loop traces, transfer-function workflows, and pyTomoAO-backed
-tomography.
+The Julia port is already close to OOPAO in core optics, atmosphere,
+SH/Pyramid/BioEdge sensing, GSC optical gains, LiFT interaction matrices,
+compact closed-loop traces, transfer-function workflows, pyTomoAO-backed
+tomography, and the current deterministic parity bundle.
 
 The biggest differences today are:
 
 1. The Julia package is architecturally different on purpose: multiple
    dispatch, param/state separation, trait-driven backends, column-major
    internals, structured errors, and cached workspaces.
-2. Some OOPAO surface features are still missing from Julia, especially
-   `tools/*`, GUI/display helpers, and some detector/telescope convenience
-   features.
-3. A few workflow-level fidelity gaps remain, most notably the full
-   atmosphere-driven Pyramid+GSC tutorial trace under huge aberrations.
-4. In a few places Julia intentionally keeps the core narrower and cleaner than
+2. The remaining unported OOPAO surface is mostly the `tools/*` and
+   GUI/display ecosystem, which is currently deferred rather than treated as a
+   core parity blocker.
+3. The full long-horizon atmosphere-driven Pyramid+GSC replay remains a
+   diagnostic stress case, not a normative parity gate.
+4. Julia now exceeds OOPAO in some engineering areas, especially numerical
+   conditioning policy, runtime/GPU architecture, and explicit backend/noise
+   abstractions.
+5. In a few places Julia intentionally keeps the core narrower and cleaner than
    OOPAO, with optional or future features deferred instead of baked in.
 
 ## Intentional Architectural Differences
@@ -57,7 +64,7 @@ The biggest differences today are:
 | Randomness | Several Python components seed from wall-clock time or local random states | Julia centralizes RNG and supports deterministic fixed-seed workflows | Deterministic regression and RTC-style repeatability were explicit design goals | Intentional |
 | FFT handling | OOPAO relies on NumPy FFTs and some ad hoc GPU/CuPy branching | Julia caches FFT plans in long-lived objects and uses backend-aware FFT dispatch | Reduces allocations and planning overhead; enables a cleaner CPU/GPU path split | Intentional |
 | Parallelism | OOPAO uses `joblib`, helper tools like `set_paralleling_setup.py`, and module-specific choices | Julia uses threads and backend traits; `KernelAbstractions` is reserved for accelerator-friendly kernels | Simpler coarse-grained policy, less nested oversubscription, better fit for Julia runtime | Intentional |
-| GPU strategy | Partial CuPy support exists, but multiple modules force `xp = np` or only lightly use GPU branches | Julia code is written around parametric array backends and backend traits | The Julia design is more uniform and better aligned with future CUDA/accelerator support, even if full runtime CUDA validation is still pending | Intentional |
+| GPU strategy | Partial CuPy support exists, but multiple modules force `xp = np` or only lightly use GPU branches | Julia code is written around parametric array backends, backend traits, and extension-ready GPU backends | The Julia design is more uniform and better aligned with current CUDA validation and future accelerator support | Intentional |
 
 ## Core Optics Differences
 
@@ -72,7 +79,7 @@ The biggest differences today are:
 
 | Area | Python behavior | Julia behavior | Why it differs | Status |
 |---|---|---|---|---|
-| Detector physics surface | OOPAO detector models integration buffering, sensor type (`CCD/CMOS/EMCCD`), gain, ADC bits, FWC saturation, dark current, background noise/map, and digitalization | `src/Optics/detector.jl` now models sensor type, gain ordering, ADC quantization, FWC saturation, dark current, explicit integration buffering, background flux/map handling, QE, PSF sampling, binning, photon noise, and readout noise | Julia added the detector-electronics path without changing the low-latency capture surface | Equivalent except integer output type |
+| Detector physics surface | OOPAO detector models integration buffering, sensor type (`CCD/CMOS/EMCCD`), gain, ADC bits, FWC saturation, dark current, background noise/map, and digitalization | `src/Optics/detector.jl` now models sensor type, gain ordering, ADC quantization, FWC saturation, dark current, explicit integration buffering, background flux/map handling, QE, PSF sampling, binning, photon noise, readout noise, and typed digital outputs | Julia added the detector-electronics path without changing the low-latency capture surface | Equivalent |
 | Integration buffering | OOPAO accumulates frames until `integrationTime` is reached | Julia supports the same feature explicitly through `capture!(det, psf; sample_time=...)`, with `readout_ready(det)` exposing whether a completed readout is available | Julia keeps buffering explicit instead of coupling it implicitly to telescope relay semantics | Equivalent |
 | Output precision / quantization | OOPAO supports `bits`, `output_precision`, `digitalization` | Julia models detector quantization levels via `bits`/`full_well` and now exposes a typed output buffer/return frame when digital output is requested | Same practical surface, but with an explicit internal analog frame plus typed output view | Equivalent |
 | Sensor-specific gain path | OOPAO distinguishes EMCCD vs CCD/CMOS behavior | Julia now uses typed sensor selectors `CCDSensor()` / `CMOSSensor()` / `EMCCDSensor()` to apply gain in the correct stage of the readout path | Same feature, more Julian API surface | Equivalent |
@@ -116,7 +123,7 @@ The biggest differences today are:
 | Calibration storage | OOPAO uses class-heavy calibration helpers such as `CalibrationVault` and modal-basis utilities with print-driven status output | Julia ports these as typed data + explicit functions in `src/Calibration/*.jl` | Better separation of operators, data, and state | Intentional |
 | KL/NCPA default | OOPAO includes modal-basis and NCPA workflows, often around existing stored products and cockpit utilities | Julia supports HHt/PSD-based KL, but the default NCPA KL path is still DM-mode covariance (`MᵀM`) | The simpler default keeps the common DM-centric workflow lightweight while preserving the more physical option | Intentional, but worth revisiting |
 | SPRINT I/O | OOPAO tooling often assumes local files and helper utilities | Julia SPRINT supports cached sensitivity matrices via `Serialization`, but deliberately does not bake FITS into core | Core package should stay file-format agnostic | Intentional |
-| Stability policy | OOPAO often uses pseudoinverses and print-driven conditioning diagnostics | Julia currently does similar things in places; see `docs/numerical-stability-review.md` | This is not a Julia-vs-Python difference in philosophy yet; both can be improved | Shared weakness |
+| Stability policy | OOPAO often uses pseudoinverses and print-driven conditioning diagnostics | Julia now exposes typed inverse policies, stronger TSVD defaults, structured tomography noise models, and adaptive LiFT damping; see `docs/numerical-stability-review.md` | Julia has moved beyond the original port goal here to provide a more explicit and controllable numerical-policy layer | Intentional improvement |
 
 ## Tomography Differences
 
@@ -132,25 +139,29 @@ The biggest differences today are:
 | Area | Python behavior | Julia behavior | Why it differs | Status |
 |---|---|---|---|---|
 | Main tutorials | OOPAO provides scripts and notebooks like `image_formation.py`, `how_to_detector.py`, `how_to_SPRINT.py`, `AO_transfer_function.py`, `AO_closed_loop_*`, `how_to_tomography.py` | Julia ports the main practical workflows under `examples/tutorials/` | This is the core parity path | Largely equivalent |
-| Tutorial coverage | OOPAO also ships `demo_OOPAO.ipynb`, `ORP_AO_School_How_To.py`, and school/PAPYRUS/EKARUS material | Julia does not currently port the school/demo/display-heavy ecosystem one-to-one | Those are lower priority than core scientific workflows and rely heavily on plotting/tools helpers | Gap |
-| Full GSC tutorial replay | OOPAO has the full atmosphere-driven Pyramid+GSC tutorial | Julia has compact and bounded regressions plus branch-step parity, but not a committed full long-horizon parity gate | The remaining mismatch is still under investigation | Gap |
+| Tutorial coverage | OOPAO also ships `demo_OOPAO.ipynb`, `ORP_AO_School_How_To.py`, and school/PAPYRUS/EKARUS material | Julia does not currently port the school/demo/display-heavy ecosystem one-to-one | Those are lower priority than core scientific workflows and rely heavily on plotting/tools helpers | Deferred |
+| Full GSC tutorial replay | OOPAO has the full atmosphere-driven Pyramid+GSC tutorial | Julia has compact and bounded regressions plus branch-step parity, but not a committed full long-horizon parity gate | The remaining mismatch occurs in a huge-OPD regime that is better treated as a robustness stress case than a normative parity target | Diagnostic |
 
 ## Tools and UI Differences
 
 | Area | Python behavior | Julia behavior | Why it differs | Status |
 |---|---|---|---|---|
-| `tools/displayTools.py` | Present and widely used by tutorials | Not implemented in Julia core | Plotting is kept optional; display helpers should not drive the simulation design | Gap |
-| `tools/OopaoGUI.py` | Present in OOPAO | Not implemented | GUI is out of scope for core parity | Gap |
-| `tools/interpolateGeometricalTransformation.py` | Present and used by some tutorials / DM utilities | Not implemented as a standalone tools module | Julia favors domain-specific implementations where needed instead of porting the full tools layer wholesale | Gap |
-| `tools/interpolate_influence_functions.py` | Present | Not implemented as a standalone tools module | Same reason | Gap |
+| `tools/displayTools.py` | Present and widely used by tutorials | Not implemented in Julia core | Plotting is kept optional; display helpers should not drive the simulation design | Deferred |
+| `tools/OopaoGUI.py` | Present in OOPAO | Not implemented | GUI is out of scope for core parity | Deferred |
+| `tools/interpolateGeometricalTransformation.py` | Present and used by some tutorials / DM utilities | Not implemented as a standalone tools module | Julia favors domain-specific implementations where needed instead of porting the full tools layer wholesale | Deferred |
+| `tools/interpolate_influence_functions.py` | Present | Not implemented as a standalone tools module | Same reason | Deferred |
 | `tools/set_paralleling_setup.py` | Present and used in initialization helpers | Not implemented | Julia parallel policy is encoded in code structure and traits rather than a separate mutable setup helper | Intentional |
 | `tools/tools.py` | Mixed helper bag used throughout OOPAO | Not ported as a single catch-all module | Julia intentionally avoids a monolithic utility bag in favor of typed APIs | Intentional |
 
 ## Known Fidelity-Relevant Gaps
 
-These are the differences that still matter for parity work.
+There are no known remaining blockers for the current core feature-parity and
+deterministic-fidelity target.
+
+The remaining differences are mostly deferred ecosystem work:
 
 1. The OOPAO `tools/*` layer and display/GUI ecosystem are not ported.
+2. The school/demo/tutorial extras are not ported one-to-one.
 
 ## Diagnostic Stress Cases
 
@@ -177,8 +188,11 @@ These differences should not be “fixed” unless they block a validated workfl
 
 When continuing parity work:
 
-1. Treat the `Gap` rows as the backlog.
-2. Treat the `Intentional` rows as settled design unless they are shown to block
-   a reference workflow.
-3. Treat the `Extension` rows as Julia-specific optional capabilities, not as
+1. Treat the `Gap` rows as the active parity backlog.
+2. Treat the `Deferred` rows as optional ecosystem work, not as core parity
+   blockers.
+3. Treat the `Diagnostic` rows as robustness/comparison cases, not hard gates.
+4. Treat the `Intentional` rows as settled design unless they are shown to
+   block a reference workflow.
+5. Treat the `Extension` rows as Julia-specific optional capabilities, not as
    parity blockers.
