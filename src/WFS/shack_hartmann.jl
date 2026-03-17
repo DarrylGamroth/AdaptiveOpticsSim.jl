@@ -328,8 +328,30 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
     pad = size(wfs.state.field, 1)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
-    idx = 1
+    return measure_sh_asterism_diffractive!(execution_style(wfs.state.slopes), wfs, tel, ast, n, n_sub, sub, pad, ox, oy)
+end
 
+function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asterism,
+    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    Base.require_one_based_indexing(tel.state.opd)
+    if isempty(ast.sources)
+        throw(InvalidConfiguration("asterism must contain at least one source"))
+    end
+    wavelength(ast)
+    prepare_sampling!(wfs, tel, ast.sources[1])
+    ensure_sh_calibration!(wfs, tel, ast.sources[1])
+    n = tel.params.resolution
+    n_sub = wfs.params.n_subap
+    sub = div(n, n_sub)
+    pad = size(wfs.state.field, 1)
+    ox = div(pad - sub, 2)
+    oy = div(pad - sub, 2)
+    return measure_sh_asterism_diffractive!(execution_style(wfs.state.slopes), wfs, tel, ast, det, rng, n, n_sub, sub, pad, ox, oy)
+end
+
+function measure_sh_asterism_diffractive!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope,
+    ast::Asterism, n::Int, n_sub::Int, sub::Int, pad::Int, ox::Int, oy::Int)
+    idx = 1
     @inbounds for i in 1:n_sub, j in 1:n_sub
         xs = (i - 1) * sub + 1
         ys = (j - 1) * sub + 1
@@ -354,27 +376,52 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
         end
         idx += 1
     end
-    zero_invalid_sh_slopes!(execution_style(wfs.state.slopes), wfs.state.slopes, wfs.state.valid_mask)
+    zero_invalid_sh_slopes!(ScalarCPUStyle(), wfs.state.slopes, wfs.state.valid_mask)
     return wfs.state.slopes
 end
 
-function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asterism,
-    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
-    Base.require_one_based_indexing(tel.state.opd)
-    if isempty(ast.sources)
-        throw(InvalidConfiguration("asterism must contain at least one source"))
-    end
-    wavelength(ast)
-    prepare_sampling!(wfs, tel, ast.sources[1])
-    ensure_sh_calibration!(wfs, tel, ast.sources[1])
-    n = tel.params.resolution
-    n_sub = wfs.params.n_subap
-    sub = div(n, n_sub)
-    pad = size(wfs.state.field, 1)
-    ox = div(pad - sub, 2)
-    oy = div(pad - sub, 2)
+function measure_sh_asterism_diffractive!(::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope,
+    ast::Asterism, n::Int, n_sub::Int, sub::Int, pad::Int, ox::Int, oy::Int)
+    host_valid_mask = Array(wfs.state.valid_mask)
+    host_ref = vec(Array(wfs.state.reference_signal_2d))
+    host_slopes = Array(wfs.state.slopes)
     idx = 1
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        xs = (i - 1) * sub + 1
+        ys = (j - 1) * sub + 1
+        xe = min(i * sub, n)
+        ye = min(j * sub, n)
+        if host_valid_mask[i, j]
+            total_sum = zero(eltype(wfs.state.slopes))
+            sx_sum = zero(eltype(wfs.state.slopes))
+            sy_sum = zero(eltype(wfs.state.slopes))
+            for src in ast.sources
+                total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
+                total_sum += total
+                sx_sum += sx
+                sy_sum += sy
+            end
+            if total_sum <= 0
+                host_slopes[idx] = zero(eltype(wfs.state.slopes))
+                host_slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
+            else
+                nsrc = length(ast.sources)
+                host_slopes[idx] = ((sy_sum / nsrc) - host_ref[idx]) / wfs.state.slopes_units
+                host_slopes[idx + n_sub * n_sub] = ((sx_sum / nsrc) - host_ref[idx + n_sub * n_sub]) / wfs.state.slopes_units
+            end
+        else
+            host_slopes[idx] = zero(eltype(wfs.state.slopes))
+            host_slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
+        end
+        idx += 1
+    end
+    copyto!(wfs.state.slopes, host_slopes)
+    return wfs.state.slopes
+end
 
+function measure_sh_asterism_diffractive!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope,
+    ast::Asterism, det::AbstractDetector, rng::AbstractRNG, n::Int, n_sub::Int, sub::Int, pad::Int, ox::Int, oy::Int)
+    idx = 1
     @inbounds for i in 1:n_sub, j in 1:n_sub
         xs = (i - 1) * sub + 1
         ys = (j - 1) * sub + 1
@@ -399,7 +446,46 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
         end
         idx += 1
     end
-    zero_invalid_sh_slopes!(execution_style(wfs.state.slopes), wfs.state.slopes, wfs.state.valid_mask)
+    zero_invalid_sh_slopes!(ScalarCPUStyle(), wfs.state.slopes, wfs.state.valid_mask)
+    return wfs.state.slopes
+end
+
+function measure_sh_asterism_diffractive!(::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope,
+    ast::Asterism, det::AbstractDetector, rng::AbstractRNG, n::Int, n_sub::Int, sub::Int, pad::Int, ox::Int, oy::Int)
+    host_valid_mask = Array(wfs.state.valid_mask)
+    host_ref = vec(Array(wfs.state.reference_signal_2d))
+    host_slopes = Array(wfs.state.slopes)
+    idx = 1
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        xs = (i - 1) * sub + 1
+        ys = (j - 1) * sub + 1
+        xe = min(i * sub, n)
+        ye = min(j * sub, n)
+        if host_valid_mask[i, j]
+            total_sum = zero(eltype(wfs.state.slopes))
+            sx_sum = zero(eltype(wfs.state.slopes))
+            sy_sum = zero(eltype(wfs.state.slopes))
+            for src in ast.sources
+                total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx, det, rng)
+                total_sum += total
+                sx_sum += sx
+                sy_sum += sy
+            end
+            if total_sum <= 0
+                host_slopes[idx] = zero(eltype(wfs.state.slopes))
+                host_slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
+            else
+                nsrc = length(ast.sources)
+                host_slopes[idx] = ((sy_sum / nsrc) - host_ref[idx]) / wfs.state.slopes_units
+                host_slopes[idx + n_sub * n_sub] = ((sx_sum / nsrc) - host_ref[idx + n_sub * n_sub]) / wfs.state.slopes_units
+            end
+        else
+            host_slopes[idx] = zero(eltype(wfs.state.slopes))
+            host_slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
+        end
+        idx += 1
+    end
+    copyto!(wfs.state.slopes, host_slopes)
     return wfs.state.slopes
 end
 
