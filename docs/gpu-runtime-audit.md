@@ -41,6 +41,9 @@ The following runtime host fallbacks have been removed:
 - backend Gaussian noise generation in `randn_backend!`
   - previously staged through a host `Array`
   - now uses a backend-native stateless KA kernel
+- photon noise generation in `poisson_noise!`
+  - previously staged through a host matrix
+  - now uses a backend-native stateless KA kernel
 - diffractive Shack-Hartmann centroid extraction
   - previously copied `valid_mask`, `spot_cube`, and `slopes` to host
   - now computes slopes directly on device with a KA kernel
@@ -49,8 +52,6 @@ The following runtime host fallbacks have been removed:
 
 The main remaining host/device round-trips are:
 
-- photon noise in `poisson_noise!`
-  - accelerator path still copies through a host matrix
 - some Shack-Hartmann calibration/reference helpers
   - `sampled_spots_peak!`
   - `host_mask_view`
@@ -64,15 +65,18 @@ The main remaining host/device round-trips are:
 The most important remaining blockers for a truly device-resident runtime loop
 are:
 
-1. backend-native Poisson noise
-2. detector-noise paths that depend on it
-3. calibration/reference helpers if they need to run on device at runtime
+1. calibration/reference helpers if they need to run on device at runtime
+2. distinguishing setup-time host copies from true runtime fallbacks
+3. optional cleanup of setup-time host-built masks / phases
 
-The setup-time host copies are lower priority than runtime noise generation.
+The remaining setup-time host copies are lower priority than the runtime
+fallbacks that have now been removed.
 
 ## Recommended Next Steps
 
-1. Implement a backend-native Poisson-noise kernel.
-2. Re-audit detector capture paths with noise enabled after that change.
-3. Decide whether calibration/reference helpers must be fully device-resident or
+1. Decide whether calibration/reference helpers must be fully device-resident or
    can remain setup-only host-assisted paths.
+2. If they must run on device, remove the remaining Shack-Hartmann host-mask and
+   mean-signal helpers.
+3. Re-audit setup-time Pyramid/BioEdge mask and modulation builders only if
+   startup cost becomes a practical problem.
