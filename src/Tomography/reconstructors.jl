@@ -188,6 +188,31 @@ end
 
 @inline _kv56_scalar(z::T) where {T<:AbstractFloat} = _kv56_scalar(complex(z))
 
+@kernel function guide_grid_kernel!(xr, yr, coords, s, c, offset_x, offset_y, diameter, n::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= n
+        @inbounds begin
+            x = coords[i]
+            y = coords[j]
+            xr[j, i] = x * c - y * s - offset_x * diameter
+            yr[j, i] = y * c + x * s - offset_y * diameter
+        end
+    end
+end
+
+@kernel function guide_grid_stack_kernel!(xr, yr, coords, rotations, offset_xs, offset_ys, diameter, n::Int, n_gs::Int)
+    i, j, k = @index(Global, NTuple)
+    if i <= n && j <= n && k <= n_gs
+        @inbounds begin
+            x = coords[i]
+            y = coords[j]
+            s, c = sincos(rotations[k])
+            xr[j, i, k] = x * c - y * s - offset_xs[k] * diameter
+            yr[j, i, k] = y * c + x * s - offset_ys[k] * diameter
+        end
+    end
+end
+
 function _guide_star_grid(
     sampling::Integer,
     diameter::T,
@@ -210,6 +235,68 @@ function _guide_star_grid(
     return xr, yr
 end
 
+function _guide_star_grids(
+    sampling::Integer,
+    diameter::T,
+    rotations::AbstractVector{T},
+    offsets_x::AbstractVector{T},
+    offsets_y::AbstractVector{T},
+) where {T<:AbstractFloat}
+    n_gs = length(rotations)
+    length(offsets_x) == n_gs == length(offsets_y) ||
+        throw(DimensionMismatchError("guide-star grid parameter vectors must have equal length"))
+    xr = Array{T}(undef, sampling, sampling, n_gs)
+    yr = similar(xr)
+    @inbounds for gs in 1:n_gs
+        xg, yg = _guide_star_grid(sampling, diameter, rotations[gs], offsets_x[gs], offsets_y[gs])
+        @views xr[:, :, gs] .= xg
+        @views yr[:, :, gs] .= yg
+    end
+    return xr, yr
+end
+
+function _guide_star_grid(
+    backend::GPUArrayBuildBackend{B},
+    sampling::Integer,
+    diameter::T,
+    rotation_angle_rad::T,
+    offset_x::T,
+    offset_y::T,
+) where {B,T<:AbstractFloat}
+    coords_host = sampling == 1 ? T[zero(T)] : collect(range(-diameter / 2, diameter / 2; length=sampling))
+    coords = materialize_build(backend, coords_host)
+    s, c = sincos(rotation_angle_rad)
+    xr = _backend_array(B, T, sampling, sampling)
+    yr = _backend_array(B, T, sampling, sampling)
+    style = execution_style(xr)
+    launch_kernel!(style, guide_grid_kernel!, xr, yr, coords, s, c, offset_x, offset_y, diameter, sampling; ndrange=(sampling, sampling))
+    return xr, yr
+end
+
+function _guide_star_grids(
+    backend::GPUArrayBuildBackend{B},
+    sampling::Integer,
+    diameter::T,
+    rotations::AbstractVector{T},
+    offsets_x::AbstractVector{T},
+    offsets_y::AbstractVector{T},
+) where {B,T<:AbstractFloat}
+    n_gs = length(rotations)
+    length(offsets_x) == n_gs == length(offsets_y) ||
+        throw(DimensionMismatchError("guide-star grid parameter vectors must have equal length"))
+    coords_host = sampling == 1 ? T[zero(T)] : collect(range(-diameter / 2, diameter / 2; length=sampling))
+    coords = materialize_build(backend, coords_host)
+    rotations_native = materialize_build(backend, rotations)
+    offsets_x_native = materialize_build(backend, offsets_x)
+    offsets_y_native = materialize_build(backend, offsets_y)
+    xr = _backend_array(B, T, sampling, sampling, n_gs)
+    yr = _backend_array(B, T, sampling, sampling, n_gs)
+    style = execution_style(xr)
+    launch_kernel!(style, guide_grid_stack_kernel!, xr, yr, coords, rotations_native, offsets_x_native, offsets_y_native,
+        diameter, sampling, n_gs; ndrange=(sampling, sampling, n_gs))
+    return xr, yr
+end
+
 function _scaled_shifted_coords(
     x::AbstractMatrix{T},
     y::AbstractMatrix{T},
@@ -223,6 +310,24 @@ function _scaled_shifted_coords(
     beta_y = direction_vectors[2, src_index] * altitude[layer_index]
     scale = isfinite(src_height) ? one(T) - altitude[layer_index] / src_height : one(T)
     return @. complex(x * scale + beta_x, y * scale + beta_y)
+end
+
+function _scaled_shifted_coords(
+    ::GPUArrayBuildBackend,
+    x::AbstractMatrix{T},
+    y::AbstractMatrix{T},
+    direction_vectors::AbstractMatrix{T},
+    src_index::Int,
+    altitude::AbstractVector{T},
+    layer_index::Int,
+    src_height::T,
+) where {T<:AbstractFloat}
+    beta_x = direction_vectors[1, src_index] * altitude[layer_index]
+    beta_y = direction_vectors[2, src_index] * altitude[layer_index]
+    scale = isfinite(src_height) ? one(T) - altitude[layer_index] / src_height : one(T)
+    out = similar(x, Complex{T})
+    @. out = complex(x * scale + beta_x, y * scale + beta_y)
+    return out
 end
 
 function _covariance_matrix(
@@ -393,25 +498,21 @@ function auto_correlation(
     directions = direction_vectors(view(lgs_dir, :, 1), view(lgs_dir, :, 2))
     source_height = lgs_height_m(asterism, atmosphere)
 
-    guide_x = Vector{Matrix{T}}(undef, n_gs)
-    guide_y = similar(guide_x)
-    for gs in 1:n_gs
-        guide_x[gs], guide_y[gs] = _guide_star_grid(
-            sampling,
-            support_d,
-            wfs.lenslet_rotation_rad[gs],
-            wfs.lenslet_offset[1, gs],
-            wfs.lenslet_offset[2, gs],
-        )
-    end
+    guide_x, guide_y = _guide_star_grids(
+        sampling,
+        support_d,
+        wfs.lenslet_rotation_rad,
+        view(wfs.lenslet_offset, 1, :),
+        view(wfs.lenslet_offset, 2, :),
+    )
 
     for jgs in 1:n_gs
         for igs in 1:jgs
             block = zeros(T, n_valid, n_valid)
             for layer in eachindex(altitude)
                 iz = _scaled_shifted_coords(
-                    guide_x[igs],
-                    guide_y[igs],
+                    @view(guide_x[:, :, igs]),
+                    @view(guide_y[:, :, igs]),
                     directions,
                     igs,
                     altitude,
@@ -419,8 +520,8 @@ function auto_correlation(
                     source_height,
                 )
                 jz = _scaled_shifted_coords(
-                    guide_x[jgs],
-                    guide_y[jgs],
+                    @view(guide_x[:, :, jgs]),
+                    @view(guide_y[:, :, jgs]),
                     directions,
                     jgs,
                     altitude,
@@ -469,17 +570,14 @@ function auto_correlation(
     directions = direction_vectors(view(lgs_dir, :, 1), view(lgs_dir, :, 2))
     source_height = lgs_height_m(asterism, atmosphere)
 
-    guide_x = Vector{Matrix{T}}(undef, n_gs)
-    guide_y = similar(guide_x)
-    for gs in 1:n_gs
-        guide_x[gs], guide_y[gs] = _guide_star_grid(
-            sampling,
-            support_d,
-            wfs.lenslet_rotation_rad[gs],
-            wfs.lenslet_offset[1, gs],
-            wfs.lenslet_offset[2, gs],
-        )
-    end
+    guide_x, guide_y = _guide_star_grids(
+        backend,
+        sampling,
+        support_d,
+        wfs.lenslet_rotation_rad,
+        view(wfs.lenslet_offset, 1, :),
+        view(wfs.lenslet_offset, 2, :),
+    )
 
     for jgs in 1:n_gs
         for igs in 1:jgs
@@ -487,8 +585,9 @@ function auto_correlation(
             fill!(block, zero(T))
             for layer in eachindex(altitude)
                 iz = _scaled_shifted_coords(
-                    guide_x[igs],
-                    guide_y[igs],
+                    backend,
+                    @view(guide_x[:, :, igs]),
+                    @view(guide_y[:, :, igs]),
                     directions,
                     igs,
                     altitude,
@@ -496,8 +595,9 @@ function auto_correlation(
                     source_height,
                 )
                 jz = _scaled_shifted_coords(
-                    guide_x[jgs],
-                    guide_y[jgs],
+                    backend,
+                    @view(guide_x[:, :, jgs]),
+                    @view(guide_y[:, :, jgs]),
                     directions,
                     jgs,
                     altitude,
@@ -561,26 +661,21 @@ function cross_correlation(
     fit_directions_xyz = direction_vectors(fit_zenith, fit_azimuth)
     source_height = lgs_height_m(asterism, atmosphere)
     target_x, target_y = _guide_star_grid(sampling, support_d, zero(T), zero(T), zero(T))
-
-    guide_x = Vector{Matrix{T}}(undef, n_gs)
-    guide_y = similar(guide_x)
-    for gs in 1:n_gs
-        guide_x[gs], guide_y[gs] = _guide_star_grid(
-            sampling,
-            support_d,
-            wfs.lenslet_rotation_rad[gs],
-            wfs.lenslet_offset[1, gs],
-            wfs.lenslet_offset[2, gs],
-        )
-    end
+    guide_x, guide_y = _guide_star_grids(
+        sampling,
+        support_d,
+        wfs.lenslet_rotation_rad,
+        view(wfs.lenslet_offset, 1, :),
+        view(wfs.lenslet_offset, 2, :),
+    )
 
     for fit_idx in 1:n_fit
         for gs in 1:n_gs
             block = zeros(T, n_row, n_row)
             for layer in eachindex(altitude)
                 iz = _scaled_shifted_coords(
-                    guide_x[gs],
-                    guide_y[gs],
+                    @view(guide_x[:, :, gs]),
+                    @view(guide_y[:, :, gs]),
                     lgs_directions_xyz,
                     gs,
                     altitude,
@@ -637,19 +732,15 @@ function cross_correlation(
     fit_zenith, fit_azimuth = optimization_geometry(tomography)
     fit_directions_xyz = direction_vectors(fit_zenith, fit_azimuth)
     source_height = lgs_height_m(asterism, atmosphere)
-    target_x, target_y = _guide_star_grid(sampling, support_d, zero(T), zero(T), zero(T))
-
-    guide_x = Vector{Matrix{T}}(undef, n_gs)
-    guide_y = similar(guide_x)
-    for gs in 1:n_gs
-        guide_x[gs], guide_y[gs] = _guide_star_grid(
-            sampling,
-            support_d,
-            wfs.lenslet_rotation_rad[gs],
-            wfs.lenslet_offset[1, gs],
-            wfs.lenslet_offset[2, gs],
-        )
-    end
+    target_x, target_y = _guide_star_grid(backend, sampling, support_d, zero(T), zero(T), zero(T))
+    guide_x, guide_y = _guide_star_grids(
+        backend,
+        sampling,
+        support_d,
+        wfs.lenslet_rotation_rad,
+        view(wfs.lenslet_offset, 1, :),
+        view(wfs.lenslet_offset, 2, :),
+    )
 
     for fit_idx in 1:n_fit
         for gs in 1:n_gs
@@ -657,8 +748,8 @@ function cross_correlation(
             fill!(block, zero(T))
             for layer in eachindex(altitude)
                 iz = _scaled_shifted_coords(
-                    guide_x[gs],
-                    guide_y[gs],
+                    @view(guide_x[:, :, gs]),
+                    @view(guide_y[:, :, gs]),
                     lgs_directions_xyz,
                     gs,
                     altitude,
@@ -666,6 +757,7 @@ function cross_correlation(
                     source_height,
                 )
                 jz = _scaled_shifted_coords(
+                    backend,
                     target_x,
                     target_y,
                     fit_directions_xyz,

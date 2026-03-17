@@ -3,10 +3,17 @@ import FFTW
 abstract type ExecutionStyle end
 
 abstract type GPUBackendTag end
+abstract type GPUPrecisionPolicy end
 
 struct CUDABackendTag <: GPUBackendTag end
 struct MetalBackendTag <: GPUBackendTag end
 struct AMDGPUBackendTag <: GPUBackendTag end
+
+struct UnifiedGPUPrecision{T<:AbstractFloat} <: GPUPrecisionPolicy end
+struct SplitGPUPrecision{RT<:AbstractFloat,BT<:AbstractFloat} <: GPUPrecisionPolicy end
+
+UnifiedGPUPrecision(::Type{T}) where {T<:AbstractFloat} = UnifiedGPUPrecision{T}()
+SplitGPUPrecision(::Type{RT}, ::Type{BT}) where {RT<:AbstractFloat,BT<:AbstractFloat} = SplitGPUPrecision{RT,BT}()
 
 struct ScalarCPUStyle <: ExecutionStyle end
 
@@ -23,6 +30,14 @@ gpu_backend_loaded(::Type{<:GPUBackendTag}) = false
 gpu_backend_array_type(::Type{<:GPUBackendTag}) = nothing
 
 gpu_backend_name(::Type) = nothing
+
+gpu_runtime_type(::UnifiedGPUPrecision{T}) where {T<:AbstractFloat} = T
+gpu_build_type(::UnifiedGPUPrecision{T}) where {T<:AbstractFloat} = T
+gpu_runtime_type(::SplitGPUPrecision{RT,BT}) where {RT<:AbstractFloat,BT<:AbstractFloat} = RT
+gpu_build_type(::SplitGPUPrecision{RT,BT}) where {RT<:AbstractFloat,BT<:AbstractFloat} = BT
+
+default_gpu_precision_policy(::Type{<:GPUBackendTag}) = SplitGPUPrecision(Float32, Float32)
+high_accuracy_gpu_precision_policy(::Type{<:GPUBackendTag}) = SplitGPUPrecision(Float32, Float64)
 
 disable_scalar_backend!(::Type{<:GPUBackendTag}) = nothing
 backend_rand(::Type{<:GPUBackendTag}, ::Type, dims::Vararg{Int}) = error("GPU backend random generation is not available")

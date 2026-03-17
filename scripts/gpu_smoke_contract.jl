@@ -208,6 +208,50 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
         return frame
     end
 
+    record_gpu_smoke!(failures, "closed_loop_multi_boundary") do
+        rt1_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
+            central_obstruction=0.0f0, T=T, backend=BackendArray)
+        rt1_src = Source(band=:I, magnitude=0.0, T=T)
+        rt1_atm = KolmogorovAtmosphere(rt1_tel; r0=0.2, L0=25.0, T=T, backend=BackendArray)
+        rt1_dm = DeformableMirror(rt1_tel; n_act=4, influence_width=0.3, T=T, backend=BackendArray)
+        rt1_wfs = ShackHartmann(rt1_tel; n_subap=4, T=T, backend=BackendArray)
+        rt1_sim = AOSimulation(rt1_tel, rt1_atm, rt1_src, rt1_dm, rt1_wfs)
+        rt1_recon = ModalReconstructor(interaction_matrix(rt1_dm, rt1_wfs, rt1_tel; amplitude=T(0.05)); gain=T(0.5))
+        rt1 = ClosedLoopRuntime(rt1_sim, rt1_recon; rng=rng)
+
+        rt2_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
+            central_obstruction=0.0f0, T=T, backend=BackendArray)
+        rt2_src = Source(band=:I, magnitude=0.0, T=T)
+        rt2_atm = KolmogorovAtmosphere(rt2_tel; r0=0.2, L0=25.0, T=T, backend=BackendArray)
+        rt2_dm = DeformableMirror(rt2_tel; n_act=4, influence_width=0.3, T=T, backend=BackendArray)
+        rt2_wfs = PyramidWFS(rt2_tel; n_subap=4, mode=Geometric(), T=T, backend=BackendArray)
+        rt2_sim = AOSimulation(rt2_tel, rt2_atm, rt2_src, rt2_dm, rt2_wfs)
+        rt2_recon = ModalReconstructor(interaction_matrix(rt2_dm, rt2_wfs, rt2_tel; amplitude=T(0.05)); gain=T(0.5))
+        rt2 = ClosedLoopRuntime(rt2_sim, rt2_recon; rng=rng)
+
+        boundary = MultiRTCBoundary(rt1, rt2)
+        step!(boundary)
+        @assert rtc_command(boundary) isa BackendArray
+        @assert rtc_slopes(boundary) isa BackendArray
+        return rtc_command(boundary)
+    end
+
+    record_gpu_smoke!(failures, "runtime_reconstructor_refresh") do
+        rt_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
+            central_obstruction=0.0f0, T=T, backend=BackendArray)
+        rt_src = Source(band=:I, magnitude=0.0, T=T)
+        rt_atm = KolmogorovAtmosphere(rt_tel; r0=0.2, L0=25.0, T=T, backend=BackendArray)
+        rt_dm = DeformableMirror(rt_tel; n_act=4, influence_width=0.3, T=T, backend=BackendArray)
+        rt_wfs = ShackHartmann(rt_tel; n_subap=4, T=T, backend=BackendArray)
+        rt_sim = AOSimulation(rt_tel, rt_atm, rt_src, rt_dm, rt_wfs)
+        rt_imat = interaction_matrix(rt_dm, rt_wfs, rt_tel; amplitude=T(0.05))
+        runtime = ClosedLoopRuntime(rt_sim, ModalReconstructor(rt_imat; gain=T(0.5)); rng=rng)
+        refreshed = with_reconstructor(runtime, ModalReconstructor(rt_imat; gain=T(0.25)))
+        step!(refreshed)
+        @assert refreshed.command isa BackendArray
+        return refreshed.command
+    end
+
     record_gpu_smoke!(failures, "interaction_matrix_reconstructor") do
         cal_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
             central_obstruction=0.0f0, T=T, backend=BackendArray)

@@ -118,9 +118,10 @@ export calibrate!, reset_calibration!, compute_optical_gains!
 export MetaSensitivity, compute_meta_sensitivity_matrix, estimate_misregistration, SPRINT, estimate!
 export ModalReconstructor, reconstruct!, reconstruct
 export AbstractController, DiscreteIntegratorController, update!
-export ClosedLoopRuntime, RTCBoundary, sense!, step!, set_command!, snapshot_outputs!
+export ClosedLoopRuntime, RTCBoundary, MultiRTCBoundary, sense!, step!, set_command!, snapshot_outputs!
 export rtc_slopes, rtc_command, rtc_wfs_frame, rtc_science_frame
-export RuntimeTimingStats, runtime_timing
+export RuntimeTimingStats, RuntimePhaseTimingStats, runtime_timing, runtime_phase_timing
+export with_reconstructor, with_reconstructors
 export AbstractOpticalElement, AbstractSource, AbstractAtmosphere, AbstractWFS
 export AbstractDetector, AbstractDeformableMirror, SensingMode, Diffractive, Geometric
 export WFSNormalization, MeanValidFluxNormalization, IncidenceFluxNormalization
@@ -131,6 +132,8 @@ export set_fft_provider_threads!
 export gpu_backend_loaded, gpu_backend_array_type, gpu_backend_name, available_gpu_backends
 export disable_scalar_backend!, backend_rand, backend_randn, backend_zeros, backend_fill
 export GPUBackendTag, CUDABackendTag, MetalBackendTag, AMDGPUBackendTag
+export GPUPrecisionPolicy, UnifiedGPUPrecision, SplitGPUPrecision
+export gpu_runtime_type, gpu_build_type, default_gpu_precision_policy, high_accuracy_gpu_precision_policy
 export TomographyAtmosphereParams, LGSAsterismParams, LGSWFSParams
 export TomographyParams, TomographyDMParams, TomographyFitting
 export AbstractTomographyMethod, ModelBasedTomography, InteractionMatrixTomography
