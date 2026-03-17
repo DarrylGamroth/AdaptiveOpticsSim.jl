@@ -19,6 +19,8 @@ The maintained CUDA validation entry points are:
   - warmed CPU crossover sweep for runtime and builder cases
 - `scripts/gpu_crossover_cuda.jl`
   - warmed CUDA crossover sweep for runtime and builder cases
+- `scripts/gpu_profile_model_tomography_cuda.jl`
+  - sampling-profile the medium CUDA model-based tomography builder
 
 On a CUDA host, the standard workflow is:
 
@@ -29,6 +31,7 @@ julia --project=. scripts/gpu_hil_cuda.jl
 julia --project=. scripts/gpu_sync_audit_cuda.jl
 julia --project=. scripts/cpu_crossover_sweep.jl
 julia --project=. scripts/gpu_crossover_cuda.jl
+julia --project=. scripts/gpu_profile_model_tomography_cuda.jl
 ```
 
 The `spiders` workstation is the current real-hardware validation host for this
@@ -125,6 +128,46 @@ So the practical crossover is not “GPU for everything.” It is currently:
 - heavy model-based tomography/reconstructor generation: GPU-first
 - modal and interaction-matrix builders: keep on CPU unless larger problem
   sizes show a crossover later
+
+## Model-Based Tomography CUDA Profile on `spiders`
+
+The profiling script:
+
+```bash
+julia --project=. scripts/gpu_profile_model_tomography_cuda.jl
+```
+
+was run on the `medium` model-based tomography case on `spiders`.
+
+The key output was:
+
+- default build time: about `1.48e9 ns`
+- high-accuracy build time: about `1.51e9 ns`
+- default build allocations: about `1.96 MB`
+- high-accuracy build allocations: about `2.71 MB`
+
+The dominant hotspot is not generic Julia dispatch. It is repeated stream
+synchronization during GPU covariance assembly:
+
+- [launch_kernel!](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Core/backends.jl#L64)
+  currently synchronizes after every accelerator kernel launch
+- [_covariance_matrix](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Tomography/reconstructors.jl#L384)
+  launches a kernel for every covariance block
+- [cross_correlation](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Tomography/reconstructors.jl#L710)
+  calls `_covariance_matrix` inside nested `fit_idx`, `gs`, and `layer` loops
+- [build_reconstructor](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Tomography/reconstructors.jl#L1160)
+  spends most of its time in that `cross_correlation` path
+
+The profile showed thousands of samples in CUDA stream synchronization under
+`launch_kernel!` and `cross_correlation`, which means the current GPU builder
+path is dominated by per-kernel synchronization overhead rather than arithmetic.
+
+So the next optimization target is now clear:
+
+1. add a non-synchronizing internal kernel-launch path for builder assembly
+2. synchronize once at the outer builder boundary instead of once per covariance
+   block
+3. then evaluate whether covariance blocks should be batched or fused further
 
 ## Validated GPU-Resident Surface
 
