@@ -2,7 +2,7 @@ using AdaptiveOpticsSim
 using Random
 
 function _sync_backend_array!(A)
-    synchronize_backend!(execution_style(A))
+    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(A))
     return nothing
 end
 
