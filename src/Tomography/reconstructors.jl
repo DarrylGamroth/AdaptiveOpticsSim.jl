@@ -759,6 +759,7 @@ function build_reconstructor(
     dm::TomographyDMParams;
     fitting::Union{Nothing,TomographyFitting}=nothing,
     noise_model::TomographyNoiseModel=RelativeSignalNoise(0.1),
+    build_backend::BuildBackend=NativeBuildBackend(),
 ) where {T<:AbstractFloat}
     gamma_single, grid_mask = sparse_gradient_matrix(valid_lenslet_support(wfs); over_sampling=2)
     gamma = blockdiag(ntuple(_ -> gamma_single, asterism.n_lgs)...)
@@ -768,18 +769,22 @@ function build_reconstructor(
     row_positions = findall(vec(grid_mask))
     col_positions = findall(repeat(vec(grid_mask), asterism.n_lgs))
     cox = cox_full[row_positions, col_positions]
-    css_signal = Matrix(gamma * cxx * transpose(gamma))
+    gamma_native = materialize_build(build_backend, gamma, gamma)
+    cxx_native = materialize_build(build_backend, gamma_native, cxx)
+    cox_native = materialize_build(build_backend, gamma_native, cox)
+    native_mask = materialize_build(build_backend, gamma_native, grid_mask)
+    css_signal = gamma_native * cxx_native * transpose(gamma_native)
     cnz = tomography_noise_covariance(noise_model, diag(css_signal))
     css = css_signal .+ cnz
-    recstat = stable_hermitian_right_division(cox * transpose(gamma), css)
+    recstat = stable_hermitian_right_division(build_backend, cox_native * transpose(gamma_native), css)
     d = support_diameter(wfs) / size(valid_lenslet_support(wfs), 1)
     wavefront_to_meter = asterism.wavelength / d / 2
     recon = d * wavefront_to_meter .* recstat
     operators = TomographyOperators(
-        gamma,
-        grid_mask,
-        cxx,
-        cox,
+        gamma_native,
+        native_mask,
+        cxx_native,
+        cox_native,
         cnz,
         recstat,
         wavefront_to_meter,
@@ -787,7 +792,7 @@ function build_reconstructor(
     return TomographicReconstructor(
         ModelBasedTomography(),
         recon,
-        grid_mask,
+        native_mask,
         atmosphere,
         asterism,
         wfs,
@@ -838,6 +843,6 @@ function reconstruct_wavefront_map(
     slopes::AbstractVector{T};
     masked_value::T=T(NaN),
 ) where {T<:AbstractFloat}
-    out = Matrix{T}(undef, size(reconstructor.grid_mask)...)
+    out = similar(reconstructor.reconstructor, T, size(reconstructor.grid_mask)...)
     return reconstruct_wavefront_map!(out, reconstructor, slopes; masked_value=masked_value)
 end

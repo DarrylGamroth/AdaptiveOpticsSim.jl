@@ -215,10 +215,12 @@ Current status of that backlog:
 - [x] Add an explicit RTC boundary surface around `ClosedLoopRuntime`.
 - [x] Add deterministic runtime latency/jitter measurement helpers and benchmarks.
 - [~] Extend builder-backend coverage to tomography and other heavy calibration paths.
-  Interaction-matrix tomography reconstruction and tomography command assembly
-  now preserve the selected build backend instead of forcing host
-  `Matrix`/`Vector` outputs. Model-based tomography covariance assembly remains
-  more CPU-oriented and is the next builder-side extension.
+  Interaction-matrix tomography reconstruction, model-based tomography
+  reconstructor outputs, and tomography command assembly now preserve the
+  selected build backend instead of forcing host `Matrix`/`Vector` outputs.
+  Model-based covariance assembly still originates on CPU-style arrays before
+  being materialized onto the selected backend, so a fully accelerator-native
+  tomography builder is still future work.
 - [ ] Add multi-WFS / multi-DM aggregation for MOAO, MCAO, and woofer/tweeter RTC scenarios.
 - [ ] Add specialized HIL-relevant sensors:
   `ZernikeSensor`, `CurvatureSensor`, and distributed/multi-WFS aggregation.

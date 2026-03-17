@@ -197,6 +197,18 @@ end
     @test size(model_map) == size(model.grid_mask)
     @test count(isnan, model_map) > 0
 
+    model_cpu = build_reconstructor(
+        ModelBasedTomography(),
+        atm,
+        lgs,
+        wfs,
+        tomo,
+        dm;
+        build_backend=CPUBuildBackend(),
+    )
+    @test model_cpu.reconstructor isa Matrix
+    @test model_cpu.grid_mask isa Matrix{Bool}
+
     model_noise = build_reconstructor(
         ModelBasedTomography(),
         atm,
