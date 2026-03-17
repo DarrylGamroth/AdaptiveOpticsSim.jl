@@ -52,6 +52,7 @@ end
     @test gpu_backend_array_type(AMDGPUBackendTag) === nothing
     @test gpu_backend_name(Matrix{Float64}) === nothing
     @test available_gpu_backends() == ()
+    @test GPUArrayBuildBackend(CUDABackendTag) isa GPUArrayBuildBackend{CUDABackendTag}
 end
 
 @testset "Telescope and PSF" begin

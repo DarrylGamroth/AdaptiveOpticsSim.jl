@@ -5,6 +5,7 @@ abstract type BuildBackend end
 
 struct NativeBuildBackend <: BuildBackend end
 struct CPUBuildBackend <: BuildBackend end
+struct GPUArrayBuildBackend{B} <: BuildBackend end
 
 struct ExactPseudoInverse <: InversePolicy end
 
@@ -30,6 +31,7 @@ default_modal_inverse_policy(::Type{T}) where {T<:AbstractFloat} = TSVDInverse(r
 default_calibration_inverse_policy(::Type{T}) where {T<:AbstractFloat} = TSVDInverse(rtol=sqrt(eps(T)))
 default_projector_inverse_policy(::Type{T}) where {T<:AbstractFloat} = TSVDInverse(rtol=sqrt(eps(T)))
 default_build_backend(::AbstractArray) = NativeBuildBackend()
+GPUArrayBuildBackend(::Type{B}) where {B} = GPUArrayBuildBackend{B}()
 
 struct InverseStats{T<:AbstractFloat,V<:AbstractVector{T}}
     singular_values::V
@@ -45,9 +47,24 @@ end
 
 prepare_build_matrix(::NativeBuildBackend, A::AbstractMatrix) = A
 prepare_build_matrix(::CPUBuildBackend, A::AbstractMatrix) = Matrix(A)
+prepare_build_matrix(backend::GPUArrayBuildBackend, A::AbstractMatrix) = materialize_build(backend, A)
 
 materialize_build(::NativeBuildBackend, A::AbstractMatrix) = A
 materialize_build(::CPUBuildBackend, A::AbstractMatrix) = Matrix(A)
+
+function _backend_array(::Type{B}, ::Type{T}, dims::Vararg{Int,N}) where {B,T,N}
+    return backend_fill(B, zero(T), dims...)
+end
+
+function _backend_array(::Type{B}, ::Type{Bool}, dims::Vararg{Int,N}) where {B,N}
+    return backend_fill(B, false, dims...)
+end
+
+function materialize_build(::GPUArrayBuildBackend{B}, A::AbstractMatrix{T}) where {B,T}
+    out = _backend_array(B, T, size(A)...)
+    copyto!(out, A)
+    return out
+end
 
 function materialize_build(::NativeBuildBackend, ref::AbstractMatrix, data::AbstractMatrix)
     out = similar(ref, eltype(data), size(data)...)
@@ -57,6 +74,12 @@ end
 
 materialize_build(::CPUBuildBackend, ::AbstractMatrix, data::AbstractMatrix) = Matrix(data)
 
+function materialize_build(::GPUArrayBuildBackend{B}, ref::AbstractMatrix, data::AbstractMatrix) where {B}
+    out = _backend_array(B, eltype(data), size(data)...)
+    copyto!(out, data)
+    return out
+end
+
 function materialize_build(::NativeBuildBackend, ref::AbstractVector{T}, data::AbstractVector{T}) where {T}
     out = similar(ref, T, length(data))
     copyto!(out, data)
@@ -64,6 +87,12 @@ function materialize_build(::NativeBuildBackend, ref::AbstractVector{T}, data::A
 end
 
 materialize_build(::CPUBuildBackend, ::AbstractVector{T}, data::AbstractVector{T}) where {T} = Vector{T}(data)
+
+function materialize_build(::GPUArrayBuildBackend{B}, ref::AbstractVector{T}, data::AbstractVector{T}) where {B,T}
+    out = _backend_array(B, T, length(data))
+    copyto!(out, data)
+    return out
+end
 
 singular_values_host(s::AbstractVector{T}) where {T} = Vector{T}(Array(s))
 

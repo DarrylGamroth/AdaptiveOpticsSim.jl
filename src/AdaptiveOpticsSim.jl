@@ -69,7 +69,7 @@ export PROJECT_STATUS
 export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError, UnsupportedAlgorithm
 export InversePolicy, ExactPseudoInverse, TSVDInverse, TikhonovInverse, InverseStats, inverse_operator
 export default_modal_inverse_policy, default_calibration_inverse_policy, default_projector_inverse_policy
-export BuildBackend, NativeBuildBackend, CPUBuildBackend, default_build_backend
+export BuildBackend, NativeBuildBackend, CPUBuildBackend, GPUArrayBuildBackend, default_build_backend
 export Workspace, ensure_psf_buffers!
 export Telemetry, TelemetryRow, record!
 export snapshot_config, write_config_toml, write_config_json
