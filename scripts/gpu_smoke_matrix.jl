@@ -155,6 +155,41 @@ function main()
         return frame
     end
 
+    record!(failures, "closed_loop_runtime") do
+        rt_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
+            central_obstruction=0.0f0, T=T, backend=CuArray)
+        rt_src = Source(band=:I, magnitude=0.0, T=T)
+        rt_atm = KolmogorovAtmosphere(rt_tel; r0=0.2, L0=25.0, T=T, backend=CuArray)
+        rt_dm = DeformableMirror(rt_tel; n_act=4, influence_width=0.3, T=T, backend=CuArray)
+        rt_wfs = ShackHartmann(rt_tel; n_subap=4, T=T, backend=CuArray)
+        rt_sim = AOSimulation(rt_tel, rt_atm, rt_src, rt_dm, rt_wfs)
+        rt_imat = interaction_matrix(rt_dm, rt_wfs, rt_tel; amplitude=T(0.05))
+        rt_recon = ModalReconstructor(rt_imat; gain=T(0.5))
+        runtime = ClosedLoopRuntime(rt_sim, rt_recon; rng=rng)
+        step!(runtime)
+        @assert runtime.command isa CuArray
+        @assert rt_dm.state.coefs isa CuArray
+        return runtime.command
+    end
+
+    record!(failures, "closed_loop_runtime_science") do
+        rt_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
+            central_obstruction=0.0f0, T=T, backend=CuArray)
+        rt_src = Source(band=:I, magnitude=0.0, T=T)
+        rt_atm = KolmogorovAtmosphere(rt_tel; r0=0.2, L0=25.0, T=T, backend=CuArray)
+        rt_dm = DeformableMirror(rt_tel; n_act=4, influence_width=0.3, T=T, backend=CuArray)
+        rt_wfs = ShackHartmann(rt_tel; n_subap=4, T=T, backend=CuArray)
+        rt_det = Detector(NoiseNone(); psf_sampling=2, T=T, backend=CuArray)
+        rt_sim = AOSimulation(rt_tel, rt_atm, rt_src, rt_dm, rt_wfs)
+        rt_imat = interaction_matrix(rt_dm, rt_wfs, rt_tel; amplitude=T(0.05))
+        rt_recon = ModalReconstructor(rt_imat; gain=T(0.5))
+        runtime = ClosedLoopRuntime(rt_sim, rt_recon; rng=rng, science_detector=rt_det)
+        step!(runtime)
+        frame = output_frame(rt_det)
+        @assert frame isa CuArray
+        return frame
+    end
+
     record!(failures, "interaction_matrix_reconstructor") do
         cal_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
             central_obstruction=0.0f0, T=T, backend=CuArray)
