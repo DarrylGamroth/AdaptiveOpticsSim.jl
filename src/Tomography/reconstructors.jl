@@ -705,7 +705,8 @@ function _fit_source_average(cross::AbstractArray{T,3}, weights::AbstractVector{
     size(cross, 1) == length(weights) ||
         throw(DimensionMismatchError("fit-source weight length must match cross-correlation stack"))
     out = similar(cross, T, size(cross, 2), size(cross, 3))
-    weights_native = materialize_build(default_build_backend(out), weights)
+    weights_native = similar(cross, T, size(cross, 1))
+    copyto!(weights_native, weights)
     style = execution_style(out)
     launch_kernel!(style, fit_source_average_kernel!, out, cross, weights_native, size(cross, 1), size(cross, 2), size(cross, 3);
         ndrange=size(out))
