@@ -15,6 +15,10 @@ The maintained CUDA validation entry points are:
   - combined runtime + builder HIL-oriented smoke coverage
 - `scripts/gpu_sync_audit_cuda.jl`
   - timing-oriented audit for runtime and builder-heavy CUDA paths
+- `scripts/cpu_crossover_sweep.jl`
+  - warmed CPU crossover sweep for runtime and builder cases
+- `scripts/gpu_crossover_cuda.jl`
+  - warmed CUDA crossover sweep for runtime and builder cases
 
 On a CUDA host, the standard workflow is:
 
@@ -23,6 +27,8 @@ julia --project=. scripts/gpu_smoke_cuda.jl
 julia --project=. scripts/gpu_builder_cuda.jl
 julia --project=. scripts/gpu_hil_cuda.jl
 julia --project=. scripts/gpu_sync_audit_cuda.jl
+julia --project=. scripts/cpu_crossover_sweep.jl
+julia --project=. scripts/gpu_crossover_cuda.jl
 ```
 
 The `spiders` workstation is the current real-hardware validation host for this
@@ -57,6 +63,68 @@ So the package is currently in the expected regime:
 
 The next benchmarking task should therefore be a size sweep to find the
 practical crossover points, not more guessing from a single compact case.
+
+## Initial Crossover Sweep on `spiders`
+
+The maintained crossover sweep was run on `spiders` with:
+
+```bash
+julia --project=. scripts/cpu_crossover_sweep.jl
+julia --project=. scripts/gpu_crossover_cuda.jl
+```
+
+The current warmed results are:
+
+- runtime `compact`
+  - CPU: about `1.47e4 ns`
+  - CUDA: about `1.24e6 ns`
+- runtime `small`
+  - CPU: about `8.84e4 ns`
+  - CUDA: about `4.12e6 ns`
+- runtime `medium`
+  - CPU: about `3.76e5 ns`
+  - CUDA: about `1.56e7 ns`
+- modal builder `compact`
+  - CPU: about `3.06e4 ns`
+  - CUDA: about `5.53e5 ns`
+- modal builder `small`
+  - CPU: about `1.43e4 ns`
+  - CUDA: about `4.39e5 ns`
+- modal builder `medium`
+  - CPU: about `4.64e4 ns`
+  - CUDA: about `6.69e5 ns`
+- interaction tomography builder `compact`
+  - CPU: about `1.41e4 ns`
+  - CUDA: about `1.62e6 ns`
+- interaction tomography builder `small`
+  - CPU: about `6.20e5 ns`
+  - CUDA: about `5.14e6 ns`
+- interaction tomography builder `medium`
+  - CPU: about `4.78e6 ns`
+  - CUDA: about `1.33e7 ns`
+- model tomography builder `compact`
+  - CPU: about `1.48e9 ns`
+  - CUDA: about `1.81e8 ns`
+- model tomography builder `small`
+  - CPU: about `1.30e10 ns`
+  - CUDA: about `1.26e9 ns`
+- model tomography builder `medium`
+  - CPU: about `1.41e10 ns`
+  - CUDA: about `1.46e9 ns`
+
+The current interpretation is:
+
+- CPU wins decisively for the tested single-loop runtime sizes.
+- CPU also wins for the tested modal and interaction-matrix builder sizes.
+- CUDA already wins decisively for model-based tomography builder workloads,
+  even at the compact case.
+
+So the practical crossover is not “GPU for everything.” It is currently:
+
+- compact and medium-sized single-loop HIL runtime: CPU-first
+- heavy model-based tomography/reconstructor generation: GPU-first
+- modal and interaction-matrix builders: keep on CPU unless larger problem
+  sizes show a crossover later
 
 ## Validated GPU-Resident Surface
 
