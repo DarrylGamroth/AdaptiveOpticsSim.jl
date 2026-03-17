@@ -4,7 +4,8 @@ struct CalibrationVault{T<:AbstractFloat,
     D<:AbstractMatrix{T},
     M<:AbstractMatrix{T},
     V<:AbstractVector{T},
-    P<:InversePolicy}
+    P<:InversePolicy,
+    B<:BuildBackend}
     D::D
     M::Union{Nothing,M}
     Mtrunc::Union{Nothing,M}
@@ -13,13 +14,15 @@ struct CalibrationVault{T<:AbstractFloat,
     effective_rank::Int
     n_trunc::Int
     policy::P
+    build_backend::B
 end
 
 function CalibrationVault(D::AbstractMatrix{T}; n_trunc::Int=0, invert::Bool=true,
-    policy::InversePolicy=default_calibration_inverse_policy(T)) where {T<:AbstractFloat}
+    policy::InversePolicy=default_calibration_inverse_policy(T),
+    build_backend::BuildBackend=default_build_backend(D)) where {T<:AbstractFloat}
     if !invert
         empty_vals = similar(D, T, 0)
-        return CalibrationVault{T, typeof(D), Matrix{T}, typeof(empty_vals), typeof(policy)}(
+        return CalibrationVault{T, typeof(D), Matrix{T}, typeof(empty_vals), typeof(policy), typeof(build_backend)}(
             D,
             nothing,
             nothing,
@@ -28,6 +31,7 @@ function CalibrationVault(D::AbstractMatrix{T}; n_trunc::Int=0, invert::Bool=tru
             0,
             0,
             policy,
+            build_backend,
         )
     end
     if n_trunc < 0
@@ -38,9 +42,9 @@ function CalibrationVault(D::AbstractMatrix{T}; n_trunc::Int=0, invert::Bool=tru
         atol=policy.atol,
         n_trunc=n_trunc,
     ) : policy
-    Minv, stats = inverse_operator(D, effective_policy)
+    Minv, stats = inverse_operator(build_backend, D, effective_policy)
     Mtrunc = effective_policy isa TSVDInverse ? Minv : nothing
-    return CalibrationVault{T, typeof(D), typeof(Minv), typeof(stats.singular_values), typeof(effective_policy)}(
+    return CalibrationVault{T, typeof(D), typeof(Minv), typeof(stats.singular_values), typeof(effective_policy), typeof(build_backend)}(
         D,
         Minv,
         Mtrunc,
@@ -49,14 +53,17 @@ function CalibrationVault(D::AbstractMatrix{T}; n_trunc::Int=0, invert::Bool=tru
         stats.effective_rank,
         stats.n_trunc,
         effective_policy,
+        build_backend,
     )
 end
 
 function CalibrationVault(D::AbstractMatrix{S}; n_trunc::Int=0, invert::Bool=true,
-    policy::InversePolicy=default_calibration_inverse_policy(float(S))) where {S<:Real}
-    return CalibrationVault(float.(D); n_trunc=n_trunc, invert=invert, policy=policy)
+    policy::InversePolicy=default_calibration_inverse_policy(float(S)),
+    build_backend::BuildBackend=default_build_backend(D)) where {S<:Real}
+    return CalibrationVault(float.(D); n_trunc=n_trunc, invert=invert, policy=policy, build_backend=build_backend)
 end
 
 function with_truncation(vault::CalibrationVault, n_trunc::Int)
-    return CalibrationVault(vault.D; n_trunc=n_trunc, invert=true, policy=vault.policy)
+    return CalibrationVault(vault.D; n_trunc=n_trunc, invert=true, policy=vault.policy,
+        build_backend=vault.build_backend)
 end

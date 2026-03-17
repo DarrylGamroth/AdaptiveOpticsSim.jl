@@ -69,6 +69,7 @@ export PROJECT_STATUS
 export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError, UnsupportedAlgorithm
 export InversePolicy, ExactPseudoInverse, TSVDInverse, TikhonovInverse, InverseStats, inverse_operator
 export default_modal_inverse_policy, default_calibration_inverse_policy, default_projector_inverse_policy
+export BuildBackend, NativeBuildBackend, CPUBuildBackend, default_build_backend
 export Workspace, ensure_psf_buffers!
 export Telemetry, TelemetryRow, record!
 export snapshot_config, write_config_toml, write_config_json
@@ -117,7 +118,9 @@ export calibrate!, reset_calibration!, compute_optical_gains!
 export MetaSensitivity, compute_meta_sensitivity_matrix, estimate_misregistration, SPRINT, estimate!
 export ModalReconstructor, reconstruct!, reconstruct
 export AbstractController, DiscreteIntegratorController, update!
-export ClosedLoopRuntime, sense!, step!, set_command!
+export ClosedLoopRuntime, RTCBoundary, sense!, step!, set_command!, snapshot_outputs!
+export rtc_slopes, rtc_command, rtc_wfs_frame, rtc_science_frame
+export RuntimeTimingStats, runtime_timing
 export AbstractOpticalElement, AbstractSource, AbstractAtmosphere, AbstractWFS
 export AbstractDetector, AbstractDeformableMirror, SensingMode, Diffractive, Geometric
 export WFSNormalization, MeanValidFluxNormalization, IncidenceFluxNormalization

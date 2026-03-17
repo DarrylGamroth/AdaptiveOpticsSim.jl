@@ -202,13 +202,22 @@ Current status of that backlog:
 - covariance/Bessel approximations have direct regression coverage
 
 ## Next 10 Tasks
-1. Build GPU-native reconstructor/calibration generation paths for RTC-facing workflows.
+1. Extend GPU-native reconstructor/calibration generation beyond the current modal/calibration backend hooks into tomography and other builder-heavy RTC workflows.
 2. Audit remaining calibration/output conventions against OOPAO telemetry exports.
 3. Decide whether the compact closed-loop traces should be expanded to full tutorial traces with atmosphere replay.
 4. Tighten the remaining large-aberration Strehl/slope drift in the long-horizon GSC replay.
 5. Validate the remaining atmosphere-driven GSC closed-loop telemetry against OOPAO outputs.
 6. Validate LiFT iterative reconstruction outputs, not just the analytic interaction matrix.
 7. Decide whether any future tomography expansion stays in core or moves behind an extension/package split later.
+
+## HIL-Oriented Near-Term Work
+- [x] Add explicit builder-backend selection for modal/calibration reconstructor generation.
+- [x] Add an explicit RTC boundary surface around `ClosedLoopRuntime`.
+- [x] Add deterministic runtime latency/jitter measurement helpers and benchmarks.
+- [ ] Extend builder-backend coverage to tomography and other heavy calibration paths.
+- [ ] Add multi-WFS / multi-DM aggregation for MOAO, MCAO, and woofer/tweeter RTC scenarios.
+- [ ] Add specialized HIL-relevant sensors:
+  `ZernikeSensor`, `CurvatureSensor`, and distributed/multi-WFS aggregation.
 
 ## Phase 0: Setup
 - Create package skeleton and CI with Julia versions.

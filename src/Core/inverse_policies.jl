@@ -1,6 +1,10 @@
 using LinearAlgebra
 
 abstract type InversePolicy end
+abstract type BuildBackend end
+
+struct NativeBuildBackend <: BuildBackend end
+struct CPUBuildBackend <: BuildBackend end
 
 struct ExactPseudoInverse <: InversePolicy end
 
@@ -25,6 +29,7 @@ TikhonovInverse(lambda::Real; rtol::Real=eps(Float64), atol::Real=0.0) =
 default_modal_inverse_policy(::Type{T}) where {T<:AbstractFloat} = TSVDInverse(rtol=sqrt(eps(T)))
 default_calibration_inverse_policy(::Type{T}) where {T<:AbstractFloat} = TSVDInverse(rtol=sqrt(eps(T)))
 default_projector_inverse_policy(::Type{T}) where {T<:AbstractFloat} = TSVDInverse(rtol=sqrt(eps(T)))
+default_build_backend(::AbstractArray) = NativeBuildBackend()
 
 struct InverseStats{T<:AbstractFloat,V<:AbstractVector{T}}
     singular_values::V
@@ -38,50 +43,77 @@ function _inverse_cutoff(s::AbstractVector{T}, rtol::T, atol::T) where {T<:Abstr
     return max(atol, rtol * s[begin])
 end
 
-function inverse_operator(A::AbstractMatrix{T}, ::ExactPseudoInverse) where {T<:AbstractFloat}
-    F = svd(A; full=false)
-    s = F.S
-    inv_s = similar(s)
-    @inbounds for i in eachindex(s)
-        inv_s[i] = iszero(s[i]) ? zero(T) : inv(s[i])
-    end
-    M = Matrix(F.V * Diagonal(inv_s) * F.U')
-    effective_rank = count(!iszero, s)
-    cond = effective_rank == 0 ? T(Inf) : s[begin] / s[effective_rank]
-    return M, InverseStats(s, cond, effective_rank, 0)
+prepare_build_matrix(::NativeBuildBackend, A::AbstractMatrix) = A
+prepare_build_matrix(::CPUBuildBackend, A::AbstractMatrix) = Matrix(A)
+
+materialize_build(::NativeBuildBackend, A::AbstractMatrix) = A
+materialize_build(::CPUBuildBackend, A::AbstractMatrix) = Matrix(A)
+
+function materialize_build(::NativeBuildBackend, ref::AbstractVector{T}, data::AbstractVector{T}) where {T}
+    out = similar(ref, T, length(data))
+    copyto!(out, data)
+    return out
 end
 
-function inverse_operator(A::AbstractMatrix{T}, policy::TSVDInverse) where {T<:AbstractFloat}
+materialize_build(::CPUBuildBackend, ::AbstractVector{T}, data::AbstractVector{T}) where {T} = Vector{T}(data)
+
+singular_values_host(s::AbstractVector{T}) where {T} = Vector{T}(Array(s))
+
+inverse_operator(A::AbstractMatrix{T}, policy::InversePolicy) where {T<:AbstractFloat} =
+    inverse_operator(default_build_backend(A), A, policy)
+
+function inverse_operator(::BuildBackend, A::AbstractMatrix{T}, policy::InversePolicy) where {T<:AbstractFloat}
+    throw(UnsupportedAlgorithm("inverse_operator is not implemented for $(typeof(policy))"))
+end
+
+function inverse_operator(backend::BuildBackend, A::AbstractMatrix{T}, ::ExactPseudoInverse) where {T<:AbstractFloat}
+    F = svd(prepare_build_matrix(backend, A); full=false)
+    s_host = singular_values_host(F.S)
+    inv_s_host = similar(s_host)
+    @inbounds for i in eachindex(s_host)
+        inv_s_host[i] = iszero(s_host[i]) ? zero(T) : inv(s_host[i])
+    end
+    inv_s = materialize_build(backend, F.S, inv_s_host)
+    M = materialize_build(backend, F.V * Diagonal(inv_s) * F.U')
+    effective_rank = count(!iszero, s_host)
+    cond = effective_rank == 0 ? T(Inf) : s_host[begin] / s_host[effective_rank]
+    return M, InverseStats(s_host, cond, effective_rank, 0)
+end
+
+function inverse_operator(backend::BuildBackend, A::AbstractMatrix{T}, policy::TSVDInverse) where {T<:AbstractFloat}
     policy.n_trunc >= 0 || throw(InvalidConfiguration("TSVD n_trunc must be >= 0"))
-    F = svd(A; full=false)
-    s = F.S
-    isempty(s) && return Matrix{T}(undef, size(A, 2), size(A, 1)), InverseStats(s, T(Inf), 0, 0)
-    cutoff = _inverse_cutoff(s, T(policy.rtol), T(policy.atol))
-    rank_by_tol = count(>(cutoff), s)
+    F = svd(prepare_build_matrix(backend, A); full=false)
+    s_host = singular_values_host(F.S)
+    isempty(s_host) && return materialize_build(backend, similar(A, T, size(A, 2), size(A, 1))),
+        InverseStats(s_host, T(Inf), 0, 0)
+    cutoff = _inverse_cutoff(s_host, T(policy.rtol), T(policy.atol))
+    rank_by_tol = count(>(cutoff), s_host)
     effective_rank = max(rank_by_tol - policy.n_trunc, 0)
-    inv_s = similar(s)
-    fill!(inv_s, zero(T))
+    inv_s_host = similar(s_host)
+    fill!(inv_s_host, zero(T))
     @inbounds for i in 1:effective_rank
-        inv_s[i] = inv(s[i])
+        inv_s_host[i] = inv(s_host[i])
     end
-    M = Matrix(F.V * Diagonal(inv_s) * F.U')
-    cond = effective_rank == 0 ? T(Inf) : s[begin] / s[effective_rank]
-    return M, InverseStats(s, cond, effective_rank, length(s) - effective_rank)
+    inv_s = materialize_build(backend, F.S, inv_s_host)
+    M = materialize_build(backend, F.V * Diagonal(inv_s) * F.U')
+    cond = effective_rank == 0 ? T(Inf) : s_host[begin] / s_host[effective_rank]
+    return M, InverseStats(s_host, cond, effective_rank, length(s_host) - effective_rank)
 end
 
-function inverse_operator(A::AbstractMatrix{T}, policy::TikhonovInverse) where {T<:AbstractFloat}
+function inverse_operator(backend::BuildBackend, A::AbstractMatrix{T}, policy::TikhonovInverse) where {T<:AbstractFloat}
     policy.lambda >= 0 || throw(InvalidConfiguration("Tikhonov lambda must be >= 0"))
-    F = svd(A; full=false)
-    s = F.S
-    inv_s = similar(s)
+    F = svd(prepare_build_matrix(backend, A); full=false)
+    s_host = singular_values_host(F.S)
+    inv_s_host = similar(s_host)
     λ2 = T(policy.lambda)^2
-    @inbounds for i in eachindex(s)
-        inv_s[i] = s[i] / (s[i]^2 + λ2)
+    @inbounds for i in eachindex(s_host)
+        inv_s_host[i] = s_host[i] / (s_host[i]^2 + λ2)
     end
-    cutoff = _inverse_cutoff(s, T(policy.rtol), T(policy.atol))
-    effective_rank = count(>(cutoff), s)
-    denom = max(isempty(s) ? zero(T) : s[end], T(policy.lambda))
-    cond = (isempty(s) || iszero(denom)) ? T(Inf) : s[begin] / denom
-    M = Matrix(F.V * Diagonal(inv_s) * F.U')
-    return M, InverseStats(s, cond, effective_rank, 0)
+    cutoff = _inverse_cutoff(s_host, T(policy.rtol), T(policy.atol))
+    effective_rank = count(>(cutoff), s_host)
+    denom = max(isempty(s_host) ? zero(T) : s_host[end], T(policy.lambda))
+    cond = (isempty(s_host) || iszero(denom)) ? T(Inf) : s_host[begin] / denom
+    inv_s = materialize_build(backend, F.S, inv_s_host)
+    M = materialize_build(backend, F.V * Diagonal(inv_s) * F.U')
+    return M, InverseStats(s_host, cond, effective_rank, 0)
 end

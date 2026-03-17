@@ -164,6 +164,11 @@ end
     ctrl = DiscreteIntegratorController(length(wfs.state.slopes); gain=0.1, tau=0.02)
     dm_cmd = update!(ctrl, wfs.state.slopes, 0.01)
     @test length(dm_cmd) == length(wfs.state.slopes)
+
+    vault = CalibrationVault(imat.matrix; build_backend=CPUBuildBackend())
+    @test vault.M isa Matrix
+    recon_cpu = ModalReconstructor(imat; build_backend=CPUBuildBackend())
+    @test recon_cpu.reconstructor isa Matrix
 end
 
 function closed_loop_runtime_allocations()
@@ -199,6 +204,17 @@ end
     @test length(runtime.command) == length(dm.state.coefs)
     @test size(output_frame(det)) == (32, 32)
     @test closed_loop_runtime_allocations() == 0
+
+    boundary = RTCBoundary(runtime)
+    @test length(rtc_slopes(boundary)) == length(wfs.state.slopes)
+    @test size(rtc_science_frame(boundary)) == size(output_frame(det))
+    step!(boundary)
+    @test rtc_command(boundary) == runtime.command
+
+    timing = runtime_timing(runtime; warmup=1, samples=5, gc_before=false)
+    @test timing.samples == 5
+    @test timing.min_ns >= 0
+    @test timing.max_ns >= timing.min_ns
 end
 
 @testset "Detector" begin

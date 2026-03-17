@@ -74,6 +74,20 @@ function bench_closed_loop_runtime()
     return @benchmark step!($runtime)
 end
 
+function bench_closed_loop_runtime_timing()
+    rng = MersenneTwister(0)
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = Source(band=:I, magnitude=0.0)
+    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
+    wfs = ShackHartmann(tel; n_subap=4)
+    sim = AOSimulation(tel, atm, src, dm, wfs)
+    imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
+    recon = ModalReconstructor(imat; gain=0.5)
+    runtime = ClosedLoopRuntime(sim, recon; rng=rng)
+    return runtime_timing(runtime; warmup=10, samples=200, gc_before=false)
+end
+
 function bench_lift(numerical::Bool)
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
@@ -169,6 +183,9 @@ display(bench_reconstructor_inplace())
 
 println("Closed-loop runtime benchmark:")
 display(bench_closed_loop_runtime())
+
+println("Closed-loop runtime timing:")
+display(bench_closed_loop_runtime_timing())
 
 println("LiFT analytic benchmark:")
 display(bench_lift(false))
