@@ -55,7 +55,7 @@ function run_gpu_builder_smoke(::Type{B}) where {B<:GPUBackendTag}
         valid_actuators=trues(1, 1),
     )
     grid_mask = trues(1, 1)
-    imat_t = materialize_build(build_backend, reshape(T[1.0, 0.5], 2, 1))
+    imat_t = AdaptiveOpticsSim.materialize_build(build_backend, reshape(T[1.0, 0.5], 2, 1))
     noise = RelativeSignalNoise(T(0.1))
 
     tr = build_reconstructor(
