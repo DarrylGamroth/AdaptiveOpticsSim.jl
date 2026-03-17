@@ -11,12 +11,18 @@ The maintained CUDA validation entry points are:
   - broad runtime/device-resident smoke coverage
 - `scripts/gpu_builder_cuda.jl`
   - reconstructor/calibration builder coverage for modal and tomography paths
+- `scripts/gpu_hil_cuda.jl`
+  - combined runtime + builder HIL-oriented smoke coverage
+- `scripts/gpu_sync_audit_cuda.jl`
+  - timing-oriented audit for runtime and builder-heavy CUDA paths
 
 On a CUDA host, the standard workflow is:
 
 ```bash
 julia --project=. scripts/gpu_smoke_cuda.jl
 julia --project=. scripts/gpu_builder_cuda.jl
+julia --project=. scripts/gpu_hil_cuda.jl
+julia --project=. scripts/gpu_sync_audit_cuda.jl
 ```
 
 The `spiders` workstation is the current real-hardware validation host for this
@@ -118,6 +124,7 @@ fallbacks that have now been removed.
 
 1. Re-audit setup-time Pyramid/BioEdge mask and modulation builders only if
    startup cost becomes a practical problem.
-2. Keep the maintained CUDA validation pair (`gpu_smoke_cuda.jl` and
-   `gpu_builder_cuda.jl`) green on `spiders`.
-3. Add profiling-based sync/transfer audits for RTC-facing builder paths.
+2. Keep the maintained CUDA validation set (`gpu_smoke_cuda.jl`,
+   `gpu_builder_cuda.jl`, and `gpu_hil_cuda.jl`) green on `spiders`.
+3. Use `gpu_sync_audit_cuda.jl` to track the timing surface of runtime and
+   builder-heavy RTC paths as the CUDA implementation evolves.

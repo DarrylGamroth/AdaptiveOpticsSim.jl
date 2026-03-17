@@ -1,0 +1,115 @@
+using AdaptiveOpticsSim
+using Random
+
+function _sync_backend_array!(A)
+    synchronize_backend!(execution_style(A))
+    return nothing
+end
+
+function _time_block_ns(f::F) where {F<:Function}
+    t0 = time_ns()
+    result = f()
+    return time_ns() - t0, result
+end
+
+function run_gpu_sync_audit(::Type{B}) where {B<:GPUBackendTag}
+    disable_scalar_backend!(B)
+    BackendArray = gpu_backend_array_type(B)
+    BackendArray === nothing && error("GPU backend $(B) is not available")
+
+    T = Float32
+    rng = MersenneTwister(1)
+    build_backend = GPUArrayBuildBackend(B)
+
+    tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
+        central_obstruction=0.0f0, T=T, backend=BackendArray)
+    src = Source(band=:I, magnitude=0.0, T=T)
+    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=BackendArray)
+    dm = DeformableMirror(tel; n_act=4, influence_width=0.3, T=T, backend=BackendArray)
+    wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=BackendArray)
+    sim = AOSimulation(tel, atm, src, dm, wfs)
+    imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
+    recon = ModalReconstructor(imat; gain=T(0.5))
+    runtime = ClosedLoopRuntime(sim, recon; rng=rng)
+    step!(runtime)
+    _sync_backend_array!(runtime.command)
+
+    runtime_stats = runtime_timing(() -> begin
+        step!(runtime)
+        _sync_backend_array!(runtime.command)
+    end; warmup=10, samples=100, gc_before=false)
+
+    modal_build_ns, modal_recon = _time_block_ns() do
+        recon_local = ModalReconstructor(imat; build_backend=build_backend)
+        _sync_backend_array!(recon_local.reconstructor)
+        recon_local
+    end
+
+    atm_tomo = TomographyAtmosphereParams(
+        zenith_angle_deg=T(0.0),
+        altitude_km=T[0.0],
+        L0=T(25.0),
+        r0_zenith=T(0.2),
+        fractional_r0=T[1.0],
+        wavelength=T(500e-9),
+        wind_direction_deg=T[0.0],
+        wind_speed=T[10.0],
+    )
+    lgs = LGSAsterismParams(radius_arcsec=T(7.6), wavelength=T(589e-9),
+        base_height_m=T(90_000.0), n_lgs=1)
+    lgswfs = LGSWFSParams(diameter=T(8.0), n_lenslet=1, n_px=8,
+        field_stop_size_arcsec=T(2.0), valid_lenslet_map=trues(1, 1),
+        lenslet_rotation_rad=zeros(T, 1), lenslet_offset=zeros(T, 2, 1))
+    tomo = TomographyParams(n_fit_src=1, fov_optimization_arcsec=T(0.0),
+        fit_src_height_m=T(Inf))
+    tdm = TomographyDMParams(heights_m=T[0.0], pitch_m=T[0.5],
+        cross_coupling=T(0.2), n_actuators=[1], valid_actuators=trues(1, 1))
+    grid_mask = trues(1, 1)
+    tomo_noise = RelativeSignalNoise(T(0.1))
+    imat_t = materialize_build(build_backend, reshape(T[1.0, 0.5], 2, 1))
+
+    im_tomo_build_ns, im_tomo = _time_block_ns() do
+        recon_local = build_reconstructor(
+            InteractionMatrixTomography(),
+            imat_t,
+            grid_mask,
+            atm_tomo,
+            lgs,
+            lgswfs,
+            tomo,
+            tdm;
+            noise_model=tomo_noise,
+            build_backend=build_backend,
+        )
+        _sync_backend_array!(recon_local.reconstructor)
+        recon_local
+    end
+
+    model_tomo_build_ns, model_tomo = _time_block_ns() do
+        recon_local = build_reconstructor(
+            ModelBasedTomography(),
+            atm_tomo,
+            lgs,
+            lgswfs,
+            tomo,
+            tdm;
+            noise_model=tomo_noise,
+            build_backend=build_backend,
+        )
+        _sync_backend_array!(recon_local.reconstructor)
+        recon_local
+    end
+
+    println("GPU sync audit")
+    println("  backend: ", gpu_backend_name(B))
+    println("  runtime_step_mean_ns: ", runtime_stats.mean_ns)
+    println("  runtime_step_p95_ns: ", runtime_stats.p95_ns)
+    println("  modal_build_ns: ", modal_build_ns)
+    println("  interaction_tomography_build_ns: ", im_tomo_build_ns)
+    println("  model_tomography_build_ns: ", model_tomo_build_ns)
+    println("  runtime_command_type: ", typeof(runtime.command))
+    println("  modal_reconstructor_type: ", typeof(modal_recon.reconstructor))
+    println("  interaction_tomography_type: ", typeof(im_tomo.reconstructor))
+    println("  model_tomography_type: ", typeof(model_tomo.reconstructor))
+    return nothing
+end

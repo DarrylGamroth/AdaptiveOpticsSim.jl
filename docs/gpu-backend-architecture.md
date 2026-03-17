@@ -92,6 +92,10 @@ AdaptiveOpticsSim.jl/
     gpu_smoke_cuda.jl
     gpu_builder_contract.jl
     gpu_builder_cuda.jl
+    gpu_hil_contract.jl
+    gpu_hil_cuda.jl
+    gpu_sync_audit_contract.jl
+    gpu_sync_audit_cuda.jl
     gpu_smoke_metal.jl
     gpu_smoke_amdgpu.jl
   test/
