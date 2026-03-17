@@ -69,7 +69,7 @@ end
 
 function materialize_build(::GPUArrayBuildBackend{B}, A::AbstractMatrix{T}) where {B,T}
     out = _backend_array(B, T, size(A)...)
-    copyto!(out, A)
+    copyto!(out, A isa Matrix{T} ? A : Matrix{T}(A))
     return out
 end
 
@@ -87,7 +87,7 @@ end
 
 function materialize_build(::GPUArrayBuildBackend{B}, A::AbstractVector{T}) where {B,T}
     out = _backend_array(B, T, length(A))
-    copyto!(out, A)
+    copyto!(out, A isa Vector{T} ? A : Vector{T}(A))
     return out
 end
 
@@ -107,7 +107,7 @@ materialize_build(::CPUBuildBackend, ::AbstractMatrix, data::AbstractMatrix) = M
 
 function materialize_build(::GPUArrayBuildBackend{B}, ref::AbstractMatrix, data::AbstractMatrix) where {B}
     out = _backend_array(B, eltype(data), size(data)...)
-    copyto!(out, data)
+    copyto!(out, data isa Matrix{eltype(data)} ? data : Matrix{eltype(data)}(data))
     return out
 end
 
@@ -133,7 +133,7 @@ materialize_build(::CPUBuildBackend, ::AbstractVector{T}, data::AbstractVector{T
 
 function materialize_build(::GPUArrayBuildBackend{B}, ref::AbstractVector{T}, data::AbstractVector{T}) where {B,T}
     out = _backend_array(B, T, length(data))
-    copyto!(out, data)
+    copyto!(out, data isa Vector{T} ? data : Vector{T}(data))
     return out
 end
 
