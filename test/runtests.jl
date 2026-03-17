@@ -42,6 +42,17 @@ end
 
 @test AdaptiveOpticsSim.PROJECT_STATUS == :in_development
 
+@testset "GPU backend registry" begin
+    @test !gpu_backend_loaded(CUDABackendTag)
+    @test !gpu_backend_loaded(MetalBackendTag)
+    @test !gpu_backend_loaded(AMDGPUBackendTag)
+    @test gpu_backend_array_type(CUDABackendTag) === nothing
+    @test gpu_backend_array_type(MetalBackendTag) === nothing
+    @test gpu_backend_array_type(AMDGPUBackendTag) === nothing
+    @test gpu_backend_name(Matrix{Float64}) === nothing
+    @test available_gpu_backends() == ()
+end
+
 @testset "Telescope and PSF" begin
     tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.2)
     src = Source(band=:I, magnitude=0.0)

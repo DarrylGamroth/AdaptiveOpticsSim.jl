@@ -30,8 +30,9 @@ Today the core already does most of the right things:
 - compute kernels use `KernelAbstractions`
 - FFT usage goes through `AbstractFFTs`
 
-In practice, only CUDA is currently validated. The package is not yet organized
-around GPU extension modules, but it should be.
+In practice, only CUDA is currently validated end to end. The package now has
+GPU extension scaffolding for CUDA, Metal, and AMDGPU, but only CUDA should be
+described as validated today.
 
 ## Recommended Package Split
 
@@ -99,7 +100,7 @@ AdaptiveOpticsSim.jl/
 
 ## Proposed `Project.toml` Shape
 
-This is the intended direction, not a required immediate edit.
+This layout is now implemented in the package.
 
 ```toml
 [weakdeps]
@@ -121,30 +122,36 @@ broader trait surface.
 Core should expose generic trait hooks like:
 
 - `execution_style(array)`
-- `fft_provider(array_or_backend)`
-- `rng_provider(array_or_backend)`
-- `transfer_policy(array_or_backend)`
+- `gpu_backend_loaded(BackendTag)`
+- `gpu_backend_array_type(BackendTag)`
 - `backend_name(array_or_backend)`
+- `disable_scalar_backend!(BackendTag)`
+- `backend_rand(BackendTag, T, dims...)`
+- `backend_randn(BackendTag, T, dims...)`
+- `backend_zeros(BackendTag, T, dims...)`
+- `backend_fill(BackendTag, value, dims...)`
 
 Example sketch:
 
 ```julia
-abstract type FFTProvider end
-struct GenericFFTProvider <: FFTProvider end
-struct CUFFTProvider <: FFTProvider end
-struct MetalFFTProvider <: FFTProvider end
-struct ROCFFTProvider <: FFTProvider end
-fft_provider(::Any) = GenericFFTProvider()
+abstract type GPUBackendTag end
+struct CUDABackendTag <: GPUBackendTag end
+struct MetalBackendTag <: GPUBackendTag end
+struct AMDGPUBackendTag <: GPUBackendTag end
+
+gpu_backend_loaded(::Type{<:GPUBackendTag}) = false
+gpu_backend_array_type(::Type{<:GPUBackendTag}) = nothing
 ```
 
 Then each extension can add methods without contaminating core:
 
 ```julia
-fft_provider(::CUDA.CuArray) = CUFFTProvider()
+gpu_backend_loaded(::Type{CUDABackendTag}) = true
+gpu_backend_array_type(::Type{CUDABackendTag}) = CUDA.CuArray
 ```
 
-The same pattern should be used for RNG/noise when backend-native
-implementations differ.
+The same typed-dispatch pattern should be used for RNG/noise when
+backend-native implementations differ.
 
 ## Extension Responsibilities
 
@@ -270,8 +277,10 @@ The existing `scripts/gpu_smoke_matrix.jl` should evolve into:
 
 For example:
 
-- `scripts/gpu_smoke_matrix.jl`
+- `scripts/gpu_smoke_contract.jl`
   - defines the cases and expected surfaces
+- `scripts/gpu_smoke_matrix.jl`
+  - legacy CUDA entry point for compatibility
 - `scripts/gpu_smoke_cuda.jl`
   - loads CUDA, selects `CuArray`, runs the matrix
 - `scripts/gpu_smoke_metal.jl`
@@ -299,10 +308,12 @@ CUDA-first-only extension story.
 
 ## Recommended Next Steps
 
-1. Add the backend extension stubs in `ext/` without changing core behavior.
-2. Move CUDA-specific smoke launching into `AdaptiveOpticsSimCUDAExt`.
-3. Add a backend-generic smoke contract and backend-specific wrappers.
-4. Treat Metal and AMDGPU as explicit bring-up targets, not implicit KA
-   promises.
+1. Keep the core generic and typed; do not leak backend package checks into
+   algorithms.
+2. Use `scripts/gpu_smoke_contract.jl` plus backend-specific wrappers as the
+   validation contract.
+3. Bring up Metal and AMDGPU explicitly with backend-specific smoke runs.
+4. Add backend-specific FFT/provider hooks only where generic paths are not
+   sufficient.
 5. Revisit OpenCL only after the extension-based CUDA/Metal/AMDGPU layout is
    established and validated.
