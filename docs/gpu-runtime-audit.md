@@ -80,6 +80,8 @@ The following paths are currently validated on CUDA with
 - closed-loop step
 - `ClosedLoopRuntime`
 - `ClosedLoopRuntime` with science detector
+- `MultiRTCBoundary` aggregated runtime stepping
+- runtime reconstructor refresh via `with_reconstructor`
 - interaction-matrix build + reconstruction
 - gain sensing camera
 - LiFT
@@ -125,8 +127,6 @@ The main remaining host/device round-trips are:
   - host-built masks / modulation phases copied to device
 - some setup-time telescope / detector helpers that materialize host buffers
 - some tomography setup/preparation stages
-  - guide-star coordinate generation still originates on CPU arrays before
-    backend materialization
   - sparse/operator assembly is still CPU-originating even though the final
     builder outputs now stay on the selected backend
 
@@ -152,9 +152,11 @@ fallbacks that have now been removed.
 
 ## Recommended Next Steps
 
-1. Re-audit setup-time Pyramid/BioEdge mask and modulation builders only if
+1. Run a size-sweep benchmark to find the CPU/GPU crossover points for runtime
+   stepping and tomography/reconstructor builds.
+2. Re-audit setup-time Pyramid/BioEdge mask and modulation builders only if
    startup cost becomes a practical problem.
-2. Keep the maintained CUDA validation set (`gpu_smoke_cuda.jl`,
+3. Keep the maintained CUDA validation set (`gpu_smoke_cuda.jl`,
    `gpu_builder_cuda.jl`, and `gpu_hil_cuda.jl`) green on `spiders`.
-3. Use `gpu_sync_audit_cuda.jl` to track the timing surface of runtime and
+4. Use `gpu_sync_audit_cuda.jl` to track the timing surface of runtime and
    builder-heavy RTC paths as the CUDA implementation evolves.
