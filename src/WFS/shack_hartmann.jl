@@ -426,6 +426,43 @@ function compute_intensity!(wfs::ShackHartmann, tel::Telescope, src::AbstractSou
     return wfs.state.intensity
 end
 
+@kernel function sh_spot_centroid_kernel!(slopes, spot_cube, valid_mask, cutoff, n_sub::Int, offset::Int, n1::Int, n2::Int)
+    idx = @index(Global, Linear)
+    n_spots = n_sub * n_sub
+    if idx <= n_spots
+        i = (idx - 1) ÷ n_sub + 1
+        j = idx - (i - 1) * n_sub
+        T = eltype(slopes)
+        total = zero(T)
+        sx = zero(T)
+        sy = zero(T)
+        if @inbounds valid_mask[i, j]
+            @inbounds for x in 1:n1, y in 1:n2
+                val = spot_cube[idx, x, y]
+                if val < cutoff
+                    spot_cube[idx, x, y] = zero(T)
+                else
+                    total += val
+                    sx += T(x - 1) * val
+                    sy += T(y - 1) * val
+                end
+            end
+            if total <= 0
+                slopes[idx] = zero(T)
+                slopes[idx + offset] = zero(T)
+            else
+                slopes[idx] = sy / total
+                slopes[idx + offset] = sx / total
+            end
+        else
+            @inbounds begin
+                slopes[idx] = zero(T)
+                slopes[idx + offset] = zero(T)
+            end
+        end
+    end
+end
+
 @inline function centroid_from_intensity!(intensity::AbstractMatrix{T}, threshold::T) where {T<:AbstractFloat}
     return centroid_from_intensity!(execution_style(intensity), intensity, threshold)
 end
@@ -632,28 +669,10 @@ end
 function sh_signal_from_spots!(::AcceleratorStyle, wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}
     n_sub = wfs.params.n_subap
     offset = n_sub * n_sub
-    host_valid_mask = Array(wfs.state.valid_mask)
-    host_spots = Array(wfs.state.spot_cube)
-    host_slopes = Array(wfs.state.slopes)
-    idx = 1
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        if host_valid_mask[i, j]
-            spot = @view host_spots[idx, :, :]
-            total, sx, sy = centroid_from_intensity_cutoff!(ScalarCPUStyle(), spot, cutoff)
-            if total <= 0
-                host_slopes[idx] = zero(T)
-                host_slopes[idx + offset] = zero(T)
-            else
-                host_slopes[idx] = sy
-                host_slopes[idx + offset] = sx
-            end
-        else
-            host_slopes[idx] = zero(T)
-            host_slopes[idx + offset] = zero(T)
-        end
-        idx += 1
-    end
-    copyto!(wfs.state.slopes, host_slopes)
+    style = execution_style(wfs.state.slopes)
+    launch_kernel!(style, sh_spot_centroid_kernel!, wfs.state.slopes, wfs.state.spot_cube,
+        wfs.state.valid_mask, cutoff, n_sub, offset, size(wfs.state.spot_cube, 2),
+        size(wfs.state.spot_cube, 3); ndrange=offset)
     return wfs.state.slopes
 end
 

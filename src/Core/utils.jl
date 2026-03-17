@@ -115,6 +115,30 @@ end
     end
 end
 
+@kernel function randn_fill_kernel!(out, seed::UInt64, n::Int)
+    i = @index(Global, Linear)
+    if i <= n
+        T = eltype(out)
+        u1 = uniform01(T, splitmix64(seed + UInt64(2 * i - 1)))
+        u2 = uniform01(T, splitmix64(seed + UInt64(2 * i)))
+        radius = sqrt(T(-2) * log(u1))
+        phase = T(2 * pi) * u2
+        @inbounds out[i] = radius * cos(phase)
+    end
+end
+
+@inline function splitmix64(x::UInt64)
+    z = x + 0x9e3779b97f4a7c15
+    z = (z ⊻ (z >> 30)) * 0xbf58476d1ce4e5b9
+    z = (z ⊻ (z >> 27)) * 0x94d049bb133111eb
+    return z ⊻ (z >> 31)
+end
+
+@inline function uniform01(::Type{T}, x::UInt64) where {T<:AbstractFloat}
+    u = T(ldexp(Float64(x >>> 11), -53))
+    return clamp(u, eps(T), prevfloat(one(T)))
+end
+
 function pad_center!(dest::AbstractMatrix, src::AbstractMatrix)
     Base.require_one_based_indexing(dest, src)
     fill!(dest, zero(eltype(dest)))
@@ -349,10 +373,9 @@ function _randn_backend!(::ScalarCPUStyle, rng::AbstractRNG, out::AbstractArray)
     return out
 end
 
-function _randn_backend!(::AcceleratorStyle, rng::AbstractRNG, out::AbstractArray{T}) where {T}
-    host = Array{T}(undef, size(out))
-    randn!(rng, host)
-    copyto!(out, host)
+function _randn_backend!(style::AcceleratorStyle, rng::AbstractRNG, out::AbstractArray{T}) where {T<:AbstractFloat}
+    seed = rand(rng, UInt64)
+    launch_kernel!(style, randn_fill_kernel!, out, seed, length(out); ndrange=length(out))
     return out
 end
 
