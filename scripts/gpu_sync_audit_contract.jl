@@ -13,8 +13,8 @@ function _time_block_ns(f::F) where {F<:Function}
 end
 
 function run_gpu_sync_audit(::Type{B}) where {B<:GPUBackendTag}
-    disable_scalar_backend!(B)
-    BackendArray = gpu_backend_array_type(B)
+    AdaptiveOpticsSim.disable_scalar_backend!(B)
+    BackendArray = AdaptiveOpticsSim.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
 
     T = Float32
@@ -66,7 +66,7 @@ function run_gpu_sync_audit(::Type{B}) where {B<:GPUBackendTag}
         cross_coupling=T(0.2), n_actuators=[1], valid_actuators=trues(1, 1))
     grid_mask = trues(1, 1)
     tomo_noise = RelativeSignalNoise(T(0.1))
-    imat_t = materialize_build(build_backend, reshape(T[1.0, 0.5], 2, 1))
+    imat_t = AdaptiveOpticsSim.materialize_build(build_backend, reshape(T[1.0, 0.5], 2, 1))
 
     im_tomo_build_ns, im_tomo = _time_block_ns() do
         recon_local = build_reconstructor(
@@ -101,7 +101,7 @@ function run_gpu_sync_audit(::Type{B}) where {B<:GPUBackendTag}
     end
 
     println("GPU sync audit")
-    println("  backend: ", gpu_backend_name(B))
+    println("  backend: ", AdaptiveOpticsSim.gpu_backend_name(B))
     println("  runtime_step_mean_ns: ", runtime_stats.mean_ns)
     println("  runtime_step_p95_ns: ", runtime_stats.p95_ns)
     println("  modal_build_ns: ", modal_build_ns)
