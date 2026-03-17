@@ -454,12 +454,14 @@ end
     @test vault_exact.effective_rank == 2
     @test vault_tsvd.effective_rank == 1
     @test maximum(abs, vault_exact.M .- vault_tsvd.M) > 0
+    @test CalibrationVault(D_sing).policy isa TSVDInverse
 
     imat = InteractionMatrix(D_sing, 0.1)
     recon_exact = ModalReconstructor(imat; policy=ExactPseudoInverse())
     recon_tsvd = ModalReconstructor(imat; policy=TSVDInverse(rtol=1e-9))
     @test recon_exact.effective_rank == 2
     @test recon_tsvd.effective_rank == 1
+    @test ModalReconstructor(imat).policy isa TSVDInverse
 
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
@@ -572,6 +574,12 @@ end
     @test length(coeffs_damped) == 2
     @test all(isfinite, coeffs_damped)
     @test diagnostics(lift_damped).regularization >= 0
+    lift_adaptive = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=2,
+        img_resolution=8, numerical=true, damping=LiFTAdaptiveLevenbergMarquardt())
+    coeffs_adaptive = reconstruct(lift_adaptive, psf, [1, 2])
+    @test length(coeffs_adaptive) == 2
+    @test all(isfinite, coeffs_adaptive)
+    @test diagnostics(lift_adaptive).regularization >= 0
     det_binned = Detector(noise=NoiseNone(), psf_sampling=1, binning=2)
     frame_binned = capture!(det_binned, psf; rng=MersenneTwister(3))
     lift_binned = LiFT(tel, src, basis, det_binned; diversity_opd=diversity, iterations=2,

@@ -182,16 +182,20 @@ Implemented so far:
   damping/conditioning diagnostics.
 - LiFT fallback solves now use an explicit SVD-based least-squares path rather
   than `pinv(normal)`.
+- LiFT now exposes an adaptive Levenberg-Marquardt damping mode in addition to
+  the fixed damping mode.
 - Modal/control inversion now has explicit inverse policies (`ExactPseudoInverse`,
   `TSVDInverse`, `TikhonovInverse`) instead of unconditional pseudoinverse use.
 - Gain Sensing Camera now tracks weak calibration modes and applies a
   calibration-sensitivity floor internally.
 - Tomography reconstruction now uses an explicit Hermitian solve path with
   factorization fallback instead of opaque right-division.
+- Tomography now exposes explicit noise-model policies instead of embedding all
+  regularization as unnamed heuristics.
 - Phase-covariance/Bessel approximations now have explicit regression checks
   against `SpecialFunctions.besselk` over representative parameter ranges.
 
 Still open:
 - stronger default conditioning policies for all workflows,
-- physically grounded tomography noise models,
-- more advanced LiFT damping policy.
+- more physically grounded tomography noise models tied to detector/WFS models,
+- more advanced adaptive LiFT damping policy.

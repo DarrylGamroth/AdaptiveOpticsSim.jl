@@ -22,6 +22,10 @@ TSVDInverse(; rtol::Real=eps(Float64), atol::Real=0.0, n_trunc::Integer=0) =
 TikhonovInverse(lambda::Real; rtol::Real=eps(Float64), atol::Real=0.0) =
     TikhonovInverse(float(lambda), float(rtol), float(atol))
 
+default_modal_inverse_policy(::Type{T}) where {T<:AbstractFloat} = TSVDInverse(rtol=sqrt(eps(T)))
+default_calibration_inverse_policy(::Type{T}) where {T<:AbstractFloat} = TSVDInverse(rtol=sqrt(eps(T)))
+default_projector_inverse_policy(::Type{T}) where {T<:AbstractFloat} = TSVDInverse(rtol=sqrt(eps(T)))
+
 struct InverseStats{T<:AbstractFloat,V<:AbstractVector{T}}
     singular_values::V
     cond::T

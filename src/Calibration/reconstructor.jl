@@ -10,7 +10,7 @@ struct ModalReconstructor{T<:AbstractFloat,M<:AbstractMatrix{T},P<:InversePolicy
 end
 
 function ModalReconstructor(imat::InteractionMatrix; gain::Real=1.0,
-    policy::InversePolicy=TSVDInverse())
+    policy::InversePolicy=default_modal_inverse_policy(eltype(imat.matrix)))
     T = eltype(imat.matrix)
     recon, stats = inverse_operator(imat.matrix, policy)
     return ModalReconstructor{T, typeof(recon), typeof(policy), typeof(stats.singular_values)}(

@@ -11,6 +11,7 @@ than by source file.
 - `write_telemetry_csv`
 - `bin2d`, `poisson_noise!`, `poisson_sample`
 - `ParallelConfig`, `with_parallel_config`
+- `InversePolicy`, `ExactPseudoInverse`, `TSVDInverse`, `TikhonovInverse`
 - Exceptions: `AdaptiveOpticsSimError`, `InvalidConfiguration`,
   `DimensionMismatchError`
 
@@ -48,6 +49,8 @@ than by source file.
 - `BioEdgeWFS`, `BioEdgeParams`, `BioEdgeState`
 - `update_valid_mask!`, `measure!`, `apply_shift_wfs!`, `set_optical_gain!`
 - `LiFT`, `lift_interaction_matrix`, `lift_interaction_matrix!`
+- `LiFTDampingMode`, `LiFTDampingNone`, `LiFTLevenbergMarquardt`,
+  `LiFTAdaptiveLevenbergMarquardt`
 - `lgs_elongation_factor`
 
 ## Calibration and reconstruction
@@ -64,6 +67,8 @@ than by source file.
 - `MetaSensitivity`, `compute_meta_sensitivity_matrix`,
   `estimate_misregistration`, `SPRINT`, `estimate!`
 - `ModalReconstructor`, `reconstruct!`, `reconstruct`
+- `TomographyNoiseModel`, `RelativeSignalNoise`, `ScalarMeasurementNoise`,
+  `DiagonalMeasurementNoise`
 
 ## Control
 

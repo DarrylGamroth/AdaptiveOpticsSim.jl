@@ -136,6 +136,21 @@ end
     @test recon.fitting === fitting
     @test recon.operators.cxx isa AbstractMatrix
     @test recon.operators.cox isa AbstractMatrix
+    @test size(recon.operators.cnz, 1) == 2
+
+    recon_noise = build_reconstructor(
+        InteractionMatrixTomography(),
+        imat,
+        grid_mask,
+        atm,
+        lgs,
+        wfs,
+        tomo,
+        dm;
+        fitting=fitting,
+        noise_model=ScalarMeasurementNoise(1e-2),
+    )
+    @test diag(recon_noise.operators.cnz) == fill(1e-2, 2)
 
     model = build_reconstructor(
         ModelBasedTomography(),
@@ -150,6 +165,17 @@ end
     model_map = reconstruct_wavefront_map(model, [0.1, -0.2])
     @test size(model_map) == size(model.grid_mask)
     @test count(isnan, model_map) > 0
+
+    model_noise = build_reconstructor(
+        ModelBasedTomography(),
+        atm,
+        lgs,
+        wfs,
+        tomo,
+        dm;
+        noise_model=DiagonalMeasurementNoise([1e-2, 2e-2]),
+    )
+    @test diag(model_noise.operators.cnz) == [1e-2, 2e-2]
 
     native_mask = Bool[
         1 0

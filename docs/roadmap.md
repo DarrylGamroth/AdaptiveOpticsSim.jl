@@ -193,6 +193,14 @@ The GPU work since then has improved runtime/device-residency substantially, but
 it does not change that the next non-GPU engineering focus should be the
 numerical-stability backlog.
 
+Current status of that backlog:
+
+- explicit inverse policies are implemented for modal/control reconstruction
+- GSC weak-mode flooring is implemented
+- tomography uses explicit Hermitian solves and structured noise-model policies
+- LiFT has QR + SVD fallback and fixed/adaptive LM damping modes
+- covariance/Bessel approximations have direct regression coverage
+
 ## Next 10 Tasks
 1. Build GPU-native reconstructor/calibration generation paths for RTC-facing workflows.
 2. Audit remaining calibration/output conventions against OOPAO telemetry exports.

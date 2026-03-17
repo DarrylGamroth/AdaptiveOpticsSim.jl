@@ -27,7 +27,7 @@ function basis_from_m2c(dm::DeformableMirror, tel::Telescope, M2C::AbstractMatri
 end
 
 function basis_projector(basis::AbstractMatrix{T}; tol::Real=1e-3,
-    policy::InversePolicy=TSVDInverse()) where {T<:AbstractFloat}
+    policy::InversePolicy=default_projector_inverse_policy(T)) where {T<:AbstractFloat}
     cross = transpose(basis) * basis
     diag_vals = diag(cross)
     diag_sum = sum(abs, diag_vals)

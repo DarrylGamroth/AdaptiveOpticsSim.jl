@@ -3,6 +3,7 @@ using SparseArrays
 
 abstract type AbstractTomographyMethod end
 abstract type AbstractSlopeOrder end
+abstract type TomographyNoiseModel end
 
 const PYTOMOAO_DEFAULT_CROSS_SAMPLING = 49
 
@@ -15,6 +16,21 @@ struct SimulationSlopes <: AbstractSlopeOrder end
 struct InterleavedSlopes <: AbstractSlopeOrder end
 
 struct InvertedSlopes <: AbstractSlopeOrder end
+
+struct RelativeSignalNoise{T<:AbstractFloat} <: TomographyNoiseModel
+    fraction::T
+end
+
+struct ScalarMeasurementNoise{T<:AbstractFloat} <: TomographyNoiseModel
+    variance::T
+end
+
+struct DiagonalMeasurementNoise{T<:AbstractFloat,V<:AbstractVector{T}} <: TomographyNoiseModel
+    variances::V
+end
+
+RelativeSignalNoise(fraction::Real) = RelativeSignalNoise(float(fraction))
+ScalarMeasurementNoise(variance::Real) = ScalarMeasurementNoise(float(variance))
 
 struct TomographyOperators{G,M,CX,CO,CN,RS,T}
     gamma::G
@@ -421,6 +437,28 @@ function stable_hermitian_right_division(rhs::AbstractMatrix{T}, css::AbstractMa
     return transpose(lu(css) \ transpose(rhs))
 end
 
+function tomography_noise_covariance(model::RelativeSignalNoise{T},
+    reference_diag::AbstractVector{T}) where {T<:AbstractFloat}
+    variances = similar(reference_diag)
+    @. variances = max(model.fraction * max(reference_diag, eps(T)), eps(T))
+    return Diagonal(variances)
+end
+
+function tomography_noise_covariance(model::ScalarMeasurementNoise{T},
+    reference_diag::AbstractVector{T}) where {T<:AbstractFloat}
+    n = length(reference_diag)
+    return Diagonal(fill(max(model.variance, eps(T)), n))
+end
+
+function tomography_noise_covariance(model::DiagonalMeasurementNoise{T},
+    reference_diag::AbstractVector{T}) where {T<:AbstractFloat}
+    length(model.variances) == length(reference_diag) ||
+        throw(DimensionMismatchError("tomography noise variances must match slope dimension"))
+    variances = similar(model.variances)
+    @. variances = max(model.variances, eps(T))
+    return Diagonal(variances)
+end
+
 function build_reconstructor(
     ::InteractionMatrixTomography,
     interaction_matrix::AbstractMatrix{T},
@@ -432,6 +470,7 @@ function build_reconstructor(
     dm::TomographyDMParams;
     fitting::Union{Nothing,TomographyFitting}=nothing,
     α::Real=10,
+    noise_model::TomographyNoiseModel=RelativeSignalNoise(1e-3 * α),
 ) where {T<:AbstractFloat}
     size(interaction_matrix, 1) > 0 ||
         throw(InvalidConfiguration("interaction_matrix must have at least one row"))
@@ -441,8 +480,9 @@ function build_reconstructor(
     cxx = auto_correlation(atmosphere, asterism, wfs, grid_mask)
     cross = cross_correlation(atmosphere, asterism, wfs, tomography; grid_mask=grid_mask)
     cox = _fit_source_average(cross, _equal_fit_source_weights(tomography))
-    cnz = Diagonal(fill(T(1e-3 * α), size(interaction_matrix, 1)))
-    css = Matrix(interaction_matrix * cxx * transpose(interaction_matrix) .+ cnz)
+    css_signal = Matrix(interaction_matrix * cxx * transpose(interaction_matrix))
+    cnz = tomography_noise_covariance(noise_model, diag(css_signal))
+    css = Matrix(css_signal .+ cnz)
     recstat = stable_hermitian_right_division(cox * transpose(interaction_matrix), css)
     operators = TomographyOperators(
         nothing,
@@ -636,6 +676,7 @@ function build_reconstructor(
     dm::TomographyDMParams;
     fitting::Union{Nothing,TomographyFitting}=nothing,
     α::Real=10,
+    noise_model::TomographyNoiseModel=RelativeSignalNoise(1e-3 * α),
 )
     return build_reconstructor(
         InteractionMatrixTomography(),
@@ -648,6 +689,7 @@ function build_reconstructor(
         dm;
         fitting=fitting,
         α=α,
+        noise_model=noise_model,
     )
 end
 
@@ -659,6 +701,7 @@ function build_reconstructor(
     tomography::TomographyParams{T},
     dm::TomographyDMParams;
     fitting::Union{Nothing,TomographyFitting}=nothing,
+    noise_model::TomographyNoiseModel=RelativeSignalNoise(0.1),
 ) where {T<:AbstractFloat}
     gamma_single, grid_mask = sparse_gradient_matrix(valid_lenslet_support(wfs); over_sampling=2)
     gamma = blockdiag(ntuple(_ -> gamma_single, asterism.n_lgs)...)
@@ -669,9 +712,7 @@ function build_reconstructor(
     col_positions = findall(repeat(vec(grid_mask), asterism.n_lgs))
     cox = cox_full[row_positions, col_positions]
     css_signal = Matrix(gamma * cxx * transpose(gamma))
-    diagonal = diag(css_signal)
-    mean_diag = sum(diagonal) / length(diagonal)
-    cnz = Diagonal(fill(mean_diag / 10, size(gamma, 1)))
+    cnz = tomography_noise_covariance(noise_model, diag(css_signal))
     css = css_signal .+ cnz
     recstat = stable_hermitian_right_division(cox * transpose(gamma), css)
     d = support_diameter(wfs) / size(valid_lenslet_support(wfs), 1)

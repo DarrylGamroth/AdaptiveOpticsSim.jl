@@ -68,6 +68,7 @@ include("Tomography/reconstructors.jl")
 export PROJECT_STATUS
 export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError, UnsupportedAlgorithm
 export InversePolicy, ExactPseudoInverse, TSVDInverse, TikhonovInverse, InverseStats, inverse_operator
+export default_modal_inverse_policy, default_calibration_inverse_policy, default_projector_inverse_policy
 export Workspace, ensure_psf_buffers!
 export Telemetry, TelemetryRow, record!
 export snapshot_config, write_config_toml, write_config_json
@@ -101,7 +102,7 @@ export BioEdgeWFS, BioEdgeParams, BioEdgeState
 export apply_shift_wfs!, set_optical_gain!
 export LiFT, lift_interaction_matrix, lift_interaction_matrix!
 export LiFTSolveMode, LiFTSolveAuto, LiFTSolveQR, LiFTSolveNormalEquations
-export LiFTDampingMode, LiFTDampingNone, LiFTLevenbergMarquardt
+export LiFTDampingMode, LiFTDampingNone, LiFTLevenbergMarquardt, LiFTAdaptiveLevenbergMarquardt
 export LiFTDiagnostics, diagnostics
 export InteractionMatrix, interaction_matrix
 export CalibrationVault, with_truncation
@@ -130,6 +131,7 @@ export GPUBackendTag, CUDABackendTag, MetalBackendTag, AMDGPUBackendTag
 export TomographyAtmosphereParams, LGSAsterismParams, LGSWFSParams
 export TomographyParams, TomographyDMParams, TomographyFitting
 export AbstractTomographyMethod, ModelBasedTomography, InteractionMatrixTomography
+export TomographyNoiseModel, RelativeSignalNoise, ScalarMeasurementNoise, DiagonalMeasurementNoise
 export AbstractSlopeOrder, SimulationSlopes, InterleavedSlopes, InvertedSlopes
 export TomographyOperators, TomographicReconstructor, TomographyCommandReconstructor
 export build_reconstructor, assemble_reconstructor_and_fitting

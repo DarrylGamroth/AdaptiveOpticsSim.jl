@@ -32,8 +32,21 @@ struct LiFTLevenbergMarquardt{T<:AbstractFloat} <: LiFTDampingMode
     condition_rtol::T
 end
 
+struct LiFTAdaptiveLevenbergMarquardt{T<:AbstractFloat} <: LiFTDampingMode
+    lambda0::T
+    growth::T
+    shrink::T
+    min_lambda::T
+    condition_rtol::T
+end
+
 LiFTLevenbergMarquardt(; lambda0::Real=1e-6, growth::Real=10.0, condition_rtol::Real=sqrt(eps(Float64))) =
     LiFTLevenbergMarquardt(float(lambda0), float(growth), float(condition_rtol))
+
+LiFTAdaptiveLevenbergMarquardt(; lambda0::Real=1e-6, growth::Real=10.0, shrink::Real=2.0,
+    min_lambda::Real=1e-10, condition_rtol::Real=sqrt(eps(Float64))) =
+    LiFTAdaptiveLevenbergMarquardt(float(lambda0), float(growth), float(shrink), float(min_lambda),
+        float(condition_rtol))
 
 struct LiFTParams{T<:AbstractFloat,A<:AbstractMatrix{T},K,S<:LiFTSolveMode,D<:LiFTDampingMode}
     diversity_opd::A
@@ -286,6 +299,8 @@ function reconstruct!(coeffs::AbstractVector{T}, lift::LiFT, psf_in::AbstractMat
     diag = lift.state.diagnostics
     style = execution_style(H)
     effective_mode = effective_solve_mode(style, lift.params.solve_mode)
+    λ_state = initial_damping_state(lift.params.damping, T)
+    prev_weighted_residual_norm = T(Inf)
     copyto!(mode_ids_buf, mode_ids)
     init_weights!(sqrtw, mode, psf_in, lift.det)
     for iter in 1:lift.params.iterations
@@ -317,9 +332,13 @@ function reconstruct!(coeffs::AbstractVector{T}, lift::LiFT, psf_in::AbstractMat
         diag.weighted_residual_norm = norm(residual)
         mul!(normal, adjoint(H), H)
         mul!(rhs, adjoint(H), residual)
-        delta = solve_lift_system!(diag, residual, rhs, H, normal, factor, effective_mode, lift.params.damping)
+        λ_state = update_damping_state(lift.params.damping, λ_state, prev_weighted_residual_norm,
+            diag.weighted_residual_norm, normal)
+        damping = effective_damping(lift.params.damping, λ_state)
+        delta = solve_lift_system!(diag, residual, rhs, H, normal, factor, effective_mode, damping)
         diag.update_norm = delta_norm(delta, n_modes, effective_mode)
         update_coefficients!(coeffs, delta, mode_ids_buf, effective_mode, style)
+        prev_weighted_residual_norm = diag.weighted_residual_norm
         if check_convergence && diag.update_norm / max(norm(coeffs), eps(T)) < 1e-3
             break
         end
@@ -500,9 +519,40 @@ function damping_lambda(damping::LiFTLevenbergMarquardt, normal::AbstractMatrix{
     return max(T(damping.lambda0) * max(base, one(T)), base)
 end
 
+function damping_lambda(damping::LiFTAdaptiveLevenbergMarquardt, normal::AbstractMatrix{T}) where {T<:AbstractFloat}
+    base = regularization_load(normal)
+    return max(T(damping.lambda0) * max(base, one(T)), T(damping.min_lambda), base)
+end
+
 @inline damping_condition_limit(::Type{T}, ::LiFTDampingNone) where {T<:AbstractFloat} = inv(sqrt(eps(T)))
 @inline damping_condition_limit(::Type{T}, damping::LiFTLevenbergMarquardt) where {T<:AbstractFloat} =
     inv(max(T(damping.condition_rtol), eps(T)))
+@inline damping_condition_limit(::Type{T}, damping::LiFTAdaptiveLevenbergMarquardt) where {T<:AbstractFloat} =
+    inv(max(T(damping.condition_rtol), eps(T)))
+
+@inline initial_damping_state(::LiFTDampingNone, ::Type{T}) where {T<:AbstractFloat} = zero(T)
+@inline initial_damping_state(damping::LiFTLevenbergMarquardt, ::Type{T}) where {T<:AbstractFloat} = T(damping.lambda0)
+@inline initial_damping_state(damping::LiFTAdaptiveLevenbergMarquardt, ::Type{T}) where {T<:AbstractFloat} = T(damping.lambda0)
+
+@inline update_damping_state(::LiFTDampingNone, λ::T, ::T, ::T, ::AbstractMatrix{T}) where {T<:AbstractFloat} = λ
+@inline update_damping_state(::LiFTLevenbergMarquardt, λ::T, ::T, ::T, ::AbstractMatrix{T}) where {T<:AbstractFloat} = λ
+function update_damping_state(damping::LiFTAdaptiveLevenbergMarquardt, λ::T, prev_residual::T,
+    current_residual::T, normal::AbstractMatrix{T}) where {T<:AbstractFloat}
+    base = regularization_load(normal)
+    if !isfinite(prev_residual)
+        return max(T(damping.lambda0), T(damping.min_lambda), base)
+    elseif current_residual > prev_residual * (one(T) + sqrt(eps(T)))
+        return max(λ * T(damping.growth), T(damping.min_lambda), base)
+    end
+    return max(λ / T(damping.shrink), T(damping.min_lambda), base)
+end
+
+@inline effective_damping(::LiFTDampingNone, ::T) where {T<:AbstractFloat} = LiFTDampingNone()
+@inline effective_damping(damping::LiFTLevenbergMarquardt, ::T) where {T<:AbstractFloat} = damping
+function effective_damping(damping::LiFTAdaptiveLevenbergMarquardt, λ::T) where {T<:AbstractFloat}
+    return LiFTLevenbergMarquardt(lambda0=max(λ, T(damping.min_lambda)),
+        growth=damping.growth, condition_rtol=damping.condition_rtol)
+end
 
 function qr_condition_ratio(qr_factor, n_modes::Int)
     T = real(eltype(qr_factor.factors))

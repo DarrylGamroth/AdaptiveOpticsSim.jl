@@ -16,7 +16,7 @@ struct CalibrationVault{T<:AbstractFloat,
 end
 
 function CalibrationVault(D::AbstractMatrix{T}; n_trunc::Int=0, invert::Bool=true,
-    policy::InversePolicy=TSVDInverse(n_trunc=n_trunc)) where {T<:AbstractFloat}
+    policy::InversePolicy=default_calibration_inverse_policy(T)) where {T<:AbstractFloat}
     if !invert
         empty_vals = similar(D, T, 0)
         return CalibrationVault{T, typeof(D), Matrix{T}, typeof(empty_vals), typeof(policy)}(
@@ -53,10 +53,10 @@ function CalibrationVault(D::AbstractMatrix{T}; n_trunc::Int=0, invert::Bool=tru
 end
 
 function CalibrationVault(D::AbstractMatrix{S}; n_trunc::Int=0, invert::Bool=true,
-    policy::InversePolicy=TSVDInverse(n_trunc=n_trunc)) where {S<:Real}
+    policy::InversePolicy=default_calibration_inverse_policy(float(S))) where {S<:Real}
     return CalibrationVault(float.(D); n_trunc=n_trunc, invert=invert, policy=policy)
 end
 
 function with_truncation(vault::CalibrationVault, n_trunc::Int)
-    return CalibrationVault(vault.D; n_trunc=n_trunc, invert=true, policy=TSVDInverse(n_trunc=n_trunc))
+    return CalibrationVault(vault.D; n_trunc=n_trunc, invert=true, policy=vault.policy)
 end
