@@ -1,10 +1,7 @@
 using AdaptiveOpticsSim
 using Random
 
-function _sync_backend_array!(A)
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(A))
-    return nothing
-end
+_sync_cpu_array!(A) = nothing
 
 function _time_block_ns(f::F) where {F<:Function}
     t0 = time_ns()
@@ -13,51 +10,38 @@ function _time_block_ns(f::F) where {F<:Function}
 end
 
 function _warm_builder!(f::F) where {F<:Function}
-    result = f()
-    return result
+    return f()
 end
 
-function run_gpu_sync_audit(::Type{B}) where {B<:GPUBackendTag}
-    AdaptiveOpticsSim.disable_scalar_backend!(B)
-    BackendArray = AdaptiveOpticsSim.gpu_backend_array_type(B)
-    BackendArray === nothing && error("GPU backend $(B) is not available")
-
-    policy = AdaptiveOpticsSim.default_gpu_precision_policy(B)
-    high_accuracy = AdaptiveOpticsSim.high_accuracy_gpu_precision_policy(B)
-    T = AdaptiveOpticsSim.gpu_runtime_type(policy)
-    TB = AdaptiveOpticsSim.gpu_build_type(policy)
-    TH = AdaptiveOpticsSim.gpu_build_type(high_accuracy)
+function run_cpu_sync_audit()
+    policy = SplitGPUPrecision(Float32, Float32)
+    high_accuracy = SplitGPUPrecision(Float32, Float64)
+    T = gpu_runtime_type(policy)
+    TB = gpu_build_type(policy)
+    TH = gpu_build_type(high_accuracy)
     rng = MersenneTwister(1)
-    build_backend = GPUArrayBuildBackend(B)
+    build_backend = CPUBuildBackend()
 
     tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
-        central_obstruction=0.0f0, T=T, backend=BackendArray)
+        central_obstruction=0.0f0, T=T, backend=Array)
     src = Source(band=:I, magnitude=0.0, T=T)
-    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=BackendArray)
-    dm = DeformableMirror(tel; n_act=4, influence_width=0.3, T=T, backend=BackendArray)
-    wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=BackendArray)
+    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=Array)
+    dm = DeformableMirror(tel; n_act=4, influence_width=0.3, T=T, backend=Array)
+    wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=Array)
     sim = AOSimulation(tel, atm, src, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
     recon = ModalReconstructor(imat; gain=T(0.5))
     runtime = ClosedLoopRuntime(sim, recon; rng=rng)
     step!(runtime)
-    _sync_backend_array!(runtime.command)
 
-    runtime_stats = runtime_timing(() -> begin
-        step!(runtime)
-        _sync_backend_array!(runtime.command)
-    end; warmup=10, samples=100, gc_before=false)
+    runtime_stats = runtime_timing(runtime; warmup=10, samples=100, gc_before=false)
     phase_stats = runtime_phase_timing(runtime; warmup=10, samples=100, gc_before=false)
 
     _warm_builder!() do
-        recon_local = ModalReconstructor(imat; build_backend=build_backend)
-        _sync_backend_array!(recon_local.reconstructor)
-        recon_local
+        ModalReconstructor(imat; build_backend=build_backend)
     end
     modal_build_ns, modal_recon = _time_block_ns() do
-        recon_local = ModalReconstructor(imat; build_backend=build_backend)
-        _sync_backend_array!(recon_local.reconstructor)
-        recon_local
+        ModalReconstructor(imat; build_backend=build_backend)
     end
 
     atm_tomo = TomographyAtmosphereParams(
@@ -81,10 +65,10 @@ function run_gpu_sync_audit(::Type{B}) where {B<:GPUBackendTag}
         cross_coupling=TB(0.2), n_actuators=[1], valid_actuators=trues(1, 1))
     grid_mask = trues(1, 1)
     tomo_noise = RelativeSignalNoise(TB(0.1))
-    imat_t = AdaptiveOpticsSim.materialize_build(build_backend, reshape(TB[1.0, 0.5], 2, 1))
+    imat_t = reshape(TB[1.0, 0.5], 2, 1)
 
     _warm_builder!() do
-        recon_local = build_reconstructor(
+        build_reconstructor(
             InteractionMatrixTomography(),
             imat_t,
             grid_mask,
@@ -96,11 +80,9 @@ function run_gpu_sync_audit(::Type{B}) where {B<:GPUBackendTag}
             noise_model=tomo_noise,
             build_backend=build_backend,
         )
-        _sync_backend_array!(recon_local.reconstructor)
-        recon_local
     end
     im_tomo_build_ns, im_tomo = _time_block_ns() do
-        recon_local = build_reconstructor(
+        build_reconstructor(
             InteractionMatrixTomography(),
             imat_t,
             grid_mask,
@@ -112,12 +94,10 @@ function run_gpu_sync_audit(::Type{B}) where {B<:GPUBackendTag}
             noise_model=tomo_noise,
             build_backend=build_backend,
         )
-        _sync_backend_array!(recon_local.reconstructor)
-        recon_local
     end
 
     _warm_builder!() do
-        recon_local = build_reconstructor(
+        build_reconstructor(
             ModelBasedTomography(),
             atm_tomo,
             lgs,
@@ -127,11 +107,9 @@ function run_gpu_sync_audit(::Type{B}) where {B<:GPUBackendTag}
             noise_model=tomo_noise,
             build_backend=build_backend,
         )
-        _sync_backend_array!(recon_local.reconstructor)
-        recon_local
     end
     model_tomo_build_ns, model_tomo = _time_block_ns() do
-        recon_local = build_reconstructor(
+        build_reconstructor(
             ModelBasedTomography(),
             atm_tomo,
             lgs,
@@ -141,8 +119,6 @@ function run_gpu_sync_audit(::Type{B}) where {B<:GPUBackendTag}
             noise_model=tomo_noise,
             build_backend=build_backend,
         )
-        _sync_backend_array!(recon_local.reconstructor)
-        recon_local
     end
 
     atm_tomo_hi = TomographyAtmosphereParams(
@@ -164,8 +140,9 @@ function run_gpu_sync_audit(::Type{B}) where {B<:GPUBackendTag}
         fit_src_height_m=TH(Inf))
     tdm_hi = TomographyDMParams(heights_m=TH[0.0], pitch_m=TH[0.5],
         cross_coupling=TH(0.2), n_actuators=[1], valid_actuators=trues(1, 1))
+
     _warm_builder!() do
-        recon_local = build_reconstructor(
+        build_reconstructor(
             ModelBasedTomography(),
             atm_tomo_hi,
             lgs_hi,
@@ -175,11 +152,9 @@ function run_gpu_sync_audit(::Type{B}) where {B<:GPUBackendTag}
             noise_model=RelativeSignalNoise(TH(0.1)),
             build_backend=build_backend,
         )
-        _sync_backend_array!(recon_local.reconstructor)
-        recon_local
     end
     model_tomo_high_ns, model_tomo_high = _time_block_ns() do
-        recon_local = build_reconstructor(
+        build_reconstructor(
             ModelBasedTomography(),
             atm_tomo_hi,
             lgs_hi,
@@ -189,12 +164,9 @@ function run_gpu_sync_audit(::Type{B}) where {B<:GPUBackendTag}
             noise_model=RelativeSignalNoise(TH(0.1)),
             build_backend=build_backend,
         )
-        _sync_backend_array!(recon_local.reconstructor)
-        recon_local
     end
 
-    println("GPU sync audit")
-    println("  backend: ", AdaptiveOpticsSim.gpu_backend_name(B))
+    println("CPU sync audit")
     println("  runtime_precision_policy: ", typeof(policy))
     println("  runtime_eltype: ", T)
     println("  build_eltype: ", TB)
@@ -215,3 +187,5 @@ function run_gpu_sync_audit(::Type{B}) where {B<:GPUBackendTag}
     println("  model_tomography_high_accuracy_type: ", typeof(model_tomo_high.reconstructor))
     return nothing
 end
+
+run_cpu_sync_audit()
