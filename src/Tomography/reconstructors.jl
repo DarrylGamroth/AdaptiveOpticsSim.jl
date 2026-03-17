@@ -286,7 +286,8 @@ function _covariance_matrix(
     cst = base * (gamma_11_6 / (T(2)^(T(5) / T(6)) * T(π)^(T(8) / T(3)))) * (L0 / r0)^(T(5) / T(3))
     var_term = base * gamma_11_6 * gamma_5_6 / (T(2) * T(π)^(T(8) / T(3))) * (L0 / r0)^(T(5) / T(3))
     style = execution_style(out)
-    launch_kernel!(style, covariance_matrix_kernel!, out, rho1_native, rho2_native, cst, var_term, inv(L0), fractional_r0;
+    launch_kernel!(style, covariance_matrix_kernel!, out, rho1_native, rho2_native, cst, var_term, inv(L0), fractional_r0,
+        length(rho1), length(rho2);
         ndrange=size(out))
     return out
 end
@@ -704,8 +705,9 @@ function _fit_source_average(cross::AbstractArray{T,3}, weights::AbstractVector{
     size(cross, 1) == length(weights) ||
         throw(DimensionMismatchError("fit-source weight length must match cross-correlation stack"))
     out = similar(cross, T, size(cross, 2), size(cross, 3))
+    weights_native = materialize_build(default_build_backend(out), weights)
     style = execution_style(out)
-    launch_kernel!(style, fit_source_average_kernel!, out, cross, weights, size(cross, 1), size(cross, 2), size(cross, 3);
+    launch_kernel!(style, fit_source_average_kernel!, out, cross, weights_native, size(cross, 1), size(cross, 2), size(cross, 3);
         ndrange=size(out))
     return out
 end
