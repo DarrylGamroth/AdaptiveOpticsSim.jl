@@ -59,6 +59,7 @@ include("Calibration/initialization.jl")
 include("Calibration/gain_sensing_camera.jl")
 include("Calibration/misregistration_identification.jl")
 include("Control/controller.jl")
+include("Control/runtime.jl")
 include("Tomography/parameters.jl")
 include("Tomography/geometry.jl")
 include("Tomography/fitting.jl")
@@ -114,6 +115,7 @@ export calibrate!, reset_calibration!, compute_optical_gains!
 export MetaSensitivity, compute_meta_sensitivity_matrix, estimate_misregistration, SPRINT, estimate!
 export ModalReconstructor, reconstruct!, reconstruct
 export AbstractController, DiscreteIntegratorController, update!
+export ClosedLoopRuntime, sense!, step!, set_command!
 export AbstractOpticalElement, AbstractSource, AbstractAtmosphere, AbstractWFS
 export AbstractDetector, AbstractDeformableMirror, SensingMode, Diffractive, Geometric
 export WFSNormalization, MeanValidFluxNormalization, IncidenceFluxNormalization

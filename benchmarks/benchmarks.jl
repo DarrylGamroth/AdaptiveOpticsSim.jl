@@ -1,5 +1,6 @@
 using AdaptiveOpticsSim
 using BenchmarkTools
+using Random
 
 function bench_psf()
     tel = Telescope(resolution=64, diameter=8.0, sampling_time=1e-3, central_obstruction=0.2)
@@ -58,6 +59,21 @@ function bench_reconstructor_inplace()
     return @benchmark reconstruct!($out, $recon, $slopes)
 end
 
+function bench_closed_loop_runtime()
+    rng = MersenneTwister(0)
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = Source(band=:I, magnitude=0.0)
+    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
+    wfs = ShackHartmann(tel; n_subap=4)
+    sim = AOSimulation(tel, atm, src, dm, wfs)
+    imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
+    recon = ModalReconstructor(imat; gain=0.5)
+    runtime = ClosedLoopRuntime(sim, recon; rng=rng)
+    step!(runtime)
+    return @benchmark step!($runtime)
+end
+
 function bench_lift(numerical::Bool)
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
@@ -113,10 +129,24 @@ function alloc_checks()
     reconstruct!(out, recon, slopes)
     alloc_recon = @allocated reconstruct!(out, recon, slopes)
 
+    rng = MersenneTwister(0)
+    tel_rt = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src_rt = Source(band=:I, magnitude=0.0)
+    atm_rt = KolmogorovAtmosphere(tel_rt; r0=0.2, L0=25.0)
+    dm_rt = DeformableMirror(tel_rt; n_act=4, influence_width=0.3)
+    wfs_rt = ShackHartmann(tel_rt; n_subap=4)
+    sim_rt = AOSimulation(tel_rt, atm_rt, src_rt, dm_rt, wfs_rt)
+    imat_rt = interaction_matrix(dm_rt, wfs_rt, tel_rt; amplitude=0.1)
+    recon_rt = ModalReconstructor(imat_rt; gain=0.5)
+    runtime = ClosedLoopRuntime(sim_rt, recon_rt; rng=rng)
+    step!(runtime)
+    alloc_runtime = @allocated step!(runtime)
+
     println("Allocation checks:")
     println("  LiFT analytic (in-place): $(alloc_lift_a) bytes")
     println("  LiFT numerical (in-place): $(alloc_lift_n) bytes")
     println("  Reconstructor! (in-place): $(alloc_recon) bytes")
+    println("  Closed-loop runtime step!: $(alloc_runtime) bytes")
 end
 
 println("PSF benchmark:")
@@ -136,6 +166,9 @@ display(bench_reconstructor())
 
 println("Reconstructor in-place benchmark:")
 display(bench_reconstructor_inplace())
+
+println("Closed-loop runtime benchmark:")
+display(bench_closed_loop_runtime())
 
 println("LiFT analytic benchmark:")
 display(bench_lift(false))

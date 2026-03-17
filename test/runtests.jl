@@ -154,6 +154,41 @@ end
     @test length(dm_cmd) == length(wfs.state.slopes)
 end
 
+function closed_loop_runtime_allocations()
+    rng = MersenneTwister(0)
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = Source(band=:I, magnitude=0.0)
+    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
+    wfs = ShackHartmann(tel; n_subap=4)
+    sim = AOSimulation(tel, atm, src, dm, wfs)
+    imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
+    recon = ModalReconstructor(imat; gain=0.5)
+    runtime = ClosedLoopRuntime(sim, recon; rng=rng)
+    step!(runtime)
+    step!(runtime)
+    return @allocated step!(runtime)
+end
+
+@testset "Closed-loop runtime" begin
+    rng = MersenneTwister(0)
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = Source(band=:I, magnitude=0.0)
+    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
+    wfs = ShackHartmann(tel; n_subap=4)
+    sim = AOSimulation(tel, atm, src, dm, wfs)
+    imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
+    recon = ModalReconstructor(imat; gain=0.5)
+    det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
+    runtime = ClosedLoopRuntime(sim, recon; rng=rng, science_detector=det)
+
+    step!(runtime)
+    @test length(runtime.command) == length(dm.state.coefs)
+    @test size(output_frame(det)) == (32, 32)
+    @test closed_loop_runtime_allocations() <= 256
+end
+
 @testset "Detector" begin
     psf = fill(1.0, 8, 8)
     det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=2)

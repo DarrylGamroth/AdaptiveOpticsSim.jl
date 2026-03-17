@@ -217,3 +217,18 @@ Interpretation:
 That means the next worthwhile LiFT improvement, if needed, is adding damping or
 explicit conditioning diagnostics on top of the QR solve rather than chasing
 smaller setup allocations.
+
+## Closed-Loop Runtime Baseline
+
+The package now also has a persistent `ClosedLoopRuntime` with `sense!` and
+`step!` for repeated closed-loop execution.
+
+On the initial representative CPU baseline:
+
+- warmed `step!` currently allocates about `240` bytes
+- the path is already persistent and benchmarked
+- the remaining allocation appears to be thin wrapper overhead, not large
+  buffer churn
+
+This is good enough for regression gating while the runtime API stabilizes, but
+it is not yet the final zero-allocation target for the sprint.
