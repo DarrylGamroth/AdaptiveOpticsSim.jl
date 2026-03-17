@@ -1,6 +1,7 @@
 using Test
 using AdaptiveOpticsSim
 using Random
+using SpecialFunctions
 using Tables
 using TOML
 
@@ -589,15 +590,28 @@ end
 @testset "Phase statistics" begin
     tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
-    rho = [0.0, 0.1]
+    rho = [0.0, 1e-6, 0.1, 1.0]
     cov = phase_covariance(rho, atm)
-    @test length(cov) == 2
+    @test length(cov) == length(rho)
+    @test all(isfinite, cov)
+    @test cov[1] >= cov[2]
+    @test cov[2] <= cov[1]
+    @test cov[3] <= cov[2]
+    @test cov[4] <= cov[3]
+    @test abs(cov[1] - cov[2]) / cov[1] < 1e-3
     var = phase_variance(atm)
     @test var > 0
     psd = phase_spectrum([0.1], atm)
     @test length(psd) == 1
+    @test psd[1] > 0
     screen = ft_phase_screen(atm, 8, 0.1; rng=MersenneTwister(1))
     @test size(screen) == (8, 8)
+
+    for z in (1e-6, 1e-3, 0.1, 1.0, 4.0, 10.0)
+        ref = SpecialFunctions.besselk(5 / 6, z)
+        approx = AdaptiveOpticsSim._kv56_scalar(z)
+        @test isapprox(real(approx), ref; rtol=2e-4, atol=1e-10)
+    end
 end
 
 @testset "Mis-registration identification" begin

@@ -354,8 +354,26 @@ end
 @inline effective_solve_mode(::AcceleratorStyle, ::LiFTSolveAuto) = LiFTSolveNormalEquations()
 @inline effective_solve_mode(::ExecutionStyle, mode::LiFTSolveMode) = mode
 
+function solve_lift_fallback!(diag::LiFTDiagnostics{T}, rhs::AbstractVector{T},
+    H::AbstractMatrix{T}, residual::AbstractVector{T}, damping::LiFTDampingMode) where {T<:AbstractFloat}
+    λ = damping isa LiFTLevenbergMarquardt ? damping_lambda(damping, transpose(H) * H) : zero(T)
+    F = svd(H; full=false)
+    s = F.S
+    work = similar(rhs)
+    mul!(work, transpose(F.U), residual)
+    @inbounds for i in eachindex(s)
+        denom = s[i]^2 + λ^2
+        work[i] = iszero(denom) ? zero(T) : (s[i] * work[i]) / denom
+    end
+    mul!(rhs, F.V, work)
+    diag.regularization = λ
+    diag.used_fallback = true
+    return rhs
+end
+
 function solve_normal_system!(diag::LiFTDiagnostics{T}, rhs::AbstractVector{T}, factor::AbstractMatrix{T},
-    normal::AbstractMatrix{T}, ::LiFTDampingNone) where {T<:AbstractFloat}
+    normal::AbstractMatrix{T}, H::AbstractMatrix{T}, residual::AbstractVector{T},
+    ::LiFTDampingNone) where {T<:AbstractFloat}
     copyto!(factor, normal)
     chol = cholesky!(Hermitian(factor), check=false)
     λ = zero(T)
@@ -368,10 +386,7 @@ function solve_normal_system!(diag::LiFTDiagnostics{T}, rhs::AbstractVector{T}, 
             @views factor[diagind(factor)] .+= λ
             chol = cholesky!(Hermitian(factor), check=false)
             if !issuccess(chol)
-                rhs .= pinv(normal) * rhs
-                diag.regularization = λ
-                diag.used_fallback = true
-                return rhs
+                return solve_lift_fallback!(diag, rhs, H, residual, LiFTLevenbergMarquardt(lambda0=λ))
             end
         end
     end
@@ -381,7 +396,8 @@ function solve_normal_system!(diag::LiFTDiagnostics{T}, rhs::AbstractVector{T}, 
 end
 
 function solve_normal_system!(diag::LiFTDiagnostics{T}, rhs::AbstractVector{T}, factor::AbstractMatrix{T},
-    normal::AbstractMatrix{T}, damping::LiFTLevenbergMarquardt) where {T<:AbstractFloat}
+    normal::AbstractMatrix{T}, H::AbstractMatrix{T}, residual::AbstractVector{T},
+    damping::LiFTLevenbergMarquardt) where {T<:AbstractFloat}
     copyto!(factor, normal)
     λ = damping_lambda(damping, normal)
     if λ > zero(T)
@@ -394,10 +410,7 @@ function solve_normal_system!(diag::LiFTDiagnostics{T}, rhs::AbstractVector{T}, 
         @views factor[diagind(factor)] .+= λ
         chol = cholesky!(Hermitian(factor), check=false)
         if λ > T(1e12)
-            rhs .= pinv(normal) * rhs
-            diag.regularization = λ
-            diag.used_fallback = true
-            return rhs
+            return solve_lift_fallback!(diag, rhs, H, residual, damping)
         end
     end
     ldiv!(chol, rhs)
@@ -418,7 +431,7 @@ function solve_lift_system!(diag::LiFTDiagnostics{T}, residual::AbstractVector{T
         if cond_ratio > damping_condition_limit(T, damping)
             diag.used_qr = false
             diag.used_fallback = true
-            solve_normal_system!(diag, rhs, factor, normal, damping)
+            solve_normal_system!(diag, rhs, factor, normal, H, residual, damping)
             return rhs
         end
         try
@@ -428,14 +441,14 @@ function solve_lift_system!(diag::LiFTDiagnostics{T}, residual::AbstractVector{T
             if err isa SingularException
                 diag.used_qr = false
                 diag.used_fallback = true
-                solve_normal_system!(diag, rhs, factor, normal, damping)
+                solve_normal_system!(diag, rhs, factor, normal, H, residual, damping)
                 return rhs
             end
             rethrow()
         end
     end
     diag.condition_ratio = normal_condition_ratio(normal)
-    solve_normal_system!(diag, rhs, factor, normal, damping)
+    solve_normal_system!(diag, rhs, factor, normal, H, residual, damping)
     return rhs
 end
 

@@ -184,19 +184,23 @@ When GPU backend layout work is paused, the intended resume point is:
 2. robustness work around the remaining long-horizon atmosphere-driven GSC
    diagnostic replay
 3. any remaining execution-quality cleanup that benefits both CPU and GPU
+4. once the numerical-stability backlog is in a good place, the next major item
+   is GPU-native reconstructor/calibration generation so the package can build
+   RTC-facing reconstructors on accelerator backends instead of treating all
+   builder paths as CPU-only setup work
 
 The GPU work since then has improved runtime/device-residency substantially, but
 it does not change that the next non-GPU engineering focus should be the
 numerical-stability backlog.
 
 ## Next 10 Tasks
-1. Audit remaining calibration/output conventions against OOPAO telemetry exports.
-2. Decide whether the compact closed-loop traces should be expanded to full tutorial traces with atmosphere replay.
-3. Tighten the remaining large-aberration Strehl/slope drift in the long-horizon GSC replay.
-4. Validate the remaining atmosphere-driven GSC closed-loop telemetry against OOPAO outputs.
-5. Validate LiFT iterative reconstruction outputs, not just the analytic interaction matrix.
-6. Decide whether any future tomography expansion stays in core or moves behind an extension/package split later.
-7. Only then resume GPU-specific expansion.
+1. Build GPU-native reconstructor/calibration generation paths for RTC-facing workflows.
+2. Audit remaining calibration/output conventions against OOPAO telemetry exports.
+3. Decide whether the compact closed-loop traces should be expanded to full tutorial traces with atmosphere replay.
+4. Tighten the remaining large-aberration Strehl/slope drift in the long-horizon GSC replay.
+5. Validate the remaining atmosphere-driven GSC closed-loop telemetry against OOPAO outputs.
+6. Validate LiFT iterative reconstruction outputs, not just the analytic interaction matrix.
+7. Decide whether any future tomography expansion stays in core or moves behind an extension/package split later.
 
 ## Phase 0: Setup
 - Create package skeleton and CI with Julia versions.
