@@ -72,9 +72,21 @@ function materialize_build(::GPUArrayBuildBackend{B}, A::AbstractMatrix{T}) wher
     return out
 end
 
+function materialize_build(::GPUArrayBuildBackend{B}, A::BitMatrix) where {B}
+    out = _backend_array(B, Bool, size(A)...)
+    copyto!(out, Matrix{Bool}(A))
+    return out
+end
+
 function materialize_build(::GPUArrayBuildBackend{B}, A::AbstractVector{T}) where {B,T}
     out = _backend_array(B, T, length(A))
     copyto!(out, A)
+    return out
+end
+
+function materialize_build(::GPUArrayBuildBackend{B}, A::BitVector) where {B}
+    out = _backend_array(B, Bool, length(A))
+    copyto!(out, Vector{Bool}(A))
     return out
 end
 
@@ -92,6 +104,12 @@ function materialize_build(::GPUArrayBuildBackend{B}, ref::AbstractMatrix, data:
     return out
 end
 
+function materialize_build(::GPUArrayBuildBackend{B}, ref::AbstractMatrix, data::BitMatrix) where {B}
+    out = _backend_array(B, Bool, size(data)...)
+    copyto!(out, Matrix{Bool}(data))
+    return out
+end
+
 function materialize_build(::NativeBuildBackend, ref::AbstractVector{T}, data::AbstractVector{T}) where {T}
     out = similar(ref, T, length(data))
     copyto!(out, data)
@@ -103,6 +121,12 @@ materialize_build(::CPUBuildBackend, ::AbstractVector{T}, data::AbstractVector{T
 function materialize_build(::GPUArrayBuildBackend{B}, ref::AbstractVector{T}, data::AbstractVector{T}) where {B,T}
     out = _backend_array(B, T, length(data))
     copyto!(out, data)
+    return out
+end
+
+function materialize_build(::GPUArrayBuildBackend{B}, ref::AbstractVector, data::BitVector) where {B}
+    out = _backend_array(B, Bool, length(data))
+    copyto!(out, Vector{Bool}(data))
     return out
 end
 
