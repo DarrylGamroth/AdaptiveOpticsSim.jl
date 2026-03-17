@@ -335,30 +335,26 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
         ys = (j - 1) * sub + 1
         xe = min(i * sub, n)
         ye = min(j * sub, n)
-        if wfs.state.valid_mask[i, j]
-            total_sum = zero(eltype(wfs.state.slopes))
-            sx_sum = zero(eltype(wfs.state.slopes))
-            sy_sum = zero(eltype(wfs.state.slopes))
-            for src in ast.sources
-                total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
-                total_sum += total
-                sx_sum += sx
-                sy_sum += sy
-            end
-            if total_sum <= 0
-                wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
-                wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
-            else
-                nsrc = length(ast.sources)
-                wfs.state.slopes[idx] = ((sy_sum / nsrc) - wfs.state.reference_signal_2d[idx]) / wfs.state.slopes_units
-                wfs.state.slopes[idx + n_sub * n_sub] = ((sx_sum / nsrc) - wfs.state.reference_signal_2d[idx + n_sub * n_sub]) / wfs.state.slopes_units
-            end
-        else
+        total_sum = zero(eltype(wfs.state.slopes))
+        sx_sum = zero(eltype(wfs.state.slopes))
+        sy_sum = zero(eltype(wfs.state.slopes))
+        for src in ast.sources
+            total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
+            total_sum += total
+            sx_sum += sx
+            sy_sum += sy
+        end
+        if total_sum <= 0
             wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
             wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
+        else
+            nsrc = length(ast.sources)
+            wfs.state.slopes[idx] = ((sy_sum / nsrc) - wfs.state.reference_signal_2d[idx]) / wfs.state.slopes_units
+            wfs.state.slopes[idx + n_sub * n_sub] = ((sx_sum / nsrc) - wfs.state.reference_signal_2d[idx + n_sub * n_sub]) / wfs.state.slopes_units
         end
         idx += 1
     end
+    zero_invalid_sh_slopes!(execution_style(wfs.state.slopes), wfs.state.slopes, wfs.state.valid_mask)
     return wfs.state.slopes
 end
 
@@ -384,30 +380,26 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
         ys = (j - 1) * sub + 1
         xe = min(i * sub, n)
         ye = min(j * sub, n)
-        if wfs.state.valid_mask[i, j]
-            total_sum = zero(eltype(wfs.state.slopes))
-            sx_sum = zero(eltype(wfs.state.slopes))
-            sy_sum = zero(eltype(wfs.state.slopes))
-            for src in ast.sources
-                total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx, det, rng)
-                total_sum += total
-                sx_sum += sx
-                sy_sum += sy
-            end
-            if total_sum <= 0
-                wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
-                wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
-            else
-                nsrc = length(ast.sources)
-                wfs.state.slopes[idx] = ((sy_sum / nsrc) - wfs.state.reference_signal_2d[idx]) / wfs.state.slopes_units
-                wfs.state.slopes[idx + n_sub * n_sub] = ((sx_sum / nsrc) - wfs.state.reference_signal_2d[idx + n_sub * n_sub]) / wfs.state.slopes_units
-            end
-        else
+        total_sum = zero(eltype(wfs.state.slopes))
+        sx_sum = zero(eltype(wfs.state.slopes))
+        sy_sum = zero(eltype(wfs.state.slopes))
+        for src in ast.sources
+            total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx, det, rng)
+            total_sum += total
+            sx_sum += sx
+            sy_sum += sy
+        end
+        if total_sum <= 0
             wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
             wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
+        else
+            nsrc = length(ast.sources)
+            wfs.state.slopes[idx] = ((sy_sum / nsrc) - wfs.state.reference_signal_2d[idx]) / wfs.state.slopes_units
+            wfs.state.slopes[idx + n_sub * n_sub] = ((sx_sum / nsrc) - wfs.state.reference_signal_2d[idx + n_sub * n_sub]) / wfs.state.slopes_units
         end
         idx += 1
     end
+    zero_invalid_sh_slopes!(execution_style(wfs.state.slopes), wfs.state.slopes, wfs.state.valid_mask)
     return wfs.state.slopes
 end
 
@@ -471,6 +463,22 @@ end
         j = idx - (i - 1) * n_sub
         if !(@inbounds valid_mask[i, j])
             @inbounds spot_cube[idx, x, y] = zero(eltype(spot_cube))
+        end
+    end
+end
+
+@kernel function zero_invalid_sh_slopes_kernel!(slopes, valid_mask, n_sub::Int, offset::Int)
+    idx = @index(Global, Linear)
+    n_spots = n_sub * n_sub
+    if idx <= n_spots
+        i = (idx - 1) ÷ n_sub + 1
+        j = idx - (i - 1) * n_sub
+        if !(@inbounds valid_mask[i, j])
+            T = eltype(slopes)
+            @inbounds begin
+                slopes[idx] = zero(T)
+                slopes[idx + offset] = zero(T)
+            end
         end
     end
 end
@@ -795,6 +803,27 @@ function sh_signal_from_spots!(::AcceleratorStyle, wfs::ShackHartmann, cutoff::T
         wfs.state.valid_mask, cutoff, n_sub, offset, size(wfs.state.spot_cube, 2),
         size(wfs.state.spot_cube, 3); ndrange=offset)
     return wfs.state.slopes
+end
+
+@inline function zero_invalid_sh_slopes!(::ScalarCPUStyle, slopes::AbstractVector{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
+    n_sub = size(valid_mask, 1)
+    offset = n_sub * n_sub
+    idx = 1
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        if !valid_mask[i, j]
+            slopes[idx] = zero(T)
+            slopes[idx + offset] = zero(T)
+        end
+        idx += 1
+    end
+    return slopes
+end
+
+@inline function zero_invalid_sh_slopes!(style::AcceleratorStyle, slopes::AbstractVector{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
+    n_sub = size(valid_mask, 1)
+    offset = n_sub * n_sub
+    launch_kernel!(style, zero_invalid_sh_slopes_kernel!, slopes, valid_mask, n_sub, offset; ndrange=offset)
+    return slopes
 end
 
 function sh_signal_from_spots!(wfs::ShackHartmann, peak::T, threshold::T) where {T<:AbstractFloat}

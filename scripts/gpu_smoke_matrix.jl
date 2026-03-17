@@ -101,6 +101,29 @@ function main()
         return slopes
     end
 
+    record!(failures, "measure_shack_diffractive_asterism") do
+        ast = Asterism([
+            Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0), T=T),
+            Source(band=:I, magnitude=0.0, coordinates=(1.0, 45.0), T=T),
+        ])
+        wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=CuArray)
+        slopes = measure!(wfs, tel, ast)
+        @assert slopes isa CuArray
+        return slopes
+    end
+
+    record!(failures, "measure_shack_diffractive_asterism_detector") do
+        ast = Asterism([
+            Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0), T=T),
+            Source(band=:I, magnitude=0.0, coordinates=(1.0, 45.0), T=T),
+        ])
+        wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=CuArray)
+        det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1, T=T, backend=CuArray)
+        slopes = measure!(wfs, tel, ast, det; rng=rng)
+        @assert slopes isa CuArray
+        return slopes
+    end
+
     record!(failures, "measure_pyramid_geometric") do
         wfs = PyramidWFS(tel; n_subap=4, modulation=2.0, T=T, backend=CuArray)
         slopes = measure!(wfs, tel)
