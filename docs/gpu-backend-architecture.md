@@ -60,7 +60,6 @@ Each GPU backend should be integrated through a Julia package extension:
 - `ext/AdaptiveOpticsSimCUDAExt.jl`
 - `ext/AdaptiveOpticsSimMetalExt.jl`
 - `ext/AdaptiveOpticsSimAMDGPUExt.jl`
-- `ext/AdaptiveOpticsSimOpenCLExt.jl`
 
 Each extension should own only backend-specific glue:
 
@@ -87,13 +86,11 @@ AdaptiveOpticsSim.jl/
     AdaptiveOpticsSimCUDAExt.jl
     AdaptiveOpticsSimMetalExt.jl
     AdaptiveOpticsSimAMDGPUExt.jl
-    AdaptiveOpticsSimOpenCLExt.jl
   scripts/
     gpu_smoke_matrix.jl
     gpu_smoke_cuda.jl
     gpu_smoke_metal.jl
     gpu_smoke_amdgpu.jl
-    gpu_smoke_opencl.jl
   test/
     gpu/
       smoke_matrix.jl
@@ -109,13 +106,11 @@ This is the intended direction, not a required immediate edit.
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
 AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
-OpenCL = "08131aa3-fb12-5dee-8b74-c09406e224a2"
 
 [extensions]
 AdaptiveOpticsSimCUDAExt = "CUDA"
 AdaptiveOpticsSimMetalExt = "Metal"
 AdaptiveOpticsSimAMDGPUExt = "AMDGPU"
-AdaptiveOpticsSimOpenCLExt = "OpenCL"
 ```
 
 ## Trait Model
@@ -139,8 +134,6 @@ struct GenericFFTProvider <: FFTProvider end
 struct CUFFTProvider <: FFTProvider end
 struct MetalFFTProvider <: FFTProvider end
 struct ROCFFTProvider <: FFTProvider end
-struct OpenCLFFTProvider <: FFTProvider end
-
 fft_provider(::Any) = GenericFFTProvider()
 ```
 
@@ -199,23 +192,19 @@ Status:
 - plausible target
 - not validated yet
 
-### `AdaptiveOpticsSimOpenCLExt`
+### OpenCL
 
-Responsibilities:
+OpenCL is deferred for now.
 
-- OpenCL array/backend detection
-- OpenCL-specific smoke entry point
-- OpenCL FFT/provider hooks if the ecosystem supports them adequately
+Reason:
 
-Status:
+- the current priority is a solid extension-based path for CUDA, Metal, and
+  AMDGPU
+- OpenCL ecosystem maturity for FFT-heavy AO workflows is less certain
+- it should not dilute the first multi-backend bring-up pass
 
-- should be treated as experimental until the Julia OpenCL + KA + FFT stack is
-  proven stable for this workload
-
-OpenCL is different from CUDA/Metal/AMDGPU in one important way: even if
-`KernelAbstractions` can launch kernels there, FFT and array ecosystem maturity
-may still make it a weaker backend. It should remain an explicit target, but not
-an assumed equal until validated.
+If revisited later, it should be treated as experimental until the Julia
+OpenCL + `KernelAbstractions` + FFT stack is proven stable for this workload.
 
 ## Runtime Support Levels
 
@@ -313,5 +302,7 @@ CUDA-first-only extension story.
 1. Add the backend extension stubs in `ext/` without changing core behavior.
 2. Move CUDA-specific smoke launching into `AdaptiveOpticsSimCUDAExt`.
 3. Add a backend-generic smoke contract and backend-specific wrappers.
-4. Treat Metal/AMDGPU/OpenCL as explicit bring-up targets, not implicit KA
+4. Treat Metal and AMDGPU as explicit bring-up targets, not implicit KA
    promises.
+5. Revisit OpenCL only after the extension-based CUDA/Metal/AMDGPU layout is
+   established and validated.

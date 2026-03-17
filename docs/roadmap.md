@@ -173,6 +173,22 @@
   a strict regression gate.
 - [ ] Turn every feature-parity claim into a deterministic regression test against OOPAO outputs.
 
+## Pre-GPU Resume Point
+
+Before the recent GPU execution push, the main workstream had shifted from
+feature parity to robustness and execution quality.
+
+When GPU backend layout work is paused, the intended resume point is:
+
+1. numerical-stability hardening from `docs/numerical-stability-review.md`
+2. robustness work around the remaining long-horizon atmosphere-driven GSC
+   diagnostic replay
+3. any remaining execution-quality cleanup that benefits both CPU and GPU
+
+The GPU work since then has improved runtime/device-residency substantially, but
+it does not change that the next non-GPU engineering focus should be the
+numerical-stability backlog.
+
 ## Next 10 Tasks
 1. Audit remaining calibration/output conventions against OOPAO telemetry exports.
 2. Decide whether the compact closed-loop traces should be expanded to full tutorial traces with atmosphere replay.
