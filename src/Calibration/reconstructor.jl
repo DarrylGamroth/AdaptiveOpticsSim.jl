@@ -1,14 +1,26 @@
 using LinearAlgebra
 
-struct ModalReconstructor{T<:AbstractFloat,M<:AbstractMatrix{T}}
+struct ModalReconstructor{T<:AbstractFloat,M<:AbstractMatrix{T},P<:InversePolicy,V<:AbstractVector{T}}
     reconstructor::M
     gain::T
+    policy::P
+    singular_values::V
+    cond::T
+    effective_rank::Int
 end
 
-function ModalReconstructor(imat::InteractionMatrix; gain::Real=1.0)
+function ModalReconstructor(imat::InteractionMatrix; gain::Real=1.0,
+    policy::InversePolicy=TSVDInverse())
     T = eltype(imat.matrix)
-    recon = pinv(imat.matrix)
-    return ModalReconstructor{T, typeof(recon)}(recon, T(gain))
+    recon, stats = inverse_operator(imat.matrix, policy)
+    return ModalReconstructor{T, typeof(recon), typeof(policy), typeof(stats.singular_values)}(
+        recon,
+        T(gain),
+        policy,
+        stats.singular_values,
+        stats.cond,
+        stats.effective_rank,
+    )
 end
 
 function reconstruct!(out::AbstractVector, recon::ModalReconstructor, slopes::AbstractVector)

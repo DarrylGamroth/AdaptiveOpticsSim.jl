@@ -20,6 +20,7 @@ const PROJECT_STATUS = :in_development
 
 include("Core/errors.jl")
 include("Core/types.jl")
+include("Core/inverse_policies.jl")
 include("Core/backends.jl")
 include("Core/config.jl")
 include("Core/utils.jl")
@@ -66,6 +67,7 @@ include("Tomography/reconstructors.jl")
 
 export PROJECT_STATUS
 export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError, UnsupportedAlgorithm
+export InversePolicy, ExactPseudoInverse, TSVDInverse, TikhonovInverse, InverseStats, inverse_operator
 export Workspace, ensure_psf_buffers!
 export Telemetry, TelemetryRow, record!
 export snapshot_config, write_config_toml, write_config_json
@@ -109,7 +111,7 @@ export AOCalibration, ao_calibration
 export fitting_error, fitting_error_dm
 export fast_atmosphere
 export AOSimulation, initialize_ao_pyramid, initialize_ao_shwfs
-export GainSensingCamera, GSCDetectorMetadata, detector_metadata, attach_detector!, detach_detector!
+export GainSensingCamera, GSCDetectorMetadata, detector_metadata, weak_mode_mask, attach_detector!, detach_detector!
 export calibrate!, reset_calibration!, compute_optical_gains!
 export MetaSensitivity, compute_meta_sensitivity_matrix, estimate_misregistration, SPRINT, estimate!
 export ModalReconstructor, reconstruct!, reconstruct

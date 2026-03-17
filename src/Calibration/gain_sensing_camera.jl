@@ -58,12 +58,14 @@ mutable struct GainSensingCamera{T<:AbstractFloat,
     IR<:AbstractMatrix{T},
     SV<:AbstractVector{Complex{T}},
     OG<:AbstractVector{T},
+    WM<:AbstractVector{Bool},
     W<:GSCFFTWorkspace{T}}
     mask::C
     mask_fft::C
     basis::B
     n_modes::Int
     calibration_ready::Bool
+    sensitivity_floor::T
     basis_product::Union{Nothing,BP}
     ir_calib::Union{Nothing,IR}
     sensi_calib::Union{Nothing,SV}
@@ -71,12 +73,14 @@ mutable struct GainSensingCamera{T<:AbstractFloat,
     ir_buffer::IR
     sensi_buffer::SV
     og::OG
+    weak_mode_mask::WM
     fftws::W
     detector_metadata::Union{Nothing,GSCDetectorMetadata{T}}
 end
 
 function GainSensingCamera(mask::AbstractMatrix, basis::AbstractArray;
-    n_jobs::Int=10, T::Type{<:AbstractFloat}=Float64, detector::Union{Nothing,Detector}=nothing)
+    n_jobs::Int=10, T::Type{<:AbstractFloat}=Float64, detector::Union{Nothing,Detector}=nothing,
+    sensitivity_floor::Real=sqrt(eps(T)))
     mask_c = Complex{T}.(mask)
     basis_t = T.(basis)
     if size(basis_t, 3) == 1 && ndims(basis_t) == 2
@@ -95,12 +99,13 @@ function GainSensingCamera(mask::AbstractMatrix, basis::AbstractArray;
     ir_probe = similar(mask_c, T, size(mask_c, 1), size(mask_c, 2))
     sensi_probe = similar(og, Complex{T})
     metadata = detector === nothing ? nothing : GSCDetectorMetadata(detector; T=T)
-    gsc = GainSensingCamera{T, typeof(mask_c), typeof(basis_t), typeof(bp_probe), typeof(ir_probe), typeof(sensi_probe), typeof(og), typeof(fftws)}(
+    gsc = GainSensingCamera{T, typeof(mask_c), typeof(basis_t), typeof(bp_probe), typeof(ir_probe), typeof(sensi_probe), typeof(og), BitVector, typeof(fftws)}(
         mask_c,
         mask_fft,
         basis_t,
         n_modes,
         false,
+        T(sensitivity_floor),
         nothing,
         nothing,
         nothing,
@@ -108,6 +113,7 @@ function GainSensingCamera(mask::AbstractMatrix, basis::AbstractArray;
         similar(ir_probe),
         similar(sensi_probe),
         og,
+        falses(n_modes),
         fftws,
         metadata,
     )
@@ -139,6 +145,7 @@ function GSCDetectorMetadata(det::Detector; T::Type{<:AbstractFloat}=eltype(det.
 end
 
 detector_metadata(gsc::GainSensingCamera) = gsc.detector_metadata
+weak_mode_mask(gsc::GainSensingCamera) = gsc.weak_mode_mask
 
 function attach_detector!(gsc::GainSensingCamera{T}, det::Detector) where {T<:AbstractFloat}
     gsc.detector_metadata = GSCDetectorMetadata(det; T=T)
@@ -167,6 +174,7 @@ function Base.show(io::IO, ::MIME"text/plain", gsc::GainSensingCamera)
         end
         print(io, ")")
     end
+    print(io, ", sensitivity_floor=", gsc.sensitivity_floor)
     print(io, ")")
 end
 
@@ -184,6 +192,7 @@ function calibrate!(gsc::GainSensingCamera, frame::AbstractMatrix; n_jobs::Int=1
     sensitivity!(sensi_calib, gsc, ir_calib, ir_calib)
     gsc.ir_calib = ir_calib
     gsc.sensi_calib = sensi_calib
+    @. gsc.weak_mode_mask = abs(sensi_calib) <= gsc.sensitivity_floor
     gsc.calibration_ready = true
     fill!(gsc.og, one(eltype(gsc.og)))
     @info "GainSensingCamera calibration complete"
@@ -193,6 +202,7 @@ end
 function reset_calibration!(gsc::GainSensingCamera)
     gsc.calibration_ready = false
     fill!(gsc.og, one(eltype(gsc.og)))
+    fill!(gsc.weak_mode_mask, false)
     return gsc
 end
 
@@ -211,8 +221,16 @@ function compute_optical_gains!(gsc::GainSensingCamera, frame::AbstractMatrix)
     normalize_frame!(gsc.frame_buffer, frame, total)
     impulse_response!(gsc.ir_buffer, gsc, gsc.frame_buffer)
     sensitivity!(gsc.sensi_buffer, gsc, gsc.ir_buffer, ir_calib)
-    @. gsc.og = real(gsc.sensi_buffer / sensi_calib)
+    compute_optical_gains!(gsc.og, gsc.sensi_buffer, sensi_calib, gsc.weak_mode_mask)
     return gsc.og
+end
+
+function compute_optical_gains!(out::AbstractVector{T}, sensi_sky::AbstractVector, sensi_calib::AbstractVector,
+    weak_mode_mask::AbstractVector{Bool}) where {T<:AbstractFloat}
+    @inbounds for i in eachindex(out, sensi_sky, sensi_calib, weak_mode_mask)
+        out[i] = weak_mode_mask[i] ? one(T) : real(sensi_sky[i] / sensi_calib[i])
+    end
+    return out
 end
 
 function normalize_frame!(out::AbstractMatrix{T}, frame::AbstractMatrix, total::Real) where {T<:AbstractFloat}

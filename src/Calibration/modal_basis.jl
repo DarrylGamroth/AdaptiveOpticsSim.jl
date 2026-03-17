@@ -26,19 +26,22 @@ function basis_from_m2c(dm::DeformableMirror, tel::Telescope, M2C::AbstractMatri
     return reshape(basis_mat, n, n, size(M2C, 2))
 end
 
-function basis_projector(basis::AbstractMatrix{T}; tol::Real=1e-3) where {T<:AbstractFloat}
+function basis_projector(basis::AbstractMatrix{T}; tol::Real=1e-3,
+    policy::InversePolicy=TSVDInverse()) where {T<:AbstractFloat}
     cross = transpose(basis) * basis
     diag_vals = diag(cross)
     diag_sum = sum(abs, diag_vals)
     if diag_sum == 0
-        return Matrix(pinv(basis))
+        projector, _ = inverse_operator(basis, policy)
+        return projector
     end
     non_diag_sum = sum(abs, cross) - diag_sum
     criteria = abs(diag_sum - non_diag_sum) / diag_sum
     if criteria <= tol && all(!iszero, diag_vals)
         return Matrix(Diagonal(inv.(diag_vals)) * transpose(basis))
     end
-    return Matrix(pinv(basis))
+    projector, _ = inverse_operator(basis, policy)
+    return projector
 end
 
 function kl_modal_basis(dm::DeformableMirror, tel::Telescope;

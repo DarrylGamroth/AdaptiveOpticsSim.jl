@@ -413,6 +413,14 @@ function _fit_source_average(cross::Array{T,3}, weights::AbstractVector{T}) wher
     return out
 end
 
+function stable_hermitian_right_division(rhs::AbstractMatrix{T}, css::AbstractMatrix{T}) where {T<:AbstractFloat}
+    fact = cholesky(Hermitian(css), check=false)
+    if issuccess(fact)
+        return transpose(fact \ transpose(rhs))
+    end
+    return transpose(lu(css) \ transpose(rhs))
+end
+
 function build_reconstructor(
     ::InteractionMatrixTomography,
     interaction_matrix::AbstractMatrix{T},
@@ -435,7 +443,7 @@ function build_reconstructor(
     cox = _fit_source_average(cross, _equal_fit_source_weights(tomography))
     cnz = Diagonal(fill(T(1e-3 * α), size(interaction_matrix, 1)))
     css = Matrix(interaction_matrix * cxx * transpose(interaction_matrix) .+ cnz)
-    recstat = (cox * transpose(interaction_matrix)) / css
+    recstat = stable_hermitian_right_division(cox * transpose(interaction_matrix), css)
     operators = TomographyOperators(
         nothing,
         Matrix(grid_mask),
@@ -665,7 +673,7 @@ function build_reconstructor(
     mean_diag = sum(diagonal) / length(diagonal)
     cnz = Diagonal(fill(mean_diag / 10, size(gamma, 1)))
     css = css_signal .+ cnz
-    recstat = (cox * transpose(gamma)) / css
+    recstat = stable_hermitian_right_division(cox * transpose(gamma), css)
     d = support_diameter(wfs) / size(valid_lenslet_support(wfs), 1)
     wavefront_to_meter = asterism.wavelength / d / 2
     recon = d * wavefront_to_meter .* recstat

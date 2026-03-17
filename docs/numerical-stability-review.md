@@ -175,7 +175,20 @@ Recommendation:
 
 ## Status
 
-This is a findings document. The LiFT item has been partially addressed by moving
-the scalar CPU default away from normal equations, adding backend-aware solve
-selection, and exposing damping/conditioning diagnostics. More advanced damping
-policy and stronger conditioning diagnostics are still open.
+This remains a living findings document.
+
+Implemented so far:
+- LiFT no longer defaults to normal equations on scalar CPU, and now exposes
+  damping/conditioning diagnostics.
+- Modal/control inversion now has explicit inverse policies (`ExactPseudoInverse`,
+  `TSVDInverse`, `TikhonovInverse`) instead of unconditional pseudoinverse use.
+- Gain Sensing Camera now tracks weak calibration modes and applies a
+  calibration-sensitivity floor internally.
+- Tomography reconstruction now uses an explicit Hermitian solve path with
+  factorization fallback instead of opaque right-division.
+
+Still open:
+- stronger default conditioning policies for all workflows,
+- physically grounded tomography noise models,
+- more advanced LiFT damping policy,
+- covariance/Bessel approximation sweep tests.

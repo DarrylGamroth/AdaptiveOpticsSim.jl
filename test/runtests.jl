@@ -443,8 +443,22 @@ end
     vault = CalibrationVault(D)
     @test size(vault.M) == (3, 4)
     @test vault.cond > 0
+    @test vault.effective_rank == 3
     vault_trunc = with_truncation(vault, 1)
     @test vault_trunc.n_trunc == 1
+
+    D_sing = [1.0 0.0; 0.0 1e-12]
+    vault_exact = CalibrationVault(D_sing; policy=ExactPseudoInverse())
+    vault_tsvd = CalibrationVault(D_sing; policy=TSVDInverse(rtol=1e-9))
+    @test vault_exact.effective_rank == 2
+    @test vault_tsvd.effective_rank == 1
+    @test maximum(abs, vault_exact.M .- vault_tsvd.M) > 0
+
+    imat = InteractionMatrix(D_sing, 0.1)
+    recon_exact = ModalReconstructor(imat; policy=ExactPseudoInverse())
+    recon_tsvd = ModalReconstructor(imat; policy=TSVDInverse(rtol=1e-9))
+    @test recon_exact.effective_rank == 2
+    @test recon_tsvd.effective_rank == 1
 
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
@@ -493,7 +507,15 @@ end
     calibrate!(gsc, frame)
     og = compute_optical_gains!(gsc, frame)
     @test length(og) == 3
+    @test length(weak_mode_mask(gsc)) == 3
+    @test all(isfinite, og)
     @test detector_metadata(gsc) === nothing
+
+    weak_gsc = GainSensingCamera(mask, zeros(8, 8, 2); sensitivity_floor=1e-6)
+    calibrate!(weak_gsc, frame)
+    weak_og = compute_optical_gains!(weak_gsc, frame)
+    @test all(weak_mode_mask(weak_gsc))
+    @test weak_og == ones(2)
 
     det = Detector(noise=NoiseReadout(1e-3), integration_time=2.0, qe=0.8, psf_sampling=2, binning=4)
     gsc_with_det = GainSensingCamera(mask, basis; detector=det)
