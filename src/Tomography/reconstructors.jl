@@ -396,6 +396,19 @@ function _scaled_shifted_coord_stack(
     return out
 end
 
+@inline function _covariance_constants(r0::T, L0::T) where {T<:AbstractFloat}
+    gamma_6_5 = gamma(T(6) / T(5))
+    gamma_11_6 = gamma(T(11) / T(6))
+    gamma_5_6 = gamma(T(5) / T(6))
+    base = (T(24) * gamma_6_5 / T(5))^(T(5) / T(6))
+    cst = base * (gamma_11_6 / (T(2)^(T(5) / T(6)) * T(π)^(T(8) / T(3)))) * (L0 / r0)^(T(5) / T(3))
+    var_term = base * gamma_11_6 * gamma_5_6 / (T(2) * T(π)^(T(8) / T(3))) * (L0 / r0)^(T(5) / T(3))
+    return cst, var_term, inv(L0)
+end
+
+@inline _covariance_input(::ScalarCPUStyle, backend::GPUArrayBuildBackend, rho::AbstractVector) = materialize_build(backend, rho)
+@inline _covariance_input(::AcceleratorStyle, ::GPUArrayBuildBackend, rho::AbstractVector) = rho
+
 function _covariance_matrix(
     ::BuildBackend,
     rho1::AbstractVector{Complex{T}},
@@ -404,7 +417,22 @@ function _covariance_matrix(
     L0::T,
     fractional_r0::T,
 ) where {T<:AbstractFloat}
-    return _covariance_matrix(rho1, rho2, r0, L0, fractional_r0)
+    cst, var_term, inv_L0 = _covariance_constants(r0, L0)
+    return _covariance_matrix(rho1, rho2, cst, var_term, inv_L0, fractional_r0)
+end
+
+function _covariance_matrix(
+    backend::GPUArrayBuildBackend,
+    rho1::AbstractVector{Complex{T}},
+    rho2::AbstractVector{Complex{T}},
+    r0::T,
+    L0::T,
+    fractional_r0::T,
+) where {T<:AbstractFloat}
+    cst, var_term, inv_L0 = _covariance_constants(r0, L0)
+    rho1_native = _covariance_input(execution_style(rho1), backend, rho1)
+    rho2_native = _covariance_input(execution_style(rho2), backend, rho2)
+    return _covariance_matrix(execution_style(rho1_native), rho1_native, rho2_native, cst, var_term, inv_L0, fractional_r0)
 end
 
 function _covariance_matrix(
@@ -414,16 +442,21 @@ function _covariance_matrix(
     L0::T,
     fractional_r0::T,
 ) where {T<:AbstractFloat}
+    cst, var_term, inv_L0 = _covariance_constants(r0, L0)
+    return _covariance_matrix(rho1, rho2, cst, var_term, inv_L0, fractional_r0)
+end
+
+function _covariance_matrix(
+    rho1::AbstractVector{Complex{T}},
+    rho2::AbstractVector{Complex{T}},
+    cst::T,
+    var_term::T,
+    inv_L0::T,
+    fractional_r0::T,
+) where {T<:AbstractFloat}
     n1 = length(rho1)
     n2 = length(rho2)
     out = Matrix{T}(undef, n1, n2)
-
-    gamma_6_5 = gamma(T(6) / T(5))
-    gamma_11_6 = gamma(T(11) / T(6))
-    gamma_5_6 = gamma(T(5) / T(6))
-    base = (T(24) * gamma_6_5 / T(5))^(T(5) / T(6))
-    cst = base * (gamma_11_6 / (T(2)^(T(5) / T(6)) * T(π)^(T(8) / T(3)))) * (L0 / r0)^(T(5) / T(3))
-    var_term = base * gamma_11_6 * gamma_5_6 / (T(2) * T(π)^(T(8) / T(3))) * (L0 / r0)^(T(5) / T(3))
 
     @inbounds for j in 1:n2
         for i in 1:n1
@@ -431,7 +464,7 @@ function _covariance_matrix(
             if iszero(rho)
                 out[i, j] = var_term * fractional_r0
             else
-                u = T(2π) * rho / L0
+                u = T(2π) * rho * inv_L0
                 out[i, j] = cst * u^(T(5) / T(6)) * real(_kv56_scalar(u)) * fractional_r0
             end
         end
@@ -440,27 +473,34 @@ function _covariance_matrix(
 end
 
 function _covariance_matrix(
-    backend::GPUArrayBuildBackend{B},
+    ::AcceleratorStyle,
     rho1::AbstractVector{Complex{T}},
     rho2::AbstractVector{Complex{T}},
-    r0::T,
-    L0::T,
+    cst::T,
+    var_term::T,
+    inv_L0::T,
     fractional_r0::T,
-) where {B,T<:AbstractFloat}
-    rho1_native = materialize_build(backend, rho1)
-    rho2_native = materialize_build(backend, rho2)
-    out = _backend_array(B, T, length(rho1), length(rho2))
-    gamma_6_5 = gamma(T(6) / T(5))
-    gamma_11_6 = gamma(T(11) / T(6))
-    gamma_5_6 = gamma(T(5) / T(6))
-    base = (T(24) * gamma_6_5 / T(5))^(T(5) / T(6))
-    cst = base * (gamma_11_6 / (T(2)^(T(5) / T(6)) * T(π)^(T(8) / T(3)))) * (L0 / r0)^(T(5) / T(3))
-    var_term = base * gamma_11_6 * gamma_5_6 / (T(2) * T(π)^(T(8) / T(3))) * (L0 / r0)^(T(5) / T(3))
+) where {T<:AbstractFloat}
+    out = similar(rho1, T, length(rho1), length(rho2))
     style = execution_style(out)
-    launch_kernel_async!(style, covariance_matrix_kernel!, out, rho1_native, rho2_native, cst, var_term, inv(L0), fractional_r0,
+    launch_kernel_async!(style, covariance_matrix_kernel!, out, rho1, rho2, cst, var_term, inv_L0, fractional_r0,
         length(rho1), length(rho2);
         ndrange=size(out))
     return out
+end
+
+function _covariance_matrix(
+    backend::GPUArrayBuildBackend,
+    rho1::AbstractVector{Complex{T}},
+    rho2::AbstractVector{Complex{T}},
+    cst::T,
+    var_term::T,
+    inv_L0::T,
+    fractional_r0::T,
+) where {T<:AbstractFloat}
+    rho1_native = _covariance_input(execution_style(rho1), backend, rho1)
+    rho2_native = _covariance_input(execution_style(rho2), backend, rho2)
+    return _covariance_matrix(execution_style(rho1_native), rho1_native, rho2_native, cst, var_term, inv_L0, fractional_r0)
 end
 
 function sparse_gradient_matrix(
@@ -661,6 +701,7 @@ function auto_correlation(
         offsets_y,
     )
     shifted = _scaled_shifted_coord_stack(backend, guide_x, guide_y, directions, altitude, source_height)
+    cst, var_term, inv_L0 = _covariance_constants(r0, atmosphere.L0)
     for jgs in 1:n_gs
         for igs in 1:jgs
             block = _backend_array(B, T, n_valid, n_valid)
@@ -672,8 +713,9 @@ function auto_correlation(
                     backend,
                     vec(iz),
                     vec(jz),
-                    r0,
-                    atmosphere.L0,
+                    cst,
+                    var_term,
+                    inv_L0,
                     atmosphere.fractional_r0[layer],
                 )
                 launch_kernel_async!(style, accumulate_selected_block_kernel!, block, cov, valid_positions_native, n_valid;
@@ -823,6 +865,7 @@ function cross_correlation(
         offsets_y,
     )
     shifted_lgs = _scaled_shifted_coord_stack(backend, guide_x, guide_y, lgs_directions_xyz, altitude, source_height)
+    cst, var_term, inv_L0 = _covariance_constants(r0, atmosphere.L0)
 
     for fit_idx in 1:n_fit
         for gs in 1:n_gs
@@ -844,8 +887,9 @@ function cross_correlation(
                     backend,
                     vec(iz),
                     vec(jz),
-                    r0,
-                    atmosphere.L0,
+                    cst,
+                    var_term,
+                    inv_L0,
                     atmosphere.fractional_r0[layer],
                 )
                 launch_kernel_async!(style, accumulate_selected_block_transpose_kernel!, block, cov, row_positions_native, n_row;

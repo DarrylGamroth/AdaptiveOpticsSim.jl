@@ -239,6 +239,27 @@ same `~8.9e7 ns` band. The reason is unchanged: `auto_correlation` is still the
 dominant builder phase by a wide margin, so future optimization effort should
 stay focused there.
 
+The next follow-up then tightened `_covariance_matrix` for GPU builder paths:
+
+- precompute the covariance constants once per outer builder phase instead of
+  once per covariance block
+- skip `materialize_build` when the covariance inputs are already backend-native
+  vectors from the shifted-coordinate stacks
+
+On `spiders`, that moved the dedicated `auto_correlation` phase profile from
+about `6.25e9 ns` down to about `6.04e9 ns`, with the largest visible drops in:
+
+- shifted-coordinate work: about `2.42e9 ns` to `2.36e9 ns`
+- covariance assembly: about `1.68e9 ns` to `1.54e9 ns`
+
+The warmed end-to-end CUDA builder also moved slightly in the right direction:
+
+- `model_tomography_build_ns`: about `8.95e7 ns` to about `8.93e7 ns`
+
+That is still only a modest end-to-end win, but it is the first change in this
+phase that improved both the hotspot profile and the warmed builder timing
+without introducing a larger structural rewrite.
+
 ## Validated GPU-Resident Surface
 
 The following paths are currently validated on CUDA with
