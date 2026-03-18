@@ -499,7 +499,7 @@ function compute_intensity!(wfs::ShackHartmann, tel::Telescope, src::AbstractSou
         amp_scale * tel.state.pupil[xs:xe, ys:ye] * cispi(opd_to_cycles * tel.state.opd[xs:xe, ys:ye])
     @. wfs.state.field *= wfs.state.phasor
     copyto!(wfs.state.fft_buffer, wfs.state.field)
-    mul!(wfs.state.fft_buffer, wfs.state.fft_plan, wfs.state.fft_buffer)
+    execute_fft_plan!(wfs.state.fft_buffer, wfs.state.fft_plan)
     @. wfs.state.intensity = abs2(wfs.state.fft_buffer)
     return wfs.state.intensity
 end
@@ -1150,7 +1150,7 @@ function lgs_spot_kernels_fft(tel::Telescope, wfs::ShackHartmann, src::LGSSource
         end
         fft_buffer = wfs.state.fft_buffer
         @. fft_buffer = complex(kernel, zero(T))
-        mul!(fft_buffer, wfs.state.fft_plan, fft_buffer)
+        execute_fft_plan!(fft_buffer, wfs.state.fft_plan)
         @views kernels_fft[:, :, idx] .= fft_buffer
         idx += 1
     end

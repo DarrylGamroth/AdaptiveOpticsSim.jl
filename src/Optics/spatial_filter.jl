@@ -170,9 +170,9 @@ function filter!(sf::SpatialFilter, tel::Telescope, src::AbstractSource)
     @views @. sf.state.field[ox+1:ox+n, oy+1:oy+n] = tel.state.pupil * cispi(opd_to_cycles * tel.state.opd)
 
     copyto!(sf.state.fft_buffer, sf.state.field)
-    mul!(sf.state.fft_buffer, sf.state.fft_plan, sf.state.fft_buffer)
+    execute_fft_plan!(sf.state.fft_buffer, sf.state.fft_plan)
     @. sf.state.filtered_field = sf.state.fft_buffer * sf.state.mask_shifted
-    mul!(sf.state.filtered_field, sf.state.ifft_plan, sf.state.filtered_field)
+    execute_fft_plan!(sf.state.filtered_field, sf.state.ifft_plan)
     @views begin
         region = sf.state.filtered_field[ox+1:ox+n, oy+1:oy+n]
         @. sf.state.phase = angle(region) * tel.state.pupil

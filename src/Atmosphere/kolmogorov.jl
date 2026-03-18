@@ -1,5 +1,16 @@
 using Random
 
+@kernel function kolmogorov_psd_kernel!(psd, freqs, coeff, two_pi_sq, inv_L0_sq, exponent, n::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= n
+        @inbounds begin
+            fx = freqs[i]
+            fy = freqs[j]
+            psd[i, j] = coeff * (two_pi_sq * (fx * fx + fy * fy) + inv_L0_sq)^exponent
+        end
+    end
+end
+
 struct KolmogorovParams{T<:AbstractFloat}
     r0::T
     L0::T
@@ -55,17 +66,29 @@ function update_psd!(atm::KolmogorovAtmosphere, delta::Real)
     n = size(atm.state.opd, 1)
     T = eltype(atm.state.opd)
     fftfreq!(atm.state.freqs, n; d=delta)
-    freqs = atm.state.freqs
-
-    r0 = atm.params.r0
-    L0 = atm.params.L0
-    freq_x = reshape(freqs, n, 1)
-    freq_y = reshape(freqs, 1, n)
-    coeff = T(0.023) * r0^(-T(5) / T(3))
-    inv_L0 = T(1) / L0
+    coeff = T(0.023) * atm.params.r0^(-T(5) / T(3))
+    inv_L0_sq = (T(1) / atm.params.L0)^2
     two_pi_sq = T(2 * pi)^2
-    @. atm.state.psd = coeff * (two_pi_sq * (freq_x^2 + freq_y^2) + inv_L0^2)^(-T(11) / T(6))
+    exponent = -T(11) / T(6)
+    update_psd!(execution_style(atm.state.psd), atm.state.psd, atm.state.freqs, coeff, two_pi_sq, inv_L0_sq, exponent, n)
     return atm
+end
+
+function update_psd!(::ScalarCPUStyle, psd::AbstractMatrix{T}, freqs::AbstractVector{T},
+    coeff::T, two_pi_sq::T, inv_L0_sq::T, exponent::T, n::Int) where {T<:AbstractFloat}
+    @inbounds for j in 1:n, i in 1:n
+        fx = freqs[i]
+        fy = freqs[j]
+        psd[i, j] = coeff * (two_pi_sq * (fx * fx + fy * fy) + inv_L0_sq)^exponent
+    end
+    return psd
+end
+
+function update_psd!(style::AcceleratorStyle, psd::AbstractMatrix{T}, freqs::AbstractVector{T},
+    coeff::T, two_pi_sq::T, inv_L0_sq::T, exponent::T, n::Int) where {T<:AbstractFloat}
+    launch_kernel!(style, kolmogorov_psd_kernel!, psd, freqs, coeff, two_pi_sq, inv_L0_sq, exponent, n;
+        ndrange=size(psd))
+    return psd
 end
 
 function ensure_psd!(atm::KolmogorovAtmosphere, delta::Real)
@@ -98,7 +121,7 @@ function phase_screen_von_karman!(out::AbstractMatrix, atm::KolmogorovAtmosphere
     randn_backend!(rng, atm.state.noise_re)
     randn_backend!(rng, atm.state.noise_im)
     @. atm.state.spectrum = complex(atm.state.noise_re, atm.state.noise_im) * sqrt(atm.state.psd)
-    mul!(atm.state.spectrum, atm.state.ifft_plan, atm.state.spectrum)
+    execute_fft_plan!(atm.state.spectrum, atm.state.ifft_plan)
     @. out = real(atm.state.spectrum) * (n * delta)
     return out
 end

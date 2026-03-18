@@ -99,7 +99,7 @@ function kl_modal_basis(::KLHHtPSD, dm::DeformableMirror, tel::Telescope, atm::A
         @inbounds for i in 1:n, j in 1:n
             buffer[i, j] = complex(mode[i, j], zero(T))
         end
-        mul!(buffer, fft_plan, buffer)
+        execute_fft_plan!(buffer, fft_plan)
         @views F[:, k] .= reshape(buffer, :)
     end
 

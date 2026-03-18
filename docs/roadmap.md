@@ -227,6 +227,11 @@ Current status of that backlog:
 - [x] Add maintained CUDA validation entry points for runtime and builder paths.
   `scripts/gpu_smoke_cuda.jl` and `scripts/gpu_builder_cuda.jl` are now the
   standard CUDA validation pair, and both have been exercised on `spiders`.
+- [x] Bring up an initial AMDGPU validation path.
+  `scripts/gpu_smoke_amdgpu.jl` and `scripts/gpu_builder_amdgpu.jl` now pass on
+  AMD hardware for the maintained smoke surface. Runtime paths are native on
+  `ROCArray`; dense SVD/Cholesky builder and LiFT solve paths still use host
+  factorization fallback before materializing results back onto `ROCArray`.
 - [x] Add HIL-oriented CUDA smoke and sync-audit entry points.
   `scripts/gpu_hil_cuda.jl` runs the combined runtime + builder smoke surface,
   and `scripts/gpu_sync_audit_cuda.jl` reports the RTC-facing runtime/build

@@ -77,6 +77,16 @@ end
     return out
 end
 
+@inline function _copy_build_data!(out, A::Transpose{T,<:Array{T,2}}) where {T}
+    copyto!(out, Matrix{T}(A))
+    return out
+end
+
+@inline function _copy_build_data!(out, A::Adjoint{T,<:Array{T,2}}) where {T}
+    copyto!(out, Matrix{T}(A))
+    return out
+end
+
 function materialize_build(::GPUArrayBuildBackend{B}, A::AbstractMatrix{T}) where {B,T}
     out = _backend_array(B, T, size(A)...)
     _copy_build_data!(out, A)
@@ -155,6 +165,16 @@ end
 
 singular_values_host(s::AbstractVector{T}) where {T} = Vector{T}(Array(s))
 
+@inline use_host_build_algebra(s::AbstractArray) = execution_style(s) isa ScalarCPUStyle
+
+function finalize_inverse_operator(backend::BuildBackend, ref::AbstractMatrix, F, inv_s_host::AbstractVector)
+    if use_host_build_algebra(F.S)
+        return materialize_build(backend, ref, F.V * Diagonal(inv_s_host) * F.U')
+    end
+    inv_s = materialize_build(backend, F.S, inv_s_host)
+    return materialize_build(backend, ref, F.V * Diagonal(inv_s) * F.U')
+end
+
 inverse_operator(A::AbstractMatrix{T}, policy::InversePolicy) where {T<:AbstractFloat} =
     inverse_operator(default_build_backend(A), A, policy)
 
@@ -169,8 +189,7 @@ function inverse_operator(backend::BuildBackend, A::AbstractMatrix{T}, ::ExactPs
     @inbounds for i in eachindex(s_host)
         inv_s_host[i] = iszero(s_host[i]) ? zero(T) : inv(s_host[i])
     end
-    inv_s = materialize_build(backend, F.S, inv_s_host)
-    M = materialize_build(backend, F.V * Diagonal(inv_s) * F.U')
+    M = finalize_inverse_operator(backend, A, F, inv_s_host)
     effective_rank = count(!iszero, s_host)
     cond = effective_rank == 0 ? T(Inf) : s_host[begin] / s_host[effective_rank]
     return M, InverseStats(s_host, cond, effective_rank, 0)
@@ -190,8 +209,7 @@ function inverse_operator(backend::BuildBackend, A::AbstractMatrix{T}, policy::T
     @inbounds for i in 1:effective_rank
         inv_s_host[i] = inv(s_host[i])
     end
-    inv_s = materialize_build(backend, F.S, inv_s_host)
-    M = materialize_build(backend, F.V * Diagonal(inv_s) * F.U')
+    M = finalize_inverse_operator(backend, A, F, inv_s_host)
     cond = effective_rank == 0 ? T(Inf) : s_host[begin] / s_host[effective_rank]
     return M, InverseStats(s_host, cond, effective_rank, length(s_host) - effective_rank)
 end
@@ -209,7 +227,6 @@ function inverse_operator(backend::BuildBackend, A::AbstractMatrix{T}, policy::T
     effective_rank = count(>(cutoff), s_host)
     denom = max(isempty(s_host) ? zero(T) : s_host[end], T(policy.lambda))
     cond = (isempty(s_host) || iszero(denom)) ? T(Inf) : s_host[begin] / denom
-    inv_s = materialize_build(backend, F.S, inv_s_host)
-    M = materialize_build(backend, F.V * Diagonal(inv_s) * F.U')
+    M = finalize_inverse_operator(backend, A, F, inv_s_host)
     return M, InverseStats(s_host, cond, effective_rank, 0)
 end

@@ -188,8 +188,9 @@ Responsibilities:
 
 Status:
 
-- plausible target
-- not validated yet
+- runtime-validated and builder-validated on the maintained smoke surface
+- current dense SVD/Cholesky builder paths use host factorization fallback,
+  then materialize the resulting operators back onto `ROCArray`
 
 ### `AdaptiveOpticsSimAMDGPUExt`
 

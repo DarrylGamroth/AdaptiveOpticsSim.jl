@@ -568,9 +568,9 @@ function bioedge_intensity_core!(out::AbstractMatrix{T}, wfs::BioEdgeWFS, tel::T
         copyto!(wfs.state.focal_field, wfs.state.field)
         if wfs.params.psf_centering
             @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.phasor
-            mul!(wfs.state.focal_field, wfs.state.fft_plan, wfs.state.focal_field)
+            execute_fft_plan!(wfs.state.focal_field, wfs.state.fft_plan)
         else
-            mul!(wfs.state.focal_field, wfs.state.fft_plan, wfs.state.focal_field)
+            execute_fft_plan!(wfs.state.focal_field, wfs.state.fft_plan)
             fftshift2d!(wfs.state.fft_buffer, wfs.state.focal_field)
         end
 
@@ -579,7 +579,7 @@ function bioedge_intensity_core!(out::AbstractMatrix{T}, wfs::BioEdgeWFS, tel::T
         lgs_ifft_buffer = wfs.state.pupil_field
         @inbounds for k in 1:4
             @views @. wfs.state.pupil_field = focal_source * wfs.state.bioedge_masks[:, :, k]
-            mul!(wfs.state.pupil_field, wfs.state.ifft_plan, wfs.state.pupil_field)
+            execute_fft_plan!(wfs.state.pupil_field, wfs.state.ifft_plan)
             @. wfs.state.temp = abs2(wfs.state.pupil_field)
             if apply_lgs
                 if profile isa LGSProfileNone

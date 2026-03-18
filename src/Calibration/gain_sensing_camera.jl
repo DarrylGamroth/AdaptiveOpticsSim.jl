@@ -265,7 +265,7 @@ end
 
 function fft2c!(out::AbstractMatrix{Complex{T}}, ws::GSCFFTWorkspace{T}, input::AbstractMatrix) where {T}
     fftshift2d!(ws.buffer, input)
-    mul!(ws.buffer, ws.fft_plan, ws.buffer)
+    execute_fft_plan!(ws.buffer, ws.fft_plan)
     fftshift2d!(out, ws.buffer)
     out ./= size(out, 1)
     return out
@@ -273,7 +273,7 @@ end
 
 function ifft2c!(out::AbstractMatrix{Complex{T}}, ws::GSCFFTWorkspace{T}, input::AbstractMatrix) where {T}
     fftshift2d!(ws.buffer, input)
-    mul!(ws.buffer, ws.ifft_plan, ws.buffer)
+    execute_fft_plan!(ws.buffer, ws.ifft_plan)
     fftshift2d!(out, ws.buffer)
     out .*= size(out, 1)
     return out

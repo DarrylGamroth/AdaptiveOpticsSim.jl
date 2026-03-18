@@ -751,7 +751,7 @@ function focal_field_from_opd!(dest::AbstractMatrix{Complex{T}}, lift::LiFT,
     end
 
     copyto!(ws.fft_buffer, ws.pupil_field)
-    mul!(ws.fft_buffer, ws.fft_plan, ws.fft_buffer)
+    execute_fft_plan!(ws.fft_buffer, ws.fft_plan)
     ws.fft_buffer ./= T(n_pad)
 
     shift_pix = if n_pad % 2 == img_size % 2

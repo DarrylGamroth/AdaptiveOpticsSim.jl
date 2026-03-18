@@ -1,7 +1,7 @@
 # GPU Runtime Audit
 
 This document tracks the state of the device-resident execution path after the
-runtime sprint and the current CUDA validation workflow.
+runtime sprint and the current CUDA/AMDGPU validation workflows.
 
 ## Standard CUDA Validation Workflow
 
@@ -36,6 +36,31 @@ julia --project=. scripts/gpu_profile_model_tomography_cuda.jl
 
 The `spiders` workstation is the current real-hardware validation host for this
 workflow.
+
+## Standard AMDGPU Validation Workflow
+
+The maintained AMDGPU validation entry points are:
+
+- `scripts/gpu_smoke_amdgpu.jl`
+  - broad runtime/device-resident smoke coverage on `ROCArray`
+- `scripts/gpu_builder_amdgpu.jl`
+  - reconstructor/calibration builder coverage on `ROCArray`
+
+On an AMDGPU host, the standard workflow is:
+
+```bash
+julia --project=. scripts/gpu_smoke_amdgpu.jl
+julia --project=. scripts/gpu_builder_amdgpu.jl
+```
+
+Current AMDGPU caveat:
+
+- FFT-backed runtime paths are native on `ROCArray`.
+- Dense SVD/Cholesky-based builder and LiFT solve paths still fall back to
+  host factorization on this hardware, then materialize the resulting operator
+  or update back to `ROCArray`.
+- So AMDGPU is now runtime-validated and builder-validated for the maintained
+  smoke surface, but not yet fully accelerator-native for dense linear algebra.
 
 ## Warmed CPU vs CUDA Snapshot on `spiders`
 

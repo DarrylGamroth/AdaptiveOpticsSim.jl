@@ -820,15 +820,15 @@ function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::T
         copyto!(wfs.state.focal_field, wfs.state.field)
         if wfs.params.psf_centering
             @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.phasor
-            mul!(wfs.state.focal_field, wfs.state.fft_plan, wfs.state.focal_field)
+            execute_fft_plan!(wfs.state.focal_field, wfs.state.fft_plan)
             @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.pyramid_mask
             copyto!(wfs.state.pupil_field, wfs.state.focal_field)
-            mul!(wfs.state.pupil_field, wfs.state.ifft_plan, wfs.state.pupil_field)
+            execute_fft_plan!(wfs.state.pupil_field, wfs.state.ifft_plan)
         else
-            mul!(wfs.state.focal_field, wfs.state.fft_plan, wfs.state.focal_field)
+            execute_fft_plan!(wfs.state.focal_field, wfs.state.fft_plan)
             fftshift2d!(wfs.state.pupil_field, wfs.state.focal_field)
             @. wfs.state.pupil_field = wfs.state.pupil_field * wfs.state.pyramid_mask
-            mul!(wfs.state.pupil_field, wfs.state.ifft_plan, wfs.state.pupil_field)
+            execute_fft_plan!(wfs.state.pupil_field, wfs.state.ifft_plan)
         end
         @. wfs.state.temp = abs2(wfs.state.pupil_field)
         out .+= wfs.state.temp
@@ -869,9 +869,9 @@ function pyramid_modulation_frame!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel:
         copyto!(wfs.state.focal_field, wfs.state.field)
         if wfs.params.psf_centering
             @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.phasor
-            mul!(wfs.state.focal_field, wfs.state.fft_plan, wfs.state.focal_field)
+            execute_fft_plan!(wfs.state.focal_field, wfs.state.fft_plan)
         else
-            mul!(wfs.state.focal_field, wfs.state.fft_plan, wfs.state.focal_field)
+            execute_fft_plan!(wfs.state.focal_field, wfs.state.fft_plan)
             @. wfs.state.intensity = abs2(wfs.state.focal_field) * fft_scale2
             fftshift2d!(wfs.state.temp, wfs.state.intensity)
             out .+= wfs.state.temp

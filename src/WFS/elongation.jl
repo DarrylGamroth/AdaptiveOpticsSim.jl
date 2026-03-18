@@ -148,9 +148,9 @@ function apply_lgs_convolution!(intensity::AbstractMatrix{T}, kernel_fft::Abstra
     end
     n = size(intensity, 1)
     @. fft_buffer = complex(intensity, zero(T))
-    mul!(fft_buffer, fft_plan, fft_buffer)
+    execute_fft_plan!(fft_buffer, fft_plan)
     @. fft_buffer *= kernel_fft
-    mul!(fft_buffer, ifft_plan, fft_buffer)
+    execute_fft_plan!(fft_buffer, ifft_plan)
     scale = T(1) / (n * n)
     @. intensity = real(fft_buffer) * scale
     return intensity
@@ -164,10 +164,10 @@ function apply_lgs_convolution!(intensity::AbstractMatrix{T}, kernel_fft::Abstra
     end
     n = size(intensity, 1)
     @. fft_buffer = complex(intensity, zero(T))
-    mul!(fft_buffer, fft_plan, fft_buffer)
+    execute_fft_plan!(fft_buffer, fft_plan)
     @. fft_buffer *= kernel_fft
     copyto!(ifft_buffer, fft_buffer)
-    mul!(ifft_buffer, ifft_plan, ifft_buffer)
+    execute_fft_plan!(ifft_buffer, ifft_plan)
     scale = T(1) / (n * n)
     @. intensity = real(ifft_buffer) * scale
     return intensity
@@ -208,7 +208,7 @@ function lgs_average_kernel_fft(tel::Telescope, src::LGSSource, pad::Int, n_suba
     kernel ./= max(n_subap * n_subap, 1)
 
     @. fft_buffer = complex(kernel, zero(T))
-    mul!(fft_buffer, fft_plan, fft_buffer)
+    execute_fft_plan!(fft_buffer, fft_plan)
     kernel_fft = similar(fft_buffer, Complex{T}, pad, pad)
     copyto!(kernel_fft, fft_buffer)
     return kernel_fft

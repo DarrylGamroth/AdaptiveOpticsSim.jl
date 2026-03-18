@@ -52,7 +52,7 @@ function compute_psf_centered!(tel::Telescope, src::Source, ws::Workspace, zero_
     end
 
     copyto!(ws.fft_buffer, ws.pupil_field)
-    mul!(ws.fft_buffer, ws.fft_plan, ws.fft_buffer)
+    execute_fft_plan!(ws.fft_buffer, ws.fft_plan)
 
     fft_scale = inv(T(n_pad))
     @. ws.psf_buffer = abs2(ws.fft_buffer) * (fft_scale * fft_scale)
