@@ -66,17 +66,19 @@ Current AMDGPU caveat:
   `ROCArray`.
 - LiFT normal-equation solves now use native rocSOLVER Cholesky solves with a
   concrete `n×1` ROC RHS buffer.
-- Remaining host fallback is now narrower: the rare LiFT SVD fallback path and
-  any builder path that still goes through generic host `LinearAlgebra`
-  dispatch outside the maintained smoke surface.
+- Tomography Hermitian right-division now uses native rocSOLVER Cholesky on
+  `ROCArray`, with native LU fallback for the non-Cholesky case.
+- LiFT fallback now also uses native rocSOLVER SVD on `ROCArray`.
+- For the maintained smoke, builder, HIL, and audit surfaces, the dense linear
+  algebra path is now AMD-native.
 
 Current warmed AMDGPU sync-audit snapshot on this host:
 
-- runtime step mean: about `1.44e6 ns`
-- modal build: about `1.81e6 ns`
-- interaction-matrix tomography build: about `1.72e6 ns`
-- model tomography build: about `6.84e7 ns`
-- high-accuracy model tomography build: about `1.79e8 ns`
+- runtime step mean: about `1.49e6 ns`
+- modal build: about `1.88e6 ns`
+- interaction-matrix tomography build: about `1.85e6 ns`
+- model tomography build: about `7.04e7 ns`
+- high-accuracy model tomography build: about `8.40e7 ns`
 
 ## Warmed CPU vs CUDA Snapshot on `spiders`
 

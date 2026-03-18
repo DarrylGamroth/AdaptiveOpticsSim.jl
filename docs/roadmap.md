@@ -231,9 +231,9 @@ Current status of that backlog:
   `scripts/gpu_smoke_amdgpu.jl` and `scripts/gpu_builder_amdgpu.jl` now pass on
   AMD hardware for the maintained smoke surface. Runtime paths are native on
   `ROCArray`; modal/calibration inverse operators now use native rocSOLVER SVD,
-  and LiFT normal-equation solves now use native rocSOLVER Cholesky with a
-  concrete ROC RHS buffer. Remaining fallback is limited to rarer generic host
-  `LinearAlgebra` paths outside the maintained smoke surface.
+  tomography Hermitian right-division uses native rocSOLVER Cholesky with
+  native LU fallback, and LiFT normal-equation plus fallback solves now use
+  native rocSOLVER paths too.
 - [x] Add HIL-oriented AMDGPU smoke and sync-audit entry points.
   `scripts/gpu_hil_amdgpu.jl` and `scripts/gpu_sync_audit_amdgpu.jl` now pass
   on AMD hardware for the maintained smoke and timing surface.

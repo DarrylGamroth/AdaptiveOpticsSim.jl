@@ -25,6 +25,14 @@ function _amdgpu_svd(A::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat}
     return U, S, Vt, AdaptiveOpticsSim.singular_values_host(S)
 end
 
+function _amdgpu_lu_solve!(A::AMDGPU.ROCArray{T,2}, B::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat}
+    n = size(A, 1)
+    ipiv = AMDGPU.ROCArray{Cint}(undef, n)
+    AMDGPU.rocSOLVER.getrf!(A, ipiv)
+    AMDGPU.rocSOLVER.getrs!('N', A, ipiv, B)
+    return B
+end
+
 function _amdgpu_pseudoinverse(backend::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag},
     U::AMDGPU.ROCArray{T,2}, S::AMDGPU.ROCArray{T,1}, Vt::AMDGPU.ROCArray{T,2},
     inv_s_host::AbstractVector{T}) where {T<:AbstractFloat}
@@ -83,14 +91,35 @@ function AdaptiveOpticsSim.inverse_operator(backend::AdaptiveOpticsSim.GPUArrayB
     return M, AdaptiveOpticsSim.InverseStats(s_host, cond, effective_rank, 0)
 end
 
+function AdaptiveOpticsSim.stable_hermitian_right_division(
+    backend::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag},
+    rhs::AMDGPU.ROCArray{T,2},
+    css::AMDGPU.ROCArray{T,2},
+) where {T<:AbstractFloat}
+    css_mat = copy(css)
+    rhs_t = permutedims(rhs, (2, 1))
+    fact = cholesky!(Hermitian(css_mat), check=false)
+    if issuccess(fact)
+        ldiv!(fact, rhs_t)
+        return permutedims(rhs_t, (2, 1))
+    end
+    css_lu = copy(css)
+    _amdgpu_lu_solve!(css_lu, rhs_t)
+    return permutedims(rhs_t, (2, 1))
+end
+
 function AdaptiveOpticsSim.solve_lift_fallback!(diag::AdaptiveOpticsSim.LiFTDiagnostics{T},
     rhs::AMDGPU.ROCArray{T,1}, H::AbstractMatrix{T}, residual::AbstractVector{T},
     damping::AdaptiveOpticsSim.LiFTDampingMode) where {T<:AbstractFloat}
-    host_residual = Vector(residual)
-    host_rhs = Vector(rhs)
-    host_H = Matrix(H)
-    host_delta = AdaptiveOpticsSim.solve_lift_fallback!(diag, host_rhs, host_H, host_residual, damping)
-    copyto!(rhs, host_delta)
+    H_mat = AMDGPU.ROCArray{T}(undef, size(H)...)
+    copyto!(H_mat, H)
+    U, S, Vt, _ = _amdgpu_svd(H_mat)
+    λ = damping isa AdaptiveOpticsSim.LiFTLevenbergMarquardt ?
+        AdaptiveOpticsSim.damping_lambda(damping, adjoint(H_mat) * H_mat) : zero(T)
+    work = AMDGPU.ROCArray{T}(undef, length(S))
+    mul!(work, transpose(U), residual)
+    @. work = ifelse(iszero(S^2 + λ^2), zero(T), (S * work) / (S^2 + λ^2))
+    mul!(rhs, adjoint(Vt), work)
     return rhs
 end
 

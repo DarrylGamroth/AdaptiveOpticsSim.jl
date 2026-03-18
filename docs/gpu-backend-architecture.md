@@ -207,8 +207,14 @@ Responsibilities:
 
 Status:
 
-- plausible target
-- not validated yet
+- runtime-validated and builder-validated on the maintained smoke surface
+- FFT-backed runtime paths are native
+- modal/calibration inverse operators use native rocSOLVER SVD
+- tomography Hermitian right-division uses native rocSOLVER Cholesky, with
+  native LU fallback for the non-Cholesky case
+- LiFT normal-equation solves use native rocSOLVER Cholesky with a concrete
+  ROC RHS buffer
+- LiFT fallback uses native rocSOLVER SVD
 
 ### OpenCL
 
