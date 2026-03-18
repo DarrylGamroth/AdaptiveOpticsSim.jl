@@ -327,6 +327,19 @@ The following builder paths are now validated on CUDA with
 - `build_reconstructor(InteractionMatrixTomography(), ...; build_backend=GPUArrayBuildBackend(CUDABackendTag))`
 - `build_reconstructor(ModelBasedTomography(), ...; build_backend=GPUArrayBuildBackend(CUDABackendTag))`
 
+The builder contract now also checks numerical agreement against CPU builds for
+the exercised cases:
+
+- modal reconstruction output
+- interaction-matrix tomography wavefront reconstruction
+- interaction-matrix tomography command reconstruction
+- model-based tomography wavefront reconstruction
+
+Those checks currently pass on `spiders` with:
+
+- `rtol=1e-5`
+- `atol=1e-6`
+
 ## Runtime Fallbacks Removed
 
 The following runtime host fallbacks have been removed:
