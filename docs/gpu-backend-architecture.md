@@ -189,8 +189,12 @@ Responsibilities:
 Status:
 
 - runtime-validated and builder-validated on the maintained smoke surface
-- current dense SVD/Cholesky builder paths use host factorization fallback,
-  then materialize the resulting operators back onto `ROCArray`
+- FFT-backed runtime paths are native
+- modal/calibration inverse operators use native rocSOLVER SVD
+- LiFT normal-equation solves use native rocSOLVER Cholesky with a concrete
+  ROC RHS buffer
+- remaining fallback is now limited to rarer generic host `LinearAlgebra`
+  paths outside the maintained smoke surface
 
 ### `AdaptiveOpticsSimAMDGPUExt`
 

@@ -62,19 +62,21 @@ julia --project=. scripts/gpu_sync_audit_amdgpu.jl
 Current AMDGPU caveat:
 
 - FFT-backed runtime paths are native on `ROCArray`.
-- Dense SVD/Cholesky-based builder and LiFT solve paths still fall back to
-  host factorization on this hardware, then materialize the resulting operator
-  or update back to `ROCArray`.
-- So AMDGPU is now runtime-validated and builder-validated for the maintained
-  smoke surface, but not yet fully accelerator-native for dense linear algebra.
+- Modal/calibration inverse operators now use native rocSOLVER SVD on
+  `ROCArray`.
+- LiFT normal-equation solves now use native rocSOLVER Cholesky solves with a
+  concrete `n×1` ROC RHS buffer.
+- Remaining host fallback is now narrower: the rare LiFT SVD fallback path and
+  any builder path that still goes through generic host `LinearAlgebra`
+  dispatch outside the maintained smoke surface.
 
 Current warmed AMDGPU sync-audit snapshot on this host:
 
-- runtime step mean: about `4.87e6 ns`
-- modal build: about `1.18e5 ns`
-- interaction-matrix tomography build: about `1.71e6 ns`
-- model tomography build: about `1.81e8 ns`
-- high-accuracy model tomography build: about `8.34e7 ns`
+- runtime step mean: about `1.44e6 ns`
+- modal build: about `1.81e6 ns`
+- interaction-matrix tomography build: about `1.72e6 ns`
+- model tomography build: about `6.84e7 ns`
+- high-accuracy model tomography build: about `1.79e8 ns`
 
 ## Warmed CPU vs CUDA Snapshot on `spiders`
 

@@ -3,6 +3,7 @@ module AdaptiveOpticsSimAMDGPUExt
 using AdaptiveOpticsSim
 using AMDGPU
 using AbstractFFTs
+using LinearAlgebra
 
 AdaptiveOpticsSim.gpu_backend_loaded(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = true
 AdaptiveOpticsSim.gpu_backend_array_type(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = AMDGPU.ROCArray
@@ -18,21 +19,134 @@ AdaptiveOpticsSim.execute_fft_plan!(buffer::AMDGPU.ROCArray, plan::AbstractFFTs.
 AdaptiveOpticsSim.default_build_backend(::AMDGPU.ROCArray) = AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.AMDGPUBackendTag)
 AdaptiveOpticsSim.prepare_build_matrix(::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag}, A::AbstractMatrix) = Matrix(A)
 
-function AdaptiveOpticsSim.solve_lift_system!(diag::AdaptiveOpticsSim.LiFTDiagnostics{T},
-    residual::AMDGPU.ROCArray{T,1}, rhs::AMDGPU.ROCArray{T,1}, H::AbstractMatrix{T},
-    normal::AbstractMatrix{T}, factor::AbstractMatrix{T},
-    effective_mode::AdaptiveOpticsSim.LiFTSolveMode, damping::AdaptiveOpticsSim.LiFTDampingMode) where {T<:AbstractFloat}
+function _amdgpu_svd(A::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat}
+    F = copy(A)
+    U, S, Vt = AMDGPU.rocSOLVER.gesvd!('S', 'S', F)
+    return U, S, Vt, AdaptiveOpticsSim.singular_values_host(S)
+end
+
+function _amdgpu_pseudoinverse(backend::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag},
+    U::AMDGPU.ROCArray{T,2}, S::AMDGPU.ROCArray{T,1}, Vt::AMDGPU.ROCArray{T,2},
+    inv_s_host::AbstractVector{T}) where {T<:AbstractFloat}
+    inv_s = AdaptiveOpticsSim.materialize_build(backend, S, inv_s_host)
+    U_scaled = similar(U)
+    copyto!(U_scaled, U)
+    U_scaled .*= reshape(inv_s, 1, :)
+    M = adjoint(Vt) * adjoint(U_scaled)
+    return M
+end
+
+function AdaptiveOpticsSim.inverse_operator(backend::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag},
+    A::AMDGPU.ROCArray{T,2}, ::AdaptiveOpticsSim.ExactPseudoInverse) where {T<:AbstractFloat}
+    U, S, Vt, s_host = _amdgpu_svd(A)
+    inv_s_host = similar(s_host)
+    @inbounds for i in eachindex(s_host)
+        inv_s_host[i] = iszero(s_host[i]) ? zero(T) : inv(s_host[i])
+    end
+    M = _amdgpu_pseudoinverse(backend, U, S, Vt, inv_s_host)
+    effective_rank = count(!iszero, s_host)
+    cond = effective_rank == 0 ? T(Inf) : s_host[begin] / s_host[effective_rank]
+    return M, AdaptiveOpticsSim.InverseStats(s_host, cond, effective_rank, 0)
+end
+
+function AdaptiveOpticsSim.inverse_operator(backend::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag},
+    A::AMDGPU.ROCArray{T,2}, policy::AdaptiveOpticsSim.TSVDInverse) where {T<:AbstractFloat}
+    U, S, Vt, s_host = _amdgpu_svd(A)
+    isempty(s_host) && return AdaptiveOpticsSim.materialize_build(backend, similar(A, T, size(A, 2), size(A, 1))),
+        AdaptiveOpticsSim.InverseStats(s_host, T(Inf), 0, 0)
+    cutoff = AdaptiveOpticsSim._inverse_cutoff(s_host, T(policy.rtol), T(policy.atol))
+    rank_by_tol = count(>(cutoff), s_host)
+    effective_rank = max(rank_by_tol - policy.n_trunc, 0)
+    inv_s_host = similar(s_host)
+    fill!(inv_s_host, zero(T))
+    @inbounds for i in 1:effective_rank
+        inv_s_host[i] = inv(s_host[i])
+    end
+    M = _amdgpu_pseudoinverse(backend, U, S, Vt, inv_s_host)
+    cond = effective_rank == 0 ? T(Inf) : s_host[begin] / s_host[effective_rank]
+    return M, AdaptiveOpticsSim.InverseStats(s_host, cond, effective_rank, length(s_host) - effective_rank)
+end
+
+function AdaptiveOpticsSim.inverse_operator(backend::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag},
+    A::AMDGPU.ROCArray{T,2}, policy::AdaptiveOpticsSim.TikhonovInverse) where {T<:AbstractFloat}
+    U, S, Vt, s_host = _amdgpu_svd(A)
+    inv_s_host = similar(s_host)
+    λ2 = T(policy.lambda)^2
+    @inbounds for i in eachindex(s_host)
+        inv_s_host[i] = s_host[i] / (s_host[i]^2 + λ2)
+    end
+    M = _amdgpu_pseudoinverse(backend, U, S, Vt, inv_s_host)
+    cutoff = AdaptiveOpticsSim._inverse_cutoff(s_host, T(policy.rtol), T(policy.atol))
+    effective_rank = count(>(cutoff), s_host)
+    denom = max(isempty(s_host) ? zero(T) : s_host[end], T(policy.lambda))
+    cond = (isempty(s_host) || iszero(denom)) ? T(Inf) : s_host[begin] / denom
+    return M, AdaptiveOpticsSim.InverseStats(s_host, cond, effective_rank, 0)
+end
+
+function AdaptiveOpticsSim.solve_lift_fallback!(diag::AdaptiveOpticsSim.LiFTDiagnostics{T},
+    rhs::AMDGPU.ROCArray{T,1}, H::AbstractMatrix{T}, residual::AbstractVector{T},
+    damping::AdaptiveOpticsSim.LiFTDampingMode) where {T<:AbstractFloat}
     host_residual = Vector(residual)
     host_rhs = Vector(rhs)
     host_H = Matrix(H)
-    host_normal = Matrix(normal)
-    host_factor = Matrix(factor)
-    host_delta = AdaptiveOpticsSim.solve_lift_system!(diag, host_residual, host_rhs, host_H, host_normal, host_factor, effective_mode, damping)
-    if effective_mode isa AdaptiveOpticsSim.LiFTSolveQR
-        copyto!(residual, host_delta)
-        return residual
-    end
+    host_delta = AdaptiveOpticsSim.solve_lift_fallback!(diag, host_rhs, host_H, host_residual, damping)
     copyto!(rhs, host_delta)
+    return rhs
+end
+
+function AdaptiveOpticsSim.solve_normal_system!(diag::AdaptiveOpticsSim.LiFTDiagnostics{T}, rhs::AMDGPU.ROCArray{T,1},
+    factor::AbstractMatrix{T}, normal::AbstractMatrix{T}, H::AbstractMatrix{T}, residual::AbstractVector{T},
+    ::AdaptiveOpticsSim.LiFTDampingNone) where {T<:AbstractFloat}
+    factor_mat = AMDGPU.ROCArray{T}(undef, size(normal)...)
+    copyto!(factor_mat, normal)
+    rhs_mat = AMDGPU.ROCArray{T}(undef, length(rhs), 1)
+    copyto!(vec(rhs_mat), rhs)
+    chol = cholesky!(Hermitian(factor_mat), check=false)
+    λ = zero(T)
+    if !issuccess(chol)
+        λ = AdaptiveOpticsSim.regularization_load(normal)
+        @views factor_mat[diagind(factor_mat)] .+= λ
+        chol = cholesky!(Hermitian(factor_mat), check=false)
+        if !issuccess(chol)
+            λ *= T(10)
+            @views factor_mat[diagind(factor_mat)] .+= λ
+            chol = cholesky!(Hermitian(factor_mat), check=false)
+            if !issuccess(chol)
+                return AdaptiveOpticsSim.solve_lift_fallback!(diag, rhs, H, residual,
+                    AdaptiveOpticsSim.LiFTLevenbergMarquardt(lambda0=λ))
+            end
+        end
+    end
+    ldiv!(chol, rhs_mat)
+    copyto!(rhs, vec(rhs_mat))
+    diag.regularization = λ
+    return rhs
+end
+
+function AdaptiveOpticsSim.solve_normal_system!(diag::AdaptiveOpticsSim.LiFTDiagnostics{T}, rhs::AMDGPU.ROCArray{T,1},
+    factor::AbstractMatrix{T}, normal::AbstractMatrix{T}, H::AbstractMatrix{T}, residual::AbstractVector{T},
+    damping::AdaptiveOpticsSim.LiFTLevenbergMarquardt) where {T<:AbstractFloat}
+    factor_mat = AMDGPU.ROCArray{T}(undef, size(normal)...)
+    copyto!(factor_mat, normal)
+    rhs_mat = AMDGPU.ROCArray{T}(undef, length(rhs), 1)
+    copyto!(vec(rhs_mat), rhs)
+    λ = AdaptiveOpticsSim.damping_lambda(damping, normal)
+    if λ > zero(T)
+        @views factor_mat[diagind(factor_mat)] .+= λ
+    end
+    chol = cholesky!(Hermitian(factor_mat), check=false)
+    while !issuccess(chol)
+        λ = max(λ * T(damping.growth), AdaptiveOpticsSim.regularization_load(normal))
+        copyto!(factor_mat, normal)
+        @views factor_mat[diagind(factor_mat)] .+= λ
+        chol = cholesky!(Hermitian(factor_mat), check=false)
+        if λ > T(1e12)
+            return AdaptiveOpticsSim.solve_lift_fallback!(diag, rhs, H, residual, damping)
+        end
+    end
+    ldiv!(chol, rhs_mat)
+    copyto!(rhs, vec(rhs_mat))
+    diag.regularization = λ
     return rhs
 end
 
