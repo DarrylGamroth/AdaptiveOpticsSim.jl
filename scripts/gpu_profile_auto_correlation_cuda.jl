@@ -67,6 +67,12 @@ function _profile_case(::Type{B}) where {B<:GPUBackendTag}
     lgs_dir = AdaptiveOpticsSim.lgs_directions(asterism)
     directions = AdaptiveOpticsSim.direction_vectors(view(lgs_dir, :, 1), view(lgs_dir, :, 2))
     source_height = AdaptiveOpticsSim.lgs_height_m(asterism, atmosphere)
+    rotations, offsets_x, offsets_y = AdaptiveOpticsSim._active_guide_grid_params(
+        wfs.lenslet_rotation_rad,
+        view(wfs.lenslet_offset, 1, :),
+        view(wfs.lenslet_offset, 2, :),
+        n_lgs,
+    )
 
     result = AdaptiveOpticsSim._backend_array(B, T, n_lgs * n_valid, n_lgs * n_valid)
     fill!(result, zero(T))
@@ -79,9 +85,9 @@ function _profile_case(::Type{B}) where {B<:GPUBackendTag}
             backend,
             sampling,
             support_d,
-            wfs.lenslet_rotation_rad,
-            view(wfs.lenslet_offset, 1, :),
-            view(wfs.lenslet_offset, 2, :),
+            rotations,
+            offsets_x,
+            offsets_y,
         )
         _sync_backend!(gx)
         _sync_backend!(gy)
@@ -100,44 +106,37 @@ function _profile_case(::Type{B}) where {B<:GPUBackendTag}
         )
         _sync_backend!(value)
     end
+    shifted_flat = reshape(shifted, :, n_lgs, length(altitude))
 
     cst, var_term, inv_L0 = AdaptiveOpticsSim._covariance_constants(r0, atmosphere.L0)
     block = AdaptiveOpticsSim._backend_array(B, T, n_valid, n_valid)
-    cov = AdaptiveOpticsSim._backend_array(B, T, sampling * sampling, sampling * sampling)
+    fractional_r0_native = AdaptiveOpticsSim.materialize_build(backend, atmosphere.fractional_r0)
 
-    t_cov = 0
-    t_accumulate = 0
+    t_selected = 0
     t_scatter = 0
 
     for jgs in 1:n_lgs
         for igs in 1:jgs
-            fill!(block, zero(T))
-            for layer in eachindex(altitude)
-                iz = @view shifted[:, :, igs, layer]
-                jz = @view shifted[:, :, jgs, layer]
-
-                _, dt_cov = _time_phase() do
-                    AdaptiveOpticsSim._covariance_matrix!(
-                        backend,
-                        cov,
-                        vec(iz),
-                        vec(jz),
-                        cst,
-                        var_term,
-                        inv_L0,
-                        atmosphere.fractional_r0[layer],
-                    )
-                    _sync_backend!(cov)
-                end
-                t_cov += dt_cov
-
-                _, dt_accumulate = _time_phase() do
-                    AdaptiveOpticsSim.launch_kernel_async!(style, AdaptiveOpticsSim.accumulate_selected_block_kernel!, block, cov,
-                        valid_positions_native, n_valid; ndrange=size(block))
-                    _sync_backend!(block)
-                end
-                t_accumulate += dt_accumulate
+            _, dt_selected = _time_phase() do
+                AdaptiveOpticsSim.launch_kernel_async!(
+                    style,
+                    AdaptiveOpticsSim.selected_covariance_block_kernel!,
+                    block,
+                    shifted_flat,
+                    valid_positions_native,
+                    fractional_r0_native,
+                    igs,
+                    jgs,
+                    cst,
+                    var_term,
+                    inv_L0,
+                    n_valid,
+                    length(altitude);
+                    ndrange=size(block),
+                )
+                _sync_backend!(block)
             end
+            t_selected += dt_selected
 
             _, dt_scatter = _time_phase() do
                 rows = (igs - 1) * n_valid + 1:igs * n_valid
@@ -157,10 +156,9 @@ function _profile_case(::Type{B}) where {B<:GPUBackendTag}
     println("  case: medium")
     println("  guide_grids_ns: ", t_guides)
     println("  scaled_shifted_coords_ns: ", t_shift)
-    println("  covariance_matrix_ns: ", t_cov)
-    println("  selected_block_accumulate_ns: ", t_accumulate)
+    println("  selected_block_kernel_ns: ", t_selected)
     println("  block_scatter_ns: ", t_scatter)
-    println("  total_timed_ns: ", t_guides + t_shift + t_cov + t_accumulate + t_scatter)
+    println("  total_timed_ns: ", t_guides + t_shift + t_selected + t_scatter)
     println("  result_type: ", typeof(result))
     return nothing
 end
