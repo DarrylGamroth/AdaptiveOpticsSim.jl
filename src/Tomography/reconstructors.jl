@@ -472,6 +472,31 @@ function _covariance_matrix(
     return out
 end
 
+function _covariance_matrix!(
+    out::AbstractMatrix{T},
+    rho1::AbstractVector{Complex{T}},
+    rho2::AbstractVector{Complex{T}},
+    cst::T,
+    var_term::T,
+    inv_L0::T,
+    fractional_r0::T,
+) where {T<:AbstractFloat}
+    size(out) == (length(rho1), length(rho2)) ||
+        throw(DimensionMismatchError("covariance output size must match rho vector lengths"))
+    @inbounds for j in 1:length(rho2)
+        for i in 1:length(rho1)
+            rho = abs(rho1[i] - rho2[j])
+            if iszero(rho)
+                out[i, j] = var_term * fractional_r0
+            else
+                u = T(2π) * rho * inv_L0
+                out[i, j] = cst * u^(T(5) / T(6)) * real(_kv56_scalar(u)) * fractional_r0
+            end
+        end
+    end
+    return out
+end
+
 function _covariance_matrix(
     ::AcceleratorStyle,
     rho1::AbstractVector{Complex{T}},
@@ -482,6 +507,25 @@ function _covariance_matrix(
     fractional_r0::T,
 ) where {T<:AbstractFloat}
     out = similar(rho1, T, length(rho1), length(rho2))
+    style = execution_style(out)
+    launch_kernel_async!(style, covariance_matrix_kernel!, out, rho1, rho2, cst, var_term, inv_L0, fractional_r0,
+        length(rho1), length(rho2);
+        ndrange=size(out))
+    return out
+end
+
+function _covariance_matrix!(
+    ::AcceleratorStyle,
+    out::AbstractMatrix{T},
+    rho1::AbstractVector{Complex{T}},
+    rho2::AbstractVector{Complex{T}},
+    cst::T,
+    var_term::T,
+    inv_L0::T,
+    fractional_r0::T,
+) where {T<:AbstractFloat}
+    size(out) == (length(rho1), length(rho2)) ||
+        throw(DimensionMismatchError("covariance output size must match rho vector lengths"))
     style = execution_style(out)
     launch_kernel_async!(style, covariance_matrix_kernel!, out, rho1, rho2, cst, var_term, inv_L0, fractional_r0,
         length(rho1), length(rho2);
@@ -501,6 +545,21 @@ function _covariance_matrix(
     rho1_native = _covariance_input(execution_style(rho1), backend, rho1)
     rho2_native = _covariance_input(execution_style(rho2), backend, rho2)
     return _covariance_matrix(execution_style(rho1_native), rho1_native, rho2_native, cst, var_term, inv_L0, fractional_r0)
+end
+
+function _covariance_matrix!(
+    backend::GPUArrayBuildBackend,
+    out::AbstractMatrix{T},
+    rho1::AbstractVector{Complex{T}},
+    rho2::AbstractVector{Complex{T}},
+    cst::T,
+    var_term::T,
+    inv_L0::T,
+    fractional_r0::T,
+) where {T<:AbstractFloat}
+    rho1_native = _covariance_input(execution_style(rho1), backend, rho1)
+    rho2_native = _covariance_input(execution_style(rho2), backend, rho2)
+    return _covariance_matrix!(execution_style(out), out, rho1_native, rho2_native, cst, var_term, inv_L0, fractional_r0)
 end
 
 function sparse_gradient_matrix(
@@ -702,15 +761,18 @@ function auto_correlation(
     )
     shifted = _scaled_shifted_coord_stack(backend, guide_x, guide_y, directions, altitude, source_height)
     cst, var_term, inv_L0 = _covariance_constants(r0, atmosphere.L0)
+    n_cov = sampling * sampling
+    block = _backend_array(B, T, n_valid, n_valid)
+    cov = _backend_array(B, T, n_cov, n_cov)
     for jgs in 1:n_gs
         for igs in 1:jgs
-            block = _backend_array(B, T, n_valid, n_valid)
             fill!(block, zero(T))
             for layer in eachindex(altitude)
                 iz = @view shifted[:, :, igs, layer]
                 jz = @view shifted[:, :, jgs, layer]
-                cov = _covariance_matrix(
+                _covariance_matrix!(
                     backend,
+                    cov,
                     vec(iz),
                     vec(jz),
                     cst,
@@ -866,10 +928,12 @@ function cross_correlation(
     )
     shifted_lgs = _scaled_shifted_coord_stack(backend, guide_x, guide_y, lgs_directions_xyz, altitude, source_height)
     cst, var_term, inv_L0 = _covariance_constants(r0, atmosphere.L0)
+    n_cov = sampling * sampling
+    block = _backend_array(B, T, n_row, n_row)
+    cov = _backend_array(B, T, n_cov, n_cov)
 
     for fit_idx in 1:n_fit
         for gs in 1:n_gs
-            block = _backend_array(B, T, n_row, n_row)
             fill!(block, zero(T))
             for layer in eachindex(altitude)
                 iz = @view shifted_lgs[:, :, gs, layer]
@@ -883,8 +947,9 @@ function cross_correlation(
                     layer,
                     tomography.fit_src_height_m,
                 )
-                cov = _covariance_matrix(
+                _covariance_matrix!(
                     backend,
+                    cov,
                     vec(iz),
                     vec(jz),
                     cst,

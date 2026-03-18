@@ -260,6 +260,33 @@ That is still only a modest end-to-end win, but it is the first change in this
 phase that improved both the hotspot profile and the warmed builder timing
 without introducing a larger structural rewrite.
 
+The next reuse pass then moved GPU tomography covariance assembly to explicit
+workspace reuse:
+
+- `auto_correlation` now reuses one `block` buffer across guide-star pairs
+- `auto_correlation` and `cross_correlation` now reuse one covariance workspace
+  instead of allocating a new covariance matrix per layer
+- the GPU covariance helper gained an in-place path so those workspaces can be
+  filled directly
+
+On `spiders`, the resulting profile/sample points were:
+
+- dedicated `auto_correlation` timed phase: about `6.04e9 ns` to about
+  `6.09e9 ns`
+- full model-tomography phase profile:
+  - `auto_correlation`: about `1.69e10 ns` to about `1.54e10 ns`
+  - `cross_correlation`: about `2.38e9 ns` to about `2.31e9 ns`
+
+Most importantly, the warmed end-to-end CUDA builder moved materially:
+
+- `model_tomography_build_ns`: about `8.93e7 ns` to about `8.67e7 ns`
+- `model_tomography_high_accuracy_build_ns`: about `9.13e7 ns` to about
+  `8.26e7 ns`
+
+So this reuse-oriented pass is worth keeping. It is the first tomography CUDA
+optimization in this phase that clearly reduced the warmed builder wall time by
+more than noise.
+
 ## Validated GPU-Resident Surface
 
 The following paths are currently validated on CUDA with
