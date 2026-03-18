@@ -226,6 +226,19 @@ That makes the remaining priority inside `auto_correlation` clearer:
    end-to-end `model_tomography_build_ns` in the compact warmed sync audit,
    which remains about `8.95e7 ns` on `spiders`.
 
+A narrower follow-up change then precomputed the LGS shifted-coordinate stack in
+GPU [cross_correlation](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Tomography/reconstructors.jl#L781)
+instead of rebuilding those coordinates inside every `fit_idx × gs × layer`
+iteration. On the same `medium` CUDA case on `spiders`, that moved
+`cross_correlation` from about `4.69e9 ns` down to about `2.37e9 ns` in the
+phase profiler.
+
+That is a real win for the secondary hotspot, but it still does not materially
+change the warmed end-to-end `model_tomography_build_ns`, which stayed in the
+same `~8.9e7 ns` band. The reason is unchanged: `auto_correlation` is still the
+dominant builder phase by a wide margin, so future optimization effort should
+stay focused there.
+
 ## Validated GPU-Resident Surface
 
 The following paths are currently validated on CUDA with

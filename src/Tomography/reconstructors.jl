@@ -661,7 +661,6 @@ function auto_correlation(
         offsets_y,
     )
     shifted = _scaled_shifted_coord_stack(backend, guide_x, guide_y, directions, altitude, source_height)
-
     for jgs in 1:n_gs
         for igs in 1:jgs
             block = _backend_array(B, T, n_valid, n_valid)
@@ -823,21 +822,14 @@ function cross_correlation(
         offsets_x,
         offsets_y,
     )
+    shifted_lgs = _scaled_shifted_coord_stack(backend, guide_x, guide_y, lgs_directions_xyz, altitude, source_height)
 
     for fit_idx in 1:n_fit
         for gs in 1:n_gs
             block = _backend_array(B, T, n_row, n_row)
             fill!(block, zero(T))
             for layer in eachindex(altitude)
-                iz = _scaled_shifted_coords(
-                    @view(guide_x[:, :, gs]),
-                    @view(guide_y[:, :, gs]),
-                    lgs_directions_xyz,
-                    gs,
-                    altitude,
-                    layer,
-                    source_height,
-                )
+                iz = @view shifted_lgs[:, :, gs, layer]
                 jz = _scaled_shifted_coords(
                     backend,
                     target_x,
