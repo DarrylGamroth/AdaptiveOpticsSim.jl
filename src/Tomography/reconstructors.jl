@@ -115,6 +115,21 @@ end
 @inline _equal_fit_source_weights(params::TomographyParams{T}) where {T<:AbstractFloat} =
     fill(inv(T(params.n_fit_src^2)), params.n_fit_src^2)
 
+function _active_guide_grid_params(
+    rotations::AbstractVector{T},
+    offsets_x::AbstractVector{T},
+    offsets_y::AbstractVector{T},
+    n_gs::Integer,
+) where {T<:AbstractFloat}
+    n_gs <= length(rotations) == length(offsets_x) == length(offsets_y) ||
+        throw(DimensionMismatchError("guide-grid parameter vectors must cover the requested guide-star count"))
+    return (
+        view(rotations, 1:n_gs),
+        view(offsets_x, 1:n_gs),
+        view(offsets_y, 1:n_gs),
+    )
+end
+
 @kernel function covariance_matrix_kernel!(out, rho1, rho2, cst, var_term, inv_L0, fractional_r0, n1::Int, n2::Int)
     i, j = @index(Global, NTuple)
     if i <= n1 && j <= n2
@@ -548,13 +563,19 @@ function auto_correlation(
     lgs_dir = lgs_directions(asterism)
     directions = direction_vectors(view(lgs_dir, :, 1), view(lgs_dir, :, 2))
     source_height = lgs_height_m(asterism, atmosphere)
+    rotations, offsets_x, offsets_y = _active_guide_grid_params(
+        wfs.lenslet_rotation_rad,
+        view(wfs.lenslet_offset, 1, :),
+        view(wfs.lenslet_offset, 2, :),
+        n_gs,
+    )
 
     guide_x, guide_y = _guide_star_grids(
         sampling,
         support_d,
-        wfs.lenslet_rotation_rad,
-        view(wfs.lenslet_offset, 1, :),
-        view(wfs.lenslet_offset, 2, :),
+        rotations,
+        offsets_x,
+        offsets_y,
     )
 
     for jgs in 1:n_gs
@@ -624,14 +645,20 @@ function auto_correlation(
     valid_positions_native = _backend_array(B, Int, length(valid_positions))
     copyto!(valid_positions_native, valid_positions)
     style = execution_style(result)
+    rotations, offsets_x, offsets_y = _active_guide_grid_params(
+        wfs.lenslet_rotation_rad,
+        view(wfs.lenslet_offset, 1, :),
+        view(wfs.lenslet_offset, 2, :),
+        n_gs,
+    )
 
     guide_x, guide_y = _guide_star_grids(
         backend,
         sampling,
         support_d,
-        wfs.lenslet_rotation_rad,
-        view(wfs.lenslet_offset, 1, :),
-        view(wfs.lenslet_offset, 2, :),
+        rotations,
+        offsets_x,
+        offsets_y,
     )
     shifted = _scaled_shifted_coord_stack(backend, guide_x, guide_y, directions, altitude, source_height)
 
@@ -700,12 +727,18 @@ function cross_correlation(
     fit_directions_xyz = direction_vectors(fit_zenith, fit_azimuth)
     source_height = lgs_height_m(asterism, atmosphere)
     target_x, target_y = _guide_star_grid(sampling, support_d, zero(T), zero(T), zero(T))
-    guide_x, guide_y = _guide_star_grids(
-        sampling,
-        support_d,
+    rotations, offsets_x, offsets_y = _active_guide_grid_params(
         wfs.lenslet_rotation_rad,
         view(wfs.lenslet_offset, 1, :),
         view(wfs.lenslet_offset, 2, :),
+        n_gs,
+    )
+    guide_x, guide_y = _guide_star_grids(
+        sampling,
+        support_d,
+        rotations,
+        offsets_x,
+        offsets_y,
     )
 
     for fit_idx in 1:n_fit
@@ -776,13 +809,19 @@ function cross_correlation(
     copyto!(row_positions_native, row_positions)
     style = execution_style(result)
     target_x, target_y = _guide_star_grid(backend, sampling, support_d, zero(T), zero(T), zero(T))
+    rotations, offsets_x, offsets_y = _active_guide_grid_params(
+        wfs.lenslet_rotation_rad,
+        view(wfs.lenslet_offset, 1, :),
+        view(wfs.lenslet_offset, 2, :),
+        n_gs,
+    )
     guide_x, guide_y = _guide_star_grids(
         backend,
         sampling,
         support_d,
-        wfs.lenslet_rotation_rad,
-        view(wfs.lenslet_offset, 1, :),
-        view(wfs.lenslet_offset, 2, :),
+        rotations,
+        offsets_x,
+        offsets_y,
     )
 
     for fit_idx in 1:n_fit
