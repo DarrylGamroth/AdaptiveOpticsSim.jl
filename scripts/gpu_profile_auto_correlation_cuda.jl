@@ -89,54 +89,45 @@ function _profile_case(::Type{B}) where {B<:GPUBackendTag}
     end
     guide_x, guide_y = guide_xy
 
-    t_shift = 0
+    shifted, t_shift = _time_phase() do
+        value = AdaptiveOpticsSim._scaled_shifted_coord_stack(
+            backend,
+            guide_x,
+            guide_y,
+            directions,
+            altitude,
+            source_height,
+        )
+        _sync_backend!(value)
+    end
+
+    cst, var_term, inv_L0 = AdaptiveOpticsSim._covariance_constants(r0, atmosphere.L0)
+    block = AdaptiveOpticsSim._backend_array(B, T, n_valid, n_valid)
+    cov = AdaptiveOpticsSim._backend_array(B, T, sampling * sampling, sampling * sampling)
+
     t_cov = 0
     t_accumulate = 0
     t_scatter = 0
 
     for jgs in 1:n_lgs
         for igs in 1:jgs
-            block = AdaptiveOpticsSim._backend_array(B, T, n_valid, n_valid)
             fill!(block, zero(T))
             for layer in eachindex(altitude)
-                iz, dt_iz = _time_phase() do
-                    value = AdaptiveOpticsSim._scaled_shifted_coords(
-                        backend,
-                        @view(guide_x[:, :, igs]),
-                        @view(guide_y[:, :, igs]),
-                        directions,
-                        igs,
-                        altitude,
-                        layer,
-                        source_height,
-                    )
-                    _sync_backend!(value)
-                end
-                jz, dt_jz = _time_phase() do
-                    value = AdaptiveOpticsSim._scaled_shifted_coords(
-                        backend,
-                        @view(guide_x[:, :, jgs]),
-                        @view(guide_y[:, :, jgs]),
-                        directions,
-                        jgs,
-                        altitude,
-                        layer,
-                        source_height,
-                    )
-                    _sync_backend!(value)
-                end
-                t_shift += dt_iz + dt_jz
+                iz = @view shifted[:, :, igs, layer]
+                jz = @view shifted[:, :, jgs, layer]
 
-                cov, dt_cov = _time_phase() do
-                    value = AdaptiveOpticsSim._covariance_matrix(
+                _, dt_cov = _time_phase() do
+                    AdaptiveOpticsSim._covariance_matrix!(
                         backend,
+                        cov,
                         vec(iz),
                         vec(jz),
-                        r0,
-                        atmosphere.L0,
+                        cst,
+                        var_term,
+                        inv_L0,
                         atmosphere.fractional_r0[layer],
                     )
-                    _sync_backend!(value)
+                    _sync_backend!(cov)
                 end
                 t_cov += dt_cov
 
