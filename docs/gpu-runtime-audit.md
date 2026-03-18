@@ -176,6 +176,33 @@ likely also being reintroduced by the surrounding covariance extraction and
 accumulation path. So the next useful optimization is a deeper refactor of
 covariance block handling, not just another launch-wrapper tweak.
 
+To separate sampling distortion from real wall-clock cost, an explicit phase
+timing script was also added:
+
+```bash
+julia --project=. scripts/gpu_profile_model_tomography_phases_cuda.jl
+```
+
+On the same `medium` CUDA case on `spiders`, the phase-timed breakdown showed:
+
+- `auto_correlation`: about `1.70e10 ns`
+- `cross_correlation`: about `2.09e9 ns`
+- `cnz`: about `1.32e9 ns`
+- `recstat`: about `5.04e8 ns`
+- `css_signal`: about `4.87e8 ns`
+- `fit_source_average`: about `3.10e8 ns`
+- `extract_submatrix`: about `2.85e8 ns`
+
+That changes the optimization priority materially:
+
+1. `auto_correlation` is the real dominant CUDA builder phase.
+2. `cross_correlation` and noise-covariance assembly are second-tier costs.
+3. `fit_source_average` and submatrix extraction are no longer the first place
+   to spend optimization effort.
+
+So the next tomography CUDA optimization pass should target the internals of
+`auto_correlation` first, not keep chasing later-stage averaging/gather code.
+
 ## Validated GPU-Resident Surface
 
 The following paths are currently validated on CUDA with
