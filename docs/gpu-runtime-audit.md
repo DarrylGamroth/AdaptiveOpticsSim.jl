@@ -45,12 +45,18 @@ The maintained AMDGPU validation entry points are:
   - broad runtime/device-resident smoke coverage on `ROCArray`
 - `scripts/gpu_builder_amdgpu.jl`
   - reconstructor/calibration builder coverage on `ROCArray`
+- `scripts/gpu_hil_amdgpu.jl`
+  - combined runtime + builder HIL-oriented smoke coverage on `ROCArray`
+- `scripts/gpu_sync_audit_amdgpu.jl`
+  - timing-oriented audit for runtime and builder-heavy AMDGPU paths
 
 On an AMDGPU host, the standard workflow is:
 
 ```bash
 julia --project=. scripts/gpu_smoke_amdgpu.jl
 julia --project=. scripts/gpu_builder_amdgpu.jl
+julia --project=. scripts/gpu_hil_amdgpu.jl
+julia --project=. scripts/gpu_sync_audit_amdgpu.jl
 ```
 
 Current AMDGPU caveat:
@@ -61,6 +67,14 @@ Current AMDGPU caveat:
   or update back to `ROCArray`.
 - So AMDGPU is now runtime-validated and builder-validated for the maintained
   smoke surface, but not yet fully accelerator-native for dense linear algebra.
+
+Current warmed AMDGPU sync-audit snapshot on this host:
+
+- runtime step mean: about `4.87e6 ns`
+- modal build: about `1.18e5 ns`
+- interaction-matrix tomography build: about `1.71e6 ns`
+- model tomography build: about `1.81e8 ns`
+- high-accuracy model tomography build: about `8.34e7 ns`
 
 ## Warmed CPU vs CUDA Snapshot on `spiders`
 
