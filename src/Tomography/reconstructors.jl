@@ -146,6 +146,27 @@ end
     end
 end
 
+@kernel function submatrix_extract_kernel!(out, src, rows, cols, n_rows::Int, n_cols::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n_rows && j <= n_cols
+        @inbounds out[i, j] = src[rows[i], cols[j]]
+    end
+end
+
+@kernel function accumulate_selected_block_kernel!(block, cov, positions, n_valid::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n_valid && j <= n_valid
+        @inbounds block[i, j] += cov[positions[i], positions[j]]
+    end
+end
+
+@kernel function accumulate_selected_block_transpose_kernel!(block, cov, positions, n_valid::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n_valid && j <= n_valid
+        @inbounds block[i, j] += cov[positions[j], positions[i]]
+    end
+end
+
 function _kv56_scalar(z::Complex{T}) where {T<:AbstractFloat}
     gamma_1_6 = T(5.56631600178)
     gamma_11_6 = T(0.94065585824)
@@ -391,7 +412,7 @@ function _covariance_matrix(
     cst = base * (gamma_11_6 / (T(2)^(T(5) / T(6)) * T(π)^(T(8) / T(3)))) * (L0 / r0)^(T(5) / T(3))
     var_term = base * gamma_11_6 * gamma_5_6 / (T(2) * T(π)^(T(8) / T(3))) * (L0 / r0)^(T(5) / T(3))
     style = execution_style(out)
-    launch_kernel!(style, covariance_matrix_kernel!, out, rho1_native, rho2_native, cst, var_term, inv(L0), fractional_r0,
+    launch_kernel_async!(style, covariance_matrix_kernel!, out, rho1_native, rho2_native, cst, var_term, inv(L0), fractional_r0,
         length(rho1), length(rho2);
         ndrange=size(out))
     return out
@@ -558,6 +579,7 @@ function auto_correlation(
     sampling = size(grid_mask, 1)
     size(grid_mask, 2) == sampling || throw(DimensionMismatchError("grid_mask must be square"))
     mask_vec = vec(grid_mask)
+    valid_positions = findall(mask_vec)
     n_valid = count(mask_vec)
     n_gs = asterism.n_lgs
     result = _backend_array(B, T, n_gs * n_valid, n_gs * n_valid)
@@ -569,6 +591,9 @@ function auto_correlation(
     lgs_dir = lgs_directions(asterism)
     directions = direction_vectors(view(lgs_dir, :, 1), view(lgs_dir, :, 2))
     source_height = lgs_height_m(asterism, atmosphere)
+    valid_positions_native = _backend_array(B, Int, length(valid_positions))
+    copyto!(valid_positions_native, valid_positions)
+    style = execution_style(result)
 
     guide_x, guide_y = _guide_star_grids(
         backend,
@@ -612,7 +637,8 @@ function auto_correlation(
                     atmosphere.L0,
                     atmosphere.fractional_r0[layer],
                 )
-                block .+= @view cov[mask_vec, mask_vec]
+                launch_kernel_async!(style, accumulate_selected_block_kernel!, block, cov, valid_positions_native, n_valid;
+                    ndrange=size(block))
             end
             rows = (igs - 1) * n_valid + 1:igs * n_valid
             cols = (jgs - 1) * n_valid + 1:jgs * n_valid
@@ -719,6 +745,7 @@ function cross_correlation(
     mask = isnothing(grid_mask) ? trues(sampling, sampling) : grid_mask
     size(mask, 2) == sampling || throw(DimensionMismatchError("grid_mask must be square"))
     row_mask = vec(mask)
+    row_positions = findall(row_mask)
     n_row = count(row_mask)
     n_fit = tomography.n_fit_src^2
     n_gs = asterism.n_lgs
@@ -732,6 +759,9 @@ function cross_correlation(
     fit_zenith, fit_azimuth = optimization_geometry(tomography)
     fit_directions_xyz = direction_vectors(fit_zenith, fit_azimuth)
     source_height = lgs_height_m(asterism, atmosphere)
+    row_positions_native = _backend_array(B, Int, length(row_positions))
+    copyto!(row_positions_native, row_positions)
+    style = execution_style(result)
     target_x, target_y = _guide_star_grid(backend, sampling, support_d, zero(T), zero(T), zero(T))
     guide_x, guide_y = _guide_star_grids(
         backend,
@@ -774,7 +804,8 @@ function cross_correlation(
                     atmosphere.L0,
                     atmosphere.fractional_r0[layer],
                 )
-                block .+= transpose(@view cov[row_mask, row_mask])
+                launch_kernel_async!(style, accumulate_selected_block_transpose_kernel!, block, cov, row_positions_native, n_row;
+                    ndrange=size(block))
             end
             cols = (gs - 1) * n_row + 1:gs * n_row
             result[fit_idx, :, cols] .= block
@@ -800,9 +831,31 @@ function _fit_source_average(cross::AbstractArray{T,3}, weights::AbstractVector{
     weights_native = similar(cross, T, size(cross, 1))
     copyto!(weights_native, weights)
     style = execution_style(out)
-    launch_kernel!(style, fit_source_average_kernel!, out, cross, weights_native, size(cross, 1), size(cross, 2), size(cross, 3);
+    launch_kernel_async!(style, fit_source_average_kernel!, out, cross, weights_native, size(cross, 1), size(cross, 2), size(cross, 3);
         ndrange=size(out))
     return out
+end
+
+function _extract_submatrix(src::AbstractMatrix{T}, rows::AbstractVector{Int}, cols::AbstractVector{Int}) where {T}
+    return src[rows, cols]
+end
+
+function _extract_submatrix(src::AbstractMatrix{T}, rows::AbstractVector{Int}, cols::AbstractVector{Int}, ::ScalarCPUStyle) where {T}
+    return src[rows, cols]
+end
+
+function _extract_submatrix(src::AbstractMatrix{T}, rows::AbstractVector{Int}, cols::AbstractVector{Int}, style::AcceleratorStyle) where {T}
+    out = similar(src, T, length(rows), length(cols))
+    rows_native = similar(src, Int, length(rows))
+    cols_native = similar(src, Int, length(cols))
+    copyto!(rows_native, rows)
+    copyto!(cols_native, cols)
+    launch_kernel_async!(style, submatrix_extract_kernel!, out, src, rows_native, cols_native, length(rows), length(cols); ndrange=size(out))
+    return out
+end
+
+function _extract_submatrix(src::AbstractMatrix{T}, rows::AbstractVector{Int}, cols::AbstractVector{Int}, backend::BuildBackend) where {T}
+    return _extract_submatrix(src, rows, cols, execution_style(src))
 end
 
 function stable_hermitian_right_division(rhs::AbstractMatrix{T}, css::AbstractMatrix{T}) where {T<:AbstractFloat}
@@ -1175,7 +1228,7 @@ function build_reconstructor(
     cox_full = _fit_source_average(cross, _equal_fit_source_weights(tomography))
     row_positions = findall(vec(grid_mask))
     col_positions = findall(repeat(vec(grid_mask), asterism.n_lgs))
-    cox = cox_full[row_positions, col_positions]
+    cox = _extract_submatrix(cox_full, row_positions, col_positions, build_backend)
     gamma_native = materialize_build(build_backend, gamma, gamma)
     cxx_native = materialize_build(build_backend, gamma_native, cxx)
     cox_native = materialize_build(build_backend, gamma_native, cox)

@@ -62,8 +62,13 @@ set_fft_provider_threads!(n::Integer) = FFTW.set_num_threads(n)
 @inline synchronize_backend!(::ScalarCPUStyle) = nothing
 @inline synchronize_backend!(style::AcceleratorStyle) = KernelAbstractions.synchronize(style.backend)
 
-@inline function launch_kernel!(style::AcceleratorStyle, kernel, args...; ndrange)
+@inline function launch_kernel_async!(style::AcceleratorStyle, kernel, args...; ndrange)
     kernel(style.backend)(args...; ndrange=ndrange)
+    return nothing
+end
+
+@inline function launch_kernel!(style::AcceleratorStyle, kernel, args...; ndrange)
+    launch_kernel_async!(style, kernel, args...; ndrange=ndrange)
     synchronize_backend!(style)
     return nothing
 end
