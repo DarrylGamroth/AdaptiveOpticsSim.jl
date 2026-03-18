@@ -182,6 +182,35 @@ end
     end
 end
 
+@kernel function selected_covariance_block_kernel!(
+    block,
+    shifted,
+    positions,
+    fractional_r0,
+    igs::Int,
+    jgs::Int,
+    cst,
+    var_term,
+    inv_L0,
+    n_valid::Int,
+    n_layers::Int,
+)
+    i, j = @index(Global, NTuple)
+    if i <= n_valid && j <= n_valid
+        acc = zero(eltype(block))
+        @inbounds for layer in 1:n_layers
+            rho = abs(shifted[positions[i], igs, layer] - shifted[positions[j], jgs, layer])
+            if iszero(rho)
+                acc += var_term * fractional_r0[layer]
+            else
+                u = (2 * π) * rho * inv_L0
+                acc += cst * u^(5 / 6) * real(_kv56_scalar(u)) * fractional_r0[layer]
+            end
+        end
+        @inbounds block[i, j] = acc
+    end
+end
+
 @kernel function scaled_shifted_coord_stack_kernel!(out, x, y, directions, altitude, src_height, n_src::Int, n_layers::Int)
     i, j, src, layer = @index(Global, NTuple)
     if i <= size(x, 1) && j <= size(x, 2) && src <= n_src && layer <= n_layers
@@ -760,29 +789,28 @@ function auto_correlation(
         offsets_y,
     )
     shifted = _scaled_shifted_coord_stack(backend, guide_x, guide_y, directions, altitude, source_height)
+    shifted_flat = reshape(shifted, :, n_gs, length(altitude))
     cst, var_term, inv_L0 = _covariance_constants(r0, atmosphere.L0)
-    n_cov = sampling * sampling
     block = _backend_array(B, T, n_valid, n_valid)
-    cov = _backend_array(B, T, n_cov, n_cov)
+    fractional_r0_native = materialize_build(backend, atmosphere.fractional_r0)
     for jgs in 1:n_gs
         for igs in 1:jgs
-            fill!(block, zero(T))
-            for layer in eachindex(altitude)
-                iz = @view shifted[:, :, igs, layer]
-                jz = @view shifted[:, :, jgs, layer]
-                _covariance_matrix!(
-                    backend,
-                    cov,
-                    vec(iz),
-                    vec(jz),
-                    cst,
-                    var_term,
-                    inv_L0,
-                    atmosphere.fractional_r0[layer],
-                )
-                launch_kernel_async!(style, accumulate_selected_block_kernel!, block, cov, valid_positions_native, n_valid;
-                    ndrange=size(block))
-            end
+            launch_kernel_async!(
+                style,
+                selected_covariance_block_kernel!,
+                block,
+                shifted_flat,
+                valid_positions_native,
+                fractional_r0_native,
+                igs,
+                jgs,
+                cst,
+                var_term,
+                inv_L0,
+                n_valid,
+                length(altitude);
+                ndrange=size(block),
+            )
             rows = (igs - 1) * n_valid + 1:igs * n_valid
             cols = (jgs - 1) * n_valid + 1:jgs * n_valid
             result[rows, cols] .= block

@@ -287,6 +287,31 @@ So this reuse-oriented pass is worth keeping. It is the first tomography CUDA
 optimization in this phase that clearly reduced the warmed builder wall time by
 more than noise.
 
+The next kept pass replaced the GPU `auto_correlation` inner loop's
+`covariance_matrix!` plus selected-block accumulation sequence with a direct
+selected-block kernel that accumulates the valid submatrix across all layers in
+one launch per guide-star pair.
+
+On `spiders`, the older phase profiler became less representative of the new
+implementation because it still reports the legacy helper-stage labels, and the
+sampled phase totals were noisier:
+
+- dedicated `auto_correlation` timed phase: about `6.09e9 ns` to about
+  `6.54e9 ns`
+- full model-tomography phase profile:
+  - `auto_correlation`: about `1.54e10 ns` to about `1.70e10 ns`
+  - `cross_correlation`: about `2.31e9 ns` to about `3.18e9 ns`
+
+But the warmed end-to-end builder improved again while the CUDA builder
+fidelity checks stayed green:
+
+- `model_tomography_build_ns`: about `8.67e7 ns` to about `8.26e7 ns`
+- `model_tomography_high_accuracy_build_ns`: stayed near `9.13e7 ns`
+
+So this direct selected-block path is also worth keeping. For this builder, the
+warmed end-to-end audit is now a more trustworthy decision metric than the
+older helper-phase profiler.
+
 ## Validated GPU-Resident Surface
 
 The following paths are currently validated on CUDA with
