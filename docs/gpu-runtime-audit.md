@@ -203,6 +203,29 @@ That changes the optimization priority materially:
 So the next tomography CUDA optimization pass should target the internals of
 `auto_correlation` first, not keep chasing later-stage averaging/gather code.
 
+To make that target concrete, an additional sub-phase script was added:
+
+```bash
+julia --project=. scripts/gpu_profile_auto_correlation_cuda.jl
+```
+
+On the `medium` CUDA case on `spiders`, the auto-correlation breakdown showed
+roughly:
+
+- guide-grid generation: `1.31e9 ns`
+- shifted-coordinate generation: `2.44e9 ns`
+- covariance assembly: `1.72e9 ns`
+- selected-block accumulation: `2.89e8 ns`
+- block scatter into the final matrix: `5.88e8 ns`
+
+That makes the remaining priority inside `auto_correlation` clearer:
+
+1. coordinate generation and covariance assembly dominate,
+2. accumulation/scatter are secondary costs,
+3. builder-side caching helps code structure, but did not materially change the
+   end-to-end `model_tomography_build_ns` in the compact warmed sync audit,
+   which remains about `8.95e7 ns` on `spiders`.
+
 ## Validated GPU-Resident Surface
 
 The following paths are currently validated on CUDA with

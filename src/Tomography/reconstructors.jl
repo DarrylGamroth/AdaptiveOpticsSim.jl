@@ -167,6 +167,17 @@ end
     end
 end
 
+@kernel function scaled_shifted_coord_stack_kernel!(out, x, y, directions, altitude, src_height, n_src::Int, n_layers::Int)
+    i, j, src, layer = @index(Global, NTuple)
+    if i <= size(x, 1) && j <= size(x, 2) && src <= n_src && layer <= n_layers
+        alt = @inbounds altitude[layer]
+        beta_x = @inbounds directions[1, src] * alt
+        beta_y = @inbounds directions[2, src] * alt
+        scale = isfinite(src_height) ? one(eltype(altitude)) - alt / src_height : one(eltype(altitude))
+        @inbounds out[i, j, src, layer] = complex(x[i, j, src] * scale + beta_x, y[i, j, src] * scale + beta_y)
+    end
+end
+
 function _kv56_scalar(z::Complex{T}) where {T<:AbstractFloat}
     gamma_1_6 = T(5.56631600178)
     gamma_11_6 = T(0.94065585824)
@@ -348,6 +359,25 @@ function _scaled_shifted_coords(
     scale = isfinite(src_height) ? one(T) - altitude[layer_index] / src_height : one(T)
     out = similar(x, Complex{T})
     @. out = complex(x * scale + beta_x, y * scale + beta_y)
+    return out
+end
+
+function _scaled_shifted_coord_stack(
+    backend::GPUArrayBuildBackend{B},
+    x::AbstractArray{T,3},
+    y::AbstractArray{T,3},
+    direction_vectors::AbstractMatrix{T},
+    altitude::AbstractVector{T},
+    src_height::T,
+) where {B,T<:AbstractFloat}
+    n_src = size(x, 3)
+    n_layers = length(altitude)
+    out = _backend_array(B, Complex{T}, size(x, 1), size(x, 2), n_src, n_layers)
+    directions_native = materialize_build(backend, direction_vectors)
+    altitude_native = materialize_build(backend, altitude)
+    style = execution_style(out)
+    launch_kernel!(style, scaled_shifted_coord_stack_kernel!, out, x, y, directions_native, altitude_native, src_height, n_src, n_layers;
+        ndrange=size(out))
     return out
 end
 
@@ -603,32 +633,15 @@ function auto_correlation(
         view(wfs.lenslet_offset, 1, :),
         view(wfs.lenslet_offset, 2, :),
     )
+    shifted = _scaled_shifted_coord_stack(backend, guide_x, guide_y, directions, altitude, source_height)
 
     for jgs in 1:n_gs
         for igs in 1:jgs
             block = _backend_array(B, T, n_valid, n_valid)
             fill!(block, zero(T))
             for layer in eachindex(altitude)
-                iz = _scaled_shifted_coords(
-                    backend,
-                    @view(guide_x[:, :, igs]),
-                    @view(guide_y[:, :, igs]),
-                    directions,
-                    igs,
-                    altitude,
-                    layer,
-                    source_height,
-                )
-                jz = _scaled_shifted_coords(
-                    backend,
-                    @view(guide_x[:, :, jgs]),
-                    @view(guide_y[:, :, jgs]),
-                    directions,
-                    jgs,
-                    altitude,
-                    layer,
-                    source_height,
-                )
+                iz = @view shifted[:, :, igs, layer]
+                jz = @view shifted[:, :, jgs, layer]
                 cov = _covariance_matrix(
                     backend,
                     vec(iz),
