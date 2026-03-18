@@ -169,6 +169,13 @@ So the next optimization target is now clear:
    block
 3. then evaluate whether covariance blocks should be batched or fused further
 
+A first experiment with an internal non-synchronizing launch helper did not
+materially change the medium-case timings. That indicates the effective
+synchronization cost is not isolated to the explicit launch helper alone; it is
+likely also being reintroduced by the surrounding covariance extraction and
+accumulation path. So the next useful optimization is a deeper refactor of
+covariance block handling, not just another launch-wrapper tweak.
+
 ## Validated GPU-Resident Surface
 
 The following paths are currently validated on CUDA with
