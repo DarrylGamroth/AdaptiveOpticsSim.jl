@@ -115,11 +115,9 @@ Remaining narrower defaults or simplifications:
   HHt/PSD option exists and is more physical
   (`src/Calibration/modal_basis.jl`, `src/Optics/ncpa.jl`).
 
-These are not current parity blockers. They should be revisited only if:
-
-- validation shows the present defaults are not numerically or physically
-  adequate for the target workflow, or
-- a science/HIL use case specifically benefits from the more physical option.
+These are not current deterministic-parity blockers, but they are required
+follow-up items for scientific/default-model completeness. They should be
+treated as part of the model-fidelity roadmap, not as merely optional cleanup.
 
 ## Feature Parity and Numerical Fidelity Gate
 - [x] The committed OOPAO reference bundle now matches
@@ -192,6 +190,11 @@ These are not current parity blockers. They should be revisited only if:
 - HCIPy / POPPY / PROPER (Python): maps to diffractive WFS propagation, PSF/coronagraph modeling.
 
 ## Suggested Near-Term Priorities
+- [ ] Improve the remaining scientifically narrower defaults, especially
+  `ft_sh_phase_screen` and the default NCPA KL basis choice.
+- [ ] Define explicit execution/fidelity profiles so the package can support a
+  scientifically stronger default profile and a faster HIL-oriented profile
+  without conflating the two.
 - [ ] Audit remaining calibration/output conventions against OOPAO telemetry exports.
 - [ ] Decide whether the long-horizon atmosphere-driven Pyramid/GSC replay stays
   purely diagnostic or receives more robustness work.
@@ -214,25 +217,29 @@ The earlier numerical-stability backlog has largely been addressed:
 
 The current focus is now:
 
-1. HIL/RTC-facing execution quality
+1. scientific/default-model completeness
 2. calibration/output convention audits against OOPAO where still needed
-3. multi-WFS / multi-DM support
-4. specialized HIL-relevant sensors such as `ZernikeWFS`
-5. targeted GPU builder/runtime performance work where profiling justifies it
+3. explicit fidelity/execution profiles for accuracy vs throughput
+4. HIL/RTC-facing execution quality
+5. multi-WFS / multi-DM support
+6. specialized HIL-relevant sensors such as `ZernikeWFS`
+7. targeted GPU builder/runtime performance work where profiling justifies it
 
 ## Next Tasks
-1. Audit remaining calibration/output conventions against OOPAO telemetry exports.
-2. Decide whether the long-horizon Pyramid/GSC replay remains purely diagnostic.
-3. Add multi-WFS / multi-DM aggregation for MOAO, MCAO, and woofer/tweeter RTC scenarios.
-4. Implement `ZernikeWFS` Phase 1 from [`docs/zernike-wfs-plan.md`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/zernike-wfs-plan.md).
-5. Implement `CurvatureSensor` if the RTC/HIL use case requires it after `ZernikeWFS`.
-6. Continue extending GPU-native builder coverage where HIL workflows demand it.
-7. Profile and optimize tomography builder hotspots only where crossover data shows the GPU path is worthwhile.
-8. Decide whether future tomography expansion stays in core or moves behind an extension/package split later.
-9. Revisit `ft_sh_phase_screen` if tilt/statistics validation shows the current
-   3x3 sub-harmonic model is insufficient for the target atmosphere workflows.
-10. Revisit the default NCPA KL basis if a science workflow benefits from
-    making HHt/PSD the default instead of DM-mode covariance.
+1. Revisit `ft_sh_phase_screen` and decide whether the current 3x3
+   sub-harmonic model should be replaced or augmented for the scientific
+   default atmosphere path.
+2. Revisit the default NCPA KL basis and decide whether HHt/PSD should become
+   the scientific default instead of DM-mode covariance.
+3. Audit remaining calibration/output conventions against OOPAO telemetry exports.
+4. Define explicit fidelity/execution profiles so the package can expose a
+   scientifically stronger default path and a faster HIL-oriented path.
+5. Decide whether the long-horizon Pyramid/GSC replay remains purely diagnostic.
+6. Add multi-WFS / multi-DM aggregation for MOAO, MCAO, and woofer/tweeter RTC scenarios.
+7. Implement `ZernikeWFS` Phase 1 from [`docs/zernike-wfs-plan.md`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/zernike-wfs-plan.md).
+8. Implement `CurvatureSensor` if the RTC/HIL use case requires it after `ZernikeWFS`.
+9. Continue extending GPU-native builder coverage where HIL workflows demand it.
+10. Profile and optimize tomography builder hotspots only where crossover data shows the GPU path is worthwhile.
 
 ## HIL-Oriented Near-Term Work
 - [x] Add explicit builder-backend selection for modal/calibration reconstructor generation.
