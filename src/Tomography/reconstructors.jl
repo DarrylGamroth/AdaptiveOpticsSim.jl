@@ -345,7 +345,7 @@ function _guide_star_grid(
     xr = _backend_array(B, T, sampling, sampling)
     yr = _backend_array(B, T, sampling, sampling)
     style = execution_style(xr)
-    launch_kernel!(style, guide_grid_kernel!, xr, yr, coords, s, c, offset_x, offset_y, diameter, sampling; ndrange=(sampling, sampling))
+    launch_kernel_async!(style, guide_grid_kernel!, xr, yr, coords, s, c, offset_x, offset_y, diameter, sampling; ndrange=(sampling, sampling))
     return xr, yr
 end
 
@@ -368,7 +368,7 @@ function _guide_star_grids(
     xr = _backend_array(B, T, sampling, sampling, n_gs)
     yr = _backend_array(B, T, sampling, sampling, n_gs)
     style = execution_style(xr)
-    launch_kernel!(style, guide_grid_stack_kernel!, xr, yr, coords, rotations_native, offsets_x_native, offsets_y_native,
+    launch_kernel_async!(style, guide_grid_stack_kernel!, xr, yr, coords, rotations_native, offsets_x_native, offsets_y_native,
         diameter, sampling, n_gs; ndrange=(sampling, sampling, n_gs))
     return xr, yr
 end
@@ -420,7 +420,7 @@ function _scaled_shifted_coord_stack(
     directions_native = materialize_build(backend, direction_vectors)
     altitude_native = materialize_build(backend, altitude)
     style = execution_style(out)
-    launch_kernel!(style, scaled_shifted_coord_stack_kernel!, out, x, y, directions_native, altitude_native, src_height, n_src, n_layers;
+    launch_kernel_async!(style, scaled_shifted_coord_stack_kernel!, out, x, y, directions_native, altitude_native, src_height, n_src, n_layers;
         ndrange=size(out))
     return out
 end
@@ -1072,7 +1072,7 @@ end
 function _build_diagonal_noise(backend::GPUArrayBuildBackend{B}, variances::AbstractVector{T}) where {B,T<:AbstractFloat}
     out = _backend_array(B, T, length(variances), length(variances))
     style = execution_style(out)
-    launch_kernel!(style, diagonal_matrix_kernel!, out, variances, length(variances); ndrange=size(out))
+    launch_kernel_async!(style, diagonal_matrix_kernel!, out, variances, length(variances); ndrange=size(out))
     return out
 end
 
