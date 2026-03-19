@@ -59,6 +59,13 @@ plan_fft_backend!(buffer) = plan_fft!(buffer)
 plan_ifft_backend!(buffer) = plan_ifft!(buffer)
 set_fft_provider_threads!(n::Integer) = FFTW.set_num_threads(n)
 execute_fft_plan!(buffer, plan) = (mul!(buffer, plan, buffer); buffer)
+backend_matmul(A::AbstractMatrix, B::AbstractMatrix) = A * B
+backend_matmul_transpose_right(A::AbstractMatrix, B::AbstractMatrix) = A * transpose(B)
+
+function backend_symmetric_product(A::AbstractMatrix, B::AbstractMatrix)
+    tmp = backend_matmul(A, B)
+    return backend_matmul_transpose_right(tmp, A)
+end
 
 @inline synchronize_backend!(::ScalarCPUStyle) = nothing
 @inline synchronize_backend!(style::AcceleratorStyle) = KernelAbstractions.synchronize(style.backend)

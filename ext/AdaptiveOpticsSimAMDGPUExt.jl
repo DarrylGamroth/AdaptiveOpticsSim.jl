@@ -18,6 +18,10 @@ AdaptiveOpticsSim.execute_fft_plan!(buffer::AMDGPU.ROCArray, plan::AMDGPU.rocFFT
 AdaptiveOpticsSim.execute_fft_plan!(buffer::AMDGPU.ROCArray, plan::AbstractFFTs.ScaledPlan) = (plan * buffer; buffer)
 AdaptiveOpticsSim.default_build_backend(::AMDGPU.ROCArray) = AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.AMDGPUBackendTag)
 AdaptiveOpticsSim.prepare_build_matrix(::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag}, A::AbstractMatrix) = Matrix(A)
+AdaptiveOpticsSim.backend_matmul(A::AMDGPU.ROCArray{T,2}, B::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat} =
+    AMDGPU.rocBLAS.gemm('N', 'N', A, B)
+AdaptiveOpticsSim.backend_matmul_transpose_right(A::AMDGPU.ROCArray{T,2}, B::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat} =
+    AMDGPU.rocBLAS.gemm('N', 'T', A, B)
 
 function _amdgpu_dense_copy(A::AbstractMatrix{T}) where {T<:AbstractFloat}
     out = AMDGPU.ROCArray{T}(undef, size(A)...)
@@ -74,7 +78,9 @@ function _amdgpu_pseudoinverse(backend::AdaptiveOpticsSim.GPUArrayBuildBackend{A
     U_scaled = similar(U)
     copyto!(U_scaled, U)
     U_scaled .*= reshape(inv_s, 1, :)
-    M = adjoint(Vt) * adjoint(U_scaled)
+    V = permutedims(Vt, (2, 1))
+    Ut = permutedims(U_scaled, (2, 1))
+    M = AMDGPU.rocBLAS.gemm('N', 'N', V, Ut)
     return M
 end
 

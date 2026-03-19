@@ -3,6 +3,22 @@
 This document tracks the state of the device-resident execution path after the
 runtime sprint and the current CUDA/AMDGPU validation workflows.
 
+The timing-oriented scripts in this document use warmed `time_ns()`-based
+measurement for operational HIL checks. They are intentionally separate from the
+`BenchmarkTools` benchmark entry points under `benchmarks/`, which exist for
+canonical CPU/CUDA/AMDGPU benchmarking with tighter statistics.
+
+The maintained benchmark entry points are:
+
+```bash
+julia --project=benchmarks benchmarks/benchmark_cpu.jl
+julia --project=benchmarks benchmarks/benchmark_cuda.jl
+julia --project=benchmarks benchmarks/benchmark_amdgpu.jl
+```
+
+The GPU benchmark entry points fail fast with a clear message if the requested
+backend is not functional on the current host.
+
 ## Standard CUDA Validation Workflow
 
 The maintained CUDA validation entry points are:
@@ -95,11 +111,48 @@ Focused `LinearAlgebra` audit result for AMDGPU:
 
 Current warmed AMDGPU sync-audit snapshot on this host:
 
-- runtime step mean: about `1.46e6 ns`
+- runtime step mean: about `1.48e6 ns`
 - modal build: about `1.88e6 ns`
-- interaction-matrix tomography build: about `2.06e6 ns`
-- model tomography build: about `6.58e7 ns`
-- high-accuracy model tomography build: about `7.27e7 ns`
+- interaction-matrix tomography build: about `1.54e6 ns`
+- model tomography build: about `6.36e7 ns`
+- high-accuracy model tomography build: about `7.24e7 ns`
+
+## Canonical BenchmarkTools Snapshot
+
+Current `BenchmarkTools` snapshots on this host are:
+
+- CPU
+  - `runtime_step`
+    - median: about `1.11e4 ns`
+    - mean: about `1.17e4 ns`
+    - memory: `32 bytes`
+    - allocs: `1`
+  - `model_tomography_build`
+    - median: about `1.08e10 ns`
+    - mean: about `1.08e10 ns`
+    - memory: about `7.87e8 bytes`
+    - allocs: `600`
+  - `model_tomography_high_accuracy_build`
+    - median: about `1.32e10 ns`
+    - mean: about `1.32e10 ns`
+    - memory: about `1.57e9 bytes`
+    - allocs: `620`
+- AMDGPU
+  - `runtime_step`
+    - median: about `1.56e6 ns`
+    - mean: about `1.61e6 ns`
+    - memory: about `3.67e5 bytes`
+    - allocs: `8511`
+  - `interaction_tomography_build`
+    - median: about `3.58e6 ns`
+    - mean: about `3.69e6 ns`
+    - memory: about `3.56e5 bytes`
+    - allocs: `9321`
+
+The current `BenchmarkTools` AMD suite intentionally benchmarks the maintained
+interaction-matrix tomography builder surface rather than the heavier
+model-based tomography builder, because the detailed model-based tomography
+profiling is already covered by the dedicated AMD profiling scripts above.
 
 ## Initial Crossover Sweep on AMDGPU
 

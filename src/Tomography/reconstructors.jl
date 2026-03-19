@@ -1173,10 +1173,11 @@ function build_reconstructor(
     cox = _fit_source_average(cross, _equal_fit_source_weights(tomography))
     cxx_native = materialize_build(build_backend, interaction_native, cxx)
     cox_native = materialize_build(build_backend, interaction_native, cox)
-    css_signal = interaction_native * cxx_native * transpose(interaction_native)
+    css_signal = backend_symmetric_product(interaction_native, cxx_native)
     cnz = tomography_noise_covariance(build_backend, noise_model, diag(css_signal))
     css = css_signal .+ cnz
-    recstat = stable_hermitian_right_division(build_backend, cox_native * transpose(interaction_native), css)
+    recstat = stable_hermitian_right_division(build_backend,
+        backend_matmul_transpose_right(cox_native, interaction_native), css)
     native_mask = materialize_build(build_backend, interaction_native, grid_mask)
     operators = TomographyOperators(
         nothing,
@@ -1403,7 +1404,8 @@ function build_reconstructor(
     build_backend::BuildBackend=NativeBuildBackend(),
 ) where {T<:AbstractFloat}
     gamma_single, grid_mask = sparse_gradient_matrix(valid_lenslet_support(wfs); over_sampling=2)
-    gamma = blockdiag(ntuple(_ -> gamma_single, asterism.n_lgs)...)
+    gamma_t = SparseMatrixCSC{T, Int}(gamma_single)
+    gamma = blockdiag(ntuple(_ -> gamma_t, asterism.n_lgs)...)
     cxx = auto_correlation(build_backend, atmosphere, asterism, wfs, grid_mask)
     cross = cross_correlation(build_backend, atmosphere, asterism, wfs, tomography)
     cox_full = _fit_source_average(cross, _equal_fit_source_weights(tomography))
@@ -1414,10 +1416,11 @@ function build_reconstructor(
     cxx_native = materialize_build(build_backend, gamma_native, cxx)
     cox_native = materialize_build(build_backend, gamma_native, cox)
     native_mask = materialize_build(build_backend, gamma_native, grid_mask)
-    css_signal = gamma_native * cxx_native * transpose(gamma_native)
+    css_signal = backend_symmetric_product(gamma_native, cxx_native)
     cnz = tomography_noise_covariance(build_backend, noise_model, diag(css_signal))
     css = css_signal .+ cnz
-    recstat = stable_hermitian_right_division(build_backend, cox_native * transpose(gamma_native), css)
+    recstat = stable_hermitian_right_division(build_backend,
+        backend_matmul_transpose_right(cox_native, gamma_native), css)
     d = support_diameter(wfs) / size(valid_lenslet_support(wfs), 1)
     wavefront_to_meter = asterism.wavelength / d / 2
     recon = d * wavefront_to_meter .* recstat

@@ -206,7 +206,20 @@ Metrics:
 
 Tools:
 - `BenchmarkTools.jl` for CPU.
-- `CUDA.@benchmark` for GPU kernels.
+- `BenchmarkTools.jl` with explicit backend synchronization for canonical GPU
+  workflows, rather than relying on asynchronous kernel submission timings.
+
+Current practice:
+- use the `scripts/gpu_*audit*.jl` and crossover scripts for operational warmed
+  HIL timing checks,
+- use the benchmark entry points under `benchmarks/` for canonical
+  `BenchmarkTools` runs on CPU, CUDA, and AMDGPU:
+
+```bash
+julia --project=benchmarks benchmarks/benchmark_cpu.jl
+julia --project=benchmarks benchmarks/benchmark_cuda.jl
+julia --project=benchmarks benchmarks/benchmark_amdgpu.jl
+```
 
 ## Tabular outputs (Tables.jl)
 Tables.jl is useful for exporting per-iteration metrics without coupling the
