@@ -218,6 +218,9 @@ Current status of that backlog:
   Interaction-matrix tomography reconstruction, model-based tomography
   reconstructor outputs, and tomography command assembly now preserve the
   selected build backend instead of forcing host `Matrix`/`Vector` outputs.
+- [ ] Add specialized HIL-relevant sensors on demand, starting with a
+  `ZernikeWFS`/ZWFS implementation and then `CurvatureSensor` if required.
+  See [`docs/zernike-wfs-plan.md`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/zernike-wfs-plan.md).
   Tomography covariance fill, fit-source averaging, and noise-covariance
   assembly now also dispatch through the selected build backend, including
   accelerator kernels for the matrix-fill stages. The remaining gap is that
