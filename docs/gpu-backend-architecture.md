@@ -30,9 +30,8 @@ Today the core already does most of the right things:
 - compute kernels use `KernelAbstractions`
 - FFT usage goes through `AbstractFFTs`
 
-In practice, only CUDA is currently validated end to end. The package now has
-GPU extension scaffolding for CUDA, Metal, and AMDGPU, but only CUDA should be
-described as validated today.
+In practice, CUDA and AMDGPU are validated on the maintained runtime, builder,
+HIL, and audit surfaces. Metal remains scaffolded but unvalidated.
 
 ## Recommended Package Split
 
@@ -92,10 +91,21 @@ AdaptiveOpticsSim.jl/
     gpu_smoke_cuda.jl
     gpu_builder_contract.jl
     gpu_builder_cuda.jl
+    gpu_builder_amdgpu.jl
     gpu_hil_contract.jl
     gpu_hil_cuda.jl
+    gpu_hil_amdgpu.jl
     gpu_sync_audit_contract.jl
     gpu_sync_audit_cuda.jl
+    gpu_sync_audit_amdgpu.jl
+    gpu_crossover_cuda.jl
+    gpu_crossover_amdgpu.jl
+    gpu_profile_model_tomography_contract.jl
+    gpu_profile_model_tomography_cuda.jl
+    gpu_profile_model_tomography_amdgpu.jl
+    gpu_profile_model_tomography_phases_contract.jl
+    gpu_profile_model_tomography_phases_cuda.jl
+    gpu_profile_model_tomography_phases_amdgpu.jl
     gpu_smoke_metal.jl
     gpu_smoke_amdgpu.jl
   test/
@@ -188,13 +198,8 @@ Responsibilities:
 
 Status:
 
-- runtime-validated and builder-validated on the maintained smoke surface
-- FFT-backed runtime paths are native
-- modal/calibration inverse operators use native rocSOLVER SVD
-- LiFT normal-equation solves use native rocSOLVER Cholesky with a concrete
-  ROC RHS buffer
-- remaining fallback is now limited to rarer generic host `LinearAlgebra`
-  paths outside the maintained smoke surface
+- plausible target
+- not validated yet
 
 ### `AdaptiveOpticsSimAMDGPUExt`
 
@@ -204,6 +209,7 @@ Responsibilities:
 - AMD-specific smoke entry point
 - ROCm FFT/provider hooks if required
 - explicit CI and driver assumptions
+- AMD-specific profiling and crossover entry points
 
 Status:
 
@@ -215,6 +221,8 @@ Status:
 - LiFT normal-equation solves use native rocSOLVER Cholesky with a concrete
   ROC RHS buffer
 - LiFT fallback uses native rocSOLVER SVD
+- maintained crossover and tomography profiling entry points now exist for
+  AMDGPU too
 
 ### OpenCL
 

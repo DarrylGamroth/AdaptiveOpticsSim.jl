@@ -237,6 +237,11 @@ Current status of that backlog:
 - [x] Add HIL-oriented AMDGPU smoke and sync-audit entry points.
   `scripts/gpu_hil_amdgpu.jl` and `scripts/gpu_sync_audit_amdgpu.jl` now pass
   on AMD hardware for the maintained smoke and timing surface.
+- [x] Add maintained AMDGPU crossover and tomography profiling entry points.
+  `scripts/gpu_crossover_amdgpu.jl`,
+  `scripts/gpu_profile_model_tomography_amdgpu.jl`, and
+  `scripts/gpu_profile_model_tomography_phases_amdgpu.jl` now provide warmed
+  CPU/GPU crossover data and tomography hotspot profiling on AMD hardware.
 - [x] Add HIL-oriented CUDA smoke and sync-audit entry points.
   `scripts/gpu_hil_cuda.jl` runs the combined runtime + builder smoke surface,
   and `scripts/gpu_sync_audit_cuda.jl` reports the RTC-facing runtime/build

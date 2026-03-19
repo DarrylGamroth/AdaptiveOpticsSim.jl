@@ -19,6 +19,12 @@ AdaptiveOpticsSim.execute_fft_plan!(buffer::AMDGPU.ROCArray, plan::AbstractFFTs.
 AdaptiveOpticsSim.default_build_backend(::AMDGPU.ROCArray) = AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.AMDGPUBackendTag)
 AdaptiveOpticsSim.prepare_build_matrix(::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag}, A::AbstractMatrix) = Matrix(A)
 
+function _amdgpu_dense_copy(A::AbstractMatrix{T}) where {T<:AbstractFloat}
+    out = AMDGPU.ROCArray{T}(undef, size(A)...)
+    copyto!(out, A)
+    return out
+end
+
 function _amdgpu_svd(A::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat}
     F = copy(A)
     U, S, Vt = AMDGPU.rocSOLVER.gesvd!('S', 'S', F)
@@ -31,6 +37,34 @@ function _amdgpu_lu_solve!(A::AMDGPU.ROCArray{T,2}, B::AMDGPU.ROCArray{T,2}) whe
     AMDGPU.rocSOLVER.getrf!(A, ipiv)
     AMDGPU.rocSOLVER.getrs!('N', A, ipiv, B)
     return B
+end
+
+function _amdgpu_cholesky_rhs(rhs::AMDGPU.ROCArray{T,1}) where {T<:AbstractFloat}
+    rhs_mat = AMDGPU.ROCArray{T}(undef, length(rhs), 1)
+    copyto!(vec(rhs_mat), rhs)
+    return rhs_mat
+end
+
+_amdgpu_cholesky_rhs(rhs::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat} = rhs
+
+function _amdgpu_finalize_rhs!(dest::AMDGPU.ROCArray{T,1}, rhs_mat::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat}
+    copyto!(dest, vec(rhs_mat))
+    return dest
+end
+
+_amdgpu_finalize_rhs!(::AMDGPU.ROCArray{T,2}, rhs_mat::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat} = rhs_mat
+
+function _amdgpu_cholesky_solve!(
+    A::AMDGPU.ROCArray{T,2},
+    rhs::AMDGPU.ROCArray{T,N};
+    check::Bool=false,
+) where {T<:AbstractFloat,N}
+    rhs_mat = _amdgpu_cholesky_rhs(rhs)
+    chol = cholesky!(Hermitian(A), check=check)
+    if issuccess(chol)
+        ldiv!(chol, rhs_mat)
+    end
+    return _amdgpu_finalize_rhs!(rhs, rhs_mat), chol
 end
 
 function _amdgpu_pseudoinverse(backend::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag},
@@ -98,9 +132,8 @@ function AdaptiveOpticsSim.stable_hermitian_right_division(
 ) where {T<:AbstractFloat}
     css_mat = copy(css)
     rhs_t = permutedims(rhs, (2, 1))
-    fact = cholesky!(Hermitian(css_mat), check=false)
+    _, fact = _amdgpu_cholesky_solve!(css_mat, rhs_t; check=false)
     if issuccess(fact)
-        ldiv!(fact, rhs_t)
         return permutedims(rhs_t, (2, 1))
     end
     css_lu = copy(css)
@@ -111,8 +144,7 @@ end
 function AdaptiveOpticsSim.solve_lift_fallback!(diag::AdaptiveOpticsSim.LiFTDiagnostics{T},
     rhs::AMDGPU.ROCArray{T,1}, H::AbstractMatrix{T}, residual::AbstractVector{T},
     damping::AdaptiveOpticsSim.LiFTDampingMode) where {T<:AbstractFloat}
-    H_mat = AMDGPU.ROCArray{T}(undef, size(H)...)
-    copyto!(H_mat, H)
+    H_mat = _amdgpu_dense_copy(H)
     U, S, Vt, _ = _amdgpu_svd(H_mat)
     λ = damping isa AdaptiveOpticsSim.LiFTLevenbergMarquardt ?
         AdaptiveOpticsSim.damping_lambda(damping, adjoint(H_mat) * H_mat) : zero(T)
@@ -126,28 +158,23 @@ end
 function AdaptiveOpticsSim.solve_normal_system!(diag::AdaptiveOpticsSim.LiFTDiagnostics{T}, rhs::AMDGPU.ROCArray{T,1},
     factor::AbstractMatrix{T}, normal::AbstractMatrix{T}, H::AbstractMatrix{T}, residual::AbstractVector{T},
     ::AdaptiveOpticsSim.LiFTDampingNone) where {T<:AbstractFloat}
-    factor_mat = AMDGPU.ROCArray{T}(undef, size(normal)...)
-    copyto!(factor_mat, normal)
-    rhs_mat = AMDGPU.ROCArray{T}(undef, length(rhs), 1)
-    copyto!(vec(rhs_mat), rhs)
-    chol = cholesky!(Hermitian(factor_mat), check=false)
+    factor_mat = _amdgpu_dense_copy(normal)
+    _, chol = _amdgpu_cholesky_solve!(factor_mat, rhs; check=false)
     λ = zero(T)
     if !issuccess(chol)
         λ = AdaptiveOpticsSim.regularization_load(normal)
         @views factor_mat[diagind(factor_mat)] .+= λ
-        chol = cholesky!(Hermitian(factor_mat), check=false)
+        _, chol = _amdgpu_cholesky_solve!(factor_mat, rhs; check=false)
         if !issuccess(chol)
             λ *= T(10)
             @views factor_mat[diagind(factor_mat)] .+= λ
-            chol = cholesky!(Hermitian(factor_mat), check=false)
+            _, chol = _amdgpu_cholesky_solve!(factor_mat, rhs; check=false)
             if !issuccess(chol)
                 return AdaptiveOpticsSim.solve_lift_fallback!(diag, rhs, H, residual,
                     AdaptiveOpticsSim.LiFTLevenbergMarquardt(lambda0=λ))
             end
         end
     end
-    ldiv!(chol, rhs_mat)
-    copyto!(rhs, vec(rhs_mat))
     diag.regularization = λ
     return rhs
 end
@@ -155,26 +182,21 @@ end
 function AdaptiveOpticsSim.solve_normal_system!(diag::AdaptiveOpticsSim.LiFTDiagnostics{T}, rhs::AMDGPU.ROCArray{T,1},
     factor::AbstractMatrix{T}, normal::AbstractMatrix{T}, H::AbstractMatrix{T}, residual::AbstractVector{T},
     damping::AdaptiveOpticsSim.LiFTLevenbergMarquardt) where {T<:AbstractFloat}
-    factor_mat = AMDGPU.ROCArray{T}(undef, size(normal)...)
-    copyto!(factor_mat, normal)
-    rhs_mat = AMDGPU.ROCArray{T}(undef, length(rhs), 1)
-    copyto!(vec(rhs_mat), rhs)
+    factor_mat = _amdgpu_dense_copy(normal)
     λ = AdaptiveOpticsSim.damping_lambda(damping, normal)
     if λ > zero(T)
         @views factor_mat[diagind(factor_mat)] .+= λ
     end
-    chol = cholesky!(Hermitian(factor_mat), check=false)
+    _, chol = _amdgpu_cholesky_solve!(factor_mat, rhs; check=false)
     while !issuccess(chol)
         λ = max(λ * T(damping.growth), AdaptiveOpticsSim.regularization_load(normal))
         copyto!(factor_mat, normal)
         @views factor_mat[diagind(factor_mat)] .+= λ
-        chol = cholesky!(Hermitian(factor_mat), check=false)
+        _, chol = _amdgpu_cholesky_solve!(factor_mat, rhs; check=false)
         if λ > T(1e12)
             return AdaptiveOpticsSim.solve_lift_fallback!(diag, rhs, H, residual, damping)
         end
     end
-    ldiv!(chol, rhs_mat)
-    copyto!(rhs, vec(rhs_mat))
     diag.regularization = λ
     return rhs
 end

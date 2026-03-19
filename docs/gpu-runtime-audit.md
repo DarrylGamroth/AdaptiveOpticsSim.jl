@@ -49,6 +49,12 @@ The maintained AMDGPU validation entry points are:
   - combined runtime + builder HIL-oriented smoke coverage on `ROCArray`
 - `scripts/gpu_sync_audit_amdgpu.jl`
   - timing-oriented audit for runtime and builder-heavy AMDGPU paths
+- `scripts/gpu_crossover_amdgpu.jl`
+  - warmed AMDGPU crossover sweep for runtime and builder cases
+- `scripts/gpu_profile_model_tomography_amdgpu.jl`
+  - sampling-profile the medium AMDGPU model-based tomography builder
+- `scripts/gpu_profile_model_tomography_phases_amdgpu.jl`
+  - explicit phase timing for the medium AMDGPU model-based tomography builder
 
 On an AMDGPU host, the standard workflow is:
 
@@ -57,6 +63,9 @@ julia --project=. scripts/gpu_smoke_amdgpu.jl
 julia --project=. scripts/gpu_builder_amdgpu.jl
 julia --project=. scripts/gpu_hil_amdgpu.jl
 julia --project=. scripts/gpu_sync_audit_amdgpu.jl
+julia --project=. scripts/gpu_crossover_amdgpu.jl
+julia --project=. scripts/gpu_profile_model_tomography_amdgpu.jl
+julia --project=. scripts/gpu_profile_model_tomography_phases_amdgpu.jl
 ```
 
 Current AMDGPU caveat:
@@ -72,13 +81,130 @@ Current AMDGPU caveat:
 - For the maintained smoke, builder, HIL, and audit surfaces, the dense linear
   algebra path is now AMD-native.
 
+Focused `LinearAlgebra` audit result for AMDGPU:
+
+- maintained ROCArray builder and LiFT paths are now covered by AMD-specific
+  extension methods rather than generic `svd(ROCArray)` or generic
+  `lu(ROCArray)` dispatch,
+- the remaining obvious generic CPU-oriented dense-LA call in the codebase is
+  [fitting.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Tomography/fitting.jl),
+  which still uses `pinv(Matrix(...))` and is not part of the maintained AMD
+  smoke/builder/HIL surface,
+- the core generic fallbacks remain in place intentionally for CPU and
+  unsupported GPU workflows, but the maintained AMD path now bypasses them.
+
 Current warmed AMDGPU sync-audit snapshot on this host:
 
-- runtime step mean: about `1.49e6 ns`
+- runtime step mean: about `1.46e6 ns`
 - modal build: about `1.88e6 ns`
-- interaction-matrix tomography build: about `1.85e6 ns`
-- model tomography build: about `7.04e7 ns`
-- high-accuracy model tomography build: about `8.40e7 ns`
+- interaction-matrix tomography build: about `2.06e6 ns`
+- model tomography build: about `6.58e7 ns`
+- high-accuracy model tomography build: about `7.27e7 ns`
+
+## Initial Crossover Sweep on AMDGPU
+
+The maintained AMD crossover sweep was run with:
+
+```bash
+julia --project=. scripts/gpu_crossover_amdgpu.jl
+```
+
+The current warmed results on this host are:
+
+- runtime `compact`
+  - AMDGPU: about `1.48e6 ns`
+- runtime `small`
+  - AMDGPU: about `5.19e6 ns`
+- runtime `medium`
+  - AMDGPU: about `2.04e7 ns`
+- modal builder `compact`
+  - AMDGPU: about `1.24e6 ns`
+- modal builder `small`
+  - AMDGPU: about `9.84e5 ns`
+- modal builder `medium`
+  - AMDGPU: about `1.93e6 ns`
+- interaction tomography builder `compact`
+  - AMDGPU: about `2.63e6 ns`
+- interaction tomography builder `small`
+  - AMDGPU: about `2.17e6 ns`
+- interaction tomography builder `medium`
+  - AMDGPU: about `4.53e6 ns`
+- model tomography builder `compact`
+  - AMDGPU: about `1.21e8 ns`
+- model tomography builder `small`
+  - AMDGPU: about `1.22e9 ns`
+- model tomography builder `medium`
+  - AMDGPU: about `1.54e9 ns`
+- model tomography builder `compact` high accuracy
+  - AMDGPU: about `1.34e8 ns`
+- model tomography builder `small` high accuracy
+  - AMDGPU: about `1.52e9 ns`
+- model tomography builder `medium` high accuracy
+  - AMDGPU: about `1.76e9 ns`
+
+The interpretation matches the CUDA story:
+
+- the tiny single-loop runtime is still CPU-first,
+- modal and interaction-matrix builder cases are still small enough that GPU
+  overhead dominates,
+- model-based tomography is the first builder family where GPU acceleration is
+  already attractive.
+
+## AMDGPU Model-Based Tomography Profile
+
+The profiling scripts:
+
+```bash
+julia --project=. scripts/gpu_profile_model_tomography_amdgpu.jl
+julia --project=. scripts/gpu_profile_model_tomography_phases_amdgpu.jl
+```
+
+were run on the `medium` AMDGPU model-based tomography case.
+
+The key sampling-profile output was:
+
+- default build time: about `1.40e9 ns`
+- high-accuracy build time: about `1.49e9 ns`
+- default build allocations: about `4.80e5 bytes`
+- high-accuracy build allocations: about `4.74e5 bytes`
+
+The phase-timed breakdown was:
+
+- `auto_correlation`: about `1.90e10 ns`
+- `cross_correlation`: about `3.48e9 ns`
+- `cnz`: about `1.59e9 ns`
+- `recstat`: about `1.60e9 ns`
+- `css_signal`: about `5.19e8 ns`
+- `fit_source_average`: about `4.37e8 ns`
+- `extract_submatrix`: about `3.42e8 ns`
+
+Two current conclusions matter for AMD specifically:
+
+- `auto_correlation` is still the dominant tomography-builder hotspot by a wide
+  margin, just as it is on CUDA.
+- the AMD sampling profile shows real allocator pressure in `_fit_source_average`
+  on `ROCArray`, so that path is worth revisiting if AMD builder latency becomes
+  a priority.
+
+## Current AMD Precision Guidance
+
+The maintained AMD precision policies are:
+
+- default: `SplitGPUPrecision(Float32, Float32)`
+- high accuracy: `SplitGPUPrecision(Float32, Float64)`
+
+Current recommendation:
+
+- keep the default `Float32` builder policy for runtime-oriented and
+  throughput-oriented HIL workflows,
+- use the high-accuracy builder policy only when tomography conditioning
+  requires it.
+
+On this host, the warmed sync-audit medium model tomography builder rises from
+about `6.58e7 ns` to about `7.27e7 ns` when switching to the high-accuracy
+policy, and the standalone medium build profile rises from about `1.40e9 ns` to
+about `1.49e9 ns`. So the high-accuracy policy is viable, but it is still a
+real builder-cost trade.
 
 ## Warmed CPU vs CUDA Snapshot on `spiders`
 
