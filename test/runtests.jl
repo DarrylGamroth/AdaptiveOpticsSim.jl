@@ -2,6 +2,7 @@ using Test
 using AdaptiveOpticsSim
 using Random
 using SpecialFunctions
+using Statistics
 using Tables
 using TOML
 
@@ -39,6 +40,32 @@ end
 function assert_dm_interface(dm, tel)
     @test applicable(build_influence_functions!, dm, tel)
     @test applicable(apply!, dm, tel, DMAdditive())
+end
+
+function subharmonic_tiptilt_power(phs::AbstractMatrix)
+    n = size(phs, 1)
+    coords = collect(LinRange(-1.0, 1.0, n))
+    x = repeat(reshape(coords, 1, n), n, 1)
+    y = repeat(reshape(coords, n, 1), 1, n)
+    A = hcat(vec(x), vec(y), ones(n * n))
+    coeffs = A \ vec(phs)
+    return coeffs[1]^2 + coeffs[2]^2
+end
+
+function subharmonic_metrics(atm::KolmogorovAtmosphere, D::Real;
+    n::Int=24, nsamp::Int=8, kwargs...)
+    delta = D / n
+    shift = n ÷ 2
+    ws = PhaseStatsWorkspace(n; T=Float64)
+    tiptilt = Float64[]
+    structure = Float64[]
+    for seed in 1:nsamp
+        phs = ft_sh_phase_screen(atm, n, delta; rng=MersenneTwister(seed), ws=ws, kwargs...)
+        push!(tiptilt, subharmonic_tiptilt_power(phs))
+        diff = @views phs[:, 1:end-shift] .- phs[:, 1+shift:end]
+        push!(structure, Statistics.mean(abs2, diff))
+    end
+    return (; tiptilt=Statistics.mean(tiptilt), structure=Statistics.mean(structure))
 end
 
 @test AdaptiveOpticsSim.PROJECT_STATUS == :in_development
@@ -127,6 +154,20 @@ end
     phs_legacy = ft_sh_phase_screen(atm_large, 32, delta;
         rng=rng, ws=ws, subharmonics=true, n_levels=3, subharmonic_radius=1)
     @test sum(abs.(phs_default .- phs_legacy)) > 0
+
+    metrics_25_none = subharmonic_metrics(atm, tel.params.diameter; subharmonics=false)
+    metrics_25_legacy = subharmonic_metrics(atm, tel.params.diameter;
+        subharmonics=true, n_levels=3, subharmonic_radius=1)
+    metrics_25_default = subharmonic_metrics(atm, tel.params.diameter; subharmonics=true)
+    @test metrics_25_none.tiptilt < metrics_25_legacy.tiptilt < metrics_25_default.tiptilt
+    @test metrics_25_none.structure < metrics_25_legacy.structure < metrics_25_default.structure
+
+    metrics_200_none = subharmonic_metrics(atm_large, tel.params.diameter; subharmonics=false)
+    metrics_200_legacy = subharmonic_metrics(atm_large, tel.params.diameter;
+        subharmonics=true, n_levels=3, subharmonic_radius=1)
+    metrics_200_default = subharmonic_metrics(atm_large, tel.params.diameter; subharmonics=true)
+    @test metrics_200_none.tiptilt < metrics_200_legacy.tiptilt < metrics_200_default.tiptilt
+    @test metrics_200_none.structure < metrics_200_legacy.structure < metrics_200_default.structure
 end
 
 @testset "Multi-layer atmosphere" begin
