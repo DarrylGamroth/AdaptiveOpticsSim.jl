@@ -108,16 +108,13 @@ Julia extensions beyond the main OOPAO surface:
 
 Remaining narrower defaults or simplifications:
 
-- `ft_sh_phase_screen` still uses a simple 3x3 sub-harmonic grid rather than a
-  more elaborate layer/outer-scale-specific construction
-  (`src/Atmosphere/phase_stats.jl`).
-- NCPA KL basis still defaults to DM-mode covariance (`MᵀM`) even though the
-  HHt/PSD option exists and is more physical
-  (`src/Calibration/modal_basis.jl`, `src/Optics/ncpa.jl`).
+- `ft_sh_phase_screen` now uses adaptive sub-harmonic levels and a wider
+  stencil by default, but the atmosphere model is still simpler than a fully
+  layer/outer-scale-specific construction (`src/Atmosphere/phase_stats.jl`).
 
-These are not current deterministic-parity blockers, but they are required
-follow-up items for scientific/default-model completeness. They should be
-treated as part of the model-fidelity roadmap, not as merely optional cleanup.
+This is not a deterministic-parity blocker, but it remains part of the
+model-fidelity roadmap and should be revisited if additional tilt/statistics
+validation shows the new default is still too coarse.
 
 ## Feature Parity and Numerical Fidelity Gate
 - [x] The committed OOPAO reference bundle now matches
@@ -226,20 +223,18 @@ The current focus is now:
 7. targeted GPU builder/runtime performance work where profiling justifies it
 
 ## Next Tasks
-1. Revisit `ft_sh_phase_screen` and decide whether the current 3x3
-   sub-harmonic model should be replaced or augmented for the scientific
-   default atmosphere path.
-2. Revisit the default NCPA KL basis and decide whether HHt/PSD should become
-   the scientific default instead of DM-mode covariance.
-3. Audit remaining calibration/output conventions against OOPAO telemetry exports.
-4. Define explicit fidelity/execution profiles so the package can expose a
+1. Audit remaining calibration/output conventions against OOPAO telemetry exports.
+2. Define explicit fidelity/execution profiles so the package can expose a
    scientifically stronger default path and a faster HIL-oriented path.
-5. Decide whether the long-horizon Pyramid/GSC replay remains purely diagnostic.
-6. Add multi-WFS / multi-DM aggregation for MOAO, MCAO, and woofer/tweeter RTC scenarios.
-7. Implement `ZernikeWFS` Phase 1 from [`docs/zernike-wfs-plan.md`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/zernike-wfs-plan.md).
-8. Implement `CurvatureSensor` if the RTC/HIL use case requires it after `ZernikeWFS`.
-9. Continue extending GPU-native builder coverage where HIL workflows demand it.
-10. Profile and optimize tomography builder hotspots only where crossover data shows the GPU path is worthwhile.
+3. Revisit `ft_sh_phase_screen` again if tilt/statistics validation shows the
+   adaptive sub-harmonic default is still too coarse for the scientific
+   profile.
+4. Decide whether the long-horizon Pyramid/GSC replay remains purely diagnostic.
+5. Add multi-WFS / multi-DM aggregation for MOAO, MCAO, and woofer/tweeter RTC scenarios.
+6. Implement `ZernikeWFS` Phase 1 from [`docs/zernike-wfs-plan.md`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/zernike-wfs-plan.md).
+7. Implement `CurvatureSensor` if the RTC/HIL use case requires it after `ZernikeWFS`.
+8. Continue extending GPU-native builder coverage where HIL workflows demand it.
+9. Profile and optimize tomography builder hotspots only where crossover data shows the GPU path is worthwhile.
 
 ## HIL-Oriented Near-Term Work
 - [x] Add explicit builder-backend selection for modal/calibration reconstructor generation.

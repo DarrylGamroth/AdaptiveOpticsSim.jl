@@ -2,9 +2,13 @@ using Random
 using Statistics
 
 abstract type NCPABasis end
-struct KLBasis <: NCPABasis end
+struct KLBasis{M<:KLBasisMethod} <: NCPABasis
+    method::M
+end
 struct ZernikeModalBasis <: NCPABasis end
 struct M2CBasis <: NCPABasis end
+
+KLBasis() = KLBasis(KLHHtPSD())
 
 @kernel function combine_basis_kernel!(opd, basis, coeffs, pupil, n_modes::Int)
     I = @index(Global, Cartesian)
@@ -35,7 +39,7 @@ function NCPA(tel::Telescope, dm::DeformableMirror, atm::AbstractAtmosphere;
             return NCPA{T, typeof(opd), Nothing, Nothing}(opd, nothing, nothing)
         end
         coeffs = T.(coefficients)
-        basis_grid = ncpa_basis(basis, tel, dm; n_modes=length(coeffs), M2C=M2C)
+        basis_grid = ncpa_basis(basis, tel, dm, atm; n_modes=length(coeffs), M2C=M2C)
         opd = combine_basis(basis_grid, coeffs, tel.state.pupil)
         return NCPA{T, typeof(opd), typeof(basis_grid), typeof(coeffs)}(opd, basis_grid, coeffs)
     end
@@ -44,7 +48,7 @@ function NCPA(tel::Telescope, dm::DeformableMirror, atm::AbstractAtmosphere;
         throw(InvalidConfiguration("f2 must be (amplitude, start_mode, end_mode, cutoff)"))
     amplitude, start_mode, end_mode, cutoff = f2
     n_modes = Int(end_mode)
-    basis_grid = ncpa_basis(basis, tel, dm; n_modes=n_modes, M2C=M2C)
+    basis_grid = ncpa_basis(basis, tel, dm, atm; n_modes=n_modes, M2C=M2C)
     rng = MersenneTwister(seed)
     coeffs = zeros(T, n_modes)
     for i in Int(start_mode):Int(end_mode)
@@ -58,10 +62,27 @@ function NCPA(tel::Telescope, dm::DeformableMirror, atm::AbstractAtmosphere;
     return NCPA{T, typeof(opd), typeof(basis_grid), typeof(coeffs)}(opd, basis_grid, coeffs)
 end
 
-function ncpa_basis(::KLBasis, tel::Telescope, dm::DeformableMirror; n_modes::Int=1,
-    M2C::Union{Nothing,AbstractMatrix}=nothing)
-    _, basis = kl_modal_basis(dm, tel; n_modes=n_modes)
-    return basis
+function ncpa_basis(basis::KLBasis{<:KLDMModes}, tel::Telescope, dm::DeformableMirror,
+    ::AbstractAtmosphere; n_modes::Int=1, M2C::Union{Nothing,AbstractMatrix}=nothing)
+    _, basis_grid = kl_modal_basis(KLDMModes(), dm, tel; n_modes=n_modes)
+    return basis_grid
+end
+
+function ncpa_basis(basis::KLBasis{<:KLDMModes}, tel::Telescope, dm::DeformableMirror;
+    n_modes::Int=1, M2C::Union{Nothing,AbstractMatrix}=nothing)
+    _, basis_grid = kl_modal_basis(KLDMModes(), dm, tel; n_modes=n_modes)
+    return basis_grid
+end
+
+function ncpa_basis(basis::KLBasis{<:KLHHtPSD}, tel::Telescope, dm::DeformableMirror,
+    atm::AbstractAtmosphere; n_modes::Int=1, M2C::Union{Nothing,AbstractMatrix}=nothing)
+    _, basis_grid = kl_modal_basis(basis.method, dm, tel, atm; n_modes=n_modes)
+    return basis_grid
+end
+
+function ncpa_basis(::KLBasis{<:KLHHtPSD}, tel::Telescope, dm::DeformableMirror;
+    n_modes::Int=1, M2C::Union{Nothing,AbstractMatrix}=nothing)
+    throw(InvalidConfiguration("KLBasis(KLHHtPSD()) requires an atmosphere"))
 end
 
 function ncpa_basis(::ZernikeModalBasis, tel::Telescope, dm::DeformableMirror; n_modes::Int=1,
@@ -77,6 +98,11 @@ function ncpa_basis(::M2CBasis, tel::Telescope, dm::DeformableMirror; n_modes::I
         throw(InvalidConfiguration("M2C matrix must be provided when basis = M2CBasis()"))
     end
     return basis_from_m2c(dm, tel, M2C)
+end
+
+function ncpa_basis(basis::NCPABasis, tel::Telescope, dm::DeformableMirror,
+    ::AbstractAtmosphere; n_modes::Int=1, M2C::Union{Nothing,AbstractMatrix}=nothing)
+    return ncpa_basis(basis, tel, dm; n_modes=n_modes, M2C=M2C)
 end
 
 function combine_basis!(opd::AbstractMatrix{T}, basis::AbstractArray{T,3},
