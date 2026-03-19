@@ -115,6 +115,12 @@ Remaining narrower defaults or simplifications:
   HHt/PSD option exists and is more physical
   (`src/Calibration/modal_basis.jl`, `src/Optics/ncpa.jl`).
 
+These are not current parity blockers. They should be revisited only if:
+
+- validation shows the present defaults are not numerically or physically
+  adequate for the target workflow, or
+- a science/HIL use case specifically benefits from the more physical option.
+
 ## Feature Parity and Numerical Fidelity Gate
 - [x] The committed OOPAO reference bundle now matches
   `psf_baseline`, `shack_hartmann_diffractive_ramp`,
@@ -223,6 +229,10 @@ The current focus is now:
 6. Continue extending GPU-native builder coverage where HIL workflows demand it.
 7. Profile and optimize tomography builder hotspots only where crossover data shows the GPU path is worthwhile.
 8. Decide whether future tomography expansion stays in core or moves behind an extension/package split later.
+9. Revisit `ft_sh_phase_screen` if tilt/statistics validation shows the current
+   3x3 sub-harmonic model is insufficient for the target atmosphere workflows.
+10. Revisit the default NCPA KL basis if a science workflow benefits from
+    making HHt/PSD the default instead of DM-mode covariance.
 
 ## HIL-Oriented Near-Term Work
 - [x] Add explicit builder-backend selection for modal/calibration reconstructor generation.
