@@ -170,8 +170,29 @@ end
         subharmonics=true, mode=FastSubharmonics())
     metrics_200_default = subharmonic_metrics(atm_large, tel.params.diameter;
         subharmonics=true, mode=FidelitySubharmonics())
-    @test metrics_200_none.tiptilt < metrics_200_legacy.tiptilt < metrics_200_default.tiptilt
-    @test metrics_200_none.structure < metrics_200_legacy.structure < metrics_200_default.structure
+@test metrics_200_none.tiptilt < metrics_200_legacy.tiptilt < metrics_200_default.tiptilt
+@test metrics_200_none.structure < metrics_200_legacy.structure < metrics_200_default.structure
+end
+
+@testset "Fidelity profiles" begin
+    @test default_fidelity_profile() isa ScientificProfile
+    @test default_subharmonic_mode(ScientificProfile()) isa FidelitySubharmonics
+    @test default_subharmonic_mode(FastProfile()) isa FastSubharmonics
+    @test default_ncpa_basis(ScientificProfile()).method isa KLHHtPSD
+    @test default_ncpa_basis(FastProfile()).method isa KLDMModes
+
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    atm = KolmogorovAtmosphere(tel; r0=0.15, L0=200.0)
+    scientific = ft_sh_phase_screen(atm, 16, 0.1; rng=MersenneTwister(3), profile=ScientificProfile())
+    fast = ft_sh_phase_screen(atm, 16, 0.1; rng=MersenneTwister(3), profile=FastProfile())
+    @test !all(scientific .== fast)
+
+    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
+    coeffs = zeros(4)
+    ncpa_fast = NCPA(tel, dm, atm; profile=FastProfile(), coefficients=coeffs)
+    ncpa_scientific = NCPA(tel, dm, atm; profile=ScientificProfile(), coefficients=coeffs)
+    @test size(ncpa_fast.opd) == size(tel.state.opd)
+    @test size(ncpa_scientific.opd) == size(tel.state.opd)
 end
 
 @testset "Multi-layer atmosphere" begin

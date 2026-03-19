@@ -20,6 +20,7 @@ const PROJECT_STATUS = :in_development
 
 include("Core/errors.jl")
 include("Core/types.jl")
+include("Core/profiles.jl")
 include("Core/inverse_policies.jl")
 include("Core/backends.jl")
 include("Core/config.jl")
@@ -67,6 +68,7 @@ include("Tomography/reconstructors.jl")
 
 export PROJECT_STATUS
 export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError, UnsupportedAlgorithm
+export FidelityProfile, ScientificProfile, FastProfile, default_fidelity_profile
 export InversePolicy, ExactPseudoInverse, TSVDInverse, TikhonovInverse, InverseStats, inverse_operator
 export default_modal_inverse_policy, default_calibration_inverse_policy, default_projector_inverse_policy
 export BuildBackend, NativeBuildBackend, CPUBuildBackend, GPUArrayBuildBackend, default_build_backend
@@ -86,7 +88,7 @@ export Asterism, coordinates_xy_arcsec, compute_psf!, psf_pixel_scale_arcsec
 export compute_psf!, ensure_psf_state!
 export ZernikeBasis, compute_zernike!, noll_to_nm
 export OPDMap
-export NCPA, NCPABasis, KLBasis, ZernikeModalBasis, M2CBasis
+export NCPA, NCPABasis, KLBasis, ZernikeModalBasis, M2CBasis, default_ncpa_basis
 export SpatialFilter, SpatialFilterShape, CircularFilter, SquareFilter, FoucaultFilter
 export set_spatial_filter!, filter!
 export KolmogorovAtmosphere, KolmogorovParams, KolmogorovState
@@ -95,7 +97,7 @@ export MultiLayerAtmosphere, MultiLayerParams, MultiLayerState
 export advance!, propagate!
 export phase_variance, phase_covariance, phase_spectrum, covariance_matrix
 export ft_phase_screen, ft_sh_phase_screen, PhaseStatsWorkspace
-export SubharmonicMode, FastSubharmonics, FidelitySubharmonics
+export SubharmonicMode, FastSubharmonics, FidelitySubharmonics, default_subharmonic_mode
 export DeformableMirror, DeformableMirrorParams, DeformableMirrorState, build_influence_functions!, apply!
 export Misregistration, apply_misregistration
 export Detector, DetectorParams, DetectorState, DetectorExportMetadata

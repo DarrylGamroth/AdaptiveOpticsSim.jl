@@ -10,6 +10,9 @@ struct M2CBasis <: NCPABasis end
 
 KLBasis() = KLBasis(KLHHtPSD())
 
+default_ncpa_basis(::ScientificProfile) = KLBasis(KLHHtPSD())
+default_ncpa_basis(::FastProfile) = KLBasis(KLDMModes())
+
 @kernel function combine_basis_kernel!(opd, basis, coeffs, pupil, n_modes::Int)
     I = @index(Global, Cartesian)
     i, j = Tuple(I)
@@ -29,7 +32,8 @@ struct NCPA{T<:AbstractFloat,A<:AbstractMatrix{T},B,V} <: AbstractOpticalElement
 end
 
 function NCPA(tel::Telescope, dm::DeformableMirror, atm::AbstractAtmosphere;
-    basis::NCPABasis=KLBasis(), coefficients=nothing, f2=nothing, seed::Integer=5,
+    profile::FidelityProfile=default_fidelity_profile(),
+    basis::NCPABasis=default_ncpa_basis(profile), coefficients=nothing, f2=nothing, seed::Integer=5,
     M2C::Union{Nothing,AbstractMatrix}=nothing)
 
     T = eltype(tel.state.opd)

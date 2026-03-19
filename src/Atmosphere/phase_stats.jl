@@ -110,7 +110,8 @@ end
 function ft_sh_phase_screen(atm::KolmogorovAtmosphere, n::Int, delta::Real;
     l0::Real=1e-10, rng::AbstractRNG=Random.default_rng(), return_psd::Bool=false,
     ws::Union{Nothing,PhaseStatsWorkspace}=nothing, subharmonics::Bool=true,
-    mode::SubharmonicMode=FidelitySubharmonics(),
+    profile::FidelityProfile=default_fidelity_profile(),
+    mode::SubharmonicMode=default_subharmonic_mode(profile),
     n_levels::Union{Int,Nothing}=nothing, subharmonic_radius::Union{Int,Nothing}=nothing)
     phs, psd = ft_phase_screen(atm, n, delta; l0=l0, rng=rng, return_psd=true, ws=ws)
     if subharmonics
@@ -131,6 +132,9 @@ default_subharmonic_levels(::FidelitySubharmonics, L0::Real, D::Real) =
 
 default_subharmonic_radius(::FastSubharmonics) = 1
 default_subharmonic_radius(::FidelitySubharmonics) = 2
+
+default_subharmonic_mode(::ScientificProfile) = FidelitySubharmonics()
+default_subharmonic_mode(::FastProfile) = FastSubharmonics()
 
 function add_subharmonics!(phs::AbstractMatrix{T}, r0::Real, L0::Real, delta::Real, l0::Real;
     rng::AbstractRNG=Random.default_rng(), n_levels::Int=3, radius::Int=2) where {T<:AbstractFloat}

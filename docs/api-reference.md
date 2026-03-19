@@ -6,6 +6,8 @@ than by source file.
 ## Core types and utilities
 
 - `Workspace`, `ensure_psf_buffers!`
+- `FidelityProfile`, `ScientificProfile`, `FastProfile`,
+  `default_fidelity_profile`
 - `Telemetry`, `TelemetryRow`, `record!`
 - `ClosedLoopTrace`, `ClosedLoopTraceRow`
 - `GSCClosedLoopTrace`, `GSCClosedLoopTraceRow`
@@ -33,7 +35,8 @@ than by source file.
   `build_influence_functions!`, `apply!`
 - `Misregistration`, `apply_misregistration`
 - `OPDMap`
-- `NCPA`, `NCPABasis`, `KLBasis`, `ZernikeModalBasis`, `M2CBasis`
+- `NCPA`, `NCPABasis`, `KLBasis`, `ZernikeModalBasis`, `M2CBasis`,
+  `default_ncpa_basis`
 - `SpatialFilter`, `SpatialFilterShape`, `CircularFilter`, `SquareFilter`,
   `FoucaultFilter`, `set_spatial_filter!`, `filter!`
 
@@ -45,7 +48,8 @@ than by source file.
 - `update_psd!`, `ensure_psd!`, `phase_screen_von_karman!`
 - `phase_variance`, `phase_covariance`, `phase_spectrum`, `covariance_matrix`
 - `ft_phase_screen`, `ft_sh_phase_screen`, `PhaseStatsWorkspace`
-- `SubharmonicMode`, `FastSubharmonics`, `FidelitySubharmonics`
+- `SubharmonicMode`, `FastSubharmonics`, `FidelitySubharmonics`,
+  `default_subharmonic_mode`
 - `fast_atmosphere`
 
 ## Wavefront sensing
