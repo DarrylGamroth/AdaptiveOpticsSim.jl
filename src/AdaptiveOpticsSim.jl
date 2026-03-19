@@ -68,7 +68,8 @@ include("Tomography/reconstructors.jl")
 
 export PROJECT_STATUS
 export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError, UnsupportedAlgorithm
-export FidelityProfile, ScientificProfile, FastProfile, default_fidelity_profile
+export FidelityProfile, ScientificProfile, FastProfile, ProfileBundle, default_fidelity_profile
+export atmosphere_profile, calibration_profile, detector_profile, lift_profile, tomography_profile
 export InversePolicy, ExactPseudoInverse, TSVDInverse, TikhonovInverse, InverseStats, inverse_operator
 export default_modal_inverse_policy, default_calibration_inverse_policy, default_projector_inverse_policy
 export BuildBackend, NativeBuildBackend, CPUBuildBackend, GPUArrayBuildBackend, default_build_backend

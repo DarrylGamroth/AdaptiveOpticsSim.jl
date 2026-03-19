@@ -10,6 +10,7 @@ struct M2CBasis <: NCPABasis end
 
 KLBasis() = KLBasis(KLHHtPSD())
 
+default_ncpa_basis(profile::FidelityProfile) = default_ncpa_basis(calibration_profile(profile))
 default_ncpa_basis(::ScientificProfile) = KLBasis(KLHHtPSD())
 default_ncpa_basis(::FastProfile) = KLBasis(KLDMModes())
 

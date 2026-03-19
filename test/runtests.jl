@@ -181,6 +181,18 @@ end
     @test default_ncpa_basis(ScientificProfile()).method isa KLHHtPSD
     @test default_ncpa_basis(FastProfile()).method isa KLDMModes
 
+    mixed = ProfileBundle(ScientificProfile(); lift=FastProfile(), tomography=FastProfile())
+    @test atmosphere_profile(mixed) isa ScientificProfile
+    @test calibration_profile(mixed) isa ScientificProfile
+    @test detector_profile(mixed) isa ScientificProfile
+    @test lift_profile(mixed) isa FastProfile
+    @test tomography_profile(mixed) isa FastProfile
+    @test default_subharmonic_mode(mixed) isa FidelitySubharmonics
+    @test default_ncpa_basis(mixed).method isa KLHHtPSD
+
+    fast_cal = ProfileBundle(ScientificProfile(); calibration=FastProfile())
+    @test default_ncpa_basis(fast_cal).method isa KLDMModes
+
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.15, L0=200.0)
     scientific = ft_sh_phase_screen(atm, 16, 0.1; rng=MersenneTwister(3), profile=ScientificProfile())

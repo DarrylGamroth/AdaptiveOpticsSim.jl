@@ -133,6 +133,7 @@ default_subharmonic_levels(::FidelitySubharmonics, L0::Real, D::Real) =
 default_subharmonic_radius(::FastSubharmonics) = 1
 default_subharmonic_radius(::FidelitySubharmonics) = 2
 
+default_subharmonic_mode(profile::FidelityProfile) = default_subharmonic_mode(atmosphere_profile(profile))
 default_subharmonic_mode(::ScientificProfile) = FidelitySubharmonics()
 default_subharmonic_mode(::FastProfile) = FastSubharmonics()
 

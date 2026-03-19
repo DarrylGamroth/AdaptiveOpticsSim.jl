@@ -192,8 +192,9 @@ validation shows the new default is still too coarse.
 - [~] Define explicit execution/fidelity profiles so the package can support a
   scientifically stronger default profile and a faster HIL-oriented profile
   without conflating the two. `ScientificProfile` / `FastProfile` now exist in
-  core and currently drive sub-harmonic phase-screen defaults plus NCPA KL
-  basis selection; more surfaces still need to be wired through them.
+  core, can be bundled with per-subsystem overrides via `ProfileBundle`, and
+  currently drive sub-harmonic phase-screen defaults plus NCPA KL basis
+  selection; more surfaces still need to be wired through them.
 - [ ] Finish the remaining calibration/output convention audit against OOPAO
   telemetry exports. Compact closed-loop trace containers are now explicit in
   core (`ClosedLoopTrace`, `GSCClosedLoopTrace`,
@@ -237,7 +238,9 @@ The current focus is now:
    core.
 2. Extend the explicit fidelity/execution profile surface beyond the current
    phase-screen and NCPA defaults so more fast/scientific choices are visible
-   at the API level.
+   at the API level. The profile surface is now granular enough to support
+   per-subsystem overrides; the next work is to wire more subsystems through
+   it.
 3. Revisit `ft_sh_phase_screen` again if tilt/statistics validation shows the
    adaptive sub-harmonic default is still too coarse for the scientific
    profile.

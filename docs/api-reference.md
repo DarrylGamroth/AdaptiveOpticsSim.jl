@@ -6,8 +6,10 @@ than by source file.
 ## Core types and utilities
 
 - `Workspace`, `ensure_psf_buffers!`
-- `FidelityProfile`, `ScientificProfile`, `FastProfile`,
+- `FidelityProfile`, `ScientificProfile`, `FastProfile`, `ProfileBundle`,
   `default_fidelity_profile`
+- `atmosphere_profile`, `calibration_profile`, `detector_profile`,
+  `lift_profile`, `tomography_profile`
 - `Telemetry`, `TelemetryRow`, `record!`
 - `ClosedLoopTrace`, `ClosedLoopTraceRow`
 - `GSCClosedLoopTrace`, `GSCClosedLoopTraceRow`
