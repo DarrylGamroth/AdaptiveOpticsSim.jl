@@ -808,6 +808,26 @@ end
     @test parsed["tel"]["resolution"] == tel.params.resolution
 end
 
+@testset "Reference compare conventions" begin
+    convention = parse_reference_compare_convention(Dict(
+        "convention" => "oopao_geometric_sh_signal_2d",
+    ))
+    raw = Float64[1, 2, 3, 4]
+    adapted = adapt_compare_convention(convention, raw)
+    @test adapted ≈ OOPAO_GEOMETRIC_SH_SLOPE_SCALE .* Float64[3, 4, 1, 2]
+
+    legacy = parse_reference_compare_convention(Dict(
+        "swap_halves" => true,
+        "scale" => OOPAO_GEOMETRIC_SH_SLOPE_SCALE,
+    ))
+    @test adapt_compare_convention(legacy, raw) == adapted
+    @test parse_reference_compare_convention(nothing) isa IdentityCompareConvention
+    @test adapt_compare_convention(IdentityCompareConvention(), raw) === raw
+    @test_throws InvalidConfiguration parse_reference_compare_convention(Dict(
+        "swap_halves" => true,
+    ))
+end
+
 @testset "Reference harness fixture" begin
     root = mktempdir()
     create_reference_fixture(root)

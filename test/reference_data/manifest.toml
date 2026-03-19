@@ -52,8 +52,7 @@ threshold = 0.0000000000000000e+00
 mode = "geometric"
 
 [cases.shack_hartmann_geometric_ramp_xy.compare]
-swap_halves = true
-scale = 7.5949367088607559e+06
+convention = "oopao_geometric_sh_signal_2d"
 
 [cases.shack_hartmann_geometric_ramp_y]
 kind = "shack_hartmann_slopes"
@@ -85,8 +84,7 @@ threshold = 0.0000000000000000e+00
 mode = "geometric"
 
 [cases.shack_hartmann_geometric_ramp_y.compare]
-swap_halves = true
-scale = 7.5949367088607559e+06
+convention = "oopao_geometric_sh_signal_2d"
 
 [cases.shack_hartmann_diffractive_ramp]
 kind = "shack_hartmann_slopes"

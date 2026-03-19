@@ -125,13 +125,14 @@ For OOPAO geometric Shack-Hartmann data, the committed bundle also uses:
 
 ```toml
 [cases.shack_hartmann_geometric_ramp_xy.compare]
-swap_halves = true
-scale = 7.5949367088607559e6
+convention = "oopao_geometric_sh_signal_2d"
 ```
 
 That adapter is intentional. OOPAO’s exported `signal_2D` ordering and
 calibrated slope units do not match the raw OPD-gradient convention currently
-returned by AdaptiveOpticsSim.jl.
+returned by AdaptiveOpticsSim.jl. The reference harness now treats this as an
+explicit named convention rather than as anonymous `swap_halves` / `scale`
+flags in the manifest.
 
 For now the harness uses plain text arrays (`DelimitedFiles`) because that keeps
 the validation path dependency-light. `storage_order = "C"` is used for

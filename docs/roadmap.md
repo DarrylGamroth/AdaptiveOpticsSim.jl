@@ -161,8 +161,8 @@ validation shows the new default is still too coarse.
   tutorial-scale pyTomoAO workflow with committed KAPA wavefront and DM-command
   regressions.
 - [ ] Audit calibration/output conventions against OOPAO for:
-  slope ordering/units outside geometric SH, PSF sampling conventions, and
-  detector coupling.
+  slope ordering/units outside the now-explicit geometric-SH compare
+  convention, PSF sampling conventions, and detector coupling.
 - [ ] Add regression-backed fidelity tests for every supported OOPAO tutorial/workflow,
   not just smoke tests.
 - [ ] Keep the current simplifications only where they are proven numerically equivalent

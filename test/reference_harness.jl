@@ -18,6 +18,16 @@ struct ReferenceBundle
     cases::Vector{ReferenceCase}
 end
 
+abstract type ReferenceCompareConvention end
+
+struct IdentityCompareConvention <: ReferenceCompareConvention end
+
+struct OOPAOGeometricSHSignal2DConvention{T<:AbstractFloat} <: ReferenceCompareConvention
+    slope_scale::T
+end
+
+const OOPAO_GEOMETRIC_SH_SLOPE_SCALE = 7.5949367088607559e6
+
 default_reference_root() = get(ENV, "ADAPTIVEOPTICS_REFERENCE_ROOT", joinpath(@__DIR__, "reference_data"))
 
 reference_manifest_path(root::AbstractString) = joinpath(root, "manifest.toml")
@@ -258,6 +268,50 @@ function matrix_from_rows(rows)
         end
     end
     return mat
+end
+
+function parse_reference_compare_convention(raw)
+    raw === nothing && return IdentityCompareConvention()
+    convention_name = lowercase(String(get(raw, "convention", "legacy")))
+    if convention_name == "legacy"
+        has_swap = get(raw, "swap_halves", false)
+        has_scale = haskey(raw, "scale")
+        if !has_swap && !has_scale
+            return IdentityCompareConvention()
+        elseif has_swap && has_scale
+            return OOPAOGeometricSHSignal2DConvention(Float64(raw["scale"]))
+        end
+        throw(InvalidConfiguration("legacy compare adapters must specify both swap_halves=true and scale"))
+    elseif convention_name == "oopao_geometric_sh_signal_2d"
+        slope_scale = Float64(get(raw, "slope_scale", OOPAO_GEOMETRIC_SH_SLOPE_SCALE))
+        return OOPAOGeometricSHSignal2DConvention(slope_scale)
+    elseif convention_name == "identity"
+        return IdentityCompareConvention()
+    end
+    throw(InvalidConfiguration("unknown compare convention '$convention_name'"))
+end
+
+adapt_compare_convention(::IdentityCompareConvention, actual) = actual
+
+function adapt_compare_convention(
+    convention::OOPAOGeometricSHSignal2DConvention,
+    actual::AbstractVector,
+)
+    isodd(length(actual)) &&
+        throw(InvalidConfiguration("OOPAO geometric SH compare convention requires an even-length slope vector"))
+    n = div(length(actual), 2)
+    adapted = similar(actual)
+    @views adapted[1:n] .= actual[n+1:end]
+    @views adapted[n+1:end] .= actual[1:n]
+    adapted .*= convention.slope_scale
+    return adapted
+end
+
+function adapt_compare_convention(
+    ::OOPAOGeometricSHSignal2DConvention,
+    actual,
+)
+    throw(InvalidConfiguration("OOPAO geometric SH compare convention requires a 1D slope vector"))
 end
 
 function parse_reference_real(value)
@@ -1062,19 +1116,7 @@ function adapt_reference_actual(case::ReferenceCase, actual)
 
     compare = get(case.config, "compare", nothing)
     compare === nothing && return actual
-
-    adapted = copy(actual)
-    if get(compare, "swap_halves", false)
-        if ndims(adapted) != 1 || isodd(length(adapted))
-            throw(InvalidConfiguration("swap_halves compare option requires an even-length vector"))
-        end
-        n = div(length(adapted), 2)
-        adapted = vcat(@view(adapted[n+1:end]), @view(adapted[1:n]))
-    end
-    if haskey(compare, "scale")
-        adapted .*= Float64(compare["scale"])
-    end
-    return adapted
+    return adapt_compare_convention(parse_reference_compare_convention(compare), actual)
 end
 
 function validate_reference_case(case::ReferenceCase)
