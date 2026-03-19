@@ -1,4 +1,4 @@
-# Julia Port Roadmap (Draft)
+# AdaptiveOpticsSim Roadmap
 
 ## Status
 - Phases 1-5 implemented in `AdaptiveOpticsSim.jl`.
@@ -7,6 +7,9 @@
 - Core feature parity and numerical fidelity with Python OOPAO are effectively
   in place for the committed deterministic workflows. Remaining work is now
   dominated by robustness, execution quality, and a few non-core surface gaps.
+- The most current OOPAO comparison document is
+  [`docs/python-julia-differences.md`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/python-julia-differences.md).
+  This roadmap is primarily for implementation status and backlog planning.
 
 ## AO Feature Checklist
 - [x] P0: Detector modeling (photon/read noise, QE, binning, PSF sampling,
@@ -65,34 +68,52 @@
 - [ ] `tools/set_paralleling_setup.py` -> not yet implemented
 - [ ] `tools/tools.py` -> not yet implemented
 
-## Simplifications vs OOPAO (Current State)
-- WFS diffractive models use FFT propagation; Shack-Hartmann supports pixel-scale
-  and subaperture sampling controls (binning + crop/pad), plus OOPAO-style
-  spot-centering phasors and centroid/convolution thresholds. Pyramid now models PSF
-  centering, old/new mask variants, rooftop tuning, rotation, and OOPAO-style
-  modulation-path construction. BioEdge now uses a diffractive mask stack with
-  modulation and grey-width/grey-length mask variants instead of the
-  phase-gradient surrogate
+## Current Differences vs OOPAO
+
+These are not all "simplifications". At this point the package is a mix of
+matched behavior, intentional Julia design differences, Julia-only extensions,
+and a few still-narrower defaults.
+
+Equivalent or improved relative to the practical OOPAO surface:
+
+- Diffractive SH, Pyramid, and BioEdge all use FFT-based propagation and now
+  cover the practical OOPAO parity surface, including the main SH parity knobs
+  and the current deterministic reference bundle
   (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`, `src/WFS/bioedge.jl`).
-- LGS elongation uses Na-profile convolution for Shack-Hartmann, Pyramid, and BioEdge.
-  Shack-Hartmann uses per-subaperture Na-profile kernels in the OOPAO-compatible path;
-  Pyramid/BioEdge currently use averaged Na-profile kernels as a Julia-side extension.
-  OOPAO does not appear to expose an equivalent per-subaperture Na-profile path for
-  Pyramid/BioEdge in the main code/tutorial surface, so this is no longer tracked as a
-  blocking OOPAO parity gap (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`,
-  `src/WFS/bioedge.jl`).
-- `ft_sh_phase_screen` uses a simple 3x3 sub-harmonic grid (no layer-specific outer-scale tuning)
+- LiFT analytical mode uses FFT-based Jacobians with object convolution and
+  readout-weighted noise; detector-pixel treatment for binned data matches the
+  practical OOPAO surface (`src/WFS/lift.jl`).
+- GainSensingCamera is parity-backed for the committed deterministic cases and
+  now has a cleaner threaded/cache-aware implementation plus explicit detector
+  metadata attachment (`src/Calibration/gain_sensing_camera.jl`).
+
+Intentional Julia differences:
+
+- SPRINT / mis-registration keeps cached sensitivity matrices and optional WFS
+  shifts, but deliberately does not bake FITS into core
+  (`src/Calibration/misregistration_identification.jl`).
+- Detector, tomography, inverse-policy, and backend/GPU abstractions are more
+  explicit than in OOPAO. In several of these areas Julia now exceeds OOPAO in
+  engineering structure rather than lagging it.
+
+Julia extensions beyond the main OOPAO surface:
+
+- LGS elongation uses Na-profile convolution for Shack-Hartmann, Pyramid, and
+  BioEdge. Shack-Hartmann uses per-subaperture Na-profile kernels in the
+  OOPAO-compatible path; Pyramid/BioEdge use averaged Na-profile kernels as a
+  Julia-side extension. OOPAO does not appear to expose an equivalent
+  per-subaperture Na-profile path for Pyramid/BioEdge in the main
+  code/tutorial surface (`src/WFS/shack_hartmann.jl`,
+  `src/WFS/pyramid.jl`, `src/WFS/bioedge.jl`).
+
+Remaining narrower defaults or simplifications:
+
+- `ft_sh_phase_screen` still uses a simple 3x3 sub-harmonic grid rather than a
+  more elaborate layer/outer-scale-specific construction
   (`src/Atmosphere/phase_stats.jl`).
-- LiFT analytical mode uses FFT-based Jacobians with object convolution and readout-weighted
-  noise; binned detector frames are supported by treating `img_resolution` in detector
-  pixels, matching the practical OOPAO surface (`src/WFS/lift.jl`).
-- GainSensingCamera uses threaded FFT batching and can attach detector metadata
-  snapshots without coupling detector physics into the optical-gain math
-  (`src/Calibration/gain_sensing_camera.jl`).
-- NCPA KL basis defaults to DM-mode covariance (`MᵀM`); HHt/PSD option is available but not default
+- NCPA KL basis still defaults to DM-mode covariance (`MᵀM`) even though the
+  HHt/PSD option exists and is more physical
   (`src/Calibration/modal_basis.jl`, `src/Optics/ncpa.jl`).
-- SPRINT/mis-registration supports cached sensitivity matrices (Serialization) and
-  optional WFS shifts, but no FITS I/O (`src/Calibration/misregistration_identification.jl`).
 
 ## Feature Parity and Numerical Fidelity Gate
 - [x] The committed OOPAO reference bundle now matches
@@ -148,8 +169,8 @@
 
 ## Candidate Algorithm Upgrades (Similar Results)
 - (DONE) Add sub-harmonic augmentation to `ft_sh_phase_screen` for better low-frequency tilt statistics (`src/Atmosphere/phase_stats.jl`) [E:med, R:low].
-- (DONE, simplified) Implement diffractive WFS paths via pupil→focal propagation with planned FFTs (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`, `src/WFS/bioedge.jl`) [E:high, R:med].
-- (DONE, simplified) Replace LGS slope scaling with focal-plane elongated PSF modeling (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`) [E:med, R:med].
+- (DONE) Implement diffractive WFS paths via pupil→focal propagation with planned FFTs (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`, `src/WFS/bioedge.jl`) [E:high, R:med].
+- (DONE) Replace LGS slope scaling with focal-plane elongated PSF modeling (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`) [E:med, R:med].
 - (DONE) Implement LiFT analytic Jacobians via FFT-based formulation (`src/WFS/lift.jl`) [E:med, R:med].
 - (DONE) Add KL basis from atmospheric covariance (HHt/PSD) instead of DM-mode covariance (`src/Calibration/modal_basis.jl`) [E:high, R:med].
 - (DONE) Implement SPRINT fast path with cached sensitivity matrices (Serialization) (`src/Calibration/misregistration_identification.jl`) [E:med, R:low].
@@ -165,35 +186,19 @@
 - HCIPy / POPPY / PROPER (Python): maps to diffractive WFS propagation, PSF/coronagraph modeling.
 
 ## Suggested Near-Term Priorities
-- [x] Expand the OOPAO reference bundle to cover at least one compact closed-loop trace per major WFS
-  on top of the existing PSF, diffractive SH, Pyramid, BioEdge, LiFT, GSC, and transfer-function cases.
-- [ ] Port the remaining atmosphere-driven GSC closed-loop workflow before adding new non-parity features.
-- [ ] Tighten the remaining large-aberration nonlinear observable drift in the
-  atmosphere-driven Pyramid/GSC replay before promoting the long-horizon case to
-  a strict regression gate.
-- [ ] Turn every feature-parity claim into a deterministic regression test against OOPAO outputs.
+- [ ] Audit remaining calibration/output conventions against OOPAO telemetry exports.
+- [ ] Decide whether the long-horizon atmosphere-driven Pyramid/GSC replay stays
+  purely diagnostic or receives more robustness work.
+- [ ] Extend HIL-focused support toward multi-WFS / multi-DM aggregation for
+  MOAO, MCAO, and woofer/tweeter RTC scenarios.
+- [ ] Add specialized HIL-relevant sensors on demand, starting with
+  `ZernikeWFS` and then `CurvatureSensor` if needed.
+- [ ] Continue GPU/HIL performance work only where profiling shows real value,
+  especially in builder-heavy tomography paths.
 
-## Pre-GPU Resume Point
+## Current Focus
 
-Before the recent GPU execution push, the main workstream had shifted from
-feature parity to robustness and execution quality.
-
-When GPU backend layout work is paused, the intended resume point is:
-
-1. numerical-stability hardening from `docs/numerical-stability-review.md`
-2. robustness work around the remaining long-horizon atmosphere-driven GSC
-   diagnostic replay
-3. any remaining execution-quality cleanup that benefits both CPU and GPU
-4. once the numerical-stability backlog is in a good place, the next major item
-   is GPU-native reconstructor/calibration generation so the package can build
-   RTC-facing reconstructors on accelerator backends instead of treating all
-   builder paths as CPU-only setup work
-
-The GPU work since then has improved runtime/device-residency substantially, but
-it does not change that the next non-GPU engineering focus should be the
-numerical-stability backlog.
-
-Current status of that backlog:
+The earlier numerical-stability backlog has largely been addressed:
 
 - explicit inverse policies are implemented for modal/control reconstruction
 - GSC weak-mode flooring is implemented
@@ -201,14 +206,23 @@ Current status of that backlog:
 - LiFT has QR + SVD fallback and fixed/adaptive LM damping modes
 - covariance/Bessel approximations have direct regression coverage
 
-## Next 10 Tasks
-1. Extend GPU-native reconstructor/calibration generation beyond the current modal/calibration backend hooks into tomography and other builder-heavy RTC workflows.
-2. Audit remaining calibration/output conventions against OOPAO telemetry exports.
-3. Decide whether the compact closed-loop traces should be expanded to full tutorial traces with atmosphere replay.
-4. Tighten the remaining large-aberration Strehl/slope drift in the long-horizon GSC replay.
-5. Validate the remaining atmosphere-driven GSC closed-loop telemetry against OOPAO outputs.
-6. Validate LiFT iterative reconstruction outputs, not just the analytic interaction matrix.
-7. Decide whether any future tomography expansion stays in core or moves behind an extension/package split later.
+The current focus is now:
+
+1. HIL/RTC-facing execution quality
+2. calibration/output convention audits against OOPAO where still needed
+3. multi-WFS / multi-DM support
+4. specialized HIL-relevant sensors such as `ZernikeWFS`
+5. targeted GPU builder/runtime performance work where profiling justifies it
+
+## Next Tasks
+1. Audit remaining calibration/output conventions against OOPAO telemetry exports.
+2. Decide whether the long-horizon Pyramid/GSC replay remains purely diagnostic.
+3. Add multi-WFS / multi-DM aggregation for MOAO, MCAO, and woofer/tweeter RTC scenarios.
+4. Implement `ZernikeWFS` Phase 1 from [`docs/zernike-wfs-plan.md`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/zernike-wfs-plan.md).
+5. Implement `CurvatureSensor` if the RTC/HIL use case requires it after `ZernikeWFS`.
+6. Continue extending GPU-native builder coverage where HIL workflows demand it.
+7. Profile and optimize tomography builder hotspots only where crossover data shows the GPU path is worthwhile.
+8. Decide whether future tomography expansion stays in core or moves behind an extension/package split later.
 
 ## HIL-Oriented Near-Term Work
 - [x] Add explicit builder-backend selection for modal/calibration reconstructor generation.
@@ -218,15 +232,15 @@ Current status of that backlog:
   Interaction-matrix tomography reconstruction, model-based tomography
   reconstructor outputs, and tomography command assembly now preserve the
   selected build backend instead of forcing host `Matrix`/`Vector` outputs.
-- [ ] Add specialized HIL-relevant sensors on demand, starting with a
-  `ZernikeWFS`/ZWFS implementation and then `CurvatureSensor` if required.
-  See [`docs/zernike-wfs-plan.md`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/zernike-wfs-plan.md).
   Tomography covariance fill, fit-source averaging, and noise-covariance
   assembly now also dispatch through the selected build backend, including
   accelerator kernels for the matrix-fill stages. The remaining gap is that
   guide-star coordinate generation and some sparse/operator assembly steps are
   still CPU-originating before backend materialization, so a fully
   accelerator-native tomography builder is still future work.
+- [ ] Add specialized HIL-relevant sensors on demand, starting with a
+  `ZernikeWFS` implementation and then `CurvatureSensor` if required.
+  See [`docs/zernike-wfs-plan.md`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/zernike-wfs-plan.md).
 - [x] Add maintained CUDA validation entry points for runtime and builder paths.
   `scripts/gpu_smoke_cuda.jl` and `scripts/gpu_builder_cuda.jl` are now the
   standard CUDA validation pair, and both have been exercised on `spiders`.
@@ -251,7 +265,7 @@ Current status of that backlog:
   timing surface for CUDA hosts.
 - [ ] Add multi-WFS / multi-DM aggregation for MOAO, MCAO, and woofer/tweeter RTC scenarios.
 - [ ] Add specialized HIL-relevant sensors:
-  `ZernikeSensor`, `CurvatureSensor`, and distributed/multi-WFS aggregation.
+  `ZernikeWFS`, `CurvatureSensor`, and distributed/multi-WFS aggregation.
 
 ## Phase 0: Setup
 - Create package skeleton and CI with Julia versions.
