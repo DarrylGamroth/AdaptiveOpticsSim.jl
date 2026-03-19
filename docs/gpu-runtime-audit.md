@@ -148,6 +148,22 @@ Current `BenchmarkTools` snapshots on this host are:
     - mean: about `3.69e6 ns`
     - memory: about `3.56e5 bytes`
     - allocs: `9321`
+- CUDA on `spiders`
+  - `runtime_step`
+    - median: about `1.41e6 ns`
+    - mean: about `1.40e6 ns`
+    - memory: about `1.80e5 bytes`
+    - allocs: `4195`
+  - `model_tomography_build`
+    - median: about `1.49e9 ns`
+    - mean: about `1.49e9 ns`
+    - memory: about `2.38e5 bytes`
+    - allocs: `5371`
+  - `model_tomography_high_accuracy_build`
+    - median: about `1.53e9 ns`
+    - mean: about `1.53e9 ns`
+    - memory: about `2.90e5 bytes`
+    - allocs: `6714`
 
 The current `BenchmarkTools` AMD suite intentionally benchmarks the maintained
 interaction-matrix tomography builder surface rather than the heavier
