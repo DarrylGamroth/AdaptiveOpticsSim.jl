@@ -86,7 +86,8 @@ Current expectations:
   - `kind` (`psf`, `shack_hartmann_slopes`, `pyramid_slopes`, `bioedge_slopes`)
   - `data` path
   - `shape`
-  - optional `storage_order` (`F` by default, `C` for NumPy row-major arrays)
+  - optional `storage_order` (`F` / `julia_column_major` by default,
+    `C` / `numpy_row_major` for NumPy row-major arrays)
   - `atol` / `rtol`
   - nested config tables (`telescope`, `source`, `opd`, `wfs`, `compute`)
   - optional `compare` rules for known convention adapters
@@ -135,10 +136,16 @@ explicit named convention rather than as anonymous `swap_halves` / `scale`
 flags in the manifest.
 
 For now the harness uses plain text arrays (`DelimitedFiles`) because that keeps
-the validation path dependency-light. `storage_order = "C"` is used for
-multi-dimensional NumPy exports so Julia reshapes them correctly. If `.npz`
-becomes more convenient, we can add a test-only reader later without changing
-the manifest structure.
+the validation path dependency-light. The loader now treats image-storage
+ordering as an explicit convention (`julia_column_major` or
+`numpy_row_major`), while still accepting the shorter legacy `F` / `C`
+spellings. If `.npz` becomes more convenient, we can add a test-only reader
+later without changing the manifest structure.
+
+LiFT reference cases also treat detector-coupled image sizing explicitly: if a
+case does not provide `compute.img_resolution`, the harness uses
+`detector.psf_sampling * telescope.resolution`, which matches the practical
+detector-pixel convention used by the current OOPAO and Julia LiFT surfaces.
 
 ## Generation workflow
 

@@ -828,6 +828,21 @@ end
     ))
 end
 
+@testset "Reference storage and detector conventions" begin
+    col_data = Float64[1, 2, 3, 4]
+    row_data = Float64[1, 2, 3, 4, 5, 6]
+    @test reshape_reference_data(col_data, (2, 2), JuliaColumnMajorStorage()) == [1 3; 2 4]
+    @test reshape_reference_data(row_data, (2, 3), NumPyRowMajorStorage()) == [1 2 3; 4 5 6]
+    @test parse_reference_storage_convention("F") isa JuliaColumnMajorStorage
+    @test parse_reference_storage_convention("numpy_row_major") isa NumPyRowMajorStorage
+    @test_throws InvalidConfiguration parse_reference_storage_convention("weird")
+
+    tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    det = Detector(noise=NoiseNone(), psf_sampling=2, binning=1)
+    @test reference_lift_img_resolution(tel, det, Dict{String,Any}()) == 16
+    @test reference_lift_img_resolution(tel, det, Dict{String,Any}("img_resolution" => 12)) == 12
+end
+
 @testset "Reference harness fixture" begin
     root = mktempdir()
     create_reference_fixture(root)

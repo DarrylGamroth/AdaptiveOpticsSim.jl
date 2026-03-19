@@ -18,6 +18,11 @@ struct ReferenceBundle
     cases::Vector{ReferenceCase}
 end
 
+abstract type ReferenceStorageConvention end
+
+struct JuliaColumnMajorStorage <: ReferenceStorageConvention end
+struct NumPyRowMajorStorage <: ReferenceStorageConvention end
+
 abstract type ReferenceCompareConvention end
 
 struct IdentityCompareConvention <: ReferenceCompareConvention end
@@ -27,6 +32,28 @@ struct OOPAOGeometricSHSignal2DConvention{T<:AbstractFloat} <: ReferenceCompareC
 end
 
 const OOPAO_GEOMETRIC_SH_SLOPE_SCALE = 7.5949367088607559e6
+
+function parse_reference_storage_convention(raw)
+    order = lowercase(String(raw))
+    if order in ("f", "julia_column_major", "column_major")
+        return JuliaColumnMajorStorage()
+    elseif order in ("c", "numpy_row_major", "row_major")
+        return NumPyRowMajorStorage()
+    end
+    throw(InvalidConfiguration("unsupported storage order '$raw'"))
+end
+
+function reshape_reference_data(data, shape::Tuple, ::JuliaColumnMajorStorage)
+    return reshape(data, shape)
+end
+
+function reshape_reference_data(data, shape::Tuple, ::NumPyRowMajorStorage)
+    if length(shape) == 1
+        return reshape(data, shape)
+    end
+    reshaped = reshape(data, reverse(shape))
+    return permutedims(reshaped, reverse(1:length(shape)))
+end
 
 default_reference_root() = get(ENV, "ADAPTIVEOPTICS_REFERENCE_ROOT", joinpath(@__DIR__, "reference_data"))
 
@@ -83,15 +110,9 @@ function load_reference_array(case::ReferenceCase)
     if length(flat) != n_expected
         throw(DimensionMismatchError("reference data for '$(case.id)' has $(length(flat)) values, expected $(n_expected)"))
     end
-    storage_order = uppercase(String(get(case.config, "storage_order", "F")))
     data = copy(flat)
-    if storage_order == "F" || length(case.shape) == 1
-        return reshape(data, case.shape)
-    elseif storage_order == "C"
-        reshaped = reshape(data, reverse(case.shape))
-        return permutedims(reshaped, reverse(1:length(case.shape)))
-    end
-    throw(InvalidConfiguration("unsupported storage order '$storage_order' for reference case '$(case.id)'"))
+    storage = parse_reference_storage_convention(get(case.config, "storage_order", "F"))
+    return reshape_reference_data(data, case.shape, storage)
 end
 
 function load_reference_aux_array(
@@ -108,14 +129,8 @@ function load_reference_aux_array(
         throw(DimensionMismatchError("reference aux data '$relpath' for '$(case.id)' has $(length(flat)) values, expected $(n_expected)"))
     end
     data = copy(flat)
-    order = uppercase(String(storage_order))
-    if order == "F" || length(dims) == 1
-        return reshape(data, dims)
-    elseif order == "C"
-        reshaped = reshape(data, reverse(dims))
-        return permutedims(reshaped, reverse(1:length(dims)))
-    end
-    throw(InvalidConfiguration("unsupported storage order '$storage_order' for aux data '$relpath' in case '$(case.id)'"))
+    storage = parse_reference_storage_convention(storage_order)
+    return reshape_reference_data(data, dims, storage)
 end
 
 function load_case_residual_opd(case::ReferenceCase)
@@ -224,6 +239,14 @@ function build_reference_detector(cfg::AbstractDict{<:AbstractString,<:Any})
     end
     return Detector(noise; integration_time=integration_time, qe=qe,
         psf_sampling=psf_sampling, binning=binning)
+end
+
+function reference_lift_img_resolution(
+    tel::Telescope,
+    det::AbstractDetector,
+    compute_cfg::AbstractDict{<:AbstractString,<:Any},
+)
+    return Int(get(compute_cfg, "img_resolution", det.params.psf_sampling * tel.params.resolution))
 end
 
 function build_reference_basis(cfg::AbstractDict{<:AbstractString,<:Any}, tel::Telescope)
@@ -1010,7 +1033,7 @@ function compute_reference_actual(case::ReferenceCase)
             reset_opd!(tel)
         end
         compute_cfg = case.config["compute"]
-        img_resolution = Int(get(compute_cfg, "img_resolution", det.params.psf_sampling * tel.params.resolution))
+        img_resolution = reference_lift_img_resolution(tel, det, compute_cfg)
         numerical = Bool(get(compute_cfg, "numerical", false))
         mode_ids = Int.(get(compute_cfg, "mode_ids", collect(1:size(basis, 3))))
         flux_norm = Float64(get(compute_cfg, "flux_norm", 1.0))
