@@ -72,6 +72,9 @@ export default_modal_inverse_policy, default_calibration_inverse_policy, default
 export BuildBackend, NativeBuildBackend, CPUBuildBackend, GPUArrayBuildBackend, default_build_backend
 export Workspace, ensure_psf_buffers!
 export Telemetry, TelemetryRow, record!
+export ClosedLoopTrace, ClosedLoopTraceRow
+export GSCClosedLoopTrace, GSCClosedLoopTraceRow
+export GSCAtmosphereReplayTrace, GSCAtmosphereReplayTraceRow
 export snapshot_config, write_config_toml, write_config_json
 export write_telemetry_csv
 export bin2d, poisson_noise!, poisson_sample

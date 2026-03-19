@@ -7,6 +7,9 @@ than by source file.
 
 - `Workspace`, `ensure_psf_buffers!`
 - `Telemetry`, `TelemetryRow`, `record!`
+- `ClosedLoopTrace`, `ClosedLoopTraceRow`
+- `GSCClosedLoopTrace`, `GSCClosedLoopTraceRow`
+- `GSCAtmosphereReplayTrace`, `GSCAtmosphereReplayTraceRow`
 - `snapshot_config`, `write_config_toml`, `write_config_json`
 - `write_telemetry_csv`
 - `bin2d`, `poisson_noise!`, `poisson_sample`

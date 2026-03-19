@@ -161,8 +161,8 @@ validation shows the new default is still too coarse.
   tutorial-scale pyTomoAO workflow with committed KAPA wavefront and DM-command
   regressions.
 - [ ] Audit calibration/output conventions against OOPAO for:
-  slope ordering/units outside geometric SH, PSF sampling conventions, detector coupling,
-  and closed-loop telemetry traces.
+  slope ordering/units outside geometric SH, PSF sampling conventions, and
+  detector coupling.
 - [ ] Add regression-backed fidelity tests for every supported OOPAO tutorial/workflow,
   not just smoke tests.
 - [ ] Keep the current simplifications only where they are proven numerically equivalent
@@ -192,7 +192,11 @@ validation shows the new default is still too coarse.
 - [ ] Define explicit execution/fidelity profiles so the package can support a
   scientifically stronger default profile and a faster HIL-oriented profile
   without conflating the two.
-- [ ] Audit remaining calibration/output conventions against OOPAO telemetry exports.
+- [ ] Finish the remaining calibration/output convention audit against OOPAO
+  telemetry exports. Compact closed-loop trace containers are now explicit in
+  core (`ClosedLoopTrace`, `GSCClosedLoopTrace`,
+  `GSCAtmosphereReplayTrace`); the remaining audit is mainly about slope
+  ordering/units, PSF sampling conventions, and detector-coupled exports.
 - [ ] Decide whether the long-horizon atmosphere-driven Pyramid/GSC replay stays
   purely diagnostic or receives more robustness work.
 - [ ] Extend HIL-focused support toward multi-WFS / multi-DM aggregation for
@@ -223,7 +227,9 @@ The current focus is now:
 7. targeted GPU builder/runtime performance work where profiling justifies it
 
 ## Next Tasks
-1. Audit remaining calibration/output conventions against OOPAO telemetry exports.
+1. Finish the remaining calibration/output convention audit against OOPAO
+   telemetry exports, now that compact closed-loop trace types are explicit in
+   core.
 2. Define explicit fidelity/execution profiles so the package can expose a
    scientifically stronger default path and a faster HIL-oriented path.
 3. Revisit `ft_sh_phase_screen` again if tilt/statistics validation shows the
