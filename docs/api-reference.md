@@ -40,6 +40,7 @@ than by source file.
 - `update_psd!`, `ensure_psd!`, `phase_screen_von_karman!`
 - `phase_variance`, `phase_covariance`, `phase_spectrum`, `covariance_matrix`
 - `ft_phase_screen`, `ft_sh_phase_screen`, `PhaseStatsWorkspace`
+- `SubharmonicMode`, `FastSubharmonics`, `FidelitySubharmonics`
 - `fast_atmosphere`
 
 ## Wavefront sensing

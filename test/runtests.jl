@@ -142,30 +142,34 @@ end
     ws = PhaseStatsWorkspace(32; T=Float64)
     phs_base = ft_sh_phase_screen(atm, 32, delta; rng=rng, ws=ws, subharmonics=false)
     rng = MersenneTwister(11)
-    phs_sh = ft_sh_phase_screen(atm, 32, delta; rng=rng, ws=ws, subharmonics=true)
+    phs_sh = ft_sh_phase_screen(atm, 32, delta; rng=rng, ws=ws, subharmonics=true,
+        mode=FidelitySubharmonics())
     @test sum(abs.(phs_sh .- phs_base)) > 0
     @test AdaptiveOpticsSim.resolve_subharmonic_levels(25.0, 8.0) == 4
     @test AdaptiveOpticsSim.resolve_subharmonic_levels(200.0, 8.0) > 4
 
     atm_large = KolmogorovAtmosphere(tel; r0=0.2, L0=200.0)
     rng = MersenneTwister(11)
-    phs_default = ft_sh_phase_screen(atm_large, 32, delta; rng=rng, ws=ws, subharmonics=true)
+    phs_default = ft_sh_phase_screen(atm_large, 32, delta; rng=rng, ws=ws,
+        subharmonics=true, mode=FidelitySubharmonics())
     rng = MersenneTwister(11)
-    phs_legacy = ft_sh_phase_screen(atm_large, 32, delta;
-        rng=rng, ws=ws, subharmonics=true, n_levels=3, subharmonic_radius=1)
+    phs_legacy = ft_sh_phase_screen(atm_large, 32, delta; rng=rng, ws=ws,
+        subharmonics=true, mode=FastSubharmonics())
     @test sum(abs.(phs_default .- phs_legacy)) > 0
 
     metrics_25_none = subharmonic_metrics(atm, tel.params.diameter; subharmonics=false)
     metrics_25_legacy = subharmonic_metrics(atm, tel.params.diameter;
-        subharmonics=true, n_levels=3, subharmonic_radius=1)
-    metrics_25_default = subharmonic_metrics(atm, tel.params.diameter; subharmonics=true)
+        subharmonics=true, mode=FastSubharmonics())
+    metrics_25_default = subharmonic_metrics(atm, tel.params.diameter;
+        subharmonics=true, mode=FidelitySubharmonics())
     @test metrics_25_none.tiptilt < metrics_25_legacy.tiptilt < metrics_25_default.tiptilt
     @test metrics_25_none.structure < metrics_25_legacy.structure < metrics_25_default.structure
 
     metrics_200_none = subharmonic_metrics(atm_large, tel.params.diameter; subharmonics=false)
     metrics_200_legacy = subharmonic_metrics(atm_large, tel.params.diameter;
-        subharmonics=true, n_levels=3, subharmonic_radius=1)
-    metrics_200_default = subharmonic_metrics(atm_large, tel.params.diameter; subharmonics=true)
+        subharmonics=true, mode=FastSubharmonics())
+    metrics_200_default = subharmonic_metrics(atm_large, tel.params.diameter;
+        subharmonics=true, mode=FidelitySubharmonics())
     @test metrics_200_none.tiptilt < metrics_200_legacy.tiptilt < metrics_200_default.tiptilt
     @test metrics_200_none.structure < metrics_200_legacy.structure < metrics_200_default.structure
 end

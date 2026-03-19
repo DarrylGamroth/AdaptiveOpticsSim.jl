@@ -64,10 +64,10 @@ function main()
         atm = KolmogorovAtmosphere(tel; r0=0.2, L0=L0)
         for (label, kwargs, theory) in (
             ("none", (subharmonics=false,), nothing),
-            ("legacy", (subharmonics=true, n_levels=3, subharmonic_radius=1),
+            ("fast", (subharmonics=true, mode=FastSubharmonics()),
                 subharmonic_theory_variance(atm.params.r0, atm.params.L0, tel.params.diameter, 1e-10;
                     n_levels=3, radius=1)),
-            ("default", (subharmonics=true,),
+            ("fidelity", (subharmonics=true, mode=FidelitySubharmonics()),
                 subharmonic_theory_variance(atm.params.r0, atm.params.L0, tel.params.diameter, 1e-10;
                     n_levels=AdaptiveOpticsSim.resolve_subharmonic_levels(atm.params.L0, tel.params.diameter), radius=2)),
         )

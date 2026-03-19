@@ -92,6 +92,7 @@ export MultiLayerAtmosphere, MultiLayerParams, MultiLayerState
 export advance!, propagate!
 export phase_variance, phase_covariance, phase_spectrum, covariance_matrix
 export ft_phase_screen, ft_sh_phase_screen, PhaseStatsWorkspace
+export SubharmonicMode, FastSubharmonics, FidelitySubharmonics
 export DeformableMirror, DeformableMirrorParams, DeformableMirrorState, build_influence_functions!, apply!
 export Misregistration, apply_misregistration
 export Detector, DetectorParams, DetectorState, capture!, output_frame, readout_ready, reset_integration!

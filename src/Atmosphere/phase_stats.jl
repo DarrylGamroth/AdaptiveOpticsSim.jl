@@ -1,6 +1,10 @@
 using Random
 using SpecialFunctions
 
+abstract type SubharmonicMode end
+struct FastSubharmonics <: SubharmonicMode end
+struct FidelitySubharmonics <: SubharmonicMode end
+
 mutable struct PhaseStatsWorkspace{T<:AbstractFloat,
     C<:AbstractMatrix{Complex{T}},
     R<:AbstractMatrix{T},
@@ -106,18 +110,27 @@ end
 function ft_sh_phase_screen(atm::KolmogorovAtmosphere, n::Int, delta::Real;
     l0::Real=1e-10, rng::AbstractRNG=Random.default_rng(), return_psd::Bool=false,
     ws::Union{Nothing,PhaseStatsWorkspace}=nothing, subharmonics::Bool=true,
-    n_levels::Union{Int,Nothing}=nothing, subharmonic_radius::Int=2)
+    mode::SubharmonicMode=FidelitySubharmonics(),
+    n_levels::Union{Int,Nothing}=nothing, subharmonic_radius::Union{Int,Nothing}=nothing)
     phs, psd = ft_phase_screen(atm, n, delta; l0=l0, rng=rng, return_psd=true, ws=ws)
     if subharmonics
-        levels = something(n_levels, resolve_subharmonic_levels(atm.params.L0, n * delta))
+        levels = something(n_levels, default_subharmonic_levels(mode, atm.params.L0, n * delta))
+        radius = something(subharmonic_radius, default_subharmonic_radius(mode))
         add_subharmonics!(phs, atm.params.r0, atm.params.L0, delta, l0;
-            rng=rng, n_levels=levels, radius=subharmonic_radius)
+            rng=rng, n_levels=levels, radius=radius)
     end
     if return_psd
         return phs, psd
     end
     return phs
 end
+
+default_subharmonic_levels(::FastSubharmonics, L0::Real, D::Real) = 3
+default_subharmonic_levels(::FidelitySubharmonics, L0::Real, D::Real) =
+    resolve_subharmonic_levels(L0, D)
+
+default_subharmonic_radius(::FastSubharmonics) = 1
+default_subharmonic_radius(::FidelitySubharmonics) = 2
 
 function add_subharmonics!(phs::AbstractMatrix{T}, r0::Real, L0::Real, delta::Real, l0::Real;
     rng::AbstractRNG=Random.default_rng(), n_levels::Int=3, radius::Int=2) where {T<:AbstractFloat}
