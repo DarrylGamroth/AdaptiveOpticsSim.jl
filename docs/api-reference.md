@@ -26,7 +26,9 @@ than by source file.
 - `Asterism`, `coordinates_xy_arcsec`, `compute_psf!`,
   `psf_pixel_scale_arcsec`, `ensure_psf_state!`
 - `ZernikeBasis`, `compute_zernike!`, `noll_to_nm`
-- `Detector`, `DetectorParams`, `DetectorState`, `capture!`
+- `Detector`, `DetectorParams`, `DetectorState`, `DetectorExportMetadata`
+- `capture!`, `output_frame`, `detector_export_metadata`, `readout_ready`,
+  `reset_integration!`
 - `DeformableMirror`, `DeformableMirrorParams`, `DeformableMirrorState`,
   `build_influence_functions!`, `apply!`
 - `Misregistration`, `apply_misregistration`
@@ -78,6 +80,9 @@ than by source file.
 
 - `AbstractController`
 - `DiscreteIntegratorController`, `update!`
+- `ClosedLoopRuntime`, `RTCBoundary`, `MultiRTCBoundary`
+- `rtc_command`, `rtc_slopes`, `rtc_wfs_frame`, `rtc_science_frame`
+- `rtc_wfs_metadata`, `rtc_science_metadata`
 
 ## Traits and interfaces
 

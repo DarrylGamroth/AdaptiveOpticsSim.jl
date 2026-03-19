@@ -125,24 +125,14 @@ function GainSensingCamera(mask::AbstractMatrix, basis::AbstractArray;
     return gsc
 end
 
-noise_symbol(::NoiseNone) = :none
-noise_symbol(::NoisePhoton) = :photon
-noise_symbol(::NoiseReadout) = :readout
-noise_symbol(::NoisePhotonReadout) = :photon_readout
-
-readout_sigma(::NoiseNone, ::Type{T}) where {T<:AbstractFloat} = nothing
-readout_sigma(::NoisePhoton, ::Type{T}) where {T<:AbstractFloat} = nothing
-readout_sigma(noise::NoiseReadout, ::Type{T}) where {T<:AbstractFloat} = T(noise.sigma)
-readout_sigma(noise::NoisePhotonReadout, ::Type{T}) where {T<:AbstractFloat} = T(noise.sigma)
-
 function GSCDetectorMetadata(det::Detector; T::Type{<:AbstractFloat}=eltype(det.state.frame))
     return GSCDetectorMetadata{T}(
         T(det.params.integration_time),
         T(det.params.qe),
         det.params.psf_sampling,
         det.params.binning,
-        noise_symbol(det.noise),
-        readout_sigma(det.noise, T),
+        detector_noise_symbol(det.noise),
+        detector_readout_sigma(det.noise, T),
     )
 end
 

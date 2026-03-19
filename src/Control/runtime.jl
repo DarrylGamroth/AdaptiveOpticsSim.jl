@@ -208,10 +208,14 @@ end
 @inline rtc_command(boundary::RTCBoundary) = boundary.command
 @inline rtc_wfs_frame(boundary::RTCBoundary) = boundary.wfs_frame
 @inline rtc_science_frame(boundary::RTCBoundary) = boundary.science_frame
+@inline rtc_wfs_metadata(boundary::RTCBoundary) = isnothing(boundary.runtime.wfs_detector) ? nothing : detector_export_metadata(boundary.runtime.wfs_detector)
+@inline rtc_science_metadata(boundary::RTCBoundary) = isnothing(boundary.runtime.science_detector) ? nothing : detector_export_metadata(boundary.runtime.science_detector)
 @inline rtc_slopes(boundary::MultiRTCBoundary) = boundary.slopes
 @inline rtc_command(boundary::MultiRTCBoundary) = boundary.command
 @inline rtc_wfs_frame(boundary::MultiRTCBoundary) = boundary.wfs_frames
 @inline rtc_science_frame(boundary::MultiRTCBoundary) = boundary.science_frames
+@inline rtc_wfs_metadata(boundary::MultiRTCBoundary) = map(rtc_wfs_metadata, boundary.boundaries)
+@inline rtc_science_metadata(boundary::MultiRTCBoundary) = map(rtc_science_metadata, boundary.boundaries)
 
 @inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, dm::DeformableMirror,
     wfs::AbstractWFS, src::AbstractSource, rng::AbstractRNG)

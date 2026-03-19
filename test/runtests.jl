@@ -264,6 +264,10 @@ end
     boundary = RTCBoundary(runtime)
     @test length(rtc_slopes(boundary)) == length(wfs.state.slopes)
     @test size(rtc_science_frame(boundary)) == size(output_frame(det))
+    science_metadata = rtc_science_metadata(boundary)
+    @test science_metadata isa DetectorExportMetadata
+    @test science_metadata.output_size == size(output_frame(det))
+    @test science_metadata.frame_size == size(det.state.frame)
     step!(boundary)
     @test rtc_command(boundary) == runtime.command
 
@@ -300,6 +304,12 @@ end
     @test maximum(frame_adc) == 0xff
     @test minimum(frame_adc) >= 0x00
     @test eltype(det_adc.state.frame) == Float64
+    metadata_adc = detector_export_metadata(det_adc)
+    @test metadata_adc.noise == :none
+    @test metadata_adc.sensor == :ccd
+    @test metadata_adc.output_precision == UInt8
+    @test metadata_adc.frame_size == (4, 4)
+    @test metadata_adc.output_size == (4, 4)
 
     det_adc_float = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         bits=8, full_well=10.0, output_precision=Float32)
@@ -332,6 +342,10 @@ end
     reset_integration!(det_buffered)
     @test readout_ready(det_buffered)
     @test det_buffered.state.integrated_time == 0.0
+    metadata_buffered = detector_export_metadata(det_buffered)
+    @test metadata_buffered.output_size == size(output_frame(det_buffered))
+    @test metadata_buffered.psf_sampling == 1
+    @test metadata_buffered.binning == 1
 
     det_background_flux = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         background_flux=2.0)

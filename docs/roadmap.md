@@ -196,8 +196,10 @@ validation shows the new default is still too coarse.
   telemetry exports. Compact closed-loop trace containers are now explicit in
   core (`ClosedLoopTrace`, `GSCClosedLoopTrace`,
   `GSCAtmosphereReplayTrace`); the remaining audit is mainly about slope
-  ordering/units, any remaining PSF sampling mismatches, and
-  detector-coupled exports.
+  ordering/units and any remaining PSF sampling mismatches. Detector-coupled
+  runtime exports are now explicit through `DetectorExportMetadata`,
+  `detector_export_metadata`, `rtc_wfs_metadata`, and
+  `rtc_science_metadata`.
 - [ ] Decide whether the long-horizon atmosphere-driven Pyramid/GSC replay stays
   purely diagnostic or receives more robustness work.
 - [ ] Extend HIL-focused support toward multi-WFS / multi-DM aggregation for

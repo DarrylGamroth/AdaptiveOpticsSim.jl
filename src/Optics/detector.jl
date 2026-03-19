@@ -22,6 +22,23 @@ struct BackgroundFrame{T<:AbstractFloat,A<:AbstractMatrix{T}} <: BackgroundModel
     map::A
 end
 
+struct DetectorExportMetadata{T<:AbstractFloat}
+    integration_time::T
+    qe::T
+    psf_sampling::Int
+    binning::Int
+    gain::T
+    dark_current::T
+    bits::Union{Nothing,Int}
+    full_well::Union{Nothing,T}
+    sensor::Symbol
+    noise::Symbol
+    readout_sigma::Union{Nothing,T}
+    output_precision::Union{Nothing,DataType}
+    frame_size::Tuple{Int,Int}
+    output_size::Tuple{Int,Int}
+end
+
 NoiseReadout(sigma::Real) = NoiseReadout{Float64}(float(sigma))
 NoisePhotonReadout(sigma::Real) = NoisePhotonReadout{Float64}(float(sigma))
 
@@ -58,6 +75,41 @@ end
 
 readout_ready(det::Detector) = det.state.readout_ready
 output_frame(det::Detector) = det.state.output_buffer === nothing ? det.state.frame : det.state.output_buffer
+
+detector_noise_symbol(::NoiseNone) = :none
+detector_noise_symbol(::NoisePhoton) = :photon
+detector_noise_symbol(::NoiseReadout) = :readout
+detector_noise_symbol(::NoisePhotonReadout) = :photon_readout
+
+detector_sensor_symbol(::CCDSensor) = :ccd
+detector_sensor_symbol(::CMOSSensor) = :cmos
+detector_sensor_symbol(::EMCCDSensor) = :emccd
+
+detector_readout_sigma(::NoiseNone, ::Type{T}) where {T<:AbstractFloat} = nothing
+detector_readout_sigma(::NoisePhoton, ::Type{T}) where {T<:AbstractFloat} = nothing
+detector_readout_sigma(noise::NoiseReadout, ::Type{T}) where {T<:AbstractFloat} = T(noise.sigma)
+detector_readout_sigma(noise::NoisePhotonReadout, ::Type{T}) where {T<:AbstractFloat} = T(noise.sigma)
+
+function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype(det.state.frame))
+    output = output_frame(det)
+    full_well = det.params.full_well === nothing ? nothing : T(det.params.full_well)
+    return DetectorExportMetadata{T}(
+        T(det.params.integration_time),
+        T(det.params.qe),
+        det.params.psf_sampling,
+        det.params.binning,
+        T(det.params.gain),
+        T(det.params.dark_current),
+        det.params.bits,
+        full_well,
+        detector_sensor_symbol(det.params.sensor),
+        detector_noise_symbol(det.noise),
+        detector_readout_sigma(det.noise, T),
+        det.params.output_precision,
+        size(det.state.frame),
+        size(output),
+    )
+end
 
 function reset_integration!(det::Detector)
     fill!(det.state.accum_buffer, zero(eltype(det.state.accum_buffer)))

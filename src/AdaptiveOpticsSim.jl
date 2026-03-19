@@ -98,7 +98,8 @@ export ft_phase_screen, ft_sh_phase_screen, PhaseStatsWorkspace
 export SubharmonicMode, FastSubharmonics, FidelitySubharmonics
 export DeformableMirror, DeformableMirrorParams, DeformableMirrorState, build_influence_functions!, apply!
 export Misregistration, apply_misregistration
-export Detector, DetectorParams, DetectorState, capture!, output_frame, readout_ready, reset_integration!
+export Detector, DetectorParams, DetectorState, DetectorExportMetadata
+export capture!, output_frame, detector_export_metadata, readout_ready, reset_integration!
 export SensorType, CCDSensor, CMOSSensor, EMCCDSensor
 export ShackHartmann, ShackHartmannParams, ShackHartmannState, update_valid_mask!, measure!
 export PyramidWFS, PyramidParams, PyramidState
@@ -124,6 +125,7 @@ export ModalReconstructor, reconstruct!, reconstruct
 export AbstractController, DiscreteIntegratorController, update!
 export ClosedLoopRuntime, RTCBoundary, MultiRTCBoundary, sense!, step!, set_command!, snapshot_outputs!
 export rtc_slopes, rtc_command, rtc_wfs_frame, rtc_science_frame
+export rtc_wfs_metadata, rtc_science_metadata
 export RuntimeTimingStats, RuntimePhaseTimingStats, runtime_timing, runtime_phase_timing
 export with_reconstructor, with_reconstructors
 export AbstractOpticalElement, AbstractSource, AbstractAtmosphere, AbstractWFS
