@@ -372,21 +372,27 @@ function poisson_sample(rng::AbstractRNG, λ::Real)
     end
 end
 
-function poisson_noise!(rng::AbstractRNG, img::AbstractMatrix)
+function poisson_noise!(rng::AbstractRNG, img::AbstractArray)
     _poisson_noise!(execution_style(img), rng, img)
     return img
 end
 
-function _poisson_noise!(::ScalarCPUStyle, rng::AbstractRNG, img::AbstractMatrix)
+function _poisson_noise!(::ScalarCPUStyle, rng::AbstractRNG, img::AbstractArray)
     @inbounds for i in eachindex(img)
         img[i] = poisson_sample(rng, img[i])
     end
     return img
 end
 
-function _poisson_noise!(style::AcceleratorStyle, rng::AbstractRNG, img::AbstractMatrix{T}) where {T<:AbstractFloat}
+function _poisson_noise!(style::AcceleratorStyle, rng::AbstractRNG, img::AbstractArray{T}) where {T<:AbstractFloat}
+    poisson_noise_async!(style, rng, img)
+    synchronize_backend!(style)
+    return img
+end
+
+function poisson_noise_async!(style::AcceleratorStyle, rng::AbstractRNG, img::AbstractArray{T}) where {T<:AbstractFloat}
     seed = rand(rng, UInt64)
-    launch_kernel!(style, poisson_noise_kernel!, img, seed, length(img); ndrange=length(img))
+    launch_kernel_async!(style, poisson_noise_kernel!, img, seed, length(img); ndrange=length(img))
     return img
 end
 
@@ -401,8 +407,14 @@ function _randn_backend!(::ScalarCPUStyle, rng::AbstractRNG, out::AbstractArray)
 end
 
 function _randn_backend!(style::AcceleratorStyle, rng::AbstractRNG, out::AbstractArray{T}) where {T<:AbstractFloat}
+    randn_backend_async!(style, rng, out)
+    synchronize_backend!(style)
+    return out
+end
+
+function randn_backend_async!(style::AcceleratorStyle, rng::AbstractRNG, out::AbstractArray{T}) where {T<:AbstractFloat}
     seed = rand(rng, UInt64)
-    launch_kernel!(style, randn_fill_kernel!, out, seed, length(out); ndrange=length(out))
+    launch_kernel_async!(style, randn_fill_kernel!, out, seed, length(out); ndrange=length(out))
     return out
 end
 

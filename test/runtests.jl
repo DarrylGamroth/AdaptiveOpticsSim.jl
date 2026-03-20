@@ -260,6 +260,74 @@ end
     @test recon_cpu.reconstructor isa Matrix
 end
 
+@testset "AO188/3k surrogate" begin
+    default_params = AO1883kSurrogateParams()
+    @test default_params.n_act == 64
+    @test default_params.n_active_actuators == 3228
+    @test default_params.n_control_modes == 188
+    @test default_params.n_low_order_subap == 2
+    @test default_params.low_order_resolution == 28
+    @test default_params.n_low_order_modes == 4
+    @test default_params.latency.high_measurement_delay_frames == 1
+    @test default_params.high_detector.noise isa NoisePhotonReadout
+    @test default_params.branch_execution isa SequentialBranchExecution
+    @test default_params.replay_mode isa DirectReplayMode
+
+    params = AO1883kSurrogateParams(
+        T=Float32,
+        resolution=48,
+        n_act=16,
+        n_active_actuators=180,
+        n_control_modes=24,
+        control_grid_side=6,
+        n_subap=4,
+        n_low_order_subap=2,
+        n_low_order_modes=3,
+        source_magnitude=0.0,
+    )
+    @test params.low_order_resolution == 12
+    surrogate = ao188_3k_surrogate(; params=params, rng=MersenneTwister(1))
+    @test count(surrogate.active_mask) == params.n_active_actuators
+    @test length(surrogate.active_indices) == params.n_active_actuators
+    @test size(surrogate.high_M2C) == (params.n_act^2, params.n_control_modes)
+    @test size(surrogate.low_M2C) == (params.n_act^2, params.n_low_order_modes)
+    @test size(surrogate.high_reconstructor.reconstructor, 1) == params.n_act^2
+    @test size(surrogate.high_reconstructor.reconstructor, 2) == length(surrogate.high_wfs.state.slopes)
+    @test size(surrogate.low_reconstructor.reconstructor, 2) == length(surrogate.low_wfs.state.slopes)
+    @test surrogate.high_reconstructor.n_control_modes == params.n_control_modes
+    @test surrogate.low_reconstructor.n_control_modes == params.n_low_order_modes
+    step!(surrogate)
+    step!(surrogate)
+    step!(surrogate)
+    @test length(surrogate.command) == params.n_act^2
+    @test maximum(abs, surrogate.command) > 0
+    timing = runtime_timing(surrogate; warmup=1, samples=2, gc_before=false)
+    @test timing.samples == 2
+    phase = ao188_3k_phase_timing(surrogate; warmup=1, samples=2, gc_before=false)
+    @test phase.samples == 2
+    @test phase.delay_mean_ns >= 0
+
+    experimental = AO1883kSurrogateParams(
+        T=Float32,
+        resolution=32,
+        n_act=12,
+        n_active_actuators=96,
+        n_control_modes=12,
+        control_grid_side=4,
+        n_subap=4,
+        n_low_order_subap=2,
+        n_low_order_modes=2,
+        source_magnitude=0.0,
+        branch_execution=TaskParallelBranchExecution(),
+        replay_mode=PreparedReplayMode(),
+    )
+    @test experimental.low_order_resolution == 8
+    surrogate_exp = ao188_3k_surrogate(; params=experimental, rng=MersenneTwister(2))
+    @test surrogate_exp.replay_prepared
+    step!(surrogate_exp)
+    @test maximum(abs, surrogate_exp.command) >= 0
+end
+
 function closed_loop_runtime_allocations()
     rng = MersenneTwister(0)
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
@@ -303,6 +371,22 @@ end
     @test science_metadata.frame_size == size(det.state.frame)
     step!(boundary)
     @test rtc_command(boundary) == runtime.command
+
+    rng2 = MersenneTwister(2)
+    tel2 = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src2 = Source(band=:I, magnitude=0.0)
+    atm2 = KolmogorovAtmosphere(tel2; r0=0.2, L0=25.0)
+    dm2 = DeformableMirror(tel2; n_act=4, influence_width=0.3)
+    wfs2 = ShackHartmann(tel2; n_subap=4, mode=Diffractive())
+    sim2 = AOSimulation(tel2, atm2, src2, dm2, wfs2)
+    imat2 = interaction_matrix(dm2, wfs2, tel2, src2; amplitude=0.1)
+    recon2 = ModalReconstructor(imat2; gain=0.5)
+    wfs_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
+    runtime2 = ClosedLoopRuntime(sim2, recon2; rng=rng2, wfs_detector=wfs_det)
+    step!(runtime2)
+    boundary2 = RTCBoundary(runtime2)
+    @test ndims(rtc_wfs_frame(boundary2)) == 3
+    @test size(rtc_wfs_frame(boundary2), 1) == wfs2.params.n_subap^2
 
     timing = runtime_timing(runtime; warmup=1, samples=5, gc_before=false)
     @test timing.samples == 5
@@ -389,6 +473,13 @@ end
         background_map=fill(1.0, 4, 4))
     frame_background_map = capture!(det_background_map, zeros(4, 4); rng=MersenneTwister(2))
     @test frame_background_map == fill(-1.0, 4, 4)
+
+    cube = cat(fill(1.0, 4, 4), fill(2.0, 4, 4); dims=3)
+    scratch = similar(cube)
+    det_stack = Detector(integration_time=1.0, noise=NoiseNone(), qe=0.5, binning=1)
+    AdaptiveOpticsSim.capture_stack!(det_stack, cube, scratch; rng=MersenneTwister(10))
+    @test cube[:, :, 1] ≈ fill(0.5, 4, 4)
+    @test cube[:, :, 2] ≈ fill(1.0, 4, 4)
 end
 
 @testset "Asterism PSF" begin

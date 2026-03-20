@@ -78,12 +78,15 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
     )
 end
 
+@inline wfs_output_frame(wfs::AbstractWFS, det::AbstractDetector) = output_frame(det)
+@inline wfs_output_frame(wfs::ShackHartmann{<:Diffractive}, det::AbstractDetector) = wfs.state.spot_cube
+
 function RTCBoundary(runtime::ClosedLoopRuntime)
     command = similar(runtime.command)
     copyto!(command, runtime.command)
     slopes = similar(runtime.wfs.state.slopes)
     copyto!(slopes, runtime.wfs.state.slopes)
-    wfs_frame = isnothing(runtime.wfs_detector) ? nothing : similar(output_frame(runtime.wfs_detector))
+    wfs_frame = isnothing(runtime.wfs_detector) ? nothing : similar(wfs_output_frame(runtime.wfs, runtime.wfs_detector))
     science_frame = isnothing(runtime.science_detector) ? nothing : similar(output_frame(runtime.science_detector))
     boundary = RTCBoundary{typeof(runtime), typeof(command), typeof(slopes), typeof(wfs_frame), typeof(science_frame)}(
         runtime,
@@ -175,7 +178,7 @@ end
     copyto!(boundary.command, boundary.runtime.command)
     copyto!(boundary.slopes, boundary.runtime.wfs.state.slopes)
     if !isnothing(boundary.wfs_frame)
-        copyto!(boundary.wfs_frame, output_frame(boundary.runtime.wfs_detector))
+        copyto!(boundary.wfs_frame, wfs_output_frame(boundary.runtime.wfs, boundary.runtime.wfs_detector))
     end
     if !isnothing(boundary.science_frame)
         copyto!(boundary.science_frame, output_frame(boundary.runtime.science_detector))

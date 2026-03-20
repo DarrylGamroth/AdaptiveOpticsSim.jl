@@ -12,6 +12,40 @@ const ARCSEC_PER_RAD = 180 * 3600 / π
     end
 end
 
+@kernel function elongation_apply_stack_kernel!(tmp, intensity_stack, kernel, half::Int, n1::Int, n2::Int, n3::Int)
+    i, j, k = @index(Global, NTuple)
+    if i <= n1 && j <= n2 && k <= n3
+        acc = zero(eltype(tmp))
+        @inbounds for dk in -half:half
+            jj = clamp(j + dk, 1, n2)
+            acc += intensity_stack[i, jj, k] * kernel[dk + half + 1]
+        end
+        @inbounds tmp[i, j, k] = acc
+    end
+end
+
+@kernel function real_to_complex_stack_kernel!(dest, src, n1::Int, n2::Int, n3::Int)
+    i, j, k = @index(Global, NTuple)
+    if i <= n1 && j <= n2 && k <= n3
+        T = eltype(src)
+        @inbounds dest[i, j, k] = Complex{T}(src[i, j, k], zero(T))
+    end
+end
+
+@kernel function multiply_kernel_fft_stack_kernel!(fft_stack, kernels_fft, n1::Int, n2::Int, n3::Int)
+    i, j, k = @index(Global, NTuple)
+    if i <= n1 && j <= n2 && k <= n3
+        @inbounds fft_stack[i, j, k] *= kernels_fft[i, j, k]
+    end
+end
+
+@kernel function complex_to_real_scaled_stack_kernel!(dest, src, scale, n1::Int, n2::Int, n3::Int)
+    i, j, k = @index(Global, NTuple)
+    if i <= n1 && j <= n2 && k <= n3
+        @inbounds dest[i, j, k] = real(src[i, j, k]) * scale
+    end
+end
+
 @inline function ensure_kernel(kernel::Vector{T}, needed::Int) where {T}
     if length(kernel) < needed
         resize!(kernel, needed)
@@ -51,6 +85,31 @@ function apply_elongation!(intensity::AbstractMatrix{T}, factor::Real, tmp::Abst
     return kernel
 end
 
+function apply_elongation_stack!(intensity_stack::AbstractArray{T,3}, factor::Real, tmp::AbstractArray{T,3},
+    kernel::AbstractVector{T}) where {T<:AbstractFloat}
+    if factor <= 1
+        return kernel
+    end
+    sigma = T(0.5) * (T(factor) - one(T))
+    if sigma <= 0
+        return kernel
+    end
+    half = max(1, ceil(Int, 2 * sigma))
+    needed = 2 * half + 1
+    kernel = ensure_kernel(kernel, needed)
+    host_kernel = Vector{T}(undef, needed)
+    @inbounds for k in -half:half
+        host_kernel[k + half + 1] = exp(-T(0.5) * (T(k) / sigma)^2)
+    end
+    host_kernel ./= sum(host_kernel)
+    @views copyto!(kernel[1:needed], host_kernel)
+
+    n1, n2, n3 = size(intensity_stack)
+    _apply_elongation_stack!(execution_style(intensity_stack), intensity_stack, tmp, kernel, half, n1, n2, n3)
+    copyto!(intensity_stack, tmp)
+    return kernel
+end
+
 function _apply_elongation!(::ScalarCPUStyle, intensity::AbstractMatrix{T}, tmp::AbstractMatrix{T},
     kernel::AbstractVector{T}, half::Int, n1::Int, n2::Int) where {T<:AbstractFloat}
     @inbounds for i in 1:n1, j in 1:n2
@@ -70,6 +129,26 @@ function _apply_elongation!(style::AcceleratorStyle, intensity::AbstractMatrix{T
     return tmp
 end
 
+function _apply_elongation_stack!(::ScalarCPUStyle, intensity_stack::AbstractArray{T,3}, tmp::AbstractArray{T,3},
+    kernel::AbstractVector{T}, half::Int, n1::Int, n2::Int, n3::Int) where {T<:AbstractFloat}
+    @inbounds for k in 1:n3, i in 1:n1, j in 1:n2
+        acc = zero(T)
+        for dk in -half:half
+            jj = clamp(j + dk, 1, n2)
+            acc += intensity_stack[i, jj, k] * kernel[dk + half + 1]
+        end
+        tmp[i, j, k] = acc
+    end
+    return tmp
+end
+
+function _apply_elongation_stack!(style::AcceleratorStyle, intensity_stack::AbstractArray{T,3}, tmp::AbstractArray{T,3},
+    kernel::AbstractVector{T}, half::Int, n1::Int, n2::Int, n3::Int) where {T<:AbstractFloat}
+    launch_kernel!(style, elongation_apply_stack_kernel!, tmp, intensity_stack, kernel, half, n1, n2, n3;
+        ndrange=size(intensity_stack))
+    return tmp
+end
+
 @inline function lgs_pixel_scale(diameter::Real, diffraction_padding::Int, wavelength::Real)
     return ARCSEC_PER_RAD * float(wavelength) / float(diameter) / diffraction_padding
 end
@@ -83,9 +162,14 @@ end
 end
 
 function lgs_reference_vector(tel::Telescope, x0::Real, y0::Real, altitude::Real)
-    x = (tel.params.diameter / 4) * (x0 / altitude)
-    y = (tel.params.diameter / 4) * (y0 / altitude)
-    z = (tel.params.diameter^2) / (8 * altitude) / (2 * sqrt(3))
+    T = promote_type(typeof(tel.params.diameter), typeof(x0), typeof(y0), typeof(altitude))
+    diameter = T(tel.params.diameter)
+    x0_t = T(x0)
+    y0_t = T(y0)
+    altitude_t = T(altitude)
+    x = (diameter / T(4)) * (x0_t / altitude_t)
+    y = (diameter / T(4)) * (y0_t / altitude_t)
+    z = (diameter^2) / (T(8) * altitude_t) / (T(2) * sqrt(T(3)))
     return (x, y, z)
 end
 
@@ -171,6 +255,43 @@ function apply_lgs_convolution!(intensity::AbstractMatrix{T}, kernel_fft::Abstra
     scale = T(1) / (n * n)
     @. intensity = real(ifft_buffer) * scale
     return intensity
+end
+
+function apply_lgs_convolution_stack!(intensity_stack::AbstractArray{T,3}, kernels_fft::AbstractArray{Complex{T},3},
+    fft_stack::AbstractArray{Complex{T},3}, fft_plan, ifft_plan) where {T<:AbstractFloat}
+    size(kernels_fft, 3) == 0 && return intensity_stack
+    _apply_lgs_convolution_stack!(execution_style(intensity_stack), intensity_stack, kernels_fft, fft_stack, fft_plan, ifft_plan)
+    return intensity_stack
+end
+
+function _apply_lgs_convolution_stack!(::ScalarCPUStyle, intensity_stack::AbstractArray{T,3}, kernels_fft::AbstractArray{Complex{T},3},
+    fft_stack::AbstractArray{Complex{T},3}, fft_plan, ifft_plan) where {T<:AbstractFloat}
+    n1, n2, n3 = size(intensity_stack)
+    scale = T(1) / (n1 * n2)
+    @inbounds for k in 1:n3
+        @views fft_stack[:, :, k] .= complex.(intensity_stack[:, :, k], zero(T))
+    end
+    execute_fft_plan!(fft_stack, fft_plan)
+    @. fft_stack *= kernels_fft
+    execute_fft_plan!(fft_stack, ifft_plan)
+    @inbounds for k in 1:n3
+        @views intensity_stack[:, :, k] .= real.(fft_stack[:, :, k]) .* scale
+    end
+    return intensity_stack
+end
+
+function _apply_lgs_convolution_stack!(style::AcceleratorStyle, intensity_stack::AbstractArray{T,3}, kernels_fft::AbstractArray{Complex{T},3},
+    fft_stack::AbstractArray{Complex{T},3}, fft_plan, ifft_plan) where {T<:AbstractFloat}
+    n1, n2, n3 = size(intensity_stack)
+    launch_kernel_async!(style, real_to_complex_stack_kernel!, fft_stack, intensity_stack, n1, n2, n3; ndrange=size(fft_stack))
+    synchronize_backend!(style)
+    execute_fft_plan!(fft_stack, fft_plan)
+    launch_kernel_async!(style, multiply_kernel_fft_stack_kernel!, fft_stack, kernels_fft, n1, n2, n3; ndrange=size(fft_stack))
+    synchronize_backend!(style)
+    execute_fft_plan!(fft_stack, ifft_plan)
+    scale = T(1) / (n1 * n2)
+    launch_kernel!(style, complex_to_real_scaled_stack_kernel!, intensity_stack, fft_stack, scale, n1, n2, n3; ndrange=size(fft_stack))
+    return intensity_stack
 end
 
 function lgs_average_kernel_fft(tel::Telescope, src::LGSSource, pad::Int, n_subap::Int,

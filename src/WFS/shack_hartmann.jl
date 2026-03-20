@@ -16,12 +16,18 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     A<:AbstractMatrix{Bool},
     V<:AbstractVector{T},
     C<:AbstractMatrix{Complex{T}},
+    CC<:AbstractArray{Complex{T},3},
     R<:AbstractMatrix{T},
+    RC3<:AbstractArray{T,3},
+    RT3<:AbstractArray{T,3},
     RB<:AbstractMatrix{T},
     RS<:AbstractMatrix{T},
     RC<:AbstractArray{T,3},
+    RN<:AbstractArray{T,3},
     P,
+    PS,
     Pi,
+    PSi,
     K<:AbstractVector{T},
     KF<:AbstractArray{Complex{T},3}}
     valid_mask::A
@@ -29,13 +35,19 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     field::C
     phasor::C
     fft_buffer::C
+    fft_stack::CC
     intensity::R
+    intensity_stack::RC3
+    intensity_tmp_stack::RT3
     temp::R
     bin_buffer::RB
     spot::RS
     spot_cube::RC
+    detector_noise_cube::RN
     fft_plan::P
+    fft_stack_plan::PS
     ifft_plan::Pi
+    ifft_stack_plan::PSi
     elongation_kernel::K
     lgs_kernel_fft::KF
     lgs_kernel_tag::UInt
@@ -73,13 +85,19 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     field = backend{Complex{T}}(undef, pad, pad)
     phasor = similar(field)
     fft_buffer = similar(field)
+    fft_stack = backend{Complex{T}}(undef, pad, pad, n_subap * n_subap)
     intensity = backend{T}(undef, pad, pad)
+    intensity_stack = backend{T}(undef, pad, pad, n_subap * n_subap)
+    intensity_tmp_stack = similar(intensity_stack)
     temp = similar(intensity)
     bin_buffer = backend{T}(undef, sub, sub)
     spot = similar(bin_buffer)
     spot_cube = backend{T}(undef, n_subap * n_subap, sub, sub)
+    detector_noise_cube = similar(spot_cube)
     fft_plan = plan_fft_backend!(fft_buffer)
+    fft_stack_plan = plan_fft_backend!(fft_stack, (1, 2))
     ifft_plan = plan_ifft_backend!(fft_buffer)
+    ifft_stack_plan = plan_ifft_backend!(fft_stack, (1, 2))
     elongation_kernel = backend{T}(undef, 1)
     lgs_kernel_fft = backend{Complex{T}}(undef, 0, 0, 0)
     state = ShackHartmannState{
@@ -87,12 +105,18 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         typeof(valid_mask),
         typeof(slopes),
         typeof(field),
+        typeof(fft_stack),
         typeof(intensity),
+        typeof(intensity_stack),
+        typeof(intensity_tmp_stack),
         typeof(bin_buffer),
         typeof(spot),
         typeof(spot_cube),
+        typeof(detector_noise_cube),
         typeof(fft_plan),
+        typeof(fft_stack_plan),
         typeof(ifft_plan),
+        typeof(ifft_stack_plan),
         typeof(elongation_kernel),
         typeof(lgs_kernel_fft),
     }(
@@ -101,13 +125,19 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         field,
         phasor,
         fft_buffer,
+        fft_stack,
         intensity,
+        intensity_stack,
+        intensity_tmp_stack,
         temp,
         bin_buffer,
         spot,
         spot_cube,
+        detector_noise_cube,
         fft_plan,
+        fft_stack_plan,
         ifft_plan,
+        ifft_stack_plan,
         elongation_kernel,
         lgs_kernel_fft,
         UInt(0),
@@ -133,14 +163,20 @@ function update_valid_mask!(wfs::ShackHartmann, tel::Telescope)
 end
 
 function ensure_sh_buffers!(wfs::ShackHartmann, pad::Int)
+    n_spots = wfs.params.n_subap * wfs.params.n_subap
     if size(wfs.state.field) != (pad, pad)
         wfs.state.field = similar(wfs.state.field, pad, pad)
         wfs.state.phasor = similar(wfs.state.phasor, pad, pad)
         wfs.state.fft_buffer = similar(wfs.state.fft_buffer, pad, pad)
+        wfs.state.fft_stack = similar(wfs.state.fft_stack, Complex{eltype(wfs.state.field)}, pad, pad, n_spots)
         wfs.state.intensity = similar(wfs.state.intensity, pad, pad)
+        wfs.state.intensity_stack = similar(wfs.state.intensity_stack, eltype(wfs.state.intensity), pad, pad, n_spots)
+        wfs.state.intensity_tmp_stack = similar(wfs.state.intensity_tmp_stack, eltype(wfs.state.intensity), pad, pad, n_spots)
         wfs.state.temp = similar(wfs.state.temp, pad, pad)
         wfs.state.fft_plan = plan_fft_backend!(wfs.state.fft_buffer)
+        wfs.state.fft_stack_plan = plan_fft_backend!(wfs.state.fft_stack, (1, 2))
         wfs.state.ifft_plan = plan_ifft_backend!(wfs.state.fft_buffer)
+        wfs.state.ifft_stack_plan = plan_ifft_backend!(wfs.state.fft_stack, (1, 2))
         wfs.state.phasor_ratio = eltype(wfs.state.slopes)(NaN)
         wfs.state.calibrated = false
     end
@@ -220,6 +256,8 @@ function prepare_sampling!(wfs::ShackHartmann, tel::Telescope, src::AbstractSour
     if n_pix_subap != wfs.state.sampled_n_pix_subap
         wfs.state.spot = similar(wfs.state.spot, n_pix_subap, n_pix_subap)
         wfs.state.spot_cube = similar(wfs.state.spot_cube, eltype(wfs.state.spot_cube),
+            wfs.params.n_subap * wfs.params.n_subap, n_pix_subap, n_pix_subap)
+        wfs.state.detector_noise_cube = similar(wfs.state.detector_noise_cube, eltype(wfs.state.detector_noise_cube),
             wfs.params.n_subap * wfs.params.n_subap, n_pix_subap, n_pix_subap)
         wfs.state.sampled_n_pix_subap = n_pix_subap
     end
@@ -504,6 +542,105 @@ function compute_intensity!(wfs::ShackHartmann, tel::Telescope, src::AbstractSou
     return wfs.state.intensity
 end
 
+@kernel function sh_field_stack_kernel!(fft_stack, valid_mask, pupil, opd, phasor,
+    amp_scale, opd_to_cycles, n_sub::Int, sub::Int, ox::Int, oy::Int, n::Int, pad::Int)
+    x, y, idx = @index(Global, NTuple)
+    if x <= pad && y <= pad && idx <= n_sub * n_sub
+        i = (idx - 1) ÷ n_sub + 1
+        j = idx - (i - 1) * n_sub
+        T = eltype(phasor)
+        val = zero(T)
+        if @inbounds valid_mask[i, j]
+            if ox + 1 <= x <= ox + sub && oy + 1 <= y <= oy + sub
+                px = (i - 1) * sub + (x - ox)
+                py = (j - 1) * sub + (y - oy)
+                if px <= n && py <= n
+                    amp = amp_scale * pupil[px, py]
+                    val = amp * cispi(opd_to_cycles * opd[px, py]) * phasor[x, y]
+                end
+            end
+        end
+        @inbounds fft_stack[x, y, idx] = val
+    end
+end
+
+@kernel function complex_abs2_stack_kernel!(intensity_stack, fft_stack, pad::Int, n_spots::Int)
+    x, y, idx = @index(Global, NTuple)
+    if x <= pad && y <= pad && idx <= n_spots
+        @inbounds intensity_stack[x, y, idx] = abs2(fft_stack[x, y, idx])
+    end
+end
+
+@kernel function sh_sample_spot_stack_kernel!(spot_cube, intensity_stack, valid_mask,
+    binning::Int, n_sub::Int, n_binned::Int, n_out::Int)
+    idx, u, v = @index(Global, NTuple)
+    n_spots = n_sub * n_sub
+    if idx <= n_spots && u <= n_out && v <= n_out
+        i = (idx - 1) ÷ n_sub + 1
+        j = idx - (i - 1) * n_sub
+        T = eltype(spot_cube)
+        val = zero(T)
+        if @inbounds valid_mask[i, j]
+            ox = div(n_out - n_binned, 2)
+            oy = div(n_out - n_binned, 2)
+            bu = u - ox
+            bv = v - oy
+            if 1 <= bu <= n_binned && 1 <= bv <= n_binned
+                if binning == 1
+                    @inbounds val = intensity_stack[bu, bv, idx]
+                else
+                    acc = zero(T)
+                    @inbounds for ii in 1:binning, jj in 1:binning
+                        acc += intensity_stack[(bu - 1) * binning + ii, (bv - 1) * binning + jj, idx]
+                    end
+                    val = acc
+                end
+            end
+        end
+        @inbounds spot_cube[idx, u, v] = val
+    end
+end
+
+function compute_intensity_stack!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
+    pad = size(wfs.state.fft_stack, 1)
+    n_sub = wfs.params.n_subap
+    sub = div(tel.params.resolution, n_sub)
+    ox = div(pad - sub, 2)
+    oy = div(pad - sub, 2)
+    T = eltype(wfs.state.intensity)
+    opd_to_cycles = T(2) / wavelength(src)
+    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time *
+        (tel.params.diameter / tel.params.resolution)^2))
+    launch_kernel_async!(style, sh_field_stack_kernel!, wfs.state.fft_stack, wfs.state.valid_mask,
+        tel.state.pupil, tel.state.opd, wfs.state.phasor, amp_scale, opd_to_cycles, n_sub, sub, ox, oy,
+        tel.params.resolution, pad; ndrange=size(wfs.state.fft_stack))
+    synchronize_backend!(style)
+    execute_fft_plan!(wfs.state.fft_stack, wfs.state.fft_stack_plan)
+    launch_kernel!(style, complex_abs2_stack_kernel!, wfs.state.intensity_stack, wfs.state.fft_stack,
+        pad, n_sub * n_sub; ndrange=size(wfs.state.intensity_stack))
+    return wfs.state.intensity_stack
+end
+
+function sample_spot_stack!(::ScalarCPUStyle, wfs::ShackHartmann)
+    n_spots = size(wfs.state.spot_cube, 1)
+    @inbounds for idx in 1:n_spots
+        sample_spot!(wfs, @view(wfs.state.intensity_stack[:, :, idx]))
+        copyto!(sh_spot_view(wfs, idx), wfs.state.spot)
+    end
+    return wfs.state.spot_cube
+end
+
+function sample_spot_stack!(style::AcceleratorStyle, wfs::ShackHartmann)
+    pad = size(wfs.state.intensity_stack, 1)
+    binning = wfs.state.binning_pixel_scale
+    @assert pad % binning == 0
+    n_binned = div(pad, binning)
+    n_out = size(wfs.state.spot_cube, 2)
+    launch_kernel!(style, sh_sample_spot_stack_kernel!, wfs.state.spot_cube, wfs.state.intensity_stack,
+        wfs.state.valid_mask, binning, wfs.params.n_subap, n_binned, n_out; ndrange=size(wfs.state.spot_cube))
+    return wfs.state.spot_cube
+end
+
 @kernel function sh_spot_centroid_kernel!(slopes, spot_cube, valid_mask, cutoff, n_sub::Int, offset::Int, n1::Int, n2::Int)
     idx = @index(Global, Linear)
     n_spots = n_sub * n_sub
@@ -654,25 +791,8 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescop
 end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
-    n = tel.params.resolution
-    n_sub = wfs.params.n_subap
-    sub = div(n, n_sub)
-    pad = size(wfs.state.field, 1)
-    ox = div(pad - sub, 2)
-    oy = div(pad - sub, 2)
-    idx = 1
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = min(i * sub, n)
-        ye = min(j * sub, n)
-        compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
-        sample_spot!(wfs, wfs.state.intensity)
-        copyto!(sh_spot_view(wfs, idx), wfs.state.spot)
-        idx += 1
-    end
-    launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
-        n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
+    compute_intensity_stack!(style, wfs, tel, src)
+    sample_spot_stack!(style, wfs)
     return maximum(wfs.state.spot_cube)
 end
 
@@ -710,27 +830,7 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescop
 end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::LGSSource)
-    n = tel.params.resolution
-    n_sub = wfs.params.n_subap
-    sub = div(n, n_sub)
-    pad = size(wfs.state.field, 1)
-    ox = div(pad - sub, 2)
-    oy = div(pad - sub, 2)
-    idx = 1
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = min(i * sub, n)
-        ye = min(j * sub, n)
-        compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
-        apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
-        sample_spot!(wfs, wfs.state.intensity)
-        copyto!(sh_spot_view(wfs, idx), wfs.state.spot)
-        idx += 1
-    end
-    launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
-        n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
-    return maximum(wfs.state.spot_cube)
+    return sampled_spots_peak_lgs!(lgs_profile(src), style, wfs, tel, src)
 end
 
 function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
@@ -770,24 +870,10 @@ end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     det::AbstractDetector, rng::AbstractRNG)
-    n = tel.params.resolution
+    compute_intensity_stack!(style, wfs, tel, src)
+    sample_spot_stack!(style, wfs)
     n_sub = wfs.params.n_subap
-    sub = div(n, n_sub)
-    pad = size(wfs.state.field, 1)
-    ox = div(pad - sub, 2)
-    oy = div(pad - sub, 2)
-    idx = 1
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = min(i * sub, n)
-        ye = min(j * sub, n)
-        compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
-        sample_spot!(wfs, wfs.state.intensity)
-        frame = capture!(det, wfs.state.spot; rng=rng)
-        copyto!(sh_spot_view(wfs, idx), frame)
-        idx += 1
-    end
+    capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
     launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
         n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
     return maximum(wfs.state.spot_cube)
@@ -831,25 +917,49 @@ end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::LGSSource,
     det::AbstractDetector, rng::AbstractRNG)
-    n = tel.params.resolution
+    return sampled_spots_peak_lgs!(lgs_profile(src), style, wfs, tel, src, det, rng)
+end
+
+function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::LGSSource)
+    compute_intensity_stack!(style, wfs, tel, src)
+    apply_elongation_stack!(wfs.state.intensity_stack, lgs_elongation_factor(src),
+        wfs.state.intensity_tmp_stack, wfs.state.elongation_kernel)
+    sample_spot_stack!(style, wfs)
+    return maximum(wfs.state.spot_cube)
+end
+
+function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::LGSSource,
+    det::AbstractDetector, rng::AbstractRNG)
+    compute_intensity_stack!(style, wfs, tel, src)
+    apply_elongation_stack!(wfs.state.intensity_stack, lgs_elongation_factor(src),
+        wfs.state.intensity_tmp_stack, wfs.state.elongation_kernel)
+    sample_spot_stack!(style, wfs)
     n_sub = wfs.params.n_subap
-    sub = div(n, n_sub)
-    pad = size(wfs.state.field, 1)
-    ox = div(pad - sub, 2)
-    oy = div(pad - sub, 2)
-    idx = 1
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = min(i * sub, n)
-        ye = min(j * sub, n)
-        compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
-        apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
-        sample_spot!(wfs, wfs.state.intensity)
-        frame = capture!(det, wfs.state.spot; rng=rng)
-        copyto!(sh_spot_view(wfs, idx), frame)
-        idx += 1
-    end
+    capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
+    launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
+        n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
+    return maximum(wfs.state.spot_cube)
+end
+
+function sampled_spots_peak_lgs!(::LGSProfileNaProfile, style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::LGSSource)
+    n_sub = wfs.params.n_subap
+    compute_intensity_stack!(style, wfs, tel, src)
+    ensure_lgs_kernels!(wfs, tel, src)
+    apply_lgs_convolution_stack!(wfs.state.intensity_stack, wfs.state.lgs_kernel_fft,
+        wfs.state.fft_stack, wfs.state.fft_stack_plan, wfs.state.ifft_stack_plan)
+    sample_spot_stack!(style, wfs)
+    return maximum(wfs.state.spot_cube)
+end
+
+function sampled_spots_peak_lgs!(::LGSProfileNaProfile, style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::LGSSource,
+    det::AbstractDetector, rng::AbstractRNG)
+    n_sub = wfs.params.n_subap
+    compute_intensity_stack!(style, wfs, tel, src)
+    ensure_lgs_kernels!(wfs, tel, src)
+    apply_lgs_convolution_stack!(wfs.state.intensity_stack, wfs.state.lgs_kernel_fft,
+        wfs.state.fft_stack, wfs.state.fft_stack_plan, wfs.state.ifft_stack_plan)
+    sample_spot_stack!(style, wfs)
+    capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
     launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
         n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
     return maximum(wfs.state.spot_cube)
@@ -1149,11 +1259,25 @@ function lgs_spot_kernels_fft(tel::Telescope, wfs::ShackHartmann, src::LGSSource
             end
         end
         fft_buffer = wfs.state.fft_buffer
-        @. fft_buffer = complex(kernel, zero(T))
+        _copy_real_kernel_to_complex!(execution_style(fft_buffer), fft_buffer, kernel)
         execute_fft_plan!(fft_buffer, wfs.state.fft_plan)
         @views kernels_fft[:, :, idx] .= fft_buffer
         idx += 1
     end
 
     return kernels_fft
+end
+
+function _copy_real_kernel_to_complex!(::ScalarCPUStyle, dest::AbstractMatrix{Complex{T}}, kernel::AbstractMatrix{T}) where {T<:AbstractFloat}
+    @. dest = Complex{T}(kernel, zero(T))
+    return dest
+end
+
+function _copy_real_kernel_to_complex!(::AcceleratorStyle, dest::AbstractMatrix{Complex{T}}, kernel::AbstractMatrix{T}) where {T<:AbstractFloat}
+    host_complex = Matrix{Complex{T}}(undef, size(kernel)...)
+    @inbounds for j in axes(kernel, 2), i in axes(kernel, 1)
+        host_complex[i, j] = Complex{T}(kernel[i, j], zero(T))
+    end
+    copyto!(dest, host_complex)
+    return dest
 end

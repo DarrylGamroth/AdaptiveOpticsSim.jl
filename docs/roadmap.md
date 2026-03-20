@@ -207,6 +207,11 @@ validation shows the new default is still too coarse.
   purely diagnostic or receives more robustness work.
 - [ ] Extend HIL-focused support toward multi-WFS / multi-DM aggregation for
   MOAO, MCAO, and woofer/tweeter RTC scenarios.
+- [x] Add a maintained AO188/3k operational surrogate benchmark configuration.
+  `ao188_3k_surrogate` and `scripts/ao188_3k_hil_audit.jl` now provide a
+  concrete 64x64 / 3228-active / 188-mode HIL-oriented surrogate with a
+  split high/low-order SH proxy, explicit control-path latency staging, tuned
+  detector/noise defaults, and a circular active-actuator support map.
 - [ ] Add specialized HIL-relevant sensors on demand, starting with
   `ZernikeWFS` and then `CurvatureSensor` if needed.
 - [ ] Continue GPU/HIL performance work only where profiling shows real value,
@@ -230,7 +235,9 @@ The current focus is now:
 4. HIL/RTC-facing execution quality
 5. multi-WFS / multi-DM support
 6. specialized HIL-relevant sensors such as `ZernikeWFS`
-7. targeted GPU builder/runtime performance work where profiling justifies it
+7. targeted GPU builder/runtime performance work where profiling justifies it,
+   with the current priority on builder-heavy paths rather than per-frame
+   pixel-output runtime loops
 
 ## Next Tasks
 1. Finish the remaining calibration/output convention audit against OOPAO
@@ -290,6 +297,17 @@ The current focus is now:
   `scripts/gpu_hil_cuda.jl` runs the combined runtime + builder smoke surface,
   and `scripts/gpu_sync_audit_cuda.jl` reports the RTC-facing runtime/build
   timing surface for CUDA hosts.
+- [~] Treat per-frame GPU runtime for pixel-output Shack-Hartmann HIL as a
+  redesign candidate rather than an optimization target.
+  The maintained AO188/3k surrogate audit currently shows CPU runtime
+  outperforming both AMDGPU and CUDA for the warmed frame loop, with the
+  dominant cost in the high-order diffractive Shack-Hartmann detector path.
+  The current accelerator implementation still loops over subapertures and
+  captures each spot individually, so further work here should only proceed if
+  we are willing to redesign that path around a batched or fused pixel
+  pipeline. Until then, GPU maintenance effort is better spent on builder-heavy
+  calibration/tomography workflows than on the single-frame RTC loop. See
+  [`docs/pixel-output-gpu-runtime-redesign.md`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/pixel-output-gpu-runtime-redesign.md).
 - [ ] Add multi-WFS / multi-DM aggregation for MOAO, MCAO, and woofer/tweeter RTC scenarios.
 - [ ] Add specialized HIL-relevant sensors:
   `ZernikeWFS`, `CurvatureSensor`, and distributed/multi-WFS aggregation.

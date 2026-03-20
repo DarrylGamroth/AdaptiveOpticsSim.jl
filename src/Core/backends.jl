@@ -56,7 +56,9 @@ end
 allocate_array(backend, ::Type{T}, dims::Vararg{Int,N}) where {T,N} = backend{T}(undef, dims...)
 
 plan_fft_backend!(buffer) = plan_fft!(buffer)
+plan_fft_backend!(buffer, dims) = plan_fft!(buffer, dims)
 plan_ifft_backend!(buffer) = plan_ifft!(buffer)
+plan_ifft_backend!(buffer, dims) = plan_ifft!(buffer, dims)
 set_fft_provider_threads!(n::Integer) = FFTW.set_num_threads(n)
 execute_fft_plan!(buffer, plan) = (mul!(buffer, plan, buffer); buffer)
 backend_matmul(A::AbstractMatrix, B::AbstractMatrix) = A * B

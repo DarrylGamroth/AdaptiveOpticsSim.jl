@@ -61,6 +61,7 @@ include("Calibration/gain_sensing_camera.jl")
 include("Calibration/misregistration_identification.jl")
 include("Control/controller.jl")
 include("Control/runtime.jl")
+include("Control/hil_configs.jl")
 include("Tomography/parameters.jl")
 include("Tomography/geometry.jl")
 include("Tomography/fitting.jl")
@@ -121,6 +122,11 @@ export AOCalibration, ao_calibration
 export fitting_error, fitting_error_dm
 export fast_atmosphere
 export AOSimulation, initialize_ao_pyramid, initialize_ao_shwfs
+export AO188ActuatorSupportModel, CircularActuatorSupport
+export AO188BranchExecutionMode, SequentialBranchExecution, TaskParallelBranchExecution
+export AO188ReplayMode, DirectReplayMode, PreparedReplayMode
+export AO188LatencyModel, AO188WFSDetectorConfig
+export AO1883kSurrogateParams, AO1883kSurrogate, ao188_3k_surrogate, ao188_3k_phase_timing, prepare_replay!
 export GainSensingCamera, GSCDetectorMetadata, detector_metadata, weak_mode_mask, attach_detector!, detach_detector!
 export calibrate!, reset_calibration!, compute_optical_gains!
 export MetaSensitivity, compute_meta_sensitivity_matrix, estimate_misregistration, SPRINT, estimate!

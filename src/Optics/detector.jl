@@ -477,6 +477,127 @@ function capture!(det::Detector, psf::AbstractMatrix{T}, rng::AbstractRNG) where
     return write_output_frame!(det)
 end
 
+function _require_batched_detector_compat(det::Detector, cube::AbstractArray, scratch::AbstractArray)
+    size(cube) == size(scratch) ||
+        throw(DimensionMismatchError("batched detector scratch must match cube size"))
+    ndims(cube) == 3 || throw(DimensionMismatchError("batched detector input must be 3D"))
+    det.params.psf_sampling == 1 ||
+        throw(InvalidConfiguration("batched detector capture currently requires psf_sampling == 1"))
+    det.params.binning == 1 ||
+        throw(InvalidConfiguration("batched detector capture currently requires binning == 1"))
+    det.params.output_precision === nothing ||
+        throw(InvalidConfiguration("batched detector capture currently requires output_precision === nothing"))
+    return nothing
+end
+
+_batched_background_map!(::NoBackground, cube::AbstractArray, scratch::AbstractArray) = cube
+_batched_background_map!(background::ScalarBackground, cube::AbstractArray, scratch::AbstractArray) = (cube .-= background.level; cube)
+
+function _batched_background_map!(background::BackgroundFrame, cube::AbstractArray, scratch::AbstractArray)
+    size(background.map) == size(cube)[1:2] ||
+        throw(DimensionMismatchError("background_map size must match detector frame size"))
+    cube .-= reshape(background.map, size(background.map)..., 1)
+    return cube
+end
+
+_batched_background_flux!(::NoBackground, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG, exposure_time::Real) = cube
+
+function _batched_background_flux!(background::ScalarBackground, det::Detector, cube::AbstractArray, scratch::AbstractArray,
+    rng::AbstractRNG, exposure_time::Real)
+    fill!(scratch, background.level * exposure_time)
+    poisson_noise!(rng, scratch)
+    cube .+= scratch
+    return cube
+end
+
+function _batched_background_flux!(background::BackgroundFrame, det::Detector, cube::AbstractArray, scratch::AbstractArray,
+    rng::AbstractRNG, exposure_time::Real)
+    size(background.map) == size(cube)[1:2] ||
+        throw(DimensionMismatchError("background_flux size must match detector frame size"))
+    scratch .= reshape(background.map, size(background.map)..., 1)
+    scratch .*= exposure_time
+    poisson_noise!(rng, scratch)
+    cube .+= scratch
+    return cube
+end
+
+function _batched_dark_current!(det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG, exposure_time::Real)
+    dark_signal = det.params.dark_current * exposure_time
+    if dark_signal <= 0
+        return cube
+    end
+    fill!(scratch, dark_signal)
+    poisson_noise!(rng, scratch)
+    cube .+= scratch
+    return cube
+end
+
+_batched_pre_readout_gain!(::CCDSensor, det::Detector, cube::AbstractArray) = cube
+_batched_pre_readout_gain!(::CMOSSensor, det::Detector, cube::AbstractArray) = cube
+_batched_pre_readout_gain!(::EMCCDSensor, det::Detector, cube::AbstractArray) = (cube .*= det.params.gain; cube)
+
+_batched_post_readout_gain!(::EMCCDSensor, det::Detector, cube::AbstractArray) = cube
+_batched_post_readout_gain!(::CCDSensor, det::Detector, cube::AbstractArray) = (cube .*= det.params.gain; cube)
+_batched_post_readout_gain!(::CMOSSensor, det::Detector, cube::AbstractArray) = (cube .*= det.params.gain; cube)
+
+_batched_readout_noise!(det::Detector{NoiseNone}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
+_batched_readout_noise!(det::Detector{NoisePhoton}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
+
+function _batched_readout_noise!(det::Detector{<:NoiseReadout}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
+    randn_backend!(rng, scratch)
+    cube .+= det.noise.sigma .* scratch
+    return cube
+end
+
+function _batched_readout_noise!(det::Detector{<:NoisePhotonReadout}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
+    randn_backend!(rng, scratch)
+    cube .+= det.noise.sigma .* scratch
+    return cube
+end
+
+function _batched_quantization!(det::Detector, cube::AbstractArray)
+    bits = det.params.bits
+    bits === nothing && return cube
+    levels = exp2(eltype(cube)(bits))
+    full_well = det.params.full_well
+    if full_well === nothing
+        peak = maximum(cube)
+        if peak > 0
+            cube .*= levels / peak
+        end
+    else
+        cube .*= (levels - one(levels)) / full_well
+        clamp!(cube, zero(eltype(cube)), levels - one(levels))
+    end
+    return cube
+end
+
+function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3};
+    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    _require_batched_detector_compat(det, cube, scratch)
+    exposure_time = det.params.integration_time
+    cube .*= det.params.qe * exposure_time
+    if det isa Detector{NoisePhoton} || det isa Detector{<:NoisePhotonReadout}
+        poisson_noise!(rng, cube)
+    end
+    _batched_background_flux!(det.background_flux, det, cube, scratch, rng, exposure_time)
+    _batched_dark_current!(det, cube, scratch, rng, exposure_time)
+    apply_saturation!(det, cube)
+    _batched_pre_readout_gain!(det.params.sensor, det, cube)
+    _batched_readout_noise!(det, cube, scratch, rng)
+    _batched_post_readout_gain!(det.params.sensor, det, cube)
+    _batched_quantization!(det, cube)
+    _batched_background_map!(det.background_map, cube, scratch)
+    return cube
+end
+
+function apply_saturation!(det::Detector, cube::AbstractArray)
+    full_well = det.params.full_well
+    full_well === nothing && return cube
+    clamp!(cube, zero(eltype(cube)), full_well)
+    return cube
+end
+
 function capture!(det::Detector, psf::AbstractMatrix{T}; rng::AbstractRNG=Random.default_rng(),
     sample_time::Union{Nothing,Real}=nothing) where {T}
     if sample_time === nothing
