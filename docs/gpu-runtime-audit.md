@@ -268,6 +268,18 @@ Current recommendation:
   throughput-oriented HIL workflows,
 - use the high-accuracy builder policy only when tomography conditioning
   requires it.
+- for runtime-equivalence expectations, treat `Float32` and `Float64`
+  differently:
+  - `scripts/gpu_runtime_equivalence_amdgpu.jl` is the maintained fast-runtime
+    `Float32` surface and checks pre-command AO188 pixels/slopes plus SH/LGS
+    detector outputs.
+  - `scripts/gpu_runtime_equivalence_high_accuracy_amdgpu.jl` is the maintained
+    scientific `Float64` surface and adds a stricter post-command AO188
+    equivalence check (`tel_opd`, post-command pixels, and post-command
+    slopes).
+  - On this host, the post-command AO188 surface is tightly equivalent in
+    `Float64`, while `Float32` still has a visible DM-application accumulation
+    gap on GPU.
 
 On this host, the warmed sync-audit medium model tomography builder rises from
 about `6.58e7 ns` to about `7.27e7 ns` when switching to the high-accuracy

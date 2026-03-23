@@ -4,9 +4,10 @@ using Random
 const _RUNTIME_EQ_RTOL = 1f-4
 const _RUNTIME_EQ_ATOL = 5f-5
 
-function _ao188_noise_free_params(; branch_execution::AO188BranchExecutionMode=SequentialBranchExecution())
+function _ao188_noise_free_params(::Type{T}=Float32;
+    branch_execution::AO188BranchExecutionMode=SequentialBranchExecution()) where {T<:AbstractFloat}
     return AO1883kSurrogateParams(
-        T=Float32,
+        T=T,
         source_magnitude=0.0,
         branch_execution=branch_execution,
         replay_mode=PreparedReplayMode(),
@@ -16,8 +17,8 @@ function _ao188_noise_free_params(; branch_execution::AO188BranchExecutionMode=S
             reconstruction_delay_frames=0,
             dm_delay_frames=0,
         ),
-        high_detector=AO188WFSDetectorConfig(T=Float32, noise=NoiseNone()),
-        low_detector=AO188WFSDetectorConfig(T=Float32, noise=NoiseNone()),
+        high_detector=AO188WFSDetectorConfig(T=T, noise=NoiseNone()),
+        low_detector=AO188WFSDetectorConfig(T=T, noise=NoiseNone()),
     )
 end
 
@@ -83,7 +84,7 @@ function _run_ao188_equivalence(::Type{B}, branch_mode::AO188BranchExecutionMode
     BackendArray === nothing && error("GPU backend $(B) is not available")
 
     cpu = ao188_3k_surrogate(; params=_ao188_noise_free_params(), backend=Array, rng=MersenneTwister(1))
-    gpu = ao188_3k_surrogate(; params=_ao188_noise_free_params(branch_execution=branch_mode), backend=BackendArray, rng=MersenneTwister(1))
+    gpu = ao188_3k_surrogate(; params=_ao188_noise_free_params(Float32; branch_execution=branch_mode), backend=BackendArray, rng=MersenneTwister(1))
 
     _evaluate_ao188!(cpu)
     _evaluate_ao188!(gpu)
@@ -95,6 +96,44 @@ function _run_ao188_equivalence(::Type{B}, branch_mode::AO188BranchExecutionMode
     _assert_close("high_slopes", gpu.high_wfs.state.slopes, cpu.high_wfs.state.slopes)
     _assert_close("low_slopes", gpu.low_wfs.state.slopes, cpu.low_wfs.state.slopes)
     _assert_max_abs("command", gpu.command, cpu.command; atol=1f-3)
+end
+
+function _post_command_observation!(surrogate::AO1883kSurrogate, host_command::AbstractVector)
+    fill!(surrogate.dm.state.coefs, zero(eltype(surrogate.dm.state.coefs)))
+    fill!(surrogate.high_command, zero(eltype(surrogate.high_command)))
+    fill!(surrogate.low_command, zero(eltype(surrogate.low_command)))
+    fill!(surrogate.combined_command, zero(eltype(surrogate.combined_command)))
+    fill!(surrogate.command, zero(eltype(surrogate.command)))
+    _set_deterministic_opd!(surrogate.tel)
+    copyto!(surrogate.command, host_command)
+    copyto!(surrogate.dm.state.coefs, host_command)
+    apply!(surrogate.dm, surrogate.tel, DMAdditive())
+    AdaptiveOpticsSim._measure_branches!(SequentialBranchExecution(), surrogate)
+    return surrogate
+end
+
+function _run_ao188_post_command_equivalence(::Type{B}, branch_mode::AO188BranchExecutionMode;
+    T::Type{<:AbstractFloat}=Float64) where {B<:GPUBackendTag}
+    disable_scalar_backend!(B)
+    BackendArray = gpu_backend_array_type(B)
+    BackendArray === nothing && error("GPU backend $(B) is not available")
+
+    cmd_src = ao188_3k_surrogate(; params=_ao188_noise_free_params(T), backend=Array, rng=MersenneTwister(1))
+    _evaluate_ao188!(cmd_src)
+    host_command = Array(cmd_src.command)
+
+    cpu = ao188_3k_surrogate(; params=_ao188_noise_free_params(T), backend=Array, rng=MersenneTwister(2))
+    gpu = ao188_3k_surrogate(; params=_ao188_noise_free_params(T; branch_execution=branch_mode), backend=BackendArray, rng=MersenneTwister(2))
+    _post_command_observation!(cpu, host_command)
+    _post_command_observation!(gpu, host_command)
+    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(gpu.command))
+
+    println("ao188_post_command_equivalence T=", T)
+    _assert_close("tel_opd", gpu.tel.state.opd, cpu.tel.state.opd; rtol=T(1e-8), atol=T(1e-12))
+    _assert_close("post_high_spot_cube", gpu.high_wfs.state.spot_cube, cpu.high_wfs.state.spot_cube; rtol=T(1e-8), atol=T(1e-4))
+    _assert_close("post_low_spot_cube", gpu.low_wfs.state.spot_cube, cpu.low_wfs.state.spot_cube; rtol=T(1e-8), atol=T(1e-4))
+    _assert_close("post_high_slopes", gpu.high_wfs.state.slopes, cpu.high_wfs.state.slopes; rtol=T(1e-8), atol=T(1e-8))
+    _assert_close("post_low_slopes", gpu.low_wfs.state.slopes, cpu.low_wfs.state.slopes; rtol=T(1e-8), atol=T(1e-8))
 end
 
 function _na_profile(T::Type{<:AbstractFloat})
@@ -160,5 +199,12 @@ function run_gpu_runtime_equivalence(::Type{B}; branch_mode::AO188BranchExecutio
     _run_lgs_equivalence(B, :none)
     _run_lgs_equivalence(B, :na)
     println("gpu_runtime_equivalence complete")
+    return nothing
+end
+
+function run_gpu_runtime_equivalence_high_accuracy(::Type{B};
+    branch_mode::AO188BranchExecutionMode=SequentialBranchExecution()) where {B<:GPUBackendTag}
+    _run_ao188_post_command_equivalence(B, branch_mode; T=Float64)
+    println("gpu_runtime_equivalence_high_accuracy complete")
     return nothing
 end
