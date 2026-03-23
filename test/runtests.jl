@@ -291,8 +291,11 @@ end
     @test length(surrogate.active_indices) == params.n_active_actuators
     @test size(surrogate.high_M2C) == (params.n_act^2, params.n_control_modes)
     @test size(surrogate.low_M2C) == (params.n_act^2, params.n_low_order_modes)
-    @test size(surrogate.high_reconstructor.reconstructor, 1) == params.n_act^2
+    @test size(surrogate.high_reconstructor.command_basis, 1) == params.n_act^2
+    @test size(surrogate.high_reconstructor.command_basis, 2) == params.n_control_modes
+    @test size(surrogate.high_reconstructor.reconstructor, 1) == params.n_control_modes
     @test size(surrogate.high_reconstructor.reconstructor, 2) == length(surrogate.high_wfs.state.slopes)
+    @test size(surrogate.low_reconstructor.command_basis, 2) == params.n_low_order_modes
     @test size(surrogate.low_reconstructor.reconstructor, 2) == length(surrogate.low_wfs.state.slopes)
     @test surrogate.high_reconstructor.n_control_modes == params.n_control_modes
     @test surrogate.low_reconstructor.n_control_modes == params.n_low_order_modes

@@ -218,8 +218,17 @@ function AO1883kSurrogateParams(;
     )
 end
 
-struct FullCommandReconstructor{T<:AbstractFloat,M<:AbstractMatrix{T},P<:InversePolicy,V<:AbstractVector{T}}
+struct FullCommandReconstructor{
+    T<:AbstractFloat,
+    M<:AbstractMatrix{T},
+    B<:AbstractMatrix{T},
+    P<:InversePolicy,
+    V<:AbstractVector{T},
+    W<:AbstractVector{T},
+}
     reconstructor::M
+    command_basis::B
+    modal_workspace::W
     gain::T
     policy::P
     singular_values::V
@@ -229,13 +238,14 @@ struct FullCommandReconstructor{T<:AbstractFloat,M<:AbstractMatrix{T},P<:Inverse
 end
 
 function reconstruct!(out::AbstractVector, recon::FullCommandReconstructor, slopes::AbstractVector)
-    mul!(out, recon.reconstructor, slopes)
-    out .*= recon.gain
+    mul!(recon.modal_workspace, recon.reconstructor, slopes)
+    recon.modal_workspace .*= recon.gain
+    mul!(out, recon.command_basis, recon.modal_workspace)
     return out
 end
 
 function reconstruct(recon::FullCommandReconstructor, slopes::AbstractVector)
-    out = similar(recon.reconstructor, size(recon.reconstructor, 1))
+    out = similar(recon.command_basis, size(recon.command_basis, 1))
     return reconstruct!(out, recon, slopes)
 end
 
@@ -442,11 +452,21 @@ end
 function _full_command_reconstructor(M2C_host::AbstractMatrix{T}, imat::InteractionMatrix{T};
     gain::Real, policy::InversePolicy, build_backend::BuildBackend, ref::AbstractMatrix{T}) where {T<:AbstractFloat}
     modal_recon, stats = inverse_operator(build_backend, imat.matrix, policy)
-    full_host = M2C_host * Matrix(Array(modal_recon))
-    full_native = materialize_build(build_backend, ref, full_host)
+    command_basis = materialize_build(build_backend, ref, M2C_host)
     singular_values = materialize_build(build_backend, similar(ref, T, 0), stats.singular_values)
-    return FullCommandReconstructor{T,typeof(full_native),typeof(policy),typeof(singular_values)}(
-        full_native,
+    modal_workspace = similar(ref, T, size(M2C_host, 2))
+    fill!(modal_workspace, zero(T))
+    return FullCommandReconstructor{
+        T,
+        typeof(modal_recon),
+        typeof(command_basis),
+        typeof(policy),
+        typeof(singular_values),
+        typeof(modal_workspace),
+    }(
+        modal_recon,
+        command_basis,
+        modal_workspace,
         T(gain),
         policy,
         singular_values,

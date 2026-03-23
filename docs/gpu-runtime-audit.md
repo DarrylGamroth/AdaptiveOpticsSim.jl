@@ -280,6 +280,11 @@ Current recommendation:
   - On this host, the post-command AO188 surface is tightly equivalent in
     `Float64`, while `Float32` still has a visible DM-application accumulation
     gap on GPU.
+  - Keeping the AO188 runtime reconstructor in mapped two-stage form
+    (`modal_reconstructor` followed by `M2C`) is still worth it for the fast
+    path: it improves the maintained AO188 runtime throughput on CPU and
+    AMDGPU, but it does not remove the stricter post-command `Float32`
+    equivalence gap by itself.
 
 On this host, the warmed sync-audit medium model tomography builder rises from
 about `6.58e7 ns` to about `7.27e7 ns` when switching to the high-accuracy

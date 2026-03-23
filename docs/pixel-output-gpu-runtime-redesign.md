@@ -84,6 +84,9 @@ Compared to the earlier AO188 audit:
 - CPU is no longer the unquestioned winner for the maintained AO188 surrogate
 - AMDGPU is faster than the local CPU in sequential mode, but still strongly
   penalized by generic Julia task overlap
+- keeping the AO188 reconstructor in mapped two-stage form (`modal_reconstructor`
+  then `M2C`) is a worthwhile fast-path refinement, but it does not remove the
+  stricter post-command `Float32` backend-equivalence gap on its own
 
 ## Current Diagnosis
 

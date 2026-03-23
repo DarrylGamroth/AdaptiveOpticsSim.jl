@@ -93,8 +93,10 @@ function run_ao188_3k_hil_audit(; backend_name::AbstractString="cpu", samples::I
     println("  total_phase_mean_ns: ", phase.total_mean_ns)
     println("  total_phase_p95_ns: ", phase.total_p95_ns)
     println("  command_type: ", typeof(scenario.command))
-    println("  high_reconstructor_type: ", typeof(scenario.high_reconstructor.reconstructor))
-    println("  low_reconstructor_type: ", typeof(scenario.low_reconstructor.reconstructor))
+    println("  high_modal_reconstructor_type: ", typeof(scenario.high_reconstructor.reconstructor))
+    println("  high_command_basis_type: ", typeof(scenario.high_reconstructor.command_basis))
+    println("  low_modal_reconstructor_type: ", typeof(scenario.low_reconstructor.reconstructor))
+    println("  low_command_basis_type: ", typeof(scenario.low_reconstructor.command_basis))
     return nothing
 end
 
