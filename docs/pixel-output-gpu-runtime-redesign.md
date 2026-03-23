@@ -95,6 +95,19 @@ Latest follow-up on the mapped path:
 - `spiders` CUDA sequential/direct is about `633.0 Hz`
 - the maintained fast-runtime equivalence scripts still pass on AMDGPU and CUDA
 
+Latest follow-up on the structured DM runtime split:
+
+- interaction-matrix calibration stays on the dense DM application path
+- runtime DM application uses a structured separable `X * C * Y'` path when the
+  Gaussian influence basis remains separable under the configured
+  misregistration
+- local CPU sequential/direct is now about `1.02 kHz`
+- local AMDGPU sequential/direct is now about `1.02 kHz`
+- `spiders` CUDA sequential/direct is about `447 Hz`
+- the maintained fast-runtime equivalence scripts still pass on AMDGPU and CUDA
+- stricter post-command `Float32` AO188 `tel_opd` agreement improves on AMDGPU
+  but not yet on CUDA
+
 ## Current Diagnosis
 
 The dominant cost is still the high-order diffractive Shack-Hartmann pixel

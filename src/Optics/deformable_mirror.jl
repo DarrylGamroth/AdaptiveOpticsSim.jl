@@ -21,11 +21,21 @@ struct DeformableMirrorParams{T<:AbstractFloat}
     misregistration::Misregistration{T}
 end
 
-mutable struct DeformableMirrorState{T<:AbstractFloat,A<:AbstractMatrix{T},M<:AbstractMatrix{T},V<:AbstractVector{T}}
+mutable struct DeformableMirrorState{
+    T<:AbstractFloat,
+    A<:AbstractMatrix{T},
+    M<:AbstractMatrix{T},
+    V<:AbstractVector{T},
+    C,
+}
     opd::A
     opd_vec::V
     modes::M
     coefs::V
+    coefs_grid::C
+    separable_x::Union{Nothing,A}
+    separable_y_t::Union{Nothing,A}
+    separable_tmp::Union{Nothing,A}
 end
 
 struct DeformableMirror{P<:DeformableMirrorParams,S<:DeformableMirrorState} <: AbstractDeformableMirror
@@ -42,10 +52,59 @@ function DeformableMirror(tel::Telescope; n_act::Int, influence_width::Real=0.2,
     opd_vec = reshape(opd, :)
     modes = backend{T}(undef, n * n, n_act * n_act)
     coefs = backend{T}(undef, n_act * n_act)
+    coefs_grid = reshape(coefs, n_act, n_act)
     fill!(coefs, zero(T))
-    state = DeformableMirrorState{T, typeof(opd), typeof(modes), typeof(opd_vec)}(opd, opd_vec, modes, coefs)
+    state = DeformableMirrorState{T, typeof(opd), typeof(modes), typeof(opd_vec), typeof(coefs_grid)}(
+        opd, opd_vec, modes, coefs, coefs_grid, nothing, nothing, nothing)
     dm = DeformableMirror(params, state)
     build_influence_functions!(dm, tel)
+    build_separable_influence!(dm, tel)
+    return dm
+end
+
+@inline function supports_separable_influence(mis::Misregistration)
+    return iszero(mis.rotation_deg) &&
+           iszero(mis.anamorphosis_angle) &&
+           mis.tangential_scaling == one(mis.tangential_scaling) &&
+           mis.radial_scaling == one(mis.radial_scaling)
+end
+
+function build_separable_influence!(dm::DeformableMirror, tel::Telescope)
+    supports_separable_influence(dm.params.misregistration) || return dm
+    n = tel.params.resolution
+    n_act = dm.params.n_act
+    T = eltype(dm.state.opd)
+    sigma2 = T(dm.params.influence_width)^2
+    xs = range(T(-1), T(1); length=n_act)
+    ys = range(T(-1), T(1); length=n_act)
+    cx = T((n + 1) / 2)
+    cy = T((n + 1) / 2)
+    scale = T(n / 2)
+    xbasis_host = Matrix{T}(undef, n, n_act)
+    ybasis_host = Matrix{T}(undef, n_act, n)
+    @inbounds for (ai, x0) in enumerate(xs)
+        x_m, _ = apply_misregistration(dm.params.misregistration, x0, zero(T))
+        for i in 1:n
+            x = (T(i) - cx) / scale
+            xbasis_host[i, ai] = exp(-((x - T(x_m))^2) / (2 * sigma2))
+        end
+    end
+    @inbounds for (aj, y0) in enumerate(ys)
+        _, y_m = apply_misregistration(dm.params.misregistration, zero(T), y0)
+        for j in 1:n
+            y = (T(j) - cy) / scale
+            ybasis_host[aj, j] = exp(-((y - T(y_m))^2) / (2 * sigma2))
+        end
+    end
+    xbasis = similar(dm.state.opd, n, n_act)
+    ybasis_t = similar(dm.state.opd, n_act, n)
+    tmp = similar(dm.state.opd, n, n_act)
+    copyto!(xbasis, xbasis_host)
+    copyto!(ybasis_t, ybasis_host)
+    fill!(tmp, zero(T))
+    dm.state.separable_x = xbasis
+    dm.state.separable_y_t = ybasis_t
+    dm.state.separable_tmp = tmp
     return dm
 end
 
@@ -104,13 +163,44 @@ function build_influence_functions!(style::AcceleratorStyle, dm::DeformableMirro
 end
 
 function apply!(dm::DeformableMirror, tel::Telescope, ::DMAdditive)
-    mul!(dm.state.opd_vec, dm.state.modes, dm.state.coefs)
+    apply_opd!(dm, tel)
     tel.state.opd .+= dm.state.opd
     return tel
 end
 
 function apply!(dm::DeformableMirror, tel::Telescope, ::DMReplace)
+    apply_opd!(dm, tel)
+    tel.state.opd .= dm.state.opd
+    return tel
+end
+
+@inline function apply_dense!(dm::DeformableMirror, tel::Telescope, ::DMAdditive)
+    mul!(dm.state.opd_vec, dm.state.modes, dm.state.coefs)
+    tel.state.opd .+= dm.state.opd
+    return tel
+end
+
+@inline function apply_dense!(dm::DeformableMirror, tel::Telescope, ::DMReplace)
     mul!(dm.state.opd_vec, dm.state.modes, dm.state.coefs)
     tel.state.opd .= dm.state.opd
     return tel
+end
+
+@inline function apply_opd!(dm::DeformableMirror, tel::Telescope)
+    if !isnothing(dm.state.separable_x)
+        return apply_opd_separable!(dm, tel)
+    end
+    mul!(dm.state.opd_vec, dm.state.modes, dm.state.coefs)
+    return dm.state.opd
+end
+
+function apply_opd_separable!(dm::DeformableMirror, tel::Telescope)
+    xbasis = dm.state.separable_x::typeof(dm.state.opd)
+    ybasis_t = dm.state.separable_y_t::typeof(dm.state.opd)
+    tmp = dm.state.separable_tmp::typeof(dm.state.opd)
+    n_act = dm.params.n_act
+    mul!(tmp, xbasis, dm.state.coefs_grid)
+    mul!(dm.state.opd, tmp, ybasis_t)
+    dm.state.opd .*= tel.state.pupil
+    return dm.state.opd
 end

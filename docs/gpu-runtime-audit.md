@@ -285,10 +285,19 @@ Current recommendation:
     path: it improves the maintained AO188 runtime throughput on CPU and
     AMDGPU, but it does not remove the stricter post-command `Float32`
     equivalence gap by itself.
-  - Current warmed AO188 surrogate rates on the mapped path are about
-    `183 Hz` on local CPU, `215 Hz` on local AMDGPU, and `633 Hz` on CUDA on
-    `spiders`, while the maintained fast-runtime equivalence scripts still
-    pass on AMDGPU and CUDA.
+  - The current AO188 split uses dense DM application for calibration
+    (`interaction_matrix`) and a structured separable DM application in the
+    runtime path when the DM misregistration keeps the Gaussian influence basis
+    separable.
+  - That split keeps the maintained fast-runtime equivalence scripts passing on
+    AMDGPU and CUDA while materially improving the runtime path on this host.
+  - Current warmed AO188 surrogate rates on the structured runtime path are
+    about `1.02 kHz` on local CPU, `1.02 kHz` on local AMDGPU, and about
+    `447 Hz` on CUDA on `spiders`.
+  - On AMDGPU, the stricter post-command `Float32` AO188 `tel_opd` max-abs
+    error improved from about `2.68e-7` to about `8.94e-8`. On CUDA, the same
+    stricter post-command `Float32` AO188 `tel_opd` max-abs error remains about
+    `2.68e-7`.
 
 On this host, the warmed sync-audit medium model tomography builder rises from
 about `6.58e7 ns` to about `7.27e7 ns` when switching to the high-accuracy

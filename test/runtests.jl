@@ -289,6 +289,8 @@ end
     surrogate = ao188_3k_surrogate(; params=params, rng=MersenneTwister(1))
     @test count(surrogate.active_mask) == params.n_active_actuators
     @test length(surrogate.active_indices) == params.n_active_actuators
+    @test !isnothing(surrogate.dm.state.separable_x)
+    @test !isnothing(surrogate.dm.state.separable_y_t)
     @test size(surrogate.high_M2C) == (params.n_act^2, params.n_control_modes)
     @test size(surrogate.low_M2C) == (params.n_act^2, params.n_low_order_modes)
     @test size(surrogate.high_reconstructor.command_basis, 1) == params.n_act^2
@@ -299,6 +301,15 @@ end
     @test size(surrogate.low_reconstructor.reconstructor, 2) == length(surrogate.low_wfs.state.slopes)
     @test surrogate.high_reconstructor.n_control_modes == params.n_control_modes
     @test surrogate.low_reconstructor.n_control_modes == params.n_low_order_modes
+
+    shifted = DeformableMirror(Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, T=Float32);
+        n_act=8, T=Float32, misregistration=Misregistration(shift_x=0.01, shift_y=-0.02, T=Float32))
+    @test !isnothing(shifted.state.separable_x)
+
+    rotated = DeformableMirror(Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, T=Float32);
+        n_act=8, T=Float32, misregistration=Misregistration(rotation_deg=1.0, T=Float32))
+    @test isnothing(rotated.state.separable_x)
+
     step!(surrogate)
     step!(surrogate)
     step!(surrogate)
