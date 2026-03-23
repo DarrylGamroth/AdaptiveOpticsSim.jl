@@ -6,6 +6,7 @@ struct CircularActuatorSupport <: AO188ActuatorSupportModel end
 abstract type AO188BranchExecutionMode end
 struct SequentialBranchExecution <: AO188BranchExecutionMode end
 struct TaskParallelBranchExecution <: AO188BranchExecutionMode end
+struct BackendStreamBranchExecution <: AO188BranchExecutionMode end
 
 abstract type AO188ReplayMode end
 struct DirectReplayMode <: AO188ReplayMode end
@@ -301,6 +302,7 @@ mutable struct AO1883kSurrogate{
     DLL,
     DLR,
     DLD,
+    BESTATE,
     RNG,
 }
     params::P
@@ -328,6 +330,7 @@ mutable struct AO1883kSurrogate{
     low_measurement_delay::DLL
     reconstruction_delay::DLR
     dm_delay::DLD
+    branch_execution_state::BESTATE
     rng::RNG
     replay_prepared::Bool
 end
@@ -486,6 +489,12 @@ function _frame_rngs!(rng::AbstractRNG)
     return MersenneTwister(rand(rng, UInt64)), MersenneTwister(rand(rng, UInt64))
 end
 
+init_branch_execution_state(::AO188BranchExecutionMode, ref) = nothing
+
+function measure_branches_backend!(::BackendStreamBranchExecution, surrogate::AO1883kSurrogate, state)
+    return _measure_branches!(SequentialBranchExecution(), surrogate)
+end
+
 function _measure_branches!(::SequentialBranchExecution, surrogate::AO1883kSurrogate)
     _measure_high!(surrogate, surrogate.rng)
     _measure_low!(surrogate, surrogate.rng)
@@ -500,6 +509,10 @@ function _measure_branches!(::TaskParallelBranchExecution, surrogate::AO1883kSur
     fetch(high_task)
     fetch(low_task)
     return surrogate
+end
+
+function _measure_branches!(::BackendStreamBranchExecution, surrogate::AO1883kSurrogate)
+    return measure_branches_backend!(BackendStreamBranchExecution(), surrogate, surrogate.branch_execution_state)
 end
 
 function prepare_replay!(surrogate::AO1883kSurrogate)
@@ -572,6 +585,7 @@ function ao188_3k_surrogate(; params::AO1883kSurrogateParams=AO1883kSurrogatePar
     fill!(low_command, zero(T))
     fill!(combined_command, zero(T))
     fill!(command, zero(T))
+    branch_execution_state = init_branch_execution_state(params.branch_execution, dm.state.coefs)
 
     surrogate = AO1883kSurrogate(
         params,
@@ -599,6 +613,7 @@ function ao188_3k_surrogate(; params::AO1883kSurrogateParams=AO1883kSurrogatePar
         VectorDelayLine(low_wfs.state.slopes, params.latency.low_measurement_delay_frames),
         VectorDelayLine(command, params.latency.reconstruction_delay_frames),
         VectorDelayLine(command, params.latency.dm_delay_frames),
+        branch_execution_state,
         rng,
         false,
     )

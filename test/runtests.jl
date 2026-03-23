@@ -326,6 +326,23 @@ end
     @test surrogate_exp.replay_prepared
     step!(surrogate_exp)
     @test maximum(abs, surrogate_exp.command) >= 0
+
+    stream_mode = AO1883kSurrogateParams(
+        T=Float32,
+        resolution=32,
+        n_act=12,
+        n_active_actuators=96,
+        n_control_modes=12,
+        control_grid_side=4,
+        n_subap=4,
+        n_low_order_subap=2,
+        n_low_order_modes=2,
+        source_magnitude=0.0,
+        branch_execution=BackendStreamBranchExecution(),
+    )
+    surrogate_stream = ao188_3k_surrogate(; params=stream_mode, rng=MersenneTwister(3))
+    step!(surrogate_stream)
+    @test maximum(abs, surrogate_stream.command) >= 0
 end
 
 function closed_loop_runtime_allocations()

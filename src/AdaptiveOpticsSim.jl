@@ -123,7 +123,7 @@ export fitting_error, fitting_error_dm
 export fast_atmosphere
 export AOSimulation, initialize_ao_pyramid, initialize_ao_shwfs
 export AO188ActuatorSupportModel, CircularActuatorSupport
-export AO188BranchExecutionMode, SequentialBranchExecution, TaskParallelBranchExecution
+export AO188BranchExecutionMode, SequentialBranchExecution, TaskParallelBranchExecution, BackendStreamBranchExecution
 export AO188ReplayMode, DirectReplayMode, PreparedReplayMode
 export AO188LatencyModel, AO188WFSDetectorConfig
 export AO1883kSurrogateParams, AO1883kSurrogate, ao188_3k_surrogate, ao188_3k_phase_timing, prepare_replay!

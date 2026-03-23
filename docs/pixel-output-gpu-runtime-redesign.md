@@ -56,6 +56,7 @@ Current implementation status:
     intensity cube instead of looping spot-by-spot at runtime
 - Phase 4: experimental, now backend-split
   - added `SequentialBranchExecution` and `TaskParallelBranchExecution`
+  - added `BackendStreamBranchExecution` as the backend-specific overlap hook
   - task-parallel branch execution is not the default
   - AMDGPU still does not justify generic Julia task overlap
   - CUDA now shows a real branch-overlap gain on the maintained AO188 case
@@ -289,6 +290,9 @@ Status:
   by default
 - CUDA measurements now justify continued investigation of backend-specific
   branch overlap
+- `BackendStreamBranchExecution` is implemented locally and falls back safely
+  on non-CUDA backends; the next required measurement is a real CUDA benchmark
+  once the remote CUDA host is reachable again
 
 ### Phase 5: Graph/replay execution
 

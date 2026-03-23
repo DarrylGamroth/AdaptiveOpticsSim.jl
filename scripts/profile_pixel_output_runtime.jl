@@ -39,7 +39,8 @@ function _resolve_branch_mode(name::AbstractString)
     lowered = lowercase(name)
     lowered == "sequential" && return SequentialBranchExecution()
     lowered == "task" && return TaskParallelBranchExecution()
-    error("unsupported branch mode '$name'; use sequential or task")
+    lowered == "stream" && return BackendStreamBranchExecution()
+    error("unsupported branch mode '$name'; use sequential, task, or stream")
 end
 
 function _resolve_replay_mode(name::AbstractString)
