@@ -135,10 +135,23 @@ Branch-overlap recheck after the SH/LGS redesign:
 
 - generic Julia task overlap is still a bad fit for AMDGPU on the maintained
   AO188 surrogate (`207 Hz` sequential vs `51 Hz` task mode)
-- CUDA now sees a meaningful gain from task overlap (`450 Hz` sequential vs
-  `527 Hz` task mode)
+- CUDA now sees a meaningful gain from branch overlap over sequential mode
+  (`450 Hz` sequential vs about `650-658 Hz` with overlap on the current code)
 - if branch overlap is pursued further, it should be as a CUDA-specific stream
   execution path, not a generic task-parallel default
+
+CUDA direct overlap comparison on the current code:
+
+- `task` mode: about `658 Hz`
+- `stream` mode: about `649 Hz`
+
+Interpretation:
+
+- explicit streams are now wired through the backend as intended
+- they do not yet outperform the existing CUDA task-overlap path
+- the value of the stream mode today is architectural: it provides a backend-
+  specific execution hook we can refine further without treating generic Julia
+  task overlap as the long-term design
 
 Low-order branch recheck after moving it to a dedicated lower-resolution
 telescope:
@@ -290,9 +303,8 @@ Status:
   by default
 - CUDA measurements now justify continued investigation of backend-specific
   branch overlap
-- `BackendStreamBranchExecution` is implemented locally and falls back safely
-  on non-CUDA backends; the next required measurement is a real CUDA benchmark
-  once the remote CUDA host is reachable again
+- `BackendStreamBranchExecution` now has a real CUDA measurement on `spiders`
+  and falls back safely on non-CUDA backends
 
 ### Phase 5: Graph/replay execution
 
