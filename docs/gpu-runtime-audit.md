@@ -285,6 +285,10 @@ Current recommendation:
     path: it improves the maintained AO188 runtime throughput on CPU and
     AMDGPU, but it does not remove the stricter post-command `Float32`
     equivalence gap by itself.
+  - Current warmed AO188 surrogate rates on the mapped path are about
+    `183 Hz` on local CPU, `215 Hz` on local AMDGPU, and `633 Hz` on CUDA on
+    `spiders`, while the maintained fast-runtime equivalence scripts still
+    pass on AMDGPU and CUDA.
 
 On this host, the warmed sync-audit medium model tomography builder rises from
 about `6.58e7 ns` to about `7.27e7 ns` when switching to the high-accuracy

@@ -88,6 +88,13 @@ Compared to the earlier AO188 audit:
   then `M2C`) is a worthwhile fast-path refinement, but it does not remove the
   stricter post-command `Float32` backend-equivalence gap on its own
 
+Latest follow-up on the mapped path:
+
+- local CPU sequential/direct is about `183.4 Hz`
+- local AMDGPU sequential/direct is about `214.6 Hz`
+- `spiders` CUDA sequential/direct is about `633.0 Hz`
+- the maintained fast-runtime equivalence scripts still pass on AMDGPU and CUDA
+
 ## Current Diagnosis
 
 The dominant cost is still the high-order diffractive Shack-Hartmann pixel
