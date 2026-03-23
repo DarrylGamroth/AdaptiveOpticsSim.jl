@@ -11,6 +11,28 @@ using LinearAlgebra
     end
 end
 
+@kernel function dm_separable_tmp_kernel!(tmp, xbasis, coefs_grid, n_act::Int)
+    i, a = @index(Global, NTuple)
+    if i <= size(tmp, 1) && a <= size(tmp, 2)
+        acc = zero(eltype(tmp))
+        @inbounds for b in 1:n_act
+            acc = muladd(xbasis[i, b], coefs_grid[b, a], acc)
+        end
+        tmp[i, a] = acc
+    end
+end
+
+@kernel function dm_separable_finalize_kernel!(opd, tmp, ybasis_t, pupil, n_act::Int)
+    i, j = @index(Global, NTuple)
+    if i <= size(opd, 1) && j <= size(opd, 2)
+        acc = zero(eltype(opd))
+        @inbounds for a in 1:n_act
+            acc = muladd(tmp[i, a], ybasis_t[a, j], acc)
+        end
+        opd[i, j] = ifelse(pupil[i, j], acc, zero(eltype(opd)))
+    end
+end
+
 abstract type DMApplyMode end
 struct DMAdditive <: DMApplyMode end
 struct DMReplace <: DMApplyMode end
@@ -199,6 +221,14 @@ function apply_opd_separable!(dm::DeformableMirror, tel::Telescope)
     ybasis_t = dm.state.separable_y_t::typeof(dm.state.opd)
     tmp = dm.state.separable_tmp::typeof(dm.state.opd)
     n_act = dm.params.n_act
+    if gpu_backend_name(typeof(dm.state.opd)) === :cuda
+        style = execution_style(dm.state.opd)
+        launch_kernel_async!(style, dm_separable_tmp_kernel!,
+            tmp, xbasis, dm.state.coefs_grid, n_act; ndrange=size(tmp))
+        launch_kernel!(style, dm_separable_finalize_kernel!,
+            dm.state.opd, tmp, ybasis_t, tel.state.pupil, n_act; ndrange=size(dm.state.opd))
+        return dm.state.opd
+    end
     mul!(tmp, xbasis, dm.state.coefs_grid)
     mul!(dm.state.opd, tmp, ybasis_t)
     dm.state.opd .*= tel.state.pupil
