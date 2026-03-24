@@ -205,11 +205,12 @@ validation shows the new default is still too coarse.
   `simulation_science_metadata`.
 - [ ] Decide whether the long-horizon atmosphere-driven Pyramid/GSC replay stays
   purely diagnostic or receives more robustness work.
-- [ ] Extend HIL-focused support toward multi-WFS / multi-DM aggregation for
-  MOAO, MCAO, and woofer/tweeter RTC scenarios. Execution planning now lives in
-  `docs/stacked-multi-source-multi-wfs-plan.md`, starting with stacked SH
-  asterism, then Pyramid/BioEdge asterism, then compatible multi-WFS execution
-  under `CompositeSimulationInterface`.
+- [x] Extend HIL-focused support toward multi-WFS / multi-DM aggregation for
+  MOAO, MCAO, and woofer/tweeter RTC scenarios. The staged implementation now
+  lives in `docs/stacked-multi-source-multi-wfs-plan.md` and includes stacked
+  SH asterism, stacked Pyramid/BioEdge asterism, grouped
+  `CompositeSimulationInterface` execution, and the maintained profiler
+  `scripts/profile_multi_source_multi_wfs_runtime.jl`.
 - [x] Add a maintained AO188/3k operational surrogate benchmark configuration.
   `ao188_3k_surrogate` and `scripts/ao188_3k_hil_audit.jl` now provide a
   concrete 64x64 / 3228-active / 188-mode HIL-oriented surrogate with a

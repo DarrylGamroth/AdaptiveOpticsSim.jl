@@ -422,6 +422,13 @@ end
     @test ndims(simulation_wfs_frame(boundary2)) == 3
     @test size(simulation_wfs_frame(boundary2), 1) == wfs2.params.n_subap^2
 
+    composite = CompositeSimulationInterface(boundary, boundary2)
+    @test length(simulation_command(composite)) == length(simulation_command(boundary)) + length(simulation_command(boundary2))
+    @test length(simulation_slopes(composite)) == length(simulation_slopes(boundary)) + length(simulation_slopes(boundary2))
+    @test length(simulation_wfs_frame(composite)) == 2
+    step!(composite)
+    @test simulation_command(composite) == vcat(simulation_command(boundary), simulation_command(boundary2))
+
     timing = runtime_timing(runtime; warmup=1, samples=5, gc_before=false)
     @test timing.samples == 5
     @test timing.min_ns >= 0
@@ -659,11 +666,80 @@ end
 
     ast = Asterism([ngs, Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0))])
     sh_ast = ShackHartmann(tel; n_subap=4, mode=Diffractive())
-    sh_ast_slopes = measure!(sh_ast, tel, ast)
+    sh_ast_slopes = copy(measure!(sh_ast, tel, ast))
     @test length(sh_ast_slopes) == 2 * 4 * 4
+    sh_ast_serial = ShackHartmann(tel; n_subap=4, mode=Diffractive())
+    AdaptiveOpticsSim.prepare_sampling!(sh_ast_serial, tel, ast.sources[1])
+    AdaptiveOpticsSim.ensure_sh_calibration!(sh_ast_serial, tel, ast.sources[1])
+    fill!(sh_ast_serial.state.detector_noise_cube, zero(eltype(sh_ast_serial.state.detector_noise_cube)))
+    for src in ast.sources
+        AdaptiveOpticsSim.sampled_spots_peak!(sh_ast_serial, tel, src)
+        sh_ast_serial.state.detector_noise_cube .+= sh_ast_serial.state.spot_cube
+    end
+    copyto!(sh_ast_serial.state.spot_cube, sh_ast_serial.state.detector_noise_cube)
+    sh_ast_serial_peak = maximum(sh_ast_serial.state.spot_cube)
+    AdaptiveOpticsSim.sh_signal_from_spots!(sh_ast_serial, sh_ast_serial_peak, sh_ast_serial.params.threshold_cog)
+    AdaptiveOpticsSim.subtract_reference_and_scale!(sh_ast_serial)
+    sh_ast_serial_slopes = copy(sh_ast_serial.state.slopes)
+    @test sh_ast_slopes ≈ sh_ast_serial_slopes
     pyr_ast = PyramidWFS(tel; n_subap=4, mode=Diffractive())
-    pyr_ast_slopes = measure!(pyr_ast, tel, ast)
+    pyr_ast_slopes = copy(measure!(pyr_ast, tel, ast))
     @test length(pyr_ast_slopes) == 2 * 4 * 4
+    pyr_ast_serial = PyramidWFS(tel; n_subap=4, mode=Diffractive())
+    AdaptiveOpticsSim.ensure_pyramid_calibration!(pyr_ast_serial, tel, ast.sources[1])
+    fill!(pyr_ast_serial.state.intensity, zero(eltype(pyr_ast_serial.state.intensity)))
+    for src in ast.sources
+        AdaptiveOpticsSim.pyramid_intensity!(pyr_ast_serial.state.temp, pyr_ast_serial, tel, src)
+        pyr_ast_serial.state.intensity .+= pyr_ast_serial.state.temp
+    end
+    pyr_ast_intensity = AdaptiveOpticsSim.sample_pyramid_intensity!(pyr_ast_serial, tel, pyr_ast_serial.state.intensity)
+    AdaptiveOpticsSim.pyramid_signal!(pyr_ast_serial, tel, pyr_ast_intensity)
+    @. pyr_ast_serial.state.slopes *= pyr_ast_serial.state.optical_gain
+    @test pyr_ast_slopes ≈ pyr_ast_serial.state.slopes
+    bio_ast = BioEdgeWFS(tel; n_subap=4, mode=Diffractive())
+    bio_ast_slopes = copy(measure!(bio_ast, tel, ast))
+    @test length(bio_ast_slopes) == 2 * 4 * 4
+    bio_ast_serial = BioEdgeWFS(tel; n_subap=4, mode=Diffractive())
+    AdaptiveOpticsSim.ensure_bioedge_calibration!(bio_ast_serial, tel, ast.sources[1])
+    fill!(bio_ast_serial.state.binned_intensity, zero(eltype(bio_ast_serial.state.binned_intensity)))
+    for src in ast.sources
+        AdaptiveOpticsSim.bioedge_intensity!(bio_ast_serial.state.intensity, bio_ast_serial, tel, src)
+        bio_ast_serial.state.binned_intensity .+= bio_ast_serial.state.intensity
+    end
+    bio_ast_intensity = AdaptiveOpticsSim.sample_bioedge_intensity!(bio_ast_serial, tel, bio_ast_serial.state.binned_intensity)
+    AdaptiveOpticsSim.bioedge_signal!(bio_ast_serial, tel, bio_ast_intensity)
+    @test bio_ast_slopes ≈ bio_ast_serial.state.slopes
+
+    pyr_ast_det = PyramidWFS(tel; n_subap=4, mode=Diffractive())
+    pyr_ast_det_slopes = copy(measure!(pyr_ast_det, tel, ast, det))
+    pyr_ast_det_serial = PyramidWFS(tel; n_subap=4, mode=Diffractive())
+    AdaptiveOpticsSim.ensure_pyramid_calibration!(pyr_ast_det_serial, tel, ast.sources[1])
+    fill!(pyr_ast_det_serial.state.intensity, zero(eltype(pyr_ast_det_serial.state.intensity)))
+    for src in ast.sources
+        AdaptiveOpticsSim.pyramid_intensity!(pyr_ast_det_serial.state.temp, pyr_ast_det_serial, tel, src)
+        pyr_ast_det_serial.state.intensity .+= pyr_ast_det_serial.state.temp
+    end
+    pyr_ast_det_intensity = AdaptiveOpticsSim.sample_pyramid_intensity!(pyr_ast_det_serial, tel, pyr_ast_det_serial.state.intensity)
+    pyr_ast_det_frame = capture!(det, pyr_ast_det_intensity; rng=MersenneTwister(12))
+    AdaptiveOpticsSim.resize_pyramid_signal_buffers!(pyr_ast_det_serial, size(pyr_ast_det_frame, 1))
+    AdaptiveOpticsSim.pyramid_signal!(pyr_ast_det_serial, tel, pyr_ast_det_frame)
+    @. pyr_ast_det_serial.state.slopes *= pyr_ast_det_serial.state.optical_gain
+    @test pyr_ast_det_slopes ≈ pyr_ast_det_serial.state.slopes
+
+    bio_ast_det = BioEdgeWFS(tel; n_subap=4, mode=Diffractive())
+    bio_ast_det_slopes = copy(measure!(bio_ast_det, tel, ast, det; rng=MersenneTwister(13)))
+    bio_ast_det_serial = BioEdgeWFS(tel; n_subap=4, mode=Diffractive())
+    AdaptiveOpticsSim.ensure_bioedge_calibration!(bio_ast_det_serial, tel, ast.sources[1])
+    fill!(bio_ast_det_serial.state.binned_intensity, zero(eltype(bio_ast_det_serial.state.binned_intensity)))
+    for src in ast.sources
+        AdaptiveOpticsSim.bioedge_intensity!(bio_ast_det_serial.state.intensity, bio_ast_det_serial, tel, src)
+        bio_ast_det_serial.state.binned_intensity .+= bio_ast_det_serial.state.intensity
+    end
+    bio_ast_det_intensity = AdaptiveOpticsSim.sample_bioedge_intensity!(bio_ast_det_serial, tel, bio_ast_det_serial.state.binned_intensity)
+    bio_ast_det_frame = capture!(det, bio_ast_det_intensity; rng=MersenneTwister(13))
+    AdaptiveOpticsSim.resize_bioedge_signal_buffers!(bio_ast_det_serial, size(bio_ast_det_frame, 1))
+    AdaptiveOpticsSim.bioedge_signal!(bio_ast_det_serial, tel, bio_ast_det_frame)
+    @test bio_ast_det_slopes ≈ bio_ast_det_serial.state.slopes
 end
 
 @testset "OOPAO parity knobs" begin

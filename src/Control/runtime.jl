@@ -358,6 +358,29 @@ function sense!(boundary::MultiRTCBoundary)
     return snapshot_outputs!(boundary)
 end
 
+@inline function reconstruct!(runtime::ClosedLoopRuntime)
+    reconstruct!(runtime.command, runtime.reconstructor, runtime.wfs.state.slopes)
+    return runtime.command
+end
+
+@inline function apply_runtime_command!(runtime::ClosedLoopRuntime)
+    apply_command!(runtime.dm.state.coefs, runtime.command, runtime.control_sign)
+    return runtime.dm.state.coefs
+end
+
+@inline function step_grouped!(boundary::MultiRTCBoundary)
+    @inbounds for child in boundary.boundaries
+        sense!(child.runtime)
+    end
+    @inbounds for child in boundary.boundaries
+        reconstruct!(child.runtime)
+    end
+    @inbounds for child in boundary.boundaries
+        apply_runtime_command!(child.runtime)
+    end
+    return snapshot_outputs!(boundary)
+end
+
 function sense!(runtime::ClosedLoopRuntime{SIM,TEL,A,S,DM,W,R,V,WD,Nothing,RNG,T}) where {SIM<:AOSimulation,TEL,A,S,DM,W,R,V,WD<:AbstractDetector,RNG,T<:AbstractFloat}
     sense_core!(runtime.atm, runtime.tel, runtime.dm, runtime.wfs, runtime.src, runtime.wfs_detector, runtime.rng)
     return runtime
@@ -407,10 +430,7 @@ function step!(boundary::RTCBoundary)
 end
 
 function step!(boundary::MultiRTCBoundary)
-    @inbounds for child in boundary.boundaries
-        step!(child.runtime)
-    end
-    return snapshot_outputs!(boundary)
+    return step_grouped!(boundary)
 end
 
 struct RuntimeTimingStats{T<:AbstractFloat}

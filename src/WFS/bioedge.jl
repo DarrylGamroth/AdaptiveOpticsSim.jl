@@ -77,6 +77,7 @@ mutable struct BioEdgeState{T<:AbstractFloat,
     C<:AbstractMatrix{Complex{T}},
     C3<:AbstractArray{Complex{T},3},
     R<:AbstractMatrix{T},
+    RS<:AbstractArray{T,3},
     Pf,
     Pi,
     K<:AbstractVector{T},
@@ -95,6 +96,7 @@ mutable struct BioEdgeState{T<:AbstractFloat,
     temp::R
     scratch::R
     binned_intensity::R
+    asterism_stack::RS
     fft_buffer::C
     binned_phase::R
     edge_mask_binned::A
@@ -112,6 +114,7 @@ mutable struct BioEdgeState{T<:AbstractFloat,
     binned_resolution::Int
     effective_resolution::Int
     nominal_detector_resolution::Int
+    asterism_capacity::Int
     calibrated::Bool
     calibration_wavelength::T
 end
@@ -178,6 +181,7 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     temp = backend{T}(undef, pad, pad)
     scratch = similar(temp)
     binned_intensity = similar(intensity)
+    asterism_stack = backend{T}(undef, 2 * pad, 2 * pad, 1)
     nominal_detector_resolution = max(1, round(Int, n_subap * pad / tel.params.resolution))
     camera_frame = backend{T}(undef, 2 * nominal_detector_resolution, 2 * nominal_detector_resolution)
     valid_i4q = backend{Bool}(undef, nominal_detector_resolution ÷ 2, nominal_detector_resolution ÷ 2)
@@ -201,6 +205,7 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         typeof(field),
         typeof(bioedge_masks),
         typeof(intensity),
+        typeof(asterism_stack),
         typeof(fft_plan),
         typeof(ifft_plan),
         typeof(elongation_kernel),
@@ -220,6 +225,7 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         temp,
         scratch,
         binned_intensity,
+        asterism_stack,
         fft_buffer,
         binned_phase,
         edge_mask_binned,
@@ -237,6 +243,7 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         tel.params.resolution,
         pad,
         nominal_detector_resolution,
+        1,
         false,
         zero(T),
     )
@@ -408,6 +415,7 @@ function ensure_bioedge_buffers!(wfs::BioEdgeWFS, pad::Int, tel::Telescope)
         wfs.state.temp = similar(wfs.state.temp, pad, pad)
         wfs.state.scratch = similar(wfs.state.scratch, pad, pad)
         wfs.state.binned_intensity = similar(wfs.state.binned_intensity, 2 * pad, 2 * pad)
+        wfs.state.asterism_stack = similar(wfs.state.asterism_stack, 2 * pad, 2 * pad, wfs.state.asterism_capacity)
         wfs.state.fft_buffer = similar(wfs.state.fft_buffer, pad, pad)
         wfs.state.fft_plan = plan_fft_backend!(wfs.state.focal_field)
         wfs.state.ifft_plan = plan_ifft_backend!(wfs.state.pupil_field)
@@ -419,6 +427,54 @@ function ensure_bioedge_buffers!(wfs::BioEdgeWFS, pad::Int, tel::Telescope)
         build_bioedge_masks!(wfs)
     end
     return wfs
+end
+
+function ensure_bioedge_asterism_stack!(wfs::BioEdgeWFS, n_src::Int)
+    n_src >= 1 || throw(InvalidConfiguration("asterism source count must be >= 1"))
+    dims = size(wfs.state.intensity)
+    if size(wfs.state.asterism_stack, 1) != dims[1] || size(wfs.state.asterism_stack, 2) != dims[2] ||
+            size(wfs.state.asterism_stack, 3) < n_src
+        capacity = max(n_src, wfs.state.asterism_capacity)
+        wfs.state.asterism_stack = similar(wfs.state.asterism_stack, dims[1], dims[2], capacity)
+        wfs.state.asterism_capacity = capacity
+    end
+    return wfs.state.asterism_stack
+end
+
+@kernel function bioedge_reduce_asterism_stack_kernel!(out, stack, n_src::Int, n1::Int, n2::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n1 && j <= n2
+        acc = zero(eltype(out))
+        @inbounds for src_idx in 1:n_src
+            acc += stack[i, j, src_idx]
+        end
+        @inbounds out[i, j] = acc
+    end
+end
+
+function accumulate_bioedge_asterism_intensity!(::ScalarCPUStyle, wfs::BioEdgeWFS, tel::Telescope, ast::Asterism)
+    stack = @view ensure_bioedge_asterism_stack!(wfs, length(ast.sources))[:, :, 1:length(ast.sources)]
+    @inbounds for (src_idx, src) in pairs(ast.sources)
+        bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
+        copyto!(@view(stack[:, :, src_idx]), wfs.state.intensity)
+    end
+    fill!(wfs.state.intensity, zero(eltype(wfs.state.intensity)))
+    @inbounds for src_idx in axes(stack, 3)
+        wfs.state.intensity .+= @view(stack[:, :, src_idx])
+    end
+    return wfs.state.intensity
+end
+
+function accumulate_bioedge_asterism_intensity!(style::AcceleratorStyle, wfs::BioEdgeWFS, tel::Telescope, ast::Asterism)
+    stack = @view ensure_bioedge_asterism_stack!(wfs, length(ast.sources))[:, :, 1:length(ast.sources)]
+    @inbounds for (src_idx, src) in pairs(ast.sources)
+        bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
+        copyto!(@view(stack[:, :, src_idx]), wfs.state.intensity)
+    end
+    launch_kernel!(style, bioedge_reduce_asterism_stack_kernel!, wfs.state.intensity, stack,
+        length(ast.sources), size(wfs.state.intensity, 1), size(wfs.state.intensity, 2);
+        ndrange=size(wfs.state.intensity))
+    return wfs.state.intensity
 end
 
 function prepare_bioedge_sampling!(wfs::BioEdgeWFS, tel::Telescope)
@@ -653,6 +709,20 @@ function measure!(wfs::BioEdgeWFS, tel::Telescope, src::LGSSource)
     return measure!(sensing_mode(wfs), wfs, tel, src)
 end
 
+function measure!(wfs::BioEdgeWFS, tel::Telescope, ast::Asterism)
+    return measure!(sensing_mode(wfs), wfs, tel, ast)
+end
+
+function measure!(wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource, det::AbstractDetector;
+    rng::AbstractRNG=Random.default_rng())
+    return measure!(sensing_mode(wfs), wfs, tel, src, det; rng=rng)
+end
+
+function measure!(wfs::BioEdgeWFS, tel::Telescope, ast::Asterism, det::AbstractDetector;
+    rng::AbstractRNG=Random.default_rng())
+    return measure!(sensing_mode(wfs), wfs, tel, ast, det; rng=rng)
+end
+
 function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource)
     ensure_bioedge_calibration!(wfs, tel, src)
     bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
@@ -665,6 +735,53 @@ function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, src::LGSSource
     bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
     intensity = sample_bioedge_intensity!(wfs, tel, wfs.state.intensity)
     return bioedge_signal!(wfs, tel, intensity, src)
+end
+
+function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource,
+    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    ensure_bioedge_calibration!(wfs, tel, src)
+    bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
+    intensity = sample_bioedge_intensity!(wfs, tel, wfs.state.intensity)
+    frame = capture!(det, intensity; rng=rng)
+    resize_bioedge_signal_buffers!(wfs, size(frame, 1))
+    return bioedge_signal!(wfs, tel, frame, src)
+end
+
+function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, src::LGSSource,
+    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    ensure_bioedge_calibration!(wfs, tel, src)
+    bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
+    intensity = sample_bioedge_intensity!(wfs, tel, wfs.state.intensity)
+    frame = capture!(det, intensity; rng=rng)
+    resize_bioedge_signal_buffers!(wfs, size(frame, 1))
+    return bioedge_signal!(wfs, tel, frame, src)
+end
+
+function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, ast::Asterism)
+    Base.require_one_based_indexing(tel.state.opd)
+    if isempty(ast.sources)
+        throw(InvalidConfiguration("asterism must contain at least one source"))
+    end
+    wavelength(ast)
+    ensure_bioedge_calibration!(wfs, tel, ast.sources[1])
+    accumulate_bioedge_asterism_intensity!(execution_style(wfs.state.intensity), wfs, tel, ast)
+    intensity = sample_bioedge_intensity!(wfs, tel, wfs.state.intensity)
+    return bioedge_signal!(wfs, tel, intensity)
+end
+
+function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, ast::Asterism,
+    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    Base.require_one_based_indexing(tel.state.opd)
+    if isempty(ast.sources)
+        throw(InvalidConfiguration("asterism must contain at least one source"))
+    end
+    wavelength(ast)
+    ensure_bioedge_calibration!(wfs, tel, ast.sources[1])
+    accumulate_bioedge_asterism_intensity!(execution_style(wfs.state.intensity), wfs, tel, ast)
+    intensity = sample_bioedge_intensity!(wfs, tel, wfs.state.intensity)
+    frame = capture!(det, intensity; rng=rng)
+    resize_bioedge_signal_buffers!(wfs, size(frame, 1))
+    return bioedge_signal!(wfs, tel, frame)
 end
 
 function bioedge_slopes!(wfs::BioEdgeWFS, phase::AbstractMatrix, edge_mask::AbstractMatrix{Bool})

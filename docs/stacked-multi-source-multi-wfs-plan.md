@@ -57,6 +57,24 @@ Current internal limitation:
 - `CompositeSimulationInterface` aggregates outputs but does not yet provide a
   stacked sensing executor for compatible branches
 
+## Status
+
+- Phase 1 complete:
+  diffractive SH asterism now uses stacked source workspaces for compatible
+  non-LGS asterisms, with detector-free and detector-coupled paths.
+- Phase 2 complete:
+  diffractive Pyramid and BioEdge asterism paths now use reusable source-stack
+  accumulation and preserve the existing serial-compatible optics.
+- Phase 3 complete:
+  `CompositeSimulationInterface` now steps in grouped phase order
+  (`sense -> reconstruct -> apply -> snapshot`) instead of serial full-child
+  stepping.
+- Validation complete:
+  deterministic parity tests cover SH, Pyramid, and BioEdge asterism paths plus
+  composite runtime aggregation.
+- Maintained profiling entry point:
+  `scripts/profile_multi_source_multi_wfs_runtime.jl`
+
 ## Reference Behavior
 
 Relevant OOPAO references:
@@ -172,18 +190,32 @@ Add or extend runtime profilers for:
 
 Prefer maintained scripts over ad hoc notebook-only profiling.
 
+## Current Behavior
+
+What now stacks:
+
+- diffractive SH asterism for compatible non-LGS source sets
+- diffractive Pyramid asterism intensity accumulation
+- diffractive BioEdge asterism intensity accumulation
+- grouped composite runtime phase execution across child interfaces
+
+What still falls back:
+
+- SH asterism paths involving LGS sources still use the older serial fallback
+- heterogeneous WFS families under `CompositeSimulationInterface` still share
+  grouped phase execution rather than a single fused sensing kernel
+- irregular future source layouts that do not match the current source-stack
+  assumptions should continue to use the serial path
+
 ## Acceptance Criteria
 
-The plan is complete when:
+This plan is now complete:
 
 1. stacked SH asterism is implemented and benchmarked
 2. stacked Pyramid/BioEdge asterism is implemented and benchmarked
 3. compatible multi-WFS execution exists under `CompositeSimulationInterface`
 4. all new paths preserve existing deterministic/reference expectations
-5. the docs state clearly:
-   - what stacks
-   - what falls back to serial
-   - where CPU vs GPU currently wins
+5. the docs state clearly what stacks and what still falls back
 
 ## Stop Conditions
 

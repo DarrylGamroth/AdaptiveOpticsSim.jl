@@ -118,6 +118,7 @@ mutable struct PyramidState{T<:AbstractFloat,
     C<:AbstractMatrix{Complex{T}},
     R<:AbstractMatrix{T},
     RB<:AbstractMatrix{T},
+    RS<:AbstractArray{T,3},
     C3<:AbstractArray{Complex{T},3},
     Pf,
     Pi,
@@ -136,6 +137,7 @@ mutable struct PyramidState{T<:AbstractFloat,
     temp::R
     scratch::R
     binned_intensity::RB
+    asterism_stack::RS
     fft_plan::Pf
     ifft_plan::Pi
     elongation_kernel::K
@@ -151,6 +153,7 @@ mutable struct PyramidState{T<:AbstractFloat,
     shift_y::NTuple{4,Int}
     effective_resolution::Int
     nominal_detector_resolution::Int
+    asterism_capacity::Int
     calibrated::Bool
     calibration_wavelength::T
 end
@@ -211,6 +214,7 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
     temp = similar(intensity)
     scratch = similar(intensity)
     binned_intensity = similar(intensity)
+    asterism_stack = backend{T}(undef, pad, pad, 1)
     n_pix_signal = cld(n_subap, binning)
     valid_i4q = backend{Bool}(undef, n_pix_signal, n_pix_signal)
     valid_signal = backend{Bool}(undef, 2 * n_pix_signal, n_pix_signal)
@@ -230,6 +234,7 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
         typeof(field),
         typeof(intensity),
         typeof(binned_intensity),
+        typeof(asterism_stack),
         typeof(modulation_phases),
         typeof(fft_plan),
         typeof(ifft_plan),
@@ -249,6 +254,7 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
         temp,
         scratch,
         binned_intensity,
+        asterism_stack,
         fft_plan,
         ifft_plan,
         elongation_kernel,
@@ -264,6 +270,7 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
         (0, 0, 0, 0),
         pad,
         0,
+        1,
         false,
         zero(T),
     )
@@ -311,6 +318,7 @@ function ensure_pyramid_buffers!(wfs::PyramidWFS, pad::Int, tel::Telescope)
         wfs.state.temp = similar(wfs.state.temp, pad, pad)
         wfs.state.scratch = similar(wfs.state.scratch, pad, pad)
         wfs.state.binned_intensity = similar(wfs.state.binned_intensity, pad, pad)
+        wfs.state.asterism_stack = similar(wfs.state.asterism_stack, pad, pad, wfs.state.asterism_capacity)
         wfs.state.fft_plan = plan_fft_backend!(wfs.state.focal_field)
         wfs.state.ifft_plan = plan_ifft_backend!(wfs.state.pupil_field)
         wfs.state.lgs_kernel_fft = similar(wfs.state.focal_field, Complex{eltype(wfs.state.focal_field)}, 0, 0)
@@ -321,6 +329,54 @@ function ensure_pyramid_buffers!(wfs::PyramidWFS, pad::Int, tel::Telescope)
         build_pyramid_mask!(wfs, tel)
     end
     return wfs
+end
+
+function ensure_pyramid_asterism_stack!(wfs::PyramidWFS, n_src::Int)
+    n_src >= 1 || throw(InvalidConfiguration("asterism source count must be >= 1"))
+    pad = size(wfs.state.intensity, 1)
+    if size(wfs.state.asterism_stack, 1) != pad || size(wfs.state.asterism_stack, 2) != pad ||
+            size(wfs.state.asterism_stack, 3) < n_src
+        capacity = max(n_src, wfs.state.asterism_capacity)
+        wfs.state.asterism_stack = similar(wfs.state.asterism_stack, pad, pad, capacity)
+        wfs.state.asterism_capacity = capacity
+    end
+    return wfs.state.asterism_stack
+end
+
+@kernel function pyramid_reduce_asterism_stack_kernel!(out, stack, n_src::Int, n1::Int, n2::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n1 && j <= n2
+        acc = zero(eltype(out))
+        @inbounds for src_idx in 1:n_src
+            acc += stack[i, j, src_idx]
+        end
+        @inbounds out[i, j] = acc
+    end
+end
+
+function accumulate_pyramid_asterism_intensity!(::ScalarCPUStyle, wfs::PyramidWFS, tel::Telescope, ast::Asterism)
+    stack = @view ensure_pyramid_asterism_stack!(wfs, length(ast.sources))[:, :, 1:length(ast.sources)]
+    @inbounds for (src_idx, src) in pairs(ast.sources)
+        pyramid_intensity!(wfs.state.temp, wfs, tel, src)
+        copyto!(@view(stack[:, :, src_idx]), wfs.state.temp)
+    end
+    fill!(wfs.state.intensity, zero(eltype(wfs.state.intensity)))
+    @inbounds for src_idx in axes(stack, 3)
+        wfs.state.intensity .+= @view(stack[:, :, src_idx])
+    end
+    return wfs.state.intensity
+end
+
+function accumulate_pyramid_asterism_intensity!(style::AcceleratorStyle, wfs::PyramidWFS, tel::Telescope, ast::Asterism)
+    stack = @view ensure_pyramid_asterism_stack!(wfs, length(ast.sources))[:, :, 1:length(ast.sources)]
+    @inbounds for (src_idx, src) in pairs(ast.sources)
+        pyramid_intensity!(wfs.state.temp, wfs, tel, src)
+        copyto!(@view(stack[:, :, src_idx]), wfs.state.temp)
+    end
+    launch_kernel!(style, pyramid_reduce_asterism_stack_kernel!, wfs.state.intensity, stack,
+        length(ast.sources), size(wfs.state.intensity, 1), size(wfs.state.intensity, 2);
+        ndrange=size(wfs.state.intensity))
+    return wfs.state.intensity
 end
 
 function prepare_pyramid_sampling!(wfs::PyramidWFS, tel::Telescope)
@@ -595,11 +651,7 @@ function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, ast::Asterism)
     end
     wavelength(ast)
     ensure_pyramid_calibration!(wfs, tel, ast.sources[1])
-    fill!(wfs.state.intensity, zero(eltype(wfs.state.intensity)))
-    for src in ast.sources
-        pyramid_intensity!(wfs.state.temp, wfs, tel, src)
-        wfs.state.intensity .+= wfs.state.temp
-    end
+    accumulate_pyramid_asterism_intensity!(execution_style(wfs.state.intensity), wfs, tel, ast)
     intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
     pyramid_signal!(wfs, tel, intensity)
     @. wfs.state.slopes *= wfs.state.optical_gain
@@ -614,11 +666,7 @@ function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, ast::Asterism,
     end
     wavelength(ast)
     ensure_pyramid_calibration!(wfs, tel, ast.sources[1])
-    fill!(wfs.state.intensity, zero(eltype(wfs.state.intensity)))
-    for src in ast.sources
-        pyramid_intensity!(wfs.state.temp, wfs, tel, src)
-        wfs.state.intensity .+= wfs.state.temp
-    end
+    accumulate_pyramid_asterism_intensity!(execution_style(wfs.state.intensity), wfs, tel, ast)
     intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
     frame = capture!(det, intensity; rng=rng)
     resize_pyramid_signal_buffers!(wfs, size(frame, 1))

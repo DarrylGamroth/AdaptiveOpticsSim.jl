@@ -56,6 +56,10 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     sampled_n_pix_subap::Int
     phasor_ratio::T
     reference_signal_2d::RB
+    fft_asterism_stack::CC
+    intensity_asterism_stack::RC3
+    fft_asterism_plan::PS
+    asterism_capacity::Int
     valid_mask_host::Matrix{Bool}
     reference_signal_host::Vector{T}
     slopes_units::T
@@ -100,6 +104,9 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     fft_stack_plan = plan_fft_backend!(fft_stack, (1, 2))
     ifft_plan = plan_ifft_backend!(fft_buffer)
     ifft_stack_plan = plan_ifft_backend!(fft_stack, (1, 2))
+    fft_asterism_stack = similar(fft_stack)
+    intensity_asterism_stack = similar(intensity_stack)
+    fft_asterism_plan = plan_fft_backend!(fft_asterism_stack, (1, 2))
     elongation_kernel = backend{T}(undef, 1)
     lgs_kernel_fft = backend{Complex{T}}(undef, 0, 0, 0)
     valid_mask_host = Matrix{Bool}(undef, n_subap, n_subap)
@@ -150,6 +157,10 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         sub,
         T(NaN),
         backend{T}(undef, 2 * n_subap, n_subap),
+        fft_asterism_stack,
+        intensity_asterism_stack,
+        fft_asterism_plan,
+        1,
         valid_mask_host,
         reference_signal_host,
         one(T),
@@ -184,9 +195,28 @@ function ensure_sh_buffers!(wfs::ShackHartmann, pad::Int)
         wfs.state.fft_stack_plan = plan_fft_backend!(wfs.state.fft_stack, (1, 2))
         wfs.state.ifft_plan = plan_ifft_backend!(wfs.state.fft_buffer)
         wfs.state.ifft_stack_plan = plan_ifft_backend!(wfs.state.fft_stack, (1, 2))
+        total = n_spots * wfs.state.asterism_capacity
+        wfs.state.fft_asterism_stack = similar(wfs.state.fft_asterism_stack, Complex{eltype(wfs.state.field)}, pad, pad, total)
+        wfs.state.intensity_asterism_stack = similar(wfs.state.intensity_asterism_stack, eltype(wfs.state.intensity), pad, pad, total)
+        wfs.state.fft_asterism_plan = plan_fft_backend!(wfs.state.fft_asterism_stack, (1, 2))
         wfs.state.phasor_ratio = eltype(wfs.state.slopes)(NaN)
         wfs.state.calibrated = false
     end
+    return wfs
+end
+
+function ensure_sh_asterism_buffers!(wfs::ShackHartmann, n_sources::Int)
+    n_sources > 0 || throw(InvalidConfiguration("asterism must contain at least one source"))
+    if n_sources <= wfs.state.asterism_capacity
+        return wfs
+    end
+    pad = size(wfs.state.fft_stack, 1)
+    n_spots = wfs.params.n_subap * wfs.params.n_subap
+    total = n_spots * n_sources
+    wfs.state.fft_asterism_stack = similar(wfs.state.fft_asterism_stack, Complex{eltype(wfs.state.field)}, pad, pad, total)
+    wfs.state.intensity_asterism_stack = similar(wfs.state.intensity_asterism_stack, eltype(wfs.state.intensity), pad, pad, total)
+    wfs.state.fft_asterism_plan = plan_fft_backend!(wfs.state.fft_asterism_stack, (1, 2))
+    wfs.state.asterism_capacity = n_sources
     return wfs
 end
 
@@ -373,6 +403,12 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
     pad = size(wfs.state.field, 1)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
+    if sh_stacked_asterism_compatible(ast)
+        peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.state.slopes), wfs, tel, ast)
+        sh_signal_from_spots!(wfs, peak, wfs.params.threshold_cog)
+        subtract_reference_and_scale!(wfs)
+        return wfs.state.slopes
+    end
     return measure_sh_asterism_diffractive!(execution_style(wfs.state.slopes), wfs, tel, ast, n, n_sub, sub, pad, ox, oy)
 end
 
@@ -391,6 +427,12 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
     pad = size(wfs.state.field, 1)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
+    if sh_stacked_asterism_compatible(ast)
+        peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.state.slopes), wfs, tel, ast, det, rng)
+        sh_signal_from_spots!(wfs, peak, wfs.params.threshold_cog)
+        subtract_reference_and_scale!(wfs)
+        return wfs.state.slopes
+    end
     return measure_sh_asterism_diffractive!(execution_style(wfs.state.slopes), wfs, tel, ast, det, rng, n, n_sub, sub, pad, ox, oy)
 end
 
@@ -578,6 +620,41 @@ end
     end
 end
 
+@kernel function sh_field_asterism_stack_kernel!(fft_stack, valid_mask, pupil, opd, phasor,
+    amp_scales, opd_to_cycles, n_sub::Int, sub::Int, ox::Int, oy::Int, n::Int, pad::Int, n_spots::Int)
+    x, y, idx_total = @index(Global, NTuple)
+    if x <= pad && y <= pad && idx_total <= size(fft_stack, 3)
+        src_idx = (idx_total - 1) ÷ n_spots + 1
+        idx = idx_total - (src_idx - 1) * n_spots
+        i = (idx - 1) ÷ n_sub + 1
+        j = idx - (i - 1) * n_sub
+        T = eltype(phasor)
+        val = zero(T)
+        if @inbounds valid_mask[i, j]
+            if ox + 1 <= x <= ox + sub && oy + 1 <= y <= oy + sub
+                px = (i - 1) * sub + (x - ox)
+                py = (j - 1) * sub + (y - oy)
+                if px <= n && py <= n
+                    amp = (@inbounds amp_scales[src_idx]) * pupil[px, py]
+                    val = amp * cispi(opd_to_cycles * opd[px, py]) * phasor[x, y]
+                end
+            end
+        end
+        @inbounds fft_stack[x, y, idx_total] = val
+    end
+end
+
+@kernel function reduce_asterism_intensity_stack_kernel!(intensity_stack, source_stack, n_spots::Int, n_src::Int, pad::Int)
+    x, y, idx = @index(Global, NTuple)
+    if x <= pad && y <= pad && idx <= n_spots
+        acc = zero(eltype(intensity_stack))
+        @inbounds for src_idx in 1:n_src
+            acc += source_stack[x, y, idx + (src_idx - 1) * n_spots]
+        end
+        @inbounds intensity_stack[x, y, idx] = acc
+    end
+end
+
 @kernel function sh_sample_spot_stack_kernel!(spot_cube, intensity_stack, valid_mask,
     binning::Int, n_sub::Int, n_binned::Int, n_out::Int)
     idx, u, v = @index(Global, NTuple)
@@ -628,6 +705,40 @@ function compute_intensity_stack!(style::AcceleratorStyle, wfs::ShackHartmann, t
     return wfs.state.intensity_stack
 end
 
+@inline sh_stacked_asterism_compatible(ast::Asterism) =
+    !isempty(ast.sources) && all(src -> !(src isa LGSSource), ast.sources)
+
+function compute_intensity_asterism_stack!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, ast::Asterism)
+    n_src = length(ast.sources)
+    ensure_sh_asterism_buffers!(wfs, n_src)
+    pad = size(wfs.state.fft_stack, 1)
+    n_sub = wfs.params.n_subap
+    n_spots = n_sub * n_sub
+    sub = div(tel.params.resolution, n_sub)
+    ox = div(pad - sub, 2)
+    oy = div(pad - sub, 2)
+    T = eltype(wfs.state.intensity)
+    amp_scales = similar(wfs.state.slopes, n_src)
+    @inbounds for i in eachindex(ast.sources)
+        src = ast.sources[i]
+        amp_scales[i] = sqrt(T(photon_flux(src) * tel.params.sampling_time *
+            (tel.params.diameter / tel.params.resolution)^2))
+    end
+    total = n_spots * n_src
+    fft_view = @view wfs.state.fft_asterism_stack[:, :, 1:total]
+    intensity_view = @view wfs.state.intensity_asterism_stack[:, :, 1:total]
+    opd_to_cycles = T(2) / wavelength(ast)
+    launch_kernel_async!(style, sh_field_asterism_stack_kernel!, fft_view, wfs.state.valid_mask,
+        tel.state.pupil, tel.state.opd, wfs.state.phasor, amp_scales, opd_to_cycles,
+        n_sub, sub, ox, oy, tel.params.resolution, pad, n_spots; ndrange=size(fft_view))
+    synchronize_backend!(style)
+    execute_fft_plan!(fft_view, wfs.state.fft_asterism_plan)
+    launch_kernel_async!(style, complex_abs2_stack_kernel!, intensity_view, fft_view, pad, total; ndrange=size(intensity_view))
+    launch_kernel!(style, reduce_asterism_intensity_stack_kernel!, wfs.state.intensity_stack, intensity_view,
+        n_spots, n_src, pad; ndrange=size(wfs.state.intensity_stack))
+    return wfs.state.intensity_stack
+end
+
 function sample_spot_stack!(::ScalarCPUStyle, wfs::ShackHartmann)
     n_spots = size(wfs.state.spot_cube, 1)
     @inbounds for idx in 1:n_spots
@@ -646,6 +757,44 @@ function sample_spot_stack!(style::AcceleratorStyle, wfs::ShackHartmann)
     launch_kernel!(style, sh_sample_spot_stack_kernel!, wfs.state.spot_cube, wfs.state.intensity_stack,
         wfs.state.valid_mask, binning, wfs.params.n_subap, n_binned, n_out; ndrange=size(wfs.state.spot_cube))
     return wfs.state.spot_cube
+end
+
+function sampled_spots_peak_asterism_stacked!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, ast::Asterism)
+    fill!(wfs.state.detector_noise_cube, zero(eltype(wfs.state.detector_noise_cube)))
+    for src in ast.sources
+        sampled_spots_peak!(ScalarCPUStyle(), wfs, tel, src)
+        wfs.state.detector_noise_cube .+= wfs.state.spot_cube
+    end
+    copyto!(wfs.state.spot_cube, wfs.state.detector_noise_cube)
+    return maximum(wfs.state.spot_cube)
+end
+
+function sampled_spots_peak_asterism_stacked!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, ast::Asterism,
+    det::AbstractDetector, rng::AbstractRNG)
+    fill!(wfs.state.detector_noise_cube, zero(eltype(wfs.state.detector_noise_cube)))
+    for src in ast.sources
+        sampled_spots_peak!(ScalarCPUStyle(), wfs, tel, src, det, rng)
+        wfs.state.detector_noise_cube .+= wfs.state.spot_cube
+    end
+    copyto!(wfs.state.spot_cube, wfs.state.detector_noise_cube)
+    return maximum(wfs.state.spot_cube)
+end
+
+function sampled_spots_peak_asterism_stacked!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, ast::Asterism)
+    compute_intensity_asterism_stack!(style, wfs, tel, ast)
+    sample_spot_stack!(style, wfs)
+    return maximum(wfs.state.spot_cube)
+end
+
+function sampled_spots_peak_asterism_stacked!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, ast::Asterism,
+    det::AbstractDetector, rng::AbstractRNG)
+    compute_intensity_asterism_stack!(style, wfs, tel, ast)
+    sample_spot_stack!(style, wfs)
+    n_sub = wfs.params.n_subap
+    capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
+    launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
+        n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
+    return maximum(wfs.state.spot_cube)
 end
 
 @kernel function sh_spot_centroid_kernel!(slopes, spot_cube, valid_mask, cutoff, n_sub::Int, offset::Int, n1::Int, n2::Int)
