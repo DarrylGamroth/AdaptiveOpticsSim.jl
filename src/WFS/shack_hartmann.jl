@@ -56,6 +56,8 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     sampled_n_pix_subap::Int
     phasor_ratio::T
     reference_signal_2d::RB
+    valid_mask_host::Matrix{Bool}
+    reference_signal_host::Vector{T}
     slopes_units::T
     calibrated::Bool
     calibration_wavelength::T
@@ -100,6 +102,8 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     ifft_stack_plan = plan_ifft_backend!(fft_stack, (1, 2))
     elongation_kernel = backend{T}(undef, 1)
     lgs_kernel_fft = backend{Complex{T}}(undef, 0, 0, 0)
+    valid_mask_host = Matrix{Bool}(undef, n_subap, n_subap)
+    reference_signal_host = Vector{T}(undef, 2 * n_subap * n_subap)
     state = ShackHartmannState{
         T,
         typeof(valid_mask),
@@ -146,6 +150,8 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         sub,
         T(NaN),
         backend{T}(undef, 2 * n_subap, n_subap),
+        valid_mask_host,
+        reference_signal_host,
         one(T),
         false,
         zero(T),
@@ -159,6 +165,7 @@ sensing_mode(::ShackHartmann{M}) where {M} = M()
 
 function update_valid_mask!(wfs::ShackHartmann, tel::Telescope)
     set_valid_subapertures!(wfs.state.valid_mask, tel.state.pupil, wfs.params.threshold)
+    copyto!(wfs.state.valid_mask_host, Array(wfs.state.valid_mask))
     return wfs
 end
 
@@ -420,8 +427,8 @@ end
 
 function measure_sh_asterism_diffractive!(::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope,
     ast::Asterism, n::Int, n_sub::Int, sub::Int, pad::Int, ox::Int, oy::Int)
-    host_valid_mask = Array(wfs.state.valid_mask)
-    host_ref = vec(Array(wfs.state.reference_signal_2d))
+    host_valid_mask = wfs.state.valid_mask_host
+    host_ref = wfs.state.reference_signal_host
     host_slopes = Array(wfs.state.slopes)
     idx = 1
     @inbounds for i in 1:n_sub, j in 1:n_sub
@@ -490,8 +497,8 @@ end
 
 function measure_sh_asterism_diffractive!(::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope,
     ast::Asterism, det::AbstractDetector, rng::AbstractRNG, n::Int, n_sub::Int, sub::Int, pad::Int, ox::Int, oy::Int)
-    host_valid_mask = Array(wfs.state.valid_mask)
-    host_ref = vec(Array(wfs.state.reference_signal_2d))
+    host_valid_mask = wfs.state.valid_mask_host
+    host_ref = wfs.state.reference_signal_host
     host_slopes = Array(wfs.state.slopes)
     idx = 1
     @inbounds for i in 1:n_sub, j in 1:n_sub
@@ -1128,6 +1135,7 @@ function sh_reference_signal!(wfs::ShackHartmann, tel::Telescope, src::AbstractS
     peak = sampled_spots_peak!(wfs, tel, src)
     sh_signal_from_spots!(wfs, peak, wfs.params.threshold_cog)
     copyto!(wfs.state.reference_signal_2d, wfs.state.slopes)
+    copyto!(wfs.state.reference_signal_host, vec(Array(wfs.state.reference_signal_2d)))
     return wfs
 end
 
