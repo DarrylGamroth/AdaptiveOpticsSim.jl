@@ -133,11 +133,9 @@ export MetaSensitivity, compute_meta_sensitivity_matrix, estimate_misregistratio
 export ModalReconstructor, reconstruct!, reconstruct
 export AbstractController, DiscreteIntegratorController, update!
 export ClosedLoopRuntime, SimulationInterface, CompositeSimulationInterface, SimulationReadout
-export RTCBoundary, MultiRTCBoundary, sense!, step!, set_command!, snapshot_outputs!
+export sense!, step!, set_command!, snapshot_outputs!
 export simulation_readout, simulation_slopes, simulation_command, simulation_wfs_frame, simulation_science_frame
 export simulation_wfs_metadata, simulation_science_metadata
-export rtc_slopes, rtc_command, rtc_wfs_frame, rtc_science_frame
-export rtc_wfs_metadata, rtc_science_metadata
 export RuntimeTimingStats, RuntimePhaseTimingStats, runtime_timing, runtime_phase_timing
 export with_reconstructor, with_reconstructors
 export AbstractOpticalElement, AbstractSource, AbstractAtmosphere, AbstractWFS

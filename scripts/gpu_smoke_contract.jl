@@ -229,11 +229,11 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
         rt2_recon = ModalReconstructor(interaction_matrix(rt2_dm, rt2_wfs, rt2_tel; amplitude=T(0.05)); gain=T(0.5))
         rt2 = ClosedLoopRuntime(rt2_sim, rt2_recon; rng=rng)
 
-        boundary = MultiRTCBoundary(rt1, rt2)
+        boundary = CompositeSimulationInterface(rt1, rt2)
         step!(boundary)
-        @assert rtc_command(boundary) isa BackendArray
-        @assert rtc_slopes(boundary) isa BackendArray
-        return rtc_command(boundary)
+        @assert simulation_command(boundary) isa BackendArray
+        @assert simulation_slopes(boundary) isa BackendArray
+        return simulation_command(boundary)
     end
 
     record_gpu_smoke!(failures, "runtime_reconstructor_refresh") do

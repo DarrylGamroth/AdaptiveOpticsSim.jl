@@ -90,9 +90,6 @@ than by source file.
 - `simulation_readout`, `simulation_command`, `simulation_slopes`,
   `simulation_wfs_frame`, `simulation_science_frame`
 - `simulation_wfs_metadata`, `simulation_science_metadata`
-- Compatibility aliases: `RTCBoundary`, `MultiRTCBoundary`,
-  `rtc_command`, `rtc_slopes`, `rtc_wfs_frame`, `rtc_science_frame`,
-  `rtc_wfs_metadata`, `rtc_science_metadata`
 
 ## Traits and interfaces
 

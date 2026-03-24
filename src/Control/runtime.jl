@@ -21,7 +21,7 @@ mutable struct ClosedLoopRuntime{SIM<:AOSimulation,TEL,A,S,DM,W,R,V,WD,SD,RNG,T<
     science_zero_padding::Int
 end
 
-mutable struct RTCBoundary{RT,C,S,W,SF}
+mutable struct SimulationInterface{RT,C,S,W,SF}
     runtime::RT
     command::C
     slopes::S
@@ -29,8 +29,8 @@ mutable struct RTCBoundary{RT,C,S,W,SF}
     science_frame::SF
 end
 
-mutable struct MultiRTCBoundary{BT,C,S,WF,SF}
-    boundaries::BT
+mutable struct CompositeSimulationInterface{IT,C,S,WF,SF}
+    interfaces::IT
     command::C
     slopes::S
     wfs_frames::WF
@@ -45,9 +45,6 @@ struct SimulationReadout{C,S,W,SF,WM,SM}
     wfs_metadata::WM
     science_metadata::SM
 end
-
-const SimulationInterface = RTCBoundary
-const CompositeSimulationInterface = MultiRTCBoundary
 
 @inline function apply_command!(::ScalarCPUStyle, coefs::AbstractVector{T}, cmd::AbstractVector{T}, sign::T) where {T<:AbstractFloat}
     @inbounds for i in eachindex(coefs, cmd)
@@ -93,40 +90,40 @@ end
 @inline wfs_output_frame(wfs::AbstractWFS, det::AbstractDetector) = output_frame(det)
 @inline wfs_output_frame(wfs::ShackHartmann{<:Diffractive}, det::AbstractDetector) = wfs.state.spot_cube
 
-function RTCBoundary(runtime::ClosedLoopRuntime)
+function SimulationInterface(runtime::ClosedLoopRuntime)
     command = similar(runtime.command)
     copyto!(command, runtime.command)
     slopes = similar(runtime.wfs.state.slopes)
     copyto!(slopes, runtime.wfs.state.slopes)
     wfs_frame = isnothing(runtime.wfs_detector) ? nothing : similar(wfs_output_frame(runtime.wfs, runtime.wfs_detector))
     science_frame = isnothing(runtime.science_detector) ? nothing : similar(output_frame(runtime.science_detector))
-    boundary = RTCBoundary{typeof(runtime), typeof(command), typeof(slopes), typeof(wfs_frame), typeof(science_frame)}(
+    interface = SimulationInterface{typeof(runtime), typeof(command), typeof(slopes), typeof(wfs_frame), typeof(science_frame)}(
         runtime,
         command,
         slopes,
         wfs_frame,
         science_frame,
     )
-    return snapshot_outputs!(boundary)
+    return snapshot_outputs!(interface)
 end
 
-function MultiRTCBoundary(boundaries::RTCBoundary...)
-    length(boundaries) > 0 || throw(InvalidConfiguration("MultiRTCBoundary requires at least one boundary"))
-    first_boundary = boundaries[1]
-    total_command = mapreduce(b -> length(rtc_command(b)), +, boundaries)
-    total_slopes = mapreduce(b -> length(rtc_slopes(b)), +, boundaries)
-    command = similar(rtc_command(first_boundary), total_command)
-    slopes = similar(rtc_slopes(first_boundary), total_slopes)
+function CompositeSimulationInterface(interfaces::SimulationInterface...)
+    length(interfaces) > 0 || throw(InvalidConfiguration("CompositeSimulationInterface requires at least one interface"))
+    first_interface = interfaces[1]
+    total_command = mapreduce(i -> length(simulation_command(i)), +, interfaces)
+    total_slopes = mapreduce(i -> length(simulation_slopes(i)), +, interfaces)
+    command = similar(simulation_command(first_interface), total_command)
+    slopes = similar(simulation_slopes(first_interface), total_slopes)
     wfs_frames = ntuple(i -> begin
-        frame = rtc_wfs_frame(boundaries[i])
+        frame = simulation_wfs_frame(interfaces[i])
         isnothing(frame) ? nothing : similar(frame)
-    end, length(boundaries))
+    end, length(interfaces))
     science_frames = ntuple(i -> begin
-        frame = rtc_science_frame(boundaries[i])
+        frame = simulation_science_frame(interfaces[i])
         isnothing(frame) ? nothing : similar(frame)
-    end, length(boundaries))
-    multi = MultiRTCBoundary{typeof(boundaries), typeof(command), typeof(slopes), typeof(wfs_frames), typeof(science_frames)}(
-        boundaries,
+    end, length(interfaces))
+    multi = CompositeSimulationInterface{typeof(interfaces), typeof(command), typeof(slopes), typeof(wfs_frames), typeof(science_frames)}(
+        interfaces,
         command,
         slopes,
         wfs_frames,
@@ -135,7 +132,7 @@ function MultiRTCBoundary(boundaries::RTCBoundary...)
     return snapshot_outputs!(multi)
 end
 
-MultiRTCBoundary(runtimes::ClosedLoopRuntime...) = MultiRTCBoundary(map(RTCBoundary, runtimes)...)
+CompositeSimulationInterface(runtimes::ClosedLoopRuntime...) = CompositeSimulationInterface(map(SimulationInterface, runtimes)...)
 
 function with_reconstructor(runtime::ClosedLoopRuntime, reconstructor)
     refreshed = ClosedLoopRuntime(
@@ -152,13 +149,13 @@ function with_reconstructor(runtime::ClosedLoopRuntime, reconstructor)
     return refreshed
 end
 
-with_reconstructor(boundary::RTCBoundary, reconstructor) = RTCBoundary(with_reconstructor(boundary.runtime, reconstructor))
+with_reconstructor(interface::SimulationInterface, reconstructor) = SimulationInterface(with_reconstructor(interface.runtime, reconstructor))
 
-function with_reconstructors(boundary::MultiRTCBoundary, reconstructors::Vararg{Any,N}) where {N}
-    length(boundary.boundaries) == N ||
-        throw(DimensionMismatchError("reconstructor count must match boundary count"))
-    refreshed = ntuple(i -> with_reconstructor(boundary.boundaries[i], reconstructors[i]), N)
-    return MultiRTCBoundary(refreshed...)
+function with_reconstructors(interface::CompositeSimulationInterface, reconstructors::Vararg{Any,N}) where {N}
+    length(interface.interfaces) == N ||
+        throw(DimensionMismatchError("reconstructor count must match interface count"))
+    refreshed = ntuple(i -> with_reconstructor(interface.interfaces[i], reconstructors[i]), N)
+    return CompositeSimulationInterface(refreshed...)
 end
 
 @inline function set_command!(runtime::ClosedLoopRuntime, command::AbstractVector)
@@ -167,70 +164,57 @@ end
     return runtime.dm.state.coefs
 end
 
-@inline function set_command!(boundary::RTCBoundary, command::AbstractVector)
-    copyto!(boundary.command, command)
-    set_command!(boundary.runtime, command)
-    return boundary.command
+@inline function set_command!(interface::SimulationInterface, command::AbstractVector)
+    copyto!(interface.command, command)
+    set_command!(interface.runtime, command)
+    return interface.command
 end
 
-@inline function set_command!(boundary::MultiRTCBoundary, command::AbstractVector)
-    length(boundary.command) == length(command) ||
+@inline function set_command!(interface::CompositeSimulationInterface, command::AbstractVector)
+    length(interface.command) == length(command) ||
         throw(DimensionMismatchError("command length must match aggregated RTC command length"))
     command_offset = 1
-    @inbounds for child in boundary.boundaries
+    @inbounds for child in interface.interfaces
         n_command = length(child.command)
         @views set_command!(child, command[command_offset:command_offset + n_command - 1])
         command_offset += n_command
     end
-    copyto!(boundary.command, command)
-    return boundary.command
+    copyto!(interface.command, command)
+    return interface.command
 end
 
-@inline function snapshot_outputs!(boundary::RTCBoundary)
-    copyto!(boundary.command, boundary.runtime.command)
-    copyto!(boundary.slopes, boundary.runtime.wfs.state.slopes)
-    if !isnothing(boundary.wfs_frame)
-        copyto!(boundary.wfs_frame, wfs_output_frame(boundary.runtime.wfs, boundary.runtime.wfs_detector))
+@inline function snapshot_outputs!(interface::SimulationInterface)
+    copyto!(interface.command, interface.runtime.command)
+    copyto!(interface.slopes, interface.runtime.wfs.state.slopes)
+    if !isnothing(interface.wfs_frame)
+        copyto!(interface.wfs_frame, wfs_output_frame(interface.runtime.wfs, interface.runtime.wfs_detector))
     end
-    if !isnothing(boundary.science_frame)
-        copyto!(boundary.science_frame, output_frame(boundary.runtime.science_detector))
+    if !isnothing(interface.science_frame)
+        copyto!(interface.science_frame, output_frame(interface.runtime.science_detector))
     end
-    return boundary
+    return interface
 end
 
-@inline function snapshot_outputs!(multi::MultiRTCBoundary)
+@inline function snapshot_outputs!(multi::CompositeSimulationInterface)
     command_offset = 1
     slope_offset = 1
-    @inbounds for i in eachindex(multi.boundaries)
-        boundary = snapshot_outputs!(multi.boundaries[i])
-        n_command = length(boundary.command)
-        n_slopes = length(boundary.slopes)
-        @views copyto!(multi.command[command_offset:command_offset + n_command - 1], boundary.command)
-        @views copyto!(multi.slopes[slope_offset:slope_offset + n_slopes - 1], boundary.slopes)
+    @inbounds for i in eachindex(multi.interfaces)
+        interface = snapshot_outputs!(multi.interfaces[i])
+        n_command = length(interface.command)
+        n_slopes = length(interface.slopes)
+        @views copyto!(multi.command[command_offset:command_offset + n_command - 1], interface.command)
+        @views copyto!(multi.slopes[slope_offset:slope_offset + n_slopes - 1], interface.slopes)
         if !isnothing(multi.wfs_frames[i])
-            copyto!(multi.wfs_frames[i], boundary.wfs_frame)
+            copyto!(multi.wfs_frames[i], interface.wfs_frame)
         end
         if !isnothing(multi.science_frames[i])
-            copyto!(multi.science_frames[i], boundary.science_frame)
+            copyto!(multi.science_frames[i], interface.science_frame)
         end
         command_offset += n_command
         slope_offset += n_slopes
     end
     return multi
 end
-
-@inline rtc_slopes(boundary::RTCBoundary) = boundary.slopes
-@inline rtc_command(boundary::RTCBoundary) = boundary.command
-@inline rtc_wfs_frame(boundary::RTCBoundary) = boundary.wfs_frame
-@inline rtc_science_frame(boundary::RTCBoundary) = boundary.science_frame
-@inline rtc_wfs_metadata(boundary::RTCBoundary) = isnothing(boundary.runtime.wfs_detector) ? nothing : detector_export_metadata(boundary.runtime.wfs_detector)
-@inline rtc_science_metadata(boundary::RTCBoundary) = isnothing(boundary.runtime.science_detector) ? nothing : detector_export_metadata(boundary.runtime.science_detector)
-@inline rtc_slopes(boundary::MultiRTCBoundary) = boundary.slopes
-@inline rtc_command(boundary::MultiRTCBoundary) = boundary.command
-@inline rtc_wfs_frame(boundary::MultiRTCBoundary) = boundary.wfs_frames
-@inline rtc_science_frame(boundary::MultiRTCBoundary) = boundary.science_frames
-@inline rtc_wfs_metadata(boundary::MultiRTCBoundary) = map(rtc_wfs_metadata, boundary.boundaries)
-@inline rtc_science_metadata(boundary::MultiRTCBoundary) = map(rtc_science_metadata, boundary.boundaries)
 
 @inline simulation_command(readout::SimulationReadout) = readout.command
 @inline simulation_slopes(readout::SimulationReadout) = readout.slopes
@@ -239,41 +223,41 @@ end
 @inline simulation_wfs_metadata(readout::SimulationReadout) = readout.wfs_metadata
 @inline simulation_science_metadata(readout::SimulationReadout) = readout.science_metadata
 
-@inline simulation_command(boundary::RTCBoundary) = rtc_command(boundary)
-@inline simulation_slopes(boundary::RTCBoundary) = rtc_slopes(boundary)
-@inline simulation_wfs_frame(boundary::RTCBoundary) = rtc_wfs_frame(boundary)
-@inline simulation_science_frame(boundary::RTCBoundary) = rtc_science_frame(boundary)
-@inline simulation_wfs_metadata(boundary::RTCBoundary) = rtc_wfs_metadata(boundary)
-@inline simulation_science_metadata(boundary::RTCBoundary) = rtc_science_metadata(boundary)
+@inline simulation_command(interface::SimulationInterface) = interface.command
+@inline simulation_slopes(interface::SimulationInterface) = interface.slopes
+@inline simulation_wfs_frame(interface::SimulationInterface) = interface.wfs_frame
+@inline simulation_science_frame(interface::SimulationInterface) = interface.science_frame
+@inline simulation_wfs_metadata(interface::SimulationInterface) = isnothing(interface.runtime.wfs_detector) ? nothing : detector_export_metadata(interface.runtime.wfs_detector)
+@inline simulation_science_metadata(interface::SimulationInterface) = isnothing(interface.runtime.science_detector) ? nothing : detector_export_metadata(interface.runtime.science_detector)
 
-@inline simulation_command(boundary::MultiRTCBoundary) = rtc_command(boundary)
-@inline simulation_slopes(boundary::MultiRTCBoundary) = rtc_slopes(boundary)
-@inline simulation_wfs_frame(boundary::MultiRTCBoundary) = rtc_wfs_frame(boundary)
-@inline simulation_science_frame(boundary::MultiRTCBoundary) = rtc_science_frame(boundary)
-@inline simulation_wfs_metadata(boundary::MultiRTCBoundary) = rtc_wfs_metadata(boundary)
-@inline simulation_science_metadata(boundary::MultiRTCBoundary) = rtc_science_metadata(boundary)
+@inline simulation_command(interface::CompositeSimulationInterface) = interface.command
+@inline simulation_slopes(interface::CompositeSimulationInterface) = interface.slopes
+@inline simulation_wfs_frame(interface::CompositeSimulationInterface) = interface.wfs_frames
+@inline simulation_science_frame(interface::CompositeSimulationInterface) = interface.science_frames
+@inline simulation_wfs_metadata(interface::CompositeSimulationInterface) = map(simulation_wfs_metadata, interface.interfaces)
+@inline simulation_science_metadata(interface::CompositeSimulationInterface) = map(simulation_science_metadata, interface.interfaces)
 
 @inline simulation_readout(readout::SimulationReadout) = readout
 
-@inline function simulation_readout(boundary::RTCBoundary)
+@inline function simulation_readout(interface::SimulationInterface)
     return SimulationReadout(
-        simulation_command(boundary),
-        simulation_slopes(boundary),
-        simulation_wfs_frame(boundary),
-        simulation_science_frame(boundary),
-        simulation_wfs_metadata(boundary),
-        simulation_science_metadata(boundary),
+        simulation_command(interface),
+        simulation_slopes(interface),
+        simulation_wfs_frame(interface),
+        simulation_science_frame(interface),
+        simulation_wfs_metadata(interface),
+        simulation_science_metadata(interface),
     )
 end
 
-@inline function simulation_readout(boundary::MultiRTCBoundary)
+@inline function simulation_readout(interface::CompositeSimulationInterface)
     return SimulationReadout(
-        simulation_command(boundary),
-        simulation_slopes(boundary),
-        simulation_wfs_frame(boundary),
-        simulation_science_frame(boundary),
-        simulation_wfs_metadata(boundary),
-        simulation_science_metadata(boundary),
+        simulation_command(interface),
+        simulation_slopes(interface),
+        simulation_wfs_frame(interface),
+        simulation_science_frame(interface),
+        simulation_wfs_metadata(interface),
+        simulation_science_metadata(interface),
     )
 end
 
@@ -346,16 +330,16 @@ function sense!(runtime::ClosedLoopRuntime{SIM,TEL,A,S,DM,W,R,V,Nothing,Nothing,
     return runtime
 end
 
-function sense!(boundary::RTCBoundary)
-    sense!(boundary.runtime)
-    return snapshot_outputs!(boundary)
+function sense!(interface::SimulationInterface)
+    sense!(interface.runtime)
+    return snapshot_outputs!(interface)
 end
 
-function sense!(boundary::MultiRTCBoundary)
-    @inbounds for child in boundary.boundaries
+function sense!(interface::CompositeSimulationInterface)
+    @inbounds for child in interface.interfaces
         sense!(child.runtime)
     end
-    return snapshot_outputs!(boundary)
+    return snapshot_outputs!(interface)
 end
 
 @inline function reconstruct!(runtime::ClosedLoopRuntime)
@@ -368,17 +352,17 @@ end
     return runtime.dm.state.coefs
 end
 
-@inline function step_grouped!(boundary::MultiRTCBoundary)
-    @inbounds for child in boundary.boundaries
+@inline function step_grouped!(interface::CompositeSimulationInterface)
+    @inbounds for child in interface.interfaces
         sense!(child.runtime)
     end
-    @inbounds for child in boundary.boundaries
+    @inbounds for child in interface.interfaces
         reconstruct!(child.runtime)
     end
-    @inbounds for child in boundary.boundaries
+    @inbounds for child in interface.interfaces
         apply_runtime_command!(child.runtime)
     end
-    return snapshot_outputs!(boundary)
+    return snapshot_outputs!(interface)
 end
 
 function sense!(runtime::ClosedLoopRuntime{SIM,TEL,A,S,DM,W,R,V,WD,Nothing,RNG,T}) where {SIM<:AOSimulation,TEL,A,S,DM,W,R,V,WD<:AbstractDetector,RNG,T<:AbstractFloat}
@@ -424,13 +408,13 @@ function step!(runtime::ClosedLoopRuntime{SIM,TEL,A,S,DM,W,R,V,WD,SD,RNG,T}) whe
     return runtime
 end
 
-function step!(boundary::RTCBoundary)
-    step!(boundary.runtime)
-    return snapshot_outputs!(boundary)
+function step!(interface::SimulationInterface)
+    step!(interface.runtime)
+    return snapshot_outputs!(interface)
 end
 
-function step!(boundary::MultiRTCBoundary)
-    return step_grouped!(boundary)
+function step!(interface::CompositeSimulationInterface)
+    return step_grouped!(interface)
 end
 
 struct RuntimeTimingStats{T<:AbstractFloat}
@@ -487,8 +471,8 @@ function runtime_timing(f!::F; warmup::Int=10, samples::Int=1000, gc_before::Boo
 end
 
 runtime_timing(runtime::ClosedLoopRuntime; kwargs...) = runtime_timing(() -> step!(runtime); kwargs...)
-runtime_timing(boundary::RTCBoundary; kwargs...) = runtime_timing(() -> step!(boundary); kwargs...)
-runtime_timing(boundary::MultiRTCBoundary; kwargs...) = runtime_timing(() -> step!(boundary); kwargs...)
+runtime_timing(interface::SimulationInterface; kwargs...) = runtime_timing(() -> step!(interface); kwargs...)
+runtime_timing(interface::CompositeSimulationInterface; kwargs...) = runtime_timing(() -> step!(interface); kwargs...)
 
 @inline function _sync_sense_outputs!(runtime::ClosedLoopRuntime)
     synchronize_backend!(execution_style(runtime.wfs.state.slopes))
@@ -541,11 +525,11 @@ function runtime_phase_timing(runtime::ClosedLoopRuntime; warmup::Int=10, sample
     )
 end
 
-function runtime_phase_timing(boundary::RTCBoundary; warmup::Int=10, samples::Int=1000, gc_before::Bool=true)
+function runtime_phase_timing(interface::SimulationInterface; warmup::Int=10, samples::Int=1000, gc_before::Bool=true)
     warmup >= 0 || throw(InvalidConfiguration("warmup must be >= 0"))
     samples > 0 || throw(InvalidConfiguration("samples must be positive"))
     for _ in 1:warmup
-        step!(boundary)
+        step!(interface)
     end
     gc_before && GC.gc()
     sense_times = Vector{Int}(undef, samples)
@@ -553,7 +537,7 @@ function runtime_phase_timing(boundary::RTCBoundary; warmup::Int=10, samples::In
     apply_times = Vector{Int}(undef, samples)
     snapshot_times = Vector{Int}(undef, samples)
     total_times = Vector{Int}(undef, samples)
-    runtime = boundary.runtime
+    runtime = interface.runtime
     @inbounds for i in 1:samples
         t0 = time_ns()
         sense!(runtime)
@@ -565,14 +549,14 @@ function runtime_phase_timing(boundary::RTCBoundary; warmup::Int=10, samples::In
         apply_command!(runtime.dm.state.coefs, runtime.command, runtime.control_sign)
         synchronize_backend!(execution_style(runtime.dm.state.coefs))
         t3 = time_ns()
-        snapshot_outputs!(boundary)
-        synchronize_backend!(execution_style(boundary.command))
-        synchronize_backend!(execution_style(boundary.slopes))
-        if !isnothing(boundary.wfs_frame)
-            synchronize_backend!(execution_style(boundary.wfs_frame))
+        snapshot_outputs!(interface)
+        synchronize_backend!(execution_style(interface.command))
+        synchronize_backend!(execution_style(interface.slopes))
+        if !isnothing(interface.wfs_frame)
+            synchronize_backend!(execution_style(interface.wfs_frame))
         end
-        if !isnothing(boundary.science_frame)
-            synchronize_backend!(execution_style(boundary.science_frame))
+        if !isnothing(interface.science_frame)
+            synchronize_backend!(execution_style(interface.science_frame))
         end
         t4 = time_ns()
         sense_times[i] = t1 - t0
@@ -594,11 +578,11 @@ function runtime_phase_timing(boundary::RTCBoundary; warmup::Int=10, samples::In
     )
 end
 
-function runtime_phase_timing(boundary::MultiRTCBoundary; warmup::Int=10, samples::Int=1000, gc_before::Bool=true)
+function runtime_phase_timing(interface::CompositeSimulationInterface; warmup::Int=10, samples::Int=1000, gc_before::Bool=true)
     warmup >= 0 || throw(InvalidConfiguration("warmup must be >= 0"))
     samples > 0 || throw(InvalidConfiguration("samples must be positive"))
     for _ in 1:warmup
-        step!(boundary)
+        step!(interface)
     end
     gc_before && GC.gc()
     sense_times = Vector{Int}(undef, samples)
@@ -608,24 +592,24 @@ function runtime_phase_timing(boundary::MultiRTCBoundary; warmup::Int=10, sample
     total_times = Vector{Int}(undef, samples)
     @inbounds for i in 1:samples
         t0 = time_ns()
-        for child in boundary.boundaries
+        for child in interface.interfaces
             sense!(child.runtime)
             _sync_sense_outputs!(child.runtime)
         end
         t1 = time_ns()
-        for child in boundary.boundaries
+        for child in interface.interfaces
             reconstruct!(child.runtime.command, child.runtime.reconstructor, child.runtime.wfs.state.slopes)
             synchronize_backend!(execution_style(child.runtime.command))
         end
         t2 = time_ns()
-        for child in boundary.boundaries
+        for child in interface.interfaces
             apply_command!(child.runtime.dm.state.coefs, child.runtime.command, child.runtime.control_sign)
             synchronize_backend!(execution_style(child.runtime.dm.state.coefs))
         end
         t3 = time_ns()
-        snapshot_outputs!(boundary)
-        synchronize_backend!(execution_style(boundary.command))
-        synchronize_backend!(execution_style(boundary.slopes))
+        snapshot_outputs!(interface)
+        synchronize_backend!(execution_style(interface.command))
+        synchronize_backend!(execution_style(interface.slopes))
         t4 = time_ns()
         sense_times[i] = t1 - t0
         reconstruct_times[i] = t2 - t1

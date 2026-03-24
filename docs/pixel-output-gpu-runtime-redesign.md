@@ -356,7 +356,7 @@ Possible new internal concepts:
 
 - `BatchedPixelWFSWorkspace`
 - batched detector helpers for spot stacks
-- explicit pixel-export buffers on `RTCBoundary` / `MultiRTCBoundary`
+- explicit pixel-export buffers on `SimulationInterface` / `CompositeSimulationInterface`
 
 Public API changes should stay minimal:
 

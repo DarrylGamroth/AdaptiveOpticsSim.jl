@@ -663,7 +663,7 @@ The following paths are currently validated on CUDA with
 - closed-loop step
 - `ClosedLoopRuntime`
 - `ClosedLoopRuntime` with science detector
-- `MultiRTCBoundary` aggregated runtime stepping
+- `CompositeSimulationInterface` aggregated runtime stepping
 - runtime reconstructor refresh via `with_reconstructor`
 - interaction-matrix build + reconstruction
 - gain sensing camera

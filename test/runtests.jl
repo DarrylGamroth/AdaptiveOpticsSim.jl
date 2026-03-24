@@ -404,7 +404,6 @@ end
     @test science_metadata.frame_size == size(det.state.frame)
     step!(boundary)
     @test simulation_command(boundary) == runtime.command
-    @test rtc_command(boundary) == simulation_command(boundary)
 
     rng2 = MersenneTwister(2)
     tel2 = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
