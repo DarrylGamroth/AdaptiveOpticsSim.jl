@@ -450,21 +450,23 @@ function _low_order_command_basis(dm::DeformableMirror, tel::Telescope, active_m
 end
 
 function _full_command_reconstructor(M2C_host::AbstractMatrix{T}, imat::InteractionMatrix{T};
-    gain::Real, policy::InversePolicy, build_backend::BuildBackend, ref::AbstractMatrix{T}) where {T<:AbstractFloat}
-    modal_recon, stats = inverse_operator(build_backend, imat.matrix, policy)
-    command_basis = materialize_build(build_backend, ref, M2C_host)
-    singular_values = materialize_build(build_backend, similar(ref, T, 0), stats.singular_values)
+    gain::Real, policy::InversePolicy, inverse_build_backend::BuildBackend,
+    materialize_backend::BuildBackend, ref::AbstractMatrix{T}) where {T<:AbstractFloat}
+    modal_recon, stats = inverse_operator(inverse_build_backend, imat.matrix, policy)
+    modal_recon_native = materialize_build(materialize_backend, ref, modal_recon)
+    command_basis = materialize_build(materialize_backend, ref, M2C_host)
+    singular_values = materialize_build(materialize_backend, similar(ref, T, 0), stats.singular_values)
     modal_workspace = similar(ref, T, size(M2C_host, 2))
     fill!(modal_workspace, zero(T))
     return FullCommandReconstructor{
         T,
-        typeof(modal_recon),
+        typeof(modal_recon_native),
         typeof(command_basis),
         typeof(policy),
         typeof(singular_values),
         typeof(modal_workspace),
     }(
-        modal_recon,
+        modal_recon_native,
         command_basis,
         modal_workspace,
         T(gain),
@@ -484,6 +486,31 @@ function _auto_build_backend(backend)
         end
     end
     return NativeBuildBackend()
+end
+
+function _ao188_calibration_objects(params::AO1883kSurrogateParams{T}) where {T<:AbstractFloat}
+    tel = Telescope(
+        resolution=params.resolution,
+        diameter=params.diameter,
+        sampling_time=params.sampling_time,
+        central_obstruction=params.central_obstruction,
+        T=T,
+        backend=Array,
+    )
+    low_tel = Telescope(
+        resolution=params.low_order_resolution,
+        diameter=params.diameter,
+        sampling_time=params.sampling_time,
+        central_obstruction=params.central_obstruction,
+        T=T,
+        backend=Array,
+    )
+    src = Source(band=params.source_band, magnitude=params.source_magnitude, T=T)
+    dm = DeformableMirror(tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=Array)
+    low_dm = DeformableMirror(low_tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=Array)
+    high_wfs = ShackHartmann(tel; n_subap=params.n_subap, mode=Diffractive(), T=T, backend=Array)
+    low_wfs = ShackHartmann(low_tel; n_subap=params.n_low_order_subap, mode=Diffractive(), T=T, backend=Array)
+    return tel, low_tel, src, dm, low_dm, high_wfs, low_wfs
 end
 
 function _measure_high!(surrogate::AO1883kSurrogate, rng::AbstractRNG)
@@ -546,7 +573,8 @@ end
 
 function ao188_3k_surrogate(; params::AO1883kSurrogateParams=AO1883kSurrogateParams(),
     backend=Array, build_backend::Union{Nothing,BuildBackend}=nothing, rng=MersenneTwister(0))
-    resolved_build_backend = isnothing(build_backend) ? _auto_build_backend(backend) : build_backend
+    resolved_materialize_backend = isnothing(build_backend) ? _auto_build_backend(backend) : build_backend
+    resolved_calibration_backend = isnothing(build_backend) && backend !== Array ? CPUBuildBackend() : resolved_materialize_backend
     T = typeof(params.diameter)
     if params.resolution % params.low_order_resolution != 0
         throw(InvalidConfiguration("low_order_resolution must evenly divide the main telescope resolution"))
@@ -579,23 +607,40 @@ function ao188_3k_surrogate(; params::AO1883kSurrogateParams=AO1883kSurrogatePar
     high_detector = detector_from_config(params.high_detector; backend=backend)
     low_detector = detector_from_config(params.low_detector; backend=backend)
 
-    overlap_weights, x_coords, y_coords = _actuator_overlap_weights(tel, dm)
+    calibration_tel = tel
+    calibration_low_tel = low_tel
+    calibration_src = src
+    calibration_dm = dm
+    calibration_low_dm = low_dm
+    calibration_high_wfs = high_wfs
+    calibration_low_wfs = low_wfs
+    if resolved_calibration_backend isa CPUBuildBackend && backend !== Array
+        calibration_tel, calibration_low_tel, calibration_src,
+        calibration_dm, calibration_low_dm, calibration_high_wfs, calibration_low_wfs =
+            _ao188_calibration_objects(params)
+    end
+
+    overlap_weights, x_coords, y_coords = _actuator_overlap_weights(calibration_tel, calibration_dm)
     overlap_t = T.(overlap_weights)
     active_mask, active_indices = _active_actuator_support(
         params.support_model, overlap_weights, x_coords, y_coords, params.n_act, params.n_active_actuators)
     high_M2C_host = _grouped_command_basis(active_mask, overlap_weights, params.n_control_modes, params.control_grid_side, T)
-    low_M2C_host = _low_order_command_basis(dm, tel, active_mask, params.n_low_order_modes, T)
+    low_M2C_host = _low_order_command_basis(calibration_dm, calibration_tel, active_mask, params.n_low_order_modes, T)
 
-    high_M2C = materialize_build(resolved_build_backend, dm.state.modes, high_M2C_host)
-    low_M2C = materialize_build(resolved_build_backend, dm.state.modes, low_M2C_host)
+    high_M2C = materialize_build(resolved_materialize_backend, dm.state.modes, high_M2C_host)
+    low_M2C = materialize_build(resolved_materialize_backend, dm.state.modes, low_M2C_host)
     policy = default_modal_inverse_policy(T)
 
-    high_imat = interaction_matrix(dm, high_wfs, tel, high_M2C, src; amplitude=params.interaction_amplitude)
-    low_imat = interaction_matrix(low_dm, low_wfs, low_tel, low_M2C, src; amplitude=params.interaction_amplitude)
+    high_imat = interaction_matrix(calibration_dm, calibration_high_wfs, calibration_tel, high_M2C_host,
+        calibration_src; amplitude=params.interaction_amplitude)
+    low_imat = interaction_matrix(calibration_low_dm, calibration_low_wfs, calibration_low_tel, low_M2C_host,
+        calibration_src; amplitude=params.interaction_amplitude)
     high_recon = _full_command_reconstructor(high_M2C_host, high_imat;
-        gain=params.control_gain, policy=policy, build_backend=resolved_build_backend, ref=dm.state.modes)
+        gain=params.control_gain, policy=policy, inverse_build_backend=resolved_calibration_backend,
+        materialize_backend=resolved_materialize_backend, ref=dm.state.modes)
     low_recon = _full_command_reconstructor(low_M2C_host, low_imat;
-        gain=params.low_order_gain, policy=policy, build_backend=resolved_build_backend, ref=dm.state.modes)
+        gain=params.low_order_gain, policy=policy, inverse_build_backend=resolved_calibration_backend,
+        materialize_backend=resolved_materialize_backend, ref=dm.state.modes)
 
     high_command = similar(dm.state.coefs)
     low_command = similar(dm.state.coefs)

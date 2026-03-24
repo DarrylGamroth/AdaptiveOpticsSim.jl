@@ -101,13 +101,13 @@ Latest follow-up on the structured DM runtime split:
 - runtime DM application uses a structured separable `X * C * Y'` path when the
   Gaussian influence basis remains separable under the configured
   misregistration
+- AO188 GPU calibration now defaults to CPU-built interaction matrices and
+  reconstructors, with the resulting operators uploaded to the runtime backend
 - local CPU sequential/direct is now about `1.02 kHz`
 - local AMDGPU sequential/direct is now about `1.02 kHz`
-- `spiders` CUDA sequential/direct is now about `1.29 kHz`
-- the maintained fast-runtime equivalence script still passes on AMDGPU
-- on CUDA, AO188 pixels/slopes remain tight but the pre-DM command smoke bound
-  is now about `1.11e-3`, so the next `Float32` target is the CUDA
-  reconstructor matvec rather than the DM path
+- `spiders` CUDA sequential/direct is now about `1.25 kHz`
+- the maintained fast-runtime AO188 equivalence now passes tightly on both
+  AMDGPU and CUDA, including the command surface
 - stricter post-command `Float32` AO188 `tel_opd` agreement improves on AMDGPU
   and improves materially on CUDA too, from about `2.68e-7` to about
   `1.49e-7`, though it still misses the scientific high-accuracy tolerance

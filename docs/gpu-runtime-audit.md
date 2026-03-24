@@ -293,18 +293,27 @@ Current recommendation:
     backends, and the current CUDA-specific runtime DM apply path pushes the
     structured separable operator through dedicated CUDA kernels instead of
     relying on the generic CuArray matmul path.
+  - The remaining AO188 `Float32` fast-runtime command drift was not in the
+    sensing path. It came from calibrating/building the AO188 interaction
+    matrices and reconstructors directly on the GPU backend. The maintained
+    AO188 GPU path now defaults to CPU-built calibration/operators, then
+    uploads the resulting reconstructors to the runtime backend.
   - Current warmed AO188 surrogate rates on the structured runtime path are
     about `1.02 kHz` on local CPU, `1.02 kHz` on local AMDGPU, and about
-    `1.29 kHz` on CUDA on `spiders`.
+    `1.25 kHz` on CUDA on `spiders`.
   - On AMDGPU, the stricter post-command `Float32` AO188 `tel_opd` max-abs
     error improved from about `2.68e-7` to about `8.94e-8`.
   - On CUDA, the same stricter post-command `Float32` AO188 `tel_opd` max-abs
     error improved from about `2.68e-7` to about `1.49e-7`, but it still does
     not meet the scientific high-accuracy tolerance.
-  - The remaining CUDA `Float32` fast-runtime gap is now the pre-DM command
-    surface, not the DM application surface: AO188 pixels and slopes remain
-    tight, but the command smoke bound is now about `1.11e-3`, slightly above
-    the earlier provisional `1e-3` threshold.
+  - With CPU-built AO188 reconstructors uploaded to GPU, the maintained
+    fast-runtime AO188 command surface is now tight on both GPU backends:
+    AMDGPU command max abs is about `2.37e-8`, and CUDA command max abs is
+    about `3.39e-8`.
+  - The scientific `Float64` AO188 post-command surface remains very tight on
+    both GPUs against CPU:
+    AMDGPU `tel_opd` max abs about `3.89e-16`, CUDA `tel_opd` max abs about
+    `3.33e-16`.
 
 On this host, the warmed sync-audit medium model tomography builder rises from
 about `6.58e7 ns` to about `7.27e7 ns` when switching to the high-accuracy
