@@ -60,6 +60,15 @@ function _build_recon(dm, wfs, tel, src)
     return ModalReconstructor(imat; gain=eltype(dm.state.coefs)(0.5))
 end
 
+function _seed_opd!(tel::Telescope{<:Any,<:Any}, ::Type{T}) where {T<:AbstractFloat}
+    host = Matrix{T}(undef, tel.params.resolution, tel.params.resolution)
+    @inbounds for i in 1:tel.params.resolution, j in 1:tel.params.resolution
+        host[i, j] = T(i + j / 10)
+    end
+    copyto!(tel.state.opd, host)
+    return tel.state.opd
+end
+
 function run_profile(; backend_name::AbstractString="cpu", T::Type{<:AbstractFloat}=Float32)
     BackendArray, backend_tag, label = _resolve_backend(backend_name)
     rng = MersenneTwister(7)
@@ -71,9 +80,7 @@ function run_profile(; backend_name::AbstractString="cpu", T::Type{<:AbstractFlo
     ast = Asterism([src1, src2])
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=BackendArray)
 
-    for i in 1:tel.params.resolution, j in 1:tel.params.resolution
-        tel.state.opd[i, j] = T(i + j / 10)
-    end
+    _seed_opd!(tel, T)
 
     sh = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=BackendArray)
     sh_mean_ns, sh_p95_ns = _timed_stats!(() -> begin
