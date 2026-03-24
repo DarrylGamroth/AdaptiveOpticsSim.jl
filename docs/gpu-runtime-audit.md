@@ -37,6 +37,8 @@ The maintained CUDA validation entry points are:
   - warmed CUDA crossover sweep for runtime and builder cases
 - `scripts/gpu_profile_model_tomography_cuda.jl`
   - sampling-profile the medium CUDA model-based tomography builder
+- `scripts/profile_multi_source_multi_wfs_runtime.jl`
+  - warmed stacked asterism and composite multi-WFS runtime profile
 
 On a CUDA host, the standard workflow is:
 
@@ -48,6 +50,7 @@ julia --project=. scripts/gpu_sync_audit_cuda.jl
 julia --project=. scripts/cpu_crossover_sweep.jl
 julia --project=. scripts/gpu_crossover_cuda.jl
 julia --project=. scripts/gpu_profile_model_tomography_cuda.jl
+julia --project=. scripts/profile_multi_source_multi_wfs_runtime.jl cuda
 ```
 
 The `spiders` workstation is the current real-hardware validation host for this
@@ -71,6 +74,8 @@ The maintained AMDGPU validation entry points are:
   - sampling-profile the medium AMDGPU model-based tomography builder
 - `scripts/gpu_profile_model_tomography_phases_amdgpu.jl`
   - explicit phase timing for the medium AMDGPU model-based tomography builder
+- `scripts/profile_multi_source_multi_wfs_runtime.jl`
+  - warmed stacked asterism and composite multi-WFS runtime profile
 
 On an AMDGPU host, the standard workflow is:
 
@@ -82,6 +87,7 @@ julia --project=. scripts/gpu_sync_audit_amdgpu.jl
 julia --project=. scripts/gpu_crossover_amdgpu.jl
 julia --project=. scripts/gpu_profile_model_tomography_amdgpu.jl
 julia --project=. scripts/gpu_profile_model_tomography_phases_amdgpu.jl
+julia --project=. scripts/profile_multi_source_multi_wfs_runtime.jl amdgpu
 ```
 
 Current AMDGPU caveat:
@@ -116,6 +122,36 @@ Current warmed AMDGPU sync-audit snapshot on this host:
 - interaction-matrix tomography build: about `1.54e6 ns`
 - model tomography build: about `6.36e7 ns`
 - high-accuracy model tomography build: about `7.24e7 ns`
+
+Current warmed stacked multi-source / multi-WFS runtime snapshot:
+
+- CPU on this host
+  - SH asterism: about `3.75e4 ns`
+  - Pyramid asterism: about `4.37e5 ns`
+  - BioEdge asterism: about `9.98e5 ns`
+  - compatible composite step: about `2.40e4 ns`
+  - mixed composite step: about `7.18e4 ns`
+- AMDGPU on this host
+  - SH asterism: about `3.61e5 ns`
+  - Pyramid asterism: about `2.13e6 ns`
+  - BioEdge asterism: about `3.77e6 ns`
+  - compatible composite step: about `8.33e5 ns`
+  - mixed composite step: about `2.02e6 ns`
+- CUDA on `spiders`
+  - SH asterism: about `2.05e5 ns`
+  - Pyramid asterism: about `1.72e6 ns`
+  - BioEdge asterism: about `3.49e6 ns`
+  - compatible composite step: about `6.47e5 ns`
+  - mixed composite step: about `1.61e6 ns`
+
+Interpretation:
+
+- stacked multi-source and grouped multi-WFS execution now work across CPU,
+  AMDGPU, and CUDA on the maintained runtime surface,
+- CPU remains the lowest-latency path for these compact cases,
+- CUDA is currently ahead of AMDGPU on the same stacked runtime surface,
+- mixed heterogeneous composite execution is still materially slower than
+  compatible grouped execution, which matches the current grouped-phase design.
 
 ## Canonical BenchmarkTools Snapshot
 

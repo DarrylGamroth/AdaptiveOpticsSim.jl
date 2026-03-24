@@ -75,6 +75,29 @@ Current internal limitation:
 - Maintained profiling entry point:
   `scripts/profile_multi_source_multi_wfs_runtime.jl`
 
+## Current Benchmark Snapshot
+
+Current warmed results from `scripts/profile_multi_source_multi_wfs_runtime.jl`:
+
+- CPU
+  - SH asterism: about `3.75e4 ns`
+  - Pyramid asterism: about `4.37e5 ns`
+  - BioEdge asterism: about `9.98e5 ns`
+  - compatible composite step: about `2.40e4 ns`
+  - mixed composite step: about `7.18e4 ns`
+- AMDGPU
+  - SH asterism: about `3.61e5 ns`
+  - Pyramid asterism: about `2.13e6 ns`
+  - BioEdge asterism: about `3.77e6 ns`
+  - compatible composite step: about `8.33e5 ns`
+  - mixed composite step: about `2.02e6 ns`
+- CUDA on `spiders`
+  - SH asterism: about `2.05e5 ns`
+  - Pyramid asterism: about `1.72e6 ns`
+  - BioEdge asterism: about `3.49e6 ns`
+  - compatible composite step: about `6.47e5 ns`
+  - mixed composite step: about `1.61e6 ns`
+
 ## Reference Behavior
 
 Relevant OOPAO references:
