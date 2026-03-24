@@ -847,6 +847,23 @@ end
     coeffs_readout = reconstruct(lift_readout, psf, [1, 2])
     @test length(coeffs_readout) == 2
     @test all(isfinite, coeffs_readout)
+
+    sep_kernel = [1.0, 2.0, 1.0] * transpose([1.0, 0.5, 1.0])
+    lift_sep = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=2,
+        img_resolution=8, numerical=false, object_kernel=sep_kernel)
+    @test lift_sep.params.object_kernel isa AdaptiveOpticsSim.LiFTSeparableObjectKernel
+    dense_conv = similar(psf)
+    sep_conv = similar(psf)
+    tmp_conv = similar(psf)
+    AdaptiveOpticsSim.conv2d_same!(dense_conv, psf, sep_kernel)
+    AdaptiveOpticsSim.conv2d_same_separable!(
+        sep_conv,
+        tmp_conv,
+        psf,
+        lift_sep.params.object_kernel.row,
+        lift_sep.params.object_kernel.col,
+    )
+    @test isapprox(sep_conv, dense_conv; rtol=1e-6, atol=1e-6)
 end
 
 @testset "Phase statistics" begin

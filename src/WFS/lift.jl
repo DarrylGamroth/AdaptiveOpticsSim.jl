@@ -58,6 +58,15 @@ struct LiFTParams{T<:AbstractFloat,A<:AbstractMatrix{T},K,S<:LiFTSolveMode,D<:Li
     damping::D
 end
 
+struct LiFTDenseObjectKernel{T<:AbstractFloat,A<:AbstractMatrix{T}}
+    kernel::A
+end
+
+struct LiFTSeparableObjectKernel{T<:AbstractFloat,V<:AbstractVector{T}}
+    row::V
+    col::V
+end
+
 mutable struct LiFTDiagnostics{T<:AbstractFloat}
     residual_norm::T
     weighted_residual_norm::T
@@ -82,6 +91,7 @@ mutable struct LiFTState{T<:AbstractFloat,
     mode_buffer::C
     pd_buffer::C
     conv_buffer::B
+    conv_aux_buffer::B
     opd_buffer::B
     residual_buffer::V
     weight_buffer::V
@@ -148,7 +158,7 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
     if img_resolution <= 0
         img_resolution = tel.params.resolution * zero_padding
     end
-    kernel = object_kernel === nothing ? nothing : T.(object_kernel)
+    kernel = object_kernel === nothing ? nothing : _lift_object_kernel(T.(object_kernel))
     params = LiFTParams(float.(diversity_opd), iterations, img_resolution, zero_padding, kernel, solve_mode, damping)
     oversampling = lift_oversampling(zero_padding)
     ws = Workspace(tel.state.opd, lift_pad_size(tel.params.resolution, zero_padding); T=T)
@@ -160,6 +170,7 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
     mode_buffer = similar(focal_buffer)
     pd_buffer = similar(focal_buffer)
     conv_buffer = similar(psf_buffer)
+    conv_aux_buffer = similar(psf_buffer)
     opd_buffer = similar(amp_buffer)
     residual_buffer = similar(psf_buffer, eltype(psf_buffer), img_resolution * img_resolution)
     weight_buffer = similar(residual_buffer)
@@ -170,6 +181,7 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
     mode_id_buffer = similar(rhs_buffer, Int, size(basis, 3))
     diagnostics = LiFTDiagnostics(T(NaN), T(NaN), T(NaN), T(NaN), zero(T), false, false)
     state = LiFTState(ws, psf_buffer, amp_buffer, field_scratch, focal_buffer, mode_buffer, pd_buffer, conv_buffer,
+        conv_aux_buffer,
         opd_buffer, residual_buffer, weight_buffer, H_buffer, normal_buffer, factor_buffer, rhs_buffer, mode_id_buffer,
         diagnostics)
     mode = numerical ? LiFTNumerical() : LiFTAnalytic()
@@ -680,10 +692,38 @@ function maybe_object_convolve!(lift::LiFT{<:LiFTMode,<:LiFTParams{<:AbstractFlo
     return mat
 end
 
-function maybe_object_convolve!(lift::LiFT{<:LiFTMode,<:LiFTParams{<:AbstractFloat,<:AbstractMatrix,<:AbstractMatrix}}, mat::AbstractMatrix)
-    conv2d_same!(lift.state.conv_buffer, mat, lift.params.object_kernel)
+function maybe_object_convolve!(lift::LiFT{<:LiFTMode,<:LiFTParams{<:AbstractFloat,<:AbstractMatrix,<:LiFTDenseObjectKernel}}, mat::AbstractMatrix)
+    conv2d_same!(lift.state.conv_buffer, mat, lift.params.object_kernel.kernel)
     copyto!(mat, lift.state.conv_buffer)
     return mat
+end
+
+function maybe_object_convolve!(lift::LiFT{<:LiFTMode,<:LiFTParams{<:AbstractFloat,<:AbstractMatrix,<:LiFTSeparableObjectKernel}}, mat::AbstractMatrix)
+    conv2d_same_separable!(lift.state.conv_buffer, lift.state.conv_aux_buffer, mat,
+        lift.params.object_kernel.row, lift.params.object_kernel.col)
+    copyto!(mat, lift.state.conv_buffer)
+    return mat
+end
+
+function _lift_object_kernel(kernel::AbstractMatrix{T}) where {T<:AbstractFloat}
+    row, col = _separable_kernel_factors(kernel)
+    if row === nothing
+        return LiFTDenseObjectKernel{T,typeof(kernel)}(kernel)
+    end
+    return LiFTSeparableObjectKernel{T,typeof(row)}(row, col)
+end
+
+function _separable_kernel_factors(kernel::AbstractMatrix{T}) where {T<:AbstractFloat}
+    F = svd(Matrix(kernel); full=false)
+    isempty(F.S) && return nothing, nothing
+    σ1 = F.S[1]
+    σ2 = length(F.S) >= 2 ? F.S[2] : zero(T)
+    tol = sqrt(eps(T)) * max(one(T), σ1)
+    σ2 <= tol || return nothing, nothing
+    scale = sqrt(σ1)
+    row = T.(F.U[:, 1] .* scale)
+    col = T.(F.V[:, 1] .* scale)
+    return row, col
 end
 
 function conv2d_same!(dest::AbstractMatrix{T}, src::AbstractMatrix{T}, kernel::AbstractMatrix) where {T<:AbstractFloat}
@@ -699,6 +739,35 @@ function conv2d_same!(dest::AbstractMatrix{T}, src::AbstractMatrix{T}, kernel::A
             ii = symm_index(i + ki - cx - 1, n)
             jj = symm_index(j + kj - cy - 1, m)
             acc += src[ii, jj] * kernel[ki, kj]
+        end
+        dest[i, j] = acc * inv_norm
+    end
+    return dest
+end
+
+function conv2d_same_separable!(dest::AbstractMatrix{T}, tmp::AbstractMatrix{T}, src::AbstractMatrix{T},
+    row_kernel::AbstractVector{T}, col_kernel::AbstractVector{T}) where {T<:AbstractFloat}
+    n, m = size(src)
+    kr = length(row_kernel)
+    kc = length(col_kernel)
+    cx = div(kr, 2)
+    cy = div(kc, 2)
+    row_norm = sum(row_kernel)
+    col_norm = sum(col_kernel)
+    inv_norm = (iszero(row_norm) || iszero(col_norm)) ? one(T) : inv(row_norm * col_norm)
+    @inbounds for i in 1:n, j in 1:m
+        acc = zero(T)
+        for ki in 1:kr
+            ii = symm_index(i + ki - cx - 1, n)
+            acc += src[ii, j] * row_kernel[ki]
+        end
+        tmp[i, j] = acc
+    end
+    @inbounds for i in 1:n, j in 1:m
+        acc = zero(T)
+        for kj in 1:kc
+            jj = symm_index(j + kj - cy - 1, m)
+            acc += tmp[i, jj] * col_kernel[kj]
         end
         dest[i, j] = acc * inv_norm
     end
