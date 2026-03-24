@@ -37,6 +37,18 @@ mutable struct MultiRTCBoundary{BT,C,S,WF,SF}
     science_frames::SF
 end
 
+struct SimulationReadout{C,S,W,SF,WM,SM}
+    command::C
+    slopes::S
+    wfs_frame::W
+    science_frame::SF
+    wfs_metadata::WM
+    science_metadata::SM
+end
+
+const SimulationInterface = RTCBoundary
+const CompositeSimulationInterface = MultiRTCBoundary
+
 @inline function apply_command!(::ScalarCPUStyle, coefs::AbstractVector{T}, cmd::AbstractVector{T}, sign::T) where {T<:AbstractFloat}
     @inbounds for i in eachindex(coefs, cmd)
         coefs[i] = sign * cmd[i]
@@ -219,6 +231,51 @@ end
 @inline rtc_science_frame(boundary::MultiRTCBoundary) = boundary.science_frames
 @inline rtc_wfs_metadata(boundary::MultiRTCBoundary) = map(rtc_wfs_metadata, boundary.boundaries)
 @inline rtc_science_metadata(boundary::MultiRTCBoundary) = map(rtc_science_metadata, boundary.boundaries)
+
+@inline simulation_command(readout::SimulationReadout) = readout.command
+@inline simulation_slopes(readout::SimulationReadout) = readout.slopes
+@inline simulation_wfs_frame(readout::SimulationReadout) = readout.wfs_frame
+@inline simulation_science_frame(readout::SimulationReadout) = readout.science_frame
+@inline simulation_wfs_metadata(readout::SimulationReadout) = readout.wfs_metadata
+@inline simulation_science_metadata(readout::SimulationReadout) = readout.science_metadata
+
+@inline simulation_command(boundary::RTCBoundary) = rtc_command(boundary)
+@inline simulation_slopes(boundary::RTCBoundary) = rtc_slopes(boundary)
+@inline simulation_wfs_frame(boundary::RTCBoundary) = rtc_wfs_frame(boundary)
+@inline simulation_science_frame(boundary::RTCBoundary) = rtc_science_frame(boundary)
+@inline simulation_wfs_metadata(boundary::RTCBoundary) = rtc_wfs_metadata(boundary)
+@inline simulation_science_metadata(boundary::RTCBoundary) = rtc_science_metadata(boundary)
+
+@inline simulation_command(boundary::MultiRTCBoundary) = rtc_command(boundary)
+@inline simulation_slopes(boundary::MultiRTCBoundary) = rtc_slopes(boundary)
+@inline simulation_wfs_frame(boundary::MultiRTCBoundary) = rtc_wfs_frame(boundary)
+@inline simulation_science_frame(boundary::MultiRTCBoundary) = rtc_science_frame(boundary)
+@inline simulation_wfs_metadata(boundary::MultiRTCBoundary) = rtc_wfs_metadata(boundary)
+@inline simulation_science_metadata(boundary::MultiRTCBoundary) = rtc_science_metadata(boundary)
+
+@inline simulation_readout(readout::SimulationReadout) = readout
+
+@inline function simulation_readout(boundary::RTCBoundary)
+    return SimulationReadout(
+        simulation_command(boundary),
+        simulation_slopes(boundary),
+        simulation_wfs_frame(boundary),
+        simulation_science_frame(boundary),
+        simulation_wfs_metadata(boundary),
+        simulation_science_metadata(boundary),
+    )
+end
+
+@inline function simulation_readout(boundary::MultiRTCBoundary)
+    return SimulationReadout(
+        simulation_command(boundary),
+        simulation_slopes(boundary),
+        simulation_wfs_frame(boundary),
+        simulation_science_frame(boundary),
+        simulation_wfs_metadata(boundary),
+        simulation_science_metadata(boundary),
+    )
+end
 
 @inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, dm::DeformableMirror,
     wfs::AbstractWFS, src::AbstractSource, rng::AbstractRNG)

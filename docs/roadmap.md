@@ -201,8 +201,8 @@ validation shows the new default is still too coarse.
   `GSCAtmosphereReplayTrace`); the remaining audit is mainly about slope
   ordering/units and any remaining PSF sampling mismatches. Detector-coupled
   runtime exports are now explicit through `DetectorExportMetadata`,
-  `detector_export_metadata`, `rtc_wfs_metadata`, and
-  `rtc_science_metadata`.
+  `detector_export_metadata`, `simulation_wfs_metadata`, and
+  `simulation_science_metadata`.
 - [ ] Decide whether the long-horizon atmosphere-driven Pyramid/GSC replay stays
   purely diagnostic or receives more robustness work.
 - [ ] Extend HIL-focused support toward multi-WFS / multi-DM aggregation for

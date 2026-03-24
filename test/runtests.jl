@@ -393,15 +393,18 @@ end
     @test size(output_frame(det)) == (32, 32)
     @test closed_loop_runtime_allocations() == 0
 
-    boundary = RTCBoundary(runtime)
-    @test length(rtc_slopes(boundary)) == length(wfs.state.slopes)
-    @test size(rtc_science_frame(boundary)) == size(output_frame(det))
-    science_metadata = rtc_science_metadata(boundary)
+    boundary = SimulationInterface(runtime)
+    readout = simulation_readout(boundary)
+    @test length(simulation_slopes(boundary)) == length(wfs.state.slopes)
+    @test simulation_slopes(readout) === simulation_slopes(boundary)
+    @test size(simulation_science_frame(boundary)) == size(output_frame(det))
+    science_metadata = simulation_science_metadata(boundary)
     @test science_metadata isa DetectorExportMetadata
     @test science_metadata.output_size == size(output_frame(det))
     @test science_metadata.frame_size == size(det.state.frame)
     step!(boundary)
-    @test rtc_command(boundary) == runtime.command
+    @test simulation_command(boundary) == runtime.command
+    @test rtc_command(boundary) == simulation_command(boundary)
 
     rng2 = MersenneTwister(2)
     tel2 = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
@@ -415,9 +418,9 @@ end
     wfs_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
     runtime2 = ClosedLoopRuntime(sim2, recon2; rng=rng2, wfs_detector=wfs_det)
     step!(runtime2)
-    boundary2 = RTCBoundary(runtime2)
-    @test ndims(rtc_wfs_frame(boundary2)) == 3
-    @test size(rtc_wfs_frame(boundary2), 1) == wfs2.params.n_subap^2
+    boundary2 = SimulationInterface(runtime2)
+    @test ndims(simulation_wfs_frame(boundary2)) == 3
+    @test size(simulation_wfs_frame(boundary2), 1) == wfs2.params.n_subap^2
 
     timing = runtime_timing(runtime; warmup=1, samples=5, gc_before=false)
     @test timing.samples == 5
