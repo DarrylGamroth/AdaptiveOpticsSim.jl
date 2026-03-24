@@ -36,6 +36,10 @@ default_modal_inverse_policy(::Type{T}) where {T<:AbstractFloat} = TSVDInverse(r
 default_calibration_inverse_policy(::Type{T}) where {T<:AbstractFloat} = TSVDInverse(rtol=sqrt(eps(T)))
 default_projector_inverse_policy(::Type{T}) where {T<:AbstractFloat} = TSVDInverse(rtol=sqrt(eps(T)))
 default_build_backend(::AbstractArray) = NativeBuildBackend()
+function default_runtime_calibration_build_backend(A::AbstractArray)
+    gpu_backend_name(typeof(A)) === nothing && return NativeBuildBackend()
+    return CPUBuildBackend()
+end
 GPUArrayBuildBackend(::Type{B}) where {B} = GPUArrayBuildBackend{B}()
 
 struct InverseStats{T<:AbstractFloat,V<:AbstractVector{T}}

@@ -298,6 +298,11 @@ Current recommendation:
     matrices and reconstructors directly on the GPU backend. The maintained
     AO188 GPU path now defaults to CPU-built calibration/operators, then
     uploads the resulting reconstructors to the runtime backend.
+  - The same CPU-build/GPU-run rule now applies to the generic runtime
+    calibration surfaces too: `ModalReconstructor`, `CalibrationVault`, and
+    `ao_calibration` default to CPU build when their source matrices live on a
+    GPU backend, while still materializing the resulting operators back onto
+    the runtime backend.
   - Current warmed AO188 surrogate rates on the structured runtime path are
     about `1.02 kHz` on local CPU, `1.02 kHz` on local AMDGPU, and about
     `1.25 kHz` on CUDA on `spiders`.
@@ -310,6 +315,10 @@ Current recommendation:
     fast-runtime AO188 command surface is now tight on both GPU backends:
     AMDGPU command max abs is about `2.37e-8`, and CUDA command max abs is
     about `3.39e-8`.
+  - The maintained generic GPU smoke surfaces also remain green with this
+    default. On both AMDGPU and CUDA, the closed-loop runtime and
+    interaction-matrix reconstructor smoke paths now run with CPU-built
+    calibration operators uploaded to the GPU runtime path.
   - The scientific `Float64` AO188 post-command surface remains very tight on
     both GPUs against CPU:
     AMDGPU `tel_opd` max abs about `3.89e-16`, CUDA `tel_opd` max abs about

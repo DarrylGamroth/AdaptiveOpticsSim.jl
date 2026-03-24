@@ -19,7 +19,7 @@ end
 
 function CalibrationVault(D::AbstractMatrix{T}; n_trunc::Int=0, invert::Bool=true,
     policy::InversePolicy=default_calibration_inverse_policy(T),
-    build_backend::BuildBackend=default_build_backend(D)) where {T<:AbstractFloat}
+    build_backend::BuildBackend=default_runtime_calibration_build_backend(D)) where {T<:AbstractFloat}
     if !invert
         empty_vals = similar(D, T, 0)
         return CalibrationVault{T, typeof(D), Matrix{T}, typeof(empty_vals), typeof(policy), typeof(build_backend)}(
@@ -43,12 +43,17 @@ function CalibrationVault(D::AbstractMatrix{T}; n_trunc::Int=0, invert::Bool=tru
         n_trunc=n_trunc,
     ) : policy
     Minv, stats = inverse_operator(build_backend, D, effective_policy)
-    Mtrunc = effective_policy isa TSVDInverse ? Minv : nothing
-    return CalibrationVault{T, typeof(D), typeof(Minv), typeof(stats.singular_values), typeof(effective_policy), typeof(build_backend)}(
+    Minv_native = build_backend isa CPUBuildBackend ?
+        materialize_build(NativeBuildBackend(), D, Minv) : Minv
+    Mtrunc = effective_policy isa TSVDInverse ? Minv_native : nothing
+    singular_values = build_backend isa CPUBuildBackend ?
+        materialize_build(NativeBuildBackend(), similar(D, T, 0), stats.singular_values) :
+        stats.singular_values
+    return CalibrationVault{T, typeof(D), typeof(Minv_native), typeof(singular_values), typeof(effective_policy), typeof(build_backend)}(
         D,
-        Minv,
+        Minv_native,
         Mtrunc,
-        stats.singular_values,
+        singular_values,
         stats.cond,
         stats.effective_rank,
         stats.n_trunc,
@@ -59,7 +64,7 @@ end
 
 function CalibrationVault(D::AbstractMatrix{S}; n_trunc::Int=0, invert::Bool=true,
     policy::InversePolicy=default_calibration_inverse_policy(float(S)),
-    build_backend::BuildBackend=default_build_backend(D)) where {S<:Real}
+    build_backend::BuildBackend=default_runtime_calibration_build_backend(D)) where {S<:Real}
     return CalibrationVault(float.(D); n_trunc=n_trunc, invert=invert, policy=policy, build_backend=build_backend)
 end
 
