@@ -525,7 +525,6 @@ function sample_bioedge_intensity!(wfs::BioEdgeWFS, tel::Telescope, intensity::A
     if size(wfs.state.camera_frame) != (n_camera, n_camera)
         wfs.state.camera_frame = similar(wfs.state.camera_frame, n_camera, n_camera)
     end
-    bin2d!(wfs.state.camera_frame, intensity, sub)
     frame = wfs.state.camera_frame
     wfs.state.nominal_detector_resolution = round(Int, wfs.params.n_subap * wfs.state.effective_resolution / tel.params.resolution)
     if wfs.params.binning != 1
@@ -537,8 +536,10 @@ function sample_bioedge_intensity!(wfs::BioEdgeWFS, tel::Telescope, intensity::A
         if size(wfs.state.binned_intensity) != (target, target)
             wfs.state.binned_intensity = similar(wfs.state.binned_intensity, target, target)
         end
-        bin2d!(wfs.state.binned_intensity, frame, factor)
+        bin2d!(wfs.state.binned_intensity, intensity, sub * factor)
         frame = wfs.state.binned_intensity
+    else
+        bin2d!(wfs.state.camera_frame, intensity, sub)
     end
     resize_bioedge_signal_buffers!(wfs, size(frame, 1))
     return frame

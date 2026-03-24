@@ -511,6 +511,15 @@ end
     AdaptiveOpticsSim.capture_stack!(det_stack, cube, scratch; rng=MersenneTwister(10))
     @test cube[:, :, 1] ≈ fill(0.5, 4, 4)
     @test cube[:, :, 2] ≈ fill(1.0, 4, 4)
+
+    psf = reshape(Float64.(1:256), 16, 16)
+    det_fused = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, psf_sampling=2, binning=2)
+    frame_fused = copy(AdaptiveOpticsSim.fill_frame!(det_fused, psf, 1.0))
+    manual_mid = zeros(Float64, 8, 8)
+    manual_out = zeros(Float64, 4, 4)
+    AdaptiveOpticsSim.bin2d!(manual_mid, psf, 2)
+    AdaptiveOpticsSim.bin2d!(manual_out, manual_mid, 2)
+    @test frame_fused == manual_out
 end
 
 @testset "Asterism PSF" begin
@@ -600,10 +609,24 @@ end
     pyr_sampled = PyramidWFS(tel; n_subap=4, mode=Diffractive(), n_pix_separation=4, binning=2)
     pyr_sampled_slopes = measure!(pyr_sampled, tel, ngs)
     @test length(pyr_sampled_slopes) == 2 * count(pyr_sampled.state.valid_i4q)
+    pyr_intensity = reshape(Float64.(1:size(tel.state.opd, 1)^2), size(tel.state.opd))
+    pyr_frame = copy(AdaptiveOpticsSim.sample_pyramid_intensity!(pyr_sampled, tel, pyr_intensity))
+    pyr_camera = zeros(Float64, 4, 4)
+    pyr_manual = zeros(Float64, 2, 2)
+    AdaptiveOpticsSim.bin2d!(pyr_camera, pyr_intensity, 8)
+    AdaptiveOpticsSim.bin2d!(pyr_manual, pyr_camera, 2)
+    @test pyr_frame == pyr_manual
 
     bio_sampled = BioEdgeWFS(tel; n_subap=4, mode=Diffractive(), binning=2)
     bio_sampled_slopes = measure!(bio_sampled, tel, ngs)
     @test length(bio_sampled_slopes) == 2 * count(bio_sampled.state.valid_i4q)
+    bio_intensity = reshape(Float64.(1:size(tel.state.opd, 1)^2), size(tel.state.opd))
+    bio_frame = copy(AdaptiveOpticsSim.sample_bioedge_intensity!(bio_sampled, tel, bio_intensity))
+    bio_camera = zeros(Float64, 4, 4)
+    bio_manual = similar(bio_frame)
+    AdaptiveOpticsSim.bin2d!(bio_camera, bio_intensity, 8)
+    AdaptiveOpticsSim.bin2d!(bio_manual, bio_camera, div(size(bio_camera, 1), size(bio_frame, 1)))
+    @test bio_frame == bio_manual
 
     pyr_profile = PyramidWFS(tel; n_subap=4, mode=Diffractive())
     pyr_profile_slopes = measure!(pyr_profile, tel, lgs_profile)

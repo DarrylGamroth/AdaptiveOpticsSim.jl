@@ -299,10 +299,10 @@ function fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real)
     ensure_buffers!(det, n_mid, m_mid, n_out, m_out)
 
     if sampling > 1
-        bin2d!(det.state.bin_buffer, psf, sampling)
         if binning > 1
-            bin2d!(det.state.frame, det.state.bin_buffer, binning)
+            bin2d!(det.state.frame, psf, sampling * binning)
         else
+            bin2d!(det.state.bin_buffer, psf, sampling)
             det.state.frame .= det.state.bin_buffer
         end
     else

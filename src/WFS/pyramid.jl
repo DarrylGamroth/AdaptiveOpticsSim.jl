@@ -504,7 +504,6 @@ function sample_pyramid_intensity!(wfs::PyramidWFS, tel::Telescope, intensity::A
     if size(wfs.state.camera_frame) != (n_camera, n_camera)
         wfs.state.camera_frame = similar(wfs.state.camera_frame, n_camera, n_camera)
     end
-    bin2d!(wfs.state.camera_frame, intensity, sub)
     frame = wfs.state.camera_frame
     if binning != 1
         if n_camera % binning != 0
@@ -514,8 +513,10 @@ function sample_pyramid_intensity!(wfs::PyramidWFS, tel::Telescope, intensity::A
         if size(wfs.state.binned_intensity) != (n_binned, n_binned)
             wfs.state.binned_intensity = similar(wfs.state.binned_intensity, n_binned, n_binned)
         end
-        bin2d!(wfs.state.binned_intensity, frame, binning)
+        bin2d!(wfs.state.binned_intensity, intensity, sub * binning)
         frame = wfs.state.binned_intensity
+    else
+        bin2d!(wfs.state.camera_frame, intensity, sub)
     end
     resize_pyramid_signal_buffers!(wfs, size(frame, 1))
     return frame
