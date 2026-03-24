@@ -62,6 +62,7 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     asterism_capacity::Int
     amp_scales::V
     amp_scales_host::Vector{T}
+    slopes_host::Vector{T}
     valid_mask_host::Matrix{Bool}
     reference_signal_host::Vector{T}
     slopes_units::T
@@ -113,6 +114,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     lgs_kernel_fft = backend{Complex{T}}(undef, 0, 0, 0)
     amp_scales = backend{T}(undef, 1)
     amp_scales_host = Vector{T}(undef, 1)
+    slopes_host = Vector{T}(undef, 2 * n_subap * n_subap)
     valid_mask_host = Matrix{Bool}(undef, n_subap, n_subap)
     reference_signal_host = Vector{T}(undef, 2 * n_subap * n_subap)
     state = ShackHartmannState{
@@ -167,6 +169,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         1,
         amp_scales,
         amp_scales_host,
+        slopes_host,
         valid_mask_host,
         reference_signal_host,
         one(T),
@@ -483,7 +486,7 @@ function measure_sh_asterism_diffractive!(::AcceleratorStyle, wfs::ShackHartmann
     ast::Asterism, n::Int, n_sub::Int, sub::Int, pad::Int, ox::Int, oy::Int)
     host_valid_mask = wfs.state.valid_mask_host
     host_ref = wfs.state.reference_signal_host
-    host_slopes = Array(wfs.state.slopes)
+    host_slopes = wfs.state.slopes_host
     idx = 1
     @inbounds for i in 1:n_sub, j in 1:n_sub
         xs = (i - 1) * sub + 1
@@ -553,7 +556,7 @@ function measure_sh_asterism_diffractive!(::AcceleratorStyle, wfs::ShackHartmann
     ast::Asterism, det::AbstractDetector, rng::AbstractRNG, n::Int, n_sub::Int, sub::Int, pad::Int, ox::Int, oy::Int)
     host_valid_mask = wfs.state.valid_mask_host
     host_ref = wfs.state.reference_signal_host
-    host_slopes = Array(wfs.state.slopes)
+    host_slopes = wfs.state.slopes_host
     idx = 1
     @inbounds for i in 1:n_sub, j in 1:n_sub
         xs = (i - 1) * sub + 1
