@@ -158,6 +158,19 @@ Interpretation:
 - the remaining work is no longer LGS structure; it is full-loop integration
   and backend-specific scheduling
 
+Mixed NGS/LGS SH runtime follow-up:
+
+- the incompatible SH asterism path now accumulates a real exported
+  `spot_cube` instead of leaving the last-source frame in the readout
+- the accelerator mixed SH centroid path now matches the CPU scalar fallback
+  thresholding semantics by using per-spot peak thresholds
+- local warmed detector-backed mixed SH runtime is now about:
+  - CPU: `0.920 ms` (`1087 Hz`)
+  - AMDGPU: `0.862 ms` (`1160 Hz`)
+- focused AMDGPU mixed SH equivalence is now tight:
+  - `spot_cube` max abs about `3.91e-2`
+  - `slopes` max abs about `1.62e-6`
+
 Branch-overlap recheck after the SH/LGS redesign:
 
 - generic Julia task overlap is still a bad fit for AMDGPU on the maintained
@@ -275,6 +288,8 @@ Status:
   `scripts/profile_pixel_output_runtime.jl`
 - dedicated LGS-heavy branch profiler:
   `scripts/profile_lgs_sh_runtime.jl`
+- dedicated mixed NGS/LGS SH profiler:
+  `scripts/profile_mixed_sh_asterism_runtime.jl`
 
 ### Phase 2: Batched SH spot generation
 

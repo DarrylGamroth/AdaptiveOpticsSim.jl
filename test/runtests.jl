@@ -681,6 +681,22 @@ end
     AdaptiveOpticsSim.subtract_reference_and_scale!(sh_ast_serial)
     sh_ast_serial_slopes = copy(sh_ast_serial.state.slopes)
     @test sh_ast_slopes ≈ sh_ast_serial_slopes
+    mixed_ngs = Source(wavelength=wavelength(lgs_profile), magnitude=0.0, coordinates=(0.0, 0.0))
+    mixed_ast = Asterism([mixed_ngs, lgs_profile])
+    sh_mixed_det = ShackHartmann(tel; n_subap=4, mode=Diffractive())
+    sh_mixed_det_slopes = copy(measure!(sh_mixed_det, tel, mixed_ast, det; rng=MersenneTwister(14)))
+    sh_mixed_det_frame = copy(sh_mixed_det.state.spot_cube)
+    sh_mixed_det_manual = ShackHartmann(tel; n_subap=4, mode=Diffractive())
+    AdaptiveOpticsSim.prepare_sampling!(sh_mixed_det_manual, tel, mixed_ast.sources[1])
+    AdaptiveOpticsSim.ensure_sh_calibration!(sh_mixed_det_manual, tel, mixed_ast.sources[1])
+    fill!(sh_mixed_det_manual.state.detector_noise_cube, zero(eltype(sh_mixed_det_manual.state.detector_noise_cube)))
+    for src in mixed_ast.sources
+        AdaptiveOpticsSim.sampled_spots_peak!(sh_mixed_det_manual, tel, src, det, MersenneTwister(14))
+        sh_mixed_det_manual.state.detector_noise_cube .+= sh_mixed_det_manual.state.spot_cube
+    end
+    copyto!(sh_mixed_det_manual.state.spot_cube, sh_mixed_det_manual.state.detector_noise_cube)
+    @test sh_mixed_det_frame ≈ sh_mixed_det_manual.state.spot_cube
+    @test length(sh_mixed_det_slopes) == 2 * 4 * 4
     pyr_ast = PyramidWFS(tel; n_subap=4, mode=Diffractive())
     pyr_ast_slopes = copy(measure!(pyr_ast, tel, ast))
     @test length(pyr_ast_slopes) == 2 * 4 * 4

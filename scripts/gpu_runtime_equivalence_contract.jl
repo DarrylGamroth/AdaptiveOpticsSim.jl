@@ -194,10 +194,54 @@ function _run_lgs_equivalence(::Type{B}, profile::Symbol) where {B<:GPUBackendTa
     _assert_close("slopes", wfs_gpu.state.slopes, wfs_cpu.state.slopes)
 end
 
+function _build_mixed_sh_asterism_case(backend, ::Type{T}) where {T<:AbstractFloat}
+    tel = Telescope(
+        resolution=112,
+        diameter=8.2,
+        sampling_time=1e-3,
+        central_obstruction=0.30,
+        T=T,
+        backend=backend,
+    )
+    ngs = Source(wavelength=T(589e-9), magnitude=T(0), coordinates=(T(0.0), T(0.0)), T=T)
+    lgs = LGSSource(
+        magnitude=T(0),
+        wavelength=T(589e-9),
+        laser_coordinates=(T(5.0), T(0.0)),
+        na_profile=_na_profile(T),
+        fwhm_spot_up=T(1.0),
+        T=T,
+    )
+    ast = Asterism([ngs, lgs])
+    wfs = ShackHartmann(tel; n_subap=14, mode=Diffractive(), T=T, backend=backend)
+    det = Detector(noise=NoiseNone(), integration_time=T(1e-3), qe=T(1), binning=1, T=T, backend=backend)
+    _set_deterministic_opd!(tel)
+    return tel, ast, wfs, det
+end
+
+function _run_mixed_sh_asterism_equivalence(::Type{B}) where {B<:GPUBackendTag}
+    disable_scalar_backend!(B)
+    BackendArray = gpu_backend_array_type(B)
+    BackendArray === nothing && error("GPU backend $(B) is not available")
+    T = Float32
+
+    tel_cpu, ast_cpu, wfs_cpu, det_cpu = _build_mixed_sh_asterism_case(Array, T)
+    tel_gpu, ast_gpu, wfs_gpu, det_gpu = _build_mixed_sh_asterism_case(BackendArray, T)
+
+    measure!(wfs_cpu, tel_cpu, ast_cpu, det_cpu; rng=MersenneTwister(3))
+    measure!(wfs_gpu, tel_gpu, ast_gpu, det_gpu; rng=MersenneTwister(3))
+    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(wfs_gpu.state.slopes))
+
+    println("mixed_sh_asterism_equivalence")
+    _assert_close("spot_cube", wfs_gpu.state.spot_cube, wfs_cpu.state.spot_cube)
+    _assert_close("slopes", wfs_gpu.state.slopes, wfs_cpu.state.slopes)
+end
+
 function run_gpu_runtime_equivalence(::Type{B}; branch_mode::AO188BranchExecutionMode=SequentialBranchExecution()) where {B<:GPUBackendTag}
     _run_ao188_equivalence(B, branch_mode)
     _run_lgs_equivalence(B, :none)
     _run_lgs_equivalence(B, :na)
+    _run_mixed_sh_asterism_equivalence(B)
     println("gpu_runtime_equivalence complete")
     return nothing
 end

@@ -39,6 +39,8 @@ The maintained CUDA validation entry points are:
   - sampling-profile the medium CUDA model-based tomography builder
 - `scripts/profile_multi_source_multi_wfs_runtime.jl`
   - warmed stacked asterism and composite multi-WFS runtime profile
+- `scripts/profile_mixed_sh_asterism_runtime.jl`
+  - warmed mixed NGS/LGS diffractive Shack-Hartmann runtime profile
 
 On a CUDA host, the standard workflow is:
 
@@ -51,6 +53,7 @@ julia --project=. scripts/cpu_crossover_sweep.jl
 julia --project=. scripts/gpu_crossover_cuda.jl
 julia --project=. scripts/gpu_profile_model_tomography_cuda.jl
 julia --project=. scripts/profile_multi_source_multi_wfs_runtime.jl cuda
+julia --project=. scripts/profile_mixed_sh_asterism_runtime.jl cuda
 ```
 
 The `spiders` workstation is the current real-hardware validation host for this
@@ -76,6 +79,8 @@ The maintained AMDGPU validation entry points are:
   - explicit phase timing for the medium AMDGPU model-based tomography builder
 - `scripts/profile_multi_source_multi_wfs_runtime.jl`
   - warmed stacked asterism and composite multi-WFS runtime profile
+- `scripts/profile_mixed_sh_asterism_runtime.jl`
+  - warmed mixed NGS/LGS diffractive Shack-Hartmann runtime profile
 
 On an AMDGPU host, the standard workflow is:
 
@@ -88,6 +93,7 @@ julia --project=. scripts/gpu_crossover_amdgpu.jl
 julia --project=. scripts/gpu_profile_model_tomography_amdgpu.jl
 julia --project=. scripts/gpu_profile_model_tomography_phases_amdgpu.jl
 julia --project=. scripts/profile_multi_source_multi_wfs_runtime.jl amdgpu
+julia --project=. scripts/profile_mixed_sh_asterism_runtime.jl amdgpu
 ```
 
 Current AMDGPU caveat:
@@ -152,6 +158,32 @@ Interpretation:
 - CUDA is currently ahead of AMDGPU on the same stacked runtime surface,
 - mixed heterogeneous composite execution is still materially slower than
   compatible grouped execution, which matches the current grouped-phase design.
+
+Current warmed mixed NGS/LGS diffractive SH runtime snapshot:
+
+- CPU on this host
+  - detector-backed mixed asterism: about `9.20e5 ns`
+  - about `1087 Hz`
+- AMDGPU on this host
+  - detector-backed mixed asterism: about `8.62e5 ns`
+  - about `1160 Hz`
+
+Current mixed NGS/LGS SH runtime equivalence snapshot on AMDGPU:
+
+- `spot_cube` max abs: about `3.91e-2`
+- `spot_cube` max rel: about `1.46e-5`
+- `slopes` max abs: about `1.62e-6`
+- `slopes` max rel: about `1.58e-5`
+
+Interpretation:
+
+- the mixed detector-backed SH path now preserves exported `spot_cube`
+  semantics instead of leaving only the last-source frame in the runtime
+  readout,
+- the maintained AMDGPU mixed SH path remains faster than CPU on this host for
+  the profiled `14 x 14` detector-backed case,
+- the focused CPU-vs-AMDGPU mixed SH equivalence is now tight for both
+  exported pixels and slopes.
 
 ## Canonical BenchmarkTools Snapshot
 
