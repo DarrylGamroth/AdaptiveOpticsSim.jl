@@ -177,6 +177,9 @@ Current maintained status:
   [`examples/tutorials/closed_loop_zernike.jl`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/examples/tutorials/closed_loop_zernike.jl)
 - no dedicated `ZernikeSignalOrder` has been introduced yet; the current
   `state.slopes` compatibility surface is sufficient for the maintained MVP
+- the compact runtime/profile surface is covered by
+  [`scripts/profile_zernike_runtime.jl`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/scripts/profile_zernike_runtime.jl)
+  on CPU, AMDGPU, and CUDA
 
 ## Test Plan
 

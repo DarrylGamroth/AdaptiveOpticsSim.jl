@@ -41,6 +41,8 @@ The maintained CUDA validation entry points are:
   - warmed stacked asterism and composite multi-WFS runtime profile
 - `scripts/profile_mixed_sh_asterism_runtime.jl`
   - warmed mixed NGS/LGS diffractive Shack-Hartmann runtime profile
+- `scripts/profile_zernike_runtime.jl`
+  - warmed compact `ZernikeWFS` closed-loop runtime profile
 
 On a CUDA host, the standard workflow is:
 
@@ -54,6 +56,7 @@ julia --project=. scripts/gpu_crossover_cuda.jl
 julia --project=. scripts/gpu_profile_model_tomography_cuda.jl
 julia --project=. scripts/profile_multi_source_multi_wfs_runtime.jl cuda
 julia --project=. scripts/profile_mixed_sh_asterism_runtime.jl cuda
+julia --project=. scripts/profile_zernike_runtime.jl cuda
 ```
 
 The `spiders` workstation is the current real-hardware validation host for this
@@ -81,6 +84,8 @@ The maintained AMDGPU validation entry points are:
   - warmed stacked asterism and composite multi-WFS runtime profile
 - `scripts/profile_mixed_sh_asterism_runtime.jl`
   - warmed mixed NGS/LGS diffractive Shack-Hartmann runtime profile
+- `scripts/profile_zernike_runtime.jl`
+  - warmed compact `ZernikeWFS` closed-loop runtime profile
 
 On an AMDGPU host, the standard workflow is:
 
@@ -94,6 +99,7 @@ julia --project=. scripts/gpu_profile_model_tomography_amdgpu.jl
 julia --project=. scripts/gpu_profile_model_tomography_phases_amdgpu.jl
 julia --project=. scripts/profile_multi_source_multi_wfs_runtime.jl amdgpu
 julia --project=. scripts/profile_mixed_sh_asterism_runtime.jl amdgpu
+julia --project=. scripts/profile_zernike_runtime.jl amdgpu
 ```
 
 Current AMDGPU caveat:
@@ -158,6 +164,31 @@ Interpretation:
 - CUDA is currently ahead of AMDGPU on the same stacked runtime surface,
 - mixed heterogeneous composite execution is still materially slower than
   compatible grouped execution, which matches the current grouped-phase design.
+
+Current warmed compact `ZernikeWFS` runtime snapshot:
+
+- CPU on this host
+  - build time: about `1.42e7 ns`
+  - runtime step mean: about `1.11e4 ns`
+  - about `89.9 kHz`
+- AMDGPU on this host
+  - build time: about `1.11e7 ns`
+  - runtime step mean: about `3.86e5 ns`
+  - about `2.59 kHz`
+- CUDA on `spiders`
+  - build time: about `2.82e7 ns`
+  - runtime step mean: about `3.64e5 ns`
+  - about `2.75 kHz`
+
+Interpretation:
+
+- the compact detector-backed `ZernikeWFS` runtime surface is now covered by a
+  maintained warmed profiler on CPU, AMDGPU, and CUDA,
+- CPU remains the lowest-latency path for this tiny `4 x 4` `ZernikeWFS`
+  closed-loop case,
+- CUDA is slightly ahead of AMDGPU on the maintained GPU profile surface,
+- the current profile shape is useful as a regression guard before adding the
+  next sensor family.
 
 Current warmed mixed NGS/LGS diffractive SH runtime snapshot:
 
