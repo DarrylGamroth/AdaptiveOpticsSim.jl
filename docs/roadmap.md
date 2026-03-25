@@ -226,6 +226,11 @@ validation shows the new default is still too coarse.
   `ZernikeWFS` and then `CurvatureSensor` if needed.
 - [ ] Continue GPU/HIL performance work only where profiling shows real value,
   especially in builder-heavy tomography paths.
+- [ ] Separate compact regression benchmarks from representative benchmark
+  ladders across the major runtime and builder families, following
+  `docs/benchmark-matrix-plan.md`, so CPU/GPU and algorithm-appropriateness
+  decisions are based on realistic scale points rather than only tiny guard
+  cases.
 - [~] Extract generic control-simulation primitives from the Subaru AO188
   simulation into core without moving the Subaru-specific assembly itself.
   The staged plan now lives in `docs/control-simulation-architecture-plan.md`.
