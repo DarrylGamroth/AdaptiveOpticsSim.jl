@@ -79,6 +79,49 @@ function assert_control_simulation_interface(sim)
     return iface
 end
 
+function assert_interaction_matrix_contract(imat, expected_rows::Int, expected_cols::Int, amplitude::Real)
+    @test imat isa InteractionMatrix
+    @test size(imat.matrix) == (expected_rows, expected_cols)
+    @test imat.amplitude ≈ amplitude
+end
+
+function assert_calibration_vault_contract(vault, forward::AbstractMatrix; inverted::Bool=true)
+    @test vault isa CalibrationVault
+    @test vault.D === forward
+    if inverted
+        @test !isnothing(vault.M)
+        @test size(vault.M, 2) == size(forward, 1)
+        @test length(vault.singular_values) == min(size(forward)...)
+        @test vault.effective_rank >= 0
+    else
+        @test isnothing(vault.M)
+        @test isempty(vault.singular_values)
+    end
+end
+
+function assert_modal_basis_contract(basis::ModalBasis, n_commands::Int, n_modes::Int)
+    @test size(basis.M2C) == (n_commands, n_modes)
+    @test size(basis.basis, 2) == n_modes
+    if !isnothing(basis.projector)
+        @test size(basis.projector, 2) == size(basis.basis, 1)
+        @test size(basis.projector, 1) == n_modes
+    end
+end
+
+function assert_ao_calibration_contract(calib::AOCalibration, n_commands::Int, n_modes::Int)
+    @test size(calib.M2C) == (n_commands, n_modes)
+    @test size(calib.basis, 2) == n_modes
+    @test calib.calibration isa CalibrationVault
+end
+
+function assert_meta_sensitivity_contract(meta::MetaSensitivity, n_fields::Int)
+    @test meta.calib0 isa CalibrationVault
+    @test meta.meta isa CalibrationVault
+    @test length(meta.field_order) == n_fields
+    @test size(meta.meta.D, 2) == n_fields
+    @test meta.meta.M !== nothing
+end
+
 function subharmonic_tiptilt_power(phs::AbstractMatrix)
     n = size(phs, 1)
     coords = collect(LinRange(-1.0, 1.0, n))
@@ -1140,6 +1183,53 @@ end
     @test supports_stacked_sources(wfs_diffractive, ast)
     prepare_runtime_wfs!(wfs_diffractive, tel, src)
     @test wfs_diffractive.state.calibrated
+end
+
+@testset "Calibration workflow contracts" begin
+    tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = Source(band=:I, magnitude=0.0)
+    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+    dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
+    wfs = ShackHartmann(tel; n_subap=2)
+    det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
+
+    basis = modal_basis(dm, tel; n_modes=2)
+    assert_modal_basis_contract(basis, length(dm.state.coefs), 2)
+
+    imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
+    assert_interaction_matrix_contract(imat, length(wfs.state.slopes), length(dm.state.coefs), 0.1)
+
+    imat_basis = interaction_matrix(dm, wfs, tel, basis.M2C; amplitude=0.1)
+    assert_interaction_matrix_contract(imat_basis, length(wfs.state.slopes), size(basis.M2C, 2), 0.1)
+
+    vault = CalibrationVault(imat.matrix)
+    assert_calibration_vault_contract(vault, imat.matrix)
+    vault_noinv = CalibrationVault(imat.matrix; invert=false)
+    assert_calibration_vault_contract(vault_noinv, imat.matrix; inverted=false)
+    vault_trunc = with_truncation(vault, 0)
+    assert_calibration_vault_contract(vault_trunc, imat.matrix)
+    @test vault_trunc.n_trunc == 0
+
+    calib = ao_calibration(tel, dm, wfs; n_modes=2, amplitude=0.1, basis=basis)
+    assert_ao_calibration_contract(calib, length(dm.state.coefs), 2)
+    @test calib.calibration.D == imat_basis.matrix
+
+    meta = compute_meta_sensitivity_matrix(tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
+    assert_meta_sensitivity_contract(meta, 2)
+
+    sprint = SPRINT(tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
+    @test sprint.meta isa MetaSensitivity
+    est = estimate!(sprint, meta.calib0.D)
+    @test est isa Misregistration
+
+    diversity = fill(eltype(tel.state.opd)(1e-9), size(tel.state.opd))
+    lift_basis = basis_from_m2c(dm, tel, basis.M2C)
+    lift = LiFT(tel, src, lift_basis, det; diversity_opd=diversity, iterations=2, img_resolution=8, numerical=true)
+    psf_in = compute_psf!(tel, src; zero_padding=1)
+    coeffs = zeros(eltype(psf_in), 2)
+    reconstruct!(coeffs, lift, psf_in, [1, 2]; check_convergence=false)
+    @test length(coeffs) == 2
+    @test diagnostics(lift).residual_norm >= 0
 end
 
 @testset "Telemetry and config" begin

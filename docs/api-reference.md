@@ -195,6 +195,30 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   `supports_prepared_runtime`, `supports_detector_output`,
   `supports_stacked_sources`, and `supports_grouped_execution`.
 
+### `IF-CAL`: calibration workflow surfaces
+
+- `interaction_matrix(...)` is the maintained linearized WFS-calibration entry
+  point and must return an `InteractionMatrix` with a stored calibration
+  `amplitude`.
+- `CalibrationVault(D; ...)` is the maintained inverse-storage workflow and
+  should retain the forward operator `D`, the selected inverse representation
+  when requested, and inversion diagnostics such as singular values, condition
+  number, effective rank, and truncation count.
+- `modal_basis(...)` is the maintained modal-basis workflow and must return a
+  `ModalBasis` with consistent `M2C`, sampled basis vectors, and optional
+  projector.
+- `ao_calibration(...)` is the maintained packaged AO-calibration workflow and
+  should return an `AOCalibration` bundling basis operators with the measured
+  `CalibrationVault`.
+- `compute_meta_sensitivity_matrix(...)` and `SPRINT(...)` are the maintained
+  misregistration-identification workflows and should retain the reference
+  calibration, inverted meta-sensitivity operator, finite-difference step
+  sizes, and active field ordering.
+- `LiFT` reconstruction uses a separate iterative contract:
+  `reconstruct!(coeffs, lift, psf_in, mode_ids, ...)` must mutate the supplied
+  coefficient buffer in place and retain convergence diagnostics in
+  `diagnostics(lift)`.
+
 ## Notes on backend-aware APIs
 
 - Constructors typically accept `T=` and `backend=` keywords.

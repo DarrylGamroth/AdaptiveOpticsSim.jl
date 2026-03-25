@@ -262,6 +262,21 @@ Conformance expectations:
 - algorithm choice/policy choice is explicit
 - output types and stored diagnostics are documented
 
+Status:
+
+- partially implemented
+- the maintained API reference now documents explicit workflow contracts for:
+  - `interaction_matrix`
+  - `CalibrationVault`
+  - `modal_basis`
+  - `ao_calibration`
+  - `compute_meta_sensitivity_matrix`
+  - `SPRINT`
+  - `LiFT`
+- conformance coverage exists in the `Calibration workflow contracts` testset
+  in [runtests.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/test/runtests.jl)
+- broader problem/algorithm/result decomposition is still open
+
 ## Naming Rules To Apply
 
 ### Required
@@ -401,8 +416,8 @@ This order keeps style work subordinate to correctness and extensibility.
 
 Continue the broader adoption and naming side of the spec:
 
-- decide whether calibration workflow families should gain explicit abstract or
-  problem/algorithm/result contracts
+- decide whether calibration workflow families should stop at documented
+  workflow contracts or gain explicit abstract/problem/algorithm/result layers
 - extend the trait audit beyond runtime/WFS surfaces where it materially
   simplifies capability checks
 - perform the remaining conservative exported-surface naming review
