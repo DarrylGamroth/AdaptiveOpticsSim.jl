@@ -86,7 +86,7 @@ export set_pupil!, set_pupil_reflectivity!, flux_map, apply_spiders!
 export Source, SourceParams, LGSSource, LGSSourceParams, wavelength, optical_path, print_optical_path
 export lgs_elongation_factor
 export Asterism, coordinates_xy_arcsec, compute_psf!, psf_pixel_scale_arcsec
-export compute_psf!, ensure_psf_state!
+export ensure_psf_state!
 export ZernikeBasis, compute_zernike!, noll_to_nm
 export OPDMap
 export NCPA, NCPABasis, KLBasis, ZernikeModalBasis, M2CBasis, default_ncpa_basis
