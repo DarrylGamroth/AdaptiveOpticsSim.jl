@@ -51,6 +51,7 @@ function assert_optical_element_interface(element, tel)
 end
 
 function assert_reconstructor_interface(recon, slopes, expected_length::Int)
+    @test recon isa AbstractReconstructorOperator
     out = zeros(eltype(slopes), expected_length)
     @test applicable(reconstruct!, out, recon, slopes)
     reconstruct!(out, recon, slopes)
@@ -1102,6 +1103,8 @@ end
     ctrl = DiscreteIntegratorController(length(wfs.state.slopes); gain=0.1, tau=0.02)
     sim = AOSimulation(tel, atm, src, dm, wfs)
     runtime = ClosedLoopRuntime(sim, modal; rng=MersenneTwister(9))
+    wfs_diffractive = ShackHartmann(tel; n_subap=2, mode=Diffractive())
+    ast = Asterism([src, Source(band=:I, magnitude=1.0, coordinates=(1.0, -45.0))])
 
     # IF-SRC
     assert_source_interface(src)
@@ -1129,6 +1132,14 @@ end
     @test !supports_stacked_sources(runtime)
     @test !supports_grouped_execution(runtime)
     @test simulation_interface(iface) === iface
+    @test !supports_prepared_runtime(wfs, src)
+    @test supports_prepared_runtime(wfs_diffractive, src)
+    @test supports_prepared_runtime(wfs_diffractive, ast)
+    @test !supports_stacked_sources(wfs, src)
+    @test supports_stacked_sources(wfs, ast)
+    @test supports_stacked_sources(wfs_diffractive, ast)
+    prepare_runtime_wfs!(wfs_diffractive, tel, src)
+    @test wfs_diffractive.state.calibrated
 end
 
 @testset "Telemetry and config" begin

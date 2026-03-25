@@ -78,7 +78,8 @@ than by source file.
   `compute_optical_gains!`
 - `MetaSensitivity`, `compute_meta_sensitivity_matrix`,
   `estimate_misregistration`, `SPRINT`, `estimate!`
-- `ModalReconstructor`, `reconstruct!`, `reconstruct`
+- `AbstractReconstructorOperator`, `ModalReconstructor`,
+  `MappedReconstructor`, `reconstruct!`, `reconstruct`
 - `TomographyNoiseModel`, `RelativeSignalNoise`, `ScalarMeasurementNoise`,
   `DiagonalMeasurementNoise`
 
@@ -88,7 +89,7 @@ than by source file.
 - `DiscreteIntegratorController`, `update!`
 - `ClosedLoopRuntime`, `SimulationInterface`, `CompositeSimulationInterface`, `SimulationReadout`
 - `AbstractControlSimulation`
-- `prepare!`, `simulation_interface`
+- `prepare!`, `prepare_runtime_wfs!`, `simulation_interface`
 - `simulation_readout`, `simulation_command`, `simulation_slopes`,
   `simulation_wfs_frame`, `simulation_science_frame`
 - `simulation_wfs_metadata`, `simulation_science_metadata`
@@ -145,6 +146,9 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - Optional capabilities are surfaced through traits and behavior:
   detector-coupled output, asterism support, prepared runtime support, and
   stacked-source execution.
+- Maintained optional-capability queries use
+  `supports_prepared_runtime(wfs, src)` and `supports_stacked_sources(wfs, src)`
+  in addition to the simulation-level trait surface.
 - The maintained runtime expects the measured slope vector to live in
   `wfs.state.slopes`.
 
@@ -163,8 +167,9 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 
 ### `IF-REC`: control reconstructors
 
-- Reconstructor operators are currently structural rather than abstract, but
-  the maintained contract is `reconstruct!(out, recon, slopes)`.
+- `AbstractReconstructorOperator` is the maintained core slopes-to-command
+  operator family, and the required runtime contract is
+  `reconstruct!(out, recon, slopes)`.
 - `reconstruct(recon, slopes)` is the thin allocation wrapper over that
   mutating operator.
 - The maintained control reconstructor families are `ModalReconstructor` and

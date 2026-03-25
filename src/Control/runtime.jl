@@ -74,6 +74,22 @@ supports_stacked_sources(sim) = supports_stacked_sources(typeof(sim))
 supports_grouped_execution(::Type) = false
 supports_grouped_execution(sim) = supports_grouped_execution(typeof(sim))
 
+"""
+    supports_prepared_runtime(wfs, src)
+
+Return whether a WFS/source pairing exposes a meaningful `prepare_runtime_wfs!`
+precomputation hook for repeated runtime stepping.
+"""
+supports_prepared_runtime(::AbstractWFS, ::Any) = false
+
+"""
+    supports_stacked_sources(wfs, src)
+
+Return whether the WFS/source pairing has maintained stacked-source execution
+support, typically for `Asterism` inputs.
+"""
+supports_stacked_sources(::AbstractWFS, ::Any) = false
+
 init_execution_state(::AbstractExecutionPolicy, ref) = nothing
 
 """
@@ -199,34 +215,42 @@ simulation_interface(runtime::ClosedLoopRuntime) = SimulationInterface(runtime)
 simulation_interface(interface::SimulationInterface) = interface
 simulation_interface(interface::CompositeSimulationInterface) = interface
 
-@inline _supports_runtime_preparation(::AbstractWFS, ::Any) = false
-@inline _supports_runtime_preparation(::ShackHartmann{<:Diffractive}, ::AbstractSource) = true
-@inline _supports_runtime_preparation(::ShackHartmann{<:Diffractive}, ::Asterism) = true
+@inline supports_prepared_runtime(::ShackHartmann{<:Diffractive}, ::AbstractSource) = true
+@inline supports_prepared_runtime(::ShackHartmann{<:Diffractive}, ::Asterism) = true
+@inline supports_stacked_sources(::ShackHartmann, ::Asterism) = true
+@inline supports_stacked_sources(::PyramidWFS, ::Asterism) = true
+@inline supports_stacked_sources(::BioEdgeWFS, ::Asterism) = true
 
-@inline function _prepare_runtime_wfs!(::AbstractWFS, tel::Telescope, src)
-    return nothing
+"""
+    prepare_runtime_wfs!(wfs, tel, src)
+
+Run any WFS-specific runtime precomputation needed before repeated `step!`
+calls. The default implementation is a no-op and returns `wfs`.
+"""
+@inline function prepare_runtime_wfs!(wfs::AbstractWFS, tel::Telescope, src)
+    return wfs
 end
 
-@inline function _prepare_runtime_wfs!(wfs::ShackHartmann{<:Diffractive}, tel::Telescope, src::AbstractSource)
+@inline function prepare_runtime_wfs!(wfs::ShackHartmann{<:Diffractive}, tel::Telescope, src::AbstractSource)
     prepare_sampling!(wfs, tel, src)
     ensure_sh_calibration!(wfs, tel, src)
     return wfs
 end
 
-@inline function _prepare_runtime_wfs!(wfs::ShackHartmann{<:Diffractive}, tel::Telescope, ast::Asterism)
+@inline function prepare_runtime_wfs!(wfs::ShackHartmann{<:Diffractive}, tel::Telescope, ast::Asterism)
     isempty(ast.sources) && throw(InvalidConfiguration("asterism must contain at least one source"))
     prepare_sampling!(wfs, tel, ast.sources[1])
     ensure_sh_calibration!(wfs, tel, ast.sources[1])
     return wfs
 end
 
-supports_prepared_runtime(runtime::ClosedLoopRuntime) = _supports_runtime_preparation(runtime.wfs, runtime.src)
+supports_prepared_runtime(runtime::ClosedLoopRuntime) = supports_prepared_runtime(runtime.wfs, runtime.src)
 supports_detector_output(runtime::ClosedLoopRuntime) = !isnothing(runtime.wfs_detector) || !isnothing(runtime.science_detector)
-supports_stacked_sources(runtime::ClosedLoopRuntime) = runtime.src isa Asterism
+supports_stacked_sources(runtime::ClosedLoopRuntime) = supports_stacked_sources(runtime.wfs, runtime.src)
 supports_grouped_execution(::CompositeSimulationInterface) = true
 
 function prepare!(runtime::ClosedLoopRuntime)
-    _prepare_runtime_wfs!(runtime.wfs, runtime.tel, runtime.src)
+    prepare_runtime_wfs!(runtime.wfs, runtime.tel, runtime.src)
     return runtime
 end
 

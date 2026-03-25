@@ -310,6 +310,10 @@ Add a short "Interface Contracts" section to `docs/api-reference.md` covering:
 - `AbstractControlSimulation`
 - `AbstractController`
 
+Status:
+
+- implemented in [api-reference.md](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/api-reference.md)
+
 ### Phase 3. Conformance Tests
 
 Add explicit interface tests for each family.
@@ -321,6 +325,11 @@ Examples:
 - reconstructors support `reconstruct!`
 - control simulations support `step!` and `simulation_readout`
 - controllers support `update!`
+
+Status:
+
+- implemented in the `Interface conformance` testset in
+  [runtests.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/test/runtests.jl)
 
 ### Phase 4. Trait Audit
 
@@ -334,6 +343,17 @@ Candidate areas:
 - grouped execution
 - stacked-source execution
 - calibration-build backend defaults
+
+Status:
+
+- partially implemented
+- runtime preparation now uses explicit WFS/source capability queries through
+  `supports_prepared_runtime(wfs, src)` and `prepare_runtime_wfs!(...)`
+- stacked-source support is now queried explicitly through
+  `supports_stacked_sources(wfs, src)` for the maintained WFS families
+- calibration-build backend defaults were already formalized earlier through the
+  runtime calibration build-backend policy work
+- broader calibration/workflow trait cleanup is still open
 
 ### Phase 5. Public Naming Audit
 
@@ -349,6 +369,13 @@ This should be conservative and may result in:
 - new clearer aliases
 - deprecations only when the clarity gain is material
 
+Status:
+
+- partial
+- the earlier `SimulationInterface` cleanup completed a meaningful part of this
+  audit
+- broader exported-surface review is still pending
+
 ## Suggested Execution Order
 
 1. write the contract section in `docs/api-reference.md`
@@ -360,8 +387,9 @@ This order keeps style work subordinate to correctness and extensibility.
 
 ## Open Questions
 
-- Should the package introduce a formal `AbstractReconstructorOperator`, or is a
-  documented duck-typed `reconstruct!` contract enough?
+- `AbstractReconstructorOperator` is now in place for the maintained control
+  reconstructor family. The remaining question is whether additional
+  reconstruction workflows should adopt it or stay on separate contracts.
 - Should problem/algorithm/solution decomposition be introduced for tomography,
   LiFT, and SPRINT, or is that a later step?
 - Should the transfer-function logic stay example-level, or become a small core
@@ -371,12 +399,10 @@ This order keeps style work subordinate to correctness and extensibility.
 
 ## Immediate Next Step
 
-Implement Phase 2 and Phase 3:
+Continue the broader adoption and naming side of the spec:
 
-- add a concise interface-contract section to `docs/api-reference.md`
-- add explicit conformance tests for:
-  - `AbstractOpticalElement`
-  - maintained `AbstractWFS` implementations
-  - reconstructor operators
-  - `AbstractControlSimulation`
-  - `AbstractController`
+- decide whether calibration workflow families should gain explicit abstract or
+  problem/algorithm/result contracts
+- extend the trait audit beyond runtime/WFS surfaces where it materially
+  simplifies capability checks
+- perform the remaining conservative exported-surface naming review

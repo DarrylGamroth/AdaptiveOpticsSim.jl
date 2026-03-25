@@ -20,6 +20,22 @@ using LinearAlgebra
 # one operator when the runtime wants separate modal and command-basis stages.
 #
 """
+    AbstractReconstructorOperator
+
+Abstract slopes-to-command operator family used by closed-loop runtime control.
+
+The maintained contract is:
+
+- `reconstruct!(out, recon, slopes)`
+- `reconstruct(recon, slopes)`
+
+Concrete implementations may internally reconstruct in modal space, command
+space, or a mapped two-stage basis, but they should present the same external
+slopes-to-command interface.
+"""
+abstract type AbstractReconstructorOperator end
+
+"""
     ModalReconstructor
 
 Linear slopes-to-modes operator built from an interaction matrix inverse.
@@ -31,7 +47,7 @@ Mathematically this applies
 where `s` is the slope vector, `R` is the selected inverse of the interaction
 matrix, and `g` is the scalar gain stored in the reconstructor.
 """
-struct ModalReconstructor{T<:AbstractFloat,M<:AbstractMatrix{T},P<:InversePolicy,V<:AbstractVector{T}}
+struct ModalReconstructor{T<:AbstractFloat,M<:AbstractMatrix{T},P<:InversePolicy,V<:AbstractVector{T}} <: AbstractReconstructorOperator
     reconstructor::M
     gain::T
     policy::P
@@ -99,7 +115,7 @@ struct MappedReconstructor{
     P<:InversePolicy,
     V<:AbstractVector{T},
     W<:AbstractVector{T},
-}
+} <: AbstractReconstructorOperator
     reconstructor::M
     command_basis::B
     modal_workspace::W
