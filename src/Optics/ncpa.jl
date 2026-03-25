@@ -1,6 +1,20 @@
 using Random
 using Statistics
 
+#
+# Static non-common-path aberrations
+#
+# `NCPA` builds a static OPD map from a chosen modal basis and coefficient set.
+#
+# Supported basis families:
+# - KL modes built from DM covariance (`KLDMModes`)
+# - KL modes weighted by atmospheric PSD (`KLHHtPSD`)
+# - Zernike modes on the pupil
+# - externally supplied modal-to-command bases (`M2C`)
+#
+# The resulting OPD can either be applied additively on top of the current
+# telescope phase or replace it entirely, just like DM application modes.
+#
 abstract type NCPABasis end
 struct KLBasis{M<:KLBasisMethod} <: NCPABasis
     method::M
@@ -26,6 +40,14 @@ default_ncpa_basis(::FastProfile) = KLBasis(KLDMModes())
     end
 end
 
+"""
+    NCPA(tel, dm, atm; ...)
+
+Construct a static non-common-path-aberration OPD map.
+
+The OPD can be built either from explicitly supplied modal coefficients or from
+randomized `f2` spectral parameters, using the requested basis family.
+"""
 struct NCPA{T<:AbstractFloat,A<:AbstractMatrix{T},B,V} <: AbstractOpticalElement
     opd::A
     basis::B
@@ -110,6 +132,14 @@ function ncpa_basis(basis::NCPABasis, tel::Telescope, dm::DeformableMirror,
     return ncpa_basis(basis, tel, dm; n_modes=n_modes, M2C=M2C)
 end
 
+"""
+    combine_basis!(opd, basis, coeffs, pupil)
+
+Accumulate a modal OPD expansion on the pupil grid.
+
+The basis is combined as `sum_k coeffs[k] * basis[:, :, k]` and then masked by
+the telescope pupil support.
+"""
 function combine_basis!(opd::AbstractMatrix{T}, basis::AbstractArray{T,3},
     coeffs::AbstractVector{T}, pupil::AbstractMatrix{Bool}) where {T<:AbstractFloat}
     return combine_basis!(execution_style(opd), opd, basis, coeffs, pupil)

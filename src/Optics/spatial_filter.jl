@@ -1,5 +1,20 @@
 import Base: filter!
 
+#
+# Focal-plane spatial filtering
+#
+# A `SpatialFilter` propagates the pupil field to the focal plane, applies a
+# focal-plane mask, and returns the filtered pupil-plane phase and amplitude.
+#
+# The algorithm is:
+# 1. embed the complex pupil field into the padded focal-grid size
+# 2. FFT to the focal plane
+# 3. multiply by the shifted focal mask
+# 4. inverse FFT back to the pupil plane
+# 5. extract filtered phase and amplitude over the original pupil support
+#
+# Different filter shapes only differ in how the focal-plane mask is built.
+#
 @kernel function circular_filter_mask_kernel!(mask, threshold2, center, n::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= n
@@ -43,6 +58,15 @@ struct SpatialFilter{S<:SpatialFilterShape,P<:SpatialFilterParams,Sf<:SpatialFil
     state::Sf
 end
 
+"""
+    SpatialFilter(tel; shape=CircularFilter(), diameter=..., zero_padding=2, T=Float64, backend=Array)
+
+Construct a focal-plane spatial filter for a telescope.
+
+`shape` determines the focal-plane mask geometry, `diameter` sets the mask
+size in pupil-resolution units, and `zero_padding` controls the focal-plane
+sampling used during propagation.
+"""
 function SpatialFilter(tel::Telescope; shape::SpatialFilterShape=CircularFilter(),
     diameter::Real=tel.params.resolution / 2, zero_padding::Int=2,
     T::Type{<:AbstractFloat}=Float64, backend=Array)
@@ -158,6 +182,15 @@ function ensure_spatial_filter_buffers!(sf::SpatialFilter, n::Int, n_pad::Int)
     return sf
 end
 
+"""
+    filter!(sf, tel, src)
+
+Propagate the telescope field through the spatial filter and return the
+filtered pupil-plane phase and amplitude.
+
+This is a full focal-plane filtering operation rather than a direct pupil-space
+mask.
+"""
 function filter!(sf::SpatialFilter, tel::Telescope, src::AbstractSource)
     n = tel.params.resolution
     n_pad = sf.params.resolution
