@@ -172,11 +172,13 @@ Rationale:
 
 Introduce small capability traits rather than ad hoc branching.
 
-Candidate traits:
+Maintained traits:
 
 - `supports_prepared_runtime(::Type)`
+- `supports_prepared_runtime(wfs, src)`
 - `supports_detector_output(::Type)`
 - `supports_stacked_sources(::Type)`
+- `supports_stacked_sources(wfs, src)`
 - `supports_grouped_execution(::Type)`
 - `supports_multirate_schedule(::Type)`
 
@@ -185,6 +187,15 @@ Rationale:
 - clearer dispatch
 - less scenario-specific branching in runtime scripts/examples
 - easier to document and test
+
+Status:
+
+- partially implemented
+- simulation-level traits are in core
+- WFS/source-pairing traits now drive runtime preparation and stacked-source
+  capability checks through `prepare_runtime_wfs!(...)`,
+  `supports_prepared_runtime(wfs, src)`, and
+  `supports_stacked_sources(wfs, src)`
 
 ### 7. Delay / Scheduling / Rate Traits
 
