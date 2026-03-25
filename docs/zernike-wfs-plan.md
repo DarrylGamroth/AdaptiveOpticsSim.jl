@@ -3,7 +3,7 @@
 Status:
 - [x] Phase 1 scalar CPU MVP
 - [~] Phase 2 GPU path
-- [ ] Phase 3 HIL/RTC integration
+- [x] Phase 3 HIL/RTC integration
 
 ## Goal
 
@@ -170,6 +170,13 @@ reference centroids.
 - add reconstructor/control example using the Zernike signal vector
 - decide whether a dedicated `ZernikeSignalOrder` or other sensor-specific
   convention is needed
+
+Current maintained status:
+- `ClosedLoopRuntime` compatibility is covered by tests
+- a compact runtime-based example lives in
+  [`examples/tutorials/closed_loop_zernike.jl`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/examples/tutorials/closed_loop_zernike.jl)
+- no dedicated `ZernikeSignalOrder` has been introduced yet; the current
+  `state.slopes` compatibility surface is sufficient for the maintained MVP
 
 ## Test Plan
 

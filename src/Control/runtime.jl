@@ -210,6 +210,7 @@ end
 
 @inline wfs_output_frame(wfs::AbstractWFS, det::AbstractDetector) = output_frame(det)
 @inline wfs_output_frame(wfs::ShackHartmann{<:Diffractive}, det::AbstractDetector) = wfs.state.spot_cube
+@inline wfs_output_frame(wfs::ZernikeWFS, det::AbstractDetector) = wfs.state.camera_frame
 
 simulation_interface(runtime::ClosedLoopRuntime) = SimulationInterface(runtime)
 simulation_interface(interface::SimulationInterface) = interface

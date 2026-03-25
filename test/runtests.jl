@@ -541,6 +541,28 @@ end
     @test timing.samples == 5
     @test timing.min_ns >= 0
     @test timing.max_ns >= timing.min_ns
+
+    rng3 = MersenneTwister(3)
+    tel3 = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src3 = Source(band=:I, magnitude=0.0)
+    atm3 = KolmogorovAtmosphere(tel3; r0=0.2, L0=25.0)
+    dm3 = DeformableMirror(tel3; n_act=4, influence_width=0.3)
+    wfs3 = ZernikeWFS(tel3; n_subap=4, diffraction_padding=2)
+    sim3 = AOSimulation(tel3, atm3, src3, dm3, wfs3)
+    imat3 = interaction_matrix(dm3, wfs3, tel3, src3; amplitude=1e-8)
+    recon3 = ModalReconstructor(imat3; gain=0.5)
+    wfs_det3 = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
+    runtime3 = ClosedLoopRuntime(sim3, recon3; rng=rng3, wfs_detector=wfs_det3)
+    @test supports_prepared_runtime(runtime3)
+    @test supports_detector_output(runtime3)
+    prepare!(runtime3)
+    @test runtime3.wfs.state.calibrated
+    step!(runtime3)
+    @test length(runtime3.command) == length(dm3.state.coefs)
+    @test simulation_wfs_frame(runtime3) === wfs3.state.camera_frame
+    @test simulation_wfs_frame(runtime3) == output_frame(wfs_det3)
+    @test size(simulation_wfs_frame(runtime3)) == size(wfs3.state.camera_frame)
+    @test all(isfinite, simulation_slopes(runtime3))
 end
 
 @testset "Detector" begin
@@ -1455,11 +1477,17 @@ end
     @test length(tomography.commands) == 4
     @test all(isfinite, tomography.commands)
 
-    for name in ("closed_loop_shack_hartmann.jl", "closed_loop_pyramid.jl", "closed_loop_bioedge.jl")
+    for name in ("closed_loop_shack_hartmann.jl", "closed_loop_pyramid.jl", "closed_loop_bioedge.jl", "closed_loop_zernike.jl")
         loop = run_tutorial_example(name)
         @test length(loop.residual_before) == length(loop.residual_after)
         @test all(isfinite, loop.residual_before)
         @test all(isfinite, loop.residual_after)
-        @test maximum(loop.final_psf) > 0
+        if hasproperty(loop, :final_psf)
+            @test maximum(loop.final_psf) > 0
+        else
+            @test maximum(loop.final_frame) > 0
+            @test all(isfinite, loop.final_slopes)
+            @test all(isfinite, loop.final_command)
+        end
     end
 end
