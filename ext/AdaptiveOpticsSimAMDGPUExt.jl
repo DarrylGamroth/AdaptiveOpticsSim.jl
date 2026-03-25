@@ -5,6 +5,21 @@ using AMDGPU
 using AbstractFFTs
 using LinearAlgebra
 
+#
+# AMDGPU backend extension
+#
+# This extension supplies backend-native dense linear algebra and FFT plumbing
+# for the maintained ROCArray execution paths. The main mathematical surfaces
+# implemented here are:
+#
+# - pseudoinverse construction from SVD
+# - stable Hermitian right division used by tomography/calibration
+# - normal-equation solves and SVD fallback for LiFT
+#
+# The key rule is that the algorithms match the core implementation, while the
+# execution is specialized to rocBLAS / rocSOLVER / rocFFT where that improves
+# performance or avoids host fallback.
+#
 AdaptiveOpticsSim.gpu_backend_loaded(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = true
 AdaptiveOpticsSim.gpu_backend_array_type(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = AMDGPU.ROCArray
 AdaptiveOpticsSim.gpu_backend_name(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = :amdgpu
@@ -66,6 +81,15 @@ function roc_cholesky_solve!(
     return rhs_mat, chol
 end
 
+"""
+    pseudoinverse_from_roc_svd(backend, U, S, Vt, inv_s_host)
+
+Assemble the pseudoinverse `V * Diagonal(inv_s) * U'` from the compact rocSOLVER
+SVD factors.
+
+`rocSOLVER.gesvd!` returns `Vt`, so the final matrix product is expressed with
+transpose flags rather than materialized transposes.
+"""
 function pseudoinverse_from_roc_svd(backend::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag},
     U::AMDGPU.ROCArray{T,2}, S::AMDGPU.ROCArray{T,1}, Vt::AMDGPU.ROCArray{T,2},
     inv_s_host::AbstractVector{T}) where {T<:AbstractFloat}
@@ -146,6 +170,16 @@ function AdaptiveOpticsSim.inverse_operator(backend::AdaptiveOpticsSim.GPUArrayB
     return roc_inverse_operator(backend, A, policy)
 end
 
+"""
+    stable_hermitian_right_division(_, rhs, gram)
+
+Solve the right-division `rhs / gram` through a left solve on the transposed
+system.
+
+The preferred path is Cholesky on the Hermitian Gram matrix. If that fails, the
+implementation falls back to LU so the higher-level algorithm remains robust on
+ill-conditioned runtime/calibration cases.
+"""
 function AdaptiveOpticsSim.stable_hermitian_right_division(
     _backend::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag},
     rhs::AMDGPU.ROCArray{T,2},
@@ -176,6 +210,16 @@ function AdaptiveOpticsSim.solve_lift_fallback!(diag::AdaptiveOpticsSim.LiFTDiag
     return rhs
 end
 
+"""
+    solve_normal_system!(diag, rhs, factor, normal, H, residual, damping)
+
+Solve the LiFT normal equations on ROCArray inputs.
+
+The main path uses Cholesky on the normal matrix, optionally with diagonal
+loading from the damping policy. If repeated factorization attempts fail, the
+code falls back to the SVD-based Levenberg-Marquardt solve to preserve the same
+robustness guarantees as the CPU implementation.
+"""
 function AdaptiveOpticsSim.solve_normal_system!(diag::AdaptiveOpticsSim.LiFTDiagnostics{T}, rhs::AMDGPU.ROCArray{T,1},
     factor::AbstractMatrix{T}, normal::AbstractMatrix{T}, H::AbstractMatrix{T}, residual::AbstractVector{T},
     ::AdaptiveOpticsSim.LiFTDampingNone) where {T<:AbstractFloat}

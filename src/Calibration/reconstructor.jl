@@ -1,5 +1,36 @@
 using LinearAlgebra
 
+#
+# Reconstructor operators
+#
+# The core control law is always a linear map from WFS slopes to DM commands.
+# This file exposes two closely related forms:
+#
+# - `ModalReconstructor`: c = g * R * s
+# - `MappedReconstructor`: u = B * (g * R * s)
+#
+# where:
+# - `s` is the measured slope vector
+# - `R` is the inverse/pseudoinverse of the interaction matrix
+# - `g` is a scalar loop gain
+# - `B` is an explicit command-basis map, typically M2C
+#
+# Keeping the two-stage mapped form explicit matters for both numerical
+# clarity and performance. It avoids baking large dense `B * R` products into
+# one operator when the runtime wants separate modal and command-basis stages.
+#
+"""
+    ModalReconstructor
+
+Linear slopes-to-modes operator built from an interaction matrix inverse.
+
+Mathematically this applies
+
+`c = g * R * s`
+
+where `s` is the slope vector, `R` is the selected inverse of the interaction
+matrix, and `g` is the scalar gain stored in the reconstructor.
+"""
 struct ModalReconstructor{T<:AbstractFloat,M<:AbstractMatrix{T},P<:InversePolicy,V<:AbstractVector{T}}
     reconstructor::M
     gain::T
@@ -29,6 +60,14 @@ function ModalReconstructor(imat::InteractionMatrix; gain::Real=1.0,
     )
 end
 
+"""
+    reconstruct!(out, recon::ModalReconstructor, slopes)
+
+Apply the modal control law `out = gain * R * slopes` in-place.
+
+This is the hot-path runtime form used by closed-loop control and keeps the
+output buffer under caller ownership.
+"""
 function reconstruct!(out::AbstractVector, recon::ModalReconstructor, slopes::AbstractVector)
     mul!(out, recon.reconstructor, slopes)
     out .*= recon.gain
@@ -40,6 +79,19 @@ function reconstruct(recon::ModalReconstructor, slopes::AbstractVector)
     return reconstruct!(out, recon, slopes)
 end
 
+"""
+    MappedReconstructor
+
+Two-stage slopes-to-commands operator with an explicit command-basis map.
+
+This represents
+
+`u = B * (g * R * s)`
+
+where `R` is the modal inverse operator and `B` maps modal coefficients to the
+final command basis. This is the natural runtime form for systems that
+reconstruct in one basis but actuate in another.
+"""
 struct MappedReconstructor{
     T<:AbstractFloat,
     M<:AbstractMatrix{T},
@@ -91,6 +143,15 @@ function MappedReconstructor(command_basis::AbstractMatrix{T}, imat::Interaction
     )
 end
 
+"""
+    reconstruct!(out, recon::MappedReconstructor, slopes)
+
+Apply the two-stage mapped control law
+
+`out = command_basis * (gain * reconstructor * slopes)`
+
+using the reconstructor's preallocated modal workspace.
+"""
 function reconstruct!(out::AbstractVector, recon::MappedReconstructor, slopes::AbstractVector)
     mul!(recon.modal_workspace, recon.reconstructor, slopes)
     recon.modal_workspace .*= recon.gain

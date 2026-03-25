@@ -1,5 +1,19 @@
 using Statistics
 
+#
+# Pyramid wavefront sensing
+#
+# The diffractive pyramid model follows the standard optical sequence:
+#
+# 1. propagate the pupil field to the focal plane
+# 2. apply the pyramid phase mask
+# 3. propagate back to the re-imaged pupil plane
+# 4. combine the four pupil images into differential slope signals
+#
+# Modulation is represented explicitly by averaging across a discrete set of
+# focal-plane phase tilts. GPU/runtime optimizations keep the same optical model
+# but batch modulation points and compatible asterism sources where possible.
+#
 @kernel function pyramid_phasor_kernel!(phasor, scale, n::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= n
@@ -176,6 +190,15 @@ struct PyramidWFS{M<:SensingMode,P<:PyramidParams,S<:PyramidState} <: AbstractWF
     state::S
 end
 
+"""
+    PyramidWFS(tel; ...)
+
+Construct a pyramid wavefront sensor.
+
+The diffractive model forms four re-imaged pupil intensities through a
+focal-plane pyramid mask. Slopes are obtained from left/right and top/bottom
+intensity differences after optional modulation averaging and binning.
+"""
 function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulation::Real=2.0,
     light_ratio::Real=0.0,
     normalization::WFSNormalization=MeanValidFluxNormalization(),

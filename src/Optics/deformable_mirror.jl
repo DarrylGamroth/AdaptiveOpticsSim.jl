@@ -1,5 +1,23 @@
 using LinearAlgebra
 
+#
+# Deformable mirror model
+#
+# The DM surface is represented as a linear superposition of influence
+# functions:
+#
+#   opd(x, y) = sum_k modes(x, y, k) * coefs[k]
+#
+# For the general path this is materialized as a dense matrix-vector product.
+# For the common Gaussian/no-rotation/no-anamorphosis case we also build a
+# separable approximation
+#
+#   opd(x, y) = X * C * Y'
+#
+# where `C` is the actuator coefficient grid. That formulation keeps the same
+# mathematical model for this influence family while substantially reducing the
+# runtime cost of repeated DM application.
+#
 @kernel function dm_mode_kernel!(mode, pupil, x_m, y_m, cx, cy, scale, sigma2, n::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= n
@@ -65,6 +83,16 @@ struct DeformableMirror{P<:DeformableMirrorParams,S<:DeformableMirrorState} <: A
     state::S
 end
 
+"""
+    DeformableMirror(tel; ...)
+
+Build a DM whose surface is a weighted sum of Gaussian influence functions on
+the telescope pupil grid.
+
+The stored dense operator is the flattened matrix `modes`, mapping actuator
+coefficients to OPD samples. When the misregistration keeps the Gaussian basis
+separable, the constructor also prepares a faster `X * C * Y'` runtime path.
+"""
 function DeformableMirror(tel::Telescope; n_act::Int, influence_width::Real=0.2,
     T::Type{<:AbstractFloat}=Float64, misregistration::Misregistration=Misregistration(T=T), backend=Array)
     params = DeformableMirrorParams{T}(n_act, T(influence_width), misregistration)
@@ -91,6 +119,15 @@ end
            mis.radial_scaling == one(mis.radial_scaling)
 end
 
+"""
+    build_separable_influence!(dm, tel)
+
+Build the factored Gaussian influence basis used by the fast separable DM
+application path.
+
+This optimization is only valid when the DM misregistration preserves the
+separable tensor-product structure of the Gaussian influence model.
+"""
 function build_separable_influence!(dm::DeformableMirror, tel::Telescope)
     supports_separable_influence(dm.params.misregistration) || return dm
     n = tel.params.resolution
@@ -134,6 +171,15 @@ function build_influence_functions!(dm::DeformableMirror, tel::Telescope)
     return build_influence_functions!(execution_style(dm.state.modes), dm, tel)
 end
 
+"""
+    build_influence_functions!(dm, tel)
+
+Materialize the dense actuator-to-OPD operator.
+
+Each column corresponds to one actuator's influence function sampled on the
+telescope pupil grid. This is the reference linear model used for calibration
+and for the dense DM application fallback.
+"""
 function build_influence_functions!(::ScalarCPUStyle, dm::DeformableMirror, tel::Telescope)
     Base.require_one_based_indexing(tel.state.pupil, dm.state.modes)
     n = tel.params.resolution
@@ -216,6 +262,15 @@ end
     return dm.state.opd
 end
 
+"""
+    apply_opd!(dm, tel)
+
+Assemble the DM OPD from the current actuator coefficients without mutating the
+telescope OPD.
+
+This chooses the separable `X * C * Y'` path when available and otherwise falls
+back to the dense matrix-vector application `modes * coefs`.
+"""
 function apply_opd_separable!(dm::DeformableMirror, tel::Telescope)
     xbasis = dm.state.separable_x::typeof(dm.state.opd)
     ybasis_t = dm.state.separable_y_t::typeof(dm.state.opd)

@@ -1,5 +1,29 @@
 using Statistics
 
+#
+# Shack-Hartmann wavefront sensing
+#
+# Two sensing models live in this file:
+#
+# - `Geometric()`: local wavefront gradients are sampled directly.
+# - `Diffractive()`: each subaperture field is propagated to the focal plane,
+#   intensity is sampled/cropped, and centroids are converted to slopes.
+#
+# The diffractive path uses FFT-based Fraunhofer propagation on each lenslet.
+# For LGS sensing, elongated spots are handled through focal-plane convolution.
+# For asterisms and GPU execution, the implementation batches lenslet/source
+# stacks so the algorithm stays mathematically the same while reducing launch
+# and detector-processing overhead.
+#
+"""
+    ShackHartmann
+
+Shack-Hartmann wavefront sensor with geometric and diffractive sensing modes.
+
+The diffractive model computes focal-plane lenslet spots and converts their
+centroids into x/y slopes. The geometric model bypasses image formation and
+samples the OPD gradient directly.
+"""
 struct ShackHartmannParams{T<:AbstractFloat}
     n_subap::Int
     threshold::T
@@ -79,6 +103,20 @@ struct ShackHartmann{M<:SensingMode,P<:ShackHartmannParams,S<:ShackHartmannState
     state::S
 end
 
+"""
+    ShackHartmann(tel; ...)
+
+Construct a Shack-Hartmann WFS on the telescope pupil grid.
+
+Important diffractive quantities:
+
+- `diffraction_padding` controls the focal-plane FFT grid size
+- `pixel_scale` and `shannon_sampling` determine detector-plane sampling
+- `n_pix_subap` controls the cropped spot size used for centroiding
+
+The constructor allocates the full lenslet workspace, including stacked FFT and
+spot buffers used by the batched GPU/runtime paths.
+"""
 function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     threshold_cog::Real=0.01, threshold_convolution::Real=0.05, half_pixel_shift::Bool=false,
     diffraction_padding::Int=2, pixel_scale=nothing, n_pix_subap=nothing,
@@ -263,6 +301,15 @@ function build_sh_phasor!(wfs::ShackHartmann, ratio::T) where {T<:AbstractFloat}
     return wfs
 end
 
+"""
+    prepare_sampling!(wfs, tel, src)
+
+Resolve the diffractive lenslet sampling for a source/wavelength pair.
+
+This chooses the effective FFT padding, detector binning, and cropped spot size
+so that the propagated spot grid is consistent with the requested angular pixel
+scale. The result is cached in the WFS state and reused across measurements.
+"""
 @inline function sh_pixel_scale_init(d_subap::Real, padding::Int, src::AbstractSource)
     return lgs_pixel_scale(d_subap, padding, wavelength(src))
 end
@@ -333,6 +380,17 @@ function prepare_sampling!(wfs::ShackHartmann, tel::Telescope, src::AbstractSour
     return wfs
 end
 
+"""
+    sample_spot!(wfs, intensity)
+
+Convert an oversampled diffractive lenslet intensity into the cropped lenslet
+spot used for centroiding.
+
+The operation is:
+
+1. optional detector-style binning on the FFT intensity grid
+2. centered crop/resize onto the configured `n_pix_subap x n_pix_subap` spot
+"""
 function sample_spot!(wfs::ShackHartmann, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
     binning = wfs.state.binning_pixel_scale
     spot_in = intensity
@@ -405,6 +463,20 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
     return wfs.state.slopes
 end
 
+"""
+    measure!(Diffractive(), wfs, tel, src)
+    measure!(Diffractive(), wfs, tel, src, det; rng)
+
+Compute diffractive Shack-Hartmann slopes from focal-plane lenslet spots.
+
+The algorithm is:
+
+1. propagate each subaperture field with FFT-based Fraunhofer propagation
+2. sample/crop the resulting lenslet spots
+3. optionally apply detector physics
+4. convert spot centroids to x/y slopes
+5. subtract the calibrated reference signal and apply the stored slope scaling
+"""
 function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
     Base.require_one_based_indexing(tel.state.opd)
