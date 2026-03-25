@@ -2,6 +2,7 @@ using AdaptiveOpticsSim
 using Random
 
 const _backend_arg = isempty(ARGS) ? "cpu" : lowercase(ARGS[1])
+const _scale_arg = length(ARGS) >= 2 ? lowercase(ARGS[2]) : "compact"
 
 if _backend_arg == "cuda"
     import CUDA
@@ -43,13 +44,61 @@ function _sync_interface!(::Type{B}, interface::SimulationInterface) where {B<:G
     return nothing
 end
 
-function run_profile(; backend_name::AbstractString="cpu", samples::Int=20, warmup::Int=5)
+function _resolve_scale(name::AbstractString)
+    lowered = lowercase(name)
+    lowered in ("compact", "medium", "representative") ||
+        error("unsupported scale '$name'; use compact, medium, or representative")
+    return lowered
+end
+
+function _zernike_scale_config(scale_name::AbstractString, T::Type{<:AbstractFloat})
+    scale = _resolve_scale(scale_name)
+    if scale == "compact"
+        return (
+            scale=scale,
+            resolution=16,
+            n_subap=4,
+            n_act=3,
+            diffraction_padding=2,
+            interaction_amplitude=T(1e-8),
+            warmup=5,
+            samples=20,
+        )
+    elseif scale == "medium"
+        return (
+            scale=scale,
+            resolution=64,
+            n_subap=16,
+            n_act=9,
+            diffraction_padding=2,
+            interaction_amplitude=T(5e-9),
+            warmup=3,
+            samples=12,
+        )
+    end
+    return (
+        scale=scale,
+        resolution=128,
+        n_subap=32,
+        n_act=17,
+        diffraction_padding=2,
+        interaction_amplitude=T(2.5e-9),
+        warmup=2,
+        samples=6,
+    )
+end
+
+function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractString="compact",
+    samples::Union{Int,Nothing}=nothing, warmup::Union{Int,Nothing}=nothing)
     BackendArray, backend_tag, backend_label = _resolve_backend(backend_name)
     T = Float32
     rng = MersenneTwister(5)
+    cfg = _zernike_scale_config(scale_name, T)
+    resolved_samples = something(samples, cfg.samples)
+    resolved_warmup = something(warmup, cfg.warmup)
 
     tel = Telescope(
-        resolution=16,
+        resolution=cfg.resolution,
         diameter=8.0,
         sampling_time=1e-3,
         central_obstruction=0.0,
@@ -58,11 +107,11 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=20, warm
     )
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=BackendArray)
-    dm = DeformableMirror(tel; n_act=3, influence_width=0.35, T=T, backend=BackendArray)
-    wfs = ZernikeWFS(tel; n_subap=4, diffraction_padding=2, T=T, backend=BackendArray)
+    dm = DeformableMirror(tel; n_act=cfg.n_act, influence_width=0.35, T=T, backend=BackendArray)
+    wfs = ZernikeWFS(tel; n_subap=cfg.n_subap, diffraction_padding=cfg.diffraction_padding, T=T, backend=BackendArray)
     det = Detector(noise=NoiseNone(), integration_time=T(1), qe=T(1), binning=1, T=T, backend=BackendArray)
     sim = AOSimulation(tel, atm, src, dm, wfs)
-    imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(1e-8))
+    imat = interaction_matrix(dm, wfs, tel, src; amplitude=cfg.interaction_amplitude)
     recon = ModalReconstructor(imat; gain=T(0.4))
     runtime = ClosedLoopRuntime(sim, recon; rng=rng, wfs_detector=det)
     interface = simulation_interface(runtime)
@@ -77,11 +126,12 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=20, warm
     timing = runtime_timing(() -> begin
         step!(interface)
         _sync_interface!(backend_tag, interface)
-    end; warmup=warmup, samples=samples, gc_before=false)
-    phase = runtime_phase_timing(interface; warmup=warmup, samples=samples, gc_before=false)
+    end; warmup=resolved_warmup, samples=resolved_samples, gc_before=false)
+    phase = runtime_phase_timing(interface; warmup=resolved_warmup, samples=resolved_samples, gc_before=false)
 
     println("zernike_runtime_profile")
     println("  backend: ", backend_label)
+    println("  scale: ", cfg.scale)
     println("  build_time_ns: ", build_time_ns)
     println("  runtime_step_mean_ns: ", timing.mean_ns)
     println("  runtime_step_p95_ns: ", timing.p95_ns)
@@ -92,10 +142,13 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=20, warm
     println("  snapshot_mean_ns: ", phase.snapshot_mean_ns)
     println("  total_phase_mean_ns: ", phase.total_mean_ns)
     println("  total_phase_p95_ns: ", phase.total_p95_ns)
+    println("  pupil_resolution: ", cfg.resolution)
+    println("  n_subap: ", cfg.n_subap)
+    println("  dm_n_act: ", cfg.n_act)
     println("  wfs_frame_shape: ", size(simulation_wfs_frame(interface)))
     println("  slope_length: ", length(simulation_slopes(interface)))
     println("  command_length: ", length(simulation_command(interface)))
     return nothing
 end
 
-run_profile(; backend_name=_backend_arg)
+run_profile(; backend_name=_backend_arg, scale_name=_scale_arg)

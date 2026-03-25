@@ -39,10 +39,12 @@ The maintained CUDA validation entry points are:
   - sampling-profile the medium CUDA model-based tomography builder
 - `scripts/profile_multi_source_multi_wfs_runtime.jl`
   - warmed stacked asterism and composite multi-WFS runtime profile
+  - supports `compact`, `medium`, and `representative` scales
 - `scripts/profile_mixed_sh_asterism_runtime.jl`
   - warmed mixed NGS/LGS diffractive Shack-Hartmann runtime profile
 - `scripts/profile_zernike_runtime.jl`
   - warmed compact `ZernikeWFS` closed-loop runtime profile
+  - supports `compact`, `medium`, and `representative` scales
 
 On a CUDA host, the standard workflow is:
 
@@ -82,10 +84,12 @@ The maintained AMDGPU validation entry points are:
   - explicit phase timing for the medium AMDGPU model-based tomography builder
 - `scripts/profile_multi_source_multi_wfs_runtime.jl`
   - warmed stacked asterism and composite multi-WFS runtime profile
+  - supports `compact`, `medium`, and `representative` scales
 - `scripts/profile_mixed_sh_asterism_runtime.jl`
   - warmed mixed NGS/LGS diffractive Shack-Hartmann runtime profile
 - `scripts/profile_zernike_runtime.jl`
   - warmed compact `ZernikeWFS` closed-loop runtime profile
+  - supports `compact`, `medium`, and `representative` scales
 
 On an AMDGPU host, the standard workflow is:
 

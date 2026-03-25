@@ -4,6 +4,7 @@ using Random
 const _backend_arg = isempty(ARGS) ? "cpu" : lowercase(ARGS[1])
 const _branch_arg = length(ARGS) >= 2 ? lowercase(ARGS[2]) : "sequential"
 const _replay_arg = length(ARGS) >= 3 ? lowercase(ARGS[3]) : "direct"
+const _scale_arg = length(ARGS) >= 4 ? lowercase(ARGS[4]) : "medium"
 
 if _backend_arg == "cuda"
     import CUDA
@@ -60,12 +61,70 @@ function _sync_runtime!(::Type{B}, runtime) where {B<:GPUBackendTag}
     return nothing
 end
 
+function _resolve_scale(name::AbstractString)
+    lowered = lowercase(name)
+    lowered in ("compact", "medium", "representative") ||
+        error("unsupported scale '$name'; use compact, medium, or representative")
+    return lowered
+end
+
+function _pixel_scale_params(scale_name::AbstractString)
+    scale = _resolve_scale(scale_name)
+    if scale == "compact"
+        return (
+            scale=scale,
+            kwargs=(
+                resolution=64,
+                n_act=32,
+                n_active_actuators=768,
+                n_control_modes=64,
+                control_grid_side=10,
+                n_subap=8,
+                n_low_order_subap=2,
+                n_low_order_modes=4,
+                r0=0.18,
+                source_magnitude=7.0,
+            ),
+            warmup=3,
+            samples=12,
+        )
+    elseif scale == "medium"
+        return (
+            scale=scale,
+            kwargs=NamedTuple(),
+            warmup=5,
+            samples=20,
+        )
+    end
+    return (
+        scale=scale,
+        kwargs=(
+            resolution=160,
+            n_act=64,
+            n_active_actuators=3228,
+            n_control_modes=512,
+            control_grid_side=32,
+            n_subap=20,
+            n_low_order_subap=4,
+            n_low_order_modes=16,
+            r0=0.14,
+            source_magnitude=9.0,
+        ),
+        warmup=2,
+        samples=6,
+    )
+end
+
 function run_profile(; backend_name::AbstractString="cpu", branch_name::AbstractString="sequential",
-    replay_name::AbstractString="direct", samples::Int=20, warmup::Int=5)
+    replay_name::AbstractString="direct", scale_name::AbstractString="medium",
+    samples::Union{Int,Nothing}=nothing, warmup::Union{Int,Nothing}=nothing)
     BackendArray, backend_tag, label = _resolve_backend(backend_name)
     branch_mode = _resolve_branch_mode(branch_name)
     replay_mode = _resolve_replay_mode(replay_name)
-    params = AO188SimulationParams(branch_execution=branch_mode, replay_mode=replay_mode)
+    cfg = _pixel_scale_params(scale_name)
+    params = AO188SimulationParams(; cfg.kwargs..., branch_execution=branch_mode, replay_mode=replay_mode)
+    resolved_samples = something(samples, cfg.samples)
+    resolved_warmup = something(warmup, cfg.warmup)
 
     t0 = time_ns()
     scenario = subaru_ao188_simulation(; params=params, backend=BackendArray, rng=MersenneTwister(1))
@@ -77,13 +136,14 @@ function run_profile(; backend_name::AbstractString="cpu", branch_name::Abstract
     timing = runtime_timing(() -> begin
         step!(scenario)
         _sync_runtime!(backend_tag, scenario)
-    end; warmup=warmup, samples=samples, gc_before=false)
-    phase = subaru_ao188_phase_timing(scenario; warmup=warmup, samples=samples, gc_before=false)
+    end; warmup=resolved_warmup, samples=resolved_samples, gc_before=false)
+    phase = subaru_ao188_phase_timing(scenario; warmup=resolved_warmup, samples=resolved_samples, gc_before=false)
 
     println("pixel_output_runtime_profile")
     println("  backend: ", label)
     println("  branch_mode: ", branch_name)
     println("  replay_mode: ", replay_name)
+    println("  scale: ", cfg.scale)
     println("  build_time_ns: ", build_time_ns)
     println("  runtime_step_mean_ns: ", timing.mean_ns)
     println("  runtime_step_p95_ns: ", timing.p95_ns)
@@ -96,8 +156,13 @@ function run_profile(; backend_name::AbstractString="cpu", branch_name::Abstract
     println("  apply_mean_ns: ", phase.apply_mean_ns)
     println("  total_phase_mean_ns: ", phase.total_mean_ns)
     println("  total_phase_p95_ns: ", phase.total_p95_ns)
+    println("  pupil_resolution: ", params.resolution)
+    println("  n_subap: ", params.n_subap)
+    println("  low_order_n_subap: ", params.n_low_order_subap)
+    println("  dm_n_act: ", params.n_act)
+    println("  n_control_modes: ", params.n_control_modes)
     println("  wfs_frame_shape: ", size(scenario.high_wfs.state.spot_cube))
     return nothing
 end
 
-run_profile(; backend_name=_backend_arg, branch_name=_branch_arg, replay_name=_replay_arg)
+run_profile(; backend_name=_backend_arg, branch_name=_branch_arg, replay_name=_replay_arg, scale_name=_scale_arg)

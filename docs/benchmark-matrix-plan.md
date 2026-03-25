@@ -1,5 +1,16 @@
 # Benchmark Matrix Plan
 
+Status:
+- [~] Phase 2 partially implemented
+  - `scripts/profile_zernike_runtime.jl` now supports `compact`, `medium`, and
+    `representative`
+  - `scripts/profile_pixel_output_runtime.jl` now supports `compact`,
+    `medium`, and `representative`
+  - `scripts/profile_multi_source_multi_wfs_runtime.jl` now supports
+    `compact`, `medium`, and `representative`
+- [ ] representative closed-loop and builder ladders are still pending beyond
+  these first runtime surfaces
+
 ## Goal
 
 Separate the package's performance surfaces into two explicit classes:
@@ -278,6 +289,11 @@ remain a regression benchmark instead of entering the representative matrix.
 
 This should be done by extending current profiling scripts rather than creating
 entirely new ad hoc entry points where possible.
+
+Current implementation status:
+
+- done for the first three maintained runtime profilers listed above
+- still pending for broader closed-loop and builder/runtime families
 
 ### Phase 3: Representative Closed-Loop and Builder Cases
 
