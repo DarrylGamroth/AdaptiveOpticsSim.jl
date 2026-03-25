@@ -455,6 +455,40 @@ end
     surrogate_stream = subaru_ao188_simulation(; params=stream_mode, rng=MersenneTwister(3))
     step!(surrogate_stream)
     @test maximum(abs, surrogate_stream.command) >= 0
+
+    curvature_params = AO188CurvatureSimulationParams(
+        T=Float32,
+        resolution=48,
+        n_act=16,
+        n_active_actuators=180,
+        n_control_modes=24,
+        control_grid_side=6,
+        n_subap=4,
+        n_low_order_subap=2,
+        n_low_order_modes=3,
+        source_magnitude=0.0,
+    )
+    curvature_sim = subaru_ao188_curvature_simulation(; params=curvature_params, rng=MersenneTwister(4))
+    @test curvature_sim.high_wfs isa CurvatureWFS
+    step!(curvature_sim)
+    @test length(curvature_sim.command) == curvature_params.n_act^2
+
+    ao3k_params = AO3kSimulationParams(
+        T=Float32,
+        resolution=64,
+        n_act=16,
+        n_active_actuators=180,
+        n_control_modes=32,
+        control_grid_side=6,
+        n_subap=8,
+        n_low_order_subap=2,
+        n_low_order_modes=3,
+        source_magnitude=0.0,
+    )
+    ao3k_sim = subaru_ao3k_simulation(; params=ao3k_params, rng=MersenneTwister(5))
+    @test ao3k_sim.high_wfs isa PyramidWFS
+    step!(ao3k_sim)
+    @test length(ao3k_sim.command) == ao3k_params.n_act^2
 end
 
 function closed_loop_runtime_allocations()
@@ -923,6 +957,41 @@ end
     @test dot(slopes_plus, slopes_minus) < 0
 end
 
+@testset "Curvature WFS" begin
+    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = Source(band=:I, magnitude=0.0)
+    wfs = CurvatureWFS(tel; n_subap=8, response_gain=0.5)
+
+    @test size(wfs.state.camera_frame) == (16, 8)
+    @test length(wfs.state.slopes) == 64
+    @test_throws InvalidConfiguration measure!(wfs, tel)
+    @test_throws InvalidConfiguration measure!(wfs, tel, Asterism([src, Source(band=:I, magnitude=0.0)]))
+
+    flat_slopes = copy(measure!(wfs, tel, src))
+    @test wfs.state.calibrated
+    @test all(isfinite, flat_slopes)
+    @test all(>=(0.0), wfs.state.camera_frame)
+    @test flat_slopes ≈ zero.(flat_slopes) atol=1e-10
+
+    det = Detector(noise=NoiseNone(), binning=1)
+    det_slopes = copy(measure!(wfs, tel, src, det))
+    @test det_slopes ≈ flat_slopes atol=1e-10
+    @test size(output_frame(det)) == size(wfs.state.camera_frame)
+
+    zb = ZernikeBasis(tel, 5)
+    compute_zernike!(zb, tel)
+    focus = @view zb.modes[:, :, 5]
+    @. tel.state.opd = 5e-8 * focus
+    slopes_plus = copy(measure!(wfs, tel, src))
+    @. tel.state.opd = -5e-8 * focus
+    slopes_minus = copy(measure!(wfs, tel, src))
+    fill!(tel.state.opd, 0.0)
+
+    @test norm(slopes_plus) > 1e-6
+    @test norm(slopes_minus) > 1e-6
+    @test dot(slopes_plus, slopes_minus) < 0
+end
+
 @testset "OOPAO parity knobs" begin
     tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
@@ -1238,6 +1307,8 @@ end
     @test supports_prepared_runtime(wfs_diffractive, src)
     @test supports_prepared_runtime(wfs_diffractive, ast)
     @test supports_prepared_runtime(zwfs, src)
+    @test supports_prepared_runtime(CurvatureWFS(tel; n_subap=2), src)
+    @test supports_prepared_runtime(PyramidWFS(tel; n_subap=2, mode=Diffractive()), src)
     @test !supports_stacked_sources(wfs, src)
     @test supports_stacked_sources(wfs, ast)
     @test supports_stacked_sources(wfs_diffractive, ast)
@@ -1245,6 +1316,9 @@ end
     @test wfs_diffractive.state.calibrated
     prepare_runtime_wfs!(zwfs, tel, src)
     @test zwfs.state.calibrated
+    curv = CurvatureWFS(tel; n_subap=2)
+    prepare_runtime_wfs!(curv, tel, src)
+    @test curv.state.calibrated
 end
 
 @testset "Calibration workflow contracts" begin

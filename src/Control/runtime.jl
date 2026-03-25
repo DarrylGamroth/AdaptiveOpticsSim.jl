@@ -211,6 +211,7 @@ end
 @inline wfs_output_frame(wfs::AbstractWFS, det::AbstractDetector) = output_frame(det)
 @inline wfs_output_frame(wfs::ShackHartmann{<:Diffractive}, det::AbstractDetector) = wfs.state.spot_cube
 @inline wfs_output_frame(wfs::ZernikeWFS, det::AbstractDetector) = wfs.state.camera_frame
+@inline wfs_output_frame(wfs::CurvatureWFS, det::AbstractDetector) = wfs.state.camera_frame
 
 simulation_interface(runtime::ClosedLoopRuntime) = SimulationInterface(runtime)
 simulation_interface(interface::SimulationInterface) = interface
@@ -218,7 +219,10 @@ simulation_interface(interface::CompositeSimulationInterface) = interface
 
 @inline supports_prepared_runtime(::ShackHartmann{<:Diffractive}, ::AbstractSource) = true
 @inline supports_prepared_runtime(::ShackHartmann{<:Diffractive}, ::Asterism) = true
+@inline supports_prepared_runtime(::PyramidWFS, ::AbstractSource) = true
+@inline supports_prepared_runtime(::PyramidWFS, ::Asterism) = true
 @inline supports_prepared_runtime(::ZernikeWFS, ::AbstractSource) = true
+@inline supports_prepared_runtime(::CurvatureWFS, ::AbstractSource) = true
 @inline supports_stacked_sources(::ShackHartmann, ::Asterism) = true
 @inline supports_stacked_sources(::PyramidWFS, ::Asterism) = true
 @inline supports_stacked_sources(::BioEdgeWFS, ::Asterism) = true
@@ -248,6 +252,24 @@ end
 
 @inline function prepare_runtime_wfs!(wfs::ZernikeWFS, tel::Telescope, src::AbstractSource)
     ensure_zernike_calibration!(wfs, tel, src)
+    return wfs
+end
+
+@inline function prepare_runtime_wfs!(wfs::CurvatureWFS, tel::Telescope, src::AbstractSource)
+    ensure_curvature_calibration!(wfs, tel, src)
+    return wfs
+end
+
+@inline function prepare_runtime_wfs!(wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
+    prepare_pyramid_sampling!(wfs, tel)
+    ensure_pyramid_calibration!(wfs, tel, src)
+    return wfs
+end
+
+@inline function prepare_runtime_wfs!(wfs::PyramidWFS, tel::Telescope, ast::Asterism)
+    isempty(ast.sources) && throw(InvalidConfiguration("asterism must contain at least one source"))
+    prepare_pyramid_sampling!(wfs, tel)
+    ensure_pyramid_calibration!(wfs, tel, ast.sources[1])
     return wfs
 end
 

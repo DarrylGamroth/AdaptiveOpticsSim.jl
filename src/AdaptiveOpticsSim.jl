@@ -50,6 +50,7 @@ include("WFS/shack_hartmann.jl")
 include("WFS/pyramid.jl")
 include("WFS/bioedge.jl")
 include("WFS/zernike_wfs.jl")
+include("WFS/curvature_wfs.jl")
 include("WFS/lift.jl")
 include("Calibration/interaction_matrix.jl")
 include("Calibration/reconstructor.jl")
@@ -110,6 +111,7 @@ export PyramidWFS, PyramidParams, PyramidState
 export pyramid_modulation_frame!
 export BioEdgeWFS, BioEdgeParams, BioEdgeState
 export ZernikeWFS, ZernikeWFSParams, ZernikeWFSState
+export CurvatureWFS, CurvatureWFSParams, CurvatureWFSState, ensure_curvature_calibration!
 export apply_shift_wfs!, set_optical_gain!
 export LiFT, lift_interaction_matrix, lift_interaction_matrix!
 export LiFTSolveMode, LiFTSolveAuto, LiFTSolveQR, LiFTSolveNormalEquations

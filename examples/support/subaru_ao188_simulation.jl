@@ -7,17 +7,93 @@ using Statistics
 
 import AdaptiveOpticsSim: step!, runtime_timing, convert_noise, validate_noise, materialize_build,
     execution_style, synchronize_backend!, bin2d!, apply_command!, prepare_sampling!,
-    ensure_sh_calibration!, wfs_output_frame, prepare!, supports_prepared_runtime,
+    ensure_sh_calibration!, wfs_output_frame, prepare!, prepare_runtime_wfs!, supports_prepared_runtime,
     supports_detector_output, supports_grouped_execution, simulation_interface,
     init_execution_state
 
 export AO188ActuatorSupportModel, CircularActuatorSupport
+export SubaruHighOrderWFSModel, OperationalShackHartmannModel, AO188CurvatureModel, AO3kNIRPyramidModel
 export AO188ReplayMode, DirectReplayMode, PreparedReplayMode
 export AO188LatencyModel, AO188WFSDetectorConfig
-export AO188SimulationParams, AO188Simulation, subaru_ao188_simulation, subaru_ao188_phase_timing, prepare_replay!
+export AO188SimulationParams, AO188CurvatureSimulationParams, AO3kSimulationParams
+export AO188Simulation, subaru_ao188_simulation, subaru_ao188_curvature_simulation, subaru_ao3k_simulation
+export subaru_ao188_phase_timing, prepare_replay!
 
 abstract type AO188ActuatorSupportModel end
 struct CircularActuatorSupport <: AO188ActuatorSupportModel end
+
+abstract type SubaruHighOrderWFSModel end
+struct OperationalShackHartmannModel <: SubaruHighOrderWFSModel end
+struct AO188CurvatureModel{T<:AbstractFloat} <: SubaruHighOrderWFSModel
+    response_gain::T
+end
+AO188CurvatureModel(; response_gain::Real=0.5, T::Type{<:AbstractFloat}=Float32) = AO188CurvatureModel{T}(T(response_gain))
+
+struct AO3kNIRPyramidModel{T<:AbstractFloat} <: SubaruHighOrderWFSModel
+    modulation::T
+    modulation_points::Int
+end
+AO3kNIRPyramidModel(; modulation::Real=2.0, modulation_points::Int=8, T::Type{<:AbstractFloat}=Float32) =
+    AO3kNIRPyramidModel{T}(T(modulation), modulation_points)
+
+function AO188CurvatureSimulationParams(; kwargs...)
+    nt = (; kwargs...)
+    T0 = get(nt, :T, Float32)
+    sampling = get(nt, :sampling_time, 1e-3)
+    high_detector = get(nt, :high_detector, AO188WFSDetectorConfig(
+        T=T0,
+        integration_time=sampling,
+        qe=0.95,
+        psf_sampling=1,
+        binning=1,
+        gain=1.0,
+        dark_current=0.0,
+        noise=NoisePhotonReadout(0.05),
+        sensor=CCDSensor(),
+    ))
+    rest = Base.structdiff(nt, (; high_order_sensor_model=nothing, source_band=nothing, high_detector=nothing))
+    return AO188SimulationParams(; source_band=:I, high_order_sensor_model=AO188CurvatureModel(T=T0),
+        high_detector=high_detector, rest...)
+end
+
+function AO3kSimulationParams(; kwargs...)
+    nt = (; kwargs...)
+    T0 = get(nt, :T, Float32)
+    sampling = get(nt, :sampling_time, 1e-3)
+    high_detector = get(nt, :high_detector, AO188WFSDetectorConfig(
+        T=T0,
+        integration_time=sampling,
+        qe=0.9,
+        psf_sampling=1,
+        binning=1,
+        gain=1.0,
+        dark_current=0.0,
+        noise=NoisePhotonReadout(0.1),
+        sensor=CMOSSensor(),
+    ))
+    rest = Base.structdiff(nt, (; source_band=nothing, n_control_modes=nothing, n_subap=nothing, resolution=nothing,
+        source_magnitude=nothing, high_order_sensor_model=nothing, high_detector=nothing))
+    return AO188SimulationParams(; source_band=:H, n_control_modes=get(nt, :n_control_modes, 1024),
+        n_subap=get(nt, :n_subap, 32), resolution=get(nt, :resolution, 160),
+        source_magnitude=get(nt, :source_magnitude, 10.0),
+        high_order_sensor_model=AO3kNIRPyramidModel(T=T0), high_detector=high_detector, rest...)
+end
+
+function _build_high_order_wfs(::OperationalShackHartmannModel, tel::Telescope, params; backend=Array)
+    T = eltype(tel.state.opd)
+    return ShackHartmann(tel; n_subap=params.n_subap, mode=Diffractive(), T=T, backend=backend)
+end
+
+function _build_high_order_wfs(model::AO188CurvatureModel, tel::Telescope, params; backend=Array)
+    T = eltype(tel.state.opd)
+    return CurvatureWFS(tel; n_subap=params.n_subap, response_gain=model.response_gain, T=T, backend=backend)
+end
+
+function _build_high_order_wfs(model::AO3kNIRPyramidModel, tel::Telescope, params; backend=Array)
+    T = eltype(tel.state.opd)
+    return PyramidWFS(tel; n_subap=params.n_subap, mode=Diffractive(),
+        modulation=model.modulation, modulation_points=model.modulation_points, T=T, backend=backend)
+end
 
 abstract type AO188ReplayMode end
 struct DirectReplayMode <: AO188ReplayMode end
@@ -107,6 +183,7 @@ struct AO188SimulationParams{
     T<:AbstractFloat,
     F<:FidelityProfile,
     S<:AO188ActuatorSupportModel,
+    W<:SubaruHighOrderWFSModel,
     B<:AbstractExecutionPolicy,
     R<:AO188ReplayMode,
     H<:AO188WFSDetectorConfig,
@@ -135,6 +212,7 @@ struct AO188SimulationParams{
     profile::F
     source_band::Symbol
     support_model::S
+    high_order_sensor_model::W
     branch_execution::B
     replay_mode::R
     latency::AO188LatencyModel
@@ -167,6 +245,7 @@ function AO188SimulationParams(;
     profile::FidelityProfile=FastProfile(),
     source_band::Symbol=:I,
     support_model::AO188ActuatorSupportModel=CircularActuatorSupport(),
+    high_order_sensor_model::SubaruHighOrderWFSModel=OperationalShackHartmannModel(),
     branch_execution::AbstractExecutionPolicy=SequentialExecution(),
     replay_mode::AO188ReplayMode=DirectReplayMode(),
     latency::AO188LatencyModel=AO188LatencyModel(),
@@ -197,7 +276,7 @@ function AO188SimulationParams(;
         default_ao188_low_order_resolution(resolution, n_low_order_subap) :
         low_order_resolution
 
-    return AO188SimulationParams{T,typeof(profile),typeof(support_model),typeof(branch_execution),typeof(replay_mode),typeof(high_detector),typeof(low_detector)}(
+    return AO188SimulationParams{T,typeof(profile),typeof(support_model),typeof(high_order_sensor_model),typeof(branch_execution),typeof(replay_mode),typeof(high_detector),typeof(low_detector)}(
         T(diameter),
         T(sampling_time),
         T(central_obstruction),
@@ -221,6 +300,7 @@ function AO188SimulationParams(;
         profile,
         source_band,
         support_model,
+        high_order_sensor_model,
         branch_execution,
         replay_mode,
         latency,
@@ -445,7 +525,7 @@ function _ao188_calibration_objects(params::AO188SimulationParams{T}) where {T<:
     src = Source(band=params.source_band, magnitude=params.source_magnitude, T=T)
     dm = DeformableMirror(tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=Array)
     low_dm = DeformableMirror(low_tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=Array)
-    high_wfs = ShackHartmann(tel; n_subap=params.n_subap, mode=Diffractive(), T=T, backend=Array)
+    high_wfs = _build_high_order_wfs(params.high_order_sensor_model, tel, params; backend=Array)
     low_wfs = ShackHartmann(low_tel; n_subap=params.n_low_order_subap, mode=Diffractive(), T=T, backend=Array)
     return tel, low_tel, src, dm, low_dm, high_wfs, low_wfs
 end
@@ -498,9 +578,8 @@ function _measure_branches!(::BackendStreamExecution, simulation::AO188Simulatio
 end
 
 function prepare_replay!(simulation::AO188Simulation)
-    prepare_sampling!(simulation.high_wfs, simulation.tel, simulation.src)
+    prepare_runtime_wfs!(simulation.high_wfs, simulation.tel, simulation.src)
     prepare_sampling!(simulation.low_wfs, simulation.low_tel, simulation.src)
-    ensure_sh_calibration!(simulation.high_wfs, simulation.tel, simulation.src)
     ensure_sh_calibration!(simulation.low_wfs, simulation.low_tel, simulation.src)
     simulation.replay_prepared = true
     return simulation
@@ -537,7 +616,7 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
     atm = KolmogorovAtmosphere(tel; r0=params.r0, L0=params.L0, T=T, backend=backend)
     dm = DeformableMirror(tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=backend)
     low_dm = DeformableMirror(low_tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=backend)
-    high_wfs = ShackHartmann(tel; n_subap=params.n_subap, mode=Diffractive(), T=T, backend=backend)
+    high_wfs = _build_high_order_wfs(params.high_order_sensor_model, tel, params; backend=backend)
     low_wfs = ShackHartmann(low_tel; n_subap=params.n_low_order_subap, mode=Diffractive(), T=T, backend=backend)
     high_detector = detector_from_config(params.high_detector; backend=backend)
     low_detector = detector_from_config(params.low_detector; backend=backend)
@@ -621,6 +700,15 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
         prepare!(surrogate)
     end
     return surrogate
+end
+
+function subaru_ao188_curvature_simulation(; params::AO188SimulationParams=AO188CurvatureSimulationParams(),
+    kwargs...)
+    return subaru_ao188_simulation(; params=params, kwargs...)
+end
+
+function subaru_ao3k_simulation(; params::AO188SimulationParams=AO3kSimulationParams(), kwargs...)
+    return subaru_ao188_simulation(; params=params, kwargs...)
 end
 
 function step!(surrogate::AO188Simulation)
