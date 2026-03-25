@@ -8,7 +8,9 @@ using Tables
 using TOML
 
 include(joinpath(dirname(@__DIR__), "examples", "support", "subaru_ao188_simulation.jl"))
+include(joinpath(dirname(@__DIR__), "examples", "support", "subaru_ao3k_simulation.jl"))
 using .SubaruAO188Simulation
+using .SubaruAO3kSimulation
 
 include("reference_harness.jl")
 include("ka_cpu_matrix.jl")
