@@ -5,13 +5,13 @@ when the RTC boundary requires detector pixels, not just slopes.
 
 The original conclusion was that the existing GPU runtime path was not a good
 optimization target and needed a redesign. That redesign is now mostly in
-place for the maintained Shack-Hartmann AO188 surrogate, and the question has
+place for the maintained Shack-Hartmann AO188 simulation, and the question has
 shifted from "can GPU runtime be made competitive at all?" to "which backend-
 specific execution model should be preferred?"
 
 ## Motivation
 
-The AO188/3k surrogate in `examples/support/ao188_3k_surrogate.jl` is the
+The AO188/3k simulation in `examples/support/subaru_ao188_simulation.jl` is the
 current reference case for pixel-output HIL:
 
 - `64 x 64` DM grid
@@ -82,7 +82,7 @@ Compared to the earlier AO188 audit:
 - local AMDGPU improved from about `22.7 Hz` to about `207.1 Hz`
 - CUDA improved from about `34.6 Hz` to about `450.4 Hz` in sequential mode
 - CUDA improves further to about `526.5 Hz` with branch overlap
-- CPU is no longer the unquestioned winner for the maintained AO188 surrogate
+- CPU is no longer the unquestioned winner for the maintained AO188 simulation
 - AMDGPU is faster than the local CPU in sequential mode, but still strongly
   penalized by generic Julia task overlap
 - keeping the AO188 reconstructor in mapped two-stage form (`modal_reconstructor`
@@ -175,7 +175,7 @@ Mixed NGS/LGS SH runtime follow-up:
 Branch-overlap recheck after the SH/LGS redesign:
 
 - generic Julia task overlap is still a bad fit for AMDGPU on the maintained
-  AO188 surrogate (`207 Hz` sequential vs `51 Hz` task mode)
+  AO188 simulation (`207 Hz` sequential vs `51 Hz` task mode)
 - CUDA now sees a meaningful gain from branch overlap over sequential mode
   (`450 Hz` sequential vs about `650-658 Hz` with overlap on the current code)
 - if branch overlap is pursued further, it should be as a CUDA-specific stream
@@ -328,7 +328,7 @@ Status:
 - implemented for the maintained spot-stack path via `capture_stack!`
 - current support is intentionally limited to the runtime-relevant
   `psf_sampling == 1`, `binning == 1`, `output_precision === nothing` detector
-  configuration used by the AO188 surrogate
+  configuration used by the AO188 simulation
 
 ### Phase 4: Branch concurrency
 
@@ -389,7 +389,7 @@ Correctness:
 
 - CPU batched vs existing CPU scalar path agreement
 - GPU batched vs CPU reference agreement
-- AO188 surrogate end-to-end closed-loop agreement within tolerance
+- AO188 simulation end-to-end closed-loop agreement within tolerance
 - detector-output agreement on representative pixel frames, not just slopes
 
 Performance:
@@ -413,7 +413,7 @@ Suggested threshold:
 - and a plausible path toward beating CPU on at least one supported GPU
   backend for AO188-scale HIL
 
-That threshold has now been met for the maintained AO188 surrogate on both
+That threshold has now been met for the maintained AO188 simulation on both
 AMDGPU and CUDA. The remaining question is where further investment should go.
 
 If future backend-specific work stops delivering real gains, the correct

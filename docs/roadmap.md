@@ -211,11 +211,11 @@ validation shows the new default is still too coarse.
   SH asterism, stacked Pyramid/BioEdge asterism, grouped
   `CompositeSimulationInterface` execution, and the maintained profiler
   `scripts/profile_multi_source_multi_wfs_runtime.jl`.
-- [x] Add a maintained AO188/3k operational surrogate benchmark configuration.
-  The maintained AO188/3k surrogate now lives as example support in
-  `examples/support/ao188_3k_surrogate.jl`, with
+- [x] Add a maintained AO188/3k operational simulation benchmark configuration.
+  The maintained AO188/3k simulation now lives as example support in
+  `examples/support/subaru_ao188_simulation.jl`, with
   `scripts/ao188_3k_hil_audit.jl` as its maintained audit entry point. It
-  provides a concrete 64x64 / 3228-active / 188-mode HIL-oriented surrogate
+  provides a concrete 64x64 / 3228-active / 188-mode HIL-oriented simulation
   with a split high/low-order SH proxy, explicit control-path latency
   staging, tuned detector/noise defaults, and a circular active-actuator
   support map.
@@ -306,7 +306,7 @@ The current focus is now:
   timing surface for CUDA hosts.
 - [~] Treat per-frame GPU runtime for pixel-output Shack-Hartmann HIL as a
   redesign candidate rather than an optimization target.
-  The maintained AO188/3k surrogate audit currently shows CPU runtime
+  The maintained AO188/3k simulation audit currently shows CPU runtime
   outperforming both AMDGPU and CUDA for the warmed frame loop, with the
   dominant cost in the high-order diffractive Shack-Hartmann detector path.
   The current accelerator implementation still loops over subapertures and

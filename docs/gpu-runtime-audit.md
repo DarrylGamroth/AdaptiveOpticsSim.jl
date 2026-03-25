@@ -345,8 +345,8 @@ Current recommendation:
     scientific `Float64` surface and adds a stricter post-command AO188
     equivalence check (`tel_opd`, post-command pixels, and post-command
     slopes).
-  - The maintained AO188 surrogate itself now lives in
-    `examples/support/ao188_3k_surrogate.jl`; the scripts under `scripts/`
+  - The maintained AO188 simulation itself now lives in
+    `examples/support/subaru_ao188_simulation.jl`; the scripts under `scripts/`
     are its audit and equivalence entry points.
   - Keeping the AO188 runtime reconstructor in mapped two-stage form
     (`modal_reconstructor` followed by `M2C`) is still worth it for the fast
@@ -371,7 +371,7 @@ Current recommendation:
     `ao_calibration` default to CPU build when their source matrices live on a
     GPU backend, while still materializing the resulting operators back onto
     the runtime backend.
-  - Current warmed AO188 surrogate rates on the structured runtime path are
+  - Current warmed AO188 simulation rates on the structured runtime path are
     about `1.02 kHz` on local CPU, `1.02 kHz` on local AMDGPU, and about
     `1.25 kHz` on CUDA on `spiders`.
   - On AMDGPU, the stricter post-command `Float32` AO188 `tel_opd` max-abs

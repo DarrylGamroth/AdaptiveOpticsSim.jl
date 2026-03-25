@@ -1,8 +1,8 @@
 using AdaptiveOpticsSim
 using Random
 
-include(joinpath(dirname(@__DIR__), "examples", "support", "ao188_3k_surrogate.jl"))
-using .AO1883kSurrogateExample
+include(joinpath(dirname(@__DIR__), "examples", "support", "subaru_ao188_simulation.jl"))
+using .SubaruAO188Simulation
 
 const _backend_arg = isempty(ARGS) ? "cpu" : lowercase(ARGS[1])
 
@@ -45,7 +45,7 @@ end
 
 function _build_scenario(params, BackendArray, rng, backend_tag)
     t0 = time_ns()
-    scenario = ao188_3k_surrogate(; params=params, backend=BackendArray, rng=rng)
+    scenario = subaru_ao188_simulation(; params=params, backend=BackendArray, rng=rng)
     _sync_runtime!(backend_tag, scenario)
     build_time_ns = time_ns() - t0
     return scenario, build_time_ns
@@ -53,7 +53,7 @@ end
 
 function run_ao188_3k_hil_audit(; backend_name::AbstractString="cpu", samples::Int=20, warmup::Int=5)
     BackendArray, backend_tag, label = _resolve_backend(backend_name)
-    params = AO1883kSurrogateParams()
+    params = AO188SimulationParams()
     scenario, build_time_ns = _build_scenario(params, BackendArray, MersenneTwister(1), backend_tag)
     step!(scenario)
     _sync_runtime!(backend_tag, scenario)
@@ -61,10 +61,10 @@ function run_ao188_3k_hil_audit(; backend_name::AbstractString="cpu", samples::I
         step!(scenario)
         _sync_runtime!(backend_tag, scenario)
     end; warmup=warmup, samples=samples, gc_before=false)
-    phase = ao188_3k_phase_timing(scenario; warmup=warmup, samples=samples, gc_before=false)
+    phase = subaru_ao188_phase_timing(scenario; warmup=warmup, samples=samples, gc_before=false)
     frame_rate_hz = 1.0e9 / timing.mean_ns
 
-    println("AO188/3k surrogate HIL audit")
+    println("AO188/3k simulation HIL audit")
     println("  backend: ", label)
     println("  wfs_proxy: diffractive_shack_hartmann")
     println("  diameter_m: ", params.diameter)

@@ -1,8 +1,8 @@
 using AdaptiveOpticsSim
 using Random
 
-include(joinpath(dirname(@__DIR__), "examples", "support", "ao188_3k_surrogate.jl"))
-using .AO1883kSurrogateExample
+include(joinpath(dirname(@__DIR__), "examples", "support", "subaru_ao188_simulation.jl"))
+using .SubaruAO188Simulation
 
 const _backend_arg = isempty(ARGS) ? "cpu" : lowercase(ARGS[1])
 const _profile_arg = length(ARGS) >= 2 ? lowercase(ARGS[2]) : "none"

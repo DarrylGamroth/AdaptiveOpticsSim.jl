@@ -13,8 +13,8 @@ if _backend_arg == "amdgpu"
     import AMDGPU
 end
 
-include(joinpath(dirname(@__DIR__), "examples", "support", "ao188_3k_surrogate.jl"))
-using .AO1883kSurrogateExample
+include(joinpath(dirname(@__DIR__), "examples", "support", "subaru_ao188_simulation.jl"))
+using .SubaruAO188Simulation
 
 function _resolve_backend(name::AbstractString)
     lowered = lowercase(name)
@@ -65,10 +65,10 @@ function run_profile(; backend_name::AbstractString="cpu", branch_name::Abstract
     BackendArray, backend_tag, label = _resolve_backend(backend_name)
     branch_mode = _resolve_branch_mode(branch_name)
     replay_mode = _resolve_replay_mode(replay_name)
-    params = AO1883kSurrogateParams(branch_execution=branch_mode, replay_mode=replay_mode)
+    params = AO188SimulationParams(branch_execution=branch_mode, replay_mode=replay_mode)
 
     t0 = time_ns()
-    scenario = ao188_3k_surrogate(; params=params, backend=BackendArray, rng=MersenneTwister(1))
+    scenario = subaru_ao188_simulation(; params=params, backend=BackendArray, rng=MersenneTwister(1))
     _sync_runtime!(backend_tag, scenario)
     build_time_ns = time_ns() - t0
 
@@ -78,7 +78,7 @@ function run_profile(; backend_name::AbstractString="cpu", branch_name::Abstract
         step!(scenario)
         _sync_runtime!(backend_tag, scenario)
     end; warmup=warmup, samples=samples, gc_before=false)
-    phase = ao188_3k_phase_timing(scenario; warmup=warmup, samples=samples, gc_before=false)
+    phase = subaru_ao188_phase_timing(scenario; warmup=warmup, samples=samples, gc_before=false)
 
     println("pixel_output_runtime_profile")
     println("  backend: ", label)

@@ -1,15 +1,15 @@
 using AdaptiveOpticsSim
 using Random
 
-include(joinpath(dirname(@__DIR__), "examples", "support", "ao188_3k_surrogate.jl"))
-using .AO1883kSurrogateExample
+include(joinpath(dirname(@__DIR__), "examples", "support", "subaru_ao188_simulation.jl"))
+using .SubaruAO188Simulation
 
 const _RUNTIME_EQ_RTOL = 1f-4
 const _RUNTIME_EQ_ATOL = 5f-5
 
 function _ao188_noise_free_params(::Type{T}=Float32;
     branch_execution::AO188BranchExecutionMode=SequentialBranchExecution()) where {T<:AbstractFloat}
-    return AO1883kSurrogateParams(
+    return AO188SimulationParams(
         T=T,
         source_magnitude=0.0,
         branch_execution=branch_execution,
@@ -41,7 +41,7 @@ function _set_deterministic_opd!(tel::Telescope)
     return tel
 end
 
-function _evaluate_ao188!(surrogate::AO1883kSurrogate)
+function _evaluate_ao188!(surrogate::AO188Simulation)
     fill!(surrogate.dm.state.coefs, zero(eltype(surrogate.dm.state.coefs)))
     fill!(surrogate.high_command, zero(eltype(surrogate.high_command)))
     fill!(surrogate.low_command, zero(eltype(surrogate.low_command)))
@@ -86,8 +86,8 @@ function _run_ao188_equivalence(::Type{B}, branch_mode::AO188BranchExecutionMode
     BackendArray = gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
 
-    cpu = ao188_3k_surrogate(; params=_ao188_noise_free_params(), backend=Array, rng=MersenneTwister(1))
-    gpu = ao188_3k_surrogate(; params=_ao188_noise_free_params(Float32; branch_execution=branch_mode), backend=BackendArray, rng=MersenneTwister(1))
+    cpu = subaru_ao188_simulation(; params=_ao188_noise_free_params(), backend=Array, rng=MersenneTwister(1))
+    gpu = subaru_ao188_simulation(; params=_ao188_noise_free_params(Float32; branch_execution=branch_mode), backend=BackendArray, rng=MersenneTwister(1))
 
     _evaluate_ao188!(cpu)
     _evaluate_ao188!(gpu)
@@ -101,7 +101,7 @@ function _run_ao188_equivalence(::Type{B}, branch_mode::AO188BranchExecutionMode
     _assert_max_abs("command", gpu.command, cpu.command; atol=1f-3)
 end
 
-function _post_command_observation!(surrogate::AO1883kSurrogate, host_command::AbstractVector)
+function _post_command_observation!(surrogate::AO188Simulation, host_command::AbstractVector)
     fill!(surrogate.dm.state.coefs, zero(eltype(surrogate.dm.state.coefs)))
     fill!(surrogate.high_command, zero(eltype(surrogate.high_command)))
     fill!(surrogate.low_command, zero(eltype(surrogate.low_command)))
@@ -121,12 +121,12 @@ function _run_ao188_post_command_equivalence(::Type{B}, branch_mode::AO188Branch
     BackendArray = gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
 
-    cmd_src = ao188_3k_surrogate(; params=_ao188_noise_free_params(T), backend=Array, rng=MersenneTwister(1))
+    cmd_src = subaru_ao188_simulation(; params=_ao188_noise_free_params(T), backend=Array, rng=MersenneTwister(1))
     _evaluate_ao188!(cmd_src)
     host_command = Array(cmd_src.command)
 
-    cpu = ao188_3k_surrogate(; params=_ao188_noise_free_params(T), backend=Array, rng=MersenneTwister(2))
-    gpu = ao188_3k_surrogate(; params=_ao188_noise_free_params(T; branch_execution=branch_mode), backend=BackendArray, rng=MersenneTwister(2))
+    cpu = subaru_ao188_simulation(; params=_ao188_noise_free_params(T), backend=Array, rng=MersenneTwister(2))
+    gpu = subaru_ao188_simulation(; params=_ao188_noise_free_params(T; branch_execution=branch_mode), backend=BackendArray, rng=MersenneTwister(2))
     _post_command_observation!(cpu, host_command)
     _post_command_observation!(gpu, host_command)
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(gpu.command))

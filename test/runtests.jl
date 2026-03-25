@@ -6,8 +6,8 @@ using Statistics
 using Tables
 using TOML
 
-include(joinpath(dirname(@__DIR__), "examples", "support", "ao188_3k_surrogate.jl"))
-using .AO1883kSurrogateExample
+include(joinpath(dirname(@__DIR__), "examples", "support", "subaru_ao188_simulation.jl"))
+using .SubaruAO188Simulation
 
 include("reference_harness.jl")
 include("ka_cpu_matrix.jl")
@@ -263,8 +263,8 @@ end
     @test recon_cpu.reconstructor isa Matrix
 end
 
-@testset "AO188/3k surrogate" begin
-    default_params = AO1883kSurrogateParams()
+@testset "AO188/3k simulation" begin
+    default_params = AO188SimulationParams()
     @test default_params.n_act == 64
     @test default_params.n_active_actuators == 3228
     @test default_params.n_control_modes == 188
@@ -276,7 +276,7 @@ end
     @test default_params.branch_execution isa SequentialBranchExecution
     @test default_params.replay_mode isa DirectReplayMode
 
-    params = AO1883kSurrogateParams(
+    params = AO188SimulationParams(
         T=Float32,
         resolution=48,
         n_act=16,
@@ -289,7 +289,7 @@ end
         source_magnitude=0.0,
     )
     @test params.low_order_resolution == 12
-    surrogate = ao188_3k_surrogate(; params=params, rng=MersenneTwister(1))
+    surrogate = subaru_ao188_simulation(; params=params, rng=MersenneTwister(1))
     @test count(surrogate.active_mask) == params.n_active_actuators
     @test length(surrogate.active_indices) == params.n_active_actuators
     @test !isnothing(surrogate.dm.state.separable_x)
@@ -320,11 +320,11 @@ end
     @test maximum(abs, surrogate.command) > 0
     timing = runtime_timing(surrogate; warmup=1, samples=2, gc_before=false)
     @test timing.samples == 2
-    phase = ao188_3k_phase_timing(surrogate; warmup=1, samples=2, gc_before=false)
+    phase = subaru_ao188_phase_timing(surrogate; warmup=1, samples=2, gc_before=false)
     @test phase.samples == 2
     @test phase.delay_mean_ns >= 0
 
-    experimental = AO1883kSurrogateParams(
+    experimental = AO188SimulationParams(
         T=Float32,
         resolution=32,
         n_act=12,
@@ -339,12 +339,12 @@ end
         replay_mode=PreparedReplayMode(),
     )
     @test experimental.low_order_resolution == 8
-    surrogate_exp = ao188_3k_surrogate(; params=experimental, rng=MersenneTwister(2))
+    surrogate_exp = subaru_ao188_simulation(; params=experimental, rng=MersenneTwister(2))
     @test surrogate_exp.replay_prepared
     step!(surrogate_exp)
     @test maximum(abs, surrogate_exp.command) >= 0
 
-    stream_mode = AO1883kSurrogateParams(
+    stream_mode = AO188SimulationParams(
         T=Float32,
         resolution=32,
         n_act=12,
@@ -357,7 +357,7 @@ end
         source_magnitude=0.0,
         branch_execution=BackendStreamBranchExecution(),
     )
-    surrogate_stream = ao188_3k_surrogate(; params=stream_mode, rng=MersenneTwister(3))
+    surrogate_stream = subaru_ao188_simulation(; params=stream_mode, rng=MersenneTwister(3))
     step!(surrogate_stream)
     @test maximum(abs, surrogate_stream.command) >= 0
 end
