@@ -68,6 +68,7 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     spot_stats_accum::V
     valid_mask_host::Matrix{Bool}
     reference_signal_host::Vector{T}
+    centroid_host::Matrix{T}
     slopes_units::T
     calibrated::Bool
     calibration_wavelength::T
@@ -122,6 +123,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     spot_stats_accum = backend{T}(undef, 3 * n_subap * n_subap)
     valid_mask_host = Matrix{Bool}(undef, n_subap, n_subap)
     reference_signal_host = Vector{T}(undef, 2 * n_subap * n_subap)
+    centroid_host = Matrix{T}(undef, sub, sub)
     state = ShackHartmannState{
         T,
         typeof(valid_mask),
@@ -180,6 +182,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         spot_stats_accum,
         valid_mask_host,
         reference_signal_host,
+        centroid_host,
         one(T),
         false,
         zero(T),
@@ -1025,6 +1028,22 @@ end
     return centroid_from_intensity_cutoff!(ScalarCPUStyle(), host_intensity, cutoff)
 end
 
+@inline function centroid_from_spot!(wfs::ShackHartmann, intensity::AbstractMatrix{T}, threshold::T) where {T<:AbstractFloat}
+    return centroid_from_spot!(execution_style(intensity), wfs, intensity, threshold)
+end
+
+@inline function centroid_from_spot!(::ScalarCPUStyle, ::ShackHartmann, intensity::AbstractMatrix{T}, threshold::T) where {T<:AbstractFloat}
+    return centroid_from_intensity!(ScalarCPUStyle(), intensity, threshold)
+end
+
+@inline function centroid_from_spot!(::AcceleratorStyle, wfs::ShackHartmann, intensity::AbstractMatrix{T}, threshold::T) where {T<:AbstractFloat}
+    if size(wfs.state.centroid_host) != size(intensity)
+        wfs.state.centroid_host = Matrix{T}(undef, size(intensity)...)
+    end
+    copyto!(wfs.state.centroid_host, intensity)
+    return centroid_from_intensity!(ScalarCPUStyle(), wfs.state.centroid_host, threshold)
+end
+
 @inline function sh_spot_view(wfs::ShackHartmann, idx::Int)
     return @view wfs.state.spot_cube[idx, :, :]
 end
@@ -1366,7 +1385,7 @@ function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
     spot = sample_spot!(wfs, wfs.state.intensity)
     copyto!(sh_spot_view(wfs, idx), spot)
-    return centroid_from_intensity!(spot, wfs.params.threshold_cog)
+    return centroid_from_spot!(wfs, spot, wfs.params.threshold_cog)
 end
 
 function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
@@ -1375,7 +1394,7 @@ function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
     apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
     spot = sample_spot!(wfs, wfs.state.intensity)
     copyto!(sh_spot_view(wfs, idx), spot)
-    return centroid_from_intensity!(spot, wfs.params.threshold_cog)
+    return centroid_from_spot!(wfs, spot, wfs.params.threshold_cog)
 end
 
 function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
@@ -1385,7 +1404,7 @@ function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     spot = sample_spot!(wfs, wfs.state.intensity)
     frame = capture!(det, spot; rng=rng)
     copyto!(sh_spot_view(wfs, idx), frame)
-    return centroid_from_intensity!(frame, wfs.params.threshold_cog)
+    return centroid_from_spot!(wfs, frame, wfs.params.threshold_cog)
 end
 
 function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
@@ -1396,7 +1415,7 @@ function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
     spot = sample_spot!(wfs, wfs.state.intensity)
     frame = capture!(det, spot; rng=rng)
     copyto!(sh_spot_view(wfs, idx), frame)
-    return centroid_from_intensity!(frame, wfs.params.threshold_cog)
+    return centroid_from_spot!(wfs, frame, wfs.params.threshold_cog)
 end
 
 function sh_reference_signal!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource)

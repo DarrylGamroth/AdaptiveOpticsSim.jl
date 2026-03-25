@@ -1,4 +1,19 @@
+module AO1883kSurrogateExample
+
+using AdaptiveOpticsSim
 using LinearAlgebra
+using Random
+using Statistics
+
+import AdaptiveOpticsSim: step!, runtime_timing, convert_noise, validate_noise, materialize_build,
+    execution_style, synchronize_backend!, bin2d!, apply_command!, prepare_sampling!,
+    ensure_sh_calibration!
+
+export AO188ActuatorSupportModel, CircularActuatorSupport
+export AO188BranchExecutionMode, SequentialBranchExecution, TaskParallelBranchExecution, BackendStreamBranchExecution
+export AO188ReplayMode, DirectReplayMode, PreparedReplayMode
+export AO188LatencyModel, AO188WFSDetectorConfig
+export AO1883kSurrogateParams, AO1883kSurrogate, ao188_3k_surrogate, ao188_3k_phase_timing, prepare_replay!
 
 abstract type AO188ActuatorSupportModel end
 struct CircularActuatorSupport <: AO188ActuatorSupportModel end
@@ -780,4 +795,37 @@ function ao188_3k_phase_timing(surrogate::AO1883kSurrogate; warmup::Int=10, samp
         mean(total_times),
         sorted_total[p95_idx],
     )
+end
+
+if isdefined(Main, :CUDA)
+    const _AO188CUDA = Main.CUDA
+
+    struct AO188CUDAStreamState
+        high::_AO188CUDA.CuStream
+        low::_AO188CUDA.CuStream
+    end
+
+    function init_branch_execution_state(::BackendStreamBranchExecution, ::_AO188CUDA.CuArray)
+        return AO188CUDAStreamState(
+            _AO188CUDA.CuStream(; flags=_AO188CUDA.STREAM_NON_BLOCKING),
+            _AO188CUDA.CuStream(; flags=_AO188CUDA.STREAM_NON_BLOCKING),
+        )
+    end
+
+    function measure_branches_backend!(::BackendStreamBranchExecution, surrogate::AO1883kSurrogate, state::AO188CUDAStreamState)
+        high_rng, low_rng = _frame_rngs!(surrogate.rng)
+        high_task = Threads.@spawn _AO188CUDA.stream!(state.high) do
+            _measure_high!(surrogate, high_rng)
+            _AO188CUDA.synchronize(state.high)
+        end
+        low_task = Threads.@spawn _AO188CUDA.stream!(state.low) do
+            _measure_low!(surrogate, low_rng)
+            _AO188CUDA.synchronize(state.low)
+        end
+        fetch(high_task)
+        fetch(low_task)
+        return surrogate
+    end
+end
+
 end

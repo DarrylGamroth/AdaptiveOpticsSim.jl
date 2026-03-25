@@ -1,6 +1,9 @@
 using AdaptiveOpticsSim
 using Random
 
+include(joinpath(dirname(@__DIR__), "examples", "support", "ao188_3k_surrogate.jl"))
+using .AO1883kSurrogateExample
+
 const _RUNTIME_EQ_RTOL = 1f-4
 const _RUNTIME_EQ_ATOL = 5f-5
 
@@ -108,7 +111,7 @@ function _post_command_observation!(surrogate::AO1883kSurrogate, host_command::A
     copyto!(surrogate.command, host_command)
     copyto!(surrogate.dm.state.coefs, host_command)
     apply!(surrogate.dm, surrogate.tel, DMAdditive())
-    AdaptiveOpticsSim._measure_branches!(SequentialBranchExecution(), surrogate)
+    _measure_branches!(SequentialBranchExecution(), surrogate)
     return surrogate
 end
 

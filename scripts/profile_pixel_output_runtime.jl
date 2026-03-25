@@ -13,6 +13,9 @@ if _backend_arg == "amdgpu"
     import AMDGPU
 end
 
+include(joinpath(dirname(@__DIR__), "examples", "support", "ao188_3k_surrogate.jl"))
+using .AO1883kSurrogateExample
+
 function _resolve_backend(name::AbstractString)
     lowered = lowercase(name)
     if lowered == "cpu"

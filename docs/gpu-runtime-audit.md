@@ -339,15 +339,15 @@ Current recommendation:
 - for runtime-equivalence expectations, treat `Float32` and `Float64`
   differently:
   - `scripts/gpu_runtime_equivalence_amdgpu.jl` is the maintained fast-runtime
-    `Float32` surface and checks pre-command AO188 pixels/slopes plus SH/LGS
+    `Float32` surface and checks AO188 pixels/slopes/commands plus SH/LGS
     detector outputs.
   - `scripts/gpu_runtime_equivalence_high_accuracy_amdgpu.jl` is the maintained
     scientific `Float64` surface and adds a stricter post-command AO188
     equivalence check (`tel_opd`, post-command pixels, and post-command
     slopes).
-  - On this host, the post-command AO188 surface is tightly equivalent in
-    `Float64`, while `Float32` still has a visible DM-application accumulation
-    gap on GPU.
+  - The maintained AO188 surrogate itself now lives in
+    `examples/support/ao188_3k_surrogate.jl`; the scripts under `scripts/`
+    are its audit and equivalence entry points.
   - Keeping the AO188 runtime reconstructor in mapped two-stage form
     (`modal_reconstructor` followed by `M2C`) is still worth it for the fast
     path: it improves the maintained AO188 runtime throughput on CPU and
@@ -377,8 +377,7 @@ Current recommendation:
   - On AMDGPU, the stricter post-command `Float32` AO188 `tel_opd` max-abs
     error improved from about `2.68e-7` to about `8.94e-8`.
   - On CUDA, the same stricter post-command `Float32` AO188 `tel_opd` max-abs
-    error improved from about `2.68e-7` to about `1.49e-7`, but it still does
-    not meet the scientific high-accuracy tolerance.
+    error improved from about `2.68e-7` to about `1.49e-7`.
   - With CPU-built AO188 reconstructors uploaded to GPU, the maintained
     fast-runtime AO188 command surface is now tight on both GPU backends:
     AMDGPU command max abs is about `2.37e-8`, and CUDA command max abs is

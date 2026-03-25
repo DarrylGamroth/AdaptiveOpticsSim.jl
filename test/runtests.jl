@@ -6,6 +6,9 @@ using Statistics
 using Tables
 using TOML
 
+include(joinpath(dirname(@__DIR__), "examples", "support", "ao188_3k_surrogate.jl"))
+using .AO1883kSurrogateExample
+
 include("reference_harness.jl")
 include("ka_cpu_matrix.jl")
 include("tomography.jl")

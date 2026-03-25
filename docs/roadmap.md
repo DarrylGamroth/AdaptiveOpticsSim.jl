@@ -212,10 +212,13 @@ validation shows the new default is still too coarse.
   `CompositeSimulationInterface` execution, and the maintained profiler
   `scripts/profile_multi_source_multi_wfs_runtime.jl`.
 - [x] Add a maintained AO188/3k operational surrogate benchmark configuration.
-  `ao188_3k_surrogate` and `scripts/ao188_3k_hil_audit.jl` now provide a
-  concrete 64x64 / 3228-active / 188-mode HIL-oriented surrogate with a
-  split high/low-order SH proxy, explicit control-path latency staging, tuned
-  detector/noise defaults, and a circular active-actuator support map.
+  The maintained AO188/3k surrogate now lives as example support in
+  `examples/support/ao188_3k_surrogate.jl`, with
+  `scripts/ao188_3k_hil_audit.jl` as its maintained audit entry point. It
+  provides a concrete 64x64 / 3228-active / 188-mode HIL-oriented surrogate
+  with a split high/low-order SH proxy, explicit control-path latency
+  staging, tuned detector/noise defaults, and a circular active-actuator
+  support map.
 - [ ] Add specialized HIL-relevant sensors on demand, starting with
   `ZernikeWFS` and then `CurvatureSensor` if needed.
 - [ ] Continue GPU/HIL performance work only where profiling shows real value,

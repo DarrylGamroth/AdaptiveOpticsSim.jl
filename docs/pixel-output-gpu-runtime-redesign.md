@@ -11,7 +11,8 @@ specific execution model should be preferred?"
 
 ## Motivation
 
-The AO188/3k surrogate is the current reference case for pixel-output HIL:
+The AO188/3k surrogate in `examples/support/ao188_3k_surrogate.jl` is the
+current reference case for pixel-output HIL:
 
 - `64 x 64` DM grid
 - `3228` active actuators
