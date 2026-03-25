@@ -105,7 +105,7 @@ export DeformableMirror, DeformableMirrorParams, DeformableMirrorState, build_in
 export Misregistration, apply_misregistration
 export Detector, DetectorParams, DetectorState, DetectorExportMetadata
 export capture!, output_frame, detector_export_metadata, readout_ready, reset_integration!
-export SensorType, CCDSensor, CMOSSensor, EMCCDSensor
+export SensorType, FrameSensorType, CountingSensorType, CCDSensor, CMOSSensor, EMCCDSensor, APDSensor
 export ShackHartmann, ShackHartmannParams, ShackHartmannState, update_valid_mask!, measure!
 export PyramidWFS, PyramidParams, PyramidState
 export pyramid_modulation_frame!

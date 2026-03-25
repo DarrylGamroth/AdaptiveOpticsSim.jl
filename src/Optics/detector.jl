@@ -2,6 +2,8 @@ using Random
 
 abstract type NoiseModel end
 abstract type SensorType end
+abstract type FrameSensorType <: SensorType end
+abstract type CountingSensorType <: SensorType end
 abstract type BackgroundModel end
 struct NoiseNone <: NoiseModel end
 struct NoisePhoton <: NoiseModel end
@@ -11,9 +13,10 @@ end
 struct NoisePhotonReadout{T<:AbstractFloat} <: NoiseModel
     sigma::T
 end
-struct CCDSensor <: SensorType end
-struct CMOSSensor <: SensorType end
-struct EMCCDSensor <: SensorType end
+struct CCDSensor <: FrameSensorType end
+struct CMOSSensor <: FrameSensorType end
+struct EMCCDSensor <: FrameSensorType end
+struct APDSensor <: CountingSensorType end
 struct NoBackground <: BackgroundModel end
 struct ScalarBackground{T<:AbstractFloat} <: BackgroundModel
     level::T
@@ -84,6 +87,12 @@ detector_noise_symbol(::NoisePhotonReadout) = :photon_readout
 detector_sensor_symbol(::CCDSensor) = :ccd
 detector_sensor_symbol(::CMOSSensor) = :cmos
 detector_sensor_symbol(::EMCCDSensor) = :emccd
+detector_sensor_symbol(::APDSensor) = :apd
+
+sensor_is_frame_based(::SensorType) = false
+sensor_is_frame_based(::FrameSensorType) = true
+sensor_is_counting(::SensorType) = false
+sensor_is_counting(::CountingSensorType) = true
 
 detector_readout_sigma(::NoiseNone, ::Type{T}) where {T<:AbstractFloat} = nothing
 detector_readout_sigma(::NoisePhoton, ::Type{T}) where {T<:AbstractFloat} = nothing
@@ -204,6 +213,8 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     bits::Union{Nothing,Int}, full_well::Union{Nothing,Real}, sensor::SensorType,
     output_precision::Union{Nothing,DataType}, background_flux, background_map,
     T::Type{<:AbstractFloat}, backend)
+    sensor isa FrameSensorType ||
+        throw(InvalidConfiguration("Detector currently models frame-based sensors only; use a sensor-side readout model for $(detector_sensor_symbol(sensor))"))
     full_well_t = full_well === nothing ? nothing : T(full_well)
     flux_model = background_model(background_flux; T=T, backend=backend)
     map_model = background_model(background_map; T=T, backend=backend)

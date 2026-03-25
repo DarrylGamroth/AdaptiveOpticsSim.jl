@@ -33,6 +33,8 @@ than by source file.
 - `Detector`, `DetectorParams`, `DetectorState`, `DetectorExportMetadata`
 - `capture!`, `output_frame`, `detector_export_metadata`, `readout_ready`,
   `reset_integration!`
+- `SensorType`, `FrameSensorType`, `CountingSensorType`, `CCDSensor`,
+  `CMOSSensor`, `EMCCDSensor`, `APDSensor`
 - `DeformableMirror`, `DeformableMirrorParams`, `DeformableMirrorState`,
   `build_influence_functions!`, `apply!`
 - `Misregistration`, `apply_misregistration`
@@ -108,8 +110,9 @@ than by source file.
   `AbstractAtmosphere`, `AbstractWFS`, `AbstractDetector`,
   `AbstractDeformableMirror`
 - Sensing-mode traits: `SensingMode`, `Diffractive`, `Geometric`
-- Detector-noise traits: `NoiseModel`, `NoiseNone`, `NoisePhoton`,
-  `NoiseReadout`, `NoisePhotonReadout`
+- Detector/readout traits: `NoiseModel`, `NoiseNone`, `NoisePhoton`,
+  `NoiseReadout`, `NoisePhotonReadout`, `SensorType`, `FrameSensorType`,
+  `CountingSensorType`
 - DM-application traits: `DMApplyMode`, `DMAdditive`, `DMReplace`
 
 ## Interface contracts
@@ -158,6 +161,10 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - `AbstractDetector` implementations must provide `capture!(det, psf; rng)`.
 - Export-facing code relies on `output_frame(det)` and
   `detector_export_metadata(det)` when detector-coupled outputs are present.
+- The maintained `Detector` type is a frame-detector implementation and accepts
+  `FrameSensorType` sensors only. Counting sensors such as `APDSensor` are a
+  distinct readout family and should be modeled through sensor/readout-specific
+  code rather than the generic frame-detector path.
 
 ### `IF-DM`: deformable mirrors
 

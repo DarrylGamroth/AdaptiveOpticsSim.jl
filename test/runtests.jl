@@ -655,6 +655,8 @@ end
     frame_ccd = copy(capture!(det_ccd, zero_psf; rng=rng_ccd))
     frame_emccd = copy(capture!(det_emccd, zero_psf; rng=rng_emccd))
     @test frame_ccd ≈ 10 .* frame_emccd
+    @test_throws InvalidConfiguration Detector(integration_time=1.0, noise=NoisePhoton(), qe=1.0, binning=1,
+        sensor=APDSensor())
 
     det_buffered = Detector(integration_time=2.0, noise=NoiseNone(), qe=1.0, binning=1)
     frame_partial = copy(capture!(det_buffered, fill(1.0, 4, 4); rng=MersenneTwister(2), sample_time=1.0))
@@ -1278,6 +1280,10 @@ end
     wfs_diffractive = ShackHartmann(tel; n_subap=2, mode=Diffractive())
     zwfs = ZernikeWFS(tel; n_subap=2)
     ast = Asterism([src, Source(band=:I, magnitude=1.0, coordinates=(1.0, -45.0))])
+    @test CCDSensor <: FrameSensorType
+    @test CMOSSensor <: FrameSensorType
+    @test EMCCDSensor <: FrameSensorType
+    @test APDSensor <: CountingSensorType
 
     # IF-SRC
     assert_source_interface(src)
