@@ -1,20 +1,17 @@
 #
 # Curvature wavefront sensing
 #
-# This implementation follows the same broad optical structure used by
-# SPECULA's curvature sensor:
+# This sensor is modeled as a twin-defocus propagated pupil measurement:
 #
-# 1. embed the pupil field on a padded FFT grid
-# 2. apply equal-and-opposite defocus phase masks in the pupil plane
-# 3. propagate each branch to a detector plane with a centered FFT
-# 4. crop the central detector region back to the pupil scale
-# 5. bin to the exported `n_subap x n_subap` readout
-# 6. form the normalized curvature signal `(I⁺ - I⁻) / (I⁺ + I⁻)`
+# 1. embed the complex pupil field on a padded FFT grid
+# 2. apply equal-and-opposite defocus masks to form two branches
+# 3. propagate both branches with a batched centered FFT
+# 4. crop back to the pupil support and bin to the exported readout
+# 5. form the normalized signal `(I⁺ - I⁻) / (I⁺ + I⁻)`
 #
-# The current exported `state.slopes` remains one scalar signal per valid
-# subaperture so the runtime/reconstructor surface stays compatible with the
-# rest of the package, but the signal now comes from propagated twin-defocus
-# images rather than a discrete Laplacian surrogate.
+# The exported `state.slopes` remains one scalar signal per valid subaperture
+# so the runtime and reconstructor interfaces stay compatible with the rest of
+# the package.
 #
 
 @kernel function curvature_phasor_kernel!(phasor, scale, n::Int)
@@ -47,6 +44,27 @@ end
     end
 end
 
+@kernel function curvature_branch_field_stack_kernel!(field_stack, pupil, opd, defocus_stack, phasor,
+    amp_scale, opd_to_cycles, ox::Int, oy::Int, n::Int, pad::Int)
+    x, y, branch = @index(Global, NTuple)
+    if x <= pad && y <= pad && branch <= size(field_stack, 3)
+        xi = x - ox
+        yi = y - oy
+        val = zero(eltype(field_stack))
+        if 1 <= xi <= n && 1 <= yi <= n && @inbounds(pupil[xi, yi])
+            val = amp_scale * cispi(opd_to_cycles * @inbounds(opd[xi, yi]))
+        end
+        @inbounds field_stack[x, y, branch] = val * defocus_stack[x, y, branch] * phasor[x, y]
+    end
+end
+
+@kernel function curvature_abs2_stack_kernel!(intensity_stack, field_stack, pad::Int, n_branches::Int)
+    x, y, branch = @index(Global, NTuple)
+    if x <= pad && y <= pad && branch <= n_branches
+        @inbounds intensity_stack[x, y, branch] = abs2(field_stack[x, y, branch])
+    end
+end
+
 """
     CurvatureWFS
 
@@ -68,18 +86,17 @@ mutable struct CurvatureWFSState{
     A<:AbstractMatrix{Bool},
     V<:AbstractVector{T},
     C<:AbstractMatrix{Complex{T}},
+    CS<:AbstractArray{Complex{T},3},
     R<:AbstractMatrix{T},
-    Pf,
+    RS<:AbstractArray{T,3},
+    Pfs,
 }
     valid_mask::A
     slopes::V
-    field::C
-    focal_field::C
     phasor::C
-    defocus_plus::C
-    defocus_minus::C
-    intensity_plus::R
-    intensity_minus::R
+    field_stack::CS
+    defocus_stack::CS
+    intensity_stack::RS
     cropped_plus::R
     cropped_minus::R
     frame_plus::R
@@ -87,7 +104,7 @@ mutable struct CurvatureWFSState{
     signal_2d::R
     reference_signal_2d::R
     camera_frame::R
-    fft_plan::Pf
+    fft_stack_plan::Pfs
     effective_padding::Int
     calibrated::Bool
     calibration_wavelength::T
@@ -103,9 +120,9 @@ end
 
 Construct a curvature WFS using two propagated defocus branches.
 
-`response_gain` is a legacy high-level control on the defocus strength. In the
-current optical model it scales the RMS defocus phase amplitude, with `1.0`
-corresponding to an approximately `1000 nm` RMS defocus term on the pupil.
+`response_gain` scales the RMS defocus phase amplitude. In the current optical
+model, `1.0` corresponds to an approximately `1000 nm` RMS defocus term on the
+pupil.
 """
 function CurvatureWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, response_gain::Real=0.5,
     diffraction_padding::Int=2, T::Type{<:AbstractFloat}=Float64, backend=Array)
@@ -118,13 +135,11 @@ function CurvatureWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, respons
     params = CurvatureWFSParams{T}(n_subap, T(threshold), T(response_gain), diffraction_padding)
     valid_mask = backend{Bool}(undef, n_subap, n_subap)
     slopes = backend{T}(undef, n_subap * n_subap)
-    field = backend{Complex{T}}(undef, pad, pad)
-    focal_field = similar(field)
-    phasor = similar(field)
-    defocus_plus = similar(field)
-    defocus_minus = similar(field)
-    intensity_plus = backend{T}(undef, pad, pad)
-    intensity_minus = backend{T}(undef, pad, pad)
+    n_branches = 2
+    phasor = backend{Complex{T}}(undef, pad, pad)
+    field_stack = backend{Complex{T}}(undef, pad, pad, n_branches)
+    defocus_stack = similar(field_stack)
+    intensity_stack = backend{T}(undef, pad, pad, n_branches)
     cropped_plus = backend{T}(undef, n, n)
     cropped_minus = backend{T}(undef, n, n)
     frame_plus = backend{T}(undef, n_subap, n_subap)
@@ -133,10 +148,8 @@ function CurvatureWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, respons
     reference_signal_2d = similar(signal_2d)
     camera_frame = backend{T}(undef, 2 * n_subap, n_subap)
     fill!(slopes, zero(T))
-    fill!(field, zero(eltype(field)))
-    fill!(focal_field, zero(eltype(focal_field)))
-    fill!(intensity_plus, zero(T))
-    fill!(intensity_minus, zero(T))
+    fill!(field_stack, zero(eltype(field_stack)))
+    fill!(intensity_stack, zero(T))
     fill!(cropped_plus, zero(T))
     fill!(cropped_minus, zero(T))
     fill!(frame_plus, zero(T))
@@ -144,24 +157,23 @@ function CurvatureWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, respons
     fill!(signal_2d, zero(T))
     fill!(reference_signal_2d, zero(T))
     fill!(camera_frame, zero(T))
-    fft_plan = plan_fft_backend!(focal_field)
+    fft_stack_plan = plan_fft_backend!(field_stack, (1, 2))
     state = CurvatureWFSState{
         T,
         typeof(valid_mask),
         typeof(slopes),
-        typeof(field),
+        typeof(phasor),
+        typeof(field_stack),
         typeof(frame_plus),
-        typeof(fft_plan),
+        typeof(intensity_stack),
+        typeof(fft_stack_plan),
     }(
         valid_mask,
         slopes,
-        field,
-        focal_field,
         phasor,
-        defocus_plus,
-        defocus_minus,
-        intensity_plus,
-        intensity_minus,
+        field_stack,
+        defocus_stack,
+        intensity_stack,
         cropped_plus,
         cropped_minus,
         frame_plus,
@@ -169,7 +181,7 @@ function CurvatureWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, respons
         signal_2d,
         reference_signal_2d,
         camera_frame,
-        fft_plan,
+        fft_stack_plan,
         diffraction_padding,
         false,
         zero(T),
@@ -191,17 +203,15 @@ end
 function ensure_curvature_buffers!(wfs::CurvatureWFS, tel::Telescope)
     n = tel.params.resolution
     pad = n * wfs.params.diffraction_padding
-    if size(wfs.state.field) != (pad, pad)
-        wfs.state.field = similar(wfs.state.field, pad, pad)
-        wfs.state.focal_field = similar(wfs.state.focal_field, pad, pad)
+    if size(wfs.state.field_stack, 1) != pad || size(wfs.state.field_stack, 2) != pad
         wfs.state.phasor = similar(wfs.state.phasor, pad, pad)
-        wfs.state.defocus_plus = similar(wfs.state.defocus_plus, pad, pad)
-        wfs.state.defocus_minus = similar(wfs.state.defocus_minus, pad, pad)
-        wfs.state.intensity_plus = similar(wfs.state.intensity_plus, pad, pad)
-        wfs.state.intensity_minus = similar(wfs.state.intensity_minus, pad, pad)
+        n_branches = size(wfs.state.field_stack, 3)
+        wfs.state.field_stack = similar(wfs.state.field_stack, pad, pad, n_branches)
+        wfs.state.defocus_stack = similar(wfs.state.defocus_stack, pad, pad, n_branches)
+        wfs.state.intensity_stack = similar(wfs.state.intensity_stack, pad, pad, n_branches)
         wfs.state.cropped_plus = similar(wfs.state.cropped_plus, n, n)
         wfs.state.cropped_minus = similar(wfs.state.cropped_minus, n, n)
-        wfs.state.fft_plan = plan_fft_backend!(wfs.state.focal_field)
+        wfs.state.fft_stack_plan = plan_fft_backend!(wfs.state.field_stack, (1, 2))
         wfs.state.effective_padding = wfs.params.diffraction_padding
         wfs.state.calibrated = false
         build_curvature_phasor!(wfs.state.phasor)
@@ -230,17 +240,14 @@ function build_curvature_phasor!(style::AcceleratorStyle, phasor::AbstractMatrix
     return phasor
 end
 
-function host_curvature_defocus_masks(wfs::CurvatureWFS, tel::Telescope)
+function host_curvature_defocus_stack(wfs::CurvatureWFS, tel::Telescope)
     T = eltype(wfs.state.frame_plus)
     n = tel.params.resolution
-    pad = size(wfs.state.field, 1)
+    pad = size(wfs.state.field_stack, 1)
     cx = (pad + 1) / 2
     radius = T(n) / 2
-    # SPECULA uses a defocus RMS in nanometers; keep the current public surface
-    # stable by mapping the legacy response gain to a similar phase amplitude.
     defocus_rms_nm = T(1000) * wfs.params.response_gain
-    plus = Matrix{Complex{T}}(undef, pad, pad)
-    minus = Matrix{Complex{T}}(undef, pad, pad)
+    out = Array{Complex{T}}(undef, pad, pad, 2)
     inv_waves = defocus_rms_nm / T(1e9)
     @inbounds for j in 1:pad, i in 1:pad
         x = (T(i) - T(cx)) / radius
@@ -248,27 +255,25 @@ function host_curvature_defocus_masks(wfs::CurvatureWFS, tel::Telescope)
         r2 = x * x + y * y
         z4 = r2 <= one(T) ? sqrt(T(3)) * (T(2) * r2 - one(T)) : zero(T)
         phase_cycles = inv_waves * z4
-        plus[i, j] = cispi(T(2) * phase_cycles)
-        minus[i, j] = cispi(-T(2) * phase_cycles)
+        out[i, j, 1] = cispi(T(2) * phase_cycles)
+        out[i, j, 2] = cispi(-T(2) * phase_cycles)
     end
-    return plus, minus
+    return out
 end
 
 function build_curvature_defocus_masks!(wfs::CurvatureWFS, tel::Telescope)
-    plus, minus = host_curvature_defocus_masks(wfs, tel)
-    copyto!(wfs.state.defocus_plus, plus)
-    copyto!(wfs.state.defocus_minus, minus)
+    copyto!(wfs.state.defocus_stack, host_curvature_defocus_stack(wfs, tel))
     return wfs
 end
 
 function sample_curvature_frames!(wfs::CurvatureWFS, tel::Telescope)
     n = tel.params.resolution
-    pad = size(wfs.state.intensity_plus, 1)
+    pad = size(wfs.state.intensity_stack, 1)
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
     sub = div(n, wfs.params.n_subap)
-    copyto!(wfs.state.cropped_plus, @view(wfs.state.intensity_plus[ox+1:ox+n, oy+1:oy+n]))
-    copyto!(wfs.state.cropped_minus, @view(wfs.state.intensity_minus[ox+1:ox+n, oy+1:oy+n]))
+    copyto!(wfs.state.cropped_plus, @view(wfs.state.intensity_stack[ox+1:ox+n, oy+1:oy+n, 1]))
+    copyto!(wfs.state.cropped_minus, @view(wfs.state.intensity_stack[ox+1:ox+n, oy+1:oy+n, 2]))
     bin2d!(wfs.state.frame_plus, wfs.state.cropped_plus, sub)
     bin2d!(wfs.state.frame_minus, wfs.state.cropped_minus, sub)
     @views copyto!(wfs.state.camera_frame[1:wfs.params.n_subap, :], wfs.state.frame_plus)
@@ -277,30 +282,52 @@ function sample_curvature_frames!(wfs::CurvatureWFS, tel::Telescope)
 end
 
 function curvature_intensity!(wfs::CurvatureWFS, tel::Telescope, src::AbstractSource)
+    return curvature_intensity!(execution_style(wfs.state.camera_frame), wfs, tel, src)
+end
+
+function curvature_intensity!(::ScalarCPUStyle, wfs::CurvatureWFS, tel::Telescope, src::AbstractSource)
     ensure_curvature_buffers!(wfs, tel)
     n = tel.params.resolution
-    pad = size(wfs.state.field, 1)
+    pad = size(wfs.state.field_stack, 1)
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
     opd_to_cycles = eltype(wfs.state.frame_plus)(2) / wavelength(src)
     amp_scale = sqrt(eltype(wfs.state.frame_plus)(
         photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
     ))
+    fill!(wfs.state.field_stack, zero(eltype(wfs.state.field_stack)))
+    @inbounds for y in 1:n, x in 1:n
+        if tel.state.pupil[x, y]
+            val = amp_scale * cispi(opd_to_cycles * tel.state.opd[x, y])
+            xx = ox + x
+            yy = oy + y
+            common = val * wfs.state.phasor[xx, yy]
+            wfs.state.field_stack[xx, yy, 1] = common * wfs.state.defocus_stack[xx, yy, 1]
+            wfs.state.field_stack[xx, yy, 2] = common * wfs.state.defocus_stack[xx, yy, 2]
+        end
+    end
+    execute_fft_plan!(wfs.state.field_stack, wfs.state.fft_stack_plan)
+    @. wfs.state.intensity_stack = abs2(wfs.state.field_stack)
+    return sample_curvature_frames!(wfs, tel)
+end
 
-    fill!(wfs.state.field, zero(eltype(wfs.state.field)))
-    @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * tel.state.pupil *
-        cispi(opd_to_cycles * tel.state.opd)
-
-    copyto!(wfs.state.focal_field, wfs.state.field)
-    @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.defocus_plus * wfs.state.phasor
-    execute_fft_plan!(wfs.state.focal_field, wfs.state.fft_plan)
-    @. wfs.state.intensity_plus = abs2(wfs.state.focal_field)
-
-    copyto!(wfs.state.focal_field, wfs.state.field)
-    @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.defocus_minus * wfs.state.phasor
-    execute_fft_plan!(wfs.state.focal_field, wfs.state.fft_plan)
-    @. wfs.state.intensity_minus = abs2(wfs.state.focal_field)
-
+function curvature_intensity!(style::AcceleratorStyle, wfs::CurvatureWFS, tel::Telescope, src::AbstractSource)
+    ensure_curvature_buffers!(wfs, tel)
+    n = tel.params.resolution
+    pad = size(wfs.state.field_stack, 1)
+    ox = div(pad - n, 2)
+    oy = div(pad - n, 2)
+    opd_to_cycles = eltype(wfs.state.frame_plus)(2) / wavelength(src)
+    amp_scale = sqrt(eltype(wfs.state.frame_plus)(
+        photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
+    ))
+    launch_kernel_async!(style, curvature_branch_field_stack_kernel!, wfs.state.field_stack, tel.state.pupil,
+        tel.state.opd, wfs.state.defocus_stack, wfs.state.phasor, amp_scale, opd_to_cycles, ox, oy, n, pad;
+        ndrange=size(wfs.state.field_stack))
+    synchronize_backend!(style)
+    execute_fft_plan!(wfs.state.field_stack, wfs.state.fft_stack_plan)
+    launch_kernel!(style, curvature_abs2_stack_kernel!, wfs.state.intensity_stack, wfs.state.field_stack,
+        pad, size(wfs.state.field_stack, 3); ndrange=size(wfs.state.intensity_stack))
     return sample_curvature_frames!(wfs, tel)
 end
 
