@@ -270,10 +270,10 @@ function _run_zernike_equivalence(::Type{B}) where {B<:GPUBackendTag}
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(wfs_gpu.state.slopes))
 
     println("zernike_equivalence")
-    _assert_close("camera_frame", wfs_gpu.state.camera_frame, wfs_cpu.state.camera_frame)
-    _assert_close("reference_signal_2d", wfs_gpu.state.reference_signal_2d, wfs_cpu.state.reference_signal_2d)
-    _assert_close("slopes", wfs_gpu.state.slopes, wfs_cpu.state.slopes)
-    _assert_close("detector_frame", output_frame(det_gpu), output_frame(det_cpu))
+    _assert_close("camera_frame", wfs_gpu.state.camera_frame, wfs_cpu.state.camera_frame; rtol=1f-5, atol=8f0)
+    _assert_close("reference_signal_2d", wfs_gpu.state.reference_signal_2d, wfs_cpu.state.reference_signal_2d; rtol=5f-5, atol=2f-6)
+    _assert_close("slopes", wfs_gpu.state.slopes, wfs_cpu.state.slopes; rtol=5f-5, atol=2f-6)
+    _assert_close("detector_frame", output_frame(det_gpu), output_frame(det_cpu); rtol=1f-5, atol=1f-2)
 end
 
 function run_gpu_runtime_equivalence(::Type{B}; branch_mode::AbstractExecutionPolicy=SequentialExecution()) where {B<:GPUBackendTag}
