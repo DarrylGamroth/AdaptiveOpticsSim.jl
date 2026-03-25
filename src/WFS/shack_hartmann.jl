@@ -224,20 +224,19 @@ end
 
 function ensure_sh_asterism_buffers!(wfs::ShackHartmann, n_sources::Int)
     n_sources > 0 || throw(InvalidConfiguration("asterism must contain at least one source"))
-    if n_sources <= wfs.state.asterism_capacity
-        return wfs
+    if n_sources > wfs.state.asterism_capacity
+        pad = size(wfs.state.fft_stack, 1)
+        n_spots = wfs.params.n_subap * wfs.params.n_subap
+        total = n_spots * n_sources
+        wfs.state.fft_asterism_stack = similar(wfs.state.fft_asterism_stack, pad, pad, total)
+        wfs.state.intensity_asterism_stack = similar(wfs.state.intensity_asterism_stack, pad, pad, total)
+        wfs.state.fft_asterism_plan = plan_fft_backend!(wfs.state.fft_asterism_stack, (1, 2))
+        wfs.state.asterism_capacity = n_sources
     end
-    pad = size(wfs.state.fft_stack, 1)
-    n_spots = wfs.params.n_subap * wfs.params.n_subap
-    total = n_spots * n_sources
-    wfs.state.fft_asterism_stack = similar(wfs.state.fft_asterism_stack, pad, pad, total)
-    wfs.state.intensity_asterism_stack = similar(wfs.state.intensity_asterism_stack, pad, pad, total)
-    wfs.state.fft_asterism_plan = plan_fft_backend!(wfs.state.fft_asterism_stack, (1, 2))
-    wfs.state.asterism_capacity = n_sources
-    if length(wfs.state.amp_scales) < n_sources
+    if length(wfs.state.amp_scales) != n_sources
         wfs.state.amp_scales = similar(wfs.state.amp_scales, n_sources)
     end
-    if length(wfs.state.amp_scales_host) < n_sources
+    if length(wfs.state.amp_scales_host) != n_sources
         wfs.state.amp_scales_host = Vector{eltype(wfs.state.amp_scales_host)}(undef, n_sources)
     end
     return wfs
@@ -687,14 +686,14 @@ function compute_intensity_asterism_stack!(style::AcceleratorStyle, wfs::ShackHa
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
     T = eltype(wfs.state.intensity)
-    amp_scales = @view wfs.state.amp_scales[1:n_src]
+    amp_scales = wfs.state.amp_scales
     host_amp_scales = wfs.state.amp_scales_host
     @inbounds for i in eachindex(ast.sources)
         src = ast.sources[i]
         host_amp_scales[i] = sqrt(T(photon_flux(src) * tel.params.sampling_time *
             (tel.params.diameter / tel.params.resolution)^2))
     end
-    copyto!(amp_scales, view(host_amp_scales, 1:n_src))
+    copyto!(amp_scales, host_amp_scales)
     total = n_spots * n_src
     fft_view = @view wfs.state.fft_asterism_stack[:, :, 1:total]
     intensity_view = @view wfs.state.intensity_asterism_stack[:, :, 1:total]
