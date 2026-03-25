@@ -1,10 +1,33 @@
 using LinearAlgebra
 using Statistics
 
+#
+# Modal basis construction
+#
+# This file builds the command-basis operators used for modal calibration and
+# control.
+#
+# Supported Karhunen-Loeve-like constructions:
+# - `KLDMModes`: eigendecomposition of the DM-mode covariance `M' * M`
+# - `KLHHtPSD`: PSD-weighted covariance in Fourier space, which better reflects
+#   atmospheric statistics when an atmosphere model is available
+#
+# The resulting `M2C` operator maps modal coefficients to actuator commands,
+# while `basis` stores the corresponding OPD modes on the pupil grid.
+#
 abstract type KLBasisMethod end
 struct KLDMModes <: KLBasisMethod end
 struct KLHHtPSD <: KLBasisMethod end
 
+"""
+    ModalBasis
+
+Bundle the command-space and pupil-space representation of a modal basis.
+
+- `M2C` maps modal coefficients to DM commands
+- `basis` stores the corresponding basis vectors in flattened pupil form
+- `projector` is an optional inverse/projection operator back into modal space
+"""
 struct ModalBasis{T<:AbstractFloat,
     M<:AbstractMatrix{T},
     B<:AbstractMatrix{T},
@@ -26,6 +49,15 @@ function basis_from_m2c(dm::DeformableMirror, tel::Telescope, M2C::AbstractMatri
     return reshape(basis_mat, n, n, size(M2C, 2))
 end
 
+"""
+    basis_projector(basis; tol=1e-3, policy=...)
+
+Construct a projector from sampled basis vectors back into modal coefficients.
+
+If the basis is close to diagonal in its Gram matrix, this uses the cheaper
+diagonal approximation. Otherwise it falls back to the configured inverse
+operator.
+"""
 function basis_projector(basis::AbstractMatrix{T}; tol::Real=1e-3,
     policy::InversePolicy=default_projector_inverse_policy(T)) where {T<:AbstractFloat}
     cross = transpose(basis) * basis
@@ -44,6 +76,14 @@ function basis_projector(basis::AbstractMatrix{T}; tol::Real=1e-3,
     return projector
 end
 
+"""
+    kl_modal_basis(method, dm, tel; ...)
+
+Build a KL-style modal basis and its modal-to-command matrix.
+
+The chosen method determines how modal covariance is approximated before the
+eigendecomposition that orders modes by decreasing expected variance.
+"""
 function kl_modal_basis(dm::DeformableMirror, tel::Telescope;
     n_modes::Int=size(dm.state.modes, 2), remove_piston::Bool=true)
     return kl_modal_basis(KLDMModes(), dm, tel; n_modes=n_modes, remove_piston=remove_piston)
@@ -141,6 +181,14 @@ function turbulence_params(atm::AbstractAtmosphere)
     throw(InvalidConfiguration("turbulence_params not defined for $(typeof(atm))"))
 end
 
+"""
+    modal_basis(dm, tel; ...)
+
+Build the modal command basis used by AO calibration and control.
+
+This returns both the modal-to-command operator and the sampled pupil-space
+basis, with an optional projector back into modal coordinates.
+"""
 function modal_basis(dm::DeformableMirror, tel::Telescope; n_modes::Int=size(dm.state.modes, 2),
     remove_piston::Bool=true, projector::Bool=true, method::KLBasisMethod=KLDMModes(),
     atm::Union{Nothing,AbstractAtmosphere}=nothing)

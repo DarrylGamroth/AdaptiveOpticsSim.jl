@@ -1,5 +1,27 @@
 include(joinpath(@__DIR__, "common.jl"))
 
+#
+# Closed-loop transfer-function tutorial
+#
+# This example evaluates the classic sampled-data AO loop model with:
+# - WFS half-frame delay
+# - RTC computational delay
+# - DM delay
+# - DAC zero-order-hold response
+# - integral control law
+#
+# The returned frequency-domain curves correspond to the standard rejection
+# transfer function, closed-loop transfer function, open-loop response, and
+# propagated noise transfer function.
+#
+"""
+    transfer_functions(freq, loop_gain, Ti, Tau, Tdm)
+
+Evaluate the standard sampled-data AO loop transfer functions.
+
+Returns rejection, closed-loop, open-loop, and noise transfer responses over
+the supplied temporal frequency grid.
+"""
 function transfer_functions(freq::AbstractVector{T}, loop_gain::T, Ti::T, Tau::T, Tdm::T) where {T<:AbstractFloat}
     S = complex.(zero(T), T(2π)) .* freq
     H_wfs = exp.(-Ti * S / 2)

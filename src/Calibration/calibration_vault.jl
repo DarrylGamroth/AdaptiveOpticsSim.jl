@@ -1,5 +1,20 @@
 using LinearAlgebra
 
+#
+# Calibration inverse storage
+#
+# `CalibrationVault` packages a measured forward operator together with its
+# chosen inverse representation.
+#
+# The typical flow is:
+# 1. measure or assemble the direct interaction matrix `D`
+# 2. choose an inverse policy (pseudo-inverse, TSVD, damping, ...)
+# 3. compute the inverse operator and retain inversion diagnostics
+#
+# Runtime reconstructors then use the stored inverse matrix while the vault
+# keeps enough metadata to report condition number, effective rank, and any
+# applied truncation.
+#
 struct CalibrationVault{T<:AbstractFloat,
     D<:AbstractMatrix{T},
     M<:AbstractMatrix{T},
@@ -17,6 +32,15 @@ struct CalibrationVault{T<:AbstractFloat,
     build_backend::B
 end
 
+"""
+    CalibrationVault(D; n_trunc=0, invert=true, policy=..., build_backend=...)
+
+Construct the stored inverse representation for a calibration operator.
+
+If `invert=true`, the vault computes the inverse operator selected by `policy`
+and retains diagnostics such as singular values, condition number, effective
+rank, and any explicit truncation count.
+"""
 function CalibrationVault(D::AbstractMatrix{T}; n_trunc::Int=0, invert::Bool=true,
     policy::InversePolicy=default_calibration_inverse_policy(T),
     build_backend::BuildBackend=default_runtime_calibration_build_backend(D)) where {T<:AbstractFloat}
@@ -68,6 +92,12 @@ function CalibrationVault(D::AbstractMatrix{S}; n_trunc::Int=0, invert::Bool=tru
     return CalibrationVault(float.(D); n_trunc=n_trunc, invert=invert, policy=policy, build_backend=build_backend)
 end
 
+"""
+    with_truncation(vault, n_trunc)
+
+Rebuild a calibration vault with the same forward operator and inverse policy
+but a different explicit TSVD truncation count.
+"""
 function with_truncation(vault::CalibrationVault, n_trunc::Int)
     return CalibrationVault(vault.D; n_trunc=n_trunc, invert=true, policy=vault.policy,
         build_backend=vault.build_backend)
