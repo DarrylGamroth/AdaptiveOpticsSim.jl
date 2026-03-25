@@ -8,6 +8,11 @@ Status:
     `medium`, and `representative`
   - `scripts/profile_multi_source_multi_wfs_runtime.jl` now supports
     `compact`, `medium`, and `representative`
+  - `scripts/profile_revolt_hil_runtime.jl` now covers a REVOLT-style
+    pixel-output SH HIL case with a fixed representative configuration
+  - `scripts/profile_external_optics_hil.jl` now covers a representative
+    external-optics HIL case where AdaptiveOpticsSim owns DM phase generation
+    and phase export but not the downstream image formation
 - [ ] representative closed-loop and builder ladders are still pending beyond
   these first runtime surfaces
 
@@ -159,6 +164,7 @@ Families:
 
 - compact maintained runtime
 - Subaru AO188 simulation example
+- fixed representative HIL cases with large pixel outputs
 - later representative SCAO / woofer-tweeter / MCAO examples
 
 Questions:
@@ -177,6 +183,21 @@ Scale ladder:
     representative endpoint for every system family
 - `representative`
   - system-level examples with realistic detector sizes and control paths
+
+For this family, some representative systems are better modeled as fixed named
+cases instead of generic scale rungs. Two maintained examples now exist:
+
+- `revolt_sh_hil`
+  - REVOLT-style SH HIL proxy
+  - `277` active commands mapped onto a `17 x 17` DM grid
+  - `16 x 16` subapertures
+  - `22 x 22` ROI
+  - full `352 x 352` pixel output mosaic
+- `external_optics_hil`
+  - external-propagator / PROPER-style proxy
+  - `468` active commands mapped onto a `22 x 22` DM grid
+  - full DM OPD generation on a `640 x 640` phase grid
+  - exported `640 x 512` phase crop for downstream image formation
 
 ### 4. Calibration / Builder Workloads
 
@@ -246,6 +267,8 @@ does need consistent, defensible scale points.
   - larger detector-backed NGS and LGS cases
 - `representative`
   - AO188-class or larger realistic pixel-output closed-loop profile
+  - may also be a fixed named HIL case such as REVOLT when the defining feature
+    is the detector payload rather than only the command length
 
 ### Pyramid / BioEdge
 

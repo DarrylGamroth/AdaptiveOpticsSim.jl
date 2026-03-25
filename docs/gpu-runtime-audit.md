@@ -45,6 +45,12 @@ The maintained CUDA validation entry points are:
 - `scripts/profile_zernike_runtime.jl`
   - warmed compact `ZernikeWFS` closed-loop runtime profile
   - supports `compact`, `medium`, and `representative` scales
+- `scripts/profile_revolt_hil_runtime.jl`
+  - warmed REVOLT-style SH HIL proxy with `277` active commands and full
+    `352 x 352` pixel output
+- `scripts/profile_external_optics_hil.jl`
+  - warmed external-optics HIL proxy with `468` active commands and exported
+    `640 x 512` phase output
 
 On a CUDA host, the standard workflow is:
 
@@ -59,6 +65,8 @@ julia --project=. scripts/gpu_profile_model_tomography_cuda.jl
 julia --project=. scripts/profile_multi_source_multi_wfs_runtime.jl cuda
 julia --project=. scripts/profile_mixed_sh_asterism_runtime.jl cuda
 julia --project=. scripts/profile_zernike_runtime.jl cuda
+julia --project=. scripts/profile_revolt_hil_runtime.jl cuda
+julia --project=. scripts/profile_external_optics_hil.jl cuda
 ```
 
 The `spiders` workstation is the current real-hardware validation host for this
@@ -90,6 +98,12 @@ The maintained AMDGPU validation entry points are:
 - `scripts/profile_zernike_runtime.jl`
   - warmed compact `ZernikeWFS` closed-loop runtime profile
   - supports `compact`, `medium`, and `representative` scales
+- `scripts/profile_revolt_hil_runtime.jl`
+  - warmed REVOLT-style SH HIL proxy with `277` active commands and full
+    `352 x 352` pixel output
+- `scripts/profile_external_optics_hil.jl`
+  - warmed external-optics HIL proxy with `468` active commands and exported
+    `640 x 512` phase output
 
 On an AMDGPU host, the standard workflow is:
 
@@ -104,6 +118,8 @@ julia --project=. scripts/gpu_profile_model_tomography_phases_amdgpu.jl
 julia --project=. scripts/profile_multi_source_multi_wfs_runtime.jl amdgpu
 julia --project=. scripts/profile_mixed_sh_asterism_runtime.jl amdgpu
 julia --project=. scripts/profile_zernike_runtime.jl amdgpu
+julia --project=. scripts/profile_revolt_hil_runtime.jl amdgpu
+julia --project=. scripts/profile_external_optics_hil.jl amdgpu
 ```
 
 Current AMDGPU caveat:
@@ -202,6 +218,11 @@ the same thing as "fully representative of a deployed instrument." The
 `representative` rung is the first one intended to approximate deployment-scale
 workload shape for that family.
 
+For HIL-oriented systems with unusually large detector payloads, a fixed named
+representative case is often more informative than another generic scale rung.
+The maintained REVOLT-style and external-optics HIL profilers below are meant
+to cover that gap.
+
 ### ZernikeWFS Closed-Loop Runtime
 
 Current warmed `runtime_step_mean_ns` frame-rate snapshot:
@@ -251,6 +272,67 @@ Interpretation:
 - the compact AO188-style rung is still CPU-first,
 - GPU is already competitive by the medium rung,
 - CUDA is clearly ahead at the current representative rung.
+
+### Fixed Representative HIL Cases
+
+Current warmed fixed-case representative snapshot:
+
+| case | CPU | AMDGPU | CUDA |
+| --- | ---: | ---: | ---: |
+| `revolt_sh_hil` | `245 Hz` | `473 Hz` | `1587 Hz` |
+| `external_optics_hil` | `2.13 kHz` | `1.72 kHz` | `6.82 kHz` |
+
+REVOLT-style SH HIL dimensions:
+
+- active commands `277`
+- DM grid commands `289` (`17 x 17`)
+- pupil resolution `352`
+- `16 x 16` SH subapertures
+- ROI `22 x 22`
+- full pixel-output mosaic `(352, 352)`
+
+Current warmed phase timing snapshot for `revolt_sh_hil`:
+
+| backend | command map | DM apply | sense | mosaic | total |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| CPU | `9.55 µs` | `196 µs` | `3.85 ms` | `4.20 ms` | `4.08 ms` |
+| AMDGPU | `219 µs` | `417 µs` | `2.11 ms` | `1.90 ms` | `2.12 ms` |
+| CUDA | `31.2 µs` | `93.7 µs` | `595 µs` | `628 µs` | `630 µs` |
+
+Interpretation:
+
+- this case is far heavier in detector pixels than the generic AO188-style
+  `representative` rung,
+- the large `352 x 352` pixel-output contract is enough to make GPU execution
+  clearly worthwhile,
+- CUDA is currently much stronger than AMDGPU on this fixed SH HIL case,
+- CPU remains respectable but is no longer the best latency path once the
+  detector payload is large enough.
+
+External-optics HIL dimensions:
+
+- active commands `468`
+- DM grid commands `484` (`22 x 22`)
+- generated DM phase grid `(640, 640)`
+- exported phase crop `(640, 512)`
+- downstream image contract `(640, 512)`
+
+Current warmed phase timing snapshot for `external_optics_hil`:
+
+| backend | command map | DM phase | export | total |
+| --- | ---: | ---: | ---: | ---: |
+| CPU | `267 ns` | `315 µs` | `464 µs` | `469 µs` |
+| AMDGPU | `215 µs` | `439 µs` | `659 µs` | `580 µs` |
+| CUDA | `27.8 µs` | `116 µs` | `146 µs` | `147 µs` |
+
+Interpretation:
+
+- this case benchmarks only the part AdaptiveOpticsSim owns in an external
+  optics pipeline: command mapping, DM phase generation, and phase export,
+- CPU is still competitive because the work is dominated by one DM apply plus a
+  crop rather than a full in-package detector model,
+- CUDA is already clearly worthwhile for this surface,
+- AMDGPU is closer to CPU than to CUDA on the current implementation.
 
 ### Multi-Source / Multi-WFS Runtime
 
