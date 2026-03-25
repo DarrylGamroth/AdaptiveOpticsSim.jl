@@ -284,6 +284,14 @@ Status: in progress
   control-simulation interface where it improves clarity
 - defer multi-rate scheduling unless a real use case requires it
 
+Current adoption:
+
+- AO188 simulation uses the shared control-simulation interface
+- `ClosedLoopRuntime` uses the shared control-simulation interface
+- maintained one-stage closed-loop examples now use the shared interface
+- more specialized staged/custom-command examples still use bespoke loops where
+  that remains clearer
+
 ## Validation Requirements
 
 Each phase must preserve:

@@ -415,6 +415,8 @@ end
     @test length(runtime.command) == length(dm.state.coefs)
     @test size(output_frame(det)) == (32, 32)
     @test closed_loop_runtime_allocations() == 0
+    @test simulation_command(runtime) === runtime.command
+    @test simulation_science_frame(runtime) === output_frame(det)
 
     boundary = SimulationInterface(runtime)
     readout = simulation_readout(boundary)
@@ -444,6 +446,7 @@ end
     @test runtime2.wfs.state.calibrated
     @test supports_detector_output(runtime2)
     step!(runtime2)
+    @test simulation_wfs_frame(runtime2) === wfs2.state.spot_cube
     boundary2 = SimulationInterface(runtime2)
     @test ndims(simulation_wfs_frame(boundary2)) == 3
     @test size(simulation_wfs_frame(boundary2), 1) == wfs2.params.n_subap^2

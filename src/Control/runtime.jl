@@ -317,6 +317,20 @@ end
 @inline simulation_wfs_metadata(readout::SimulationReadout) = readout.wfs_metadata
 @inline simulation_science_metadata(readout::SimulationReadout) = readout.science_metadata
 
+@inline simulation_command(runtime::ClosedLoopRuntime) = runtime.command
+@inline simulation_slopes(runtime::ClosedLoopRuntime) = runtime.wfs.state.slopes
+@inline simulation_wfs_frame(runtime::ClosedLoopRuntime) = isnothing(runtime.wfs_detector) ? nothing : wfs_output_frame(runtime.wfs, runtime.wfs_detector)
+@inline simulation_science_frame(runtime::ClosedLoopRuntime) = isnothing(runtime.science_detector) ? nothing : output_frame(runtime.science_detector)
+@inline simulation_wfs_metadata(runtime::ClosedLoopRuntime) = isnothing(runtime.wfs_detector) ? nothing : detector_export_metadata(runtime.wfs_detector)
+@inline simulation_science_metadata(runtime::ClosedLoopRuntime) = isnothing(runtime.science_detector) ? nothing : detector_export_metadata(runtime.science_detector)
+
+@inline simulation_command(sim::AbstractControlSimulation) = simulation_command(simulation_readout(sim))
+@inline simulation_slopes(sim::AbstractControlSimulation) = simulation_slopes(simulation_readout(sim))
+@inline simulation_wfs_frame(sim::AbstractControlSimulation) = simulation_wfs_frame(simulation_readout(sim))
+@inline simulation_science_frame(sim::AbstractControlSimulation) = simulation_science_frame(simulation_readout(sim))
+@inline simulation_wfs_metadata(sim::AbstractControlSimulation) = simulation_wfs_metadata(simulation_readout(sim))
+@inline simulation_science_metadata(sim::AbstractControlSimulation) = simulation_science_metadata(simulation_readout(sim))
+
 @inline simulation_command(interface::SimulationInterface) = interface.command
 @inline simulation_slopes(interface::SimulationInterface) = interface.slopes
 @inline simulation_wfs_frame(interface::SimulationInterface) = interface.wfs_frame
@@ -332,6 +346,17 @@ end
 @inline simulation_science_metadata(interface::CompositeSimulationInterface) = map(simulation_science_metadata, interface.interfaces)
 
 @inline simulation_readout(readout::SimulationReadout) = readout
+@inline function simulation_readout(runtime::ClosedLoopRuntime)
+    return SimulationReadout(
+        simulation_command(runtime),
+        simulation_slopes(runtime),
+        simulation_wfs_frame(runtime),
+        simulation_science_frame(runtime),
+        simulation_wfs_metadata(runtime),
+        simulation_science_metadata(runtime),
+    )
+end
+@inline simulation_readout(sim::AbstractControlSimulation) = simulation_readout(simulation_interface(sim))
 
 @inline function simulation_readout(interface::SimulationInterface)
     return SimulationReadout(

@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using LinearAlgebra
 using Random
 using Logging
 
@@ -22,15 +23,11 @@ imat1 = interaction_matrix(sim.dm, sim.wfs, sim.tel; amplitude=0.05)
 imat2 = interaction_matrix(sim.dm, sim.wfs, sim.tel; amplitude=0.1)
 mat = 0.5 .* (imat1.matrix .+ imat2.matrix)
 recon = ModalReconstructor(InteractionMatrix(mat, 0.1); gain=0.4)
-cmd = similar(sim.dm.state.coefs)
+runtime = ClosedLoopRuntime(sim, recon; rng=rng)
+interface = simulation_interface(runtime)
 
 for _ in 1:5
-    advance!(sim.atm, sim.tel; rng=rng)
-    propagate!(sim.atm, sim.tel)
-    apply!(sim.dm, sim.tel, DMAdditive())
-    measure!(sim.wfs, sim.tel)
-    reconstruct!(cmd, recon, sim.wfs.state.slopes)
-    sim.dm.state.coefs .= -cmd
+    step!(interface)
 end
 
-@info "Closed-loop long push-pull complete"
+@info "Closed-loop long push-pull complete" residual_norm=norm(simulation_command(interface))

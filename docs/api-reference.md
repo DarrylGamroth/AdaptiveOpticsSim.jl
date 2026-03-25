@@ -92,6 +92,8 @@ than by source file.
 - `simulation_readout`, `simulation_command`, `simulation_slopes`,
   `simulation_wfs_frame`, `simulation_science_frame`
 - `simulation_wfs_metadata`, `simulation_science_metadata`
+  - these accessors now work on both interface/readout objects and direct
+    `AbstractControlSimulation` instances
 - `AbstractExecutionPolicy`, `SequentialExecution`, `ThreadedExecution`,
   `BackendStreamExecution`
 - `VectorDelayLine`, `shift_delay!`
