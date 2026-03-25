@@ -187,6 +187,9 @@ validation shows the new default is still too coarse.
 - HCIPy / POPPY / PROPER (Python): maps to diffractive WFS propagation, PSF/coronagraph modeling.
 
 ## Suggested Near-Term Priorities
+- [ ] Write and implement the interface/style specification pass described in
+  `docs/interface-style-spec-plan.md`, with explicit abstract-family contracts,
+  capability-trait audit, and conformance tests.
 - [ ] Improve the remaining scientifically narrower defaults, especially
   `ft_sh_phase_screen` and the default NCPA KL basis choice.
 - [~] Define explicit execution/fidelity profiles so the package can support a
