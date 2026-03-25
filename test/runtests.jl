@@ -45,6 +45,39 @@ function assert_dm_interface(dm, tel)
     @test applicable(apply!, dm, tel, DMAdditive())
 end
 
+function assert_optical_element_interface(element, tel)
+    @test applicable(apply!, element, tel, DMAdditive())
+    @test applicable(apply!, element, tel, DMReplace())
+end
+
+function assert_reconstructor_interface(recon, slopes, expected_length::Int)
+    out = zeros(eltype(slopes), expected_length)
+    @test applicable(reconstruct!, out, recon, slopes)
+    reconstruct!(out, recon, slopes)
+    @test length(out) == expected_length
+    allocated = reconstruct(recon, slopes)
+    @test length(allocated) == expected_length
+end
+
+function assert_controller_interface(ctrl, input, dt::Real)
+    @test applicable(update!, ctrl, input, dt)
+    output = update!(ctrl, input, dt)
+    @test length(output) == length(input)
+end
+
+function assert_control_simulation_interface(sim)
+    @test sim isa AbstractControlSimulation
+    @test applicable(step!, sim)
+    @test applicable(simulation_interface, sim)
+    @test applicable(simulation_readout, sim)
+    iface = simulation_interface(sim)
+    readout = simulation_readout(sim)
+    @test simulation_command(readout) === simulation_command(sim)
+    @test simulation_slopes(readout) === simulation_slopes(sim)
+    @test simulation_command(simulation_readout(iface)) === simulation_command(iface)
+    return iface
+end
+
 function subharmonic_tiptilt_power(phs::AbstractMatrix)
     n = size(phs, 1)
     coords = collect(LinRange(-1.0, 1.0, n))
@@ -1061,13 +1094,41 @@ end
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     det = Detector(noise=NoiseNone())
     psf = fill(1.0, 8, 8)
+    opd_map = OPDMap(fill(0.1, size(tel.state.opd)))
+    ncpa = NCPA(tel, dm, atm; coefficients=[0.01, -0.02])
+    imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
+    modal = ModalReconstructor(imat; gain=1.0)
+    mapped = MappedReconstructor(Matrix{Float64}(I, length(dm.state.coefs), length(dm.state.coefs)), imat; gain=0.5)
+    ctrl = DiscreteIntegratorController(length(wfs.state.slopes); gain=0.1, tau=0.02)
+    sim = AOSimulation(tel, atm, src, dm, wfs)
+    runtime = ClosedLoopRuntime(sim, modal; rng=MersenneTwister(9))
 
+    # IF-SRC
     assert_source_interface(src)
     assert_source_interface(lgs)
+    # IF-ATM
     assert_atmosphere_interface(atm, tel)
+    # IF-WFS
     assert_wfs_interface(wfs, tel)
+    # IF-DM
     assert_dm_interface(dm, tel)
+    # IF-DET
     assert_detector_interface(det, psf)
+    # IF-OPT
+    assert_optical_element_interface(opd_map, tel)
+    assert_optical_element_interface(ncpa, tel)
+    # IF-REC
+    assert_reconstructor_interface(modal, wfs.state.slopes, length(dm.state.coefs))
+    assert_reconstructor_interface(mapped, wfs.state.slopes, length(dm.state.coefs))
+    # IF-CTRL
+    assert_controller_interface(ctrl, wfs.state.slopes, 0.01)
+    # IF-SIM
+    iface = assert_control_simulation_interface(runtime)
+    @test !supports_prepared_runtime(runtime)
+    @test !supports_detector_output(runtime)
+    @test !supports_stacked_sources(runtime)
+    @test !supports_grouped_execution(runtime)
+    @test simulation_interface(iface) === iface
 end
 
 @testset "Telemetry and config" begin

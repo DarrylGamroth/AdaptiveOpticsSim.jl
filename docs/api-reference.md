@@ -110,6 +110,86 @@ than by source file.
   `NoiseReadout`, `NoisePhotonReadout`
 - DM-application traits: `DMApplyMode`, `DMAdditive`, `DMReplace`
 
+## Interface contracts
+
+These contracts summarize the maintained method families that extension code is
+expected to implement. The conformance evidence for the maintained surfaces
+lives in the `Interface conformance` testset in `test/runtests.jl`.
+
+### `IF-OPT`: optical elements
+
+- `AbstractOpticalElement` implementations that modify telescope phase should
+  implement `apply!(element, tel, mode)`.
+- Maintained optical-phase elements support both `DMAdditive()` and
+  `DMReplace()` semantics.
+- Shape mismatches should raise structured errors rather than silently resizing
+  or clipping.
+
+### `IF-SRC`: sources
+
+- `AbstractSource` implementations must provide `wavelength(src)`.
+- Source-specific flux or spectrum helpers may exist, but `wavelength` is the
+  minimal shared contract used across optics and sensing.
+
+### `IF-ATM`: atmospheres
+
+- `AbstractAtmosphere` implementations must provide `advance!(atm, tel; rng)`
+  and `propagate!(atm, tel)`.
+- `advance!` updates the evolving atmospheric state, while `propagate!`
+  applies the resulting OPD to the telescope.
+
+### `IF-WFS`: wavefront sensors
+
+- `AbstractWFS` implementations must provide `update_valid_mask!(wfs, tel)` and
+  `measure!(wfs, tel)` or `measure!(wfs, tel, src)`.
+- Optional capabilities are surfaced through traits and behavior:
+  detector-coupled output, asterism support, prepared runtime support, and
+  stacked-source execution.
+- The maintained runtime expects the measured slope vector to live in
+  `wfs.state.slopes`.
+
+### `IF-DET`: detectors
+
+- `AbstractDetector` implementations must provide `capture!(det, psf; rng)`.
+- Export-facing code relies on `output_frame(det)` and
+  `detector_export_metadata(det)` when detector-coupled outputs are present.
+
+### `IF-DM`: deformable mirrors
+
+- `AbstractDeformableMirror` implementations must provide
+  `build_influence_functions!(dm, tel)` and `apply!(dm, tel, mode)`.
+- The maintained DM runtime path assumes `dm.state.coefs` is the active command
+  vector and that `apply!` writes phase on the telescope OPD grid.
+
+### `IF-REC`: control reconstructors
+
+- Reconstructor operators are currently structural rather than abstract, but
+  the maintained contract is `reconstruct!(out, recon, slopes)`.
+- `reconstruct(recon, slopes)` is the thin allocation wrapper over that
+  mutating operator.
+- The maintained control reconstructor families are `ModalReconstructor` and
+  `MappedReconstructor`, and both must present the same external
+  slopes-to-command contract.
+
+### `IF-CTRL`: controllers
+
+- `AbstractController` implementations should expose a canonical mutating update
+  path through `update!(ctrl, input, dt)`.
+- The maintained controller family is `DiscreteIntegratorController`, which
+  returns the updated command-like controller state.
+
+### `IF-SIM`: control simulations
+
+- `AbstractControlSimulation` implementations must provide `step!(sim)`,
+  `simulation_interface(sim)`, and `simulation_readout(sim)`.
+- `prepare!(sim)` is the preferred optional hook for runtime precomputation.
+- Output-side accessors are `simulation_command`, `simulation_slopes`,
+  `simulation_wfs_frame`, `simulation_science_frame`,
+  `simulation_wfs_metadata`, and `simulation_science_metadata`.
+- Optional behavior is expressed with
+  `supports_prepared_runtime`, `supports_detector_output`,
+  `supports_stacked_sources`, and `supports_grouped_execution`.
+
 ## Notes on backend-aware APIs
 
 - Constructors typically accept `T=` and `backend=` keywords.
