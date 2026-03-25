@@ -1,5 +1,10 @@
 # Zernike WFS Plan
 
+Status:
+- [x] Phase 1 scalar CPU MVP
+- [ ] Phase 2 GPU path
+- [ ] Phase 3 HIL/RTC integration
+
 ## Goal
 
 Add a Zernike wavefront sensor to `AdaptiveOpticsSim.jl` in a way that fits the

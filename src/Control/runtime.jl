@@ -217,6 +217,7 @@ simulation_interface(interface::CompositeSimulationInterface) = interface
 
 @inline supports_prepared_runtime(::ShackHartmann{<:Diffractive}, ::AbstractSource) = true
 @inline supports_prepared_runtime(::ShackHartmann{<:Diffractive}, ::Asterism) = true
+@inline supports_prepared_runtime(::ZernikeWFS, ::AbstractSource) = true
 @inline supports_stacked_sources(::ShackHartmann, ::Asterism) = true
 @inline supports_stacked_sources(::PyramidWFS, ::Asterism) = true
 @inline supports_stacked_sources(::BioEdgeWFS, ::Asterism) = true
@@ -241,6 +242,11 @@ end
     isempty(ast.sources) && throw(InvalidConfiguration("asterism must contain at least one source"))
     prepare_sampling!(wfs, tel, ast.sources[1])
     ensure_sh_calibration!(wfs, tel, ast.sources[1])
+    return wfs
+end
+
+@inline function prepare_runtime_wfs!(wfs::ZernikeWFS, tel::Telescope, src::AbstractSource)
+    ensure_zernike_calibration!(wfs, tel, src)
     return wfs
 end
 

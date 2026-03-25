@@ -1,5 +1,6 @@
 using Test
 using AdaptiveOpticsSim
+using LinearAlgebra
 using Random
 using SpecialFunctions
 using Statistics
@@ -865,6 +866,41 @@ end
     @test bio_ast_det_slopes ≈ bio_ast_det_serial.state.slopes
 end
 
+@testset "Zernike WFS" begin
+    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = Source(band=:I, magnitude=0.0)
+    wfs = ZernikeWFS(tel; n_subap=8, diffraction_padding=2)
+
+    @test size(wfs.state.camera_frame) == (8, 8)
+    @test length(wfs.state.slopes) == count(wfs.state.valid_mask)
+    @test_throws InvalidConfiguration measure!(wfs, tel)
+    @test_throws InvalidConfiguration measure!(wfs, tel, Asterism([src, Source(band=:I, magnitude=0.0)]))
+
+    flat_slopes = copy(measure!(wfs, tel, src))
+    @test wfs.state.calibrated
+    @test all(isfinite, flat_slopes)
+    @test all(>=(0.0), wfs.state.camera_frame)
+    @test flat_slopes ≈ zero.(flat_slopes) atol=1e-10
+
+    det = Detector(noise=NoiseNone(), binning=1)
+    det_slopes = copy(measure!(wfs, tel, src, det))
+    @test det_slopes ≈ flat_slopes atol=1e-10
+    @test size(output_frame(det)) == size(wfs.state.camera_frame)
+
+    zb = ZernikeBasis(tel, 5)
+    compute_zernike!(zb, tel)
+    focus = @view zb.modes[:, :, 5]
+    @. tel.state.opd = 5e-8 * focus
+    slopes_plus = copy(measure!(wfs, tel, src))
+    @. tel.state.opd = -5e-8 * focus
+    slopes_minus = copy(measure!(wfs, tel, src))
+    fill!(tel.state.opd, 0.0)
+
+    @test norm(slopes_plus) > 1e-6
+    @test norm(slopes_minus) > 1e-6
+    @test dot(slopes_plus, slopes_minus) < 0
+end
+
 @testset "OOPAO parity knobs" begin
     tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
@@ -1147,6 +1183,7 @@ end
     sim = AOSimulation(tel, atm, src, dm, wfs)
     runtime = ClosedLoopRuntime(sim, modal; rng=MersenneTwister(9))
     wfs_diffractive = ShackHartmann(tel; n_subap=2, mode=Diffractive())
+    zwfs = ZernikeWFS(tel; n_subap=2)
     ast = Asterism([src, Source(band=:I, magnitude=1.0, coordinates=(1.0, -45.0))])
 
     # IF-SRC
@@ -1178,11 +1215,14 @@ end
     @test !supports_prepared_runtime(wfs, src)
     @test supports_prepared_runtime(wfs_diffractive, src)
     @test supports_prepared_runtime(wfs_diffractive, ast)
+    @test supports_prepared_runtime(zwfs, src)
     @test !supports_stacked_sources(wfs, src)
     @test supports_stacked_sources(wfs, ast)
     @test supports_stacked_sources(wfs_diffractive, ast)
     prepare_runtime_wfs!(wfs_diffractive, tel, src)
     @test wfs_diffractive.state.calibrated
+    prepare_runtime_wfs!(zwfs, tel, src)
+    @test zwfs.state.calibrated
 end
 
 @testset "Calibration workflow contracts" begin

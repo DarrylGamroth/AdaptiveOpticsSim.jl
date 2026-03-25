@@ -271,10 +271,9 @@ The current focus is now:
    profile.
 4. Decide whether the long-horizon Pyramid/GSC replay remains purely diagnostic.
 5. Add multi-WFS / multi-DM aggregation for MOAO, MCAO, and woofer/tweeter RTC scenarios.
-6. Implement `ZernikeWFS` Phase 1 from [`docs/zernike-wfs-plan.md`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/zernike-wfs-plan.md).
-7. Implement `CurvatureSensor` if the RTC/HIL use case requires it after `ZernikeWFS`.
-8. Continue extending GPU-native builder coverage where HIL workflows demand it.
-9. Profile and optimize tomography builder hotspots only where crossover data shows the GPU path is worthwhile.
+6. Implement `CurvatureSensor` if the RTC/HIL use case requires it after `ZernikeWFS`.
+7. Continue extending GPU-native builder coverage where HIL workflows demand it.
+8. Profile and optimize tomography builder hotspots only where crossover data shows the GPU path is worthwhile.
 
 ## HIL-Oriented Near-Term Work
 - [x] Add explicit builder-backend selection for modal/calibration reconstructor generation.

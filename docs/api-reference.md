@@ -59,6 +59,7 @@ than by source file.
 - `ShackHartmann`, `ShackHartmannParams`, `ShackHartmannState`
 - `PyramidWFS`, `PyramidParams`, `PyramidState`
 - `BioEdgeWFS`, `BioEdgeParams`, `BioEdgeState`
+- `ZernikeWFS`, `ZernikeWFSParams`, `ZernikeWFSState`
 - `update_valid_mask!`, `measure!`, `apply_shift_wfs!`, `set_optical_gain!`
 - `LiFT`, `lift_interaction_matrix`, `lift_interaction_matrix!`
 - `LiFTDampingMode`, `LiFTDampingNone`, `LiFTLevenbergMarquardt`,
