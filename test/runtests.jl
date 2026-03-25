@@ -407,6 +407,9 @@ end
     recon = ModalReconstructor(imat; gain=0.5)
     det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
     runtime = ClosedLoopRuntime(sim, recon; rng=rng, science_detector=det)
+    @test runtime isa AbstractControlSimulation
+    @test !supports_prepared_runtime(runtime)
+    @test supports_detector_output(runtime)
 
     step!(runtime)
     @test length(runtime.command) == length(dm.state.coefs)
@@ -436,12 +439,17 @@ end
     recon2 = ModalReconstructor(imat2; gain=0.5)
     wfs_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
     runtime2 = ClosedLoopRuntime(sim2, recon2; rng=rng2, wfs_detector=wfs_det)
+    @test supports_prepared_runtime(runtime2)
+    prepare!(runtime2)
+    @test runtime2.wfs.state.calibrated
+    @test supports_detector_output(runtime2)
     step!(runtime2)
     boundary2 = SimulationInterface(runtime2)
     @test ndims(simulation_wfs_frame(boundary2)) == 3
     @test size(simulation_wfs_frame(boundary2), 1) == wfs2.params.n_subap^2
 
     composite = CompositeSimulationInterface(boundary, boundary2)
+    @test supports_grouped_execution(composite)
     @test length(simulation_command(composite)) == length(simulation_command(boundary)) + length(simulation_command(boundary2))
     @test length(simulation_slopes(composite)) == length(simulation_slopes(boundary)) + length(simulation_slopes(boundary2))
     @test length(simulation_wfs_frame(composite)) == 2

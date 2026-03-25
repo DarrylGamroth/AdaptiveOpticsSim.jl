@@ -52,7 +52,7 @@ supports_grouped_execution(sim) = supports_grouped_execution(typeof(sim))
 
 init_execution_state(::AbstractExecutionPolicy, ref) = nothing
 
-mutable struct ClosedLoopRuntime{SIM<:AOSimulation,TEL,A,S,DM,W,R,V,WD,SD,RNG,T<:AbstractFloat}
+mutable struct ClosedLoopRuntime{SIM<:AOSimulation,TEL,A,S,DM,W,R,V,WD,SD,RNG,T<:AbstractFloat} <: AbstractControlSimulation
     simulation::SIM
     tel::TEL
     atm::A
@@ -140,6 +140,49 @@ end
 simulation_interface(runtime::ClosedLoopRuntime) = SimulationInterface(runtime)
 simulation_interface(interface::SimulationInterface) = interface
 simulation_interface(interface::CompositeSimulationInterface) = interface
+
+@inline _supports_runtime_preparation(::AbstractWFS, ::Any) = false
+@inline _supports_runtime_preparation(::ShackHartmann{<:Diffractive}, ::AbstractSource) = true
+@inline _supports_runtime_preparation(::ShackHartmann{<:Diffractive}, ::Asterism) = true
+
+@inline function _prepare_runtime_wfs!(::AbstractWFS, tel::Telescope, src)
+    return nothing
+end
+
+@inline function _prepare_runtime_wfs!(wfs::ShackHartmann{<:Diffractive}, tel::Telescope, src::AbstractSource)
+    prepare_sampling!(wfs, tel, src)
+    ensure_sh_calibration!(wfs, tel, src)
+    return wfs
+end
+
+@inline function _prepare_runtime_wfs!(wfs::ShackHartmann{<:Diffractive}, tel::Telescope, ast::Asterism)
+    isempty(ast.sources) && throw(InvalidConfiguration("asterism must contain at least one source"))
+    prepare_sampling!(wfs, tel, ast.sources[1])
+    ensure_sh_calibration!(wfs, tel, ast.sources[1])
+    return wfs
+end
+
+supports_prepared_runtime(runtime::ClosedLoopRuntime) = _supports_runtime_preparation(runtime.wfs, runtime.src)
+supports_detector_output(runtime::ClosedLoopRuntime) = !isnothing(runtime.wfs_detector) || !isnothing(runtime.science_detector)
+supports_stacked_sources(runtime::ClosedLoopRuntime) = runtime.src isa Asterism
+supports_grouped_execution(::CompositeSimulationInterface) = true
+
+function prepare!(runtime::ClosedLoopRuntime)
+    _prepare_runtime_wfs!(runtime.wfs, runtime.tel, runtime.src)
+    return runtime
+end
+
+function prepare!(interface::SimulationInterface)
+    prepare!(interface.runtime)
+    return snapshot_outputs!(interface)
+end
+
+function prepare!(interface::CompositeSimulationInterface)
+    @inbounds for child in interface.interfaces
+        prepare!(child.runtime)
+    end
+    return snapshot_outputs!(interface)
+end
 
 function SimulationInterface(runtime::ClosedLoopRuntime)
     command = similar(runtime.command)
@@ -524,6 +567,7 @@ end
 runtime_timing(runtime::ClosedLoopRuntime; kwargs...) = runtime_timing(() -> step!(runtime); kwargs...)
 runtime_timing(interface::SimulationInterface; kwargs...) = runtime_timing(() -> step!(interface); kwargs...)
 runtime_timing(interface::CompositeSimulationInterface; kwargs...) = runtime_timing(() -> step!(interface); kwargs...)
+runtime_timing(sim::AbstractControlSimulation; kwargs...) = runtime_timing(() -> step!(sim); kwargs...)
 
 @inline function _sync_sense_outputs!(runtime::ClosedLoopRuntime)
     synchronize_backend!(execution_style(runtime.wfs.state.slopes))

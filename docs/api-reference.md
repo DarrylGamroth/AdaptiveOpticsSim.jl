@@ -87,9 +87,16 @@ than by source file.
 - `AbstractController`
 - `DiscreteIntegratorController`, `update!`
 - `ClosedLoopRuntime`, `SimulationInterface`, `CompositeSimulationInterface`, `SimulationReadout`
+- `AbstractControlSimulation`
+- `prepare!`, `simulation_interface`
 - `simulation_readout`, `simulation_command`, `simulation_slopes`,
   `simulation_wfs_frame`, `simulation_science_frame`
 - `simulation_wfs_metadata`, `simulation_science_metadata`
+- `AbstractExecutionPolicy`, `SequentialExecution`, `ThreadedExecution`,
+  `BackendStreamExecution`
+- `VectorDelayLine`, `shift_delay!`
+- `supports_prepared_runtime`, `supports_detector_output`,
+  `supports_stacked_sources`, `supports_grouped_execution`
 
 ## Traits and interfaces
 

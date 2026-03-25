@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using LinearAlgebra
 using Random
 using Logging
 
@@ -20,15 +21,11 @@ sim = initialize_ao_shwfs(
 
 imat = interaction_matrix(sim.dm, sim.wfs, sim.tel; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
-cmd = similar(sim.dm.state.coefs)
+runtime = ClosedLoopRuntime(sim, recon; rng=rng)
+interface = simulation_interface(runtime)
 
 for _ in 1:5
-    advance!(sim.atm, sim.tel; rng=rng)
-    propagate!(sim.atm, sim.tel)
-    apply!(sim.dm, sim.tel, DMAdditive())
-    measure!(sim.wfs, sim.tel)
-    reconstruct!(cmd, recon, sim.wfs.state.slopes)
-    sim.dm.state.coefs .= -cmd
+    step!(interface)
 end
 
-@info "Closed-loop run_cl complete"
+@info "Closed-loop run_cl complete" residual_norm=norm(simulation_command(interface))

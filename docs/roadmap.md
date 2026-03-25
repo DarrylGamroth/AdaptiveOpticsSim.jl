@@ -227,8 +227,10 @@ validation shows the new default is still too coarse.
   simulation into core without moving the Subaru-specific assembly itself.
   The staged plan now lives in `docs/control-simulation-architecture-plan.md`.
   `MappedReconstructor`, `VectorDelayLine`, generic execution policies, and the
-  first control-simulation hooks/capability traits are now in core; broader
-  adoption beyond the AO188 example is still pending.
+  first control-simulation hooks/capability traits are now in core, and both
+  the AO188 example and `ClosedLoopRuntime` now conform to the shared
+  control-simulation interface; broader adoption beyond those runtime surfaces
+  is still pending.
 
 ## Current Focus
 

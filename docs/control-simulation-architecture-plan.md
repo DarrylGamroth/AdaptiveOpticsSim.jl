@@ -250,12 +250,13 @@ Exit criteria:
 
 ### Phase 3: Control Simulation Interface
 
-Status: partially implemented
+Status: implemented for the current runtime surface
 
 - add `AbstractControlSimulation`
 - add `prepare!` / `simulation_interface` conventions
 - make AO188 simulation conform explicitly
-- update scripts to target the interface, not the concrete AO188 type
+- make `ClosedLoopRuntime` conform explicitly
+- update maintained examples/scripts to target the interface where practical
 
 Exit criteria:
 
@@ -279,8 +280,8 @@ Status: in progress
 
 - apply `MappedReconstructor` where other runtime systems currently use the same
   pattern
-- consider whether closed-loop tutorial runtimes should conform to the new
-  simulation interface directly
+- continue moving tutorial/runtime examples onto the generic
+  control-simulation interface where it improves clarity
 - defer multi-rate scheduling unless a real use case requires it
 
 ## Validation Requirements
