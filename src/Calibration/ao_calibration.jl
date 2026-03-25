@@ -1,3 +1,14 @@
+#
+# AO calibration assembly
+#
+# `ao_calibration` packages the standard modal calibration flow:
+# 1. choose or build a modal basis for the DM
+# 2. measure the WFS interaction matrix in that command basis
+# 3. build a `CalibrationVault` inverse operator from the measured matrix
+#
+# The result is the compact object used by modal reconstructors and runtime
+# controller setup.
+#
 struct AOCalibration{T<:AbstractFloat,
     B<:AbstractMatrix{T},
     P<:AbstractMatrix{T},
@@ -9,6 +20,15 @@ struct AOCalibration{T<:AbstractFloat,
     calibration::C
 end
 
+"""
+    ao_calibration(tel, dm, wfs; ...)
+
+Build the standard modal AO calibration package.
+
+If no basis is provided, the function first constructs one from the DM and
+telescope, then measures the interaction matrix in that modal command basis and
+builds a `CalibrationVault` inverse from the result.
+"""
 function ao_calibration(tel::Telescope, dm::DeformableMirror, wfs::AbstractWFS;
     n_modes::Int=size(dm.state.modes, 2), amplitude::Real=1e-9,
     projector::Bool=true, basis::Union{Nothing,ModalBasis}=nothing,

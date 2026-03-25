@@ -1,5 +1,19 @@
 using LinearAlgebra
 
+#
+# Interaction-matrix calibration
+#
+# The interaction matrix records the local linear response of the WFS slopes to
+# DM command perturbations.
+#
+# Each column is built by:
+# 1. applying one actuator or command-basis perturbation to the DM
+# 2. propagating the modified telescope phase through the WFS
+# 3. recording the measured slope vector
+#
+# This provides the linear operator used by calibration vaults, modal
+# reconstructors, and interaction-matrix tomography.
+#
 struct InteractionMatrix{T<:AbstractFloat,M<:AbstractMatrix{T}}
     matrix::M
     amplitude::T
@@ -16,6 +30,18 @@ end
     return similar(ref, T, n_rows, n_cols)
 end
 
+"""
+    interaction_matrix(dm, wfs, tel; amplitude=1)
+    interaction_matrix(dm, wfs, tel, src; amplitude=1)
+    interaction_matrix(dm, wfs, tel, commands; amplitude=1)
+    interaction_matrix(dm, wfs, tel, commands, src; amplitude=1)
+
+Build the WFS interaction matrix for either actuator-space pushes or an
+explicit command basis.
+
+The returned matrix stores one measured slope vector per commanded
+perturbation, scaled by the requested calibration amplitude.
+"""
 function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS, tel::Telescope; amplitude::Real=1.0)
     n_act = length(dm.state.coefs)
     T = eltype(dm.state.coefs)

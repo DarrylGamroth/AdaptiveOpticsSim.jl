@@ -1,3 +1,19 @@
+#
+# Closed-loop runtime execution and simulation I/O
+#
+# This file defines the low-latency control loop used by HIL and deterministic
+# runtime benchmarks.
+#
+# The core runtime step is:
+# 1. advance and propagate the atmosphere
+# 2. apply the current DM command to the telescope OPD
+# 3. measure WFS outputs, optionally through a detector
+# 4. reconstruct a new command from the sensed slopes
+# 5. apply the signed command back to the DM coefficient vector
+#
+# `SimulationInterface` and `SimulationReadout` expose that state as the
+# controller-facing I/O surface without changing the underlying runtime object.
+#
 @kernel function apply_command_kernel!(coefs, cmd, sign, n::Int)
     i = @index(Global, Linear)
     if i <= n
@@ -12,6 +28,14 @@ struct SequentialExecution <: AbstractExecutionPolicy end
 struct ThreadedExecution <: AbstractExecutionPolicy end
 struct BackendStreamExecution <: AbstractExecutionPolicy end
 
+"""
+    VectorDelayLine(ref, delay_frames)
+
+Preallocated fixed-length frame delay for vector-valued control signals.
+
+The delay line stores `delay_frames` historical samples and returns the signal
+that exits the tail when a new sample is shifted in.
+"""
 mutable struct VectorDelayLine{A<:AbstractMatrix,V<:AbstractVector}
     buffer::A
     scratch::V
@@ -52,6 +76,15 @@ supports_grouped_execution(sim) = supports_grouped_execution(typeof(sim))
 
 init_execution_state(::AbstractExecutionPolicy, ref) = nothing
 
+"""
+    ClosedLoopRuntime(simulation, reconstructor; ...)
+
+Create the executable closed-loop control runtime for an AO simulation.
+
+The runtime owns the mutable command vector, optional detector outputs, and the
+objects needed to execute repeated `sense!` and `step!` calls without
+reconstructing the simulation graph.
+"""
 mutable struct ClosedLoopRuntime{SIM<:AOSimulation,TEL,A,S,DM,W,R,V,WD,SD,RNG,T<:AbstractFloat} <: AbstractControlSimulation
     simulation::SIM
     tel::TEL
@@ -68,6 +101,14 @@ mutable struct ClosedLoopRuntime{SIM<:AOSimulation,TEL,A,S,DM,W,R,V,WD,SD,RNG,T<
     science_zero_padding::Int
 end
 
+"""
+    SimulationInterface(runtime)
+
+Allocate a controller-facing I/O view for a runtime.
+
+The interface owns copied command, slope, and frame buffers so external code
+can snapshot or stream runtime state without mutating the runtime internals.
+"""
 mutable struct SimulationInterface{RT,C,S,W,SF}
     runtime::RT
     command::C
@@ -76,6 +117,15 @@ mutable struct SimulationInterface{RT,C,S,W,SF}
     science_frame::SF
 end
 
+"""
+    CompositeSimulationInterface(interfaces...)
+
+Aggregate several compatible simulation interfaces into one combined command,
+slope, and frame surface.
+
+This is used for grouped multi-branch execution while preserving per-runtime
+state internally.
+"""
 mutable struct CompositeSimulationInterface{IT,C,S,WF,SF}
     interfaces::IT
     command::C
@@ -84,6 +134,14 @@ mutable struct CompositeSimulationInterface{IT,C,S,WF,SF}
     science_frames::SF
 end
 
+"""
+    SimulationReadout
+
+Zero-copy view of the current output side of a simulation runtime or interface.
+
+This bundles the command, slopes, optional frames, and export metadata that an
+external controller or logger would observe at the current simulation state.
+"""
 struct SimulationReadout{C,S,W,SF,WM,SM}
     command::C
     slopes::S
@@ -277,6 +335,15 @@ end
     return interface.command
 end
 
+"""
+    snapshot_outputs!(interface)
+
+Refresh the exported command, slopes, and frame buffers from the underlying
+runtime state.
+
+This is the explicit copy boundary between the internal mutable runtime objects
+and the externally consumed `SimulationInterface` buffers.
+"""
 @inline function snapshot_outputs!(interface::SimulationInterface)
     copyto!(interface.command, interface.runtime.command)
     copyto!(interface.slopes, interface.runtime.wfs.state.slopes)
@@ -380,6 +447,14 @@ end
     )
 end
 
+"""
+    sense_core!(...)
+
+Execute the sensing half of the closed-loop update.
+
+This advances the atmosphere, propagates the telescope, applies the current DM
+surface, and measures the WFS with or without an explicit detector model.
+"""
 @inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, dm::DeformableMirror,
     wfs::AbstractWFS, src::AbstractSource, rng::AbstractRNG)
     advance!(atm, tel, rng)
@@ -405,6 +480,15 @@ end
     return nothing
 end
 
+"""
+    step_core!(...)
+
+Execute one full closed-loop update.
+
+`step_core!` is the hot-path composition of sensing, optional science capture,
+reconstruction, and DM command application. The various method overloads differ
+only in whether WFS and science detectors participate in the step.
+"""
 @inline function step_core!(atm::AbstractAtmosphere, tel::Telescope, dm::DeformableMirror,
     wfs::AbstractWFS, src::AbstractSource, reconstructor, command::AbstractVector{T},
     rng::AbstractRNG, control_sign::T) where {T<:AbstractFloat}
@@ -532,6 +616,15 @@ function step!(interface::SimulationInterface)
     return snapshot_outputs!(interface)
 end
 
+"""
+    step!(interface::CompositeSimulationInterface)
+
+Run grouped multi-branch execution for a composite interface.
+
+The grouped path performs all sensing phases first, then all reconstruction
+phases, then all command-application phases, which reduces unnecessary
+inter-branch serialization compared with stepping each child end to end.
+"""
 function step!(interface::CompositeSimulationInterface)
     return step_grouped!(interface)
 end
@@ -557,6 +650,14 @@ struct RuntimePhaseTimingStats{T<:AbstractFloat}
     total_p95_ns::T
 end
 
+"""
+    runtime_timing(f!; warmup=10, samples=1000, gc_before=true)
+
+Measure end-to-end runtime latency using warmed `time_ns()` samples.
+
+This is intended for maintained low-overhead HIL timing audits rather than
+microbenchmarking individual kernels.
+"""
 function runtime_timing(f!::F; warmup::Int=10, samples::Int=1000, gc_before::Bool=true) where {F<:Function}
     warmup >= 0 || throw(InvalidConfiguration("warmup must be >= 0"))
     samples > 0 || throw(InvalidConfiguration("samples must be positive"))
@@ -605,6 +706,15 @@ runtime_timing(sim::AbstractControlSimulation; kwargs...) = runtime_timing(() ->
     return nothing
 end
 
+"""
+    runtime_phase_timing(runtime; warmup=10, samples=1000, gc_before=true)
+
+Measure the mean latency of the major closed-loop runtime phases.
+
+The returned statistics separate sensing, reconstruction, command application,
+and interface snapshot costs so backend regressions can be localized more
+easily than with one aggregate timing number.
+"""
 function runtime_phase_timing(runtime::ClosedLoopRuntime; warmup::Int=10, samples::Int=1000, gc_before::Bool=true)
     warmup >= 0 || throw(InvalidConfiguration("warmup must be >= 0"))
     samples > 0 || throw(InvalidConfiguration("samples must be positive"))
