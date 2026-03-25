@@ -7,7 +7,8 @@ using LinearAlgebra: mul!
 using KernelAbstractions: @kernel, @index
 
 const _backend_arg = isempty(ARGS) ? "cpu" : lowercase(ARGS[1])
-const _config_dir_arg = length(ARGS) >= 2 ? ARGS[2] : get(ENV, "REVOLT_CONFIG_DIR", "/home/dgamroth/workspaces/codex/heart/revolt-on-sky/config")
+const _default_config_dir = joinpath(dirname(@__DIR__), "benchmarks", "assets", "revolt_like")
+const _config_dir_arg = length(ARGS) >= 2 ? ARGS[2] : get(ENV, "REVOLT_CONFIG_DIR", _default_config_dir)
 
 if _backend_arg == "cuda"
     import CUDA
@@ -82,14 +83,14 @@ end
 
 function _load_dm277_actuator_map(path::AbstractString)
     raw = readlines(path)
-    length(raw) >= 2 || error("dmActuatorMap_277.csv is unexpectedly short")
+    length(raw) >= 2 || error("actuator map file is unexpectedly short")
     header = split(strip(raw[1]))
-    length(header) == 4 || error("unexpected dmActuatorMap_277 header '$((raw[1]))'")
+    length(header) == 4 || error("unexpected actuator map header '$((raw[1]))'")
     n_row = parse(Int, header[3])
     n_col = parse(Int, header[4])
     grid = readdlm(IOBuffer(join(raw[2:end], '\n')), ',', Int)
-    size(grid) == (n_row, n_col) || error("dmActuatorMap_277 grid size $(size(grid)) does not match header $((n_row, n_col))")
-    maximum(grid) > 0 || error("dmActuatorMap_277 has no active actuators")
+    size(grid) == (n_row, n_col) || error("actuator map grid size $(size(grid)) does not match header $((n_row, n_col))")
+    maximum(grid) > 0 || error("actuator map has no active actuators")
     active_indices = Vector{Int}(undef, maximum(grid))
     @inbounds for j in 1:n_col, i in 1:n_row
         label = grid[i, j]
@@ -102,9 +103,9 @@ end
 
 function _load_dm_extrapolation(path::AbstractString, T::Type{<:AbstractFloat})
     raw = readlines(path)
-    length(raw) >= 2 || error("dmExtrapolation.csv is unexpectedly short")
+    length(raw) >= 2 || error("extrapolation file is unexpectedly short")
     header = split(strip(raw[1]))
-    length(header) == 4 || error("unexpected dmExtrapolation header '$((raw[1]))'")
+    length(header) == 4 || error("unexpected extrapolation header '$((raw[1]))'")
     n_row = parse(Int, header[3])
     n_col = parse(Int, header[4])
     triplets = readdlm(IOBuffer(join(raw[2:end], '\n')), ',', Float64)
@@ -160,8 +161,8 @@ end
 function run_profile(; backend_name::AbstractString="cpu", config_dir::AbstractString=_config_dir_arg, samples::Int=6, warmup::Int=2)
     BackendArray, backend_tag, label = _resolve_backend(backend_name)
     T = Float32
-    actuator_map_path = joinpath(config_dir, "dmActuatorMap_277.csv")
-    extrapolation_path = joinpath(config_dir, "dmExtrapolation.csv")
+    actuator_map_path = joinpath(config_dir, "revolt_like_dmActuatorMap_277.csv")
+    extrapolation_path = joinpath(config_dir, "revolt_like_dmExtrapolation.csv")
     actuator_map, active_indices_host = _load_dm277_actuator_map(actuator_map_path)
     extrapolation_host = Matrix(_load_dm_extrapolation(extrapolation_path, T))
     n_subap = 16
@@ -238,7 +239,7 @@ function run_profile(; backend_name::AbstractString="cpu", config_dir::AbstractS
     end; warmup=warmup, samples=samples)
     total_mean_ns, total_p95_ns = _timed_stats!(_step!; warmup=warmup, samples=samples)
 
-    println("revolt_hil_runtime_profile")
+    println("revolt_like_hil_runtime_profile")
     println("  backend: ", label)
     println("  config_dir: ", config_dir)
     println("  actuator_command_length: ", n_active)

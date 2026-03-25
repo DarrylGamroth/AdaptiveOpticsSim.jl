@@ -46,8 +46,8 @@ The maintained CUDA validation entry points are:
   - warmed compact `ZernikeWFS` closed-loop runtime profile
   - supports `compact`, `medium`, and `representative` scales
 - `scripts/profile_revolt_hil_runtime.jl`
-  - warmed REVOLT-style SH HIL proxy with `277` active commands and full
-    `352 x 352` pixel output
+  - warmed REVOLT-like synthetic SH HIL benchmark with `277` active commands
+    and full `352 x 352` pixel output
 - `scripts/profile_external_optics_hil.jl`
   - warmed external-optics HIL proxy with `468` active commands and exported
     `640 x 512` phase output
@@ -99,8 +99,8 @@ The maintained AMDGPU validation entry points are:
   - warmed compact `ZernikeWFS` closed-loop runtime profile
   - supports `compact`, `medium`, and `representative` scales
 - `scripts/profile_revolt_hil_runtime.jl`
-  - warmed REVOLT-style SH HIL proxy with `277` active commands and full
-    `352 x 352` pixel output
+  - warmed REVOLT-like synthetic SH HIL benchmark with `277` active commands
+    and full `352 x 352` pixel output
 - `scripts/profile_external_optics_hil.jl`
   - warmed external-optics HIL proxy with `468` active commands and exported
     `640 x 512` phase output
@@ -220,8 +220,8 @@ workload shape for that family.
 
 For HIL-oriented systems with unusually large detector payloads, a fixed named
 representative case is often more informative than another generic scale rung.
-The maintained REVOLT-style and external-optics HIL profilers below are meant
-to cover that gap.
+The maintained REVOLT-like synthetic and external-optics HIL profilers below
+are meant to cover that gap without depending on external instrument repos.
 
 ### ZernikeWFS Closed-Loop Runtime
 
@@ -279,32 +279,34 @@ Current warmed fixed-case representative snapshot:
 
 | case | CPU | AMDGPU | CUDA |
 | --- | ---: | ---: | ---: |
-| `revolt_sh_hil` | `248 Hz` | `526 Hz` | `1507 Hz` |
+| `revolt_like_hil` | `177 Hz` | `487 Hz` | `1502 Hz` |
 | `external_optics_hil` | `2.36 kHz` | `2.00 kHz` | `6.72 kHz` |
 
-REVOLT-style SH HIL dimensions:
+REVOLT-like synthetic SH HIL dimensions:
 
 - active commands `277`
 - extrapolated command length `277`
 - DM grid commands `361` (`19 x 19`)
-- active-actuator layout from `dmActuatorMap_277.csv`
-- RTC extrapolation applied from `dmExtrapolation.csv`
+- synthetic DM277-like active-actuator layout from
+  `benchmarks/assets/revolt_like/revolt_like_dmActuatorMap_277.csv`
+- synthetic sparse extrapolation from
+  `benchmarks/assets/revolt_like/revolt_like_dmExtrapolation.csv`
 - pupil resolution `352`
 - `16 x 16` SH subapertures
 - ROI `22 x 22`
 - full pixel-output mosaic `(352, 352)`
 
-Current warmed phase timing snapshot for `revolt_sh_hil`:
+Current warmed phase timing snapshot for `revolt_like_hil`:
 
 | backend | command map | DM apply | sense | mosaic | total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| CPU | `17.2 µs` | `345 µs` | `3.86 ms` | `3.95 ms` | `4.03 ms` |
-| AMDGPU | `277 µs` | `499 µs` | `2.10 ms` | `1.99 ms` | `1.90 ms` |
-| CUDA | `60.3 µs` | `128 µs` | `636 µs` | `658 µs` | `663 µs` |
+| CPU | `16.6 µs` | `243 µs` | `5.45 ms` | `5.71 ms` | `5.66 ms` |
+| AMDGPU | `204 µs` | `417 µs` | `1.87 ms` | `2.01 ms` | `2.05 ms` |
+| CUDA | `60.2 µs` | `128 µs` | `629 µs` | `661 µs` | `666 µs` |
 
 Interpretation:
 
-- this case is far heavier in detector pixels than the generic AO188-style
+- this synthetic case is far heavier in detector pixels than the generic AO188-style
   `representative` rung,
 - the large `352 x 352` pixel-output contract is enough to make GPU execution
   clearly worthwhile,

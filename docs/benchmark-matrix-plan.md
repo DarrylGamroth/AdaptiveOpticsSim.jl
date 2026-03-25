@@ -8,8 +8,9 @@ Status:
     `medium`, and `representative`
   - `scripts/profile_multi_source_multi_wfs_runtime.jl` now supports
     `compact`, `medium`, and `representative`
-  - `scripts/profile_revolt_hil_runtime.jl` now covers a REVOLT-style
-    pixel-output SH HIL case with a fixed representative configuration
+  - `scripts/profile_revolt_hil_runtime.jl` now covers a REVOLT-like
+    synthetic pixel-output SH HIL case with a fixed representative
+    configuration
   - `scripts/profile_external_optics_hil.jl` now covers a representative
     external-optics HIL case where AdaptiveOpticsSim owns DM phase generation
     and phase export but not the downstream image formation
@@ -187,11 +188,12 @@ Scale ladder:
 For this family, some representative systems are better modeled as fixed named
 cases instead of generic scale rungs. Two maintained examples now exist:
 
-- `revolt_sh_hil`
-  - REVOLT-style SH HIL proxy
-  - `277` active commands mapped through `dmExtrapolation.csv`
-  - applied onto the real DM277 `19 x 19` active-actuator layout from
-    `dmActuatorMap_277.csv`
+- `revolt_like_hil`
+  - REVOLT-like synthetic SH HIL benchmark
+  - `277` active commands mapped through a synthetic sparse extrapolation
+    operator
+  - applied onto a synthetic DM277-like `19 x 19` active-actuator layout
+  - benchmark assets live under `benchmarks/assets/revolt_like/`
   - `16 x 16` subapertures
   - `22 x 22` ROI
   - full `352 x 352` pixel output mosaic
