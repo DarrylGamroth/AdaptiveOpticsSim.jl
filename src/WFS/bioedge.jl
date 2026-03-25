@@ -50,6 +50,17 @@ end
     end
 end
 
+@kernel function gather_bioedge_slopes_kernel!(slopes, signal_2d, valid_signal_indices, count::Int, y_offset::Int)
+    idx = @index(Global, Linear)
+    if idx <= count
+        src = @inbounds valid_signal_indices[idx]
+        @inbounds begin
+            slopes[idx] = signal_2d[src]
+            slopes[idx + count] = signal_2d[src + y_offset]
+        end
+    end
+end
+
 struct BioEdgeParams{T<:AbstractFloat,M,N<:WFSNormalization}
     n_subap::Int
     threshold::T
@@ -73,6 +84,7 @@ end
 mutable struct BioEdgeState{T<:AbstractFloat,
     A<:AbstractMatrix{Bool},
     V<:AbstractVector{T},
+    I<:AbstractVector{Int},
     SF<:SpatialFilter,
     C<:AbstractMatrix{Complex{T}},
     C3<:AbstractArray{Complex{T},3},
@@ -108,6 +120,7 @@ mutable struct BioEdgeState{T<:AbstractFloat,
     optical_gain::V
     valid_i4q::A
     valid_signal::A
+    valid_signal_indices::I
     signal_2d::R
     reference_signal_2d::R
     camera_frame::R
@@ -186,6 +199,7 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     camera_frame = backend{T}(undef, 2 * nominal_detector_resolution, 2 * nominal_detector_resolution)
     valid_i4q = backend{Bool}(undef, nominal_detector_resolution ÷ 2, nominal_detector_resolution ÷ 2)
     valid_signal = backend{Bool}(undef, nominal_detector_resolution, nominal_detector_resolution ÷ 2)
+    valid_signal_indices = backend{Int}(undef, length(valid_i4q))
     signal_2d = backend{T}(undef, nominal_detector_resolution, nominal_detector_resolution ÷ 2)
     reference_signal_2d = similar(signal_2d)
     fft_buffer = similar(field)
@@ -201,6 +215,7 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         T,
         typeof(valid_mask),
         typeof(slopes),
+        typeof(valid_signal_indices),
         typeof(sf),
         typeof(field),
         typeof(bioedge_masks),
@@ -237,6 +252,7 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         optical_gain,
         valid_i4q,
         valid_signal,
+        valid_signal_indices,
         signal_2d,
         reference_signal_2d,
         camera_frame,
@@ -861,9 +877,8 @@ function bioedge_signal!(::AcceleratorStyle, wfs::BioEdgeWFS, tel::Telescope, fr
     norma = bioedge_normalization(wfs.params.normalization, wfs, tel, src, count, sum(i4q[wfs.state.valid_i4q]))
     @. sx = (q1 - q2 + q4 - q3) / norma - refx
     @. sy = (q1 - q4 + q2 - q3) / norma - refy
-    valid_i4q_t = permutedims(wfs.state.valid_i4q)
-    copyto!(@view(wfs.state.slopes[1:count]), permutedims(sx)[valid_i4q_t])
-    copyto!(@view(wfs.state.slopes[count+1:2*count]), permutedims(sy)[valid_i4q_t])
+    launch_kernel!(execution_style(frame), gather_bioedge_slopes_kernel!, wfs.state.slopes,
+        wfs.state.signal_2d, wfs.state.valid_signal_indices, count, n_pixels; ndrange=count)
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
 end
@@ -896,6 +911,25 @@ function update_bioedge_valid_signal!(wfs::BioEdgeWFS)
     return wfs
 end
 
+function update_bioedge_valid_signal_indices!(wfs::BioEdgeWFS)
+    valid_host = execution_style(wfs.state.valid_i4q) isa ScalarCPUStyle ? wfs.state.valid_i4q : Array(wfs.state.valid_i4q)
+    n_pixels = size(valid_host, 1)
+    n_valid = count(valid_host)
+    if length(wfs.state.valid_signal_indices) != n_valid
+        wfs.state.valid_signal_indices = similar(wfs.state.valid_signal_indices, n_valid)
+    end
+    host_indices = Vector{Int}(undef, n_valid)
+    idx = 1
+    @inbounds for i in 1:n_pixels, j in 1:n_pixels
+        if valid_host[i, j]
+            host_indices[idx] = i + (j - 1) * (2 * n_pixels)
+            idx += 1
+        end
+    end
+    copyto!(wfs.state.valid_signal_indices, host_indices)
+    return wfs
+end
+
 function resize_bioedge_slope_buffers!(wfs::BioEdgeWFS)
     n_valid = count(wfs.state.valid_i4q)
     if n_valid == 0
@@ -909,6 +943,7 @@ function resize_bioedge_slope_buffers!(wfs::BioEdgeWFS)
         wfs.state.optical_gain = similar(wfs.state.optical_gain, n_slopes)
         fill!(wfs.state.optical_gain, one(eltype(wfs.state.optical_gain)))
     end
+    update_bioedge_valid_signal_indices!(wfs)
     return wfs
 end
 
