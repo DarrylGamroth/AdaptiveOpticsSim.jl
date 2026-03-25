@@ -194,6 +194,98 @@ Interpretation:
 - the current profile shape is useful as a regression guard before adding the
   next sensor family.
 
+## Initial Runtime Ladder Snapshot
+
+In the current benchmark matrix, `medium` means "larger than the compact guard
+case and useful for showing scaling/crossover trends." It is not automatically
+the same thing as "fully representative of a deployed instrument." The
+`representative` rung is the first one intended to approximate deployment-scale
+workload shape for that family.
+
+### ZernikeWFS Closed-Loop Runtime
+
+Current warmed `runtime_step_mean_ns` frame-rate snapshot:
+
+| scale | CPU | AMDGPU | CUDA |
+| --- | ---: | ---: | ---: |
+| `compact` | `87.9 kHz` | `2.56 kHz` | `2.45 kHz` |
+| `medium` | `4.62 kHz` | `2.57 kHz` | `2.79 kHz` |
+| `representative` | `305 Hz` | `1.80 kHz` | `2.69 kHz` |
+
+Dimensions:
+
+- `compact`: pupil `16`, frame `(4, 4)`, signal length `16`, command length `9`
+- `medium`: pupil `64`, frame `(16, 16)`, signal length `224`, command length `81`
+- `representative`: pupil `128`, frame `(32, 32)`, signal length `856`, command
+  length `289`
+
+Interpretation:
+
+- CPU dominates the tiny compact case,
+- by the first representative rung, both GPU backends are ahead of CPU,
+- CUDA is currently ahead of AMDGPU on this maintained `ZernikeWFS` runtime
+  surface.
+
+### Pixel-Output Closed-Loop Runtime
+
+Current warmed `runtime_step_mean_ns` frame-rate snapshot for the AO188-style
+pixel-output profile (`sequential` / `direct`):
+
+| scale | CPU | AMDGPU | CUDA |
+| --- | ---: | ---: | ---: |
+| `compact` | `3.25 kHz` | `1.15 kHz` | `1.32 kHz` |
+| `medium` | `865 Hz` | `1.02 kHz` | `1.25 kHz` |
+| `representative` | `522 Hz` | `737 Hz` | `1.24 kHz` |
+
+Dimensions:
+
+- `compact`: pupil `64`, high-order subap `8`, low-order subap `2`,
+  command modes `64`, frame `(64, 8, 8)`
+- `medium`: pupil `112`, high-order subap `14`, low-order subap `2`,
+  command modes `188`, frame `(196, 8, 8)`
+- `representative`: pupil `160`, high-order subap `20`, low-order subap `4`,
+  command modes `512`, frame `(400, 8, 8)`
+
+Interpretation:
+
+- the compact AO188-style rung is still CPU-first,
+- GPU is already competitive by the medium rung,
+- CUDA is clearly ahead at the current representative rung.
+
+### Multi-Source / Multi-WFS Runtime
+
+Current warmed `composite_compatible_mean_ns` frame-rate snapshot:
+
+| scale | CPU | AMDGPU | CUDA |
+| --- | ---: | ---: | ---: |
+| `compact` | `38.1 kHz` | `1.31 kHz` | `1.56 kHz` |
+| `medium` | `6.91 kHz` | `645 Hz` | `977 Hz` |
+| `representative` | `1.14 kHz` | `441 Hz` | `696 Hz` |
+
+Dimensions:
+
+- `compact`: `2` sources, asterism pupil `32`, runtime pupil `16`, `2`
+  compatible branches
+- `medium`: `4` sources, asterism pupil `64`, runtime pupil `32`, `3`
+  compatible branches
+- `representative`: `6` sources, asterism pupil `96`, runtime pupil `72`, `4`
+  compatible branches
+
+Additional current warmed asterism sensor snapshots:
+
+| metric | compact CPU / AMDGPU / CUDA | medium CPU / AMDGPU / CUDA | representative CPU / AMDGPU / CUDA |
+| --- | --- | --- | --- |
+| SH asterism | `9.44 kHz / 3.09 kHz / 4.78 kHz` | `3.24 kHz / 2.35 kHz / 4.35 kHz` | `821 Hz / 1.23 kHz / 3.36 kHz` |
+| Pyramid asterism | `2.14 kHz / 584 Hz / 660 Hz` | `202 Hz / 328 Hz / 371 Hz` | `26.9 Hz / 108.8 Hz / 247.7 Hz` |
+| BioEdge asterism | `962 Hz / 293 Hz / 267 Hz` | `86.7 Hz / 156 Hz / 166 Hz` | `11.4 Hz / 59.3 Hz / 110.3 Hz` |
+
+Interpretation:
+
+- the compact grouped-runtime case remains CPU-first,
+- larger multi-source and diffractive asterism workloads become much more
+  favorable to GPU backends,
+- CUDA is currently ahead of AMDGPU on the maintained stacked-runtime surface.
+
 Current warmed mixed NGS/LGS diffractive SH runtime snapshot:
 
 - CPU on this host

@@ -123,6 +123,8 @@ Scale ladder:
   - current regression-sized surface
 - `medium`
   - larger pupil and detector sizes where GPU may start to amortize overhead
+  - intended as a scaling/crossover rung, not automatically a deployment-scale
+    configuration
 - `representative`
   - realistic single-WFS closed-loop size meant to approximate deployment use
 
@@ -146,6 +148,8 @@ Scale ladder:
   - current maintained stacked profiles
 - `medium`
   - more sources and larger detector tiles
+  - intended as a scaling/crossover rung, not automatically a final
+    instrument-like scene
 - `representative`
   - realistic multi-WFS HIL or tomography-facing runtime scene
 
@@ -169,6 +173,8 @@ Scale ladder:
   - existing minimal runtime surfaces
 - `medium`
   - AO188-class example
+  - larger and more informative than compact, but not necessarily the final
+    representative endpoint for every system family
 - `representative`
   - system-level examples with realistic detector sizes and control paths
 
@@ -193,6 +199,8 @@ Scale ladder:
   - current audit/builder surfaces
 - `medium`
   - current tomography profiling surfaces
+  - intended to expose scaling trends and crossover onset before the fully
+    representative builder cases
 - `representative`
   - KAPA-like or instrument-scale assembly workloads
 
