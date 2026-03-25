@@ -962,7 +962,7 @@ end
 @testset "Curvature WFS" begin
     tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
-    wfs = CurvatureWFS(tel; n_subap=8, response_gain=0.5)
+    wfs = CurvatureWFS(tel; n_subap=8, defocus_rms_nm=500.0)
 
     @test size(wfs.state.camera_frame) == (16, 8)
     @test length(wfs.state.slopes) == 64

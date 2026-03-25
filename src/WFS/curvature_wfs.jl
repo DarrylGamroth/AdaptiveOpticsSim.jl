@@ -77,7 +77,7 @@ the normalized curvature signal sampled on the valid subaperture grid.
 struct CurvatureWFSParams{T<:AbstractFloat}
     n_subap::Int
     threshold::T
-    response_gain::T
+    defocus_rms_nm::T
     diffraction_padding::Int
 end
 
@@ -116,23 +116,23 @@ struct CurvatureWFS{P<:CurvatureWFSParams,S<:CurvatureWFSState} <: AbstractWFS
 end
 
 """
-    CurvatureWFS(tel; n_subap, threshold=0.1, response_gain=0.5, diffraction_padding=2, ...)
+    CurvatureWFS(tel; n_subap, threshold=0.1, defocus_rms_nm=500.0, diffraction_padding=2, ...)
 
 Construct a curvature WFS using two propagated defocus branches.
 
-`response_gain` scales the RMS defocus phase amplitude. In the current optical
-model, `1.0` corresponds to an approximately `1000 nm` RMS defocus term on the
-pupil.
+`defocus_rms_nm` sets the RMS amplitude of the defocus term in nanometers.
 """
-function CurvatureWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, response_gain::Real=0.5,
+function CurvatureWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, defocus_rms_nm::Real=500.0,
     diffraction_padding::Int=2, T::Type{<:AbstractFloat}=Float64, backend=Array)
     tel.params.resolution % n_subap == 0 ||
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     diffraction_padding >= 1 ||
         throw(InvalidConfiguration("diffraction_padding must be >= 1"))
+    defocus_rms_nm >= 0 ||
+        throw(InvalidConfiguration("defocus_rms_nm must be >= 0"))
     n = tel.params.resolution
     pad = n * diffraction_padding
-    params = CurvatureWFSParams{T}(n_subap, T(threshold), T(response_gain), diffraction_padding)
+    params = CurvatureWFSParams{T}(n_subap, T(threshold), T(defocus_rms_nm), diffraction_padding)
     valid_mask = backend{Bool}(undef, n_subap, n_subap)
     slopes = backend{T}(undef, n_subap * n_subap)
     n_branches = 2
@@ -246,9 +246,8 @@ function host_curvature_defocus_stack(wfs::CurvatureWFS, tel::Telescope)
     pad = size(wfs.state.field_stack, 1)
     cx = (pad + 1) / 2
     radius = T(n) / 2
-    defocus_rms_nm = T(1000) * wfs.params.response_gain
     out = Array{Complex{T}}(undef, pad, pad, 2)
-    inv_waves = defocus_rms_nm / T(1e9)
+    inv_waves = wfs.params.defocus_rms_nm / T(1e9)
     @inbounds for j in 1:pad, i in 1:pad
         x = (T(i) - T(cx)) / radius
         y = (T(j) - T(cx)) / radius

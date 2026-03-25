@@ -25,9 +25,9 @@ struct CircularActuatorSupport <: AO188ActuatorSupportModel end
 abstract type SubaruHighOrderWFSModel end
 struct OperationalShackHartmannModel <: SubaruHighOrderWFSModel end
 struct AO188CurvatureModel{T<:AbstractFloat} <: SubaruHighOrderWFSModel
-    response_gain::T
+    defocus_rms_nm::T
 end
-AO188CurvatureModel(; response_gain::Real=0.5, T::Type{<:AbstractFloat}=Float32) = AO188CurvatureModel{T}(T(response_gain))
+AO188CurvatureModel(; defocus_rms_nm::Real=500.0, T::Type{<:AbstractFloat}=Float32) = AO188CurvatureModel{T}(T(defocus_rms_nm))
 
 function AO188CurvatureSimulationParams(; kwargs...)
     nt = (; kwargs...)
@@ -56,7 +56,7 @@ end
 
 function _build_high_order_wfs(model::AO188CurvatureModel, tel::Telescope, params; backend=Array)
     T = eltype(tel.state.opd)
-    return CurvatureWFS(tel; n_subap=params.n_subap, response_gain=model.response_gain, T=T, backend=backend)
+    return CurvatureWFS(tel; n_subap=params.n_subap, defocus_rms_nm=model.defocus_rms_nm, T=T, backend=backend)
 end
 
 abstract type AO188ReplayMode end
