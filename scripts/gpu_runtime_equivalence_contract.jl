@@ -48,7 +48,7 @@ function _evaluate_ao188!(surrogate::AO188Simulation)
     fill!(surrogate.combined_command, zero(eltype(surrogate.combined_command)))
     fill!(surrogate.command, zero(eltype(surrogate.command)))
     _set_deterministic_opd!(surrogate.tel)
-    AdaptiveOpticsSim._measure_branches!(surrogate.params.branch_execution, surrogate)
+    SubaruAO188Simulation._measure_branches!(surrogate.params.branch_execution, surrogate)
     reconstruct!(surrogate.high_command, surrogate.high_reconstructor, surrogate.high_wfs.state.slopes)
     reconstruct!(surrogate.low_command, surrogate.low_reconstructor, surrogate.low_wfs.state.slopes)
     surrogate.combined_command .= surrogate.high_command .+ surrogate.low_command
@@ -111,7 +111,7 @@ function _post_command_observation!(surrogate::AO188Simulation, host_command::Ab
     copyto!(surrogate.command, host_command)
     copyto!(surrogate.dm.state.coefs, host_command)
     apply!(surrogate.dm, surrogate.tel, DMAdditive())
-    _measure_branches!(SequentialExecution(), surrogate)
+    SubaruAO188Simulation._measure_branches!(SequentialExecution(), surrogate)
     return surrogate
 end
 
@@ -240,11 +240,48 @@ function _run_mixed_sh_asterism_equivalence(::Type{B}) where {B<:GPUBackendTag}
     _assert_close("slopes", wfs_gpu.state.slopes, wfs_cpu.state.slopes)
 end
 
+function _build_zernike_case(backend, ::Type{T}) where {T<:AbstractFloat}
+    tel = Telescope(
+        resolution=32,
+        diameter=8.0,
+        sampling_time=1e-3,
+        central_obstruction=0.0,
+        T=T,
+        backend=backend,
+    )
+    src = Source(band=:I, magnitude=T(0), T=T)
+    wfs = ZernikeWFS(tel; n_subap=8, diffraction_padding=2, T=T, backend=backend)
+    det = Detector(noise=NoiseNone(), integration_time=T(1e-3), qe=T(1), binning=1, T=T, backend=backend)
+    _set_deterministic_opd!(tel)
+    return tel, src, wfs, det
+end
+
+function _run_zernike_equivalence(::Type{B}) where {B<:GPUBackendTag}
+    disable_scalar_backend!(B)
+    BackendArray = gpu_backend_array_type(B)
+    BackendArray === nothing && error("GPU backend $(B) is not available")
+    T = Float32
+
+    tel_cpu, src_cpu, wfs_cpu, det_cpu = _build_zernike_case(Array, T)
+    tel_gpu, src_gpu, wfs_gpu, det_gpu = _build_zernike_case(BackendArray, T)
+
+    measure!(wfs_cpu, tel_cpu, src_cpu, det_cpu; rng=MersenneTwister(4))
+    measure!(wfs_gpu, tel_gpu, src_gpu, det_gpu; rng=MersenneTwister(4))
+    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(wfs_gpu.state.slopes))
+
+    println("zernike_equivalence")
+    _assert_close("camera_frame", wfs_gpu.state.camera_frame, wfs_cpu.state.camera_frame)
+    _assert_close("reference_signal_2d", wfs_gpu.state.reference_signal_2d, wfs_cpu.state.reference_signal_2d)
+    _assert_close("slopes", wfs_gpu.state.slopes, wfs_cpu.state.slopes)
+    _assert_close("detector_frame", output_frame(det_gpu), output_frame(det_cpu))
+end
+
 function run_gpu_runtime_equivalence(::Type{B}; branch_mode::AbstractExecutionPolicy=SequentialExecution()) where {B<:GPUBackendTag}
     _run_ao188_equivalence(B, branch_mode)
     _run_lgs_equivalence(B, :none)
     _run_lgs_equivalence(B, :na)
     _run_mixed_sh_asterism_equivalence(B)
+    _run_zernike_equivalence(B)
     println("gpu_runtime_equivalence complete")
     return nothing
 end

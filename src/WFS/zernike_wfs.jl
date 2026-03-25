@@ -16,6 +16,29 @@
 # controller surfaces for compatibility with other WFS types.
 #
 
+@kernel function zernike_phasor_kernel!(phasor, scale, n::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= n
+        phase = scale * (i + j - 2)
+        @inbounds phasor[i, j] = cis(phase)
+    end
+end
+
+@kernel function zernike_signal_kernel!(signal_2d, frame, valid_mask, reference_signal_2d, inv_norm, n1::Int, n2::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n1 && j <= n2
+        @inbounds signal_2d[i, j] = valid_mask[i, j] ? frame[i, j] * inv_norm - reference_signal_2d[i, j] : zero(eltype(signal_2d))
+    end
+end
+
+@kernel function gather_zernike_signal_kernel!(slopes, signal_2d, valid_signal_indices, count::Int)
+    idx = @index(Global, Linear)
+    if idx <= count
+        src = @inbounds valid_signal_indices[idx]
+        @inbounds slopes[idx] = signal_2d[src]
+    end
+end
+
 struct ZernikeWFSParams{T<:AbstractFloat,N<:WFSNormalization}
     n_subap::Int
     threshold::T
@@ -224,11 +247,22 @@ function ensure_zernike_buffers!(wfs::ZernikeWFS, tel::Telescope)
 end
 
 function build_zernike_phasor!(phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+    return build_zernike_phasor!(execution_style(phasor), phasor)
+end
+
+function build_zernike_phasor!(::ScalarCPUStyle, phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
     n = size(phasor, 1)
     scale = -T(pi) * (n + 1) / n
     @inbounds for j in 1:n, i in 1:n
         phasor[i, j] = cis(scale * (i + j - 2))
     end
+    return phasor
+end
+
+function build_zernike_phasor!(style::AcceleratorStyle, phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+    n = size(phasor, 1)
+    scale = -T(pi) * (n + 1) / n
+    launch_kernel!(style, zernike_phasor_kernel!, phasor, scale, n; ndrange=size(phasor))
     return phasor
 end
 
@@ -291,7 +325,9 @@ end
 
 function zernike_normalization(::MeanValidFluxNormalization, wfs::ZernikeWFS, tel::Telescope,
     src::AbstractSource, frame::AbstractMatrix)
-    vals = frame[wfs.state.valid_mask]
+    frame_host = execution_style(frame) isa ScalarCPUStyle ? frame : Array(frame)
+    valid_host = execution_style(wfs.state.valid_mask) isa ScalarCPUStyle ? wfs.state.valid_mask : Array(wfs.state.valid_mask)
+    vals = frame_host[valid_host]
     return isempty(vals) ? one(eltype(frame)) : max(mean(vals), eps(eltype(frame)))
 end
 
@@ -299,11 +335,18 @@ function zernike_normalization(::IncidenceFluxNormalization, wfs::ZernikeWFS, te
     src::AbstractSource, frame::AbstractMatrix)
     fmap = flux_map(tel, src)
     sample_zernike_frame!(wfs.state.normalization_frame, wfs.state.nominal_frame, wfs, fmap, tel)
-    vals = wfs.state.normalization_frame[wfs.state.valid_mask]
+    norm_host = execution_style(wfs.state.normalization_frame) isa ScalarCPUStyle ?
+        wfs.state.normalization_frame : Array(wfs.state.normalization_frame)
+    valid_host = execution_style(wfs.state.valid_mask) isa ScalarCPUStyle ? wfs.state.valid_mask : Array(wfs.state.valid_mask)
+    vals = norm_host[valid_host]
     return isempty(vals) ? one(eltype(frame)) : max(mean(vals), eps(eltype(frame)))
 end
 
 function zernike_signal!(wfs::ZernikeWFS, tel::Telescope, frame::AbstractMatrix{T}, src::AbstractSource) where {T<:AbstractFloat}
+    return zernike_signal!(execution_style(frame), wfs, tel, frame, src)
+end
+
+function zernike_signal!(::ScalarCPUStyle, wfs::ZernikeWFS, tel::Telescope, frame::AbstractMatrix{T}, src::AbstractSource) where {T<:AbstractFloat}
     if size(frame) != size(wfs.state.signal_2d)
         throw(DimensionMismatchError("ZernikeWFS frame size must match sampled camera frame"))
     end
@@ -317,6 +360,20 @@ function zernike_signal!(wfs::ZernikeWFS, tel::Telescope, frame::AbstractMatrix{
     @inbounds for idx in eachindex(wfs.state.valid_signal_indices)
         wfs.state.slopes[idx] = wfs.state.signal_2d[wfs.state.valid_signal_indices[idx]]
     end
+    return wfs.state.slopes
+end
+
+function zernike_signal!(style::AcceleratorStyle, wfs::ZernikeWFS, tel::Telescope, frame::AbstractMatrix{T}, src::AbstractSource) where {T<:AbstractFloat}
+    if size(frame) != size(wfs.state.signal_2d)
+        throw(DimensionMismatchError("ZernikeWFS frame size must match sampled camera frame"))
+    end
+    norm_factor = zernike_normalization(wfs.params.normalization, wfs, tel, src, frame)
+    inv_norm = inv(norm_factor)
+    launch_kernel!(style, zernike_signal_kernel!, wfs.state.signal_2d, frame, wfs.state.valid_mask,
+        wfs.state.reference_signal_2d, inv_norm, size(frame, 1), size(frame, 2); ndrange=size(frame))
+    count = length(wfs.state.valid_signal_indices)
+    launch_kernel!(style, gather_zernike_signal_kernel!, wfs.state.slopes, wfs.state.signal_2d,
+        wfs.state.valid_signal_indices, count; ndrange=count)
     return wfs.state.slopes
 end
 

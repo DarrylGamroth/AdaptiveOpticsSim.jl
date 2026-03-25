@@ -2,7 +2,7 @@
 
 Status:
 - [x] Phase 1 scalar CPU MVP
-- [ ] Phase 2 GPU path
+- [~] Phase 2 GPU path
 - [ ] Phase 3 HIL/RTC integration
 
 ## Goal

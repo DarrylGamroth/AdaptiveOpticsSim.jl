@@ -155,6 +155,21 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
         return slopes
     end
 
+    record_gpu_smoke!(failures, "measure_zernike_diffractive") do
+        wfs = ZernikeWFS(tel; n_subap=4, T=T, backend=BackendArray)
+        slopes = measure!(wfs, tel, src)
+        @assert slopes isa BackendArray
+        return slopes
+    end
+
+    record_gpu_smoke!(failures, "measure_zernike_detector") do
+        wfs = ZernikeWFS(tel; n_subap=4, T=T, backend=BackendArray)
+        det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1, T=T, backend=BackendArray)
+        slopes = measure!(wfs, tel, src, det; rng=rng)
+        @assert slopes isa BackendArray
+        return slopes
+    end
+
     record_gpu_smoke!(failures, "closed_loop_step") do
         step_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
             central_obstruction=0.0f0, T=T, backend=BackendArray)
