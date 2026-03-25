@@ -1,5 +1,23 @@
 using Logging
 
+#
+# Gain-sensing camera optical-gain estimation
+#
+# This file implements the focal-plane gain-sensing camera method used to
+# estimate modal optical gains from detector images.
+#
+# The calibration/evaluation flow is:
+# 1. normalize a detector frame by its total flux
+# 2. compute the impulse response by mixing the frame with the focal mask and
+#    transforming it in Fourier space
+# 3. project pairs of impulse responses through precomputed basis products to
+#    obtain complex modal sensitivities
+# 4. compare on-sky sensitivities to calibration sensitivities to recover
+#    per-mode optical gains
+#
+# Weak modes are explicitly masked so poorly conditioned sensitivity ratios do
+# not inject spurious gain estimates.
+#
 struct GSCDetectorMetadata{T<:AbstractFloat}
     integration_time::T
     qe::T
@@ -20,6 +38,13 @@ mutable struct GSCFFTWorkspace{T<:AbstractFloat,
     ifft_plan::Pi
 end
 
+"""
+    GSCFFTWorkspace(n; T=Float64, backend=Array)
+    GSCFFTWorkspace(ref; T=real(eltype(ref)))
+
+Preallocated FFT workspace used by gain-sensing camera calibration and
+evaluation.
+"""
 function GSCFFTWorkspace(n::Int; T::Type{<:AbstractFloat}=Float64, backend=Array)
     buffer = backend{Complex{T}}(undef, n, n)
     fft_out = similar(buffer)
@@ -51,6 +76,15 @@ function GSCFFTWorkspace(ref::AbstractMatrix; T::Type{<:AbstractFloat}=real(elty
     )
 end
 
+"""
+    GainSensingCamera(mask, basis; ...)
+
+Construct the gain-sensing camera estimator.
+
+`mask` is the focal-plane complex mask, and `basis[:, :, k]` defines the modal
+phase basis used to project the impulse-response sensitivities into modal
+optical gains.
+"""
 mutable struct GainSensingCamera{T<:AbstractFloat,
     C<:AbstractMatrix{Complex{T}},
     B<:AbstractArray{T,3},
@@ -170,6 +204,15 @@ function Base.show(io::IO, ::MIME"text/plain", gsc::GainSensingCamera)
     print(io, ")")
 end
 
+"""
+    calibrate!(gsc, frame; n_jobs=10)
+
+Calibrate the gain-sensing camera from a reference detector frame.
+
+This computes the calibration impulse response, the reference modal
+sensitivities, and the weak-mode mask used later when converting sensitivities
+into optical-gain estimates.
+"""
 function calibrate!(gsc::GainSensingCamera, frame::AbstractMatrix; n_jobs::Int=10)
     total = sum(frame)
     if total <= 0
@@ -198,6 +241,15 @@ function reset_calibration!(gsc::GainSensingCamera)
     return gsc
 end
 
+"""
+    compute_optical_gains!(gsc, frame)
+
+Estimate the current modal optical gains from a detector frame.
+
+The frame is normalized, converted into an impulse response, projected into
+modal sensitivities, and finally divided by the stored calibration
+sensitivities.
+"""
 function compute_optical_gains!(gsc::GainSensingCamera, frame::AbstractMatrix)
     if !gsc.calibration_ready
         throw(InvalidConfiguration("GainSensingCamera must be calibrated before computing optical gains"))
@@ -296,6 +348,15 @@ function split_basis_product(basis::AbstractArray{T,3}, ws::GSCFFTWorkspace{T}; 
     return out
 end
 
+"""
+    impulse_response!(out, gsc, frame)
+
+Compute the gain-sensing camera impulse response for a normalized detector
+frame.
+
+The implementation mixes the frame with the focal mask and evaluates the
+imaginary part of the corresponding Fourier-domain product.
+"""
 function impulse_response!(out::AbstractMatrix{T}, gsc::GainSensingCamera{T}, frame::AbstractMatrix) where {T<:AbstractFloat}
     @. gsc.fftws.fft_out = gsc.mask * frame
     fft2c!(gsc.fftws.ifft_out, gsc.fftws, gsc.fftws.fft_out)
@@ -303,6 +364,14 @@ function impulse_response!(out::AbstractMatrix{T}, gsc::GainSensingCamera{T}, fr
     return out
 end
 
+"""
+    sensitivity!(out, gsc, IR_1, IR_2)
+
+Project two impulse responses into the complex modal sensitivity domain.
+
+This forms the Fourier-domain product of the two impulse responses and then
+projects that product through the precomputed basis products for each mode.
+"""
 function sensitivity!(out::AbstractVector{Complex{T}}, gsc::GainSensingCamera{T},
     IR_1::AbstractMatrix, IR_2::AbstractMatrix) where {T<:AbstractFloat}
     fft2c!(gsc.fftws.fft_out, gsc.fftws, IR_1)
