@@ -1,6 +1,24 @@
 using LinearAlgebra
 using SparseArrays
 
+#
+# Model-based and interaction-matrix tomography reconstructors
+#
+# This file implements the pyTomoAO/OOPAO-style covariance formulation used to
+# recover layered or fitted wavefront estimates from guide-star slopes.
+#
+# Core operators:
+# - `Gamma`: sparse gradient operator from pupil phase samples to x/y slopes
+# - `Cxx`: guide-star slope auto-covariance
+# - `Cox`: cross-covariance between fitted directions and measured slopes
+# - `Cnz`: measurement-noise covariance
+# - `RecStatSA`: statistical Wiener-like reconstructor `Cox / (Cxx + Cnz)`
+#
+# The two main entry points differ only in how measured slopes are represented:
+# - `ModelBasedTomography` builds `Gamma` explicitly and works on pupil samples
+# - `InteractionMatrixTomography` assumes a measured interaction matrix already
+#   maps the statistical covariances into slope space
+#
 abstract type AbstractTomographyMethod end
 abstract type AbstractSlopeOrder end
 abstract type TomographyNoiseModel end
@@ -60,6 +78,18 @@ function PhotonReadoutSlopeNoise(det::Detector; photons_per_subaperture::Real, e
     )
 end
 
+"""
+    TomographyOperators
+
+Cache the intermediate linear operators used to assemble a tomography
+reconstructor.
+
+- `gamma`: sparse gradient operator from sampled phase to slopes
+- `cxx`: slope auto-covariance
+- `cox`: cross-covariance between fit directions and guide-star slopes
+- `cnz`: measurement-noise covariance
+- `recstat`: statistical reconstructor before any DM fitting step
+"""
 struct TomographyOperators{G,M,CX,CO,CN,RS,T}
     gamma::G
     grid_mask::M
@@ -70,6 +100,15 @@ struct TomographyOperators{G,M,CX,CO,CN,RS,T}
     wavefront_to_meter::T
 end
 
+"""
+    TomographicReconstructor
+
+Bundle a tomography reconstruction operator with the geometry and intermediate
+operators that produced it.
+
+`reconstructor` maps measured slopes to either masked wavefront samples or
+interaction-matrix control outputs, depending on `method`.
+"""
 struct TomographicReconstructor{
     Method<:AbstractTomographyMethod,
     T<:AbstractFloat,
@@ -662,6 +701,14 @@ function sparse_gradient_matrix(
     return gamma, grid_mask
 end
 
+"""
+    auto_correlation(..., grid_mask)
+
+Assemble the guide-star slope auto-covariance `Cxx` over the masked pupil grid.
+
+Each block integrates the von Karman covariance across atmospheric layers after
+shifting each guide-star pupil footprint by the layer geometry.
+"""
 function auto_correlation(
     backend::BuildBackend,
     atmosphere::TomographyAtmosphereParams{T},
@@ -822,6 +869,15 @@ function auto_correlation(
     return result
 end
 
+"""
+    cross_correlation(...; grid_mask=nothing)
+
+Assemble the cross-covariance `Cox` between fit directions and guide-star slope
+measurements.
+
+The result is stacked over fit sources, then later averaged or extracted into
+the final statistical reconstructor.
+"""
 function cross_correlation(
     backend::BuildBackend,
     atmosphere::TomographyAtmosphereParams{T},
@@ -1148,6 +1204,15 @@ function tomography_noise_covariance(backend::BuildBackend, model::PhotonReadout
     return _build_diagonal_noise(backend, variances)
 end
 
+"""
+    build_reconstructor(InteractionMatrixTomography(), interaction_matrix, ...)
+
+Build a statistical tomography reconstructor in measured slope space.
+
+This path treats `interaction_matrix` as the slope-space projection operator,
+forms `Cxx`, `Cox`, and `Cnz`, and computes the Wiener-like solve
+`Cox * A' / (A * Cxx * A' + Cnz)`.
+"""
 function build_reconstructor(
     ::InteractionMatrixTomography,
     interaction_matrix::AbstractMatrix{T},
@@ -1266,6 +1331,14 @@ function prepare_slope_order(
     return interleave_xy_columns(swapped, n_valid_subap; n_channels=n_channels)
 end
 
+"""
+    assemble_reconstructor_and_fitting(reconstructor, dm; ...)
+
+Project a model-based tomography reconstructor onto DM actuator commands.
+
+This applies the requested slope-order convention, builds or reuses the DM
+fitting operator, and composes the final slope-to-command matrix.
+"""
 function assemble_reconstructor_and_fitting(
     reconstructor::TomographicReconstructor{ModelBasedTomography,T},
     dm::TomographyDMParams{T};
@@ -1392,6 +1465,15 @@ function build_reconstructor(
     )
 end
 
+"""
+    build_reconstructor(ModelBasedTomography(), atmosphere, asterism, wfs, tomography, dm; ...)
+
+Build the full covariance-model tomography reconstructor.
+
+This path constructs the sparse gradient operator `Gamma`, forms the masked
+covariance matrices `Cxx`, `Cox`, and `Cnz`, then evaluates the statistical
+reconstructor `RecStatSA = Cox * Gamma' / (Gamma * Cxx * Gamma' + Cnz)`.
+"""
 function build_reconstructor(
     ::ModelBasedTomography,
     atmosphere::TomographyAtmosphereParams{T},

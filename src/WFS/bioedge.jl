@@ -1,5 +1,20 @@
 using Statistics
 
+#
+# BioEdge wavefront sensing
+#
+# BioEdge is implemented here as a four-edge/Foucault-style pupil-plane sensor.
+# The diffractive path:
+#
+# 1. propagates the pupil field to the focal plane
+# 2. applies four complementary knife-edge masks
+# 3. propagates back to pupil intensity images
+# 4. combines those edge images into x/y differential signals
+#
+# Modulation, detector binning, and asterism batching follow the same pattern
+# as the Pyramid implementation, but the focal-plane filtering is performed
+# with the BioEdge mask family rather than a pyramid phase ramp.
+#
 @kernel function edge_mask_kernel!(mask, pupil, n::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= n
@@ -137,6 +152,16 @@ struct BioEdgeWFS{M<:SensingMode,P<:BioEdgeParams,S<:BioEdgeState} <: AbstractWF
     state::S
 end
 
+"""
+    BioEdgeWFS(tel; ...)
+
+Construct a BioEdge wavefront sensor.
+
+The diffractive model forms four edge-filtered pupil images using complementary
+focal-plane BioEdge masks. Slopes are then built from the resulting
+left/right and top/bottom differential signals after optional binning and
+modulation averaging.
+"""
 function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     light_ratio::Real=0.0, modulation::Real=0.0, modulation_points::Union{Int,Nothing}=nothing,
     normalization::WFSNormalization=MeanValidFluxNormalization(),

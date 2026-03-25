@@ -1,6 +1,25 @@
 using LinearAlgebra
 using Logging
 
+#
+# LiFT phase retrieval
+#
+# LiFT fits modal coefficients by matching a parameterized PSF model to an
+# observed detector image.
+#
+# Forward model:
+# 1. combine modal coefficients into an OPD map
+# 2. add the configured diversity term
+# 3. propagate to the focal plane and form intensity
+# 4. optionally convolve with an object kernel
+#
+# Inverse model:
+# - `LiFTAnalytic` builds the Jacobian from focal-plane field derivatives
+# - `LiFTNumerical` builds the Jacobian by centered finite differences
+#
+# The update step is then solved by QR or normal equations with explicit
+# damping/fallback logic.
+#
 @kernel function lift_scatter_update_kernel!(coeffs, delta, mode_ids, n_modes::Int)
     i = @index(Global, Linear)
     if i <= n_modes
@@ -136,6 +155,15 @@ function weight_mode(R_n::Symbol)
 end
 weight_mode(::Any) = throw(InvalidConfiguration("R_n must be :model, :iterative, a matrix, or nothing"))
 
+"""
+    LiFT(tel, src, basis, det; ...)
+
+Construct a LiFT phase-retrieval model.
+
+`basis[:, :, k]` defines the modal OPD basis being estimated. The reconstruction
+iteratively matches those coefficients to the detector-plane PSF, optionally
+including diversity and object convolution.
+"""
 function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::AbstractDetector;
     diversity_opd::AbstractMatrix, iterations::Int=5, img_resolution::Int=0,
     numerical::Bool=false, ang_pixel_arcsec=nothing, object_kernel=nothing,
@@ -197,12 +225,27 @@ end
 
 diagnostics(lift::LiFT) = lift.state.diagnostics
 
+"""
+    prepare_opd!(lift, coeffs)
+
+Assemble the current model OPD from the modal basis coefficients plus the fixed
+diversity OPD.
+"""
 @inline function prepare_opd!(lift::LiFT, coeffs::AbstractVector)
     combine_basis!(lift.state.opd_buffer, lift.basis, coeffs, lift.tel.state.pupil)
     @. lift.state.opd_buffer += lift.params.diversity_opd
     return lift.state.opd_buffer
 end
 
+"""
+    lift_interaction_matrix!(H, lift, coefficients, mode_ids; flux_norm=1)
+
+Fill the LiFT Jacobian matrix with derivatives of detector intensity with
+respect to the requested modal coefficients.
+
+- `LiFTNumerical` uses centered finite differences
+- `LiFTAnalytic` uses the field-derivative formulation
+"""
 function lift_interaction_matrix!(H::AbstractMatrix, lift::LiFT{LiFTNumerical}, coefficients::AbstractVector,
     mode_ids::AbstractVector; flux_norm::Real=1.0)
     T = eltype(lift.state.psf_buffer)
@@ -295,6 +338,15 @@ function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVecto
     return out
 end
 
+"""
+    reconstruct!(coeffs, lift, psf_in, mode_ids, weighting; ...)
+
+Run the LiFT iterative reconstruction in-place.
+
+Each iteration evaluates the current PSF model, builds/weights the Jacobian,
+solves for a modal update, and scatters that update back into the full
+coefficient vector.
+"""
 function reconstruct!(coeffs::AbstractVector{T}, lift::LiFT, psf_in::AbstractMatrix{T}, mode_ids::AbstractVector,
     mode::LiFTWeightingMode; optimize_norm::Symbol=:sum, check_convergence::Bool=true) where {T<:AbstractFloat}
     maximum(mode_ids) <= length(coeffs) ||
@@ -402,6 +454,15 @@ function solve_lift_fallback!(diag::LiFTDiagnostics{T}, rhs::AbstractVector{T},
     return rhs
 end
 
+"""
+    solve_normal_system!(diag, rhs, factor, normal, H, residual, damping)
+
+Solve the LiFT normal equations for the current modal update.
+
+The preferred path is Cholesky on the normal matrix. If the factorization is
+ill-conditioned, the implementation adds diagonal loading and eventually falls
+back to the SVD-based solve.
+"""
 function solve_normal_system!(diag::LiFTDiagnostics{T}, rhs::AbstractVector{T}, factor::AbstractMatrix{T},
     normal::AbstractMatrix{T}, H::AbstractMatrix{T}, residual::AbstractVector{T},
     ::LiFTDampingNone) where {T<:AbstractFloat}
@@ -650,6 +711,14 @@ function weight_vector(psf::AbstractMatrix{T}, R_n, det::AbstractDetector) where
     return weight_vector!(out, psf, weight_mode(R_n), det)
 end
 
+"""
+    psf_from_opd!(lift, opd; flux_norm=1)
+
+Evaluate the LiFT forward model PSF from an OPD map.
+
+This includes coherent propagation, intensity formation, detector-size
+resampling, and optional object convolution.
+"""
 function psf_from_opd!(lift::LiFT, opd::AbstractMatrix; flux_norm::Real=1.0)
     amp_scale = sqrt(eltype(lift.state.psf_buffer)(photon_flux(lift.src) * flux_norm *
         lift.tel.params.sampling_time * (lift.tel.params.diameter / lift.tel.params.resolution)^2))
