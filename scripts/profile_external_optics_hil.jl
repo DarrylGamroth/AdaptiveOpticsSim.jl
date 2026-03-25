@@ -129,7 +129,7 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=6, warmu
     T = Float32
     phase_resolution = 640
     external_shape = (640, 512)
-    n_act = 22
+    n_act = 24
     n_active = 468
 
     tel = Telescope(

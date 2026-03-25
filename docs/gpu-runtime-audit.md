@@ -280,7 +280,7 @@ Current warmed fixed-case representative snapshot:
 | case | CPU | AMDGPU | CUDA |
 | --- | ---: | ---: | ---: |
 | `revolt_sh_hil` | `245 Hz` | `473 Hz` | `1587 Hz` |
-| `external_optics_hil` | `2.13 kHz` | `1.72 kHz` | `6.82 kHz` |
+| `external_optics_hil` | `2.36 kHz` | `2.00 kHz` | `6.72 kHz` |
 
 REVOLT-style SH HIL dimensions:
 
@@ -312,7 +312,7 @@ Interpretation:
 External-optics HIL dimensions:
 
 - active commands `468`
-- DM grid commands `484` (`22 x 22`)
+- DM grid commands `576` (`24 x 24`)
 - generated DM phase grid `(640, 640)`
 - exported phase crop `(640, 512)`
 - downstream image contract `(640, 512)`
@@ -321,9 +321,9 @@ Current warmed phase timing snapshot for `external_optics_hil`:
 
 | backend | command map | DM phase | export | total |
 | --- | ---: | ---: | ---: | ---: |
-| CPU | `267 ns` | `315 µs` | `464 µs` | `469 µs` |
-| AMDGPU | `215 µs` | `439 µs` | `659 µs` | `580 µs` |
-| CUDA | `27.8 µs` | `116 µs` | `146 µs` | `147 µs` |
+| CPU | `297 ns` | `245 µs` | `376 µs` | `424 µs` |
+| AMDGPU | `198 µs` | `484 µs` | `518 µs` | `499 µs` |
+| CUDA | `27.8 µs` | `119 µs` | `150 µs` | `149 µs` |
 
 Interpretation:
 

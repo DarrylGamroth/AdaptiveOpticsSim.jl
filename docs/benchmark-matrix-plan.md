@@ -195,7 +195,7 @@ cases instead of generic scale rungs. Two maintained examples now exist:
   - full `352 x 352` pixel output mosaic
 - `external_optics_hil`
   - external-propagator / PROPER-style proxy
-  - `468` active commands mapped onto a `22 x 22` DM grid
+  - `468` active commands mapped onto a `24 x 24` DM grid
   - full DM OPD generation on a `640 x 640` phase grid
   - exported `640 x 512` phase crop for downstream image formation
 
