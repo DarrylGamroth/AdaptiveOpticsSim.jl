@@ -279,13 +279,16 @@ Current warmed fixed-case representative snapshot:
 
 | case | CPU | AMDGPU | CUDA |
 | --- | ---: | ---: | ---: |
-| `revolt_sh_hil` | `245 Hz` | `473 Hz` | `1587 Hz` |
+| `revolt_sh_hil` | `248 Hz` | `526 Hz` | `1507 Hz` |
 | `external_optics_hil` | `2.36 kHz` | `2.00 kHz` | `6.72 kHz` |
 
 REVOLT-style SH HIL dimensions:
 
 - active commands `277`
-- DM grid commands `289` (`17 x 17`)
+- extrapolated command length `277`
+- DM grid commands `361` (`19 x 19`)
+- active-actuator layout from `dmActuatorMap_277.csv`
+- RTC extrapolation applied from `dmExtrapolation.csv`
 - pupil resolution `352`
 - `16 x 16` SH subapertures
 - ROI `22 x 22`
@@ -295,9 +298,9 @@ Current warmed phase timing snapshot for `revolt_sh_hil`:
 
 | backend | command map | DM apply | sense | mosaic | total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| CPU | `9.55 µs` | `196 µs` | `3.85 ms` | `4.20 ms` | `4.08 ms` |
-| AMDGPU | `219 µs` | `417 µs` | `2.11 ms` | `1.90 ms` | `2.12 ms` |
-| CUDA | `31.2 µs` | `93.7 µs` | `595 µs` | `628 µs` | `630 µs` |
+| CPU | `17.2 µs` | `345 µs` | `3.86 ms` | `3.95 ms` | `4.03 ms` |
+| AMDGPU | `277 µs` | `499 µs` | `2.10 ms` | `1.99 ms` | `1.90 ms` |
+| CUDA | `60.3 µs` | `128 µs` | `636 µs` | `658 µs` | `663 µs` |
 
 Interpretation:
 

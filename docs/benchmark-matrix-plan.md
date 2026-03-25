@@ -189,7 +189,9 @@ cases instead of generic scale rungs. Two maintained examples now exist:
 
 - `revolt_sh_hil`
   - REVOLT-style SH HIL proxy
-  - `277` active commands mapped onto a `17 x 17` DM grid
+  - `277` active commands mapped through `dmExtrapolation.csv`
+  - applied onto the real DM277 `19 x 19` active-actuator layout from
+    `dmActuatorMap_277.csv`
   - `16 x 16` subapertures
   - `22 x 22` ROI
   - full `352 x 352` pixel output mosaic

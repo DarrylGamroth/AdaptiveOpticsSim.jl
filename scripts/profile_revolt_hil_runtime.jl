@@ -1,9 +1,13 @@
 using AdaptiveOpticsSim
 using Random
 using Statistics: mean
+using DelimitedFiles
+using SparseArrays
+using LinearAlgebra: mul!
 using KernelAbstractions: @kernel, @index
 
 const _backend_arg = isempty(ARGS) ? "cpu" : lowercase(ARGS[1])
+const _config_dir_arg = length(ARGS) >= 2 ? ARGS[2] : get(ENV, "REVOLT_CONFIG_DIR", "/home/dgamroth/workspaces/codex/heart/revolt-on-sky/config")
 
 if _backend_arg == "cuda"
     import CUDA
@@ -76,20 +80,39 @@ function _timed_stats!(f!::F; warmup::Int=2, samples::Int=6) where {F<:Function}
     return mean(timings), sorted[p95_idx]
 end
 
-function _active_support_indices(n_act::Int, n_active::Int)
-    total = n_act * n_act
-    0 < n_active <= total || error("n_active must be in 1:$total")
-    xs = range(-1.0, 1.0; length=n_act)
-    ys = range(-1.0, 1.0; length=n_act)
-    scores = Vector{Tuple{Float64,Int}}(undef, total)
-    idx = 1
-    for x in xs, y in ys
-        scores[idx] = (x^2 + y^2, idx)
-        idx += 1
+function _load_dm277_actuator_map(path::AbstractString)
+    raw = readlines(path)
+    length(raw) >= 2 || error("dmActuatorMap_277.csv is unexpectedly short")
+    header = split(strip(raw[1]))
+    length(header) == 4 || error("unexpected dmActuatorMap_277 header '$((raw[1]))'")
+    n_row = parse(Int, header[3])
+    n_col = parse(Int, header[4])
+    grid = readdlm(IOBuffer(join(raw[2:end], '\n')), ',', Int)
+    size(grid) == (n_row, n_col) || error("dmActuatorMap_277 grid size $(size(grid)) does not match header $((n_row, n_col))")
+    maximum(grid) > 0 || error("dmActuatorMap_277 has no active actuators")
+    active_indices = Vector{Int}(undef, maximum(grid))
+    @inbounds for j in 1:n_col, i in 1:n_row
+        label = grid[i, j]
+        if label > 0
+            active_indices[label] = LinearIndices(grid)[i, j]
+        end
     end
-    sort!(scores; by=first)
-    active = sort(map(last, scores[1:n_active]))
-    return active
+    return grid, active_indices
+end
+
+function _load_dm_extrapolation(path::AbstractString, T::Type{<:AbstractFloat})
+    raw = readlines(path)
+    length(raw) >= 2 || error("dmExtrapolation.csv is unexpectedly short")
+    header = split(strip(raw[1]))
+    length(header) == 4 || error("unexpected dmExtrapolation header '$((raw[1]))'")
+    n_row = parse(Int, header[3])
+    n_col = parse(Int, header[4])
+    triplets = readdlm(IOBuffer(join(raw[2:end], '\n')), ',', Float64)
+    size(triplets, 2) == 3 || error("dmExtrapolation triplets must have three columns")
+    rows = Int.(triplets[:, 1]) .+ 1
+    cols = Int.(triplets[:, 2]) .+ 1
+    vals = T.(triplets[:, 3])
+    return sparse(rows, cols, vals, n_row, n_col)
 end
 
 function _fill_active_command!(active_command::AbstractVector{T}) where {T<:AbstractFloat}
@@ -134,14 +157,18 @@ function _tile_spot_cube!(mosaic::AbstractMatrix{T}, spot_cube::AbstractArray{T,
     return mosaic
 end
 
-function run_profile(; backend_name::AbstractString="cpu", samples::Int=6, warmup::Int=2)
+function run_profile(; backend_name::AbstractString="cpu", config_dir::AbstractString=_config_dir_arg, samples::Int=6, warmup::Int=2)
     BackendArray, backend_tag, label = _resolve_backend(backend_name)
     T = Float32
+    actuator_map_path = joinpath(config_dir, "dmActuatorMap_277.csv")
+    extrapolation_path = joinpath(config_dir, "dmExtrapolation.csv")
+    actuator_map, active_indices_host = _load_dm277_actuator_map(actuator_map_path)
+    extrapolation_host = Matrix(_load_dm_extrapolation(extrapolation_path, T))
     n_subap = 16
     roi = 22
     resolution = 352
-    n_act = 17
-    n_active = 277
+    n_act = size(actuator_map, 1)
+    n_active = length(active_indices_host)
 
     tel = Telescope(
         resolution=resolution,
@@ -155,10 +182,12 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=6, warmu
     dm = DeformableMirror(tel; n_act=n_act, influence_width=0.3, T=T, backend=BackendArray)
     wfs = ShackHartmann(tel; n_subap=n_subap, mode=Diffractive(), n_pix_subap=roi, diffraction_padding=2, T=T, backend=BackendArray)
     det = Detector(noise=NoiseNone(), integration_time=T(1), qe=T(1), binning=1, T=T, backend=BackendArray)
-    active_indices_host = _active_support_indices(n_act, n_active)
     active_indices_backend = BackendArray{Int}(undef, n_active)
     copyto!(active_indices_backend, active_indices_host)
     active_command = BackendArray{T}(undef, n_active)
+    extrapolated_command = BackendArray{T}(undef, n_active)
+    extrapolation_backend = BackendArray{T}(undef, size(extrapolation_host)...)
+    copyto!(extrapolation_backend, extrapolation_host)
     _fill_active_command!(active_command)
     tiled_frame = BackendArray{T}(undef, resolution, resolution)
 
@@ -169,7 +198,8 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=6, warmu
 
     function _step!()
         reset_opd!(tel)
-        _scatter_active_command!(dm.state.coefs, active_command, active_indices_backend)
+        mul!(extrapolated_command, extrapolation_backend, active_command)
+        _scatter_active_command!(dm.state.coefs, extrapolated_command, active_indices_backend)
         apply!(dm, tel, DMReplace())
         measure!(wfs, tel, src, det; rng=Random.default_rng())
         _tile_spot_cube!(tiled_frame, wfs.state.spot_cube, n_subap, roi)
@@ -181,22 +211,26 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=6, warmu
 
     command_map_mean_ns, command_map_p95_ns = _timed_stats!(() -> begin
         reset_opd!(tel)
-        _scatter_active_command!(dm.state.coefs, active_command, active_indices_backend)
+        mul!(extrapolated_command, extrapolation_backend, active_command)
+        _scatter_active_command!(dm.state.coefs, extrapolated_command, active_indices_backend)
         _sync_backend!(backend_tag, dm.state.coefs)
     end; warmup=warmup, samples=samples)
     dm_apply_mean_ns, dm_apply_p95_ns = _timed_stats!(() -> begin
-        _scatter_active_command!(dm.state.coefs, active_command, active_indices_backend)
+        mul!(extrapolated_command, extrapolation_backend, active_command)
+        _scatter_active_command!(dm.state.coefs, extrapolated_command, active_indices_backend)
         apply!(dm, tel, DMReplace())
         _sync_backend!(backend_tag, tel.state.opd)
     end; warmup=warmup, samples=samples)
     sense_mean_ns, sense_p95_ns = _timed_stats!(() -> begin
-        _scatter_active_command!(dm.state.coefs, active_command, active_indices_backend)
+        mul!(extrapolated_command, extrapolation_backend, active_command)
+        _scatter_active_command!(dm.state.coefs, extrapolated_command, active_indices_backend)
         apply!(dm, tel, DMReplace())
         measure!(wfs, tel, src, det; rng=Random.default_rng())
         _sync_backend!(backend_tag, wfs.state.spot_cube)
     end; warmup=warmup, samples=samples)
     mosaic_mean_ns, mosaic_p95_ns = _timed_stats!(() -> begin
-        _scatter_active_command!(dm.state.coefs, active_command, active_indices_backend)
+        mul!(extrapolated_command, extrapolation_backend, active_command)
+        _scatter_active_command!(dm.state.coefs, extrapolated_command, active_indices_backend)
         apply!(dm, tel, DMReplace())
         measure!(wfs, tel, src, det; rng=Random.default_rng())
         _tile_spot_cube!(tiled_frame, wfs.state.spot_cube, n_subap, roi)
@@ -206,8 +240,11 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=6, warmu
 
     println("revolt_hil_runtime_profile")
     println("  backend: ", label)
+    println("  config_dir: ", config_dir)
     println("  actuator_command_length: ", n_active)
+    println("  extrapolated_command_length: ", length(extrapolated_command))
     println("  dm_grid_command_length: ", length(dm.state.coefs))
+    println("  dm_layout_shape: ", size(actuator_map))
     println("  pupil_resolution: ", resolution)
     println("  n_subap: ", n_subap)
     println("  roi_size: ", roi)
@@ -228,4 +265,4 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=6, warmu
     return nothing
 end
 
-run_profile(; backend_name=_backend_arg)
+run_profile(; backend_name=_backend_arg, config_dir=_config_dir_arg)
