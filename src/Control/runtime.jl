@@ -5,6 +5,53 @@
     end
 end
 
+abstract type AbstractControlSimulation end
+abstract type AbstractExecutionPolicy end
+
+struct SequentialExecution <: AbstractExecutionPolicy end
+struct ThreadedExecution <: AbstractExecutionPolicy end
+struct BackendStreamExecution <: AbstractExecutionPolicy end
+
+mutable struct VectorDelayLine{A<:AbstractMatrix,V<:AbstractVector}
+    buffer::A
+    scratch::V
+end
+
+function VectorDelayLine(ref::AbstractVector{T}, delay_frames::Int) where {T<:AbstractFloat}
+    delay_frames >= 0 || throw(InvalidConfiguration("delay_frames must be >= 0"))
+    buffer = similar(ref, T, length(ref), delay_frames)
+    fill!(buffer, zero(T))
+    scratch = similar(ref, T, length(ref))
+    fill!(scratch, zero(T))
+    return VectorDelayLine{typeof(buffer),typeof(scratch)}(buffer, scratch)
+end
+
+function shift_delay!(line::VectorDelayLine, sample::AbstractVector)
+    n_delay = size(line.buffer, 2)
+    if n_delay == 0
+        copyto!(line.scratch, sample)
+        return line.scratch
+    end
+    copyto!(line.scratch, @view(line.buffer[:, 1]))
+    @inbounds for i in 1:n_delay-1
+        copyto!(@view(line.buffer[:, i]), @view(line.buffer[:, i + 1]))
+    end
+    copyto!(@view(line.buffer[:, n_delay]), sample)
+    return line.scratch
+end
+
+prepare!(sim::AbstractControlSimulation) = sim
+supports_prepared_runtime(::Type) = false
+supports_prepared_runtime(sim) = supports_prepared_runtime(typeof(sim))
+supports_detector_output(::Type) = false
+supports_detector_output(sim) = supports_detector_output(typeof(sim))
+supports_stacked_sources(::Type) = false
+supports_stacked_sources(sim) = supports_stacked_sources(typeof(sim))
+supports_grouped_execution(::Type) = false
+supports_grouped_execution(sim) = supports_grouped_execution(typeof(sim))
+
+init_execution_state(::AbstractExecutionPolicy, ref) = nothing
+
 mutable struct ClosedLoopRuntime{SIM<:AOSimulation,TEL,A,S,DM,W,R,V,WD,SD,RNG,T<:AbstractFloat}
     simulation::SIM
     tel::TEL
@@ -89,6 +136,10 @@ end
 
 @inline wfs_output_frame(wfs::AbstractWFS, det::AbstractDetector) = output_frame(det)
 @inline wfs_output_frame(wfs::ShackHartmann{<:Diffractive}, det::AbstractDetector) = wfs.state.spot_cube
+
+simulation_interface(runtime::ClosedLoopRuntime) = SimulationInterface(runtime)
+simulation_interface(interface::SimulationInterface) = interface
+simulation_interface(interface::CompositeSimulationInterface) = interface
 
 function SimulationInterface(runtime::ClosedLoopRuntime)
     command = similar(runtime.command)

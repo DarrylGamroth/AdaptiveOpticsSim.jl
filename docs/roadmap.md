@@ -223,6 +223,12 @@ validation shows the new default is still too coarse.
   `ZernikeWFS` and then `CurvatureSensor` if needed.
 - [ ] Continue GPU/HIL performance work only where profiling shows real value,
   especially in builder-heavy tomography paths.
+- [~] Extract generic control-simulation primitives from the Subaru AO188
+  simulation into core without moving the Subaru-specific assembly itself.
+  The staged plan now lives in `docs/control-simulation-architecture-plan.md`.
+  `MappedReconstructor`, `VectorDelayLine`, generic execution policies, and the
+  first control-simulation hooks/capability traits are now in core; broader
+  adoption beyond the AO188 example is still pending.
 
 ## Current Focus
 

@@ -7,21 +7,17 @@ using Statistics
 
 import AdaptiveOpticsSim: step!, runtime_timing, convert_noise, validate_noise, materialize_build,
     execution_style, synchronize_backend!, bin2d!, apply_command!, prepare_sampling!,
-    ensure_sh_calibration!
+    ensure_sh_calibration!, wfs_output_frame, prepare!, supports_prepared_runtime,
+    supports_detector_output, supports_grouped_execution, simulation_interface,
+    init_execution_state
 
 export AO188ActuatorSupportModel, CircularActuatorSupport
-export AO188BranchExecutionMode, SequentialBranchExecution, TaskParallelBranchExecution, BackendStreamBranchExecution
 export AO188ReplayMode, DirectReplayMode, PreparedReplayMode
 export AO188LatencyModel, AO188WFSDetectorConfig
 export AO188SimulationParams, AO188Simulation, subaru_ao188_simulation, subaru_ao188_phase_timing, prepare_replay!
 
 abstract type AO188ActuatorSupportModel end
 struct CircularActuatorSupport <: AO188ActuatorSupportModel end
-
-abstract type AO188BranchExecutionMode end
-struct SequentialBranchExecution <: AO188BranchExecutionMode end
-struct TaskParallelBranchExecution <: AO188BranchExecutionMode end
-struct BackendStreamBranchExecution <: AO188BranchExecutionMode end
 
 abstract type AO188ReplayMode end
 struct DirectReplayMode <: AO188ReplayMode end
@@ -111,7 +107,7 @@ struct AO188SimulationParams{
     T<:AbstractFloat,
     F<:FidelityProfile,
     S<:AO188ActuatorSupportModel,
-    B<:AO188BranchExecutionMode,
+    B<:AbstractExecutionPolicy,
     R<:AO188ReplayMode,
     H<:AO188WFSDetectorConfig,
     L<:AO188WFSDetectorConfig,
@@ -171,7 +167,7 @@ function AO188SimulationParams(;
     profile::FidelityProfile=FastProfile(),
     source_band::Symbol=:I,
     support_model::AO188ActuatorSupportModel=CircularActuatorSupport(),
-    branch_execution::AO188BranchExecutionMode=SequentialBranchExecution(),
+    branch_execution::AbstractExecutionPolicy=SequentialExecution(),
     replay_mode::AO188ReplayMode=DirectReplayMode(),
     latency::AO188LatencyModel=AO188LatencyModel(),
     high_detector::AO188WFSDetectorConfig=AO188WFSDetectorConfig(
@@ -233,65 +229,6 @@ function AO188SimulationParams(;
     )
 end
 
-struct FullCommandReconstructor{
-    T<:AbstractFloat,
-    M<:AbstractMatrix{T},
-    B<:AbstractMatrix{T},
-    P<:InversePolicy,
-    V<:AbstractVector{T},
-    W<:AbstractVector{T},
-}
-    reconstructor::M
-    command_basis::B
-    modal_workspace::W
-    gain::T
-    policy::P
-    singular_values::V
-    cond::T
-    effective_rank::Int
-    n_control_modes::Int
-end
-
-function reconstruct!(out::AbstractVector, recon::FullCommandReconstructor, slopes::AbstractVector)
-    mul!(recon.modal_workspace, recon.reconstructor, slopes)
-    recon.modal_workspace .*= recon.gain
-    mul!(out, recon.command_basis, recon.modal_workspace)
-    return out
-end
-
-function reconstruct(recon::FullCommandReconstructor, slopes::AbstractVector)
-    out = similar(recon.command_basis, size(recon.command_basis, 1))
-    return reconstruct!(out, recon, slopes)
-end
-
-mutable struct VectorDelayLine{A<:AbstractMatrix,V<:AbstractVector}
-    buffer::A
-    scratch::V
-end
-
-function VectorDelayLine(ref::AbstractVector{T}, delay_frames::Int) where {T<:AbstractFloat}
-    delay_frames >= 0 || throw(InvalidConfiguration("delay_frames must be >= 0"))
-    buffer = similar(ref, T, length(ref), delay_frames)
-    fill!(buffer, zero(T))
-    scratch = similar(ref, T, length(ref))
-    fill!(scratch, zero(T))
-    return VectorDelayLine{typeof(buffer),typeof(scratch)}(buffer, scratch)
-end
-
-function shift_delay!(line::VectorDelayLine, sample::AbstractVector)
-    n_delay = size(line.buffer, 2)
-    if n_delay == 0
-        copyto!(line.scratch, sample)
-        return line.scratch
-    end
-    copyto!(line.scratch, @view(line.buffer[:, 1]))
-    @inbounds for i in 1:n_delay-1
-        copyto!(@view(line.buffer[:, i]), @view(line.buffer[:, i + 1]))
-    end
-    copyto!(@view(line.buffer[:, n_delay]), sample)
-    return line.scratch
-end
-
 struct AO1883kPhaseTimingStats{T<:AbstractFloat}
     samples::Int
     high_sense_mean_ns::T
@@ -329,7 +266,7 @@ mutable struct AO188Simulation{
     DLD,
     BESTATE,
     RNG,
-}
+} <: AbstractControlSimulation
     params::P
     tel::TEL
     low_tel::LOWTEL
@@ -467,29 +404,14 @@ end
 function _full_command_reconstructor(M2C_host::AbstractMatrix{T}, imat::InteractionMatrix{T};
     gain::Real, policy::InversePolicy, inverse_build_backend::BuildBackend,
     materialize_backend::BuildBackend, ref::AbstractMatrix{T}) where {T<:AbstractFloat}
-    modal_recon, stats = inverse_operator(inverse_build_backend, imat.matrix, policy)
-    modal_recon_native = materialize_build(materialize_backend, ref, modal_recon)
-    command_basis = materialize_build(materialize_backend, ref, M2C_host)
-    singular_values = materialize_build(materialize_backend, similar(ref, T, 0), stats.singular_values)
-    modal_workspace = similar(ref, T, size(M2C_host, 2))
-    fill!(modal_workspace, zero(T))
-    return FullCommandReconstructor{
-        T,
-        typeof(modal_recon_native),
-        typeof(command_basis),
-        typeof(policy),
-        typeof(singular_values),
-        typeof(modal_workspace),
-    }(
-        modal_recon_native,
-        command_basis,
-        modal_workspace,
-        T(gain),
-        policy,
-        singular_values,
-        stats.cond,
-        stats.effective_rank,
-        size(M2C_host, 2),
+    return MappedReconstructor(
+        M2C_host,
+        imat;
+        gain=gain,
+        policy=policy,
+        inverse_build_backend=inverse_build_backend,
+        materialize_backend=materialize_backend,
+        ref=ref,
     )
 end
 
@@ -551,39 +473,37 @@ function _frame_rngs!(rng::AbstractRNG)
     return MersenneTwister(rand(rng, UInt64)), MersenneTwister(rand(rng, UInt64))
 end
 
-init_branch_execution_state(::AO188BranchExecutionMode, ref) = nothing
-
-function measure_branches_backend!(::BackendStreamBranchExecution, surrogate::AO188Simulation, state)
-    return _measure_branches!(SequentialBranchExecution(), surrogate)
+function measure_branches_backend!(::BackendStreamExecution, simulation::AO188Simulation, state)
+    return _measure_branches!(SequentialExecution(), simulation)
 end
 
-function _measure_branches!(::SequentialBranchExecution, surrogate::AO188Simulation)
-    _measure_high!(surrogate, surrogate.rng)
-    _measure_low!(surrogate, surrogate.rng)
-    return surrogate
+function _measure_branches!(::SequentialExecution, simulation::AO188Simulation)
+    _measure_high!(simulation, simulation.rng)
+    _measure_low!(simulation, simulation.rng)
+    return simulation
 end
 
-function _measure_branches!(::TaskParallelBranchExecution, surrogate::AO188Simulation)
-    Threads.nthreads() < 2 && return _measure_branches!(SequentialBranchExecution(), surrogate)
-    high_rng, low_rng = _frame_rngs!(surrogate.rng)
-    high_task = Threads.@spawn _measure_high!(surrogate, high_rng)
-    low_task = Threads.@spawn _measure_low!(surrogate, low_rng)
+function _measure_branches!(::ThreadedExecution, simulation::AO188Simulation)
+    Threads.nthreads() < 2 && return _measure_branches!(SequentialExecution(), simulation)
+    high_rng, low_rng = _frame_rngs!(simulation.rng)
+    high_task = Threads.@spawn _measure_high!(simulation, high_rng)
+    low_task = Threads.@spawn _measure_low!(simulation, low_rng)
     fetch(high_task)
     fetch(low_task)
-    return surrogate
+    return simulation
 end
 
-function _measure_branches!(::BackendStreamBranchExecution, surrogate::AO188Simulation)
-    return measure_branches_backend!(BackendStreamBranchExecution(), surrogate, surrogate.branch_execution_state)
+function _measure_branches!(::BackendStreamExecution, simulation::AO188Simulation)
+    return measure_branches_backend!(BackendStreamExecution(), simulation, simulation.branch_execution_state)
 end
 
-function prepare_replay!(surrogate::AO188Simulation)
-    prepare_sampling!(surrogate.high_wfs, surrogate.tel, surrogate.src)
-    prepare_sampling!(surrogate.low_wfs, surrogate.low_tel, surrogate.src)
-    ensure_sh_calibration!(surrogate.high_wfs, surrogate.tel, surrogate.src)
-    ensure_sh_calibration!(surrogate.low_wfs, surrogate.low_tel, surrogate.src)
-    surrogate.replay_prepared = true
-    return surrogate
+function prepare_replay!(simulation::AO188Simulation)
+    prepare_sampling!(simulation.high_wfs, simulation.tel, simulation.src)
+    prepare_sampling!(simulation.low_wfs, simulation.low_tel, simulation.src)
+    ensure_sh_calibration!(simulation.high_wfs, simulation.tel, simulation.src)
+    ensure_sh_calibration!(simulation.low_wfs, simulation.low_tel, simulation.src)
+    simulation.replay_prepared = true
+    return simulation
 end
 
 function subaru_ao188_simulation(; params::AO188SimulationParams=AO188SimulationParams(),
@@ -665,7 +585,7 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
     fill!(low_command, zero(T))
     fill!(combined_command, zero(T))
     fill!(command, zero(T))
-    branch_execution_state = init_branch_execution_state(params.branch_execution, dm.state.coefs)
+    branch_execution_state = init_execution_state(params.branch_execution, dm.state.coefs)
 
     surrogate = AO188Simulation(
         params,
@@ -698,14 +618,14 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
         false,
     )
     if params.replay_mode isa PreparedReplayMode
-        prepare_replay!(surrogate)
+        prepare!(surrogate)
     end
     return surrogate
 end
 
 function step!(surrogate::AO188Simulation)
     if surrogate.params.replay_mode isa PreparedReplayMode && !surrogate.replay_prepared
-        prepare_replay!(surrogate)
+        prepare!(surrogate)
     end
     advance!(surrogate.atm, surrogate.tel, surrogate.rng)
     propagate!(surrogate.atm, surrogate.tel)
@@ -727,6 +647,28 @@ function step!(surrogate::AO188Simulation)
 end
 
 runtime_timing(surrogate::AO188Simulation; kwargs...) = runtime_timing(() -> step!(surrogate); kwargs...)
+
+prepare!(simulation::AO188Simulation) = prepare_replay!(simulation)
+supports_prepared_runtime(::Type{<:AO188Simulation}) = true
+supports_detector_output(::Type{<:AO188Simulation}) = true
+supports_grouped_execution(::Type{<:AO188Simulation}) = true
+
+function simulation_interface(simulation::AO188Simulation)
+    return SimulationReadout(
+        simulation.command,
+        (simulation.high_wfs.state.slopes, simulation.low_wfs.state.slopes),
+        (
+            wfs_output_frame(simulation.high_wfs, simulation.high_detector),
+            wfs_output_frame(simulation.low_wfs, simulation.low_detector),
+        ),
+        nothing,
+        (
+            detector_export_metadata(simulation.high_detector),
+            detector_export_metadata(simulation.low_detector),
+        ),
+        nothing,
+    )
+end
 
 function subaru_ao188_phase_timing(surrogate::AO188Simulation; warmup::Int=10, samples::Int=1000, gc_before::Bool=true)
     warmup >= 0 || throw(InvalidConfiguration("warmup must be >= 0"))
@@ -805,14 +747,14 @@ if isdefined(Main, :CUDA)
         low::_AO188CUDA.CuStream
     end
 
-    function init_branch_execution_state(::BackendStreamBranchExecution, ::_AO188CUDA.CuArray)
+    function init_execution_state(::BackendStreamExecution, ::_AO188CUDA.CuArray)
         return AO188CUDAStreamState(
             _AO188CUDA.CuStream(; flags=_AO188CUDA.STREAM_NON_BLOCKING),
             _AO188CUDA.CuStream(; flags=_AO188CUDA.STREAM_NON_BLOCKING),
         )
     end
 
-    function measure_branches_backend!(::BackendStreamBranchExecution, surrogate::AO188Simulation, state::AO188CUDAStreamState)
+    function measure_branches_backend!(::BackendStreamExecution, surrogate::AO188Simulation, state::AO188CUDAStreamState)
         high_rng, low_rng = _frame_rngs!(surrogate.rng)
         high_task = Threads.@spawn _AO188CUDA.stream!(state.high) do
             _measure_high!(surrogate, high_rng)

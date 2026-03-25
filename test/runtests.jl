@@ -253,6 +253,17 @@ end
     cmd = reconstruct(recon, wfs.state.slopes)
     @test length(cmd) == length(dm.state.coefs)
 
+    mapped = MappedReconstructor(Matrix{Float64}(I, length(dm.state.coefs), length(dm.state.coefs)), imat; gain=0.5)
+    mapped_cmd = reconstruct(mapped, wfs.state.slopes)
+    @test length(mapped_cmd) == length(dm.state.coefs)
+    @test mapped.n_control_modes == length(dm.state.coefs)
+
+    delay = VectorDelayLine(dm.state.coefs, 1)
+    delayed0 = shift_delay!(delay, fill(1.0, length(dm.state.coefs)))
+    @test all(iszero, delayed0)
+    delayed1 = shift_delay!(delay, fill(2.0, length(dm.state.coefs)))
+    @test all(==(1.0), delayed1)
+
     ctrl = DiscreteIntegratorController(length(wfs.state.slopes); gain=0.1, tau=0.02)
     dm_cmd = update!(ctrl, wfs.state.slopes, 0.01)
     @test length(dm_cmd) == length(wfs.state.slopes)
@@ -273,7 +284,7 @@ end
     @test default_params.n_low_order_modes == 4
     @test default_params.latency.high_measurement_delay_frames == 1
     @test default_params.high_detector.noise isa NoisePhotonReadout
-    @test default_params.branch_execution isa SequentialBranchExecution
+    @test default_params.branch_execution isa SequentialExecution
     @test default_params.replay_mode isa DirectReplayMode
 
     params = AO188SimulationParams(
@@ -318,6 +329,12 @@ end
     step!(surrogate)
     @test length(surrogate.command) == params.n_act^2
     @test maximum(abs, surrogate.command) > 0
+    @test supports_prepared_runtime(typeof(surrogate))
+    @test supports_detector_output(typeof(surrogate))
+    @test supports_grouped_execution(typeof(surrogate))
+    simif = simulation_interface(surrogate)
+    @test simulation_command(simif) === surrogate.command
+    @test length(simulation_slopes(simif)) == 2
     timing = runtime_timing(surrogate; warmup=1, samples=2, gc_before=false)
     @test timing.samples == 2
     phase = subaru_ao188_phase_timing(surrogate; warmup=1, samples=2, gc_before=false)
@@ -335,7 +352,7 @@ end
         n_low_order_subap=2,
         n_low_order_modes=2,
         source_magnitude=0.0,
-        branch_execution=TaskParallelBranchExecution(),
+        branch_execution=ThreadedExecution(),
         replay_mode=PreparedReplayMode(),
     )
     @test experimental.low_order_resolution == 8
@@ -355,7 +372,7 @@ end
         n_low_order_subap=2,
         n_low_order_modes=2,
         source_magnitude=0.0,
-        branch_execution=BackendStreamBranchExecution(),
+        branch_execution=BackendStreamExecution(),
     )
     surrogate_stream = subaru_ao188_simulation(; params=stream_mode, rng=MersenneTwister(3))
     step!(surrogate_stream)

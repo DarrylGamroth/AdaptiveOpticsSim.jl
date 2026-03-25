@@ -56,8 +56,9 @@ Current implementation status:
     subaperture-specific Fourier-domain convolution across the stacked
     intensity cube instead of looping spot-by-spot at runtime
 - Phase 4: experimental, now backend-split
-  - added `SequentialBranchExecution` and `TaskParallelBranchExecution`
-  - added `BackendStreamBranchExecution` as the backend-specific overlap hook
+  - added generic execution policies:
+    `SequentialExecution`, `ThreadedExecution`, and
+    `BackendStreamExecution`
   - task-parallel branch execution is not the default
   - AMDGPU still does not justify generic Julia task overlap
   - CUDA now shows a real branch-overlap gain on the maintained AO188 case
@@ -346,7 +347,7 @@ Status:
   by default
 - CUDA measurements now justify continued investigation of backend-specific
   branch overlap
-- `BackendStreamBranchExecution` now has a real CUDA measurement on `spiders`
+- `BackendStreamExecution` now has a real CUDA measurement on `spiders`
   and falls back safely on non-CUDA backends
 
 ### Phase 5: Graph/replay execution

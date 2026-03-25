@@ -7,4 +7,4 @@ catch err
 end
 
 include(joinpath(@__DIR__, "gpu_runtime_equivalence_contract.jl"))
-run_gpu_runtime_equivalence(AMDGPUBackendTag; branch_mode=SequentialBranchExecution())
+run_gpu_runtime_equivalence(AMDGPUBackendTag; branch_mode=SequentialExecution())

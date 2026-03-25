@@ -124,12 +124,17 @@ export AOSimulation, initialize_ao_pyramid, initialize_ao_shwfs
 export GainSensingCamera, GSCDetectorMetadata, detector_metadata, weak_mode_mask, attach_detector!, detach_detector!
 export calibrate!, reset_calibration!, compute_optical_gains!
 export MetaSensitivity, compute_meta_sensitivity_matrix, estimate_misregistration, SPRINT, estimate!
-export ModalReconstructor, reconstruct!, reconstruct
+export ModalReconstructor, MappedReconstructor, reconstruct!, reconstruct
 export AbstractController, DiscreteIntegratorController, update!
+export AbstractControlSimulation, AbstractExecutionPolicy
+export SequentialExecution, ThreadedExecution, BackendStreamExecution
+export VectorDelayLine, shift_delay!, prepare!, init_execution_state
+export supports_prepared_runtime, supports_detector_output, supports_stacked_sources, supports_grouped_execution
 export ClosedLoopRuntime, SimulationInterface, CompositeSimulationInterface, SimulationReadout
 export sense!, step!, set_command!, snapshot_outputs!
 export simulation_readout, simulation_slopes, simulation_command, simulation_wfs_frame, simulation_science_frame
 export simulation_wfs_metadata, simulation_science_metadata
+export simulation_interface
 export RuntimeTimingStats, RuntimePhaseTimingStats, runtime_timing, runtime_phase_timing
 export with_reconstructor, with_reconstructors
 export AbstractOpticalElement, AbstractSource, AbstractAtmosphere, AbstractWFS

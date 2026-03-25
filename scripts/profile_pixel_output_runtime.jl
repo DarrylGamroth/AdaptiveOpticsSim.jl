@@ -40,9 +40,9 @@ end
 
 function _resolve_branch_mode(name::AbstractString)
     lowered = lowercase(name)
-    lowered == "sequential" && return SequentialBranchExecution()
-    lowered == "task" && return TaskParallelBranchExecution()
-    lowered == "stream" && return BackendStreamBranchExecution()
+    lowered == "sequential" && return SequentialExecution()
+    lowered == "task" && return ThreadedExecution()
+    lowered == "stream" && return BackendStreamExecution()
     error("unsupported branch mode '$name'; use sequential, task, or stream")
 end
 

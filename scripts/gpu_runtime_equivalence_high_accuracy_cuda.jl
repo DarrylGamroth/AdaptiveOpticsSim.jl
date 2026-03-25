@@ -7,4 +7,4 @@ catch err
 end
 
 include(joinpath(@__DIR__, "gpu_runtime_equivalence_contract.jl"))
-run_gpu_runtime_equivalence_high_accuracy(CUDABackendTag; branch_mode=BackendStreamBranchExecution())
+run_gpu_runtime_equivalence_high_accuracy(CUDABackendTag; branch_mode=BackendStreamExecution())

@@ -8,7 +8,7 @@ const _RUNTIME_EQ_RTOL = 1f-4
 const _RUNTIME_EQ_ATOL = 5f-5
 
 function _ao188_noise_free_params(::Type{T}=Float32;
-    branch_execution::AO188BranchExecutionMode=SequentialBranchExecution()) where {T<:AbstractFloat}
+    branch_execution::AbstractExecutionPolicy=SequentialExecution()) where {T<:AbstractFloat}
     return AO188SimulationParams(
         T=T,
         source_magnitude=0.0,
@@ -81,7 +81,7 @@ function _assert_max_abs(label::AbstractString, actual, expected; atol::Real)
     @assert max_abs <= atol "$label mismatch (max_abs=$max_abs, atol=$atol)"
 end
 
-function _run_ao188_equivalence(::Type{B}, branch_mode::AO188BranchExecutionMode) where {B<:GPUBackendTag}
+function _run_ao188_equivalence(::Type{B}, branch_mode::AbstractExecutionPolicy) where {B<:GPUBackendTag}
     disable_scalar_backend!(B)
     BackendArray = gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
@@ -111,11 +111,11 @@ function _post_command_observation!(surrogate::AO188Simulation, host_command::Ab
     copyto!(surrogate.command, host_command)
     copyto!(surrogate.dm.state.coefs, host_command)
     apply!(surrogate.dm, surrogate.tel, DMAdditive())
-    _measure_branches!(SequentialBranchExecution(), surrogate)
+    _measure_branches!(SequentialExecution(), surrogate)
     return surrogate
 end
 
-function _run_ao188_post_command_equivalence(::Type{B}, branch_mode::AO188BranchExecutionMode;
+function _run_ao188_post_command_equivalence(::Type{B}, branch_mode::AbstractExecutionPolicy;
     T::Type{<:AbstractFloat}=Float64) where {B<:GPUBackendTag}
     disable_scalar_backend!(B)
     BackendArray = gpu_backend_array_type(B)
@@ -240,7 +240,7 @@ function _run_mixed_sh_asterism_equivalence(::Type{B}) where {B<:GPUBackendTag}
     _assert_close("slopes", wfs_gpu.state.slopes, wfs_cpu.state.slopes)
 end
 
-function run_gpu_runtime_equivalence(::Type{B}; branch_mode::AO188BranchExecutionMode=SequentialBranchExecution()) where {B<:GPUBackendTag}
+function run_gpu_runtime_equivalence(::Type{B}; branch_mode::AbstractExecutionPolicy=SequentialExecution()) where {B<:GPUBackendTag}
     _run_ao188_equivalence(B, branch_mode)
     _run_lgs_equivalence(B, :none)
     _run_lgs_equivalence(B, :na)
@@ -250,7 +250,7 @@ function run_gpu_runtime_equivalence(::Type{B}; branch_mode::AO188BranchExecutio
 end
 
 function run_gpu_runtime_equivalence_high_accuracy(::Type{B};
-    branch_mode::AO188BranchExecutionMode=SequentialBranchExecution()) where {B<:GPUBackendTag}
+    branch_mode::AbstractExecutionPolicy=SequentialExecution()) where {B<:GPUBackendTag}
     _run_ao188_post_command_equivalence(B, branch_mode; T=Float64)
     println("gpu_runtime_equivalence_high_accuracy complete")
     return nothing
