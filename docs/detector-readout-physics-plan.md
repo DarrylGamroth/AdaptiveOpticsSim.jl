@@ -11,6 +11,8 @@ The immediate driver is AO188 curvature sensing, but the goal is broader:
   generic `Detector`
 - make the detector/readout layer scalable to future sensors such as APD arrays
   and SPAD imaging arrays
+- define interfaces with types, traits, and multiple dispatch rather than
+  `isa`-driven branching or flag-heavy runtime logic
 
 ## Current State
 
@@ -36,6 +38,32 @@ The package now has a cleaner split than before:
 This is a better foundation, but it is still not a full detector/readout model.
 
 ## Main Questions
+
+## Interface Rules
+
+This plan should be implemented with the same interface discipline used
+elsewhere in the package:
+
+- use abstract types to define the main detector/readout families
+- use traits for optional capabilities
+- use multiple dispatch for behavior selection
+- avoid `isa` checks in hot paths when dispatch can express the interface
+- avoid a single generic detector object with many booleans that emulate type
+  differences
+
+Concretely, detector/readout work in this plan should prefer shapes like:
+
+- `AbstractFrameDetector`
+- `AbstractCountingDetector`
+- `AbstractFrameReadout`
+- `AbstractCountingReadout`
+- trait queries such as `supports_detector_mtf(x)` or
+  `supports_counting_statistics(x)`
+- dispatch like `capture!(det::AbstractFrameDetector, frame; rng)` and
+  `capture!(det::AbstractCountingDetector, channels; rng)`
+
+The goal is not abstraction for its own sake. The goal is to keep the physics
+layer explicit and extensible without hidden concrete-type checks.
 
 ### 1. Should detector/readout physics be overhauled per detector family?
 
@@ -184,6 +212,12 @@ Add core types along these lines:
 - `CountingReadoutMetadata`
 - `channel_output(readout)`
 
+Optional capability traits should be used where behavior is not universal, for
+example:
+
+- `supports_frame_export(readout)`
+- `supports_channel_metadata(readout)`
+
 The goal is to avoid treating counting output as a fake image.
 
 Deliverables:
@@ -201,6 +235,12 @@ Candidate type family:
 
 - `AbstractCountingDetector`
 - `APDDetector`
+
+Candidate trait surface:
+
+- `supports_counting_noise(det)`
+- `supports_dead_time(det)`
+- `supports_channel_gain_map(det)`
 
 Candidate physics:
 
@@ -257,6 +297,7 @@ Requirements:
 - precomputable
 - backend-friendly
 - works with current frame sensors
+- selected through detector type/trait dispatch, not detector-kind flags
 
 The first maintained version should be simple:
 
@@ -278,6 +319,9 @@ Then refine the frame families where needed:
 - CCD
 - CMOS
 - EMCCD
+
+That should be represented with concrete detector types and dispatch, not
+deeply nested conditional logic inside one frame-detector implementation.
 
 Examples:
 
@@ -301,6 +345,9 @@ architecture.
 For array readout, SPAD should likely be a distinct detector family:
 
 - `SPADArraySensor` or `SPADImager`
+
+with its own type/trait-dispatch path rather than as a mode flag on `APD` or
+`CMOS`.
 
 Likely physics:
 
