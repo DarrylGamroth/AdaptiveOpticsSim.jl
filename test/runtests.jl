@@ -663,6 +663,18 @@ end
     frame_ccd = copy(capture!(det_ccd, zero_psf; rng=rng_ccd))
     frame_emccd = copy(capture!(det_emccd, zero_psf; rng=rng_emccd))
     @test frame_ccd ≈ 10 .* frame_emccd
+    @test_throws InvalidConfiguration EMCCDSensor(excess_noise_factor=0.5)
+
+    uniform_signal = fill(50.0, 8, 8)
+    det_emccd_base = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        gain=1.0, sensor=EMCCDSensor())
+    det_emccd_excess = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        gain=1.0, sensor=EMCCDSensor(excess_noise_factor=sqrt(2.0)))
+    frame_emccd_base = copy(capture!(det_emccd_base, uniform_signal; rng=MersenneTwister(8)))
+    frame_emccd_excess = copy(capture!(det_emccd_excess, uniform_signal; rng=MersenneTwister(8)))
+    @test frame_emccd_base == uniform_signal
+    @test std(vec(frame_emccd_excess)) > 0
+
     @test_throws InvalidConfiguration Detector(integration_time=1.0, noise=NoisePhoton(), qe=1.0, binning=1,
         sensor=APDSensor())
 

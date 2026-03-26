@@ -188,6 +188,9 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   `NullFrameResponse` is the identity model and
   `SeparableGaussianPixelResponse` is the maintained first pixel-response/MTF
   approximation.
+- `EMCCDSensor` now also supports an opt-in excess-noise factor through its
+  constructor, while keeping the default behavior unchanged when
+  `excess_noise_factor == 1`.
 - The maintained counting-detector family is currently `APDDetector`, with
   optional capability queries surfaced through `supports_counting_noise`,
   `supports_dead_time`, and `supports_channel_gain_map`.

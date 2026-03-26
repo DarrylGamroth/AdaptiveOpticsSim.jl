@@ -19,7 +19,9 @@ struct NoisePhotonReadout{T<:AbstractFloat} <: NoiseModel
 end
 struct CCDSensor <: FrameSensorType end
 struct CMOSSensor <: FrameSensorType end
-struct EMCCDSensor <: FrameSensorType end
+struct EMCCDSensor{T<:AbstractFloat} <: FrameSensorType
+    excess_noise_factor::T
+end
 struct APDSensor <: CountingSensorType end
 struct NoDeadTime <: CountingDeadTimeModel end
 struct NonParalyzableDeadTime{T<:AbstractFloat} <: CountingDeadTimeModel
@@ -79,6 +81,10 @@ end
 NoiseReadout(sigma::Real) = NoiseReadout{Float64}(float(sigma))
 NoisePhotonReadout(sigma::Real) = NoisePhotonReadout{Float64}(float(sigma))
 NonParalyzableDeadTime(dead_time::Real) = NonParalyzableDeadTime{Float64}(float(dead_time))
+function EMCCDSensor(; excess_noise_factor::Real=1.0, T::Type{<:AbstractFloat}=Float64)
+    excess_noise_factor >= 1 || throw(InvalidConfiguration("EMCCDSensor excess_noise_factor must be >= 1"))
+    return EMCCDSensor{T}(T(excess_noise_factor))
+end
 
 function SeparableGaussianPixelResponse(; response_width_px::Real=0.5, truncate_at::Real=3.0,
     T::Type{<:AbstractFloat}=Float64, backend=Array)
@@ -750,6 +756,18 @@ function apply_saturation!(det::Detector)
     return det.state.frame
 end
 
+apply_sensor_statistics!(::CCDSensor, det::Detector, rng::AbstractRNG) = det.state.frame
+apply_sensor_statistics!(::CMOSSensor, det::Detector, rng::AbstractRNG) = det.state.frame
+function apply_sensor_statistics!(sensor::EMCCDSensor, det::Detector, rng::AbstractRNG)
+    factor = sensor.excess_noise_factor
+    factor <= one(factor) && return det.state.frame
+    randn_backend!(rng, det.state.noise_buffer)
+    scale2 = factor * factor - one(factor)
+    zero_t = zero(eltype(det.state.frame))
+    @. det.state.frame += sqrt(max(scale2 * det.state.frame, zero_t)) * det.state.noise_buffer
+    return det.state.frame
+end
+
 apply_pre_readout_gain!(::CCDSensor, det::Detector) = det.state.frame
 apply_pre_readout_gain!(::CMOSSensor, det::Detector) = det.state.frame
 function apply_pre_readout_gain!(::EMCCDSensor, det::Detector)
@@ -815,6 +833,7 @@ end
 function finalize_capture!(det::Detector, rng::AbstractRNG, exposure_time::Real)
     apply_dark_current!(det, rng, exposure_time)
     apply_saturation!(det)
+    apply_sensor_statistics!(det.params.sensor, det, rng)
     apply_pre_readout_gain!(det.params.sensor, det)
     apply_readout_noise!(det, rng)
     apply_post_readout_gain!(det.params.sensor, det)
@@ -904,6 +923,18 @@ _batched_pre_readout_gain!(::CCDSensor, det::Detector, cube::AbstractArray) = cu
 _batched_pre_readout_gain!(::CMOSSensor, det::Detector, cube::AbstractArray) = cube
 _batched_pre_readout_gain!(::EMCCDSensor, det::Detector, cube::AbstractArray) = (cube .*= det.params.gain; cube)
 
+_batched_sensor_statistics!(::CCDSensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
+_batched_sensor_statistics!(::CMOSSensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
+function _batched_sensor_statistics!(sensor::EMCCDSensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
+    factor = sensor.excess_noise_factor
+    factor <= one(factor) && return cube
+    randn_backend!(rng, scratch)
+    scale2 = factor * factor - one(factor)
+    zero_t = zero(eltype(cube))
+    @. cube += sqrt(max(scale2 * cube, zero_t)) * scratch
+    return cube
+end
+
 _batched_post_readout_gain!(::EMCCDSensor, det::Detector, cube::AbstractArray) = cube
 _batched_post_readout_gain!(::CCDSensor, det::Detector, cube::AbstractArray) = (cube .*= det.params.gain; cube)
 _batched_post_readout_gain!(::CMOSSensor, det::Detector, cube::AbstractArray) = (cube .*= det.params.gain; cube)
@@ -951,6 +982,7 @@ function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::Abstra
     _batched_background_flux!(det.background_flux, det, cube, scratch, rng, exposure_time)
     _batched_dark_current!(det, cube, scratch, rng, exposure_time)
     apply_saturation!(det, cube)
+    _batched_sensor_statistics!(det.params.sensor, det, cube, scratch, rng)
     _batched_pre_readout_gain!(det.params.sensor, det, cube)
     _batched_readout_noise!(det, cube, scratch, rng)
     _batched_post_readout_gain!(det.params.sensor, det, cube)
