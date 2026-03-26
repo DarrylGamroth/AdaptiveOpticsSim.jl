@@ -154,6 +154,8 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - `CurvatureWFS` now has two maintained readout families:
   `CurvatureFrameReadout` for frame-style detector coupling and
   `CurvatureCountingReadout` for counting/channel-style readout.
+- `CurvatureBranchResponse` models reusable intra-/extra-focal throughput and
+  background imbalance independently of any one instrument example.
 - Maintained optional-capability queries use
   `supports_prepared_runtime(wfs, src)` and `supports_stacked_sources(wfs, src)`
   in addition to the simulation-level trait surface.

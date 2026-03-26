@@ -7,7 +7,8 @@
 # 2. apply equal-and-opposite defocus masks to form two branches
 # 3. propagate both branches with a batched centered FFT
 # 4. crop back to the pupil support and bin to the exported readout
-# 5. form the normalized signal `(I⁺ - I⁻) / (I⁺ + I⁻)`
+# 5. apply branch response terms and form the normalized signal
+#    `(I⁺ - I⁻) / (I⁺ + I⁻)`
 #
 # The exported `state.slopes` remains one scalar signal per valid subaperture
 # so the runtime and reconstructor interfaces stay compatible with the rest of
@@ -112,12 +113,38 @@ abstract type CurvatureReadoutModel end
 struct CurvatureFrameReadout <: CurvatureReadoutModel end
 struct CurvatureCountingReadout <: CurvatureReadoutModel end
 
-struct CurvatureWFSParams{T<:AbstractFloat,R<:CurvatureReadoutModel}
+"""
+    CurvatureBranchResponse(; plus_throughput=1, minus_throughput=1, plus_background=0, minus_background=0, T=Float64)
+
+Per-branch detector-plane response model for `CurvatureWFS`.
+
+The throughputs scale the intra-/extra-focal branch intensities before signal
+formation. The backgrounds are added after detector-plane sampling and can be
+used to represent fixed branch offsets or asymmetric relay background.
+"""
+struct CurvatureBranchResponse{T<:AbstractFloat}
+    plus_throughput::T
+    minus_throughput::T
+    plus_background::T
+    minus_background::T
+end
+
+function CurvatureBranchResponse(; plus_throughput::Real=1.0, minus_throughput::Real=1.0,
+    plus_background::Real=0.0, minus_background::Real=0.0, T::Type{<:AbstractFloat}=Float64)
+    plus_throughput >= 0 || throw(InvalidConfiguration("plus_throughput must be >= 0"))
+    minus_throughput >= 0 || throw(InvalidConfiguration("minus_throughput must be >= 0"))
+    plus_background >= 0 || throw(InvalidConfiguration("plus_background must be >= 0"))
+    minus_background >= 0 || throw(InvalidConfiguration("minus_background must be >= 0"))
+    return CurvatureBranchResponse{T}(T(plus_throughput), T(minus_throughput), T(plus_background), T(minus_background))
+end
+
+struct CurvatureWFSParams{T<:AbstractFloat,R<:CurvatureReadoutModel,B<:CurvatureBranchResponse{T}}
     n_subap::Int
     threshold::T
     defocus_rms_nm::T
     diffraction_padding::Int
     readout_model::R
+    branch_response::B
 end
 
 mutable struct CurvatureWFSState{
@@ -155,14 +182,17 @@ struct CurvatureWFS{P<:CurvatureWFSParams,S<:CurvatureWFSState} <: AbstractWFS
 end
 
 """
-    CurvatureWFS(tel; n_subap, threshold=0.1, defocus_rms_nm=500.0, diffraction_padding=2, readout_model=CurvatureFrameReadout(), ...)
+    CurvatureWFS(tel; n_subap, threshold=0.1, defocus_rms_nm=500.0, diffraction_padding=2,
+                 readout_model=CurvatureFrameReadout(), branch_response=CurvatureBranchResponse(), ...)
 
 Construct a curvature WFS using two propagated defocus branches.
 
 `defocus_rms_nm` sets the RMS amplitude of the defocus term in nanometers.
+`branch_response` models intra-/extra-focal throughput and background imbalance.
 """
 function CurvatureWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, defocus_rms_nm::Real=500.0,
     diffraction_padding::Int=2, readout_model::CurvatureReadoutModel=CurvatureFrameReadout(),
+    branch_response::CurvatureBranchResponse=CurvatureBranchResponse(),
     T::Type{<:AbstractFloat}=Float64, backend=Array)
     tel.params.resolution % n_subap == 0 ||
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
@@ -172,7 +202,9 @@ function CurvatureWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, defocus
         throw(InvalidConfiguration("defocus_rms_nm must be >= 0"))
     n = tel.params.resolution
     pad = n * diffraction_padding
-    params = CurvatureWFSParams{T, typeof(readout_model)}(n_subap, T(threshold), T(defocus_rms_nm), diffraction_padding, readout_model)
+    response = convert_curvature_branch_response(branch_response, T)
+    params = CurvatureWFSParams{T, typeof(readout_model), typeof(response)}(
+        n_subap, T(threshold), T(defocus_rms_nm), diffraction_padding, readout_model, response)
     valid_mask = backend{Bool}(undef, n_subap, n_subap)
     slopes = backend{T}(undef, n_subap * n_subap)
     n_branches = 2
@@ -234,6 +266,9 @@ function CurvatureWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, defocus
 end
 
 sensing_mode(::CurvatureWFS) = Diffractive()
+convert_curvature_branch_response(response::CurvatureBranchResponse, ::Type{T}) where {T<:AbstractFloat} =
+    CurvatureBranchResponse(T=T, plus_throughput=response.plus_throughput, minus_throughput=response.minus_throughput,
+        plus_background=response.plus_background, minus_background=response.minus_background)
 curvature_camera_dims(n_subap::Int, ::CurvatureFrameReadout) = (2 * n_subap, n_subap)
 curvature_camera_dims(n_subap::Int, ::CurvatureCountingReadout) = (2, n_subap * n_subap)
 curvature_camera_frame(backend, ::Type{T}, n_subap::Int, readout_model::CurvatureReadoutModel) where {T<:AbstractFloat} =
@@ -319,8 +354,16 @@ function sample_curvature_frames!(wfs::CurvatureWFS, tel::Telescope)
     copyto!(wfs.state.cropped_minus, @view(wfs.state.intensity_stack[ox+1:ox+n, oy+1:oy+n, 2]))
     bin2d!(wfs.state.frame_plus, wfs.state.cropped_plus, sub)
     bin2d!(wfs.state.frame_minus, wfs.state.cropped_minus, sub)
+    apply_curvature_branch_response!(wfs)
     pack_curvature_readout!(wfs)
     return wfs.state.camera_frame
+end
+
+function apply_curvature_branch_response!(wfs::CurvatureWFS)
+    response = wfs.params.branch_response
+    @. wfs.state.frame_plus = response.plus_throughput * wfs.state.frame_plus + response.plus_background
+    @. wfs.state.frame_minus = response.minus_throughput * wfs.state.frame_minus + response.minus_background
+    return wfs
 end
 
 function pack_curvature_readout!(wfs::CurvatureWFS)

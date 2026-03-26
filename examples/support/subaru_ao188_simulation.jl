@@ -24,14 +24,21 @@ struct CircularActuatorSupport <: AO188ActuatorSupportModel end
 
 abstract type SubaruHighOrderWFSModel end
 struct OperationalShackHartmannModel <: SubaruHighOrderWFSModel end
-struct AO188CurvatureModel{T<:AbstractFloat,R<:CurvatureReadoutModel} <: SubaruHighOrderWFSModel
+struct AO188CurvatureModel{T<:AbstractFloat,R<:CurvatureReadoutModel,B<:CurvatureBranchResponse{T}} <: SubaruHighOrderWFSModel
     defocus_rms_nm::T
     readout_model::R
+    branch_response::B
 end
 AO188CurvatureModel(; defocus_rms_nm::Real=500.0,
     readout_model::CurvatureReadoutModel=CurvatureCountingReadout(),
+    branch_response::CurvatureBranchResponse=CurvatureBranchResponse(),
     T::Type{<:AbstractFloat}=Float32) =
-    AO188CurvatureModel{T, typeof(readout_model)}(T(defocus_rms_nm), readout_model)
+    AO188CurvatureModel{T, typeof(readout_model), CurvatureBranchResponse{T}}(
+        T(defocus_rms_nm), readout_model, CurvatureBranchResponse(T=T,
+            plus_throughput=branch_response.plus_throughput,
+            minus_throughput=branch_response.minus_throughput,
+            plus_background=branch_response.plus_background,
+            minus_background=branch_response.minus_background))
 
 function AO188CurvatureSimulationParams(; kwargs...)
     nt = (; kwargs...)
@@ -51,7 +58,7 @@ end
 function _build_high_order_wfs(model::AO188CurvatureModel, tel::Telescope, params; backend=Array)
     T = eltype(tel.state.opd)
     return CurvatureWFS(tel; n_subap=params.n_subap, defocus_rms_nm=model.defocus_rms_nm,
-        readout_model=model.readout_model, T=T, backend=backend)
+        readout_model=model.readout_model, branch_response=model.branch_response, T=T, backend=backend)
 end
 
 abstract type AO188ReplayMode end

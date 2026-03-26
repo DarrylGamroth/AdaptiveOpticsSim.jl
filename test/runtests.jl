@@ -1005,6 +1005,16 @@ end
     @test size(counting.state.camera_frame) == (2, 64)
     @test counting_flat ≈ zero.(counting_flat) atol=1e-10
     @test_throws InvalidConfiguration measure!(counting, tel, src, det)
+
+    response = CurvatureBranchResponse(T=Float64, plus_throughput=1.2, minus_throughput=0.8,
+        plus_background=5.0, minus_background=1.0)
+    imbalanced = CurvatureWFS(tel; n_subap=8, defocus_rms_nm=500.0, branch_response=response)
+    imbalanced_flat = copy(measure!(imbalanced, tel, src))
+    @test imbalanced_flat ≈ zero.(imbalanced_flat) atol=1e-10
+    plus_mean = mean(@view imbalanced.state.camera_frame[1:imbalanced.params.n_subap, :])
+    minus_mean = mean(@view imbalanced.state.camera_frame[imbalanced.params.n_subap+1:end, :])
+    @test plus_mean > minus_mean
+    @test_throws InvalidConfiguration CurvatureBranchResponse(plus_throughput=-1.0)
 end
 
 @testset "OOPAO parity knobs" begin
