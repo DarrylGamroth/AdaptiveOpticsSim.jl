@@ -234,8 +234,6 @@ function CurvatureWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, defocus
 end
 
 sensing_mode(::CurvatureWFS) = Diffractive()
-curvature_detector_compatible(::CurvatureReadoutModel) = false
-curvature_detector_compatible(::CurvatureFrameReadout) = true
 curvature_camera_dims(n_subap::Int, ::CurvatureFrameReadout) = (2 * n_subap, n_subap)
 curvature_camera_dims(n_subap::Int, ::CurvatureCountingReadout) = (2, n_subap * n_subap)
 curvature_camera_frame(backend, ::Type{T}, n_subap::Int, readout_model::CurvatureReadoutModel) where {T<:AbstractFloat} =
@@ -326,28 +324,30 @@ function sample_curvature_frames!(wfs::CurvatureWFS, tel::Telescope)
 end
 
 function pack_curvature_readout!(wfs::CurvatureWFS)
-    return pack_curvature_readout!(execution_style(wfs.state.camera_frame), wfs)
+    return pack_curvature_readout!(execution_style(wfs.state.camera_frame), wfs.params.readout_model, wfs)
 end
 
-function pack_curvature_readout!(::ScalarCPUStyle, wfs::CurvatureWFS)
-    if wfs.params.readout_model isa CurvatureFrameReadout
-        @views copyto!(wfs.state.camera_frame[1:wfs.params.n_subap, :], wfs.state.frame_plus)
-        @views copyto!(wfs.state.camera_frame[wfs.params.n_subap+1:2*wfs.params.n_subap, :], wfs.state.frame_minus)
-    else
-        copyto!(@view(wfs.state.camera_frame[1, :]), vec(wfs.state.frame_plus))
-        copyto!(@view(wfs.state.camera_frame[2, :]), vec(wfs.state.frame_minus))
-    end
+function pack_curvature_readout!(::ScalarCPUStyle, ::CurvatureFrameReadout, wfs::CurvatureWFS)
+    @views copyto!(wfs.state.camera_frame[1:wfs.params.n_subap, :], wfs.state.frame_plus)
+    @views copyto!(wfs.state.camera_frame[wfs.params.n_subap+1:2*wfs.params.n_subap, :], wfs.state.frame_minus)
     return wfs.state.camera_frame
 end
 
-function pack_curvature_readout!(style::AcceleratorStyle, wfs::CurvatureWFS)
-    if wfs.params.readout_model isa CurvatureFrameReadout
-        @views copyto!(wfs.state.camera_frame[1:wfs.params.n_subap, :], wfs.state.frame_plus)
-        @views copyto!(wfs.state.camera_frame[wfs.params.n_subap+1:2*wfs.params.n_subap, :], wfs.state.frame_minus)
-    else
-        launch_kernel!(style, curvature_channel_pack_kernel!, wfs.state.camera_frame, wfs.state.frame_plus,
-            wfs.state.frame_minus, wfs.params.n_subap; ndrange=size(wfs.state.frame_plus))
-    end
+function pack_curvature_readout!(::ScalarCPUStyle, ::CurvatureCountingReadout, wfs::CurvatureWFS)
+    copyto!(@view(wfs.state.camera_frame[1, :]), vec(wfs.state.frame_plus))
+    copyto!(@view(wfs.state.camera_frame[2, :]), vec(wfs.state.frame_minus))
+    return wfs.state.camera_frame
+end
+
+function pack_curvature_readout!(::AcceleratorStyle, ::CurvatureFrameReadout, wfs::CurvatureWFS)
+    @views copyto!(wfs.state.camera_frame[1:wfs.params.n_subap, :], wfs.state.frame_plus)
+    @views copyto!(wfs.state.camera_frame[wfs.params.n_subap+1:2*wfs.params.n_subap, :], wfs.state.frame_minus)
+    return wfs.state.camera_frame
+end
+
+function pack_curvature_readout!(style::AcceleratorStyle, ::CurvatureCountingReadout, wfs::CurvatureWFS)
+    launch_kernel!(style, curvature_channel_pack_kernel!, wfs.state.camera_frame, wfs.state.frame_plus,
+        wfs.state.frame_minus, wfs.params.n_subap; ndrange=size(wfs.state.frame_plus))
     return wfs.state.camera_frame
 end
 
@@ -402,63 +402,76 @@ function curvature_intensity!(style::AcceleratorStyle, wfs::CurvatureWFS, tel::T
 end
 
 function curvature_signal!(wfs::CurvatureWFS, frame::AbstractMatrix{T}) where {T<:AbstractFloat}
-    if wfs.params.readout_model isa CurvatureCountingReadout
-        return curvature_signal_channels!(wfs, frame)
-    end
+    return curvature_signal!(execution_style(frame), wfs.params.readout_model, wfs, frame)
+end
+
+function curvature_signal!(::ScalarCPUStyle, ::CurvatureFrameReadout, wfs::CurvatureWFS,
+    frame::AbstractMatrix{T}) where {T<:AbstractFloat}
     size(frame) == size(wfs.state.camera_frame) ||
         throw(DimensionMismatchError("CurvatureWFS frame size must match the sampled camera frame"))
     n_sub = wfs.params.n_subap
     epsval = eps(eltype(wfs.state.signal_2d))
-    style = execution_style(frame)
-    if style isa ScalarCPUStyle
-        @inbounds for i in 1:n_sub, j in 1:n_sub
-            idx = (i - 1) * n_sub + j
-            if wfs.state.valid_mask[i, j]
-                plus = frame[i, j]
-                minus = frame[i + n_sub, j]
-                signal = (plus - minus) / (plus + minus + epsval)
-                corrected = signal - wfs.state.reference_signal_2d[i, j]
-                wfs.state.signal_2d[i, j] = corrected
-                wfs.state.slopes[idx] = corrected
-            else
-                wfs.state.signal_2d[i, j] = zero(eltype(wfs.state.signal_2d))
-                wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
-            end
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        idx = (i - 1) * n_sub + j
+        if wfs.state.valid_mask[i, j]
+            plus = frame[i, j]
+            minus = frame[i + n_sub, j]
+            signal = (plus - minus) / (plus + minus + epsval)
+            corrected = signal - wfs.state.reference_signal_2d[i, j]
+            wfs.state.signal_2d[i, j] = corrected
+            wfs.state.slopes[idx] = corrected
+        else
+            wfs.state.signal_2d[i, j] = zero(eltype(wfs.state.signal_2d))
+            wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
         end
-    else
-        launch_kernel!(style, curvature_signal_from_frame_kernel!, wfs.state.signal_2d, wfs.state.slopes,
-            frame, wfs.state.reference_signal_2d, wfs.state.valid_mask, epsval, n_sub;
-            ndrange=size(wfs.state.signal_2d))
     end
     return wfs.state.slopes
 end
 
-function curvature_signal_channels!(wfs::CurvatureWFS, frame::AbstractMatrix{T}) where {T<:AbstractFloat}
+function curvature_signal!(style::AcceleratorStyle, ::CurvatureFrameReadout, wfs::CurvatureWFS,
+    frame::AbstractMatrix{T}) where {T<:AbstractFloat}
+    size(frame) == size(wfs.state.camera_frame) ||
+        throw(DimensionMismatchError("CurvatureWFS frame size must match the sampled camera frame"))
+    n_sub = wfs.params.n_subap
+    epsval = eps(eltype(wfs.state.signal_2d))
+    launch_kernel!(style, curvature_signal_from_frame_kernel!, wfs.state.signal_2d, wfs.state.slopes,
+        frame, wfs.state.reference_signal_2d, wfs.state.valid_mask, epsval, n_sub;
+        ndrange=size(wfs.state.signal_2d))
+    return wfs.state.slopes
+end
+
+function curvature_signal!(::ScalarCPUStyle, ::CurvatureCountingReadout, wfs::CurvatureWFS,
+    frame::AbstractMatrix{T}) where {T<:AbstractFloat}
     size(frame) == size(wfs.state.camera_frame) ||
         throw(DimensionMismatchError("CurvatureWFS frame size must match the sampled channel readout"))
     n_sub = wfs.params.n_subap
     epsval = eps(eltype(wfs.state.signal_2d))
-    style = execution_style(frame)
-    if style isa ScalarCPUStyle
-        @inbounds for i in 1:n_sub, j in 1:n_sub
-            idx = (i - 1) * n_sub + j
-            if wfs.state.valid_mask[i, j]
-                plus = frame[1, idx]
-                minus = frame[2, idx]
-                signal = (plus - minus) / (plus + minus + epsval)
-                corrected = signal - wfs.state.reference_signal_2d[i, j]
-                wfs.state.signal_2d[i, j] = corrected
-                wfs.state.slopes[idx] = corrected
-            else
-                wfs.state.signal_2d[i, j] = zero(eltype(wfs.state.signal_2d))
-                wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
-            end
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        idx = (i - 1) * n_sub + j
+        if wfs.state.valid_mask[i, j]
+            plus = frame[1, idx]
+            minus = frame[2, idx]
+            signal = (plus - minus) / (plus + minus + epsval)
+            corrected = signal - wfs.state.reference_signal_2d[i, j]
+            wfs.state.signal_2d[i, j] = corrected
+            wfs.state.slopes[idx] = corrected
+        else
+            wfs.state.signal_2d[i, j] = zero(eltype(wfs.state.signal_2d))
+            wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
         end
-    else
-        launch_kernel!(style, curvature_signal_from_channels_kernel!, wfs.state.signal_2d, wfs.state.slopes,
-            frame, wfs.state.reference_signal_2d, wfs.state.valid_mask, epsval, n_sub;
-            ndrange=size(wfs.state.signal_2d))
     end
+    return wfs.state.slopes
+end
+
+function curvature_signal!(style::AcceleratorStyle, ::CurvatureCountingReadout, wfs::CurvatureWFS,
+    frame::AbstractMatrix{T}) where {T<:AbstractFloat}
+    size(frame) == size(wfs.state.camera_frame) ||
+        throw(DimensionMismatchError("CurvatureWFS frame size must match the sampled channel readout"))
+    n_sub = wfs.params.n_subap
+    epsval = eps(eltype(wfs.state.signal_2d))
+    launch_kernel!(style, curvature_signal_from_channels_kernel!, wfs.state.signal_2d, wfs.state.slopes,
+        frame, wfs.state.reference_signal_2d, wfs.state.valid_mask, epsval, n_sub;
+        ndrange=size(wfs.state.signal_2d))
     return wfs.state.slopes
 end
 
@@ -507,8 +520,16 @@ end
 
 function measure!(::Diffractive, wfs::CurvatureWFS, tel::Telescope, src::AbstractSource,
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
-    curvature_detector_compatible(wfs.params.readout_model) ||
-        throw(InvalidConfiguration("CurvatureWFS detector coupling requires CurvatureFrameReadout"))
+    return measure_detector_coupled!(wfs.params.readout_model, wfs, tel, src, det; rng=rng)
+end
+
+function measure_detector_coupled!(::CurvatureCountingReadout, wfs::CurvatureWFS, tel::Telescope,
+    src::AbstractSource, det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    throw(InvalidConfiguration("CurvatureWFS detector coupling requires CurvatureFrameReadout"))
+end
+
+function measure_detector_coupled!(::CurvatureFrameReadout, wfs::CurvatureWFS, tel::Telescope,
+    src::AbstractSource, det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
     ensure_curvature_calibration!(wfs, tel, src)
     curvature_intensity!(wfs, tel, src)
     capture!(det, wfs.state.camera_frame; rng=rng)

@@ -146,7 +146,7 @@ reference centroids.
 
 ### Phase 1: Scalar CPU MVP
 
-- add `src/WFS/zernike_wfs.jl`
+- add `src/WFS/zernike.jl`
 - include/export from
   [`src/AdaptiveOpticsSim.jl`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/AdaptiveOpticsSim.jl)
 - implement params/state/constructor
