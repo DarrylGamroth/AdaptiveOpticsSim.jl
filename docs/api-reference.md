@@ -225,6 +225,10 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - `FowlerSampling(n_pairs)` models paired pedestal/signal averaging and
   reduces additive readout noise to `sqrt(2 / n_pairs)` times the
   `SingleRead()` sigma.
+- `SAPHIRASensor(read_time=...)` now also threads the read cadence into the
+  HgCdTe-array metadata and detector physics, so export metadata records
+  reference/signal read counts, per-read time, and total wall-clock time, and
+  SAPHIRA dark/glow accumulation includes the configured read overhead.
 - The maintained counting-detector family is currently `APDDetector`, with
   optional capability queries surfaced through `supports_counting_noise`,
   `supports_dead_time`, and `supports_channel_gain_map`.

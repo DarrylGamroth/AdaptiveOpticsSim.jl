@@ -723,6 +723,8 @@ end
     saphira_meta = detector_export_metadata(det_saphira_ndr)
     @test saphira_meta.sampling_mode == :averaged_non_destructive_reads
     @test saphira_meta.sampling_reads == 4
+    @test saphira_meta.sampling_reference_reads == 0
+    @test saphira_meta.sampling_signal_reads == 4
     @test saphira_meta.readout_sigma == 2.0
     det_saphira_cds = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
         gain=1.0, sensor=SAPHIRASensor(sampling_mode=CorrelatedDoubleSampling()))
@@ -730,6 +732,8 @@ end
     @test frame_saphira_cds ≈ frame_saphira_single .* sqrt(2.0) atol=1e-10
     cds_meta = detector_export_metadata(det_saphira_cds)
     @test cds_meta.sampling_mode == :correlated_double_sampling
+    @test cds_meta.sampling_reference_reads == 1
+    @test cds_meta.sampling_signal_reads == 1
     @test cds_meta.readout_sigma ≈ 4.0 * sqrt(2.0)
     det_saphira_fowler = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
         gain=1.0, sensor=SAPHIRASensor(sampling_mode=FowlerSampling(8)))
@@ -738,10 +742,24 @@ end
     fowler_meta = detector_export_metadata(det_saphira_fowler)
     @test fowler_meta.sampling_mode == :fowler_sampling
     @test fowler_meta.sampling_reads == 16
+    @test fowler_meta.sampling_reference_reads == 8
+    @test fowler_meta.sampling_signal_reads == 8
     @test fowler_meta.readout_sigma == 2.0
+    det_saphira_timed_single = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        dark_current=1000.0, gain=1.0, sensor=SAPHIRASensor(read_time=1.0))
+    frame_saphira_timed_single = copy(capture!(det_saphira_timed_single, zero_psf; rng=MersenneTwister(17)))
+    det_saphira_timed_cds = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        dark_current=1000.0, gain=1.0,
+        sensor=SAPHIRASensor(read_time=1.0, sampling_mode=CorrelatedDoubleSampling()))
+    frame_saphira_timed_cds = copy(capture!(det_saphira_timed_cds, zero_psf; rng=MersenneTwister(17)))
+    @test sum(frame_saphira_timed_cds) > sum(frame_saphira_timed_single)
+    timed_meta = detector_export_metadata(det_saphira_timed_cds)
+    @test timed_meta.sampling_read_time == 1.0
+    @test timed_meta.sampling_wallclock_time == 3.0
     @test_throws InvalidConfiguration SAPHIRASensor(avalanche_gain=0.5)
     @test_throws InvalidConfiguration SAPHIRASensor(excess_noise_factor=0.5)
     @test_throws InvalidConfiguration SAPHIRASensor(glow_rate=-1.0)
+    @test_throws InvalidConfiguration SAPHIRASensor(read_time=-1.0)
     @test_throws InvalidConfiguration SAPHIRASensor(sampling_mode=AveragedNonDestructiveReads(0))
     @test_throws InvalidConfiguration SAPHIRASensor(sampling_mode=FowlerSampling(0))
 

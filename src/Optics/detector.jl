@@ -44,6 +44,7 @@ struct SAPHIRASensor{T<:AbstractFloat,M<:FrameSamplingMode} <: HgCdTeAvalancheAr
     avalanche_gain::T
     excess_noise_factor::T
     glow_rate::T
+    read_time::T
     sampling_mode::M
 end
 struct APDSensor <: CountingSensorType end
@@ -83,6 +84,10 @@ struct DetectorExportMetadata{T<:AbstractFloat}
     response_width_px::Union{Nothing,T}
     sampling_mode::Symbol
     sampling_reads::Union{Nothing,Int}
+    sampling_reference_reads::Union{Nothing,Int}
+    sampling_signal_reads::Union{Nothing,Int}
+    sampling_read_time::Union{Nothing,T}
+    sampling_wallclock_time::Union{Nothing,T}
 end
 
 struct CountingReadoutMetadata
@@ -124,14 +129,15 @@ function InGaAsSensor(; glow_rate::Real=0.0, T::Type{<:AbstractFloat}=Float64)
     return InGaAsSensor{T}(T(glow_rate))
 end
 function SAPHIRASensor(; avalanche_gain::Real=1.0, excess_noise_factor::Real=1.0,
-    glow_rate::Real=0.0, sampling_mode::FrameSamplingMode=SingleRead(),
+    glow_rate::Real=0.0, read_time::Real=0.0, sampling_mode::FrameSamplingMode=SingleRead(),
     T::Type{<:AbstractFloat}=Float64)
     avalanche_gain >= 1 || throw(InvalidConfiguration("SAPHIRASensor avalanche_gain must be >= 1"))
     excess_noise_factor >= 1 || throw(InvalidConfiguration("SAPHIRASensor excess_noise_factor must be >= 1"))
     glow_rate >= 0 || throw(InvalidConfiguration("SAPHIRASensor glow_rate must be >= 0"))
+    read_time >= 0 || throw(InvalidConfiguration("SAPHIRASensor read_time must be >= 0"))
     validate_frame_sampling_mode(sampling_mode)
     return SAPHIRASensor{T,typeof(sampling_mode)}(
-        T(avalanche_gain), T(excess_noise_factor), T(glow_rate), sampling_mode)
+        T(avalanche_gain), T(excess_noise_factor), T(glow_rate), T(read_time), sampling_mode)
 end
 
 function SeparableGaussianPixelResponse(; response_width_px::Real=0.5, truncate_at::Real=3.0,
@@ -272,6 +278,26 @@ frame_sampling_reads(::SingleRead) = nothing
 frame_sampling_reads(mode::AveragedNonDestructiveReads) = mode.n_reads
 frame_sampling_reads(::CorrelatedDoubleSampling) = 2
 frame_sampling_reads(mode::FowlerSampling) = 2 * mode.n_pairs
+frame_sampling_reference_reads(::FrameSensorType) = nothing
+frame_sampling_reference_reads(sensor::SAPHIRASensor) = frame_sampling_reference_reads(sensor.sampling_mode)
+frame_sampling_reference_reads(::SingleRead) = 0
+frame_sampling_reference_reads(::AveragedNonDestructiveReads) = 0
+frame_sampling_reference_reads(::CorrelatedDoubleSampling) = 1
+frame_sampling_reference_reads(mode::FowlerSampling) = mode.n_pairs
+frame_sampling_signal_reads(::FrameSensorType) = nothing
+frame_sampling_signal_reads(sensor::SAPHIRASensor) = frame_sampling_signal_reads(sensor.sampling_mode)
+frame_sampling_signal_reads(::SingleRead) = 1
+frame_sampling_signal_reads(mode::AveragedNonDestructiveReads) = mode.n_reads
+frame_sampling_signal_reads(::CorrelatedDoubleSampling) = 1
+frame_sampling_signal_reads(mode::FowlerSampling) = mode.n_pairs
+sampling_read_time(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = nothing
+sampling_read_time(sensor::SAPHIRASensor, ::Type{T}) where {T<:AbstractFloat} = T(sensor.read_time)
+sampling_wallclock_time(::FrameSensorType, integration_time, ::Type{T}) where {T<:AbstractFloat} = nothing
+function sampling_wallclock_time(sensor::SAPHIRASensor, integration_time, ::Type{T}) where {T<:AbstractFloat}
+    reads = frame_sampling_reads(sensor)
+    reads === nothing && return nothing
+    return T(integration_time) + T(reads) * T(sensor.read_time)
+end
 
 supports_detector_mtf(::AbstractFrameDetector) = false
 supports_detector_mtf(det::Detector) = supports_detector_mtf(det.params.response_model)
@@ -334,6 +360,10 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         frame_response_width(det.params.response_model, T),
         frame_sampling_symbol(det.params.sensor),
         frame_sampling_reads(det.params.sensor),
+        frame_sampling_reference_reads(det.params.sensor),
+        frame_sampling_signal_reads(det.params.sensor),
+        sampling_read_time(det.params.sensor, T),
+        sampling_wallclock_time(det.params.sensor, det.params.integration_time, T),
     )
 end
 
@@ -442,6 +472,15 @@ effective_readout_sigma(::SingleRead, sigma) = sigma
 effective_readout_sigma(mode::AveragedNonDestructiveReads, sigma) = sigma / sqrt(mode.n_reads)
 effective_readout_sigma(::CorrelatedDoubleSampling, sigma) = sigma * sqrt(2)
 effective_readout_sigma(mode::FowlerSampling, sigma) = sigma * sqrt(2 / mode.n_pairs)
+effective_dark_current_time(::FrameSensorType, exposure_time) = exposure_time
+function effective_dark_current_time(sensor::HgCdTeAvalancheArraySensorType, exposure_time)
+    reads = frame_sampling_reads(sensor)
+    reads === nothing && return exposure_time
+    return exposure_time + reads * sensor.read_time
+end
+effective_sensor_glow_time(::FrameSensorType, exposure_time) = exposure_time
+effective_sensor_glow_time(sensor::HgCdTeAvalancheArraySensorType, exposure_time) =
+    effective_dark_current_time(sensor, exposure_time)
 
 convert_dead_time_model(::NoDeadTime, ::Type{T}) where {T<:AbstractFloat} = NoDeadTime()
 convert_dead_time_model(model::NonParalyzableDeadTime, ::Type{T}) where {T<:AbstractFloat} =
@@ -841,7 +880,7 @@ function apply_background_flux!(background::BackgroundFrame, det::Detector, rng:
 end
 
 function apply_dark_current!(det::Detector, rng::AbstractRNG, exposure_time::Real)
-    dark_signal = det.params.dark_current * exposure_time
+    dark_signal = det.params.dark_current * effective_dark_current_time(det.params.sensor, exposure_time)
     if dark_signal <= 0
         return det.state.frame
     end
@@ -888,7 +927,7 @@ function apply_sensor_statistics!(sensor::CMOSSensor, det::Detector, rng::Abstra
 end
 
 function apply_sensor_statistics!(sensor::InGaAsSensor, det::Detector, rng::AbstractRNG)
-    rate = sensor.glow_rate * det.params.integration_time
+    rate = sensor.glow_rate * effective_sensor_glow_time(sensor, det.params.integration_time)
     rate <= zero(rate) && return det.state.frame
     fill!(det.state.noise_buffer, rate)
     poisson_noise!(rng, det.state.noise_buffer)
@@ -909,7 +948,7 @@ apply_sensor_statistics!(sensor::EMCCDSensor, det::Detector, rng::AbstractRNG) =
     apply_avalanche_excess_noise!(sensor.excess_noise_factor, det, rng)
 
 function apply_sensor_statistics!(sensor::SAPHIRASensor, det::Detector, rng::AbstractRNG)
-    rate = sensor.glow_rate * det.params.integration_time
+    rate = sensor.glow_rate * effective_sensor_glow_time(sensor, det.params.integration_time)
     if rate > zero(rate)
         fill!(det.state.noise_buffer, rate)
         poisson_noise!(rng, det.state.noise_buffer)
@@ -1099,7 +1138,7 @@ function _batched_background_flux!(background::BackgroundFrame, det::Detector, c
 end
 
 function _batched_dark_current!(det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG, exposure_time::Real)
-    dark_signal = det.params.dark_current * exposure_time
+    dark_signal = det.params.dark_current * effective_dark_current_time(det.params.sensor, exposure_time)
     if dark_signal <= 0
         return cube
     end
@@ -1125,7 +1164,7 @@ function _batched_sensor_statistics!(sensor::CCDSensor, det::Detector, cube::Abs
     return cube
 end
 function _batched_sensor_statistics!(sensor::InGaAsSensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
-    rate = sensor.glow_rate * det.params.integration_time
+    rate = sensor.glow_rate * effective_sensor_glow_time(sensor, det.params.integration_time)
     rate <= zero(rate) && return cube
     fill!(scratch, rate)
     poisson_noise!(rng, scratch)
@@ -1143,7 +1182,7 @@ end
 _batched_sensor_statistics!(sensor::EMCCDSensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) =
     _batched_avalanche_excess_noise!(sensor.excess_noise_factor, cube, scratch, rng)
 function _batched_sensor_statistics!(sensor::SAPHIRASensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
-    rate = sensor.glow_rate * det.params.integration_time
+    rate = sensor.glow_rate * effective_sensor_glow_time(sensor, det.params.integration_time)
     if rate > zero(rate)
         fill!(scratch, rate)
         poisson_noise!(rng, scratch)
