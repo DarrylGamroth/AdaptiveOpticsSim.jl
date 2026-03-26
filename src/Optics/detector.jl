@@ -6,6 +6,7 @@ abstract type FrameSensorType <: SensorType end
 abstract type CountingSensorType <: SensorType end
 abstract type AbstractFrameDetector <: AbstractDetector end
 abstract type AbstractCountingDetector <: AbstractDetector end
+abstract type CountingDeadTimeModel end
 abstract type BackgroundModel end
 struct NoiseNone <: NoiseModel end
 struct NoisePhoton <: NoiseModel end
@@ -19,6 +20,10 @@ struct CCDSensor <: FrameSensorType end
 struct CMOSSensor <: FrameSensorType end
 struct EMCCDSensor <: FrameSensorType end
 struct APDSensor <: CountingSensorType end
+struct NoDeadTime <: CountingDeadTimeModel end
+struct NonParalyzableDeadTime{T<:AbstractFloat} <: CountingDeadTimeModel
+    dead_time::T
+end
 struct NoBackground <: BackgroundModel end
 struct ScalarBackground{T<:AbstractFloat} <: BackgroundModel
     level::T
@@ -55,6 +60,8 @@ struct CountingDetectorExportMetadata{T<:AbstractFloat}
     qe::T
     gain::T
     dark_count_rate::T
+    dead_time_model::Symbol
+    dead_time::Union{Nothing,T}
     sensor::Symbol
     noise::Symbol
     output_precision::Union{Nothing,DataType}
@@ -63,6 +70,7 @@ end
 
 NoiseReadout(sigma::Real) = NoiseReadout{Float64}(float(sigma))
 NoisePhotonReadout(sigma::Real) = NoisePhotonReadout{Float64}(float(sigma))
+NonParalyzableDeadTime(dead_time::Real) = NonParalyzableDeadTime{Float64}(float(dead_time))
 
 struct DetectorParams{T<:AbstractFloat,S<:SensorType}
     integration_time::T
@@ -95,11 +103,12 @@ struct Detector{N<:NoiseModel,P<:DetectorParams,S<:DetectorState,BF<:BackgroundM
     background_map::BM
 end
 
-struct APDDetectorParams{T<:AbstractFloat,S<:APDSensor}
+struct APDDetectorParams{T<:AbstractFloat,S<:APDSensor,D<:CountingDeadTimeModel}
     integration_time::T
     qe::T
     gain::T
     dark_count_rate::T
+    dead_time_model::D
     sensor::S
     output_precision::Union{Nothing,DataType}
     layout::Symbol
@@ -134,6 +143,17 @@ detector_sensor_symbol(::CCDSensor) = :ccd
 detector_sensor_symbol(::CMOSSensor) = :cmos
 detector_sensor_symbol(::EMCCDSensor) = :emccd
 detector_sensor_symbol(::APDSensor) = :apd
+counting_dead_time_symbol(::NoDeadTime) = :none
+counting_dead_time_symbol(::NonParalyzableDeadTime) = :nonparalyzable
+
+supports_counting_noise(::AbstractCountingDetector) = false
+supports_counting_noise(::APDDetector) = true
+supports_dead_time(::AbstractCountingDetector) = false
+supports_dead_time(det::APDDetector) = supports_dead_time(det.params.dead_time_model)
+supports_dead_time(::NoDeadTime) = false
+supports_dead_time(::NonParalyzableDeadTime) = true
+supports_channel_gain_map(::AbstractCountingDetector) = false
+supports_channel_gain_map(det::APDDetector) = !isnothing(det.channel_gain_map)
 
 sensor_is_frame_based(::SensorType) = false
 sensor_is_frame_based(::FrameSensorType) = true
@@ -173,6 +193,8 @@ function detector_export_metadata(det::APDDetector; T::Type{<:AbstractFloat}=elt
         T(det.params.qe),
         T(det.params.gain),
         T(det.params.dark_count_rate),
+        counting_dead_time_symbol(det.params.dead_time_model),
+        counting_dead_time_value(det.params.dead_time_model, T),
         detector_sensor_symbol(det.params.sensor),
         detector_noise_symbol(det.noise),
         det.params.output_precision,
@@ -259,6 +281,19 @@ function background_model(map::AbstractMatrix; T::Type{<:AbstractFloat}, backend
     return BackgroundFrame{T, typeof(background)}(background)
 end
 
+counting_dead_time_value(::NoDeadTime, ::Type{T}) where {T<:AbstractFloat} = nothing
+counting_dead_time_value(model::NonParalyzableDeadTime, ::Type{T}) where {T<:AbstractFloat} = T(model.dead_time)
+
+convert_dead_time_model(::NoDeadTime, ::Type{T}) where {T<:AbstractFloat} = NoDeadTime()
+convert_dead_time_model(model::NonParalyzableDeadTime, ::Type{T}) where {T<:AbstractFloat} =
+    NonParalyzableDeadTime{T}(T(model.dead_time))
+
+validate_dead_time_model(model::NoDeadTime) = model
+function validate_dead_time_model(model::NonParalyzableDeadTime)
+    model.dead_time >= 0 || throw(InvalidConfiguration("NonParalyzableDeadTime dead_time must be >= 0"))
+    return model
+end
+
 validate_frame_detector_sensor(::FrameSensorType) = nothing
 function validate_frame_detector_sensor(sensor::CountingSensorType)
     throw(InvalidConfiguration("Detector currently models frame-based sensors only; use a sensor-side readout model for $(detector_sensor_symbol(sensor))"))
@@ -331,23 +366,25 @@ validate_apd_noise(noise::NoisePhotonReadout) =
     throw(InvalidConfiguration("APDDetector does not support frame-style readout noise; use NoisePhoton"))
 
 function _build_apd_detector(noise::NoiseModel; integration_time::Real, qe::Real, gain::Real,
-    dark_count_rate::Real, sensor::APDSensor, output_precision::Union{Nothing,DataType},
+    dark_count_rate::Real, dead_time_model::CountingDeadTimeModel, sensor::APDSensor, output_precision::Union{Nothing,DataType},
     layout::Symbol, channel_gain_map,
     T::Type{<:AbstractFloat}, backend)
     gain >= 0 || throw(InvalidConfiguration("APDDetector gain must be >= 0"))
     dark_count_rate >= 0 || throw(InvalidConfiguration("APDDetector dark_count_rate must be >= 0"))
     converted = convert_noise(noise, T)
     validated = validate_apd_noise(converted)
+    dead_time = validate_dead_time_model(convert_dead_time_model(dead_time_model, T))
     gain_map = channel_gain_map === nothing ? nothing : begin
         g = backend{T}(undef, size(channel_gain_map)...)
         copyto!(g, T.(channel_gain_map))
         g
     end
-    params = APDDetectorParams{T,typeof(sensor)}(
+    params = APDDetectorParams{T,typeof(sensor),typeof(dead_time)}(
         T(integration_time),
         T(qe),
         T(gain),
         T(dark_count_rate),
+        dead_time,
         sensor,
         output_precision,
         layout,
@@ -396,10 +433,10 @@ end
 
 function APDDetector(; integration_time::Real=1.0, qe::Real=1.0, noise::NoiseModel=NoisePhoton(),
     gain::Real=1.0, dark_count_rate::Real=0.0, output_precision::Union{Nothing,DataType}=nothing,
-    layout::Symbol=:channels, channel_gain_map=nothing,
+    layout::Symbol=:channels, channel_gain_map=nothing, dead_time_model::CountingDeadTimeModel=NoDeadTime(),
     T::Type{<:AbstractFloat}=Float64, backend=Array)
     return _build_apd_detector(noise; integration_time=integration_time, qe=qe, gain=gain,
-        dark_count_rate=dark_count_rate, sensor=APDSensor(), output_precision=output_precision,
+        dark_count_rate=dark_count_rate, dead_time_model=dead_time_model, sensor=APDSensor(), output_precision=output_precision,
         layout=layout, channel_gain_map=channel_gain_map, T=T, backend=backend)
 end
 
@@ -429,6 +466,17 @@ function apply_apd_dark_counts!(det::APDDetector, exposure_time::Real)
     dark = det.params.dark_count_rate * exposure_time
     dark <= 0 && return det.state.channels
     det.state.channels .+= dark
+    return det.state.channels
+end
+
+apply_apd_dead_time!(det::APDDetector) = apply_apd_dead_time!(det.params.dead_time_model, det)
+apply_apd_dead_time!(::NoDeadTime, det::APDDetector) = det.state.channels
+function apply_apd_dead_time!(model::NonParalyzableDeadTime, det::APDDetector)
+    exposure_time = det.params.integration_time
+    exposure_time > zero(exposure_time) || return det.state.channels
+    scale = model.dead_time / exposure_time
+    scale <= zero(scale) && return det.state.channels
+    @. det.state.channels = det.state.channels / (1 + det.state.channels * scale)
     return det.state.channels
 end
 
@@ -464,6 +512,7 @@ function capture!(det::APDDetector, channels::AbstractMatrix{T}; rng::AbstractRN
     apply_apd_gain_map!(det)
     apply_apd_dark_counts!(det, det.params.integration_time)
     apply_apd_counting_noise!(det, rng)
+    apply_apd_dead_time!(det)
     apply_apd_gain!(det)
     return write_channel_output!(det)
 end

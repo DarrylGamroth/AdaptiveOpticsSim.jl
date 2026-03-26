@@ -34,8 +34,11 @@ than by source file.
 - `AbstractFrameDetector`, `AbstractCountingDetector`
 - `APDDetector`, `APDDetectorParams`, `APDDetectorState`
 - `CountingReadoutMetadata`, `CountingDetectorExportMetadata`
+- `CountingDeadTimeModel`, `NoDeadTime`, `NonParalyzableDeadTime`
 - `capture!`, `output_frame`, `channel_output`, `detector_export_metadata`,
   `readout_ready`, `reset_integration!`
+- `supports_counting_noise`, `supports_dead_time`,
+  `supports_channel_gain_map`
 - `SensorType`, `FrameSensorType`, `CountingSensorType`, `CCDSensor`,
   `CMOSSensor`, `EMCCDSensor`, `APDSensor`
 - `DeformableMirror`, `DeformableMirrorParams`, `DeformableMirrorState`,
@@ -178,6 +181,12 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   `FrameSensorType` sensors only. Counting sensors such as `APDSensor` are a
   distinct readout family and should be modeled through sensor/readout-specific
   code rather than the generic frame-detector path.
+- The maintained counting-detector family is currently `APDDetector`, with
+  optional capability queries surfaced through `supports_counting_noise`,
+  `supports_dead_time`, and `supports_channel_gain_map`.
+- Counting-detector dead-time behavior is selected by dispatch through
+  `CountingDeadTimeModel`, with `NoDeadTime` as the null model and
+  `NonParalyzableDeadTime` as the maintained first physical model.
 
 ### `IF-DM`: deformable mirrors
 

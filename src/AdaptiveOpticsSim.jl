@@ -106,7 +106,9 @@ export Misregistration, apply_misregistration
 export AbstractFrameDetector, AbstractCountingDetector
 export Detector, DetectorParams, DetectorState, DetectorExportMetadata
 export APDDetector, APDDetectorParams, APDDetectorState, CountingReadoutMetadata, CountingDetectorExportMetadata
+export CountingDeadTimeModel, NoDeadTime, NonParalyzableDeadTime
 export capture!, output_frame, channel_output, detector_export_metadata, readout_ready, reset_integration!
+export supports_counting_noise, supports_dead_time, supports_channel_gain_map
 export SensorType, FrameSensorType, CountingSensorType, CCDSensor, CMOSSensor, EMCCDSensor, APDSensor
 export ShackHartmann, ShackHartmannParams, ShackHartmannState, update_valid_mask!, measure!
 export PyramidWFS, PyramidParams, PyramidState

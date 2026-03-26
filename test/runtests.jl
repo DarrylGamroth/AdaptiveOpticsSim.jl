@@ -675,11 +675,28 @@ end
     @test apd_meta.sensor == :apd
     @test apd_meta.readout.output_size == (2, 8)
     @test apd_meta.readout.n_channels == 16
+    @test apd_meta.dead_time_model == :none
+    @test apd_meta.dead_time === nothing
+    @test supports_counting_noise(apd)
+    @test !supports_dead_time(apd)
+    @test !supports_channel_gain_map(apd)
 
     apd_gain_map = APDDetector(integration_time=1.0, qe=1.0, gain=1.0, dark_count_rate=0.0,
         noise=NoiseNone(), channel_gain_map=fill(0.5, 2, 8))
     @test capture!(apd_gain_map, fill(2.0, 2, 8); rng=MersenneTwister(9)) == fill(1.0, 2, 8)
+    @test supports_channel_gain_map(apd_gain_map)
+
+    apd_dead_time = APDDetector(integration_time=1.0, qe=1.0, gain=1.0, dark_count_rate=0.0,
+        noise=NoiseNone(), dead_time_model=NonParalyzableDeadTime(0.5))
+    dead_time_out = capture!(apd_dead_time, fill(4.0, 2, 8); rng=MersenneTwister(9))
+    @test dead_time_out ≈ fill(4.0 / 3.0, 2, 8)
+    dead_time_meta = detector_export_metadata(apd_dead_time)
+    @test dead_time_meta.dead_time_model == :nonparalyzable
+    @test dead_time_meta.dead_time == 0.5
+    @test supports_dead_time(apd_dead_time)
+
     @test_throws InvalidConfiguration APDDetector(noise=NoiseReadout(1.0))
+    @test_throws InvalidConfiguration APDDetector(dead_time_model=NonParalyzableDeadTime(-1.0))
 
     det_buffered = Detector(integration_time=2.0, noise=NoiseNone(), qe=1.0, binning=1)
     frame_partial = copy(capture!(det_buffered, fill(1.0, 4, 4); rng=MersenneTwister(2), sample_time=1.0))
@@ -1027,6 +1044,10 @@ end
     counting_apd = copy(measure!(counting, tel, src, apd))
     @test counting_apd ≈ counting_flat atol=1e-10
     @test detector_export_metadata(apd).readout.output_size == size(counting.state.camera_frame)
+    apd_dead = APDDetector(integration_time=1.0, qe=1.0, gain=1.0, dark_count_rate=0.0,
+        noise=NoiseNone(), dead_time_model=NonParalyzableDeadTime(0.25))
+    counting_dead = copy(measure!(counting, tel, src, apd_dead))
+    @test counting_dead ≈ counting_flat atol=1e-10
     @test_throws InvalidConfiguration CurvatureWFS(tel; n_subap=8, readout_model=CurvatureCountingReadout(),
         readout_pixels_per_subap=2)
 
