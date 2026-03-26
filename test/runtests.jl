@@ -473,6 +473,8 @@ end
     curvature_sim = subaru_ao188_curvature_simulation(; params=curvature_params, rng=MersenneTwister(4))
     @test curvature_sim.high_wfs isa CurvatureWFS
     @test curvature_sim.high_wfs.params.readout_model isa CurvatureCountingReadout
+    @test curvature_sim.high_wfs.params.readout_crop_resolution == 32
+    @test curvature_sim.high_wfs.params.readout_pixels_per_subap == 1
     @test isnothing(curvature_sim.high_detector)
     step!(curvature_sim)
     @test length(curvature_sim.command) == curvature_params.n_act^2

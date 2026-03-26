@@ -28,17 +28,32 @@ struct AO188CurvatureModel{T<:AbstractFloat,R<:CurvatureReadoutModel,B<:Curvatur
     defocus_rms_nm::T
     readout_model::R
     branch_response::B
+    crop_samples_per_subap::Int
+    readout_pixels_per_subap::Int
 end
 AO188CurvatureModel(; defocus_rms_nm::Real=500.0,
     readout_model::CurvatureReadoutModel=CurvatureCountingReadout(),
     branch_response::CurvatureBranchResponse=CurvatureBranchResponse(),
+    crop_samples_per_subap::Integer=8,
+    readout_pixels_per_subap::Integer=1,
     T::Type{<:AbstractFloat}=Float32) =
     AO188CurvatureModel{T, typeof(readout_model), CurvatureBranchResponse{T}}(
         T(defocus_rms_nm), readout_model, CurvatureBranchResponse(T=T,
             plus_throughput=branch_response.plus_throughput,
             minus_throughput=branch_response.minus_throughput,
             plus_background=branch_response.plus_background,
-            minus_background=branch_response.minus_background))
+            minus_background=branch_response.minus_background),
+        Int(crop_samples_per_subap),
+        Int(readout_pixels_per_subap))
+
+function ao188_curvature_readout_crop_resolution(resolution::Int, n_subap::Int, crop_samples_per_subap::Int)
+    crop_samples_per_subap >= 1 ||
+        throw(InvalidConfiguration("AO188 curvature crop_samples_per_subap must be >= 1"))
+    max_divisible = resolution - mod(resolution, n_subap)
+    max_divisible > 0 || throw(InvalidConfiguration("AO188 curvature resolution must be divisible by n_subap"))
+    requested = n_subap * crop_samples_per_subap
+    return min(requested, max_divisible)
+end
 
 function AO188CurvatureSimulationParams(; kwargs...)
     nt = (; kwargs...)
@@ -57,8 +72,12 @@ end
 
 function _build_high_order_wfs(model::AO188CurvatureModel, tel::Telescope, params; backend=Array)
     T = eltype(tel.state.opd)
+    readout_crop_resolution = ao188_curvature_readout_crop_resolution(
+        tel.params.resolution, params.n_subap, model.crop_samples_per_subap)
     return CurvatureWFS(tel; n_subap=params.n_subap, defocus_rms_nm=model.defocus_rms_nm,
-        readout_model=model.readout_model, branch_response=model.branch_response, T=T, backend=backend)
+        readout_model=model.readout_model, branch_response=model.branch_response,
+        readout_crop_resolution=readout_crop_resolution,
+        readout_pixels_per_subap=model.readout_pixels_per_subap, T=T, backend=backend)
 end
 
 abstract type AO188ReplayMode end
