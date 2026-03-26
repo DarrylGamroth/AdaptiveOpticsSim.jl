@@ -650,6 +650,16 @@ function measure_detector_coupled!(::CurvatureCountingReadout, wfs::CurvatureWFS
     throw(InvalidConfiguration("CurvatureWFS detector coupling requires CurvatureFrameReadout"))
 end
 
+function measure_detector_coupled!(::CurvatureCountingReadout, wfs::CurvatureWFS, tel::Telescope,
+    src::AbstractSource, det::APDDetector; rng::AbstractRNG=Random.default_rng())
+    ensure_curvature_calibration!(wfs, tel, src)
+    curvature_intensity!(wfs, tel, src)
+    capture!(det, wfs.state.camera_frame; rng=rng)
+    size(channel_output(det)) == size(wfs.state.camera_frame) ||
+        throw(InvalidConfiguration("CurvatureWFS counting-detector output size must match the sampled channel readout"))
+    return curvature_signal!(wfs, channel_output(det))
+end
+
 function measure_detector_coupled!(::CurvatureFrameReadout, wfs::CurvatureWFS, tel::Telescope,
     src::AbstractSource, det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
     ensure_curvature_calibration!(wfs, tel, src)

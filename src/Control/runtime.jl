@@ -212,6 +212,11 @@ end
 @inline wfs_output_frame(wfs::ShackHartmann{<:Diffractive}, det::AbstractDetector) = wfs.state.spot_cube
 @inline wfs_output_frame(wfs::ZernikeWFS, det::AbstractDetector) = wfs.state.camera_frame
 @inline wfs_output_frame(wfs::CurvatureWFS, det::AbstractDetector) = wfs.state.camera_frame
+@inline wfs_output_metadata(::AbstractWFS) = nothing
+@inline wfs_output_metadata(wfs::CurvatureWFS) = wfs_output_metadata(wfs.params.readout_model, wfs)
+@inline wfs_output_metadata(::CurvatureFrameReadout, wfs::CurvatureWFS) = nothing
+@inline wfs_output_metadata(::CurvatureCountingReadout, wfs::CurvatureWFS) =
+    CountingReadoutMetadata(:branch_by_channel, size(wfs.state.camera_frame), length(wfs.state.camera_frame))
 
 simulation_interface(runtime::ClosedLoopRuntime) = SimulationInterface(runtime)
 simulation_interface(interface::SimulationInterface) = interface
@@ -441,7 +446,8 @@ end
 @inline simulation_slopes(runtime::ClosedLoopRuntime) = runtime.wfs.state.slopes
 @inline simulation_wfs_frame(runtime::ClosedLoopRuntime) = isnothing(runtime.wfs_detector) ? nothing : wfs_output_frame(runtime.wfs, runtime.wfs_detector)
 @inline simulation_science_frame(runtime::ClosedLoopRuntime) = isnothing(runtime.science_detector) ? nothing : output_frame(runtime.science_detector)
-@inline simulation_wfs_metadata(runtime::ClosedLoopRuntime) = isnothing(runtime.wfs_detector) ? nothing : detector_export_metadata(runtime.wfs_detector)
+@inline simulation_wfs_metadata(runtime::ClosedLoopRuntime) =
+    isnothing(runtime.wfs_detector) ? wfs_output_metadata(runtime.wfs) : detector_export_metadata(runtime.wfs_detector)
 @inline simulation_science_metadata(runtime::ClosedLoopRuntime) = isnothing(runtime.science_detector) ? nothing : detector_export_metadata(runtime.science_detector)
 
 @inline simulation_command(sim::AbstractControlSimulation) = simulation_command(simulation_readout(sim))
@@ -455,7 +461,8 @@ end
 @inline simulation_slopes(interface::SimulationInterface) = interface.slopes
 @inline simulation_wfs_frame(interface::SimulationInterface) = interface.wfs_frame
 @inline simulation_science_frame(interface::SimulationInterface) = interface.science_frame
-@inline simulation_wfs_metadata(interface::SimulationInterface) = isnothing(interface.runtime.wfs_detector) ? nothing : detector_export_metadata(interface.runtime.wfs_detector)
+@inline simulation_wfs_metadata(interface::SimulationInterface) =
+    isnothing(interface.runtime.wfs_detector) ? wfs_output_metadata(interface.runtime.wfs) : detector_export_metadata(interface.runtime.wfs_detector)
 @inline simulation_science_metadata(interface::SimulationInterface) = isnothing(interface.runtime.science_detector) ? nothing : detector_export_metadata(interface.runtime.science_detector)
 
 @inline simulation_command(interface::CompositeSimulationInterface) = interface.command

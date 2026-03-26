@@ -8,7 +8,7 @@ using Statistics
 import AdaptiveOpticsSim: step!, runtime_timing, convert_noise, validate_noise, materialize_build,
     execution_style, synchronize_backend!, bin2d!, apply_command!, prepare_sampling!,
     ensure_sh_calibration!, wfs_output_frame, prepare!, prepare_runtime_wfs!, supports_prepared_runtime,
-    supports_detector_output, supports_grouped_execution, simulation_interface,
+    supports_detector_output, supports_grouped_execution, simulation_interface, wfs_output_metadata,
     init_execution_state
 
 export AO188ActuatorSupportModel, CircularActuatorSupport
@@ -519,7 +519,8 @@ _high_order_wfs_frame(simulation::AO188Simulation) =
     isnothing(simulation.high_detector) ? simulation.high_wfs.state.camera_frame :
     wfs_output_frame(simulation.high_wfs, simulation.high_detector)
 _high_order_wfs_metadata(simulation::AO188Simulation) =
-    isnothing(simulation.high_detector) ? nothing : detector_export_metadata(simulation.high_detector)
+    isnothing(simulation.high_detector) ? wfs_output_metadata(simulation.high_wfs) :
+    detector_export_metadata(simulation.high_detector)
 
 function _measure_high!(surrogate::AO188Simulation, rng::AbstractRNG)
     if isnothing(surrogate.high_detector)

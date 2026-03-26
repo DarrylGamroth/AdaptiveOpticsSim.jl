@@ -480,7 +480,7 @@ end
     @test length(curvature_sim.command) == curvature_params.n_act^2
     curvature_readout = simulation_interface(curvature_sim)
     @test size(simulation_wfs_frame(curvature_readout)[1]) == (2, curvature_params.n_subap^2)
-    @test simulation_wfs_metadata(curvature_readout)[1] === nothing
+    @test simulation_wfs_metadata(curvature_readout)[1] isa CountingReadoutMetadata
 
     ao3k_params = AO3kSimulationParams(
         T=Float32,
@@ -664,6 +664,22 @@ end
     @test frame_ccd ≈ 10 .* frame_emccd
     @test_throws InvalidConfiguration Detector(integration_time=1.0, noise=NoisePhoton(), qe=1.0, binning=1,
         sensor=APDSensor())
+
+    apd = APDDetector(integration_time=1.0, qe=0.5, gain=2.0, dark_count_rate=0.0, noise=NoiseNone())
+    channels = fill(4.0, 2, 8)
+    apd_out = capture!(apd, channels; rng=MersenneTwister(9))
+    @test apd_out == fill(4.0, 2, 8)
+    @test channel_output(apd) === apd_out
+    apd_meta = detector_export_metadata(apd)
+    @test apd_meta isa CountingDetectorExportMetadata
+    @test apd_meta.sensor == :apd
+    @test apd_meta.readout.output_size == (2, 8)
+    @test apd_meta.readout.n_channels == 16
+
+    apd_gain_map = APDDetector(integration_time=1.0, qe=1.0, gain=1.0, dark_count_rate=0.0,
+        noise=NoiseNone(), channel_gain_map=fill(0.5, 2, 8))
+    @test capture!(apd_gain_map, fill(2.0, 2, 8); rng=MersenneTwister(9)) == fill(1.0, 2, 8)
+    @test_throws InvalidConfiguration APDDetector(noise=NoiseReadout(1.0))
 
     det_buffered = Detector(integration_time=2.0, noise=NoiseNone(), qe=1.0, binning=1)
     frame_partial = copy(capture!(det_buffered, fill(1.0, 4, 4); rng=MersenneTwister(2), sample_time=1.0))
@@ -1007,6 +1023,10 @@ end
     @test size(counting.state.camera_frame) == (2, 64)
     @test counting_flat ≈ zero.(counting_flat) atol=1e-10
     @test_throws InvalidConfiguration measure!(counting, tel, src, det)
+    apd = APDDetector(integration_time=1.0, qe=1.0, gain=1.0, dark_count_rate=0.0, noise=NoiseNone())
+    counting_apd = copy(measure!(counting, tel, src, apd))
+    @test counting_apd ≈ counting_flat atol=1e-10
+    @test detector_export_metadata(apd).readout.output_size == size(counting.state.camera_frame)
     @test_throws InvalidConfiguration CurvatureWFS(tel; n_subap=8, readout_model=CurvatureCountingReadout(),
         readout_pixels_per_subap=2)
 

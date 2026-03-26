@@ -4,6 +4,8 @@ abstract type NoiseModel end
 abstract type SensorType end
 abstract type FrameSensorType <: SensorType end
 abstract type CountingSensorType <: SensorType end
+abstract type AbstractFrameDetector <: AbstractDetector end
+abstract type AbstractCountingDetector <: AbstractDetector end
 abstract type BackgroundModel end
 struct NoiseNone <: NoiseModel end
 struct NoisePhoton <: NoiseModel end
@@ -42,6 +44,23 @@ struct DetectorExportMetadata{T<:AbstractFloat}
     output_size::Tuple{Int,Int}
 end
 
+struct CountingReadoutMetadata
+    layout::Symbol
+    output_size::Tuple{Int,Int}
+    n_channels::Int
+end
+
+struct CountingDetectorExportMetadata{T<:AbstractFloat}
+    integration_time::T
+    qe::T
+    gain::T
+    dark_count_rate::T
+    sensor::Symbol
+    noise::Symbol
+    output_precision::Union{Nothing,DataType}
+    readout::CountingReadoutMetadata
+end
+
 NoiseReadout(sigma::Real) = NoiseReadout{Float64}(float(sigma))
 NoisePhotonReadout(sigma::Real) = NoisePhotonReadout{Float64}(float(sigma))
 
@@ -68,7 +87,7 @@ mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O}
     readout_ready::Bool
 end
 
-struct Detector{N<:NoiseModel,P<:DetectorParams,S<:DetectorState,BF<:BackgroundModel,BM<:BackgroundModel} <: AbstractDetector
+struct Detector{N<:NoiseModel,P<:DetectorParams,S<:DetectorState,BF<:BackgroundModel,BM<:BackgroundModel} <: AbstractFrameDetector
     noise::N
     params::P
     state::S
@@ -76,8 +95,35 @@ struct Detector{N<:NoiseModel,P<:DetectorParams,S<:DetectorState,BF<:BackgroundM
     background_map::BM
 end
 
+struct APDDetectorParams{T<:AbstractFloat,S<:APDSensor}
+    integration_time::T
+    qe::T
+    gain::T
+    dark_count_rate::T
+    sensor::S
+    output_precision::Union{Nothing,DataType}
+    layout::Symbol
+end
+
+mutable struct APDDetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O}
+    channels::A
+    noise_buffer::A
+    output_buffer::O
+end
+
+struct APDDetector{N<:NoiseModel,P<:APDDetectorParams,S<:APDDetectorState,GM} <: AbstractCountingDetector
+    noise::N
+    params::P
+    state::S
+    channel_gain_map::GM
+end
+
 readout_ready(det::Detector) = det.state.readout_ready
 output_frame(det::Detector) = det.state.output_buffer === nothing ? det.state.frame : det.state.output_buffer
+readout_ready(det::APDDetector) = true
+channel_output(det::APDDetector) = det.state.output_buffer === nothing ? det.state.channels : det.state.output_buffer
+output_frame(det::APDDetector) = channel_output(det)
+reset_integration!(det::APDDetector) = det
 
 detector_noise_symbol(::NoiseNone) = :none
 detector_noise_symbol(::NoisePhoton) = :photon
@@ -117,6 +163,20 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         det.params.output_precision,
         size(det.state.frame),
         size(output),
+    )
+end
+
+function detector_export_metadata(det::APDDetector; T::Type{<:AbstractFloat}=eltype(det.state.channels))
+    output = channel_output(det)
+    return CountingDetectorExportMetadata{T}(
+        T(det.params.integration_time),
+        T(det.params.qe),
+        T(det.params.gain),
+        T(det.params.dark_count_rate),
+        detector_sensor_symbol(det.params.sensor),
+        detector_noise_symbol(det.noise),
+        det.params.output_precision,
+        CountingReadoutMetadata(det.params.layout, size(output), length(output)),
     )
 end
 
@@ -199,6 +259,11 @@ function background_model(map::AbstractMatrix; T::Type{<:AbstractFloat}, backend
     return BackgroundFrame{T, typeof(background)}(background)
 end
 
+validate_frame_detector_sensor(::FrameSensorType) = nothing
+function validate_frame_detector_sensor(sensor::CountingSensorType)
+    throw(InvalidConfiguration("Detector currently models frame-based sensors only; use a sensor-side readout model for $(detector_sensor_symbol(sensor))"))
+end
+
 function resolve_output_precision(bits::Union{Nothing,Int}, output_precision::Union{Nothing,DataType})
     output_precision !== nothing && return output_precision
     bits === 8 && return UInt8
@@ -213,8 +278,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     bits::Union{Nothing,Int}, full_well::Union{Nothing,Real}, sensor::SensorType,
     output_precision::Union{Nothing,DataType}, background_flux, background_map,
     T::Type{<:AbstractFloat}, backend)
-    sensor isa FrameSensorType ||
-        throw(InvalidConfiguration("Detector currently models frame-based sensors only; use a sensor-side readout model for $(detector_sensor_symbol(sensor))"))
+    validate_frame_detector_sensor(sensor)
     full_well_t = full_well === nothing ? nothing : T(full_well)
     flux_model = background_model(background_flux; T=T, backend=backend)
     map_model = background_model(background_map; T=T, backend=backend)
@@ -259,6 +323,46 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     )
 end
 
+validate_apd_noise(noise::NoiseNone) = noise
+validate_apd_noise(noise::NoisePhoton) = noise
+validate_apd_noise(noise::NoiseReadout) =
+    throw(InvalidConfiguration("APDDetector does not support additive readout noise; use NoiseNone or NoisePhoton"))
+validate_apd_noise(noise::NoisePhotonReadout) =
+    throw(InvalidConfiguration("APDDetector does not support frame-style readout noise; use NoisePhoton"))
+
+function _build_apd_detector(noise::NoiseModel; integration_time::Real, qe::Real, gain::Real,
+    dark_count_rate::Real, sensor::APDSensor, output_precision::Union{Nothing,DataType},
+    layout::Symbol, channel_gain_map,
+    T::Type{<:AbstractFloat}, backend)
+    gain >= 0 || throw(InvalidConfiguration("APDDetector gain must be >= 0"))
+    dark_count_rate >= 0 || throw(InvalidConfiguration("APDDetector dark_count_rate must be >= 0"))
+    converted = convert_noise(noise, T)
+    validated = validate_apd_noise(converted)
+    gain_map = channel_gain_map === nothing ? nothing : begin
+        g = backend{T}(undef, size(channel_gain_map)...)
+        copyto!(g, T.(channel_gain_map))
+        g
+    end
+    params = APDDetectorParams{T,typeof(sensor)}(
+        T(integration_time),
+        T(qe),
+        T(gain),
+        T(dark_count_rate),
+        sensor,
+        output_precision,
+        layout,
+    )
+    channels = backend{T}(undef, 1, 1)
+    noise_buffer = backend{T}(undef, 1, 1)
+    output_buffer = output_precision === nothing ? nothing : backend{output_precision}(undef, 1, 1)
+    fill!(channels, zero(T))
+    fill!(noise_buffer, zero(T))
+    output_buffer === nothing || fill!(output_buffer, zero(eltype(output_buffer)))
+    state = APDDetectorState{T,typeof(channels),typeof(output_buffer)}(channels, noise_buffer, output_buffer)
+    return APDDetector{typeof(validated),typeof(params),typeof(state),typeof(gain_map)}(
+        validated, params, state, gain_map)
+end
+
 function Detector(; integration_time::Real=1.0, qe::Real=1.0,
     psf_sampling::Int=1, binning::Int=1, noise=NoisePhoton(),
     gain::Real=1.0, dark_current::Real=0.0, bits::Union{Nothing,Int}=nothing,
@@ -288,6 +392,84 @@ function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
         sensor=sensor, output_precision=output_precision,
         background_flux=background_flux, background_map=background_map,
         T=T, backend=backend)
+end
+
+function APDDetector(; integration_time::Real=1.0, qe::Real=1.0, noise::NoiseModel=NoisePhoton(),
+    gain::Real=1.0, dark_count_rate::Real=0.0, output_precision::Union{Nothing,DataType}=nothing,
+    layout::Symbol=:channels, channel_gain_map=nothing,
+    T::Type{<:AbstractFloat}=Float64, backend=Array)
+    return _build_apd_detector(noise; integration_time=integration_time, qe=qe, gain=gain,
+        dark_count_rate=dark_count_rate, sensor=APDSensor(), output_precision=output_precision,
+        layout=layout, channel_gain_map=channel_gain_map, T=T, backend=backend)
+end
+
+function ensure_channel_buffers!(det::APDDetector, dims::Tuple{Int,Int})
+    if size(det.state.channels) != dims
+        det.state.channels = similar(det.state.channels, dims...)
+    end
+    if size(det.state.noise_buffer) != dims
+        det.state.noise_buffer = similar(det.state.noise_buffer, dims...)
+    end
+    if det.state.output_buffer !== nothing && size(det.state.output_buffer) != dims
+        det.state.output_buffer = similar(det.state.output_buffer, dims...)
+        fill!(det.state.output_buffer, zero(eltype(det.state.output_buffer)))
+    end
+    return det
+end
+
+function apply_apd_gain_map!(det::APDDetector)
+    isnothing(det.channel_gain_map) && return det.state.channels
+    size(det.channel_gain_map) == size(det.state.channels) ||
+        throw(DimensionMismatchError("APDDetector channel_gain_map size must match counting-channel size"))
+    det.state.channels .*= det.channel_gain_map
+    return det.state.channels
+end
+
+function apply_apd_dark_counts!(det::APDDetector, exposure_time::Real)
+    dark = det.params.dark_count_rate * exposure_time
+    dark <= 0 && return det.state.channels
+    det.state.channels .+= dark
+    return det.state.channels
+end
+
+apply_apd_counting_noise!(det::APDDetector{NoiseNone}, rng::AbstractRNG) = det.state.channels
+function apply_apd_counting_noise!(det::APDDetector{NoisePhoton}, rng::AbstractRNG)
+    poisson_noise!(rng, det.state.channels)
+    return det.state.channels
+end
+
+function apply_apd_gain!(det::APDDetector)
+    det.state.channels .*= det.params.gain
+    return det.state.channels
+end
+
+function write_channel_output!(det::APDDetector)
+    output = det.state.output_buffer
+    output === nothing && return det.state.channels
+    output_eltype = eltype(output)
+    if output_eltype <: Integer
+        lo = typemin(output_eltype)
+        hi = typemax(output_eltype)
+        @. output = output_eltype(clamp(round(det.state.channels), lo, hi))
+    else
+        copyto!(output, det.state.channels)
+    end
+    return output
+end
+
+function capture!(det::APDDetector, channels::AbstractMatrix{T}; rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    ensure_channel_buffers!(det, size(channels))
+    copyto!(det.state.channels, channels)
+    det.state.channels .*= det.params.qe * det.params.integration_time
+    apply_apd_gain_map!(det)
+    apply_apd_dark_counts!(det, det.params.integration_time)
+    apply_apd_counting_noise!(det, rng)
+    apply_apd_gain!(det)
+    return write_channel_output!(det)
+end
+
+function capture!(det::APDDetector, channels::AbstractMatrix{T}, rng::AbstractRNG) where {T<:AbstractFloat}
+    return capture!(det, channels; rng=rng)
 end
 
 function fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real) where {T}

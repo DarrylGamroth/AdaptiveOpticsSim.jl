@@ -31,8 +31,11 @@ than by source file.
   `psf_pixel_scale_arcsec`, `ensure_psf_state!`
 - `ZernikeBasis`, `compute_zernike!`, `noll_to_nm`
 - `Detector`, `DetectorParams`, `DetectorState`, `DetectorExportMetadata`
-- `capture!`, `output_frame`, `detector_export_metadata`, `readout_ready`,
-  `reset_integration!`
+- `AbstractFrameDetector`, `AbstractCountingDetector`
+- `APDDetector`, `APDDetectorParams`, `APDDetectorState`
+- `CountingReadoutMetadata`, `CountingDetectorExportMetadata`
+- `capture!`, `output_frame`, `channel_output`, `detector_export_metadata`,
+  `readout_ready`, `reset_integration!`
 - `SensorType`, `FrameSensorType`, `CountingSensorType`, `CCDSensor`,
   `CMOSSensor`, `EMCCDSensor`, `APDSensor`
 - `DeformableMirror`, `DeformableMirrorParams`, `DeformableMirrorState`,
@@ -63,6 +66,7 @@ than by source file.
 - `BioEdgeWFS`, `BioEdgeParams`, `BioEdgeState`
 - `ZernikeWFS`, `ZernikeWFSParams`, `ZernikeWFSState`
 - `CurvatureReadoutModel`, `CurvatureFrameReadout`, `CurvatureCountingReadout`
+- `CurvatureBranchResponse`
 - `update_valid_mask!`, `measure!`, `apply_shift_wfs!`, `set_optical_gain!`
 - `LiFT`, `lift_interaction_matrix`, `lift_interaction_matrix!`
 - `LiFTDampingMode`, `LiFTDampingNone`, `LiFTLevenbergMarquardt`,
