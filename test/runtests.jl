@@ -712,9 +712,21 @@ end
         gain=1.0, full_well=100.0, sensor=SAPHIRASensor(avalanche_gain=5.0))
     frame_saphira_sat = copy(capture!(det_saphira_sat, uniform_signal; rng=MersenneTwister(15)))
     @test maximum(frame_saphira_sat) == 100.0
+    det_saphira_single = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
+        gain=1.0, sensor=SAPHIRASensor())
+    frame_saphira_single = copy(capture!(det_saphira_single, zero_psf; rng=MersenneTwister(16)))
+    det_saphira_ndr = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
+        gain=1.0, sensor=SAPHIRASensor(sampling_mode=AveragedNonDestructiveReads(4)))
+    frame_saphira_ndr = copy(capture!(det_saphira_ndr, zero_psf; rng=MersenneTwister(16)))
+    @test frame_saphira_ndr ≈ frame_saphira_single ./ 2 atol=1e-10
+    @test supports_nondestructive_reads(det_saphira_ndr.params.sensor)
+    saphira_meta = detector_export_metadata(det_saphira_ndr)
+    @test saphira_meta.sampling_mode == :averaged_non_destructive_reads
+    @test saphira_meta.sampling_reads == 4
     @test_throws InvalidConfiguration SAPHIRASensor(avalanche_gain=0.5)
     @test_throws InvalidConfiguration SAPHIRASensor(excess_noise_factor=0.5)
     @test_throws InvalidConfiguration SAPHIRASensor(glow_rate=-1.0)
+    @test_throws InvalidConfiguration SAPHIRASensor(sampling_mode=AveragedNonDestructiveReads(0))
 
     @test_throws InvalidConfiguration Detector(integration_time=1.0, noise=NoisePhoton(), qe=1.0, binning=1,
         sensor=APDSensor())
@@ -1439,6 +1451,8 @@ end
     @test SAPHIRASensor <: AvalancheFrameSensorType
     @test !supports_avalanche_gain(CCDSensor())
     @test !supports_sensor_glow(CMOSSensor())
+    @test !supports_nondestructive_reads(CCDSensor())
+    @test supports_nondestructive_reads(SAPHIRASensor())
     @test APDSensor <: CountingSensorType
     @test curv_count.params.readout_model isa CurvatureCountingReadout
 

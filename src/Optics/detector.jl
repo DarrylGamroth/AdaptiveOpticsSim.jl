@@ -9,6 +9,7 @@ abstract type AbstractCountingDetector <: AbstractDetector end
 abstract type CountingDeadTimeModel end
 abstract type FrameResponseModel end
 abstract type BackgroundModel end
+abstract type FrameSamplingMode end
 struct NoiseNone <: NoiseModel end
 struct NoisePhoton <: NoiseModel end
 struct NoiseReadout{T<:AbstractFloat} <: NoiseModel
@@ -30,10 +31,15 @@ end
 struct InGaAsSensor{T<:AbstractFloat} <: FrameSensorType
     glow_rate::T
 end
-struct SAPHIRASensor{T<:AbstractFloat} <: AvalancheFrameSensorType
+struct SingleRead <: FrameSamplingMode end
+struct AveragedNonDestructiveReads <: FrameSamplingMode
+    n_reads::Int
+end
+struct SAPHIRASensor{T<:AbstractFloat,M<:FrameSamplingMode} <: AvalancheFrameSensorType
     avalanche_gain::T
     excess_noise_factor::T
     glow_rate::T
+    sampling_mode::M
 end
 struct APDSensor <: CountingSensorType end
 struct NoDeadTime <: CountingDeadTimeModel end
@@ -70,6 +76,8 @@ struct DetectorExportMetadata{T<:AbstractFloat}
     output_size::Tuple{Int,Int}
     frame_response::Symbol
     response_width_px::Union{Nothing,T}
+    sampling_mode::Symbol
+    sampling_reads::Union{Nothing,Int}
 end
 
 struct CountingReadoutMetadata
@@ -111,11 +119,14 @@ function InGaAsSensor(; glow_rate::Real=0.0, T::Type{<:AbstractFloat}=Float64)
     return InGaAsSensor{T}(T(glow_rate))
 end
 function SAPHIRASensor(; avalanche_gain::Real=1.0, excess_noise_factor::Real=1.0,
-    glow_rate::Real=0.0, T::Type{<:AbstractFloat}=Float64)
+    glow_rate::Real=0.0, sampling_mode::FrameSamplingMode=SingleRead(),
+    T::Type{<:AbstractFloat}=Float64)
     avalanche_gain >= 1 || throw(InvalidConfiguration("SAPHIRASensor avalanche_gain must be >= 1"))
     excess_noise_factor >= 1 || throw(InvalidConfiguration("SAPHIRASensor excess_noise_factor must be >= 1"))
     glow_rate >= 0 || throw(InvalidConfiguration("SAPHIRASensor glow_rate must be >= 0"))
-    return SAPHIRASensor{T}(T(avalanche_gain), T(excess_noise_factor), T(glow_rate))
+    validate_frame_sampling_mode(sampling_mode)
+    return SAPHIRASensor{T,typeof(sampling_mode)}(
+        T(avalanche_gain), T(excess_noise_factor), T(glow_rate), sampling_mode)
 end
 
 function SeparableGaussianPixelResponse(; response_width_px::Real=0.5, truncate_at::Real=3.0,
@@ -244,6 +255,14 @@ counting_dead_time_symbol(::NoDeadTime) = :none
 counting_dead_time_symbol(::NonParalyzableDeadTime) = :nonparalyzable
 frame_response_symbol(::NullFrameResponse) = :none
 frame_response_symbol(::SeparableGaussianPixelResponse) = :separable_gaussian
+frame_sampling_symbol(::SingleRead) = :single_read
+frame_sampling_symbol(::AveragedNonDestructiveReads) = :averaged_non_destructive_reads
+frame_sampling_symbol(::FrameSensorType) = :single_read
+frame_sampling_symbol(sensor::SAPHIRASensor) = frame_sampling_symbol(sensor.sampling_mode)
+frame_sampling_reads(::FrameSensorType) = nothing
+frame_sampling_reads(sensor::SAPHIRASensor) = frame_sampling_reads(sensor.sampling_mode)
+frame_sampling_reads(::SingleRead) = nothing
+frame_sampling_reads(mode::AveragedNonDestructiveReads) = mode.n_reads
 
 supports_detector_mtf(::AbstractFrameDetector) = false
 supports_detector_mtf(det::Detector) = supports_detector_mtf(det.params.response_model)
@@ -258,6 +277,8 @@ supports_avalanche_gain(::AvalancheFrameSensorType) = true
 supports_sensor_glow(::FrameSensorType) = false
 supports_sensor_glow(::InGaAsSensor) = true
 supports_sensor_glow(::SAPHIRASensor) = true
+supports_nondestructive_reads(::FrameSensorType) = false
+supports_nondestructive_reads(::SAPHIRASensor) = true
 
 supports_counting_noise(::AbstractCountingDetector) = false
 supports_counting_noise(::APDDetector) = true
@@ -298,6 +319,8 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         size(output),
         frame_response_symbol(det.params.response_model),
         frame_response_width(det.params.response_model, T),
+        frame_sampling_symbol(det.params.sensor),
+        frame_sampling_reads(det.params.sensor),
     )
 end
 
@@ -400,6 +423,10 @@ counting_dead_time_value(::NoDeadTime, ::Type{T}) where {T<:AbstractFloat} = not
 counting_dead_time_value(model::NonParalyzableDeadTime, ::Type{T}) where {T<:AbstractFloat} = T(model.dead_time)
 frame_response_width(::NullFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
 frame_response_width(model::SeparableGaussianPixelResponse, ::Type{T}) where {T<:AbstractFloat} = T(model.response_width_px)
+effective_readout_sigma(::FrameSensorType, sigma) = sigma
+effective_readout_sigma(sensor::SAPHIRASensor, sigma) = effective_readout_sigma(sensor.sampling_mode, sigma)
+effective_readout_sigma(::SingleRead, sigma) = sigma
+effective_readout_sigma(mode::AveragedNonDestructiveReads, sigma) = sigma / sqrt(mode.n_reads)
 
 convert_dead_time_model(::NoDeadTime, ::Type{T}) where {T<:AbstractFloat} = NoDeadTime()
 convert_dead_time_model(model::NonParalyzableDeadTime, ::Type{T}) where {T<:AbstractFloat} =
@@ -422,6 +449,11 @@ function validate_frame_response_model(model::SeparableGaussianPixelResponse)
     length(model.kernel) > 0 || throw(InvalidConfiguration("SeparableGaussianPixelResponse kernel must not be empty"))
     isodd(length(model.kernel)) || throw(InvalidConfiguration("SeparableGaussianPixelResponse kernel length must be odd"))
     return model
+end
+validate_frame_sampling_mode(::SingleRead) = SingleRead()
+function validate_frame_sampling_mode(mode::AveragedNonDestructiveReads)
+    mode.n_reads >= 1 || throw(InvalidConfiguration("AveragedNonDestructiveReads n_reads must be >= 1"))
+    return mode
 end
 
 validate_frame_detector_sensor(::FrameSensorType) = nothing
@@ -899,12 +931,14 @@ apply_readout_noise!(det::Detector{NoiseNone}, rng::AbstractRNG) = det.state.fra
 apply_readout_noise!(det::Detector{NoisePhoton}, rng::AbstractRNG) = det.state.frame
 function apply_readout_noise!(det::Detector{<:NoiseReadout}, rng::AbstractRNG)
     randn_backend!(rng, det.state.noise_buffer)
-    det.state.frame .+= det.noise.sigma .* det.state.noise_buffer
+    sigma = effective_readout_sigma(det.params.sensor, det.noise.sigma)
+    det.state.frame .+= sigma .* det.state.noise_buffer
     return det.state.frame
 end
 function apply_readout_noise!(det::Detector{<:NoisePhotonReadout}, rng::AbstractRNG)
     randn_backend!(rng, det.state.noise_buffer)
-    det.state.frame .+= det.noise.sigma .* det.state.noise_buffer
+    sigma = effective_readout_sigma(det.params.sensor, det.noise.sigma)
+    det.state.frame .+= sigma .* det.state.noise_buffer
     return det.state.frame
 end
 
@@ -1109,13 +1143,15 @@ _batched_readout_noise!(det::Detector{NoisePhoton}, cube::AbstractArray, scratch
 
 function _batched_readout_noise!(det::Detector{<:NoiseReadout}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
     randn_backend!(rng, scratch)
-    cube .+= det.noise.sigma .* scratch
+    sigma = effective_readout_sigma(det.params.sensor, det.noise.sigma)
+    cube .+= sigma .* scratch
     return cube
 end
 
 function _batched_readout_noise!(det::Detector{<:NoisePhotonReadout}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
     randn_backend!(rng, scratch)
-    cube .+= det.noise.sigma .* scratch
+    sigma = effective_readout_sigma(det.params.sensor, det.noise.sigma)
+    cube .+= sigma .* scratch
     return cube
 end
 
