@@ -14,7 +14,7 @@ import AdaptiveOpticsSim: step!, runtime_timing, convert_noise, validate_noise, 
 export AO188ActuatorSupportModel, CircularActuatorSupport
 export SubaruHighOrderWFSModel, OperationalShackHartmannModel, AO188CurvatureModel
 export AO188ReplayMode, DirectReplayMode, PreparedReplayMode
-export AO188LatencyModel, AO188WFSDetectorConfig
+export AO188LatencyModel, AO188DetectorConfig, AO188WFSDetectorConfig, AO188APDDetectorConfig
 export AO188SimulationParams, AO188CurvatureSimulationParams
 export AO188Simulation, subaru_ao188_simulation, subaru_ao188_curvature_simulation
 export subaru_ao188_phase_timing, prepare_replay!
@@ -59,7 +59,7 @@ function AO188CurvatureSimulationParams(; kwargs...)
     nt = (; kwargs...)
     T0 = get(nt, :T, Float32)
     sampling = get(nt, :sampling_time, 1e-3)
-    high_detector = get(nt, :high_detector, nothing)
+    high_detector = get(nt, :high_detector, AO188APDDetectorConfig(T=T0, integration_time=sampling))
     rest = Base.structdiff(nt, (; high_order_sensor_model=nothing, source_band=nothing, high_detector=nothing))
     return AO188SimulationParams(; source_band=:I, high_order_sensor_model=AO188CurvatureModel(T=T0),
         high_detector=high_detector, rest...)
@@ -107,7 +107,9 @@ function AO188LatencyModel(;
     return AO188LatencyModel(delays...)
 end
 
-struct AO188WFSDetectorConfig{T<:AbstractFloat,N<:NoiseModel,S<:SensorType}
+abstract type AO188DetectorConfig end
+
+struct AO188WFSDetectorConfig{T<:AbstractFloat,N<:NoiseModel,S<:SensorType} <: AO188DetectorConfig
     integration_time::T
     qe::T
     psf_sampling::Int
@@ -141,6 +143,40 @@ function AO188WFSDetectorConfig(;
     )
 end
 
+struct AO188APDDetectorConfig{T<:AbstractFloat,N<:NoiseModel,D<:CountingDeadTimeModel,GM} <: AO188DetectorConfig
+    integration_time::T
+    qe::T
+    gain::T
+    dark_count_rate::T
+    noise::N
+    dead_time_model::D
+    output_precision::Union{Nothing,DataType}
+    channel_gain_map::GM
+end
+
+function AO188APDDetectorConfig(;
+    T::Type{<:AbstractFloat}=Float32,
+    integration_time::Real=1e-3,
+    qe::Real=0.9,
+    gain::Real=1.0,
+    dark_count_rate::Real=0.0,
+    noise::NoiseModel=NoisePhoton(),
+    dead_time_model::CountingDeadTimeModel=NoDeadTime(),
+    output_precision::Union{Nothing,DataType}=nothing,
+    channel_gain_map=nothing,
+)
+    return AO188APDDetectorConfig{T,typeof(convert_noise(noise, T)),typeof(dead_time_model),typeof(channel_gain_map)}(
+        T(integration_time),
+        T(qe),
+        T(gain),
+        T(dark_count_rate),
+        convert_noise(noise, T),
+        dead_time_model,
+        output_precision,
+        channel_gain_map,
+    )
+end
+
 function detector_from_config(cfg::AO188WFSDetectorConfig{T}; backend=Array) where {T<:AbstractFloat}
     return Detector(
         cfg.noise;
@@ -151,6 +187,21 @@ function detector_from_config(cfg::AO188WFSDetectorConfig{T}; backend=Array) whe
         gain=cfg.gain,
         dark_current=cfg.dark_current,
         sensor=cfg.sensor,
+        T=T,
+        backend=backend,
+    )
+end
+
+function detector_from_config(cfg::AO188APDDetectorConfig{T}; backend=Array) where {T<:AbstractFloat}
+    return APDDetector(
+        integration_time=cfg.integration_time,
+        qe=cfg.qe,
+        gain=cfg.gain,
+        dark_count_rate=cfg.dark_count_rate,
+        noise=cfg.noise,
+        dead_time_model=cfg.dead_time_model,
+        output_precision=cfg.output_precision,
+        channel_gain_map=cfg.channel_gain_map,
         T=T,
         backend=backend,
     )
@@ -234,7 +285,7 @@ function AO188SimulationParams(;
     branch_execution::AbstractExecutionPolicy=SequentialExecution(),
     replay_mode::AO188ReplayMode=DirectReplayMode(),
     latency::AO188LatencyModel=AO188LatencyModel(),
-    high_detector::Union{Nothing,AO188WFSDetectorConfig}=AO188WFSDetectorConfig(
+    high_detector::Union{Nothing,AO188DetectorConfig}=AO188WFSDetectorConfig(
         T=T,
         integration_time=sampling_time,
         qe=0.9,

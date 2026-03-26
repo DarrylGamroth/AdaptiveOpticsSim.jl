@@ -475,12 +475,13 @@ end
     @test curvature_sim.high_wfs.params.readout_model isa CurvatureCountingReadout
     @test curvature_sim.high_wfs.params.readout_crop_resolution == 32
     @test curvature_sim.high_wfs.params.readout_pixels_per_subap == 1
-    @test isnothing(curvature_sim.high_detector)
+    @test curvature_params.high_detector isa AO188APDDetectorConfig
+    @test curvature_sim.high_detector isa APDDetector
     step!(curvature_sim)
     @test length(curvature_sim.command) == curvature_params.n_act^2
     curvature_readout = simulation_interface(curvature_sim)
     @test size(simulation_wfs_frame(curvature_readout)[1]) == (2, curvature_params.n_subap^2)
-    @test simulation_wfs_metadata(curvature_readout)[1] isa CountingReadoutMetadata
+    @test simulation_wfs_metadata(curvature_readout)[1] isa CountingDetectorExportMetadata
 
     ao3k_params = AO3kSimulationParams(
         T=Float32,
@@ -685,6 +686,24 @@ end
         noise=NoiseNone(), channel_gain_map=fill(0.5, 2, 8))
     @test capture!(apd_gain_map, fill(2.0, 2, 8); rng=MersenneTwister(9)) == fill(1.0, 2, 8)
     @test supports_channel_gain_map(apd_gain_map)
+
+    det_mtf = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        response_model=SeparableGaussianPixelResponse(response_width_px=0.75))
+    impulse = zeros(9, 9)
+    impulse[5, 5] = 1.0
+    frame_mtf = capture!(det_mtf, impulse; rng=MersenneTwister(3))
+    @test sum(frame_mtf) ≈ 1.0 atol=1e-6
+    @test frame_mtf[5, 5] < 1.0
+    @test frame_mtf[5, 4] > 0
+    @test supports_detector_mtf(det_mtf)
+    mtf_meta = detector_export_metadata(det_mtf)
+    @test mtf_meta.frame_response == :separable_gaussian
+    @test mtf_meta.response_width_px == 0.75
+    @test_throws InvalidConfiguration SeparableGaussianPixelResponse(response_width_px=0.0)
+
+    cube_mtf = cat(copy(impulse), copy(impulse); dims=3)
+    scratch_mtf = similar(cube_mtf)
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.capture_stack!(det_mtf, cube_mtf, scratch_mtf; rng=MersenneTwister(10))
 
     apd_dead_time = APDDetector(integration_time=1.0, qe=1.0, gain=1.0, dark_count_rate=0.0,
         noise=NoiseNone(), dead_time_model=NonParalyzableDeadTime(0.5))

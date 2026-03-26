@@ -33,10 +33,13 @@ than by source file.
 - `Detector`, `DetectorParams`, `DetectorState`, `DetectorExportMetadata`
 - `AbstractFrameDetector`, `AbstractCountingDetector`
 - `APDDetector`, `APDDetectorParams`, `APDDetectorState`
+- `FrameResponseModel`, `NullFrameResponse`,
+  `SeparableGaussianPixelResponse`
 - `CountingReadoutMetadata`, `CountingDetectorExportMetadata`
 - `CountingDeadTimeModel`, `NoDeadTime`, `NonParalyzableDeadTime`
 - `capture!`, `output_frame`, `channel_output`, `detector_export_metadata`,
   `readout_ready`, `reset_integration!`
+- `supports_detector_mtf`
 - `supports_counting_noise`, `supports_dead_time`,
   `supports_channel_gain_map`
 - `SensorType`, `FrameSensorType`, `CountingSensorType`, `CCDSensor`,
@@ -181,6 +184,10 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   `FrameSensorType` sensors only. Counting sensors such as `APDSensor` are a
   distinct readout family and should be modeled through sensor/readout-specific
   code rather than the generic frame-detector path.
+- The maintained frame-detector response family is opt-in and null by default:
+  `NullFrameResponse` is the identity model and
+  `SeparableGaussianPixelResponse` is the maintained first pixel-response/MTF
+  approximation.
 - The maintained counting-detector family is currently `APDDetector`, with
   optional capability queries surfaced through `supports_counting_noise`,
   `supports_dead_time`, and `supports_channel_gain_map`.

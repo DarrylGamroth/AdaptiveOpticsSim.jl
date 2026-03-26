@@ -7,6 +7,7 @@ abstract type CountingSensorType <: SensorType end
 abstract type AbstractFrameDetector <: AbstractDetector end
 abstract type AbstractCountingDetector <: AbstractDetector end
 abstract type CountingDeadTimeModel end
+abstract type FrameResponseModel end
 abstract type BackgroundModel end
 struct NoiseNone <: NoiseModel end
 struct NoisePhoton <: NoiseModel end
@@ -23,6 +24,11 @@ struct APDSensor <: CountingSensorType end
 struct NoDeadTime <: CountingDeadTimeModel end
 struct NonParalyzableDeadTime{T<:AbstractFloat} <: CountingDeadTimeModel
     dead_time::T
+end
+struct NullFrameResponse <: FrameResponseModel end
+struct SeparableGaussianPixelResponse{T<:AbstractFloat,V<:AbstractVector{T}} <: FrameResponseModel
+    response_width_px::T
+    kernel::V
 end
 struct NoBackground <: BackgroundModel end
 struct ScalarBackground{T<:AbstractFloat} <: BackgroundModel
@@ -47,6 +53,8 @@ struct DetectorExportMetadata{T<:AbstractFloat}
     output_precision::Union{Nothing,DataType}
     frame_size::Tuple{Int,Int}
     output_size::Tuple{Int,Int}
+    frame_response::Symbol
+    response_width_px::Union{Nothing,T}
 end
 
 struct CountingReadoutMetadata
@@ -72,7 +80,47 @@ NoiseReadout(sigma::Real) = NoiseReadout{Float64}(float(sigma))
 NoisePhotonReadout(sigma::Real) = NoisePhotonReadout{Float64}(float(sigma))
 NonParalyzableDeadTime(dead_time::Real) = NonParalyzableDeadTime{Float64}(float(dead_time))
 
-struct DetectorParams{T<:AbstractFloat,S<:SensorType}
+function SeparableGaussianPixelResponse(; response_width_px::Real=0.5, truncate_at::Real=3.0,
+    T::Type{<:AbstractFloat}=Float64, backend=Array)
+    response_width_px > 0 || throw(InvalidConfiguration("SeparableGaussianPixelResponse response_width_px must be > 0"))
+    truncate_at > 0 || throw(InvalidConfiguration("SeparableGaussianPixelResponse truncate_at must be > 0"))
+    radius = max(1, ceil(Int, truncate_at * response_width_px))
+    host_kernel = Vector{T}(undef, 2 * radius + 1)
+    inv_sigma2 = inv(T(response_width_px)^2)
+    for (idx, offset) in enumerate(-radius:radius)
+        host_kernel[idx] = exp(-T(0.5) * T(offset * offset) * inv_sigma2)
+    end
+    host_kernel ./= sum(host_kernel)
+    kernel = backend{T}(undef, length(host_kernel))
+    copyto!(kernel, host_kernel)
+    return SeparableGaussianPixelResponse{T,typeof(kernel)}(T(response_width_px), kernel)
+end
+
+@kernel function separable_response_rows_kernel!(out, img, kernel, radius::Int, n::Int, m::Int, klen::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= m
+        acc = zero(eltype(out))
+        @inbounds for kk in 1:klen
+            jj = clamp(j + kk - radius - 1, 1, m)
+            acc += kernel[kk] * img[i, jj]
+        end
+        @inbounds out[i, j] = acc
+    end
+end
+
+@kernel function separable_response_cols_kernel!(out, img, kernel, radius::Int, n::Int, m::Int, klen::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= m
+        acc = zero(eltype(out))
+        @inbounds for kk in 1:klen
+            ii = clamp(i + kk - radius - 1, 1, n)
+            acc += kernel[kk] * img[ii, j]
+        end
+        @inbounds out[i, j] = acc
+    end
+end
+
+struct DetectorParams{T<:AbstractFloat,S<:SensorType,R<:FrameResponseModel}
     integration_time::T
     qe::T
     psf_sampling::Int
@@ -82,11 +130,13 @@ struct DetectorParams{T<:AbstractFloat,S<:SensorType}
     bits::Union{Nothing,Int}
     full_well::Union{Nothing,T}
     sensor::S
+    response_model::R
     output_precision::Union{Nothing,DataType}
 end
 
 mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O}
     frame::A
+    response_buffer::A
     bin_buffer::A
     noise_buffer::A
     accum_buffer::A
@@ -145,6 +195,13 @@ detector_sensor_symbol(::EMCCDSensor) = :emccd
 detector_sensor_symbol(::APDSensor) = :apd
 counting_dead_time_symbol(::NoDeadTime) = :none
 counting_dead_time_symbol(::NonParalyzableDeadTime) = :nonparalyzable
+frame_response_symbol(::NullFrameResponse) = :none
+frame_response_symbol(::SeparableGaussianPixelResponse) = :separable_gaussian
+
+supports_detector_mtf(::AbstractFrameDetector) = false
+supports_detector_mtf(det::Detector) = supports_detector_mtf(det.params.response_model)
+supports_detector_mtf(::NullFrameResponse) = false
+supports_detector_mtf(::SeparableGaussianPixelResponse) = true
 
 supports_counting_noise(::AbstractCountingDetector) = false
 supports_counting_noise(::APDDetector) = true
@@ -183,6 +240,8 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         det.params.output_precision,
         size(det.state.frame),
         size(output),
+        frame_response_symbol(det.params.response_model),
+        frame_response_width(det.params.response_model, T),
     )
 end
 
@@ -283,14 +342,29 @@ end
 
 counting_dead_time_value(::NoDeadTime, ::Type{T}) where {T<:AbstractFloat} = nothing
 counting_dead_time_value(model::NonParalyzableDeadTime, ::Type{T}) where {T<:AbstractFloat} = T(model.dead_time)
+frame_response_width(::NullFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
+frame_response_width(model::SeparableGaussianPixelResponse, ::Type{T}) where {T<:AbstractFloat} = T(model.response_width_px)
 
 convert_dead_time_model(::NoDeadTime, ::Type{T}) where {T<:AbstractFloat} = NoDeadTime()
 convert_dead_time_model(model::NonParalyzableDeadTime, ::Type{T}) where {T<:AbstractFloat} =
     NonParalyzableDeadTime{T}(T(model.dead_time))
+convert_frame_response_model(::NullFrameResponse, ::Type{T}, backend) where {T<:AbstractFloat} = NullFrameResponse()
+function convert_frame_response_model(model::SeparableGaussianPixelResponse, ::Type{T}, backend) where {T<:AbstractFloat}
+    kernel = backend{T}(undef, length(model.kernel))
+    copyto!(kernel, T.(Array(model.kernel)))
+    return SeparableGaussianPixelResponse{T,typeof(kernel)}(T(model.response_width_px), kernel)
+end
 
 validate_dead_time_model(model::NoDeadTime) = model
 function validate_dead_time_model(model::NonParalyzableDeadTime)
     model.dead_time >= 0 || throw(InvalidConfiguration("NonParalyzableDeadTime dead_time must be >= 0"))
+    return model
+end
+validate_frame_response_model(model::NullFrameResponse) = model
+function validate_frame_response_model(model::SeparableGaussianPixelResponse)
+    model.response_width_px > 0 || throw(InvalidConfiguration("SeparableGaussianPixelResponse response_width_px must be > 0"))
+    length(model.kernel) > 0 || throw(InvalidConfiguration("SeparableGaussianPixelResponse kernel must not be empty"))
+    isodd(length(model.kernel)) || throw(InvalidConfiguration("SeparableGaussianPixelResponse kernel length must be odd"))
     return model
 end
 
@@ -311,14 +385,15 @@ end
 function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     psf_sampling::Int, binning::Int, gain::Real, dark_current::Real,
     bits::Union{Nothing,Int}, full_well::Union{Nothing,Real}, sensor::SensorType,
-    output_precision::Union{Nothing,DataType}, background_flux, background_map,
+    response_model::FrameResponseModel, output_precision::Union{Nothing,DataType}, background_flux, background_map,
     T::Type{<:AbstractFloat}, backend)
     validate_frame_detector_sensor(sensor)
     full_well_t = full_well === nothing ? nothing : T(full_well)
     flux_model = background_model(background_flux; T=T, backend=backend)
     map_model = background_model(background_map; T=T, backend=backend)
+    response = validate_frame_response_model(convert_frame_response_model(response_model, T, backend))
     output_precision_t = resolve_output_precision(bits, output_precision)
-    params = DetectorParams{T, typeof(sensor)}(
+    params = DetectorParams{T, typeof(sensor), typeof(response)}(
         T(integration_time),
         T(qe),
         psf_sampling,
@@ -328,20 +403,24 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
         bits,
         full_well_t,
         sensor,
+        response,
         output_precision_t,
     )
     frame = backend{T}(undef, 1, 1)
+    response_buffer = backend{T}(undef, 1, 1)
     bin_buffer = backend{T}(undef, 1, 1)
     noise_buffer = backend{T}(undef, 1, 1)
     accum_buffer = backend{T}(undef, 1, 1)
     output_buffer = output_precision_t === nothing ? nothing : backend{output_precision_t}(undef, 1, 1)
     fill!(frame, zero(T))
+    fill!(response_buffer, zero(T))
     fill!(bin_buffer, zero(T))
     fill!(noise_buffer, zero(T))
     fill!(accum_buffer, zero(T))
     output_buffer === nothing || fill!(output_buffer, zero(eltype(output_buffer)))
     state = DetectorState{T, typeof(frame), typeof(output_buffer)}(
         frame,
+        response_buffer,
         bin_buffer,
         noise_buffer,
         accum_buffer,
@@ -404,13 +483,14 @@ function Detector(; integration_time::Real=1.0, qe::Real=1.0,
     psf_sampling::Int=1, binning::Int=1, noise=NoisePhoton(),
     gain::Real=1.0, dark_current::Real=0.0, bits::Union{Nothing,Int}=nothing,
     full_well::Union{Nothing,Real}=nothing, sensor::SensorType=CCDSensor(),
+    response_model::FrameResponseModel=NullFrameResponse(),
     output_precision::Union{Nothing,DataType}=nothing, background_flux=nothing, background_map=nothing,
     T::Type{<:AbstractFloat}=Float64, backend=Array)
     normalized = normalize_noise(noise)
     return Detector(normalized; integration_time=integration_time, qe=qe,
         psf_sampling=psf_sampling, binning=binning, gain=gain,
         dark_current=dark_current, bits=bits, full_well=full_well,
-        sensor=sensor, output_precision=output_precision,
+        sensor=sensor, response_model=response_model, output_precision=output_precision,
         background_flux=background_flux, background_map=background_map,
         T=T, backend=backend)
 end
@@ -418,7 +498,8 @@ end
 function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
     psf_sampling::Int=1, binning::Int=1, gain::Real=1.0, dark_current::Real=0.0,
     bits::Union{Nothing,Int}=nothing, full_well::Union{Nothing,Real}=nothing,
-    sensor::SensorType=CCDSensor(), output_precision::Union{Nothing,DataType}=nothing,
+    sensor::SensorType=CCDSensor(), response_model::FrameResponseModel=NullFrameResponse(),
+    output_precision::Union{Nothing,DataType}=nothing,
     background_flux=nothing, background_map=nothing,
     T::Type{<:AbstractFloat}=Float64, backend=Array)
     converted = convert_noise(noise, T)
@@ -426,7 +507,7 @@ function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
     return _build_detector(validated; integration_time=integration_time, qe=qe,
         psf_sampling=psf_sampling, binning=binning, gain=gain,
         dark_current=dark_current, bits=bits, full_well=full_well,
-        sensor=sensor, output_precision=output_precision,
+        sensor=sensor, response_model=response_model, output_precision=output_precision,
         background_flux=background_flux, background_map=background_map,
         T=T, backend=backend)
 end
@@ -521,6 +602,48 @@ function capture!(det::APDDetector, channels::AbstractMatrix{T}, rng::AbstractRN
     return capture!(det, channels; rng=rng)
 end
 
+apply_frame_response!(::NullFrameResponse, det::Detector) = det.state.frame
+
+function apply_frame_response!(model::SeparableGaussianPixelResponse, det::Detector)
+    return apply_frame_response!(execution_style(det.state.frame), model, det)
+end
+
+function apply_frame_response!(::ScalarCPUStyle, model::SeparableGaussianPixelResponse, det::Detector)
+    frame = det.state.frame
+    scratch = det.state.response_buffer
+    kernel = model.kernel
+    n, m = size(frame)
+    radius = fld(length(kernel), 2)
+    @inbounds for i in 1:n, j in 1:m
+        acc = zero(eltype(frame))
+        for kk in eachindex(kernel)
+            jj = clamp(j + kk - radius - 1, 1, m)
+            acc += kernel[kk] * frame[i, jj]
+        end
+        scratch[i, j] = acc
+    end
+    @inbounds for i in 1:n, j in 1:m
+        acc = zero(eltype(frame))
+        for kk in eachindex(kernel)
+            ii = clamp(i + kk - radius - 1, 1, n)
+            acc += kernel[kk] * scratch[ii, j]
+        end
+        frame[i, j] = acc
+    end
+    return frame
+end
+
+function apply_frame_response!(style::AcceleratorStyle, model::SeparableGaussianPixelResponse, det::Detector)
+    frame = det.state.frame
+    scratch = det.state.response_buffer
+    kernel = model.kernel
+    n, m = size(frame)
+    radius = fld(length(kernel), 2)
+    launch_kernel!(style, separable_response_rows_kernel!, scratch, frame, kernel, radius, n, m, length(kernel); ndrange=(n, m))
+    launch_kernel!(style, separable_response_cols_kernel!, frame, scratch, kernel, radius, n, m, length(kernel); ndrange=(n, m))
+    return frame
+end
+
 function fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real) where {T}
     n_in, m_in = size(psf)
     sampling = det.params.psf_sampling
@@ -555,6 +678,7 @@ function fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real)
         end
     end
     @. det.state.frame *= det.params.qe * exposure_time
+    apply_frame_response!(det.params.response_model, det)
     return det.state.frame
 end
 
@@ -729,6 +853,8 @@ function _require_batched_detector_compat(det::Detector, cube::AbstractArray, sc
         throw(InvalidConfiguration("batched detector capture currently requires binning == 1"))
     det.params.output_precision === nothing ||
         throw(InvalidConfiguration("batched detector capture currently requires output_precision === nothing"))
+    supports_detector_mtf(det) &&
+        throw(InvalidConfiguration("batched detector capture currently requires NullFrameResponse()"))
     return nothing
 end
 
@@ -873,6 +999,9 @@ end
 function ensure_buffers!(det::Detector, n_mid::Int, m_mid::Int, n_out::Int, m_out::Int)
     if size(det.state.frame) != (n_out, m_out)
         det.state.frame = similar(det.state.frame, n_out, m_out)
+    end
+    if size(det.state.response_buffer) != (n_out, m_out)
+        det.state.response_buffer = similar(det.state.response_buffer, n_out, m_out)
     end
     if size(det.state.bin_buffer) != (n_mid, m_mid)
         det.state.bin_buffer = similar(det.state.bin_buffer, n_mid, m_mid)
