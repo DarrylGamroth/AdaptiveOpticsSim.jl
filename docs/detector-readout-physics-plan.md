@@ -13,6 +13,7 @@ The immediate driver is AO188 curvature sensing, but the goal is broader:
   and SPAD imaging arrays
 - define interfaces with types, traits, and multiple dispatch rather than
   `isa`-driven branching or flag-heavy runtime logic
+- keep AO188 as an example/use case rather than a core design driver
 
 ## Current State
 
@@ -64,6 +65,89 @@ Concretely, detector/readout work in this plan should prefer shapes like:
 
 The goal is not abstraction for its own sake. The goal is to keep the physics
 layer explicit and extensible without hidden concrete-type checks.
+
+## Layering Rules
+
+The implementation should preserve a strict separation between:
+
+- sensor optics
+- readout model
+- detector response
+
+These are different layers and should remain different layers.
+
+### Sensor Optics
+
+This layer owns:
+
+- propagation
+- masks/modulation
+- branch geometry
+- detector-plane crop/sampling
+- ideal optical intensity or ideal channel outputs
+
+This layer should not own:
+
+- EM gain
+- APD avalanche statistics
+- SPAD dead time
+- read noise
+- ADC behavior
+
+### Readout Model
+
+This layer maps optical outputs to a detector-family-compatible interface.
+
+This layer should expose:
+
+- output layout
+- output metadata
+- geometric reduction from optical planes to readout channels
+
+This layer should not own detector electronics/statistics.
+
+### Detector Response
+
+This layer owns:
+
+- noise/statistics
+- gain
+- dead time
+- dark current / dark counts
+- saturation
+- ADC/quantization
+- MTF/pixel response for frame detectors
+
+## Null-Model Rule
+
+Each layer should have an explicit null/default model.
+
+That means:
+
+- sensor optics can run without extra instrument-specific perturbations
+- readout can export an ideal direct surface
+- detector response can be a null/noiseless identity model
+
+This is important for:
+
+- deterministic regression
+- interface clarity
+- HIL baselines
+- not forcing every use case through a physically rich detector model
+
+The null-model rule should be preserved as new detector families are added.
+
+## AO188 Rule
+
+AO188 is a use case, not a core architectural primitive.
+
+That means:
+
+- AO188-specific defaults belong in the Subaru example layer
+- AO188 should be built from generic curvature optics, generic counting
+  readout, and generic counting-detector pieces
+- AO188 should not drive hardcoded behavior in the core detector/readout
+  abstractions
 
 ### 1. Should detector/readout physics be overhauled per detector family?
 
@@ -124,79 +208,6 @@ SPADs split into two useful categories:
 
 That means SPAD should not be squeezed into either "just APD" or "just CMOS".
 It deserves a future branch in the detector/readout taxonomy.
-
-## Design Direction
-
-The detector/readout stack should be organized into three layers.
-
-### Layer 1: Optical Sensor
-
-This layer produces optical intensity or channelized optical readout before
-detector-specific electronics/statistics.
-
-Examples:
-
-- `ShackHartmann`
-- `PyramidWFS`
-- `BioEdgeWFS`
-- `ZernikeWFS`
-- `CurvatureWFS`
-
-This layer should handle:
-
-- propagation
-- masks/modulation
-- branch geometry
-- detector-plane sampling/crop
-- channel packing or frame packing
-
-This layer should not decide:
-
-- EM gain
-- read noise
-- APD avalanche statistics
-- SPAD dead time
-- ADC quantization
-
-unless the quantity is inseparable from the sensor optics itself.
-
-### Layer 2: Readout Model
-
-This layer maps optical outputs into detector-family-compatible measurement
-channels.
-
-Examples:
-
-- frame readout
-- counting readout
-- quadrant readout
-- per-subap scalar reduction
-- APD-channel packing
-
-This layer should stay generic where possible.
-
-### Layer 3: Detector Response
-
-This layer handles the detector/electronics/statistics model.
-
-Frame-detector examples:
-
-- QE
-- dark current
-- read noise
-- EM gain / excess noise
-- saturation
-- ADC quantization
-- pixel response / MTF
-
-Counting-detector examples:
-
-- QE / throughput
-- dark counts
-- avalanche gain or effective counting response
-- dead time
-- afterpulsing if ever needed
-- channel non-uniformity
 
 ## Immediate APD-Like Counting Plan
 
