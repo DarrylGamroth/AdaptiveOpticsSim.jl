@@ -649,6 +649,20 @@ end
     @test frame_adc_float isa Matrix{Float32}
     @test maximum(frame_adc_float) == Float32(255.0)
 
+    det_window = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        readout_window=FrameWindow(2:3, 2:4))
+    psf_window = reshape(collect(1.0:16.0), 4, 4)
+    frame_window = copy(capture!(det_window, psf_window; rng=MersenneTwister(2)))
+    @test size(frame_window) == (2, 3)
+    @test frame_window == psf_window[2:3, 2:4]
+    meta_window = detector_export_metadata(det_window)
+    @test meta_window.window_rows == (2, 3)
+    @test meta_window.window_cols == (2, 4)
+    det_window_oob = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        readout_window=FrameWindow(2:5, 1:2))
+    @test_throws DimensionMismatchError capture!(det_window_oob, psf_window; rng=MersenneTwister(2))
+    @test_throws InvalidConfiguration FrameWindow(0:1, 1:2)
+
     det_dark = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1, dark_current=100.0)
     frame_dark = capture!(det_dark, zeros(4, 4); rng=MersenneTwister(2))
     @test sum(frame_dark) > 0
@@ -804,6 +818,11 @@ end
     cube_mtf = cat(copy(impulse), copy(impulse); dims=3)
     scratch_mtf = similar(cube_mtf)
     @test_throws InvalidConfiguration AdaptiveOpticsSim.capture_stack!(det_mtf, cube_mtf, scratch_mtf; rng=MersenneTwister(10))
+    det_window_stack = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        readout_window=FrameWindow(2:8, 2:8))
+    cube_window = cat(copy(impulse), copy(impulse); dims=3)
+    scratch_window = similar(cube_window)
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.capture_stack!(det_window_stack, cube_window, scratch_window; rng=MersenneTwister(10))
 
     det_cmos_batched = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=CMOSSensor(column_readout_sigma=1.0))

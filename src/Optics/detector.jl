@@ -10,6 +10,15 @@ abstract type CountingDeadTimeModel end
 abstract type FrameResponseModel end
 abstract type BackgroundModel end
 abstract type FrameSamplingMode end
+struct FrameWindow
+    rows::UnitRange{Int}
+    cols::UnitRange{Int}
+    function FrameWindow(rows::UnitRange{Int}, cols::UnitRange{Int})
+        window = new(rows, cols)
+        validate_readout_window(window)
+        return window
+    end
+end
 struct NoiseNone <: NoiseModel end
 struct NoisePhoton <: NoiseModel end
 struct NoiseReadout{T<:AbstractFloat} <: NoiseModel
@@ -82,6 +91,8 @@ struct DetectorExportMetadata{T<:AbstractFloat}
     output_size::Tuple{Int,Int}
     frame_response::Symbol
     response_width_px::Union{Nothing,T}
+    window_rows::Union{Nothing,Tuple{Int,Int}}
+    window_cols::Union{Nothing,Tuple{Int,Int}}
     sampling_mode::Symbol
     sampling_reads::Union{Nothing,Int}
     sampling_reference_reads::Union{Nothing,Int}
@@ -198,6 +209,7 @@ struct DetectorParams{T<:AbstractFloat,S<:SensorType,R<:FrameResponseModel}
     full_well::Union{Nothing,T}
     sensor::S
     response_model::R
+    readout_window::Union{Nothing,FrameWindow}
     output_precision::Union{Nothing,DataType}
 end
 
@@ -341,6 +353,10 @@ detector_readout_sigma(noise::NoisePhotonReadout, sensor::FrameSensorType, ::Typ
 function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype(det.state.frame))
     output = output_frame(det)
     full_well = det.params.full_well === nothing ? nothing : T(det.params.full_well)
+    row_window = det.params.readout_window === nothing ? nothing :
+        (first(det.params.readout_window.rows), last(det.params.readout_window.rows))
+    col_window = det.params.readout_window === nothing ? nothing :
+        (first(det.params.readout_window.cols), last(det.params.readout_window.cols))
     return DetectorExportMetadata{T}(
         T(det.params.integration_time),
         T(det.params.qe),
@@ -358,6 +374,8 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         size(output),
         frame_response_symbol(det.params.response_model),
         frame_response_width(det.params.response_model, T),
+        row_window,
+        col_window,
         frame_sampling_symbol(det.params.sensor),
         frame_sampling_reads(det.params.sensor),
         frame_sampling_reference_reads(det.params.sensor),
@@ -504,6 +522,20 @@ function validate_frame_response_model(model::SeparableGaussianPixelResponse)
     isodd(length(model.kernel)) || throw(InvalidConfiguration("SeparableGaussianPixelResponse kernel length must be odd"))
     return model
 end
+validate_readout_window(::Nothing) = nothing
+function validate_readout_window(window::FrameWindow)
+    isempty(window.rows) && throw(InvalidConfiguration("FrameWindow rows must not be empty"))
+    isempty(window.cols) && throw(InvalidConfiguration("FrameWindow cols must not be empty"))
+    first(window.rows) >= 1 || throw(InvalidConfiguration("FrameWindow rows must start at >= 1"))
+    first(window.cols) >= 1 || throw(InvalidConfiguration("FrameWindow cols must start at >= 1"))
+    return window
+end
+function validate_readout_window(window::FrameWindow, n_out::Int, m_out::Int)
+    validate_readout_window(window)
+    last(window.rows) <= n_out || throw(DimensionMismatchError("FrameWindow rows must lie within detector output rows"))
+    last(window.cols) <= m_out || throw(DimensionMismatchError("FrameWindow cols must lie within detector output cols"))
+    return window
+end
 validate_frame_sampling_mode(::SingleRead) = SingleRead()
 function validate_frame_sampling_mode(mode::AveragedNonDestructiveReads)
     mode.n_reads >= 1 || throw(InvalidConfiguration("AveragedNonDestructiveReads n_reads must be >= 1"))
@@ -532,7 +564,8 @@ end
 function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     psf_sampling::Int, binning::Int, gain::Real, dark_current::Real,
     bits::Union{Nothing,Int}, full_well::Union{Nothing,Real}, sensor::SensorType,
-    response_model::FrameResponseModel, output_precision::Union{Nothing,DataType}, background_flux, background_map,
+    response_model::FrameResponseModel, readout_window::Union{Nothing,FrameWindow},
+    output_precision::Union{Nothing,DataType}, background_flux, background_map,
     T::Type{<:AbstractFloat}, backend)
     validate_frame_detector_sensor(sensor)
     full_well_t = full_well === nothing ? nothing : T(full_well)
@@ -540,6 +573,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     map_model = background_model(background_map; T=T, backend=backend)
     response = validate_frame_response_model(convert_frame_response_model(response_model, T, backend))
     output_precision_t = resolve_output_precision(bits, output_precision)
+    window = validate_readout_window(readout_window)
     params = DetectorParams{T, typeof(sensor), typeof(response)}(
         T(integration_time),
         T(qe),
@@ -551,6 +585,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
         full_well_t,
         sensor,
         response,
+        window,
         output_precision_t,
     )
     frame = backend{T}(undef, 1, 1)
@@ -558,7 +593,11 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     bin_buffer = backend{T}(undef, 1, 1)
     noise_buffer = backend{T}(undef, 1, 1)
     accum_buffer = backend{T}(undef, 1, 1)
-    output_buffer = output_precision_t === nothing ? nothing : backend{output_precision_t}(undef, 1, 1)
+    output_buffer = if output_precision_t === nothing
+        window === nothing ? nothing : backend{T}(undef, 1, 1)
+    else
+        backend{output_precision_t}(undef, 1, 1)
+    end
     fill!(frame, zero(T))
     fill!(response_buffer, zero(T))
     fill!(bin_buffer, zero(T))
@@ -631,13 +670,14 @@ function Detector(; integration_time::Real=1.0, qe::Real=1.0,
     gain::Real=1.0, dark_current::Real=0.0, bits::Union{Nothing,Int}=nothing,
     full_well::Union{Nothing,Real}=nothing, sensor::SensorType=CCDSensor(),
     response_model::FrameResponseModel=NullFrameResponse(),
+    readout_window::Union{Nothing,FrameWindow}=nothing,
     output_precision::Union{Nothing,DataType}=nothing, background_flux=nothing, background_map=nothing,
     T::Type{<:AbstractFloat}=Float64, backend=Array)
     normalized = normalize_noise(noise)
     return Detector(normalized; integration_time=integration_time, qe=qe,
         psf_sampling=psf_sampling, binning=binning, gain=gain,
         dark_current=dark_current, bits=bits, full_well=full_well,
-        sensor=sensor, response_model=response_model, output_precision=output_precision,
+        sensor=sensor, response_model=response_model, readout_window=readout_window, output_precision=output_precision,
         background_flux=background_flux, background_map=background_map,
         T=T, backend=backend)
 end
@@ -646,6 +686,7 @@ function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
     psf_sampling::Int=1, binning::Int=1, gain::Real=1.0, dark_current::Real=0.0,
     bits::Union{Nothing,Int}=nothing, full_well::Union{Nothing,Real}=nothing,
     sensor::SensorType=CCDSensor(), response_model::FrameResponseModel=NullFrameResponse(),
+    readout_window::Union{Nothing,FrameWindow}=nothing,
     output_precision::Union{Nothing,DataType}=nothing,
     background_flux=nothing, background_map=nothing,
     T::Type{<:AbstractFloat}=Float64, backend=Array)
@@ -654,7 +695,7 @@ function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
     return _build_detector(validated; integration_time=integration_time, qe=qe,
         psf_sampling=psf_sampling, binning=binning, gain=gain,
         dark_current=dark_current, bits=bits, full_well=full_well,
-        sensor=sensor, response_model=response_model, output_precision=output_precision,
+        sensor=sensor, response_model=response_model, readout_window=readout_window, output_precision=output_precision,
         background_flux=background_flux, background_map=background_map,
         T=T, backend=backend)
 end
@@ -1064,15 +1105,20 @@ function finalize_capture!(det::Detector, rng::AbstractRNG, exposure_time::Real)
 end
 
 function write_output_frame!(det::Detector)
+    window = det.params.readout_window
     output = det.state.output_buffer
-    output === nothing && return det.state.frame
+    if output === nothing
+        window === nothing && return det.state.frame
+        throw(InvalidConfiguration("Detector readout_window requires an allocated output buffer"))
+    end
     output_eltype = eltype(output)
+    source = window === nothing ? det.state.frame : @view(det.state.frame[window.rows, window.cols])
     if output_eltype <: Integer
         lo = typemin(output_eltype)
         hi = typemax(output_eltype)
-        @. output = output_eltype(clamp(round(det.state.frame), lo, hi))
+        @. output = output_eltype(clamp(round(source), lo, hi))
     else
-        copyto!(output, det.state.frame)
+        output .= source
     end
     return output
 end
@@ -1093,6 +1139,8 @@ function _require_batched_detector_compat(det::Detector, cube::AbstractArray, sc
         throw(InvalidConfiguration("batched detector capture currently requires binning == 1"))
     det.params.output_precision === nothing ||
         throw(InvalidConfiguration("batched detector capture currently requires output_precision === nothing"))
+    det.params.readout_window === nothing ||
+        throw(InvalidConfiguration("batched detector capture currently requires full-frame readout"))
     supports_detector_mtf(det) &&
         throw(InvalidConfiguration("batched detector capture currently requires NullFrameResponse()"))
     _require_batched_sensor_compat(det.params.sensor)
@@ -1307,8 +1355,11 @@ function ensure_buffers!(det::Detector, n_mid::Int, m_mid::Int, n_out::Int, m_ou
         det.state.integrated_time = zero(det.state.integrated_time)
         det.state.readout_ready = true
     end
-    if det.state.output_buffer !== nothing && size(det.state.output_buffer) != (n_out, m_out)
-        det.state.output_buffer = similar(det.state.output_buffer, n_out, m_out)
+    window = det.params.readout_window === nothing ? nothing : validate_readout_window(det.params.readout_window, n_out, m_out)
+    out_rows = window === nothing ? n_out : length(window.rows)
+    out_cols = window === nothing ? m_out : length(window.cols)
+    if det.state.output_buffer !== nothing && size(det.state.output_buffer) != (out_rows, out_cols)
+        det.state.output_buffer = similar(det.state.output_buffer, out_rows, out_cols)
         fill!(det.state.output_buffer, zero(eltype(det.state.output_buffer)))
     end
     return det

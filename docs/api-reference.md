@@ -33,6 +33,7 @@ than by source file.
 - `Detector`, `DetectorParams`, `DetectorState`, `DetectorExportMetadata`
 - `AbstractFrameDetector`, `AbstractCountingDetector`
 - `APDDetector`, `APDDetectorParams`, `APDDetectorState`
+- `FrameWindow`
 - `FrameResponseModel`, `NullFrameResponse`,
   `SeparableGaussianPixelResponse`
 - `FrameSamplingMode`, `SingleRead`, `AveragedNonDestructiveReads`,
@@ -195,6 +196,9 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   `NullFrameResponse` is the identity model and
   `SeparableGaussianPixelResponse` is the maintained first pixel-response/MTF
   approximation.
+- `FrameWindow(rows, cols)` is a generic frame-readout crop that applies to the
+  detector output surface after detector sampling/binning. This is intended for
+  subarray/windowed readout and is not SAPHIRA-specific.
 - `CCDSensor` supports opt-in clock-induced charge through its constructor.
 - `CMOSSensor` supports opt-in column readout noise through its constructor.
 - `EMCCDSensor` supports an opt-in excess-noise factor through its constructor,

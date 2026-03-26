@@ -106,6 +106,7 @@ export Misregistration, apply_misregistration
 export AbstractFrameDetector, AbstractCountingDetector
 export Detector, DetectorParams, DetectorState, DetectorExportMetadata
 export FrameResponseModel, NullFrameResponse, SeparableGaussianPixelResponse
+export FrameWindow
 export FrameSamplingMode, SingleRead, AveragedNonDestructiveReads, CorrelatedDoubleSampling, FowlerSampling
 export APDDetector, APDDetectorParams, APDDetectorState, CountingReadoutMetadata, CountingDetectorExportMetadata
 export CountingDeadTimeModel, NoDeadTime, NonParalyzableDeadTime
