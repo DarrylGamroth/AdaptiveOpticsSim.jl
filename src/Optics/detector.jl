@@ -17,10 +17,23 @@ end
 struct NoisePhotonReadout{T<:AbstractFloat} <: NoiseModel
     sigma::T
 end
-struct CCDSensor <: FrameSensorType end
-struct CMOSSensor <: FrameSensorType end
-struct EMCCDSensor{T<:AbstractFloat} <: FrameSensorType
+struct CCDSensor{T<:AbstractFloat} <: FrameSensorType
+    clock_induced_charge_rate::T
+end
+struct CMOSSensor{T<:AbstractFloat} <: FrameSensorType
+    column_readout_sigma::T
+end
+abstract type AvalancheFrameSensorType <: FrameSensorType end
+struct EMCCDSensor{T<:AbstractFloat} <: AvalancheFrameSensorType
     excess_noise_factor::T
+end
+struct InGaAsSensor{T<:AbstractFloat} <: FrameSensorType
+    glow_rate::T
+end
+struct SAPHIRASensor{T<:AbstractFloat} <: AvalancheFrameSensorType
+    avalanche_gain::T
+    excess_noise_factor::T
+    glow_rate::T
 end
 struct APDSensor <: CountingSensorType end
 struct NoDeadTime <: CountingDeadTimeModel end
@@ -85,6 +98,25 @@ function EMCCDSensor(; excess_noise_factor::Real=1.0, T::Type{<:AbstractFloat}=F
     excess_noise_factor >= 1 || throw(InvalidConfiguration("EMCCDSensor excess_noise_factor must be >= 1"))
     return EMCCDSensor{T}(T(excess_noise_factor))
 end
+function CCDSensor(; clock_induced_charge_rate::Real=0.0, T::Type{<:AbstractFloat}=Float64)
+    clock_induced_charge_rate >= 0 || throw(InvalidConfiguration("CCDSensor clock_induced_charge_rate must be >= 0"))
+    return CCDSensor{T}(T(clock_induced_charge_rate))
+end
+function CMOSSensor(; column_readout_sigma::Real=0.0, T::Type{<:AbstractFloat}=Float64)
+    column_readout_sigma >= 0 || throw(InvalidConfiguration("CMOSSensor column_readout_sigma must be >= 0"))
+    return CMOSSensor{T}(T(column_readout_sigma))
+end
+function InGaAsSensor(; glow_rate::Real=0.0, T::Type{<:AbstractFloat}=Float64)
+    glow_rate >= 0 || throw(InvalidConfiguration("InGaAsSensor glow_rate must be >= 0"))
+    return InGaAsSensor{T}(T(glow_rate))
+end
+function SAPHIRASensor(; avalanche_gain::Real=1.0, excess_noise_factor::Real=1.0,
+    glow_rate::Real=0.0, T::Type{<:AbstractFloat}=Float64)
+    avalanche_gain >= 1 || throw(InvalidConfiguration("SAPHIRASensor avalanche_gain must be >= 1"))
+    excess_noise_factor >= 1 || throw(InvalidConfiguration("SAPHIRASensor excess_noise_factor must be >= 1"))
+    glow_rate >= 0 || throw(InvalidConfiguration("SAPHIRASensor glow_rate must be >= 0"))
+    return SAPHIRASensor{T}(T(avalanche_gain), T(excess_noise_factor), T(glow_rate))
+end
 
 function SeparableGaussianPixelResponse(; response_width_px::Real=0.5, truncate_at::Real=3.0,
     T::Type{<:AbstractFloat}=Float64, backend=Array)
@@ -123,6 +155,13 @@ end
             acc += kernel[kk] * img[ii, j]
         end
         @inbounds out[i, j] = acc
+    end
+end
+
+@kernel function add_column_noise_kernel!(frame, noise, sigma, n::Int, m::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= m
+        @inbounds frame[i, j] += sigma * noise[1, j]
     end
 end
 
@@ -198,6 +237,8 @@ detector_noise_symbol(::NoisePhotonReadout) = :photon_readout
 detector_sensor_symbol(::CCDSensor) = :ccd
 detector_sensor_symbol(::CMOSSensor) = :cmos
 detector_sensor_symbol(::EMCCDSensor) = :emccd
+detector_sensor_symbol(::InGaAsSensor) = :ingaas
+detector_sensor_symbol(::SAPHIRASensor) = :saphira
 detector_sensor_symbol(::APDSensor) = :apd
 counting_dead_time_symbol(::NoDeadTime) = :none
 counting_dead_time_symbol(::NonParalyzableDeadTime) = :nonparalyzable
@@ -756,10 +797,34 @@ function apply_saturation!(det::Detector)
     return det.state.frame
 end
 
-apply_sensor_statistics!(::CCDSensor, det::Detector, rng::AbstractRNG) = det.state.frame
-apply_sensor_statistics!(::CMOSSensor, det::Detector, rng::AbstractRNG) = det.state.frame
-function apply_sensor_statistics!(sensor::EMCCDSensor, det::Detector, rng::AbstractRNG)
-    factor = sensor.excess_noise_factor
+apply_sensor_statistics!(sensor::FrameSensorType, det::Detector, rng::AbstractRNG) = det.state.frame
+
+function apply_sensor_statistics!(sensor::CCDSensor, det::Detector, rng::AbstractRNG)
+    rate = sensor.clock_induced_charge_rate * det.params.integration_time
+    rate <= zero(rate) && return det.state.frame
+    fill!(det.state.noise_buffer, rate)
+    poisson_noise!(rng, det.state.noise_buffer)
+    det.state.frame .+= det.state.noise_buffer
+    return det.state.frame
+end
+
+function apply_sensor_statistics!(sensor::CMOSSensor, det::Detector, rng::AbstractRNG)
+    sigma = sensor.column_readout_sigma
+    sigma <= zero(sigma) && return det.state.frame
+    randn_backend!(rng, det.state.noise_buffer)
+    return apply_cmos_column_noise!(execution_style(det.state.frame), det.state.frame, det.state.noise_buffer, sigma)
+end
+
+function apply_sensor_statistics!(sensor::InGaAsSensor, det::Detector, rng::AbstractRNG)
+    rate = sensor.glow_rate * det.params.integration_time
+    rate <= zero(rate) && return det.state.frame
+    fill!(det.state.noise_buffer, rate)
+    poisson_noise!(rng, det.state.noise_buffer)
+    det.state.frame .+= det.state.noise_buffer
+    return det.state.frame
+end
+
+function apply_avalanche_excess_noise!(factor, det::Detector, rng::AbstractRNG)
     factor <= one(factor) && return det.state.frame
     randn_backend!(rng, det.state.noise_buffer)
     scale2 = factor * factor - one(factor)
@@ -768,10 +833,45 @@ function apply_sensor_statistics!(sensor::EMCCDSensor, det::Detector, rng::Abstr
     return det.state.frame
 end
 
+apply_sensor_statistics!(sensor::EMCCDSensor, det::Detector, rng::AbstractRNG) =
+    apply_avalanche_excess_noise!(sensor.excess_noise_factor, det, rng)
+
+function apply_sensor_statistics!(sensor::SAPHIRASensor, det::Detector, rng::AbstractRNG)
+    rate = sensor.glow_rate * det.params.integration_time
+    if rate > zero(rate)
+        fill!(det.state.noise_buffer, rate)
+        poisson_noise!(rng, det.state.noise_buffer)
+        det.state.frame .+= det.state.noise_buffer
+    end
+    return apply_avalanche_excess_noise!(sensor.excess_noise_factor, det, rng)
+end
+
+function apply_cmos_column_noise!(::ScalarCPUStyle, frame, noise, sigma)
+    n, m = size(frame)
+    @inbounds for j in 1:m
+        offset = sigma * noise[1, j]
+        for i in 1:n
+            frame[i, j] += offset
+        end
+    end
+    return frame
+end
+
+function apply_cmos_column_noise!(style::AcceleratorStyle, frame, noise, sigma)
+    n, m = size(frame)
+    launch_kernel!(style, add_column_noise_kernel!, frame, noise, sigma, n, m; ndrange=(n, m))
+    return frame
+end
+
 apply_pre_readout_gain!(::CCDSensor, det::Detector) = det.state.frame
 apply_pre_readout_gain!(::CMOSSensor, det::Detector) = det.state.frame
+apply_pre_readout_gain!(::InGaAsSensor, det::Detector) = det.state.frame
 function apply_pre_readout_gain!(::EMCCDSensor, det::Detector)
     det.state.frame .*= det.params.gain
+    return det.state.frame
+end
+function apply_pre_readout_gain!(sensor::SAPHIRASensor, det::Detector)
+    det.state.frame .*= sensor.avalanche_gain
     return det.state.frame
 end
 
@@ -794,6 +894,14 @@ function apply_post_readout_gain!(::CCDSensor, det::Detector)
     return det.state.frame
 end
 function apply_post_readout_gain!(::CMOSSensor, det::Detector)
+    det.state.frame .*= det.params.gain
+    return det.state.frame
+end
+function apply_post_readout_gain!(::InGaAsSensor, det::Detector)
+    det.state.frame .*= det.params.gain
+    return det.state.frame
+end
+function apply_post_readout_gain!(::SAPHIRASensor, det::Detector)
     det.state.frame .*= det.params.gain
     return det.state.frame
 end
@@ -874,6 +982,14 @@ function _require_batched_detector_compat(det::Detector, cube::AbstractArray, sc
         throw(InvalidConfiguration("batched detector capture currently requires output_precision === nothing"))
     supports_detector_mtf(det) &&
         throw(InvalidConfiguration("batched detector capture currently requires NullFrameResponse()"))
+    _require_batched_sensor_compat(det.params.sensor)
+    return nothing
+end
+
+_require_batched_sensor_compat(::FrameSensorType) = nothing
+function _require_batched_sensor_compat(sensor::CMOSSensor)
+    sensor.column_readout_sigma <= zero(sensor.column_readout_sigma) ||
+        throw(InvalidConfiguration("batched detector capture does not yet support CMOSSensor column_readout_sigma"))
     return nothing
 end
 
@@ -921,12 +1037,28 @@ end
 
 _batched_pre_readout_gain!(::CCDSensor, det::Detector, cube::AbstractArray) = cube
 _batched_pre_readout_gain!(::CMOSSensor, det::Detector, cube::AbstractArray) = cube
+_batched_pre_readout_gain!(::InGaAsSensor, det::Detector, cube::AbstractArray) = cube
 _batched_pre_readout_gain!(::EMCCDSensor, det::Detector, cube::AbstractArray) = (cube .*= det.params.gain; cube)
+_batched_pre_readout_gain!(sensor::SAPHIRASensor, det::Detector, cube::AbstractArray) = (cube .*= sensor.avalanche_gain; cube)
 
-_batched_sensor_statistics!(::CCDSensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
-_batched_sensor_statistics!(::CMOSSensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
-function _batched_sensor_statistics!(sensor::EMCCDSensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
-    factor = sensor.excess_noise_factor
+_batched_sensor_statistics!(sensor::FrameSensorType, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
+function _batched_sensor_statistics!(sensor::CCDSensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
+    rate = sensor.clock_induced_charge_rate * det.params.integration_time
+    rate <= zero(rate) && return cube
+    fill!(scratch, rate)
+    poisson_noise!(rng, scratch)
+    cube .+= scratch
+    return cube
+end
+function _batched_sensor_statistics!(sensor::InGaAsSensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
+    rate = sensor.glow_rate * det.params.integration_time
+    rate <= zero(rate) && return cube
+    fill!(scratch, rate)
+    poisson_noise!(rng, scratch)
+    cube .+= scratch
+    return cube
+end
+function _batched_avalanche_excess_noise!(factor, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
     factor <= one(factor) && return cube
     randn_backend!(rng, scratch)
     scale2 = factor * factor - one(factor)
@@ -934,10 +1066,23 @@ function _batched_sensor_statistics!(sensor::EMCCDSensor, det::Detector, cube::A
     @. cube += sqrt(max(scale2 * cube, zero_t)) * scratch
     return cube
 end
+_batched_sensor_statistics!(sensor::EMCCDSensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) =
+    _batched_avalanche_excess_noise!(sensor.excess_noise_factor, cube, scratch, rng)
+function _batched_sensor_statistics!(sensor::SAPHIRASensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
+    rate = sensor.glow_rate * det.params.integration_time
+    if rate > zero(rate)
+        fill!(scratch, rate)
+        poisson_noise!(rng, scratch)
+        cube .+= scratch
+    end
+    return _batched_avalanche_excess_noise!(sensor.excess_noise_factor, cube, scratch, rng)
+end
 
 _batched_post_readout_gain!(::EMCCDSensor, det::Detector, cube::AbstractArray) = cube
 _batched_post_readout_gain!(::CCDSensor, det::Detector, cube::AbstractArray) = (cube .*= det.params.gain; cube)
 _batched_post_readout_gain!(::CMOSSensor, det::Detector, cube::AbstractArray) = (cube .*= det.params.gain; cube)
+_batched_post_readout_gain!(::InGaAsSensor, det::Detector, cube::AbstractArray) = (cube .*= det.params.gain; cube)
+_batched_post_readout_gain!(::SAPHIRASensor, det::Detector, cube::AbstractArray) = (cube .*= det.params.gain; cube)
 
 _batched_readout_noise!(det::Detector{NoiseNone}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
 _batched_readout_noise!(det::Detector{NoisePhoton}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube

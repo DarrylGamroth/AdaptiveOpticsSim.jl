@@ -675,6 +675,38 @@ end
     @test frame_emccd_base == uniform_signal
     @test std(vec(frame_emccd_excess)) > 0
 
+    det_ccd_cic = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        sensor=CCDSensor(clock_induced_charge_rate=5.0))
+    frame_ccd_cic = capture!(det_ccd_cic, zero_psf; rng=MersenneTwister(11))
+    @test sum(frame_ccd_cic) > 0
+    @test_throws InvalidConfiguration CCDSensor(clock_induced_charge_rate=-1.0)
+
+    det_cmos = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        sensor=CMOSSensor(column_readout_sigma=1.0))
+    frame_cmos = copy(capture!(det_cmos, zeros(8, 8); rng=MersenneTwister(12)))
+    @test !all(iszero, frame_cmos)
+    @test all(j -> isapprox(std(frame_cmos[:, j]), 0.0; atol=1e-8), axes(frame_cmos, 2))
+    @test std(vec(frame_cmos[1, :])) > 0
+    @test_throws InvalidConfiguration CMOSSensor(column_readout_sigma=-1.0)
+
+    det_ingaas = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        sensor=InGaAsSensor(glow_rate=3.0))
+    frame_ingaas = capture!(det_ingaas, zero_psf; rng=MersenneTwister(13))
+    @test sum(frame_ingaas) > 0
+    @test_throws InvalidConfiguration InGaAsSensor(glow_rate=-1.0)
+
+    det_saphira = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        gain=1.0, sensor=SAPHIRASensor(avalanche_gain=5.0))
+    frame_saphira = copy(capture!(det_saphira, uniform_signal; rng=MersenneTwister(14)))
+    @test frame_saphira == 5.0 .* uniform_signal
+    det_saphira_excess = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        gain=1.0, sensor=SAPHIRASensor(avalanche_gain=1.0, excess_noise_factor=sqrt(2.0)))
+    frame_saphira_excess = copy(capture!(det_saphira_excess, uniform_signal; rng=MersenneTwister(14)))
+    @test std(vec(frame_saphira_excess)) > 0
+    @test_throws InvalidConfiguration SAPHIRASensor(avalanche_gain=0.5)
+    @test_throws InvalidConfiguration SAPHIRASensor(excess_noise_factor=0.5)
+    @test_throws InvalidConfiguration SAPHIRASensor(glow_rate=-1.0)
+
     @test_throws InvalidConfiguration Detector(integration_time=1.0, noise=NoisePhoton(), qe=1.0, binning=1,
         sensor=APDSensor())
 
@@ -716,6 +748,10 @@ end
     cube_mtf = cat(copy(impulse), copy(impulse); dims=3)
     scratch_mtf = similar(cube_mtf)
     @test_throws InvalidConfiguration AdaptiveOpticsSim.capture_stack!(det_mtf, cube_mtf, scratch_mtf; rng=MersenneTwister(10))
+
+    det_cmos_batched = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        sensor=CMOSSensor(column_readout_sigma=1.0))
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.capture_stack!(det_cmos_batched, cube_mtf, scratch_mtf; rng=MersenneTwister(10))
 
     apd_dead_time = APDDetector(integration_time=1.0, qe=1.0, gain=1.0, dark_count_rate=0.0,
         noise=NoiseNone(), dead_time_model=NonParalyzableDeadTime(0.5))
@@ -1388,7 +1424,10 @@ end
     ast = Asterism([src, Source(band=:I, magnitude=1.0, coordinates=(1.0, -45.0))])
     @test CCDSensor <: FrameSensorType
     @test CMOSSensor <: FrameSensorType
-    @test EMCCDSensor <: FrameSensorType
+    @test AvalancheFrameSensorType <: FrameSensorType
+    @test EMCCDSensor <: AvalancheFrameSensorType
+    @test InGaAsSensor <: FrameSensorType
+    @test SAPHIRASensor <: AvalancheFrameSensorType
     @test APDSensor <: CountingSensorType
     @test curv_count.params.readout_model isa CurvatureCountingReadout
 

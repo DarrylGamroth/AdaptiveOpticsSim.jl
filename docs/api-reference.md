@@ -43,7 +43,8 @@ than by source file.
 - `supports_counting_noise`, `supports_dead_time`,
   `supports_channel_gain_map`
 - `SensorType`, `FrameSensorType`, `CountingSensorType`, `CCDSensor`,
-  `CMOSSensor`, `EMCCDSensor`, `APDSensor`
+  `CMOSSensor`, `AvalancheFrameSensorType`, `EMCCDSensor`, `InGaAsSensor`,
+  `SAPHIRASensor`, `APDSensor`
 - `DeformableMirror`, `DeformableMirrorParams`, `DeformableMirrorState`,
   `build_influence_functions!`, `apply!`
 - `Misregistration`, `apply_misregistration`
@@ -188,9 +189,14 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   `NullFrameResponse` is the identity model and
   `SeparableGaussianPixelResponse` is the maintained first pixel-response/MTF
   approximation.
-- `EMCCDSensor` now also supports an opt-in excess-noise factor through its
-  constructor, while keeping the default behavior unchanged when
+- `CCDSensor` supports opt-in clock-induced charge through its constructor.
+- `CMOSSensor` supports opt-in column readout noise through its constructor.
+- `EMCCDSensor` supports an opt-in excess-noise factor through its constructor,
+  while keeping the default behavior unchanged when
   `excess_noise_factor == 1`.
+- `InGaAsSensor` is a frame-detector family with an opt-in glow-rate term.
+- `SAPHIRASensor` is the maintained avalanche-frame-detector family with
+  avalanche gain, excess noise, and glow-rate controls.
 - The maintained counting-detector family is currently `APDDetector`, with
   optional capability queries surfaced through `supports_counting_noise`,
   `supports_dead_time`, and `supports_channel_gain_map`.
