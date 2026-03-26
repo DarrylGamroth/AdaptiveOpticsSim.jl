@@ -24,26 +24,20 @@ struct CircularActuatorSupport <: AO188ActuatorSupportModel end
 
 abstract type SubaruHighOrderWFSModel end
 struct OperationalShackHartmannModel <: SubaruHighOrderWFSModel end
-struct AO188CurvatureModel{T<:AbstractFloat} <: SubaruHighOrderWFSModel
+struct AO188CurvatureModel{T<:AbstractFloat,R<:CurvatureReadoutModel} <: SubaruHighOrderWFSModel
     defocus_rms_nm::T
+    readout_model::R
 end
-AO188CurvatureModel(; defocus_rms_nm::Real=500.0, T::Type{<:AbstractFloat}=Float32) = AO188CurvatureModel{T}(T(defocus_rms_nm))
+AO188CurvatureModel(; defocus_rms_nm::Real=500.0,
+    readout_model::CurvatureReadoutModel=CurvatureCountingReadout(),
+    T::Type{<:AbstractFloat}=Float32) =
+    AO188CurvatureModel{T, typeof(readout_model)}(T(defocus_rms_nm), readout_model)
 
 function AO188CurvatureSimulationParams(; kwargs...)
     nt = (; kwargs...)
     T0 = get(nt, :T, Float32)
     sampling = get(nt, :sampling_time, 1e-3)
-    high_detector = get(nt, :high_detector, AO188WFSDetectorConfig(
-        T=T0,
-        integration_time=sampling,
-        qe=0.95,
-        psf_sampling=1,
-        binning=1,
-        gain=1.0,
-        dark_current=0.0,
-        noise=NoisePhotonReadout(0.05),
-        sensor=CCDSensor(),
-    ))
+    high_detector = get(nt, :high_detector, nothing)
     rest = Base.structdiff(nt, (; high_order_sensor_model=nothing, source_band=nothing, high_detector=nothing))
     return AO188SimulationParams(; source_band=:I, high_order_sensor_model=AO188CurvatureModel(T=T0),
         high_detector=high_detector, rest...)
@@ -56,7 +50,8 @@ end
 
 function _build_high_order_wfs(model::AO188CurvatureModel, tel::Telescope, params; backend=Array)
     T = eltype(tel.state.opd)
-    return CurvatureWFS(tel; n_subap=params.n_subap, defocus_rms_nm=model.defocus_rms_nm, T=T, backend=backend)
+    return CurvatureWFS(tel; n_subap=params.n_subap, defocus_rms_nm=model.defocus_rms_nm,
+        readout_model=model.readout_model, T=T, backend=backend)
 end
 
 abstract type AO188ReplayMode end
@@ -150,8 +145,8 @@ struct AO188SimulationParams{
     W<:SubaruHighOrderWFSModel,
     B<:AbstractExecutionPolicy,
     R<:AO188ReplayMode,
-    H<:AO188WFSDetectorConfig,
-    L<:AO188WFSDetectorConfig,
+    H,
+    L,
 }
     diameter::T
     sampling_time::T
@@ -213,7 +208,7 @@ function AO188SimulationParams(;
     branch_execution::AbstractExecutionPolicy=SequentialExecution(),
     replay_mode::AO188ReplayMode=DirectReplayMode(),
     latency::AO188LatencyModel=AO188LatencyModel(),
-    high_detector::AO188WFSDetectorConfig=AO188WFSDetectorConfig(
+    high_detector::Union{Nothing,AO188WFSDetectorConfig}=AO188WFSDetectorConfig(
         T=T,
         integration_time=sampling_time,
         qe=0.9,
@@ -494,7 +489,16 @@ function _ao188_calibration_objects(params::AO188SimulationParams{T}) where {T<:
     return tel, low_tel, src, dm, low_dm, high_wfs, low_wfs
 end
 
+_high_order_wfs_frame(simulation::AO188Simulation) =
+    isnothing(simulation.high_detector) ? simulation.high_wfs.state.camera_frame :
+    wfs_output_frame(simulation.high_wfs, simulation.high_detector)
+_high_order_wfs_metadata(simulation::AO188Simulation) =
+    isnothing(simulation.high_detector) ? nothing : detector_export_metadata(simulation.high_detector)
+
 function _measure_high!(surrogate::AO188Simulation, rng::AbstractRNG)
+    if isnothing(surrogate.high_detector)
+        return measure!(surrogate.high_wfs, surrogate.tel, surrogate.src)
+    end
     return measure!(surrogate.high_wfs, surrogate.tel, surrogate.src, surrogate.high_detector; rng=rng)
 end
 
@@ -582,7 +586,7 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
     low_dm = DeformableMirror(low_tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=backend)
     high_wfs = _build_high_order_wfs(params.high_order_sensor_model, tel, params; backend=backend)
     low_wfs = ShackHartmann(low_tel; n_subap=params.n_low_order_subap, mode=Diffractive(), T=T, backend=backend)
-    high_detector = detector_from_config(params.high_detector; backend=backend)
+    high_detector = isnothing(params.high_detector) ? nothing : detector_from_config(params.high_detector; backend=backend)
     low_detector = detector_from_config(params.low_detector; backend=backend)
 
     calibration_tel = tel
@@ -706,12 +710,12 @@ function simulation_interface(simulation::AO188Simulation)
         simulation.command,
         (simulation.high_wfs.state.slopes, simulation.low_wfs.state.slopes),
         (
-            wfs_output_frame(simulation.high_wfs, simulation.high_detector),
+            _high_order_wfs_frame(simulation),
             wfs_output_frame(simulation.low_wfs, simulation.low_detector),
         ),
         nothing,
         (
-            detector_export_metadata(simulation.high_detector),
+            _high_order_wfs_metadata(simulation),
             detector_export_metadata(simulation.low_detector),
         ),
         nothing,
@@ -737,7 +741,11 @@ function subaru_ao188_phase_timing(surrogate::AO188Simulation; warmup::Int=10, s
         advance!(surrogate.atm, surrogate.tel, surrogate.rng)
         propagate!(surrogate.atm, surrogate.tel)
         apply!(surrogate.dm, surrogate.tel, DMAdditive())
-        measure!(surrogate.high_wfs, surrogate.tel, surrogate.src, surrogate.high_detector; rng=surrogate.rng)
+        if isnothing(surrogate.high_detector)
+            measure!(surrogate.high_wfs, surrogate.tel, surrogate.src)
+        else
+            measure!(surrogate.high_wfs, surrogate.tel, surrogate.src, surrogate.high_detector; rng=surrogate.rng)
+        end
         synchronize_backend!(execution_style(surrogate.high_wfs.state.slopes))
         t1 = time_ns()
         _downsample_low_order_opd!(surrogate)
