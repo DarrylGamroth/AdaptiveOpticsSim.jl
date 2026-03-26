@@ -249,6 +249,15 @@ supports_detector_mtf(::AbstractFrameDetector) = false
 supports_detector_mtf(det::Detector) = supports_detector_mtf(det.params.response_model)
 supports_detector_mtf(::NullFrameResponse) = false
 supports_detector_mtf(::SeparableGaussianPixelResponse) = true
+supports_clock_induced_charge(::FrameSensorType) = false
+supports_clock_induced_charge(::CCDSensor) = true
+supports_column_readout_noise(::FrameSensorType) = false
+supports_column_readout_noise(::CMOSSensor) = true
+supports_avalanche_gain(::FrameSensorType) = false
+supports_avalanche_gain(::AvalancheFrameSensorType) = true
+supports_sensor_glow(::FrameSensorType) = false
+supports_sensor_glow(::InGaAsSensor) = true
+supports_sensor_glow(::SAPHIRASensor) = true
 
 supports_counting_noise(::AbstractCountingDetector) = false
 supports_counting_noise(::APDDetector) = true
@@ -790,8 +799,19 @@ function apply_dark_current!(det::Detector, rng::AbstractRNG, exposure_time::Rea
     return det.state.frame
 end
 
-function apply_saturation!(det::Detector)
+function sensor_saturation_limit(det::Detector)
+    return sensor_saturation_limit(det.params.sensor, det)
+end
+
+sensor_saturation_limit(::FrameSensorType, det::Detector) = det.params.full_well
+function sensor_saturation_limit(sensor::SAPHIRASensor, det::Detector)
     full_well = det.params.full_well
+    full_well === nothing && return nothing
+    return full_well / sensor.avalanche_gain
+end
+
+function apply_saturation!(det::Detector)
+    full_well = sensor_saturation_limit(det)
     full_well === nothing && return det.state.frame
     clamp!(det.state.frame, zero(eltype(det.state.frame)), full_well)
     return det.state.frame

@@ -109,7 +109,9 @@ export FrameResponseModel, NullFrameResponse, SeparableGaussianPixelResponse
 export APDDetector, APDDetectorParams, APDDetectorState, CountingReadoutMetadata, CountingDetectorExportMetadata
 export CountingDeadTimeModel, NoDeadTime, NonParalyzableDeadTime
 export capture!, output_frame, channel_output, detector_export_metadata, readout_ready, reset_integration!
-export supports_detector_mtf, supports_counting_noise, supports_dead_time, supports_channel_gain_map
+export supports_detector_mtf, supports_clock_induced_charge, supports_column_readout_noise
+export supports_avalanche_gain, supports_sensor_glow
+export supports_counting_noise, supports_dead_time, supports_channel_gain_map
 export SensorType, FrameSensorType, CountingSensorType, AvalancheFrameSensorType
 export CCDSensor, CMOSSensor, EMCCDSensor, InGaAsSensor, SAPHIRASensor, APDSensor
 export ShackHartmann, ShackHartmannParams, ShackHartmannState, update_valid_mask!, measure!

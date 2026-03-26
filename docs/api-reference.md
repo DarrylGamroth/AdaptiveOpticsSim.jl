@@ -40,6 +40,8 @@ than by source file.
 - `capture!`, `output_frame`, `channel_output`, `detector_export_metadata`,
   `readout_ready`, `reset_integration!`
 - `supports_detector_mtf`
+- `supports_clock_induced_charge`, `supports_column_readout_noise`
+- `supports_avalanche_gain`, `supports_sensor_glow`
 - `supports_counting_noise`, `supports_dead_time`,
   `supports_channel_gain_map`
 - `SensorType`, `FrameSensorType`, `CountingSensorType`, `CCDSensor`,
@@ -197,6 +199,12 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - `InGaAsSensor` is a frame-detector family with an opt-in glow-rate term.
 - `SAPHIRASensor` is the maintained avalanche-frame-detector family with
   avalanche gain, excess noise, and glow-rate controls.
+- The frame-sensor capability traits are now explicit:
+  `supports_clock_induced_charge`, `supports_column_readout_noise`,
+  `supports_avalanche_gain`, and `supports_sensor_glow`.
+- `SAPHIRASensor` also uses an avalanche-aware saturation limit when
+  `full_well` is set, so incident charge saturates earlier as avalanche gain
+  increases.
 - The maintained counting-detector family is currently `APDDetector`, with
   optional capability queries surfaced through `supports_counting_noise`,
   `supports_dead_time`, and `supports_channel_gain_map`.

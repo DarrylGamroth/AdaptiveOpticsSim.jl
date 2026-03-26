@@ -679,6 +679,7 @@ end
         sensor=CCDSensor(clock_induced_charge_rate=5.0))
     frame_ccd_cic = capture!(det_ccd_cic, zero_psf; rng=MersenneTwister(11))
     @test sum(frame_ccd_cic) > 0
+    @test supports_clock_induced_charge(det_ccd_cic.params.sensor)
     @test_throws InvalidConfiguration CCDSensor(clock_induced_charge_rate=-1.0)
 
     det_cmos = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
@@ -687,22 +688,30 @@ end
     @test !all(iszero, frame_cmos)
     @test all(j -> isapprox(std(frame_cmos[:, j]), 0.0; atol=1e-8), axes(frame_cmos, 2))
     @test std(vec(frame_cmos[1, :])) > 0
+    @test supports_column_readout_noise(det_cmos.params.sensor)
     @test_throws InvalidConfiguration CMOSSensor(column_readout_sigma=-1.0)
 
     det_ingaas = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=InGaAsSensor(glow_rate=3.0))
     frame_ingaas = capture!(det_ingaas, zero_psf; rng=MersenneTwister(13))
     @test sum(frame_ingaas) > 0
+    @test supports_sensor_glow(det_ingaas.params.sensor)
     @test_throws InvalidConfiguration InGaAsSensor(glow_rate=-1.0)
 
     det_saphira = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0, sensor=SAPHIRASensor(avalanche_gain=5.0))
     frame_saphira = copy(capture!(det_saphira, uniform_signal; rng=MersenneTwister(14)))
     @test frame_saphira == 5.0 .* uniform_signal
+    @test supports_avalanche_gain(det_saphira.params.sensor)
+    @test supports_sensor_glow(det_saphira.params.sensor)
     det_saphira_excess = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0, sensor=SAPHIRASensor(avalanche_gain=1.0, excess_noise_factor=sqrt(2.0)))
     frame_saphira_excess = copy(capture!(det_saphira_excess, uniform_signal; rng=MersenneTwister(14)))
     @test std(vec(frame_saphira_excess)) > 0
+    det_saphira_sat = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        gain=1.0, full_well=100.0, sensor=SAPHIRASensor(avalanche_gain=5.0))
+    frame_saphira_sat = copy(capture!(det_saphira_sat, uniform_signal; rng=MersenneTwister(15)))
+    @test maximum(frame_saphira_sat) == 100.0
     @test_throws InvalidConfiguration SAPHIRASensor(avalanche_gain=0.5)
     @test_throws InvalidConfiguration SAPHIRASensor(excess_noise_factor=0.5)
     @test_throws InvalidConfiguration SAPHIRASensor(glow_rate=-1.0)
@@ -1428,6 +1437,8 @@ end
     @test EMCCDSensor <: AvalancheFrameSensorType
     @test InGaAsSensor <: FrameSensorType
     @test SAPHIRASensor <: AvalancheFrameSensorType
+    @test !supports_avalanche_gain(CCDSensor())
+    @test !supports_sensor_glow(CMOSSensor())
     @test APDSensor <: CountingSensorType
     @test curv_count.params.readout_model isa CurvatureCountingReadout
 
