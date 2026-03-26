@@ -994,6 +994,12 @@ end
     @test norm(slopes_plus) > 1e-6
     @test norm(slopes_minus) > 1e-6
     @test dot(slopes_plus, slopes_minus) < 0
+
+    counting = CurvatureWFS(tel; n_subap=8, defocus_rms_nm=500.0, readout_model=CurvatureCountingReadout())
+    counting_flat = copy(measure!(counting, tel, src))
+    @test size(counting.state.camera_frame) == (2, 64)
+    @test counting_flat ≈ zero.(counting_flat) atol=1e-10
+    @test_throws InvalidConfiguration measure!(counting, tel, src, det)
 end
 
 @testset "OOPAO parity knobs" begin
@@ -1279,11 +1285,13 @@ end
     runtime = ClosedLoopRuntime(sim, modal; rng=MersenneTwister(9))
     wfs_diffractive = ShackHartmann(tel; n_subap=2, mode=Diffractive())
     zwfs = ZernikeWFS(tel; n_subap=2)
+    curv_count = CurvatureWFS(tel; n_subap=2, readout_model=CurvatureCountingReadout())
     ast = Asterism([src, Source(band=:I, magnitude=1.0, coordinates=(1.0, -45.0))])
     @test CCDSensor <: FrameSensorType
     @test CMOSSensor <: FrameSensorType
     @test EMCCDSensor <: FrameSensorType
     @test APDSensor <: CountingSensorType
+    @test curv_count.params.readout_model isa CurvatureCountingReadout
 
     # IF-SRC
     assert_source_interface(src)

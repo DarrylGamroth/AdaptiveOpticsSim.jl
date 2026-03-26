@@ -111,6 +111,7 @@ export PyramidWFS, PyramidParams, PyramidState
 export pyramid_modulation_frame!
 export BioEdgeWFS, BioEdgeParams, BioEdgeState
 export ZernikeWFS, ZernikeWFSParams, ZernikeWFSState
+export CurvatureReadoutModel, CurvatureFrameReadout, CurvatureCountingReadout
 export CurvatureWFS, CurvatureWFSParams, CurvatureWFSState, ensure_curvature_calibration!
 export apply_shift_wfs!, set_optical_gain!
 export LiFT, lift_interaction_matrix, lift_interaction_matrix!

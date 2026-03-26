@@ -62,6 +62,7 @@ than by source file.
 - `PyramidWFS`, `PyramidParams`, `PyramidState`
 - `BioEdgeWFS`, `BioEdgeParams`, `BioEdgeState`
 - `ZernikeWFS`, `ZernikeWFSParams`, `ZernikeWFSState`
+- `CurvatureReadoutModel`, `CurvatureFrameReadout`, `CurvatureCountingReadout`
 - `update_valid_mask!`, `measure!`, `apply_shift_wfs!`, `set_optical_gain!`
 - `LiFT`, `lift_interaction_matrix`, `lift_interaction_matrix!`
 - `LiFTDampingMode`, `LiFTDampingNone`, `LiFTLevenbergMarquardt`,
@@ -150,6 +151,9 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - Optional capabilities are surfaced through traits and behavior:
   detector-coupled output, asterism support, prepared runtime support, and
   stacked-source execution.
+- `CurvatureWFS` now has two maintained readout families:
+  `CurvatureFrameReadout` for frame-style detector coupling and
+  `CurvatureCountingReadout` for counting/channel-style readout.
 - Maintained optional-capability queries use
   `supports_prepared_runtime(wfs, src)` and `supports_stacked_sources(wfs, src)`
   in addition to the simulation-level trait surface.
