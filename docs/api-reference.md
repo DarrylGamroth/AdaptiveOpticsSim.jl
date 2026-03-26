@@ -156,6 +156,9 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   `CurvatureCountingReadout` for counting/channel-style readout.
 - `CurvatureBranchResponse` models reusable intra-/extra-focal throughput and
   background imbalance independently of any one instrument example.
+- `CurvatureWFS` also exposes detector-plane geometry controls through
+  `readout_crop_resolution` and `readout_pixels_per_subap` so the exported frame
+  sampling can be decoupled from the control-grid sampling.
 - Maintained optional-capability queries use
   `supports_prepared_runtime(wfs, src)` and `supports_stacked_sources(wfs, src)`
   in addition to the simulation-level trait surface.

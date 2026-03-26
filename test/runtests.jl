@@ -1005,6 +1005,8 @@ end
     @test size(counting.state.camera_frame) == (2, 64)
     @test counting_flat ≈ zero.(counting_flat) atol=1e-10
     @test_throws InvalidConfiguration measure!(counting, tel, src, det)
+    @test_throws InvalidConfiguration CurvatureWFS(tel; n_subap=8, readout_model=CurvatureCountingReadout(),
+        readout_pixels_per_subap=2)
 
     response = CurvatureBranchResponse(T=Float64, plus_throughput=1.2, minus_throughput=0.8,
         plus_background=5.0, minus_background=1.0)
@@ -1015,6 +1017,14 @@ end
     minus_mean = mean(@view imbalanced.state.camera_frame[imbalanced.params.n_subap+1:end, :])
     @test plus_mean > minus_mean
     @test_throws InvalidConfiguration CurvatureBranchResponse(plus_throughput=-1.0)
+
+    oversampled = CurvatureWFS(tel; n_subap=8, readout_crop_resolution=16, readout_pixels_per_subap=2)
+    oversampled_flat = copy(measure!(oversampled, tel, src))
+    @test size(oversampled.state.camera_frame) == (32, 16)
+    @test size(oversampled.state.frame_plus) == (16, 16)
+    @test size(oversampled.state.reduced_plus) == (8, 8)
+    @test oversampled_flat ≈ zero.(oversampled_flat) atol=1e-10
+    @test_throws InvalidConfiguration CurvatureWFS(tel; n_subap=8, readout_crop_resolution=18, readout_pixels_per_subap=2)
 end
 
 @testset "OOPAO parity knobs" begin
