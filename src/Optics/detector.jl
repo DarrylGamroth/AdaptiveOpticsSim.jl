@@ -25,6 +25,7 @@ struct CMOSSensor{T<:AbstractFloat} <: FrameSensorType
     column_readout_sigma::T
 end
 abstract type AvalancheFrameSensorType <: FrameSensorType end
+abstract type HgCdTeAvalancheArraySensorType <: AvalancheFrameSensorType end
 struct EMCCDSensor{T<:AbstractFloat} <: AvalancheFrameSensorType
     excess_noise_factor::T
 end
@@ -35,7 +36,11 @@ struct SingleRead <: FrameSamplingMode end
 struct AveragedNonDestructiveReads <: FrameSamplingMode
     n_reads::Int
 end
-struct SAPHIRASensor{T<:AbstractFloat,M<:FrameSamplingMode} <: AvalancheFrameSensorType
+struct CorrelatedDoubleSampling <: FrameSamplingMode end
+struct FowlerSampling <: FrameSamplingMode
+    n_pairs::Int
+end
+struct SAPHIRASensor{T<:AbstractFloat,M<:FrameSamplingMode} <: HgCdTeAvalancheArraySensorType
     avalanche_gain::T
     excess_noise_factor::T
     glow_rate::T
@@ -257,12 +262,16 @@ frame_response_symbol(::NullFrameResponse) = :none
 frame_response_symbol(::SeparableGaussianPixelResponse) = :separable_gaussian
 frame_sampling_symbol(::SingleRead) = :single_read
 frame_sampling_symbol(::AveragedNonDestructiveReads) = :averaged_non_destructive_reads
+frame_sampling_symbol(::CorrelatedDoubleSampling) = :correlated_double_sampling
+frame_sampling_symbol(::FowlerSampling) = :fowler_sampling
 frame_sampling_symbol(::FrameSensorType) = :single_read
 frame_sampling_symbol(sensor::SAPHIRASensor) = frame_sampling_symbol(sensor.sampling_mode)
 frame_sampling_reads(::FrameSensorType) = nothing
 frame_sampling_reads(sensor::SAPHIRASensor) = frame_sampling_reads(sensor.sampling_mode)
 frame_sampling_reads(::SingleRead) = nothing
 frame_sampling_reads(mode::AveragedNonDestructiveReads) = mode.n_reads
+frame_sampling_reads(::CorrelatedDoubleSampling) = 2
+frame_sampling_reads(mode::FowlerSampling) = 2 * mode.n_pairs
 
 supports_detector_mtf(::AbstractFrameDetector) = false
 supports_detector_mtf(det::Detector) = supports_detector_mtf(det.params.response_model)
@@ -278,7 +287,9 @@ supports_sensor_glow(::FrameSensorType) = false
 supports_sensor_glow(::InGaAsSensor) = true
 supports_sensor_glow(::SAPHIRASensor) = true
 supports_nondestructive_reads(::FrameSensorType) = false
-supports_nondestructive_reads(::SAPHIRASensor) = true
+supports_nondestructive_reads(::HgCdTeAvalancheArraySensorType) = true
+supports_reference_read_subtraction(::FrameSensorType) = false
+supports_reference_read_subtraction(::HgCdTeAvalancheArraySensorType) = true
 
 supports_counting_noise(::AbstractCountingDetector) = false
 supports_counting_noise(::APDDetector) = true
@@ -294,10 +305,12 @@ sensor_is_frame_based(::FrameSensorType) = true
 sensor_is_counting(::SensorType) = false
 sensor_is_counting(::CountingSensorType) = true
 
-detector_readout_sigma(::NoiseNone, ::Type{T}) where {T<:AbstractFloat} = nothing
-detector_readout_sigma(::NoisePhoton, ::Type{T}) where {T<:AbstractFloat} = nothing
-detector_readout_sigma(noise::NoiseReadout, ::Type{T}) where {T<:AbstractFloat} = T(noise.sigma)
-detector_readout_sigma(noise::NoisePhotonReadout, ::Type{T}) where {T<:AbstractFloat} = T(noise.sigma)
+detector_readout_sigma(::NoiseNone, ::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = nothing
+detector_readout_sigma(::NoisePhoton, ::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = nothing
+detector_readout_sigma(noise::NoiseReadout, sensor::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} =
+    T(effective_readout_sigma(sensor, T(noise.sigma)))
+detector_readout_sigma(noise::NoisePhotonReadout, sensor::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} =
+    T(effective_readout_sigma(sensor, T(noise.sigma)))
 
 function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype(det.state.frame))
     output = output_frame(det)
@@ -313,7 +326,7 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         full_well,
         detector_sensor_symbol(det.params.sensor),
         detector_noise_symbol(det.noise),
-        detector_readout_sigma(det.noise, T),
+        detector_readout_sigma(det.noise, det.params.sensor, T),
         det.params.output_precision,
         size(det.state.frame),
         size(output),
@@ -424,9 +437,11 @@ counting_dead_time_value(model::NonParalyzableDeadTime, ::Type{T}) where {T<:Abs
 frame_response_width(::NullFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
 frame_response_width(model::SeparableGaussianPixelResponse, ::Type{T}) where {T<:AbstractFloat} = T(model.response_width_px)
 effective_readout_sigma(::FrameSensorType, sigma) = sigma
-effective_readout_sigma(sensor::SAPHIRASensor, sigma) = effective_readout_sigma(sensor.sampling_mode, sigma)
+effective_readout_sigma(sensor::HgCdTeAvalancheArraySensorType, sigma) = effective_readout_sigma(sensor.sampling_mode, sigma)
 effective_readout_sigma(::SingleRead, sigma) = sigma
 effective_readout_sigma(mode::AveragedNonDestructiveReads, sigma) = sigma / sqrt(mode.n_reads)
+effective_readout_sigma(::CorrelatedDoubleSampling, sigma) = sigma * sqrt(2)
+effective_readout_sigma(mode::FowlerSampling, sigma) = sigma * sqrt(2 / mode.n_pairs)
 
 convert_dead_time_model(::NoDeadTime, ::Type{T}) where {T<:AbstractFloat} = NoDeadTime()
 convert_dead_time_model(model::NonParalyzableDeadTime, ::Type{T}) where {T<:AbstractFloat} =
@@ -453,6 +468,11 @@ end
 validate_frame_sampling_mode(::SingleRead) = SingleRead()
 function validate_frame_sampling_mode(mode::AveragedNonDestructiveReads)
     mode.n_reads >= 1 || throw(InvalidConfiguration("AveragedNonDestructiveReads n_reads must be >= 1"))
+    return mode
+end
+validate_frame_sampling_mode(::CorrelatedDoubleSampling) = CorrelatedDoubleSampling()
+function validate_frame_sampling_mode(mode::FowlerSampling)
+    mode.n_pairs >= 1 || throw(InvalidConfiguration("FowlerSampling n_pairs must be >= 1"))
     return mode
 end
 

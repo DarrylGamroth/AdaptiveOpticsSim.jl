@@ -723,10 +723,27 @@ end
     saphira_meta = detector_export_metadata(det_saphira_ndr)
     @test saphira_meta.sampling_mode == :averaged_non_destructive_reads
     @test saphira_meta.sampling_reads == 4
+    @test saphira_meta.readout_sigma == 2.0
+    det_saphira_cds = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
+        gain=1.0, sensor=SAPHIRASensor(sampling_mode=CorrelatedDoubleSampling()))
+    frame_saphira_cds = copy(capture!(det_saphira_cds, zero_psf; rng=MersenneTwister(16)))
+    @test frame_saphira_cds ≈ frame_saphira_single .* sqrt(2.0) atol=1e-10
+    cds_meta = detector_export_metadata(det_saphira_cds)
+    @test cds_meta.sampling_mode == :correlated_double_sampling
+    @test cds_meta.readout_sigma ≈ 4.0 * sqrt(2.0)
+    det_saphira_fowler = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
+        gain=1.0, sensor=SAPHIRASensor(sampling_mode=FowlerSampling(8)))
+    frame_saphira_fowler = copy(capture!(det_saphira_fowler, zero_psf; rng=MersenneTwister(16)))
+    @test frame_saphira_fowler ≈ frame_saphira_single ./ 2 atol=1e-10
+    fowler_meta = detector_export_metadata(det_saphira_fowler)
+    @test fowler_meta.sampling_mode == :fowler_sampling
+    @test fowler_meta.sampling_reads == 16
+    @test fowler_meta.readout_sigma == 2.0
     @test_throws InvalidConfiguration SAPHIRASensor(avalanche_gain=0.5)
     @test_throws InvalidConfiguration SAPHIRASensor(excess_noise_factor=0.5)
     @test_throws InvalidConfiguration SAPHIRASensor(glow_rate=-1.0)
     @test_throws InvalidConfiguration SAPHIRASensor(sampling_mode=AveragedNonDestructiveReads(0))
+    @test_throws InvalidConfiguration SAPHIRASensor(sampling_mode=FowlerSampling(0))
 
     @test_throws InvalidConfiguration Detector(integration_time=1.0, noise=NoisePhoton(), qe=1.0, binning=1,
         sensor=APDSensor())
@@ -1446,13 +1463,16 @@ end
     @test CCDSensor <: FrameSensorType
     @test CMOSSensor <: FrameSensorType
     @test AvalancheFrameSensorType <: FrameSensorType
+    @test HgCdTeAvalancheArraySensorType <: AvalancheFrameSensorType
     @test EMCCDSensor <: AvalancheFrameSensorType
     @test InGaAsSensor <: FrameSensorType
-    @test SAPHIRASensor <: AvalancheFrameSensorType
+    @test SAPHIRASensor <: HgCdTeAvalancheArraySensorType
     @test !supports_avalanche_gain(CCDSensor())
     @test !supports_sensor_glow(CMOSSensor())
     @test !supports_nondestructive_reads(CCDSensor())
     @test supports_nondestructive_reads(SAPHIRASensor())
+    @test !supports_reference_read_subtraction(EMCCDSensor())
+    @test supports_reference_read_subtraction(SAPHIRASensor())
     @test APDSensor <: CountingSensorType
     @test curv_count.params.readout_model isa CurvatureCountingReadout
 

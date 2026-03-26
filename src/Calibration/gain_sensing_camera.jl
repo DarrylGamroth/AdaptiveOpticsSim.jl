@@ -166,7 +166,7 @@ function GSCDetectorMetadata(det::Detector; T::Type{<:AbstractFloat}=eltype(det.
         det.params.psf_sampling,
         det.params.binning,
         detector_noise_symbol(det.noise),
-        detector_readout_sigma(det.noise, T),
+        detector_readout_sigma(det.noise, det.params.sensor, T),
     )
 end
 

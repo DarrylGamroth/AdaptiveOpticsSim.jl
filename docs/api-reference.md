@@ -35,7 +35,8 @@ than by source file.
 - `APDDetector`, `APDDetectorParams`, `APDDetectorState`
 - `FrameResponseModel`, `NullFrameResponse`,
   `SeparableGaussianPixelResponse`
-- `FrameSamplingMode`, `SingleRead`, `AveragedNonDestructiveReads`
+- `FrameSamplingMode`, `SingleRead`, `AveragedNonDestructiveReads`,
+  `CorrelatedDoubleSampling`, `FowlerSampling`
 - `CountingReadoutMetadata`, `CountingDetectorExportMetadata`
 - `CountingDeadTimeModel`, `NoDeadTime`, `NonParalyzableDeadTime`
 - `capture!`, `output_frame`, `channel_output`, `detector_export_metadata`,
@@ -43,11 +44,12 @@ than by source file.
 - `supports_detector_mtf`
 - `supports_clock_induced_charge`, `supports_column_readout_noise`
 - `supports_avalanche_gain`, `supports_sensor_glow`,
-  `supports_nondestructive_reads`
+  `supports_nondestructive_reads`, `supports_reference_read_subtraction`
 - `supports_counting_noise`, `supports_dead_time`,
   `supports_channel_gain_map`
 - `SensorType`, `FrameSensorType`, `CountingSensorType`, `CCDSensor`,
-  `CMOSSensor`, `AvalancheFrameSensorType`, `EMCCDSensor`, `InGaAsSensor`,
+  `CMOSSensor`, `AvalancheFrameSensorType`,
+  `HgCdTeAvalancheArraySensorType`, `EMCCDSensor`, `InGaAsSensor`,
   `SAPHIRASensor`, `APDSensor`
 - `DeformableMirror`, `DeformableMirrorParams`, `DeformableMirrorState`,
   `build_influence_functions!`, `apply!`
@@ -202,16 +204,27 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - `SAPHIRASensor` is the maintained avalanche-frame-detector family with
   avalanche gain, excess noise, glow-rate, and optional non-destructive-read
   sampling controls.
+- `SAPHIRASensor` now sits under the more explicit
+  `HgCdTeAvalancheArraySensorType` family rather than only the generic
+  avalanche-frame umbrella.
 - The frame-sensor capability traits are now explicit:
   `supports_clock_induced_charge`, `supports_column_readout_noise`,
   `supports_avalanche_gain`, `supports_sensor_glow`, and
   `supports_nondestructive_reads`.
+- HgCdTe avalanche-array sensors also expose
+  `supports_reference_read_subtraction`, which covers read schemes such as
+  correlated double sampling and Fowler sampling.
 - `SAPHIRASensor` also uses an avalanche-aware saturation limit when
   `full_well` is set, so incident charge saturates earlier as avalanche gain
   increases.
 - `AveragedNonDestructiveReads(n_reads)` is the maintained first SAPHIRA-style
   sampling model and reduces the effective additive readout-noise sigma by
   `1 / sqrt(n_reads)` relative to `SingleRead()`.
+- `CorrelatedDoubleSampling()` models one pedestal read and one signal read,
+  so additive readout noise increases by `sqrt(2)` relative to `SingleRead()`.
+- `FowlerSampling(n_pairs)` models paired pedestal/signal averaging and
+  reduces additive readout noise to `sqrt(2 / n_pairs)` times the
+  `SingleRead()` sigma.
 - The maintained counting-detector family is currently `APDDetector`, with
   optional capability queries surfaced through `supports_counting_noise`,
   `supports_dead_time`, and `supports_channel_gain_map`.
