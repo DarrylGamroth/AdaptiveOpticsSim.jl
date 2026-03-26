@@ -224,6 +224,10 @@ validation shows the new default is still too coarse.
   support map.
 - [ ] Add specialized HIL-relevant sensors on demand, starting with
   `ZernikeWFS` and then `CurvatureSensor` if needed.
+- [ ] Build the next detector/readout-physics layer following
+  `docs/detector-readout-physics-plan.md`, starting with APD-like counting
+  behavior for curvature sensing, then frame-detector MTF/pixel-response work,
+  while keeping room for future SPAD/SPAD-array support.
 - [ ] Continue GPU/HIL performance work only where profiling shows real value,
   especially in builder-heavy tomography paths.
 - [~] Separate compact regression benchmarks from representative benchmark
