@@ -3,14 +3,33 @@ output_frame(det::Detector) = det.state.output_buffer === nothing ? det.state.fr
 readout_products(det::Detector) = det.state.readout_products
 detector_reference_frame(det::Detector) = detector_reference_frame(det.state.readout_products)
 detector_signal_frame(det::Detector) = detector_signal_frame(det.state.readout_products)
+detector_combined_frame(det::Detector) = detector_combined_frame(det.state.readout_products)
+detector_reference_cube(det::Detector) = detector_reference_cube(det.state.readout_products)
+detector_signal_cube(det::Detector) = detector_signal_cube(det.state.readout_products)
 detector_read_cube(det::Detector) = detector_read_cube(det.state.readout_products)
+detector_read_times(det::Detector) = detector_read_times(det.state.readout_products)
 
 detector_reference_frame(::NoFrameReadoutProducts) = nothing
 detector_signal_frame(::NoFrameReadoutProducts) = nothing
+detector_combined_frame(::NoFrameReadoutProducts) = nothing
+detector_reference_cube(::NoFrameReadoutProducts) = nothing
+detector_signal_cube(::NoFrameReadoutProducts) = nothing
 detector_read_cube(::NoFrameReadoutProducts) = nothing
+detector_read_times(::NoFrameReadoutProducts) = nothing
 detector_reference_frame(products::SampledFrameReadoutProducts) = products.reference_frame
 detector_signal_frame(products::SampledFrameReadoutProducts) = products.signal_frame
+detector_combined_frame(::SampledFrameReadoutProducts) = nothing
+detector_reference_cube(::SampledFrameReadoutProducts) = nothing
+detector_signal_cube(::SampledFrameReadoutProducts) = nothing
 detector_read_cube(products::SampledFrameReadoutProducts) = products.read_cube
+detector_read_times(::SampledFrameReadoutProducts) = nothing
+detector_reference_frame(products::HgCdTeReadoutProducts) = products.reference_frame
+detector_signal_frame(products::HgCdTeReadoutProducts) = products.signal_frame
+detector_combined_frame(products::HgCdTeReadoutProducts) = products.combined_frame
+detector_reference_cube(products::HgCdTeReadoutProducts) = products.reference_cube
+detector_signal_cube(products::HgCdTeReadoutProducts) = products.signal_cube
+detector_read_cube(products::HgCdTeReadoutProducts) = products.read_cube
+detector_read_times(products::HgCdTeReadoutProducts) = products.read_times
 
 detector_noise_symbol(::NoiseNone) = :none
 detector_noise_symbol(::NoisePhoton) = :photon
@@ -102,10 +121,23 @@ supports_read_cube(::FrameSensorType) = false
 
 readout_correction_symbol(::NullFrameReadoutCorrection) = :none
 readout_correction_symbol(::ReferencePixelCommonModeCorrection) = :reference_pixel_common_mode
+readout_correction_symbol(::ReferenceRowCommonModeCorrection) = :reference_row_common_mode
+readout_correction_symbol(::ReferenceColumnCommonModeCorrection) = :reference_column_common_mode
+readout_correction_symbol(::ReferenceOutputCommonModeCorrection) = :reference_output_common_mode
+readout_correction_symbol(::CompositeFrameReadoutCorrection) = :composite
 correction_edge_rows(::FrameReadoutCorrectionModel) = nothing
 correction_edge_cols(::FrameReadoutCorrectionModel) = nothing
 correction_edge_rows(model::ReferencePixelCommonModeCorrection) = model.edge_rows
 correction_edge_cols(model::ReferencePixelCommonModeCorrection) = model.edge_cols
+correction_edge_rows(model::ReferenceColumnCommonModeCorrection) = model.edge_rows
+correction_edge_cols(model::ReferenceRowCommonModeCorrection) = model.edge_cols
+correction_edge_rows(model::ReferenceOutputCommonModeCorrection) = model.edge_rows
+correction_edge_cols(model::ReferenceOutputCommonModeCorrection) = model.edge_cols
+correction_group_rows(::FrameReadoutCorrectionModel) = nothing
+correction_group_cols(::FrameReadoutCorrectionModel) = nothing
+correction_group_cols(model::ReferenceOutputCommonModeCorrection) = model.output_cols
+correction_stage_count(::FrameReadoutCorrectionModel) = 1
+correction_stage_count(model::CompositeFrameReadoutCorrection) = length(model.stages)
 
 supports_counting_noise(::AbstractCountingDetector) = false
 supports_dead_time(::AbstractCountingDetector) = false
@@ -151,6 +183,8 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         (first(det.params.readout_window.cols), last(det.params.readout_window.cols))
     support_rows, support_cols = response_support(det.params.response_model)
     products = readout_products(det)
+    reference_cube = detector_reference_cube(products)
+    signal_cube = detector_signal_cube(products)
     read_cube = detector_read_cube(products)
     return DetectorExportMetadata{T}(
         T(det.params.integration_time),
@@ -190,9 +224,17 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         readout_correction_symbol(det.params.correction_model),
         correction_edge_rows(det.params.correction_model),
         correction_edge_cols(det.params.correction_model),
+        correction_group_rows(det.params.correction_model),
+        correction_group_cols(det.params.correction_model),
+        correction_stage_count(det.params.correction_model),
         !isnothing(detector_reference_frame(products)),
         !isnothing(detector_signal_frame(products)),
+        !isnothing(detector_combined_frame(products)),
+        !isnothing(reference_cube),
+        !isnothing(signal_cube),
         !isnothing(read_cube),
+        isnothing(reference_cube) ? nothing : size(reference_cube, 3),
+        isnothing(signal_cube) ? nothing : size(signal_cube, 3),
         isnothing(read_cube) ? nothing : size(read_cube, 3),
     )
 end
@@ -392,6 +434,23 @@ validate_readout_correction_model(::NullFrameReadoutCorrection) = NullFrameReado
 
 function validate_readout_correction_model(model::ReferencePixelCommonModeCorrection)
     return ReferencePixelCommonModeCorrection(model.edge_rows, model.edge_cols)
+end
+
+function validate_readout_correction_model(model::ReferenceRowCommonModeCorrection)
+    return ReferenceRowCommonModeCorrection(model.edge_cols)
+end
+
+function validate_readout_correction_model(model::ReferenceColumnCommonModeCorrection)
+    return ReferenceColumnCommonModeCorrection(model.edge_rows)
+end
+
+function validate_readout_correction_model(model::ReferenceOutputCommonModeCorrection)
+    return ReferenceOutputCommonModeCorrection(model.output_cols; edge_rows=model.edge_rows, edge_cols=model.edge_cols)
+end
+
+function validate_readout_correction_model(model::CompositeFrameReadoutCorrection)
+    stages = map(validate_readout_correction_model, model.stages)
+    return CompositeFrameReadoutCorrection(tuple(stages...))
 end
 
 resolve_correction_model(sensor::SensorType, ::Nothing) = NullFrameReadoutCorrection()

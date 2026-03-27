@@ -179,8 +179,103 @@ function _reference_pixel_bias(model::ReferencePixelCommonModeCorrection, frame:
     return total / T(count)
 end
 
+function _row_reference_bias(edge_cols::Int, row::AbstractVector{T}) where {T}
+    n = length(row)
+    n_edge = min(edge_cols, n)
+    total = zero(T)
+    count = 0
+    if n_edge > 0
+        total += sum(@view(row[1:n_edge]))
+        count += n_edge
+        if n > n_edge
+            total += sum(@view(row[n - n_edge + 1:n]))
+            count += n_edge
+        end
+    end
+    count > 0 || return zero(T)
+    return total / T(count)
+end
+
+function _column_reference_bias(edge_rows::Int, col::AbstractVector{T}) where {T}
+    n = length(col)
+    n_edge = min(edge_rows, n)
+    total = zero(T)
+    count = 0
+    if n_edge > 0
+        total += sum(@view(col[1:n_edge]))
+        count += n_edge
+        if n > n_edge
+            total += sum(@view(col[n - n_edge + 1:n]))
+            count += n_edge
+        end
+    end
+    count > 0 || return zero(T)
+    return total / T(count)
+end
+
+function _output_reference_bias(model::ReferenceOutputCommonModeCorrection, block::AbstractMatrix{T}) where {T}
+    n, m = size(block)
+    n_edge_rows = min(model.edge_rows, n)
+    n_edge_cols = min(model.edge_cols, m)
+    total = zero(T)
+    count = 0
+    if n_edge_rows > 0
+        total += sum(@view(block[1:n_edge_rows, :]))
+        count += n_edge_rows * m
+        if n > n_edge_rows
+            total += sum(@view(block[n - n_edge_rows + 1:n, :]))
+            count += n_edge_rows * m
+        end
+    end
+    row_lo = n_edge_rows + 1
+    row_hi = n - n_edge_rows
+    if n_edge_cols > 0 && row_lo <= row_hi
+        total += sum(@view(block[row_lo:row_hi, 1:n_edge_cols]))
+        count += (row_hi - row_lo + 1) * n_edge_cols
+        if m > n_edge_cols
+            total += sum(@view(block[row_lo:row_hi, m - n_edge_cols + 1:m]))
+            count += (row_hi - row_lo + 1) * n_edge_cols
+        end
+    end
+    count > 0 || return zero(T)
+    return total / T(count)
+end
+
 function apply_readout_correction!(model::ReferencePixelCommonModeCorrection, frame::AbstractMatrix)
     frame .-= _reference_pixel_bias(model, frame)
+    return frame
+end
+
+function apply_readout_correction!(model::ReferenceRowCommonModeCorrection, frame::AbstractMatrix)
+    for row_idx in axes(frame, 1)
+        row = @view(frame[row_idx, :])
+        row .-= _row_reference_bias(model.edge_cols, row)
+    end
+    return frame
+end
+
+function apply_readout_correction!(model::ReferenceColumnCommonModeCorrection, frame::AbstractMatrix)
+    for col_idx in axes(frame, 2)
+        col = @view(frame[:, col_idx])
+        col .-= _column_reference_bias(model.edge_rows, col)
+    end
+    return frame
+end
+
+function apply_readout_correction!(model::ReferenceOutputCommonModeCorrection, frame::AbstractMatrix)
+    n_cols = size(frame, 2)
+    for col_lo in 1:model.output_cols:n_cols
+        col_hi = min(col_lo + model.output_cols - 1, n_cols)
+        block = @view(frame[:, col_lo:col_hi])
+        block .-= _output_reference_bias(model, block)
+    end
+    return frame
+end
+
+function apply_readout_correction!(model::CompositeFrameReadoutCorrection, frame::AbstractMatrix)
+    for stage in model.stages
+        apply_readout_correction!(stage, frame)
+    end
     return frame
 end
 

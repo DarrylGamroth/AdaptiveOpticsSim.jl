@@ -996,14 +996,18 @@ end
         gain=1.0, sensor=SAPHIRASensor())
     frame_saphira_single = copy(capture!(det_saphira_single, zero_psf; rng=MersenneTwister(16)))
     single_products = readout_products(det_saphira_single)
-    @test single_products isa SampledFrameReadoutProducts
+    @test single_products isa HgCdTeReadoutProducts
     @test detector_reference_frame(det_saphira_single) === nothing
     @test detector_signal_frame(det_saphira_single) !== nothing
+    @test detector_combined_frame(det_saphira_single) == frame_saphira_single
+    @test detector_reference_cube(det_saphira_single) === nothing
+    @test detector_signal_cube(det_saphira_single) !== nothing
     @test detector_read_cube(det_saphira_single) === nothing
+    @test detector_read_times(det_saphira_single) === nothing
     det_saphira_ndr = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
         gain=1.0, sensor=SAPHIRASensor(sampling_mode=AveragedNonDestructiveReads(4)))
     frame_saphira_ndr = copy(capture!(det_saphira_ndr, zero_psf; rng=MersenneTwister(16)))
-    @test frame_saphira_ndr ≈ frame_saphira_single ./ 2 atol=1e-10
+    @test std(vec(frame_saphira_ndr)) < std(vec(frame_saphira_single))
     @test supports_nondestructive_reads(det_saphira_ndr.params.sensor)
     @test supports_readout_correction(det_saphira_ndr.params.sensor)
     @test supports_read_cube(det_saphira_ndr.params.sensor)
@@ -1015,8 +1019,15 @@ end
     @test saphira_meta.readout_sigma == 2.0
     @test saphira_meta.provides_signal_frame
     @test !saphira_meta.provides_reference_frame
+    @test saphira_meta.provides_combined_frame
+    @test !saphira_meta.provides_reference_cube
+    @test saphira_meta.provides_signal_cube
     @test saphira_meta.provides_read_cube
+    @test saphira_meta.signal_cube_reads == 4
     @test saphira_meta.read_cube_reads == 4
+    @test detector_combined_frame(det_saphira_ndr) == frame_saphira_ndr
+    @test size(detector_signal_cube(det_saphira_ndr)) == (4, 4, 4)
+    @test length(detector_read_times(det_saphira_ndr)) == 4
     det_saphira_cds = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
         gain=1.0, sensor=SAPHIRASensor(sampling_mode=CorrelatedDoubleSampling()))
     frame_saphira_cds = copy(capture!(det_saphira_cds, zero_psf; rng=MersenneTwister(16)))
@@ -1026,16 +1037,27 @@ end
     @test cds_meta.sampling_reference_reads == 1
     @test cds_meta.sampling_signal_reads == 1
     @test cds_meta.readout_sigma ≈ 4.0 * sqrt(2.0)
+    @test cds_meta.provides_reference_cube
+    @test cds_meta.provides_signal_cube
+    @test cds_meta.reference_cube_reads == 1
+    @test cds_meta.signal_cube_reads == 1
+    @test size(detector_reference_cube(det_saphira_cds)) == (4, 4, 1)
+    @test size(detector_signal_cube(det_saphira_cds)) == (4, 4, 1)
+    @test detector_combined_frame(det_saphira_cds) ≈
+        detector_signal_frame(det_saphira_cds) .- detector_reference_frame(det_saphira_cds)
     det_saphira_fowler = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
         gain=1.0, sensor=SAPHIRASensor(sampling_mode=FowlerSampling(8)))
     frame_saphira_fowler = copy(capture!(det_saphira_fowler, zero_psf; rng=MersenneTwister(16)))
-    @test std(vec(frame_saphira_fowler)) < std(vec(frame_saphira_single))
     fowler_meta = detector_export_metadata(det_saphira_fowler)
     @test fowler_meta.sampling_mode == :fowler_sampling
     @test fowler_meta.sampling_reads == 16
     @test fowler_meta.sampling_reference_reads == 8
     @test fowler_meta.sampling_signal_reads == 8
     @test fowler_meta.readout_sigma == 2.0
+    @test fowler_meta.reference_cube_reads == 8
+    @test fowler_meta.signal_cube_reads == 8
+    @test detector_combined_frame(det_saphira_fowler) ≈
+        detector_signal_frame(det_saphira_fowler) .- detector_reference_frame(det_saphira_fowler)
     det_saphira_timed_single = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         dark_current=1000.0, gain=1.0, sensor=SAPHIRASensor(read_time=1.0))
     frame_saphira_timed_single = copy(capture!(det_saphira_timed_single, zero_psf; rng=MersenneTwister(17)))
@@ -1052,12 +1074,17 @@ end
         readout_window=FrameWindow(2:3, 2:3))
     capture!(det_saphira_windowed, fill(10.0, 4, 4); rng=MersenneTwister(18))
     windowed_meta = detector_export_metadata(det_saphira_windowed)
-    @test windowed_meta.sampling_read_time == 0.25
-    @test windowed_meta.sampling_wallclock_time == 1.5
+    @test windowed_meta.sampling_read_time == 0.5
+    @test windowed_meta.sampling_wallclock_time == 2.0
+    @test detector_combined_frame(det_saphira_windowed) !== nothing
+    @test size(detector_reference_cube(det_saphira_windowed)) == (2, 2, 1)
+    @test size(detector_signal_cube(det_saphira_windowed)) == (2, 2, 1)
     @test size(detector_signal_frame(det_saphira_windowed)) == (2, 2)
     @test size(detector_read_cube(det_saphira_windowed)) == (2, 2, 2)
+    @test detector_read_times(det_saphira_windowed) == [0.5, 1.0]
     det_saphira_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0, sensor=SAPHIRASensor(),
+        response_model=NullFrameResponse(),
         correction_model=ReferencePixelCommonModeCorrection(1, 1))
     corrected_frame = capture!(det_saphira_corrected, fill(5.0, 4, 4); rng=MersenneTwister(19))
     corrected_meta = detector_export_metadata(det_saphira_corrected)
@@ -1065,6 +1092,42 @@ end
     @test corrected_meta.correction_edge_rows == 1
     @test corrected_meta.correction_edge_cols == 1
     @test abs(mean(corrected_frame)) < 1e-6
+    det_saphira_row_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        gain=1.0, sensor=SAPHIRASensor(),
+        response_model=NullFrameResponse(),
+        correction_model=ReferenceRowCommonModeCorrection(1))
+    row_pattern = repeat(reshape([1.0, 2.0, 3.0, 4.0], :, 1), 1, 4)
+    row_corrected = capture!(det_saphira_row_corrected, row_pattern; rng=MersenneTwister(20))
+    @test maximum(abs, row_corrected) < 1e-6
+    det_saphira_col_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        gain=1.0, sensor=SAPHIRASensor(),
+        response_model=NullFrameResponse(),
+        correction_model=ReferenceColumnCommonModeCorrection(1))
+    col_pattern = repeat(reshape([1.0, 2.0, 3.0, 4.0], 1, :), 4, 1)
+    col_corrected = capture!(det_saphira_col_corrected, col_pattern; rng=MersenneTwister(21))
+    @test maximum(abs, col_corrected) < 1e-6
+    det_saphira_output_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        gain=1.0, sensor=SAPHIRASensor(),
+        response_model=NullFrameResponse(),
+        correction_model=ReferenceOutputCommonModeCorrection(2; edge_rows=1, edge_cols=1))
+    output_pattern = hcat(fill(5.0, 4, 2), fill(10.0, 4, 2))
+    output_corrected = capture!(det_saphira_output_corrected, output_pattern; rng=MersenneTwister(22))
+    output_meta = detector_export_metadata(det_saphira_output_corrected)
+    @test output_meta.readout_correction == :reference_output_common_mode
+    @test output_meta.correction_group_cols == 2
+    @test maximum(abs, output_corrected) < 1e-6
+    det_saphira_composite = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        gain=1.0, sensor=SAPHIRASensor(),
+        response_model=NullFrameResponse(),
+        correction_model=CompositeFrameReadoutCorrection((
+            ReferenceRowCommonModeCorrection(1),
+            ReferenceColumnCommonModeCorrection(1))))
+    composite_pattern = row_pattern .+ col_pattern
+    composite_corrected = capture!(det_saphira_composite, composite_pattern; rng=MersenneTwister(23))
+    composite_meta = detector_export_metadata(det_saphira_composite)
+    @test composite_meta.readout_correction == :composite
+    @test composite_meta.correction_stage_count == 2
+    @test maximum(abs, composite_corrected) < 1e-6
     @test_throws InvalidConfiguration SAPHIRASensor(avalanche_gain=0.5)
     @test_throws InvalidConfiguration SAPHIRASensor(excess_noise_factor=0.5)
     @test_throws InvalidConfiguration SAPHIRASensor(glow_rate=-1.0)
@@ -1072,6 +1135,10 @@ end
     @test_throws InvalidConfiguration SAPHIRASensor(sampling_mode=AveragedNonDestructiveReads(0))
     @test_throws InvalidConfiguration SAPHIRASensor(sampling_mode=FowlerSampling(0))
     @test_throws InvalidConfiguration ReferencePixelCommonModeCorrection(0, 0)
+    @test_throws InvalidConfiguration ReferenceRowCommonModeCorrection(0)
+    @test_throws InvalidConfiguration ReferenceColumnCommonModeCorrection(0)
+    @test_throws InvalidConfiguration ReferenceOutputCommonModeCorrection(0)
+    @test_throws InvalidConfiguration CompositeFrameReadoutCorrection(())
 
     @test_throws InvalidConfiguration Detector(integration_time=1.0, noise=NoisePhoton(), qe=1.0, binning=1,
         sensor=APDSensor())
@@ -1877,6 +1944,9 @@ end
     @test !supports_readout_correction(EMCCDSensor())
     @test supports_readout_correction(SAPHIRASensor())
     @test supports_read_cube(SAPHIRASensor())
+    @test AdaptiveOpticsSim.readout_correction_symbol(ReferenceRowCommonModeCorrection()) == :reference_row_common_mode
+    @test AdaptiveOpticsSim.readout_correction_symbol(ReferenceColumnCommonModeCorrection()) == :reference_column_common_mode
+    @test AdaptiveOpticsSim.readout_correction_symbol(ReferenceOutputCommonModeCorrection(4)) == :reference_output_common_mode
     @test APDSensor <: CountingSensorType
     @test curv_count.params.readout_model isa CurvatureCountingReadout
 

@@ -220,6 +220,16 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - `FrameWindow(rows, cols)` is a generic frame-readout crop that applies to the
   detector output surface after detector sampling/binning. This is intended for
   subarray/windowed readout and is not SAPHIRA-specific.
+- Frame-detector readout correction is now a separate surface from detector
+  response. `NullFrameReadoutCorrection` is the null model,
+  `ReferencePixelCommonModeCorrection` subtracts one global reference-edge
+  bias, `ReferenceRowCommonModeCorrection` and
+  `ReferenceColumnCommonModeCorrection` subtract per-row or per-column
+  reference-edge bias, `ReferenceOutputCommonModeCorrection` subtracts
+  per-output-group bias over column groups, and
+  `CompositeFrameReadoutCorrection` composes multiple correction stages.
+- Detector export metadata now records correction family, edge support, output
+  grouping, and correction stage count.
 - `CCDSensor` supports opt-in clock-induced charge through its constructor.
 - `CMOSSensor` supports opt-in column readout noise through its constructor.
 - `EMCCDSensor` supports an opt-in excess-noise factor through its constructor,
@@ -254,6 +264,15 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   HgCdTe-array metadata and detector physics, so export metadata records
   reference/signal read counts, per-read time, and total wall-clock time, and
   SAPHIRA dark/glow accumulation includes the configured read overhead.
+- SAPHIRA/HgCdTe readout products are now explicit. The generic accessors
+  `detector_reference_frame`, `detector_signal_frame`, `detector_combined_frame`,
+  `detector_reference_cube`, `detector_signal_cube`, `detector_read_cube`, and
+  `detector_read_times` expose the maintained readout-product surface. The
+  dedicated `HgCdTeReadoutProducts` payload makes pedestal/signal averages and
+  their corresponding cubes first-class rather than inferring them from only the
+  combined detector frame.
+- SAPHIRA subarray timing now scales with active readout rows rather than raw
+  cropped area, which better matches row-wise frame-array readout semantics.
 - The maintained counting-detector family is currently `APDDetector`, with
   optional capability queries surfaced through `supports_counting_noise`,
   `supports_dead_time`, and `supports_channel_gain_map`.

@@ -40,12 +40,84 @@ struct ReferencePixelCommonModeCorrection <: FrameReadoutCorrectionModel
     end
 end
 
+struct ReferenceRowCommonModeCorrection <: FrameReadoutCorrectionModel
+    edge_cols::Int
+    function ReferenceRowCommonModeCorrection(edge_cols::Integer=4)
+        edge_cols > 0 || throw(InvalidConfiguration("ReferenceRowCommonModeCorrection edge_cols must be > 0"))
+        return new(Int(edge_cols))
+    end
+end
+
+struct ReferenceColumnCommonModeCorrection <: FrameReadoutCorrectionModel
+    edge_rows::Int
+    function ReferenceColumnCommonModeCorrection(edge_rows::Integer=4)
+        edge_rows > 0 || throw(InvalidConfiguration("ReferenceColumnCommonModeCorrection edge_rows must be > 0"))
+        return new(Int(edge_rows))
+    end
+end
+
+struct ReferenceOutputCommonModeCorrection <: FrameReadoutCorrectionModel
+    output_cols::Int
+    edge_rows::Int
+    edge_cols::Int
+    function ReferenceOutputCommonModeCorrection(output_cols::Integer; edge_rows::Integer=4, edge_cols::Integer=4)
+        output_cols > 0 || throw(InvalidConfiguration("ReferenceOutputCommonModeCorrection output_cols must be > 0"))
+        edge_rows >= 0 || throw(InvalidConfiguration("ReferenceOutputCommonModeCorrection edge_rows must be >= 0"))
+        edge_cols >= 0 || throw(InvalidConfiguration("ReferenceOutputCommonModeCorrection edge_cols must be >= 0"))
+        (edge_rows > 0 || edge_cols > 0) ||
+            throw(InvalidConfiguration("ReferenceOutputCommonModeCorrection requires at least one reference-pixel edge"))
+        return new(Int(output_cols), Int(edge_rows), Int(edge_cols))
+    end
+end
+
+struct CompositeFrameReadoutCorrection{M<:Tuple} <: FrameReadoutCorrectionModel
+    stages::M
+    function CompositeFrameReadoutCorrection(stages::Tuple{Vararg{FrameReadoutCorrectionModel}})
+        isempty(stages) && throw(InvalidConfiguration("CompositeFrameReadoutCorrection requires at least one stage"))
+        return new{typeof(stages)}(stages)
+    end
+end
+
+CompositeFrameReadoutCorrection(stages::Tuple) =
+    throw(InvalidConfiguration("CompositeFrameReadoutCorrection stages must be FrameReadoutCorrectionModel values"))
+CompositeFrameReadoutCorrection(stages::FrameReadoutCorrectionModel...) = CompositeFrameReadoutCorrection(tuple(stages...))
+
 struct NoFrameReadoutProducts <: FrameReadoutProducts end
 
 struct SampledFrameReadoutProducts{A<:AbstractMatrix,C} <: FrameReadoutProducts
     reference_frame::Union{Nothing,A}
     signal_frame::A
     read_cube::Union{Nothing,C}
+end
+
+struct HgCdTeReadoutProducts{A<:AbstractMatrix,C,V} <: FrameReadoutProducts
+    reference_frame::Union{Nothing,A}
+    signal_frame::A
+    combined_frame::A
+    reference_cube::Union{Nothing,C}
+    signal_cube::Union{Nothing,C}
+    read_cube::Union{Nothing,C}
+    read_times::Union{Nothing,V}
+end
+
+function HgCdTeReadoutProducts(reference_frame::Union{Nothing,A}, signal_frame::A, combined_frame::A,
+    reference_cube::Nothing, signal_cube::Nothing, read_cube::Nothing, read_times::Nothing) where {A<:AbstractMatrix}
+    return HgCdTeReadoutProducts{A,Nothing,Nothing}(reference_frame, signal_frame, combined_frame,
+        reference_cube, signal_cube, read_cube, read_times)
+end
+
+function HgCdTeReadoutProducts(reference_frame::Union{Nothing,A}, signal_frame::A, combined_frame::A,
+    reference_cube::Union{Nothing,C}, signal_cube::Union{Nothing,C}, read_cube::Union{Nothing,C}, read_times::Nothing) where
+    {A<:AbstractMatrix,C<:AbstractArray}
+    return HgCdTeReadoutProducts{A,C,Nothing}(reference_frame, signal_frame, combined_frame,
+        reference_cube, signal_cube, read_cube, read_times)
+end
+
+function HgCdTeReadoutProducts(reference_frame::Union{Nothing,A}, signal_frame::A, combined_frame::A,
+    reference_cube::Union{Nothing,C}, signal_cube::Union{Nothing,C}, read_cube::Union{Nothing,C}, read_times::Union{Nothing,V}) where
+    {A<:AbstractMatrix,C<:AbstractArray,V<:AbstractVector}
+    return HgCdTeReadoutProducts{A,C,V}(reference_frame, signal_frame, combined_frame,
+        reference_cube, signal_cube, read_cube, read_times)
 end
 
 function SampledFrameReadoutProducts(reference_frame::Union{Nothing,A}, signal_frame::A,
@@ -155,9 +227,17 @@ struct DetectorExportMetadata{T<:AbstractFloat}
     readout_correction::Symbol
     correction_edge_rows::Union{Nothing,Int}
     correction_edge_cols::Union{Nothing,Int}
+    correction_group_rows::Union{Nothing,Int}
+    correction_group_cols::Union{Nothing,Int}
+    correction_stage_count::Int
     provides_reference_frame::Bool
     provides_signal_frame::Bool
+    provides_combined_frame::Bool
+    provides_reference_cube::Bool
+    provides_signal_cube::Bool
     provides_read_cube::Bool
+    reference_cube_reads::Union{Nothing,Int}
+    signal_cube_reads::Union{Nothing,Int}
     read_cube_reads::Union{Nothing,Int}
 end
 

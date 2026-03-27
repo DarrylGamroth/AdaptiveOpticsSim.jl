@@ -63,15 +63,15 @@ frame_sampling_signal_reads(mode::FowlerSampling) = mode.n_pairs
 
 sampling_read_time(sensor::SAPHIRASensor, ::Type{T}) where {T<:AbstractFloat} = T(sensor.read_time)
 
-function _window_area_fraction(frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat}
+function _window_row_fraction(frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat}
     window === nothing && return one(T)
-    total = frame_size[1] * frame_size[2]
-    active = length(window.rows) * length(window.cols)
-    return T(active / total)
+    total_rows = frame_size[1]
+    active_rows = length(window.rows)
+    return T(active_rows / total_rows)
 end
 
 function sampling_read_time(sensor::SAPHIRASensor, frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat}
-    return T(sensor.read_time) * _window_area_fraction(frame_size, window, T)
+    return T(sensor.read_time) * _window_row_fraction(frame_size, window, T)
 end
 
 function sampling_wallclock_time(sensor::SAPHIRASensor, integration_time, ::Type{T}) where {T<:AbstractFloat}
@@ -184,56 +184,87 @@ function _sampling_average_sigma(sensor::SAPHIRASensor, reads::Int, sigma)
     return sigma / sqrt(reads)
 end
 
-function _sampling_reference_average(sensor::SAPHIRASensor, det::Detector, sigma, rng::AbstractRNG)
-    n_ref = frame_sampling_reference_reads(sensor)
-    n_ref == 0 && return nothing
-    reference = similar(det.state.frame, size(det.state.frame)...)
-    fill!(reference, zero(eltype(reference)))
-    sigma_ref = _sampling_average_sigma(sensor, n_ref, sigma)
-    _sample_frame_read!(sensor, det, reference, reference, sigma_ref, rng)
-    return reference
-end
-
-function _sampling_signal_average(sensor::SAPHIRASensor, det::Detector, sigma, rng::AbstractRNG)
-    n_sig = frame_sampling_signal_reads(sensor)
-    signal = similar(det.state.frame, size(det.state.frame)...)
-    sigma_sig = _sampling_average_sigma(sensor, n_sig, sigma)
-    _sample_frame_read!(sensor, det, signal, det.state.frame, sigma_sig, rng)
-    return signal
-end
-
-function _sampling_read_cube(sensor::SAPHIRASensor, det::Detector, sigma, rng::AbstractRNG)
-    n_reads = frame_sampling_reads(sensor)
-    n_reads <= 1 && return nothing
-    cube = similar(det.state.frame, size(det.state.frame)..., n_reads)
-    baseline = similar(det.state.frame, size(det.state.frame)...)
-    n_ref = frame_sampling_reference_reads(sensor)
+function _sampling_average_cube(cube::AbstractArray{T,3}) where {T}
+    n_reads = size(cube, 3)
+    out = similar(cube, size(cube, 1), size(cube, 2))
+    fill!(out, zero(T))
     for read_idx in 1:n_reads
-        if read_idx <= n_ref
-            fill!(baseline, zero(eltype(baseline)))
-        else
-            copyto!(baseline, det.state.frame)
-        end
+        @views out .+= cube[:, :, read_idx]
+    end
+    out ./= T(n_reads)
+    return out
+end
+
+function _sampling_reference_cube(sensor::SAPHIRASensor, det::Detector, sigma, rng::AbstractRNG)
+    n_ref = frame_sampling_reference_reads(sensor)
+    n_ref <= 0 && return nothing
+    cube = similar(det.state.frame, size(det.state.frame)..., n_ref)
+    baseline = similar(det.state.frame, size(det.state.frame)...)
+    fill!(baseline, zero(eltype(baseline)))
+    for read_idx in 1:n_ref
         _sample_frame_read!(sensor, det, baseline, baseline, sigma, rng)
         @views copyto!(cube[:, :, read_idx], baseline)
     end
     return cube
 end
 
+function _sampling_signal_cube(sensor::SAPHIRASensor, det::Detector, sigma, rng::AbstractRNG)
+    n_sig = frame_sampling_signal_reads(sensor)
+    cube = similar(det.state.frame, size(det.state.frame)..., n_sig)
+    baseline = similar(det.state.frame, size(det.state.frame)...)
+    for read_idx in 1:n_sig
+        _sample_frame_read!(sensor, det, baseline, det.state.frame, sigma, rng)
+        @views copyto!(cube[:, :, read_idx], baseline)
+    end
+    return cube
+end
+
+function _sampling_read_cube(sensor::SAPHIRASensor, reference_cube::Union{Nothing,AbstractArray{T,3}},
+    signal_cube::AbstractArray{T,3}) where {T}
+    n_reads = frame_sampling_reads(sensor)
+    n_reads <= 1 && return nothing
+    cube = similar(signal_cube, size(signal_cube, 1), size(signal_cube, 2), n_reads)
+    offset = 0
+    if !isnothing(reference_cube)
+        for read_idx in axes(reference_cube, 3)
+            @views copyto!(cube[:, :, read_idx], reference_cube[:, :, read_idx])
+        end
+        offset = size(reference_cube, 3)
+    end
+    for read_idx in axes(signal_cube, 3)
+        @views copyto!(cube[:, :, offset + read_idx], signal_cube[:, :, read_idx])
+    end
+    return cube
+end
+
+function _sampling_read_times(sensor::SAPHIRASensor, det::Detector, n_reads::Int)
+    n_reads <= 0 && return nothing
+    T = eltype(det.state.frame)
+    read_dt = sampling_read_time(sensor, size(det.state.frame), det.params.readout_window, T)
+    times = Vector{T}(undef, n_reads)
+    for read_idx in 1:n_reads
+        times[read_idx] = T(read_idx) * read_dt
+    end
+    return times
+end
+
 function finalize_readout_products!(sensor::SAPHIRASensor, det::Detector, rng::AbstractRNG, exposure_time::Real)
     sigma = _raw_sampling_sigma(det)
-    reference_full = _sampling_reference_average(sensor, det, sigma, rng)
-    signal_full = _sampling_signal_average(sensor, det, sigma, rng)
-    cube_full = _sampling_read_cube(sensor, det, sigma, rng)
+    reference_cube_full = _sampling_reference_cube(sensor, det, sigma, rng)
+    signal_cube_full = _sampling_signal_cube(sensor, det, sigma, rng)
+    cube_full = _sampling_read_cube(sensor, reference_cube_full, signal_cube_full)
+    reference_full = isnothing(reference_cube_full) ? nothing : _sampling_average_cube(reference_cube_full)
+    signal_full = _sampling_average_cube(signal_cube_full)
+    combined_full = isnothing(reference_full) ? signal_full : signal_full .- reference_full
     reference = isnothing(reference_full) ? nothing : _copy_windowed_frame(reference_full, det)
     signal = _copy_windowed_frame(signal_full, det)
+    combined = _copy_windowed_frame(combined_full, det)
+    reference_cube = isnothing(reference_cube_full) ? nothing : _copy_windowed_cube(reference_cube_full, det)
+    signal_cube = _copy_windowed_cube(signal_cube_full, det)
     cube = isnothing(cube_full) ? nothing : _copy_windowed_cube(cube_full, det)
-    if isnothing(reference)
-        det.state.frame .= signal_full
-    else
-        det.state.frame .= signal_full .- reference_full
-    end
-    det.state.readout_products = SampledFrameReadoutProducts(reference, signal, cube)
+    read_times = isnothing(cube_full) ? nothing : _sampling_read_times(sensor, det, size(cube_full, 3))
+    det.state.frame .= combined_full
+    det.state.readout_products = HgCdTeReadoutProducts(reference, signal, combined, reference_cube, signal_cube, cube, read_times)
     return det.state.readout_products
 end
 
