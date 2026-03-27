@@ -9,8 +9,52 @@ detector_noise_symbol(::NoisePhotonReadout) = :photon_readout
 detector_sensor_symbol(sensor::SensorType) =
     throw(InvalidConfiguration("missing detector_sensor_symbol overload for $(typeof(sensor))"))
 
-frame_response_symbol(::NullFrameResponse) = :none
-frame_response_symbol(::SeparableGaussianPixelResponse) = :separable_gaussian
+response_family(::NullFrameResponse) = :none
+response_family(::GaussianPixelResponse) = :gaussian
+response_family(::RectangularPixelAperture) = :rectangular_aperture
+response_family(::SeparablePixelMTF) = :separable_mtf
+
+frame_response_symbol(model::AbstractFrameResponse) = response_family(model)
+
+response_application_domain(::AbstractFrameResponse) = :image
+
+is_shift_invariant(::AbstractFrameResponse) = true
+supports_frequency_domain_application(::AbstractFrameResponse) = false
+supports_frequency_domain_application(::AbstractFrameMTF) = true
+supports_separable_application(::AbstractFrameResponse) = false
+supports_separable_application(::NullFrameResponse) = true
+supports_separable_application(::GaussianPixelResponse) = true
+supports_separable_application(::RectangularPixelAperture) = true
+supports_separable_application(::SeparablePixelMTF) = true
+supports_subpixel_geometry(::AbstractFrameResponse) = false
+supports_subpixel_geometry(::AbstractFrameMTF) = true
+
+response_support(::NullFrameResponse) = nothing, nothing
+response_support(model::GaussianPixelResponse) = length(model.kernel), length(model.kernel)
+response_support(model::RectangularPixelAperture) = length(model.kernel_y), length(model.kernel_x)
+response_support(model::SeparablePixelMTF) = length(model.kernel_y), length(model.kernel_x)
+
+response_width_px(::NullFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
+response_width_px(model::GaussianPixelResponse, ::Type{T}) where {T<:AbstractFloat} = T(model.response_width_px)
+response_width_px(::AbstractFrameMTF, ::Type{T}) where {T<:AbstractFloat} = nothing
+
+response_pitch_x_px(::AbstractFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
+response_pitch_y_px(::AbstractFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
+response_fill_factor_x(::AbstractFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
+response_fill_factor_y(::AbstractFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
+response_aperture_shape(::AbstractFrameResponse) = nothing
+
+response_pitch_x_px(model::RectangularPixelAperture, ::Type{T}) where {T<:AbstractFloat} = T(model.pitch_x_px)
+response_pitch_y_px(model::RectangularPixelAperture, ::Type{T}) where {T<:AbstractFloat} = T(model.pitch_y_px)
+response_fill_factor_x(model::RectangularPixelAperture, ::Type{T}) where {T<:AbstractFloat} = T(model.fill_factor_x)
+response_fill_factor_y(model::RectangularPixelAperture, ::Type{T}) where {T<:AbstractFloat} = T(model.fill_factor_y)
+response_aperture_shape(::RectangularPixelAperture) = :rectangular
+
+response_pitch_x_px(model::SeparablePixelMTF, ::Type{T}) where {T<:AbstractFloat} = T(model.pitch_x_px)
+response_pitch_y_px(model::SeparablePixelMTF, ::Type{T}) where {T<:AbstractFloat} = T(model.pitch_y_px)
+response_fill_factor_x(model::SeparablePixelMTF, ::Type{T}) where {T<:AbstractFloat} = T(model.fill_factor_x)
+response_fill_factor_y(model::SeparablePixelMTF, ::Type{T}) where {T<:AbstractFloat} = T(model.fill_factor_y)
+response_aperture_shape(::SeparablePixelMTF) = :rectangular
 
 frame_sampling_symbol(::FrameSensorType) = :single_read
 frame_sampling_reads(::FrameSensorType) = nothing
@@ -21,8 +65,9 @@ sampling_wallclock_time(::FrameSensorType, integration_time, ::Type{T}) where {T
 
 supports_detector_mtf(::AbstractFrameDetector) = false
 supports_detector_mtf(det::Detector) = supports_detector_mtf(det.params.response_model)
-supports_detector_mtf(::NullFrameResponse) = false
-supports_detector_mtf(::SeparableGaussianPixelResponse) = true
+supports_detector_mtf(::AbstractFrameResponse) = false
+supports_detector_mtf(::GaussianPixelResponse) = true
+supports_detector_mtf(::AbstractFrameMTF) = true
 
 supports_clock_induced_charge(::FrameSensorType) = false
 supports_column_readout_noise(::FrameSensorType) = false
@@ -35,6 +80,9 @@ supports_reference_read_subtraction(::FrameSensorType) = false
 supports_counting_noise(::AbstractCountingDetector) = false
 supports_dead_time(::AbstractCountingDetector) = false
 supports_channel_gain_map(::AbstractCountingDetector) = false
+
+supports_detector_response(::SensorType, ::AbstractDetectorResponse) = false
+supports_detector_response(::FrameSensorType, ::AbstractFrameResponse) = true
 
 sensor_is_frame_based(::SensorType) = false
 sensor_is_frame_based(::FrameSensorType) = true
@@ -55,6 +103,7 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         (first(det.params.readout_window.rows), last(det.params.readout_window.rows))
     col_window = det.params.readout_window === nothing ? nothing :
         (first(det.params.readout_window.cols), last(det.params.readout_window.cols))
+    support_rows, support_cols = response_support(det.params.response_model)
     return DetectorExportMetadata{T}(
         T(det.params.integration_time),
         T(det.params.qe),
@@ -70,8 +119,18 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         det.params.output_precision,
         size(det.state.frame),
         size(output),
-        frame_response_symbol(det.params.response_model),
-        frame_response_width(det.params.response_model, T),
+        response_family(det.params.response_model),
+        response_width_px(det.params.response_model, T),
+        response_application_domain(det.params.response_model),
+        supports_separable_application(det.params.response_model),
+        is_shift_invariant(det.params.response_model),
+        support_rows,
+        support_cols,
+        response_pitch_x_px(det.params.response_model, T),
+        response_pitch_y_px(det.params.response_model, T),
+        response_fill_factor_x(det.params.response_model, T),
+        response_fill_factor_y(det.params.response_model, T),
+        response_aperture_shape(det.params.response_model),
         row_window,
         col_window,
         frame_sampling_symbol(det.params.sensor),
@@ -168,26 +227,66 @@ function background_model(map::AbstractMatrix; T::Type{<:AbstractFloat}, backend
     return BackgroundFrame{T, typeof(background)}(background)
 end
 
-frame_response_width(::NullFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
-frame_response_width(model::SeparableGaussianPixelResponse, ::Type{T}) where {T<:AbstractFloat} = T(model.response_width_px)
 effective_readout_sigma(::FrameSensorType, sigma) = sigma
 effective_dark_current_time(::FrameSensorType, exposure_time) = exposure_time
 effective_sensor_glow_time(::FrameSensorType, exposure_time) = exposure_time
 
 convert_frame_response_model(::NullFrameResponse, ::Type{T}, backend) where {T<:AbstractFloat} = NullFrameResponse()
 
-function convert_frame_response_model(model::SeparableGaussianPixelResponse, ::Type{T}, backend) where {T<:AbstractFloat}
+function convert_frame_response_model(model::GaussianPixelResponse, ::Type{T}, backend) where {T<:AbstractFloat}
     kernel = backend{T}(undef, length(model.kernel))
     copyto!(kernel, T.(Array(model.kernel)))
-    return SeparableGaussianPixelResponse{T,typeof(kernel)}(T(model.response_width_px), kernel)
+    return GaussianPixelResponse{T,typeof(kernel)}(T(model.response_width_px), kernel)
+end
+
+function convert_frame_response_model(model::RectangularPixelAperture, ::Type{T}, backend) where {T<:AbstractFloat}
+    kernel_x = backend{T}(undef, length(model.kernel_x))
+    kernel_y = backend{T}(undef, length(model.kernel_y))
+    copyto!(kernel_x, T.(Array(model.kernel_x)))
+    copyto!(kernel_y, T.(Array(model.kernel_y)))
+    return RectangularPixelAperture{T,typeof(kernel_x),typeof(kernel_y)}(
+        T(model.pitch_x_px), T(model.pitch_y_px), T(model.fill_factor_x), T(model.fill_factor_y), kernel_x, kernel_y)
+end
+
+function convert_frame_response_model(model::SeparablePixelMTF, ::Type{T}, backend) where {T<:AbstractFloat}
+    kernel_x = backend{T}(undef, length(model.kernel_x))
+    kernel_y = backend{T}(undef, length(model.kernel_y))
+    copyto!(kernel_x, T.(Array(model.kernel_x)))
+    copyto!(kernel_y, T.(Array(model.kernel_y)))
+    return SeparablePixelMTF{T,typeof(kernel_x),typeof(kernel_y)}(
+        T(model.pitch_x_px), T(model.pitch_y_px), T(model.fill_factor_x), T(model.fill_factor_y), kernel_x, kernel_y)
 end
 
 validate_frame_response_model(model::NullFrameResponse) = model
 
-function validate_frame_response_model(model::SeparableGaussianPixelResponse)
-    model.response_width_px > 0 || throw(InvalidConfiguration("SeparableGaussianPixelResponse response_width_px must be > 0"))
-    length(model.kernel) > 0 || throw(InvalidConfiguration("SeparableGaussianPixelResponse kernel must not be empty"))
-    isodd(length(model.kernel)) || throw(InvalidConfiguration("SeparableGaussianPixelResponse kernel length must be odd"))
+function validate_frame_response_model(model::GaussianPixelResponse)
+    model.response_width_px > 0 || throw(InvalidConfiguration("GaussianPixelResponse response_width_px must be > 0"))
+    length(model.kernel) > 0 || throw(InvalidConfiguration("GaussianPixelResponse kernel must not be empty"))
+    isodd(length(model.kernel)) || throw(InvalidConfiguration("GaussianPixelResponse kernel length must be odd"))
+    return model
+end
+
+function validate_frame_response_model(model::RectangularPixelAperture)
+    model.pitch_x_px > 0 || throw(InvalidConfiguration("RectangularPixelAperture pitch_x_px must be > 0"))
+    model.pitch_y_px > 0 || throw(InvalidConfiguration("RectangularPixelAperture pitch_y_px must be > 0"))
+    zero(model.fill_factor_x) < model.fill_factor_x <= one(model.fill_factor_x) ||
+        throw(InvalidConfiguration("RectangularPixelAperture fill_factor_x must lie in (0, 1]"))
+    zero(model.fill_factor_y) < model.fill_factor_y <= one(model.fill_factor_y) ||
+        throw(InvalidConfiguration("RectangularPixelAperture fill_factor_y must lie in (0, 1]"))
+    isodd(length(model.kernel_x)) || throw(InvalidConfiguration("RectangularPixelAperture kernel_x length must be odd"))
+    isodd(length(model.kernel_y)) || throw(InvalidConfiguration("RectangularPixelAperture kernel_y length must be odd"))
+    return model
+end
+
+function validate_frame_response_model(model::SeparablePixelMTF)
+    model.pitch_x_px > 0 || throw(InvalidConfiguration("SeparablePixelMTF pitch_x_px must be > 0"))
+    model.pitch_y_px > 0 || throw(InvalidConfiguration("SeparablePixelMTF pitch_y_px must be > 0"))
+    zero(model.fill_factor_x) < model.fill_factor_x <= one(model.fill_factor_x) ||
+        throw(InvalidConfiguration("SeparablePixelMTF fill_factor_x must lie in (0, 1]"))
+    zero(model.fill_factor_y) < model.fill_factor_y <= one(model.fill_factor_y) ||
+        throw(InvalidConfiguration("SeparablePixelMTF fill_factor_y must lie in (0, 1]"))
+    isodd(length(model.kernel_x)) || throw(InvalidConfiguration("SeparablePixelMTF kernel_x length must be odd"))
+    isodd(length(model.kernel_y)) || throw(InvalidConfiguration("SeparablePixelMTF kernel_y length must be odd"))
     return model
 end
 
@@ -214,6 +313,11 @@ function validate_frame_detector_sensor(sensor::CountingSensorType)
     throw(InvalidConfiguration("Detector currently models frame-based sensors only; use a sensor-side readout model for $(detector_sensor_symbol(sensor))"))
 end
 
+function validate_detector_response(sensor::SensorType, response_model::AbstractDetectorResponse)
+    supports_detector_response(sensor, response_model) && return response_model
+    throw(InvalidConfiguration("response model $(typeof(response_model)) is not supported for sensor $(typeof(sensor))"))
+end
+
 function resolve_output_precision(bits::Union{Nothing,Int}, output_precision::Union{Nothing,DataType})
     output_precision !== nothing && return output_precision
     bits === 8 && return UInt8
@@ -233,7 +337,8 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     full_well_t = full_well === nothing ? nothing : T(full_well)
     flux_model = background_model(background_flux; T=T, backend=backend)
     map_model = background_model(background_map; T=T, backend=backend)
-    response = validate_frame_response_model(convert_frame_response_model(response_model, T, backend))
+    response = validate_detector_response(sensor,
+        validate_frame_response_model(convert_frame_response_model(response_model, T, backend)))
     output_precision_t = resolve_output_precision(bits, output_precision)
     window = validate_readout_window(readout_window)
     params = DetectorParams{T, typeof(sensor), typeof(response)}(

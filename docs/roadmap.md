@@ -228,6 +228,12 @@ validation shows the new default is still too coarse.
   `docs/detector-readout-physics-plan.md`, starting with APD-like counting
   behavior for curvature sensing, then frame-detector MTF/pixel-response work,
   while keeping room for future SPAD/SPAD-array support.
+- [x] Formalize the detector-response / MTF interface described in
+  `docs/detector-response-interface-plan.md`. The detector layer now exposes
+  `AbstractDetectorResponse` / `AbstractFrameResponse` / `AbstractFrameMTF`,
+  explicit response traits and metadata, plus maintained
+  `GaussianPixelResponse`, `RectangularPixelAperture`, and
+  `SeparablePixelMTF` models with batched support for the separable paths.
 - [ ] Continue GPU/HIL performance work only where profiling shows real value,
   especially in builder-heavy tomography paths.
 - [~] Separate compact regression benchmarks from representative benchmark

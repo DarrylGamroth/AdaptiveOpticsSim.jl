@@ -34,15 +34,19 @@ than by source file.
 - `AbstractFrameDetector`, `AbstractCountingDetector`
 - `APDDetector`, `APDDetectorParams`, `APDDetectorState`
 - `FrameWindow`
-- `FrameResponseModel`, `NullFrameResponse`,
-  `SeparableGaussianPixelResponse`
+- `AbstractDetectorResponse`, `AbstractFrameResponse`, `AbstractFrameMTF`
+- `FrameResponseModel`, `NullFrameResponse`, `GaussianPixelResponse`,
+  `RectangularPixelAperture`, `SeparablePixelMTF`
 - `FrameSamplingMode`, `SingleRead`, `AveragedNonDestructiveReads`,
   `CorrelatedDoubleSampling`, `FowlerSampling`
 - `CountingReadoutMetadata`, `CountingDetectorExportMetadata`
 - `CountingDeadTimeModel`, `NoDeadTime`, `NonParalyzableDeadTime`
 - `capture!`, `output_frame`, `channel_output`, `detector_export_metadata`,
   `readout_ready`, `reset_integration!`
-- `supports_detector_mtf`
+- `response_family`, `response_application_domain`, `response_support`
+- `supports_detector_mtf`, `is_shift_invariant`,
+  `supports_frequency_domain_application`,
+  `supports_separable_application`, `supports_subpixel_geometry`
 - `supports_clock_induced_charge`, `supports_column_readout_noise`
 - `supports_avalanche_gain`, `supports_sensor_glow`,
   `supports_nondestructive_reads`, `supports_reference_read_subtraction`
@@ -193,9 +197,13 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   distinct readout family and should be modeled through sensor/readout-specific
   code rather than the generic frame-detector path.
 - The maintained frame-detector response family is opt-in and null by default:
-  `NullFrameResponse` is the identity model and
-  `SeparableGaussianPixelResponse` is the maintained first pixel-response/MTF
-  approximation.
+  `NullFrameResponse` is the identity model, `GaussianPixelResponse` is the
+  maintained effective blur-like response, `RectangularPixelAperture` is the
+  first explicit pixel-geometry model, and `SeparablePixelMTF` is the first
+  maintained MTF-specified response family.
+- Detector export metadata now records response family, application domain,
+  separability, shift invariance, support, pitch, fill factor, and aperture
+  shape, rather than only one response-width scalar.
 - `FrameWindow(rows, cols)` is a generic frame-readout crop that applies to the
   detector output surface after detector sampling/binning. This is intended for
   subarray/windowed readout and is not SAPHIRA-specific.

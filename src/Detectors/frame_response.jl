@@ -1,44 +1,56 @@
-apply_frame_response!(::NullFrameResponse, det::Detector) = det.state.frame
+apply_response!(::NullFrameResponse, det::Detector) = det.state.frame
 
-function apply_frame_response!(model::SeparableGaussianPixelResponse, det::Detector)
-    return apply_frame_response!(execution_style(det.state.frame), model, det)
+function apply_response!(model::AbstractFrameResponse, det::Detector)
+    return apply_response!(execution_style(det.state.frame), model, det.state.frame, det.state.response_buffer)
 end
 
-function apply_frame_response!(::ScalarCPUStyle, model::SeparableGaussianPixelResponse, det::Detector)
-    frame = det.state.frame
-    scratch = det.state.response_buffer
-    kernel = model.kernel
+function _apply_separable_response!(::ScalarCPUStyle, frame::AbstractMatrix, scratch::AbstractMatrix,
+    kernel_y::AbstractVector, kernel_x::AbstractVector)
     n, m = size(frame)
-    radius = fld(length(kernel), 2)
+    radius_x = fld(length(kernel_x), 2)
+    radius_y = fld(length(kernel_y), 2)
     @inbounds for i in 1:n, j in 1:m
         acc = zero(eltype(frame))
-        for kk in eachindex(kernel)
-            jj = clamp(j + kk - radius - 1, 1, m)
-            acc += kernel[kk] * frame[i, jj]
+        for kk in eachindex(kernel_x)
+            jj = clamp(j + kk - radius_x - 1, 1, m)
+            acc += kernel_x[kk] * frame[i, jj]
         end
         scratch[i, j] = acc
     end
     @inbounds for i in 1:n, j in 1:m
         acc = zero(eltype(frame))
-        for kk in eachindex(kernel)
-            ii = clamp(i + kk - radius - 1, 1, n)
-            acc += kernel[kk] * scratch[ii, j]
+        for kk in eachindex(kernel_y)
+            ii = clamp(i + kk - radius_y - 1, 1, n)
+            acc += kernel_y[kk] * scratch[ii, j]
         end
         frame[i, j] = acc
     end
     return frame
 end
 
-function apply_frame_response!(style::AcceleratorStyle, model::SeparableGaussianPixelResponse, det::Detector)
-    frame = det.state.frame
-    scratch = det.state.response_buffer
-    kernel = model.kernel
+function _apply_separable_response!(style::AcceleratorStyle, frame::AbstractMatrix, scratch::AbstractMatrix,
+    kernel_y::AbstractVector, kernel_x::AbstractVector)
     n, m = size(frame)
-    radius = fld(length(kernel), 2)
-    launch_kernel!(style, separable_response_rows_kernel!, scratch, frame, kernel, radius, n, m, length(kernel); ndrange=(n, m))
-    launch_kernel!(style, separable_response_cols_kernel!, frame, scratch, kernel, radius, n, m, length(kernel); ndrange=(n, m))
+    radius_x = fld(length(kernel_x), 2)
+    radius_y = fld(length(kernel_y), 2)
+    launch_kernel!(style, separable_response_rows_kernel!, scratch, frame, kernel_x, radius_x, n, m, length(kernel_x); ndrange=(n, m))
+    launch_kernel!(style, separable_response_cols_kernel!, frame, scratch, kernel_y, radius_y, n, m, length(kernel_y); ndrange=(n, m))
     return frame
 end
+
+function apply_response!(style::ExecutionStyle, model::GaussianPixelResponse, frame::AbstractMatrix, scratch::AbstractMatrix)
+    return _apply_separable_response!(style, frame, scratch, model.kernel, model.kernel)
+end
+
+function apply_response!(style::ExecutionStyle, model::RectangularPixelAperture, frame::AbstractMatrix, scratch::AbstractMatrix)
+    return _apply_separable_response!(style, frame, scratch, model.kernel_y, model.kernel_x)
+end
+
+function apply_response!(style::ExecutionStyle, model::SeparablePixelMTF, frame::AbstractMatrix, scratch::AbstractMatrix)
+    return _apply_separable_response!(style, frame, scratch, model.kernel_y, model.kernel_x)
+end
+
+const apply_frame_response! = apply_response!
 
 function ensure_buffers!(det::Detector, n_mid::Int, m_mid::Int, n_out::Int, m_out::Int)
     if size(det.state.frame) != (n_out, m_out)
@@ -103,7 +115,7 @@ function fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real)
         end
     end
     @. det.state.frame *= det.params.qe * exposure_time
-    apply_frame_response!(det.params.response_model, det)
+    apply_response!(det.params.response_model, det)
     return det.state.frame
 end
 

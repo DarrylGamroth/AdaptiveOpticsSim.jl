@@ -10,8 +10,8 @@ function _require_batched_detector_compat(det::Detector, cube::AbstractArray, sc
         throw(InvalidConfiguration("batched detector capture currently requires output_precision === nothing"))
     det.params.readout_window === nothing ||
         throw(InvalidConfiguration("batched detector capture currently requires full-frame readout"))
-    supports_detector_mtf(det) &&
-        throw(InvalidConfiguration("batched detector capture currently requires NullFrameResponse()"))
+    supports_separable_application(det.params.response_model) ||
+        throw(InvalidConfiguration("batched detector capture currently requires a maintained separable frame response"))
     _require_batched_sensor_compat(det.params.sensor)
     return nothing
 end
@@ -119,11 +119,24 @@ function capture_stack_poisson_noise!(det::Detector{<:NoisePhotonReadout}, cube:
     return cube
 end
 
+function _batched_apply_response!(::NullFrameResponse, det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
+    return cube
+end
+
+function _batched_apply_response!(model::AbstractFrameResponse, det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
+    style = execution_style(cube)
+    for k in axes(cube, 3)
+        apply_response!(style, model, @view(cube[:, :, k]), @view(scratch[:, :, k]))
+    end
+    return cube
+end
+
 function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3};
     rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     _require_batched_detector_compat(det, cube, scratch)
     exposure_time = det.params.integration_time
     cube .*= det.params.qe * exposure_time
+    _batched_apply_response!(det.params.response_model, det, cube, scratch)
     capture_stack_poisson_noise!(det, cube, rng)
     _batched_background_flux!(det.background_flux, det, cube, scratch, rng, exposure_time)
     _batched_dark_current!(det, cube, scratch, rng, exposure_time)

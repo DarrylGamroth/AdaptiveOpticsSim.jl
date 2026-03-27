@@ -802,7 +802,7 @@ end
     @test supports_channel_gain_map(apd_gain_map)
 
     det_mtf = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-        response_model=SeparableGaussianPixelResponse(response_width_px=0.75))
+        response_model=GaussianPixelResponse(response_width_px=0.75))
     impulse = zeros(9, 9)
     impulse[5, 5] = 1.0
     frame_mtf = capture!(det_mtf, impulse; rng=MersenneTwister(3))
@@ -811,13 +811,51 @@ end
     @test frame_mtf[5, 4] > 0
     @test supports_detector_mtf(det_mtf)
     mtf_meta = detector_export_metadata(det_mtf)
-    @test mtf_meta.frame_response == :separable_gaussian
+    @test mtf_meta.frame_response == :gaussian
     @test mtf_meta.response_width_px == 0.75
-    @test_throws InvalidConfiguration SeparableGaussianPixelResponse(response_width_px=0.0)
+    @test mtf_meta.response_application_domain == :image
+    @test mtf_meta.response_is_separable
+    @test mtf_meta.response_is_shift_invariant
+    @test mtf_meta.response_support_rows == mtf_meta.response_support_cols
+    @test mtf_meta.pitch_x_px === nothing
+    @test mtf_meta.aperture_shape === nothing
+    @test_throws InvalidConfiguration GaussianPixelResponse(response_width_px=0.0)
 
     cube_mtf = cat(copy(impulse), copy(impulse); dims=3)
     scratch_mtf = similar(cube_mtf)
-    @test_throws InvalidConfiguration AdaptiveOpticsSim.capture_stack!(det_mtf, cube_mtf, scratch_mtf; rng=MersenneTwister(10))
+    stack_mtf = AdaptiveOpticsSim.capture_stack!(det_mtf, cube_mtf, scratch_mtf; rng=MersenneTwister(10))
+    @test size(stack_mtf) == size(cube_mtf)
+    @test all(isfinite, stack_mtf)
+
+    rect_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        response_model=RectangularPixelAperture(pitch_x_px=2.0, pitch_y_px=2.0,
+            fill_factor_x=0.6, fill_factor_y=0.8))
+    rect_frame = capture!(rect_det, impulse; rng=MersenneTwister(4))
+    @test sum(rect_frame) ≈ 1.0 atol=1e-6
+    @test rect_frame[5, 5] < 1.0
+    rect_meta = detector_export_metadata(rect_det)
+    @test rect_meta.frame_response == :rectangular_aperture
+    @test rect_meta.pitch_x_px == 2.0
+    @test rect_meta.pitch_y_px == 2.0
+    @test rect_meta.fill_factor_x == 0.6
+    @test rect_meta.fill_factor_y == 0.8
+    @test rect_meta.aperture_shape == :rectangular
+    @test rect_meta.response_application_domain == :image
+    @test supports_detector_mtf(rect_det)
+
+    mtf_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        response_model=SeparablePixelMTF(pitch_x_px=1.0, pitch_y_px=1.0,
+            fill_factor_x=0.7, fill_factor_y=0.7))
+    mtf_frame = capture!(mtf_det, impulse; rng=MersenneTwister(5))
+    @test sum(mtf_frame) ≈ 1.0 atol=1e-6
+    mtf_meta2 = detector_export_metadata(mtf_det)
+    @test mtf_meta2.frame_response == :separable_mtf
+    @test mtf_meta2.response_is_separable
+    @test mtf_meta2.response_application_domain == :image
+    @test mtf_meta2.aperture_shape == :rectangular
+    @test_throws InvalidConfiguration RectangularPixelAperture(fill_factor_x=0.0)
+    @test_throws InvalidConfiguration SeparablePixelMTF(fill_factor_y=1.5)
+
     det_window_stack = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         readout_window=FrameWindow(2:8, 2:8))
     cube_window = cat(copy(impulse), copy(impulse); dims=3)
