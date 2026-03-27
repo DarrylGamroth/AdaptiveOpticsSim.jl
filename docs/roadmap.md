@@ -32,7 +32,7 @@
 - [x] `Pyramid.py` -> `src/WFS/pyramid.jl`
 - [x] `BioEdge.py` -> `src/WFS/bioedge.jl`
 - [x] `DeformableMirror.py` -> `src/Optics/deformable_mirror.jl`
-- [x] `Detector.py` -> `src/Optics/detector.jl`
+- [x] `Detector.py` -> `src/Detectors/`
 - [x] `Asterism.py` -> `src/Optics/asterism.jl`
 - [x] `MisRegistration.py` -> `src/Optics/misregistration.jl`
 - [x] `Zernike.py` -> `src/Optics/zernike.jl`

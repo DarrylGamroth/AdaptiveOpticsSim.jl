@@ -25,7 +25,7 @@ The package now has a cleaner split than before:
   `src/WFS/bioedge.jl`,
   `src/WFS/zernike.jl`,
   `src/WFS/curvature.jl`
-- the generic frame detector lives in `src/Optics/detector.jl`
+- the generic frame detector family lives in `src/Detectors/`
 - detector families are now explicit:
   - `FrameSensorType`
   - `CountingSensorType`
@@ -300,7 +300,7 @@ Frame detectors deserve a separate improvement track.
 ### Phase 1: Detector MTF / Pixel Response
 
 Add an optional frame-detector MTF or pixel-response stage in
-`src/Optics/detector.jl`.
+`src/Detectors/`.
 
 Requirements:
 
