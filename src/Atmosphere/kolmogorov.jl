@@ -6,7 +6,11 @@ using Random
         @inbounds begin
             fx = freqs[i]
             fy = freqs[j]
-            psd[i, j] = coeff * (two_pi_sq * (fx * fx + fy * fy) + inv_L0_sq)^exponent
+            psd[i, j] = ifelse(
+                i == 1 && j == 1,
+                zero(eltype(psd)),
+                coeff * (two_pi_sq * (fx * fx + fy * fy) + inv_L0_sq)^exponent,
+            )
         end
     end
 end
@@ -71,7 +75,6 @@ function update_psd!(atm::KolmogorovAtmosphere, delta::Real)
     two_pi_sq = T(2 * pi)^2
     exponent = -T(11) / T(6)
     update_psd!(execution_style(atm.state.psd), atm.state.psd, atm.state.freqs, coeff, two_pi_sq, inv_L0_sq, exponent, n)
-    atm.state.psd[1, 1] = zero(T)
     return atm
 end
 
@@ -80,7 +83,8 @@ function update_psd!(::ScalarCPUStyle, psd::AbstractMatrix{T}, freqs::AbstractVe
     @inbounds for j in 1:n, i in 1:n
         fx = freqs[i]
         fy = freqs[j]
-        psd[i, j] = coeff * (two_pi_sq * (fx * fx + fy * fy) + inv_L0_sq)^exponent
+        psd[i, j] = i == 1 && j == 1 ? zero(T) :
+            coeff * (two_pi_sq * (fx * fx + fy * fy) + inv_L0_sq)^exponent
     end
     return psd
 end
