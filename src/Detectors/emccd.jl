@@ -1,3 +1,14 @@
+struct EMCCDSensor{T<:AbstractFloat} <: AvalancheFrameSensorType
+    excess_noise_factor::T
+end
+
+function EMCCDSensor(; excess_noise_factor::Real=1.0, T::Type{<:AbstractFloat}=Float64)
+    excess_noise_factor >= 1 || throw(InvalidConfiguration("EMCCDSensor excess_noise_factor must be >= 1"))
+    return EMCCDSensor{T}(T(excess_noise_factor))
+end
+
+detector_sensor_symbol(::EMCCDSensor) = :emccd
+
 apply_sensor_statistics!(sensor::EMCCDSensor, det::Detector, rng::AbstractRNG) =
     apply_avalanche_excess_noise!(sensor.excess_noise_factor, det, rng)
 

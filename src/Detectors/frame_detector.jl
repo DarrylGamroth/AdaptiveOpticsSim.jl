@@ -222,7 +222,7 @@ function finalize_capture!(det::Detector, rng::AbstractRNG, exposure_time::Real)
     return det.state.frame
 end
 
-function write_output_frame!(det::Detector)
+function write_output!(det::Detector)
     window = det.params.readout_window
     output = det.state.output_buffer
     if output === nothing
@@ -244,7 +244,7 @@ end
 function capture!(det::Detector, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
     capture_signal!(det, psf, rng, det.params.integration_time)
     finalize_capture!(det, rng, det.params.integration_time)
-    return write_output_frame!(det)
+    return write_output!(det)
 end
 
 function _require_batched_detector_compat(det::Detector, cube::AbstractArray, scratch::AbstractArray)
@@ -420,7 +420,7 @@ function capture!(det::Detector, psf::AbstractMatrix{T}; rng::AbstractRNG=Random
         det.state.integrated_time = zero(det.state.integrated_time)
         det.state.readout_ready = true
     end
-    return write_output_frame!(det)
+    return write_output!(det)
 end
 
 function ensure_buffers!(det::Detector, n_mid::Int, m_mid::Int, n_out::Int, m_out::Int)

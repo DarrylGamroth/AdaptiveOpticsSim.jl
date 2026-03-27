@@ -1,3 +1,15 @@
+struct InGaAsSensor{T<:AbstractFloat} <: FrameSensorType
+    glow_rate::T
+end
+
+function InGaAsSensor(; glow_rate::Real=0.0, T::Type{<:AbstractFloat}=Float64)
+    glow_rate >= 0 || throw(InvalidConfiguration("InGaAsSensor glow_rate must be >= 0"))
+    return InGaAsSensor{T}(T(glow_rate))
+end
+
+detector_sensor_symbol(::InGaAsSensor) = :ingaas
+supports_sensor_glow(::InGaAsSensor) = true
+
 function apply_sensor_statistics!(sensor::InGaAsSensor, det::Detector, rng::AbstractRNG)
     rate = sensor.glow_rate * effective_sensor_glow_time(sensor, det.params.integration_time)
     rate <= zero(rate) && return det.state.frame
