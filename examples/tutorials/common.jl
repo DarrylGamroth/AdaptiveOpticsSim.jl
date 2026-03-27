@@ -27,7 +27,7 @@ function base_atmosphere(tel::Telescope; r0::Real=0.15, L0::Real=25.0)
         tel;
         r0=r0,
         L0=L0,
-        fractional_r0=[1.0],
+        fractional_cn2=[1.0],
         wind_speed=[8.0],
         wind_direction=[0.0],
         altitude=[0.0],

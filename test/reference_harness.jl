@@ -350,7 +350,7 @@ function build_reference_tomography_atmosphere(cfg::AbstractDict{<:AbstractStrin
         altitude_km=Float64.(cfg["altitude_km"]),
         L0=Float64(cfg["L0"]),
         r0_zenith=Float64(cfg["r0_zenith"]),
-        fractional_r0=Float64.(cfg["fractional_r0"]),
+        fractional_cn2=Float64.(cfg["fractional_cn2"]),
         wavelength=Float64(cfg["wavelength"]),
         wind_direction_deg=Float64.(cfg["wind_direction_deg"]),
         wind_speed=Float64.(cfg["wind_speed"]),

@@ -169,15 +169,15 @@ function _active_guide_grid_params(
     )
 end
 
-@kernel function covariance_matrix_kernel!(out, rho1, rho2, cst, var_term, inv_L0, fractional_r0, n1::Int, n2::Int)
+@kernel function covariance_matrix_kernel!(out, rho1, rho2, cst, var_term, inv_L0, fractional_cn2, n1::Int, n2::Int)
     i, j = @index(Global, NTuple)
     if i <= n1 && j <= n2
         rho = abs(@inbounds(rho1[i] - rho2[j]))
         if iszero(rho)
-            @inbounds out[i, j] = var_term * fractional_r0
+            @inbounds out[i, j] = var_term * fractional_cn2
         else
             u = (2 * π) * rho * inv_L0
-            @inbounds out[i, j] = cst * u^(5 / 6) * real(_kv56_scalar(u)) * fractional_r0
+            @inbounds out[i, j] = cst * u^(5 / 6) * real(_kv56_scalar(u)) * fractional_cn2
         end
     end
 end
@@ -225,7 +225,7 @@ end
     block,
     shifted,
     positions,
-    fractional_r0,
+    fractional_cn2,
     igs::Int,
     jgs::Int,
     cst,
@@ -240,10 +240,10 @@ end
         @inbounds for layer in 1:n_layers
             rho = abs(shifted[positions[i], igs, layer] - shifted[positions[j], jgs, layer])
             if iszero(rho)
-                acc += var_term * fractional_r0[layer]
+                acc += var_term * fractional_cn2[layer]
             else
                 u = (2 * π) * rho * inv_L0
-                acc += cst * u^(5 / 6) * real(_kv56_scalar(u)) * fractional_r0[layer]
+                acc += cst * u^(5 / 6) * real(_kv56_scalar(u)) * fractional_cn2[layer]
             end
         end
         @inbounds block[i, j] = acc
@@ -483,10 +483,10 @@ function _covariance_matrix(
     rho2::AbstractVector{Complex{T}},
     r0::T,
     L0::T,
-    fractional_r0::T,
+    fractional_cn2::T,
 ) where {T<:AbstractFloat}
     cst, var_term, inv_L0 = _covariance_constants(r0, L0)
-    return _covariance_matrix(rho1, rho2, cst, var_term, inv_L0, fractional_r0)
+    return _covariance_matrix(rho1, rho2, cst, var_term, inv_L0, fractional_cn2)
 end
 
 function _covariance_matrix(
@@ -495,12 +495,12 @@ function _covariance_matrix(
     rho2::AbstractVector{Complex{T}},
     r0::T,
     L0::T,
-    fractional_r0::T,
+    fractional_cn2::T,
 ) where {T<:AbstractFloat}
     cst, var_term, inv_L0 = _covariance_constants(r0, L0)
     rho1_native = _covariance_input(execution_style(rho1), backend, rho1)
     rho2_native = _covariance_input(execution_style(rho2), backend, rho2)
-    return _covariance_matrix(execution_style(rho1_native), rho1_native, rho2_native, cst, var_term, inv_L0, fractional_r0)
+    return _covariance_matrix(execution_style(rho1_native), rho1_native, rho2_native, cst, var_term, inv_L0, fractional_cn2)
 end
 
 function _covariance_matrix(
@@ -508,10 +508,10 @@ function _covariance_matrix(
     rho2::AbstractVector{Complex{T}},
     r0::T,
     L0::T,
-    fractional_r0::T,
+    fractional_cn2::T,
 ) where {T<:AbstractFloat}
     cst, var_term, inv_L0 = _covariance_constants(r0, L0)
-    return _covariance_matrix(rho1, rho2, cst, var_term, inv_L0, fractional_r0)
+    return _covariance_matrix(rho1, rho2, cst, var_term, inv_L0, fractional_cn2)
 end
 
 function _covariance_matrix(
@@ -520,7 +520,7 @@ function _covariance_matrix(
     cst::T,
     var_term::T,
     inv_L0::T,
-    fractional_r0::T,
+    fractional_cn2::T,
 ) where {T<:AbstractFloat}
     n1 = length(rho1)
     n2 = length(rho2)
@@ -530,10 +530,10 @@ function _covariance_matrix(
         for i in 1:n1
             rho = abs(rho1[i] - rho2[j])
             if iszero(rho)
-                out[i, j] = var_term * fractional_r0
+                out[i, j] = var_term * fractional_cn2
             else
                 u = T(2π) * rho * inv_L0
-                out[i, j] = cst * u^(T(5) / T(6)) * real(_kv56_scalar(u)) * fractional_r0
+                out[i, j] = cst * u^(T(5) / T(6)) * real(_kv56_scalar(u)) * fractional_cn2
             end
         end
     end
@@ -547,7 +547,7 @@ function _covariance_matrix!(
     cst::T,
     var_term::T,
     inv_L0::T,
-    fractional_r0::T,
+    fractional_cn2::T,
 ) where {T<:AbstractFloat}
     size(out) == (length(rho1), length(rho2)) ||
         throw(DimensionMismatchError("covariance output size must match rho vector lengths"))
@@ -555,10 +555,10 @@ function _covariance_matrix!(
         for i in 1:length(rho1)
             rho = abs(rho1[i] - rho2[j])
             if iszero(rho)
-                out[i, j] = var_term * fractional_r0
+                out[i, j] = var_term * fractional_cn2
             else
                 u = T(2π) * rho * inv_L0
-                out[i, j] = cst * u^(T(5) / T(6)) * real(_kv56_scalar(u)) * fractional_r0
+                out[i, j] = cst * u^(T(5) / T(6)) * real(_kv56_scalar(u)) * fractional_cn2
             end
         end
     end
@@ -572,11 +572,11 @@ function _covariance_matrix(
     cst::T,
     var_term::T,
     inv_L0::T,
-    fractional_r0::T,
+    fractional_cn2::T,
 ) where {T<:AbstractFloat}
     out = similar(rho1, T, length(rho1), length(rho2))
     style = execution_style(out)
-    launch_kernel_async!(style, covariance_matrix_kernel!, out, rho1, rho2, cst, var_term, inv_L0, fractional_r0,
+    launch_kernel_async!(style, covariance_matrix_kernel!, out, rho1, rho2, cst, var_term, inv_L0, fractional_cn2,
         length(rho1), length(rho2);
         ndrange=size(out))
     return out
@@ -590,12 +590,12 @@ function _covariance_matrix!(
     cst::T,
     var_term::T,
     inv_L0::T,
-    fractional_r0::T,
+    fractional_cn2::T,
 ) where {T<:AbstractFloat}
     size(out) == (length(rho1), length(rho2)) ||
         throw(DimensionMismatchError("covariance output size must match rho vector lengths"))
     style = execution_style(out)
-    launch_kernel_async!(style, covariance_matrix_kernel!, out, rho1, rho2, cst, var_term, inv_L0, fractional_r0,
+    launch_kernel_async!(style, covariance_matrix_kernel!, out, rho1, rho2, cst, var_term, inv_L0, fractional_cn2,
         length(rho1), length(rho2);
         ndrange=size(out))
     return out
@@ -608,11 +608,11 @@ function _covariance_matrix(
     cst::T,
     var_term::T,
     inv_L0::T,
-    fractional_r0::T,
+    fractional_cn2::T,
 ) where {T<:AbstractFloat}
     rho1_native = _covariance_input(execution_style(rho1), backend, rho1)
     rho2_native = _covariance_input(execution_style(rho2), backend, rho2)
-    return _covariance_matrix(execution_style(rho1_native), rho1_native, rho2_native, cst, var_term, inv_L0, fractional_r0)
+    return _covariance_matrix(execution_style(rho1_native), rho1_native, rho2_native, cst, var_term, inv_L0, fractional_cn2)
 end
 
 function _covariance_matrix!(
@@ -623,11 +623,11 @@ function _covariance_matrix!(
     cst::T,
     var_term::T,
     inv_L0::T,
-    fractional_r0::T,
+    fractional_cn2::T,
 ) where {T<:AbstractFloat}
     rho1_native = _covariance_input(execution_style(rho1), backend, rho1)
     rho2_native = _covariance_input(execution_style(rho2), backend, rho2)
-    return _covariance_matrix!(execution_style(out), out, rho1_native, rho2_native, cst, var_term, inv_L0, fractional_r0)
+    return _covariance_matrix!(execution_style(out), out, rho1_native, rho2_native, cst, var_term, inv_L0, fractional_cn2)
 end
 
 function sparse_gradient_matrix(
@@ -780,7 +780,7 @@ function auto_correlation(
                     vec(jz),
                     r0,
                     atmosphere.L0,
-                    atmosphere.fractional_r0[layer],
+                    atmosphere.fractional_cn2[layer],
                 )
                 block .+= @view cov[mask_vec, mask_vec]
             end
@@ -839,7 +839,7 @@ function auto_correlation(
     shifted_flat = reshape(shifted, :, n_gs, length(altitude))
     cst, var_term, inv_L0 = _covariance_constants(r0, atmosphere.L0)
     block = _backend_array(B, T, n_valid, n_valid)
-    fractional_r0_native = materialize_build(backend, atmosphere.fractional_r0)
+    fractional_cn2_native = materialize_build(backend, atmosphere.fractional_cn2)
     for jgs in 1:n_gs
         for igs in 1:jgs
             launch_kernel_async!(
@@ -848,7 +848,7 @@ function auto_correlation(
                 block,
                 shifted_flat,
                 valid_positions_native,
-                fractional_r0_native,
+                fractional_cn2_native,
                 igs,
                 jgs,
                 cst,
@@ -955,7 +955,7 @@ function cross_correlation(
                     vec(jz),
                     r0,
                     atmosphere.L0,
-                    atmosphere.fractional_r0[layer],
+                    atmosphere.fractional_cn2[layer],
                 )
                 block .+= transpose(@view cov[row_mask, row_mask])
             end
@@ -1039,7 +1039,7 @@ function cross_correlation(
                     cst,
                     var_term,
                     inv_L0,
-                    atmosphere.fractional_r0[layer],
+                    atmosphere.fractional_cn2[layer],
                 )
                 launch_kernel_async!(style, accumulate_selected_block_transpose_kernel!, block, cov, row_positions_native, n_row;
                     ndrange=size(block))

@@ -179,7 +179,7 @@ function main(; resolution::Int=24, n_subap::Int=4)
         tel;
         r0=0.15,
         L0=25.0,
-        fractional_r0=[0.6, 0.4],
+        fractional_cn2=[0.6, 0.4],
         wind_speed=[10.0, 18.0],
         wind_direction=[0.0, 144.0],
         altitude=[0.0, 5000.0],

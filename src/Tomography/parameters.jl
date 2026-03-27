@@ -9,7 +9,7 @@ struct TomographyAtmosphereParams{
     altitude_km::A
     L0::T
     r0_zenith::T
-    fractional_r0::F
+    fractional_cn2::F
     wavelength::T
     wind_direction_deg::D
     wind_speed::S
@@ -20,14 +20,14 @@ function TomographyAtmosphereParams(;
     altitude_km::AbstractVector{<:Real},
     L0::Real,
     r0_zenith::Real,
-    fractional_r0::AbstractVector{<:Real},
+    fractional_cn2::AbstractVector{<:Real},
     wavelength::Real,
     wind_direction_deg::AbstractVector{<:Real},
     wind_speed::AbstractVector{<:Real},
 )
     lengths = (
         length(altitude_km),
-        length(fractional_r0),
+        length(fractional_cn2),
         length(wind_direction_deg),
         length(wind_speed),
     )
@@ -41,23 +41,23 @@ function TomographyAtmosphereParams(;
     wavelength > 0 || throw(InvalidConfiguration("wavelength must be positive"))
     all(>=(0), altitude_km) || throw(InvalidConfiguration("altitude_km must be non-negative"))
     all(>=(0), wind_speed) || throw(InvalidConfiguration("wind_speed must be non-negative"))
-    all(>=(0), fractional_r0) ||
-        throw(InvalidConfiguration("fractional_r0 must be non-negative"))
-    isapprox(sum(fractional_r0), 1; atol=1e-6, rtol=1e-6) ||
-        throw(InvalidConfiguration("fractional_r0 must sum to 1"))
+    all(>=(0), fractional_cn2) ||
+        throw(InvalidConfiguration("fractional_cn2 must be non-negative"))
+    isapprox(sum(fractional_cn2), 1; atol=1e-6, rtol=1e-6) ||
+        throw(InvalidConfiguration("fractional_cn2 must sum to 1"))
 
     T = promote_type(
         typeof(float(zenith_angle_deg)),
         eltype(float.(altitude_km)),
         typeof(float(L0)),
         typeof(float(r0_zenith)),
-        eltype(float.(fractional_r0)),
+        eltype(float.(fractional_cn2)),
         typeof(float(wavelength)),
         eltype(float.(wind_direction_deg)),
         eltype(float.(wind_speed)),
     )
     altitude = convert.(T, altitude_km)
-    fractions = convert.(T, fractional_r0)
+    fractions = convert.(T, fractional_cn2)
     directions = convert.(T, wind_direction_deg)
     speeds = convert.(T, wind_speed)
     return TomographyAtmosphereParams{

@@ -6,7 +6,7 @@ function compact_tomography_setup()
         altitude_km=[0.0],
         L0=25.0,
         r0_zenith=0.2,
-        fractional_r0=[1.0],
+        fractional_cn2=[1.0],
         wavelength=5.0e-7,
         wind_direction_deg=[0.0],
         wind_speed=[10.0],

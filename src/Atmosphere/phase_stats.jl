@@ -26,7 +26,7 @@ function PhaseStatsWorkspace(n::Int; T::Type{<:AbstractFloat}=Float64, backend=A
     noise_re = backend{T}(undef, n, n)
     noise_im = backend{T}(undef, n, n)
     freqs = backend{T}(undef, n)
-    ifft_plan = plan_ifft_backend!(buffer)
+    ifft_plan = plan_ifft_backend!(spectrum)
     return PhaseStatsWorkspace{T, typeof(spectrum), typeof(psd), typeof(freqs), typeof(ifft_plan)}(
         spectrum,
         buffer,
@@ -45,7 +45,7 @@ function phase_variance(r0::Real, L0::Real; cn2::Real=1.0)
 end
 
 phase_variance(atm::KolmogorovAtmosphere; cn2::Real=1.0) = phase_variance(atm.params.r0, atm.params.L0; cn2=cn2)
-phase_variance(atm::MultiLayerAtmosphere; cn2::Real=sum(atm.params.r0_fractions)) =
+phase_variance(atm::MultiLayerAtmosphere; cn2::Real=sum(atm.params.cn2_fractions)) =
     phase_variance(atm.params.r0, atm.params.L0; cn2=cn2)
 
 function phase_covariance(rho::AbstractArray, r0::Real, L0::Real)
@@ -62,8 +62,11 @@ end
 phase_covariance(rho::AbstractArray, atm::KolmogorovAtmosphere) = phase_covariance(rho, atm.params.r0, atm.params.L0)
 
 function phase_spectrum(f::AbstractArray, r0::Real, L0::Real)
-    cst = (24 * gamma(6 / 5) / 5)^(5 / 6) * (gamma(11 / 6)^2) / (2 * pi^(11 / 3)) * r0^(-5 / 3)
-    return cst .* (f .^ 2 .+ (1 / L0)^2) .^ (-11 / 6)
+    T = promote_type(typeof(float(r0)), typeof(float(L0)), eltype(float.(f)))
+    coeff = T(0.023) * T(r0)^(-T(5) / T(3))
+    inv_L0_sq = inv(T(L0))^2
+    two_pi_sq = T(2 * pi)^2
+    return @. coeff * (two_pi_sq * (f^2) + inv_L0_sq)^(-T(11) / T(6))
 end
 
 phase_spectrum(f::AbstractArray, atm::KolmogorovAtmosphere) = phase_spectrum(f, atm.params.r0, atm.params.L0)
@@ -81,26 +84,26 @@ function ft_phase_screen(atm::KolmogorovAtmosphere, n::Int, delta::Real;
         ws = PhaseStatsWorkspace(n; T=eltype(atm.state.opd))
     end
     fftfreq!(ws.freqs, n; d=delta)
-    del_f = 1 / (n * delta)
-
-    r0 = atm.params.r0
-    L0 = atm.params.L0
-    fm = 5.92 / l0 / (2 * pi)
-    f0 = 1 / L0
+    T = eltype(ws.psd)
+    coeff = T(0.023) * atm.params.r0^(-T(5) / T(3))
+    inv_L0_sq = inv(atm.params.L0)^2
+    two_pi_sq = T(2 * pi)^2
+    exponent = -T(11) / T(6)
+    fm = T(5.92) / T(l0) / T(2 * pi)
+    inv_fm_sq = isfinite(fm) && fm > zero(T) ? inv(fm)^2 : zero(T)
 
     @inbounds for i in 1:n, j in 1:n
         f = sqrt(ws.freqs[i]^2 + ws.freqs[j]^2)
-        ws.psd[i, j] = 0.023 * r0^(-5 / 3) * exp(-((f / fm)^2)) / ((f^2 + f0^2)^(11 / 6))
+        base = coeff * (two_pi_sq * (f^2) + inv_L0_sq)^exponent
+        ws.psd[i, j] = inv_fm_sq == zero(T) ? base : base * exp(-(f^2) * inv_fm_sq)
     end
-    ws.psd[div(n, 2) + 1, div(n, 2) + 1] = 0
+    ws.psd[1, 1] = 0
 
     randn_backend!(rng, ws.noise_re)
     randn_backend!(rng, ws.noise_im)
-    @. ws.spectrum = complex(ws.noise_re, ws.noise_im) * sqrt(ws.psd) * del_f
-    fftshift2d!(ws.buffer, ws.spectrum)
-    execute_fft_plan!(ws.buffer, ws.ifft_plan)
-    fftshift2d!(ws.spectrum, ws.buffer)
-    phs = real.(ws.spectrum) .* n
+    @. ws.spectrum = complex(ws.noise_re, ws.noise_im) * sqrt(ws.psd)
+    execute_fft_plan!(ws.spectrum, ws.ifft_plan)
+    phs = real.(ws.spectrum) .* (n * T(delta))
     if return_psd
         return phs, ws.psd
     end
@@ -142,8 +145,12 @@ function add_subharmonics!(phs::AbstractMatrix{T}, r0::Real, L0::Real, delta::Re
     n_levels >= 1 || throw(ArgumentError("n_levels must be >= 1"))
     radius >= 1 || throw(ArgumentError("radius must be >= 1"))
     n = size(phs, 1)
-    fm = 5.92 / l0 / (2 * pi)
-    f0 = 1 / L0
+    base_coeff = T(0.023) * T(r0)^(-T(5) / T(3))
+    inv_L0_sq = inv(T(L0))^2
+    two_pi_sq = T(2 * pi)^2
+    exponent = -T(11) / T(6)
+    fm = T(5.92) / T(l0) / T(2 * pi)
+    inv_fm_sq = isfinite(fm) && fm > zero(T) ? inv(fm)^2 : zero(T)
     D = n * delta
     offset = n ÷ 2
     delta_t = T(delta)
@@ -154,14 +161,17 @@ function add_subharmonics!(phs::AbstractMatrix{T}, r0::Real, L0::Real, delta::Re
                 continue
             end
             f = sqrt((fx * del_f)^2 + (fy * del_f)^2)
-            psd = 0.023 * r0^(-5 / 3) * exp(-((f / fm)^2)) / ((f^2 + f0^2)^(11 / 6))
+            psd = base_coeff * (two_pi_sq * (f^2) + inv_L0_sq)^exponent
+            if inv_fm_sq != zero(T)
+                psd *= exp(-(f^2) * inv_fm_sq)
+            end
             amp = sqrt(psd) * del_f
-            coeff = (randn(rng) + im * randn(rng)) * amp
+            sample_coeff = (randn(rng) + im * randn(rng)) * amp
             @inbounds for i in 1:n, j in 1:n
                 xi = (i - 1 - offset) * delta_t
                 yj = (j - 1 - offset) * delta_t
                 phase = 2 * pi * ((fx * del_f) * xi + (fy * del_f) * yj)
-                phs[i, j] += real(coeff * cis(phase))
+                phs[i, j] += real(sample_coeff * cis(phase))
             end
         end
     end

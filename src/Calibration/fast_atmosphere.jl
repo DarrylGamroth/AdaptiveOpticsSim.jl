@@ -31,7 +31,7 @@ function fast_atmosphere(tel::Telescope, atm::MultiLayerAtmosphere; speed_factor
     atm_fast = MultiLayerAtmosphere(tel_fast;
         r0=atm.params.r0,
         L0=atm.params.L0,
-        fractional_r0=atm.params.r0_fractions,
+        fractional_cn2=atm.params.cn2_fractions,
         wind_speed=atm.params.wind_speed,
         wind_direction=atm.params.wind_direction,
         altitude=atm.params.altitude,

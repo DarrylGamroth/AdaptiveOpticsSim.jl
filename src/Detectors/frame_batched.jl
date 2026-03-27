@@ -123,6 +123,10 @@ function _batched_apply_response!(::ExecutionStyle, ::NullFrameResponse, cube::A
     return cube
 end
 
+function _batched_apply_response!(::ScalarCPUStyle, ::NullFrameResponse, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
+    return cube
+end
+
 function _batched_apply_response!(::ScalarCPUStyle, model::AbstractFrameResponse, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
     for b in axes(cube, 1)
         apply_response!(ScalarCPUStyle(), model, @view(cube[b, :, :]), @view(scratch[b, :, :]))

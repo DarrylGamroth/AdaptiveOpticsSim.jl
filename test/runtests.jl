@@ -151,6 +151,110 @@ function subharmonic_metrics(atm::KolmogorovAtmosphere, D::Real;
     return (; tiptilt=Statistics.mean(tiptilt), structure=Statistics.mean(structure))
 end
 
+function moving_atmosphere_trace(;
+    seed::Integer=1,
+    steps::Integer=4,
+    resolution::Int=16,
+    diameter::Real=8.0,
+    sampling_time::Real=1e-3,
+    r0::Real=0.2,
+    L0::Real=25.0,
+    fractional_cn2::AbstractVector=[1.0],
+    wind_speed::AbstractVector=[0.0],
+    wind_direction::AbstractVector=[0.0],
+    altitude::AbstractVector=[0.0],
+)
+    tel = Telescope(resolution=resolution, diameter=diameter, sampling_time=sampling_time, central_obstruction=0.0)
+    atm = MultiLayerAtmosphere(tel;
+        r0=r0,
+        L0=L0,
+        fractional_cn2=fractional_cn2,
+        wind_speed=wind_speed,
+        wind_direction=wind_direction,
+        altitude=altitude,
+    )
+    rng = MersenneTwister(seed)
+    trace = Matrix{Float64}[]
+    for _ in 1:steps
+        advance!(atm, tel; rng=rng)
+        push!(trace, copy(atm.state.opd))
+    end
+    return trace
+end
+
+function moving_wfs_slope_trace(;
+    seed::Integer=1,
+    steps::Integer=4,
+)
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = Source(band=:I, magnitude=0.0)
+    delta = tel.params.diameter / tel.params.resolution
+    atm = MultiLayerAtmosphere(tel;
+        r0=0.2,
+        L0=25.0,
+        fractional_cn2=[0.7, 0.3],
+        wind_speed=[delta / tel.params.sampling_time, 0.5 * delta / tel.params.sampling_time],
+        wind_direction=[0.0, 90.0],
+        altitude=[0.0, 5000.0],
+    )
+    wfs = ShackHartmann(tel; n_subap=4)
+    rng = MersenneTwister(seed)
+    trace = Vector{Vector{Float64}}(undef, steps)
+    for i in 1:steps
+        advance!(atm, tel; rng=rng)
+        propagate!(atm, tel)
+        measure!(wfs, tel, src)
+        trace[i] = copy(wfs.state.slopes)
+    end
+    return trace
+end
+
+function moving_closed_loop_trace(;
+    seed::Integer=1,
+    steps::Integer=5,
+)
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = Source(band=:I, magnitude=0.0)
+    delta = tel.params.diameter / tel.params.resolution
+    atm = MultiLayerAtmosphere(tel;
+        r0=0.2,
+        L0=25.0,
+        fractional_cn2=[0.7, 0.3],
+        wind_speed=[delta / tel.params.sampling_time, 0.5 * delta / tel.params.sampling_time],
+        wind_direction=[0.0, 90.0],
+        altitude=[0.0, 5000.0],
+    )
+    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
+    wfs = ZernikeWFS(tel; n_subap=4, diffraction_padding=2)
+    sim = AOSimulation(tel, atm, src, dm, wfs)
+    imat = interaction_matrix(dm, wfs, tel, src; amplitude=1e-8)
+    recon = ModalReconstructor(imat; gain=0.2)
+    wfs_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
+    science_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
+    runtime = ClosedLoopRuntime(sim, recon; rng=MersenneTwister(seed), wfs_detector=wfs_det, science_detector=science_det)
+    prepare!(runtime)
+    delay = VectorDelayLine(runtime.command, 1)
+
+    slope_norms = zeros(Float64, steps)
+    command_norms = zeros(Float64, steps)
+    wfs_energy = zeros(Float64, steps)
+    science_energy = zeros(Float64, steps)
+
+    for i in 1:steps
+        sense!(runtime)
+        reconstruct!(runtime)
+        delayed = copy(shift_delay!(delay, runtime.command))
+        copyto!(runtime.command, delayed)
+        AdaptiveOpticsSim.apply_runtime_command!(runtime)
+        slope_norms[i] = norm(simulation_slopes(runtime))
+        command_norms[i] = norm(simulation_command(runtime))
+        wfs_energy[i] = sum(abs, simulation_wfs_frame(runtime))
+        science_energy[i] = sum(abs, simulation_science_frame(runtime))
+    end
+
+    return (; slope_norms, command_norms, wfs_energy, science_energy)
+end
+
 @test AdaptiveOpticsSim.PROJECT_STATUS == :in_development
 
 @testset "GPU backend registry" begin
@@ -292,18 +396,127 @@ end
 
 @testset "Multi-layer atmosphere" begin
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    delta = tel.params.diameter / tel.params.resolution
+    one_pixel_speed = delta / tel.params.sampling_time
+    quarter_pixel_speed = 0.25 * one_pixel_speed
+
     atm = MultiLayerAtmosphere(tel;
         r0=0.2,
         L0=25.0,
-        fractional_r0=[0.5, 0.5],
-        wind_speed=[5.0, 10.0],
-        wind_direction=[0.0, 90.0],
-        altitude=[0.0, 5000.0],
+        fractional_cn2=[1.0],
+        wind_speed=[one_pixel_speed],
+        wind_direction=[0.0],
+        altitude=[0.0],
     )
     advance!(atm, tel; rng=MersenneTwister(3))
+    first = copy(atm.state.opd)
+    advance!(atm, tel; rng=MersenneTwister(3))
+    second = copy(atm.state.opd)
     propagate!(atm, tel)
     @test size(atm.state.opd) == (16, 16)
     @test sum(abs.(tel.state.opd)) > 0
+    @test second[:, 2:end] ≈ first[:, 1:end-1]
+
+    stationary = MultiLayerAtmosphere(tel;
+        r0=0.2,
+        L0=25.0,
+        fractional_cn2=[1.0],
+        wind_speed=[0.0],
+        wind_direction=[0.0],
+        altitude=[0.0],
+    )
+    advance!(stationary, tel; rng=MersenneTwister(4))
+    static_first = copy(stationary.state.opd)
+    advance!(stationary, tel; rng=MersenneTwister(4))
+    @test stationary.state.opd ≈ static_first
+
+    subpixel = MultiLayerAtmosphere(tel;
+        r0=0.2,
+        L0=25.0,
+        fractional_cn2=[1.0],
+        wind_speed=[quarter_pixel_speed],
+        wind_direction=[0.0],
+        altitude=[0.0],
+    )
+    advance!(subpixel, tel; rng=MersenneTwister(5))
+    subpixel_first = copy(subpixel.state.opd)
+    for _ in 1:4
+        advance!(subpixel, tel; rng=MersenneTwister(5))
+    end
+    @test subpixel.state.opd[:, 2:end] ≈ subpixel_first[:, 1:end-1]
+
+    function ensemble_std(fractions; nsamp::Int=16)
+        acc = 0.0
+        for s in 1:nsamp
+            atm_local = MultiLayerAtmosphere(tel;
+                r0=0.2,
+                L0=25.0,
+                fractional_cn2=fractions,
+                wind_speed=fill(0.0, length(fractions)),
+                wind_direction=fill(0.0, length(fractions)),
+                altitude=fill(0.0, length(fractions)),
+            )
+            advance!(atm_local, tel; rng=MersenneTwister(s))
+            acc += std(vec(atm_local.state.opd))
+        end
+        return acc / nsamp
+    end
+
+    single_std = ensemble_std([1.0])
+    equal_std = ensemble_std([0.5, 0.5])
+    uneven_std = ensemble_std([0.8, 0.2])
+    @test isapprox(equal_std, single_std; rtol=0.15)
+    @test isapprox(uneven_std, single_std; rtol=0.15)
+
+    replay_a = moving_atmosphere_trace(
+        seed=11,
+        steps=5,
+        resolution=16,
+        fractional_cn2=[0.7, 0.3],
+        wind_speed=[one_pixel_speed, quarter_pixel_speed],
+        wind_direction=[0.0, 90.0],
+        altitude=[0.0, 5000.0],
+    )
+    replay_b = moving_atmosphere_trace(
+        seed=11,
+        steps=5,
+        resolution=16,
+        fractional_cn2=[0.7, 0.3],
+        wind_speed=[one_pixel_speed, quarter_pixel_speed],
+        wind_direction=[0.0, 90.0],
+        altitude=[0.0, 5000.0],
+    )
+    replay_c = moving_atmosphere_trace(
+        seed=12,
+        steps=5,
+        resolution=16,
+        fractional_cn2=[0.7, 0.3],
+        wind_speed=[one_pixel_speed, quarter_pixel_speed],
+        wind_direction=[0.0, 90.0],
+        altitude=[0.0, 5000.0],
+    )
+    @test replay_a == replay_b
+    @test any(!=(0.0), abs.(replay_a[1] .- replay_c[1]))
+end
+
+@testset "Moving-atmosphere regressions" begin
+    slopes_a = moving_wfs_slope_trace(seed=21, steps=4)
+    slopes_b = moving_wfs_slope_trace(seed=21, steps=4)
+    slopes_c = moving_wfs_slope_trace(seed=22, steps=4)
+    @test slopes_a == slopes_b
+    @test any(norm(slopes_a[i + 1] - slopes_a[i]) > 0 for i in 1:length(slopes_a)-1)
+    @test any(norm(slopes_a[i] - slopes_c[i]) > 0 for i in eachindex(slopes_a))
+
+    loop_a = moving_closed_loop_trace(seed=31, steps=5)
+    loop_b = moving_closed_loop_trace(seed=31, steps=5)
+    loop_c = moving_closed_loop_trace(seed=32, steps=5)
+    @test loop_a == loop_b
+    @test any(diff(loop_a.slope_norms) .!= 0)
+    @test all(isfinite, loop_a.command_norms)
+    @test maximum(loop_a.command_norms) > 0
+    @test all(>(0), loop_a.wfs_energy)
+    @test all(>(0), loop_a.science_energy)
+    @test any(abs.(loop_a.slope_norms .- loop_c.slope_norms) .> 0)
 end
 
 @testset "Deformable mirror and WFS" begin
@@ -1518,8 +1731,16 @@ end
     psd = phase_spectrum([0.1], atm)
     @test length(psd) == 1
     @test psd[1] > 0
+    delta = tel.params.diameter / tel.params.resolution
     screen = ft_phase_screen(atm, 8, 0.1; rng=MersenneTwister(1))
     @test size(screen) == (8, 8)
+    ensure_psd!(atm, delta)
+    runtime_screen_rng = MersenneTwister(7)
+    helper_screen_rng = MersenneTwister(7)
+    advance!(atm, tel; rng=runtime_screen_rng)
+    helper_screen, helper_psd = ft_phase_screen(atm, tel.params.resolution, delta; rng=helper_screen_rng, return_psd=true)
+    @test helper_screen ≈ atm.state.opd
+    @test helper_psd ≈ atm.state.psd
 
     for z in (1e-6, 1e-3, 0.1, 1.0, 4.0, 10.0)
         ref = SpecialFunctions.besselk(5 / 6, z)
