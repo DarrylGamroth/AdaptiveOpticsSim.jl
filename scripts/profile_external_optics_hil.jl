@@ -71,6 +71,14 @@ function _timed_stats!(f!::F; warmup::Int=2, samples::Int=6) where {F<:Function}
     return mean(timings), sorted[p95_idx]
 end
 
+function _allocated_bytes(f!::F; warmup::Int=2, gc_before::Bool=true) where {F<:Function}
+    for _ in 1:warmup
+        f!()
+    end
+    gc_before && GC.gc()
+    return @allocated f!()
+end
+
 function _active_support_indices(n_act::Int, n_active::Int)
     total = n_act * n_act
     0 < n_active <= total || error("n_active must be in 1:$total")
@@ -175,6 +183,22 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=6, warmu
         _sync_backend!(backend_tag, export_phase)
     end; warmup=warmup, samples=samples)
     total_mean_ns, total_p95_ns = _timed_stats!(_step!; warmup=warmup, samples=samples)
+    command_map_alloc_bytes = _allocated_bytes(() -> begin
+        _scatter_active_command!(dm.state.coefs, active_command, active_indices_backend)
+        _sync_backend!(backend_tag, dm.state.coefs)
+    end; warmup=warmup)
+    dm_phase_alloc_bytes = _allocated_bytes(() -> begin
+        _scatter_active_command!(dm.state.coefs, active_command, active_indices_backend)
+        apply_opd!(dm, tel)
+        _sync_backend!(backend_tag, dm.state.opd)
+    end; warmup=warmup)
+    export_alloc_bytes = _allocated_bytes(() -> begin
+        _scatter_active_command!(dm.state.coefs, active_command, active_indices_backend)
+        apply_opd!(dm, tel)
+        _export_phase_crop!(export_phase, dm.state.opd)
+        _sync_backend!(backend_tag, export_phase)
+    end; warmup=warmup)
+    total_alloc_bytes = _allocated_bytes(_step!; warmup=warmup)
 
     println("external_optics_hil_profile")
     println("  backend: ", label)
@@ -193,6 +217,10 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=6, warmu
     println("  total_mean_ns: ", total_mean_ns)
     println("  total_p95_ns: ", total_p95_ns)
     println("  frame_rate_hz: ", 1.0e9 / total_mean_ns)
+    println("  command_map_alloc_bytes: ", command_map_alloc_bytes)
+    println("  dm_phase_alloc_bytes: ", dm_phase_alloc_bytes)
+    println("  export_alloc_bytes: ", export_alloc_bytes)
+    println("  total_alloc_bytes: ", total_alloc_bytes)
     return nothing
 end
 

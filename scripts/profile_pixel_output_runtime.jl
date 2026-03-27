@@ -68,6 +68,14 @@ function _resolve_scale(name::AbstractString)
     return lowered
 end
 
+function _allocated_bytes(f!::F; warmup::Int=2, gc_before::Bool=true) where {F<:Function}
+    for _ in 1:warmup
+        f!()
+    end
+    gc_before && GC.gc()
+    return @allocated f!()
+end
+
 function _pixel_scale_params(scale_name::AbstractString)
     scale = _resolve_scale(scale_name)
     if scale == "compact"
@@ -137,6 +145,10 @@ function run_profile(; backend_name::AbstractString="cpu", branch_name::Abstract
         step!(scenario)
         _sync_runtime!(backend_tag, scenario)
     end; warmup=resolved_warmup, samples=resolved_samples, gc_before=false)
+    runtime_alloc_bytes = _allocated_bytes(() -> begin
+        step!(scenario)
+        _sync_runtime!(backend_tag, scenario)
+    end; warmup=resolved_warmup, gc_before=false)
     phase = subaru_ao188_phase_timing(scenario; warmup=resolved_warmup, samples=resolved_samples, gc_before=false)
 
     println("pixel_output_runtime_profile")
@@ -148,6 +160,7 @@ function run_profile(; backend_name::AbstractString="cpu", branch_name::Abstract
     println("  runtime_step_mean_ns: ", timing.mean_ns)
     println("  runtime_step_p95_ns: ", timing.p95_ns)
     println("  frame_rate_hz: ", 1.0e9 / timing.mean_ns)
+    println("  runtime_alloc_bytes: ", runtime_alloc_bytes)
     println("  high_sense_mean_ns: ", phase.high_sense_mean_ns)
     println("  low_sense_mean_ns: ", phase.low_sense_mean_ns)
     println("  high_reconstruct_mean_ns: ", phase.high_reconstruct_mean_ns)

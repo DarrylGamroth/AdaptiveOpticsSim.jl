@@ -9,6 +9,8 @@ using KernelAbstractions: @kernel, @index
 const _backend_arg = isempty(ARGS) ? "cpu" : lowercase(ARGS[1])
 const _default_config_dir = joinpath(dirname(@__DIR__), "benchmarks", "assets", "revolt_like")
 const _config_dir_arg = length(ARGS) >= 2 ? ARGS[2] : get(ENV, "REVOLT_CONFIG_DIR", _default_config_dir)
+const _sensor_arg = length(ARGS) >= 3 ? lowercase(ARGS[3]) : "ccd"
+const _response_arg = length(ARGS) >= 4 ? lowercase(ARGS[4]) : "default"
 
 if _backend_arg == "cuda"
     import CUDA
@@ -79,6 +81,31 @@ function _timed_stats!(f!::F; warmup::Int=2, samples::Int=6) where {F<:Function}
     sorted = sort(timings)
     p95_idx = clamp(round(Int, 0.95 * samples), 1, samples)
     return mean(timings), sorted[p95_idx]
+end
+
+function _allocated_bytes(f!::F; warmup::Int=2, gc_before::Bool=true) where {F<:Function}
+    for _ in 1:warmup
+        f!()
+    end
+    gc_before && GC.gc()
+    return @allocated f!()
+end
+
+function _resolve_sensor(name::AbstractString)
+    lowered = lowercase(name)
+    lowered == "ccd" && return CCDSensor(), :ccd
+    lowered == "cmos" && return CMOSSensor(), :cmos
+    lowered == "emccd" && return EMCCDSensor(), :emccd
+    lowered == "ingaas" && return InGaAsSensor(), :ingaas
+    lowered == "saphira" && return SAPHIRASensor(), :saphira
+    error("unsupported sensor '$name'; use ccd, cmos, emccd, ingaas, or saphira")
+end
+
+function _resolve_response_model(name::AbstractString)
+    lowered = lowercase(name)
+    lowered == "default" && return nothing, :default
+    lowered == "null" && return NullFrameResponse(), :null
+    error("unsupported response mode '$name'; use default or null")
 end
 
 function _load_dm277_actuator_map(path::AbstractString)
@@ -158,8 +185,12 @@ function _tile_spot_cube!(mosaic::AbstractMatrix{T}, spot_cube::AbstractArray{T,
     return mosaic
 end
 
-function run_profile(; backend_name::AbstractString="cpu", config_dir::AbstractString=_config_dir_arg, samples::Int=6, warmup::Int=2)
+function run_profile(; backend_name::AbstractString="cpu", config_dir::AbstractString=_config_dir_arg,
+    sensor_name::AbstractString="ccd", response_name::AbstractString="default",
+    samples::Int=6, warmup::Int=2)
     BackendArray, backend_tag, label = _resolve_backend(backend_name)
+    sensor, sensor_label = _resolve_sensor(sensor_name)
+    response_model, response_label = _resolve_response_model(response_name)
     T = Float32
     actuator_map_path = joinpath(config_dir, "revolt_like_dmActuatorMap_277.csv")
     extrapolation_path = joinpath(config_dir, "revolt_like_dmExtrapolation.csv")
@@ -182,7 +213,8 @@ function run_profile(; backend_name::AbstractString="cpu", config_dir::AbstractS
     src = Source(band=:I, magnitude=0.0, T=T)
     dm = DeformableMirror(tel; n_act=n_act, influence_width=0.3, T=T, backend=BackendArray)
     wfs = ShackHartmann(tel; n_subap=n_subap, mode=Diffractive(), n_pix_subap=roi, diffraction_padding=2, T=T, backend=BackendArray)
-    det = Detector(noise=NoiseNone(), integration_time=T(1), qe=T(1), binning=1, T=T, backend=BackendArray)
+    det = Detector(noise=NoiseNone(), integration_time=T(1), qe=T(1), binning=1,
+        sensor=sensor, response_model=response_model, T=T, backend=BackendArray)
     active_indices_backend = BackendArray{Int}(undef, n_active)
     copyto!(active_indices_backend, active_indices_host)
     active_command = BackendArray{T}(undef, n_active)
@@ -238,10 +270,42 @@ function run_profile(; backend_name::AbstractString="cpu", config_dir::AbstractS
         _sync_backend!(backend_tag, tiled_frame)
     end; warmup=warmup, samples=samples)
     total_mean_ns, total_p95_ns = _timed_stats!(_step!; warmup=warmup, samples=samples)
+    command_map_alloc_bytes = _allocated_bytes(() -> begin
+        reset_opd!(tel)
+        mul!(extrapolated_command, extrapolation_backend, active_command)
+        _scatter_active_command!(dm.state.coefs, extrapolated_command, active_indices_backend)
+        _sync_backend!(backend_tag, dm.state.coefs)
+    end; warmup=warmup)
+    dm_apply_alloc_bytes = _allocated_bytes(() -> begin
+        mul!(extrapolated_command, extrapolation_backend, active_command)
+        _scatter_active_command!(dm.state.coefs, extrapolated_command, active_indices_backend)
+        apply!(dm, tel, DMReplace())
+        _sync_backend!(backend_tag, tel.state.opd)
+    end; warmup=warmup)
+    sense_alloc_bytes = _allocated_bytes(() -> begin
+        mul!(extrapolated_command, extrapolation_backend, active_command)
+        _scatter_active_command!(dm.state.coefs, extrapolated_command, active_indices_backend)
+        apply!(dm, tel, DMReplace())
+        measure!(wfs, tel, src, det; rng=Random.default_rng())
+        _sync_backend!(backend_tag, wfs.state.spot_cube)
+    end; warmup=warmup)
+    mosaic_alloc_bytes = _allocated_bytes(() -> begin
+        mul!(extrapolated_command, extrapolation_backend, active_command)
+        _scatter_active_command!(dm.state.coefs, extrapolated_command, active_indices_backend)
+        apply!(dm, tel, DMReplace())
+        measure!(wfs, tel, src, det; rng=Random.default_rng())
+        _tile_spot_cube!(tiled_frame, wfs.state.spot_cube, n_subap, roi)
+        _sync_backend!(backend_tag, tiled_frame)
+    end; warmup=warmup)
+    total_alloc_bytes = _allocated_bytes(_step!; warmup=warmup)
+    metadata = detector_export_metadata(det)
 
     println("revolt_like_hil_runtime_profile")
     println("  backend: ", label)
     println("  config_dir: ", config_dir)
+    println("  sensor: ", sensor_label)
+    println("  response_mode: ", response_label)
+    println("  effective_frame_response: ", metadata.frame_response)
     println("  actuator_command_length: ", n_active)
     println("  extrapolated_command_length: ", length(extrapolated_command))
     println("  dm_grid_command_length: ", length(dm.state.coefs))
@@ -263,7 +327,12 @@ function run_profile(; backend_name::AbstractString="cpu", config_dir::AbstractS
     println("  total_mean_ns: ", total_mean_ns)
     println("  total_p95_ns: ", total_p95_ns)
     println("  frame_rate_hz: ", 1.0e9 / total_mean_ns)
+    println("  command_map_alloc_bytes: ", command_map_alloc_bytes)
+    println("  dm_apply_alloc_bytes: ", dm_apply_alloc_bytes)
+    println("  sense_alloc_bytes: ", sense_alloc_bytes)
+    println("  mosaic_alloc_bytes: ", mosaic_alloc_bytes)
+    println("  total_alloc_bytes: ", total_alloc_bytes)
     return nothing
 end
 
-run_profile(; backend_name=_backend_arg, config_dir=_config_dir_arg)
+run_profile(; backend_name=_backend_arg, config_dir=_config_dir_arg, sensor_name=_sensor_arg, response_name=_response_arg)

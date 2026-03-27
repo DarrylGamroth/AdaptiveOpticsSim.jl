@@ -48,9 +48,12 @@ The maintained CUDA validation entry points are:
 - `scripts/profile_revolt_hil_runtime.jl`
   - warmed REVOLT-like synthetic SH HIL benchmark with `277` active commands
     and full `352 x 352` pixel output
+  - supports detector-family and `default` vs `null` response sweeps
+  - now reports warmed allocation bytes per phase and for the full step
 - `scripts/profile_external_optics_hil.jl`
   - warmed external-optics HIL proxy with `468` active commands and exported
     `640 x 512` phase output
+  - now reports warmed allocation bytes per phase and for the full step
 
 On a CUDA host, the standard workflow is:
 
@@ -101,9 +104,12 @@ The maintained AMDGPU validation entry points are:
 - `scripts/profile_revolt_hil_runtime.jl`
   - warmed REVOLT-like synthetic SH HIL benchmark with `277` active commands
     and full `352 x 352` pixel output
+  - supports detector-family and `default` vs `null` response sweeps
+  - now reports warmed allocation bytes per phase and for the full step
 - `scripts/profile_external_optics_hil.jl`
   - warmed external-optics HIL proxy with `468` active commands and exported
     `640 x 512` phase output
+  - now reports warmed allocation bytes per phase and for the full step
 
 On an AMDGPU host, the standard workflow is:
 
@@ -223,6 +229,10 @@ representative case is often more informative than another generic scale rung.
 The maintained REVOLT-like synthetic and external-optics HIL profilers below
 are meant to cover that gap without depending on external instrument repos.
 
+These HIL profilers now also report warmed allocation bytes. On GPU backends,
+those values should be read as host/runtime launch-side allocation overhead,
+not total device memory traffic.
+
 ### ZernikeWFS Closed-Loop Runtime
 
 Current warmed `runtime_step_mean_ns` frame-rate snapshot:
@@ -271,7 +281,9 @@ Interpretation:
 
 - the compact AO188-style rung is still CPU-first,
 - GPU is already competitive by the medium rung,
-- CUDA is clearly ahead at the current representative rung.
+- CUDA is clearly ahead at the current representative rung,
+- the current medium CPU profile remains effectively allocation-flat with
+  `runtime_alloc_bytes = 64`.
 
 ### Fixed Representative HIL Cases
 
@@ -314,6 +326,26 @@ Interpretation:
 - CPU remains respectable but is no longer the best latency path once the
   detector payload is large enough.
 
+Focused detector-response overhead snapshot on the same REVOLT-like HIL case:
+
+| backend | sensor | response | rate | total alloc bytes |
+| --- | --- | --- | ---: | ---: |
+| CPU | `CMOSSensor` | `default` (`gaussian`) | `107 Hz` | `32` |
+| CPU | `CMOSSensor` | `null` | `115 Hz` | `32` |
+| CPU | `CCDSensor` | `default` (`none`) | `128 Hz` | `32` |
+| AMDGPU | `CMOSSensor` | `default` (`gaussian`) | `317 Hz` | `245040` |
+| AMDGPU | `CMOSSensor` | `null` | `514 Hz` | `83264` |
+
+Interpretation:
+
+- the first maintained Gaussian pixel-response path has a visible cost on the
+  large HIL surface,
+- on CPU the effect is mainly latency rather than allocation growth,
+- on AMDGPU the current response path adds both latency and host/runtime
+  allocation overhead,
+- detector-response benchmarking is therefore worth keeping alongside the base
+  HIL timing surfaces.
+
 External-optics HIL dimensions:
 
 - active commands `468`
@@ -337,7 +369,10 @@ Interpretation:
 - CPU is still competitive because the work is dominated by one DM apply plus a
   crop rather than a full in-package detector model,
 - CUDA is already clearly worthwhile for this surface,
-- AMDGPU is closer to CPU than to CUDA on the current implementation.
+- AMDGPU is closer to CPU than to CUDA on the current implementation,
+- the maintained CPU path is allocation-free after warmup on this surface:
+  `command_map_alloc_bytes = 0`, `dm_phase_alloc_bytes = 0`,
+  `export_alloc_bytes = 0`, `total_alloc_bytes = 0`.
 
 ### Multi-Source / Multi-WFS Runtime
 

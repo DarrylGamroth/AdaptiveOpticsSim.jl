@@ -10,7 +10,7 @@ Status:
     `compact`, `medium`, and `representative`
   - `scripts/profile_revolt_hil_runtime.jl` now covers a REVOLT-like
     synthetic pixel-output SH HIL case with a fixed representative
-    configuration
+    configuration and detector-family / detector-response sweeps
   - `scripts/profile_external_optics_hil.jl` now covers a representative
     external-optics HIL case where AdaptiveOpticsSim owns DM phase generation
     and phase export but not the downstream image formation
@@ -244,7 +244,9 @@ Every representative benchmark entry should report:
 - warmed mean and p95 timing
 - effective frame rate or throughput
 - phase timing when available
-- allocation or memory notes where relevant
+- steady-state allocation bytes where relevant
+- response/readout metadata where the benchmark intentionally compares
+  detector-response or detector-family variants
 
 Representative reports should avoid naked timings without configuration context.
 
