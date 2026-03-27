@@ -745,6 +745,10 @@ end
     @test runtime isa AbstractControlSimulation
     @test !supports_prepared_runtime(runtime)
     @test supports_detector_output(runtime)
+    @test runtime_profile(runtime) isa ScientificRuntimeProfile
+    @test runtime_latency(runtime).measurement_delay_frames == 0
+    @test runtime.science_zero_padding == 2
+    @test !runtime.prepared
 
     step!(runtime)
     @test length(runtime.command) == length(dm.state.coefs)
@@ -798,6 +802,8 @@ end
     @test timing.samples == 5
     @test timing.min_ns >= 0
     @test timing.max_ns >= timing.min_ns
+    phase_runtime = runtime_phase_timing(runtime; warmup=1, samples=3, gc_before=false)
+    @test phase_runtime.delay_mean_ns >= 0
 
     rng3 = MersenneTwister(3)
     tel3 = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
@@ -813,6 +819,7 @@ end
     @test supports_prepared_runtime(runtime3)
     @test supports_detector_output(runtime3)
     prepare!(runtime3)
+    @test runtime3.prepared
     @test runtime3.wfs.state.calibrated
     step!(runtime3)
     @test length(runtime3.command) == length(dm3.state.coefs)
@@ -820,6 +827,49 @@ end
     @test simulation_wfs_frame(runtime3) == output_frame(wfs_det3)
     @test size(simulation_wfs_frame(runtime3)) == size(wfs3.state.camera_frame)
     @test all(isfinite, simulation_slopes(runtime3))
+
+    rng4 = MersenneTwister(4)
+    tel4 = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src4 = Source(band=:I, magnitude=0.0)
+    atm4 = KolmogorovAtmosphere(tel4; r0=0.2, L0=25.0)
+    dm4 = DeformableMirror(tel4; n_act=4, influence_width=0.3)
+    wfs4 = ShackHartmann(tel4; n_subap=4)
+    sim4 = AOSimulation(tel4, atm4, src4, dm4, wfs4)
+    imat4 = interaction_matrix(dm4, wfs4, tel4; amplitude=0.1)
+    recon4 = ModalReconstructor(imat4; gain=0.5)
+    runtime4 = ClosedLoopRuntime(sim4, recon4;
+        rng=rng4,
+        profile=HILRuntimeProfile(),
+        latency=RuntimeLatencyModel(
+            measurement_delay_frames=1,
+            readout_delay_frames=1,
+            reconstruction_delay_frames=1,
+            dm_delay_frames=1,
+        ),
+    )
+    @test runtime_profile(runtime4) isa HILRuntimeProfile
+    @test runtime4.science_zero_padding == 0
+    slope_norms = Float64[]
+    command_norms = Float64[]
+    dm_norms = Float64[]
+    for _ in 1:5
+        step!(runtime4)
+        push!(slope_norms, norm(simulation_slopes(runtime4)))
+        push!(command_norms, norm(simulation_command(runtime4)))
+        push!(dm_norms, norm(runtime4.dm.state.coefs))
+    end
+    @test slope_norms[1] == 0
+    @test slope_norms[2] == 0
+    @test slope_norms[3] > 0
+    @test command_norms[1] == 0
+    @test command_norms[2] == 0
+    @test command_norms[3] == 0
+    @test command_norms[4] > 0
+    @test dm_norms[1] == 0
+    @test dm_norms[2] == 0
+    @test dm_norms[3] == 0
+    @test dm_norms[4] == 0
+    @test dm_norms[5] > 0
 end
 
 @testset "Detector" begin

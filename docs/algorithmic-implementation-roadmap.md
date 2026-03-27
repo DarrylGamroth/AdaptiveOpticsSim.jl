@@ -335,11 +335,11 @@ Rationale:
 
 ## Immediate Next Sprint
 
-1. Define the `ScientificRuntimeProfile` and `HILRuntimeProfile` boundary in code.
-2. Audit the closed-loop hot path for per-step allocations and type-instability.
-3. Make latency staging first-class across sensing, reconstruction, and command application.
-4. Build prepared runtime objects that separate setup work from `step!`.
-5. Add benchmark scenarios for single-WFS, grouped multi-WFS, and AO188/3k-style runs.
+1. Define the neutral science-propagation handoff from core AO state to external optics.
+2. Add the first `Proper.jl` extension module without introducing a core dependency.
+3. Support diffraction-limited, aberrated, and DM-corrected science-path handoff.
+4. Add smoke tests and one maintained example for the `Proper.jl` bridge.
+5. Document the extension boundary and the expected in-memory wavefront contract.
 
 ## Exit Criteria For The Roadmap
 

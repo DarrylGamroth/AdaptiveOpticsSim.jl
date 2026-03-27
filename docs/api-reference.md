@@ -18,6 +18,8 @@ than by source file.
 - `write_telemetry_csv`
 - `bin2d`, `poisson_noise!`, `poisson_sample`
 - `ParallelConfig`, `with_parallel_config`
+- `AbstractRuntimeProfile`, `ScientificRuntimeProfile`, `HILRuntimeProfile`,
+  `RuntimeLatencyModel`, `default_runtime_profile`
 - `InversePolicy`, `ExactPseudoInverse`, `TSVDInverse`, `TikhonovInverse`
 - Exceptions: `AdaptiveOpticsSimError`, `InvalidConfiguration`,
   `DimensionMismatchError`
@@ -117,6 +119,7 @@ than by source file.
 - `ClosedLoopRuntime`, `SimulationInterface`, `CompositeSimulationInterface`, `SimulationReadout`
 - `AbstractControlSimulation`
 - `prepare!`, `prepare_runtime_wfs!`, `simulation_interface`
+- `runtime_profile`, `runtime_latency`
 - `simulation_readout`, `simulation_command`, `simulation_slopes`,
   `simulation_wfs_frame`, `simulation_science_frame`
 - `simulation_wfs_metadata`, `simulation_science_metadata`
@@ -125,6 +128,9 @@ than by source file.
 - `AbstractExecutionPolicy`, `SequentialExecution`, `ThreadedExecution`,
   `BackendStreamExecution`
 - `VectorDelayLine`, `shift_delay!`
+- `runtime_timing`, `runtime_phase_timing`
+  - `RuntimePhaseTimingStats` now exposes `delay_mean_ns` in addition to the
+    existing sense/reconstruct/apply/snapshot timing surface
 - `supports_prepared_runtime`, `supports_detector_output`,
   `supports_stacked_sources`, `supports_grouped_execution`
 

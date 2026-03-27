@@ -23,10 +23,50 @@ end
 
 abstract type AbstractControlSimulation end
 abstract type AbstractExecutionPolicy end
+abstract type AbstractRuntimeProfile end
 
 struct SequentialExecution <: AbstractExecutionPolicy end
 struct ThreadedExecution <: AbstractExecutionPolicy end
 struct BackendStreamExecution <: AbstractExecutionPolicy end
+
+struct ScientificRuntimeProfile <: AbstractRuntimeProfile end
+struct HILRuntimeProfile <: AbstractRuntimeProfile end
+
+struct RuntimeLatencyModel
+    measurement_delay_frames::Int
+    readout_delay_frames::Int
+    reconstruction_delay_frames::Int
+    dm_delay_frames::Int
+end
+
+default_runtime_profile() = ScientificRuntimeProfile()
+
+function RuntimeLatencyModel(;
+    measurement_delay_frames::Integer=0,
+    readout_delay_frames::Integer=0,
+    reconstruction_delay_frames::Integer=0,
+    dm_delay_frames::Integer=0,
+)
+    delays = (
+        Int(measurement_delay_frames),
+        Int(readout_delay_frames),
+        Int(reconstruction_delay_frames),
+        Int(dm_delay_frames),
+    )
+    all(>=(0), delays) || throw(InvalidConfiguration("runtime latency delays must be >= 0"))
+    return RuntimeLatencyModel(delays...)
+end
+
+default_runtime_latency(::ScientificRuntimeProfile) = RuntimeLatencyModel()
+default_runtime_latency(::HILRuntimeProfile) = RuntimeLatencyModel(
+    measurement_delay_frames=1,
+    readout_delay_frames=1,
+    reconstruction_delay_frames=0,
+    dm_delay_frames=1,
+)
+
+runtime_science_zero_padding(::ScientificRuntimeProfile) = 2
+runtime_science_zero_padding(::HILRuntimeProfile) = 0
 
 """
     VectorDelayLine(ref, delay_frames)
@@ -101,7 +141,26 @@ The runtime owns the mutable command vector, optional detector outputs, and the
 objects needed to execute repeated `sense!` and `step!` calls without
 reconstructing the simulation graph.
 """
-mutable struct ClosedLoopRuntime{SIM<:AOSimulation,TEL,A,S,DM,W,R,V,WD,SD,RNG,T<:AbstractFloat} <: AbstractControlSimulation
+mutable struct ClosedLoopRuntime{
+    SIM<:AOSimulation,
+    TEL,
+    A,
+    S,
+    DM,
+    W,
+    R,
+    CV,
+    SV,
+    WD,
+    SD,
+    RNG,
+    RP<:AbstractRuntimeProfile,
+    MD,
+    RD,
+    CD,
+    DD,
+    T<:AbstractFloat,
+} <: AbstractControlSimulation
     simulation::SIM
     tel::TEL
     atm::A
@@ -109,12 +168,21 @@ mutable struct ClosedLoopRuntime{SIM<:AOSimulation,TEL,A,S,DM,W,R,V,WD,SD,RNG,T<
     dm::DM
     wfs::W
     reconstructor::R
-    command::V
+    command::CV
+    reconstruct_buffer::CV
+    slopes::SV
     wfs_detector::WD
     science_detector::SD
     rng::RNG
+    profile::RP
+    latency::RuntimeLatencyModel
+    measurement_delay::MD
+    readout_delay::RD
+    reconstruction_delay::CD
+    dm_delay::DD
     control_sign::T
     science_zero_padding::Int
+    prepared::Bool
 end
 
 """
@@ -185,13 +253,41 @@ end
 
 function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
     wfs_detector=nothing, science_detector=nothing, rng=MersenneTwister(0),
-    control_sign::Real=-1.0, science_zero_padding::Int=2)
+    profile::AbstractRuntimeProfile=default_runtime_profile(),
+    latency::RuntimeLatencyModel=default_runtime_latency(profile),
+    control_sign::Real=-1.0, science_zero_padding::Union{Int,Nothing}=nothing)
     T = eltype(simulation.dm.state.coefs)
     command = similar(simulation.dm.state.coefs)
     fill!(command, zero(T))
-    return ClosedLoopRuntime{typeof(simulation), typeof(simulation.tel), typeof(simulation.atm),
-        typeof(simulation.src), typeof(simulation.dm), typeof(simulation.wfs), typeof(reconstructor),
-        typeof(command), typeof(wfs_detector), typeof(science_detector), typeof(rng), T}(
+    reconstruct_buffer = similar(command)
+    fill!(reconstruct_buffer, zero(T))
+    slopes = similar(simulation.wfs.state.slopes)
+    fill!(slopes, zero(eltype(slopes)))
+    measurement_delay = VectorDelayLine(simulation.wfs.state.slopes, latency.measurement_delay_frames)
+    readout_delay = VectorDelayLine(simulation.wfs.state.slopes, latency.readout_delay_frames)
+    reconstruction_delay = VectorDelayLine(command, latency.reconstruction_delay_frames)
+    dm_delay = VectorDelayLine(command, latency.dm_delay_frames)
+    resolved_zero_padding = something(science_zero_padding, runtime_science_zero_padding(profile))
+    return ClosedLoopRuntime{
+        typeof(simulation),
+        typeof(simulation.tel),
+        typeof(simulation.atm),
+        typeof(simulation.src),
+        typeof(simulation.dm),
+        typeof(simulation.wfs),
+        typeof(reconstructor),
+        typeof(command),
+        typeof(slopes),
+        typeof(wfs_detector),
+        typeof(science_detector),
+        typeof(rng),
+        typeof(profile),
+        typeof(measurement_delay),
+        typeof(readout_delay),
+        typeof(reconstruction_delay),
+        typeof(dm_delay),
+        T,
+    }(
         simulation,
         simulation.tel,
         simulation.atm,
@@ -200,11 +296,20 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
         simulation.wfs,
         reconstructor,
         command,
+        reconstruct_buffer,
+        slopes,
         wfs_detector,
         science_detector,
         rng,
+        profile,
+        latency,
+        measurement_delay,
+        readout_delay,
+        reconstruction_delay,
+        dm_delay,
         T(control_sign),
-        science_zero_padding,
+        resolved_zero_padding,
+        false,
     )
 end
 
@@ -285,6 +390,7 @@ supports_grouped_execution(::CompositeSimulationInterface) = true
 
 function prepare!(runtime::ClosedLoopRuntime)
     prepare_runtime_wfs!(runtime.wfs, runtime.tel, runtime.src)
+    runtime.prepared = true
     return runtime
 end
 
@@ -303,8 +409,8 @@ end
 function SimulationInterface(runtime::ClosedLoopRuntime)
     command = similar(runtime.command)
     copyto!(command, runtime.command)
-    slopes = similar(runtime.wfs.state.slopes)
-    copyto!(slopes, runtime.wfs.state.slopes)
+    slopes = similar(runtime.slopes)
+    copyto!(slopes, runtime.slopes)
     wfs_frame = isnothing(runtime.wfs_detector) ? nothing : similar(wfs_output_frame(runtime.wfs, runtime.wfs_detector))
     science_frame = isnothing(runtime.science_detector) ? nothing : similar(output_frame(runtime.science_detector))
     interface = SimulationInterface{typeof(runtime), typeof(command), typeof(slopes), typeof(wfs_frame), typeof(science_frame)}(
@@ -351,11 +457,16 @@ function with_reconstructor(runtime::ClosedLoopRuntime, reconstructor)
         wfs_detector=runtime.wfs_detector,
         science_detector=runtime.science_detector,
         rng=runtime.rng,
+        profile=runtime.profile,
+        latency=runtime.latency,
         control_sign=runtime.control_sign,
         science_zero_padding=runtime.science_zero_padding,
     )
     copyto!(refreshed.command, runtime.command)
+    copyto!(refreshed.reconstruct_buffer, runtime.reconstruct_buffer)
+    copyto!(refreshed.slopes, runtime.slopes)
     copyto!(refreshed.dm.state.coefs, runtime.dm.state.coefs)
+    refreshed.prepared = runtime.prepared
     return refreshed
 end
 
@@ -404,7 +515,7 @@ and the externally consumed `SimulationInterface` buffers.
 """
 @inline function snapshot_outputs!(interface::SimulationInterface)
     copyto!(interface.command, interface.runtime.command)
-    copyto!(interface.slopes, interface.runtime.wfs.state.slopes)
+    copyto!(interface.slopes, interface.runtime.slopes)
     if !isnothing(interface.wfs_frame)
         copyto!(interface.wfs_frame, wfs_output_frame(interface.runtime.wfs, interface.runtime.wfs_detector))
     end
@@ -443,12 +554,14 @@ end
 @inline simulation_science_metadata(readout::SimulationReadout) = readout.science_metadata
 
 @inline simulation_command(runtime::ClosedLoopRuntime) = runtime.command
-@inline simulation_slopes(runtime::ClosedLoopRuntime) = runtime.wfs.state.slopes
+@inline simulation_slopes(runtime::ClosedLoopRuntime) = runtime.slopes
 @inline simulation_wfs_frame(runtime::ClosedLoopRuntime) = isnothing(runtime.wfs_detector) ? nothing : wfs_output_frame(runtime.wfs, runtime.wfs_detector)
 @inline simulation_science_frame(runtime::ClosedLoopRuntime) = isnothing(runtime.science_detector) ? nothing : output_frame(runtime.science_detector)
 @inline simulation_wfs_metadata(runtime::ClosedLoopRuntime) =
     isnothing(runtime.wfs_detector) ? wfs_output_metadata(runtime.wfs) : detector_export_metadata(runtime.wfs_detector)
 @inline simulation_science_metadata(runtime::ClosedLoopRuntime) = isnothing(runtime.science_detector) ? nothing : detector_export_metadata(runtime.science_detector)
+@inline runtime_profile(runtime::ClosedLoopRuntime) = runtime.profile
+@inline runtime_latency(runtime::ClosedLoopRuntime) = runtime.latency
 
 @inline simulation_command(sim::AbstractControlSimulation) = simulation_command(simulation_readout(sim))
 @inline simulation_slopes(sim::AbstractControlSimulation) = simulation_slopes(simulation_readout(sim))
@@ -540,6 +653,19 @@ end
     return nothing
 end
 
+@inline function stage_sensed_slopes!(runtime::ClosedLoopRuntime)
+    measured = shift_delay!(runtime.measurement_delay, runtime.wfs.state.slopes)
+    readout = shift_delay!(runtime.readout_delay, measured)
+    copyto!(runtime.slopes, readout)
+    return runtime.slopes
+end
+
+@inline function stage_runtime_command!(runtime::ClosedLoopRuntime)
+    delayed = shift_delay!(runtime.reconstruction_delay, runtime.reconstruct_buffer)
+    copyto!(runtime.command, delayed)
+    return runtime.command
+end
+
 """
     step_core!(...)
 
@@ -588,11 +714,6 @@ end
     return nothing
 end
 
-function sense!(runtime::ClosedLoopRuntime{SIM,TEL,A,S,DM,W,R,V,Nothing,Nothing,RNG,T}) where {SIM<:AOSimulation,TEL,A,S,DM,W,R,V,RNG,T<:AbstractFloat}
-    sense_core!(runtime.atm, runtime.tel, runtime.dm, runtime.wfs, runtime.src, runtime.rng)
-    return runtime
-end
-
 function sense!(interface::SimulationInterface)
     sense!(interface.runtime)
     return snapshot_outputs!(interface)
@@ -606,12 +727,14 @@ function sense!(interface::CompositeSimulationInterface)
 end
 
 @inline function reconstruct!(runtime::ClosedLoopRuntime)
-    reconstruct!(runtime.command, runtime.reconstructor, runtime.wfs.state.slopes)
+    reconstruct!(runtime.reconstruct_buffer, runtime.reconstructor, runtime.slopes)
+    stage_runtime_command!(runtime)
     return runtime.command
 end
 
 @inline function apply_runtime_command!(runtime::ClosedLoopRuntime)
-    apply_command!(runtime.dm.state.coefs, runtime.command, runtime.control_sign)
+    delayed = shift_delay!(runtime.dm_delay, runtime.command)
+    apply_command!(runtime.dm.state.coefs, delayed, runtime.control_sign)
     return runtime.dm.state.coefs
 end
 
@@ -628,46 +751,23 @@ end
     return snapshot_outputs!(interface)
 end
 
-function sense!(runtime::ClosedLoopRuntime{SIM,TEL,A,S,DM,W,R,V,WD,Nothing,RNG,T}) where {SIM<:AOSimulation,TEL,A,S,DM,W,R,V,WD<:AbstractDetector,RNG,T<:AbstractFloat}
-    sense_core!(runtime.atm, runtime.tel, runtime.dm, runtime.wfs, runtime.src, runtime.wfs_detector, runtime.rng)
+function sense!(runtime::ClosedLoopRuntime)
+    if isnothing(runtime.wfs_detector)
+        sense_core!(runtime.atm, runtime.tel, runtime.dm, runtime.wfs, runtime.src, runtime.rng)
+    else
+        sense_core!(runtime.atm, runtime.tel, runtime.dm, runtime.wfs, runtime.src, runtime.wfs_detector, runtime.rng)
+    end
+    if !isnothing(runtime.science_detector)
+        capture_science_core!(runtime.tel, runtime.src, runtime.science_detector, runtime.rng, runtime.science_zero_padding)
+    end
+    stage_sensed_slopes!(runtime)
     return runtime
 end
 
-function sense!(runtime::ClosedLoopRuntime{SIM,TEL,A,S,DM,W,R,V,Nothing,SD,RNG,T}) where {SIM<:AOSimulation,TEL,A,S,DM,W,R,V,SD<:AbstractDetector,RNG,T<:AbstractFloat}
-    sense_core!(runtime.atm, runtime.tel, runtime.dm, runtime.wfs, runtime.src, runtime.rng)
-    capture_science_core!(runtime.tel, runtime.src, runtime.science_detector, runtime.rng, runtime.science_zero_padding)
-    return runtime
-end
-
-function sense!(runtime::ClosedLoopRuntime{SIM,TEL,A,S,DM,W,R,V,WD,SD,RNG,T}) where {SIM<:AOSimulation,TEL,A,S,DM,W,R,V,WD<:AbstractDetector,SD<:AbstractDetector,RNG,T<:AbstractFloat}
-    sense_core!(runtime.atm, runtime.tel, runtime.dm, runtime.wfs, runtime.src, runtime.wfs_detector, runtime.rng)
-    capture_science_core!(runtime.tel, runtime.src, runtime.science_detector, runtime.rng, runtime.science_zero_padding)
-    return runtime
-end
-
-function step!(runtime::ClosedLoopRuntime{SIM,TEL,A,S,DM,W,R,V,Nothing,Nothing,RNG,T}) where {SIM<:AOSimulation,TEL,A,S,DM,W,R,V,RNG,T<:AbstractFloat}
-    step_core!(runtime.atm, runtime.tel, runtime.dm, runtime.wfs, runtime.src, runtime.reconstructor,
-        runtime.command, runtime.rng, runtime.control_sign)
-    return runtime
-end
-
-function step!(runtime::ClosedLoopRuntime{SIM,TEL,A,S,DM,W,R,V,WD,Nothing,RNG,T}) where {SIM<:AOSimulation,TEL,A,S,DM,W,R,V,WD<:AbstractDetector,RNG,T<:AbstractFloat}
-    step_core!(runtime.atm, runtime.tel, runtime.dm, runtime.wfs, runtime.src, runtime.wfs_detector,
-        runtime.reconstructor, runtime.command, runtime.rng, runtime.control_sign)
-    return runtime
-end
-
-function step!(runtime::ClosedLoopRuntime{SIM,TEL,A,S,DM,W,R,V,Nothing,SD,RNG,T}) where {SIM<:AOSimulation,TEL,A,S,DM,W,R,V,SD<:AbstractDetector,RNG,T<:AbstractFloat}
-    step_core!(runtime.atm, runtime.tel, runtime.dm, runtime.wfs, runtime.src, runtime.reconstructor,
-        runtime.command, runtime.science_detector, runtime.rng, runtime.control_sign,
-        runtime.science_zero_padding)
-    return runtime
-end
-
-function step!(runtime::ClosedLoopRuntime{SIM,TEL,A,S,DM,W,R,V,WD,SD,RNG,T}) where {SIM<:AOSimulation,TEL,A,S,DM,W,R,V,WD<:AbstractDetector,SD<:AbstractDetector,RNG,T<:AbstractFloat}
-    step_core!(runtime.atm, runtime.tel, runtime.dm, runtime.wfs, runtime.src, runtime.wfs_detector,
-        runtime.reconstructor, runtime.command, runtime.science_detector, runtime.rng,
-        runtime.control_sign, runtime.science_zero_padding)
+function step!(runtime::ClosedLoopRuntime)
+    sense!(runtime)
+    reconstruct!(runtime)
+    apply_runtime_command!(runtime)
     return runtime
 end
 
@@ -704,6 +804,7 @@ struct RuntimePhaseTimingStats{T<:AbstractFloat}
     samples::Int
     sense_mean_ns::T
     reconstruct_mean_ns::T
+    delay_mean_ns::T
     apply_mean_ns::T
     snapshot_mean_ns::T
     total_mean_ns::T
@@ -756,7 +857,7 @@ runtime_timing(interface::CompositeSimulationInterface; kwargs...) = runtime_tim
 runtime_timing(sim::AbstractControlSimulation; kwargs...) = runtime_timing(() -> step!(sim); kwargs...)
 
 @inline function _sync_sense_outputs!(runtime::ClosedLoopRuntime)
-    synchronize_backend!(execution_style(runtime.wfs.state.slopes))
+    synchronize_backend!(execution_style(runtime.slopes))
     if !isnothing(runtime.wfs_detector)
         synchronize_backend!(execution_style(output_frame(runtime.wfs_detector)))
     end
@@ -784,6 +885,7 @@ function runtime_phase_timing(runtime::ClosedLoopRuntime; warmup::Int=10, sample
     gc_before && GC.gc()
     sense_times = Vector{Int}(undef, samples)
     reconstruct_times = Vector{Int}(undef, samples)
+    delay_times = Vector{Int}(undef, samples)
     apply_times = Vector{Int}(undef, samples)
     total_times = Vector{Int}(undef, samples)
     @inbounds for i in 1:samples
@@ -791,16 +893,21 @@ function runtime_phase_timing(runtime::ClosedLoopRuntime; warmup::Int=10, sample
         sense!(runtime)
         _sync_sense_outputs!(runtime)
         t1 = time_ns()
-        reconstruct!(runtime.command, runtime.reconstructor, runtime.wfs.state.slopes)
-        synchronize_backend!(execution_style(runtime.command))
+        reconstruct!(runtime.reconstruct_buffer, runtime.reconstructor, runtime.slopes)
+        synchronize_backend!(execution_style(runtime.reconstruct_buffer))
         t2 = time_ns()
-        apply_command!(runtime.dm.state.coefs, runtime.command, runtime.control_sign)
-        synchronize_backend!(execution_style(runtime.dm.state.coefs))
+        stage_runtime_command!(runtime)
+        synchronize_backend!(execution_style(runtime.command))
         t3 = time_ns()
+        delayed = shift_delay!(runtime.dm_delay, runtime.command)
+        apply_command!(runtime.dm.state.coefs, delayed, runtime.control_sign)
+        synchronize_backend!(execution_style(runtime.dm.state.coefs))
+        t4 = time_ns()
         sense_times[i] = t1 - t0
         reconstruct_times[i] = t2 - t1
-        apply_times[i] = t3 - t2
-        total_times[i] = t3 - t0
+        delay_times[i] = t3 - t2
+        apply_times[i] = t4 - t3
+        total_times[i] = t4 - t0
     end
     sorted_total = sort(copy(total_times))
     p95_idx = clamp(round(Int, 0.95 * samples), 1, samples)
@@ -808,6 +915,7 @@ function runtime_phase_timing(runtime::ClosedLoopRuntime; warmup::Int=10, sample
         samples,
         mean(sense_times),
         mean(reconstruct_times),
+        mean(delay_times),
         mean(apply_times),
         0.0,
         mean(total_times),
@@ -824,6 +932,7 @@ function runtime_phase_timing(interface::SimulationInterface; warmup::Int=10, sa
     gc_before && GC.gc()
     sense_times = Vector{Int}(undef, samples)
     reconstruct_times = Vector{Int}(undef, samples)
+    delay_times = Vector{Int}(undef, samples)
     apply_times = Vector{Int}(undef, samples)
     snapshot_times = Vector{Int}(undef, samples)
     total_times = Vector{Int}(undef, samples)
@@ -833,12 +942,16 @@ function runtime_phase_timing(interface::SimulationInterface; warmup::Int=10, sa
         sense!(runtime)
         _sync_sense_outputs!(runtime)
         t1 = time_ns()
-        reconstruct!(runtime.command, runtime.reconstructor, runtime.wfs.state.slopes)
-        synchronize_backend!(execution_style(runtime.command))
+        reconstruct!(runtime.reconstruct_buffer, runtime.reconstructor, runtime.slopes)
+        synchronize_backend!(execution_style(runtime.reconstruct_buffer))
         t2 = time_ns()
-        apply_command!(runtime.dm.state.coefs, runtime.command, runtime.control_sign)
-        synchronize_backend!(execution_style(runtime.dm.state.coefs))
+        stage_runtime_command!(runtime)
+        synchronize_backend!(execution_style(runtime.command))
         t3 = time_ns()
+        delayed = shift_delay!(runtime.dm_delay, runtime.command)
+        apply_command!(runtime.dm.state.coefs, delayed, runtime.control_sign)
+        synchronize_backend!(execution_style(runtime.dm.state.coefs))
+        t4 = time_ns()
         snapshot_outputs!(interface)
         synchronize_backend!(execution_style(interface.command))
         synchronize_backend!(execution_style(interface.slopes))
@@ -848,12 +961,13 @@ function runtime_phase_timing(interface::SimulationInterface; warmup::Int=10, sa
         if !isnothing(interface.science_frame)
             synchronize_backend!(execution_style(interface.science_frame))
         end
-        t4 = time_ns()
+        t5 = time_ns()
         sense_times[i] = t1 - t0
         reconstruct_times[i] = t2 - t1
-        apply_times[i] = t3 - t2
-        snapshot_times[i] = t4 - t3
-        total_times[i] = t4 - t0
+        delay_times[i] = t3 - t2
+        apply_times[i] = t4 - t3
+        snapshot_times[i] = t5 - t4
+        total_times[i] = t5 - t0
     end
     sorted_total = sort(copy(total_times))
     p95_idx = clamp(round(Int, 0.95 * samples), 1, samples)
@@ -861,6 +975,7 @@ function runtime_phase_timing(interface::SimulationInterface; warmup::Int=10, sa
         samples,
         mean(sense_times),
         mean(reconstruct_times),
+        mean(delay_times),
         mean(apply_times),
         mean(snapshot_times),
         mean(total_times),
@@ -877,6 +992,7 @@ function runtime_phase_timing(interface::CompositeSimulationInterface; warmup::I
     gc_before && GC.gc()
     sense_times = Vector{Int}(undef, samples)
     reconstruct_times = Vector{Int}(undef, samples)
+    delay_times = Vector{Int}(undef, samples)
     apply_times = Vector{Int}(undef, samples)
     snapshot_times = Vector{Int}(undef, samples)
     total_times = Vector{Int}(undef, samples)
@@ -888,24 +1004,31 @@ function runtime_phase_timing(interface::CompositeSimulationInterface; warmup::I
         end
         t1 = time_ns()
         for child in interface.interfaces
-            reconstruct!(child.runtime.command, child.runtime.reconstructor, child.runtime.wfs.state.slopes)
-            synchronize_backend!(execution_style(child.runtime.command))
+            reconstruct!(child.runtime.reconstruct_buffer, child.runtime.reconstructor, child.runtime.slopes)
+            synchronize_backend!(execution_style(child.runtime.reconstruct_buffer))
         end
         t2 = time_ns()
         for child in interface.interfaces
-            apply_command!(child.runtime.dm.state.coefs, child.runtime.command, child.runtime.control_sign)
-            synchronize_backend!(execution_style(child.runtime.dm.state.coefs))
+            stage_runtime_command!(child.runtime)
+            synchronize_backend!(execution_style(child.runtime.command))
         end
         t3 = time_ns()
+        for child in interface.interfaces
+            delayed = shift_delay!(child.runtime.dm_delay, child.runtime.command)
+            apply_command!(child.runtime.dm.state.coefs, delayed, child.runtime.control_sign)
+            synchronize_backend!(execution_style(child.runtime.dm.state.coefs))
+        end
+        t4 = time_ns()
         snapshot_outputs!(interface)
         synchronize_backend!(execution_style(interface.command))
         synchronize_backend!(execution_style(interface.slopes))
-        t4 = time_ns()
+        t5 = time_ns()
         sense_times[i] = t1 - t0
         reconstruct_times[i] = t2 - t1
-        apply_times[i] = t3 - t2
-        snapshot_times[i] = t4 - t3
-        total_times[i] = t4 - t0
+        delay_times[i] = t3 - t2
+        apply_times[i] = t4 - t3
+        snapshot_times[i] = t5 - t4
+        total_times[i] = t5 - t0
     end
     sorted_total = sort(copy(total_times))
     p95_idx = clamp(round(Int, 0.95 * samples), 1, samples)
@@ -913,6 +1036,7 @@ function runtime_phase_timing(interface::CompositeSimulationInterface; warmup::I
         samples,
         mean(sense_times),
         mean(reconstruct_times),
+        mean(delay_times),
         mean(apply_times),
         mean(snapshot_times),
         mean(total_times),
