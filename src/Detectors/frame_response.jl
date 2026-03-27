@@ -33,8 +33,8 @@ function _apply_separable_response!(style::AcceleratorStyle, frame::AbstractMatr
     n, m = size(frame)
     radius_x = fld(length(kernel_x), 2)
     radius_y = fld(length(kernel_y), 2)
-    launch_kernel!(style, separable_response_rows_kernel!, scratch, frame, kernel_x, radius_x, n, m, length(kernel_x); ndrange=(n, m))
-    launch_kernel!(style, separable_response_cols_kernel!, frame, scratch, kernel_y, radius_y, n, m, length(kernel_y); ndrange=(n, m))
+    launch_kernel_async!(style, separable_response_rows_kernel!, scratch, frame, kernel_x, radius_x, n, m, length(kernel_x); ndrange=(n, m))
+    launch_kernel_async!(style, separable_response_cols_kernel!, frame, scratch, kernel_y, radius_y, n, m, length(kernel_y); ndrange=(n, m))
     return frame
 end
 
@@ -58,7 +58,7 @@ function apply_response!(::ScalarCPUStyle, model::SampledFrameResponse, frame::A
         end
         scratch[i, j] = acc
     end
-    frame .= scratch
+    copyto!(frame, scratch)
     return frame
 end
 
@@ -67,8 +67,8 @@ function apply_response!(style::AcceleratorStyle, model::SampledFrameResponse, f
     kn, km = size(model.kernel)
     radius_i = fld(kn, 2)
     radius_j = fld(km, 2)
-    launch_kernel!(style, sampled_response_kernel!, scratch, frame, model.kernel, radius_i, radius_j, n, m, kn, km; ndrange=(n, m))
-    frame .= scratch
+    launch_kernel_async!(style, sampled_response_kernel!, scratch, frame, model.kernel, radius_i, radius_j, n, m, kn, km; ndrange=(n, m))
+    copyto!(frame, scratch)
     return frame
 end
 
