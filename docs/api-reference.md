@@ -36,7 +36,7 @@ than by source file.
 - `FrameWindow`
 - `AbstractDetectorResponse`, `AbstractFrameResponse`, `AbstractFrameMTF`
 - `FrameResponseModel`, `NullFrameResponse`, `GaussianPixelResponse`,
-  `RectangularPixelAperture`, `SeparablePixelMTF`
+  `SampledFrameResponse`, `RectangularPixelAperture`, `SeparablePixelMTF`
 - `FrameSamplingMode`, `SingleRead`, `AveragedNonDestructiveReads`,
   `CorrelatedDoubleSampling`, `FowlerSampling`
 - `CountingReadoutMetadata`, `CountingDetectorExportMetadata`
@@ -198,7 +198,8 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   code rather than the generic frame-detector path.
 - The maintained frame-detector response family is opt-in and null by default:
   `NullFrameResponse` is the identity model, `GaussianPixelResponse` is the
-  maintained effective blur-like response, `RectangularPixelAperture` is the
+  maintained effective blur-like response, `SampledFrameResponse` is the
+  maintained measured/sampled kernel path, `RectangularPixelAperture` is the
   first explicit pixel-geometry model, and `SeparablePixelMTF` is the first
   maintained MTF-specified response family.
 - Detector export metadata now records response family, application domain,

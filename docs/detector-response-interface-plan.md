@@ -1,6 +1,7 @@
 # Detector Response Interface Plan
 
-Status: implemented in core detector response APIs and maintained models.
+Status: implemented in core detector response APIs and maintained models,
+including a sampled-kernel response path.
 
 ## Goal
 

@@ -106,7 +106,7 @@ export Misregistration, apply_misregistration
 export AbstractFrameDetector, AbstractCountingDetector
 export Detector, DetectorParams, DetectorState, DetectorExportMetadata
 export AbstractDetectorResponse, AbstractFrameResponse, AbstractFrameMTF
-export FrameResponseModel, NullFrameResponse, GaussianPixelResponse, RectangularPixelAperture, SeparablePixelMTF
+export FrameResponseModel, NullFrameResponse, GaussianPixelResponse, SampledFrameResponse, RectangularPixelAperture, SeparablePixelMTF
 export SeparableGaussianPixelResponse
 export FrameWindow
 export FrameSamplingMode, SingleRead, AveragedNonDestructiveReads, CorrelatedDoubleSampling, FowlerSampling

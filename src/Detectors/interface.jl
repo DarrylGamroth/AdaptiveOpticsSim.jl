@@ -42,6 +42,17 @@ struct GaussianPixelResponse{T<:AbstractFloat,V<:AbstractVector{T}} <: AbstractF
     kernel::V
 end
 
+struct SampledFrameResponse{T<:AbstractFloat,A<:AbstractMatrix{T}} <: AbstractFrameResponse
+    kernel::A
+    function SampledFrameResponse{T,A}(kernel::A) where {T<:AbstractFloat,A<:AbstractMatrix{T}}
+        all(size(kernel) .> 0) || throw(InvalidConfiguration("SampledFrameResponse kernel must not be empty"))
+        isodd(size(kernel, 1)) || throw(InvalidConfiguration("SampledFrameResponse kernel row count must be odd"))
+        isodd(size(kernel, 2)) || throw(InvalidConfiguration("SampledFrameResponse kernel column count must be odd"))
+        sum(kernel) > zero(T) || throw(InvalidConfiguration("SampledFrameResponse kernel must have positive sum"))
+        return new{T,A}(kernel)
+    end
+end
+
 struct RectangularPixelAperture{T<:AbstractFloat,VX<:AbstractVector{T},VY<:AbstractVector{T}} <: AbstractFrameMTF
     pitch_x_px::T
     pitch_y_px::T
@@ -194,6 +205,21 @@ function SeparablePixelMTF(; pitch_x_px::Real=1.0, pitch_y_px::Real=1.0,
         T(pitch_x_px), T(pitch_y_px), T(fill_factor_x), T(fill_factor_y), kernel_x, kernel_y)
 end
 
+function SampledFrameResponse(kernel::AbstractMatrix; normalize::Bool=true,
+    T::Type{<:AbstractFloat}=Float64, backend=Array)
+    isempty(kernel) && throw(InvalidConfiguration("SampledFrameResponse kernel must not be empty"))
+    host_kernel = T.(kernel)
+    if normalize
+        kernel_sum = sum(host_kernel)
+        kernel_sum > zero(T) || throw(InvalidConfiguration("SampledFrameResponse normalized kernel must have positive sum"))
+        host_kernel ./= kernel_sum
+    end
+    kernel_backend = backend{T}(undef, size(host_kernel)...)
+    copyto!(kernel_backend, host_kernel)
+    model = SampledFrameResponse{T,typeof(kernel_backend)}(kernel_backend)
+    return validate_frame_response_model(model)
+end
+
 @kernel function separable_response_rows_kernel!(out, img, kernel, radius::Int, n::Int, m::Int, klen::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= m
@@ -213,6 +239,22 @@ end
         @inbounds for kk in 1:klen
             ii = clamp(i + kk - radius - 1, 1, n)
             acc += kernel[kk] * img[ii, j]
+        end
+        @inbounds out[i, j] = acc
+    end
+end
+
+@kernel function sampled_response_kernel!(out, img, kernel, radius_i::Int, radius_j::Int,
+    n::Int, m::Int, kn::Int, km::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= m
+        acc = zero(eltype(out))
+        @inbounds for ki in 1:kn
+            ii = clamp(i + ki - radius_i - 1, 1, n)
+            for kj in 1:km
+                jj = clamp(j + kj - radius_j - 1, 1, m)
+                acc += kernel[ki, kj] * img[ii, jj]
+            end
         end
         @inbounds out[i, j] = acc
     end

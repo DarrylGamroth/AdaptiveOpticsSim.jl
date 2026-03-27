@@ -821,11 +821,30 @@ end
     @test mtf_meta.aperture_shape === nothing
     @test_throws InvalidConfiguration GaussianPixelResponse(response_width_px=0.0)
 
+    sampled_kernel = [0.0 0.1 0.0; 0.1 0.6 0.1; 0.0 0.1 0.0]
+    sampled_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        response_model=SampledFrameResponse(sampled_kernel))
+    sampled_frame = capture!(sampled_det, impulse; rng=MersenneTwister(6))
+    @test sum(sampled_frame) ≈ 1.0 atol=1e-6
+    @test sampled_frame[5, 5] ≈ 0.6 atol=1e-6
+    @test sampled_frame[5, 4] ≈ 0.1 atol=1e-6
+    sampled_meta = detector_export_metadata(sampled_det)
+    @test sampled_meta.frame_response == :sampled
+    @test sampled_meta.response_application_domain == :image
+    @test !sampled_meta.response_is_separable
+    @test sampled_meta.response_support_rows == 3
+    @test sampled_meta.response_support_cols == 3
+    @test sampled_meta.aperture_shape == :sampled
+    @test supports_detector_mtf(sampled_det)
+    @test_throws InvalidConfiguration SampledFrameResponse(zeros(3, 3))
+    @test_throws InvalidConfiguration SampledFrameResponse(ones(2, 3))
+
     cube_mtf = cat(copy(impulse), copy(impulse); dims=3)
     scratch_mtf = similar(cube_mtf)
     stack_mtf = AdaptiveOpticsSim.capture_stack!(det_mtf, cube_mtf, scratch_mtf; rng=MersenneTwister(10))
     @test size(stack_mtf) == size(cube_mtf)
     @test all(isfinite, stack_mtf)
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.capture_stack!(sampled_det, cube_mtf, scratch_mtf; rng=MersenneTwister(10))
 
     rect_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         response_model=RectangularPixelAperture(pitch_x_px=2.0, pitch_y_px=2.0,

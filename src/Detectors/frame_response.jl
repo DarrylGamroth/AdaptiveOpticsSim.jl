@@ -42,6 +42,36 @@ function apply_response!(style::ExecutionStyle, model::GaussianPixelResponse, fr
     return _apply_separable_response!(style, frame, scratch, model.kernel, model.kernel)
 end
 
+function apply_response!(::ScalarCPUStyle, model::SampledFrameResponse, frame::AbstractMatrix, scratch::AbstractMatrix)
+    n, m = size(frame)
+    kn, km = size(model.kernel)
+    radius_i = fld(kn, 2)
+    radius_j = fld(km, 2)
+    @inbounds for i in 1:n, j in 1:m
+        acc = zero(eltype(frame))
+        for ki in 1:kn
+            ii = clamp(i + ki - radius_i - 1, 1, n)
+            for kj in 1:km
+                jj = clamp(j + kj - radius_j - 1, 1, m)
+                acc += model.kernel[ki, kj] * frame[ii, jj]
+            end
+        end
+        scratch[i, j] = acc
+    end
+    frame .= scratch
+    return frame
+end
+
+function apply_response!(style::AcceleratorStyle, model::SampledFrameResponse, frame::AbstractMatrix, scratch::AbstractMatrix)
+    n, m = size(frame)
+    kn, km = size(model.kernel)
+    radius_i = fld(kn, 2)
+    radius_j = fld(km, 2)
+    launch_kernel!(style, sampled_response_kernel!, scratch, frame, model.kernel, radius_i, radius_j, n, m, kn, km; ndrange=(n, m))
+    frame .= scratch
+    return frame
+end
+
 function apply_response!(style::ExecutionStyle, model::RectangularPixelAperture, frame::AbstractMatrix, scratch::AbstractMatrix)
     return _apply_separable_response!(style, frame, scratch, model.kernel_y, model.kernel_x)
 end

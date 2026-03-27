@@ -11,6 +11,7 @@ detector_sensor_symbol(sensor::SensorType) =
 
 response_family(::NullFrameResponse) = :none
 response_family(::GaussianPixelResponse) = :gaussian
+response_family(::SampledFrameResponse) = :sampled
 response_family(::RectangularPixelAperture) = :rectangular_aperture
 response_family(::SeparablePixelMTF) = :separable_mtf
 
@@ -31,11 +32,13 @@ supports_subpixel_geometry(::AbstractFrameMTF) = true
 
 response_support(::NullFrameResponse) = nothing, nothing
 response_support(model::GaussianPixelResponse) = length(model.kernel), length(model.kernel)
+response_support(model::SampledFrameResponse) = size(model.kernel)
 response_support(model::RectangularPixelAperture) = length(model.kernel_y), length(model.kernel_x)
 response_support(model::SeparablePixelMTF) = length(model.kernel_y), length(model.kernel_x)
 
 response_width_px(::NullFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
 response_width_px(model::GaussianPixelResponse, ::Type{T}) where {T<:AbstractFloat} = T(model.response_width_px)
+response_width_px(::SampledFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
 response_width_px(::AbstractFrameMTF, ::Type{T}) where {T<:AbstractFloat} = nothing
 
 response_pitch_x_px(::AbstractFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
@@ -43,6 +46,7 @@ response_pitch_y_px(::AbstractFrameResponse, ::Type{T}) where {T<:AbstractFloat}
 response_fill_factor_x(::AbstractFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
 response_fill_factor_y(::AbstractFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
 response_aperture_shape(::AbstractFrameResponse) = nothing
+response_aperture_shape(::SampledFrameResponse) = :sampled
 
 response_pitch_x_px(model::RectangularPixelAperture, ::Type{T}) where {T<:AbstractFloat} = T(model.pitch_x_px)
 response_pitch_y_px(model::RectangularPixelAperture, ::Type{T}) where {T<:AbstractFloat} = T(model.pitch_y_px)
@@ -67,6 +71,7 @@ supports_detector_mtf(::AbstractFrameDetector) = false
 supports_detector_mtf(det::Detector) = supports_detector_mtf(det.params.response_model)
 supports_detector_mtf(::AbstractFrameResponse) = false
 supports_detector_mtf(::GaussianPixelResponse) = true
+supports_detector_mtf(::SampledFrameResponse) = true
 supports_detector_mtf(::AbstractFrameMTF) = true
 
 supports_clock_induced_charge(::FrameSensorType) = false
@@ -239,6 +244,12 @@ function convert_frame_response_model(model::GaussianPixelResponse, ::Type{T}, b
     return GaussianPixelResponse{T,typeof(kernel)}(T(model.response_width_px), kernel)
 end
 
+function convert_frame_response_model(model::SampledFrameResponse, ::Type{T}, backend) where {T<:AbstractFloat}
+    kernel = backend{T}(undef, size(model.kernel)...)
+    copyto!(kernel, T.(Array(model.kernel)))
+    return SampledFrameResponse{T,typeof(kernel)}(kernel)
+end
+
 function convert_frame_response_model(model::RectangularPixelAperture, ::Type{T}, backend) where {T<:AbstractFloat}
     kernel_x = backend{T}(undef, length(model.kernel_x))
     kernel_y = backend{T}(undef, length(model.kernel_y))
@@ -263,6 +274,15 @@ function validate_frame_response_model(model::GaussianPixelResponse)
     model.response_width_px > 0 || throw(InvalidConfiguration("GaussianPixelResponse response_width_px must be > 0"))
     length(model.kernel) > 0 || throw(InvalidConfiguration("GaussianPixelResponse kernel must not be empty"))
     isodd(length(model.kernel)) || throw(InvalidConfiguration("GaussianPixelResponse kernel length must be odd"))
+    return model
+end
+
+function validate_frame_response_model(model::SampledFrameResponse)
+    all(size(model.kernel) .> 0) || throw(InvalidConfiguration("SampledFrameResponse kernel must not be empty"))
+    isodd(size(model.kernel, 1)) || throw(InvalidConfiguration("SampledFrameResponse kernel row count must be odd"))
+    isodd(size(model.kernel, 2)) || throw(InvalidConfiguration("SampledFrameResponse kernel column count must be odd"))
+    sum(model.kernel) > zero(eltype(model.kernel)) ||
+        throw(InvalidConfiguration("SampledFrameResponse kernel must have positive sum"))
     return model
 end
 
