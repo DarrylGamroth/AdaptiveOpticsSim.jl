@@ -130,6 +130,24 @@ function _batched_apply_response!(::ScalarCPUStyle, model::AbstractFrameResponse
     return cube
 end
 
+function _batched_apply_response!(::ScalarCPUStyle, model::GaussianPixelResponse,
+    cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
+    _batched_apply_separable_response!(ScalarCPUStyle(), cube, scratch, model.kernel, model.kernel)
+    return cube
+end
+
+function _batched_apply_response!(::ScalarCPUStyle, model::RectangularPixelAperture,
+    cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
+    _batched_apply_separable_response!(ScalarCPUStyle(), cube, scratch, model.kernel_y, model.kernel_x)
+    return cube
+end
+
+function _batched_apply_response!(::ScalarCPUStyle, model::SeparablePixelMTF,
+    cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
+    _batched_apply_separable_response!(ScalarCPUStyle(), cube, scratch, model.kernel_y, model.kernel_x)
+    return cube
+end
+
 function _batched_apply_response!(style::AcceleratorStyle, model::GaussianPixelResponse,
     cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
     _batched_apply_separable_response!(style, cube, scratch, model.kernel, model.kernel)
@@ -157,6 +175,30 @@ function _batched_apply_separable_response!(style::AcceleratorStyle, cube::Abstr
         kernel_x, radius_x, n_batch, n, m, length(kernel_x); ndrange=size(cube))
     launch_kernel_async!(style, separable_response_stack_cols_kernel!, cube, scratch,
         kernel_y, radius_y, n_batch, n, m, length(kernel_y); ndrange=size(cube))
+    return cube
+end
+
+function _batched_apply_separable_response!(::ScalarCPUStyle, cube::AbstractArray{T,3},
+    scratch::AbstractArray{T,3}, kernel_y::AbstractVector, kernel_x::AbstractVector) where {T}
+    n_batch, n, m = size(cube)
+    radius_x = fld(length(kernel_x), 2)
+    radius_y = fld(length(kernel_y), 2)
+    @inbounds for j in 1:m, i in 1:n, b in 1:n_batch
+        acc = zero(T)
+        for kk in eachindex(kernel_x)
+            jj = clamp(j + kk - radius_x - 1, 1, m)
+            acc += kernel_x[kk] * cube[b, i, jj]
+        end
+        scratch[b, i, j] = acc
+    end
+    @inbounds for j in 1:m, i in 1:n, b in 1:n_batch
+        acc = zero(T)
+        for kk in eachindex(kernel_y)
+            ii = clamp(i + kk - radius_y - 1, 1, n)
+            acc += kernel_y[kk] * scratch[b, ii, j]
+        end
+        cube[b, i, j] = acc
+    end
     return cube
 end
 
