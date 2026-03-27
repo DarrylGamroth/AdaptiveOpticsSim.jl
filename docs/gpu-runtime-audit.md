@@ -54,6 +54,9 @@ The maintained CUDA validation entry points are:
   - warmed external-optics HIL proxy with `468` active commands and exported
     `640 x 512` phase output
   - now reports warmed allocation bytes per phase and for the full step
+- `scripts/profile_ao3k_runtime.jl`
+  - warmed AO3k pyramid runtime profile with `default` vs `null`
+    high-detector response sweeps
 
 On a CUDA host, the standard workflow is:
 
@@ -70,6 +73,7 @@ julia --project=. scripts/profile_mixed_sh_asterism_runtime.jl cuda
 julia --project=. scripts/profile_zernike_runtime.jl cuda
 julia --project=. scripts/profile_revolt_hil_runtime.jl cuda
 julia --project=. scripts/profile_external_optics_hil.jl cuda
+julia --project=. scripts/profile_ao3k_runtime.jl cuda
 ```
 
 The `spiders` workstation is the current real-hardware validation host for this
@@ -110,6 +114,9 @@ The maintained AMDGPU validation entry points are:
   - warmed external-optics HIL proxy with `468` active commands and exported
     `640 x 512` phase output
   - now reports warmed allocation bytes per phase and for the full step
+- `scripts/profile_ao3k_runtime.jl`
+  - warmed AO3k pyramid runtime profile with `default` vs `null`
+    high-detector response sweeps
 
 On an AMDGPU host, the standard workflow is:
 
@@ -126,6 +133,7 @@ julia --project=. scripts/profile_mixed_sh_asterism_runtime.jl amdgpu
 julia --project=. scripts/profile_zernike_runtime.jl amdgpu
 julia --project=. scripts/profile_revolt_hil_runtime.jl amdgpu
 julia --project=. scripts/profile_external_optics_hil.jl amdgpu
+julia --project=. scripts/profile_ao3k_runtime.jl amdgpu
 ```
 
 Current AMDGPU caveat:
@@ -215,6 +223,32 @@ Interpretation:
 - CUDA is slightly ahead of AMDGPU on the maintained GPU profile surface,
 - the current profile shape is useful as a regression guard before adding the
   next sensor family.
+
+Current warmed AO3k medium runtime snapshot on this host:
+
+- CPU on this host
+  - `default` high-detector response: about `45.5 Hz`
+  - `null` high-detector response: about `41.9 Hz`
+  - both at `runtime_alloc_bytes = 32`
+  - dimensions:
+    - pupil `160`
+    - high-order subapertures `32`
+    - high-order frame `(64, 64)`
+    - high-order slopes `2048`
+    - control modes `1024`
+- AMDGPU on this host
+  - currently blocked by an existing scalar-indexing failure in
+    [kolmogorov.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Atmosphere/kolmogorov.jl)
+    during `update_psd!`
+
+Interpretation:
+
+- the new AO3k profiler is now in place on a maintained system surface that
+  actually uses the CMOS default detector-response path,
+- the first CPU snapshot shows the detector-response toggle is not a dominant
+  cost on this larger AO3k pyramid runtime surface,
+- the next backend step for AO3k is not more detector work; it is fixing the
+  existing AMDGPU atmosphere path so this maintained profiler can run there.
 
 ## Initial Runtime Ladder Snapshot
 
