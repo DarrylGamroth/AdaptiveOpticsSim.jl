@@ -78,6 +78,7 @@ end
 
 apply_pre_readout_gain!(::FrameSensorType, det::Detector) = det.state.frame
 apply_post_readout_gain!(::FrameSensorType, det::Detector) = det.state.frame
+reset_readout_products!(det::Detector) = (det.state.readout_products = NoFrameReadoutProducts(); det)
 
 apply_readout_noise!(det::Detector{NoiseNone}, rng::AbstractRNG) = det.state.frame
 apply_readout_noise!(det::Detector{NoisePhoton}, rng::AbstractRNG) = det.state.frame
@@ -128,6 +129,71 @@ function subtract_background_map!(background::BackgroundFrame, det::Detector)
     return det.state.frame
 end
 
+readout_product_shape(det::Detector) = det.params.readout_window === nothing ?
+    size(det.state.frame) :
+    (length(det.params.readout_window.rows), length(det.params.readout_window.cols))
+
+function _copy_windowed_frame(frame::AbstractMatrix, det::Detector)
+    window = det.params.readout_window
+    if window === nothing
+        return copy(frame)
+    end
+    return copy(@view(frame[window.rows, window.cols]))
+end
+
+function _copy_windowed_cube(cube::AbstractArray{T,3}, det::Detector) where {T}
+    window = det.params.readout_window
+    if window === nothing
+        return copy(cube)
+    end
+    return copy(@view(cube[window.rows, window.cols, :]))
+end
+
+apply_readout_correction!(::NullFrameReadoutCorrection, frame::AbstractMatrix) = frame
+
+function _reference_pixel_bias(model::ReferencePixelCommonModeCorrection, frame::AbstractMatrix{T}) where {T}
+    n, m = size(frame)
+    n_edge_rows = min(model.edge_rows, n)
+    n_edge_cols = min(model.edge_cols, m)
+    total = zero(T)
+    count = 0
+    if n_edge_rows > 0
+        total += sum(@view(frame[1:n_edge_rows, :]))
+        count += n_edge_rows * m
+        if n > n_edge_rows
+            total += sum(@view(frame[n - n_edge_rows + 1:n, :]))
+            count += n_edge_rows * m
+        end
+    end
+    row_lo = n_edge_rows + 1
+    row_hi = n - n_edge_rows
+    if n_edge_cols > 0 && row_lo <= row_hi
+        total += sum(@view(frame[row_lo:row_hi, 1:n_edge_cols]))
+        count += (row_hi - row_lo + 1) * n_edge_cols
+        if m > n_edge_cols
+            total += sum(@view(frame[row_lo:row_hi, m - n_edge_cols + 1:m]))
+            count += (row_hi - row_lo + 1) * n_edge_cols
+        end
+    end
+    count > 0 || return zero(T)
+    return total / T(count)
+end
+
+function apply_readout_correction!(model::ReferencePixelCommonModeCorrection, frame::AbstractMatrix)
+    frame .-= _reference_pixel_bias(model, frame)
+    return frame
+end
+
+function apply_readout_correction!(model::FrameReadoutCorrectionModel, cube::AbstractArray{T,3}) where {T}
+    for k in axes(cube, 3)
+        apply_readout_correction!(model, @view(cube[:, :, k]))
+    end
+    return cube
+end
+
+finalize_readout_products!(::FrameSensorType, det::Detector, rng::AbstractRNG, exposure_time::Real) =
+    reset_readout_products!(det)
+
 function finalize_capture!(det::Detector, rng::AbstractRNG, exposure_time::Real)
     apply_dark_current!(det, rng, exposure_time)
     apply_saturation!(det)
@@ -135,6 +201,8 @@ function finalize_capture!(det::Detector, rng::AbstractRNG, exposure_time::Real)
     apply_pre_readout_gain!(det.params.sensor, det)
     apply_readout_noise!(det, rng)
     apply_post_readout_gain!(det.params.sensor, det)
+    finalize_readout_products!(det.params.sensor, det, rng, exposure_time)
+    apply_readout_correction!(det.params.correction_model, det.state.frame)
     apply_quantization!(det)
     subtract_background_map!(det.background_map, det)
     return det.state.frame

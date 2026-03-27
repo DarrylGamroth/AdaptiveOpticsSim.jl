@@ -11,6 +11,8 @@ abstract type AbstractFrameMTF <: AbstractFrameResponse end
 const FrameResponseModel = AbstractFrameResponse
 abstract type BackgroundModel end
 abstract type FrameSamplingMode end
+abstract type FrameReadoutCorrectionModel end
+abstract type FrameReadoutProducts end
 abstract type AvalancheFrameSensorType <: FrameSensorType end
 abstract type HgCdTeAvalancheArraySensorType <: AvalancheFrameSensorType end
 
@@ -22,6 +24,38 @@ struct FrameWindow
         validate_readout_window(window)
         return window
     end
+end
+
+struct NullFrameReadoutCorrection <: FrameReadoutCorrectionModel end
+
+struct ReferencePixelCommonModeCorrection <: FrameReadoutCorrectionModel
+    edge_rows::Int
+    edge_cols::Int
+    function ReferencePixelCommonModeCorrection(edge_rows::Integer=4, edge_cols::Integer=4)
+        edge_rows >= 0 || throw(InvalidConfiguration("ReferencePixelCommonModeCorrection edge_rows must be >= 0"))
+        edge_cols >= 0 || throw(InvalidConfiguration("ReferencePixelCommonModeCorrection edge_cols must be >= 0"))
+        (edge_rows > 0 || edge_cols > 0) ||
+            throw(InvalidConfiguration("ReferencePixelCommonModeCorrection requires at least one reference-pixel edge"))
+        return new(Int(edge_rows), Int(edge_cols))
+    end
+end
+
+struct NoFrameReadoutProducts <: FrameReadoutProducts end
+
+struct SampledFrameReadoutProducts{A<:AbstractMatrix,C} <: FrameReadoutProducts
+    reference_frame::Union{Nothing,A}
+    signal_frame::A
+    read_cube::Union{Nothing,C}
+end
+
+function SampledFrameReadoutProducts(reference_frame::Union{Nothing,A}, signal_frame::A,
+    read_cube::Nothing) where {A<:AbstractMatrix}
+    return SampledFrameReadoutProducts{A,Nothing}(reference_frame, signal_frame, read_cube)
+end
+
+function SampledFrameReadoutProducts(reference_frame::Union{Nothing,A}, signal_frame::A,
+    read_cube::C) where {A<:AbstractMatrix,C<:AbstractArray}
+    return SampledFrameReadoutProducts{A,C}(reference_frame, signal_frame, read_cube)
 end
 
 struct NoiseNone <: NoiseModel end
@@ -118,6 +152,13 @@ struct DetectorExportMetadata{T<:AbstractFloat}
     sampling_signal_reads::Union{Nothing,Int}
     sampling_read_time::Union{Nothing,T}
     sampling_wallclock_time::Union{Nothing,T}
+    readout_correction::Symbol
+    correction_edge_rows::Union{Nothing,Int}
+    correction_edge_cols::Union{Nothing,Int}
+    provides_reference_frame::Bool
+    provides_signal_frame::Bool
+    provides_read_cube::Bool
+    read_cube_reads::Union{Nothing,Int}
 end
 
 struct CountingReadoutMetadata
@@ -304,17 +345,19 @@ struct DetectorParams{T<:AbstractFloat,S<:SensorType,R<:AbstractFrameResponse}
     full_well::Union{Nothing,T}
     sensor::S
     response_model::R
+    correction_model::FrameReadoutCorrectionModel
     readout_window::Union{Nothing,FrameWindow}
     output_precision::Union{Nothing,DataType}
 end
 
-mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O}
+mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O,P<:FrameReadoutProducts}
     frame::A
     response_buffer::A
     bin_buffer::A
     noise_buffer::A
     accum_buffer::A
     output_buffer::O
+    readout_products::P
     integrated_time::T
     readout_ready::Bool
 end

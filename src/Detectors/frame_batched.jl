@@ -10,6 +10,8 @@ function _require_batched_detector_compat(det::Detector, cube::AbstractArray, sc
         throw(InvalidConfiguration("batched detector capture currently requires output_precision === nothing"))
     det.params.readout_window === nothing ||
         throw(InvalidConfiguration("batched detector capture currently requires full-frame readout"))
+    det.params.correction_model isa NullFrameReadoutCorrection ||
+        throw(InvalidConfiguration("batched detector capture currently requires null readout correction"))
     supports_separable_application(det.params.response_model) ||
         throw(InvalidConfiguration("batched detector capture currently requires a maintained separable frame response"))
     _require_batched_sensor_compat(det.params.sensor)

@@ -1,5 +1,16 @@
 readout_ready(det::Detector) = det.state.readout_ready
 output_frame(det::Detector) = det.state.output_buffer === nothing ? det.state.frame : det.state.output_buffer
+readout_products(det::Detector) = det.state.readout_products
+detector_reference_frame(det::Detector) = detector_reference_frame(det.state.readout_products)
+detector_signal_frame(det::Detector) = detector_signal_frame(det.state.readout_products)
+detector_read_cube(det::Detector) = detector_read_cube(det.state.readout_products)
+
+detector_reference_frame(::NoFrameReadoutProducts) = nothing
+detector_signal_frame(::NoFrameReadoutProducts) = nothing
+detector_read_cube(::NoFrameReadoutProducts) = nothing
+detector_reference_frame(products::SampledFrameReadoutProducts) = products.reference_frame
+detector_signal_frame(products::SampledFrameReadoutProducts) = products.signal_frame
+detector_read_cube(products::SampledFrameReadoutProducts) = products.read_cube
 
 detector_noise_symbol(::NoiseNone) = :none
 detector_noise_symbol(::NoisePhoton) = :photon
@@ -61,11 +72,16 @@ response_fill_factor_y(model::SeparablePixelMTF, ::Type{T}) where {T<:AbstractFl
 response_aperture_shape(::SeparablePixelMTF) = :rectangular
 
 frame_sampling_symbol(::FrameSensorType) = :single_read
-frame_sampling_reads(::FrameSensorType) = nothing
+frame_sampling_reads(::FrameSensorType) = 1
 frame_sampling_reference_reads(::FrameSensorType) = nothing
 frame_sampling_signal_reads(::FrameSensorType) = nothing
 sampling_read_time(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = nothing
-sampling_wallclock_time(::FrameSensorType, integration_time, ::Type{T}) where {T<:AbstractFloat} = nothing
+sampling_read_time(sensor::FrameSensorType, frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat} =
+    sampling_read_time(sensor, T)
+sampling_wallclock_time(::FrameSensorType, integration_time, ::Type{T}) where {T<:AbstractFloat} = T(integration_time)
+sampling_wallclock_time(sensor::FrameSensorType, integration_time, frame_size::Tuple{Int,Int},
+    window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat} =
+    sampling_wallclock_time(sensor, integration_time, T)
 
 supports_detector_mtf(::AbstractFrameDetector) = false
 supports_detector_mtf(det::Detector) = supports_detector_mtf(det.params.response_model)
@@ -81,6 +97,15 @@ supports_avalanche_gain(::AvalancheFrameSensorType) = true
 supports_sensor_glow(::FrameSensorType) = false
 supports_nondestructive_reads(::FrameSensorType) = false
 supports_reference_read_subtraction(::FrameSensorType) = false
+supports_readout_correction(::FrameSensorType) = false
+supports_read_cube(::FrameSensorType) = false
+
+readout_correction_symbol(::NullFrameReadoutCorrection) = :none
+readout_correction_symbol(::ReferencePixelCommonModeCorrection) = :reference_pixel_common_mode
+correction_edge_rows(::FrameReadoutCorrectionModel) = nothing
+correction_edge_cols(::FrameReadoutCorrectionModel) = nothing
+correction_edge_rows(model::ReferencePixelCommonModeCorrection) = model.edge_rows
+correction_edge_cols(model::ReferencePixelCommonModeCorrection) = model.edge_cols
 
 supports_counting_noise(::AbstractCountingDetector) = false
 supports_dead_time(::AbstractCountingDetector) = false
@@ -125,6 +150,8 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
     col_window = det.params.readout_window === nothing ? nothing :
         (first(det.params.readout_window.cols), last(det.params.readout_window.cols))
     support_rows, support_cols = response_support(det.params.response_model)
+    products = readout_products(det)
+    read_cube = detector_read_cube(products)
     return DetectorExportMetadata{T}(
         T(det.params.integration_time),
         T(det.params.qe),
@@ -158,8 +185,15 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         frame_sampling_reads(det.params.sensor),
         frame_sampling_reference_reads(det.params.sensor),
         frame_sampling_signal_reads(det.params.sensor),
-        sampling_read_time(det.params.sensor, T),
-        sampling_wallclock_time(det.params.sensor, det.params.integration_time, T),
+        sampling_read_time(det.params.sensor, size(det.state.frame), det.params.readout_window, T),
+        sampling_wallclock_time(det.params.sensor, det.params.integration_time, size(det.state.frame), det.params.readout_window, T),
+        readout_correction_symbol(det.params.correction_model),
+        correction_edge_rows(det.params.correction_model),
+        correction_edge_cols(det.params.correction_model),
+        !isnothing(detector_reference_frame(products)),
+        !isnothing(detector_signal_frame(products)),
+        !isnothing(read_cube),
+        isnothing(read_cube) ? nothing : size(read_cube, 3),
     )
 end
 
@@ -354,6 +388,21 @@ function validate_detector_response(sensor::SensorType, response_model::Abstract
     throw(InvalidConfiguration("response model $(typeof(response_model)) is not supported for sensor $(typeof(sensor))"))
 end
 
+validate_readout_correction_model(::NullFrameReadoutCorrection) = NullFrameReadoutCorrection()
+
+function validate_readout_correction_model(model::ReferencePixelCommonModeCorrection)
+    return ReferencePixelCommonModeCorrection(model.edge_rows, model.edge_cols)
+end
+
+resolve_correction_model(sensor::SensorType, ::Nothing) = NullFrameReadoutCorrection()
+resolve_correction_model(sensor::SensorType, correction_model::FrameReadoutCorrectionModel) = correction_model
+
+function validate_readout_correction(sensor::SensorType, correction_model::FrameReadoutCorrectionModel)
+    supports_readout_correction(sensor) && return correction_model
+    correction_model isa NullFrameReadoutCorrection && return correction_model
+    throw(InvalidConfiguration("readout correction $(typeof(correction_model)) is not supported for sensor $(typeof(sensor))"))
+end
+
 resolve_response_model(sensor::SensorType, ::Nothing; T::Type{<:AbstractFloat}, backend) =
     default_response_model(sensor; T=T, backend=backend)
 resolve_response_model(sensor::SensorType, response_model::AbstractFrameResponse; T::Type{<:AbstractFloat}, backend) =
@@ -371,7 +420,8 @@ end
 function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     psf_sampling::Int, binning::Int, gain::Real, dark_current::Real,
     bits::Union{Nothing,Int}, full_well::Union{Nothing,Real}, sensor::SensorType,
-    response_model::Union{Nothing,FrameResponseModel}, readout_window::Union{Nothing,FrameWindow},
+    response_model::Union{Nothing,FrameResponseModel}, correction_model::Union{Nothing,FrameReadoutCorrectionModel},
+    readout_window::Union{Nothing,FrameWindow},
     output_precision::Union{Nothing,DataType}, background_flux, background_map,
     T::Type{<:AbstractFloat}, backend)
     validate_frame_detector_sensor(sensor)
@@ -381,6 +431,8 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     resolved_response = resolve_response_model(sensor, response_model; T=T, backend=backend)
     response = validate_detector_response(sensor,
         validate_frame_response_model(convert_frame_response_model(resolved_response, T, backend)))
+    resolved_correction = resolve_correction_model(sensor, correction_model)
+    correction = validate_readout_correction(sensor, validate_readout_correction_model(resolved_correction))
     output_precision_t = resolve_output_precision(bits, output_precision)
     window = validate_readout_window(readout_window)
     params = DetectorParams{T, typeof(sensor), typeof(response)}(
@@ -394,6 +446,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
         full_well_t,
         sensor,
         response,
+        correction,
         window,
         output_precision_t,
     )
@@ -413,13 +466,14 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     fill!(noise_buffer, zero(T))
     fill!(accum_buffer, zero(T))
     output_buffer === nothing || fill!(output_buffer, zero(eltype(output_buffer)))
-    state = DetectorState{T, typeof(frame), typeof(output_buffer)}(
+    state = DetectorState{T, typeof(frame), typeof(output_buffer), FrameReadoutProducts}(
         frame,
         response_buffer,
         bin_buffer,
         noise_buffer,
         accum_buffer,
         output_buffer,
+        NoFrameReadoutProducts(),
         zero(T),
         true,
     )
@@ -437,6 +491,7 @@ function Detector(; integration_time::Real=1.0, qe::Real=1.0,
     gain::Real=1.0, dark_current::Real=0.0, bits::Union{Nothing,Int}=nothing,
     full_well::Union{Nothing,Real}=nothing, sensor::SensorType=CCDSensor(),
     response_model::Union{Nothing,FrameResponseModel}=nothing,
+    correction_model::Union{Nothing,FrameReadoutCorrectionModel}=nothing,
     readout_window::Union{Nothing,FrameWindow}=nothing,
     output_precision::Union{Nothing,DataType}=nothing, background_flux=nothing, background_map=nothing,
     T::Type{<:AbstractFloat}=Float64, backend=Array)
@@ -444,7 +499,8 @@ function Detector(; integration_time::Real=1.0, qe::Real=1.0,
     return Detector(normalized; integration_time=integration_time, qe=qe,
         psf_sampling=psf_sampling, binning=binning, gain=gain,
         dark_current=dark_current, bits=bits, full_well=full_well,
-        sensor=sensor, response_model=response_model, readout_window=readout_window, output_precision=output_precision,
+        sensor=sensor, response_model=response_model, correction_model=correction_model,
+        readout_window=readout_window, output_precision=output_precision,
         background_flux=background_flux, background_map=background_map,
         T=T, backend=backend)
 end
@@ -453,6 +509,7 @@ function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
     psf_sampling::Int=1, binning::Int=1, gain::Real=1.0, dark_current::Real=0.0,
     bits::Union{Nothing,Int}=nothing, full_well::Union{Nothing,Real}=nothing,
     sensor::SensorType=CCDSensor(), response_model::Union{Nothing,FrameResponseModel}=nothing,
+    correction_model::Union{Nothing,FrameReadoutCorrectionModel}=nothing,
     readout_window::Union{Nothing,FrameWindow}=nothing,
     output_precision::Union{Nothing,DataType}=nothing,
     background_flux=nothing, background_map=nothing,
@@ -462,7 +519,8 @@ function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
     return _build_detector(validated; integration_time=integration_time, qe=qe,
         psf_sampling=psf_sampling, binning=binning, gain=gain,
         dark_current=dark_current, bits=bits, full_well=full_well,
-        sensor=sensor, response_model=response_model, readout_window=readout_window, output_precision=output_precision,
+        sensor=sensor, response_model=response_model, correction_model=correction_model,
+        readout_window=readout_window, output_precision=output_precision,
         background_flux=background_flux, background_map=background_map,
         T=T, backend=backend)
 end

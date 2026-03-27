@@ -110,11 +110,15 @@ export FrameResponseModel, NullFrameResponse, GaussianPixelResponse, SampledFram
 export SeparableGaussianPixelResponse
 export FrameWindow
 export FrameSamplingMode, SingleRead, AveragedNonDestructiveReads, CorrelatedDoubleSampling, FowlerSampling
+export FrameReadoutCorrectionModel, NullFrameReadoutCorrection, ReferencePixelCommonModeCorrection
+export FrameReadoutProducts, NoFrameReadoutProducts, SampledFrameReadoutProducts
 export APDDetector, APDDetectorParams, APDDetectorState, CountingReadoutMetadata, CountingDetectorExportMetadata
 export CountingDeadTimeModel, NoDeadTime, NonParalyzableDeadTime
-export capture!, output_frame, channel_output, detector_export_metadata, readout_ready, reset_integration!
+export capture!, output_frame, readout_products, detector_reference_frame, detector_signal_frame, detector_read_cube
+export channel_output, detector_export_metadata, readout_ready, reset_integration!
 export supports_detector_mtf, supports_clock_induced_charge, supports_column_readout_noise
 export supports_avalanche_gain, supports_sensor_glow, supports_nondestructive_reads, supports_reference_read_subtraction
+export supports_readout_correction, supports_read_cube
 export supports_counting_noise, supports_dead_time, supports_channel_gain_map
 export response_family, response_application_domain, response_support
 export is_shift_invariant, supports_frequency_domain_application, supports_separable_application, supports_subpixel_geometry
