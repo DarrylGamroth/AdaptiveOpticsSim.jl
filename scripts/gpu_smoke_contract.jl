@@ -67,6 +67,51 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
         return tel.state.opd
     end
 
+    record_gpu_smoke!(failures, "atmosphere_multilayer_step") do
+        atm = MultiLayerAtmosphere(tel;
+            r0=T(0.2),
+            L0=T(25.0),
+            fractional_cn2=T[0.7, 0.3],
+            wind_speed=T[8.0, 4.0],
+            wind_direction=T[0.0, 90.0],
+            altitude=T[0.0, 5000.0],
+            T=T,
+            backend=BackendArray,
+        )
+        advance!(atm, tel; rng=rng)
+        propagate!(atm, tel)
+        @assert atm.state.opd isa BackendArray
+        @assert tel.state.opd isa BackendArray
+        return atm.state.opd
+    end
+
+    record_gpu_smoke!(failures, "atmosphere_phase_helpers") do
+        atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=BackendArray)
+        ws = PhaseStatsWorkspace(tel.params.resolution; T=T, backend=BackendArray)
+        screen, psd = ft_phase_screen(atm, tel.params.resolution, tel.params.diameter / tel.params.resolution;
+            rng=rng, ws=ws, return_psd=true)
+        sh_screen = ft_sh_phase_screen(atm, tel.params.resolution, tel.params.diameter / tel.params.resolution;
+            rng=rng, ws=ws, subharmonics=true, n_levels=2, subharmonic_radius=1)
+        rho = similar(atm.state.opd, T, 4, 4)
+        fill!(rho, T(0.1))
+        cov = phase_covariance(rho, atm)
+        freqs = similar(atm.state.freqs, T, 4)
+        copyto!(freqs, T[0.1, 0.2, 0.3, 0.4])
+        covmat = covariance_matrix(freqs, freqs, atm)
+        spectrum = phase_spectrum(freqs, atm)
+        freq_grid = similar(atm.state.opd, T, 2, 2)
+        copyto!(freq_grid, reshape(T[0.1, 0.2, 0.3, 0.4], 2, 2))
+        spectrum_grid = phase_spectrum(freq_grid, atm)
+        @assert screen isa BackendArray
+        @assert psd isa BackendArray
+        @assert sh_screen isa BackendArray
+        @assert cov isa BackendArray
+        @assert covmat isa BackendArray
+        @assert spectrum isa BackendArray
+        @assert spectrum_grid isa BackendArray
+        return screen
+    end
+
     record_gpu_smoke!(failures, "dm_apply") do
         dm = DeformableMirror(tel; n_act=4, influence_width=0.3, T=T, backend=BackendArray)
         fill!(dm.state.coefs, T(0.05))
