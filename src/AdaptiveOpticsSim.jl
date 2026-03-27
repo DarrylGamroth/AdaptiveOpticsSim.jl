@@ -118,6 +118,7 @@ export supports_avalanche_gain, supports_sensor_glow, supports_nondestructive_re
 export supports_counting_noise, supports_dead_time, supports_channel_gain_map
 export response_family, response_application_domain, response_support
 export is_shift_invariant, supports_frequency_domain_application, supports_separable_application, supports_subpixel_geometry
+export default_response_model
 export SensorType, FrameSensorType, CountingSensorType, AvalancheFrameSensorType, HgCdTeAvalancheArraySensorType
 export CCDSensor, CMOSSensor, EMCCDSensor, InGaAsSensor, SAPHIRASensor, APDSensor
 export ShackHartmann, ShackHartmannParams, ShackHartmannState, update_valid_mask!, measure!

@@ -44,6 +44,7 @@ than by source file.
 - `capture!`, `output_frame`, `channel_output`, `detector_export_metadata`,
   `readout_ready`, `reset_integration!`
 - `response_family`, `response_application_domain`, `response_support`
+- `default_response_model`
 - `supports_detector_mtf`, `is_shift_invariant`,
   `supports_frequency_domain_application`,
   `supports_separable_application`, `supports_subpixel_geometry`
@@ -202,6 +203,11 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   maintained measured/sampled kernel path, `RectangularPixelAperture` is the
   first explicit pixel-geometry model, and `SeparablePixelMTF` is the first
   maintained MTF-specified response family.
+- Omitted `response_model` values now resolve by detector family through
+  `default_response_model(sensor; ...)`:
+  `CCDSensor` and `EMCCDSensor` keep the null response by default,
+  `CMOSSensor` and `InGaAsSensor` use a mild Gaussian response,
+  and `SAPHIRASensor` uses a mild sampled-kernel response.
 - Detector export metadata now records response family, application domain,
   separability, shift invariance, support, pitch, fill factor, and aperture
   shape, rather than only one response-width scalar.

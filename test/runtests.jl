@@ -703,6 +703,7 @@ end
     @test all(j -> isapprox(std(frame_cmos[:, j]), 0.0; atol=1e-8), axes(frame_cmos, 2))
     @test std(vec(frame_cmos[1, :])) > 0
     @test supports_column_readout_noise(det_cmos.params.sensor)
+    @test detector_export_metadata(det_cmos).frame_response == :gaussian
     @test_throws InvalidConfiguration CMOSSensor(column_readout_sigma=-1.0)
 
     det_ingaas = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
@@ -710,6 +711,7 @@ end
     frame_ingaas = capture!(det_ingaas, zero_psf; rng=MersenneTwister(13))
     @test sum(frame_ingaas) > 0
     @test supports_sensor_glow(det_ingaas.params.sensor)
+    @test detector_export_metadata(det_ingaas).frame_response == :gaussian
     @test_throws InvalidConfiguration InGaAsSensor(glow_rate=-1.0)
 
     det_saphira = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
@@ -718,6 +720,7 @@ end
     @test frame_saphira == 5.0 .* uniform_signal
     @test supports_avalanche_gain(det_saphira.params.sensor)
     @test supports_sensor_glow(det_saphira.params.sensor)
+    @test detector_export_metadata(det_saphira).frame_response == :sampled
     det_saphira_excess = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0, sensor=SAPHIRASensor(avalanche_gain=1.0, excess_noise_factor=sqrt(2.0)))
     frame_saphira_excess = copy(capture!(det_saphira_excess, uniform_signal; rng=MersenneTwister(14)))
@@ -779,6 +782,9 @@ end
 
     @test_throws InvalidConfiguration Detector(integration_time=1.0, noise=NoisePhoton(), qe=1.0, binning=1,
         sensor=APDSensor())
+
+    det_default_ccd = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1, sensor=CCDSensor())
+    @test detector_export_metadata(det_default_ccd).frame_response == :none
 
     apd = APDDetector(integration_time=1.0, qe=0.5, gain=2.0, dark_count_rate=0.0, noise=NoiseNone())
     channels = fill(4.0, 2, 8)

@@ -89,6 +89,22 @@ supports_channel_gain_map(::AbstractCountingDetector) = false
 supports_detector_response(::SensorType, ::AbstractDetectorResponse) = false
 supports_detector_response(::FrameSensorType, ::AbstractFrameResponse) = true
 
+function default_response_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64, backend=Array)
+    return NullFrameResponse()
+end
+
+function default_response_model(::CMOSSensor; T::Type{<:AbstractFloat}=Float64, backend=Array)
+    return GaussianPixelResponse(response_width_px=0.35, T=T, backend=backend)
+end
+
+function default_response_model(::InGaAsSensor; T::Type{<:AbstractFloat}=Float64, backend=Array)
+    return GaussianPixelResponse(response_width_px=0.4, T=T, backend=backend)
+end
+
+function default_response_model(::SAPHIRASensor; T::Type{<:AbstractFloat}=Float64, backend=Array)
+    return SampledFrameResponse([0.0 0.01 0.0; 0.01 0.96 0.01; 0.0 0.01 0.0]; T=T, backend=backend)
+end
+
 sensor_is_frame_based(::SensorType) = false
 sensor_is_frame_based(::FrameSensorType) = true
 sensor_is_counting(::SensorType) = false
@@ -338,6 +354,11 @@ function validate_detector_response(sensor::SensorType, response_model::Abstract
     throw(InvalidConfiguration("response model $(typeof(response_model)) is not supported for sensor $(typeof(sensor))"))
 end
 
+resolve_response_model(sensor::SensorType, ::Nothing; T::Type{<:AbstractFloat}, backend) =
+    default_response_model(sensor; T=T, backend=backend)
+resolve_response_model(sensor::SensorType, response_model::AbstractFrameResponse; T::Type{<:AbstractFloat}, backend) =
+    response_model
+
 function resolve_output_precision(bits::Union{Nothing,Int}, output_precision::Union{Nothing,DataType})
     output_precision !== nothing && return output_precision
     bits === 8 && return UInt8
@@ -350,15 +371,16 @@ end
 function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     psf_sampling::Int, binning::Int, gain::Real, dark_current::Real,
     bits::Union{Nothing,Int}, full_well::Union{Nothing,Real}, sensor::SensorType,
-    response_model::FrameResponseModel, readout_window::Union{Nothing,FrameWindow},
+    response_model::Union{Nothing,FrameResponseModel}, readout_window::Union{Nothing,FrameWindow},
     output_precision::Union{Nothing,DataType}, background_flux, background_map,
     T::Type{<:AbstractFloat}, backend)
     validate_frame_detector_sensor(sensor)
     full_well_t = full_well === nothing ? nothing : T(full_well)
     flux_model = background_model(background_flux; T=T, backend=backend)
     map_model = background_model(background_map; T=T, backend=backend)
+    resolved_response = resolve_response_model(sensor, response_model; T=T, backend=backend)
     response = validate_detector_response(sensor,
-        validate_frame_response_model(convert_frame_response_model(response_model, T, backend)))
+        validate_frame_response_model(convert_frame_response_model(resolved_response, T, backend)))
     output_precision_t = resolve_output_precision(bits, output_precision)
     window = validate_readout_window(readout_window)
     params = DetectorParams{T, typeof(sensor), typeof(response)}(
@@ -414,7 +436,7 @@ function Detector(; integration_time::Real=1.0, qe::Real=1.0,
     psf_sampling::Int=1, binning::Int=1, noise=NoisePhoton(),
     gain::Real=1.0, dark_current::Real=0.0, bits::Union{Nothing,Int}=nothing,
     full_well::Union{Nothing,Real}=nothing, sensor::SensorType=CCDSensor(),
-    response_model::FrameResponseModel=NullFrameResponse(),
+    response_model::Union{Nothing,FrameResponseModel}=nothing,
     readout_window::Union{Nothing,FrameWindow}=nothing,
     output_precision::Union{Nothing,DataType}=nothing, background_flux=nothing, background_map=nothing,
     T::Type{<:AbstractFloat}=Float64, backend=Array)
@@ -430,7 +452,7 @@ end
 function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
     psf_sampling::Int=1, binning::Int=1, gain::Real=1.0, dark_current::Real=0.0,
     bits::Union{Nothing,Int}=nothing, full_well::Union{Nothing,Real}=nothing,
-    sensor::SensorType=CCDSensor(), response_model::FrameResponseModel=NullFrameResponse(),
+    sensor::SensorType=CCDSensor(), response_model::Union{Nothing,FrameResponseModel}=nothing,
     readout_window::Union{Nothing,FrameWindow}=nothing,
     output_precision::Union{Nothing,DataType}=nothing,
     background_flux=nothing, background_map=nothing,
