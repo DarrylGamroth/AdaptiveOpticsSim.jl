@@ -119,15 +119,44 @@ function capture_stack_poisson_noise!(det::Detector{<:NoisePhotonReadout}, cube:
     return cube
 end
 
-function _batched_apply_response!(::NullFrameResponse, det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
+function _batched_apply_response!(::ExecutionStyle, ::NullFrameResponse, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
     return cube
 end
 
-function _batched_apply_response!(model::AbstractFrameResponse, det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
-    style = execution_style(cube)
-    for k in axes(cube, 3)
-        apply_response!(style, model, @view(cube[:, :, k]), @view(scratch[:, :, k]))
+function _batched_apply_response!(::ScalarCPUStyle, model::AbstractFrameResponse, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
+    for b in axes(cube, 1)
+        apply_response!(ScalarCPUStyle(), model, @view(cube[b, :, :]), @view(scratch[b, :, :]))
     end
+    return cube
+end
+
+function _batched_apply_response!(style::AcceleratorStyle, model::GaussianPixelResponse,
+    cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
+    _batched_apply_separable_response!(style, cube, scratch, model.kernel, model.kernel)
+    return cube
+end
+
+function _batched_apply_response!(style::AcceleratorStyle, model::RectangularPixelAperture,
+    cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
+    _batched_apply_separable_response!(style, cube, scratch, model.kernel_y, model.kernel_x)
+    return cube
+end
+
+function _batched_apply_response!(style::AcceleratorStyle, model::SeparablePixelMTF,
+    cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
+    _batched_apply_separable_response!(style, cube, scratch, model.kernel_y, model.kernel_x)
+    return cube
+end
+
+function _batched_apply_separable_response!(style::AcceleratorStyle, cube::AbstractArray{T,3},
+    scratch::AbstractArray{T,3}, kernel_y::AbstractVector, kernel_x::AbstractVector) where {T}
+    n_batch, n, m = size(cube)
+    radius_x = fld(length(kernel_x), 2)
+    radius_y = fld(length(kernel_y), 2)
+    launch_kernel_async!(style, separable_response_stack_rows_kernel!, scratch, cube,
+        kernel_x, radius_x, n_batch, n, m, length(kernel_x); ndrange=size(cube))
+    launch_kernel_async!(style, separable_response_stack_cols_kernel!, cube, scratch,
+        kernel_y, radius_y, n_batch, n, m, length(kernel_y); ndrange=size(cube))
     return cube
 end
 
@@ -136,7 +165,7 @@ function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::Abstra
     _require_batched_detector_compat(det, cube, scratch)
     exposure_time = det.params.integration_time
     cube .*= det.params.qe * exposure_time
-    _batched_apply_response!(det.params.response_model, det, cube, scratch)
+    _batched_apply_response!(execution_style(cube), det.params.response_model, cube, scratch)
     capture_stack_poisson_noise!(det, cube, rng)
     _batched_background_flux!(det.background_flux, det, cube, scratch, rng, exposure_time)
     _batched_dark_current!(det, cube, scratch, rng, exposure_time)

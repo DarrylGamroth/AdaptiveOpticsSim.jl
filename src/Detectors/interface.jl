@@ -260,6 +260,32 @@ end
     end
 end
 
+@kernel function separable_response_stack_rows_kernel!(out, img, kernel, radius::Int,
+    n_batch::Int, n::Int, m::Int, klen::Int)
+    b, i, j = @index(Global, NTuple)
+    if b <= n_batch && i <= n && j <= m
+        acc = zero(eltype(out))
+        @inbounds for kk in 1:klen
+            jj = clamp(j + kk - radius - 1, 1, m)
+            acc += kernel[kk] * img[b, i, jj]
+        end
+        @inbounds out[b, i, j] = acc
+    end
+end
+
+@kernel function separable_response_stack_cols_kernel!(out, img, kernel, radius::Int,
+    n_batch::Int, n::Int, m::Int, klen::Int)
+    b, i, j = @index(Global, NTuple)
+    if b <= n_batch && i <= n && j <= m
+        acc = zero(eltype(out))
+        @inbounds for kk in 1:klen
+            ii = clamp(i + kk - radius - 1, 1, n)
+            acc += kernel[kk] * img[b, ii, j]
+        end
+        @inbounds out[b, i, j] = acc
+    end
+end
+
 @kernel function add_column_noise_kernel!(frame, noise, sigma, n::Int, m::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= m
