@@ -237,18 +237,23 @@ Current warmed AO3k medium runtime snapshot on this host:
     - high-order slopes `2048`
     - control modes `1024`
 - AMDGPU on this host
-  - currently blocked by an existing scalar-indexing failure in
-    [kolmogorov.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Atmosphere/kolmogorov.jl)
-    during `update_psd!`
+  - `default` high-detector response: about `166.6 Hz`
+  - `null` high-detector response: about `169.6 Hz`
+  - `runtime_alloc_bytes`: about `356136` (`default`), `350824` (`null`)
+  - dimensions:
+    - pupil `160`
+    - high-order subapertures `32`
+    - high-order frame `(64, 64)`
+    - high-order slopes `2048`
+    - control modes `1024`
 
 Interpretation:
 
 - the new AO3k profiler is now in place on a maintained system surface that
   actually uses the CMOS default detector-response path,
-- the first CPU snapshot shows the detector-response toggle is not a dominant
-  cost on this larger AO3k pyramid runtime surface,
-- the next backend step for AO3k is not more detector work; it is fixing the
-  existing AMDGPU atmosphere path so this maintained profiler can run there.
+- the first CPU and AMDGPU snapshots both show the detector-response toggle is
+  not a dominant cost on this larger AO3k pyramid runtime surface,
+- AMDGPU is materially ahead of CPU on this maintained AO3k medium rung.
 
 ## Initial Runtime Ladder Snapshot
 
