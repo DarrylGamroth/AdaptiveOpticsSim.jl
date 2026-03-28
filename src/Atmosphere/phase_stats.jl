@@ -1,6 +1,57 @@
 using Random
 using SpecialFunctions
 
+@kernel function phase_screen_psd_kernel!(psd, freqs, coeff, two_pi_sq, inv_L0_sq, exponent, inv_fm_sq, n::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= n
+        T = eltype(psd)
+        fx = freqs[i]
+        fy = freqs[j]
+        f_sq = fx * fx + fy * fy
+        base = coeff * (two_pi_sq * f_sq + inv_L0_sq)^exponent
+        with_inner = inv_fm_sq == zero(T) ? base : base * exp(-f_sq * inv_fm_sq)
+        @inbounds psd[i, j] = ifelse(i == 1 && j == 1, zero(T), with_inner)
+    end
+end
+
+@kernel function phase_spectrum_kernel!(out, freqs, coeff, two_pi_sq, inv_L0_sq, exponent, n::Int)
+    i = @index(Global, Linear)
+    if i <= n
+        @inbounds out[i] = coeff * (two_pi_sq * (freqs[i] * freqs[i]) + inv_L0_sq)^exponent
+    end
+end
+
+@kernel function phase_covariance_kernel!(out, rho, cst, base, u_scale, n::Int)
+    i = @index(Global, Linear)
+    if i <= n
+        T = eltype(out)
+        @inbounds begin
+            rho_i = rho[i]
+            if rho_i == zero(T)
+                out[i] = base
+            else
+                u = u_scale * rho_i
+                out[i] = cst * _scaled_kv56_scalar(u)
+            end
+        end
+    end
+end
+
+@kernel function add_subharmonics_kernel!(phs, coeff_re, coeff_im, freq_x, freq_y, two_pi, delta_t, offset::Int, n_terms::Int, n::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= n
+        T = eltype(phs)
+        xi = (i - 1 - offset) * delta_t
+        yj = (j - 1 - offset) * delta_t
+        acc = zero(T)
+        @inbounds for k in 1:n_terms
+            phase = two_pi * (freq_x[k] * xi + freq_y[k] * yj)
+            acc += coeff_re[k] * cos(phase) - coeff_im[k] * sin(phase)
+        end
+        @inbounds phs[i, j] += acc
+    end
+end
+
 abstract type SubharmonicMode end
 struct FastSubharmonics <: SubharmonicMode end
 struct FidelitySubharmonics <: SubharmonicMode end
@@ -38,6 +89,25 @@ function PhaseStatsWorkspace(n::Int; T::Type{<:AbstractFloat}=Float64, backend=A
     )
 end
 
+function PhaseStatsWorkspace(ref::AbstractMatrix, n::Int; T::Type{<:AbstractFloat}=eltype(ref))
+    spectrum = similar(ref, Complex{T}, n, n)
+    buffer = similar(spectrum)
+    psd = similar(ref, T, n, n)
+    noise_re = similar(ref, T, n, n)
+    noise_im = similar(ref, T, n, n)
+    freqs = similar(ref, T, n)
+    ifft_plan = plan_ifft_backend!(spectrum)
+    return PhaseStatsWorkspace{T, typeof(spectrum), typeof(psd), typeof(freqs), typeof(ifft_plan)}(
+        spectrum,
+        buffer,
+        psd,
+        noise_re,
+        noise_im,
+        freqs,
+        ifft_plan,
+    )
+end
+
 function phase_variance(r0::Real, L0::Real; cn2::Real=1.0)
     L0r0 = (L0 / r0)^(5 / 3)
     cst = (24 * gamma(6 / 5))^(5 / 6) * (gamma(11 / 6) * gamma(5 / 6)) / (2 * pi^(8 / 3))
@@ -48,7 +118,7 @@ phase_variance(atm::KolmogorovAtmosphere; cn2::Real=1.0) = phase_variance(atm.pa
 phase_variance(atm::MultiLayerAtmosphere; cn2::Real=sum(atm.params.cn2_fractions)) =
     phase_variance(atm.params.r0, atm.params.L0; cn2=cn2)
 
-function phase_covariance(rho::AbstractArray, r0::Real, L0::Real)
+function _phase_covariance_cpu(rho::AbstractArray, r0::Real, L0::Real)
     L0r0 = (L0 / r0)^(5 / 3)
     cst = (24 * gamma(6 / 5) / 5)^(5 / 6) * (gamma(11 / 6) / ((2^(5 / 6)) * pi^(8 / 3))) * L0r0
     base = (24 * gamma(6 / 5) / 5)^(5 / 6) * (gamma(11 / 6) * gamma(5 / 6)) / (2 * pi^(8 / 3)) * L0r0
@@ -59,6 +129,25 @@ function phase_covariance(rho::AbstractArray, r0::Real, L0::Real)
     return out
 end
 
+function phase_covariance(rho::AbstractArray, r0::Real, L0::Real)
+    return _phase_covariance(execution_style(rho), rho, r0, L0)
+end
+
+_phase_covariance(::ScalarCPUStyle, rho::AbstractArray, r0::Real, L0::Real) = _phase_covariance_cpu(rho, r0, L0)
+
+function _phase_covariance(style::AcceleratorStyle, rho::AbstractArray, r0::Real, L0::Real)
+    T = eltype(rho)
+    L0r0 = (T(L0) / T(r0))^(T(5) / T(3))
+    cst = (T(24) * T(gamma(T(6) / T(5))) / T(5))^(T(5) / T(6)) *
+        (T(gamma(T(11) / T(6))) / ((T(2)^(T(5) / T(6))) * T(pi)^(T(8) / T(3)))) * L0r0
+    base = (T(24) * T(gamma(T(6) / T(5))) / T(5))^(T(5) / T(6)) *
+        (T(gamma(T(11) / T(6))) * T(gamma(T(5) / T(6)))) / (T(2) * T(pi)^(T(8) / T(3))) * L0r0
+    out = similar(rho, T, size(rho)...)
+    launch_kernel!(style, phase_covariance_kernel!, out, rho, cst, base, T(2 * pi) / T(L0),
+        length(out); ndrange=length(out))
+    return out
+end
+
 phase_covariance(rho::AbstractArray, atm::KolmogorovAtmosphere) = phase_covariance(rho, atm.params.r0, atm.params.L0)
 
 function phase_spectrum(f::AbstractArray, r0::Real, L0::Real)
@@ -66,10 +155,28 @@ function phase_spectrum(f::AbstractArray, r0::Real, L0::Real)
     coeff = T(0.023) * T(r0)^(-T(5) / T(3))
     inv_L0_sq = inv(T(L0))^2
     two_pi_sq = T(2 * pi)^2
-    return @. coeff * (two_pi_sq * (f^2) + inv_L0_sq)^(-T(11) / T(6))
+    exponent = -T(11) / T(6)
+    out = similar(f, T, size(f)...)
+    _phase_spectrum!(execution_style(out), out, f, coeff, two_pi_sq, inv_L0_sq, exponent)
+    return out
 end
 
 phase_spectrum(f::AbstractArray, atm::KolmogorovAtmosphere) = phase_spectrum(f, atm.params.r0, atm.params.L0)
+
+function _phase_spectrum!(::ScalarCPUStyle, out::AbstractArray{T}, freqs::AbstractArray{T},
+    coeff::T, two_pi_sq::T, inv_L0_sq::T, exponent::T) where {T<:AbstractFloat}
+    @inbounds for i in eachindex(out, freqs)
+        f = freqs[i]
+        out[i] = coeff * (two_pi_sq * (f * f) + inv_L0_sq)^exponent
+    end
+    return out
+end
+
+function _phase_spectrum!(style::AcceleratorStyle, out::AbstractArray{T}, freqs::AbstractArray{T},
+    coeff::T, two_pi_sq::T, inv_L0_sq::T, exponent::T) where {T<:AbstractFloat}
+    launch_kernel!(style, phase_spectrum_kernel!, out, freqs, coeff, two_pi_sq, inv_L0_sq, exponent, length(out); ndrange=length(out))
+    return out
+end
 
 function covariance_matrix(rho1::AbstractVector, rho2::AbstractVector, atm::KolmogorovAtmosphere)
     rho = abs.(rho1 .- transpose(rho2))
@@ -81,23 +188,18 @@ function ft_phase_screen(atm::KolmogorovAtmosphere, n::Int, delta::Real;
     ws::Union{Nothing,PhaseStatsWorkspace}=nothing)
 
     if ws === nothing
-        ws = PhaseStatsWorkspace(n; T=eltype(atm.state.opd))
+        ws = PhaseStatsWorkspace(atm.state.opd, n; T=eltype(atm.state.opd))
     end
     fftfreq!(ws.freqs, n; d=delta)
     T = eltype(ws.psd)
     coeff = T(0.023) * atm.params.r0^(-T(5) / T(3))
-    inv_L0_sq = inv(atm.params.L0)^2
+    inv_L0_sq = inv(T(atm.params.L0))^2
     two_pi_sq = T(2 * pi)^2
     exponent = -T(11) / T(6)
     fm = T(5.92) / T(l0) / T(2 * pi)
     inv_fm_sq = isfinite(fm) && fm > zero(T) ? inv(fm)^2 : zero(T)
 
-    @inbounds for i in 1:n, j in 1:n
-        f = sqrt(ws.freqs[i]^2 + ws.freqs[j]^2)
-        base = coeff * (two_pi_sq * (f^2) + inv_L0_sq)^exponent
-        ws.psd[i, j] = inv_fm_sq == zero(T) ? base : base * exp(-(f^2) * inv_fm_sq)
-    end
-    ws.psd[1, 1] = 0
+    fill_phase_psd!(ws.psd, ws.freqs, coeff, two_pi_sq, inv_L0_sq, exponent, inv_fm_sq, n)
 
     randn_backend!(rng, ws.noise_re)
     randn_backend!(rng, ws.noise_im)
@@ -108,6 +210,29 @@ function ft_phase_screen(atm::KolmogorovAtmosphere, n::Int, delta::Real;
         return phs, ws.psd
     end
     return phs
+end
+
+function fill_phase_psd!(psd::AbstractMatrix{T}, freqs::AbstractVector{T},
+    coeff::T, two_pi_sq::T, inv_L0_sq::T, exponent::T, inv_fm_sq::T, n::Int) where {T<:AbstractFloat}
+    _fill_phase_psd!(execution_style(psd), psd, freqs, coeff, two_pi_sq, inv_L0_sq, exponent, inv_fm_sq, n)
+    return psd
+end
+
+function _fill_phase_psd!(::ScalarCPUStyle, psd::AbstractMatrix{T}, freqs::AbstractVector{T},
+    coeff::T, two_pi_sq::T, inv_L0_sq::T, exponent::T, inv_fm_sq::T, n::Int) where {T<:AbstractFloat}
+    @inbounds for i in 1:n, j in 1:n
+        f_sq = freqs[i]^2 + freqs[j]^2
+        base = coeff * (two_pi_sq * f_sq + inv_L0_sq)^exponent
+        with_inner = inv_fm_sq == zero(T) ? base : base * exp(-f_sq * inv_fm_sq)
+        psd[i, j] = i == 1 && j == 1 ? zero(T) : with_inner
+    end
+    return psd
+end
+
+function _fill_phase_psd!(style::AcceleratorStyle, psd::AbstractMatrix{T}, freqs::AbstractVector{T},
+    coeff::T, two_pi_sq::T, inv_L0_sq::T, exponent::T, inv_fm_sq::T, n::Int) where {T<:AbstractFloat}
+    launch_kernel!(style, phase_screen_psd_kernel!, psd, freqs, coeff, two_pi_sq, inv_L0_sq, exponent, inv_fm_sq, n; ndrange=size(psd))
+    return psd
 end
 
 function ft_sh_phase_screen(atm::KolmogorovAtmosphere, n::Int, delta::Real;
@@ -144,37 +269,83 @@ function add_subharmonics!(phs::AbstractMatrix{T}, r0::Real, L0::Real, delta::Re
     rng::AbstractRNG=Random.default_rng(), n_levels::Int=3, radius::Int=2) where {T<:AbstractFloat}
     n_levels >= 1 || throw(ArgumentError("n_levels must be >= 1"))
     radius >= 1 || throw(ArgumentError("radius must be >= 1"))
-    n = size(phs, 1)
+    return _add_subharmonics!(execution_style(phs), phs, r0, L0, delta, l0; rng=rng, n_levels=n_levels, radius=radius)
+end
+
+function _subharmonic_terms(::Type{T}, n::Int, r0::Real, L0::Real, delta::Real, l0::Real, rng::AbstractRNG,
+    n_levels::Int, radius::Int) where {T<:AbstractFloat}
     base_coeff = T(0.023) * T(r0)^(-T(5) / T(3))
     inv_L0_sq = inv(T(L0))^2
     two_pi_sq = T(2 * pi)^2
     exponent = -T(11) / T(6)
     fm = T(5.92) / T(l0) / T(2 * pi)
     inv_fm_sq = isfinite(fm) && fm > zero(T) ? inv(fm)^2 : zero(T)
-    D = n * delta
-    offset = n ÷ 2
-    delta_t = T(delta)
+    D = T(n) * T(delta)
+    freq_x = T[]
+    freq_y = T[]
+    coeff_re = T[]
+    coeff_im = T[]
     for p in 1:n_levels
-        del_f = 1 / (D * 3^p)
+        del_f = inv(D * T(3^p))
         for fx in -radius:radius, fy in -radius:radius
             if fx == 0 && fy == 0
                 continue
             end
-            f = sqrt((fx * del_f)^2 + (fy * del_f)^2)
+            fx_t = T(fx) * del_f
+            fy_t = T(fy) * del_f
+            f = sqrt(fx_t^2 + fy_t^2)
             psd = base_coeff * (two_pi_sq * (f^2) + inv_L0_sq)^exponent
             if inv_fm_sq != zero(T)
                 psd *= exp(-(f^2) * inv_fm_sq)
             end
             amp = sqrt(psd) * del_f
             sample_coeff = (randn(rng) + im * randn(rng)) * amp
-            @inbounds for i in 1:n, j in 1:n
-                xi = (i - 1 - offset) * delta_t
-                yj = (j - 1 - offset) * delta_t
-                phase = 2 * pi * ((fx * del_f) * xi + (fy * del_f) * yj)
-                phs[i, j] += real(sample_coeff * cis(phase))
-            end
+            push!(freq_x, fx_t)
+            push!(freq_y, fy_t)
+            push!(coeff_re, real(sample_coeff))
+            push!(coeff_im, imag(sample_coeff))
         end
     end
+    return (; freq_x, freq_y, coeff_re, coeff_im)
+end
+
+function _add_subharmonics!(::ScalarCPUStyle, phs::AbstractMatrix{T}, r0::Real, L0::Real, delta::Real, l0::Real;
+    rng::AbstractRNG=Random.default_rng(), n_levels::Int=3, radius::Int=2) where {T<:AbstractFloat}
+    n = size(phs, 1)
+    offset = n ÷ 2
+    delta_t = T(delta)
+    terms = _subharmonic_terms(T, n, r0, L0, delta, l0, rng, n_levels, radius)
+    @inbounds for k in eachindex(terms.freq_x)
+        fx_t = terms.freq_x[k]
+        fy_t = terms.freq_y[k]
+        re = terms.coeff_re[k]
+        im = terms.coeff_im[k]
+        for i in 1:n, j in 1:n
+            xi = (i - 1 - offset) * delta_t
+            yj = (j - 1 - offset) * delta_t
+            phase = T(2 * pi) * (fx_t * xi + fy_t * yj)
+            phs[i, j] += re * cos(phase) - im * sin(phase)
+        end
+    end
+    return phs
+end
+
+function _add_subharmonics!(style::AcceleratorStyle, phs::AbstractMatrix{T}, r0::Real, L0::Real, delta::Real, l0::Real;
+    rng::AbstractRNG=Random.default_rng(), n_levels::Int=3, radius::Int=2) where {T<:AbstractFloat}
+    n = size(phs, 1)
+    terms = _subharmonic_terms(T, n, r0, L0, delta, l0, rng, n_levels, radius)
+    n_terms = length(terms.freq_x)
+    n_terms == 0 && return phs
+    coeff_re = similar(phs, T, n_terms)
+    coeff_im = similar(phs, T, n_terms)
+    freq_x = similar(phs, T, n_terms)
+    freq_y = similar(phs, T, n_terms)
+    copyto!(coeff_re, terms.coeff_re)
+    copyto!(coeff_im, terms.coeff_im)
+    copyto!(freq_x, terms.freq_x)
+    copyto!(freq_y, terms.freq_y)
+    launch_kernel!(style, add_subharmonics_kernel!, phs, coeff_re, coeff_im, freq_x, freq_y,
+        T(2 * pi), T(delta), n ÷ 2, n_terms, n; ndrange=size(phs))
     return phs
 end
 

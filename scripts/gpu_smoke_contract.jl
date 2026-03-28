@@ -67,6 +67,57 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
         return tel.state.opd
     end
 
+    record_gpu_smoke!(failures, "atmosphere_multilayer_step") do
+        atm = MultiLayerAtmosphere(tel;
+            r0=T(0.2),
+            L0=T(25.0),
+            fractional_cn2=T[0.7, 0.3],
+            wind_speed=T[8.0, 4.0],
+            wind_direction=T[0.0, 90.0],
+            altitude=T[0.0, 5000.0],
+            T=T,
+            backend=BackendArray,
+        )
+        advance!(atm, tel; rng=rng)
+        propagate!(atm, tel)
+        @assert atm.state.opd isa BackendArray
+        @assert tel.state.opd isa BackendArray
+        return atm.state.opd
+    end
+
+    record_gpu_smoke!(failures, "atmosphere_phase_helpers") do
+        atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=BackendArray)
+        ws = PhaseStatsWorkspace(tel.params.resolution; T=T, backend=BackendArray)
+        screen, psd = ft_phase_screen(atm, tel.params.resolution, tel.params.diameter / tel.params.resolution;
+            rng=rng, ws=ws, return_psd=true)
+        sh_screen = ft_sh_phase_screen(atm, tel.params.resolution, tel.params.diameter / tel.params.resolution;
+            rng=rng, ws=ws, subharmonics=true, n_levels=2, subharmonic_radius=1)
+        rho = similar(atm.state.opd, T, 4, 4)
+        copyto!(rho, reshape(T[0.0, 0.02, 0.05, 0.1, 0.15, 0.25, 0.4, 0.8, 1.2, 1.6, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0], 4, 4))
+        cov = phase_covariance(rho, atm)
+        freqs = similar(atm.state.freqs, T, 4)
+        copyto!(freqs, T[0.1, 0.2, 0.3, 0.4])
+        covmat = covariance_matrix(freqs, freqs, atm)
+        spectrum = phase_spectrum(freqs, atm)
+        freq_grid = similar(atm.state.opd, T, 2, 2)
+        copyto!(freq_grid, reshape(T[0.1, 0.2, 0.3, 0.4], 2, 2))
+        spectrum_grid = phase_spectrum(freq_grid, atm)
+        @assert screen isa BackendArray
+        @assert psd isa BackendArray
+        @assert sh_screen isa BackendArray
+        @assert cov isa BackendArray
+        @assert covmat isa BackendArray
+        @assert spectrum isa BackendArray
+        @assert spectrum_grid isa BackendArray
+        cov_ref = phase_covariance(Array(rho), atm)
+        covmat_ref = covariance_matrix(Array(freqs), Array(freqs), atm)
+        cov_rel = maximum(abs.(Array(cov) .- cov_ref)) / maximum(abs.(cov_ref))
+        covmat_rel = maximum(abs.(Array(covmat) .- covmat_ref)) / maximum(abs.(covmat_ref))
+        @assert cov_rel < 5e-4
+        @assert covmat_rel < 5e-4
+        return screen
+    end
+
     record_gpu_smoke!(failures, "dm_apply") do
         dm = DeformableMirror(tel; n_act=4, influence_width=0.3, T=T, backend=BackendArray)
         fill!(dm.state.coefs, T(0.05))

@@ -1,3 +1,31 @@
+@kernel function moving_layer_extract_kernel!(out, screen, start_x, start_y, scale, n::Int, m::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= n
+        T = eltype(out)
+        y = start_y + T(i - 1)
+        y0 = floor(Int, y)
+        fy = y - T(y0)
+        wy0 = one(T) - fy
+        iy0 = wrap_index(y0, m)
+        iy1 = wrap_index(y0 + 1, m)
+
+        x = start_x + T(j - 1)
+        x0 = floor(Int, x)
+        fx = x - T(x0)
+        wx0 = one(T) - fx
+        ix0 = wrap_index(x0, m)
+        ix1 = wrap_index(x0 + 1, m)
+
+        @inbounds begin
+            v00 = screen[iy0, ix0]
+            v01 = screen[iy0, ix1]
+            v10 = screen[iy1, ix0]
+            v11 = screen[iy1, ix1]
+            out[i, j] = scale * (wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11))
+        end
+    end
+end
+
 struct MultiLayerParams{T<:AbstractFloat,
     V1<:AbstractVector{T},
     V2<:AbstractVector{T},
@@ -102,17 +130,22 @@ end
 
 @inline wrap_index(i::Int, n::Int) = mod1(i, n)
 
-function extract_shifted_screen!(out::AbstractMatrix{T}, screen::AbstractMatrix{T}, offset_x::T, offset_y::T) where {T<:AbstractFloat}
+function extract_shifted_screen!(out::AbstractMatrix{T}, screen::AbstractMatrix{T}, offset_x::T, offset_y::T, scale::T) where {T<:AbstractFloat}
     n = size(out, 1)
     size(out, 2) == n || throw(DimensionMismatchError("output must be square"))
     m = size(screen, 1)
     size(screen, 2) == m || throw(DimensionMismatchError("screen must be square"))
     m >= n || throw(DimensionMismatchError("screen resolution must be at least as large as the pupil resolution"))
 
-    # Move a finite periodic canvas under the pupil with bilinear subpixel interpolation.
     start_x = T((m - n) / 2 + 1) - offset_x
     start_y = T((m - n) / 2 + 1) - offset_y
+    _extract_shifted_screen!(execution_style(out), out, screen, start_x, start_y, scale, n, m)
+    return out
+end
 
+function _extract_shifted_screen!(::ScalarCPUStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
+    start_x::T, start_y::T, scale::T, n::Int, m::Int) where {T<:AbstractFloat}
+    # Move a finite periodic canvas under the pupil with bilinear subpixel interpolation.
     @inbounds for i in 1:n
         y = start_y + T(i - 1)
         y0 = floor(Int, y)
@@ -133,9 +166,15 @@ function extract_shifted_screen!(out::AbstractMatrix{T}, screen::AbstractMatrix{
             v01 = screen[iy0, ix1]
             v10 = screen[iy1, ix0]
             v11 = screen[iy1, ix1]
-            out[i, j] = wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11)
+            out[i, j] = scale * (wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11))
         end
     end
+    return out
+end
+
+function _extract_shifted_screen!(style::AcceleratorStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
+    start_x::T, start_y::T, scale::T, n::Int, m::Int) where {T<:AbstractFloat}
+    launch_kernel!(style, moving_layer_extract_kernel!, out, screen, start_x, start_y, scale, n, m; ndrange=size(out))
     return out
 end
 
@@ -145,11 +184,8 @@ function sample_layer!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer, tel
     dt = T(tel.params.sampling_time)
     layer.state.offset_x += T(layer.params.wind_velocity_x) * dt / delta
     layer.state.offset_y += T(layer.params.wind_velocity_y) * dt / delta
-    extract_shifted_screen!(out, layer.generator.state.opd, layer.state.offset_x, layer.state.offset_y)
     scale = T(layer.params.amplitude_scale)
-    @inbounds for idx in eachindex(out)
-        out[idx] *= scale
-    end
+    extract_shifted_screen!(out, layer.generator.state.opd, layer.state.offset_x, layer.state.offset_y, scale)
     return out
 end
 
@@ -162,8 +198,6 @@ function MultiLayerAtmosphere(tel::Telescope;
     altitude::AbstractVector,
     T::Type{<:AbstractFloat}=Float64,
     backend=Array)
-
-    backend === Array || throw(UnsupportedAlgorithm("persistent MultiLayerAtmosphere currently supports backend=Array only"))
 
     n_layers = length(fractional_cn2)
     n_layers > 0 || throw(InvalidConfiguration("fractional_cn2 cannot be empty"))
