@@ -1,0 +1,22 @@
+[model]
+label = "shwfs"
+
+[telescope]
+resolution = 480
+
+[sources]
+star_magnitude_vis = 3.0
+star_magnitude_ir = 5.0
+vis_flux_scale = 0.25
+calibration_flux_scale = 0.5
+calibration_magnitude = 1.5
+
+[wfs]
+family = "shack_hartmann"
+n_subap = 16
+threshold = 0.1
+shannon_sampling = true
+
+[detectors]
+wfs = "cblue1"
+science = "cred2"

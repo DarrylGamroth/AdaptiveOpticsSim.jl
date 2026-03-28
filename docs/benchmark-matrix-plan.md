@@ -8,9 +8,9 @@ Status:
     `medium`, and `representative`
   - `scripts/profile_multi_source_multi_wfs_runtime.jl` now supports
     `compact`, `medium`, and `representative`
-  - `scripts/profile_revolt_hil_runtime.jl` now covers a REVOLT-like
-    synthetic pixel-output SH HIL case with a fixed representative
-    configuration and detector-family / detector-response sweeps
+  - `scripts/profile_revolt_hil_runtime.jl` now covers native Julia REVOLT
+    PWFS, unmodulated PWFS, and SHWFS cases with maintained camera metadata
+    and detector-response sweeps
   - `scripts/profile_external_optics_hil.jl` now covers a representative
     external-optics HIL case where AdaptiveOpticsSim owns DM phase generation
     and phase export but not the downstream image formation
@@ -191,15 +191,15 @@ Scale ladder:
 For this family, some representative systems are better modeled as fixed named
 cases instead of generic scale rungs. Two maintained examples now exist:
 
-- `revolt_like_hil`
-  - REVOLT-like synthetic SH HIL benchmark
-  - `277` active commands mapped through a synthetic sparse extrapolation
-    operator
-  - applied onto a synthetic DM277-like `19 x 19` active-actuator layout
-  - benchmark assets live under `benchmarks/assets/revolt_like/`
-  - `16 x 16` subapertures
-  - `22 x 22` ROI
-  - full `352 x 352` pixel output mosaic
+- `revolt_hil`
+  - native Julia REVOLT runtime benchmark family
+  - maintained cases: modulated PWFS, unmodulated PWFS, and SHWFS
+  - shared `16 x 16` DM grid with maintained telescope, atmosphere, and
+    misregistration settings encoded directly in Julia config files
+  - camera metadata maintained directly in Julia for `CBLUE1`, `CRED2`,
+    `iXon`, and `CS165CU`
+  - script reports the actual internal frame shapes produced by the Julia
+    sensing models rather than a separate synthetic detector mosaic
 - `external_optics_hil`
   - external-propagator / PROPER-style proxy
   - `468` active commands mapped onto a `24 x 24` DM grid

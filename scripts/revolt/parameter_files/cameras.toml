@@ -1,0 +1,43 @@
+[cameras.cblue1]
+resolution = 440
+bits = 12
+full_well = 100000.0
+sensor = "cmos"
+qe = 0.74
+dark_current = 0.96
+readout_noise = 2.33
+photon_noise = true
+psf_sampling = 2.0
+
+[cameras.cred2]
+resolution = 480
+bits = 14
+full_well = 33643.0
+sensor = "ingaas"
+qe = 0.80
+dark_current = 334.0
+readout_noise = 25.0
+photon_noise = true
+psf_sampling = 4.0
+
+[cameras.ixon]
+resolution = 128
+bits = 14
+full_well = 16000.0
+sensor = "emccd"
+qe = 0.95
+dark_current = 20.0
+readout_noise = 1.0
+photon_noise = true
+psf_sampling = 2.0
+
+[cameras.cs165cu]
+resolution = 1080
+bits = 10
+full_well = 11000.0
+sensor = "cmos"
+qe = 0.65
+dark_current = 4.0
+readout_noise = 4.0
+photon_noise = true
+psf_sampling = 3.5

@@ -1,0 +1,28 @@
+[model]
+label = "pwfs_modulated"
+
+[telescope]
+resolution = 40
+
+[sources]
+star_magnitude_vis = 5.0
+star_magnitude_ir = 4.5
+vis_flux_scale = 0.5
+calibration_flux_scale = 0.5
+calibration_magnitude = 2.5
+
+[wfs]
+family = "pyramid"
+n_subap = 20
+threshold = 0.1
+modulation = 5.0
+modulation_points = 32
+light_ratio = 0.1
+n_pix_separation = 4
+n_pix_edge = 2
+psf_centering = true
+
+[detectors]
+wfs = "ixon"
+gain = "cs165cu"
+science = "cred2"
