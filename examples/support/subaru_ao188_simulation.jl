@@ -109,7 +109,7 @@ end
 
 abstract type AO188DetectorConfig end
 
-struct AO188WFSDetectorConfig{T<:AbstractFloat,N<:NoiseModel,S<:SensorType,R<:Union{Nothing,FrameResponseModel}} <: AO188DetectorConfig
+struct AO188WFSDetectorConfig{T<:AbstractFloat,N<:NoiseModel,S<:SensorType,R<:Union{Nothing,FrameResponseModel},C<:FrameReadoutCorrectionModel} <: AO188DetectorConfig
     integration_time::T
     qe::T
     psf_sampling::Int
@@ -119,6 +119,7 @@ struct AO188WFSDetectorConfig{T<:AbstractFloat,N<:NoiseModel,S<:SensorType,R<:Un
     noise::N
     sensor::S
     response_model::R
+    correction_model::C
 end
 
 function AO188WFSDetectorConfig(;
@@ -132,8 +133,9 @@ function AO188WFSDetectorConfig(;
     noise::NoiseModel=NoisePhotonReadout(0.3),
     sensor::SensorType=CCDSensor(),
     response_model::Union{Nothing,FrameResponseModel}=nothing,
+    correction_model::FrameReadoutCorrectionModel=NullFrameReadoutCorrection(),
 )
-    return AO188WFSDetectorConfig{T,typeof(convert_noise(noise, T)),typeof(sensor),typeof(response_model)}(
+    return AO188WFSDetectorConfig{T,typeof(convert_noise(noise, T)),typeof(sensor),typeof(response_model),typeof(correction_model)}(
         T(integration_time),
         T(qe),
         psf_sampling,
@@ -143,6 +145,7 @@ function AO188WFSDetectorConfig(;
         convert_noise(validate_noise(noise), T),
         sensor,
         response_model,
+        correction_model,
     )
 end
 
@@ -191,6 +194,7 @@ function detector_from_config(cfg::AO188WFSDetectorConfig{T}; backend=Array) whe
         dark_current=cfg.dark_current,
         sensor=cfg.sensor,
         response_model=cfg.response_model,
+        correction_model=cfg.correction_model,
         T=T,
         backend=backend,
     )

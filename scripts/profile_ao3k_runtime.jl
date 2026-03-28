@@ -4,6 +4,8 @@ using Random
 const _backend_arg = isempty(ARGS) ? "cpu" : lowercase(ARGS[1])
 const _scale_arg = length(ARGS) >= 2 ? lowercase(ARGS[2]) : "medium"
 const _response_arg = length(ARGS) >= 3 ? lowercase(ARGS[3]) : "default"
+const _sampling_arg = length(ARGS) >= 4 ? lowercase(ARGS[4]) : "default"
+const _correction_arg = length(ARGS) >= 5 ? lowercase(ARGS[5]) : "default"
 
 if _backend_arg == "cuda"
     import CUDA
@@ -68,6 +70,26 @@ function _resolve_response(name::AbstractString)
     error("unsupported response mode '$name'; use default or null")
 end
 
+function _resolve_sampling(name::AbstractString, T::Type{<:AbstractFloat})
+    lowered = lowercase(name)
+    lowered == "default" && return SAPHIRASensor(read_time=T(2.5e-4), sampling_mode=CorrelatedDoubleSampling(), T=T), "cds"
+    lowered == "single" && return SAPHIRASensor(read_time=T(2.5e-4), sampling_mode=SingleRead(), T=T), "single"
+    lowered == "ndr4" && return SAPHIRASensor(read_time=T(2.5e-4), sampling_mode=AveragedNonDestructiveReads(4), T=T), "ndr4"
+    lowered == "cds" && return SAPHIRASensor(read_time=T(2.5e-4), sampling_mode=CorrelatedDoubleSampling(), T=T), "cds"
+    lowered == "fowler8" && return SAPHIRASensor(read_time=T(2.5e-4), sampling_mode=FowlerSampling(8), T=T), "fowler8"
+    error("unsupported sampling mode '$name'; use default, single, ndr4, cds, or fowler8")
+end
+
+function _resolve_correction(name::AbstractString)
+    lowered = lowercase(name)
+    lowered == "default" && return ReferencePixelCommonModeCorrection(4, 4), "reference_pixel"
+    lowered == "none" && return NullFrameReadoutCorrection(), "none"
+    lowered == "row" && return ReferenceRowCommonModeCorrection(4), "row"
+    lowered == "column" && return ReferenceColumnCommonModeCorrection(4), "column"
+    lowered == "output" && return ReferenceOutputCommonModeCorrection(32; edge_rows=4, edge_cols=4), "output"
+    error("unsupported correction mode '$name'; use default, none, row, column, or output")
+end
+
 function _ao3k_scale_params(scale_name::AbstractString)
     scale = _resolve_scale(scale_name)
     if scale == "compact"
@@ -116,10 +138,13 @@ function _allocated_bytes(f!::F; warmup::Int=2, gc_before::Bool=true) where {F<:
 end
 
 function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractString="medium",
-    response_name::AbstractString="default", samples::Union{Int,Nothing}=nothing,
+    response_name::AbstractString="default", sampling_name::AbstractString="default",
+    correction_name::AbstractString="default", samples::Union{Int,Nothing}=nothing,
     warmup::Union{Int,Nothing}=nothing)
     BackendArray, backend_tag, backend_label = _resolve_backend(backend_name)
     response_model, response_label = _resolve_response(response_name)
+    sensor, sampling_label = _resolve_sampling(sampling_name, Float32)
+    correction_model, correction_label = _resolve_correction(correction_name)
     cfg = _ao3k_scale_params(scale_name)
     resolved_samples = something(samples, cfg.samples)
     resolved_warmup = something(warmup, cfg.warmup)
@@ -132,9 +157,10 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
         binning=1,
         gain=1.0,
         dark_current=0.0,
-        noise=NoisePhotonReadout(0.1),
-        sensor=CMOSSensor(),
+        noise=NoiseReadout(0.1),
+        sensor=sensor,
         response_model=response_model,
+        correction_model=correction_model,
     ))
 
     t0 = time_ns()
@@ -156,11 +182,21 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     high_metadata, low_metadata = simulation_wfs_metadata(simulation)
     high_frame, low_frame = simulation_wfs_frame(simulation)
     high_slopes, low_slopes = simulation_slopes(simulation)
+    high_detector = simulation.high_detector
+    high_reference_frame = isnothing(high_detector) ? nothing : detector_reference_frame(high_detector)
+    high_signal_frame = isnothing(high_detector) ? nothing : detector_signal_frame(high_detector)
+    high_combined_frame = isnothing(high_detector) ? nothing : detector_combined_frame(high_detector)
+    high_reference_cube = isnothing(high_detector) ? nothing : detector_reference_cube(high_detector)
+    high_signal_cube = isnothing(high_detector) ? nothing : detector_signal_cube(high_detector)
+    high_read_cube = isnothing(high_detector) ? nothing : detector_read_cube(high_detector)
+    high_read_times = isnothing(high_detector) ? nothing : detector_read_times(high_detector)
 
     println("ao3k_runtime_profile")
     println("  backend: ", backend_label)
     println("  scale: ", cfg.scale)
     println("  response_mode: ", response_label)
+    println("  sampling_mode: ", sampling_label)
+    println("  correction_mode: ", correction_label)
     println("  build_time_ns: ", build_time_ns)
     println("  runtime_step_mean_ns: ", timing.mean_ns)
     println("  runtime_step_p95_ns: ", timing.p95_ns)
@@ -184,7 +220,18 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     println("  command_length: ", length(simulation_command(simulation)))
     println("  high_response_family: ", isnothing(high_metadata) ? nothing : high_metadata.frame_response)
     println("  low_response_family: ", isnothing(low_metadata) ? nothing : low_metadata.frame_response)
+    println("  high_sensor: ", isnothing(high_metadata) ? nothing : high_metadata.sensor)
+    println("  high_sampling_mode: ", isnothing(high_metadata) ? nothing : high_metadata.sampling_mode)
+    println("  high_readout_correction: ", isnothing(high_metadata) ? nothing : high_metadata.readout_correction)
+    println("  high_reference_frame_shape: ", isnothing(high_reference_frame) ? nothing : size(high_reference_frame))
+    println("  high_signal_frame_shape: ", isnothing(high_signal_frame) ? nothing : size(high_signal_frame))
+    println("  high_combined_frame_shape: ", isnothing(high_combined_frame) ? nothing : size(high_combined_frame))
+    println("  high_reference_cube_shape: ", isnothing(high_reference_cube) ? nothing : size(high_reference_cube))
+    println("  high_signal_cube_shape: ", isnothing(high_signal_cube) ? nothing : size(high_signal_cube))
+    println("  high_read_cube_shape: ", isnothing(high_read_cube) ? nothing : size(high_read_cube))
+    println("  high_read_times_length: ", isnothing(high_read_times) ? nothing : length(high_read_times))
     return nothing
 end
 
-run_profile(; backend_name=_backend_arg, scale_name=_scale_arg, response_name=_response_arg)
+run_profile(; backend_name=_backend_arg, scale_name=_scale_arg, response_name=_response_arg,
+    sampling_name=_sampling_arg, correction_name=_correction_arg)

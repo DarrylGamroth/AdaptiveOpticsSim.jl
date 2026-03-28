@@ -27,8 +27,9 @@ function AO3kSimulationParams(; kwargs...)
         binning=1,
         gain=1.0,
         dark_current=0.0,
-        noise=NoisePhotonReadout(0.1),
-        sensor=CMOSSensor(),
+        noise=NoiseReadout(0.1),
+        sensor=SAPHIRASensor(read_time=sampling / 4, sampling_mode=CorrelatedDoubleSampling(), T=T0),
+        correction_model=ReferencePixelCommonModeCorrection(4, 4),
     ))
     rest = Base.structdiff(nt, (; source_band=nothing, n_control_modes=nothing, n_subap=nothing,
         resolution=nothing, source_magnitude=nothing, high_order_sensor_model=nothing, high_detector=nothing))

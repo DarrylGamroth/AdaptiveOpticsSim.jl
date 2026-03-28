@@ -227,19 +227,26 @@ Interpretation:
 Current warmed AO3k medium runtime snapshot on this host:
 
 - CPU on this host
-  - `default` high-detector response: about `45.5 Hz`
-  - `null` high-detector response: about `41.9 Hz`
-  - both at `runtime_alloc_bytes = 32`
-  - dimensions:
-    - pupil `160`
-    - high-order subapertures `32`
-    - high-order frame `(64, 64)`
-    - high-order slopes `2048`
-    - control modes `1024`
-- AMDGPU on this host
-  - `default` high-detector response: about `166.6 Hz`
-  - `null` high-detector response: about `169.6 Hz`
-  - `runtime_alloc_bytes`: about `356136` (`default`), `350824` (`null`)
+  - `default` SAPHIRA high-detector path
+    - response: sampled default
+    - sampling: CDS
+    - correction: reference-pixel
+    - about `48.7 Hz`
+    - `runtime_alloc_bytes`: about `263536`
+    - high-order products:
+      - reference frame `(64, 64)`
+      - signal frame `(64, 64)`
+      - combined frame `(64, 64)`
+      - reference cube `(64, 64, 1)`
+      - signal cube `(64, 64, 1)`
+      - read cube `(64, 64, 2)`
+  - `null` + `Fowler(8)` + output correction
+    - about `27.0 Hz`
+    - `runtime_alloc_bytes`: about `1181104`
+    - high-order products:
+      - reference cube `(64, 64, 8)`
+      - signal cube `(64, 64, 8)`
+      - read cube `(64, 64, 16)`
   - dimensions:
     - pupil `160`
     - high-order subapertures `32`
@@ -250,10 +257,13 @@ Current warmed AO3k medium runtime snapshot on this host:
 Interpretation:
 
 - the new AO3k profiler is now in place on a maintained system surface that
-  actually uses the CMOS default detector-response path,
-- the first CPU and AMDGPU snapshots both show the detector-response toggle is
-  not a dominant cost on this larger AO3k pyramid runtime surface,
-- AMDGPU is materially ahead of CPU on this maintained AO3k medium rung.
+  now actually uses the SAPHIRA/HgCdTe detector family rather than a generic
+  frame-detector proxy,
+- the maintained AO3k medium rung now exposes the explicit HgCdTe readout
+  products and readout-correction surface at the profiler level,
+- heavier SAPHIRA sampling and correction modes materially increase both
+  runtime and allocations, so those surfaces are now visible to the benchmark
+  matrix instead of being hidden inside detector internals.
 
 ## Initial Runtime Ladder Snapshot
 

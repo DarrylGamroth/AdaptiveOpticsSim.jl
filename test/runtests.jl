@@ -710,8 +710,16 @@ end
     )
     ao3k_sim = subaru_ao3k_simulation(; params=ao3k_params, rng=MersenneTwister(5))
     @test ao3k_sim.high_wfs isa PyramidWFS
+    @test ao3k_sim.high_detector isa Detector
+    @test ao3k_sim.high_detector.params.sensor isa SAPHIRASensor
     step!(ao3k_sim)
     @test length(ao3k_sim.command) == ao3k_params.n_act^2
+    ao3k_iface = simulation_interface(ao3k_sim)
+    ao3k_high_meta = simulation_wfs_metadata(ao3k_iface)[1]
+    @test ao3k_high_meta.sensor == :saphira
+    @test ao3k_high_meta.provides_combined_frame
+    @test ao3k_high_meta.provides_reference_frame
+    @test ao3k_high_meta.provides_signal_frame
 end
 
 function closed_loop_runtime_allocations()

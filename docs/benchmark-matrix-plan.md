@@ -15,7 +15,8 @@ Status:
     external-optics HIL case where AdaptiveOpticsSim owns DM phase generation
     and phase export but not the downstream image formation
   - `scripts/profile_ao3k_runtime.jl` now covers the maintained AO3k pyramid
-    runtime surface with `default` vs `null` detector-response sweeps
+    runtime surface with detector-response, SAPHIRA sampling-mode, and
+    readout-correction sweeps
 - [ ] representative closed-loop and builder ladders are still pending beyond
   these first runtime surfaces
 
