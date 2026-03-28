@@ -1,0 +1,23 @@
+[telescope]
+diameter = 1.22
+resolution = 480
+sampling_time = 0.002
+central_obstruction = 0.0
+
+[atmosphere]
+r0 = 0.15
+L0 = 30.0
+fractional_r0 = [0.45, 0.10, 0.10, 0.25, 0.10]
+wind_speed = [5.0, 5.0, 7.0, 10.0, 10.0]
+wind_direction = [0.0, 72.0, 144.0, 216.0, 288.0]
+altitude = [0.0, 1000.0, 5000.0, 10000.0, 12000.0]
+
+[dm]
+n_act = 16
+influence_width = 0.35
+shift_x_px = 0.006
+shift_y_px = -0.003
+rotation_deg = 0.69
+anamorphosis_angle = 0.0
+radial_scaling = 0.951
+tangential_scaling = 0.959
