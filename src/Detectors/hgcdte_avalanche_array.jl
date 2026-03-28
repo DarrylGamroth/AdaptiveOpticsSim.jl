@@ -10,7 +10,7 @@ struct FowlerSampling <: FrameSamplingMode
     n_pairs::Int
 end
 
-struct SAPHIRASensor{T<:AbstractFloat,M<:FrameSamplingMode} <: HgCdTeAvalancheArraySensorType
+struct HgCdTeAvalancheArraySensor{T<:AbstractFloat,M<:FrameSamplingMode} <: HgCdTeAvalancheArraySensorType
     avalanche_gain::T
     excess_noise_factor::T
     glow_rate::T
@@ -18,20 +18,20 @@ struct SAPHIRASensor{T<:AbstractFloat,M<:FrameSamplingMode} <: HgCdTeAvalancheAr
     sampling_mode::M
 end
 
-function SAPHIRASensor(; avalanche_gain::Real=1.0, excess_noise_factor::Real=1.0,
+function HgCdTeAvalancheArraySensor(; avalanche_gain::Real=1.0, excess_noise_factor::Real=1.0,
     glow_rate::Real=0.0, read_time::Real=0.0, sampling_mode::FrameSamplingMode=SingleRead(),
     T::Type{<:AbstractFloat}=Float64)
-    avalanche_gain >= 1 || throw(InvalidConfiguration("SAPHIRASensor avalanche_gain must be >= 1"))
-    excess_noise_factor >= 1 || throw(InvalidConfiguration("SAPHIRASensor excess_noise_factor must be >= 1"))
-    glow_rate >= 0 || throw(InvalidConfiguration("SAPHIRASensor glow_rate must be >= 0"))
-    read_time >= 0 || throw(InvalidConfiguration("SAPHIRASensor read_time must be >= 0"))
+    avalanche_gain >= 1 || throw(InvalidConfiguration("HgCdTeAvalancheArraySensor avalanche_gain must be >= 1"))
+    excess_noise_factor >= 1 || throw(InvalidConfiguration("HgCdTeAvalancheArraySensor excess_noise_factor must be >= 1"))
+    glow_rate >= 0 || throw(InvalidConfiguration("HgCdTeAvalancheArraySensor glow_rate must be >= 0"))
+    read_time >= 0 || throw(InvalidConfiguration("HgCdTeAvalancheArraySensor read_time must be >= 0"))
     validate_frame_sampling_mode(sampling_mode)
-    return SAPHIRASensor{T,typeof(sampling_mode)}(
+    return HgCdTeAvalancheArraySensor{T,typeof(sampling_mode)}(
         T(avalanche_gain), T(excess_noise_factor), T(glow_rate), T(read_time), sampling_mode)
 end
 
-detector_sensor_symbol(::SAPHIRASensor) = :saphira
-supports_sensor_glow(::SAPHIRASensor) = true
+detector_sensor_symbol(::HgCdTeAvalancheArraySensor) = :hgcdte_avalanche_array
+supports_sensor_glow(::HgCdTeAvalancheArraySensor) = true
 supports_nondestructive_reads(::HgCdTeAvalancheArraySensorType) = true
 supports_reference_read_subtraction(::HgCdTeAvalancheArraySensorType) = true
 supports_readout_correction(::HgCdTeAvalancheArraySensorType) = true
@@ -41,27 +41,27 @@ frame_sampling_symbol(::SingleRead) = :single_read
 frame_sampling_symbol(::AveragedNonDestructiveReads) = :averaged_non_destructive_reads
 frame_sampling_symbol(::CorrelatedDoubleSampling) = :correlated_double_sampling
 frame_sampling_symbol(::FowlerSampling) = :fowler_sampling
-frame_sampling_symbol(sensor::SAPHIRASensor) = frame_sampling_symbol(sensor.sampling_mode)
+frame_sampling_symbol(sensor::HgCdTeAvalancheArraySensor) = frame_sampling_symbol(sensor.sampling_mode)
 
-frame_sampling_reads(sensor::SAPHIRASensor) = frame_sampling_reads(sensor.sampling_mode)
+frame_sampling_reads(sensor::HgCdTeAvalancheArraySensor) = frame_sampling_reads(sensor.sampling_mode)
 frame_sampling_reads(::SingleRead) = 1
 frame_sampling_reads(mode::AveragedNonDestructiveReads) = mode.n_reads
 frame_sampling_reads(::CorrelatedDoubleSampling) = 2
 frame_sampling_reads(mode::FowlerSampling) = 2 * mode.n_pairs
 
-frame_sampling_reference_reads(sensor::SAPHIRASensor) = frame_sampling_reference_reads(sensor.sampling_mode)
+frame_sampling_reference_reads(sensor::HgCdTeAvalancheArraySensor) = frame_sampling_reference_reads(sensor.sampling_mode)
 frame_sampling_reference_reads(::SingleRead) = 0
 frame_sampling_reference_reads(::AveragedNonDestructiveReads) = 0
 frame_sampling_reference_reads(::CorrelatedDoubleSampling) = 1
 frame_sampling_reference_reads(mode::FowlerSampling) = mode.n_pairs
 
-frame_sampling_signal_reads(sensor::SAPHIRASensor) = frame_sampling_signal_reads(sensor.sampling_mode)
+frame_sampling_signal_reads(sensor::HgCdTeAvalancheArraySensor) = frame_sampling_signal_reads(sensor.sampling_mode)
 frame_sampling_signal_reads(::SingleRead) = 1
 frame_sampling_signal_reads(mode::AveragedNonDestructiveReads) = mode.n_reads
 frame_sampling_signal_reads(::CorrelatedDoubleSampling) = 1
 frame_sampling_signal_reads(mode::FowlerSampling) = mode.n_pairs
 
-sampling_read_time(sensor::SAPHIRASensor, ::Type{T}) where {T<:AbstractFloat} = T(sensor.read_time)
+sampling_read_time(sensor::HgCdTeAvalancheArraySensor, ::Type{T}) where {T<:AbstractFloat} = T(sensor.read_time)
 
 function _window_row_fraction(frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat}
     window === nothing && return one(T)
@@ -70,17 +70,17 @@ function _window_row_fraction(frame_size::Tuple{Int,Int}, window::Union{Nothing,
     return T(active_rows / total_rows)
 end
 
-function sampling_read_time(sensor::SAPHIRASensor, frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat}
+function sampling_read_time(sensor::HgCdTeAvalancheArraySensor, frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat}
     return T(sensor.read_time) * _window_row_fraction(frame_size, window, T)
 end
 
-function sampling_wallclock_time(sensor::SAPHIRASensor, integration_time, ::Type{T}) where {T<:AbstractFloat}
+function sampling_wallclock_time(sensor::HgCdTeAvalancheArraySensor, integration_time, ::Type{T}) where {T<:AbstractFloat}
     reads = frame_sampling_reads(sensor)
     reads === nothing && return nothing
     return T(integration_time) + T(reads) * T(sensor.read_time)
 end
 
-function sampling_wallclock_time(sensor::SAPHIRASensor, integration_time, frame_size::Tuple{Int,Int},
+function sampling_wallclock_time(sensor::HgCdTeAvalancheArraySensor, integration_time, frame_size::Tuple{Int,Int},
     window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat}
     reads = frame_sampling_reads(sensor)
     reads === nothing && return T(integration_time)
@@ -117,13 +117,13 @@ function validate_frame_sampling_mode(mode::FowlerSampling)
     return mode
 end
 
-function sensor_saturation_limit(sensor::SAPHIRASensor, det::Detector)
+function sensor_saturation_limit(sensor::HgCdTeAvalancheArraySensor, det::Detector)
     full_well = det.params.full_well
     full_well === nothing && return nothing
     return full_well / sensor.avalanche_gain
 end
 
-function apply_sensor_statistics!(sensor::SAPHIRASensor, det::Detector, rng::AbstractRNG)
+function apply_sensor_statistics!(sensor::HgCdTeAvalancheArraySensor, det::Detector, rng::AbstractRNG)
     rate = sensor.glow_rate * effective_sensor_glow_time(sensor, det.params.integration_time)
     if rate > zero(rate)
         fill!(det.state.noise_buffer, rate)
@@ -133,19 +133,19 @@ function apply_sensor_statistics!(sensor::SAPHIRASensor, det::Detector, rng::Abs
     return apply_avalanche_excess_noise!(sensor.excess_noise_factor, det, rng)
 end
 
-function apply_pre_readout_gain!(sensor::SAPHIRASensor, det::Detector)
+function apply_pre_readout_gain!(sensor::HgCdTeAvalancheArraySensor, det::Detector)
     det.state.frame .*= sensor.avalanche_gain
     return det.state.frame
 end
 
-function apply_post_readout_gain!(::SAPHIRASensor, det::Detector)
+function apply_post_readout_gain!(::HgCdTeAvalancheArraySensor, det::Detector)
     det.state.frame .*= det.params.gain
     return det.state.frame
 end
 
-_batched_pre_readout_gain!(sensor::SAPHIRASensor, det::Detector, cube::AbstractArray) = (cube .*= sensor.avalanche_gain; cube)
+_batched_pre_readout_gain!(sensor::HgCdTeAvalancheArraySensor, det::Detector, cube::AbstractArray) = (cube .*= sensor.avalanche_gain; cube)
 
-function _batched_sensor_statistics!(sensor::SAPHIRASensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
+function _batched_sensor_statistics!(sensor::HgCdTeAvalancheArraySensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
     rate = sensor.glow_rate * effective_sensor_glow_time(sensor, det.params.integration_time)
     if rate > zero(rate)
         fill!(scratch, rate)
@@ -155,9 +155,9 @@ function _batched_sensor_statistics!(sensor::SAPHIRASensor, det::Detector, cube:
     return _batched_avalanche_excess_noise!(sensor.excess_noise_factor, cube, scratch, rng)
 end
 
-_batched_post_readout_gain!(::SAPHIRASensor, det::Detector, cube::AbstractArray) = (cube .*= det.params.gain; cube)
+_batched_post_readout_gain!(::HgCdTeAvalancheArraySensor, det::Detector, cube::AbstractArray) = (cube .*= det.params.gain; cube)
 
-function _sample_frame_read!(sensor::SAPHIRASensor, det::Detector, target::AbstractMatrix, baseline::AbstractMatrix,
+function _sample_frame_read!(sensor::HgCdTeAvalancheArraySensor, det::Detector, target::AbstractMatrix, baseline::AbstractMatrix,
     sigma, rng::AbstractRNG)
     copyto!(target, baseline)
     if sigma > zero(sigma)
@@ -179,7 +179,7 @@ end
 
 _raw_sampling_sigma(det::Detector) = zero(eltype(det.state.frame))
 
-function _sampling_average_sigma(sensor::SAPHIRASensor, reads::Int, sigma)
+function _sampling_average_sigma(sensor::HgCdTeAvalancheArraySensor, reads::Int, sigma)
     reads <= 0 && return zero(sigma)
     return sigma / sqrt(reads)
 end
@@ -195,7 +195,7 @@ function _sampling_average_cube(cube::AbstractArray{T,3}) where {T}
     return out
 end
 
-function _sampling_reference_cube(sensor::SAPHIRASensor, det::Detector, sigma, rng::AbstractRNG)
+function _sampling_reference_cube(sensor::HgCdTeAvalancheArraySensor, det::Detector, sigma, rng::AbstractRNG)
     n_ref = frame_sampling_reference_reads(sensor)
     n_ref <= 0 && return nothing
     cube = similar(det.state.frame, size(det.state.frame)..., n_ref)
@@ -208,7 +208,7 @@ function _sampling_reference_cube(sensor::SAPHIRASensor, det::Detector, sigma, r
     return cube
 end
 
-function _sampling_signal_cube(sensor::SAPHIRASensor, det::Detector, sigma, rng::AbstractRNG)
+function _sampling_signal_cube(sensor::HgCdTeAvalancheArraySensor, det::Detector, sigma, rng::AbstractRNG)
     n_sig = frame_sampling_signal_reads(sensor)
     cube = similar(det.state.frame, size(det.state.frame)..., n_sig)
     baseline = similar(det.state.frame, size(det.state.frame)...)
@@ -219,7 +219,7 @@ function _sampling_signal_cube(sensor::SAPHIRASensor, det::Detector, sigma, rng:
     return cube
 end
 
-function _sampling_read_cube(sensor::SAPHIRASensor, reference_cube::Union{Nothing,AbstractArray{T,3}},
+function _sampling_read_cube(sensor::HgCdTeAvalancheArraySensor, reference_cube::Union{Nothing,AbstractArray{T,3}},
     signal_cube::AbstractArray{T,3}) where {T}
     n_reads = frame_sampling_reads(sensor)
     n_reads <= 1 && return nothing
@@ -237,7 +237,7 @@ function _sampling_read_cube(sensor::SAPHIRASensor, reference_cube::Union{Nothin
     return cube
 end
 
-function _sampling_read_times(sensor::SAPHIRASensor, det::Detector, n_reads::Int)
+function _sampling_read_times(sensor::HgCdTeAvalancheArraySensor, det::Detector, n_reads::Int)
     n_reads <= 0 && return nothing
     T = eltype(det.state.frame)
     read_dt = sampling_read_time(sensor, size(det.state.frame), det.params.readout_window, T)
@@ -248,7 +248,7 @@ function _sampling_read_times(sensor::SAPHIRASensor, det::Detector, n_reads::Int
     return times
 end
 
-function finalize_readout_products!(sensor::SAPHIRASensor, det::Detector, rng::AbstractRNG, exposure_time::Real)
+function finalize_readout_products!(sensor::HgCdTeAvalancheArraySensor, det::Detector, rng::AbstractRNG, exposure_time::Real)
     sigma = _raw_sampling_sigma(det)
     reference_cube_full = _sampling_reference_cube(sensor, det, sigma, rng)
     signal_cube_full = _sampling_signal_cube(sensor, det, sigma, rng)
@@ -268,7 +268,7 @@ function finalize_readout_products!(sensor::SAPHIRASensor, det::Detector, rng::A
     return det.state.readout_products
 end
 
-function finalize_capture!(det::Detector{N,<:DetectorParams{T,<:SAPHIRASensor},S,BF,BM},
+function finalize_capture!(det::Detector{N,<:DetectorParams{T,<:HgCdTeAvalancheArraySensor},S,BF,BM},
     rng::AbstractRNG, exposure_time::Real) where {N,T,S,BF,BM}
     apply_dark_current!(det, rng, exposure_time)
     apply_saturation!(det)

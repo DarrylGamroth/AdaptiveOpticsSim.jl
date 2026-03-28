@@ -180,7 +180,7 @@ once more physical models exist.
   - CMOS
   - EMCCD
   - InGaAs
-  - SAPHIRA
+  - HgCdTe avalanche arrays
 - Keep this as capability-based policy, not one universal detector flag set.
 
 ## Testing Requirements

@@ -28,7 +28,7 @@ function AO3kSimulationParams(; kwargs...)
         gain=1.0,
         dark_current=0.0,
         noise=NoiseReadout(0.1),
-        sensor=SAPHIRASensor(read_time=sampling / 4, sampling_mode=CorrelatedDoubleSampling(), T=T0),
+        sensor=HgCdTeAvalancheArraySensor(read_time=sampling / 4, sampling_mode=CorrelatedDoubleSampling(), T=T0),
         correction_model=ReferencePixelCommonModeCorrection(4, 4),
     ))
     rest = Base.structdiff(nt, (; source_band=nothing, n_control_modes=nothing, n_subap=nothing,

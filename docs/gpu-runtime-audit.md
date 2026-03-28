@@ -227,7 +227,7 @@ Interpretation:
 Current warmed AO3k medium runtime snapshot on this host:
 
 - CPU on this host
-  - `default` SAPHIRA high-detector path
+  - `default` HgCdTe avalanche-array high-detector path
     - response: sampled default
     - sampling: CDS
     - correction: reference-pixel
@@ -257,11 +257,11 @@ Current warmed AO3k medium runtime snapshot on this host:
 Interpretation:
 
 - the new AO3k profiler is now in place on a maintained system surface that
-  now actually uses the SAPHIRA/HgCdTe detector family rather than a generic
+  now actually uses the HgCdTe avalanche-array detector family rather than a generic
   frame-detector proxy,
 - the maintained AO3k medium rung now exposes the explicit HgCdTe readout
   products and readout-correction surface at the profiler level,
-- heavier SAPHIRA sampling and correction modes materially increase both
+- heavier HgCdTe-array sampling and correction modes materially increase both
   runtime and allocations, so those surfaces are now visible to the benchmark
   matrix instead of being hidden inside detector internals.
 

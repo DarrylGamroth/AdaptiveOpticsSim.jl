@@ -72,11 +72,11 @@ end
 
 function _resolve_sampling(name::AbstractString, T::Type{<:AbstractFloat})
     lowered = lowercase(name)
-    lowered == "default" && return SAPHIRASensor(read_time=T(2.5e-4), sampling_mode=CorrelatedDoubleSampling(), T=T), "cds"
-    lowered == "single" && return SAPHIRASensor(read_time=T(2.5e-4), sampling_mode=SingleRead(), T=T), "single"
-    lowered == "ndr4" && return SAPHIRASensor(read_time=T(2.5e-4), sampling_mode=AveragedNonDestructiveReads(4), T=T), "ndr4"
-    lowered == "cds" && return SAPHIRASensor(read_time=T(2.5e-4), sampling_mode=CorrelatedDoubleSampling(), T=T), "cds"
-    lowered == "fowler8" && return SAPHIRASensor(read_time=T(2.5e-4), sampling_mode=FowlerSampling(8), T=T), "fowler8"
+    lowered == "default" && return HgCdTeAvalancheArraySensor(read_time=T(2.5e-4), sampling_mode=CorrelatedDoubleSampling(), T=T), "cds"
+    lowered == "single" && return HgCdTeAvalancheArraySensor(read_time=T(2.5e-4), sampling_mode=SingleRead(), T=T), "single"
+    lowered == "ndr4" && return HgCdTeAvalancheArraySensor(read_time=T(2.5e-4), sampling_mode=AveragedNonDestructiveReads(4), T=T), "ndr4"
+    lowered == "cds" && return HgCdTeAvalancheArraySensor(read_time=T(2.5e-4), sampling_mode=CorrelatedDoubleSampling(), T=T), "cds"
+    lowered == "fowler8" && return HgCdTeAvalancheArraySensor(read_time=T(2.5e-4), sampling_mode=FowlerSampling(8), T=T), "fowler8"
     error("unsupported sampling mode '$name'; use default, single, ndr4, cds, or fowler8")
 end
 

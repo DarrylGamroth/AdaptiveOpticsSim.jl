@@ -128,7 +128,7 @@ export response_family, response_application_domain, response_support
 export is_shift_invariant, supports_frequency_domain_application, supports_separable_application, supports_subpixel_geometry
 export default_response_model
 export SensorType, FrameSensorType, CountingSensorType, AvalancheFrameSensorType, HgCdTeAvalancheArraySensorType
-export CCDSensor, CMOSSensor, EMCCDSensor, InGaAsSensor, SAPHIRASensor, APDSensor
+export CCDSensor, CMOSSensor, EMCCDSensor, InGaAsSensor, HgCdTeAvalancheArraySensor, APDSensor
 export ShackHartmann, ShackHartmannParams, ShackHartmannState, update_valid_mask!, measure!
 export PyramidWFS, PyramidParams, PyramidState
 export pyramid_modulation_frame!

@@ -58,7 +58,7 @@ than by source file.
 - `SensorType`, `FrameSensorType`, `CountingSensorType`, `CCDSensor`,
   `CMOSSensor`, `AvalancheFrameSensorType`,
   `HgCdTeAvalancheArraySensorType`, `EMCCDSensor`, `InGaAsSensor`,
-  `SAPHIRASensor`, `APDSensor`
+  `HgCdTeAvalancheArraySensor`, `APDSensor`
 - `DeformableMirror`, `DeformableMirrorParams`, `DeformableMirrorState`,
   `build_influence_functions!`, `apply!`
 - `Misregistration`, `apply_misregistration`
@@ -213,13 +213,13 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   `default_response_model(sensor; ...)`:
   `CCDSensor` and `EMCCDSensor` keep the null response by default,
   `CMOSSensor` and `InGaAsSensor` use a mild Gaussian response,
-  and `SAPHIRASensor` uses a mild sampled-kernel response.
+  and `HgCdTeAvalancheArraySensor` uses a mild sampled-kernel response.
 - Detector export metadata now records response family, application domain,
   separability, shift invariance, support, pitch, fill factor, and aperture
   shape, rather than only one response-width scalar.
 - `FrameWindow(rows, cols)` is a generic frame-readout crop that applies to the
   detector output surface after detector sampling/binning. This is intended for
-  subarray/windowed readout and is not SAPHIRA-specific.
+  subarray/windowed readout and is not detector-family-specific.
 - Frame-detector readout correction is now a separate surface from detector
   response. `NullFrameReadoutCorrection` is the null model,
   `ReferencePixelCommonModeCorrection` subtracts one global reference-edge
@@ -236,10 +236,10 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   while keeping the default behavior unchanged when
   `excess_noise_factor == 1`.
 - `InGaAsSensor` is a frame-detector family with an opt-in glow-rate term.
-- `SAPHIRASensor` is the maintained avalanche-frame-detector family with
+- `HgCdTeAvalancheArraySensor` is the maintained avalanche-frame-detector family with
   avalanche gain, excess noise, glow-rate, and optional non-destructive-read
   sampling controls.
-- `SAPHIRASensor` now sits under the more explicit
+- `HgCdTeAvalancheArraySensor` sits under the more explicit
   `HgCdTeAvalancheArraySensorType` family rather than only the generic
   avalanche-frame umbrella.
 - The frame-sensor capability traits are now explicit:
@@ -249,10 +249,10 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - HgCdTe avalanche-array sensors also expose
   `supports_reference_read_subtraction`, which covers read schemes such as
   correlated double sampling and Fowler sampling.
-- `SAPHIRASensor` also uses an avalanche-aware saturation limit when
+- `HgCdTeAvalancheArraySensor` also uses an avalanche-aware saturation limit when
   `full_well` is set, so incident charge saturates earlier as avalanche gain
   increases.
-- `AveragedNonDestructiveReads(n_reads)` is the maintained first SAPHIRA-style
+- `AveragedNonDestructiveReads(n_reads)` is the maintained first HgCdTe-array
   sampling model and reduces the effective additive readout-noise sigma by
   `1 / sqrt(n_reads)` relative to `SingleRead()`.
 - `CorrelatedDoubleSampling()` models one pedestal read and one signal read,
@@ -260,18 +260,18 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - `FowlerSampling(n_pairs)` models paired pedestal/signal averaging and
   reduces additive readout noise to `sqrt(2 / n_pairs)` times the
   `SingleRead()` sigma.
-- `SAPHIRASensor(read_time=...)` now also threads the read cadence into the
+- `HgCdTeAvalancheArraySensor(read_time=...)` now also threads the read cadence into the
   HgCdTe-array metadata and detector physics, so export metadata records
   reference/signal read counts, per-read time, and total wall-clock time, and
-  SAPHIRA dark/glow accumulation includes the configured read overhead.
-- SAPHIRA/HgCdTe readout products are now explicit. The generic accessors
+  HgCdTe-array dark/glow accumulation includes the configured read overhead.
+- HgCdTe-array readout products are now explicit. The generic accessors
   `detector_reference_frame`, `detector_signal_frame`, `detector_combined_frame`,
   `detector_reference_cube`, `detector_signal_cube`, `detector_read_cube`, and
   `detector_read_times` expose the maintained readout-product surface. The
   dedicated `HgCdTeReadoutProducts` payload makes pedestal/signal averages and
   their corresponding cubes first-class rather than inferring them from only the
   combined detector frame.
-- SAPHIRA subarray timing now scales with active readout rows rather than raw
+- HgCdTe-array subarray timing now scales with active readout rows rather than raw
   cropped area, which better matches row-wise frame-array readout semantics.
 - The maintained counting-detector family is currently `APDDetector`, with
   optional capability queries surfaced through `supports_counting_noise`,

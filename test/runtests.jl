@@ -711,12 +711,12 @@ end
     ao3k_sim = subaru_ao3k_simulation(; params=ao3k_params, rng=MersenneTwister(5))
     @test ao3k_sim.high_wfs isa PyramidWFS
     @test ao3k_sim.high_detector isa Detector
-    @test ao3k_sim.high_detector.params.sensor isa SAPHIRASensor
+    @test ao3k_sim.high_detector.params.sensor isa HgCdTeAvalancheArraySensor
     step!(ao3k_sim)
     @test length(ao3k_sim.command) == ao3k_params.n_act^2
     ao3k_iface = simulation_interface(ao3k_sim)
     ao3k_high_meta = simulation_wfs_metadata(ao3k_iface)[1]
-    @test ao3k_high_meta.sensor == :saphira
+    @test ao3k_high_meta.sensor == :hgcdte_avalanche_array
     @test ao3k_high_meta.provides_combined_frame
     @test ao3k_high_meta.provides_reference_frame
     @test ao3k_high_meta.provides_signal_frame
@@ -986,22 +986,22 @@ end
     @test_throws InvalidConfiguration InGaAsSensor(glow_rate=-1.0)
 
     det_saphira = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-        gain=1.0, sensor=SAPHIRASensor(avalanche_gain=5.0))
+        gain=1.0, sensor=HgCdTeAvalancheArraySensor(avalanche_gain=5.0))
     frame_saphira = copy(capture!(det_saphira, uniform_signal; rng=MersenneTwister(14)))
     @test frame_saphira == 5.0 .* uniform_signal
     @test supports_avalanche_gain(det_saphira.params.sensor)
     @test supports_sensor_glow(det_saphira.params.sensor)
     @test detector_export_metadata(det_saphira).frame_response == :sampled
     det_saphira_excess = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-        gain=1.0, sensor=SAPHIRASensor(avalanche_gain=1.0, excess_noise_factor=sqrt(2.0)))
+        gain=1.0, sensor=HgCdTeAvalancheArraySensor(avalanche_gain=1.0, excess_noise_factor=sqrt(2.0)))
     frame_saphira_excess = copy(capture!(det_saphira_excess, uniform_signal; rng=MersenneTwister(14)))
     @test std(vec(frame_saphira_excess)) > 0
     det_saphira_sat = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-        gain=1.0, full_well=100.0, sensor=SAPHIRASensor(avalanche_gain=5.0))
+        gain=1.0, full_well=100.0, sensor=HgCdTeAvalancheArraySensor(avalanche_gain=5.0))
     frame_saphira_sat = copy(capture!(det_saphira_sat, uniform_signal; rng=MersenneTwister(15)))
     @test maximum(frame_saphira_sat) == 100.0
     det_saphira_single = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
-        gain=1.0, sensor=SAPHIRASensor())
+        gain=1.0, sensor=HgCdTeAvalancheArraySensor())
     frame_saphira_single = copy(capture!(det_saphira_single, zero_psf; rng=MersenneTwister(16)))
     single_products = readout_products(det_saphira_single)
     @test single_products isa HgCdTeReadoutProducts
@@ -1013,7 +1013,7 @@ end
     @test detector_read_cube(det_saphira_single) === nothing
     @test detector_read_times(det_saphira_single) === nothing
     det_saphira_ndr = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
-        gain=1.0, sensor=SAPHIRASensor(sampling_mode=AveragedNonDestructiveReads(4)))
+        gain=1.0, sensor=HgCdTeAvalancheArraySensor(sampling_mode=AveragedNonDestructiveReads(4)))
     frame_saphira_ndr = copy(capture!(det_saphira_ndr, zero_psf; rng=MersenneTwister(16)))
     @test std(vec(frame_saphira_ndr)) < std(vec(frame_saphira_single))
     @test supports_nondestructive_reads(det_saphira_ndr.params.sensor)
@@ -1037,7 +1037,7 @@ end
     @test size(detector_signal_cube(det_saphira_ndr)) == (4, 4, 4)
     @test length(detector_read_times(det_saphira_ndr)) == 4
     det_saphira_cds = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
-        gain=1.0, sensor=SAPHIRASensor(sampling_mode=CorrelatedDoubleSampling()))
+        gain=1.0, sensor=HgCdTeAvalancheArraySensor(sampling_mode=CorrelatedDoubleSampling()))
     frame_saphira_cds = copy(capture!(det_saphira_cds, zero_psf; rng=MersenneTwister(16)))
     @test std(vec(frame_saphira_cds)) > std(vec(frame_saphira_single))
     cds_meta = detector_export_metadata(det_saphira_cds)
@@ -1054,7 +1054,7 @@ end
     @test detector_combined_frame(det_saphira_cds) ≈
         detector_signal_frame(det_saphira_cds) .- detector_reference_frame(det_saphira_cds)
     det_saphira_fowler = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
-        gain=1.0, sensor=SAPHIRASensor(sampling_mode=FowlerSampling(8)))
+        gain=1.0, sensor=HgCdTeAvalancheArraySensor(sampling_mode=FowlerSampling(8)))
     frame_saphira_fowler = copy(capture!(det_saphira_fowler, zero_psf; rng=MersenneTwister(16)))
     fowler_meta = detector_export_metadata(det_saphira_fowler)
     @test fowler_meta.sampling_mode == :fowler_sampling
@@ -1067,18 +1067,18 @@ end
     @test detector_combined_frame(det_saphira_fowler) ≈
         detector_signal_frame(det_saphira_fowler) .- detector_reference_frame(det_saphira_fowler)
     det_saphira_timed_single = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-        dark_current=1000.0, gain=1.0, sensor=SAPHIRASensor(read_time=1.0))
+        dark_current=1000.0, gain=1.0, sensor=HgCdTeAvalancheArraySensor(read_time=1.0))
     frame_saphira_timed_single = copy(capture!(det_saphira_timed_single, zero_psf; rng=MersenneTwister(17)))
     det_saphira_timed_cds = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         dark_current=1000.0, gain=1.0,
-        sensor=SAPHIRASensor(read_time=1.0, sampling_mode=CorrelatedDoubleSampling()))
+        sensor=HgCdTeAvalancheArraySensor(read_time=1.0, sampling_mode=CorrelatedDoubleSampling()))
     frame_saphira_timed_cds = copy(capture!(det_saphira_timed_cds, zero_psf; rng=MersenneTwister(17)))
     @test sum(frame_saphira_timed_cds) > sum(frame_saphira_timed_single)
     timed_meta = detector_export_metadata(det_saphira_timed_cds)
     @test timed_meta.sampling_read_time == 1.0
     @test timed_meta.sampling_wallclock_time == 3.0
     det_saphira_windowed = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-        gain=1.0, sensor=SAPHIRASensor(read_time=1.0, sampling_mode=CorrelatedDoubleSampling()),
+        gain=1.0, sensor=HgCdTeAvalancheArraySensor(read_time=1.0, sampling_mode=CorrelatedDoubleSampling()),
         readout_window=FrameWindow(2:3, 2:3))
     capture!(det_saphira_windowed, fill(10.0, 4, 4); rng=MersenneTwister(18))
     windowed_meta = detector_export_metadata(det_saphira_windowed)
@@ -1091,7 +1091,7 @@ end
     @test size(detector_read_cube(det_saphira_windowed)) == (2, 2, 2)
     @test detector_read_times(det_saphira_windowed) == [0.5, 1.0]
     det_saphira_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-        gain=1.0, sensor=SAPHIRASensor(),
+        gain=1.0, sensor=HgCdTeAvalancheArraySensor(),
         response_model=NullFrameResponse(),
         correction_model=ReferencePixelCommonModeCorrection(1, 1))
     corrected_frame = capture!(det_saphira_corrected, fill(5.0, 4, 4); rng=MersenneTwister(19))
@@ -1101,21 +1101,21 @@ end
     @test corrected_meta.correction_edge_cols == 1
     @test abs(mean(corrected_frame)) < 1e-6
     det_saphira_row_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-        gain=1.0, sensor=SAPHIRASensor(),
+        gain=1.0, sensor=HgCdTeAvalancheArraySensor(),
         response_model=NullFrameResponse(),
         correction_model=ReferenceRowCommonModeCorrection(1))
     row_pattern = repeat(reshape([1.0, 2.0, 3.0, 4.0], :, 1), 1, 4)
     row_corrected = capture!(det_saphira_row_corrected, row_pattern; rng=MersenneTwister(20))
     @test maximum(abs, row_corrected) < 1e-6
     det_saphira_col_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-        gain=1.0, sensor=SAPHIRASensor(),
+        gain=1.0, sensor=HgCdTeAvalancheArraySensor(),
         response_model=NullFrameResponse(),
         correction_model=ReferenceColumnCommonModeCorrection(1))
     col_pattern = repeat(reshape([1.0, 2.0, 3.0, 4.0], 1, :), 4, 1)
     col_corrected = capture!(det_saphira_col_corrected, col_pattern; rng=MersenneTwister(21))
     @test maximum(abs, col_corrected) < 1e-6
     det_saphira_output_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-        gain=1.0, sensor=SAPHIRASensor(),
+        gain=1.0, sensor=HgCdTeAvalancheArraySensor(),
         response_model=NullFrameResponse(),
         correction_model=ReferenceOutputCommonModeCorrection(2; edge_rows=1, edge_cols=1))
     output_pattern = hcat(fill(5.0, 4, 2), fill(10.0, 4, 2))
@@ -1125,7 +1125,7 @@ end
     @test output_meta.correction_group_cols == 2
     @test maximum(abs, output_corrected) < 1e-6
     det_saphira_composite = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-        gain=1.0, sensor=SAPHIRASensor(),
+        gain=1.0, sensor=HgCdTeAvalancheArraySensor(),
         response_model=NullFrameResponse(),
         correction_model=CompositeFrameReadoutCorrection((
             ReferenceRowCommonModeCorrection(1),
@@ -1136,12 +1136,12 @@ end
     @test composite_meta.readout_correction == :composite
     @test composite_meta.correction_stage_count == 2
     @test maximum(abs, composite_corrected) < 1e-6
-    @test_throws InvalidConfiguration SAPHIRASensor(avalanche_gain=0.5)
-    @test_throws InvalidConfiguration SAPHIRASensor(excess_noise_factor=0.5)
-    @test_throws InvalidConfiguration SAPHIRASensor(glow_rate=-1.0)
-    @test_throws InvalidConfiguration SAPHIRASensor(read_time=-1.0)
-    @test_throws InvalidConfiguration SAPHIRASensor(sampling_mode=AveragedNonDestructiveReads(0))
-    @test_throws InvalidConfiguration SAPHIRASensor(sampling_mode=FowlerSampling(0))
+    @test_throws InvalidConfiguration HgCdTeAvalancheArraySensor(avalanche_gain=0.5)
+    @test_throws InvalidConfiguration HgCdTeAvalancheArraySensor(excess_noise_factor=0.5)
+    @test_throws InvalidConfiguration HgCdTeAvalancheArraySensor(glow_rate=-1.0)
+    @test_throws InvalidConfiguration HgCdTeAvalancheArraySensor(read_time=-1.0)
+    @test_throws InvalidConfiguration HgCdTeAvalancheArraySensor(sampling_mode=AveragedNonDestructiveReads(0))
+    @test_throws InvalidConfiguration HgCdTeAvalancheArraySensor(sampling_mode=FowlerSampling(0))
     @test_throws InvalidConfiguration ReferencePixelCommonModeCorrection(0, 0)
     @test_throws InvalidConfiguration ReferenceRowCommonModeCorrection(0)
     @test_throws InvalidConfiguration ReferenceColumnCommonModeCorrection(0)
@@ -1942,16 +1942,16 @@ end
     @test HgCdTeAvalancheArraySensorType <: AvalancheFrameSensorType
     @test EMCCDSensor <: AvalancheFrameSensorType
     @test InGaAsSensor <: FrameSensorType
-    @test SAPHIRASensor <: HgCdTeAvalancheArraySensorType
+    @test HgCdTeAvalancheArraySensor <: HgCdTeAvalancheArraySensorType
     @test !supports_avalanche_gain(CCDSensor())
     @test !supports_sensor_glow(CMOSSensor())
     @test !supports_nondestructive_reads(CCDSensor())
-    @test supports_nondestructive_reads(SAPHIRASensor())
+    @test supports_nondestructive_reads(HgCdTeAvalancheArraySensor())
     @test !supports_reference_read_subtraction(EMCCDSensor())
-    @test supports_reference_read_subtraction(SAPHIRASensor())
+    @test supports_reference_read_subtraction(HgCdTeAvalancheArraySensor())
     @test !supports_readout_correction(EMCCDSensor())
-    @test supports_readout_correction(SAPHIRASensor())
-    @test supports_read_cube(SAPHIRASensor())
+    @test supports_readout_correction(HgCdTeAvalancheArraySensor())
+    @test supports_read_cube(HgCdTeAvalancheArraySensor())
     @test AdaptiveOpticsSim.readout_correction_symbol(ReferenceRowCommonModeCorrection()) == :reference_row_common_mode
     @test AdaptiveOpticsSim.readout_correction_symbol(ReferenceColumnCommonModeCorrection()) == :reference_column_common_mode
     @test AdaptiveOpticsSim.readout_correction_symbol(ReferenceOutputCommonModeCorrection(4)) == :reference_output_common_mode

@@ -97,8 +97,8 @@ function _resolve_sensor(name::AbstractString)
     lowered == "cmos" && return CMOSSensor(), :cmos
     lowered == "emccd" && return EMCCDSensor(), :emccd
     lowered == "ingaas" && return InGaAsSensor(), :ingaas
-    lowered == "saphira" && return SAPHIRASensor(), :saphira
-    error("unsupported sensor '$name'; use ccd, cmos, emccd, ingaas, or saphira")
+    lowered == "hgcdte" && return HgCdTeAvalancheArraySensor(), :hgcdte_avalanche_array
+    error("unsupported sensor '$name'; use ccd, cmos, emccd, ingaas, or hgcdte")
 end
 
 function _resolve_response_model(name::AbstractString)

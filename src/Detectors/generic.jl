@@ -158,7 +158,7 @@ function default_response_model(::InGaAsSensor; T::Type{<:AbstractFloat}=Float64
     return GaussianPixelResponse(response_width_px=0.4, T=T, backend=backend)
 end
 
-function default_response_model(::SAPHIRASensor; T::Type{<:AbstractFloat}=Float64, backend=Array)
+function default_response_model(::HgCdTeAvalancheArraySensor; T::Type{<:AbstractFloat}=Float64, backend=Array)
     return SampledFrameResponse([0.0 0.01 0.0; 0.01 0.96 0.01; 0.0 0.01 0.0]; T=T, backend=backend)
 end
 
