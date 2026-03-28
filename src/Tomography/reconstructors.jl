@@ -177,7 +177,7 @@ end
             @inbounds out[i, j] = var_term * fractional_cn2
         else
             u = (2 * π) * rho * inv_L0
-            @inbounds out[i, j] = cst * u^(5 / 6) * real(_kv56_scalar(u)) * fractional_cn2
+            @inbounds out[i, j] = cst * _scaled_kv56_scalar(u) * fractional_cn2
         end
     end
 end
@@ -243,7 +243,7 @@ end
                 acc += var_term * fractional_cn2[layer]
             else
                 u = (2 * π) * rho * inv_L0
-                acc += cst * u^(5 / 6) * real(_kv56_scalar(u)) * fractional_cn2[layer]
+                acc += cst * _scaled_kv56_scalar(u) * fractional_cn2[layer]
             end
         end
         @inbounds block[i, j] = acc
@@ -260,48 +260,6 @@ end
         @inbounds out[i, j, src, layer] = complex(x[i, j, src] * scale + beta_x, y[i, j, src] * scale + beta_y)
     end
 end
-
-function _kv56_scalar(z::Complex{T}) where {T<:AbstractFloat}
-    gamma_1_6 = T(5.56631600178)
-    gamma_11_6 = T(0.94065585824)
-    v = T(5) / T(6)
-    z_abs = abs(z)
-    if z_abs < T(2)
-        sum_a = zero(Complex{T})
-        sum_b = zero(Complex{T})
-        term_a = (T(0.5) * z)^v / gamma_11_6
-        term_b = (T(0.5) * z)^(-v) / gamma_1_6
-        sum_a += term_a
-        sum_b += term_b
-        z_sq_over_4 = (T(0.5) * z)^2
-        k = 1
-        tol = T(1e-15)
-        while k <= 1000
-            factor_a = z_sq_over_4 / (T(k) * (T(k) + v))
-            term_a *= factor_a
-            sum_a += term_a
-            factor_b = z_sq_over_4 / (T(k) * (T(k) - v))
-            term_b *= factor_b
-            sum_b += term_b
-            if abs(term_a) < tol * abs(sum_a) && abs(term_b) < tol * abs(sum_b)
-                break
-            end
-            k += 1
-        end
-        return T(π) * (sum_b - sum_a)
-    end
-    z_inv = inv(z)
-    sum_terms = one(Complex{T}) +
-        (T(2) / T(9)) * z_inv +
-        (-T(7) / T(81)) * z_inv^2 +
-        (T(175) / T(2187)) * z_inv^3 +
-        (-T(2275) / T(19683)) * z_inv^4 +
-        (T(5005) / T(177147)) * z_inv^5
-    prefactor = sqrt(T(π) / (T(2) * z)) * exp(-z)
-    return prefactor * sum_terms
-end
-
-@inline _kv56_scalar(z::T) where {T<:AbstractFloat} = _kv56_scalar(complex(z))
 
 @kernel function guide_grid_kernel!(xr, yr, coords, s, c, offset_x, offset_y, diameter, n::Int)
     i, j = @index(Global, NTuple)
@@ -533,7 +491,7 @@ function _covariance_matrix(
                 out[i, j] = var_term * fractional_cn2
             else
                 u = T(2π) * rho * inv_L0
-                out[i, j] = cst * u^(T(5) / T(6)) * real(_kv56_scalar(u)) * fractional_cn2
+                out[i, j] = cst * _scaled_kv56_scalar(u) * fractional_cn2
             end
         end
     end
@@ -558,7 +516,7 @@ function _covariance_matrix!(
                 out[i, j] = var_term * fractional_cn2
             else
                 u = T(2π) * rho * inv_L0
-                out[i, j] = cst * u^(T(5) / T(6)) * real(_kv56_scalar(u)) * fractional_cn2
+                out[i, j] = cst * _scaled_kv56_scalar(u) * fractional_cn2
             end
         end
     end

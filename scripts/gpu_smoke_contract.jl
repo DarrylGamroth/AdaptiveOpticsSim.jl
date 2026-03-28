@@ -93,7 +93,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
         sh_screen = ft_sh_phase_screen(atm, tel.params.resolution, tel.params.diameter / tel.params.resolution;
             rng=rng, ws=ws, subharmonics=true, n_levels=2, subharmonic_radius=1)
         rho = similar(atm.state.opd, T, 4, 4)
-        fill!(rho, T(0.1))
+        copyto!(rho, reshape(T[0.0, 0.02, 0.05, 0.1, 0.15, 0.25, 0.4, 0.8, 1.2, 1.6, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0], 4, 4))
         cov = phase_covariance(rho, atm)
         freqs = similar(atm.state.freqs, T, 4)
         copyto!(freqs, T[0.1, 0.2, 0.3, 0.4])
@@ -109,6 +109,12 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
         @assert covmat isa BackendArray
         @assert spectrum isa BackendArray
         @assert spectrum_grid isa BackendArray
+        cov_ref = phase_covariance(Array(rho), atm)
+        covmat_ref = covariance_matrix(Array(freqs), Array(freqs), atm)
+        cov_rel = maximum(abs.(Array(cov) .- cov_ref)) / maximum(abs.(cov_ref))
+        covmat_rel = maximum(abs.(Array(covmat) .- covmat_ref)) / maximum(abs.(covmat_ref))
+        @assert cov_rel < 5e-4
+        @assert covmat_rel < 5e-4
         return screen
     end
 

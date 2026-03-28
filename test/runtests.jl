@@ -1822,10 +1822,13 @@ end
     @test helper_screen ≈ atm.state.opd
     @test helper_psd ≈ atm.state.psd
 
-    for z in (1e-6, 1e-3, 0.1, 1.0, 4.0, 10.0)
+    for z in (1e-6, 1e-3, 0.1, 1.0, 4.0, 10.0, 40.0, 140.0)
         ref = SpecialFunctions.besselk(5 / 6, z)
         approx = AdaptiveOpticsSim._kv56_scalar(z)
+        scaled_ref = z^(5 / 6) * ref
+        scaled_approx = AdaptiveOpticsSim._scaled_kv56_scalar(z)
         @test isapprox(real(approx), ref; rtol=2e-4, atol=1e-10)
+        @test isapprox(scaled_approx, scaled_ref; rtol=1e-7, atol=1e-12)
     end
 end
 

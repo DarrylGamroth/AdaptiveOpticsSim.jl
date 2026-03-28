@@ -21,6 +21,22 @@ end
     end
 end
 
+@kernel function phase_covariance_kernel!(out, rho, cst, base, u_scale, n::Int)
+    i = @index(Global, Linear)
+    if i <= n
+        T = eltype(out)
+        @inbounds begin
+            rho_i = rho[i]
+            if rho_i == zero(T)
+                out[i] = base
+            else
+                u = u_scale * rho_i
+                out[i] = cst * _scaled_kv56_scalar(u)
+            end
+        end
+    end
+end
+
 @kernel function add_subharmonics_kernel!(phs, coeff_re, coeff_im, freq_x, freq_y, two_pi, delta_t, offset::Int, n_terms::Int, n::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= n
@@ -120,12 +136,15 @@ end
 _phase_covariance(::ScalarCPUStyle, rho::AbstractArray, r0::Real, L0::Real) = _phase_covariance_cpu(rho, r0, L0)
 
 function _phase_covariance(style::AcceleratorStyle, rho::AbstractArray, r0::Real, L0::Real)
-    # `SpecialFunctions.besselk` is not GPU-compilable on current AMDGPU/CUDA paths,
-    # so compute on the host and return the result on the original backend.
-    out_host = _phase_covariance_cpu(Array(rho), r0, L0)
-    out = similar(rho, eltype(out_host), size(out_host)...)
-    copyto!(out, out_host)
-    synchronize_backend!(style)
+    T = eltype(rho)
+    L0r0 = (T(L0) / T(r0))^(T(5) / T(3))
+    cst = (T(24) * T(gamma(T(6) / T(5))) / T(5))^(T(5) / T(6)) *
+        (T(gamma(T(11) / T(6))) / ((T(2)^(T(5) / T(6))) * T(pi)^(T(8) / T(3)))) * L0r0
+    base = (T(24) * T(gamma(T(6) / T(5))) / T(5))^(T(5) / T(6)) *
+        (T(gamma(T(11) / T(6))) * T(gamma(T(5) / T(6)))) / (T(2) * T(pi)^(T(8) / T(3))) * L0r0
+    out = similar(rho, T, size(rho)...)
+    launch_kernel!(style, phase_covariance_kernel!, out, rho, cst, base, T(2 * pi) / T(L0),
+        length(out); ndrange=length(out))
     return out
 end
 
