@@ -1697,7 +1697,13 @@ end
     stack_mtf = AdaptiveOpticsSim.capture_stack!(det_mtf, cube_mtf, scratch_mtf; rng=MersenneTwister(10))
     @test size(stack_mtf) == size(cube_mtf)
     @test all(isfinite, stack_mtf)
-    @test_throws InvalidConfiguration AdaptiveOpticsSim.capture_stack!(sampled_det, cube_mtf, scratch_mtf; rng=MersenneTwister(10))
+    cube_sampled = cat(copy(impulse), copy(impulse); dims=3)
+    scratch_sampled = similar(cube_sampled)
+    stack_sampled = AdaptiveOpticsSim.capture_stack!(sampled_det, cube_sampled, scratch_sampled; rng=MersenneTwister(10))
+    @test size(stack_sampled) == size(cube_sampled)
+    @test all(isfinite, stack_sampled)
+    @test stack_sampled[:, :, 1] ≈ sampled_frame atol=1e-6
+    @test stack_sampled[:, :, 2] ≈ sampled_frame atol=1e-6
 
     rect_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         response_model=RectangularPixelAperture(pitch_x_px=2.0, pitch_y_px=2.0,

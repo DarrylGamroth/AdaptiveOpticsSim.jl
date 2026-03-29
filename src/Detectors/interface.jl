@@ -664,6 +664,22 @@ end
     end
 end
 
+@kernel function sampled_response_stack_kernel!(out, img, kernel, radius_i::Int, radius_j::Int,
+    n_batch::Int, n::Int, m::Int, kn::Int, km::Int)
+    b, i, j = @index(Global, NTuple)
+    if b <= n_batch && i <= n && j <= m
+        acc = zero(eltype(out))
+        @inbounds for ki in 1:kn
+            ii = clamp(i + ki - radius_i - 1, 1, n)
+            for kj in 1:km
+                jj = clamp(j + kj - radius_j - 1, 1, m)
+                acc += kernel[ki, kj] * img[b, ii, jj]
+            end
+        end
+        @inbounds out[b, i, j] = acc
+    end
+end
+
 @kernel function separable_response_stack_rows_kernel!(out, img, kernel, radius::Int,
     n_batch::Int, n::Int, m::Int, klen::Int)
     b, i, j = @index(Global, NTuple)

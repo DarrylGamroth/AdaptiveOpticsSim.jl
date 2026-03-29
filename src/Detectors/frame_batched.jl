@@ -1,4 +1,5 @@
 function _require_batched_detector_compat(det::Detector, cube::AbstractArray, scratch::AbstractArray)
+    style = execution_style(cube)
     size(cube) == size(scratch) ||
         throw(DimensionMismatchError("batched detector scratch must match cube size"))
     ndims(cube) == 3 || throw(DimensionMismatchError("batched detector input must be 3D"))
@@ -12,8 +13,8 @@ function _require_batched_detector_compat(det::Detector, cube::AbstractArray, sc
         throw(InvalidConfiguration("batched detector capture currently requires full-frame readout"))
     is_null_readout_correction(det.params.correction_model) ||
         throw(InvalidConfiguration("batched detector capture currently requires null readout correction"))
-    supports_separable_application(det.params.response_model) ||
-        throw(InvalidConfiguration("batched detector capture currently requires a maintained separable frame response"))
+    supports_batched_response_application(style, det.params.response_model) ||
+        throw(InvalidConfiguration("batched detector capture currently requires a maintained batched frame response"))
     is_global_shutter(det.params.timing_model) ||
         throw(InvalidConfiguration("batched detector capture currently requires global-shutter timing semantics"))
     is_null_persistence(persistence_model(det.params.sensor)) ||
@@ -190,6 +191,27 @@ function _batched_apply_response!(::ScalarCPUStyle, model::AbstractFrameResponse
     return cube
 end
 
+function _batched_apply_response!(::ScalarCPUStyle, model::SampledFrameResponse,
+    cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
+    n_batch, n, m = size(cube)
+    kn, km = size(model.kernel)
+    radius_i = fld(kn, 2)
+    radius_j = fld(km, 2)
+    @inbounds for j in 1:m, i in 1:n, b in 1:n_batch
+        acc = zero(T)
+        for ki in 1:kn
+            ii = clamp(i + ki - radius_i - 1, 1, n)
+            for kj in 1:km
+                jj = clamp(j + kj - radius_j - 1, 1, m)
+                acc += model.kernel[ki, kj] * cube[b, ii, jj]
+            end
+        end
+        scratch[b, i, j] = acc
+    end
+    copyto!(cube, scratch)
+    return cube
+end
+
 function _batched_apply_response!(::ScalarCPUStyle, model::GaussianPixelResponse,
     cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
     _batched_apply_separable_response!(ScalarCPUStyle(), cube, scratch, model.kernel, model.kernel)
@@ -211,6 +233,18 @@ end
 function _batched_apply_response!(style::AcceleratorStyle, model::GaussianPixelResponse,
     cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
     _batched_apply_separable_response!(style, cube, scratch, model.kernel, model.kernel)
+    return cube
+end
+
+function _batched_apply_response!(style::AcceleratorStyle, model::SampledFrameResponse,
+    cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
+    n_batch, n, m = size(cube)
+    kn, km = size(model.kernel)
+    radius_i = fld(kn, 2)
+    radius_j = fld(km, 2)
+    launch_kernel_async!(style, sampled_response_stack_kernel!, scratch, cube, model.kernel,
+        radius_i, radius_j, n_batch, n, m, kn, km; ndrange=size(cube))
+    copyto!(cube, scratch)
     return cube
 end
 
