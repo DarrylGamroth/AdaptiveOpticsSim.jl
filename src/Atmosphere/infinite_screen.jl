@@ -535,13 +535,13 @@ function InfinitePhaseScreen(tel::Telescope;
             Vector{T}(undef, size(column_positive.operator.predictor, 1))),
         materialize_build(build_backend, backend{T}(undef, size(column_positive.operator.residual_factor, 2)),
             Vector{T}(undef, size(column_positive.operator.residual_factor, 2))),
-        materialize_build(build_backend, Matrix{Int}(undef, size(column_positive.stencil.stencil_coords)...),
+        materialize_build(build_backend, backend{Int}(undef, size(column_positive.stencil.stencil_coords)...),
             column_positive.stencil.stencil_coords),
-        materialize_build(build_backend, Matrix{Int}(undef, size(column_negative.stencil.stencil_coords)...),
+        materialize_build(build_backend, backend{Int}(undef, size(column_negative.stencil.stencil_coords)...),
             column_negative.stencil.stencil_coords),
-        materialize_build(build_backend, Matrix{Int}(undef, size(row_positive.stencil.stencil_coords)...),
+        materialize_build(build_backend, backend{Int}(undef, size(row_positive.stencil.stencil_coords)...),
             row_positive.stencil.stencil_coords),
-        materialize_build(build_backend, Matrix{Int}(undef, size(row_negative.stencil.stencil_coords)...),
+        materialize_build(build_backend, backend{Int}(undef, size(row_negative.stencil.stencil_coords)...),
             row_negative.stencil.stencil_coords),
         InfiniteBoundaryModel(
             InfiniteBoundaryStencil(
