@@ -153,6 +153,20 @@ function extract_shifted_screen!(out::AbstractMatrix{T}, screen::AbstractMatrix{
     return out
 end
 
+function extract_shifted_screen_async!(out::AbstractMatrix{T}, screen::AbstractMatrix{T},
+    offset_x::T, offset_y::T, amplitude_scale::T, footprint_scale::T=one(T)) where {T<:AbstractFloat}
+    n = size(out, 1)
+    size(out, 2) == n || throw(DimensionMismatchError("output must be square"))
+    m = size(screen, 1)
+    size(screen, 2) == m || throw(DimensionMismatchError("screen must be square"))
+    m >= n || throw(DimensionMismatchError("screen resolution must be at least as large as the pupil resolution"))
+    footprint_scale > zero(T) || throw(InvalidConfiguration("footprint_scale must be positive"))
+    start_x = T(m + 1) / 2 - footprint_scale * T(n - 1) / 2 - offset_x
+    start_y = T(m + 1) / 2 - footprint_scale * T(n - 1) / 2 - offset_y
+    _extract_shifted_screen_async!(execution_style(out), out, screen, start_x, start_y, footprint_scale, amplitude_scale, n, m)
+    return out
+end
+
 function _extract_shifted_screen!(::ScalarCPUStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
     start_x::T, start_y::T, footprint_scale::T, amplitude_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
     # Finite moving-screen backend: move a periodic canvas under the pupil with
@@ -189,6 +203,17 @@ function _extract_shifted_screen!(style::AcceleratorStyle, out::AbstractMatrix{T
     return out
 end
 
+@inline function _extract_shifted_screen_async!(::ScalarCPUStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
+    start_x::T, start_y::T, footprint_scale::T, amplitude_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
+    return _extract_shifted_screen!(ScalarCPUStyle(), out, screen, start_x, start_y, footprint_scale, amplitude_scale, n, m)
+end
+
+function _extract_shifted_screen_async!(style::AcceleratorStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
+    start_x::T, start_y::T, footprint_scale::T, amplitude_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
+    launch_kernel_async!(style, moving_layer_extract_kernel!, out, screen, start_x, start_y, footprint_scale, amplitude_scale, n, m; ndrange=size(out))
+    return out
+end
+
 function render_layer!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer, tel::Telescope,
     src::Union{AbstractSource,Nothing}=nothing) where {T<:AbstractFloat}
     shift_x, shift_y, footprint_scale = layer_source_geometry(src, layer.params.altitude, tel, T)
@@ -198,7 +223,7 @@ end
 function render_layer!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer,
     shift_x::T, shift_y::T, footprint_scale::T) where {T<:AbstractFloat}
     amplitude_scale = T(layer.params.amplitude_scale)
-    extract_shifted_screen!(out, layer.generator.state.opd,
+    extract_shifted_screen_async!(out, layer.generator.state.opd,
         layer.state.offset_x - shift_x,
         layer.state.offset_y - shift_y,
         amplitude_scale,
