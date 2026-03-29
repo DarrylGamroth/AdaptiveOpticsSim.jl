@@ -366,6 +366,11 @@ function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::Abstra
     return _capture_stack_generalized!(det, cube, scratch; rng=rng)
 end
 
+function capture_stack!(det::Detector, out_cube::AbstractArray{TO,3}, in_cube::AbstractArray{TI,3};
+    rng::AbstractRNG=Random.default_rng()) where {TO,TI<:AbstractFloat}
+    return _capture_stack_generalized!(det, out_cube, in_cube; rng=rng)
+end
+
 function apply_saturation!(det::Detector, cube::AbstractArray)
     full_well = det.params.full_well
     full_well === nothing && return cube
