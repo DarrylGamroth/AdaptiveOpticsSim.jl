@@ -230,12 +230,25 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   `CompositeFrameReadoutCorrection` composes multiple correction stages.
 - Detector export metadata now records correction family, edge support, output
   grouping, and correction stage count.
+- Static frame-detector structure is now explicit. The maintained defect-model
+  surface includes `NullDetectorDefectModel`,
+  `PixelResponseNonuniformity`, `DarkSignalNonuniformity`,
+  `BadPixelMask`, and `CompositeDetectorDefectModel`.
+- Frame-detector timing is now explicit through `AbstractFrameTimingModel`,
+  with `GlobalShutter` as the null/default semantics and `RollingShutter` as
+  the maintained timed row-readout model.
+- Frame-detector nonlinearity is now explicit through
+  `AbstractFrameNonlinearityModel`, with `NullFrameNonlinearity` and
+  `SaturatingFrameNonlinearity` as the maintained surface.
 - `CCDSensor` supports opt-in clock-induced charge through its constructor.
-- `CMOSSensor` supports opt-in column readout noise through its constructor.
-- `EMCCDSensor` supports an opt-in excess-noise factor through its constructor,
-  while keeping the default behavior unchanged when
-  `excess_noise_factor == 1`.
-- `InGaAsSensor` is a frame-detector family with an opt-in glow-rate term.
+- `CMOSSensor` supports opt-in column readout noise, grouped-output gain/offset
+  patterns through `StaticCMOSOutputPattern`, and explicit shutter timing.
+- `EMCCDSensor` supports opt-in excess-noise-factor behavior, EMCCD-specific
+  CIC through `cic_rate`, and explicit multiplication-model selection through
+  `ExcessNoiseApproximation` or `StochasticMultiplicationRegister`.
+- `InGaAsSensor` is a frame-detector family with opt-in glow, persistence
+  through `ExponentialPersistence`, and support for explicit detector
+  nonlinearity.
 - `HgCdTeAvalancheArraySensor` is the maintained avalanche-frame-detector family with
   avalanche gain, excess noise, glow-rate, and optional non-destructive-read
   sampling controls.
@@ -275,10 +288,19 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   cropped area, which better matches row-wise frame-array readout semantics.
 - The maintained counting-detector family is currently `APDDetector`, with
   optional capability queries surfaced through `supports_counting_noise`,
-  `supports_dead_time`, and `supports_channel_gain_map`.
+  `supports_dead_time`, `supports_channel_gain_map`,
+  `supports_counting_gating`, `supports_afterpulsing`,
+  `supports_channel_crosstalk`, and `supports_paralyzable_dead_time`.
 - Counting-detector dead-time behavior is selected by dispatch through
   `CountingDeadTimeModel`, with `NoDeadTime` as the null model and
-  `NonParalyzableDeadTime` as the maintained first physical model.
+  `NonParalyzableDeadTime` and `ParalyzableDeadTime` as maintained physical
+  models.
+- APD counting control is now explicit through `AbstractCountingGateModel`,
+  with `NullCountingGate` and `DutyCycleGate`.
+- APD counting correlation is now explicit through
+  `AbstractCountingCorrelationModel`, with `NullCountingCorrelation`,
+  `AfterpulsingModel`, `ChannelCrosstalkModel`, and
+  `CompositeCountingCorrelation`.
 
 ### `IF-DM`: deformable mirrors
 

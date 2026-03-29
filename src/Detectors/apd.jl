@@ -5,12 +5,18 @@ struct NonParalyzableDeadTime{T<:AbstractFloat} <: CountingDeadTimeModel
     dead_time::T
 end
 
-struct APDDetectorParams{T<:AbstractFloat,S<:APDSensor,D<:CountingDeadTimeModel}
+struct ParalyzableDeadTime{T<:AbstractFloat} <: CountingDeadTimeModel
+    dead_time::T
+end
+
+struct APDDetectorParams{T<:AbstractFloat,S<:APDSensor,D<:CountingDeadTimeModel,G<:AbstractCountingGateModel,C<:AbstractCountingCorrelationModel}
     integration_time::T
     qe::T
     gain::T
     dark_count_rate::T
     dead_time_model::D
+    gate_model::G
+    correlation_model::C
     sensor::S
     output_precision::Union{Nothing,DataType}
     layout::Symbol
@@ -30,6 +36,7 @@ struct APDDetector{N<:NoiseModel,P<:APDDetectorParams,S<:APDDetectorState,GM} <:
 end
 
 NonParalyzableDeadTime(dead_time::Real) = NonParalyzableDeadTime{Float64}(float(dead_time))
+ParalyzableDeadTime(dead_time::Real) = ParalyzableDeadTime{Float64}(float(dead_time))
 
 readout_ready(det::APDDetector) = true
 channel_output(det::APDDetector) = det.state.output_buffer === nothing ? det.state.channels : det.state.output_buffer
@@ -39,22 +46,82 @@ reset_integration!(det::APDDetector) = det
 detector_sensor_symbol(::APDSensor) = :apd
 counting_dead_time_symbol(::NoDeadTime) = :none
 counting_dead_time_symbol(::NonParalyzableDeadTime) = :nonparalyzable
+counting_dead_time_symbol(::ParalyzableDeadTime) = :paralyzable
 supports_counting_noise(::APDDetector) = true
 supports_dead_time(det::APDDetector) = supports_dead_time(det.params.dead_time_model)
 supports_dead_time(::NoDeadTime) = false
 supports_dead_time(::NonParalyzableDeadTime) = true
+supports_dead_time(::ParalyzableDeadTime) = true
 supports_channel_gain_map(det::APDDetector) = !isnothing(det.channel_gain_map)
+is_null_counting_gate(::AbstractCountingGateModel) = false
+is_null_counting_gate(::NullCountingGate) = true
+is_paralyzable_dead_time(::CountingDeadTimeModel) = false
+is_paralyzable_dead_time(::ParalyzableDeadTime) = true
+supports_counting_gating(det::APDDetector) = !is_null_counting_gate(det.params.gate_model)
+supports_afterpulsing(det::APDDetector) = _supports_afterpulsing(det.params.correlation_model)
+supports_channel_crosstalk(det::APDDetector) = _supports_channel_crosstalk(det.params.correlation_model)
+supports_paralyzable_dead_time(det::APDDetector) = is_paralyzable_dead_time(det.params.dead_time_model)
+
+_supports_afterpulsing(::AbstractCountingCorrelationModel) = false
+_supports_afterpulsing(::AfterpulsingModel) = true
+_supports_afterpulsing(model::CompositeCountingCorrelation) = any(_supports_afterpulsing, model.stages)
+_supports_channel_crosstalk(::AbstractCountingCorrelationModel) = false
+_supports_channel_crosstalk(::ChannelCrosstalkModel) = true
+_supports_channel_crosstalk(model::CompositeCountingCorrelation) = any(_supports_channel_crosstalk, model.stages)
 
 counting_dead_time_value(::NoDeadTime, ::Type{T}) where {T<:AbstractFloat} = nothing
 counting_dead_time_value(model::NonParalyzableDeadTime, ::Type{T}) where {T<:AbstractFloat} = T(model.dead_time)
+counting_dead_time_value(model::ParalyzableDeadTime, ::Type{T}) where {T<:AbstractFloat} = T(model.dead_time)
 convert_dead_time_model(::NoDeadTime, ::Type{T}) where {T<:AbstractFloat} = NoDeadTime()
 convert_dead_time_model(model::NonParalyzableDeadTime, ::Type{T}) where {T<:AbstractFloat} =
     NonParalyzableDeadTime{T}(T(model.dead_time))
+convert_dead_time_model(model::ParalyzableDeadTime, ::Type{T}) where {T<:AbstractFloat} =
+    ParalyzableDeadTime{T}(T(model.dead_time))
 validate_dead_time_model(model::NoDeadTime) = model
 
 function validate_dead_time_model(model::NonParalyzableDeadTime)
     model.dead_time >= 0 || throw(InvalidConfiguration("NonParalyzableDeadTime dead_time must be >= 0"))
     return model
+end
+
+function validate_dead_time_model(model::ParalyzableDeadTime)
+    model.dead_time >= 0 || throw(InvalidConfiguration("ParalyzableDeadTime dead_time must be >= 0"))
+    return model
+end
+
+convert_gate_model(::NullCountingGate, ::Type{T}) where {T<:AbstractFloat} = NullCountingGate()
+convert_gate_model(model::DutyCycleGate, ::Type{T}) where {T<:AbstractFloat} = DutyCycleGate{T}(T(model.duty_cycle))
+validate_gate_model(::NullCountingGate) = NullCountingGate()
+
+function validate_gate_model(model::DutyCycleGate)
+    zero(model.duty_cycle) < model.duty_cycle <= one(model.duty_cycle) ||
+        throw(InvalidConfiguration("DutyCycleGate duty_cycle must lie in (0, 1]"))
+    return model
+end
+
+convert_correlation_model(::NullCountingCorrelation, ::Type{T}) where {T<:AbstractFloat} = NullCountingCorrelation()
+convert_correlation_model(model::AfterpulsingModel, ::Type{T}) where {T<:AbstractFloat} = AfterpulsingModel{T}(T(model.probability))
+convert_correlation_model(model::ChannelCrosstalkModel, ::Type{T}) where {T<:AbstractFloat} =
+    ChannelCrosstalkModel{T}(T(model.coupling))
+convert_correlation_model(model::CompositeCountingCorrelation, ::Type{T}) where {T<:AbstractFloat} =
+    CompositeCountingCorrelation(tuple((convert_correlation_model(stage, T) for stage in model.stages)...))
+
+validate_correlation_model(::NullCountingCorrelation) = NullCountingCorrelation()
+
+function validate_correlation_model(model::AfterpulsingModel)
+    zero(model.probability) <= model.probability <= one(model.probability) ||
+        throw(InvalidConfiguration("AfterpulsingModel probability must lie in [0, 1]"))
+    return model
+end
+
+function validate_correlation_model(model::ChannelCrosstalkModel)
+    zero(model.coupling) <= model.coupling <= one(model.coupling) ||
+        throw(InvalidConfiguration("ChannelCrosstalkModel coupling must lie in [0, 1]"))
+    return model
+end
+
+function validate_correlation_model(model::CompositeCountingCorrelation)
+    return CompositeCountingCorrelation(tuple((validate_correlation_model(stage) for stage in model.stages)...))
 end
 
 validate_apd_noise(noise::NoiseNone) = noise
@@ -73,6 +140,11 @@ function detector_export_metadata(det::APDDetector; T::Type{<:AbstractFloat}=elt
         T(det.params.dark_count_rate),
         counting_dead_time_symbol(det.params.dead_time_model),
         counting_dead_time_value(det.params.dead_time_model, T),
+        counting_gate_symbol(det.params.gate_model),
+        counting_gate_duty_cycle(det.params.gate_model, T),
+        counting_correlation_symbol(det.params.correlation_model),
+        afterpulse_probability(det.params.correlation_model, T),
+        crosstalk_value(det.params.correlation_model, T),
         detector_sensor_symbol(det.params.sensor),
         detector_noise_symbol(det.noise),
         det.params.output_precision,
@@ -81,7 +153,8 @@ function detector_export_metadata(det::APDDetector; T::Type{<:AbstractFloat}=elt
 end
 
 function _build_apd_detector(noise::NoiseModel; integration_time::Real, qe::Real, gain::Real,
-    dark_count_rate::Real, dead_time_model::CountingDeadTimeModel, sensor::APDSensor, output_precision::Union{Nothing,DataType},
+    dark_count_rate::Real, dead_time_model::CountingDeadTimeModel, gate_model::AbstractCountingGateModel,
+    correlation_model::AbstractCountingCorrelationModel, sensor::APDSensor, output_precision::Union{Nothing,DataType},
     layout::Symbol, channel_gain_map,
     T::Type{<:AbstractFloat}, backend)
     gain >= 0 || throw(InvalidConfiguration("APDDetector gain must be >= 0"))
@@ -89,17 +162,21 @@ function _build_apd_detector(noise::NoiseModel; integration_time::Real, qe::Real
     converted = convert_noise(noise, T)
     validated = validate_apd_noise(converted)
     dead_time = validate_dead_time_model(convert_dead_time_model(dead_time_model, T))
+    gate = validate_gate_model(convert_gate_model(gate_model, T))
+    correlation = validate_correlation_model(convert_correlation_model(correlation_model, T))
     gain_map = channel_gain_map === nothing ? nothing : begin
         g = backend{T}(undef, size(channel_gain_map)...)
         copyto!(g, T.(channel_gain_map))
         g
     end
-    params = APDDetectorParams{T,typeof(sensor),typeof(dead_time)}(
+    params = APDDetectorParams{T,typeof(sensor),typeof(dead_time),typeof(gate),typeof(correlation)}(
         T(integration_time),
         T(qe),
         T(gain),
         T(dark_count_rate),
         dead_time,
+        gate,
+        correlation,
         sensor,
         output_precision,
         layout,
@@ -118,9 +195,12 @@ end
 function APDDetector(; integration_time::Real=1.0, qe::Real=1.0, noise::NoiseModel=NoisePhoton(),
     gain::Real=1.0, dark_count_rate::Real=0.0, output_precision::Union{Nothing,DataType}=nothing,
     layout::Symbol=:channels, channel_gain_map=nothing, dead_time_model::CountingDeadTimeModel=NoDeadTime(),
+    gate_model::AbstractCountingGateModel=NullCountingGate(),
+    correlation_model::AbstractCountingCorrelationModel=NullCountingCorrelation(),
     T::Type{<:AbstractFloat}=Float64, backend=Array)
     return _build_apd_detector(noise; integration_time=integration_time, qe=qe, gain=gain,
-        dark_count_rate=dark_count_rate, dead_time_model=dead_time_model, sensor=APDSensor(), output_precision=output_precision,
+        dark_count_rate=dark_count_rate, dead_time_model=dead_time_model, gate_model=gate_model,
+        correlation_model=correlation_model, sensor=APDSensor(), output_precision=output_precision,
         layout=layout, channel_gain_map=channel_gain_map, T=T, backend=backend)
 end
 
@@ -137,6 +217,10 @@ function ensure_buffers!(det::APDDetector, dims::Tuple{Int,Int})
     end
     return det
 end
+
+effective_gate_time(::NullCountingGate, exposure_time) = exposure_time
+effective_gate_time(model::DutyCycleGate, exposure_time) = exposure_time * model.duty_cycle
+counting_exposure_time(det::APDDetector) = effective_gate_time(det.params.gate_model, det.params.integration_time)
 
 function apply_gain_map!(det::APDDetector)
     isnothing(det.channel_gain_map) && return det.state.channels
@@ -157,11 +241,20 @@ apply_dead_time!(det::APDDetector) = apply_dead_time!(det.params.dead_time_model
 apply_dead_time!(::NoDeadTime, det::APDDetector) = det.state.channels
 
 function apply_dead_time!(model::NonParalyzableDeadTime, det::APDDetector)
-    exposure_time = det.params.integration_time
+    exposure_time = counting_exposure_time(det)
     exposure_time > zero(exposure_time) || return det.state.channels
     scale = model.dead_time / exposure_time
     scale <= zero(scale) && return det.state.channels
     @. det.state.channels = det.state.channels / (1 + det.state.channels * scale)
+    return det.state.channels
+end
+
+function apply_dead_time!(model::ParalyzableDeadTime, det::APDDetector)
+    exposure_time = counting_exposure_time(det)
+    exposure_time > zero(exposure_time) || return det.state.channels
+    scale = model.dead_time / exposure_time
+    scale <= zero(scale) && return det.state.channels
+    @. det.state.channels = det.state.channels * exp(-det.state.channels * scale)
     return det.state.channels
 end
 
@@ -174,6 +267,46 @@ end
 
 function apply_gain!(det::APDDetector)
     det.state.channels .*= det.params.gain
+    return det.state.channels
+end
+
+apply_counting_correlation!(::NullCountingCorrelation, det::APDDetector, rng::AbstractRNG) = det.state.channels
+
+function apply_counting_correlation!(model::AfterpulsingModel, det::APDDetector, rng::AbstractRNG)
+    p = model.probability
+    p <= zero(p) && return det.state.channels
+    det.state.channels .*= (one(p) + p)
+    return det.state.channels
+end
+
+function apply_counting_correlation!(model::ChannelCrosstalkModel, det::APDDetector, rng::AbstractRNG)
+    coupling = model.coupling
+    coupling <= zero(coupling) && return det.state.channels
+    copyto!(det.state.noise_buffer, det.state.channels)
+    fill!(det.state.channels, zero(eltype(det.state.channels)))
+    n, m = size(det.state.channels)
+    @inbounds for i in 1:n, j in 1:m
+        center = det.state.noise_buffer[i, j]
+        bleed = coupling * center
+        keep = center - bleed
+        det.state.channels[i, j] += keep
+        neighbors = 0
+        i > 1 && (neighbors += 1)
+        i < n && (neighbors += 1)
+        j > 1 && (neighbors += 1)
+        j < m && (neighbors += 1)
+        neighbors == 0 && continue
+        share = bleed / neighbors
+        i > 1 && (det.state.channels[i - 1, j] += share)
+        i < n && (det.state.channels[i + 1, j] += share)
+        j > 1 && (det.state.channels[i, j - 1] += share)
+        j < m && (det.state.channels[i, j + 1] += share)
+    end
+    return det.state.channels
+end
+
+function apply_counting_correlation!(model::CompositeCountingCorrelation, det::APDDetector, rng::AbstractRNG)
+    foreach(stage -> apply_counting_correlation!(stage, det, rng), model.stages)
     return det.state.channels
 end
 
@@ -194,11 +327,13 @@ end
 function capture!(det::APDDetector, channels::AbstractMatrix{T}; rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     ensure_buffers!(det, size(channels))
     copyto!(det.state.channels, channels)
-    det.state.channels .*= det.params.qe * det.params.integration_time
+    exposure_time = effective_gate_time(det.params.gate_model, det.params.integration_time)
+    det.state.channels .*= det.params.qe * exposure_time
     apply_gain_map!(det)
-    apply_dark_counts!(det, det.params.integration_time)
+    apply_dark_counts!(det, exposure_time)
     apply_counting_noise!(det, rng)
     apply_dead_time!(det)
+    apply_counting_correlation!(det.params.correlation_model, det, rng)
     apply_gain!(det)
     return write_output!(det)
 end

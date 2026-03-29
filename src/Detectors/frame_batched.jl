@@ -10,10 +10,14 @@ function _require_batched_detector_compat(det::Detector, cube::AbstractArray, sc
         throw(InvalidConfiguration("batched detector capture currently requires output_precision === nothing"))
     det.params.readout_window === nothing ||
         throw(InvalidConfiguration("batched detector capture currently requires full-frame readout"))
-    det.params.correction_model isa NullFrameReadoutCorrection ||
+    is_null_readout_correction(det.params.correction_model) ||
         throw(InvalidConfiguration("batched detector capture currently requires null readout correction"))
     supports_separable_application(det.params.response_model) ||
         throw(InvalidConfiguration("batched detector capture currently requires a maintained separable frame response"))
+    is_global_shutter(det.params.timing_model) ||
+        throw(InvalidConfiguration("batched detector capture currently requires global-shutter timing semantics"))
+    is_null_persistence(persistence_model(det.params.sensor)) ||
+        throw(InvalidConfiguration("batched detector capture currently requires null detector persistence"))
     _require_batched_sensor_compat(det.params.sensor)
     return nothing
 end
@@ -62,7 +66,57 @@ function _batched_dark_current!(det::Detector, cube::AbstractArray, scratch::Abs
     return cube
 end
 
-_batched_pre_readout_gain!(::FrameSensorType, det::Detector, cube::AbstractArray) = cube
+_batched_signal_defects!(::NullDetectorDefectModel, cube::AbstractArray, scratch::AbstractArray, exposure_time::Real) = cube
+_batched_dark_defects!(::NullDetectorDefectModel, cube::AbstractArray, scratch::AbstractArray, exposure_time::Real) = cube
+
+function _batched_signal_defects!(model::PixelResponseNonuniformity, cube::AbstractArray, scratch::AbstractArray, exposure_time::Real)
+    size(model.gain_map) == size(cube)[1:2] ||
+        throw(DimensionMismatchError("PixelResponseNonuniformity gain_map size must match detector frame size"))
+    cube .*= reshape(model.gain_map, size(model.gain_map)..., 1)
+    return cube
+end
+
+_batched_dark_defects!(::PixelResponseNonuniformity, cube::AbstractArray, scratch::AbstractArray, exposure_time::Real) = cube
+_batched_signal_defects!(::DarkSignalNonuniformity, cube::AbstractArray, scratch::AbstractArray, exposure_time::Real) = cube
+
+function _batched_dark_defects!(model::DarkSignalNonuniformity, cube::AbstractArray, scratch::AbstractArray, exposure_time::Real)
+    size(model.dark_map) == size(cube)[1:2] ||
+        throw(DimensionMismatchError("DarkSignalNonuniformity dark_map size must match detector frame size"))
+    cube .+= reshape(model.dark_map .* exposure_time, size(model.dark_map)..., 1)
+    return cube
+end
+
+function _batched_signal_defects!(model::BadPixelMask, cube::AbstractArray, scratch::AbstractArray, exposure_time::Real)
+    size(model.mask) == size(cube)[1:2] ||
+        throw(DimensionMismatchError("BadPixelMask mask size must match detector frame size"))
+    throughput = model.throughput
+    throughput == one(throughput) && return cube
+    cube .= ifelse.(reshape(model.mask, size(model.mask)..., 1), throughput .* cube, cube)
+    return cube
+end
+
+_batched_dark_defects!(::BadPixelMask, cube::AbstractArray, scratch::AbstractArray, exposure_time::Real) = cube
+
+function _batched_signal_defects!(model::CompositeDetectorDefectModel, cube::AbstractArray, scratch::AbstractArray, exposure_time::Real)
+    foreach(stage -> _batched_signal_defects!(stage, cube, scratch, exposure_time), model.stages)
+    return cube
+end
+
+function _batched_dark_defects!(model::CompositeDetectorDefectModel, cube::AbstractArray, scratch::AbstractArray, exposure_time::Real)
+    foreach(stage -> _batched_dark_defects!(stage, cube, scratch, exposure_time), model.stages)
+    return cube
+end
+
+_batched_frame_nonlinearity!(::NullFrameNonlinearity, cube::AbstractArray) = cube
+
+function _batched_frame_nonlinearity!(model::SaturatingFrameNonlinearity, cube::AbstractArray)
+    coeff = model.coefficient
+    coeff <= zero(coeff) && return cube
+    @. cube = cube / (1 + coeff * cube)
+    return cube
+end
+
+_batched_pre_readout_gain!(::FrameSensorType, det::Detector, cube::AbstractArray, rng::AbstractRNG) = cube
 _batched_sensor_statistics!(sensor::FrameSensorType, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
 
 function _batched_avalanche_excess_noise!(factor, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
@@ -213,13 +267,16 @@ function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::Abstra
     _require_batched_detector_compat(det, cube, scratch)
     exposure_time = det.params.integration_time
     cube .*= det.params.qe * exposure_time
+    _batched_signal_defects!(det.params.defect_model, cube, scratch, exposure_time)
     _batched_apply_response!(execution_style(cube), det.params.response_model, cube, scratch)
     capture_stack_poisson_noise!(det, cube, rng)
     _batched_background_flux!(det.background_flux, det, cube, scratch, rng, exposure_time)
     _batched_dark_current!(det, cube, scratch, rng, exposure_time)
-    apply_saturation!(det, cube)
+    _batched_dark_defects!(det.params.defect_model, cube, scratch, exposure_time)
     _batched_sensor_statistics!(det.params.sensor, det, cube, scratch, rng)
-    _batched_pre_readout_gain!(det.params.sensor, det, cube)
+    _batched_frame_nonlinearity!(det.params.nonlinearity_model, cube)
+    apply_saturation!(det, cube)
+    _batched_pre_readout_gain!(det.params.sensor, det, cube, rng)
     _batched_readout_noise!(det, cube, scratch, rng)
     _batched_post_readout_gain!(det.params.sensor, det, cube)
     _batched_quantization!(det, cube)

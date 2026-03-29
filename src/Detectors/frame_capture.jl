@@ -1,11 +1,76 @@
+function ensure_latent_buffer!(det::Detector)
+    if size(det.state.latent_buffer) != size(det.state.frame)
+        det.state.latent_buffer = similar(det.state.frame, size(det.state.frame)...)
+        fill!(det.state.latent_buffer, zero(eltype(det.state.latent_buffer)))
+    end
+    return det.state.latent_buffer
+end
+
+apply_signal_defects!(::NullDetectorDefectModel, det::Detector, exposure_time::Real) = det.state.frame
+apply_dark_defects!(::NullDetectorDefectModel, det::Detector, exposure_time::Real) = det.state.frame
+
+function apply_signal_defects!(model::PixelResponseNonuniformity, det::Detector, exposure_time::Real)
+    size(model.gain_map) == size(det.state.frame) ||
+        throw(DimensionMismatchError("PixelResponseNonuniformity gain_map size must match detector frame size"))
+    det.state.frame .*= model.gain_map
+    return det.state.frame
+end
+
+apply_dark_defects!(::PixelResponseNonuniformity, det::Detector, exposure_time::Real) = det.state.frame
+apply_signal_defects!(::DarkSignalNonuniformity, det::Detector, exposure_time::Real) = det.state.frame
+
+function apply_dark_defects!(model::DarkSignalNonuniformity, det::Detector, exposure_time::Real)
+    size(model.dark_map) == size(det.state.frame) ||
+        throw(DimensionMismatchError("DarkSignalNonuniformity dark_map size must match detector frame size"))
+    det.state.frame .+= model.dark_map .* exposure_time
+    return det.state.frame
+end
+
+function apply_signal_defects!(model::BadPixelMask, det::Detector, exposure_time::Real)
+    size(model.mask) == size(det.state.frame) ||
+        throw(DimensionMismatchError("BadPixelMask mask size must match detector frame size"))
+    throughput = model.throughput
+    throughput == one(throughput) && return det.state.frame
+    det.state.frame .= ifelse.(model.mask, throughput .* det.state.frame, det.state.frame)
+    return det.state.frame
+end
+
+apply_dark_defects!(::BadPixelMask, det::Detector, exposure_time::Real) = det.state.frame
+
+function apply_signal_defects!(model::CompositeDetectorDefectModel, det::Detector, exposure_time::Real)
+    foreach(stage -> apply_signal_defects!(stage, det, exposure_time), model.stages)
+    return det.state.frame
+end
+
+function apply_dark_defects!(model::CompositeDetectorDefectModel, det::Detector, exposure_time::Real)
+    foreach(stage -> apply_dark_defects!(stage, det, exposure_time), model.stages)
+    return det.state.frame
+end
+
+apply_frame_nonlinearity!(::NullFrameNonlinearity, det::Detector) = det.state.frame
+
+function apply_frame_nonlinearity!(model::SaturatingFrameNonlinearity, det::Detector)
+    coeff = model.coefficient
+    coeff <= zero(coeff) && return det.state.frame
+    @. det.state.frame = det.state.frame / (1 + coeff * det.state.frame)
+    return det.state.frame
+end
+
+apply_sensor_persistence!(::FrameSensorType, det::Detector, exposure_time::Real) = det.state.frame
+update_sensor_persistence!(::FrameSensorType, det::Detector, exposure_time::Real) = det.state.frame
+
 function capture_signal!(det::Detector{NoiseNone}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
     fill_frame!(det, psf, exposure_time)
+    apply_signal_defects!(det.params.defect_model, det, exposure_time)
+    apply_sensor_persistence!(det.params.sensor, det, exposure_time)
     apply_background_flux!(det.background_flux, det, rng, exposure_time)
     return nothing
 end
 
 function capture_signal!(det::Detector{NoisePhoton}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
     fill_frame!(det, psf, exposure_time)
+    apply_signal_defects!(det.params.defect_model, det, exposure_time)
+    apply_sensor_persistence!(det.params.sensor, det, exposure_time)
     poisson_noise!(rng, det.state.frame)
     apply_background_flux!(det.background_flux, det, rng, exposure_time)
     return nothing
@@ -13,12 +78,16 @@ end
 
 function capture_signal!(det::Detector{<:NoiseReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
     fill_frame!(det, psf, exposure_time)
+    apply_signal_defects!(det.params.defect_model, det, exposure_time)
+    apply_sensor_persistence!(det.params.sensor, det, exposure_time)
     apply_background_flux!(det.background_flux, det, rng, exposure_time)
     return nothing
 end
 
 function capture_signal!(det::Detector{<:NoisePhotonReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
     fill_frame!(det, psf, exposure_time)
+    apply_signal_defects!(det.params.defect_model, det, exposure_time)
+    apply_sensor_persistence!(det.params.sensor, det, exposure_time)
     poisson_noise!(rng, det.state.frame)
     apply_background_flux!(det.background_flux, det, rng, exposure_time)
     return nothing
@@ -76,7 +145,7 @@ function apply_avalanche_excess_noise!(factor, det::Detector, rng::AbstractRNG)
     return det.state.frame
 end
 
-apply_pre_readout_gain!(::FrameSensorType, det::Detector) = det.state.frame
+apply_pre_readout_gain!(::FrameSensorType, det::Detector, rng::AbstractRNG) = det.state.frame
 apply_post_readout_gain!(::FrameSensorType, det::Detector) = det.state.frame
 reset_readout_products!(det::Detector) = (det.state.readout_products = NoFrameReadoutProducts(); det)
 
@@ -291,15 +360,18 @@ finalize_readout_products!(::FrameSensorType, det::Detector, rng::AbstractRNG, e
 
 function finalize_capture!(det::Detector, rng::AbstractRNG, exposure_time::Real)
     apply_dark_current!(det, rng, exposure_time)
-    apply_saturation!(det)
+    apply_dark_defects!(det.params.defect_model, det, exposure_time)
     apply_sensor_statistics!(det.params.sensor, det, rng)
-    apply_pre_readout_gain!(det.params.sensor, det)
+    apply_frame_nonlinearity!(det.params.nonlinearity_model, det)
+    apply_saturation!(det)
+    apply_pre_readout_gain!(det.params.sensor, det, rng)
     apply_readout_noise!(det, rng)
     apply_post_readout_gain!(det.params.sensor, det)
     finalize_readout_products!(det.params.sensor, det, rng, exposure_time)
     apply_readout_correction!(det.params.correction_model, det.state.frame)
     apply_quantization!(det)
     subtract_background_map!(det.background_map, det)
+    update_sensor_persistence!(det.params.sensor, det, exposure_time)
     return det.state.frame
 end
 

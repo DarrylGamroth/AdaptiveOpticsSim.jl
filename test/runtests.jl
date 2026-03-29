@@ -959,6 +959,11 @@ end
     frame_emccd_excess = copy(capture!(det_emccd_excess, uniform_signal; rng=MersenneTwister(8)))
     @test frame_emccd_base == uniform_signal
     @test std(vec(frame_emccd_excess)) > 0
+    det_emccd_stochastic = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        gain=5.0, sensor=EMCCDSensor(excess_noise_factor=1.4,
+            multiplication_model=StochasticMultiplicationRegister(0.6)))
+    frame_emccd_stochastic = copy(capture!(det_emccd_stochastic, uniform_signal; rng=MersenneTwister(124)))
+    @test std(vec(frame_emccd_stochastic)) > 0
 
     det_ccd_cic = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=CCDSensor(clock_induced_charge_rate=5.0))
@@ -966,6 +971,15 @@ end
     @test sum(frame_ccd_cic) > 0
     @test supports_clock_induced_charge(det_ccd_cic.params.sensor)
     @test_throws InvalidConfiguration CCDSensor(clock_induced_charge_rate=-1.0)
+    det_emccd_cic = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        sensor=EMCCDSensor(cic_rate=3.0))
+    @test sum(capture!(det_emccd_cic, zero_psf; rng=MersenneTwister(125))) > 0
+    det_emccd_sat = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        gain=5.0, sensor=EMCCDSensor(register_full_well=100.0))
+    @test maximum(capture!(det_emccd_sat, fill(50.0, 4, 4); rng=MersenneTwister(126))) == 100.0
+    @test_throws InvalidConfiguration EMCCDSensor(cic_rate=-1.0)
+    @test_throws InvalidConfiguration EMCCDSensor(register_full_well=0.0)
+    @test_throws InvalidConfiguration EMCCDSensor(multiplication_model=StochasticMultiplicationRegister(-1.0))
 
     det_cmos = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=CMOSSensor(column_readout_sigma=1.0))
@@ -976,6 +990,35 @@ end
     @test supports_column_readout_noise(det_cmos.params.sensor)
     @test detector_export_metadata(det_cmos).frame_response == :gaussian
     @test_throws InvalidConfiguration CMOSSensor(column_readout_sigma=-1.0)
+    prnu_map = [1.0 0.5 1.0 0.5; 1.0 0.5 1.0 0.5; 1.0 0.5 1.0 0.5; 1.0 0.5 1.0 0.5]
+    dsnu_map = fill(0.25, 4, 4)
+    bad_mask = falses(4, 4)
+    bad_mask[2, 3] = true
+    det_cmos_structured = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        sensor=CMOSSensor(output_model=StaticCMOSOutputPattern(2, [1.0, 2.0], [0.0, 10.0]),
+            timing_model=RollingShutter(1e-3)),
+        response_model=NullFrameResponse(),
+        defect_model=CompositeDetectorDefectModel(
+            PixelResponseNonuniformity(prnu_map),
+            DarkSignalNonuniformity(dsnu_map),
+            BadPixelMask(bad_mask; throughput=0.0)))
+    structured_frame = capture!(det_cmos_structured, fill(2.0, 4, 4); rng=MersenneTwister(120))
+    @test structured_frame[1, 1] ≈ 2.25
+    @test structured_frame[1, 2] ≈ 1.25
+    @test structured_frame[1, 3] ≈ 14.5
+    @test structured_frame[2, 3] ≈ 10.5
+    structured_meta = detector_export_metadata(det_cmos_structured)
+    @test structured_meta.detector_defects == :composite
+    @test structured_meta.has_prnu
+    @test structured_meta.has_dsnu
+    @test structured_meta.has_bad_pixels
+    @test structured_meta.timing_model == :rolling_shutter
+    @test structured_meta.timing_line_time == 1e-3
+    @test structured_meta.sampling_wallclock_time == 1.004
+    @test supports_detector_defect_maps(det_cmos_structured.params.sensor)
+    @test supports_shutter_timing(det_cmos_structured.params.sensor)
+    @test_throws InvalidConfiguration CMOSSensor(timing_model=RollingShutter(-1.0))
+    @test_throws InvalidConfiguration CMOSSensor(output_model=StaticCMOSOutputPattern(2, [1.0], [0.0, 1.0]))
 
     det_ingaas = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=InGaAsSensor(glow_rate=3.0))
@@ -984,6 +1027,27 @@ end
     @test supports_sensor_glow(det_ingaas.params.sensor)
     @test detector_export_metadata(det_ingaas).frame_response == :gaussian
     @test_throws InvalidConfiguration InGaAsSensor(glow_rate=-1.0)
+    det_ingaas_persist = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        response_model=NullFrameResponse(),
+        sensor=InGaAsSensor(persistence_model=ExponentialPersistence(0.5, 0.0)))
+    capture!(det_ingaas_persist, fill(4.0, 4, 4); rng=MersenneTwister(121))
+    persisted = capture!(det_ingaas_persist, zeros(4, 4); rng=MersenneTwister(122))
+    @test sum(persisted) ≈ 32.0
+    persist_meta = detector_export_metadata(det_ingaas_persist)
+    @test persist_meta.persistence_model == :exponential
+    det_ingaas_nonlinear = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        response_model=NullFrameResponse(),
+        nonlinearity_model=SaturatingFrameNonlinearity(0.1),
+        sensor=InGaAsSensor())
+    nonlinear_frame = capture!(det_ingaas_nonlinear, fill(10.0, 2, 2); rng=MersenneTwister(123))
+    @test nonlinear_frame == fill(5.0, 2, 2)
+    nonlinear_meta = detector_export_metadata(det_ingaas_nonlinear)
+    @test nonlinear_meta.nonlinearity_model == :saturating
+    @test supports_detector_persistence(det_ingaas_persist.params.sensor)
+    @test supports_detector_nonlinearity(det_ingaas_nonlinear.params.sensor)
+    @test_throws InvalidConfiguration InGaAsSensor(persistence_model=ExponentialPersistence(1.1, 0.0))
+    @test_throws InvalidConfiguration Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        nonlinearity_model=SaturatingFrameNonlinearity(-0.1), sensor=InGaAsSensor())
 
     det_saphira = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeAvalancheArraySensor(avalanche_gain=5.0))
@@ -1267,9 +1331,45 @@ end
     @test dead_time_meta.dead_time_model == :nonparalyzable
     @test dead_time_meta.dead_time == 0.5
     @test supports_dead_time(apd_dead_time)
+    apd_paralyzable = APDDetector(integration_time=1.0, qe=1.0, gain=1.0, dark_count_rate=0.0,
+        noise=NoiseNone(), dead_time_model=ParalyzableDeadTime(0.5))
+    @test capture!(apd_paralyzable, fill(4.0, 2, 8); rng=MersenneTwister(9)) ≈ fill(4.0 * exp(-2.0), 2, 8)
+    @test supports_paralyzable_dead_time(apd_paralyzable)
+    apd_gated = APDDetector(integration_time=1.0, qe=1.0, gain=1.0, dark_count_rate=0.0,
+        noise=NoiseNone(), gate_model=DutyCycleGate(0.5))
+    @test capture!(apd_gated, fill(4.0, 2, 8); rng=MersenneTwister(9)) == fill(2.0, 2, 8)
+    gated_meta = detector_export_metadata(apd_gated)
+    @test gated_meta.gate_model == :duty_cycle
+    @test gated_meta.duty_cycle == 0.5
+    @test supports_counting_gating(apd_gated)
+    apd_afterpulse = APDDetector(integration_time=1.0, qe=1.0, gain=1.0, dark_count_rate=0.0,
+        noise=NoiseNone(), correlation_model=AfterpulsingModel(0.25))
+    @test capture!(apd_afterpulse, fill(4.0, 2, 8); rng=MersenneTwister(9)) == fill(5.0, 2, 8)
+    @test supports_afterpulsing(apd_afterpulse)
+    apd_crosstalk = APDDetector(integration_time=1.0, qe=1.0, gain=1.0, dark_count_rate=0.0,
+        noise=NoiseNone(), correlation_model=ChannelCrosstalkModel(0.4))
+    crosstalk_in = zeros(3, 3)
+    crosstalk_in[2, 2] = 10.0
+    crosstalk_out = capture!(apd_crosstalk, crosstalk_in; rng=MersenneTwister(9))
+    @test crosstalk_out[2, 2] ≈ 6.0
+    @test crosstalk_out[1, 2] ≈ 1.0
+    @test crosstalk_out[2, 1] ≈ 1.0
+    @test crosstalk_out[2, 3] ≈ 1.0
+    @test crosstalk_out[3, 2] ≈ 1.0
+    @test supports_channel_crosstalk(apd_crosstalk)
+    apd_composite_corr = APDDetector(integration_time=1.0, qe=1.0, gain=1.0, dark_count_rate=0.0,
+        noise=NoiseNone(), correlation_model=CompositeCountingCorrelation(AfterpulsingModel(0.1), ChannelCrosstalkModel(0.2)))
+    composite_meta_apd = detector_export_metadata(apd_composite_corr)
+    @test composite_meta_apd.correlation_model == :composite
+    @test composite_meta_apd.afterpulse_probability == 0.1
+    @test composite_meta_apd.crosstalk == 0.2
 
     @test_throws InvalidConfiguration APDDetector(noise=NoiseReadout(1.0))
     @test_throws InvalidConfiguration APDDetector(dead_time_model=NonParalyzableDeadTime(-1.0))
+    @test_throws InvalidConfiguration APDDetector(dead_time_model=ParalyzableDeadTime(-1.0))
+    @test_throws InvalidConfiguration APDDetector(gate_model=DutyCycleGate(0.0))
+    @test_throws InvalidConfiguration APDDetector(correlation_model=AfterpulsingModel(1.5))
+    @test_throws InvalidConfiguration APDDetector(correlation_model=ChannelCrosstalkModel(-0.1))
 
     det_buffered = Detector(integration_time=2.0, noise=NoiseNone(), qe=1.0, binning=1)
     frame_partial = copy(capture!(det_buffered, fill(1.0, 4, 4); rng=MersenneTwister(2), sample_time=1.0))
@@ -1948,6 +2048,14 @@ end
     @test HgCdTeAvalancheArraySensor <: HgCdTeAvalancheArraySensorType
     @test !supports_avalanche_gain(CCDSensor())
     @test !supports_sensor_glow(CMOSSensor())
+    @test supports_detector_defect_maps(CMOSSensor())
+    @test supports_detector_defect_maps(InGaAsSensor())
+    @test supports_shutter_timing(CMOSSensor())
+    @test !supports_shutter_timing(CCDSensor())
+    @test !supports_detector_persistence(CMOSSensor())
+    @test supports_detector_persistence(InGaAsSensor(persistence_model=ExponentialPersistence(0.1, 0.9)))
+    @test !supports_detector_nonlinearity(CMOSSensor())
+    @test supports_detector_nonlinearity(InGaAsSensor())
     @test !supports_nondestructive_reads(CCDSensor())
     @test supports_nondestructive_reads(HgCdTeAvalancheArraySensor())
     @test !supports_reference_read_subtraction(EMCCDSensor())

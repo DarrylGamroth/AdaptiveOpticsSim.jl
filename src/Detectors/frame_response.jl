@@ -101,6 +101,10 @@ function ensure_buffers!(det::Detector, n_mid::Int, m_mid::Int, n_out::Int, m_ou
         det.state.integrated_time = zero(det.state.integrated_time)
         det.state.readout_ready = true
     end
+    if size(det.state.latent_buffer) != (n_out, m_out)
+        det.state.latent_buffer = similar(det.state.latent_buffer, n_out, m_out)
+        fill!(det.state.latent_buffer, zero(eltype(det.state.latent_buffer)))
+    end
     window = det.params.readout_window === nothing ? nothing : validate_readout_window(det.params.readout_window, n_out, m_out)
     out_rows = window === nothing ? n_out : length(window.rows)
     out_cols = window === nothing ? m_out : length(window.cols)

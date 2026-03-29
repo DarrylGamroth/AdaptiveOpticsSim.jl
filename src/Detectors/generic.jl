@@ -39,6 +39,35 @@ detector_noise_symbol(::NoisePhotonReadout) = :photon_readout
 detector_sensor_symbol(sensor::SensorType) =
     throw(InvalidConfiguration("missing detector_sensor_symbol overload for $(typeof(sensor))"))
 
+detector_defect_symbol(::NullDetectorDefectModel) = :none
+detector_defect_symbol(::PixelResponseNonuniformity) = :prnu
+detector_defect_symbol(::DarkSignalNonuniformity) = :dsnu
+detector_defect_symbol(::BadPixelMask) = :bad_pixel_mask
+detector_defect_symbol(::CompositeDetectorDefectModel) = :composite
+
+timing_model_symbol(::GlobalShutter) = :global_shutter
+timing_model_symbol(::RollingShutter) = :rolling_shutter
+is_global_shutter(::AbstractFrameTimingModel) = false
+is_global_shutter(::GlobalShutter) = true
+
+nonlinearity_symbol(::NullFrameNonlinearity) = :none
+nonlinearity_symbol(::SaturatingFrameNonlinearity) = :saturating
+is_null_frame_nonlinearity(::AbstractFrameNonlinearityModel) = false
+is_null_frame_nonlinearity(::NullFrameNonlinearity) = true
+
+persistence_symbol(::NullPersistence) = :none
+persistence_symbol(::ExponentialPersistence) = :exponential
+is_null_persistence(::AbstractPersistenceModel) = false
+is_null_persistence(::NullPersistence) = true
+
+counting_gate_symbol(::NullCountingGate) = :none
+counting_gate_symbol(::DutyCycleGate) = :duty_cycle
+
+counting_correlation_symbol(::NullCountingCorrelation) = :none
+counting_correlation_symbol(::AfterpulsingModel) = :afterpulsing
+counting_correlation_symbol(::ChannelCrosstalkModel) = :channel_crosstalk
+counting_correlation_symbol(::CompositeCountingCorrelation) = :composite
+
 response_family(::NullFrameResponse) = :none
 response_family(::GaussianPixelResponse) = :gaussian
 response_family(::SampledFrameResponse) = :sampled
@@ -114,6 +143,10 @@ supports_column_readout_noise(::FrameSensorType) = false
 supports_avalanche_gain(::FrameSensorType) = false
 supports_avalanche_gain(::AvalancheFrameSensorType) = true
 supports_sensor_glow(::FrameSensorType) = false
+supports_detector_defect_maps(::FrameSensorType) = false
+supports_detector_persistence(::FrameSensorType) = false
+supports_detector_nonlinearity(::FrameSensorType) = false
+supports_shutter_timing(::FrameSensorType) = false
 supports_nondestructive_reads(::FrameSensorType) = false
 supports_reference_read_subtraction(::FrameSensorType) = false
 supports_readout_correction(::FrameSensorType) = false
@@ -125,6 +158,8 @@ readout_correction_symbol(::ReferenceRowCommonModeCorrection) = :reference_row_c
 readout_correction_symbol(::ReferenceColumnCommonModeCorrection) = :reference_column_common_mode
 readout_correction_symbol(::ReferenceOutputCommonModeCorrection) = :reference_output_common_mode
 readout_correction_symbol(::CompositeFrameReadoutCorrection) = :composite
+is_null_readout_correction(::FrameReadoutCorrectionModel) = false
+is_null_readout_correction(::NullFrameReadoutCorrection) = true
 correction_edge_rows(::FrameReadoutCorrectionModel) = nothing
 correction_edge_cols(::FrameReadoutCorrectionModel) = nothing
 correction_edge_rows(model::ReferencePixelCommonModeCorrection) = model.edge_rows
@@ -142,6 +177,10 @@ correction_stage_count(model::CompositeFrameReadoutCorrection) = length(model.st
 supports_counting_noise(::AbstractCountingDetector) = false
 supports_dead_time(::AbstractCountingDetector) = false
 supports_channel_gain_map(::AbstractCountingDetector) = false
+supports_counting_gating(::AbstractCountingDetector) = false
+supports_afterpulsing(::AbstractCountingDetector) = false
+supports_channel_crosstalk(::AbstractCountingDetector) = false
+supports_paralyzable_dead_time(::AbstractCountingDetector) = false
 
 supports_detector_response(::SensorType, ::AbstractDetectorResponse) = false
 supports_detector_response(::FrameSensorType, ::AbstractFrameResponse) = true
@@ -161,6 +200,10 @@ end
 function default_response_model(::HgCdTeAvalancheArraySensor; T::Type{<:AbstractFloat}=Float64, backend=Array)
     return SampledFrameResponse([0.0 0.01 0.0; 0.01 0.96 0.01; 0.0 0.01 0.0]; T=T, backend=backend)
 end
+
+default_detector_defect_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64, backend=Array) = NullDetectorDefectModel()
+default_frame_timing_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64) = GlobalShutter()
+default_frame_nonlinearity_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64) = NullFrameNonlinearity()
 
 sensor_is_frame_based(::SensorType) = false
 sensor_is_frame_based(::FrameSensorType) = true
@@ -213,8 +256,14 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         response_fill_factor_x(det.params.response_model, T),
         response_fill_factor_y(det.params.response_model, T),
         response_aperture_shape(det.params.response_model),
+        detector_defect_symbol(det.params.defect_model),
+        has_prnu(det.params.defect_model),
+        has_dsnu(det.params.defect_model),
+        has_bad_pixels(det.params.defect_model),
         row_window,
         col_window,
+        timing_model_symbol(det.params.timing_model),
+        line_time(det.params.timing_model, T),
         frame_sampling_symbol(det.params.sensor),
         frame_sampling_reads(det.params.sensor),
         frame_sampling_reference_reads(det.params.sensor),
@@ -227,6 +276,8 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         correction_group_rows(det.params.correction_model),
         correction_group_cols(det.params.correction_model),
         correction_stage_count(det.params.correction_model),
+        nonlinearity_symbol(det.params.nonlinearity_model),
+        persistence_symbol(persistence_model(det.params.sensor)),
         !isnothing(detector_reference_frame(products)),
         !isnothing(detector_signal_frame(products)),
         !isnothing(detector_combined_frame(products)),
@@ -327,6 +378,44 @@ end
 effective_readout_sigma(::FrameSensorType, sigma) = sigma
 effective_dark_current_time(::FrameSensorType, exposure_time) = exposure_time
 effective_sensor_glow_time(::FrameSensorType, exposure_time) = exposure_time
+persistence_model(::FrameSensorType) = NullPersistence()
+
+line_time(::AbstractFrameTimingModel, ::Type{T}) where {T<:AbstractFloat} = nothing
+line_time(model::RollingShutter, ::Type{T}) where {T<:AbstractFloat} = T(model.line_time)
+
+has_prnu(::AbstractDetectorDefectModel) = false
+has_prnu(::PixelResponseNonuniformity) = true
+has_prnu(model::CompositeDetectorDefectModel) = any(has_prnu, model.stages)
+has_dsnu(::AbstractDetectorDefectModel) = false
+has_dsnu(::DarkSignalNonuniformity) = true
+has_dsnu(model::CompositeDetectorDefectModel) = any(has_dsnu, model.stages)
+has_bad_pixels(::AbstractDetectorDefectModel) = false
+has_bad_pixels(::BadPixelMask) = true
+has_bad_pixels(model::CompositeDetectorDefectModel) = any(has_bad_pixels, model.stages)
+
+counting_gate_duty_cycle(::AbstractCountingGateModel, ::Type{T}) where {T<:AbstractFloat} = nothing
+counting_gate_duty_cycle(model::DutyCycleGate, ::Type{T}) where {T<:AbstractFloat} = T(model.duty_cycle)
+afterpulse_probability(::AbstractCountingCorrelationModel, ::Type{T}) where {T<:AbstractFloat} = nothing
+afterpulse_probability(model::AfterpulsingModel, ::Type{T}) where {T<:AbstractFloat} = T(model.probability)
+afterpulse_probability(model::CompositeCountingCorrelation, ::Type{T}) where {T<:AbstractFloat} =
+    _max_or_nothing((afterpulse_probability(stage, T) for stage in model.stages))
+crosstalk_value(::AbstractCountingCorrelationModel, ::Type{T}) where {T<:AbstractFloat} = nothing
+crosstalk_value(model::ChannelCrosstalkModel, ::Type{T}) where {T<:AbstractFloat} = T(model.coupling)
+crosstalk_value(model::CompositeCountingCorrelation, ::Type{T}) where {T<:AbstractFloat} =
+    _max_or_nothing((crosstalk_value(stage, T) for stage in model.stages))
+
+function _max_or_nothing(values)
+    found = false
+    max_value = nothing
+    for value in values
+        isnothing(value) && continue
+        if !found || value > max_value
+            max_value = value
+            found = true
+        end
+    end
+    return found ? max_value : nothing
+end
 
 convert_frame_response_model(::NullFrameResponse, ::Type{T}, backend) where {T<:AbstractFloat} = NullFrameResponse()
 
@@ -402,6 +491,76 @@ function validate_frame_response_model(model::SeparablePixelMTF)
     return model
 end
 
+convert_detector_defect_model(::NullDetectorDefectModel, ::Type{T}, backend) where {T<:AbstractFloat} = NullDetectorDefectModel()
+
+function convert_detector_defect_model(model::PixelResponseNonuniformity, ::Type{T}, backend) where {T<:AbstractFloat}
+    gain_map = _to_backend_matrix(T.(Array(model.gain_map)), backend)
+    return PixelResponseNonuniformity{T,typeof(gain_map)}(gain_map)
+end
+
+function convert_detector_defect_model(model::DarkSignalNonuniformity, ::Type{T}, backend) where {T<:AbstractFloat}
+    dark_map = _to_backend_matrix(T.(Array(model.dark_map)), backend)
+    return DarkSignalNonuniformity{T,typeof(dark_map)}(dark_map)
+end
+
+function convert_detector_defect_model(model::BadPixelMask, ::Type{T}, backend) where {T<:AbstractFloat}
+    mask = _to_backend_bool_matrix(Array(model.mask), backend)
+    return BadPixelMask{T,typeof(mask)}(mask, T(model.throughput))
+end
+
+function convert_detector_defect_model(model::CompositeDetectorDefectModel, ::Type{T}, backend) where {T<:AbstractFloat}
+    return CompositeDetectorDefectModel(tuple((convert_detector_defect_model(stage, T, backend) for stage in model.stages)...))
+end
+
+validate_detector_defect_model(::NullDetectorDefectModel) = NullDetectorDefectModel()
+
+function validate_detector_defect_model(model::PixelResponseNonuniformity)
+    isempty(model.gain_map) && throw(InvalidConfiguration("PixelResponseNonuniformity gain_map must not be empty"))
+    minimum(model.gain_map) >= zero(eltype(model.gain_map)) ||
+        throw(InvalidConfiguration("PixelResponseNonuniformity gain_map must be >= 0"))
+    return model
+end
+
+function validate_detector_defect_model(model::DarkSignalNonuniformity)
+    isempty(model.dark_map) && throw(InvalidConfiguration("DarkSignalNonuniformity dark_map must not be empty"))
+    minimum(model.dark_map) >= zero(eltype(model.dark_map)) ||
+        throw(InvalidConfiguration("DarkSignalNonuniformity dark_map must be >= 0"))
+    return model
+end
+
+function validate_detector_defect_model(model::BadPixelMask)
+    isempty(model.mask) && throw(InvalidConfiguration("BadPixelMask mask must not be empty"))
+    zero(model.throughput) <= model.throughput <= one(model.throughput) ||
+        throw(InvalidConfiguration("BadPixelMask throughput must lie in [0, 1]"))
+    return model
+end
+
+function validate_detector_defect_model(model::CompositeDetectorDefectModel)
+    return CompositeDetectorDefectModel(tuple((validate_detector_defect_model(stage) for stage in model.stages)...))
+end
+
+convert_frame_timing_model(::GlobalShutter, ::Type{T}) where {T<:AbstractFloat} = GlobalShutter()
+convert_frame_timing_model(model::RollingShutter, ::Type{T}) where {T<:AbstractFloat} = RollingShutter{T}(T(model.line_time))
+
+validate_frame_timing_model(::GlobalShutter) = GlobalShutter()
+
+function validate_frame_timing_model(model::RollingShutter)
+    model.line_time >= zero(model.line_time) || throw(InvalidConfiguration("RollingShutter line_time must be >= 0"))
+    return model
+end
+
+convert_frame_nonlinearity_model(::NullFrameNonlinearity, ::Type{T}) where {T<:AbstractFloat} = NullFrameNonlinearity()
+convert_frame_nonlinearity_model(model::SaturatingFrameNonlinearity, ::Type{T}) where {T<:AbstractFloat} =
+    SaturatingFrameNonlinearity{T}(T(model.coefficient))
+
+validate_frame_nonlinearity_model(::NullFrameNonlinearity) = NullFrameNonlinearity()
+
+function validate_frame_nonlinearity_model(model::SaturatingFrameNonlinearity)
+    model.coefficient >= zero(model.coefficient) ||
+        throw(InvalidConfiguration("SaturatingFrameNonlinearity coefficient must be >= 0"))
+    return model
+end
+
 validate_readout_window(::Nothing) = nothing
 
 function validate_readout_window(window::FrameWindow)
@@ -428,6 +587,32 @@ end
 function validate_detector_response(sensor::SensorType, response_model::AbstractDetectorResponse)
     supports_detector_response(sensor, response_model) && return response_model
     throw(InvalidConfiguration("response model $(typeof(response_model)) is not supported for sensor $(typeof(sensor))"))
+end
+
+resolve_detector_defect_model(sensor::FrameSensorType, ::Nothing; T::Type{<:AbstractFloat}, backend) =
+    default_detector_defect_model(sensor; T=T, backend=backend)
+resolve_detector_defect_model(sensor::FrameSensorType, model::AbstractDetectorDefectModel; T::Type{<:AbstractFloat}, backend) = model
+
+validate_detector_defect(sensor::FrameSensorType, model::AbstractDetectorDefectModel) = model
+
+resolve_frame_timing_model(sensor::FrameSensorType, ::Nothing; T::Type{<:AbstractFloat}) =
+    default_frame_timing_model(sensor; T=T)
+resolve_frame_timing_model(sensor::FrameSensorType, model::AbstractFrameTimingModel; T::Type{<:AbstractFloat}) = model
+
+function validate_frame_timing(sensor::FrameSensorType, model::AbstractFrameTimingModel)
+    supports_shutter_timing(sensor) && return model
+    is_global_shutter(model) && return model
+    throw(InvalidConfiguration("frame timing $(typeof(model)) is not supported for sensor $(typeof(sensor))"))
+end
+
+resolve_frame_nonlinearity_model(sensor::FrameSensorType, ::Nothing; T::Type{<:AbstractFloat}) =
+    default_frame_nonlinearity_model(sensor; T=T)
+resolve_frame_nonlinearity_model(sensor::FrameSensorType, model::AbstractFrameNonlinearityModel; T::Type{<:AbstractFloat}) = model
+
+function validate_frame_nonlinearity(sensor::FrameSensorType, model::AbstractFrameNonlinearityModel)
+    supports_detector_nonlinearity(sensor) && return model
+    is_null_frame_nonlinearity(model) && return model
+    throw(InvalidConfiguration("frame nonlinearity $(typeof(model)) is not supported for sensor $(typeof(sensor))"))
 end
 
 validate_readout_correction_model(::NullFrameReadoutCorrection) = NullFrameReadoutCorrection()
@@ -458,7 +643,7 @@ resolve_correction_model(sensor::SensorType, correction_model::FrameReadoutCorre
 
 function validate_readout_correction(sensor::SensorType, correction_model::FrameReadoutCorrectionModel)
     supports_readout_correction(sensor) && return correction_model
-    correction_model isa NullFrameReadoutCorrection && return correction_model
+    is_null_readout_correction(correction_model) && return correction_model
     throw(InvalidConfiguration("readout correction $(typeof(correction_model)) is not supported for sensor $(typeof(sensor))"))
 end
 
@@ -479,7 +664,9 @@ end
 function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     psf_sampling::Int, binning::Int, gain::Real, dark_current::Real,
     bits::Union{Nothing,Int}, full_well::Union{Nothing,Real}, sensor::SensorType,
-    response_model::Union{Nothing,FrameResponseModel}, correction_model::Union{Nothing,FrameReadoutCorrectionModel},
+    response_model::Union{Nothing,FrameResponseModel}, defect_model::Union{Nothing,AbstractDetectorDefectModel},
+    timing_model::Union{Nothing,AbstractFrameTimingModel}, correction_model::Union{Nothing,FrameReadoutCorrectionModel},
+    nonlinearity_model::Union{Nothing,AbstractFrameNonlinearityModel},
     readout_window::Union{Nothing,FrameWindow},
     output_precision::Union{Nothing,DataType}, background_flux, background_map,
     T::Type{<:AbstractFloat}, backend)
@@ -490,8 +677,16 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     resolved_response = resolve_response_model(sensor, response_model; T=T, backend=backend)
     response = validate_detector_response(sensor,
         validate_frame_response_model(convert_frame_response_model(resolved_response, T, backend)))
+    resolved_defect = resolve_detector_defect_model(sensor, defect_model; T=T, backend=backend)
+    defects = validate_detector_defect(sensor,
+        validate_detector_defect_model(convert_detector_defect_model(resolved_defect, T, backend)))
+    resolved_timing = resolve_frame_timing_model(sensor, timing_model; T=T)
+    timing = validate_frame_timing(sensor, validate_frame_timing_model(convert_frame_timing_model(resolved_timing, T)))
     resolved_correction = resolve_correction_model(sensor, correction_model)
     correction = validate_readout_correction(sensor, validate_readout_correction_model(resolved_correction))
+    resolved_nonlinearity = resolve_frame_nonlinearity_model(sensor, nonlinearity_model; T=T)
+    nonlinearity = validate_frame_nonlinearity(sensor,
+        validate_frame_nonlinearity_model(convert_frame_nonlinearity_model(resolved_nonlinearity, T)))
     output_precision_t = resolve_output_precision(bits, output_precision)
     window = validate_readout_window(readout_window)
     params = DetectorParams{T, typeof(sensor), typeof(response)}(
@@ -505,7 +700,10 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
         full_well_t,
         sensor,
         response,
+        defects,
+        timing,
         correction,
+        nonlinearity,
         window,
         output_precision_t,
     )
@@ -524,6 +722,8 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     fill!(bin_buffer, zero(T))
     fill!(noise_buffer, zero(T))
     fill!(accum_buffer, zero(T))
+    latent_buffer = backend{T}(undef, 1, 1)
+    fill!(latent_buffer, zero(T))
     output_buffer === nothing || fill!(output_buffer, zero(eltype(output_buffer)))
     state = DetectorState{T, typeof(frame), typeof(output_buffer), FrameReadoutProducts}(
         frame,
@@ -531,6 +731,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
         bin_buffer,
         noise_buffer,
         accum_buffer,
+        latent_buffer,
         output_buffer,
         NoFrameReadoutProducts(),
         zero(T),
@@ -550,7 +751,10 @@ function Detector(; integration_time::Real=1.0, qe::Real=1.0,
     gain::Real=1.0, dark_current::Real=0.0, bits::Union{Nothing,Int}=nothing,
     full_well::Union{Nothing,Real}=nothing, sensor::SensorType=CCDSensor(),
     response_model::Union{Nothing,FrameResponseModel}=nothing,
+    defect_model::Union{Nothing,AbstractDetectorDefectModel}=nothing,
+    timing_model::Union{Nothing,AbstractFrameTimingModel}=nothing,
     correction_model::Union{Nothing,FrameReadoutCorrectionModel}=nothing,
+    nonlinearity_model::Union{Nothing,AbstractFrameNonlinearityModel}=nothing,
     readout_window::Union{Nothing,FrameWindow}=nothing,
     output_precision::Union{Nothing,DataType}=nothing, background_flux=nothing, background_map=nothing,
     T::Type{<:AbstractFloat}=Float64, backend=Array)
@@ -558,7 +762,8 @@ function Detector(; integration_time::Real=1.0, qe::Real=1.0,
     return Detector(normalized; integration_time=integration_time, qe=qe,
         psf_sampling=psf_sampling, binning=binning, gain=gain,
         dark_current=dark_current, bits=bits, full_well=full_well,
-        sensor=sensor, response_model=response_model, correction_model=correction_model,
+        sensor=sensor, response_model=response_model, defect_model=defect_model, timing_model=timing_model,
+        correction_model=correction_model, nonlinearity_model=nonlinearity_model,
         readout_window=readout_window, output_precision=output_precision,
         background_flux=background_flux, background_map=background_map,
         T=T, backend=backend)
@@ -568,7 +773,10 @@ function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
     psf_sampling::Int=1, binning::Int=1, gain::Real=1.0, dark_current::Real=0.0,
     bits::Union{Nothing,Int}=nothing, full_well::Union{Nothing,Real}=nothing,
     sensor::SensorType=CCDSensor(), response_model::Union{Nothing,FrameResponseModel}=nothing,
+    defect_model::Union{Nothing,AbstractDetectorDefectModel}=nothing,
+    timing_model::Union{Nothing,AbstractFrameTimingModel}=nothing,
     correction_model::Union{Nothing,FrameReadoutCorrectionModel}=nothing,
+    nonlinearity_model::Union{Nothing,AbstractFrameNonlinearityModel}=nothing,
     readout_window::Union{Nothing,FrameWindow}=nothing,
     output_precision::Union{Nothing,DataType}=nothing,
     background_flux=nothing, background_map=nothing,
@@ -578,7 +786,8 @@ function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
     return _build_detector(validated; integration_time=integration_time, qe=qe,
         psf_sampling=psf_sampling, binning=binning, gain=gain,
         dark_current=dark_current, bits=bits, full_well=full_well,
-        sensor=sensor, response_model=response_model, correction_model=correction_model,
+        sensor=sensor, response_model=response_model, defect_model=defect_model,
+        timing_model=timing_model, correction_model=correction_model, nonlinearity_model=nonlinearity_model,
         readout_window=readout_window, output_precision=output_precision,
         background_flux=background_flux, background_map=background_map,
         T=T, backend=backend)

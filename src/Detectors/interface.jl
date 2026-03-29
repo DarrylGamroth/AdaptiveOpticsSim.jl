@@ -5,14 +5,20 @@ abstract type CountingSensorType <: SensorType end
 abstract type AbstractFrameDetector <: AbstractDetector end
 abstract type AbstractCountingDetector <: AbstractDetector end
 abstract type CountingDeadTimeModel end
+abstract type AbstractCountingGateModel end
+abstract type AbstractCountingCorrelationModel end
 abstract type AbstractDetectorResponse end
 abstract type AbstractFrameResponse <: AbstractDetectorResponse end
 abstract type AbstractFrameMTF <: AbstractFrameResponse end
 const FrameResponseModel = AbstractFrameResponse
 abstract type BackgroundModel end
+abstract type AbstractDetectorDefectModel end
 abstract type FrameSamplingMode end
+abstract type AbstractFrameTimingModel end
 abstract type FrameReadoutCorrectionModel end
 abstract type FrameReadoutProducts end
+abstract type AbstractFrameNonlinearityModel end
+abstract type AbstractPersistenceModel end
 abstract type AvalancheFrameSensorType <: FrameSensorType end
 abstract type HgCdTeAvalancheArraySensorType <: AvalancheFrameSensorType end
 
@@ -83,6 +89,107 @@ CompositeFrameReadoutCorrection(stages::Tuple) =
 CompositeFrameReadoutCorrection(stages::FrameReadoutCorrectionModel...) = CompositeFrameReadoutCorrection(tuple(stages...))
 
 struct NoFrameReadoutProducts <: FrameReadoutProducts end
+
+struct NullDetectorDefectModel <: AbstractDetectorDefectModel end
+
+struct PixelResponseNonuniformity{T<:AbstractFloat,A<:AbstractMatrix{T}} <: AbstractDetectorDefectModel
+    gain_map::A
+end
+
+struct DarkSignalNonuniformity{T<:AbstractFloat,A<:AbstractMatrix{T}} <: AbstractDetectorDefectModel
+    dark_map::A
+end
+
+struct BadPixelMask{T<:AbstractFloat,A<:AbstractMatrix{Bool}} <: AbstractDetectorDefectModel
+    mask::A
+    throughput::T
+end
+
+struct CompositeDetectorDefectModel{M<:Tuple} <: AbstractDetectorDefectModel
+    stages::M
+    function CompositeDetectorDefectModel(stages::Tuple{Vararg{AbstractDetectorDefectModel}})
+        isempty(stages) && throw(InvalidConfiguration("CompositeDetectorDefectModel requires at least one stage"))
+        return new{typeof(stages)}(stages)
+    end
+end
+
+CompositeDetectorDefectModel(stages::Tuple) =
+    throw(InvalidConfiguration("CompositeDetectorDefectModel stages must be AbstractDetectorDefectModel values"))
+CompositeDetectorDefectModel(stages::AbstractDetectorDefectModel...) = CompositeDetectorDefectModel(tuple(stages...))
+
+struct GlobalShutter <: AbstractFrameTimingModel end
+
+struct RollingShutter{T<:AbstractFloat} <: AbstractFrameTimingModel
+    line_time::T
+end
+
+RollingShutter(line_time::Real) = RollingShutter{Float64}(float(line_time))
+
+struct NullFrameNonlinearity <: AbstractFrameNonlinearityModel end
+
+struct SaturatingFrameNonlinearity{T<:AbstractFloat} <: AbstractFrameNonlinearityModel
+    coefficient::T
+end
+
+SaturatingFrameNonlinearity(coefficient::Real) = SaturatingFrameNonlinearity{Float64}(float(coefficient))
+
+struct NullPersistence <: AbstractPersistenceModel end
+
+struct ExponentialPersistence{T<:AbstractFloat} <: AbstractPersistenceModel
+    coupling::T
+    decay::T
+end
+
+ExponentialPersistence(coupling::Real, decay::Real) = ExponentialPersistence{Float64}(float(coupling), float(decay))
+
+struct NullCountingGate <: AbstractCountingGateModel end
+
+struct DutyCycleGate{T<:AbstractFloat} <: AbstractCountingGateModel
+    duty_cycle::T
+end
+
+DutyCycleGate(duty_cycle::Real) = DutyCycleGate{Float64}(float(duty_cycle))
+
+struct NullCountingCorrelation <: AbstractCountingCorrelationModel end
+
+struct AfterpulsingModel{T<:AbstractFloat} <: AbstractCountingCorrelationModel
+    probability::T
+end
+
+AfterpulsingModel(probability::Real) = AfterpulsingModel{Float64}(float(probability))
+
+struct ChannelCrosstalkModel{T<:AbstractFloat} <: AbstractCountingCorrelationModel
+    coupling::T
+end
+
+ChannelCrosstalkModel(coupling::Real) = ChannelCrosstalkModel{Float64}(float(coupling))
+
+struct CompositeCountingCorrelation{M<:Tuple} <: AbstractCountingCorrelationModel
+    stages::M
+    function CompositeCountingCorrelation(stages::Tuple{Vararg{AbstractCountingCorrelationModel}})
+        isempty(stages) && throw(InvalidConfiguration("CompositeCountingCorrelation requires at least one stage"))
+        return new{typeof(stages)}(stages)
+    end
+end
+
+CompositeCountingCorrelation(stages::Tuple) =
+    throw(InvalidConfiguration("CompositeCountingCorrelation stages must be AbstractCountingCorrelationModel values"))
+CompositeCountingCorrelation(stages::AbstractCountingCorrelationModel...) = CompositeCountingCorrelation(tuple(stages...))
+
+function PixelResponseNonuniformity(gain_map::AbstractMatrix; T::Type{<:AbstractFloat}=Float64, backend=Array)
+    backend_map = _to_backend_matrix(T.(gain_map), backend)
+    return validate_detector_defect_model(PixelResponseNonuniformity{T,typeof(backend_map)}(backend_map))
+end
+
+function DarkSignalNonuniformity(dark_map::AbstractMatrix; T::Type{<:AbstractFloat}=Float64, backend=Array)
+    backend_map = _to_backend_matrix(T.(dark_map), backend)
+    return validate_detector_defect_model(DarkSignalNonuniformity{T,typeof(backend_map)}(backend_map))
+end
+
+function BadPixelMask(mask::AbstractMatrix{Bool}; throughput::Real=0.0, T::Type{<:AbstractFloat}=Float64, backend=Array)
+    backend_mask = _to_backend_bool_matrix(mask, backend)
+    return validate_detector_defect_model(BadPixelMask{T,typeof(backend_mask)}(backend_mask, T(throughput)))
+end
 
 struct SampledFrameReadoutProducts{A<:AbstractMatrix,C} <: FrameReadoutProducts
     reference_frame::Union{Nothing,A}
@@ -216,8 +323,14 @@ struct DetectorExportMetadata{T<:AbstractFloat}
     fill_factor_x::Union{Nothing,T}
     fill_factor_y::Union{Nothing,T}
     aperture_shape::Union{Nothing,Symbol}
+    detector_defects::Symbol
+    has_prnu::Bool
+    has_dsnu::Bool
+    has_bad_pixels::Bool
     window_rows::Union{Nothing,Tuple{Int,Int}}
     window_cols::Union{Nothing,Tuple{Int,Int}}
+    timing_model::Symbol
+    timing_line_time::Union{Nothing,T}
     sampling_mode::Symbol
     sampling_reads::Union{Nothing,Int}
     sampling_reference_reads::Union{Nothing,Int}
@@ -230,6 +343,8 @@ struct DetectorExportMetadata{T<:AbstractFloat}
     correction_group_rows::Union{Nothing,Int}
     correction_group_cols::Union{Nothing,Int}
     correction_stage_count::Int
+    nonlinearity_model::Symbol
+    persistence_model::Symbol
     provides_reference_frame::Bool
     provides_signal_frame::Bool
     provides_combined_frame::Bool
@@ -254,6 +369,11 @@ struct CountingDetectorExportMetadata{T<:AbstractFloat}
     dark_count_rate::T
     dead_time_model::Symbol
     dead_time::Union{Nothing,T}
+    gate_model::Symbol
+    duty_cycle::Union{Nothing,T}
+    correlation_model::Symbol
+    afterpulse_probability::Union{Nothing,T}
+    crosstalk::Union{Nothing,T}
     sensor::Symbol
     noise::Symbol
     output_precision::Union{Nothing,DataType}
@@ -267,6 +387,18 @@ function _to_backend_vector(host_kernel::AbstractVector{T}, backend) where {T<:A
     kernel = backend{T}(undef, length(host_kernel))
     copyto!(kernel, host_kernel)
     return kernel
+end
+
+function _to_backend_matrix(host_data::AbstractMatrix{T}, backend) where {T<:AbstractFloat}
+    data = backend{T}(undef, size(host_data)...)
+    copyto!(data, host_data)
+    return data
+end
+
+function _to_backend_bool_matrix(host_data::AbstractMatrix{Bool}, backend)
+    data = backend{Bool}(undef, size(host_data)...)
+    copyto!(data, host_data)
+    return data
 end
 
 function _gaussian_kernel(response_width_px::Real, truncate_at::Real, ::Type{T}) where {T<:AbstractFloat}
@@ -425,7 +557,10 @@ struct DetectorParams{T<:AbstractFloat,S<:SensorType,R<:AbstractFrameResponse}
     full_well::Union{Nothing,T}
     sensor::S
     response_model::R
+    defect_model::AbstractDetectorDefectModel
+    timing_model::AbstractFrameTimingModel
     correction_model::FrameReadoutCorrectionModel
+    nonlinearity_model::AbstractFrameNonlinearityModel
     readout_window::Union{Nothing,FrameWindow}
     output_precision::Union{Nothing,DataType}
 end
@@ -436,6 +571,7 @@ mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O,P<:FrameRea
     bin_buffer::A
     noise_buffer::A
     accum_buffer::A
+    latent_buffer::A
     output_buffer::O
     readout_products::P
     integrated_time::T
