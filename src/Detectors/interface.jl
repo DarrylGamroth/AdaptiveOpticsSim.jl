@@ -19,6 +19,9 @@ abstract type FrameReadoutCorrectionModel end
 abstract type FrameReadoutProducts end
 abstract type AbstractFrameNonlinearityModel end
 abstract type AbstractPersistenceModel end
+abstract type AbstractDetectorThermalModel end
+abstract type AbstractDetectorThermalState end
+abstract type AbstractTemperatureLaw end
 abstract type AvalancheFrameSensorType <: FrameSensorType end
 abstract type HgCdTeAvalancheArraySensorType <: AvalancheFrameSensorType end
 
@@ -134,6 +137,76 @@ end
 SaturatingFrameNonlinearity(coefficient::Real) = SaturatingFrameNonlinearity{Float64}(float(coefficient))
 
 struct NullPersistence <: AbstractPersistenceModel end
+
+struct NullDetectorThermalModel <: AbstractDetectorThermalModel end
+
+struct NoThermalState <: AbstractDetectorThermalState end
+
+struct DetectorThermalState{T<:AbstractFloat} <: AbstractDetectorThermalState
+    temperature_K::T
+end
+
+struct NullTemperatureLaw <: AbstractTemperatureLaw end
+
+struct ArrheniusRateLaw{T<:AbstractFloat} <: AbstractTemperatureLaw
+    reference_temperature_K::T
+    activation_temperature_K::T
+end
+
+ArrheniusRateLaw(reference_temperature_K::Real, activation_temperature_K::Real) =
+    ArrheniusRateLaw{Float64}(float(reference_temperature_K), float(activation_temperature_K))
+
+struct LinearTemperatureLaw{T<:AbstractFloat} <: AbstractTemperatureLaw
+    reference_temperature_K::T
+    slope_per_K::T
+end
+
+LinearTemperatureLaw(reference_temperature_K::Real, slope_per_K::Real) =
+    LinearTemperatureLaw{Float64}(float(reference_temperature_K), float(slope_per_K))
+
+struct ExponentialTemperatureLaw{T<:AbstractFloat} <: AbstractTemperatureLaw
+    reference_temperature_K::T
+    exponent_per_K::T
+end
+
+ExponentialTemperatureLaw(reference_temperature_K::Real, exponent_per_K::Real) =
+    ExponentialTemperatureLaw{Float64}(float(reference_temperature_K), float(exponent_per_K))
+
+struct FixedTemperature{
+    T<:AbstractFloat,
+    DC<:AbstractTemperatureLaw,
+    G<:AbstractTemperatureLaw,
+    DCR<:AbstractTemperatureLaw,
+    CIC<:AbstractTemperatureLaw,
+} <: AbstractDetectorThermalModel
+    temperature_K::T
+    dark_current_law::DC
+    glow_rate_law::G
+    dark_count_law::DCR
+    cic_rate_law::CIC
+end
+
+function FixedTemperature(; temperature_K::Real,
+    dark_current_law::AbstractTemperatureLaw=NullTemperatureLaw(),
+    glow_rate_law::AbstractTemperatureLaw=NullTemperatureLaw(),
+    dark_count_law::AbstractTemperatureLaw=NullTemperatureLaw(),
+    cic_rate_law::AbstractTemperatureLaw=NullTemperatureLaw(),
+    T::Type{<:AbstractFloat}=Float64)
+    temperature_K > 0 || throw(InvalidConfiguration("FixedTemperature temperature_K must be > 0"))
+    return FixedTemperature{
+        T,
+        typeof(dark_current_law),
+        typeof(glow_rate_law),
+        typeof(dark_count_law),
+        typeof(cic_rate_law),
+    }(
+        T(temperature_K),
+        dark_current_law,
+        glow_rate_law,
+        dark_count_law,
+        cic_rate_law,
+    )
+end
 
 struct ExponentialPersistence{T<:AbstractFloat} <: AbstractPersistenceModel
     coupling::T
@@ -331,6 +404,14 @@ struct DetectorExportMetadata{T<:AbstractFloat}
     window_cols::Union{Nothing,Tuple{Int,Int}}
     timing_model::Symbol
     timing_line_time::Union{Nothing,T}
+    thermal_model::Symbol
+    detector_temperature_K::Union{Nothing,T}
+    ambient_temperature_K::Union{Nothing,T}
+    cooling_setpoint_K::Union{Nothing,T}
+    thermal_time_constant_s::Union{Nothing,T}
+    dark_current_law::Symbol
+    glow_rate_law::Symbol
+    cic_rate_law::Symbol
     sampling_mode::Symbol
     sampling_reads::Union{Nothing,Int}
     sampling_reference_reads::Union{Nothing,Int}
@@ -374,6 +455,12 @@ struct CountingDetectorExportMetadata{T<:AbstractFloat}
     correlation_model::Symbol
     afterpulse_probability::Union{Nothing,T}
     crosstalk::Union{Nothing,T}
+    thermal_model::Symbol
+    detector_temperature_K::Union{Nothing,T}
+    ambient_temperature_K::Union{Nothing,T}
+    cooling_setpoint_K::Union{Nothing,T}
+    thermal_time_constant_s::Union{Nothing,T}
+    dark_count_law::Symbol
     sensor::Symbol
     noise::Symbol
     output_precision::Union{Nothing,DataType}
@@ -546,7 +633,7 @@ end
     end
 end
 
-struct DetectorParams{T<:AbstractFloat,S<:SensorType,R<:AbstractFrameResponse}
+struct DetectorParams{T<:AbstractFloat,S<:SensorType,R<:AbstractFrameResponse,TM<:AbstractDetectorThermalModel}
     integration_time::T
     qe::T
     psf_sampling::Int
@@ -561,11 +648,12 @@ struct DetectorParams{T<:AbstractFloat,S<:SensorType,R<:AbstractFrameResponse}
     timing_model::AbstractFrameTimingModel
     correction_model::FrameReadoutCorrectionModel
     nonlinearity_model::AbstractFrameNonlinearityModel
+    thermal_model::TM
     readout_window::Union{Nothing,FrameWindow}
     output_precision::Union{Nothing,DataType}
 end
 
-mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O,P<:FrameReadoutProducts}
+mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O,P<:FrameReadoutProducts,TS<:AbstractDetectorThermalState}
     frame::A
     response_buffer::A
     bin_buffer::A
@@ -574,6 +662,7 @@ mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O,P<:FrameRea
     latent_buffer::A
     output_buffer::O
     readout_products::P
+    thermal_state::TS
     integrated_time::T
     readout_ready::Bool
 end

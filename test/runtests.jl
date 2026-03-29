@@ -1382,6 +1382,44 @@ end
     @test_throws InvalidConfiguration Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         nonlinearity_model=SaturatingFrameNonlinearity(-0.1), sensor=InGaAsSensor())
 
+    arrhenius = ArrheniusRateLaw(300.0, 6000.0)
+    linear = LinearTemperatureLaw(300.0, 0.01)
+    exp_law = ExponentialTemperatureLaw(300.0, 0.01)
+    @test evaluate_temperature_law(arrhenius, 10.0, 80.0) < 10.0
+    @test evaluate_temperature_law(linear, 2.0, 250.0) ≈ 1.0
+    @test evaluate_temperature_law(exp_law, 2.0, 250.0) < 2.0
+
+    thermal_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        dark_current=10.0,
+        response_model=NullFrameResponse(),
+        thermal_model=FixedTemperature(temperature_K=80.0, dark_current_law=arrhenius),
+        sensor=CCDSensor())
+    thermal_meta = detector_export_metadata(thermal_det)
+    @test supports_detector_thermal_model(thermal_det)
+    @test !supports_dynamic_thermal_state(thermal_det.params.thermal_model)
+    @test supports_temperature_dependent_dark_current(thermal_det)
+    @test detector_temperature(thermal_det) == 80.0
+    @test thermal_meta.thermal_model == :fixed_temperature
+    @test thermal_meta.detector_temperature_K == 80.0
+    @test thermal_meta.cooling_setpoint_K == 80.0
+    @test thermal_meta.dark_current_law == :arrhenius
+    @test effective_dark_current(thermal_det) < thermal_det.params.dark_current
+    @test thermal_state(thermal_det) isa NoThermalState
+    @test advance_thermal!(thermal_det, 1.0) === thermal_det
+
+    thermal_ingaas = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        response_model=NullFrameResponse(),
+        thermal_model=FixedTemperature(temperature_K=250.0, glow_rate_law=linear),
+        sensor=InGaAsSensor(glow_rate=2.0))
+    @test supports_temperature_dependent_glow(thermal_ingaas)
+    @test effective_glow_rate(thermal_ingaas) ≈ 1.0
+
+    thermal_emccd = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        response_model=NullFrameResponse(),
+        thermal_model=FixedTemperature(temperature_K=250.0, cic_rate_law=linear),
+        sensor=EMCCDSensor(cic_rate=2.0))
+    @test effective_cic_rate(thermal_emccd) ≈ 1.0
+
     det_saphira = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeAvalancheArraySensor(avalanche_gain=5.0))
     frame_saphira = copy(capture!(det_saphira, uniform_signal; rng=MersenneTwister(14)))
@@ -1703,6 +1741,15 @@ end
     @test_throws InvalidConfiguration APDDetector(gate_model=DutyCycleGate(0.0))
     @test_throws InvalidConfiguration APDDetector(correlation_model=AfterpulsingModel(1.5))
     @test_throws InvalidConfiguration APDDetector(correlation_model=ChannelCrosstalkModel(-0.1))
+    apd_thermal = APDDetector(integration_time=1.0, qe=1.0, gain=1.0, dark_count_rate=10.0,
+        noise=NoiseNone(), thermal_model=FixedTemperature(temperature_K=80.0, dark_count_law=arrhenius))
+    apd_thermal_meta = detector_export_metadata(apd_thermal)
+    @test supports_detector_thermal_model(apd_thermal)
+    @test supports_temperature_dependent_dark_counts(apd_thermal)
+    @test detector_temperature(apd_thermal) == 80.0
+    @test apd_thermal_meta.thermal_model == :fixed_temperature
+    @test apd_thermal_meta.dark_count_law == :arrhenius
+    @test effective_dark_count_rate(apd_thermal) < apd_thermal.params.dark_count_rate
 
     det_buffered = Detector(integration_time=2.0, noise=NoiseNone(), qe=1.0, binning=1)
     frame_partial = copy(capture!(det_buffered, fill(1.0, 4, 4); rng=MersenneTwister(2), sample_time=1.0))

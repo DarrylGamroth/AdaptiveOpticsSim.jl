@@ -9,7 +9,7 @@ struct ParalyzableDeadTime{T<:AbstractFloat} <: CountingDeadTimeModel
     dead_time::T
 end
 
-struct APDDetectorParams{T<:AbstractFloat,S<:APDSensor,D<:CountingDeadTimeModel,G<:AbstractCountingGateModel,C<:AbstractCountingCorrelationModel}
+struct APDDetectorParams{T<:AbstractFloat,S<:APDSensor,D<:CountingDeadTimeModel,G<:AbstractCountingGateModel,C<:AbstractCountingCorrelationModel,TM<:AbstractDetectorThermalModel}
     integration_time::T
     qe::T
     gain::T
@@ -17,15 +17,17 @@ struct APDDetectorParams{T<:AbstractFloat,S<:APDSensor,D<:CountingDeadTimeModel,
     dead_time_model::D
     gate_model::G
     correlation_model::C
+    thermal_model::TM
     sensor::S
     output_precision::Union{Nothing,DataType}
     layout::Symbol
 end
 
-mutable struct APDDetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O}
+mutable struct APDDetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O,TS<:AbstractDetectorThermalState}
     channels::A
     noise_buffer::A
     output_buffer::O
+    thermal_state::TS
 end
 
 struct APDDetector{N<:NoiseModel,P<:APDDetectorParams,S<:APDDetectorState,GM} <: AbstractCountingDetector
@@ -39,6 +41,11 @@ NonParalyzableDeadTime(dead_time::Real) = NonParalyzableDeadTime{Float64}(float(
 ParalyzableDeadTime(dead_time::Real) = ParalyzableDeadTime{Float64}(float(dead_time))
 
 readout_ready(det::APDDetector) = true
+thermal_model(det::APDDetector) = det.params.thermal_model
+thermal_state(det::APDDetector) = det.state.thermal_state
+detector_temperature(det::APDDetector, ::Type{T}=eltype(det.state.channels)) where {T<:AbstractFloat} =
+    detector_temperature_K(det.params.thermal_model, det.state.thermal_state, T)
+advance_thermal!(det::APDDetector, dt) = (advance_thermal!(det.params.thermal_model, det.state.thermal_state, dt); det)
 channel_output(det::APDDetector) = det.state.output_buffer === nothing ? det.state.channels : det.state.output_buffer
 output_frame(det::APDDetector) = channel_output(det)
 reset_integration!(det::APDDetector) = det
@@ -61,6 +68,9 @@ supports_counting_gating(det::APDDetector) = !is_null_counting_gate(det.params.g
 supports_afterpulsing(det::APDDetector) = _supports_afterpulsing(det.params.correlation_model)
 supports_channel_crosstalk(det::APDDetector) = _supports_channel_crosstalk(det.params.correlation_model)
 supports_paralyzable_dead_time(det::APDDetector) = is_paralyzable_dead_time(det.params.dead_time_model)
+supports_detector_thermal_model(det::APDDetector) = !is_null_thermal_model(det.params.thermal_model)
+supports_temperature_dependent_dark_counts(det::APDDetector) =
+    !is_null_temperature_law(active_dark_count_law(det, det.params.thermal_model))
 
 _supports_afterpulsing(::AbstractCountingCorrelationModel) = false
 _supports_afterpulsing(::AfterpulsingModel) = true
@@ -106,6 +116,17 @@ convert_correlation_model(model::ChannelCrosstalkModel, ::Type{T}) where {T<:Abs
 convert_correlation_model(model::CompositeCountingCorrelation, ::Type{T}) where {T<:AbstractFloat} =
     CompositeCountingCorrelation(tuple((convert_correlation_model(stage, T) for stage in model.stages)...))
 
+dark_count_law(::APDDetector) = NullTemperatureLaw()
+active_dark_count_law(det::APDDetector, ::NullDetectorThermalModel) = dark_count_law(det)
+
+function active_dark_count_law(det::APDDetector, model::FixedTemperature)
+    return is_null_temperature_law(model.dark_count_law) ? dark_count_law(det) : model.dark_count_law
+end
+
+effective_dark_count_rate(det::APDDetector, ::Type{T}=eltype(det.state.channels)) where {T<:AbstractFloat} =
+    T(evaluate_temperature_law(active_dark_count_law(det, det.params.thermal_model),
+        T(det.params.dark_count_rate), detector_temperature(det, T)))
+
 validate_correlation_model(::NullCountingCorrelation) = NullCountingCorrelation()
 
 function validate_correlation_model(model::AfterpulsingModel)
@@ -145,6 +166,12 @@ function detector_export_metadata(det::APDDetector; T::Type{<:AbstractFloat}=elt
         counting_correlation_symbol(det.params.correlation_model),
         afterpulse_probability(det.params.correlation_model, T),
         crosstalk_value(det.params.correlation_model, T),
+        thermal_model_symbol(det.params.thermal_model),
+        detector_temperature(det, T),
+        ambient_temperature_K(det.params.thermal_model, T),
+        cooling_setpoint_K(det.params.thermal_model, T),
+        thermal_time_constant_s(det.params.thermal_model, T),
+        temperature_law_symbol(active_dark_count_law(det, det.params.thermal_model)),
         detector_sensor_symbol(det.params.sensor),
         detector_noise_symbol(det.noise),
         det.params.output_precision,
@@ -154,7 +181,8 @@ end
 
 function _build_apd_detector(noise::NoiseModel; integration_time::Real, qe::Real, gain::Real,
     dark_count_rate::Real, dead_time_model::CountingDeadTimeModel, gate_model::AbstractCountingGateModel,
-    correlation_model::AbstractCountingCorrelationModel, sensor::APDSensor, output_precision::Union{Nothing,DataType},
+    correlation_model::AbstractCountingCorrelationModel, thermal_model::AbstractDetectorThermalModel,
+    sensor::APDSensor, output_precision::Union{Nothing,DataType},
     layout::Symbol, channel_gain_map,
     T::Type{<:AbstractFloat}, backend)
     gain >= 0 || throw(InvalidConfiguration("APDDetector gain must be >= 0"))
@@ -164,12 +192,13 @@ function _build_apd_detector(noise::NoiseModel; integration_time::Real, qe::Real
     dead_time = validate_dead_time_model(convert_dead_time_model(dead_time_model, T))
     gate = validate_gate_model(convert_gate_model(gate_model, T))
     correlation = validate_correlation_model(convert_correlation_model(correlation_model, T))
+    thermal = validate_thermal_model(convert_thermal_model(thermal_model, T))
     gain_map = channel_gain_map === nothing ? nothing : begin
         g = backend{T}(undef, size(channel_gain_map)...)
         copyto!(g, T.(channel_gain_map))
         g
     end
-    params = APDDetectorParams{T,typeof(sensor),typeof(dead_time),typeof(gate),typeof(correlation)}(
+    params = APDDetectorParams{T,typeof(sensor),typeof(dead_time),typeof(gate),typeof(correlation),typeof(thermal)}(
         T(integration_time),
         T(qe),
         T(gain),
@@ -177,6 +206,7 @@ function _build_apd_detector(noise::NoiseModel; integration_time::Real, qe::Real
         dead_time,
         gate,
         correlation,
+        thermal,
         sensor,
         output_precision,
         layout,
@@ -187,7 +217,9 @@ function _build_apd_detector(noise::NoiseModel; integration_time::Real, qe::Real
     fill!(channels, zero(T))
     fill!(noise_buffer, zero(T))
     output_buffer === nothing || fill!(output_buffer, zero(eltype(output_buffer)))
-    state = APDDetectorState{T,typeof(channels),typeof(output_buffer)}(channels, noise_buffer, output_buffer)
+    thermal_state = thermal_state_from_model(thermal, T)
+    state = APDDetectorState{T,typeof(channels),typeof(output_buffer),typeof(thermal_state)}(
+        channels, noise_buffer, output_buffer, thermal_state)
     return APDDetector{typeof(validated),typeof(params),typeof(state),typeof(gain_map)}(
         validated, params, state, gain_map)
 end
@@ -197,10 +229,11 @@ function APDDetector(; integration_time::Real=1.0, qe::Real=1.0, noise::NoiseMod
     layout::Symbol=:channels, channel_gain_map=nothing, dead_time_model::CountingDeadTimeModel=NoDeadTime(),
     gate_model::AbstractCountingGateModel=NullCountingGate(),
     correlation_model::AbstractCountingCorrelationModel=NullCountingCorrelation(),
+    thermal_model::AbstractDetectorThermalModel=NullDetectorThermalModel(),
     T::Type{<:AbstractFloat}=Float64, backend=Array)
     return _build_apd_detector(noise; integration_time=integration_time, qe=qe, gain=gain,
         dark_count_rate=dark_count_rate, dead_time_model=dead_time_model, gate_model=gate_model,
-        correlation_model=correlation_model, sensor=APDSensor(), output_precision=output_precision,
+        correlation_model=correlation_model, thermal_model=thermal_model, sensor=APDSensor(), output_precision=output_precision,
         layout=layout, channel_gain_map=channel_gain_map, T=T, backend=backend)
 end
 
@@ -231,7 +264,7 @@ function apply_gain_map!(det::APDDetector)
 end
 
 function apply_dark_counts!(det::APDDetector, exposure_time::Real)
-    dark = det.params.dark_count_rate * exposure_time
+    dark = effective_dark_count_rate(det) * exposure_time
     dark <= 0 && return det.state.channels
     det.state.channels .+= dark
     return det.state.channels

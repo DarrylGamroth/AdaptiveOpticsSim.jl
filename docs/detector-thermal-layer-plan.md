@@ -355,6 +355,10 @@ Deliverables:
 - metadata
 - docs and conformance tests
 
+Status:
+
+- implemented
+
 ### Phase 2: Temperature-Aware Core Hooks
 
 Add generic hooks in the detector layer:
@@ -367,6 +371,10 @@ Add generic hooks in the detector layer:
 Initial implementation can be identity for null models and simple law-driven
 mapping for fixed-temperature models.
 
+Status:
+
+- implemented
+
 ### Phase 3: Family Wiring
 
 Wire the thermal layer into:
@@ -377,6 +385,16 @@ Wire the thermal layer into:
 - `HgCdTeAvalancheArraySensor.glow_rate`
 
 Optional early `EMCCDSensor` thermal coupling can stay limited to dark current.
+
+Status:
+
+- implemented for:
+  - generic frame-detector dark current
+  - `APDDetector.dark_count_rate`
+  - `InGaAsSensor.glow_rate`
+  - `HgCdTeAvalancheArraySensor.glow_rate`
+  - `EMCCDSensor.cic_rate`
+- persistence remains a later refinement
 
 ### Phase 4: Dynamic Thermal Evolution
 
@@ -439,11 +457,10 @@ Some design questions still remain open:
 
 ## Recommended Next Step
 
-Implement Phases 1 and 2 first:
+Implement Phase 4 next:
 
-- core thermal interface
-- fixed-temperature model
-- temperature-aware rate hooks
+- `FirstOrderThermalModel`
+- dynamic thermal state evolution
+- deterministic evolution tests
 
-That gives immediate modeling value for cooled detector families without adding
-unnecessary dynamic complexity too early.
+Then use the thermal layer on maintained system surfaces where it matters most.

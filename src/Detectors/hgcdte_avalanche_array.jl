@@ -36,6 +36,7 @@ supports_nondestructive_reads(::HgCdTeAvalancheArraySensorType) = true
 supports_reference_read_subtraction(::HgCdTeAvalancheArraySensorType) = true
 supports_readout_correction(::HgCdTeAvalancheArraySensorType) = true
 supports_read_cube(::HgCdTeAvalancheArraySensorType) = true
+configured_glow_rate(sensor::HgCdTeAvalancheArraySensor, ::Type{T}) where {T<:AbstractFloat} = T(sensor.glow_rate)
 
 frame_sampling_symbol(::SingleRead) = :single_read
 frame_sampling_symbol(::AveragedNonDestructiveReads) = :averaged_non_destructive_reads
@@ -124,7 +125,7 @@ function sensor_saturation_limit(sensor::HgCdTeAvalancheArraySensor, det::Detect
 end
 
 function apply_sensor_statistics!(sensor::HgCdTeAvalancheArraySensor, det::Detector, rng::AbstractRNG)
-    rate = sensor.glow_rate * effective_sensor_glow_time(sensor, det.params.integration_time)
+    rate = effective_glow_rate(det) * effective_sensor_glow_time(sensor, det.params.integration_time)
     if rate > zero(rate)
         fill!(det.state.noise_buffer, rate)
         poisson_noise!(rng, det.state.noise_buffer)
@@ -146,7 +147,7 @@ end
 _batched_pre_readout_gain!(sensor::HgCdTeAvalancheArraySensor, det::Detector, cube::AbstractArray, rng::AbstractRNG) = (cube .*= sensor.avalanche_gain; cube)
 
 function _batched_sensor_statistics!(sensor::HgCdTeAvalancheArraySensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
-    rate = sensor.glow_rate * effective_sensor_glow_time(sensor, det.params.integration_time)
+    rate = effective_glow_rate(det) * effective_sensor_glow_time(sensor, det.params.integration_time)
     if rate > zero(rate)
         fill!(scratch, rate)
         poisson_noise!(rng, scratch)
@@ -268,7 +269,7 @@ function finalize_readout_products!(sensor::HgCdTeAvalancheArraySensor, det::Det
     return det.state.readout_products
 end
 
-function finalize_capture!(det::Detector{N,<:DetectorParams{T,<:HgCdTeAvalancheArraySensor},S,BF,BM},
+function finalize_capture!(det::Detector{N,<:DetectorParams{T,<:HgCdTeAvalancheArraySensor,<:Any},S,BF,BM},
     rng::AbstractRNG, exposure_time::Real) where {N,T,S,BF,BM}
     apply_dark_current!(det, rng, exposure_time)
     apply_saturation!(det)

@@ -30,6 +30,7 @@ end
 
 detector_sensor_symbol(::EMCCDSensor) = :emccd
 supports_clock_induced_charge(::EMCCDSensor) = true
+configured_cic_rate(sensor::EMCCDSensor, ::Type{T}) where {T<:AbstractFloat} = T(sensor.cic_rate)
 is_excess_noise_model(::AbstractEMGainModel) = false
 is_excess_noise_model(::ExcessNoiseApproximation) = true
 
@@ -45,7 +46,7 @@ function validate_em_gain_model(model::StochasticMultiplicationRegister)
 end
 
 function apply_sensor_statistics!(sensor::EMCCDSensor, det::Detector, rng::AbstractRNG)
-    rate = sensor.cic_rate * det.params.integration_time
+    rate = effective_cic_rate(det) * det.params.integration_time
     if rate > zero(rate)
         fill!(det.state.noise_buffer, rate)
         poisson_noise!(rng, det.state.noise_buffer)
@@ -76,7 +77,7 @@ function apply_pre_readout_gain!(model::StochasticMultiplicationRegister, sensor
 end
 
 function _batched_sensor_statistics!(sensor::EMCCDSensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
-    rate = sensor.cic_rate * det.params.integration_time
+    rate = effective_cic_rate(det) * det.params.integration_time
     if rate > zero(rate)
         fill!(scratch, rate)
         poisson_noise!(rng, scratch)

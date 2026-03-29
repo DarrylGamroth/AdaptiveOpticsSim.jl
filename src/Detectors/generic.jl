@@ -60,6 +60,56 @@ persistence_symbol(::ExponentialPersistence) = :exponential
 is_null_persistence(::AbstractPersistenceModel) = false
 is_null_persistence(::NullPersistence) = true
 
+thermal_model_symbol(::NullDetectorThermalModel) = :none
+thermal_model_symbol(::FixedTemperature) = :fixed_temperature
+is_null_thermal_model(::AbstractDetectorThermalModel) = false
+is_null_thermal_model(::NullDetectorThermalModel) = true
+
+temperature_law_symbol(::NullTemperatureLaw) = :none
+temperature_law_symbol(::ArrheniusRateLaw) = :arrhenius
+temperature_law_symbol(::LinearTemperatureLaw) = :linear
+temperature_law_symbol(::ExponentialTemperatureLaw) = :exponential
+is_null_temperature_law(::AbstractTemperatureLaw) = false
+is_null_temperature_law(::NullTemperatureLaw) = true
+
+thermal_model(det::Detector) = det.params.thermal_model
+thermal_state(det::Detector) = det.state.thermal_state
+
+ambient_temperature_K(::AbstractDetectorThermalModel, ::Type{T}) where {T<:AbstractFloat} = nothing
+cooling_setpoint_K(::AbstractDetectorThermalModel, ::Type{T}) where {T<:AbstractFloat} = nothing
+thermal_time_constant_s(::AbstractDetectorThermalModel, ::Type{T}) where {T<:AbstractFloat} = nothing
+cooling_setpoint_K(model::FixedTemperature, ::Type{T}) where {T<:AbstractFloat} = T(model.temperature_K)
+detector_temperature_K(::NullDetectorThermalModel, ::AbstractDetectorThermalState, ::Type{T}) where {T<:AbstractFloat} = nothing
+detector_temperature_K(model::FixedTemperature, ::AbstractDetectorThermalState, ::Type{T}) where {T<:AbstractFloat} = T(model.temperature_K)
+detector_temperature_K(model::AbstractDetectorThermalModel, state::DetectorThermalState, ::Type{T}) where {T<:AbstractFloat} = T(state.temperature_K)
+detector_temperature(det::Detector, ::Type{T}=eltype(det.state.frame)) where {T<:AbstractFloat} =
+    detector_temperature_K(det.params.thermal_model, det.state.thermal_state, T)
+
+advance_thermal!(::NullDetectorThermalModel, ::AbstractDetectorThermalState, dt) = nothing
+advance_thermal!(::FixedTemperature, ::AbstractDetectorThermalState, dt) = nothing
+advance_thermal!(det::Detector, dt) = (advance_thermal!(det.params.thermal_model, det.state.thermal_state, dt); det)
+
+evaluate_temperature_law(::NullTemperatureLaw, base_value, detector_temperature) = base_value
+
+function evaluate_temperature_law(law::ArrheniusRateLaw{T}, base_value, detector_temperature) where {T<:AbstractFloat}
+    isnothing(detector_temperature) && return base_value
+    detector_temperature > zero(detector_temperature) ||
+        throw(InvalidConfiguration("detector temperature must be > 0 K"))
+    scale = exp(law.activation_temperature_K * (inv(law.reference_temperature_K) - inv(detector_temperature)))
+    return base_value * scale
+end
+
+function evaluate_temperature_law(law::LinearTemperatureLaw, base_value, detector_temperature)
+    isnothing(detector_temperature) && return base_value
+    scaled = base_value * (one(base_value) + law.slope_per_K * (detector_temperature - law.reference_temperature_K))
+    return max(zero(base_value), scaled)
+end
+
+function evaluate_temperature_law(law::ExponentialTemperatureLaw, base_value, detector_temperature)
+    isnothing(detector_temperature) && return base_value
+    return base_value * exp(law.exponent_per_K * (detector_temperature - law.reference_temperature_K))
+end
+
 counting_gate_symbol(::NullCountingGate) = :none
 counting_gate_symbol(::DutyCycleGate) = :duty_cycle
 
@@ -151,6 +201,20 @@ supports_nondestructive_reads(::FrameSensorType) = false
 supports_reference_read_subtraction(::FrameSensorType) = false
 supports_readout_correction(::FrameSensorType) = false
 supports_read_cube(::FrameSensorType) = false
+supports_detector_thermal_model(::AbstractFrameDetector) = false
+supports_detector_thermal_model(::AbstractCountingDetector) = false
+supports_dynamic_thermal_state(::AbstractDetectorThermalModel) = false
+supports_detector_thermal_model(det::Detector) = !is_null_thermal_model(det.params.thermal_model)
+
+supports_temperature_dependent_dark_current(det::Detector) =
+    !is_null_temperature_law(active_dark_current_law(det.params.sensor, det.params.thermal_model))
+supports_temperature_dependent_glow(det::Detector) =
+    !is_null_temperature_law(active_glow_rate_law(det.params.sensor, det.params.thermal_model))
+supports_temperature_dependent_persistence(::Detector) = false
+supports_temperature_dependent_dark_counts(::AbstractCountingDetector) = false
+
+configured_glow_rate(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = zero(T)
+configured_cic_rate(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = zero(T)
 
 readout_correction_symbol(::NullFrameReadoutCorrection) = :none
 readout_correction_symbol(::ReferencePixelCommonModeCorrection) = :reference_pixel_common_mode
@@ -204,6 +268,97 @@ end
 default_detector_defect_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64, backend=Array) = NullDetectorDefectModel()
 default_frame_timing_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64) = GlobalShutter()
 default_frame_nonlinearity_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64) = NullFrameNonlinearity()
+default_thermal_model(::SensorType; T::Type{<:AbstractFloat}=Float64) = NullDetectorThermalModel()
+
+convert_temperature_law(::NullTemperatureLaw, ::Type{T}) where {T<:AbstractFloat} = NullTemperatureLaw()
+convert_temperature_law(model::ArrheniusRateLaw, ::Type{T}) where {T<:AbstractFloat} =
+    ArrheniusRateLaw{T}(T(model.reference_temperature_K), T(model.activation_temperature_K))
+convert_temperature_law(model::LinearTemperatureLaw, ::Type{T}) where {T<:AbstractFloat} =
+    LinearTemperatureLaw{T}(T(model.reference_temperature_K), T(model.slope_per_K))
+convert_temperature_law(model::ExponentialTemperatureLaw, ::Type{T}) where {T<:AbstractFloat} =
+    ExponentialTemperatureLaw{T}(T(model.reference_temperature_K), T(model.exponent_per_K))
+
+validate_temperature_law(::NullTemperatureLaw) = NullTemperatureLaw()
+
+function validate_temperature_law(model::ArrheniusRateLaw)
+    model.reference_temperature_K > zero(model.reference_temperature_K) ||
+        throw(InvalidConfiguration("ArrheniusRateLaw reference_temperature_K must be > 0"))
+    return model
+end
+
+function validate_temperature_law(model::LinearTemperatureLaw)
+    model.reference_temperature_K > zero(model.reference_temperature_K) ||
+        throw(InvalidConfiguration("LinearTemperatureLaw reference_temperature_K must be > 0"))
+    return model
+end
+
+function validate_temperature_law(model::ExponentialTemperatureLaw)
+    model.reference_temperature_K > zero(model.reference_temperature_K) ||
+        throw(InvalidConfiguration("ExponentialTemperatureLaw reference_temperature_K must be > 0"))
+    return model
+end
+
+convert_thermal_model(::NullDetectorThermalModel, ::Type{T}) where {T<:AbstractFloat} = NullDetectorThermalModel()
+
+function convert_thermal_model(model::FixedTemperature, ::Type{T}) where {T<:AbstractFloat}
+    return FixedTemperature(
+        temperature_K=T(model.temperature_K),
+        dark_current_law=validate_temperature_law(convert_temperature_law(model.dark_current_law, T)),
+        glow_rate_law=validate_temperature_law(convert_temperature_law(model.glow_rate_law, T)),
+        dark_count_law=validate_temperature_law(convert_temperature_law(model.dark_count_law, T)),
+        cic_rate_law=validate_temperature_law(convert_temperature_law(model.cic_rate_law, T)),
+        T=T,
+    )
+end
+
+validate_thermal_model(::NullDetectorThermalModel) = NullDetectorThermalModel()
+
+function validate_thermal_model(model::FixedTemperature)
+    model.temperature_K > zero(model.temperature_K) ||
+        throw(InvalidConfiguration("FixedTemperature temperature_K must be > 0"))
+    validate_temperature_law(model.dark_current_law)
+    validate_temperature_law(model.glow_rate_law)
+    validate_temperature_law(model.dark_count_law)
+    validate_temperature_law(model.cic_rate_law)
+    return model
+end
+
+resolve_thermal_model(sensor::SensorType, ::Nothing; T::Type{<:AbstractFloat}) =
+    default_thermal_model(sensor; T=T)
+resolve_thermal_model(sensor::SensorType, model::AbstractDetectorThermalModel; T::Type{<:AbstractFloat}) = model
+
+thermal_state_from_model(::NullDetectorThermalModel, ::Type{T}) where {T<:AbstractFloat} = NoThermalState()
+thermal_state_from_model(::FixedTemperature, ::Type{T}) where {T<:AbstractFloat} = NoThermalState()
+
+dark_current_law(::SensorType) = NullTemperatureLaw()
+glow_rate_law(::SensorType) = NullTemperatureLaw()
+cic_rate_law(::SensorType) = NullTemperatureLaw()
+
+active_dark_current_law(sensor::SensorType, ::NullDetectorThermalModel) = dark_current_law(sensor)
+active_glow_rate_law(sensor::SensorType, ::NullDetectorThermalModel) = glow_rate_law(sensor)
+active_cic_rate_law(sensor::SensorType, ::NullDetectorThermalModel) = cic_rate_law(sensor)
+
+function active_dark_current_law(sensor::SensorType, model::FixedTemperature)
+    return is_null_temperature_law(model.dark_current_law) ? dark_current_law(sensor) : model.dark_current_law
+end
+
+function active_glow_rate_law(sensor::SensorType, model::FixedTemperature)
+    return is_null_temperature_law(model.glow_rate_law) ? glow_rate_law(sensor) : model.glow_rate_law
+end
+
+function active_cic_rate_law(sensor::SensorType, model::FixedTemperature)
+    return is_null_temperature_law(model.cic_rate_law) ? cic_rate_law(sensor) : model.cic_rate_law
+end
+
+effective_dark_current(det::Detector, ::Type{T}=eltype(det.state.frame)) where {T<:AbstractFloat} =
+    T(evaluate_temperature_law(active_dark_current_law(det.params.sensor, det.params.thermal_model), T(det.params.dark_current), detector_temperature(det, T)))
+effective_glow_rate(det::Detector, ::Type{T}=eltype(det.state.frame)) where {T<:AbstractFloat} =
+    T(evaluate_temperature_law(active_glow_rate_law(det.params.sensor, det.params.thermal_model),
+        configured_glow_rate(det.params.sensor, T), detector_temperature(det, T)))
+effective_cic_rate(det::Detector, ::Type{T}=eltype(det.state.frame)) where {T<:AbstractFloat} =
+    T(evaluate_temperature_law(active_cic_rate_law(det.params.sensor, det.params.thermal_model),
+        configured_cic_rate(det.params.sensor, T), detector_temperature(det, T)))
+effective_persistence_model(det::Detector) = persistence_model(det.params.sensor)
 
 sensor_is_frame_based(::SensorType) = false
 sensor_is_frame_based(::FrameSensorType) = true
@@ -264,6 +419,14 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         col_window,
         timing_model_symbol(det.params.timing_model),
         line_time(det.params.timing_model, T),
+        thermal_model_symbol(det.params.thermal_model),
+        detector_temperature(det, T),
+        ambient_temperature_K(det.params.thermal_model, T),
+        cooling_setpoint_K(det.params.thermal_model, T),
+        thermal_time_constant_s(det.params.thermal_model, T),
+        temperature_law_symbol(active_dark_current_law(det.params.sensor, det.params.thermal_model)),
+        temperature_law_symbol(active_glow_rate_law(det.params.sensor, det.params.thermal_model)),
+        temperature_law_symbol(active_cic_rate_law(det.params.sensor, det.params.thermal_model)),
         frame_sampling_symbol(det.params.sensor),
         frame_sampling_reads(det.params.sensor),
         frame_sampling_reference_reads(det.params.sensor),
@@ -667,6 +830,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     response_model::Union{Nothing,FrameResponseModel}, defect_model::Union{Nothing,AbstractDetectorDefectModel},
     timing_model::Union{Nothing,AbstractFrameTimingModel}, correction_model::Union{Nothing,FrameReadoutCorrectionModel},
     nonlinearity_model::Union{Nothing,AbstractFrameNonlinearityModel},
+    thermal_model::Union{Nothing,AbstractDetectorThermalModel},
     readout_window::Union{Nothing,FrameWindow},
     output_precision::Union{Nothing,DataType}, background_flux, background_map,
     T::Type{<:AbstractFloat}, backend)
@@ -687,9 +851,11 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     resolved_nonlinearity = resolve_frame_nonlinearity_model(sensor, nonlinearity_model; T=T)
     nonlinearity = validate_frame_nonlinearity(sensor,
         validate_frame_nonlinearity_model(convert_frame_nonlinearity_model(resolved_nonlinearity, T)))
+    resolved_thermal = resolve_thermal_model(sensor, thermal_model; T=T)
+    thermal = validate_thermal_model(convert_thermal_model(resolved_thermal, T))
     output_precision_t = resolve_output_precision(bits, output_precision)
     window = validate_readout_window(readout_window)
-    params = DetectorParams{T, typeof(sensor), typeof(response)}(
+    params = DetectorParams{T, typeof(sensor), typeof(response), typeof(thermal)}(
         T(integration_time),
         T(qe),
         psf_sampling,
@@ -704,6 +870,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
         timing,
         correction,
         nonlinearity,
+        thermal,
         window,
         output_precision_t,
     )
@@ -725,7 +892,8 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     latent_buffer = backend{T}(undef, 1, 1)
     fill!(latent_buffer, zero(T))
     output_buffer === nothing || fill!(output_buffer, zero(eltype(output_buffer)))
-    state = DetectorState{T, typeof(frame), typeof(output_buffer), FrameReadoutProducts}(
+    thermal_state = thermal_state_from_model(thermal, T)
+    state = DetectorState{T, typeof(frame), typeof(output_buffer), FrameReadoutProducts, typeof(thermal_state)}(
         frame,
         response_buffer,
         bin_buffer,
@@ -734,6 +902,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
         latent_buffer,
         output_buffer,
         NoFrameReadoutProducts(),
+        thermal_state,
         zero(T),
         true,
     )
@@ -755,6 +924,7 @@ function Detector(; integration_time::Real=1.0, qe::Real=1.0,
     timing_model::Union{Nothing,AbstractFrameTimingModel}=nothing,
     correction_model::Union{Nothing,FrameReadoutCorrectionModel}=nothing,
     nonlinearity_model::Union{Nothing,AbstractFrameNonlinearityModel}=nothing,
+    thermal_model::Union{Nothing,AbstractDetectorThermalModel}=nothing,
     readout_window::Union{Nothing,FrameWindow}=nothing,
     output_precision::Union{Nothing,DataType}=nothing, background_flux=nothing, background_map=nothing,
     T::Type{<:AbstractFloat}=Float64, backend=Array)
@@ -763,7 +933,7 @@ function Detector(; integration_time::Real=1.0, qe::Real=1.0,
         psf_sampling=psf_sampling, binning=binning, gain=gain,
         dark_current=dark_current, bits=bits, full_well=full_well,
         sensor=sensor, response_model=response_model, defect_model=defect_model, timing_model=timing_model,
-        correction_model=correction_model, nonlinearity_model=nonlinearity_model,
+        correction_model=correction_model, nonlinearity_model=nonlinearity_model, thermal_model=thermal_model,
         readout_window=readout_window, output_precision=output_precision,
         background_flux=background_flux, background_map=background_map,
         T=T, backend=backend)
@@ -777,6 +947,7 @@ function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
     timing_model::Union{Nothing,AbstractFrameTimingModel}=nothing,
     correction_model::Union{Nothing,FrameReadoutCorrectionModel}=nothing,
     nonlinearity_model::Union{Nothing,AbstractFrameNonlinearityModel}=nothing,
+    thermal_model::Union{Nothing,AbstractDetectorThermalModel}=nothing,
     readout_window::Union{Nothing,FrameWindow}=nothing,
     output_precision::Union{Nothing,DataType}=nothing,
     background_flux=nothing, background_map=nothing,
@@ -788,6 +959,7 @@ function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
         dark_current=dark_current, bits=bits, full_well=full_well,
         sensor=sensor, response_model=response_model, defect_model=defect_model,
         timing_model=timing_model, correction_model=correction_model, nonlinearity_model=nonlinearity_model,
+        thermal_model=thermal_model,
         readout_window=readout_window, output_precision=output_precision,
         background_flux=background_flux, background_map=background_map,
         T=T, backend=backend)

@@ -36,6 +36,11 @@ than by source file.
 - `AbstractFrameDetector`, `AbstractCountingDetector`
 - `APDDetector`, `APDDetectorParams`, `APDDetectorState`
 - `FrameWindow`
+- `AbstractDetectorThermalModel`, `NullDetectorThermalModel`,
+  `FixedTemperature`
+- `AbstractDetectorThermalState`, `NoThermalState`, `DetectorThermalState`
+- `AbstractTemperatureLaw`, `NullTemperatureLaw`, `ArrheniusRateLaw`,
+  `LinearTemperatureLaw`, `ExponentialTemperatureLaw`
 - `AbstractDetectorResponse`, `AbstractFrameResponse`, `AbstractFrameMTF`
 - `FrameResponseModel`, `NullFrameResponse`, `GaussianPixelResponse`,
   `SampledFrameResponse`, `RectangularPixelAperture`, `SeparablePixelMTF`
@@ -47,6 +52,11 @@ than by source file.
   `readout_ready`, `reset_integration!`
 - `response_family`, `response_application_domain`, `response_support`
 - `default_response_model`
+- `thermal_model`, `thermal_state`, `detector_temperature`,
+  `advance_thermal!`
+- `evaluate_temperature_law`, `effective_dark_current`,
+  `effective_glow_rate`, `effective_cic_rate`,
+  `effective_dark_count_rate`
 - `supports_detector_mtf`, `is_shift_invariant`,
   `supports_frequency_domain_application`,
   `supports_separable_application`, `supports_subpixel_geometry`
@@ -55,6 +65,11 @@ than by source file.
   `supports_nondestructive_reads`, `supports_reference_read_subtraction`
 - `supports_counting_noise`, `supports_dead_time`,
   `supports_channel_gain_map`
+- `supports_detector_thermal_model`, `supports_dynamic_thermal_state`,
+  `supports_temperature_dependent_dark_current`,
+  `supports_temperature_dependent_glow`,
+  `supports_temperature_dependent_persistence`,
+  `supports_temperature_dependent_dark_counts`
 - `SensorType`, `FrameSensorType`, `CountingSensorType`, `CCDSensor`,
   `CMOSSensor`, `AvalancheFrameSensorType`,
   `HgCdTeAvalancheArraySensorType`, `EMCCDSensor`, `InGaAsSensor`,
@@ -217,6 +232,21 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - Detector export metadata now records response family, application domain,
   separability, shift invariance, support, pitch, fill factor, and aperture
   shape, rather than only one response-width scalar.
+- Detector thermal behavior is now a separate reusable sublayer:
+  `NullDetectorThermalModel` is the default identity path and
+  `FixedTemperature` is the first physical model.
+- Temperature-law infrastructure is shared across detector families through
+  `NullTemperatureLaw`, `ArrheniusRateLaw`, `LinearTemperatureLaw`, and
+  `ExponentialTemperatureLaw`.
+- The maintained thermal accessors are `thermal_model(det)`,
+  `thermal_state(det)`, `detector_temperature(det)`, and
+  `advance_thermal!(det, dt)`.
+- The maintained temperature-aware detector hooks are
+  `effective_dark_current(det)`, `effective_glow_rate(det)`,
+  `effective_cic_rate(det)`, and `effective_dark_count_rate(det)`.
+- Detector export metadata now also records thermal model family,
+  detector temperature, cooling setpoint, and the active temperature-law
+  family for dark current, glow, CIC, or dark counts where applicable.
 - `FrameWindow(rows, cols)` is a generic frame-readout crop that applies to the
   detector output surface after detector sampling/binning. This is intended for
   subarray/windowed readout and is not detector-family-specific.

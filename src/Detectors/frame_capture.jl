@@ -114,7 +114,7 @@ function apply_background_flux!(background::BackgroundFrame, det::Detector, rng:
 end
 
 function apply_dark_current!(det::Detector, rng::AbstractRNG, exposure_time::Real)
-    dark_signal = det.params.dark_current * effective_dark_current_time(det.params.sensor, exposure_time)
+    dark_signal = effective_dark_current(det) * effective_dark_current_time(det.params.sensor, exposure_time)
     if dark_signal <= 0
         return det.state.frame
     end
