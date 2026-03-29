@@ -6,6 +6,7 @@ const _scale_arg = length(ARGS) >= 2 ? lowercase(ARGS[2]) : "medium"
 const _response_arg = length(ARGS) >= 3 ? lowercase(ARGS[3]) : "default"
 const _sampling_arg = length(ARGS) >= 4 ? lowercase(ARGS[4]) : "default"
 const _correction_arg = length(ARGS) >= 5 ? lowercase(ARGS[5]) : "default"
+const _thermal_arg = length(ARGS) >= 6 ? lowercase(ARGS[6]) : "default"
 
 if _backend_arg == "cuda"
     import CUDA
@@ -90,6 +91,32 @@ function _resolve_correction(name::AbstractString)
     error("unsupported correction mode '$name'; use default, none, row, column, or output")
 end
 
+function _resolve_thermal(name::AbstractString, T::Type{<:AbstractFloat})
+    lowered = lowercase(name)
+    lowered == "default" && return FixedTemperature(
+        temperature_K=80.0,
+        dark_current_law=ArrheniusRateLaw(293.0, 4500.0),
+        glow_rate_law=ArrheniusRateLaw(293.0, 3000.0),
+        T=T), "fixed80"
+    lowered == "none" && return nothing, "none"
+    lowered == "fixed80" && return FixedTemperature(
+        temperature_K=80.0,
+        dark_current_law=ArrheniusRateLaw(293.0, 4500.0),
+        glow_rate_law=ArrheniusRateLaw(293.0, 3000.0),
+        T=T), "fixed80"
+    lowered == "dynamic80" && return FirstOrderThermalModel(
+        ambient_temperature_K=293.0,
+        setpoint_temperature_K=80.0,
+        initial_temperature_K=293.0,
+        time_constant_s=0.05,
+        min_temperature_K=70.0,
+        max_temperature_K=300.0,
+        dark_current_law=ArrheniusRateLaw(293.0, 4500.0),
+        glow_rate_law=ArrheniusRateLaw(293.0, 3000.0),
+        T=T), "dynamic80"
+    error("unsupported thermal mode '$name'; use default, none, fixed80, or dynamic80")
+end
+
 function _ao3k_scale_params(scale_name::AbstractString)
     scale = _resolve_scale(scale_name)
     if scale == "compact"
@@ -139,12 +166,14 @@ end
 
 function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractString="medium",
     response_name::AbstractString="default", sampling_name::AbstractString="default",
-    correction_name::AbstractString="default", samples::Union{Int,Nothing}=nothing,
+    correction_name::AbstractString="default", thermal_name::AbstractString="default",
+    samples::Union{Int,Nothing}=nothing,
     warmup::Union{Int,Nothing}=nothing)
     BackendArray, backend_tag, backend_label = _resolve_backend(backend_name)
     response_model, response_label = _resolve_response(response_name)
     sensor, sampling_label = _resolve_sampling(sampling_name, Float32)
     correction_model, correction_label = _resolve_correction(correction_name)
+    thermal_model, thermal_label = _resolve_thermal(thermal_name, Float32)
     cfg = _ao3k_scale_params(scale_name)
     resolved_samples = something(samples, cfg.samples)
     resolved_warmup = something(warmup, cfg.warmup)
@@ -156,11 +185,18 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
         psf_sampling=1,
         binning=1,
         gain=1.0,
-        dark_current=0.0,
+        dark_current=0.02,
         noise=NoiseReadout(0.1),
-        sensor=sensor,
+        sensor=HgCdTeAvalancheArraySensor(
+            glow_rate=T(0.02),
+            read_time=sensor.read_time,
+            sampling_mode=sensor.sampling_mode,
+            avalanche_gain=sensor.avalanche_gain,
+            excess_noise_factor=sensor.excess_noise_factor,
+            T=T),
         response_model=response_model,
         correction_model=correction_model,
+        thermal_model=thermal_model,
     ))
 
     t0 = time_ns()
@@ -197,6 +233,7 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     println("  response_mode: ", response_label)
     println("  sampling_mode: ", sampling_label)
     println("  correction_mode: ", correction_label)
+    println("  thermal_mode: ", thermal_label)
     println("  build_time_ns: ", build_time_ns)
     println("  runtime_step_mean_ns: ", timing.mean_ns)
     println("  runtime_step_p95_ns: ", timing.p95_ns)
@@ -221,6 +258,10 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     println("  high_response_family: ", isnothing(high_metadata) ? nothing : high_metadata.frame_response)
     println("  low_response_family: ", isnothing(low_metadata) ? nothing : low_metadata.frame_response)
     println("  high_sensor: ", isnothing(high_metadata) ? nothing : high_metadata.sensor)
+    println("  high_thermal_model: ", isnothing(high_metadata) ? nothing : high_metadata.thermal_model)
+    println("  high_detector_temperature_K: ", isnothing(high_metadata) ? nothing : high_metadata.detector_temperature_K)
+    println("  high_cooling_setpoint_K: ", isnothing(high_metadata) ? nothing : high_metadata.cooling_setpoint_K)
+    println("  high_ambient_temperature_K: ", isnothing(high_metadata) ? nothing : high_metadata.ambient_temperature_K)
     println("  high_sampling_mode: ", isnothing(high_metadata) ? nothing : high_metadata.sampling_mode)
     println("  high_readout_correction: ", isnothing(high_metadata) ? nothing : high_metadata.readout_correction)
     println("  high_reference_frame_shape: ", isnothing(high_reference_frame) ? nothing : size(high_reference_frame))
@@ -234,4 +275,4 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
 end
 
 run_profile(; backend_name=_backend_arg, scale_name=_scale_arg, response_name=_response_arg,
-    sampling_name=_sampling_arg, correction_name=_correction_arg)
+    sampling_name=_sampling_arg, correction_name=_correction_arg, thermal_name=_thermal_arg)

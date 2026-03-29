@@ -26,10 +26,19 @@ function AO3kSimulationParams(; kwargs...)
         psf_sampling=1,
         binning=1,
         gain=1.0,
-        dark_current=0.0,
+        dark_current=0.02,
         noise=NoiseReadout(0.1),
-        sensor=HgCdTeAvalancheArraySensor(read_time=sampling / 4, sampling_mode=CorrelatedDoubleSampling(), T=T0),
+        sensor=HgCdTeAvalancheArraySensor(
+            glow_rate=0.02,
+            read_time=sampling / 4,
+            sampling_mode=CorrelatedDoubleSampling(),
+            T=T0),
         correction_model=ReferencePixelCommonModeCorrection(4, 4),
+        thermal_model=FixedTemperature(
+            temperature_K=80.0,
+            dark_current_law=ArrheniusRateLaw(293.0, 4500.0),
+            glow_rate_law=ArrheniusRateLaw(293.0, 3000.0),
+            T=T0),
     ))
     rest = Base.structdiff(nt, (; source_band=nothing, n_control_modes=nothing, n_subap=nothing,
         resolution=nothing, source_magnitude=nothing, high_order_sensor_model=nothing, high_detector=nothing))

@@ -372,6 +372,7 @@ function capture!(det::APDDetector, channels::AbstractMatrix{T}; rng::AbstractRN
     apply_dead_time!(det)
     apply_counting_correlation!(det.params.correlation_model, det, rng)
     apply_gain!(det)
+    advance_thermal!(det, det.params.integration_time)
     return write_output!(det)
 end
 

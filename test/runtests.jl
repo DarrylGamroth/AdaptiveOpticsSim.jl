@@ -1045,11 +1045,14 @@ end
     @test ao3k_sim.high_wfs isa PyramidWFS
     @test ao3k_sim.high_detector isa Detector
     @test ao3k_sim.high_detector.params.sensor isa HgCdTeAvalancheArraySensor
+    @test ao3k_params.high_detector.thermal_model isa FixedTemperature
     step!(ao3k_sim)
     @test length(ao3k_sim.command) == ao3k_params.n_act^2
     ao3k_iface = simulation_interface(ao3k_sim)
     ao3k_high_meta = simulation_wfs_metadata(ao3k_iface)[1]
     @test ao3k_high_meta.sensor == :hgcdte_avalanche_array
+    @test ao3k_high_meta.thermal_model == :fixed_temperature
+    @test ao3k_high_meta.detector_temperature_K == 80.0f0
     @test ao3k_high_meta.provides_combined_frame
     @test ao3k_high_meta.provides_reference_frame
     @test ao3k_high_meta.provides_signal_frame
@@ -1435,6 +1438,9 @@ end
     @test advance_thermal!(dynamic_det, 2.0) === dynamic_det
     @test detector_temperature(dynamic_det) ≈ 120.0 + 180.0 * exp(-1.0)
     @test effective_dark_current(dynamic_det) < dark_current_initial
+    reset_integration!(dynamic_det)
+    capture!(dynamic_det, fill(1.0f0, 4, 4); rng=MersenneTwister(24))
+    @test detector_temperature(dynamic_det) < 120.0 + 180.0 * exp(-1.0)
     @test_throws InvalidConfiguration advance_thermal!(dynamic_det, -1.0)
     @test_throws InvalidConfiguration FirstOrderThermalModel(
         ambient_temperature_K=295.0,
@@ -1804,6 +1810,8 @@ end
     @test advance_thermal!(apd_dynamic, 2.0) === apd_dynamic
     @test detector_temperature(apd_dynamic) ≈ 120.0 + 180.0 * exp(-1.0)
     @test effective_dark_count_rate(apd_dynamic) < apd_dynamic_initial
+    capture!(apd_dynamic, fill(1.0, 2, 2); rng=MersenneTwister(25))
+    @test detector_temperature(apd_dynamic) < 120.0 + 180.0 * exp(-1.0)
 
     det_buffered = Detector(integration_time=2.0, noise=NoiseNone(), qe=1.0, binning=1)
     frame_partial = copy(capture!(det_buffered, fill(1.0, 4, 4); rng=MersenneTwister(2), sample_time=1.0))

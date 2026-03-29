@@ -10,13 +10,14 @@ Status:
     `compact`, `medium`, and `representative`
   - `scripts/profile_revolt_hil_runtime.jl` now covers a REVOLT-like
     synthetic pixel-output SH HIL case with a fixed representative
-    configuration and detector-family / detector-response sweeps
+    configuration and detector-family / detector-response / detector-thermal
+    sweeps
   - `scripts/profile_external_optics_hil.jl` now covers a representative
     external-optics HIL case where AdaptiveOpticsSim owns DM phase generation
     and phase export but not the downstream image formation
   - `scripts/profile_ao3k_runtime.jl` now covers the maintained AO3k pyramid
-    runtime surface with detector-response, HgCdTe-array sampling-mode, and
-    readout-correction sweeps
+    runtime surface with detector-response, HgCdTe-array sampling-mode,
+    readout-correction, and detector-thermal sweeps
 - [ ] representative closed-loop and builder ladders are still pending beyond
   these first runtime surfaces
 

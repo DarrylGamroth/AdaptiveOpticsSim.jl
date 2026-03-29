@@ -109,7 +109,7 @@ end
 
 abstract type AO188DetectorConfig end
 
-struct AO188WFSDetectorConfig{T<:AbstractFloat,N<:NoiseModel,S<:SensorType,R<:Union{Nothing,FrameResponseModel},C<:FrameReadoutCorrectionModel} <: AO188DetectorConfig
+struct AO188WFSDetectorConfig{T<:AbstractFloat,N<:NoiseModel,S<:SensorType,R<:Union{Nothing,FrameResponseModel},C<:FrameReadoutCorrectionModel,TM<:Union{Nothing,AbstractDetectorThermalModel}} <: AO188DetectorConfig
     integration_time::T
     qe::T
     psf_sampling::Int
@@ -120,6 +120,7 @@ struct AO188WFSDetectorConfig{T<:AbstractFloat,N<:NoiseModel,S<:SensorType,R<:Un
     sensor::S
     response_model::R
     correction_model::C
+    thermal_model::TM
 end
 
 function AO188WFSDetectorConfig(;
@@ -134,8 +135,9 @@ function AO188WFSDetectorConfig(;
     sensor::SensorType=CCDSensor(),
     response_model::Union{Nothing,FrameResponseModel}=nothing,
     correction_model::FrameReadoutCorrectionModel=NullFrameReadoutCorrection(),
+    thermal_model::Union{Nothing,AbstractDetectorThermalModel}=nothing,
 )
-    return AO188WFSDetectorConfig{T,typeof(convert_noise(noise, T)),typeof(sensor),typeof(response_model),typeof(correction_model)}(
+    return AO188WFSDetectorConfig{T,typeof(convert_noise(noise, T)),typeof(sensor),typeof(response_model),typeof(correction_model),typeof(thermal_model)}(
         T(integration_time),
         T(qe),
         psf_sampling,
@@ -146,10 +148,11 @@ function AO188WFSDetectorConfig(;
         sensor,
         response_model,
         correction_model,
+        thermal_model,
     )
 end
 
-struct AO188APDDetectorConfig{T<:AbstractFloat,N<:NoiseModel,D<:CountingDeadTimeModel,GM} <: AO188DetectorConfig
+struct AO188APDDetectorConfig{T<:AbstractFloat,N<:NoiseModel,D<:CountingDeadTimeModel,GM,TM<:Union{Nothing,AbstractDetectorThermalModel}} <: AO188DetectorConfig
     integration_time::T
     qe::T
     gain::T
@@ -158,6 +161,7 @@ struct AO188APDDetectorConfig{T<:AbstractFloat,N<:NoiseModel,D<:CountingDeadTime
     dead_time_model::D
     output_precision::Union{Nothing,DataType}
     channel_gain_map::GM
+    thermal_model::TM
 end
 
 function AO188APDDetectorConfig(;
@@ -170,8 +174,9 @@ function AO188APDDetectorConfig(;
     dead_time_model::CountingDeadTimeModel=NoDeadTime(),
     output_precision::Union{Nothing,DataType}=nothing,
     channel_gain_map=nothing,
+    thermal_model::Union{Nothing,AbstractDetectorThermalModel}=nothing,
 )
-    return AO188APDDetectorConfig{T,typeof(convert_noise(noise, T)),typeof(dead_time_model),typeof(channel_gain_map)}(
+    return AO188APDDetectorConfig{T,typeof(convert_noise(noise, T)),typeof(dead_time_model),typeof(channel_gain_map),typeof(thermal_model)}(
         T(integration_time),
         T(qe),
         T(gain),
@@ -180,6 +185,7 @@ function AO188APDDetectorConfig(;
         dead_time_model,
         output_precision,
         channel_gain_map,
+        thermal_model,
     )
 end
 
@@ -195,6 +201,7 @@ function detector_from_config(cfg::AO188WFSDetectorConfig{T}; backend=Array) whe
         sensor=cfg.sensor,
         response_model=cfg.response_model,
         correction_model=cfg.correction_model,
+        thermal_model=cfg.thermal_model,
         T=T,
         backend=backend,
     )
@@ -210,6 +217,7 @@ function detector_from_config(cfg::AO188APDDetectorConfig{T}; backend=Array) whe
         dead_time_model=cfg.dead_time_model,
         output_precision=cfg.output_precision,
         channel_gain_map=cfg.channel_gain_map,
+        thermal_model=something(cfg.thermal_model, NullDetectorThermalModel()),
         T=T,
         backend=backend,
     )

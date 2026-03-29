@@ -11,6 +11,7 @@ const _default_config_dir = joinpath(dirname(@__DIR__), "benchmarks", "assets", 
 const _config_dir_arg = length(ARGS) >= 2 ? ARGS[2] : get(ENV, "REVOLT_CONFIG_DIR", _default_config_dir)
 const _sensor_arg = length(ARGS) >= 3 ? lowercase(ARGS[3]) : "ccd"
 const _response_arg = length(ARGS) >= 4 ? lowercase(ARGS[4]) : "default"
+const _thermal_arg = length(ARGS) >= 5 ? lowercase(ARGS[5]) : "none"
 
 if _backend_arg == "cuda"
     import CUDA
@@ -108,6 +109,51 @@ function _resolve_response_model(name::AbstractString)
     error("unsupported response mode '$name'; use default or null")
 end
 
+function _resolve_thermal_model(name::AbstractString, sensor_label::Symbol, T::Type{<:AbstractFloat})
+    lowered = lowercase(name)
+    lowered == "none" && return nothing, :none
+    dark_law = ArrheniusRateLaw(293.0, 4500.0)
+    glow_law = ArrheniusRateLaw(293.0, 3000.0)
+    cic_law = LinearTemperatureLaw(293.0, 0.01)
+    if lowered == "fixed120"
+        return FixedTemperature(
+            temperature_K=120.0,
+            dark_current_law=dark_law,
+            glow_rate_law=(sensor_label in (:ingaas, :hgcdte_avalanche_array) ? glow_law : NullTemperatureLaw()),
+            cic_rate_law=(sensor_label == :emccd ? cic_law : NullTemperatureLaw()),
+            T=T), :fixed120
+    elseif lowered == "dynamic120"
+        return FirstOrderThermalModel(
+            ambient_temperature_K=293.0,
+            setpoint_temperature_K=120.0,
+            initial_temperature_K=293.0,
+            time_constant_s=0.05,
+            min_temperature_K=100.0,
+            max_temperature_K=300.0,
+            dark_current_law=dark_law,
+            glow_rate_law=(sensor_label in (:ingaas, :hgcdte_avalanche_array) ? glow_law : NullTemperatureLaw()),
+            cic_rate_law=(sensor_label == :emccd ? cic_law : NullTemperatureLaw()),
+            T=T), :dynamic120
+    end
+    error("unsupported thermal mode '$name'; use none, fixed120, or dynamic120")
+end
+
+_thermalized_sensor(sensor::CCDSensor, ::Bool, ::Type{T}) where {T<:AbstractFloat} = sensor
+_thermalized_sensor(sensor::CMOSSensor, ::Bool, ::Type{T}) where {T<:AbstractFloat} = sensor
+_thermalized_sensor(sensor::EMCCDSensor, enabled::Bool, ::Type{T}) where {T<:AbstractFloat} =
+    enabled ? EMCCDSensor(cic_rate=T(0.02), excess_noise_factor=sensor.excess_noise_factor,
+        em_gain_model=sensor.em_gain_model, T=T) : sensor
+_thermalized_sensor(sensor::InGaAsSensor, enabled::Bool, ::Type{T}) where {T<:AbstractFloat} =
+    enabled ? InGaAsSensor(glow_rate=T(0.02), persistence_model=sensor.persistence_model, T=T) : sensor
+_thermalized_sensor(sensor::HgCdTeAvalancheArraySensor, enabled::Bool, ::Type{T}) where {T<:AbstractFloat} =
+    enabled ? HgCdTeAvalancheArraySensor(
+        avalanche_gain=sensor.avalanche_gain,
+        excess_noise_factor=sensor.excess_noise_factor,
+        glow_rate=T(0.02),
+        read_time=sensor.read_time,
+        sampling_mode=sensor.sampling_mode,
+        T=T) : sensor
+
 function _load_dm277_actuator_map(path::AbstractString)
     raw = readlines(path)
     length(raw) >= 2 || error("actuator map file is unexpectedly short")
@@ -187,11 +233,15 @@ end
 
 function run_profile(; backend_name::AbstractString="cpu", config_dir::AbstractString=_config_dir_arg,
     sensor_name::AbstractString="ccd", response_name::AbstractString="default",
+    thermal_name::AbstractString="none",
     samples::Int=6, warmup::Int=2)
     BackendArray, backend_tag, label = _resolve_backend(backend_name)
     sensor, sensor_label = _resolve_sensor(sensor_name)
     response_model, response_label = _resolve_response_model(response_name)
     T = Float32
+    thermal_model, thermal_label = _resolve_thermal_model(thermal_name, sensor_label, T)
+    sensor = _thermalized_sensor(sensor, !isnothing(thermal_model), T)
+    dark_current = isnothing(thermal_model) ? zero(T) : T(0.02)
     actuator_map_path = joinpath(config_dir, "revolt_like_dmActuatorMap_277.csv")
     extrapolation_path = joinpath(config_dir, "revolt_like_dmExtrapolation.csv")
     actuator_map, active_indices_host = _load_dm277_actuator_map(actuator_map_path)
@@ -214,7 +264,8 @@ function run_profile(; backend_name::AbstractString="cpu", config_dir::AbstractS
     dm = DeformableMirror(tel; n_act=n_act, influence_width=0.3, T=T, backend=BackendArray)
     wfs = ShackHartmann(tel; n_subap=n_subap, mode=Diffractive(), n_pix_subap=roi, diffraction_padding=2, T=T, backend=BackendArray)
     det = Detector(noise=NoiseNone(), integration_time=T(1), qe=T(1), binning=1,
-        sensor=sensor, response_model=response_model, T=T, backend=BackendArray)
+        dark_current=dark_current, sensor=sensor, response_model=response_model,
+        thermal_model=thermal_model, T=T, backend=BackendArray)
     active_indices_backend = BackendArray{Int}(undef, n_active)
     copyto!(active_indices_backend, active_indices_host)
     active_command = BackendArray{T}(undef, n_active)
@@ -305,7 +356,12 @@ function run_profile(; backend_name::AbstractString="cpu", config_dir::AbstractS
     println("  config_dir: ", config_dir)
     println("  sensor: ", sensor_label)
     println("  response_mode: ", response_label)
+    println("  thermal_mode: ", thermal_label)
     println("  effective_frame_response: ", metadata.frame_response)
+    println("  thermal_model: ", metadata.thermal_model)
+    println("  detector_temperature_K: ", metadata.detector_temperature_K)
+    println("  cooling_setpoint_K: ", metadata.cooling_setpoint_K)
+    println("  ambient_temperature_K: ", metadata.ambient_temperature_K)
     println("  actuator_command_length: ", n_active)
     println("  extrapolated_command_length: ", length(extrapolated_command))
     println("  dm_grid_command_length: ", length(dm.state.coefs))
@@ -335,4 +391,5 @@ function run_profile(; backend_name::AbstractString="cpu", config_dir::AbstractS
     return nothing
 end
 
-run_profile(; backend_name=_backend_arg, config_dir=_config_dir_arg, sensor_name=_sensor_arg, response_name=_response_arg)
+run_profile(; backend_name=_backend_arg, config_dir=_config_dir_arg, sensor_name=_sensor_arg, response_name=_response_arg,
+    thermal_name=_thermal_arg)

@@ -48,15 +48,16 @@ The maintained CUDA validation entry points are:
 - `scripts/profile_revolt_hil_runtime.jl`
   - warmed REVOLT-like synthetic SH HIL benchmark with `277` active commands
     and full `352 x 352` pixel output
-  - supports detector-family and `default` vs `null` response sweeps
+  - supports detector-family, `default` vs `null` response sweeps, and
+    detector-thermal sweeps
   - now reports warmed allocation bytes per phase and for the full step
 - `scripts/profile_external_optics_hil.jl`
   - warmed external-optics HIL proxy with `468` active commands and exported
     `640 x 512` phase output
   - now reports warmed allocation bytes per phase and for the full step
 - `scripts/profile_ao3k_runtime.jl`
-  - warmed AO3k pyramid runtime profile with `default` vs `null`
-    high-detector response sweeps
+  - warmed AO3k pyramid runtime profile with high-detector response,
+    HgCdTe-array sampling, readout-correction, and detector-thermal sweeps
 
 On a CUDA host, the standard workflow is:
 
@@ -108,15 +109,16 @@ The maintained AMDGPU validation entry points are:
 - `scripts/profile_revolt_hil_runtime.jl`
   - warmed REVOLT-like synthetic SH HIL benchmark with `277` active commands
     and full `352 x 352` pixel output
-  - supports detector-family and `default` vs `null` response sweeps
+  - supports detector-family, `default` vs `null` response sweeps, and
+    detector-thermal sweeps
   - now reports warmed allocation bytes per phase and for the full step
 - `scripts/profile_external_optics_hil.jl`
   - warmed external-optics HIL proxy with `468` active commands and exported
     `640 x 512` phase output
   - now reports warmed allocation bytes per phase and for the full step
 - `scripts/profile_ao3k_runtime.jl`
-  - warmed AO3k pyramid runtime profile with `default` vs `null`
-    high-detector response sweeps
+  - warmed AO3k pyramid runtime profile with high-detector response,
+    HgCdTe-array sampling, readout-correction, and detector-thermal sweeps
 
 On an AMDGPU host, the standard workflow is:
 
@@ -227,12 +229,15 @@ Interpretation:
 Current warmed AO3k medium runtime snapshot on this host:
 
 - CPU on this host
-  - `default` HgCdTe avalanche-array high-detector path
+  - `default` HgCdTe avalanche-array high-detector path with fixed `80 K`
+    cooling
     - response: sampled default
     - sampling: CDS
     - correction: reference-pixel
-    - about `48.7 Hz`
-    - `runtime_alloc_bytes`: about `263536`
+    - about `54.8 Hz`
+    - `runtime_alloc_bytes`: about `265520`
+    - thermal model: `fixed_temperature`
+    - detector temperature: `80 K`
     - high-order products:
       - reference frame `(64, 64)`
       - signal frame `(64, 64)`
@@ -240,24 +245,44 @@ Current warmed AO3k medium runtime snapshot on this host:
       - reference cube `(64, 64, 1)`
       - signal cube `(64, 64, 1)`
       - read cube `(64, 64, 2)`
-  - `null` + `Fowler(8)` + output correction
-    - about `27.0 Hz`
-    - `runtime_alloc_bytes`: about `1181104`
-    - high-order products:
-      - reference cube `(64, 64, 8)`
-      - signal cube `(64, 64, 8)`
-      - read cube `(64, 64, 16)`
-  - dimensions:
+  - `none` thermal, same detector response/sampling/correction
+    - about `51.8 Hz`
+    - `runtime_alloc_bytes`: about `265488`
+- dimensions:
     - pupil `160`
     - high-order subapertures `32`
     - high-order frame `(64, 64)`
     - high-order slopes `2048`
     - control modes `1024`
 
+- AMDGPU on this host
+  - `fixed80`
+    - about `141.1 Hz`
+    - `runtime_alloc_bytes`: about `465208`
+    - thermal model: `fixed_temperature`
+    - detector temperature: `80 K`
+
 Interpretation:
 
 - the new AO3k profiler is now in place on a maintained system surface that
   now actually uses the HgCdTe avalanche-array detector family rather than a generic
+  frame-detector proxy,
+- the maintained AO3k example now carries an explicit cooled-detector
+  configuration at the example layer rather than leaving detector temperature
+  implicit,
+- the AO3k profiler now makes the thermal model visible in exported metadata
+  and benchmark output,
+- the fixed-temperature thermal model adds negligible allocation cost on the
+  maintained AO3k surface and slightly improves the CPU medium rung relative to
+  the null-thermal case on this host.
+
+Current warmed REVOLT-like HIL thermal snapshot on this host:
+
+- CPU, `HgCdTeAvalancheArraySensor`, `default` response, `fixed120`
+  - about `134.7 Hz`
+  - `total_alloc_bytes`: about `2806304`
+  - thermal model: `fixed_temperature`
+  - detector temperature: `120 K`
   frame-detector proxy,
 - the maintained AO3k medium rung now exposes the explicit HgCdTe readout
   products and readout-correction surface at the profiler level,

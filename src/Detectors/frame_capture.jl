@@ -397,6 +397,7 @@ end
 function capture!(det::Detector, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
     capture_signal!(det, psf, rng, det.params.integration_time)
     finalize_capture!(det, rng, det.params.integration_time)
+    advance_thermal!(det, det.params.integration_time)
     return write_output!(det)
 end
 
@@ -419,6 +420,7 @@ function capture!(det::Detector, psf::AbstractMatrix{T}; rng::AbstractRNG=Random
     end
     det.state.accum_buffer .+= det.state.frame
     det.state.integrated_time += dt
+    advance_thermal!(det, dt)
     det.state.readout_ready = false
     if det.state.integrated_time + eps(dt) >= det.params.integration_time
         det.state.frame .= det.state.accum_buffer
