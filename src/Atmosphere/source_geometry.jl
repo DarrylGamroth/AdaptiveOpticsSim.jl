@@ -1,3 +1,28 @@
+"""
+Internal marker for atmosphere layers that participate in the shared finite /
+infinite rendering path.
+
+Maintained layer implementations are expected to support:
+
+- `sample_layer!(out, layer, tel, rng)` for evolving the layer and writing a
+  pupil-sized sample into `out`
+- `render_layer!(out, layer, shift_x, shift_y, footprint_scale)` for writing a
+  source-aware pupil sample into `out` without evolving the layer state
+- `layer_altitude(layer)` returning the layer altitude in meters
+
+The shared atmosphere-container helpers in this file assume their `atm`
+argument provides:
+
+- `atm.layers`
+- `atm.params.altitude`
+- `atm.state.opd`
+- `atm.state.layer_buffer`
+- `atm.state.source_geometry`
+"""
+abstract type AbstractAtmosphereLayer end
+
+@inline layer_altitude(layer::AbstractAtmosphereLayer) = layer.params.altitude
+
 mutable struct AtmosphereSourceGeometryCache{T<:AbstractFloat,V<:AbstractVector{T}}
     shift_x::V
     shift_y::V

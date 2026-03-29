@@ -34,6 +34,21 @@ function assert_atmosphere_interface(atm, tel)
     @test applicable(propagate!, atm, tel)
 end
 
+function assert_atmosphere_layer_interface(layer, tel, rng, src)
+    @test layer isa AdaptiveOpticsSim.AbstractAtmosphereLayer
+    @test applicable(AdaptiveOpticsSim.sample_layer!, similar(tel.state.opd), layer, tel, rng)
+    @test applicable(AdaptiveOpticsSim.render_layer!, similar(tel.state.opd), layer, zero(eltype(tel.state.opd)),
+        zero(eltype(tel.state.opd)), one(eltype(tel.state.opd)))
+    altitude = AdaptiveOpticsSim.layer_altitude(layer)
+    shift_x, shift_y, footprint_scale = AdaptiveOpticsSim.layer_source_geometry(src, altitude, tel, eltype(tel.state.opd))
+    sample = similar(tel.state.opd)
+    fill!(sample, zero(eltype(sample)))
+    AdaptiveOpticsSim.sample_layer!(sample, layer, tel, rng)
+    @test size(sample) == size(tel.state.opd)
+    AdaptiveOpticsSim.render_layer!(sample, layer, shift_x, shift_y, footprint_scale)
+    @test size(sample) == size(tel.state.opd)
+end
+
 function assert_wfs_interface(wfs, tel)
     @test applicable(update_valid_mask!, wfs, tel)
     @test applicable(measure!, wfs, tel)
@@ -2400,6 +2415,10 @@ end
     zwfs = ZernikeWFS(tel; n_subap=2)
     curv_count = CurvatureWFS(tel; n_subap=2, readout_model=CurvatureCountingReadout())
     ast = Asterism([src, Source(band=:I, magnitude=1.0, coordinates=(1.0, -45.0))])
+    moving_atm = MultiLayerAtmosphere(tel; r0=0.2, L0=25.0, fractional_cn2=[1.0],
+        wind_speed=[0.0], wind_direction=[0.0], altitude=[0.0])
+    infinite_atm = InfiniteMultiLayerAtmosphere(tel; r0=0.2, L0=25.0, fractional_cn2=[1.0],
+        wind_speed=[0.0], wind_direction=[0.0], altitude=[0.0], screen_resolution=33, stencil_size=35)
     @test CCDSensor <: FrameSensorType
     @test CMOSSensor <: FrameSensorType
     @test AvalancheFrameSensorType <: FrameSensorType
@@ -2435,6 +2454,10 @@ end
     assert_source_interface(lgs)
     # IF-ATM
     assert_atmosphere_interface(atm, tel)
+    @test applicable(propagate!, moving_atm, tel, src)
+    @test applicable(propagate!, infinite_atm, tel, src)
+    assert_atmosphere_layer_interface(moving_atm.layers[1], tel, MersenneTwister(11), src)
+    assert_atmosphere_layer_interface(infinite_atm.layers[1], tel, MersenneTwister(12), src)
     # IF-WFS
     assert_wfs_interface(wfs, tel)
     # IF-DM

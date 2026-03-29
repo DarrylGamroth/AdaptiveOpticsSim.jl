@@ -61,7 +61,7 @@ struct MovingAtmosphereLayer{
     S<:MovingLayerState,
     A<:KolmogorovAtmosphere,
     TT<:Telescope,
-}
+} <: AbstractAtmosphereLayer
     params::P
     generator::A
     generator_telescope::TT

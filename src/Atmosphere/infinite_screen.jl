@@ -126,7 +126,7 @@ struct InfiniteAtmosphereLayer{
     P<:InfiniteLayerParams,
     S<:InfiniteLayerState,
     Screen<:InfinitePhaseScreen,
-}
+} <: AbstractAtmosphereLayer
     params::P
     screen::Screen
     state::S
