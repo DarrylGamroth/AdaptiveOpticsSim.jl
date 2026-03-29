@@ -6,8 +6,13 @@ Maintained layer implementations are expected to support:
 
 - `sample_layer!(out, layer, tel, rng)` for evolving the layer and writing a
   pupil-sized sample into `out`
+- `sample_layer_accumulate!(out, layer, tel, rng)` for evolving the layer and
+  adding a pupil-sized sample into `out`
 - `render_layer!(out, layer, shift_x, shift_y, footprint_scale)` for writing a
   source-aware pupil sample into `out` without evolving the layer state
+- `render_layer_accumulate!(out, layer, shift_x, shift_y, footprint_scale)` for
+  adding a source-aware pupil sample into `out` without evolving the layer
+  state
 - `layer_altitude(layer)` returning the layer altitude in meters
 
 The shared atmosphere-container helpers in this file assume their `atm`
@@ -16,7 +21,6 @@ argument provides:
 - `atm.layers`
 - `atm.params.altitude`
 - `atm.state.opd`
-- `atm.state.layer_buffer`
 - `atm.state.source_geometry`
 """
 abstract type AbstractAtmosphereLayer end
@@ -109,24 +113,21 @@ function ensure_source_geometry_cache!(cache::AtmosphereSourceGeometryCache{T},
     return cache
 end
 
-function accumulate_sampled_layers!(opd::AbstractMatrix, layer_buffer::AbstractMatrix,
-    layers, tel::Telescope, rng::AbstractRNG)
+function accumulate_sampled_layers!(opd::AbstractMatrix, layers, tel::Telescope, rng::AbstractRNG)
     isempty(layers) && return opd
     sample_layer!(opd, layers[1], tel, rng)
     @inbounds for i in 2:length(layers)
-        sample_layer!(layer_buffer, layers[i], tel, rng)
-        opd .+= layer_buffer
+        sample_layer_accumulate!(opd, layers[i], tel, rng)
     end
     return opd
 end
 
-function accumulate_rendered_layers!(opd::AbstractMatrix, layer_buffer::AbstractMatrix,
+function accumulate_rendered_layers!(opd::AbstractMatrix,
     layers, shift_x::AbstractVector, shift_y::AbstractVector, footprint_scale::AbstractVector)
     isempty(layers) && return opd
     render_layer!(opd, layers[1], shift_x[1], shift_y[1], footprint_scale[1])
     @inbounds for i in 2:length(layers)
-        render_layer!(layer_buffer, layers[i], shift_x[i], shift_y[i], footprint_scale[i])
-        opd .+= layer_buffer
+        render_layer_accumulate!(opd, layers[i], shift_x[i], shift_y[i], footprint_scale[i])
     end
     return opd
 end
@@ -137,7 +138,7 @@ function propagate_source_aware!(atm, tel::Telescope, src::AbstractSource)
         return propagate!(atm, tel)
     end
     cache = ensure_source_geometry_cache!(atm.state.source_geometry, src, atm.params.altitude, tel, T)
-    accumulate_rendered_layers!(atm.state.opd, atm.state.layer_buffer, atm.layers,
+    accumulate_rendered_layers!(atm.state.opd, atm.layers,
         cache.shift_x, cache.shift_y, cache.footprint_scale)
     tel.state.opd .= atm.state.opd .* tel.state.pupil
     return tel

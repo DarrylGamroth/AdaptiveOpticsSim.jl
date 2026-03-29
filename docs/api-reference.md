@@ -174,10 +174,10 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   applies the resulting OPD to the telescope.
 - The maintained multilayer backends also share an internal layer/container
   contract used by the common source-aware rendering path:
-  - layer objects implement `sample_layer!`, `render_layer!`, and
-    `layer_altitude`
-  - container objects provide `layers`, `params.altitude`, `state.opd`,
-    `state.layer_buffer`, and `state.source_geometry`
+  - layer objects implement `sample_layer!`, `sample_layer_accumulate!`,
+    `render_layer!`, `render_layer_accumulate!`, and `layer_altitude`
+  - container objects provide `layers`, `params.altitude`, `state.opd`, and
+    `state.source_geometry`
 - Source-aware maintained multilayer atmospheres provide `propagate!(atm, tel,
   src)` and are expected to route through the shared accumulation helpers
   rather than duplicating backend-specific render loops.

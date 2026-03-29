@@ -157,7 +157,6 @@ Runtime state for the planned infinite multilayer atmosphere backend.
 """
 mutable struct InfiniteMultiLayerState{T<:AbstractFloat,A<:AbstractMatrix{T}}
     opd::A
-    layer_buffer::A
     source_geometry::AtmosphereSourceGeometryCache{T,Vector{T}}
 end
 
@@ -405,6 +404,26 @@ function sample_layer!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer, t
     return render_layer!(out, layer, tel)
 end
 
+function sample_layer_accumulate!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer, tel::Telescope,
+    rng::AbstractRNG) where {T<:AbstractFloat}
+    ensure_initialized!(layer.screen, rng)
+    delta = T(tel.params.diameter / tel.params.resolution)
+    dt = T(tel.params.sampling_time)
+    next_offset_x = layer.state.offset_x + T(layer.params.wind_velocity_x) * dt / delta
+    next_offset_y = layer.state.offset_y + T(layer.params.wind_velocity_y) * dt / delta
+    shift_x = trunc(Int, next_offset_x)
+    shift_y = trunc(Int, next_offset_y)
+    residual_x = next_offset_x - T(shift_x)
+    residual_y = next_offset_y - T(shift_y)
+    _apply_integer_shift_x!(layer.screen, shift_x, rng)
+    _apply_integer_shift_y!(layer.screen, shift_y, rng)
+    layer.state.offset_x = residual_x
+    layer.state.offset_y = residual_y
+    layer.state.integer_shift_x += shift_x
+    layer.state.integer_shift_y += shift_y
+    return render_layer_accumulate!(out, layer, tel)
+end
+
 function render_layer!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer, tel::Telescope,
     src::Union{AbstractSource,Nothing}=nothing) where {T<:AbstractFloat}
     shift_x, shift_y, footprint_scale = layer_source_geometry(src, layer.params.altitude, tel, T)
@@ -414,6 +433,22 @@ end
 function render_layer!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer,
     shift_x::T, shift_y::T, footprint_scale::T) where {T<:AbstractFloat}
     extract_shifted_screen!(out, layer.screen.state.screen,
+        layer.state.offset_x - shift_x,
+        layer.state.offset_y - shift_y,
+        T(layer.params.amplitude_scale),
+        footprint_scale)
+    return out
+end
+
+function render_layer_accumulate!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer, tel::Telescope,
+    src::Union{AbstractSource,Nothing}=nothing) where {T<:AbstractFloat}
+    shift_x, shift_y, footprint_scale = layer_source_geometry(src, layer.params.altitude, tel, T)
+    return render_layer_accumulate!(out, layer, shift_x, shift_y, footprint_scale)
+end
+
+function render_layer_accumulate!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer,
+    shift_x::T, shift_y::T, footprint_scale::T) where {T<:AbstractFloat}
+    accumulate_shifted_screen!(out, layer.screen.state.screen,
         layer.state.offset_x - shift_x,
         layer.state.offset_y - shift_y,
         T(layer.params.amplitude_scale),
@@ -661,15 +696,13 @@ function InfiniteMultiLayerAtmosphere(tel::Telescope;
         ) for i in 1:n_layers
     ]
     opd = backend{T}(undef, tel.params.resolution, tel.params.resolution)
-    layer_buffer = backend{T}(undef, tel.params.resolution, tel.params.resolution)
     fill!(opd, zero(T))
-    fill!(layer_buffer, zero(T))
-    state = InfiniteMultiLayerState{T, typeof(opd)}(opd, layer_buffer, AtmosphereSourceGeometryCache(n_layers, T))
+    state = InfiniteMultiLayerState{T, typeof(opd)}(opd, AtmosphereSourceGeometryCache(n_layers, T))
     return InfiniteMultiLayerAtmosphere(params, layers, state)
 end
 
 function advance!(atm::InfiniteMultiLayerAtmosphere, tel::Telescope, rng::AbstractRNG)
-    accumulate_sampled_layers!(atm.state.opd, atm.state.layer_buffer, atm.layers, tel, rng)
+    accumulate_sampled_layers!(atm.state.opd, atm.layers, tel, rng)
     return atm
 end
 

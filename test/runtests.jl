@@ -37,7 +37,10 @@ end
 function assert_atmosphere_layer_interface(layer, tel, rng, src)
     @test layer isa AdaptiveOpticsSim.AbstractAtmosphereLayer
     @test applicable(AdaptiveOpticsSim.sample_layer!, similar(tel.state.opd), layer, tel, rng)
+    @test applicable(AdaptiveOpticsSim.sample_layer_accumulate!, similar(tel.state.opd), layer, tel, rng)
     @test applicable(AdaptiveOpticsSim.render_layer!, similar(tel.state.opd), layer, zero(eltype(tel.state.opd)),
+        zero(eltype(tel.state.opd)), one(eltype(tel.state.opd)))
+    @test applicable(AdaptiveOpticsSim.render_layer_accumulate!, similar(tel.state.opd), layer, zero(eltype(tel.state.opd)),
         zero(eltype(tel.state.opd)), one(eltype(tel.state.opd)))
     altitude = AdaptiveOpticsSim.layer_altitude(layer)
     shift_x, shift_y, footprint_scale = AdaptiveOpticsSim.layer_source_geometry(src, altitude, tel, eltype(tel.state.opd))
@@ -45,7 +48,14 @@ function assert_atmosphere_layer_interface(layer, tel, rng, src)
     fill!(sample, zero(eltype(sample)))
     AdaptiveOpticsSim.sample_layer!(sample, layer, tel, rng)
     @test size(sample) == size(tel.state.opd)
+    fill!(sample, zero(eltype(sample)))
+    AdaptiveOpticsSim.sample_layer_accumulate!(sample, layer, tel, rng)
+    @test size(sample) == size(tel.state.opd)
+    fill!(sample, zero(eltype(sample)))
     AdaptiveOpticsSim.render_layer!(sample, layer, shift_x, shift_y, footprint_scale)
+    @test size(sample) == size(tel.state.opd)
+    fill!(sample, zero(eltype(sample)))
+    AdaptiveOpticsSim.render_layer_accumulate!(sample, layer, shift_x, shift_y, footprint_scale)
     @test size(sample) == size(tel.state.opd)
 end
 

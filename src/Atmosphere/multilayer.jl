@@ -26,6 +26,34 @@
     end
 end
 
+@kernel function moving_layer_accumulate_kernel!(out, screen, start_x, start_y, footprint_scale, amplitude_scale, n::Int, m::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= n
+        T = eltype(out)
+        y = start_y + footprint_scale * T(i - 1)
+        y0 = floor(Int, y)
+        fy = y - T(y0)
+        wy0 = one(T) - fy
+        iy0 = wrap_index(y0, m)
+        iy1 = wrap_index(y0 + 1, m)
+
+        x = start_x + footprint_scale * T(j - 1)
+        x0 = floor(Int, x)
+        fx = x - T(x0)
+        wx0 = one(T) - fx
+        ix0 = wrap_index(x0, m)
+        ix1 = wrap_index(x0 + 1, m)
+
+        @inbounds begin
+            v00 = screen[iy0, ix0]
+            v01 = screen[iy0, ix1]
+            v10 = screen[iy1, ix0]
+            v11 = screen[iy1, ix1]
+            out[i, j] += amplitude_scale * (wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11))
+        end
+    end
+end
+
 struct MultiLayerParams{T<:AbstractFloat,
     V1<:AbstractVector{T},
     V2<:AbstractVector{T},
@@ -70,7 +98,6 @@ end
 
 mutable struct MultiLayerState{T<:AbstractFloat,A<:AbstractMatrix{T}}
     opd::A
-    layer_buffer::A
     source_geometry::AtmosphereSourceGeometryCache{T,Vector{T}}
 end
 
@@ -203,6 +230,20 @@ function _extract_shifted_screen!(style::AcceleratorStyle, out::AbstractMatrix{T
     return out
 end
 
+function accumulate_shifted_screen!(out::AbstractMatrix{T}, screen::AbstractMatrix{T},
+    offset_x::T, offset_y::T, amplitude_scale::T, footprint_scale::T=one(T)) where {T<:AbstractFloat}
+    n = size(out, 1)
+    size(out, 2) == n || throw(DimensionMismatchError("output must be square"))
+    m = size(screen, 1)
+    size(screen, 2) == m || throw(DimensionMismatchError("screen must be square"))
+    m >= n || throw(DimensionMismatchError("screen resolution must be at least as large as the pupil resolution"))
+    footprint_scale > zero(T) || throw(InvalidConfiguration("footprint_scale must be positive"))
+    start_x = T(m + 1) / 2 - footprint_scale * T(n - 1) / 2 - offset_x
+    start_y = T(m + 1) / 2 - footprint_scale * T(n - 1) / 2 - offset_y
+    _accumulate_shifted_screen!(execution_style(out), out, screen, start_x, start_y, footprint_scale, amplitude_scale, n, m)
+    return out
+end
+
 @inline function _extract_shifted_screen_async!(::ScalarCPUStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
     start_x::T, start_y::T, footprint_scale::T, amplitude_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
     return _extract_shifted_screen!(ScalarCPUStyle(), out, screen, start_x, start_y, footprint_scale, amplitude_scale, n, m)
@@ -211,6 +252,40 @@ end
 function _extract_shifted_screen_async!(style::AcceleratorStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
     start_x::T, start_y::T, footprint_scale::T, amplitude_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
     launch_kernel_async!(style, moving_layer_extract_kernel!, out, screen, start_x, start_y, footprint_scale, amplitude_scale, n, m; ndrange=size(out))
+    return out
+end
+
+function _accumulate_shifted_screen!(::ScalarCPUStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
+    start_x::T, start_y::T, footprint_scale::T, amplitude_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
+    @inbounds for i in 1:n
+        y = start_y + footprint_scale * T(i - 1)
+        y0 = floor(Int, y)
+        fy = y - T(y0)
+        wy0 = one(T) - fy
+        iy0 = wrap_index(y0, m)
+        iy1 = wrap_index(y0 + 1, m)
+
+        for j in 1:n
+            x = start_x + footprint_scale * T(j - 1)
+            x0 = floor(Int, x)
+            fx = x - T(x0)
+            wx0 = one(T) - fx
+            ix0 = wrap_index(x0, m)
+            ix1 = wrap_index(x0 + 1, m)
+
+            v00 = screen[iy0, ix0]
+            v01 = screen[iy0, ix1]
+            v10 = screen[iy1, ix0]
+            v11 = screen[iy1, ix1]
+            out[i, j] += amplitude_scale * (wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11))
+        end
+    end
+    return out
+end
+
+function _accumulate_shifted_screen!(style::AcceleratorStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
+    start_x::T, start_y::T, footprint_scale::T, amplitude_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
+    launch_kernel!(style, moving_layer_accumulate_kernel!, out, screen, start_x, start_y, footprint_scale, amplitude_scale, n, m; ndrange=size(out))
     return out
 end
 
@@ -231,6 +306,23 @@ function render_layer!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer,
     return out
 end
 
+function render_layer_accumulate!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer, tel::Telescope,
+    src::Union{AbstractSource,Nothing}=nothing) where {T<:AbstractFloat}
+    shift_x, shift_y, footprint_scale = layer_source_geometry(src, layer.params.altitude, tel, T)
+    return render_layer_accumulate!(out, layer, shift_x, shift_y, footprint_scale)
+end
+
+function render_layer_accumulate!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer,
+    shift_x::T, shift_y::T, footprint_scale::T) where {T<:AbstractFloat}
+    amplitude_scale = T(layer.params.amplitude_scale)
+    accumulate_shifted_screen!(out, layer.generator.state.opd,
+        layer.state.offset_x - shift_x,
+        layer.state.offset_y - shift_y,
+        amplitude_scale,
+        footprint_scale)
+    return out
+end
+
 function sample_layer!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer, tel::Telescope, rng::AbstractRNG) where {T<:AbstractFloat}
     ensure_initialized!(layer, rng)
     delta = T(tel.params.diameter / tel.params.resolution)
@@ -238,6 +330,15 @@ function sample_layer!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer, tel
     layer.state.offset_x += T(layer.params.wind_velocity_x) * dt / delta
     layer.state.offset_y += T(layer.params.wind_velocity_y) * dt / delta
     return render_layer!(out, layer, tel)
+end
+
+function sample_layer_accumulate!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer, tel::Telescope, rng::AbstractRNG) where {T<:AbstractFloat}
+    ensure_initialized!(layer, rng)
+    delta = T(tel.params.diameter / tel.params.resolution)
+    dt = T(tel.params.sampling_time)
+    layer.state.offset_x += T(layer.params.wind_velocity_x) * dt / delta
+    layer.state.offset_y += T(layer.params.wind_velocity_y) * dt / delta
+    return render_layer_accumulate!(out, layer, tel)
 end
 
 function MultiLayerAtmosphere(tel::Telescope;
@@ -285,16 +386,14 @@ function MultiLayerAtmosphere(tel::Telescope;
     ]
 
     opd = backend{T}(undef, tel.params.resolution, tel.params.resolution)
-    layer_buffer = backend{T}(undef, tel.params.resolution, tel.params.resolution)
     fill!(opd, zero(T))
-    fill!(layer_buffer, zero(T))
-    state = MultiLayerState{T, typeof(opd)}(opd, layer_buffer, AtmosphereSourceGeometryCache(n_layers, T))
+    state = MultiLayerState{T, typeof(opd)}(opd, AtmosphereSourceGeometryCache(n_layers, T))
 
     return MultiLayerAtmosphere(params, layers, state)
 end
 
 function advance!(atm::MultiLayerAtmosphere, tel::Telescope, rng::AbstractRNG)
-    accumulate_sampled_layers!(atm.state.opd, atm.state.layer_buffer, atm.layers, tel, rng)
+    accumulate_sampled_layers!(atm.state.opd, atm.layers, tel, rng)
     return atm
 end
 
