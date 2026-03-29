@@ -158,6 +158,7 @@ Runtime state for the planned infinite multilayer atmosphere backend.
 mutable struct InfiniteMultiLayerState{T<:AbstractFloat,A<:AbstractMatrix{T}}
     opd::A
     layer_buffer::A
+    source_geometry::AtmosphereSourceGeometryCache{T,Vector{T}}
 end
 
 """
@@ -407,6 +408,11 @@ end
 function render_layer!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer, tel::Telescope,
     src::Union{AbstractSource,Nothing}=nothing) where {T<:AbstractFloat}
     shift_x, shift_y, footprint_scale = layer_source_geometry(src, layer.params.altitude, tel, T)
+    return render_layer!(out, layer, shift_x, shift_y, footprint_scale)
+end
+
+function render_layer!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer,
+    shift_x::T, shift_y::T, footprint_scale::T) where {T<:AbstractFloat}
     extract_shifted_screen!(out, layer.screen.state.screen,
         layer.state.offset_x - shift_x,
         layer.state.offset_y - shift_y,
@@ -658,7 +664,7 @@ function InfiniteMultiLayerAtmosphere(tel::Telescope;
     layer_buffer = backend{T}(undef, tel.params.resolution, tel.params.resolution)
     fill!(opd, zero(T))
     fill!(layer_buffer, zero(T))
-    state = InfiniteMultiLayerState{T, typeof(opd)}(opd, layer_buffer)
+    state = InfiniteMultiLayerState{T, typeof(opd)}(opd, layer_buffer, AtmosphereSourceGeometryCache(n_layers, T))
     return InfiniteMultiLayerAtmosphere(params, layers, state)
 end
 
@@ -683,11 +689,5 @@ function propagate!(atm::InfiniteMultiLayerAtmosphere, tel::Telescope)
 end
 
 function propagate!(atm::InfiniteMultiLayerAtmosphere, tel::Telescope, src::AbstractSource)
-    fill!(atm.state.opd, zero(eltype(atm.state.opd)))
-    for layer in atm.layers
-        render_layer!(atm.state.layer_buffer, layer, tel, src)
-        atm.state.opd .+= atm.state.layer_buffer
-    end
-    tel.state.opd .= atm.state.opd .* tel.state.pupil
-    return tel
+    return propagate_source_aware!(atm, tel, src)
 end

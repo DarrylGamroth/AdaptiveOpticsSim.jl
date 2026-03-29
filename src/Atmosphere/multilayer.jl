@@ -71,6 +71,7 @@ end
 mutable struct MultiLayerState{T<:AbstractFloat,A<:AbstractMatrix{T}}
     opd::A
     layer_buffer::A
+    source_geometry::AtmosphereSourceGeometryCache{T,Vector{T}}
 end
 
 struct MultiLayerAtmosphere{
@@ -132,28 +133,6 @@ end
 
 @inline wrap_index(i::Int, n::Int) = mod1(i, n)
 
-@inline function layer_source_geometry(::Nothing, layer_altitude::Real, tel::Telescope, ::Type{T}) where {T<:AbstractFloat}
-    return zero(T), zero(T), one(T)
-end
-
-function layer_source_geometry(src::AbstractSource, layer_altitude::Real, tel::Telescope, ::Type{T}) where {T<:AbstractFloat}
-    dx_arcsec, dy_arcsec = coordinates_xy_arcsec(src)
-    delta = T(tel.params.diameter / tel.params.resolution)
-    altitude_t = T(layer_altitude)
-    arcsec_to_rad = T(π / (180 * 3600))
-    shift_x = T(dx_arcsec) * arcsec_to_rad * altitude_t / delta
-    shift_y = T(dy_arcsec) * arcsec_to_rad * altitude_t / delta
-
-    src_height = source_height_m(src)
-    footprint_scale = one(T)
-    if isfinite(src_height)
-        src_height_t = T(src_height)
-        src_height_t > altitude_t || throw(InvalidConfiguration("source height must exceed layer altitude for finite-height propagation"))
-        footprint_scale = (src_height_t - altitude_t) / src_height_t
-    end
-    return shift_x, shift_y, footprint_scale
-end
-
 function extract_shifted_screen!(out::AbstractMatrix{T}, screen::AbstractMatrix{T},
     offset_x::T, offset_y::T, amplitude_scale::T, footprint_scale::T=one(T)) where {T<:AbstractFloat}
     n = size(out, 1)
@@ -213,6 +192,11 @@ end
 function render_layer!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer, tel::Telescope,
     src::Union{AbstractSource,Nothing}=nothing) where {T<:AbstractFloat}
     shift_x, shift_y, footprint_scale = layer_source_geometry(src, layer.params.altitude, tel, T)
+    return render_layer!(out, layer, shift_x, shift_y, footprint_scale)
+end
+
+function render_layer!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer,
+    shift_x::T, shift_y::T, footprint_scale::T) where {T<:AbstractFloat}
     amplitude_scale = T(layer.params.amplitude_scale)
     extract_shifted_screen!(out, layer.generator.state.opd,
         layer.state.offset_x - shift_x,
@@ -279,7 +263,7 @@ function MultiLayerAtmosphere(tel::Telescope;
     layer_buffer = backend{T}(undef, tel.params.resolution, tel.params.resolution)
     fill!(opd, zero(T))
     fill!(layer_buffer, zero(T))
-    state = MultiLayerState{T, typeof(opd)}(opd, layer_buffer)
+    state = MultiLayerState{T, typeof(opd)}(opd, layer_buffer, AtmosphereSourceGeometryCache(n_layers, T))
 
     return MultiLayerAtmosphere(params, layers, state)
 end
@@ -305,11 +289,5 @@ function propagate!(atm::MultiLayerAtmosphere, tel::Telescope)
 end
 
 function propagate!(atm::MultiLayerAtmosphere, tel::Telescope, src::AbstractSource)
-    fill!(atm.state.opd, zero(eltype(atm.state.opd)))
-    for layer in atm.layers
-        render_layer!(atm.state.layer_buffer, layer, tel, src)
-        atm.state.opd .+= atm.state.layer_buffer
-    end
-    tel.state.opd .= atm.state.opd .* tel.state.pupil
-    return tel
+    return propagate_source_aware!(atm, tel, src)
 end

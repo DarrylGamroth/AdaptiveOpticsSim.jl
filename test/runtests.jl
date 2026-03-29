@@ -627,6 +627,34 @@ end
     @test std(vec(finite_offaxis.lgs_opd)) < std(vec(finite_offaxis.offaxis_opd))
     @test std(vec(infinite_offaxis.lgs_opd)) < std(vec(infinite_offaxis.offaxis_opd))
 
+    function onaxis_fast_path_regression(constructor; kwargs...)
+        atm = constructor(tel;
+            r0=0.2,
+            L0=25.0,
+            fractional_cn2=[0.7, 0.3],
+            wind_speed=[6.0, 3.0],
+            wind_direction=[0.0, 120.0],
+            altitude=[0.0, 5000.0],
+            kwargs...,
+        )
+        rng = MersenneTwister(52)
+        advance!(atm, tel; rng=rng)
+        propagate!(atm, tel)
+        base_opd = copy(tel.state.opd)
+        @test !atm.state.source_geometry.valid
+        propagate!(atm, tel, onaxis)
+        @test tel.state.opd == base_opd
+        @test !atm.state.source_geometry.valid
+        propagate!(atm, tel, offaxis)
+        @test atm.state.source_geometry.valid
+        @test atm.state.source_geometry.cached_x_arcsec ≈ coordinates_xy_arcsec(offaxis)[1]
+        @test atm.state.source_geometry.cached_y_arcsec ≈ coordinates_xy_arcsec(offaxis)[2]
+        return atm
+    end
+
+    onaxis_fast_path_regression(MultiLayerAtmosphere)
+    onaxis_fast_path_regression(InfiniteMultiLayerAtmosphere; screen_resolution=33, stencil_size=35)
+
     function ensemble_std(constructor, fractions; nsamp::Int=12, kwargs...)
         acc = 0.0
         for s in 1:nsamp
