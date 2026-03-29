@@ -84,18 +84,36 @@ function ensure_source_geometry_cache!(cache::AtmosphereSourceGeometryCache{T},
     return cache
 end
 
+function accumulate_sampled_layers!(opd::AbstractMatrix, layer_buffer::AbstractMatrix,
+    layers, tel::Telescope, rng::AbstractRNG)
+    isempty(layers) && return opd
+    sample_layer!(opd, layers[1], tel, rng)
+    @inbounds for i in 2:length(layers)
+        sample_layer!(layer_buffer, layers[i], tel, rng)
+        opd .+= layer_buffer
+    end
+    return opd
+end
+
+function accumulate_rendered_layers!(opd::AbstractMatrix, layer_buffer::AbstractMatrix,
+    layers, shift_x::AbstractVector, shift_y::AbstractVector, footprint_scale::AbstractVector)
+    isempty(layers) && return opd
+    render_layer!(opd, layers[1], shift_x[1], shift_y[1], footprint_scale[1])
+    @inbounds for i in 2:length(layers)
+        render_layer!(layer_buffer, layers[i], shift_x[i], shift_y[i], footprint_scale[i])
+        opd .+= layer_buffer
+    end
+    return opd
+end
+
 function propagate_source_aware!(atm, tel::Telescope, src::AbstractSource)
     T = eltype(atm.state.opd)
     if is_onaxis_infinite_source(src, T)
         return propagate!(atm, tel)
     end
     cache = ensure_source_geometry_cache!(atm.state.source_geometry, src, atm.params.altitude, tel, T)
-    fill!(atm.state.opd, zero(T))
-    @inbounds for i in eachindex(atm.layers)
-        render_layer!(atm.state.layer_buffer, atm.layers[i],
-            cache.shift_x[i], cache.shift_y[i], cache.footprint_scale[i])
-        atm.state.opd .+= atm.state.layer_buffer
-    end
+    accumulate_rendered_layers!(atm.state.opd, atm.state.layer_buffer, atm.layers,
+        cache.shift_x, cache.shift_y, cache.footprint_scale)
     tel.state.opd .= atm.state.opd .* tel.state.pupil
     return tel
 end

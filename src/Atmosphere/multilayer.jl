@@ -269,13 +269,7 @@ function MultiLayerAtmosphere(tel::Telescope;
 end
 
 function advance!(atm::MultiLayerAtmosphere, tel::Telescope, rng::AbstractRNG)
-    fill!(atm.state.opd, zero(eltype(atm.state.opd)))
-
-    for layer in atm.layers
-        sample_layer!(atm.state.layer_buffer, layer, tel, rng)
-        atm.state.opd .+= atm.state.layer_buffer
-    end
-
+    accumulate_sampled_layers!(atm.state.opd, atm.state.layer_buffer, atm.layers, tel, rng)
     return atm
 end
 
