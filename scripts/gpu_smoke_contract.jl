@@ -1,5 +1,7 @@
 using AdaptiveOpticsSim
+using LinearAlgebra
 using Random
+using Statistics
 
 function record_gpu_smoke!(f::Function, failures::Vector{String}, name::AbstractString)
     try
@@ -83,6 +85,71 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
         @assert atm.state.opd isa BackendArray
         @assert tel.state.opd isa BackendArray
         return atm.state.opd
+    end
+
+    record_gpu_smoke!(failures, "atmosphere_infinite_multilayer_step") do
+        atm = InfiniteMultiLayerAtmosphere(tel;
+            r0=T(0.2),
+            L0=T(25.0),
+            fractional_cn2=T[0.7, 0.3],
+            wind_speed=T[8.0, 4.0],
+            wind_direction=T[0.0, 90.0],
+            altitude=T[0.0, 5000.0],
+            screen_resolution=33,
+            stencil_size=35,
+            T=T,
+            backend=BackendArray,
+        )
+        advance!(atm, tel; rng=rng)
+        propagate!(atm, tel, src)
+        @assert atm.state.opd isa BackendArray
+        @assert tel.state.opd isa BackendArray
+        @assert atm.layers[1].screen.state.screen isa BackendArray
+        @assert atm.layers[1].screen.state.screen_scratch isa BackendArray
+        return atm.state.opd
+    end
+
+    record_gpu_smoke!(failures, "atmosphere_infinite_statistical_agreement") do
+        function trajectory_stats(backend; steps::Int=10)
+            local_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
+                central_obstruction=0.0f0, T=T, backend=backend)
+            local_src = Source(band=:I, magnitude=0.0, coordinates=(30.0, 20.0), T=T)
+            local_atm = InfiniteMultiLayerAtmosphere(local_tel;
+                r0=T(0.2),
+                L0=T(25.0),
+                fractional_cn2=T[0.7, 0.3],
+                wind_speed=T[8.0, 4.0],
+                wind_direction=T[0.0, 90.0],
+                altitude=T[0.0, 5000.0],
+                screen_resolution=33,
+                stencil_size=35,
+                T=T,
+                backend=backend,
+            )
+            local_rng = MersenneTwister(21)
+            stds = Float64[]
+            corrs = Float64[]
+            previous = nothing
+            for _ in 1:steps
+                advance!(local_atm, local_tel; rng=local_rng)
+                propagate!(local_atm, local_tel, local_src)
+                opd = Array(local_tel.state.opd)
+                push!(stds, std(vec(opd)))
+                if previous !== nothing
+                    push!(corrs, dot(vec(previous), vec(opd)) / sqrt(dot(vec(previous), vec(previous)) * dot(vec(opd), vec(opd))))
+                end
+                previous = opd
+            end
+            return (; std_mean=mean(stds), corr_mean=mean(corrs))
+        end
+
+        cpu_stats = trajectory_stats(Array)
+        gpu_stats = trajectory_stats(BackendArray)
+        std_rel = abs(gpu_stats.std_mean - cpu_stats.std_mean) / max(cpu_stats.std_mean, eps(Float64))
+        corr_abs = abs(gpu_stats.corr_mean - cpu_stats.corr_mean)
+        @assert std_rel < 0.5
+        @assert corr_abs < 0.05
+        return gpu_stats
     end
 
     record_gpu_smoke!(failures, "atmosphere_phase_helpers") do

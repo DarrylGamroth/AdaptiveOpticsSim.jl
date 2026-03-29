@@ -107,6 +107,14 @@ Suggested files:
 - `src/Atmosphere/`
 - `test/`
 - `docs/deterministic-simulation.md`
+- `docs/infinite-boundary-atmosphere-plan.md`
+
+Detailed follow-on plan:
+
+- See
+  [infinite-boundary-atmosphere-plan.md](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/infinite-boundary-atmosphere-plan.md)
+  for the staged CPU-first, GPU-capable implementation plan for the infinite
+  boundary-injection model that should follow the current finite periodic path.
 
 ## Milestone 2: Unify Phase-Screen Statistics And Runtime Scaling
 

@@ -99,11 +99,7 @@ function record!(t::Telemetry{R}, row::R) where {R}
     return t
 end
 
-function write_telemetry_csv(::AbstractString, ::Telemetry; kwargs...)
-    throw(InvalidConfiguration("CSV.jl not available; load CSV to enable write_telemetry_csv."))
-end
-
-function write_telemetry_csv(::AbstractString, ::Union{ClosedLoopTrace,GSCClosedLoopTrace,GSCAtmosphereReplayTrace}; kwargs...)
+function write_telemetry_csv(args...; kwargs...)
     throw(InvalidConfiguration("CSV.jl not available; load CSV to enable write_telemetry_csv."))
 end
 

@@ -61,6 +61,6 @@ function write_config_toml(path::AbstractString, config)
     return path
 end
 
-function write_config_json(::AbstractString, ::Any; kwargs...)
+function write_config_json(args...; kwargs...)
     throw(InvalidConfiguration("JSON3.jl not available; load JSON3 to enable write_config_json."))
 end

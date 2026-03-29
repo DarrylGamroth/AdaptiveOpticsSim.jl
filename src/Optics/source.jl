@@ -57,6 +57,15 @@ end
 wavelength(src::Source) = src.params.wavelength
 photon_flux(src::Source) = src.params.n_photon
 optical_tag(src::Source) = "source($(src.params.band))"
+source_height_m(::Source) = Inf
+
+function coordinates_xy_arcsec(src::Source)
+    r = src.params.coordinates[1]
+    theta = src.params.coordinates[2]
+    x = r * cosd(theta)
+    y = r * sind(theta)
+    return x, y
+end
 
 struct LGSSourceParams{T<:AbstractFloat,A}
     magnitude::T
@@ -106,6 +115,15 @@ end
 wavelength(src::LGSSource) = src.params.wavelength
 photon_flux(src::LGSSource) = src.params.n_photon
 optical_tag(::LGSSource) = "lgs"
+source_height_m(src::LGSSource) = src.params.altitude
+
+function coordinates_xy_arcsec(src::LGSSource)
+    r = src.params.coordinates[1]
+    theta = src.params.coordinates[2]
+    x = r * cosd(theta)
+    y = r * sind(theta)
+    return x, y
+end
 
 optical_tag(x) = lowercase(string(nameof(typeof(x))))
 

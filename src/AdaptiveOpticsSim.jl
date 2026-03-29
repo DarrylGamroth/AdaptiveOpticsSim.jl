@@ -41,6 +41,8 @@ include("Optics/asterism.jl")
 include("Optics/opd_map.jl")
 include("Optics/spatial_filter.jl")
 include("Atmosphere/kolmogorov.jl")
+include("Atmosphere/infinite_screen_math.jl")
+include("Atmosphere/infinite_screen.jl")
 include("Atmosphere/multilayer.jl")
 include("Atmosphere/phase_stats.jl")
 include("Calibration/modal_basis.jl")
@@ -70,7 +72,7 @@ include("Tomography/fitting.jl")
 include("Tomography/reconstructors.jl")
 
 export PROJECT_STATUS
-export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError, UnsupportedAlgorithm
+export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError, UnsupportedAlgorithm, NumericalConditionError
 export FidelityProfile, ScientificProfile, FastProfile, ProfileBundle, default_fidelity_profile
 export atmosphere_profile, calibration_profile, detector_profile, lift_profile, tomography_profile
 export InversePolicy, ExactPseudoInverse, TSVDInverse, TikhonovInverse, InverseStats, inverse_operator
@@ -96,6 +98,9 @@ export NCPA, NCPABasis, KLBasis, ZernikeModalBasis, M2CBasis, default_ncpa_basis
 export SpatialFilter, SpatialFilterShape, CircularFilter, SquareFilter, FoucaultFilter
 export set_spatial_filter!, filter!
 export KolmogorovAtmosphere, KolmogorovParams, KolmogorovState
+export InfinitePhaseScreenParams, InfinitePhaseScreenState, InfinitePhaseScreen
+export InfiniteLayerParams, InfiniteLayerState, InfiniteAtmosphereLayer
+export InfiniteMultiLayerParams, InfiniteMultiLayerState, InfiniteMultiLayerAtmosphere
 export update_psd!, ensure_psd!, phase_screen_von_karman!
 export MultiLayerAtmosphere, MultiLayerParams, MultiLayerState
 export advance!, propagate!

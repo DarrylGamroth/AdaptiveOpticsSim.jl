@@ -1,15 +1,15 @@
-@kernel function moving_layer_extract_kernel!(out, screen, start_x, start_y, scale, n::Int, m::Int)
+@kernel function moving_layer_extract_kernel!(out, screen, start_x, start_y, footprint_scale, amplitude_scale, n::Int, m::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= n
         T = eltype(out)
-        y = start_y + T(i - 1)
+        y = start_y + footprint_scale * T(i - 1)
         y0 = floor(Int, y)
         fy = y - T(y0)
         wy0 = one(T) - fy
         iy0 = wrap_index(y0, m)
         iy1 = wrap_index(y0 + 1, m)
 
-        x = start_x + T(j - 1)
+        x = start_x + footprint_scale * T(j - 1)
         x0 = floor(Int, x)
         fx = x - T(x0)
         wx0 = one(T) - fx
@@ -21,7 +21,7 @@
             v01 = screen[iy0, ix1]
             v10 = screen[iy1, ix0]
             v11 = screen[iy1, ix1]
-            out[i, j] = scale * (wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11))
+            out[i, j] = amplitude_scale * (wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11))
         end
     end
 end
@@ -47,6 +47,7 @@ struct MovingLayerParams{T<:AbstractFloat}
     amplitude_scale::T
     wind_velocity_x::T
     wind_velocity_y::T
+    altitude::T
 end
 
 mutable struct MovingLayerState{T<:AbstractFloat}
@@ -109,13 +110,14 @@ function MovingAtmosphereLayer(
     cn2_fraction::Real,
     wind_velocity_x::Real,
     wind_velocity_y::Real,
+    altitude::Real,
     T::Type{<:AbstractFloat}=Float64,
     backend=Array,
 )
     screen_resolution = moving_layer_screen_resolution(tel.params.resolution)
     screen_telescope = moving_layer_telescope(tel; resolution=screen_resolution, T=T, backend=backend)
     generator = KolmogorovAtmosphere(screen_telescope; r0=r0, L0=L0, T=T, backend=backend)
-    params = MovingLayerParams(T(sqrt(cn2_fraction)), T(wind_velocity_x), T(wind_velocity_y))
+    params = MovingLayerParams(T(sqrt(cn2_fraction)), T(wind_velocity_x), T(wind_velocity_y), T(altitude))
     state = MovingLayerState(zero(T), zero(T), false)
     return MovingAtmosphereLayer(params, generator, screen_telescope, state)
 end
@@ -130,24 +132,54 @@ end
 
 @inline wrap_index(i::Int, n::Int) = mod1(i, n)
 
-function extract_shifted_screen!(out::AbstractMatrix{T}, screen::AbstractMatrix{T}, offset_x::T, offset_y::T, scale::T) where {T<:AbstractFloat}
+@inline function layer_source_geometry(::Nothing, layer_altitude::Real, tel::Telescope, ::Type{T}) where {T<:AbstractFloat}
+    return zero(T), zero(T), one(T)
+end
+
+function layer_source_geometry(src::AbstractSource, layer_altitude::Real, tel::Telescope, ::Type{T}) where {T<:AbstractFloat}
+    dx_arcsec, dy_arcsec = coordinates_xy_arcsec(src)
+    delta = T(tel.params.diameter / tel.params.resolution)
+    altitude_t = T(layer_altitude)
+    arcsec_to_rad = T(π / (180 * 3600))
+    shift_x = T(dx_arcsec) * arcsec_to_rad * altitude_t / delta
+    shift_y = T(dy_arcsec) * arcsec_to_rad * altitude_t / delta
+
+    src_height = source_height_m(src)
+    footprint_scale = one(T)
+    if isfinite(src_height)
+        src_height_t = T(src_height)
+        src_height_t > altitude_t || throw(InvalidConfiguration("source height must exceed layer altitude for finite-height propagation"))
+        footprint_scale = (src_height_t - altitude_t) / src_height_t
+    end
+    return shift_x, shift_y, footprint_scale
+end
+
+function extract_shifted_screen!(out::AbstractMatrix{T}, screen::AbstractMatrix{T},
+    offset_x::T, offset_y::T, amplitude_scale::T, footprint_scale::T=one(T)) where {T<:AbstractFloat}
     n = size(out, 1)
     size(out, 2) == n || throw(DimensionMismatchError("output must be square"))
     m = size(screen, 1)
     size(screen, 2) == m || throw(DimensionMismatchError("screen must be square"))
     m >= n || throw(DimensionMismatchError("screen resolution must be at least as large as the pupil resolution"))
+    footprint_scale > zero(T) || throw(InvalidConfiguration("footprint_scale must be positive"))
 
-    start_x = T((m - n) / 2 + 1) - offset_x
-    start_y = T((m - n) / 2 + 1) - offset_y
-    _extract_shifted_screen!(execution_style(out), out, screen, start_x, start_y, scale, n, m)
+    # This sampling/extraction helper is shared infrastructure for moving-screen
+    # atmosphere models. The current finite backend uses periodic wraparound in
+    # `_extract_shifted_screen!`; the planned infinite backend will reuse the
+    # same extraction interface after updating its persistent buffer via
+    # boundary injection instead of wraparound.
+    start_x = T(m + 1) / 2 - footprint_scale * T(n - 1) / 2 - offset_x
+    start_y = T(m + 1) / 2 - footprint_scale * T(n - 1) / 2 - offset_y
+    _extract_shifted_screen!(execution_style(out), out, screen, start_x, start_y, footprint_scale, amplitude_scale, n, m)
     return out
 end
 
 function _extract_shifted_screen!(::ScalarCPUStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
-    start_x::T, start_y::T, scale::T, n::Int, m::Int) where {T<:AbstractFloat}
-    # Move a finite periodic canvas under the pupil with bilinear subpixel interpolation.
+    start_x::T, start_y::T, footprint_scale::T, amplitude_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
+    # Finite moving-screen backend: move a periodic canvas under the pupil with
+    # bilinear subpixel interpolation.
     @inbounds for i in 1:n
-        y = start_y + T(i - 1)
+        y = start_y + footprint_scale * T(i - 1)
         y0 = floor(Int, y)
         fy = y - T(y0)
         wy0 = one(T) - fy
@@ -155,7 +187,7 @@ function _extract_shifted_screen!(::ScalarCPUStyle, out::AbstractMatrix{T}, scre
         iy1 = wrap_index(y0 + 1, m)
 
         for j in 1:n
-            x = start_x + T(j - 1)
+            x = start_x + footprint_scale * T(j - 1)
             x0 = floor(Int, x)
             fx = x - T(x0)
             wx0 = one(T) - fx
@@ -166,15 +198,27 @@ function _extract_shifted_screen!(::ScalarCPUStyle, out::AbstractMatrix{T}, scre
             v01 = screen[iy0, ix1]
             v10 = screen[iy1, ix0]
             v11 = screen[iy1, ix1]
-            out[i, j] = scale * (wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11))
+            out[i, j] = amplitude_scale * (wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11))
         end
     end
     return out
 end
 
 function _extract_shifted_screen!(style::AcceleratorStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
-    start_x::T, start_y::T, scale::T, n::Int, m::Int) where {T<:AbstractFloat}
-    launch_kernel!(style, moving_layer_extract_kernel!, out, screen, start_x, start_y, scale, n, m; ndrange=size(out))
+    start_x::T, start_y::T, footprint_scale::T, amplitude_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
+    launch_kernel!(style, moving_layer_extract_kernel!, out, screen, start_x, start_y, footprint_scale, amplitude_scale, n, m; ndrange=size(out))
+    return out
+end
+
+function render_layer!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer, tel::Telescope,
+    src::Union{AbstractSource,Nothing}=nothing) where {T<:AbstractFloat}
+    shift_x, shift_y, footprint_scale = layer_source_geometry(src, layer.params.altitude, tel, T)
+    amplitude_scale = T(layer.params.amplitude_scale)
+    extract_shifted_screen!(out, layer.generator.state.opd,
+        layer.state.offset_x - shift_x,
+        layer.state.offset_y - shift_y,
+        amplitude_scale,
+        footprint_scale)
     return out
 end
 
@@ -184,9 +228,7 @@ function sample_layer!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer, tel
     dt = T(tel.params.sampling_time)
     layer.state.offset_x += T(layer.params.wind_velocity_x) * dt / delta
     layer.state.offset_y += T(layer.params.wind_velocity_y) * dt / delta
-    scale = T(layer.params.amplitude_scale)
-    extract_shifted_screen!(out, layer.generator.state.opd, layer.state.offset_x, layer.state.offset_y, scale)
-    return out
+    return render_layer!(out, layer, tel)
 end
 
 function MultiLayerAtmosphere(tel::Telescope;
@@ -227,6 +269,7 @@ function MultiLayerAtmosphere(tel::Telescope;
             cn2_fraction=params.cn2_fractions[i],
             wind_velocity_x=params.wind_velocity_x[i],
             wind_velocity_y=params.wind_velocity_y[i],
+            altitude=params.altitude[i],
             T=T,
             backend=backend,
         ) for i in 1:n_layers
@@ -257,6 +300,16 @@ function advance!(atm::MultiLayerAtmosphere, tel::Telescope; rng::AbstractRNG=Ra
 end
 
 function propagate!(atm::MultiLayerAtmosphere, tel::Telescope)
+    tel.state.opd .= atm.state.opd .* tel.state.pupil
+    return tel
+end
+
+function propagate!(atm::MultiLayerAtmosphere, tel::Telescope, src::AbstractSource)
+    fill!(atm.state.opd, zero(eltype(atm.state.opd)))
+    for layer in atm.layers
+        render_layer!(atm.state.layer_buffer, layer, tel, src)
+        atm.state.opd .+= atm.state.layer_buffer
+    end
     tel.state.opd .= atm.state.opd .* tel.state.pupil
     return tel
 end

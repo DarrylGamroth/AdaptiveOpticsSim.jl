@@ -84,6 +84,7 @@ Examples already in place:
 - `scripts/profile_mixed_sh_asterism_runtime.jl`
 - `scripts/profile_multi_source_multi_wfs_runtime.jl`
 - `scripts/profile_pixel_output_runtime.jl`
+- `scripts/profile_atmosphere_runtime.jl`
 - `scripts/ao188_3k_hil_audit.jl`
 - `benchmarks/benchmark_{cpu,cuda,amdgpu}.jl`
 
@@ -118,6 +119,31 @@ Families:
 - Shack-Hartmann
 - Pyramid
 - BioEdge
+
+### 0. Atmosphere Evolution Runtime
+
+Families:
+
+- finite periodic moving-screen atmosphere
+- infinite boundary-injection atmosphere
+
+Purpose:
+
+- make the fidelity/performance tradeoff explicit
+- compare CPU and GPU execution for the same multilayer transport workload
+- keep the fast/HIL finite path visible even after the infinite model lands
+
+Maintained surface:
+
+- `scripts/profile_atmosphere_runtime.jl`
+
+Required outputs:
+
+- finite and infinite build/precompute time
+- finite and infinite per-step mean and p95
+- finite and infinite steady-state allocations
+- finite and infinite synchronization count per sample
+- explicit infinite/finite slowdown ratio
 - ZernikeWFS
 
 Questions:

@@ -133,7 +133,7 @@ function apply_sensor_statistics!(sensor::HgCdTeAvalancheArraySensor, det::Detec
     return apply_avalanche_excess_noise!(sensor.excess_noise_factor, det, rng)
 end
 
-function apply_pre_readout_gain!(sensor::HgCdTeAvalancheArraySensor, det::Detector)
+function apply_pre_readout_gain!(sensor::HgCdTeAvalancheArraySensor, det::Detector, rng::AbstractRNG)
     det.state.frame .*= sensor.avalanche_gain
     return det.state.frame
 end
@@ -143,7 +143,7 @@ function apply_post_readout_gain!(::HgCdTeAvalancheArraySensor, det::Detector)
     return det.state.frame
 end
 
-_batched_pre_readout_gain!(sensor::HgCdTeAvalancheArraySensor, det::Detector, cube::AbstractArray) = (cube .*= sensor.avalanche_gain; cube)
+_batched_pre_readout_gain!(sensor::HgCdTeAvalancheArraySensor, det::Detector, cube::AbstractArray, rng::AbstractRNG) = (cube .*= sensor.avalanche_gain; cube)
 
 function _batched_sensor_statistics!(sensor::HgCdTeAvalancheArraySensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
     rate = sensor.glow_rate * effective_sensor_glow_time(sensor, det.params.integration_time)
@@ -273,7 +273,7 @@ function finalize_capture!(det::Detector{N,<:DetectorParams{T,<:HgCdTeAvalancheA
     apply_dark_current!(det, rng, exposure_time)
     apply_saturation!(det)
     apply_sensor_statistics!(det.params.sensor, det, rng)
-    apply_pre_readout_gain!(det.params.sensor, det)
+    apply_pre_readout_gain!(det.params.sensor, det, rng)
     finalize_readout_products!(det.params.sensor, det, rng, exposure_time)
     apply_quantization!(det)
     subtract_background_map!(det.background_map, det)

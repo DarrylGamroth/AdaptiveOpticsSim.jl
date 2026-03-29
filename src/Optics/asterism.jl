@@ -17,14 +17,6 @@ function wavelength(ast::Asterism)
     return w0
 end
 
-function coordinates_xy_arcsec(src::Source)
-    r = src.params.coordinates[1]
-    theta = src.params.coordinates[2]
-    x = r * cosd(theta)
-    y = r * sind(theta)
-    return x, y
-end
-
 function psf_pixel_scale_arcsec(tel::Telescope, src::Source, zero_padding::Int)
     return (180 * 3600 / π) * wavelength(src) / tel.params.diameter / zero_padding
 end
