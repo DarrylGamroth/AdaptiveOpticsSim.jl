@@ -25,13 +25,16 @@ end
 
 _require_batched_sensor_compat(::FrameSensorType) = nothing
 
+_batched_frame_shape(cube::AbstractArray{T,3}) where {T} = (size(cube, 2), size(cube, 3))
+_batched_frame_map(map::AbstractMatrix) = reshape(map, 1, size(map, 1), size(map, 2))
+
 _batched_background_map!(::NoBackground, cube::AbstractArray, scratch::AbstractArray) = cube
 _batched_background_map!(background::ScalarBackground, cube::AbstractArray, scratch::AbstractArray) = (cube .-= background.level; cube)
 
 function _batched_background_map!(background::BackgroundFrame, cube::AbstractArray, scratch::AbstractArray)
-    size(background.map) == size(cube)[1:2] ||
+    size(background.map) == _batched_frame_shape(cube) ||
         throw(DimensionMismatchError("background_map size must match detector frame size"))
-    cube .-= reshape(background.map, size(background.map)..., 1)
+    cube .-= _batched_frame_map(background.map)
     return cube
 end
 
@@ -47,9 +50,9 @@ end
 
 function _batched_background_flux!(background::BackgroundFrame, det::Detector, cube::AbstractArray, scratch::AbstractArray,
     rng::AbstractRNG, exposure_time::Real)
-    size(background.map) == size(cube)[1:2] ||
+    size(background.map) == _batched_frame_shape(cube) ||
         throw(DimensionMismatchError("background_flux size must match detector frame size"))
-    scratch .= reshape(background.map, size(background.map)..., 1)
+    scratch .= _batched_frame_map(background.map)
     scratch .*= exposure_time
     poisson_noise!(rng, scratch)
     cube .+= scratch
@@ -71,9 +74,9 @@ _batched_signal_defects!(::NullDetectorDefectModel, cube::AbstractArray, scratch
 _batched_dark_defects!(::NullDetectorDefectModel, cube::AbstractArray, scratch::AbstractArray, exposure_time::Real) = cube
 
 function _batched_signal_defects!(model::PixelResponseNonuniformity, cube::AbstractArray, scratch::AbstractArray, exposure_time::Real)
-    size(model.gain_map) == size(cube)[1:2] ||
+    size(model.gain_map) == _batched_frame_shape(cube) ||
         throw(DimensionMismatchError("PixelResponseNonuniformity gain_map size must match detector frame size"))
-    cube .*= reshape(model.gain_map, size(model.gain_map)..., 1)
+    cube .*= _batched_frame_map(model.gain_map)
     return cube
 end
 
@@ -81,18 +84,18 @@ _batched_dark_defects!(::PixelResponseNonuniformity, cube::AbstractArray, scratc
 _batched_signal_defects!(::DarkSignalNonuniformity, cube::AbstractArray, scratch::AbstractArray, exposure_time::Real) = cube
 
 function _batched_dark_defects!(model::DarkSignalNonuniformity, cube::AbstractArray, scratch::AbstractArray, exposure_time::Real)
-    size(model.dark_map) == size(cube)[1:2] ||
+    size(model.dark_map) == _batched_frame_shape(cube) ||
         throw(DimensionMismatchError("DarkSignalNonuniformity dark_map size must match detector frame size"))
-    cube .+= reshape(model.dark_map .* exposure_time, size(model.dark_map)..., 1)
+    cube .+= _batched_frame_map(model.dark_map .* exposure_time)
     return cube
 end
 
 function _batched_signal_defects!(model::BadPixelMask, cube::AbstractArray, scratch::AbstractArray, exposure_time::Real)
-    size(model.mask) == size(cube)[1:2] ||
+    size(model.mask) == _batched_frame_shape(cube) ||
         throw(DimensionMismatchError("BadPixelMask mask size must match detector frame size"))
     throughput = model.throughput
     throughput == one(throughput) && return cube
-    cube .= ifelse.(reshape(model.mask, size(model.mask)..., 1), throughput .* cube, cube)
+    cube .= ifelse.(_batched_frame_map(model.mask), throughput .* cube, cube)
     return cube
 end
 
