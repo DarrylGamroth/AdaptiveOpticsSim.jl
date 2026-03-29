@@ -406,6 +406,13 @@ Add:
 
 This should be opt-in and must not disturb deterministic default runs.
 
+Status:
+
+- implemented with `FirstOrderThermalModel`
+- current scope is deterministic first-order relaxation toward a cooling
+  setpoint using shared detector thermal state
+- self-heating remains deferred
+
 ### Phase 5: Profiling and Example Adoption
 
 Use the new thermal layer on maintained surfaces where it matters:
@@ -457,10 +464,9 @@ Some design questions still remain open:
 
 ## Recommended Next Step
 
-Implement Phase 4 next:
+Implement Phase 5 next:
 
-- `FirstOrderThermalModel`
-- dynamic thermal state evolution
-- deterministic evolution tests
-
-Then use the thermal layer on maintained system surfaces where it matters most.
+- use the thermal layer on maintained example and benchmark surfaces
+- record runtime/allocation impact where thermally richer detector defaults
+  matter
+- keep AO188/AO3k temperature choices at the example layer

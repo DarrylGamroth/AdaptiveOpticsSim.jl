@@ -123,6 +123,10 @@ function active_dark_count_law(det::APDDetector, model::FixedTemperature)
     return is_null_temperature_law(model.dark_count_law) ? dark_count_law(det) : model.dark_count_law
 end
 
+function active_dark_count_law(det::APDDetector, model::FirstOrderThermalModel)
+    return is_null_temperature_law(model.dark_count_law) ? dark_count_law(det) : model.dark_count_law
+end
+
 effective_dark_count_rate(det::APDDetector, ::Type{T}=eltype(det.state.channels)) where {T<:AbstractFloat} =
     T(evaluate_temperature_law(active_dark_count_law(det, det.params.thermal_model),
         T(det.params.dark_count_rate), detector_temperature(det, T)))

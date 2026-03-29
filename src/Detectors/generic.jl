@@ -62,6 +62,7 @@ is_null_persistence(::NullPersistence) = true
 
 thermal_model_symbol(::NullDetectorThermalModel) = :none
 thermal_model_symbol(::FixedTemperature) = :fixed_temperature
+thermal_model_symbol(::FirstOrderThermalModel) = :first_order
 is_null_thermal_model(::AbstractDetectorThermalModel) = false
 is_null_thermal_model(::NullDetectorThermalModel) = true
 
@@ -79,6 +80,9 @@ ambient_temperature_K(::AbstractDetectorThermalModel, ::Type{T}) where {T<:Abstr
 cooling_setpoint_K(::AbstractDetectorThermalModel, ::Type{T}) where {T<:AbstractFloat} = nothing
 thermal_time_constant_s(::AbstractDetectorThermalModel, ::Type{T}) where {T<:AbstractFloat} = nothing
 cooling_setpoint_K(model::FixedTemperature, ::Type{T}) where {T<:AbstractFloat} = T(model.temperature_K)
+ambient_temperature_K(model::FirstOrderThermalModel, ::Type{T}) where {T<:AbstractFloat} = T(model.ambient_temperature_K)
+cooling_setpoint_K(model::FirstOrderThermalModel, ::Type{T}) where {T<:AbstractFloat} = T(model.setpoint_temperature_K)
+thermal_time_constant_s(model::FirstOrderThermalModel, ::Type{T}) where {T<:AbstractFloat} = T(model.time_constant_s)
 detector_temperature_K(::NullDetectorThermalModel, ::AbstractDetectorThermalState, ::Type{T}) where {T<:AbstractFloat} = nothing
 detector_temperature_K(model::FixedTemperature, ::AbstractDetectorThermalState, ::Type{T}) where {T<:AbstractFloat} = T(model.temperature_K)
 detector_temperature_K(model::AbstractDetectorThermalModel, state::DetectorThermalState, ::Type{T}) where {T<:AbstractFloat} = T(state.temperature_K)
@@ -87,6 +91,14 @@ detector_temperature(det::Detector, ::Type{T}=eltype(det.state.frame)) where {T<
 
 advance_thermal!(::NullDetectorThermalModel, ::AbstractDetectorThermalState, dt) = nothing
 advance_thermal!(::FixedTemperature, ::AbstractDetectorThermalState, dt) = nothing
+function advance_thermal!(model::FirstOrderThermalModel, state::DetectorThermalState, dt)
+    dt >= 0 || throw(InvalidConfiguration("thermal evolution step dt must be >= 0"))
+    iszero(dt) && return nothing
+    equilibrium = clamp(model.setpoint_temperature_K, model.min_temperature_K, model.max_temperature_K)
+    state.temperature_K = clamp(equilibrium + (state.temperature_K - equilibrium) * exp(-dt / model.time_constant_s),
+        model.min_temperature_K, model.max_temperature_K)
+    return nothing
+end
 advance_thermal!(det::Detector, dt) = (advance_thermal!(det.params.thermal_model, det.state.thermal_state, dt); det)
 
 evaluate_temperature_law(::NullTemperatureLaw, base_value, detector_temperature) = base_value
@@ -204,6 +216,7 @@ supports_read_cube(::FrameSensorType) = false
 supports_detector_thermal_model(::AbstractFrameDetector) = false
 supports_detector_thermal_model(::AbstractCountingDetector) = false
 supports_dynamic_thermal_state(::AbstractDetectorThermalModel) = false
+supports_dynamic_thermal_state(::FirstOrderThermalModel) = true
 supports_detector_thermal_model(det::Detector) = !is_null_thermal_model(det.params.thermal_model)
 
 supports_temperature_dependent_dark_current(det::Detector) =
@@ -311,11 +324,53 @@ function convert_thermal_model(model::FixedTemperature, ::Type{T}) where {T<:Abs
     )
 end
 
+function convert_thermal_model(model::FirstOrderThermalModel, ::Type{T}) where {T<:AbstractFloat}
+    return FirstOrderThermalModel(
+        ambient_temperature_K=T(model.ambient_temperature_K),
+        setpoint_temperature_K=T(model.setpoint_temperature_K),
+        initial_temperature_K=T(model.initial_temperature_K),
+        time_constant_s=T(model.time_constant_s),
+        min_temperature_K=T(model.min_temperature_K),
+        max_temperature_K=T(model.max_temperature_K),
+        dark_current_law=validate_temperature_law(convert_temperature_law(model.dark_current_law, T)),
+        glow_rate_law=validate_temperature_law(convert_temperature_law(model.glow_rate_law, T)),
+        dark_count_law=validate_temperature_law(convert_temperature_law(model.dark_count_law, T)),
+        cic_rate_law=validate_temperature_law(convert_temperature_law(model.cic_rate_law, T)),
+        T=T,
+    )
+end
+
 validate_thermal_model(::NullDetectorThermalModel) = NullDetectorThermalModel()
 
 function validate_thermal_model(model::FixedTemperature)
     model.temperature_K > zero(model.temperature_K) ||
         throw(InvalidConfiguration("FixedTemperature temperature_K must be > 0"))
+    validate_temperature_law(model.dark_current_law)
+    validate_temperature_law(model.glow_rate_law)
+    validate_temperature_law(model.dark_count_law)
+    validate_temperature_law(model.cic_rate_law)
+    return model
+end
+
+function validate_thermal_model(model::FirstOrderThermalModel)
+    model.ambient_temperature_K > zero(model.ambient_temperature_K) ||
+        throw(InvalidConfiguration("FirstOrderThermalModel ambient_temperature_K must be > 0"))
+    model.setpoint_temperature_K > zero(model.setpoint_temperature_K) ||
+        throw(InvalidConfiguration("FirstOrderThermalModel setpoint_temperature_K must be > 0"))
+    model.initial_temperature_K > zero(model.initial_temperature_K) ||
+        throw(InvalidConfiguration("FirstOrderThermalModel initial_temperature_K must be > 0"))
+    model.time_constant_s > zero(model.time_constant_s) ||
+        throw(InvalidConfiguration("FirstOrderThermalModel time_constant_s must be > 0"))
+    model.min_temperature_K > zero(model.min_temperature_K) ||
+        throw(InvalidConfiguration("FirstOrderThermalModel min_temperature_K must be > 0"))
+    model.max_temperature_K > zero(model.max_temperature_K) ||
+        throw(InvalidConfiguration("FirstOrderThermalModel max_temperature_K must be > 0"))
+    model.min_temperature_K <= model.initial_temperature_K <= model.max_temperature_K ||
+        throw(InvalidConfiguration("FirstOrderThermalModel initial_temperature_K must lie within [min_temperature_K, max_temperature_K]"))
+    model.min_temperature_K <= model.setpoint_temperature_K <= model.max_temperature_K ||
+        throw(InvalidConfiguration("FirstOrderThermalModel setpoint_temperature_K must lie within [min_temperature_K, max_temperature_K]"))
+    model.min_temperature_K <= model.ambient_temperature_K <= model.max_temperature_K ||
+        throw(InvalidConfiguration("FirstOrderThermalModel ambient_temperature_K must lie within [min_temperature_K, max_temperature_K]"))
     validate_temperature_law(model.dark_current_law)
     validate_temperature_law(model.glow_rate_law)
     validate_temperature_law(model.dark_count_law)
@@ -329,6 +384,8 @@ resolve_thermal_model(sensor::SensorType, model::AbstractDetectorThermalModel; T
 
 thermal_state_from_model(::NullDetectorThermalModel, ::Type{T}) where {T<:AbstractFloat} = NoThermalState()
 thermal_state_from_model(::FixedTemperature, ::Type{T}) where {T<:AbstractFloat} = NoThermalState()
+thermal_state_from_model(model::FirstOrderThermalModel, ::Type{T}) where {T<:AbstractFloat} =
+    DetectorThermalState{T}(T(model.initial_temperature_K))
 
 dark_current_law(::SensorType) = NullTemperatureLaw()
 glow_rate_law(::SensorType) = NullTemperatureLaw()
@@ -342,11 +399,23 @@ function active_dark_current_law(sensor::SensorType, model::FixedTemperature)
     return is_null_temperature_law(model.dark_current_law) ? dark_current_law(sensor) : model.dark_current_law
 end
 
+function active_dark_current_law(sensor::SensorType, model::FirstOrderThermalModel)
+    return is_null_temperature_law(model.dark_current_law) ? dark_current_law(sensor) : model.dark_current_law
+end
+
 function active_glow_rate_law(sensor::SensorType, model::FixedTemperature)
     return is_null_temperature_law(model.glow_rate_law) ? glow_rate_law(sensor) : model.glow_rate_law
 end
 
+function active_glow_rate_law(sensor::SensorType, model::FirstOrderThermalModel)
+    return is_null_temperature_law(model.glow_rate_law) ? glow_rate_law(sensor) : model.glow_rate_law
+end
+
 function active_cic_rate_law(sensor::SensorType, model::FixedTemperature)
+    return is_null_temperature_law(model.cic_rate_law) ? cic_rate_law(sensor) : model.cic_rate_law
+end
+
+function active_cic_rate_law(sensor::SensorType, model::FirstOrderThermalModel)
     return is_null_temperature_law(model.cic_rate_law) ? cic_rate_law(sensor) : model.cic_rate_law
 end
 

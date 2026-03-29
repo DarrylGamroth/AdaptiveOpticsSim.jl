@@ -1407,6 +1407,44 @@ end
     @test thermal_state(thermal_det) isa NoThermalState
     @test advance_thermal!(thermal_det, 1.0) === thermal_det
 
+    dynamic_model = FirstOrderThermalModel(
+        ambient_temperature_K=295.0,
+        setpoint_temperature_K=120.0,
+        initial_temperature_K=300.0,
+        time_constant_s=2.0,
+        min_temperature_K=80.0,
+        max_temperature_K=320.0,
+        dark_current_law=arrhenius,
+    )
+    dynamic_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        dark_current=10.0,
+        response_model=NullFrameResponse(),
+        thermal_model=dynamic_model,
+        sensor=CCDSensor())
+    dynamic_meta = detector_export_metadata(dynamic_det)
+    @test supports_detector_thermal_model(dynamic_det)
+    @test supports_dynamic_thermal_state(dynamic_det.params.thermal_model)
+    @test thermal_state(dynamic_det) isa DetectorThermalState
+    @test detector_temperature(dynamic_det) == 300.0
+    @test dynamic_meta.thermal_model == :first_order
+    @test dynamic_meta.detector_temperature_K == 300.0
+    @test dynamic_meta.ambient_temperature_K == 295.0
+    @test dynamic_meta.cooling_setpoint_K == 120.0
+    @test dynamic_meta.thermal_time_constant_s == 2.0
+    dark_current_initial = effective_dark_current(dynamic_det)
+    @test advance_thermal!(dynamic_det, 2.0) === dynamic_det
+    @test detector_temperature(dynamic_det) ≈ 120.0 + 180.0 * exp(-1.0)
+    @test effective_dark_current(dynamic_det) < dark_current_initial
+    @test_throws InvalidConfiguration advance_thermal!(dynamic_det, -1.0)
+    @test_throws InvalidConfiguration FirstOrderThermalModel(
+        ambient_temperature_K=295.0,
+        setpoint_temperature_K=120.0,
+        initial_temperature_K=60.0,
+        time_constant_s=2.0,
+        min_temperature_K=80.0,
+        max_temperature_K=320.0,
+    )
+
     thermal_ingaas = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         response_model=NullFrameResponse(),
         thermal_model=FixedTemperature(temperature_K=250.0, glow_rate_law=linear),
@@ -1750,6 +1788,22 @@ end
     @test apd_thermal_meta.thermal_model == :fixed_temperature
     @test apd_thermal_meta.dark_count_law == :arrhenius
     @test effective_dark_count_rate(apd_thermal) < apd_thermal.params.dark_count_rate
+    apd_dynamic = APDDetector(integration_time=1.0, qe=1.0, gain=1.0, dark_count_rate=10.0,
+        noise=NoiseNone(), thermal_model=FirstOrderThermalModel(
+            ambient_temperature_K=295.0,
+            setpoint_temperature_K=120.0,
+            initial_temperature_K=300.0,
+            time_constant_s=2.0,
+            min_temperature_K=80.0,
+            max_temperature_K=320.0,
+            dark_count_law=arrhenius))
+    apd_dynamic_initial = effective_dark_count_rate(apd_dynamic)
+    @test supports_detector_thermal_model(apd_dynamic)
+    @test supports_dynamic_thermal_state(apd_dynamic.params.thermal_model)
+    @test thermal_state(apd_dynamic) isa DetectorThermalState
+    @test advance_thermal!(apd_dynamic, 2.0) === apd_dynamic
+    @test detector_temperature(apd_dynamic) ≈ 120.0 + 180.0 * exp(-1.0)
+    @test effective_dark_count_rate(apd_dynamic) < apd_dynamic_initial
 
     det_buffered = Detector(integration_time=2.0, noise=NoiseNone(), qe=1.0, binning=1)
     frame_partial = copy(capture!(det_buffered, fill(1.0, 4, 4); rng=MersenneTwister(2), sample_time=1.0))

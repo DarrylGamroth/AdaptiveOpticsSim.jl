@@ -142,7 +142,7 @@ struct NullDetectorThermalModel <: AbstractDetectorThermalModel end
 
 struct NoThermalState <: AbstractDetectorThermalState end
 
-struct DetectorThermalState{T<:AbstractFloat} <: AbstractDetectorThermalState
+mutable struct DetectorThermalState{T<:AbstractFloat} <: AbstractDetectorThermalState
     temperature_K::T
 end
 
@@ -201,6 +201,70 @@ function FixedTemperature(; temperature_K::Real,
         typeof(cic_rate_law),
     }(
         T(temperature_K),
+        dark_current_law,
+        glow_rate_law,
+        dark_count_law,
+        cic_rate_law,
+    )
+end
+
+struct FirstOrderThermalModel{
+    T<:AbstractFloat,
+    DC<:AbstractTemperatureLaw,
+    G<:AbstractTemperatureLaw,
+    DCR<:AbstractTemperatureLaw,
+    CIC<:AbstractTemperatureLaw,
+} <: AbstractDetectorThermalModel
+    ambient_temperature_K::T
+    setpoint_temperature_K::T
+    initial_temperature_K::T
+    time_constant_s::T
+    min_temperature_K::T
+    max_temperature_K::T
+    dark_current_law::DC
+    glow_rate_law::G
+    dark_count_law::DCR
+    cic_rate_law::CIC
+end
+
+function FirstOrderThermalModel(; ambient_temperature_K::Real,
+    setpoint_temperature_K::Real,
+    time_constant_s::Real,
+    initial_temperature_K::Real=setpoint_temperature_K,
+    min_temperature_K::Real=min(ambient_temperature_K, setpoint_temperature_K, initial_temperature_K),
+    max_temperature_K::Real=max(ambient_temperature_K, setpoint_temperature_K, initial_temperature_K),
+    dark_current_law::AbstractTemperatureLaw=NullTemperatureLaw(),
+    glow_rate_law::AbstractTemperatureLaw=NullTemperatureLaw(),
+    dark_count_law::AbstractTemperatureLaw=NullTemperatureLaw(),
+    cic_rate_law::AbstractTemperatureLaw=NullTemperatureLaw(),
+    T::Type{<:AbstractFloat}=Float64)
+    ambient_temperature_K > 0 || throw(InvalidConfiguration("FirstOrderThermalModel ambient_temperature_K must be > 0"))
+    setpoint_temperature_K > 0 || throw(InvalidConfiguration("FirstOrderThermalModel setpoint_temperature_K must be > 0"))
+    initial_temperature_K > 0 || throw(InvalidConfiguration("FirstOrderThermalModel initial_temperature_K must be > 0"))
+    time_constant_s > 0 || throw(InvalidConfiguration("FirstOrderThermalModel time_constant_s must be > 0"))
+    min_temperature_K > 0 || throw(InvalidConfiguration("FirstOrderThermalModel min_temperature_K must be > 0"))
+    max_temperature_K > 0 || throw(InvalidConfiguration("FirstOrderThermalModel max_temperature_K must be > 0"))
+    min_temperature_K <= max_temperature_K ||
+        throw(InvalidConfiguration("FirstOrderThermalModel min_temperature_K must be <= max_temperature_K"))
+    min_temperature_K <= initial_temperature_K <= max_temperature_K ||
+        throw(InvalidConfiguration("FirstOrderThermalModel initial_temperature_K must lie within [min_temperature_K, max_temperature_K]"))
+    min_temperature_K <= setpoint_temperature_K <= max_temperature_K ||
+        throw(InvalidConfiguration("FirstOrderThermalModel setpoint_temperature_K must lie within [min_temperature_K, max_temperature_K]"))
+    min_temperature_K <= ambient_temperature_K <= max_temperature_K ||
+        throw(InvalidConfiguration("FirstOrderThermalModel ambient_temperature_K must lie within [min_temperature_K, max_temperature_K]"))
+    return FirstOrderThermalModel{
+        T,
+        typeof(dark_current_law),
+        typeof(glow_rate_law),
+        typeof(dark_count_law),
+        typeof(cic_rate_law),
+    }(
+        T(ambient_temperature_K),
+        T(setpoint_temperature_K),
+        T(initial_temperature_K),
+        T(time_constant_s),
+        T(min_temperature_K),
+        T(max_temperature_K),
         dark_current_law,
         glow_rate_law,
         dark_count_law,

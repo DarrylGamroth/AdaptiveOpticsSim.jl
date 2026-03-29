@@ -37,7 +37,7 @@ than by source file.
 - `APDDetector`, `APDDetectorParams`, `APDDetectorState`
 - `FrameWindow`
 - `AbstractDetectorThermalModel`, `NullDetectorThermalModel`,
-  `FixedTemperature`
+  `FixedTemperature`, `FirstOrderThermalModel`
 - `AbstractDetectorThermalState`, `NoThermalState`, `DetectorThermalState`
 - `AbstractTemperatureLaw`, `NullTemperatureLaw`, `ArrheniusRateLaw`,
   `LinearTemperatureLaw`, `ExponentialTemperatureLaw`
@@ -233,14 +233,18 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   separability, shift invariance, support, pitch, fill factor, and aperture
   shape, rather than only one response-width scalar.
 - Detector thermal behavior is now a separate reusable sublayer:
-  `NullDetectorThermalModel` is the default identity path and
-  `FixedTemperature` is the first physical model.
+  `NullDetectorThermalModel` is the default identity path,
+  `FixedTemperature` is the first static physical model, and
+  `FirstOrderThermalModel` is the first maintained dynamic model.
 - Temperature-law infrastructure is shared across detector families through
   `NullTemperatureLaw`, `ArrheniusRateLaw`, `LinearTemperatureLaw`, and
   `ExponentialTemperatureLaw`.
 - The maintained thermal accessors are `thermal_model(det)`,
   `thermal_state(det)`, `detector_temperature(det)`, and
   `advance_thermal!(det, dt)`.
+- Dynamic thermal evolution is currently modeled as first-order relaxation
+  toward a cooling setpoint with explicit initial temperature, ambient
+  temperature, time constant, and clamp bounds.
 - The maintained temperature-aware detector hooks are
   `effective_dark_current(det)`, `effective_glow_rate(det)`,
   `effective_cic_rate(det)`, and `effective_dark_count_rate(det)`.
