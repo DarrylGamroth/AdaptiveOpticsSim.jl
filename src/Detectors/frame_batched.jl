@@ -11,8 +11,8 @@ function _require_batched_detector_compat(det::Detector, cube::AbstractArray, sc
         throw(InvalidConfiguration("batched detector capture currently requires output_precision === nothing"))
     det.params.readout_window === nothing ||
         throw(InvalidConfiguration("batched detector capture currently requires full-frame readout"))
-    is_null_readout_correction(det.params.correction_model) ||
-        throw(InvalidConfiguration("batched detector capture currently requires null readout correction"))
+    supports_batched_readout_correction(det.params.correction_model) ||
+        throw(InvalidConfiguration("batched detector capture currently requires a maintained batched readout correction"))
     supports_batched_response_application(style, det.params.response_model) ||
         throw(InvalidConfiguration("batched detector capture currently requires a maintained batched frame response"))
     is_global_shutter(det.params.timing_model) ||
@@ -132,6 +132,14 @@ end
 _batched_post_readout_gain!(::FrameSensorType, det::Detector, cube::AbstractArray) = cube
 _batched_readout_noise!(det::Detector{NoiseNone}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
 _batched_readout_noise!(det::Detector{NoisePhoton}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
+_batched_apply_readout_correction!(::NullFrameReadoutCorrection, cube::AbstractArray{T,3}) where {T} = cube
+
+function _batched_apply_readout_correction!(model::FrameReadoutCorrectionModel, cube::AbstractArray{T,3}) where {T}
+    for b in axes(cube, 1)
+        apply_readout_correction!(model, @view(cube[b, :, :]))
+    end
+    return cube
+end
 
 function _batched_readout_noise!(det::Detector{<:NoiseReadout}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
     randn_backend!(rng, scratch)
@@ -313,6 +321,7 @@ function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::Abstra
     _batched_pre_readout_gain!(det.params.sensor, det, cube, rng)
     _batched_readout_noise!(det, cube, scratch, rng)
     _batched_post_readout_gain!(det.params.sensor, det, cube)
+    _batched_apply_readout_correction!(det.params.correction_model, cube)
     _batched_quantization!(det, cube)
     _batched_background_map!(det.background_map, cube, scratch)
     return cube

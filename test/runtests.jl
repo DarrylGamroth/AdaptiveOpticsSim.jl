@@ -1740,6 +1740,15 @@ end
     scratch_window = similar(cube_window)
     @test_throws InvalidConfiguration AdaptiveOpticsSim.capture_stack!(det_window_stack, cube_window, scratch_window; rng=MersenneTwister(10))
 
+    corrected_stack_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        sensor=HgCdTeAvalancheArraySensor(sampling_mode=SingleRead()),
+        correction_model=ReferencePixelCommonModeCorrection(1, 1))
+    corrected_stack_in = fill(10.0, 2, 5, 5)
+    corrected_stack = AdaptiveOpticsSim.capture_stack!(corrected_stack_det, corrected_stack_in,
+        similar(corrected_stack_in); rng=MersenneTwister(10))
+    @test size(corrected_stack) == size(corrected_stack_in)
+    @test maximum(abs, corrected_stack) ≤ 1e-6
+
     det_cmos_batched = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=CMOSSensor(column_readout_sigma=1.0))
     @test_throws InvalidConfiguration AdaptiveOpticsSim.capture_stack!(det_cmos_batched, cube_mtf, scratch_mtf; rng=MersenneTwister(10))

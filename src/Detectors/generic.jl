@@ -211,6 +211,14 @@ supports_detector_mtf(::AbstractFrameResponse) = false
 supports_detector_mtf(::GaussianPixelResponse) = true
 supports_detector_mtf(::SampledFrameResponse) = true
 supports_detector_mtf(::AbstractFrameMTF) = true
+supports_batched_readout_correction(::FrameReadoutCorrectionModel) = false
+supports_batched_readout_correction(::NullFrameReadoutCorrection) = true
+supports_batched_readout_correction(::ReferencePixelCommonModeCorrection) = true
+supports_batched_readout_correction(::ReferenceRowCommonModeCorrection) = true
+supports_batched_readout_correction(::ReferenceColumnCommonModeCorrection) = true
+supports_batched_readout_correction(::ReferenceOutputCommonModeCorrection) = true
+supports_batched_readout_correction(model::CompositeFrameReadoutCorrection) =
+    all(supports_batched_readout_correction, model.stages)
 
 supports_clock_induced_charge(::FrameSensorType) = false
 supports_column_readout_noise(::FrameSensorType) = false
