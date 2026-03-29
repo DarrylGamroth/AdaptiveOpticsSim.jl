@@ -327,9 +327,19 @@ Exit criterion:
 
 Status:
 - implemented for the maintained spot-stack path via `capture_stack!`
-- current support is intentionally limited to the runtime-relevant
-  `psf_sampling == 1`, `binning == 1`, `output_precision === nothing` detector
-  configuration used by the AO188 simulation
+- the fixed-shape in-place fast path is intentionally limited to
+  `psf_sampling == 1`, `binning == 1`, `output_precision === nothing`,
+  full-frame readout, global-shutter timing, and null persistence
+- maintained batched response models now include null, Gaussian,
+  rectangular/separable MTF, and sampled frame responses
+- maintained batched readout correction now includes the null and reference-edge
+  common-mode correction models
+- a second generalized `capture_stack!` path now exists for shape-changing
+  detector configurations with separate input/output stacks
+  - this generalized path covers `psf_sampling`, `binning`,
+    `readout_window`, and `output_precision`
+  - it is intentionally not the hot HIL fast path
+  - it still requires global-shutter timing and null persistence
 
 ### Phase 4: Branch concurrency
 

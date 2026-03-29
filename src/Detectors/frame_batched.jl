@@ -327,6 +327,34 @@ function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::Abstra
     return cube
 end
 
+function _require_generalized_batched_detector_compat(det::Detector, out_cube::AbstractArray, in_cube::AbstractArray)
+    ndims(in_cube) == 3 || throw(DimensionMismatchError("generalized batched detector input must be 3D"))
+    ndims(out_cube) == 3 || throw(DimensionMismatchError("generalized batched detector output must be 3D"))
+    size(in_cube, 1) == size(out_cube, 1) ||
+        throw(DimensionMismatchError("generalized batched detector batch count must match"))
+    is_global_shutter(det.params.timing_model) ||
+        throw(InvalidConfiguration("generalized batched detector capture currently requires global-shutter timing semantics"))
+    is_null_persistence(persistence_model(det.params.sensor)) ||
+        throw(InvalidConfiguration("generalized batched detector capture currently requires null detector persistence"))
+    expected_shape = detector_output_shape(det, (size(in_cube, 2), size(in_cube, 3)))
+    size(out_cube, 2) == expected_shape[1] && size(out_cube, 3) == expected_shape[2] ||
+        throw(DimensionMismatchError("generalized batched detector output stack shape must match detector output shape"))
+    return nothing
+end
+
+function capture_stack!(det::Detector, out_cube::AbstractArray{TO,3}, in_cube::AbstractArray{TI,3};
+    rng::AbstractRNG=Random.default_rng()) where {TO,TI}
+    _require_generalized_batched_detector_compat(det, out_cube, in_cube)
+    for b in axes(in_cube, 1)
+        input_frame = @view(in_cube[b, :, :])
+        output_frame = @view(out_cube[b, :, :])
+        capture_signal!(det, input_frame, rng, det.params.integration_time)
+        finalize_capture!(det, rng, det.params.integration_time)
+        copyto!(output_frame, write_output!(det))
+    end
+    return out_cube
+end
+
 function apply_saturation!(det::Detector, cube::AbstractArray)
     full_well = det.params.full_well
     full_well === nothing && return cube

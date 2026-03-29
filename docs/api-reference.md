@@ -264,6 +264,37 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   `CompositeFrameReadoutCorrection` composes multiple correction stages.
 - Detector export metadata now records correction family, edge support, output
   grouping, and correction stage count.
+- Batched detector capture now has two maintained surfaces:
+  - the fixed-shape in-place fast path `capture_stack!(det, cube, scratch)`
+  - the generalized shape-changing path `capture_stack!(det, out_cube, in_cube)`
+- The fixed-shape batched fast path is intended for stacked SH/HIL workloads and
+  currently requires:
+  - `psf_sampling == 1`
+  - `binning == 1`
+  - `output_precision === nothing`
+  - full-frame readout
+  - global-shutter timing
+  - null persistence
+- The fixed-shape fast path now supports the maintained batched frame-response
+  family:
+  - `NullFrameResponse`
+  - `GaussianPixelResponse`
+  - `SampledFrameResponse`
+  - `RectangularPixelAperture`
+  - `SeparablePixelMTF`
+- The fixed-shape fast path also supports the maintained batched readout
+  correction family:
+  - `NullFrameReadoutCorrection`
+  - `ReferencePixelCommonModeCorrection`
+  - `ReferenceRowCommonModeCorrection`
+  - `ReferenceColumnCommonModeCorrection`
+  - `ReferenceOutputCommonModeCorrection`
+  - `CompositeFrameReadoutCorrection` when all stages are maintained batched
+    corrections
+- The generalized batched path preserves detector semantics for
+  `psf_sampling`, `binning`, `readout_window`, and `output_precision` by using
+  separate input/output stacks. It is more general but not the latency-critical
+  fast path.
 - Static frame-detector structure is now explicit. The maintained defect-model
   surface includes `NullDetectorDefectModel`,
   `PixelResponseNonuniformity`, `DarkSignalNonuniformity`,

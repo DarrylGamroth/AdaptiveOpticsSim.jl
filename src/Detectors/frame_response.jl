@@ -115,6 +115,30 @@ function ensure_buffers!(det::Detector, n_mid::Int, m_mid::Int, n_out::Int, m_ou
     return det
 end
 
+function detector_frame_shape(det::Detector, input_shape::Tuple{Int,Int})
+    n_in, m_in = input_shape
+    sampling = det.params.psf_sampling
+    binning = det.params.binning
+    if sampling < 1 || binning < 1
+        throw(InvalidConfiguration("psf_sampling and binning must be >= 1"))
+    end
+    if n_in % sampling != 0 || m_in % sampling != 0
+        throw(DimensionMismatchError("psf_sampling must evenly divide input dimensions"))
+    end
+    n_mid = div(n_in, sampling)
+    m_mid = div(m_in, sampling)
+    if n_mid % binning != 0 || m_mid % binning != 0
+        throw(DimensionMismatchError("binning must evenly divide sampled dimensions"))
+    end
+    return div(n_mid, binning), div(m_mid, binning)
+end
+
+function detector_output_shape(det::Detector, input_shape::Tuple{Int,Int})
+    n_out, m_out = detector_frame_shape(det, input_shape)
+    window = det.params.readout_window === nothing ? nothing : validate_readout_window(det.params.readout_window, n_out, m_out)
+    return window === nothing ? (n_out, m_out) : (length(window.rows), length(window.cols))
+end
+
 function fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real) where {T}
     n_in, m_in = size(psf)
     sampling = det.params.psf_sampling

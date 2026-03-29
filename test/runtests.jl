@@ -1692,18 +1692,22 @@ end
     @test_throws InvalidConfiguration SampledFrameResponse(zeros(3, 3))
     @test_throws InvalidConfiguration SampledFrameResponse(ones(2, 3))
 
-    cube_mtf = cat(copy(impulse), copy(impulse); dims=3)
+    cube_mtf = Array{Float64}(undef, 2, size(impulse, 1), size(impulse, 2))
+    cube_mtf[1, :, :] .= impulse
+    cube_mtf[2, :, :] .= impulse
     scratch_mtf = similar(cube_mtf)
     stack_mtf = AdaptiveOpticsSim.capture_stack!(det_mtf, cube_mtf, scratch_mtf; rng=MersenneTwister(10))
     @test size(stack_mtf) == size(cube_mtf)
     @test all(isfinite, stack_mtf)
-    cube_sampled = cat(copy(impulse), copy(impulse); dims=3)
+    cube_sampled = Array{Float64}(undef, 2, size(impulse, 1), size(impulse, 2))
+    cube_sampled[1, :, :] .= impulse
+    cube_sampled[2, :, :] .= impulse
     scratch_sampled = similar(cube_sampled)
     stack_sampled = AdaptiveOpticsSim.capture_stack!(sampled_det, cube_sampled, scratch_sampled; rng=MersenneTwister(10))
     @test size(stack_sampled) == size(cube_sampled)
     @test all(isfinite, stack_sampled)
-    @test stack_sampled[:, :, 1] ≈ sampled_frame atol=1e-6
-    @test stack_sampled[:, :, 2] ≈ sampled_frame atol=1e-6
+    @test stack_sampled[1, :, :] ≈ sampled_frame atol=1e-6
+    @test stack_sampled[2, :, :] ≈ sampled_frame atol=1e-6
 
     rect_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         response_model=RectangularPixelAperture(pitch_x_px=2.0, pitch_y_px=2.0,
@@ -1736,9 +1740,16 @@ end
 
     det_window_stack = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         readout_window=FrameWindow(2:8, 2:8))
-    cube_window = cat(copy(impulse), copy(impulse); dims=3)
+    cube_window = Array{Float64}(undef, 2, size(impulse, 1), size(impulse, 2))
+    cube_window[1, :, :] .= impulse
+    cube_window[2, :, :] .= impulse
     scratch_window = similar(cube_window)
     @test_throws InvalidConfiguration AdaptiveOpticsSim.capture_stack!(det_window_stack, cube_window, scratch_window; rng=MersenneTwister(10))
+    input_window_stack = copy(cube_window)
+    output_window_stack = Array{Float64}(undef, 2, 7, 7)
+    generalized_window = AdaptiveOpticsSim.capture_stack!(det_window_stack, output_window_stack, input_window_stack; rng=MersenneTwister(10))
+    @test size(generalized_window) == (2, 7, 7)
+    @test generalized_window[1, :, :] ≈ capture!(det_window_stack, impulse; rng=MersenneTwister(10))
 
     corrected_stack_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=HgCdTeAvalancheArraySensor(sampling_mode=SingleRead()),
@@ -1752,6 +1763,17 @@ end
     det_cmos_batched = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=CMOSSensor(column_readout_sigma=1.0))
     @test_throws InvalidConfiguration AdaptiveOpticsSim.capture_stack!(det_cmos_batched, cube_mtf, scratch_mtf; rng=MersenneTwister(10))
+
+    det_generalized = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, psf_sampling=2, binning=2,
+        bits=8, full_well=10.0, output_precision=UInt8)
+    input_generalized = zeros(Float64, 2, 8, 8)
+    input_generalized[1, 4, 4] = 10.0
+    input_generalized[2, 5, 5] = 10.0
+    output_generalized = Array{UInt8}(undef, 2, 2, 2)
+    generalized_stack = AdaptiveOpticsSim.capture_stack!(det_generalized, output_generalized, input_generalized; rng=MersenneTwister(10))
+    @test size(generalized_stack) == (2, 2, 2)
+    @test generalized_stack[1, :, :] == capture!(det_generalized, @view(input_generalized[1, :, :]); rng=MersenneTwister(10))
+    @test generalized_stack[2, :, :] == capture!(det_generalized, @view(input_generalized[2, :, :]); rng=MersenneTwister(10))
 
     apd_dead_time = APDDetector(integration_time=1.0, qe=1.0, gain=1.0, dark_count_rate=0.0,
         noise=NoiseNone(), dead_time_model=NonParalyzableDeadTime(0.5))
@@ -1853,12 +1875,14 @@ end
     frame_background_map = capture!(det_background_map, zeros(4, 4); rng=MersenneTwister(2))
     @test frame_background_map == fill(-1.0, 4, 4)
 
-    cube = cat(fill(1.0, 4, 4), fill(2.0, 4, 4); dims=3)
+    cube = Array{Float64}(undef, 2, 4, 4)
+    cube[1, :, :] .= fill(1.0, 4, 4)
+    cube[2, :, :] .= fill(2.0, 4, 4)
     scratch = similar(cube)
     det_stack = Detector(integration_time=1.0, noise=NoiseNone(), qe=0.5, binning=1)
     AdaptiveOpticsSim.capture_stack!(det_stack, cube, scratch; rng=MersenneTwister(10))
-    @test cube[:, :, 1] ≈ fill(0.5, 4, 4)
-    @test cube[:, :, 2] ≈ fill(1.0, 4, 4)
+    @test cube[1, :, :] ≈ fill(0.5, 4, 4)
+    @test cube[2, :, :] ≈ fill(1.0, 4, 4)
 
     psf = reshape(Float64.(1:256), 16, 16)
     det_fused = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, psf_sampling=2, binning=2)
