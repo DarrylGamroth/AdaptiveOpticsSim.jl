@@ -27,6 +27,9 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
     src = Source(band=:I, magnitude=0.0, T=T)
     lgs = LGSSource(; magnitude=0.0, wavelength=589e-9, altitude=90_000.0,
         laser_coordinates=(0.0, 0.0), T=T)
+    spider_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
+        central_obstruction=0.0f0, T=T, backend=BackendArray)
+    apply_spiders!(spider_tel; thickness=0.5, angles=[0.0, 90.0])
 
     record_gpu_smoke!(failures, "psf_source") do
         psf = compute_psf!(tel, src; zero_padding=2)
@@ -40,6 +43,12 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
             Source(band=:I, magnitude=0.0, coordinates=(1.0, 90.0)),
         ])
         psf = compute_psf!(tel, ast; zero_padding=2)
+        @assert psf isa BackendArray
+        return psf
+    end
+
+    record_gpu_smoke!(failures, "psf_source_spiders") do
+        psf = compute_psf!(spider_tel, src; zero_padding=2)
         @assert psf isa BackendArray
         return psf
     end
@@ -87,6 +96,24 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
         return atm.state.opd
     end
 
+    record_gpu_smoke!(failures, "atmosphere_multilayer_step_spiders") do
+        atm = MultiLayerAtmosphere(spider_tel;
+            r0=T(0.2),
+            L0=T(25.0),
+            fractional_cn2=T[0.7, 0.3],
+            wind_speed=T[8.0, 4.0],
+            wind_direction=T[0.0, 90.0],
+            altitude=T[0.0, 5000.0],
+            T=T,
+            backend=BackendArray,
+        )
+        advance!(atm, spider_tel; rng=rng)
+        propagate!(atm, spider_tel, src)
+        @assert atm.state.opd isa BackendArray
+        @assert spider_tel.state.opd isa BackendArray
+        return spider_tel.state.opd
+    end
+
     record_gpu_smoke!(failures, "atmosphere_infinite_multilayer_step") do
         atm = InfiniteMultiLayerAtmosphere(tel;
             r0=T(0.2),
@@ -107,6 +134,26 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
         @assert atm.layers[1].screen.state.screen isa BackendArray
         @assert atm.layers[1].screen.state.screen_scratch isa BackendArray
         return atm.state.opd
+    end
+
+    record_gpu_smoke!(failures, "atmosphere_infinite_multilayer_step_spiders") do
+        atm = InfiniteMultiLayerAtmosphere(spider_tel;
+            r0=T(0.2),
+            L0=T(25.0),
+            fractional_cn2=T[0.7, 0.3],
+            wind_speed=T[8.0, 4.0],
+            wind_direction=T[0.0, 90.0],
+            altitude=T[0.0, 5000.0],
+            screen_resolution=33,
+            stencil_size=35,
+            T=T,
+            backend=BackendArray,
+        )
+        advance!(atm, spider_tel; rng=rng)
+        propagate!(atm, spider_tel, src)
+        @assert atm.state.opd isa BackendArray
+        @assert spider_tel.state.opd isa BackendArray
+        return spider_tel.state.opd
     end
 
     record_gpu_smoke!(failures, "atmosphere_infinite_statistical_agreement") do
@@ -203,6 +250,13 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
     record_gpu_smoke!(failures, "measure_shack_diffractive") do
         wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=BackendArray)
         slopes = measure!(wfs, tel, src)
+        @assert slopes isa BackendArray
+        return slopes
+    end
+
+    record_gpu_smoke!(failures, "measure_shack_diffractive_spiders") do
+        wfs = ShackHartmann(spider_tel; n_subap=4, mode=Diffractive(), T=T, backend=BackendArray)
+        slopes = measure!(wfs, spider_tel, src)
         @assert slopes isa BackendArray
         return slopes
     end
