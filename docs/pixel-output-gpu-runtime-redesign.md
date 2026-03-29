@@ -340,6 +340,11 @@ Status:
     `readout_window`, and `output_precision`
   - it is intentionally not the hot HIL fast path
   - it still requires global-shutter timing and null persistence
+- rolling-shutter timing and persistence are intentionally deferred rather than
+  being folded into the current batched paths
+  - rolling shutter needs explicit row-time semantics
+  - persistence needs per-spot latent-state handling
+  - neither is currently justified by a maintained SH/HIL benchmark surface
 
 ### Phase 4: Branch concurrency
 

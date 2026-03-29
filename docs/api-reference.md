@@ -304,6 +304,11 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   `psf_sampling`, `binning`, `readout_window`, and `output_precision` by using
   separate input/output stacks. It is more general but not the latency-critical
   fast path.
+- Rolling-shutter timing and detector persistence are intentionally not part of
+  either maintained batched-detector path today. They require temporal or
+  latent-state semantics that are not a good fit for the current spot-stack HIL
+  fast path, so they are deferred until a maintained system surface requires
+  them.
 - Static frame-detector structure is now explicit. The maintained defect-model
   surface includes `NullDetectorDefectModel`,
   `PixelResponseNonuniformity`, `DarkSignalNonuniformity`,
