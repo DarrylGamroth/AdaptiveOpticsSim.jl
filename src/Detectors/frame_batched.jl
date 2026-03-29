@@ -307,7 +307,7 @@ function _batched_apply_separable_response!(::ScalarCPUStyle, cube::AbstractArra
     return cube
 end
 
-function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3};
+function _capture_stack_fixed!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3};
     rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     _require_batched_detector_compat(det, cube, scratch)
     exposure_time = det.params.integration_time
@@ -345,7 +345,7 @@ function _require_generalized_batched_detector_compat(det::Detector, out_cube::A
     return nothing
 end
 
-function capture_stack!(det::Detector, out_cube::AbstractArray{TO,3}, in_cube::AbstractArray{TI,3};
+function _capture_stack_generalized!(det::Detector, out_cube::AbstractArray{TO,3}, in_cube::AbstractArray{TI,3};
     rng::AbstractRNG=Random.default_rng()) where {TO,TI}
     _require_generalized_batched_detector_compat(det, out_cube, in_cube)
     for b in axes(in_cube, 1)
@@ -356,6 +356,14 @@ function capture_stack!(det::Detector, out_cube::AbstractArray{TO,3}, in_cube::A
         copyto!(output_frame, write_output!(det))
     end
     return out_cube
+end
+
+function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{S,3};
+    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat,S<:AbstractFloat}
+    if size(cube) == size(scratch)
+        return _capture_stack_fixed!(det, cube, scratch; rng=rng)
+    end
+    return _capture_stack_generalized!(det, cube, scratch; rng=rng)
 end
 
 function apply_saturation!(det::Detector, cube::AbstractArray)
