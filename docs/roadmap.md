@@ -231,6 +231,10 @@ validation shows the new default is still too coarse.
 - [ ] Expand detector-family-specific physics for the most useful current
   families following `docs/detector-family-feature-plan.md`, with the next
   focus on `CMOSSensor`, `EMCCDSensor`, `InGaAsSensor`, and `APDDetector`.
+- [ ] Add the reusable detector thermal layer described in
+  `docs/detector-thermal-layer-plan.md`, starting with a null model,
+  fixed-temperature support, and temperature-aware dark/glow/count-rate hooks
+  before any dynamic thermal evolution.
 - [x] Formalize the detector-response / MTF interface described in
   `docs/detector-response-interface-plan.md`. The detector layer now exposes
   `AbstractDetectorResponse` / `AbstractFrameResponse` / `AbstractFrameMTF`,
