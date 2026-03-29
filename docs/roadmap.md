@@ -228,6 +228,9 @@ validation shows the new default is still too coarse.
   `docs/detector-readout-physics-plan.md`, starting with APD-like counting
   behavior for curvature sensing, then frame-detector MTF/pixel-response work,
   while keeping room for future SPAD/SPAD-array support.
+- [ ] Expand detector-family-specific physics for the most useful current
+  families following `docs/detector-family-feature-plan.md`, with the next
+  focus on `CMOSSensor`, `EMCCDSensor`, `InGaAsSensor`, and `APDDetector`.
 - [x] Formalize the detector-response / MTF interface described in
   `docs/detector-response-interface-plan.md`. The detector layer now exposes
   `AbstractDetectorResponse` / `AbstractFrameResponse` / `AbstractFrameMTF`,
