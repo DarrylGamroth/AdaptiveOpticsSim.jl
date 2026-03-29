@@ -297,11 +297,12 @@ Acceptance:
 
 Implementation status:
 
-- `InfiniteMultiLayerAtmosphere` now performs CPU reference stepping with
+- `InfiniteMultiLayerAtmosphere` now performs maintained CPU/GPU stepping with
   precomputed row/column boundary operators, integer boundary injection, and
   residual subpixel extraction.
-- The runtime hot path is intentionally CPU-only at this stage; GPU stepping
-  remains deferred to Work package 5.
+- GPU construction now warms the boundary-injection paths up front so the first
+  integer-shift sample does not absorb one-time kernel setup in the runtime
+  allocation surface.
 
 ### Work package 4: Multilayer and off-axis extraction
 
@@ -357,6 +358,8 @@ Implementation status:
   through direction-specialized `KernelAbstractions` gather/injection kernels.
 - GPU smoke coverage now includes infinite multilayer construction, stepping,
   propagation, and CPU/GPU statistical agreement checks.
+- the one-time GPU kernel warmup cost is now paid during construction rather
+  than the first integer boundary-injection step.
 
 ### Work package 6: Regression and benchmark gates
 

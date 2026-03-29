@@ -126,7 +126,7 @@ struct InfiniteAtmosphereLayer{
     P<:InfiniteLayerParams,
     S<:InfiniteLayerState,
     Screen<:InfinitePhaseScreen,
-}
+} <: AbstractAtmosphereLayer
     params::P
     screen::Screen
     state::S
@@ -157,14 +157,15 @@ Runtime state for the planned infinite multilayer atmosphere backend.
 """
 mutable struct InfiniteMultiLayerState{T<:AbstractFloat,A<:AbstractMatrix{T}}
     opd::A
-    layer_buffer::A
+    source_geometry::AtmosphereSourceGeometryCache{T,Vector{T}}
 end
 
 """
-Planned infinite boundary-injection atmosphere backend.
+Infinite boundary-injection atmosphere backend.
 
-This backend now provides the CPU reference implementation. GPU runtime support
-is intentionally deferred to the later GPU port work package.
+This backend supports both CPU and GPU runtime stepping. Builder-side
+factorization remains separate from the steady-state transport path so the hot
+loop stays backend-generic.
 """
 struct InfiniteMultiLayerAtmosphere{
     P<:InfiniteMultiLayerParams,
@@ -403,9 +404,34 @@ function sample_layer!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer, t
     return render_layer!(out, layer, tel)
 end
 
+function sample_layer_accumulate!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer, tel::Telescope,
+    rng::AbstractRNG) where {T<:AbstractFloat}
+    ensure_initialized!(layer.screen, rng)
+    delta = T(tel.params.diameter / tel.params.resolution)
+    dt = T(tel.params.sampling_time)
+    next_offset_x = layer.state.offset_x + T(layer.params.wind_velocity_x) * dt / delta
+    next_offset_y = layer.state.offset_y + T(layer.params.wind_velocity_y) * dt / delta
+    shift_x = trunc(Int, next_offset_x)
+    shift_y = trunc(Int, next_offset_y)
+    residual_x = next_offset_x - T(shift_x)
+    residual_y = next_offset_y - T(shift_y)
+    _apply_integer_shift_x!(layer.screen, shift_x, rng)
+    _apply_integer_shift_y!(layer.screen, shift_y, rng)
+    layer.state.offset_x = residual_x
+    layer.state.offset_y = residual_y
+    layer.state.integer_shift_x += shift_x
+    layer.state.integer_shift_y += shift_y
+    return render_layer_accumulate!(out, layer, tel)
+end
+
 function render_layer!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer, tel::Telescope,
     src::Union{AbstractSource,Nothing}=nothing) where {T<:AbstractFloat}
     shift_x, shift_y, footprint_scale = layer_source_geometry(src, layer.params.altitude, tel, T)
+    return render_layer!(out, layer, shift_x, shift_y, footprint_scale)
+end
+
+function render_layer!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer,
+    shift_x::T, shift_y::T, footprint_scale::T) where {T<:AbstractFloat}
     extract_shifted_screen!(out, layer.screen.state.screen,
         layer.state.offset_x - shift_x,
         layer.state.offset_y - shift_y,
@@ -413,6 +439,46 @@ function render_layer!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer, t
         footprint_scale)
     return out
 end
+
+function render_layer_accumulate!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer, tel::Telescope,
+    src::Union{AbstractSource,Nothing}=nothing) where {T<:AbstractFloat}
+    shift_x, shift_y, footprint_scale = layer_source_geometry(src, layer.params.altitude, tel, T)
+    return render_layer_accumulate!(out, layer, shift_x, shift_y, footprint_scale)
+end
+
+function render_layer_accumulate!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer,
+    shift_x::T, shift_y::T, footprint_scale::T) where {T<:AbstractFloat}
+    accumulate_shifted_screen!(out, layer.screen.state.screen,
+        layer.state.offset_x - shift_x,
+        layer.state.offset_y - shift_y,
+        T(layer.params.amplitude_scale),
+        footprint_scale)
+    return out
+end
+
+function _warmup_gpu_infinite_screen!(style::AcceleratorStyle, screen::InfinitePhaseScreen, rng::AbstractRNG)
+    state = screen.state
+    fill!(state.screen, zero(eltype(state.screen)))
+    fill!(state.screen_scratch, zero(eltype(state.screen_scratch)))
+    fill!(state.extract_buffer, zero(eltype(state.extract_buffer)))
+    fill!(state.stencil_buffer, zero(eltype(state.stencil_buffer)))
+    fill!(state.boundary_buffer, zero(eltype(state.boundary_buffer)))
+    fill!(state.noise_buffer, zero(eltype(state.noise_buffer)))
+    _inject_column_positive!(style, state.screen, state, rng)
+    _inject_column_negative!(style, state.screen, state, rng)
+    _inject_row_positive!(style, state.screen, state, rng)
+    _inject_row_negative!(style, state.screen, state, rng)
+    fill!(state.screen, zero(eltype(state.screen)))
+    fill!(state.screen_scratch, zero(eltype(state.screen_scratch)))
+    fill!(state.extract_buffer, zero(eltype(state.extract_buffer)))
+    fill!(state.stencil_buffer, zero(eltype(state.stencil_buffer)))
+    fill!(state.boundary_buffer, zero(eltype(state.boundary_buffer)))
+    fill!(state.noise_buffer, zero(eltype(state.noise_buffer)))
+    synchronize_backend!(style)
+    return screen
+end
+
+@inline _warmup_gpu_infinite_screen!(::ScalarCPUStyle, screen::InfinitePhaseScreen, rng::AbstractRNG) = screen
 
 function InfinitePhaseScreen(tel::Telescope;
     r0::Real,
@@ -469,13 +535,13 @@ function InfinitePhaseScreen(tel::Telescope;
             Vector{T}(undef, size(column_positive.operator.predictor, 1))),
         materialize_build(build_backend, backend{T}(undef, size(column_positive.operator.residual_factor, 2)),
             Vector{T}(undef, size(column_positive.operator.residual_factor, 2))),
-        materialize_build(build_backend, Matrix{Int}(undef, size(column_positive.stencil.stencil_coords)...),
+        materialize_build(build_backend, backend{Int}(undef, size(column_positive.stencil.stencil_coords)...),
             column_positive.stencil.stencil_coords),
-        materialize_build(build_backend, Matrix{Int}(undef, size(column_negative.stencil.stencil_coords)...),
+        materialize_build(build_backend, backend{Int}(undef, size(column_negative.stencil.stencil_coords)...),
             column_negative.stencil.stencil_coords),
-        materialize_build(build_backend, Matrix{Int}(undef, size(row_positive.stencil.stencil_coords)...),
+        materialize_build(build_backend, backend{Int}(undef, size(row_positive.stencil.stencil_coords)...),
             row_positive.stencil.stencil_coords),
-        materialize_build(build_backend, Matrix{Int}(undef, size(row_negative.stencil.stencil_coords)...),
+        materialize_build(build_backend, backend{Int}(undef, size(row_negative.stencil.stencil_coords)...),
             row_negative.stencil.stencil_coords),
         InfiniteBoundaryModel(
             InfiniteBoundaryStencil(
@@ -575,7 +641,9 @@ function InfinitePhaseScreen(tel::Telescope;
         ),
         false,
     )
-    return InfinitePhaseScreen(params, state, generator, screen_telescope)
+    screen_model = InfinitePhaseScreen(params, state, generator, screen_telescope)
+    _warmup_gpu_infinite_screen!(execution_style(state.screen), screen_model, MersenneTwister(0))
+    return screen_model
 end
 
 function InfiniteMultiLayerAtmosphere(tel::Telescope;
@@ -628,21 +696,13 @@ function InfiniteMultiLayerAtmosphere(tel::Telescope;
         ) for i in 1:n_layers
     ]
     opd = backend{T}(undef, tel.params.resolution, tel.params.resolution)
-    layer_buffer = backend{T}(undef, tel.params.resolution, tel.params.resolution)
     fill!(opd, zero(T))
-    fill!(layer_buffer, zero(T))
-    state = InfiniteMultiLayerState{T, typeof(opd)}(opd, layer_buffer)
+    state = InfiniteMultiLayerState{T, typeof(opd)}(opd, AtmosphereSourceGeometryCache(n_layers, T))
     return InfiniteMultiLayerAtmosphere(params, layers, state)
 end
 
 function advance!(atm::InfiniteMultiLayerAtmosphere, tel::Telescope, rng::AbstractRNG)
-    fill!(atm.state.opd, zero(eltype(atm.state.opd)))
-
-    for layer in atm.layers
-        sample_layer!(atm.state.layer_buffer, layer, tel, rng)
-        atm.state.opd .+= atm.state.layer_buffer
-    end
-
+    accumulate_sampled_layers!(atm.state.opd, atm.layers, tel, rng)
     return atm
 end
 
@@ -656,11 +716,5 @@ function propagate!(atm::InfiniteMultiLayerAtmosphere, tel::Telescope)
 end
 
 function propagate!(atm::InfiniteMultiLayerAtmosphere, tel::Telescope, src::AbstractSource)
-    fill!(atm.state.opd, zero(eltype(atm.state.opd)))
-    for layer in atm.layers
-        render_layer!(atm.state.layer_buffer, layer, tel, src)
-        atm.state.opd .+= atm.state.layer_buffer
-    end
-    tel.state.opd .= atm.state.opd .* tel.state.pupil
-    return tel
+    return propagate_source_aware!(atm, tel, src)
 end
