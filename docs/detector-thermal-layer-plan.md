@@ -65,6 +65,36 @@ These are useful, but the package does not currently have:
 So today the package has thermally relevant parameters, but not a thermal
 model.
 
+## Reuse From Existing Detector Code
+
+The current `HgCdTeAvalancheArraySensor` implementation already contains one
+important reusable pattern: detector-family code defines effective timing and
+exposure-like quantities, and the generic detector layer consumes them.
+
+Examples already in core:
+
+- `sampling_read_time(...)`
+- `sampling_wallclock_time(...)`
+- `effective_dark_current_time(...)`
+- `effective_sensor_glow_time(...)`
+
+These should be reused as the seam between detector family behavior and the
+thermal layer.
+
+What should be reused:
+
+- the timing-to-effective-exposure hook pattern
+- family-specific cadence logic that determines effective accumulation time
+
+What should not be moved into the thermal layer:
+
+- HgCdTe read-product construction
+- Fowler/CDS cube assembly
+- reference/signal readout packaging
+
+The thermal layer should consume effective times already provided by the
+detector family, not absorb family-specific readout semantics.
+
 ## Design Rules
 
 - Keep the thermal layer separate from optics, readout, and detector response.
@@ -110,7 +140,14 @@ Optional state types:
 - `NoThermalState`
 - `DetectorThermalState`
 
-The null/default path should require no dynamic state.
+The preferred architecture is:
+
+- `DetectorParams` and `APDDetectorParams` carry `thermal_model`
+- `DetectorState` and `APDDetectorState` carry `thermal_state`
+- the state object itself is small and shared in shape across families
+
+The null/default path should require no dynamic state and should use
+`NoThermalState`.
 
 ## Null Model
 
@@ -171,12 +208,24 @@ Add reusable parameter-law families such as:
 
 - `AbstractTemperatureLaw`
 - `NullTemperatureLaw`
-- `ArrheniusDarkCurrentLaw`
-- `ExponentialGlowLaw`
-- `PersistenceTemperatureLaw`
+- `ArrheniusRateLaw`
+- `ExponentialTemperatureLaw`
 - `LinearTemperatureLaw`
+- `PersistenceTemperatureLaw`
 
-These should be used to map thermal state to detector-family parameters.
+These should be shared generic law types, not separate law hierarchies per
+detector family.
+
+Detector families should instead expose family-specific hook functions such as:
+
+- `dark_current_law(sensor)`
+- `glow_rate_law(sensor)`
+- `dark_count_law(detector)`
+- `persistence_coupling_law(sensor)`
+- `persistence_decay_law(sensor)`
+
+That keeps the mathematics reusable while still letting detector families say
+which laws matter to them.
 
 ## Detector Integration Strategy
 
@@ -195,8 +244,15 @@ And temperature-aware hooks such as:
 
 - `effective_dark_current(det)`
 - `effective_glow_rate(det)`
+- `effective_dark_count_rate(det)`
+- `effective_cic_rate(det)`
+- `effective_persistence_model(det)`
 
 The null implementation should simply return the configured detector parameter.
+
+Behavior selection should be driven by multiple dispatch on thermal-model and
+temperature-law types. Traits should only be used for optional capability
+queries, not to replace dispatch.
 
 ### `EMCCDSensor`
 
@@ -259,6 +315,10 @@ Add traits only for optional behavior:
 - `supports_temperature_dependent_dark_counts(x)`
 
 Do not add traits that simply restate the detector family.
+
+Traits are useful here, but only as interface/conformance queries. The actual
+rate evaluation and temperature updates should still be implemented through
+multiple dispatch.
 
 ## Metadata Requirements
 
@@ -353,16 +413,29 @@ For dynamic thermal models, also add:
 - steady-state convergence tests
 - deterministic fixed-step evolution tests
 
-## Open Questions
+## Current Decisions And Remaining Questions
 
-- Should thermal state live in `DetectorState` / `APDDetectorState`, or be
-  layered through a smaller shared thermal-state object?
-- Should temperature laws be shared across detector families, or should each
-  family own its own law surface with only light common helpers?
-- Is self-heating worth modeling in Phase 1, or should it wait for dynamic
-  thermal evolution?
-- Do we want Celsius aliases in public APIs, or should the core remain
-  Kelvin-only?
+The current recommended decisions are:
+
+- Thermal state should live in `DetectorState` / `APDDetectorState` through a
+  small shared thermal-state object rather than detector-family-specific
+  temperature fields.
+- Temperature laws should be shared generic law types, while detector families
+  provide hook functions choosing which law applies to which effect.
+- Self-heating should wait until dynamic thermal evolution. It is not worth
+  modeling in Phase 1.
+- The public core API should remain Kelvin-only.
+
+Some design questions still remain open:
+
+- whether `FirstOrderThermalModel` should be stored entirely in params, or
+  whether part of the cooler/controller configuration deserves a more explicit
+  sub-structure
+- whether persistence should be temperature-coupled by transforming the stored
+  persistence model itself or by evaluating temperature-aware effective
+  persistence parameters at use sites
+- whether `EMCCDSensor` needs a temperature-dependent CIC law in the first
+  thermal implementation or whether that should remain a later refinement
 
 ## Recommended Next Step
 
