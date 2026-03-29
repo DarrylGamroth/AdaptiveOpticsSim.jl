@@ -161,10 +161,11 @@ mutable struct InfiniteMultiLayerState{T<:AbstractFloat,A<:AbstractMatrix{T}}
 end
 
 """
-Planned infinite boundary-injection atmosphere backend.
+Infinite boundary-injection atmosphere backend.
 
-This backend now provides the CPU reference implementation. GPU runtime support
-is intentionally deferred to the later GPU port work package.
+This backend supports both CPU and GPU runtime stepping. Builder-side
+factorization remains separate from the steady-state transport path so the hot
+loop stays backend-generic.
 """
 struct InfiniteMultiLayerAtmosphere{
     P<:InfiniteMultiLayerParams,
@@ -414,6 +415,30 @@ function render_layer!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer, t
     return out
 end
 
+function _warmup_gpu_infinite_screen!(style::AcceleratorStyle, screen::InfinitePhaseScreen, rng::AbstractRNG)
+    state = screen.state
+    fill!(state.screen, zero(eltype(state.screen)))
+    fill!(state.screen_scratch, zero(eltype(state.screen_scratch)))
+    fill!(state.extract_buffer, zero(eltype(state.extract_buffer)))
+    fill!(state.stencil_buffer, zero(eltype(state.stencil_buffer)))
+    fill!(state.boundary_buffer, zero(eltype(state.boundary_buffer)))
+    fill!(state.noise_buffer, zero(eltype(state.noise_buffer)))
+    _inject_column_positive!(style, state.screen, state, rng)
+    _inject_column_negative!(style, state.screen, state, rng)
+    _inject_row_positive!(style, state.screen, state, rng)
+    _inject_row_negative!(style, state.screen, state, rng)
+    fill!(state.screen, zero(eltype(state.screen)))
+    fill!(state.screen_scratch, zero(eltype(state.screen_scratch)))
+    fill!(state.extract_buffer, zero(eltype(state.extract_buffer)))
+    fill!(state.stencil_buffer, zero(eltype(state.stencil_buffer)))
+    fill!(state.boundary_buffer, zero(eltype(state.boundary_buffer)))
+    fill!(state.noise_buffer, zero(eltype(state.noise_buffer)))
+    synchronize_backend!(style)
+    return screen
+end
+
+@inline _warmup_gpu_infinite_screen!(::ScalarCPUStyle, screen::InfinitePhaseScreen, rng::AbstractRNG) = screen
+
 function InfinitePhaseScreen(tel::Telescope;
     r0::Real,
     L0::Real=25.0,
@@ -575,7 +600,9 @@ function InfinitePhaseScreen(tel::Telescope;
         ),
         false,
     )
-    return InfinitePhaseScreen(params, state, generator, screen_telescope)
+    screen_model = InfinitePhaseScreen(params, state, generator, screen_telescope)
+    _warmup_gpu_infinite_screen!(execution_style(state.screen), screen_model, MersenneTwister(0))
+    return screen_model
 end
 
 function InfiniteMultiLayerAtmosphere(tel::Telescope;

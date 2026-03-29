@@ -84,13 +84,13 @@ Current implementation note:
 - Milestone 1 now uses a persistent finite periodic canvas per layer with
   subpixel interpolation.
 - The finite periodic model remains a maintained fast/HIL-oriented atmosphere path.
-- `InfiniteMultiLayerAtmosphere` now exists as a CPU reference model with
+- `InfiniteMultiLayerAtmosphere` now exists as a maintained CPU/GPU model with
   builder-time conditional boundary operators, runtime row/column injection,
   and residual subpixel extraction.
 - finite and infinite atmospheres now both support source-aware propagation for
   off-axis and finite-height footprints from the current evolved layer state.
-- The infinite model is not yet GPU runtime-capable; that remains a later
-  work package.
+- GPU construction now warms the boundary-injection kernels up front so the
+  first integer-shift step does not pay a large one-time runtime allocation.
 - The staged plan for the next atmosphere backend is in
   [infinite-boundary-atmosphere-plan.md](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/infinite-boundary-atmosphere-plan.md).
 
