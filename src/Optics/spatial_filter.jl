@@ -15,17 +15,6 @@ import Base: filter!
 #
 # Different filter shapes only differ in how the focal-plane mask is built.
 #
-@kernel function circular_filter_mask_kernel!(mask, threshold2, center, n::Int)
-    i, j = @index(Global, NTuple)
-    if i <= n && j <= n
-        x = i - center
-        y = j - center
-        r2 = x^2 + y^2
-        value = r2 <= threshold2
-        @inbounds mask[i, j] = (value + im * value) / sqrt(2)
-    end
-end
-
 abstract type SpatialFilterShape end
 struct CircularFilter <: SpatialFilterShape end
 struct SquareFilter <: SpatialFilterShape end
@@ -103,27 +92,19 @@ function set_spatial_filter!(sf::SpatialFilter{CircularFilter})
 end
 
 function _set_spatial_filter!(::ScalarCPUStyle, sf::SpatialFilter, ::CircularFilter)
-    n = sf.params.resolution
     diameter_padded = sf.params.diameter * sf.params.zero_padding
-    center = (n + 1) / 2
-
-    @inbounds for i in 1:n, j in 1:n
-        x = i - center
-        y = j - center
-        r2 = x^2 + y^2
-        value = r2 <= diameter_padded^2
-        sf.state.mask[i, j] = (value + im * value) / sqrt(2)
-    end
-
+    inside = (one(eltype(sf.state.mask)) + im * one(eltype(sf.state.mask))) / sqrt(2)
+    build_mask!(sf.state.mask, CircularAperture(radius=diameter_padded, T=eltype(sf.state.phase));
+        grid=pixel_mask_grid(sf.state.mask; T=eltype(sf.state.phase)), inside=inside)
     finalize_spatial_filter_mask!(sf)
     return sf
 end
 
 function _set_spatial_filter!(style::AcceleratorStyle, sf::SpatialFilter, ::CircularFilter)
-    n = sf.params.resolution
     diameter_padded = sf.params.diameter * sf.params.zero_padding
-    center = (n + 1) / 2
-    launch_kernel!(style, circular_filter_mask_kernel!, sf.state.mask, diameter_padded^2, center, n; ndrange=size(sf.state.mask))
+    inside = (one(eltype(sf.state.mask)) + im * one(eltype(sf.state.mask))) / sqrt(2)
+    build_mask!(sf.state.mask, CircularAperture(radius=diameter_padded, T=eltype(sf.state.phase));
+        grid=pixel_mask_grid(sf.state.mask; T=eltype(sf.state.phase)), inside=inside)
     finalize_spatial_filter_mask!(sf)
     return sf
 end
@@ -131,22 +112,20 @@ end
 function set_spatial_filter!(sf::SpatialFilter{SquareFilter})
     n = sf.params.resolution
     diameter_padded = sf.params.diameter * sf.params.zero_padding
-    center = (n + 1) / 2
-    fill!(sf.state.mask, zero(eltype(sf.state.mask)))
     half = Int(round(diameter_padded / 2))
-    cx = Int(round(center))
+    cx = Int(round((n + 1) / 2))
     xs = max(1, cx - half)
     xe = min(n, cx + half)
-    @views @. sf.state.mask[xs:xe, xs:xe] = (1 + im) / sqrt(2)
-
+    inside = (one(eltype(sf.state.mask)) + im * one(eltype(sf.state.mask))) / sqrt(2)
+    build_mask!(sf.state.mask, RectangularROI(xs:xe, xs:xe); inside=inside)
     finalize_spatial_filter_mask!(sf)
     return sf
 end
 
 function set_spatial_filter!(sf::SpatialFilter{FoucaultFilter})
     n = sf.params.resolution
-    fill!(sf.state.mask, zero(eltype(sf.state.mask)))
-    @views @. sf.state.mask[1:floor(Int, n / 2), :] = (1 + im) / sqrt(2)
+    inside = (one(eltype(sf.state.mask)) + im * one(eltype(sf.state.mask))) / sqrt(2)
+    build_mask!(sf.state.mask, RectangularROI(1:floor(Int, n / 2), 1:n); inside=inside)
     finalize_spatial_filter_mask!(sf)
     return sf
 end

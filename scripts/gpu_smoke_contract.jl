@@ -101,6 +101,21 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
         return psf
     end
 
+    record_gpu_smoke!(failures, "aperture_masks") do
+        support = BackendArray{Bool}(undef, 16, 16)
+        weighted = BackendArray{Complex{T}}(undef, 16, 16)
+        valid = BackendArray{Bool}(undef, 4, 4)
+        build_mask!(support, AnnularAperture(inner_radius=T(0.2), outer_radius=T(1), T=T); grid=default_mask_grid(support; T=T))
+        apply_mask!(support, SpiderMask(thickness=T(0.1), angle_rad=T(pi / 4), T=T); grid=default_mask_grid(support; T=T))
+        build_mask!(weighted, CircularAperture(radius=T(4), T=T); grid=pixel_mask_grid(weighted; T=T), inside=complex(T(inv(sqrt(2))), T(inv(sqrt(2)))))
+        build_mask!(valid, SubapertureGridMask(threshold=T(0.1), T=T), support)
+        @assert support isa BackendArray
+        @assert weighted isa BackendArray
+        @assert valid isa BackendArray
+        @assert any(Array(valid))
+        return valid
+    end
+
     record_gpu_smoke!(failures, "detector_capture_none") do
         psf = compute_psf!(tel, src; zero_padding=2)
         det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=2, T=T, backend=BackendArray)

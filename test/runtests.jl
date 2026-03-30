@@ -374,6 +374,54 @@ end
     @test zero_out ≈ field.state.field atol=1e-10 rtol=1e-10
 end
 
+@testset "Aperture masks" begin
+    bool_mask = falses(32, 32)
+    build_mask!(bool_mask, CircularAperture(radius=1.0))
+    @test bool_mask[16, 16]
+    @test !bool_mask[1, 1]
+
+    annulus = falses(32, 32)
+    build_mask!(annulus, AnnularAperture(inner_radius=0.25, outer_radius=1.0))
+    @test !annulus[16, 16]
+    @test count(annulus) < count(bool_mask)
+
+    weighted = fill(-1.0, 16, 16)
+    build_mask!(weighted, RectangularROI(5:8, 6:10); inside=2.0, outside=-1.0)
+    @test all(weighted[5:8, 6:10] .== 2.0)
+    @test weighted[4, 6] == -1.0
+
+    spider = trues(32, 32)
+    apply_mask!(spider, SpiderMask(thickness=0.08, angle_rad=pi / 2))
+    @test count(spider) < length(spider)
+
+    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.25)
+    expected = falses(32, 32)
+    build_mask!(expected, AnnularAperture(inner_radius=0.25, outer_radius=1.0))
+    @test tel.state.pupil == expected
+    apply_spiders!(tel; thickness=0.4, angles=[0.0, 90.0])
+    manual = copy(expected)
+    apply_mask!(manual, SpiderMask(thickness=0.1, angle_rad=0.0))
+    apply_mask!(manual, SpiderMask(thickness=0.1, angle_rad=pi / 2))
+    @test tel.state.pupil == manual
+
+    sf_tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    sf = SpatialFilter(sf_tel; shape=SquareFilter(), diameter=4, zero_padding=2)
+    @test count(x -> !iszero(x), sf.state.mask) > 0
+    foucault = SpatialFilter(sf_tel; shape=FoucaultFilter(), diameter=4, zero_padding=2)
+    foucault_count = count(x -> !iszero(x), foucault.state.mask)
+    @test 0 < foucault_count < length(foucault.state.mask)
+
+    pupil = falses(8, 8)
+    pupil[1:4, 1:4] .= true
+    pupil[5:8, 5:8] .= true
+    valid = falses(2, 2)
+    build_mask!(valid, SubapertureGridMask(threshold=0.5), pupil)
+    @test valid == Bool[true false; false true]
+    valid2 = similar(valid)
+    AdaptiveOpticsSim.set_valid_subapertures!(valid2, pupil, 0.5)
+    @test valid2 == valid
+end
+
 @testset "Zernike basis" begin
     tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     zb = ZernikeBasis(tel, 5)

@@ -26,6 +26,10 @@ Project-wide units guidance lives in
 - `InversePolicy`, `ExactPseudoInverse`, `TSVDInverse`, `TikhonovInverse`
 - Exceptions: `AdaptiveOpticsSimError`, `InvalidConfiguration`,
   `DimensionMismatchError`
+- Aperture/mask primitives: `MaskGrid`, `CircularAperture`,
+  `AnnularAperture`, `SpiderMask`, `RectangularROI`,
+  `SubapertureGridMask`, `default_mask_grid`, `pixel_mask_grid`,
+  `build_mask!`, `apply_mask!`
 
 ## Optical elements
 
@@ -215,6 +219,19 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - `ExtendedSource` preserves the wrapped source center and total flux while
   expanding the source distribution into weighted measurement samples only in
   the grouped sensing path.
+
+### `IF-MASK`: aperture and support maps
+
+- Aperture and support-map construction is centralized through
+  `MaskGrid`, `CircularAperture`, `AnnularAperture`, `SpiderMask`,
+  `RectangularROI`, and `SubapertureGridMask`.
+- `build_mask!` is the maintained constructor for full-support boolean,
+  weighted-real, or weighted-complex masks.
+- `apply_mask!` is the maintained mutating path for destructive occluders such
+  as spiders.
+- Telescope pupil generation, spatial-filter support maps, and WFS valid-mask
+  assembly should reuse these builders instead of introducing local geometry
+  loops or kernels.
 
 ### `IF-ATM`: atmospheres
 

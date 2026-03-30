@@ -66,28 +66,6 @@ function Telescope(; resolution::Int,
     return Telescope(params, state)
 end
 
-@kernel function generate_pupil_kernel!(pupil, r_inner, cx, cy, scale, n::Int)
-    i, j = @index(Global, NTuple)
-    if i <= n && j <= n
-        x = (i - cx) / scale
-        y = (j - cy) / scale
-        r = sqrt(x^2 + y^2)
-        @inbounds pupil[i, j] = (r <= one(r)) & (r >= r_inner)
-    end
-end
-
-@kernel function apply_spider_kernel!(pupil, thickness_norm, a, b, offset_x_norm, offset_y_norm, cx, cy, scale, n::Int)
-    i, j = @index(Global, NTuple)
-    if i <= n && j <= n
-        x = (i - cx) / scale - offset_x_norm
-        y = (j - cy) / scale - offset_y_norm
-        dist = abs(a * x + b * y)
-        if dist <= thickness_norm
-            @inbounds pupil[i, j] = false
-        end
-    end
-end
-
 function generate_pupil!(pupil::AbstractMatrix{Bool}, params::TelescopeParams)
     Base.require_one_based_indexing(pupil)
     _generate_pupil!(execution_style(pupil), pupil, params)
@@ -95,29 +73,14 @@ function generate_pupil!(pupil::AbstractMatrix{Bool}, params::TelescopeParams)
 end
 
 function _generate_pupil!(::ScalarCPUStyle, pupil::AbstractMatrix{Bool}, params::TelescopeParams)
-    n = params.resolution
-    r_outer = 1.0
-    r_inner = params.central_obstruction
-    cx = (n + 1) / 2
-    cy = (n + 1) / 2
-    scale = n / 2
-
-    @inbounds for i in 1:n, j in 1:n
-        x = (i - cx) / scale
-        y = (j - cy) / scale
-        r = sqrt(x^2 + y^2)
-        pupil[i, j] = (r <= r_outer) & (r >= r_inner)
-    end
+    build_mask!(pupil, AnnularAperture(inner_radius=params.central_obstruction, outer_radius=one(params.diameter), T=typeof(params.diameter));
+        grid=default_mask_grid(pupil; T=typeof(params.diameter)))
     return pupil
 end
 
 function _generate_pupil!(style::AcceleratorStyle, pupil::AbstractMatrix{Bool}, params::TelescopeParams)
-    n = params.resolution
-    T = typeof(params.diameter)
-    cx = T((n + 1) / 2)
-    cy = T((n + 1) / 2)
-    scale = T(n / 2)
-    launch_kernel!(style, generate_pupil_kernel!, pupil, params.central_obstruction, cx, cy, scale, n; ndrange=size(pupil))
+    build_mask!(pupil, AnnularAperture(inner_radius=params.central_obstruction, outer_radius=one(params.diameter), T=typeof(params.diameter));
+        grid=default_mask_grid(pupil; T=typeof(params.diameter)))
     return pupil
 end
 
@@ -184,48 +147,33 @@ end
 
 function apply_spiders!(tel::Telescope; thickness::Real, angles::AbstractVector, offset_x::Real=0.0, offset_y::Real=0.0)
     Base.require_one_based_indexing(tel.state.pupil)
-    n = tel.params.resolution
     radius = tel.params.diameter / 2
     thickness_norm = thickness / radius
     offset_x_norm = offset_x / radius
     offset_y_norm = offset_y / radius
-
-    cx = (n + 1) / 2
-    cy = (n + 1) / 2
-    scale = n / 2
-
-    _apply_spiders!(execution_style(tel.state.pupil), tel.state.pupil, angles, thickness_norm, offset_x_norm, offset_y_norm, cx, cy, scale, n)
+    _apply_spiders!(tel.state.pupil, angles, thickness_norm, offset_x_norm, offset_y_norm)
     return tel
 end
 
-function _apply_spiders!(::ScalarCPUStyle, pupil::AbstractMatrix{Bool}, angles::AbstractVector, thickness_norm::Real,
-    offset_x_norm::Real, offset_y_norm::Real, cx::Real, cy::Real, scale::Real, n::Int)
+function _apply_spiders!(pupil::AbstractMatrix{Bool}, angles::AbstractVector, thickness_norm::Real,
+    offset_x_norm::Real, offset_y_norm::Real)
+    T = promote_type(typeof(thickness_norm), typeof(offset_x_norm), typeof(offset_y_norm))
+    grid = default_mask_grid(pupil; T=T)
     for angle in angles
-        θ = deg2rad(angle)
-        sθ, cθ = sincos(θ)
-        a = -sθ
-        b = cθ
-        @inbounds for i in 1:n, j in 1:n
-            x = (i - cx) / scale - offset_x_norm
-            y = (j - cy) / scale - offset_y_norm
-            dist = abs(a * x + b * y)
-            if dist <= thickness_norm
-                pupil[i, j] = false
-            end
-        end
+        apply_mask!(pupil, SpiderMask(thickness=thickness_norm, angle_rad=deg2rad(angle), offset_x=offset_x_norm, offset_y=offset_y_norm,
+            T=T); grid=grid)
     end
     return pupil
 end
 
-function _apply_spiders!(style::AcceleratorStyle, pupil::AbstractMatrix{Bool}, angles::AbstractVector, thickness_norm::Real,
+function _apply_spiders!(::ScalarCPUStyle, pupil::AbstractMatrix{Bool}, angles::AbstractVector, thickness_norm::Real,
     offset_x_norm::Real, offset_y_norm::Real, cx::Real, cy::Real, scale::Real, n::Int)
-    for angle in angles
-        θ = deg2rad(angle)
-        sθ, cθ = sincos(θ)
-        a = -sθ
-        b = cθ
-        launch_kernel!(style, apply_spider_kernel!, pupil, thickness_norm, a, b, offset_x_norm, offset_y_norm, cx, cy, scale, n;
-            ndrange=size(pupil))
-    end
+    _apply_spiders!(pupil, angles, thickness_norm, offset_x_norm, offset_y_norm)
+    return pupil
+end
+
+function _apply_spiders!(::AcceleratorStyle, pupil::AbstractMatrix{Bool}, angles::AbstractVector, thickness_norm::Real,
+    offset_x_norm::Real, offset_y_norm::Real, cx::Real, cy::Real, scale::Real, n::Int)
+    _apply_spiders!(pupil, angles, thickness_norm, offset_x_norm, offset_y_norm)
     return pupil
 end

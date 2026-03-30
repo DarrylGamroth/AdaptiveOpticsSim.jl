@@ -30,6 +30,7 @@ include("Core/workspace.jl")
 include("Core/parallel.jl")
 include("Core/telemetry.jl")
 
+include("Optics/aperture_masks.jl")
 include("Optics/telescope.jl")
 include("Optics/source.jl")
 include("Optics/spectrum.jl")
@@ -91,6 +92,9 @@ export GSCAtmosphereReplayTrace, GSCAtmosphereReplayTraceRow
 export snapshot_config, write_config_toml, write_config_json
 export write_telemetry_csv
 export bin2d, poisson_noise!, poisson_sample
+export AbstractMaskPrimitive, MaskGrid
+export CircularAperture, AnnularAperture, SpiderMask, RectangularROI, SubapertureGridMask
+export default_mask_grid, pixel_mask_grid, build_mask!, apply_mask!
 export Telescope, TelescopeParams, TelescopeState, generate_pupil!, reset_opd!, apply_opd!
 export set_pupil!, set_pupil_reflectivity!, flux_map, apply_spiders!
 export Source, SourceParams, LGSSource, LGSSourceParams, wavelength, optical_path, print_optical_path

@@ -38,19 +38,6 @@ end
     end
 end
 
-@kernel function valid_subaperture_mask_kernel!(valid_mask, pupil, threshold, sub::Int, n_sub::Int)
-    i, j = @index(Global, NTuple)
-    if i <= n_sub && j <= n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        occ = zero(typeof(threshold))
-        @inbounds for x in xs:(xs + sub - 1), y in ys:(ys + sub - 1)
-            occ += pupil[x, y]
-        end
-        @inbounds valid_mask[i, j] = occ / (sub * sub) > threshold
-    end
-end
-
 @kernel function geometric_slopes_kernel!(slopes, opd, valid_mask, sub::Int, n_sub::Int, offset::Int)
     i, j = @index(Global, NTuple)
     if i <= n_sub && j <= n_sub
@@ -419,36 +406,19 @@ function randn_backend_async!(style::AcceleratorStyle, rng::AbstractRNG, out::Ab
 end
 
 function set_valid_subapertures!(valid_mask::AbstractMatrix{Bool}, pupil::AbstractMatrix{Bool}, threshold::Real)
-    Base.require_one_based_indexing(valid_mask, pupil)
-    n = size(pupil, 1)
-    n_sub = size(valid_mask, 1)
-    if size(valid_mask, 2) != n_sub || size(pupil, 2) != n
-        throw(DimensionMismatchError("valid_mask and pupil must be square"))
-    end
-    if n % n_sub != 0
-        throw(DimensionMismatchError("pupil size must be divisible by valid_mask size"))
-    end
-    sub = div(n, n_sub)
-    _set_valid_subapertures!(execution_style(valid_mask), valid_mask, pupil, threshold, sub, n_sub)
+    build_mask!(valid_mask, SubapertureGridMask(threshold), pupil)
     return valid_mask
 end
 
 function _set_valid_subapertures!(::ScalarCPUStyle, valid_mask::AbstractMatrix{Bool}, pupil::AbstractMatrix{Bool},
     threshold::Real, sub::Int, n_sub::Int)
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = xs + sub - 1
-        ye = ys + sub - 1
-        valid_mask[i, j] = mean(@view pupil[xs:xe, ys:ye]) > threshold
-    end
+    build_mask!(valid_mask, SubapertureGridMask(threshold), pupil)
     return valid_mask
 end
 
-function _set_valid_subapertures!(style::AcceleratorStyle, valid_mask::AbstractMatrix{Bool}, pupil::AbstractMatrix{Bool},
+function _set_valid_subapertures!(::AcceleratorStyle, valid_mask::AbstractMatrix{Bool}, pupil::AbstractMatrix{Bool},
     threshold::Real, sub::Int, n_sub::Int)
-    threshold_t = promote_type(eltype(pupil), typeof(threshold))(threshold)
-    launch_kernel!(style, valid_subaperture_mask_kernel!, valid_mask, pupil, threshold_t, sub, n_sub; ndrange=size(valid_mask))
+    build_mask!(valid_mask, SubapertureGridMask(threshold), pupil)
     return valid_mask
 end
 
