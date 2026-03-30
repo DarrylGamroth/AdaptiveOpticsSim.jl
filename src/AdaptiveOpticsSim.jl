@@ -55,6 +55,7 @@ include("Calibration/modal_basis.jl")
 include("Optics/ncpa.jl")
 include("WFS/sensing_modes.jl")
 include("WFS/elongation.jl")
+include("WFS/subapertures.jl")
 include("WFS/shack_hartmann.jl")
 include("WFS/pyramid.jl")
 include("WFS/bioedge.jl")
@@ -212,6 +213,10 @@ export RuntimeTimingStats, RuntimePhaseTimingStats, runtime_timing, runtime_phas
 export with_reconstructor, with_reconstructors
 export AbstractOpticalElement, AbstractSource, AbstractAtmosphere, AbstractWFS
 export AbstractDetector, AbstractDeformableMirror, SensingMode, Diffractive, Geometric
+export AbstractSlopeExtractionModel, CenterOfGravityExtraction
+export SubapertureLayout, SubapertureCalibration
+export subaperture_layout, subaperture_calibration, slope_extraction_model
+export valid_subaperture_indices, n_valid_subapertures
 export WFSNormalization, MeanValidFluxNormalization, IncidenceFluxNormalization
 export NoiseModel, NoiseNone, NoisePhoton, NoiseReadout, NoisePhotonReadout
 export DMApplyMode, DMAdditive, DMReplace

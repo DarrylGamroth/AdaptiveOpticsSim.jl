@@ -2332,7 +2332,7 @@ end
     end
     copyto!(sh_ast_serial.state.spot_cube, sh_ast_serial.state.detector_noise_cube)
     sh_ast_serial_peak = maximum(sh_ast_serial.state.spot_cube)
-    AdaptiveOpticsSim.sh_signal_from_spots!(sh_ast_serial, sh_ast_serial_peak, sh_ast_serial.params.threshold_cog)
+    AdaptiveOpticsSim.sh_signal_from_spots!(sh_ast_serial, sh_ast_serial_peak, slope_extraction_model(sh_ast_serial))
     AdaptiveOpticsSim.subtract_reference_and_scale!(sh_ast_serial)
     sh_ast_serial_slopes = copy(sh_ast_serial.state.slopes)
     @test sh_ast_slopes ≈ sh_ast_serial_slopes
@@ -2412,6 +2412,45 @@ end
     AdaptiveOpticsSim.resize_bioedge_signal_buffers!(bio_ast_det_serial, size(bio_ast_det_frame, 1))
     AdaptiveOpticsSim.bioedge_signal!(bio_ast_det_serial, tel, bio_ast_det_frame)
     @test bio_ast_det_slopes ≈ bio_ast_det_serial.state.slopes
+end
+
+@testset "Shack-Hartmann subapertures" begin
+    tel = Telescope(resolution=24, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
+    src = Source(band=:I, magnitude=0.0)
+    sh = ShackHartmann(tel; n_subap=6, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8, threshold_cog=0.02)
+
+    layout = subaperture_layout(sh)
+    calibration = subaperture_calibration(sh)
+    @test layout isa SubapertureLayout
+    @test calibration isa SubapertureCalibration
+    @test layout.n_subap == 6
+    @test layout.subap_pixels == 4
+    @test layout.pitch_m ≈ tel.params.diameter / 6
+    @test !calibration.calibrated
+    @test slope_extraction_model(sh) isa CenterOfGravityExtraction
+    @test slope_extraction_model(sh).threshold ≈ 0.02
+    @test n_valid_subapertures(layout) == count(layout.valid_mask_host)
+
+    prepare_runtime_wfs!(sh, tel, src)
+    @test calibration.calibrated
+    @test calibration.slopes_units == sh.state.slopes_units
+    @test calibration.wavelength == sh.state.calibration_wavelength
+    @test calibration.signature == sh.state.calibration_signature
+    @test calibration.reference_signal_2d === sh.state.reference_signal_2d
+    @test calibration.reference_signal_host === sh.state.reference_signal_host
+    @test length(valid_subaperture_indices(layout)) == n_valid_subapertures(layout)
+
+    slopes = measure!(sh, tel, src)
+    @test all(isfinite, slopes)
+    meta = AdaptiveOpticsSim.wfs_output_metadata(sh)
+    @test meta.n_valid_subap == n_valid_subapertures(layout)
+    @test meta.subap_pixels == layout.subap_pixels
+    @test meta.calibrated
+
+    dm = DeformableMirror(tel; n_act=5)
+    imat = interaction_matrix(dm, sh, tel, src; amplitude=1e-8)
+    @test size(imat.matrix, 1) == length(sh.state.slopes)
+    @test size(imat.matrix, 2) == length(dm.state.coefs)
 end
 
 @testset "Zernike WFS" begin
@@ -3095,6 +3134,12 @@ end
     @test extended.n_samples == 25
     @test norm(extended.sh_spot_delta) > 1e-12
     @test norm(extended.pyramid_intensity_delta) > 1e-12
+
+    sh_subaps = run_tutorial_example("shack_hartmann_subapertures.jl")
+    @test sh_subaps.n_valid > 0
+    @test sh_subaps.calibrated
+    @test sh_subaps.metadata.n_valid_subap == sh_subaps.n_valid
+    @test all(isfinite, sh_subaps.slopes)
 
     spatial = run_tutorial_example("spatial_filter.jl")
     @test size(spatial.filtered_phase) == size(spatial.filtered_amplitude)

@@ -110,6 +110,11 @@ Project-wide units guidance lives in
 ## Wavefront sensing
 
 - `ShackHartmann`, `ShackHartmannParams`, `ShackHartmannState`
+- `SubapertureLayout`, `SubapertureCalibration`,
+  `AbstractSlopeExtractionModel`, `CenterOfGravityExtraction`
+- `subaperture_layout`, `subaperture_calibration`,
+  `slope_extraction_model`, `valid_subaperture_indices`,
+  `n_valid_subapertures`
 - `PyramidWFS`, `PyramidParams`, `PyramidState`
 - `BioEdgeWFS`, `BioEdgeParams`, `BioEdgeState`
 - `ZernikeWFS`, `ZernikeWFSParams`, `ZernikeWFSState`
@@ -261,6 +266,11 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   `CurvatureCountingReadout` for counting/channel-style readout.
 - `CurvatureBranchResponse` models reusable intra-/extra-focal throughput and
   background imbalance independently of any one instrument example.
+- `ShackHartmann` now exposes its maintained subaperture/calibration surface
+  through `SubapertureLayout` and `SubapertureCalibration`.
+- Grouped-runtime and detector-coupled Shack-Hartmann paths are expected to
+  share that layout/calibration contract rather than managing independent
+  valid-mask and reference-signal state.
 - `CurvatureWFS` also exposes detector-plane geometry controls through
   `readout_crop_resolution` and `readout_pixels_per_subap` so the exported frame
   sampling can be decoupled from the control-grid sampling.

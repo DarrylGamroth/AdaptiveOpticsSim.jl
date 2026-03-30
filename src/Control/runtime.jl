@@ -315,6 +315,14 @@ end
 
 @inline wfs_output_frame(wfs::AbstractWFS, det::AbstractDetector) = output_frame(det)
 @inline wfs_output_frame(wfs::ShackHartmann{<:Diffractive}, det::AbstractDetector) = wfs.state.spot_cube
+@inline wfs_output_metadata(wfs::ShackHartmann) = (
+    n_subap=subaperture_layout(wfs).n_subap,
+    n_valid_subap=n_valid_subapertures(subaperture_layout(wfs)),
+    subap_pixels=subaperture_layout(wfs).subap_pixels,
+    pitch_m=subaperture_layout(wfs).pitch_m,
+    slopes_units=subaperture_calibration(wfs).slopes_units,
+    calibrated=subaperture_calibration(wfs).calibrated,
+)
 @inline wfs_output_frame(wfs::ZernikeWFS, det::AbstractDetector) = wfs.state.camera_frame
 @inline wfs_output_frame(wfs::CurvatureWFS, det::AbstractDetector) = wfs.state.camera_frame
 @inline wfs_output_metadata(::AbstractWFS) = nothing

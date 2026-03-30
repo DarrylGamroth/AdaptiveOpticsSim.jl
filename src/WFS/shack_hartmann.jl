@@ -54,7 +54,9 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     Pi,
     PSi,
     K<:AbstractVector{T},
-    KF<:AbstractArray{Complex{T},3}}
+    KF<:AbstractArray{Complex{T},3},
+    L,
+    CAL}
     valid_mask::A
     slopes::V
     field::C
@@ -99,6 +101,8 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     calibrated::Bool
     calibration_wavelength::T
     calibration_signature::UInt
+    layout::L
+    calibration::CAL
 end
 
 struct ShackHartmann{M<:SensingMode,P<:ShackHartmannParams,S<:ShackHartmannState} <: AbstractWFS
@@ -167,6 +171,9 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     valid_mask_host = Matrix{Bool}(undef, n_subap, n_subap)
     reference_signal_host = Vector{T}(undef, 2 * n_subap * n_subap)
     centroid_host = Matrix{T}(undef, sub, sub)
+    reference_signal_2d = backend{T}(undef, 2 * n_subap, n_subap)
+    layout = SubapertureLayout(n_subap, tel.params.resolution, tel.params.diameter, threshold, valid_mask, valid_mask_host)
+    calibration = SubapertureCalibration(reference_signal_2d, reference_signal_host, CenterOfGravityExtraction(T(threshold_cog); T=T))
     state = ShackHartmannState{
         T,
         typeof(valid_mask),
@@ -187,6 +194,8 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         typeof(ifft_stack_plan),
         typeof(elongation_kernel),
         typeof(lgs_kernel_fft),
+        typeof(layout),
+        typeof(calibration),
     }(
         valid_mask,
         slopes,
@@ -214,7 +223,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         1,
         sub,
         T(NaN),
-        backend{T}(undef, 2 * n_subap, n_subap),
+        reference_signal_2d,
         fft_asterism_stack,
         intensity_asterism_stack,
         fft_asterism_plan,
@@ -232,6 +241,8 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         false,
         zero(T),
         UInt(0),
+        layout,
+        calibration,
     )
     wfs = ShackHartmann{typeof(mode), typeof(params), typeof(state)}(params, state)
     update_valid_mask!(wfs, tel)
@@ -239,10 +250,13 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
 end
 
 sensing_mode(::ShackHartmann{M}) where {M} = M()
+@inline subaperture_layout(wfs::ShackHartmann) = wfs.state.layout
+@inline subaperture_calibration(wfs::ShackHartmann) = wfs.state.calibration
+@inline slope_extraction_model(wfs::ShackHartmann) = slope_extraction_model(subaperture_calibration(wfs))
+@inline centroid_threshold(wfs::ShackHartmann) = slope_extraction_model(wfs).threshold
 
 function update_valid_mask!(wfs::ShackHartmann, tel::Telescope)
-    set_valid_subapertures!(wfs.state.valid_mask, tel.state.pupil, wfs.params.threshold)
-    copyto!(wfs.state.valid_mask_host, Array(wfs.state.valid_mask))
+    update_subaperture_layout!(subaperture_layout(wfs), tel.state.pupil)
     return wfs
 end
 
@@ -481,7 +495,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
     prepare_sampling!(wfs, tel, src)
     ensure_sh_calibration!(wfs, tel, src)
     peak = sampled_spots_peak!(wfs, tel, src)
-    sh_signal_from_spots!(wfs, peak, wfs.params.threshold_cog)
+    sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
     subtract_reference_and_scale!(wfs)
     return wfs.state.slopes
 end
@@ -492,7 +506,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Spectr
     prepare_sampling!(wfs, tel, ref)
     ensure_sh_calibration!(wfs, tel, src)
     peak = sampled_spots_peak!(wfs, tel, src)
-    sh_signal_from_spots!(wfs, peak, wfs.params.threshold_cog)
+    sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
     subtract_reference_and_scale!(wfs)
     return wfs.state.slopes
 end
@@ -517,7 +531,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
     prepare_sampling!(wfs, tel, src)
     ensure_sh_calibration!(wfs, tel, src)
     peak = sampled_spots_peak!(wfs, tel, src, det, rng)
-    sh_signal_from_spots!(wfs, peak, wfs.params.threshold_cog)
+    sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
     subtract_reference_and_scale!(wfs)
     return wfs.state.slopes
 end
@@ -529,7 +543,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Spectr
     prepare_sampling!(wfs, tel, ref)
     ensure_sh_calibration!(wfs, tel, src)
     peak = sampled_spots_peak!(wfs, tel, src, det, rng)
-    sh_signal_from_spots!(wfs, peak, wfs.params.threshold_cog)
+    sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
     subtract_reference_and_scale!(wfs)
     return wfs.state.slopes
 end
@@ -550,7 +564,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
     oy = div(pad - sub, 2)
     if sh_stacked_asterism_compatible(ast)
         peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.state.slopes), wfs, tel, ast)
-        sh_signal_from_spots!(wfs, peak, wfs.params.threshold_cog)
+        sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
         subtract_reference_and_scale!(wfs)
         return wfs.state.slopes
     end
@@ -577,7 +591,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
     oy = div(pad - sub, 2)
     if sh_stacked_asterism_compatible(ast)
         peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.state.slopes), wfs, tel, ast, det, rng)
-        sh_signal_from_spots!(wfs, peak, wfs.params.threshold_cog)
+        sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
         subtract_reference_and_scale!(wfs)
         return wfs.state.slopes
     end
@@ -1036,7 +1050,7 @@ function measure_sh_asterism_batched!(style::AcceleratorStyle, wfs::ShackHartman
         _sampled_spots_peak_source_batched!(style, wfs, tel, src)
         wfs.state.spot_cube_accum .+= wfs.state.spot_cube
         launch_kernel!(style, sh_spot_centroid_stats_kernel!, wfs.state.spot_stats, wfs.state.spot_cube,
-            wfs.state.valid_mask, wfs.params.threshold_cog, n_sub, size(wfs.state.spot_cube, 2),
+            wfs.state.valid_mask, centroid_threshold(wfs), n_sub, size(wfs.state.spot_cube, 2),
             size(wfs.state.spot_cube, 3); ndrange=n_spots)
         launch_kernel!(style, accumulate_spot_stats_kernel!, wfs.state.spot_stats_accum,
             wfs.state.spot_stats, n_spots; ndrange=3 * n_spots)
@@ -1060,7 +1074,7 @@ function measure_sh_asterism_batched!(style::AcceleratorStyle, wfs::ShackHartman
         _sampled_spots_peak_source_batched!(style, wfs, tel, src, det, rng)
         wfs.state.spot_cube_accum .+= wfs.state.spot_cube
         launch_kernel!(style, sh_spot_centroid_stats_kernel!, wfs.state.spot_stats, wfs.state.spot_cube,
-            wfs.state.valid_mask, wfs.params.threshold_cog, n_sub, size(wfs.state.spot_cube, 2),
+            wfs.state.valid_mask, centroid_threshold(wfs), n_sub, size(wfs.state.spot_cube, 2),
             size(wfs.state.spot_cube, 3); ndrange=n_spots)
         launch_kernel!(style, accumulate_spot_stats_kernel!, wfs.state.spot_stats_accum,
             wfs.state.spot_stats, n_spots; ndrange=3 * n_spots)
@@ -1188,6 +1202,10 @@ end
 
 @inline function centroid_from_spot!(wfs::ShackHartmann, intensity::AbstractMatrix{T}, threshold::T) where {T<:AbstractFloat}
     return centroid_from_spot!(execution_style(intensity), wfs, intensity, threshold)
+end
+
+@inline function centroid_from_spot!(wfs::ShackHartmann, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
+    return centroid_from_spot!(wfs, intensity, centroid_threshold(wfs))
 end
 
 @inline function centroid_from_spot!(::ScalarCPUStyle, ::ShackHartmann, intensity::AbstractMatrix{T}, threshold::T) where {T<:AbstractFloat}
@@ -1622,6 +1640,10 @@ function sh_signal_from_spots!(wfs::ShackHartmann, peak::T, threshold::T) where 
     return sh_signal_from_spots!(wfs, cutoff)
 end
 
+function sh_signal_from_spots!(wfs::ShackHartmann, peak::T, extraction::CenterOfGravityExtraction{T}) where {T<:AbstractFloat}
+    return sh_signal_from_spots!(wfs, centroid_cutoff(extraction, peak))
+end
+
 function mean_valid_signal(signal::AbstractVector{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
     return mean_valid_signal(execution_style(signal), signal, valid_mask)
 end
@@ -1690,7 +1712,7 @@ function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
     spot = sample_spot!(wfs, wfs.state.intensity)
     copyto!(sh_spot_view(wfs, idx), spot)
-    return centroid_from_spot!(wfs, spot, wfs.params.threshold_cog)
+    return centroid_from_spot!(wfs, spot)
 end
 
 function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
@@ -1699,7 +1721,7 @@ function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
     apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
     spot = sample_spot!(wfs, wfs.state.intensity)
     copyto!(sh_spot_view(wfs, idx), spot)
-    return centroid_from_spot!(wfs, spot, wfs.params.threshold_cog)
+    return centroid_from_spot!(wfs, spot)
 end
 
 function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
@@ -1709,7 +1731,7 @@ function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     spot = sample_spot!(wfs, wfs.state.intensity)
     frame = capture!(det, spot; rng=rng)
     copyto!(sh_spot_view(wfs, idx), frame)
-    return centroid_from_spot!(wfs, frame, wfs.params.threshold_cog)
+    return centroid_from_spot!(wfs, frame)
 end
 
 function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
@@ -1720,14 +1742,13 @@ function centroid_sums!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
     spot = sample_spot!(wfs, wfs.state.intensity)
     frame = capture!(det, spot; rng=rng)
     copyto!(sh_spot_view(wfs, idx), frame)
-    return centroid_from_spot!(wfs, frame, wfs.params.threshold_cog)
+    return centroid_from_spot!(wfs, frame)
 end
 
 function sh_reference_signal!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
     peak = sampled_spots_peak!(wfs, tel, src)
-    sh_signal_from_spots!(wfs, peak, wfs.params.threshold_cog)
-    copyto!(wfs.state.reference_signal_2d, wfs.state.slopes)
-    copyto!(wfs.state.reference_signal_host, vec(Array(wfs.state.reference_signal_2d)))
+    sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
+    set_reference_signal!(subaperture_calibration(wfs), reshape(wfs.state.slopes, size(wfs.state.reference_signal_2d)))
     return wfs
 end
 
@@ -1750,7 +1771,7 @@ function ensure_sh_calibration!(wfs::ShackHartmann, tel::Telescope, src::Abstrac
     scale = T(T(tel.params.diameter) * pixel_scale / (T(2π) * rad2arcsec))
     fill_calibration_ramp!(execution_style(tel.state.opd), tel.state.opd, scale, n)
     peak = sampled_spots_peak!(wfs, tel, src)
-    sh_signal_from_spots!(wfs, peak, wfs.params.threshold_cog)
+    sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
     subtract_reference!(wfs)
     wfs.state.slopes_units = mean_valid_signal(wfs.state.slopes, wfs.state.valid_mask)
     if !isfinite(wfs.state.slopes_units) || wfs.state.slopes_units == zero(T)
@@ -1760,6 +1781,11 @@ function ensure_sh_calibration!(wfs::ShackHartmann, tel::Telescope, src::Abstrac
     wfs.state.calibrated = true
     wfs.state.calibration_wavelength = λ
     wfs.state.calibration_signature = sig
+    set_calibration_state!(subaperture_calibration(wfs);
+        slopes_units=wfs.state.slopes_units,
+        calibrated=wfs.state.calibrated,
+        wavelength=wfs.state.calibration_wavelength,
+        signature=wfs.state.calibration_signature)
     return wfs
 end
 
