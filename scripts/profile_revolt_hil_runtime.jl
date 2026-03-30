@@ -125,19 +125,14 @@ function _propagate_atmosphere!(runtime)
 end
 
 function _sync_profile_state!(backend_tag, runtime)
-    _sync_backend!(backend_tag, runtime.telescope.state.opd)
-    _sync_backend!(backend_tag, runtime.dm.state.coefs)
-    _sync_backend!(backend_tag, runtime.wfs.state.slopes)
+    # The real external boundary is the detector pixel output. Synchronizing the
+    # final detector frame is sufficient to fence the full step on the backend
+    # stream without separately synchronizing internal telescope/DM/WFS buffers.
     _sync_backend!(backend_tag, output_frame(runtime.wfs_detector))
     return nothing
 end
 
-function _wfs_internal_frame(runtime)
-    if runtime.wfs_family === :shack_hartmann
-        return runtime.wfs.state.spot_cube
-    end
-    return runtime.wfs.state.camera_frame
-end
+_wfs_frame(runtime) = AdaptiveOpticsSim.wfs_output_frame(runtime.wfs, runtime.wfs_detector)
 
 function _phase_step!(runtime, backend_tag; phase_index::Int=1)
     advance!(runtime.atmosphere, runtime.telescope; rng=runtime.rng)
@@ -156,8 +151,14 @@ function _report_profile(runtime, backend_label::AbstractString, response_mode::
     wfs_metadata = detector_export_metadata(runtime.wfs_detector)
     science_metadata = detector_export_metadata(runtime.science_detector)
     gain_metadata = isnothing(runtime.gain_detector) ? nothing : detector_export_metadata(runtime.gain_detector)
-    internal_frame = _wfs_internal_frame(runtime)
+    wfs_frame = _wfs_frame(runtime)
     wfs_camera = runtime.camera_configs[runtime.wfs_detector_name]
+    wfs_reference_frame = detector_reference_frame(runtime.wfs_detector)
+    wfs_signal_frame = detector_signal_frame(runtime.wfs_detector)
+    wfs_combined_frame = detector_combined_frame(runtime.wfs_detector)
+    wfs_reference_cube = detector_reference_cube(runtime.wfs_detector)
+    wfs_signal_cube = detector_signal_cube(runtime.wfs_detector)
+    wfs_read_cube = detector_read_cube(runtime.wfs_detector)
 
     println("revolt_hil_runtime_profile")
     println("  backend: ", backend_label)
@@ -184,8 +185,14 @@ function _report_profile(runtime, backend_label::AbstractString, response_mode::
     println("  source_band: ", runtime.sky_source.params.band)
     println("  effective_sky_magnitude: ", runtime.sky_source.params.magnitude)
     println("  effective_calibration_magnitude: ", runtime.calibration_source.params.magnitude)
-    println("  internal_wfs_frame_shape: ", size(internal_frame))
+    println("  wfs_frame_shape: ", size(wfs_frame))
     println("  detector_output_shape: ", size(output_frame(runtime.wfs_detector)))
+    println("  wfs_reference_frame_shape: ", isnothing(wfs_reference_frame) ? nothing : size(wfs_reference_frame))
+    println("  wfs_signal_frame_shape: ", isnothing(wfs_signal_frame) ? nothing : size(wfs_signal_frame))
+    println("  wfs_combined_frame_shape: ", isnothing(wfs_combined_frame) ? nothing : size(wfs_combined_frame))
+    println("  wfs_reference_cube_shape: ", isnothing(wfs_reference_cube) ? nothing : size(wfs_reference_cube))
+    println("  wfs_signal_cube_shape: ", isnothing(wfs_signal_cube) ? nothing : size(wfs_signal_cube))
+    println("  wfs_read_cube_shape: ", isnothing(wfs_read_cube) ? nothing : size(wfs_read_cube))
     println("  build_time_ns: ", build_time_ns)
     println("  atmosphere_mean_ns: ", atmosphere_mean_ns)
     println("  atmosphere_p95_ns: ", atmosphere_p95_ns)

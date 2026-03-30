@@ -115,6 +115,35 @@ end
     end
 end
 
+@kernel function pyramid_embed_field_kernel!(field, pupil, modulation_phase, opd, amp_scale, opd_to_cycles,
+    ox::Int, oy::Int, n::Int, pad1::Int, pad2::Int)
+    i, j = @index(Global, NTuple)
+    if i <= pad1 && j <= pad2
+        ii = i - ox
+        jj = j - oy
+        if 1 <= ii <= n && 1 <= jj <= n && @inbounds(pupil[ii, jj])
+            phase = cispi(opd_to_cycles * @inbounds(opd[ii, jj]))
+            @inbounds field[i, j] = amp_scale * @inbounds(modulation_phase[ii, jj]) * phase
+        else
+            @inbounds field[i, j] = zero(eltype(field))
+        end
+    end
+end
+
+@kernel function complex_mul_inplace_kernel!(dest, factors, n1::Int, n2::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n1 && j <= n2
+        @inbounds dest[i, j] *= factors[i, j]
+    end
+end
+
+@kernel function accumulate_abs2_kernel!(out, field, n1::Int, n2::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n1 && j <= n2
+        @inbounds out[i, j] += abs2(field[i, j])
+    end
+end
+
 struct PyramidParams{T<:AbstractFloat,M,N<:WFSNormalization}
     n_subap::Int
     threshold::T
@@ -1001,6 +1030,11 @@ function _build_pyramid_mask!(style::AcceleratorStyle, mask::AbstractMatrix{Comp
 end
 
 function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::Telescope, src::AbstractSource) where {T<:AbstractFloat}
+    return pyramid_intensity_core!(execution_style(out), out, wfs, tel, src)
+end
+
+function pyramid_intensity_core!(::ScalarCPUStyle, out::AbstractMatrix{T}, wfs::PyramidWFS,
+    tel::Telescope, src::AbstractSource) where {T<:AbstractFloat}
     prepare_pyramid_sampling!(wfs, tel)
     n = tel.params.resolution
     pad = size(wfs.state.field, 1)
@@ -1032,6 +1066,48 @@ function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::T
         @. wfs.state.temp = abs2(wfs.state.pupil_field)
         out .+= wfs.state.temp
     end
+    return out
+end
+
+function pyramid_intensity_core!(style::AcceleratorStyle, out::AbstractMatrix{T}, wfs::PyramidWFS,
+    tel::Telescope, src::AbstractSource) where {T<:AbstractFloat}
+    prepare_pyramid_sampling!(wfs, tel)
+    n = tel.params.resolution
+    pad1, pad2 = size(wfs.state.field)
+    ox = div(pad1 - n, 2)
+    oy = div(pad2 - n, 2)
+    opd_to_cycles = T(2) / wavelength(src)
+    amp_scale = sqrt(T(
+        photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2 /
+        wfs.params.modulation_points
+    ))
+
+    fill!(out, zero(T))
+    for p in 1:wfs.params.modulation_points
+        modulation_phase = @view wfs.state.modulation_phases[:, :, p]
+        launch_kernel_async!(style, pyramid_embed_field_kernel!, wfs.state.field, tel.state.pupil,
+            modulation_phase, tel.state.opd, amp_scale, opd_to_cycles, ox, oy, n, pad1, pad2;
+            ndrange=size(wfs.state.field))
+        copyto!(wfs.state.focal_field, wfs.state.field)
+        if wfs.params.psf_centering
+            launch_kernel_async!(style, complex_mul_inplace_kernel!, wfs.state.focal_field, wfs.state.phasor,
+                pad1, pad2; ndrange=size(wfs.state.focal_field))
+            execute_fft_plan!(wfs.state.focal_field, wfs.state.fft_plan)
+            copyto!(wfs.state.pupil_field, wfs.state.focal_field)
+            launch_kernel_async!(style, complex_mul_inplace_kernel!, wfs.state.pupil_field, wfs.state.pyramid_mask,
+                pad1, pad2; ndrange=size(wfs.state.pupil_field))
+            execute_fft_plan!(wfs.state.pupil_field, wfs.state.ifft_plan)
+        else
+            execute_fft_plan!(wfs.state.focal_field, wfs.state.fft_plan)
+            fftshift2d!(wfs.state.pupil_field, wfs.state.focal_field)
+            launch_kernel_async!(style, complex_mul_inplace_kernel!, wfs.state.pupil_field, wfs.state.pyramid_mask,
+                pad1, pad2; ndrange=size(wfs.state.pupil_field))
+            execute_fft_plan!(wfs.state.pupil_field, wfs.state.ifft_plan)
+        end
+        launch_kernel_async!(style, accumulate_abs2_kernel!, out, wfs.state.pupil_field, pad1, pad2;
+            ndrange=size(out))
+    end
+    synchronize_backend!(style)
     return out
 end
 
