@@ -92,16 +92,21 @@ end
 
 function _build_slices(atm, tel::Telescope, src::AbstractSource, zero_padding::Int,
     ::Type{T}, model::AbstractAtmosphericFieldModel) where {T<:AbstractFloat}
-    slices = Vector{Any}(undef, 1)
-    slices[1] = _build_field_slice(atm, tel, src, zero_padding, T, model)
+    slice = _build_field_slice(atm, tel, src, zero_padding, T, model)
+    slices = Vector{typeof(slice)}(undef, 1)
+    slices[1] = slice
     return slices
 end
 
 function _build_slices(atm, tel::Telescope, src::SpectralSource, zero_padding::Int,
     ::Type{T}, model::AbstractAtmosphericFieldModel) where {T<:AbstractFloat}
     bundle = spectral_bundle(src)
-    slices = Vector{Any}(undef, length(bundle))
-    @inbounds for i in eachindex(bundle.samples)
+    first_sample = bundle.samples[1]
+    first_src = source_with_wavelength_and_flux(src, first_sample.wavelength, T(photon_flux(src) * first_sample.weight))
+    first_slice = _build_field_slice(atm, tel, first_src, zero_padding, T, model)
+    slices = Vector{typeof(first_slice)}(undef, length(bundle))
+    slices[1] = first_slice
+    @inbounds for i in 2:length(bundle)
         sample = bundle.samples[i]
         sample_src = source_with_wavelength_and_flux(src, sample.wavelength, T(photon_flux(src) * sample.weight))
         slices[i] = _build_field_slice(atm, tel, sample_src, zero_padding, T, model)

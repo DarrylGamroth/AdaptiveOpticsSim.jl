@@ -185,6 +185,8 @@ mutable struct CurvatureWFSState{
     effective_padding::Int
     calibrated::Bool
     calibration_wavelength::T
+    atmospheric_propagation::Any
+    atmospheric_signature::UInt
 end
 
 struct CurvatureWFS{P<:CurvatureWFSParams,S<:CurvatureWFSState} <: AbstractWFS
@@ -292,6 +294,8 @@ function CurvatureWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, defocus
         diffraction_padding,
         false,
         zero(T),
+        nothing,
+        zero(UInt),
     )
     wfs = CurvatureWFS{typeof(params),typeof(state)}(params, state)
     update_valid_mask!(wfs, tel)
@@ -346,10 +350,42 @@ function ensure_curvature_buffers!(wfs::CurvatureWFS, tel::Telescope)
         wfs.state.fft_stack_plan = plan_fft_backend!(wfs.state.field_stack, (1, 2))
         wfs.state.effective_padding = wfs.params.diffraction_padding
         wfs.state.calibrated = false
+        wfs.state.atmospheric_propagation = nothing
+        wfs.state.atmospheric_signature = zero(UInt)
         build_curvature_phasor!(wfs.state.phasor)
         build_curvature_defocus_masks!(wfs, tel)
     end
     return wfs
+end
+
+function curvature_atmospheric_signature(wfs::CurvatureWFS, tel::Telescope, src::AbstractSource,
+    atm::AbstractAtmosphere, model::AbstractAtmosphericFieldModel)
+    return hash((
+        typeof(atm),
+        typeof(src),
+        source_measurement_signature(src),
+        typeof(model),
+        tel.params.resolution,
+        tel.params.diameter,
+        wfs.params.diffraction_padding,
+        length(atm.layers),
+    ))
+end
+
+function ensure_curvature_atmospheric_propagation!(wfs::CurvatureWFS, tel::Telescope, src::AbstractSource,
+    atm::AbstractAtmosphere, model::AbstractAtmosphericFieldModel)
+    sig = curvature_atmospheric_signature(wfs, tel, src, atm, model)
+    cache = wfs.state.atmospheric_propagation
+    if cache isa AtmosphericFieldPropagation && wfs.state.atmospheric_signature == sig
+        return cache
+    end
+    prop = AtmosphericFieldPropagation(atm, tel, src;
+        model=model,
+        zero_padding=wfs.params.diffraction_padding,
+        T=eltype(wfs.state.frame_plus))
+    wfs.state.atmospheric_propagation = prop
+    wfs.state.atmospheric_signature = sig
+    return prop
 end
 
 function build_curvature_phasor!(phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
@@ -531,11 +567,7 @@ end
 function curvature_intensity!(wfs::CurvatureWFS, tel::Telescope, src::AbstractSource, atm::AbstractAtmosphere;
     propagation::Union{Nothing,AtmosphericFieldPropagation}=nothing,
     model::AbstractAtmosphericFieldModel=LayeredFresnelAtmosphericPropagation(T=eltype(wfs.state.frame_plus)))
-    T = eltype(wfs.state.frame_plus)
-    prop = isnothing(propagation) ? AtmosphericFieldPropagation(atm, tel, src;
-        model=model,
-        zero_padding=wfs.params.diffraction_padding,
-        T=T) : propagation
+    prop = isnothing(propagation) ? ensure_curvature_atmospheric_propagation!(wfs, tel, src, atm, model) : propagation
     field = propagate_atmosphere_field!(prop, atm, tel, src)
     return curvature_intensity_from_field!(wfs, tel, field)
 end
