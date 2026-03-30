@@ -145,6 +145,18 @@ function fill_telescope_field!(out::AbstractMatrix{Complex{T}}, tel::Telescope, 
     return out
 end
 
+function fill_telescope_field_async!(out::AbstractMatrix{Complex{T}}, tel::Telescope, src::AbstractSource;
+    zero_padding::Int=1,
+    center_even_grid::Bool=true) where {T<:AbstractFloat}
+    zero_padding >= 1 || throw(InvalidConfiguration("zero_padding must be >= 1"))
+    n = tel.params.resolution
+    n_pad = n * zero_padding
+    size(out) == (n_pad, n_pad) ||
+        throw(DimensionMismatchError("electric field size must match telescope resolution * zero_padding"))
+    _fill_telescope_field_async!(execution_style(out), out, tel, src, zero_padding, center_even_grid)
+    return out
+end
+
 function _fill_telescope_field!(::ScalarCPUStyle, out::AbstractMatrix{Complex{T}}, tel::Telescope, src::AbstractSource,
     zero_padding::Int, center_even_grid::Bool) where {T<:AbstractFloat}
     n = tel.params.resolution
@@ -174,6 +186,24 @@ function _fill_telescope_field!(style::AcceleratorStyle, out::AbstractMatrix{Com
     return out
 end
 
+function _fill_telescope_field_async!(::ScalarCPUStyle, out::AbstractMatrix{Complex{T}}, tel::Telescope, src::AbstractSource,
+    zero_padding::Int, center_even_grid::Bool) where {T<:AbstractFloat}
+    return _fill_telescope_field!(ScalarCPUStyle(), out, tel, src, zero_padding, center_even_grid)
+end
+
+function _fill_telescope_field_async!(style::AcceleratorStyle, out::AbstractMatrix{Complex{T}}, tel::Telescope, src::AbstractSource,
+    zero_padding::Int, center_even_grid::Bool) where {T<:AbstractFloat}
+    n = tel.params.resolution
+    n_pad = n * zero_padding
+    opd_to_cycles = T(2) / T(wavelength(src))
+    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
+    ox, oy = field_embedding_offsets(n, n_pad)
+    phase_shift = center_even_grid && iseven(n_pad) ? -T(pi) * (T(n_pad) + one(T)) / T(n_pad) : zero(T)
+    launch_kernel_async!(style, fill_telescope_field_kernel!, out, tel.state.pupil_reflectivity, tel.state.opd, phase_shift,
+        amp_scale, opd_to_cycles, ox, oy, n, n_pad, center_even_grid && iseven(n_pad); ndrange=size(out))
+    return out
+end
+
 function fill_from_telescope!(ef::ElectricField, tel::Telescope, src::AbstractSource)
     wavelength(src) == ef.params.wavelength ||
         throw(InvalidConfiguration("source wavelength must match ElectricField wavelength"))
@@ -181,6 +211,16 @@ function fill_from_telescope!(ef::ElectricField, tel::Telescope, src::AbstractSo
         throw(DimensionMismatchError("ElectricField resolution must match telescope resolution"))
     ensure_field_buffers!(ef)
     fill_telescope_field!(ef.state.field, tel, src; zero_padding=ef.params.zero_padding)
+    return ef
+end
+
+function fill_from_telescope_async!(ef::ElectricField, tel::Telescope, src::AbstractSource)
+    wavelength(src) == ef.params.wavelength ||
+        throw(InvalidConfiguration("source wavelength must match ElectricField wavelength"))
+    tel.params.resolution == ef.params.resolution ||
+        throw(DimensionMismatchError("ElectricField resolution must match telescope resolution"))
+    ensure_field_buffers!(ef)
+    fill_telescope_field_async!(ef.state.field, tel, src; zero_padding=ef.params.zero_padding)
     return ef
 end
 
@@ -197,6 +237,11 @@ end
 
 function apply_phase!(field::ElectricField, phase_or_opd::AbstractMatrix; units::Symbol=:opd)
     _apply_phase!(execution_style(field.state.field), field, phase_or_opd, units)
+    return field
+end
+
+function apply_phase_async!(field::ElectricField, phase_or_opd::AbstractMatrix; units::Symbol=:opd)
+    _apply_phase_async!(execution_style(field.state.field), field, phase_or_opd, units)
     return field
 end
 
@@ -234,6 +279,26 @@ function _apply_phase!(style::AcceleratorStyle, field::ElectricField, phase_or_o
         return field
     elseif units === :phase
         launch_kernel!(style, apply_phase_rad_kernel!, field.state.field, phase_or_opd,
+            ox, oy, field.params.resolution, full_field; ndrange=size(phase_or_opd))
+        return field
+    end
+    throw(InvalidConfiguration("units must be :opd or :phase"))
+end
+
+function _apply_phase_async!(::ScalarCPUStyle, field::ElectricField, phase_or_opd::AbstractMatrix, units::Symbol)
+    return _apply_phase!(ScalarCPUStyle(), field, phase_or_opd, units)
+end
+
+function _apply_phase_async!(style::AcceleratorStyle, field::ElectricField, phase_or_opd::AbstractMatrix, units::Symbol)
+    full_field, ox, oy = _phase_target_layout(field, phase_or_opd)
+    if units === :opd
+        T = eltype(field.state.intensity)
+        opd_to_cycles = T(2) / field.params.wavelength
+        launch_kernel_async!(style, apply_phase_opd_kernel!, field.state.field, phase_or_opd, opd_to_cycles,
+            ox, oy, field.params.resolution, full_field; ndrange=size(phase_or_opd))
+        return field
+    elseif units === :phase
+        launch_kernel_async!(style, apply_phase_rad_kernel!, field.state.field, phase_or_opd,
             ox, oy, field.params.resolution, full_field; ndrange=size(phase_or_opd))
         return field
     end

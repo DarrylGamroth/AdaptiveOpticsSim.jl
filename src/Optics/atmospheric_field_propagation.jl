@@ -147,23 +147,27 @@ end
 
 function _propagate_slice_geometric!(slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
     atm, tel::Telescope) where {T<:AbstractFloat}
-    fill_from_telescope!(slice.field, tel, slice.source)
+    style = execution_style(slice.field.state.field)
+    fill_from_telescope_async!(slice.field, tel, slice.source)
     @inbounds for idx in prop.params.layer_order
         layer = atm.layers[idx]
         _render_layer_phase!(slice.phase_buffer, layer, tel, slice.source, prop.params.model, slice.field.params.wavelength)
-        apply_phase!(slice.field, slice.phase_buffer; units=:opd)
+        apply_phase_async!(slice.field, slice.phase_buffer; units=:opd)
     end
+    synchronize_backend!(style)
     return slice.field
 end
 
 function _propagate_slice_fresnel!(slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
     atm, tel::Telescope) where {T<:AbstractFloat}
-    fill_from_telescope!(slice.field, tel, slice.source)
+    style = execution_style(slice.field.state.field)
+    fill_from_telescope_async!(slice.field, tel, slice.source)
     @inbounds for k in eachindex(prop.params.layer_order)
         idx = prop.params.layer_order[k]
         layer = atm.layers[idx]
         _render_layer_phase!(slice.phase_buffer, layer, tel, slice.source, prop.params.model, slice.field.params.wavelength)
-        apply_phase!(slice.field, slice.phase_buffer; units=:opd)
+        apply_phase_async!(slice.field, slice.phase_buffer; units=:opd)
+        synchronize_backend!(style)
         local propagator = slice.propagators[k]
         isnothing(propagator) || propagate_field!(slice.field, propagator)
     end
