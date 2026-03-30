@@ -183,6 +183,12 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   `DMReplace()` semantics.
 - Shape mismatches should raise structured errors rather than silently resizing
   or clipping.
+- The maintained wave-optics field surface is `ElectricField`, which is a
+  derived propagation object rather than the primary telescope plant state.
+- `ElectricField` implementations/builders are expected to provide:
+  `fill_from_telescope!`, `apply_phase!`, `apply_amplitude!`, and `intensity!`.
+- Runtime OPD remains in meters on `Telescope.state.opd`; field-phase
+  conversion is explicit and wavelength-aware at the field boundary.
 
 ### `IF-SRC`: sources
 

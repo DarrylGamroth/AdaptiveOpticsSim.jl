@@ -37,6 +37,29 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
         return psf
     end
 
+    record_gpu_smoke!(failures, "electric_field_core") do
+        field = ElectricField(tel, src; zero_padding=2, T=T)
+        @assert field.state.field isa BackendArray
+        @assert field.state.fft_buffer isa BackendArray
+        @assert field.state.intensity isa BackendArray
+        intensity = intensity!(field)
+        @assert intensity isa BackendArray
+
+        amplitude = similar(tel.state.opd, T, tel.params.resolution, tel.params.resolution)
+        fill!(amplitude, T(0.5))
+        apply_amplitude!(field, amplitude)
+        intensity!(field)
+        @assert field.state.intensity isa BackendArray
+
+        field2 = ElectricField(tel, src; zero_padding=2, T=T)
+        psf_from_field = similar(field2.state.intensity)
+        AdaptiveOpticsSim.centered_psf_from_field!(psf_from_field, field2)
+        psf = compute_psf!(tel, src; zero_padding=2)
+        rel = maximum(abs.(Array(psf_from_field) .- Array(psf))) / max(maximum(abs.(Array(psf))), eps(Float64))
+        @assert rel < 1f-5
+        return field.state.intensity
+    end
+
     record_gpu_smoke!(failures, "psf_asterism") do
         ast = Asterism([
             Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0)),
