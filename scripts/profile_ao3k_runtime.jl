@@ -145,7 +145,7 @@ function _ao3k_scale_params(scale_name::AbstractString)
     return (
         scale=scale,
         kwargs=(
-            resolution=224,
+            resolution=240,
             n_subap=40,
             n_control_modes=2048,
             control_grid_side=56,
