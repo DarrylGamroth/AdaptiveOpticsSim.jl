@@ -193,7 +193,7 @@ function atmospheric_intensity!(out::AbstractMatrix{T}, prop::AtmosphericFieldPr
     propagated = propagate_atmosphere_field!(prop, atm, tel, src)
     size(out) == size(propagated.state.field) ||
         throw(DimensionMismatchError("atmospheric intensity output must match propagated field size"))
-    @. out = abs2(propagated.state.field)
+    intensity!(out, propagated)
     return out
 end
 
@@ -209,7 +209,7 @@ function atmospheric_intensity!(out::AbstractMatrix{T}, prop::AtmosphericFieldPr
         else
             _propagate_slice_fresnel!(slice, prop, atm, tel)
         end
-        out .+= abs2.(slice.field.state.field)
+        accumulate_intensity!(out, slice.field)
     end
     return out
 end

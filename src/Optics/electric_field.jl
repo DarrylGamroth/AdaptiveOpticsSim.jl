@@ -1,3 +1,62 @@
+@kernel function fill_telescope_field_kernel!(out, pupil_reflectivity, opd, phase_shift, amp_scale,
+    opd_to_cycles, ox::Int, oy::Int, n::Int, n_pad::Int, center_even_grid::Bool)
+    i, j = @index(Global, NTuple)
+    if i <= n_pad && j <= n_pad
+        xi = i - ox
+        yj = j - oy
+        val = zero(eltype(out))
+        if 1 <= xi <= n && 1 <= yj <= n
+            @inbounds val = amp_scale * sqrt(pupil_reflectivity[xi, yj]) * cispi(opd_to_cycles * opd[xi, yj])
+        end
+        if center_even_grid
+            val *= cis(phase_shift * (i + j - 2))
+        end
+        @inbounds out[i, j] = val
+    end
+end
+
+@kernel function apply_phase_opd_kernel!(field, phase_or_opd, opd_to_cycles, ox::Int, oy::Int, n::Int,
+    full_field::Bool)
+    i, j = @index(Global, NTuple)
+    if i <= size(phase_or_opd, 1) && j <= size(phase_or_opd, 2)
+        fi = full_field ? i : i + ox
+        fj = full_field ? j : j + oy
+        @inbounds field[fi, fj] *= cispi(opd_to_cycles * phase_or_opd[i, j])
+    end
+end
+
+@kernel function apply_phase_rad_kernel!(field, phase_or_opd, ox::Int, oy::Int, n::Int, full_field::Bool)
+    i, j = @index(Global, NTuple)
+    if i <= size(phase_or_opd, 1) && j <= size(phase_or_opd, 2)
+        fi = full_field ? i : i + ox
+        fj = full_field ? j : j + oy
+        @inbounds field[fi, fj] *= cis(phase_or_opd[i, j])
+    end
+end
+
+@kernel function apply_amplitude_kernel!(field, amplitude, ox::Int, oy::Int, n::Int, full_field::Bool)
+    i, j = @index(Global, NTuple)
+    if i <= size(amplitude, 1) && j <= size(amplitude, 2)
+        fi = full_field ? i : i + ox
+        fj = full_field ? j : j + oy
+        @inbounds field[fi, fj] *= amplitude[i, j]
+    end
+end
+
+@kernel function intensity_kernel!(out, field, n::Int, m::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= m
+        @inbounds out[i, j] = abs2(field[i, j])
+    end
+end
+
+@kernel function accumulate_abs2_kernel!(out, field, n::Int, m::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= m
+        @inbounds out[i, j] += abs2(field[i, j])
+    end
+end
+
 struct ElectricFieldParams{T<:AbstractFloat}
     resolution::Int
     padded_resolution::Int
@@ -82,6 +141,14 @@ function fill_telescope_field!(out::AbstractMatrix{Complex{T}}, tel::Telescope, 
     size(out) == (n_pad, n_pad) ||
         throw(DimensionMismatchError("electric field size must match telescope resolution * zero_padding"))
 
+    _fill_telescope_field!(execution_style(out), out, tel, src, zero_padding, center_even_grid)
+    return out
+end
+
+function _fill_telescope_field!(::ScalarCPUStyle, out::AbstractMatrix{Complex{T}}, tel::Telescope, src::AbstractSource,
+    zero_padding::Int, center_even_grid::Bool) where {T<:AbstractFloat}
+    n = tel.params.resolution
+    n_pad = n * zero_padding
     fill!(out, zero(eltype(out)))
     opd_to_cycles = T(2) / T(wavelength(src))
     amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
@@ -89,8 +156,21 @@ function fill_telescope_field!(out::AbstractMatrix{Complex{T}}, tel::Telescope, 
     @views @. out[ox+1:ox+n, oy+1:oy+n] = amp_scale * sqrt(tel.state.pupil_reflectivity) * cispi(opd_to_cycles * tel.state.opd)
     if center_even_grid && iseven(n_pad)
         phase_shift = -T(pi) * (T(n_pad) + one(T)) / T(n_pad)
-        apply_centering_phase!(execution_style(out), out, phase_shift)
+        apply_centering_phase!(ScalarCPUStyle(), out, phase_shift)
     end
+    return out
+end
+
+function _fill_telescope_field!(style::AcceleratorStyle, out::AbstractMatrix{Complex{T}}, tel::Telescope, src::AbstractSource,
+    zero_padding::Int, center_even_grid::Bool) where {T<:AbstractFloat}
+    n = tel.params.resolution
+    n_pad = n * zero_padding
+    opd_to_cycles = T(2) / T(wavelength(src))
+    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
+    ox, oy = field_embedding_offsets(n, n_pad)
+    phase_shift = center_even_grid && iseven(n_pad) ? -T(pi) * (T(n_pad) + one(T)) / T(n_pad) : zero(T)
+    launch_kernel!(style, fill_telescope_field_kernel!, out, tel.state.pupil_reflectivity, tel.state.opd, phase_shift,
+        amp_scale, opd_to_cycles, ox, oy, n, n_pad, center_even_grid && iseven(n_pad); ndrange=size(out))
     return out
 end
 
@@ -116,6 +196,21 @@ function field_target_view(field::ElectricField, input::AbstractMatrix)
 end
 
 function apply_phase!(field::ElectricField, phase_or_opd::AbstractMatrix; units::Symbol=:opd)
+    _apply_phase!(execution_style(field.state.field), field, phase_or_opd, units)
+    return field
+end
+
+function _phase_target_layout(field::ElectricField, input::AbstractMatrix)
+    if size(input) == size(field.state.field)
+        return true, 0, 0
+    elseif size(input) == (field.params.resolution, field.params.resolution)
+        ox, oy = field_embedding_offsets(field.params.resolution, field.params.padded_resolution)
+        return false, ox, oy
+    end
+    throw(DimensionMismatchError("field map size must match the active pupil or full padded field"))
+end
+
+function _apply_phase!(::ScalarCPUStyle, field::ElectricField, phase_or_opd::AbstractMatrix, units::Symbol)
     target = field_target_view(field, phase_or_opd)
     if units === :opd
         T = eltype(field.state.intensity)
@@ -129,16 +224,71 @@ function apply_phase!(field::ElectricField, phase_or_opd::AbstractMatrix; units:
     throw(InvalidConfiguration("units must be :opd or :phase"))
 end
 
+function _apply_phase!(style::AcceleratorStyle, field::ElectricField, phase_or_opd::AbstractMatrix, units::Symbol)
+    full_field, ox, oy = _phase_target_layout(field, phase_or_opd)
+    if units === :opd
+        T = eltype(field.state.intensity)
+        opd_to_cycles = T(2) / field.params.wavelength
+        launch_kernel!(style, apply_phase_opd_kernel!, field.state.field, phase_or_opd, opd_to_cycles,
+            ox, oy, field.params.resolution, full_field; ndrange=size(phase_or_opd))
+        return field
+    elseif units === :phase
+        launch_kernel!(style, apply_phase_rad_kernel!, field.state.field, phase_or_opd,
+            ox, oy, field.params.resolution, full_field; ndrange=size(phase_or_opd))
+        return field
+    end
+    throw(InvalidConfiguration("units must be :opd or :phase"))
+end
+
 function apply_amplitude!(field::ElectricField, amplitude::AbstractMatrix)
+    _apply_amplitude!(execution_style(field.state.field), field, amplitude)
+    return field
+end
+
+function _apply_amplitude!(::ScalarCPUStyle, field::ElectricField, amplitude::AbstractMatrix)
     target = field_target_view(field, amplitude)
     @. target *= amplitude
+    return field
+end
+
+function _apply_amplitude!(style::AcceleratorStyle, field::ElectricField, amplitude::AbstractMatrix)
+    full_field, ox, oy = _phase_target_layout(field, amplitude)
+    launch_kernel!(style, apply_amplitude_kernel!, field.state.field, amplitude,
+        ox, oy, field.params.resolution, full_field; ndrange=size(amplitude))
     return field
 end
 
 function intensity!(out::AbstractMatrix{T}, field::ElectricField) where {T<:AbstractFloat}
     size(out) == size(field.state.field) ||
         throw(DimensionMismatchError("intensity output must match ElectricField size"))
-    @. out = abs2(field.state.field)
+    _intensity!(execution_style(out), out, field.state.field)
+    return out
+end
+
+function _intensity!(::ScalarCPUStyle, out::AbstractMatrix{T}, field_values::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+    @. out = abs2(field_values)
+    return out
+end
+
+function _intensity!(style::AcceleratorStyle, out::AbstractMatrix{T}, field_values::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+    launch_kernel!(style, intensity_kernel!, out, field_values, size(out, 1), size(out, 2); ndrange=size(out))
+    return out
+end
+
+function accumulate_intensity!(out::AbstractMatrix{T}, field::ElectricField) where {T<:AbstractFloat}
+    size(out) == size(field.state.field) ||
+        throw(DimensionMismatchError("intensity output must match ElectricField size"))
+    _accumulate_intensity!(execution_style(out), out, field.state.field)
+    return out
+end
+
+function _accumulate_intensity!(::ScalarCPUStyle, out::AbstractMatrix{T}, field_values::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+    @. out += abs2(field_values)
+    return out
+end
+
+function _accumulate_intensity!(style::AcceleratorStyle, out::AbstractMatrix{T}, field_values::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+    launch_kernel!(style, accumulate_abs2_kernel!, out, field_values, size(out, 1), size(out, 2); ndrange=size(out))
     return out
 end
 
