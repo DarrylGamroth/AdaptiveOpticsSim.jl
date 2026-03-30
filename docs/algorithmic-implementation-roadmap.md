@@ -314,6 +314,9 @@ Goal: move beyond OOPAO where it is scientifically or operationally limiting.
 
 Candidate directions after the core runtime is fixed:
 
+- electric-field and Fresnel/chromatic propagation layers informed by SPECULA,
+- polychromatic and extended-source sensing optics,
+- stronger aperture/mask primitives and SH subaperture calibration surfaces,
 - richer control families informed by SPECULA,
 - stronger detector/readout physics for runtime realism,
 - science-camera and coronagraph workflows through `Proper.jl`,
@@ -323,6 +326,12 @@ Candidate directions after the core runtime is fixed:
 Explicit rule:
 
 - OOPAO parity is a validation layer, not a feature ceiling.
+
+Detailed ranked follow-on plan:
+
+- If core optics is prioritized ahead of `Proper.jl` or broader control work,
+  follow
+  [core-optics-expansion-roadmap.md](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/core-optics-expansion-roadmap.md).
 
 ## Recommended Execution Order
 
@@ -343,11 +352,15 @@ Rationale:
 
 ## Immediate Next Sprint
 
-1. Define the neutral science-propagation handoff from core AO state to external optics.
-2. Add the first `Proper.jl` extension module without introducing a core dependency.
-3. Support diffraction-limited, aberrated, and DM-corrected science-path handoff.
-4. Add smoke tests and one maintained example for the `Proper.jl` bridge.
-5. Document the extension boundary and the expected in-memory wavefront contract.
+1. Start CO-1 from
+   [core-optics-expansion-roadmap.md](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/core-optics-expansion-roadmap.md):
+   add the electric-field core types and telescope-to-field conversion helpers.
+2. Refactor the current PSF input preparation so Fraunhofer propagation becomes a
+   maintained reusable field operation instead of a special-case PSF path.
+3. Add CPU reference tests proving field-based Fraunhofer propagation matches
+   the current monochromatic PSF behavior.
+4. Add backend-smoke coverage for the new field construction and intensity path.
+5. Re-benchmark the PSF and curvature surfaces before starting CO-2.
 
 ## Exit Criteria For The Roadmap
 
@@ -356,5 +369,6 @@ This roadmap is complete when:
 - atmosphere evolution is persistent and regression-backed,
 - phase-statistics helpers and runtime scaling are consistent,
 - HIL runtime profiles are explicit and benchmarked,
-- `Proper.jl` provides optional science propagation,
+- the ranked core-optics milestones are either complete or explicitly deferred,
+- `Proper.jl` provides optional science propagation if still needed,
 - control remains lean in core and only grows after the plant is stable.
