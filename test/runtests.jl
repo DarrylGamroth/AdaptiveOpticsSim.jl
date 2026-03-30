@@ -29,6 +29,8 @@ function assert_source_interface(src)
     @test hasmethod(wavelength, Tuple{typeof(src)})
 end
 
+include("optional_gpu_backends.jl")
+
 function assert_atmosphere_interface(atm, tel)
     @test applicable(advance!, atm, tel)
     @test applicable(propagate!, atm, tel)
