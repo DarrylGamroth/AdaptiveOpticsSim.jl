@@ -330,6 +330,13 @@ function intensity!(out::AbstractMatrix{T}, field::ElectricField) where {T<:Abst
     return out
 end
 
+function intensity_async!(out::AbstractMatrix{T}, field::ElectricField) where {T<:AbstractFloat}
+    size(out) == size(field.state.field) ||
+        throw(DimensionMismatchError("intensity output must match ElectricField size"))
+    _intensity_async!(execution_style(out), out, field.state.field)
+    return out
+end
+
 function _intensity!(::ScalarCPUStyle, out::AbstractMatrix{T}, field_values::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
     @. out = abs2(field_values)
     return out
@@ -340,10 +347,27 @@ function _intensity!(style::AcceleratorStyle, out::AbstractMatrix{T}, field_valu
     return out
 end
 
+function _intensity_async!(::ScalarCPUStyle, out::AbstractMatrix{T}, field_values::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+    @. out = abs2(field_values)
+    return out
+end
+
+function _intensity_async!(style::AcceleratorStyle, out::AbstractMatrix{T}, field_values::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+    launch_kernel_async!(style, intensity_kernel!, out, field_values, size(out, 1), size(out, 2); ndrange=size(out))
+    return out
+end
+
 function accumulate_intensity!(out::AbstractMatrix{T}, field::ElectricField) where {T<:AbstractFloat}
     size(out) == size(field.state.field) ||
         throw(DimensionMismatchError("intensity output must match ElectricField size"))
     _accumulate_intensity!(execution_style(out), out, field.state.field)
+    return out
+end
+
+function accumulate_intensity_async!(out::AbstractMatrix{T}, field::ElectricField) where {T<:AbstractFloat}
+    size(out) == size(field.state.field) ||
+        throw(DimensionMismatchError("intensity output must match ElectricField size"))
+    _accumulate_intensity_async!(execution_style(out), out, field.state.field)
     return out
 end
 
@@ -354,6 +378,16 @@ end
 
 function _accumulate_intensity!(style::AcceleratorStyle, out::AbstractMatrix{T}, field_values::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
     launch_kernel!(style, accumulate_abs2_kernel!, out, field_values, size(out, 1), size(out, 2); ndrange=size(out))
+    return out
+end
+
+function _accumulate_intensity_async!(::ScalarCPUStyle, out::AbstractMatrix{T}, field_values::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+    @. out += abs2(field_values)
+    return out
+end
+
+function _accumulate_intensity_async!(style::AcceleratorStyle, out::AbstractMatrix{T}, field_values::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+    launch_kernel_async!(style, accumulate_abs2_kernel!, out, field_values, size(out, 1), size(out, 2); ndrange=size(out))
     return out
 end
 
