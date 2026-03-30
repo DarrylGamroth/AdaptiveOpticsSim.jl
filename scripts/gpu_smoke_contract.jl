@@ -302,6 +302,15 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
         return slopes
     end
 
+    record_gpu_smoke!(failures, "measure_shack_diffractive_polychromatic") do
+        bundle = SpectralBundle(T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.4, 0.6]; T=T)
+        poly = with_spectrum(src, bundle)
+        wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=BackendArray)
+        slopes = measure!(wfs, tel, poly)
+        @assert slopes isa BackendArray
+        return slopes
+    end
+
     record_gpu_smoke!(failures, "measure_shack_diffractive_spiders") do
         wfs = ShackHartmann(spider_tel; n_subap=4, mode=Diffractive(), T=T, backend=BackendArray)
         slopes = measure!(wfs, spider_tel, src)
@@ -349,6 +358,15 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
     record_gpu_smoke!(failures, "measure_pyramid_diffractive") do
         wfs = PyramidWFS(tel; n_subap=4, modulation=2.0, mode=Diffractive(), T=T, backend=BackendArray)
         slopes = measure!(wfs, tel, src)
+        @assert slopes isa BackendArray
+        return slopes
+    end
+
+    record_gpu_smoke!(failures, "measure_pyramid_diffractive_polychromatic") do
+        bundle = SpectralBundle(T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.4, 0.6]; T=T)
+        poly = with_spectrum(src, bundle)
+        wfs = PyramidWFS(tel; n_subap=4, modulation=2.0, mode=Diffractive(), T=T, backend=BackendArray)
+        slopes = measure!(wfs, tel, poly)
         @assert slopes isa BackendArray
         return slopes
     end

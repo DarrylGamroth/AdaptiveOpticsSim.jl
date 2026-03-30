@@ -32,6 +32,7 @@ include("Core/telemetry.jl")
 
 include("Optics/telescope.jl")
 include("Optics/source.jl")
+include("Optics/spectrum.jl")
 include("Optics/electric_field.jl")
 include("Optics/propagation.jl")
 include("Optics/psf.jl")
@@ -92,6 +93,8 @@ export bin2d, poisson_noise!, poisson_sample
 export Telescope, TelescopeParams, TelescopeState, generate_pupil!, reset_opd!, apply_opd!
 export set_pupil!, set_pupil_reflectivity!, flux_map, apply_spiders!
 export Source, SourceParams, LGSSource, LGSSourceParams, wavelength, optical_path, print_optical_path
+export SpectralSample, SpectralBundle, SpectralSource, with_spectrum
+export spectral_bundle, spectral_reference_source, has_spectral_bundle, is_polychromatic, weighted_wavelength
 export lgs_elongation_factor
 export ElectricField, ElectricFieldParams, ElectricFieldState
 export fill_from_telescope!, fill_telescope_field!, apply_phase!, apply_amplitude!, intensity!

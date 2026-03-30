@@ -183,6 +183,7 @@ mutable struct PyramidState{T<:AbstractFloat,
     asterism_capacity::Int
     calibrated::Bool
     calibration_wavelength::T
+    calibration_signature::UInt
 end
 
 struct PyramidWFS{M<:SensingMode,P<:PyramidParams,S<:PyramidState} <: AbstractWFS
@@ -312,6 +313,7 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
         1,
         false,
         zero(T),
+        UInt(0),
     )
     wfs = PyramidWFS{typeof(mode), typeof(params), typeof(state)}(params, state)
     update_valid_mask!(wfs, tel)
@@ -396,8 +398,7 @@ end
 function accumulate_pyramid_asterism_intensity!(::ScalarCPUStyle, wfs::PyramidWFS, tel::Telescope, ast::Asterism)
     stack = @view ensure_pyramid_asterism_stack!(wfs, length(ast.sources))[:, :, 1:length(ast.sources)]
     @inbounds for (src_idx, src) in pairs(ast.sources)
-        pyramid_intensity!(wfs.state.temp, wfs, tel, src)
-        copyto!(@view(stack[:, :, src_idx]), wfs.state.temp)
+        pyramid_intensity!(@view(stack[:, :, src_idx]), wfs, tel, src)
     end
     fill!(wfs.state.intensity, zero(eltype(wfs.state.intensity)))
     @inbounds for src_idx in axes(stack, 3)
@@ -409,11 +410,39 @@ end
 function accumulate_pyramid_asterism_intensity!(style::AcceleratorStyle, wfs::PyramidWFS, tel::Telescope, ast::Asterism)
     stack = @view ensure_pyramid_asterism_stack!(wfs, length(ast.sources))[:, :, 1:length(ast.sources)]
     @inbounds for (src_idx, src) in pairs(ast.sources)
-        pyramid_intensity!(wfs.state.temp, wfs, tel, src)
-        copyto!(@view(stack[:, :, src_idx]), wfs.state.temp)
+        pyramid_intensity!(@view(stack[:, :, src_idx]), wfs, tel, src)
     end
     launch_kernel!(style, pyramid_reduce_asterism_stack_kernel!, wfs.state.intensity, stack,
         length(ast.sources), size(wfs.state.intensity, 1), size(wfs.state.intensity, 2);
+        ndrange=size(wfs.state.intensity))
+    return wfs.state.intensity
+end
+
+function accumulate_pyramid_spectral_intensity!(::ScalarCPUStyle, wfs::PyramidWFS, tel::Telescope, src::SpectralSource)
+    stack = @view ensure_pyramid_asterism_stack!(wfs, length(src.bundle.samples))[:, :, 1:length(src.bundle.samples)]
+    total_flux = photon_flux(src)
+    @inbounds for (sample_idx, sample) in pairs(src.bundle.samples)
+        variant = source_with_wavelength_and_flux(src, sample.wavelength,
+            eltype(wfs.state.intensity)(total_flux * sample.weight))
+        pyramid_intensity!(@view(stack[:, :, sample_idx]), wfs, tel, variant)
+    end
+    fill!(wfs.state.intensity, zero(eltype(wfs.state.intensity)))
+    @inbounds for sample_idx in axes(stack, 3)
+        wfs.state.intensity .+= @view(stack[:, :, sample_idx])
+    end
+    return wfs.state.intensity
+end
+
+function accumulate_pyramid_spectral_intensity!(style::AcceleratorStyle, wfs::PyramidWFS, tel::Telescope, src::SpectralSource)
+    stack = @view ensure_pyramid_asterism_stack!(wfs, length(src.bundle.samples))[:, :, 1:length(src.bundle.samples)]
+    total_flux = photon_flux(src)
+    @inbounds for (sample_idx, sample) in pairs(src.bundle.samples)
+        variant = source_with_wavelength_and_flux(src, sample.wavelength,
+            eltype(wfs.state.intensity)(total_flux * sample.weight))
+        pyramid_intensity!(@view(stack[:, :, sample_idx]), wfs, tel, variant)
+    end
+    launch_kernel!(style, pyramid_reduce_asterism_stack_kernel!, wfs.state.intensity, stack,
+        length(src.bundle.samples), size(wfs.state.intensity, 1), size(wfs.state.intensity, 2);
         ndrange=size(wfs.state.intensity))
     return wfs.state.intensity
 end
@@ -668,11 +697,20 @@ function measure!(wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
     return measure!(sensing_mode(wfs), wfs, tel, src)
 end
 
+function measure!(wfs::PyramidWFS, tel::Telescope, src::SpectralSource)
+    return measure!(sensing_mode(wfs), wfs, tel, src)
+end
+
 function measure!(wfs::PyramidWFS, tel::Telescope, src::LGSSource)
     return measure!(sensing_mode(wfs), wfs, tel, src)
 end
 
 function measure!(wfs::PyramidWFS, tel::Telescope, src::AbstractSource, det::AbstractDetector;
+    rng::AbstractRNG=Random.default_rng())
+    return measure!(sensing_mode(wfs), wfs, tel, src, det; rng=rng)
+end
+
+function measure!(wfs::PyramidWFS, tel::Telescope, src::SpectralSource, det::AbstractDetector;
     rng::AbstractRNG=Random.default_rng())
     return measure!(sensing_mode(wfs), wfs, tel, src, det; rng=rng)
 end
@@ -691,6 +729,15 @@ function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::AbstractS
     return wfs.state.slopes
 end
 
+function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::SpectralSource)
+    ensure_pyramid_calibration!(wfs, tel, src)
+    accumulate_pyramid_spectral_intensity!(execution_style(wfs.state.intensity), wfs, tel, src)
+    intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
+    pyramid_signal!(wfs, tel, intensity, spectral_reference_source(src))
+    @. wfs.state.slopes *= wfs.state.optical_gain
+    return wfs.state.slopes
+end
+
 function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::AbstractSource,
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
     ensure_pyramid_calibration!(wfs, tel, src)
@@ -699,6 +746,18 @@ function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::AbstractS
     frame = capture!(det, intensity; rng=rng)
     resize_pyramid_signal_buffers!(wfs, size(frame, 1))
     pyramid_signal!(wfs, tel, frame, src)
+    @. wfs.state.slopes *= wfs.state.optical_gain
+    return wfs.state.slopes
+end
+
+function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::SpectralSource,
+    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    ensure_pyramid_calibration!(wfs, tel, src)
+    accumulate_pyramid_spectral_intensity!(execution_style(wfs.state.intensity), wfs, tel, src)
+    intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
+    frame = capture!(det, intensity; rng=rng)
+    resize_pyramid_signal_buffers!(wfs, size(frame, 1))
+    pyramid_signal!(wfs, tel, frame, spectral_reference_source(src))
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
 end
@@ -1207,7 +1266,8 @@ end
 
 function ensure_pyramid_calibration!(wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
     λ = eltype(wfs.state.slopes)(wavelength(src))
-    if wfs.state.calibrated && wfs.state.calibration_wavelength == λ
+    sig = source_measurement_signature(src)
+    if wfs.state.calibrated && wfs.state.calibration_wavelength == λ && wfs.state.calibration_signature == sig
         return wfs
     end
     opd_saved = copy(tel.state.opd)
@@ -1222,6 +1282,7 @@ function ensure_pyramid_calibration!(wfs::PyramidWFS, tel::Telescope, src::Abstr
     copyto!(tel.state.opd, opd_saved)
     wfs.state.calibrated = true
     wfs.state.calibration_wavelength = λ
+    wfs.state.calibration_signature = sig
     return wfs
 end
 

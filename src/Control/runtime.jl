@@ -334,7 +334,9 @@ simulation_interface(interface::CompositeSimulationInterface) = interface
 @inline supports_prepared_runtime(::ZernikeWFS, ::AbstractSource) = true
 @inline supports_prepared_runtime(::CurvatureWFS, ::AbstractSource) = true
 @inline supports_stacked_sources(::ShackHartmann, ::Asterism) = true
+@inline supports_stacked_sources(::ShackHartmann, ::SpectralSource) = true
 @inline supports_stacked_sources(::PyramidWFS, ::Asterism) = true
+@inline supports_stacked_sources(::PyramidWFS, ::SpectralSource) = true
 @inline supports_stacked_sources(::BioEdgeWFS, ::Asterism) = true
 
 """
@@ -349,6 +351,12 @@ end
 
 @inline function prepare_runtime_wfs!(wfs::ShackHartmann{<:Diffractive}, tel::Telescope, src::AbstractSource)
     prepare_sampling!(wfs, tel, src)
+    ensure_sh_calibration!(wfs, tel, src)
+    return wfs
+end
+
+@inline function prepare_runtime_wfs!(wfs::ShackHartmann{<:Diffractive}, tel::Telescope, src::SpectralSource)
+    prepare_sampling!(wfs, tel, spectral_reference_source(src))
     ensure_sh_calibration!(wfs, tel, src)
     return wfs
 end
@@ -371,6 +379,12 @@ end
 end
 
 @inline function prepare_runtime_wfs!(wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
+    prepare_pyramid_sampling!(wfs, tel)
+    ensure_pyramid_calibration!(wfs, tel, src)
+    return wfs
+end
+
+@inline function prepare_runtime_wfs!(wfs::PyramidWFS, tel::Telescope, src::SpectralSource)
     prepare_pyramid_sampling!(wfs, tel)
     ensure_pyramid_calibration!(wfs, tel, src)
     return wfs

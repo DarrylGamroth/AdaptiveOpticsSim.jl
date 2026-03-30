@@ -88,6 +88,8 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     asterism_capacity::Int
     amp_scales::V
     amp_scales_host::Vector{T}
+    opd_to_cycles::V
+    opd_to_cycles_host::Vector{T}
     spot_stats::V
     spot_stats_accum::V
     valid_mask_host::Matrix{Bool}
@@ -96,6 +98,7 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     slopes_units::T
     calibrated::Bool
     calibration_wavelength::T
+    calibration_signature::UInt
 end
 
 struct ShackHartmann{M<:SensingMode,P<:ShackHartmannParams,S<:ShackHartmannState} <: AbstractWFS
@@ -157,6 +160,8 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     lgs_kernel_fft = backend{Complex{T}}(undef, 0, 0, 0)
     amp_scales = backend{T}(undef, 1)
     amp_scales_host = Vector{T}(undef, 1)
+    opd_to_cycles = backend{T}(undef, 1)
+    opd_to_cycles_host = Vector{T}(undef, 1)
     spot_stats = backend{T}(undef, 3 * n_subap * n_subap)
     spot_stats_accum = backend{T}(undef, 3 * n_subap * n_subap)
     valid_mask_host = Matrix{Bool}(undef, n_subap, n_subap)
@@ -216,6 +221,8 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         1,
         amp_scales,
         amp_scales_host,
+        opd_to_cycles,
+        opd_to_cycles_host,
         spot_stats,
         spot_stats_accum,
         valid_mask_host,
@@ -224,6 +231,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         one(T),
         false,
         zero(T),
+        UInt(0),
     )
     wfs = ShackHartmann{typeof(mode), typeof(params), typeof(state)}(params, state)
     update_valid_mask!(wfs, tel)
@@ -279,6 +287,12 @@ function ensure_sh_asterism_buffers!(wfs::ShackHartmann, n_sources::Int)
     end
     if length(wfs.state.amp_scales_host) != n_sources
         wfs.state.amp_scales_host = Vector{eltype(wfs.state.amp_scales_host)}(undef, n_sources)
+    end
+    if length(wfs.state.opd_to_cycles) != n_sources
+        wfs.state.opd_to_cycles = similar(wfs.state.opd_to_cycles, n_sources)
+    end
+    if length(wfs.state.opd_to_cycles_host) != n_sources
+        wfs.state.opd_to_cycles_host = Vector{eltype(wfs.state.opd_to_cycles_host)}(undef, n_sources)
     end
     return wfs
 end
@@ -439,11 +453,20 @@ function measure!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
     return measure!(sensing_mode(wfs), wfs, tel, src)
 end
 
+function measure!(wfs::ShackHartmann, tel::Telescope, src::SpectralSource)
+    return measure!(sensing_mode(wfs), wfs, tel, src)
+end
+
 function measure!(wfs::ShackHartmann, tel::Telescope, src::LGSSource)
     return measure!(sensing_mode(wfs), wfs, tel, src)
 end
 
 function measure!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource, det::AbstractDetector;
+    rng::AbstractRNG=Random.default_rng())
+    return measure!(sensing_mode(wfs), wfs, tel, src, det; rng=rng)
+end
+
+function measure!(wfs::ShackHartmann, tel::Telescope, src::SpectralSource, det::AbstractDetector;
     rng::AbstractRNG=Random.default_rng())
     return measure!(sensing_mode(wfs), wfs, tel, src, det; rng=rng)
 end
@@ -456,6 +479,17 @@ end
 function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
     Base.require_one_based_indexing(tel.state.opd)
     prepare_sampling!(wfs, tel, src)
+    ensure_sh_calibration!(wfs, tel, src)
+    peak = sampled_spots_peak!(wfs, tel, src)
+    sh_signal_from_spots!(wfs, peak, wfs.params.threshold_cog)
+    subtract_reference_and_scale!(wfs)
+    return wfs.state.slopes
+end
+
+function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::SpectralSource)
+    Base.require_one_based_indexing(tel.state.opd)
+    ref = spectral_reference_source(src)
+    prepare_sampling!(wfs, tel, ref)
     ensure_sh_calibration!(wfs, tel, src)
     peak = sampled_spots_peak!(wfs, tel, src)
     sh_signal_from_spots!(wfs, peak, wfs.params.threshold_cog)
@@ -481,6 +515,18 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
     Base.require_one_based_indexing(tel.state.opd)
     prepare_sampling!(wfs, tel, src)
+    ensure_sh_calibration!(wfs, tel, src)
+    peak = sampled_spots_peak!(wfs, tel, src, det, rng)
+    sh_signal_from_spots!(wfs, peak, wfs.params.threshold_cog)
+    subtract_reference_and_scale!(wfs)
+    return wfs.state.slopes
+end
+
+function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::SpectralSource,
+    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    Base.require_one_based_indexing(tel.state.opd)
+    ref = spectral_reference_source(src)
+    prepare_sampling!(wfs, tel, ref)
     ensure_sh_calibration!(wfs, tel, src)
     peak = sampled_spots_peak!(wfs, tel, src, det, rng)
     sh_signal_from_spots!(wfs, peak, wfs.params.threshold_cog)
@@ -679,7 +725,7 @@ end
                 py = (j - 1) * sub + (y - oy)
                 if px <= n && py <= n
                     amp = (@inbounds amp_scales[src_idx]) * pupil[px, py]
-                    val = amp * cispi(opd_to_cycles * opd[px, py]) * phasor[x, y]
+                    val = amp * cispi((@inbounds opd_to_cycles[src_idx]) * opd[px, py]) * phasor[x, y]
                 end
             end
         end
@@ -763,16 +809,56 @@ function compute_intensity_asterism_stack!(style::AcceleratorStyle, wfs::ShackHa
     T = eltype(wfs.state.intensity)
     amp_scales = wfs.state.amp_scales
     host_amp_scales = wfs.state.amp_scales_host
+    opd_to_cycles = wfs.state.opd_to_cycles
+    host_opd_to_cycles = wfs.state.opd_to_cycles_host
     @inbounds for i in eachindex(ast.sources)
         src = ast.sources[i]
         host_amp_scales[i] = sqrt(T(photon_flux(src) * tel.params.sampling_time *
             (tel.params.diameter / tel.params.resolution)^2))
+        host_opd_to_cycles[i] = T(2) / wavelength(src)
     end
     copyto!(amp_scales, host_amp_scales)
+    copyto!(opd_to_cycles, host_opd_to_cycles)
     total = n_spots * n_src
     fft_view = @view wfs.state.fft_asterism_stack[:, :, 1:total]
     intensity_view = @view wfs.state.intensity_asterism_stack[:, :, 1:total]
-    opd_to_cycles = T(2) / wavelength(ast)
+    launch_kernel_async!(style, sh_field_asterism_stack_kernel!, fft_view, wfs.state.valid_mask,
+        tel.state.pupil, tel.state.opd, wfs.state.phasor, amp_scales, opd_to_cycles,
+        n_sub, sub, ox, oy, tel.params.resolution, pad, n_spots; ndrange=size(fft_view))
+    synchronize_backend!(style)
+    execute_fft_plan!(fft_view, wfs.state.fft_asterism_plan)
+    launch_kernel_async!(style, complex_abs2_stack_kernel!, intensity_view, fft_view, pad, total; ndrange=size(intensity_view))
+    launch_kernel!(style, reduce_asterism_intensity_stack_kernel!, wfs.state.intensity_stack, intensity_view,
+        n_spots, n_src, pad; ndrange=size(wfs.state.intensity_stack))
+    return wfs.state.intensity_stack
+end
+
+function compute_intensity_spectral_stack!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::SpectralSource)
+    bundle = spectral_bundle(src)
+    n_src = length(bundle)
+    ensure_sh_asterism_buffers!(wfs, n_src)
+    pad = size(wfs.state.fft_stack, 1)
+    n_sub = wfs.params.n_subap
+    n_spots = n_sub * n_sub
+    sub = div(tel.params.resolution, n_sub)
+    ox = div(pad - sub, 2)
+    oy = div(pad - sub, 2)
+    T = eltype(wfs.state.intensity)
+    amp_scales = wfs.state.amp_scales
+    host_amp_scales = wfs.state.amp_scales_host
+    opd_to_cycles = wfs.state.opd_to_cycles
+    host_opd_to_cycles = wfs.state.opd_to_cycles_host
+    base_flux = T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2)
+    @inbounds for i in eachindex(bundle.samples)
+        sample = bundle.samples[i]
+        host_amp_scales[i] = sqrt(base_flux * sample.weight)
+        host_opd_to_cycles[i] = T(2) / sample.wavelength
+    end
+    copyto!(amp_scales, host_amp_scales)
+    copyto!(opd_to_cycles, host_opd_to_cycles)
+    total = n_spots * n_src
+    fft_view = @view wfs.state.fft_asterism_stack[:, :, 1:total]
+    intensity_view = @view wfs.state.intensity_asterism_stack[:, :, 1:total]
     launch_kernel_async!(style, sh_field_asterism_stack_kernel!, fft_view, wfs.state.valid_mask,
         tel.state.pupil, tel.state.opd, wfs.state.phasor, amp_scales, opd_to_cycles,
         n_sub, sub, ox, oy, tel.params.resolution, pad, n_spots; ndrange=size(fft_view))
@@ -1124,6 +1210,10 @@ function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::AbstractSo
     return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src)
 end
 
+function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::SpectralSource)
+    return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src)
+end
+
 function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
@@ -1154,6 +1244,39 @@ end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
     compute_intensity_stack!(style, wfs, tel, src)
+    sample_spot_stack!(style, wfs)
+    return maximum(wfs.state.spot_cube)
+end
+
+function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::SpectralSource)
+    fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
+    peak = zero(eltype(wfs.state.slopes))
+    total_flux = photon_flux(src)
+    @inbounds for sample in src.bundle.samples
+        variant = source_with_wavelength_and_flux(src, sample.wavelength,
+            eltype(wfs.state.slopes)(total_flux * sample.weight))
+        peak = max(peak, sampled_spots_peak!(ScalarCPUStyle(), wfs, tel, variant))
+        wfs.state.spot_cube_accum .+= wfs.state.spot_cube
+    end
+    copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
+    return max(peak, maximum(wfs.state.spot_cube))
+end
+
+function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::SpectralSource)
+    if spectral_reference_source(src) isa LGSSource
+        fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
+        peak = zero(eltype(wfs.state.slopes))
+        total_flux = photon_flux(src)
+        @inbounds for sample in src.bundle.samples
+            variant = source_with_wavelength_and_flux(src, sample.wavelength,
+                eltype(wfs.state.slopes)(total_flux * sample.weight))
+            peak = max(peak, sampled_spots_peak!(style, wfs, tel, variant))
+            @. wfs.state.spot_cube_accum = wfs.state.spot_cube_accum + wfs.state.spot_cube
+        end
+        copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
+        return max(peak, maximum(wfs.state.spot_cube))
+    end
+    compute_intensity_spectral_stack!(style, wfs, tel, src)
     sample_spot_stack!(style, wfs)
     return maximum(wfs.state.spot_cube)
 end
@@ -1200,6 +1323,11 @@ function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::AbstractSo
     return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src, det, rng)
 end
 
+function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::SpectralSource,
+    det::AbstractDetector, rng::AbstractRNG)
+    return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src, det, rng)
+end
+
 function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     det::AbstractDetector, rng::AbstractRNG)
     n = tel.params.resolution
@@ -1233,6 +1361,48 @@ end
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     det::AbstractDetector, rng::AbstractRNG)
     compute_intensity_stack!(style, wfs, tel, src)
+    sample_spot_stack!(style, wfs)
+    n_sub = wfs.params.n_subap
+    capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
+    launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
+        n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
+    return maximum(wfs.state.spot_cube)
+end
+
+function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::SpectralSource,
+    det::AbstractDetector, rng::AbstractRNG)
+    fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
+    total_flux = photon_flux(src)
+    @inbounds for sample in src.bundle.samples
+        variant = source_with_wavelength_and_flux(src, sample.wavelength,
+            eltype(wfs.state.slopes)(total_flux * sample.weight))
+        sampled_spots_peak!(ScalarCPUStyle(), wfs, tel, variant)
+        wfs.state.spot_cube_accum .+= wfs.state.spot_cube
+    end
+    copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
+    capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
+    return maximum(wfs.state.spot_cube)
+end
+
+function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::SpectralSource,
+    det::AbstractDetector, rng::AbstractRNG)
+    if spectral_reference_source(src) isa LGSSource
+        fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
+        total_flux = photon_flux(src)
+        @inbounds for sample in src.bundle.samples
+            variant = source_with_wavelength_and_flux(src, sample.wavelength,
+                eltype(wfs.state.slopes)(total_flux * sample.weight))
+            sampled_spots_peak!(style, wfs, tel, variant)
+            @. wfs.state.spot_cube_accum = wfs.state.spot_cube_accum + wfs.state.spot_cube
+        end
+        copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
+        n_sub = wfs.params.n_subap
+        capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
+        launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
+            n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
+        return maximum(wfs.state.spot_cube)
+    end
+    compute_intensity_spectral_stack!(style, wfs, tel, src)
     sample_spot_stack!(style, wfs)
     n_sub = wfs.params.n_subap
     capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
@@ -1500,7 +1670,8 @@ end
 
 function ensure_sh_calibration!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
     λ = eltype(wfs.state.slopes)(wavelength(src))
-    if wfs.state.calibrated && wfs.state.calibration_wavelength == λ
+    sig = source_measurement_signature(src)
+    if wfs.state.calibrated && wfs.state.calibration_wavelength == λ && wfs.state.calibration_signature == sig
         return wfs
     end
     opd_saved = copy(tel.state.opd)
@@ -1525,6 +1696,7 @@ function ensure_sh_calibration!(wfs::ShackHartmann, tel::Telescope, src::Abstrac
     copyto!(tel.state.opd, opd_saved)
     wfs.state.calibrated = true
     wfs.state.calibration_wavelength = λ
+    wfs.state.calibration_signature = sig
     return wfs
 end
 

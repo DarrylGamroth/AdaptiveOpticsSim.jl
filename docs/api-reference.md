@@ -202,6 +202,13 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - `AbstractSource` implementations must provide `wavelength(src)`.
 - Source-specific flux or spectrum helpers may exist, but `wavelength` is the
   minimal shared contract used across optics and sensing.
+- The maintained spectral wrapper family is `SpectralSample`,
+  `SpectralBundle`, and `SpectralSource`, constructed with `with_spectrum`.
+- `SpectralBundle` normalizes weights at construction, while `SpectralSource`
+  preserves the wrapped source geometry and flux boundary.
+- Source-measurement code that supports grouped broad-band execution should use
+  `spectral_reference_source(src)` for geometry preparation and
+  `source_measurement_signature(src)` for calibration/cache identity.
 
 ### `IF-ATM`: atmospheres
 
@@ -239,6 +246,9 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   in addition to the simulation-level trait surface.
 - The maintained runtime expects the measured slope vector to live in
   `wfs.state.slopes`.
+- Diffractive `ShackHartmann` and `PyramidWFS` now also support grouped
+  broad-band execution through `SpectralSource`, including detector-coupled
+  readout after wavelength accumulation.
 
 ### `IF-DET`: detectors
 

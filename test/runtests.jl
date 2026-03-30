@@ -2019,6 +2019,68 @@ end
     @test sum(psf) >= sum(@view tel.state.psf_stack[:, :, 1])
 end
 
+@testset "Polychromatic WFS" begin
+    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = Source(band=:I, magnitude=0.0)
+    λ0 = wavelength(src)
+    bundle_single = SpectralBundle([SpectralSample(λ0, 1.0)])
+    bundle_broad = SpectralBundle([SpectralSample(0.9 * λ0, 0.4), SpectralSample(1.1 * λ0, 0.6)])
+    poly_single = with_spectrum(src, bundle_single)
+    poly_broad = with_spectrum(src, bundle_broad)
+
+    @test sum(sample.weight for sample in bundle_broad) ≈ 1.0
+    @test weighted_wavelength(bundle_broad) ≈ (0.9 * λ0 * 0.4 + 1.1 * λ0 * 0.6)
+    @test has_spectral_bundle(poly_broad)
+    @test is_polychromatic(poly_broad)
+    @test !is_polychromatic(poly_single)
+    @test spectral_reference_source(poly_broad) === src
+
+    zb = ZernikeBasis(tel, 5)
+    compute_zernike!(zb, tel)
+    focus = @view zb.modes[:, :, 5]
+    @. tel.state.opd = 5e-8 * focus
+
+    sh_mono = ShackHartmann(tel; n_subap=8, mode=Diffractive())
+    sh_single = ShackHartmann(tel; n_subap=8, mode=Diffractive())
+    sh_broad = ShackHartmann(tel; n_subap=8, mode=Diffractive())
+
+    mono_slopes = copy(measure!(sh_mono, tel, src))
+    single_slopes = copy(measure!(sh_single, tel, poly_single))
+    broad_slopes_1 = copy(measure!(sh_broad, tel, poly_broad))
+    broad_slopes_2 = copy(measure!(sh_broad, tel, poly_broad))
+
+    @test single_slopes ≈ mono_slopes atol=1e-10 rtol=1e-10
+    @test broad_slopes_1 ≈ broad_slopes_2 atol=1e-10 rtol=1e-10
+    @test norm(broad_slopes_1 - mono_slopes) > 1e-8
+    @test supports_stacked_sources(sh_broad, poly_broad)
+
+    pyr_mono = PyramidWFS(tel; n_subap=8, mode=Diffractive(), modulation=1.0)
+    pyr_single = PyramidWFS(tel; n_subap=8, mode=Diffractive(), modulation=1.0)
+    pyr_broad = PyramidWFS(tel; n_subap=8, mode=Diffractive(), modulation=1.0)
+
+    mono_pyr = copy(measure!(pyr_mono, tel, src))
+    single_pyr = copy(measure!(pyr_single, tel, poly_single))
+    broad_pyr_1 = copy(measure!(pyr_broad, tel, poly_broad))
+    broad_pyr_2 = copy(measure!(pyr_broad, tel, poly_broad))
+
+    @test single_pyr ≈ mono_pyr atol=1e-10 rtol=1e-10
+    @test broad_pyr_1 ≈ broad_pyr_2 atol=1e-10 rtol=1e-10
+    @test norm(broad_pyr_1 - mono_pyr) > 1e-8
+    @test supports_stacked_sources(pyr_broad, poly_broad)
+
+    det = Detector(noise=NoiseNone(), binning=1)
+    spectral_frame = measure!(sh_broad, tel, poly_broad, det)
+    @test size(sh_broad.state.detector_noise_cube) == size(sh_broad.state.spot_cube)
+    @test spectral_frame ≈ broad_slopes_1 atol=1e-10 rtol=1e-10
+
+    pyr_det = Detector(noise=NoiseNone(), binning=1)
+    pyr_det_slopes = measure!(pyr_broad, tel, poly_broad, pyr_det)
+    @test size(output_frame(pyr_det)) == size(pyr_broad.state.camera_frame)
+    @test pyr_det_slopes ≈ broad_pyr_1 atol=1e-10 rtol=1e-10
+
+    fill!(tel.state.opd, 0.0)
+end
+
 @testset "Pupil masks and misregistration" begin
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     base_sum = sum(tel.state.pupil)
@@ -2181,10 +2243,11 @@ end
     @test length(pyr_ast_slopes) == 2 * 4 * 4
     pyr_ast_serial = PyramidWFS(tel; n_subap=4, mode=Diffractive())
     AdaptiveOpticsSim.ensure_pyramid_calibration!(pyr_ast_serial, tel, ast.sources[1])
+    pyr_ast_stack = @view AdaptiveOpticsSim.ensure_pyramid_asterism_stack!(pyr_ast_serial, length(ast.sources))[:, :, 1:length(ast.sources)]
     fill!(pyr_ast_serial.state.intensity, zero(eltype(pyr_ast_serial.state.intensity)))
-    for src in ast.sources
-        AdaptiveOpticsSim.pyramid_intensity!(pyr_ast_serial.state.temp, pyr_ast_serial, tel, src)
-        pyr_ast_serial.state.intensity .+= pyr_ast_serial.state.temp
+    for (src_idx, src) in pairs(ast.sources)
+        AdaptiveOpticsSim.pyramid_intensity!(@view(pyr_ast_stack[:, :, src_idx]), pyr_ast_serial, tel, src)
+        pyr_ast_serial.state.intensity .+= @view(pyr_ast_stack[:, :, src_idx])
     end
     pyr_ast_intensity = AdaptiveOpticsSim.sample_pyramid_intensity!(pyr_ast_serial, tel, pyr_ast_serial.state.intensity)
     AdaptiveOpticsSim.pyramid_signal!(pyr_ast_serial, tel, pyr_ast_intensity)
@@ -2208,10 +2271,11 @@ end
     pyr_ast_det_slopes = copy(measure!(pyr_ast_det, tel, ast, det))
     pyr_ast_det_serial = PyramidWFS(tel; n_subap=4, mode=Diffractive())
     AdaptiveOpticsSim.ensure_pyramid_calibration!(pyr_ast_det_serial, tel, ast.sources[1])
+    pyr_ast_det_stack = @view AdaptiveOpticsSim.ensure_pyramid_asterism_stack!(pyr_ast_det_serial, length(ast.sources))[:, :, 1:length(ast.sources)]
     fill!(pyr_ast_det_serial.state.intensity, zero(eltype(pyr_ast_det_serial.state.intensity)))
-    for src in ast.sources
-        AdaptiveOpticsSim.pyramid_intensity!(pyr_ast_det_serial.state.temp, pyr_ast_det_serial, tel, src)
-        pyr_ast_det_serial.state.intensity .+= pyr_ast_det_serial.state.temp
+    for (src_idx, src) in pairs(ast.sources)
+        AdaptiveOpticsSim.pyramid_intensity!(@view(pyr_ast_det_stack[:, :, src_idx]), pyr_ast_det_serial, tel, src)
+        pyr_ast_det_serial.state.intensity .+= @view(pyr_ast_det_stack[:, :, src_idx])
     end
     pyr_ast_det_intensity = AdaptiveOpticsSim.sample_pyramid_intensity!(pyr_ast_det_serial, tel, pyr_ast_det_serial.state.intensity)
     pyr_ast_det_frame = capture!(det, pyr_ast_det_intensity; rng=MersenneTwister(12))

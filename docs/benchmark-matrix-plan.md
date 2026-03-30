@@ -90,6 +90,8 @@ Examples already in place:
 - `benchmarks/benchmark_{cpu,cuda,amdgpu}.jl`
 - GPU smoke now also guards the maintained monochromatic propagation surface:
   `ElectricField`, `FraunhoferPropagation`, and `FresnelPropagation`
+- GPU smoke now also guards maintained broad-band diffractive WFS execution for
+  `ShackHartmann` and `PyramidWFS` through `SpectralSource`
 
 ### Class B: Representative Benchmarks
 
