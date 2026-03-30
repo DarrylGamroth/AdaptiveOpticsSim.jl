@@ -1,20 +1,22 @@
+@inline wrap_upper_index(i::Int, n::Int) = ifelse(i > n, i - n, i)
+
 @kernel function moving_layer_extract_kernel!(out, screen, start_x, start_y, footprint_scale, amplitude_scale, n::Int, m::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= n
         T = eltype(out)
         y = start_y + footprint_scale * T(i - 1)
-        y0 = floor(Int, y)
+        y0 = unsafe_trunc(Int, floor(y))
         fy = y - T(y0)
         wy0 = one(T) - fy
-        iy0 = wrap_index(y0, m)
-        iy1 = wrap_index(y0 + 1, m)
+        iy0 = wrap_upper_index(y0, m)
+        iy1 = wrap_upper_index(y0 + 1, m)
 
         x = start_x + footprint_scale * T(j - 1)
-        x0 = floor(Int, x)
+        x0 = unsafe_trunc(Int, floor(x))
         fx = x - T(x0)
         wx0 = one(T) - fx
-        ix0 = wrap_index(x0, m)
-        ix1 = wrap_index(x0 + 1, m)
+        ix0 = wrap_upper_index(x0, m)
+        ix1 = wrap_upper_index(x0 + 1, m)
 
         @inbounds begin
             v00 = screen[iy0, ix0]
@@ -31,18 +33,18 @@ end
     if i <= n && j <= n
         T = eltype(out)
         y = start_y + footprint_scale * T(i - 1)
-        y0 = floor(Int, y)
+        y0 = unsafe_trunc(Int, floor(y))
         fy = y - T(y0)
         wy0 = one(T) - fy
-        iy0 = wrap_index(y0, m)
-        iy1 = wrap_index(y0 + 1, m)
+        iy0 = wrap_upper_index(y0, m)
+        iy1 = wrap_upper_index(y0 + 1, m)
 
         x = start_x + footprint_scale * T(j - 1)
-        x0 = floor(Int, x)
+        x0 = unsafe_trunc(Int, floor(x))
         fx = x - T(x0)
         wx0 = one(T) - fx
-        ix0 = wrap_index(x0, m)
-        ix1 = wrap_index(x0 + 1, m)
+        ix0 = wrap_upper_index(x0, m)
+        ix1 = wrap_upper_index(x0 + 1, m)
 
         @inbounds begin
             v00 = screen[iy0, ix0]
@@ -159,6 +161,7 @@ function ensure_initialized!(layer::MovingAtmosphereLayer, rng::AbstractRNG)
 end
 
 @inline wrap_index(i::Int, n::Int) = mod1(i, n)
+@inline normalize_start_coordinate(start::T, m::Int) where {T<:AbstractFloat} = mod(start - one(T), T(m)) + one(T)
 
 function extract_shifted_screen!(out::AbstractMatrix{T}, screen::AbstractMatrix{T},
     offset_x::T, offset_y::T, amplitude_scale::T, footprint_scale::T=one(T)) where {T<:AbstractFloat}
@@ -226,7 +229,9 @@ end
 
 function _extract_shifted_screen!(style::AcceleratorStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
     start_x::T, start_y::T, footprint_scale::T, amplitude_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
-    launch_kernel!(style, moving_layer_extract_kernel!, out, screen, start_x, start_y, footprint_scale, amplitude_scale, n, m; ndrange=size(out))
+    start_x_wrapped = normalize_start_coordinate(start_x, m)
+    start_y_wrapped = normalize_start_coordinate(start_y, m)
+    launch_kernel!(style, moving_layer_extract_kernel!, out, screen, start_x_wrapped, start_y_wrapped, footprint_scale, amplitude_scale, n, m; ndrange=size(out))
     return out
 end
 
@@ -251,7 +256,9 @@ end
 
 function _extract_shifted_screen_async!(style::AcceleratorStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
     start_x::T, start_y::T, footprint_scale::T, amplitude_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
-    launch_kernel_async!(style, moving_layer_extract_kernel!, out, screen, start_x, start_y, footprint_scale, amplitude_scale, n, m; ndrange=size(out))
+    start_x_wrapped = normalize_start_coordinate(start_x, m)
+    start_y_wrapped = normalize_start_coordinate(start_y, m)
+    launch_kernel_async!(style, moving_layer_extract_kernel!, out, screen, start_x_wrapped, start_y_wrapped, footprint_scale, amplitude_scale, n, m; ndrange=size(out))
     return out
 end
 
@@ -285,7 +292,9 @@ end
 
 function _accumulate_shifted_screen!(style::AcceleratorStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
     start_x::T, start_y::T, footprint_scale::T, amplitude_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
-    launch_kernel!(style, moving_layer_accumulate_kernel!, out, screen, start_x, start_y, footprint_scale, amplitude_scale, n, m; ndrange=size(out))
+    start_x_wrapped = normalize_start_coordinate(start_x, m)
+    start_y_wrapped = normalize_start_coordinate(start_y, m)
+    launch_kernel!(style, moving_layer_accumulate_kernel!, out, screen, start_x_wrapped, start_y_wrapped, footprint_scale, amplitude_scale, n, m; ndrange=size(out))
     return out
 end
 
