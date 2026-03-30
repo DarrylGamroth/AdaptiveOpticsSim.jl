@@ -32,6 +32,9 @@ Project-wide units guidance lives in
 - `Telescope`, `TelescopeParams`, `TelescopeState`
 - `generate_pupil!`, `reset_opd!`, `apply_opd!`, `set_pupil!`, `apply_spiders!`
 - `Source`, `SourceParams`, `LGSSource`, `LGSSourceParams`, `wavelength`
+- `ElectricField`, `ElectricFieldParams`, `ElectricFieldState`
+- `fill_from_telescope!`, `fill_telescope_field!`, `apply_phase!`,
+  `apply_amplitude!`, `intensity!`
 - `Asterism`, `coordinates_xy_arcsec`, `compute_psf!`,
   `psf_pixel_scale_arcsec`, `ensure_psf_state!`
 - `ZernikeBasis`, `compute_zernike!`, `noll_to_nm`

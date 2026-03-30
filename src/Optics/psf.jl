@@ -30,6 +30,16 @@ function ensure_psf_workspace!(tel::Telescope, n::Int)
     return tel.state.psf_workspace
 end
 
+function centered_psf_from_field!(out::AbstractMatrix{T}, field::ElectricField) where {T<:AbstractFloat}
+    size(out) == size(field.state.field) ||
+        throw(DimensionMismatchError("PSF output must match ElectricField size"))
+    copyto!(field.state.fft_buffer, field.state.field)
+    execute_fft_plan!(field.state.fft_buffer, field.state.fft_plan)
+    fft_scale = inv(T(field.params.padded_resolution))
+    @. out = abs2(field.state.fft_buffer) * (fft_scale * fft_scale)
+    return out
+end
+
 function compute_psf_centered!(tel::Telescope, src::Source, ws::Workspace, zero_padding::Int=1)
     n = tel.params.resolution
     if zero_padding < 1
@@ -39,17 +49,7 @@ function compute_psf_centered!(tel::Telescope, src::Source, ws::Workspace, zero_
     T = eltype(tel.state.opd)
 
     ensure_psf_buffers!(ws, n_pad)
-
-    fill!(ws.pupil_field, zero(eltype(ws.pupil_field)))
-    opd_to_cycles = T(2) / wavelength(src)
-    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
-    ox = div(n_pad - n, 2)
-    oy = div(n_pad - n, 2)
-    @views @. ws.pupil_field[ox+1:ox+n, oy+1:oy+n] = amp_scale * sqrt(tel.state.pupil_reflectivity) * cispi(opd_to_cycles * tel.state.opd)
-    if iseven(n_pad)
-        phase_shift = -T(pi) * (T(n_pad) + one(T)) / T(n_pad)
-        apply_centering_phase!(execution_style(ws.pupil_field), ws.pupil_field, phase_shift)
-    end
+    fill_telescope_field!(ws.pupil_field, tel, src; zero_padding=zero_padding)
 
     copyto!(ws.fft_buffer, ws.pupil_field)
     execute_fft_plan!(ws.fft_buffer, ws.fft_plan)

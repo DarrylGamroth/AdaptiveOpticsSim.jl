@@ -297,10 +297,15 @@ end
 @testset "Telescope and PSF" begin
     tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.2)
     src = Source(band=:I, magnitude=0.0)
+    field = ElectricField(tel, src; zero_padding=2)
+    @test size(field.state.field) == (64, 64)
+    @test field.params.wavelength == wavelength(src)
+    centered_psf = AdaptiveOpticsSim.centered_psf_from_field!(similar(field.state.intensity), field)
     psf = compute_psf!(tel, src; zero_padding=2)
     @test size(psf) == (64, 64)
     @test maximum(psf) > 0
     @test isfinite(sum(psf))
+    @test centered_psf ≈ psf
     @test tel.state.psf_workspace !== nothing
     cached_ws = tel.state.psf_workspace
     compute_psf!(tel, src; zero_padding=2)
@@ -314,6 +319,35 @@ end
     @test size(fmap) == size(tel_dim.state.pupil)
     @test maximum(fmap) > 0
     @test optical_path(src, tel_dim) == "source(I) -> telescope"
+
+    tel_simple = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src_simple = Source(band=:I, magnitude=0.0)
+    field_simple = ElectricField(tel_simple, src_simple; zero_padding=1)
+    direct = similar(field_simple.state.field)
+    fill_telescope_field!(direct, tel_simple, src_simple; zero_padding=1)
+    @test direct == field_simple.state.field
+
+    phase_map = fill(pi / 2, tel_simple.params.resolution, tel_simple.params.resolution)
+    baseline = copy(field_simple.state.field)
+    apply_phase!(field_simple, phase_map; units=:phase)
+    @test field_simple.state.field ≈ baseline .* cis.(phase_map)
+
+    field_simple = ElectricField(tel_simple, src_simple; zero_padding=1)
+    opd_map = fill(eltype(tel_simple.state.opd)(wavelength(src_simple) / 4), tel_simple.params.resolution, tel_simple.params.resolution)
+    baseline = copy(field_simple.state.field)
+    apply_phase!(field_simple, opd_map; units=:opd)
+    @test field_simple.state.field ≈ baseline .* cispi.(2 .* opd_map ./ wavelength(src_simple))
+
+    field_simple = ElectricField(tel_simple, src_simple; zero_padding=1)
+    amplitude_map = fill(0.5, tel_simple.params.resolution, tel_simple.params.resolution)
+    baseline = copy(field_simple.state.field)
+    apply_amplitude!(field_simple, amplitude_map)
+    @test field_simple.state.field ≈ baseline .* amplitude_map
+
+    intensity_buffer = similar(field_simple.state.intensity)
+    intensity!(intensity_buffer, field_simple)
+    @test intensity_buffer ≈ abs2.(field_simple.state.field)
+    @test intensity!(field_simple) === field_simple.state.intensity
 end
 
 @testset "Zernike basis" begin
