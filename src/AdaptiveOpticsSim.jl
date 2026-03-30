@@ -51,6 +51,7 @@ include("Atmosphere/infinite_screen_math.jl")
 include("Atmosphere/infinite_screen.jl")
 include("Atmosphere/multilayer.jl")
 include("Atmosphere/phase_stats.jl")
+include("Optics/atmospheric_field_propagation.jl")
 include("Calibration/modal_basis.jl")
 include("Optics/ncpa.jl")
 include("WFS/sensing_modes.jl")
@@ -107,6 +108,9 @@ export lgs_elongation_factor
 export ElectricField, ElectricFieldParams, ElectricFieldState
 export fill_from_telescope!, fill_telescope_field!, apply_phase!, apply_amplitude!, intensity!
 export AbstractPropagationModel, FraunhoferPropagation, FresnelPropagation, propagate_field!
+export AbstractAtmosphericFieldModel, GeometricAtmosphericPropagation, LayeredFresnelAtmosphericPropagation
+export AtmosphericFieldPropagationParams, AtmosphericFieldPropagationState, AtmosphericFieldSlice
+export AtmosphericFieldPropagation, propagate_atmosphere_field!, atmospheric_intensity!
 export Asterism, coordinates_xy_arcsec, compute_psf!, psf_pixel_scale_arcsec
 export ensure_psf_state!
 export ZernikeBasis, compute_zernike!, noll_to_nm

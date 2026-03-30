@@ -86,10 +86,13 @@ Examples already in place:
 - `scripts/profile_multi_source_multi_wfs_runtime.jl`
 - `scripts/profile_pixel_output_runtime.jl`
 - `scripts/profile_atmosphere_runtime.jl`
+- `scripts/profile_atmospheric_field_runtime.jl`
 - `scripts/ao188_3k_hil_audit.jl`
 - `benchmarks/benchmark_{cpu,cuda,amdgpu}.jl`
 - GPU smoke now also guards the maintained monochromatic propagation surface:
   `ElectricField`, `FraunhoferPropagation`, and `FresnelPropagation`
+- GPU smoke now also guards the maintained coupled atmosphere-to-field
+  propagation surface and curvature-through-atmosphere sensing path
 - GPU smoke now also guards maintained broad-band diffractive WFS execution for
   `ShackHartmann` and `PyramidWFS` through `SpectralSource`
 - GPU smoke now also guards maintained extended-source diffractive WFS
@@ -143,6 +146,7 @@ Purpose:
 Maintained surface:
 
 - `scripts/profile_atmosphere_runtime.jl`
+- `scripts/profile_atmospheric_field_runtime.jl`
 
 Required outputs:
 
@@ -151,6 +155,8 @@ Required outputs:
 - finite and infinite steady-state allocations
 - finite and infinite synchronization count per sample
 - explicit infinite/finite slowdown ratio
+- geometric and layered-Fresnel atmosphere-aware field propagation timing
+- curvature-through-atmosphere timing on the same backend ladder
 - ZernikeWFS
 
 Questions:

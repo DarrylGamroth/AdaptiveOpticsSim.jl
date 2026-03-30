@@ -59,6 +59,13 @@ end
     end
 end
 
+@kernel function curvature_branch_field_from_input_kernel!(field_stack, input_field, defocus_stack, phasor, pad::Int, n_branches::Int)
+    x, y, branch = @index(Global, NTuple)
+    if x <= pad && y <= pad && branch <= n_branches
+        @inbounds field_stack[x, y, branch] = input_field[x, y] * defocus_stack[x, y, branch] * phasor[x, y]
+    end
+end
+
 @kernel function curvature_abs2_stack_kernel!(intensity_stack, field_stack, pad::Int, n_branches::Int)
     x, y, branch = @index(Global, NTuple)
     if x <= pad && y <= pad && branch <= n_branches
@@ -489,6 +496,50 @@ function curvature_intensity!(style::AcceleratorStyle, wfs::CurvatureWFS, tel::T
     return sample_curvature_frames!(wfs, tel)
 end
 
+function curvature_branch_stack_from_field!(wfs::CurvatureWFS, field::ElectricField)
+    return curvature_branch_stack_from_field!(execution_style(wfs.state.field_stack), wfs, field)
+end
+
+function curvature_branch_stack_from_field!(::ScalarCPUStyle, wfs::CurvatureWFS, field::ElectricField)
+    size(field.state.field) == (size(wfs.state.field_stack, 1), size(wfs.state.field_stack, 2)) ||
+        throw(DimensionMismatchError("ElectricField padded resolution must match CurvatureWFS diffraction grid"))
+    n_branches = size(wfs.state.field_stack, 3)
+    pad = size(wfs.state.field_stack, 1)
+    @inbounds for branch in 1:n_branches, y in 1:pad, x in 1:pad
+        wfs.state.field_stack[x, y, branch] = field.state.field[x, y] * wfs.state.defocus_stack[x, y, branch] * wfs.state.phasor[x, y]
+    end
+    return wfs.state.field_stack
+end
+
+function curvature_branch_stack_from_field!(style::AcceleratorStyle, wfs::CurvatureWFS, field::ElectricField)
+    size(field.state.field) == (size(wfs.state.field_stack, 1), size(wfs.state.field_stack, 2)) ||
+        throw(DimensionMismatchError("ElectricField padded resolution must match CurvatureWFS diffraction grid"))
+    launch_kernel_async!(style, curvature_branch_field_from_input_kernel!, wfs.state.field_stack,
+        field.state.field, wfs.state.defocus_stack, wfs.state.phasor, size(wfs.state.field_stack, 1), size(wfs.state.field_stack, 3);
+        ndrange=size(wfs.state.field_stack))
+    synchronize_backend!(style)
+    return wfs.state.field_stack
+end
+
+function curvature_intensity_from_field!(wfs::CurvatureWFS, tel::Telescope, field::ElectricField)
+    ensure_curvature_buffers!(wfs, tel)
+    curvature_branch_stack_from_field!(wfs, field)
+    fraunhofer_intensity_stack!(wfs.state.intensity_stack, wfs.state.field_stack, wfs.state.fft_stack_plan)
+    return sample_curvature_frames!(wfs, tel)
+end
+
+function curvature_intensity!(wfs::CurvatureWFS, tel::Telescope, src::AbstractSource, atm::AbstractAtmosphere;
+    propagation::Union{Nothing,AtmosphericFieldPropagation}=nothing,
+    model::AbstractAtmosphericFieldModel=LayeredFresnelAtmosphericPropagation(T=eltype(wfs.state.frame_plus)))
+    T = eltype(wfs.state.frame_plus)
+    prop = isnothing(propagation) ? AtmosphericFieldPropagation(atm, tel, src;
+        model=model,
+        zero_padding=wfs.params.diffraction_padding,
+        T=T) : propagation
+    field = propagate_atmosphere_field!(prop, atm, tel, src)
+    return curvature_intensity_from_field!(wfs, tel, field)
+end
+
 function curvature_signal!(wfs::CurvatureWFS, frame::AbstractMatrix{T}) where {T<:AbstractFloat}
     return curvature_signal!(execution_style(frame), wfs.params.readout_model, wfs, frame)
 end
@@ -635,6 +686,53 @@ function measure!(::Diffractive, wfs::CurvatureWFS, tel::Telescope, src::Abstrac
     ensure_curvature_calibration!(wfs, tel, src)
     curvature_intensity!(wfs, tel, src)
     return curvature_signal!(wfs, wfs.state.camera_frame)
+end
+
+function measure!(wfs::CurvatureWFS, tel::Telescope, src::AbstractSource, atm::AbstractAtmosphere;
+    propagation::Union{Nothing,AtmosphericFieldPropagation}=nothing,
+    model::AbstractAtmosphericFieldModel=LayeredFresnelAtmosphericPropagation(T=eltype(wfs.state.frame_plus)))
+    ensure_curvature_calibration!(wfs, tel, src)
+    curvature_intensity!(wfs, tel, src, atm; propagation=propagation, model=model)
+    return curvature_signal!(wfs, wfs.state.camera_frame)
+end
+
+function measure!(wfs::CurvatureWFS, tel::Telescope, src::AbstractSource, atm::AbstractAtmosphere, det::AbstractDetector;
+    rng::AbstractRNG=Random.default_rng(),
+    propagation::Union{Nothing,AtmosphericFieldPropagation}=nothing,
+    model::AbstractAtmosphericFieldModel=LayeredFresnelAtmosphericPropagation(T=eltype(wfs.state.frame_plus)))
+    ensure_curvature_calibration!(wfs, tel, src)
+    curvature_intensity!(wfs, tel, src, atm; propagation=propagation, model=model)
+    capture!(det, wfs.state.camera_frame; rng=rng)
+    frame = det isa APDDetector ? channel_output(det) : output_frame(det)
+    return curvature_signal!(wfs, frame)
+end
+
+function measure!(wfs::CurvatureWFS, tel::Telescope, ast::Asterism, atm::AbstractAtmosphere;
+    model::AbstractAtmosphericFieldModel=LayeredFresnelAtmosphericPropagation(T=eltype(wfs.state.frame_plus)))
+    isempty(ast.sources) && throw(InvalidConfiguration("asterism must contain at least one source"))
+    ensure_curvature_calibration!(wfs, tel, ast.sources[1])
+    acc_plus = similar(wfs.state.frame_plus)
+    acc_minus = similar(wfs.state.frame_minus)
+    fill!(acc_plus, zero(eltype(acc_plus)))
+    fill!(acc_minus, zero(eltype(acc_minus)))
+    @inbounds for src in ast.sources
+        curvature_intensity!(wfs, tel, src, atm; model=model)
+        acc_plus .+= wfs.state.frame_plus
+        acc_minus .+= wfs.state.frame_minus
+    end
+    copyto!(wfs.state.frame_plus, acc_plus)
+    copyto!(wfs.state.frame_minus, acc_minus)
+    pack_curvature_readout!(wfs)
+    return curvature_signal!(wfs, wfs.state.camera_frame)
+end
+
+function measure!(wfs::CurvatureWFS, tel::Telescope, ast::Asterism, atm::AbstractAtmosphere, det::AbstractDetector;
+    rng::AbstractRNG=Random.default_rng(),
+    model::AbstractAtmosphericFieldModel=LayeredFresnelAtmosphericPropagation(T=eltype(wfs.state.frame_plus)))
+    measure!(wfs, tel, ast, atm; model=model)
+    capture!(det, wfs.state.camera_frame; rng=rng)
+    frame = det isa APDDetector ? channel_output(det) : output_frame(det)
+    return curvature_signal!(wfs, frame)
 end
 
 function measure!(::Diffractive, wfs::CurvatureWFS, tel::Telescope, src::AbstractSource,

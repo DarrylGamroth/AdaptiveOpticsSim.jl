@@ -38,8 +38,13 @@ Project-wide units guidance lives in
 - `Source`, `SourceParams`, `LGSSource`, `LGSSourceParams`, `wavelength`
 - `ElectricField`, `ElectricFieldParams`, `ElectricFieldState`
 - `AbstractPropagationModel`, `FraunhoferPropagation`, `FresnelPropagation`
+- `AbstractAtmosphericFieldModel`, `GeometricAtmosphericPropagation`,
+  `LayeredFresnelAtmosphericPropagation`
+- `AtmosphericFieldPropagation`, `AtmosphericFieldPropagationParams`,
+  `AtmosphericFieldPropagationState`, `AtmosphericFieldSlice`
 - `fill_from_telescope!`, `fill_telescope_field!`, `apply_phase!`,
-  `apply_amplitude!`, `intensity!`, `propagate_field!`
+  `apply_amplitude!`, `intensity!`, `propagate_field!`,
+  `propagate_atmosphere_field!`, `atmospheric_intensity!`
 - `Asterism`, `coordinates_xy_arcsec`, `compute_psf!`,
   `psf_pixel_scale_arcsec`, `ensure_psf_state!`
 - `ZernikeBasis`, `compute_zernike!`, `noll_to_nm`
@@ -199,10 +204,15 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   `fill_from_telescope!`, `apply_phase!`, `apply_amplitude!`, and `intensity!`.
 - Maintained propagation models implement `propagate_field!(out, field, model)`
   and `propagate_field!(field, model)`.
+- The maintained atmosphere-aware field surface is `AtmosphericFieldPropagation`
+  with `propagate_atmosphere_field!` and `atmospheric_intensity!`.
 - `FraunhoferPropagation` exports centered pupil-to-focal field propagation with
   `params.output_sampling_rad` describing the angular sample pitch.
 - `FresnelPropagation` exports monochromatic transfer-function propagation with
   explicit `params.distance_m` and `params.output_sampling_m`.
+- `GeometricAtmosphericPropagation` is the fast phase-only coupled atmosphere
+  path, while `LayeredFresnelAtmosphericPropagation` is the maintained
+  layer-aware physical propagation path.
 - Runtime OPD remains in meters on `Telescope.state.opd`; field-phase
   conversion is explicit and wavelength-aware at the field boundary.
 
@@ -253,6 +263,9 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - Source-aware maintained multilayer atmospheres provide `propagate!(atm, tel,
   src)` and are expected to route through the shared accumulation helpers
   rather than duplicating backend-specific render loops.
+- The maintained coupled atmosphere/field surface is expected to consume those
+  same source-aware layer helpers rather than introducing a second backend
+  split for finite vs infinite atmospheres.
 
 ### `IF-WFS`: wavefront sensors
 
@@ -264,6 +277,10 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - `CurvatureWFS` now has two maintained readout families:
   `CurvatureFrameReadout` for frame-style detector coupling and
   `CurvatureCountingReadout` for counting/channel-style readout.
+- `CurvatureWFS` now also has a maintained atmosphere-aware diffractive path
+  through `measure!(wfs, tel, src, atm)` and
+  `measure!(wfs, tel, ast, atm)` using the shared atmospheric field
+  propagation layer.
 - `CurvatureBranchResponse` models reusable intra-/extra-focal throughput and
   background imbalance independently of any one instrument example.
 - `ShackHartmann` now exposes its maintained subaperture/calibration surface

@@ -317,6 +317,8 @@ Candidate directions after the core runtime is fixed:
 - electric-field and Fresnel/chromatic propagation layers informed by SPECULA,
 - polychromatic and extended-source sensing optics,
 - stronger aperture/mask primitives and SH subaperture calibration surfaces,
+- atmosphere-aware electric-field propagation informed primarily by SPECULA's
+  `AtmoPropagation`,
 - richer control families informed by SPECULA,
 - stronger detector/readout physics for runtime realism,
 - science-camera and coronagraph workflows through `Proper.jl`,
@@ -332,6 +334,9 @@ Detailed ranked follow-on plan:
 - If core optics is prioritized ahead of `Proper.jl` or broader control work,
   follow
   [core-optics-expansion-roadmap.md](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/core-optics-expansion-roadmap.md).
+- If atmosphere-aware field propagation is prioritized after the completed
+  core-optics milestones, follow
+  [atmospheric-field-propagation-roadmap.md](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/atmospheric-field-propagation-roadmap.md).
 
 ## Recommended Execution Order
 
@@ -352,15 +357,20 @@ Rationale:
 
 ## Immediate Next Sprint
 
-1. Start CO-1 from
-   [core-optics-expansion-roadmap.md](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/core-optics-expansion-roadmap.md):
-   add the electric-field core types and telescope-to-field conversion helpers.
-2. Refactor the current PSF input preparation so Fraunhofer propagation becomes a
-   maintained reusable field operation instead of a special-case PSF path.
-3. Add CPU reference tests proving field-based Fraunhofer propagation matches
-   the current monochromatic PSF behavior.
-4. Add backend-smoke coverage for the new field construction and intensity path.
-5. Re-benchmark the PSF and curvature surfaces before starting CO-2.
+1. Start AFP-1 from
+   [atmospheric-field-propagation-roadmap.md](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/atmospheric-field-propagation-roadmap.md):
+   define the maintained atmosphere-to-field propagation contract and workspace
+   types.
+2. Implement AFP-2 geometric layered field propagation first so the coupled
+   path can be validated against the current OPD-based geometric limit.
+3. Add CPU reference tests covering:
+   - vacuum/no-atmosphere equivalence,
+   - one-layer phase application,
+   - finite vs infinite atmosphere agreement in the geometric limit.
+4. Add AMDGPU and CUDA smoke coverage for the geometric atmosphere-aware field
+   path before starting layered Fresnel propagation.
+5. Re-benchmark curvature and atmosphere-driven optical paths before starting
+   AFP-3.
 
 ## Exit Criteria For The Roadmap
 
@@ -370,5 +380,7 @@ This roadmap is complete when:
 - phase-statistics helpers and runtime scaling are consistent,
 - HIL runtime profiles are explicit and benchmarked,
 - the ranked core-optics milestones are either complete or explicitly deferred,
+- the next coupled optics gap, atmosphere-aware field propagation, is either
+  complete or explicitly deferred,
 - `Proper.jl` provides optional science propagation if still needed,
 - control remains lean in core and only grows after the plant is stable.

@@ -662,11 +662,31 @@ surface, and measures the WFS with or without an explicit detector model.
 end
 
 @inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, dm::DeformableMirror,
+    wfs::CurvatureWFS, src::AbstractSource, rng::AbstractRNG)
+    reset_opd!(tel)
+    advance!(atm, tel, rng)
+    apply!(dm, tel, DMAdditive())
+    measure!(wfs, tel, src, atm)
+    tel.state.opd .+= atm.state.opd .* tel.state.pupil
+    return nothing
+end
+
+@inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, dm::DeformableMirror,
     wfs::AbstractWFS, src::AbstractSource, det::AbstractDetector, rng::AbstractRNG)
     advance!(atm, tel, rng)
     propagate!(atm, tel)
     apply!(dm, tel, DMAdditive())
     measure!(wfs, tel, src, det; rng=rng)
+    return nothing
+end
+
+@inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, dm::DeformableMirror,
+    wfs::CurvatureWFS, src::AbstractSource, det::AbstractDetector, rng::AbstractRNG)
+    reset_opd!(tel)
+    advance!(atm, tel, rng)
+    apply!(dm, tel, DMAdditive())
+    measure!(wfs, tel, src, atm, det; rng=rng)
+    tel.state.opd .+= atm.state.opd .* tel.state.pupil
     return nothing
 end
 

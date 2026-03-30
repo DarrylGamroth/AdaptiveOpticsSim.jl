@@ -219,6 +219,50 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
         return spider_tel.state.opd
     end
 
+    record_gpu_smoke!(failures, "atmospheric_field_geometric") do
+        atm = MultiLayerAtmosphere(tel;
+            r0=T(0.2),
+            L0=T(25.0),
+            fractional_cn2=T[0.7, 0.3],
+            wind_speed=T[8.0, 4.0],
+            wind_direction=T[0.0, 90.0],
+            altitude=T[0.0, 5000.0],
+            T=T,
+            backend=BackendArray,
+        )
+        advance!(atm, tel; rng=rng)
+        prop = AtmosphericFieldPropagation(atm, tel, src;
+            model=GeometricAtmosphericPropagation(T=T),
+            zero_padding=2,
+            T=T)
+        field = propagate_atmosphere_field!(prop, atm, tel, src)
+        @assert field.state.field isa BackendArray
+        intensity = atmospheric_intensity!(prop, atm, tel, src)
+        @assert intensity isa BackendArray
+        return intensity
+    end
+
+    record_gpu_smoke!(failures, "atmospheric_field_fresnel") do
+        atm = MultiLayerAtmosphere(tel;
+            r0=T(0.2),
+            L0=T(25.0),
+            fractional_cn2=T[0.7, 0.3],
+            wind_speed=T[8.0, 4.0],
+            wind_direction=T[0.0, 90.0],
+            altitude=T[0.0, 5000.0],
+            T=T,
+            backend=BackendArray,
+        )
+        advance!(atm, tel; rng=rng)
+        prop = AtmosphericFieldPropagation(atm, tel, src;
+            model=LayeredFresnelAtmosphericPropagation(T=T),
+            zero_padding=2,
+            T=T)
+        field = propagate_atmosphere_field!(prop, atm, tel, src)
+        @assert field.state.field isa BackendArray
+        return field.state.field
+    end
+
     record_gpu_smoke!(failures, "atmosphere_infinite_statistical_agreement") do
         function trajectory_stats(backend; steps::Int=10)
             local_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
@@ -437,6 +481,24 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
         wfs = ZernikeWFS(tel; n_subap=4, T=T, backend=BackendArray)
         det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1, T=T, backend=BackendArray)
         slopes = measure!(wfs, tel, src, det; rng=rng)
+        @assert slopes isa BackendArray
+        return slopes
+    end
+
+    record_gpu_smoke!(failures, "measure_curvature_atmosphere") do
+        atm = MultiLayerAtmosphere(tel;
+            r0=T(0.2),
+            L0=T(25.0),
+            fractional_cn2=T[0.7, 0.3],
+            wind_speed=T[8.0, 4.0],
+            wind_direction=T[0.0, 90.0],
+            altitude=T[0.0, 5000.0],
+            T=T,
+            backend=BackendArray,
+        )
+        advance!(atm, tel; rng=rng)
+        wfs = CurvatureWFS(tel; n_subap=4, T=T, backend=BackendArray)
+        slopes = measure!(wfs, tel, src, atm)
         @assert slopes isa BackendArray
         return slopes
     end

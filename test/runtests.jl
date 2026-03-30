@@ -372,6 +372,68 @@ end
     zero_out = similar(field.state.field)
     propagate_field!(zero_out, field, zero_fresnel)
     @test zero_out ≈ field.state.field atol=1e-10 rtol=1e-10
+
+    atm_tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    atm_src = Source(band=:I, magnitude=0.0)
+    atm = MultiLayerAtmosphere(atm_tel;
+        r0=0.2,
+        L0=25.0,
+        fractional_cn2=[0.7, 0.3],
+        wind_speed=[8.0, 4.0],
+        wind_direction=[0.0, 90.0],
+        altitude=[0.0, 5000.0],
+    )
+    advance!(atm, atm_tel; rng=MersenneTwister(1))
+    geom_prop = AtmosphericFieldPropagation(atm, atm_tel, atm_src;
+        model=GeometricAtmosphericPropagation(T=Float64),
+        zero_padding=1,
+        T=Float64)
+    geom_field = propagate_atmosphere_field!(geom_prop, atm, atm_tel, atm_src)
+    tel_geom = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    propagate!(atm, tel_geom, atm_src)
+    collapsed = ElectricField(tel_geom, atm_src; zero_padding=1)
+    @test geom_field.state.field ≈ collapsed.state.field atol=1e-8 rtol=1e-8
+
+    fresnel_atm = MultiLayerAtmosphere(atm_tel;
+        r0=0.2,
+        L0=25.0,
+        fractional_cn2=[1.0],
+        wind_speed=[0.0],
+        wind_direction=[0.0],
+        altitude=[0.0],
+    )
+    advance!(fresnel_atm, atm_tel; rng=MersenneTwister(2))
+    fresnel_prop = AtmosphericFieldPropagation(fresnel_atm, atm_tel, atm_src;
+        model=LayeredFresnelAtmosphericPropagation(T=Float64),
+        zero_padding=1,
+        T=Float64)
+    fresnel_field = propagate_atmosphere_field!(fresnel_prop, fresnel_atm, atm_tel, atm_src)
+    geom_single = AtmosphericFieldPropagation(fresnel_atm, atm_tel, atm_src;
+        model=GeometricAtmosphericPropagation(T=Float64),
+        zero_padding=1,
+        T=Float64)
+    geom_single_field = propagate_atmosphere_field!(geom_single, fresnel_atm, atm_tel, atm_src)
+    @test fresnel_field.state.field ≈ geom_single_field.state.field atol=1e-8 rtol=1e-8
+
+    spectral = with_spectrum(atm_src, SpectralBundle([wavelength(atm_src), 1.1 * wavelength(atm_src)], [0.75, 0.25]))
+    spectral_prop = AtmosphericFieldPropagation(atm, atm_tel, spectral;
+        model=GeometricAtmosphericPropagation(T=Float64),
+        zero_padding=2,
+        T=Float64)
+    spectral_intensity = atmospheric_intensity!(spectral_prop, atm, atm_tel, spectral)
+    mono_prop = AtmosphericFieldPropagation(atm, atm_tel, atm_src;
+        model=GeometricAtmosphericPropagation(T=Float64),
+        zero_padding=2,
+        T=Float64)
+    mono_intensity = atmospheric_intensity!(mono_prop, atm, atm_tel, atm_src)
+    single_spectral = with_spectrum(atm_src, SpectralBundle([wavelength(atm_src)], [1.0]))
+    single_spectral_prop = AtmosphericFieldPropagation(atm, atm_tel, single_spectral;
+        model=GeometricAtmosphericPropagation(T=Float64),
+        zero_padding=2,
+        T=Float64)
+    @test atmospheric_intensity!(single_spectral_prop, atm, atm_tel, single_spectral) ≈ mono_intensity atol=1e-8 rtol=1e-8
+    @test size(spectral_intensity) == size(mono_intensity)
+    @test sum(spectral_intensity) > 0
 end
 
 @testset "Aperture masks" begin
@@ -2555,6 +2617,29 @@ end
     @test size(oversampled.state.reduced_plus) == (8, 8)
     @test oversampled_flat ≈ zero.(oversampled_flat) atol=1e-10
     @test_throws InvalidConfiguration CurvatureWFS(tel; n_subap=8, readout_crop_resolution=18, readout_pixels_per_subap=2)
+
+    atm = MultiLayerAtmosphere(tel;
+        r0=0.2,
+        L0=25.0,
+        fractional_cn2=[0.7, 0.3],
+        wind_speed=[8.0, 4.0],
+        wind_direction=[0.0, 90.0],
+        altitude=[0.0, 5000.0],
+    )
+    advance!(atm, tel; rng=MersenneTwister(3))
+    atm_slopes = copy(measure!(wfs, tel, src, atm))
+    @test all(isfinite, atm_slopes)
+    @test norm(atm_slopes) > 0
+
+    det_atm = Detector(noise=NoiseNone(), binning=1)
+    det_atm_slopes = copy(measure!(wfs, tel, src, atm, det_atm))
+    @test all(isfinite, det_atm_slopes)
+
+    ast = Asterism([src, Source(band=:I, magnitude=0.0, coordinates=(1.0, 90.0))])
+    ast_slopes = copy(measure!(wfs, tel, ast, atm))
+    @test length(ast_slopes) == length(wfs.state.slopes)
+    @test all(isfinite, ast_slopes)
+    @test norm(ast_slopes) > 0
 end
 
 @testset "OOPAO parity knobs" begin
