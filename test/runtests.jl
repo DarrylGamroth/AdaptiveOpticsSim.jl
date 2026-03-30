@@ -348,6 +348,30 @@ end
     intensity!(intensity_buffer, field_simple)
     @test intensity_buffer ≈ abs2.(field_simple.state.field)
     @test intensity!(field_simple) === field_simple.state.intensity
+
+    fraunhofer = FraunhoferPropagation(field)
+    propagated = similar(field.state.field)
+    propagate_field!(propagated, field, fraunhofer)
+    propagated_psf = similar(field.state.intensity)
+    @. propagated_psf = abs2(propagated)
+    @test propagated_psf ≈ centered_psf atol=1e-10 rtol=1e-10
+    @test fraunhofer.params.output_sampling_rad ≈ wavelength(src) / (field.params.padded_resolution * field.params.sampling_m)
+
+    fresnel = FresnelPropagation(field; distance_m=25.0)
+    fresnel_out = similar(field.state.field)
+    propagate_field!(fresnel_out, field, fresnel)
+    @test size(fresnel_out) == size(field.state.field)
+    @test isfinite(sum(abs, fresnel_out))
+    reverse_fresnel = FresnelPropagation(field; distance_m=-25.0)
+    reverse_input = ElectricField(tel, src; zero_padding=2)
+    copyto!(reverse_input.state.field, fresnel_out)
+    propagate_field!(reverse_input, reverse_fresnel)
+    @test reverse_input.state.field ≈ field.state.field atol=1e-9 rtol=1e-9
+
+    zero_fresnel = FresnelPropagation(field; distance_m=0.0)
+    zero_out = similar(field.state.field)
+    propagate_field!(zero_out, field, zero_fresnel)
+    @test zero_out ≈ field.state.field atol=1e-10 rtol=1e-10
 end
 
 @testset "Zernike basis" begin

@@ -33,8 +33,9 @@ Project-wide units guidance lives in
 - `generate_pupil!`, `reset_opd!`, `apply_opd!`, `set_pupil!`, `apply_spiders!`
 - `Source`, `SourceParams`, `LGSSource`, `LGSSourceParams`, `wavelength`
 - `ElectricField`, `ElectricFieldParams`, `ElectricFieldState`
+- `AbstractPropagationModel`, `FraunhoferPropagation`, `FresnelPropagation`
 - `fill_from_telescope!`, `fill_telescope_field!`, `apply_phase!`,
-  `apply_amplitude!`, `intensity!`
+  `apply_amplitude!`, `intensity!`, `propagate_field!`
 - `Asterism`, `coordinates_xy_arcsec`, `compute_psf!`,
   `psf_pixel_scale_arcsec`, `ensure_psf_state!`
 - `ZernikeBasis`, `compute_zernike!`, `noll_to_nm`
@@ -187,6 +188,12 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   derived propagation object rather than the primary telescope plant state.
 - `ElectricField` implementations/builders are expected to provide:
   `fill_from_telescope!`, `apply_phase!`, `apply_amplitude!`, and `intensity!`.
+- Maintained propagation models implement `propagate_field!(out, field, model)`
+  and `propagate_field!(field, model)`.
+- `FraunhoferPropagation` exports centered pupil-to-focal field propagation with
+  `params.output_sampling_rad` describing the angular sample pitch.
+- `FresnelPropagation` exports monochromatic transfer-function propagation with
+  explicit `params.distance_m` and `params.output_sampling_m`.
 - Runtime OPD remains in meters on `Telescope.state.opd`; field-phase
   conversion is explicit and wavelength-aware at the field boundary.
 

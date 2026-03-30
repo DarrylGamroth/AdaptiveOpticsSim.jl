@@ -31,13 +31,7 @@ function ensure_psf_workspace!(tel::Telescope, n::Int)
 end
 
 function centered_psf_from_field!(out::AbstractMatrix{T}, field::ElectricField) where {T<:AbstractFloat}
-    size(out) == size(field.state.field) ||
-        throw(DimensionMismatchError("PSF output must match ElectricField size"))
-    copyto!(field.state.fft_buffer, field.state.field)
-    execute_fft_plan!(field.state.fft_buffer, field.state.fft_plan)
-    fft_scale = inv(T(field.params.padded_resolution))
-    @. out = abs2(field.state.fft_buffer) * (fft_scale * fft_scale)
-    return out
+    return fraunhofer_intensity_from_field!(out, field)
 end
 
 function compute_psf_centered!(tel::Telescope, src::Source, ws::Workspace, zero_padding::Int=1)

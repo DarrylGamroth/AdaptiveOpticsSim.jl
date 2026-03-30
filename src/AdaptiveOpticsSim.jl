@@ -33,6 +33,7 @@ include("Core/telemetry.jl")
 include("Optics/telescope.jl")
 include("Optics/source.jl")
 include("Optics/electric_field.jl")
+include("Optics/propagation.jl")
 include("Optics/psf.jl")
 include("Optics/zernike.jl")
 include("Optics/misregistration.jl")
@@ -94,6 +95,7 @@ export Source, SourceParams, LGSSource, LGSSourceParams, wavelength, optical_pat
 export lgs_elongation_factor
 export ElectricField, ElectricFieldParams, ElectricFieldState
 export fill_from_telescope!, fill_telescope_field!, apply_phase!, apply_amplitude!, intensity!
+export AbstractPropagationModel, FraunhoferPropagation, FresnelPropagation, propagate_field!
 export Asterism, coordinates_xy_arcsec, compute_psf!, psf_pixel_scale_arcsec
 export ensure_psf_state!
 export ZernikeBasis, compute_zernike!, noll_to_nm

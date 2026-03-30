@@ -467,8 +467,7 @@ function curvature_intensity!(::ScalarCPUStyle, wfs::CurvatureWFS, tel::Telescop
             wfs.state.field_stack[xx, yy, 2] = common * wfs.state.defocus_stack[xx, yy, 2]
         end
     end
-    execute_fft_plan!(wfs.state.field_stack, wfs.state.fft_stack_plan)
-    @. wfs.state.intensity_stack = abs2(wfs.state.field_stack)
+    fraunhofer_intensity_stack!(wfs.state.intensity_stack, wfs.state.field_stack, wfs.state.fft_stack_plan)
     return sample_curvature_frames!(wfs, tel)
 end
 
@@ -486,9 +485,7 @@ function curvature_intensity!(style::AcceleratorStyle, wfs::CurvatureWFS, tel::T
         tel.state.opd, wfs.state.defocus_stack, wfs.state.phasor, amp_scale, opd_to_cycles, ox, oy, n, pad;
         ndrange=size(wfs.state.field_stack))
     synchronize_backend!(style)
-    execute_fft_plan!(wfs.state.field_stack, wfs.state.fft_stack_plan)
-    launch_kernel!(style, curvature_abs2_stack_kernel!, wfs.state.intensity_stack, wfs.state.field_stack,
-        pad, size(wfs.state.field_stack, 3); ndrange=size(wfs.state.intensity_stack))
+    fraunhofer_intensity_stack!(wfs.state.intensity_stack, wfs.state.field_stack, wfs.state.fft_stack_plan)
     return sample_curvature_frames!(wfs, tel)
 end
 

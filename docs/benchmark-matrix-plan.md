@@ -88,6 +88,8 @@ Examples already in place:
 - `scripts/profile_atmosphere_runtime.jl`
 - `scripts/ao188_3k_hil_audit.jl`
 - `benchmarks/benchmark_{cpu,cuda,amdgpu}.jl`
+- GPU smoke now also guards the maintained monochromatic propagation surface:
+  `ElectricField`, `FraunhoferPropagation`, and `FresnelPropagation`
 
 ### Class B: Representative Benchmarks
 

@@ -60,6 +60,31 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
         return field.state.intensity
     end
 
+    record_gpu_smoke!(failures, "field_propagation") do
+        field = ElectricField(tel, src; zero_padding=2, T=T)
+        fraunhofer = FraunhoferPropagation(field)
+        propagated = similar(field.state.field)
+        propagate_field!(propagated, field, fraunhofer)
+        psf_from_prop = similar(field.state.intensity)
+        @. psf_from_prop = abs2(propagated)
+        psf = compute_psf!(tel, src; zero_padding=2)
+        rel = maximum(abs.(Array(psf_from_prop) .- Array(psf))) / max(maximum(abs.(Array(psf))), eps(Float64))
+        @assert rel < 1f-5
+
+        fresnel = FresnelPropagation(field; distance_m=T(10))
+        fresnel_out = similar(field.state.field)
+        propagate_field!(fresnel_out, field, fresnel)
+        @assert fresnel_out isa BackendArray
+        reverse = FresnelPropagation(field; distance_m=T(-10))
+        field_reverse = ElectricField(tel, src; zero_padding=2, T=T)
+        copyto!(field_reverse.state.field, fresnel_out)
+        propagate_field!(field_reverse, reverse)
+        roundtrip_rel = maximum(abs.(Array(field_reverse.state.field) .- Array(field.state.field))) /
+            max(maximum(abs.(Array(field.state.field))), eps(Float64))
+        @assert roundtrip_rel < 1f-4
+        return fresnel_out
+    end
+
     record_gpu_smoke!(failures, "psf_asterism") do
         ast = Asterism([
             Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0)),

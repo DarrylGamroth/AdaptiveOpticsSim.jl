@@ -3,6 +3,7 @@ struct ElectricFieldParams{T<:AbstractFloat}
     padded_resolution::Int
     zero_padding::Int
     wavelength::T
+    sampling_m::T
 end
 
 mutable struct ElectricFieldState{T<:AbstractFloat,
@@ -48,7 +49,8 @@ function ElectricField(tel::Telescope, src::AbstractSource;
         backend{T}(undef, n_pad, n_pad)
     end
     fft_plan = plan_fft_backend!(fft_buffer)
-    params = ElectricFieldParams{T}(n, n_pad, zero_padding, T(wavelength(src)))
+    sampling_m = T(tel.params.diameter / tel.params.resolution)
+    params = ElectricFieldParams{T}(n, n_pad, zero_padding, T(wavelength(src)), sampling_m)
     state = ElectricFieldState{T, typeof(field), typeof(intensity), typeof(fft_plan)}(
         field,
         fft_buffer,
