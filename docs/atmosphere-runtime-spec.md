@@ -4,6 +4,9 @@ This document freezes the Milestone 0 contract for atmosphere-related runtime
 behavior in AdaptiveOpticsSim.jl. It is the normative reference for the
 atmosphere/runtime refactor that follows.
 
+General project-wide units guidance lives in
+[units-policy.md](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/units-policy.md).
+
 ## Scope
 
 This specification covers:

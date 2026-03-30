@@ -5,13 +5,13 @@ struct TomographyAtmosphereParams{
     D<:AbstractVector{T},
     S<:AbstractVector{T},
 }
-    zenith_angle_deg::T
+    zenith_angle_rad::T
     altitude_km::A
     L0::T
     r0_zenith::T
     fractional_cn2::F
     wavelength::T
-    wind_direction_deg::D
+    wind_direction_rad::D
     wind_speed::S
 end
 
@@ -58,7 +58,7 @@ function TomographyAtmosphereParams(;
     )
     altitude = convert.(T, altitude_km)
     fractions = convert.(T, fractional_cn2)
-    directions = convert.(T, wind_direction_deg)
+    directions = T.(deg2rad.(wind_direction_deg))
     speeds = convert.(T, wind_speed)
     return TomographyAtmosphereParams{
         T,
@@ -67,7 +67,7 @@ function TomographyAtmosphereParams(;
         typeof(directions),
         typeof(speeds),
     }(
-        T(zenith_angle_deg),
+        T(deg2rad(zenith_angle_deg)),
         altitude,
         T(L0),
         T(r0_zenith),
@@ -226,17 +226,19 @@ function TomographyDMParams(;
     )
 end
 
-@inline airmass(params::TomographyAtmosphereParams) = inv(cosd(params.zenith_angle_deg))
+@inline zenith_angle_rad(params::TomographyAtmosphereParams) = params.zenith_angle_rad
+@inline zenith_angle_deg(params::TomographyAtmosphereParams) = rad2deg(params.zenith_angle_rad)
+
+@inline airmass(params::TomographyAtmosphereParams) = inv(cos(params.zenith_angle_rad))
 
 @inline layer_altitude_m(params::TomographyAtmosphereParams) = params.altitude_km .* (1000 * airmass(params))
 
-@inline function wind_direction_rad(params::TomographyAtmosphereParams)
-    return deg2rad.(params.wind_direction_deg)
-end
+@inline wind_direction_rad(params::TomographyAtmosphereParams) = params.wind_direction_rad
+@inline wind_direction_deg(params::TomographyAtmosphereParams) = rad2deg.(params.wind_direction_rad)
 
 @inline function wind_velocity_components(params::TomographyAtmosphereParams)
-    direction = wind_direction_rad(params)
-    return params.wind_speed .* cos.(direction), params.wind_speed .* sin.(direction)
+    return params.wind_speed .* cos.(params.wind_direction_rad),
+        params.wind_speed .* sin.(params.wind_direction_rad)
 end
 
 @inline lgs_height_m(params::LGSAsterismParams, atmosphere::TomographyAtmosphereParams) =

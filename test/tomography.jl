@@ -9,8 +9,12 @@
         wind_direction_deg=[90.0, 45.0, 180.0],
         wind_speed=[10.0, 20.0, 15.0],
     )
+    @test isapprox(zenith_angle_rad(atm), deg2rad(30.0))
+    @test zenith_angle_deg(atm) ≈ 30.0
     @test isapprox(airmass(atm), inv(cosd(30.0)))
     @test layer_altitude_m(atm) ≈ [5000.0, 10000.0, 15000.0] .* airmass(atm)
+    @test wind_direction_rad(atm) ≈ deg2rad.([90.0, 45.0, 180.0])
+    @test wind_direction_deg(atm) ≈ [90.0, 45.0, 180.0]
     vx, vy = wind_velocity_components(atm)
     @test vx ≈ [0.0, 20cosd(45.0), -15.0]
     @test vy ≈ [10.0, 20sind(45.0), 0.0]

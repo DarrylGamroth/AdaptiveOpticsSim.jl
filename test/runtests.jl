@@ -1951,6 +1951,9 @@ end
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src1 = Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0))
     src2 = Source(band=:I, magnitude=0.0, coordinates=(1.0, 90.0))
+    @test coordinates_xy_arcsec(src1) == (0.0, 0.0)
+    @test coordinates_xy_arcsec(src2)[1] ≈ 0.0 atol=1e-12
+    @test coordinates_xy_arcsec(src2)[2] ≈ 1.0
     ast = Asterism([src1, src2])
     psf = compute_psf!(tel, ast; zero_padding=2)
     @test size(tel.state.psf_stack, 3) == 2
@@ -1978,6 +1981,8 @@ end
     tel2 = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm1 = DeformableMirror(tel2; n_act=2, influence_width=0.3)
     mis = Misregistration(shift_x=0.1, shift_y=0.0, rotation_deg=5.0, T=Float64)
+    @test rotation_deg(mis) ≈ 5.0
+    @test rotation_rad(mis) ≈ deg2rad(5.0)
     dm2 = DeformableMirror(tel2; n_act=2, influence_width=0.3, misregistration=mis)
     @test dm1.state.modes != dm2.state.modes
 end

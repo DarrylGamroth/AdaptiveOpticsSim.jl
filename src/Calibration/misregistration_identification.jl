@@ -96,7 +96,7 @@ function compute_meta_sensitivity_matrix(tel::Telescope, dm::DeformableMirror, w
     n_elements = length(calib0.matrix)
     meta = zeros(T, n_elements, length(fields))
     for (idx, field) in enumerate(fields)
-        eps_val = getfield(epsilon, field)
+        eps_val = misregistration_component(epsilon, field)
         if eps_val == 0
             throw(InvalidConfiguration("epsilon for $(field) must be non-zero"))
         end
@@ -114,8 +114,9 @@ function compute_meta_sensitivity_matrix(tel::Telescope, dm::DeformableMirror, w
             imat_n = interaction_matrix(dm, wfs, tel, basis; amplitude=1e-9)
             apply_shift_wfs!(wfs; sx=0, sy=0)
         else
-            mis_p = update_misregistration(misregistration_zero, field, getfield(misregistration_zero, field) + eps_val)
-            mis_n = update_misregistration(misregistration_zero, field, getfield(misregistration_zero, field) - eps_val)
+            base_val = misregistration_component(misregistration_zero, field)
+            mis_p = update_misregistration(misregistration_zero, field, base_val + eps_val)
+            mis_n = update_misregistration(misregistration_zero, field, base_val - eps_val)
 
             dm_p = DeformableMirror(tel; n_act=dm.params.n_act, influence_width=dm.params.influence_width,
                 misregistration=mis_p, T=T)
@@ -158,7 +159,7 @@ function estimate_misregistration(meta::MetaSensitivity, calib_in::AbstractMatri
 
     out = misregistration_zero
     for (i, field) in enumerate(meta.field_order)
-        out = update_misregistration(out, field, getfield(out, field) + delta[i])
+        out = update_misregistration(out, field, misregistration_component(out, field) + delta[i])
     end
     return out
 end
@@ -243,8 +244,8 @@ Return a copy of `mis` with one named misregistration field replaced.
 function update_misregistration(mis::Misregistration{T}, field::Symbol, value::Real) where {T<:AbstractFloat}
     return Misregistration(; shift_x=field == :shift_x ? T(value) : mis.shift_x,
         shift_y=field == :shift_y ? T(value) : mis.shift_y,
-        rotation_deg=field == :rotation_deg ? T(value) : mis.rotation_deg,
-        anamorphosis_angle=field == :anamorphosis_angle ? T(value) : mis.anamorphosis_angle,
+        rotation_deg=field == :rotation_deg ? T(value) : rotation_deg(mis),
+        anamorphosis_angle=field == :anamorphosis_angle ? T(value) : anamorphosis_angle_deg(mis),
         tangential_scaling=field == :tangential_scaling ? T(value) : mis.tangential_scaling,
         radial_scaling=field == :radial_scaling ? T(value) : mis.radial_scaling,
         T=T)

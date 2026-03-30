@@ -64,12 +64,12 @@ end
 
 function compute_psf!(tel::Telescope, src::Source, ws::Workspace, zero_padding::Int=1)
     psf = compute_psf_centered!(tel, src, ws, zero_padding)
-    if iszero(src.params.coordinates[1])
+    coords_xy_arcsec = src.params.coordinates_xy_arcsec
+    if iszero(coords_xy_arcsec[1]) && iszero(coords_xy_arcsec[2])
         return psf
     end
     scale = psf_pixel_scale_arcsec(tel, src, zero_padding)
-    dx_arcsec, dy_arcsec = coordinates_xy_arcsec(src)
-    shift_psf!(tel.state.psf, ws.psf_buffer, dx_arcsec / scale, dy_arcsec / scale)
+    shift_psf!(tel.state.psf, ws.psf_buffer, coords_xy_arcsec[1] / scale, coords_xy_arcsec[2] / scale)
     return tel.state.psf
 end
 

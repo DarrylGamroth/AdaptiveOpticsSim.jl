@@ -113,8 +113,8 @@ function DeformableMirror(tel::Telescope; n_act::Int, influence_width::Real=0.2,
 end
 
 @inline function supports_separable_influence(mis::Misregistration)
-    return iszero(mis.rotation_deg) &&
-           iszero(mis.anamorphosis_angle) &&
+    return iszero(mis.rotation_rad) &&
+           iszero(mis.anamorphosis_angle_rad) &&
            mis.tangential_scaling == one(mis.tangential_scaling) &&
            mis.radial_scaling == one(mis.radial_scaling)
 end

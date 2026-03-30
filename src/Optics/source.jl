@@ -27,13 +27,20 @@ struct LGSProfileNaProfile <: LGSProfile end
 struct SourceParams{T<:AbstractFloat}
     band::Symbol
     magnitude::T
-    coordinates::NTuple{2,T}
+    coordinates_xy_arcsec::NTuple{2,T}
     wavelength::T
     n_photon::T
 end
 
 struct Source{P<:SourceParams} <: AbstractSource
     params::P
+end
+
+@inline function polar_arcsec_deg_to_xy_arcsec(radius_arcsec::Real, theta_deg::Real, ::Type{T}) where {T<:AbstractFloat}
+    r = T(radius_arcsec)
+    θ = T(deg2rad(theta_deg))
+    sθ, cθ = sincos(θ)
+    return (r * cθ, r * sθ)
 end
 
 function Source(; band::Symbol=:I, magnitude::Real=0.0, coordinates=(0.0, 0.0), wavelength=nothing, T::Type{<:AbstractFloat}=Float64)
@@ -44,13 +51,13 @@ function Source(; band::Symbol=:I, magnitude::Real=0.0, coordinates=(0.0, 0.0), 
             throw(InvalidConfiguration("Unknown band $(band); provide wavelength."))
         end
     end
-    coords = (T(coordinates[1]), T(coordinates[2]))
+    coords_xy_arcsec = polar_arcsec_deg_to_xy_arcsec(coordinates[1], coordinates[2], T)
     n_photon = if haskey(BAND_ZEROPOINTS, band)
         T(BAND_ZEROPOINTS[band] * 10.0^(-0.4 * magnitude))
     else
         one(T)
     end
-    params = SourceParams{T}(band, T(magnitude), coords, T(wavelength), n_photon)
+    params = SourceParams{T}(band, T(magnitude), coords_xy_arcsec, T(wavelength), n_photon)
     return Source(params)
 end
 
@@ -59,17 +66,11 @@ photon_flux(src::Source) = src.params.n_photon
 optical_tag(src::Source) = "source($(src.params.band))"
 source_height_m(::Source) = Inf
 
-function coordinates_xy_arcsec(src::Source)
-    r = src.params.coordinates[1]
-    theta = src.params.coordinates[2]
-    x = r * cosd(theta)
-    y = r * sind(theta)
-    return x, y
-end
+coordinates_xy_arcsec(src::Source) = src.params.coordinates_xy_arcsec
 
 struct LGSSourceParams{T<:AbstractFloat,A}
     magnitude::T
-    coordinates::NTuple{2,T}
+    coordinates_xy_arcsec::NTuple{2,T}
     wavelength::T
     altitude::T
     elongation_factor::T
@@ -100,7 +101,7 @@ function LGSSource(; magnitude::Real=0.0, coordinates=(0.0, 0.0), wavelength::Re
 
     params = LGSSourceParams{T, typeof(na_profile)}(
         T(magnitude),
-        (T(coordinates[1]), T(coordinates[2])),
+        polar_arcsec_deg_to_xy_arcsec(coordinates[1], coordinates[2], T),
         T(wavelength),
         alt_val,
         T(elongation_factor),
@@ -117,13 +118,7 @@ photon_flux(src::LGSSource) = src.params.n_photon
 optical_tag(::LGSSource) = "lgs"
 source_height_m(src::LGSSource) = src.params.altitude
 
-function coordinates_xy_arcsec(src::LGSSource)
-    r = src.params.coordinates[1]
-    theta = src.params.coordinates[2]
-    x = r * cosd(theta)
-    y = r * sind(theta)
-    return x, y
-end
+coordinates_xy_arcsec(src::LGSSource) = src.params.coordinates_xy_arcsec
 
 optical_tag(x) = lowercase(string(nameof(typeof(x))))
 

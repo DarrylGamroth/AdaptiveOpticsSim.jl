@@ -149,7 +149,7 @@ mutable struct TomographyCommandReconstructor{
 end
 
 @inline _fried_parameter(params::TomographyAtmosphereParams{T}) where {T<:AbstractFloat} =
-    params.r0_zenith * cosd(params.zenith_angle_deg)^(T(3) / T(5))
+    params.r0_zenith * cos(params.zenith_angle_rad)^(T(3) / T(5))
 
 @inline _equal_fit_source_weights(params::TomographyParams{T}) where {T<:AbstractFloat} =
     fill(inv(T(params.n_fit_src^2)), params.n_fit_src^2)

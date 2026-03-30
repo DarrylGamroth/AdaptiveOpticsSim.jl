@@ -3,6 +3,9 @@
 This is a guide to the exported public API. It is organized by subsystem rather
 than by source file.
 
+Project-wide units guidance lives in
+[units-policy.md](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/units-policy.md).
+
 ## Core types and utilities
 
 - `Workspace`, `ensure_psf_buffers!`
@@ -76,7 +79,8 @@ than by source file.
   `HgCdTeAvalancheArraySensor`, `APDSensor`
 - `DeformableMirror`, `DeformableMirrorParams`, `DeformableMirrorState`,
   `build_influence_functions!`, `apply!`
-- `Misregistration`, `apply_misregistration`
+- `Misregistration`, `apply_misregistration`, `rotation_rad`, `rotation_deg`,
+  `anamorphosis_angle_rad`, `anamorphosis_angle_deg`
 - `OPDMap`
 - `NCPA`, `NCPABasis`, `KLBasis`, `ZernikeModalBasis`, `M2CBasis`,
   `default_ncpa_basis`
@@ -126,6 +130,8 @@ than by source file.
   `MappedReconstructor`, `reconstruct!`, `reconstruct`
 - `TomographyNoiseModel`, `RelativeSignalNoise`, `ScalarMeasurementNoise`,
   `DiagonalMeasurementNoise`
+- `airmass`, `zenith_angle_rad`, `zenith_angle_deg`, `layer_altitude_m`,
+  `wind_direction_rad`, `wind_direction_deg`, `wind_velocity_components`
 
 ## Control
 

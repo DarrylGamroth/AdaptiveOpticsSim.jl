@@ -109,7 +109,7 @@ export phase_variance, phase_covariance, phase_spectrum, covariance_matrix
 export ft_phase_screen, ft_sh_phase_screen, PhaseStatsWorkspace
 export SubharmonicMode, FastSubharmonics, FidelitySubharmonics, default_subharmonic_mode
 export DeformableMirror, DeformableMirrorParams, DeformableMirrorState, build_influence_functions!, apply!
-export Misregistration, apply_misregistration
+export Misregistration, apply_misregistration, rotation_rad, rotation_deg, anamorphosis_angle_rad, anamorphosis_angle_deg
 export AbstractFrameDetector, AbstractCountingDetector
 export Detector, DetectorParams, DetectorState, DetectorExportMetadata
 export AbstractDetectorResponse, AbstractFrameResponse, AbstractFrameMTF
@@ -214,7 +214,7 @@ export TomographyNoiseModel, RelativeSignalNoise, ScalarMeasurementNoise, Diagon
 export AbstractSlopeOrder, SimulationSlopes, InterleavedSlopes, InvertedSlopes
 export TomographyOperators, TomographicReconstructor, TomographyCommandReconstructor
 export build_reconstructor, assemble_reconstructor_and_fitting
-export airmass, layer_altitude_m, wind_direction_rad, wind_velocity_components
+export airmass, zenith_angle_rad, zenith_angle_deg, layer_altitude_m, wind_direction_rad, wind_direction_deg, wind_velocity_components
 export lgs_height_m, lgs_directions!, lgs_directions
 export optimization_geometry!, optimization_geometry, direction_vectors!, direction_vectors
 export n_valid_subapertures, valid_lenslet_support, dm_valid_support, support_diameter
