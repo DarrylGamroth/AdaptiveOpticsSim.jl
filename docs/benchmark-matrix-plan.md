@@ -92,6 +92,8 @@ Examples already in place:
   `ElectricField`, `FraunhoferPropagation`, and `FresnelPropagation`
 - GPU smoke now also guards maintained broad-band diffractive WFS execution for
   `ShackHartmann` and `PyramidWFS` through `SpectralSource`
+- GPU smoke now also guards maintained extended-source diffractive WFS
+  execution for `ShackHartmann` and `PyramidWFS` through `ExtendedSource`
 
 ### Class B: Representative Benchmarks
 

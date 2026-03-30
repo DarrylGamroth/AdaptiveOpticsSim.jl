@@ -2081,6 +2081,72 @@ end
     fill!(tel.state.opd, 0.0)
 end
 
+@testset "Extended-source WFS" begin
+    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = Source(band=:I, magnitude=0.0)
+    point_model = PointCloudSourceModel([(0.0, 0.0)], [1.0])
+    gaussian_model = GaussianDiskSourceModel(sigma_arcsec=0.35, n_side=5)
+    image_model = SampledImageSourceModel([0.0 1.0 0.0; 1.0 2.0 1.0; 0.0 1.0 0.0], pixel_scale_arcsec=0.2)
+    ext_point = with_extended_source(src, point_model)
+    ext_gauss = with_extended_source(src, gaussian_model)
+    ext_image = with_extended_source(src, image_model)
+
+    point_ast = extended_source_asterism(ext_point)
+    image_ast = extended_source_asterism(ext_image)
+    @test has_extended_source_model(ext_gauss)
+    @test !has_extended_source_model(src)
+    @test length(point_ast) == 1
+    @test length(image_ast) == 5
+    @test AdaptiveOpticsSim.photon_flux(point_ast.sources[1]) ≈ AdaptiveOpticsSim.photon_flux(src)
+    @test sum(AdaptiveOpticsSim.photon_flux(sample) for sample in image_ast.sources) ≈ AdaptiveOpticsSim.photon_flux(src)
+
+    zb = ZernikeBasis(tel, 5)
+    compute_zernike!(zb, tel)
+    focus = @view zb.modes[:, :, 5]
+    @. tel.state.opd = 5e-8 * focus
+
+    sh_point = ShackHartmann(tel; n_subap=8, mode=Diffractive())
+    sh_ext_point = ShackHartmann(tel; n_subap=8, mode=Diffractive())
+    sh_ext = ShackHartmann(tel; n_subap=8, mode=Diffractive())
+    point_slopes = copy(measure!(sh_point, tel, src))
+    ext_point_slopes = copy(measure!(sh_ext_point, tel, ext_point))
+    point_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_point, tel, src)
+    ext_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_ext, tel, ext_gauss)
+    ext_slopes_1 = copy(measure!(sh_ext, tel, ext_gauss))
+    ext_slopes_2 = copy(measure!(sh_ext, tel, ext_gauss))
+
+    @test ext_point_slopes ≈ point_slopes atol=1e-10 rtol=1e-10
+    @test ext_slopes_1 ≈ ext_slopes_2 atol=1e-10 rtol=1e-10
+    @test ext_peak < point_peak
+    @test norm(sh_ext.state.spot_cube - sh_point.state.spot_cube) > 1e-8
+    @test supports_stacked_sources(sh_ext, ext_gauss)
+
+    pyr_point = PyramidWFS(tel; n_subap=8, mode=Diffractive(), modulation=1.0)
+    pyr_ext_point = PyramidWFS(tel; n_subap=8, mode=Diffractive(), modulation=1.0)
+    pyr_ext = PyramidWFS(tel; n_subap=8, mode=Diffractive(), modulation=1.0)
+    pyr_point_slopes = copy(measure!(pyr_point, tel, src))
+    pyr_ext_point_slopes = copy(measure!(pyr_ext_point, tel, ext_point))
+    pyr_ext_slopes_1 = copy(measure!(pyr_ext, tel, ext_gauss))
+    pyr_ext_slopes_2 = copy(measure!(pyr_ext, tel, ext_gauss))
+
+    @test pyr_ext_point_slopes ≈ pyr_point_slopes atol=1e-10 rtol=1e-10
+    @test pyr_ext_slopes_1 ≈ pyr_ext_slopes_2 atol=1e-10 rtol=1e-10
+    @test norm(pyr_ext.state.intensity - pyr_point.state.intensity) > 1e-10
+    @test supports_stacked_sources(pyr_ext, ext_gauss)
+
+    det = Detector(noise=NoiseNone(), binning=1)
+    sh_det_slopes = measure!(sh_ext, tel, ext_gauss, det)
+    @test size(sh_ext.state.detector_noise_cube) == size(sh_ext.state.spot_cube)
+    @test sh_det_slopes ≈ ext_slopes_1 atol=1e-10 rtol=1e-10
+
+    pyr_det = Detector(noise=NoiseNone(), binning=1)
+    pyr_det_slopes = measure!(pyr_ext, tel, ext_gauss, pyr_det)
+    @test size(output_frame(pyr_det)) == size(pyr_ext.state.camera_frame)
+    @test pyr_det_slopes ≈ pyr_ext_slopes_1 atol=1e-10 rtol=1e-10
+
+    fill!(tel.state.opd, 0.0)
+end
+
 @testset "Pupil masks and misregistration" begin
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     base_sum = sum(tel.state.pupil)
@@ -2976,6 +3042,11 @@ end
     asterism = run_tutorial_example("asterism.jl")
     @test size(asterism.per_source_psf, 3) == 4
     @test sum(asterism.combined_psf) >= sum(@view asterism.per_source_psf[:, :, 1])
+
+    extended = run_tutorial_example("extended_source_sensing.jl")
+    @test extended.n_samples == 25
+    @test norm(extended.sh_spot_delta) > 1e-12
+    @test norm(extended.pyramid_intensity_delta) > 1e-12
 
     spatial = run_tutorial_example("spatial_filter.jl")
     @test size(spatial.filtered_phase) == size(spatial.filtered_amplitude)

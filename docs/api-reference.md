@@ -209,6 +209,12 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - Source-measurement code that supports grouped broad-band execution should use
   `spectral_reference_source(src)` for geometry preparation and
   `source_measurement_signature(src)` for calibration/cache identity.
+- The maintained extended-source wrapper family is `PointCloudSourceModel`,
+  `GaussianDiskSourceModel`, `SampledImageSourceModel`, and `ExtendedSource`,
+  constructed with `with_extended_source`.
+- `ExtendedSource` preserves the wrapped source center and total flux while
+  expanding the source distribution into weighted measurement samples only in
+  the grouped sensing path.
 
 ### `IF-ATM`: atmospheres
 
@@ -249,6 +255,10 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - Diffractive `ShackHartmann` and `PyramidWFS` now also support grouped
   broad-band execution through `SpectralSource`, including detector-coupled
   readout after wavelength accumulation.
+- Diffractive `ShackHartmann` and `PyramidWFS` also support grouped
+  extended-source execution through `ExtendedSource`, reusing the same
+  maintained grouped accumulation pattern used for asterisms and broad-band
+  sensing.
 
 ### `IF-DET`: detectors
 

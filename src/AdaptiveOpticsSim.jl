@@ -41,6 +41,7 @@ include("Optics/misregistration.jl")
 include("Optics/deformable_mirror.jl")
 include("Detectors/detector.jl")
 include("Optics/asterism.jl")
+include("Optics/extended_source.jl")
 include("Optics/opd_map.jl")
 include("Optics/spatial_filter.jl")
 include("Atmosphere/source_geometry.jl")
@@ -95,6 +96,8 @@ export set_pupil!, set_pupil_reflectivity!, flux_map, apply_spiders!
 export Source, SourceParams, LGSSource, LGSSourceParams, wavelength, optical_path, print_optical_path
 export SpectralSample, SpectralBundle, SpectralSource, with_spectrum
 export spectral_bundle, spectral_reference_source, has_spectral_bundle, is_polychromatic, weighted_wavelength
+export PointCloudSourceModel, GaussianDiskSourceModel, SampledImageSourceModel
+export ExtendedSource, with_extended_source, has_extended_source_model, extended_source_model, extended_source_asterism
 export lgs_elongation_factor
 export ElectricField, ElectricFieldParams, ElectricFieldState
 export fill_from_telescope!, fill_telescope_field!, apply_phase!, apply_amplitude!, intensity!

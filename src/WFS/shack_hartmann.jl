@@ -1214,6 +1214,10 @@ function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::SpectralSo
     return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src)
 end
 
+function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::ExtendedSource)
+    return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src)
+end
+
 function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
     n = tel.params.resolution
     n_sub = wfs.params.n_subap
@@ -1281,6 +1285,32 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
     return maximum(wfs.state.spot_cube)
 end
 
+function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::ExtendedSource)
+    ast = extended_source_asterism(src)
+    if length(ast.sources) == 1
+        return sampled_spots_peak!(ScalarCPUStyle(), wfs, tel, ast.sources[1])
+    end
+    return sampled_spots_peak_asterism_stacked!(ScalarCPUStyle(), wfs, tel, ast)
+end
+
+function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::ExtendedSource)
+    ast = extended_source_asterism(src)
+    if length(ast.sources) == 1
+        return sampled_spots_peak!(style, wfs, tel, ast.sources[1])
+    end
+    if sh_stacked_asterism_compatible(ast)
+        return sampled_spots_peak_asterism_stacked!(style, wfs, tel, ast)
+    end
+    fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
+    peak = zero(eltype(wfs.state.slopes))
+    @inbounds for sample in ast.sources
+        peak = max(peak, sampled_spots_peak!(style, wfs, tel, sample))
+        @. wfs.state.spot_cube_accum = wfs.state.spot_cube_accum + wfs.state.spot_cube
+    end
+    copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
+    return max(peak, maximum(wfs.state.spot_cube))
+end
+
 function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::LGSSource)
     return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src)
 end
@@ -1324,6 +1354,11 @@ function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::AbstractSo
 end
 
 function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::SpectralSource,
+    det::AbstractDetector, rng::AbstractRNG)
+    return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src, det, rng)
+end
+
+function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::ExtendedSource,
     det::AbstractDetector, rng::AbstractRNG)
     return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src, det, rng)
 end
@@ -1409,6 +1444,34 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
     launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
         n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
     return maximum(wfs.state.spot_cube)
+end
+
+function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::ExtendedSource,
+    det::AbstractDetector, rng::AbstractRNG)
+    ast = extended_source_asterism(src)
+    if length(ast.sources) == 1
+        return sampled_spots_peak!(ScalarCPUStyle(), wfs, tel, ast.sources[1], det, rng)
+    end
+    return sampled_spots_peak_asterism_stacked!(ScalarCPUStyle(), wfs, tel, ast, det, rng)
+end
+
+function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::ExtendedSource,
+    det::AbstractDetector, rng::AbstractRNG)
+    ast = extended_source_asterism(src)
+    if length(ast.sources) == 1
+        return sampled_spots_peak!(style, wfs, tel, ast.sources[1], det, rng)
+    end
+    if sh_stacked_asterism_compatible(ast)
+        return sampled_spots_peak_asterism_stacked!(style, wfs, tel, ast, det, rng)
+    end
+    fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
+    peak = zero(eltype(wfs.state.slopes))
+    @inbounds for sample in ast.sources
+        peak = max(peak, sampled_spots_peak!(style, wfs, tel, sample, det, rng))
+        @. wfs.state.spot_cube_accum = wfs.state.spot_cube_accum + wfs.state.spot_cube
+    end
+    copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
+    return max(peak, maximum(wfs.state.spot_cube))
 end
 
 function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,

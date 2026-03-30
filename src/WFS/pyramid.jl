@@ -447,6 +447,38 @@ function accumulate_pyramid_spectral_intensity!(style::AcceleratorStyle, wfs::Py
     return wfs.state.intensity
 end
 
+function accumulate_pyramid_extended_intensity!(::ScalarCPUStyle, out::AbstractMatrix, wfs::PyramidWFS,
+    tel::Telescope, src::ExtendedSource)
+    ast = extended_source_asterism(src)
+    if length(ast.sources) == 1
+        return pyramid_intensity!(out, wfs, tel, ast.sources[1])
+    end
+    stack = @view ensure_pyramid_asterism_stack!(wfs, length(ast.sources))[:, :, 1:length(ast.sources)]
+    @inbounds for (src_idx, sample) in pairs(ast.sources)
+        pyramid_intensity!(@view(stack[:, :, src_idx]), wfs, tel, sample)
+    end
+    fill!(out, zero(eltype(out)))
+    @inbounds for src_idx in axes(stack, 3)
+        out .+= @view(stack[:, :, src_idx])
+    end
+    return out
+end
+
+function accumulate_pyramid_extended_intensity!(style::AcceleratorStyle, out::AbstractMatrix, wfs::PyramidWFS,
+    tel::Telescope, src::ExtendedSource)
+    ast = extended_source_asterism(src)
+    if length(ast.sources) == 1
+        return pyramid_intensity!(out, wfs, tel, ast.sources[1])
+    end
+    stack = @view ensure_pyramid_asterism_stack!(wfs, length(ast.sources))[:, :, 1:length(ast.sources)]
+    @inbounds for (src_idx, sample) in pairs(ast.sources)
+        pyramid_intensity!(@view(stack[:, :, src_idx]), wfs, tel, sample)
+    end
+    launch_kernel!(style, pyramid_reduce_asterism_stack_kernel!, out, stack,
+        length(ast.sources), size(out, 1), size(out, 2); ndrange=size(out))
+    return out
+end
+
 function prepare_pyramid_sampling!(wfs::PyramidWFS, tel::Telescope)
     n_sub = wfs.params.n_subap
     pad = tel.params.resolution * wfs.params.diffraction_padding
@@ -1005,6 +1037,10 @@ end
 
 function pyramid_intensity!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::Telescope, src::AbstractSource) where {T<:AbstractFloat}
     return pyramid_intensity_core!(out, wfs, tel, src)
+end
+
+function pyramid_intensity!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::Telescope, src::ExtendedSource) where {T<:AbstractFloat}
+    return accumulate_pyramid_extended_intensity!(execution_style(out), out, wfs, tel, src)
 end
 
 function pyramid_intensity!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::Telescope, src::LGSSource) where {T<:AbstractFloat}

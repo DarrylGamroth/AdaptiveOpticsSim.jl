@@ -311,6 +311,15 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
         return slopes
     end
 
+    record_gpu_smoke!(failures, "measure_shack_diffractive_extended") do
+        model = GaussianDiskSourceModel(sigma_arcsec=T(0.35), n_side=5, T=T)
+        ext = with_extended_source(src, model)
+        wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=BackendArray)
+        slopes = measure!(wfs, tel, ext)
+        @assert slopes isa BackendArray
+        return slopes
+    end
+
     record_gpu_smoke!(failures, "measure_shack_diffractive_spiders") do
         wfs = ShackHartmann(spider_tel; n_subap=4, mode=Diffractive(), T=T, backend=BackendArray)
         slopes = measure!(wfs, spider_tel, src)
@@ -367,6 +376,15 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
         poly = with_spectrum(src, bundle)
         wfs = PyramidWFS(tel; n_subap=4, modulation=2.0, mode=Diffractive(), T=T, backend=BackendArray)
         slopes = measure!(wfs, tel, poly)
+        @assert slopes isa BackendArray
+        return slopes
+    end
+
+    record_gpu_smoke!(failures, "measure_pyramid_diffractive_extended") do
+        model = GaussianDiskSourceModel(sigma_arcsec=T(0.35), n_side=5, T=T)
+        ext = with_extended_source(src, model)
+        wfs = PyramidWFS(tel; n_subap=4, modulation=2.0, mode=Diffractive(), T=T, backend=BackendArray)
+        slopes = measure!(wfs, tel, ext)
         @assert slopes isa BackendArray
         return slopes
     end

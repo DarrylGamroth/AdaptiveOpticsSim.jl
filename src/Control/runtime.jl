@@ -335,8 +335,10 @@ simulation_interface(interface::CompositeSimulationInterface) = interface
 @inline supports_prepared_runtime(::CurvatureWFS, ::AbstractSource) = true
 @inline supports_stacked_sources(::ShackHartmann, ::Asterism) = true
 @inline supports_stacked_sources(::ShackHartmann, ::SpectralSource) = true
+@inline supports_stacked_sources(::ShackHartmann, ::ExtendedSource) = true
 @inline supports_stacked_sources(::PyramidWFS, ::Asterism) = true
 @inline supports_stacked_sources(::PyramidWFS, ::SpectralSource) = true
+@inline supports_stacked_sources(::PyramidWFS, ::ExtendedSource) = true
 @inline supports_stacked_sources(::BioEdgeWFS, ::Asterism) = true
 
 """
