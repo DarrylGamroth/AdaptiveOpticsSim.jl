@@ -46,6 +46,7 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     RT3<:AbstractArray{T,3},
     RB<:AbstractMatrix{T},
     RS<:AbstractMatrix{T},
+    RCS<:AbstractArray{T,3},
     RC<:AbstractArray{T,3},
     RCE<:AbstractArray{T,3},
     RA<:AbstractArray{T,3},
@@ -70,6 +71,7 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     temp::R
     bin_buffer::RB
     spot::RS
+    sampled_spot_cube::RCS
     spot_cube::RC
     exported_spot_cube::RCE
     spot_cube_accum::RA
@@ -154,10 +156,11 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     temp = similar(intensity)
     bin_buffer = backend{T}(undef, sub, sub)
     spot = similar(bin_buffer)
-    spot_cube = backend{T}(undef, n_subap * n_subap, sub, sub)
-    exported_spot_cube = similar(spot_cube)
-    spot_cube_accum = similar(spot_cube)
-    detector_noise_cube = similar(spot_cube)
+    sampled_spot_cube = backend{T}(undef, n_subap * n_subap, sub, sub)
+    spot_cube = similar(sampled_spot_cube)
+    exported_spot_cube = similar(sampled_spot_cube)
+    spot_cube_accum = similar(sampled_spot_cube)
+    detector_noise_cube = similar(sampled_spot_cube)
     fft_plan = plan_fft_backend!(fft_buffer)
     fft_stack_plan = plan_fft_backend!(fft_stack, (1, 2))
     ifft_plan = plan_ifft_backend!(fft_buffer)
@@ -191,6 +194,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         typeof(intensity_tmp_stack),
         typeof(bin_buffer),
         typeof(spot),
+        typeof(sampled_spot_cube),
         typeof(spot_cube),
         typeof(exported_spot_cube),
         typeof(spot_cube_accum),
@@ -216,6 +220,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         temp,
         bin_buffer,
         spot,
+        sampled_spot_cube,
         spot_cube,
         exported_spot_cube,
         spot_cube_accum,
@@ -412,6 +417,8 @@ function prepare_sampling!(wfs::ShackHartmann, tel::Telescope, src::AbstractSour
 
     if n_pix_subap != wfs.state.sampled_n_pix_subap
         wfs.state.spot = similar(wfs.state.spot, n_pix_subap, n_pix_subap)
+        wfs.state.sampled_spot_cube = similar(wfs.state.sampled_spot_cube, eltype(wfs.state.sampled_spot_cube),
+            wfs.params.n_subap * wfs.params.n_subap, n_pix_subap, n_pix_subap)
         wfs.state.spot_cube = similar(wfs.state.spot_cube, eltype(wfs.state.spot_cube),
             wfs.params.n_subap * wfs.params.n_subap, n_pix_subap, n_pix_subap)
         wfs.state.exported_spot_cube = similar(wfs.state.exported_spot_cube, eltype(wfs.state.exported_spot_cube),
@@ -432,6 +439,20 @@ end
 
 @inline function sh_exported_spot_cube(wfs::ShackHartmann)
     return wfs.state.exported_spot_cube
+end
+
+@inline function sh_sampled_spot_cube(wfs::ShackHartmann)
+    return wfs.state.sampled_spot_cube
+end
+
+@inline function sync_signal_spots_from_sampled!(wfs::ShackHartmann)
+    copyto!(wfs.state.spot_cube, wfs.state.sampled_spot_cube)
+    return wfs.state.spot_cube
+end
+
+@inline function capture_sampled_spot_stack!(wfs::ShackHartmann, det::AbstractDetector, rng::AbstractRNG)
+    capture_stack!(det, wfs.state.spot_cube, wfs.state.sampled_spot_cube; rng=rng)
+    return wfs.state.spot_cube
 end
 
 @inline function sync_exported_spots!(wfs::ShackHartmann)
@@ -1013,12 +1034,12 @@ function compute_intensity_spectral_stack!(style::AcceleratorStyle, wfs::ShackHa
 end
 
 function sample_spot_stack!(::ScalarCPUStyle, wfs::ShackHartmann)
-    n_spots = size(wfs.state.spot_cube, 1)
+    n_spots = size(wfs.state.sampled_spot_cube, 1)
     @inbounds for idx in 1:n_spots
         sample_spot!(wfs, @view(wfs.state.intensity_stack[:, :, idx]))
-        copyto!(sh_spot_view(wfs, idx), wfs.state.spot)
+        copyto!(@view(wfs.state.sampled_spot_cube[idx, :, :]), wfs.state.spot)
     end
-    return wfs.state.spot_cube
+    return wfs.state.sampled_spot_cube
 end
 
 function sample_spot_stack!(style::AcceleratorStyle, wfs::ShackHartmann)
@@ -1026,10 +1047,10 @@ function sample_spot_stack!(style::AcceleratorStyle, wfs::ShackHartmann)
     binning = wfs.state.binning_pixel_scale
     @assert pad % binning == 0
     n_binned = div(pad, binning)
-    n_out = size(wfs.state.spot_cube, 2)
-    launch_kernel!(style, sh_sample_spot_stack_kernel!, wfs.state.spot_cube, wfs.state.intensity_stack,
-        wfs.state.valid_mask, binning, wfs.params.n_subap, n_binned, n_out; ndrange=size(wfs.state.spot_cube))
-    return wfs.state.spot_cube
+    n_out = size(wfs.state.sampled_spot_cube, 2)
+    launch_kernel!(style, sh_sample_spot_stack_kernel!, wfs.state.sampled_spot_cube, wfs.state.intensity_stack,
+        wfs.state.valid_mask, binning, wfs.params.n_subap, n_binned, n_out; ndrange=size(wfs.state.sampled_spot_cube))
+    return wfs.state.sampled_spot_cube
 end
 
 function sampled_spots_peak_asterism_stacked!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, ast::Asterism)
@@ -1056,6 +1077,7 @@ end
 function sampled_spots_peak_asterism_stacked!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, ast::Asterism)
     compute_intensity_asterism_stack!(style, wfs, tel, ast)
     sample_spot_stack!(style, wfs)
+    sync_signal_spots_from_sampled!(wfs)
     return maximum(wfs.state.spot_cube)
 end
 
@@ -1064,7 +1086,7 @@ function sampled_spots_peak_asterism_stacked!(style::AcceleratorStyle, wfs::Shac
     compute_intensity_asterism_stack!(style, wfs, tel, ast)
     sample_spot_stack!(style, wfs)
     n_sub = wfs.params.n_subap
-    capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
+    capture_sampled_spot_stack!(wfs, det, rng)
     launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
         n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
     return maximum(wfs.state.spot_cube)
@@ -1429,6 +1451,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
     end
     compute_intensity_stack!(style, wfs, tel, src)
     sample_spot_stack!(style, wfs)
+    sync_signal_spots_from_sampled!(wfs)
     return sh_safe_peak_value(wfs.state.spot_cube)
 end
 
@@ -1475,6 +1498,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
     end
     compute_intensity_spectral_stack!(style, wfs, tel, src)
     sample_spot_stack!(style, wfs)
+    sync_signal_spots_from_sampled!(wfs)
     return sh_safe_peak_value(wfs.state.spot_cube)
 end
 
@@ -1620,7 +1644,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
     compute_intensity_stack!(style, wfs, tel, src)
     sample_spot_stack!(style, wfs)
     n_sub = wfs.params.n_subap
-    capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
+    capture_sampled_spot_stack!(wfs, det, rng)
     launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
         n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
     return sh_safe_peak_value(wfs.state.spot_cube)
@@ -1637,7 +1661,7 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescop
         wfs.state.spot_cube_accum .+= wfs.state.spot_cube
     end
     copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
-    capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
+    capture_stack!(det, wfs.state.spot_cube, wfs.state.spot_cube_accum; rng=rng)
     return maximum(wfs.state.spot_cube)
 end
 
@@ -1653,7 +1677,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
             @. wfs.state.spot_cube_accum = wfs.state.spot_cube_accum + wfs.state.spot_cube
         end
         copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
-        capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
+        capture_stack!(det, wfs.state.spot_cube, wfs.state.spot_cube_accum; rng=rng)
         return sh_safe_peak_value(wfs.state.spot_cube)
     end
     if spectral_reference_source(src) isa LGSSource
@@ -1667,7 +1691,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
         end
         copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
         n_sub = wfs.params.n_subap
-        capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
+        capture_stack!(det, wfs.state.spot_cube, wfs.state.spot_cube_accum; rng=rng)
         launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
             n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
         return sh_safe_peak_value(wfs.state.spot_cube)
@@ -1675,7 +1699,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
     compute_intensity_spectral_stack!(style, wfs, tel, src)
     sample_spot_stack!(style, wfs)
     n_sub = wfs.params.n_subap
-    capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
+    capture_sampled_spot_stack!(wfs, det, rng)
     launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
         n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
     return sh_safe_peak_value(wfs.state.spot_cube)
@@ -1755,6 +1779,7 @@ function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs:
     apply_elongation_stack!(wfs.state.intensity_stack, lgs_elongation_factor(src),
         wfs.state.intensity_tmp_stack, wfs.state.elongation_kernel)
     sample_spot_stack!(style, wfs)
+    sync_signal_spots_from_sampled!(wfs)
     return maximum(wfs.state.spot_cube)
 end
 
@@ -1765,7 +1790,7 @@ function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs:
         wfs.state.intensity_tmp_stack, wfs.state.elongation_kernel)
     sample_spot_stack!(style, wfs)
     n_sub = wfs.params.n_subap
-    capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
+    capture_sampled_spot_stack!(wfs, det, rng)
     launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
         n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
     return maximum(wfs.state.spot_cube)
@@ -1778,6 +1803,7 @@ function sampled_spots_peak_lgs!(::LGSProfileNaProfile, style::AcceleratorStyle,
     apply_lgs_convolution_stack!(wfs.state.intensity_stack, wfs.state.lgs_kernel_fft,
         wfs.state.fft_stack, wfs.state.fft_stack_plan, wfs.state.ifft_stack_plan)
     sample_spot_stack!(style, wfs)
+    sync_signal_spots_from_sampled!(wfs)
     return maximum(wfs.state.spot_cube)
 end
 
@@ -1789,7 +1815,7 @@ function sampled_spots_peak_lgs!(::LGSProfileNaProfile, style::AcceleratorStyle,
     apply_lgs_convolution_stack!(wfs.state.intensity_stack, wfs.state.lgs_kernel_fft,
         wfs.state.fft_stack, wfs.state.fft_stack_plan, wfs.state.ifft_stack_plan)
     sample_spot_stack!(style, wfs)
-    capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
+    capture_sampled_spot_stack!(wfs, det, rng)
     launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
         n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
     return maximum(wfs.state.spot_cube)

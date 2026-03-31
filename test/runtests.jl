@@ -1354,6 +1354,8 @@ end
     step!(runtime2)
     @test simulation_wfs_frame(runtime2) === wfs2.state.exported_spot_cube
     @test simulation_wfs_frame(runtime2) !== wfs2.state.spot_cube
+    @test wfs2.state.spot_cube !== wfs2.state.sampled_spot_cube
+    @test simulation_wfs_frame(runtime2) !== wfs2.state.sampled_spot_cube
     @test size(simulation_wfs_frame(runtime2)) == size(wfs2.state.spot_cube)
     @test all(simulation_wfs_frame(runtime2) .>= wfs2.state.spot_cube)
     boundary2 = SimulationInterface(runtime2)
