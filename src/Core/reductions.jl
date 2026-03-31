@@ -1,13 +1,18 @@
-@kernel function masked_sum2d_kernel!(out, values, valid_mask, n_rows::Int, n_cols::Int)
+@kernel function masked_sum2d_kernel!(out, values_parent, valid_mask, row_offset::Int, col_offset::Int, n_rows::Int, n_cols::Int)
     i, j = @index(Global, NTuple)
     if i <= n_rows && j <= n_cols && @inbounds(valid_mask[i, j])
         T = eltype(out)
-        @atomic out[1] += T(@inbounds values[i, j])
+        @atomic out[1] += T(@inbounds values_parent[i + row_offset, j + col_offset])
     end
 end
 
 @inline reduction_parent_source(A::AbstractArray) = A
 @inline reduction_parent_source(A::SubArray) = parent(A)
+
+@inline reduction_axis_offset(A::AbstractArray, dim::Int) = 0
+@inline reduction_axis_offset(A::SubArray, dim::Int) = reduction_index_offset(parentindices(A)[dim])
+@inline reduction_index_offset(r::AbstractUnitRange{<:Integer}) = first(r) - 1
+@inline reduction_index_offset(::Base.Slice) = 0
 
 @inline reduction_host_view(host_parent::AbstractArray, A::AbstractArray) = host_parent
 @inline reduction_host_view(host_parent::AbstractArray, A::SubArray) = @view(host_parent[parentindices(A)...])
@@ -54,9 +59,40 @@ function masked_sum2d(style::AcceleratorStyle, values::AbstractMatrix{T}, valid_
         host_values = reduction_host_view(refreshed_parent, values)
         return masked_sum2d(ScalarCPUStyle(), host_values, valid_mask_host), refreshed_parent
     end
-    fill!(scalar_buffer, zero(T))
     n_rows, n_cols = size(valid_mask)
-    launch_kernel!(style, masked_sum2d_kernel!, scalar_buffer, values, valid_mask, n_rows, n_cols; ndrange=(n_rows, n_cols))
+    values_parent = reduction_parent_source(values)
+    row_offset = reduction_axis_offset(values, 1)
+    col_offset = reduction_axis_offset(values, 2)
+    return masked_sum2d_accelerator(
+        style,
+        values_parent,
+        valid_mask,
+        scalar_buffer,
+        scalar_host,
+        host_parent,
+        row_offset,
+        col_offset,
+        n_rows,
+        n_cols,
+    )
+end
+
+function masked_sum2d_accelerator(style::AcceleratorStyle, values_parent::AbstractMatrix{T}, valid_mask::AbstractMatrix{Bool},
+    scalar_buffer::AbstractVector{T}, scalar_host::AbstractVector{T}, host_parent::AbstractMatrix{T},
+    row_offset::Int, col_offset::Int, n_rows::Int, n_cols::Int) where {T<:AbstractFloat}
+    fill!(scalar_buffer, zero(T))
+    launch_kernel!(
+        style,
+        masked_sum2d_kernel!,
+        scalar_buffer,
+        values_parent,
+        valid_mask,
+        row_offset,
+        col_offset,
+        n_rows,
+        n_cols;
+        ndrange=(n_rows, n_cols),
+    )
     copyto!(scalar_host, scalar_buffer)
     return scalar_host[1], host_parent
 end
