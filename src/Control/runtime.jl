@@ -25,6 +25,15 @@ abstract type AbstractControlSimulation end
 abstract type AbstractExecutionPolicy end
 abstract type AbstractRuntimeProfile end
 
+struct RuntimeProductRequirements
+    slopes::Bool
+    wfs_pixels::Bool
+    science_pixels::Bool
+end
+
+RuntimeProductRequirements(; slopes::Bool=true, wfs_pixels::Bool=false, science_pixels::Bool=false) =
+    RuntimeProductRequirements(slopes, wfs_pixels, science_pixels)
+
 struct SequentialExecution <: AbstractExecutionPolicy end
 struct ThreadedExecution <: AbstractExecutionPolicy end
 struct BackendStreamExecution <: AbstractExecutionPolicy end
@@ -40,6 +49,8 @@ struct RuntimeLatencyModel
 end
 
 default_runtime_profile() = ScientificRuntimeProfile()
+default_runtime_products(; wfs_detector=nothing, science_detector=nothing) =
+    RuntimeProductRequirements(slopes=true, wfs_pixels=!isnothing(wfs_detector), science_pixels=!isnothing(science_detector))
 
 function RuntimeLatencyModel(;
     measurement_delay_frames::Integer=0,
@@ -155,6 +166,7 @@ mutable struct ClosedLoopRuntime{
     SD,
     RNG,
     RP<:AbstractRuntimeProfile,
+    PR<:RuntimeProductRequirements,
     MD,
     RD,
     CD,
@@ -175,6 +187,7 @@ mutable struct ClosedLoopRuntime{
     science_detector::SD
     rng::RNG
     profile::RP
+    products::PR
     latency::RuntimeLatencyModel
     measurement_delay::MD
     readout_delay::RD
@@ -254,8 +267,10 @@ end
 function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
     wfs_detector=nothing, science_detector=nothing, rng=MersenneTwister(0),
     profile::AbstractRuntimeProfile=default_runtime_profile(),
+    products::RuntimeProductRequirements=default_runtime_products(wfs_detector=wfs_detector, science_detector=science_detector),
     latency::RuntimeLatencyModel=default_runtime_latency(profile),
     control_sign::Real=-1.0, science_zero_padding::Union{Int,Nothing}=nothing)
+    products.slopes || throw(InvalidConfiguration("ClosedLoopRuntime requires slope products for reconstruction"))
     T = eltype(simulation.dm.state.coefs)
     command = similar(simulation.dm.state.coefs)
     fill!(command, zero(T))
@@ -268,7 +283,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
     reconstruction_delay = VectorDelayLine(command, latency.reconstruction_delay_frames)
     dm_delay = VectorDelayLine(command, latency.dm_delay_frames)
     resolved_zero_padding = something(science_zero_padding, runtime_science_zero_padding(profile))
-    return ClosedLoopRuntime{
+    runtime = ClosedLoopRuntime{
         typeof(simulation),
         typeof(simulation.tel),
         typeof(simulation.atm),
@@ -282,6 +297,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
         typeof(science_detector),
         typeof(rng),
         typeof(profile),
+        typeof(products),
         typeof(measurement_delay),
         typeof(readout_delay),
         typeof(reconstruction_delay),
@@ -302,6 +318,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
         science_detector,
         rng,
         profile,
+        products,
         latency,
         measurement_delay,
         readout_delay,
@@ -311,6 +328,8 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
         resolved_zero_padding,
         false,
     )
+    set_runtime_wfs_product_policy!(runtime.wfs, runtime.products)
+    return runtime
 end
 
 @inline wfs_output_frame(wfs::AbstractWFS, det::AbstractDetector) = output_frame(det)
@@ -330,6 +349,11 @@ end
 @inline wfs_output_metadata(::CurvatureFrameReadout, wfs::CurvatureWFS) = nothing
 @inline wfs_output_metadata(::CurvatureCountingReadout, wfs::CurvatureWFS) =
     CountingReadoutMetadata(:branch_by_channel, size(wfs.state.camera_frame), length(wfs.state.camera_frame))
+
+@inline runtime_products(runtime::ClosedLoopRuntime) = runtime.products
+@inline requires_runtime_slopes(runtime::ClosedLoopRuntime) = runtime.products.slopes
+@inline requires_runtime_wfs_pixels(runtime::ClosedLoopRuntime) = runtime.products.wfs_pixels && !isnothing(runtime.wfs_detector)
+@inline requires_runtime_science_pixels(runtime::ClosedLoopRuntime) = runtime.products.science_pixels && !isnothing(runtime.science_detector)
 
 simulation_interface(runtime::ClosedLoopRuntime) = SimulationInterface(runtime)
 simulation_interface(interface::SimulationInterface) = interface
@@ -407,13 +431,20 @@ end
     return wfs
 end
 
+@inline set_runtime_wfs_product_policy!(wfs::AbstractWFS, products::RuntimeProductRequirements) = wfs
+@inline function set_runtime_wfs_product_policy!(wfs::ShackHartmann{<:Diffractive}, products::RuntimeProductRequirements)
+    wfs.state.export_pixels_enabled = products.wfs_pixels
+    return wfs
+end
+
 supports_prepared_runtime(runtime::ClosedLoopRuntime) = supports_prepared_runtime(runtime.wfs, runtime.src)
-supports_detector_output(runtime::ClosedLoopRuntime) = !isnothing(runtime.wfs_detector) || !isnothing(runtime.science_detector)
+supports_detector_output(runtime::ClosedLoopRuntime) = requires_runtime_wfs_pixels(runtime) || requires_runtime_science_pixels(runtime)
 supports_stacked_sources(runtime::ClosedLoopRuntime) = supports_stacked_sources(runtime.wfs, runtime.src)
 supports_grouped_execution(::CompositeSimulationInterface) = true
 
 function prepare!(runtime::ClosedLoopRuntime)
     prepare_runtime_wfs!(runtime.wfs, runtime.tel, runtime.src)
+    set_runtime_wfs_product_policy!(runtime.wfs, runtime.products)
     runtime.prepared = true
     return runtime
 end
@@ -435,8 +466,8 @@ function SimulationInterface(runtime::ClosedLoopRuntime)
     copyto!(command, runtime.command)
     slopes = similar(runtime.slopes)
     copyto!(slopes, runtime.slopes)
-    wfs_frame = isnothing(runtime.wfs_detector) ? nothing : similar(wfs_output_frame(runtime.wfs, runtime.wfs_detector))
-    science_frame = isnothing(runtime.science_detector) ? nothing : similar(output_frame(runtime.science_detector))
+    wfs_frame = requires_runtime_wfs_pixels(runtime) ? similar(wfs_output_frame(runtime.wfs, runtime.wfs_detector)) : nothing
+    science_frame = requires_runtime_science_pixels(runtime) ? similar(output_frame(runtime.science_detector)) : nothing
     interface = SimulationInterface{typeof(runtime), typeof(command), typeof(slopes), typeof(wfs_frame), typeof(science_frame)}(
         runtime,
         command,
@@ -482,6 +513,7 @@ function with_reconstructor(runtime::ClosedLoopRuntime, reconstructor)
         science_detector=runtime.science_detector,
         rng=runtime.rng,
         profile=runtime.profile,
+        products=runtime.products,
         latency=runtime.latency,
         control_sign=runtime.control_sign,
         science_zero_padding=runtime.science_zero_padding,
@@ -578,12 +610,13 @@ end
 @inline simulation_science_metadata(readout::SimulationReadout) = readout.science_metadata
 
 @inline simulation_command(runtime::ClosedLoopRuntime) = runtime.command
-@inline simulation_slopes(runtime::ClosedLoopRuntime) = runtime.slopes
-@inline simulation_wfs_frame(runtime::ClosedLoopRuntime) = isnothing(runtime.wfs_detector) ? nothing : wfs_output_frame(runtime.wfs, runtime.wfs_detector)
-@inline simulation_science_frame(runtime::ClosedLoopRuntime) = isnothing(runtime.science_detector) ? nothing : output_frame(runtime.science_detector)
+@inline simulation_slopes(runtime::ClosedLoopRuntime) = requires_runtime_slopes(runtime) ? runtime.slopes : nothing
+@inline simulation_wfs_frame(runtime::ClosedLoopRuntime) = requires_runtime_wfs_pixels(runtime) ? wfs_output_frame(runtime.wfs, runtime.wfs_detector) : nothing
+@inline simulation_science_frame(runtime::ClosedLoopRuntime) = requires_runtime_science_pixels(runtime) ? output_frame(runtime.science_detector) : nothing
 @inline simulation_wfs_metadata(runtime::ClosedLoopRuntime) =
-    isnothing(runtime.wfs_detector) ? wfs_output_metadata(runtime.wfs) : detector_export_metadata(runtime.wfs_detector)
-@inline simulation_science_metadata(runtime::ClosedLoopRuntime) = isnothing(runtime.science_detector) ? nothing : detector_export_metadata(runtime.science_detector)
+    requires_runtime_wfs_pixels(runtime) ? detector_export_metadata(runtime.wfs_detector) : nothing
+@inline simulation_science_metadata(runtime::ClosedLoopRuntime) =
+    requires_runtime_science_pixels(runtime) ? detector_export_metadata(runtime.science_detector) : nothing
 @inline runtime_profile(runtime::ClosedLoopRuntime) = runtime.profile
 @inline runtime_latency(runtime::ClosedLoopRuntime) = runtime.latency
 
@@ -598,9 +631,8 @@ end
 @inline simulation_slopes(interface::SimulationInterface) = interface.slopes
 @inline simulation_wfs_frame(interface::SimulationInterface) = interface.wfs_frame
 @inline simulation_science_frame(interface::SimulationInterface) = interface.science_frame
-@inline simulation_wfs_metadata(interface::SimulationInterface) =
-    isnothing(interface.runtime.wfs_detector) ? wfs_output_metadata(interface.runtime.wfs) : detector_export_metadata(interface.runtime.wfs_detector)
-@inline simulation_science_metadata(interface::SimulationInterface) = isnothing(interface.runtime.science_detector) ? nothing : detector_export_metadata(interface.runtime.science_detector)
+@inline simulation_wfs_metadata(interface::SimulationInterface) = simulation_wfs_metadata(interface.runtime)
+@inline simulation_science_metadata(interface::SimulationInterface) = simulation_science_metadata(interface.runtime)
 
 @inline simulation_command(interface::CompositeSimulationInterface) = interface.command
 @inline simulation_slopes(interface::CompositeSimulationInterface) = interface.slopes
@@ -801,10 +833,12 @@ function sense!(runtime::ClosedLoopRuntime)
     else
         sense_core!(runtime.atm, runtime.tel, runtime.dm, runtime.wfs, runtime.src, runtime.wfs_detector, runtime.rng)
     end
-    if !isnothing(runtime.science_detector)
+    if requires_runtime_science_pixels(runtime)
         capture_science_core!(runtime.tel, runtime.src, runtime.science_detector, runtime.rng, runtime.science_zero_padding)
     end
-    stage_sensed_slopes!(runtime)
+    if requires_runtime_slopes(runtime)
+        stage_sensed_slopes!(runtime)
+    end
     return runtime
 end
 
@@ -905,7 +939,7 @@ runtime_timing(sim::AbstractControlSimulation; kwargs...) = runtime_timing(() ->
     if !isnothing(runtime.wfs_detector)
         synchronize_backend!(execution_style(output_frame(runtime.wfs_detector)))
     end
-    if !isnothing(runtime.science_detector)
+    if requires_runtime_science_pixels(runtime)
         synchronize_backend!(execution_style(output_frame(runtime.science_detector)))
     end
     return nothing

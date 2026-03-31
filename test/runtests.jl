@@ -1368,6 +1368,22 @@ end
     step!(composite)
     @test simulation_command(composite) == vcat(simulation_command(boundary), simulation_command(boundary2))
 
+    runtime2_slopes_only = ClosedLoopRuntime(
+        sim2,
+        recon2;
+        rng=MersenneTwister(22),
+        wfs_detector=wfs_det,
+        products=RuntimeProductRequirements(slopes=true, wfs_pixels=false, science_pixels=false),
+    )
+    prepare!(runtime2_slopes_only)
+    @test runtime_products(runtime2_slopes_only).wfs_pixels == false
+    @test !supports_detector_output(runtime2_slopes_only)
+    @test !runtime2_slopes_only.wfs.state.export_pixels_enabled
+    step!(runtime2_slopes_only)
+    @test simulation_wfs_frame(runtime2_slopes_only) === nothing
+    slopes_only_boundary = SimulationInterface(runtime2_slopes_only)
+    @test simulation_wfs_frame(slopes_only_boundary) === nothing
+
     timing = runtime_timing(runtime; warmup=1, samples=5, gc_before=false)
     @test timing.samples == 5
     @test timing.min_ns >= 0

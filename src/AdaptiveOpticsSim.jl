@@ -204,7 +204,8 @@ export AbstractController, DiscreteIntegratorController, update!
 export AbstractControlSimulation, AbstractExecutionPolicy
 export SequentialExecution, ThreadedExecution, BackendStreamExecution
 export AbstractRuntimeProfile, ScientificRuntimeProfile, HILRuntimeProfile
-export RuntimeLatencyModel, default_runtime_profile
+export RuntimeProductRequirements, runtime_products
+export RuntimeLatencyModel, default_runtime_profile, default_runtime_products
 export VectorDelayLine, shift_delay!, prepare!, prepare_runtime_wfs!, init_execution_state
 export supports_prepared_runtime, supports_detector_output, supports_stacked_sources, supports_grouped_execution
 export ClosedLoopRuntime, SimulationInterface, CompositeSimulationInterface, SimulationReadout

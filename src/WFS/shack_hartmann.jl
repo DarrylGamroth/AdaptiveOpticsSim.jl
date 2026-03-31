@@ -101,6 +101,7 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     slopes_host::Vector{T}
     centroid_host::Matrix{T}
     slopes_units::T
+    export_pixels_enabled::Bool
     calibrated::Bool
     calibration_wavelength::T
     calibration_signature::UInt
@@ -246,6 +247,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         slopes_host,
         centroid_host,
         one(T),
+        true,
         false,
         zero(T),
         UInt(0),
@@ -436,6 +438,7 @@ end
 end
 
 @inline function sync_exported_spots!(wfs::ShackHartmann)
+    wfs.state.export_pixels_enabled || return wfs.state.exported_spot_cube
     copyto!(wfs.state.exported_spot_cube, wfs.state.spot_cube)
     return wfs.state.exported_spot_cube
 end
