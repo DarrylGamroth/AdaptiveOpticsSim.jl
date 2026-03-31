@@ -413,3 +413,89 @@ with:
 
 That is the smallest useful matrix that will materially improve performance
 decision-making for the package.
+
+## Current Baselines
+
+Snapshot date:
+
+- 2026-03-30
+
+Validated surfaces:
+
+- local CPU representative ladders
+- local AMDGPU realistic `medium` ladders
+- remote CUDA validation on `spiders`
+
+### AO3k Runtime
+
+Commands:
+
+- `julia --project=. scripts/profile_ao3k_runtime.jl cpu medium default`
+- `julia --project=. scripts/profile_ao3k_runtime.jl cpu representative default`
+- `julia --project=. scripts/profile_ao3k_runtime.jl amdgpu medium default`
+- on `spiders`: `julia --project=. scripts/profile_ao3k_runtime.jl cuda medium default`
+
+Recorded results:
+
+- CPU `medium`
+  - `runtime_step_mean_ns`: `1.76839216e7`
+  - `frame_rate_hz`: `56.55`
+  - `runtime_alloc_bytes`: `4688`
+- CPU `representative`
+  - `runtime_step_mean_ns`: `4.21010778e7`
+  - `frame_rate_hz`: `23.75`
+  - `runtime_alloc_bytes`: `4688`
+- AMDGPU `medium`
+  - `runtime_step_mean_ns`: `7.2786754e6`
+  - `frame_rate_hz`: `137.38763511833486`
+  - `runtime_alloc_bytes`: `752920`
+- CUDA `medium` on `spiders`
+  - `runtime_step_mean_ns`: `2.3901578e6`
+  - `frame_rate_hz`: `418.38241809808545`
+  - `runtime_alloc_bytes`: `242304`
+
+Configuration context:
+
+- pupil resolution: `160`
+- `n_subap`: `32`
+- high sensor: `hgcdte_avalanche_array`
+- high sampling mode: `correlated_double_sampling`
+- high readout correction: `reference_pixel_common_mode`
+
+### Multi-Source / Multi-WFS Runtime
+
+Commands:
+
+- `julia --project=. scripts/profile_multi_source_multi_wfs_runtime.jl cpu medium`
+- `julia --project=. scripts/profile_multi_source_multi_wfs_runtime.jl cpu representative`
+- `julia --project=. scripts/profile_multi_source_multi_wfs_runtime.jl amdgpu medium`
+
+Recorded results:
+
+- CPU `medium`
+  - `sh_asterism_mean_ns`: `317637.5`
+  - `pyramid_asterism_mean_ns`: `5.005580166666667e6`
+  - `bioedge_asterism_mean_ns`: `1.2097988e7`
+  - `composite_compatible_mean_ns`: `172208.33`
+  - `composite_mixed_mean_ns`: `384359.58`
+- CPU `representative`
+  - `sh_asterism_mean_ns`: `958680.5`
+  - `pyramid_asterism_mean_ns`: `3.5360958666666664e7`
+  - `bioedge_asterism_mean_ns`: `8.621651366666667e7`
+  - `composite_compatible_mean_ns`: `969146.33`
+  - `composite_mixed_mean_ns`: `3.3986123333333335e6`
+- AMDGPU `medium`
+  - `sh_asterism_mean_ns`: `3.9118879416666664e7`
+  - `pyramid_asterism_mean_ns`: `3.0214100833333335e6`
+  - `bioedge_asterism_mean_ns`: `6.20568325e6`
+  - `composite_compatible_mean_ns`: `5.478529775e7`
+  - `composite_mixed_mean_ns`: `3.3314810583333332e7`
+
+Interpretation:
+
+- AO3k now has a maintained realistic-size benchmark on CPU, AMDGPU, and CUDA.
+- AMDGPU and CUDA both beat the CPU AO3k `medium` rung, but CUDA is currently
+  much farther ahead.
+- The multi-WFS family is mixed rather than uniformly GPU-favorable: Pyramid
+  and BioEdge scale well on AMDGPU at the `medium` rung, while the current
+  diffractive SH asterism path is still expensive there.

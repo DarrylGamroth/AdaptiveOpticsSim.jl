@@ -358,6 +358,83 @@ Backend expectation:
 - backend-specific fallback policy is allowed, but it should be isolated to
   shared infrastructure rather than embedded as ad hoc scientific-model logic
 
+## Current ROCm Workaround Inventory
+
+The current tree includes a small number of explicit ROCm-specific workaround
+paths that were added to restore realistic maintained benchmark coverage
+without changing global backend policy.
+
+These are acceptable only as transitional measures ahead of the structural
+refactor phases above.
+
+### 1. Detector-owned host mirrors for ROCm noise/readout correction
+
+Files:
+
+- [frame_capture.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Detectors/frame_capture.jl)
+- [interface.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Detectors/interface.jl)
+- [frame_response.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Detectors/frame_response.jl)
+- [hgcdte_avalanche_array.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Detectors/hgcdte_avalanche_array.jl)
+
+Current behavior:
+
+- `DetectorState` owns a preallocated `noise_buffer_host`
+- ROCm detector paths that still trip compiler failures in generic GPU
+  reductions/noise kernels use that host mirror instead of allocating
+  `Array(frame)` inside helper functions
+
+Status:
+
+- acceptable temporary maintained fallback
+- should be revisited in Phase 4 and Phase 5 of this plan
+
+### 2. WFS-owned host mirrors for ROCm calibration metadata and masked flux sums
+
+Files:
+
+- [pyramid.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/WFS/pyramid.jl)
+- [bioedge.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/WFS/bioedge.jl)
+
+Current behavior:
+
+- `PyramidState` and `BioEdgeState` own cached host buffers for valid-mask
+  metadata and ROCm masked-flux fallback
+- the ROCm path copies through cached state rather than allocating inside
+  hot-path helpers
+
+Status:
+
+- acceptable temporary maintained fallback
+- should be replaced by shared reduction infrastructure in Phase 4
+
+### 3. ROCm-specific Shack-Hartmann safe path
+
+File:
+
+- [shack_hartmann.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/WFS/shack_hartmann.jl)
+
+Current behavior:
+
+- diffractive SH on ROCm currently avoids the stacked GPU path for several
+  measurement/reduction surfaces
+- the safe path reuses cached host vectors and mask mirrors owned by SH state
+
+Status:
+
+- benchmark-unblock path, not desired final structure
+- should be superseded by Phases 1, 4, and 5 of this plan
+
+### Policy
+
+These workarounds are acceptable because:
+
+- they are localized to detector/WFS runtime ownership, not global backend
+  policy
+- they reuse owned state instead of allocating ad hoc in helper functions
+- they restored realistic maintained AMDGPU benchmark coverage
+
+They should not be treated as the final GPU architecture.
+
 ## Recommendation
 
 The next concrete implementation work should start with Phases 1 and 2, not
