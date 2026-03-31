@@ -267,10 +267,7 @@ sensing_mode(::ShackHartmann{M}) where {M} = M()
 @inline sh_rocm_safe_path(wfs::ShackHartmann) = gpu_backend_name(typeof(wfs.state.slopes)) === :amdgpu
 
 @inline function sh_safe_peak_value(A::AbstractArray{T}) where {T<:AbstractFloat}
-    if gpu_backend_name(typeof(A)) === :amdgpu || gpu_backend_name(typeof(parent(A))) === :amdgpu
-        return maximum(Array(A))
-    end
-    return maximum(A)
+    return backend_maximum_value(A)
 end
 
 @inline function sh_refresh_valid_mask_host!(wfs::ShackHartmann)
@@ -1894,30 +1891,11 @@ function mean_valid_signal(signal::AbstractVector{T}, valid_mask::AbstractMatrix
 end
 
 function mean_valid_signal(::ScalarCPUStyle, signal::AbstractVector{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
-    n_sub = size(valid_mask, 1)
-    offset = n_sub * n_sub
-    acc = zero(T)
-    count = 0
-    idx = 1
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        if valid_mask[i, j]
-            acc += signal[idx]
-            acc += signal[idx + offset]
-            count += 2
-        end
-        idx += 1
-    end
-    return count == 0 ? one(T) : acc / count
+    return packed_valid_pair_mean(ScalarCPUStyle(), signal, valid_mask)
 end
 
 function mean_valid_signal(::AcceleratorStyle, signal::AbstractVector{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
-    if gpu_backend_name(typeof(signal)) === :amdgpu
-        host_signal = Array(signal)
-        host_valid_mask = Array(valid_mask)
-        return mean_valid_signal(ScalarCPUStyle(), host_signal, host_valid_mask)
-    end
-    count = sum(valid_mask)
-    return count == 0 ? one(T) : sum(signal) / (T(2) * T(count))
+    return packed_valid_pair_mean(execution_style(signal), signal, valid_mask)
 end
 
 function subtract_reference_and_scale!(wfs::ShackHartmann)

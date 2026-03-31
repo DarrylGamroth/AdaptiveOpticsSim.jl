@@ -1,17 +1,5 @@
 using Statistics
 
-@kernel function pyramid_masked_sum_kernel!(out, values, valid_mask, n_rows::Int, n_cols::Int)
-    i, j = @index(Global, NTuple)
-    if i <= n_rows && j <= n_cols
-        if @inbounds valid_mask[i, j]
-            KernelAbstractions.@atomic out[1] += values[i, j]
-        end
-    end
-end
-
-@inline pyramid_rocm_array(A::AbstractArray) = gpu_backend_name(typeof(A)) === :amdgpu
-@inline pyramid_rocm_array(A::SubArray) = pyramid_rocm_array(parent(A))
-
 #
 # Pyramid wavefront sensing
 #
@@ -610,40 +598,21 @@ function resize_pyramid_slope_buffers!(wfs::PyramidWFS)
 end
 
 function pyramid_valid_flux_sum!(::ScalarCPUStyle, wfs::PyramidWFS, i4q::AbstractMatrix{T}) where {T<:AbstractFloat}
-    summed = zero(T)
-    valid = wfs.state.valid_i4q_host
-    @inbounds for j in axes(valid, 2), i in axes(valid, 1)
-        if valid[i, j]
-            summed += i4q[i, j]
-        end
-    end
-    return summed
+    return masked_sum2d(ScalarCPUStyle(), i4q, wfs.state.valid_i4q_host)
 end
 
-@inline pyramid_host_flux_parent(i4q::AbstractMatrix) = i4q
-@inline pyramid_host_flux_parent(i4q::SubArray) = parent(i4q)
-
-@inline pyramid_host_flux_view(host_parent::AbstractMatrix, i4q::AbstractMatrix) = host_parent
-@inline pyramid_host_flux_view(host_parent::AbstractMatrix, i4q::SubArray) = @view(host_parent[parentindices(i4q)...])
-
 function pyramid_valid_flux_sum!(style::AcceleratorStyle, wfs::PyramidWFS, i4q::AbstractMatrix{T}) where {T<:AbstractFloat}
-    if pyramid_rocm_array(i4q)
-        host_parent = wfs.state.valid_flux_i4q_host
-        src = pyramid_host_flux_parent(i4q)
-        if size(host_parent) != size(src)
-            host_parent = Matrix{T}(undef, size(src)...)
-            wfs.state.valid_flux_i4q_host = host_parent
-        end
-        copyto!(host_parent, src)
-        host_i4q = pyramid_host_flux_view(host_parent, i4q)
-        return pyramid_valid_flux_sum!(ScalarCPUStyle(), wfs, host_i4q)
-    end
-    fill!(wfs.state.valid_flux_sum_buffer, zero(T))
-    n_rows, n_cols = size(wfs.state.valid_i4q)
-    launch_kernel!(style, pyramid_masked_sum_kernel!, wfs.state.valid_flux_sum_buffer, i4q, wfs.state.valid_i4q,
-        n_rows, n_cols; ndrange=(n_rows, n_cols))
-    copyto!(wfs.state.valid_flux_sum_host, wfs.state.valid_flux_sum_buffer)
-    return wfs.state.valid_flux_sum_host[1]
+    summed, host_parent = masked_sum2d(
+        style,
+        i4q,
+        wfs.state.valid_i4q,
+        wfs.state.valid_i4q_host,
+        wfs.state.valid_flux_sum_buffer,
+        wfs.state.valid_flux_sum_host,
+        wfs.state.valid_flux_i4q_host,
+    )
+    wfs.state.valid_flux_i4q_host = host_parent
+    return summed
 end
 
 function select_pyramid_valid_i4q!(wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
