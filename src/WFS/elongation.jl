@@ -283,11 +283,13 @@ end
 function _apply_lgs_convolution_stack!(style::AcceleratorStyle, intensity_stack::AbstractArray{T,3}, kernels_fft::AbstractArray{Complex{T},3},
     fft_stack::AbstractArray{Complex{T},3}, fft_plan, ifft_plan) where {T<:AbstractFloat}
     n1, n2, n3 = size(intensity_stack)
-    launch_kernel_async!(style, real_to_complex_stack_kernel!, fft_stack, intensity_stack, n1, n2, n3; ndrange=size(fft_stack))
-    synchronize_backend!(style)
+    phase = begin_kernel_phase(style)
+    queue_kernel!(phase, real_to_complex_stack_kernel!, fft_stack, intensity_stack, n1, n2, n3; ndrange=size(fft_stack))
+    finish_kernel_phase!(phase)
     execute_fft_plan!(fft_stack, fft_plan)
-    launch_kernel_async!(style, multiply_kernel_fft_stack_kernel!, fft_stack, kernels_fft, n1, n2, n3; ndrange=size(fft_stack))
-    synchronize_backend!(style)
+    phase = begin_kernel_phase(style)
+    queue_kernel!(phase, multiply_kernel_fft_stack_kernel!, fft_stack, kernels_fft, n1, n2, n3; ndrange=size(fft_stack))
+    finish_kernel_phase!(phase)
     execute_fft_plan!(fft_stack, ifft_plan)
     scale = T(1) / (n1 * n2)
     launch_kernel!(style, complex_to_real_scaled_stack_kernel!, intensity_stack, fft_stack, scale, n1, n2, n3; ndrange=size(fft_stack))

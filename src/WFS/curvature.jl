@@ -570,10 +570,11 @@ function curvature_intensity!(style::AcceleratorStyle, wfs::CurvatureWFS, tel::T
     amp_scale = sqrt(eltype(wfs.state.frame_plus)(
         photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
     ))
-    launch_kernel_async!(style, curvature_branch_field_stack_kernel!, wfs.state.field_stack, tel.state.pupil,
+    phase = begin_kernel_phase(style)
+    queue_kernel!(phase, curvature_branch_field_stack_kernel!, wfs.state.field_stack, tel.state.pupil,
         tel.state.opd, wfs.state.defocus_stack, wfs.state.phasor, amp_scale, opd_to_cycles, ox, oy, n, pad;
         ndrange=size(wfs.state.field_stack))
-    synchronize_backend!(style)
+    finish_kernel_phase!(phase)
     fraunhofer_intensity_stack!(wfs.state.intensity_stack, wfs.state.field_stack, wfs.state.fft_stack_plan)
     return sample_curvature_frames!(wfs, tel)
 end
@@ -596,10 +597,11 @@ end
 function curvature_branch_stack_from_field!(style::AcceleratorStyle, wfs::CurvatureWFS, field::ElectricField)
     size(field.state.field) == (size(wfs.state.field_stack, 1), size(wfs.state.field_stack, 2)) ||
         throw(DimensionMismatchError("ElectricField padded resolution must match CurvatureWFS diffraction grid"))
-    launch_kernel_async!(style, curvature_branch_field_from_input_kernel!, wfs.state.field_stack,
+    phase = begin_kernel_phase(style)
+    queue_kernel!(phase, curvature_branch_field_from_input_kernel!, wfs.state.field_stack,
         field.state.field, wfs.state.defocus_stack, wfs.state.phasor, size(wfs.state.field_stack, 1), size(wfs.state.field_stack, 3);
         ndrange=size(wfs.state.field_stack))
-    synchronize_backend!(style)
+    finish_kernel_phase!(phase)
     return wfs.state.field_stack
 end
 
