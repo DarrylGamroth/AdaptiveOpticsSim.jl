@@ -26,6 +26,8 @@ mutable struct KolmogorovState{T<:AbstractFloat,A<:AbstractMatrix{T},B<:Abstract
     spectrum::B
     noise_re::A
     noise_im::A
+    noise_re_host::Matrix{T}
+    noise_im_host::Matrix{T}
     freqs::V
     ifft_plan::P
     last_delta::T
@@ -45,7 +47,9 @@ function KolmogorovAtmosphere(tel::Telescope; r0::Real, L0::Real=25.0, T::Type{<
     psd = backend{T}(undef, n, n)
     spectrum = backend{Complex{T}}(undef, n, n)
     noise_re = backend{T}(undef, n, n)
-   noise_im = backend{T}(undef, n, n)
+    noise_im = backend{T}(undef, n, n)
+    noise_re_host = Matrix{T}(undef, n, n)
+    noise_im_host = Matrix{T}(undef, n, n)
     freqs = backend{T}(undef, n)
     ifft_plan = plan_ifft_backend!(spectrum)
     fill!(opd, zero(T))
@@ -57,6 +61,8 @@ function KolmogorovAtmosphere(tel::Telescope; r0::Real, L0::Real=25.0, T::Type{<
         spectrum,
         noise_re,
         noise_im,
+        noise_re_host,
+        noise_im_host,
         freqs,
         ifft_plan,
         T(-1),
@@ -123,12 +129,17 @@ function phase_screen_von_karman!(out::AbstractMatrix, atm::KolmogorovAtmosphere
     if size(out) != (n, n)
         throw(DimensionMismatchError("output must be square"))
     end
-    randn_backend!(rng, atm.state.noise_re)
-    randn_backend!(rng, atm.state.noise_im)
+    atm.state.noise_re_host = randn_phase_noise!(rng, atm.state.noise_re, atm.state.noise_re_host)
+    atm.state.noise_im_host = randn_phase_noise!(rng, atm.state.noise_im, atm.state.noise_im_host)
     @. atm.state.spectrum = complex(atm.state.noise_re, atm.state.noise_im) * sqrt(atm.state.psd)
     execute_fft_plan!(atm.state.spectrum, atm.state.ifft_plan)
     @. out = real(atm.state.spectrum) * (n * delta)
     return out
+end
+
+function randn_phase_noise!(rng::AbstractRNG, out::AbstractMatrix{T}, host::Matrix{T}) where {T<:AbstractFloat}
+    randn_backend!(rng, out)
+    return host
 end
 
 

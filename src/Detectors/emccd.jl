@@ -67,7 +67,7 @@ end
 
 function apply_pre_readout_gain!(model::StochasticMultiplicationRegister, sensor::EMCCDSensor, det::Detector, rng::AbstractRNG)
     det.state.frame .*= det.params.gain
-    randn_backend!(rng, det.state.noise_buffer)
+    randn_frame_noise!(det, rng, det.state.noise_buffer)
     factor = sensor.excess_noise_factor <= one(sensor.excess_noise_factor) ?
         model.register_noise_factor :
         max(model.register_noise_factor, sqrt(sensor.excess_noise_factor^2 - one(sensor.excess_noise_factor)))

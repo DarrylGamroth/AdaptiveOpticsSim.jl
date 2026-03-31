@@ -77,7 +77,7 @@ end
 function apply_sensor_statistics!(sensor::CMOSSensor, det::Detector, rng::AbstractRNG)
     sigma = sensor.column_readout_sigma
     sigma <= zero(sigma) && return det.state.frame
-    randn_backend!(rng, det.state.noise_buffer)
+    randn_frame_noise!(det, rng, det.state.noise_buffer)
     return apply_column_noise!(execution_style(det.state.frame), det.state.frame, det.state.noise_buffer, sigma)
 end
 

@@ -36,6 +36,24 @@ AdaptiveOpticsSim.default_build_backend(::AMDGPU.ROCArray) = AdaptiveOpticsSim.G
 AdaptiveOpticsSim.prepare_build_matrix(::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag}, A::AbstractMatrix) = Matrix(A)
 AdaptiveOpticsSim.randn_backend_async!(::AdaptiveOpticsSim.AcceleratorStyle, rng::AbstractRNG, out::AMDGPU.ROCArray) = (Random.randn!(rng, out); out)
 AdaptiveOpticsSim._randn_backend!(::AdaptiveOpticsSim.AcceleratorStyle, rng::AbstractRNG, out::AMDGPU.ROCArray) = (Random.randn!(rng, out); out)
+function AdaptiveOpticsSim.randn_frame_noise!(det::AdaptiveOpticsSim.Detector, rng::AbstractRNG, out::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat}
+    host = det.state.noise_buffer_host
+    if size(host) != size(out)
+        host = Matrix{T}(undef, size(out)...)
+        det.state.noise_buffer_host = host
+    end
+    randn!(rng, host)
+    copyto!(out, host)
+    return out
+end
+function AdaptiveOpticsSim.randn_phase_noise!(rng::AbstractRNG, out::AMDGPU.ROCArray{T,2}, host::Matrix{T}) where {T<:AbstractFloat}
+    if size(host) != size(out)
+        host = Matrix{T}(undef, size(out)...)
+    end
+    randn!(rng, host)
+    copyto!(out, host)
+    return host
+end
 AdaptiveOpticsSim.backend_matmul(A::AMDGPU.ROCArray{T,2}, B::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat} =
     AMDGPU.rocBLAS.gemm('N', 'N', A, B)
 AdaptiveOpticsSim.backend_matmul_transpose_right(A::AMDGPU.ROCArray{T,2}, B::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat} =

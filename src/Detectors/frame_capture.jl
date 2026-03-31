@@ -75,6 +75,11 @@ function poisson_noise_frame!(det::Detector, rng::AbstractRNG, img::AbstractMatr
     return img
 end
 
+function randn_frame_noise!(det::Detector, rng::AbstractRNG, out::AbstractMatrix{T}) where {T<:AbstractFloat}
+    randn_backend!(rng, out)
+    return out
+end
+
 function capture_signal!(det::Detector{NoiseNone}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
     fill_frame!(det, psf, exposure_time)
     apply_signal_defects!(det.params.defect_model, det, exposure_time)
@@ -169,14 +174,14 @@ apply_readout_noise!(det::Detector{NoiseNone}, rng::AbstractRNG) = det.state.fra
 apply_readout_noise!(det::Detector{NoisePhoton}, rng::AbstractRNG) = det.state.frame
 
 function apply_readout_noise!(det::Detector{<:NoiseReadout}, rng::AbstractRNG)
-    randn_backend!(rng, det.state.noise_buffer)
+    randn_frame_noise!(det, rng, det.state.noise_buffer)
     sigma = effective_readout_sigma(det.params.sensor, det.noise.sigma)
     det.state.frame .+= sigma .* det.state.noise_buffer
     return det.state.frame
 end
 
 function apply_readout_noise!(det::Detector{<:NoisePhotonReadout}, rng::AbstractRNG)
-    randn_backend!(rng, det.state.noise_buffer)
+    randn_frame_noise!(det, rng, det.state.noise_buffer)
     sigma = effective_readout_sigma(det.params.sensor, det.noise.sigma)
     det.state.frame .+= sigma .* det.state.noise_buffer
     return det.state.frame

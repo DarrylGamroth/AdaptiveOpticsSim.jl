@@ -162,7 +162,7 @@ function _sample_frame_read!(sensor::HgCdTeAvalancheArraySensor, det::Detector, 
     sigma, rng::AbstractRNG)
     copyto!(target, baseline)
     if sigma > zero(sigma)
-        randn_backend!(rng, det.state.noise_buffer)
+        randn_frame_noise!(det, rng, det.state.noise_buffer)
         target .+= sigma .* det.state.noise_buffer
     end
     target .*= det.params.gain
