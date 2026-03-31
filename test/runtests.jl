@@ -1352,7 +1352,10 @@ end
     @test runtime2.wfs.state.calibrated
     @test supports_detector_output(runtime2)
     step!(runtime2)
-    @test simulation_wfs_frame(runtime2) === wfs2.state.spot_cube
+    @test simulation_wfs_frame(runtime2) === wfs2.state.exported_spot_cube
+    @test simulation_wfs_frame(runtime2) !== wfs2.state.spot_cube
+    @test size(simulation_wfs_frame(runtime2)) == size(wfs2.state.spot_cube)
+    @test all(simulation_wfs_frame(runtime2) .>= wfs2.state.spot_cube)
     boundary2 = SimulationInterface(runtime2)
     @test ndims(simulation_wfs_frame(boundary2)) == 3
     @test size(simulation_wfs_frame(boundary2), 1) == wfs2.params.n_subap^2

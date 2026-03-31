@@ -314,7 +314,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
 end
 
 @inline wfs_output_frame(wfs::AbstractWFS, det::AbstractDetector) = output_frame(det)
-@inline wfs_output_frame(wfs::ShackHartmann{<:Diffractive}, det::AbstractDetector) = wfs.state.spot_cube
+@inline wfs_output_frame(wfs::ShackHartmann{<:Diffractive}, det::AbstractDetector) = sh_exported_spot_cube(wfs)
 @inline wfs_output_metadata(wfs::ShackHartmann) = (
     n_subap=subaperture_layout(wfs).n_subap,
     n_valid_subap=n_valid_subapertures(subaperture_layout(wfs)),

@@ -47,6 +47,7 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     RB<:AbstractMatrix{T},
     RS<:AbstractMatrix{T},
     RC<:AbstractArray{T,3},
+    RCE<:AbstractArray{T,3},
     RA<:AbstractArray{T,3},
     RN<:AbstractArray{T,3},
     P,
@@ -70,6 +71,7 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     bin_buffer::RB
     spot::RS
     spot_cube::RC
+    exported_spot_cube::RCE
     spot_cube_accum::RA
     detector_noise_cube::RN
     fft_plan::P
@@ -152,6 +154,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     bin_buffer = backend{T}(undef, sub, sub)
     spot = similar(bin_buffer)
     spot_cube = backend{T}(undef, n_subap * n_subap, sub, sub)
+    exported_spot_cube = similar(spot_cube)
     spot_cube_accum = similar(spot_cube)
     detector_noise_cube = similar(spot_cube)
     fft_plan = plan_fft_backend!(fft_buffer)
@@ -188,6 +191,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         typeof(bin_buffer),
         typeof(spot),
         typeof(spot_cube),
+        typeof(exported_spot_cube),
         typeof(spot_cube_accum),
         typeof(detector_noise_cube),
         typeof(fft_plan),
@@ -212,6 +216,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         bin_buffer,
         spot,
         spot_cube,
+        exported_spot_cube,
         spot_cube_accum,
         detector_noise_cube,
         fft_plan,
@@ -410,6 +415,8 @@ function prepare_sampling!(wfs::ShackHartmann, tel::Telescope, src::AbstractSour
         wfs.state.spot = similar(wfs.state.spot, n_pix_subap, n_pix_subap)
         wfs.state.spot_cube = similar(wfs.state.spot_cube, eltype(wfs.state.spot_cube),
             wfs.params.n_subap * wfs.params.n_subap, n_pix_subap, n_pix_subap)
+        wfs.state.exported_spot_cube = similar(wfs.state.exported_spot_cube, eltype(wfs.state.exported_spot_cube),
+            wfs.params.n_subap * wfs.params.n_subap, n_pix_subap, n_pix_subap)
         wfs.state.spot_cube_accum = similar(wfs.state.spot_cube_accum, eltype(wfs.state.spot_cube_accum),
             wfs.params.n_subap * wfs.params.n_subap, n_pix_subap, n_pix_subap)
         wfs.state.detector_noise_cube = similar(wfs.state.detector_noise_cube, eltype(wfs.state.detector_noise_cube),
@@ -422,6 +429,15 @@ function prepare_sampling!(wfs::ShackHartmann, tel::Telescope, src::AbstractSour
     half_shift_ratio = wfs.params.half_pixel_shift ? T(binning_pixel_scale) : zero(T)
     build_sh_phasor!(wfs, half_shift_ratio)
     return wfs
+end
+
+@inline function sh_exported_spot_cube(wfs::ShackHartmann)
+    return wfs.state.exported_spot_cube
+end
+
+@inline function sync_exported_spots!(wfs::ShackHartmann)
+    copyto!(wfs.state.exported_spot_cube, wfs.state.spot_cube)
+    return wfs.state.exported_spot_cube
 end
 
 """
@@ -511,6 +527,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
     prepare_sampling!(wfs, tel, src)
     ensure_sh_calibration!(wfs, tel, src)
     peak = sampled_spots_peak!(wfs, tel, src)
+    sync_exported_spots!(wfs)
     sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
     subtract_reference_and_scale!(wfs)
     return wfs.state.slopes
@@ -522,6 +539,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Spectr
     prepare_sampling!(wfs, tel, ref)
     ensure_sh_calibration!(wfs, tel, src)
     peak = sampled_spots_peak!(wfs, tel, src)
+    sync_exported_spots!(wfs)
     sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
     subtract_reference_and_scale!(wfs)
     return wfs.state.slopes
@@ -547,6 +565,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
     prepare_sampling!(wfs, tel, src)
     ensure_sh_calibration!(wfs, tel, src)
     peak = sampled_spots_peak!(wfs, tel, src, det, rng)
+    sync_exported_spots!(wfs)
     sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
     subtract_reference_and_scale!(wfs)
     return wfs.state.slopes
@@ -559,6 +578,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Spectr
     prepare_sampling!(wfs, tel, ref)
     ensure_sh_calibration!(wfs, tel, src)
     peak = sampled_spots_peak!(wfs, tel, src, det, rng)
+    sync_exported_spots!(wfs)
     sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
     subtract_reference_and_scale!(wfs)
     return wfs.state.slopes
@@ -580,6 +600,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
     oy = div(pad - sub, 2)
     if sh_stacked_asterism_compatible(ast) && !sh_rocm_safe_path(wfs)
         peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.state.slopes), wfs, tel, ast)
+        sync_exported_spots!(wfs)
         sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
         subtract_reference_and_scale!(wfs)
         return wfs.state.slopes
@@ -607,6 +628,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
     oy = div(pad - sub, 2)
     if sh_stacked_asterism_compatible(ast) && !sh_rocm_safe_path(wfs)
         peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.state.slopes), wfs, tel, ast, det, rng)
+        sync_exported_spots!(wfs)
         sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
         subtract_reference_and_scale!(wfs)
         return wfs.state.slopes
@@ -652,6 +674,7 @@ function measure_sh_asterism_diffractive!(::ScalarCPUStyle, wfs::ShackHartmann, 
         idx += 1
     end
     copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
+    sync_exported_spots!(wfs)
     zero_invalid_sh_slopes!(ScalarCPUStyle(), wfs.state.slopes, wfs.state.valid_mask)
     return wfs.state.slopes
 end
@@ -693,6 +716,7 @@ function measure_sh_asterism_diffractive!(::AcceleratorStyle, wfs::ShackHartmann
         idx += 1
     end
     copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
+    sync_exported_spots!(wfs)
     copyto!(wfs.state.slopes, host_slopes)
     return wfs.state.slopes
 end
@@ -732,6 +756,7 @@ function measure_sh_asterism_diffractive!(::ScalarCPUStyle, wfs::ShackHartmann, 
         idx += 1
     end
     copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
+    sync_exported_spots!(wfs)
     zero_invalid_sh_slopes!(ScalarCPUStyle(), wfs.state.slopes, wfs.state.valid_mask)
     return wfs.state.slopes
 end
@@ -773,6 +798,7 @@ function measure_sh_asterism_diffractive!(::AcceleratorStyle, wfs::ShackHartmann
         idx += 1
     end
     copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
+    sync_exported_spots!(wfs)
     copyto!(wfs.state.slopes, host_slopes)
     return wfs.state.slopes
 end
@@ -1154,6 +1180,7 @@ function measure_sh_asterism_batched!(style::AcceleratorStyle, wfs::ShackHartman
             wfs.state.spot_stats, n_spots; ndrange=3 * n_spots)
     end
     copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
+    sync_exported_spots!(wfs)
     offset = n_spots
     reference = vec(wfs.state.reference_signal_2d)
     launch_kernel!(style, sh_finalize_asterism_slopes_kernel!, wfs.state.slopes, wfs.state.spot_stats_accum,
@@ -1178,6 +1205,7 @@ function measure_sh_asterism_batched!(style::AcceleratorStyle, wfs::ShackHartman
             wfs.state.spot_stats, n_spots; ndrange=3 * n_spots)
     end
     copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
+    sync_exported_spots!(wfs)
     offset = n_spots
     reference = vec(wfs.state.reference_signal_2d)
     launch_kernel!(style, sh_finalize_asterism_slopes_kernel!, wfs.state.slopes, wfs.state.spot_stats_accum,
