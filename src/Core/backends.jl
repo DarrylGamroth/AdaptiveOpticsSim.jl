@@ -21,6 +21,10 @@ struct AcceleratorStyle{B<:KernelAbstractions.Backend} <: ExecutionStyle
     backend::B
 end
 
+struct KernelLaunchPhase{S<:ExecutionStyle}
+    style::S
+end
+
 execution_style(A::AbstractArray) = execution_style(KernelAbstractions.get_backend(A))
 execution_style(::KernelAbstractions.CPU) = ScalarCPUStyle()
 execution_style(backend::KernelAbstractions.Backend) = AcceleratorStyle(backend)
@@ -72,8 +76,16 @@ end
 @inline synchronize_backend!(::ScalarCPUStyle) = nothing
 @inline synchronize_backend!(style::AcceleratorStyle) = KernelAbstractions.synchronize(style.backend)
 
+@inline begin_kernel_phase(style::ExecutionStyle) = KernelLaunchPhase(style)
+@inline finish_kernel_phase!(phase::KernelLaunchPhase) = synchronize_backend!(phase.style)
+
 @inline function launch_kernel_async!(style::AcceleratorStyle, kernel, args...; ndrange)
     kernel(style.backend)(args...; ndrange=ndrange)
+    return nothing
+end
+
+@inline function queue_kernel!(phase::KernelLaunchPhase{<:AcceleratorStyle}, kernel, args...; ndrange)
+    launch_kernel_async!(phase.style, kernel, args...; ndrange=ndrange)
     return nothing
 end
 

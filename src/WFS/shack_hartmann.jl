@@ -968,9 +968,11 @@ function compute_intensity_asterism_stack!(style::AcceleratorStyle, wfs::ShackHa
         n_sub, sub, ox, oy, tel.params.resolution, pad, n_spots; ndrange=size(fft_view))
     synchronize_backend!(style)
     execute_fft_plan!(fft_view, wfs.state.fft_asterism_plan)
-    launch_kernel_async!(style, complex_abs2_stack_kernel!, intensity_view, fft_view, pad, total; ndrange=size(intensity_view))
-    launch_kernel!(style, reduce_asterism_intensity_stack_kernel!, wfs.state.intensity_stack, intensity_view,
+    phase = begin_kernel_phase(style)
+    queue_kernel!(phase, complex_abs2_stack_kernel!, intensity_view, fft_view, pad, total; ndrange=size(intensity_view))
+    queue_kernel!(phase, reduce_asterism_intensity_stack_kernel!, wfs.state.intensity_stack, intensity_view,
         n_spots, n_src, pad; ndrange=size(wfs.state.intensity_stack))
+    finish_kernel_phase!(phase)
     return wfs.state.intensity_stack
 end
 
@@ -1005,9 +1007,11 @@ function compute_intensity_spectral_stack!(style::AcceleratorStyle, wfs::ShackHa
         n_sub, sub, ox, oy, tel.params.resolution, pad, n_spots; ndrange=size(fft_view))
     synchronize_backend!(style)
     execute_fft_plan!(fft_view, wfs.state.fft_asterism_plan)
-    launch_kernel_async!(style, complex_abs2_stack_kernel!, intensity_view, fft_view, pad, total; ndrange=size(intensity_view))
-    launch_kernel!(style, reduce_asterism_intensity_stack_kernel!, wfs.state.intensity_stack, intensity_view,
+    phase = begin_kernel_phase(style)
+    queue_kernel!(phase, complex_abs2_stack_kernel!, intensity_view, fft_view, pad, total; ndrange=size(intensity_view))
+    queue_kernel!(phase, reduce_asterism_intensity_stack_kernel!, wfs.state.intensity_stack, intensity_view,
         n_spots, n_src, pad; ndrange=size(wfs.state.intensity_stack))
+    finish_kernel_phase!(phase)
     return wfs.state.intensity_stack
 end
 
@@ -1176,11 +1180,13 @@ function measure_sh_asterism_batched!(style::AcceleratorStyle, wfs::ShackHartman
     for src in ast.sources
         _sampled_spots_peak_source_batched!(style, wfs, tel, src)
         wfs.state.spot_cube_accum .+= wfs.state.spot_cube
-        launch_kernel!(style, sh_spot_centroid_stats_kernel!, wfs.state.spot_stats, wfs.state.spot_cube,
+        phase = begin_kernel_phase(style)
+        queue_kernel!(phase, sh_spot_centroid_stats_kernel!, wfs.state.spot_stats, wfs.state.spot_cube,
             wfs.state.valid_mask, centroid_threshold(wfs), n_sub, size(wfs.state.spot_cube, 2),
             size(wfs.state.spot_cube, 3); ndrange=n_spots)
-        launch_kernel!(style, accumulate_spot_stats_kernel!, wfs.state.spot_stats_accum,
+        queue_kernel!(phase, accumulate_spot_stats_kernel!, wfs.state.spot_stats_accum,
             wfs.state.spot_stats, n_spots; ndrange=3 * n_spots)
+        finish_kernel_phase!(phase)
     end
     copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
     sync_exported_spots!(wfs)
@@ -1201,11 +1207,13 @@ function measure_sh_asterism_batched!(style::AcceleratorStyle, wfs::ShackHartman
     for src in ast.sources
         _sampled_spots_peak_source_batched!(style, wfs, tel, src, det, rng)
         wfs.state.spot_cube_accum .+= wfs.state.spot_cube
-        launch_kernel!(style, sh_spot_centroid_stats_kernel!, wfs.state.spot_stats, wfs.state.spot_cube,
+        phase = begin_kernel_phase(style)
+        queue_kernel!(phase, sh_spot_centroid_stats_kernel!, wfs.state.spot_stats, wfs.state.spot_cube,
             wfs.state.valid_mask, centroid_threshold(wfs), n_sub, size(wfs.state.spot_cube, 2),
             size(wfs.state.spot_cube, 3); ndrange=n_spots)
-        launch_kernel!(style, accumulate_spot_stats_kernel!, wfs.state.spot_stats_accum,
+        queue_kernel!(phase, accumulate_spot_stats_kernel!, wfs.state.spot_stats_accum,
             wfs.state.spot_stats, n_spots; ndrange=3 * n_spots)
+        finish_kernel_phase!(phase)
     end
     copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
     sync_exported_spots!(wfs)
