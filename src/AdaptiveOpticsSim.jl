@@ -80,21 +80,12 @@ include("Tomography/geometry.jl")
 include("Tomography/fitting.jl")
 include("Tomography/reconstructors.jl")
 
-export PROJECT_STATUS
 export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError, UnsupportedAlgorithm, NumericalConditionError
 export FidelityProfile, ScientificProfile, FastProfile, ProfileBundle, default_fidelity_profile
 export atmosphere_profile, calibration_profile, detector_profile, lift_profile, tomography_profile
 export InversePolicy, ExactPseudoInverse, TSVDInverse, TikhonovInverse, InverseStats, inverse_operator
 export default_modal_inverse_policy, default_calibration_inverse_policy, default_projector_inverse_policy
 export BuildBackend, NativeBuildBackend, CPUBuildBackend, GPUArrayBuildBackend, default_build_backend
-export Workspace, ensure_psf_buffers!
-export Telemetry, TelemetryRow, record!
-export ClosedLoopTrace, ClosedLoopTraceRow
-export GSCClosedLoopTrace, GSCClosedLoopTraceRow
-export GSCAtmosphereReplayTrace, GSCAtmosphereReplayTraceRow
-export snapshot_config, write_config_toml, write_config_json
-export write_telemetry_csv
-export bin2d, poisson_noise!, poisson_sample
 export AbstractMaskPrimitive, MaskGrid
 export CircularAperture, AnnularAperture, SpiderMask, RectangularROI, SubapertureGridMask
 export default_mask_grid, pixel_mask_grid, build_mask!, apply_mask!
@@ -195,11 +186,8 @@ export ModalBasis, KLBasisMethod, KLDMModes, KLHHtPSD
 export dm_basis, kl_modal_basis, modal_basis, basis_from_m2c, basis_projector
 export AOCalibration, ao_calibration
 export fitting_error, fitting_error_dm
-export fast_atmosphere
-export AOSimulation, initialize_ao_pyramid, initialize_ao_shwfs
-export GainSensingCamera, GSCDetectorMetadata, detector_metadata, weak_mode_mask, attach_detector!, detach_detector!
+export GainSensingCamera
 export calibrate!, reset_calibration!, compute_optical_gains!
-export MetaSensitivity, compute_meta_sensitivity_matrix, estimate_misregistration, SPRINT, estimate!
 export AbstractReconstructorOperator, ModalReconstructor, MappedReconstructor, reconstruct!, reconstruct
 export AbstractController, DiscreteIntegratorController, update!
 export AbstractControlSimulation, AbstractExecutionPolicy

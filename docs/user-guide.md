@@ -4,6 +4,28 @@ AdaptiveOpticsSim.jl is an idiomatic Julia adaptive-optics toolkit. The package
 keeps the OOPAO feature set recognizable, but shifts the design toward
 multiple dispatch, explicit state, and deterministic execution.
 
+## Public API tiers
+
+The package now distinguishes between:
+
+- stable exported workflow APIs
+- advanced but maintained APIs that may require qualification as
+  `AdaptiveOpticsSim.<name>`
+- developer/backend support APIs used mainly by benchmark and extension code
+
+For ordinary usage, start with the exported workflow surface shown in the quick
+start and the main API sections in
+[api-reference.md](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/api-reference.md).
+
+For advanced utilities such as telemetry/config helpers, scenario builders, and
+misregistration-identification tools, use namespaced access. Examples:
+
+```julia
+ws = AdaptiveOpticsSim.Workspace(tel; rng=MersenneTwister(0))
+sim = AdaptiveOpticsSim.initialize_ao_shwfs(...)
+sprint = AdaptiveOpticsSim.SPRINT(tel, dm, wfs, basis)
+```
+
 ## Core model
 
 - Parameters live in immutable structs such as `TelescopeParams` and

@@ -26,6 +26,45 @@ The goal is not to finalize the Phase 1 export set here. The goal is to:
 - Current top-level export count from
   [`src/AdaptiveOpticsSim.jl`](../src/AdaptiveOpticsSim.jl): `566`
 
+## Phase 1 implementation status
+
+- Current top-level export count after Phase 1 API curation:
+  - `533`
+- Change:
+  - `-33` exported names
+
+Phase 1 intentionally targeted the first low-risk tranche:
+
+- telemetry, trace, workspace, and config helpers moved to namespaced access
+- scenario-builder and misregistration-identification convenience APIs moved to
+  namespaced access
+
+Phase 1 intentionally did **not** de-export the backend/build helper surface
+yet, because that tooling is still used broadly by maintained benchmark,
+backend-validation, and support scripts. That surface remains documented as
+advanced/developer-oriented and should be revisited in a later curation pass.
+
+### Phase 1 de-exported symbols
+
+Phase 1 moved the following names to documented namespaced access:
+
+- `PROJECT_STATUS`
+- `Workspace`, `ensure_psf_buffers!`
+- `Telemetry`, `TelemetryRow`, `record!`
+- `ClosedLoopTrace`, `ClosedLoopTraceRow`
+- `GSCClosedLoopTrace`, `GSCClosedLoopTraceRow`
+- `GSCAtmosphereReplayTrace`, `GSCAtmosphereReplayTraceRow`
+- `snapshot_config`, `write_config_toml`, `write_config_json`
+- `write_telemetry_csv`
+- `bin2d`, `poisson_noise!`, `poisson_sample`
+- `fast_atmosphere`
+- `AOSimulation`, `initialize_ao_shwfs`, `initialize_ao_pyramid`
+- `GSCDetectorMetadata`, `detector_metadata`
+- `weak_mode_mask`, `attach_detector!`, `detach_detector!`
+- `MetaSensitivity`, `compute_meta_sensitivity_matrix`
+- `estimate_misregistration`
+- `SPRINT`, `estimate!`
+
 ## Tier Definitions
 
 - `Stable`

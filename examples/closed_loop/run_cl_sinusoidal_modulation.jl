@@ -4,7 +4,7 @@ using Logging
 
 rng = MersenneTwister(4)
 
-sim = initialize_ao_pyramid(
+sim = AdaptiveOpticsSim.initialize_ao_pyramid(
     resolution=32,
     diameter=8.0,
     sampling_time=1e-3,

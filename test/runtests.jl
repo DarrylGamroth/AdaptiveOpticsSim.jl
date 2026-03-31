@@ -144,7 +144,7 @@ function assert_ao_calibration_contract(calib::AOCalibration, n_commands::Int, n
     @test calib.calibration isa CalibrationVault
 end
 
-function assert_meta_sensitivity_contract(meta::MetaSensitivity, n_fields::Int)
+function assert_meta_sensitivity_contract(meta::AdaptiveOpticsSim.MetaSensitivity, n_fields::Int)
     @test meta.calib0 isa CalibrationVault
     @test meta.meta isa CalibrationVault
     @test length(meta.field_order) == n_fields
@@ -253,7 +253,7 @@ function moving_closed_loop_trace(;
     )
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
     wfs = ZernikeWFS(tel; n_subap=4, diffraction_padding=2)
-    sim = AOSimulation(tel, atm, src, dm, wfs)
+    sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=1e-8)
     recon = ModalReconstructor(imat; gain=0.2)
     wfs_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
@@ -1288,7 +1288,7 @@ function closed_loop_runtime_allocations()
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
     wfs = ShackHartmann(tel; n_subap=4)
-    sim = AOSimulation(tel, atm, src, dm, wfs)
+    sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     recon = ModalReconstructor(imat; gain=0.5)
     runtime = ClosedLoopRuntime(sim, recon; rng=rng)
@@ -1304,7 +1304,7 @@ end
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
     wfs = ShackHartmann(tel; n_subap=4)
-    sim = AOSimulation(tel, atm, src, dm, wfs)
+    sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     recon = ModalReconstructor(imat; gain=0.5)
     det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
@@ -1342,7 +1342,7 @@ end
     atm2 = KolmogorovAtmosphere(tel2; r0=0.2, L0=25.0)
     dm2 = DeformableMirror(tel2; n_act=4, influence_width=0.3)
     wfs2 = ShackHartmann(tel2; n_subap=4, mode=Diffractive())
-    sim2 = AOSimulation(tel2, atm2, src2, dm2, wfs2)
+    sim2 = AdaptiveOpticsSim.AOSimulation(tel2, atm2, src2, dm2, wfs2)
     imat2 = interaction_matrix(dm2, wfs2, tel2, src2; amplitude=0.1)
     recon2 = ModalReconstructor(imat2; gain=0.5)
     wfs_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
@@ -1399,7 +1399,7 @@ end
     atm3 = KolmogorovAtmosphere(tel3; r0=0.2, L0=25.0)
     dm3 = DeformableMirror(tel3; n_act=4, influence_width=0.3)
     wfs3 = ZernikeWFS(tel3; n_subap=4, diffraction_padding=2)
-    sim3 = AOSimulation(tel3, atm3, src3, dm3, wfs3)
+    sim3 = AdaptiveOpticsSim.AOSimulation(tel3, atm3, src3, dm3, wfs3)
     imat3 = interaction_matrix(dm3, wfs3, tel3, src3; amplitude=1e-8)
     recon3 = ModalReconstructor(imat3; gain=0.5)
     wfs_det3 = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
@@ -1422,7 +1422,7 @@ end
     atm4 = KolmogorovAtmosphere(tel4; r0=0.2, L0=25.0)
     dm4 = DeformableMirror(tel4; n_act=4, influence_width=0.3)
     wfs4 = ShackHartmann(tel4; n_subap=4)
-    sim4 = AOSimulation(tel4, atm4, src4, dm4, wfs4)
+    sim4 = AdaptiveOpticsSim.AOSimulation(tel4, atm4, src4, dm4, wfs4)
     imat4 = interaction_matrix(dm4, wfs4, tel4; amplitude=0.1)
     recon4 = ModalReconstructor(imat4; gain=0.5)
     runtime4 = ClosedLoopRuntime(sim4, recon4;
@@ -2789,20 +2789,20 @@ end
     calibrate!(gsc, frame)
     og = compute_optical_gains!(gsc, frame)
     @test length(og) == 3
-    @test length(weak_mode_mask(gsc)) == 3
+    @test length(AdaptiveOpticsSim.weak_mode_mask(gsc)) == 3
     @test all(isfinite, og)
-    @test detector_metadata(gsc) === nothing
+    @test AdaptiveOpticsSim.detector_metadata(gsc) === nothing
 
     weak_gsc = GainSensingCamera(mask, zeros(8, 8, 2); sensitivity_floor=1e-6)
     calibrate!(weak_gsc, frame)
     weak_og = compute_optical_gains!(weak_gsc, frame)
-    @test all(weak_mode_mask(weak_gsc))
+    @test all(AdaptiveOpticsSim.weak_mode_mask(weak_gsc))
     @test weak_og == ones(2)
 
     det = Detector(noise=NoiseReadout(1e-3), integration_time=2.0, qe=0.8, psf_sampling=2, binning=4)
     gsc_with_det = GainSensingCamera(mask, basis; detector=det)
-    metadata = detector_metadata(gsc_with_det)
-    @test metadata isa GSCDetectorMetadata
+    metadata = AdaptiveOpticsSim.detector_metadata(gsc_with_det)
+    @test metadata isa AdaptiveOpticsSim.GSCDetectorMetadata
     @test metadata.integration_time == 2.0
     @test metadata.qe == 0.8
     @test metadata.psf_sampling == 2
@@ -2811,10 +2811,10 @@ end
     @test metadata.readout_sigma == 1e-3
     @test occursin("psf_sampling=2", sprint(show, MIME"text/plain"(), gsc_with_det))
 
-    detach_detector!(gsc_with_det)
-    @test detector_metadata(gsc_with_det) === nothing
-    attach_detector!(gsc_with_det, det)
-    @test detector_metadata(gsc_with_det) isa GSCDetectorMetadata
+    AdaptiveOpticsSim.detach_detector!(gsc_with_det)
+    @test AdaptiveOpticsSim.detector_metadata(gsc_with_det) === nothing
+    AdaptiveOpticsSim.attach_detector!(gsc_with_det, det)
+    @test AdaptiveOpticsSim.detector_metadata(gsc_with_det) isa AdaptiveOpticsSim.GSCDetectorMetadata
 end
 
 @testset "LiFT" begin
@@ -2934,8 +2934,8 @@ end
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     wfs = ShackHartmann(tel; n_subap=2)
     basis = modal_basis(dm, tel; n_modes=2)
-    meta = compute_meta_sensitivity_matrix(tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
-    est = estimate_misregistration(meta, meta.calib0.D; misregistration_zero=Misregistration())
+    meta = AdaptiveOpticsSim.compute_meta_sensitivity_matrix(tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
+    est = AdaptiveOpticsSim.estimate_misregistration(meta, meta.calib0.D; misregistration_zero=Misregistration())
     @test est.shift_x ≈ 0.0
     @test est.shift_y ≈ 0.0
 end
@@ -2955,7 +2955,7 @@ end
     modal = ModalReconstructor(imat; gain=1.0)
     mapped = MappedReconstructor(Matrix{Float64}(I, length(dm.state.coefs), length(dm.state.coefs)), imat; gain=0.5)
     ctrl = DiscreteIntegratorController(length(wfs.state.slopes); gain=0.1, tau=0.02)
-    sim = AOSimulation(tel, atm, src, dm, wfs)
+    sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
     runtime = ClosedLoopRuntime(sim, modal; rng=MersenneTwister(9))
     wfs_diffractive = ShackHartmann(tel; n_subap=2, mode=Diffractive())
     zwfs = ZernikeWFS(tel; n_subap=2)
@@ -3072,12 +3072,12 @@ end
     assert_ao_calibration_contract(calib, length(dm.state.coefs), 2)
     @test calib.calibration.D == imat_basis.matrix
 
-    meta = compute_meta_sensitivity_matrix(tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
+    meta = AdaptiveOpticsSim.compute_meta_sensitivity_matrix(tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
     assert_meta_sensitivity_contract(meta, 2)
 
-    sprint = SPRINT(tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
-    @test sprint.meta isa MetaSensitivity
-    est = estimate!(sprint, meta.calib0.D)
+    sprint = AdaptiveOpticsSim.SPRINT(tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
+    @test sprint.meta isa AdaptiveOpticsSim.MetaSensitivity
+    est = AdaptiveOpticsSim.estimate!(sprint, meta.calib0.D)
     @test est isa Misregistration
 
     diversity = fill(eltype(tel.state.opd)(1e-9), size(tel.state.opd))
@@ -3091,25 +3091,25 @@ end
 end
 
 @testset "Telemetry and config" begin
-    telemetry = Telemetry()
-    record!(telemetry, 1, 0.0; wfe_rms=1.0, strehl=0.5, loop_gain=0.2)
+    telemetry = AdaptiveOpticsSim.Telemetry()
+    AdaptiveOpticsSim.record!(telemetry, 1, 0.0; wfe_rms=1.0, strehl=0.5, loop_gain=0.2)
     @test length(telemetry) == 1
     row = telemetry[1]
     @test row.iter == 1
     @test row.strehl ≈ 0.5
 
-    @test Tables.istable(Telemetry)
-    @test Tables.rowaccess(Telemetry)
+    @test Tables.istable(AdaptiveOpticsSim.Telemetry)
+    @test Tables.rowaccess(AdaptiveOpticsSim.Telemetry)
     rows = collect(Tables.rows(telemetry))
     @test length(rows) == 1
     @test rows[1].loop_gain ≈ 0.2
 
-    closed_loop = ClosedLoopTrace(Float32[
+    closed_loop = AdaptiveOpticsSim.ClosedLoopTrace(Float32[
         100 80 0.50 3 4
         120 90 0.45 5 6
     ]; dt=0.002f0, t0=0.1f0)
     @test length(closed_loop) == 2
-    @test eltype(typeof(closed_loop)) == ClosedLoopTraceRow{Float32}
+    @test eltype(typeof(closed_loop)) == AdaptiveOpticsSim.ClosedLoopTraceRow{Float32}
     @test closed_loop[2].iter == 2
     @test closed_loop[2].t ≈ 0.102f0
     @test closed_loop[2].residual_rms_nm ≈ 90.0f0
@@ -3119,12 +3119,12 @@ end
     @test length(closed_rows) == 2
     @test closed_rows[1].command_norm ≈ 4.0f0
 
-    gsc_closed_loop = GSCClosedLoopTrace(Float32[
+    gsc_closed_loop = AdaptiveOpticsSim.GSCClosedLoopTrace(Float32[
         100 80 0.50 3 0.9 4
         120 90 0.45 5 0.8 6
     ]; dt=0.002f0, t0=0.1f0)
     @test length(gsc_closed_loop) == 2
-    @test eltype(typeof(gsc_closed_loop)) == GSCClosedLoopTraceRow{Float32}
+    @test eltype(typeof(gsc_closed_loop)) == AdaptiveOpticsSim.GSCClosedLoopTraceRow{Float32}
     @test gsc_closed_loop[2].mean_optical_gain ≈ 0.8f0
     @test Tables.istable(typeof(gsc_closed_loop))
     @test Tables.rowaccess(typeof(gsc_closed_loop))
@@ -3132,12 +3132,12 @@ end
     @test length(gsc_closed_rows) == 2
     @test gsc_closed_rows[1].slope_norm ≈ 3.0f0
 
-    replay = GSCAtmosphereReplayTrace(Float32[
+    replay = AdaptiveOpticsSim.GSCAtmosphereReplayTrace(Float32[
         140 100 110 0.50 0.45 3 0.9
         150 105 115 0.48 0.42 5 0.8
     ]; dt=0.002f0, t0=0.1f0)
     @test length(replay) == 2
-    @test eltype(typeof(replay)) == GSCAtmosphereReplayTraceRow{Float32}
+    @test eltype(typeof(replay)) == AdaptiveOpticsSim.GSCAtmosphereReplayTraceRow{Float32}
     @test replay[2].sci_strehl ≈ 0.42f0
     @test replay[2].slope_norm ≈ 5.0f0
     @test Tables.istable(typeof(replay))
@@ -3146,18 +3146,18 @@ end
     @test length(replay_rows) == 2
     @test replay_rows[1].ngs_forcing_rms_nm ≈ 140.0f0
 
-    @test_throws DimensionMismatchError ClosedLoopTrace(zeros(2, 4))
-    @test_throws DimensionMismatchError GSCClosedLoopTrace(zeros(2, 5))
-    @test_throws DimensionMismatchError GSCAtmosphereReplayTrace(zeros(2, 6))
+    @test_throws DimensionMismatchError AdaptiveOpticsSim.ClosedLoopTrace(zeros(2, 4))
+    @test_throws DimensionMismatchError AdaptiveOpticsSim.GSCClosedLoopTrace(zeros(2, 5))
+    @test_throws DimensionMismatchError AdaptiveOpticsSim.GSCAtmosphereReplayTrace(zeros(2, 6))
 
     tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
-    cfg = snapshot_config(tel=tel, src=src)
+    cfg = AdaptiveOpticsSim.snapshot_config(tel=tel, src=src)
     @test haskey(cfg, "tel")
     @test haskey(cfg, "src")
     path, io = mktemp()
     close(io)
-    write_config_toml(path, cfg)
+    AdaptiveOpticsSim.write_config_toml(path, cfg)
     parsed = TOML.parsefile(path)
     @test parsed["tel"]["resolution"] == tel.params.resolution
 end

@@ -1,25 +1,38 @@
 # API Reference
 
-This is a guide to the exported public API. It is organized by subsystem rather
-than by source file.
+This is a guide to the maintained public API. It is organized by subsystem
+rather than by source file.
 
 Project-wide units guidance lives in
 [units-policy.md](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/units-policy.md).
 
+## Public API policy
+
+The package now uses a tiered API surface:
+
+- `Stable top-level API`
+  - exported by default
+  - intended for ordinary optics, sensing, calibration, and runtime workflows
+- `Advanced documented API`
+  - maintained and supported
+  - may require qualification as `AdaptiveOpticsSim.<name>`
+- `Developer / backend support API`
+  - primarily for extensions, benchmark tooling, and backend validation
+  - some of this surface remains exported for compatibility, but it should not
+    be treated as entry-level workflow API
+
+The practical rule is:
+
+- start with the stable exported workflow surface
+- use `AdaptiveOpticsSim.<name>` for advanced helpers such as telemetry,
+  scenario builders, and specialized calibration-identification utilities
+
 ## Core types and utilities
 
-- `Workspace`, `ensure_psf_buffers!`
 - `FidelityProfile`, `ScientificProfile`, `FastProfile`, `ProfileBundle`,
   `default_fidelity_profile`
 - `atmosphere_profile`, `calibration_profile`, `detector_profile`,
   `lift_profile`, `tomography_profile`
-- `Telemetry`, `TelemetryRow`, `record!`
-- `ClosedLoopTrace`, `ClosedLoopTraceRow`
-- `GSCClosedLoopTrace`, `GSCClosedLoopTraceRow`
-- `GSCAtmosphereReplayTrace`, `GSCAtmosphereReplayTraceRow`
-- `snapshot_config`, `write_config_toml`, `write_config_json`
-- `write_telemetry_csv`
-- `bin2d`, `poisson_noise!`, `poisson_sample`
 - `ParallelConfig`, `with_parallel_config`
 - `AbstractRuntimeProfile`, `ScientificRuntimeProfile`, `HILRuntimeProfile`,
   `RuntimeLatencyModel`, `default_runtime_profile`
@@ -110,7 +123,6 @@ Project-wide units guidance lives in
 - `ft_phase_screen`, `ft_sh_phase_screen`, `PhaseStatsWorkspace`
 - `SubharmonicMode`, `FastSubharmonics`, `FidelitySubharmonics`,
   `default_subharmonic_mode`
-- `fast_atmosphere`
 
 ## Wavefront sensing
 
@@ -142,8 +154,6 @@ Project-wide units guidance lives in
 - `fitting_error`, `fitting_error_dm`
 - `GainSensingCamera`, `calibrate!`, `reset_calibration!`,
   `compute_optical_gains!`
-- `MetaSensitivity`, `compute_meta_sensitivity_matrix`,
-  `estimate_misregistration`, `SPRINT`, `estimate!`
 - `AbstractReconstructorOperator`, `ModalReconstructor`,
   `MappedReconstructor`, `reconstruct!`, `reconstruct`
 - `TomographyNoiseModel`, `RelativeSignalNoise`, `ScalarMeasurementNoise`,
@@ -172,6 +182,47 @@ Project-wide units guidance lives in
     existing sense/reconstruct/apply/snapshot timing surface
 - `supports_prepared_runtime`, `supports_detector_output`,
   `supports_stacked_sources`, `supports_grouped_execution`
+
+## Advanced documented API
+
+These surfaces are maintained, but Phase 1 moved them out of the default
+top-level namespace. Access them as `AdaptiveOpticsSim.<name>`.
+
+### Telemetry, config, and trace containers
+
+- `AdaptiveOpticsSim.PROJECT_STATUS`
+- `AdaptiveOpticsSim.Workspace`, `AdaptiveOpticsSim.ensure_psf_buffers!`
+- `AdaptiveOpticsSim.Telemetry`, `AdaptiveOpticsSim.TelemetryRow`,
+  `AdaptiveOpticsSim.record!`
+- `AdaptiveOpticsSim.ClosedLoopTrace`,
+  `AdaptiveOpticsSim.ClosedLoopTraceRow`
+- `AdaptiveOpticsSim.GSCClosedLoopTrace`,
+  `AdaptiveOpticsSim.GSCClosedLoopTraceRow`
+- `AdaptiveOpticsSim.GSCAtmosphereReplayTrace`,
+  `AdaptiveOpticsSim.GSCAtmosphereReplayTraceRow`
+- `AdaptiveOpticsSim.snapshot_config`,
+  `AdaptiveOpticsSim.write_config_toml`,
+  `AdaptiveOpticsSim.write_config_json`,
+  `AdaptiveOpticsSim.write_telemetry_csv`
+- `AdaptiveOpticsSim.bin2d`, `AdaptiveOpticsSim.poisson_noise!`,
+  `AdaptiveOpticsSim.poisson_sample`
+
+### Scenario builders and calibration workflow helpers
+
+- `AdaptiveOpticsSim.fast_atmosphere`
+- `AdaptiveOpticsSim.AOSimulation`
+- `AdaptiveOpticsSim.initialize_ao_shwfs`
+- `AdaptiveOpticsSim.initialize_ao_pyramid`
+- `AdaptiveOpticsSim.GSCDetectorMetadata`
+- `AdaptiveOpticsSim.detector_metadata`
+- `AdaptiveOpticsSim.weak_mode_mask`
+- `AdaptiveOpticsSim.attach_detector!`
+- `AdaptiveOpticsSim.detach_detector!`
+- `AdaptiveOpticsSim.MetaSensitivity`
+- `AdaptiveOpticsSim.compute_meta_sensitivity_matrix`
+- `AdaptiveOpticsSim.estimate_misregistration`
+- `AdaptiveOpticsSim.SPRINT`
+- `AdaptiveOpticsSim.estimate!`
 
 ## Traits and interfaces
 
@@ -519,7 +570,8 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - `ao_calibration(...)` is the maintained packaged AO-calibration workflow and
   should return an `AOCalibration` bundling basis operators with the measured
   `CalibrationVault`.
-- `compute_meta_sensitivity_matrix(...)` and `SPRINT(...)` are the maintained
+- `AdaptiveOpticsSim.compute_meta_sensitivity_matrix(...)` and
+  `AdaptiveOpticsSim.SPRINT(...)` are the maintained
   misregistration-identification workflows and should retain the reference
   calibration, inverted meta-sensitivity operator, finite-difference step
   sizes, and active field ordering.

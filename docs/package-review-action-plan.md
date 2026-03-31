@@ -505,17 +505,17 @@ Recommended implementation order:
 
 Tasks:
 
-- `[ ]` `PLAN-06` Define the stable top-level public API set
+- `[x]` `PLAN-06` Define the stable top-level public API set
   - traces to: `PR-01`, `PR-02`
-- `[ ]` `PLAN-07` Define the advanced/expert non-exported but documented API
+- `[x]` `PLAN-07` Define the advanced/expert non-exported but documented API
   tier
   - traces to: `PR-01`, `PR-03`
-- `[ ]` `PLAN-08` Remove or de-export infrastructure/backend/helper names that
+- `[x]` `PLAN-08` Remove or de-export infrastructure/backend/helper names that
   do not belong in the default top-level API
   - traces to: `PR-02`, `PR-04`
-- `[ ]` `PLAN-09` Add an explicit public API policy section to the docs
+- `[x]` `PLAN-09` Add an explicit public API policy section to the docs
   - traces to: `PR-04`
-- `[ ]` `PLAN-10` Audit scenario-builder and convenience exports and move
+- `[x]` `PLAN-10` Audit scenario-builder and convenience exports and move
   non-core ones to namespaced or example-support access
   - traces to: `PR-02`, `PR-08`
 
@@ -541,17 +541,17 @@ Objective:
 
 Detailed work:
 
-- `[ ]` derive the stable public API candidate list from
+- `[x]` derive the stable public API candidate list from
   [`docs/api-tier-inventory.md`](./api-tier-inventory.md)
-- `[ ]` group the stable API by user workflow:
+- `[x]` group the stable API by user workflow:
   - optical setup
   - atmosphere
   - detector/WFS
   - calibration/reconstruction
   - closed-loop runtime
-- `[ ]` identify symbols that are stable but should remain namespaced rather
+- `[x]` identify symbols that are stable but should remain namespaced rather
   than exported
-- `[ ]` define an explicit “must remain exported” set for workflow ergonomics
+- `[x]` define an explicit “must remain exported” set for workflow ergonomics
 
 Acceptance criteria:
 
@@ -562,6 +562,7 @@ Evidence to record:
 
 - stable API symbol list
 - count of stable exported names
+- stable exported count after curation: `533`
 
 #### `PLAN-07`: define the advanced/expert API tier
 
@@ -571,11 +572,11 @@ Objective:
 
 Detailed work:
 
-- `[ ]` identify expert simulation, calibration, backend, and debugging hooks
-- `[ ]` separate:
+- `[x]` identify expert simulation, calibration, backend, and debugging hooks
+- `[x]` separate:
   - advanced public but non-default APIs
   - internal extension hooks
-- `[ ]` define documentation rules for advanced APIs:
+- `[x]` define documentation rules for advanced APIs:
   - document them
   - do not necessarily export them
   - keep them stable only where justified
@@ -598,11 +599,11 @@ Objective:
 
 Detailed work:
 
-- `[ ]` remove exports for infrastructure/backend/helper names that do not
+- `[x]` remove exports for infrastructure/backend/helper names that do not
   belong in the default workflow surface
-- `[ ]` preserve access through `AdaptiveOpticsSim.<name>`
-- `[ ]` update examples/tests/docs for any symbols that stop being exported
-- `[ ]` record de-exported symbols in the API policy changelog section
+- `[x]` preserve access through `AdaptiveOpticsSim.<name>`
+- `[x]` update examples/tests/docs for any symbols that stop being exported
+- `[x]` record de-exported symbols in the API policy changelog section
 
 Acceptance criteria:
 
@@ -614,6 +615,7 @@ Evidence to record:
 
 - before/after export counts
 - de-export list
+- export count before/after: `566 -> 533`
 
 #### `PLAN-09`: add the public API policy to docs
 
@@ -623,15 +625,15 @@ Objective:
 
 Detailed work:
 
-- `[ ]` add a “Public API Policy” section to
+- `[x]` add a “Public API Policy” section to
   [`docs/api-reference.md`](./api-reference.md)
-- `[ ]` add a short “How to read the API surface” section to
+- `[x]` add a short “How to read the API surface” section to
   [`docs/user-guide.md`](./user-guide.md)
-- `[ ]` define:
+- `[x]` define:
   - stable public API
   - advanced API
   - internal hooks
-- `[ ]` define export criteria for future additions
+- `[x]` define export criteria for future additions
 
 Acceptance criteria:
 
@@ -642,6 +644,8 @@ Acceptance criteria:
 Evidence to record:
 
 - doc references to the policy section
+- [`docs/api-reference.md`](./api-reference.md)
+- [`docs/user-guide.md`](./user-guide.md)
 
 #### `PLAN-10`: audit scenario-builder and convenience exports
 
@@ -652,13 +656,13 @@ Objective:
 
 Detailed work:
 
-- `[ ]` identify scenario-builder helpers currently exported
-- `[ ]` classify them as:
+- `[x]` identify scenario-builder helpers currently exported
+- `[x]` classify them as:
   - keep exported
   - keep public but namespaced
   - move to example/support-oriented surface later
-- `[ ]` check tutorial/example usage to avoid breaking intended workflows
-- `[ ]` update docs to point users to examples when the helper is more of a
+- `[x]` check tutorial/example usage to avoid breaking intended workflows
+- `[x]` update docs to point users to examples when the helper is more of a
   scenario builder than a core operator
 
 Acceptance criteria:
@@ -669,16 +673,24 @@ Acceptance criteria:
 Evidence to record:
 
 - classification table for scenario-builder exports
+- [`docs/api-tier-inventory.md`](./api-tier-inventory.md)
 
 ### Phase 1 Completion Checklist
 
-- `[ ]` API policy added to docs
-- `[ ]` stable API list recorded
-- `[ ]` advanced/expert API list recorded
-- `[ ]` de-export list recorded
-- `[ ]` before/after export counts recorded
-- `[ ]` user guide and API reference updated
-- `[ ]` examples/tests still pass after curation
+- `[x]` API policy added to docs
+- `[x]` stable API list recorded
+- `[x]` advanced/expert API list recorded
+- `[x]` de-export list recorded
+- `[x]` before/after export counts recorded
+- `[x]` user guide and API reference updated
+- `[x]` examples/tests still pass after curation
+
+Phase 1 evidence summary:
+
+- full suite passed with `julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'`
+- export count reduced from `566` to `533`
+- stable, advanced, and de-export candidate tiers recorded in
+  [`docs/api-tier-inventory.md`](./api-tier-inventory.md)
 
 ## Phase 2: Internal Modularization
 
@@ -899,10 +911,10 @@ Verification:
 
 | Review ID | Recommendation | Plan Tasks | Evidence Target | Status |
 | --- | --- | --- | --- | --- |
-| PR-01 | Curate public API into tiers | PLAN-01, PLAN-06, PLAN-07 | API policy and tiered docs | [ ] |
-| PR-02 | Reduce exported surface | PLAN-06, PLAN-08, PLAN-10 | reduced export count | [ ] |
-| PR-03 | Keep generic verbs, improve discoverability via layering | PLAN-07, PLAN-09 | API docs and examples | [ ] |
-| PR-04 | Add public API policy | PLAN-01, PLAN-09 | documented API policy | [ ] |
+| PR-01 | Curate public API into tiers | PLAN-01, PLAN-06, PLAN-07 | API policy and tiered docs | [x] |
+| PR-02 | Reduce exported surface | PLAN-06, PLAN-08, PLAN-10 | reduced export count | [x] |
+| PR-03 | Keep generic verbs, improve discoverability via layering | PLAN-07, PLAN-09 | API docs and examples | [x] |
+| PR-04 | Add public API policy | PLAN-01, PLAN-09 | documented API policy | [x] |
 | PR-05 | Split oversized subsystem files | PLAN-02, PLAN-11, PLAN-12, PLAN-13, PLAN-14 | reduced file sizes / cleaner layout | [ ] |
 | PR-06 | Split monolithic test driver | PLAN-02, PLAN-15 | test layout restructure | [ ] |
 | PR-07 | Prefer internal modularization before package splitting | PLAN-02, PLAN-16 | modularization inventory and package-boundary notes | [ ] |
@@ -950,7 +962,8 @@ Verification:
 
 ### Depends on Phase 0 inventory output
 
-- `[ ]` PLAN-06 through PLAN-16
+- `[x]` PLAN-06 through PLAN-10
+- `[ ]` PLAN-11 through PLAN-16
 
 ### Depends on structural cleanup
 

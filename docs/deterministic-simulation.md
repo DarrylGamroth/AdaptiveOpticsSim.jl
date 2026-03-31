@@ -49,7 +49,7 @@ function init_deterministic!(cfg::DeterministicConfig)
     set_fft_provider_threads!(cfg.fft_threads)
 end
 
-ws = Workspace(tel; rng=MersenneTwister(0x1234))
+ws = AdaptiveOpticsSim.Workspace(tel; rng=MersenneTwister(0x1234))
 ```
 
 ## Phase screens

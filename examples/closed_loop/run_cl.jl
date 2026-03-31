@@ -5,7 +5,7 @@ using Logging
 
 rng = MersenneTwister(0)
 
-sim = initialize_ao_shwfs(
+sim = AdaptiveOpticsSim.initialize_ao_shwfs(
     resolution=32,
     diameter=8.0,
     sampling_time=1e-3,
