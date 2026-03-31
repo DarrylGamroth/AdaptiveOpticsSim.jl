@@ -89,7 +89,6 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     phasor_ratio::T
     reference_signal_2d::RB
     fft_asterism_stack::CC
-    intensity_asterism_stack::RC3
     fft_asterism_plan::PS
     asterism_capacity::Int
     amp_scales::V
@@ -152,7 +151,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     fft_stack = backend{Complex{T}}(undef, pad, pad, n_subap * n_subap)
     intensity = backend{T}(undef, pad, pad)
     intensity_stack = backend{T}(undef, pad, pad, n_subap * n_subap)
-    intensity_tmp_stack = similar(intensity_stack)
+    intensity_tmp_stack = backend{T}(undef, pad, pad, n_subap * n_subap)
     temp = similar(intensity)
     bin_buffer = backend{T}(undef, sub, sub)
     spot = similar(bin_buffer)
@@ -166,7 +165,6 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     ifft_plan = plan_ifft_backend!(fft_buffer)
     ifft_stack_plan = plan_ifft_backend!(fft_stack, (1, 2))
     fft_asterism_stack = similar(fft_stack)
-    intensity_asterism_stack = similar(intensity_stack)
     fft_asterism_plan = plan_fft_backend!(fft_asterism_stack, (1, 2))
     elongation_kernel = backend{T}(undef, 1)
     lgs_kernel_fft = backend{Complex{T}}(undef, 0, 0, 0)
@@ -238,7 +236,6 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         T(NaN),
         reference_signal_2d,
         fft_asterism_stack,
-        intensity_asterism_stack,
         fft_asterism_plan,
         1,
         amp_scales,
@@ -285,6 +282,10 @@ function update_valid_mask!(wfs::ShackHartmann, tel::Telescope)
     return wfs
 end
 
+@inline function sh_grouped_stack_capacity(wfs::ShackHartmann)
+    return wfs.params.n_subap * wfs.params.n_subap * wfs.state.asterism_capacity
+end
+
 function ensure_sh_buffers!(wfs::ShackHartmann, pad::Int)
     n_spots = wfs.params.n_subap * wfs.params.n_subap
     if size(wfs.state.field) != (pad, pad)
@@ -294,15 +295,14 @@ function ensure_sh_buffers!(wfs::ShackHartmann, pad::Int)
         wfs.state.fft_stack = similar(wfs.state.fft_stack, Complex{eltype(wfs.state.field)}, pad, pad, n_spots)
         wfs.state.intensity = similar(wfs.state.intensity, pad, pad)
         wfs.state.intensity_stack = similar(wfs.state.intensity_stack, eltype(wfs.state.intensity), pad, pad, n_spots)
-        wfs.state.intensity_tmp_stack = similar(wfs.state.intensity_tmp_stack, eltype(wfs.state.intensity), pad, pad, n_spots)
+        total = sh_grouped_stack_capacity(wfs)
+        wfs.state.intensity_tmp_stack = similar(wfs.state.intensity_tmp_stack, eltype(wfs.state.intensity), pad, pad, total)
         wfs.state.temp = similar(wfs.state.temp, pad, pad)
         wfs.state.fft_plan = plan_fft_backend!(wfs.state.fft_buffer)
         wfs.state.fft_stack_plan = plan_fft_backend!(wfs.state.fft_stack, (1, 2))
         wfs.state.ifft_plan = plan_ifft_backend!(wfs.state.fft_buffer)
         wfs.state.ifft_stack_plan = plan_ifft_backend!(wfs.state.fft_stack, (1, 2))
-        total = n_spots * wfs.state.asterism_capacity
         wfs.state.fft_asterism_stack = similar(wfs.state.fft_asterism_stack, pad, pad, total)
-        wfs.state.intensity_asterism_stack = similar(wfs.state.intensity_asterism_stack, pad, pad, total)
         wfs.state.fft_asterism_plan = plan_fft_backend!(wfs.state.fft_asterism_stack, (1, 2))
         wfs.state.phasor_ratio = eltype(wfs.state.slopes)(NaN)
         wfs.state.calibrated = false
@@ -317,7 +317,7 @@ function ensure_sh_asterism_buffers!(wfs::ShackHartmann, n_sources::Int)
         n_spots = wfs.params.n_subap * wfs.params.n_subap
         total = n_spots * n_sources
         wfs.state.fft_asterism_stack = similar(wfs.state.fft_asterism_stack, pad, pad, total)
-        wfs.state.intensity_asterism_stack = similar(wfs.state.intensity_asterism_stack, pad, pad, total)
+        wfs.state.intensity_tmp_stack = similar(wfs.state.intensity_tmp_stack, eltype(wfs.state.intensity_tmp_stack), pad, pad, total)
         wfs.state.fft_asterism_plan = plan_fft_backend!(wfs.state.fft_asterism_stack, (1, 2))
         wfs.state.asterism_capacity = n_sources
     end
@@ -980,7 +980,7 @@ function compute_intensity_asterism_stack!(style::AcceleratorStyle, wfs::ShackHa
     copyto!(opd_to_cycles, host_opd_to_cycles)
     total = n_spots * n_src
     fft_view = @view wfs.state.fft_asterism_stack[:, :, 1:total]
-    intensity_view = @view wfs.state.intensity_asterism_stack[:, :, 1:total]
+    intensity_view = @view wfs.state.intensity_tmp_stack[:, :, 1:total]
     launch_kernel_async!(style, sh_field_asterism_stack_kernel!, fft_view, wfs.state.valid_mask,
         tel.state.pupil, tel.state.opd, wfs.state.phasor, amp_scales, opd_to_cycles,
         n_sub, sub, ox, oy, tel.params.resolution, pad, n_spots; ndrange=size(fft_view))
@@ -1019,7 +1019,7 @@ function compute_intensity_spectral_stack!(style::AcceleratorStyle, wfs::ShackHa
     copyto!(opd_to_cycles, host_opd_to_cycles)
     total = n_spots * n_src
     fft_view = @view wfs.state.fft_asterism_stack[:, :, 1:total]
-    intensity_view = @view wfs.state.intensity_asterism_stack[:, :, 1:total]
+    intensity_view = @view wfs.state.intensity_tmp_stack[:, :, 1:total]
     launch_kernel_async!(style, sh_field_asterism_stack_kernel!, fft_view, wfs.state.valid_mask,
         tel.state.pupil, tel.state.opd, wfs.state.phasor, amp_scales, opd_to_cycles,
         n_sub, sub, ox, oy, tel.params.resolution, pad, n_spots; ndrange=size(fft_view))
@@ -1776,8 +1776,9 @@ end
 
 function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::LGSSource)
     compute_intensity_stack!(style, wfs, tel, src)
+    tmp_view = @view wfs.state.intensity_tmp_stack[:, :, 1:size(wfs.state.intensity_stack, 3)]
     apply_elongation_stack!(wfs.state.intensity_stack, lgs_elongation_factor(src),
-        wfs.state.intensity_tmp_stack, wfs.state.elongation_kernel)
+        tmp_view, wfs.state.elongation_kernel)
     sample_spot_stack!(style, wfs)
     sync_signal_spots_from_sampled!(wfs)
     return maximum(wfs.state.spot_cube)
@@ -1786,8 +1787,9 @@ end
 function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::LGSSource,
     det::AbstractDetector, rng::AbstractRNG)
     compute_intensity_stack!(style, wfs, tel, src)
+    tmp_view = @view wfs.state.intensity_tmp_stack[:, :, 1:size(wfs.state.intensity_stack, 3)]
     apply_elongation_stack!(wfs.state.intensity_stack, lgs_elongation_factor(src),
-        wfs.state.intensity_tmp_stack, wfs.state.elongation_kernel)
+        tmp_view, wfs.state.elongation_kernel)
     sample_spot_stack!(style, wfs)
     n_sub = wfs.params.n_subap
     capture_sampled_spot_stack!(wfs, det, rng)
