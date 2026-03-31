@@ -146,11 +146,16 @@ Exit criteria:
 
 Phase outputs:
 
-- API tier inventory doc
-- modularization inventory doc
-- reusable-infrastructure inventory doc
-- model-validation inventory doc
-- cross-package benchmark inventory doc
+- API tier inventory doc:
+  [`docs/api-tier-inventory.md`](./api-tier-inventory.md)
+- modularization inventory doc:
+  [`docs/modularization-inventory.md`](./modularization-inventory.md)
+- reusable-infrastructure inventory doc:
+  [`docs/reusable-infrastructure-inventory.md`](./reusable-infrastructure-inventory.md)
+- model-validation inventory doc:
+  [`docs/model-validation-inventory.md`](./model-validation-inventory.md)
+- cross-package benchmark inventory doc:
+  [`docs/cross-package-benchmark-inventory.md`](./cross-package-benchmark-inventory.md)
 - a short index section in this plan linking to all five outputs
 
 Recommended implementation order:
@@ -163,21 +168,21 @@ Recommended implementation order:
 
 Tasks:
 
-- `[ ]` `PLAN-01` Create an API tier inventory:
+- `[x]` `PLAN-01` Create an API tier inventory:
   - stable public API
   - advanced/expert API
   - internal extension hooks
   - traces to: `PR-01`, `PR-02`, `PR-04`
-- `[ ]` `PLAN-02` Create a source-file modularization inventory for oversized
+- `[x]` `PLAN-02` Create a source-file modularization inventory for oversized
   files and proposed splits
   - traces to: `PR-05`, `PR-06`, `PR-07`
-- `[ ]` `PLAN-03` Create a reusable-infrastructure duplication inventory
+- `[x]` `PLAN-03` Create a reusable-infrastructure duplication inventory
   covering detector, WFS, runtime, backend, and calibration scaffolding
   - traces to: `PR-09` through `PR-14`
-- `[ ]` `PLAN-04` Create a model-validation inventory listing all maintained
+- `[x]` `PLAN-04` Create a model-validation inventory listing all maintained
   model families and current evidence
   - traces to: `PR-15`, `PR-16`, `PR-17`
-- `[ ]` `PLAN-05` Create a cross-package benchmark inventory from:
+- `[x]` `PLAN-05` Create a cross-package benchmark inventory from:
   - `../REVOLT`
   - `../AdaptiveOpticsSim.jl-revolt-real`
   - existing local benchmark scripts
@@ -198,6 +203,14 @@ Verification:
 ### Phase 0 Task Detail
 
 #### `PLAN-01`: API tier inventory
+
+Status:
+
+- complete
+
+Artifact:
+
+- [`docs/api-tier-inventory.md`](./api-tier-inventory.md)
 
 Objective:
 
@@ -243,6 +256,14 @@ Evidence to record:
 - link to generated/maintained inventory doc
 
 #### `PLAN-02`: modularization inventory
+
+Status:
+
+- complete
+
+Artifact:
+
+- [`docs/modularization-inventory.md`](./modularization-inventory.md)
 
 Objective:
 
@@ -291,6 +312,14 @@ Evidence to record:
 
 #### `PLAN-03`: reusable-infrastructure duplication inventory
 
+Status:
+
+- complete
+
+Artifact:
+
+- [`docs/reusable-infrastructure-inventory.md`](./reusable-infrastructure-inventory.md)
+
 Objective:
 
 - identify repeated orchestration and backend-policy patterns that should be
@@ -336,6 +365,14 @@ Evidence to record:
 
 #### `PLAN-04`: model-validation inventory
 
+Status:
+
+- complete
+
+Artifact:
+
+- [`docs/model-validation-inventory.md`](./model-validation-inventory.md)
+
 Objective:
 
 - create a current-state map from maintained model families to validation
@@ -375,6 +412,14 @@ Evidence to record:
 - references to test files, scripts, and bundles
 
 #### `PLAN-05`: cross-package benchmark inventory
+
+Status:
+
+- complete
+
+Artifact:
+
+- [`docs/cross-package-benchmark-inventory.md`](./cross-package-benchmark-inventory.md)
 
 Objective:
 
@@ -417,12 +462,12 @@ Evidence to record:
 
 ### Phase 0 Completion Checklist
 
-- `[ ]` all five inventory docs created
-- `[ ]` all five docs linked from this plan
-- `[ ]` baseline export count recorded
-- `[ ]` baseline oversized-file counts recorded
-- `[ ]` validation evidence inventory recorded
-- `[ ]` benchmark-scenario inventory recorded
+- `[x]` all five inventory docs created
+- `[x]` all five docs linked from this plan
+- `[x]` baseline export count recorded
+- `[x]` baseline oversized-file counts recorded
+- `[x]` validation evidence inventory recorded
+- `[x]` benchmark-scenario inventory recorded
 
 ## Phase 1: Public API Curation
 
@@ -897,11 +942,11 @@ Verification:
 
 ### Ready to start immediately
 
-- `[ ]` PLAN-01
-- `[ ]` PLAN-02
-- `[ ]` PLAN-03
-- `[ ]` PLAN-04
-- `[ ]` PLAN-05
+- `[x]` PLAN-01
+- `[x]` PLAN-02
+- `[x]` PLAN-03
+- `[x]` PLAN-04
+- `[x]` PLAN-05
 
 ### Depends on Phase 0 inventory output
 
