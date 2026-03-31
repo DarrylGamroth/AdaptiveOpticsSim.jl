@@ -95,6 +95,9 @@ function ensure_buffers!(det::Detector, n_mid::Int, m_mid::Int, n_out::Int, m_ou
     if size(det.state.noise_buffer) != (n_out, m_out)
         det.state.noise_buffer = similar(det.state.noise_buffer, n_out, m_out)
     end
+    if size(det.state.noise_buffer_host) != (n_out, m_out)
+        det.state.noise_buffer_host = Matrix{eltype(det.state.noise_buffer_host)}(undef, n_out, m_out)
+    end
     if size(det.state.accum_buffer) != (n_out, m_out)
         det.state.accum_buffer = similar(det.state.accum_buffer, n_out, m_out)
         fill!(det.state.accum_buffer, zero(eltype(det.state.accum_buffer)))

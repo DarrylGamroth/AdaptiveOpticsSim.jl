@@ -134,8 +134,14 @@ mutable struct BioEdgeState{T<:AbstractFloat,
     lgs_kernel_tag::UInt
     optical_gain::V
     valid_i4q::A
+    valid_i4q_host::Matrix{Bool}
     valid_signal::A
     valid_signal_indices::I
+    valid_signal_indices_host::Vector{Int}
+    valid_signal_count::Int
+    valid_flux_sum_buffer::V
+    valid_flux_sum_host::Vector{T}
+    valid_flux_i4q_host::Matrix{T}
     signal_2d::R
     reference_signal_2d::R
     camera_frame::R
@@ -223,10 +229,15 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     nominal_detector_resolution = max(1, round(Int, n_subap * pad / tel.params.resolution))
     camera_frame = backend{T}(undef, 2 * nominal_detector_resolution, 2 * nominal_detector_resolution)
     valid_i4q = backend{Bool}(undef, nominal_detector_resolution ÷ 2, nominal_detector_resolution ÷ 2)
+    valid_i4q_host = Matrix{Bool}(undef, size(valid_i4q)...)
     valid_signal = backend{Bool}(undef, nominal_detector_resolution, nominal_detector_resolution ÷ 2)
     valid_signal_indices = backend{Int}(undef, length(valid_i4q))
+    valid_signal_indices_host = Vector{Int}(undef, length(valid_signal_indices))
     signal_2d = backend{T}(undef, nominal_detector_resolution, nominal_detector_resolution ÷ 2)
     reference_signal_2d = similar(signal_2d)
+    valid_flux_sum_buffer = backend{T}(undef, 1)
+    valid_flux_sum_host = Vector{T}(undef, 1)
+    valid_flux_i4q_host = Matrix{T}(undef, size(temp)...)
     fft_buffer = similar(field)
     binned_phase = backend{T}(undef, tel.params.resolution, tel.params.resolution)
     edge_mask_binned = similar(edge_mask)
@@ -276,8 +287,14 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         UInt(0),
         optical_gain,
         valid_i4q,
+        valid_i4q_host,
         valid_signal,
         valid_signal_indices,
+        valid_signal_indices_host,
+        0,
+        valid_flux_sum_buffer,
+        valid_flux_sum_host,
+        valid_flux_i4q_host,
         signal_2d,
         reference_signal_2d,
         camera_frame,
@@ -298,6 +315,18 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
 end
 
 sensing_mode(::BioEdgeWFS{M}) where {M} = M()
+
+@kernel function bioedge_masked_sum_kernel!(out, values, valid_mask, n_rows::Int, n_cols::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n_rows && j <= n_cols
+        if @inbounds valid_mask[i, j]
+            KernelAbstractions.@atomic out[1] += values[i, j]
+        end
+    end
+end
+
+@inline bioedge_rocm_array(A::AbstractArray) = gpu_backend_name(typeof(A)) === :amdgpu
+@inline bioedge_rocm_array(A::SubArray) = bioedge_rocm_array(parent(A))
 
 function update_valid_mask!(wfs::BioEdgeWFS, tel::Telescope)
     set_valid_subapertures!(wfs.state.valid_mask, tel.state.pupil, wfs.params.threshold)
@@ -330,9 +359,48 @@ function _update_edge_mask!(::ScalarCPUStyle, mask::AbstractMatrix{Bool}, pupil:
 end
 
 function _update_edge_mask!(style::AcceleratorStyle, mask::AbstractMatrix{Bool}, pupil::AbstractMatrix{Bool}, n::Int)
+    if gpu_backend_name(typeof(mask)) === :amdgpu
+        host_pupil = Array(pupil)
+        host_mask = Matrix{Bool}(undef, size(mask))
+        _update_edge_mask!(ScalarCPUStyle(), host_mask, host_pupil, n)
+        copyto!(mask, host_mask)
+        return mask
+    end
     launch_kernel!(style, edge_mask_kernel!, mask, pupil, n; ndrange=size(mask))
     return mask
 end
+
+@inline ensure_bioedge_lgs_kernel!(::LGSProfileNone, wfs::BioEdgeWFS, tel::Telescope, src::LGSSource) = wfs
+@inline ensure_bioedge_lgs_kernel!(::LGSProfileNaProfile, wfs::BioEdgeWFS, tel::Telescope, src::LGSSource) =
+    ensure_lgs_kernel!(wfs, tel, src)
+@inline ensure_bioedge_lgs_kernel!(profile, wfs::BioEdgeWFS, tel::Telescope, src::LGSSource) = wfs
+
+@inline function apply_bioedge_lgs_profile!(::LGSProfileNone, wfs::BioEdgeWFS, src::LGSSource,
+    lgs_fft_buffer, lgs_ifft_buffer)
+    wfs.state.elongation_kernel = apply_elongation!(
+        wfs.state.temp,
+        lgs_elongation_factor(src),
+        wfs.state.scratch,
+        wfs.state.elongation_kernel,
+    )
+    return wfs.state.temp
+end
+
+@inline function apply_bioedge_lgs_profile!(::LGSProfileNaProfile, wfs::BioEdgeWFS, src::LGSSource,
+    lgs_fft_buffer, lgs_ifft_buffer)
+    apply_lgs_convolution!(
+        wfs.state.temp,
+        wfs.state.lgs_kernel_fft,
+        lgs_fft_buffer,
+        wfs.state.fft_plan,
+        lgs_ifft_buffer,
+        wfs.state.ifft_plan,
+    )
+    return wfs.state.temp
+end
+
+@inline apply_bioedge_lgs_profile!(profile, wfs::BioEdgeWFS, src::LGSSource, lgs_fft_buffer, lgs_ifft_buffer) =
+    wfs.state.temp
 
 function build_bioedge_phasor!(phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
     _build_bioedge_phasor!(execution_style(phasor), phasor)
@@ -655,9 +723,7 @@ function bioedge_intensity_core!(out::AbstractMatrix{T}, wfs::BioEdgeWFS, tel::T
 
     fill!(out, zero(T))
     profile = apply_lgs ? lgs_profile(src) : LGSProfileNone()
-    if apply_lgs && profile isa LGSProfileNaProfile
-        ensure_lgs_kernel!(wfs, tel, src)
-    end
+    apply_lgs && ensure_bioedge_lgs_kernel!(profile, wfs, tel, src)
 
     @inbounds for p in 1:wfs.params.modulation_points
         fill!(wfs.state.field, zero(eltype(wfs.state.field)))
@@ -680,23 +746,7 @@ function bioedge_intensity_core!(out::AbstractMatrix{T}, wfs::BioEdgeWFS, tel::T
             execute_fft_plan!(wfs.state.pupil_field, wfs.state.ifft_plan)
             @. wfs.state.temp = abs2(wfs.state.pupil_field)
             if apply_lgs
-                if profile isa LGSProfileNone
-                    wfs.state.elongation_kernel = apply_elongation!(
-                        wfs.state.temp,
-                        lgs_elongation_factor(src),
-                        wfs.state.scratch,
-                        wfs.state.elongation_kernel,
-                    )
-                else
-                    apply_lgs_convolution!(
-                        wfs.state.temp,
-                        wfs.state.lgs_kernel_fft,
-                        lgs_fft_buffer,
-                        wfs.state.fft_plan,
-                        lgs_ifft_buffer,
-                        wfs.state.ifft_plan,
-                    )
-                end
+                apply_bioedge_lgs_profile!(profile, wfs, src, lgs_fft_buffer, lgs_ifft_buffer)
             end
             oxq = k in (3, 4) ? pad : 0
             oyq = k in (2, 4) ? pad : 0
@@ -882,7 +932,7 @@ end
 
 function bioedge_signal!(::AcceleratorStyle, wfs::BioEdgeWFS, tel::Telescope, frame::AbstractMatrix{T},
     src::Union{Nothing,AbstractSource}) where {T<:AbstractFloat}
-    count = div(length(wfs.state.slopes), 2)
+    count = wfs.state.valid_signal_count
     center = round(Int, wfs.state.nominal_detector_resolution / wfs.params.binning / 2)
     n_pixels = center
     rows_lo = center - n_pixels + 1:center
@@ -899,7 +949,8 @@ function bioedge_signal!(::AcceleratorStyle, wfs::BioEdgeWFS, tel::Telescope, fr
     refy = @view wfs.state.reference_signal_2d[n_pixels+1:2*n_pixels, :]
     i4q = @view wfs.state.temp[1:n_pixels, 1:n_pixels]
     @. i4q = q1 + q2 + q3 + q4
-    norma = bioedge_normalization(wfs.params.normalization, wfs, tel, src, count, sum(i4q[wfs.state.valid_i4q]))
+    summed_i4q = bioedge_valid_flux_sum!(execution_style(frame), wfs, i4q)
+    norma = bioedge_normalization(wfs.params.normalization, wfs, tel, src, count, summed_i4q)
     @. sx = (q1 - q2 + q4 - q3) / norma - refx
     @. sy = (q1 - q4 + q2 - q3) / norma - refy
     launch_kernel!(execution_style(frame), gather_bioedge_slopes_kernel!, wfs.state.slopes,
@@ -937,13 +988,21 @@ function update_bioedge_valid_signal!(wfs::BioEdgeWFS)
 end
 
 function update_bioedge_valid_signal_indices!(wfs::BioEdgeWFS)
-    valid_host = execution_style(wfs.state.valid_i4q) isa ScalarCPUStyle ? wfs.state.valid_i4q : Array(wfs.state.valid_i4q)
+    valid_host = wfs.state.valid_i4q_host
+    if size(valid_host) != size(wfs.state.valid_i4q)
+        valid_host = Matrix{Bool}(undef, size(wfs.state.valid_i4q)...)
+        wfs.state.valid_i4q_host = valid_host
+    end
+    copyto!(valid_host, wfs.state.valid_i4q)
     n_pixels = size(valid_host, 1)
     n_valid = count(valid_host)
-    if length(wfs.state.valid_signal_indices) != n_valid
+    if length(wfs.state.valid_signal_indices) < n_valid
         wfs.state.valid_signal_indices = similar(wfs.state.valid_signal_indices, n_valid)
     end
-    host_indices = Vector{Int}(undef, n_valid)
+    if length(wfs.state.valid_signal_indices_host) < n_valid
+        wfs.state.valid_signal_indices_host = Vector{Int}(undef, n_valid)
+    end
+    host_indices = wfs.state.valid_signal_indices_host
     idx = 1
     @inbounds for i in 1:n_pixels, j in 1:n_pixels
         if valid_host[i, j]
@@ -951,12 +1010,13 @@ function update_bioedge_valid_signal_indices!(wfs::BioEdgeWFS)
             idx += 1
         end
     end
-    copyto!(wfs.state.valid_signal_indices, host_indices)
-    return wfs
+    copyto!(wfs.state.valid_signal_indices, 1, host_indices, 1, n_valid)
+    wfs.state.valid_signal_count = n_valid
+    return n_valid
 end
 
 function resize_bioedge_slope_buffers!(wfs::BioEdgeWFS)
-    n_valid = count(wfs.state.valid_i4q)
+    n_valid = wfs.state.valid_signal_count
     if n_valid == 0
         throw(InvalidConfiguration("bioedge valid pixel selection produced no valid signals"))
     end
@@ -968,8 +1028,44 @@ function resize_bioedge_slope_buffers!(wfs::BioEdgeWFS)
         wfs.state.optical_gain = similar(wfs.state.optical_gain, n_slopes)
         fill!(wfs.state.optical_gain, one(eltype(wfs.state.optical_gain)))
     end
-    update_bioedge_valid_signal_indices!(wfs)
     return wfs
+end
+
+function bioedge_valid_flux_sum!(::ScalarCPUStyle, wfs::BioEdgeWFS, i4q::AbstractMatrix{T}) where {T<:AbstractFloat}
+    summed = zero(T)
+    valid = wfs.state.valid_i4q_host
+    @inbounds for j in axes(valid, 2), i in axes(valid, 1)
+        if valid[i, j]
+            summed += i4q[i, j]
+        end
+    end
+    return summed
+end
+
+@inline bioedge_host_flux_parent(i4q::AbstractMatrix) = i4q
+@inline bioedge_host_flux_parent(i4q::SubArray) = parent(i4q)
+
+@inline bioedge_host_flux_view(host_parent::AbstractMatrix, i4q::AbstractMatrix) = host_parent
+@inline bioedge_host_flux_view(host_parent::AbstractMatrix, i4q::SubArray) = @view(host_parent[parentindices(i4q)...])
+
+function bioedge_valid_flux_sum!(style::AcceleratorStyle, wfs::BioEdgeWFS, i4q::AbstractMatrix{T}) where {T<:AbstractFloat}
+    if bioedge_rocm_array(i4q)
+        host_parent = wfs.state.valid_flux_i4q_host
+        src = bioedge_host_flux_parent(i4q)
+        if size(host_parent) != size(src)
+            host_parent = Matrix{T}(undef, size(src)...)
+            wfs.state.valid_flux_i4q_host = host_parent
+        end
+        copyto!(host_parent, src)
+        host_i4q = bioedge_host_flux_view(host_parent, i4q)
+        return bioedge_valid_flux_sum!(ScalarCPUStyle(), wfs, host_i4q)
+    end
+    fill!(wfs.state.valid_flux_sum_buffer, zero(T))
+    n_rows, n_cols = size(wfs.state.valid_i4q)
+    launch_kernel!(style, bioedge_masked_sum_kernel!, wfs.state.valid_flux_sum_buffer, i4q, wfs.state.valid_i4q,
+        n_rows, n_cols; ndrange=(n_rows, n_cols))
+    copyto!(wfs.state.valid_flux_sum_host, wfs.state.valid_flux_sum_buffer)
+    return wfs.state.valid_flux_sum_host[1]
 end
 
 function select_bioedge_valid_i4q!(wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource)
@@ -994,6 +1090,7 @@ function select_bioedge_valid_i4q!(::ScalarCPUStyle, wfs::BioEdgeWFS, tel::Teles
     if iszero(wfs.params.light_ratio)
         fill!(wfs.state.valid_i4q, true)
         update_bioedge_valid_signal!(wfs)
+        update_bioedge_valid_signal_indices!(wfs)
         resize_bioedge_slope_buffers!(wfs)
         return wfs
     end
@@ -1031,6 +1128,7 @@ function select_bioedge_valid_i4q!(::ScalarCPUStyle, wfs::BioEdgeWFS, tel::Teles
         wfs.state.valid_i4q[i, j] = (q1 + q2 + q3 + q4) >= cutoff
     end
     update_bioedge_valid_signal!(wfs)
+    update_bioedge_valid_signal_indices!(wfs)
     resize_bioedge_slope_buffers!(wfs)
     return wfs
 end
@@ -1053,6 +1151,7 @@ function select_bioedge_valid_i4q!(::AcceleratorStyle, wfs::BioEdgeWFS, tel::Tel
     if iszero(wfs.params.light_ratio)
         fill!(wfs.state.valid_i4q, true)
         update_bioedge_valid_signal!(wfs)
+        update_bioedge_valid_signal_indices!(wfs)
         resize_bioedge_slope_buffers!(wfs)
         return wfs
     end
@@ -1083,6 +1182,7 @@ function select_bioedge_valid_i4q!(::AcceleratorStyle, wfs::BioEdgeWFS, tel::Tel
     cutoff = wfs.params.light_ratio * maximum(i4q)
     @. wfs.state.valid_i4q = i4q >= cutoff
     update_bioedge_valid_signal!(wfs)
+    update_bioedge_valid_signal_indices!(wfs)
     resize_bioedge_slope_buffers!(wfs)
     return wfs
 end

@@ -1,5 +1,17 @@
 using Statistics
 
+@kernel function pyramid_masked_sum_kernel!(out, values, valid_mask, n_rows::Int, n_cols::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n_rows && j <= n_cols
+        if @inbounds valid_mask[i, j]
+            KernelAbstractions.@atomic out[1] += values[i, j]
+        end
+    end
+end
+
+@inline pyramid_rocm_array(A::AbstractArray) = gpu_backend_name(typeof(A)) === :amdgpu
+@inline pyramid_rocm_array(A::SubArray) = pyramid_rocm_array(parent(A))
+
 #
 # Pyramid wavefront sensing
 #
@@ -171,8 +183,14 @@ mutable struct PyramidState{T<:AbstractFloat,
     lgs_kernel_tag::UInt
     optical_gain::Vg
     valid_i4q::A
+    valid_i4q_host::Matrix{Bool}
     valid_signal::A
     valid_signal_indices::I
+    valid_signal_indices_host::Vector{Int}
+    valid_signal_count::Int
+    valid_flux_sum_buffer::Vg
+    valid_flux_sum_host::Vector{T}
+    valid_flux_i4q_host::Matrix{T}
     signal_2d::R
     reference_signal_2d::R
     camera_frame::RB
@@ -254,8 +272,13 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
     asterism_stack = backend{T}(undef, pad, pad, 1)
     n_pix_signal = cld(n_subap, binning)
     valid_i4q = backend{Bool}(undef, n_pix_signal, n_pix_signal)
+    valid_i4q_host = Matrix{Bool}(undef, n_pix_signal, n_pix_signal)
     valid_signal = backend{Bool}(undef, 2 * n_pix_signal, n_pix_signal)
     valid_signal_indices = backend{Int}(undef, n_pix_signal * n_pix_signal)
+    valid_signal_indices_host = Vector{Int}(undef, n_pix_signal * n_pix_signal)
+    valid_flux_sum_buffer = backend{T}(undef, 1)
+    valid_flux_sum_host = Vector{T}(undef, 1)
+    valid_flux_i4q_host = Matrix{T}(undef, size(temp)...)
     signal_2d = backend{T}(undef, 2 * n_pix_signal, n_pix_signal)
     reference_signal_2d = similar(signal_2d)
     camera_frame = backend{T}(undef, max(1, n_subap), max(1, n_subap))
@@ -301,8 +324,14 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
         UInt(0),
         optical_gain,
         valid_i4q,
+        valid_i4q_host,
         valid_signal,
         valid_signal_indices,
+        valid_signal_indices_host,
+        0,
+        valid_flux_sum_buffer,
+        valid_flux_sum_host,
+        valid_flux_i4q_host,
         signal_2d,
         reference_signal_2d,
         camera_frame,
@@ -537,13 +566,21 @@ function update_pyramid_valid_signal!(wfs::PyramidWFS)
 end
 
 function update_pyramid_valid_signal_indices!(wfs::PyramidWFS)
-    valid_host = execution_style(wfs.state.valid_i4q) isa ScalarCPUStyle ? wfs.state.valid_i4q : Array(wfs.state.valid_i4q)
+    valid_host = wfs.state.valid_i4q_host
+    if size(valid_host) != size(wfs.state.valid_i4q)
+        valid_host = Matrix{Bool}(undef, size(wfs.state.valid_i4q)...)
+        wfs.state.valid_i4q_host = valid_host
+    end
+    copyto!(valid_host, wfs.state.valid_i4q)
     n_pixels = size(valid_host, 1)
     n_valid = count(valid_host)
-    if length(wfs.state.valid_signal_indices) != n_valid
+    if length(wfs.state.valid_signal_indices) < n_valid
         wfs.state.valid_signal_indices = similar(wfs.state.valid_signal_indices, n_valid)
     end
-    host_indices = Vector{Int}(undef, n_valid)
+    if length(wfs.state.valid_signal_indices_host) < n_valid
+        wfs.state.valid_signal_indices_host = Vector{Int}(undef, n_valid)
+    end
+    host_indices = wfs.state.valid_signal_indices_host
     idx = 1
     @inbounds for i in 1:n_pixels, j in 1:n_pixels
         if valid_host[i, j]
@@ -551,12 +588,13 @@ function update_pyramid_valid_signal_indices!(wfs::PyramidWFS)
             idx += 1
         end
     end
-    copyto!(wfs.state.valid_signal_indices, host_indices)
-    return wfs
+    copyto!(wfs.state.valid_signal_indices, 1, host_indices, 1, n_valid)
+    wfs.state.valid_signal_count = n_valid
+    return n_valid
 end
 
 function resize_pyramid_slope_buffers!(wfs::PyramidWFS)
-    n_valid = count(wfs.state.valid_i4q)
+    n_valid = wfs.state.valid_signal_count
     if n_valid == 0
         throw(InvalidConfiguration("pyramid valid pixel selection produced no valid signals"))
     end
@@ -568,8 +606,44 @@ function resize_pyramid_slope_buffers!(wfs::PyramidWFS)
         wfs.state.optical_gain = similar(wfs.state.optical_gain, n_slopes)
         fill!(wfs.state.optical_gain, one(eltype(wfs.state.optical_gain)))
     end
-    update_pyramid_valid_signal_indices!(wfs)
     return wfs
+end
+
+function pyramid_valid_flux_sum!(::ScalarCPUStyle, wfs::PyramidWFS, i4q::AbstractMatrix{T}) where {T<:AbstractFloat}
+    summed = zero(T)
+    valid = wfs.state.valid_i4q_host
+    @inbounds for j in axes(valid, 2), i in axes(valid, 1)
+        if valid[i, j]
+            summed += i4q[i, j]
+        end
+    end
+    return summed
+end
+
+@inline pyramid_host_flux_parent(i4q::AbstractMatrix) = i4q
+@inline pyramid_host_flux_parent(i4q::SubArray) = parent(i4q)
+
+@inline pyramid_host_flux_view(host_parent::AbstractMatrix, i4q::AbstractMatrix) = host_parent
+@inline pyramid_host_flux_view(host_parent::AbstractMatrix, i4q::SubArray) = @view(host_parent[parentindices(i4q)...])
+
+function pyramid_valid_flux_sum!(style::AcceleratorStyle, wfs::PyramidWFS, i4q::AbstractMatrix{T}) where {T<:AbstractFloat}
+    if pyramid_rocm_array(i4q)
+        host_parent = wfs.state.valid_flux_i4q_host
+        src = pyramid_host_flux_parent(i4q)
+        if size(host_parent) != size(src)
+            host_parent = Matrix{T}(undef, size(src)...)
+            wfs.state.valid_flux_i4q_host = host_parent
+        end
+        copyto!(host_parent, src)
+        host_i4q = pyramid_host_flux_view(host_parent, i4q)
+        return pyramid_valid_flux_sum!(ScalarCPUStyle(), wfs, host_i4q)
+    end
+    fill!(wfs.state.valid_flux_sum_buffer, zero(T))
+    n_rows, n_cols = size(wfs.state.valid_i4q)
+    launch_kernel!(style, pyramid_masked_sum_kernel!, wfs.state.valid_flux_sum_buffer, i4q, wfs.state.valid_i4q,
+        n_rows, n_cols; ndrange=(n_rows, n_cols))
+    copyto!(wfs.state.valid_flux_sum_host, wfs.state.valid_flux_sum_buffer)
+    return wfs.state.valid_flux_sum_host[1]
 end
 
 function select_pyramid_valid_i4q!(wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
@@ -584,6 +658,7 @@ function select_pyramid_valid_i4q!(::ScalarCPUStyle, wfs::PyramidWFS, tel::Teles
     if iszero(wfs.params.light_ratio)
         fill!(wfs.state.valid_i4q, true)
         update_pyramid_valid_signal!(wfs)
+        update_pyramid_valid_signal_indices!(wfs)
         resize_pyramid_slope_buffers!(wfs)
         return wfs
     end
@@ -622,6 +697,7 @@ function select_pyramid_valid_i4q!(::ScalarCPUStyle, wfs::PyramidWFS, tel::Teles
         wfs.state.valid_i4q[i, j] = (q1 + q2 + q3 + q4) >= cutoff
     end
     update_pyramid_valid_signal!(wfs)
+    update_pyramid_valid_signal_indices!(wfs)
     resize_pyramid_slope_buffers!(wfs)
     return wfs
 end
@@ -634,6 +710,7 @@ function select_pyramid_valid_i4q!(::AcceleratorStyle, wfs::PyramidWFS, tel::Tel
     if iszero(wfs.params.light_ratio)
         fill!(wfs.state.valid_i4q, true)
         update_pyramid_valid_signal!(wfs)
+        update_pyramid_valid_signal_indices!(wfs)
         resize_pyramid_slope_buffers!(wfs)
         return wfs
     end
@@ -665,6 +742,7 @@ function select_pyramid_valid_i4q!(::AcceleratorStyle, wfs::PyramidWFS, tel::Tel
     cutoff = wfs.params.light_ratio * maximum(i4q)
     @. wfs.state.valid_i4q = i4q >= cutoff
     update_pyramid_valid_signal!(wfs)
+    update_pyramid_valid_signal_indices!(wfs)
     resize_pyramid_slope_buffers!(wfs)
     return wfs
 end
@@ -1256,7 +1334,7 @@ end
 
 function pyramid_signal!(::AcceleratorStyle, wfs::PyramidWFS, tel::Telescope, frame::AbstractMatrix{T},
     src::Union{Nothing,AbstractSource}) where {T<:AbstractFloat}
-    count = div(length(wfs.state.slopes), 2)
+    count = wfs.state.valid_signal_count
     n_extra = round(Int, (something(wfs.params.n_pix_separation, 0) / 2) / wfs.params.binning)
     center = round(Int, wfs.state.nominal_detector_resolution / wfs.params.binning / 2)
     n_pixels = cld(wfs.params.n_subap, wfs.params.binning)
@@ -1274,7 +1352,8 @@ function pyramid_signal!(::AcceleratorStyle, wfs::PyramidWFS, tel::Telescope, fr
     refy = @view wfs.state.reference_signal_2d[n_pixels+1:2*n_pixels, :]
     i4q = @view wfs.state.temp[1:n_pixels, 1:n_pixels]
     @. i4q = q1 + q2 + q3 + q4
-    norma = pyramid_normalization(wfs.params.normalization, wfs, tel, src, count, sum(i4q[wfs.state.valid_i4q]))
+    summed_i4q = pyramid_valid_flux_sum!(execution_style(frame), wfs, i4q)
+    norma = pyramid_normalization(wfs.params.normalization, wfs, tel, src, count, summed_i4q)
     @. sx = (q1 - q2 + q4 - q3) / norma - refx
     @. sy = (q1 - q4 + q2 - q3) / norma - refy
     launch_kernel!(execution_style(frame), gather_pyramid_slopes_kernel!, wfs.state.slopes,
@@ -1380,19 +1459,25 @@ function quadrant_sum(intensity::AbstractMatrix{T}, xs::Int, ys::Int, sub::Int,
 end
 
 function apply_shift_wfs!(wfs::PyramidWFS; sx, sy)
-    if sx isa Real && sy isa Real
-        shift_x = (round(Int, sx), round(Int, sx), round(Int, sx), round(Int, sx))
-        shift_y = (round(Int, sy), round(Int, sy), round(Int, sy), round(Int, sy))
-    else
-        if length(sx) != 4 || length(sy) != 4
-            throw(InvalidConfiguration("pyramid shift must have 4 elements"))
-        end
-        shift_x = (round(Int, sx[1]), round(Int, sx[2]), round(Int, sx[3]), round(Int, sx[4]))
-        shift_y = (round(Int, sy[1]), round(Int, sy[2]), round(Int, sy[3]), round(Int, sy[4]))
-    end
+    shift_x, shift_y = pyramid_shift_components(sx, sy)
     wfs.state.shift_x = shift_x
     wfs.state.shift_y = shift_y
     return wfs
+end
+
+@inline function pyramid_shift_components(sx::Real, sy::Real)
+    shift_x = (round(Int, sx), round(Int, sx), round(Int, sx), round(Int, sx))
+    shift_y = (round(Int, sy), round(Int, sy), round(Int, sy), round(Int, sy))
+    return shift_x, shift_y
+end
+
+@inline function pyramid_shift_components(sx, sy)
+    if length(sx) != 4 || length(sy) != 4
+        throw(InvalidConfiguration("pyramid shift must have 4 elements"))
+    end
+    shift_x = (round(Int, sx[1]), round(Int, sx[2]), round(Int, sx[3]), round(Int, sx[4]))
+    shift_y = (round(Int, sy[1]), round(Int, sy[2]), round(Int, sy[3]), round(Int, sy[4]))
+    return shift_x, shift_y
 end
 
 function set_optical_gain!(wfs::PyramidWFS, gain::Real)

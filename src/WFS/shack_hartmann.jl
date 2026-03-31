@@ -96,6 +96,7 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     spot_stats_accum::V
     valid_mask_host::Matrix{Bool}
     reference_signal_host::Vector{T}
+    slopes_host::Vector{T}
     centroid_host::Matrix{T}
     slopes_units::T
     calibrated::Bool
@@ -170,6 +171,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     spot_stats_accum = backend{T}(undef, 3 * n_subap * n_subap)
     valid_mask_host = Matrix{Bool}(undef, n_subap, n_subap)
     reference_signal_host = Vector{T}(undef, 2 * n_subap * n_subap)
+    slopes_host = Vector{T}(undef, 2 * n_subap * n_subap)
     centroid_host = Matrix{T}(undef, sub, sub)
     reference_signal_2d = backend{T}(undef, 2 * n_subap, n_subap)
     layout = SubapertureLayout(n_subap, tel.params.resolution, tel.params.diameter, threshold, valid_mask, valid_mask_host)
@@ -236,6 +238,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         spot_stats_accum,
         valid_mask_host,
         reference_signal_host,
+        slopes_host,
         centroid_host,
         one(T),
         false,
@@ -254,6 +257,19 @@ sensing_mode(::ShackHartmann{M}) where {M} = M()
 @inline subaperture_calibration(wfs::ShackHartmann) = wfs.state.calibration
 @inline slope_extraction_model(wfs::ShackHartmann) = slope_extraction_model(subaperture_calibration(wfs))
 @inline centroid_threshold(wfs::ShackHartmann) = slope_extraction_model(wfs).threshold
+@inline sh_rocm_safe_path(wfs::ShackHartmann) = gpu_backend_name(typeof(wfs.state.slopes)) === :amdgpu
+
+@inline function sh_safe_peak_value(A::AbstractArray{T}) where {T<:AbstractFloat}
+    if gpu_backend_name(typeof(A)) === :amdgpu || gpu_backend_name(typeof(parent(A))) === :amdgpu
+        return maximum(Array(A))
+    end
+    return maximum(A)
+end
+
+@inline function sh_refresh_valid_mask_host!(wfs::ShackHartmann)
+    copyto!(wfs.state.valid_mask_host, wfs.state.valid_mask)
+    return wfs.state.valid_mask_host
+end
 
 function update_valid_mask!(wfs::ShackHartmann, tel::Telescope)
     update_subaperture_layout!(subaperture_layout(wfs), tel.state.pupil)
@@ -562,13 +578,13 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
     pad = size(wfs.state.field, 1)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
-    if sh_stacked_asterism_compatible(ast)
+    if sh_stacked_asterism_compatible(ast) && !sh_rocm_safe_path(wfs)
         peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.state.slopes), wfs, tel, ast)
         sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
         subtract_reference_and_scale!(wfs)
         return wfs.state.slopes
     end
-    if execution_style(wfs.state.slopes) isa AcceleratorStyle
+    if execution_style(wfs.state.slopes) isa AcceleratorStyle && !sh_rocm_safe_path(wfs)
         return measure_sh_asterism_batched!(execution_style(wfs.state.slopes), wfs, tel, ast)
     end
     return measure_sh_asterism_diffractive!(execution_style(wfs.state.slopes), wfs, tel, ast, n, n_sub, sub, pad, ox, oy)
@@ -589,13 +605,13 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
     pad = size(wfs.state.field, 1)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
-    if sh_stacked_asterism_compatible(ast)
+    if sh_stacked_asterism_compatible(ast) && !sh_rocm_safe_path(wfs)
         peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.state.slopes), wfs, tel, ast, det, rng)
         sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
         subtract_reference_and_scale!(wfs)
         return wfs.state.slopes
     end
-    if execution_style(wfs.state.slopes) isa AcceleratorStyle
+    if execution_style(wfs.state.slopes) isa AcceleratorStyle && !sh_rocm_safe_path(wfs)
         return measure_sh_asterism_batched!(execution_style(wfs.state.slopes), wfs, tel, ast, det, rng)
     end
     return measure_sh_asterism_diffractive!(execution_style(wfs.state.slopes), wfs, tel, ast, det, rng, n, n_sub, sub, pad, ox, oy)
@@ -640,6 +656,47 @@ function measure_sh_asterism_diffractive!(::ScalarCPUStyle, wfs::ShackHartmann, 
     return wfs.state.slopes
 end
 
+function measure_sh_asterism_diffractive!(::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope,
+    ast::Asterism, n::Int, n_sub::Int, sub::Int, pad::Int, ox::Int, oy::Int)
+    sh_refresh_valid_mask_host!(wfs)
+    host_slopes = wfs.state.slopes_host
+    fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
+    idx = 1
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        xs = (i - 1) * sub + 1
+        ys = (j - 1) * sub + 1
+        xe = min(i * sub, n)
+        ye = min(j * sub, n)
+        if wfs.state.valid_mask_host[i, j]
+            total_sum = zero(eltype(host_slopes))
+            sx_sum = zero(eltype(host_slopes))
+            sy_sum = zero(eltype(host_slopes))
+            for src in ast.sources
+                total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
+                total_sum += total
+                sx_sum += sx
+                sy_sum += sy
+                @views wfs.state.spot_cube_accum[idx, :, :] .+= wfs.state.spot_cube[idx, :, :]
+            end
+            if total_sum <= 0
+                host_slopes[idx] = zero(eltype(host_slopes))
+                host_slopes[idx + n_sub * n_sub] = zero(eltype(host_slopes))
+            else
+                nsrc = length(ast.sources)
+                host_slopes[idx] = ((sy_sum / nsrc) - wfs.state.reference_signal_host[idx]) / wfs.state.slopes_units
+                host_slopes[idx + n_sub * n_sub] = ((sx_sum / nsrc) - wfs.state.reference_signal_host[idx + n_sub * n_sub]) / wfs.state.slopes_units
+            end
+        else
+            host_slopes[idx] = zero(eltype(host_slopes))
+            host_slopes[idx + n_sub * n_sub] = zero(eltype(host_slopes))
+        end
+        idx += 1
+    end
+    copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
+    copyto!(wfs.state.slopes, host_slopes)
+    return wfs.state.slopes
+end
+
 function measure_sh_asterism_diffractive!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope,
     ast::Asterism, det::AbstractDetector, rng::AbstractRNG, n::Int, n_sub::Int, sub::Int, pad::Int, ox::Int, oy::Int)
     fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
@@ -676,6 +733,47 @@ function measure_sh_asterism_diffractive!(::ScalarCPUStyle, wfs::ShackHartmann, 
     end
     copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
     zero_invalid_sh_slopes!(ScalarCPUStyle(), wfs.state.slopes, wfs.state.valid_mask)
+    return wfs.state.slopes
+end
+
+function measure_sh_asterism_diffractive!(::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope,
+    ast::Asterism, det::AbstractDetector, rng::AbstractRNG, n::Int, n_sub::Int, sub::Int, pad::Int, ox::Int, oy::Int)
+    sh_refresh_valid_mask_host!(wfs)
+    host_slopes = wfs.state.slopes_host
+    fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
+    idx = 1
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        xs = (i - 1) * sub + 1
+        ys = (j - 1) * sub + 1
+        xe = min(i * sub, n)
+        ye = min(j * sub, n)
+        if wfs.state.valid_mask_host[i, j]
+            total_sum = zero(eltype(host_slopes))
+            sx_sum = zero(eltype(host_slopes))
+            sy_sum = zero(eltype(host_slopes))
+            for src in ast.sources
+                total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx, det, rng)
+                total_sum += total
+                sx_sum += sx
+                sy_sum += sy
+                @views wfs.state.spot_cube_accum[idx, :, :] .+= wfs.state.spot_cube[idx, :, :]
+            end
+            if total_sum <= 0
+                host_slopes[idx] = zero(eltype(host_slopes))
+                host_slopes[idx + n_sub * n_sub] = zero(eltype(host_slopes))
+            else
+                nsrc = length(ast.sources)
+                host_slopes[idx] = ((sy_sum / nsrc) - wfs.state.reference_signal_host[idx]) / wfs.state.slopes_units
+                host_slopes[idx + n_sub * n_sub] = ((sx_sum / nsrc) - wfs.state.reference_signal_host[idx + n_sub * n_sub]) / wfs.state.slopes_units
+            end
+        else
+            host_slopes[idx] = zero(eltype(host_slopes))
+            host_slopes[idx + n_sub * n_sub] = zero(eltype(host_slopes))
+        end
+        idx += 1
+    end
+    copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
+    copyto!(wfs.state.slopes, host_slopes)
     return wfs.state.slopes
 end
 
@@ -1265,9 +1363,37 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescop
 end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
+    if sh_rocm_safe_path(wfs)
+        sh_refresh_valid_mask_host!(wfs)
+        n = tel.params.resolution
+        n_sub = wfs.params.n_subap
+        sub = div(n, n_sub)
+        pad = size(wfs.state.field, 1)
+        ox = div(pad - sub, 2)
+        oy = div(pad - sub, 2)
+        peak = zero(eltype(wfs.state.slopes))
+        idx = 1
+        @inbounds for i in 1:n_sub, j in 1:n_sub
+            spot_view = sh_spot_view(wfs, idx)
+            if wfs.state.valid_mask_host[i, j]
+                xs = (i - 1) * sub + 1
+                ys = (j - 1) * sub + 1
+                xe = min(i * sub, n)
+                ye = min(j * sub, n)
+                compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+                sample_spot!(wfs, wfs.state.intensity)
+                copyto!(spot_view, wfs.state.spot)
+                peak = max(peak, sh_safe_peak_value(spot_view))
+            else
+                fill!(spot_view, zero(eltype(spot_view)))
+            end
+            idx += 1
+        end
+        return peak
+    end
     compute_intensity_stack!(style, wfs, tel, src)
     sample_spot_stack!(style, wfs)
-    return maximum(wfs.state.spot_cube)
+    return sh_safe_peak_value(wfs.state.spot_cube)
 end
 
 function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::SpectralSource)
@@ -1285,6 +1411,19 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescop
 end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::SpectralSource)
+    if sh_rocm_safe_path(wfs)
+        fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
+        peak = zero(eltype(wfs.state.slopes))
+        total_flux = photon_flux(src)
+        @inbounds for sample in src.bundle.samples
+            variant = source_with_wavelength_and_flux(src, sample.wavelength,
+                eltype(wfs.state.slopes)(total_flux * sample.weight))
+            peak = max(peak, sampled_spots_peak!(style, wfs, tel, variant))
+            @. wfs.state.spot_cube_accum = wfs.state.spot_cube_accum + wfs.state.spot_cube
+        end
+        copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
+        return max(peak, sh_safe_peak_value(wfs.state.spot_cube))
+    end
     if spectral_reference_source(src) isa LGSSource
         fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
         peak = zero(eltype(wfs.state.slopes))
@@ -1296,11 +1435,11 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
             @. wfs.state.spot_cube_accum = wfs.state.spot_cube_accum + wfs.state.spot_cube
         end
         copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
-        return max(peak, maximum(wfs.state.spot_cube))
+        return max(peak, sh_safe_peak_value(wfs.state.spot_cube))
     end
     compute_intensity_spectral_stack!(style, wfs, tel, src)
     sample_spot_stack!(style, wfs)
-    return maximum(wfs.state.spot_cube)
+    return sh_safe_peak_value(wfs.state.spot_cube)
 end
 
 function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::ExtendedSource)
@@ -1316,7 +1455,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
     if length(ast.sources) == 1
         return sampled_spots_peak!(style, wfs, tel, ast.sources[1])
     end
-    if sh_stacked_asterism_compatible(ast)
+    if sh_stacked_asterism_compatible(ast) && !sh_rocm_safe_path(wfs)
         return sampled_spots_peak_asterism_stacked!(style, wfs, tel, ast)
     end
     fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
@@ -1326,7 +1465,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
         @. wfs.state.spot_cube_accum = wfs.state.spot_cube_accum + wfs.state.spot_cube
     end
     copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
-    return max(peak, maximum(wfs.state.spot_cube))
+    return max(peak, sh_safe_peak_value(wfs.state.spot_cube))
 end
 
 function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::LGSSource)
@@ -1413,13 +1552,42 @@ end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     det::AbstractDetector, rng::AbstractRNG)
+    if sh_rocm_safe_path(wfs)
+        sh_refresh_valid_mask_host!(wfs)
+        n = tel.params.resolution
+        n_sub = wfs.params.n_subap
+        sub = div(n, n_sub)
+        pad = size(wfs.state.field, 1)
+        ox = div(pad - sub, 2)
+        oy = div(pad - sub, 2)
+        peak = zero(eltype(wfs.state.slopes))
+        idx = 1
+        @inbounds for i in 1:n_sub, j in 1:n_sub
+            spot_view = sh_spot_view(wfs, idx)
+            if wfs.state.valid_mask_host[i, j]
+                xs = (i - 1) * sub + 1
+                ys = (j - 1) * sub + 1
+                xe = min(i * sub, n)
+                ye = min(j * sub, n)
+                compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+                sample_spot!(wfs, wfs.state.intensity)
+                frame = capture!(det, wfs.state.spot; rng=rng)
+                copyto!(spot_view, frame)
+                peak = max(peak, sh_safe_peak_value(spot_view))
+            else
+                fill!(spot_view, zero(eltype(spot_view)))
+            end
+            idx += 1
+        end
+        return peak
+    end
     compute_intensity_stack!(style, wfs, tel, src)
     sample_spot_stack!(style, wfs)
     n_sub = wfs.params.n_subap
     capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
     launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
         n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
-    return maximum(wfs.state.spot_cube)
+    return sh_safe_peak_value(wfs.state.spot_cube)
 end
 
 function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::SpectralSource,
@@ -1439,6 +1607,19 @@ end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::SpectralSource,
     det::AbstractDetector, rng::AbstractRNG)
+    if sh_rocm_safe_path(wfs)
+        fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
+        total_flux = photon_flux(src)
+        @inbounds for sample in src.bundle.samples
+            variant = source_with_wavelength_and_flux(src, sample.wavelength,
+                eltype(wfs.state.slopes)(total_flux * sample.weight))
+            sampled_spots_peak!(style, wfs, tel, variant, det, rng)
+            @. wfs.state.spot_cube_accum = wfs.state.spot_cube_accum + wfs.state.spot_cube
+        end
+        copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
+        capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
+        return sh_safe_peak_value(wfs.state.spot_cube)
+    end
     if spectral_reference_source(src) isa LGSSource
         fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
         total_flux = photon_flux(src)
@@ -1453,7 +1634,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
         capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
         launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
             n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
-        return maximum(wfs.state.spot_cube)
+        return sh_safe_peak_value(wfs.state.spot_cube)
     end
     compute_intensity_spectral_stack!(style, wfs, tel, src)
     sample_spot_stack!(style, wfs)
@@ -1461,7 +1642,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
     capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
     launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
         n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
-    return maximum(wfs.state.spot_cube)
+    return sh_safe_peak_value(wfs.state.spot_cube)
 end
 
 function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::ExtendedSource,
@@ -1479,7 +1660,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
     if length(ast.sources) == 1
         return sampled_spots_peak!(style, wfs, tel, ast.sources[1], det, rng)
     end
-    if sh_stacked_asterism_compatible(ast)
+    if sh_stacked_asterism_compatible(ast) && !sh_rocm_safe_path(wfs)
         return sampled_spots_peak_asterism_stacked!(style, wfs, tel, ast, det, rng)
     end
     fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
@@ -1489,7 +1670,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
         @. wfs.state.spot_cube_accum = wfs.state.spot_cube_accum + wfs.state.spot_cube
     end
     copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
-    return max(peak, maximum(wfs.state.spot_cube))
+    return max(peak, sh_safe_peak_value(wfs.state.spot_cube))
 end
 
 function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
@@ -1605,6 +1786,31 @@ function sh_signal_from_spots!(::ScalarCPUStyle, wfs::ShackHartmann, cutoff::T) 
 end
 
 function sh_signal_from_spots!(::AcceleratorStyle, wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}
+    if sh_rocm_safe_path(wfs)
+        sh_refresh_valid_mask_host!(wfs)
+        n_sub = wfs.params.n_subap
+        offset = n_sub * n_sub
+        host_slopes = wfs.state.slopes_host
+        idx = 1
+        @inbounds for i in 1:n_sub, j in 1:n_sub
+            if wfs.state.valid_mask_host[i, j]
+                total, sx, sy = centroid_from_spot!(wfs, sh_spot_view(wfs, idx), cutoff)
+                if total <= 0
+                    host_slopes[idx] = zero(T)
+                    host_slopes[idx + offset] = zero(T)
+                else
+                    host_slopes[idx] = sy
+                    host_slopes[idx + offset] = sx
+                end
+            else
+                host_slopes[idx] = zero(T)
+                host_slopes[idx + offset] = zero(T)
+            end
+            idx += 1
+        end
+        copyto!(wfs.state.slopes, host_slopes)
+        return wfs.state.slopes
+    end
     n_sub = wfs.params.n_subap
     offset = n_sub * n_sub
     style = execution_style(wfs.state.slopes)
@@ -1666,6 +1872,11 @@ function mean_valid_signal(::ScalarCPUStyle, signal::AbstractVector{T}, valid_ma
 end
 
 function mean_valid_signal(::AcceleratorStyle, signal::AbstractVector{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
+    if gpu_backend_name(typeof(signal)) === :amdgpu
+        host_signal = Array(signal)
+        host_valid_mask = Array(valid_mask)
+        return mean_valid_signal(ScalarCPUStyle(), host_signal, host_valid_mask)
+    end
     count = sum(valid_mask)
     return count == 0 ? one(T) : sum(signal) / (T(2) * T(count))
 end

@@ -714,7 +714,8 @@ function validate_frame_response_model(model::SampledFrameResponse)
     all(size(model.kernel) .> 0) || throw(InvalidConfiguration("SampledFrameResponse kernel must not be empty"))
     isodd(size(model.kernel, 1)) || throw(InvalidConfiguration("SampledFrameResponse kernel row count must be odd"))
     isodd(size(model.kernel, 2)) || throw(InvalidConfiguration("SampledFrameResponse kernel column count must be odd"))
-    sum(model.kernel) > zero(eltype(model.kernel)) ||
+    kernel_sum = execution_style(model.kernel) isa ScalarCPUStyle ? sum(model.kernel) : sum(Array(model.kernel))
+    kernel_sum > zero(eltype(model.kernel)) ||
         throw(InvalidConfiguration("SampledFrameResponse kernel must have positive sum"))
     return model
 end
@@ -967,6 +968,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     response_buffer = backend{T}(undef, 1, 1)
     bin_buffer = backend{T}(undef, 1, 1)
     noise_buffer = backend{T}(undef, 1, 1)
+    noise_buffer_host = Matrix{T}(undef, 1, 1)
     accum_buffer = backend{T}(undef, 1, 1)
     output_buffer = if output_precision_t === nothing
         window === nothing ? nothing : backend{T}(undef, 1, 1)
@@ -987,6 +989,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
         response_buffer,
         bin_buffer,
         noise_buffer,
+        noise_buffer_host,
         accum_buffer,
         latent_buffer,
         output_buffer,

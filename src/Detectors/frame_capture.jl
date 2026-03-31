@@ -59,6 +59,22 @@ end
 apply_sensor_persistence!(::FrameSensorType, det::Detector, exposure_time::Real) = det.state.frame
 update_sensor_persistence!(::FrameSensorType, det::Detector, exposure_time::Real) = det.state.frame
 
+function poisson_noise_frame!(det::Detector, rng::AbstractRNG, img::AbstractMatrix{T}) where {T<:AbstractFloat}
+    if gpu_backend_name(typeof(img)) === :amdgpu
+        host = det.state.noise_buffer_host
+        if size(host) != size(img)
+            host = Matrix{T}(undef, size(img)...)
+            det.state.noise_buffer_host = host
+        end
+        copyto!(host, img)
+        _poisson_noise!(ScalarCPUStyle(), rng, host)
+        copyto!(img, host)
+        return img
+    end
+    poisson_noise!(rng, img)
+    return img
+end
+
 function capture_signal!(det::Detector{NoiseNone}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
     fill_frame!(det, psf, exposure_time)
     apply_signal_defects!(det.params.defect_model, det, exposure_time)
@@ -71,7 +87,7 @@ function capture_signal!(det::Detector{NoisePhoton}, psf::AbstractMatrix{T}, rng
     fill_frame!(det, psf, exposure_time)
     apply_signal_defects!(det.params.defect_model, det, exposure_time)
     apply_sensor_persistence!(det.params.sensor, det, exposure_time)
-    poisson_noise!(rng, det.state.frame)
+    poisson_noise_frame!(det, rng, det.state.frame)
     apply_background_flux!(det.background_flux, det, rng, exposure_time)
     return nothing
 end
@@ -88,7 +104,7 @@ function capture_signal!(det::Detector{<:NoisePhotonReadout}, psf::AbstractMatri
     fill_frame!(det, psf, exposure_time)
     apply_signal_defects!(det.params.defect_model, det, exposure_time)
     apply_sensor_persistence!(det.params.sensor, det, exposure_time)
-    poisson_noise!(rng, det.state.frame)
+    poisson_noise_frame!(det, rng, det.state.frame)
     apply_background_flux!(det.background_flux, det, rng, exposure_time)
     return nothing
 end
@@ -97,7 +113,7 @@ apply_background_flux!(::NoBackground, det::Detector, rng::AbstractRNG, exposure
 
 function apply_background_flux!(background::ScalarBackground, det::Detector, rng::AbstractRNG, exposure_time::Real)
     fill!(det.state.noise_buffer, background.level * exposure_time)
-    poisson_noise!(rng, det.state.noise_buffer)
+    poisson_noise_frame!(det, rng, det.state.noise_buffer)
     det.state.frame .+= det.state.noise_buffer
     return det.state.frame
 end
@@ -108,7 +124,7 @@ function apply_background_flux!(background::BackgroundFrame, det::Detector, rng:
     end
     copyto!(det.state.noise_buffer, background.map)
     det.state.noise_buffer .*= exposure_time
-    poisson_noise!(rng, det.state.noise_buffer)
+    poisson_noise_frame!(det, rng, det.state.noise_buffer)
     det.state.frame .+= det.state.noise_buffer
     return det.state.frame
 end
@@ -119,7 +135,7 @@ function apply_dark_current!(det::Detector, rng::AbstractRNG, exposure_time::Rea
         return det.state.frame
     end
     fill!(det.state.noise_buffer, dark_signal)
-    poisson_noise!(rng, det.state.noise_buffer)
+    poisson_noise_frame!(det, rng, det.state.noise_buffer)
     det.state.frame .+= det.state.noise_buffer
     return det.state.frame
 end
@@ -219,6 +235,16 @@ function _copy_windowed_cube(cube::AbstractArray{T,3}, det::Detector) where {T}
 end
 
 apply_readout_correction!(::NullFrameReadoutCorrection, frame::AbstractMatrix) = frame
+
+function detector_host_frame!(det::Detector, frame::AbstractMatrix{T}) where {T<:AbstractFloat}
+    host = det.state.noise_buffer_host
+    if size(host) != size(frame)
+        host = Matrix{T}(undef, size(frame)...)
+        det.state.noise_buffer_host = host
+    end
+    copyto!(host, frame)
+    return host
+end
 
 function _reference_pixel_bias(model::ReferencePixelCommonModeCorrection, frame::AbstractMatrix{T}) where {T}
     n, m = size(frame)
@@ -355,6 +381,16 @@ function apply_readout_correction!(model::FrameReadoutCorrectionModel, cube::Abs
     return cube
 end
 
+function apply_readout_correction!(model::FrameReadoutCorrectionModel, frame::AbstractMatrix{T}, det::Detector) where {T}
+    if gpu_backend_name(typeof(frame)) === :amdgpu
+        host = detector_host_frame!(det, frame)
+        apply_readout_correction!(model, host)
+        copyto!(frame, host)
+        return frame
+    end
+    return apply_readout_correction!(model, frame)
+end
+
 finalize_readout_products!(::FrameSensorType, det::Detector, rng::AbstractRNG, exposure_time::Real) =
     reset_readout_products!(det)
 
@@ -368,7 +404,7 @@ function finalize_capture!(det::Detector, rng::AbstractRNG, exposure_time::Real)
     apply_readout_noise!(det, rng)
     apply_post_readout_gain!(det.params.sensor, det)
     finalize_readout_products!(det.params.sensor, det, rng, exposure_time)
-    apply_readout_correction!(det.params.correction_model, det.state.frame)
+    apply_readout_correction!(det.params.correction_model, det.state.frame, det)
     apply_quantization!(det)
     subtract_background_map!(det.background_map, det)
     update_sensor_persistence!(det.params.sensor, det, exposure_time)

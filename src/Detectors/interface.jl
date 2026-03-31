@@ -398,7 +398,8 @@ struct SampledFrameResponse{T<:AbstractFloat,A<:AbstractMatrix{T}} <: AbstractFr
         all(size(kernel) .> 0) || throw(InvalidConfiguration("SampledFrameResponse kernel must not be empty"))
         isodd(size(kernel, 1)) || throw(InvalidConfiguration("SampledFrameResponse kernel row count must be odd"))
         isodd(size(kernel, 2)) || throw(InvalidConfiguration("SampledFrameResponse kernel column count must be odd"))
-        sum(kernel) > zero(T) || throw(InvalidConfiguration("SampledFrameResponse kernel must have positive sum"))
+        kernel_sum = execution_style(kernel) isa ScalarCPUStyle ? sum(kernel) : sum(Array(kernel))
+        kernel_sum > zero(T) || throw(InvalidConfiguration("SampledFrameResponse kernel must have positive sum"))
         return new{T,A}(kernel)
     end
 end
@@ -738,6 +739,7 @@ mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O,P<:FrameRea
     response_buffer::A
     bin_buffer::A
     noise_buffer::A
+    noise_buffer_host::Matrix{T}
     accum_buffer::A
     latent_buffer::A
     output_buffer::O
