@@ -701,23 +701,23 @@ Goal:
 
 Tasks:
 
-- `[ ]` `PLAN-11` Split [`src/WFS/shack_hartmann.jl`](../src/WFS/shack_hartmann.jl)
+- `[x]` `PLAN-11` Split [`src/WFS/shack_hartmann.jl`](../src/WFS/shack_hartmann.jl)
   into smaller units
   - traces to: `PR-05`
-- `[ ]` `PLAN-12` Split [`src/WFS/pyramid.jl`](../src/WFS/pyramid.jl)
+- `[x]` `PLAN-12` Split [`src/WFS/pyramid.jl`](../src/WFS/pyramid.jl)
   - traces to: `PR-05`
-- `[ ]` `PLAN-13` Split [`src/WFS/bioedge.jl`](../src/WFS/bioedge.jl)
+- `[x]` `PLAN-13` Split [`src/WFS/bioedge.jl`](../src/WFS/bioedge.jl)
   - traces to: `PR-05`
-- `[ ]` `PLAN-14` Split [`src/Control/runtime.jl`](../src/Control/runtime.jl)
+- `[x]` `PLAN-14` Split [`src/Control/runtime.jl`](../src/Control/runtime.jl)
   by product planning, latency staging, execution, and exports
   - traces to: `PR-05`, `PR-11`
-- `[ ]` `PLAN-15` Split [`test/runtests.jl`](../test/runtests.jl) into:
+- `[x]` `PLAN-15` Split [`test/runtests.jl`](../test/runtests.jl) into:
   - unit/subsystem tests
   - interface/conformance tests
   - reference tests
   - tutorial/example tests
   - traces to: `PR-06`, `PR-31`, `PR-33`
-- `[ ]` `PLAN-16` Re-evaluate whether any optional integrations should move to
+- `[x]` `PLAN-16` Re-evaluate whether any optional integrations should move to
   extensions or separate adapter packages
   - traces to: `PR-07`, `PR-08`, `PR-38`
 
@@ -726,6 +726,20 @@ Verification:
 - large-file line counts are substantially reduced
 - test entry points remain green
 - no loss of subsystem coverage
+
+Phase 2 evidence summary:
+
+- large entry-point files were reduced to thin include surfaces:
+  - [`src/WFS/shack_hartmann.jl`](../src/WFS/shack_hartmann.jl): `2167 -> 12`
+  - [`src/WFS/pyramid.jl`](../src/WFS/pyramid.jl): `1463 -> 11`
+  - [`src/WFS/bioedge.jl`](../src/WFS/bioedge.jl): `1241 -> 10`
+  - [`src/Control/runtime.jl`](../src/Control/runtime.jl): `1123 -> 12`
+  - [`test/runtests.jl`](../test/runtests.jl): `3300 -> 8`
+- split layout and boundary notes recorded in
+  [`docs/modularization-inventory.md`](./modularization-inventory.md)
+- optional integration/package-boundary decision recorded in
+  [`docs/optional-integration-boundaries.md`](./optional-integration-boundaries.md)
+- full suite passed with `julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'`
 
 ## Phase 3: Reusable Runtime and Backend Building Blocks
 
@@ -915,9 +929,9 @@ Verification:
 | PR-02 | Reduce exported surface | PLAN-06, PLAN-08, PLAN-10 | reduced export count | [x] |
 | PR-03 | Keep generic verbs, improve discoverability via layering | PLAN-07, PLAN-09 | API docs and examples | [x] |
 | PR-04 | Add public API policy | PLAN-01, PLAN-09 | documented API policy | [x] |
-| PR-05 | Split oversized subsystem files | PLAN-02, PLAN-11, PLAN-12, PLAN-13, PLAN-14 | reduced file sizes / cleaner layout | [ ] |
-| PR-06 | Split monolithic test driver | PLAN-02, PLAN-15 | test layout restructure | [ ] |
-| PR-07 | Prefer internal modularization before package splitting | PLAN-02, PLAN-16 | modularization inventory and package-boundary notes | [ ] |
+| PR-05 | Split oversized subsystem files | PLAN-02, PLAN-11, PLAN-12, PLAN-13, PLAN-14 | reduced file sizes / cleaner layout | [x] |
+| PR-06 | Split monolithic test driver | PLAN-02, PLAN-15 | test layout restructure | [x] |
+| PR-07 | Prefer internal modularization before package splitting | PLAN-02, PLAN-16 | modularization inventory and package-boundary notes | [x] |
 | PR-08 | Keep optional integrations out of core | PLAN-10, PLAN-16, PLAN-40 | extension/package boundary docs | [ ] |
 | PR-09 | Extract detector noise/readout helpers | PLAN-03, PLAN-17 | shared detector infrastructure | [ ] |
 | PR-10 | Extract grouped WFS execution skeletons | PLAN-03, PLAN-18 | shared WFS grouping helpers | [ ] |
@@ -963,7 +977,7 @@ Verification:
 ### Depends on Phase 0 inventory output
 
 - `[x]` PLAN-06 through PLAN-10
-- `[ ]` PLAN-11 through PLAN-16
+- `[x]` PLAN-11 through PLAN-16
 
 ### Depends on structural cleanup
 

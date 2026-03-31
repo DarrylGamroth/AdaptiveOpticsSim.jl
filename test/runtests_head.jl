@@ -1,0 +1,286 @@
+using Test
+using AdaptiveOpticsSim
+using LinearAlgebra
+using Random
+using SpecialFunctions
+using Statistics
+using Tables
+using TOML
+
+include(joinpath(dirname(@__DIR__), "examples", "support", "subaru_ao188_simulation.jl"))
+include(joinpath(dirname(@__DIR__), "examples", "support", "subaru_ao3k_simulation.jl"))
+using .SubaruAO188Simulation
+using .SubaruAO3kSimulation
+
+include("reference_harness.jl")
+include("ka_cpu_matrix.jl")
+include("tomography.jl")
+
+function run_tutorial_example(name::AbstractString)
+    path = joinpath(dirname(@__DIR__), "examples", "tutorials", name)
+    mod = Module(Symbol("Tutorial_", replace(basename(name), "." => "_")))
+    Core.eval(mod, :(include(path::AbstractString) = Base.include($mod, path)))
+    Base.include(mod, path)
+    main_fn = Core.eval(mod, :main)
+    return Base.invokelatest(main_fn)
+end
+
+function assert_source_interface(src)
+    @test hasmethod(wavelength, Tuple{typeof(src)})
+end
+
+include("optional_gpu_backends.jl")
+
+function assert_atmosphere_interface(atm, tel)
+    @test applicable(advance!, atm, tel)
+    @test applicable(propagate!, atm, tel)
+end
+
+function assert_atmosphere_layer_interface(layer, tel, rng, src)
+    @test layer isa AdaptiveOpticsSim.AbstractAtmosphereLayer
+    @test applicable(AdaptiveOpticsSim.sample_layer!, similar(tel.state.opd), layer, tel, rng)
+    @test applicable(AdaptiveOpticsSim.sample_layer_accumulate!, similar(tel.state.opd), layer, tel, rng)
+    @test applicable(AdaptiveOpticsSim.render_layer!, similar(tel.state.opd), layer, zero(eltype(tel.state.opd)),
+        zero(eltype(tel.state.opd)), one(eltype(tel.state.opd)))
+    @test applicable(AdaptiveOpticsSim.render_layer_accumulate!, similar(tel.state.opd), layer, zero(eltype(tel.state.opd)),
+        zero(eltype(tel.state.opd)), one(eltype(tel.state.opd)))
+    altitude = AdaptiveOpticsSim.layer_altitude(layer)
+    shift_x, shift_y, footprint_scale = AdaptiveOpticsSim.layer_source_geometry(src, altitude, tel, eltype(tel.state.opd))
+    sample = similar(tel.state.opd)
+    fill!(sample, zero(eltype(sample)))
+    AdaptiveOpticsSim.sample_layer!(sample, layer, tel, rng)
+    @test size(sample) == size(tel.state.opd)
+    fill!(sample, zero(eltype(sample)))
+    AdaptiveOpticsSim.sample_layer_accumulate!(sample, layer, tel, rng)
+    @test size(sample) == size(tel.state.opd)
+    fill!(sample, zero(eltype(sample)))
+    AdaptiveOpticsSim.render_layer!(sample, layer, shift_x, shift_y, footprint_scale)
+    @test size(sample) == size(tel.state.opd)
+    fill!(sample, zero(eltype(sample)))
+    AdaptiveOpticsSim.render_layer_accumulate!(sample, layer, shift_x, shift_y, footprint_scale)
+    @test size(sample) == size(tel.state.opd)
+end
+
+function assert_wfs_interface(wfs, tel)
+    @test applicable(update_valid_mask!, wfs, tel)
+    @test applicable(measure!, wfs, tel)
+end
+
+function assert_detector_interface(det, psf)
+    @test applicable(capture!, det, psf)
+end
+
+function assert_dm_interface(dm, tel)
+    @test applicable(build_influence_functions!, dm, tel)
+    @test applicable(apply!, dm, tel, DMAdditive())
+end
+
+function assert_optical_element_interface(element, tel)
+    @test applicable(apply!, element, tel, DMAdditive())
+    @test applicable(apply!, element, tel, DMReplace())
+end
+
+function assert_reconstructor_interface(recon, slopes, expected_length::Int)
+    @test recon isa AbstractReconstructorOperator
+    out = zeros(eltype(slopes), expected_length)
+    @test applicable(reconstruct!, out, recon, slopes)
+    reconstruct!(out, recon, slopes)
+    @test length(out) == expected_length
+    allocated = reconstruct(recon, slopes)
+    @test length(allocated) == expected_length
+end
+
+function assert_controller_interface(ctrl, input, dt::Real)
+    @test applicable(update!, ctrl, input, dt)
+    output = update!(ctrl, input, dt)
+    @test length(output) == length(input)
+end
+
+function assert_control_simulation_interface(sim)
+    @test sim isa AbstractControlSimulation
+    @test applicable(step!, sim)
+    @test applicable(simulation_interface, sim)
+    @test applicable(simulation_readout, sim)
+    iface = simulation_interface(sim)
+    readout = simulation_readout(sim)
+    @test simulation_command(readout) === simulation_command(sim)
+    @test simulation_slopes(readout) === simulation_slopes(sim)
+    @test simulation_command(simulation_readout(iface)) === simulation_command(iface)
+    return iface
+end
+
+function assert_interaction_matrix_contract(imat, expected_rows::Int, expected_cols::Int, amplitude::Real)
+    @test imat isa InteractionMatrix
+    @test size(imat.matrix) == (expected_rows, expected_cols)
+    @test imat.amplitude ≈ amplitude
+end
+
+function assert_calibration_vault_contract(vault, forward::AbstractMatrix; inverted::Bool=true)
+    @test vault isa CalibrationVault
+    @test vault.D === forward
+    if inverted
+        @test !isnothing(vault.M)
+        @test size(vault.M, 2) == size(forward, 1)
+        @test length(vault.singular_values) == min(size(forward)...)
+        @test vault.effective_rank >= 0
+    else
+        @test isnothing(vault.M)
+        @test isempty(vault.singular_values)
+    end
+end
+
+function assert_modal_basis_contract(basis::ModalBasis, n_commands::Int, n_modes::Int)
+    @test size(basis.M2C) == (n_commands, n_modes)
+    @test size(basis.basis, 2) == n_modes
+    if !isnothing(basis.projector)
+        @test size(basis.projector, 2) == size(basis.basis, 1)
+        @test size(basis.projector, 1) == n_modes
+    end
+end
+
+function assert_ao_calibration_contract(calib::AOCalibration, n_commands::Int, n_modes::Int)
+    @test size(calib.M2C) == (n_commands, n_modes)
+    @test size(calib.basis, 2) == n_modes
+    @test calib.calibration isa CalibrationVault
+end
+
+function assert_meta_sensitivity_contract(meta::AdaptiveOpticsSim.MetaSensitivity, n_fields::Int)
+    @test meta.calib0 isa CalibrationVault
+    @test meta.meta isa CalibrationVault
+    @test length(meta.field_order) == n_fields
+    @test size(meta.meta.D, 2) == n_fields
+    @test meta.meta.M !== nothing
+end
+
+function subharmonic_tiptilt_power(phs::AbstractMatrix)
+    n = size(phs, 1)
+    coords = collect(LinRange(-1.0, 1.0, n))
+    x = repeat(reshape(coords, 1, n), n, 1)
+    y = repeat(reshape(coords, n, 1), 1, n)
+    A = hcat(vec(x), vec(y), ones(n * n))
+    coeffs = A \ vec(phs)
+    return coeffs[1]^2 + coeffs[2]^2
+end
+
+function subharmonic_metrics(atm::KolmogorovAtmosphere, D::Real;
+    n::Int=24, nsamp::Int=8, kwargs...)
+    delta = D / n
+    shift = n ÷ 2
+    ws = PhaseStatsWorkspace(n; T=Float64)
+    tiptilt = Float64[]
+    structure = Float64[]
+    for seed in 1:nsamp
+        phs = ft_sh_phase_screen(atm, n, delta; rng=MersenneTwister(seed), ws=ws, kwargs...)
+        push!(tiptilt, subharmonic_tiptilt_power(phs))
+        diff = @views phs[:, 1:end-shift] .- phs[:, 1+shift:end]
+        push!(structure, Statistics.mean(abs2, diff))
+    end
+    return (; tiptilt=Statistics.mean(tiptilt), structure=Statistics.mean(structure))
+end
+
+function moving_atmosphere_trace(;
+    seed::Integer=1,
+    steps::Integer=4,
+    resolution::Int=16,
+    diameter::Real=8.0,
+    sampling_time::Real=1e-3,
+    r0::Real=0.2,
+    L0::Real=25.0,
+    fractional_cn2::AbstractVector=[1.0],
+    wind_speed::AbstractVector=[0.0],
+    wind_direction::AbstractVector=[0.0],
+    altitude::AbstractVector=[0.0],
+)
+    tel = Telescope(resolution=resolution, diameter=diameter, sampling_time=sampling_time, central_obstruction=0.0)
+    atm = MultiLayerAtmosphere(tel;
+        r0=r0,
+        L0=L0,
+        fractional_cn2=fractional_cn2,
+        wind_speed=wind_speed,
+        wind_direction=wind_direction,
+        altitude=altitude,
+    )
+    rng = MersenneTwister(seed)
+    trace = Matrix{Float64}[]
+    for _ in 1:steps
+        advance!(atm, tel; rng=rng)
+        push!(trace, copy(atm.state.opd))
+    end
+    return trace
+end
+
+function moving_wfs_slope_trace(;
+    seed::Integer=1,
+    steps::Integer=4,
+)
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = Source(band=:I, magnitude=0.0)
+    delta = tel.params.diameter / tel.params.resolution
+    atm = MultiLayerAtmosphere(tel;
+        r0=0.2,
+        L0=25.0,
+        fractional_cn2=[0.7, 0.3],
+        wind_speed=[delta / tel.params.sampling_time, 0.5 * delta / tel.params.sampling_time],
+        wind_direction=[0.0, 90.0],
+        altitude=[0.0, 5000.0],
+    )
+    wfs = ShackHartmann(tel; n_subap=4)
+    rng = MersenneTwister(seed)
+    trace = Vector{Vector{Float64}}(undef, steps)
+    for i in 1:steps
+        advance!(atm, tel; rng=rng)
+        propagate!(atm, tel)
+        measure!(wfs, tel, src)
+        trace[i] = copy(wfs.state.slopes)
+    end
+    return trace
+end
+
+function moving_closed_loop_trace(;
+    seed::Integer=1,
+    steps::Integer=5,
+)
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = Source(band=:I, magnitude=0.0)
+    delta = tel.params.diameter / tel.params.resolution
+    atm = MultiLayerAtmosphere(tel;
+        r0=0.2,
+        L0=25.0,
+        fractional_cn2=[0.7, 0.3],
+        wind_speed=[delta / tel.params.sampling_time, 0.5 * delta / tel.params.sampling_time],
+        wind_direction=[0.0, 90.0],
+        altitude=[0.0, 5000.0],
+    )
+    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
+    wfs = ZernikeWFS(tel; n_subap=4, diffraction_padding=2)
+    sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
+    imat = interaction_matrix(dm, wfs, tel, src; amplitude=1e-8)
+    recon = ModalReconstructor(imat; gain=0.2)
+    wfs_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
+    science_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
+    runtime = ClosedLoopRuntime(sim, recon; rng=MersenneTwister(seed), wfs_detector=wfs_det, science_detector=science_det)
+    prepare!(runtime)
+    delay = VectorDelayLine(runtime.command, 1)
+
+    slope_norms = zeros(Float64, steps)
+    command_norms = zeros(Float64, steps)
+    wfs_energy = zeros(Float64, steps)
+    science_energy = zeros(Float64, steps)
+
+    for i in 1:steps
+        sense!(runtime)
+        reconstruct!(runtime)
+        delayed = copy(shift_delay!(delay, runtime.command))
+        copyto!(runtime.command, delayed)
+        AdaptiveOpticsSim.apply_runtime_command!(runtime)
+        slope_norms[i] = norm(simulation_slopes(runtime))
+        command_norms[i] = norm(simulation_command(runtime))
+        wfs_energy[i] = sum(abs, simulation_wfs_frame(runtime))
+        science_energy[i] = sum(abs, simulation_science_frame(runtime))
+    end
+
+    return (; slope_norms, command_norms, wfs_energy, science_energy)
+end
+
+@test AdaptiveOpticsSim.PROJECT_STATUS == :in_development
+

@@ -32,6 +32,51 @@ Current line counts:
 - [`src/Control/runtime.jl`](../src/Control/runtime.jl): `1123`
 - [`test/runtests.jl`](../test/runtests.jl): `3300`
 
+## Phase 2 implementation status
+
+Phase 2 completed the first internal modularization pass without changing the
+package boundary.
+
+Current entry-point line counts:
+
+- [`src/WFS/shack_hartmann.jl`](../src/WFS/shack_hartmann.jl): `12`
+- [`src/WFS/pyramid.jl`](../src/WFS/pyramid.jl): `11`
+- [`src/WFS/bioedge.jl`](../src/WFS/bioedge.jl): `10`
+- [`src/Control/runtime.jl`](../src/Control/runtime.jl): `12`
+- [`test/runtests.jl`](../test/runtests.jl): `8`
+
+Current split layout:
+
+- Shack-Hartmann:
+  - [`src/WFS/shack_hartmann/setup.jl`](../src/WFS/shack_hartmann/setup.jl)
+  - [`src/WFS/shack_hartmann/measure.jl`](../src/WFS/shack_hartmann/measure.jl)
+  - [`src/WFS/shack_hartmann/stacks.jl`](../src/WFS/shack_hartmann/stacks.jl)
+  - [`src/WFS/shack_hartmann/signals.jl`](../src/WFS/shack_hartmann/signals.jl)
+  - [`src/WFS/shack_hartmann/lgs.jl`](../src/WFS/shack_hartmann/lgs.jl)
+- Pyramid:
+  - [`src/WFS/pyramid/setup.jl`](../src/WFS/pyramid/setup.jl)
+  - [`src/WFS/pyramid/measure.jl`](../src/WFS/pyramid/measure.jl)
+  - [`src/WFS/pyramid/optics.jl`](../src/WFS/pyramid/optics.jl)
+  - [`src/WFS/pyramid/signals.jl`](../src/WFS/pyramid/signals.jl)
+- BioEdge:
+  - [`src/WFS/bioedge/setup.jl`](../src/WFS/bioedge/setup.jl)
+  - [`src/WFS/bioedge/measure.jl`](../src/WFS/bioedge/measure.jl)
+  - [`src/WFS/bioedge/signals.jl`](../src/WFS/bioedge/signals.jl)
+- Runtime:
+  - [`src/Control/runtime/types.jl`](../src/Control/runtime/types.jl)
+  - [`src/Control/runtime/construction.jl`](../src/Control/runtime/construction.jl)
+  - [`src/Control/runtime/outputs.jl`](../src/Control/runtime/outputs.jl)
+  - [`src/Control/runtime/execution.jl`](../src/Control/runtime/execution.jl)
+  - [`src/Control/runtime/timing.jl`](../src/Control/runtime/timing.jl)
+- Tests:
+  - [`test/runtests_head.jl`](../test/runtests_head.jl)
+  - [`test/testsets/core_optics.jl`](../test/testsets/core_optics.jl)
+  - [`test/testsets/atmosphere.jl`](../test/testsets/atmosphere.jl)
+  - [`test/testsets/control_and_runtime.jl`](../test/testsets/control_and_runtime.jl)
+  - [`test/testsets/detectors_and_wfs.jl`](../test/testsets/detectors_and_wfs.jl)
+  - [`test/testsets/calibration_and_analysis.jl`](../test/testsets/calibration_and_analysis.jl)
+  - [`test/testsets/reference_and_tutorials.jl`](../test/testsets/reference_and_tutorials.jl)
+
 ## Inventory
 
 ### 1. `src/WFS/shack_hartmann.jl`
