@@ -538,40 +538,24 @@ function ensure_bioedge_asterism_stack!(wfs::BioEdgeWFS, n_src::Int)
     return wfs.state.asterism_stack
 end
 
-@kernel function bioedge_reduce_asterism_stack_kernel!(out, stack, n_src::Int, n1::Int, n2::Int)
-    i, j = @index(Global, NTuple)
-    if i <= n1 && j <= n2
-        acc = zero(eltype(out))
-        @inbounds for src_idx in 1:n_src
-            acc += stack[i, j, src_idx]
-        end
-        @inbounds out[i, j] = acc
-    end
-end
-
 function accumulate_bioedge_asterism_intensity!(::ScalarCPUStyle, wfs::BioEdgeWFS, tel::Telescope, ast::Asterism)
-    stack = @view ensure_bioedge_asterism_stack!(wfs, length(ast.sources))[:, :, 1:length(ast.sources)]
+    count = length(ast.sources)
+    stack = grouped_stack_view(ensure_bioedge_asterism_stack!(wfs, count), count)
     @inbounds for (src_idx, src) in pairs(ast.sources)
         bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
         copyto!(@view(stack[:, :, src_idx]), wfs.state.intensity)
     end
-    fill!(wfs.state.intensity, zero(eltype(wfs.state.intensity)))
-    @inbounds for src_idx in axes(stack, 3)
-        wfs.state.intensity .+= @view(stack[:, :, src_idx])
-    end
-    return wfs.state.intensity
+    return reduce_grouped_stack!(ScalarCPUStyle(), wfs.state.intensity, stack, count)
 end
 
 function accumulate_bioedge_asterism_intensity!(style::AcceleratorStyle, wfs::BioEdgeWFS, tel::Telescope, ast::Asterism)
-    stack = @view ensure_bioedge_asterism_stack!(wfs, length(ast.sources))[:, :, 1:length(ast.sources)]
+    count = length(ast.sources)
+    stack = grouped_stack_view(ensure_bioedge_asterism_stack!(wfs, count), count)
     @inbounds for (src_idx, src) in pairs(ast.sources)
         bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
         copyto!(@view(stack[:, :, src_idx]), wfs.state.intensity)
     end
-    launch_kernel!(style, bioedge_reduce_asterism_stack_kernel!, wfs.state.intensity, stack,
-        length(ast.sources), size(wfs.state.intensity, 1), size(wfs.state.intensity, 2);
-        ndrange=size(wfs.state.intensity))
-    return wfs.state.intensity
+    return reduce_grouped_stack!(style, wfs.state.intensity, stack, count)
 end
 
 function prepare_bioedge_sampling!(wfs::BioEdgeWFS, tel::Telescope)
@@ -697,4 +681,3 @@ function sample_bioedge_intensity!(wfs::BioEdgeWFS, tel::Telescope, intensity::A
     resize_bioedge_signal_buffers!(wfs, size(frame, 1))
     return frame
 end
-

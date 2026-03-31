@@ -84,11 +84,6 @@ end
 @inline wfs_output_metadata(::CurvatureCountingReadout, wfs::CurvatureWFS) =
     CountingReadoutMetadata(:branch_by_channel, size(wfs.state.camera_frame), length(wfs.state.camera_frame))
 
-@inline runtime_products(runtime::ClosedLoopRuntime) = runtime.products
-@inline requires_runtime_slopes(runtime::ClosedLoopRuntime) = runtime.products.slopes
-@inline requires_runtime_wfs_pixels(runtime::ClosedLoopRuntime) = runtime.products.wfs_pixels && !isnothing(runtime.wfs_detector)
-@inline requires_runtime_science_pixels(runtime::ClosedLoopRuntime) = runtime.products.science_pixels && !isnothing(runtime.science_detector)
-
 simulation_interface(runtime::ClosedLoopRuntime) = SimulationInterface(runtime)
 simulation_interface(interface::SimulationInterface) = interface
 simulation_interface(interface::CompositeSimulationInterface) = interface

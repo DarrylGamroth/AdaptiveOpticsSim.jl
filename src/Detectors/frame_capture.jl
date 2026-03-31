@@ -81,46 +81,29 @@ function randn_frame_noise!(det::Detector, rng::AbstractRNG, out::AbstractMatrix
 end
 
 function capture_signal!(det::Detector{NoiseNone}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
-    fill_frame!(det, psf, exposure_time)
-    apply_signal_defects!(det.params.defect_model, det, exposure_time)
-    apply_sensor_persistence!(det.params.sensor, det, exposure_time)
-    apply_background_flux!(det.background_flux, det, rng, exposure_time)
+    capture_signal_pipeline!(det, psf, rng, exposure_time)
     return nothing
 end
 
 function capture_signal!(det::Detector{NoisePhoton}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
-    fill_frame!(det, psf, exposure_time)
-    apply_signal_defects!(det.params.defect_model, det, exposure_time)
-    apply_sensor_persistence!(det.params.sensor, det, exposure_time)
-    poisson_noise_frame!(det, rng, det.state.frame)
-    apply_background_flux!(det.background_flux, det, rng, exposure_time)
+    capture_signal_pipeline!(det, psf, rng, exposure_time)
     return nothing
 end
 
 function capture_signal!(det::Detector{<:NoiseReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
-    fill_frame!(det, psf, exposure_time)
-    apply_signal_defects!(det.params.defect_model, det, exposure_time)
-    apply_sensor_persistence!(det.params.sensor, det, exposure_time)
-    apply_background_flux!(det.background_flux, det, rng, exposure_time)
+    capture_signal_pipeline!(det, psf, rng, exposure_time)
     return nothing
 end
 
 function capture_signal!(det::Detector{<:NoisePhotonReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
-    fill_frame!(det, psf, exposure_time)
-    apply_signal_defects!(det.params.defect_model, det, exposure_time)
-    apply_sensor_persistence!(det.params.sensor, det, exposure_time)
-    poisson_noise_frame!(det, rng, det.state.frame)
-    apply_background_flux!(det.background_flux, det, rng, exposure_time)
+    capture_signal_pipeline!(det, psf, rng, exposure_time)
     return nothing
 end
 
 apply_background_flux!(::NoBackground, det::Detector, rng::AbstractRNG, exposure_time::Real) = det.state.frame
 
 function apply_background_flux!(background::ScalarBackground, det::Detector, rng::AbstractRNG, exposure_time::Real)
-    fill!(det.state.noise_buffer, background.level * exposure_time)
-    poisson_noise_frame!(det, rng, det.state.noise_buffer)
-    det.state.frame .+= det.state.noise_buffer
-    return det.state.frame
+    return add_poisson_rate!(det.state.frame, det, rng, background.level * exposure_time)
 end
 
 function apply_background_flux!(background::BackgroundFrame, det::Detector, rng::AbstractRNG, exposure_time::Real)
@@ -136,13 +119,7 @@ end
 
 function apply_dark_current!(det::Detector, rng::AbstractRNG, exposure_time::Real)
     dark_signal = effective_dark_current(det) * effective_dark_current_time(det.params.sensor, exposure_time)
-    if dark_signal <= 0
-        return det.state.frame
-    end
-    fill!(det.state.noise_buffer, dark_signal)
-    poisson_noise_frame!(det, rng, det.state.noise_buffer)
-    det.state.frame .+= det.state.noise_buffer
-    return det.state.frame
+    return add_poisson_rate!(det.state.frame, det, rng, dark_signal)
 end
 
 sensor_saturation_limit(det::Detector) = sensor_saturation_limit(det.params.sensor, det)
@@ -174,17 +151,13 @@ apply_readout_noise!(det::Detector{NoiseNone}, rng::AbstractRNG) = det.state.fra
 apply_readout_noise!(det::Detector{NoisePhoton}, rng::AbstractRNG) = det.state.frame
 
 function apply_readout_noise!(det::Detector{<:NoiseReadout}, rng::AbstractRNG)
-    randn_frame_noise!(det, rng, det.state.noise_buffer)
     sigma = effective_readout_sigma(det.params.sensor, det.noise.sigma)
-    det.state.frame .+= sigma .* det.state.noise_buffer
-    return det.state.frame
+    return add_gaussian_noise!(det.state.frame, det, rng, sigma)
 end
 
 function apply_readout_noise!(det::Detector{<:NoisePhotonReadout}, rng::AbstractRNG)
-    randn_frame_noise!(det, rng, det.state.noise_buffer)
     sigma = effective_readout_sigma(det.params.sensor, det.noise.sigma)
-    det.state.frame .+= sigma .* det.state.noise_buffer
-    return det.state.frame
+    return add_gaussian_noise!(det.state.frame, det, rng, sigma)
 end
 
 function apply_quantization!(det::Detector)
@@ -400,20 +373,7 @@ finalize_readout_products!(::FrameSensorType, det::Detector, rng::AbstractRNG, e
     reset_readout_products!(det)
 
 function finalize_capture!(det::Detector, rng::AbstractRNG, exposure_time::Real)
-    apply_dark_current!(det, rng, exposure_time)
-    apply_dark_defects!(det.params.defect_model, det, exposure_time)
-    apply_sensor_statistics!(det.params.sensor, det, rng)
-    apply_frame_nonlinearity!(det.params.nonlinearity_model, det)
-    apply_saturation!(det)
-    apply_pre_readout_gain!(det.params.sensor, det, rng)
-    apply_readout_noise!(det, rng)
-    apply_post_readout_gain!(det.params.sensor, det)
-    finalize_readout_products!(det.params.sensor, det, rng, exposure_time)
-    apply_readout_correction!(det.params.correction_model, det.state.frame, det)
-    apply_quantization!(det)
-    subtract_background_map!(det.background_map, det)
-    update_sensor_persistence!(det.params.sensor, det, exposure_time)
-    return det.state.frame
+    return finalize_readout_pipeline!(det, rng, exposure_time)
 end
 
 function write_output!(det::Detector)

@@ -300,8 +300,7 @@ end
 
 function render_layer!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer, tel::Telescope,
     src::Union{AbstractSource,Nothing}=nothing) where {T<:AbstractFloat}
-    shift_x, shift_y, footprint_scale = layer_source_geometry(src, layer.params.altitude, tel, T)
-    return render_layer!(out, layer, shift_x, shift_y, footprint_scale)
+    return render_layer!(out, layer, layer_render_context(src, layer, tel, T))
 end
 
 function render_layer!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer,
@@ -317,8 +316,7 @@ end
 
 function render_layer_accumulate!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer, tel::Telescope,
     src::Union{AbstractSource,Nothing}=nothing) where {T<:AbstractFloat}
-    shift_x, shift_y, footprint_scale = layer_source_geometry(src, layer.params.altitude, tel, T)
-    return render_layer_accumulate!(out, layer, shift_x, shift_y, footprint_scale)
+    return render_layer_accumulate!(out, layer, layer_render_context(src, layer, tel, T))
 end
 
 function render_layer_accumulate!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer,

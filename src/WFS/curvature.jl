@@ -740,7 +740,8 @@ function curvature_signal!(style::AcceleratorStyle, ::CurvatureCountingReadout, 
 end
 
 function ensure_curvature_calibration!(wfs::CurvatureWFS, tel::Telescope, src::AbstractSource)
-    if wfs.state.calibrated && wfs.state.calibration_wavelength == src.params.wavelength
+    λ = calibration_wavelength(src, typeof(src.params.wavelength))
+    if calibration_matches(wfs.state.calibrated, wfs.state.calibration_wavelength, λ)
         return wfs
     end
     opd_saved = copy(tel.state.opd)
@@ -751,7 +752,7 @@ function ensure_curvature_calibration!(wfs::CurvatureWFS, tel::Telescope, src::A
     copyto!(wfs.state.reference_signal_2d, wfs.state.signal_2d)
     copyto!(tel.state.opd, opd_saved)
     wfs.state.calibrated = true
-    wfs.state.calibration_wavelength = src.params.wavelength
+    wfs.state.calibration_wavelength = λ
     return wfs
 end
 

@@ -749,22 +749,22 @@ Goal:
 
 Tasks:
 
-- `[ ]` `PLAN-17` Extract detector noise/readout pipeline helpers into shared
+- `[x]` `PLAN-17` Extract detector noise/readout pipeline helpers into shared
   infrastructure
   - traces to: `PR-09`
-- `[ ]` `PLAN-18` Extract grouped WFS execution scaffolding shared across SH,
+- `[x]` `PLAN-18` Extract grouped WFS execution scaffolding shared across SH,
   Pyramid, and BioEdge
   - traces to: `PR-10`
-- `[ ]` `PLAN-19` Extract runtime product planning and export helpers from the
+- `[x]` `PLAN-19` Extract runtime product planning and export helpers from the
   runtime/WFS files
   - traces to: `PR-11`
-- `[ ]` `PLAN-20` Extract shared source/field/atmosphere accumulation helpers
+- `[x]` `PLAN-20` Extract shared source/field/atmosphere accumulation helpers
   into one maintained layer
   - traces to: `PR-12`
-- `[ ]` `PLAN-21` Continue moving backend reduction/random-fill behavior into
+- `[x]` `PLAN-21` Continue moving backend reduction/random-fill behavior into
   backend services or extensions
   - traces to: `PR-13`, `PR-34`
-- `[ ]` `PLAN-22` Extract common calibration workflow scaffolding
+- `[x]` `PLAN-22` Extract common calibration workflow scaffolding
   - traces to: `PR-14`
 
 Primary files:
@@ -780,6 +780,22 @@ Verification:
 - duplicated infrastructure code paths are reduced
 - backend policy becomes more centralized
 - measured warmed benchmark regressions are absent or justified
+
+Evidence recorded:
+
+- shared detector pipeline helpers in
+  [`src/Detectors/pipeline.jl`](../src/Detectors/pipeline.jl)
+- shared grouped WFS helpers in [`src/WFS/grouped.jl`](../src/WFS/grouped.jl)
+- shared calibration helpers in
+  [`src/WFS/calibration.jl`](../src/WFS/calibration.jl)
+- shared runtime product planning in
+  [`src/Control/products.jl`](../src/Control/products.jl)
+- shared propagation context helpers in
+  [`src/Optics/propagation_context.jl`](../src/Optics/propagation_context.jl)
+- shared random/noise services in
+  [`src/Core/random_services.jl`](../src/Core/random_services.jl)
+- verification run:
+  `julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'`
 
 ## Phase 4: Validation and Model Correctness Matrix
 
@@ -933,12 +949,12 @@ Verification:
 | PR-06 | Split monolithic test driver | PLAN-02, PLAN-15 | test layout restructure | [x] |
 | PR-07 | Prefer internal modularization before package splitting | PLAN-02, PLAN-16 | modularization inventory and package-boundary notes | [x] |
 | PR-08 | Keep optional integrations out of core | PLAN-10, PLAN-16, PLAN-40 | extension/package boundary docs | [ ] |
-| PR-09 | Extract detector noise/readout helpers | PLAN-03, PLAN-17 | shared detector infrastructure | [ ] |
-| PR-10 | Extract grouped WFS execution skeletons | PLAN-03, PLAN-18 | shared WFS grouping helpers | [ ] |
-| PR-11 | Extract runtime product planning/export helpers | PLAN-03, PLAN-14, PLAN-19 | shared runtime export layer | [ ] |
-| PR-12 | Extract shared source/field/atmosphere accumulation helpers | PLAN-03, PLAN-20 | shared propagation helpers | [ ] |
-| PR-13 | Centralize backend reductions/random-fill services | PLAN-03, PLAN-21 | backend-service isolation | [ ] |
-| PR-14 | Extract calibration scaffolding | PLAN-03, PLAN-22 | shared calibration orchestration | [ ] |
+| PR-09 | Extract detector noise/readout helpers | PLAN-03, PLAN-17 | shared detector infrastructure | [x] |
+| PR-10 | Extract grouped WFS execution skeletons | PLAN-03, PLAN-18 | shared WFS grouping helpers | [x] |
+| PR-11 | Extract runtime product planning/export helpers | PLAN-03, PLAN-14, PLAN-19 | shared runtime export layer | [x] |
+| PR-12 | Extract shared source/field/atmosphere accumulation helpers | PLAN-03, PLAN-20 | shared propagation helpers | [x] |
+| PR-13 | Centralize backend reductions/random-fill services | PLAN-03, PLAN-21 | backend-service isolation | [x] |
+| PR-14 | Extract calibration scaffolding | PLAN-03, PLAN-22 | shared calibration orchestration | [x] |
 | PR-15 | Build formal validation matrix | PLAN-04, PLAN-23, PLAN-27 | model validity matrix | [ ] |
 | PR-16 | Distinguish validation classes | PLAN-04, PLAN-24 | validation taxonomy doc | [ ] |
 | PR-17 | Add model validity matrix doc | PLAN-04, PLAN-23, PLAN-27 | validity doc with evidence links | [ ] |
@@ -958,7 +974,7 @@ Verification:
 | PR-31 | Make backend validation first-class in tests | PLAN-15 | backend tests in tree | [ ] |
 | PR-32 | Add clearer optional CUDA coverage | PLAN-15 | optional CUDA test entry | [ ] |
 | PR-33 | Separate backend smoke, functional tests, and benchmarks | PLAN-15, PLAN-32 | test/benchmark separation | [ ] |
-| PR-34 | Isolate backend-specific execution policy further | PLAN-21 | reduced model-local backend branching | [ ] |
+| PR-34 | Isolate backend-specific execution policy further | PLAN-21 | reduced model-local backend branching | [x] |
 | PR-35 | Avoid additional OOPAO parity chasing | PLAN-38 | roadmap language and decisions | [ ] |
 | PR-36 | Use SPECULA as stronger breadth reference | PLAN-26, PLAN-39 | roadmap and targeted baselines | [ ] |
 | PR-37 | Revisit controller/process breadth later | PLAN-39 | future-direction roadmap | [ ] |
@@ -981,7 +997,7 @@ Verification:
 
 ### Depends on structural cleanup
 
-- `[ ]` PLAN-17 through PLAN-22
+- `[x]` PLAN-17 through PLAN-22
 
 ### Depends on validation and benchmark harness design
 

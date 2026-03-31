@@ -378,12 +378,11 @@ function zernike_signal!(style::AcceleratorStyle, wfs::ZernikeWFS, tel::Telescop
 end
 
 function ensure_zernike_calibration!(wfs::ZernikeWFS, tel::Telescope, src::AbstractSource)
-    λ = eltype(wfs.state.slopes)(wavelength(src))
-    if wfs.state.calibrated && wfs.state.calibration_wavelength == λ
+    λ = calibration_wavelength(src, eltype(wfs.state.slopes))
+    if calibration_matches(wfs.state.calibrated, wfs.state.calibration_wavelength, λ)
         return wfs
     end
-    opd_saved = copy(tel.state.opd)
-    fill!(tel.state.opd, zero(eltype(tel.state.opd)))
+    opd_saved = save_zero_opd!(tel)
     zernike_pupil_intensity!(wfs, tel, src)
     sample_zernike_frame!(wfs.state.camera_frame, wfs.state.nominal_frame, wfs, wfs.state.pupil_intensity, tel)
     fill!(wfs.state.reference_signal_2d, zero(eltype(wfs.state.reference_signal_2d)))
@@ -392,7 +391,7 @@ function ensure_zernike_calibration!(wfs::ZernikeWFS, tel::Telescope, src::Abstr
     copyto!(wfs.state.reference_frame, wfs.state.camera_frame)
     fill!(wfs.state.signal_2d, zero(eltype(wfs.state.signal_2d)))
     fill!(wfs.state.slopes, zero(eltype(wfs.state.slopes)))
-    copyto!(tel.state.opd, opd_saved)
+    restore_opd!(tel, opd_saved)
     wfs.state.calibrated = true
     wfs.state.calibration_wavelength = λ
     return wfs

@@ -47,11 +47,7 @@ end
 
 function apply_sensor_statistics!(sensor::EMCCDSensor, det::Detector, rng::AbstractRNG)
     rate = effective_cic_rate(det) * det.params.integration_time
-    if rate > zero(rate)
-        fill!(det.state.noise_buffer, rate)
-        poisson_noise!(rng, det.state.noise_buffer)
-        det.state.frame .+= det.state.noise_buffer
-    end
+    add_poisson_rate!(det.state.frame, det, rng, rate)
     return det.state.frame
 end
 

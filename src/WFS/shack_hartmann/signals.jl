@@ -700,15 +700,15 @@ function sh_reference_signal!(wfs::ShackHartmann, tel::Telescope, src::AbstractS
 end
 
 function ensure_sh_calibration!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
-    λ = eltype(wfs.state.slopes)(wavelength(src))
-    sig = source_measurement_signature(src)
-    if wfs.state.calibrated && wfs.state.calibration_wavelength == λ && wfs.state.calibration_signature == sig
+    λ = calibration_wavelength(src, eltype(wfs.state.slopes))
+    sig = calibration_signature(src)
+    if calibration_matches(wfs.state.calibrated, wfs.state.calibration_wavelength, λ,
+        wfs.state.calibration_signature, sig)
         return wfs
     end
-    opd_saved = copy(tel.state.opd)
-    fill!(tel.state.opd, zero(eltype(tel.state.opd)))
+    opd_saved = save_zero_opd!(tel)
     sh_reference_signal!(wfs, tel, src)
-    copyto!(tel.state.opd, opd_saved)
+    restore_opd!(tel, opd_saved)
 
     T = eltype(wfs.state.slopes)
     n = tel.params.resolution
@@ -724,7 +724,7 @@ function ensure_sh_calibration!(wfs::ShackHartmann, tel::Telescope, src::Abstrac
     if !isfinite(wfs.state.slopes_units) || wfs.state.slopes_units == zero(T)
         wfs.state.slopes_units = one(T)
     end
-    copyto!(tel.state.opd, opd_saved)
+    restore_opd!(tel, opd_saved)
     wfs.state.calibrated = true
     wfs.state.calibration_wavelength = λ
     wfs.state.calibration_signature = sig
@@ -735,4 +735,3 @@ function ensure_sh_calibration!(wfs::ShackHartmann, tel::Telescope, src::Abstrac
         signature=wfs.state.calibration_signature)
     return wfs
 end
-

@@ -2,7 +2,7 @@
 
 Date: 2026-03-31
 
-Status: active
+Status: implemented in part
 
 Plan traceability:
 
@@ -21,6 +21,23 @@ The goal is not to refactor the code in this document. The goal is to:
 - point to the current occurrences
 - propose a shared abstraction and likely owning module
 - record the likely payoff and abstraction risk
+
+Phase 3 implementation status:
+
+- `RI-01` implemented via shared detector pipeline helpers in
+  [`src/Detectors/pipeline.jl`](../src/Detectors/pipeline.jl)
+- `RI-02` implemented via grouped WFS helpers in
+  [`src/WFS/grouped.jl`](../src/WFS/grouped.jl)
+- `RI-03` implemented via shared runtime product planning in
+  [`src/Control/products.jl`](../src/Control/products.jl)
+- `RI-04` implemented via shared propagation context helpers in
+  [`src/Optics/propagation_context.jl`](../src/Optics/propagation_context.jl)
+- `RI-05` implemented in part through shared reduction infrastructure in
+  [`src/Core/reductions.jl`](../src/Core/reductions.jl) and grouped WFS helpers
+- `RI-06` implemented in part through shared random/noise services in
+  [`src/Core/random_services.jl`](../src/Core/random_services.jl)
+- `RI-07` implemented via shared calibration scaffolding in
+  [`src/WFS/calibration.jl`](../src/WFS/calibration.jl)
 
 ## Inventory
 
@@ -65,6 +82,11 @@ Expected payoff:
 
 - high
 
+Implementation note:
+
+- shared detector pipeline helpers now own reusable scalar capture/readout
+  staging in [`src/Detectors/pipeline.jl`](../src/Detectors/pipeline.jl)
+
 ### `RI-02`: Grouped WFS accumulation skeleton
 
 Duplicated pattern:
@@ -100,6 +122,11 @@ Expected payoff:
 
 - high
 
+Implementation note:
+
+- shared grouped reduction/view helpers now live in
+  [`src/WFS/grouped.jl`](../src/WFS/grouped.jl)
+
 ### `RI-03`: Runtime product planning and export policy
 
 Duplicated pattern:
@@ -133,6 +160,11 @@ Risk of abstraction:
 Expected payoff:
 
 - high
+
+Implementation note:
+
+- runtime product requirements and lowering now live in
+  [`src/Control/products.jl`](../src/Control/products.jl)
 
 ### `RI-04`: Source / field / atmosphere accumulation pipeline
 
@@ -170,6 +202,11 @@ Expected payoff:
 
 - medium-high
 
+Implementation note:
+
+- source-aware layer render context and shared render entry points now live in
+  [`src/Optics/propagation_context.jl`](../src/Optics/propagation_context.jl)
+
 ### `RI-05`: Backend reduction services
 
 Duplicated pattern:
@@ -204,6 +241,11 @@ Expected payoff:
 
 - high
 
+Implementation note:
+
+- grouped WFS reduction kernels were moved onto shared helpers; masked reduction
+  services remain centered in [`src/Core/reductions.jl`](../src/Core/reductions.jl)
+
 ### `RI-06`: Backend random-fill and noise services
 
 Duplicated pattern:
@@ -237,6 +279,12 @@ Risk of abstraction:
 Expected payoff:
 
 - high
+
+Implementation note:
+
+- random fill and Poisson services were moved out of `utils.jl` into
+  [`src/Core/random_services.jl`](../src/Core/random_services.jl), with backend
+  extensions remaining responsible for specializations
 
 ### `RI-07`: WFS calibration orchestration skeleton
 
@@ -306,6 +354,11 @@ Risk of abstraction:
 Expected payoff:
 
 - medium-high
+
+Implementation note:
+
+- shared calibration signature/wavelength/reference helpers now live in
+  [`src/WFS/calibration.jl`](../src/WFS/calibration.jl)
 
 ### `RI-09`: Runtime grouped execution orchestration
 

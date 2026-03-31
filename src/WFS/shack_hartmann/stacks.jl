@@ -66,17 +66,6 @@ end
     end
 end
 
-@kernel function reduce_asterism_intensity_stack_kernel!(intensity_stack, source_stack, n_spots::Int, n_src::Int, pad::Int)
-    x, y, idx = @index(Global, NTuple)
-    if x <= pad && y <= pad && idx <= n_spots
-        acc = zero(eltype(intensity_stack))
-        @inbounds for src_idx in 1:n_src
-            acc += source_stack[x, y, idx + (src_idx - 1) * n_spots]
-        end
-        @inbounds intensity_stack[x, y, idx] = acc
-    end
-end
-
 @kernel function sh_sample_spot_stack_kernel!(spot_cube, intensity_stack, valid_mask,
     binning::Int, n_sub::Int, n_binned::Int, n_out::Int)
     idx, u, v = @index(Global, NTuple)
@@ -162,8 +151,8 @@ function compute_intensity_asterism_stack!(style::AcceleratorStyle, wfs::ShackHa
     execute_fft_plan!(fft_view, wfs.state.fft_asterism_plan)
     phase = begin_kernel_phase(style)
     queue_kernel!(phase, complex_abs2_stack_kernel!, intensity_view, fft_view, pad, total; ndrange=size(intensity_view))
-    queue_kernel!(phase, reduce_asterism_intensity_stack_kernel!, wfs.state.intensity_stack, intensity_view,
-        n_spots, n_src, pad; ndrange=size(wfs.state.intensity_stack))
+    queue_kernel!(phase, reduce_grouped_blocks_kernel!, wfs.state.intensity_stack, intensity_view,
+        n_spots, n_src, size(wfs.state.intensity_stack, 1), size(wfs.state.intensity_stack, 2); ndrange=size(wfs.state.intensity_stack))
     finish_kernel_phase!(phase)
     return wfs.state.intensity_stack
 end
@@ -201,8 +190,8 @@ function compute_intensity_spectral_stack!(style::AcceleratorStyle, wfs::ShackHa
     execute_fft_plan!(fft_view, wfs.state.fft_asterism_plan)
     phase = begin_kernel_phase(style)
     queue_kernel!(phase, complex_abs2_stack_kernel!, intensity_view, fft_view, pad, total; ndrange=size(intensity_view))
-    queue_kernel!(phase, reduce_asterism_intensity_stack_kernel!, wfs.state.intensity_stack, intensity_view,
-        n_spots, n_src, pad; ndrange=size(wfs.state.intensity_stack))
+    queue_kernel!(phase, reduce_grouped_blocks_kernel!, wfs.state.intensity_stack, intensity_view,
+        n_spots, n_src, size(wfs.state.intensity_stack, 1), size(wfs.state.intensity_stack, 2); ndrange=size(wfs.state.intensity_stack))
     finish_kernel_phase!(phase)
     return wfs.state.intensity_stack
 end

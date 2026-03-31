@@ -126,11 +126,7 @@ end
 
 function apply_sensor_statistics!(sensor::HgCdTeAvalancheArraySensor, det::Detector, rng::AbstractRNG)
     rate = effective_glow_rate(det) * effective_sensor_glow_time(sensor, det.params.integration_time)
-    if rate > zero(rate)
-        fill!(det.state.noise_buffer, rate)
-        poisson_noise_frame!(det, rng, det.state.noise_buffer)
-        det.state.frame .+= det.state.noise_buffer
-    end
+    add_poisson_rate!(det.state.frame, det, rng, rate)
     return apply_avalanche_excess_noise!(sensor.excess_noise_factor, det, rng)
 end
 
@@ -161,10 +157,7 @@ _batched_post_readout_gain!(::HgCdTeAvalancheArraySensor, det::Detector, cube::A
 function _sample_frame_read!(sensor::HgCdTeAvalancheArraySensor, det::Detector, target::AbstractMatrix, baseline::AbstractMatrix,
     sigma, rng::AbstractRNG)
     copyto!(target, baseline)
-    if sigma > zero(sigma)
-        randn_frame_noise!(det, rng, det.state.noise_buffer)
-        target .+= sigma .* det.state.noise_buffer
-    end
+    add_gaussian_noise!(target, det, rng, sigma)
     target .*= det.params.gain
     apply_readout_correction!(det.params.correction_model, target, det)
     return target

@@ -25,15 +25,6 @@ abstract type AbstractControlSimulation end
 abstract type AbstractExecutionPolicy end
 abstract type AbstractRuntimeProfile end
 
-struct RuntimeProductRequirements
-    slopes::Bool
-    wfs_pixels::Bool
-    science_pixels::Bool
-end
-
-RuntimeProductRequirements(; slopes::Bool=true, wfs_pixels::Bool=false, science_pixels::Bool=false) =
-    RuntimeProductRequirements(slopes, wfs_pixels, science_pixels)
-
 struct SequentialExecution <: AbstractExecutionPolicy end
 struct ThreadedExecution <: AbstractExecutionPolicy end
 struct BackendStreamExecution <: AbstractExecutionPolicy end
@@ -49,8 +40,6 @@ struct RuntimeLatencyModel
 end
 
 default_runtime_profile() = ScientificRuntimeProfile()
-default_runtime_products(; wfs_detector=nothing, science_detector=nothing) =
-    RuntimeProductRequirements(slopes=true, wfs_pixels=!isnothing(wfs_detector), science_pixels=!isnothing(science_detector))
 
 function RuntimeLatencyModel(;
     measurement_delay_frames::Integer=0,
@@ -263,4 +252,3 @@ end
 @inline function apply_command!(coefs::AbstractVector{T}, cmd::AbstractVector{T}, sign::T) where {T<:AbstractFloat}
     apply_command!(execution_style(coefs), coefs, cmd, sign)
 end
-

@@ -1,6 +1,7 @@
 using Random
 
 include("interface.jl")
+include("pipeline.jl")
 include("ccd.jl")
 include("cmos.jl")
 include("emccd.jl")

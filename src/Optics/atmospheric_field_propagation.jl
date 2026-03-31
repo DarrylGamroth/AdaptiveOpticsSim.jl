@@ -140,9 +140,9 @@ end
 
 function _render_layer_phase!(out::AbstractMatrix{T}, layer::AbstractAtmosphereLayer, tel::Telescope,
     src::AbstractSource, model::AbstractAtmosphericFieldModel, λ::T) where {T<:AbstractFloat}
-    shift_x, shift_y, footprint_scale = layer_source_geometry(src, layer_altitude(layer), tel, T)
+    ctx = layer_render_context(src, layer, tel, T)
     shift_scale = _chromatic_shift_scale(model, λ)
-    return render_layer!(out, layer, shift_x * shift_scale, shift_y * shift_scale, footprint_scale)
+    return render_layer!(out, layer, ctx.shift_x * shift_scale, ctx.shift_y * shift_scale, ctx.footprint_scale)
 end
 
 function _propagate_slice_geometric!(slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,

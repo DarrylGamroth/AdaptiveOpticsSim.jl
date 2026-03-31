@@ -100,21 +100,20 @@ function pyramid_normalization(::IncidenceFluxNormalization, ::PyramidWFS, ::Tel
 end
 
 function ensure_pyramid_calibration!(wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
-    λ = eltype(wfs.state.slopes)(wavelength(src))
-    sig = source_measurement_signature(src)
-    if wfs.state.calibrated && wfs.state.calibration_wavelength == λ && wfs.state.calibration_signature == sig
+    λ = calibration_wavelength(src, eltype(wfs.state.slopes))
+    sig = calibration_signature(src)
+    if calibration_matches(wfs.state.calibrated, wfs.state.calibration_wavelength, λ,
+        wfs.state.calibration_signature, sig)
         return wfs
     end
-    opd_saved = copy(tel.state.opd)
-    fill!(tel.state.opd, zero(eltype(tel.state.opd)))
+    opd_saved = save_zero_opd!(tel)
     select_pyramid_valid_i4q!(wfs, tel, src)
     pyramid_intensity!(wfs.state.intensity, wfs, tel, src)
     frame = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
     fill!(wfs.state.reference_signal_2d, zero(eltype(wfs.state.reference_signal_2d)))
     pyramid_signal!(wfs, tel, frame, src)
-    copyto!(wfs.state.reference_signal_2d, wfs.state.signal_2d)
-    fill!(wfs.state.slopes, zero(eltype(wfs.state.slopes)))
-    copyto!(tel.state.opd, opd_saved)
+    store_reference_signal!(wfs.state.reference_signal_2d, wfs.state.signal_2d, wfs.state.slopes)
+    restore_opd!(tel, opd_saved)
     wfs.state.calibrated = true
     wfs.state.calibration_wavelength = λ
     wfs.state.calibration_signature = sig
