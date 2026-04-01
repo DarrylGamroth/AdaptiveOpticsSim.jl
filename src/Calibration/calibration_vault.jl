@@ -32,6 +32,9 @@ struct CalibrationVault{T<:AbstractFloat,
     build_backend::B
 end
 
+@inline forward_operator(vault::CalibrationVault) = vault.D
+@inline inverse_operator_matrix(vault::CalibrationVault) = vault.M
+
 """
     CalibrationVault(D; n_trunc=0, invert=true, policy=..., build_backend=...)
 

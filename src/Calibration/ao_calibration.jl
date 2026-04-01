@@ -20,6 +20,11 @@ struct AOCalibration{T<:AbstractFloat,
     calibration::C
 end
 
+@inline modal_to_command(calib::AOCalibration) = calib.M2C
+@inline sampled_basis(calib::AOCalibration) = calib.basis
+@inline modal_projector(calib::AOCalibration) = calib.projector
+@inline calibration_vault(calib::AOCalibration) = calib.calibration
+
 """
     ao_calibration(tel, dm, wfs; ...)
 

@@ -189,7 +189,9 @@ export InteractionMatrix, interaction_matrix
 export CalibrationVault, with_truncation
 export ModalBasis, KLBasisMethod, KLDMModes, KLHHtPSD
 export dm_basis, kl_modal_basis, modal_basis, basis_from_m2c, basis_projector
-export AOCalibration, ao_calibration
+export modal_to_command, sampled_basis, modal_projector
+export AOCalibration, ao_calibration, calibration_vault
+export forward_operator, inverse_operator_matrix
 export fitting_error, fitting_error_dm
 export GainSensingCamera
 export calibrate!, reset_calibration!, compute_optical_gains!

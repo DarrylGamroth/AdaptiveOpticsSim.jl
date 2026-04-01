@@ -110,24 +110,31 @@ end
 function assert_interaction_matrix_contract(imat, expected_rows::Int, expected_cols::Int, amplitude::Real)
     @test imat isa InteractionMatrix
     @test size(imat.matrix) == (expected_rows, expected_cols)
+    @test forward_operator(imat) === imat.matrix
     @test imat.amplitude ≈ amplitude
 end
 
 function assert_calibration_vault_contract(vault, forward::AbstractMatrix; inverted::Bool=true)
     @test vault isa CalibrationVault
     @test vault.D === forward
+    @test forward_operator(vault) === forward
     if inverted
+        @test inverse_operator_matrix(vault) === vault.M
         @test !isnothing(vault.M)
         @test size(vault.M, 2) == size(forward, 1)
         @test length(vault.singular_values) == min(size(forward)...)
         @test vault.effective_rank >= 0
     else
+        @test isnothing(inverse_operator_matrix(vault))
         @test isnothing(vault.M)
         @test isempty(vault.singular_values)
     end
 end
 
 function assert_modal_basis_contract(basis::ModalBasis, n_commands::Int, n_modes::Int)
+    @test modal_to_command(basis) === basis.M2C
+    @test sampled_basis(basis) === basis.basis
+    @test modal_projector(basis) === basis.projector
     @test size(basis.M2C) == (n_commands, n_modes)
     @test size(basis.basis, 2) == n_modes
     if !isnothing(basis.projector)
@@ -137,6 +144,10 @@ function assert_modal_basis_contract(basis::ModalBasis, n_commands::Int, n_modes
 end
 
 function assert_ao_calibration_contract(calib::AOCalibration, n_commands::Int, n_modes::Int)
+    @test modal_to_command(calib) === calib.M2C
+    @test sampled_basis(calib) === calib.basis
+    @test modal_projector(calib) === calib.projector
+    @test calibration_vault(calib) === calib.calibration
     @test size(calib.M2C) == (n_commands, n_modes)
     @test size(calib.basis, 2) == n_modes
     @test calib.calibration isa CalibrationVault

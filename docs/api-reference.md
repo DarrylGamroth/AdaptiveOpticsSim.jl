@@ -574,17 +574,23 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 
 - `interaction_matrix(...)` is the maintained linearized WFS-calibration entry
   point and must return an `InteractionMatrix` with a stored calibration
-  `amplitude`.
+  `amplitude`. `forward_operator(imat)` is the long-form accessor for the
+  stored matrix.
 - `CalibrationVault(D; ...)` is the maintained inverse-storage workflow and
   should retain the forward operator `D`, the selected inverse representation
   when requested, and inversion diagnostics such as singular values, condition
-  number, effective rank, and truncation count.
+  number, effective rank, and truncation count. `forward_operator(vault)` and
+  `inverse_operator_matrix(vault)` are the preferred long-form accessors for
+  the stored operators.
 - `modal_basis(...)` is the maintained modal-basis workflow and must return a
   `ModalBasis` with consistent `M2C`, sampled basis vectors, and optional
-  projector.
+  projector. `modal_to_command(basis)`, `sampled_basis(basis)`, and
+  `modal_projector(basis)` provide the long-form result accessors.
 - `ao_calibration(...)` is the maintained packaged AO-calibration workflow and
   should return an `AOCalibration` bundling basis operators with the measured
-  `CalibrationVault`.
+  `CalibrationVault`. `modal_to_command(calib)`, `sampled_basis(calib)`,
+  `modal_projector(calib)`, and `calibration_vault(calib)` provide the
+  preferred long-form accessors for the result fields.
 - `AdaptiveOpticsSim.compute_meta_sensitivity_matrix(...)` and
   `AdaptiveOpticsSim.SPRINT(...)` are the maintained
   misregistration-identification workflows and should retain the reference

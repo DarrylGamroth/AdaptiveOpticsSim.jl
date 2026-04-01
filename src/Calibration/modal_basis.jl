@@ -37,6 +37,10 @@ struct ModalBasis{T<:AbstractFloat,
     projector::Union{Nothing,P}
 end
 
+@inline modal_to_command(basis::ModalBasis) = basis.M2C
+@inline sampled_basis(basis::ModalBasis) = basis.basis
+@inline modal_projector(basis::ModalBasis) = basis.projector
+
 function dm_basis(dm::DeformableMirror, tel::Telescope)
     n = tel.params.resolution
     n_modes = size(dm.state.modes, 2)

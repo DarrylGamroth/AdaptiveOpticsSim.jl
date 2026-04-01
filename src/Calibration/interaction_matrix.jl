@@ -19,6 +19,8 @@ struct InteractionMatrix{T<:AbstractFloat,M<:AbstractMatrix{T}}
     amplitude::T
 end
 
+@inline forward_operator(imat::InteractionMatrix) = imat.matrix
+
 @inline function _measure_for_calibration!(wfs::AbstractWFS, tel::Telescope, src::Union{Nothing,AbstractSource})
     if src === nothing
         return measure!(wfs, tel)

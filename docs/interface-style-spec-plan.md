@@ -273,6 +273,14 @@ Status:
   - `compute_meta_sensitivity_matrix`
   - `SPRINT`
   - `LiFT`
+- long-form result accessors now exist for the main modal-calibration surfaces:
+  - `forward_operator(imat)`
+  - `forward_operator(vault)`
+  - `inverse_operator_matrix(vault)`
+  - `modal_to_command(basis/calib)`
+  - `sampled_basis(basis/calib)`
+  - `modal_projector(basis/calib)`
+  - `calibration_vault(calib)`
 - conformance coverage exists in the `Calibration workflow contracts` testset
   in [runtests.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/test/runtests.jl)
 - broader problem/algorithm/result decomposition is still open
