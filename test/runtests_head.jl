@@ -29,8 +29,6 @@ function assert_source_interface(src)
     @test hasmethod(wavelength, Tuple{typeof(src)})
 end
 
-include("optional_gpu_backends.jl")
-
 function assert_atmosphere_interface(atm, tel)
     @test applicable(advance!, atm, tel)
     @test applicable(propagate!, atm, tel)
@@ -283,4 +281,3 @@ function moving_closed_loop_trace(;
 end
 
 @test AdaptiveOpticsSim.PROJECT_STATUS == :in_development
-

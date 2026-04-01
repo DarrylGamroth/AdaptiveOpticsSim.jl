@@ -69,6 +69,8 @@ If you are:
   - optional integration and package-boundary rules
 - [`future-platform-direction.md`](./future-platform-direction.md)
   - post-cleanup expansion policy
+- [`backend-validation-guide.md`](./backend-validation-guide.md)
+  - functional vs backend smoke vs benchmark separation
 
 ## Active Implementation Plans
 

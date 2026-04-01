@@ -739,6 +739,14 @@ Phase 2 evidence summary:
   [`docs/modularization-inventory.md`](./modularization-inventory.md)
 - optional integration/package-boundary decision recorded in
   [`docs/optional-integration-boundaries.md`](./optional-integration-boundaries.md)
+- optional backend validation is now first-class in the test tree through:
+  - [`test/optional_amdgpu_backends.jl`](../test/optional_amdgpu_backends.jl)
+  - [`test/optional_cuda_backends.jl`](../test/optional_cuda_backends.jl)
+  - shared scaffolding in
+    [`test/backend_optional_common.jl`](../test/backend_optional_common.jl)
+- functional tests, optional backend smoke, and benchmark/profile evidence are
+  now documented separately in
+  [`docs/backend-validation-guide.md`](./backend-validation-guide.md)
 - full suite passed with `julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'`
 
 ## Phase 3: Reusable Runtime and Backend Building Blocks
@@ -1003,9 +1011,9 @@ Verification:
 | PR-28 | Create maintainer architecture guide | PLAN-34 | architecture guide | [x] |
 | PR-29 | Expand synthesis-oriented docs | PLAN-35, PLAN-37 | stronger user/maintainer docs | [x] |
 | PR-30 | Add end-to-end runtime/dataflow guide | PLAN-36 | runtime/dataflow doc | [x] |
-| PR-31 | Make backend validation first-class in tests | PLAN-15 | backend tests in tree | [ ] |
-| PR-32 | Add clearer optional CUDA coverage | PLAN-15 | optional CUDA test entry | [ ] |
-| PR-33 | Separate backend smoke, functional tests, and benchmarks | PLAN-15, PLAN-32 | test/benchmark separation | [ ] |
+| PR-31 | Make backend validation first-class in tests | PLAN-15 | backend tests in tree | [x] |
+| PR-32 | Add clearer optional CUDA coverage | PLAN-15 | optional CUDA test entry | [x] |
+| PR-33 | Separate backend smoke, functional tests, and benchmarks | PLAN-15, PLAN-32 | test/benchmark separation | [x] |
 | PR-34 | Isolate backend-specific execution policy further | PLAN-21 | reduced model-local backend branching | [x] |
 | PR-35 | Avoid additional OOPAO parity chasing | PLAN-38 | roadmap language and decisions | [x] |
 | PR-36 | Use SPECULA as stronger breadth reference | PLAN-26, PLAN-39 | roadmap and targeted baselines | [x] |
