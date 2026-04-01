@@ -72,6 +72,8 @@ If you are:
   - maintained accuracy note for the shared `K_{5/6}` covariance helper
 - [`atmosphere-statistics-validation.md`](./atmosphere-statistics-validation.md)
   - maintained finite/infinite atmosphere statistics artifact and limitations
+- [`detector-validation.md`](./detector-validation.md)
+  - maintained detector-family fixture artifact and scope limits
 - [`optional-integration-boundaries.md`](./optional-integration-boundaries.md)
   - optional integration and package-boundary rules
 - [`future-platform-direction.md`](./future-platform-direction.md)

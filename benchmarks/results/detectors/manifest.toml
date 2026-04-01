@@ -1,0 +1,4 @@
+[[artifacts]]
+purpose = "detector-family validation artifact for PVP-04"
+id = "DET-VAL-2026-04-01"
+path = "2026-04-01-phase1-pvp04.toml"

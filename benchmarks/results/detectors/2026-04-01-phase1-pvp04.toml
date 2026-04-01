@@ -1,0 +1,44 @@
+artifact_id = "DET-VAL-2026-04-01"
+generated_on = "2026-04-01"
+
+[interpretation]
+apd_counting_chain_ok = true
+ingaas_persistence_ok = true
+cmos_structured_output_ok = true
+hgcdte_avalanche_ok = true
+ccd_emccd_gain_ok = true
+
+[scope]
+families = ["ccd", "emccd", "cmos", "ingaas", "hgcdte_avalanche_array", "apd"]
+artifact_kind = "detector_fixture_validation"
+rng_policy = "fixed_seed_mersenne_twister"
+
+[cases.ingaas_persistence]
+persisted_mean = 2.0
+persisted_sum = 32.0
+contract_holds = true
+
+[cases.hgcdte_avalanche]
+excess_std = 6.319274261294794
+contract_holds = true
+gain_error_max = 0.0
+
+[cases.apd_counting_chain]
+contract_holds = true
+expected_mean = 0.7333333333333336
+error_max = 0.0
+mean = 0.7333333333333336
+
+[cases.cmos_structured_output]
+contract_holds = true
+pixel_1_2 = 1.25
+pixel_2_3 = 10.5
+pixel_1_3 = 14.5
+mean = 7.375
+pixel_1_1 = 2.25
+
+[cases.ccd_emccd_gain]
+contract_holds = true
+gain_error_max = 0.0
+ccd_mean = -1.6144714053485099
+emccd_mean = -0.161447140534851
