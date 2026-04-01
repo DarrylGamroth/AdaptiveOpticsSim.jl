@@ -219,16 +219,16 @@ Objective:
 
 Detailed work:
 
-- `[ ]` count and record the current exported top-level surface from
+- `[x]` count and record the current exported top-level surface from
   [`src/AdaptiveOpticsSim.jl`](../src/AdaptiveOpticsSim.jl)
-- `[ ]` classify exports into:
+- `[x]` classify exports into:
   - end-user stable workflow API
   - advanced/expert simulation API
   - backend/infrastructure hooks that should likely stop being exported
-- `[ ]` identify names that should remain exported for workflow ergonomics even
+- `[x]` identify names that should remain exported for workflow ergonomics even
   if they are not mathematically fundamental
-- `[ ]` identify names that are currently undocumented but effectively public
-- `[ ]` create a proposed “target export surface” column for later Phase 1 use
+- `[x]` identify names that are currently undocumented but effectively public
+- `[x]` create a proposed “target export surface” column for later Phase 1 use
 
 Deliverable artifact:
 
@@ -272,17 +272,17 @@ Objective:
 
 Detailed work:
 
-- `[ ]` record file size baselines for the largest source and test files
-- `[ ]` identify responsibility clusters inside:
+- `[x]` record file size baselines for the largest source and test files
+- `[x]` identify responsibility clusters inside:
   - [`src/WFS/shack_hartmann.jl`](../src/WFS/shack_hartmann.jl)
   - [`src/WFS/pyramid.jl`](../src/WFS/pyramid.jl)
   - [`src/WFS/bioedge.jl`](../src/WFS/bioedge.jl)
   - [`src/Control/runtime.jl`](../src/Control/runtime.jl)
   - [`test/runtests.jl`](../test/runtests.jl)
-- `[ ]` propose concrete target file/module boundaries for each
-- `[ ]` identify high-risk split points where cyclic dependencies or implicit
+- `[x]` propose concrete target file/module boundaries for each
+- `[x]` identify high-risk split points where cyclic dependencies or implicit
   invariants may exist
-- `[ ]` identify files that should *not* be split yet
+- `[x]` identify files that should *not* be split yet
 
 Deliverable artifact:
 
@@ -327,13 +327,13 @@ Objective:
 
 Detailed work:
 
-- `[ ]` inspect detector noise/readout flows for repeated orchestration
-- `[ ]` inspect SH/Pyramid/BioEdge grouped execution paths for repeated
+- `[x]` inspect detector noise/readout flows for repeated orchestration
+- `[x]` inspect SH/Pyramid/BioEdge grouped execution paths for repeated
   grouping, buffering, normalization, and export behavior
-- `[ ]` inspect runtime export/product planning duplication
-- `[ ]` inspect source/field/atmosphere propagation accumulation patterns
-- `[ ]` inspect backend-specific reduction/random-fill policy duplication
-- `[ ]` inspect calibration workflow orchestration duplication
+- `[x]` inspect runtime export/product planning duplication
+- `[x]` inspect source/field/atmosphere propagation accumulation patterns
+- `[x]` inspect backend-specific reduction/random-fill policy duplication
+- `[x]` inspect calibration workflow orchestration duplication
 
 Deliverable artifact:
 
@@ -380,21 +380,21 @@ Objective:
 
 Detailed work:
 
-- `[ ]` enumerate maintained model families:
+- `[x]` enumerate maintained model families:
   - atmosphere
   - field/propagation
   - detectors
   - WFS families
   - runtime/control
   - tomography/calibration
-- `[ ]` map each family to current evidence classes:
+- `[x]` map each family to current evidence classes:
   - analytic checks
   - reference bundle checks
   - backend parity checks
   - benchmark evidence
-- `[ ]` mark evidence gaps explicitly
-- `[ ]` identify where OOPAO is the current baseline
-- `[ ]` identify where SPECULA should become the targeted baseline
+- `[x]` mark evidence gaps explicitly
+- `[x]` identify where OOPAO is the current baseline
+- `[x]` identify where SPECULA should become the targeted baseline
 
 Deliverable artifact:
 
@@ -428,20 +428,20 @@ Objective:
 
 Detailed work:
 
-- `[ ]` inspect relevant benchmark/runtime assets in:
+- `[x]` inspect relevant benchmark/runtime assets in:
   - [`../REVOLT`](../REVOLT)
   - [`../AdaptiveOpticsSim.jl-revolt-real`](../AdaptiveOpticsSim.jl-revolt-real)
   - local `scripts/profile_*`
-- `[ ]` identify scenario families that exist in at least two of:
+- `[x]` identify scenario families that exist in at least two of:
   - AdaptiveOpticsSim
   - OOPAO / REVOLT-OOPAO
   - SPECULA / REVOLT-SPECULA
-- `[ ]` identify configuration compatibility constraints:
+- `[x]` identify configuration compatibility constraints:
   - atmosphere
   - detector family
   - WFS type
   - controller/reconstructor assumptions
-- `[ ]` define which scenarios are good compact, medium, and representative
+- `[x]` define which scenarios are good compact, medium, and representative
   seeds
 
 Deliverable artifact:
