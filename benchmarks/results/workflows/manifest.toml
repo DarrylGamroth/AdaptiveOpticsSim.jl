@@ -1,0 +1,4 @@
+[[artifacts]]
+purpose = "LiFT and gain-sensing workflow profile artifact for PVP-05"
+id = "WORKFLOW-VAL-2026-04-01"
+path = "2026-04-01-phase1-pvp05.toml"

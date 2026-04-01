@@ -1,0 +1,31 @@
+artifact_id = "WORKFLOW-VAL-2026-04-01"
+generated_on = "2026-04-01"
+
+[scope]
+families = ["lift", "gain_sensing_camera"]
+backend = "cpu"
+artifact_kind = "workflow_profile_validation"
+
+[cases.lift_reconstruct]
+scenario = "tutorial_like_modal_psf_fit"
+build_time_ns = 256135026
+n_modes = 4
+max_coeff_error = 2.5e-8
+img_resolution = 48
+reconstruct_p95_ns = 1.113762e6
+reconstruct_mean_ns = 1.095747e6
+reconstruct_alloc_bytes = 7584
+
+[cases.gain_sensing_camera]
+first_calibration_time_ns = 2060430896
+measurement_alloc_bytes = 80
+measurement_p95_ns = 142075.0
+calibration_p95_ns = 522006.0
+scenario = "tutorial_like_pyramid_gain_sensing"
+build_time_ns = 1419714328
+calibration_alloc_bytes = 332248
+measurement_mean_ns = 136109.35
+calibration_mean_ns = 483927.3
+n_modes = 4
+mean_optical_gain = 0.9986264554732334
+frame_size = [72, 72]
