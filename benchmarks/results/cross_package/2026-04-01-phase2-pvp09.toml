@@ -1,0 +1,287 @@
+contract_path = "benchmarks/contracts/cross_package.toml"
+generated_at = "2026-04-01T16:10:02.505"
+status = "active"
+version = 1
+
+[contract_metadata]
+description = "Cross-package benchmark scenario contracts for AdaptiveOpticsSim, OOPAO, and SPECULA-aligned surfaces."
+status = "active"
+
+[scenarios.cp01_compact_reference]
+class = "compact"
+description = "Frozen compact reference fidelity surfaces from the committed OOPAO and SPECULA bundles."
+family = "CP-01"
+kind = "reference_fidelity"
+status = "passed"
+
+    [scenarios.cp01_compact_reference.baselines.oopao]
+    case_count = 17
+    failed_case_count = 0
+    l2_rel_error = 0.00025046040611362297
+    max_abs_error = 3.485259829762459e6
+    max_rel_error = 49.495899173022295
+    root = "test/reference_data"
+    status = "passed"
+
+    [scenarios.cp01_compact_reference.baselines.specula]
+    case_count = 7
+    failed_case_count = 0
+    l2_rel_error = 0.0
+    max_abs_error = 0.0
+    max_rel_error = 0.0
+    root = "test/reference_data_specula"
+    status = "passed"
+
+[scenarios.cp02_revolt_sh_medium]
+class = "medium"
+description = "REVOLT-like Shack-Hartmann HIL runtime comparison between main and revolt-real, with normalized Julia-side comparability fields and explicit known differences."
+family = "CP-02"
+kind = "runtime_profile"
+known_differences = ["pupil_resolution", "wfs_frame_response", "detector_output_shape", "dm_command_layout", "science_detector_payload"]
+normalized_fields = ["backend", "response_mode", "n_subap", "wfs_sensor"]
+status = "passed"
+
+    [scenarios.cp02_revolt_sh_medium.comparison]
+    alloc_ratio_main_to_revolt_real = 1.458156575395295
+    backend_match = true
+    frame_rate_ratio_main_to_revolt_real = 5.466093937626966
+    mean_time_ratio_main_to_revolt_real = 0.18294599606426393
+    n_subap_match = true
+    response_mode_match = true
+    wfs_sensor_match = true
+
+    [scenarios.cp02_revolt_sh_medium.implementations.main]
+    actuator_command_length = 277
+    ambient_temperature_K = "none"
+    backend = "cpu"
+    build_time_ns = 1327396447
+    command_map_alloc_bytes = 0
+    command_map_mean_ns = 23153.333333333332
+    command_map_p95_ns = 59331
+    config_dir = "benchmarks/assets/revolt_like"
+    cooling_setpoint_K = "none"
+    cwd = "."
+    detector_temperature_K = "none"
+    dm_apply_alloc_bytes = 0
+    dm_apply_mean_ns = 140506.16666666666
+    dm_apply_p95_ns = 363600
+    dm_grid_command_length = 361
+    dm_layout_shape = "(19, 19)"
+    effective_frame_response = "gaussian"
+    extrapolated_command_length = 277
+    frame_rate_hz = 197.77314036388282
+    label = "adaptiveopticssim_main"
+    mosaic_alloc_bytes = 120992
+    mosaic_mean_ns = 4.986223666666667e6
+    mosaic_p95_ns = 5281252
+    n_subap = 16
+    profile_root = "revolt_like_hil_runtime_profile"
+    pupil_resolution = 352
+    response_mode = "default"
+    roi_size = 22
+    sense_alloc_bytes = 120992
+    sense_mean_ns = 4.835388166666667e6
+    sense_p95_ns = 5213396
+    sensor = "cmos"
+    spot_cube_shape = "(256, 22, 22)"
+    status = "passed"
+    thermal_mode = "none"
+    thermal_model = "none"
+    tiled_wfs_frame_shape = "(352, 352)"
+    total_alloc_bytes = 120992
+    total_mean_ns = 5.056298333333333e6
+    total_p95_ns = 5281403
+    wfs_sensor = "cmos"
+
+    [scenarios.cp02_revolt_sh_medium.implementations.revolt_real]
+    atmosphere_alloc_bytes = 0
+    atmosphere_mean_ns = 6.609358666666667e6
+    atmosphere_p95_ns = 6833376
+    backend = "cpu"
+    build_time_ns = 4135851625
+    cwd = "../AdaptiveOpticsSim.jl-revolt-real"
+    detector_output_shape = "(30, 30)"
+    dm_apply_alloc_bytes = 0
+    dm_apply_mean_ns = 1.3102017333333334e7
+    dm_apply_p95_ns = 13141069
+    dm_command_length = 256
+    dm_grid_shape = "(16, 16)"
+    effective_calibration_magnitude = 2.252575
+    effective_sky_magnitude = 4.50515
+    frame_rate_hz = 36.181804158628026
+    label = "adaptiveopticssim_revolt_real"
+    model = "shwfs"
+    n_subap = 16
+    profile_root = "revolt_hil_runtime_profile"
+    pupil_resolution = 480
+    response_mode = "default"
+    science_detector = "cred2"
+    science_detector_nominal_resolution = 480
+    science_detector_sensor = "ingaas"
+    sense_alloc_bytes = 82976
+    sense_mean_ns = 2.7571930833333332e7
+    sense_p95_ns = 27762808
+    slope_length = 512
+    source_band = "R"
+    status = "passed"
+    total_alloc_bytes = 82976
+    total_mean_ns = 2.7638201666666668e7
+    total_p95_ns = 28005763
+    wfs_combined_frame_shape = "none"
+    wfs_detector = "cblue1"
+    wfs_detector_nominal_resolution = 440
+    wfs_detector_sensor = "cmos"
+    wfs_family = "shack_hartmann"
+    wfs_frame_response = "gaussian"
+    wfs_frame_shape = "(256, 30, 30)"
+    wfs_read_cube_shape = "none"
+    wfs_reference_cube_shape = "none"
+    wfs_reference_frame_shape = "none"
+    wfs_sensor = "cmos"
+    wfs_signal_cube_shape = "none"
+    wfs_signal_frame_shape = "none"
+
+    [scenarios.cp02_revolt_sh_medium.implementations.revolt_specula]
+    cwd = "../REVOLT/Python/specula"
+    error = """failed process: Process(setenv(`python3 revolt.py`; dir=\"/home/dgamroth/workspaces/codex/REVOLT/Python/specula\"), ProcessExited(1)) [1]\n"""
+    label = "revolt_specula"
+    optional = true
+    status = "skipped"
+
+[scenarios.cp03_revolt_pwfs_representative]
+class = "representative"
+description = "REVOLT-like representative PWFS modal SCAO comparison between main and revolt-real on the unmodulated representative contract."
+family = "CP-03"
+kind = "runtime_profile"
+known_differences = ["gain_detector_runtime_path", "reconstructor_build_method", "timing_breakdown_implementation"]
+normalized_fields = ["backend", "response_mode", "model", "wfs_family", "n_subap", "wfs_detector_sensor", "science_detector_sensor", "pupil_resolution", "wfs_frame_response", "detector_output_shape"]
+status = "passed"
+
+    [scenarios.cp03_revolt_pwfs_representative.comparison]
+    alloc_ratio_main_to_revolt_real = 1.4583333333333333
+    backend_match = true
+    detector_output_shape_match = true
+    frame_rate_ratio_main_to_revolt_real = 1.026767827796018
+    mean_time_ratio_main_to_revolt_real = 0.973930009227621
+    model_match = true
+    n_subap_match = true
+    pupil_resolution_match = true
+    response_mode_match = true
+    science_detector_sensor_match = true
+    wfs_detector_sensor_match = true
+    wfs_family_match = true
+    wfs_frame_response_match = true
+
+    [scenarios.cp03_revolt_pwfs_representative.implementations.main]
+    atmosphere_alloc_bytes = 0
+    atmosphere_mean_ns = 4.5571965e6
+    atmosphere_p95_ns = 4970880
+    backend = "cpu"
+    build_time_ns = 18761480558
+    cwd = "."
+    detector_output_shape = "(48, 48)"
+    dm_apply_alloc_bytes = 0
+    dm_apply_mean_ns = 4.4357295e6
+    dm_apply_p95_ns = 4563198
+    dm_command_length = 256
+    dm_grid_shape = "(16, 16)"
+    effective_calibration_magnitude = 3.252575
+    effective_sky_magnitude = 3.252575
+    frame_rate_hz = 17.90367402637471
+    gain_detector = "cs165cu"
+    gain_detector_nominal_resolution = 1080
+    gain_detector_sensor = "cmos"
+    label = "adaptiveopticssim_main"
+    model = "pwfs_unmodulated"
+    n_subap = 20
+    profile_root = "revolt_pwfs_runtime_profile"
+    pupil_resolution = 480
+    response_mode = "default"
+    science_detector = "cred2"
+    science_detector_nominal_resolution = 480
+    science_detector_sensor = "ingaas"
+    sense_alloc_bytes = 560
+    sense_mean_ns = 5.47962525e7
+    sense_p95_ns = 54807544
+    slope_length = 744
+    source_band = "R"
+    status = "passed"
+    total_alloc_bytes = 560
+    total_mean_ns = 5.58544575e7
+    total_p95_ns = 56149034
+    wfs_combined_frame_shape = "none"
+    wfs_detector = "ixon"
+    wfs_detector_nominal_resolution = 128
+    wfs_detector_sensor = "emccd"
+    wfs_family = "pyramid"
+    wfs_frame_response = "none"
+    wfs_frame_shape = "(48, 48)"
+    wfs_read_cube_shape = "none"
+    wfs_reference_cube_shape = "none"
+    wfs_reference_frame_shape = "none"
+    wfs_signal_cube_shape = "none"
+    wfs_signal_frame_shape = "none"
+
+    [scenarios.cp03_revolt_pwfs_representative.implementations.revolt_real]
+    atmosphere_alloc_bytes = 0
+    atmosphere_mean_ns = 6.82814e6
+    atmosphere_p95_ns = 6954341
+    backend = "cpu"
+    build_time_ns = 4866983207
+    cwd = "../AdaptiveOpticsSim.jl-revolt-real"
+    detector_output_shape = "(48, 48)"
+    dm_apply_alloc_bytes = 0
+    dm_apply_mean_ns = 1.31331255e7
+    dm_apply_p95_ns = 13185168
+    dm_command_length = 256
+    dm_grid_shape = "(16, 16)"
+    effective_calibration_magnitude = 3.252575
+    effective_sky_magnitude = 3.252575
+    frame_rate_hz = 17.436925409715435
+    gain_detector = "cs165cu"
+    gain_detector_nominal_resolution = 1080
+    gain_detector_sensor = "cmos"
+    label = "adaptiveopticssim_revolt_real"
+    model = "pwfs_unmodulated"
+    n_subap = 20
+    profile_root = "revolt_hil_runtime_profile"
+    pupil_resolution = 480
+    response_mode = "default"
+    science_detector = "cred2"
+    science_detector_nominal_resolution = 480
+    science_detector_sensor = "ingaas"
+    sense_alloc_bytes = 384
+    sense_mean_ns = 5.70743395e7
+    sense_p95_ns = 57512870
+    slope_length = 744
+    source_band = "R"
+    status = "passed"
+    total_alloc_bytes = 384
+    total_mean_ns = 5.734956e7
+    total_p95_ns = 57991165
+    wfs_combined_frame_shape = "none"
+    wfs_detector = "ixon"
+    wfs_detector_nominal_resolution = 128
+    wfs_detector_sensor = "emccd"
+    wfs_family = "pyramid"
+    wfs_frame_response = "none"
+    wfs_frame_shape = "(48, 48)"
+    wfs_read_cube_shape = "none"
+    wfs_reference_cube_shape = "none"
+    wfs_reference_frame_shape = "none"
+    wfs_signal_cube_shape = "none"
+    wfs_signal_frame_shape = "none"
+
+[scenarios.cp05_specula_atmo_field_medium]
+class = "medium"
+description = "SPECULA-aligned atmospheric-field and curvature-through-atmosphere benchmark family; contract recorded, execution deferred until an external runnable scenario is normalized into the harness."
+family = "CP-05"
+kind = "runtime_profile"
+skip_reason = "SPECULA provides AtmoPropagation configs/tests but no maintained executable benchmark runner with comparable atmospheric-field and curvature runtime outputs in the current neighboring trees"
+status = "deferred"
+
+[summary]
+deferred = 1
+failed = 0
+passed = 3
+skipped = 0

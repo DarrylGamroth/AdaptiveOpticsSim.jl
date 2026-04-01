@@ -42,6 +42,10 @@ The current maintained ladder is:
     `revolt-real`
   - normalization rules and accepted differences are documented in
     [`revolt-pwfs-benchmark-contract.md`](./revolt-pwfs-benchmark-contract.md)
+- `cp05_specula_atmo_field_medium`
+  - SPECULA-aligned atmospheric-field benchmark family
+  - currently contract-only/deferred with scope note in
+    [`specula-atmo-field-benchmark-scope.md`](./specula-atmo-field-benchmark-scope.md)
 
 ## Runner
 

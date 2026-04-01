@@ -56,6 +56,9 @@ If you are:
 - [`revolt-pwfs-benchmark-contract.md`](./revolt-pwfs-benchmark-contract.md)
   - normalization rules and accepted differences for the maintained `CP-03`
     REVOLT-like Pyramid comparison
+- [`specula-atmo-field-benchmark-scope.md`](./specula-atmo-field-benchmark-scope.md)
+  - current scope and defer conditions for the `CP-05`
+    SPECULA-aligned atmospheric-field benchmark family
 - [`future-platform-direction.md`](./future-platform-direction.md)
   - post-review platform direction and scope guardrails
 - [`post-review-platform-plan.md`](./post-review-platform-plan.md)

@@ -69,8 +69,9 @@ These are the concrete surfaces that justify this plan.
 - `CP-03`: REVOLT-like PWFS representative comparison is now first-class in
   `main`, but external SPECULA execution is still not normalized into the
   harness
-- `CP-05`: atmospheric field propagation / curvature-through-atmosphere has no
-  frozen external SPECULA-aligned benchmark contract yet
+- `CP-05`: atmospheric field propagation / curvature-through-atmosphere now has
+  an explicit contract/defer record, but still no maintained external runnable
+  benchmark participant
 
 ### Capability-Selection Gaps
 
@@ -273,7 +274,9 @@ Preferred evidence order:
 - `[x]` `PVP-08` first-class `CP-03` benchmark family
   - archived in
     [2026-04-01-phase2-pvp08.toml](../benchmarks/results/cross_package/2026-04-01-phase2-pvp08.toml)
-- `[ ]` `PVP-09` `CP-05` benchmark family or scoped defer
+- `[x]` `PVP-09` `CP-05` benchmark family or scoped defer
+  - deferred with scope note in
+    [specula-atmo-field-benchmark-scope.md](./specula-atmo-field-benchmark-scope.md)
 - `[ ]` `PVP-10` benchmark-results manifest and guide update
 
 ### Phase 3

@@ -128,3 +128,11 @@ science_detector_sensor = "science_detector_sensor"
 pupil_resolution = "pupil_resolution"
 wfs_frame_response = "wfs_frame_response"
 detector_output_shape = "detector_output_shape"
+
+[scenarios.cp05_specula_atmo_field_medium]
+family = "CP-05"
+class = "medium"
+kind = "runtime_profile"
+status = "contract_only"
+description = "SPECULA-aligned atmospheric-field and curvature-through-atmosphere benchmark family; contract recorded, execution deferred until an external runnable scenario is normalized into the harness."
+skip_reason = "SPECULA provides AtmoPropagation configs/tests but no maintained executable benchmark runner with comparable atmospheric-field and curvature runtime outputs in the current neighboring trees"

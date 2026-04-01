@@ -225,8 +225,10 @@ Recommended class:
 
 Current comparability limits:
 
-- no frozen SPECULA bundle yet
-- scenario equivalence is still conceptual rather than encoded
+- SPECULA-targeted validation bundles exist, but there is still no maintained
+  executable benchmark runner for this family in the neighboring trees
+- the current scope/defer record is documented in
+  [specula-atmo-field-benchmark-scope.md](./specula-atmo-field-benchmark-scope.md)
 
 ## Candidate Ladder
 
