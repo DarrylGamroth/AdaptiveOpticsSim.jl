@@ -70,6 +70,8 @@ If you are:
   - SPECULA-targeted frozen bundle policy and provenance
 - [`phase-statistics-accuracy.md`](./phase-statistics-accuracy.md)
   - maintained accuracy note for the shared `K_{5/6}` covariance helper
+- [`atmosphere-statistics-validation.md`](./atmosphere-statistics-validation.md)
+  - maintained finite/infinite atmosphere statistics artifact and limitations
 - [`optional-integration-boundaries.md`](./optional-integration-boundaries.md)
   - optional integration and package-boundary rules
 - [`future-platform-direction.md`](./future-platform-direction.md)

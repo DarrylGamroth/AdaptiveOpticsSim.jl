@@ -1,0 +1,38 @@
+artifact_id = "ATM-STAT-2026-04-01"
+generated_on = "2026-04-01"
+
+[interpretation]
+windowed_stationarity_close = true
+finite_periodicity_exact = true
+infinite_nonperiodic_after_wrap = true
+infinite_nonperiodic_long_run = true
+finite_infinite_single_layer_close = true
+
+[scope]
+sampling_time_s = 0.001
+finite_model = "MultiLayerAtmosphere"
+resolution = 16
+r0_m = 0.2
+diameter_m = 8.0
+L0_m = 25.0
+infinite_model = "InfiniteMultiLayerAtmosphere"
+
+[ensemble_std]
+finite_single_layer = 0.1186199240799813
+uneven_ratio = 0.9689498294380449
+infinite_uneven_two_layer = 0.1073086409730575
+single_layer_ratio = 0.9336320725378746
+infinite_single_layer = 0.11074736556307828
+infinite_equal_two_layer = 0.10575280686420888
+equal_ratio = 0.9549013317519985
+
+[stationarity]
+late_to_early_ratio = 1.0057100734275737
+early_window_std = 0.09222158816585495
+late_window_std = 0.09274818020588944
+
+[periodicity]
+infinite_period_corr = -0.32552788909479285
+finite_period_exact = true
+screen_period_steps = 48
+infinite_long_corr = -0.11522698479565403

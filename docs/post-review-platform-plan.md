@@ -257,7 +257,7 @@ Preferred evidence order:
 ### Phase 1
 
 - `[x]` `PVP-01` phase-statistics accuracy evidence
-- `[ ]` `PVP-02` atmosphere statistics artifact or defer note
+- `[x]` `PVP-02` atmosphere statistics artifact or defer note
 - `[ ]` `PVP-03` atmospheric-field external reference artifact or defer note
 - `[ ]` `PVP-04` detector-family validation artifact
 - `[ ]` `PVP-05` LiFT/gain-sensing runtime evidence

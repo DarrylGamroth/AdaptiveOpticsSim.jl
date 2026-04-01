@@ -1,0 +1,4 @@
+[[artifacts]]
+purpose = "finite/infinite atmosphere statistics artifact for PVP-02"
+id = "ATM-STAT-2026-04-01"
+path = "2026-04-01-phase1-pvp02.toml"
