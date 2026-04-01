@@ -175,10 +175,11 @@ Recommended class:
 
 Current comparability limits:
 
-- this family exists concretely in `revolt-real` and REVOLT/SPECULA, but not
-  yet as a first-class main-repo benchmark harness
-- controller/modal basis/calibration alignment still needs a frozen benchmark
-  contract
+- this family is now first-class in `main` for the Julia-to-Julia comparison,
+  with the current normalization rules documented in
+  [revolt-pwfs-benchmark-contract.md](./revolt-pwfs-benchmark-contract.md)
+- controller/modal basis/calibration alignment still needs a stronger external
+  frozen or executable benchmark surface
 
 ### Family `CP-04`: Multi-source / multi-WFS grouped execution
 

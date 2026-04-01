@@ -53,6 +53,9 @@ If you are:
 - [`revolt-sh-benchmark-contract.md`](./revolt-sh-benchmark-contract.md)
   - normalization rules and accepted differences for the maintained `CP-02`
     REVOLT-like Shack-Hartmann comparison
+- [`revolt-pwfs-benchmark-contract.md`](./revolt-pwfs-benchmark-contract.md)
+  - normalization rules and accepted differences for the maintained `CP-03`
+    REVOLT-like Pyramid comparison
 - [`future-platform-direction.md`](./future-platform-direction.md)
   - post-review platform direction and scope guardrails
 - [`post-review-platform-plan.md`](./post-review-platform-plan.md)

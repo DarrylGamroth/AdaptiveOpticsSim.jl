@@ -66,8 +66,9 @@ These are the concrete surfaces that justify this plan.
 
 - `CP-02`: REVOLT-like SH runtime exists, but normalization and archived evidence
   can be stronger
-- `CP-03`: REVOLT-like PWFS representative comparison is not yet first-class in
-  `main`
+- `CP-03`: REVOLT-like PWFS representative comparison is now first-class in
+  `main`, but external SPECULA execution is still not normalized into the
+  harness
 - `CP-05`: atmospheric field propagation / curvature-through-atmosphere has no
   frozen external SPECULA-aligned benchmark contract yet
 
@@ -269,7 +270,9 @@ Preferred evidence order:
 - `[x]` `PVP-07` stronger `CP-02` archived baseline
   - normalized contract and archived result in
     [2026-04-01-phase2-pvp07.toml](../benchmarks/results/cross_package/2026-04-01-phase2-pvp07.toml)
-- `[ ]` `PVP-08` first-class `CP-03` benchmark family
+- `[x]` `PVP-08` first-class `CP-03` benchmark family
+  - archived in
+    [2026-04-01-phase2-pvp08.toml](../benchmarks/results/cross_package/2026-04-01-phase2-pvp08.toml)
 - `[ ]` `PVP-09` `CP-05` benchmark family or scoped defer
 - `[ ]` `PVP-10` benchmark-results manifest and guide update
 

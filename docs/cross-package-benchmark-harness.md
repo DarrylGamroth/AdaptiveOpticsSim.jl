@@ -38,8 +38,10 @@ The current maintained ladder is:
   - normalization rules and accepted differences are documented in
     [`revolt-sh-benchmark-contract.md`](./revolt-sh-benchmark-contract.md)
 - `cp03_revolt_pwfs_representative`
-  - representative contract-only PWFS comparison, intentionally deferred until
-    the main-repo scenario normalization is first-class
+  - representative REVOLT-like PWFS comparison between `main` and
+    `revolt-real`
+  - normalization rules and accepted differences are documented in
+    [`revolt-pwfs-benchmark-contract.md`](./revolt-pwfs-benchmark-contract.md)
 
 ## Runner
 

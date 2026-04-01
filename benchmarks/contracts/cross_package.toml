@@ -75,6 +75,56 @@ optional = true
 family = "CP-03"
 class = "representative"
 kind = "runtime_profile"
-status = "contract_only"
-description = "REVOLT-like representative PWFS modal SCAO comparison; contract defined, execution deferred until main-repo scenario normalization is complete."
-skip_reason = "main-repo PWFS REVOLT-aligned builder is not yet a first-class maintained scenario runner"
+description = "REVOLT-like representative PWFS modal SCAO comparison between main and revolt-real on the unmodulated representative contract."
+comparison_fields = ["backend", "response_mode", "model", "wfs_family", "n_subap", "wfs_detector_sensor", "science_detector_sensor", "pupil_resolution", "wfs_frame_response", "detector_output_shape"]
+normalized_fields = ["backend", "response_mode", "model", "wfs_family", "n_subap", "wfs_detector_sensor", "science_detector_sensor", "pupil_resolution", "wfs_frame_response", "detector_output_shape"]
+known_differences = [
+    "gain_detector_runtime_path",
+    "reconstructor_build_method",
+    "timing_breakdown_implementation",
+]
+runtime_metrics = ["build_time_ns", "total_mean_ns", "total_p95_ns", "frame_rate_hz", "total_alloc_bytes"]
+
+[scenarios.cp03_revolt_pwfs_representative.main]
+label = "adaptiveopticssim_main"
+cwd = "."
+command = ["julia", "--project=.", "--startup-file=no", "scripts/profile_revolt_pwfs_runtime.jl", "cpu", "pwfs_unmod", "default", "2", "1"]
+profile_root = "revolt_pwfs_runtime_profile"
+mean_key = "total_mean_ns"
+p95_key = "total_p95_ns"
+frame_rate_key = "frame_rate_hz"
+alloc_key = "total_alloc_bytes"
+
+[scenarios.cp03_revolt_pwfs_representative.main.field_aliases]
+backend = "backend"
+response_mode = "response_mode"
+model = "model"
+wfs_family = "wfs_family"
+n_subap = "n_subap"
+wfs_detector_sensor = "wfs_detector_sensor"
+science_detector_sensor = "science_detector_sensor"
+pupil_resolution = "pupil_resolution"
+wfs_frame_response = "wfs_frame_response"
+detector_output_shape = "detector_output_shape"
+
+[scenarios.cp03_revolt_pwfs_representative.revolt_real]
+label = "adaptiveopticssim_revolt_real"
+cwd = "../AdaptiveOpticsSim.jl-revolt-real"
+command = ["julia", "--project=.", "--startup-file=no", "scripts/profile_revolt_hil_runtime.jl", "cpu", "pwfs_unmod", "default", "2", "1"]
+profile_root = "revolt_hil_runtime_profile"
+mean_key = "total_mean_ns"
+p95_key = "total_p95_ns"
+frame_rate_key = "frame_rate_hz"
+alloc_key = "total_alloc_bytes"
+
+[scenarios.cp03_revolt_pwfs_representative.revolt_real.field_aliases]
+backend = "backend"
+response_mode = "response_mode"
+model = "model"
+wfs_family = "wfs_family"
+n_subap = "n_subap"
+wfs_detector_sensor = "wfs_detector_sensor"
+science_detector_sensor = "science_detector_sensor"
+pupil_resolution = "pupil_resolution"
+wfs_frame_response = "wfs_frame_response"
+detector_output_shape = "detector_output_shape"

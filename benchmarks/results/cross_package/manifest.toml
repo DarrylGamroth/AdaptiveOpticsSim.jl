@@ -1,4 +1,4 @@
-latest_result = "benchmarks/results/cross_package/2026-04-01-phase2-pvp07.toml"
-results = ["benchmarks/results/cross_package/2026-03-31-phase5-baseline.toml", "benchmarks/results/cross_package/2026-04-01-phase2-pvp07.toml"]
+latest_result = "benchmarks/results/cross_package/2026-04-01-phase2-pvp08.toml"
+results = ["benchmarks/results/cross_package/2026-03-31-phase5-baseline.toml", "benchmarks/results/cross_package/2026-04-01-phase2-pvp07.toml", "benchmarks/results/cross_package/2026-04-01-phase2-pvp08.toml"]
 status = "active"
 version = 1
