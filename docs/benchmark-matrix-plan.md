@@ -371,6 +371,8 @@ does need consistent, defensible scale points.
   - current model-tomography profiling sizes
 - `representative`
   - KAPA-like or instrument-scale cases already used for reference validation
+  - currently deferred as a routine maintained artifact; see
+    [tomography-benchmark-scope.md](./tomography-benchmark-scope.md)
 
 ## Backend Questions This Matrix Should Answer
 

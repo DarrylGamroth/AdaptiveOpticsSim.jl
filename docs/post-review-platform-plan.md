@@ -261,7 +261,8 @@ Preferred evidence order:
 - `[x]` `PVP-03` atmospheric-field external reference artifact or defer note
 - `[x]` `PVP-04` detector-family validation artifact
 - `[x]` `PVP-05` LiFT/gain-sensing runtime evidence
-- `[ ]` `PVP-06` tomography representative evidence or defer note
+- `[x]` `PVP-06` tomography representative evidence or defer note
+  - deferred with scope note in [tomography-benchmark-scope.md](./tomography-benchmark-scope.md)
 
 ### Phase 2
 
