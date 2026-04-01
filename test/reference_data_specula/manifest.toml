@@ -6,6 +6,48 @@ bundle_kind = "contract_bundle"
 baseline = "specula"
 description = "Frozen SPECULA-targeted reference cases derived from maintained local scenarios aligned to SPECULA test contracts."
 
+[cases.atmospheric_chromatic_intensity]
+rtol = 1.0e-10
+data = "atmospheric_chromatic_intensity.txt"
+shape = [48, 48]
+specula_test = "test_atmo_propagation.py::TestAtmoPropagation::test_atmo_chromatic_shift_switches"
+kind = "atmospheric_intensity"
+atol = 1.0e-10
+baseline = "specula"
+specula_contract = "spectral atmospheric propagation with a chromatic reference wavelength yields a stable broad-band intensity surface"
+
+    [cases.atmospheric_chromatic_intensity.telescope]
+    central_obstruction = 0.0
+    resolution = 24
+    sampling_time = 0.001
+    diameter = 8.0
+
+    [cases.atmospheric_chromatic_intensity.atmosphere]
+    kind = "finite"
+    altitude = [0.0, 10000.0]
+    fractional_cn2 = [0.4, 0.6]
+    advance_seed = 19
+    r0 = 0.2
+    wind_speed = [5.0, 9.0]
+    advance_steps = 1
+    L0 = 25.0
+    wind_direction = [0.0, 120.0]
+
+    [cases.atmospheric_chromatic_intensity.source]
+    kind = "ngs"
+    coordinates = [12.0, 35.0]
+    magnitude = 0.0
+    band = "I"
+
+        [cases.atmospheric_chromatic_intensity.source.spectrum]
+        wavelengths = [7.9e-7, 1.215e-6]
+        weights = [0.6, 0.4]
+
+    [cases.atmospheric_chromatic_intensity.propagation]
+    kind = "geometric"
+    zero_padding = 2
+    chromatic_reference_wavelength = 5.89e-7
+
 [cases.curvature_quadratic_signal]
 rtol = 1.0e-10
 data = "curvature_quadratic_signal.txt"
@@ -151,3 +193,78 @@ specula_contract = "flat wavefront produces zero curvature signal after referenc
     kind = "ngs"
     magnitude = 0.0
     band = "I"
+
+[cases.atmospheric_fresnel_intensity]
+rtol = 1.0e-10
+data = "atmospheric_fresnel_intensity.txt"
+shape = [48, 48]
+specula_test = "test_physical_propagation.py::TestPhysicalPropagation::test_physicalProp"
+kind = "atmospheric_intensity"
+atol = 1.0e-10
+baseline = "specula"
+specula_contract = "layered Fresnel atmospheric propagation yields a stable detector-plane intensity surface for a deterministic phase screen"
+
+    [cases.atmospheric_fresnel_intensity.telescope]
+    central_obstruction = 0.0
+    resolution = 24
+    sampling_time = 0.001
+    diameter = 8.0
+
+    [cases.atmospheric_fresnel_intensity.atmosphere]
+    kind = "finite"
+    altitude = [3500.0]
+    fractional_cn2 = [1.0]
+    advance_seed = 11
+    r0 = 0.2
+    wind_speed = [6.0]
+    advance_steps = 1
+    L0 = 25.0
+    wind_direction = [45.0]
+
+    [cases.atmospheric_fresnel_intensity.source]
+    kind = "ngs"
+    coordinates = [3.0, 70.0]
+    magnitude = 0.0
+    band = "I"
+
+    [cases.atmospheric_fresnel_intensity.propagation]
+    kind = "layered_fresnel"
+    band_limit_factor = 1.0
+    zero_padding = 2
+
+[cases.atmospheric_geometric_intensity]
+rtol = 1.0e-10
+data = "atmospheric_geometric_intensity.txt"
+shape = [48, 48]
+specula_test = "test_atmo_propagation.py::TestAtmoPropagation::test_quarter_array_extraction"
+kind = "atmospheric_intensity"
+atol = 1.0e-10
+baseline = "specula"
+specula_contract = "deterministic geometric layered propagation yields a stable off-axis atmospheric intensity surface"
+
+    [cases.atmospheric_geometric_intensity.telescope]
+    central_obstruction = 0.0
+    resolution = 24
+    sampling_time = 0.001
+    diameter = 8.0
+
+    [cases.atmospheric_geometric_intensity.atmosphere]
+    kind = "finite"
+    altitude = [0.0, 5000.0]
+    fractional_cn2 = [0.7, 0.3]
+    advance_seed = 7
+    r0 = 0.2
+    wind_speed = [8.0, 4.0]
+    advance_steps = 1
+    L0 = 25.0
+    wind_direction = [0.0, 90.0]
+
+    [cases.atmospheric_geometric_intensity.source]
+    kind = "ngs"
+    coordinates = [4.0, 30.0]
+    magnitude = 0.0
+    band = "I"
+
+    [cases.atmospheric_geometric_intensity.propagation]
+    kind = "geometric"
+    zero_padding = 2

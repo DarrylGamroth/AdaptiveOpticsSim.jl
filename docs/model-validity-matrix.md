@@ -76,7 +76,7 @@ Validation classes are intentionally distinct:
 | --- | --- | --- | --- | --- | --- | --- |
 | `MV-01` | Atmosphere: finite and infinite multilayer propagation | `A`, `G`, `P`, `M` | analytic + backend parity | [runtests.jl](../test/runtests.jl), [gpu_smoke_contract.jl](../scripts/gpu_smoke_contract.jl), [profile_atmosphere_runtime.jl](../scripts/profile_atmosphere_runtime.jl), [atmosphere-runtime-spec.md](./atmosphere-runtime-spec.md), [atmosphere-statistics-validation.md](./atmosphere-statistics-validation.md), [2026-04-01-phase1-pvp02.toml](../benchmarks/results/atmosphere/2026-04-01-phase1-pvp02.toml) | No frozen external infinite-atmosphere parity bundle yet, but a committed fixed-seed finite/infinite statistics artifact now records variance agreement, stationarity, and non-periodicity evidence | strong |
 | `MV-02` | Phase statistics and covariance helpers | `A`, `G`, `M` | analytic | [runtests.jl](../test/runtests.jl), [gpu_smoke_contract.jl](../scripts/gpu_smoke_contract.jl), [atmosphere-runtime-spec.md](./atmosphere-runtime-spec.md), [phase-statistics-accuracy.md](./phase-statistics-accuracy.md) | `K_{5/6}` helper accuracy is now summarized in a maintained note over `x ∈ [1e-6, 140]`; there is still no frozen external phase-statistics bundle | medium-strong |
-| `MV-03` | Core optics: electric field, Fraunhofer, Fresnel, atmospheric field propagation | `A`, `G`, `P`, `M` | analytic + SPECULA-informed design | [runtests.jl](../test/runtests.jl), [gpu_smoke_contract.jl](../scripts/gpu_smoke_contract.jl), [profile_atmospheric_field_runtime.jl](../scripts/profile_atmospheric_field_runtime.jl), [atmospheric-field-propagation-roadmap.md](./atmospheric-field-propagation-roadmap.md) | No frozen external atmospheric-field bundle yet; current external SPECULA alignment is via contract and design provenance rather than full-array equivalence | medium-strong |
+| `MV-03` | Core optics: electric field, Fraunhofer, Fresnel, atmospheric field propagation | `A`, `R`, `G`, `P`, `M` | analytic + SPECULA-targeted contract bundle | [runtests.jl](../test/runtests.jl), [reference_harness.jl](../test/reference_harness.jl), [reference_data_specula](../test/reference_data_specula), [specula-reference-datasets.md](./specula-reference-datasets.md), [gpu_smoke_contract.jl](../scripts/gpu_smoke_contract.jl), [profile_atmospheric_field_runtime.jl](../scripts/profile_atmospheric_field_runtime.jl), [atmospheric-field-propagation-roadmap.md](./atmospheric-field-propagation-roadmap.md) | External atmospheric-field evidence is now contract-oriented through deterministic SPECULA-aligned scenarios; this is still narrower than full platform-level numerical equivalence | strong |
 | `MV-04` | Detectors and detector-family execution | `A`, `G`, `P`, `M` | analytic + runtime behavior | [runtests.jl](../test/runtests.jl), [optional_amdgpu_backends.jl](../test/optional_amdgpu_backends.jl), [optional_cuda_backends.jl](../test/optional_cuda_backends.jl), [profile_ao3k_runtime.jl](../scripts/profile_ao3k_runtime.jl) | Detector realism is strongest in integrated runtime scenarios; family-specific frozen detector references remain limited | medium |
 | `MV-05` | Shack-Hartmann WFS | `A`, `R`, `G`, `P`, `M` | OOPAO | [reference_harness.jl](../test/reference_harness.jl), [reference_data](../test/reference_data), [gpu_smoke_contract.jl](../scripts/gpu_smoke_contract.jl), [profile_multi_source_multi_wfs_runtime.jl](../scripts/profile_multi_source_multi_wfs_runtime.jl), [profile_ao3k_runtime.jl](../scripts/profile_ao3k_runtime.jl) | OOPAO remains the primary frozen parity baseline; no SPECULA-targeted frozen SH bundle yet | strong |
 | `MV-06` | Pyramid and BioEdge WFS | `A`, `R`, `G`, `P`, `M` | OOPAO | [reference_harness.jl](../test/reference_harness.jl), [reference_data](../test/reference_data), [gpu_smoke_contract.jl](../scripts/gpu_smoke_contract.jl), [profile_multi_source_multi_wfs_runtime.jl](../scripts/profile_multi_source_multi_wfs_runtime.jl) | OOPAO remains the primary parity baseline; grouped/polychromatic SPECULA-targeted bundles are still future work | strong |
@@ -101,6 +101,7 @@ Validation classes are intentionally distinct:
 - SPECULA is the targeted external baseline where it is the stronger reference
   for behavior breadth rather than legacy parity, currently captured through the
   committed contract bundle for:
+  - atmospheric field propagation
   - Zernike WFS
   - Curvature WFS
 
@@ -108,8 +109,6 @@ Validation classes are intentionally distinct:
 
 - Infinite-atmosphere fidelity is not currently claimed against a frozen OOPAO
   or SPECULA statistics bundle.
-- Atmospheric field propagation is validated by internal regression, backend
-  parity, and benchmark evidence, but not yet by a frozen external field bundle.
 - SPECULA-targeted contract bundles are intentionally narrower than full
   platform equivalence:
   - they freeze deterministic contract scenarios

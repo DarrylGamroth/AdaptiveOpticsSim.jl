@@ -1,12 +1,13 @@
 # SPECULA Reference Datasets
 
-Date: 2026-03-31
+Date: 2026-04-01
 
 Status: active
 
 Plan traceability:
 
 - [`PLAN-26`](./package-review-action-plan.md)
+- [`PVP-03`](./post-review-platform-plan.md)
 - review IDs: `PR-19`, `PR-20`, `PR-36`
 
 ## Purpose
@@ -70,6 +71,24 @@ That means:
      `test_curvature_sensor.py::TestCurvatureSensor::test_full_chain_focus_response`
    - contract:
      a low-order quadratic phase produces a non-trivial curvature signal
+5. `atmospheric_geometric_intensity`
+   - provenance:
+     `test_atmo_propagation.py::TestAtmoPropagation::test_quarter_array_extraction`
+   - contract:
+     deterministic geometric layered propagation remains stable on a maintained
+     off-axis atmospheric intensity surface
+6. `atmospheric_fresnel_intensity`
+   - provenance:
+     `test_physical_propagation.py::TestPhysicalPropagation::test_physicalProp`
+   - contract:
+     deterministic layered Fresnel propagation remains stable on a maintained
+     detector-plane atmospheric intensity surface
+7. `atmospheric_chromatic_intensity`
+   - provenance:
+     `test_atmo_propagation.py::TestAtmoPropagation::test_atmo_chromatic_shift_switches`
+   - contract:
+     spectral atmospheric propagation with a chromatic reference wavelength
+     remains stable on a maintained broad-band intensity surface
 
 ## Why These Cases Are Narrow
 
@@ -120,8 +139,10 @@ benchmark work tracked after Phase 4.
 
 ## Known Limits
 
-- This bundle does not yet cover atmospheric field propagation directly.
 - It does not yet cover grouped/polychromatic SPECULA comparisons for Pyramid
   or Shack-Hartmann.
+- The atmospheric-field cases are contract-oriented maintained Julia scenarios;
+  they are not a claim of full array-level equivalence to every SPECULA
+  `AtmoPropagation` configuration.
 - It should be treated as targeted external validation, not as a full SPECULA
   parity claim.

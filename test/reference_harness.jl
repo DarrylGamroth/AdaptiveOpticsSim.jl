@@ -2,6 +2,7 @@ using DelimitedFiles
 using FFTW
 using KernelAbstractions
 using LinearAlgebra
+using Random
 
 struct ReferenceCase
     id::String
@@ -248,6 +249,17 @@ function build_reference_source(cfg::AbstractDict{<:AbstractString,<:Any})
     throw(InvalidConfiguration("unknown source kind '$kind'"))
 end
 
+function build_reference_measurement_source(cfg::AbstractDict{<:AbstractString,<:Any})
+    src = build_reference_source(cfg)
+    spectrum_cfg = get(cfg, "spectrum", nothing)
+    spectrum_cfg === nothing && return src
+    bundle = SpectralBundle(
+        Float64.(spectrum_cfg["wavelengths"]),
+        Float64.(spectrum_cfg["weights"]),
+    )
+    return with_spectrum(src, bundle)
+end
+
 function build_reference_detector(cfg::AbstractDict{<:AbstractString,<:Any})
     noise_name = lowercase(String(get(cfg, "noise", "none")))
     integration_time = Float64(get(cfg, "integration_time", 1.0))
@@ -267,6 +279,47 @@ function build_reference_detector(cfg::AbstractDict{<:AbstractString,<:Any})
     end
     return Detector(noise; integration_time=integration_time, qe=qe,
         psf_sampling=psf_sampling, binning=binning)
+end
+
+function build_reference_atmosphere(cfg::AbstractDict{<:AbstractString,<:Any}, tel::Telescope)
+    kind = lowercase(String(get(cfg, "kind", "finite")))
+    kwargs = (
+        r0=Float64(cfg["r0"]),
+        L0=Float64(get(cfg, "L0", 25.0)),
+        fractional_cn2=Float64.(cfg["fractional_cn2"]),
+        wind_speed=Float64.(cfg["wind_speed"]),
+        wind_direction=Float64.(cfg["wind_direction"]),
+        altitude=Float64.(cfg["altitude"]),
+        T=Float64,
+    )
+    if kind == "finite"
+        return MultiLayerAtmosphere(tel; kwargs...)
+    elseif kind == "infinite"
+        return InfiniteMultiLayerAtmosphere(tel;
+            kwargs...,
+            screen_resolution=Int(get(cfg, "screen_resolution", default_infinite_screen_resolution(tel.params.resolution))),
+            stencil_size=Int(get(cfg, "stencil_size", default_infinite_stencil_size(tel.params.resolution))),
+        )
+    end
+    throw(InvalidConfiguration("unknown atmosphere kind '$kind'"))
+end
+
+function build_reference_atmospheric_model(cfg::AbstractDict{<:AbstractString,<:Any})
+    kind = lowercase(String(get(cfg, "kind", "geometric")))
+    chromatic_reference_wavelength = get(cfg, "chromatic_reference_wavelength", nothing)
+    if kind == "geometric"
+        return GeometricAtmosphericPropagation(
+            chromatic_reference_wavelength=chromatic_reference_wavelength,
+            T=Float64,
+        )
+    elseif kind in ("fresnel", "layered_fresnel")
+        return LayeredFresnelAtmosphericPropagation(
+            band_limit_factor=Float64(get(cfg, "band_limit_factor", 1.0)),
+            chromatic_reference_wavelength=chromatic_reference_wavelength,
+            T=Float64,
+        )
+    end
+    throw(InvalidConfiguration("unknown atmospheric propagation model '$kind'"))
 end
 
 function reference_lift_img_resolution(
@@ -964,6 +1017,25 @@ function compute_reference_actual(case::ReferenceCase)
             end
         end
         return copy(measure!(wfs, tel, src))
+    elseif case.kind === :atmospheric_intensity
+        tel = build_reference_telescope(case.config["telescope"])
+        src = build_reference_measurement_source(case.config["source"])
+        atm = build_reference_atmosphere(case.config["atmosphere"], tel)
+        advance_steps = Int(get(case.config["atmosphere"], "advance_steps", 1))
+        advance_seed = Int(get(case.config["atmosphere"], "advance_seed", 1))
+        rng = MersenneTwister(advance_seed)
+        for _ in 1:advance_steps
+            advance!(atm, tel; rng=rng)
+        end
+        prop = AtmosphericFieldPropagation(
+            atm,
+            tel,
+            src;
+            model=build_reference_atmospheric_model(case.config["propagation"]),
+            zero_padding=Int(get(case.config["propagation"], "zero_padding", 1)),
+            T=Float64,
+        )
+        return copy(atmospheric_intensity!(prop, atm, tel, src))
     elseif case.kind === :gsc_optical_gains
         tel = build_reference_telescope(case.config["telescope"])
         src = build_reference_source(case.config["source"])
