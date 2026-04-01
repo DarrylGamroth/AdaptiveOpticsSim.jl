@@ -16,19 +16,33 @@ metrics = ["max_abs_error", "max_rel_error", "l2_rel_error"]
 family = "CP-02"
 class = "medium"
 kind = "runtime_profile"
-description = "REVOLT-like Shack-Hartmann HIL runtime comparison between main and revolt-real."
-comparison_fields = ["pupil_resolution", "n_subap"]
+description = "REVOLT-like Shack-Hartmann HIL runtime comparison between main and revolt-real, with normalized Julia-side comparability fields and explicit known differences."
+comparison_fields = ["backend", "response_mode", "n_subap", "wfs_sensor"]
+normalized_fields = ["backend", "response_mode", "n_subap", "wfs_sensor"]
+known_differences = [
+    "pupil_resolution",
+    "wfs_frame_response",
+    "detector_output_shape",
+    "dm_command_layout",
+    "science_detector_payload",
+]
 runtime_metrics = ["build_time_ns", "total_mean_ns", "total_p95_ns", "frame_rate_hz", "total_alloc_bytes"]
 
 [scenarios.cp02_revolt_sh_medium.main]
 label = "adaptiveopticssim_main"
 cwd = "."
-command = ["julia", "--project=.", "--startup-file=no", "scripts/profile_revolt_hil_runtime.jl", "cpu"]
+command = ["julia", "--project=.", "--startup-file=no", "scripts/profile_revolt_hil_runtime.jl", "cpu", "benchmarks/assets/revolt_like", "cmos", "default", "none"]
 profile_root = "revolt_like_hil_runtime_profile"
 mean_key = "total_mean_ns"
 p95_key = "total_p95_ns"
 frame_rate_key = "frame_rate_hz"
 alloc_key = "total_alloc_bytes"
+
+[scenarios.cp02_revolt_sh_medium.main.field_aliases]
+backend = "backend"
+response_mode = "response_mode"
+n_subap = "n_subap"
+wfs_sensor = "sensor"
 
 [scenarios.cp02_revolt_sh_medium.revolt_real]
 label = "adaptiveopticssim_revolt_real"
@@ -39,6 +53,12 @@ mean_key = "total_mean_ns"
 p95_key = "total_p95_ns"
 frame_rate_key = "frame_rate_hz"
 alloc_key = "total_alloc_bytes"
+
+[scenarios.cp02_revolt_sh_medium.revolt_real.field_aliases]
+backend = "backend"
+response_mode = "response_mode"
+n_subap = "n_subap"
+wfs_sensor = "wfs_detector_sensor"
 
 [scenarios.cp02_revolt_sh_medium.revolt_specula]
 label = "revolt_specula"

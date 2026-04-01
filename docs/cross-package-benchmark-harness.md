@@ -35,6 +35,8 @@ The current maintained ladder is:
   - compact fidelity-first OOPAO/SPECULA frozen bundle comparison
 - `cp02_revolt_sh_medium`
   - medium REVOLT-like Shack-Hartmann HIL runtime comparison
+  - normalization rules and accepted differences are documented in
+    [`revolt-sh-benchmark-contract.md`](./revolt-sh-benchmark-contract.md)
 - `cp03_revolt_pwfs_representative`
   - representative contract-only PWFS comparison, intentionally deferred until
     the main-repo scenario normalization is first-class

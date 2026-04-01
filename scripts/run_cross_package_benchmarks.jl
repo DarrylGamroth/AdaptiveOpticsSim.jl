@@ -210,6 +210,9 @@ function run_profile_implementation(name::AbstractString, cfg::Dict{String,Any})
     for field in get(cfg, "comparison_fields", String[])
         result[String(field)] = get(data, String(field), nothing)
     end
+    for (alias, source_key) in get(cfg, "field_aliases", Dict{String,Any}())
+        result[String(alias)] = get(data, String(source_key), nothing)
+    end
     for (key, value) in data
         haskey(result, key) || (result[key] = normalize_profile_field(key, value))
     end
@@ -241,7 +244,9 @@ function run_runtime_scenario(name::AbstractString, cfg::Dict{String,Any})
     required_failed = false
     required_passed = false
     for (impl_name, impl_cfg_any) in sort!(collect(pairs(cfg)); by=first)
-        impl_name in ("family", "class", "kind", "description", "comparison_fields", "runtime_metrics", "status", "skip_reason") && continue
+        impl_name in ("family", "class", "kind", "description", "comparison_fields",
+            "normalized_fields", "known_differences", "runtime_metrics", "status",
+            "skip_reason") && continue
         impl_cfg = Dict{String,Any}(impl_cfg_any)
         if haskey(cfg, "comparison_fields")
             impl_cfg["comparison_fields"] = cfg["comparison_fields"]
@@ -273,6 +278,8 @@ function run_runtime_scenario(name::AbstractString, cfg::Dict{String,Any})
         "kind" => cfg["kind"],
         "status" => status,
         "description" => cfg["description"],
+        "normalized_fields" => get(cfg, "normalized_fields", String[]),
+        "known_differences" => get(cfg, "known_differences", String[]),
         "implementations" => impl_results,
         "comparison" => comparison,
     )

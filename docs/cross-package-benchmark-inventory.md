@@ -148,8 +148,9 @@ Current comparability limits:
   exact REVOLT scenario builder
 - calibration and reconstructor generation pipelines are not yet normalized
   across Julia and SPECULA
-- detector models are conceptually comparable, but not yet guaranteed
-  parameter-identical
+- detector and payload details are now normalized only at the coarse contract
+  level documented in [revolt-sh-benchmark-contract.md](./revolt-sh-benchmark-contract.md),
+  not yet as a full parity surface
 
 ### Family `CP-03`: REVOLT-like PWFS modal SCAO
 

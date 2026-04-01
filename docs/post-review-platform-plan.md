@@ -266,7 +266,9 @@ Preferred evidence order:
 
 ### Phase 2
 
-- `[ ]` `PVP-07` stronger `CP-02` archived baseline
+- `[x]` `PVP-07` stronger `CP-02` archived baseline
+  - normalized contract and archived result in
+    [2026-04-01-phase2-pvp07.toml](../benchmarks/results/cross_package/2026-04-01-phase2-pvp07.toml)
 - `[ ]` `PVP-08` first-class `CP-03` benchmark family
 - `[ ]` `PVP-09` `CP-05` benchmark family or scoped defer
 - `[ ]` `PVP-10` benchmark-results manifest and guide update
