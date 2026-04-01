@@ -3,6 +3,9 @@
 This document describes the deterministic OOPAO bundles used to cross-validate
 AdaptiveOpticsSim.jl.
 
+For the separate SPECULA-targeted frozen bundle, see
+[specula-reference-datasets.md](./specula-reference-datasets.md).
+
 ## Principles
 - Use fixed seeds and deterministic settings.
 - Store small, representative datasets.

@@ -6,6 +6,7 @@ using LinearAlgebra
 struct ReferenceCase
     id::String
     kind::Symbol
+    baseline::Symbol
     data_path::String
     shape::Tuple{Vararg{Int}}
     atol::Float64
@@ -15,6 +16,7 @@ end
 
 struct ReferenceBundle
     root::String
+    metadata::Dict{String,Any}
     cases::Vector{ReferenceCase}
 end
 
@@ -56,10 +58,32 @@ function reshape_reference_data(data, shape::Tuple, ::NumPyRowMajorStorage)
 end
 
 default_reference_root() = get(ENV, "ADAPTIVEOPTICS_REFERENCE_ROOT", joinpath(@__DIR__, "reference_data"))
+default_specula_reference_root() = get(ENV, "ADAPTIVEOPTICS_SPECULA_REFERENCE_ROOT", joinpath(@__DIR__, "reference_data_specula"))
 
 reference_manifest_path(root::AbstractString) = joinpath(root, "manifest.toml")
 
 has_reference_bundle(root::AbstractString=default_reference_root()) = isfile(reference_manifest_path(root))
+has_specula_reference_bundle(root::AbstractString=default_specula_reference_root()) = isfile(reference_manifest_path(root))
+
+function parse_reference_baseline(kind::Symbol, raw::AbstractDict{<:AbstractString,<:Any})
+    if haskey(raw, "baseline")
+        return Symbol(lowercase(String(raw["baseline"])))
+    elseif kind in (
+        :tomography_model_gamma,
+        :tomography_model_cxx,
+        :tomography_model_cox,
+        :tomography_model_cnz,
+        :tomography_model_reconstructor,
+        :tomography_model_wavefront,
+        :tomography_im_reconstructor,
+        :tomography_im_wavefront,
+        :tomography_model_command_matrix,
+        :tomography_model_dm_commands,
+    )
+        return :pytomoao
+    end
+    return :oopao
+end
 
 function parse_reference_case(id::AbstractString, raw::AbstractDict{<:AbstractString,<:Any}, root::AbstractString)
     kind = Symbol(get(raw, "kind", ""))
@@ -77,6 +101,7 @@ function parse_reference_case(id::AbstractString, raw::AbstractDict{<:AbstractSt
     return ReferenceCase(
         String(id),
         kind,
+        parse_reference_baseline(kind, raw),
         joinpath(root, String(data)),
         shape,
         Float64(get(raw, "atol", 0.0)),
@@ -95,14 +120,17 @@ function load_reference_bundle(root::AbstractString=default_reference_root())
     if version != 1
         throw(InvalidConfiguration("unsupported reference manifest version $(version)"))
     end
+    metadata = Dict{String,Any}(get(raw, "metadata", Dict{String,Any}()))
     raw_cases = get(raw, "cases", Dict{String,Any}())
     case_ids = sort!(collect(keys(raw_cases)))
     cases = ReferenceCase[]
     for id in case_ids
         push!(cases, parse_reference_case(id, raw_cases[id], root))
     end
-    return ReferenceBundle(String(root), cases)
+    return ReferenceBundle(String(root), metadata, cases)
 end
+
+reference_cases(bundle::ReferenceBundle, baseline::Symbol) = [case for case in bundle.cases if case.baseline === baseline]
 
 function load_reference_array(case::ReferenceCase)
     flat = vec(readdlm(case.data_path, Float64))
@@ -872,6 +900,41 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
             binning=Int(get(cfg, "binning", 1)),
             mode=mode,
         )
+    elseif kind === :zernike_signal
+        return ZernikeWFS(tel;
+            n_subap=n_subap,
+            threshold=threshold,
+            phase_shift_pi=Float64(get(cfg, "phase_shift_pi", 0.5)),
+            spot_radius_lambda_over_d=Float64(get(cfg, "spot_radius_lambda_over_d", 1.0)),
+            normalization=parse_wfs_normalization(get(cfg, "normalization", "mean_valid_flux")),
+            diffraction_padding=Int(get(cfg, "diffraction_padding", 2)),
+            binning=Int(get(cfg, "binning", 1)),
+        )
+    elseif kind === :curvature_signal
+        readout_name = lowercase(String(get(cfg, "readout_model", "frame")))
+        readout_model = if readout_name == "frame"
+            CurvatureFrameReadout()
+        elseif readout_name == "counting"
+            CurvatureCountingReadout()
+        else
+            throw(InvalidConfiguration("unknown curvature readout model '$readout_name'"))
+        end
+        branch_response = CurvatureBranchResponse(
+            plus_throughput=Float64(get(cfg, "plus_throughput", 1.0)),
+            minus_throughput=Float64(get(cfg, "minus_throughput", 1.0)),
+            plus_background=Float64(get(cfg, "plus_background", 0.0)),
+            minus_background=Float64(get(cfg, "minus_background", 0.0)),
+        )
+        return CurvatureWFS(tel;
+            n_subap=n_subap,
+            threshold=threshold,
+            defocus_rms_nm=Float64(get(cfg, "defocus_rms_nm", 500.0)),
+            diffraction_padding=Int(get(cfg, "diffraction_padding", 2)),
+            readout_crop_resolution=Int(get(cfg, "readout_crop_resolution", tel.params.resolution)),
+            readout_pixels_per_subap=Int(get(cfg, "readout_pixels_per_subap", 1)),
+            readout_model=readout_model,
+            branch_response=branch_response,
+        )
     end
     throw(InvalidConfiguration("unsupported WFS reference kind '$(kind)'"))
 end
@@ -885,7 +948,7 @@ function compute_reference_actual(case::ReferenceCase)
         end
         zero_padding = Int(get(case.config["compute"], "zero_padding", 2))
         return copy(compute_psf!(tel, src; zero_padding=zero_padding))
-    elseif case.kind in (:shack_hartmann_slopes, :pyramid_slopes, :bioedge_slopes)
+    elseif case.kind in (:shack_hartmann_slopes, :pyramid_slopes, :bioedge_slopes, :zernike_signal, :curvature_signal)
         tel = build_reference_telescope(case.config["telescope"])
         src = build_reference_source(case.config["source"])
         wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
@@ -893,7 +956,12 @@ function compute_reference_actual(case::ReferenceCase)
         if residual !== nothing
             apply_opd!(tel, residual)
         elseif haskey(case.config, "opd")
-            apply_reference_opd!(tel, case.config["opd"])
+            if haskey(case.config, "basis")
+                basis = build_reference_basis(case.config["basis"], tel)
+                apply_reference_opd!(tel, case.config["opd"], basis)
+            else
+                apply_reference_opd!(tel, case.config["opd"])
+            end
         end
         return copy(measure!(wfs, tel, src))
     elseif case.kind === :gsc_optical_gains

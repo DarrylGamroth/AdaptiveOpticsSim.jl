@@ -805,21 +805,21 @@ Goal:
 
 Tasks:
 
-- `[ ]` `PLAN-23` Add a model validity matrix doc for all major model families
+- `[x]` `PLAN-23` Add a model validity matrix doc for all major model families
   - traces to: `PR-15`, `PR-17`
-- `[ ]` `PLAN-24` Separate validation classes explicitly:
+- `[x]` `PLAN-24` Separate validation classes explicitly:
   - analytic
   - reference bundle
   - backend parity
   - benchmark evidence
   - traces to: `PR-16`
-- `[ ]` `PLAN-25` Expand and formalize OOPAO comparison coverage as the primary
+- `[x]` `PLAN-25` Expand and formalize OOPAO comparison coverage as the primary
   parity baseline
   - traces to: `PR-18`, `PR-20`
-- `[ ]` `PLAN-26` Add targeted SPECULA comparison bundles for selected model
+- `[x]` `PLAN-26` Add targeted SPECULA comparison bundles for selected model
   families where SPECULA is the stronger baseline
   - traces to: `PR-19`, `PR-20`, `PR-36`
-- `[ ]` `PLAN-27` Record model assumptions, limits, and known non-equivalences
+- `[x]` `PLAN-27` Record model assumptions, limits, and known non-equivalences
   beside the evidence matrix
   - traces to: `PR-15`, `PR-17`
 
@@ -833,6 +833,21 @@ Verification:
 
 - each maintained model family has explicit evidence links
 - OOPAO/SPECULA comparison bundles are versioned and reproducible
+
+Evidence recorded:
+
+- maintained validation matrix in
+  [`model-validity-matrix.md`](./model-validity-matrix.md)
+- OOPAO bundle policy and provenance in
+  [`oopao-reference-datasets.md`](./oopao-reference-datasets.md)
+- SPECULA-targeted contract bundle policy and provenance in
+  [`specula-reference-datasets.md`](./specula-reference-datasets.md)
+- committed SPECULA-targeted bundle in
+  [`test/reference_data_specula`](../test/reference_data_specula)
+- maintained generator in
+  [`scripts/generate_specula_reference_bundle.jl`](../scripts/generate_specula_reference_bundle.jl)
+- verification run:
+  `julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'`
 
 ## Phase 5: Cross-Package Benchmark Harness
 
@@ -955,12 +970,12 @@ Verification:
 | PR-12 | Extract shared source/field/atmosphere accumulation helpers | PLAN-03, PLAN-20 | shared propagation helpers | [x] |
 | PR-13 | Centralize backend reductions/random-fill services | PLAN-03, PLAN-21 | backend-service isolation | [x] |
 | PR-14 | Extract calibration scaffolding | PLAN-03, PLAN-22 | shared calibration orchestration | [x] |
-| PR-15 | Build formal validation matrix | PLAN-04, PLAN-23, PLAN-27 | model validity matrix | [ ] |
-| PR-16 | Distinguish validation classes | PLAN-04, PLAN-24 | validation taxonomy doc | [ ] |
-| PR-17 | Add model validity matrix doc | PLAN-04, PLAN-23, PLAN-27 | validity doc with evidence links | [ ] |
-| PR-18 | Keep OOPAO as primary parity baseline | PLAN-25 | OOPAO bundle coverage | [ ] |
-| PR-19 | Add targeted SPECULA baselines | PLAN-26 | SPECULA bundle coverage | [ ] |
-| PR-20 | Prefer frozen bundles over live external CI deps | PLAN-25, PLAN-26 | frozen reference artifacts | [ ] |
+| PR-15 | Build formal validation matrix | PLAN-04, PLAN-23, PLAN-27 | model validity matrix | [x] |
+| PR-16 | Distinguish validation classes | PLAN-04, PLAN-24 | validation taxonomy doc | [x] |
+| PR-17 | Add model validity matrix doc | PLAN-04, PLAN-23, PLAN-27 | validity doc with evidence links | [x] |
+| PR-18 | Keep OOPAO as primary parity baseline | PLAN-25 | OOPAO bundle coverage | [x] |
+| PR-19 | Add targeted SPECULA baselines | PLAN-26 | SPECULA bundle coverage | [x] |
+| PR-20 | Prefer frozen bundles over live external CI deps | PLAN-25, PLAN-26 | frozen reference artifacts | [x] |
 | PR-21 | Provide cross-package benchmarks | PLAN-05, PLAN-28, PLAN-29, PLAN-30 | benchmark harness and reports | [ ] |
 | PR-22 | Keep cross-package benchmarks out of unit tests | PLAN-32 | benchmark execution policy docs | [ ] |
 | PR-23 | Use REVOLT-like scenarios | PLAN-05, PLAN-28, PLAN-29 | REVOLT benchmark scenarios | [ ] |
@@ -976,7 +991,7 @@ Verification:
 | PR-33 | Separate backend smoke, functional tests, and benchmarks | PLAN-15, PLAN-32 | test/benchmark separation | [ ] |
 | PR-34 | Isolate backend-specific execution policy further | PLAN-21 | reduced model-local backend branching | [x] |
 | PR-35 | Avoid additional OOPAO parity chasing | PLAN-38 | roadmap language and decisions | [ ] |
-| PR-36 | Use SPECULA as stronger breadth reference | PLAN-26, PLAN-39 | roadmap and targeted baselines | [ ] |
+| PR-36 | Use SPECULA as stronger breadth reference | PLAN-26, PLAN-39 | roadmap and targeted baselines | [x] |
 | PR-37 | Revisit controller/process breadth later | PLAN-39 | future-direction roadmap | [ ] |
 | PR-38 | Keep science-path integrations optional | PLAN-16, PLAN-40 | boundary docs and extension policy | [ ] |
 
@@ -1001,7 +1016,8 @@ Verification:
 
 ### Depends on validation and benchmark harness design
 
-- `[ ]` PLAN-23 through PLAN-32
+- `[x]` PLAN-23 through PLAN-27
+- `[ ]` PLAN-28 through PLAN-32
 
 ### Documentation consolidation after the architecture stabilizes
 

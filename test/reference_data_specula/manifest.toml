@@ -1,0 +1,153 @@
+version = 1
+
+[metadata]
+specula_repo_path = "/home/dgamroth/workspaces/codex/SPECULA"
+bundle_kind = "contract_bundle"
+baseline = "specula"
+description = "Frozen SPECULA-targeted reference cases derived from maintained local scenarios aligned to SPECULA test contracts."
+
+[cases.curvature_quadratic_signal]
+rtol = 1.0e-10
+data = "curvature_quadratic_signal.txt"
+shape = [144]
+specula_test = "test_curvature_sensor.py::TestCurvatureSensor::test_full_chain_focus_response"
+kind = "curvature_signal"
+atol = 1.0e-10
+baseline = "specula"
+specula_contract = "low-order quadratic phase produces a non-trivial curvature signal"
+
+    [cases.curvature_quadratic_signal.wfs]
+    readout_crop_resolution = 48
+    readout_pixels_per_subap = 1
+    n_subap = 12
+    threshold = 0.0
+    diffraction_padding = 2
+    mode = "diffractive"
+    defocus_rms_nm = 500.0
+    readout_model = "frame"
+
+    [cases.curvature_quadratic_signal.opd]
+    kind = "basis_mode"
+    mode_index = 4
+    amplitude = 5.0e-8
+
+    [cases.curvature_quadratic_signal.telescope]
+    central_obstruction = 0.0
+    resolution = 48
+    sampling_time = 0.001
+    diameter = 8.0
+
+    [cases.curvature_quadratic_signal.basis]
+    kind = "cartesian_polynomials"
+    n_modes = 4
+
+    [cases.curvature_quadratic_signal.source]
+    kind = "ngs"
+    magnitude = 0.0
+    band = "I"
+
+[cases.zernike_quadratic_signal]
+rtol = 1.0e-10
+data = "zernike_quadratic_signal.txt"
+shape = [124]
+specula_test = "test_zernike_sensor.py::TestZernikeSensor::test_focus"
+kind = "zernike_signal"
+atol = 1.0e-10
+baseline = "specula"
+specula_contract = "low-order quadratic phase produces a structured non-flat differential signal"
+
+    [cases.zernike_quadratic_signal.wfs]
+    binning = 2
+    spot_radius_lambda_over_d = 1.0
+    threshold = 0.0
+    diffraction_padding = 2
+    mode = "diffractive"
+    phase_shift_pi = 0.5
+    n_subap = 24
+
+    [cases.zernike_quadratic_signal.opd]
+    kind = "basis_mode"
+    mode_index = 4
+    amplitude = 5.0e-8
+
+    [cases.zernike_quadratic_signal.telescope]
+    central_obstruction = 0.0
+    resolution = 48
+    sampling_time = 0.001
+    diameter = 8.0
+
+    [cases.zernike_quadratic_signal.basis]
+    kind = "cartesian_polynomials"
+    n_modes = 4
+
+    [cases.zernike_quadratic_signal.source]
+    kind = "ngs"
+    magnitude = 0.0
+    band = "I"
+
+[cases.zernike_flat_signal]
+rtol = 1.0e-10
+data = "zernike_flat_signal.txt"
+shape = [124]
+specula_test = "test_zernike_sensor.py::TestZernikeSensor::test_flat_wavefront_output_size"
+kind = "zernike_signal"
+atol = 1.0e-10
+baseline = "specula"
+specula_contract = "flat output shape and non-negative signal surface"
+
+    [cases.zernike_flat_signal.wfs]
+    binning = 2
+    spot_radius_lambda_over_d = 1.0
+    threshold = 0.0
+    diffraction_padding = 2
+    mode = "diffractive"
+    phase_shift_pi = 0.5
+    n_subap = 24
+
+    [cases.zernike_flat_signal.opd]
+    kind = "zeros"
+
+    [cases.zernike_flat_signal.telescope]
+    central_obstruction = 0.0
+    resolution = 48
+    sampling_time = 0.001
+    diameter = 8.0
+
+    [cases.zernike_flat_signal.source]
+    kind = "ngs"
+    magnitude = 0.0
+    band = "I"
+
+[cases.curvature_flat_signal]
+rtol = 1.0e-10
+data = "curvature_flat_signal.txt"
+shape = [144]
+specula_test = "test_curvature_sensor.py::TestCurvatureSensor::test_flat_wavefront_flux"
+kind = "curvature_signal"
+atol = 1.0e-10
+baseline = "specula"
+specula_contract = "flat wavefront produces zero curvature signal after reference subtraction"
+
+    [cases.curvature_flat_signal.wfs]
+    readout_crop_resolution = 48
+    readout_pixels_per_subap = 1
+    n_subap = 12
+    threshold = 0.0
+    diffraction_padding = 2
+    mode = "diffractive"
+    defocus_rms_nm = 500.0
+    readout_model = "frame"
+
+    [cases.curvature_flat_signal.opd]
+    kind = "zeros"
+
+    [cases.curvature_flat_signal.telescope]
+    central_obstruction = 0.0
+    resolution = 48
+    sampling_time = 0.001
+    diameter = 8.0
+
+    [cases.curvature_flat_signal.source]
+    kind = "ngs"
+    magnitude = 0.0
+    band = "I"

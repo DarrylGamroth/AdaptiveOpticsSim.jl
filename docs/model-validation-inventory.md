@@ -2,7 +2,7 @@
 
 Date: 2026-03-31
 
-Status: active
+Status: supporting inventory
 
 Plan traceability:
 
@@ -14,7 +14,10 @@ Plan traceability:
 This document inventories the maintained model families in
 AdaptiveOpticsSim.jl and records their current validation evidence.
 
-The goal is not to define the final validation matrix here. The goal is to:
+This document now supports the maintained
+[model-validity-matrix.md](./model-validity-matrix.md).
+
+The goal is not to redefine the final validation matrix here. The goal is to:
 
 - normalize the evidence classes used across the package
 - map each maintained model family to its current evidence

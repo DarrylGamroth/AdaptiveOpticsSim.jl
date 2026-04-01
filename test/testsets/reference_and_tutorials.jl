@@ -117,6 +117,23 @@ end
     end
 end
 
+@testset "Reference bundle baselines" begin
+    oopao_bundle = load_reference_bundle(default_reference_root())
+    @test !isempty(reference_cases(oopao_bundle, :oopao))
+    @test isempty(reference_cases(oopao_bundle, :specula))
+
+    specula_root = default_specula_reference_root()
+    if has_specula_reference_bundle(specula_root)
+        specula_bundle = load_reference_bundle(specula_root)
+        @test specula_bundle.metadata["baseline"] == "specula"
+        @test !isempty(reference_cases(specula_bundle, :specula))
+        @test isempty(reference_cases(specula_bundle, :oopao))
+    else
+        @info "Skipping SPECULA reference baseline inventory; no manifest found" root=specula_root
+        @test true
+    end
+end
+
 @testset "OOPAO reference regression" begin
     root = default_reference_root()
     if has_reference_bundle(root)
@@ -129,6 +146,23 @@ end
         end
     else
         @info "Skipping OOPAO reference regression; no manifest found" root=root
+        @test true
+    end
+end
+
+@testset "SPECULA reference regression" begin
+    root = default_specula_reference_root()
+    if has_specula_reference_bundle(root)
+        bundle = load_reference_bundle(root)
+        cases = reference_cases(bundle, :specula)
+        @test !isempty(cases)
+        for case in cases
+            result = validate_reference_case(case)
+            @test size(result.actual) == size(result.expected)
+            @test result.ok
+        end
+    else
+        @info "Skipping SPECULA reference regression; no manifest found" root=root
         @test true
     end
 end
