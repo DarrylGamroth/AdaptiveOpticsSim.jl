@@ -908,17 +908,17 @@ Goal:
 
 Tasks:
 
-- `[ ]` `PLAN-33` Mark docs as active, completed, or archived/superseded
+- `[x]` `PLAN-33` Mark docs as active, completed, or archived/superseded
   - traces to: `PR-26`, `PR-27`
-- `[ ]` `PLAN-34` Create a maintainer architecture guide that reflects the
+- `[x]` `PLAN-34` Create a maintainer architecture guide that reflects the
   current implemented system
   - traces to: `PR-28`
-- `[ ]` `PLAN-35` Expand the user guide into a clearer workflow-oriented
+- `[x]` `PLAN-35` Expand the user guide into a clearer workflow-oriented
   learning surface
   - traces to: `PR-29`
-- `[ ]` `PLAN-36` Add an end-to-end runtime/dataflow guide
+- `[x]` `PLAN-36` Add an end-to-end runtime/dataflow guide
   - traces to: `PR-30`
-- `[ ]` `PLAN-37` Reduce plan-doc sprawl by linking detailed plans from a small
+- `[x]` `PLAN-37` Reduce plan-doc sprawl by linking detailed plans from a small
   number of maintained index pages
   - traces to: `PR-26`, `PR-29`
 
@@ -936,6 +936,12 @@ Verification:
   - architecture overview
   - runtime dataflow
   - validation/benchmark evidence
+- maintained Phase 6 outputs:
+  - [`documentation-map.md`](./documentation-map.md)
+  - [`maintainer-architecture.md`](./maintainer-architecture.md)
+  - [`runtime-dataflow.md`](./runtime-dataflow.md)
+  - updated [`user-guide.md`](./user-guide.md)
+  - updated [`api-reference.md`](./api-reference.md)
 
 ## Phase 7: Future Platform Direction
 
@@ -987,11 +993,11 @@ Verification:
 | PR-23 | Use REVOLT-like scenarios | PLAN-05, PLAN-28, PLAN-29 | REVOLT benchmark scenarios | [x] |
 | PR-24 | Measure fidelity and runtime | PLAN-30, PLAN-31 | benchmark metric records | [x] |
 | PR-25 | Maintain compact/medium/representative comparison classes | PLAN-28 | scenario ladder docs | [x] |
-| PR-26 | Consolidate plan-heavy docs | PLAN-33, PLAN-37 | doc status/indexing cleanup | [ ] |
-| PR-27 | Mark docs as active/completed/archived | PLAN-33 | status-labeled docs | [ ] |
-| PR-28 | Create maintainer architecture guide | PLAN-34 | architecture guide | [ ] |
-| PR-29 | Expand synthesis-oriented docs | PLAN-35, PLAN-37 | stronger user/maintainer docs | [ ] |
-| PR-30 | Add end-to-end runtime/dataflow guide | PLAN-36 | runtime/dataflow doc | [ ] |
+| PR-26 | Consolidate plan-heavy docs | PLAN-33, PLAN-37 | doc status/indexing cleanup | [x] |
+| PR-27 | Mark docs as active/completed/archived | PLAN-33 | status-labeled docs | [x] |
+| PR-28 | Create maintainer architecture guide | PLAN-34 | architecture guide | [x] |
+| PR-29 | Expand synthesis-oriented docs | PLAN-35, PLAN-37 | stronger user/maintainer docs | [x] |
+| PR-30 | Add end-to-end runtime/dataflow guide | PLAN-36 | runtime/dataflow doc | [x] |
 | PR-31 | Make backend validation first-class in tests | PLAN-15 | backend tests in tree | [ ] |
 | PR-32 | Add clearer optional CUDA coverage | PLAN-15 | optional CUDA test entry | [ ] |
 | PR-33 | Separate backend smoke, functional tests, and benchmarks | PLAN-15, PLAN-32 | test/benchmark separation | [ ] |
@@ -1027,7 +1033,7 @@ Verification:
 
 ### Documentation consolidation after the architecture stabilizes
 
-- `[ ]` PLAN-33 through PLAN-37
+- `[x]` PLAN-33 through PLAN-37
 
 ### Future-direction guardrails
 

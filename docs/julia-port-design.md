@@ -1,5 +1,7 @@
 # Julia Design Sketch for AdaptiveOpticsSim.jl
 
+Status: completed reference design
+
 This document sketches an idiomatic Julia design for porting OOPAO into
 AdaptiveOpticsSim.jl. It favors
 multiple dispatch, explicit state, and preallocated workspaces over OO-style

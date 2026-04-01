@@ -1,5 +1,15 @@
 # User Guide
 
+Status: active
+
+Start with:
+
+- [`documentation-map.md`](./documentation-map.md) for doc navigation
+- [`api-reference.md`](./api-reference.md) for maintained public APIs
+- [`model-validity-matrix.md`](./model-validity-matrix.md) for model evidence
+- [`benchmark-matrix-plan.md`](./benchmark-matrix-plan.md) for performance
+  surfaces
+
 AdaptiveOpticsSim.jl is an idiomatic Julia adaptive-optics toolkit. The package
 keeps the OOPAO feature set recognizable, but shifts the design toward
 multiple dispatch, explicit state, and deterministic execution.
@@ -15,7 +25,7 @@ The package now distinguishes between:
 
 For ordinary usage, start with the exported workflow surface shown in the quick
 start and the main API sections in
-[api-reference.md](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/api-reference.md).
+[api-reference.md](./api-reference.md).
 
 For advanced utilities such as telemetry/config helpers, scenario builders, and
 misregistration-identification tools, use namespaced access. Examples:
@@ -84,13 +94,97 @@ dm.state.coefs .= -cmd
 apply!(dm, tel, DMAdditive())
 ```
 
+## Recommended learning path
+
+Use this progression instead of starting from subsystem plans:
+
+1. image formation and PSF generation
+2. atmosphere plus one WFS
+3. detector-backed sensing
+4. closed-loop runtime
+5. field propagation, polychromatic sensing, and extended-source cases
+
+The examples under `examples/tutorials/` already follow this shape well enough
+to be the primary learning surface.
+
+## Common workflows
+
+### Workflow 1: optics-only PSF studies
+
+Start with:
+
+- `Telescope`
+- `Source`
+- `compute_psf!`
+- optional `NCPA`, `OPDMap`, `apply_opd!`
+
+Use this when you care about:
+
+- pupil construction
+- PSF normalization
+- image formation
+- simple aberration studies
+
+### Workflow 2: atmosphere and WFS studies
+
+Start with:
+
+- `MultiLayerAtmosphere` or `InfiniteMultiLayerAtmosphere`
+- `advance!`
+- `propagate!`
+- one of `ShackHartmann`, `PyramidWFS`, `BioEdgeWFS`, `CurvatureWFS`,
+  `ZernikeWFS`
+- `measure!`
+
+Use this when you care about:
+
+- sensor behavior
+- atmosphere evolution
+- detector-coupled readout
+- optical gain / calibration studies
+
+### Workflow 3: closed-loop simulation
+
+Start with:
+
+- `DeformableMirror`
+- calibration helpers such as `interaction_matrix`
+- a reconstructor
+- `ClosedLoopRuntime`
+- `prepare!`
+- `update!`, `simulation_readout`, `simulation_command`, `simulation_slopes`
+
+Use this when you care about:
+
+- loop staging
+- latency
+- exported runtime products
+- HIL-style or realistic detector-backed sensing paths
+
+### Workflow 4: field propagation and diffractive optics
+
+Start with:
+
+- `ElectricField`
+- `FraunhoferPropagation`, `FresnelPropagation`
+- `AtmosphericFieldPropagation`
+- `SpectralSource`
+- `ExtendedSource`
+
+Use this when you care about:
+
+- field-level propagation
+- polychromatic sensing
+- extended sources
+- curvature or atmosphere-aware field propagation
+
 ## Determinism
 
 - Use a fixed `MersenneTwister` and pass it into `advance!` or detector calls.
 - Keep detector noise disabled when comparing against reference datasets unless
   the test is explicitly about noise.
 - Run single-threaded when strict reproducibility matters. See
-  `docs/deterministic-simulation.md`.
+  [`deterministic-simulation.md`](./deterministic-simulation.md).
 
 ## Logging and errors
 
@@ -125,7 +219,23 @@ See `docs/julia-tutorial-mappings.md` for the full mapping back to OOPAO.
   transfer-function workflow. LiFT, closed-loop traces, and tomography remain
   follow-on parity work.
 
-See `docs/oopao-reference-datasets.md` for the bundle contract.
+See [`oopao-reference-datasets.md`](./oopao-reference-datasets.md) for the
+bundle contract.
+
+For the maintained synthesis of model evidence, use
+[`model-validity-matrix.md`](./model-validity-matrix.md).
+
+## Benchmark and comparison workflow
+
+Use the benchmark docs intentionally:
+
+- [`benchmark-matrix-plan.md`](./benchmark-matrix-plan.md)
+  - maintained local runtime surfaces
+- [`cross-package-benchmark-harness.md`](./cross-package-benchmark-harness.md)
+  - archived cross-package OOPAO/SPECULA/REVOLT-like evidence
+
+These are engineering evidence surfaces, not normal tutorial entry points and
+not part of `Pkg.test()`.
 
 ## Plotting
 

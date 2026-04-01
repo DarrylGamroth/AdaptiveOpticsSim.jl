@@ -1,5 +1,7 @@
 # AdaptiveOpticsSim Roadmap
 
+Status: active
+
 ## Status
 - Phases 1-5 implemented in `AdaptiveOpticsSim.jl`.
 - Phase 6 in progress (telemetry + config export done; more I/O helpers pending).

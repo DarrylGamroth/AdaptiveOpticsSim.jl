@@ -1,10 +1,19 @@
 # API Reference
 
+Status: active
+
+Related guides:
+
+- [`documentation-map.md`](./documentation-map.md)
+- [`user-guide.md`](./user-guide.md)
+- [`maintainer-architecture.md`](./maintainer-architecture.md)
+- [`runtime-dataflow.md`](./runtime-dataflow.md)
+
 This is a guide to the maintained public API. It is organized by subsystem
 rather than by source file.
 
 Project-wide units guidance lives in
-[units-policy.md](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/units-policy.md).
+[units-policy.md](./units-policy.md).
 
 ## Public API policy
 
@@ -26,6 +35,10 @@ The practical rule is:
 - start with the stable exported workflow surface
 - use `AdaptiveOpticsSim.<name>` for advanced helpers such as telemetry,
   scenario builders, and specialized calibration-identification utilities
+
+If you are new to the package, read [`user-guide.md`](./user-guide.md) first.
+If you are maintaining the package, pair this document with
+[`maintainer-architecture.md`](./maintainer-architecture.md).
 
 ## Core types and utilities
 

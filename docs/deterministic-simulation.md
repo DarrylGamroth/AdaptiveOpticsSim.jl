@@ -1,5 +1,7 @@
 # Deterministic Simulation Mode (Design Sketch)
 
+Status: active reference design
+
 This document outlines a deterministic mode for the Julia port so results are
 reproducible run-to-run with identical inputs and configuration.
 

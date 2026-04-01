@@ -1,5 +1,7 @@
 # OOPAO Reference Datasets
 
+Status: active
+
 This document describes the deterministic OOPAO bundles used to cross-validate
 AdaptiveOpticsSim.jl.
 
