@@ -2,16 +2,30 @@
 
 Status: active
 
+Related guides:
+
+- [`documentation-map.md`](./documentation-map.md)
+- [`future-platform-direction.md`](./future-platform-direction.md)
+- [`optional-integration-boundaries.md`](./optional-integration-boundaries.md)
+
 ## Status
-- Phases 1-5 implemented in `AdaptiveOpticsSim.jl`.
-- Phase 6 in progress (telemetry + config export done; more I/O helpers pending).
-- Phase 7 complete (user guide, API reference, tutorial ports, and committed OOPAO reference bundle in place).
+- Core review/action-plan Phases 0-7 are now implemented.
 - Core feature parity and numerical fidelity with Python OOPAO are effectively
   in place for the committed deterministic workflows. Remaining work is now
   dominated by robustness, execution quality, and a few non-core surface gaps.
 - The most current OOPAO comparison document is
-  [`docs/python-julia-differences.md`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/python-julia-differences.md).
+  [`python-julia-differences.md`](./python-julia-differences.md).
   This roadmap is primarily for implementation status and backlog planning.
+
+Direction guardrails:
+
+- OOPAO is a behavioral and validation reference, not an architectural ceiling.
+- SPECULA is now the stronger external reference for broader platform-level
+  expansion.
+- science-path integrations should remain optional unless a later explicit
+  boundary review changes that policy.
+- controller/process breadth should expand only after runtime and benchmark
+  evidence justify it.
 
 ## AO Feature Checklist
 - [x] P0: Detector modeling (photon/read noise, QE, binning, PSF sampling,
@@ -189,6 +203,9 @@ validation shows the new default is still too coarse.
 - HCIPy / POPPY / PROPER (Python): maps to diffractive WFS propagation, PSF/coronagraph modeling.
 
 ## Suggested Near-Term Priorities
+- [x] Publish explicit post-review direction guardrails in
+  [`future-platform-direction.md`](./future-platform-direction.md) and keep
+  this roadmap aligned with them.
 - [ ] Write and implement the interface/style specification pass described in
   `docs/interface-style-spec-plan.md`, with explicit abstract-family contracts,
   capability-trait audit, and conformance tests.

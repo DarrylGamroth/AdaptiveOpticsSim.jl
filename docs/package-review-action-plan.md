@@ -952,17 +952,22 @@ Goal:
 
 Tasks:
 
-- `[ ]` `PLAN-38` Document that OOPAO is a reference, not a ceiling
+- `[x]` `PLAN-38` Document that OOPAO is a reference, not a ceiling
   - traces to: `PR-35`
-- `[ ]` `PLAN-39` Document SPECULA-targeted future breadth areas
+- `[x]` `PLAN-39` Document SPECULA-targeted future breadth areas
   - traces to: `PR-36`, `PR-37`
-- `[ ]` `PLAN-40` Keep science-path integrations optional and outside the core
+- `[x]` `PLAN-40` Keep science-path integrations optional and outside the core
   package boundary where appropriate
   - traces to: `PR-38`
 
 Verification:
 
 - future roadmap docs reference this plan and do not bypass it
+- maintained Phase 7 outputs:
+  - [`future-platform-direction.md`](./future-platform-direction.md)
+  - updated [`roadmap.md`](./roadmap.md)
+  - updated [`algorithmic-implementation-roadmap.md`](./algorithmic-implementation-roadmap.md)
+  - updated [`optional-integration-boundaries.md`](./optional-integration-boundaries.md)
 
 ## Traceability Matrix
 
@@ -975,7 +980,7 @@ Verification:
 | PR-05 | Split oversized subsystem files | PLAN-02, PLAN-11, PLAN-12, PLAN-13, PLAN-14 | reduced file sizes / cleaner layout | [x] |
 | PR-06 | Split monolithic test driver | PLAN-02, PLAN-15 | test layout restructure | [x] |
 | PR-07 | Prefer internal modularization before package splitting | PLAN-02, PLAN-16 | modularization inventory and package-boundary notes | [x] |
-| PR-08 | Keep optional integrations out of core | PLAN-10, PLAN-16, PLAN-40 | extension/package boundary docs | [ ] |
+| PR-08 | Keep optional integrations out of core | PLAN-10, PLAN-16, PLAN-40 | extension/package boundary docs | [x] |
 | PR-09 | Extract detector noise/readout helpers | PLAN-03, PLAN-17 | shared detector infrastructure | [x] |
 | PR-10 | Extract grouped WFS execution skeletons | PLAN-03, PLAN-18 | shared WFS grouping helpers | [x] |
 | PR-11 | Extract runtime product planning/export helpers | PLAN-03, PLAN-14, PLAN-19 | shared runtime export layer | [x] |
@@ -1002,10 +1007,10 @@ Verification:
 | PR-32 | Add clearer optional CUDA coverage | PLAN-15 | optional CUDA test entry | [ ] |
 | PR-33 | Separate backend smoke, functional tests, and benchmarks | PLAN-15, PLAN-32 | test/benchmark separation | [ ] |
 | PR-34 | Isolate backend-specific execution policy further | PLAN-21 | reduced model-local backend branching | [x] |
-| PR-35 | Avoid additional OOPAO parity chasing | PLAN-38 | roadmap language and decisions | [ ] |
+| PR-35 | Avoid additional OOPAO parity chasing | PLAN-38 | roadmap language and decisions | [x] |
 | PR-36 | Use SPECULA as stronger breadth reference | PLAN-26, PLAN-39 | roadmap and targeted baselines | [x] |
-| PR-37 | Revisit controller/process breadth later | PLAN-39 | future-direction roadmap | [ ] |
-| PR-38 | Keep science-path integrations optional | PLAN-16, PLAN-40 | boundary docs and extension policy | [ ] |
+| PR-37 | Revisit controller/process breadth later | PLAN-39 | future-direction roadmap | [x] |
+| PR-38 | Keep science-path integrations optional | PLAN-16, PLAN-40 | boundary docs and extension policy | [x] |
 
 ## Implementation Checklist View
 
@@ -1037,7 +1042,7 @@ Verification:
 
 ### Future-direction guardrails
 
-- `[ ]` PLAN-38 through PLAN-40
+- `[x]` PLAN-38 through PLAN-40
 
 ## Completion Rule
 

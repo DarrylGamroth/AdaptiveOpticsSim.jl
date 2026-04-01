@@ -1,5 +1,13 @@
 # Algorithmic Implementation Roadmap
 
+Status: active
+
+Related guides:
+
+- [`documentation-map.md`](./documentation-map.md)
+- [`future-platform-direction.md`](./future-platform-direction.md)
+- [`optional-integration-boundaries.md`](./optional-integration-boundaries.md)
+
 This roadmap supersedes the earlier "port OOPAO as-is" mindset.
 OOPAO remains a behavioral reference where useful, but it is not an
 architectural constraint. SPECULA is also a useful reference, especially for
@@ -31,6 +39,16 @@ target for AdaptiveOpticsSim.jl is:
 - OOPAO: use for behavior checks, tutorial parity, and regression baselines.
 - SPECULA: use for algorithm decomposition and persistent-screen implementation ideas.
 - Native Julia design: final authority for API, data layout, execution, and extensions.
+
+Future-direction guardrails:
+
+- do not add new OOPAO parity work just because OOPAO exposes it
+- use SPECULA as the stronger reference when deciding the next platform-breadth
+  areas
+- keep science-path integrations optional unless an explicit boundary review
+  changes that policy
+- revisit broader controller/process families only after the plant/runtime and
+  validation surfaces justify them
 
 ## Milestone 0: Freeze Targets And Rename Semantics
 

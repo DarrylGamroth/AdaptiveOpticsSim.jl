@@ -50,6 +50,8 @@ If you are:
   - maintained performance surfaces and benchmark classes
 - [`cross-package-benchmark-harness.md`](./cross-package-benchmark-harness.md)
   - cross-package benchmark execution and archived evidence
+- [`future-platform-direction.md`](./future-platform-direction.md)
+  - post-review platform direction and scope guardrails
 
 ## Active Supporting Reference
 
@@ -65,6 +67,8 @@ If you are:
   - SPECULA-targeted frozen bundle policy and provenance
 - [`optional-integration-boundaries.md`](./optional-integration-boundaries.md)
   - optional integration and package-boundary rules
+- [`future-platform-direction.md`](./future-platform-direction.md)
+  - post-cleanup expansion policy
 
 ## Active Implementation Plans
 

@@ -7,6 +7,7 @@ Status: active
 Plan traceability:
 
 - [`PLAN-16`](./package-review-action-plan.md)
+- [`PLAN-40`](./package-review-action-plan.md)
 - review IDs: `PR-07`, `PR-08`, `PR-38`
 
 ## Purpose
@@ -28,6 +29,9 @@ The correct boundary today is:
 - keep backend-specific and format-specific integrations in `ext/`
 - keep future science-path integrations in optional adapter packages or
   extensions rather than moving them into the core package
+
+This remains true after the package-review cleanup phases. Phase 7 strengthens
+the policy rather than changing it.
 
 ## Keep In Core
 
@@ -66,6 +70,7 @@ These areas should remain outside the core package boundary unless a later plan
 justifies a stronger integration:
 
 - `Proper.jl` science-path bridging
+- downstream science-camera and coronagraph adapters
 - cross-package benchmark harnesses and REVOLT-style scenario runners
 - additional file-format/export adapters beyond the current lightweight
   extension surface
@@ -85,3 +90,13 @@ Instead, it confirms:
 - further package splitting should wait until after more internal
   modularization and validation work
 - future science-path integrations must remain optional by policy
+
+## Phase 7 Outcome
+
+Phase 7 keeps the same package boundary and makes the future-direction policy
+explicit:
+
+- OOPAO parity is not, by itself, a reason to move more features into core
+- SPECULA-informed breadth work still has to respect the same package boundary
+- science-path integration should arrive through a narrow handoff surface plus
+  optional extensions or adapter packages
