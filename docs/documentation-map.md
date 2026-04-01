@@ -52,6 +52,9 @@ If you are:
   - cross-package benchmark execution and archived evidence
 - [`future-platform-direction.md`](./future-platform-direction.md)
   - post-review platform direction and scope guardrails
+- [`post-review-platform-plan.md`](./post-review-platform-plan.md)
+  - phased next-step plan for validation hardening, benchmark expansion, and
+    next capability selection
 
 ## Active Supporting Reference
 
@@ -82,6 +85,7 @@ entry-point guides.
 - [`core-optics-expansion-roadmap.md`](./core-optics-expansion-roadmap.md)
 - [`gpu-runtime-structural-refactor-plan.md`](./gpu-runtime-structural-refactor-plan.md)
 - [`infinite-boundary-atmosphere-plan.md`](./infinite-boundary-atmosphere-plan.md)
+- [`post-review-platform-plan.md`](./post-review-platform-plan.md)
 
 Use these when actively working in that subsystem. Do not treat them as the
 primary orientation docs for new contributors.

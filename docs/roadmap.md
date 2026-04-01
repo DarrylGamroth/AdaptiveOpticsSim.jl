@@ -6,6 +6,7 @@ Related guides:
 
 - [`documentation-map.md`](./documentation-map.md)
 - [`future-platform-direction.md`](./future-platform-direction.md)
+- [`post-review-platform-plan.md`](./post-review-platform-plan.md)
 - [`optional-integration-boundaries.md`](./optional-integration-boundaries.md)
 
 ## Status

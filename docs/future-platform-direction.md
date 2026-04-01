@@ -20,6 +20,9 @@ Its job is to prevent future work from drifting back toward:
 - unplanned control-framework expansion before the plant/runtime is ready
 - science-path integration pressure leaking into the core package boundary
 
+The phased execution plan for the next post-review work lives in
+[post-review-platform-plan.md](./post-review-platform-plan.md).
+
 ## Direction Summary
 
 The package should continue to evolve as:
