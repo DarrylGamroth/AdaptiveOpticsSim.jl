@@ -1,0 +1,60 @@
+version = 1
+
+[metadata]
+status = "active"
+description = "Cross-package benchmark scenario contracts for AdaptiveOpticsSim, OOPAO, and SPECULA-aligned surfaces."
+
+[scenarios.cp01_compact_reference]
+family = "CP-01"
+class = "compact"
+kind = "reference_fidelity"
+description = "Frozen compact reference fidelity surfaces from the committed OOPAO and SPECULA bundles."
+baselines = ["oopao", "specula"]
+metrics = ["max_abs_error", "max_rel_error", "l2_rel_error"]
+
+[scenarios.cp02_revolt_sh_medium]
+family = "CP-02"
+class = "medium"
+kind = "runtime_profile"
+description = "REVOLT-like Shack-Hartmann HIL runtime comparison between main and revolt-real."
+comparison_fields = ["pupil_resolution", "n_subap"]
+runtime_metrics = ["build_time_ns", "total_mean_ns", "total_p95_ns", "frame_rate_hz", "total_alloc_bytes"]
+
+[scenarios.cp02_revolt_sh_medium.main]
+label = "adaptiveopticssim_main"
+cwd = "."
+command = ["julia", "--project=.", "--startup-file=no", "scripts/profile_revolt_hil_runtime.jl", "cpu"]
+profile_root = "revolt_like_hil_runtime_profile"
+mean_key = "total_mean_ns"
+p95_key = "total_p95_ns"
+frame_rate_key = "frame_rate_hz"
+alloc_key = "total_alloc_bytes"
+
+[scenarios.cp02_revolt_sh_medium.revolt_real]
+label = "adaptiveopticssim_revolt_real"
+cwd = "../AdaptiveOpticsSim.jl-revolt-real"
+command = ["julia", "--project=.", "--startup-file=no", "scripts/profile_revolt_hil_runtime.jl", "cpu", "shwfs", "default"]
+profile_root = "revolt_hil_runtime_profile"
+mean_key = "total_mean_ns"
+p95_key = "total_p95_ns"
+frame_rate_key = "frame_rate_hz"
+alloc_key = "total_alloc_bytes"
+
+[scenarios.cp02_revolt_sh_medium.revolt_specula]
+label = "revolt_specula"
+cwd = "../REVOLT/Python/specula"
+command = ["python3", "revolt.py"]
+profile_root = "revolt_specula_runtime_profile"
+mean_key = "total_mean_ns"
+p95_key = "total_p95_ns"
+frame_rate_key = "frame_rate_hz"
+alloc_key = "total_alloc_bytes"
+optional = true
+
+[scenarios.cp03_revolt_pwfs_representative]
+family = "CP-03"
+class = "representative"
+kind = "runtime_profile"
+status = "contract_only"
+description = "REVOLT-like representative PWFS modal SCAO comparison; contract defined, execution deferred until main-repo scenario normalization is complete."
+skip_reason = "main-repo PWFS REVOLT-aligned builder is not yet a first-class maintained scenario runner"

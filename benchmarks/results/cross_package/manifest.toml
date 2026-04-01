@@ -1,0 +1,4 @@
+latest_result = "benchmarks/results/cross_package/2026-03-31-phase5-baseline.toml"
+results = ["benchmarks/results/cross_package/2026-03-31-phase5-baseline.toml"]
+status = "active"
+version = 1

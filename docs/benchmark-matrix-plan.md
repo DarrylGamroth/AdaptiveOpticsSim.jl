@@ -20,6 +20,42 @@ Status:
     readout-correction, and detector-thermal sweeps
 - [ ] representative closed-loop and builder ladders are still pending beyond
   these first runtime surfaces
+- [x] Phase 5 cross-package harness implemented
+  - scenario contracts now live in
+    [`../benchmarks/contracts/cross_package.toml`](../benchmarks/contracts/cross_package.toml)
+  - the maintained runner is
+    [`../scripts/run_cross_package_benchmarks.jl`](../scripts/run_cross_package_benchmarks.jl)
+  - archived evidence now lives under
+    [`../benchmarks/results/cross_package`](../benchmarks/results/cross_package)
+
+## Cross-Package Harness
+
+Maintained cross-package benchmarking is now a first-class engineering surface.
+
+Primary files:
+
+- contract:
+  [`../benchmarks/contracts/cross_package.toml`](../benchmarks/contracts/cross_package.toml)
+- runner:
+  [`../scripts/run_cross_package_benchmarks.jl`](../scripts/run_cross_package_benchmarks.jl)
+- archive:
+  [`../benchmarks/results/cross_package`](../benchmarks/results/cross_package)
+- harness guide:
+  [`./cross-package-benchmark-harness.md`](./cross-package-benchmark-harness.md)
+
+The current maintained ladder is:
+
+- `compact`
+  - frozen OOPAO and SPECULA reference fidelity bundles
+- `medium`
+  - REVOLT-like SH HIL runtime comparison between `main` and
+    `../AdaptiveOpticsSim.jl-revolt-real`
+- `representative`
+  - PWFS REVOLT-aligned contract recorded and intentionally deferred until the
+    main-repo scenario runner is normalized
+
+These runs are deliberately outside `Pkg.test()` and should be treated as
+maintained benchmark evidence rather than unit-test gates.
 
 ## Goal
 

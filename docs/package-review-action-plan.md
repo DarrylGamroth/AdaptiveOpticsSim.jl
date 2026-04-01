@@ -858,26 +858,26 @@ Goal:
 
 Tasks:
 
-- `[ ]` `PLAN-28` Define benchmark scenario contracts for compact, medium, and
+- `[x]` `PLAN-28` Define benchmark scenario contracts for compact, medium, and
   representative cross-package comparisons
   - traces to: `PR-23`, `PR-25`
-- `[ ]` `PLAN-29` Build a REVOLT-like benchmark harness using:
+- `[x]` `PLAN-29` Build a REVOLT-like benchmark harness using:
   - `../REVOLT`
   - `../AdaptiveOpticsSim.jl-revolt-real`
   - local benchmark scripts
   - traces to: `PR-21`, `PR-23`
-- `[ ]` `PLAN-30` Record runtime metrics:
+- `[x]` `PLAN-30` Record runtime metrics:
   - build time
   - step time
   - frame rate
   - allocations / memory
   - traces to: `PR-21`, `PR-24`
-- `[ ]` `PLAN-31` Record fidelity metrics:
+- `[x]` `PLAN-31` Record fidelity metrics:
   - residuals
   - output equivalence norms
   - science / sensing quality metrics where applicable
   - traces to: `PR-24`
-- `[ ]` `PLAN-32` Keep cross-package benchmarking outside normal `Pkg.test()`
+- `[x]` `PLAN-32` Keep cross-package benchmarking outside normal `Pkg.test()`
   and document it as maintained engineering evidence
   - traces to: `PR-22`
 
@@ -892,6 +892,12 @@ Verification:
 - benchmark contract docs exist
 - at least one maintained REVOLT-like scenario is runnable and archived
 - results are versioned by scenario and backend
+- maintained artifacts:
+  - [`../benchmarks/contracts/cross_package.toml`](../benchmarks/contracts/cross_package.toml)
+  - [`./cross-package-benchmark-harness.md`](./cross-package-benchmark-harness.md)
+  - [`../scripts/run_cross_package_benchmarks.jl`](../scripts/run_cross_package_benchmarks.jl)
+  - [`../benchmarks/results/cross_package/manifest.toml`](../benchmarks/results/cross_package/manifest.toml)
+  - [`../benchmarks/results/cross_package/2026-03-31-phase5-baseline.toml`](../benchmarks/results/cross_package/2026-03-31-phase5-baseline.toml)
 
 ## Phase 6: Documentation Consolidation and Learning Surfaces
 
@@ -976,11 +982,11 @@ Verification:
 | PR-18 | Keep OOPAO as primary parity baseline | PLAN-25 | OOPAO bundle coverage | [x] |
 | PR-19 | Add targeted SPECULA baselines | PLAN-26 | SPECULA bundle coverage | [x] |
 | PR-20 | Prefer frozen bundles over live external CI deps | PLAN-25, PLAN-26 | frozen reference artifacts | [x] |
-| PR-21 | Provide cross-package benchmarks | PLAN-05, PLAN-28, PLAN-29, PLAN-30 | benchmark harness and reports | [ ] |
-| PR-22 | Keep cross-package benchmarks out of unit tests | PLAN-32 | benchmark execution policy docs | [ ] |
-| PR-23 | Use REVOLT-like scenarios | PLAN-05, PLAN-28, PLAN-29 | REVOLT benchmark scenarios | [ ] |
-| PR-24 | Measure fidelity and runtime | PLAN-30, PLAN-31 | benchmark metric records | [ ] |
-| PR-25 | Maintain compact/medium/representative comparison classes | PLAN-28 | scenario ladder docs | [ ] |
+| PR-21 | Provide cross-package benchmarks | PLAN-05, PLAN-28, PLAN-29, PLAN-30 | benchmark harness and reports | [x] |
+| PR-22 | Keep cross-package benchmarks out of unit tests | PLAN-32 | benchmark execution policy docs | [x] |
+| PR-23 | Use REVOLT-like scenarios | PLAN-05, PLAN-28, PLAN-29 | REVOLT benchmark scenarios | [x] |
+| PR-24 | Measure fidelity and runtime | PLAN-30, PLAN-31 | benchmark metric records | [x] |
+| PR-25 | Maintain compact/medium/representative comparison classes | PLAN-28 | scenario ladder docs | [x] |
 | PR-26 | Consolidate plan-heavy docs | PLAN-33, PLAN-37 | doc status/indexing cleanup | [ ] |
 | PR-27 | Mark docs as active/completed/archived | PLAN-33 | status-labeled docs | [ ] |
 | PR-28 | Create maintainer architecture guide | PLAN-34 | architecture guide | [ ] |
@@ -1017,7 +1023,7 @@ Verification:
 ### Depends on validation and benchmark harness design
 
 - `[x]` PLAN-23 through PLAN-27
-- `[ ]` PLAN-28 through PLAN-32
+- `[x]` PLAN-28 through PLAN-32
 
 ### Documentation consolidation after the architecture stabilizes
 

@@ -2,7 +2,7 @@
 
 Date: 2026-03-31
 
-Status: active
+Status: completed inventory backing active harness
 
 Plan traceability:
 
@@ -14,12 +14,22 @@ Plan traceability:
 This document inventories the currently available assets for maintained
 cross-package benchmarking against OOPAO- and SPECULA-based models.
 
-The goal is not to define the final benchmark harness here. The goal is to:
+This document began as the Phase 0 inventory for cross-package benchmarking.
+Phase 5 is now implemented, so this file remains as the source inventory behind
+the maintained harness rather than as the primary execution guide.
+
+The inventory goals are to:
 
 - record which scenario sources already exist
 - identify scenario families that are actually comparable
 - assign candidate `compact`, `medium`, and `representative` seeds
 - record the main comparability limits before Phase 5 benchmark work starts
+
+For the active harness and archived evidence, see:
+
+- [`cross-package-benchmark-harness.md`](./cross-package-benchmark-harness.md)
+- [`../benchmarks/contracts/cross_package.toml`](../benchmarks/contracts/cross_package.toml)
+- [`../benchmarks/results/cross_package`](../benchmarks/results/cross_package)
 
 ## Scenario Sources
 
