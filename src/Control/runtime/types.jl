@@ -123,12 +123,28 @@ precomputation hook for repeated runtime stepping.
 supports_prepared_runtime(::AbstractWFS, ::Any) = false
 
 """
+    supports_detector_output(wfs, det)
+
+Return whether the WFS exposes a maintained detector-coupled `measure!`
+surface for the supplied detector family.
+"""
+supports_detector_output(::AbstractWFS, ::AbstractDetector) = false
+
+"""
     supports_stacked_sources(wfs, src)
 
 Return whether the WFS/source pairing has maintained stacked-source execution
 support, typically for `Asterism` inputs.
 """
 supports_stacked_sources(::AbstractWFS, ::Any) = false
+
+"""
+    supports_grouped_execution(wfs, src)
+
+Return whether the WFS/source pairing exposes maintained grouped execution,
+such as grouped asterism or spectral accumulation.
+"""
+supports_grouped_execution(::AbstractWFS, ::Any) = false
 
 init_execution_state(::AbstractExecutionPolicy, ref) = nothing
 

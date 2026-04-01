@@ -94,6 +94,14 @@ simulation_interface(interface::CompositeSimulationInterface) = interface
 @inline supports_prepared_runtime(::PyramidWFS, ::Asterism) = true
 @inline supports_prepared_runtime(::ZernikeWFS, ::AbstractSource) = true
 @inline supports_prepared_runtime(::CurvatureWFS, ::AbstractSource) = true
+@inline supports_detector_output(::ShackHartmann{<:Diffractive}, ::AbstractDetector) = true
+@inline supports_detector_output(::PyramidWFS{<:Diffractive}, ::AbstractDetector) = true
+@inline supports_detector_output(::BioEdgeWFS{<:Diffractive}, ::AbstractDetector) = true
+@inline supports_detector_output(::ZernikeWFS, ::AbstractDetector) = true
+@inline supports_detector_output(wfs::CurvatureWFS, det::AbstractDetector) = supports_detector_output(wfs.params.readout_model, det)
+@inline supports_detector_output(::CurvatureFrameReadout, ::AbstractDetector) = true
+@inline supports_detector_output(::CurvatureCountingReadout, ::AbstractDetector) = false
+@inline supports_detector_output(::CurvatureCountingReadout, ::APDDetector) = true
 @inline supports_stacked_sources(::ShackHartmann, ::Asterism) = true
 @inline supports_stacked_sources(::ShackHartmann, ::SpectralSource) = true
 @inline supports_stacked_sources(::ShackHartmann, ::ExtendedSource) = true
@@ -101,6 +109,13 @@ simulation_interface(interface::CompositeSimulationInterface) = interface
 @inline supports_stacked_sources(::PyramidWFS, ::SpectralSource) = true
 @inline supports_stacked_sources(::PyramidWFS, ::ExtendedSource) = true
 @inline supports_stacked_sources(::BioEdgeWFS, ::Asterism) = true
+@inline supports_grouped_execution(::ShackHartmann{<:Diffractive}, ::Asterism) = true
+@inline supports_grouped_execution(::ShackHartmann{<:Diffractive}, ::SpectralSource) = true
+@inline supports_grouped_execution(::ShackHartmann{<:Diffractive}, ::ExtendedSource) = true
+@inline supports_grouped_execution(::PyramidWFS{<:Diffractive}, ::Asterism) = true
+@inline supports_grouped_execution(::PyramidWFS{<:Diffractive}, ::SpectralSource) = true
+@inline supports_grouped_execution(::PyramidWFS{<:Diffractive}, ::ExtendedSource) = true
+@inline supports_grouped_execution(::BioEdgeWFS{<:Diffractive}, ::Asterism) = true
 
 """
     prepare_runtime_wfs!(wfs, tel, src)

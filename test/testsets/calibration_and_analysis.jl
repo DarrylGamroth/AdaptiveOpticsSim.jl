@@ -281,6 +281,7 @@ end
     wfs = ShackHartmann(tel; n_subap=2)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     det = Detector(noise=NoiseNone())
+    apd = APDDetector(noise=NoisePhoton())
     psf = fill(1.0, 8, 8)
     opd_map = OPDMap(fill(0.1, size(tel.state.opd)))
     ncpa = NCPA(tel, dm, atm; coefficients=[0.01, -0.02])
@@ -291,7 +292,11 @@ end
     sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
     runtime = ClosedLoopRuntime(sim, modal; rng=MersenneTwister(9))
     wfs_diffractive = ShackHartmann(tel; n_subap=2, mode=Diffractive())
+    poly = with_spectrum(src, SpectralBundle([wavelength(src), 1.1 * wavelength(src)], [0.7, 0.3]))
+    pyr = PyramidWFS(tel; n_subap=2, mode=Diffractive())
+    bio = BioEdgeWFS(tel; n_subap=2, mode=Diffractive())
     zwfs = ZernikeWFS(tel; n_subap=2)
+    curv = CurvatureWFS(tel; n_subap=2)
     curv_count = CurvatureWFS(tel; n_subap=2, readout_model=CurvatureCountingReadout())
     ast = Asterism([src, Source(band=:I, magnitude=1.0, coordinates=(1.0, -45.0))])
     moving_atm = MultiLayerAtmosphere(tel; r0=0.2, L0=25.0, fractional_cn2=[1.0],
@@ -362,16 +367,29 @@ end
     @test supports_prepared_runtime(wfs_diffractive, src)
     @test supports_prepared_runtime(wfs_diffractive, ast)
     @test supports_prepared_runtime(zwfs, src)
-    @test supports_prepared_runtime(CurvatureWFS(tel; n_subap=2), src)
+    @test supports_prepared_runtime(curv, src)
     @test supports_prepared_runtime(PyramidWFS(tel; n_subap=2, mode=Diffractive()), src)
+    @test !supports_detector_output(wfs, det)
+    @test supports_detector_output(wfs_diffractive, det)
+    @test supports_detector_output(pyr, det)
+    @test supports_detector_output(bio, det)
+    @test supports_detector_output(zwfs, det)
+    @test supports_detector_output(curv, det)
+    @test !supports_detector_output(curv_count, det)
+    @test supports_detector_output(curv_count, apd)
     @test !supports_stacked_sources(wfs, src)
     @test supports_stacked_sources(wfs, ast)
     @test supports_stacked_sources(wfs_diffractive, ast)
+    @test !supports_grouped_execution(wfs_diffractive, src)
+    @test supports_grouped_execution(wfs_diffractive, ast)
+    @test supports_grouped_execution(wfs_diffractive, poly)
+    @test supports_grouped_execution(pyr, ast)
+    @test supports_grouped_execution(pyr, poly)
+    @test supports_grouped_execution(bio, ast)
     prepare_runtime_wfs!(wfs_diffractive, tel, src)
     @test wfs_diffractive.state.calibrated
     prepare_runtime_wfs!(zwfs, tel, src)
     @test zwfs.state.calibrated
-    curv = CurvatureWFS(tel; n_subap=2)
     prepare_runtime_wfs!(curv, tel, src)
     @test curv.state.calibrated
 end
@@ -422,4 +440,3 @@ end
     @test length(coeffs) == 2
     @test diagnostics(lift).residual_norm >= 0
 end
-

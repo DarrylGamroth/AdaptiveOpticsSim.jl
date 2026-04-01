@@ -366,6 +366,12 @@ Status:
   `supports_prepared_runtime(wfs, src)` and `prepare_runtime_wfs!(...)`
 - stacked-source support is now queried explicitly through
   `supports_stacked_sources(wfs, src)` for the maintained WFS families
+- detector-coupled WFS measurement is now queried explicitly through
+  `supports_detector_output(wfs, det)` for the maintained detector-aware WFS
+  families
+- grouped WFS execution is now queried explicitly through
+  `supports_grouped_execution(wfs, src)` for the maintained grouped
+  asterism/spectral families
 - calibration-build backend defaults were already formalized earlier through the
   runtime calibration build-backend policy work
 - broader calibration/workflow trait cleanup is still open
