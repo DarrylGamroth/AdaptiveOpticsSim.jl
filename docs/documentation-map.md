@@ -68,6 +68,8 @@ If you are:
   - OOPAO frozen bundle policy and provenance
 - [`specula-reference-datasets.md`](./specula-reference-datasets.md)
   - SPECULA-targeted frozen bundle policy and provenance
+- [`phase-statistics-accuracy.md`](./phase-statistics-accuracy.md)
+  - maintained accuracy note for the shared `K_{5/6}` covariance helper
 - [`optional-integration-boundaries.md`](./optional-integration-boundaries.md)
   - optional integration and package-boundary rules
 - [`future-platform-direction.md`](./future-platform-direction.md)

@@ -256,7 +256,7 @@ Preferred evidence order:
 
 ### Phase 1
 
-- `[ ]` `PVP-01` phase-statistics accuracy evidence
+- `[x]` `PVP-01` phase-statistics accuracy evidence
 - `[ ]` `PVP-02` atmosphere statistics artifact or defer note
 - `[ ]` `PVP-03` atmospheric-field external reference artifact or defer note
 - `[ ]` `PVP-04` detector-family validation artifact
