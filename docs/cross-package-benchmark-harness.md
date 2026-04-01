@@ -80,6 +80,33 @@ The result schema separates:
 - fidelity metrics
 - deferred or skipped scenarios
 
+## Manifest Policy
+
+The archived cross-package manifest records two policy layers:
+
+- `scenario_policies`
+  - classifies each benchmark family as `mandatory`, `optional`, or
+    `environment_gated`
+- `implementation_policies`
+  - records per-implementation exceptions when a scenario is maintained but a
+    specific participant depends on neighboring-tree assets or optional runtime
+    environment setup
+
+Current interpretation:
+
+- `mandatory`
+  - expected to appear in the active archived ladder and pass in a normal
+    maintainer environment
+- `optional`
+  - useful comparison participant, but not required for the harness run to be
+    considered valid
+- `environment_gated`
+  - maintained by contract, but expected to remain deferred until the required
+    external runnable asset or environment is available
+
+This keeps the archived benchmark record explicit about what is required,
+best-effort, and intentionally deferred.
+
 ## Maintained Metrics
 
 ### Runtime metrics

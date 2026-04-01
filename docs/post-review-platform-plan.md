@@ -277,7 +277,9 @@ Preferred evidence order:
 - `[x]` `PVP-09` `CP-05` benchmark family or scoped defer
   - deferred with scope note in
     [specula-atmo-field-benchmark-scope.md](./specula-atmo-field-benchmark-scope.md)
-- `[ ]` `PVP-10` benchmark-results manifest and guide update
+- `[x]` `PVP-10` benchmark-results manifest and guide update
+  - policy recorded in
+    [benchmarks/results/cross_package/manifest.toml](../benchmarks/results/cross_package/manifest.toml)
 
 ### Phase 3
 

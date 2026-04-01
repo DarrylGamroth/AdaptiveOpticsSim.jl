@@ -49,7 +49,7 @@ If you are:
 - [`benchmark-matrix-plan.md`](./benchmark-matrix-plan.md)
   - maintained performance surfaces and benchmark classes
 - [`cross-package-benchmark-harness.md`](./cross-package-benchmark-harness.md)
-  - cross-package benchmark execution and archived evidence
+  - cross-package benchmark execution, archived evidence, and scenario policy
 - [`revolt-sh-benchmark-contract.md`](./revolt-sh-benchmark-contract.md)
   - normalization rules and accepted differences for the maintained `CP-02`
     REVOLT-like Shack-Hartmann comparison
