@@ -87,6 +87,12 @@ Examples of better next breadth areas than more OOPAO parity:
 - carefully selected controller/process families with clear benchmark and
   validation goals
 
+The currently selected next breadth milestone is:
+
+- grouped sensing/runtime orchestration
+  - plan: [grouped-runtime-plan.md](./grouped-runtime-plan.md)
+  - decision memo: [next-milestone-decision-2026-04.md](./next-milestone-decision-2026-04.md)
+
 ## What To Avoid
 
 Avoid these patterns unless a later explicit plan justifies them:

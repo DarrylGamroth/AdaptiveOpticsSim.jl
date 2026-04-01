@@ -283,6 +283,10 @@ Preferred evidence order:
 
 ### Phase 3
 
-- `[ ]` `PVP-11` next-milestone comparison memo
-- `[ ]` `PVP-12` committed next-milestone plan
-- `[ ]` `PVP-13` explicit defer records for non-chosen candidates
+- `[x]` `PVP-11` next-milestone comparison memo
+  - [next-milestone-decision-2026-04.md](./next-milestone-decision-2026-04.md)
+- `[x]` `PVP-12` committed next-milestone plan
+  - [grouped-runtime-plan.md](./grouped-runtime-plan.md)
+- `[x]` `PVP-13` explicit defer records for non-chosen candidates
+  - recorded in
+    [next-milestone-decision-2026-04.md](./next-milestone-decision-2026-04.md)

@@ -207,6 +207,12 @@ validation shows the new default is still too coarse.
 - [x] Publish explicit post-review direction guardrails in
   [`future-platform-direction.md`](./future-platform-direction.md) and keep
   this roadmap aligned with them.
+- [x] Select one evidence-backed next breadth milestone and defer the
+  alternatives explicitly.
+  - chosen milestone:
+    [grouped-runtime-plan.md](./grouped-runtime-plan.md)
+  - decision memo:
+    [next-milestone-decision-2026-04.md](./next-milestone-decision-2026-04.md)
 - [ ] Write and implement the interface/style specification pass described in
   `docs/interface-style-spec-plan.md`, with explicit abstract-family contracts,
   capability-trait audit, and conformance tests.

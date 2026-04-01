@@ -64,6 +64,10 @@ If you are:
 - [`post-review-platform-plan.md`](./post-review-platform-plan.md)
   - phased next-step plan for validation hardening, benchmark expansion, and
     next capability selection
+- [`next-milestone-decision-2026-04.md`](./next-milestone-decision-2026-04.md)
+  - evidence-backed selection memo for the next breadth milestone
+- [`grouped-runtime-plan.md`](./grouped-runtime-plan.md)
+  - chosen next breadth milestone for grouped sensing/runtime orchestration
 
 ## Active Supporting Reference
 
