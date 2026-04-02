@@ -108,6 +108,36 @@ This plan does not directly implement:
 Make the platform easier to understand and use without changing the primary
 Julia-native workflow model.
 
+### Exit Criteria
+
+Phase 1 is complete when:
+
+- the next API-curation tranche is implemented and recorded in the maintained
+  API inventory
+- a user can move from “I know individual subsystems” to “I understand how to
+  build and run a realistic platform scenario” using stable synthesis docs
+- the recommended path for reproducible scenario authoring is documented as
+  script-first, typed, and Julia-native
+- affected docs and tests are updated so the new guidance is aligned with the
+  maintained implementation
+
+### Phase Outputs
+
+Phase 1 should produce:
+
+- one additional export-curation patch with updated traceability
+- one stable architecture/synthesis guide for platform-scale usage
+- one stable workflow guide describing how the main runtime pieces fit together
+- one scenario-authoring style guide for reproducible script-based platform
+  scenarios
+
+### Recommended Execution Order
+
+1. `PSP-01`
+2. `PSP-02`
+3. `PSP-03`
+4. `PSP-04`
+
 ### Milestones
 
 | Milestone | Task | Outputs |
@@ -116,6 +146,217 @@ Julia-native workflow model.
 | `PSP-02` | Add a synthesis-oriented platform architecture guide aimed at users moving beyond single tutorials. | new stable guide |
 | `PSP-03` | Add a platform workflow guide explaining how atmosphere, runtime, WFS, detector, and benchmark entry points fit together. | new stable guide or expanded user guide section |
 | `PSP-04` | Add a scenario-builder style guide that defines how Julia scripts should express reproducible scenarios without config files. | style guide / conventions note |
+
+### `PSP-01`: Next API-Curation Tranche
+
+Objective:
+
+- remove another low-value tranche of top-level exports while preserving the
+  stable top-level experience for the most common constructors and workflows
+
+Primary files in scope:
+
+- [src/AdaptiveOpticsSim.jl](../src/AdaptiveOpticsSim.jl)
+- [docs/api-tier-inventory.md](./api-tier-inventory.md)
+- [docs/api-reference.md](./api-reference.md)
+- [docs/user-guide.md](./user-guide.md)
+- affected examples and tests that still depend on the candidate exports
+
+Detailed work:
+
+- re-scan current exports and identify the next low-risk tranche of names that
+  are:
+  - helper-level,
+  - calibration-internal,
+  - benchmark-only,
+  - or better consumed via `AdaptiveOpticsSim.<name>`
+- record that tranche in [api-tier-inventory.md](./api-tier-inventory.md)
+- de-export the chosen tranche in
+  [src/AdaptiveOpticsSim.jl](../src/AdaptiveOpticsSim.jl)
+- update affected docs, tutorials, examples, and tests to use explicit
+  namespaced access
+- add or update at least one regression test that confirms the intended stable
+  top-level API remains available
+
+Deliverables:
+
+- export-curation code patch
+- updated API inventory with before/after counts
+- updated API docs/examples reflecting the curated surface
+
+Acceptance criteria:
+
+- export count is reduced again, or the remaining tranche is explicitly
+  reclassified with evidence that further reduction would hurt usability
+- no documented stable quickstart path becomes more obscure
+- `Pkg.test()` passes after the export changes
+
+Evidence to record:
+
+- export count before/after
+- list of de-exported names or categories
+- any intentionally retained borderline names and the reason
+
+### `PSP-02`: Platform Architecture Synthesis Guide
+
+Objective:
+
+- give advanced users and maintainers one stable orientation guide that explains
+  the package as a platform rather than as a pile of subsystem docs
+
+Primary files in scope:
+
+- new stable guide, expected path:
+  [docs/platform-architecture.md](./platform-architecture.md)
+- [docs/documentation-map.md](./documentation-map.md)
+- [docs/user-guide.md](./user-guide.md)
+- [docs/maintainer-architecture.md](./maintainer-architecture.md)
+- [docs/runtime-dataflow.md](./runtime-dataflow.md)
+
+Detailed work:
+
+- write a synthesis-oriented architecture guide covering:
+  - platform building blocks,
+  - params/state/runtime ownership,
+  - orchestration boundaries,
+  - validation surfaces,
+  - backend strategy,
+  - and extension boundaries
+- explicitly connect single-subsystem usage to platform-scale composition
+- keep the guide descriptive, not roadmap-shaped
+- link out to the deeper subsystem docs instead of duplicating them
+- update [documentation-map.md](./documentation-map.md) so the new guide becomes
+  a first-class stable entry point
+
+Minimum section schema:
+
+- purpose
+- platform model
+- major subsystem families
+- how runtime composition works today
+- how validation and benchmarks support claims
+- extension boundaries and non-goals
+- recommended reading path
+
+Deliverables:
+
+- new stable platform architecture guide
+- updated documentation map and any necessary cross-links
+
+Acceptance criteria:
+
+- a reader can understand the package-level architecture without reading plan
+  docs first
+- the guide complements rather than duplicates
+  [maintainer-architecture.md](./maintainer-architecture.md)
+- doc navigation exposes the guide as a stable entry point
+
+Evidence to record:
+
+- guide path
+- updated documentation-map entry
+- any replaced or superseded orientation references
+
+### `PSP-03`: Platform Workflow Guide
+
+Objective:
+
+- describe the main script-first workflow from scenario setup through runtime
+  execution, validation, and benchmarking
+
+Primary files in scope:
+
+- new stable guide, expected path:
+  [docs/platform-workflows.md](./platform-workflows.md)
+- [docs/user-guide.md](./user-guide.md)
+- [docs/runtime-dataflow.md](./runtime-dataflow.md)
+- [docs/benchmark-matrix-plan.md](./benchmark-matrix-plan.md)
+- [docs/model-validity-matrix.md](./model-validity-matrix.md)
+
+Detailed work:
+
+- write one workflow-oriented guide for:
+  - defining sources/telescope/atmosphere/WFS/detector/runtime
+  - building a reproducible script
+  - running validation/reference comparisons
+  - running maintained benchmarks
+  - choosing grouped/platform-scale versus isolated subsystem workflows
+- include concrete references to the maintained scripts and examples that should
+  be copied or adapted
+- make clear when users should use:
+  - tutorials,
+  - stable APIs,
+  - benchmark scripts,
+  - or cross-package harnesses
+
+Deliverables:
+
+- new stable workflow guide or equivalent substantial user-guide expansion
+- updated navigation links
+
+Acceptance criteria:
+
+- a user can follow the guide to construct a realistic script-based platform
+  workflow without scanning multiple plan docs
+- the guide clearly distinguishes:
+  - normal usage,
+  - validation usage,
+  - and benchmarking usage
+
+Evidence to record:
+
+- guide path
+- referenced maintained scripts/examples
+- any updated stable navigation entries
+
+### `PSP-04`: Scenario-Builder Style Guide
+
+Objective:
+
+- define the package’s maintained script-first conventions for reproducible,
+  typed scenario construction
+
+Primary files in scope:
+
+- new stable/supporting guide, expected path:
+  [docs/scenario-builder-style.md](./scenario-builder-style.md)
+- [docs/user-guide.md](./user-guide.md)
+- [docs/future-platform-direction.md](./future-platform-direction.md)
+- relevant examples/tutorials if a canonical pattern needs to be updated
+
+Detailed work:
+
+- write the style rules for scenario scripts, including:
+  - params/state separation in scripts
+  - deterministic RNG ownership
+  - scenario naming and decomposition
+  - builder/helper function boundaries
+  - result capture and export expectations
+  - benchmark/validation hooks
+  - what should not be embedded directly in scripts
+- show a canonical script layout for:
+  - a normal platform run,
+  - a validation run,
+  - and a benchmark run
+- explicitly document that scenario manifests remain deferred and secondary
+
+Deliverables:
+
+- maintained style guide for script-based scenario construction
+- updated cross-links from user-facing docs
+
+Acceptance criteria:
+
+- the style guide makes script-first platform composition more uniform
+- the package stance against config-first primary workflows is explicit
+- later orchestration work can reference this guide instead of inventing new
+  script conventions ad hoc
+
+Evidence to record:
+
+- guide path
+- canonical script layout pattern recorded in the guide
+- any examples updated to align with the new rules
 
 ### Acceptance
 
@@ -129,6 +370,33 @@ Julia-native workflow model.
 
 Close the highest-value remaining validation and benchmark gaps.
 
+### Exit Criteria
+
+Phase 2 is complete when:
+
+- tomography benchmark scope is either strengthened with a maintained artifact
+  or explicitly re-scoped with current benchmark-backed evidence
+- SPECULA-aligned evidence extends beyond isolated optical contracts into at
+  least one broader runtime/platform-scale scenario
+- all new evidence is reflected in the maintained validity/benchmark docs and
+  stored as reproducible artifacts or explicit decision records
+
+### Phase Outputs
+
+Phase 2 should produce:
+
+- one tomography benchmark artifact or defer note with current justification
+- expanded SPECULA-aligned validation/reference data where it materially
+  strengthens platform claims
+- one broader platform/runtime comparison surface inspired by SPECULA
+- updated validity, benchmark, and documentation-map traceability
+
+### Recommended Execution Order
+
+1. `PSP-05`
+2. `PSP-06`
+3. `PSP-07`
+
 ### Milestones
 
 | Milestone | Task | Outputs |
@@ -136,6 +404,141 @@ Close the highest-value remaining validation and benchmark gaps.
 | `PSP-05` | Convert the tomography representative benchmark defer into a maintained benchmark artifact, or explicitly re-scope it with benchmark-backed reasoning if it is still not practical. | benchmark artifact or updated defer note |
 | `PSP-06` | Expand SPECULA-aligned validation beyond current contract-only cases where the platform claim would benefit from broader evidence. | new frozen bundle cases and updated validity matrix |
 | `PSP-07` | Add at least one platform-scale SPECULA-informed scenario comparing orchestration/runtime behavior rather than only isolated optical kernels. | new benchmark/validation contract and archived result |
+
+### `PSP-05`: Representative Tomography Evidence
+
+Objective:
+
+- either close the tomography benchmark defer with maintained representative
+  evidence or replace the current defer note with a more defensible scoped
+  decision backed by fresh measurements
+
+Primary files in scope:
+
+- [docs/tomography-benchmark-scope.md](./tomography-benchmark-scope.md)
+- [docs/model-validity-matrix.md](./model-validity-matrix.md)
+- [docs/benchmark-matrix-plan.md](./benchmark-matrix-plan.md)
+- a maintained generator and archived artifact if evidence is added
+
+Detailed work:
+
+- re-evaluate the current tomography benchmark blockers against the present
+  codebase and benchmark surfaces
+- if representative evidence is now practical:
+  - add a maintained generator script
+  - archive the result artifact and manifest
+  - wire it into the validity matrix
+- if representative evidence is still not practical:
+  - replace the current defer with a tighter scope note
+  - record concrete blocker categories and revisit conditions
+
+Deliverables:
+
+- benchmark artifact plus manifest, or
+- stronger defer note with benchmark-backed rationale
+
+Acceptance criteria:
+
+- `MV-10` is either strengthened with current evidence or re-scoped with a
+  materially better justification than the existing note
+- the decision is reproducible and recorded in maintained docs
+
+Evidence to record:
+
+- benchmark script path if added
+- archived result path if added
+- explicit blocker list if still deferred
+
+### `PSP-06`: Broader SPECULA-Aligned Validation
+
+Objective:
+
+- strengthen SPECULA-referenced claims beyond today’s mostly contract-oriented
+  frozen cases where broader runtime or orchestration evidence is useful
+
+Primary files in scope:
+
+- [docs/specula-reference-datasets.md](./specula-reference-datasets.md)
+- [docs/model-validity-matrix.md](./model-validity-matrix.md)
+- [test/reference_harness.jl](../test/reference_harness.jl)
+- [scripts/generate_specula_reference_bundle.jl](../scripts/generate_specula_reference_bundle.jl)
+- [test/reference_data_specula](../test/reference_data_specula)
+
+Detailed work:
+
+- identify one or two high-value SPECULA-aligned scenarios where current
+  evidence is too narrow, focusing on:
+  - broader runtime behavior,
+  - grouped/platform execution,
+  - or platform-relevant orchestration rather than more isolated kernels
+- extend the SPECULA reference harness/generator only as needed for those cases
+- add frozen reference cases and wire them into the maintained regression suite
+- update the validity matrix with the stronger scope
+
+Deliverables:
+
+- new SPECULA-aligned reference bundle cases
+- updated generator/harness support
+- updated validity and provenance docs
+
+Acceptance criteria:
+
+- at least one new SPECULA-aligned case goes beyond current narrow optical
+  contract coverage
+- the new evidence is committed, reproducible, and exercised in maintained test
+  flows
+
+Evidence to record:
+
+- new case IDs and bundle paths
+- generator/harness changes
+- updated validity status for the affected matrix entry
+
+### `PSP-07`: Platform-Scale SPECULA-Informed Scenario
+
+Objective:
+
+- add one broader scenario that evaluates orchestration/runtime behavior in a
+  way that better reflects platform-scale comparison than isolated component
+  validation does
+
+Primary files in scope:
+
+- [benchmarks/contracts/cross_package.toml](../benchmarks/contracts/cross_package.toml)
+- [scripts/run_cross_package_benchmarks.jl](../scripts/run_cross_package_benchmarks.jl)
+- [docs/cross-package-benchmark-harness.md](./cross-package-benchmark-harness.md)
+- [docs/model-validity-matrix.md](./model-validity-matrix.md)
+- archived results under [benchmarks/results](../benchmarks/results)
+
+Detailed work:
+
+- define one broader SPECULA-informed scenario contract with:
+  - normalized parameters,
+  - explicit accepted non-equivalences,
+  - and clearly stated success metrics
+- prefer a platform/runtime scenario that exercises orchestration or grouped
+  behavior rather than a single isolated propagation kernel
+- add runner support and archive the resulting baseline, or explicitly record a
+  precise environment/scenario gate if an external dependency still prevents the
+  full comparison
+
+Deliverables:
+
+- new contract entry
+- archived result or scoped environment-gated result note
+- updated benchmark harness docs
+
+Acceptance criteria:
+
+- Phase 2 ends with at least one broader SPECULA-informed runtime/platform
+  comparison surface recorded in the maintained benchmark/validation set
+- environment-gated limitations, if any, are explicit instead of implicit
+
+Evidence to record:
+
+- contract ID
+- archived result path
+- normalization rules and accepted differences
 
 ### Acceptance
 
