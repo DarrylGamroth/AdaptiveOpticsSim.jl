@@ -294,6 +294,10 @@ Implementation record:
 
 ### `PSP-03`: Platform Workflow Guide
 
+Status:
+
+- completed
+
 Objective:
 
 - describe the main script-first workflow from scenario setup through runtime
@@ -343,6 +347,16 @@ Evidence to record:
 - guide path
 - referenced maintained scripts/examples
 - any updated stable navigation entries
+
+Implementation record:
+
+- stable guide added:
+  [platform-workflows.md](./platform-workflows.md)
+- stable navigation updated in:
+  [documentation-map.md](./documentation-map.md)
+- user-facing entry points updated in:
+  [user-guide.md](./user-guide.md) and
+  [platform-architecture.md](./platform-architecture.md)
 
 ### `PSP-04`: Scenario-Builder Style Guide
 
@@ -717,7 +731,7 @@ next topic.
 
 - [x] `PSP-01`
 - [x] `PSP-02`
-- [ ] `PSP-03`
+- [x] `PSP-03`
 - [ ] `PSP-04`
 
 ### Phase 2

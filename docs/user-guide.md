@@ -7,6 +7,8 @@ Start with:
 - [`documentation-map.md`](./documentation-map.md) for doc navigation
 - [`platform-architecture.md`](./platform-architecture.md) for package-level
   synthesis
+- [`platform-workflows.md`](./platform-workflows.md) for platform-scale usage
+  and evidence workflows
 - [`api-reference.md`](./api-reference.md) for maintained public APIs
 - [`model-validity-matrix.md`](./model-validity-matrix.md) for model evidence
 - [`benchmark-matrix-plan.md`](./benchmark-matrix-plan.md) for performance
@@ -31,6 +33,10 @@ start and the main API sections in
 
 If you want the package-level picture before diving into workflows, read
 [platform-architecture.md](./platform-architecture.md) first.
+
+If you want the maintained script-first workflow for realistic simulations,
+validation, or benchmark runs, then read
+[platform-workflows.md](./platform-workflows.md) next.
 
 For advanced utilities such as telemetry/config helpers, scenario builders,
 build-backend policy helpers, and misregistration-identification tools, use

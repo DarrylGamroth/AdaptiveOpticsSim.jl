@@ -24,6 +24,8 @@ questions like:
 This is a stable synthesis guide. It complements:
 
 - [`user-guide.md`](./user-guide.md) for workflow-oriented entry
+- [`platform-workflows.md`](./platform-workflows.md) for script-first workflow
+  composition
 - [`api-reference.md`](./api-reference.md) for maintained symbols
 - [`maintainer-architecture.md`](./maintainer-architecture.md) for subsystem
   ownership
@@ -253,7 +255,7 @@ See:
 If you are:
 
 - learning the platform shape:
-  - read this guide, then [`user-guide.md`](./user-guide.md)
+  - read this guide, then [`platform-workflows.md`](./platform-workflows.md)
 - maintaining code structure:
   - read this guide, then [`maintainer-architecture.md`](./maintainer-architecture.md)
 - debugging runtime ownership or export behavior:

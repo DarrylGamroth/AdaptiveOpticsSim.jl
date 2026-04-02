@@ -24,6 +24,8 @@ If you are:
   - [`user-guide.md`](./user-guide.md)
 - trying to understand the package as a platform:
   - [`platform-architecture.md`](./platform-architecture.md)
+- trying to understand how to actually build, validate, or benchmark a platform script:
+  - [`platform-workflows.md`](./platform-workflows.md)
 - looking for maintained public APIs:
   - [`api-reference.md`](./api-reference.md)
 - maintaining or refactoring the codebase:
@@ -42,6 +44,8 @@ If you are:
   - workflow-oriented user entry point
 - [`platform-architecture.md`](./platform-architecture.md)
   - stable synthesis guide for platform-scale structure and boundaries
+- [`platform-workflows.md`](./platform-workflows.md)
+  - stable workflow guide for script-first simulation, validation, and benchmarking
 - [`api-reference.md`](./api-reference.md)
   - maintained public API surface
 - [`maintainer-architecture.md`](./maintainer-architecture.md)
