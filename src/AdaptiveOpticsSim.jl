@@ -90,7 +90,6 @@ export FidelityProfile, ScientificProfile, FastProfile, ProfileBundle, default_f
 export atmosphere_profile, calibration_profile, detector_profile, lift_profile, tomography_profile
 export InversePolicy, ExactPseudoInverse, TSVDInverse, TikhonovInverse, InverseStats, inverse_operator
 export default_modal_inverse_policy, default_calibration_inverse_policy, default_projector_inverse_policy
-export BuildBackend, NativeBuildBackend, CPUBuildBackend, GPUArrayBuildBackend, default_build_backend
 export AbstractMaskPrimitive, MaskGrid
 export CircularAperture, AnnularAperture, SpiderMask, RectangularROI, SubapertureGridMask
 export default_mask_grid, pixel_mask_grid, build_mask!, apply_mask!
@@ -224,7 +223,6 @@ export WFSNormalization, MeanValidFluxNormalization, IncidenceFluxNormalization
 export NoiseModel, NoiseNone, NoisePhoton, NoiseReadout, NoisePhotonReadout
 export DMApplyMode, DMAdditive, DMReplace
 export ParallelConfig, with_parallel_config
-export set_fft_provider_threads!
 export gpu_backend_loaded, gpu_backend_array_type, gpu_backend_name, available_gpu_backends
 export disable_scalar_backend!, backend_rand, backend_randn, backend_zeros, backend_fill
 export GPUBackendTag, CUDABackendTag, MetalBackendTag, AMDGPUBackendTag

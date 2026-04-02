@@ -40,9 +40,9 @@ end
     dm_cmd = update!(ctrl, wfs.state.slopes, 0.01)
     @test length(dm_cmd) == length(wfs.state.slopes)
 
-    vault = CalibrationVault(imat.matrix; build_backend=CPUBuildBackend())
+    vault = CalibrationVault(imat.matrix; build_backend=AdaptiveOpticsSim.CPUBuildBackend())
     @test vault.M isa Matrix
-    recon_cpu = ModalReconstructor(imat; build_backend=CPUBuildBackend())
+    recon_cpu = ModalReconstructor(imat; build_backend=AdaptiveOpticsSim.CPUBuildBackend())
     @test recon_cpu.reconstructor isa Matrix
 end
 

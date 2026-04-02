@@ -7,7 +7,18 @@
     @test gpu_backend_array_type(AMDGPUBackendTag) === nothing
     @test gpu_backend_name(Matrix{Float64}) === nothing
     @test available_gpu_backends() == ()
-    @test GPUArrayBuildBackend(CUDABackendTag) isa GPUArrayBuildBackend{CUDABackendTag}
+    @test AdaptiveOpticsSim.GPUArrayBuildBackend(CUDABackendTag) isa AdaptiveOpticsSim.GPUArrayBuildBackend{CUDABackendTag}
+end
+
+@testset "API export curation" begin
+    @test Base.isexported(AdaptiveOpticsSim, :Telescope)
+    @test Base.isexported(AdaptiveOpticsSim, :ShackHartmann)
+    @test !Base.isexported(AdaptiveOpticsSim, :BuildBackend)
+    @test !Base.isexported(AdaptiveOpticsSim, :CPUBuildBackend)
+    @test !Base.isexported(AdaptiveOpticsSim, :GPUArrayBuildBackend)
+    @test !Base.isexported(AdaptiveOpticsSim, :default_build_backend)
+    @test !Base.isexported(AdaptiveOpticsSim, :set_fft_provider_threads!)
+    @test AdaptiveOpticsSim.CPUBuildBackend() isa AdaptiveOpticsSim.BuildBackend
 end
 
 @testset "Telescope and PSF" begin

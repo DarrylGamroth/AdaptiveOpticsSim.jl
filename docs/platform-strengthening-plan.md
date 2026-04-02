@@ -149,6 +149,10 @@ Phase 1 should produce:
 
 ### `PSP-01`: Next API-Curation Tranche
 
+Status:
+
+- completed
+
 Objective:
 
 - remove another low-value tranche of top-level exports while preserving the
@@ -196,6 +200,22 @@ Evidence to record:
 - export count before/after
 - list of de-exported names or categories
 - any intentionally retained borderline names and the reason
+
+Implementation record:
+
+- pre-`PSP-01` export count: `544`
+- post-`PSP-01` export count: `538`
+- de-exported tranche:
+  - `BuildBackend`
+  - `NativeBuildBackend`
+  - `CPUBuildBackend`
+  - `GPUArrayBuildBackend`
+  - `default_build_backend`
+  - `set_fft_provider_threads!`
+- intentionally retained for a later coherent pass:
+  - GPU backend tags
+  - GPU precision-policy helpers
+  - low-level backend allocation helpers
 
 ### `PSP-02`: Platform Architecture Synthesis Guide
 

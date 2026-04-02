@@ -17,7 +17,7 @@ function run_gpu_model_tomography_phase_profile(::Type{B}) where {B<:GPUBackendT
 
     policy = AdaptiveOpticsSim.default_gpu_precision_policy(B)
     TB = AdaptiveOpticsSim.gpu_build_type(policy)
-    build_backend = GPUArrayBuildBackend(B)
+    build_backend = AdaptiveOpticsSim.GPUArrayBuildBackend(B)
 
     n_lenslet = 3
     n_lgs = 2

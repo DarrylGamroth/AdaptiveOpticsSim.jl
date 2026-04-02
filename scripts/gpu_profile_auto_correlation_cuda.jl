@@ -25,7 +25,7 @@ function _profile_case(::Type{B}) where {B<:GPUBackendTag}
 
     policy = AdaptiveOpticsSim.default_gpu_precision_policy(B)
     T = AdaptiveOpticsSim.gpu_build_type(policy)
-    backend = GPUArrayBuildBackend(B)
+    backend = AdaptiveOpticsSim.GPUArrayBuildBackend(B)
 
     n_lenslet = 3
     n_lgs = 2

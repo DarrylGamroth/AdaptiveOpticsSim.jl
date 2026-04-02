@@ -534,8 +534,8 @@ function _low_order_command_basis(dm::DeformableMirror, tel::Telescope, active_m
 end
 
 function _full_command_reconstructor(M2C_host::AbstractMatrix{T}, imat::InteractionMatrix{T};
-    gain::Real, policy::InversePolicy, inverse_build_backend::BuildBackend,
-    materialize_backend::BuildBackend, ref::AbstractMatrix{T}) where {T<:AbstractFloat}
+    gain::Real, policy::InversePolicy, inverse_build_backend::AdaptiveOpticsSim.BuildBackend,
+    materialize_backend::AdaptiveOpticsSim.BuildBackend, ref::AbstractMatrix{T}) where {T<:AbstractFloat}
     return MappedReconstructor(
         M2C_host,
         imat;
@@ -548,13 +548,13 @@ function _full_command_reconstructor(M2C_host::AbstractMatrix{T}, imat::Interact
 end
 
 function _auto_build_backend(backend)
-    backend === Array && return NativeBuildBackend()
-    for B in available_gpu_backends()
-        if backend === gpu_backend_array_type(B)
-            return GPUArrayBuildBackend(B)
+    backend === Array && return AdaptiveOpticsSim.NativeBuildBackend()
+    for B in AdaptiveOpticsSim.available_gpu_backends()
+        if backend === AdaptiveOpticsSim.gpu_backend_array_type(B)
+            return AdaptiveOpticsSim.GPUArrayBuildBackend(B)
         end
     end
-    return NativeBuildBackend()
+    return AdaptiveOpticsSim.NativeBuildBackend()
 end
 
 function _ao188_calibration_objects(params::AO188SimulationParams{T}) where {T<:AbstractFloat}
@@ -648,9 +648,9 @@ function prepare_replay!(simulation::AO188Simulation)
 end
 
 function subaru_ao188_simulation(; params::AO188SimulationParams=AO188SimulationParams(),
-    backend=Array, build_backend::Union{Nothing,BuildBackend}=nothing, rng=MersenneTwister(0))
+    backend=Array, build_backend::Union{Nothing,AdaptiveOpticsSim.BuildBackend}=nothing, rng=MersenneTwister(0))
     resolved_materialize_backend = isnothing(build_backend) ? _auto_build_backend(backend) : build_backend
-    resolved_calibration_backend = isnothing(build_backend) && backend !== Array ? CPUBuildBackend() : resolved_materialize_backend
+    resolved_calibration_backend = isnothing(build_backend) && backend !== Array ? AdaptiveOpticsSim.CPUBuildBackend() : resolved_materialize_backend
     T = typeof(params.diameter)
     if params.resolution % params.low_order_resolution != 0
         throw(InvalidConfiguration("low_order_resolution must evenly divide the main telescope resolution"))
@@ -690,7 +690,7 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
     calibration_low_dm = low_dm
     calibration_high_wfs = high_wfs
     calibration_low_wfs = low_wfs
-    if resolved_calibration_backend isa CPUBuildBackend && backend !== Array
+    if resolved_calibration_backend isa AdaptiveOpticsSim.CPUBuildBackend && backend !== Array
         calibration_tel, calibration_low_tel, calibration_src,
         calibration_dm, calibration_low_dm, calibration_high_wfs, calibration_low_wfs =
             _ao188_calibration_objects(params)

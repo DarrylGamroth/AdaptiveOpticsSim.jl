@@ -7,7 +7,7 @@ function run_gpu_builder_smoke(::Type{B}) where {B<:GPUBackendTag}
     BackendArray === nothing && error("GPU backend $(B) is not available")
 
     T = Float32
-    build_backend = GPUArrayBuildBackend(B)
+    build_backend = AdaptiveOpticsSim.GPUArrayBuildBackend(B)
 
     A = backend_rand(B, T, 8, 4)
     imat = InteractionMatrix(A, T(0.1))
@@ -17,7 +17,7 @@ function run_gpu_builder_smoke(::Type{B}) where {B<:GPUBackendTag}
 
     recon = ModalReconstructor(imat; build_backend=build_backend)
     @assert recon.reconstructor isa BackendArray
-    recon_cpu = ModalReconstructor(InteractionMatrix(cpu_A, T(0.1)); build_backend=CPUBuildBackend())
+    recon_cpu = ModalReconstructor(InteractionMatrix(cpu_A, T(0.1)); build_backend=AdaptiveOpticsSim.CPUBuildBackend())
     slopes_modal = reshape(T.(1:8), 8)
     @assert isapprox(
         Array(reconstruct(recon, AdaptiveOpticsSim.materialize_build(build_backend, slopes_modal))),
@@ -94,7 +94,7 @@ function run_gpu_builder_smoke(::Type{B}) where {B<:GPUBackendTag}
         tomo,
         dm;
         noise_model=noise,
-        build_backend=CPUBuildBackend(),
+        build_backend=AdaptiveOpticsSim.CPUBuildBackend(),
     )
     slopes_tomo = T[0.25, -0.5]
     slopes_tomo_tr_gpu = AdaptiveOpticsSim.materialize_build(build_backend, convert.(eltype(tr.reconstructor), slopes_tomo))
@@ -133,7 +133,7 @@ function run_gpu_builder_smoke(::Type{B}) where {B<:GPUBackendTag}
         tomo,
         dm;
         noise_model=noise,
-        build_backend=CPUBuildBackend(),
+        build_backend=AdaptiveOpticsSim.CPUBuildBackend(),
     )
     slopes_tomo_mr = convert.(eltype(mr_cpu.reconstructor), slopes_tomo)
     slopes_tomo_mr_gpu = AdaptiveOpticsSim.materialize_build(build_backend, slopes_tomo_mr)

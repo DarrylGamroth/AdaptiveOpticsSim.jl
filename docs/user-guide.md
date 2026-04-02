@@ -27,13 +27,15 @@ For ordinary usage, start with the exported workflow surface shown in the quick
 start and the main API sections in
 [api-reference.md](./api-reference.md).
 
-For advanced utilities such as telemetry/config helpers, scenario builders, and
-misregistration-identification tools, use namespaced access. Examples:
+For advanced utilities such as telemetry/config helpers, scenario builders,
+build-backend policy helpers, and misregistration-identification tools, use
+namespaced access. Examples:
 
 ```julia
 ws = AdaptiveOpticsSim.Workspace(tel; rng=MersenneTwister(0))
 sim = AdaptiveOpticsSim.initialize_ao_shwfs(...)
 sprint = AdaptiveOpticsSim.SPRINT(tel, dm, wfs, basis)
+cpu_backend = AdaptiveOpticsSim.CPUBuildBackend()
 ```
 
 ## Core model

@@ -166,7 +166,7 @@ end
         tomo,
         dm;
         fitting=fitting,
-        build_backend=CPUBuildBackend(),
+        build_backend=AdaptiveOpticsSim.CPUBuildBackend(),
     )
     @test recon_cpu.reconstructor isa Matrix
     @test recon_cpu.grid_mask isa Matrix{Bool}
@@ -208,7 +208,7 @@ end
         wfs,
         tomo,
         dm;
-        build_backend=CPUBuildBackend(),
+        build_backend=AdaptiveOpticsSim.CPUBuildBackend(),
     )
     @test model_cpu.reconstructor isa Matrix
     @test model_cpu.grid_mask isa Matrix{Bool}
@@ -300,7 +300,7 @@ end
     cmd_recon_cpu = assemble_reconstructor_and_fitting(
         model_recon,
         dm;
-        build_backend=CPUBuildBackend(),
+        build_backend=AdaptiveOpticsSim.CPUBuildBackend(),
     )
     @test cmd_recon_cpu.matrix isa Matrix
     commands = dm_commands(cmd_recon, [0.1, -0.2])

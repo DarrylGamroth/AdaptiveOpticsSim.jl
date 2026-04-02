@@ -32,8 +32,8 @@ function _sweep_backend_array(::GPUSweepTarget{B}) where {B<:GPUBackendTag}
     return BackendArray
 end
 
-_build_backend(::CPUSweepTarget) = CPUBuildBackend()
-_build_backend(::GPUSweepTarget{B}) where {B<:GPUBackendTag} = GPUArrayBuildBackend(B)
+_build_backend(::CPUSweepTarget) = AdaptiveOpticsSim.CPUBuildBackend()
+_build_backend(::GPUSweepTarget{B}) where {B<:GPUBackendTag} = AdaptiveOpticsSim.GPUArrayBuildBackend(B)
 
 _backend_name(::CPUSweepTarget) = "cpu"
 _backend_name(::GPUSweepTarget{B}) where {B<:GPUBackendTag} =

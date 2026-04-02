@@ -23,8 +23,10 @@ The goal is not to finalize the Phase 1 export set here. The goal is to:
 
 ## Baseline
 
-- Current top-level export count from
+- Phase 0 baseline export count from
   [`src/AdaptiveOpticsSim.jl`](../src/AdaptiveOpticsSim.jl): `566`
+- Current pre-`PSP-01` export count after later feature additions:
+  - `544`
 
 ## Phase 1 implementation status
 
@@ -43,6 +45,34 @@ Phase 1 intentionally did **not** de-export the backend/build helper surface
 yet, because that tooling is still used broadly by maintained benchmark,
 backend-validation, and support scripts. That surface remains documented as
 advanced/developer-oriented and should be revisited in a later curation pass.
+
+## `PSP-01` implementation status
+
+- Current top-level export count after `PSP-01` curation:
+  - `538`
+- Change from the current pre-`PSP-01` baseline:
+  - `-6` exported names
+
+`PSP-01` intentionally targeted the lowest-risk backend/build helper tranche:
+
+- build-backend policy types moved to namespaced access
+- `default_build_backend` moved to namespaced access
+- `set_fft_provider_threads!` moved to namespaced access
+
+`PSP-01` intentionally did **not** de-export the broader GPU backend tag and
+allocation-helper surface yet, because that surface is still used heavily by
+maintained benchmark, smoke, and backend-audit scripts. That larger tranche
+should be revisited only when those developer flows can be updated in one
+coherent pass.
+
+### `PSP-01` de-exported symbols
+
+- `BuildBackend`
+- `NativeBuildBackend`
+- `CPUBuildBackend`
+- `GPUArrayBuildBackend`
+- `default_build_backend`
+- `set_fft_provider_threads!`
 
 ### Phase 1 de-exported symbols
 

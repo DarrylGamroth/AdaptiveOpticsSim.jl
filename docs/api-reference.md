@@ -34,7 +34,8 @@ The practical rule is:
 
 - start with the stable exported workflow surface
 - use `AdaptiveOpticsSim.<name>` for advanced helpers such as telemetry,
-  scenario builders, and specialized calibration-identification utilities
+  scenario builders, build/backend policy utilities, and specialized
+  calibration-identification utilities
 
 If you are new to the package, read [`user-guide.md`](./user-guide.md) first.
 If you are maintaining the package, pair this document with
@@ -240,6 +241,18 @@ top-level namespace. Access them as `AdaptiveOpticsSim.<name>`.
 - `AdaptiveOpticsSim.estimate_misregistration`
 - `AdaptiveOpticsSim.SPRINT`
 - `AdaptiveOpticsSim.estimate!`
+
+### Build and backend policy helpers
+
+- `AdaptiveOpticsSim.BuildBackend`
+- `AdaptiveOpticsSim.NativeBuildBackend`
+- `AdaptiveOpticsSim.CPUBuildBackend`
+- `AdaptiveOpticsSim.GPUArrayBuildBackend`
+- `AdaptiveOpticsSim.default_build_backend`
+- `AdaptiveOpticsSim.set_fft_provider_threads!`
+
+These remain maintained, but they are now explicitly treated as advanced
+developer-facing infrastructure rather than normal top-level workflow API.
 
 ## Traits and interfaces
 
