@@ -34,6 +34,14 @@ AdaptiveOpticsSim.execute_fft_plan!(buffer::AMDGPU.ROCArray, plan::AMDGPU.rocFFT
 AdaptiveOpticsSim.execute_fft_plan!(buffer::AMDGPU.ROCArray, plan::AbstractFFTs.ScaledPlan) = (plan * buffer; buffer)
 AdaptiveOpticsSim.default_build_backend(::AMDGPU.ROCArray) = AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.AMDGPUBackendTag)
 AdaptiveOpticsSim.prepare_build_matrix(::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag}, A::AbstractMatrix) = Matrix(A)
+AdaptiveOpticsSim.grouped_accumulation_plan(
+    ::Type{<:AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend}},
+    ::Type{<:AdaptiveOpticsSim.PyramidWFS},
+) = AdaptiveOpticsSim.GroupedStaged2DPlan()
+AdaptiveOpticsSim.grouped_accumulation_plan(
+    ::Type{<:AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend}},
+    ::Type{<:AdaptiveOpticsSim.BioEdgeWFS},
+) = AdaptiveOpticsSim.GroupedStaged2DPlan()
 AdaptiveOpticsSim.randn_backend_async!(::AdaptiveOpticsSim.AcceleratorStyle, rng::AbstractRNG, out::AMDGPU.ROCArray) = (Random.randn!(rng, out); out)
 AdaptiveOpticsSim._randn_backend!(::AdaptiveOpticsSim.AcceleratorStyle, rng::AbstractRNG, out::AMDGPU.ROCArray) = (Random.randn!(rng, out); out)
 function AdaptiveOpticsSim.randn_frame_noise!(det::AdaptiveOpticsSim.Detector, rng::AbstractRNG, out::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat}

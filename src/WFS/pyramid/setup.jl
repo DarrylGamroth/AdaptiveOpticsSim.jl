@@ -401,6 +401,8 @@ function ensure_pyramid_asterism_stack!(wfs::PyramidWFS, n_src::Int)
     return wfs.state.asterism_stack
 end
 
+@inline grouped_staging_buffer(wfs::PyramidWFS, out::AbstractMatrix) = wfs.state.intensity
+
 function accumulate_pyramid_asterism_intensity!(::ScalarCPUStyle, wfs::PyramidWFS, tel::Telescope, ast::Asterism)
     count = length(ast.sources)
     stack = grouped_stack_view(ensure_pyramid_asterism_stack!(wfs, count), count)

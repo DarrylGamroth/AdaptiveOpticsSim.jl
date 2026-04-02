@@ -52,7 +52,7 @@ function reduce_grouped_blocks!(style::AcceleratorStyle, out::AbstractArray{T,3}
     return out
 end
 
-@inline function accumulate_grouped_sources!(::GroupedStackReducePlan, ::ScalarCPUStyle,
+@inline function accumulate_grouped_sources!(::GroupedStackReducePlan, ::ScalarCPUStyle, wfs::AbstractWFS,
     out::AbstractMatrix, stack::AbstractArray{T,3}, sources, render!, args...) where {T}
     count = length(sources)
     @inbounds for idx in eachindex(sources)
@@ -61,7 +61,7 @@ end
     return reduce_grouped_stack!(ScalarCPUStyle(), out, stack, count)
 end
 
-@inline function accumulate_grouped_sources!(::GroupedStackReducePlan, style::AcceleratorStyle,
+@inline function accumulate_grouped_sources!(::GroupedStackReducePlan, style::AcceleratorStyle, wfs::AbstractWFS,
     out::AbstractMatrix, stack::AbstractArray{T,3}, sources, render!, args...) where {T}
     count = length(sources)
     @inbounds for idx in eachindex(sources)
@@ -73,5 +73,29 @@ end
 @inline function accumulate_grouped_sources!(style::S, wfs::W, out::AbstractMatrix,
     stack::AbstractArray{T,3}, sources, render!, args...) where {S<:ExecutionStyle,W<:AbstractWFS,T}
     plan = grouped_accumulation_plan(style, wfs)
-    return accumulate_grouped_sources!(plan, style, out, stack, sources, render!, args...)
+    return accumulate_grouped_sources!(plan, style, wfs, out, stack, sources, render!, args...)
+end
+
+@inline grouped_staging_buffer(wfs::AbstractWFS, out::AbstractMatrix) = out
+
+@inline function accumulate_grouped_sources!(::GroupedStaged2DPlan, ::ScalarCPUStyle, wfs::W,
+    out::AbstractMatrix, stack::AbstractArray{T,3}, sources, render!, args...) where {W<:AbstractWFS,T}
+    count = length(sources)
+    stage = grouped_staging_buffer(wfs, out)
+    @inbounds for idx in eachindex(sources)
+        render!(stage, args..., sources[idx])
+        copyto!(@view(stack[:, :, idx]), stage)
+    end
+    return reduce_grouped_stack!(ScalarCPUStyle(), out, stack, count)
+end
+
+@inline function accumulate_grouped_sources!(::GroupedStaged2DPlan, style::AcceleratorStyle, wfs::W,
+    out::AbstractMatrix, stack::AbstractArray{T,3}, sources, render!, args...) where {W<:AbstractWFS,T}
+    count = length(sources)
+    stage = grouped_staging_buffer(wfs, out)
+    @inbounds for idx in eachindex(sources)
+        render!(stage, args..., sources[idx])
+        copyto!(@view(stack[:, :, idx]), stage)
+    end
+    return reduce_grouped_stack!(style, out, stack, count)
 end

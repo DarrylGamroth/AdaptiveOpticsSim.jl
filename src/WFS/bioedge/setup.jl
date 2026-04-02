@@ -538,6 +538,8 @@ function ensure_bioedge_asterism_stack!(wfs::BioEdgeWFS, n_src::Int)
     return wfs.state.asterism_stack
 end
 
+@inline grouped_staging_buffer(wfs::BioEdgeWFS, out::AbstractMatrix) = wfs.state.intensity
+
 function accumulate_bioedge_asterism_intensity!(::ScalarCPUStyle, wfs::BioEdgeWFS, tel::Telescope, ast::Asterism)
     count = length(ast.sources)
     stack = grouped_stack_view(ensure_bioedge_asterism_stack!(wfs, count), count)

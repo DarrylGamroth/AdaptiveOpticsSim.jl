@@ -20,6 +20,26 @@ end
 backend_functional(::Type{CUDABackendTag}) = CUDA.functional()
 backend_functional(::Type{AMDGPUBackendTag}) = AMDGPU.functional()
 
+run_optional_backend_plan_checks(::Type{<:GPUBackendTag}, tel, backend) = nothing
+
+function run_optional_backend_plan_checks(::Type{AMDGPUBackendTag}, tel, backend)
+    T = Float32
+    pyr = PyramidWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+    bio = BioEdgeWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+    @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(pyr.state.intensity), pyr) isa AdaptiveOpticsSim.GroupedStaged2DPlan
+    @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(bio.state.intensity), bio) isa AdaptiveOpticsSim.GroupedStaged2DPlan
+    return nothing
+end
+
+function run_optional_backend_plan_checks(::Type{CUDABackendTag}, tel, backend)
+    T = Float32
+    pyr = PyramidWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+    bio = BioEdgeWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+    @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(pyr.state.intensity), pyr) isa AdaptiveOpticsSim.GroupedStackReducePlan
+    @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(bio.state.intensity), bio) isa AdaptiveOpticsSim.GroupedStackReducePlan
+    return nothing
+end
+
 function run_optional_backend_smoke(::Type{B}) where {B<:GPUBackendTag}
     pkg = backend_package_name(B)
     pkg_path = Base.find_package(pkg)
@@ -101,6 +121,8 @@ function run_optional_backend_smoke(::Type{B}) where {B<:GPUBackendTag}
     sh = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=BackendArray)
     slopes = measure!(sh, tel, poly)
     @test slopes isa BackendArray
+
+    run_optional_backend_plan_checks(B, tel, BackendArray)
 
     curv = CurvatureWFS(tel; n_subap=4, T=T, backend=BackendArray)
     curv_slopes = measure!(curv, tel, src, atm)

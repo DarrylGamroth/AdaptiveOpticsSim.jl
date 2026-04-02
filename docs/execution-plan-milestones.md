@@ -77,7 +77,7 @@ Traceability:
 
 ### EP-2: AMDGPU Grouped Recovery
 
-Status: pending
+Status: implemented
 
 Goal:
 
@@ -190,7 +190,7 @@ Traceability:
 ## Checklist
 
 - [x] `EP-1` grouped WFS plan formalization
-- [ ] `EP-2` AMDGPU grouped recovery
+- [x] `EP-2` AMDGPU grouped recovery
 - [ ] `EP-3` detector execution plans
 - [ ] `EP-4` atmospheric field execution plans
 - [ ] `EP-5` reduction and runtime export plans
