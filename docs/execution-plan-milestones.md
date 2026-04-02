@@ -171,7 +171,7 @@ Traceability:
 
 ### EP-5: Reduction And Runtime Export Plans
 
-Status: pending
+Status: implemented
 
 Goal:
 
@@ -182,6 +182,20 @@ Deliverables:
 
 - reduction-plan and runtime-export-plan surfaces
 - benchmark-backed defaults where a maintained backend difference exists
+
+Acceptance:
+
+- reduction semantics remain unchanged across maintained backends
+- runtime export semantics remain unchanged for single and composite interfaces
+- grouped-runtime benchmark surfaces remain in-family for CPU, AMDGPU, and CUDA
+
+Verification:
+
+- `julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'`
+- `julia --project=. --startup-file=no scripts/profile_multi_source_multi_wfs_runtime.jl cpu medium`
+- `julia --project=. --startup-file=no scripts/profile_multi_source_multi_wfs_runtime.jl amdgpu medium`
+- on `spiders`:
+  - `julia --project=. --startup-file=no scripts/profile_multi_source_multi_wfs_runtime.jl cuda medium`
 
 Traceability:
 
@@ -212,5 +226,5 @@ Traceability:
 - [x] `EP-2` AMDGPU grouped recovery
 - [x] `EP-3` detector execution plans
 - [x] `EP-4` atmospheric field execution plans
-- [ ] `EP-5` reduction and runtime export plans
+- [x] `EP-5` reduction and runtime export plans
 - [ ] `EP-6` builder adoption and closeout

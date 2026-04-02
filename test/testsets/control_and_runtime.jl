@@ -248,6 +248,7 @@ end
     @test simulation_science_frame(runtime) === output_frame(det)
 
     boundary = SimulationInterface(runtime)
+    @test AdaptiveOpticsSim.runtime_export_plan(boundary) isa AdaptiveOpticsSim.DirectRuntimeExportPlan
     readout = simulation_readout(boundary)
     @test length(simulation_slopes(boundary)) == length(wfs.state.slopes)
     @test simulation_slopes(readout) === simulation_slopes(boundary)
@@ -334,6 +335,8 @@ end
     grouped_bio = BioEdgeWFS(grouped_tel; n_subap=4, modulation=1.0, mode=Diffractive())
     @test @inferred(AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(grouped_pyr.state.intensity), grouped_pyr)) isa AdaptiveOpticsSim.GroupedStackReducePlan
     @test @inferred(AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(grouped_bio.state.intensity), grouped_bio)) isa AdaptiveOpticsSim.GroupedStackReducePlan
+    @test AdaptiveOpticsSim.reduction_execution_plan(grouped_pyr.state.intensity) isa AdaptiveOpticsSim.DirectReductionPlan
+    @test AdaptiveOpticsSim.runtime_export_plan(grouped) isa AdaptiveOpticsSim.CompositeRuntimeExportPlan
 
     runtime2_slopes_only = ClosedLoopRuntime(
         sim2,

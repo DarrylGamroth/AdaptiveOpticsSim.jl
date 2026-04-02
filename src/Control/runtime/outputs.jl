@@ -1,3 +1,11 @@
+abstract type AbstractRuntimeExportPlan end
+
+struct DirectRuntimeExportPlan <: AbstractRuntimeExportPlan end
+struct CompositeRuntimeExportPlan <: AbstractRuntimeExportPlan end
+
+@inline runtime_export_plan(::SimulationInterface) = DirectRuntimeExportPlan()
+@inline runtime_export_plan(::CompositeSimulationInterface) = CompositeRuntimeExportPlan()
+
 @inline function set_command!(runtime::ClosedLoopRuntime, command::AbstractVector)
     copyto!(runtime.command, command)
     copyto!(runtime.dm.state.coefs, command)
@@ -32,7 +40,10 @@ runtime state.
 This is the explicit copy boundary between the internal mutable runtime objects
 and the externally consumed `SimulationInterface` buffers.
 """
-@inline function snapshot_outputs!(interface::SimulationInterface)
+@inline snapshot_outputs!(interface::SimulationInterface) = snapshot_outputs!(runtime_export_plan(interface), interface)
+@inline snapshot_outputs!(multi::CompositeSimulationInterface) = snapshot_outputs!(runtime_export_plan(multi), multi)
+
+@inline function snapshot_outputs!(::DirectRuntimeExportPlan, interface::SimulationInterface)
     copyto!(interface.command, interface.runtime.command)
     copyto!(interface.slopes, interface.runtime.slopes)
     if !isnothing(interface.wfs_frame)
@@ -44,7 +55,7 @@ and the externally consumed `SimulationInterface` buffers.
     return interface
 end
 
-@inline function snapshot_outputs!(multi::CompositeSimulationInterface)
+@inline function snapshot_outputs!(::CompositeRuntimeExportPlan, multi::CompositeSimulationInterface)
     command_offset = 1
     slope_offset = 1
     @inbounds for i in eachindex(multi.interfaces)

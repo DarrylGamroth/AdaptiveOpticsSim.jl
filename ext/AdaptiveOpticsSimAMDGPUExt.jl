@@ -46,6 +46,10 @@ AdaptiveOpticsSim.detector_execution_plan(
     ::Type{<:AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:AdaptiveOpticsSim.Detector},
 ) = AdaptiveOpticsSim.DetectorHostMirrorPlan()
+AdaptiveOpticsSim.reduction_execution_plan(
+    ::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
+    ::AMDGPU.ROCArray,
+) = AdaptiveOpticsSim.HostMirrorReductionPlan()
 AdaptiveOpticsSim.randn_backend_async!(::AdaptiveOpticsSim.AcceleratorStyle, rng::AbstractRNG, out::AMDGPU.ROCArray) = (Random.randn!(rng, out); out)
 AdaptiveOpticsSim._randn_backend!(::AdaptiveOpticsSim.AcceleratorStyle, rng::AbstractRNG, out::AMDGPU.ROCArray) = (Random.randn!(rng, out); out)
 function AdaptiveOpticsSim.randn_phase_noise!(rng::AbstractRNG, out::AMDGPU.ROCArray{T,2}, host::Matrix{T}) where {T<:AbstractFloat}

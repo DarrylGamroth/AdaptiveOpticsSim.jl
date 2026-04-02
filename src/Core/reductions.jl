@@ -6,6 +6,11 @@
     end
 end
 
+abstract type AbstractReductionExecutionPlan end
+
+struct DirectReductionPlan <: AbstractReductionExecutionPlan end
+struct HostMirrorReductionPlan <: AbstractReductionExecutionPlan end
+
 @inline reduction_parent_source(A::AbstractArray) = A
 @inline reduction_parent_source(A::SubArray) = parent(A)
 
@@ -17,10 +22,9 @@ end
 @inline reduction_host_view(host_parent::AbstractArray, A::AbstractArray) = host_parent
 @inline reduction_host_view(host_parent::AbstractArray, A::SubArray) = @view(host_parent[parentindices(A)...])
 
-@inline reduction_backend_name(A::AbstractArray) = _reduction_backend_name(A)
-@inline _reduction_backend_name(A::AbstractArray) = something(gpu_backend_name(typeof(A)), _reduction_backend_name_parent(A))
-@inline _reduction_backend_name_parent(A::AbstractArray) = nothing
-@inline _reduction_backend_name_parent(A::SubArray) = gpu_backend_name(typeof(parent(A)))
+@inline reduction_execution_plan(A::AbstractArray) = reduction_execution_plan(execution_style(A), reduction_parent_source(A))
+@inline reduction_execution_plan(::ScalarCPUStyle, ::AbstractArray) = DirectReductionPlan()
+@inline reduction_execution_plan(::AcceleratorStyle, ::AbstractArray) = DirectReductionPlan()
 
 @inline function ensure_reduction_host_parent(host_parent::AbstractMatrix{T}, src::AbstractMatrix{T}) where {T}
     return size(host_parent) == size(src) ? host_parent : Matrix{T}(undef, size(src)...)
@@ -28,12 +32,10 @@ end
 
 @inline backend_maximum_value(A::AbstractArray{T}) where {T<:AbstractFloat} = backend_maximum_value(execution_style(A), A)
 @inline backend_maximum_value(::ScalarCPUStyle, A::AbstractArray{T}) where {T<:AbstractFloat} = maximum(A)
-@inline function backend_maximum_value(::AcceleratorStyle, A::AbstractArray{T}) where {T<:AbstractFloat}
-    if reduction_backend_name(A) === :amdgpu
-        return maximum(Array(A))
-    end
-    return maximum(A)
-end
+@inline backend_maximum_value(style::AcceleratorStyle, A::AbstractArray{T}) where {T<:AbstractFloat} =
+    _backend_maximum_value(reduction_execution_plan(style, reduction_parent_source(A)), A)
+@inline _backend_maximum_value(::DirectReductionPlan, A::AbstractArray{T}) where {T<:AbstractFloat} = maximum(A)
+@inline _backend_maximum_value(::HostMirrorReductionPlan, A::AbstractArray{T}) where {T<:AbstractFloat} = maximum(Array(A))
 
 @inline function masked_sum2d(values::AbstractMatrix{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
     return masked_sum2d(ScalarCPUStyle(), values, valid_mask)
@@ -52,13 +54,23 @@ end
 function masked_sum2d(style::AcceleratorStyle, values::AbstractMatrix{T}, valid_mask::AbstractMatrix{Bool},
     valid_mask_host::AbstractMatrix{Bool}, scalar_buffer::AbstractVector{T}, scalar_host::AbstractVector{T},
     host_parent::AbstractMatrix{T}) where {T<:AbstractFloat}
-    if reduction_backend_name(values) === :amdgpu
-        src = reduction_parent_source(values)
-        refreshed_parent = ensure_reduction_host_parent(host_parent, src)
-        copyto!(refreshed_parent, src)
-        host_values = reduction_host_view(refreshed_parent, values)
-        return masked_sum2d(ScalarCPUStyle(), host_values, valid_mask_host), refreshed_parent
-    end
+    plan = reduction_execution_plan(style, reduction_parent_source(values))
+    return masked_sum2d(plan, style, values, valid_mask, valid_mask_host, scalar_buffer, scalar_host, host_parent)
+end
+
+function masked_sum2d(::HostMirrorReductionPlan, style::AcceleratorStyle, values::AbstractMatrix{T}, valid_mask::AbstractMatrix{Bool},
+    valid_mask_host::AbstractMatrix{Bool}, scalar_buffer::AbstractVector{T}, scalar_host::AbstractVector{T},
+    host_parent::AbstractMatrix{T}) where {T<:AbstractFloat}
+    src = reduction_parent_source(values)
+    refreshed_parent = ensure_reduction_host_parent(host_parent, src)
+    copyto!(refreshed_parent, src)
+    host_values = reduction_host_view(refreshed_parent, values)
+    return masked_sum2d(ScalarCPUStyle(), host_values, valid_mask_host), refreshed_parent
+end
+
+function masked_sum2d(::DirectReductionPlan, style::AcceleratorStyle, values::AbstractMatrix{T}, valid_mask::AbstractMatrix{Bool},
+    valid_mask_host::AbstractMatrix{Bool}, scalar_buffer::AbstractVector{T}, scalar_host::AbstractVector{T},
+    host_parent::AbstractMatrix{T}) where {T<:AbstractFloat}
     n_rows, n_cols = size(valid_mask)
     values_parent = reduction_parent_source(values)
     row_offset = reduction_axis_offset(values, 1)
@@ -119,9 +131,14 @@ function packed_valid_pair_mean(::ScalarCPUStyle, signal::AbstractVector{T}, val
 end
 
 function packed_valid_pair_mean(::AcceleratorStyle, signal::AbstractVector{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
-    if reduction_backend_name(signal) === :amdgpu
-        return packed_valid_pair_mean(ScalarCPUStyle(), Array(signal), Array(valid_mask))
-    end
+    return packed_valid_pair_mean(reduction_execution_plan(signal), signal, valid_mask)
+end
+
+function packed_valid_pair_mean(::HostMirrorReductionPlan, signal::AbstractVector{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
+    return packed_valid_pair_mean(ScalarCPUStyle(), Array(signal), Array(valid_mask))
+end
+
+function packed_valid_pair_mean(::DirectReductionPlan, signal::AbstractVector{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
     count = sum(valid_mask)
     return count == 0 ? one(T) : sum(signal) / (T(2) * T(count))
 end

@@ -49,6 +49,7 @@ function run_optional_backend_plan_checks(::Type{AMDGPUBackendTag}, tel, backend
     @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(pyr.state.intensity), pyr) isa AdaptiveOpticsSim.GroupedStaged2DPlan
     @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(bio.state.intensity), bio) isa AdaptiveOpticsSim.GroupedStaged2DPlan
     @test AdaptiveOpticsSim.detector_execution_plan(typeof(AdaptiveOpticsSim.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.DetectorHostMirrorPlan
+    @test AdaptiveOpticsSim.reduction_execution_plan(pyr.state.intensity) isa AdaptiveOpticsSim.HostMirrorReductionPlan
     @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
         AdaptiveOpticsSim.execution_style(first(geom_prop.state.slices).field.state.field),
         geom_prop.params.model,
@@ -87,6 +88,7 @@ function run_optional_backend_plan_checks(::Type{CUDABackendTag}, tel, backend)
     @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(pyr.state.intensity), pyr) isa AdaptiveOpticsSim.GroupedStackReducePlan
     @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(bio.state.intensity), bio) isa AdaptiveOpticsSim.GroupedStackReducePlan
     @test AdaptiveOpticsSim.detector_execution_plan(typeof(AdaptiveOpticsSim.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.DetectorDirectPlan
+    @test AdaptiveOpticsSim.reduction_execution_plan(pyr.state.intensity) isa AdaptiveOpticsSim.DirectReductionPlan
     @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
         AdaptiveOpticsSim.execution_style(first(geom_prop.state.slices).field.state.field),
         geom_prop.params.model,
