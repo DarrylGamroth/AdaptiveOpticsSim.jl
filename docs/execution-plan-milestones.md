@@ -203,7 +203,7 @@ Traceability:
 
 ### EP-6: Builder Adoption And Closeout
 
-Status: pending
+Status: implemented
 
 Goal:
 
@@ -216,6 +216,22 @@ Deliverables:
 - updated benchmark/validation documentation
 - explicit closeout note for the execution-plan rollout
 
+Outcome:
+
+- builder-side adoption is closed as a documented decision, not a new code path
+- tomography/calibration builders continue to use the existing typed
+  `BuildBackend` policy
+- rollout closeout is recorded in
+  [execution-plan-closeout.md](./execution-plan-closeout.md)
+
+Verification:
+
+- reviewed current builder policy in
+  [inverse_policies.jl](../src/Core/inverse_policies.jl)
+- confirmed rollout benchmark and validation evidence in the milestone notes
+  above
+  
+
 Traceability:
 
 - `EPR-01` through `EPR-06`
@@ -227,4 +243,4 @@ Traceability:
 - [x] `EP-3` detector execution plans
 - [x] `EP-4` atmospheric field execution plans
 - [x] `EP-5` reduction and runtime export plans
-- [ ] `EP-6` builder adoption and closeout
+- [x] `EP-6` builder adoption and closeout

@@ -66,6 +66,8 @@ If you are:
     next capability selection
 - [`execution-plan-milestones.md`](./execution-plan-milestones.md)
   - phased rollout for backend-specific execution-plan adoption
+- [`execution-plan-closeout.md`](./execution-plan-closeout.md)
+  - rollout outcome, builder decision, and follow-up triggers
 - [`next-milestone-decision-2026-04.md`](./next-milestone-decision-2026-04.md)
   - evidence-backed selection memo for the next breadth milestone
 - [`grouped-runtime-plan.md`](./grouped-runtime-plan.md)
@@ -106,6 +108,8 @@ If you are:
   - functional vs backend smoke vs benchmark separation
 - [`execution-plan-architecture.md`](./execution-plan-architecture.md)
   - shared semantic contracts with backend-specific execution-plan policy
+- [`execution-plan-closeout.md`](./execution-plan-closeout.md)
+  - completed rollout summary and maintained decision record
 
 ## Active Implementation Plans
 
@@ -119,6 +123,7 @@ entry-point guides.
 - [`execution-plan-architecture.md`](./execution-plan-architecture.md)
 - [`infinite-boundary-atmosphere-plan.md`](./infinite-boundary-atmosphere-plan.md)
 - [`execution-plan-milestones.md`](./execution-plan-milestones.md)
+- [`execution-plan-closeout.md`](./execution-plan-closeout.md)
 - [`post-review-platform-plan.md`](./post-review-platform-plan.md)
 
 Use these when actively working in that subsystem. Do not treat them as the

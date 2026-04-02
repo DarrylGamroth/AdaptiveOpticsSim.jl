@@ -98,6 +98,7 @@ captured in:
 
 - [execution-plan-architecture.md](./execution-plan-architecture.md)
 - [execution-plan-milestones.md](./execution-plan-milestones.md)
+- [execution-plan-closeout.md](./execution-plan-closeout.md)
 
 ## What To Avoid
 
