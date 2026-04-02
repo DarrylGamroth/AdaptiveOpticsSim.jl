@@ -5,6 +5,8 @@ Status: active
 Start with:
 
 - [`documentation-map.md`](./documentation-map.md) for doc navigation
+- [`platform-architecture.md`](./platform-architecture.md) for package-level
+  synthesis
 - [`api-reference.md`](./api-reference.md) for maintained public APIs
 - [`model-validity-matrix.md`](./model-validity-matrix.md) for model evidence
 - [`benchmark-matrix-plan.md`](./benchmark-matrix-plan.md) for performance
@@ -26,6 +28,9 @@ The package now distinguishes between:
 For ordinary usage, start with the exported workflow surface shown in the quick
 start and the main API sections in
 [api-reference.md](./api-reference.md).
+
+If you want the package-level picture before diving into workflows, read
+[platform-architecture.md](./platform-architecture.md) first.
 
 For advanced utilities such as telemetry/config helpers, scenario builders,
 build-backend policy helpers, and misregistration-identification tools, use

@@ -22,6 +22,8 @@ If you are:
 
 - learning the package:
   - [`user-guide.md`](./user-guide.md)
+- trying to understand the package as a platform:
+  - [`platform-architecture.md`](./platform-architecture.md)
 - looking for maintained public APIs:
   - [`api-reference.md`](./api-reference.md)
 - maintaining or refactoring the codebase:
@@ -38,6 +40,8 @@ If you are:
 
 - [`user-guide.md`](./user-guide.md)
   - workflow-oriented user entry point
+- [`platform-architecture.md`](./platform-architecture.md)
+  - stable synthesis guide for platform-scale structure and boundaries
 - [`api-reference.md`](./api-reference.md)
   - maintained public API surface
 - [`maintainer-architecture.md`](./maintainer-architecture.md)
@@ -64,9 +68,6 @@ If you are:
 - [`post-review-platform-plan.md`](./post-review-platform-plan.md)
   - phased next-step plan for validation hardening, benchmark expansion, and
     next capability selection
-- [`platform-strengthening-plan.md`](./platform-strengthening-plan.md)
-  - phased main-platform plan for API/docs cleanup, evidence strengthening,
-    ROCm hardening, and Julia-native orchestration growth
 - [`execution-plan-milestones.md`](./execution-plan-milestones.md)
   - phased rollout for backend-specific execution-plan adoption
 - [`execution-plan-closeout.md`](./execution-plan-closeout.md)

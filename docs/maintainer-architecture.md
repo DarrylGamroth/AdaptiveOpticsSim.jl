@@ -14,6 +14,8 @@ AdaptiveOpticsSim.jl.
 
 It is the maintainer-facing synthesis layer that sits between:
 
+- the platform synthesis guide in
+  [`platform-architecture.md`](./platform-architecture.md)
 - the public workflow docs in [`user-guide.md`](./user-guide.md)
 - the symbol inventory in [`api-reference.md`](./api-reference.md)
 - the subsystem plans and audits under [`docs/`](./)
@@ -189,7 +191,8 @@ See [`optional-integration-boundaries.md`](./optional-integration-boundaries.md)
 ## Recommended Reading Order for Maintainers
 
 1. [`documentation-map.md`](./documentation-map.md)
-2. [`maintainer-architecture.md`](./maintainer-architecture.md)
-3. [`runtime-dataflow.md`](./runtime-dataflow.md)
-4. [`model-validity-matrix.md`](./model-validity-matrix.md)
-5. subsystem plan docs only as needed
+2. [`platform-architecture.md`](./platform-architecture.md)
+3. [`maintainer-architecture.md`](./maintainer-architecture.md)
+4. [`runtime-dataflow.md`](./runtime-dataflow.md)
+5. [`model-validity-matrix.md`](./model-validity-matrix.md)
+6. subsystem plan docs only as needed

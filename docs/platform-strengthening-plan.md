@@ -219,6 +219,10 @@ Implementation record:
 
 ### `PSP-02`: Platform Architecture Synthesis Guide
 
+Status:
+
+- completed
+
 Objective:
 
 - give advanced users and maintainers one stable orientation guide that explains
@@ -276,6 +280,17 @@ Evidence to record:
 - guide path
 - updated documentation-map entry
 - any replaced or superseded orientation references
+
+Implementation record:
+
+- stable guide added:
+  [platform-architecture.md](./platform-architecture.md)
+- stable navigation updated in:
+  [documentation-map.md](./documentation-map.md)
+- user and maintainer entry points updated in:
+  [user-guide.md](./user-guide.md),
+  [maintainer-architecture.md](./maintainer-architecture.md), and
+  [runtime-dataflow.md](./runtime-dataflow.md)
 
 ### `PSP-03`: Platform Workflow Guide
 
@@ -700,8 +715,8 @@ next topic.
 
 ### Phase 1
 
-- [ ] `PSP-01`
-- [ ] `PSP-02`
+- [x] `PSP-01`
+- [x] `PSP-02`
 - [ ] `PSP-03`
 - [ ] `PSP-04`
 

@@ -20,6 +20,9 @@ It is not a symbol reference. It is the operational picture of:
 - which products are exported
 - where validation and benchmark evidence attach
 
+For the broader package/platform picture, start with
+[`platform-architecture.md`](./platform-architecture.md).
+
 ## Main Runtime Objects
 
 The most important runtime-facing objects are:
@@ -171,7 +174,9 @@ There are two relevant evidence layers:
 When debugging or extending runtime behavior:
 
 1. use this doc to identify the layer that owns the behavior
-2. use [`maintainer-architecture.md`](./maintainer-architecture.md) for the
+2. use [`platform-architecture.md`](./platform-architecture.md) for the
+   package-level composition picture
+3. use [`maintainer-architecture.md`](./maintainer-architecture.md) for the
    subsystem map
-3. use [`api-reference.md`](./api-reference.md) for specific symbols
-4. use subsystem plans only after the stable guides above are no longer enough
+4. use [`api-reference.md`](./api-reference.md) for specific symbols
+5. use subsystem plans only after the stable guides above are no longer enough
