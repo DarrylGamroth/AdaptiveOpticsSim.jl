@@ -93,6 +93,12 @@ The currently selected next breadth milestone is:
   - plan: [grouped-runtime-plan.md](./grouped-runtime-plan.md)
   - decision memo: [next-milestone-decision-2026-04.md](./next-milestone-decision-2026-04.md)
 
+The preferred architectural pattern for backend-sensitive runtime work is now
+captured in:
+
+- [execution-plan-architecture.md](./execution-plan-architecture.md)
+- [execution-plan-milestones.md](./execution-plan-milestones.md)
+
 ## What To Avoid
 
 Avoid these patterns unless a later explicit plan justifies them:

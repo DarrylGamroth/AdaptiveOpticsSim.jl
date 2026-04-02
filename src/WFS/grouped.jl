@@ -1,3 +1,9 @@
+abstract type AbstractGroupedAccumulationPlan end
+
+struct GroupedStackReducePlan <: AbstractGroupedAccumulationPlan end
+struct GroupedDirectAccumulatePlan <: AbstractGroupedAccumulationPlan end
+struct GroupedStaged2DPlan <: AbstractGroupedAccumulationPlan end
+
 @kernel function reduce_grouped_stack_kernel!(out, stack, count::Int, n1::Int, n2::Int)
     i, j = @index(Global, NTuple)
     if i <= n1 && j <= n2
@@ -22,6 +28,11 @@ end
 
 @inline grouped_stack_view(stack::AbstractArray{T,3}, count::Int) where {T} = @view stack[:, :, 1:count]
 
+@inline grouped_accumulation_plan(style::S, wfs::W) where {S<:ExecutionStyle,W<:AbstractWFS} =
+    grouped_accumulation_plan(S, W)
+
+@inline grouped_accumulation_plan(::Type{<:ExecutionStyle}, ::Type{<:AbstractWFS}) = GroupedStackReducePlan()
+
 function reduce_grouped_stack!(::ScalarCPUStyle, out::AbstractMatrix, stack::AbstractArray{T,3}, count::Int) where {T}
     fill!(out, zero(eltype(out)))
     @inbounds for idx in 1:count
@@ -41,8 +52,8 @@ function reduce_grouped_blocks!(style::AcceleratorStyle, out::AbstractArray{T,3}
     return out
 end
 
-@inline function accumulate_grouped_sources!(::ScalarCPUStyle, out::AbstractMatrix, stack::AbstractArray{T,3},
-    sources, render!, args...) where {T}
+@inline function accumulate_grouped_sources!(::GroupedStackReducePlan, ::ScalarCPUStyle,
+    out::AbstractMatrix, stack::AbstractArray{T,3}, sources, render!, args...) where {T}
     count = length(sources)
     @inbounds for idx in eachindex(sources)
         render!(@view(stack[:, :, idx]), args..., sources[idx])
@@ -50,11 +61,17 @@ end
     return reduce_grouped_stack!(ScalarCPUStyle(), out, stack, count)
 end
 
-@inline function accumulate_grouped_sources!(style::AcceleratorStyle, out::AbstractMatrix, stack::AbstractArray{T,3},
-    sources, render!, args...) where {T}
+@inline function accumulate_grouped_sources!(::GroupedStackReducePlan, style::AcceleratorStyle,
+    out::AbstractMatrix, stack::AbstractArray{T,3}, sources, render!, args...) where {T}
     count = length(sources)
     @inbounds for idx in eachindex(sources)
         render!(@view(stack[:, :, idx]), args..., sources[idx])
     end
     return reduce_grouped_stack!(style, out, stack, count)
+end
+
+@inline function accumulate_grouped_sources!(style::S, wfs::W, out::AbstractMatrix,
+    stack::AbstractArray{T,3}, sources, render!, args...) where {S<:ExecutionStyle,W<:AbstractWFS,T}
+    plan = grouped_accumulation_plan(style, wfs)
+    return accumulate_grouped_sources!(plan, style, out, stack, sources, render!, args...)
 end

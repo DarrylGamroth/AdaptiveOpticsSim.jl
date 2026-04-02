@@ -404,13 +404,13 @@ end
 function accumulate_pyramid_asterism_intensity!(::ScalarCPUStyle, wfs::PyramidWFS, tel::Telescope, ast::Asterism)
     count = length(ast.sources)
     stack = grouped_stack_view(ensure_pyramid_asterism_stack!(wfs, count), count)
-    return accumulate_grouped_sources!(ScalarCPUStyle(), wfs.state.intensity, stack, ast.sources, pyramid_intensity!, wfs, tel)
+    return accumulate_grouped_sources!(ScalarCPUStyle(), wfs, wfs.state.intensity, stack, ast.sources, pyramid_intensity!, wfs, tel)
 end
 
 function accumulate_pyramid_asterism_intensity!(style::AcceleratorStyle, wfs::PyramidWFS, tel::Telescope, ast::Asterism)
     count = length(ast.sources)
     stack = grouped_stack_view(ensure_pyramid_asterism_stack!(wfs, count), count)
-    return accumulate_grouped_sources!(style, wfs.state.intensity, stack, ast.sources, pyramid_intensity!, wfs, tel)
+    return accumulate_grouped_sources!(style, wfs, wfs.state.intensity, stack, ast.sources, pyramid_intensity!, wfs, tel)
 end
 
 function accumulate_pyramid_spectral_intensity!(::ScalarCPUStyle, wfs::PyramidWFS, tel::Telescope, src::SpectralSource)
@@ -445,7 +445,7 @@ function accumulate_pyramid_extended_intensity!(::ScalarCPUStyle, out::AbstractM
     end
     count = length(ast.sources)
     stack = grouped_stack_view(ensure_pyramid_asterism_stack!(wfs, count), count)
-    return accumulate_grouped_sources!(ScalarCPUStyle(), out, stack, ast.sources, pyramid_intensity!, wfs, tel)
+    return accumulate_grouped_sources!(ScalarCPUStyle(), wfs, out, stack, ast.sources, pyramid_intensity!, wfs, tel)
 end
 
 function accumulate_pyramid_extended_intensity!(style::AcceleratorStyle, out::AbstractMatrix, wfs::PyramidWFS,
@@ -456,7 +456,7 @@ function accumulate_pyramid_extended_intensity!(style::AcceleratorStyle, out::Ab
     end
     count = length(ast.sources)
     stack = grouped_stack_view(ensure_pyramid_asterism_stack!(wfs, count), count)
-    return accumulate_grouped_sources!(style, out, stack, ast.sources, pyramid_intensity!, wfs, tel)
+    return accumulate_grouped_sources!(style, wfs, out, stack, ast.sources, pyramid_intensity!, wfs, tel)
 end
 
 function prepare_pyramid_sampling!(wfs::PyramidWFS, tel::Telescope)

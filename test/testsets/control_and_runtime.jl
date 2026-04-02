@@ -329,6 +329,12 @@ end
     @test simulation_wfs_frame(grouped_stack_only) === nothing
     @test !isnothing(simulation_grouped_wfs_stack(grouped_stack_only))
 
+    grouped_tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    grouped_pyr = PyramidWFS(grouped_tel; n_subap=4, modulation=1.0, mode=Diffractive())
+    grouped_bio = BioEdgeWFS(grouped_tel; n_subap=4, modulation=1.0, mode=Diffractive())
+    @test @inferred(AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(grouped_pyr.state.intensity), grouped_pyr)) isa AdaptiveOpticsSim.GroupedStackReducePlan
+    @test @inferred(AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(grouped_bio.state.intensity), grouped_bio)) isa AdaptiveOpticsSim.GroupedStackReducePlan
+
     runtime2_slopes_only = ClosedLoopRuntime(
         sim2,
         recon2;

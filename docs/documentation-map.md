@@ -64,6 +64,8 @@ If you are:
 - [`post-review-platform-plan.md`](./post-review-platform-plan.md)
   - phased next-step plan for validation hardening, benchmark expansion, and
     next capability selection
+- [`execution-plan-milestones.md`](./execution-plan-milestones.md)
+  - phased rollout for backend-specific execution-plan adoption
 - [`next-milestone-decision-2026-04.md`](./next-milestone-decision-2026-04.md)
   - evidence-backed selection memo for the next breadth milestone
 - [`grouped-runtime-plan.md`](./grouped-runtime-plan.md)
@@ -102,6 +104,8 @@ If you are:
   - post-cleanup expansion policy
 - [`backend-validation-guide.md`](./backend-validation-guide.md)
   - functional vs backend smoke vs benchmark separation
+- [`execution-plan-architecture.md`](./execution-plan-architecture.md)
+  - shared semantic contracts with backend-specific execution-plan policy
 
 ## Active Implementation Plans
 
@@ -112,7 +116,9 @@ entry-point guides.
 - [`atmospheric-field-propagation-roadmap.md`](./atmospheric-field-propagation-roadmap.md)
 - [`core-optics-expansion-roadmap.md`](./core-optics-expansion-roadmap.md)
 - [`gpu-runtime-structural-refactor-plan.md`](./gpu-runtime-structural-refactor-plan.md)
+- [`execution-plan-architecture.md`](./execution-plan-architecture.md)
 - [`infinite-boundary-atmosphere-plan.md`](./infinite-boundary-atmosphere-plan.md)
+- [`execution-plan-milestones.md`](./execution-plan-milestones.md)
 - [`post-review-platform-plan.md`](./post-review-platform-plan.md)
 
 Use these when actively working in that subsystem. Do not treat them as the
