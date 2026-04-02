@@ -1,4 +1,10 @@
 abstract type AbstractAtmosphericFieldModel end
+abstract type AbstractAtmosphericFieldExecutionPlan end
+
+struct GeometricFieldSynchronousPlan <: AbstractAtmosphericFieldExecutionPlan end
+struct GeometricFieldAsyncPlan <: AbstractAtmosphericFieldExecutionPlan end
+struct LayeredFresnelFieldSynchronousPlan <: AbstractAtmosphericFieldExecutionPlan end
+struct LayeredFresnelFieldAsyncPlan <: AbstractAtmosphericFieldExecutionPlan end
 
 struct GeometricAtmosphericPropagation{T<:AbstractFloat} <: AbstractAtmosphericFieldModel
     chromatic_reference_wavelength::Union{Nothing,T}
@@ -42,6 +48,18 @@ struct AtmosphericFieldPropagation{P<:AtmosphericFieldPropagationParams,S<:Atmos
     params::P
     state::S
 end
+
+@inline atmospheric_field_execution_plan(style::ExecutionStyle, model::AbstractAtmosphericFieldModel) =
+    atmospheric_field_execution_plan(typeof(style), typeof(model))
+
+@inline atmospheric_field_execution_plan(::Type{<:ScalarCPUStyle}, ::Type{<:GeometricAtmosphericPropagation}) =
+    GeometricFieldSynchronousPlan()
+@inline atmospheric_field_execution_plan(::Type{<:AcceleratorStyle}, ::Type{<:GeometricAtmosphericPropagation}) =
+    GeometricFieldAsyncPlan()
+@inline atmospheric_field_execution_plan(::Type{<:ScalarCPUStyle}, ::Type{<:LayeredFresnelAtmosphericPropagation}) =
+    LayeredFresnelFieldSynchronousPlan()
+@inline atmospheric_field_execution_plan(::Type{<:AcceleratorStyle}, ::Type{<:LayeredFresnelAtmosphericPropagation}) =
+    LayeredFresnelFieldAsyncPlan()
 
 function GeometricAtmosphericPropagation(; chromatic_reference_wavelength=nothing, T::Type{<:AbstractFloat}=Float64)
     ref = isnothing(chromatic_reference_wavelength) ? nothing : T(chromatic_reference_wavelength)
@@ -145,7 +163,7 @@ function _render_layer_phase!(out::AbstractMatrix{T}, layer::AbstractAtmosphereL
     return render_layer!(out, layer, ctx.shift_x * shift_scale, ctx.shift_y * shift_scale, ctx.footprint_scale)
 end
 
-function _propagate_slice_geometric!(slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
+function _propagate_slice!(::GeometricFieldSynchronousPlan, slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
     atm, tel::Telescope) where {T<:AbstractFloat}
     style = execution_style(slice.field.state.field)
     fill_from_telescope_async!(slice.field, tel, slice.source)
@@ -158,7 +176,7 @@ function _propagate_slice_geometric!(slice::AtmosphericFieldSlice{T}, prop::Atmo
     return slice.field
 end
 
-function _propagate_slice_geometric_async!(slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
+function _propagate_slice!(::GeometricFieldAsyncPlan, slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
     atm, tel::Telescope) where {T<:AbstractFloat}
     fill_from_telescope_async!(slice.field, tel, slice.source)
     @inbounds for idx in prop.params.layer_order
@@ -169,7 +187,7 @@ function _propagate_slice_geometric_async!(slice::AtmosphericFieldSlice{T}, prop
     return slice.field
 end
 
-function _propagate_slice_fresnel!(slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
+function _propagate_slice!(::LayeredFresnelFieldSynchronousPlan, slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
     atm, tel::Telescope) where {T<:AbstractFloat}
     style = execution_style(slice.field.state.field)
     fill_from_telescope_async!(slice.field, tel, slice.source)
@@ -185,7 +203,7 @@ function _propagate_slice_fresnel!(slice::AtmosphericFieldSlice{T}, prop::Atmosp
     return slice.field
 end
 
-function _propagate_slice_fresnel_async!(slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
+function _propagate_slice!(::LayeredFresnelFieldAsyncPlan, slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
     atm, tel::Telescope) where {T<:AbstractFloat}
     style = execution_style(slice.field.state.field)
     fill_from_telescope_async!(slice.field, tel, slice.source)
@@ -204,11 +222,8 @@ end
 function propagate_atmosphere_field!(prop::AtmosphericFieldPropagation, atm, tel::Telescope, src::AbstractSource)
     length(prop.state.slices) == 1 || throw(InvalidConfiguration("monochromatic atmosphere propagation requires a monochromatic workspace"))
     slice = prop.state.slices[1]
-    if prop.params.model isa GeometricAtmosphericPropagation
-        return _propagate_slice_geometric!(slice, prop, atm, tel)
-    else
-        return _propagate_slice_fresnel!(slice, prop, atm, tel)
-    end
+    plan = atmospheric_field_execution_plan(execution_style(slice.field.state.field), prop.params.model)
+    return _propagate_slice!(plan, slice, prop, atm, tel)
 end
 
 function propagate_atmosphere_field!(field::ElectricField, prop::AtmosphericFieldPropagation, atm, tel::Telescope, src::AbstractSource)
@@ -238,7 +253,8 @@ function _spectral_atmospheric_intensity!(::ScalarCPUStyle, out::AbstractMatrix{
     size(out) == size(prop.state.intensity) ||
         throw(DimensionMismatchError("spectral atmospheric intensity output must match propagation workspace size"))
     fill!(out, zero(T))
-    _spectral_atmospheric_intensity_model!(ScalarCPUStyle(), out, prop, atm, tel)
+    plan = atmospheric_field_execution_plan(ScalarCPUStyle(), prop.params.model)
+    _spectral_atmospheric_intensity_model!(plan, out, prop, atm, tel)
     return out
 end
 
@@ -247,46 +263,51 @@ function _spectral_atmospheric_intensity!(style::AcceleratorStyle, out::Abstract
     size(out) == size(prop.state.intensity) ||
         throw(DimensionMismatchError("spectral atmospheric intensity output must match propagation workspace size"))
     fill!(out, zero(T))
-    _spectral_atmospheric_intensity_model!(style, out, prop, atm, tel)
+    plan = atmospheric_field_execution_plan(style, prop.params.model)
+    _spectral_atmospheric_intensity_model!(plan, out, prop, atm, tel)
     synchronize_backend!(style)
     return out
 end
 
-function _spectral_atmospheric_intensity_model!(::ScalarCPUStyle, out::AbstractMatrix{T},
+function _spectral_atmospheric_intensity_model!(::GeometricFieldSynchronousPlan, out::AbstractMatrix{T},
     prop::AtmosphericFieldPropagation{<:AtmosphericFieldPropagationParams{T,<:GeometricAtmosphericPropagation}},
     atm, tel::Telescope) where {T<:AbstractFloat}
+    plan = GeometricFieldSynchronousPlan()
     @inbounds for slice in prop.state.slices
-        _propagate_slice_geometric!(slice, prop, atm, tel)
+        _propagate_slice!(plan, slice, prop, atm, tel)
         accumulate_intensity!(out, slice.field)
     end
     return out
 end
 
-function _spectral_atmospheric_intensity_model!(style::AcceleratorStyle, out::AbstractMatrix{T},
+function _spectral_atmospheric_intensity_model!(::GeometricFieldAsyncPlan, out::AbstractMatrix{T},
     prop::AtmosphericFieldPropagation{<:AtmosphericFieldPropagationParams{T,<:GeometricAtmosphericPropagation}},
     atm, tel::Telescope) where {T<:AbstractFloat}
+    plan = GeometricFieldAsyncPlan()
     @inbounds for slice in prop.state.slices
-        _propagate_slice_geometric_async!(slice, prop, atm, tel)
+        _propagate_slice!(plan, slice, prop, atm, tel)
         accumulate_intensity_async!(out, slice.field)
     end
     return out
 end
 
-function _spectral_atmospheric_intensity_model!(::ScalarCPUStyle, out::AbstractMatrix{T},
+function _spectral_atmospheric_intensity_model!(::LayeredFresnelFieldSynchronousPlan, out::AbstractMatrix{T},
     prop::AtmosphericFieldPropagation{<:AtmosphericFieldPropagationParams{T,<:LayeredFresnelAtmosphericPropagation}},
     atm, tel::Telescope) where {T<:AbstractFloat}
+    plan = LayeredFresnelFieldSynchronousPlan()
     @inbounds for slice in prop.state.slices
-        _propagate_slice_fresnel!(slice, prop, atm, tel)
+        _propagate_slice!(plan, slice, prop, atm, tel)
         accumulate_intensity!(out, slice.field)
     end
     return out
 end
 
-function _spectral_atmospheric_intensity_model!(style::AcceleratorStyle, out::AbstractMatrix{T},
+function _spectral_atmospheric_intensity_model!(::LayeredFresnelFieldAsyncPlan, out::AbstractMatrix{T},
     prop::AtmosphericFieldPropagation{<:AtmosphericFieldPropagationParams{T,<:LayeredFresnelAtmosphericPropagation}},
     atm, tel::Telescope) where {T<:AbstractFloat}
+    plan = LayeredFresnelFieldAsyncPlan()
     @inbounds for slice in prop.state.slices
-        _propagate_slice_fresnel_async!(slice, prop, atm, tel)
+        _propagate_slice!(plan, slice, prop, atm, tel)
         accumulate_intensity_async!(out, slice.field)
     end
     return out

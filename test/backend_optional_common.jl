@@ -27,9 +27,36 @@ function run_optional_backend_plan_checks(::Type{AMDGPUBackendTag}, tel, backend
     pyr = PyramidWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
     bio = BioEdgeWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, sensor=HgCdTeAvalancheArraySensor(T=T), T=T, backend=backend)
+    src = Source(band=:I, magnitude=0.0, T=T)
+    atm = MultiLayerAtmosphere(tel;
+        r0=T(0.2),
+        L0=T(25.0),
+        fractional_cn2=T[1.0],
+        wind_speed=T[0.0],
+        wind_direction=T[0.0],
+        altitude=T[0.0],
+        T=T,
+        backend=backend,
+    )
+    geom_prop = AtmosphericFieldPropagation(atm, tel, src;
+        model=GeometricAtmosphericPropagation(T=T),
+        zero_padding=1,
+        T=T)
+    fresnel_prop = AtmosphericFieldPropagation(atm, tel, src;
+        model=LayeredFresnelAtmosphericPropagation(T=T),
+        zero_padding=1,
+        T=T)
     @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(pyr.state.intensity), pyr) isa AdaptiveOpticsSim.GroupedStaged2DPlan
     @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(bio.state.intensity), bio) isa AdaptiveOpticsSim.GroupedStaged2DPlan
     @test AdaptiveOpticsSim.detector_execution_plan(typeof(AdaptiveOpticsSim.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.DetectorHostMirrorPlan
+    @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
+        AdaptiveOpticsSim.execution_style(first(geom_prop.state.slices).field.state.field),
+        geom_prop.params.model,
+    ) isa AdaptiveOpticsSim.GeometricFieldAsyncPlan
+    @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
+        AdaptiveOpticsSim.execution_style(first(fresnel_prop.state.slices).field.state.field),
+        fresnel_prop.params.model,
+    ) isa AdaptiveOpticsSim.LayeredFresnelFieldAsyncPlan
     return nothing
 end
 
@@ -38,9 +65,36 @@ function run_optional_backend_plan_checks(::Type{CUDABackendTag}, tel, backend)
     pyr = PyramidWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
     bio = BioEdgeWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, sensor=HgCdTeAvalancheArraySensor(T=T), T=T, backend=backend)
+    src = Source(band=:I, magnitude=0.0, T=T)
+    atm = MultiLayerAtmosphere(tel;
+        r0=T(0.2),
+        L0=T(25.0),
+        fractional_cn2=T[1.0],
+        wind_speed=T[0.0],
+        wind_direction=T[0.0],
+        altitude=T[0.0],
+        T=T,
+        backend=backend,
+    )
+    geom_prop = AtmosphericFieldPropagation(atm, tel, src;
+        model=GeometricAtmosphericPropagation(T=T),
+        zero_padding=1,
+        T=T)
+    fresnel_prop = AtmosphericFieldPropagation(atm, tel, src;
+        model=LayeredFresnelAtmosphericPropagation(T=T),
+        zero_padding=1,
+        T=T)
     @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(pyr.state.intensity), pyr) isa AdaptiveOpticsSim.GroupedStackReducePlan
     @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(bio.state.intensity), bio) isa AdaptiveOpticsSim.GroupedStackReducePlan
     @test AdaptiveOpticsSim.detector_execution_plan(typeof(AdaptiveOpticsSim.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.DetectorDirectPlan
+    @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
+        AdaptiveOpticsSim.execution_style(first(geom_prop.state.slices).field.state.field),
+        geom_prop.params.model,
+    ) isa AdaptiveOpticsSim.GeometricFieldAsyncPlan
+    @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
+        AdaptiveOpticsSim.execution_style(first(fresnel_prop.state.slices).field.state.field),
+        fresnel_prop.params.model,
+    ) isa AdaptiveOpticsSim.LayeredFresnelFieldAsyncPlan
     return nothing
 end
 

@@ -104,6 +104,10 @@ end
         model=GeometricAtmosphericPropagation(T=Float64),
         zero_padding=1,
         T=Float64)
+    @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
+        AdaptiveOpticsSim.execution_style(first(geom_prop.state.slices).field.state.field),
+        geom_prop.params.model,
+    ) isa AdaptiveOpticsSim.GeometricFieldSynchronousPlan
     geom_field = propagate_atmosphere_field!(geom_prop, atm, atm_tel, atm_src)
     tel_geom = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     propagate!(atm, tel_geom, atm_src)
@@ -123,6 +127,10 @@ end
         model=LayeredFresnelAtmosphericPropagation(T=Float64),
         zero_padding=1,
         T=Float64)
+    @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
+        AdaptiveOpticsSim.execution_style(first(fresnel_prop.state.slices).field.state.field),
+        fresnel_prop.params.model,
+    ) isa AdaptiveOpticsSim.LayeredFresnelFieldSynchronousPlan
     fresnel_field = propagate_atmosphere_field!(fresnel_prop, fresnel_atm, atm_tel, atm_src)
     geom_single = AtmosphericFieldPropagation(fresnel_atm, atm_tel, atm_src;
         model=GeometricAtmosphericPropagation(T=Float64),
@@ -210,4 +218,3 @@ end
     @test noll_to_nm(3) == (1, 1)
     @test noll_to_nm(4) == (2, -2)
 end
-

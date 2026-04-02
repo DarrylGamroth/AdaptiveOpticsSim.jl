@@ -138,7 +138,7 @@ Traceability:
 
 ### EP-4: Atmospheric Field Execution Plans
 
-Status: pending
+Status: implemented
 
 Goal:
 
@@ -149,6 +149,21 @@ Deliverables:
 
 - typed atmospheric-field execution plans
 - benchmark-backed default-plan choices for maintained backends
+
+Acceptance:
+
+- CPU atmospheric-field semantics remain unchanged
+- maintained accelerator semantics remain unchanged
+- the atmospheric-field benchmark surfaces remain in-family for CPU and CUDA
+
+Verification:
+
+- `julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'`
+- `julia --project=. --startup-file=no scripts/profile_atmospheric_field_runtime.jl cpu geometric finite medium`
+- `julia --project=. --startup-file=no scripts/profile_atmospheric_field_runtime.jl cpu fresnel finite medium`
+- on `spiders`:
+  - `julia --project=. --startup-file=no scripts/profile_atmospheric_field_runtime.jl cuda geometric finite medium`
+  - `julia --project=. --startup-file=no scripts/profile_atmospheric_field_runtime.jl cuda fresnel finite medium`
 
 Traceability:
 
@@ -196,6 +211,6 @@ Traceability:
 - [x] `EP-1` grouped WFS plan formalization
 - [x] `EP-2` AMDGPU grouped recovery
 - [x] `EP-3` detector execution plans
-- [ ] `EP-4` atmospheric field execution plans
+- [x] `EP-4` atmospheric field execution plans
 - [ ] `EP-5` reduction and runtime export plans
 - [ ] `EP-6` builder adoption and closeout
