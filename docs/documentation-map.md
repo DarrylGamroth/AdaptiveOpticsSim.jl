@@ -26,6 +26,8 @@ If you are:
   - [`platform-architecture.md`](./platform-architecture.md)
 - trying to understand how to actually build, validate, or benchmark a platform script:
   - [`platform-workflows.md`](./platform-workflows.md)
+- writing or reviewing a realistic scenario script:
+  - [`scenario-builder-style.md`](./scenario-builder-style.md)
 - looking for maintained public APIs:
   - [`api-reference.md`](./api-reference.md)
 - maintaining or refactoring the codebase:
@@ -46,6 +48,8 @@ If you are:
   - stable synthesis guide for platform-scale structure and boundaries
 - [`platform-workflows.md`](./platform-workflows.md)
   - stable workflow guide for script-first simulation, validation, and benchmarking
+- [`scenario-builder-style.md`](./scenario-builder-style.md)
+  - maintained conventions for script-first scenario construction
 - [`api-reference.md`](./api-reference.md)
   - maintained public API surface
 - [`maintainer-architecture.md`](./maintainer-architecture.md)

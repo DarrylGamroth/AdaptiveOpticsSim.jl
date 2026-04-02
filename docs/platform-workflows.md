@@ -28,6 +28,7 @@ bridge between:
 - [`runtime-dataflow.md`](./runtime-dataflow.md)
 - [`model-validity-matrix.md`](./model-validity-matrix.md)
 - [`benchmark-matrix-plan.md`](./benchmark-matrix-plan.md)
+- [`scenario-builder-style.md`](./scenario-builder-style.md)
 
 ## Workflow Model
 
@@ -185,6 +186,9 @@ The important structural rules are:
 - use exported runtime/readout accessors rather than digging through internal
   buffers
 
+For the maintained style rules behind that script shape, use
+[`scenario-builder-style.md`](./scenario-builder-style.md).
+
 ## Building A Reproducible Platform Script
 
 Use these rules:
@@ -195,6 +199,8 @@ Use these rules:
 - prefer typed helper functions over dynamically assembled dictionaries or
   loose config blobs
 - keep any advanced helper usage namespaced as `AdaptiveOpticsSim.<name>`
+- follow the maintained script-construction rules in
+  [`scenario-builder-style.md`](./scenario-builder-style.md)
 
 Good script responsibilities:
 

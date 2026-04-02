@@ -360,6 +360,10 @@ Implementation record:
 
 ### `PSP-04`: Scenario-Builder Style Guide
 
+Status:
+
+- completed
+
 Objective:
 
 - define the package’s maintained script-first conventions for reproducible,
@@ -406,6 +410,16 @@ Evidence to record:
 - guide path
 - canonical script layout pattern recorded in the guide
 - any examples updated to align with the new rules
+
+Implementation record:
+
+- stable guide added:
+  [scenario-builder-style.md](./scenario-builder-style.md)
+- stable navigation updated in:
+  [documentation-map.md](./documentation-map.md)
+- user/workflow entry points updated in:
+  [user-guide.md](./user-guide.md) and
+  [platform-workflows.md](./platform-workflows.md)
 
 ### Acceptance
 
@@ -732,7 +746,7 @@ next topic.
 - [x] `PSP-01`
 - [x] `PSP-02`
 - [x] `PSP-03`
-- [ ] `PSP-04`
+- [x] `PSP-04`
 
 ### Phase 2
 

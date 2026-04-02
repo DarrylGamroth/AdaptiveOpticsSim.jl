@@ -9,6 +9,8 @@ Start with:
   synthesis
 - [`platform-workflows.md`](./platform-workflows.md) for platform-scale usage
   and evidence workflows
+- [`scenario-builder-style.md`](./scenario-builder-style.md) for scenario
+  authoring conventions
 - [`api-reference.md`](./api-reference.md) for maintained public APIs
 - [`model-validity-matrix.md`](./model-validity-matrix.md) for model evidence
 - [`benchmark-matrix-plan.md`](./benchmark-matrix-plan.md) for performance
@@ -37,6 +39,10 @@ If you want the package-level picture before diving into workflows, read
 If you want the maintained script-first workflow for realistic simulations,
 validation, or benchmark runs, then read
 [platform-workflows.md](./platform-workflows.md) next.
+
+If you are writing or reviewing a realistic scenario script, then use
+[scenario-builder-style.md](./scenario-builder-style.md) as the maintained
+style guide.
 
 For advanced utilities such as telemetry/config helpers, scenario builders,
 build-backend policy helpers, and misregistration-identification tools, use
