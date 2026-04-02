@@ -813,6 +813,8 @@ function simulation_interface(simulation::AO188Simulation)
             detector_export_metadata(simulation.low_detector),
         ),
         nothing,
+        nothing,
+        nothing,
     )
 end
 

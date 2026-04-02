@@ -126,6 +126,13 @@ The runtime product plan decides whether a given simulation step must produce:
 - science pixels
 - metadata surfaces
 
+For grouped composite execution, exported products can additionally include:
+
+- per-branch grouped WFS frames
+- per-branch grouped science frames
+- compatible-shape grouped WFS stacks
+- compatible-shape grouped science stacks
+
 This keeps slopes-only runs from paying unnecessary export costs.
 
 ## Backend Flow

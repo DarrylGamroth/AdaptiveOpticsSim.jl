@@ -290,8 +290,44 @@ end
     @test length(simulation_command(composite)) == length(simulation_command(boundary)) + length(simulation_command(boundary2))
     @test length(simulation_slopes(composite)) == length(simulation_slopes(boundary)) + length(simulation_slopes(boundary2))
     @test length(simulation_wfs_frame(composite)) == 2
+    @test simulation_grouped_wfs_stack(composite) === nothing
     step!(composite)
     @test simulation_command(composite) == vcat(simulation_command(boundary), simulation_command(boundary2))
+
+    rng2b = MersenneTwister(12)
+    tel2b = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src2b = Source(band=:I, magnitude=0.0)
+    atm2b = KolmogorovAtmosphere(tel2b; r0=0.2, L0=25.0)
+    dm2b = DeformableMirror(tel2b; n_act=4, influence_width=0.3)
+    wfs2b = ShackHartmann(tel2b; n_subap=4, mode=Diffractive())
+    sim2b = AdaptiveOpticsSim.AOSimulation(tel2b, atm2b, src2b, dm2b, wfs2b)
+    imat2b = interaction_matrix(dm2b, wfs2b, tel2b, src2b; amplitude=0.1)
+    recon2b = ModalReconstructor(imat2b; gain=0.5)
+    wfs_det_b = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
+    runtime2b = ClosedLoopRuntime(sim2b, recon2b; rng=rng2b, wfs_detector=wfs_det_b)
+    prepare!(runtime2b)
+    step!(runtime2b)
+    boundary2b = SimulationInterface(runtime2b)
+    grouped = CompositeSimulationInterface(
+        boundary2,
+        boundary2b;
+        products=GroupedRuntimeProductRequirements(wfs_frames=true, science_frames=false, wfs_stack=true, science_stack=false),
+    )
+    @test length(simulation_wfs_frame(grouped)) == 2
+    @test !isnothing(simulation_grouped_wfs_stack(grouped))
+    @test size(simulation_grouped_wfs_stack(grouped)) == (size(simulation_wfs_frame(boundary2))..., 2)
+    @test simulation_grouped_science_stack(grouped) === nothing
+    step!(grouped)
+    @test selectdim(simulation_grouped_wfs_stack(grouped), ndims(simulation_grouped_wfs_stack(grouped)), 1) == simulation_wfs_frame(boundary2)
+    @test selectdim(simulation_grouped_wfs_stack(grouped), ndims(simulation_grouped_wfs_stack(grouped)), 2) == simulation_wfs_frame(boundary2b)
+
+    grouped_stack_only = CompositeSimulationInterface(
+        boundary2,
+        boundary2b;
+        products=GroupedRuntimeProductRequirements(wfs_frames=false, science_frames=false, wfs_stack=true, science_stack=false),
+    )
+    @test simulation_wfs_frame(grouped_stack_only) === nothing
+    @test !isnothing(simulation_grouped_wfs_stack(grouped_stack_only))
 
     runtime2_slopes_only = ClosedLoopRuntime(
         sim2,
@@ -382,4 +418,3 @@ end
     @test dm_norms[4] == 0
     @test dm_norms[5] > 0
 end
-

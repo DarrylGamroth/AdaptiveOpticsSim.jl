@@ -40,3 +40,21 @@ function reduce_grouped_blocks!(style::AcceleratorStyle, out::AbstractArray{T,3}
         size(out, 1), size(out, 2); ndrange=size(out))
     return out
 end
+
+@inline function accumulate_grouped_sources!(::ScalarCPUStyle, out::AbstractMatrix, stack::AbstractArray{T,3},
+    sources, render!, args...) where {T}
+    count = length(sources)
+    @inbounds for idx in eachindex(sources)
+        render!(@view(stack[:, :, idx]), args..., sources[idx])
+    end
+    return reduce_grouped_stack!(ScalarCPUStyle(), out, stack, count)
+end
+
+@inline function accumulate_grouped_sources!(style::AcceleratorStyle, out::AbstractMatrix, stack::AbstractArray{T,3},
+    sources, render!, args...) where {T}
+    count = length(sources)
+    @inbounds for idx in eachindex(sources)
+        render!(@view(stack[:, :, idx]), args..., sources[idx])
+    end
+    return reduce_grouped_stack!(style, out, stack, count)
+end

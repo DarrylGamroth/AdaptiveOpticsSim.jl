@@ -222,32 +222,51 @@ function SimulationInterface(runtime::ClosedLoopRuntime)
     return snapshot_outputs!(interface)
 end
 
-function CompositeSimulationInterface(interfaces::SimulationInterface...)
+function CompositeSimulationInterface(interfaces::SimulationInterface...;
+    products::GroupedRuntimeProductRequirements=default_grouped_runtime_products(interfaces...))
     length(interfaces) > 0 || throw(InvalidConfiguration("CompositeSimulationInterface requires at least one interface"))
     first_interface = interfaces[1]
     total_command = mapreduce(i -> length(simulation_command(i)), +, interfaces)
     total_slopes = mapreduce(i -> length(simulation_slopes(i)), +, interfaces)
     command = similar(simulation_command(first_interface), total_command)
     slopes = similar(simulation_slopes(first_interface), total_slopes)
+    plan = grouped_runtime_product_plan(products, interfaces)
     wfs_frames = ntuple(i -> begin
         frame = simulation_wfs_frame(interfaces[i])
-        isnothing(frame) ? nothing : similar(frame)
+        !plan.wfs_frames || isnothing(frame) ? nothing : similar(frame)
     end, length(interfaces))
     science_frames = ntuple(i -> begin
         frame = simulation_science_frame(interfaces[i])
-        isnothing(frame) ? nothing : similar(frame)
+        !plan.science_frames || isnothing(frame) ? nothing : similar(frame)
     end, length(interfaces))
-    multi = CompositeSimulationInterface{typeof(interfaces), typeof(command), typeof(slopes), typeof(wfs_frames), typeof(science_frames)}(
+    wfs_stack = plan.wfs_stack ? grouped_frame_stack_buffer(map(simulation_wfs_frame, interfaces)) : nothing
+    science_stack = plan.science_stack ? grouped_frame_stack_buffer(map(simulation_science_frame, interfaces)) : nothing
+    multi = CompositeSimulationInterface{
+        typeof(interfaces),
+        typeof(command),
+        typeof(slopes),
+        typeof(wfs_frames),
+        typeof(science_frames),
+        typeof(products),
+        typeof(wfs_stack),
+        typeof(science_stack),
+    }(
         interfaces,
         command,
         slopes,
         wfs_frames,
         science_frames,
+        products,
+        wfs_stack,
+        science_stack,
     )
     return snapshot_outputs!(multi)
 end
 
-CompositeSimulationInterface(runtimes::ClosedLoopRuntime...) = CompositeSimulationInterface(map(SimulationInterface, runtimes)...)
+function CompositeSimulationInterface(runtimes::ClosedLoopRuntime...;
+    products::GroupedRuntimeProductRequirements=default_grouped_runtime_products(map(SimulationInterface, runtimes)...))
+    return CompositeSimulationInterface(map(SimulationInterface, runtimes)...; products=products)
+end
 
 function with_reconstructor(runtime::ClosedLoopRuntime, reconstructor)
     refreshed = ClosedLoopRuntime(

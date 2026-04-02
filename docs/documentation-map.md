@@ -68,6 +68,10 @@ If you are:
   - evidence-backed selection memo for the next breadth milestone
 - [`grouped-runtime-plan.md`](./grouped-runtime-plan.md)
   - chosen next breadth milestone for grouped sensing/runtime orchestration
+- [`grouped-runtime-contract.md`](./grouped-runtime-contract.md)
+  - maintained grouped source/runtime/export contract
+- [`grouped-runtime-validation.md`](./grouped-runtime-validation.md)
+  - grouped runtime validation artifact and scope limits
 
 ## Active Supporting Reference
 

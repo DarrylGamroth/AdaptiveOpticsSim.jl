@@ -1,0 +1,4 @@
+[[artifacts]]
+purpose = "grouped runtime validation artifact for GR-4"
+id = "GROUPED-VAL-2026-04-01"
+path = "2026-04-01-gr.toml"

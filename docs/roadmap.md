@@ -213,6 +213,8 @@ validation shows the new default is still too coarse.
     [grouped-runtime-plan.md](./grouped-runtime-plan.md)
   - decision memo:
     [next-milestone-decision-2026-04.md](./next-milestone-decision-2026-04.md)
+- [x] Implement the chosen grouped-runtime breadth milestone with explicit
+  grouped export ownership and archived grouped-runtime validation evidence.
 - [ ] Write and implement the interface/style specification pass described in
   `docs/interface-style-spec-plan.md`, with explicit abstract-family contracts,
   capability-trait audit, and conformance tests.

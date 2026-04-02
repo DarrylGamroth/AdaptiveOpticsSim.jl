@@ -135,7 +135,7 @@ function _build_runtime_branch(::Type{T}, BackendArray, resolution::Int, n_subap
         ShackHartmann(tel; n_subap=n_subap, mode=Diffractive(), T=T, backend=BackendArray) :
         PyramidWFS(tel; n_subap=n_subap, modulation=T(1.0), mode=Diffractive(), T=T, backend=BackendArray)
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=BackendArray)
-    sim = AOSimulation(tel, atm, src, dm, wfs)
+    sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
     rt = ClosedLoopRuntime(sim, _build_recon(dm, wfs, tel, src); rng=MersenneTwister(seed), wfs_detector=det)
     return rt
 end
@@ -204,26 +204,66 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
         _sync_backend!(backend_tag, simulation_command(composite_mixed))
     end; warmup=resolved_warmup, samples=resolved_samples)
 
-    println("multi_source_multi_wfs_profile")
-    println("  backend: ", label)
-    println("  scale: ", cfg.scale)
-    println("  sh_asterism_mean_ns: ", sh_mean_ns)
-    println("  sh_asterism_p95_ns: ", sh_p95_ns)
-    println("  pyramid_asterism_mean_ns: ", pyr_mean_ns)
-    println("  pyramid_asterism_p95_ns: ", pyr_p95_ns)
-    println("  bioedge_asterism_mean_ns: ", bio_mean_ns)
-    println("  bioedge_asterism_p95_ns: ", bio_p95_ns)
-    println("  composite_compatible_mean_ns: ", comp_mean_ns)
-    println("  composite_compatible_p95_ns: ", comp_p95_ns)
-    println("  composite_mixed_mean_ns: ", mixed_mean_ns)
-    println("  composite_mixed_p95_ns: ", mixed_p95_ns)
-    println("  source_count: ", length(cfg.source_coords))
-    println("  asterism_resolution: ", cfg.asterism_resolution)
-    println("  asterism_n_subap: ", cfg.asterism_n_subap)
-    println("  runtime_resolution: ", cfg.runtime_resolution)
-    println("  runtime_n_subap: ", cfg.runtime_n_subap)
-    println("  runtime_branch_count: ", cfg.branch_count)
-    return nothing
+    compatible_stack = simulation_grouped_wfs_stack(composite_compatible)
+    mixed_stack = simulation_grouped_wfs_stack(composite_mixed)
+
+    return (
+        backend=label,
+        scale=cfg.scale,
+        sh_asterism_mean_ns=sh_mean_ns,
+        sh_asterism_p95_ns=sh_p95_ns,
+        pyramid_asterism_mean_ns=pyr_mean_ns,
+        pyramid_asterism_p95_ns=pyr_p95_ns,
+        bioedge_asterism_mean_ns=bio_mean_ns,
+        bioedge_asterism_p95_ns=bio_p95_ns,
+        composite_compatible_mean_ns=comp_mean_ns,
+        composite_compatible_p95_ns=comp_p95_ns,
+        composite_mixed_mean_ns=mixed_mean_ns,
+        composite_mixed_p95_ns=mixed_p95_ns,
+        source_count=length(cfg.source_coords),
+        asterism_resolution=cfg.asterism_resolution,
+        asterism_n_subap=cfg.asterism_n_subap,
+        runtime_resolution=cfg.runtime_resolution,
+        runtime_n_subap=cfg.runtime_n_subap,
+        runtime_branch_count=cfg.branch_count,
+        compatible_grouped_wfs_stack=!isnothing(compatible_stack),
+        mixed_grouped_wfs_stack=!isnothing(mixed_stack),
+        compatible_grouped_wfs_stack_shape=isnothing(compatible_stack) ? "none" : string(size(compatible_stack)),
+        mixed_grouped_wfs_stack_shape=isnothing(mixed_stack) ? "none" : string(size(mixed_stack)),
+    )
 end
 
-run_profile(; backend_name=_backend_arg, scale_name=_scale_arg)
+function print_profile(result)
+    println("multi_source_multi_wfs_profile")
+    for key in (
+        :backend,
+        :scale,
+        :sh_asterism_mean_ns,
+        :sh_asterism_p95_ns,
+        :pyramid_asterism_mean_ns,
+        :pyramid_asterism_p95_ns,
+        :bioedge_asterism_mean_ns,
+        :bioedge_asterism_p95_ns,
+        :composite_compatible_mean_ns,
+        :composite_compatible_p95_ns,
+        :composite_mixed_mean_ns,
+        :composite_mixed_p95_ns,
+        :source_count,
+        :asterism_resolution,
+        :asterism_n_subap,
+        :runtime_resolution,
+        :runtime_n_subap,
+        :runtime_branch_count,
+        :compatible_grouped_wfs_stack,
+        :compatible_grouped_wfs_stack_shape,
+        :mixed_grouped_wfs_stack,
+        :mixed_grouped_wfs_stack_shape,
+    )
+        println("  ", key, ": ", getproperty(result, key))
+    end
+    return result
+end
+
+if abspath(PROGRAM_FILE) == @__FILE__
+    print_profile(run_profile(; backend_name=_backend_arg, scale_name=_scale_arg))
+end

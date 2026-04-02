@@ -1,0 +1,55 @@
+artifact_id = "GROUPED-VAL-2026-04-01"
+generated_on = "2026-04-01"
+
+[scope]
+families = ["grouped_runtime", "multi_source_multi_wfs"]
+backend = "cpu"
+artifact_kind = "grouped_runtime_validation"
+
+[cases.medium]
+compatible_grouped_wfs_stack = true
+runtime_n_subap = 8
+pyramid_asterism_p95_ns = 5155891
+asterism_n_subap = 8
+compatible_grouped_wfs_stack_shape = "(64, 4, 4, 3)"
+scale = "medium"
+backend = "cpu"
+bioedge_asterism_p95_ns = 12038045
+sh_asterism_mean_ns = 329428.75
+sh_asterism_p95_ns = 327723
+source_count = 4
+composite_mixed_mean_ns = 400238.1666666667
+mixed_grouped_wfs_stack = false
+composite_compatible_p95_ns = 182030
+mixed_grouped_wfs_stack_shape = "none"
+runtime_branch_count = 3
+composite_compatible_mean_ns = 179156.41666666666
+asterism_resolution = 64
+bioedge_asterism_mean_ns = 1.1962033166666666e7
+pyramid_asterism_mean_ns = 5.1238055e6
+composite_mixed_p95_ns = 416548
+runtime_resolution = 32
+
+[cases.representative]
+compatible_grouped_wfs_stack = true
+runtime_n_subap = 12
+pyramid_asterism_p95_ns = 37007254
+asterism_n_subap = 12
+compatible_grouped_wfs_stack_shape = "(144, 6, 6, 4)"
+scale = "representative"
+backend = "cpu"
+bioedge_asterism_p95_ns = 88790256
+sh_asterism_mean_ns = 948468.3333333334
+sh_asterism_p95_ns = 981223
+source_count = 6
+composite_mixed_mean_ns = 3.5785643333333335e6
+mixed_grouped_wfs_stack = false
+composite_compatible_p95_ns = 1276634
+mixed_grouped_wfs_stack_shape = "none"
+runtime_branch_count = 4
+composite_compatible_mean_ns = 995649.6666666666
+asterism_resolution = 96
+bioedge_asterism_mean_ns = 8.851693766666667e7
+pyramid_asterism_mean_ns = 3.6804092833333336e7
+composite_mixed_p95_ns = 3692357
+runtime_resolution = 72

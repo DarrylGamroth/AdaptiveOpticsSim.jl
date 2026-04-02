@@ -402,19 +402,15 @@ function ensure_pyramid_asterism_stack!(wfs::PyramidWFS, n_src::Int)
 end
 
 function accumulate_pyramid_asterism_intensity!(::ScalarCPUStyle, wfs::PyramidWFS, tel::Telescope, ast::Asterism)
-    stack = grouped_stack_view(ensure_pyramid_asterism_stack!(wfs, length(ast.sources)), length(ast.sources))
-    @inbounds for (src_idx, src) in pairs(ast.sources)
-        pyramid_intensity!(@view(stack[:, :, src_idx]), wfs, tel, src)
-    end
-    return reduce_grouped_stack!(ScalarCPUStyle(), wfs.state.intensity, stack, length(ast.sources))
+    count = length(ast.sources)
+    stack = grouped_stack_view(ensure_pyramid_asterism_stack!(wfs, count), count)
+    return accumulate_grouped_sources!(ScalarCPUStyle(), wfs.state.intensity, stack, ast.sources, pyramid_intensity!, wfs, tel)
 end
 
 function accumulate_pyramid_asterism_intensity!(style::AcceleratorStyle, wfs::PyramidWFS, tel::Telescope, ast::Asterism)
-    stack = grouped_stack_view(ensure_pyramid_asterism_stack!(wfs, length(ast.sources)), length(ast.sources))
-    @inbounds for (src_idx, src) in pairs(ast.sources)
-        pyramid_intensity!(@view(stack[:, :, src_idx]), wfs, tel, src)
-    end
-    return reduce_grouped_stack!(style, wfs.state.intensity, stack, length(ast.sources))
+    count = length(ast.sources)
+    stack = grouped_stack_view(ensure_pyramid_asterism_stack!(wfs, count), count)
+    return accumulate_grouped_sources!(style, wfs.state.intensity, stack, ast.sources, pyramid_intensity!, wfs, tel)
 end
 
 function accumulate_pyramid_spectral_intensity!(::ScalarCPUStyle, wfs::PyramidWFS, tel::Telescope, src::SpectralSource)
@@ -449,10 +445,7 @@ function accumulate_pyramid_extended_intensity!(::ScalarCPUStyle, out::AbstractM
     end
     count = length(ast.sources)
     stack = grouped_stack_view(ensure_pyramid_asterism_stack!(wfs, count), count)
-    @inbounds for (src_idx, sample) in pairs(ast.sources)
-        pyramid_intensity!(@view(stack[:, :, src_idx]), wfs, tel, sample)
-    end
-    return reduce_grouped_stack!(ScalarCPUStyle(), out, stack, count)
+    return accumulate_grouped_sources!(ScalarCPUStyle(), out, stack, ast.sources, pyramid_intensity!, wfs, tel)
 end
 
 function accumulate_pyramid_extended_intensity!(style::AcceleratorStyle, out::AbstractMatrix, wfs::PyramidWFS,
@@ -463,10 +456,7 @@ function accumulate_pyramid_extended_intensity!(style::AcceleratorStyle, out::Ab
     end
     count = length(ast.sources)
     stack = grouped_stack_view(ensure_pyramid_asterism_stack!(wfs, count), count)
-    @inbounds for (src_idx, sample) in pairs(ast.sources)
-        pyramid_intensity!(@view(stack[:, :, src_idx]), wfs, tel, sample)
-    end
-    return reduce_grouped_stack!(style, out, stack, count)
+    return accumulate_grouped_sources!(style, out, stack, ast.sources, pyramid_intensity!, wfs, tel)
 end
 
 function prepare_pyramid_sampling!(wfs::PyramidWFS, tel::Telescope)

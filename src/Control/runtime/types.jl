@@ -228,12 +228,15 @@ slope, and frame surface.
 This is used for grouped multi-branch execution while preserving per-runtime
 state internally.
 """
-mutable struct CompositeSimulationInterface{IT,C,S,WF,SF}
+mutable struct CompositeSimulationInterface{IT,C,S,WF,SF,PR,WS,SS}
     interfaces::IT
     command::C
     slopes::S
     wfs_frames::WF
     science_frames::SF
+    products::PR
+    wfs_stack::WS
+    science_stack::SS
 end
 
 """
@@ -244,13 +247,15 @@ Zero-copy view of the current output side of a simulation runtime or interface.
 This bundles the command, slopes, optional frames, and export metadata that an
 external controller or logger would observe at the current simulation state.
 """
-struct SimulationReadout{C,S,W,SF,WM,SM}
+struct SimulationReadout{C,S,W,SF,WM,SM,GW,GS}
     command::C
     slopes::S
     wfs_frame::W
     science_frame::SF
     wfs_metadata::WM
     science_metadata::SM
+    grouped_wfs_stack::GW
+    grouped_science_stack::GS
 end
 
 @inline function apply_command!(::ScalarCPUStyle, coefs::AbstractVector{T}, cmd::AbstractVector{T}, sign::T) where {T<:AbstractFloat}

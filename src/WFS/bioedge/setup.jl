@@ -541,21 +541,13 @@ end
 function accumulate_bioedge_asterism_intensity!(::ScalarCPUStyle, wfs::BioEdgeWFS, tel::Telescope, ast::Asterism)
     count = length(ast.sources)
     stack = grouped_stack_view(ensure_bioedge_asterism_stack!(wfs, count), count)
-    @inbounds for (src_idx, src) in pairs(ast.sources)
-        bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
-        copyto!(@view(stack[:, :, src_idx]), wfs.state.intensity)
-    end
-    return reduce_grouped_stack!(ScalarCPUStyle(), wfs.state.intensity, stack, count)
+    return accumulate_grouped_sources!(ScalarCPUStyle(), wfs.state.intensity, stack, ast.sources, bioedge_intensity!, wfs, tel)
 end
 
 function accumulate_bioedge_asterism_intensity!(style::AcceleratorStyle, wfs::BioEdgeWFS, tel::Telescope, ast::Asterism)
     count = length(ast.sources)
     stack = grouped_stack_view(ensure_bioedge_asterism_stack!(wfs, count), count)
-    @inbounds for (src_idx, src) in pairs(ast.sources)
-        bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
-        copyto!(@view(stack[:, :, src_idx]), wfs.state.intensity)
-    end
-    return reduce_grouped_stack!(style, wfs.state.intensity, stack, count)
+    return accumulate_grouped_sources!(style, wfs.state.intensity, stack, ast.sources, bioedge_intensity!, wfs, tel)
 end
 
 function prepare_bioedge_sampling!(wfs::BioEdgeWFS, tel::Telescope)

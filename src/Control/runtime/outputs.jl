@@ -59,6 +59,12 @@ end
         if !isnothing(multi.science_frames[i])
             copyto!(multi.science_frames[i], interface.science_frame)
         end
+        if !isnothing(multi.wfs_stack)
+            copyto!(selectdim(multi.wfs_stack, ndims(multi.wfs_stack), i), interface.wfs_frame)
+        end
+        if !isnothing(multi.science_stack)
+            copyto!(selectdim(multi.science_stack, ndims(multi.science_stack), i), interface.science_frame)
+        end
         command_offset += n_command
         slope_offset += n_slopes
     end
@@ -71,6 +77,8 @@ end
 @inline simulation_science_frame(readout::SimulationReadout) = readout.science_frame
 @inline simulation_wfs_metadata(readout::SimulationReadout) = readout.wfs_metadata
 @inline simulation_science_metadata(readout::SimulationReadout) = readout.science_metadata
+@inline simulation_grouped_wfs_stack(readout::SimulationReadout) = readout.grouped_wfs_stack
+@inline simulation_grouped_science_stack(readout::SimulationReadout) = readout.grouped_science_stack
 
 @inline simulation_command(runtime::ClosedLoopRuntime) = runtime.command
 @inline simulation_slopes(runtime::ClosedLoopRuntime) = requires_runtime_slopes(runtime) ? runtime.slopes : nothing
@@ -80,6 +88,8 @@ end
     requires_runtime_wfs_pixels(runtime) ? detector_export_metadata(runtime.wfs_detector) : nothing
 @inline simulation_science_metadata(runtime::ClosedLoopRuntime) =
     requires_runtime_science_pixels(runtime) ? detector_export_metadata(runtime.science_detector) : nothing
+@inline simulation_grouped_wfs_stack(::ClosedLoopRuntime) = nothing
+@inline simulation_grouped_science_stack(::ClosedLoopRuntime) = nothing
 @inline runtime_profile(runtime::ClosedLoopRuntime) = runtime.profile
 @inline runtime_latency(runtime::ClosedLoopRuntime) = runtime.latency
 
@@ -89,6 +99,8 @@ end
 @inline simulation_science_frame(sim::AbstractControlSimulation) = simulation_science_frame(simulation_readout(sim))
 @inline simulation_wfs_metadata(sim::AbstractControlSimulation) = simulation_wfs_metadata(simulation_readout(sim))
 @inline simulation_science_metadata(sim::AbstractControlSimulation) = simulation_science_metadata(simulation_readout(sim))
+@inline simulation_grouped_wfs_stack(sim::AbstractControlSimulation) = simulation_grouped_wfs_stack(simulation_readout(sim))
+@inline simulation_grouped_science_stack(sim::AbstractControlSimulation) = simulation_grouped_science_stack(simulation_readout(sim))
 
 @inline simulation_command(interface::SimulationInterface) = interface.command
 @inline simulation_slopes(interface::SimulationInterface) = interface.slopes
@@ -96,13 +108,17 @@ end
 @inline simulation_science_frame(interface::SimulationInterface) = interface.science_frame
 @inline simulation_wfs_metadata(interface::SimulationInterface) = simulation_wfs_metadata(interface.runtime)
 @inline simulation_science_metadata(interface::SimulationInterface) = simulation_science_metadata(interface.runtime)
+@inline simulation_grouped_wfs_stack(::SimulationInterface) = nothing
+@inline simulation_grouped_science_stack(::SimulationInterface) = nothing
 
 @inline simulation_command(interface::CompositeSimulationInterface) = interface.command
 @inline simulation_slopes(interface::CompositeSimulationInterface) = interface.slopes
-@inline simulation_wfs_frame(interface::CompositeSimulationInterface) = interface.wfs_frames
-@inline simulation_science_frame(interface::CompositeSimulationInterface) = interface.science_frames
+@inline simulation_wfs_frame(interface::CompositeSimulationInterface) = requires_grouped_wfs_frames(interface) ? interface.wfs_frames : nothing
+@inline simulation_science_frame(interface::CompositeSimulationInterface) = requires_grouped_science_frames(interface) ? interface.science_frames : nothing
 @inline simulation_wfs_metadata(interface::CompositeSimulationInterface) = map(simulation_wfs_metadata, interface.interfaces)
 @inline simulation_science_metadata(interface::CompositeSimulationInterface) = map(simulation_science_metadata, interface.interfaces)
+@inline simulation_grouped_wfs_stack(interface::CompositeSimulationInterface) = requires_grouped_wfs_stack(interface) ? interface.wfs_stack : nothing
+@inline simulation_grouped_science_stack(interface::CompositeSimulationInterface) = requires_grouped_science_stack(interface) ? interface.science_stack : nothing
 
 @inline simulation_readout(readout::SimulationReadout) = readout
 @inline function simulation_readout(runtime::ClosedLoopRuntime)
@@ -113,6 +129,8 @@ end
         simulation_science_frame(runtime),
         simulation_wfs_metadata(runtime),
         simulation_science_metadata(runtime),
+        simulation_grouped_wfs_stack(runtime),
+        simulation_grouped_science_stack(runtime),
     )
 end
 @inline simulation_readout(sim::AbstractControlSimulation) = simulation_readout(simulation_interface(sim))
@@ -125,6 +143,8 @@ end
         simulation_science_frame(interface),
         simulation_wfs_metadata(interface),
         simulation_science_metadata(interface),
+        simulation_grouped_wfs_stack(interface),
+        simulation_grouped_science_stack(interface),
     )
 end
 
@@ -136,6 +156,8 @@ end
         simulation_science_frame(interface),
         simulation_wfs_metadata(interface),
         simulation_science_metadata(interface),
+        simulation_grouped_wfs_stack(interface),
+        simulation_grouped_science_stack(interface),
     )
 end
 

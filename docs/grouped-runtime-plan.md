@@ -1,6 +1,6 @@
 # Grouped Runtime Plan
 
-Status: active
+Status: completed
 
 Plan traceability:
 
@@ -16,6 +16,19 @@ This plan defines the next selected platform-breadth milestone:
 
 The goal is to make grouped execution a first-class, benchmarked core runtime
 surface rather than a collection of partially shared execution paths.
+
+## Implementation Status
+
+This plan is implemented.
+
+Completed deliverables:
+
+- grouped contract note:
+  [grouped-runtime-contract.md](./grouped-runtime-contract.md)
+- grouped validation note:
+  [grouped-runtime-validation.md](./grouped-runtime-validation.md)
+- grouped runtime artifact:
+  [2026-04-01-gr.toml](../benchmarks/results/grouped/2026-04-01-gr.toml)
 
 ## Scope
 
@@ -51,6 +64,10 @@ Acceptance:
 - one maintained contract note exists
 - current grouped runtime entry points are mapped to that contract
 
+Status:
+
+- implemented in [grouped-runtime-contract.md](./grouped-runtime-contract.md)
+
 ### GR-2: Grouped Product Ownership Cleanup
 
 Deliverables:
@@ -68,6 +85,11 @@ Acceptance:
 - grouped execution no longer relies on ambiguous in-place product ownership
 - grouped export semantics are test-covered
 
+Status:
+
+- implemented through explicit grouped composite export products and test
+  coverage in [control_and_runtime.jl](../test/testsets/control_and_runtime.jl)
+
 ### GR-3: Grouped Runtime Pipeline Reuse
 
 Deliverables:
@@ -81,6 +103,11 @@ Acceptance:
 
 - duplication in grouped runtime hot paths is reduced
 - no regression in existing grouped runtime tests
+
+Status:
+
+- implemented through shared grouped accumulation helpers in
+  [grouped.jl](../src/WFS/grouped.jl)
 
 ### GR-4: Grouped Validation Surface
 
@@ -96,6 +123,10 @@ Acceptance:
 
 - the grouped runtime family has a maintained validation/evidence surface
 - benchmark evidence is archived and reproducible
+
+Status:
+
+- implemented in [grouped-runtime-validation.md](./grouped-runtime-validation.md)
 
 ## Validation Expectations
 

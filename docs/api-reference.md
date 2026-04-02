@@ -184,9 +184,13 @@ If you are maintaining the package, pair this document with
 - `runtime_profile`, `runtime_latency`
 - `simulation_readout`, `simulation_command`, `simulation_slopes`,
   `simulation_wfs_frame`, `simulation_science_frame`
+- `simulation_grouped_wfs_stack`, `simulation_grouped_science_stack`
 - `simulation_wfs_metadata`, `simulation_science_metadata`
   - these accessors now work on both interface/readout objects and direct
     `AbstractControlSimulation` instances
+- `RuntimeProductRequirements`, `GroupedRuntimeProductRequirements`
+  - grouped composite execution now has an explicit grouped export policy in
+    addition to the per-runtime slope/WFS/science product policy
 - `AbstractExecutionPolicy`, `SequentialExecution`, `ThreadedExecution`,
   `BackendStreamExecution`
 - `VectorDelayLine`, `shift_delay!`
@@ -566,6 +570,9 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - Output-side accessors are `simulation_command`, `simulation_slopes`,
   `simulation_wfs_frame`, `simulation_science_frame`,
   `simulation_wfs_metadata`, and `simulation_science_metadata`.
+- Grouped composite simulations may additionally expose compatible-shape grouped
+  exports through `simulation_grouped_wfs_stack` and
+  `simulation_grouped_science_stack`.
 - Optional behavior is expressed with
   `supports_prepared_runtime`, `supports_detector_output`,
   `supports_stacked_sources`, and `supports_grouped_execution`.
