@@ -76,7 +76,7 @@ function _batched_sensor_statistics!(sensor::EMCCDSensor, det::Detector, cube::A
     rate = effective_cic_rate(det) * det.params.integration_time
     if rate > zero(rate)
         fill!(scratch, rate)
-        poisson_noise!(rng, scratch)
+        poisson_noise_frame!(det, rng, scratch)
         cube .+= scratch
     end
     return cube

@@ -116,7 +116,7 @@ Traceability:
 
 ### EP-3: Detector Execution Plans
 
-Status: pending
+Status: implemented
 
 Goal:
 
@@ -127,6 +127,10 @@ Deliverables:
 
 - typed detector execution plans for staged capture/readout
 - ROCm/CUDA/CPU policy localized behind plan dispatch
+
+Verification:
+
+- `julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'`
 
 Traceability:
 
@@ -191,7 +195,7 @@ Traceability:
 
 - [x] `EP-1` grouped WFS plan formalization
 - [x] `EP-2` AMDGPU grouped recovery
-- [ ] `EP-3` detector execution plans
+- [x] `EP-3` detector execution plans
 - [ ] `EP-4` atmospheric field execution plans
 - [ ] `EP-5` reduction and runtime export plans
 - [ ] `EP-6` builder adoption and closeout

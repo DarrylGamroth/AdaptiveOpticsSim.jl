@@ -43,7 +43,7 @@ _batched_background_flux!(::NoBackground, det::Detector, cube::AbstractArray, sc
 function _batched_background_flux!(background::ScalarBackground, det::Detector, cube::AbstractArray, scratch::AbstractArray,
     rng::AbstractRNG, exposure_time::Real)
     fill!(scratch, background.level * exposure_time)
-    poisson_noise!(rng, scratch)
+    poisson_noise_frame!(det, rng, scratch)
     cube .+= scratch
     return cube
 end
@@ -54,7 +54,7 @@ function _batched_background_flux!(background::BackgroundFrame, det::Detector, c
         throw(DimensionMismatchError("background_flux size must match detector frame size"))
     scratch .= _batched_frame_map(background.map)
     scratch .*= exposure_time
-    poisson_noise!(rng, scratch)
+    poisson_noise_frame!(det, rng, scratch)
     cube .+= scratch
     return cube
 end
@@ -65,7 +65,7 @@ function _batched_dark_current!(det::Detector, cube::AbstractArray, scratch::Abs
         return cube
     end
     fill!(scratch, dark_signal)
-    poisson_noise!(rng, scratch)
+    poisson_noise_frame!(det, rng, scratch)
     cube .+= scratch
     return cube
 end
@@ -145,14 +145,14 @@ function _batched_apply_readout_correction!(model::FrameReadoutCorrectionModel, 
 end
 
 function _batched_readout_noise!(det::Detector{<:NoiseReadout}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
-    randn_backend!(rng, scratch)
+    randn_frame_noise!(det, rng, scratch)
     sigma = effective_readout_sigma(det.params.sensor, det.noise.sigma)
     cube .+= sigma .* scratch
     return cube
 end
 
 function _batched_readout_noise!(det::Detector{<:NoisePhotonReadout}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
-    randn_backend!(rng, scratch)
+    randn_frame_noise!(det, rng, scratch)
     sigma = effective_readout_sigma(det.params.sensor, det.noise.sigma)
     cube .+= sigma .* scratch
     return cube
@@ -178,12 +178,12 @@ end
 capture_stack_poisson_noise!(det::Detector, cube::AbstractArray, rng::AbstractRNG) = cube
 
 function capture_stack_poisson_noise!(det::Detector{NoisePhoton}, cube::AbstractArray, rng::AbstractRNG)
-    poisson_noise!(rng, cube)
+    poisson_noise_frame!(det, rng, cube)
     return cube
 end
 
 function capture_stack_poisson_noise!(det::Detector{<:NoisePhotonReadout}, cube::AbstractArray, rng::AbstractRNG)
-    poisson_noise!(rng, cube)
+    poisson_noise_frame!(det, rng, cube)
     return cube
 end
 
@@ -324,7 +324,7 @@ function _capture_stack_fixed!(det::Detector, cube::AbstractArray{T,3}, scratch:
     _batched_pre_readout_gain!(det.params.sensor, det, cube, rng)
     _batched_readout_noise!(det, cube, scratch, rng)
     _batched_post_readout_gain!(det.params.sensor, det, cube)
-    _batched_apply_readout_correction!(det.params.correction_model, cube)
+    apply_readout_correction!(det.params.correction_model, cube, det)
     _batched_quantization!(det, cube)
     _batched_background_map!(det.background_map, cube, scratch)
     return cube

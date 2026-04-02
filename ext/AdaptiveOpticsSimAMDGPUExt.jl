@@ -42,18 +42,12 @@ AdaptiveOpticsSim.grouped_accumulation_plan(
     ::Type{<:AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:AdaptiveOpticsSim.BioEdgeWFS},
 ) = AdaptiveOpticsSim.GroupedStaged2DPlan()
+AdaptiveOpticsSim.detector_execution_plan(
+    ::Type{<:AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend}},
+    ::Type{<:AdaptiveOpticsSim.Detector},
+) = AdaptiveOpticsSim.DetectorHostMirrorPlan()
 AdaptiveOpticsSim.randn_backend_async!(::AdaptiveOpticsSim.AcceleratorStyle, rng::AbstractRNG, out::AMDGPU.ROCArray) = (Random.randn!(rng, out); out)
 AdaptiveOpticsSim._randn_backend!(::AdaptiveOpticsSim.AcceleratorStyle, rng::AbstractRNG, out::AMDGPU.ROCArray) = (Random.randn!(rng, out); out)
-function AdaptiveOpticsSim.randn_frame_noise!(det::AdaptiveOpticsSim.Detector, rng::AbstractRNG, out::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat}
-    host = det.state.noise_buffer_host
-    if size(host) != size(out)
-        host = Matrix{T}(undef, size(out)...)
-        det.state.noise_buffer_host = host
-    end
-    randn!(rng, host)
-    copyto!(out, host)
-    return out
-end
 function AdaptiveOpticsSim.randn_phase_noise!(rng::AbstractRNG, out::AMDGPU.ROCArray{T,2}, host::Matrix{T}) where {T<:AbstractFloat}
     if size(host) != size(out)
         host = Matrix{T}(undef, size(out)...)

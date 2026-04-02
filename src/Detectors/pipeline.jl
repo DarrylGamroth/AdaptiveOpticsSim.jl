@@ -1,3 +1,13 @@
+abstract type AbstractDetectorExecutionPlan end
+
+struct DetectorDirectPlan <: AbstractDetectorExecutionPlan end
+struct DetectorHostMirrorPlan <: AbstractDetectorExecutionPlan end
+
+@inline detector_execution_plan(style::ExecutionStyle, det::Detector) =
+    detector_execution_plan(typeof(style), typeof(det))
+
+@inline detector_execution_plan(::Type{<:ExecutionStyle}, ::Type{<:Detector}) = DetectorDirectPlan()
+
 @inline photon_noise_enabled(::Detector{NoiseNone}) = false
 @inline photon_noise_enabled(::Detector{NoisePhoton}) = true
 @inline photon_noise_enabled(::Detector{<:NoiseReadout}) = false

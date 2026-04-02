@@ -59,25 +59,77 @@ end
 apply_sensor_persistence!(::FrameSensorType, det::Detector, exposure_time::Real) = det.state.frame
 update_sensor_persistence!(::FrameSensorType, det::Detector, exposure_time::Real) = det.state.frame
 
-function poisson_noise_frame!(det::Detector, rng::AbstractRNG, img::AbstractMatrix{T}) where {T<:AbstractFloat}
-    if gpu_backend_name(typeof(img)) === :amdgpu
-        host = det.state.noise_buffer_host
-        if size(host) != size(img)
-            host = Matrix{T}(undef, size(img)...)
-            det.state.noise_buffer_host = host
-        end
-        copyto!(host, img)
-        _poisson_noise!(ScalarCPUStyle(), rng, host)
-        copyto!(img, host)
-        return img
+function detector_host_buffer!(det::Detector, ::Type{T}, dims::Tuple{Int,Int}) where {T<:AbstractFloat}
+    host = det.state.noise_buffer_host
+    if size(host) != dims
+        host = Matrix{T}(undef, dims...)
+        det.state.noise_buffer_host = host
     end
+    return host
+end
+
+function detector_host_frame!(det::Detector, frame::AbstractMatrix{T}) where {T<:AbstractFloat}
+    host = detector_host_buffer!(det, T, size(frame))
+    copyto!(host, frame)
+    return host
+end
+
+function _poisson_noise_frame!(::DetectorDirectPlan, det::Detector, rng::AbstractRNG, img::AbstractMatrix{T}) where {T<:AbstractFloat}
     poisson_noise!(rng, img)
     return img
 end
 
-function randn_frame_noise!(det::Detector, rng::AbstractRNG, out::AbstractMatrix{T}) where {T<:AbstractFloat}
+function _poisson_noise_frame!(::DetectorDirectPlan, det::Detector, rng::AbstractRNG, cube::AbstractArray{T,3}) where {T<:AbstractFloat}
+    poisson_noise!(rng, cube)
+    return cube
+end
+
+function _poisson_noise_frame!(::DetectorHostMirrorPlan, det::Detector, rng::AbstractRNG, img::AbstractMatrix{T}) where {T<:AbstractFloat}
+    host = detector_host_frame!(det, img)
+    _poisson_noise!(ScalarCPUStyle(), rng, host)
+    copyto!(img, host)
+    return img
+end
+
+function _poisson_noise_frame!(plan::DetectorHostMirrorPlan, det::Detector, rng::AbstractRNG, cube::AbstractArray{T,3}) where {T<:AbstractFloat}
+    for b in axes(cube, 1)
+        _poisson_noise_frame!(plan, det, rng, @view(cube[b, :, :]))
+    end
+    return cube
+end
+
+function poisson_noise_frame!(det::Detector, rng::AbstractRNG, img::AbstractArray{T}) where {T<:AbstractFloat}
+    plan = detector_execution_plan(typeof(execution_style(img)), typeof(det))
+    return _poisson_noise_frame!(plan, det, rng, img)
+end
+
+function _randn_frame_noise!(::DetectorDirectPlan, det::Detector, rng::AbstractRNG, out::AbstractMatrix{T}) where {T<:AbstractFloat}
     randn_backend!(rng, out)
     return out
+end
+
+function _randn_frame_noise!(::DetectorDirectPlan, det::Detector, rng::AbstractRNG, cube::AbstractArray{T,3}) where {T<:AbstractFloat}
+    randn_backend!(rng, cube)
+    return cube
+end
+
+function _randn_frame_noise!(::DetectorHostMirrorPlan, det::Detector, rng::AbstractRNG, out::AbstractMatrix{T}) where {T<:AbstractFloat}
+    host = detector_host_buffer!(det, T, size(out))
+    randn!(rng, host)
+    copyto!(out, host)
+    return out
+end
+
+function _randn_frame_noise!(plan::DetectorHostMirrorPlan, det::Detector, rng::AbstractRNG, cube::AbstractArray{T,3}) where {T<:AbstractFloat}
+    for b in axes(cube, 1)
+        _randn_frame_noise!(plan, det, rng, @view(cube[b, :, :]))
+    end
+    return cube
+end
+
+function randn_frame_noise!(det::Detector, rng::AbstractRNG, out::AbstractArray{T}) where {T<:AbstractFloat}
+    plan = detector_execution_plan(typeof(execution_style(out)), typeof(det))
+    return _randn_frame_noise!(plan, det, rng, out)
 end
 
 function capture_signal!(det::Detector{NoiseNone}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
@@ -214,16 +266,6 @@ end
 
 apply_readout_correction!(::NullFrameReadoutCorrection, frame::AbstractMatrix) = frame
 
-function detector_host_frame!(det::Detector, frame::AbstractMatrix{T}) where {T<:AbstractFloat}
-    host = det.state.noise_buffer_host
-    if size(host) != size(frame)
-        host = Matrix{T}(undef, size(frame)...)
-        det.state.noise_buffer_host = host
-    end
-    copyto!(host, frame)
-    return host
-end
-
 function _reference_pixel_bias(model::ReferencePixelCommonModeCorrection, frame::AbstractMatrix{T}) where {T}
     n, m = size(frame)
     n_edge_rows = min(model.edge_rows, n)
@@ -359,14 +401,35 @@ function apply_readout_correction!(model::FrameReadoutCorrectionModel, cube::Abs
     return cube
 end
 
-function apply_readout_correction!(model::FrameReadoutCorrectionModel, frame::AbstractMatrix{T}, det::Detector) where {T}
-    if gpu_backend_name(typeof(frame)) === :amdgpu
-        host = detector_host_frame!(det, frame)
-        apply_readout_correction!(model, host)
-        copyto!(frame, host)
-        return frame
-    end
+function _apply_readout_correction!(::DetectorDirectPlan, model::FrameReadoutCorrectionModel,
+    frame::AbstractMatrix{T}, det::Detector) where {T<:AbstractFloat}
     return apply_readout_correction!(model, frame)
+end
+
+function _apply_readout_correction!(::DetectorDirectPlan, model::FrameReadoutCorrectionModel,
+    cube::AbstractArray{T,3}, det::Detector) where {T<:AbstractFloat}
+    return apply_readout_correction!(model, cube)
+end
+
+function _apply_readout_correction!(::DetectorHostMirrorPlan, model::FrameReadoutCorrectionModel,
+    frame::AbstractMatrix{T}, det::Detector) where {T<:AbstractFloat}
+    host = detector_host_frame!(det, frame)
+    apply_readout_correction!(model, host)
+    copyto!(frame, host)
+    return frame
+end
+
+function _apply_readout_correction!(plan::DetectorHostMirrorPlan, model::FrameReadoutCorrectionModel,
+    cube::AbstractArray{T,3}, det::Detector) where {T<:AbstractFloat}
+    for b in axes(cube, 1)
+        _apply_readout_correction!(plan, model, @view(cube[b, :, :]), det)
+    end
+    return cube
+end
+
+function apply_readout_correction!(model::FrameReadoutCorrectionModel, frame::AbstractArray{T}, det::Detector) where {T<:AbstractFloat}
+    plan = detector_execution_plan(typeof(execution_style(frame)), typeof(det))
+    return _apply_readout_correction!(plan, model, frame, det)
 end
 
 finalize_readout_products!(::FrameSensorType, det::Detector, rng::AbstractRNG, exposure_time::Real) =
