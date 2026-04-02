@@ -64,10 +64,15 @@ If you are:
 - [`post-review-platform-plan.md`](./post-review-platform-plan.md)
   - phased next-step plan for validation hardening, benchmark expansion, and
     next capability selection
+- [`platform-strengthening-plan.md`](./platform-strengthening-plan.md)
+  - phased main-platform plan for API/docs cleanup, evidence strengthening,
+    ROCm hardening, and Julia-native orchestration growth
 - [`execution-plan-milestones.md`](./execution-plan-milestones.md)
   - phased rollout for backend-specific execution-plan adoption
 - [`execution-plan-closeout.md`](./execution-plan-closeout.md)
   - rollout outcome, builder decision, and follow-up triggers
+- [`platform-strengthening-plan.md`](./platform-strengthening-plan.md)
+  - next main-platform implementation plan after the execution-plan rollout
 - [`next-milestone-decision-2026-04.md`](./next-milestone-decision-2026-04.md)
   - evidence-backed selection memo for the next breadth milestone
 - [`grouped-runtime-plan.md`](./grouped-runtime-plan.md)
@@ -124,6 +129,7 @@ entry-point guides.
 - [`infinite-boundary-atmosphere-plan.md`](./infinite-boundary-atmosphere-plan.md)
 - [`execution-plan-milestones.md`](./execution-plan-milestones.md)
 - [`execution-plan-closeout.md`](./execution-plan-closeout.md)
+- [`platform-strengthening-plan.md`](./platform-strengthening-plan.md)
 - [`post-review-platform-plan.md`](./post-review-platform-plan.md)
 
 Use these when actively working in that subsystem. Do not treat them as the

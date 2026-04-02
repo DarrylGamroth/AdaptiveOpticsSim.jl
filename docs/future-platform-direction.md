@@ -23,6 +23,10 @@ Its job is to prevent future work from drifting back toward:
 The phased execution plan for the next post-review work lives in
 [post-review-platform-plan.md](./post-review-platform-plan.md).
 
+The next concrete main-platform strengthening plan now lives in:
+
+- [platform-strengthening-plan.md](./platform-strengthening-plan.md)
+
 ## Direction Summary
 
 The package should continue to evolve as:
@@ -99,6 +103,11 @@ captured in:
 - [execution-plan-architecture.md](./execution-plan-architecture.md)
 - [execution-plan-milestones.md](./execution-plan-milestones.md)
 - [execution-plan-closeout.md](./execution-plan-closeout.md)
+
+The preferred follow-up for the main platform, without switching to a
+config-first interface, is now captured in:
+
+- [platform-strengthening-plan.md](./platform-strengthening-plan.md)
 
 ## What To Avoid
 
