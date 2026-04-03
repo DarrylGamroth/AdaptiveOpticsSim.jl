@@ -48,6 +48,8 @@ If you are:
   - stable synthesis guide for platform-scale structure and boundaries
 - [`platform-workflows.md`](./platform-workflows.md)
   - stable workflow guide for script-first simulation, validation, and benchmarking
+- [`platform-orchestration.md`](./platform-orchestration.md)
+  - typed scenario/config layer for Julia-native runtime composition
 - [`scenario-builder-style.md`](./scenario-builder-style.md)
   - maintained conventions for script-first scenario construction
 - [`api-reference.md`](./api-reference.md)

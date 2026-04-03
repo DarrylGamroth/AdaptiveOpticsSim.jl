@@ -180,6 +180,9 @@ If you are maintaining the package, pair this document with
 - `AbstractController`
 - `DiscreteIntegratorController`, `update!`
 - `ClosedLoopRuntime`, `SimulationInterface`, `CompositeSimulationInterface`, `SimulationReadout`
+- `ClosedLoopBranchConfig`, `SinglePlatformConfig`, `GroupedPlatformConfig`, `PlatformScenario`
+- `build_platform_scenario`, `platform_config`, `platform_boundary`,
+  `platform_name`, `platform_branch_labels`
 - `AbstractControlSimulation`
 - `prepare!`, `prepare_runtime_wfs!`, `simulation_interface`
 - `runtime_profile`, `runtime_latency`

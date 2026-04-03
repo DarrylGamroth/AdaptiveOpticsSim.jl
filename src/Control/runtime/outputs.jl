@@ -47,10 +47,18 @@ and the externally consumed `SimulationInterface` buffers.
     copyto!(interface.command, interface.runtime.command)
     copyto!(interface.slopes, interface.runtime.slopes)
     if !isnothing(interface.wfs_frame)
-        copyto!(interface.wfs_frame, wfs_output_frame(interface.runtime.wfs, interface.runtime.wfs_detector))
+        source = wfs_output_frame(interface.runtime.wfs, interface.runtime.wfs_detector)
+        if size(interface.wfs_frame) != size(source)
+            interface.wfs_frame = similar(source)
+        end
+        copyto!(interface.wfs_frame, source)
     end
     if !isnothing(interface.science_frame)
-        copyto!(interface.science_frame, output_frame(interface.runtime.science_detector))
+        source = output_frame(interface.runtime.science_detector)
+        if size(interface.science_frame) != size(source)
+            interface.science_frame = similar(source)
+        end
+        copyto!(interface.science_frame, source)
     end
     return interface
 end

@@ -68,6 +68,10 @@ end
 
 @inline wfs_output_frame(wfs::AbstractWFS, det::AbstractDetector) = output_frame(det)
 @inline wfs_output_frame(wfs::ShackHartmann{<:Diffractive}, det::AbstractDetector) = sh_exported_spot_cube(wfs)
+@inline wfs_output_frame_prototype(wfs::AbstractWFS, det::AbstractDetector) = wfs_output_frame(wfs, det)
+@inline wfs_output_frame_prototype(wfs::PyramidWFS, det::AbstractDetector) = wfs.state.camera_frame
+@inline wfs_output_frame_prototype(wfs::BioEdgeWFS, det::AbstractDetector) = wfs.state.camera_frame
+@inline wfs_output_frame_prototype(wfs::ShackHartmann{<:Diffractive}, det::AbstractDetector) = sh_exported_spot_cube(wfs)
 @inline wfs_output_metadata(wfs::ShackHartmann) = (
     n_subap=subaperture_layout(wfs).n_subap,
     n_valid_subap=n_valid_subapertures(subaperture_layout(wfs)),
@@ -78,6 +82,8 @@ end
 )
 @inline wfs_output_frame(wfs::ZernikeWFS, det::AbstractDetector) = wfs.state.camera_frame
 @inline wfs_output_frame(wfs::CurvatureWFS, det::AbstractDetector) = wfs.state.camera_frame
+@inline wfs_output_frame_prototype(wfs::ZernikeWFS, det::AbstractDetector) = wfs.state.camera_frame
+@inline wfs_output_frame_prototype(wfs::CurvatureWFS, det::AbstractDetector) = wfs.state.camera_frame
 @inline wfs_output_metadata(::AbstractWFS) = nothing
 @inline wfs_output_metadata(wfs::CurvatureWFS) = wfs_output_metadata(wfs.params.readout_model, wfs)
 @inline wfs_output_metadata(::CurvatureFrameReadout, wfs::CurvatureWFS) = nothing
@@ -210,7 +216,7 @@ function SimulationInterface(runtime::ClosedLoopRuntime)
     copyto!(command, runtime.command)
     slopes = similar(runtime.slopes)
     copyto!(slopes, runtime.slopes)
-    wfs_frame = requires_runtime_wfs_pixels(runtime) ? similar(wfs_output_frame(runtime.wfs, runtime.wfs_detector)) : nothing
+    wfs_frame = requires_runtime_wfs_pixels(runtime) ? similar(wfs_output_frame_prototype(runtime.wfs, runtime.wfs_detector)) : nothing
     science_frame = requires_runtime_science_pixels(runtime) ? similar(output_frame(runtime.science_detector)) : nothing
     interface = SimulationInterface{typeof(runtime), typeof(command), typeof(slopes), typeof(wfs_frame), typeof(science_frame)}(
         runtime,
@@ -219,7 +225,15 @@ function SimulationInterface(runtime::ClosedLoopRuntime)
         wfs_frame,
         science_frame,
     )
-    return snapshot_outputs!(interface)
+    if !isnothing(interface.wfs_frame)
+        source = wfs_output_frame(runtime.wfs, runtime.wfs_detector)
+        initial = size(source) == size(interface.wfs_frame) ? source : wfs_output_frame_prototype(runtime.wfs, runtime.wfs_detector)
+        copyto!(interface.wfs_frame, initial)
+    end
+    if !isnothing(interface.science_frame)
+        copyto!(interface.science_frame, output_frame(runtime.science_detector))
+    end
+    return interface
 end
 
 function CompositeSimulationInterface(interfaces::SimulationInterface...;

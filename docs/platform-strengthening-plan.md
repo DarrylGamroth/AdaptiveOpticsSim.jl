@@ -723,6 +723,22 @@ files.
 - scripts remain the main entry point
 - no declarative manifest layer is required to use the new platform model
 
+### Implementation record
+
+- typed orchestration layer added in [src/Control/platform.jl](../src/Control/platform.jl)
+- new exported scenario/config families:
+  - `ClosedLoopBranchConfig`
+  - `SinglePlatformConfig`
+  - `GroupedPlatformConfig`
+  - `PlatformScenario`
+- maintained orchestration guide added:
+  [platform-orchestration.md](./platform-orchestration.md)
+- maintained grouped runtime runner migrated to the new layer:
+  [profile_multi_source_multi_wfs_runtime.jl](../scripts/profile_multi_source_multi_wfs_runtime.jl)
+- canonical example scripts added:
+  - [platform_single_runtime.jl](../examples/closed_loop/platform_single_runtime.jl)
+  - [platform_grouped_runtime.jl](../examples/closed_loop/platform_grouped_runtime.jl)
+
 ## Phase 5: Platform-Scale Validation And Benchmarking
 
 ### Goal
@@ -822,10 +838,10 @@ next topic.
 
 ### Phase 4
 
-- [ ] `PSP-11`
-- [ ] `PSP-12`
-- [ ] `PSP-13`
-- [ ] `PSP-14`
+- [x] `PSP-11`
+- [x] `PSP-12`
+- [x] `PSP-13`
+- [x] `PSP-14`
 
 ### Phase 5
 

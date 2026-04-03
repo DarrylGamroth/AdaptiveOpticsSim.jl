@@ -308,6 +308,9 @@ Use grouped/platform workflows when:
 The practical rules are:
 
 - request only the runtime products you need
+- prefer `PlatformScenario` plus `SinglePlatformConfig` or
+  `GroupedPlatformConfig` when a script is assembling reusable runtime
+  composition rather than a one-off local demo
 - keep grouped export policy explicit
 - rely on `simulation_grouped_wfs_stack` and
   `simulation_grouped_science_stack` only when the runtime contract says the
@@ -337,6 +340,8 @@ This preserves continuity between:
 
 - [`platform-architecture.md`](./platform-architecture.md)
   - package-level platform picture
+- [`platform-orchestration.md`](./platform-orchestration.md)
+  - typed platform scenario/config layer
 - [`runtime-dataflow.md`](./runtime-dataflow.md)
   - step-by-step runtime ownership
 - [`api-reference.md`](./api-reference.md)

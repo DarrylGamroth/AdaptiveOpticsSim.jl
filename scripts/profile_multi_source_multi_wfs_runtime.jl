@@ -136,8 +136,13 @@ function _build_runtime_branch(::Type{T}, BackendArray, resolution::Int, n_subap
         PyramidWFS(tel; n_subap=n_subap, modulation=T(1.0), mode=Diffractive(), T=T, backend=BackendArray)
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=BackendArray)
     sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
-    rt = ClosedLoopRuntime(sim, _build_recon(dm, wfs, tel, src); rng=MersenneTwister(seed), wfs_detector=det)
-    return rt
+    return ClosedLoopBranchConfig(
+        Symbol("branch_", seed),
+        sim,
+        _build_recon(dm, wfs, tel, src);
+        wfs_detector=det,
+        rng=MersenneTwister(seed),
+    )
 end
 
 function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractString="compact",
@@ -174,26 +179,32 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
         _sync_backend!(backend_tag, bio.state.slopes)
     end; warmup=resolved_warmup, samples=resolved_samples)
 
-    compatible_runtimes = [_build_runtime_branch(T, BackendArray,
+    compatible_branches = [_build_runtime_branch(T, BackendArray,
         cfg.runtime_resolution, cfg.runtime_n_subap, cfg.runtime_dm_n_act, 10 + i; sensor=:sh)
         for i in 1:cfg.branch_count]
-    mixed_runtimes = vcat(
+    mixed_branches = vcat(
         [_build_runtime_branch(T, BackendArray,
             cfg.runtime_resolution, cfg.runtime_n_subap, cfg.runtime_dm_n_act, 30 + i; sensor=:sh)
             for i in 1:max(cfg.branch_count - 1, 1)],
         [_build_runtime_branch(T, BackendArray,
             cfg.runtime_resolution, cfg.runtime_n_subap, cfg.runtime_dm_n_act, 40; sensor=:pyr)],
     )
-    for runtime in compatible_runtimes
-        step!(runtime)
-    end
-    for runtime in mixed_runtimes
-        step!(runtime)
-    end
-    compatible_interfaces = map(SimulationInterface, compatible_runtimes)
-    mixed_interfaces = map(SimulationInterface, mixed_runtimes)
-    composite_compatible = CompositeSimulationInterface(compatible_interfaces...)
-    composite_mixed = CompositeSimulationInterface(mixed_interfaces...)
+    compatible_cfg = GroupedPlatformConfig(
+        Tuple(map(branch -> branch.label, compatible_branches));
+        name=:compatible_grouped_runtime,
+        products=GroupedRuntimeProductRequirements(wfs_frames=true, science_frames=false, wfs_stack=true, science_stack=false),
+    )
+    mixed_cfg = GroupedPlatformConfig(
+        Tuple(map(branch -> branch.label, mixed_branches));
+        name=:mixed_grouped_runtime,
+        products=GroupedRuntimeProductRequirements(wfs_frames=true, science_frames=false, wfs_stack=false, science_stack=false),
+    )
+    composite_compatible = build_platform_scenario(compatible_cfg, compatible_branches...)
+    composite_mixed = build_platform_scenario(mixed_cfg, mixed_branches...)
+    prepare!(composite_compatible)
+    prepare!(composite_mixed)
+    step!(composite_compatible)
+    step!(composite_mixed)
 
     comp_mean_ns, comp_p95_ns = _timed_stats!(() -> begin
         step!(composite_compatible)

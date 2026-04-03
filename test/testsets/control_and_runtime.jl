@@ -330,6 +330,52 @@ end
     @test simulation_wfs_frame(grouped_stack_only) === nothing
     @test !isnothing(simulation_grouped_wfs_stack(grouped_stack_only))
 
+    single_cfg = SinglePlatformConfig(
+        name=:single_runtime_demo,
+        branch_label=:science_branch,
+        products=RuntimeProductRequirements(slopes=true, wfs_pixels=false, science_pixels=true),
+    )
+    single_branch = ClosedLoopBranchConfig(
+        :science_branch,
+        sim,
+        recon;
+        science_detector=det,
+        rng=MersenneTwister(31),
+    )
+    single_scenario = build_platform_scenario(single_cfg, single_branch)
+    @test single_scenario isa PlatformScenario
+    @test platform_name(single_scenario) == :single_runtime_demo
+    @test platform_branch_labels(single_scenario) == (:science_branch,)
+    @test simulation_interface(single_scenario) isa SimulationInterface
+    @test supports_detector_output(single_scenario)
+    step!(single_scenario)
+    @test simulation_science_frame(single_scenario) !== nothing
+    @test simulation_wfs_frame(single_scenario) === nothing
+    @test simulation_readout(single_scenario).science_frame === simulation_science_frame(single_scenario)
+
+    grouped_cfg = GroupedPlatformConfig(
+        (:branch_a, :branch_b);
+        name=:grouped_runtime_demo,
+        products=GroupedRuntimeProductRequirements(wfs_frames=true, science_frames=false, wfs_stack=true, science_stack=false),
+    )
+    grouped_scenario = build_platform_scenario(
+        grouped_cfg,
+        ClosedLoopBranchConfig(:branch_a, sim2, recon2; wfs_detector=wfs_det, rng=MersenneTwister(41)),
+        ClosedLoopBranchConfig(:branch_b, sim2b, recon2b; wfs_detector=wfs_det_b, rng=MersenneTwister(42)),
+    )
+    @test grouped_scenario isa PlatformScenario
+    @test platform_name(grouped_scenario) == :grouped_runtime_demo
+    @test platform_branch_labels(grouped_scenario) == (:branch_a, :branch_b)
+    @test simulation_interface(grouped_scenario) isa CompositeSimulationInterface
+    @test supports_grouped_execution(grouped_scenario)
+    prepare!(grouped_scenario)
+    step!(grouped_scenario)
+    @test !isnothing(simulation_grouped_wfs_stack(grouped_scenario))
+    @test size(simulation_grouped_wfs_stack(grouped_scenario)) == (size(simulation_wfs_frame(grouped_scenario)[1])..., 2)
+    @test simulation_grouped_science_stack(grouped_scenario) === nothing
+    grouped_readout = simulation_readout(grouped_scenario)
+    @test grouped_readout.grouped_wfs_stack === simulation_grouped_wfs_stack(grouped_scenario)
+
     grouped_tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     grouped_pyr = PyramidWFS(grouped_tel; n_subap=4, modulation=1.0, mode=Diffractive())
     grouped_bio = BioEdgeWFS(grouped_tel; n_subap=4, modulation=1.0, mode=Diffractive())
