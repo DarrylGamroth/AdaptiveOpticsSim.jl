@@ -56,6 +56,9 @@ If you are:
   - explicit post-plan decision on what still trails SPECULA and what comes next
 - [`platform-manifest-defer.md`](./platform-manifest-defer.md)
   - explicit defer note for optional scenario manifests/config-style orchestration
+- [`external-comparison-workspace-plan.md`](./external-comparison-workspace-plan.md)
+  - migration plan for replacing the `revolt-real` fork with a dedicated
+    external comparison workspace
 - [`scenario-builder-style.md`](./scenario-builder-style.md)
   - maintained conventions for script-first scenario construction
 - [`api-reference.md`](./api-reference.md)
