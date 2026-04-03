@@ -186,11 +186,43 @@ These should not be copied into `main` unchanged:
 
 ### `ECW-1`: Workspace bootstrap
 
+Status:
+
+- planned
+
+Objective:
+
+- create a clean external home for comparison work so future REVOLT/OOPAO/
+  SPECULA integration no longer depends on a simulator fork
+
 Outputs:
 
 - new `../AdaptiveOpticsComparisons` workspace
 - top-level README
 - clear ownership note: comparison workspace, not simulator fork
+
+Recommended execution order:
+
+1. create the new directory and top-level Julia project
+2. add baseline docs and ownership rules
+3. define the minimal workspace structure
+4. record external neighbor assumptions explicitly
+
+Primary paths in scope:
+
+- new external workspace root:
+  `../AdaptiveOpticsComparisons`
+- expected initial files:
+  - `../AdaptiveOpticsComparisons/Project.toml`
+  - `../AdaptiveOpticsComparisons/README.md`
+  - `../AdaptiveOpticsComparisons/docs/workspace-overview.md`
+  - `../AdaptiveOpticsComparisons/docs/env-setup.md`
+  - `../AdaptiveOpticsComparisons/docs/result-policy.md`
+  - `../AdaptiveOpticsComparisons/julia/`
+  - `../AdaptiveOpticsComparisons/python/`
+  - `../AdaptiveOpticsComparisons/contracts/`
+  - `../AdaptiveOpticsComparisons/results/`
+  - `../AdaptiveOpticsComparisons/assets/`
 
 Tasks:
 
@@ -203,16 +235,130 @@ Tasks:
   - OOPAO
   - SPECULA
 
+Detailed work:
+
+- create `../AdaptiveOpticsComparisons` as a new standalone workspace rather
+  than as a fork of `AdaptiveOpticsSim.jl`
+- add a minimal Julia `Project.toml` whose first responsibility is orchestration
+  and reproducibility, not package development
+- add a README that states:
+  - this workspace is for comparison engineering
+  - it is not the core simulator
+  - it consumes `AdaptiveOpticsSim.jl` as a dependency/input
+- create the initial subdirectories:
+  - `docs/`
+  - `julia/runners/`
+  - `julia/support/`
+  - `python/wrappers/`
+  - `contracts/`
+  - `results/archived/`
+  - `results/manifests/`
+  - `assets/`
+- write `docs/workspace-overview.md` covering:
+  - workspace role
+  - supported comparison participants
+  - ownership rules
+  - boundary with `AdaptiveOpticsSim.jl`
+- write `docs/env-setup.md` covering the expected external neighbors and how
+  they are discovered:
+  - `../AdaptiveOpticsSim.jl`
+  - `../REVOLT`
+  - OOPAO checkout or environment
+  - SPECULA/REVOLT Python env
+- write `docs/result-policy.md` covering:
+  - what gets archived
+  - which results are authoritative
+  - how reruns supersede older artifacts
+
+Deliverables:
+
+- bootstrapped comparison workspace root
+- initial Julia project file
+- baseline ownership and environment docs
+- empty-but-meaningful directory skeleton for later migration phases
+
+Minimum README schema:
+
+- purpose
+- non-goals
+- relationship to `AdaptiveOpticsSim.jl`
+- supported external neighbors
+- quick-start commands
+- where migrated REVOLT assets will live
+
+Minimum `Project.toml` expectations:
+
+- package/environment name for the workspace
+- dependency on `AdaptiveOpticsSim`
+- only the minimum direct Julia dependencies needed for orchestration and
+  result writing
+
 Acceptance:
 
 - the workspace can be checked out and understood without reading the old fork
 
+Acceptance criteria:
+
+- a new maintainer can identify:
+  - what the workspace is for
+  - what stays in `AdaptiveOpticsSim.jl`
+  - where REVOLT/OOPAO/SPECULA assets are expected
+- the workspace layout is sufficient to begin `ECW-2` without redesign
+- no copied simulator source tree is introduced just to bootstrap the workspace
+
+Evidence to record:
+
+- exact workspace root path
+- initial `Project.toml`
+- README path
+- baseline docs added
+- any intentionally deferred bootstrap items
+
+Notes:
+
+- do not migrate assets during `ECW-1`
+- do not introduce Python env management policy beyond the minimal discovery/
+  setup contract needed for later phases
+
 ### `ECW-2`: Migrate REVOLT comparison assets
+
+Status:
+
+- planned
+
+Objective:
+
+- move REVOLT-specific comparison scaffolding out of the fork and into the new
+  comparison workspace without changing core package boundaries
 
 Outputs:
 
 - migrated REVOLT-oriented scenario builders and assets
 - no comparison-only files left unique to `revolt-real` without a disposition
+
+Recommended execution order:
+
+1. inventory the REVOLT-specific comparison surface in `revolt-real`
+2. move the low-risk comparison-only assets first
+3. migrate the Julia-side REVOLT builders and parameter files
+4. add compatibility shims or path updates in the new workspace
+5. write a residual-in-fork inventory
+
+Primary source paths in scope:
+
+- `../AdaptiveOpticsSim.jl-revolt-real/scripts/revolt/`
+- `../AdaptiveOpticsSim.jl-revolt-real/scripts/revolt/parameter_files/`
+- `../AdaptiveOpticsSim.jl-revolt-real/benchmarks/assets/revolt_like/`
+- comparison-side runner scripts that are only useful in REVOLT/OOPAO/SPECULA
+  context
+
+Primary destination paths in scope:
+
+- `../AdaptiveOpticsComparisons/julia/runners/revolt/`
+- `../AdaptiveOpticsComparisons/julia/support/revolt/`
+- `../AdaptiveOpticsComparisons/contracts/revolt/`
+- `../AdaptiveOpticsComparisons/assets/revolt_like/`
+- `../AdaptiveOpticsComparisons/docs/`
 
 Tasks:
 
@@ -221,10 +367,84 @@ Tasks:
 - move comparison-side asset generation scripts there
 - inventory everything left in `revolt-real`
 
+Detailed work:
+
+- create a migration inventory table for every file under:
+  - `scripts/revolt/`
+  - `scripts/revolt/parameter_files/`
+  - `benchmarks/assets/revolt_like/`
+- classify each item as:
+  - move to comparison workspace
+  - keep temporarily in `revolt-real`
+  - candidate for later upstream review
+- migrate the REVOLT Julia scenario builders into the new workspace with the
+  same behavior but comparison-workspace-relative paths
+- migrate the REVOLT TOML parameter files into `contracts/revolt/` or
+  `assets/revolt_like/` depending on whether they are:
+  - scenario definitions
+  - camera/config normalization assets
+- migrate any comparison-only helper scripts that generate or normalize
+  REVOLT-like assets
+- update path handling so the new workspace becomes the execution home for
+  these scenarios
+- write a `docs/revolt-migration-inventory.md` in the new workspace recording:
+  - original path
+  - new path
+  - status
+  - notes
+- leave behind, in `revolt-real`, only:
+  - files needed temporarily for transition, or
+  - files explicitly classified for later upstream review
+
+Deliverables:
+
+- migrated REVOLT scenario-builder subtree in the comparison workspace
+- migrated parameter/config asset subtree
+- migrated REVOLT-like asset subtree
+- residual inventory showing what remains in `revolt-real` and why
+
+Minimum migration inventory schema:
+
+- original path
+- destination path
+- classification
+- migration status
+- rationale
+
+Residual fork inventory categories:
+
+- transitional keep
+- likely removable after `ECW-3`
+- explicit upstream-review candidate
+- intentionally historical
+
 Acceptance:
 
 - the new workspace can run the current REVOLT-like Julia scenarios without
   requiring the fork as the execution home
+
+Acceptance criteria:
+
+- the comparison workspace owns the maintained REVOLT Julia scenario builders
+  and their parameter assets
+- path handling no longer assumes `revolt-real` as the scenario home
+- there is an explicit written record of everything still left in
+  `revolt-real`
+- no file is left behind in the fork simply because it was not classified
+
+Evidence to record:
+
+- migrated path list
+- residual path list
+- first successful runner command executed from the new workspace
+- any blockers that prevent complete REVOLT-asset migration
+
+Notes:
+
+- do not refactor scenario semantics during `ECW-2`
+- preserve behavior first, improve structure later
+- keep upstream review separate from asset migration; `ECW-2` is not the phase
+  where core code moves into `main`
 
 ### `ECW-3`: Re-anchor the maintained comparison harness
 
