@@ -90,6 +90,8 @@ If you are:
   - maintained grouped source/runtime/export contract
 - [`grouped-runtime-validation.md`](./grouped-runtime-validation.md)
   - grouped runtime validation artifact and scope limits
+- [`specula-platform-runtime-validation.md`](./specula-platform-runtime-validation.md)
+  - Julia-native SPECULA-informed platform/runtime artifact and scope limits
 
 ## Active Supporting Reference
 
@@ -112,8 +114,8 @@ If you are:
 - [`lift-gsc-runtime-validation.md`](./lift-gsc-runtime-validation.md)
   - maintained workflow-profile artifact for LiFT and gain-sensing camera
 - [`tomography-benchmark-scope.md`](./tomography-benchmark-scope.md)
-  - current maintained scope and defer conditions for representative tomography
-    benchmark evidence
+  - current maintained scope and archived re-scoping record for representative
+    tomography benchmark evidence
 - [`optional-integration-boundaries.md`](./optional-integration-boundaries.md)
   - optional integration and package-boundary rules
 - [`future-platform-direction.md`](./future-platform-direction.md)

@@ -470,6 +470,10 @@ Phase 2 should produce:
 
 ### `PSP-05`: Representative Tomography Evidence
 
+Status:
+
+- completed
+
 Objective:
 
 - either close the tomography benchmark defer with maintained representative
@@ -512,7 +516,23 @@ Evidence to record:
 - archived result path if added
 - explicit blocker list if still deferred
 
+Implementation record:
+
+- archived scope decision added:
+  [2026-04-02-phase2-psp05.toml](../benchmarks/results/tomography/2026-04-02-phase2-psp05.toml)
+- manifest added:
+  [manifest.toml](../benchmarks/results/tomography/manifest.toml)
+- maintained note updated:
+  [tomography-benchmark-scope.md](./tomography-benchmark-scope.md)
+- `MV-10` remains a scoped defer for representative benchmark evidence, but the
+  defer is now anchored to an explicit archived decision record and maintenance
+  timeout budget instead of the earlier prose-only note
+
 ### `PSP-06`: Broader SPECULA-Aligned Validation
+
+Status:
+
+- completed
 
 Objective:
 
@@ -557,7 +577,25 @@ Evidence to record:
 - generator/harness changes
 - updated validity status for the affected matrix entry
 
+Implementation record:
+
+- new frozen SPECULA-targeted cases added:
+  - `shack_hartmann_polychromatic_frame`
+  - `pyramid_polychromatic_frame`
+- harness widened in:
+  [reference_harness.jl](../test/reference_harness.jl)
+- bundle generator updated in:
+  [generate_specula_reference_bundle.jl](../scripts/generate_specula_reference_bundle.jl)
+- frozen bundle refreshed under:
+  [test/reference_data_specula](../test/reference_data_specula)
+- validity notes for `MV-05` and `MV-06` now record the narrow SPECULA
+  detector-frame contracts
+
 ### `PSP-07`: Platform-Scale SPECULA-Informed Scenario
+
+Status:
+
+- completed
 
 Objective:
 
@@ -602,6 +640,19 @@ Evidence to record:
 - contract ID
 - archived result path
 - normalization rules and accepted differences
+
+Implementation record:
+
+- maintained generator added:
+  [generate_specula_platform_runtime_artifact.jl](../scripts/generate_specula_platform_runtime_artifact.jl)
+- archived artifact added:
+  [2026-04-02-phase2-psp07.toml](../benchmarks/results/platform/2026-04-02-phase2-psp07.toml)
+- manifest added:
+  [manifest.toml](../benchmarks/results/platform/manifest.toml)
+- maintained note added:
+  [specula-platform-runtime-validation.md](./specula-platform-runtime-validation.md)
+- `MV-13` now records a broader SPECULA-informed Julia-native platform/runtime
+  artifact rather than only the earlier grouped-runtime artifact
 
 ### Acceptance
 
@@ -750,9 +801,9 @@ next topic.
 
 ### Phase 2
 
-- [ ] `PSP-05`
-- [ ] `PSP-06`
-- [ ] `PSP-07`
+- [x] `PSP-05`
+- [x] `PSP-06`
+- [x] `PSP-07`
 
 ### Phase 3
 

@@ -1,0 +1,4 @@
+[[artifacts]]
+purpose = "tomography representative benchmark scope decision for PSP-05"
+id = "TOMO-SCOPE-2026-04-02"
+path = "2026-04-02-phase2-psp05.toml"

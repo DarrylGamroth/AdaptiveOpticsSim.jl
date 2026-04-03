@@ -891,7 +891,7 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
     n_subap = Int(cfg["n_subap"])
     threshold = Float64(get(cfg, "threshold", 0.1))
     mode = parse_sensing_mode(get(cfg, "mode", "geometric"))
-    if kind === :shack_hartmann_slopes
+    if kind in (:shack_hartmann_slopes, :shack_hartmann_frame)
         pixel_scale = get(cfg, "pixel_scale", nothing)
         n_pix_subap = get(cfg, "n_pix_subap", nothing)
         threshold_cog = Float64(get(cfg, "threshold_cog", 0.01))
@@ -914,7 +914,7 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
             pixel_scale=Float64(pixel_scale), n_pix_subap=Int(n_pix_subap),
             threshold_cog=threshold_cog, threshold_convolution=threshold_convolution,
             half_pixel_shift=half_pixel_shift)
-    elseif kind === :pyramid_slopes
+    elseif kind in (:pyramid_slopes, :pyramid_frame)
         return PyramidWFS(tel;
             n_subap=n_subap,
             threshold=threshold,
@@ -1003,7 +1003,7 @@ function compute_reference_actual(case::ReferenceCase)
         return copy(compute_psf!(tel, src; zero_padding=zero_padding))
     elseif case.kind in (:shack_hartmann_slopes, :pyramid_slopes, :bioedge_slopes, :zernike_signal, :curvature_signal)
         tel = build_reference_telescope(case.config["telescope"])
-        src = build_reference_source(case.config["source"])
+        src = build_reference_measurement_source(case.config["source"])
         wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
         residual = load_case_residual_opd(case)
         if residual !== nothing
@@ -1017,6 +1017,28 @@ function compute_reference_actual(case::ReferenceCase)
             end
         end
         return copy(measure!(wfs, tel, src))
+    elseif case.kind === :shack_hartmann_frame
+        tel = build_reference_telescope(case.config["telescope"])
+        src = build_reference_measurement_source(case.config["source"])
+        wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
+        if haskey(case.config, "opd")
+            apply_reference_opd!(tel, case.config["opd"])
+        end
+        AdaptiveOpticsSim.sampled_spots_peak!(wfs, tel, src)
+        @views return copy(wfs.state.spot_cube[1, :, :])
+    elseif case.kind === :pyramid_frame
+        tel = build_reference_telescope(case.config["telescope"])
+        src = build_reference_measurement_source(case.config["source"])
+        wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
+        if haskey(case.config, "opd")
+            apply_reference_opd!(tel, case.config["opd"])
+        end
+        if src isa SpectralSource
+            AdaptiveOpticsSim.accumulate_pyramid_spectral_intensity!(AdaptiveOpticsSim.execution_style(wfs.state.intensity), wfs, tel, src)
+        else
+            AdaptiveOpticsSim.pyramid_intensity!(wfs.state.intensity, wfs, tel, src)
+        end
+        return copy(AdaptiveOpticsSim.sample_pyramid_intensity!(wfs, tel, wfs.state.intensity))
     elseif case.kind === :atmospheric_intensity
         tel = build_reference_telescope(case.config["telescope"])
         src = build_reference_measurement_source(case.config["source"])

@@ -1,0 +1,60 @@
+artifact_id = "SPECULA-PLATFORM-2026-04-02"
+generated_on = "2026-04-02"
+
+[scope]
+families = ["grouped_runtime", "multi_source_multi_wfs", "composite_runtime"]
+backend = "cpu"
+reference_mode = "specula_informed_julia_native"
+artifact_kind = "specula_informed_platform_runtime"
+
+[cases.medium]
+compatible_grouped_wfs_stack = true
+runtime_n_subap = 8
+pyramid_asterism_p95_ns = 5054244
+asterism_n_subap = 8
+compatible_grouped_wfs_stack_shape = "(64, 4, 4, 3)"
+scale = "medium"
+backend = "cpu"
+bioedge_asterism_p95_ns = 11772273
+sh_asterism_mean_ns = 331489.5
+sh_asterism_p95_ns = 333422
+source_count = 4
+composite_mixed_mean_ns = 384967.6666666667
+mixed_grouped_wfs_stack = false
+composite_compatible_p95_ns = 175337
+mixed_grouped_wfs_stack_shape = "none"
+runtime_branch_count = 3
+composite_compatible_mean_ns = 177633.25
+asterism_resolution = 64
+bioedge_asterism_mean_ns = 1.1742408416666666e7
+pyramid_asterism_mean_ns = 5.029067416666667e6
+composite_mixed_p95_ns = 395458
+runtime_resolution = 32
+
+[cases.representative]
+compatible_grouped_wfs_stack = true
+runtime_n_subap = 12
+pyramid_asterism_p95_ns = 36531324
+asterism_n_subap = 12
+compatible_grouped_wfs_stack_shape = "(144, 6, 6, 4)"
+scale = "representative"
+backend = "cpu"
+bioedge_asterism_p95_ns = 88709123
+sh_asterism_mean_ns = 970349.5
+sh_asterism_p95_ns = 1010847
+source_count = 6
+composite_mixed_mean_ns = 3.4482496666666665e6
+mixed_grouped_wfs_stack = false
+composite_compatible_p95_ns = 1268978
+mixed_grouped_wfs_stack_shape = "none"
+runtime_branch_count = 4
+composite_compatible_mean_ns = 992979.8333333334
+asterism_resolution = 96
+bioedge_asterism_mean_ns = 8.815289866666667e7
+pyramid_asterism_mean_ns = 3.6292918166666664e7
+composite_mixed_p95_ns = 3628783
+runtime_resolution = 72
+
+[specula_inspiration]
+processing_object_tests = ["test_mmse_reconstructor.py::TestMMSEReconstructor::test_mmse_multiple_wfs", "test_sprint.py", "test_sprint_pyr.py"]
+contract_statement = "The scenario measures Julia-native grouped orchestration and heterogeneous multi-WFS runtime behavior on maintained exported surfaces inspired by SPECULA platform composition patterns."

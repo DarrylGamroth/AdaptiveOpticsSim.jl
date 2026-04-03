@@ -27,6 +27,12 @@ Status:
     [`../scripts/run_cross_package_benchmarks.jl`](../scripts/run_cross_package_benchmarks.jl)
   - archived evidence now lives under
     [`../benchmarks/results/cross_package`](../benchmarks/results/cross_package)
+- [x] platform-strengthening Phase 2 evidence added
+  - tomography representative benchmark scope now has an archived decision
+    record under
+    [`../benchmarks/results/tomography`](../benchmarks/results/tomography)
+  - a Julia-native SPECULA-informed platform/runtime artifact now lives under
+    [`../benchmarks/results/platform`](../benchmarks/results/platform)
 
 ## Cross-Package Harness
 

@@ -262,6 +262,78 @@ function specula_reference_cases()
                 "chromatic_reference_wavelength" => 0.589e-6,
             ),
         ),
+        "shack_hartmann_polychromatic_frame" => Dict(
+            "baseline" => "specula",
+            "kind" => "shack_hartmann_frame",
+            "data" => "shack_hartmann_polychromatic_frame.txt",
+            "atol" => 1e-10,
+            "rtol" => 1e-10,
+            "specula_test" => "test_poly_chrom_sh.py::TestPolyChromSH::test_polychrom_sh_basic",
+            "specula_contract" => "polychromatic Shack-Hartmann sensing yields a stable sampled detector-plane frame on the maintained Julia surface",
+            "telescope" => Dict(
+                "resolution" => 120,
+                "diameter" => 8.0,
+                "sampling_time" => 1e-3,
+                "central_obstruction" => 0.0,
+            ),
+            "source" => Dict(
+                "kind" => "ngs",
+                "band" => "I",
+                "magnitude" => 0.0,
+                "spectrum" => Dict(
+                    "wavelengths" => [500e-9, 600e-9, 700e-9],
+                    "weights" => [0.8, 1.0, 0.6],
+                ),
+            ),
+            "wfs" => Dict(
+                "n_subap" => 1,
+                "threshold" => 0.0,
+                "mode" => "diffractive",
+                "n_pix_subap" => 20,
+                "pixel_scale" => 0.1,
+            ),
+            "opd" => Dict(
+                "kind" => "zeros",
+            ),
+        ),
+        "pyramid_polychromatic_frame" => Dict(
+            "baseline" => "specula",
+            "kind" => "pyramid_frame",
+            "data" => "pyramid_polychromatic_frame.txt",
+            "atol" => 1e-10,
+            "rtol" => 1e-10,
+            "specula_test" => "test_poly_chrom_pyramid.py::TestPolyCromPyramid::test_basic_output_shape",
+            "specula_contract" => "polychromatic pyramid sensing yields a stable sampled detector-plane frame on the maintained Julia surface",
+            "telescope" => Dict(
+                "resolution" => 120,
+                "diameter" => 8.0,
+                "sampling_time" => 1e-3,
+                "central_obstruction" => 0.0,
+            ),
+            "source" => Dict(
+                "kind" => "ngs",
+                "band" => "I",
+                "magnitude" => 0.0,
+                "spectrum" => Dict(
+                    "wavelengths" => [500e-9, 600e-9],
+                    "weights" => [1.0, 1.0],
+                ),
+            ),
+            "wfs" => Dict(
+                "n_subap" => 30,
+                "threshold" => 0.0,
+                "mode" => "diffractive",
+                "modulation" => 3.0,
+                "modulation_points" => 16,
+                "diffraction_padding" => 2,
+                "n_pix_separation" => 20,
+                "n_pix_edge" => 10,
+                "binning" => 1,
+            ),
+            "opd" => Dict(
+                "kind" => "zeros",
+            ),
+        ),
     )
 end
 

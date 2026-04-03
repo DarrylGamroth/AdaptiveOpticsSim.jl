@@ -3,6 +3,7 @@ Status: active
 Plan traceability:
 
 - [`PVP-06`](./post-review-platform-plan.md)
+- [`PSP-05`](./platform-strengthening-plan.md)
 - [`MV-10`](./model-validity-matrix.md)
 
 # Tomography Benchmark Scope
@@ -81,6 +82,22 @@ This defer should be revisited when one of the following becomes true:
 3. tomography becomes the next major performance focus and warrants a dedicated
    maintained artifact despite a longer refresh time
 
-Until then, tomography remains validated primarily through frozen reference
-data and functional coverage, with representative benchmark evidence explicitly
-deferred.
+## Current Re-Scoping Artifact
+
+- [2026-04-02-phase2-psp05.toml](../benchmarks/results/tomography/2026-04-02-phase2-psp05.toml)
+- manifest:
+  [manifest.toml](../benchmarks/results/tomography/manifest.toml)
+
+The refreshed `PSP-05` outcome is still a scoped defer, but it is now anchored
+to an explicit archived decision record rather than only a prose note.
+
+That record captures:
+
+- the maintenance refresh budget used for the representative attempt
+- the candidate representative dimensions under consideration
+- the fact that the trimmed representative refresh still exceeded the accepted
+  routine-maintenance budget on `2026-04-02`
+
+So tomography remains validated primarily through frozen reference data and
+functional coverage, with representative benchmark evidence explicitly
+deferred, but the defer is now narrower and better justified than before.

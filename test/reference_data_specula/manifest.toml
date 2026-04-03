@@ -88,6 +88,45 @@ specula_contract = "low-order quadratic phase produces a non-trivial curvature s
     magnitude = 0.0
     band = "I"
 
+[cases.pyramid_polychromatic_frame]
+rtol = 1.0e-10
+data = "pyramid_polychromatic_frame.txt"
+shape = [100, 100]
+specula_test = "test_poly_chrom_pyramid.py::TestPolyCromPyramid::test_basic_output_shape"
+kind = "pyramid_frame"
+atol = 1.0e-10
+baseline = "specula"
+specula_contract = "polychromatic pyramid sensing yields a stable sampled detector-plane frame on the maintained Julia surface"
+
+    [cases.pyramid_polychromatic_frame.wfs]
+    n_pix_edge = 10
+    binning = 1
+    threshold = 0.0
+    diffraction_padding = 2
+    mode = "diffractive"
+    modulation = 3.0
+    n_pix_separation = 20
+    modulation_points = 16
+    n_subap = 30
+
+    [cases.pyramid_polychromatic_frame.opd]
+    kind = "zeros"
+
+    [cases.pyramid_polychromatic_frame.telescope]
+    central_obstruction = 0.0
+    resolution = 120
+    sampling_time = 0.001
+    diameter = 8.0
+
+    [cases.pyramid_polychromatic_frame.source]
+    kind = "ngs"
+    magnitude = 0.0
+    band = "I"
+
+        [cases.pyramid_polychromatic_frame.source.spectrum]
+        wavelengths = [5.0e-7, 6.0e-7]
+        weights = [1.0, 1.0]
+
 [cases.zernike_quadratic_signal]
 rtol = 1.0e-10
 data = "zernike_quadratic_signal.txt"
@@ -268,3 +307,38 @@ specula_contract = "deterministic geometric layered propagation yields a stable 
     [cases.atmospheric_geometric_intensity.propagation]
     kind = "geometric"
     zero_padding = 2
+
+[cases.shack_hartmann_polychromatic_frame]
+rtol = 1.0e-10
+data = "shack_hartmann_polychromatic_frame.txt"
+shape = [120, 120]
+specula_test = "test_poly_chrom_sh.py::TestPolyChromSH::test_polychrom_sh_basic"
+kind = "shack_hartmann_frame"
+atol = 1.0e-10
+baseline = "specula"
+specula_contract = "polychromatic Shack-Hartmann sensing yields a stable sampled detector-plane frame on the maintained Julia surface"
+
+    [cases.shack_hartmann_polychromatic_frame.wfs]
+    pixel_scale = 0.1
+    threshold = 0.0
+    mode = "diffractive"
+    n_pix_subap = 20
+    n_subap = 1
+
+    [cases.shack_hartmann_polychromatic_frame.opd]
+    kind = "zeros"
+
+    [cases.shack_hartmann_polychromatic_frame.telescope]
+    central_obstruction = 0.0
+    resolution = 120
+    sampling_time = 0.001
+    diameter = 8.0
+
+    [cases.shack_hartmann_polychromatic_frame.source]
+    kind = "ngs"
+    magnitude = 0.0
+    band = "I"
+
+        [cases.shack_hartmann_polychromatic_frame.source.spectrum]
+        wavelengths = [5.0e-7, 6.0e-7, 7.0e-7]
+        weights = [0.8, 1.0, 0.6]

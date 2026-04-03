@@ -1,0 +1,4 @@
+[[artifacts]]
+purpose = "SPECULA-informed platform runtime validation artifact for PSP-07"
+id = "SPECULA-PLATFORM-2026-04-02"
+path = "2026-04-02-phase2-psp07.toml"

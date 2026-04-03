@@ -1,6 +1,6 @@
 # SPECULA Reference Datasets
 
-Date: 2026-04-01
+Date: 2026-04-02
 
 Status: active
 
@@ -8,6 +8,7 @@ Plan traceability:
 
 - [`PLAN-26`](./package-review-action-plan.md)
 - [`PVP-03`](./post-review-platform-plan.md)
+- [`PSP-06`](./platform-strengthening-plan.md)
 - review IDs: `PR-19`, `PR-20`, `PR-36`
 
 ## Purpose
@@ -89,8 +90,20 @@ That means:
    - contract:
      spectral atmospheric propagation with a chromatic reference wavelength
      remains stable on a maintained broad-band intensity surface
+8. `shack_hartmann_polychromatic_frame`
+   - provenance:
+     `test_poly_chrom_sh.py::TestPolyChromSH::test_polychrom_sh_basic`
+   - contract:
+     polychromatic Shack-Hartmann sensing remains stable on a maintained sampled
+     detector-plane frame surface
+9. `pyramid_polychromatic_frame`
+   - provenance:
+     `test_poly_chrom_pyramid.py::TestPolyCromPyramid::test_basic_output_shape`
+   - contract:
+     polychromatic pyramid sensing remains stable on a maintained sampled
+     detector-plane frame surface
 
-## Why These Cases Are Narrow
+## Why These Cases Are Still Narrow
 
 AdaptiveOpticsSim and SPECULA do not expose identical public sensor surfaces for
 all optics chains. In particular:
@@ -139,8 +152,9 @@ benchmark work tracked after Phase 4.
 
 ## Known Limits
 
-- It does not yet cover grouped/polychromatic SPECULA comparisons for Pyramid
-  or Shack-Hartmann.
+- It now includes polychromatic Shack-Hartmann and Pyramid detector-plane
+  frame contracts, but it still does not claim grouped/platform-scale
+  equivalence for those WFS families.
 - The atmospheric-field cases are contract-oriented maintained Julia scenarios;
   they are not a claim of full array-level equivalence to every SPECULA
   `AtmoPropagation` configuration.

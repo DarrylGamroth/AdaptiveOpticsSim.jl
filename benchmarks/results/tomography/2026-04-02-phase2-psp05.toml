@@ -1,0 +1,24 @@
+artifact_id = "TOMO-SCOPE-2026-04-02"
+generated_on = "2026-04-02"
+status = "deferred"
+
+[scope]
+artifact_kind = "tomography_representative_scope_decision"
+family = "tomography"
+review_date = "2026-06-30"
+
+[maintenance_budget]
+refresh_timeout_s = 120
+routine_refresh_required = true
+
+[candidate.representative]
+n_lenslet = 4
+n_lgs = 3
+n_fit_src = 3
+n_dm = 2
+n_px = 4
+
+[decision]
+refresh_practical = false
+blocking_category = "representative model-based reconstructor build cost"
+rationale = "A trimmed representative refresh attempt remained above the accepted routine-maintenance timeout budget on 2026-04-02, so PSP-05 closes as an explicit scoped defer rather than a committed representative artifact."
