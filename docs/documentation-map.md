@@ -92,6 +92,11 @@ If you are:
   - grouped runtime validation artifact and scope limits
 - [`specula-platform-runtime-validation.md`](./specula-platform-runtime-validation.md)
   - Julia-native SPECULA-informed platform/runtime artifact and scope limits
+- [`rocm-fallback-inventory.md`](./rocm-fallback-inventory.md)
+  - explicit ROCm fallback classification after the execution-plan rollout and
+    Phase 3 cleanup
+- [`rocm-phase3-rebaseline.md`](./rocm-phase3-rebaseline.md)
+  - CPU/AMDGPU/CUDA realistic runtime rebaseline after the Phase 3 ROCm cleanup
 
 ## Active Supporting Reference
 
@@ -111,6 +116,10 @@ If you are:
   - maintained finite/infinite atmosphere statistics artifact and limitations
 - [`detector-validation.md`](./detector-validation.md)
   - maintained detector-family fixture artifact and scope limits
+- [`rocm-fallback-inventory.md`](./rocm-fallback-inventory.md)
+  - explicit ROCm fallback classification and residual workaround status
+- [`rocm-phase3-rebaseline.md`](./rocm-phase3-rebaseline.md)
+  - maintained Phase 3 CPU/AMDGPU/CUDA runtime rebaseline
 - [`lift-gsc-runtime-validation.md`](./lift-gsc-runtime-validation.md)
   - maintained workflow-profile artifact for LiFT and gain-sensing camera
 - [`tomography-benchmark-scope.md`](./tomography-benchmark-scope.md)

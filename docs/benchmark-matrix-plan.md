@@ -33,6 +33,13 @@ Status:
     [`../benchmarks/results/tomography`](../benchmarks/results/tomography)
   - a Julia-native SPECULA-informed platform/runtime artifact now lives under
     [`../benchmarks/results/platform`](../benchmarks/results/platform)
+- [x] platform-strengthening Phase 3 rebaseline added
+  - ROCm fallback inventory is now explicit in
+    [`./rocm-fallback-inventory.md`](./rocm-fallback-inventory.md)
+  - CPU/AMDGPU/CUDA realistic runtime rebaseline now lives under
+    [`../benchmarks/results/platform`](../benchmarks/results/platform)
+    with interpretation in
+    [`./rocm-phase3-rebaseline.md`](./rocm-phase3-rebaseline.md)
 
 ## Cross-Package Harness
 

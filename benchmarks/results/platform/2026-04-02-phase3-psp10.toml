@@ -1,0 +1,45 @@
+purpose = "Phase 3 ROCm cleanup rebaseline for PSP-10"
+phase = "platform-strengthening-phase-3"
+date = "2026-04-02"
+
+[change]
+summary = "AMDGPU detector Gaussian frame noise now uses device-native execution while Poisson/readout correction remain on the detector host-mirror path"
+
+[cpu.ao3k_medium]
+step_mean_ns = 1.73412479e7
+alloc_bytes = 6016
+
+[cpu.grouped_medium]
+sh_asterism_mean_ns = 304309.6666666667
+pyramid_asterism_mean_ns = 4.886819583333333e6
+bioedge_asterism_mean_ns = 1.144210275e7
+composite_compatible_mean_ns = 168559.66666666666
+composite_mixed_mean_ns = 365629.5
+
+[amdgpu.ao3k_medium]
+step_mean_ns = 7.1657279e6
+alloc_bytes = 548328
+
+[amdgpu.grouped_medium]
+sh_asterism_mean_ns = 3.906693175e7
+pyramid_asterism_mean_ns = 2.87203475e6
+bioedge_asterism_mean_ns = 6.168384583333333e6
+composite_compatible_mean_ns = 5.3198266416666664e7
+composite_mixed_mean_ns = 3.4180570583333336e7
+
+[cuda.environment]
+host = "spiders"
+repo_path = "/home/gamrothd/workspaces/codex/AdaptiveOpticsSim.jl"
+repo_commit = "c235a37"
+smoke = "gpu_smoke_cuda.jl passed"
+
+[cuda.ao3k_medium]
+step_mean_ns = 2.5233259e6
+alloc_bytes = 268440
+
+[cuda.grouped_medium]
+sh_asterism_mean_ns = 223283.41666666666
+pyramid_asterism_mean_ns = 2.7633235e6
+bioedge_asterism_mean_ns = 6.206203083333333e6
+composite_compatible_mean_ns = 1.1169828333333333e6
+composite_mixed_mean_ns = 1.857524e6

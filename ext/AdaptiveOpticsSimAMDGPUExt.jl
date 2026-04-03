@@ -52,6 +52,24 @@ AdaptiveOpticsSim.reduction_execution_plan(
 ) = AdaptiveOpticsSim.HostMirrorReductionPlan()
 AdaptiveOpticsSim.randn_backend_async!(::AdaptiveOpticsSim.AcceleratorStyle, rng::AbstractRNG, out::AMDGPU.ROCArray) = (Random.randn!(rng, out); out)
 AdaptiveOpticsSim._randn_backend!(::AdaptiveOpticsSim.AcceleratorStyle, rng::AbstractRNG, out::AMDGPU.ROCArray) = (Random.randn!(rng, out); out)
+function AdaptiveOpticsSim._randn_frame_noise!(
+    ::AdaptiveOpticsSim.DetectorHostMirrorPlan,
+    det::AdaptiveOpticsSim.Detector,
+    rng::AbstractRNG,
+    out::AMDGPU.ROCArray{T,2},
+) where {T<:AbstractFloat}
+    AdaptiveOpticsSim.randn_backend!(rng, out)
+    return out
+end
+function AdaptiveOpticsSim._randn_frame_noise!(
+    ::AdaptiveOpticsSim.DetectorHostMirrorPlan,
+    det::AdaptiveOpticsSim.Detector,
+    rng::AbstractRNG,
+    cube::AMDGPU.ROCArray{T,3},
+) where {T<:AbstractFloat}
+    AdaptiveOpticsSim.randn_backend!(rng, cube)
+    return cube
+end
 function AdaptiveOpticsSim.randn_phase_noise!(rng::AbstractRNG, out::AMDGPU.ROCArray{T,2}, host::Matrix{T}) where {T<:AbstractFloat}
     if size(host) != size(out)
         host = Matrix{T}(undef, size(out)...)

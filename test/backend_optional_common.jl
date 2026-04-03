@@ -50,6 +50,16 @@ function run_optional_backend_plan_checks(::Type{AMDGPUBackendTag}, tel, backend
     @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(bio.state.intensity), bio) isa AdaptiveOpticsSim.GroupedStaged2DPlan
     @test AdaptiveOpticsSim.detector_execution_plan(typeof(AdaptiveOpticsSim.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.DetectorHostMirrorPlan
     @test AdaptiveOpticsSim.reduction_execution_plan(pyr.state.intensity) isa AdaptiveOpticsSim.HostMirrorReductionPlan
+    randn_method = which(
+        AdaptiveOpticsSim._randn_frame_noise!,
+        (
+            AdaptiveOpticsSim.DetectorHostMirrorPlan,
+            typeof(det),
+            typeof(MersenneTwister(1)),
+            typeof(det.state.frame),
+        ),
+    )
+    @test occursin("AdaptiveOpticsSimAMDGPUExt", String(randn_method.file))
     @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
         AdaptiveOpticsSim.execution_style(first(geom_prop.state.slices).field.state.field),
         geom_prop.params.model,

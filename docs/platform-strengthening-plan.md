@@ -681,6 +681,15 @@ real value.
 - grouped and AO3k benchmark surfaces remain in-family
 - residual fallback behavior is explicit rather than ambient
 
+### Implementation record
+
+- fallback inventory added:
+  [rocm-fallback-inventory.md](./rocm-fallback-inventory.md)
+- Phase 3 rebaseline note added:
+  [rocm-phase3-rebaseline.md](./rocm-phase3-rebaseline.md)
+- archived runtime artifact added:
+  [2026-04-02-phase3-psp10.toml](../benchmarks/results/platform/2026-04-02-phase3-psp10.toml)
+
 ## Phase 4: Julia-Native Platform Orchestration
 
 ### Goal
@@ -807,9 +816,9 @@ next topic.
 
 ### Phase 3
 
-- [ ] `PSP-08`
-- [ ] `PSP-09`
-- [ ] `PSP-10`
+- [x] `PSP-08`
+- [x] `PSP-09`
+- [x] `PSP-10`
 
 ### Phase 4
 
