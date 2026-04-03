@@ -50,6 +50,8 @@ If you are:
   - stable workflow guide for script-first simulation, validation, and benchmarking
 - [`platform-orchestration.md`](./platform-orchestration.md)
   - typed scenario/config layer for Julia-native runtime composition
+- [`platform-orchestration-validation.md`](./platform-orchestration-validation.md)
+  - maintained benchmark and backend evidence for the `PlatformScenario` layer
 - [`scenario-builder-style.md`](./scenario-builder-style.md)
   - maintained conventions for script-first scenario construction
 - [`api-reference.md`](./api-reference.md)
@@ -70,6 +72,9 @@ If you are:
 - [`revolt-pwfs-benchmark-contract.md`](./revolt-pwfs-benchmark-contract.md)
   - normalization rules and accepted differences for the maintained `CP-03`
     REVOLT-like Pyramid comparison
+- [`revolt-platform-benchmark-contract.md`](./revolt-platform-benchmark-contract.md)
+  - normalization rules and accepted differences for the maintained `CP-06`
+    grouped platform-runtime comparison
 - [`specula-atmo-field-benchmark-scope.md`](./specula-atmo-field-benchmark-scope.md)
   - current scope and defer conditions for the `CP-05`
     SPECULA-aligned atmospheric-field benchmark family

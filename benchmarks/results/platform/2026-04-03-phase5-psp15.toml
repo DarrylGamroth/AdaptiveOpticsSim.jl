@@ -1,0 +1,116 @@
+artifact_id = "PLATFORM-ORCH-2026-04-03"
+generated_on = "2026-04-03"
+
+[scope]
+families = ["single_platform_runtime", "compatible_grouped_runtime", "mixed_grouped_runtime"]
+notes = "CUDA result is recorded from the maintained spiders host run because this local environment does not provide a CUDA device."
+artifact_kind = "platform_orchestration_runtime"
+backends = ["cpu", "amdgpu", "cuda"]
+
+[cases.cuda_medium]
+compatible_build_time_ns = 0x3404e014
+single_p95_ns = 1077150
+compatible_mean_ns = 1.1336554166666667e6
+compatible_grouped_wfs_stack = true
+mixed_mean_ns = 1.7546255833333333e6
+single_mean_ns = 1.1018353333333333e6
+compatible_grouped_wfs_stack_shape = "(64, 4, 4, 3)"
+scale = "medium"
+backend = "cuda"
+mixed_branch_count = 3
+single_build_time_ns = 0x0a238f65
+single_alloc_bytes = 157549
+single_science_frame_shape = "(96, 96)"
+mixed_build_time_ns = 0x5018fe5f
+mixed_p95_ns = 1728570
+single_frame_rate_hz = 907.5766312328582
+mixed_grouped_wfs_stack = false
+mixed_alloc_bytes = 227347
+compatible_alloc_bytes = 115979
+mixed_frame_rate_hz = 569.9221586067721
+mixed_grouped_wfs_stack_shape = "none"
+compatible_branch_count = 3
+single_wfs_family = "pyramid"
+compatible_frame_rate_hz = 882.102255498713
+compatible_p95_ns = 1108010
+
+[cases.cpu_medium]
+compatible_build_time_ns = 0x392cf684
+single_p95_ns = 999446
+compatible_mean_ns = 172836.83333333334
+compatible_grouped_wfs_stack = true
+mixed_mean_ns = 369813.5833333333
+single_mean_ns = 987051.9166666666
+compatible_grouped_wfs_stack_shape = "(64, 4, 4, 3)"
+scale = "medium"
+backend = "cpu"
+mixed_branch_count = 3
+single_build_time_ns = 0x09c7d617
+single_alloc_bytes = 2560
+single_science_frame_shape = "(96, 96)"
+mixed_build_time_ns = 0x40694278
+mixed_p95_ns = 384067
+single_frame_rate_hz = 1013.1179354547629
+mixed_grouped_wfs_stack = false
+mixed_alloc_bytes = 70544
+compatible_alloc_bytes = 100304
+mixed_frame_rate_hz = 2704.065088649394
+mixed_grouped_wfs_stack_shape = "none"
+compatible_branch_count = 3
+single_wfs_family = "pyramid"
+compatible_frame_rate_hz = 5785.803759036702
+compatible_p95_ns = 175808
+
+[cases.cpu_representative]
+compatible_build_time_ns = 0x26979b57
+single_p95_ns = 3035878
+compatible_mean_ns = 559738.5
+compatible_grouped_wfs_stack = true
+mixed_mean_ns = 1.2609223333333333e6
+single_mean_ns = 2.8745548333333335e6
+compatible_grouped_wfs_stack_shape = "(144, 4, 4, 4)"
+scale = "representative"
+backend = "cpu"
+mixed_branch_count = 4
+single_build_time_ns = 0xb06c
+single_alloc_bytes = 2560
+single_science_frame_shape = "(144, 144)"
+mixed_build_time_ns = 0x2a879243
+mixed_p95_ns = 1424980
+single_frame_rate_hz = 347.8799528900968
+mixed_grouped_wfs_stack = false
+mixed_alloc_bytes = 196480
+compatible_alloc_bytes = 256432
+mixed_frame_rate_hz = 793.0702578297844
+mixed_grouped_wfs_stack_shape = "none"
+compatible_branch_count = 4
+single_wfs_family = "pyramid"
+compatible_frame_rate_hz = 1786.5485400771968
+compatible_p95_ns = 910951
+
+[cases.amdgpu_medium]
+compatible_build_time_ns = 0x30dd75f3
+single_p95_ns = 1269360
+compatible_mean_ns = 6.270342975e7
+compatible_grouped_wfs_stack = true
+mixed_mean_ns = 4.06819905e7
+single_mean_ns = 1.3902716666666667e6
+compatible_grouped_wfs_stack_shape = "(64, 4, 4, 3)"
+scale = "medium"
+backend = "amdgpu"
+mixed_branch_count = 3
+single_build_time_ns = 0x51513afc
+single_alloc_bytes = 247692
+single_science_frame_shape = "(96, 96)"
+mixed_build_time_ns = 0x44de06c7
+mixed_p95_ns = 47213889
+single_frame_rate_hz = 719.2838809681081
+mixed_grouped_wfs_stack = false
+mixed_alloc_bytes = 4673287
+compatible_alloc_bytes = 6662615
+mixed_frame_rate_hz = 24.580901467935792
+mixed_grouped_wfs_stack_shape = "none"
+compatible_branch_count = 3
+single_wfs_family = "pyramid"
+compatible_frame_rate_hz = 15.948090941548536
+compatible_p95_ns = 76116491

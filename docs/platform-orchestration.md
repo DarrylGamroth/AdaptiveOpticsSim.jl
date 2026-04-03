@@ -148,3 +148,7 @@ Canonical examples using this layer live in:
 The maintained grouped runtime benchmark also uses this layer:
 
 - [profile_multi_source_multi_wfs_runtime.jl](../scripts/profile_multi_source_multi_wfs_runtime.jl)
+
+Direct runtime evidence and backend validation for the layer are recorded in:
+
+- [platform-orchestration-validation.md](./platform-orchestration-validation.md)

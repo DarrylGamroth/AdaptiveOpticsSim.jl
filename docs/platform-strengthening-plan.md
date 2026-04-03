@@ -759,6 +759,23 @@ Back the new orchestration layer with realistic evidence.
 - at least one realistic cross-package scenario is normalized and archived
 - CPU/AMDGPU/CUDA claims are explicit and tested where maintained
 
+Implementation record:
+
+- direct platform runner added:
+  [profile_platform_runtime.jl](../scripts/profile_platform_runtime.jl)
+- archived direct orchestration artifact added:
+  [2026-04-03-phase5-psp15.toml](../benchmarks/results/platform/2026-04-03-phase5-psp15.toml)
+- orchestration validation note added:
+  [platform-orchestration-validation.md](./platform-orchestration-validation.md)
+- normalized cross-package platform contract added:
+  [cross_package.toml](../benchmarks/contracts/cross_package.toml)
+- archived cross-package result added:
+  [2026-04-03-phase5-psp16.toml](../benchmarks/results/cross_package/2026-04-03-phase5-psp16.toml)
+- contract note added:
+  [revolt-platform-benchmark-contract.md](./revolt-platform-benchmark-contract.md)
+- backend smoke widened to instantiate `PlatformScenario` directly in:
+  [backend_optional_common.jl](../test/backend_optional_common.jl)
+
 ## Phase 6: Closeout And Deferred Tracks
 
 ### Goal
@@ -845,9 +862,9 @@ next topic.
 
 ### Phase 5
 
-- [ ] `PSP-15`
-- [ ] `PSP-16`
-- [ ] `PSP-17`
+- [x] `PSP-15`
+- [x] `PSP-16`
+- [x] `PSP-17`
 
 ### Phase 6
 

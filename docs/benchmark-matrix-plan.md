@@ -40,6 +40,13 @@ Status:
     [`../benchmarks/results/platform`](../benchmarks/results/platform)
     with interpretation in
     [`./rocm-phase3-rebaseline.md`](./rocm-phase3-rebaseline.md)
+- [x] platform-strengthening Phase 5 orchestration evidence added
+  - direct `PlatformScenario` runtime evidence now lives under
+    [`../benchmarks/results/platform`](../benchmarks/results/platform)
+    with interpretation in
+    [`./platform-orchestration-validation.md`](./platform-orchestration-validation.md)
+  - the normalized cross-package platform contract now lives in
+    [`./revolt-platform-benchmark-contract.md`](./revolt-platform-benchmark-contract.md)
 
 ## Cross-Package Harness
 
@@ -62,6 +69,9 @@ The current maintained ladder is:
   - frozen OOPAO and SPECULA reference fidelity bundles
 - `medium`
   - REVOLT-like SH HIL runtime comparison between `main` and
+    `../AdaptiveOpticsSim.jl-revolt-real`
+- `medium`
+  - REVOLT-like grouped platform runtime comparison between `main` and
     `../AdaptiveOpticsSim.jl-revolt-real`
 - `representative`
   - PWFS REVOLT-aligned contract recorded and intentionally deferred until the

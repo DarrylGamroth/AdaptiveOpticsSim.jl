@@ -109,9 +109,15 @@ function run_reference_baseline(baseline::Symbol)
     max_abs = 0.0
     max_rel = 0.0
     max_l2_rel = 0.0
+    failed_case_ids = String[]
     for case in cases
         result = validate_reference_case(case)
-        failed += result.ok ? 0 : 1
+        if result.ok
+            failed += 0
+        else
+            failed += 1
+            push!(failed_case_ids, String(case.id))
+        end
         max_abs = max(max_abs, Float64(result.maxabs))
         if size(result.actual) == size(result.expected)
             max_rel = max(max_rel, max_relative_error(result.actual, result.expected))
@@ -127,6 +133,7 @@ function run_reference_baseline(baseline::Symbol)
         "root" => relpath_or_identity(root),
         "case_count" => length(cases),
         "failed_case_count" => failed,
+        "failed_case_ids" => failed_case_ids,
         "max_abs_error" => max_abs,
         "max_rel_error" => max_rel,
         "l2_rel_error" => max_l2_rel,
@@ -308,7 +315,49 @@ function run_contract(path::AbstractString)
     return contract, scenario_results
 end
 
-function write_cross_package_manifest!(result_path::AbstractString)
+function _scenario_policy(name::AbstractString, cfg::Dict{String,Any})
+    if get(cfg, "status", "") == "contract_only"
+        return Dict{String,Any}(
+            "scenario" => name,
+            "family" => cfg["family"],
+            "policy" => "environment_gated",
+            "expected_status" => "deferred",
+            "execution_mode" => "when_external_runner_available",
+            "notes" => get(cfg, "skip_reason", "contract-only scenario"),
+        )
+    end
+    return Dict{String,Any}(
+        "scenario" => name,
+        "family" => cfg["family"],
+        "policy" => "mandatory",
+        "expected_status" => "passed",
+        "execution_mode" => "always",
+        "notes" => cfg["description"],
+    )
+end
+
+function _implementation_policies(name::AbstractString, cfg::Dict{String,Any})
+    policies = Vector{Dict{String,Any}}()
+    for (impl_name, impl_cfg_any) in pairs(cfg)
+        impl_name in ("family", "class", "kind", "description", "comparison_fields",
+            "normalized_fields", "known_differences", "runtime_metrics", "status",
+            "skip_reason") && continue
+        impl_cfg_any isa AbstractDict || continue
+        impl_cfg = Dict{String,Any}(impl_cfg_any)
+        Bool(get(impl_cfg, "optional", false)) || continue
+        push!(policies, Dict{String,Any}(
+            "scenario" => name,
+            "implementation" => String(impl_name),
+            "policy" => "optional",
+            "expected_status" => "skipped_or_passed",
+            "execution_mode" => "when_optional_runtime_available",
+            "notes" => "Optional neighboring-tree or external runtime participant for maintained cross-package comparison.",
+        ))
+    end
+    return policies
+end
+
+function write_cross_package_manifest!(result_path::AbstractString, contract::Dict{String,Any})
     manifest_path = repo_join("benchmarks", "results", "cross_package", "manifest.toml")
     mkpath(dirname(manifest_path))
     rel_result = relpath(result_path, _repo_root)
@@ -320,11 +369,19 @@ function write_cross_package_manifest!(result_path::AbstractString)
     end
     rel_result in entries || push!(entries, rel_result)
     sort!(entries)
+    scenarios_cfg = Dict{String,Any}(contract["scenarios"])
+    scenario_policies = [_scenario_policy(name, Dict{String,Any}(scenarios_cfg[name])) for name in sort!(collect(keys(scenarios_cfg)))]
+    implementation_policies = Vector{Dict{String,Any}}()
+    for name in sort!(collect(keys(scenarios_cfg)))
+        append!(implementation_policies, _implementation_policies(name, Dict{String,Any}(scenarios_cfg[name])))
+    end
     manifest = Dict{String,Any}(
-        "version" => 1,
+        "version" => 2,
         "status" => "active",
         "latest_result" => rel_result,
         "results" => entries,
+        "scenario_policies" => scenario_policies,
+        "implementation_policies" => implementation_policies,
     )
     open(manifest_path, "w") do io
         TOML.print(io, manifest; sorted=true)
@@ -370,7 +427,7 @@ function write_results(contract_path::AbstractString, output_path::AbstractStrin
     open(output_path, "w") do io
         TOML.print(io, payload; sorted=true)
     end
-    write_cross_package_manifest!(output_path)
+    write_cross_package_manifest!(output_path, contract)
     return output_path
 end
 

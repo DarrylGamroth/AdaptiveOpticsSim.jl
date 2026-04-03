@@ -7,6 +7,22 @@ backend_label(::Type{AMDGPUBackendTag}) = "AMDGPU"
 backend_full_smoke_env(::Type{CUDABackendTag}) = "ADAPTIVEOPTICS_TEST_FULL_CUDA"
 backend_full_smoke_env(::Type{AMDGPUBackendTag}) = "ADAPTIVEOPTICS_TEST_FULL_AMDGPU"
 
+function build_optional_platform_branch(::Type{T}, BackendArray, label::Symbol; sensor::Symbol=:sh, seed::Integer=1) where {T<:AbstractFloat}
+    tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
+        central_obstruction=T(0.0), T=T, backend=BackendArray)
+    src = Source(band=:I, magnitude=0.0, T=T)
+    atm = KolmogorovAtmosphere(tel; r0=T(0.2), L0=T(25.0), T=T, backend=BackendArray)
+    dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=BackendArray)
+    wfs = sensor == :sh ?
+        ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=BackendArray) :
+        PyramidWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=BackendArray)
+    det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=BackendArray)
+    sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
+    imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
+    recon = ModalReconstructor(imat; gain=T(0.5))
+    return ClosedLoopBranchConfig(label, sim, recon; wfs_detector=det, rng=MersenneTwister(seed))
+end
+
 function import_backend_package!(::Type{CUDABackendTag})
     @eval import CUDA
     return nothing
@@ -197,5 +213,35 @@ function run_optional_backend_smoke(::Type{B}) where {B<:GPUBackendTag}
     curv = CurvatureWFS(tel; n_subap=4, T=T, backend=BackendArray)
     curv_slopes = measure!(curv, tel, src, atm)
     @test curv_slopes isa BackendArray
+
+    single_platform = build_platform_scenario(
+        SinglePlatformConfig(
+            name=:optional_backend_single,
+            branch_label=:main,
+            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false),
+        ),
+        build_optional_platform_branch(T, BackendArray, :main; sensor=:sh, seed=21),
+    )
+    prepare!(single_platform)
+    step!(single_platform)
+    @test simulation_interface(single_platform) isa SimulationInterface
+    @test simulation_wfs_frame(single_platform) isa BackendArray
+    @test platform_branch_labels(single_platform) == (:main,)
+
+    grouped_platform = build_platform_scenario(
+        GroupedPlatformConfig(
+            (:hi, :lo);
+            name=:optional_backend_grouped,
+            products=GroupedRuntimeProductRequirements(wfs_frames=true, science_frames=false, wfs_stack=true, science_stack=false),
+        ),
+        build_optional_platform_branch(T, BackendArray, :hi; sensor=:sh, seed=31),
+        build_optional_platform_branch(T, BackendArray, :lo; sensor=:sh, seed=32),
+    )
+    prepare!(grouped_platform)
+    step!(grouped_platform)
+    @test simulation_interface(grouped_platform) isa CompositeSimulationInterface
+    @test simulation_grouped_wfs_stack(grouped_platform) isa BackendArray
+    @test size(simulation_grouped_wfs_stack(grouped_platform), ndims(simulation_grouped_wfs_stack(grouped_platform))) == 2
+    @test platform_branch_labels(grouped_platform) == (:hi, :lo)
     return nothing
 end

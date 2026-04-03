@@ -69,6 +69,7 @@ Representative runtime evidence should be gathered with maintained profile or
 benchmark scripts such as:
 
 - [`profile_ao3k_runtime.jl`](../scripts/profile_ao3k_runtime.jl)
+- [`profile_platform_runtime.jl`](../scripts/profile_platform_runtime.jl)
 - [`profile_multi_source_multi_wfs_runtime.jl`](../scripts/profile_multi_source_multi_wfs_runtime.jl)
 - [`run_cross_package_benchmarks.jl`](../scripts/run_cross_package_benchmarks.jl)
 - [`benchmarks/`](../benchmarks)

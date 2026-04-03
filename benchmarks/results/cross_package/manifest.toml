@@ -1,52 +1,50 @@
-latest_result = "benchmarks/results/cross_package/2026-04-01-phase2-pvp09.toml"
-results = ["benchmarks/results/cross_package/2026-03-31-phase5-baseline.toml", "benchmarks/results/cross_package/2026-04-01-phase2-pvp07.toml", "benchmarks/results/cross_package/2026-04-01-phase2-pvp08.toml", "benchmarks/results/cross_package/2026-04-01-phase2-pvp09.toml"]
+latest_result = "benchmarks/results/cross_package/2026-04-03-phase5-psp16.toml"
+results = ["benchmarks/results/cross_package/2026-03-31-phase5-baseline.toml", "benchmarks/results/cross_package/2026-04-01-phase2-pvp07.toml", "benchmarks/results/cross_package/2026-04-01-phase2-pvp08.toml", "benchmarks/results/cross_package/2026-04-01-phase2-pvp09.toml", "benchmarks/results/cross_package/2026-04-03-phase5-psp16.toml"]
 status = "active"
 version = 2
 
+[[implementation_policies]]
+execution_mode = "when_optional_runtime_available"
+expected_status = "skipped_or_passed"
+implementation = "revolt_specula"
+notes = "Optional neighboring-tree or external runtime participant for maintained cross-package comparison."
+policy = "optional"
+scenario = "cp02_revolt_sh_medium"
+
 [[scenario_policies]]
-scenario = "cp01_compact_reference"
+execution_mode = "always"
+expected_status = "passed"
 family = "CP-01"
+notes = "Frozen compact reference fidelity surfaces from the committed OOPAO and SPECULA bundles."
 policy = "mandatory"
-expected_status = "passed"
-execution_mode = "always"
-notes = "Frozen local OOPAO and SPECULA bundle fidelity baseline; this is the required compact cross-package correctness rung."
-
+scenario = "cp01_compact_reference"
 [[scenario_policies]]
-scenario = "cp02_revolt_sh_medium"
+execution_mode = "always"
+expected_status = "passed"
 family = "CP-02"
+notes = "REVOLT-like Shack-Hartmann HIL runtime comparison between main and revolt-real, with normalized Julia-side comparability fields and explicit known differences."
 policy = "mandatory"
-expected_status = "passed"
-execution_mode = "always"
-notes = "Maintained medium REVOLT-like Shack-Hartmann runtime comparison between main and revolt-real."
-
-[[scenario_policies]]
-scenario = "cp03_revolt_pwfs_representative"
-family = "CP-03"
-policy = "mandatory"
-expected_status = "passed"
-execution_mode = "always"
-notes = "Maintained representative REVOLT-like Pyramid runtime comparison between main and revolt-real."
-
-[[scenario_policies]]
-scenario = "cp05_specula_atmo_field_medium"
-family = "CP-05"
-policy = "environment_gated"
-expected_status = "deferred"
-execution_mode = "when_external_runner_available"
-notes = "SPECULA-aligned atmospheric-field family recorded as a contract/defer until a normalized external runnable scenario exists."
-
-[[implementation_policies]]
 scenario = "cp02_revolt_sh_medium"
-implementation = "revolt_specula"
-policy = "optional"
-expected_status = "skipped_or_passed"
-execution_mode = "when_python_specula_env_available"
-notes = "Neighbor-tree SPECULA execution remains optional because its current runtime depends on external Python plotting/runtime environment setup."
-
-[[implementation_policies]]
+[[scenario_policies]]
+execution_mode = "always"
+expected_status = "passed"
+family = "CP-03"
+notes = "REVOLT-like representative PWFS modal SCAO comparison between main and revolt-real on the unmodulated representative contract."
+policy = "mandatory"
 scenario = "cp03_revolt_pwfs_representative"
-implementation = "revolt_specula"
-policy = "optional"
-expected_status = "skipped_or_passed"
-execution_mode = "when_python_specula_env_available"
-notes = "Neighbor-tree SPECULA execution remains optional because its current runtime depends on external Python plotting/runtime environment setup."
+
+[[scenario_policies]]
+execution_mode = "when_external_runner_available"
+expected_status = "deferred"
+family = "CP-05"
+notes = "SPECULA provides AtmoPropagation configs/tests but no maintained executable benchmark runner with comparable atmospheric-field and curvature runtime outputs in the current neighboring trees"
+policy = "environment_gated"
+scenario = "cp05_specula_atmo_field_medium"
+
+[[scenario_policies]]
+execution_mode = "always"
+expected_status = "passed"
+family = "CP-06"
+notes = "Grouped platform runtime comparison between main and revolt-real on the maintained multi-source / multi-WFS medium rung."
+policy = "mandatory"
+scenario = "cp06_revolt_platform_medium"

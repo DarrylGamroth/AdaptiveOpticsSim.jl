@@ -136,3 +136,51 @@ kind = "runtime_profile"
 status = "contract_only"
 description = "SPECULA-aligned atmospheric-field and curvature-through-atmosphere benchmark family; contract recorded, execution deferred until an external runnable scenario is normalized into the harness."
 skip_reason = "SPECULA provides AtmoPropagation configs/tests but no maintained executable benchmark runner with comparable atmospheric-field and curvature runtime outputs in the current neighboring trees"
+
+[scenarios.cp06_revolt_platform_medium]
+family = "CP-06"
+class = "medium"
+kind = "runtime_profile"
+description = "Grouped platform runtime comparison between main and revolt-real on the maintained multi-source / multi-WFS medium rung."
+comparison_fields = ["backend", "scale", "runtime_resolution", "runtime_n_subap", "runtime_branch_count"]
+normalized_fields = ["backend", "scale", "runtime_resolution", "runtime_n_subap", "runtime_branch_count"]
+known_differences = [
+    "typed_platform_scenario_surface",
+    "grouped_export_stack_contract",
+    "composite_runtime_entrypoint_shape",
+]
+runtime_metrics = ["total_mean_ns", "total_p95_ns", "frame_rate_hz", "total_alloc_bytes"]
+
+[scenarios.cp06_revolt_platform_medium.main]
+label = "adaptiveopticssim_main"
+cwd = "."
+command = ["julia", "--project=.", "--startup-file=no", "scripts/profile_multi_source_multi_wfs_runtime.jl", "cpu", "medium"]
+profile_root = "multi_source_multi_wfs_profile"
+mean_key = "composite_compatible_mean_ns"
+p95_key = "composite_compatible_p95_ns"
+frame_rate_key = "composite_compatible_frame_rate_hz"
+alloc_key = "composite_compatible_alloc_bytes"
+
+[scenarios.cp06_revolt_platform_medium.main.field_aliases]
+backend = "backend"
+scale = "scale"
+runtime_resolution = "runtime_resolution"
+runtime_n_subap = "runtime_n_subap"
+runtime_branch_count = "runtime_branch_count"
+
+[scenarios.cp06_revolt_platform_medium.revolt_real]
+label = "adaptiveopticssim_revolt_real"
+cwd = "../AdaptiveOpticsSim.jl-revolt-real"
+command = ["julia", "--project=.", "--startup-file=no", "scripts/profile_multi_source_multi_wfs_runtime.jl", "cpu", "medium"]
+profile_root = "multi_source_multi_wfs_profile"
+mean_key = "composite_compatible_mean_ns"
+p95_key = "composite_compatible_p95_ns"
+frame_rate_key = "composite_compatible_frame_rate_hz"
+alloc_key = "composite_compatible_alloc_bytes"
+
+[scenarios.cp06_revolt_platform_medium.revolt_real.field_aliases]
+backend = "backend"
+scale = "scale"
+runtime_resolution = "runtime_resolution"
+runtime_n_subap = "runtime_n_subap"
+runtime_branch_count = "runtime_branch_count"

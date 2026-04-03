@@ -200,9 +200,11 @@ Recommended class:
 
 Current comparability limits:
 
-- there is no direct ready-made OOPAO or SPECULA scenario bundle matching the
-  current grouped Julia benchmark
-- this is currently a Julia-first benchmark family, not a cross-package one
+- this family is now partially normalized as the maintained `CP-06`
+  Julia-to-Julia grouped platform-runtime contract against
+  `../AdaptiveOpticsSim.jl-revolt-real`
+- there is still no direct ready-made OOPAO or SPECULA scenario bundle
+  matching the current grouped Julia benchmark
 
 ### Family `CP-05`: Atmospheric field propagation and curvature-through-atmosphere
 

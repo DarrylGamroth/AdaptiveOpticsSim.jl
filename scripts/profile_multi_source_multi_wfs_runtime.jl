@@ -18,14 +18,14 @@ function _resolve_backend(name::AbstractString)
     if lowered == "cpu"
         return Array, nothing, "cpu"
     elseif lowered == "cuda"
-        isdefined(Main, :CUDA) || error("profile_multi_source_multi_wfs_runtime.jl requires CUDA.jl for backend=cuda")
+        isdefined(Main, :CUDA) || (@eval import CUDA)
         CUDA.functional() || error("profile_multi_source_multi_wfs_runtime.jl requires a functional CUDA driver/device")
         AdaptiveOpticsSim.disable_scalar_backend!(CUDABackendTag)
         backend = AdaptiveOpticsSim.gpu_backend_array_type(CUDABackendTag)
         backend === nothing && error("CUDA backend array type is unavailable")
         return backend, CUDABackendTag, "cuda"
     elseif lowered == "amdgpu"
-        isdefined(Main, :AMDGPU) || error("profile_multi_source_multi_wfs_runtime.jl requires AMDGPU.jl for backend=amdgpu")
+        isdefined(Main, :AMDGPU) || (@eval import AMDGPU)
         AMDGPU.functional() || error("profile_multi_source_multi_wfs_runtime.jl requires a functional ROCm installation and GPU")
         AdaptiveOpticsSim.disable_scalar_backend!(AMDGPUBackendTag)
         backend = AdaptiveOpticsSim.gpu_backend_array_type(AMDGPUBackendTag)
@@ -48,12 +48,18 @@ function _timed_stats!(f!::F; warmup::Int=5, samples::Int=20) where {F<:Function
     end
     GC.gc()
     timings = Vector{Int}(undef, samples)
+    alloc_bytes = Vector{Int}(undef, samples)
     @inbounds for i in 1:samples
-        t0 = time_ns()
-        f!()
-        timings[i] = time_ns() - t0
+        gc_enable = GC.enable(false)
+        try
+            t0 = time_ns()
+            alloc_bytes[i] = @allocated f!()
+            timings[i] = time_ns() - t0
+        finally
+            GC.enable(gc_enable)
+        end
     end
-    return mean(timings), sort(timings)[clamp(round(Int, 0.95 * samples), 1, samples)]
+    return mean(timings), sort(timings)[clamp(round(Int, 0.95 * samples), 1, samples)], Int(round(mean(alloc_bytes)))
 end
 
 function _resolve_scale(name::AbstractString)
@@ -162,19 +168,19 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     _seed_opd!(tel, T)
 
     sh = ShackHartmann(tel; n_subap=cfg.asterism_n_subap, mode=Diffractive(), T=T, backend=BackendArray)
-    sh_mean_ns, sh_p95_ns = _timed_stats!(() -> begin
+    sh_mean_ns, sh_p95_ns, sh_alloc_bytes = _timed_stats!(() -> begin
         measure!(sh, tel, ast, det; rng=rng)
         _sync_backend!(backend_tag, sh.state.slopes)
     end; warmup=resolved_warmup, samples=resolved_samples)
 
     pyr = PyramidWFS(tel; n_subap=cfg.asterism_n_subap, modulation=T(1.0), mode=Diffractive(), T=T, backend=BackendArray)
-    pyr_mean_ns, pyr_p95_ns = _timed_stats!(() -> begin
+    pyr_mean_ns, pyr_p95_ns, pyr_alloc_bytes = _timed_stats!(() -> begin
         measure!(pyr, tel, ast, det; rng=rng)
         _sync_backend!(backend_tag, pyr.state.slopes)
     end; warmup=resolved_warmup, samples=resolved_samples)
 
     bio = BioEdgeWFS(tel; n_subap=cfg.asterism_n_subap, modulation=T(1.0), mode=Diffractive(), T=T, backend=BackendArray)
-    bio_mean_ns, bio_p95_ns = _timed_stats!(() -> begin
+    bio_mean_ns, bio_p95_ns, bio_alloc_bytes = _timed_stats!(() -> begin
         measure!(bio, tel, ast, det; rng=rng)
         _sync_backend!(backend_tag, bio.state.slopes)
     end; warmup=resolved_warmup, samples=resolved_samples)
@@ -206,11 +212,11 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     step!(composite_compatible)
     step!(composite_mixed)
 
-    comp_mean_ns, comp_p95_ns = _timed_stats!(() -> begin
+    comp_mean_ns, comp_p95_ns, comp_alloc_bytes = _timed_stats!(() -> begin
         step!(composite_compatible)
         _sync_backend!(backend_tag, simulation_command(composite_compatible))
     end; warmup=resolved_warmup, samples=resolved_samples)
-    mixed_mean_ns, mixed_p95_ns = _timed_stats!(() -> begin
+    mixed_mean_ns, mixed_p95_ns, mixed_alloc_bytes = _timed_stats!(() -> begin
         step!(composite_mixed)
         _sync_backend!(backend_tag, simulation_command(composite_mixed))
     end; warmup=resolved_warmup, samples=resolved_samples)
@@ -223,14 +229,24 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
         scale=cfg.scale,
         sh_asterism_mean_ns=sh_mean_ns,
         sh_asterism_p95_ns=sh_p95_ns,
+        sh_asterism_frame_rate_hz=1e9 / sh_mean_ns,
+        sh_asterism_alloc_bytes=sh_alloc_bytes,
         pyramid_asterism_mean_ns=pyr_mean_ns,
         pyramid_asterism_p95_ns=pyr_p95_ns,
+        pyramid_asterism_frame_rate_hz=1e9 / pyr_mean_ns,
+        pyramid_asterism_alloc_bytes=pyr_alloc_bytes,
         bioedge_asterism_mean_ns=bio_mean_ns,
         bioedge_asterism_p95_ns=bio_p95_ns,
+        bioedge_asterism_frame_rate_hz=1e9 / bio_mean_ns,
+        bioedge_asterism_alloc_bytes=bio_alloc_bytes,
         composite_compatible_mean_ns=comp_mean_ns,
         composite_compatible_p95_ns=comp_p95_ns,
+        composite_compatible_frame_rate_hz=1e9 / comp_mean_ns,
+        composite_compatible_alloc_bytes=comp_alloc_bytes,
         composite_mixed_mean_ns=mixed_mean_ns,
         composite_mixed_p95_ns=mixed_p95_ns,
+        composite_mixed_frame_rate_hz=1e9 / mixed_mean_ns,
+        composite_mixed_alloc_bytes=mixed_alloc_bytes,
         source_count=length(cfg.source_coords),
         asterism_resolution=cfg.asterism_resolution,
         asterism_n_subap=cfg.asterism_n_subap,
@@ -251,14 +267,24 @@ function print_profile(result)
         :scale,
         :sh_asterism_mean_ns,
         :sh_asterism_p95_ns,
+        :sh_asterism_frame_rate_hz,
+        :sh_asterism_alloc_bytes,
         :pyramid_asterism_mean_ns,
         :pyramid_asterism_p95_ns,
+        :pyramid_asterism_frame_rate_hz,
+        :pyramid_asterism_alloc_bytes,
         :bioedge_asterism_mean_ns,
         :bioedge_asterism_p95_ns,
+        :bioedge_asterism_frame_rate_hz,
+        :bioedge_asterism_alloc_bytes,
         :composite_compatible_mean_ns,
         :composite_compatible_p95_ns,
+        :composite_compatible_frame_rate_hz,
+        :composite_compatible_alloc_bytes,
         :composite_mixed_mean_ns,
         :composite_mixed_p95_ns,
+        :composite_mixed_frame_rate_hz,
+        :composite_mixed_alloc_bytes,
         :source_count,
         :asterism_resolution,
         :asterism_n_subap,
