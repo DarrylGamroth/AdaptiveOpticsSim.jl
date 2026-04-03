@@ -1,41 +1,40 @@
-# AdaptiveOpticsSim.jl
+# AdaptiveOpticsSim.jl-revolt-real
 
-Julia adaptive optics simulation toolkit (in development). This package is an
-idiomatic Julia port of OOPAO with a focus on performance, reproducibility, and
-extensible modeling.
+This repository is now a transitional historical fork.
 
-## Quick start
+Active simulator development belongs in:
 
-```julia
-using AdaptiveOpticsSim
+- [../AdaptiveOpticsSim.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl)
 
-tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
-src = Source(band=:I, magnitude=8.0)
-psf = compute_psf!(tel, src; zero_padding=2)
-```
+Active cross-package comparison work belongs in:
 
-Runnable tutorial ports live in `examples/tutorials/`:
+- [../AdaptiveOpticsComparisons](/home/dgamroth/workspaces/codex/AdaptiveOpticsComparisons)
 
-```bash
-julia --project examples/tutorials/image_formation.jl
-julia --project examples/tutorials/closed_loop_pyramid.jl
-```
+## Current Role
 
-Reference-bundle regeneration can be pinned directly to OOPAO upstream:
+This fork is retained only so older comparison workflows and historical
+benchmarks continue to have a concrete reference tree during the migration away
+from a fork-based comparison model.
 
-```bash
-python3 scripts/generate_oopao_reference_bundle.py /tmp/oopao-bundle \
-  --oopao-repo https://github.com/cheritier/OOPAO.git \
-  --oopao-ref 085d5e50ace0d20fe13cc2da20129d5400166973
-```
+It should not be treated as the default execution home for new comparison work.
 
-## Documentation
+## What Moved
 
-- `docs/user-guide.md`
-- `docs/api-reference.md`
-- `docs/julia-port-design.md`
-- `docs/julia-tutorial-mappings.md`
-- `docs/roadmap.md`
-- `docs/oopao-reference-datasets.md`
-- `docs/deterministic-simulation.md`
-- `docs/phase7-traceability.md`
+Maintained REVOLT comparison assets and harness ownership now live in
+`AdaptiveOpticsComparisons`, including:
+
+- REVOLT scenario builders
+- REVOLT parameter contracts
+- REVOLT-like HIL assets
+- the cross-package benchmark harness
+- new archived cross-package results
+
+## Expected End State
+
+The intended end state is that this repository remains only as:
+
+- a transitional compatibility reference, or
+- a frozen historical branch
+
+If you are starting new work, use `AdaptiveOpticsComparisons` instead of this
+fork.
