@@ -184,7 +184,7 @@ Tasks:
   - traces to: `PR-15`, `PR-16`, `PR-17`
 - `[x]` `PLAN-05` Create a cross-package benchmark inventory from:
   - `../REVOLT`
-  - `../AdaptiveOpticsSim.jl-revolt-real`
+  - `../AdaptiveOpticsComparisons`
   - existing local benchmark scripts
   - traces to: `PR-21` through `PR-25`
 
@@ -430,7 +430,7 @@ Detailed work:
 
 - `[x]` inspect relevant benchmark/runtime assets in:
   - [`../REVOLT`](../REVOLT)
-  - [`../AdaptiveOpticsSim.jl-revolt-real`](../AdaptiveOpticsSim.jl-revolt-real)
+  - [`../AdaptiveOpticsComparisons`](../../AdaptiveOpticsComparisons)
   - local `scripts/profile_*`
 - `[x]` identify scenario families that exist in at least two of:
   - AdaptiveOpticsSim
@@ -871,7 +871,7 @@ Tasks:
   - traces to: `PR-23`, `PR-25`
 - `[x]` `PLAN-29` Build a REVOLT-like benchmark harness using:
   - `../REVOLT`
-  - `../AdaptiveOpticsSim.jl-revolt-real`
+  - `../AdaptiveOpticsComparisons`
   - local benchmark scripts
   - traces to: `PR-21`, `PR-23`
 - `[x]` `PLAN-30` Record runtime metrics:

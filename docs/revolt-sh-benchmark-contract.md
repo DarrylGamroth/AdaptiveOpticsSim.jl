@@ -15,7 +15,7 @@ REVOLT-like Shack-Hartmann runtime benchmark.
 The goal is not to claim full scenario identity between:
 
 - `AdaptiveOpticsSim.jl` `main`
-- `../AdaptiveOpticsSim.jl-revolt-real`
+- `../AdaptiveOpticsComparisons`
 - `../REVOLT/Python/specula`
 
 The goal is to make the current Julia-to-Julia comparison stronger and more
@@ -35,7 +35,8 @@ fields to match:
 - WFS detector sensor family
 
 The `main` side now runs the REVOLT-like HIL benchmark with the WFS sensor set
-to `cmos` so that the detector family matches the REVOLT-aligned branch.
+to `cmos` so that the detector family matches the comparison-workspace REVOLT
+runner.
 
 ## Known Differences
 

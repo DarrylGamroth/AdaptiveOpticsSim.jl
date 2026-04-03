@@ -607,7 +607,7 @@ Recommendation:
   validation artifacts.
 - The REVOLT-related trees already make this practical:
   - [`../REVOLT`](../REVOLT)
-  - [`../AdaptiveOpticsSim.jl-revolt-real`](../AdaptiveOpticsSim.jl-revolt-real)
+  - [`../AdaptiveOpticsComparisons`](../../AdaptiveOpticsComparisons)
 
 Recommended benchmark structure:
 

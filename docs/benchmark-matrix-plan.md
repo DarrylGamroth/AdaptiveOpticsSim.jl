@@ -69,10 +69,10 @@ The current maintained ladder is:
   - frozen OOPAO and SPECULA reference fidelity bundles
 - `medium`
   - REVOLT-like SH HIL runtime comparison between `main` and
-    `../AdaptiveOpticsSim.jl-revolt-real`
+    `../AdaptiveOpticsComparisons`
 - `medium`
-  - REVOLT-like grouped platform runtime comparison between `main` and
-    `../AdaptiveOpticsSim.jl-revolt-real`
+  - REVOLT-like grouped platform runtime family retained as contract-only
+    until the comparison workspace owns a distinct grouped-platform runner
 - `representative`
   - PWFS REVOLT-aligned contract recorded and intentionally deferred until the
     main-repo scenario runner is normalized

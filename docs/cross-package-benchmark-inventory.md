@@ -70,24 +70,24 @@ Relevant available files in [`../REVOLT`](../REVOLT):
   - `generate_IF_and_KL_basis.py`
   - `prepare_pushpull_amplitudes.py`
 
-### 3. AdaptiveOpticsSim REVOLT-aligned branch assets
+### 3. External comparison workspace assets
 
-Relevant files in [`../AdaptiveOpticsSim.jl-revolt-real`](../AdaptiveOpticsSim.jl-revolt-real):
+Relevant files in [`../AdaptiveOpticsComparisons`](../../AdaptiveOpticsComparisons):
 
 - REVOLT-aligned scenario builders:
-  - [`../AdaptiveOpticsSim.jl-revolt-real/scripts/revolt/common.jl`](../AdaptiveOpticsSim.jl-revolt-real/scripts/revolt/common.jl)
-  - [`../AdaptiveOpticsSim.jl-revolt-real/scripts/revolt/shwfs.jl`](../AdaptiveOpticsSim.jl-revolt-real/scripts/revolt/shwfs.jl)
-  - [`../AdaptiveOpticsSim.jl-revolt-real/scripts/revolt/pwfs.jl`](../AdaptiveOpticsSim.jl-revolt-real/scripts/revolt/pwfs.jl)
-  - [`../AdaptiveOpticsSim.jl-revolt-real/scripts/revolt/pwfs_unmod.jl`](../AdaptiveOpticsSim.jl-revolt-real/scripts/revolt/pwfs_unmod.jl)
+  - [`../AdaptiveOpticsComparisons/julia/support/revolt/common.jl`](../../AdaptiveOpticsComparisons/julia/support/revolt/common.jl)
+  - [`../AdaptiveOpticsComparisons/julia/runners/revolt/shwfs.jl`](../../AdaptiveOpticsComparisons/julia/runners/revolt/shwfs.jl)
+  - [`../AdaptiveOpticsComparisons/julia/runners/revolt/pwfs.jl`](../../AdaptiveOpticsComparisons/julia/runners/revolt/pwfs.jl)
+  - [`../AdaptiveOpticsComparisons/julia/runners/revolt/pwfs_unmod.jl`](../../AdaptiveOpticsComparisons/julia/runners/revolt/pwfs_unmod.jl)
 - TOML parameter assets:
-  - `scripts/revolt/parameter_files/common.toml`
-  - `scripts/revolt/parameter_files/shwfs.toml`
-  - `scripts/revolt/parameter_files/pwfs.toml`
-  - `scripts/revolt/parameter_files/pwfs_unmod.toml`
-  - `scripts/revolt/parameter_files/cameras.toml`
+  - `contracts/revolt/common.toml`
+  - `contracts/revolt/shwfs.toml`
+  - `contracts/revolt/pwfs.toml`
+  - `contracts/revolt/pwfs_unmod.toml`
+  - `contracts/revolt/cameras.toml`
 - benchmark assets:
-  - [`../AdaptiveOpticsSim.jl-revolt-real/benchmarks/assets/revolt_like/`](../AdaptiveOpticsSim.jl-revolt-real/benchmarks/assets/revolt_like)
-  - [`../AdaptiveOpticsSim.jl-revolt-real/scripts/profile_revolt_hil_runtime.jl`](../AdaptiveOpticsSim.jl-revolt-real/scripts/profile_revolt_hil_runtime.jl)
+  - [`../AdaptiveOpticsComparisons/assets/revolt_like/`](../../AdaptiveOpticsComparisons/assets/revolt_like)
+  - [`../AdaptiveOpticsComparisons/julia/runners/profile_revolt_runtime.jl`](../../AdaptiveOpticsComparisons/julia/runners/profile_revolt_runtime.jl)
 
 ## Candidate Scenario Families
 
@@ -133,8 +133,8 @@ Available in:
 
 - AdaptiveOpticsSim main:
   [`scripts/profile_revolt_hil_runtime.jl`](../scripts/profile_revolt_hil_runtime.jl)
-- AdaptiveOpticsSim REVOLT-aligned branch:
-  [`../AdaptiveOpticsSim.jl-revolt-real/scripts/revolt/shwfs.jl`](../AdaptiveOpticsSim.jl-revolt-real/scripts/revolt/shwfs.jl)
+- external comparison workspace:
+  [`../AdaptiveOpticsComparisons/julia/runners/revolt/shwfs.jl`](../../AdaptiveOpticsComparisons/julia/runners/revolt/shwfs.jl)
 - REVOLT/SPECULA SH config:
   [`../REVOLT/Python/specula/params_revolt_modal.yml`](../REVOLT/Python/specula/params_revolt_modal.yml)
 
@@ -161,8 +161,8 @@ Purpose:
 
 Available in:
 
-- AdaptiveOpticsSim REVOLT-aligned branch:
-  [`../AdaptiveOpticsSim.jl-revolt-real/scripts/revolt/pwfs.jl`](../AdaptiveOpticsSim.jl-revolt-real/scripts/revolt/pwfs.jl)
+- external comparison workspace:
+  [`../AdaptiveOpticsComparisons/julia/runners/revolt/pwfs.jl`](../../AdaptiveOpticsComparisons/julia/runners/revolt/pwfs.jl)
 - REVOLT/SPECULA PWFS config:
   [`../REVOLT/Python/specula/PWFS/params_revolt_modal_PWFS.yml`](../REVOLT/Python/specula/PWFS/params_revolt_modal_PWFS.yml)
 - related maintained main-repo runtime surfaces:
@@ -201,8 +201,8 @@ Recommended class:
 Current comparability limits:
 
 - this family is now partially normalized as the maintained `CP-06`
-  Julia-to-Julia grouped platform-runtime contract against
-  `../AdaptiveOpticsSim.jl-revolt-real`
+  Julia-to-Julia grouped platform-runtime contract, but the external
+  comparison-workspace participant is currently deferred
 - there is still no direct ready-made OOPAO or SPECULA scenario bundle
   matching the current grouped Julia benchmark
 
@@ -248,7 +248,7 @@ Current comparability limits:
 
 - Family: `CP-02`
 - Primary comparison:
-  - AdaptiveOpticsSim main / `revolt-real` vs REVOLT/SPECULA SH
+  - AdaptiveOpticsSim main / comparison workspace vs REVOLT/SPECULA SH
 - Why it is viable now:
   - all three source trees already contain relevant scenario assets
   - detector-backed SH runtime is already benchmarked locally
@@ -319,7 +319,7 @@ Every cross-package benchmark should record:
 
 1. Formalize `CP-02` as the first maintained cross-package benchmark family.
 2. Freeze a PWFS representative contract for `CP-03` using the REVOLT/SPECULA
-   PWFS assets and `revolt-real` Julia builder.
+   PWFS assets and the comparison-workspace Julia runner.
 3. Add a SPECULA-focused atmospheric field propagation comparison family for
    `CP-05`.
 4. Keep `CP-01` as the compact fidelity baseline and do not overload it with

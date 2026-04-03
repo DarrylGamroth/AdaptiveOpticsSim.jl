@@ -16,8 +16,8 @@ Plan traceability:
 This document defines the maintained cross-package benchmark harness for:
 
 - AdaptiveOpticsSim main
-- the REVOLT-aligned Julia branch in
-  [`../AdaptiveOpticsSim.jl-revolt-real`](../AdaptiveOpticsSim.jl-revolt-real)
+- the external comparison workspace in
+  [`../AdaptiveOpticsComparisons`](../../AdaptiveOpticsComparisons)
 - external OOPAO/SPECULA comparison surfaces where frozen bundles or executable
   scenario assets exist
 
@@ -39,11 +39,13 @@ The current maintained ladder is:
     [`revolt-sh-benchmark-contract.md`](./revolt-sh-benchmark-contract.md)
 - `cp03_revolt_pwfs_representative`
   - representative REVOLT-like PWFS comparison between `main` and
-    `revolt-real`
+    the comparison workspace
   - normalization rules and accepted differences are documented in
     [`revolt-pwfs-benchmark-contract.md`](./revolt-pwfs-benchmark-contract.md)
 - `cp06_revolt_platform_medium`
-  - grouped platform-runtime comparison between `main` and `revolt-real`
+  - grouped platform-runtime family retained historically in the core package
+  - currently contract-only/deferred until the external comparison workspace
+    owns a distinct grouped-platform runner
   - normalization rules and accepted differences are documented in
     [`revolt-platform-benchmark-contract.md`](./revolt-platform-benchmark-contract.md)
 - `cp05_specula_atmo_field_medium`

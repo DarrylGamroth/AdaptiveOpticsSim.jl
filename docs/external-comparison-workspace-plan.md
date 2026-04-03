@@ -2,13 +2,12 @@
 
 Date: 2026-04-03
 
-Status: active
+Status: completed
 
 ## Purpose
 
-This plan defines how to replace the long-lived
-[`../AdaptiveOpticsSim.jl-revolt-real`](../AdaptiveOpticsSim.jl-revolt-real)
-fork with a dedicated external comparison workspace.
+This plan defines how to replace the former long-lived REVOLT-aligned fork
+with a dedicated external comparison workspace.
 
 The goal is to:
 
@@ -21,7 +20,8 @@ The goal is to:
 
 The default decision is:
 
-- do **not** merge `../AdaptiveOpticsSim.jl-revolt-real` into `main`
+- do **not** merge the former `AdaptiveOpticsSim.jl-revolt-real` fork into
+  `main`
 - create a separate comparison workspace in `../`
 - upstream only code that is clearly generic core capability
 
@@ -364,9 +364,9 @@ Recommended execution order:
 
 Primary source paths in scope:
 
-- `../AdaptiveOpticsSim.jl-revolt-real/scripts/revolt/`
-- `../AdaptiveOpticsSim.jl-revolt-real/scripts/revolt/parameter_files/`
-- `../AdaptiveOpticsSim.jl-revolt-real/benchmarks/assets/revolt_like/`
+- former `AdaptiveOpticsSim.jl-revolt-real/scripts/revolt/`
+- former `AdaptiveOpticsSim.jl-revolt-real/scripts/revolt/parameter_files/`
+- former `AdaptiveOpticsSim.jl-revolt-real/benchmarks/assets/revolt_like/`
 - comparison-side runner scripts that are only useful in REVOLT/OOPAO/SPECULA
   context
 
@@ -603,18 +603,19 @@ Outputs:
 
 Recommended end state:
 
-- archive/freeze it as a transitional historical branch, or
-- reduce it to a minimal reference with a README pointing to the new
-  comparison workspace
+- archive the former fork and remove the live checkout after the migrated
+  comparison workspace is validated
 
 Acceptance:
 
 - `revolt-real` is no longer treated as an active long-term integration fork
+- the live checkout has been removed from the maintainer workspace after an
+  archive was recorded
 
 Recorded evidence:
 
-- frozen-fork README redirect:
-  `../AdaptiveOpticsSim.jl-revolt-real/README.md`
+- archive path and removal record in the comparison workspace disposition note:
+  `/home/dgamroth/workspaces/codex/archives/AdaptiveOpticsSim.jl-revolt-real-2026-04-03.tar.gz`
 - comparison-workspace migration plan and inventories:
   - `../AdaptiveOpticsComparisons/docs/revolt-migration-inventory.md`
   - `../AdaptiveOpticsComparisons/docs/cross-package-benchmark-harness.md`

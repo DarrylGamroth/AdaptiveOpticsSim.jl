@@ -16,7 +16,7 @@ metrics = ["max_abs_error", "max_rel_error", "l2_rel_error"]
 family = "CP-02"
 class = "medium"
 kind = "runtime_profile"
-description = "REVOLT-like Shack-Hartmann HIL runtime comparison between main and revolt-real, with normalized Julia-side comparability fields and explicit known differences."
+description = "REVOLT-like Shack-Hartmann runtime comparison between the package-local main runner and the external comparison-workspace REVOLT runner."
 comparison_fields = ["backend", "response_mode", "n_subap", "wfs_sensor"]
 normalized_fields = ["backend", "response_mode", "n_subap", "wfs_sensor"]
 known_differences = [
@@ -44,17 +44,17 @@ response_mode = "response_mode"
 n_subap = "n_subap"
 wfs_sensor = "sensor"
 
-[scenarios.cp02_revolt_sh_medium.revolt_real]
-label = "adaptiveopticssim_revolt_real"
-cwd = "../AdaptiveOpticsSim.jl-revolt-real"
-command = ["julia", "--project=.", "--startup-file=no", "scripts/profile_revolt_hil_runtime.jl", "cpu", "shwfs", "default"]
+[scenarios.cp02_revolt_sh_medium.comparison_workspace]
+label = "comparison_workspace_revolt"
+cwd = "../AdaptiveOpticsComparisons"
+command = ["julia", "--project=.", "--startup-file=no", "julia/runners/profile_revolt_runtime.jl", "cpu", "shwfs", "default"]
 profile_root = "revolt_hil_runtime_profile"
 mean_key = "total_mean_ns"
 p95_key = "total_p95_ns"
 frame_rate_key = "frame_rate_hz"
 alloc_key = "total_alloc_bytes"
 
-[scenarios.cp02_revolt_sh_medium.revolt_real.field_aliases]
+[scenarios.cp02_revolt_sh_medium.comparison_workspace.field_aliases]
 backend = "backend"
 response_mode = "response_mode"
 n_subap = "n_subap"
@@ -75,7 +75,7 @@ optional = true
 family = "CP-03"
 class = "representative"
 kind = "runtime_profile"
-description = "REVOLT-like representative PWFS modal SCAO comparison between main and revolt-real on the unmodulated representative contract."
+description = "REVOLT-like representative PWFS modal SCAO comparison between the package-local main runner and the external comparison-workspace REVOLT runner."
 comparison_fields = ["backend", "response_mode", "model", "wfs_family", "n_subap", "wfs_detector_sensor", "science_detector_sensor", "pupil_resolution", "wfs_frame_response", "detector_output_shape"]
 normalized_fields = ["backend", "response_mode", "model", "wfs_family", "n_subap", "wfs_detector_sensor", "science_detector_sensor", "pupil_resolution", "wfs_frame_response", "detector_output_shape"]
 known_differences = [
@@ -107,17 +107,17 @@ pupil_resolution = "pupil_resolution"
 wfs_frame_response = "wfs_frame_response"
 detector_output_shape = "detector_output_shape"
 
-[scenarios.cp03_revolt_pwfs_representative.revolt_real]
-label = "adaptiveopticssim_revolt_real"
-cwd = "../AdaptiveOpticsSim.jl-revolt-real"
-command = ["julia", "--project=.", "--startup-file=no", "scripts/profile_revolt_hil_runtime.jl", "cpu", "pwfs_unmod", "default", "2", "1"]
+[scenarios.cp03_revolt_pwfs_representative.comparison_workspace]
+label = "comparison_workspace_revolt"
+cwd = "../AdaptiveOpticsComparisons"
+command = ["julia", "--project=.", "--startup-file=no", "julia/runners/profile_revolt_runtime.jl", "cpu", "pwfs_unmod", "default", "2", "1"]
 profile_root = "revolt_hil_runtime_profile"
 mean_key = "total_mean_ns"
 p95_key = "total_p95_ns"
 frame_rate_key = "frame_rate_hz"
 alloc_key = "total_alloc_bytes"
 
-[scenarios.cp03_revolt_pwfs_representative.revolt_real.field_aliases]
+[scenarios.cp03_revolt_pwfs_representative.comparison_workspace.field_aliases]
 backend = "backend"
 response_mode = "response_mode"
 model = "model"
@@ -141,7 +141,8 @@ skip_reason = "SPECULA provides AtmoPropagation configs/tests but no maintained 
 family = "CP-06"
 class = "medium"
 kind = "runtime_profile"
-description = "Grouped platform runtime comparison between main and revolt-real on the maintained multi-source / multi-WFS medium rung."
+status = "contract_only"
+description = "Grouped platform runtime comparison family retained historically in the core package; external comparison-workspace re-anchor is deferred until a distinct external orchestration surface is normalized."
 comparison_fields = ["backend", "scale", "runtime_resolution", "runtime_n_subap", "runtime_branch_count"]
 normalized_fields = ["backend", "scale", "runtime_resolution", "runtime_n_subap", "runtime_branch_count"]
 known_differences = [
@@ -150,37 +151,4 @@ known_differences = [
     "composite_runtime_entrypoint_shape",
 ]
 runtime_metrics = ["total_mean_ns", "total_p95_ns", "frame_rate_hz", "total_alloc_bytes"]
-
-[scenarios.cp06_revolt_platform_medium.main]
-label = "adaptiveopticssim_main"
-cwd = "."
-command = ["julia", "--project=.", "--startup-file=no", "scripts/profile_multi_source_multi_wfs_runtime.jl", "cpu", "medium"]
-profile_root = "multi_source_multi_wfs_profile"
-mean_key = "composite_compatible_mean_ns"
-p95_key = "composite_compatible_p95_ns"
-frame_rate_key = "composite_compatible_frame_rate_hz"
-alloc_key = "composite_compatible_alloc_bytes"
-
-[scenarios.cp06_revolt_platform_medium.main.field_aliases]
-backend = "backend"
-scale = "scale"
-runtime_resolution = "runtime_resolution"
-runtime_n_subap = "runtime_n_subap"
-runtime_branch_count = "runtime_branch_count"
-
-[scenarios.cp06_revolt_platform_medium.revolt_real]
-label = "adaptiveopticssim_revolt_real"
-cwd = "../AdaptiveOpticsSim.jl-revolt-real"
-command = ["julia", "--project=.", "--startup-file=no", "scripts/profile_multi_source_multi_wfs_runtime.jl", "cpu", "medium"]
-profile_root = "multi_source_multi_wfs_profile"
-mean_key = "composite_compatible_mean_ns"
-p95_key = "composite_compatible_p95_ns"
-frame_rate_key = "composite_compatible_frame_rate_hz"
-alloc_key = "composite_compatible_alloc_bytes"
-
-[scenarios.cp06_revolt_platform_medium.revolt_real.field_aliases]
-backend = "backend"
-scale = "scale"
-runtime_resolution = "runtime_resolution"
-runtime_n_subap = "runtime_n_subap"
-runtime_branch_count = "runtime_branch_count"
+skip_reason = "external comparison workspace now owns the harness, but a distinct grouped-platform external runner has not yet been normalized beyond the core-package platform runtime surface"
