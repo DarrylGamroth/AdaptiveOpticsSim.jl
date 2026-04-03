@@ -1,6 +1,6 @@
 # Optional Integration Boundaries
 
-Date: 2026-03-31
+Date: 2026-04-03
 
 Status: active
 
@@ -100,3 +100,19 @@ explicit:
 - SPECULA-informed breadth work still has to respect the same package boundary
 - science-path integration should arrive through a narrow handoff surface plus
   optional extensions or adapter packages
+
+## Platform-Strengthening Phase 6 Outcome
+
+Phase 6 keeps the same science-path boundary in force after the completed
+platform-orchestration work.
+
+The explicit rule remains:
+
+- do not move focal-plane or downstream science-path work into core as the next
+  default step
+- keep future science-path work optional unless a later boundary review changes
+  that decision explicitly
+
+The current closeout decision is recorded in:
+
+- [platform-strengthening-closeout.md](./platform-strengthening-closeout.md)

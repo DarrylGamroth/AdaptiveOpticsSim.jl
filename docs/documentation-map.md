@@ -52,6 +52,10 @@ If you are:
   - typed scenario/config layer for Julia-native runtime composition
 - [`platform-orchestration-validation.md`](./platform-orchestration-validation.md)
   - maintained benchmark and backend evidence for the `PlatformScenario` layer
+- [`platform-strengthening-closeout.md`](./platform-strengthening-closeout.md)
+  - explicit post-plan decision on what still trails SPECULA and what comes next
+- [`platform-manifest-defer.md`](./platform-manifest-defer.md)
+  - explicit defer note for optional scenario manifests/config-style orchestration
 - [`scenario-builder-style.md`](./scenario-builder-style.md)
   - maintained conventions for script-first scenario construction
 - [`api-reference.md`](./api-reference.md)
@@ -80,6 +84,8 @@ If you are:
     SPECULA-aligned atmospheric-field benchmark family
 - [`future-platform-direction.md`](./future-platform-direction.md)
   - post-review platform direction and scope guardrails
+- [`platform-strengthening-closeout.md`](./platform-strengthening-closeout.md)
+  - Phase 6 closeout decision for the main platform-strengthening pass
 - [`post-review-platform-plan.md`](./post-review-platform-plan.md)
   - phased next-step plan for validation hardening, benchmark expansion, and
     next capability selection

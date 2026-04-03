@@ -797,6 +797,16 @@ next topic.
 - science-path remains optional unless deliberately changed
 - config manifests remain deferred and non-primary unless a later plan changes that rule
 
+Implementation record:
+
+- explicit closeout note added:
+  [platform-strengthening-closeout.md](./platform-strengthening-closeout.md)
+- science-path boundary reaffirmed in:
+  [optional-integration-boundaries.md](./optional-integration-boundaries.md)
+- explicit manifest/config defer note added:
+  [platform-manifest-defer.md](./platform-manifest-defer.md)
+- roadmap and future-direction docs updated to point at the closeout decision
+
 ## Execution Order
 
 1. `PSP-01`
@@ -868,6 +878,6 @@ next topic.
 
 ### Phase 6
 
-- [ ] `PSP-18`
-- [ ] `PSP-19`
-- [ ] `PSP-20`
+- [x] `PSP-18`
+- [x] `PSP-19`
+- [x] `PSP-20`

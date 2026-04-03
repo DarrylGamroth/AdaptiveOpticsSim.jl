@@ -30,6 +30,10 @@ Its job is to keep scenario authoring:
 This guide intentionally does not introduce a manifest or config-file-first
 workflow. Scenario manifests remain deferred and secondary.
 
+The current defer decision is recorded in:
+
+- [platform-manifest-defer.md](./platform-manifest-defer.md)
+
 ## Core Rule
 
 The maintained scenario-authoring model is:

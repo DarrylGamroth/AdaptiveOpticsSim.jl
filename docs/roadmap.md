@@ -27,6 +27,8 @@ Direction guardrails:
   boundary review changes that policy.
 - controller/process breadth should expand only after runtime and benchmark
   evidence justify it.
+- the completed platform-strengthening pass is closed out in
+  [`platform-strengthening-closeout.md`](./platform-strengthening-closeout.md).
 
 ## AO Feature Checklist
 - [x] P0: Detector modeling (photon/read noise, QE, binning, PSF sampling,
@@ -242,6 +244,16 @@ validation shows the new default is still too coarse.
   SH asterism, stacked Pyramid/BioEdge asterism, grouped
   `CompositeSimulationInterface` execution, and the maintained profiler
   `scripts/profile_multi_source_multi_wfs_runtime.jl`.
+- [x] Complete the platform-strengthening plan through the orchestration,
+  evidence, and closeout phases.
+  - orchestration guide:
+    [`platform-orchestration.md`](./platform-orchestration.md)
+  - orchestration evidence:
+    [`platform-orchestration-validation.md`](./platform-orchestration-validation.md)
+  - closeout decision:
+    [`platform-strengthening-closeout.md`](./platform-strengthening-closeout.md)
+- [ ] Choose and plan the next focused controller/process-breadth milestone now
+  that the platform-strengthening pass is complete.
 - [x] Add a maintained AO188/3k operational simulation benchmark configuration.
   The maintained AO188/3k simulation now lives as example support in
   `examples/support/subaru_ao188_simulation.jl`, with

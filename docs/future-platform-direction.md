@@ -27,6 +27,11 @@ The next concrete main-platform strengthening plan now lives in:
 
 - [platform-strengthening-plan.md](./platform-strengthening-plan.md)
 
+That plan is now complete through Phase 6. Its closeout decision is recorded
+in:
+
+- [platform-strengthening-closeout.md](./platform-strengthening-closeout.md)
+
 ## Direction Summary
 
 The package should continue to evolve as:
@@ -108,6 +113,12 @@ The preferred follow-up for the main platform, without switching to a
 config-first interface, is now captured in:
 
 - [platform-strengthening-plan.md](./platform-strengthening-plan.md)
+- [platform-strengthening-closeout.md](./platform-strengthening-closeout.md)
+
+The explicit defer for optional scenario manifests/config-style orchestration
+is now recorded in:
+
+- [platform-manifest-defer.md](./platform-manifest-defer.md)
 
 ## What To Avoid
 
