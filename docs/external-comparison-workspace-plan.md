@@ -489,6 +489,10 @@ Notes:
 
 ### `ECW-3`: Re-anchor the maintained comparison harness
 
+Status:
+
+- completed 2026-04-03
+
 Outputs:
 
 - comparison-side harness entry points
@@ -509,6 +513,33 @@ Acceptance:
 
 - cross-package comparisons no longer depend on `revolt-real` as a forked code
   host
+
+Recorded evidence:
+
+- comparison-workspace harness runner:
+  `../AdaptiveOpticsComparisons/julia/runners/run_cross_package_benchmarks.jl`
+- comparison-workspace contract:
+  `../AdaptiveOpticsComparisons/contracts/cross_package.toml`
+- comparison-workspace REVOLT runtime runner:
+  `../AdaptiveOpticsComparisons/julia/runners/profile_revolt_runtime.jl`
+- comparison-workspace harness guide:
+  `../AdaptiveOpticsComparisons/docs/cross-package-benchmark-harness.md`
+- first archived re-anchored result:
+  `../AdaptiveOpticsComparisons/results/archived/2026-04-03-ecw3-baseline.toml`
+- manifest for preferred results:
+  `../AdaptiveOpticsComparisons/results/manifests/cross_package.toml`
+- acceptance command:
+  `julia --project=. --startup-file=no julia/runners/run_cross_package_benchmarks.jl`
+  from `../AdaptiveOpticsComparisons`
+
+Notes:
+
+- the core package still retains package-local profile scripts and historical
+  archived cross-package evidence
+- the comparison workspace is now the default home for new multi-package
+  contracts and archived comparison runs
+- `CP-06` is explicitly deferred in the comparison workspace until a distinct
+  grouped-platform external runner is normalized
 
 ### `ECW-4`: Upstream interface-only gaps
 
