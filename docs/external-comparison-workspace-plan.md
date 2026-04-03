@@ -188,7 +188,7 @@ These should not be copied into `main` unchanged:
 
 Status:
 
-- planned
+- completed 2026-04-03
 
 Objective:
 
@@ -313,6 +313,24 @@ Evidence to record:
 - README path
 - baseline docs added
 - any intentionally deferred bootstrap items
+
+Recorded evidence:
+
+- workspace root:
+  `../AdaptiveOpticsComparisons`
+- initial project:
+  `../AdaptiveOpticsComparisons/Project.toml`
+- bootstrap README:
+  `../AdaptiveOpticsComparisons/README.md`
+- baseline docs:
+  - `../AdaptiveOpticsComparisons/docs/workspace-overview.md`
+  - `../AdaptiveOpticsComparisons/docs/env-setup.md`
+  - `../AdaptiveOpticsComparisons/docs/result-policy.md`
+- intentionally deferred bootstrap items:
+  - Python environment locking
+  - containerization
+  - CI automation
+  - REVOLT asset migration
 
 Notes:
 
