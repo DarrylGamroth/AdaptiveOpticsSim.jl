@@ -342,7 +342,7 @@ Notes:
 
 Status:
 
-- planned
+- completed 2026-04-03
 
 Objective:
 
@@ -456,6 +456,29 @@ Evidence to record:
 - residual path list
 - first successful runner command executed from the new workspace
 - any blockers that prevent complete REVOLT-asset migration
+
+Recorded evidence:
+
+- migrated inventory:
+  `../AdaptiveOpticsComparisons/docs/revolt-migration-inventory.md`
+- maintained REVOLT support subtree:
+  - `../AdaptiveOpticsComparisons/julia/support/revolt/common.jl`
+  - `../AdaptiveOpticsComparisons/julia/runners/revolt/pwfs.jl`
+  - `../AdaptiveOpticsComparisons/julia/runners/revolt/pwfs_unmod.jl`
+  - `../AdaptiveOpticsComparisons/julia/runners/revolt/shwfs.jl`
+  - `../AdaptiveOpticsComparisons/julia/runners/revolt/generate_revolt_like_benchmark_assets.jl`
+- migrated parameter/config assets:
+  `../AdaptiveOpticsComparisons/contracts/revolt/`
+- migrated REVOLT-like HIL assets:
+  `../AdaptiveOpticsComparisons/assets/revolt_like/`
+- residual fork inventory:
+  recorded in `../AdaptiveOpticsComparisons/docs/revolt-migration-inventory.md`
+- first successful new-workspace runner command:
+  `julia --project=. --startup-file=no -e 'include("julia/runners/revolt/shwfs.jl"); setup = revolt_setup(); println(setup.label)'`
+- transition compatibility check:
+  `julia --project=. --startup-file=no -e 'include("scripts/revolt/shwfs.jl"); setup = revolt_setup(); println(setup.label)'`
+- blockers:
+  none for the scoped REVOLT asset migration
 
 Notes:
 
