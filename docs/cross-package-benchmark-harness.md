@@ -39,7 +39,7 @@ The current maintained ladder is:
     [`revolt-sh-benchmark-contract.md`](./revolt-sh-benchmark-contract.md)
 - `cp03_revolt_pwfs_representative`
   - representative REVOLT-like PWFS comparison between `main` and
-    the comparison workspace
+    `REVOLT/Julia`, orchestrated from the comparison workspace
   - normalization rules and accepted differences are documented in
     [`revolt-pwfs-benchmark-contract.md`](./revolt-pwfs-benchmark-contract.md)
 - `cp06_revolt_platform_medium`

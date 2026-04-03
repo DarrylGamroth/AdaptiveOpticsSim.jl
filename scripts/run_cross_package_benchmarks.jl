@@ -253,7 +253,7 @@ function run_runtime_scenario(name::AbstractString, cfg::Dict{String,Any})
     for (impl_name, impl_cfg_any) in sort!(collect(pairs(cfg)); by=first)
         impl_name in ("family", "class", "kind", "description", "comparison_fields",
             "normalized_fields", "known_differences", "runtime_metrics", "status",
-            "skip_reason") && continue
+            "skip_reason", "primary_comparison") && continue
         impl_cfg = Dict{String,Any}(impl_cfg_any)
         if haskey(cfg, "comparison_fields")
             impl_cfg["comparison_fields"] = cfg["comparison_fields"]
@@ -267,16 +267,18 @@ function run_runtime_scenario(name::AbstractString, cfg::Dict{String,Any})
         end
     end
 
+    primary_name = String(get(cfg, "primary_comparison", "revolt_julia"))
     main = get(impl_results, "main", Dict{String,Any}())
-    revolt_real = get(impl_results, "revolt_real", Dict{String,Any}())
+    comparison_impl = get(impl_results, primary_name, Dict{String,Any}())
     comparison = Dict{String,Any}()
     for field in get(cfg, "comparison_fields", String[])
         field_name = String(field)
-        comparison["$(field_name)_match"] = get(main, field_name, nothing) == get(revolt_real, field_name, nothing)
+        comparison["$(field_name)_match"] = get(main, field_name, nothing) == get(comparison_impl, field_name, nothing)
     end
-    comparison["mean_time_ratio_main_to_revolt_real"] = runtime_ratio(get(main, "total_mean_ns", nothing), get(revolt_real, "total_mean_ns", nothing))
-    comparison["frame_rate_ratio_main_to_revolt_real"] = runtime_ratio(get(main, "frame_rate_hz", nothing), get(revolt_real, "frame_rate_hz", nothing))
-    comparison["alloc_ratio_main_to_revolt_real"] = runtime_ratio(get(main, "total_alloc_bytes", nothing), get(revolt_real, "total_alloc_bytes", nothing))
+    comparison["primary_implementation"] = primary_name
+    comparison["mean_time_ratio_main_to_$(primary_name)"] = runtime_ratio(get(main, "total_mean_ns", nothing), get(comparison_impl, "total_mean_ns", nothing))
+    comparison["frame_rate_ratio_main_to_$(primary_name)"] = runtime_ratio(get(main, "frame_rate_hz", nothing), get(comparison_impl, "frame_rate_hz", nothing))
+    comparison["alloc_ratio_main_to_$(primary_name)"] = runtime_ratio(get(main, "total_alloc_bytes", nothing), get(comparison_impl, "total_alloc_bytes", nothing))
 
     status = required_failed ? "failed" : (required_passed ? "passed" : "skipped")
     return Dict{String,Any}(
@@ -341,7 +343,7 @@ function _implementation_policies(name::AbstractString, cfg::Dict{String,Any})
     for (impl_name, impl_cfg_any) in pairs(cfg)
         impl_name in ("family", "class", "kind", "description", "comparison_fields",
             "normalized_fields", "known_differences", "runtime_metrics", "status",
-            "skip_reason") && continue
+            "skip_reason", "primary_comparison") && continue
         impl_cfg_any isa AbstractDict || continue
         impl_cfg = Dict{String,Any}(impl_cfg_any)
         Bool(get(impl_cfg, "optional", false)) || continue

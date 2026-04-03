@@ -2,7 +2,7 @@
 
 Date: 2026-04-03
 
-Status: completed
+Status: completed, superseded by `REVOLT/Julia` model ownership
 
 ## Purpose
 
@@ -15,6 +15,12 @@ The goal is to:
 - move cross-package comparison concerns out of the core package
 - preserve the useful REVOLT/OOPAO/SPECULA comparison assets
 - stop maintaining a drifting fork as if it were part of the core product
+
+Final outcome:
+
+- `AdaptiveOpticsComparisons` owns comparison orchestration, contracts, and
+  archived results
+- `REVOLT/Julia` owns the Julia REVOLT model implementation
 
 ## Decision Summary
 
@@ -372,10 +378,10 @@ Primary source paths in scope:
 
 Primary destination paths in scope:
 
-- `../AdaptiveOpticsComparisons/julia/runners/revolt/`
-- `../AdaptiveOpticsComparisons/julia/support/revolt/`
-- `../AdaptiveOpticsComparisons/contracts/revolt/`
-- `../AdaptiveOpticsComparisons/assets/revolt_like/`
+- `../REVOLT/Julia/runners/revolt/`
+- `../REVOLT/Julia/support/revolt/`
+- `../REVOLT/Julia/contracts/revolt/`
+- `../REVOLT/Julia/assets/revolt_like/`
 - `../AdaptiveOpticsComparisons/docs/`
 
 Tasks:
@@ -443,8 +449,8 @@ Acceptance:
 
 Acceptance criteria:
 
-- the comparison workspace owns the maintained REVOLT Julia scenario builders
-  and their parameter assets
+- `REVOLT/Julia` owns the maintained REVOLT Julia scenario builders and their
+  parameter assets
 - path handling no longer assumes `revolt-real` as the scenario home
 - there is an explicit written record of everything still left in
   `revolt-real`
@@ -520,8 +526,8 @@ Recorded evidence:
   `../AdaptiveOpticsComparisons/julia/runners/run_cross_package_benchmarks.jl`
 - comparison-workspace contract:
   `../AdaptiveOpticsComparisons/contracts/cross_package.toml`
-- comparison-workspace REVOLT runtime runner:
-  `../AdaptiveOpticsComparisons/julia/runners/profile_revolt_runtime.jl`
+- REVOLT Julia runtime runner:
+  `../REVOLT/Julia/runners/profile_revolt_runtime.jl`
 - comparison-workspace harness guide:
   `../AdaptiveOpticsComparisons/docs/cross-package-benchmark-harness.md`
 - first archived re-anchored result:

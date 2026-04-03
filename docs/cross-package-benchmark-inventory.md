@@ -70,15 +70,15 @@ Relevant available files in [`../REVOLT`](../REVOLT):
   - `generate_IF_and_KL_basis.py`
   - `prepare_pushpull_amplitudes.py`
 
-### 3. External comparison workspace assets
+### 3. REVOLT Julia assets
 
-Relevant files in [`../AdaptiveOpticsComparisons`](../../AdaptiveOpticsComparisons):
+Relevant files in [`../REVOLT/Julia`](../../REVOLT/Julia):
 
 - REVOLT-aligned scenario builders:
-  - [`../AdaptiveOpticsComparisons/julia/support/revolt/common.jl`](../../AdaptiveOpticsComparisons/julia/support/revolt/common.jl)
-  - [`../AdaptiveOpticsComparisons/julia/runners/revolt/shwfs.jl`](../../AdaptiveOpticsComparisons/julia/runners/revolt/shwfs.jl)
-  - [`../AdaptiveOpticsComparisons/julia/runners/revolt/pwfs.jl`](../../AdaptiveOpticsComparisons/julia/runners/revolt/pwfs.jl)
-  - [`../AdaptiveOpticsComparisons/julia/runners/revolt/pwfs_unmod.jl`](../../AdaptiveOpticsComparisons/julia/runners/revolt/pwfs_unmod.jl)
+  - [`../REVOLT/Julia/support/revolt/common.jl`](../../REVOLT/Julia/support/revolt/common.jl)
+  - [`../REVOLT/Julia/runners/revolt/shwfs.jl`](../../REVOLT/Julia/runners/revolt/shwfs.jl)
+  - [`../REVOLT/Julia/runners/revolt/pwfs.jl`](../../REVOLT/Julia/runners/revolt/pwfs.jl)
+  - [`../REVOLT/Julia/runners/revolt/pwfs_unmod.jl`](../../REVOLT/Julia/runners/revolt/pwfs_unmod.jl)
 - TOML parameter assets:
   - `contracts/revolt/common.toml`
   - `contracts/revolt/shwfs.toml`
@@ -86,8 +86,8 @@ Relevant files in [`../AdaptiveOpticsComparisons`](../../AdaptiveOpticsCompariso
   - `contracts/revolt/pwfs_unmod.toml`
   - `contracts/revolt/cameras.toml`
 - benchmark assets:
-  - [`../AdaptiveOpticsComparisons/assets/revolt_like/`](../../AdaptiveOpticsComparisons/assets/revolt_like)
-  - [`../AdaptiveOpticsComparisons/julia/runners/profile_revolt_runtime.jl`](../../AdaptiveOpticsComparisons/julia/runners/profile_revolt_runtime.jl)
+  - [`../REVOLT/Julia/assets/revolt_like/`](../../REVOLT/Julia/assets/revolt_like)
+  - [`../REVOLT/Julia/runners/profile_revolt_runtime.jl`](../../REVOLT/Julia/runners/profile_revolt_runtime.jl)
 
 ## Candidate Scenario Families
 
@@ -133,8 +133,8 @@ Available in:
 
 - AdaptiveOpticsSim main:
   [`scripts/profile_revolt_hil_runtime.jl`](../scripts/profile_revolt_hil_runtime.jl)
-- external comparison workspace:
-  [`../AdaptiveOpticsComparisons/julia/runners/revolt/shwfs.jl`](../../AdaptiveOpticsComparisons/julia/runners/revolt/shwfs.jl)
+- REVOLT Julia:
+  [`../REVOLT/Julia/runners/revolt/shwfs.jl`](../../REVOLT/Julia/runners/revolt/shwfs.jl)
 - REVOLT/SPECULA SH config:
   [`../REVOLT/Python/specula/params_revolt_modal.yml`](../REVOLT/Python/specula/params_revolt_modal.yml)
 
@@ -161,8 +161,8 @@ Purpose:
 
 Available in:
 
-- external comparison workspace:
-  [`../AdaptiveOpticsComparisons/julia/runners/revolt/pwfs.jl`](../../AdaptiveOpticsComparisons/julia/runners/revolt/pwfs.jl)
+- REVOLT Julia:
+  [`../REVOLT/Julia/runners/revolt/pwfs.jl`](../../REVOLT/Julia/runners/revolt/pwfs.jl)
 - REVOLT/SPECULA PWFS config:
   [`../REVOLT/Python/specula/PWFS/params_revolt_modal_PWFS.yml`](../REVOLT/Python/specula/PWFS/params_revolt_modal_PWFS.yml)
 - related maintained main-repo runtime surfaces:
@@ -248,7 +248,7 @@ Current comparability limits:
 
 - Family: `CP-02`
 - Primary comparison:
-  - AdaptiveOpticsSim main / comparison workspace vs REVOLT/SPECULA SH
+  - AdaptiveOpticsSim main / `REVOLT/Julia` vs REVOLT/SPECULA SH
 - Why it is viable now:
   - all three source trees already contain relevant scenario assets
   - detector-backed SH runtime is already benchmarked locally

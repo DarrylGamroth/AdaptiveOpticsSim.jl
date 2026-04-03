@@ -15,7 +15,7 @@ REVOLT-like representative Pyramid WFS benchmark.
 The current maintained surface compares:
 
 - `AdaptiveOpticsSim.jl` `main`
-- `../AdaptiveOpticsComparisons`
+- `../REVOLT/Julia`
 
 on the unmodulated representative PWFS contract.
 
@@ -37,7 +37,7 @@ between the two Julia implementations:
 
 This makes `CP-03` stronger than the earlier contract-only state: the main
 package now has a first-class REVOLT-like PWFS runner with the same coarse
-scenario identity as the comparison-workspace REVOLT runner.
+scenario identity as the `REVOLT/Julia` runner.
 
 ## Known Differences
 
