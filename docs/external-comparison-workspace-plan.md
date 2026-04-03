@@ -543,6 +543,10 @@ Notes:
 
 ### `ECW-4`: Upstream interface-only gaps
 
+Status:
+
+- completed 2026-04-03
+
 Outputs:
 
 - a small list of actual upstream patches, if needed
@@ -561,7 +565,37 @@ Acceptance:
 - the comparison workspace uses stable core interfaces without copying
   comparison logic into `main`
 
+Recorded evidence:
+
+- interface audit:
+  `../AdaptiveOpticsComparisons/docs/upstream-interface-audit.md`
+- localized comparison-side reference harness:
+  `../AdaptiveOpticsComparisons/julia/support/reference_harness.jl`
+- updated comparison harness runner:
+  `../AdaptiveOpticsComparisons/julia/runners/run_cross_package_benchmarks.jl`
+- updated REVOLT runtime runner:
+  `../AdaptiveOpticsComparisons/julia/runners/profile_revolt_runtime.jl`
+- post-audit archived result:
+  `../AdaptiveOpticsComparisons/results/archived/2026-04-03-ecw4-baseline.toml`
+
+Decision:
+
+- no immediate upstream patch is required
+
+Notes:
+
+- exported detector/runtime output surfaces are sufficient for the current
+  maintained comparison workflows
+- the comparison workspace no longer reaches directly into
+  `AdaptiveOpticsSim.jl/test/reference_harness.jl`
+- no generic builder or benchmark API gap is currently blocking the migrated
+  comparison flows
+
 ### `ECW-5`: Retire or freeze `revolt-real`
+
+Status:
+
+- completed 2026-04-03
 
 Outputs:
 
@@ -576,6 +610,20 @@ Recommended end state:
 Acceptance:
 
 - `revolt-real` is no longer treated as an active long-term integration fork
+
+Recorded evidence:
+
+- frozen-fork README redirect:
+  `../AdaptiveOpticsSim.jl-revolt-real/README.md`
+- comparison-workspace migration plan and inventories:
+  - `../AdaptiveOpticsComparisons/docs/revolt-migration-inventory.md`
+  - `../AdaptiveOpticsComparisons/docs/cross-package-benchmark-harness.md`
+  - `../AdaptiveOpticsComparisons/docs/upstream-interface-audit.md`
+
+Disposition:
+
+- `revolt-real` remains as a transitional historical fork with compatibility
+  shims, not as the default home for new comparison work
 
 ## Immediate Upstream Decision
 
