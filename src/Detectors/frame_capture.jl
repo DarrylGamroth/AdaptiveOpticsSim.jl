@@ -177,11 +177,25 @@ end
 sensor_saturation_limit(det::Detector) = sensor_saturation_limit(det.params.sensor, det)
 sensor_saturation_limit(::FrameSensorType, det::Detector) = det.params.full_well
 
-function apply_saturation!(det::Detector)
+function _apply_saturation!(::DetectorDirectPlan, det::Detector)
     full_well = sensor_saturation_limit(det)
     full_well === nothing && return det.state.frame
     clamp!(det.state.frame, zero(eltype(det.state.frame)), full_well)
     return det.state.frame
+end
+
+function _apply_saturation!(::DetectorHostMirrorPlan, det::Detector)
+    full_well = sensor_saturation_limit(det)
+    full_well === nothing && return det.state.frame
+    host = detector_host_frame!(det, det.state.frame)
+    clamp!(host, zero(eltype(host)), full_well)
+    copyto!(det.state.frame, host)
+    return det.state.frame
+end
+
+function apply_saturation!(det::Detector)
+    plan = detector_execution_plan(typeof(execution_style(det.state.frame)), typeof(det))
+    return _apply_saturation!(plan, det)
 end
 
 apply_sensor_statistics!(sensor::FrameSensorType, det::Detector, rng::AbstractRNG) = det.state.frame
@@ -212,7 +226,7 @@ function apply_readout_noise!(det::Detector{<:NoisePhotonReadout}, rng::Abstract
     return add_gaussian_noise!(det.state.frame, det, rng, sigma)
 end
 
-function apply_quantization!(det::Detector)
+function _apply_quantization!(::DetectorDirectPlan, det::Detector)
     bits = det.params.bits
     bits === nothing && return det.state.frame
     levels = exp2(eltype(det.state.frame)(bits))
@@ -227,6 +241,30 @@ function apply_quantization!(det::Detector)
         clamp!(det.state.frame, zero(eltype(det.state.frame)), levels - one(levels))
     end
     return det.state.frame
+end
+
+function _apply_quantization!(::DetectorHostMirrorPlan, det::Detector)
+    bits = det.params.bits
+    bits === nothing && return det.state.frame
+    host = detector_host_frame!(det, det.state.frame)
+    levels = exp2(eltype(host)(bits))
+    full_well = det.params.full_well
+    if full_well === nothing
+        peak = maximum(host)
+        if peak > 0
+            host .*= levels / peak
+        end
+    else
+        host .*= (levels - one(levels)) / full_well
+        clamp!(host, zero(eltype(host)), levels - one(levels))
+    end
+    copyto!(det.state.frame, host)
+    return det.state.frame
+end
+
+function apply_quantization!(det::Detector)
+    plan = detector_execution_plan(typeof(execution_style(det.state.frame)), typeof(det))
+    return _apply_quantization!(plan, det)
 end
 
 subtract_background_map!(::NoBackground, det::Detector) = det.state.frame

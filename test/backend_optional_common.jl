@@ -43,6 +43,8 @@ function run_optional_backend_plan_checks(::Type{AMDGPUBackendTag}, tel, backend
     pyr = PyramidWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
     bio = BioEdgeWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, sensor=HgCdTeAvalancheArraySensor(T=T), T=T, backend=backend)
+    det_capture = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, bits=12, full_well=T(100),
+        sensor=CMOSSensor(T=T), T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = MultiLayerAtmosphere(tel;
         r0=T(0.2),
@@ -65,6 +67,11 @@ function run_optional_backend_plan_checks(::Type{AMDGPUBackendTag}, tel, backend
     @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(pyr.state.intensity), pyr) isa AdaptiveOpticsSim.GroupedStaged2DPlan
     @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(bio.state.intensity), bio) isa AdaptiveOpticsSim.GroupedStaged2DPlan
     @test AdaptiveOpticsSim.detector_execution_plan(typeof(AdaptiveOpticsSim.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.DetectorHostMirrorPlan
+    capture_psf = backend{T}(undef, 4, 4)
+    fill!(capture_psf, T(10))
+    captured = capture!(det_capture, capture_psf; rng=MersenneTwister(2))
+    @test captured isa backend
+    @test maximum(Array(captured)) <= Float64(exp2(T(12)) - one(T))
     @test AdaptiveOpticsSim.reduction_execution_plan(pyr.state.intensity) isa AdaptiveOpticsSim.HostMirrorReductionPlan
     randn_method = which(
         AdaptiveOpticsSim._randn_frame_noise!,
