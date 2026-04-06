@@ -12,6 +12,8 @@ const _config_dir_arg = length(ARGS) >= 2 ? ARGS[2] : get(ENV, "REVOLT_CONFIG_DI
 const _sensor_arg = length(ARGS) >= 3 ? lowercase(ARGS[3]) : "ccd"
 const _response_arg = length(ARGS) >= 4 ? lowercase(ARGS[4]) : "default"
 const _thermal_arg = length(ARGS) >= 5 ? lowercase(ARGS[5]) : "none"
+const _samples_arg = length(ARGS) >= 6 ? parse(Int, ARGS[6]) : 6
+const _warmup_arg = length(ARGS) >= 7 ? parse(Int, ARGS[7]) : 2
 
 if _backend_arg == "cuda"
     import CUDA
@@ -392,4 +394,4 @@ function run_profile(; backend_name::AbstractString="cpu", config_dir::AbstractS
 end
 
 run_profile(; backend_name=_backend_arg, config_dir=_config_dir_arg, sensor_name=_sensor_arg, response_name=_response_arg,
-    thermal_name=_thermal_arg)
+    thermal_name=_thermal_arg, samples=_samples_arg, warmup=_warmup_arg)
