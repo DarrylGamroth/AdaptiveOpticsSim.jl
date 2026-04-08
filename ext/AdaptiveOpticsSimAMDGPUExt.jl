@@ -42,6 +42,10 @@ AdaptiveOpticsSim.grouped_accumulation_plan(
     ::Type{<:AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:AdaptiveOpticsSim.BioEdgeWFS},
 ) = AdaptiveOpticsSim.GroupedStaged2DPlan()
+AdaptiveOpticsSim.sh_sensing_execution_plan(
+    ::Type{<:AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend}},
+    ::Type{<:AdaptiveOpticsSim.ShackHartmann},
+) = AdaptiveOpticsSim.ShackHartmannRocmSafePlan()
 AdaptiveOpticsSim.detector_execution_plan(
     ::Type{<:AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:AdaptiveOpticsSim.Detector},

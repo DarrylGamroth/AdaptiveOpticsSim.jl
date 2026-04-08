@@ -112,7 +112,7 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescop
 end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
-    if sh_rocm_safe_path(wfs)
+    if sh_uses_rocm_safe_sensing_plan(wfs)
         sh_refresh_valid_mask_host!(wfs)
         n = tel.params.resolution
         n_sub = wfs.params.n_subap
@@ -161,7 +161,7 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescop
 end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::SpectralSource)
-    if sh_rocm_safe_path(wfs)
+    if sh_uses_rocm_safe_sensing_plan(wfs)
         fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
         peak = zero(eltype(wfs.state.slopes))
         total_flux = photon_flux(src)
@@ -206,7 +206,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
     if length(ast.sources) == 1
         return sampled_spots_peak!(style, wfs, tel, ast.sources[1])
     end
-    if sh_stacked_asterism_compatible(ast) && !sh_rocm_safe_path(wfs)
+    if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_plan(wfs)
         return sampled_spots_peak_asterism_stacked!(style, wfs, tel, ast)
     end
     fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
@@ -303,7 +303,7 @@ end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     det::AbstractDetector, rng::AbstractRNG)
-    if sh_rocm_safe_path(wfs)
+    if sh_uses_rocm_safe_sensing_plan(wfs)
         sh_refresh_valid_mask_host!(wfs)
         n = tel.params.resolution
         n_sub = wfs.params.n_subap
@@ -358,7 +358,7 @@ end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::SpectralSource,
     det::AbstractDetector, rng::AbstractRNG)
-    if sh_rocm_safe_path(wfs)
+    if sh_uses_rocm_safe_sensing_plan(wfs)
         fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
         total_flux = photon_flux(src)
         @inbounds for sample in src.bundle.samples
@@ -411,7 +411,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
     if length(ast.sources) == 1
         return sampled_spots_peak!(style, wfs, tel, ast.sources[1], det, rng)
     end
-    if sh_stacked_asterism_compatible(ast) && !sh_rocm_safe_path(wfs)
+    if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_plan(wfs)
         return sampled_spots_peak_asterism_stacked!(style, wfs, tel, ast, det, rng)
     end
     fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
@@ -541,7 +541,7 @@ function sh_signal_from_spots!(::ScalarCPUStyle, wfs::ShackHartmann, cutoff::T) 
 end
 
 function sh_signal_from_spots!(::AcceleratorStyle, wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}
-    if sh_rocm_safe_path(wfs)
+    if sh_uses_rocm_safe_sensing_plan(wfs)
         sh_refresh_valid_mask_host!(wfs)
         n_sub = wfs.params.n_subap
         offset = n_sub * n_sub

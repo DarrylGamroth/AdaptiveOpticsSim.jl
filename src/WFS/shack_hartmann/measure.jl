@@ -145,14 +145,14 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
     pad = size(wfs.state.field, 1)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
-    if sh_stacked_asterism_compatible(ast) && !sh_rocm_safe_path(wfs)
+    if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_plan(wfs)
         peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.state.slopes), wfs, tel, ast)
         sync_exported_spots!(wfs)
         sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
         subtract_reference_and_scale!(wfs)
         return wfs.state.slopes
     end
-    if execution_style(wfs.state.slopes) isa AcceleratorStyle && !sh_rocm_safe_path(wfs)
+    if execution_style(wfs.state.slopes) isa AcceleratorStyle && sh_uses_batched_sensing_plan(wfs)
         return measure_sh_asterism_batched!(execution_style(wfs.state.slopes), wfs, tel, ast)
     end
     return measure_sh_asterism_diffractive!(execution_style(wfs.state.slopes), wfs, tel, ast, n, n_sub, sub, pad, ox, oy)
@@ -173,14 +173,14 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
     pad = size(wfs.state.field, 1)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
-    if sh_stacked_asterism_compatible(ast) && !sh_rocm_safe_path(wfs)
+    if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_plan(wfs)
         peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.state.slopes), wfs, tel, ast, det, rng)
         sync_exported_spots!(wfs)
         sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
         subtract_reference_and_scale!(wfs)
         return wfs.state.slopes
     end
-    if execution_style(wfs.state.slopes) isa AcceleratorStyle && !sh_rocm_safe_path(wfs)
+    if execution_style(wfs.state.slopes) isa AcceleratorStyle && sh_uses_batched_sensing_plan(wfs)
         return measure_sh_asterism_batched!(execution_style(wfs.state.slopes), wfs, tel, ast, det, rng)
     end
     return measure_sh_asterism_diffractive!(execution_style(wfs.state.slopes), wfs, tel, ast, det, rng, n, n_sub, sub, pad, ox, oy)
@@ -349,4 +349,3 @@ function measure_sh_asterism_diffractive!(::AcceleratorStyle, wfs::ShackHartmann
     copyto!(wfs.state.slopes, host_slopes)
     return wfs.state.slopes
 end
-

@@ -6,6 +6,7 @@ Plan traceability:
 
 - [platform-strengthening-plan.md](./platform-strengthening-plan.md) `PSP-08`
 - [execution-plan-closeout.md](./execution-plan-closeout.md)
+- [amdgpu-sh-convergence-plan.md](./amdgpu-sh-convergence-plan.md)
 
 ## Purpose
 

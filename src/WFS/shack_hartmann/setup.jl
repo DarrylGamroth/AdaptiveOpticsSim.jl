@@ -272,7 +272,23 @@ sensing_mode(::ShackHartmann{M}) where {M} = M()
 @inline valid_subaperture_policy(wfs::ShackHartmann) = wfs.params.valid_subaperture_policy
 @inline slope_extraction_model(wfs::ShackHartmann) = slope_extraction_model(subaperture_calibration(wfs))
 @inline centroid_threshold(wfs::ShackHartmann) = slope_extraction_model(wfs).threshold
-@inline sh_rocm_safe_path(wfs::ShackHartmann) = gpu_backend_name(typeof(wfs.state.slopes)) === :amdgpu
+
+abstract type AbstractShackHartmannSensingPlan end
+struct ShackHartmannScalarPlan <: AbstractShackHartmannSensingPlan end
+struct ShackHartmannBatchedPlan <: AbstractShackHartmannSensingPlan end
+struct ShackHartmannRocmSafePlan <: AbstractShackHartmannSensingPlan end
+
+@inline sh_sensing_execution_plan(style::ExecutionStyle, wfs::ShackHartmann) =
+    sh_sensing_execution_plan(typeof(style), typeof(wfs))
+@inline sh_sensing_execution_plan(::Type{<:ScalarCPUStyle}, ::Type{<:ShackHartmann}) = ShackHartmannScalarPlan()
+@inline sh_sensing_execution_plan(::Type{<:AcceleratorStyle}, ::Type{<:ShackHartmann}) = ShackHartmannBatchedPlan()
+@inline sh_sensing_execution_plan(wfs::ShackHartmann) =
+    sh_sensing_execution_plan(execution_style(wfs.state.slopes), wfs)
+
+@inline sh_uses_rocm_safe_sensing_plan(wfs::ShackHartmann) =
+    sh_sensing_execution_plan(wfs) isa ShackHartmannRocmSafePlan
+@inline sh_uses_batched_sensing_plan(wfs::ShackHartmann) =
+    sh_sensing_execution_plan(wfs) isa ShackHartmannBatchedPlan
 
 convert_valid_subaperture_policy(policy::GeometryValidSubapertures, ::Type{T}) where {T<:AbstractFloat} =
     GeometryValidSubapertures(threshold=T(policy.threshold), T=T)
