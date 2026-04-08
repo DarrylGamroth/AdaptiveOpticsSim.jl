@@ -52,6 +52,7 @@ The reduced maintained smoke covers:
 - infinite atmosphere
 - atmospheric field propagation
 - polychromatic diffractive SH
+- deterministic diffractive SH detector/export equivalence against CPU
 - curvature-through-atmosphere
 
 For the full maintained GPU smoke matrix, use:
@@ -60,6 +61,17 @@ For the full maintained GPU smoke matrix, use:
 - `ADAPTIVEOPTICS_TEST_FULL_CUDA=1`
 
 which route through [`gpu_smoke_contract.jl`](../scripts/gpu_smoke_contract.jl).
+
+The full GPU smoke matrix now also pins the exact batched Shack-Hartmann
+detector/export surface that previously regressed on CUDA:
+
+- null-noise diffractive SH with detector capture
+- CPU vs GPU comparison of:
+  - [`sh_exported_spot_cube`](../src/WFS/shack_hartmann/setup.jl)
+  - [`wfs_output_frame`](../src/Control/runtime/construction.jl)
+
+This keeps the public exported-pixel surface under backend parity coverage, not
+just the slope output.
 
 ## Benchmark Separation
 

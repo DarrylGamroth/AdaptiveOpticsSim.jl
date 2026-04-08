@@ -416,6 +416,32 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
         return slopes
     end
 
+    record_gpu_smoke!(failures, "measure_shack_diffractive_detector_equivalence") do
+        cpu_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
+            central_obstruction=0.0f0, T=T, backend=Array)
+        cpu_src = Source(band=:I, magnitude=0.0, T=T)
+        cpu_wfs = ShackHartmann(cpu_tel; n_subap=4, mode=Diffractive(), T=T, backend=Array)
+        gpu_wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=BackendArray)
+        cpu_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
+            sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=Array)
+        gpu_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
+            sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=BackendArray)
+
+        measure!(cpu_wfs, cpu_tel, cpu_src, cpu_det; rng=rng)
+        measure!(gpu_wfs, tel, src, gpu_det; rng=rng)
+
+        cpu_export = Array(sh_exported_spot_cube(cpu_wfs))
+        gpu_export = Array(sh_exported_spot_cube(gpu_wfs))
+        cpu_frame = Array(wfs_output_frame(cpu_wfs, cpu_det))
+        gpu_frame = Array(wfs_output_frame(gpu_wfs, gpu_det))
+
+        @assert size(gpu_export) == size(cpu_export)
+        @assert size(gpu_frame) == size(cpu_frame)
+        @assert isapprox(gpu_export, cpu_export; rtol=1f-5, atol=1f-4)
+        @assert isapprox(gpu_frame, cpu_frame; rtol=1f-5, atol=1f-4)
+        return gpu_frame
+    end
+
     record_gpu_smoke!(failures, "measure_pyramid_geometric") do
         wfs = PyramidWFS(tel; n_subap=4, modulation=2.0, T=T, backend=BackendArray)
         slopes = measure!(wfs, tel)
