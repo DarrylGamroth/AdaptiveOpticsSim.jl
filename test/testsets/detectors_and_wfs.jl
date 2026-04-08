@@ -677,6 +677,27 @@
     @test frame_fused == manual_out
 end
 
+@testset "Shack-Hartmann valid subaperture policies" begin
+    tel = Telescope(resolution=352, diameter=1.22, sampling_time=1 / 500)
+    sh_geom = ShackHartmann(tel; n_subap=16, mode=Diffractive(), T=Float32)
+    sh_flux = ShackHartmann(tel;
+        n_subap=16,
+        mode=Diffractive(),
+        valid_subaperture_policy=FluxThresholdValidSubapertures(light_ratio=0.5, T=Float32),
+        T=Float32)
+
+    geom_mask = copy(sh_geom.state.valid_mask_host)
+    flux_mask = copy(sh_flux.state.valid_mask_host)
+
+    @test sum(geom_mask) == 216
+    @test sum(flux_mask) == 208
+    @test flux_mask != geom_mask
+
+    missing = sort!([[idx.I[1] - 1, idx.I[2] - 1] for idx in findall(geom_mask .& .!flux_mask)])
+    @test missing == [[0, 4], [0, 11], [4, 0], [4, 15], [11, 0], [11, 15], [15, 4], [15, 11]]
+    @test isempty(findall(flux_mask .& .!geom_mask))
+end
+
 @testset "Asterism PSF" begin
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src1 = Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0))

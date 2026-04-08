@@ -1,4 +1,19 @@
 abstract type AbstractSlopeExtractionModel end
+abstract type AbstractValidSubaperturePolicy end
+
+struct GeometryValidSubapertures{T<:AbstractFloat} <: AbstractValidSubaperturePolicy
+    threshold::T
+end
+
+struct FluxThresholdValidSubapertures{T<:AbstractFloat} <: AbstractValidSubaperturePolicy
+    light_ratio::T
+end
+
+GeometryValidSubapertures(; threshold::Real=0.1, T::Type{<:AbstractFloat}=typeof(float(threshold))) =
+    GeometryValidSubapertures{T}(T(threshold))
+
+FluxThresholdValidSubapertures(; light_ratio::Real=0.5, T::Type{<:AbstractFloat}=typeof(float(light_ratio))) =
+    FluxThresholdValidSubapertures{T}(T(light_ratio))
 
 struct CenterOfGravityExtraction{T<:AbstractFloat,W<:Union{Nothing,AbstractMatrix{T}}} <: AbstractSlopeExtractionModel
     threshold::T
@@ -60,6 +75,44 @@ end
 function update_subaperture_layout!(layout::SubapertureLayout, pupil::AbstractMatrix{Bool})
     build_mask!(layout.valid_mask, SubapertureGridMask(threshold=layout.threshold, T=typeof(layout.threshold)), pupil)
     copyto!(layout.valid_mask_host, Array(layout.valid_mask))
+    resize!(layout.valid_indices_host, 0)
+    append!(layout.valid_indices_host, findall(layout.valid_mask_host))
+    return layout
+end
+
+function update_subaperture_layout!(layout::SubapertureLayout, pupil::AbstractMatrix{Bool},
+    policy::GeometryValidSubapertures)
+    layout.threshold = convert(typeof(layout.threshold), policy.threshold)
+    build_mask!(layout.valid_mask, SubapertureGridMask(threshold=layout.threshold, T=typeof(layout.threshold)), pupil)
+    copyto!(layout.valid_mask_host, Array(layout.valid_mask))
+    resize!(layout.valid_indices_host, 0)
+    append!(layout.valid_indices_host, findall(layout.valid_mask_host))
+    return layout
+end
+
+function update_subaperture_layout!(layout::SubapertureLayout, support_map::AbstractMatrix{T},
+    policy::FluxThresholdValidSubapertures) where {T<:Real}
+    n_sub = layout.n_subap
+    sub = layout.subap_pixels
+    size(support_map, 1) == n_sub * sub || throw(DimensionMismatchError("support map size must match subaperture layout"))
+    size(support_map, 2) == n_sub * sub || throw(DimensionMismatchError("support map size must match subaperture layout"))
+    support_host = Array(support_map)
+    flux_per_subap = Matrix{Float64}(undef, n_sub, n_sub)
+    peak = 0.0
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        xs = (i - 1) * sub + 1
+        ys = (j - 1) * sub + 1
+        xe = i * sub
+        ye = j * sub
+        total = sum(@view support_host[xs:xe, ys:ye])
+        flux_per_subap[i, j] = total
+        peak = max(peak, total)
+    end
+    cutoff = convert(Float64, policy.light_ratio) * peak
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        layout.valid_mask_host[i, j] = flux_per_subap[i, j] >= cutoff
+    end
+    copyto!(layout.valid_mask, layout.valid_mask_host)
     resize!(layout.valid_indices_host, 0)
     append!(layout.valid_indices_host, findall(layout.valid_mask_host))
     return layout

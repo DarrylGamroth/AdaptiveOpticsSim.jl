@@ -24,7 +24,7 @@ The diffractive model computes focal-plane lenslet spots and converts their
 centroids into x/y slopes. The geometric model bypasses image formation and
 samples the OPD gradient directly.
 """
-struct ShackHartmannParams{T<:AbstractFloat}
+struct ShackHartmannParams{T<:AbstractFloat,VP<:AbstractValidSubaperturePolicy}
     n_subap::Int
     threshold::T
     threshold_cog::T
@@ -34,6 +34,7 @@ struct ShackHartmannParams{T<:AbstractFloat}
     pixel_scale::Union{T,Nothing}
     n_pix_subap::Union{Int,Nothing}
     shannon_sampling::Bool
+    valid_subaperture_policy::VP
 end
 
 mutable struct ShackHartmannState{T<:AbstractFloat,
@@ -132,14 +133,18 @@ spot buffers used by the batched GPU/runtime paths.
 function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     threshold_cog::Real=0.01, threshold_convolution::Real=0.05, half_pixel_shift::Bool=false,
     diffraction_padding::Int=2, pixel_scale=nothing, n_pix_subap=nothing,
-    shannon_sampling::Bool=true, mode::SensingMode=Geometric(),
+    shannon_sampling::Bool=true,
+    valid_subaperture_policy::Union{Nothing,AbstractValidSubaperturePolicy}=nothing,
+    mode::SensingMode=Geometric(),
     T::Type{<:AbstractFloat}=Float64, backend=Array)
     if tel.params.resolution % n_subap != 0
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     end
     pixel_scale_t = pixel_scale === nothing ? nothing : T(pixel_scale)
-    params = ShackHartmannParams{T}(n_subap, T(threshold), T(threshold_cog), T(threshold_convolution), half_pixel_shift, diffraction_padding,
-        pixel_scale_t, n_pix_subap, shannon_sampling)
+    raw_policy = isnothing(valid_subaperture_policy) ? GeometryValidSubapertures(threshold=threshold, T=T) : valid_subaperture_policy
+    policy = convert_valid_subaperture_policy(raw_policy, T)
+    params = ShackHartmannParams{T, typeof(policy)}(n_subap, T(threshold), T(threshold_cog), T(threshold_convolution), half_pixel_shift, diffraction_padding,
+        pixel_scale_t, n_pix_subap, shannon_sampling, policy)
     valid_mask = backend{Bool}(undef, n_subap, n_subap)
     slopes = backend{T}(undef, 2 * n_subap * n_subap)
     fill!(slopes, zero(T))
@@ -264,9 +269,16 @@ end
 sensing_mode(::ShackHartmann{M}) where {M} = M()
 @inline subaperture_layout(wfs::ShackHartmann) = wfs.state.layout
 @inline subaperture_calibration(wfs::ShackHartmann) = wfs.state.calibration
+@inline valid_subaperture_policy(wfs::ShackHartmann) = wfs.params.valid_subaperture_policy
 @inline slope_extraction_model(wfs::ShackHartmann) = slope_extraction_model(subaperture_calibration(wfs))
 @inline centroid_threshold(wfs::ShackHartmann) = slope_extraction_model(wfs).threshold
 @inline sh_rocm_safe_path(wfs::ShackHartmann) = gpu_backend_name(typeof(wfs.state.slopes)) === :amdgpu
+
+convert_valid_subaperture_policy(policy::GeometryValidSubapertures, ::Type{T}) where {T<:AbstractFloat} =
+    GeometryValidSubapertures(threshold=T(policy.threshold), T=T)
+
+convert_valid_subaperture_policy(policy::FluxThresholdValidSubapertures, ::Type{T}) where {T<:AbstractFloat} =
+    FluxThresholdValidSubapertures(light_ratio=T(policy.light_ratio), T=T)
 
 @inline function sh_safe_peak_value(A::AbstractArray{T}) where {T<:AbstractFloat}
     return backend_maximum_value(A)
@@ -278,7 +290,14 @@ end
 end
 
 function update_valid_mask!(wfs::ShackHartmann, tel::Telescope)
-    update_subaperture_layout!(subaperture_layout(wfs), tel.state.pupil)
+    policy = valid_subaperture_policy(wfs)
+    if policy isa GeometryValidSubapertures
+        update_subaperture_layout!(subaperture_layout(wfs), tel.state.pupil, policy)
+    elseif policy isa FluxThresholdValidSubapertures
+        update_subaperture_layout!(subaperture_layout(wfs), tel.state.pupil_reflectivity, policy)
+    else
+        throw(UnsupportedAlgorithm("unsupported valid subaperture policy $(typeof(policy))"))
+    end
     return wfs
 end
 

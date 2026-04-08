@@ -174,6 +174,7 @@ export CCDSensor, CMOSSensor, EMCCDSensor, InGaAsSensor, HgCdTeAvalancheArraySen
 export AbstractCMOSOutputModel, NullCMOSOutputModel, StaticCMOSOutputPattern
 export AbstractEMGainModel, ExcessNoiseApproximation, StochasticMultiplicationRegister
 export ShackHartmann, ShackHartmannParams, ShackHartmannState, update_valid_mask!, measure!
+export AbstractValidSubaperturePolicy, GeometryValidSubapertures, FluxThresholdValidSubapertures
 export PyramidWFS, PyramidParams, PyramidState
 export pyramid_modulation_frame!
 export BioEdgeWFS, BioEdgeParams, BioEdgeState
