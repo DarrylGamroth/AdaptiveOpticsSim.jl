@@ -430,10 +430,10 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
         measure!(cpu_wfs, cpu_tel, cpu_src, cpu_det; rng=rng)
         measure!(gpu_wfs, tel, src, gpu_det; rng=rng)
 
-        cpu_export = Array(sh_exported_spot_cube(cpu_wfs))
-        gpu_export = Array(sh_exported_spot_cube(gpu_wfs))
-        cpu_frame = Array(wfs_output_frame(cpu_wfs, cpu_det))
-        gpu_frame = Array(wfs_output_frame(gpu_wfs, gpu_det))
+        cpu_export = Array(AdaptiveOpticsSim.sh_exported_spot_cube(cpu_wfs))
+        gpu_export = Array(AdaptiveOpticsSim.sh_exported_spot_cube(gpu_wfs))
+        cpu_frame = Array(AdaptiveOpticsSim.wfs_output_frame(cpu_wfs, cpu_det))
+        gpu_frame = Array(AdaptiveOpticsSim.wfs_output_frame(gpu_wfs, gpu_det))
 
         @assert size(gpu_export) == size(cpu_export)
         @assert size(gpu_frame) == size(cpu_frame)
