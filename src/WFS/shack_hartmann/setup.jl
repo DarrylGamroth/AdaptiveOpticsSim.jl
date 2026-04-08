@@ -470,7 +470,8 @@ end
 end
 
 @inline function capture_sampled_spot_stack!(wfs::ShackHartmann, det::AbstractDetector, rng::AbstractRNG)
-    capture_stack!(det, wfs.state.spot_cube, wfs.state.sampled_spot_cube; rng=rng)
+    copyto!(wfs.state.spot_cube, wfs.state.sampled_spot_cube)
+    capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube; rng=rng)
     return wfs.state.spot_cube
 end
 

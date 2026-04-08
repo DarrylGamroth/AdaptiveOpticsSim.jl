@@ -130,6 +130,21 @@ function run_optional_backend_plan_checks(::Type{CUDABackendTag}, tel, backend)
         AdaptiveOpticsSim.execution_style(first(fresnel_prop.state.slices).field.state.field),
         fresnel_prop.params.model,
     ) isa AdaptiveOpticsSim.LayeredFresnelFieldAsyncPlan
+    cpu_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
+        central_obstruction=0.0f0, T=T, backend=Array)
+    cpu_src = Source(band=:I, magnitude=0.0, T=T)
+    cpu_sh = ShackHartmann(cpu_tel; n_subap=4, mode=Diffractive(), T=T, backend=Array)
+    gpu_sh = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
+    cpu_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+        sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=Array)
+    gpu_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+        sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=backend)
+    measure!(cpu_sh, cpu_tel, cpu_src, cpu_det; rng=MersenneTwister(3))
+    measure!(gpu_sh, tel, src, gpu_det; rng=MersenneTwister(3))
+    cpu_export = Array(AdaptiveOpticsSim.sh_exported_spot_cube(cpu_sh))
+    gpu_export = Array(AdaptiveOpticsSim.sh_exported_spot_cube(gpu_sh))
+    @test size(gpu_export) == size(cpu_export)
+    @test isapprox(gpu_export, cpu_export; rtol=1f-5, atol=1f-4)
     return nothing
 end
 
