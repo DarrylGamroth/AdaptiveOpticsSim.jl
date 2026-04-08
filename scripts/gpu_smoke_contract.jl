@@ -419,16 +419,19 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
     record_gpu_smoke!(failures, "measure_shack_diffractive_detector_equivalence") do
         cpu_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
             central_obstruction=0.0f0, T=T, backend=Array)
+        gpu_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
+            central_obstruction=0.0f0, T=T, backend=BackendArray)
         cpu_src = Source(band=:I, magnitude=0.0, T=T)
+        gpu_src = Source(band=:I, magnitude=0.0, T=T)
         cpu_wfs = ShackHartmann(cpu_tel; n_subap=4, mode=Diffractive(), T=T, backend=Array)
-        gpu_wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=BackendArray)
+        gpu_wfs = ShackHartmann(gpu_tel; n_subap=4, mode=Diffractive(), T=T, backend=BackendArray)
         cpu_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
             sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=Array)
         gpu_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
             sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=BackendArray)
 
         measure!(cpu_wfs, cpu_tel, cpu_src, cpu_det; rng=rng)
-        measure!(gpu_wfs, tel, src, gpu_det; rng=rng)
+        measure!(gpu_wfs, gpu_tel, gpu_src, gpu_det; rng=rng)
 
         cpu_export = Array(AdaptiveOpticsSim.sh_exported_spot_cube(cpu_wfs))
         gpu_export = Array(AdaptiveOpticsSim.sh_exported_spot_cube(gpu_wfs))
