@@ -80,6 +80,17 @@ Acceptance:
 - no host `centroid_host` copy in the maintained AMDGPU SH sensing path
 - reduced `sense_mean_ns` and `sense_alloc_bytes`
 
+Current status:
+
+- first direct recovery attempt was rejected
+- replacing the maintained ROCm-safe host loop with the existing batched
+  `sh_spot_centroid_kernel!` caused a GPUCompiler / ROCm segfault on the
+  maintained HEART HIL path
+- a narrower per-spot stats kernel compiled but regressed runtime due to
+  per-subap kernel-launch overhead
+- the kept baseline remains the host-staged ROCm-safe centroid path until a
+  narrower ROCm-specific centroid kernel is proven safe and faster
+
 ### SHP-3: Batched AMDGPU SH Measurement Path
 
 Goal:

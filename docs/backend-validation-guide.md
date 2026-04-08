@@ -12,6 +12,10 @@ Plan traceability:
 
 This document explains how backend validation is organized.
 
+For backend-specific failure history that motivated current fallback plans,
+especially on ROCm/AMDGPU, see
+[rocm-failure-catalog.md](./rocm-failure-catalog.md).
+
 The goal is to keep three distinct classes of evidence separate:
 
 - functional tests in `Pkg.test()`

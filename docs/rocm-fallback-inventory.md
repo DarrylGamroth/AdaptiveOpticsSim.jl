@@ -7,11 +7,15 @@ Plan traceability:
 - [platform-strengthening-plan.md](./platform-strengthening-plan.md) `PSP-08`
 - [execution-plan-closeout.md](./execution-plan-closeout.md)
 - [amdgpu-sh-convergence-plan.md](./amdgpu-sh-convergence-plan.md)
+- [rocm-failure-catalog.md](./rocm-failure-catalog.md)
 
 ## Purpose
 
 This note records the remaining explicit ROCm-specific fallback surfaces after
 the execution-plan rollout and the Phase 3 cleanup pass.
+
+For the underlying "what exactly failed on ROCm and why this fallback exists"
+detail, see [rocm-failure-catalog.md](./rocm-failure-catalog.md).
 
 The goal is to keep the remaining workaround debt:
 
