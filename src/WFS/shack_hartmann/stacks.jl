@@ -443,6 +443,71 @@ end
     end
 end
 
+@kernel function sh_spot_cutoff_stats_kernel!(stats, spot_cube, valid_mask, cutoff, n_sub::Int, n1::Int, n2::Int)
+    idx = @index(Global, Linear)
+    n_spots = n_sub * n_sub
+    if idx <= n_spots
+        i = (idx - 1) ÷ n_sub + 1
+        j = idx - (i - 1) * n_sub
+        base = 3 * (idx - 1)
+        T = eltype(stats)
+        total = zero(T)
+        sx = zero(T)
+        sy = zero(T)
+        if @inbounds valid_mask[i, j]
+            @inbounds for x in 1:n1, y in 1:n2
+                val = spot_cube[idx, x, y]
+                if val >= cutoff
+                    total += val
+                    sx += T(x - 1) * val
+                    sy += T(y - 1) * val
+                end
+            end
+            if total > 0
+                sx /= total
+                sy /= total
+            end
+        end
+        @inbounds begin
+            stats[base + 1] = total
+            stats[base + 2] = sx
+            stats[base + 3] = sy
+        end
+    end
+end
+
+@kernel function sh_finalize_spot_slopes_kernel!(slopes, stats, valid_mask, n_sub::Int, offset::Int)
+    idx = @index(Global, Linear)
+    n_spots = n_sub * n_sub
+    if idx <= n_spots
+        i = (idx - 1) ÷ n_sub + 1
+        j = idx - (i - 1) * n_sub
+        base = 3 * (idx - 1)
+        T = eltype(slopes)
+        if @inbounds valid_mask[i, j]
+            total = @inbounds stats[base + 1]
+            if total > zero(T)
+                sx = @inbounds stats[base + 2] / total
+                sy = @inbounds stats[base + 3] / total
+                @inbounds begin
+                    slopes[idx] = sy
+                    slopes[idx + offset] = sx
+                end
+            else
+                @inbounds begin
+                    slopes[idx] = zero(T)
+                    slopes[idx + offset] = zero(T)
+                end
+            end
+        else
+            @inbounds begin
+                slopes[idx] = zero(T)
+                slopes[idx + offset] = zero(T)
+            end
+        end
+    end
+end
+
 @kernel function zero_invalid_spots_kernel!(spot_cube, valid_mask, n_sub::Int, n1::Int, n2::Int)
     idx, x, y = @index(Global, NTuple)
     n_spots = n_sub * n_sub

@@ -276,6 +276,7 @@ sensing_mode(::ShackHartmann{M}) where {M} = M()
 abstract type AbstractShackHartmannSensingPlan end
 struct ShackHartmannScalarPlan <: AbstractShackHartmannSensingPlan end
 struct ShackHartmannBatchedPlan <: AbstractShackHartmannSensingPlan end
+struct ShackHartmannDeviceStatsPlan <: AbstractShackHartmannSensingPlan end
 struct ShackHartmannRocmSafePlan <: AbstractShackHartmannSensingPlan end
 
 @inline sh_sensing_execution_plan(style::ExecutionStyle, wfs::ShackHartmann) =
@@ -289,6 +290,8 @@ struct ShackHartmannRocmSafePlan <: AbstractShackHartmannSensingPlan end
     sh_sensing_execution_plan(wfs) isa ShackHartmannRocmSafePlan
 @inline sh_uses_batched_sensing_plan(wfs::ShackHartmann) =
     sh_sensing_execution_plan(wfs) isa ShackHartmannBatchedPlan
+@inline sh_uses_device_stats_sensing_plan(wfs::ShackHartmann) =
+    sh_sensing_execution_plan(wfs) isa ShackHartmannDeviceStatsPlan
 
 convert_valid_subaperture_policy(policy::GeometryValidSubapertures, ::Type{T}) where {T<:AbstractFloat} =
     GeometryValidSubapertures(threshold=T(policy.threshold), T=T)
