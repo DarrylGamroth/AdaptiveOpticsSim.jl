@@ -211,6 +211,32 @@ function run_optional_backend_plan_checks(::Type{AMDGPUBackendTag}, tel, backend
     AdaptiveOpticsSim.capture_stack!(gpu_gen_det, gpu_gen_out, gpu_gen_input; rng=MersenneTwister(14))
     @test gpu_gen_out isa backend
     @test Array(gpu_gen_out) == cpu_gen_out
+
+    cpu_windowed_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1,
+        gain=T(1.0),
+        sensor=HgCdTeAvalancheArraySensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
+        response_model=NullFrameResponse(),
+        readout_window=FrameWindow(2:3, 2:3),
+        T=T,
+        backend=Array)
+    gpu_windowed_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1,
+        gain=T(1.0),
+        sensor=HgCdTeAvalancheArraySensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
+        response_model=NullFrameResponse(),
+        readout_window=FrameWindow(2:3, 2:3),
+        T=T,
+        backend=backend)
+    windowed_input = fill(T(10), 4, 4)
+    cpu_windowed_frame = capture!(cpu_windowed_det, windowed_input; rng=MersenneTwister(15))
+    gpu_windowed_frame = capture!(gpu_windowed_det, backend(copy(windowed_input)); rng=MersenneTwister(15))
+    @test isapprox(Array(gpu_windowed_frame), cpu_windowed_frame; rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(detector_reference_frame(gpu_windowed_det)), detector_reference_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(detector_signal_frame(gpu_windowed_det)), detector_signal_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(detector_combined_frame(gpu_windowed_det)), detector_combined_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(detector_reference_cube(gpu_windowed_det)), detector_reference_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(detector_signal_cube(gpu_windowed_det)), detector_signal_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(detector_read_cube(gpu_windowed_det)), detector_read_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test detector_read_times(gpu_windowed_det) == detector_read_times(cpu_windowed_det)
     return nothing
 end
 
@@ -382,6 +408,32 @@ function run_optional_backend_plan_checks(::Type{CUDABackendTag}, tel, backend)
     AdaptiveOpticsSim.capture_stack!(gpu_gen_det, gpu_gen_out, gpu_gen_input; rng=MersenneTwister(14))
     @test gpu_gen_out isa backend
     @test Array(gpu_gen_out) == cpu_gen_out
+
+    cpu_windowed_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1,
+        gain=T(1.0),
+        sensor=HgCdTeAvalancheArraySensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
+        response_model=NullFrameResponse(),
+        readout_window=FrameWindow(2:3, 2:3),
+        T=T,
+        backend=Array)
+    gpu_windowed_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1,
+        gain=T(1.0),
+        sensor=HgCdTeAvalancheArraySensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
+        response_model=NullFrameResponse(),
+        readout_window=FrameWindow(2:3, 2:3),
+        T=T,
+        backend=backend)
+    windowed_input = fill(T(10), 4, 4)
+    cpu_windowed_frame = capture!(cpu_windowed_det, windowed_input; rng=MersenneTwister(15))
+    gpu_windowed_frame = capture!(gpu_windowed_det, backend(copy(windowed_input)); rng=MersenneTwister(15))
+    @test isapprox(Array(gpu_windowed_frame), cpu_windowed_frame; rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(detector_reference_frame(gpu_windowed_det)), detector_reference_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(detector_signal_frame(gpu_windowed_det)), detector_signal_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(detector_combined_frame(gpu_windowed_det)), detector_combined_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(detector_reference_cube(gpu_windowed_det)), detector_reference_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(detector_signal_cube(gpu_windowed_det)), detector_signal_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(detector_read_cube(gpu_windowed_det)), detector_read_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test detector_read_times(gpu_windowed_det) == detector_read_times(cpu_windowed_det)
 
     return nothing
 end

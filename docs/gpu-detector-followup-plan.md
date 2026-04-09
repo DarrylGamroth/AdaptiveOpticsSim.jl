@@ -25,6 +25,13 @@ Current state:
   - AMDGPU: `capture ≈ 0.488 ms`, `write_output! ≈ 0.0245 ms`
   - CUDA: `capture ≈ 4.91 ms`, `write_output! ≈ 0.0119 ms`
   - conclusion: window extraction / integer packing is already device-native and not the dominant cost on the maintained direct-frame path
+- a windowed HgCdTe readout-product fast path was prototyped and rejected:
+  - it preserved deterministic CPU/GPU parity on AMDGPU and CUDA
+  - but it regressed warmed runtime against the old full-cube branch on both backends
+  - measured microbenchmark:
+    - AMDGPU: `new ≈ 62.31 ms`, `old ≈ 26.29 ms`
+    - CUDA: `new ≈ 34.56 ms`, `old ≈ 1.08 ms`
+  - conclusion: repeated windowed slice copies are a worse GPU shape than the existing full-cube path on this maintained surface
 
 Highest-value next targets:
 1. Detector finalization on maintained frame surfaces
@@ -35,9 +42,8 @@ Highest-value next targets:
      - no regression on maintained HEART surfaces
 
 2. HgCdTe readout-product surfaces
-   - profile whether readout-product construction is a maintained bottleneck
-   - likely higher-value than direct `write_output!`, because the current windowed HgCdTe path still builds full sampling cubes before copying windowed products
-   - only optimize if it shows up in maintained workloads
+   - only revisit if a maintained workload shows the current full-cube path is a real bottleneck
+   - any replacement should avoid per-read windowed slice copies and prove a warmed runtime win on both AMDGPU and CUDA
 
 Design rules:
 - preserve detector semantics and user-facing APIs
@@ -54,7 +60,7 @@ Execution order:
    - current result: not worth keeping on maintained AMDGPU/CUDA surfaces yet
 5. profile direct `write_output!` on maintained GPU detector surfaces
    - current result: already cheap; no further action justified
-6. only optimize HgCdTe readout products if they show up as a maintained workload bottleneck
+6. only revisit HgCdTe readout products if they show up as a maintained workload bottleneck
 
 Stop/go criteria:
 - keep a new GPU path only if:
