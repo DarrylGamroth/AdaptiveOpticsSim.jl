@@ -121,27 +121,39 @@ function run_optional_backend_plan_checks(::Type{AMDGPUBackendTag}, tel, backend
     )
     @test isapprox(Array(gpu_sh_stats.state.slopes), cpu_sh_stats.state.slopes; rtol=1f-5, atol=1f-4)
 
-    cpu_corr_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-        sensor=HgCdTeAvalancheArraySensor(T=T),
-        response_model=NullFrameResponse(),
-        correction_model=ReferencePixelCommonModeCorrection(1, 1),
-        T=T,
-        backend=Array)
-    gpu_corr_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-        sensor=HgCdTeAvalancheArraySensor(T=T),
-        response_model=NullFrameResponse(),
-        correction_model=ReferencePixelCommonModeCorrection(1, 1),
-        T=T,
-        backend=backend)
+    correction_models = (
+        ReferencePixelCommonModeCorrection(1, 1),
+        ReferenceRowCommonModeCorrection(1),
+        ReferenceColumnCommonModeCorrection(1),
+        ReferenceOutputCommonModeCorrection(2; edge_rows=1, edge_cols=1),
+        CompositeFrameReadoutCorrection((
+            ReferenceRowCommonModeCorrection(1),
+            ReferenceColumnCommonModeCorrection(1),
+        )),
+    )
     corr_input = reshape(T.(1:96), 2, 6, 8)
-    cpu_corr_cube = copy(corr_input)
-    gpu_corr_cube = backend(copy(corr_input))
-    cpu_corr_scratch = similar(cpu_corr_cube)
-    gpu_corr_scratch = similar(gpu_corr_cube)
-    AdaptiveOpticsSim.capture_stack!(cpu_corr_det, cpu_corr_cube, cpu_corr_scratch; rng=MersenneTwister(11))
-    AdaptiveOpticsSim.capture_stack!(gpu_corr_det, gpu_corr_cube, gpu_corr_scratch; rng=MersenneTwister(11))
-    @test gpu_corr_cube isa backend
-    @test isapprox(Array(gpu_corr_cube), cpu_corr_cube; rtol=1f-5, atol=1f-4)
+    for correction_model in correction_models
+        cpu_corr_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+            sensor=HgCdTeAvalancheArraySensor(T=T),
+            response_model=NullFrameResponse(),
+            correction_model=correction_model,
+            T=T,
+            backend=Array)
+        gpu_corr_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+            sensor=HgCdTeAvalancheArraySensor(T=T),
+            response_model=NullFrameResponse(),
+            correction_model=correction_model,
+            T=T,
+            backend=backend)
+        cpu_corr_cube = copy(corr_input)
+        gpu_corr_cube = backend(copy(corr_input))
+        cpu_corr_scratch = similar(cpu_corr_cube)
+        gpu_corr_scratch = similar(gpu_corr_cube)
+        AdaptiveOpticsSim.capture_stack!(cpu_corr_det, cpu_corr_cube, cpu_corr_scratch; rng=MersenneTwister(11))
+        AdaptiveOpticsSim.capture_stack!(gpu_corr_det, gpu_corr_cube, gpu_corr_scratch; rng=MersenneTwister(11))
+        @test gpu_corr_cube isa backend
+        @test isapprox(Array(gpu_corr_cube), cpu_corr_cube; rtol=1f-5, atol=1f-4)
+    end
     return nothing
 end
 
@@ -223,27 +235,39 @@ function run_optional_backend_plan_checks(::Type{CUDABackendTag}, tel, backend)
     )
     @test isapprox(Array(gpu_sh_stats.state.slopes), cpu_sh_stats.state.slopes; rtol=1f-5, atol=1f-4)
 
-    cpu_corr_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-        sensor=HgCdTeAvalancheArraySensor(T=T),
-        response_model=NullFrameResponse(),
-        correction_model=ReferencePixelCommonModeCorrection(1, 1),
-        T=T,
-        backend=Array)
-    gpu_corr_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-        sensor=HgCdTeAvalancheArraySensor(T=T),
-        response_model=NullFrameResponse(),
-        correction_model=ReferencePixelCommonModeCorrection(1, 1),
-        T=T,
-        backend=backend)
+    correction_models = (
+        ReferencePixelCommonModeCorrection(1, 1),
+        ReferenceRowCommonModeCorrection(1),
+        ReferenceColumnCommonModeCorrection(1),
+        ReferenceOutputCommonModeCorrection(2; edge_rows=1, edge_cols=1),
+        CompositeFrameReadoutCorrection((
+            ReferenceRowCommonModeCorrection(1),
+            ReferenceColumnCommonModeCorrection(1),
+        )),
+    )
     corr_input = reshape(T.(1:96), 2, 6, 8)
-    cpu_corr_cube = copy(corr_input)
-    gpu_corr_cube = backend(copy(corr_input))
-    cpu_corr_scratch = similar(cpu_corr_cube)
-    gpu_corr_scratch = similar(gpu_corr_cube)
-    AdaptiveOpticsSim.capture_stack!(cpu_corr_det, cpu_corr_cube, cpu_corr_scratch; rng=MersenneTwister(11))
-    AdaptiveOpticsSim.capture_stack!(gpu_corr_det, gpu_corr_cube, gpu_corr_scratch; rng=MersenneTwister(11))
-    @test gpu_corr_cube isa backend
-    @test isapprox(Array(gpu_corr_cube), cpu_corr_cube; rtol=1f-5, atol=1f-4)
+    for correction_model in correction_models
+        cpu_corr_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+            sensor=HgCdTeAvalancheArraySensor(T=T),
+            response_model=NullFrameResponse(),
+            correction_model=correction_model,
+            T=T,
+            backend=Array)
+        gpu_corr_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+            sensor=HgCdTeAvalancheArraySensor(T=T),
+            response_model=NullFrameResponse(),
+            correction_model=correction_model,
+            T=T,
+            backend=backend)
+        cpu_corr_cube = copy(corr_input)
+        gpu_corr_cube = backend(copy(corr_input))
+        cpu_corr_scratch = similar(cpu_corr_cube)
+        gpu_corr_scratch = similar(gpu_corr_cube)
+        AdaptiveOpticsSim.capture_stack!(cpu_corr_det, cpu_corr_cube, cpu_corr_scratch; rng=MersenneTwister(11))
+        AdaptiveOpticsSim.capture_stack!(gpu_corr_det, gpu_corr_cube, gpu_corr_scratch; rng=MersenneTwister(11))
+        @test gpu_corr_cube isa backend
+        @test isapprox(Array(gpu_corr_cube), cpu_corr_cube; rtol=1f-5, atol=1f-4)
+    end
 
     return nothing
 end

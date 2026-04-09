@@ -213,6 +213,161 @@ function _batched_apply_readout_correction!(style::AcceleratorStyle, model::Refe
     return cube
 end
 
+@kernel function reference_row_bias_kernel!(scratch, cube, edge_cols::Int, n::Int, m::Int)
+    batch_idx, row_idx = @index(Global, NTuple)
+    if batch_idx <= size(cube, 1) && row_idx <= n
+        T = eltype(cube)
+        n_edge = min(edge_cols, m)
+        total = zero(T)
+        count = 0
+        @inbounds begin
+            if n_edge > 0
+                for j in 1:n_edge
+                    total += cube[batch_idx, row_idx, j]
+                end
+                count += n_edge
+                if m > n_edge
+                    for j in (m - n_edge + 1):m
+                        total += cube[batch_idx, row_idx, j]
+                    end
+                    count += n_edge
+                end
+            end
+            scratch[batch_idx, row_idx, 1] = count > 0 ? total / T(count) : zero(T)
+        end
+    end
+end
+
+@kernel function subtract_row_bias_kernel!(cube, scratch, n::Int, m::Int)
+    batch_idx, row_idx, col_idx = @index(Global, NTuple)
+    if batch_idx <= size(cube, 1) && row_idx <= n && col_idx <= m
+        @inbounds cube[batch_idx, row_idx, col_idx] -= scratch[batch_idx, row_idx, 1]
+    end
+end
+
+function _batched_apply_readout_correction!(style::AcceleratorStyle, model::ReferenceRowCommonModeCorrection,
+    cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
+    n = size(cube, 2)
+    m = size(cube, 3)
+    launch_kernel!(style, reference_row_bias_kernel!, scratch, cube, model.edge_cols, n, m;
+        ndrange=(size(cube, 1), n))
+    launch_kernel!(style, subtract_row_bias_kernel!, cube, scratch, n, m; ndrange=size(cube))
+    return cube
+end
+
+@kernel function reference_column_bias_kernel!(scratch, cube, edge_rows::Int, n::Int, m::Int)
+    batch_idx, col_idx = @index(Global, NTuple)
+    if batch_idx <= size(cube, 1) && col_idx <= m
+        T = eltype(cube)
+        n_edge = min(edge_rows, n)
+        total = zero(T)
+        count = 0
+        @inbounds begin
+            if n_edge > 0
+                for i in 1:n_edge
+                    total += cube[batch_idx, i, col_idx]
+                end
+                count += n_edge
+                if n > n_edge
+                    for i in (n - n_edge + 1):n
+                        total += cube[batch_idx, i, col_idx]
+                    end
+                    count += n_edge
+                end
+            end
+            scratch[batch_idx, 1, col_idx] = count > 0 ? total / T(count) : zero(T)
+        end
+    end
+end
+
+@kernel function subtract_column_bias_kernel!(cube, scratch, n::Int, m::Int)
+    batch_idx, row_idx, col_idx = @index(Global, NTuple)
+    if batch_idx <= size(cube, 1) && row_idx <= n && col_idx <= m
+        @inbounds cube[batch_idx, row_idx, col_idx] -= scratch[batch_idx, 1, col_idx]
+    end
+end
+
+function _batched_apply_readout_correction!(style::AcceleratorStyle, model::ReferenceColumnCommonModeCorrection,
+    cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
+    n = size(cube, 2)
+    m = size(cube, 3)
+    launch_kernel!(style, reference_column_bias_kernel!, scratch, cube, model.edge_rows, n, m;
+        ndrange=(size(cube, 1), m))
+    launch_kernel!(style, subtract_column_bias_kernel!, cube, scratch, n, m; ndrange=size(cube))
+    return cube
+end
+
+@kernel function reference_output_bias_kernel!(scratch, cube, output_cols::Int, edge_rows::Int, edge_cols::Int, n::Int, m::Int)
+    batch_idx, block_idx = @index(Global, NTuple)
+    n_blocks = cld(m, output_cols)
+    if batch_idx <= size(cube, 1) && block_idx <= n_blocks
+        T = eltype(cube)
+        col_lo = (block_idx - 1) * output_cols + 1
+        col_hi = min(col_lo + output_cols - 1, m)
+        block_m = col_hi - col_lo + 1
+        n_edge_rows = min(edge_rows, n)
+        n_edge_cols = min(edge_cols, block_m)
+        total = zero(T)
+        count = 0
+        @inbounds begin
+            if n_edge_rows > 0
+                for i in 1:n_edge_rows, j in col_lo:col_hi
+                    total += cube[batch_idx, i, j]
+                end
+                count += n_edge_rows * block_m
+                if n > n_edge_rows
+                    for i in (n - n_edge_rows + 1):n, j in col_lo:col_hi
+                        total += cube[batch_idx, i, j]
+                    end
+                    count += n_edge_rows * block_m
+                end
+            end
+            row_lo = n_edge_rows + 1
+            row_hi = n - n_edge_rows
+            if n_edge_cols > 0 && row_lo <= row_hi
+                for i in row_lo:row_hi, j in col_lo:(col_lo + n_edge_cols - 1)
+                    total += cube[batch_idx, i, j]
+                end
+                count += (row_hi - row_lo + 1) * n_edge_cols
+                if block_m > n_edge_cols
+                    for i in row_lo:row_hi, j in (col_hi - n_edge_cols + 1):col_hi
+                        total += cube[batch_idx, i, j]
+                    end
+                    count += (row_hi - row_lo + 1) * n_edge_cols
+                end
+            end
+            scratch[batch_idx, block_idx, 1] = count > 0 ? total / T(count) : zero(T)
+        end
+    end
+end
+
+@kernel function subtract_output_bias_kernel!(cube, scratch, output_cols::Int, n::Int, m::Int)
+    batch_idx, row_idx, col_idx = @index(Global, NTuple)
+    if batch_idx <= size(cube, 1) && row_idx <= n && col_idx <= m
+        block_idx = (col_idx - 1) ÷ output_cols + 1
+        @inbounds cube[batch_idx, row_idx, col_idx] -= scratch[batch_idx, block_idx, 1]
+    end
+end
+
+function _batched_apply_readout_correction!(style::AcceleratorStyle, model::ReferenceOutputCommonModeCorrection,
+    cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
+    n = size(cube, 2)
+    m = size(cube, 3)
+    n_blocks = cld(m, model.output_cols)
+    launch_kernel!(style, reference_output_bias_kernel!, scratch, cube, model.output_cols, model.edge_rows,
+        model.edge_cols, n, m; ndrange=(size(cube, 1), n_blocks))
+    launch_kernel!(style, subtract_output_bias_kernel!, cube, scratch, model.output_cols, n, m; ndrange=size(cube))
+    return cube
+end
+
+function _batched_apply_readout_correction!(style::AcceleratorStyle, model::CompositeFrameReadoutCorrection,
+    cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
+    for stage in model.stages
+        _batched_apply_readout_correction!(style, stage, cube, scratch)
+    end
+    return cube
+end
+
 function _batched_readout_noise!(det::Detector{<:NoiseReadout}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
     _batched_randn_noise_async!(execution_style(cube), det, scratch, rng)
     sigma = effective_readout_sigma(det.params.sensor, det.noise.sigma)
