@@ -1,0 +1,111 @@
+# Release Validation Runbook
+
+Status: active
+
+## Purpose
+
+This runbook defines the maintained release-validation entry point for
+AdaptiveOpticsSim.jl.
+
+It is intentionally operational: the goal is to make the defended validation
+surface easy to rerun before a release or a production handoff.
+
+## Primary Entry Point
+
+Use:
+
+- [run_release_validation.sh](../scripts/run_release_validation.sh)
+
+From the repository root:
+
+```bash
+./scripts/run_release_validation.sh
+```
+
+This always runs:
+
+- full CPU `Pkg.test()`
+
+Optional validation tracks are enabled through environment flags:
+
+```bash
+ADAPTIVEOPTICS_VALIDATE_CUDA=1 ./scripts/run_release_validation.sh
+ADAPTIVEOPTICS_VALIDATE_AMDGPU=1 ./scripts/run_release_validation.sh
+ADAPTIVEOPTICS_VALIDATE_COMPARISONS=1 ./scripts/run_release_validation.sh
+```
+
+They may be combined:
+
+```bash
+ADAPTIVEOPTICS_VALIDATE_CUDA=1 \
+ADAPTIVEOPTICS_VALIDATE_AMDGPU=1 \
+ADAPTIVEOPTICS_VALIDATE_COMPARISONS=1 \
+./scripts/run_release_validation.sh
+```
+
+## What Each Track Does
+
+### CPU
+
+Always runs:
+
+- `julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'`
+
+This is the baseline production gate.
+
+### CUDA
+
+Enabled with:
+
+- `ADAPTIVEOPTICS_VALIDATE_CUDA=1`
+
+Runs:
+
+- [gpu_smoke_cuda.jl](../scripts/gpu_smoke_cuda.jl)
+- [gpu_runtime_equivalence_cuda.jl](../scripts/gpu_runtime_equivalence_cuda.jl)
+
+Use this on a CUDA-capable host with `CUDA.jl` available in the project
+environment.
+
+### AMDGPU
+
+Enabled with:
+
+- `ADAPTIVEOPTICS_VALIDATE_AMDGPU=1`
+
+Runs:
+
+- [gpu_smoke_amdgpu.jl](../scripts/gpu_smoke_amdgpu.jl)
+- [gpu_runtime_equivalence_amdgpu.jl](../scripts/gpu_runtime_equivalence_amdgpu.jl)
+
+Use this on an AMDGPU-capable host with `AMDGPU.jl` available in the project
+environment.
+
+### Cross-package comparisons
+
+Enabled with:
+
+- `ADAPTIVEOPTICS_VALIDATE_COMPARISONS=1`
+
+Runs the maintained HEART all-package ladder in the sibling comparison
+workspace when it exists:
+
+- [/home/dgamroth/workspaces/codex/AdaptiveOpticsComparisons/contracts/heart_hil.toml](/home/dgamroth/workspaces/codex/AdaptiveOpticsComparisons/contracts/heart_hil.toml)
+
+If the sibling comparison workspace is absent, this track skips cleanly.
+
+## Interpretation
+
+Before a release or production handoff:
+
+1. CPU validation must pass.
+2. CUDA validation must pass if CUDA is in the supported delivery scope.
+3. AMDGPU validation must pass if AMDGPU is in the supported delivery scope.
+4. Cross-package HEART comparison should be rerun when external equivalence
+   claims are part of the release story.
+
+Use together with:
+
+- [supported-production-surfaces.md](./supported-production-surfaces.md)
+- [production-readiness-checklist.md](./production-readiness-checklist.md)
+- [backend-validation-guide.md](./backend-validation-guide.md)

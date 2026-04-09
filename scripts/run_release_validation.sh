@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+COMPARISON_ROOT="${ROOT_DIR%/AdaptiveOpticsSim.jl}/AdaptiveOpticsComparisons"
+STAMP="$(date +%F)"
+
+run_step() {
+    local label="$1"
+    shift
+    echo "==> ${label}"
+    "$@"
+}
+
+cd "${ROOT_DIR}"
+
+run_step "CPU full test suite" \
+    julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'
+
+if [[ "${ADAPTIVEOPTICS_VALIDATE_CUDA:-0}" == "1" ]]; then
+    run_step "CUDA smoke" \
+        julia --project=. --startup-file=no scripts/gpu_smoke_cuda.jl
+    run_step "CUDA runtime equivalence" \
+        julia --project=. --startup-file=no scripts/gpu_runtime_equivalence_cuda.jl
+fi
+
+if [[ "${ADAPTIVEOPTICS_VALIDATE_AMDGPU:-0}" == "1" ]]; then
+    run_step "AMDGPU smoke" \
+        julia --project=. --startup-file=no scripts/gpu_smoke_amdgpu.jl
+    run_step "AMDGPU runtime equivalence" \
+        julia --project=. --startup-file=no scripts/gpu_runtime_equivalence_amdgpu.jl
+fi
+
+if [[ "${ADAPTIVEOPTICS_VALIDATE_COMPARISONS:-0}" == "1" ]]; then
+    if [[ -d "${COMPARISON_ROOT}" ]]; then
+        run_step "HEART all-package runtime ladder" \
+            bash -lc "cd '${COMPARISON_ROOT}' && julia --project=. --startup-file=no julia/runners/run_cross_package_benchmarks.jl contracts/heart_hil.toml results/archived/${STAMP}-heart-hil-all-packages.toml"
+    else
+        echo "==> Skipping cross-package comparisons: ${COMPARISON_ROOT} not found"
+    fi
+fi
+
+echo "==> Release validation completed"

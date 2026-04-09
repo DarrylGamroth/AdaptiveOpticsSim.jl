@@ -22,6 +22,11 @@ The goal is to keep three distinct classes of evidence separate:
 - optional backend smoke/parity checks in `Pkg.test()`
 - benchmark and profile evidence outside `Pkg.test()`
 
+For current release/support scope, use:
+
+- [supported-production-surfaces.md](./supported-production-surfaces.md)
+- [production-readiness-checklist.md](./production-readiness-checklist.md)
+
 ## Test Layout
 
 ### Functional and subsystem tests
@@ -95,6 +100,29 @@ This separation exists so:
 - unit tests stay reasonably fast
 - optional GPU availability does not block normal development
 - benchmark evidence remains intentional and archived rather than implicit
+
+## Automation
+
+Checked-in CI automation now exists in:
+
+- [../.github/workflows/cpu-validation.yml](../.github/workflows/cpu-validation.yml)
+- [../.github/workflows/cuda-backend-validation.yml](../.github/workflows/cuda-backend-validation.yml)
+- [../.github/workflows/amdgpu-backend-validation.yml](../.github/workflows/amdgpu-backend-validation.yml)
+
+Current intent:
+
+- CPU workflow:
+  - runs the normal `Pkg.test()` suite on a hosted runner
+- CUDA workflow:
+  - targets a self-hosted runner labeled `self-hosted`, `linux`, `cuda`
+  - runs the maintained CUDA smoke and runtime-equivalence scripts
+- AMDGPU workflow:
+  - targets a self-hosted runner labeled `self-hosted`, `linux`, `amdgpu`
+  - runs the maintained AMDGPU smoke and runtime-equivalence scripts
+
+These workflows are part of production hardening, but they are only fully
+effective once the expected self-hosted GPU runners are actually registered and
+kept healthy.
 
 ## Validation Rule
 
