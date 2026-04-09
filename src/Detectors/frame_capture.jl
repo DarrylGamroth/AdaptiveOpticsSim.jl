@@ -441,7 +441,7 @@ end
 
 function _apply_readout_correction!(::DetectorDirectPlan, model::FrameReadoutCorrectionModel,
     frame::AbstractMatrix{T}, det::Detector) where {T<:AbstractFloat}
-    return apply_readout_correction!(model, frame)
+    return _apply_readout_correction!(execution_style(frame), model, frame, det)
 end
 
 function _apply_readout_correction!(::DetectorDirectPlan, model::FrameReadoutCorrectionModel,
@@ -449,8 +449,37 @@ function _apply_readout_correction!(::DetectorDirectPlan, model::FrameReadoutCor
     return apply_readout_correction!(model, cube)
 end
 
+function _detector_readout_scratch!(det::Detector, frame::AbstractMatrix{T}) where {T<:AbstractFloat}
+    if size(det.state.noise_buffer) != size(frame)
+        det.state.noise_buffer = similar(det.state.noise_buffer, size(frame)...)
+        fill!(det.state.noise_buffer, zero(eltype(det.state.noise_buffer)))
+    end
+    return det.state.noise_buffer
+end
+
+function _apply_readout_correction!(::ScalarCPUStyle, model::FrameReadoutCorrectionModel,
+    frame::AbstractMatrix{T}, det::Detector) where {T<:AbstractFloat}
+    return apply_readout_correction!(model, frame)
+end
+
+function _apply_readout_correction!(style::AcceleratorStyle, model::FrameReadoutCorrectionModel,
+    frame::AbstractMatrix{T}, det::Detector) where {T<:AbstractFloat}
+    if supports_batched_readout_correction(model)
+        scratch = _detector_readout_scratch!(det, frame)
+        frame_cube = reshape(frame, 1, size(frame, 1), size(frame, 2))
+        scratch_cube = reshape(scratch, 1, size(scratch, 1), size(scratch, 2))
+        _batched_apply_readout_correction!(style, model, frame_cube, scratch_cube)
+        return frame
+    end
+    return apply_readout_correction!(model, frame)
+end
+
 function _apply_readout_correction!(::DetectorHostMirrorPlan, model::FrameReadoutCorrectionModel,
     frame::AbstractMatrix{T}, det::Detector) where {T<:AbstractFloat}
+    style = execution_style(frame)
+    if style isa AcceleratorStyle && supports_batched_readout_correction(model)
+        return _apply_readout_correction!(style, model, frame, det)
+    end
     host = detector_host_frame!(det, frame)
     apply_readout_correction!(model, host)
     copyto!(frame, host)

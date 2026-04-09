@@ -133,6 +133,24 @@ function run_optional_backend_plan_checks(::Type{AMDGPUBackendTag}, tel, backend
     )
     corr_input = reshape(T.(1:96), 2, 6, 8)
     for correction_model in correction_models
+        cpu_frame_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+            sensor=HgCdTeAvalancheArraySensor(T=T),
+            response_model=NullFrameResponse(),
+            correction_model=correction_model,
+            T=T,
+            backend=Array)
+        gpu_frame_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+            sensor=HgCdTeAvalancheArraySensor(T=T),
+            response_model=NullFrameResponse(),
+            correction_model=correction_model,
+            T=T,
+            backend=backend)
+        frame_input = reshape(T.(1:48), 6, 8)
+        cpu_frame = capture!(cpu_frame_det, frame_input; rng=MersenneTwister(12))
+        gpu_frame = capture!(gpu_frame_det, backend(copy(frame_input)); rng=MersenneTwister(12))
+        @test gpu_frame isa backend
+        @test isapprox(Array(gpu_frame), cpu_frame; rtol=1f-5, atol=1f-4)
+
         cpu_corr_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
             sensor=HgCdTeAvalancheArraySensor(T=T),
             response_model=NullFrameResponse(),
@@ -247,6 +265,24 @@ function run_optional_backend_plan_checks(::Type{CUDABackendTag}, tel, backend)
     )
     corr_input = reshape(T.(1:96), 2, 6, 8)
     for correction_model in correction_models
+        cpu_frame_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+            sensor=HgCdTeAvalancheArraySensor(T=T),
+            response_model=NullFrameResponse(),
+            correction_model=correction_model,
+            T=T,
+            backend=Array)
+        gpu_frame_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+            sensor=HgCdTeAvalancheArraySensor(T=T),
+            response_model=NullFrameResponse(),
+            correction_model=correction_model,
+            T=T,
+            backend=backend)
+        frame_input = reshape(T.(1:48), 6, 8)
+        cpu_frame = capture!(cpu_frame_det, frame_input; rng=MersenneTwister(12))
+        gpu_frame = capture!(gpu_frame_det, backend(copy(frame_input)); rng=MersenneTwister(12))
+        @test gpu_frame isa backend
+        @test isapprox(Array(gpu_frame), cpu_frame; rtol=1f-5, atol=1f-4)
+
         cpu_corr_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
             sensor=HgCdTeAvalancheArraySensor(T=T),
             response_model=NullFrameResponse(),
