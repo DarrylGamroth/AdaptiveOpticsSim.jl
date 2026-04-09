@@ -136,6 +136,9 @@ If you are:
   - explicit ROCm fallback classification and residual workaround status
 - [`rocm-phase3-rebaseline.md`](./rocm-phase3-rebaseline.md)
   - maintained Phase 3 CPU/AMDGPU/CUDA runtime rebaseline
+- [`gpu-sh-centroid-redesign-plan.md`](./gpu-sh-centroid-redesign-plan.md)
+  - redesign plan for a genuinely GPU-friendly Shack-Hartmann centroid/export
+    path shared across CUDA and AMDGPU
 - [`lift-gsc-runtime-validation.md`](./lift-gsc-runtime-validation.md)
   - maintained workflow-profile artifact for LiFT and gain-sensing camera
 - [`tomography-benchmark-scope.md`](./tomography-benchmark-scope.md)
@@ -167,6 +170,8 @@ entry-point guides.
 - [`execution-plan-closeout.md`](./execution-plan-closeout.md)
 - [`platform-strengthening-plan.md`](./platform-strengthening-plan.md)
 - [`post-review-platform-plan.md`](./post-review-platform-plan.md)
+- [`amdgpu-sh-convergence-plan.md`](./amdgpu-sh-convergence-plan.md)
+- [`gpu-sh-centroid-redesign-plan.md`](./gpu-sh-centroid-redesign-plan.md)
 
 Use these when actively working in that subsystem. Do not treat them as the
 primary orientation docs for new contributors.

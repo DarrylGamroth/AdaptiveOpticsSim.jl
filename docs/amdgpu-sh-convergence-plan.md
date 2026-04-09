@@ -18,6 +18,10 @@ The target architecture is:
 This is specifically not a plan to keep the current blanket ROCm-safe path
 indefinitely.
 
+For the detailed redesign of the GPU centroid/export algorithm shape itself,
+including launch-overhead guardrails and shared CUDA/AMDGPU work, see
+[gpu-sh-centroid-redesign-plan.md](./gpu-sh-centroid-redesign-plan.md).
+
 ## Current Evidence
 
 On the maintained HEART Julia backend runtime surface:
