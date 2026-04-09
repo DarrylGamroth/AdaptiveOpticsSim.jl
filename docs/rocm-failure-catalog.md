@@ -184,6 +184,17 @@ Implication:
 - the next attempt should use a narrower ROCm-specific kernel and must be
   validated first on the maintained HEART surface
 
+Focused repro:
+
+- [amdgpu_sh_localmem_repro.jl](../scripts/amdgpu_sh_localmem_repro.jl)
+- `serial` mode:
+  - one-thread-per-spot cutoff-stats kernel
+  - expected to complete successfully on AMDGPU
+- `localmem` mode:
+  - one-workgroup-per-spot cutoff-stats kernel using `@localmem` and
+    `@synchronize`
+  - currently expected to trip a ROCm runtime `GPU Kernel Exception`
+
 ### 5. AMDGPU HEART SH export tiling in `REVOLT/Julia`
 
 Files:
