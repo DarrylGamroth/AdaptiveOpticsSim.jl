@@ -70,7 +70,10 @@ Current status:
 
 - Gaussian frame noise has already been recovered to device-native execution on
   AMDGPU
-- Poisson and readout-correction remain on the host-mirror path
+- batched Poisson noise has also been recovered to device-native execution on
+  AMDGPU for maintained SH detector capture
+- readout-correction and some scalar frame-finalization operations remain on
+  the host-mirror path
 
 ### 2. Direct ROCm reductions used by maintained SH and grouped runtime paths
 
@@ -107,9 +110,11 @@ Files:
 - [measure.jl](../src/WFS/shack_hartmann/measure.jl)
 - [stacks.jl](../src/WFS/shack_hartmann/stacks.jl)
 
-Current fallback:
+Current maintained path:
 
-- AMDGPU selects `ShackHartmannRocmSafePlan`
+- AMDGPU now selects `ShackHartmannBatchedPlan`
+- `ShackHartmannRocmSafePlan` remains available as an escape hatch, not the
+  default
 
 Why this exists:
 
@@ -138,9 +143,11 @@ Important nuance:
 Current status:
 
 - an explicit SH sensing execution-plan seam now exists
-- this is the primary next optimization target
+- after the ROCm toolchain update and detector-path cleanup, the shared
+  batched SH path is again stable enough to be the maintained AMDGPU default
+- the remaining gap is performance, not basic viability
 
-### 4. Host centroid extraction in ROCm-safe SH sensing paths
+### 4. Host centroid extraction in ROCm-safe SH sensing recovery work
 
 Files:
 
@@ -148,8 +155,10 @@ Files:
 
 Current behavior:
 
-- some ROCm-safe SH paths still stage spot information back to host-owned
-  buffers or host-owned slope/reference structures
+- the old ROCm-safe SH path stages spot information back to host-owned buffers
+  or host-owned slope/reference structures
+- this is no longer the maintained default, but it remains relevant as the
+  fallback baseline and as a reference for future regressions
 
 Observed symptom classes:
 
@@ -164,7 +173,8 @@ Evidence:
 
 Current status:
 
-- this is an active convergence target, not a settled design
+- this is no longer the maintained default path
+- it remains useful as a debug / recovery baseline
 
 Additional observed failure while attempting recovery:
 
@@ -206,8 +216,8 @@ Additional findings:
   backend-native cooperative reduction rather than KA local-memory or atomic
   accumulation.
 - on the maintained HEART SH surface, that native cooperative reduction is
-  correct but still slower than the current kept `ShackHartmannRocmSafePlan`,
-  so it is not yet the default path.
+  correct but still slower than the current shared batched path, so it is not
+  the default path.
 
 ### 5. AMDGPU HEART SH export tiling in `REVOLT/Julia`
 

@@ -1,6 +1,6 @@
 # AMDGPU SH Convergence Plan
 
-Status: active
+Status: active, shared batched SH default recovered
 
 ## Purpose
 
@@ -27,18 +27,19 @@ including launch-overhead guardrails and shared CUDA/AMDGPU work, see
 On the maintained HEART Julia backend runtime surface:
 
 - CPU `sense_mean_ns`: about `16.0 ms`
-- AMDGPU `sense_mean_ns`: about `91.0 ms`
-- CUDA `sense_mean_ns`: about `1.8 ms`
+- AMDGPU `sense_mean_ns`: about `37.2 ms`
+- CUDA `sense_mean_ns`: about `1.6 ms`
 
 The slowdown is concentrated in sensing, not atmosphere or DM application.
 
-The main structural causes are:
+The remaining structural causes are:
 
 1. AMDGPU still selects `DetectorHostMirrorPlan`.
-2. AMDGPU Shack-Hartmann still routes through a ROCm-safe sensing fork instead
-   of the batched GPU sensing path.
-3. Accelerator centroid extraction still copies spot images to host.
-4. The HEART runner still uses host tiling for AMDGPU final `352x352` export.
+2. AMDGPU still uses a CUDA-tolerable but not yet ROCm-optimized centroid
+   kernel shape inside the shared batched SH path.
+3. Detector capture/finalization still carries ROCm-specific host-mirror
+   behavior on maintained SH surfaces.
+4. Some non-SH ROCm reductions still require host-mirror fallback.
 
 ## Milestones
 
@@ -86,14 +87,10 @@ Acceptance:
 
 Current status:
 
-- first direct recovery attempt was rejected
-- replacing the maintained ROCm-safe host loop with the existing batched
-  `sh_spot_centroid_kernel!` caused a GPUCompiler / ROCm segfault on the
-  maintained HEART HIL path
-- a narrower per-spot stats kernel compiled but regressed runtime due to
-  per-subap kernel-launch overhead
-- the kept baseline remains the host-staged ROCm-safe centroid path until a
-  narrower ROCm-specific centroid kernel is proven safe and faster
+- first direct recovery attempt was rejected before the ROCm toolchain update
+- after the ROCm toolchain update, the shared batched centroid path became
+  stable again on the maintained HEART surface
+- the remaining issue is performance tuning, not compiler failure
 
 ### SHP-3: Batched AMDGPU SH Measurement Path
 
@@ -111,6 +108,15 @@ Acceptance:
 
 - maintained HEART null/noise-free CPU vs AMDGPU equivalence still holds
 - AMDGPU `sense_mean_ns` materially improves
+
+Current status:
+
+- completed for the maintained HEART SH surface
+- AMDGPU now defaults back to `ShackHartmannBatchedPlan`
+- maintained HEART runtime improved from about `90.8 ms` total / `11.0 Hz` to
+  about `39.1 ms` total / `25.6 Hz`
+- this is still slower than CPU and much slower than CUDA, so convergence work
+  remains active
 
 ### SHP-4: AMDGPU Device-Side HEART Mosaic Export
 
@@ -151,11 +157,17 @@ Acceptance:
 1. `SHP-1` explicit sensing-plan seam
 2. `SHP-2` centroid extraction
 3. `SHP-3` batched SH sensing
-4. `SHP-4` HEART export tiling
-5. `SHP-5` detector narrowing
+4. `SHP-5` detector narrowing
+5. `SHP-4` HEART export tiling
 
 ## First Slice Started
 
-This pass begins `SHP-1` by introducing an explicit Shack-Hartmann sensing plan
-interface and routing AMDGPU through an extension-defined ROCm-safe plan rather
-than a backend-name check in core code.
+This plan has completed the first recovery arc:
+
+- explicit SH sensing-plan seam exists
+- AMDGPU default SH sensing is back on the shared batched path
+- detector-path narrowing has begun and already recovered direct batched
+  device Poisson noise on AMDGPU
+
+The next work is no longer broad SH recovery. It is targeted narrowing of the
+remaining detector and reduction fallbacks.
