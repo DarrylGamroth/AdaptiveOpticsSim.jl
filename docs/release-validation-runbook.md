@@ -43,6 +43,12 @@ ADAPTIVEOPTICS_VALIDATE_COMPARISONS=1 \
 ./scripts/run_release_validation.sh
 ```
 
+To regenerate the maintained frozen OOPAO external-equivalence artifact:
+
+```bash
+julia --project=. --startup-file=no scripts/generate_oopao_equivalence_artifact.jl
+```
+
 ## What Each Track Does
 
 ### CPU

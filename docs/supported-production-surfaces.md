@@ -121,6 +121,17 @@ Primary evidence:
 - [/home/dgamroth/workspaces/codex/AdaptiveOpticsComparisons/docs/cross-package-benchmark-harness.md](/home/dgamroth/workspaces/codex/AdaptiveOpticsComparisons/docs/cross-package-benchmark-harness.md)
 - [/home/dgamroth/workspaces/codex/AdaptiveOpticsComparisons/results/archived/2026-04-08-heart-hil-oopao-baseline.toml](/home/dgamroth/workspaces/codex/AdaptiveOpticsComparisons/results/archived/2026-04-08-heart-hil-oopao-baseline.toml)
 
+Additional production-supported frozen OOPAO equivalence surfaces:
+
+- diffractive Pyramid ramp from the committed OOPAO reference bundle
+- diffractive BioEdge ramp from the committed OOPAO reference bundle
+
+Primary evidence:
+
+- [oopao-reference-datasets.md](./oopao-reference-datasets.md)
+- [../scripts/generate_oopao_equivalence_artifact.jl](../scripts/generate_oopao_equivalence_artifact.jl)
+- [../benchmarks/results/equivalence/2026-04-09-oopao-production-equivalence.toml](../benchmarks/results/equivalence/2026-04-09-oopao-production-equivalence.toml)
+
 ## Explicitly Not Yet Production-Supported
 
 The following should still be treated as experimental, scoped, or unresolved:

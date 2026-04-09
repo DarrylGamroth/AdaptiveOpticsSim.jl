@@ -1,0 +1,38 @@
+artifact_id = "OOPAO-EQUIV-2026-04-09"
+generated_on = "2026-04-09"
+all_cases_within_tolerance = true
+
+[scope]
+interpretation = "deterministic frozen OOPAO reference surfaces intended to complement the HEART Shack-Hartmann equivalence baseline"
+reference_bundle_root = "/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/test/reference_data"
+artifact_kind = "oopao_external_equivalence"
+baseline = "oopao"
+surfaces = ["pyramid_diffractive_ramp", "bioedge_diffractive_ramp"]
+
+[cases.pyramid_diffractive_ramp]
+rtol = 0.05
+actual_norm = 0.23300266661473482
+l2_rel_error = 6.0181426625687154e-9
+shape = [8]
+id = "pyramid_diffractive_ramp"
+max_abs_error = 7.411679325830534e-10
+kind = "pyramid_slopes"
+max_rel_error = 1.1765075287839762e-8
+within_tolerance = true
+expected_norm = 0.23300266792365332
+atol = 0.002
+baseline = "oopao"
+
+[cases.bioedge_diffractive_ramp]
+rtol = 0.05
+actual_norm = 0.22476759940596353
+l2_rel_error = 5.129433668109272e-9
+shape = [32]
+id = "bioedge_diffractive_ramp"
+max_abs_error = 5.764551336273627e-10
+kind = "bioedge_slopes"
+max_rel_error = 0.06916258056293155
+within_tolerance = true
+expected_norm = 0.22476760055871994
+atol = 0.002
+baseline = "oopao"

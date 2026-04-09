@@ -1,0 +1,4 @@
+[[artifacts]]
+purpose = "production external-equivalence artifact for frozen OOPAO pyramid and bioedge surfaces"
+id = "OOPAO-EQUIV-2026-04-09"
+path = "2026-04-09-oopao-production-equivalence.toml"

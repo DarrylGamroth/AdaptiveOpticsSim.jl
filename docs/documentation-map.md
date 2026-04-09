@@ -46,6 +46,9 @@ If you are:
 - looking for performance evidence:
   - [`benchmark-matrix-plan.md`](./benchmark-matrix-plan.md)
   - [`cross-package-benchmark-harness.md`](./cross-package-benchmark-harness.md)
+- looking for frozen external equivalence evidence:
+  - [`oopao-reference-datasets.md`](./oopao-reference-datasets.md)
+  - [`../scripts/generate_oopao_equivalence_artifact.jl`](../scripts/generate_oopao_equivalence_artifact.jl)
 
 ## Active Stable Guides
 
