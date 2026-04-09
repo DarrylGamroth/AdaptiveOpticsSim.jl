@@ -49,6 +49,9 @@ If you are:
 - looking for frozen external equivalence evidence:
   - [`oopao-reference-datasets.md`](./oopao-reference-datasets.md)
   - [`../scripts/generate_oopao_equivalence_artifact.jl`](../scripts/generate_oopao_equivalence_artifact.jl)
+- looking for scientist-owned HEART boundary truth:
+  - [`../scripts/generate_heart_boundary_truth_artifact.py`](../scripts/generate_heart_boundary_truth_artifact.py)
+  - [`../benchmarks/results/truth/2026-04-09-heart-boundary-truth.toml`](../benchmarks/results/truth/2026-04-09-heart-boundary-truth.toml)
 
 ## Active Stable Guides
 

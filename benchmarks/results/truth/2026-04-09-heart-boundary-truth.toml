@@ -1,0 +1,67 @@
+artifact_id = "HEART-TRUTH-2026-04-09"
+generated_on = "2026-04-09"
+
+[scope]
+artifact_kind = "scientist_owned_heart_boundary_truth"
+interpretation = "Scientist-owned REVOLT/DAO boundary and geometry sources used as external truth for the maintained HEART RTC HIL contract"
+truth_level = "boundary_and_geometry"
+raw_on_sky_telemetry_included = false
+provenance_root = "/home/dgamroth/workspaces/codex/REVOLT"
+
+[boundary_truth]
+external_command_length = 277
+dm_grid_shape = [19, 19]
+dm_nonzero_actuators = 277
+telescope_diameter_m = 1.22
+sh_n_subap = 16
+sh_pixels_per_subap = 22
+detector_output_shape = [352, 352]
+detector_response_model = "cblue1_cmos"
+julia_threshold = 0.1
+oopao_light_threshold = 0.1
+specula_subap_wanted_fov_arcsec = 15.33
+specula_sensor_pxscale_arcsec = 0.697
+specula_detector_size = [352, 352]
+
+[known_differences]
+central_obstruction_note = "Julia common contract uses 0.0, while SPECULA scientist-owned config records an approximate 0.25 m obstruction for DAO; this remains a known model-normalization difference rather than a boundary mismatch."
+wfs_wavelength_note = "SPECULA SH config is explicit at 800 nm; OOPAO SH path uses R-band source and Julia uses REVOLT visible-star plus cblue1 camera settings. This artifact treats command/frame boundary and geometry as truth, not full optical identity."
+oopao_sh_construction_note = "Scientist-owned OOPAO SH script sets n_subaperture=16 and shannon_sampling=true for the ideal SHWFS path."
+
+[verdict]
+boundary_truth_available = true
+suitable_for_supported_boundary_claims = true
+suitable_for_full_optical_truth_claims = false
+
+[provenance.julia_common_toml]
+path = "/home/dgamroth/workspaces/codex/REVOLT/Julia/contracts/revolt/common.toml"
+sha256 = "3bd6dc8931e47c0b22b975ce24df4cbc4a3fcce504e60b0bb0fe17038748c390"
+
+[provenance.julia_shwfs_toml]
+path = "/home/dgamroth/workspaces/codex/REVOLT/Julia/contracts/revolt/shwfs.toml"
+sha256 = "b669f66ab6b3ce4b548af0530fca8ab5ea8b98293856a02c69e91fe64c5bb0fd"
+
+[provenance.julia_cameras_toml]
+path = "/home/dgamroth/workspaces/codex/REVOLT/Julia/contracts/revolt/cameras.toml"
+sha256 = "7c9ef75d7de178d1e7f4a27f7c4ad3dd0fd79010b8f8a4e972bee5ae507116b0"
+
+[provenance.dm_map]
+path = "/home/dgamroth/workspaces/codex/REVOLT/Julia/assets/revolt_like/revolt_like_dmActuatorMap_277.csv"
+sha256 = "67f6683de2e1aa0b80c0cd55f971b7ec48de3bb71015be26fe8fe10d79e145ce"
+
+[provenance.specula_params]
+path = "/home/dgamroth/workspaces/codex/REVOLT/Python/specula/params_revolt_modal.yml"
+sha256 = "544424d1d745b5daf029f1c3f55e509cae71dd6d7f07f97604d7111ad34e6aa8"
+
+[provenance.oopao_sh_script]
+path = "/home/dgamroth/workspaces/codex/REVOLT/Python/OOPAO_model/REVOLTtwin_idealSHWFS.py"
+sha256 = "3860884a60b5820decc45291c55000b3baeaf45c346a98ae4c0f2469a49ab5f5"
+
+[provenance.oopao_parameter_file]
+path = "/home/dgamroth/workspaces/codex/REVOLT/Python/OOPAO_model/parameter_files/parameterFile_REVOLTtwin_ideal.py"
+sha256 = "62f1441be9a799bfa31dd001f7fbf4ae7d98c244a8da81b9aadd6061c35b963e"
+
+[provenance.dao_pupil_image]
+path = "/home/dgamroth/workspaces/codex/REVOLT/Data/DAO1.2m-pupil-median-stack.tiff"
+sha256 = "0a2763cb63bda5a8f9481b14cbaff4a34adb205d02185e9292e0d1061edfe17e"
+file_description = "/home/dgamroth/workspaces/codex/REVOLT/Data/DAO1.2m-pupil-median-stack.tiff: TIFF image data, little-endian, direntries=24, width=320, height=256, bps=16, compression=deflate, PhotometricInterpretation=BlackIsZero, manufacturer=Allied Vision Technologies, model=Goldeye G-008 Cool, orientation=upper-left"

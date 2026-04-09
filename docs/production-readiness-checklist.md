@@ -30,7 +30,7 @@ Use together with:
 - [x] Maintained Julia CPU/CUDA/AMDGPU HEART runtime artifacts
 - [x] Maintained second HEART realism runtime artifact (`null` vs `default`)
 - [x] At least one additional trusted external equivalence surface beyond HEART SH
-- [ ] Instrument-truth artifact beyond package-to-package comparison
+- [x] Instrument-truth artifact beyond package-to-package comparison
 
 ### Automated enforcement
 
@@ -50,7 +50,7 @@ Use together with:
 
 - [x] Strong OOPAO-aligned HEART SH comparison surface
 - [x] SPECULA mismatch resolved or explicitly closed out as non-blocking scope
-- [ ] Scientist-owned or instrument-owned truth artifact for HEART boundary
+- [x] Scientist-owned or instrument-owned truth artifact for HEART boundary
 
 ### Operational hardening
 
@@ -61,16 +61,12 @@ Use together with:
 
 ## Required Before Claiming Production Readiness
 
-The remaining blockers are:
+The remaining blocker is:
 
 1. GPU CI must be real, not just checked-in.
    - The workflows need actual self-hosted runners with the expected labels.
-2. Instrument-truth validation is still missing.
-   - Package-to-package agreement is useful, but not sufficient as final truth.
 
 ## Next Recommended Order
 
 1. Register and exercise self-hosted CUDA and AMDGPU runners in CI.
-2. Secure a HEART instrument-truth artifact or scientist-owned truth bundle.
-3. Decide whether SPECULA stays exploratory or becomes a formal target.
-4. Keep the release-validation runbook and bootstrap path exercised on production hosts.
+2. Keep the release-validation runbook and bootstrap path exercised on production hosts.

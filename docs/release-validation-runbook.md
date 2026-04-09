@@ -32,6 +32,7 @@ Optional validation tracks are enabled through environment flags:
 ADAPTIVEOPTICS_VALIDATE_CUDA=1 ./scripts/run_release_validation.sh
 ADAPTIVEOPTICS_VALIDATE_AMDGPU=1 ./scripts/run_release_validation.sh
 ADAPTIVEOPTICS_VALIDATE_COMPARISONS=1 ./scripts/run_release_validation.sh
+ADAPTIVEOPTICS_VALIDATE_TRUTH=1 ./scripts/run_release_validation.sh
 ```
 
 They may be combined:
@@ -40,6 +41,7 @@ They may be combined:
 ADAPTIVEOPTICS_VALIDATE_CUDA=1 \
 ADAPTIVEOPTICS_VALIDATE_AMDGPU=1 \
 ADAPTIVEOPTICS_VALIDATE_COMPARISONS=1 \
+ADAPTIVEOPTICS_VALIDATE_TRUTH=1 \
 ./scripts/run_release_validation.sh
 ```
 
@@ -47,6 +49,12 @@ To regenerate the maintained frozen OOPAO external-equivalence artifact:
 
 ```bash
 julia --project=. --startup-file=no scripts/generate_oopao_equivalence_artifact.jl
+```
+
+To regenerate the maintained HEART boundary truth artifact:
+
+```bash
+python3 scripts/generate_heart_boundary_truth_artifact.py
 ```
 
 ## What Each Track Does
@@ -100,6 +108,19 @@ workspace when it exists:
 
 If the sibling comparison workspace is absent, this track skips cleanly.
 
+### Scientist-owned HEART truth
+
+Enabled with:
+
+- `ADAPTIVEOPTICS_VALIDATE_TRUTH=1`
+
+Runs:
+
+- [generate_heart_boundary_truth_artifact.py](../scripts/generate_heart_boundary_truth_artifact.py)
+
+Use this when the sibling `REVOLT` checkout is present and the release story
+needs the maintained scientist-owned HEART boundary artifact refreshed.
+
 ## Interpretation
 
 Before a release or production handoff:
@@ -109,6 +130,8 @@ Before a release or production handoff:
 3. AMDGPU validation must pass if AMDGPU is in the supported delivery scope.
 4. Cross-package HEART comparison should be rerun when external equivalence
    claims are part of the release story.
+5. Scientist-owned HEART truth should be rerun when boundary-truth claims are
+   part of the release story.
 
 Use together with:
 

@@ -40,4 +40,13 @@ if [[ "${ADAPTIVEOPTICS_VALIDATE_COMPARISONS:-0}" == "1" ]]; then
     fi
 fi
 
+
+if [[ "${ADAPTIVEOPTICS_VALIDATE_TRUTH:-0}" == "1" ]]; then
+    if [[ -d "${ROOT_DIR%/AdaptiveOpticsSim.jl}/REVOLT" ]]; then
+        run_step "HEART boundary truth artifact" \
+            python3 scripts/generate_heart_boundary_truth_artifact.py
+    else
+        echo "==> Skipping HEART truth artifact: ${ROOT_DIR%/AdaptiveOpticsSim.jl}/REVOLT not found"
+    fi
+fi
 echo "==> Release validation completed"

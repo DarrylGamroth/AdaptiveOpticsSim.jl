@@ -132,6 +132,11 @@ Primary evidence:
 - [../scripts/generate_oopao_equivalence_artifact.jl](../scripts/generate_oopao_equivalence_artifact.jl)
 - [../benchmarks/results/equivalence/2026-04-09-oopao-production-equivalence.toml](../benchmarks/results/equivalence/2026-04-09-oopao-production-equivalence.toml)
 
+Scientist-owned HEART boundary truth artifact:
+
+- [../scripts/generate_heart_boundary_truth_artifact.py](../scripts/generate_heart_boundary_truth_artifact.py)
+- [../benchmarks/results/truth/2026-04-09-heart-boundary-truth.toml](../benchmarks/results/truth/2026-04-09-heart-boundary-truth.toml)
+
 ## Explicitly Not Yet Production-Supported
 
 The following should still be treated as experimental, scoped, or unresolved:
@@ -142,8 +147,7 @@ The following should still be treated as experimental, scoped, or unresolved:
   maintained evidence surfaces
 - cross-package grouped/platform equivalence beyond the currently normalized
   contracts
-- instrument-truth alignment beyond the currently maintained comparison
-  artifacts
+- full optical or on-sky instrument-truth alignment beyond the maintained boundary artifact
 
 ## Release Interpretation
 
