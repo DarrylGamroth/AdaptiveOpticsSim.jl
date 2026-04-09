@@ -132,6 +132,18 @@ function run_optional_backend_plan_checks(::Type{AMDGPUBackendTag}, tel, backend
         )),
     )
     corr_input = reshape(T.(1:96), 2, 6, 8)
+    cpu_quant_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+        bits=8, full_well=T(100), sensor=CMOSSensor(T=T),
+        response_model=NullFrameResponse(), T=T, backend=Array)
+    gpu_quant_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+        bits=8, full_well=T(100), sensor=CMOSSensor(T=T),
+        response_model=NullFrameResponse(), T=T, backend=backend)
+    quant_input = reshape(T.(1:48), 6, 8) .* T(3)
+    cpu_quant_frame = capture!(cpu_quant_det, copy(quant_input); rng=MersenneTwister(13))
+    gpu_quant_frame = capture!(gpu_quant_det, backend(copy(quant_input)); rng=MersenneTwister(13))
+    @test gpu_quant_frame isa backend
+    @test isapprox(Array(gpu_quant_frame), cpu_quant_frame; rtol=1f-5, atol=1f-4)
+
     for correction_model in correction_models
         cpu_frame_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
             sensor=HgCdTeAvalancheArraySensor(T=T),
@@ -172,6 +184,33 @@ function run_optional_backend_plan_checks(::Type{AMDGPUBackendTag}, tel, backend
         @test gpu_corr_cube isa backend
         @test isapprox(Array(gpu_corr_cube), cpu_corr_cube; rtol=1f-5, atol=1f-4)
     end
+
+    generalized_correction = CompositeFrameReadoutCorrection((
+        ReferenceRowCommonModeCorrection(1),
+        ReferenceColumnCommonModeCorrection(1),
+    ))
+    cpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+        bits=8, full_well=T(100), readout_window=FrameWindow(2:5, 3:7), output_precision=UInt16,
+        sensor=HgCdTeAvalancheArraySensor(T=T),
+        response_model=NullFrameResponse(),
+        correction_model=generalized_correction,
+        T=T,
+        backend=Array)
+    gpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+        bits=8, full_well=T(100), readout_window=FrameWindow(2:5, 3:7), output_precision=UInt16,
+        sensor=HgCdTeAvalancheArraySensor(T=T),
+        response_model=NullFrameResponse(),
+        correction_model=generalized_correction,
+        T=T,
+        backend=backend)
+    cpu_gen_input = copy(corr_input)
+    gpu_gen_input = backend(copy(corr_input))
+    cpu_gen_out = Array{UInt16}(undef, 2, 4, 5)
+    gpu_gen_out = backend{UInt16}(undef, 2, 4, 5)
+    AdaptiveOpticsSim.capture_stack!(cpu_gen_det, cpu_gen_out, cpu_gen_input; rng=MersenneTwister(14))
+    AdaptiveOpticsSim.capture_stack!(gpu_gen_det, gpu_gen_out, gpu_gen_input; rng=MersenneTwister(14))
+    @test gpu_gen_out isa backend
+    @test Array(gpu_gen_out) == cpu_gen_out
     return nothing
 end
 
@@ -264,6 +303,18 @@ function run_optional_backend_plan_checks(::Type{CUDABackendTag}, tel, backend)
         )),
     )
     corr_input = reshape(T.(1:96), 2, 6, 8)
+    cpu_quant_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+        bits=8, full_well=T(100), sensor=CMOSSensor(T=T),
+        response_model=NullFrameResponse(), T=T, backend=Array)
+    gpu_quant_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+        bits=8, full_well=T(100), sensor=CMOSSensor(T=T),
+        response_model=NullFrameResponse(), T=T, backend=backend)
+    quant_input = reshape(T.(1:48), 6, 8) .* T(3)
+    cpu_quant_frame = capture!(cpu_quant_det, copy(quant_input); rng=MersenneTwister(13))
+    gpu_quant_frame = capture!(gpu_quant_det, backend(copy(quant_input)); rng=MersenneTwister(13))
+    @test gpu_quant_frame isa backend
+    @test isapprox(Array(gpu_quant_frame), cpu_quant_frame; rtol=1f-5, atol=1f-4)
+
     for correction_model in correction_models
         cpu_frame_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
             sensor=HgCdTeAvalancheArraySensor(T=T),
@@ -304,6 +355,33 @@ function run_optional_backend_plan_checks(::Type{CUDABackendTag}, tel, backend)
         @test gpu_corr_cube isa backend
         @test isapprox(Array(gpu_corr_cube), cpu_corr_cube; rtol=1f-5, atol=1f-4)
     end
+
+    generalized_correction = CompositeFrameReadoutCorrection((
+        ReferenceRowCommonModeCorrection(1),
+        ReferenceColumnCommonModeCorrection(1),
+    ))
+    cpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+        bits=8, full_well=T(100), readout_window=FrameWindow(2:5, 3:7), output_precision=UInt16,
+        sensor=HgCdTeAvalancheArraySensor(T=T),
+        response_model=NullFrameResponse(),
+        correction_model=generalized_correction,
+        T=T,
+        backend=Array)
+    gpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+        bits=8, full_well=T(100), readout_window=FrameWindow(2:5, 3:7), output_precision=UInt16,
+        sensor=HgCdTeAvalancheArraySensor(T=T),
+        response_model=NullFrameResponse(),
+        correction_model=generalized_correction,
+        T=T,
+        backend=backend)
+    cpu_gen_input = copy(corr_input)
+    gpu_gen_input = backend(copy(corr_input))
+    cpu_gen_out = Array{UInt16}(undef, 2, 4, 5)
+    gpu_gen_out = backend{UInt16}(undef, 2, 4, 5)
+    AdaptiveOpticsSim.capture_stack!(cpu_gen_det, cpu_gen_out, cpu_gen_input; rng=MersenneTwister(14))
+    AdaptiveOpticsSim.capture_stack!(gpu_gen_det, gpu_gen_out, gpu_gen_input; rng=MersenneTwister(14))
+    @test gpu_gen_out isa backend
+    @test Array(gpu_gen_out) == cpu_gen_out
 
     return nothing
 end

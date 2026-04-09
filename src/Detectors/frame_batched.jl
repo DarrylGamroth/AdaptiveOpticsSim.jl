@@ -534,6 +534,11 @@ end
 function _capture_stack_fixed!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3};
     rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     _require_batched_detector_compat(det, cube, scratch)
+    return _apply_batched_detector_pipeline!(det, cube, scratch; rng=rng)
+end
+
+function _apply_batched_detector_pipeline!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3};
+    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     exposure_time = det.params.integration_time
     cube .*= det.params.qe * exposure_time
     _batched_signal_defects!(det.params.defect_model, cube, scratch, exposure_time)

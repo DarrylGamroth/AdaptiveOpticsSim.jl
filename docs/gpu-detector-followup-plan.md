@@ -11,11 +11,16 @@ Current state:
 - maintained readout-correction models now have device-native GPU paths for:
   - direct single-frame capture
   - fixed batched stack capture
+- maintained direct detector finalization now uses device-native GPU saturation/quantization on maintained frame surfaces
 - public detector APIs stay unchanged:
   - `Detector(...)`
   - `capture!`
   - `capture_stack!`
 - generic host-mirror and generic per-slice correction code remains as fallback-only behavior for unsupported surfaces
+- generalized batched detector fast-path prototypes for windowed/integer output were evaluated and not kept:
+  - they preserved CPU parity
+  - they did not improve warmed runtime on CUDA
+  - they regressed warmed runtime on AMDGPU relative to the kept per-frame loop
 
 Highest-value next targets:
 1. Detector finalization on maintained frame surfaces
@@ -25,17 +30,7 @@ Highest-value next targets:
      - CPU vs CUDA parity
      - no regression on maintained HEART surfaces
 
-2. Generalized batched detector capture
-   - reduce or replace `_capture_stack_generalized!` batch-by-batch frame loops for maintained surfaces involving:
-     - `psf_sampling > 1`
-     - `binning > 1`
-     - `readout_window`
-     - `output_precision`
-   - acceptance:
-     - stack result matches per-frame CPU semantics
-     - backend parity on maintained GPU hardware
-
-3. Window extraction and packed output writeout
+2. Window extraction and packed output writeout
    - add stack-aware/device-aware paths for:
      - `readout_window`
      - integer output packing in `write_output!`
@@ -43,7 +38,7 @@ Highest-value next targets:
      - output product matches current CPU behavior
      - no hidden host round-trips on maintained GPU surfaces
 
-4. HgCdTe readout-product surfaces
+3. HgCdTe readout-product surfaces
    - profile whether readout-product construction is a maintained bottleneck
    - only optimize if it shows up in maintained workloads
 
@@ -59,7 +54,8 @@ Execution order:
 2. implement device-native saturation/quantization where the current plan still host-mirrors
 3. add focused parity tests for direct frame finalization on GPU
 4. profile `_capture_stack_generalized!` and identify whether generalized batching is worth a maintained GPU path
-5. only then add stack-aware window/output packing if the benchmarks justify it
+   - current result: not worth keeping on maintained AMDGPU/CUDA surfaces yet
+5. only add stack-aware window/output packing if the benchmarks justify it on maintained workloads
 
 Stop/go criteria:
 - keep a new GPU path only if:

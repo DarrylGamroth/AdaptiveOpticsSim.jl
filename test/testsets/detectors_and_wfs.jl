@@ -39,6 +39,38 @@
     @test frame_adc_float isa Matrix{Float32}
     @test maximum(frame_adc_float) == Float32(255.0)
 
+    det_adc_window_corr = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        bits=8, full_well=100.0, readout_window=FrameWindow(2:5, 3:7), output_precision=UInt16,
+        sensor=HgCdTeAvalancheArraySensor(sampling_mode=SingleRead()),
+        response_model=NullFrameResponse(),
+        correction_model=CompositeFrameReadoutCorrection((
+            ReferenceRowCommonModeCorrection(1),
+            ReferenceColumnCommonModeCorrection(1),
+        )))
+    adc_window_in = reshape(collect(1.0:96.0), 2, 6, 8)
+    adc_window_out = Array{UInt16}(undef, 2, 4, 5)
+    generalized_adc_window = AdaptiveOpticsSim.capture_stack!(det_adc_window_corr, adc_window_out, copy(adc_window_in);
+        rng=MersenneTwister(10))
+    @test size(generalized_adc_window) == (2, 4, 5)
+    @test generalized_adc_window[1, :, :] == capture!(Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+            bits=8, full_well=100.0, readout_window=FrameWindow(2:5, 3:7), output_precision=UInt16,
+            sensor=HgCdTeAvalancheArraySensor(sampling_mode=SingleRead()),
+            response_model=NullFrameResponse(),
+            correction_model=CompositeFrameReadoutCorrection((
+                ReferenceRowCommonModeCorrection(1),
+                ReferenceColumnCommonModeCorrection(1),
+            ))),
+        @view(adc_window_in[1, :, :]); rng=MersenneTwister(10))
+    @test generalized_adc_window[2, :, :] == capture!(Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+            bits=8, full_well=100.0, readout_window=FrameWindow(2:5, 3:7), output_precision=UInt16,
+            sensor=HgCdTeAvalancheArraySensor(sampling_mode=SingleRead()),
+            response_model=NullFrameResponse(),
+            correction_model=CompositeFrameReadoutCorrection((
+                ReferenceRowCommonModeCorrection(1),
+                ReferenceColumnCommonModeCorrection(1),
+            ))),
+        @view(adc_window_in[2, :, :]); rng=MersenneTwister(10))
+
     det_window = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         readout_window=FrameWindow(2:3, 2:4))
     psf_window = reshape(collect(1.0:16.0), 4, 4)

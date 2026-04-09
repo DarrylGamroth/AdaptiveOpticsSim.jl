@@ -193,8 +193,25 @@ function _apply_saturation!(::DetectorHostMirrorPlan, det::Detector)
     return det.state.frame
 end
 
+function _apply_saturation!(::ScalarCPUStyle, det::Detector)
+    full_well = sensor_saturation_limit(det)
+    full_well === nothing && return det.state.frame
+    clamp!(det.state.frame, zero(eltype(det.state.frame)), full_well)
+    return det.state.frame
+end
+
+function _apply_saturation!(::AcceleratorStyle, det::Detector)
+    full_well = sensor_saturation_limit(det)
+    full_well === nothing && return det.state.frame
+    clamp!(det.state.frame, zero(eltype(det.state.frame)), full_well)
+    return det.state.frame
+end
+
 function apply_saturation!(det::Detector)
     plan = detector_execution_plan(typeof(execution_style(det.state.frame)), typeof(det))
+    if plan isa DetectorHostMirrorPlan && execution_style(det.state.frame) isa AcceleratorStyle
+        return _apply_saturation!(execution_style(det.state.frame), det)
+    end
     return _apply_saturation!(plan, det)
 end
 
@@ -262,8 +279,45 @@ function _apply_quantization!(::DetectorHostMirrorPlan, det::Detector)
     return det.state.frame
 end
 
+function _apply_quantization!(::ScalarCPUStyle, det::Detector)
+    bits = det.params.bits
+    bits === nothing && return det.state.frame
+    levels = exp2(eltype(det.state.frame)(bits))
+    full_well = det.params.full_well
+    if full_well === nothing
+        peak = maximum(det.state.frame)
+        if peak > 0
+            det.state.frame .*= levels / peak
+        end
+    else
+        det.state.frame .*= (levels - one(levels)) / full_well
+        clamp!(det.state.frame, zero(eltype(det.state.frame)), levels - one(levels))
+    end
+    return det.state.frame
+end
+
+function _apply_quantization!(::AcceleratorStyle, det::Detector)
+    bits = det.params.bits
+    bits === nothing && return det.state.frame
+    levels = exp2(eltype(det.state.frame)(bits))
+    full_well = det.params.full_well
+    if full_well === nothing
+        peak = maximum(det.state.frame)
+        if peak > 0
+            det.state.frame .*= levels / peak
+        end
+    else
+        det.state.frame .*= (levels - one(levels)) / full_well
+        clamp!(det.state.frame, zero(eltype(det.state.frame)), levels - one(levels))
+    end
+    return det.state.frame
+end
+
 function apply_quantization!(det::Detector)
     plan = detector_execution_plan(typeof(execution_style(det.state.frame)), typeof(det))
+    if plan isa DetectorHostMirrorPlan && execution_style(det.state.frame) isa AcceleratorStyle
+        return _apply_quantization!(execution_style(det.state.frame), det)
+    end
     return _apply_quantization!(plan, det)
 end
 
