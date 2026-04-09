@@ -67,6 +67,18 @@ end
     return centroid_from_intensity!(ScalarCPUStyle(), wfs.state.centroid_host, threshold)
 end
 
+function sh_signal_from_spots_device_stats!(style::AcceleratorStyle, wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}
+    n_sub = wfs.params.n_subap
+    offset = n_sub * n_sub
+    fill!(wfs.state.spot_stats, zero(eltype(wfs.state.spot_stats)))
+    launch_kernel!(style, sh_spot_cutoff_stats_kernel!, wfs.state.spot_stats, wfs.state.spot_cube,
+        wfs.state.valid_mask, cutoff, n_sub, size(wfs.state.spot_cube, 2),
+        size(wfs.state.spot_cube, 3); ndrange=offset)
+    launch_kernel!(style, sh_finalize_spot_slopes_kernel!, wfs.state.slopes, wfs.state.spot_stats,
+        wfs.state.valid_mask, n_sub, offset; ndrange=offset)
+    return wfs.state.slopes
+end
+
 @inline function sh_spot_view(wfs::ShackHartmann, idx::Int)
     return @view wfs.state.spot_cube[idx, :, :]
 end
@@ -567,16 +579,8 @@ function sh_signal_from_spots!(::AcceleratorStyle, wfs::ShackHartmann, cutoff::T
         return wfs.state.slopes
     end
     if sh_uses_device_stats_sensing_plan(wfs)
-        n_sub = wfs.params.n_subap
-        offset = n_sub * n_sub
         style = execution_style(wfs.state.slopes)
-        fill!(wfs.state.spot_stats, zero(eltype(wfs.state.spot_stats)))
-        launch_kernel!(style, sh_spot_cutoff_stats_kernel!, wfs.state.spot_stats, wfs.state.spot_cube,
-            wfs.state.valid_mask, cutoff, n_sub, size(wfs.state.spot_cube, 2),
-            size(wfs.state.spot_cube, 3); ndrange=offset)
-        launch_kernel!(style, sh_finalize_spot_slopes_kernel!, wfs.state.slopes, wfs.state.spot_stats,
-            wfs.state.valid_mask, n_sub, offset; ndrange=offset)
-        return wfs.state.slopes
+        return sh_signal_from_spots_device_stats!(style, wfs, cutoff)
     end
     n_sub = wfs.params.n_subap
     offset = n_sub * n_sub

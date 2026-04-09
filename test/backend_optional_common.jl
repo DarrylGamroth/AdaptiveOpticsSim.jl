@@ -93,6 +93,33 @@ function run_optional_backend_plan_checks(::Type{AMDGPUBackendTag}, tel, backend
         AdaptiveOpticsSim.execution_style(first(fresnel_prop.state.slices).field.state.field),
         fresnel_prop.params.model,
     ) isa AdaptiveOpticsSim.LayeredFresnelFieldAsyncPlan
+    cpu_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
+        central_obstruction=0.0f0, T=T, backend=Array)
+    gpu_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
+        central_obstruction=0.0f0, T=T, backend=backend)
+    cpu_src = Source(band=:I, magnitude=0.0, T=T)
+    gpu_src = Source(band=:I, magnitude=0.0, T=T)
+    cpu_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+        sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=Array)
+    gpu_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+        sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=backend)
+    cpu_sh_stats = ShackHartmann(cpu_tel; n_subap=4, mode=Diffractive(), T=T, backend=Array,
+        valid_subaperture_policy=FluxThresholdValidSubapertures(light_ratio=0.5f0))
+    gpu_sh_stats = ShackHartmann(gpu_tel; n_subap=4, mode=Diffractive(), T=T, backend=backend,
+        valid_subaperture_policy=FluxThresholdValidSubapertures(light_ratio=0.5f0))
+    measure!(cpu_sh_stats, cpu_tel, cpu_src, cpu_det; rng=MersenneTwister(3))
+    measure!(gpu_sh_stats, gpu_tel, gpu_src, gpu_det; rng=MersenneTwister(3))
+    cpu_peak = AdaptiveOpticsSim.sh_safe_peak_value(cpu_sh_stats.state.spot_cube)
+    cpu_cutoff = AdaptiveOpticsSim.centroid_threshold(cpu_sh_stats) * cpu_peak
+    AdaptiveOpticsSim.sh_signal_from_spots!(cpu_sh_stats, cpu_cutoff)
+    gpu_peak = AdaptiveOpticsSim.sh_safe_peak_value(gpu_sh_stats.state.spot_cube)
+    gpu_cutoff = AdaptiveOpticsSim.centroid_threshold(gpu_sh_stats) * gpu_peak
+    AdaptiveOpticsSim.sh_signal_from_spots_device_stats!(
+        AdaptiveOpticsSim.execution_style(gpu_sh_stats.state.slopes),
+        gpu_sh_stats,
+        gpu_cutoff,
+    )
+    @test isapprox(Array(gpu_sh_stats.state.slopes), cpu_sh_stats.state.slopes; rtol=1f-5, atol=1f-4)
     return nothing
 end
 
@@ -156,6 +183,7 @@ function run_optional_backend_plan_checks(::Type{CUDABackendTag}, tel, backend)
     @test isapprox(gpu_export, cpu_export; rtol=1f-5, atol=1f-4)
     @test size(gpu_frame) == size(cpu_frame)
     @test isapprox(gpu_frame, cpu_frame; rtol=1f-5, atol=1f-4)
+
     return nothing
 end
 

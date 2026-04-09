@@ -82,6 +82,89 @@ function AdaptiveOpticsSim.randn_phase_noise!(rng::AbstractRNG, out::AMDGPU.ROCA
     copyto!(out, host)
     return host
 end
+function roc_sh_spot_cutoff_stats_kernel!(stats, spot_cube, valid_mask, cutoff, n_sub::Int, n1::Int, n2::Int)
+    lane = Int(AMDGPU.workitemIdx().x)
+    idx = Int(AMDGPU.workgroupIdx().x)
+    n_spots = n_sub * n_sub
+    if idx <= n_spots
+        i = (idx - 1) ÷ n_sub + 1
+        j = idx - (i - 1) * n_sub
+        if @inbounds valid_mask[i, j]
+            T = eltype(stats)
+            total_sh = AMDGPU.@ROCStaticLocalArray(T, 256, false)
+            sx_sh = AMDGPU.@ROCStaticLocalArray(T, 256, false)
+            sy_sh = AMDGPU.@ROCStaticLocalArray(T, 256, false)
+            total = zero(T)
+            sx = zero(T)
+            sy = zero(T)
+            npix = n1 * n2
+            p = lane
+            while p <= npix
+                x = (p - 1) ÷ n2 + 1
+                y = p - (x - 1) * n2
+                val = @inbounds spot_cube[idx, x, y]
+                if val >= cutoff
+                    total += val
+                    sx += T(x - 1) * val
+                    sy += T(y - 1) * val
+                end
+                p += 256
+            end
+            @inbounds begin
+                total_sh[lane] = total
+                sx_sh[lane] = sx
+                sy_sh[lane] = sy
+            end
+            AMDGPU.sync_workgroup()
+            stride = 128
+            while stride >= 1
+                if lane <= stride
+                    @inbounds begin
+                        total_sh[lane] += total_sh[lane + stride]
+                        sx_sh[lane] += sx_sh[lane + stride]
+                        sy_sh[lane] += sy_sh[lane + stride]
+                    end
+                end
+                AMDGPU.sync_workgroup()
+                stride ÷= 2
+            end
+            if lane == 1
+                base = 3 * (idx - 1)
+                @inbounds begin
+                    stats[base + 1] = total_sh[1]
+                    stats[base + 2] = sx_sh[1]
+                    stats[base + 3] = sy_sh[1]
+                end
+            end
+        end
+    end
+    return
+end
+function AdaptiveOpticsSim.sh_signal_from_spots_device_stats!(
+    ::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
+    wfs::AdaptiveOpticsSim.ShackHartmann,
+    cutoff::T,
+) where {T<:AbstractFloat}
+    n_sub = wfs.params.n_subap
+    offset = n_sub * n_sub
+    n1 = size(wfs.state.spot_cube, 2)
+    n2 = size(wfs.state.spot_cube, 3)
+    fill!(wfs.state.spot_stats, zero(eltype(wfs.state.spot_stats)))
+    AMDGPU.@roc groupsize=256 gridsize=offset roc_sh_spot_cutoff_stats_kernel!(
+        wfs.state.spot_stats,
+        wfs.state.spot_cube,
+        wfs.state.valid_mask,
+        cutoff,
+        n_sub,
+        n1,
+        n2,
+    )
+    AMDGPU.synchronize()
+    style = AdaptiveOpticsSim.execution_style(wfs.state.slopes)
+    AdaptiveOpticsSim.launch_kernel!(style, AdaptiveOpticsSim.sh_finalize_spot_slopes_kernel!, wfs.state.slopes,
+        wfs.state.spot_stats, wfs.state.valid_mask, n_sub, offset; ndrange=offset)
+    return wfs.state.slopes
+end
 AdaptiveOpticsSim.backend_matmul(A::AMDGPU.ROCArray{T,2}, B::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat} =
     AMDGPU.rocBLAS.gemm('N', 'N', A, B)
 AdaptiveOpticsSim.backend_matmul_transpose_right(A::AMDGPU.ROCArray{T,2}, B::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat} =

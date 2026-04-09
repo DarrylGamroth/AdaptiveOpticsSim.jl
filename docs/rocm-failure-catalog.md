@@ -195,6 +195,20 @@ Focused repro:
     `@synchronize`
   - currently expected to trip a ROCm runtime `GPU Kernel Exception`
 
+Additional findings:
+
+- `KernelAbstractions.@atomic` float accumulators also fail on ROCm in this
+  environment with `InvalidIRError` during compilation.
+- native `@roc` float atomics fail on the same maintained SH surface with the
+  same kind of compile-time `InvalidIRError`.
+- native `@roc` workgroup-local reductions using `@ROCStaticLocalArray` and
+  `sync_workgroup()` do compile and run, so the current ROCm-friendly route is
+  backend-native cooperative reduction rather than KA local-memory or atomic
+  accumulation.
+- on the maintained HEART SH surface, that native cooperative reduction is
+  correct but still slower than the current kept `ShackHartmannRocmSafePlan`,
+  so it is not yet the default path.
+
 ### 5. AMDGPU HEART SH export tiling in `REVOLT/Julia`
 
 Files:
