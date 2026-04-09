@@ -26,6 +26,7 @@ For current release/support scope, use:
 
 - [supported-production-surfaces.md](./supported-production-surfaces.md)
 - [production-readiness-checklist.md](./production-readiness-checklist.md)
+- [self-hosted-gpu-runner-setup.md](./self-hosted-gpu-runner-setup.md)
 
 ## Test Layout
 

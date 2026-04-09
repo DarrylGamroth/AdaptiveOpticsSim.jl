@@ -109,3 +109,10 @@ Use together with:
 - [supported-production-surfaces.md](./supported-production-surfaces.md)
 - [production-readiness-checklist.md](./production-readiness-checklist.md)
 - [backend-validation-guide.md](./backend-validation-guide.md)
+- [self-hosted-gpu-runner-setup.md](./self-hosted-gpu-runner-setup.md)
+
+## Validation host bootstrap
+
+Before trusting a new CUDA or AMDGPU validation host, bootstrap it with:
+
+- [bootstrap_validation_host.sh](../scripts/bootstrap_validation_host.sh)

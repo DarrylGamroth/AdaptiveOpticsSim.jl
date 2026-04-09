@@ -44,7 +44,7 @@ Use together with:
 
 - [x] Production-supported scope explicitly documented
 - [x] Explicit non-production/experimental scope documented
-- [ ] Public release notes or README-level summary of supported scope
+- [x] Public release notes or README-level summary of supported scope
 
 ### External truth and equivalence
 
@@ -56,7 +56,7 @@ Use together with:
 
 - [x] Maintained cross-package contracts and archived manifests
 - [x] Same-host CPU-vs-CUDA runtime artifact on `spiders`
-- [ ] Versioned bootstrap/runner instructions for production validation hosts
+- [x] Versioned bootstrap/runner instructions for production validation hosts
 - [x] One-command release validation procedure documented
 
 ## Required Before Claiming Production Readiness

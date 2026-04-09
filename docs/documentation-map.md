@@ -42,6 +42,7 @@ If you are:
   - [`production-readiness-checklist.md`](./production-readiness-checklist.md)
 - running a release-validation pass:
   - [`release-validation-runbook.md`](./release-validation-runbook.md)
+  - [`self-hosted-gpu-runner-setup.md`](./self-hosted-gpu-runner-setup.md)
 - looking for performance evidence:
   - [`benchmark-matrix-plan.md`](./benchmark-matrix-plan.md)
   - [`cross-package-benchmark-harness.md`](./cross-package-benchmark-harness.md)
@@ -80,6 +81,7 @@ If you are:
 - [`production-readiness-checklist.md`](./production-readiness-checklist.md)
   - remaining blockers before production-readiness claims
 - [`release-validation-runbook.md`](./release-validation-runbook.md)
+- [`self-hosted-gpu-runner-setup.md`](./self-hosted-gpu-runner-setup.md)
   - one-command release validation procedure and optional GPU/comparison tracks
 - [`benchmark-matrix-plan.md`](./benchmark-matrix-plan.md)
   - maintained performance surfaces and benchmark classes

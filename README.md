@@ -33,9 +33,26 @@ python3 scripts/generate_oopao_reference_bundle.py /tmp/oopao-bundle \
 
 - `docs/user-guide.md`
 - `docs/api-reference.md`
+- `docs/supported-production-surfaces.md`
+- `docs/production-readiness-checklist.md`
+- `docs/release-validation-runbook.md`
 - `docs/julia-port-design.md`
 - `docs/julia-tutorial-mappings.md`
 - `docs/roadmap.md`
 - `docs/oopao-reference-datasets.md`
 - `docs/deterministic-simulation.md`
 - `docs/phase7-traceability.md`
+
+## Supported production surface
+
+The package now has a documented maintained production-validation surface. Use:
+
+- [docs/supported-production-surfaces.md](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/supported-production-surfaces.md)
+- [docs/production-readiness-checklist.md](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/production-readiness-checklist.md)
+- [docs/release-validation-runbook.md](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/docs/release-validation-runbook.md)
+
+Release validation entry point:
+
+```bash
+./scripts/run_release_validation.sh
+```
