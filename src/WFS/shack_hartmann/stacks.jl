@@ -463,10 +463,6 @@ end
                     sy += T(y - 1) * val
                 end
             end
-            if total > 0
-                sx /= total
-                sy /= total
-            end
         end
         @inbounds begin
             stats[base + 1] = total

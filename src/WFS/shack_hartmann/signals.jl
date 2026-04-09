@@ -67,6 +67,22 @@ end
     return centroid_from_intensity!(ScalarCPUStyle(), wfs.state.centroid_host, threshold)
 end
 
+@inline function centroid_from_spot_cutoff!(wfs::ShackHartmann, intensity::AbstractMatrix{T}, cutoff::T) where {T<:AbstractFloat}
+    return centroid_from_spot_cutoff!(execution_style(intensity), wfs, intensity, cutoff)
+end
+
+@inline function centroid_from_spot_cutoff!(::ScalarCPUStyle, ::ShackHartmann, intensity::AbstractMatrix{T}, cutoff::T) where {T<:AbstractFloat}
+    return centroid_from_intensity_cutoff!(ScalarCPUStyle(), intensity, cutoff)
+end
+
+@inline function centroid_from_spot_cutoff!(::AcceleratorStyle, wfs::ShackHartmann, intensity::AbstractMatrix{T}, cutoff::T) where {T<:AbstractFloat}
+    if size(wfs.state.centroid_host) != size(intensity)
+        wfs.state.centroid_host = Matrix{T}(undef, size(intensity)...)
+    end
+    copyto!(wfs.state.centroid_host, intensity)
+    return centroid_from_intensity_cutoff!(ScalarCPUStyle(), wfs.state.centroid_host, cutoff)
+end
+
 function sh_signal_from_spots_device_stats!(style::AcceleratorStyle, wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}
     n_sub = wfs.params.n_subap
     offset = n_sub * n_sub
@@ -561,7 +577,7 @@ function sh_signal_from_spots!(::AcceleratorStyle, wfs::ShackHartmann, cutoff::T
         idx = 1
         @inbounds for i in 1:n_sub, j in 1:n_sub
             if wfs.state.valid_mask_host[i, j]
-                total, sx, sy = centroid_from_spot!(wfs, sh_spot_view(wfs, idx), cutoff)
+                total, sx, sy = centroid_from_spot_cutoff!(wfs, sh_spot_view(wfs, idx), cutoff)
                 if total <= 0
                     host_slopes[idx] = zero(T)
                     host_slopes[idx + offset] = zero(T)
