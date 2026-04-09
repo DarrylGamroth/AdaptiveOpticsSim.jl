@@ -74,6 +74,24 @@ function AdaptiveOpticsSim._randn_frame_noise!(
     AdaptiveOpticsSim.randn_backend!(rng, cube)
     return cube
 end
+function AdaptiveOpticsSim._poisson_noise_frame!(
+    ::AdaptiveOpticsSim.DetectorHostMirrorPlan,
+    det::AdaptiveOpticsSim.Detector,
+    rng::AbstractRNG,
+    img::AMDGPU.ROCArray{T,2},
+) where {T<:AbstractFloat}
+    AdaptiveOpticsSim._poisson_noise!(AdaptiveOpticsSim.execution_style(img), rng, img)
+    return img
+end
+function AdaptiveOpticsSim._poisson_noise_frame!(
+    ::AdaptiveOpticsSim.DetectorHostMirrorPlan,
+    det::AdaptiveOpticsSim.Detector,
+    rng::AbstractRNG,
+    cube::AMDGPU.ROCArray{T,3},
+) where {T<:AbstractFloat}
+    AdaptiveOpticsSim._poisson_noise!(AdaptiveOpticsSim.execution_style(cube), rng, cube)
+    return cube
+end
 function AdaptiveOpticsSim.randn_phase_noise!(rng::AbstractRNG, out::AMDGPU.ROCArray{T,2}, host::Matrix{T}) where {T<:AbstractFloat}
     if size(host) != size(out)
         host = Matrix{T}(undef, size(out)...)

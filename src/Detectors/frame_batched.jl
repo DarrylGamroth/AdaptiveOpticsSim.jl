@@ -28,6 +28,16 @@ _require_batched_sensor_compat(::FrameSensorType) = nothing
 _batched_frame_shape(cube::AbstractArray{T,3}) where {T} = (size(cube, 2), size(cube, 3))
 _batched_frame_map(map::AbstractMatrix) = reshape(map, 1, size(map, 1), size(map, 2))
 
+_batched_poisson_noise_async!(::ScalarCPUStyle, det::Detector, cube::AbstractArray, rng::AbstractRNG) =
+    poisson_noise_frame!(det, rng, cube)
+_batched_poisson_noise_async!(style::AcceleratorStyle, det::Detector, cube::AbstractArray{T}, rng::AbstractRNG) where {T<:AbstractFloat} =
+    poisson_noise_async!(style, rng, cube)
+
+_batched_randn_noise_async!(::ScalarCPUStyle, det::Detector, cube::AbstractArray, rng::AbstractRNG) =
+    randn_frame_noise!(det, rng, cube)
+_batched_randn_noise_async!(style::AcceleratorStyle, det::Detector, cube::AbstractArray{T}, rng::AbstractRNG) where {T<:AbstractFloat} =
+    randn_backend_async!(style, rng, cube)
+
 _batched_background_map!(::NoBackground, cube::AbstractArray, scratch::AbstractArray) = cube
 _batched_background_map!(background::ScalarBackground, cube::AbstractArray, scratch::AbstractArray) = (cube .-= background.level; cube)
 
@@ -43,7 +53,7 @@ _batched_background_flux!(::NoBackground, det::Detector, cube::AbstractArray, sc
 function _batched_background_flux!(background::ScalarBackground, det::Detector, cube::AbstractArray, scratch::AbstractArray,
     rng::AbstractRNG, exposure_time::Real)
     fill!(scratch, background.level * exposure_time)
-    poisson_noise_frame!(det, rng, scratch)
+    _batched_poisson_noise_async!(execution_style(cube), det, scratch, rng)
     cube .+= scratch
     return cube
 end
@@ -54,7 +64,7 @@ function _batched_background_flux!(background::BackgroundFrame, det::Detector, c
         throw(DimensionMismatchError("background_flux size must match detector frame size"))
     scratch .= _batched_frame_map(background.map)
     scratch .*= exposure_time
-    poisson_noise_frame!(det, rng, scratch)
+    _batched_poisson_noise_async!(execution_style(cube), det, scratch, rng)
     cube .+= scratch
     return cube
 end
@@ -65,7 +75,7 @@ function _batched_dark_current!(det::Detector, cube::AbstractArray, scratch::Abs
         return cube
     end
     fill!(scratch, dark_signal)
-    poisson_noise_frame!(det, rng, scratch)
+    _batched_poisson_noise_async!(execution_style(cube), det, scratch, rng)
     cube .+= scratch
     return cube
 end
@@ -145,14 +155,14 @@ function _batched_apply_readout_correction!(model::FrameReadoutCorrectionModel, 
 end
 
 function _batched_readout_noise!(det::Detector{<:NoiseReadout}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
-    randn_frame_noise!(det, rng, scratch)
+    _batched_randn_noise_async!(execution_style(cube), det, scratch, rng)
     sigma = effective_readout_sigma(det.params.sensor, det.noise.sigma)
     cube .+= sigma .* scratch
     return cube
 end
 
 function _batched_readout_noise!(det::Detector{<:NoisePhotonReadout}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
-    randn_frame_noise!(det, rng, scratch)
+    _batched_randn_noise_async!(execution_style(cube), det, scratch, rng)
     sigma = effective_readout_sigma(det.params.sensor, det.noise.sigma)
     cube .+= sigma .* scratch
     return cube
@@ -178,12 +188,12 @@ end
 capture_stack_poisson_noise!(det::Detector, cube::AbstractArray, rng::AbstractRNG) = cube
 
 function capture_stack_poisson_noise!(det::Detector{NoisePhoton}, cube::AbstractArray, rng::AbstractRNG)
-    poisson_noise_frame!(det, rng, cube)
+    _batched_poisson_noise_async!(execution_style(cube), det, cube, rng)
     return cube
 end
 
 function capture_stack_poisson_noise!(det::Detector{<:NoisePhotonReadout}, cube::AbstractArray, rng::AbstractRNG)
-    poisson_noise_frame!(det, rng, cube)
+    _batched_poisson_noise_async!(execution_style(cube), det, cube, rng)
     return cube
 end
 
@@ -327,6 +337,7 @@ function _capture_stack_fixed!(det::Detector, cube::AbstractArray{T,3}, scratch:
     apply_readout_correction!(det.params.correction_model, cube, det)
     _batched_quantization!(det, cube)
     _batched_background_map!(det.background_map, cube, scratch)
+    synchronize_backend!(execution_style(cube))
     return cube
 end
 
