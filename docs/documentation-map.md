@@ -139,6 +139,12 @@ If you are:
 - [`gpu-sh-centroid-redesign-plan.md`](./gpu-sh-centroid-redesign-plan.md)
   - redesign plan for a genuinely GPU-friendly Shack-Hartmann centroid/export
     path shared across CUDA and AMDGPU
+- [`gpu-readout-correction-plan.md`](./gpu-readout-correction-plan.md)
+  - completed/active plan for stack-aware GPU readout-correction on maintained
+    detector surfaces
+- [`gpu-detector-followup-plan.md`](./gpu-detector-followup-plan.md)
+  - follow-on plan for detector finalization, generalized batching, and
+    GPU-native output surfaces after readout-correction recovery
 - [`lift-gsc-runtime-validation.md`](./lift-gsc-runtime-validation.md)
   - maintained workflow-profile artifact for LiFT and gain-sensing camera
 - [`tomography-benchmark-scope.md`](./tomography-benchmark-scope.md)
