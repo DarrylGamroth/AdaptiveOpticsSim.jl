@@ -21,6 +21,10 @@ Current state:
   - they preserved CPU parity
   - they did not improve warmed runtime on CUDA
   - they regressed warmed runtime on AMDGPU relative to the kept per-frame loop
+- direct `write_output!` profiling on the maintained windowed/integer HgCdTe surface did not justify more code:
+  - AMDGPU: `capture ≈ 0.488 ms`, `write_output! ≈ 0.0245 ms`
+  - CUDA: `capture ≈ 4.91 ms`, `write_output! ≈ 0.0119 ms`
+  - conclusion: window extraction / integer packing is already device-native and not the dominant cost on the maintained direct-frame path
 
 Highest-value next targets:
 1. Detector finalization on maintained frame surfaces
@@ -30,16 +34,9 @@ Highest-value next targets:
      - CPU vs CUDA parity
      - no regression on maintained HEART surfaces
 
-2. Window extraction and packed output writeout
-   - add stack-aware/device-aware paths for:
-     - `readout_window`
-     - integer output packing in `write_output!`
-   - acceptance:
-     - output product matches current CPU behavior
-     - no hidden host round-trips on maintained GPU surfaces
-
-3. HgCdTe readout-product surfaces
+2. HgCdTe readout-product surfaces
    - profile whether readout-product construction is a maintained bottleneck
+   - likely higher-value than direct `write_output!`, because the current windowed HgCdTe path still builds full sampling cubes before copying windowed products
    - only optimize if it shows up in maintained workloads
 
 Design rules:
@@ -55,7 +52,9 @@ Execution order:
 3. add focused parity tests for direct frame finalization on GPU
 4. profile `_capture_stack_generalized!` and identify whether generalized batching is worth a maintained GPU path
    - current result: not worth keeping on maintained AMDGPU/CUDA surfaces yet
-5. only add stack-aware window/output packing if the benchmarks justify it on maintained workloads
+5. profile direct `write_output!` on maintained GPU detector surfaces
+   - current result: already cheap; no further action justified
+6. only optimize HgCdTe readout products if they show up as a maintained workload bottleneck
 
 Stop/go criteria:
 - keep a new GPU path only if:
