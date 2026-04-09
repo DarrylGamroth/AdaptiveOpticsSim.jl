@@ -146,11 +146,70 @@ _batched_post_readout_gain!(::FrameSensorType, det::Detector, cube::AbstractArra
 _batched_readout_noise!(det::Detector{NoiseNone}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
 _batched_readout_noise!(det::Detector{NoisePhoton}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
 _batched_apply_readout_correction!(::NullFrameReadoutCorrection, cube::AbstractArray{T,3}) where {T} = cube
+_batched_apply_readout_correction!(::NullFrameReadoutCorrection, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T} = cube
 
 function _batched_apply_readout_correction!(model::FrameReadoutCorrectionModel, cube::AbstractArray{T,3}) where {T}
     for b in axes(cube, 1)
         apply_readout_correction!(model, @view(cube[b, :, :]))
     end
+    return cube
+end
+
+function _batched_apply_readout_correction!(model::FrameReadoutCorrectionModel, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
+    return _batched_apply_readout_correction!(execution_style(cube), model, cube, scratch)
+end
+
+function _batched_apply_readout_correction!(::ExecutionStyle, model::FrameReadoutCorrectionModel,
+    cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
+    return _batched_apply_readout_correction!(model, cube)
+end
+
+@kernel function reference_pixel_bias_kernel!(bias, cube, edge_rows::Int, edge_cols::Int, n::Int, m::Int)
+    idx = @index(Global, Linear)
+    if idx <= size(cube, 1)
+        T = eltype(cube)
+        n_edge_rows = min(edge_rows, n)
+        n_edge_cols = min(edge_cols, m)
+        total = zero(T)
+        count = 0
+        @inbounds begin
+            if n_edge_rows > 0
+                for i in 1:n_edge_rows, j in 1:m
+                    total += cube[idx, i, j]
+                end
+                count += n_edge_rows * m
+                if n > n_edge_rows
+                    for i in (n - n_edge_rows + 1):n, j in 1:m
+                        total += cube[idx, i, j]
+                    end
+                    count += n_edge_rows * m
+                end
+            end
+            row_lo = n_edge_rows + 1
+            row_hi = n - n_edge_rows
+            if n_edge_cols > 0 && row_lo <= row_hi
+                for i in row_lo:row_hi, j in 1:n_edge_cols
+                    total += cube[idx, i, j]
+                end
+                count += (row_hi - row_lo + 1) * n_edge_cols
+                if m > n_edge_cols
+                    for i in row_lo:row_hi, j in (m - n_edge_cols + 1):m
+                        total += cube[idx, i, j]
+                    end
+                    count += (row_hi - row_lo + 1) * n_edge_cols
+                end
+            end
+        end
+        @inbounds bias[idx] = count > 0 ? total / T(count) : zero(T)
+    end
+end
+
+function _batched_apply_readout_correction!(style::AcceleratorStyle, model::ReferencePixelCommonModeCorrection,
+    cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
+    bias = @view scratch[:, 1, 1]
+    launch_kernel!(style, reference_pixel_bias_kernel!, bias, cube, model.edge_rows, model.edge_cols,
+        size(cube, 2), size(cube, 3); ndrange=size(cube, 1))
+    cube .-= reshape(bias, :, 1, 1)
     return cube
 end
 
@@ -334,7 +393,7 @@ function _capture_stack_fixed!(det::Detector, cube::AbstractArray{T,3}, scratch:
     _batched_pre_readout_gain!(det.params.sensor, det, cube, rng)
     _batched_readout_noise!(det, cube, scratch, rng)
     _batched_post_readout_gain!(det.params.sensor, det, cube)
-    apply_readout_correction!(det.params.correction_model, cube, det)
+    _batched_apply_readout_correction!(det.params.correction_model, cube, scratch)
     _batched_quantization!(det, cube)
     _batched_background_map!(det.background_map, cube, scratch)
     synchronize_backend!(execution_style(cube))

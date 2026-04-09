@@ -537,11 +537,23 @@
     corrected_stack_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=HgCdTeAvalancheArraySensor(sampling_mode=SingleRead()),
         correction_model=ReferencePixelCommonModeCorrection(1, 1))
-    corrected_stack_in = fill(10.0, 2, 5, 5)
+    corrected_stack_in = Array{Float64}(undef, 2, 5, 5)
+    corrected_stack_in[1, :, :] .= reshape(collect(1.0:25.0), 5, 5)
+    corrected_stack_in[2, :, :] .= reshape(collect(26.0:50.0), 5, 5)
+    corrected_stack_ref = copy(corrected_stack_in)
     corrected_stack = AdaptiveOpticsSim.capture_stack!(corrected_stack_det, corrected_stack_in,
         similar(corrected_stack_in); rng=MersenneTwister(10))
     @test size(corrected_stack) == size(corrected_stack_in)
-    @test maximum(abs, corrected_stack) ≤ 1e-6
+    corrected_frame_1 = capture!(Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+            sensor=HgCdTeAvalancheArraySensor(sampling_mode=SingleRead()),
+            correction_model=ReferencePixelCommonModeCorrection(1, 1)),
+        @view(corrected_stack_ref[1, :, :]); rng=MersenneTwister(10))
+    corrected_frame_2 = capture!(Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+            sensor=HgCdTeAvalancheArraySensor(sampling_mode=SingleRead()),
+            correction_model=ReferencePixelCommonModeCorrection(1, 1)),
+        @view(corrected_stack_ref[2, :, :]); rng=MersenneTwister(10))
+    @test corrected_stack[1, :, :] ≈ corrected_frame_1
+    @test corrected_stack[2, :, :] ≈ corrected_frame_2
 
     det_cmos_batched = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=CMOSSensor(column_readout_sigma=1.0))
