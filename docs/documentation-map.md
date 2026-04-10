@@ -83,6 +83,8 @@ Use these when the task is cross-package or instrument-truth work:
   - maintained conventions for script-first scenario construction
 - [`api-cleanup-plan-2026-04.md`](./api-cleanup-plan-2026-04.md)
   - phased cleanup plan for runtime/HIL naming, accessors, and external-control semantics
+- [`controllable-optics-plan-2026-04.md`](./controllable-optics-plan-2026-04.md)
+  - phased plan for multi-surface controllable optics, GPU-native command routing, and ordered plant application
 - [`api-reference.md`](./api-reference.md)
   - maintained public API surface
 - [`maintainer-architecture.md`](./maintainer-architecture.md)

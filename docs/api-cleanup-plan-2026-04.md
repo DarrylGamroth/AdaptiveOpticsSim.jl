@@ -179,6 +179,8 @@ meta = science_metadata(scenario)
 
 ## Next Implementation Target
 
-The next highest-value slice after `AC-4` is `AC-5`: finish migrating the
-remaining user-facing runtime examples to the preferred structured-control
-surface and then start the deprecation layer for the legacy names.
+The next highest-value slice after `AC-4` is the plant/runtime expansion in
+[`controllable-optics-plan-2026-04.md`](./controllable-optics-plan-2026-04.md),
+then `AC-5`: finish migrating the remaining user-facing runtime examples to the
+preferred structured-control surface and start the deprecation layer for the
+legacy names once the controllable-optic surface is stable.
