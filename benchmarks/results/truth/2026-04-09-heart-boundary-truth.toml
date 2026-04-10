@@ -6,6 +6,7 @@ artifact_kind = "scientist_owned_heart_boundary_truth"
 interpretation = "Scientist-owned REVOLT/DAO boundary and geometry sources used as external truth for the maintained HEART RTC HIL contract"
 truth_level = "boundary_and_geometry"
 raw_on_sky_telemetry_included = false
+includes_dao_pupil_threshold_sweep = true
 provenance_root = "/home/dgamroth/workspaces/codex/REVOLT"
 
 [boundary_truth]
@@ -22,11 +23,16 @@ oopao_light_threshold = 0.1
 specula_subap_wanted_fov_arcsec = 15.33
 specula_sensor_pxscale_arcsec = 0.697
 specula_detector_size = [352, 352]
+dao_pupil_image_size = [256, 320]
+dao_pupil_nominal_threshold = 0.15
+dao_pupil_nominal_bbox = [79, 172, 118, 212]
+dao_pupil_nominal_fraction = 0.0778076171875
 
 [known_differences]
 central_obstruction_note = "Julia common contract uses 0.0, while SPECULA scientist-owned config records an approximate 0.25 m obstruction for DAO; this remains a known model-normalization difference rather than a boundary mismatch."
 wfs_wavelength_note = "SPECULA SH config is explicit at 800 nm; OOPAO SH path uses R-band source and Julia uses REVOLT visible-star plus cblue1 camera settings. This artifact treats command/frame boundary and geometry as truth, not full optical identity."
 oopao_sh_construction_note = "Scientist-owned OOPAO SH script sets n_subaperture=16 and shannon_sampling=true for the ideal SHWFS path."
+dao_pupil_note = "DAO pupil image threshold sweep is derived from the scientist-owned median pupil TIFF; threshold 0.15 is recorded as the nominal compact pupil mask summary in this artifact."
 
 [verdict]
 boundary_truth_available = true
@@ -65,3 +71,10 @@ sha256 = "62f1441be9a799bfa31dd001f7fbf4ae7d98c244a8da81b9aadd6061c35b963e"
 path = "/home/dgamroth/workspaces/codex/REVOLT/Data/DAO1.2m-pupil-median-stack.tiff"
 sha256 = "0a2763cb63bda5a8f9481b14cbaff4a34adb205d02185e9292e0d1061edfe17e"
 file_description = "/home/dgamroth/workspaces/codex/REVOLT/Data/DAO1.2m-pupil-median-stack.tiff: TIFF image data, little-endian, direntries=24, width=320, height=256, bps=16, compression=deflate, PhotometricInterpretation=BlackIsZero, manufacturer=Allied Vision Technologies, model=Goldeye G-008 Cool, orientation=upper-left"
+
+[provenance.dao_pupil_analysis]
+image_size = "[256, 320]"
+min_value = "0.0"
+max_value = "0.7838864728770886"
+mean_value = "0.08868573813432232"
+threshold_sweep_json = "[{\"threshold\": 0.02, \"count\": 81727, \"bbox\": [1, 256, 1, 320], \"fraction\": 0.99764404296875}, {\"threshold\": 0.05, \"count\": 70547, \"bbox\": [1, 256, 1, 320], \"fraction\": 0.86116943359375}, {\"threshold\": 0.1, \"count\": 6559, \"bbox\": [9, 190, 16, 290], \"fraction\": 0.08006591796875}, {\"threshold\": 0.15, \"count\": 6374, \"bbox\": [79, 172, 118, 212], \"fraction\": 0.0778076171875}, {\"threshold\": 0.2, \"count\": 6270, \"bbox\": [79, 172, 118, 212], \"fraction\": 0.0765380859375}, {\"threshold\": 0.25, \"count\": 6132, \"bbox\": [79, 172, 118, 212], \"fraction\": 0.074853515625}, {\"threshold\": 0.3, \"count\": 5967, \"bbox\": [79, 172, 118, 211], \"fraction\": 0.07283935546875}]"

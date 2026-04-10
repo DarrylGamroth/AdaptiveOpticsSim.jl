@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 import subprocess
+import tempfile
 from pathlib import Path
 import tomllib
 
@@ -38,20 +38,15 @@ def parse_toml(path: Path):
 
 
 def parse_specula_value(text: str, key: str) -> str:
+    import re
     m = re.search(rf'^\s*{re.escape(key)}\s*:\s*(.+?)\s*(?:#.*)?$', text, re.MULTILINE)
     if not m:
         raise RuntimeError(f'missing key {key} in {SPECULA_YML}')
     return m.group(1).strip()
 
 
-def parse_python_assignment(text: str, name: str) -> str:
-    m = re.search(rf'{re.escape(name)}\s*=\s*([^#\n]+)', text)
-    if not m:
-        raise RuntimeError(f'missing assignment {name}')
-    return m.group(1).strip()
-
-
 def parse_param_value(text: str, key: str) -> str:
+    import re
     m = re.search(rf"param\['{re.escape(key)}'\s*\]\s*=\s*([^#\n]+)", text)
     if not m:
         raise RuntimeError(f'missing parameter {key}')
@@ -78,8 +73,50 @@ def parse_dm_map(path: Path):
 
 
 def file_description(path: Path) -> str:
-    out = subprocess.check_output(['file', str(path)], text=True).strip()
-    return out
+    return subprocess.check_output(['file', str(path)], text=True).strip()
+
+
+def dao_pupil_analysis(path: Path) -> dict:
+    julia_probe = r'''
+using TiffImages, Statistics, JSON3
+img = Float64.(TiffImages.load(ARGS[1]))
+thresholds = [0.02, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3]
+stats = Dict{String,Any}()
+stats["size"] = [size(img, 1), size(img, 2)]
+stats["min"] = minimum(img)
+stats["max"] = maximum(img)
+stats["mean"] = mean(img)
+sweep = Any[]
+for t in thresholds
+    m = img .> t
+    inds = findall(m)
+    rows = map(I -> I[1], inds)
+    cols = map(I -> I[2], inds)
+    bbox = isempty(inds) ? nothing : [minimum(rows), maximum(rows), minimum(cols), maximum(cols)]
+    push!(sweep, Dict(
+        "threshold" => t,
+        "count" => count(m),
+        "fraction" => count(m) / length(m),
+        "bbox" => bbox,
+    ))
+end
+println(JSON3.write(Dict("pupil_stats" => stats, "threshold_sweep" => sweep)))
+'''
+    with tempfile.TemporaryDirectory(prefix='aos-heart-truth-') as tmpdir:
+        subprocess.check_call(
+            [
+                'julia', '--startup-file=no', '-e',
+                'using Pkg; Pkg.activate(ARGS[1]); Pkg.add(["TiffImages","JSON3"])',
+                tmpdir,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        out = subprocess.check_output(
+            ['julia', '--startup-file=no', f'--project={tmpdir}', '-e', julia_probe, str(path)],
+            text=True,
+        )
+    return json.loads(out)
 
 
 def toml_scalar(v):
@@ -134,16 +171,16 @@ def dumps_toml(data: dict) -> str:
 def main() -> None:
     common = parse_toml(COMMON_TOML)
     shwfs = parse_toml(SHWFS_TOML)
-    cameras = parse_toml(CAMERAS_TOML)
     specula_text = SPECULA_YML.read_text()
-    oopao_sh_text = OOPAO_SH.read_text()
     oopao_param_text = OOPAO_PARAM.read_text()
     dm_info = parse_dm_map(DM_MAP)
+    dao_pupil = dao_pupil_analysis(DAO_PUPIL)
 
     n_subap_julia = int(shwfs['wfs']['n_subap'])
     n_pix_subap_julia = int(shwfs['wfs']['n_pix_subap'])
     detector_shape = [n_subap_julia * n_pix_subap_julia, n_subap_julia * n_pix_subap_julia]
     light_threshold = float(parse_param_value(oopao_param_text, 'lightThreshold'))
+    nominal = next(item for item in dao_pupil['threshold_sweep'] if abs(item['threshold'] - 0.15) < 1e-12)
 
     data = {
         'artifact_id': 'HEART-TRUTH-2026-04-09',
@@ -153,6 +190,7 @@ def main() -> None:
             'interpretation': 'Scientist-owned REVOLT/DAO boundary and geometry sources used as external truth for the maintained HEART RTC HIL contract',
             'truth_level': 'boundary_and_geometry',
             'raw_on_sky_telemetry_included': False,
+            'includes_dao_pupil_threshold_sweep': True,
             'provenance_root': str(REVOLT),
         },
         'boundary_truth': {
@@ -169,11 +207,16 @@ def main() -> None:
             'specula_subap_wanted_fov_arcsec': float(parse_specula_value(specula_text, 'subap_wanted_fov')),
             'specula_sensor_pxscale_arcsec': float(parse_specula_value(specula_text, 'sensor_pxscale')),
             'specula_detector_size': [352, 352],
+            'dao_pupil_image_size': dao_pupil['pupil_stats']['size'],
+            'dao_pupil_nominal_threshold': nominal['threshold'],
+            'dao_pupil_nominal_bbox': nominal['bbox'],
+            'dao_pupil_nominal_fraction': nominal['fraction'],
         },
         'known_differences': {
             'central_obstruction_note': 'Julia common contract uses 0.0, while SPECULA scientist-owned config records an approximate 0.25 m obstruction for DAO; this remains a known model-normalization difference rather than a boundary mismatch.',
             'wfs_wavelength_note': 'SPECULA SH config is explicit at 800 nm; OOPAO SH path uses R-band source and Julia uses REVOLT visible-star plus cblue1 camera settings. This artifact treats command/frame boundary and geometry as truth, not full optical identity.',
             'oopao_sh_construction_note': 'Scientist-owned OOPAO SH script sets n_subaperture=16 and shannon_sampling=true for the ideal SHWFS path.',
+            'dao_pupil_note': 'DAO pupil image threshold sweep is derived from the scientist-owned median pupil TIFF; threshold 0.15 is recorded as the nominal compact pupil mask summary in this artifact.',
         },
         'verdict': {
             'boundary_truth_available': True,
@@ -214,6 +257,13 @@ def main() -> None:
                 'sha256': sha256(DAO_PUPIL),
                 'file_description': file_description(DAO_PUPIL),
             },
+            'dao_pupil_analysis': {
+                'image_size': str(dao_pupil['pupil_stats']['size']),
+                'min_value': str(dao_pupil['pupil_stats']['min']),
+                'max_value': str(dao_pupil['pupil_stats']['max']),
+                'mean_value': str(dao_pupil['pupil_stats']['mean']),
+                'threshold_sweep_json': json.dumps(dao_pupil['threshold_sweep']),
+            },
         },
     }
 
@@ -222,8 +272,7 @@ def main() -> None:
 
     manifest = {'artifacts': []}
     if MANIFEST.exists():
-        import tomllib as _tomllib
-        manifest = _tomllib.loads(MANIFEST.read_text())
+        manifest = tomllib.loads(MANIFEST.read_text())
     artifacts = [a for a in manifest.get('artifacts', []) if a.get('id') != 'HEART-TRUTH-2026-04-09']
     artifacts.append({
         'purpose': 'scientist-owned HEART boundary truth artifact from REVOLT/DAO assets',
