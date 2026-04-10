@@ -1,13 +1,13 @@
 @testset "GPU backend registry" begin
-    @test !gpu_backend_loaded(CUDABackendTag)
-    @test !gpu_backend_loaded(MetalBackendTag)
-    @test !gpu_backend_loaded(AMDGPUBackendTag)
-    @test gpu_backend_array_type(CUDABackendTag) === nothing
-    @test gpu_backend_array_type(MetalBackendTag) === nothing
-    @test gpu_backend_array_type(AMDGPUBackendTag) === nothing
+    @test !gpu_backend_loaded(AdaptiveOpticsSim.CUDABackendTag)
+    @test !gpu_backend_loaded(AdaptiveOpticsSim.MetalBackendTag)
+    @test !gpu_backend_loaded(AdaptiveOpticsSim.AMDGPUBackendTag)
+    @test gpu_backend_array_type(AdaptiveOpticsSim.CUDABackendTag) === nothing
+    @test gpu_backend_array_type(AdaptiveOpticsSim.MetalBackendTag) === nothing
+    @test gpu_backend_array_type(AdaptiveOpticsSim.AMDGPUBackendTag) === nothing
     @test gpu_backend_name(Matrix{Float64}) === nothing
     @test available_gpu_backends() == ()
-    @test AdaptiveOpticsSim.GPUArrayBuildBackend(CUDABackendTag) isa AdaptiveOpticsSim.GPUArrayBuildBackend{CUDABackendTag}
+    @test AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.CUDABackendTag) isa AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.CUDABackendTag}
 end
 
 @testset "API export curation" begin
@@ -18,6 +18,10 @@ end
     @test !Base.isexported(AdaptiveOpticsSim, :GPUArrayBuildBackend)
     @test !Base.isexported(AdaptiveOpticsSim, :default_build_backend)
     @test !Base.isexported(AdaptiveOpticsSim, :set_fft_provider_threads!)
+    @test !Base.isexported(AdaptiveOpticsSim, :GPUBackendTag)
+    @test !Base.isexported(AdaptiveOpticsSim, :CUDABackendTag)
+    @test !Base.isexported(AdaptiveOpticsSim, :MetalBackendTag)
+    @test !Base.isexported(AdaptiveOpticsSim, :AMDGPUBackendTag)
     @test AdaptiveOpticsSim.CPUBuildBackend() isa AdaptiveOpticsSim.BuildBackend
 end
 

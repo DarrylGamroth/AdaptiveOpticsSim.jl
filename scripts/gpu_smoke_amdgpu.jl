@@ -7,4 +7,4 @@ catch err
 end
 
 include(joinpath(@__DIR__, "gpu_smoke_contract.jl"))
-run_gpu_smoke_matrix(AMDGPUBackendTag)
+run_gpu_smoke_matrix(AdaptiveOpticsSim.AMDGPUBackendTag)

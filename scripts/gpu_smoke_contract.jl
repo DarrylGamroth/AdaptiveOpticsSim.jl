@@ -14,7 +14,7 @@ function record_gpu_smoke!(f::Function, failures::Vector{String}, name::Abstract
     return nothing
 end
 
-function run_gpu_smoke_matrix(::Type{B}) where {B<:GPUBackendTag}
+function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     disable_scalar_backend!(B)
     failures = String[]
     rng = MersenneTwister(1)

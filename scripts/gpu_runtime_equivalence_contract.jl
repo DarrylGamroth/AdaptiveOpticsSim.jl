@@ -81,7 +81,7 @@ function _assert_max_abs(label::AbstractString, actual, expected; atol::Real)
     @assert max_abs <= atol "$label mismatch (max_abs=$max_abs, atol=$atol)"
 end
 
-function _run_ao188_equivalence(::Type{B}, branch_mode::AbstractExecutionPolicy) where {B<:GPUBackendTag}
+function _run_ao188_equivalence(::Type{B}, branch_mode::AbstractExecutionPolicy) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     disable_scalar_backend!(B)
     BackendArray = gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
@@ -116,7 +116,7 @@ function _post_command_observation!(surrogate::AO188Simulation, host_command::Ab
 end
 
 function _run_ao188_post_command_equivalence(::Type{B}, branch_mode::AbstractExecutionPolicy;
-    T::Type{<:AbstractFloat}=Float64) where {B<:GPUBackendTag}
+    T::Type{<:AbstractFloat}=Float64) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     disable_scalar_backend!(B)
     BackendArray = gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
@@ -179,7 +179,7 @@ function _build_lgs_case(backend, ::Type{T}, profile::Symbol) where {T<:Abstract
     return tel, src, wfs, det
 end
 
-function _run_lgs_equivalence(::Type{B}, profile::Symbol) where {B<:GPUBackendTag}
+function _run_lgs_equivalence(::Type{B}, profile::Symbol) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     disable_scalar_backend!(B)
     BackendArray = gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
@@ -222,7 +222,7 @@ function _build_mixed_sh_asterism_case(backend, ::Type{T}) where {T<:AbstractFlo
     return tel, ast, wfs, det
 end
 
-function _run_mixed_sh_asterism_equivalence(::Type{B}) where {B<:GPUBackendTag}
+function _run_mixed_sh_asterism_equivalence(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     disable_scalar_backend!(B)
     BackendArray = gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
@@ -256,7 +256,7 @@ function _build_zernike_case(backend, ::Type{T}) where {T<:AbstractFloat}
     return tel, src, wfs, det
 end
 
-function _run_zernike_equivalence(::Type{B}) where {B<:GPUBackendTag}
+function _run_zernike_equivalence(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     disable_scalar_backend!(B)
     BackendArray = gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
@@ -276,7 +276,7 @@ function _run_zernike_equivalence(::Type{B}) where {B<:GPUBackendTag}
     _assert_close("detector_frame", output_frame(det_gpu), output_frame(det_cpu); rtol=1f-5, atol=1f-2)
 end
 
-function run_gpu_runtime_equivalence(::Type{B}; branch_mode::AbstractExecutionPolicy=SequentialExecution()) where {B<:GPUBackendTag}
+function run_gpu_runtime_equivalence(::Type{B}; branch_mode::AbstractExecutionPolicy=SequentialExecution()) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     _run_ao188_equivalence(B, branch_mode)
     _run_lgs_equivalence(B, :none)
     _run_lgs_equivalence(B, :na)
@@ -287,7 +287,7 @@ function run_gpu_runtime_equivalence(::Type{B}; branch_mode::AbstractExecutionPo
 end
 
 function run_gpu_runtime_equivalence_high_accuracy(::Type{B};
-    branch_mode::AbstractExecutionPolicy=SequentialExecution()) where {B<:GPUBackendTag}
+    branch_mode::AbstractExecutionPolicy=SequentialExecution()) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     _run_ao188_post_command_equivalence(B, branch_mode; T=Float64)
     println("gpu_runtime_equivalence_high_accuracy complete")
     return nothing

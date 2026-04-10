@@ -76,6 +76,8 @@ This plan is complete when all of the following are true:
 
 ### Phase PH-1: Freeze the production boundary and release gate
 
+Status: complete
+
 Goal:
 
 - make the supported claim auditable from a small number of maintained files
@@ -111,6 +113,8 @@ Verification:
 
 ### Phase PH-2: Public API curation pass 2
 
+Status: complete
+
 Goal:
 
 - reduce the top-level namespace to a clearer stable workflow surface without
@@ -143,6 +147,8 @@ Verification:
 - optional backend coverage for any moved GPU/backend helpers touched by the pass
 
 ### Phase PH-3: Structural modularization pass 2
+
+Status: complete
 
 Goal:
 
@@ -186,6 +192,8 @@ Verification:
 
 ### Phase PH-4: Validation breadth pass 2
 
+Status: complete via [production-boundary-freeze-2026-04.md](./production-boundary-freeze-2026-04.md)
+
 Goal:
 
 - strengthen the production claim with one additional maintained realism or
@@ -222,6 +230,8 @@ Verification:
 - docs linked from the release/readiness docs
 
 ### Phase PH-5: Operational validation cadence
+
+Status: complete once at least one dated CUDA run and one dated AMDGPU run are archived under `benchmarks/results/validation_runs/`
 
 Goal:
 

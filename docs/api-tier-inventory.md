@@ -48,6 +48,30 @@ advanced/developer-oriented and should be revisited in a later curation pass.
 
 ## `PSP-01` implementation status
 
+- Current top-level export count after `PSP-02` curation:
+  - `547`
+- Change from the current pre-`PSP-02` baseline:
+  - `-4` exported names
+
+`PSP-02` intentionally targeted the lowest-risk remaining backend tag tranche:
+
+- `GPUBackendTag` moved to namespaced access
+- `CUDABackendTag` moved to namespaced access
+- `MetalBackendTag` moved to namespaced access
+- `AMDGPUBackendTag` moved to namespaced access
+
+These names remain part of the advanced/developer surface for benchmark, smoke,
+and backend-audit scripts, but no longer occupy the default package namespace.
+
+### `PSP-02` de-exported symbols
+
+- `GPUBackendTag`
+- `CUDABackendTag`
+- `MetalBackendTag`
+- `AMDGPUBackendTag`
+
+## `PSP-01` implementation status
+
 - Current top-level export count after `PSP-01` curation:
   - `538`
 - Change from the current pre-`PSP-01` baseline:

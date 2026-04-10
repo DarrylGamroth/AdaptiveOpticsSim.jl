@@ -31,6 +31,8 @@ Use these supporting docs together:
 - [backend-validation-guide.md](./backend-validation-guide.md)
 - [cross-package-benchmark-harness.md](./cross-package-benchmark-harness.md)
 - [production-readiness-checklist.md](./production-readiness-checklist.md)
+- [operational-gpu-validation-cadence.md](./operational-gpu-validation-cadence.md)
+- [production-boundary-freeze-2026-04.md](./production-boundary-freeze-2026-04.md)
 
 ## Production-Supported Surfaces
 

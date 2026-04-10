@@ -19,24 +19,24 @@ function _resolve_backend(name::AbstractString)
     elseif lowered == "cuda"
         isdefined(Main, :CUDA) || error("profile_zernike_runtime.jl requires CUDA.jl for backend=cuda")
         CUDA.functional() || error("profile_zernike_runtime.jl requires a functional CUDA driver/device")
-        AdaptiveOpticsSim.disable_scalar_backend!(CUDABackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(CUDABackendTag)
+        AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.CUDABackendTag)
+        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.CUDABackendTag)
         backend === nothing && error("CUDA backend array type is unavailable")
-        return backend, CUDABackendTag, "cuda"
+        return backend, AdaptiveOpticsSim.CUDABackendTag, "cuda"
     elseif lowered == "amdgpu"
         isdefined(Main, :AMDGPU) || error("profile_zernike_runtime.jl requires AMDGPU.jl for backend=amdgpu")
         AMDGPU.functional() || error("profile_zernike_runtime.jl requires a functional ROCm installation and GPU")
-        AdaptiveOpticsSim.disable_scalar_backend!(AMDGPUBackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AMDGPUBackendTag)
+        AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.AMDGPUBackendTag)
+        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.AMDGPUBackendTag)
         backend === nothing && error("AMDGPU backend array type is unavailable")
-        return backend, AMDGPUBackendTag, "amdgpu"
+        return backend, AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
     end
     error("unsupported backend '$name'; use cpu, cuda, or amdgpu")
 end
 
 _sync_interface!(::Nothing, _) = nothing
 
-function _sync_interface!(::Type{B}, interface::SimulationInterface) where {B<:GPUBackendTag}
+function _sync_interface!(::Type{B}, interface::SimulationInterface) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(interface.command))
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(interface.slopes))
     frame = simulation_wfs_frame(interface)

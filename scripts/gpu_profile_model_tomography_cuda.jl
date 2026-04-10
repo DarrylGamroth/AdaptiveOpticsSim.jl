@@ -8,4 +8,4 @@ catch err
 end
 
 include(joinpath(@__DIR__, "gpu_profile_model_tomography_contract.jl"))
-run_gpu_model_tomography_profile(CUDABackendTag)
+run_gpu_model_tomography_profile(AdaptiveOpticsSim.CUDABackendTag)

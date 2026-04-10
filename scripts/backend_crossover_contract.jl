@@ -3,7 +3,7 @@ using Random
 
 abstract type SweepExecutionTarget end
 struct CPUSweepTarget <: SweepExecutionTarget end
-struct GPUSweepTarget{B<:GPUBackendTag} <: SweepExecutionTarget end
+struct GPUSweepTarget{B<:AdaptiveOpticsSim.GPUBackendTag} <: SweepExecutionTarget end
 
 _sync_target!(::CPUSweepTarget, _) = nothing
 
@@ -13,19 +13,19 @@ function _sync_target!(::GPUSweepTarget, A)
 end
 
 _gpu_target_type(::CPUSweepTarget) = nothing
-_gpu_target_type(::GPUSweepTarget{B}) where {B<:GPUBackendTag} = B
+_gpu_target_type(::GPUSweepTarget{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag} = B
 
 _sweep_policy(::CPUSweepTarget) = SplitGPUPrecision(Float32, Float32)
-_sweep_policy(::GPUSweepTarget{B}) where {B<:GPUBackendTag} =
+_sweep_policy(::GPUSweepTarget{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag} =
     AdaptiveOpticsSim.default_gpu_precision_policy(B)
 
 _high_accuracy_policy(::CPUSweepTarget) = SplitGPUPrecision(Float32, Float64)
-_high_accuracy_policy(::GPUSweepTarget{B}) where {B<:GPUBackendTag} =
+_high_accuracy_policy(::GPUSweepTarget{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag} =
     AdaptiveOpticsSim.high_accuracy_gpu_precision_policy(B)
 
 _sweep_backend_array(::CPUSweepTarget) = Array
 
-function _sweep_backend_array(::GPUSweepTarget{B}) where {B<:GPUBackendTag}
+function _sweep_backend_array(::GPUSweepTarget{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     AdaptiveOpticsSim.disable_scalar_backend!(B)
     BackendArray = AdaptiveOpticsSim.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
@@ -33,10 +33,10 @@ function _sweep_backend_array(::GPUSweepTarget{B}) where {B<:GPUBackendTag}
 end
 
 _build_backend(::CPUSweepTarget) = AdaptiveOpticsSim.CPUBuildBackend()
-_build_backend(::GPUSweepTarget{B}) where {B<:GPUBackendTag} = AdaptiveOpticsSim.GPUArrayBuildBackend(B)
+_build_backend(::GPUSweepTarget{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag} = AdaptiveOpticsSim.GPUArrayBuildBackend(B)
 
 _backend_name(::CPUSweepTarget) = "cpu"
-_backend_name(::GPUSweepTarget{B}) where {B<:GPUBackendTag} =
+_backend_name(::GPUSweepTarget{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag} =
     string(something(AdaptiveOpticsSim.gpu_backend_name(B), B))
 
 function _time_block_ns(f::F) where {F<:Function}

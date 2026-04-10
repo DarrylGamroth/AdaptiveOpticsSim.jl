@@ -1,11 +1,11 @@
-backend_package_name(::Type{CUDABackendTag}) = "CUDA"
-backend_package_name(::Type{AMDGPUBackendTag}) = "AMDGPU"
+backend_package_name(::Type{AdaptiveOpticsSim.CUDABackendTag}) = "CUDA"
+backend_package_name(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = "AMDGPU"
 
-backend_label(::Type{CUDABackendTag}) = "CUDA"
-backend_label(::Type{AMDGPUBackendTag}) = "AMDGPU"
+backend_label(::Type{AdaptiveOpticsSim.CUDABackendTag}) = "CUDA"
+backend_label(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = "AMDGPU"
 
-backend_full_smoke_env(::Type{CUDABackendTag}) = "ADAPTIVEOPTICS_TEST_FULL_CUDA"
-backend_full_smoke_env(::Type{AMDGPUBackendTag}) = "ADAPTIVEOPTICS_TEST_FULL_AMDGPU"
+backend_full_smoke_env(::Type{AdaptiveOpticsSim.CUDABackendTag}) = "ADAPTIVEOPTICS_TEST_FULL_CUDA"
+backend_full_smoke_env(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = "ADAPTIVEOPTICS_TEST_FULL_AMDGPU"
 
 function build_optional_platform_branch(::Type{T}, BackendArray, label::Symbol; sensor::Symbol=:sh, seed::Integer=1) where {T<:AbstractFloat}
     tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
@@ -23,22 +23,22 @@ function build_optional_platform_branch(::Type{T}, BackendArray, label::Symbol; 
     return ClosedLoopBranchConfig(label, sim, recon; wfs_detector=det, rng=MersenneTwister(seed))
 end
 
-function import_backend_package!(::Type{CUDABackendTag})
+function import_backend_package!(::Type{AdaptiveOpticsSim.CUDABackendTag})
     @eval import CUDA
     return nothing
 end
 
-function import_backend_package!(::Type{AMDGPUBackendTag})
+function import_backend_package!(::Type{AdaptiveOpticsSim.AMDGPUBackendTag})
     @eval import AMDGPU
     return nothing
 end
 
-backend_functional(::Type{CUDABackendTag}) = CUDA.functional()
-backend_functional(::Type{AMDGPUBackendTag}) = AMDGPU.functional()
+backend_functional(::Type{AdaptiveOpticsSim.CUDABackendTag}) = CUDA.functional()
+backend_functional(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = AMDGPU.functional()
 
-run_optional_backend_plan_checks(::Type{<:GPUBackendTag}, tel, backend) = nothing
+run_optional_backend_plan_checks(::Type{<:AdaptiveOpticsSim.GPUBackendTag}, tel, backend) = nothing
 
-function run_optional_backend_plan_checks(::Type{AMDGPUBackendTag}, tel, backend)
+function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}, tel, backend)
     T = Float32
     sh = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
     pyr = PyramidWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
@@ -240,7 +240,7 @@ function run_optional_backend_plan_checks(::Type{AMDGPUBackendTag}, tel, backend
     return nothing
 end
 
-function run_optional_backend_plan_checks(::Type{CUDABackendTag}, tel, backend)
+function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTag}, tel, backend)
     T = Float32
     sh = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
     pyr = PyramidWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
@@ -438,7 +438,7 @@ function run_optional_backend_plan_checks(::Type{CUDABackendTag}, tel, backend)
     return nothing
 end
 
-function run_optional_backend_smoke(::Type{B}) where {B<:GPUBackendTag}
+function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     pkg = backend_package_name(B)
     pkg_path = Base.find_package(pkg)
     if pkg_path === nothing

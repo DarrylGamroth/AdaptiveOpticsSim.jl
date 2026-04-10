@@ -7,4 +7,4 @@ catch err
 end
 
 include(joinpath(@__DIR__, "gpu_sync_audit_contract.jl"))
-run_gpu_sync_audit(AMDGPUBackendTag)
+run_gpu_sync_audit(AdaptiveOpticsSim.AMDGPUBackendTag)

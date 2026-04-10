@@ -88,6 +88,10 @@ If you are:
   - remaining blockers before production-readiness claims
 - [`production-hardening-plan-2026-04.md`](./production-hardening-plan-2026-04.md)
   - ordered execution plan for finishing the current production-hardening pass
+- [`operational-gpu-validation-cadence.md`](./operational-gpu-validation-cadence.md)
+  - required real-hardware release-validation cadence for CUDA and AMDGPU
+- [`production-boundary-freeze-2026-04.md`](./production-boundary-freeze-2026-04.md)
+  - explicit decision to freeze the current supported production boundary for this release train
 - [`release-validation-runbook.md`](./release-validation-runbook.md)
 - [`self-hosted-gpu-runner-setup.md`](./self-hosted-gpu-runner-setup.md)
   - one-command release validation procedure and optional GPU/comparison tracks

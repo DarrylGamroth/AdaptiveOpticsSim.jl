@@ -10,7 +10,7 @@ function _time_phase(f)
     return value, dt
 end
 
-function run_gpu_model_tomography_phase_profile(::Type{B}) where {B<:GPUBackendTag}
+function run_gpu_model_tomography_phase_profile(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     AdaptiveOpticsSim.disable_scalar_backend!(B)
     BackendArray = AdaptiveOpticsSim.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")

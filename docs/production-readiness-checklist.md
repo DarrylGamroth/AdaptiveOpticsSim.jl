@@ -69,4 +69,4 @@ The remaining blocker is:
 ## Next Recommended Order
 
 1. Put CUDA and AMDGPU validation on a real operational cadence, either through CI or through a maintained release-validation host.
-2. Keep the release-validation runbook and bootstrap path exercised on production hosts.
+2. Keep the release-validation runbook, cadence note, and bootstrap path exercised on production hosts.

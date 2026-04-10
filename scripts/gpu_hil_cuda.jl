@@ -7,4 +7,4 @@ catch err
 end
 
 include(joinpath(@__DIR__, "gpu_hil_contract.jl"))
-run_gpu_hil_smoke(CUDABackendTag)
+run_gpu_hil_smoke(AdaptiveOpticsSim.CUDABackendTag)

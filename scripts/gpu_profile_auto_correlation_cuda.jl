@@ -18,7 +18,7 @@ function _time_phase(f)
     return value, dt
 end
 
-function _profile_case(::Type{B}) where {B<:GPUBackendTag}
+function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     AdaptiveOpticsSim.disable_scalar_backend!(B)
     BackendArray = AdaptiveOpticsSim.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
@@ -163,4 +163,4 @@ function _profile_case(::Type{B}) where {B<:GPUBackendTag}
     return nothing
 end
 
-_profile_case(CUDABackendTag)
+_profile_case(AdaptiveOpticsSim.CUDABackendTag)

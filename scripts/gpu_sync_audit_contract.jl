@@ -17,7 +17,7 @@ function _warm_builder!(f::F) where {F<:Function}
     return result
 end
 
-function run_gpu_sync_audit(::Type{B}) where {B<:GPUBackendTag}
+function run_gpu_sync_audit(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     AdaptiveOpticsSim.disable_scalar_backend!(B)
     BackendArray = AdaptiveOpticsSim.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")

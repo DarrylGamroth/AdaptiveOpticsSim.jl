@@ -1,7 +1,7 @@
 using AdaptiveOpticsSim
 using LinearAlgebra
 
-function run_gpu_builder_smoke(::Type{B}) where {B<:GPUBackendTag}
+function run_gpu_builder_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     disable_scalar_backend!(B)
     BackendArray = gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")

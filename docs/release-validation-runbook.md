@@ -15,11 +15,19 @@ surface easy to rerun before a release or a production handoff.
 Use:
 
 - [run_release_validation.sh](../scripts/run_release_validation.sh)
+- [archive_release_validation.sh](../scripts/archive_release_validation.sh)
 
 From the repository root:
 
 ```bash
 ./scripts/run_release_validation.sh
+```
+
+To archive an operational validation run with dated logs and metadata:
+
+```bash
+./scripts/archive_release_validation.sh amdgpu
+./scripts/archive_release_validation.sh cuda spiders
 ```
 
 This always runs:
@@ -139,6 +147,7 @@ Use together with:
 - [production-readiness-checklist.md](./production-readiness-checklist.md)
 - [backend-validation-guide.md](./backend-validation-guide.md)
 - [self-hosted-gpu-runner-setup.md](./self-hosted-gpu-runner-setup.md)
+- [operational-gpu-validation-cadence.md](./operational-gpu-validation-cadence.md)
 
 ## Validation host bootstrap
 

@@ -30,7 +30,8 @@ Current line counts:
 - [`src/WFS/pyramid.jl`](../src/WFS/pyramid.jl): `1463`
 - [`src/WFS/bioedge.jl`](../src/WFS/bioedge.jl): `1241`
 - [`src/Control/runtime.jl`](../src/Control/runtime.jl): `1123`
-- [`test/runtests.jl`](../test/runtests.jl): `3300`
+- [`test/runtests.jl`](../test/runtests.jl): `12`
+- [`test/testsets/detectors_and_wfs.jl`](../test/testsets/detectors_and_wfs.jl): `4`
 
 ## Phase 2 implementation status
 
@@ -74,6 +75,10 @@ Current split layout:
   - [`test/testsets/atmosphere.jl`](../test/testsets/atmosphere.jl)
   - [`test/testsets/control_and_runtime.jl`](../test/testsets/control_and_runtime.jl)
   - [`test/testsets/detectors_and_wfs.jl`](../test/testsets/detectors_and_wfs.jl)
+  - [`test/testsets/detectors.jl`](../test/testsets/detectors.jl)
+  - [`test/testsets/shack_hartmann_and_sources.jl`](../test/testsets/shack_hartmann_and_sources.jl)
+  - [`test/testsets/pyramid_bioedge_and_lgs.jl`](../test/testsets/pyramid_bioedge_and_lgs.jl)
+  - [`test/testsets/zernike_and_curvature.jl`](../test/testsets/zernike_and_curvature.jl)
   - [`test/testsets/calibration_and_analysis.jl`](../test/testsets/calibration_and_analysis.jl)
   - [`test/testsets/reference_and_tutorials.jl`](../test/testsets/reference_and_tutorials.jl)
 

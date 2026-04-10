@@ -7,4 +7,4 @@ catch err
 end
 
 include(joinpath(@__DIR__, "backend_crossover_contract.jl"))
-run_backend_crossover_sweep(GPUSweepTarget{CUDABackendTag}())
+run_backend_crossover_sweep(GPUSweepTarget{AdaptiveOpticsSim.CUDABackendTag}())

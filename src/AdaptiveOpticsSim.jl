@@ -229,7 +229,6 @@ export DMApplyMode, DMAdditive, DMReplace
 export ParallelConfig, with_parallel_config
 export gpu_backend_loaded, gpu_backend_array_type, gpu_backend_name, available_gpu_backends
 export disable_scalar_backend!, backend_rand, backend_randn, backend_zeros, backend_fill
-export GPUBackendTag, CUDABackendTag, MetalBackendTag, AMDGPUBackendTag
 export GPUPrecisionPolicy, UnifiedGPUPrecision, SplitGPUPrecision
 export gpu_runtime_type, gpu_build_type, default_gpu_precision_policy, high_accuracy_gpu_precision_policy
 export TomographyAtmosphereParams, LGSAsterismParams, LGSWFSParams
