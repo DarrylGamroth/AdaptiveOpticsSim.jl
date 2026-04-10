@@ -35,13 +35,16 @@ mutable struct KolmogorovState{T<:AbstractFloat,A<:AbstractMatrix{T},B<:Abstract
     last_L0::T
 end
 
-struct KolmogorovAtmosphere{P<:KolmogorovParams,S<:KolmogorovState} <: AbstractAtmosphere
+struct KolmogorovAtmosphere{P<:KolmogorovParams,S<:KolmogorovState,B<:AbstractArrayBackend} <: AbstractAtmosphere
     params::P
     state::S
 end
 
-function KolmogorovAtmosphere(tel::Telescope; r0::Real, L0::Real=25.0, T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
-    backend = _resolve_array_backend(backend)
+@inline backend(::KolmogorovAtmosphere{<:Any,<:Any,B}) where {B} = B()
+
+function KolmogorovAtmosphere(tel::Telescope; r0::Real, L0::Real=25.0, T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel))
+    selector = require_same_backend(tel, _resolve_backend_selector(backend))
+    backend = _resolve_array_backend(selector)
     params = KolmogorovParams{T}(T(r0), T(L0))
     n = tel.params.resolution
     opd = backend{T}(undef, n, n)
@@ -70,7 +73,7 @@ function KolmogorovAtmosphere(tel::Telescope; r0::Real, L0::Real=25.0, T::Type{<
         T(-1),
         T(-1),
     )
-    return KolmogorovAtmosphere(params, state)
+    return KolmogorovAtmosphere{typeof(params), typeof(state), typeof(selector)}(params, state)
 end
 
 function update_psd!(atm::KolmogorovAtmosphere, delta::Real)

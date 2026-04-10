@@ -54,11 +54,42 @@ array_backend_type(::MetalBackend) = _require_gpu_array_backend(MetalBackendTag,
 array_backend_type(::AMDGPUBackend) = _require_gpu_array_backend(AMDGPUBackendTag, "AMDGPUBackend()")
 resolve_array_backend(backend::AbstractArrayBackend) = array_backend_type(backend)
 
-# Internal normalization helper used by constructor chaining after a backend has
-# already been resolved to an array container type. Public API should prefer the
-# semantic selector surface and call `resolve_array_backend` directly.
+array_backend_selector(::Type{Array}) = CPUBackend()
+array_backend_selector(::Type{<:AbstractArray}) =
+    throw(InvalidConfiguration("no semantic backend selector is registered for the array storage type"))
+
+# Internal normalization helpers used by constructor chaining after a backend has
+# already been resolved to a semantic selector or array container type. Public
+# API should prefer the semantic selector surface and call `resolve_array_backend`
+# directly.
+_resolve_backend_selector(backend::AbstractArrayBackend) = backend
+_resolve_backend_selector(backend::Type{<:AbstractArray}) = array_backend_selector(backend)
 _resolve_array_backend(backend::AbstractArrayBackend) = array_backend_type(backend)
 _resolve_array_backend(backend::Type{<:AbstractArray}) = backend
+
+backend(backend::AbstractArrayBackend) = backend
+backend(A::AbstractArray) = array_backend_selector(typeof(A))
+backend_type(x) = typeof(backend(x))
+
+@inline function same_backend(x, y)
+    return backend_type(x) === backend_type(y)
+end
+
+@inline function same_backend(x, y, z, rest...)
+    return same_backend(x, y) && same_backend(x, z) && all(arg -> same_backend(x, arg), rest)
+end
+
+function require_same_backend(xs...)
+    filtered = Tuple(x for x in xs if !isnothing(x))
+    isempty(filtered) && return CPUBackend()
+    ref = backend(filtered[1])
+    refT = typeof(ref)
+    for x in filtered[2:end]
+        bx = backend(x)
+        typeof(bx) === refT || throw(InvalidConfiguration("all composed objects in a simulation path must share the same backend; got $(refT) and $(typeof(bx))"))
+    end
+    return ref
+end
 
 gpu_runtime_type(::UnifiedGPUPrecision{T}) where {T<:AbstractFloat} = T
 gpu_build_type(::UnifiedGPUPrecision{T}) where {T<:AbstractFloat} = T

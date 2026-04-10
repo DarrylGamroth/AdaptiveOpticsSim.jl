@@ -90,10 +90,12 @@ The sensor stores the sampled pupil-intensity signal in `state.slopes` for
 runtime compatibility. For this sensor the vector represents a normalized pupil
 intensity signal, not geometric or centroid slopes.
 """
-struct ZernikeWFS{P<:ZernikeWFSParams,S<:ZernikeWFSState} <: AbstractWFS
+struct ZernikeWFS{P<:ZernikeWFSParams,S<:ZernikeWFSState,B<:AbstractArrayBackend} <: AbstractWFS
     params::P
     state::S
 end
+
+@inline backend(::ZernikeWFS{<:Any,<:Any,B}) where {B} = B()
 
 """
     ZernikeWFS(tel; ...)
@@ -111,8 +113,9 @@ function ZernikeWFS(tel::Telescope; n_subap::Int,
     diffraction_padding::Int=2,
     binning::Int=1,
     T::Type{<:AbstractFloat}=Float64,
-    backend=CPUBackend())
-    backend = _resolve_array_backend(backend)
+    backend::AbstractArrayBackend=backend(tel))
+    selector = require_same_backend(tel, _resolve_backend_selector(backend))
+    backend = _resolve_array_backend(selector)
     if tel.params.resolution % n_subap != 0
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     end
@@ -186,7 +189,7 @@ function ZernikeWFS(tel::Telescope; n_subap::Int,
         false,
         zero(T),
     )
-    wfs = ZernikeWFS{typeof(params),typeof(state)}(params, state)
+    wfs = ZernikeWFS{typeof(params),typeof(state),typeof(selector)}(params, state)
     update_valid_mask!(wfs, tel)
     build_zernike_phasor!(wfs.state.phasor)
     build_zernike_phase_mask!(wfs, tel)

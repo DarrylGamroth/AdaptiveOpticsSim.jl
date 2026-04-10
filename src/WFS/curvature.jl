@@ -213,10 +213,12 @@ mutable struct CurvatureWFSState{
     atmospheric_signature::UInt
 end
 
-struct CurvatureWFS{P<:CurvatureWFSParams,S<:CurvatureWFSState} <: AbstractWFS
+struct CurvatureWFS{P<:CurvatureWFSParams,S<:CurvatureWFSState,B<:AbstractArrayBackend} <: AbstractWFS
     params::P
     state::S
 end
+
+@inline backend(::CurvatureWFS{<:Any,<:Any,B}) where {B} = B()
 
 """
     CurvatureWFS(tel; n_subap, threshold=0.1, defocus_rms_nm=500.0, diffraction_padding=2,
@@ -235,8 +237,9 @@ function CurvatureWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, defocus
     diffraction_padding::Int=2, readout_model::CurvatureReadoutModel=CurvatureFrameReadout(),
     readout_crop_resolution::Integer=tel.params.resolution, readout_pixels_per_subap::Integer=1,
     branch_response::CurvatureBranchResponse=CurvatureBranchResponse(),
-    T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
-    backend = _resolve_array_backend(backend)
+    T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel))
+    selector = require_same_backend(tel, _resolve_backend_selector(backend))
+    backend = _resolve_array_backend(selector)
     tel.params.resolution % n_subap == 0 ||
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     diffraction_padding >= 1 ||
@@ -322,7 +325,7 @@ function CurvatureWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, defocus
         nothing,
         zero(UInt),
     )
-    wfs = CurvatureWFS{typeof(params),typeof(state)}(params, state)
+    wfs = CurvatureWFS{typeof(params),typeof(state),typeof(selector)}(params, state)
     update_valid_mask!(wfs, tel)
     build_curvature_phasor!(wfs.state.phasor)
     build_curvature_defocus_masks!(wfs, tel)

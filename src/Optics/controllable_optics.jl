@@ -72,8 +72,14 @@ end
 @inline _apply_selected!(optic::AbstractControllableOptic, tel::Telescope, mode,
     label::Symbol) = _apply_selected!(optic, tel, mode, (label,))
 
-function _backend_copy_matrix(host::AbstractMatrix{T}, backend, ::Type{T}) where {T<:AbstractFloat}
-    backend = _resolve_array_backend(backend)
+function _backend_copy_matrix(host::AbstractMatrix{T}, backend::AbstractArrayBackend, ::Type{T}) where {T<:AbstractFloat}
+    backend_array = _resolve_array_backend(backend)
+    out = backend_array{T}(undef, size(host)...)
+    copyto!(out, host)
+    return out
+end
+
+function _backend_copy_matrix(host::AbstractMatrix{T}, backend::Type{<:AbstractArray}, ::Type{T}) where {T<:AbstractFloat}
     out = backend{T}(undef, size(host)...)
     copyto!(out, host)
     return out
@@ -85,7 +91,8 @@ function _modal_command_layout(spec::Union{Nothing,Symbol}, n::Int)
 end
 
 function _modal_mode_matrix(tel::Telescope, definitions::Tuple, ::Type{T}, backend) where {T<:AbstractFloat}
-    backend = _resolve_array_backend(backend)
+    selector = require_same_backend(tel, _resolve_backend_selector(backend))
+    backend = _resolve_array_backend(selector)
     n = tel.params.resolution
     pupil = tel.state.pupil
     xs = collect(range(T(-1), T(1); length=n))
@@ -128,15 +135,18 @@ struct TipTiltMirrorParams{T<:AbstractFloat}
     scale::T
 end
 
-struct TipTiltMirror{P<:TipTiltMirrorParams,S<:LowOrderControllableState,CL<:RuntimeCommandLayout} <: AbstractControllableOptic
+struct TipTiltMirror{P<:TipTiltMirrorParams,S<:LowOrderControllableState,CL<:RuntimeCommandLayout,B<:AbstractArrayBackend} <: AbstractControllableOptic
     params::P
     state::S
     layout::CL
 end
 
+@inline backend(::TipTiltMirror{<:Any,<:Any,<:Any,B}) where {B} = B()
+
 function TipTiltMirror(tel::Telescope; scale::Real=1.0,
-    T::Type{<:AbstractFloat}=Float64, backend=CPUBackend(), label::Symbol=:tiptilt)
-    backend = _resolve_array_backend(backend)
+    T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel), label::Symbol=:tiptilt)
+    selector = require_same_backend(tel, _resolve_backend_selector(backend))
+    backend = _resolve_array_backend(selector)
     n = tel.params.resolution
     opd = backend{T}(undef, n, n)
     fill!(opd, zero(T))
@@ -148,7 +158,8 @@ function TipTiltMirror(tel::Telescope; scale::Real=1.0,
     coefs = backend{T}(undef, 2)
     fill!(coefs, zero(T))
     state = LowOrderControllableState{T,typeof(opd),typeof(modes),typeof(coefs)}(opd, opd_vec, modes, coefs)
-    return TipTiltMirror(TipTiltMirrorParams{T}(T(scale)), state, RuntimeCommandLayout(label => 2))
+    params = TipTiltMirrorParams{T}(T(scale))
+    return TipTiltMirror{typeof(params),typeof(state),typeof(RuntimeCommandLayout(label => 2)),typeof(selector)}(params, state, RuntimeCommandLayout(label => 2))
 end
 
 const SteeringMirror = TipTiltMirror
@@ -157,15 +168,18 @@ struct FocusStageParams{T<:AbstractFloat}
     scale::T
 end
 
-struct FocusStage{P<:FocusStageParams,S<:LowOrderControllableState,CL<:RuntimeCommandLayout} <: AbstractControllableOptic
+struct FocusStage{P<:FocusStageParams,S<:LowOrderControllableState,CL<:RuntimeCommandLayout,B<:AbstractArrayBackend} <: AbstractControllableOptic
     params::P
     state::S
     layout::CL
 end
 
+@inline backend(::FocusStage{<:Any,<:Any,<:Any,B}) where {B} = B()
+
 function FocusStage(tel::Telescope; scale::Real=1.0,
-    T::Type{<:AbstractFloat}=Float64, backend=CPUBackend(), label::Symbol=:focus)
-    backend = _resolve_array_backend(backend)
+    T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel), label::Symbol=:focus)
+    selector = require_same_backend(tel, _resolve_backend_selector(backend))
+    backend = _resolve_array_backend(selector)
     n = tel.params.resolution
     opd = backend{T}(undef, n, n)
     fill!(opd, zero(T))
@@ -179,7 +193,8 @@ function FocusStage(tel::Telescope; scale::Real=1.0,
     coefs = backend{T}(undef, 1)
     fill!(coefs, zero(T))
     state = LowOrderControllableState{T,typeof(opd),typeof(modes),typeof(coefs)}(opd, opd_vec, modes, coefs)
-    return FocusStage(FocusStageParams{T}(T(scale)), state, RuntimeCommandLayout(label => 1))
+    params = FocusStageParams{T}(T(scale))
+    return FocusStage{typeof(params),typeof(state),typeof(RuntimeCommandLayout(label => 1)),typeof(selector)}(params, state, RuntimeCommandLayout(label => 1))
 end
 
 @inline command_storage(optic::TipTiltMirror) = optic.state.coefs
@@ -199,12 +214,14 @@ end
     return tel
 end
 
-struct CompositeControllableOptic{O,CV,CL,CR} <: AbstractControllableOptic
+struct CompositeControllableOptic{O,CV,CL,CR,B<:AbstractArrayBackend} <: AbstractControllableOptic
     optics::O
     command::CV
     layout::CL
     child_ranges::CR
 end
+
+@inline backend(::CompositeControllableOptic{<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
 
 function _composite_segment_specs(label::Symbol, optic::AbstractControllableOptic)
     layout = command_layout(optic)
@@ -227,7 +244,8 @@ function CompositeControllableOptic(entries::Vararg{Pair{<:Symbol,<:AbstractCont
         start = i == 1 ? 1 : 1 + sum(length(command_storage(optics[j])) for j in 1:(i - 1))
         start:(start + length(command_storage(optics[i])) - 1)
     end
-    optic = CompositeControllableOptic(optics, command, layout, child_ranges)
+    selector = require_same_backend(optics...)
+    optic = CompositeControllableOptic{typeof(optics),typeof(command),typeof(layout),typeof(child_ranges),typeof(selector)}(optics, command, layout, child_ranges)
     for i in 1:N
         copyto!(@view(optic.command[child_ranges[i]]), command_storage(optics[i]))
     end

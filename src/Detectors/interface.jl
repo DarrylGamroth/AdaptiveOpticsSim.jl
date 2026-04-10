@@ -313,19 +313,19 @@ CompositeCountingCorrelation(stages::Tuple) =
     throw(InvalidConfiguration("CompositeCountingCorrelation stages must be AbstractCountingCorrelationModel values"))
 CompositeCountingCorrelation(stages::AbstractCountingCorrelationModel...) = CompositeCountingCorrelation(tuple(stages...))
 
-function PixelResponseNonuniformity(gain_map::AbstractMatrix; T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+function PixelResponseNonuniformity(gain_map::AbstractMatrix; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
     backend_map = _to_backend_matrix(T.(gain_map), backend)
     return validate_detector_defect_model(PixelResponseNonuniformity{T,typeof(backend_map)}(backend_map))
 end
 
-function DarkSignalNonuniformity(dark_map::AbstractMatrix; T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+function DarkSignalNonuniformity(dark_map::AbstractMatrix; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
     backend_map = _to_backend_matrix(T.(dark_map), backend)
     return validate_detector_defect_model(DarkSignalNonuniformity{T,typeof(backend_map)}(backend_map))
 end
 
-function BadPixelMask(mask::AbstractMatrix{Bool}; throughput::Real=0.0, T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+function BadPixelMask(mask::AbstractMatrix{Bool}; throughput::Real=0.0, T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
     backend_mask = _to_backend_bool_matrix(mask, backend)
     return validate_detector_defect_model(BadPixelMask{T,typeof(backend_mask)}(backend_mask, T(throughput)))
@@ -593,7 +593,7 @@ function _pixel_aperture_kernel(pitch_px::Real, fill_factor::Real, ::Type{T}) wh
 end
 
 function GaussianPixelResponse(; response_width_px::Real=0.5, truncate_at::Real=3.0,
-    T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+    T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
     kernel = _to_backend_vector(_gaussian_kernel(response_width_px, truncate_at, T), backend)
     return GaussianPixelResponse{T,typeof(kernel)}(T(response_width_px), kernel)
@@ -601,7 +601,7 @@ end
 
 function RectangularPixelAperture(; pitch_x_px::Real=1.0, pitch_y_px::Real=1.0,
     fill_factor_x::Real=1.0, fill_factor_y::Real=1.0,
-    T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+    T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
     kernel_x = _to_backend_vector(_pixel_aperture_kernel(pitch_x_px, fill_factor_x, T), backend)
     kernel_y = _to_backend_vector(_pixel_aperture_kernel(pitch_y_px, fill_factor_y, T), backend)
@@ -611,7 +611,7 @@ end
 
 function SeparablePixelMTF(; pitch_x_px::Real=1.0, pitch_y_px::Real=1.0,
     fill_factor_x::Real=1.0, fill_factor_y::Real=1.0,
-    T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+    T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
     kernel_x = _to_backend_vector(_pixel_aperture_kernel(pitch_x_px, fill_factor_x, T), backend)
     kernel_y = _to_backend_vector(_pixel_aperture_kernel(pitch_y_px, fill_factor_y, T), backend)
@@ -620,7 +620,7 @@ function SeparablePixelMTF(; pitch_x_px::Real=1.0, pitch_y_px::Real=1.0,
 end
 
 function SampledFrameResponse(kernel::AbstractMatrix; normalize::Bool=true,
-    T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+    T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
     isempty(kernel) && throw(InvalidConfiguration("SampledFrameResponse kernel must not be empty"))
     host_kernel = T.(kernel)
@@ -759,10 +759,12 @@ mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O,P<:FrameRea
     readout_ready::Bool
 end
 
-struct Detector{N<:NoiseModel,P<:DetectorParams,S<:DetectorState,BF<:BackgroundModel,BM<:BackgroundModel} <: AbstractFrameDetector
+struct Detector{N<:NoiseModel,P<:DetectorParams,S<:DetectorState,BF<:BackgroundModel,BM<:BackgroundModel,B<:AbstractArrayBackend} <: AbstractFrameDetector
     noise::N
     params::P
     state::S
     background_flux::BF
     background_map::BM
 end
+
+@inline backend(::Detector{<:Any,<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()

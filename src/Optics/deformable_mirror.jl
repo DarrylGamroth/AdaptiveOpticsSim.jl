@@ -74,10 +74,12 @@ mutable struct DeformableMirrorState{
     separable_tmp::Union{Nothing,A}
 end
 
-struct DeformableMirror{P<:DeformableMirrorParams,S<:DeformableMirrorState} <: AbstractDeformableMirror
+struct DeformableMirror{P<:DeformableMirrorParams,S<:DeformableMirrorState,B<:AbstractArrayBackend} <: AbstractDeformableMirror
     params::P
     state::S
 end
+
+@inline backend(::DeformableMirror{<:Any,<:Any,B}) where {B} = B()
 
 @inline command_storage(dm::DeformableMirror) = dm.state.coefs
 @inline command_layout(dm::DeformableMirror) = RuntimeCommandLayout(:dm => length(dm.state.coefs))
@@ -93,8 +95,9 @@ coefficients to OPD samples. When the misregistration keeps the Gaussian basis
 separable, the constructor also prepares a faster `X * C * Y'` runtime path.
 """
 function DeformableMirror(tel::Telescope; n_act::Int, influence_width::Real=0.2,
-    T::Type{<:AbstractFloat}=Float64, misregistration::Misregistration=Misregistration(T=T), backend=CPUBackend())
-    backend = _resolve_array_backend(backend)
+    T::Type{<:AbstractFloat}=Float64, misregistration::Misregistration=Misregistration(T=T), backend::AbstractArrayBackend=backend(tel))
+    selector = require_same_backend(tel, _resolve_backend_selector(backend))
+    backend = _resolve_array_backend(selector)
     params = DeformableMirrorParams{T}(n_act, T(influence_width), misregistration)
     n = tel.params.resolution
     opd = backend{T}(undef, n, n)
@@ -106,7 +109,7 @@ function DeformableMirror(tel::Telescope; n_act::Int, influence_width::Real=0.2,
     fill!(coefs, zero(T))
     state = DeformableMirrorState{T, typeof(opd), typeof(modes), typeof(opd_vec), typeof(coefs_grid)}(
         opd, opd_vec, modes, coefs, coefs_grid, nothing, nothing, nothing)
-    dm = DeformableMirror(params, state)
+    dm = DeformableMirror{typeof(params), typeof(state), typeof(selector)}(params, state)
     build_influence_functions!(dm, tel)
     build_separable_influence!(dm, tel)
     return dm

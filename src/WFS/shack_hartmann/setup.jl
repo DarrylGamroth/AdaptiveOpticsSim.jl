@@ -111,10 +111,12 @@ mutable struct ShackHartmannState{T<:AbstractFloat,
     calibration::CAL
 end
 
-struct ShackHartmann{M<:SensingMode,P<:ShackHartmannParams,S<:ShackHartmannState} <: AbstractWFS
+struct ShackHartmann{M<:SensingMode,P<:ShackHartmannParams,S<:ShackHartmannState,B<:AbstractArrayBackend} <: AbstractWFS
     params::P
     state::S
 end
+
+@inline backend(::ShackHartmann{<:Any,<:Any,<:Any,B}) where {B} = B()
 
 """
     ShackHartmann(tel; ...)
@@ -136,8 +138,9 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     shannon_sampling::Bool=true,
     valid_subaperture_policy::Union{Nothing,AbstractValidSubaperturePolicy}=nothing,
     mode::SensingMode=Geometric(),
-    T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
-    backend = _resolve_array_backend(backend)
+    T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel))
+    selector = require_same_backend(tel, _resolve_backend_selector(backend))
+    backend = _resolve_array_backend(selector)
     if tel.params.resolution % n_subap != 0
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     end
@@ -262,7 +265,7 @@ function ShackHartmann(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         layout,
         calibration,
     )
-    wfs = ShackHartmann{typeof(mode), typeof(params), typeof(state)}(params, state)
+    wfs = ShackHartmann{typeof(mode), typeof(params), typeof(state), typeof(selector)}(params, state)
     update_valid_mask!(wfs, tel)
     return wfs
 end

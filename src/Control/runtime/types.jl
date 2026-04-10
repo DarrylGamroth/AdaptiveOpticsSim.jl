@@ -178,6 +178,7 @@ mutable struct ClosedLoopRuntime{
     DD,
     CL,
     T<:AbstractFloat,
+    B<:AbstractArrayBackend,
 } <: AbstractControlSimulation
     simulation::SIM
     tel::TEL
@@ -204,6 +205,8 @@ mutable struct ClosedLoopRuntime{
     science_zero_padding::Int
     prepared::Bool
 end
+
+@inline backend(::ClosedLoopRuntime{<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
 
 """
     SimulationInterface(runtime)

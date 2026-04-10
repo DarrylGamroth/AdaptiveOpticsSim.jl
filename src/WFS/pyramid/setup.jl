@@ -192,10 +192,12 @@ mutable struct PyramidState{T<:AbstractFloat,
     calibration_signature::UInt
 end
 
-struct PyramidWFS{M<:SensingMode,P<:PyramidParams,S<:PyramidState} <: AbstractWFS
+struct PyramidWFS{M<:SensingMode,P<:PyramidParams,S<:PyramidState,B<:AbstractArrayBackend} <: AbstractWFS
     params::P
     state::S
 end
+
+@inline backend(::PyramidWFS{<:Any,<:Any,<:Any,B}) where {B} = B()
 
 """
     PyramidWFS(tel; ...)
@@ -214,9 +216,10 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
     old_mask::Bool=false, rooftop::Real=0.0, theta_rotation::Real=0.0, delta_theta::Real=0.0,
     user_modulation_path=nothing, mask_scale::Real=1.0, diffraction_padding::Int=2,
     psf_centering::Bool=true, n_pix_separation=nothing, n_pix_edge=nothing, binning::Int=1,
-    mode::SensingMode=Geometric(), T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+    mode::SensingMode=Geometric(), T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel))
 
-    backend = _resolve_array_backend(backend)
+    selector = require_same_backend(tel, _resolve_backend_selector(backend))
+    backend = _resolve_array_backend(selector)
     if tel.params.resolution % n_subap != 0
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     end
@@ -333,7 +336,7 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
         zero(T),
         UInt(0),
     )
-    wfs = PyramidWFS{typeof(mode), typeof(params), typeof(state)}(params, state)
+    wfs = PyramidWFS{typeof(mode), typeof(params), typeof(state), typeof(selector)}(params, state)
     update_valid_mask!(wfs, tel)
     build_pyramid_phasor!(wfs.state.phasor)
     build_pyramid_mask!(wfs, tel)

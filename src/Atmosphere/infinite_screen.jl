@@ -171,11 +171,14 @@ struct InfiniteMultiLayerAtmosphere{
     P<:InfiniteMultiLayerParams,
     S<:InfiniteMultiLayerState,
     L<:AbstractVector{<:InfiniteAtmosphereLayer},
+    B<:AbstractArrayBackend,
 } <: AbstractAtmosphere
     params::P
     layers::L
     state::S
 end
+
+@inline backend(::InfiniteMultiLayerAtmosphere{<:Any,<:Any,<:Any,B}) where {B} = B()
 
 @inline default_infinite_screen_resolution(n::Int) = 3 * n
 
@@ -185,8 +188,9 @@ function infinite_screen_telescope(
     tel::Telescope;
     resolution::Int,
     T::Type{<:AbstractFloat}=Float64,
-    backend=CPUBackend(),
+    backend::AbstractArrayBackend=backend(tel),
 )
+    selector = require_same_backend(tel, backend)
     delta = tel.params.diameter / tel.params.resolution
     return Telescope(
         resolution=resolution,
@@ -195,7 +199,7 @@ function infinite_screen_telescope(
         central_obstruction=0.0,
         fov_arcsec=tel.params.fov_arcsec,
         T=T,
-        backend=backend,
+        backend=selector,
     )
 end
 
@@ -484,8 +488,9 @@ function InfinitePhaseScreen(tel::Telescope;
     screen_resolution::Int=default_infinite_screen_resolution(tel.params.resolution),
     stencil_size::Int=default_infinite_stencil_size(tel.params.resolution),
     T::Type{<:AbstractFloat}=Float64,
-    backend=CPUBackend())
-    backend = _resolve_array_backend(backend)
+    backend::AbstractArrayBackend=backend(tel))
+    selector = require_same_backend(tel, backend)
+    backend_array = _resolve_array_backend(selector)
     screen_resolution >= tel.params.resolution ||
         throw(InvalidConfiguration("screen_resolution must be >= telescope resolution"))
     pixel_scale = T(tel.params.diameter / tel.params.resolution)
@@ -515,11 +520,11 @@ function InfinitePhaseScreen(tel::Telescope;
         side=:negative,
         tail_stride=screen_resolution,
         T=T)
-    screen_telescope = infinite_screen_telescope(tel; resolution=stencil_size, T=T, backend=backend)
-    generator = KolmogorovAtmosphere(screen_telescope; r0=params.r0, L0=params.L0, T=T, backend=backend)
-    screen = backend{T}(undef, stencil_size, stencil_size)
-    screen_scratch = backend{T}(undef, stencil_size, stencil_size)
-    extract_buffer = backend{T}(undef, tel.params.resolution, tel.params.resolution)
+    screen_telescope = infinite_screen_telescope(tel; resolution=stencil_size, T=T, backend=selector)
+    generator = KolmogorovAtmosphere(screen_telescope; r0=params.r0, L0=params.L0, T=T, backend=selector)
+    screen = backend_array{T}(undef, stencil_size, stencil_size)
+    screen_scratch = backend_array{T}(undef, stencil_size, stencil_size)
+    extract_buffer = backend_array{T}(undef, tel.params.resolution, tel.params.resolution)
     build_backend = default_build_backend(screen)
     fill!(screen, zero(T))
     fill!(screen_scratch, zero(T))
@@ -528,19 +533,19 @@ function InfinitePhaseScreen(tel::Telescope;
         screen,
         screen_scratch,
         extract_buffer,
-        materialize_build(build_backend, backend{T}(undef, size(column_positive.operator.predictor, 2)),
+        materialize_build(build_backend, backend_array{T}(undef, size(column_positive.operator.predictor, 2)),
             Vector{T}(undef, size(column_positive.operator.predictor, 2))),
-        materialize_build(build_backend, backend{T}(undef, size(column_positive.operator.predictor, 1)),
+        materialize_build(build_backend, backend_array{T}(undef, size(column_positive.operator.predictor, 1)),
             Vector{T}(undef, size(column_positive.operator.predictor, 1))),
-        materialize_build(build_backend, backend{T}(undef, size(column_positive.operator.residual_factor, 2)),
+        materialize_build(build_backend, backend_array{T}(undef, size(column_positive.operator.residual_factor, 2)),
             Vector{T}(undef, size(column_positive.operator.residual_factor, 2))),
-        materialize_build(build_backend, backend{Int}(undef, size(column_positive.stencil.stencil_coords)...),
+        materialize_build(build_backend, backend_array{Int}(undef, size(column_positive.stencil.stencil_coords)...),
             column_positive.stencil.stencil_coords),
-        materialize_build(build_backend, backend{Int}(undef, size(column_negative.stencil.stencil_coords)...),
+        materialize_build(build_backend, backend_array{Int}(undef, size(column_negative.stencil.stencil_coords)...),
             column_negative.stencil.stencil_coords),
-        materialize_build(build_backend, backend{Int}(undef, size(row_positive.stencil.stencil_coords)...),
+        materialize_build(build_backend, backend_array{Int}(undef, size(row_positive.stencil.stencil_coords)...),
             row_positive.stencil.stencil_coords),
-        materialize_build(build_backend, backend{Int}(undef, size(row_negative.stencil.stencil_coords)...),
+        materialize_build(build_backend, backend_array{Int}(undef, size(row_negative.stencil.stencil_coords)...),
             row_negative.stencil.stencil_coords),
         InfiniteBoundaryModel(
             InfiniteBoundaryStencil(
@@ -655,8 +660,9 @@ function InfiniteMultiLayerAtmosphere(tel::Telescope;
     screen_resolution::Int=default_infinite_screen_resolution(tel.params.resolution),
     stencil_size::Int=default_infinite_stencil_size(tel.params.resolution),
     T::Type{<:AbstractFloat}=Float64,
-    backend=CPUBackend())
-    backend = _resolve_array_backend(backend)
+    backend::AbstractArrayBackend=backend(tel))
+    selector = require_same_backend(tel, backend)
+    backend_array = _resolve_array_backend(selector)
     n_layers = length(fractional_cn2)
     n_layers > 0 || throw(InvalidConfiguration("fractional_cn2 cannot be empty"))
     if length(wind_speed) != n_layers || length(wind_direction) != n_layers || length(altitude) != n_layers
@@ -690,15 +696,15 @@ function InfiniteMultiLayerAtmosphere(tel::Telescope;
                 screen_resolution=screen_resolution,
                 stencil_size=stencil_size,
                 T=T,
-                backend=backend,
+                backend=selector,
             ),
             InfiniteLayerState(zero(T), zero(T), 0, 0),
         ) for i in 1:n_layers
     ]
-    opd = backend{T}(undef, tel.params.resolution, tel.params.resolution)
+    opd = backend_array{T}(undef, tel.params.resolution, tel.params.resolution)
     fill!(opd, zero(T))
     state = InfiniteMultiLayerState{T, typeof(opd)}(opd, AtmosphereSourceGeometryCache(n_layers, T))
-    return InfiniteMultiLayerAtmosphere(params, layers, state)
+    return InfiniteMultiLayerAtmosphere{typeof(params), typeof(state), typeof(layers), typeof(selector)}(params, layers, state)
 end
 
 function advance!(atm::InfiniteMultiLayerAtmosphere, tel::Telescope, rng::AbstractRNG)

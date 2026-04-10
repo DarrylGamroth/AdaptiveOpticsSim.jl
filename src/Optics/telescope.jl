@@ -21,10 +21,12 @@ mutable struct TelescopeState{T,
     psf_workspace::W
 end
 
-struct Telescope{P<:TelescopeParams,S<:TelescopeState} <: AbstractOpticalElement
+struct Telescope{P<:TelescopeParams,S<:TelescopeState,B<:AbstractArrayBackend} <: AbstractOpticalElement
     params::P
     state::S
 end
+
+@inline backend(::Telescope{<:Any,<:Any,B}) where {B} = B()
 
 function Telescope(; resolution::Int,
     diameter::Real,
@@ -33,9 +35,10 @@ function Telescope(; resolution::Int,
     fov_arcsec::Real=0.0,
     pupil_reflectivity::Union{Real,AbstractMatrix}=1.0,
     T::Type{<:AbstractFloat}=Float64,
-    backend=CPUBackend())
+    backend::AbstractArrayBackend=CPUBackend())
 
-    backend = _resolve_array_backend(backend)
+    selector = _resolve_backend_selector(backend)
+    backend = _resolve_array_backend(selector)
 
     params = TelescopeParams{T}(
         resolution,
@@ -65,7 +68,7 @@ function Telescope(; resolution::Int,
         psf_stack,
         psf_workspace,
     )
-    return Telescope(params, state)
+    return Telescope{typeof(params), typeof(state), typeof(selector)}(params, state)
 end
 
 function generate_pupil!(pupil::AbstractMatrix{Bool}, params::TelescopeParams)

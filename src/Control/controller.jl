@@ -15,7 +15,7 @@
 abstract type AbstractController end
 
 """
-    DiscreteIntegratorController(n; gain=0.3, tau=0.02, T=Float64, backend=CPUBackend())
+    DiscreteIntegratorController(n; gain=0.3, tau=0.02, T=Float64, backend::AbstractArrayBackend=CPUBackend())
 
 Construct a simple discrete-time integral controller with a first-order DM lag
 state.
@@ -27,7 +27,7 @@ mutable struct DiscreteIntegratorController{T<:AbstractFloat,V<:AbstractVector{T
     dm_state::V
 end
 
-function DiscreteIntegratorController(n::Int; gain::Real=0.3, tau::Real=0.02, T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+function DiscreteIntegratorController(n::Int; gain::Real=0.3, tau::Real=0.02, T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
     i_state = backend{T}(undef, n)
     dm_state = backend{T}(undef, n)

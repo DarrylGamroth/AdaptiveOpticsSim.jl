@@ -8,7 +8,7 @@ mutable struct Workspace{R<:AbstractRNG,T,A<:AbstractMatrix{Complex{T}},B<:Abstr
     fft_plan::P
 end
 
-function Workspace(n::Int; T=Float64, backend=CPUBackend(), rng=MersenneTwister(0))
+function Workspace(n::Int; T=Float64, backend::AbstractArrayBackend=CPUBackend(), rng=MersenneTwister(0))
     backend = _resolve_array_backend(backend)
     pupil_field = backend{Complex{T}}(undef, n, n)
     fft_buffer = similar(pupil_field)

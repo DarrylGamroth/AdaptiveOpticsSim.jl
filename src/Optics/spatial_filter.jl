@@ -48,7 +48,7 @@ struct SpatialFilter{S<:SpatialFilterShape,P<:SpatialFilterParams,Sf<:SpatialFil
 end
 
 """
-    SpatialFilter(tel; shape=CircularFilter(), diameter=..., zero_padding=2, T=Float64, backend=CPUBackend())
+    SpatialFilter(tel; shape=CircularFilter(), diameter=..., zero_padding=2, T=Float64, backend::AbstractArrayBackend=CPUBackend())
 
 Construct a focal-plane spatial filter for a telescope.
 
@@ -58,7 +58,7 @@ sampling used during propagation.
 """
 function SpatialFilter(tel::Telescope; shape::SpatialFilterShape=CircularFilter(),
     diameter::Real=tel.params.resolution / 2, zero_padding::Int=2,
-    T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+    T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
     n_pad = tel.params.resolution * zero_padding
     params = SpatialFilterParams{T}(T(diameter), zero_padding, n_pad)

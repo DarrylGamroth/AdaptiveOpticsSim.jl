@@ -1,6 +1,6 @@
 # Backend Type Refactor Plan 2026-04
 
-Status: planned
+Status: implemented
 
 ## Purpose
 
@@ -15,6 +15,15 @@ cleanly through model composition, and enforce a simple production rule:
 
 This is a structural refactor. It should not be attempted as an opportunistic
 cleanup inside unrelated feature work.
+
+Implementation outcome:
+
+- major public stateful types now carry explicit semantic backend parameters
+- homogeneous backend composition is enforced for standard simulation/runtime paths
+- public constructors accept semantic backend selectors, not raw array storage types
+- `backend(x)`, `backend_type(x)`, `same_backend(...)`, and `require_same_backend(...)` are the maintained identity/query helpers
+- maintained OOPAO equivalence remained within tolerance after the refactor
+- the full package test suite remained green except for the pre-existing SPECULA reference regression
 
 ## Why This Is Needed
 

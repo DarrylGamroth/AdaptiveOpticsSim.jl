@@ -7,7 +7,7 @@
 
 abstract type AbstractPlatformConfig end
 
-struct RuntimeBranch{SIM,REC,WD,SD,RNG,PR,CL}
+struct RuntimeBranch{SIM,REC,WD,SD,RNG,PR,CL,B<:AbstractArrayBackend}
     label::Symbol
     simulation::SIM
     reconstructor::REC
@@ -24,6 +24,7 @@ function RuntimeBranch(label::Symbol, simulation, reconstructor;
     rng::AbstractRNG=Random.default_rng(),
     products=nothing,
     command_layout=nothing)
+    selector = require_same_backend(simulation, wfs_detector, science_detector)
     return RuntimeBranch{
         typeof(simulation),
         typeof(reconstructor),
@@ -32,6 +33,7 @@ function RuntimeBranch(label::Symbol, simulation, reconstructor;
         typeof(rng),
         typeof(products),
         typeof(command_layout),
+        typeof(selector),
     }(
         label,
         simulation,
@@ -43,6 +45,8 @@ function RuntimeBranch(label::Symbol, simulation, reconstructor;
         command_layout,
     )
 end
+
+@inline backend(::RuntimeBranch{<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
 
 struct SingleRuntimeConfig{RP<:AbstractRuntimeProfile,PR<:RuntimeProductRequirements,T<:AbstractFloat} <: AbstractPlatformConfig
     name::Symbol
@@ -118,7 +122,7 @@ function GroupedRuntimeConfig(branches::Vararg{RuntimeBranch,N}; kwargs...) wher
     return GroupedRuntimeConfig(ntuple(i -> branches[i].label, N); kwargs...)
 end
 
-struct RuntimeScenario{CFG<:AbstractPlatformConfig,BR,BD} <: AbstractControlSimulation
+struct RuntimeScenario{CFG<:AbstractPlatformConfig,BR,BD,B<:AbstractArrayBackend} <: AbstractControlSimulation
     config::CFG
     branches::BR
     boundary::BD
@@ -171,10 +175,12 @@ function build_runtime_scenario(config::SingleRuntimeConfig, branch::RuntimeBran
         throw(InvalidConfiguration("single platform branch label $(branch.label) must match config branch_label $(config.branch_label)"))
     runtime = _build_platform_runtime(config, branch)
     boundary = SimulationInterface(runtime)
+    selector = backend(branch)
     return RuntimeScenario{
         typeof(config),
         Tuple{typeof(branch)},
         typeof(boundary),
+        typeof(selector),
     }(
         config,
         (branch,),
@@ -183,6 +189,7 @@ function build_runtime_scenario(config::SingleRuntimeConfig, branch::RuntimeBran
 end
 
 function build_runtime_scenario(config::GroupedRuntimeConfig{N}, branches::Vararg{RuntimeBranch,N}) where {N}
+    selector = require_same_backend(branches...)
     labels = ntuple(i -> branches[i].label, N)
     labels == config.branch_labels ||
         throw(InvalidConfiguration("grouped platform branch labels $labels must match config branch_labels $(config.branch_labels)"))
@@ -192,6 +199,7 @@ function build_runtime_scenario(config::GroupedRuntimeConfig{N}, branches::Varar
         typeof(config),
         typeof(branches),
         typeof(boundary),
+        typeof(selector),
     }(
         config,
         branches,
@@ -199,6 +207,7 @@ function build_runtime_scenario(config::GroupedRuntimeConfig{N}, branches::Varar
     )
 end
 
+@inline backend(::RuntimeScenario{<:Any,<:Any,<:Any,B}) where {B} = B()
 simulation_interface(scenario::RuntimeScenario) = platform_boundary(scenario)
 
 readout(sim::AbstractControlSimulation) = simulation_readout(sim)

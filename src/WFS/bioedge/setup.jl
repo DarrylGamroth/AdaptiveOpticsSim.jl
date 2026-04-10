@@ -153,10 +153,12 @@ mutable struct BioEdgeState{T<:AbstractFloat,
     calibration_wavelength::T
 end
 
-struct BioEdgeWFS{M<:SensingMode,P<:BioEdgeParams,S<:BioEdgeState} <: AbstractWFS
+struct BioEdgeWFS{M<:SensingMode,P<:BioEdgeParams,S<:BioEdgeState,B<:AbstractArrayBackend} <: AbstractWFS
     params::P
     state::S
 end
+
+@inline backend(::BioEdgeWFS{<:Any,<:Any,<:Any,B}) where {B} = B()
 
 """
     BioEdgeWFS(tel; ...)
@@ -176,9 +178,10 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     grey_width::Real=0.0, grey_length=false,
     diffraction_padding::Int=2, psf_centering::Bool=true, n_pix_separation=nothing,
     n_pix_edge=nothing, binning::Int=1,
-    mode::SensingMode=Geometric(), T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+    mode::SensingMode=Geometric(), T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel))
 
-    backend = _resolve_array_backend(backend)
+    selector = require_same_backend(tel, _resolve_backend_selector(backend))
+    backend = _resolve_array_backend(selector)
     if tel.params.resolution % n_subap != 0
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     end
@@ -210,7 +213,7 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     edge_mask = backend{Bool}(undef, size(tel.state.pupil))
     slopes = backend{T}(undef, 2 * n_subap * n_subap)
     fill!(slopes, zero(T))
-    sf = SpatialFilter(tel; shape=FoucaultFilter(), zero_padding=diffraction_padding, T=T, backend=backend)
+    sf = SpatialFilter(tel; shape=FoucaultFilter(), zero_padding=diffraction_padding, T=T, backend=selector)
     pad = tel.params.resolution * diffraction_padding
     if n_pix_separation !== nothing
         edge = n_pix_edge === nothing ? div(n_pix_separation, 2) : n_pix_edge
@@ -306,7 +309,7 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         false,
         zero(T),
     )
-    wfs = BioEdgeWFS{typeof(mode), typeof(params), typeof(state)}(params, state)
+    wfs = BioEdgeWFS{typeof(mode), typeof(params), typeof(state), typeof(selector)}(params, state)
     update_valid_mask!(wfs, tel)
     update_edge_mask!(wfs, tel)
     build_bioedge_phasor!(wfs.state.phasor)

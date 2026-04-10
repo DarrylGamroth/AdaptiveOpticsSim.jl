@@ -5,6 +5,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
     latency::RuntimeLatencyModel=default_runtime_latency(profile),
     control_sign::Real=-1.0, science_zero_padding::Union{Int,Nothing}=nothing,
     command_layout::Union{RuntimeCommandLayout,Nothing}=nothing)
+    selector = require_same_backend(simulation, wfs_detector, science_detector)
     products.slopes || throw(InvalidConfiguration("ClosedLoopRuntime requires slope products for reconstruction"))
     T = eltype(command_storage(simulation.optic))
     command = similar(command_storage(simulation.optic))
@@ -42,6 +43,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
         typeof(dm_delay),
         typeof(resolved_command_layout),
         T,
+        typeof(selector),
     }(
         simulation,
         simulation.tel,
@@ -105,6 +107,8 @@ end
     CountingReadoutMetadata(:branch_by_channel, size(wfs.state.camera_frame), length(wfs.state.camera_frame))
 
 simulation_interface(runtime::ClosedLoopRuntime) = SimulationInterface(runtime)
+@inline backend(interface::SimulationInterface) = backend(interface.runtime)
+@inline backend(interface::CompositeSimulationInterface) = backend(interface.interfaces[1])
 simulation_interface(interface::SimulationInterface) = interface
 simulation_interface(interface::CompositeSimulationInterface) = interface
 

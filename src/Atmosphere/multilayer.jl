@@ -107,11 +107,14 @@ struct MultiLayerAtmosphere{
     P<:MultiLayerParams,
     S<:MultiLayerState,
     L<:AbstractVector{<:MovingAtmosphereLayer},
+    B<:AbstractArrayBackend,
 } <: AbstractAtmosphere
     params::P
     layers::L
     state::S
 end
+
+@inline backend(::MultiLayerAtmosphere{<:Any,<:Any,<:Any,B}) where {B} = B()
 
 @inline moving_layer_screen_resolution(n::Int) = 3 * n
 
@@ -119,7 +122,7 @@ function moving_layer_telescope(
     tel::Telescope;
     resolution::Int,
     T::Type{<:AbstractFloat}=Float64,
-    backend=CPUBackend(),
+    backend::AbstractArrayBackend=backend(tel),
 )
     delta = tel.params.diameter / tel.params.resolution
     return Telescope(
@@ -142,11 +145,13 @@ function MovingAtmosphereLayer(
     wind_velocity_y::Real,
     altitude::Real,
     T::Type{<:AbstractFloat}=Float64,
-    backend=CPUBackend(),
+    backend::AbstractArrayBackend=CPUBackend(),
 )
+    selector = require_same_backend(tel, backend)
+    backend_array = _resolve_array_backend(selector)
     screen_resolution = moving_layer_screen_resolution(tel.params.resolution)
-    screen_telescope = moving_layer_telescope(tel; resolution=screen_resolution, T=T, backend=backend)
-    generator = KolmogorovAtmosphere(screen_telescope; r0=r0, L0=L0, T=T, backend=backend)
+    screen_telescope = moving_layer_telescope(tel; resolution=screen_resolution, T=T, backend=selector)
+    generator = KolmogorovAtmosphere(screen_telescope; r0=r0, L0=L0, T=T, backend=selector)
     params = MovingLayerParams(T(sqrt(cn2_fraction)), T(wind_velocity_x), T(wind_velocity_y), T(altitude))
     state = MovingLayerState(zero(T), zero(T), false)
     return MovingAtmosphereLayer(params, generator, screen_telescope, state)
@@ -356,9 +361,10 @@ function MultiLayerAtmosphere(tel::Telescope;
     wind_direction::AbstractVector,
     altitude::AbstractVector,
     T::Type{<:AbstractFloat}=Float64,
-    backend=CPUBackend())
+    backend::AbstractArrayBackend=backend(tel))
 
-    backend = _resolve_array_backend(backend)
+    selector = require_same_backend(tel, backend)
+    backend_array = _resolve_array_backend(selector)
 
     n_layers = length(fractional_cn2)
     n_layers > 0 || throw(InvalidConfiguration("fractional_cn2 cannot be empty"))
@@ -390,15 +396,15 @@ function MultiLayerAtmosphere(tel::Telescope;
             wind_velocity_y=params.wind_velocity_y[i],
             altitude=params.altitude[i],
             T=T,
-            backend=backend,
+            backend=selector,
         ) for i in 1:n_layers
     ]
 
-    opd = backend{T}(undef, tel.params.resolution, tel.params.resolution)
+    opd = backend_array{T}(undef, tel.params.resolution, tel.params.resolution)
     fill!(opd, zero(T))
     state = MultiLayerState{T, typeof(opd)}(opd, AtmosphereSourceGeometryCache(n_layers, T))
 
-    return MultiLayerAtmosphere(params, layers, state)
+    return MultiLayerAtmosphere{typeof(params), typeof(state), typeof(layers), typeof(selector)}(params, layers, state)
 end
 
 function advance!(atm::MultiLayerAtmosphere, tel::Telescope, rng::AbstractRNG)

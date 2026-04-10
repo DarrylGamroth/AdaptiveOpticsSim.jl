@@ -30,12 +30,14 @@ mutable struct APDDetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O,TS<:Abst
     thermal_state::TS
 end
 
-struct APDDetector{N<:NoiseModel,P<:APDDetectorParams,S<:APDDetectorState,GM} <: AbstractCountingDetector
+struct APDDetector{N<:NoiseModel,P<:APDDetectorParams,S<:APDDetectorState,GM,B<:AbstractArrayBackend} <: AbstractCountingDetector
     noise::N
     params::P
     state::S
     channel_gain_map::GM
 end
+
+@inline backend(::APDDetector{<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
 
 NonParalyzableDeadTime(dead_time::Real) = NonParalyzableDeadTime{Float64}(float(dead_time))
 ParalyzableDeadTime(dead_time::Real) = ParalyzableDeadTime{Float64}(float(dead_time))
@@ -224,7 +226,8 @@ function _build_apd_detector(noise::NoiseModel; integration_time::Real, qe::Real
     thermal_state = thermal_state_from_model(thermal, T)
     state = APDDetectorState{T,typeof(channels),typeof(output_buffer),typeof(thermal_state)}(
         channels, noise_buffer, output_buffer, thermal_state)
-    return APDDetector{typeof(validated),typeof(params),typeof(state),typeof(gain_map)}(
+    selector = _resolve_backend_selector(backend)
+    return APDDetector{typeof(validated),typeof(params),typeof(state),typeof(gain_map),typeof(selector)}(
         validated, params, state, gain_map)
 end
 
@@ -234,7 +237,7 @@ function APDDetector(; integration_time::Real=1.0, qe::Real=1.0, noise::NoiseMod
     gate_model::AbstractCountingGateModel=NullCountingGate(),
     correlation_model::AbstractCountingCorrelationModel=NullCountingCorrelation(),
     thermal_model::AbstractDetectorThermalModel=NullDetectorThermalModel(),
-    T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+    T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
     return _build_apd_detector(noise; integration_time=integration_time, qe=qe, gain=gain,
         dark_count_rate=dark_count_rate, dead_time_model=dead_time_model, gate_model=gate_model,

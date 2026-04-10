@@ -36,6 +36,21 @@ end
     @test det.state.frame isa Matrix
     @test sf.state.phase isa Matrix
     @test ef.state.field isa Matrix{ComplexF64}
+
+    @test backend(tel) isa CPUBackend
+    @test backend(atm) isa CPUBackend
+    @test backend(dm) isa CPUBackend
+    @test backend(tt) isa CPUBackend
+    @test backend(focus) isa CPUBackend
+    @test backend(wfs) isa CPUBackend
+    @test backend(det) isa CPUBackend
+    @test backend_type(tel) === CPUBackend
+    @test backend_type(wfs) === CPUBackend
+    @test same_backend(tel, atm, dm, wfs, det)
+    @test_throws InvalidConfiguration require_same_backend(tel, CUDABackend())
+
+    @test_throws TypeError Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, backend=Array)
+    @test_throws TypeError Detector(backend=Array)
 end
 
 @testset "Calibration and control" begin

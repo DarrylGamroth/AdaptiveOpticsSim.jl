@@ -91,6 +91,8 @@ export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError, Uns
 export FidelityProfile, ScientificProfile, FastProfile, ProfileBundle, default_fidelity_profile
 export atmosphere_profile, calibration_profile, detector_profile, lift_profile, tomography_profile
 export InversePolicy, ExactPseudoInverse, TSVDInverse, TikhonovInverse, InverseStats, inverse_operator
+export CPUBackend, CUDABackend, AMDGPUBackend, MetalBackend
+export backend, backend_type, same_backend, require_same_backend
 export default_modal_inverse_policy, default_calibration_inverse_policy, default_projector_inverse_policy
 export AbstractMaskPrimitive, MaskGrid
 export CircularAperture, AnnularAperture, SpiderMask, RectangularROI, SubapertureGridMask

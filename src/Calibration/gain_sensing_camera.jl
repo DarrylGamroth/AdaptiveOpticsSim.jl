@@ -39,13 +39,13 @@ mutable struct GSCFFTWorkspace{T<:AbstractFloat,
 end
 
 """
-    GSCFFTWorkspace(n; T=Float64, backend=CPUBackend())
+    GSCFFTWorkspace(n; T=Float64, backend::AbstractArrayBackend=CPUBackend())
     GSCFFTWorkspace(ref; T=real(eltype(ref)))
 
 Preallocated FFT workspace used by gain-sensing camera calibration and
 evaluation.
 """
-function GSCFFTWorkspace(n::Int; T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+function GSCFFTWorkspace(n::Int; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
     buffer = backend{Complex{T}}(undef, n, n)
     fft_out = similar(buffer)
