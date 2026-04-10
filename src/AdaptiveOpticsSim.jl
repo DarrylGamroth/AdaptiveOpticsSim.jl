@@ -41,6 +41,7 @@ include("Optics/propagation.jl")
 include("Optics/psf.jl")
 include("Optics/zernike.jl")
 include("Optics/misregistration.jl")
+include("Optics/controllable_optics.jl")
 include("Optics/deformable_mirror.jl")
 include("Detectors/detector.jl")
 include("Optics/asterism.jl")
@@ -126,6 +127,8 @@ export phase_variance, phase_covariance, phase_spectrum, covariance_matrix
 export ft_phase_screen, ft_sh_phase_screen, PhaseStatsWorkspace
 export SubharmonicMode, FastSubharmonics, FidelitySubharmonics, default_subharmonic_mode
 export DeformableMirror, DeformableMirrorParams, DeformableMirrorState, build_influence_functions!, apply!
+export CompositeControllableOptic, TipTiltMirror, SteeringMirror, FocusStage
+export command_storage, n_control_dofs, controllable_surface_labels, supports_segmented_command, update_command!, apply_selected!
 export Misregistration, apply_misregistration, rotation_rad, rotation_deg, anamorphosis_angle_rad, anamorphosis_angle_deg
 export AbstractFrameDetector, AbstractCountingDetector
 export Detector, DetectorParams, DetectorState, DetectorExportMetadata
@@ -222,7 +225,7 @@ export runtime_profile, runtime_latency
 export RuntimeTimingStats, RuntimePhaseTimingStats, runtime_timing, runtime_phase_timing
 export with_reconstructor, with_reconstructors
 export AbstractOpticalElement, AbstractSource, AbstractAtmosphere, AbstractWFS
-export AbstractDetector, AbstractDeformableMirror, SensingMode, Diffractive, Geometric
+export AbstractDetector, AbstractControllableOptic, AbstractDeformableMirror, SensingMode, Diffractive, Geometric
 export AbstractSlopeExtractionModel, CenterOfGravityExtraction
 export SubapertureLayout, SubapertureCalibration
 export subaperture_layout, subaperture_calibration, slope_extraction_model

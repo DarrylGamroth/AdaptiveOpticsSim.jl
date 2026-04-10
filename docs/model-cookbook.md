@@ -187,16 +187,44 @@ external_command[1] = 0.05
 set_command!(scenario, external_command)
 sense!(scenario)
 
-# If a runtime boundary represents several logical control surfaces packed into
-# one RTC vector, provide an explicit command layout and then inject a
-# structured NamedTuple instead of doing manual slice math. This is useful for
-# tip/tilt mirrors, steering mirrors, or packed woofer/tweeter commands.
+# If the plant itself contains several controllable surfaces, make them explicit
+# in the optic model and still drive them through one packed RTC boundary.
+tiptilt = TipTiltMirror(tel; scale=0.1, label=:tiptilt)
+high_order_dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
+composite_optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => high_order_dm)
+composite_sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, composite_optic, wfs)
+
+composite_branch = RuntimeBranch(
+    :main,
+    composite_sim,
+    recon;
+    wfs_detector=science_det,
+    science_detector=science_det,
+    rng=MersenneTwister(2),
+)
+composite_scenario = build_runtime_scenario(cfg, composite_branch)
+prepare!(composite_scenario)
+set_command!(composite_scenario, (
+    tiptilt=fill(0.01, 2),
+    dm=fill(0.02, 16),
+))
+sense!(composite_scenario)
+
+# Partial updates do not require manual slice math either. Here only the
+# tip/tilt segment changes; the DM segment remains staged in-place.
+update_command!(composite_scenario, (
+    tiptilt=fill(0.015, 2),
+))
+sense!(composite_scenario)
+
+# If a runtime boundary only needs a logical split over one existing optic, you
+# can still provide an explicit command layout without changing the plant.
 split_branch = RuntimeBranch(
     :main,
     sim,
     recon;
     science_detector=science_det,
-    rng=MersenneTwister(2),
+    rng=MersenneTwister(3),
     command_layout=RuntimeCommandLayout(:woofer => 8, :tweeter => 8),
 )
 split_scenario = build_runtime_scenario(cfg, split_branch)

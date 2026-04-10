@@ -6,8 +6,8 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
     control_sign::Real=-1.0, science_zero_padding::Union{Int,Nothing}=nothing,
     command_layout::Union{RuntimeCommandLayout,Nothing}=nothing)
     products.slopes || throw(InvalidConfiguration("ClosedLoopRuntime requires slope products for reconstruction"))
-    T = eltype(simulation.dm.state.coefs)
-    command = similar(simulation.dm.state.coefs)
+    T = eltype(command_storage(simulation.optic))
+    command = similar(command_storage(simulation.optic))
     fill!(command, zero(T))
     reconstruct_buffer = similar(command)
     fill!(reconstruct_buffer, zero(T))
@@ -18,7 +18,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
     reconstruction_delay = VectorDelayLine(command, latency.reconstruction_delay_frames)
     dm_delay = VectorDelayLine(command, latency.dm_delay_frames)
     resolved_zero_padding = something(science_zero_padding, runtime_science_zero_padding(profile))
-    resolved_command_layout = something(command_layout, RuntimeCommandLayout(RuntimeCommandSegment(:dm, 1, length(command))))
+    resolved_command_layout = something(command_layout, AdaptiveOpticsSim.command_layout(simulation.optic))
     resolved_command_layout.total_length == length(command) ||
         throw(InvalidConfiguration("runtime command layout total length must match the runtime command vector length"))
     runtime = ClosedLoopRuntime{
@@ -26,7 +26,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
         typeof(simulation.tel),
         typeof(simulation.atm),
         typeof(simulation.src),
-        typeof(simulation.dm),
+        typeof(simulation.optic),
         typeof(simulation.wfs),
         typeof(reconstructor),
         typeof(command),
@@ -47,7 +47,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
         simulation.tel,
         simulation.atm,
         simulation.src,
-        simulation.dm,
+        simulation.optic,
         simulation.wfs,
         reconstructor,
         command,
@@ -73,6 +73,14 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
 end
 
 @inline wfs_output_frame(wfs::AbstractWFS, det::AbstractDetector) = output_frame(det)
+@inline wfs_output_frame(wfs::ShackHartmann{<:Diffractive}, ::Nothing) = sh_exported_spot_cube(wfs)
+@inline wfs_output_frame(wfs::ZernikeWFS, ::Nothing) = wfs.state.camera_frame
+@inline wfs_output_frame(wfs::CurvatureWFS, ::Nothing) = wfs.state.camera_frame
+@inline wfs_output_frame_prototype(wfs::PyramidWFS, ::Nothing) = wfs.state.camera_frame
+@inline wfs_output_frame_prototype(wfs::BioEdgeWFS, ::Nothing) = wfs.state.camera_frame
+@inline wfs_output_frame_prototype(wfs::ShackHartmann{<:Diffractive}, ::Nothing) = sh_exported_spot_cube(wfs)
+@inline wfs_output_frame_prototype(wfs::ZernikeWFS, ::Nothing) = wfs.state.camera_frame
+@inline wfs_output_frame_prototype(wfs::CurvatureWFS, ::Nothing) = wfs.state.camera_frame
 @inline wfs_output_frame(wfs::ShackHartmann{<:Diffractive}, det::AbstractDetector) = sh_exported_spot_cube(wfs)
 @inline wfs_output_frame_prototype(wfs::AbstractWFS, det::AbstractDetector) = wfs_output_frame(wfs, det)
 @inline wfs_output_frame_prototype(wfs::PyramidWFS, det::AbstractDetector) = wfs.state.camera_frame
@@ -305,7 +313,7 @@ function with_reconstructor(runtime::ClosedLoopRuntime, reconstructor)
     copyto!(refreshed.command, runtime.command)
     copyto!(refreshed.reconstruct_buffer, runtime.reconstruct_buffer)
     copyto!(refreshed.slopes, runtime.slopes)
-    copyto!(refreshed.dm.state.coefs, runtime.dm.state.coefs)
+    set_command!(refreshed.optic, command_storage(runtime.optic))
     refreshed.prepared = runtime.prepared
     return refreshed
 end

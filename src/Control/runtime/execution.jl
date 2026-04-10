@@ -1,36 +1,36 @@
-@inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, dm::DeformableMirror,
+@inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
     wfs::AbstractWFS, src::AbstractSource, rng::AbstractRNG)
     advance!(atm, tel, rng)
     propagate!(atm, tel)
-    apply!(dm, tel, DMAdditive())
+    apply!(optic, tel, DMAdditive())
     measure!(wfs, tel, src)
     return nothing
 end
 
-@inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, dm::DeformableMirror,
+@inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
     wfs::CurvatureWFS, src::AbstractSource, rng::AbstractRNG)
     reset_opd!(tel)
     advance!(atm, tel, rng)
-    apply!(dm, tel, DMAdditive())
+    apply!(optic, tel, DMAdditive())
     measure!(wfs, tel, src, atm)
     tel.state.opd .+= atm.state.opd .* tel.state.pupil
     return nothing
 end
 
-@inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, dm::DeformableMirror,
+@inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
     wfs::AbstractWFS, src::AbstractSource, det::AbstractDetector, rng::AbstractRNG)
     advance!(atm, tel, rng)
     propagate!(atm, tel)
-    apply!(dm, tel, DMAdditive())
+    apply!(optic, tel, DMAdditive())
     measure!(wfs, tel, src, det; rng=rng)
     return nothing
 end
 
-@inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, dm::DeformableMirror,
+@inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
     wfs::CurvatureWFS, src::AbstractSource, det::AbstractDetector, rng::AbstractRNG)
     reset_opd!(tel)
     advance!(atm, tel, rng)
-    apply!(dm, tel, DMAdditive())
+    apply!(optic, tel, DMAdditive())
     measure!(wfs, tel, src, atm, det; rng=rng)
     tel.state.opd .+= atm.state.opd .* tel.state.pupil
     return nothing
@@ -65,42 +65,42 @@ Execute one full closed-loop update.
 reconstruction, and DM command application. The various method overloads differ
 only in whether WFS and science detectors participate in the step.
 """
-@inline function step_core!(atm::AbstractAtmosphere, tel::Telescope, dm::DeformableMirror,
+@inline function step_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
     wfs::AbstractWFS, src::AbstractSource, reconstructor, command::AbstractVector{T},
     rng::AbstractRNG, control_sign::T) where {T<:AbstractFloat}
-    sense_core!(atm, tel, dm, wfs, src, rng)
+    sense_core!(atm, tel, optic, wfs, src, rng)
     reconstruct!(command, reconstructor, wfs.state.slopes)
-    apply_command!(dm.state.coefs, command, control_sign)
+    stage_command!(optic, command, control_sign)
     return nothing
 end
 
-@inline function step_core!(atm::AbstractAtmosphere, tel::Telescope, dm::DeformableMirror,
+@inline function step_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
     wfs::AbstractWFS, src::AbstractSource, wfs_detector::AbstractDetector, reconstructor,
     command::AbstractVector{T}, rng::AbstractRNG, control_sign::T) where {T<:AbstractFloat}
-    sense_core!(atm, tel, dm, wfs, src, wfs_detector, rng)
+    sense_core!(atm, tel, optic, wfs, src, wfs_detector, rng)
     reconstruct!(command, reconstructor, wfs.state.slopes)
-    apply_command!(dm.state.coefs, command, control_sign)
+    stage_command!(optic, command, control_sign)
     return nothing
 end
 
-@inline function step_core!(atm::AbstractAtmosphere, tel::Telescope, dm::DeformableMirror,
+@inline function step_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
     wfs::AbstractWFS, src::AbstractSource, reconstructor, command::AbstractVector{T},
     science_detector::AbstractDetector, rng::AbstractRNG, control_sign::T, science_zero_padding::Int) where {T<:AbstractFloat}
-    sense_core!(atm, tel, dm, wfs, src, rng)
+    sense_core!(atm, tel, optic, wfs, src, rng)
     capture_science_core!(tel, src, science_detector, rng, science_zero_padding)
     reconstruct!(command, reconstructor, wfs.state.slopes)
-    apply_command!(dm.state.coefs, command, control_sign)
+    stage_command!(optic, command, control_sign)
     return nothing
 end
 
-@inline function step_core!(atm::AbstractAtmosphere, tel::Telescope, dm::DeformableMirror,
+@inline function step_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
     wfs::AbstractWFS, src::AbstractSource, wfs_detector::AbstractDetector, reconstructor,
     command::AbstractVector{T}, science_detector::AbstractDetector, rng::AbstractRNG,
     control_sign::T, science_zero_padding::Int) where {T<:AbstractFloat}
-    sense_core!(atm, tel, dm, wfs, src, wfs_detector, rng)
+    sense_core!(atm, tel, optic, wfs, src, wfs_detector, rng)
     capture_science_core!(tel, src, science_detector, rng, science_zero_padding)
     reconstruct!(command, reconstructor, wfs.state.slopes)
-    apply_command!(dm.state.coefs, command, control_sign)
+    stage_command!(optic, command, control_sign)
     return nothing
 end
 
@@ -124,8 +124,8 @@ end
 
 @inline function apply_runtime_command!(runtime::ClosedLoopRuntime)
     delayed = shift_delay!(runtime.dm_delay, runtime.command)
-    apply_command!(runtime.dm.state.coefs, delayed, runtime.control_sign)
-    return runtime.dm.state.coefs
+    stage_command!(runtime.optic, delayed, runtime.control_sign)
+    return command_storage(runtime.optic)
 end
 
 @inline function step_grouped!(interface::CompositeSimulationInterface)
@@ -143,9 +143,9 @@ end
 
 function sense!(runtime::ClosedLoopRuntime)
     if isnothing(runtime.wfs_detector)
-        sense_core!(runtime.atm, runtime.tel, runtime.dm, runtime.wfs, runtime.src, runtime.rng)
+        sense_core!(runtime.atm, runtime.tel, runtime.optic, runtime.wfs, runtime.src, runtime.rng)
     else
-        sense_core!(runtime.atm, runtime.tel, runtime.dm, runtime.wfs, runtime.src, runtime.wfs_detector, runtime.rng)
+        sense_core!(runtime.atm, runtime.tel, runtime.optic, runtime.wfs, runtime.src, runtime.wfs_detector, runtime.rng)
     end
     if requires_runtime_science_pixels(runtime)
         capture_science_core!(runtime.tel, runtime.src, runtime.science_detector, runtime.rng, runtime.science_zero_padding)

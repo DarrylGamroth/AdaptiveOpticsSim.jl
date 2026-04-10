@@ -418,6 +418,47 @@ end
     @test command(split_scenario) == vcat(woofer_cmd, tweeter_cmd)
     @test simulation_science_frame(split_scenario) !== nothing
 
+    tiptilt = TipTiltMirror(tel_ext; scale=0.1, label=:tiptilt)
+    dm_combo = DeformableMirror(tel_ext; n_act=4, influence_width=0.3)
+    combo_optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm_combo)
+    combo_sim = AdaptiveOpticsSim.AOSimulation(tel_ext, atm_ext, src_ext, combo_optic, wfs_ext)
+    combo_scenario = build_runtime_scenario(
+        SingleRuntimeConfig(name=:combo_runtime_demo, branch_label=:external_branch,
+            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=true)),
+        RuntimeBranch(:external_branch, combo_sim, NullReconstructor();
+            wfs_detector=det_ext,
+            science_detector=det_ext,
+            rng=MersenneTwister(8)),
+    )
+    prepare!(combo_scenario)
+    @test command_segment_labels(command_layout(combo_scenario)) == (:tiptilt, :dm)
+    set_command!(combo_scenario, (; tiptilt=fill(eltype(command(combo_scenario))(0.01), 2), dm=fill(eltype(command(combo_scenario))(0.02), 16)))
+    sense!(combo_scenario)
+    @test command(combo_scenario) == vcat(fill(eltype(command(combo_scenario))(0.01), 2), fill(eltype(command(combo_scenario))(0.02), 16))
+    update_command!(combo_scenario, (; tiptilt=fill(eltype(command(combo_scenario))(0.03), 2)))
+    @test command(combo_scenario)[1:2] == fill(eltype(command(combo_scenario))(0.03), 2)
+    @test command(combo_scenario)[3:end] == fill(eltype(command(combo_scenario))(0.02), 16)
+    sense!(combo_scenario)
+    @test science_frame(combo_scenario) !== nothing
+    @test wfs_frame(combo_scenario) !== nothing
+
+    focus = FocusStage(tel_ext; scale=0.1, label=:focus)
+    dm_focus = DeformableMirror(tel_ext; n_act=4, influence_width=0.3)
+    focus_optic = CompositeControllableOptic(:focus => focus, :dm => dm_focus)
+    focus_sim = AdaptiveOpticsSim.AOSimulation(tel_ext, atm_ext, src_ext, focus_optic, wfs_ext)
+    focus_scenario = build_runtime_scenario(
+        SingleRuntimeConfig(name=:focus_runtime_demo, branch_label=:external_branch,
+            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
+        RuntimeBranch(:external_branch, focus_sim, NullReconstructor();
+            wfs_detector=det_ext,
+            rng=MersenneTwister(9)),
+    )
+    prepare!(focus_scenario)
+    @test command_segment_labels(command_layout(focus_scenario)) == (:focus, :dm)
+    set_command!(focus_scenario, (; focus=fill(eltype(command(focus_scenario))(0.04), 1), dm=fill(eltype(command(focus_scenario))(0.01), 16)))
+    sense!(focus_scenario)
+    @test wfs_frame(focus_scenario) !== nothing
+
     grouped_cfg = GroupedPlatformConfig(
         (:branch_a, :branch_b);
         name=:grouped_runtime_demo,

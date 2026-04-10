@@ -264,6 +264,31 @@ end
     return NamedTuple{labels}(Tuple(layouts))
 end
 
+@inline function update_command!(scenario::PlatformScenario, command::NamedTuple)
+    boundary = platform_boundary(scenario)
+    labels = platform_branch_labels(scenario)
+    if boundary isa SimulationInterface
+        update_command!(boundary, command)
+    else
+        all(label -> label in labels, Tuple(keys(command))) ||
+            throw(InvalidConfiguration("structured scenario command keys $(Tuple(keys(command))) must be a subset of branch labels $labels"))
+        @inbounds for (idx, label) in pairs(labels)
+            if hasproperty(command, label)
+                branch_command = getproperty(command, label)
+                if branch_command isa NamedTuple
+                    update_command!(boundary.interfaces[idx], branch_command)
+                elseif branch_command isa AbstractVector
+                    set_command!(boundary.interfaces[idx], branch_command)
+                else
+                    throw(InvalidConfiguration("structured branch command $(label) must be an AbstractVector or NamedTuple"))
+                end
+            end
+        end
+    end
+    snapshot_outputs!(scenario)
+    return simulation_command(scenario)
+end
+
 @inline function set_command!(scenario::PlatformScenario, command::NamedTuple)
     boundary = platform_boundary(scenario)
     labels = platform_branch_labels(scenario)

@@ -23,6 +23,53 @@ function build_optional_platform_branch(::Type{T}, BackendArray, label::Symbol; 
     return ClosedLoopBranchConfig(label, sim, recon; wfs_detector=det, rng=MersenneTwister(seed))
 end
 
+function run_optional_composite_optic_parity(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    T = Float32
+    function build_case(backend)
+        tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
+            central_obstruction=T(0.0), T=T, backend=backend)
+        src = Source(band=:I, magnitude=0.0, T=T)
+        atm = KolmogorovAtmosphere(tel; r0=T(0.2), L0=T(25.0), T=T, backend=backend)
+        tiptilt = TipTiltMirror(tel; scale=T(0.1), T=T, backend=backend, label=:tiptilt)
+        dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=backend)
+        optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm)
+        wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
+        det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
+        sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, optic, wfs)
+        scenario = build_runtime_scenario(
+            SingleRuntimeConfig(name=:optional_backend_composite, branch_label=:main,
+                products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
+            RuntimeBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(91)),
+        )
+        return scenario
+    end
+
+    cpu = build_case(Array)
+    gpu = build_case(BackendArray)
+    prepare!(cpu)
+    prepare!(gpu)
+    tip_cmd = fill(T(0.0125), 2)
+    dm_cmd = fill(T(0.02), 16)
+    structured = (; tiptilt=tip_cmd, dm=dm_cmd)
+    set_command!(cpu, structured)
+    set_command!(gpu, structured)
+    sense!(cpu)
+    sense!(gpu)
+    @test command_segment_labels(command_layout(gpu)) == (:tiptilt, :dm)
+    @test isapprox(Array(command(gpu)), Array(command(cpu)); rtol=1f-6, atol=1f-6)
+    @test isapprox(Array(slopes(gpu)), Array(slopes(cpu)); rtol=2f-4, atol=2f-4)
+    @test isapprox(Array(wfs_frame(gpu)), Array(wfs_frame(cpu)); rtol=2f-4, atol=2f-4)
+
+    update_command!(cpu, (; tiptilt=fill(T(0.025), 2)))
+    update_command!(gpu, (; tiptilt=fill(T(0.025), 2)))
+    sense!(cpu)
+    sense!(gpu)
+    @test isapprox(Array(command(gpu)), Array(command(cpu)); rtol=1f-6, atol=1f-6)
+    @test isapprox(Array(slopes(gpu)), Array(slopes(cpu)); rtol=2f-4, atol=2f-4)
+    @test isapprox(Array(wfs_frame(gpu)), Array(wfs_frame(cpu)); rtol=2f-4, atol=2f-4)
+    return nothing
+end
+
 function import_backend_package!(::Type{AdaptiveOpticsSim.CUDABackendTag})
     @eval import CUDA
     return nothing
@@ -526,6 +573,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     @test slopes isa BackendArray
 
     run_optional_backend_plan_checks(B, tel, BackendArray)
+    run_optional_composite_optic_parity(B, BackendArray)
 
     curv = CurvatureWFS(tel; n_subap=4, T=T, backend=BackendArray)
     curv_slopes = measure!(curv, tel, src, atm)

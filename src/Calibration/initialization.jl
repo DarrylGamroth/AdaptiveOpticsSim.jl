@@ -1,9 +1,21 @@
-struct AOSimulation{A<:AbstractAtmosphere,S<:AbstractSource,W<:AbstractWFS}
+struct AOSimulation{A<:AbstractAtmosphere,S<:AbstractSource,O<:AbstractControllableOptic,W<:AbstractWFS}
     tel::Telescope
     atm::A
     src::S
-    dm::DeformableMirror
+    optic::O
     wfs::W
+end
+
+@inline function Base.getproperty(sim::AOSimulation, name::Symbol)
+    if name === :dm
+        return getfield(sim, :optic)
+    end
+    return getfield(sim, name)
+end
+
+@inline function Base.propertynames(sim::AOSimulation, private::Bool=false)
+    names = fieldnames(typeof(sim))
+    return :dm in names ? names : (names..., :dm)
 end
 
 function initialize_ao_pyramid(; resolution::Int, diameter::Real, sampling_time::Real,

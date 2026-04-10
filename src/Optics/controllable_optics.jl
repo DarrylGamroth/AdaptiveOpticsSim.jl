@@ -1,0 +1,297 @@
+using LinearAlgebra
+
+command_storage(::AbstractControllableOptic) =
+    throw(InvalidConfiguration("command_storage is not implemented for this controllable optic"))
+
+@inline n_control_dofs(optic::AbstractControllableOptic) = length(command_storage(optic))
+@inline command_layout(optic::AbstractControllableOptic) = RuntimeCommandLayout(:optic => n_control_dofs(optic))
+@inline controllable_surface_labels(optic::AbstractControllableOptic) = command_segment_labels(command_layout(optic))
+@inline supports_segmented_command(optic::AbstractControllableOptic) = length(command_segments(command_layout(optic))) > 1
+
+function _set_command_segments!(setter, total_length::Int, layout::RuntimeCommandLayout, command::NamedTuple;
+    require_all::Bool=true)
+    layout.total_length == total_length ||
+        throw(InvalidConfiguration("command layout total length must match the target command length"))
+    labels = Tuple(command_segment_labels(layout))
+    provided = Tuple(keys(command))
+    if require_all
+        provided == labels ||
+            throw(InvalidConfiguration("structured command keys $(provided) must match command layout labels $(labels)"))
+    else
+        all(label -> label in labels, provided) ||
+            throw(InvalidConfiguration("structured command keys $(provided) must be a subset of command layout labels $(labels)"))
+    end
+    @inbounds for seg in command_segments(layout)
+        if hasproperty(command, seg.label)
+            segment = getproperty(command, seg.label)
+            length(segment) == seg.length ||
+                throw(DimensionMismatchError("command segment $(seg.label) must have length $(seg.length)"))
+            setter(seg, segment)
+        elseif require_all
+            throw(InvalidConfiguration("structured command is missing segment $(seg.label)"))
+        end
+    end
+    return command
+end
+
+@inline function set_command!(optic::AbstractControllableOptic, command::AbstractVector)
+    copyto!(command_storage(optic), command)
+    return command_storage(optic)
+end
+
+@inline function stage_command!(optic::AbstractControllableOptic, command::AbstractVector{T}, sign::T) where {T<:AbstractFloat}
+    apply_command!(command_storage(optic), command, sign)
+    return command_storage(optic)
+end
+
+@inline function set_command!(optic::AbstractControllableOptic, command::NamedTuple)
+    _set_command_segments!(length(command_storage(optic)), command_layout(optic), command) do seg, segment
+        copyto!(@view(command_storage(optic)[command_segment_range(seg)]), segment)
+    end
+    return command_storage(optic)
+end
+
+@inline function update_command!(optic::AbstractControllableOptic, command::NamedTuple)
+    _set_command_segments!(length(command_storage(optic)), command_layout(optic), command; require_all=false) do seg, segment
+        copyto!(@view(command_storage(optic)[command_segment_range(seg)]), segment)
+    end
+    return command_storage(optic)
+end
+
+@inline function apply_selected!(optic::AbstractControllableOptic, tel::Telescope, mode)
+    apply!(optic, tel, mode)
+    return tel
+end
+
+@inline function apply_selected!(optic::AbstractControllableOptic, tel::Telescope, mode,
+    labels::Tuple{Vararg{Symbol}})
+    isempty(labels) || apply!(optic, tel, mode)
+    return tel
+end
+
+@inline apply_selected!(optic::AbstractControllableOptic, tel::Telescope, mode,
+    label::Symbol) = apply_selected!(optic, tel, mode, (label,))
+
+function _backend_copy_matrix(host::AbstractMatrix{T}, backend, ::Type{T}) where {T<:AbstractFloat}
+    out = backend{T}(undef, size(host)...)
+    copyto!(out, host)
+    return out
+end
+
+function _modal_command_layout(spec::Union{Nothing,Symbol}, n::Int)
+    isnothing(spec) && return RuntimeCommandLayout(:optic => n)
+    return RuntimeCommandLayout(spec => n)
+end
+
+function _modal_mode_matrix(tel::Telescope, definitions::Tuple, ::Type{T}, backend) where {T<:AbstractFloat}
+    n = tel.params.resolution
+    pupil = tel.state.pupil
+    xs = collect(range(T(-1), T(1); length=n))
+    ys = collect(range(T(-1), T(1); length=n))
+    host = Matrix{T}(undef, n * n, length(definitions))
+    for (k, f) in pairs(definitions)
+        for j in 1:n, i in 1:n
+            host[(j - 1) * n + i, k] = pupil[i, j] ? f(xs[i], ys[j]) : zero(T)
+        end
+    end
+    return _backend_copy_matrix(host, backend, T)
+end
+
+function _normalize_pupil_mode!(mode::AbstractMatrix{T}, pupil::AbstractMatrix{Bool}) where {T<:AbstractFloat}
+    vals = T[]
+    n = size(pupil, 1)
+    for j in 1:size(pupil, 2), i in 1:n
+        if pupil[i, j]
+            push!(vals, mode[(j - 1) * n + i, 1])
+        end
+    end
+    isempty(vals) && return mode
+    μ = mean(vals)
+    σ = std(vals; corrected=false)
+    σ > eps(T) || (σ = one(T))
+    @inbounds for idx in axes(mode, 1)
+        mode[idx, 1] = (mode[idx, 1] - μ) / σ
+    end
+    return mode
+end
+
+mutable struct LowOrderControllableState{T<:AbstractFloat,A<:AbstractMatrix{T},M<:AbstractMatrix{T},V<:AbstractVector{T}}
+    opd::A
+    opd_vec::V
+    modes::M
+    coefs::V
+end
+
+struct TipTiltMirrorParams{T<:AbstractFloat}
+    scale::T
+end
+
+struct TipTiltMirror{P<:TipTiltMirrorParams,S<:LowOrderControllableState,CL<:RuntimeCommandLayout} <: AbstractControllableOptic
+    params::P
+    state::S
+    layout::CL
+end
+
+function TipTiltMirror(tel::Telescope; scale::Real=1.0,
+    T::Type{<:AbstractFloat}=Float64, backend=Array, label::Symbol=:tiptilt)
+    n = tel.params.resolution
+    opd = backend{T}(undef, n, n)
+    fill!(opd, zero(T))
+    opd_vec = reshape(opd, :)
+    modes = _modal_mode_matrix(tel, (
+        (x, y) -> T(scale) * x,
+        (x, y) -> T(scale) * y,
+    ), T, backend)
+    coefs = backend{T}(undef, 2)
+    fill!(coefs, zero(T))
+    state = LowOrderControllableState{T,typeof(opd),typeof(modes),typeof(coefs)}(opd, opd_vec, modes, coefs)
+    return TipTiltMirror(TipTiltMirrorParams{T}(T(scale)), state, RuntimeCommandLayout(label => 2))
+end
+
+const SteeringMirror = TipTiltMirror
+
+struct FocusStageParams{T<:AbstractFloat}
+    scale::T
+end
+
+struct FocusStage{P<:FocusStageParams,S<:LowOrderControllableState,CL<:RuntimeCommandLayout} <: AbstractControllableOptic
+    params::P
+    state::S
+    layout::CL
+end
+
+function FocusStage(tel::Telescope; scale::Real=1.0,
+    T::Type{<:AbstractFloat}=Float64, backend=Array, label::Symbol=:focus)
+    n = tel.params.resolution
+    opd = backend{T}(undef, n, n)
+    fill!(opd, zero(T))
+    opd_vec = reshape(opd, :)
+    host_modes = _modal_mode_matrix(tel, (
+        (x, y) -> T(scale) * (x^2 + y^2),
+    ), T, backend)
+    host_focus = Array(host_modes)
+    _normalize_pupil_mode!(host_focus, tel.state.pupil)
+    modes = _backend_copy_matrix(host_focus, backend, T)
+    coefs = backend{T}(undef, 1)
+    fill!(coefs, zero(T))
+    state = LowOrderControllableState{T,typeof(opd),typeof(modes),typeof(coefs)}(opd, opd_vec, modes, coefs)
+    return FocusStage(FocusStageParams{T}(T(scale)), state, RuntimeCommandLayout(label => 1))
+end
+
+@inline command_storage(optic::TipTiltMirror) = optic.state.coefs
+@inline command_layout(optic::TipTiltMirror) = optic.layout
+@inline command_storage(optic::FocusStage) = optic.state.coefs
+@inline command_layout(optic::FocusStage) = optic.layout
+
+@inline function apply!(optic::Union{TipTiltMirror,FocusStage}, tel::Telescope, ::DMAdditive)
+    mul!(optic.state.opd_vec, optic.state.modes, optic.state.coefs)
+    tel.state.opd .+= optic.state.opd
+    return tel
+end
+
+@inline function apply!(optic::Union{TipTiltMirror,FocusStage}, tel::Telescope, ::DMReplace)
+    mul!(optic.state.opd_vec, optic.state.modes, optic.state.coefs)
+    tel.state.opd .= optic.state.opd
+    return tel
+end
+
+struct CompositeControllableOptic{O,CV,CL,CR} <: AbstractControllableOptic
+    optics::O
+    command::CV
+    layout::CL
+    child_ranges::CR
+end
+
+function _composite_segment_specs(label::Symbol, optic::AbstractControllableOptic)
+    layout = command_layout(optic)
+    segments = command_segments(layout)
+    if length(segments) == 1
+        return (label => segments[1].length,)
+    end
+    return Tuple(Symbol(label, :__, seg.label) => seg.length for seg in segments)
+end
+
+function CompositeControllableOptic(entries::Vararg{Pair{<:Symbol,<:AbstractControllableOptic},N}) where {N}
+    N > 0 || throw(InvalidConfiguration("CompositeControllableOptic requires at least one child optic"))
+    optics = ntuple(i -> entries[i].second, N)
+    specs = Tuple(vcat(map(entry -> collect(_composite_segment_specs(entry.first, entry.second)), entries)...))
+    layout = RuntimeCommandLayout(specs...)
+    first_storage = command_storage(optics[1])
+    command = similar(first_storage, layout.total_length)
+    fill!(command, zero(eltype(command)))
+    child_ranges = ntuple(N) do i
+        start = i == 1 ? 1 : 1 + sum(length(command_storage(optics[j])) for j in 1:(i - 1))
+        start:(start + length(command_storage(optics[i])) - 1)
+    end
+    optic = CompositeControllableOptic(optics, command, layout, child_ranges)
+    for i in 1:N
+        copyto!(@view(optic.command[child_ranges[i]]), command_storage(optics[i]))
+    end
+    return optic
+end
+
+function CompositeControllableOptic(optics::AbstractControllableOptic...)
+    length(optics) > 0 || throw(InvalidConfiguration("CompositeControllableOptic requires at least one child optic"))
+    labels = map(optic -> begin
+        labels = controllable_surface_labels(optic)
+        length(labels) == 1 || throw(InvalidConfiguration("CompositeControllableOptic requires explicit labels when a child optic has multiple command segments"))
+        labels[1]
+    end, optics)
+    entries = ntuple(i -> labels[i] => optics[i], length(optics))
+    return CompositeControllableOptic(entries...)
+end
+
+@inline command_storage(optic::CompositeControllableOptic) = optic.command
+@inline command_layout(optic::CompositeControllableOptic) = optic.layout
+
+@inline function set_command!(optic::CompositeControllableOptic, command::AbstractVector)
+    copyto!(optic.command, command)
+    @inbounds for i in eachindex(optic.optics)
+        set_command!(optic.optics[i], @view(optic.command[optic.child_ranges[i]]))
+    end
+    return optic.command
+end
+
+@inline function stage_command!(optic::CompositeControllableOptic, command::AbstractVector{T}, sign::T) where {T<:AbstractFloat}
+    apply_command!(optic.command, command, sign)
+    @inbounds for i in eachindex(optic.optics)
+        set_command!(optic.optics[i], @view(optic.command[optic.child_ranges[i]]))
+    end
+    return optic.command
+end
+
+@inline function set_command!(optic::CompositeControllableOptic, command::NamedTuple)
+    _set_command_segments!(length(optic.command), optic.layout, command) do seg, segment
+        copyto!(@view(optic.command[command_segment_range(seg)]), segment)
+    end
+    @inbounds for i in eachindex(optic.optics)
+        set_command!(optic.optics[i], @view(optic.command[optic.child_ranges[i]]))
+    end
+    return optic.command
+end
+
+@inline function update_command!(optic::CompositeControllableOptic, command::NamedTuple)
+    _set_command_segments!(length(optic.command), optic.layout, command; require_all=false) do seg, segment
+        copyto!(@view(optic.command[command_segment_range(seg)]), segment)
+    end
+    @inbounds for i in eachindex(optic.optics)
+        set_command!(optic.optics[i], @view(optic.command[optic.child_ranges[i]]))
+    end
+    return optic.command
+end
+
+@inline function apply!(optic::CompositeControllableOptic, tel::Telescope, mode)
+    @inbounds for child in optic.optics
+        apply!(child, tel, mode)
+    end
+    return tel
+end
+
+@inline function apply_selected!(optic::CompositeControllableOptic, tel::Telescope, mode,
+    labels::Tuple{Vararg{Symbol}})
+    label_set = Set(labels)
+    @inbounds for child in optic.optics
+        any(in(label_set), controllable_surface_labels(child)) && apply!(child, tel, mode)
+    end
+    return tel
+end

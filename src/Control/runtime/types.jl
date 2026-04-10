@@ -162,7 +162,7 @@ mutable struct ClosedLoopRuntime{
     TEL,
     A,
     S,
-    DM,
+    O,
     W,
     R,
     CV,
@@ -183,7 +183,7 @@ mutable struct ClosedLoopRuntime{
     tel::TEL
     atm::A
     src::S
-    dm::DM
+    optic::O
     wfs::W
     reconstructor::R
     command::CV
@@ -203,6 +203,18 @@ mutable struct ClosedLoopRuntime{
     control_sign::T
     science_zero_padding::Int
     prepared::Bool
+end
+
+@inline function Base.getproperty(runtime::ClosedLoopRuntime, name::Symbol)
+    if name === :dm
+        return getfield(runtime, :optic)
+    end
+    return getfield(runtime, name)
+end
+
+@inline function Base.propertynames(runtime::ClosedLoopRuntime, private::Bool=false)
+    names = fieldnames(typeof(runtime))
+    return :dm in names ? names : (names..., :dm)
 end
 
 """
@@ -259,48 +271,6 @@ struct SimulationReadout{C,S,W,SF,WM,SM,GW,GS}
     grouped_wfs_stack::GW
     grouped_science_stack::GS
 end
-
-struct RuntimeCommandSegment{L}
-    label::L
-    offset::Int
-    length::Int
-    function RuntimeCommandSegment(label, offset::Integer, length::Integer)
-        offset >= 1 || throw(InvalidConfiguration("command segment offset must be >= 1"))
-        length >= 0 || throw(InvalidConfiguration("command segment length must be >= 0"))
-        return new{typeof(label)}(label, Int(offset), Int(length))
-    end
-end
-
-struct RuntimeCommandLayout{S}
-    segments::S
-    total_length::Int
-    function RuntimeCommandLayout(segments::Tuple)
-        total = 0
-        for seg in segments
-            seg isa RuntimeCommandSegment ||
-                throw(InvalidConfiguration("RuntimeCommandLayout segments must be RuntimeCommandSegment values"))
-            seg.offset == total + 1 ||
-                throw(InvalidConfiguration("RuntimeCommandLayout segments must be contiguous and 1-based"))
-            total += seg.length
-        end
-        return new{typeof(segments)}(segments, total)
-    end
-end
-
-RuntimeCommandLayout(segments::RuntimeCommandSegment...) = RuntimeCommandLayout(tuple(segments...))
-RuntimeCommandLayout(specs::Pair...) = begin
-    offset = 1
-    segments = map(specs) do spec
-        length = Int(spec.second)
-        seg = RuntimeCommandSegment(spec.first, offset, length)
-        offset += length
-        seg
-    end
-    RuntimeCommandLayout(Tuple(segments))
-end
-command_segments(layout::RuntimeCommandLayout) = layout.segments
-command_segment_labels(layout::RuntimeCommandLayout) = map(seg -> seg.label, layout.segments)
-command_segment_range(seg::RuntimeCommandSegment) = seg.offset:(seg.offset + seg.length - 1)
 
 @inline function apply_command!(::ScalarCPUStyle, coefs::AbstractVector{T}, cmd::AbstractVector{T}, sign::T) where {T<:AbstractFloat}
     @inbounds for i in eachindex(coefs, cmd)

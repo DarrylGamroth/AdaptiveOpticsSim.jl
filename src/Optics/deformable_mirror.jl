@@ -51,10 +51,6 @@ end
     end
 end
 
-abstract type DMApplyMode end
-struct DMAdditive <: DMApplyMode end
-struct DMReplace <: DMApplyMode end
-
 struct DeformableMirrorParams{T<:AbstractFloat}
     n_act::Int
     influence_width::T
@@ -82,6 +78,9 @@ struct DeformableMirror{P<:DeformableMirrorParams,S<:DeformableMirrorState} <: A
     params::P
     state::S
 end
+
+@inline command_storage(dm::DeformableMirror) = dm.state.coefs
+@inline command_layout(dm::DeformableMirror) = RuntimeCommandLayout(:dm => length(dm.state.coefs))
 
 """
     DeformableMirror(tel; ...)

@@ -9,33 +9,17 @@ struct CompositeRuntimeExportPlan <: AbstractRuntimeExportPlan end
 @inline command_layout(runtime::ClosedLoopRuntime) = runtime.command_layout
 @inline command_layout(interface::SimulationInterface) = command_layout(interface.runtime)
 
-function _set_command_segments!(setter, total_length::Int, layout::RuntimeCommandLayout, command::NamedTuple)
-    layout.total_length == total_length ||
-        throw(InvalidConfiguration("command layout total length must match the target command length"))
-    labels = Tuple(command_segment_labels(layout))
-    provided = keys(command)
-    Tuple(provided) == labels ||
-        throw(InvalidConfiguration("structured command keys $(Tuple(provided)) must match command layout labels $labels"))
-    @inbounds for seg in command_segments(layout)
-        segment = getproperty(command, seg.label)
-        length(segment) == seg.length ||
-            throw(DimensionMismatchError("command segment $(seg.label) must have length $(seg.length)"))
-        setter(seg, segment)
-    end
-    return command
-end
-
 @inline function set_command!(runtime::ClosedLoopRuntime, command::AbstractVector)
     copyto!(runtime.command, command)
-    copyto!(runtime.dm.state.coefs, command)
-    return runtime.dm.state.coefs
+    set_command!(runtime.optic, runtime.command)
+    return command_storage(runtime.optic)
 end
 
 @inline function set_command!(runtime::ClosedLoopRuntime, command::NamedTuple)
     _set_command_segments!(length(runtime.command), command_layout(runtime), command) do seg, segment
         rng = command_segment_range(seg)
         copyto!(@view(runtime.command[rng]), segment)
-        copyto!(@view(runtime.dm.state.coefs[rng]), segment)
+        copyto!(@view(command_storage(runtime.optic)[rng]), segment)
     end
     return runtime.command
 end
@@ -50,6 +34,25 @@ end
     set_command!(interface.runtime, command)
     copyto!(interface.command, interface.runtime.command)
     return interface.command
+end
+
+@inline function update_command!(runtime::ClosedLoopRuntime, command::NamedTuple)
+    _set_command_segments!(length(runtime.command), runtime.command_layout, command; require_all=false) do seg, segment
+        rng = command_segment_range(seg)
+        copyto!(@view(runtime.command[rng]), segment)
+        copyto!(@view(command_storage(runtime.optic)[rng]), segment)
+    end
+    return runtime.command
+end
+
+@inline function update_command!(interface::SimulationInterface, command::NamedTuple)
+    update_command!(interface.runtime, command)
+    copyto!(interface.command, interface.runtime.command)
+    return interface.command
+end
+
+@inline function update_command!(interface::CompositeSimulationInterface, command::NamedTuple)
+    throw(InvalidConfiguration("update_command! on a composite interface should be routed through a RuntimeScenario or child SimulationInterface"))
 end
 
 @inline function set_command!(interface::CompositeSimulationInterface, command::AbstractVector)

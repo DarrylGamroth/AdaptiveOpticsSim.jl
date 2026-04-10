@@ -180,21 +180,35 @@ If you are maintaining the package, pair this document with
 - `AbstractController`
 - `DiscreteIntegratorController`, `update!`
 - `ClosedLoopRuntime`, `SimulationInterface`, `CompositeSimulationInterface`, `SimulationReadout`
-- `ClosedLoopBranchConfig`, `SinglePlatformConfig`, `GroupedPlatformConfig`, `PlatformScenario`
-- `build_platform_scenario`, `platform_config`, `platform_boundary`,
-  `platform_name`, `platform_branch_labels`
+- preferred orchestration names:
+  - `RuntimeBranch`, `SingleRuntimeConfig`, `GroupedRuntimeConfig`, `RuntimeScenario`
+  - `build_runtime_scenario`
+- compatibility aliases retained during migration:
+  - `ClosedLoopBranchConfig`, `SinglePlatformConfig`, `GroupedPlatformConfig`, `PlatformScenario`
+  - `build_platform_scenario`
+- `platform_config`, `platform_boundary`, `platform_name`, `platform_branch_labels`
 - `AbstractControlSimulation`
+- `NullReconstructor`
+  - use this for external-control / HIL runtimes that inject commands through `set_command!`
 - `prepare!`, `prepare_runtime_wfs!`, `simulation_interface`
 - `runtime_profile`, `runtime_latency`
-- `simulation_readout`, `simulation_command`, `simulation_slopes`,
-  `simulation_wfs_frame`, `simulation_science_frame`
-- `simulation_grouped_wfs_stack`, `simulation_grouped_science_stack`
-- `simulation_wfs_metadata`, `simulation_science_metadata`
-  - these accessors now work on both interface/readout objects and direct
-    `AbstractControlSimulation` instances
+- preferred runtime accessors:
+  - `command`, `slopes`, `wfs_frame`, `science_frame`
+  - `wfs_metadata`, `science_metadata`
+  - `grouped_wfs_stack`, `grouped_science_stack`
+- compatibility accessors retained during migration:
+  - `simulation_readout`, `simulation_command`, `simulation_slopes`
+  - `simulation_wfs_frame`, `simulation_science_frame`
+  - `simulation_grouped_wfs_stack`, `simulation_grouped_science_stack`
+  - `simulation_wfs_metadata`, `simulation_science_metadata`
+- `set_command!`, `update_command!`, `snapshot_outputs!`
+  - `set_command!` and `update_command!` accept flat vectors or structured `NamedTuple` commands
 - `RuntimeProductRequirements`, `GroupedRuntimeProductRequirements`
   - grouped composite execution now has an explicit grouped export policy in
     addition to the per-runtime slope/WFS/science product policy
+- controllable optics used by the runtime layer:
+  - `AbstractControllableOptic`, `CompositeControllableOptic`
+  - `TipTiltMirror`, `SteeringMirror`, `FocusStage`, `DeformableMirror`
 - `AbstractExecutionPolicy`, `SequentialExecution`, `ThreadedExecution`,
   `BackendStreamExecution`
 - `VectorDelayLine`, `shift_delay!`
