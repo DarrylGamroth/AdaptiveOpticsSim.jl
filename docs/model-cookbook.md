@@ -133,7 +133,7 @@ Use this pattern when you need:
 Use this when the simulation should behave like a hardware-in-the-loop or RTC
 boundary surface: commands in, WFS/science products out.
 
-For a single-branch RTC-style runtime with an external DM command source:
+For a single-branch RTC-style runtime with an external command source:
 
 ```julia
 using AdaptiveOpticsSim
@@ -147,18 +147,19 @@ dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive())
 sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
 
-# Use NullReconstructor() when the control law lives outside the package and
-# commands are injected through set_command!(...).
+# Use NullReconstructor() when the controller lives outside the package and
+# commands are injected explicitly through set_command!(...).
 recon = NullReconstructor()
 
-# Attach a science detector if the external interface should export a science
-# image per sensing step.
+# Attach detectors when the external interface should export pixel products.
+wfs_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
 science_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
 
 branch = RuntimeBranch(
     :main,
     sim,
     recon;
+    wfs_detector=wfs_det,
     science_detector=science_det,
     rng=MersenneTwister(1),
 )
@@ -172,20 +173,34 @@ cfg = SingleRuntimeConfig(
 scenario = build_runtime_scenario(cfg, branch)
 prepare!(scenario)
 
-# The external command vector must match the DM command length exported by the
-# runtime boundary.
+# Inspect the external command contract before wiring in a controller.
+# For this single-DM plant the boundary is one flat command vector.
 n_command = length(command(scenario))
 external_command = zeros(eltype(command(scenario)), n_command)
 
-# Example: set one actuator command from an external controller.
-external_command[1] = 0.05
+# Typical HIL / plant-facing flow per control step:
+#   1. get a command from the external controller
+#   2. inject it into the simulated plant
+#   3. run only the sensing side of the package
+#   4. read the exported products that go back to the controller
+for k in 1:3
+    fill!(external_command, 0)
+    external_command[1] = 0.05 * k
 
-# HIL / plant-facing flow:
-#   1. inject the external DM command
-#   2. run the sensing side of the simulation
-#   3. read the exported WFS/science products
-set_command!(scenario, external_command)
-sense!(scenario)
+    set_command!(scenario, external_command)
+    sense!(scenario)
+
+    command_vec = command(scenario)
+    slopes_vec = slopes(scenario)
+    wfs_img = wfs_frame(scenario)
+    science_img = science_frame(scenario)
+    wfs_meta = wfs_metadata(scenario)
+    science_meta = science_metadata(scenario)
+
+    @show k length(command_vec) length(slopes_vec)
+    @show size(wfs_img) size(science_img)
+    @show wfs_meta.output_size science_meta.output_size
+end
 
 # If the plant itself contains several controllable surfaces, make them explicit
 # in the optic model and still drive them through one packed RTC boundary.
@@ -198,7 +213,7 @@ composite_branch = RuntimeBranch(
     :main,
     composite_sim,
     recon;
-    wfs_detector=science_det,
+    wfs_detector=wfs_det,
     science_detector=science_det,
     rng=MersenneTwister(2),
 )
@@ -235,30 +250,28 @@ set_command!(split_scenario, (
 ))
 sense!(split_scenario)
 
-# Exported boundary products after the sensing step.
-command_vec = command(scenario)
-slopes_vec = slopes(scenario)
-wfs_img = wfs_frame(scenario)
-science_img = science_frame(scenario)
-wfs_meta = wfs_metadata(scenario)
-science_meta = science_metadata(scenario)
-
-# Typical controller-side checks:
-@show length(command_vec)
-@show length(slopes_vec)
-@show size(wfs_img)
-@show size(science_img)
-@show science_meta.output_size
-@show science_meta.output_precision
+# Export semantics for the single-branch `scenario` above:
+# - `command(scenario)` is one packed command vector
+# - `slopes(scenario)` is one packed slopes vector
+# - `wfs_frame(scenario)` is one WFS frame, or `nothing`
+# - `science_frame(scenario)` is one science frame, or `nothing`
+# - detector metadata describes the pixel contract seen by the controller
 ```
 
 Use `step!(scenario)` only when you want the package to perform its own
-reconstruction and DM update. For an external RTC or HIL controller, prefer the
-explicit `set_command!(scenario, cmd)` plus `sense!(scenario)` flow above.
+reconstruction and command update. For an external RTC or HIL controller,
+prefer the explicit `set_command!(scenario, cmd)` plus `sense!(scenario)` flow
+above.
 
 The exported science frame is the configured science detector's `output_frame`,
 so its shape and element type are detector-defined. Inspect
 `science_metadata(scenario)` to learn the exact export contract for:
+
+- `output_size`
+- `output_precision`
+- `binning`
+- `window_rows` / `window_cols`
+- `bits` / `full_well`
 
 For grouped RTC boundaries, keep the outer structure branch-oriented and nest
 structured commands per branch when needed:
@@ -270,11 +283,15 @@ set_command!(grouped_scenario, (
 ))
 ```
 
-- `output_size`
-- `output_precision`
-- `binning`
-- `window_rows` / `window_cols`
-- `bits` / `full_well`
+Grouped output semantics differ from the single-branch case:
+
+- `command(grouped_scenario)` and `slopes(grouped_scenario)` are still one
+  packed vector each, aggregated across branches.
+- `wfs_frame(grouped_scenario)` and `science_frame(grouped_scenario)` become
+  per-branch frame collections when those grouped frame products are enabled.
+- `grouped_wfs_stack(grouped_scenario)` and
+  `grouped_science_stack(grouped_scenario)` provide stacked array forms when
+  the grouped contract requests them.
 
 That lets an external HIL client validate the runtime boundary before wiring the
 frame into another controller, transport layer, or logging path.
@@ -290,6 +307,96 @@ Use this pattern when you need:
 - exported WFS or science frames per step
 - grouped runtime products
 - HIL-style benchmarking or controller integration
+
+## Recipe 6: GPU HIL Runtime
+
+Use this when the plant should run on CUDA or AMDGPU and the external
+controller still talks to the same HIL runtime boundary.
+
+```julia
+using AdaptiveOpticsSim
+using CUDA
+using Random
+
+const GPU = CUDA.CuArray
+
+# Choose backend and precision once near the top of the script.
+tel = Telescope(
+    resolution=16,
+    diameter=8.0f0,
+    sampling_time=1f-3,
+    central_obstruction=0.0f0,
+    T=Float32,
+    backend=GPU,
+)
+src = Source(band=:I, magnitude=0.0f0, T=Float32)
+atm = KolmogorovAtmosphere(tel; r0=0.2f0, L0=25.0f0, T=Float32, backend=GPU)
+
+# Multi-surface plants work on GPU too.
+tiptilt = TipTiltMirror(tel; scale=0.1f0, label=:tiptilt, T=Float32, backend=GPU)
+dm = DeformableMirror(tel; n_act=4, influence_width=0.3f0, T=Float32, backend=GPU)
+optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm)
+
+wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=Float32, backend=GPU)
+wfs_det = Detector(noise=NoiseNone(), integration_time=1.0f0, qe=1.0f0, binning=1; T=Float32, backend=GPU)
+science_det = Detector(noise=NoiseNone(), integration_time=1.0f0, qe=1.0f0, binning=1; T=Float32, backend=GPU)
+
+sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, optic, wfs)
+branch = RuntimeBranch(
+    :main,
+    sim,
+    NullReconstructor();
+    wfs_detector=wfs_det,
+    science_detector=science_det,
+    rng=MersenneTwister(1),
+)
+cfg = SingleRuntimeConfig(
+    name=:hil_gpu,
+    branch_label=:main,
+    products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=true),
+)
+
+scenario = build_runtime_scenario(cfg, branch)
+prepare!(scenario)
+
+# The external controller can still send structured commands by segment.
+set_command!(scenario, (
+    tiptilt=Float32[0.01, -0.01],
+    dm=fill(0.02f0, 16),
+))
+sense!(scenario)
+
+# These products stay backend-native until you explicitly copy them to CPU.
+slopes_vec = slopes(scenario)
+wfs_img = wfs_frame(scenario)
+science_img = science_frame(scenario)
+
+@show typeof(slopes_vec)
+@show typeof(wfs_img)
+@show typeof(science_img)
+
+# Only copy to CPU when another process or transport layer really needs host
+# memory.
+wfs_host = Array(wfs_img)
+science_host = Array(science_img)
+```
+
+Notes:
+
+- Replace `CUDA.CuArray` with `AMDGPU.ROCArray` for the AMDGPU path.
+- Keep `backend=GPU` on the long-lived plant objects so runtime buffers stay on
+  device.
+- If you need a GPU-built internal reconstructor as well, build that
+  calibration surface intentionally with `AdaptiveOpticsSim.GPUArrayBuildBackend(...)`.
+- `set_command!` accepts ordinary CPU vectors or tuples; the runtime stages the
+  command into the backend-native optic state before `sense!(...)`.
+
+Use this pattern when you need:
+
+- external-control / HIL semantics on GPU
+- backend-native WFS and science exports
+- realistic CUDA or AMDGPU runtime profiling
+- plant models with several controllable surfaces on one RTC boundary
 
 ## How To Choose The Right Entry Surface
 
