@@ -370,20 +370,20 @@ end
     @test simulation_wfs_frame(grouped_stack_only) === nothing
     @test !isnothing(simulation_grouped_wfs_stack(grouped_stack_only))
 
-    single_cfg = SinglePlatformConfig(
+    single_cfg = SingleRuntimeConfig(
         name=:single_runtime_demo,
         branch_label=:science_branch,
         products=RuntimeProductRequirements(slopes=true, wfs_pixels=false, science_pixels=true),
     )
-    single_branch = ClosedLoopBranchConfig(
+    single_branch = RuntimeBranch(
         :science_branch,
         sim,
         recon;
         science_detector=det,
         rng=MersenneTwister(31),
     )
-    single_scenario = build_platform_scenario(single_cfg, single_branch)
-    @test single_scenario isa PlatformScenario
+    single_scenario = build_runtime_scenario(single_cfg, single_branch)
+    @test single_scenario isa RuntimeScenario
     @test platform_name(single_scenario) == :single_runtime_demo
     @test platform_branch_labels(single_scenario) == (:science_branch,)
     @test simulation_interface(single_scenario) isa SimulationInterface
@@ -459,17 +459,17 @@ end
     sense!(focus_scenario)
     @test wfs_frame(focus_scenario) !== nothing
 
-    grouped_cfg = GroupedPlatformConfig(
+    grouped_cfg = GroupedRuntimeConfig(
         (:branch_a, :branch_b);
         name=:grouped_runtime_demo,
         products=GroupedRuntimeProductRequirements(wfs_frames=true, science_frames=false, wfs_stack=true, science_stack=false),
     )
-    grouped_scenario = build_platform_scenario(
+    grouped_scenario = build_runtime_scenario(
         grouped_cfg,
-        ClosedLoopBranchConfig(:branch_a, sim2, recon2; wfs_detector=wfs_det, rng=MersenneTwister(41)),
-        ClosedLoopBranchConfig(:branch_b, sim2b, recon2b; wfs_detector=wfs_det_b, rng=MersenneTwister(42)),
+        RuntimeBranch(:branch_a, sim2, recon2; wfs_detector=wfs_det, rng=MersenneTwister(41)),
+        RuntimeBranch(:branch_b, sim2b, recon2b; wfs_detector=wfs_det_b, rng=MersenneTwister(42)),
     )
-    @test grouped_scenario isa PlatformScenario
+    @test grouped_scenario isa RuntimeScenario
     @test platform_name(grouped_scenario) == :grouped_runtime_demo
     @test platform_branch_labels(grouped_scenario) == (:branch_a, :branch_b)
     @test simulation_interface(grouped_scenario) isa CompositeSimulationInterface
@@ -599,7 +599,7 @@ end
         step!(runtime4)
         push!(slope_norms, norm(simulation_slopes(runtime4)))
         push!(command_norms, norm(simulation_command(runtime4)))
-        push!(dm_norms, norm(runtime4.dm.state.coefs))
+        push!(dm_norms, norm(command_storage(runtime4.optic)))
     end
     @test slope_norms[1] == 0
     @test slope_norms[2] == 0

@@ -14,19 +14,19 @@ without switching the package to a config-file-first model.
 
 The orchestration layer is built from three pieces:
 
-- `ClosedLoopBranchConfig`
+- `RuntimeBranch`
   - one typed branch definition containing:
     - a simulation
     - a reconstructor
     - optional WFS and science detectors
     - an RNG
-- `SinglePlatformConfig` or `GroupedPlatformConfig`
+- `SingleRuntimeConfig` or `GroupedRuntimeConfig`
   - typed runtime-composition policy:
     - scenario name
     - branch labels
     - runtime profile / latency
     - exported product policy
-- `PlatformScenario`
+- `RuntimeScenario`
   - the executable orchestration object that wraps the resulting
     `SimulationInterface` or `CompositeSimulationInterface`
 
@@ -43,7 +43,7 @@ instead of replacing Julia composition with external manifests.
 Single-branch runtime:
 
 ```julia
-branch = ClosedLoopBranchConfig(
+branch = RuntimeBranch(
     :main,
     sim,
     recon;
@@ -52,13 +52,13 @@ branch = ClosedLoopBranchConfig(
     rng=MersenneTwister(1),
 )
 
-cfg = SinglePlatformConfig(
+cfg = SingleRuntimeConfig(
     name=:single_branch_demo,
     branch_label=:main,
     products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=true),
 )
 
-scenario = build_platform_scenario(cfg, branch)
+scenario = build_runtime_scenario(cfg, branch)
 prepare!(scenario)
 step!(scenario)
 readout = simulation_readout(scenario)
@@ -67,7 +67,7 @@ readout = simulation_readout(scenario)
 Grouped runtime:
 
 ```julia
-cfg = GroupedPlatformConfig(
+cfg = GroupedRuntimeConfig(
     (:high, :low);
     name=:grouped_demo,
     products=GroupedRuntimeProductRequirements(
@@ -78,10 +78,10 @@ cfg = GroupedPlatformConfig(
     ),
 )
 
-scenario = build_platform_scenario(
+scenario = build_runtime_scenario(
     cfg,
-    ClosedLoopBranchConfig(:high, sim1, recon1; wfs_detector=det1, rng=MersenneTwister(1)),
-    ClosedLoopBranchConfig(:low, sim2, recon2; wfs_detector=det2, rng=MersenneTwister(2)),
+    RuntimeBranch(:high, sim1, recon1; wfs_detector=det1, rng=MersenneTwister(1)),
+    RuntimeBranch(:low, sim2, recon2; wfs_detector=det2, rng=MersenneTwister(2)),
 )
 
 prepare!(scenario)
@@ -91,7 +91,7 @@ stack = simulation_grouped_wfs_stack(scenario)
 
 ## Execution Semantics
 
-`PlatformScenario` is a thin orchestration wrapper.
+`RuntimeScenario` is a thin orchestration wrapper.
 
 It delegates to the maintained runtime surfaces:
 
@@ -109,7 +109,7 @@ composition contract explicit and typed.
 ## Product Policy
 
 Single-branch scenarios use the `RuntimeProductRequirements` recorded in
-`SinglePlatformConfig`, unless a branch explicitly overrides products.
+`SingleRuntimeConfig`, unless a branch explicitly overrides products.
 
 Grouped scenarios use `GroupedRuntimeProductRequirements` for the composite
 export surface. Branch-local runtime product policy is derived automatically

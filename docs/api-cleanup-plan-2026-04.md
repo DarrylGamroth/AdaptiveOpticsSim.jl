@@ -10,10 +10,10 @@ the transition.
 
 The goal is to replace internal historical naming such as:
 
-- `ClosedLoopBranchConfig`
-- `SinglePlatformConfig`
-- `GroupedPlatformConfig`
-- `PlatformScenario`
+- `RuntimeBranch`
+- `SingleRuntimeConfig`
+- `GroupedRuntimeConfig`
+- `RuntimeScenario`
 - `simulation_*` accessors
 
 with clearer user-facing vocabulary while preserving a compatibility layer long
@@ -147,7 +147,7 @@ After the preferred surface is stable and validated:
 
 Status:
 
-- not started
+- completed
 
 ### AC-7 Compatibility Removal
 
@@ -159,7 +159,7 @@ Remove the legacy layer only after:
 
 Status:
 
-- deferred until after AC-6 validation
+- completed
 
 ## Current Preferred Surface
 
@@ -181,6 +181,4 @@ meta = science_metadata(scenario)
 
 The next highest-value slice after `AC-4` is the plant/runtime expansion in
 [`controllable-optics-plan-2026-04.md`](./controllable-optics-plan-2026-04.md),
-then `AC-5`: finish migrating the remaining user-facing runtime examples to the
-preferred structured-control surface and start the deprecation layer for the
-legacy names once the controllable-optic surface is stable.
+and the migration/removal slice is now complete for the legacy `dm` and old orchestration surfaces.

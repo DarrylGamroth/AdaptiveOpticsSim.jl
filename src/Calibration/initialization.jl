@@ -6,18 +6,6 @@ struct AOSimulation{A<:AbstractAtmosphere,S<:AbstractSource,O<:AbstractControlla
     wfs::W
 end
 
-@inline function Base.getproperty(sim::AOSimulation, name::Symbol)
-    if name === :dm
-        return getfield(sim, :optic)
-    end
-    return getfield(sim, name)
-end
-
-@inline function Base.propertynames(sim::AOSimulation, private::Bool=false)
-    names = fieldnames(typeof(sim))
-    return :dm in names ? names : (names..., :dm)
-end
-
 function initialize_ao_pyramid(; resolution::Int, diameter::Real, sampling_time::Real,
     r0::Real, L0::Real=25.0, fractional_cn2::AbstractVector=[1.0],
     wind_speed::AbstractVector=[0.0], wind_direction::AbstractVector=[0.0], altitude::AbstractVector=[0.0],

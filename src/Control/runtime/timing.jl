@@ -109,7 +109,7 @@ function runtime_phase_timing(runtime::ClosedLoopRuntime; warmup::Int=10, sample
         synchronize_backend!(execution_style(runtime.command))
         t3 = time_ns()
         delayed = shift_delay!(runtime.dm_delay, runtime.command)
-        stage_command!(runtime.optic, delayed, runtime.control_sign)
+        _stage_command!(runtime.optic, delayed, runtime.control_sign)
         synchronize_backend!(execution_style(command_storage(runtime.optic)))
         t4 = time_ns()
         sense_times[i] = t1 - t0
@@ -158,7 +158,7 @@ function runtime_phase_timing(interface::SimulationInterface; warmup::Int=10, sa
         synchronize_backend!(execution_style(runtime.command))
         t3 = time_ns()
         delayed = shift_delay!(runtime.dm_delay, runtime.command)
-        stage_command!(runtime.optic, delayed, runtime.control_sign)
+        _stage_command!(runtime.optic, delayed, runtime.control_sign)
         synchronize_backend!(execution_style(command_storage(runtime.optic)))
         t4 = time_ns()
         snapshot_outputs!(interface)
@@ -224,7 +224,7 @@ function runtime_phase_timing(interface::CompositeSimulationInterface; warmup::I
         t3 = time_ns()
         for child in interface.interfaces
             delayed = shift_delay!(child.runtime.dm_delay, child.runtime.command)
-            stage_command!(child.runtime.optic, delayed, child.runtime.control_sign)
+            _stage_command!(child.runtime.optic, delayed, child.runtime.control_sign)
             synchronize_backend!(execution_style(command_storage(child.runtime.optic)))
         end
         t4 = time_ns()

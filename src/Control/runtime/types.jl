@@ -205,18 +205,6 @@ mutable struct ClosedLoopRuntime{
     prepared::Bool
 end
 
-@inline function Base.getproperty(runtime::ClosedLoopRuntime, name::Symbol)
-    if name === :dm
-        return getfield(runtime, :optic)
-    end
-    return getfield(runtime, name)
-end
-
-@inline function Base.propertynames(runtime::ClosedLoopRuntime, private::Bool=false)
-    names = fieldnames(typeof(runtime))
-    return :dm in names ? names : (names..., :dm)
-end
-
 """
     SimulationInterface(runtime)
 

@@ -300,7 +300,7 @@ Use:
   - when you are studying one physical layer
 - `ClosedLoopRuntime`
   - when you want an AO control loop step surface
-- `SinglePlatformConfig` or `GroupedPlatformConfig`
+- `SingleRuntimeConfig` or `GroupedRuntimeConfig`
   - when you need explicit exported products and branch composition at the
     runtime boundary
 

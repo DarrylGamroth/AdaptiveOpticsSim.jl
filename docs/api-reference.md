@@ -180,12 +180,9 @@ If you are maintaining the package, pair this document with
 - `AbstractController`
 - `DiscreteIntegratorController`, `update!`
 - `ClosedLoopRuntime`, `SimulationInterface`, `CompositeSimulationInterface`, `SimulationReadout`
-- preferred orchestration names:
+- runtime orchestration:
   - `RuntimeBranch`, `SingleRuntimeConfig`, `GroupedRuntimeConfig`, `RuntimeScenario`
   - `build_runtime_scenario`
-- compatibility aliases retained during migration:
-  - `ClosedLoopBranchConfig`, `SinglePlatformConfig`, `GroupedPlatformConfig`, `PlatformScenario`
-  - `build_platform_scenario`
 - `platform_config`, `platform_boundary`, `platform_name`, `platform_branch_labels`
 - `AbstractControlSimulation`
 - `NullReconstructor`

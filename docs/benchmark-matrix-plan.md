@@ -41,7 +41,7 @@ Status:
     with interpretation in
     [`./rocm-phase3-rebaseline.md`](./rocm-phase3-rebaseline.md)
 - [x] platform-strengthening Phase 5 orchestration evidence added
-  - direct `PlatformScenario` runtime evidence now lives under
+  - direct `RuntimeScenario` runtime evidence now lives under
     [`../benchmarks/results/platform`](../benchmarks/results/platform)
     with interpretation in
     [`./platform-orchestration-validation.md`](./platform-orchestration-validation.md)

@@ -128,7 +128,7 @@ export ft_phase_screen, ft_sh_phase_screen, PhaseStatsWorkspace
 export SubharmonicMode, FastSubharmonics, FidelitySubharmonics, default_subharmonic_mode
 export DeformableMirror, DeformableMirrorParams, DeformableMirrorState, build_influence_functions!, apply!
 export CompositeControllableOptic, TipTiltMirror, SteeringMirror, FocusStage
-export command_storage, n_control_dofs, controllable_surface_labels, supports_segmented_command, update_command!, apply_selected!
+export command_storage, n_control_dofs, controllable_surface_labels, supports_segmented_command, update_command!
 export Misregistration, apply_misregistration, rotation_rad, rotation_deg, anamorphosis_angle_rad, anamorphosis_angle_deg
 export AbstractFrameDetector, AbstractCountingDetector
 export Detector, DetectorParams, DetectorState, DetectorExportMetadata
@@ -211,9 +211,8 @@ export VectorDelayLine, shift_delay!, prepare!, prepare_runtime_wfs!, init_execu
 export supports_prepared_runtime, supports_detector_output, supports_stacked_sources, supports_grouped_execution
 export ClosedLoopRuntime, SimulationInterface, CompositeSimulationInterface, SimulationReadout
 export RuntimeCommandSegment, RuntimeCommandLayout, command_layout, branch_command_layout, branch_command_layouts, command_segments, command_segment_labels, command_segment_range
-export AbstractPlatformConfig, ClosedLoopBranchConfig, SinglePlatformConfig, GroupedPlatformConfig, PlatformScenario
-export RuntimeBranch, SingleRuntimeConfig, GroupedRuntimeConfig, RuntimeScenario
-export build_platform_scenario, build_runtime_scenario, platform_config, platform_boundary, platform_name, platform_branch_labels
+export AbstractPlatformConfig, RuntimeBranch, SingleRuntimeConfig, GroupedRuntimeConfig, RuntimeScenario
+export build_runtime_scenario, platform_config, platform_boundary, platform_name, platform_branch_labels
 export sense!, step!, set_command!, snapshot_outputs!
 export readout, command, slopes, wfs_frame, science_frame, wfs_metadata, science_metadata
 export grouped_wfs_stack, grouped_science_stack

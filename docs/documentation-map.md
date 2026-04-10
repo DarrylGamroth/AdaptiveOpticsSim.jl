@@ -71,7 +71,7 @@ Use these when the task is cross-package or instrument-truth work:
 - [`platform-orchestration.md`](./platform-orchestration.md)
   - typed scenario/config layer for Julia-native runtime composition
 - [`platform-orchestration-validation.md`](./platform-orchestration-validation.md)
-  - maintained benchmark and backend evidence for the `PlatformScenario` layer
+  - maintained benchmark and backend evidence for the `RuntimeScenario` layer
 - [`platform-strengthening-closeout.md`](./platform-strengthening-closeout.md)
   - explicit post-plan decision on what still trails SPECULA and what comes next
 - [`platform-manifest-defer.md`](./platform-manifest-defer.md)

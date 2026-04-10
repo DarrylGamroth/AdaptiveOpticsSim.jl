@@ -727,10 +727,10 @@ files.
 
 - typed orchestration layer added in [src/Control/platform.jl](../src/Control/platform.jl)
 - new exported scenario/config families:
-  - `ClosedLoopBranchConfig`
-  - `SinglePlatformConfig`
-  - `GroupedPlatformConfig`
-  - `PlatformScenario`
+  - `RuntimeBranch`
+  - `SingleRuntimeConfig`
+  - `GroupedRuntimeConfig`
+  - `RuntimeScenario`
 - maintained orchestration guide added:
   [platform-orchestration.md](./platform-orchestration.md)
 - maintained grouped runtime runner migrated to the new layer:
@@ -773,7 +773,7 @@ Implementation record:
   [2026-04-03-phase5-psp16.toml](../benchmarks/results/cross_package/2026-04-03-phase5-psp16.toml)
 - contract note added:
   [revolt-platform-benchmark-contract.md](./revolt-platform-benchmark-contract.md)
-- backend smoke widened to instantiate `PlatformScenario` directly in:
+- backend smoke widened to instantiate `RuntimeScenario` directly in:
   [backend_optional_common.jl](../test/backend_optional_common.jl)
 
 ## Phase 6: Closeout And Deferred Tracks

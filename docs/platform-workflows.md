@@ -308,8 +308,8 @@ Use grouped/platform workflows when:
 The practical rules are:
 
 - request only the runtime products you need
-- prefer `PlatformScenario` plus `SinglePlatformConfig` or
-  `GroupedPlatformConfig` when a script is assembling reusable runtime
+- prefer `RuntimeScenario` plus `SingleRuntimeConfig` or
+  `GroupedRuntimeConfig` when a script is assembling reusable runtime
   composition rather than a one-off local demo
 - keep grouped export policy explicit
 - rely on `simulation_grouped_wfs_stack` and

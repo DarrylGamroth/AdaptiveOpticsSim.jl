@@ -39,7 +39,7 @@ end
     return command_storage(optic)
 end
 
-@inline function stage_command!(optic::AbstractControllableOptic, command::AbstractVector{T}, sign::T) where {T<:AbstractFloat}
+@inline function _stage_command!(optic::AbstractControllableOptic, command::AbstractVector{T}, sign::T) where {T<:AbstractFloat}
     apply_command!(command_storage(optic), command, sign)
     return command_storage(optic)
 end
@@ -58,19 +58,19 @@ end
     return command_storage(optic)
 end
 
-@inline function apply_selected!(optic::AbstractControllableOptic, tel::Telescope, mode)
+@inline function _apply_selected!(optic::AbstractControllableOptic, tel::Telescope, mode)
     apply!(optic, tel, mode)
     return tel
 end
 
-@inline function apply_selected!(optic::AbstractControllableOptic, tel::Telescope, mode,
+@inline function _apply_selected!(optic::AbstractControllableOptic, tel::Telescope, mode,
     labels::Tuple{Vararg{Symbol}})
     isempty(labels) || apply!(optic, tel, mode)
     return tel
 end
 
-@inline apply_selected!(optic::AbstractControllableOptic, tel::Telescope, mode,
-    label::Symbol) = apply_selected!(optic, tel, mode, (label,))
+@inline _apply_selected!(optic::AbstractControllableOptic, tel::Telescope, mode,
+    label::Symbol) = _apply_selected!(optic, tel, mode, (label,))
 
 function _backend_copy_matrix(host::AbstractMatrix{T}, backend, ::Type{T}) where {T<:AbstractFloat}
     out = backend{T}(undef, size(host)...)
@@ -252,7 +252,7 @@ end
     return optic.command
 end
 
-@inline function stage_command!(optic::CompositeControllableOptic, command::AbstractVector{T}, sign::T) where {T<:AbstractFloat}
+@inline function _stage_command!(optic::CompositeControllableOptic, command::AbstractVector{T}, sign::T) where {T<:AbstractFloat}
     apply_command!(optic.command, command, sign)
     @inbounds for i in eachindex(optic.optics)
         set_command!(optic.optics[i], @view(optic.command[optic.child_ranges[i]]))
@@ -287,7 +287,7 @@ end
     return tel
 end
 
-@inline function apply_selected!(optic::CompositeControllableOptic, tel::Telescope, mode,
+@inline function _apply_selected!(optic::CompositeControllableOptic, tel::Telescope, mode,
     labels::Tuple{Vararg{Symbol}})
     label_set = Set(labels)
     @inbounds for child in optic.optics

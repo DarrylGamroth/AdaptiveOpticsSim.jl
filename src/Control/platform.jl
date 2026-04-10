@@ -7,7 +7,7 @@
 
 abstract type AbstractPlatformConfig end
 
-struct ClosedLoopBranchConfig{SIM,REC,WD,SD,RNG,PR,CL}
+struct RuntimeBranch{SIM,REC,WD,SD,RNG,PR,CL}
     label::Symbol
     simulation::SIM
     reconstructor::REC
@@ -18,13 +18,13 @@ struct ClosedLoopBranchConfig{SIM,REC,WD,SD,RNG,PR,CL}
     command_layout::CL
 end
 
-function ClosedLoopBranchConfig(label::Symbol, simulation, reconstructor;
+function RuntimeBranch(label::Symbol, simulation, reconstructor;
     wfs_detector=nothing,
     science_detector=nothing,
     rng::AbstractRNG=Random.default_rng(),
     products=nothing,
     command_layout=nothing)
-    return ClosedLoopBranchConfig{
+    return RuntimeBranch{
         typeof(simulation),
         typeof(reconstructor),
         typeof(wfs_detector),
@@ -44,7 +44,7 @@ function ClosedLoopBranchConfig(label::Symbol, simulation, reconstructor;
     )
 end
 
-struct SinglePlatformConfig{RP<:AbstractRuntimeProfile,PR<:RuntimeProductRequirements,T<:AbstractFloat} <: AbstractPlatformConfig
+struct SingleRuntimeConfig{RP<:AbstractRuntimeProfile,PR<:RuntimeProductRequirements,T<:AbstractFloat} <: AbstractPlatformConfig
     name::Symbol
     branch_label::Symbol
     profile::RP
@@ -54,7 +54,7 @@ struct SinglePlatformConfig{RP<:AbstractRuntimeProfile,PR<:RuntimeProductRequire
     science_zero_padding::Int
 end
 
-function SinglePlatformConfig(;
+function SingleRuntimeConfig(;
     name::Symbol=:platform_runtime,
     branch_label::Symbol=:main,
     profile::AbstractRuntimeProfile=default_runtime_profile(),
@@ -64,7 +64,7 @@ function SinglePlatformConfig(;
     science_zero_padding::Integer=runtime_science_zero_padding(profile),
 )
     T = typeof(float(control_sign))
-    return SinglePlatformConfig{
+    return SingleRuntimeConfig{
         typeof(profile),
         typeof(products),
         T,
@@ -79,7 +79,7 @@ function SinglePlatformConfig(;
     )
 end
 
-struct GroupedPlatformConfig{N,RP<:AbstractRuntimeProfile,PR<:GroupedRuntimeProductRequirements,T<:AbstractFloat} <: AbstractPlatformConfig
+struct GroupedRuntimeConfig{N,RP<:AbstractRuntimeProfile,PR<:GroupedRuntimeProductRequirements,T<:AbstractFloat} <: AbstractPlatformConfig
     name::Symbol
     branch_labels::NTuple{N,Symbol}
     profile::RP
@@ -89,7 +89,7 @@ struct GroupedPlatformConfig{N,RP<:AbstractRuntimeProfile,PR<:GroupedRuntimeProd
     science_zero_padding::Int
 end
 
-function GroupedPlatformConfig(branch_labels::NTuple{N,Symbol};
+function GroupedRuntimeConfig(branch_labels::NTuple{N,Symbol};
     name::Symbol=:grouped_platform_runtime,
     profile::AbstractRuntimeProfile=default_runtime_profile(),
     products::GroupedRuntimeProductRequirements=default_grouped_runtime_products(),
@@ -98,7 +98,7 @@ function GroupedPlatformConfig(branch_labels::NTuple{N,Symbol};
     science_zero_padding::Integer=runtime_science_zero_padding(profile),
 ) where {N}
     T = typeof(float(control_sign))
-    return GroupedPlatformConfig{
+    return GroupedRuntimeConfig{
         N,
         typeof(profile),
         typeof(products),
@@ -114,38 +114,34 @@ function GroupedPlatformConfig(branch_labels::NTuple{N,Symbol};
     )
 end
 
-function GroupedPlatformConfig(branches::Vararg{ClosedLoopBranchConfig,N}; kwargs...) where {N}
-    return GroupedPlatformConfig(ntuple(i -> branches[i].label, N); kwargs...)
+function GroupedRuntimeConfig(branches::Vararg{RuntimeBranch,N}; kwargs...) where {N}
+    return GroupedRuntimeConfig(ntuple(i -> branches[i].label, N); kwargs...)
 end
 
-struct PlatformScenario{CFG<:AbstractPlatformConfig,BR,BD} <: AbstractControlSimulation
+struct RuntimeScenario{CFG<:AbstractPlatformConfig,BR,BD} <: AbstractControlSimulation
     config::CFG
     branches::BR
     boundary::BD
 end
 
-const RuntimeBranch = ClosedLoopBranchConfig
-const SingleRuntimeConfig = SinglePlatformConfig
-const GroupedRuntimeConfig = GroupedPlatformConfig
-const RuntimeScenario = PlatformScenario
 
-@inline platform_config(scenario::PlatformScenario) = scenario.config
-@inline platform_boundary(scenario::PlatformScenario) = scenario.boundary
-@inline platform_name(config::SinglePlatformConfig) = config.name
-@inline platform_name(config::GroupedPlatformConfig) = config.name
-@inline platform_name(scenario::PlatformScenario) = platform_name(platform_config(scenario))
-@inline platform_branch_labels(config::SinglePlatformConfig) = (config.branch_label,)
-@inline platform_branch_labels(config::GroupedPlatformConfig) = config.branch_labels
-@inline platform_branch_labels(scenario::PlatformScenario) = platform_branch_labels(platform_config(scenario))
-@inline runtime_profile(scenario::PlatformScenario) = platform_config(scenario).profile
-@inline runtime_latency(scenario::PlatformScenario) = platform_config(scenario).latency
+@inline platform_config(scenario::RuntimeScenario) = scenario.config
+@inline platform_boundary(scenario::RuntimeScenario) = scenario.boundary
+@inline platform_name(config::SingleRuntimeConfig) = config.name
+@inline platform_name(config::GroupedRuntimeConfig) = config.name
+@inline platform_name(scenario::RuntimeScenario) = platform_name(platform_config(scenario))
+@inline platform_branch_labels(config::SingleRuntimeConfig) = (config.branch_label,)
+@inline platform_branch_labels(config::GroupedRuntimeConfig) = config.branch_labels
+@inline platform_branch_labels(scenario::RuntimeScenario) = platform_branch_labels(platform_config(scenario))
+@inline runtime_profile(scenario::RuntimeScenario) = platform_config(scenario).profile
+@inline runtime_latency(scenario::RuntimeScenario) = platform_config(scenario).latency
 
-@inline function _branch_runtime_products(config::SinglePlatformConfig, branch::ClosedLoopBranchConfig)
+@inline function _branch_runtime_products(config::SingleRuntimeConfig, branch::RuntimeBranch)
     isnothing(branch.products) || return branch.products
     return config.products
 end
 
-@inline function _branch_runtime_products(config::GroupedPlatformConfig, branch::ClosedLoopBranchConfig)
+@inline function _branch_runtime_products(config::GroupedRuntimeConfig, branch::RuntimeBranch)
     isnothing(branch.products) || return branch.products
     return RuntimeProductRequirements(
         slopes=true,
@@ -154,7 +150,7 @@ end
     )
 end
 
-@inline function _build_platform_runtime(config::AbstractPlatformConfig, branch::ClosedLoopBranchConfig)
+@inline function _build_platform_runtime(config::AbstractPlatformConfig, branch::RuntimeBranch)
     return ClosedLoopRuntime(
         branch.simulation,
         branch.reconstructor;
@@ -170,12 +166,12 @@ end
     )
 end
 
-function build_platform_scenario(config::SinglePlatformConfig, branch::ClosedLoopBranchConfig)
+function build_runtime_scenario(config::SingleRuntimeConfig, branch::RuntimeBranch)
     branch.label == config.branch_label ||
         throw(InvalidConfiguration("single platform branch label $(branch.label) must match config branch_label $(config.branch_label)"))
     runtime = _build_platform_runtime(config, branch)
     boundary = SimulationInterface(runtime)
-    return PlatformScenario{
+    return RuntimeScenario{
         typeof(config),
         Tuple{typeof(branch)},
         typeof(boundary),
@@ -186,13 +182,13 @@ function build_platform_scenario(config::SinglePlatformConfig, branch::ClosedLoo
     )
 end
 
-function build_platform_scenario(config::GroupedPlatformConfig{N}, branches::Vararg{ClosedLoopBranchConfig,N}) where {N}
+function build_runtime_scenario(config::GroupedRuntimeConfig{N}, branches::Vararg{RuntimeBranch,N}) where {N}
     labels = ntuple(i -> branches[i].label, N)
     labels == config.branch_labels ||
         throw(InvalidConfiguration("grouped platform branch labels $labels must match config branch_labels $(config.branch_labels)"))
     runtimes = ntuple(i -> _build_platform_runtime(config, branches[i]), N)
     boundary = CompositeSimulationInterface(runtimes...; products=config.products)
-    return PlatformScenario{
+    return RuntimeScenario{
         typeof(config),
         typeof(branches),
         typeof(boundary),
@@ -203,40 +199,37 @@ function build_platform_scenario(config::GroupedPlatformConfig{N}, branches::Var
     )
 end
 
-build_runtime_scenario(config::SingleRuntimeConfig, branch::RuntimeBranch) = build_platform_scenario(config, branch)
-build_runtime_scenario(config::GroupedRuntimeConfig{N}, branches::Vararg{RuntimeBranch,N}) where {N} = build_platform_scenario(config, branches...)
-
-simulation_interface(scenario::PlatformScenario) = platform_boundary(scenario)
+simulation_interface(scenario::RuntimeScenario) = platform_boundary(scenario)
 
 readout(sim::AbstractControlSimulation) = simulation_readout(sim)
 readout(runtime::ClosedLoopRuntime) = simulation_readout(runtime)
 readout(interface::SimulationInterface) = simulation_readout(interface)
 readout(interface::CompositeSimulationInterface) = simulation_readout(interface)
 
-function prepare!(scenario::PlatformScenario)
+function prepare!(scenario::RuntimeScenario)
     prepare!(platform_boundary(scenario))
     return scenario
 end
 
-function sense!(scenario::PlatformScenario)
+function sense!(scenario::RuntimeScenario)
     sense!(platform_boundary(scenario))
     return scenario
 end
 
-function step!(scenario::PlatformScenario)
+function step!(scenario::RuntimeScenario)
     step!(platform_boundary(scenario))
     return scenario
 end
 
-function snapshot_outputs!(scenario::PlatformScenario)
+function snapshot_outputs!(scenario::RuntimeScenario)
     snapshot_outputs!(platform_boundary(scenario))
     return scenario
 end
 
-@inline set_command!(scenario::PlatformScenario, command::AbstractVector) = set_command!(platform_boundary(scenario), command)
-@inline runtime_phase_timing(scenario::PlatformScenario; kwargs...) = runtime_phase_timing(platform_boundary(scenario); kwargs...)
+@inline set_command!(scenario::RuntimeScenario, command::AbstractVector) = set_command!(platform_boundary(scenario), command)
+@inline runtime_phase_timing(scenario::RuntimeScenario; kwargs...) = runtime_phase_timing(platform_boundary(scenario); kwargs...)
 
-function command_layout(scenario::PlatformScenario)
+function command_layout(scenario::RuntimeScenario)
     labels = platform_branch_labels(scenario)
     boundary = platform_boundary(scenario)
     if boundary isa SimulationInterface
@@ -247,7 +240,7 @@ function command_layout(scenario::PlatformScenario)
     return RuntimeCommandLayout(segments)
 end
 
-@inline function branch_command_layout(scenario::PlatformScenario, label::Symbol)
+@inline function branch_command_layout(scenario::RuntimeScenario, label::Symbol)
     boundary = platform_boundary(scenario)
     labels = platform_branch_labels(scenario)
     idx = findfirst(==(label), labels)
@@ -258,13 +251,13 @@ end
     return command_layout(boundary.interfaces[idx])
 end
 
-@inline function branch_command_layouts(scenario::PlatformScenario)
+@inline function branch_command_layouts(scenario::RuntimeScenario)
     labels = platform_branch_labels(scenario)
     layouts = map(label -> branch_command_layout(scenario, label), labels)
     return NamedTuple{labels}(Tuple(layouts))
 end
 
-@inline function update_command!(scenario::PlatformScenario, command::NamedTuple)
+@inline function update_command!(scenario::RuntimeScenario, command::NamedTuple)
     boundary = platform_boundary(scenario)
     labels = platform_branch_labels(scenario)
     if boundary isa SimulationInterface
@@ -289,7 +282,7 @@ end
     return simulation_command(scenario)
 end
 
-@inline function set_command!(scenario::PlatformScenario, command::NamedTuple)
+@inline function set_command!(scenario::RuntimeScenario, command::NamedTuple)
     boundary = platform_boundary(scenario)
     labels = platform_branch_labels(scenario)
     if boundary isa SimulationInterface
@@ -312,7 +305,7 @@ end
     return simulation_command(scenario)
 end
 
-supports_prepared_runtime(scenario::PlatformScenario) =
+supports_prepared_runtime(scenario::RuntimeScenario) =
     any(branch -> supports_prepared_runtime(branch.simulation.wfs, branch.simulation.src), scenario.branches)
-supports_detector_output(scenario::PlatformScenario) = any(branch -> !isnothing(branch.wfs_detector) || !isnothing(branch.science_detector), scenario.branches)
-supports_grouped_execution(scenario::PlatformScenario) = length(scenario.branches) > 1
+supports_detector_output(scenario::RuntimeScenario) = any(branch -> !isnothing(branch.wfs_detector) || !isnothing(branch.science_detector), scenario.branches)
+supports_grouped_execution(scenario::RuntimeScenario) = length(scenario.branches) > 1

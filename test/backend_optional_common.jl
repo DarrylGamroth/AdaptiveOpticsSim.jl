@@ -20,7 +20,7 @@ function build_optional_platform_branch(::Type{T}, BackendArray, label::Symbol; 
     sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
     recon = ModalReconstructor(imat; gain=T(0.5))
-    return ClosedLoopBranchConfig(label, sim, recon; wfs_detector=det, rng=MersenneTwister(seed))
+    return RuntimeBranch(label, sim, recon; wfs_detector=det, rng=MersenneTwister(seed))
 end
 
 function run_optional_composite_optic_parity(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
@@ -579,8 +579,8 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     curv_slopes = measure!(curv, tel, src, atm)
     @test curv_slopes isa BackendArray
 
-    single_platform = build_platform_scenario(
-        SinglePlatformConfig(
+    single_platform = build_runtime_scenario(
+        SingleRuntimeConfig(
             name=:optional_backend_single,
             branch_label=:main,
             products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false),
@@ -593,8 +593,8 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     @test simulation_wfs_frame(single_platform) isa BackendArray
     @test platform_branch_labels(single_platform) == (:main,)
 
-    grouped_platform = build_platform_scenario(
-        GroupedPlatformConfig(
+    grouped_platform = build_runtime_scenario(
+        GroupedRuntimeConfig(
             (:hi, :lo);
             name=:optional_backend_grouped,
             products=GroupedRuntimeProductRequirements(wfs_frames=true, science_frames=false, wfs_stack=true, science_stack=false),

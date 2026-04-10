@@ -70,7 +70,7 @@ only in whether WFS and science detectors participate in the step.
     rng::AbstractRNG, control_sign::T) where {T<:AbstractFloat}
     sense_core!(atm, tel, optic, wfs, src, rng)
     reconstruct!(command, reconstructor, wfs.state.slopes)
-    stage_command!(optic, command, control_sign)
+    _stage_command!(optic, command, control_sign)
     return nothing
 end
 
@@ -79,7 +79,7 @@ end
     command::AbstractVector{T}, rng::AbstractRNG, control_sign::T) where {T<:AbstractFloat}
     sense_core!(atm, tel, optic, wfs, src, wfs_detector, rng)
     reconstruct!(command, reconstructor, wfs.state.slopes)
-    stage_command!(optic, command, control_sign)
+    _stage_command!(optic, command, control_sign)
     return nothing
 end
 
@@ -89,7 +89,7 @@ end
     sense_core!(atm, tel, optic, wfs, src, rng)
     capture_science_core!(tel, src, science_detector, rng, science_zero_padding)
     reconstruct!(command, reconstructor, wfs.state.slopes)
-    stage_command!(optic, command, control_sign)
+    _stage_command!(optic, command, control_sign)
     return nothing
 end
 
@@ -100,7 +100,7 @@ end
     sense_core!(atm, tel, optic, wfs, src, wfs_detector, rng)
     capture_science_core!(tel, src, science_detector, rng, science_zero_padding)
     reconstruct!(command, reconstructor, wfs.state.slopes)
-    stage_command!(optic, command, control_sign)
+    _stage_command!(optic, command, control_sign)
     return nothing
 end
 
@@ -124,7 +124,7 @@ end
 
 @inline function apply_runtime_command!(runtime::ClosedLoopRuntime)
     delayed = shift_delay!(runtime.dm_delay, runtime.command)
-    stage_command!(runtime.optic, delayed, runtime.control_sign)
+    _stage_command!(runtime.optic, delayed, runtime.control_sign)
     return command_storage(runtime.optic)
 end
 

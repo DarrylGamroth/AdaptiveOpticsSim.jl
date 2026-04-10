@@ -1,15 +1,12 @@
 # Controllable Optics Plan 2026-04
 
-Status: implemented (compatibility layer active)
+Status: implemented
 
 ## Purpose
 
 ## Status Summary
 
-This plan is implemented on the supported runtime surface. The compatibility
-layer remains active for one release cycle so older `dm`-centric and
-`simulation_*`-style call sites keep working while the preferred runtime and
-controllable-optic API settles.
+This plan is implemented on the supported runtime surface. The runtime and controllable-optic API now uses the preferred names directly.
 
 Completed phases:
 
@@ -20,11 +17,6 @@ Completed phases:
 - `CO-5` first extra controllable optics: `TipTiltMirror`, `SteeringMirror`, `FocusStage`
 - `CO-6` backend-native command routing covered on the maintained GPU surfaces
 - `CO-7` public API/docs migrated to the preferred runtime vocabulary
-
-Next cleanup after one validated release cycle:
-
-- remove legacy `dm` compatibility accessors from runtime/simulation containers
-- deprecate the older orchestration names once downstream examples have migrated
 
 This plan extends the runtime and plant model from a single deformable mirror to
 an explicit family of controllable optics that can be driven through one packed
@@ -248,12 +240,12 @@ Deliverables:
 - cookbook/user-guide/runtime examples updated to use controllable-optic
   vocabulary where relevant
 - `api-reference.md` updated
-- old DM-specific runtime assumptions deprecated once validated
+- old DM-specific runtime assumptions removed from the active runtime surface
 
 Success criteria:
 
 - HIL examples show multi-surface command layouts directly
-- legacy compatibility can be removed after one validated release cycle
+- active runtime docs and examples use the direct controllable-optic vocabulary
 
 ## Validation Plan
 

@@ -41,7 +41,7 @@ Accepted known differences:
 - `composite_runtime_entrypoint_shape`
 
 These differences remain recorded because `main` now routes this rung through
-the typed `PlatformScenario` layer, while the former REVOLT-aligned fork was
+the typed `RuntimeScenario` layer, while the former REVOLT-aligned fork was
 never normalized into a distinct external grouped-platform runner before the
 comparison-workspace migration.
 

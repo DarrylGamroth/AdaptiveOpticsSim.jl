@@ -15,7 +15,7 @@ layer.
 
 The objective is to make three things explicit:
 
-- the direct `PlatformScenario` runtime surface has realistic timing evidence
+- the direct `RuntimeScenario` runtime surface has realistic timing evidence
 - CPU and maintained GPU backends exercise that surface intentionally
 - the orchestration layer is benchmarked as a first-class API, not only through
   older runtime wrappers
@@ -58,8 +58,8 @@ Optional backend smoke now instantiates the orchestration layer directly:
 
 The maintained smoke verifies:
 
-- single-branch `PlatformScenario` execution
-- grouped `PlatformScenario` execution
+- single-branch `RuntimeScenario` execution
+- grouped `RuntimeScenario` execution
 - grouped stack export availability on compatible grouped backends
 - backend-specific execution-plan defaults still align with the orchestration
   surface
