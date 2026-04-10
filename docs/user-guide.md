@@ -7,6 +7,7 @@ This is the main user-facing guide.
 If you only need the normal package entry points, read these and stop there:
 
 - [../README.md](../README.md)
+- [model-cookbook.md](./model-cookbook.md)
 - [api-reference.md](./api-reference.md)
 - `examples/tutorials/`
 
@@ -60,6 +61,8 @@ The common hot-path verbs use Julia's mutating `!` convention:
 - `reconstruct!`
 - `apply!`
 - `step!`
+
+For a compact recipe-first version of this guide, use [model-cookbook.md](./model-cookbook.md).
 
 ## Build A Model
 

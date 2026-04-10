@@ -9,6 +9,7 @@ reproducibility, and backend portability.
 If you are a normal user, read these in order:
 
 - [docs/user-guide.md](docs/user-guide.md)
+- [docs/model-cookbook.md](docs/model-cookbook.md)
 - [docs/api-reference.md](docs/api-reference.md)
 - `examples/tutorials/`
 
@@ -98,6 +99,7 @@ Use `examples/closed_loop_demo.jl` for the smallest direct closed-loop script.
 For users:
 
 - [docs/user-guide.md](docs/user-guide.md)
+- [docs/model-cookbook.md](docs/model-cookbook.md)
 - [docs/api-reference.md](docs/api-reference.md)
 - [docs/julia-tutorial-mappings.md](docs/julia-tutorial-mappings.md)
 

@@ -23,6 +23,7 @@ planning and audit records for subsystem work.
 Most users should stop after these three:
 
 - [`user-guide.md`](./user-guide.md)
+- [`model-cookbook.md`](./model-cookbook.md)
 - [`api-reference.md`](./api-reference.md)
 - `examples/tutorials/`
 
@@ -61,6 +62,8 @@ Use these when the task is cross-package or instrument-truth work:
 
 - [`user-guide.md`](./user-guide.md)
   - workflow-oriented user entry point
+- [`model-cookbook.md`](./model-cookbook.md)
+  - compact recipe-first entry point for common model types, including HIL-style runtime surfaces
 - [`platform-architecture.md`](./platform-architecture.md)
   - stable synthesis guide for platform-scale structure and boundaries
 - [`platform-workflows.md`](./platform-workflows.md)
