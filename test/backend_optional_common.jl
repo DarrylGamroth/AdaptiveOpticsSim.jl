@@ -33,8 +33,13 @@ function import_backend_package!(::Type{AdaptiveOpticsSim.AMDGPUBackendTag})
     return nothing
 end
 
-backend_functional(::Type{AdaptiveOpticsSim.CUDABackendTag}) = CUDA.functional()
-backend_functional(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = AMDGPU.functional()
+function backend_functional(::Type{AdaptiveOpticsSim.CUDABackendTag})
+    return Base.invokelatest(getproperty(getfield(Main, :CUDA), :functional))
+end
+
+function backend_functional(::Type{AdaptiveOpticsSim.AMDGPUBackendTag})
+    return Base.invokelatest(getproperty(getfield(Main, :AMDGPU), :functional))
+end
 
 run_optional_backend_plan_checks(::Type{<:AdaptiveOpticsSim.GPUBackendTag}, tel, backend) = nothing
 

@@ -30,9 +30,10 @@ To archive an operational validation run with dated logs and metadata:
 ./scripts/archive_release_validation.sh cuda spiders
 ```
 
-This always runs:
+By default:
 
-- full CPU `Pkg.test()`
+- `cpu` and `all` archive tracks run full CPU `Pkg.test()`
+- `cuda` and `amdgpu` archive tracks skip the full CPU suite and run the backend-specific validation surface only
 
 Optional validation tracks are enabled through environment flags:
 
@@ -69,11 +70,13 @@ python3 scripts/generate_heart_boundary_truth_artifact.py
 
 ### CPU
 
-Always runs:
+Default for `cpu` and `all` archive tracks:
 
 - `julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'`
 
 This is the baseline production gate.
+
+The CPU full suite may be skipped only when `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1` is set explicitly. That mode is intended for backend-host validation runs that are paired with separately archived CPU/full-suite evidence for the same candidate commit or an explicitly identified release ancestor.
 
 ### CUDA
 
@@ -87,7 +90,7 @@ Runs:
 - [gpu_runtime_equivalence_cuda.jl](../scripts/gpu_runtime_equivalence_cuda.jl)
 
 Use this on a CUDA-capable host with `CUDA.jl` available in the project
-environment.
+environment. The archived `cuda` track defaults to backend-only validation by setting `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
 
 ### AMDGPU
 
@@ -101,7 +104,7 @@ Runs:
 - [gpu_runtime_equivalence_amdgpu.jl](../scripts/gpu_runtime_equivalence_amdgpu.jl)
 
 Use this on an AMDGPU-capable host with `AMDGPU.jl` available in the project
-environment.
+environment. The archived `amdgpu` track defaults to backend-only validation by setting `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
 
 ### Cross-package comparisons
 

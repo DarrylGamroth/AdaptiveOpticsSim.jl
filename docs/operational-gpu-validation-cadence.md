@@ -23,7 +23,7 @@ release-validation hosts.
 
 For every supported release candidate or production handoff:
 
-1. run the CPU baseline validation
+1. archive at least one CPU/full-suite validation run for the candidate commit or an explicitly identified release ancestor
 2. run CUDA validation on a real CUDA host if CUDA is in scope
 3. run AMDGPU validation on a real AMDGPU host if AMDGPU is in scope
 4. archive the resulting logs and run metadata
@@ -42,6 +42,7 @@ Use:
 Examples:
 
 ```bash
+./scripts/archive_release_validation.sh cpu
 ./scripts/archive_release_validation.sh amdgpu
 ./scripts/archive_release_validation.sh cuda spiders
 ```
@@ -73,6 +74,7 @@ Each operational validation run must produce:
 
 ## Release Decision Rule
 
-A release may claim support for a backend only if the matching operational run
-for that backend passed on real hardware for the candidate commit or an
-explicitly identified release candidate ancestor.
+A release may claim support for a backend only if:
+
+- there is archived CPU/full-suite evidence for the candidate commit or an explicitly identified release candidate ancestor
+- the matching backend operational run passed on real hardware for that same commit or ancestor

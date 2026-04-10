@@ -15,6 +15,8 @@ mkdir -p "${OUTDIR}"
 LOGFILE="${OUTDIR}/${STAMP}-${HOST_LABEL}-${TRACK}.log"
 METAFILE="${OUTDIR}/${STAMP}-${HOST_LABEL}-${TRACK}.toml"
 
+DEFAULT_SKIP_CPU_FULL_TESTS=0
+
 case "${TRACK}" in
     cpu)
         export ADAPTIVEOPTICS_VALIDATE_CUDA=0
@@ -23,10 +25,12 @@ case "${TRACK}" in
     cuda)
         export ADAPTIVEOPTICS_VALIDATE_CUDA=1
         export ADAPTIVEOPTICS_VALIDATE_AMDGPU=0
+        DEFAULT_SKIP_CPU_FULL_TESTS=1
         ;;
     amdgpu)
         export ADAPTIVEOPTICS_VALIDATE_CUDA=0
         export ADAPTIVEOPTICS_VALIDATE_AMDGPU=1
+        DEFAULT_SKIP_CPU_FULL_TESTS=1
         ;;
     all)
         export ADAPTIVEOPTICS_VALIDATE_CUDA=1
@@ -37,6 +41,8 @@ case "${TRACK}" in
         exit 2
         ;;
 esac
+
+export ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS="${ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS:-${DEFAULT_SKIP_CPU_FULL_TESTS}}"
 
 cd "${ROOT_DIR}"
 GIT_COMMIT="$(git rev-parse HEAD)"
@@ -69,6 +75,7 @@ log_path = "$(basename "${LOGFILE}")"
 command = "${CMD}"
 validate_cuda = ${ADAPTIVEOPTICS_VALIDATE_CUDA}
 validate_amdgpu = ${ADAPTIVEOPTICS_VALIDATE_AMDGPU}
+skip_cpu_full_tests = ${ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS}
 EOF
 
 if [[ "${STATUS}" != "passed" ]]; then

@@ -14,8 +14,12 @@ run_step() {
 
 cd "${ROOT_DIR}"
 
-run_step "CPU full test suite" \
-    julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'
+if [[ "${ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS:-0}" != "1" ]]; then
+    run_step "CPU full test suite" \
+        julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'
+else
+    echo "==> Skipping CPU full test suite (ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1)"
+fi
 
 if [[ "${ADAPTIVEOPTICS_VALIDATE_CUDA:-0}" == "1" ]]; then
     run_step "CUDA smoke" \
