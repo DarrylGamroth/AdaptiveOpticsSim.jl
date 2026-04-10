@@ -133,12 +133,13 @@ Use this pattern when you need:
 Use this when the simulation should behave like a hardware-in-the-loop or RTC
 boundary surface: commands in, WFS/science products out.
 
-For a single-branch RTC-style runtime:
+For a single-branch RTC-style runtime with an external DM command source:
 
 ```julia
 using AdaptiveOpticsSim
 using Random
 
+# Build the physical plant.
 tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
 src = Source(band=:I, magnitude=0.0)
 atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
@@ -146,8 +147,13 @@ dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive())
 sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
 
+# ClosedLoopBranchConfig currently expects a reconstructor, even if the HIL loop
+# will inject commands from an external RTC instead of using step!(scenario).
 imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
+
+# Attach a science detector if the external interface should export a science
+# image per sensing step.
 science_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
 
 branch = ClosedLoopBranchConfig(
@@ -166,13 +172,55 @@ cfg = SinglePlatformConfig(
 
 scenario = build_platform_scenario(cfg, branch)
 prepare!(scenario)
-step!(scenario)
 
+# The external command vector must match the DM command length exported by the
+# runtime boundary.
+n_command = length(simulation_command(scenario))
+external_command = zeros(eltype(simulation_command(scenario)), n_command)
+
+# Example: set one actuator command from an external controller.
+external_command[1] = 0.05
+
+# HIL / plant-facing flow:
+#   1. inject the external DM command
+#   2. run the sensing side of the simulation
+#   3. read the exported WFS/science products
+set_command!(scenario, external_command)
+sense!(scenario)
+
+# Exported boundary products after the sensing step.
 command = simulation_command(scenario)
 slopes = simulation_slopes(scenario)
 wfs_frame = simulation_wfs_frame(scenario)
 science_frame = simulation_science_frame(scenario)
+wfs_meta = simulation_wfs_metadata(scenario)
+science_meta = simulation_science_metadata(scenario)
+
+# Typical controller-side checks:
+@show length(command)
+@show length(slopes)
+@show size(wfs_frame)
+@show size(science_frame)
+@show science_meta.output_size
+@show science_meta.output_precision
 ```
+
+Use `step!(scenario)` only when you want the package to perform its own
+reconstruction and DM update. For an external RTC or HIL controller, prefer the
+explicit `set_command!(scenario, cmd)` plus `sense!(scenario)` flow above.
+
+The exported science frame is the configured science detector's `output_frame`,
+so its shape and element type are detector-defined. Inspect
+`simulation_science_metadata(scenario)` to learn the exact export contract for:
+
+- `output_size`
+- `output_precision`
+- `binning`
+- `window_rows` / `window_cols`
+- `bits` / `full_well`
+
+That lets an external HIL client validate the runtime boundary before wiring the
+frame into another controller, transport layer, or logging path.
 
 For grouped or multi-branch RTC-style composition, start from:
 
