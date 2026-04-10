@@ -246,6 +246,7 @@ end
     @test closed_loop_runtime_allocations() == 0
     @test simulation_command(runtime) === runtime.command
     @test simulation_science_frame(runtime) === output_frame(det)
+    @test command_segment_labels(command_layout(runtime)) == (:dm,)
     @test command(runtime) === simulation_command(runtime)
     @test science_frame(runtime) === simulation_science_frame(runtime)
     @test readout(runtime).science_frame === simulation_science_frame(runtime)
@@ -288,14 +289,14 @@ end
 
     boundary = SimulationInterface(runtime)
     @test AdaptiveOpticsSim.runtime_export_plan(boundary) isa AdaptiveOpticsSim.DirectRuntimeExportPlan
-    readout = simulation_readout(boundary)
+    boundary_readout = simulation_readout(boundary)
     @test length(simulation_slopes(boundary)) == length(wfs.state.slopes)
-    @test simulation_slopes(readout) === simulation_slopes(boundary)
+    @test simulation_slopes(boundary_readout) === simulation_slopes(boundary)
     @test size(simulation_science_frame(boundary)) == size(output_frame(det))
-    science_metadata = simulation_science_metadata(boundary)
-    @test science_metadata isa DetectorExportMetadata
-    @test science_metadata.output_size == size(output_frame(det))
-    @test science_metadata.frame_size == size(det.state.frame)
+    boundary_science_metadata = simulation_science_metadata(boundary)
+    @test boundary_science_metadata isa DetectorExportMetadata
+    @test boundary_science_metadata.output_size == size(output_frame(det))
+    @test boundary_science_metadata.frame_size == size(det.state.frame)
     step!(boundary)
     @test simulation_command(boundary) == runtime.command
 
@@ -387,10 +388,35 @@ end
     @test platform_branch_labels(single_scenario) == (:science_branch,)
     @test simulation_interface(single_scenario) isa SimulationInterface
     @test supports_detector_output(single_scenario)
+    single_layout = command_layout(single_scenario)
+    @test single_layout isa RuntimeCommandLayout
+    @test command_segment_labels(single_layout) == (:dm,)
+    @test command_segment_range(command_segments(single_layout)[1]) == 1:length(command(single_scenario))
+    branch_command = fill(eltype(command(single_scenario))(0.02), length(command(single_scenario)))
+    set_command!(single_scenario, (; dm=branch_command))
+    sense!(single_scenario)
+    @test command(single_scenario) == branch_command
     step!(single_scenario)
     @test simulation_science_frame(single_scenario) !== nothing
     @test simulation_wfs_frame(single_scenario) === nothing
     @test simulation_readout(single_scenario).science_frame === simulation_science_frame(single_scenario)
+
+    split_layout = RuntimeCommandLayout(:woofer => 8, :tweeter => 8)
+    split_scenario = build_runtime_scenario(
+        SingleRuntimeConfig(name=:split_runtime_demo, branch_label=:science_branch,
+            products=RuntimeProductRequirements(slopes=true, wfs_pixels=false, science_pixels=true)),
+        RuntimeBranch(:science_branch, sim, NullReconstructor();
+            science_detector=det,
+            rng=MersenneTwister(32),
+            command_layout=split_layout),
+    )
+    @test command_segment_labels(command_layout(split_scenario)) == (:woofer, :tweeter)
+    woofer_cmd = fill(eltype(command(split_scenario))(0.03), 8)
+    tweeter_cmd = fill(eltype(command(split_scenario))(0.04), 8)
+    set_command!(split_scenario, (; woofer=woofer_cmd, tweeter=tweeter_cmd))
+    sense!(split_scenario)
+    @test command(split_scenario) == vcat(woofer_cmd, tweeter_cmd)
+    @test simulation_science_frame(split_scenario) !== nothing
 
     grouped_cfg = GroupedPlatformConfig(
         (:branch_a, :branch_b);
@@ -407,13 +433,48 @@ end
     @test platform_branch_labels(grouped_scenario) == (:branch_a, :branch_b)
     @test simulation_interface(grouped_scenario) isa CompositeSimulationInterface
     @test supports_grouped_execution(grouped_scenario)
+    grouped_layout = command_layout(grouped_scenario)
+    @test grouped_layout isa RuntimeCommandLayout
+    @test command_segment_labels(grouped_layout) == (:branch_a, :branch_b)
+    @test command_segment_range(command_segments(grouped_layout)[1]) == 1:length(simulation_interface(grouped_scenario).interfaces[1].command)
+    @test first(command_segment_range(command_segments(grouped_layout)[2])) == length(simulation_interface(grouped_scenario).interfaces[1].command) + 1
+    @test command_segment_labels(branch_command_layout(grouped_scenario, :branch_a)) == (:dm,)
+    @test branch_command_layouts(grouped_scenario).branch_b == branch_command_layout(grouped_scenario, :branch_b)
     prepare!(grouped_scenario)
+    branch_a_cmd = fill(eltype(command(grouped_scenario))(0.01), length(simulation_interface(grouped_scenario).interfaces[1].command))
+    branch_b_cmd = fill(eltype(command(grouped_scenario))(0.02), length(simulation_interface(grouped_scenario).interfaces[2].command))
+    set_command!(grouped_scenario, (; branch_a=branch_a_cmd, branch_b=branch_b_cmd))
+    sense!(grouped_scenario)
+    @test command(grouped_scenario) == vcat(branch_a_cmd, branch_b_cmd)
     step!(grouped_scenario)
     @test !isnothing(simulation_grouped_wfs_stack(grouped_scenario))
     @test size(simulation_grouped_wfs_stack(grouped_scenario)) == (size(simulation_wfs_frame(grouped_scenario)[1])..., 2)
     @test simulation_grouped_science_stack(grouped_scenario) === nothing
     grouped_readout = simulation_readout(grouped_scenario)
     @test grouped_readout.grouped_wfs_stack === simulation_grouped_wfs_stack(grouped_scenario)
+
+    split_grouped_scenario = build_runtime_scenario(
+        grouped_cfg,
+        RuntimeBranch(:branch_a, sim2, NullReconstructor();
+            wfs_detector=wfs_det,
+            rng=MersenneTwister(43),
+            command_layout=RuntimeCommandLayout(:woofer => 8, :tweeter => 8)),
+        RuntimeBranch(:branch_b, sim2b, NullReconstructor();
+            wfs_detector=wfs_det_b,
+            rng=MersenneTwister(44),
+            command_layout=RuntimeCommandLayout(:steering => 2, :dm => 14)),
+    )
+    prepare!(split_grouped_scenario)
+    @test command_segment_labels(command_layout(split_grouped_scenario)) == (:branch_a, :branch_b)
+    @test command_segment_labels(branch_command_layout(split_grouped_scenario, :branch_a)) == (:woofer, :tweeter)
+    @test command_segment_labels(branch_command_layout(split_grouped_scenario, :branch_b)) == (:steering, :dm)
+    set_command!(split_grouped_scenario, (
+        branch_a=(; woofer=fill(eltype(command(split_grouped_scenario))(0.05), 8), tweeter=fill(eltype(command(split_grouped_scenario))(0.06), 8)),
+        branch_b=(; steering=fill(eltype(command(split_grouped_scenario))(0.07), 2), dm=fill(eltype(command(split_grouped_scenario))(0.08), 14)),
+    ))
+    sense!(split_grouped_scenario)
+    @test command(split_grouped_scenario) == vcat(fill(eltype(command(split_grouped_scenario))(0.05), 8), fill(eltype(command(split_grouped_scenario))(0.06), 8), fill(eltype(command(split_grouped_scenario))(0.07), 2), fill(eltype(command(split_grouped_scenario))(0.08), 14))
+    @test !isnothing(grouped_wfs_stack(split_grouped_scenario))
 
     grouped_tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     grouped_pyr = PyramidWFS(grouped_tel; n_subap=4, modulation=1.0, mode=Diffractive())

@@ -7,7 +7,7 @@
 
 abstract type AbstractPlatformConfig end
 
-struct ClosedLoopBranchConfig{SIM,REC,WD,SD,RNG,PR}
+struct ClosedLoopBranchConfig{SIM,REC,WD,SD,RNG,PR,CL}
     label::Symbol
     simulation::SIM
     reconstructor::REC
@@ -15,13 +15,15 @@ struct ClosedLoopBranchConfig{SIM,REC,WD,SD,RNG,PR}
     science_detector::SD
     rng::RNG
     products::PR
+    command_layout::CL
 end
 
 function ClosedLoopBranchConfig(label::Symbol, simulation, reconstructor;
     wfs_detector=nothing,
     science_detector=nothing,
     rng::AbstractRNG=Random.default_rng(),
-    products=nothing)
+    products=nothing,
+    command_layout=nothing)
     return ClosedLoopBranchConfig{
         typeof(simulation),
         typeof(reconstructor),
@@ -29,6 +31,7 @@ function ClosedLoopBranchConfig(label::Symbol, simulation, reconstructor;
         typeof(science_detector),
         typeof(rng),
         typeof(products),
+        typeof(command_layout),
     }(
         label,
         simulation,
@@ -37,6 +40,7 @@ function ClosedLoopBranchConfig(label::Symbol, simulation, reconstructor;
         science_detector,
         rng,
         products,
+        command_layout,
     )
 end
 
@@ -162,6 +166,7 @@ end
         latency=config.latency,
         control_sign=config.control_sign,
         science_zero_padding=config.science_zero_padding,
+        command_layout=branch.command_layout,
     )
 end
 
@@ -230,6 +235,57 @@ end
 
 @inline set_command!(scenario::PlatformScenario, command::AbstractVector) = set_command!(platform_boundary(scenario), command)
 @inline runtime_phase_timing(scenario::PlatformScenario; kwargs...) = runtime_phase_timing(platform_boundary(scenario); kwargs...)
+
+function command_layout(scenario::PlatformScenario)
+    labels = platform_branch_labels(scenario)
+    boundary = platform_boundary(scenario)
+    if boundary isa SimulationInterface
+        return command_layout(boundary)
+    end
+    segments = ntuple(i -> RuntimeCommandSegment(labels[i], i == 1 ? 1 : 1 + sum(length(boundary.interfaces[j].command) for j in 1:(i - 1)),
+        length(boundary.interfaces[i].command)), length(labels))
+    return RuntimeCommandLayout(segments)
+end
+
+@inline function branch_command_layout(scenario::PlatformScenario, label::Symbol)
+    boundary = platform_boundary(scenario)
+    labels = platform_branch_labels(scenario)
+    idx = findfirst(==(label), labels)
+    isnothing(idx) && throw(InvalidConfiguration("runtime scenario does not contain branch $(label)"))
+    if boundary isa SimulationInterface
+        return command_layout(boundary)
+    end
+    return command_layout(boundary.interfaces[idx])
+end
+
+@inline function branch_command_layouts(scenario::PlatformScenario)
+    labels = platform_branch_labels(scenario)
+    layouts = map(label -> branch_command_layout(scenario, label), labels)
+    return NamedTuple{labels}(Tuple(layouts))
+end
+
+@inline function set_command!(scenario::PlatformScenario, command::NamedTuple)
+    boundary = platform_boundary(scenario)
+    labels = platform_branch_labels(scenario)
+    if boundary isa SimulationInterface
+        set_command!(boundary, command)
+    else
+        Tuple(keys(command)) == labels ||
+            throw(InvalidConfiguration("structured scenario command keys $(Tuple(keys(command))) must match branch labels $labels"))
+        @inbounds for (idx, label) in pairs(labels)
+            branch_command = getproperty(command, label)
+            if branch_command isa NamedTuple
+                set_command!(boundary.interfaces[idx], branch_command)
+            elseif branch_command isa AbstractVector
+                set_command!(boundary.interfaces[idx], branch_command)
+            else
+                throw(InvalidConfiguration("structured branch command $(label) must be an AbstractVector or NamedTuple"))
+            end
+        end
+    end
+    snapshot_outputs!(scenario)
+    return simulation_command(scenario)
+end
 
 supports_prepared_runtime(scenario::PlatformScenario) =
     any(branch -> supports_prepared_runtime(branch.simulation.wfs, branch.simulation.src), scenario.branches)

@@ -115,7 +115,11 @@ Success criteria:
 
 Status:
 
-- planned, not yet implemented
+- implemented in the current pass
+- runtime boundaries can now carry explicit segmented command layouts
+- grouped runtime scenarios accept nested structured commands by branch
+- current structured-layout support is label-and-slice based, which is enough for packed woofer/tweeter, tip/tilt, or steering-mirror surfaces that share one command vector
+- future work can add richer surface-specific metadata without changing the packed RTC boundary
 
 ### AC-5 Documentation And Example Migration
 
@@ -175,5 +179,6 @@ meta = science_metadata(scenario)
 
 ## Next Implementation Target
 
-The next highest-value slice is `AC-4`: structured command-layout support for
-multi-DM control surfaces.
+The next highest-value slice after `AC-4` is `AC-5`: finish migrating the
+remaining user-facing runtime examples to the preferred structured-control
+surface and then start the deprecation layer for the legacy names.

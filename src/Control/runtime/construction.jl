@@ -3,7 +3,8 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
     profile::AbstractRuntimeProfile=default_runtime_profile(),
     products::RuntimeProductRequirements=default_runtime_products(wfs_detector=wfs_detector, science_detector=science_detector),
     latency::RuntimeLatencyModel=default_runtime_latency(profile),
-    control_sign::Real=-1.0, science_zero_padding::Union{Int,Nothing}=nothing)
+    control_sign::Real=-1.0, science_zero_padding::Union{Int,Nothing}=nothing,
+    command_layout::Union{RuntimeCommandLayout,Nothing}=nothing)
     products.slopes || throw(InvalidConfiguration("ClosedLoopRuntime requires slope products for reconstruction"))
     T = eltype(simulation.dm.state.coefs)
     command = similar(simulation.dm.state.coefs)
@@ -17,6 +18,9 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
     reconstruction_delay = VectorDelayLine(command, latency.reconstruction_delay_frames)
     dm_delay = VectorDelayLine(command, latency.dm_delay_frames)
     resolved_zero_padding = something(science_zero_padding, runtime_science_zero_padding(profile))
+    resolved_command_layout = something(command_layout, RuntimeCommandLayout(RuntimeCommandSegment(:dm, 1, length(command))))
+    resolved_command_layout.total_length == length(command) ||
+        throw(InvalidConfiguration("runtime command layout total length must match the runtime command vector length"))
     runtime = ClosedLoopRuntime{
         typeof(simulation),
         typeof(simulation.tel),
@@ -36,6 +40,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
         typeof(readout_delay),
         typeof(reconstruction_delay),
         typeof(dm_delay),
+        typeof(resolved_command_layout),
         T,
     }(
         simulation,
@@ -58,6 +63,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
         readout_delay,
         reconstruction_delay,
         dm_delay,
+        resolved_command_layout,
         T(control_sign),
         resolved_zero_padding,
         false,
@@ -294,6 +300,7 @@ function with_reconstructor(runtime::ClosedLoopRuntime, reconstructor)
         latency=runtime.latency,
         control_sign=runtime.control_sign,
         science_zero_padding=runtime.science_zero_padding,
+        command_layout=runtime.command_layout,
     )
     copyto!(refreshed.command, runtime.command)
     copyto!(refreshed.reconstruct_buffer, runtime.reconstruct_buffer)

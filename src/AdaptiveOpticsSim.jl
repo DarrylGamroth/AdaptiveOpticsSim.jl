@@ -207,6 +207,7 @@ export RuntimeLatencyModel, default_runtime_profile, default_runtime_products, d
 export VectorDelayLine, shift_delay!, prepare!, prepare_runtime_wfs!, init_execution_state
 export supports_prepared_runtime, supports_detector_output, supports_stacked_sources, supports_grouped_execution
 export ClosedLoopRuntime, SimulationInterface, CompositeSimulationInterface, SimulationReadout
+export RuntimeCommandSegment, RuntimeCommandLayout, command_layout, branch_command_layout, branch_command_layouts, command_segments, command_segment_labels, command_segment_range
 export AbstractPlatformConfig, ClosedLoopBranchConfig, SinglePlatformConfig, GroupedPlatformConfig, PlatformScenario
 export RuntimeBranch, SingleRuntimeConfig, GroupedRuntimeConfig, RuntimeScenario
 export build_platform_scenario, build_runtime_scenario, platform_config, platform_boundary, platform_name, platform_branch_labels

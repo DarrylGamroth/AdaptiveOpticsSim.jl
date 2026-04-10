@@ -6,15 +6,49 @@ struct CompositeRuntimeExportPlan <: AbstractRuntimeExportPlan end
 @inline runtime_export_plan(::SimulationInterface) = DirectRuntimeExportPlan()
 @inline runtime_export_plan(::CompositeSimulationInterface) = CompositeRuntimeExportPlan()
 
+@inline command_layout(runtime::ClosedLoopRuntime) = runtime.command_layout
+@inline command_layout(interface::SimulationInterface) = command_layout(interface.runtime)
+
+function _set_command_segments!(setter, total_length::Int, layout::RuntimeCommandLayout, command::NamedTuple)
+    layout.total_length == total_length ||
+        throw(InvalidConfiguration("command layout total length must match the target command length"))
+    labels = Tuple(command_segment_labels(layout))
+    provided = keys(command)
+    Tuple(provided) == labels ||
+        throw(InvalidConfiguration("structured command keys $(Tuple(provided)) must match command layout labels $labels"))
+    @inbounds for seg in command_segments(layout)
+        segment = getproperty(command, seg.label)
+        length(segment) == seg.length ||
+            throw(DimensionMismatchError("command segment $(seg.label) must have length $(seg.length)"))
+        setter(seg, segment)
+    end
+    return command
+end
+
 @inline function set_command!(runtime::ClosedLoopRuntime, command::AbstractVector)
     copyto!(runtime.command, command)
     copyto!(runtime.dm.state.coefs, command)
     return runtime.dm.state.coefs
 end
 
+@inline function set_command!(runtime::ClosedLoopRuntime, command::NamedTuple)
+    _set_command_segments!(length(runtime.command), command_layout(runtime), command) do seg, segment
+        rng = command_segment_range(seg)
+        copyto!(@view(runtime.command[rng]), segment)
+        copyto!(@view(runtime.dm.state.coefs[rng]), segment)
+    end
+    return runtime.command
+end
+
 @inline function set_command!(interface::SimulationInterface, command::AbstractVector)
     copyto!(interface.command, command)
     set_command!(interface.runtime, command)
+    return interface.command
+end
+
+@inline function set_command!(interface::SimulationInterface, command::NamedTuple)
+    set_command!(interface.runtime, command)
+    copyto!(interface.command, interface.runtime.command)
     return interface.command
 end
 

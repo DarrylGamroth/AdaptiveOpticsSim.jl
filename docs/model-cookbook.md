@@ -187,6 +187,26 @@ external_command[1] = 0.05
 set_command!(scenario, external_command)
 sense!(scenario)
 
+# If a runtime boundary represents several logical control surfaces packed into
+# one RTC vector, provide an explicit command layout and then inject a
+# structured NamedTuple instead of doing manual slice math. This is useful for
+# tip/tilt mirrors, steering mirrors, or packed woofer/tweeter commands.
+split_branch = RuntimeBranch(
+    :main,
+    sim,
+    recon;
+    science_detector=science_det,
+    rng=MersenneTwister(2),
+    command_layout=RuntimeCommandLayout(:woofer => 8, :tweeter => 8),
+)
+split_scenario = build_runtime_scenario(cfg, split_branch)
+prepare!(split_scenario)
+set_command!(split_scenario, (
+    woofer=fill(0.01, 8),
+    tweeter=fill(0.02, 8),
+))
+sense!(split_scenario)
+
 # Exported boundary products after the sensing step.
 command_vec = command(scenario)
 slopes_vec = slopes(scenario)
@@ -211,6 +231,16 @@ explicit `set_command!(scenario, cmd)` plus `sense!(scenario)` flow above.
 The exported science frame is the configured science detector's `output_frame`,
 so its shape and element type are detector-defined. Inspect
 `science_metadata(scenario)` to learn the exact export contract for:
+
+For grouped RTC boundaries, keep the outer structure branch-oriented and nest
+structured commands per branch when needed:
+
+```julia
+set_command!(grouped_scenario, (
+    high_order=(; woofer=woofer_cmd, tweeter=tweeter_cmd),
+    low_order=(; steering=tt_cmd, dm=ho_cmd),
+))
+```
 
 - `output_size`
 - `output_precision`
