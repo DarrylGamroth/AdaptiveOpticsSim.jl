@@ -128,10 +128,10 @@ for _ in 1:5
     step!(interface)
 end
 
-readout = simulation_readout(interface)
-cmd = simulation_command(readout)
-slopes = simulation_slopes(readout)
-frame = simulation_wfs_frame(readout)
+rt = readout(interface)
+cmd = command(rt)
+slopes_vec = slopes(rt)
+frame = wfs_frame(rt)
 ```
 
 Use this when you care about:

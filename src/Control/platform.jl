@@ -120,6 +120,11 @@ struct PlatformScenario{CFG<:AbstractPlatformConfig,BR,BD} <: AbstractControlSim
     boundary::BD
 end
 
+const RuntimeBranch = ClosedLoopBranchConfig
+const SingleRuntimeConfig = SinglePlatformConfig
+const GroupedRuntimeConfig = GroupedPlatformConfig
+const RuntimeScenario = PlatformScenario
+
 @inline platform_config(scenario::PlatformScenario) = scenario.config
 @inline platform_boundary(scenario::PlatformScenario) = scenario.boundary
 @inline platform_name(config::SinglePlatformConfig) = config.name
@@ -193,7 +198,15 @@ function build_platform_scenario(config::GroupedPlatformConfig{N}, branches::Var
     )
 end
 
+build_runtime_scenario(config::SingleRuntimeConfig, branch::RuntimeBranch) = build_platform_scenario(config, branch)
+build_runtime_scenario(config::GroupedRuntimeConfig{N}, branches::Vararg{RuntimeBranch,N}) where {N} = build_platform_scenario(config, branches...)
+
 simulation_interface(scenario::PlatformScenario) = platform_boundary(scenario)
+
+readout(sim::AbstractControlSimulation) = simulation_readout(sim)
+readout(runtime::ClosedLoopRuntime) = simulation_readout(runtime)
+readout(interface::SimulationInterface) = simulation_readout(interface)
+readout(interface::CompositeSimulationInterface) = simulation_readout(interface)
 
 function prepare!(scenario::PlatformScenario)
     prepare!(platform_boundary(scenario))

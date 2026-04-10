@@ -147,16 +147,15 @@ dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive())
 sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
 
-# ClosedLoopBranchConfig currently expects a reconstructor, even if the HIL loop
-# will inject commands from an external RTC instead of using step!(scenario).
-imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
-recon = ModalReconstructor(imat; gain=0.5)
+# Use NullReconstructor() when the control law lives outside the package and
+# commands are injected through set_command!(...).
+recon = NullReconstructor()
 
 # Attach a science detector if the external interface should export a science
 # image per sensing step.
 science_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
 
-branch = ClosedLoopBranchConfig(
+branch = RuntimeBranch(
     :main,
     sim,
     recon;
@@ -164,19 +163,19 @@ branch = ClosedLoopBranchConfig(
     rng=MersenneTwister(1),
 )
 
-cfg = SinglePlatformConfig(
+cfg = SingleRuntimeConfig(
     name=:single_runtime_demo,
     branch_label=:main,
     products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=true),
 )
 
-scenario = build_platform_scenario(cfg, branch)
+scenario = build_runtime_scenario(cfg, branch)
 prepare!(scenario)
 
 # The external command vector must match the DM command length exported by the
 # runtime boundary.
-n_command = length(simulation_command(scenario))
-external_command = zeros(eltype(simulation_command(scenario)), n_command)
+n_command = length(command(scenario))
+external_command = zeros(eltype(command(scenario)), n_command)
 
 # Example: set one actuator command from an external controller.
 external_command[1] = 0.05
@@ -189,18 +188,18 @@ set_command!(scenario, external_command)
 sense!(scenario)
 
 # Exported boundary products after the sensing step.
-command = simulation_command(scenario)
-slopes = simulation_slopes(scenario)
-wfs_frame = simulation_wfs_frame(scenario)
-science_frame = simulation_science_frame(scenario)
-wfs_meta = simulation_wfs_metadata(scenario)
-science_meta = simulation_science_metadata(scenario)
+command_vec = command(scenario)
+slopes_vec = slopes(scenario)
+wfs_img = wfs_frame(scenario)
+science_img = science_frame(scenario)
+wfs_meta = wfs_metadata(scenario)
+science_meta = science_metadata(scenario)
 
 # Typical controller-side checks:
-@show length(command)
-@show length(slopes)
-@show size(wfs_frame)
-@show size(science_frame)
+@show length(command_vec)
+@show length(slopes_vec)
+@show size(wfs_img)
+@show size(science_img)
 @show science_meta.output_size
 @show science_meta.output_precision
 ```
@@ -211,7 +210,7 @@ explicit `set_command!(scenario, cmd)` plus `sense!(scenario)` flow above.
 
 The exported science frame is the configured science detector's `output_frame`,
 so its shape and element type are detector-defined. Inspect
-`simulation_science_metadata(scenario)` to learn the exact export contract for:
+`science_metadata(scenario)` to learn the exact export contract for:
 
 - `output_size`
 - `output_precision`

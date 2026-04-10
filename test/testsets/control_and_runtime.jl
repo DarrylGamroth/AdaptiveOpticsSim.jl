@@ -246,6 +246,45 @@ end
     @test closed_loop_runtime_allocations() == 0
     @test simulation_command(runtime) === runtime.command
     @test simulation_science_frame(runtime) === output_frame(det)
+    @test command(runtime) === simulation_command(runtime)
+    @test science_frame(runtime) === simulation_science_frame(runtime)
+    @test readout(runtime).science_frame === simulation_science_frame(runtime)
+
+    tel_ext = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src_ext = Source(band=:I, magnitude=0.0)
+    atm_ext = KolmogorovAtmosphere(tel_ext; r0=0.2, L0=25.0)
+    dm_ext = DeformableMirror(tel_ext; n_act=4, influence_width=0.3)
+    wfs_ext = ShackHartmann(tel_ext; n_subap=4, mode=Diffractive())
+    sim_ext = AdaptiveOpticsSim.AOSimulation(tel_ext, atm_ext, src_ext, dm_ext, wfs_ext)
+    det_ext = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
+    null_recon = NullReconstructor()
+    @test_throws InvalidConfiguration reconstruct!(similar(dm_ext.state.coefs), null_recon, wfs_ext.state.slopes)
+
+    external_branch = RuntimeBranch(
+        :external_branch,
+        sim_ext,
+        null_recon;
+        science_detector=det_ext,
+        rng=MersenneTwister(7),
+    )
+    external_cfg = SingleRuntimeConfig(
+        name=:external_runtime_demo,
+        branch_label=:external_branch,
+        products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=true),
+    )
+    external_scenario = build_runtime_scenario(external_cfg, external_branch)
+    @test external_scenario isa RuntimeScenario
+    prepare!(external_scenario)
+    external_command = fill(eltype(command(external_scenario))(0.03), length(command(external_scenario)))
+    set_command!(external_scenario, external_command)
+    sense!(external_scenario)
+    @test command(external_scenario) == external_command
+    @test slopes(external_scenario) === simulation_slopes(external_scenario)
+    @test wfs_frame(external_scenario) === simulation_wfs_frame(external_scenario)
+    @test science_frame(external_scenario) === simulation_science_frame(external_scenario)
+    @test science_metadata(external_scenario) == simulation_science_metadata(external_scenario)
+    @test readout(external_scenario).science_frame === science_frame(external_scenario)
+    @test_throws InvalidConfiguration step!(external_scenario)
 
     boundary = SimulationInterface(runtime)
     @test AdaptiveOpticsSim.runtime_export_plan(boundary) isa AdaptiveOpticsSim.DirectRuntimeExportPlan

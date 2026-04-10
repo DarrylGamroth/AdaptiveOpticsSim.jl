@@ -196,7 +196,7 @@ export forward_operator, inverse_operator_matrix
 export fitting_error, fitting_error_dm
 export GainSensingCamera
 export calibrate!, reset_calibration!, compute_optical_gains!
-export AbstractReconstructorOperator, ModalReconstructor, MappedReconstructor, reconstruct!, reconstruct
+export AbstractReconstructorOperator, NullReconstructor, ModalReconstructor, MappedReconstructor, reconstruct!, reconstruct
 export AbstractController, DiscreteIntegratorController, update!
 export AbstractControlSimulation, AbstractExecutionPolicy
 export SequentialExecution, ThreadedExecution, BackendStreamExecution
@@ -208,8 +208,11 @@ export VectorDelayLine, shift_delay!, prepare!, prepare_runtime_wfs!, init_execu
 export supports_prepared_runtime, supports_detector_output, supports_stacked_sources, supports_grouped_execution
 export ClosedLoopRuntime, SimulationInterface, CompositeSimulationInterface, SimulationReadout
 export AbstractPlatformConfig, ClosedLoopBranchConfig, SinglePlatformConfig, GroupedPlatformConfig, PlatformScenario
-export build_platform_scenario, platform_config, platform_boundary, platform_name, platform_branch_labels
+export RuntimeBranch, SingleRuntimeConfig, GroupedRuntimeConfig, RuntimeScenario
+export build_platform_scenario, build_runtime_scenario, platform_config, platform_boundary, platform_name, platform_branch_labels
 export sense!, step!, set_command!, snapshot_outputs!
+export readout, command, slopes, wfs_frame, science_frame, wfs_metadata, science_metadata
+export grouped_wfs_stack, grouped_science_stack
 export simulation_readout, simulation_slopes, simulation_command, simulation_wfs_frame, simulation_science_frame
 export simulation_wfs_metadata, simulation_science_metadata
 export simulation_grouped_wfs_stack, simulation_grouped_science_stack

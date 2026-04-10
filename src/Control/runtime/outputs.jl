@@ -140,6 +140,16 @@ end
 @inline simulation_grouped_science_stack(interface::CompositeSimulationInterface) = requires_grouped_science_stack(interface) ? interface.science_stack : nothing
 
 @inline simulation_readout(readout::SimulationReadout) = readout
+
+@inline command(x) = simulation_command(x)
+@inline slopes(x) = simulation_slopes(x)
+@inline wfs_frame(x) = simulation_wfs_frame(x)
+@inline science_frame(x) = simulation_science_frame(x)
+@inline wfs_metadata(x) = simulation_wfs_metadata(x)
+@inline science_metadata(x) = simulation_science_metadata(x)
+@inline grouped_wfs_stack(x) = simulation_grouped_wfs_stack(x)
+@inline grouped_science_stack(x) = simulation_grouped_science_stack(x)
+
 @inline function simulation_readout(runtime::ClosedLoopRuntime)
     return SimulationReadout(
         simulation_command(runtime),

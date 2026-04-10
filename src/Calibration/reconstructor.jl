@@ -36,6 +36,26 @@ slopes-to-command interface.
 abstract type AbstractReconstructorOperator end
 
 """
+    NullReconstructor()
+
+Explicit no-op control operator for external-command or HIL-facing runtimes.
+
+`NullReconstructor` exists so a runtime boundary can be assembled without
+constructing a fake slopes-to-command map. It is valid with `sense!` plus
+`set_command!`, but `step!` / `reconstruct!` will reject it because there is no
+internal reconstruction stage to run.
+"""
+struct NullReconstructor <: AbstractReconstructorOperator end
+
+function reconstruct!(out::AbstractVector, ::NullReconstructor, slopes::AbstractVector)
+    throw(InvalidConfiguration("NullReconstructor does not define an internal slopes-to-command update; use set_command! with sense! for external-control runtimes"))
+end
+
+function reconstruct(::NullReconstructor, slopes::AbstractVector)
+    throw(InvalidConfiguration("NullReconstructor does not define an internal slopes-to-command update; use set_command! with sense! for external-control runtimes"))
+end
+
+"""
     ModalReconstructor
 
 Linear slopes-to-modes operator built from an interaction matrix inverse.

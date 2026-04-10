@@ -81,6 +81,8 @@ Use these when the task is cross-package or instrument-truth work:
     external comparison workspace
 - [`scenario-builder-style.md`](./scenario-builder-style.md)
   - maintained conventions for script-first scenario construction
+- [`api-cleanup-plan-2026-04.md`](./api-cleanup-plan-2026-04.md)
+  - phased cleanup plan for runtime/HIL naming, accessors, and external-control semantics
 - [`api-reference.md`](./api-reference.md)
   - maintained public API surface
 - [`maintainer-architecture.md`](./maintainer-architecture.md)
