@@ -154,7 +154,7 @@ The recommended script shape is:
 using AdaptiveOpticsSim
 using Random
 
-function build_scenario(; T=Float32, backend=Array)
+function build_scenario(; T=Float32, backend=CPUBackend())
     tel = Telescope(...)
     src = Source(...)
     atm = MultiLayerAtmosphere(tel; ..., T=T, backend=backend)

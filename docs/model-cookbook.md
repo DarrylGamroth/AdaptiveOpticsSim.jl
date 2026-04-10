@@ -318,7 +318,7 @@ using AdaptiveOpticsSim
 using CUDA
 using Random
 
-const GPU = CUDA.CuArray
+const GPU = CUDABackend()
 
 # Choose backend and precision once near the top of the script.
 tel = Telescope(
@@ -383,13 +383,16 @@ science_host = Array(science_img)
 
 Notes:
 
-- Replace `CUDA.CuArray` with `AMDGPU.ROCArray` for the AMDGPU path.
+- Replace `CUDABackend()` with `AMDGPUBackend()` for the AMDGPU path.
 - Keep `backend=GPU` on the long-lived plant objects so runtime buffers stay on
   device.
 - If you need a GPU-built internal reconstructor as well, build that
   calibration surface intentionally with `AdaptiveOpticsSim.GPUArrayBuildBackend(...)`.
 - `set_command!` accepts ordinary CPU vectors or tuples; the runtime stages the
   command into the backend-native optic state before `sense!(...)`.
+- `CPUBackend()` is the default public constructor surface; raw array types such
+  as `Array`, `CUDA.CuArray`, and `AMDGPU.ROCArray` still work as a lower-level
+  compatibility path.
 
 Use this pattern when you need:
 

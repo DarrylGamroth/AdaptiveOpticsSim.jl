@@ -356,7 +356,9 @@ function MultiLayerAtmosphere(tel::Telescope;
     wind_direction::AbstractVector,
     altitude::AbstractVector,
     T::Type{<:AbstractFloat}=Float64,
-    backend=Array)
+    backend=CPUBackend())
+
+    backend = resolve_array_backend(backend)
 
     n_layers = length(fractional_cn2)
     n_layers > 0 || throw(InvalidConfiguration("fractional_cn2 cannot be empty"))

@@ -69,7 +69,7 @@ Base.@kwdef struct MyScenarioConfig{T<:AbstractFloat}
     magnitude::T = T(8.0)
 end
 
-function build_scenario(cfg::MyScenarioConfig{T}; backend=Array) where {T}
+function build_scenario(cfg::MyScenarioConfig{T}; backend=CPUBackend()) where {T}
     tel = Telescope(
         resolution=cfg.resolution,
         diameter=cfg.diameter,

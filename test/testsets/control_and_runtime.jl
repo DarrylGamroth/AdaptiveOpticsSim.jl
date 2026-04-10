@@ -14,6 +14,31 @@
     @test maximum(slopes) > 0
 end
 
+@testset "Semantic backend descriptors" begin
+    @test array_backend_type(CPUBackend()) === Array
+    @test resolve_array_backend(Array) === Array
+
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0, backend=CPUBackend())
+    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, backend=CPUBackend())
+    dm = DeformableMirror(tel; n_act=4, influence_width=0.3, backend=CPUBackend())
+    tt = TipTiltMirror(tel; scale=0.1, backend=CPUBackend())
+    focus = FocusStage(tel; scale=0.2, backend=CPUBackend())
+    wfs = ShackHartmann(tel; n_subap=4, backend=CPUBackend())
+    det = Detector(backend=CPUBackend())
+    sf = SpatialFilter(tel; backend=CPUBackend())
+    ef = ElectricField(tel, Source(band=:I, magnitude=0.0); backend=CPUBackend())
+
+    @test tel.state.opd isa Matrix
+    @test atm.state.opd isa Matrix
+    @test dm.state.coefs isa Vector
+    @test tt.state.coefs isa Vector
+    @test focus.state.coefs isa Vector
+    @test wfs.state.slopes isa Vector
+    @test det.state.frame isa Matrix
+    @test sf.state.phase isa Matrix
+    @test ef.state.field isa Matrix{ComplexF64}
+end
+
 @testset "Calibration and control" begin
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)

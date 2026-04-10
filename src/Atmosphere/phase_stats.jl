@@ -70,7 +70,8 @@ mutable struct PhaseStatsWorkspace{T<:AbstractFloat,
     ifft_plan::P
 end
 
-function PhaseStatsWorkspace(n::Int; T::Type{<:AbstractFloat}=Float64, backend=Array)
+function PhaseStatsWorkspace(n::Int; T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+    backend = resolve_array_backend(backend)
     spectrum = backend{Complex{T}}(undef, n, n)
     buffer = similar(spectrum)
     psd = backend{T}(undef, n, n)

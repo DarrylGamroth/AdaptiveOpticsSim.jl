@@ -45,7 +45,8 @@ end
 Preallocated FFT workspace used by gain-sensing camera calibration and
 evaluation.
 """
-function GSCFFTWorkspace(n::Int; T::Type{<:AbstractFloat}=Float64, backend=Array)
+function GSCFFTWorkspace(n::Int; T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+    backend = resolve_array_backend(backend)
     buffer = backend{Complex{T}}(undef, n, n)
     fft_out = similar(buffer)
     ifft_out = similar(buffer)

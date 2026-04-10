@@ -93,7 +93,8 @@ coefficients to OPD samples. When the misregistration keeps the Gaussian basis
 separable, the constructor also prepares a faster `X * C * Y'` runtime path.
 """
 function DeformableMirror(tel::Telescope; n_act::Int, influence_width::Real=0.2,
-    T::Type{<:AbstractFloat}=Float64, misregistration::Misregistration=Misregistration(T=T), backend=Array)
+    T::Type{<:AbstractFloat}=Float64, misregistration::Misregistration=Misregistration(T=T), backend=CPUBackend())
+    backend = resolve_array_backend(backend)
     params = DeformableMirrorParams{T}(n_act, T(influence_width), misregistration)
     n = tel.params.resolution
     opd = backend{T}(undef, n, n)

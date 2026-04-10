@@ -282,23 +282,23 @@ supports_paralyzable_dead_time(::AbstractCountingDetector) = false
 supports_detector_response(::SensorType, ::AbstractDetectorResponse) = false
 supports_detector_response(::FrameSensorType, ::AbstractFrameResponse) = true
 
-function default_response_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64, backend=Array)
+function default_response_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
     return NullFrameResponse()
 end
 
-function default_response_model(::CMOSSensor; T::Type{<:AbstractFloat}=Float64, backend=Array)
+function default_response_model(::CMOSSensor; T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
     return GaussianPixelResponse(response_width_px=0.35, T=T, backend=backend)
 end
 
-function default_response_model(::InGaAsSensor; T::Type{<:AbstractFloat}=Float64, backend=Array)
+function default_response_model(::InGaAsSensor; T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
     return GaussianPixelResponse(response_width_px=0.4, T=T, backend=backend)
 end
 
-function default_response_model(::HgCdTeAvalancheArraySensor; T::Type{<:AbstractFloat}=Float64, backend=Array)
+function default_response_model(::HgCdTeAvalancheArraySensor; T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
     return SampledFrameResponse([0.0 0.01 0.0; 0.01 0.96 0.01; 0.0 0.01 0.0]; T=T, backend=backend)
 end
 
-default_detector_defect_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64, backend=Array) = NullDetectorDefectModel()
+default_detector_defect_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64, backend=CPUBackend()) = NullDetectorDefectModel()
 default_frame_timing_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64) = GlobalShutter()
 default_frame_nonlinearity_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64) = NullFrameNonlinearity()
 default_thermal_model(::SensorType; T::Type{<:AbstractFloat}=Float64) = NullDetectorThermalModel()
@@ -1019,7 +1019,8 @@ function Detector(; integration_time::Real=1.0, qe::Real=1.0,
     thermal_model::Union{Nothing,AbstractDetectorThermalModel}=nothing,
     readout_window::Union{Nothing,FrameWindow}=nothing,
     output_precision::Union{Nothing,DataType}=nothing, background_flux=nothing, background_map=nothing,
-    T::Type{<:AbstractFloat}=Float64, backend=Array)
+    T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+    backend = resolve_array_backend(backend)
     normalized = normalize_noise(noise)
     return Detector(normalized; integration_time=integration_time, qe=qe,
         psf_sampling=psf_sampling, binning=binning, gain=gain,
@@ -1043,7 +1044,8 @@ function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
     readout_window::Union{Nothing,FrameWindow}=nothing,
     output_precision::Union{Nothing,DataType}=nothing,
     background_flux=nothing, background_map=nothing,
-    T::Type{<:AbstractFloat}=Float64, backend=Array)
+    T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+    backend = resolve_array_backend(backend)
     converted = convert_noise(noise, T)
     validated = validate_noise(converted)
     return _build_detector(validated; integration_time=integration_time, qe=qe,

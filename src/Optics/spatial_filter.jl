@@ -58,7 +58,8 @@ sampling used during propagation.
 """
 function SpatialFilter(tel::Telescope; shape::SpatialFilterShape=CircularFilter(),
     diameter::Real=tel.params.resolution / 2, zero_padding::Int=2,
-    T::Type{<:AbstractFloat}=Float64, backend=Array)
+    T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+    backend = resolve_array_backend(backend)
     n_pad = tel.params.resolution * zero_padding
     params = SpatialFilterParams{T}(T(diameter), zero_padding, n_pad)
     mask = backend{Complex{T}}(undef, n_pad, n_pad)

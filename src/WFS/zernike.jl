@@ -111,7 +111,8 @@ function ZernikeWFS(tel::Telescope; n_subap::Int,
     diffraction_padding::Int=2,
     binning::Int=1,
     T::Type{<:AbstractFloat}=Float64,
-    backend=Array)
+    backend=CPUBackend())
+    backend = resolve_array_backend(backend)
     if tel.params.resolution % n_subap != 0
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     end

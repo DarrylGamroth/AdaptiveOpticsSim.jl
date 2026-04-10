@@ -234,7 +234,8 @@ function APDDetector(; integration_time::Real=1.0, qe::Real=1.0, noise::NoiseMod
     gate_model::AbstractCountingGateModel=NullCountingGate(),
     correlation_model::AbstractCountingCorrelationModel=NullCountingCorrelation(),
     thermal_model::AbstractDetectorThermalModel=NullDetectorThermalModel(),
-    T::Type{<:AbstractFloat}=Float64, backend=Array)
+    T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+    backend = resolve_array_backend(backend)
     return _build_apd_detector(noise; integration_time=integration_time, qe=qe, gain=gain,
         dark_count_rate=dark_count_rate, dead_time_model=dead_time_model, gate_model=gate_model,
         correlation_model=correlation_model, thermal_model=thermal_model, sensor=APDSensor(), output_precision=output_precision,

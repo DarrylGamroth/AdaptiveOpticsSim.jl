@@ -33,7 +33,9 @@ function Telescope(; resolution::Int,
     fov_arcsec::Real=0.0,
     pupil_reflectivity::Union{Real,AbstractMatrix}=1.0,
     T::Type{<:AbstractFloat}=Float64,
-    backend=Array)
+    backend=CPUBackend())
+
+    backend = resolve_array_backend(backend)
 
     params = TelescopeParams{T}(
         resolution,

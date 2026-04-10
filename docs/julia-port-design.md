@@ -139,7 +139,7 @@ struct Telescope{P,S}
     state::S
 end
 
-function Telescope(; T=Float64, backend=Array, kwargs...)
+function Telescope(; T=Float64, backend=CPUBackend(), kwargs...)
     params = TelescopeParams{T}(; kwargs...)
     n = params.resolution
     pupil = backend{Bool}(undef, n, n)
@@ -150,7 +150,7 @@ function Telescope(; T=Float64, backend=Array, kwargs...)
 end
 ```
 
-This keeps the API consistent while allowing `backend=CuArray` for GPU runs.
+This keeps the API consistent while allowing `backend=CUDABackend()` for GPU runs.
 
 ## Performance guidelines
 - Preallocate arrays in `Workspace` and reuse them in every loop iteration.
@@ -333,7 +333,7 @@ Intended rule:
 - keep data layout and workspace ownership explicit.
 
 Guidelines:
-- Make array backends explicit (`backend=Array` or `backend=CuArray`).
+- Make array backends explicit (`backend=CPUBackend()` or `backend=CUDABackend()`).
 - Avoid scalar indexing on GPU; call `CUDA.allowscalar(false)` in tests.
 - Preallocate GPU workspaces; minimize host-device transfers.
 - Use `AbstractFFTs.jl` so FFT providers share the same planning/execution API.

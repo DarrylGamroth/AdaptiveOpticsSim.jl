@@ -484,7 +484,8 @@ function InfinitePhaseScreen(tel::Telescope;
     screen_resolution::Int=default_infinite_screen_resolution(tel.params.resolution),
     stencil_size::Int=default_infinite_stencil_size(tel.params.resolution),
     T::Type{<:AbstractFloat}=Float64,
-    backend=Array)
+    backend=CPUBackend())
+    backend = resolve_array_backend(backend)
     screen_resolution >= tel.params.resolution ||
         throw(InvalidConfiguration("screen_resolution must be >= telescope resolution"))
     pixel_scale = T(tel.params.diameter / tel.params.resolution)
@@ -654,7 +655,8 @@ function InfiniteMultiLayerAtmosphere(tel::Telescope;
     screen_resolution::Int=default_infinite_screen_resolution(tel.params.resolution),
     stencil_size::Int=default_infinite_stencil_size(tel.params.resolution),
     T::Type{<:AbstractFloat}=Float64,
-    backend=Array)
+    backend=CPUBackend())
+    backend = resolve_array_backend(backend)
     n_layers = length(fractional_cn2)
     n_layers > 0 || throw(InvalidConfiguration("fractional_cn2 cannot be empty"))
     if length(wind_speed) != n_layers || length(wind_direction) != n_layers || length(altitude) != n_layers

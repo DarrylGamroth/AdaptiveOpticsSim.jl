@@ -9,7 +9,8 @@ struct StaticCMOSOutputPattern{T<:AbstractFloat,V1<:AbstractVector{T},V2<:Abstra
 end
 
 function StaticCMOSOutputPattern(output_cols::Integer, gains::AbstractVector, offsets::AbstractVector;
-    T::Type{<:AbstractFloat}=Float64, backend=Array)
+    T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+    backend = resolve_array_backend(backend)
     backend_gains = _to_backend_vector(T.(gains), backend)
     backend_offsets = _to_backend_vector(T.(offsets), backend)
     return validate_cmos_output_model(
@@ -31,7 +32,8 @@ struct CMOSSensor{T<:AbstractFloat,O<:AbstractCMOSOutputModel,M<:AbstractFrameTi
 end
 
 function CMOSSensor(; column_readout_sigma::Real=0.0, output_model::AbstractCMOSOutputModel=NullCMOSOutputModel(),
-    timing_model::AbstractFrameTimingModel=GlobalShutter(), T::Type{<:AbstractFloat}=Float64, backend=Array)
+    timing_model::AbstractFrameTimingModel=GlobalShutter(), T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
+    backend = resolve_array_backend(backend)
     column_readout_sigma >= 0 || throw(InvalidConfiguration("CMOSSensor column_readout_sigma must be >= 0"))
     converted_output = convert_cmos_output_model(output_model, T, backend)
     validated_output = validate_cmos_output_model(converted_output)

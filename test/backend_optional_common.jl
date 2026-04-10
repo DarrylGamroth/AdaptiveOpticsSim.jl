@@ -7,6 +7,23 @@ backend_label(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = "AMDGPU"
 backend_full_smoke_env(::Type{AdaptiveOpticsSim.CUDABackendTag}) = "ADAPTIVEOPTICS_TEST_FULL_CUDA"
 backend_full_smoke_env(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = "ADAPTIVEOPTICS_TEST_FULL_AMDGPU"
 
+backend_selector(::Type{AdaptiveOpticsSim.CUDABackendTag}) = AdaptiveOpticsSim.CUDABackend()
+backend_selector(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = AdaptiveOpticsSim.AMDGPUBackend()
+
+function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    selector = backend_selector(B)
+    T = Float32
+    tel = Telescope(resolution=8, diameter=T(1), sampling_time=T(1e-3), central_obstruction=T(0), T=T, backend=selector)
+    dm = DeformableMirror(tel; n_act=2, influence_width=T(0.3), T=T, backend=selector)
+    wfs = ShackHartmann(tel; n_subap=2, mode=Diffractive(), T=T, backend=selector)
+    det = Detector(noise=NoiseNone(), integration_time=T(1), qe=T(1), binning=1, T=T, backend=selector)
+    @test tel.state.opd isa BackendArray
+    @test dm.state.coefs isa BackendArray
+    @test wfs.state.slopes isa BackendArray
+    @test det.state.frame isa BackendArray
+    return nothing
+end
+
 function build_optional_platform_branch(::Type{T}, BackendArray, label::Symbol; sensor::Symbol=:sh, seed::Integer=1) where {T<:AbstractFloat}
     tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
         central_obstruction=T(0.0), T=T, backend=BackendArray)
@@ -509,6 +526,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     AdaptiveOpticsSim.disable_scalar_backend!(B)
     backend = AdaptiveOpticsSim.gpu_backend_array_type(B)
     @test backend !== nothing
+    run_optional_backend_selector_smoke(B, backend)
 
     if get(ENV, backend_full_smoke_env(B), "0") == "1"
         include(joinpath(dirname(@__DIR__), "scripts", "gpu_smoke_contract.jl"))
