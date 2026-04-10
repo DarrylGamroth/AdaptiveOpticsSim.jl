@@ -160,3 +160,5 @@ For current release/readiness decisions:
   starts claiming SPECULA equivalence for that surface
 - new features outside this supported surface should ship as experimental until
   they gain the same evidence shape
+- supported accelerator claims require routine validation on real hardware,
+  either through CI or through the maintained release-validation host path

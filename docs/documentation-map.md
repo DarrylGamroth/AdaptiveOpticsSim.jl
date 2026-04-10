@@ -208,6 +208,8 @@ These remain useful as implementation evidence, but they are no longer the
 recommended entry point for normal use.
 
 - [`package-review-2026-03.md`](./package-review-2026-03.md)
+- [`package-review-status-2026-04.md`](./package-review-status-2026-04.md)
+  - current read of which March review findings still stand vs have been mitigated
 - [`package-review-action-plan.md`](./package-review-action-plan.md)
 - [`api-tier-inventory.md`](./api-tier-inventory.md)
 - [`modularization-inventory.md`](./modularization-inventory.md)

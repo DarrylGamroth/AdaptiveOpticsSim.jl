@@ -37,8 +37,8 @@ Use together with:
 - [x] Checked-in CPU CI workflow
 - [x] Checked-in CUDA backend CI workflow
 - [x] Checked-in AMDGPU backend CI workflow
-- [ ] Self-hosted CUDA runner registered and green in routine CI
-- [ ] Self-hosted AMDGPU runner registered and green in routine CI
+- [ ] CUDA validation routinely executed on real hardware (CI or release-validation host)
+- [ ] AMDGPU validation routinely executed on real hardware (CI or release-validation host)
 
 ### Supported-scope clarity
 
@@ -63,10 +63,10 @@ Use together with:
 
 The remaining blocker is:
 
-1. GPU CI must be real, not just checked-in.
-   - The workflows need actual self-hosted runners with the expected labels.
+1. Routine GPU validation on real hardware must be operational, not just described.
+   - That can be satisfied either by green self-hosted CI runners or by a maintained release-validation host path that is exercised for supported releases.
 
 ## Next Recommended Order
 
-1. Register and exercise self-hosted CUDA and AMDGPU runners in CI.
+1. Put CUDA and AMDGPU validation on a real operational cadence, either through CI or through a maintained release-validation host.
 2. Keep the release-validation runbook and bootstrap path exercised on production hosts.
