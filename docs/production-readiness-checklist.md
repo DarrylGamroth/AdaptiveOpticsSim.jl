@@ -37,8 +37,8 @@ Use together with:
 - [x] Checked-in CPU CI workflow
 - [x] Checked-in CUDA backend CI workflow
 - [x] Checked-in AMDGPU backend CI workflow
-- [ ] CUDA validation routinely executed on real hardware (CI or release-validation host)
-- [ ] AMDGPU validation routinely executed on real hardware (CI or release-validation host)
+- [x] CUDA validation routinely executed on real hardware (CI or release-validation host)
+- [x] AMDGPU validation routinely executed on real hardware (CI or release-validation host)
 
 ### Supported-scope clarity
 
@@ -61,12 +61,15 @@ Use together with:
 
 ## Required Before Claiming Production Readiness
 
-The remaining blocker is:
+There are no remaining blockers on the currently supported production surface.
 
-1. Routine GPU validation on real hardware must be operational, not just described.
-   - That can be satisfied either by green self-hosted CI runners or by a maintained release-validation host path that is exercised for supported releases.
+Recorded operational evidence on commit `2192140`:
+
+- [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml)
+- [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-amdgpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-amdgpu.toml)
+- [../benchmarks/results/validation_runs/2026-04-10-spiders-cuda.toml](../benchmarks/results/validation_runs/2026-04-10-spiders-cuda.toml)
 
 ## Next Recommended Order
 
-1. Put CUDA and AMDGPU validation on a real operational cadence, either through CI or through a maintained release-validation host.
-2. Keep the release-validation runbook, cadence note, and bootstrap path exercised on production hosts.
+1. Keep the release-validation runbook, cadence note, and bootstrap path exercised on production hosts.
+2. Extend the same evidence shape to the next production-candidate surfaces rather than broadening support informally.

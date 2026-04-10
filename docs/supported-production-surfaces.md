@@ -54,6 +54,7 @@ Primary evidence:
 - [model-validity-matrix.md](./model-validity-matrix.md)
 - [platform-workflows.md](./platform-workflows.md)
 - [benchmark-matrix-plan.md](./benchmark-matrix-plan.md)
+- [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml)
 
 ### CUDA backend
 
@@ -72,6 +73,7 @@ Primary evidence:
 - [gpu-smoke-contract.jl](../scripts/gpu_smoke_contract.jl)
 - [gpu_runtime_equivalence_contract.jl](../scripts/gpu_runtime_equivalence_contract.jl)
 - [cross-package-benchmark-harness.md](./cross-package-benchmark-harness.md)
+- [../benchmarks/results/validation_runs/2026-04-10-spiders-cuda.toml](../benchmarks/results/validation_runs/2026-04-10-spiders-cuda.toml)
 
 Current expectation:
 
@@ -96,6 +98,7 @@ Primary evidence:
 - [rocm-failure-catalog.md](./rocm-failure-catalog.md)
 - [rocm-fallback-inventory.md](./rocm-fallback-inventory.md)
 - [cross-package-benchmark-harness.md](./cross-package-benchmark-harness.md)
+- [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-amdgpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-amdgpu.toml)
 
 Important qualifier:
 

@@ -1,0 +1,78 @@
+==> host: rtc-devel
+==> track: amdgpu
+==> commit: 219214059d4fc564c04c9515201befc962f6d654
+==> started: 2026-04-10T11:37:27-07:00
+==> command: ./scripts/run_release_validation.sh
+==> Skipping CPU full test suite (ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1)
+==> AMDGPU smoke
+psf_source ok :: ROCArray{Float32, 2, AMDGPU.Runtime.Mem.HIPBuffer}
+electric_field_core ok :: ROCArray{Float32, 2, AMDGPU.Runtime.Mem.HIPBuffer}
+field_propagation ok :: ROCArray{ComplexF32, 2, AMDGPU.Runtime.Mem.HIPBuffer}
+psf_asterism ok :: ROCArray{Float32, 2, AMDGPU.Runtime.Mem.HIPBuffer}
+psf_source_spiders ok :: ROCArray{Float32, 2, AMDGPU.Runtime.Mem.HIPBuffer}
+aperture_masks ok :: ROCArray{Bool, 2, AMDGPU.Runtime.Mem.HIPBuffer}
+detector_capture_none ok :: ROCArray{Float32, 2, AMDGPU.Runtime.Mem.HIPBuffer}
+detector_capture_noise ok :: ROCArray{Float32, 2, AMDGPU.Runtime.Mem.HIPBuffer}
+atmosphere_step ok :: ROCArray{Float32, 2, AMDGPU.Runtime.Mem.HIPBuffer}
+atmosphere_multilayer_step ok :: ROCArray{Float32, 2, AMDGPU.Runtime.Mem.HIPBuffer}
+atmosphere_multilayer_step_spiders ok :: ROCArray{Float32, 2, AMDGPU.Runtime.Mem.HIPBuffer}
+atmosphere_infinite_multilayer_step ok :: ROCArray{Float32, 2, AMDGPU.Runtime.Mem.HIPBuffer}
+atmosphere_infinite_multilayer_step_spiders ok :: ROCArray{Float32, 2, AMDGPU.Runtime.Mem.HIPBuffer}
+atmospheric_field_geometric ok :: ROCArray{Float32, 2, AMDGPU.Runtime.Mem.HIPBuffer}
+atmospheric_field_fresnel ok :: ROCArray{ComplexF32, 2, AMDGPU.Runtime.Mem.HIPBuffer}
+atmosphere_infinite_statistical_agreement ok :: @NamedTuple{std_mean::Float64, corr_mean::Float64}
+atmosphere_phase_helpers ok :: ROCArray{Float32, 2, AMDGPU.Runtime.Mem.HIPBuffer}
+dm_apply ok :: ROCArray{Float32, 2, AMDGPU.Runtime.Mem.HIPBuffer}
+measure_shack_geometric ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+measure_shack_diffractive ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+measure_shack_diffractive_polychromatic ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+measure_shack_diffractive_extended ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+measure_shack_diffractive_spiders ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+measure_shack_lgs ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+measure_shack_diffractive_asterism ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+measure_shack_diffractive_asterism_detector ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+measure_shack_diffractive_detector_equivalence ok :: Array{Float32, 3}
+measure_pyramid_geometric ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+measure_pyramid_diffractive ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+measure_pyramid_diffractive_polychromatic ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+measure_pyramid_diffractive_extended ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+measure_pyramid_detector ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+measure_bioedge_geometric ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+measure_bioedge_diffractive ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+measure_zernike_diffractive ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+measure_zernike_detector ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+measure_curvature_atmosphere ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+closed_loop_step ok :: ROCArray{Float32, 2, AMDGPU.Runtime.Mem.HIPBuffer}
+closed_loop_runtime ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+closed_loop_runtime_science ok :: ROCArray{Float32, 2, AMDGPU.Runtime.Mem.HIPBuffer}
+closed_loop_multi_boundary ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+runtime_reconstructor_refresh ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+interaction_matrix_reconstructor ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+[ Info: GainSensingCamera calibration started
+[ Info: GainSensingCamera calibration complete
+gain_sensing_camera ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+lift ok :: ROCArray{Float32, 1, AMDGPU.Runtime.Mem.HIPBuffer}
+gpu_smoke_matrix complete
+==> AMDGPU runtime equivalence
+ao188_runtime_equivalence
+  high_spot_cube: max_abs=0.0390625 max_rel=1.1443485e-6
+  low_spot_cube: max_abs=3.0 max_rel=9.81887e-7
+  high_slopes: max_abs=1.264736e-6 max_rel=0.0013880692
+  low_slopes: max_abs=1.4277175e-6 max_rel=0.00024115179
+  command: max_abs=2.4214387e-8 max_rel=0.0054645077
+lgs_sh_equivalence profile=none
+  spot_cube: max_abs=3.637979e-12 max_rel=8.397553e-7
+  slopes: max_abs=1.7434359e-6 max_rel=0.0005057723
+lgs_sh_equivalence profile=na
+  spot_cube: max_abs=5.551115e-16 max_rel=4.656613e-9
+  slopes: max_abs=3.7811697e-6 max_rel=0.0016034107
+mixed_sh_asterism_equivalence
+  spot_cube: max_abs=0.0390625 max_rel=1.4615917e-5
+  slopes: max_abs=1.5422702e-6 max_rel=1.5042879e-5
+zernike_equivalence
+  camera_frame: max_abs=2.0 max_rel=4.4873505e-7
+  reference_signal_2d: max_abs=4.7683716e-7 max_rel=3.3674962e-7
+  slopes: max_abs=5.9604645e-7 max_rel=2.857279e-5
+  detector_frame: max_abs=0.001953125 max_rel=4.382178e-7
+gpu_runtime_equivalence complete
+==> Release validation completed

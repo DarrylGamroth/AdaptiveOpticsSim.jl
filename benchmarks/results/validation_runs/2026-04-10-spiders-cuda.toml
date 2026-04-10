@@ -1,0 +1,12 @@
+artifact_kind = "release_validation_run"
+host_label = "spiders"
+track = "cuda"
+status = "passed"
+started_at = "2026-04-10T11:35:46-07:00"
+finished_at = "2026-04-10T11:40:11-07:00"
+git_commit = "219214059d4fc564c04c9515201befc962f6d654"
+log_path = "2026-04-10-spiders-cuda.log"
+command = "./scripts/run_release_validation.sh"
+validate_cuda = 1
+validate_amdgpu = 0
+skip_cpu_full_tests = 1

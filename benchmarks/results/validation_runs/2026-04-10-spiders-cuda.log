@@ -1,0 +1,78 @@
+==> host: spiders
+==> track: cuda
+==> commit: 219214059d4fc564c04c9515201befc962f6d654
+==> started: 2026-04-10T11:35:46-07:00
+==> command: ./scripts/run_release_validation.sh
+==> Skipping CPU full test suite (ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1)
+==> CUDA smoke
+psf_source ok :: CuArray{Float32, 2, CUDA.DeviceMemory}
+electric_field_core ok :: CuArray{Float32, 2, CUDA.DeviceMemory}
+field_propagation ok :: CuArray{ComplexF32, 2, CUDA.DeviceMemory}
+psf_asterism ok :: CuArray{Float32, 2, CUDA.DeviceMemory}
+psf_source_spiders ok :: CuArray{Float32, 2, CUDA.DeviceMemory}
+aperture_masks ok :: CuArray{Bool, 2, CUDA.DeviceMemory}
+detector_capture_none ok :: CuArray{Float32, 2, CUDA.DeviceMemory}
+detector_capture_noise ok :: CuArray{Float32, 2, CUDA.DeviceMemory}
+atmosphere_step ok :: CuArray{Float32, 2, CUDA.DeviceMemory}
+atmosphere_multilayer_step ok :: CuArray{Float32, 2, CUDA.DeviceMemory}
+atmosphere_multilayer_step_spiders ok :: CuArray{Float32, 2, CUDA.DeviceMemory}
+atmosphere_infinite_multilayer_step ok :: CuArray{Float32, 2, CUDA.DeviceMemory}
+atmosphere_infinite_multilayer_step_spiders ok :: CuArray{Float32, 2, CUDA.DeviceMemory}
+atmospheric_field_geometric ok :: CuArray{Float32, 2, CUDA.DeviceMemory}
+atmospheric_field_fresnel ok :: CuArray{ComplexF32, 2, CUDA.DeviceMemory}
+atmosphere_infinite_statistical_agreement ok :: @NamedTuple{std_mean::Float64, corr_mean::Float64}
+atmosphere_phase_helpers ok :: CuArray{Float32, 2, CUDA.DeviceMemory}
+dm_apply ok :: CuArray{Float32, 2, CUDA.DeviceMemory}
+measure_shack_geometric ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+measure_shack_diffractive ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+measure_shack_diffractive_polychromatic ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+measure_shack_diffractive_extended ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+measure_shack_diffractive_spiders ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+measure_shack_lgs ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+measure_shack_diffractive_asterism ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+measure_shack_diffractive_asterism_detector ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+measure_shack_diffractive_detector_equivalence ok :: Array{Float32, 3}
+measure_pyramid_geometric ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+measure_pyramid_diffractive ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+measure_pyramid_diffractive_polychromatic ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+measure_pyramid_diffractive_extended ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+measure_pyramid_detector ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+measure_bioedge_geometric ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+measure_bioedge_diffractive ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+measure_zernike_diffractive ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+measure_zernike_detector ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+measure_curvature_atmosphere ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+closed_loop_step ok :: CuArray{Float32, 2, CUDA.DeviceMemory}
+closed_loop_runtime ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+closed_loop_runtime_science ok :: CuArray{Float32, 2, CUDA.DeviceMemory}
+closed_loop_multi_boundary ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+runtime_reconstructor_refresh ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+interaction_matrix_reconstructor ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+[ Info: GainSensingCamera calibration started
+[ Info: GainSensingCamera calibration complete
+gain_sensing_camera ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+lift ok :: CuArray{Float32, 1, CUDA.DeviceMemory}
+gpu_smoke_matrix complete
+==> CUDA runtime equivalence
+ao188_runtime_equivalence
+  high_spot_cube: max_abs=0.046875 max_rel=1.0421664e-6
+  low_spot_cube: max_abs=3.0 max_rel=5.924648e-7
+  high_slopes: max_abs=1.2889504e-6 max_rel=0.0021801202
+  low_slopes: max_abs=1.4007092e-6 max_rel=8.063324e-5
+  command: max_abs=3.13521e-8 max_rel=0.010929015
+lgs_sh_equivalence profile=none
+  spot_cube: max_abs=8.185452e-12 max_rel=1.2659643e-6
+  slopes: max_abs=2.289191e-6 max_rel=0.0007592412
+lgs_sh_equivalence profile=na
+  spot_cube: max_abs=7.771561e-16 max_rel=6.519258e-9
+  slopes: max_abs=4.5895576e-6 max_rel=0.00240545
+mixed_sh_asterism_equivalence
+  spot_cube: max_abs=0.046875 max_rel=1.3715005e-5
+  slopes: max_abs=1.4305115e-6 max_rel=9.108573e-6
+zernike_equivalence
+  camera_frame: max_abs=6.0 max_rel=5.5074054e-7
+  reference_signal_2d: max_abs=9.536743e-7 max_rel=4.2980153e-7
+  slopes: max_abs=6.556511e-7 max_rel=2.0873953e-5
+  detector_frame: max_abs=0.005859375 max_rel=5.3783253e-7
+gpu_runtime_equivalence complete
+==> Release validation completed

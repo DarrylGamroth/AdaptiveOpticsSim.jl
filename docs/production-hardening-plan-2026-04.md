@@ -231,7 +231,7 @@ Verification:
 
 ### Phase PH-5: Operational validation cadence
 
-Status: complete once at least one dated CUDA run and one dated AMDGPU run are archived under `benchmarks/results/validation_runs/`
+Status: complete. Archived cadence evidence exists under `benchmarks/results/validation_runs/` for commit `2192140`, including CPU/full-suite, CUDA backend-host, and AMDGPU backend-host runs.
 
 Goal:
 
@@ -256,7 +256,7 @@ Exit criteria:
 
 Verification:
 
-- run the chosen cadence once and record the result location
+- completed with [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml), [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-amdgpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-amdgpu.toml), and [../benchmarks/results/validation_runs/2026-04-10-spiders-cuda.toml](../benchmarks/results/validation_runs/2026-04-10-spiders-cuda.toml)
 
 ## Recommended Implementation Sequence
 
