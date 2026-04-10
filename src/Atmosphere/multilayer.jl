@@ -119,7 +119,7 @@ function moving_layer_telescope(
     tel::Telescope;
     resolution::Int,
     T::Type{<:AbstractFloat}=Float64,
-    backend=Array,
+    backend=CPUBackend(),
 )
     delta = tel.params.diameter / tel.params.resolution
     return Telescope(
@@ -142,7 +142,7 @@ function MovingAtmosphereLayer(
     wind_velocity_y::Real,
     altitude::Real,
     T::Type{<:AbstractFloat}=Float64,
-    backend=Array,
+    backend=CPUBackend(),
 )
     screen_resolution = moving_layer_screen_resolution(tel.params.resolution)
     screen_telescope = moving_layer_telescope(tel; resolution=screen_resolution, T=T, backend=backend)
@@ -358,7 +358,7 @@ function MultiLayerAtmosphere(tel::Telescope;
     T::Type{<:AbstractFloat}=Float64,
     backend=CPUBackend())
 
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
 
     n_layers = length(fractional_cn2)
     n_layers > 0 || throw(InvalidConfiguration("fractional_cn2 cannot be empty"))

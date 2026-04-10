@@ -35,7 +35,7 @@ function Telescope(; resolution::Int,
     T::Type{<:AbstractFloat}=Float64,
     backend=CPUBackend())
 
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
 
     params = TelescopeParams{T}(
         resolution,

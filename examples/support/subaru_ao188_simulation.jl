@@ -65,12 +65,12 @@ function AO188CurvatureSimulationParams(; kwargs...)
         high_detector=high_detector, rest...)
 end
 
-function _build_high_order_wfs(::OperationalShackHartmannModel, tel::Telescope, params; backend=Array)
+function _build_high_order_wfs(::OperationalShackHartmannModel, tel::Telescope, params; backend=CPUBackend())
     T = eltype(tel.state.opd)
     return ShackHartmann(tel; n_subap=params.n_subap, mode=Diffractive(), T=T, backend=backend)
 end
 
-function _build_high_order_wfs(model::AO188CurvatureModel, tel::Telescope, params; backend=Array)
+function _build_high_order_wfs(model::AO188CurvatureModel, tel::Telescope, params; backend=CPUBackend())
     T = eltype(tel.state.opd)
     readout_crop_resolution = ao188_curvature_readout_crop_resolution(
         tel.params.resolution, params.n_subap, model.crop_samples_per_subap)
@@ -189,7 +189,7 @@ function AO188APDDetectorConfig(;
     )
 end
 
-function detector_from_config(cfg::AO188WFSDetectorConfig{T}; backend=Array) where {T<:AbstractFloat}
+function detector_from_config(cfg::AO188WFSDetectorConfig{T}; backend=CPUBackend()) where {T<:AbstractFloat}
     return Detector(
         cfg.noise;
         integration_time=cfg.integration_time,
@@ -207,7 +207,7 @@ function detector_from_config(cfg::AO188WFSDetectorConfig{T}; backend=Array) whe
     )
 end
 
-function detector_from_config(cfg::AO188APDDetectorConfig{T}; backend=Array) where {T<:AbstractFloat}
+function detector_from_config(cfg::AO188APDDetectorConfig{T}; backend=CPUBackend()) where {T<:AbstractFloat}
     return APDDetector(
         integration_time=cfg.integration_time,
         qe=cfg.qe,
@@ -564,7 +564,7 @@ function _ao188_calibration_objects(params::AO188SimulationParams{T}) where {T<:
         sampling_time=params.sampling_time,
         central_obstruction=params.central_obstruction,
         T=T,
-        backend=Array,
+        backend=CPUBackend(),
     )
     low_tel = Telescope(
         resolution=params.low_order_resolution,
@@ -572,13 +572,13 @@ function _ao188_calibration_objects(params::AO188SimulationParams{T}) where {T<:
         sampling_time=params.sampling_time,
         central_obstruction=params.central_obstruction,
         T=T,
-        backend=Array,
+        backend=CPUBackend(),
     )
     src = Source(band=params.source_band, magnitude=params.source_magnitude, T=T)
-    dm = DeformableMirror(tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=Array)
-    low_dm = DeformableMirror(low_tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=Array)
-    high_wfs = _build_high_order_wfs(params.high_order_sensor_model, tel, params; backend=Array)
-    low_wfs = ShackHartmann(low_tel; n_subap=params.n_low_order_subap, mode=Diffractive(), T=T, backend=Array)
+    dm = DeformableMirror(tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=CPUBackend())
+    low_dm = DeformableMirror(low_tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=CPUBackend())
+    high_wfs = _build_high_order_wfs(params.high_order_sensor_model, tel, params; backend=CPUBackend())
+    low_wfs = ShackHartmann(low_tel; n_subap=params.n_low_order_subap, mode=Diffractive(), T=T, backend=CPUBackend())
     return tel, low_tel, src, dm, low_dm, high_wfs, low_wfs
 end
 
@@ -648,7 +648,7 @@ function prepare_replay!(simulation::AO188Simulation)
 end
 
 function subaru_ao188_simulation(; params::AO188SimulationParams=AO188SimulationParams(),
-    backend=Array, build_backend::Union{Nothing,AdaptiveOpticsSim.BuildBackend}=nothing, rng=MersenneTwister(0))
+    backend=CPUBackend(), build_backend::Union{Nothing,AdaptiveOpticsSim.BuildBackend}=nothing, rng=MersenneTwister(0))
     resolved_materialize_backend = isnothing(build_backend) ? _auto_build_backend(backend) : build_backend
     resolved_calibration_backend = isnothing(build_backend) && backend !== Array ? AdaptiveOpticsSim.CPUBuildBackend() : resolved_materialize_backend
     T = typeof(params.diameter)

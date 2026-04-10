@@ -390,9 +390,8 @@ Notes:
   calibration surface intentionally with `AdaptiveOpticsSim.GPUArrayBuildBackend(...)`.
 - `set_command!` accepts ordinary CPU vectors or tuples; the runtime stages the
   command into the backend-native optic state before `sense!(...)`.
-- `CPUBackend()` is the default public constructor surface; raw array types such
-  as `Array`, `CUDA.CuArray`, and `AMDGPU.ROCArray` still work as a lower-level
-  compatibility path.
+- `CPUBackend()` is the default public constructor surface. Use `CUDABackend()` or
+  `AMDGPUBackend()` to move the plant onto a GPU.
 
 Use this pattern when you need:
 

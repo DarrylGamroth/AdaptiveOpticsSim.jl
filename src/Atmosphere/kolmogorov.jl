@@ -41,7 +41,7 @@ struct KolmogorovAtmosphere{P<:KolmogorovParams,S<:KolmogorovState} <: AbstractA
 end
 
 function KolmogorovAtmosphere(tel::Telescope; r0::Real, L0::Real=25.0, T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
     params = KolmogorovParams{T}(T(r0), T(L0))
     n = tel.params.resolution
     opd = backend{T}(undef, n, n)

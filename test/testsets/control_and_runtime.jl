@@ -16,7 +16,6 @@ end
 
 @testset "Semantic backend descriptors" begin
     @test array_backend_type(CPUBackend()) === Array
-    @test resolve_array_backend(Array) === Array
 
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0, backend=CPUBackend())
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, backend=CPUBackend())

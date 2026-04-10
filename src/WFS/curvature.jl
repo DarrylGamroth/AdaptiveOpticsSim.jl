@@ -236,7 +236,7 @@ function CurvatureWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, defocus
     readout_crop_resolution::Integer=tel.params.resolution, readout_pixels_per_subap::Integer=1,
     branch_response::CurvatureBranchResponse=CurvatureBranchResponse(),
     T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
     tel.params.resolution % n_subap == 0 ||
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     diffraction_padding >= 1 ||

@@ -81,7 +81,7 @@ Deliverables:
   - optional cached intensity/phase views,
   - reusable FFT work buffers/plans where needed.
 - Add explicit builders and mutators:
-  - `ElectricField(tel, src; backend=Array, T=Float64, pad=1)`
+  - `ElectricField(tel, src; backend=CPUBackend(), T=Float64, pad=1)`
   - `fill_from_telescope!(field, tel, src)`
   - `apply_phase!(field, opd_or_phase; units=:opd)`
   - `apply_amplitude!(field, amp)`

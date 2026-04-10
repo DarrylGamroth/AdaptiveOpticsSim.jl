@@ -98,7 +98,7 @@ ZernikeWFS(
     diffraction_padding::Int = 2,
     binning::Int = 1,
     T::Type{<:AbstractFloat} = Float64,
-    backend = Array,
+    backend = CPUBackend(),
 )
 ```
 

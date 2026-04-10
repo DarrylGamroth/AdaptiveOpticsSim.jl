@@ -1020,7 +1020,7 @@ function Detector(; integration_time::Real=1.0, qe::Real=1.0,
     readout_window::Union{Nothing,FrameWindow}=nothing,
     output_precision::Union{Nothing,DataType}=nothing, background_flux=nothing, background_map=nothing,
     T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
     normalized = normalize_noise(noise)
     return Detector(normalized; integration_time=integration_time, qe=qe,
         psf_sampling=psf_sampling, binning=binning, gain=gain,
@@ -1045,7 +1045,7 @@ function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
     output_precision::Union{Nothing,DataType}=nothing,
     background_flux=nothing, background_map=nothing,
     T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
     converted = convert_noise(noise, T)
     validated = validate_noise(converted)
     return _build_detector(validated; integration_time=integration_time, qe=qe,

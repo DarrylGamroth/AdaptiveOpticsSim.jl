@@ -9,7 +9,7 @@ mutable struct Workspace{R<:AbstractRNG,T,A<:AbstractMatrix{Complex{T}},B<:Abstr
 end
 
 function Workspace(n::Int; T=Float64, backend=CPUBackend(), rng=MersenneTwister(0))
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
     pupil_field = backend{Complex{T}}(undef, n, n)
     fft_buffer = similar(pupil_field)
     psf_buffer = backend{T}(undef, n, n)

@@ -13,7 +13,7 @@ function initialize_ao_pyramid(; resolution::Int, diameter::Real, sampling_time:
     n_act::Int, influence_width::Real=0.2, n_subap::Int, threshold::Real=0.1,
     modulation::Real=2.0, T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
 
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
 
     tel = Telescope(resolution=resolution, diameter=diameter, sampling_time=sampling_time,
         central_obstruction=central_obstruction, T=T, backend=backend)
@@ -32,7 +32,7 @@ function initialize_ao_shwfs(; resolution::Int, diameter::Real, sampling_time::R
     n_act::Int, influence_width::Real=0.2, n_subap::Int, threshold::Real=0.1,
     T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
 
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
 
     tel = Telescope(resolution=resolution, diameter=diameter, sampling_time=sampling_time,
         central_obstruction=central_obstruction, T=T, backend=backend)

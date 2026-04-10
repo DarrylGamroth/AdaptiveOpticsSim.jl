@@ -640,8 +640,7 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - Constructors typically accept `T=` and `backend=` keywords.
 - The preferred public backend selectors are `CPUBackend()`, `CUDABackend()`,
   and `AMDGPUBackend()`.
-- Raw array types such as `Array`, `CUDA.CuArray`, and `AMDGPU.ROCArray`
-  remain supported as a lower-level compatibility surface.
+- Use backend selector objects rather than raw array container types in new code.
 - Methods accept `AbstractArray` inputs where practical, but structs keep
   concrete array fields so the compiler can specialize.
 - FFT-heavy paths use `AbstractFFTs.jl`; future GPU-specialized kernels should

@@ -297,7 +297,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
             return (; std_mean=mean(stds), corr_mean=mean(corrs))
         end
 
-        cpu_stats = trajectory_stats(Array)
+        cpu_stats = trajectory_stats(CPUBackend())
         gpu_stats = trajectory_stats(BackendArray)
         std_rel = abs(gpu_stats.std_mean - cpu_stats.std_mean) / max(cpu_stats.std_mean, eps(Float64))
         corr_abs = abs(gpu_stats.corr_mean - cpu_stats.corr_mean)
@@ -418,15 +418,15 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
 
     record_gpu_smoke!(failures, "measure_shack_diffractive_detector_equivalence") do
         cpu_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
-            central_obstruction=0.0f0, T=T, backend=Array)
+            central_obstruction=0.0f0, T=T, backend=CPUBackend())
         gpu_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
             central_obstruction=0.0f0, T=T, backend=BackendArray)
         cpu_src = Source(band=:I, magnitude=0.0, T=T)
         gpu_src = Source(band=:I, magnitude=0.0, T=T)
-        cpu_wfs = ShackHartmann(cpu_tel; n_subap=4, mode=Diffractive(), T=T, backend=Array)
+        cpu_wfs = ShackHartmann(cpu_tel; n_subap=4, mode=Diffractive(), T=T, backend=CPUBackend())
         gpu_wfs = ShackHartmann(gpu_tel; n_subap=4, mode=Diffractive(), T=T, backend=BackendArray)
         cpu_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
-            sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=Array)
+            sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=CPUBackend())
         gpu_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
             sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=BackendArray)
 

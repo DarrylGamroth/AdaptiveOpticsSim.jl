@@ -24,16 +24,16 @@ function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:
     return nothing
 end
 
-function build_optional_platform_branch(::Type{T}, BackendArray, label::Symbol; sensor::Symbol=:sh, seed::Integer=1) where {T<:AbstractFloat}
+function build_optional_platform_branch(::Type{T}, backend, label::Symbol; sensor::Symbol=:sh, seed::Integer=1) where {T<:AbstractFloat}
     tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
-        central_obstruction=T(0.0), T=T, backend=BackendArray)
+        central_obstruction=T(0.0), T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
-    atm = KolmogorovAtmosphere(tel; r0=T(0.2), L0=T(25.0), T=T, backend=BackendArray)
-    dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=BackendArray)
+    atm = KolmogorovAtmosphere(tel; r0=T(0.2), L0=T(25.0), T=T, backend=backend)
+    dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=backend)
     wfs = sensor == :sh ?
-        ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=BackendArray) :
-        PyramidWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=BackendArray)
-    det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=BackendArray)
+        ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend) :
+        PyramidWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+    det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
     sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
     recon = ModalReconstructor(imat; gain=T(0.5))
@@ -61,8 +61,8 @@ function run_optional_composite_optic_parity(::Type{B}, BackendArray) where {B<:
         return scenario
     end
 
-    cpu = build_case(Array)
-    gpu = build_case(BackendArray)
+    cpu = build_case(CPUBackend())
+    gpu = build_case(backend_selector(B))
     prepare!(cpu)
     prepare!(gpu)
     tip_cmd = fill(T(0.0125), 2)
@@ -163,16 +163,16 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
         fresnel_prop.params.model,
     ) isa AdaptiveOpticsSim.LayeredFresnelFieldAsyncPlan
     cpu_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
-        central_obstruction=0.0f0, T=T, backend=Array)
+        central_obstruction=0.0f0, T=T, backend=CPUBackend())
     gpu_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
         central_obstruction=0.0f0, T=T, backend=backend)
     cpu_src = Source(band=:I, magnitude=0.0, T=T)
     gpu_src = Source(band=:I, magnitude=0.0, T=T)
     cpu_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-        sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=Array)
+        sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=CPUBackend())
     gpu_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
         sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=backend)
-    cpu_sh_stats = ShackHartmann(cpu_tel; n_subap=4, mode=Diffractive(), T=T, backend=Array,
+    cpu_sh_stats = ShackHartmann(cpu_tel; n_subap=4, mode=Diffractive(), T=T, backend=CPUBackend(),
         valid_subaperture_policy=FluxThresholdValidSubapertures(light_ratio=0.5f0))
     gpu_sh_stats = ShackHartmann(gpu_tel; n_subap=4, mode=Diffractive(), T=T, backend=backend,
         valid_subaperture_policy=FluxThresholdValidSubapertures(light_ratio=0.5f0))
@@ -203,7 +203,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
     corr_input = reshape(T.(1:96), 2, 6, 8)
     cpu_quant_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
         bits=8, full_well=T(100), sensor=CMOSSensor(T=T),
-        response_model=NullFrameResponse(), T=T, backend=Array)
+        response_model=NullFrameResponse(), T=T, backend=CPUBackend())
     gpu_quant_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
         bits=8, full_well=T(100), sensor=CMOSSensor(T=T),
         response_model=NullFrameResponse(), T=T, backend=backend)
@@ -219,7 +219,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
             response_model=NullFrameResponse(),
             correction_model=correction_model,
             T=T,
-            backend=Array)
+            backend=CPUBackend())
         gpu_frame_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
             sensor=HgCdTeAvalancheArraySensor(T=T),
             response_model=NullFrameResponse(),
@@ -237,7 +237,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
             response_model=NullFrameResponse(),
             correction_model=correction_model,
             T=T,
-            backend=Array)
+            backend=CPUBackend())
         gpu_corr_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
             sensor=HgCdTeAvalancheArraySensor(T=T),
             response_model=NullFrameResponse(),
@@ -264,7 +264,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
         response_model=NullFrameResponse(),
         correction_model=generalized_correction,
         T=T,
-        backend=Array)
+        backend=CPUBackend())
     gpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
         bits=8, full_well=T(100), readout_window=FrameWindow(2:5, 3:7), output_precision=UInt16,
         sensor=HgCdTeAvalancheArraySensor(T=T),
@@ -287,7 +287,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
         response_model=NullFrameResponse(),
         readout_window=FrameWindow(2:3, 2:3),
         T=T,
-        backend=Array)
+        backend=CPUBackend())
     gpu_windowed_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1,
         gain=T(1.0),
         sensor=HgCdTeAvalancheArraySensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
@@ -348,15 +348,15 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
         fresnel_prop.params.model,
     ) isa AdaptiveOpticsSim.LayeredFresnelFieldAsyncPlan
     cpu_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
-        central_obstruction=0.0f0, T=T, backend=Array)
+        central_obstruction=0.0f0, T=T, backend=CPUBackend())
     gpu_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
         central_obstruction=0.0f0, T=T, backend=backend)
     cpu_src = Source(band=:I, magnitude=0.0, T=T)
     gpu_src = Source(band=:I, magnitude=0.0, T=T)
-    cpu_sh = ShackHartmann(cpu_tel; n_subap=4, mode=Diffractive(), T=T, backend=Array)
+    cpu_sh = ShackHartmann(cpu_tel; n_subap=4, mode=Diffractive(), T=T, backend=CPUBackend())
     gpu_sh = ShackHartmann(gpu_tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
     cpu_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-        sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=Array)
+        sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=CPUBackend())
     gpu_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
         sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=backend)
     measure!(cpu_sh, cpu_tel, cpu_src, cpu_det; rng=MersenneTwister(3))
@@ -369,7 +369,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
     @test isapprox(gpu_export, cpu_export; rtol=1f-5, atol=1f-4)
     @test size(gpu_frame) == size(cpu_frame)
     @test isapprox(gpu_frame, cpu_frame; rtol=1f-5, atol=1f-4)
-    cpu_sh_stats = ShackHartmann(cpu_tel; n_subap=4, mode=Diffractive(), T=T, backend=Array,
+    cpu_sh_stats = ShackHartmann(cpu_tel; n_subap=4, mode=Diffractive(), T=T, backend=CPUBackend(),
         valid_subaperture_policy=FluxThresholdValidSubapertures(light_ratio=0.5f0))
     gpu_sh_stats = ShackHartmann(gpu_tel; n_subap=4, mode=Diffractive(), T=T, backend=backend,
         valid_subaperture_policy=FluxThresholdValidSubapertures(light_ratio=0.5f0))
@@ -400,7 +400,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
     corr_input = reshape(T.(1:96), 2, 6, 8)
     cpu_quant_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
         bits=8, full_well=T(100), sensor=CMOSSensor(T=T),
-        response_model=NullFrameResponse(), T=T, backend=Array)
+        response_model=NullFrameResponse(), T=T, backend=CPUBackend())
     gpu_quant_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
         bits=8, full_well=T(100), sensor=CMOSSensor(T=T),
         response_model=NullFrameResponse(), T=T, backend=backend)
@@ -416,7 +416,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
             response_model=NullFrameResponse(),
             correction_model=correction_model,
             T=T,
-            backend=Array)
+            backend=CPUBackend())
         gpu_frame_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
             sensor=HgCdTeAvalancheArraySensor(T=T),
             response_model=NullFrameResponse(),
@@ -434,7 +434,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
             response_model=NullFrameResponse(),
             correction_model=correction_model,
             T=T,
-            backend=Array)
+            backend=CPUBackend())
         gpu_corr_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
             sensor=HgCdTeAvalancheArraySensor(T=T),
             response_model=NullFrameResponse(),
@@ -461,7 +461,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
         response_model=NullFrameResponse(),
         correction_model=generalized_correction,
         T=T,
-        backend=Array)
+        backend=CPUBackend())
     gpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
         bits=8, full_well=T(100), readout_window=FrameWindow(2:5, 3:7), output_precision=UInt16,
         sensor=HgCdTeAvalancheArraySensor(T=T),
@@ -484,7 +484,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
         response_model=NullFrameResponse(),
         readout_window=FrameWindow(2:3, 2:3),
         T=T,
-        backend=Array)
+        backend=CPUBackend())
     gpu_windowed_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1,
         gain=T(1.0),
         sensor=HgCdTeAvalancheArraySensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
@@ -538,9 +538,10 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     T = Float32
     rng = MersenneTwister(7)
     BackendArray = backend
+    selector = backend_selector(B)
 
     tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
-        central_obstruction=0.0f0, T=T, backend=BackendArray)
+        central_obstruction=0.0f0, T=T, backend=selector)
     src = Source(band=:I, magnitude=0.0, T=T)
 
     atm = MultiLayerAtmosphere(tel;
@@ -551,7 +552,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         wind_direction=T[0.0, 90.0],
         altitude=T[0.0, 5000.0],
         T=T,
-        backend=BackendArray,
+        backend=selector,
     )
     advance!(atm, tel; rng=rng)
     propagate!(atm, tel, src)
@@ -568,7 +569,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         screen_resolution=33,
         stencil_size=35,
         T=T,
-        backend=BackendArray,
+        backend=selector,
     )
     advance!(inf_atm, tel; rng=rng)
     propagate!(inf_atm, tel, src)
@@ -586,14 +587,14 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
 
     bundle = SpectralBundle(T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.4, 0.6]; T=T)
     poly = with_spectrum(src, bundle)
-    sh = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=BackendArray)
+    sh = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=selector)
     slopes = measure!(sh, tel, poly)
     @test slopes isa BackendArray
 
     run_optional_backend_plan_checks(B, tel, BackendArray)
     run_optional_composite_optic_parity(B, BackendArray)
 
-    curv = CurvatureWFS(tel; n_subap=4, T=T, backend=BackendArray)
+    curv = CurvatureWFS(tel; n_subap=4, T=T, backend=selector)
     curv_slopes = measure!(curv, tel, src, atm)
     @test curv_slopes isa BackendArray
 

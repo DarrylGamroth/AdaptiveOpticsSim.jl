@@ -41,7 +41,6 @@ gpu_backend_array_type(::Type{<:GPUBackendTag}) = nothing
 
 gpu_backend_name(::Type) = nothing
 
-array_backend_type(backend::Type{<:AbstractArray}) = backend
 array_backend_type(::CPUBackend) = Array
 
 function _require_gpu_array_backend(::Type{B}, label::AbstractString) where {B<:GPUBackendTag}
@@ -53,7 +52,13 @@ end
 array_backend_type(::CUDABackend) = _require_gpu_array_backend(CUDABackendTag, "CUDABackend()")
 array_backend_type(::MetalBackend) = _require_gpu_array_backend(MetalBackendTag, "MetalBackend()")
 array_backend_type(::AMDGPUBackend) = _require_gpu_array_backend(AMDGPUBackendTag, "AMDGPUBackend()")
-resolve_array_backend(backend) = array_backend_type(backend)
+resolve_array_backend(backend::AbstractArrayBackend) = array_backend_type(backend)
+
+# Internal normalization helper used by constructor chaining after a backend has
+# already been resolved to an array container type. Public API should prefer the
+# semantic selector surface and call `resolve_array_backend` directly.
+_resolve_array_backend(backend::AbstractArrayBackend) = array_backend_type(backend)
+_resolve_array_backend(backend::Type{<:AbstractArray}) = backend
 
 gpu_runtime_type(::UnifiedGPUPrecision{T}) where {T<:AbstractFloat} = T
 gpu_build_type(::UnifiedGPUPrecision{T}) where {T<:AbstractFloat} = T
@@ -77,7 +82,7 @@ function available_gpu_backends()
     return Tuple(out)
 end
 
-allocate_array(backend, ::Type{T}, dims::Vararg{Int,N}) where {T,N} = resolve_array_backend(backend){T}(undef, dims...)
+allocate_array(backend, ::Type{T}, dims::Vararg{Int,N}) where {T,N} = _resolve_array_backend(backend){T}(undef, dims...)
 
 plan_fft_backend!(buffer) = plan_fft!(buffer)
 plan_fft_backend!(buffer, dims) = plan_fft!(buffer, dims)

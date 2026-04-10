@@ -86,7 +86,7 @@ function _run_ao188_equivalence(::Type{B}, branch_mode::AbstractExecutionPolicy)
     BackendArray = gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
 
-    cpu = subaru_ao188_simulation(; params=_ao188_noise_free_params(), backend=Array, rng=MersenneTwister(1))
+    cpu = subaru_ao188_simulation(; params=_ao188_noise_free_params(), backend=CPUBackend(), rng=MersenneTwister(1))
     gpu = subaru_ao188_simulation(; params=_ao188_noise_free_params(Float32; branch_execution=branch_mode), backend=BackendArray, rng=MersenneTwister(1))
 
     _evaluate_ao188!(cpu)
@@ -121,11 +121,11 @@ function _run_ao188_post_command_equivalence(::Type{B}, branch_mode::AbstractExe
     BackendArray = gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
 
-    cmd_src = subaru_ao188_simulation(; params=_ao188_noise_free_params(T), backend=Array, rng=MersenneTwister(1))
+    cmd_src = subaru_ao188_simulation(; params=_ao188_noise_free_params(T), backend=CPUBackend(), rng=MersenneTwister(1))
     _evaluate_ao188!(cmd_src)
     host_command = Array(cmd_src.command)
 
-    cpu = subaru_ao188_simulation(; params=_ao188_noise_free_params(T), backend=Array, rng=MersenneTwister(2))
+    cpu = subaru_ao188_simulation(; params=_ao188_noise_free_params(T), backend=CPUBackend(), rng=MersenneTwister(2))
     gpu = subaru_ao188_simulation(; params=_ao188_noise_free_params(T; branch_execution=branch_mode), backend=BackendArray, rng=MersenneTwister(2))
     _post_command_observation!(cpu, host_command)
     _post_command_observation!(gpu, host_command)

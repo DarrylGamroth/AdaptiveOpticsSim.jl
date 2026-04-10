@@ -314,19 +314,19 @@ CompositeCountingCorrelation(stages::Tuple) =
 CompositeCountingCorrelation(stages::AbstractCountingCorrelationModel...) = CompositeCountingCorrelation(tuple(stages...))
 
 function PixelResponseNonuniformity(gain_map::AbstractMatrix; T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
     backend_map = _to_backend_matrix(T.(gain_map), backend)
     return validate_detector_defect_model(PixelResponseNonuniformity{T,typeof(backend_map)}(backend_map))
 end
 
 function DarkSignalNonuniformity(dark_map::AbstractMatrix; T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
     backend_map = _to_backend_matrix(T.(dark_map), backend)
     return validate_detector_defect_model(DarkSignalNonuniformity{T,typeof(backend_map)}(backend_map))
 end
 
 function BadPixelMask(mask::AbstractMatrix{Bool}; throughput::Real=0.0, T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
     backend_mask = _to_backend_bool_matrix(mask, backend)
     return validate_detector_defect_model(BadPixelMask{T,typeof(backend_mask)}(backend_mask, T(throughput)))
 end
@@ -539,21 +539,21 @@ NoiseReadout(sigma::Real) = NoiseReadout{Float64}(float(sigma))
 NoisePhotonReadout(sigma::Real) = NoisePhotonReadout{Float64}(float(sigma))
 
 function _to_backend_vector(host_kernel::AbstractVector{T}, backend) where {T<:AbstractFloat}
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
     kernel = backend{T}(undef, length(host_kernel))
     copyto!(kernel, host_kernel)
     return kernel
 end
 
 function _to_backend_matrix(host_data::AbstractMatrix{T}, backend) where {T<:AbstractFloat}
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
     data = backend{T}(undef, size(host_data)...)
     copyto!(data, host_data)
     return data
 end
 
 function _to_backend_bool_matrix(host_data::AbstractMatrix{Bool}, backend)
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
     data = backend{Bool}(undef, size(host_data)...)
     copyto!(data, host_data)
     return data
@@ -594,7 +594,7 @@ end
 
 function GaussianPixelResponse(; response_width_px::Real=0.5, truncate_at::Real=3.0,
     T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
     kernel = _to_backend_vector(_gaussian_kernel(response_width_px, truncate_at, T), backend)
     return GaussianPixelResponse{T,typeof(kernel)}(T(response_width_px), kernel)
 end
@@ -602,7 +602,7 @@ end
 function RectangularPixelAperture(; pitch_x_px::Real=1.0, pitch_y_px::Real=1.0,
     fill_factor_x::Real=1.0, fill_factor_y::Real=1.0,
     T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
     kernel_x = _to_backend_vector(_pixel_aperture_kernel(pitch_x_px, fill_factor_x, T), backend)
     kernel_y = _to_backend_vector(_pixel_aperture_kernel(pitch_y_px, fill_factor_y, T), backend)
     return RectangularPixelAperture{T,typeof(kernel_x),typeof(kernel_y)}(
@@ -612,7 +612,7 @@ end
 function SeparablePixelMTF(; pitch_x_px::Real=1.0, pitch_y_px::Real=1.0,
     fill_factor_x::Real=1.0, fill_factor_y::Real=1.0,
     T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
     kernel_x = _to_backend_vector(_pixel_aperture_kernel(pitch_x_px, fill_factor_x, T), backend)
     kernel_y = _to_backend_vector(_pixel_aperture_kernel(pitch_y_px, fill_factor_y, T), backend)
     return SeparablePixelMTF{T,typeof(kernel_x),typeof(kernel_y)}(
@@ -621,7 +621,7 @@ end
 
 function SampledFrameResponse(kernel::AbstractMatrix; normalize::Bool=true,
     T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
     isempty(kernel) && throw(InvalidConfiguration("SampledFrameResponse kernel must not be empty"))
     host_kernel = T.(kernel)
     if normalize

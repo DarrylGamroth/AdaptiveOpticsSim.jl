@@ -100,10 +100,11 @@ function assert_control_simulation_interface(sim)
     @test applicable(simulation_interface, sim)
     @test applicable(readout, sim)
     iface = simulation_interface(sim)
-    readout = readout(sim)
-    @test command(readout) === command(sim)
-    @test slopes(readout) === slopes(sim)
-    @test command(readout(iface)) === command(iface)
+    sim_readout = readout(sim)
+    iface_readout = readout(iface)
+    @test command(sim_readout) === command(sim)
+    @test slopes(sim_readout) === slopes(sim)
+    @test command(iface_readout) === command(iface)
     return iface
 end
 

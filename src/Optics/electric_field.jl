@@ -93,7 +93,7 @@ function ElectricField(tel::Telescope, src::AbstractSource;
     zero_padding::Int=1,
     T::Type{<:AbstractFloat}=eltype(tel.state.opd),
     backend=nothing)
-    backend = isnothing(backend) ? nothing : resolve_array_backend(backend)
+    backend = isnothing(backend) ? nothing : _resolve_array_backend(backend)
     zero_padding >= 1 || throw(InvalidConfiguration("zero_padding must be >= 1"))
     n = tel.params.resolution
     n_pad = n * zero_padding

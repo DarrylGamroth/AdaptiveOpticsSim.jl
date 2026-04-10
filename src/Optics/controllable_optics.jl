@@ -73,7 +73,7 @@ end
     label::Symbol) = _apply_selected!(optic, tel, mode, (label,))
 
 function _backend_copy_matrix(host::AbstractMatrix{T}, backend, ::Type{T}) where {T<:AbstractFloat}
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
     out = backend{T}(undef, size(host)...)
     copyto!(out, host)
     return out
@@ -85,7 +85,7 @@ function _modal_command_layout(spec::Union{Nothing,Symbol}, n::Int)
 end
 
 function _modal_mode_matrix(tel::Telescope, definitions::Tuple, ::Type{T}, backend) where {T<:AbstractFloat}
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
     n = tel.params.resolution
     pupil = tel.state.pupil
     xs = collect(range(T(-1), T(1); length=n))
@@ -136,7 +136,7 @@ end
 
 function TipTiltMirror(tel::Telescope; scale::Real=1.0,
     T::Type{<:AbstractFloat}=Float64, backend=CPUBackend(), label::Symbol=:tiptilt)
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
     n = tel.params.resolution
     opd = backend{T}(undef, n, n)
     fill!(opd, zero(T))
@@ -165,7 +165,7 @@ end
 
 function FocusStage(tel::Telescope; scale::Real=1.0,
     T::Type{<:AbstractFloat}=Float64, backend=CPUBackend(), label::Symbol=:focus)
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
     n = tel.params.resolution
     opd = backend{T}(undef, n, n)
     fill!(opd, zero(T))

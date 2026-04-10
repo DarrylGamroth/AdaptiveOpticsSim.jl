@@ -216,7 +216,7 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
     psf_centering::Bool=true, n_pix_separation=nothing, n_pix_edge=nothing, binning::Int=1,
     mode::SensingMode=Geometric(), T::Type{<:AbstractFloat}=Float64, backend=CPUBackend())
 
-    backend = resolve_array_backend(backend)
+    backend = _resolve_array_backend(backend)
     if tel.params.resolution % n_subap != 0
         throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
     end
