@@ -2,74 +2,68 @@
 
 Status: active
 
-Start with:
+This is the main user-facing guide.
 
-- [`documentation-map.md`](./documentation-map.md) for doc navigation
-- [`platform-architecture.md`](./platform-architecture.md) for package-level
-  synthesis
-- [`platform-workflows.md`](./platform-workflows.md) for platform-scale usage
-  and evidence workflows
-- [`scenario-builder-style.md`](./scenario-builder-style.md) for scenario
-  authoring conventions
-- [`api-reference.md`](./api-reference.md) for maintained public APIs
-- [`model-validity-matrix.md`](./model-validity-matrix.md) for model evidence
-- [`benchmark-matrix-plan.md`](./benchmark-matrix-plan.md) for performance
-  surfaces
+If you only need the normal package entry points, read these and stop there:
 
-AdaptiveOpticsSim.jl is an idiomatic Julia adaptive-optics toolkit. The package
-keeps the OOPAO feature set recognizable, but shifts the design toward
-multiple dispatch, explicit state, and deterministic execution.
+- [../README.md](../README.md)
+- [api-reference.md](./api-reference.md)
+- `examples/tutorials/`
 
-## Public API tiers
+You do not need the platform, benchmark, audit, or production-hardening docs to
+build a normal AO model.
 
-The package now distinguishes between:
+Use those deeper docs only when you are:
 
-- stable exported workflow APIs
-- advanced but maintained APIs that may require qualification as
-  `AdaptiveOpticsSim.<name>`
-- developer/backend support APIs used mainly by benchmark and extension code
+- validating backend parity
+- working on production support claims
+- benchmarking against OOPAO/SPECULA/REVOLT-like surfaces
+- refactoring or maintaining the package internals
 
-For ordinary usage, start with the exported workflow surface shown in the quick
-start and the main API sections in
-[api-reference.md](./api-reference.md).
+## What To Read Next
 
-If you want the package-level picture before diving into workflows, read
-[platform-architecture.md](./platform-architecture.md) first.
+Choose one path:
 
-If you want the maintained script-first workflow for realistic simulations,
-validation, or benchmark runs, then read
-[platform-workflows.md](./platform-workflows.md) next.
+- optics and PSF work:
+  - `examples/tutorials/image_formation.jl`
+  - `examples/tutorials/ncpa.jl`
+- detector and WFS work:
+  - `examples/tutorials/detector.jl`
+  - `examples/tutorials/shack_hartmann_subapertures.jl`
+  - `examples/tutorials/extended_source_sensing.jl`
+- closed-loop AO work:
+  - `examples/closed_loop_demo.jl`
+  - `examples/tutorials/closed_loop_shack_hartmann.jl`
+  - `examples/tutorials/closed_loop_pyramid.jl`
+- calibration and identification work:
+  - `examples/tutorials/gain_sensing_camera.jl`
+  - `examples/tutorials/lift.jl`
+  - `examples/tutorials/transfer_function.jl`
 
-If you are writing or reviewing a realistic scenario script, then use
-[scenario-builder-style.md](./scenario-builder-style.md) as the maintained
-style guide.
+## Mental Model
 
-For advanced utilities such as telemetry/config helpers, scenario builders,
-build-backend policy helpers, and misregistration-identification tools, use
-namespaced access. Examples:
+The package is organized around a small set of modeling objects:
 
-```julia
-ws = AdaptiveOpticsSim.Workspace(tel; rng=MersenneTwister(0))
-sim = AdaptiveOpticsSim.initialize_ao_shwfs(...)
-sprint = AdaptiveOpticsSim.SPRINT(tel, dm, wfs, basis)
-cpu_backend = AdaptiveOpticsSim.CPUBuildBackend()
-```
+- `Telescope` and `Source`
+- atmosphere objects such as `KolmogorovAtmosphere` and `MultiLayerAtmosphere`
+- sensing objects such as `ShackHartmann`, `PyramidWFS`, and `BioEdgeWFS`
+- `Detector` when the sensing path needs explicit detector physics
+- `DeformableMirror` and a reconstructor for control
+- `ClosedLoopRuntime` when you want a step-wise AO simulation surface
 
-## Core model
+The common hot-path verbs use Julia's mutating `!` convention:
 
-- Parameters live in immutable structs such as `TelescopeParams` and
-  `ShackHartmannParams`.
-- Mutable simulation data lives in state objects such as `TelescopeState`,
-  `DetectorState`, and `PyramidState`.
-- Hot-path methods use the `!` convention: `compute_psf!`, `advance!`,
-  `measure!`, `reconstruct!`, `apply!`.
-- Algorithm choice is carried by dispatch and traits:
-  `Geometric()` vs `Diffractive()`, `NoisePhoton()` vs `NoiseReadout()`,
-  `DMAdditive()` vs `DMReplace()`.
+- `compute_psf!`
+- `advance!`
+- `propagate!`
+- `measure!`
+- `reconstruct!`
+- `apply!`
+- `step!`
 
-## Quick start
+## Build A Model
 
-### PSF generation
+### Workflow 1: Optics-only PSF
 
 ```julia
 using AdaptiveOpticsSim
@@ -79,7 +73,14 @@ src = Source(band=:I, magnitude=8.0)
 psf = compute_psf!(tel, src; zero_padding=2)
 ```
 
-### Atmosphere and sensing
+Use this when you care about:
+
+- pupil construction
+- PSF normalization
+- image formation
+- simple aberration studies
+
+### Workflow 2: Atmosphere plus one WFS
 
 ```julia
 atm = MultiLayerAtmosphere(
@@ -93,101 +94,57 @@ atm = MultiLayerAtmosphere(
 )
 
 wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
-src = Source(band=:I, magnitude=8.0)
 
 advance!(atm, tel)
 propagate!(atm, tel)
 slopes = measure!(wfs, tel, src)
 ```
 
-### Closed loop
-
-```julia
-dm = DeformableMirror(tel; n_act=3, influence_width=0.35)
-imat = interaction_matrix(dm, wfs, tel, src; amplitude=1e-9)
-recon = ModalReconstructor(imat; gain=0.4)
-cmd = similar(dm.state.coefs)
-
-reconstruct!(cmd, recon, slopes)
-dm.state.coefs .= -cmd
-apply!(dm, tel, DMAdditive())
-```
-
-## Recommended learning path
-
-Use this progression instead of starting from subsystem plans:
-
-1. image formation and PSF generation
-2. atmosphere plus one WFS
-3. detector-backed sensing
-4. closed-loop runtime
-5. field propagation, polychromatic sensing, and extended-source cases
-
-The examples under `examples/tutorials/` already follow this shape well enough
-to be the primary learning surface.
-
-## Common workflows
-
-### Workflow 1: optics-only PSF studies
-
-Start with:
-
-- `Telescope`
-- `Source`
-- `compute_psf!`
-- optional `NCPA`, `OPDMap`, `apply_opd!`
-
-Use this when you care about:
-
-- pupil construction
-- PSF normalization
-- image formation
-- simple aberration studies
-
-### Workflow 2: atmosphere and WFS studies
-
-Start with:
-
-- `MultiLayerAtmosphere` or `InfiniteMultiLayerAtmosphere`
-- `advance!`
-- `propagate!`
-- one of `ShackHartmann`, `PyramidWFS`, `BioEdgeWFS`, `CurvatureWFS`,
-  `ZernikeWFS`
-- `measure!`
-
 Use this when you care about:
 
 - sensor behavior
 - atmosphere evolution
 - detector-coupled readout
-- optical gain / calibration studies
+- optical gain and calibration studies
 
-### Workflow 3: closed-loop simulation
+### Workflow 3: Closed-loop AO simulation
 
-Start with:
+```julia
+using Random
 
-- `DeformableMirror`
-- calibration helpers such as `interaction_matrix`
-- a reconstructor
-- `ClosedLoopRuntime`
-- `prepare!`
-- `update!`, `simulation_readout`, `simulation_command`, `simulation_slopes`
+rng = MersenneTwister(0)
+dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
+sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
+
+imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
+recon = ModalReconstructor(imat; gain=0.5)
+runtime = ClosedLoopRuntime(sim, recon; rng=rng)
+interface = simulation_interface(runtime)
+
+for _ in 1:5
+    step!(interface)
+end
+
+readout = simulation_readout(interface)
+cmd = simulation_command(readout)
+slopes = simulation_slopes(readout)
+frame = simulation_wfs_frame(readout)
+```
 
 Use this when you care about:
 
 - loop staging
 - latency
 - exported runtime products
-- HIL-style or realistic detector-backed sensing paths
+- HIL-style or detector-backed sensing paths
 
-### Workflow 4: field propagation and diffractive optics
+### Workflow 4: Field propagation and diffractive optics
 
 Start with:
 
 - `ElectricField`
 - `FraunhoferPropagation`, `FresnelPropagation`
 - `AtmosphericFieldPropagation`
-- `SpectralSource`
 - `ExtendedSource`
 
 Use this when you care about:
@@ -197,83 +154,93 @@ Use this when you care about:
 - extended sources
 - curvature or atmosphere-aware field propagation
 
+## Choosing Components
+
+### Atmosphere
+
+- `KolmogorovAtmosphere`
+  - compact single-screen studies
+- `MultiLayerAtmosphere`
+  - standard finite multilayer turbulence
+- `InfiniteMultiLayerAtmosphere`
+  - longer-running translated-screen studies
+
+### Wavefront sensor
+
+- `ShackHartmann`
+  - general SH studies and HIL-style RTC surfaces
+- `PyramidWFS`
+  - pyramid sensing and modulation studies
+- `BioEdgeWFS`
+  - BioEdge variants
+- `CurvatureWFS`
+  - curvature sensing
+- `ZernikeWFS`
+  - Zernike WFS studies
+
+### Detector
+
+Use an explicit `Detector(...)` when the sensing path needs detector physics,
+readout behavior, windowing, or exported frame products.
+
+Leave detector effects simple or disabled when the goal is deterministic model
+comparison rather than detector realism.
+
+## Public API Tiers
+
+The package distinguishes between:
+
+- stable exported workflow APIs
+- advanced but maintained APIs that may require qualification as `AdaptiveOpticsSim.<name>`
+- developer/backend support APIs used mainly by benchmark and extension code
+
+For ordinary usage, start with the exported workflow surface shown above and in
+[api-reference.md](./api-reference.md).
+
+For advanced utilities such as telemetry/config helpers, scenario builders, and
+some backend policy helpers, use namespaced access. Examples:
+
+```julia
+ws = AdaptiveOpticsSim.Workspace(tel; rng=MersenneTwister(0))
+sim = AdaptiveOpticsSim.initialize_ao_shwfs(...)
+sprint = AdaptiveOpticsSim.SPRINT(tel, dm, wfs, basis)
+```
+
 ## Determinism
 
 - Use a fixed `MersenneTwister` and pass it into `advance!` or detector calls.
 - Keep detector noise disabled when comparing against reference datasets unless
   the test is explicitly about noise.
-- Run single-threaded when strict reproducibility matters. See
-  [`deterministic-simulation.md`](./deterministic-simulation.md).
+- Run single-threaded when strict reproducibility matters.
 
-## Logging and errors
+See [deterministic-simulation.md](./deterministic-simulation.md).
 
-- Use `Logging.jl` macros such as `@info` and `@warn` in user-facing code.
-- The core throws structured exceptions such as `InvalidConfiguration` and
-  `DimensionMismatchError`.
-- Avoid logging inside inner loops; return state and let the caller decide how
-  much telemetry to emit.
+## Tutorials and Examples
 
-## Tutorials and examples
-
-Runnable example ports live under `examples/tutorials/`. Start with:
+Runnable example ports live under `examples/tutorials/`. Good starting points:
 
 - `examples/tutorials/image_formation.jl`
 - `examples/tutorials/detector.jl`
-- `examples/tutorials/transfer_function.jl`
-- `examples/tutorials/gain_sensing_camera.jl`
 - `examples/tutorials/closed_loop_shack_hartmann.jl`
 - `examples/tutorials/closed_loop_pyramid.jl`
 - `examples/tutorials/closed_loop_bioedge.jl`
+- `examples/tutorials/closed_loop_zernike.jl`
 
-See `docs/julia-tutorial-mappings.md` for the full mapping back to OOPAO.
+See [julia-tutorial-mappings.md](./julia-tutorial-mappings.md) for the mapping
+back to OOPAO tutorials.
 
-## Validation workflow
+## When You Need More Than The User Guide
 
-- `Pkg.test()` runs the tutorial smoke tests plus the reference harness.
-- `test/reference_data/` stores a small deterministic OOPAO bundle for
-  cross-validation.
-- `ENV["ADAPTIVEOPTICS_REFERENCE_ROOT"]` can point to an alternate bundle.
-- The committed bundle currently covers PSF, geometric/diffractive
-  Shack-Hartmann, Pyramid, BioEdge, GSC optical gains, and the analytical
-  transfer-function workflow. LiFT, closed-loop traces, and tomography remain
-  follow-on parity work.
+Only go deeper if your task actually needs it:
 
-See [`oopao-reference-datasets.md`](./oopao-reference-datasets.md) for the
-bundle contract.
-
-For the maintained synthesis of model evidence, use
-[`model-validity-matrix.md`](./model-validity-matrix.md).
-
-## Benchmark and comparison workflow
-
-Use the benchmark docs intentionally:
-
-- [`benchmark-matrix-plan.md`](./benchmark-matrix-plan.md)
-  - maintained local runtime surfaces
-- [`cross-package-benchmark-harness.md`](./cross-package-benchmark-harness.md)
-  - archived cross-package OOPAO/SPECULA/REVOLT-like evidence
-
-These are engineering evidence surfaces, not normal tutorial entry points and
-not part of `Pkg.test()`.
-
-## Plotting
-
-The core package does not require plotting. For user-facing visualization, use
-`Plots.jl` in examples, notebooks, or downstream tooling rather than wiring it
-into hot paths.
-
-## Backends and performance
-
-Current code already parameterizes many core arrays by numeric type and array
-backend. The intended execution model is:
-
-- `AbstractFFTs.jl` for FFT portability across CPU and GPU backends.
-- trait-driven algorithm selection for geometric vs diffractive sensing and for
-  backend-aware kernels.
-- `KernelAbstractions.jl` for non-FFT kernels that should run on CPU and GPU
-  from a single implementation.
-
-The package is not fully on `KernelAbstractions.jl` yet, but the design target
-is explicit: stencil-like loops, binning, focal-plane mask application,
-weighting updates, and per-subaperture reductions should move behind
-trait-selected kernels instead of hard-coded CPU loops.
+- public API details:
+  - [api-reference.md](./api-reference.md)
+- maintained validation status:
+  - [model-validity-matrix.md](./model-validity-matrix.md)
+- supported production scope:
+  - [supported-production-surfaces.md](./supported-production-surfaces.md)
+- benchmark and cross-package evidence:
+  - [cross-package-benchmark-harness.md](./cross-package-benchmark-harness.md)
+  - [benchmark-matrix-plan.md](./benchmark-matrix-plan.md)
+- maintainer/developer navigation:
+  - [documentation-map.md](./documentation-map.md)

@@ -18,40 +18,44 @@ planning and audit records for subsystem work.
 
 ## Start Here
 
-If you are:
+### User Path
 
-- learning the package:
-  - [`user-guide.md`](./user-guide.md)
-- trying to understand the package as a platform:
-  - [`platform-architecture.md`](./platform-architecture.md)
-- trying to understand how to actually build, validate, or benchmark a platform script:
-  - [`platform-workflows.md`](./platform-workflows.md)
-- writing or reviewing a realistic scenario script:
-  - [`scenario-builder-style.md`](./scenario-builder-style.md)
-- looking for maintained public APIs:
-  - [`api-reference.md`](./api-reference.md)
-- maintaining or refactoring the codebase:
-  - [`maintainer-architecture.md`](./maintainer-architecture.md)
-- trying to understand runtime execution:
-  - [`runtime-dataflow.md`](./runtime-dataflow.md)
-- checking whether a model is validated:
-  - [`model-validity-matrix.md`](./model-validity-matrix.md)
-- checking what is currently production-supported:
-  - [`supported-production-surfaces.md`](./supported-production-surfaces.md)
-- checking the remaining production blockers:
-  - [`production-readiness-checklist.md`](./production-readiness-checklist.md)
-- running a release-validation pass:
-  - [`release-validation-runbook.md`](./release-validation-runbook.md)
-  - [`self-hosted-gpu-runner-setup.md`](./self-hosted-gpu-runner-setup.md)
-- looking for performance evidence:
-  - [`benchmark-matrix-plan.md`](./benchmark-matrix-plan.md)
-  - [`cross-package-benchmark-harness.md`](./cross-package-benchmark-harness.md)
-- looking for frozen external equivalence evidence:
-  - [`oopao-reference-datasets.md`](./oopao-reference-datasets.md)
-  - [`../scripts/generate_oopao_equivalence_artifact.jl`](../scripts/generate_oopao_equivalence_artifact.jl)
-- looking for scientist-owned HEART boundary truth:
-  - [`../scripts/generate_heart_boundary_truth_artifact.py`](../scripts/generate_heart_boundary_truth_artifact.py)
-  - [`../benchmarks/results/truth/2026-04-09-heart-boundary-truth.toml`](../benchmarks/results/truth/2026-04-09-heart-boundary-truth.toml)
+Most users should stop after these three:
+
+- [`user-guide.md`](./user-guide.md)
+- [`api-reference.md`](./api-reference.md)
+- `examples/tutorials/`
+
+### Validation And Production Path
+
+Use these when the task is evidence, release support, or backend validation:
+
+- [`model-validity-matrix.md`](./model-validity-matrix.md)
+- [`supported-production-surfaces.md`](./supported-production-surfaces.md)
+- [`production-readiness-checklist.md`](./production-readiness-checklist.md)
+- [`release-validation-runbook.md`](./release-validation-runbook.md)
+- [`self-hosted-gpu-runner-setup.md`](./self-hosted-gpu-runner-setup.md)
+- [`benchmark-matrix-plan.md`](./benchmark-matrix-plan.md)
+- [`cross-package-benchmark-harness.md`](./cross-package-benchmark-harness.md)
+
+### Developer And Maintainer Path
+
+Use these when changing package structure or internals:
+
+- [`maintainer-architecture.md`](./maintainer-architecture.md)
+- [`platform-architecture.md`](./platform-architecture.md)
+- [`platform-workflows.md`](./platform-workflows.md)
+- [`scenario-builder-style.md`](./scenario-builder-style.md)
+- [`runtime-dataflow.md`](./runtime-dataflow.md)
+
+### External Truth And Equivalence
+
+Use these when the task is cross-package or instrument-truth work:
+
+- [`oopao-reference-datasets.md`](./oopao-reference-datasets.md)
+- [`../scripts/generate_oopao_equivalence_artifact.jl`](../scripts/generate_oopao_equivalence_artifact.jl)
+- [`../scripts/generate_heart_boundary_truth_artifact.py`](../scripts/generate_heart_boundary_truth_artifact.py)
+- [`../benchmarks/results/truth/2026-04-09-heart-boundary-truth.toml`](../benchmarks/results/truth/2026-04-09-heart-boundary-truth.toml)
 
 ## Active Stable Guides
 
