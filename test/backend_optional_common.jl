@@ -590,7 +590,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     prepare!(single_platform)
     step!(single_platform)
     @test simulation_interface(single_platform) isa SimulationInterface
-    @test simulation_wfs_frame(single_platform) isa BackendArray
+    @test wfs_frame(single_platform) isa BackendArray
     @test platform_branch_labels(single_platform) == (:main,)
 
     grouped_platform = build_runtime_scenario(
@@ -605,8 +605,8 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     prepare!(grouped_platform)
     step!(grouped_platform)
     @test simulation_interface(grouped_platform) isa CompositeSimulationInterface
-    @test simulation_grouped_wfs_stack(grouped_platform) isa BackendArray
-    @test size(simulation_grouped_wfs_stack(grouped_platform), ndims(simulation_grouped_wfs_stack(grouped_platform))) == 2
+    @test grouped_wfs_stack(grouped_platform) isa BackendArray
+    @test size(grouped_wfs_stack(grouped_platform), ndims(grouped_wfs_stack(grouped_platform))) == 2
     @test platform_branch_labels(grouped_platform) == (:hi, :lo)
     return nothing
 end

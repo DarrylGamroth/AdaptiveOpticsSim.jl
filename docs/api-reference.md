@@ -194,10 +194,10 @@ If you are maintaining the package, pair this document with
   - `wfs_metadata`, `science_metadata`
   - `grouped_wfs_stack`, `grouped_science_stack`
 - compatibility accessors retained during migration:
-  - `simulation_readout`, `simulation_command`, `simulation_slopes`
-  - `simulation_wfs_frame`, `simulation_science_frame`
-  - `simulation_grouped_wfs_stack`, `simulation_grouped_science_stack`
-  - `simulation_wfs_metadata`, `simulation_science_metadata`
+  - `readout`, `command`, `slopes`
+  - `wfs_frame`, `science_frame`
+  - `grouped_wfs_stack`, `grouped_science_stack`
+  - `wfs_metadata`, `science_metadata`
 - `set_command!`, `update_command!`, `snapshot_outputs!`
   - `set_command!` and `update_command!` accept flat vectors or structured `NamedTuple` commands
 - `RuntimeProductRequirements`, `GroupedRuntimeProductRequirements`
@@ -592,14 +592,14 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 ### `IF-SIM`: control simulations
 
 - `AbstractControlSimulation` implementations must provide `step!(sim)`,
-  `simulation_interface(sim)`, and `simulation_readout(sim)`.
+  `simulation_interface(sim)`, and `readout(sim)`.
 - `prepare!(sim)` is the preferred optional hook for runtime precomputation.
-- Output-side accessors are `simulation_command`, `simulation_slopes`,
-  `simulation_wfs_frame`, `simulation_science_frame`,
-  `simulation_wfs_metadata`, and `simulation_science_metadata`.
+- Output-side accessors are `command`, `slopes`,
+  `wfs_frame`, `science_frame`,
+  `wfs_metadata`, and `science_metadata`.
 - Grouped composite simulations may additionally expose compatible-shape grouped
-  exports through `simulation_grouped_wfs_stack` and
-  `simulation_grouped_science_stack`.
+  exports through `grouped_wfs_stack` and
+  `grouped_science_stack`.
 - Optional behavior is expressed with
   `supports_prepared_runtime`, `supports_detector_output`,
   `supports_stacked_sources`, and `supports_grouped_execution`.

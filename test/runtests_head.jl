@@ -98,12 +98,12 @@ function assert_control_simulation_interface(sim)
     @test sim isa AbstractControlSimulation
     @test applicable(step!, sim)
     @test applicable(simulation_interface, sim)
-    @test applicable(simulation_readout, sim)
+    @test applicable(readout, sim)
     iface = simulation_interface(sim)
-    readout = simulation_readout(sim)
-    @test simulation_command(readout) === simulation_command(sim)
-    @test simulation_slopes(readout) === simulation_slopes(sim)
-    @test simulation_command(simulation_readout(iface)) === simulation_command(iface)
+    readout = readout(sim)
+    @test command(readout) === command(sim)
+    @test slopes(readout) === slopes(sim)
+    @test command(readout(iface)) === command(iface)
     return iface
 end
 
@@ -282,10 +282,10 @@ function moving_closed_loop_trace(;
         delayed = copy(shift_delay!(delay, runtime.command))
         copyto!(runtime.command, delayed)
         AdaptiveOpticsSim.apply_runtime_command!(runtime)
-        slope_norms[i] = norm(simulation_slopes(runtime))
-        command_norms[i] = norm(simulation_command(runtime))
-        wfs_energy[i] = sum(abs, simulation_wfs_frame(runtime))
-        science_energy[i] = sum(abs, simulation_science_frame(runtime))
+        slope_norms[i] = norm(slopes(runtime))
+        command_norms[i] = norm(command(runtime))
+        wfs_energy[i] = sum(abs, wfs_frame(runtime))
+        science_energy[i] = sum(abs, science_frame(runtime))
     end
 
     return (; slope_norms, command_norms, wfs_energy, science_energy)

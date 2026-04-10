@@ -105,8 +105,8 @@ end
     @test supports_detector_output(typeof(surrogate))
     @test supports_grouped_execution(typeof(surrogate))
     simif = simulation_interface(surrogate)
-    @test simulation_command(simif) === surrogate.command
-    @test length(simulation_slopes(simif)) == 2
+    @test command(simif) === surrogate.command
+    @test length(slopes(simif)) == 2
     timing = runtime_timing(surrogate; warmup=1, samples=2, gc_before=false)
     @test timing.samples == 2
     phase = subaru_ao188_phase_timing(surrogate; warmup=1, samples=2, gc_before=false)
@@ -172,8 +172,8 @@ end
     step!(curvature_sim)
     @test length(curvature_sim.command) == curvature_params.n_act^2
     curvature_readout = simulation_interface(curvature_sim)
-    @test size(simulation_wfs_frame(curvature_readout)[1]) == (2, curvature_params.n_subap^2)
-    @test simulation_wfs_metadata(curvature_readout)[1] isa CountingDetectorExportMetadata
+    @test size(wfs_frame(curvature_readout)[1]) == (2, curvature_params.n_subap^2)
+    @test wfs_metadata(curvature_readout)[1] isa CountingDetectorExportMetadata
 
     ao3k_params = AO3kSimulationParams(
         T=Float32,
@@ -195,7 +195,7 @@ end
     step!(ao3k_sim)
     @test length(ao3k_sim.command) == ao3k_params.n_act^2
     ao3k_iface = simulation_interface(ao3k_sim)
-    ao3k_high_meta = simulation_wfs_metadata(ao3k_iface)[1]
+    ao3k_high_meta = wfs_metadata(ao3k_iface)[1]
     @test ao3k_high_meta.sensor == :hgcdte_avalanche_array
     @test ao3k_high_meta.thermal_model == :fixed_temperature
     @test ao3k_high_meta.detector_temperature_K == 80.0f0
@@ -244,12 +244,12 @@ end
     @test length(runtime.command) == length(dm.state.coefs)
     @test size(output_frame(det)) == (32, 32)
     @test closed_loop_runtime_allocations() == 0
-    @test simulation_command(runtime) === runtime.command
-    @test simulation_science_frame(runtime) === output_frame(det)
+    @test command(runtime) === runtime.command
+    @test science_frame(runtime) === output_frame(det)
     @test command_segment_labels(command_layout(runtime)) == (:dm,)
-    @test command(runtime) === simulation_command(runtime)
-    @test science_frame(runtime) === simulation_science_frame(runtime)
-    @test readout(runtime).science_frame === simulation_science_frame(runtime)
+    @test command(runtime) === command(runtime)
+    @test science_frame(runtime) === science_frame(runtime)
+    @test readout(runtime).science_frame === science_frame(runtime)
 
     tel_ext = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src_ext = Source(band=:I, magnitude=0.0)
@@ -280,25 +280,25 @@ end
     set_command!(external_scenario, external_command)
     sense!(external_scenario)
     @test command(external_scenario) == external_command
-    @test slopes(external_scenario) === simulation_slopes(external_scenario)
-    @test wfs_frame(external_scenario) === simulation_wfs_frame(external_scenario)
-    @test science_frame(external_scenario) === simulation_science_frame(external_scenario)
-    @test science_metadata(external_scenario) == simulation_science_metadata(external_scenario)
+    @test slopes(external_scenario) === slopes(external_scenario)
+    @test wfs_frame(external_scenario) === wfs_frame(external_scenario)
+    @test science_frame(external_scenario) === science_frame(external_scenario)
+    @test science_metadata(external_scenario) == science_metadata(external_scenario)
     @test readout(external_scenario).science_frame === science_frame(external_scenario)
     @test_throws InvalidConfiguration step!(external_scenario)
 
     boundary = SimulationInterface(runtime)
     @test AdaptiveOpticsSim.runtime_export_plan(boundary) isa AdaptiveOpticsSim.DirectRuntimeExportPlan
-    boundary_readout = simulation_readout(boundary)
-    @test length(simulation_slopes(boundary)) == length(wfs.state.slopes)
-    @test simulation_slopes(boundary_readout) === simulation_slopes(boundary)
-    @test size(simulation_science_frame(boundary)) == size(output_frame(det))
-    boundary_science_metadata = simulation_science_metadata(boundary)
+    boundary_readout = readout(boundary)
+    @test length(slopes(boundary)) == length(wfs.state.slopes)
+    @test slopes(boundary_readout) === slopes(boundary)
+    @test size(science_frame(boundary)) == size(output_frame(det))
+    boundary_science_metadata = science_metadata(boundary)
     @test boundary_science_metadata isa DetectorExportMetadata
     @test boundary_science_metadata.output_size == size(output_frame(det))
     @test boundary_science_metadata.frame_size == size(det.state.frame)
     step!(boundary)
-    @test simulation_command(boundary) == runtime.command
+    @test command(boundary) == runtime.command
 
     rng2 = MersenneTwister(2)
     tel2 = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
@@ -316,24 +316,24 @@ end
     @test runtime2.wfs.state.calibrated
     @test supports_detector_output(runtime2)
     step!(runtime2)
-    @test simulation_wfs_frame(runtime2) === wfs2.state.exported_spot_cube
-    @test simulation_wfs_frame(runtime2) !== wfs2.state.spot_cube
+    @test wfs_frame(runtime2) === wfs2.state.exported_spot_cube
+    @test wfs_frame(runtime2) !== wfs2.state.spot_cube
     @test wfs2.state.spot_cube !== wfs2.state.sampled_spot_cube
-    @test simulation_wfs_frame(runtime2) !== wfs2.state.sampled_spot_cube
-    @test size(simulation_wfs_frame(runtime2)) == size(wfs2.state.spot_cube)
-    @test all(simulation_wfs_frame(runtime2) .>= wfs2.state.spot_cube)
+    @test wfs_frame(runtime2) !== wfs2.state.sampled_spot_cube
+    @test size(wfs_frame(runtime2)) == size(wfs2.state.spot_cube)
+    @test all(wfs_frame(runtime2) .>= wfs2.state.spot_cube)
     boundary2 = SimulationInterface(runtime2)
-    @test ndims(simulation_wfs_frame(boundary2)) == 3
-    @test size(simulation_wfs_frame(boundary2), 1) == wfs2.params.n_subap^2
+    @test ndims(wfs_frame(boundary2)) == 3
+    @test size(wfs_frame(boundary2), 1) == wfs2.params.n_subap^2
 
     composite = CompositeSimulationInterface(boundary, boundary2)
     @test supports_grouped_execution(composite)
-    @test length(simulation_command(composite)) == length(simulation_command(boundary)) + length(simulation_command(boundary2))
-    @test length(simulation_slopes(composite)) == length(simulation_slopes(boundary)) + length(simulation_slopes(boundary2))
-    @test length(simulation_wfs_frame(composite)) == 2
-    @test simulation_grouped_wfs_stack(composite) === nothing
+    @test length(command(composite)) == length(command(boundary)) + length(command(boundary2))
+    @test length(slopes(composite)) == length(slopes(boundary)) + length(slopes(boundary2))
+    @test length(wfs_frame(composite)) == 2
+    @test grouped_wfs_stack(composite) === nothing
     step!(composite)
-    @test simulation_command(composite) == vcat(simulation_command(boundary), simulation_command(boundary2))
+    @test command(composite) == vcat(command(boundary), command(boundary2))
 
     rng2b = MersenneTwister(12)
     tel2b = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
@@ -354,21 +354,21 @@ end
         boundary2b;
         products=GroupedRuntimeProductRequirements(wfs_frames=true, science_frames=false, wfs_stack=true, science_stack=false),
     )
-    @test length(simulation_wfs_frame(grouped)) == 2
-    @test !isnothing(simulation_grouped_wfs_stack(grouped))
-    @test size(simulation_grouped_wfs_stack(grouped)) == (size(simulation_wfs_frame(boundary2))..., 2)
-    @test simulation_grouped_science_stack(grouped) === nothing
+    @test length(wfs_frame(grouped)) == 2
+    @test !isnothing(grouped_wfs_stack(grouped))
+    @test size(grouped_wfs_stack(grouped)) == (size(wfs_frame(boundary2))..., 2)
+    @test grouped_science_stack(grouped) === nothing
     step!(grouped)
-    @test selectdim(simulation_grouped_wfs_stack(grouped), ndims(simulation_grouped_wfs_stack(grouped)), 1) == simulation_wfs_frame(boundary2)
-    @test selectdim(simulation_grouped_wfs_stack(grouped), ndims(simulation_grouped_wfs_stack(grouped)), 2) == simulation_wfs_frame(boundary2b)
+    @test selectdim(grouped_wfs_stack(grouped), ndims(grouped_wfs_stack(grouped)), 1) == wfs_frame(boundary2)
+    @test selectdim(grouped_wfs_stack(grouped), ndims(grouped_wfs_stack(grouped)), 2) == wfs_frame(boundary2b)
 
     grouped_stack_only = CompositeSimulationInterface(
         boundary2,
         boundary2b;
         products=GroupedRuntimeProductRequirements(wfs_frames=false, science_frames=false, wfs_stack=true, science_stack=false),
     )
-    @test simulation_wfs_frame(grouped_stack_only) === nothing
-    @test !isnothing(simulation_grouped_wfs_stack(grouped_stack_only))
+    @test wfs_frame(grouped_stack_only) === nothing
+    @test !isnothing(grouped_wfs_stack(grouped_stack_only))
 
     single_cfg = SingleRuntimeConfig(
         name=:single_runtime_demo,
@@ -397,9 +397,9 @@ end
     sense!(single_scenario)
     @test command(single_scenario) == branch_command
     step!(single_scenario)
-    @test simulation_science_frame(single_scenario) !== nothing
-    @test simulation_wfs_frame(single_scenario) === nothing
-    @test simulation_readout(single_scenario).science_frame === simulation_science_frame(single_scenario)
+    @test science_frame(single_scenario) !== nothing
+    @test wfs_frame(single_scenario) === nothing
+    @test readout(single_scenario).science_frame === science_frame(single_scenario)
 
     split_layout = RuntimeCommandLayout(:woofer => 8, :tweeter => 8)
     split_scenario = build_runtime_scenario(
@@ -416,7 +416,7 @@ end
     set_command!(split_scenario, (; woofer=woofer_cmd, tweeter=tweeter_cmd))
     sense!(split_scenario)
     @test command(split_scenario) == vcat(woofer_cmd, tweeter_cmd)
-    @test simulation_science_frame(split_scenario) !== nothing
+    @test science_frame(split_scenario) !== nothing
 
     tiptilt = TipTiltMirror(tel_ext; scale=0.1, label=:tiptilt)
     dm_combo = DeformableMirror(tel_ext; n_act=4, influence_width=0.3)
@@ -488,11 +488,11 @@ end
     sense!(grouped_scenario)
     @test command(grouped_scenario) == vcat(branch_a_cmd, branch_b_cmd)
     step!(grouped_scenario)
-    @test !isnothing(simulation_grouped_wfs_stack(grouped_scenario))
-    @test size(simulation_grouped_wfs_stack(grouped_scenario)) == (size(simulation_wfs_frame(grouped_scenario)[1])..., 2)
-    @test simulation_grouped_science_stack(grouped_scenario) === nothing
-    grouped_readout = simulation_readout(grouped_scenario)
-    @test grouped_readout.grouped_wfs_stack === simulation_grouped_wfs_stack(grouped_scenario)
+    @test !isnothing(grouped_wfs_stack(grouped_scenario))
+    @test size(grouped_wfs_stack(grouped_scenario)) == (size(wfs_frame(grouped_scenario)[1])..., 2)
+    @test grouped_science_stack(grouped_scenario) === nothing
+    grouped_readout = readout(grouped_scenario)
+    @test grouped_readout.grouped_wfs_stack === grouped_wfs_stack(grouped_scenario)
 
     split_grouped_scenario = build_runtime_scenario(
         grouped_cfg,
@@ -537,9 +537,9 @@ end
     @test !supports_detector_output(runtime2_slopes_only)
     @test !runtime2_slopes_only.wfs.state.export_pixels_enabled
     step!(runtime2_slopes_only)
-    @test simulation_wfs_frame(runtime2_slopes_only) === nothing
+    @test wfs_frame(runtime2_slopes_only) === nothing
     slopes_only_boundary = SimulationInterface(runtime2_slopes_only)
-    @test simulation_wfs_frame(slopes_only_boundary) === nothing
+    @test wfs_frame(slopes_only_boundary) === nothing
 
     timing = runtime_timing(runtime; warmup=1, samples=5, gc_before=false)
     @test timing.samples == 5
@@ -566,10 +566,10 @@ end
     @test runtime3.wfs.state.calibrated
     step!(runtime3)
     @test length(runtime3.command) == length(dm3.state.coefs)
-    @test simulation_wfs_frame(runtime3) === wfs3.state.camera_frame
-    @test simulation_wfs_frame(runtime3) == output_frame(wfs_det3)
-    @test size(simulation_wfs_frame(runtime3)) == size(wfs3.state.camera_frame)
-    @test all(isfinite, simulation_slopes(runtime3))
+    @test wfs_frame(runtime3) === wfs3.state.camera_frame
+    @test wfs_frame(runtime3) == output_frame(wfs_det3)
+    @test size(wfs_frame(runtime3)) == size(wfs3.state.camera_frame)
+    @test all(isfinite, slopes(runtime3))
 
     rng4 = MersenneTwister(4)
     tel4 = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
@@ -597,8 +597,8 @@ end
     dm_norms = Float64[]
     for _ in 1:5
         step!(runtime4)
-        push!(slope_norms, norm(simulation_slopes(runtime4)))
-        push!(command_norms, norm(simulation_command(runtime4)))
+        push!(slope_norms, norm(slopes(runtime4)))
+        push!(command_norms, norm(command(runtime4)))
         push!(dm_norms, norm(command_storage(runtime4.optic)))
     end
     @test slope_norms[1] == 0

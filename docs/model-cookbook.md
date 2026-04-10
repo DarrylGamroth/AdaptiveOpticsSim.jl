@@ -117,9 +117,9 @@ for _ in 1:5
     step!(interface)
 end
 
-readout = simulation_readout(interface)
-cmd = simulation_command(readout)
-slopes = simulation_slopes(readout)
+readout = readout(interface)
+cmd = command(readout)
+slopes = slopes(readout)
 ```
 
 Use this pattern when you need:

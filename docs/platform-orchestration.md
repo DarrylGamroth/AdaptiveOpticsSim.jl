@@ -61,7 +61,7 @@ cfg = SingleRuntimeConfig(
 scenario = build_runtime_scenario(cfg, branch)
 prepare!(scenario)
 step!(scenario)
-readout = simulation_readout(scenario)
+readout = readout(scenario)
 ```
 
 Grouped runtime:
@@ -86,7 +86,7 @@ scenario = build_runtime_scenario(
 
 prepare!(scenario)
 step!(scenario)
-stack = simulation_grouped_wfs_stack(scenario)
+stack = grouped_wfs_stack(scenario)
 ```
 
 ## Execution Semantics
@@ -99,7 +99,7 @@ It delegates to the maintained runtime surfaces:
 - `sense!(scenario)`
 - `step!(scenario)`
 - `set_command!(scenario, cmd)`
-- `simulation_readout(scenario)`
+- `readout(scenario)`
 - `runtime_timing(scenario)`
 - `runtime_phase_timing(scenario)`
 

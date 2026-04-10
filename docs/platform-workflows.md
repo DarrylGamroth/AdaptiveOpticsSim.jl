@@ -174,7 +174,7 @@ function main()
     for _ in 1:10
         step!(sim.runtime)
     end
-    return simulation_readout(sim.runtime)
+    return readout(sim.runtime)
 end
 ```
 
@@ -312,8 +312,8 @@ The practical rules are:
   `GroupedRuntimeConfig` when a script is assembling reusable runtime
   composition rather than a one-off local demo
 - keep grouped export policy explicit
-- rely on `simulation_grouped_wfs_stack` and
-  `simulation_grouped_science_stack` only when the runtime contract says the
+- rely on `grouped_wfs_stack` and
+  `grouped_science_stack` only when the runtime contract says the
   layout is compatible
 - for mixed layouts, use explicit per-branch readout surfaces instead of
   assuming a fake common stack
