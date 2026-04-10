@@ -86,6 +86,8 @@ If you are:
   - explicit production-supported vs experimental scope
 - [`production-readiness-checklist.md`](./production-readiness-checklist.md)
   - remaining blockers before production-readiness claims
+- [`production-hardening-plan-2026-04.md`](./production-hardening-plan-2026-04.md)
+  - ordered execution plan for finishing the current production-hardening pass
 - [`release-validation-runbook.md`](./release-validation-runbook.md)
 - [`self-hosted-gpu-runner-setup.md`](./self-hosted-gpu-runner-setup.md)
   - one-command release validation procedure and optional GPU/comparison tracks
