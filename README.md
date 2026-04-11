@@ -58,17 +58,19 @@ using Random
 
 rng = MersenneTwister(0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
+sim = AOSimulation(tel, atm, src, dm, wfs)
 
 imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
 runtime = ClosedLoopRuntime(sim, recon; rng=rng)
 interface = simulation_interface(runtime)
+prepare!(interface)
 
 for _ in 1:5
     step!(interface)
 end
 
+# `step!` runs the full closed-loop update: sense + reconstruct + apply.
 rt = readout(interface)
 cmd = command(rt)
 frame = wfs_frame(rt)

@@ -593,7 +593,12 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 
 - `AbstractControlSimulation` implementations must provide `step!(sim)`,
   `simulation_interface(sim)`, and `readout(sim)`.
-- `prepare!(sim)` is the preferred optional hook for runtime precomputation.
+- `sense!(sim)` is the plant/sensor-side execution hook when commands are
+  supplied externally.
+- `prepare!(sim)` is the preferred optional hook for one-time runtime/WFS
+  precomputation before repeated `sense!` or `step!` calls.
+- `step!(sim)` is the full closed-loop update and must be equivalent to
+  `sense!` followed by reconstruction and command application.
 - Output-side accessors are `command`, `slopes`,
   `wfs_frame`, `science_frame`,
   `wfs_metadata`, and `science_metadata`.

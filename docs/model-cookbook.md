@@ -171,6 +171,9 @@ cfg = SingleRuntimeConfig(
 )
 
 scenario = build_runtime_scenario(cfg, branch)
+
+# `prepare!` performs one-time runtime/WFS precomputation and enables the
+# requested export surfaces before repeated `sense!` or `step!` calls.
 prepare!(scenario)
 
 # Inspect the external command contract before wiring in a controller.
@@ -357,6 +360,9 @@ cfg = SingleRuntimeConfig(
 )
 
 scenario = build_runtime_scenario(cfg, branch)
+
+# `prepare!` performs one-time runtime/WFS precomputation and enables the
+# requested export surfaces before repeated `sense!` or `step!` calls.
 prepare!(scenario)
 
 # The external controller can still send structured commands by segment.

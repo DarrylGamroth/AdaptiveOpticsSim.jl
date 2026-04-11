@@ -123,6 +123,7 @@ imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
 runtime = ClosedLoopRuntime(sim, recon; rng=rng)
 interface = simulation_interface(runtime)
+prepare!(interface)
 
 for _ in 1:5
     step!(interface)
@@ -140,6 +141,11 @@ Use this when you care about:
 - latency
 - exported runtime products
 - HIL-style or detector-backed sensing paths
+
+`prepare!(...)` performs any WFS/runtime precomputation once before repeated
+`step!(...)` or `sense!(...)` calls. `step!(...)` runs the full closed-loop
+update, while `sense!(...)` runs only the plant/sensor side and is the right
+entry point when commands come from an external controller.
 
 ### Workflow 4: Field propagation and diffractive optics
 
