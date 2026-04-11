@@ -1,6 +1,9 @@
 """Base type for optical elements."""
 abstract type AbstractOpticalElement end
 
+"""Telescopes provide the pupil/OPD reference surface for a simulation path."""
+abstract type AbstractTelescope <: AbstractOpticalElement end
+
 """Sources must provide wavelength(src)."""
 abstract type AbstractSource <: AbstractOpticalElement end
 

@@ -21,7 +21,7 @@ mutable struct TelescopeState{T,
     psf_workspace::W
 end
 
-struct Telescope{P<:TelescopeParams,S<:TelescopeState,B<:AbstractArrayBackend} <: AbstractOpticalElement
+struct Telescope{P<:TelescopeParams,S<:TelescopeState,B<:AbstractArrayBackend} <: AbstractTelescope
     params::P
     state::S
 end

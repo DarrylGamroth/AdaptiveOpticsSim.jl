@@ -1,16 +1,16 @@
-struct AOSimulation{A<:AbstractAtmosphere,S<:AbstractSource,O<:AbstractControllableOptic,W<:AbstractWFS,B<:AbstractArrayBackend}
-    tel::Telescope
+struct AOSimulation{TEL<:AbstractTelescope,A<:AbstractAtmosphere,S<:AbstractSource,O<:AbstractControllableOptic,W<:AbstractWFS,B<:AbstractArrayBackend}
+    tel::TEL
     atm::A
     src::S
     optic::O
     wfs::W
 end
 
-@inline backend(::AOSimulation{<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline backend(::AOSimulation{<:Any,<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
 
-function AOSimulation(tel::Telescope, atm::AbstractAtmosphere, src::AbstractSource, optic::AbstractControllableOptic, wfs::AbstractWFS)
+function AOSimulation(tel::AbstractTelescope, atm::AbstractAtmosphere, src::AbstractSource, optic::AbstractControllableOptic, wfs::AbstractWFS)
     selector = require_same_backend(tel, atm, optic, wfs)
-    return AOSimulation{typeof(atm), typeof(src), typeof(optic), typeof(wfs), typeof(selector)}(tel, atm, src, optic, wfs)
+    return AOSimulation{typeof(tel), typeof(atm), typeof(src), typeof(optic), typeof(wfs), typeof(selector)}(tel, atm, src, optic, wfs)
 end
 
 function initialize_ao_pyramid(; resolution::Int, diameter::Real, sampling_time::Real,

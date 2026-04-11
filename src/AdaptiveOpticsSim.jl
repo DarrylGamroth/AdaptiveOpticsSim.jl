@@ -97,7 +97,7 @@ export default_modal_inverse_policy, default_calibration_inverse_policy, default
 export AbstractMaskPrimitive, MaskGrid
 export CircularAperture, AnnularAperture, SpiderMask, RectangularROI, SubapertureGridMask
 export default_mask_grid, pixel_mask_grid, build_mask!, apply_mask!
-export Telescope, TelescopeParams, TelescopeState, generate_pupil!, reset_opd!, apply_opd!
+export AbstractTelescope, Telescope, TelescopeParams, TelescopeState, generate_pupil!, reset_opd!, apply_opd!
 export set_pupil!, set_pupil_reflectivity!, flux_map, apply_spiders!
 export Source, SourceParams, LGSSource, LGSSourceParams, wavelength, optical_path, print_optical_path
 export SpectralSample, SpectralBundle, SpectralSource, with_spectrum
@@ -197,6 +197,7 @@ export ModalBasis, KLBasisMethod, KLDMModes, KLHHtPSD
 export dm_basis, kl_modal_basis, modal_basis, basis_from_m2c, basis_projector
 export modal_to_command, sampled_basis, modal_projector
 export AOCalibration, ao_calibration, calibration_vault
+export AOSimulation, initialize_ao_pyramid, initialize_ao_shwfs
 export forward_operator, inverse_operator_matrix
 export fitting_error, fitting_error_dm
 export GainSensingCamera

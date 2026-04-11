@@ -289,7 +289,7 @@ end
     modal = ModalReconstructor(imat; gain=1.0)
     mapped = MappedReconstructor(Matrix{Float64}(I, length(dm.state.coefs), length(dm.state.coefs)), imat; gain=0.5)
     ctrl = DiscreteIntegratorController(length(wfs.state.slopes); gain=0.1, tau=0.02)
-    sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
+    sim = AOSimulation(tel, atm, src, dm, wfs)
     runtime = ClosedLoopRuntime(sim, modal; rng=MersenneTwister(9))
     wfs_diffractive = ShackHartmann(tel; n_subap=2, mode=Diffractive())
     poly = with_spectrum(src, SpectralBundle([wavelength(src), 1.1 * wavelength(src)], [0.7, 0.3]))

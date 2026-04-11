@@ -34,7 +34,7 @@ function build_optional_platform_branch(::Type{T}, backend, label::Symbol; senso
         ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend) :
         PyramidWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
-    sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
+    sim = AOSimulation(tel, atm, src, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
     recon = ModalReconstructor(imat; gain=T(0.5))
     return RuntimeBranch(label, sim, recon; wfs_detector=det, rng=MersenneTwister(seed))
@@ -52,7 +52,7 @@ function run_optional_composite_optic_parity(::Type{B}, BackendArray) where {B<:
         optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm)
         wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
         det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
-        sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, optic, wfs)
+        sim = AOSimulation(tel, atm, src, optic, wfs)
         scenario = build_runtime_scenario(
             SingleRuntimeConfig(name=:optional_backend_composite, branch_label=:main,
                 products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
