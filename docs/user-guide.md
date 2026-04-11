@@ -49,18 +49,75 @@ The package is organized around a small set of modeling objects:
 - atmosphere objects such as `KolmogorovAtmosphere` and `MultiLayerAtmosphere`
 - sensing objects such as `ShackHartmann`, `PyramidWFS`, and `BioEdgeWFS`
 - `Detector` when the sensing path needs explicit detector physics
-- `DeformableMirror` and a reconstructor for control
-- `ClosedLoopRuntime` when you want a step-wise AO simulation surface
+- controllable optics such as `DeformableMirror`, `TipTiltMirror`, and `CompositeControllableOptic`
+- `RuntimeScenario` when you want the maintained step-wise AO or HIL simulation surface
 
-The common hot-path verbs use Julia's mutating `!` convention:
+## Three Execution Layers
 
-- `compute_psf!`
+The package exposes three layers on purpose.
+
+### 1. Primitive physics layer
+
+Use this layer when you are studying or composing one physical subsystem at a
+time.
+
+Canonical verbs:
+
 - `advance!`
 - `propagate!`
-- `measure!`
-- `reconstruct!`
 - `apply!`
+- `measure!`
+- `capture!`
+
+Typical use:
+
+- PSF formation
+- direct WFS studies
+- calibration internals
+- custom research scripts
+
+### 2. Runtime execution layer
+
+Use this layer when you want repeated AO execution with a stable command/input
+and readout/output boundary.
+
+Canonical verbs and accessors:
+
+- `prepare!`
+- `sense!`
 - `step!`
+- `set_command!`
+- `update_command!`
+- `readout`
+- `command`, `slopes`, `wfs_frame`, `science_frame`
+
+Semantics:
+
+- `prepare!(...)` performs one-time runtime/WFS precomputation
+- `sense!(...)` runs only the plant/sensor side
+- `step!(...)` runs the full closed-loop update
+
+### 3. Orchestration layer
+
+Use this as the default public runtime assembly surface.
+
+Canonical types and builder:
+
+- `RuntimeBranch`
+- `SingleRuntimeConfig`
+- `GroupedRuntimeConfig`
+- `RuntimeScenario`
+- `build_runtime_scenario(...)`
+
+This layer is the recommended path for:
+
+- normal closed-loop examples
+- HIL / RTC-boundary simulations
+- grouped or multi-branch runtime composition
+
+The lower-level `ClosedLoopRuntime` + `simulation_interface(...)` path remains
+available, but it is an advanced single-runtime surface rather than the default
+user entry point.
 
 For a compact recipe-first version of this guide, use [model-cookbook.md](./model-cookbook.md).
 
@@ -121,15 +178,22 @@ sim = AOSimulation(tel, src, atm, dm, wfs)
 
 imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
-runtime = ClosedLoopRuntime(sim, recon; rng=rng)
-interface = simulation_interface(runtime)
-prepare!(interface)
+branch = RuntimeBranch(:main, sim, recon; rng=rng)
+
+cfg = SingleRuntimeConfig(
+    name=:closed_loop_demo,
+    branch_label=:main,
+    products=RuntimeProductRequirements(slopes=true, wfs_pixels=true),
+)
+
+scenario = build_runtime_scenario(cfg, branch)
+prepare!(scenario)
 
 for _ in 1:5
-    step!(interface)
+    step!(scenario)
 end
 
-rt = readout(interface)
+rt = readout(scenario)
 cmd = command(rt)
 slopes_vec = slopes(rt)
 frame = wfs_frame(rt)

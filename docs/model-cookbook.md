@@ -94,8 +94,8 @@ Use this pattern when you care about:
 
 ## Recipe 4: Closed-Loop AO Model
 
-Use this when you want an actual AO control step surface rather than isolated
-subsystem calls.
+Use this when you want the maintained public AO runtime surface rather than
+isolated subsystem calls.
 
 ```julia
 using AdaptiveOpticsSim
@@ -110,23 +110,31 @@ sim = AOSimulation(tel, src, atm, dm, wfs)
 
 imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
-runtime = ClosedLoopRuntime(sim, recon; rng=MersenneTwister(0))
-interface = simulation_interface(runtime)
+branch = RuntimeBranch(:main, sim, recon; rng=MersenneTwister(0))
+
+cfg = SingleRuntimeConfig(
+    name=:closed_loop_demo,
+    branch_label=:main,
+    products=RuntimeProductRequirements(slopes=true, wfs_pixels=true),
+)
+
+scenario = build_runtime_scenario(cfg, branch)
+prepare!(scenario)
 
 for _ in 1:5
-    step!(interface)
+    step!(scenario)
 end
 
-readout = readout(interface)
-cmd = command(readout)
-slopes = slopes(readout)
+rt = readout(scenario)
+cmd = command(rt)
+slopes_vec = slopes(rt)
 ```
 
 Use this pattern when you need:
 
 - loop stepping
 - runtime latency products
-- command/slopes/frame export from one simulation object
+- command/slopes/frame export from one maintained runtime boundary
 
 ## Recipe 5: HIL / RTC Boundary Simulation
 
@@ -406,6 +414,23 @@ Use this pattern when you need:
 - realistic CUDA or AMDGPU runtime profiling
 - plant models with several controllable surfaces on one RTC boundary
 
+## Recipe 7: Advanced Direct Runtime Interface
+
+Use this only when you are manually assembling or testing a single runtime and
+do not need the full scenario/config layer.
+
+```julia
+runtime = ClosedLoopRuntime(sim, recon; rng=MersenneTwister(0))
+interface = simulation_interface(runtime)
+prepare!(interface)
+step!(interface)
+rt = readout(interface)
+```
+
+This is a maintained advanced surface, but it is not the default public runtime
+assembly path. Prefer `build_runtime_scenario(...)` for normal closed-loop and
+HIL work.
+
 ## How To Choose The Right Entry Surface
 
 Use:
@@ -413,11 +438,10 @@ Use:
 - subsystem functions such as `compute_psf!`, `advance!`, `propagate!`, and
   `measure!`
   - when you are studying one physical layer
-- `ClosedLoopRuntime`
-  - when you want an AO control loop step surface
 - `SingleRuntimeConfig` or `GroupedRuntimeConfig`
-  - when you need explicit exported products and branch composition at the
-    runtime boundary
+  - when you want the maintained public runtime/orchestration surface
+- `ClosedLoopRuntime` plus `simulation_interface(...)`
+  - only when you are manually assembling or testing one low-level runtime
 
 ## Next Step
 

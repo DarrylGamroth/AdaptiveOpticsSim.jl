@@ -13,12 +13,14 @@ sim = AOSimulation(tel, src, atm, dm, wfs)
 
 imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
-runtime = ClosedLoopRuntime(sim, recon; rng=rng)
-interface = simulation_interface(runtime)
+branch = RuntimeBranch(:main, sim, recon; rng=rng)
+cfg = SingleRuntimeConfig(name=:closed_loop_demo, branch_label=:main)
+scenario = build_runtime_scenario(cfg, branch)
+prepare!(scenario)
 
 n_iter = 5
 for k in 1:n_iter
-    step!(interface)
+    step!(scenario)
 end
 
-println("Closed-loop demo complete, command_norm=$(norm(command(readout(interface))))")
+println("Closed-loop demo complete, command_norm=$(norm(command(readout(scenario))))")

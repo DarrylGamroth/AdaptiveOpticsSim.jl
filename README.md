@@ -62,19 +62,23 @@ sim = AOSimulation(tel, src, atm, dm, wfs)
 
 imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
-runtime = ClosedLoopRuntime(sim, recon; rng=rng)
-interface = simulation_interface(runtime)
-prepare!(interface)
+
+branch = RuntimeBranch(:main, sim, recon; rng=rng)
+cfg = SingleRuntimeConfig(name=:demo, branch_label=:main)
+scenario = build_runtime_scenario(cfg, branch)
+prepare!(scenario)
 
 for _ in 1:5
-    step!(interface)
+    step!(scenario)
 end
 
-# `step!` runs the full closed-loop update: sense + reconstruct + apply.
-rt = readout(interface)
+rt = readout(scenario)
 cmd = command(rt)
 frame = wfs_frame(rt)
 ```
+
+`prepare!(...)` performs one-time runtime/WFS precomputation. `step!(...)`
+runs the full closed-loop update: sense + reconstruct + apply.
 
 The main modeling objects are:
 
@@ -82,7 +86,10 @@ The main modeling objects are:
 - `MultiLayerAtmosphere` or `KolmogorovAtmosphere` for turbulence
 - `ShackHartmann`, `PyramidWFS`, `BioEdgeWFS`, `CurvatureWFS`, `ZernikeWFS` for sensing
 - `DeformableMirror` plus a reconstructor for control
-- `ClosedLoopRuntime` when you want a step-wise AO simulation surface
+- `RuntimeScenario` when you want the maintained step-wise AO simulation surface
+
+For external-control / HIL paths, use `NullReconstructor()` plus
+`set_command!(scenario, cmd)` and `sense!(scenario)`.
 
 ## Tutorials
 

@@ -177,43 +177,57 @@ If you are maintaining the package, pair this document with
 
 ## Control
 
+### Primitive control and sensing layer
+
 - `AbstractController`
 - `DiscreteIntegratorController`, `update!`
-- `ClosedLoopRuntime`, `SimulationInterface`, `CompositeSimulationInterface`, `SimulationReadout`
-- runtime orchestration:
-  - `RuntimeBranch`, `SingleRuntimeConfig`, `GroupedRuntimeConfig`, `RuntimeScenario`
-  - `build_runtime_scenario`
-- `platform_config`, `platform_boundary`, `platform_name`, `platform_branch_labels`
-- `AbstractControlSimulation`
 - `NullReconstructor`
-  - use this for external-control / HIL runtimes that inject commands through `set_command!`
-- `prepare!`, `prepare_runtime_wfs!`, `simulation_interface`
-- `runtime_profile`, `runtime_latency`
-- preferred runtime accessors:
-  - `command`, `slopes`, `wfs_frame`, `science_frame`
-  - `wfs_metadata`, `science_metadata`
-  - `grouped_wfs_stack`, `grouped_science_stack`
-- compatibility accessors retained during migration:
-  - `readout`, `command`, `slopes`
-  - `wfs_frame`, `science_frame`
-  - `grouped_wfs_stack`, `grouped_science_stack`
-  - `wfs_metadata`, `science_metadata`
+- `prepare_runtime_wfs!`
+
+### Runtime execution layer
+
+- `AbstractControlSimulation`
+- `ClosedLoopRuntime`, `SimulationReadout`
+- `prepare!`, `sense!`, `step!`
 - `set_command!`, `update_command!`, `snapshot_outputs!`
   - `set_command!` and `update_command!` accept flat vectors or structured `NamedTuple` commands
+- `readout`, `command`, `slopes`, `wfs_frame`, `science_frame`
+- `wfs_metadata`, `science_metadata`
+- `grouped_wfs_stack`, `grouped_science_stack`
+- `runtime_profile`, `runtime_latency`
+- `runtime_timing`, `runtime_phase_timing`
+  - `RuntimePhaseTimingStats` now exposes `delay_mean_ns` in addition to the existing sense/reconstruct/apply/snapshot timing surface
+- `supports_prepared_runtime`, `supports_detector_output`,
+  `supports_stacked_sources`, `supports_grouped_execution`
+
+### Orchestration layer
+
+- `RuntimeBranch`, `SingleRuntimeConfig`, `GroupedRuntimeConfig`, `RuntimeScenario`
+- `build_runtime_scenario`
 - `RuntimeProductRequirements`, `GroupedRuntimeProductRequirements`
-  - grouped composite execution now has an explicit grouped export policy in
-    addition to the per-runtime slope/WFS/science product policy
-- controllable optics used by the runtime layer:
-  - `AbstractControllableOptic`, `CompositeControllableOptic`
-  - `TipTiltMirror`, `SteeringMirror`, `FocusStage`, `DeformableMirror`
+- `platform_config`, `platform_boundary`, `platform_name`, `platform_branch_labels`
+
+This is the preferred public runtime assembly surface for normal closed-loop and
+HIL usage.
+
+### Advanced single-runtime wrappers
+
+- `SimulationInterface`, `CompositeSimulationInterface`
+- `simulation_interface`
+
+Use these when you are manually assembling or testing a single runtime and do
+not need the scenario/config layer.
+
+### Controllable optics used by the runtime layer
+
+- `AbstractControllableOptic`, `CompositeControllableOptic`
+- `TipTiltMirror`, `SteeringMirror`, `FocusStage`, `DeformableMirror`
+
+### Execution and scheduling helpers
+
 - `AbstractExecutionPolicy`, `SequentialExecution`, `ThreadedExecution`,
   `BackendStreamExecution`
 - `VectorDelayLine`, `shift_delay!`
-- `runtime_timing`, `runtime_phase_timing`
-  - `RuntimePhaseTimingStats` now exposes `delay_mean_ns` in addition to the
-    existing sense/reconstruct/apply/snapshot timing surface
-- `supports_prepared_runtime`, `supports_detector_output`,
-  `supports_stacked_sources`, `supports_grouped_execution`
 
 ## Advanced documented API
 
@@ -242,7 +256,6 @@ top-level namespace. Access them as `AdaptiveOpticsSim.<name>`.
 ### Scenario builders and calibration workflow helpers
 
 - `AdaptiveOpticsSim.fast_atmosphere`
-- `AdaptiveOpticsSim.AOSimulation`
 - `AdaptiveOpticsSim.initialize_ao_shwfs`
 - `AdaptiveOpticsSim.initialize_ao_pyramid`
 - `AdaptiveOpticsSim.GSCDetectorMetadata`
