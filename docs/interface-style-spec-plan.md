@@ -206,7 +206,7 @@ Required:
 
 - `step!(sim)`
 - `simulation_interface(sim)`
-- `simulation_readout(sim)`
+- `readout(sim)`
 
 Preferred:
 

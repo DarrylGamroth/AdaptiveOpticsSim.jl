@@ -200,10 +200,10 @@ Rules:
 
 Good:
 
-- `simulation_readout(runtime)`
-- `simulation_slopes(readout)`
-- `simulation_wfs_frame(readout)`
-- `simulation_grouped_wfs_stack(readout)` only when the grouped contract says
+- `readout(runtime)`
+- `slopes(readout)`
+- `wfs_frame(readout)`
+- `grouped_wfs_stack(readout)` only when the grouped contract says
   the layout is compatible
 
 Bad:

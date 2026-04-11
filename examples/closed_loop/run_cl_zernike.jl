@@ -15,12 +15,18 @@ sim = AOSimulation(tel, src, atm, dm, wfs)
 
 imat = interaction_matrix(dm, wfs, tel, src; amplitude=1e-8)
 recon = ModalReconstructor(imat; gain=0.5)
-runtime = ClosedLoopRuntime(sim, recon; rng=rng, wfs_detector=det)
-interface = simulation_interface(runtime)
+branch = RuntimeBranch(:main, sim, recon; rng=rng, wfs_detector=det)
+cfg = SingleRuntimeConfig(
+    name=:run_cl_zernike_demo,
+    branch_label=:main,
+    products=RuntimeProductRequirements(slopes=true, wfs_pixels=true),
+)
+scenario = build_runtime_scenario(cfg, branch)
 
-prepare!(interface)
+prepare!(scenario)
 for _ in 1:5
-    step!(interface)
+    step!(scenario)
 end
 
-@info "Closed-loop ZernikeWFS tutorial complete" residual_norm=norm(command(readout(interface))) slope_norm=norm(slopes(readout(interface)))
+rt = readout(scenario)
+@info "Closed-loop ZernikeWFS tutorial complete" residual_norm=norm(command(rt)) slope_norm=norm(slopes(rt))

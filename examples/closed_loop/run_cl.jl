@@ -21,11 +21,13 @@ sim = AdaptiveOpticsSim.initialize_ao_shwfs(
 
 imat = interaction_matrix(sim.optic, sim.wfs, sim.tel; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
-runtime = ClosedLoopRuntime(sim, recon; rng=rng)
-interface = simulation_interface(runtime)
+branch = RuntimeBranch(:main, sim, recon; rng=rng)
+cfg = SingleRuntimeConfig(name=:run_cl_demo, branch_label=:main)
+scenario = build_runtime_scenario(cfg, branch)
+prepare!(scenario)
 
 for _ in 1:5
-    step!(interface)
+    step!(scenario)
 end
 
-@info "Closed-loop run_cl complete" residual_norm=norm(command(readout(interface)))
+@info "Closed-loop run_cl complete" residual_norm=norm(command(readout(scenario)))

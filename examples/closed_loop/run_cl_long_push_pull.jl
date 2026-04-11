@@ -23,11 +23,13 @@ imat1 = interaction_matrix(sim.optic, sim.wfs, sim.tel; amplitude=0.05)
 imat2 = interaction_matrix(sim.optic, sim.wfs, sim.tel; amplitude=0.1)
 mat = 0.5 .* (imat1.matrix .+ imat2.matrix)
 recon = ModalReconstructor(InteractionMatrix(mat, 0.1); gain=0.4)
-runtime = ClosedLoopRuntime(sim, recon; rng=rng)
-interface = simulation_interface(runtime)
+branch = RuntimeBranch(:main, sim, recon; rng=rng)
+cfg = SingleRuntimeConfig(name=:run_cl_long_push_pull_demo, branch_label=:main)
+scenario = build_runtime_scenario(cfg, branch)
+prepare!(scenario)
 
 for _ in 1:5
-    step!(interface)
+    step!(scenario)
 end
 
-@info "Closed-loop long push-pull complete" residual_norm=norm(command(readout(interface)))
+@info "Closed-loop long push-pull complete" residual_norm=norm(command(readout(scenario)))

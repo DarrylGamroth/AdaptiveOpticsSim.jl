@@ -62,9 +62,9 @@ Required rule:
 For grouped composite execution:
 
 - branch detector-facing WFS exports are available through
-  `simulation_wfs_frame(composite)`
+  `wfs_frame(composite)`
 - compatible grouped WFS exports are available through
-  `simulation_grouped_wfs_stack(composite)`
+  `grouped_wfs_stack(composite)`
 - if branch shapes are incompatible, grouped stack export must be `nothing`
   instead of forcing an ambiguous layout
 
@@ -72,9 +72,9 @@ For grouped composite execution:
 
 The same policy applies to grouped science outputs:
 
-- branch science frames via `simulation_science_frame(composite)`
+- branch science frames via `science_frame(composite)`
 - compatible grouped science stacks via
-  `simulation_grouped_science_stack(composite)`
+  `grouped_science_stack(composite)`
 - incompatible grouped science layouts must remain unstacked
 
 ## Current Runtime Entry Points
@@ -83,10 +83,10 @@ The maintained grouped runtime entry points are:
 
 - `CompositeSimulationInterface`
 - `step!(::CompositeSimulationInterface)`
-- `simulation_wfs_frame`
-- `simulation_science_frame`
-- `simulation_grouped_wfs_stack`
-- `simulation_grouped_science_stack`
+- `wfs_frame`
+- `science_frame`
+- `grouped_wfs_stack`
+- `grouped_science_stack`
 
 ## Conformance Checklist
 

@@ -12,20 +12,25 @@ function main(; n_iter::Int=4)
     sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=1e-8)
     recon = ModalReconstructor(imat; gain=0.4)
-    runtime = ClosedLoopRuntime(sim, recon; rng=rng, wfs_detector=det)
-    interface = simulation_interface(runtime)
+    branch = RuntimeBranch(:main, sim, recon; rng=rng, wfs_detector=det)
+    cfg = SingleRuntimeConfig(
+        name=:tutorial_closed_loop_zernike,
+        branch_label=:main,
+        products=RuntimeProductRequirements(slopes=true, wfs_pixels=true),
+    )
+    scenario = build_runtime_scenario(cfg, branch)
 
-    prepare!(interface)
+    prepare!(scenario)
     residual_before = zeros(Float64, n_iter)
     residual_after = similar(residual_before)
 
     for k in 1:n_iter
         residual_before[k] = pupil_rms(tel.state.opd, tel.state.pupil)
-        step!(interface)
+        step!(scenario)
         residual_after[k] = pupil_rms(tel.state.opd, tel.state.pupil)
     end
 
-    rt = readout(interface)
+    rt = readout(scenario)
     result = (
         residual_before=residual_before,
         residual_after=residual_after,
