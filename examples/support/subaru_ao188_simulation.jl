@@ -8,8 +8,7 @@ using Statistics
 import AdaptiveOpticsSim: step!, runtime_timing, convert_noise, validate_noise, materialize_build,
     execution_style, synchronize_backend!, bin2d!, apply_command!, prepare_sampling!,
     ensure_sh_calibration!, wfs_output_frame, prepare!, prepare_runtime_wfs!, supports_prepared_runtime,
-    supports_detector_output, supports_grouped_execution, simulation_interface, wfs_output_metadata,
-    init_execution_state
+    supports_detector_output, supports_grouped_execution, wfs_output_metadata, init_execution_state
 
 export AO188ActuatorSupportModel, CircularActuatorSupport
 export SubaruHighOrderWFSModel, OperationalShackHartmannModel, AO188CurvatureModel
@@ -17,7 +16,7 @@ export AO188ReplayMode, DirectReplayMode, PreparedReplayMode
 export AO188LatencyModel, AO188DetectorConfig, AO188WFSDetectorConfig, AO188APDDetectorConfig
 export AO188SimulationParams, AO188CurvatureSimulationParams
 export AO188Simulation, subaru_ao188_simulation, subaru_ao188_curvature_simulation
-export subaru_ao188_phase_timing, prepare_replay!
+export subaru_ao188_phase_timing, prepare_replay!, ao188_readout
 
 abstract type AO188ActuatorSupportModel end
 struct CircularActuatorSupport <: AO188ActuatorSupportModel end
@@ -65,12 +64,12 @@ function AO188CurvatureSimulationParams(; kwargs...)
         high_detector=high_detector, rest...)
 end
 
-function _build_high_order_wfs(::OperationalShackHartmannModel, tel::Telescope, params; backend=CPUBackend())
+function _build_high_order_wfs(::OperationalShackHartmannModel, tel::Telescope, params; backend::AbstractArrayBackend=CPUBackend())
     T = eltype(tel.state.opd)
     return ShackHartmann(tel; n_subap=params.n_subap, mode=Diffractive(), T=T, backend=backend)
 end
 
-function _build_high_order_wfs(model::AO188CurvatureModel, tel::Telescope, params; backend=CPUBackend())
+function _build_high_order_wfs(model::AO188CurvatureModel, tel::Telescope, params; backend::AbstractArrayBackend=CPUBackend())
     T = eltype(tel.state.opd)
     readout_crop_resolution = ao188_curvature_readout_crop_resolution(
         tel.params.resolution, params.n_subap, model.crop_samples_per_subap)
@@ -189,7 +188,7 @@ function AO188APDDetectorConfig(;
     )
 end
 
-function detector_from_config(cfg::AO188WFSDetectorConfig{T}; backend=CPUBackend()) where {T<:AbstractFloat}
+function detector_from_config(cfg::AO188WFSDetectorConfig{T}; backend::AbstractArrayBackend=CPUBackend()) where {T<:AbstractFloat}
     return Detector(
         cfg.noise;
         integration_time=cfg.integration_time,
@@ -207,7 +206,7 @@ function detector_from_config(cfg::AO188WFSDetectorConfig{T}; backend=CPUBackend
     )
 end
 
-function detector_from_config(cfg::AO188APDDetectorConfig{T}; backend=CPUBackend()) where {T<:AbstractFloat}
+function detector_from_config(cfg::AO188APDDetectorConfig{T}; backend::AbstractArrayBackend=CPUBackend()) where {T<:AbstractFloat}
     return APDDetector(
         integration_time=cfg.integration_time,
         qe=cfg.qe,
@@ -547,13 +546,11 @@ function _full_command_reconstructor(M2C_host::AbstractMatrix{T}, imat::Interact
     )
 end
 
-function _auto_build_backend(backend)
-    backend === Array && return AdaptiveOpticsSim.NativeBuildBackend()
-    for B in AdaptiveOpticsSim.available_gpu_backends()
-        if backend === AdaptiveOpticsSim.gpu_backend_array_type(B)
-            return AdaptiveOpticsSim.GPUArrayBuildBackend(B)
-        end
-    end
+function _auto_build_backend(backend::AbstractArrayBackend)
+    backend isa CPUBackend && return AdaptiveOpticsSim.NativeBuildBackend()
+    backend isa CUDABackend && return AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.CUDABackendTag)
+    backend isa MetalBackend && return AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.MetalBackendTag)
+    backend isa AMDGPUBackend && return AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.AMDGPUBackendTag)
     return AdaptiveOpticsSim.NativeBuildBackend()
 end
 
@@ -648,9 +645,9 @@ function prepare_replay!(simulation::AO188Simulation)
 end
 
 function subaru_ao188_simulation(; params::AO188SimulationParams=AO188SimulationParams(),
-    backend=CPUBackend(), build_backend::Union{Nothing,AdaptiveOpticsSim.BuildBackend}=nothing, rng=MersenneTwister(0))
+    backend::AbstractArrayBackend=CPUBackend(), build_backend::Union{Nothing,AdaptiveOpticsSim.BuildBackend}=nothing, rng=MersenneTwister(0))
     resolved_materialize_backend = isnothing(build_backend) ? _auto_build_backend(backend) : build_backend
-    resolved_calibration_backend = isnothing(build_backend) && backend !== Array ? AdaptiveOpticsSim.CPUBuildBackend() : resolved_materialize_backend
+    resolved_calibration_backend = isnothing(build_backend) && !(backend isa CPUBackend) ? AdaptiveOpticsSim.CPUBuildBackend() : resolved_materialize_backend
     T = typeof(params.diameter)
     if params.resolution % params.low_order_resolution != 0
         throw(InvalidConfiguration("low_order_resolution must evenly divide the main telescope resolution"))
@@ -690,7 +687,7 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
     calibration_low_dm = low_dm
     calibration_high_wfs = high_wfs
     calibration_low_wfs = low_wfs
-    if resolved_calibration_backend isa AdaptiveOpticsSim.CPUBuildBackend && backend !== Array
+    if resolved_calibration_backend isa AdaptiveOpticsSim.CPUBuildBackend && !(backend isa CPUBackend)
         calibration_tel, calibration_low_tel, calibration_src,
         calibration_dm, calibration_low_dm, calibration_high_wfs, calibration_low_wfs =
             _ao188_calibration_objects(params)
@@ -799,7 +796,7 @@ supports_prepared_runtime(::Type{<:AO188Simulation}) = true
 supports_detector_output(::Type{<:AO188Simulation}) = true
 supports_grouped_execution(::Type{<:AO188Simulation}) = true
 
-function simulation_interface(simulation::AO188Simulation)
+function ao188_readout(simulation::AO188Simulation)
     return SimulationReadout(
         simulation.command,
         (simulation.high_wfs.state.slopes, simulation.low_wfs.state.slopes),

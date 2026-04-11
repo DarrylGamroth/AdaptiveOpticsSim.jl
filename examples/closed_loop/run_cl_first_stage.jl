@@ -18,19 +18,19 @@ sim = AdaptiveOpticsSim.initialize_ao_shwfs(
     n_subap=4,
 )
 
-imat = interaction_matrix(sim.dm, sim.wfs, sim.tel; amplitude=0.1)
+imat = interaction_matrix(sim.optic, sim.wfs, sim.tel; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.4)
-cmd = similar(sim.dm.state.coefs)
+cmd = similar(sim.optic.state.coefs)
 
 n_half = div(length(cmd), 2)
 for _ in 1:5
     advance!(sim.atm, sim.tel; rng=rng)
     propagate!(sim.atm, sim.tel)
-    apply!(sim.dm, sim.tel, DMAdditive())
+    apply!(sim.optic, sim.tel, DMAdditive())
     measure!(sim.wfs, sim.tel)
     reconstruct!(cmd, recon, sim.wfs.state.slopes)
-    sim.dm.state.coefs .= 0
-    sim.dm.state.coefs[1:n_half] .= -cmd[1:n_half]
+    sim.optic.state.coefs .= 0
+    sim.optic.state.coefs[1:n_half] .= -cmd[1:n_half]
 end
 
 @info "Closed-loop first-stage run complete"

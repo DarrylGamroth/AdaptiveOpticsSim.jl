@@ -55,7 +55,7 @@ function AO3kSimulationParams(; kwargs...)
     )
 end
 
-function SubaruAO188Simulation._build_high_order_wfs(model::AO3kNIRPyramidModel, tel::Telescope, params; backend=CPUBackend())
+function SubaruAO188Simulation._build_high_order_wfs(model::AO3kNIRPyramidModel, tel::Telescope, params; backend::AbstractArrayBackend=CPUBackend())
     T = eltype(tel.state.opd)
     return PyramidWFS(
         tel;

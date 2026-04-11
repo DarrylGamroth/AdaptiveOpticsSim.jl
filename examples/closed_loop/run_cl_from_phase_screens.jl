@@ -24,16 +24,16 @@ for k in 1:5
     screens[k] = copy(sim.atm.state.opd)
 end
 
-imat = interaction_matrix(sim.dm, sim.wfs, sim.tel; amplitude=0.1)
+imat = interaction_matrix(sim.optic, sim.wfs, sim.tel; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
-cmd = similar(sim.dm.state.coefs)
+cmd = similar(sim.optic.state.coefs)
 
 for k in 1:length(screens)
     sim.tel.state.opd .= screens[k] .* sim.tel.state.pupil
-    apply!(sim.dm, sim.tel, DMAdditive())
+    apply!(sim.optic, sim.tel, DMAdditive())
     measure!(sim.wfs, sim.tel)
     reconstruct!(cmd, recon, sim.wfs.state.slopes)
-    sim.dm.state.coefs .= -cmd
+    sim.optic.state.coefs .= -cmd
 end
 
 @info "Closed-loop from phase screens complete"

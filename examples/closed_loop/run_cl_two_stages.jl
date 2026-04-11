@@ -19,7 +19,7 @@ sim = AdaptiveOpticsSim.initialize_ao_shwfs(
 )
 
 dm_coarse = DeformableMirror(sim.tel; n_act=2, influence_width=0.6)
-dm_fine = sim.dm
+dm_fine = sim.optic
 
 imat_coarse = interaction_matrix(dm_coarse, sim.wfs, sim.tel; amplitude=0.1)
 imat_fine = interaction_matrix(dm_fine, sim.wfs, sim.tel; amplitude=0.1)

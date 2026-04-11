@@ -19,7 +19,7 @@ sim = AdaptiveOpticsSim.initialize_ao_shwfs(
     n_subap=4,
 )
 
-imat = interaction_matrix(sim.dm, sim.wfs, sim.tel; amplitude=0.1)
+imat = interaction_matrix(sim.optic, sim.wfs, sim.tel; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
 runtime = ClosedLoopRuntime(sim, recon; rng=rng)
 interface = simulation_interface(runtime)
