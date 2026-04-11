@@ -5,7 +5,7 @@ using LinearAlgebra
 using Random
 using Statistics
 
-import AdaptiveOpticsSim: step!, runtime_timing, convert_noise, validate_noise, materialize_build,
+import AdaptiveOpticsSim: step!, readout, runtime_timing, convert_noise, validate_noise, materialize_build,
     execution_style, synchronize_backend!, bin2d!, apply_command!, prepare_sampling!,
     ensure_sh_calibration!, wfs_output_frame, prepare!, prepare_runtime_wfs!, supports_prepared_runtime,
     supports_detector_output, supports_grouped_execution, wfs_output_metadata, init_execution_state
@@ -795,6 +795,8 @@ prepare!(simulation::AO188Simulation) = prepare_replay!(simulation)
 supports_prepared_runtime(::Type{<:AO188Simulation}) = true
 supports_detector_output(::Type{<:AO188Simulation}) = true
 supports_grouped_execution(::Type{<:AO188Simulation}) = true
+
+readout(simulation::AO188Simulation) = ao188_readout(simulation)
 
 function ao188_readout(simulation::AO188Simulation)
     return SimulationReadout(

@@ -362,7 +362,7 @@ end
     @test !supports_detector_output(runtime)
     @test !supports_stacked_sources(runtime)
     @test !supports_grouped_execution(runtime)
-    @test simulation_interface(iface) === iface
+    @test AdaptiveOpticsSim.simulation_interface(iface) === iface
     @test !supports_prepared_runtime(wfs, src)
     @test supports_prepared_runtime(wfs_diffractive, src)
     @test supports_prepared_runtime(wfs_diffractive, ast)

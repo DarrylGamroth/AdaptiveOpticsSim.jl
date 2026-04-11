@@ -115,7 +115,7 @@ This layer is the recommended path for:
 - HIL / RTC-boundary simulations
 - grouped or multi-branch runtime composition
 
-The lower-level `ClosedLoopRuntime` + `simulation_interface(...)` path remains
+The lower-level `ClosedLoopRuntime` + `AdaptiveOpticsSim.simulation_interface(...)` path remains
 available, but it is an advanced single-runtime surface rather than the default
 user entry point.
 

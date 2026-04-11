@@ -14,6 +14,31 @@
     @test maximum(slopes) > 0
 end
 
+@testset "AOSimulation constructors" begin
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = Source(band=:I, magnitude=0.0)
+    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
+    wfs = ShackHartmann(tel; n_subap=4)
+
+    sim_positional = AOSimulation(tel, src, atm, dm, wfs)
+    sim_keyword = AOSimulation(
+        telescope=tel,
+        source=src,
+        atmosphere=atm,
+        optic=dm,
+        sensor=wfs,
+    )
+
+    @test sim_keyword.tel === tel
+    @test sim_keyword.src === src
+    @test sim_keyword.atm === atm
+    @test sim_keyword.optic === dm
+    @test sim_keyword.wfs === wfs
+    @test backend(sim_keyword) isa CPUBackend
+    @test typeof(sim_keyword) === typeof(sim_positional)
+end
+
 @testset "Semantic backend descriptors" begin
     @test array_backend_type(CPUBackend()) === Array
 
@@ -143,9 +168,9 @@ end
     @test supports_prepared_runtime(typeof(surrogate))
     @test supports_detector_output(typeof(surrogate))
     @test supports_grouped_execution(typeof(surrogate))
-    simif = simulation_interface(surrogate)
-    @test command(simif) === surrogate.command
-    @test length(slopes(simif)) == 2
+    surrogate_readout = readout(surrogate)
+    @test command(surrogate_readout) === surrogate.command
+    @test length(slopes(surrogate_readout)) == 2
     timing = runtime_timing(surrogate; warmup=1, samples=2, gc_before=false)
     @test timing.samples == 2
     phase = subaru_ao188_phase_timing(surrogate; warmup=1, samples=2, gc_before=false)
@@ -210,7 +235,7 @@ end
     @test curvature_sim.high_detector isa APDDetector
     step!(curvature_sim)
     @test length(curvature_sim.command) == curvature_params.n_act^2
-    curvature_readout = simulation_interface(curvature_sim)
+    curvature_readout = AdaptiveOpticsSim.simulation_interface(curvature_sim)
     @test size(wfs_frame(curvature_readout)[1]) == (2, curvature_params.n_subap^2)
     @test wfs_metadata(curvature_readout)[1] isa CountingDetectorExportMetadata
 
@@ -233,7 +258,7 @@ end
     @test ao3k_params.high_detector.thermal_model isa FixedTemperature
     step!(ao3k_sim)
     @test length(ao3k_sim.command) == ao3k_params.n_act^2
-    ao3k_iface = simulation_interface(ao3k_sim)
+    ao3k_iface = AdaptiveOpticsSim.simulation_interface(ao3k_sim)
     ao3k_high_meta = wfs_metadata(ao3k_iface)[1]
     @test ao3k_high_meta.sensor == :hgcdte_avalanche_array
     @test ao3k_high_meta.thermal_model == :fixed_temperature
@@ -425,7 +450,7 @@ end
     @test single_scenario isa RuntimeScenario
     @test platform_name(single_scenario) == :single_runtime_demo
     @test platform_branch_labels(single_scenario) == (:science_branch,)
-    @test simulation_interface(single_scenario) isa SimulationInterface
+    @test AdaptiveOpticsSim.simulation_interface(single_scenario) isa SimulationInterface
     @test supports_detector_output(single_scenario)
     single_layout = command_layout(single_scenario)
     @test single_layout isa RuntimeCommandLayout
@@ -511,18 +536,18 @@ end
     @test grouped_scenario isa RuntimeScenario
     @test platform_name(grouped_scenario) == :grouped_runtime_demo
     @test platform_branch_labels(grouped_scenario) == (:branch_a, :branch_b)
-    @test simulation_interface(grouped_scenario) isa CompositeSimulationInterface
+    @test AdaptiveOpticsSim.simulation_interface(grouped_scenario) isa CompositeSimulationInterface
     @test supports_grouped_execution(grouped_scenario)
     grouped_layout = command_layout(grouped_scenario)
     @test grouped_layout isa RuntimeCommandLayout
     @test command_segment_labels(grouped_layout) == (:branch_a, :branch_b)
-    @test command_segment_range(command_segments(grouped_layout)[1]) == 1:length(simulation_interface(grouped_scenario).interfaces[1].command)
-    @test first(command_segment_range(command_segments(grouped_layout)[2])) == length(simulation_interface(grouped_scenario).interfaces[1].command) + 1
+    @test command_segment_range(command_segments(grouped_layout)[1]) == 1:length(AdaptiveOpticsSim.simulation_interface(grouped_scenario).interfaces[1].command)
+    @test first(command_segment_range(command_segments(grouped_layout)[2])) == length(AdaptiveOpticsSim.simulation_interface(grouped_scenario).interfaces[1].command) + 1
     @test command_segment_labels(branch_command_layout(grouped_scenario, :branch_a)) == (:dm,)
     @test branch_command_layouts(grouped_scenario).branch_b == branch_command_layout(grouped_scenario, :branch_b)
     prepare!(grouped_scenario)
-    branch_a_cmd = fill(eltype(command(grouped_scenario))(0.01), length(simulation_interface(grouped_scenario).interfaces[1].command))
-    branch_b_cmd = fill(eltype(command(grouped_scenario))(0.02), length(simulation_interface(grouped_scenario).interfaces[2].command))
+    branch_a_cmd = fill(eltype(command(grouped_scenario))(0.01), length(AdaptiveOpticsSim.simulation_interface(grouped_scenario).interfaces[1].command))
+    branch_b_cmd = fill(eltype(command(grouped_scenario))(0.02), length(AdaptiveOpticsSim.simulation_interface(grouped_scenario).interfaces[2].command))
     set_command!(grouped_scenario, (; branch_a=branch_a_cmd, branch_b=branch_b_cmd))
     sense!(grouped_scenario)
     @test command(grouped_scenario) == vcat(branch_a_cmd, branch_b_cmd)

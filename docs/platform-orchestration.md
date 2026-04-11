@@ -11,7 +11,7 @@ The goal is to make realistic runtime assembly more explicit and reusable
 without switching the package to a config-file-first model.
 
 This is the preferred public runtime assembly layer. Use direct
-`ClosedLoopRuntime` plus `simulation_interface(...)` only when you are
+`ClosedLoopRuntime` plus `AdaptiveOpticsSim.simulation_interface(...)` only when you are
 manually assembling or testing a single runtime.
 
 ## Design

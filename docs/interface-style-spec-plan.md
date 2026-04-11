@@ -205,7 +205,7 @@ Conformance expectations:
 Required:
 
 - `step!(sim)`
-- `simulation_interface(sim)`
+- `AdaptiveOpticsSim.simulation_interface(sim)`
 - `readout(sim)`
 
 Preferred:

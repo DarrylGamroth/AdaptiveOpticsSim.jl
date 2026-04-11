@@ -421,7 +421,7 @@ do not need the full scenario/config layer.
 
 ```julia
 runtime = ClosedLoopRuntime(sim, recon; rng=MersenneTwister(0))
-interface = simulation_interface(runtime)
+interface = AdaptiveOpticsSim.simulation_interface(runtime)
 prepare!(interface)
 step!(interface)
 rt = readout(interface)

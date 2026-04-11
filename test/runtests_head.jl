@@ -97,9 +97,9 @@ end
 function assert_control_simulation_interface(sim)
     @test sim isa AbstractControlSimulation
     @test applicable(step!, sim)
-    @test applicable(simulation_interface, sim)
+    @test applicable(AdaptiveOpticsSim.simulation_interface, sim)
     @test applicable(readout, sim)
-    iface = simulation_interface(sim)
+    iface = AdaptiveOpticsSim.simulation_interface(sim)
     sim_readout = readout(sim)
     iface_readout = readout(iface)
     @test command(sim_readout) === command(sim)

@@ -219,7 +219,6 @@ export build_runtime_scenario, platform_config, platform_boundary, platform_name
 export sense!, step!, set_command!, snapshot_outputs!
 export readout, command, slopes, wfs_frame, science_frame, wfs_metadata, science_metadata
 export grouped_wfs_stack, grouped_science_stack
-export simulation_interface
 export runtime_profile, runtime_latency
 export RuntimeTimingStats, RuntimePhaseTimingStats, runtime_timing, runtime_phase_timing
 export with_reconstructor, with_reconstructors

@@ -35,7 +35,7 @@ still too mixed:
 This is not a problem in the implementation itself. It is a problem in public
 layering:
 
-- the cookbook still mixes `simulation_interface(runtime)` with
+- the cookbook still mixes `AdaptiveOpticsSim.simulation_interface(runtime)` with
   `build_runtime_scenario(...)`
 - the user path does not yet treat one runtime/orchestration surface as the
   clear default
@@ -167,7 +167,7 @@ The package should present the execution stack like this:
    - `wfs_frame(...)`
    - `science_frame(...)`
 
-The low-level `ClosedLoopRuntime` + `simulation_interface(...)` path remains
+The low-level `ClosedLoopRuntime` + `AdaptiveOpticsSim.simulation_interface(...)` path remains
 supported, but it should be documented as a lower-level/power-user surface.
 
 ## Concrete Work Items
@@ -184,7 +184,7 @@ Required changes:
   - explicitly describe Layers 1-3
 - `docs/model-cookbook.md`
   - keep normal runtime recipes on `build_runtime_scenario(...)`
-  - label any `simulation_interface(...)` example as advanced/low-level
+  - label any `AdaptiveOpticsSim.simulation_interface(...)` example as advanced/low-level
 - `docs/api-reference.md`
   - group exported execution APIs by layer
 - `docs/platform-orchestration.md`
@@ -194,7 +194,7 @@ Success criteria:
 
 - a normal user can stay on the orchestration/runtime path without seeing the
   low-level runtime wrapper first
-- the docs do not imply that `simulation_interface(...)` and
+- the docs do not imply that `AdaptiveOpticsSim.simulation_interface(...)` and
   `build_runtime_scenario(...)` are equally preferred entry points
 
 ### LI-2 Cookbook Normalization
@@ -206,7 +206,7 @@ Required changes:
 - convert the current closed-loop runtime recipe to the scenario builder path,
   or relabel it explicitly as a low-level runtime recipe
 - keep one dedicated advanced recipe for direct `ClosedLoopRuntime` /
-  `simulation_interface(...)`
+  `AdaptiveOpticsSim.simulation_interface(...)`
 - make the HIL recipes use:
   - `prepare!`
   - `set_command!`
@@ -228,7 +228,7 @@ Required changes:
   - primitive physics layer
   - runtime execution layer
   - orchestration layer
-- document when `simulation_interface(...)` is appropriate
+- document when `AdaptiveOpticsSim.simulation_interface(...)` is appropriate
 - document the exact `sense!` vs `step!` distinction once and reuse it
 
 Success criteria:
@@ -237,7 +237,7 @@ Success criteria:
 
 ### LI-4 Advanced Surface Labeling
 
-Treat `simulation_interface(...)` as an advanced surface without removing it.
+Treat `AdaptiveOpticsSim.simulation_interface(...)` as an advanced surface without removing it.
 
 Required changes:
 
@@ -250,7 +250,7 @@ Required changes:
 
 Success criteria:
 
-- users encountering `simulation_interface(...)` understand why it exists
+- users encountering `AdaptiveOpticsSim.simulation_interface(...)` understand why it exists
 - users do not need it for the normal HIL/runtime path
 
 ### LI-5 Example Classification
@@ -274,7 +274,7 @@ Success criteria:
 If the layered story works well after the doc/examples pass, consider a small
 API cleanup:
 
-- keep `simulation_interface(...)` exported if it remains a legitimate advanced
+- keep `AdaptiveOpticsSim.simulation_interface(...)` exported if it remains a legitimate advanced
   surface
 - otherwise move it to the advanced docs only and consider reducing its
   prominence in exported examples
@@ -300,7 +300,7 @@ This plan is complete when:
 - `platform-orchestration.md` is the clear first stop for public runtime
   assembly
 - at least one advanced doc/example still covers direct
-  `simulation_interface(...)` usage for power users
+  `AdaptiveOpticsSim.simulation_interface(...)` usage for power users
 
 ## Relationship To Existing Plans
 

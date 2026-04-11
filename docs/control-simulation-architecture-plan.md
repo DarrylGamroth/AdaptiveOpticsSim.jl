@@ -152,7 +152,7 @@ Candidate names:
 Recommended minimal API:
 
 - `step!(sim)`
-- `simulation_interface(sim)`
+- `AdaptiveOpticsSim.simulation_interface(sim)`
 - `prepare!(sim)` or `prepare_runtime!(sim)`
 
 Optional later additions:

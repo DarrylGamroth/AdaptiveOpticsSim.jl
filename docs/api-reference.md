@@ -213,7 +213,7 @@ HIL usage.
 ### Advanced single-runtime wrappers
 
 - `SimulationInterface`, `CompositeSimulationInterface`
-- `simulation_interface`
+- `AdaptiveOpticsSim.simulation_interface`
 
 Use these when you are manually assembling or testing a single runtime and do
 not need the scenario/config layer.
@@ -605,7 +605,7 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 ### `IF-SIM`: control simulations
 
 - `AbstractControlSimulation` implementations must provide `step!(sim)`,
-  `simulation_interface(sim)`, and `readout(sim)`.
+  `AdaptiveOpticsSim.simulation_interface(sim)`, and `readout(sim)`.
 - `sense!(sim)` is the plant/sensor-side execution hook when commands are
   supplied externally.
 - `prepare!(sim)` is the preferred optional hook for one-time runtime/WFS
