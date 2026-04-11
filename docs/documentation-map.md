@@ -83,6 +83,8 @@ Use these when the task is cross-package or instrument-truth work:
   - maintained conventions for script-first scenario construction
 - [`api-cleanup-plan-2026-04.md`](./api-cleanup-plan-2026-04.md)
   - phased cleanup plan for runtime/HIL naming, accessors, and external-control semantics
+- [`layered-interface-plan-2026-04.md`](./layered-interface-plan-2026-04.md)
+  - phased cleanup plan for the primitive, runtime, and orchestration-layer public interface story
 - [`controllable-optics-plan-2026-04.md`](./controllable-optics-plan-2026-04.md)
   - phased plan for multi-surface controllable optics, GPU-native command routing, and ordered plant application
 - [`backend-type-refactor-plan-2026-04.md`](./backend-type-refactor-plan-2026-04.md)
