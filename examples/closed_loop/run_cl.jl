@@ -28,4 +28,4 @@ for _ in 1:5
     step!(interface)
 end
 
-@info "Closed-loop run_cl complete" residual_norm=norm(simulation_command(interface))
+@info "Closed-loop run_cl complete" residual_norm=norm(command(readout(interface)))

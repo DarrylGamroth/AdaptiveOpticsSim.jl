@@ -69,8 +69,9 @@ for _ in 1:5
     step!(interface)
 end
 
-cmd = simulation_command(interface)
-frame = simulation_wfs_frame(interface)
+rt = readout(interface)
+cmd = command(rt)
+frame = wfs_frame(rt)
 ```
 
 The main modeling objects are:

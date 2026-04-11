@@ -23,4 +23,4 @@ for _ in 1:5
     step!(interface)
 end
 
-@info "Closed-loop ZernikeWFS tutorial complete" residual_norm=norm(simulation_command(interface)) slope_norm=norm(simulation_slopes(interface))
+@info "Closed-loop ZernikeWFS tutorial complete" residual_norm=norm(command(readout(interface))) slope_norm=norm(slopes(readout(interface)))

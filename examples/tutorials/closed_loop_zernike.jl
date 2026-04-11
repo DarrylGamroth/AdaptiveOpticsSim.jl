@@ -25,12 +25,13 @@ function main(; n_iter::Int=4)
         residual_after[k] = pupil_rms(tel.state.opd, tel.state.pupil)
     end
 
+    rt = readout(interface)
     result = (
         residual_before=residual_before,
         residual_after=residual_after,
-        final_frame=copy(simulation_wfs_frame(interface)),
-        final_slopes=copy(simulation_slopes(interface)),
-        final_command=copy(simulation_command(interface)),
+        final_frame=copy(wfs_frame(rt)),
+        final_slopes=copy(slopes(rt)),
+        final_command=copy(command(rt)),
     )
     @info "Closed-loop ZernikeWFS tutorial complete" final_residual=result.residual_after[end]
     return result

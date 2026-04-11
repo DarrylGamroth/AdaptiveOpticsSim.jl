@@ -30,4 +30,4 @@ for _ in 1:5
     step!(interface)
 end
 
-@info "Closed-loop long push-pull complete" residual_norm=norm(simulation_command(interface))
+@info "Closed-loop long push-pull complete" residual_norm=norm(command(readout(interface)))

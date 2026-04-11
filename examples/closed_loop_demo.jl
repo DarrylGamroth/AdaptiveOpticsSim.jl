@@ -21,4 +21,4 @@ for k in 1:n_iter
     step!(interface)
 end
 
-println("Closed-loop demo complete, command_norm=$(norm(simulation_command(interface)))")
+println("Closed-loop demo complete, command_norm=$(norm(command(readout(interface))))")

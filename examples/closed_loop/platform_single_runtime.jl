@@ -11,7 +11,7 @@ imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
 science_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
 
-branch = ClosedLoopBranchConfig(
+branch = RuntimeBranch(
     :main,
     sim,
     recon;
@@ -19,19 +19,19 @@ branch = ClosedLoopBranchConfig(
     rng=MersenneTwister(1),
 )
 
-cfg = SinglePlatformConfig(
+cfg = SingleRuntimeConfig(
     name=:single_runtime_demo,
     branch_label=:main,
     products=RuntimeProductRequirements(slopes=true, wfs_pixels=false, science_pixels=true),
 )
 
-scenario = build_platform_scenario(cfg, branch)
+scenario = build_runtime_scenario(cfg, branch)
 prepare!(scenario)
 step!(scenario)
 
 println("platform_single_runtime")
 println("  name: ", platform_name(scenario))
 println("  branch_labels: ", platform_branch_labels(scenario))
-println("  command_length: ", length(simulation_command(scenario)))
-println("  slopes_length: ", length(simulation_slopes(scenario)))
-println("  science_frame_shape: ", size(simulation_science_frame(scenario)))
+println("  command_length: ", length(command(scenario)))
+println("  slopes_length: ", length(slopes(scenario)))
+println("  science_frame_shape: ", size(science_frame(scenario)))
