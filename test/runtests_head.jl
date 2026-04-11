@@ -263,7 +263,7 @@ function moving_closed_loop_trace(;
     )
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
     wfs = ZernikeWFS(tel; n_subap=4, diffraction_padding=2)
-    sim = AOSimulation(tel, atm, src, dm, wfs)
+    sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=1e-8)
     recon = ModalReconstructor(imat; gain=0.2)
     wfs_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)

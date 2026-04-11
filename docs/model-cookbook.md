@@ -106,7 +106,7 @@ src = Source(band=:I, magnitude=0.0)
 atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive())
-sim = AOSimulation(tel, atm, src, dm, wfs)
+sim = AOSimulation(tel, src, atm, dm, wfs)
 
 imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
@@ -145,7 +145,7 @@ src = Source(band=:I, magnitude=0.0)
 atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive())
-sim = AOSimulation(tel, atm, src, dm, wfs)
+sim = AOSimulation(tel, src, atm, dm, wfs)
 
 # Use NullReconstructor() when the controller lives outside the package and
 # commands are injected explicitly through set_command!(...).
@@ -210,7 +210,7 @@ end
 tiptilt = TipTiltMirror(tel; scale=0.1, label=:tiptilt)
 high_order_dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 composite_optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => high_order_dm)
-composite_sim = AOSimulation(tel, atm, src, composite_optic, wfs)
+composite_sim = AOSimulation(tel, src, atm, composite_optic, wfs)
 
 composite_branch = RuntimeBranch(
     :main,
@@ -344,7 +344,7 @@ wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=Float32, backend=GPU)
 wfs_det = Detector(noise=NoiseNone(), integration_time=1.0f0, qe=1.0f0, binning=1; T=Float32, backend=GPU)
 science_det = Detector(noise=NoiseNone(), integration_time=1.0f0, qe=1.0f0, binning=1; T=Float32, backend=GPU)
 
-sim = AOSimulation(tel, atm, src, optic, wfs)
+sim = AOSimulation(tel, src, atm, optic, wfs)
 branch = RuntimeBranch(
     :main,
     sim,

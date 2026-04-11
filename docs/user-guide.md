@@ -117,7 +117,7 @@ using Random
 
 rng = MersenneTwister(0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-sim = AOSimulation(tel, atm, src, dm, wfs)
+sim = AOSimulation(tel, src, atm, dm, wfs)
 
 imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)

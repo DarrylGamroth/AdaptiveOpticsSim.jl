@@ -1,16 +1,20 @@
-struct AOSimulation{TEL<:AbstractTelescope,A<:AbstractAtmosphere,S<:AbstractSource,O<:AbstractControllableOptic,W<:AbstractWFS,B<:AbstractArrayBackend}
+struct AOSimulation{TEL<:AbstractTelescope,S<:AbstractSource,A<:AbstractAtmosphere,O<:AbstractControllableOptic,W<:AbstractWFS,B<:AbstractArrayBackend}
     tel::TEL
-    atm::A
     src::S
+    atm::A
     optic::O
     wfs::W
 end
 
 @inline backend(::AOSimulation{<:Any,<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
 
-function AOSimulation(tel::AbstractTelescope, atm::AbstractAtmosphere, src::AbstractSource, optic::AbstractControllableOptic, wfs::AbstractWFS)
+function AOSimulation(tel::AbstractTelescope, src::AbstractSource, atm::AbstractAtmosphere, optic::AbstractControllableOptic, wfs::AbstractWFS)
     selector = require_same_backend(tel, atm, optic, wfs)
-    return AOSimulation{typeof(tel), typeof(atm), typeof(src), typeof(optic), typeof(wfs), typeof(selector)}(tel, atm, src, optic, wfs)
+    return AOSimulation{typeof(tel), typeof(src), typeof(atm), typeof(optic), typeof(wfs), typeof(selector)}(tel, src, atm, optic, wfs)
+end
+
+function AOSimulation(tel::AbstractTelescope, atm::AbstractAtmosphere, src::AbstractSource, optic::AbstractControllableOptic, wfs::AbstractWFS)
+    return AOSimulation(tel, src, atm, optic, wfs)
 end
 
 function initialize_ao_pyramid(; resolution::Int, diameter::Real, sampling_time::Real,
@@ -29,7 +33,7 @@ function initialize_ao_pyramid(; resolution::Int, diameter::Real, sampling_time:
         wind_speed=wind_speed, wind_direction=wind_direction, altitude=altitude, T=T, backend=selector)
     dm = DeformableMirror(tel; n_act=n_act, influence_width=influence_width, T=T, backend=selector)
     wfs = PyramidWFS(tel; n_subap=n_subap, threshold=threshold, modulation=modulation, T=T, backend=selector)
-    return AOSimulation(tel, atm, src, dm, wfs)
+    return AOSimulation(tel, src, atm, dm, wfs)
 end
 
 function initialize_ao_shwfs(; resolution::Int, diameter::Real, sampling_time::Real,
@@ -48,5 +52,5 @@ function initialize_ao_shwfs(; resolution::Int, diameter::Real, sampling_time::R
         wind_speed=wind_speed, wind_direction=wind_direction, altitude=altitude, T=T, backend=selector)
     dm = DeformableMirror(tel; n_act=n_act, influence_width=influence_width, T=T, backend=selector)
     wfs = ShackHartmann(tel; n_subap=n_subap, threshold=threshold, T=T, backend=selector)
-    return AOSimulation(tel, atm, src, dm, wfs)
+    return AOSimulation(tel, src, atm, dm, wfs)
 end

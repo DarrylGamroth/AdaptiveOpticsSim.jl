@@ -9,7 +9,7 @@ atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 wfs = ShackHartmann(tel; n_subap=4)
 src = Source(band=:I, magnitude=0.0)
-sim = AOSimulation(tel, atm, src, dm, wfs)
+sim = AOSimulation(tel, src, atm, dm, wfs)
 
 imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)

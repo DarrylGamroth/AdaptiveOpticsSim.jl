@@ -269,7 +269,7 @@ wfs = ShackHartmann(tel; backend=CPUBackend())
 And the composed path should enforce:
 
 ```julia
-AOSimulation(tel, atm, src, dm, wfs)
+AOSimulation(tel, src, atm, dm, wfs)
 ```
 
 only if all components share the same semantic backend.
