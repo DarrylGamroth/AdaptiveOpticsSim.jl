@@ -13,10 +13,6 @@ function AOSimulation(tel::AbstractTelescope, src::AbstractSource, atm::Abstract
     return AOSimulation{typeof(tel), typeof(src), typeof(atm), typeof(optic), typeof(wfs), typeof(selector)}(tel, src, atm, optic, wfs)
 end
 
-function AOSimulation(tel::AbstractTelescope, atm::AbstractAtmosphere, src::AbstractSource, optic::AbstractControllableOptic, wfs::AbstractWFS)
-    return AOSimulation(tel, src, atm, optic, wfs)
-end
-
 function initialize_ao_pyramid(; resolution::Int, diameter::Real, sampling_time::Real,
     r0::Real, L0::Real=25.0, fractional_cn2::AbstractVector=[1.0],
     wind_speed::AbstractVector=[0.0], wind_direction::AbstractVector=[0.0], altitude::AbstractVector=[0.0],
