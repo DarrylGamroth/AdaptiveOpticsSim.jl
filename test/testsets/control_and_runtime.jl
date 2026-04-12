@@ -235,7 +235,7 @@ end
     @test curvature_sim.high_detector isa APDDetector
     step!(curvature_sim)
     @test length(curvature_sim.command) == curvature_params.n_act^2
-    curvature_readout = AdaptiveOpticsSim.simulation_interface(curvature_sim)
+    curvature_readout = readout(curvature_sim)
     @test size(wfs_frame(curvature_readout)[1]) == (2, curvature_params.n_subap^2)
     @test wfs_metadata(curvature_readout)[1] isa CountingDetectorExportMetadata
 
@@ -258,8 +258,8 @@ end
     @test ao3k_params.high_detector.thermal_model isa FixedTemperature
     step!(ao3k_sim)
     @test length(ao3k_sim.command) == ao3k_params.n_act^2
-    ao3k_iface = AdaptiveOpticsSim.simulation_interface(ao3k_sim)
-    ao3k_high_meta = wfs_metadata(ao3k_iface)[1]
+    ao3k_readout = readout(ao3k_sim)
+    ao3k_high_meta = wfs_metadata(ao3k_readout)[1]
     @test ao3k_high_meta.sensor == :hgcdte_avalanche_array
     @test ao3k_high_meta.thermal_model == :fixed_temperature
     @test ao3k_high_meta.detector_temperature_K == 80.0f0

@@ -440,7 +440,7 @@ Use:
   - when you are studying one physical layer
 - `SingleRuntimeConfig` or `GroupedRuntimeConfig`
   - when you want the maintained public runtime/orchestration surface
-- `ClosedLoopRuntime` plus `simulation_interface(...)`
+- `ClosedLoopRuntime` plus `AdaptiveOpticsSim.simulation_interface(...)`
   - only when you are manually assembling or testing one low-level runtime
 
 ## Next Step

@@ -622,7 +622,8 @@ background_model(::Nothing; T::Type{<:AbstractFloat}, backend) = NoBackground()
 background_model(level::Real; T::Type{<:AbstractFloat}, backend) = ScalarBackground{T}(T(level))
 
 function background_model(map::AbstractMatrix; T::Type{<:AbstractFloat}, backend)
-    background = backend{T}(undef, size(map)...)
+    storage = _resolve_array_backend(backend)
+    background = storage{T}(undef, size(map)...)
     copyto!(background, T.(map))
     return BackgroundFrame{T, typeof(background)}(background)
 end
