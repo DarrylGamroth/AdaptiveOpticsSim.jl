@@ -312,7 +312,11 @@ function _run_zernike_equivalence(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBack
     _assert_close("detector_frame", output_frame(det_gpu), output_frame(det_cpu); rtol=1f-5, atol=1f-2)
 end
 
-function _build_multi_optic_hil_case(backend, ::Type{T}) where {T<:AbstractFloat}
+@inline _low_order_label(::Val{:tiptilt}) = :tiptilt
+@inline _low_order_label(::Val{:steering}) = :steering
+@inline _low_order_label(::Val{:focus}) = :focus
+
+function _build_multi_optic_hil_case(backend, ::Type{T}, ::Val{:tiptilt}) where {T<:AbstractFloat}
     tel = Telescope(
         resolution=16,
         diameter=T(8.0),
@@ -339,39 +343,109 @@ function _build_multi_optic_hil_case(backend, ::Type{T}) where {T<:AbstractFloat
     return scenario
 end
 
-function _run_multi_optic_hil_equivalence(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+function _build_multi_optic_hil_case(backend, ::Type{T}, ::Val{:steering}) where {T<:AbstractFloat}
+    tel = Telescope(
+        resolution=16,
+        diameter=T(8.0),
+        sampling_time=T(1e-3),
+        central_obstruction=T(0.0),
+        T=T,
+        backend=backend,
+    )
+    src = Source(band=:I, magnitude=T(0), T=T)
+    atm = StaticAtmosphere(tel; T=T, backend=backend)
+    steering = SteeringMirror(tel; scale=T(0.1), T=T, backend=backend, label=:steering)
+    dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=backend)
+    optic = CompositeControllableOptic(:steering => steering, :dm => dm)
+    wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
+    det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
+    scenario = build_runtime_scenario(
+        SingleRuntimeConfig(name=:steering_multi_optic_equivalence, branch_label=:main,
+            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
+        RuntimeBranch(:main, AOSimulation(tel, src, atm, optic, wfs), NullReconstructor();
+            wfs_detector=det,
+            rng=MersenneTwister(91)),
+    )
+    prepare!(scenario)
+    return scenario
+end
+
+function _build_multi_optic_hil_case(backend, ::Type{T}, ::Val{:focus}) where {T<:AbstractFloat}
+    tel = Telescope(
+        resolution=16,
+        diameter=T(8.0),
+        sampling_time=T(1e-3),
+        central_obstruction=T(0.0),
+        T=T,
+        backend=backend,
+    )
+    src = Source(band=:I, magnitude=T(0), T=T)
+    atm = StaticAtmosphere(tel; T=T, backend=backend)
+    focus = FocusStage(tel; scale=T(0.1), T=T, backend=backend, label=:focus)
+    dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=backend)
+    optic = CompositeControllableOptic(:focus => focus, :dm => dm)
+    wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
+    det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
+    scenario = build_runtime_scenario(
+        SingleRuntimeConfig(name=:focus_multi_optic_equivalence, branch_label=:main,
+            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
+        RuntimeBranch(:main, AOSimulation(tel, src, atm, optic, wfs), NullReconstructor();
+            wfs_detector=det,
+            rng=MersenneTwister(91)),
+    )
+    prepare!(scenario)
+    return scenario
+end
+
+function _multi_optic_case_commands(::Type{T}, ::Val{:focus}) where {T<:AbstractFloat}
+    return fill(T(0.0125), 1), fill(T(0.025), 1), fill(T(0.02), 16)
+end
+
+function _multi_optic_case_commands(::Type{T}, ::Union{Val{:tiptilt},Val{:steering}}) where {T<:AbstractFloat}
+    return fill(T(0.0125), 2), fill(T(0.025), 2), fill(T(0.02), 16)
+end
+
+function _multi_optic_case_tolerances(::Val{:focus})
+    return (slopes_rtol=5f-3, slopes_atol=6f-3, frame_rtol=6f-3, frame_atol=1f6)
+end
+
+function _multi_optic_case_tolerances(::Union{Val{:tiptilt},Val{:steering}})
+    return (slopes_rtol=3f-3, slopes_atol=4f-3, frame_rtol=4f-3, frame_atol=1f6)
+end
+
+function _run_multi_optic_hil_equivalence(::Type{B}, case::Val{K}) where {B<:AdaptiveOpticsSim.GPUBackendTag,K}
     disable_scalar_backend!(B)
     BackendArray = gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
     T = Float32
 
-    cpu = _build_multi_optic_hil_case(CPUBackend(), T)
-    gpu = _build_multi_optic_hil_case(_gpu_backend_selector(B), T)
+    cpu = _build_multi_optic_hil_case(CPUBackend(), T, case)
+    gpu = _build_multi_optic_hil_case(_gpu_backend_selector(B), T, case)
+    initial_low_order, updated_low_order, initial_dm = _multi_optic_case_commands(T, case)
+    label = _low_order_label(case)
+    tol = _multi_optic_case_tolerances(case)
 
-    initial_tip = fill(T(0.0125), 2)
-    initial_dm = fill(T(0.02), 16)
-    set_command!(cpu, (; tiptilt=initial_tip, dm=initial_dm))
-    set_command!(gpu, (; tiptilt=initial_tip, dm=initial_dm))
+    set_command!(cpu, NamedTuple{(label, :dm)}((initial_low_order, initial_dm)))
+    set_command!(gpu, NamedTuple{(label, :dm)}((initial_low_order, initial_dm)))
     sense!(cpu)
     sense!(gpu)
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(command(gpu)))
 
-    println("multi_optic_hil_equivalence initial")
+    println("$(K)_dm_hil_equivalence initial")
     _assert_close("command", command(gpu), command(cpu); rtol=1f-6, atol=1f-6)
-    _assert_close("slopes", slopes(gpu), slopes(cpu); rtol=3f-3, atol=4f-3)
-    _assert_close("wfs_frame", wfs_frame(gpu), wfs_frame(cpu); rtol=4f-3, atol=1f6)
+    _assert_close("slopes", slopes(gpu), slopes(cpu); rtol=tol.slopes_rtol, atol=tol.slopes_atol)
+    _assert_close("wfs_frame", wfs_frame(gpu), wfs_frame(cpu); rtol=tol.frame_rtol, atol=tol.frame_atol)
 
-    update_tip = fill(T(0.025), 2)
-    update_command!(cpu, (; tiptilt=update_tip))
-    update_command!(gpu, (; tiptilt=update_tip))
+    update_command!(cpu, NamedTuple{(label,)}((updated_low_order,)))
+    update_command!(gpu, NamedTuple{(label,)}((updated_low_order,)))
     sense!(cpu)
     sense!(gpu)
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(command(gpu)))
 
-    println("multi_optic_hil_equivalence updated")
+    println("$(K)_dm_hil_equivalence updated")
     _assert_close("command", command(gpu), command(cpu); rtol=1f-6, atol=1f-6)
-    _assert_close("slopes", slopes(gpu), slopes(cpu); rtol=3f-3, atol=4f-3)
-    _assert_close("wfs_frame", wfs_frame(gpu), wfs_frame(cpu); rtol=4f-3, atol=1f6)
+    _assert_close("slopes", slopes(gpu), slopes(cpu); rtol=tol.slopes_rtol, atol=tol.slopes_atol)
+    _assert_close("wfs_frame", wfs_frame(gpu), wfs_frame(cpu); rtol=tol.frame_rtol, atol=tol.frame_atol)
 end
 
 function run_gpu_runtime_equivalence(::Type{B}; branch_mode::AbstractExecutionPolicy=SequentialExecution()) where {B<:AdaptiveOpticsSim.GPUBackendTag}
@@ -380,7 +454,9 @@ function run_gpu_runtime_equivalence(::Type{B}; branch_mode::AbstractExecutionPo
     _run_lgs_equivalence(B, :na)
     _run_mixed_sh_asterism_equivalence(B)
     _run_zernike_equivalence(B)
-    _run_multi_optic_hil_equivalence(B)
+    _run_multi_optic_hil_equivalence(B, Val(:tiptilt))
+    _run_multi_optic_hil_equivalence(B, Val(:steering))
+    _run_multi_optic_hil_equivalence(B, Val(:focus))
     println("gpu_runtime_equivalence complete")
     return nothing
 end

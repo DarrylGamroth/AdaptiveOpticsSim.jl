@@ -10,6 +10,29 @@ backend_full_smoke_env(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = "ADAPTIVEOP
 backend_selector(::Type{AdaptiveOpticsSim.CUDABackendTag}) = AdaptiveOpticsSim.CUDABackend()
 backend_selector(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = AdaptiveOpticsSim.AMDGPUBackend()
 
+struct OptionalStaticAtmosphere{A,B<:AbstractArrayBackend} <: AdaptiveOpticsSim.AbstractAtmosphere
+    screen::A
+end
+
+AdaptiveOpticsSim.backend(::OptionalStaticAtmosphere{<:Any,B}) where {B} = B()
+AdaptiveOpticsSim.advance!(atm::OptionalStaticAtmosphere, tel::Telescope, rng::AbstractRNG) = atm
+AdaptiveOpticsSim.advance!(atm::OptionalStaticAtmosphere, tel::Telescope; rng::AbstractRNG=Random.default_rng()) = atm
+
+function AdaptiveOpticsSim.propagate!(atm::OptionalStaticAtmosphere, tel::Telescope)
+    copyto!(tel.state.opd, atm.screen)
+    return tel
+end
+
+function OptionalStaticAtmosphere(tel::Telescope; T::Type{<:AbstractFloat}=Float32, backend::AbstractArrayBackend=backend(tel))
+    selector = AdaptiveOpticsSim.require_same_backend(tel, AdaptiveOpticsSim._resolve_backend_selector(backend))
+    array_backend = AdaptiveOpticsSim._resolve_array_backend(selector)
+    host = zeros(T, tel.params.resolution, tel.params.resolution)
+    host .*= Array(tel.state.pupil)
+    screen = array_backend{T}(undef, size(host)...)
+    copyto!(screen, host)
+    return OptionalStaticAtmosphere{typeof(screen),typeof(selector)}(screen)
+end
+
 function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     selector = backend_selector(B)
     T = Float32
@@ -40,50 +63,115 @@ function build_optional_platform_branch(::Type{T}, backend, label::Symbol; senso
     return RuntimeBranch(label, sim, recon; wfs_detector=det, rng=MersenneTwister(seed))
 end
 
-function run_optional_composite_optic_parity(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
-    T = Float32
-    function build_case(backend)
-        tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
-            central_obstruction=T(0.0), T=T, backend=backend)
-        src = Source(band=:I, magnitude=0.0, T=T)
-        atm = KolmogorovAtmosphere(tel; r0=T(0.2), L0=T(25.0), T=T, backend=backend)
-        tiptilt = TipTiltMirror(tel; scale=T(0.1), T=T, backend=backend, label=:tiptilt)
-        dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=backend)
-        optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm)
-        wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
-        det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
-        sim = AOSimulation(tel, src, atm, optic, wfs)
-        scenario = build_runtime_scenario(
-            SingleRuntimeConfig(name=:optional_backend_composite, branch_label=:main,
-                products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
-            RuntimeBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(91)),
-        )
-        return scenario
-    end
+@inline _optional_low_order_label(::Val{:tiptilt}) = :tiptilt
+@inline _optional_low_order_label(::Val{:steering}) = :steering
+@inline _optional_low_order_label(::Val{:focus}) = :focus
 
-    cpu = build_case(CPUBackend())
-    gpu = build_case(backend_selector(B))
+function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:tiptilt}) where {T<:AbstractFloat}
+    T = Float32
+    tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
+        central_obstruction=T(0.0), T=T, backend=backend)
+    src = Source(band=:I, magnitude=0.0, T=T)
+    atm = OptionalStaticAtmosphere(tel; T=T, backend=backend)
+    tiptilt = TipTiltMirror(tel; scale=T(0.1), T=T, backend=backend, label=:tiptilt)
+    dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=backend)
+    optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm)
+    wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
+    det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
+    sim = AOSimulation(tel, src, atm, optic, wfs)
+    return build_runtime_scenario(
+        SingleRuntimeConfig(name=:optional_backend_composite_tiptilt, branch_label=:main,
+            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
+        RuntimeBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(91)),
+    )
+end
+
+function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:steering}) where {T<:AbstractFloat}
+    T = Float32
+    tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
+        central_obstruction=T(0.0), T=T, backend=backend)
+    src = Source(band=:I, magnitude=0.0, T=T)
+    atm = OptionalStaticAtmosphere(tel; T=T, backend=backend)
+    steering = SteeringMirror(tel; scale=T(0.1), T=T, backend=backend, label=:steering)
+    dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=backend)
+    optic = CompositeControllableOptic(:steering => steering, :dm => dm)
+    wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
+    det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
+    sim = AOSimulation(tel, src, atm, optic, wfs)
+    return build_runtime_scenario(
+        SingleRuntimeConfig(name=:optional_backend_composite_steering, branch_label=:main,
+            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
+        RuntimeBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(91)),
+    )
+end
+
+function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:focus}) where {T<:AbstractFloat}
+    T = Float32
+    tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
+        central_obstruction=T(0.0), T=T, backend=backend)
+    src = Source(band=:I, magnitude=0.0, T=T)
+    atm = OptionalStaticAtmosphere(tel; T=T, backend=backend)
+    focus = FocusStage(tel; scale=T(0.1), T=T, backend=backend, label=:focus)
+    dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=backend)
+    optic = CompositeControllableOptic(:focus => focus, :dm => dm)
+    wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
+    det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
+    sim = AOSimulation(tel, src, atm, optic, wfs)
+    return build_runtime_scenario(
+        SingleRuntimeConfig(name=:optional_backend_composite_focus, branch_label=:main,
+            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
+        RuntimeBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(91)),
+    )
+end
+
+function _optional_low_order_commands(::Type{T}, ::Val{:focus}) where {T<:AbstractFloat}
+    return fill(T(0.0125), 1), fill(T(0.025), 1), fill(T(0.02), 16)
+end
+
+function _optional_low_order_commands(::Type{T}, ::Union{Val{:tiptilt},Val{:steering}}) where {T<:AbstractFloat}
+    return fill(T(0.0125), 2), fill(T(0.025), 2), fill(T(0.02), 16)
+end
+
+function _optional_low_order_tolerances(::Val{:focus})
+    return (slopes_rtol=5f-3, slopes_atol=6f-3, frame_rtol=6f-3, frame_atol=1f6)
+end
+
+function _optional_low_order_tolerances(::Union{Val{:tiptilt},Val{:steering}})
+    return (slopes_rtol=3f-3, slopes_atol=4f-3, frame_rtol=4f-3, frame_atol=1f6)
+end
+
+function _run_optional_composite_optic_case(::Type{B}, case::Val{K}) where {B<:AdaptiveOpticsSim.GPUBackendTag,K}
+    T = Float32
+    cpu = _build_optional_composite_optic_case(CPUBackend(), T, case)
+    gpu = _build_optional_composite_optic_case(backend_selector(B), T, case)
     prepare!(cpu)
     prepare!(gpu)
-    tip_cmd = fill(T(0.0125), 2)
-    dm_cmd = fill(T(0.02), 16)
-    structured = (; tiptilt=tip_cmd, dm=dm_cmd)
-    set_command!(cpu, structured)
-    set_command!(gpu, structured)
+    initial_low_order, updated_low_order, dm_cmd = _optional_low_order_commands(T, case)
+    label = _optional_low_order_label(case)
+    tol = _optional_low_order_tolerances(case)
+    set_command!(cpu, NamedTuple{(label, :dm)}((initial_low_order, dm_cmd)))
+    set_command!(gpu, NamedTuple{(label, :dm)}((initial_low_order, dm_cmd)))
     sense!(cpu)
     sense!(gpu)
-    @test command_segment_labels(command_layout(gpu)) == (:tiptilt, :dm)
+    @test command_segment_labels(command_layout(gpu)) == (label, :dm)
     @test isapprox(Array(command(gpu)), Array(command(cpu)); rtol=1f-6, atol=1f-6)
-    @test isapprox(Array(slopes(gpu)), Array(slopes(cpu)); rtol=3f-3, atol=4f-3)
-    @test isapprox(Array(wfs_frame(gpu)), Array(wfs_frame(cpu)); rtol=4f-3, atol=1f6)
+    @test isapprox(Array(slopes(gpu)), Array(slopes(cpu)); rtol=tol.slopes_rtol, atol=tol.slopes_atol)
+    @test isapprox(Array(wfs_frame(gpu)), Array(wfs_frame(cpu)); rtol=tol.frame_rtol, atol=tol.frame_atol)
 
-    update_command!(cpu, (; tiptilt=fill(T(0.025), 2)))
-    update_command!(gpu, (; tiptilt=fill(T(0.025), 2)))
+    update_command!(cpu, NamedTuple{(label,)}((updated_low_order,)))
+    update_command!(gpu, NamedTuple{(label,)}((updated_low_order,)))
     sense!(cpu)
     sense!(gpu)
     @test isapprox(Array(command(gpu)), Array(command(cpu)); rtol=1f-6, atol=1f-6)
-    @test isapprox(Array(slopes(gpu)), Array(slopes(cpu)); rtol=3f-3, atol=4f-3)
-    @test isapprox(Array(wfs_frame(gpu)), Array(wfs_frame(cpu)); rtol=4f-3, atol=1f6)
+    @test isapprox(Array(slopes(gpu)), Array(slopes(cpu)); rtol=tol.slopes_rtol, atol=tol.slopes_atol)
+    @test isapprox(Array(wfs_frame(gpu)), Array(wfs_frame(cpu)); rtol=tol.frame_rtol, atol=tol.frame_atol)
+    return nothing
+end
+
+function run_optional_composite_optic_parity(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    _run_optional_composite_optic_case(B, Val(:tiptilt))
+    _run_optional_composite_optic_case(B, Val(:steering))
+    _run_optional_composite_optic_case(B, Val(:focus))
     return nothing
 end
 

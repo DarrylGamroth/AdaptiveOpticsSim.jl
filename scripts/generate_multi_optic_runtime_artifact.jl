@@ -56,20 +56,43 @@ function build_scenario(; seed::Integer=91)
     return scenario
 end
 
-function build_behavior_scenario(; seed::Integer=91)
+@inline low_order_label(::Val{:tiptilt}) = :tiptilt
+@inline low_order_label(::Val{:steering}) = :steering
+@inline low_order_label(::Val{:focus}) = :focus
+
+function build_behavior_optic(tel::Telescope, ::Val{:tiptilt}; T::Type{<:AbstractFloat}=Float32)
+    return CompositeControllableOptic(
+        :tiptilt => TipTiltMirror(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:tiptilt),
+        :dm => DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=CPUBackend()),
+    )
+end
+
+function build_behavior_optic(tel::Telescope, ::Val{:steering}; T::Type{<:AbstractFloat}=Float32)
+    return CompositeControllableOptic(
+        :steering => SteeringMirror(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:steering),
+        :dm => DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=CPUBackend()),
+    )
+end
+
+function build_behavior_optic(tel::Telescope, ::Val{:focus}; T::Type{<:AbstractFloat}=Float32)
+    return CompositeControllableOptic(
+        :focus => FocusStage(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:focus),
+        :dm => DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=CPUBackend()),
+    )
+end
+
+function build_behavior_scenario(::Val{K}; seed::Integer=91) where {K}
     T = Float32
     tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
         central_obstruction=T(0.0), T=T, backend=CPUBackend())
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = StaticAtmosphere(tel; T=T, backend=CPUBackend())
-    tiptilt = TipTiltMirror(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:tiptilt)
-    dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=CPUBackend())
-    optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm)
+    optic = build_behavior_optic(tel, Val(K); T=T)
     wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=CPUBackend())
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=CPUBackend())
     sim = AOSimulation(tel, src, atm, optic, wfs)
     scenario = build_runtime_scenario(
-        SingleRuntimeConfig(name=:multi_optic_behavior, branch_label=:main,
+        SingleRuntimeConfig(name=Symbol(:multi_optic_behavior_, K), branch_label=:main,
             products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
         RuntimeBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(seed)),
     )
@@ -77,22 +100,47 @@ function build_behavior_scenario(; seed::Integer=91)
     return scenario
 end
 
-function measure_behavior_response(tiptilt_cmd::AbstractVector{<:AbstractFloat})
-    scenario = build_behavior_scenario()
-    set_command!(scenario, (; tiptilt=tiptilt_cmd, dm=fill(Float32(0), 16)))
+function measure_behavior_response(::Val{K}, low_order_cmd::AbstractVector{<:AbstractFloat}) where {K}
+    scenario = build_behavior_scenario(Val(K))
+    label = low_order_label(Val(K))
+    set_command!(scenario, NamedTuple{(label, :dm)}((collect(Float32.(low_order_cmd)), fill(Float32(0), 16))))
     sense!(scenario)
     slopes_vec = Array(slopes(scenario))
     frame = Array(wfs_frame(scenario))
     n = length(slopes_vec) ÷ 2
     return Dict(
-        "tiptilt_command" => collect(tiptilt_cmd),
+        "command" => collect(Float32.(low_order_cmd)),
         "axis_1_mean" => mean(slopes_vec[1:n]),
         "axis_2_mean" => mean(slopes_vec[(n + 1):end]),
         "axis_1_norm" => norm(slopes_vec[1:n]),
         "axis_2_norm" => norm(slopes_vec[(n + 1):end]),
         "slopes" => slopes_vec,
         "wfs_frame" => frame,
+        "frame_sum" => sum(frame),
     )
+end
+
+function low_order_opd(::Val{K}, low_order_cmd::AbstractVector{<:AbstractFloat};
+    dm_cmd::AbstractVector{<:AbstractFloat}=fill(Float32(0), 16), composite::Bool=false) where {K}
+    T = Float32
+    tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
+        central_obstruction=T(0.0), T=T, backend=CPUBackend())
+    low_order = K === :tiptilt ? TipTiltMirror(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:tiptilt) :
+        K === :steering ? SteeringMirror(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:steering) :
+        FocusStage(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:focus)
+    dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=CPUBackend())
+    fill!(tel.state.opd, zero(T))
+    if composite
+        optic = CompositeControllableOptic(low_order_label(Val(K)) => low_order, :dm => dm)
+        set_command!(optic, NamedTuple{(low_order_label(Val(K)), :dm)}((collect(Float32.(low_order_cmd)), collect(Float32.(dm_cmd)))))
+        apply!(optic, tel, DMAdditive())
+    else
+        set_command!(low_order, collect(Float32.(low_order_cmd)))
+        set_command!(dm, collect(Float32.(dm_cmd)))
+        apply!(low_order, tel, DMAdditive())
+        apply!(dm, tel, DMAdditive())
+    end
+    return copy(Array(tel.state.opd))
 end
 
 function vector_stats(x)
@@ -152,10 +200,31 @@ function build_report()
     layout = command_layout(scenario_a)
     segments = command_segments(layout)
 
-    tip_plus = measure_behavior_response(Float32[0.0125, 0.0])
-    tip_minus = measure_behavior_response(Float32[-0.0125, 0.0])
-    tilt_plus = measure_behavior_response(Float32[0.0, 0.0125])
-    tilt_minus = measure_behavior_response(Float32[0.0, -0.0125])
+    tip_plus = measure_behavior_response(Val(:tiptilt), Float32[0.0125, 0.0])
+    tip_minus = measure_behavior_response(Val(:tiptilt), Float32[-0.0125, 0.0])
+    tilt_plus = measure_behavior_response(Val(:tiptilt), Float32[0.0, 0.0125])
+    tilt_minus = measure_behavior_response(Val(:tiptilt), Float32[0.0, -0.0125])
+    tip_zero = measure_behavior_response(Val(:tiptilt), Float32[0.0, 0.0])
+    steering_plus = measure_behavior_response(Val(:steering), Float32[0.0125, 0.0])
+    steering_minus = measure_behavior_response(Val(:steering), Float32[-0.0125, 0.0])
+    steering_zero = measure_behavior_response(Val(:steering), Float32[0.0, 0.0])
+    focus_plus = measure_behavior_response(Val(:focus), Float32[0.0125])
+    focus_minus = measure_behavior_response(Val(:focus), Float32[-0.0125])
+    focus_zero = measure_behavior_response(Val(:focus), Float32[0.0])
+    tip_seq = low_order_opd(Val(:tiptilt), Float32[0.01, -0.02]; dm_cmd=fill(Float32(0.03), 16), composite=false)
+    tip_comp = low_order_opd(Val(:tiptilt), Float32[0.01, -0.02]; dm_cmd=fill(Float32(0.03), 16), composite=true)
+    steer_seq = low_order_opd(Val(:steering), Float32[0.01, 0.02]; dm_cmd=fill(Float32(0.02), 16), composite=false)
+    steer_comp = low_order_opd(Val(:steering), Float32[0.01, 0.02]; dm_cmd=fill(Float32(0.02), 16), composite=true)
+    focus_seq = low_order_opd(Val(:focus), Float32[0.02]; dm_cmd=fill(Float32(0.01), 16), composite=false)
+    focus_comp = low_order_opd(Val(:focus), Float32[0.02]; dm_cmd=fill(Float32(0.01), 16), composite=true)
+    tip_a = low_order_opd(Val(:tiptilt), Float32[0.005, 0.0])
+    tip_b = low_order_opd(Val(:tiptilt), Float32[0.0, 0.005])
+    tip_ab = low_order_opd(Val(:tiptilt), Float32[0.005, 0.005])
+    tip_2a = low_order_opd(Val(:tiptilt), Float32[0.01, 0.0])
+    steer_a = low_order_opd(Val(:steering), Float32[0.005, 0.0])
+    steer_2a = low_order_opd(Val(:steering), Float32[0.01, 0.0])
+    focus_a = low_order_opd(Val(:focus), Float32[0.005])
+    focus_2a = low_order_opd(Val(:focus), Float32[0.01])
 
     return Dict(
         "artifact_id" => "MULTI-OPTIC-HIL-2026-04-13",
@@ -208,12 +277,14 @@ function build_report()
                 "axis_2_mean" => tip_plus["axis_2_mean"],
                 "axis_1_norm" => tip_plus["axis_1_norm"],
                 "axis_2_norm" => tip_plus["axis_2_norm"],
+                "frame_sum" => tip_plus["frame_sum"],
             ),
             "tip_minus" => Dict(
                 "axis_1_mean" => tip_minus["axis_1_mean"],
                 "axis_2_mean" => tip_minus["axis_2_mean"],
                 "axis_1_norm" => tip_minus["axis_1_norm"],
                 "axis_2_norm" => tip_minus["axis_2_norm"],
+                "frame_sum" => tip_minus["frame_sum"],
             ),
             "tilt_plus" => Dict(
                 "axis_1_mean" => tilt_plus["axis_1_mean"],
@@ -234,6 +305,56 @@ function build_report()
             "tilt_dominant_axis" => 1,
             "tip_axis_ratio" => tip_plus["axis_2_norm"] / max(tip_plus["axis_1_norm"], eps(Float32)),
             "tilt_axis_ratio" => tilt_plus["axis_1_norm"] / max(tilt_plus["axis_2_norm"], eps(Float32)),
+            "zero_slopes_l2" => norm(tip_zero["slopes"]),
+        ),
+        "steering_behavior" => Dict(
+            "steering_plus" => Dict(
+                "axis_1_mean" => steering_plus["axis_1_mean"],
+                "axis_2_mean" => steering_plus["axis_2_mean"],
+                "axis_1_norm" => steering_plus["axis_1_norm"],
+                "axis_2_norm" => steering_plus["axis_2_norm"],
+                "frame_sum" => steering_plus["frame_sum"],
+            ),
+            "steering_minus" => Dict(
+                "axis_1_mean" => steering_minus["axis_1_mean"],
+                "axis_2_mean" => steering_minus["axis_2_mean"],
+                "axis_1_norm" => steering_minus["axis_1_norm"],
+                "axis_2_norm" => steering_minus["axis_2_norm"],
+                "frame_sum" => steering_minus["frame_sum"],
+            ),
+            "antisymmetry_l2" => norm(steering_plus["slopes"] .+ steering_minus["slopes"]),
+            "zero_slopes_l2" => norm(steering_zero["slopes"]),
+            "matches_tiptilt_exactly" => steering_plus["slopes"] == tip_plus["slopes"],
+        ),
+        "focus_behavior" => Dict(
+            "focus_plus" => Dict(
+                "axis_1_mean" => focus_plus["axis_1_mean"],
+                "axis_2_mean" => focus_plus["axis_2_mean"],
+                "axis_1_norm" => focus_plus["axis_1_norm"],
+                "axis_2_norm" => focus_plus["axis_2_norm"],
+                "frame_sum" => focus_plus["frame_sum"],
+            ),
+            "focus_minus" => Dict(
+                "axis_1_mean" => focus_minus["axis_1_mean"],
+                "axis_2_mean" => focus_minus["axis_2_mean"],
+                "axis_1_norm" => focus_minus["axis_1_norm"],
+                "axis_2_norm" => focus_minus["axis_2_norm"],
+                "frame_sum" => focus_minus["frame_sum"],
+            ),
+            "antisymmetry_l2" => norm(focus_plus["slopes"] .+ focus_minus["slopes"]),
+            "zero_slopes_l2" => norm(focus_zero["slopes"]),
+            "axis_balance_ratio" => focus_plus["axis_1_norm"] / max(focus_plus["axis_2_norm"], eps(Float32)),
+        ),
+        "composition" => Dict(
+            "tiptilt_dm_opd_l2" => norm(tip_seq .- tip_comp),
+            "steering_dm_opd_l2" => norm(steer_seq .- steer_comp),
+            "focus_dm_opd_l2" => norm(focus_seq .- focus_comp),
+        ),
+        "opd_linearity" => Dict(
+            "tiptilt_additivity_l2" => norm(tip_ab .- (tip_a .+ tip_b)),
+            "tiptilt_scaling_l2" => norm(tip_2a .- (2 .* tip_a)),
+            "steering_scaling_l2" => norm(steer_2a .- (2 .* steer_a)),
+            "focus_scaling_l2" => norm(focus_2a .- (2 .* focus_a)),
         ),
     )
 end

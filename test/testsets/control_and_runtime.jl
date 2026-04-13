@@ -100,6 +100,80 @@ function build_static_runtime_atmosphere(tel::Telescope; T::Type{<:AbstractFloat
     return StaticRuntimeAtmosphere{typeof(screen),typeof(selector)}(screen)
 end
 
+@inline low_order_label(::Val{:tiptilt}) = :tiptilt
+@inline low_order_label(::Val{:steering}) = :steering
+@inline low_order_label(::Val{:focus}) = :focus
+
+function build_static_low_order_optic(tel::Telescope, ::Val{:tiptilt}; scale::Real=0.1)
+    return TipTiltMirror(tel; scale=scale, label=:tiptilt)
+end
+
+function build_static_low_order_optic(tel::Telescope, ::Val{:steering}; scale::Real=0.1)
+    return SteeringMirror(tel; scale=scale, label=:steering)
+end
+
+function build_static_low_order_optic(tel::Telescope, ::Val{:focus}; scale::Real=0.1)
+    return FocusStage(tel; scale=scale, label=:focus)
+end
+
+function build_static_low_order_runtime(::Val{K}, low_order_cmd::AbstractVector{<:Real};
+    dm_cmd::AbstractVector{<:Real}=fill(0.0, 16), seed::Integer=91) where {K}
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = Source(band=:I, magnitude=0.0)
+    atm = build_static_runtime_atmosphere(tel)
+    low_order = build_static_low_order_optic(tel, Val(K))
+    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
+    optic = CompositeControllableOptic(low_order_label(Val(K)) => low_order, :dm => dm)
+    wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive())
+    det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
+    sim = AOSimulation(tel, src, atm, optic, wfs)
+    runtime = ClosedLoopRuntime(sim, NullReconstructor();
+        wfs_detector=det,
+        products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false),
+        rng=MersenneTwister(seed),
+    )
+    prepare!(runtime)
+    label = low_order_label(Val(K))
+    set_command!(runtime, NamedTuple{(label, :dm)}((collect(float.(low_order_cmd)), collect(float.(dm_cmd)))))
+    sense!(runtime)
+    return runtime
+end
+
+function low_order_response_metrics(runtime)
+    slopes_vec = Array(slopes(runtime))
+    frame = Array(wfs_frame(runtime))
+    n = length(slopes_vec) ÷ 2
+    return (
+        slopes=slopes_vec,
+        frame=frame,
+        axis_1_norm=norm(slopes_vec[1:n]),
+        axis_2_norm=norm(slopes_vec[(n + 1):end]),
+        axis_1_mean=mean(slopes_vec[1:n]),
+        axis_2_mean=mean(slopes_vec[(n + 1):end]),
+        frame_sum=sum(frame),
+    )
+end
+
+function low_order_opd(::Val{K}, low_order_cmd::AbstractVector{<:Real};
+    dm_cmd::AbstractVector{<:Real}=fill(0.0, 16), composite::Bool=false) where {K}
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    low_order = build_static_low_order_optic(tel, Val(K))
+    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
+    fill!(tel.state.opd, 0.0)
+    if composite
+        optic = CompositeControllableOptic(low_order_label(Val(K)) => low_order, :dm => dm)
+        label = low_order_label(Val(K))
+        set_command!(optic, NamedTuple{(label, :dm)}((collect(float.(low_order_cmd)), collect(float.(dm_cmd)))))
+        apply!(optic, tel, DMAdditive())
+    else
+        set_command!(low_order, collect(float.(low_order_cmd)))
+        set_command!(dm, collect(float.(dm_cmd)))
+        apply!(low_order, tel, DMAdditive())
+        apply!(dm, tel, DMAdditive())
+    end
+    return copy(tel.state.opd)
+end
+
 @testset "Calibration and control" begin
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
@@ -557,41 +631,54 @@ end
     @test wfs_frame(combo_scenario_b) == wfs_frame(combo_scenario)
     @test science_frame(combo_scenario_b) == science_frame(combo_scenario)
 
-    function build_static_combo_runtime(tip_cmd)
-        tel_static = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
-        src_static = Source(band=:I, magnitude=0.0)
-        atm_static = build_static_runtime_atmosphere(tel_static)
-        tip_static = TipTiltMirror(tel_static; scale=0.1, label=:tiptilt)
-        dm_static = DeformableMirror(tel_static; n_act=4, influence_width=0.3)
-        optic_static = CompositeControllableOptic(:tiptilt => tip_static, :dm => dm_static)
-        wfs_static = ShackHartmann(tel_static; n_subap=4, mode=Diffractive())
-        det_static = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
-        sim_static = AOSimulation(tel_static, src_static, atm_static, optic_static, wfs_static)
-        runtime_static = ClosedLoopRuntime(sim_static, NullReconstructor();
-            wfs_detector=det_static,
-            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false),
-            rng=MersenneTwister(91),
-        )
-        prepare!(runtime_static)
-        set_command!(runtime_static, (; tiptilt=tip_cmd, dm=fill(0.0, 16)))
-        sense!(runtime_static)
-        return runtime_static
-    end
+    tip_plus = low_order_response_metrics(build_static_low_order_runtime(Val(:tiptilt), [0.0125, 0.0]))
+    tip_minus = low_order_response_metrics(build_static_low_order_runtime(Val(:tiptilt), [-0.0125, 0.0]))
+    tilt_plus = low_order_response_metrics(build_static_low_order_runtime(Val(:tiptilt), [0.0, 0.0125]))
+    tilt_minus = low_order_response_metrics(build_static_low_order_runtime(Val(:tiptilt), [0.0, -0.0125]))
+    tip_zero = low_order_response_metrics(build_static_low_order_runtime(Val(:tiptilt), [0.0, 0.0]))
+    @test tip_plus.axis_1_norm < tip_plus.axis_2_norm
+    @test tilt_plus.axis_1_norm > tilt_plus.axis_2_norm
+    @test norm(tip_plus.slopes .+ tip_minus.slopes) ≤ 2e-5
+    @test norm(tilt_plus.slopes .+ tilt_minus.slopes) ≤ 2e-5
+    @test norm(tip_plus.slopes .- tilt_plus.slopes) > 1.0
+    @test norm(tip_zero.slopes) ≤ 1e-12
+    @test isapprox(tip_plus.frame_sum, tip_minus.frame_sum; rtol=1e-12, atol=1e-6)
 
-    tip_plus_runtime = build_static_combo_runtime([0.0125, 0.0])
-    tip_minus_runtime = build_static_combo_runtime([-0.0125, 0.0])
-    tilt_plus_runtime = build_static_combo_runtime([0.0, 0.0125])
-    tilt_minus_runtime = build_static_combo_runtime([0.0, -0.0125])
-    n_static = length(slopes(tip_plus_runtime)) ÷ 2
-    tip_plus_slopes = Array(slopes(tip_plus_runtime))
-    tip_minus_slopes = Array(slopes(tip_minus_runtime))
-    tilt_plus_slopes = Array(slopes(tilt_plus_runtime))
-    tilt_minus_slopes = Array(slopes(tilt_minus_runtime))
-    @test norm(tip_plus_slopes[1:n_static]) < norm(tip_plus_slopes[(n_static + 1):end])
-    @test norm(tilt_plus_slopes[1:n_static]) > norm(tilt_plus_slopes[(n_static + 1):end])
-    @test norm(tip_plus_slopes .+ tip_minus_slopes) ≤ 2e-5
-    @test norm(tilt_plus_slopes .+ tilt_minus_slopes) ≤ 2e-5
-    @test norm(tip_plus_slopes .- tilt_plus_slopes) > 1.0
+    steering_scenario = build_runtime_scenario(
+        SingleRuntimeConfig(name=:steering_runtime_demo, branch_label=:external_branch,
+            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
+        RuntimeBranch(:external_branch,
+            AOSimulation(
+                tel_ext,
+                src_ext,
+                atm_ext,
+                CompositeControllableOptic(
+                    :steering => SteeringMirror(tel_ext; scale=0.1, label=:steering),
+                    :dm => DeformableMirror(tel_ext; n_act=4, influence_width=0.3),
+                ),
+                wfs_ext,
+            ),
+            NullReconstructor();
+            wfs_detector=det_ext,
+            rng=MersenneTwister(10),
+        ),
+    )
+    prepare!(steering_scenario)
+    @test command_segment_labels(command_layout(steering_scenario)) == (:steering, :dm)
+    set_command!(steering_scenario, (; steering=fill(eltype(command(steering_scenario))(0.01), 2), dm=fill(eltype(command(steering_scenario))(0.02), 16)))
+    sense!(steering_scenario)
+    update_command!(steering_scenario, (; steering=fill(eltype(command(steering_scenario))(0.03), 2)))
+    @test command(steering_scenario)[1:2] == fill(eltype(command(steering_scenario))(0.03), 2)
+    @test command(steering_scenario)[3:end] == fill(eltype(command(steering_scenario))(0.02), 16)
+
+    steering_plus = low_order_response_metrics(build_static_low_order_runtime(Val(:steering), [0.0125, 0.0]))
+    steering_minus = low_order_response_metrics(build_static_low_order_runtime(Val(:steering), [-0.0125, 0.0]))
+    steering_zero = low_order_response_metrics(build_static_low_order_runtime(Val(:steering), [0.0, 0.0]))
+    @test steering_plus.axis_1_norm < steering_plus.axis_2_norm
+    @test norm(steering_plus.slopes .+ steering_minus.slopes) ≤ 2e-5
+    @test norm(steering_zero.slopes) ≤ 1e-12
+    @test isapprox(steering_plus.frame_sum, steering_minus.frame_sum; rtol=1e-12, atol=1e-6)
+    @test steering_plus.slopes == tip_plus.slopes
 
     focus = FocusStage(tel_ext; scale=0.1, label=:focus)
     dm_focus = DeformableMirror(tel_ext; n_act=4, influence_width=0.3)
@@ -609,6 +696,42 @@ end
     set_command!(focus_scenario, (; focus=fill(eltype(command(focus_scenario))(0.04), 1), dm=fill(eltype(command(focus_scenario))(0.01), 16)))
     sense!(focus_scenario)
     @test wfs_frame(focus_scenario) !== nothing
+    update_command!(focus_scenario, (; focus=fill(eltype(command(focus_scenario))(0.02), 1)))
+    @test command(focus_scenario)[1] == eltype(command(focus_scenario))(0.02)
+    @test command(focus_scenario)[2:end] == fill(eltype(command(focus_scenario))(0.01), 16)
+
+    focus_plus = low_order_response_metrics(build_static_low_order_runtime(Val(:focus), [0.0125]))
+    focus_minus = low_order_response_metrics(build_static_low_order_runtime(Val(:focus), [-0.0125]))
+    focus_zero = low_order_response_metrics(build_static_low_order_runtime(Val(:focus), [0.0]))
+    @test norm(focus_plus.slopes .+ focus_minus.slopes) ≤ 2e-5
+    @test focus_plus.axis_1_norm > 1e-1
+    @test isapprox(focus_plus.axis_1_norm, focus_plus.axis_2_norm; rtol=1e-10, atol=1e-10)
+    @test abs(focus_plus.axis_1_mean) ≤ 1e-12
+    @test abs(focus_plus.axis_2_mean) ≤ 1e-12
+    @test norm(focus_zero.slopes) ≤ 1e-12
+    @test isapprox(focus_plus.frame_sum, focus_minus.frame_sum; rtol=1e-12, atol=1e-6)
+
+    @test norm(low_order_opd(Val(:tiptilt), [0.01, -0.02]; dm_cmd=fill(0.03, 16), composite=false) .-
+        low_order_opd(Val(:tiptilt), [0.01, -0.02]; dm_cmd=fill(0.03, 16), composite=true)) == 0.0
+    @test norm(low_order_opd(Val(:steering), [0.01, 0.02]; dm_cmd=fill(0.02, 16), composite=false) .-
+        low_order_opd(Val(:steering), [0.01, 0.02]; dm_cmd=fill(0.02, 16), composite=true)) == 0.0
+    @test norm(low_order_opd(Val(:focus), [0.02]; dm_cmd=fill(0.01, 16), composite=false) .-
+        low_order_opd(Val(:focus), [0.02]; dm_cmd=fill(0.01, 16), composite=true)) == 0.0
+
+    tip_a = low_order_opd(Val(:tiptilt), [0.005, 0.0])
+    tip_b = low_order_opd(Val(:tiptilt), [0.0, 0.005])
+    tip_ab = low_order_opd(Val(:tiptilt), [0.005, 0.005])
+    tip_2a = low_order_opd(Val(:tiptilt), [0.01, 0.0])
+    @test tip_ab ≈ (tip_a .+ tip_b) atol=1e-12 rtol=1e-12
+    @test tip_2a ≈ (2 .* tip_a) atol=1e-12 rtol=1e-12
+
+    steering_a = low_order_opd(Val(:steering), [0.005, 0.0])
+    steering_2a = low_order_opd(Val(:steering), [0.01, 0.0])
+    @test steering_2a ≈ (2 .* steering_a) atol=1e-12 rtol=1e-12
+
+    focus_a = low_order_opd(Val(:focus), [0.005])
+    focus_2a = low_order_opd(Val(:focus), [0.01])
+    @test focus_2a ≈ (2 .* focus_a) atol=1e-12 rtol=1e-12
 
     grouped_cfg = GroupedRuntimeConfig(
         (:branch_a, :branch_b);

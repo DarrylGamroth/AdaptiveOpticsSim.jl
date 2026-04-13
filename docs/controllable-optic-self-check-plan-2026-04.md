@@ -1,6 +1,6 @@
 # Controllable Optic Self-Check Plan 2026-04
 
-Status: active
+Status: implemented
 
 Plan traceability:
 
@@ -156,7 +156,7 @@ Verification evidence:
 
 Status:
 
-- partial
+- implemented
 
 ### OSV-A2 Add deterministic directional behavior tests for low-order optics
 
@@ -189,7 +189,7 @@ Verification evidence:
 
 Status:
 
-- partial
+- implemented
 
 Notes:
 
@@ -220,12 +220,14 @@ Target locations:
 
 Verification evidence:
 
-- archived CPU artifact records the observables
-- tests assert the observable contract directly
+- archived CPU artifact records the observables for `tiptilt`, `steering`, and
+  `focus`
+- tests assert the observable contract directly on the maintained static
+  composite-runtime surface
 
 Status:
 
-- pending
+- implemented
 
 ### OSV-A4 Add small-signal linearity checks
 
@@ -250,12 +252,14 @@ Target locations:
 
 Verification evidence:
 
-- deterministic CPU checks at one or more documented amplitudes
-- validity note describing where linearity is expected and where it is not
+- deterministic CPU checks on documented small-signal OPD surfaces for
+  `tiptilt`, `steering`, and `focus`
+- validity note describing that linearity is asserted on optic-application OPD,
+  not on downstream Shack-Hartmann centroid outputs
 
 Status:
 
-- pending
+- implemented
 
 ### OSV-A5 Add explicit composition and ordering checks
 
@@ -286,7 +290,7 @@ Verification evidence:
 
 Status:
 
-- pending
+- implemented
 
 ### OSV-A6 Freeze deterministic truth artifacts and GPU parity contracts
 
@@ -317,7 +321,7 @@ Verification evidence:
 
 Status:
 
-- partial
+- implemented
 
 ## Recommended Execution Order
 
@@ -341,12 +345,12 @@ Rationale:
 
 | ID | Requirement | Planned actions | Primary evidence | Status |
 | --- | --- | --- | --- | --- |
-| `OSV-1` | Interface correctness | `OSV-A1` | runtime tests | partial |
-| `OSV-2` | Behavioral invariants | `OSV-A2` | deterministic behavior tests and artifact observables | partial |
-| `OSV-3` | Optical-effect semantics | `OSV-A3` | optic-specific observables | pending |
-| `OSV-4` | Small-signal linearity | `OSV-A4` | linearity tests | pending |
-| `OSV-5` | Composition and ordering | `OSV-A5` | sequential-vs-composite checks | pending |
-| `OSV-6` | Truth artifacts and GPU parity | `OSV-A6` | CPU artifact plus optional GPU contracts | partial |
+| `OSV-1` | Interface correctness | `OSV-A1` | runtime tests | implemented |
+| `OSV-2` | Behavioral invariants | `OSV-A2` | deterministic behavior tests and artifact observables | implemented |
+| `OSV-3` | Optical-effect semantics | `OSV-A3` | optic-specific observables | implemented |
+| `OSV-4` | Small-signal linearity | `OSV-A4` | linearity tests | implemented |
+| `OSV-5` | Composition and ordering | `OSV-A5` | sequential-vs-composite checks | implemented |
+| `OSV-6` | Truth artifacts and GPU parity | `OSV-A6` | CPU artifact plus optional GPU contracts | implemented |
 
 ## Done Definition
 

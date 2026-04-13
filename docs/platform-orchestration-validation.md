@@ -77,8 +77,17 @@ The maintained platform artifacts record:
 - mixed grouped platform runtime
   - grouped WFS stack export explicitly unavailable
 - deterministic multi-optic HIL runtime
-  - `tiptilt + dm` composite optic with structured command update
-  - exact replay of packed command, slopes, and WFS frame on the maintained CPU surface
+  - `tiptilt + dm`, `steering + dm`, and `focus + dm` composite optics with
+    structured command update
+  - exact replay of packed command, slopes, and WFS frame on the maintained CPU
+    surface
+  - behavioral observables:
+    - directional slope-axis dominance for low-order pointing terms
+    - opposite-sign antisymmetry for signed low-order commands
+    - bounded frame-sum invariants for rigid-shift-like perturbations
+  - composition and small-signal observables:
+    - sequential-vs-composite OPD equivalence
+    - small-signal OPD additivity and scaling for low-order optics
 
 For each case, the artifact records:
 
