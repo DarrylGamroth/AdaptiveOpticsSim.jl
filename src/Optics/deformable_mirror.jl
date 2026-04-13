@@ -279,8 +279,8 @@ function apply_opd_separable!(dm::DeformableMirror, tel::Telescope)
     ybasis_t = dm.state.separable_y_t::typeof(dm.state.opd)
     tmp = dm.state.separable_tmp::typeof(dm.state.opd)
     n_act = dm.params.n_act
-    if gpu_backend_name(typeof(dm.state.opd)) === :cuda
-        style = execution_style(dm.state.opd)
+    style = execution_style(dm.state.opd)
+    if style isa AcceleratorStyle
         launch_kernel_async!(style, dm_separable_tmp_kernel!,
             tmp, xbasis, dm.state.coefs_grid, n_act; ndrange=size(tmp))
         launch_kernel!(style, dm_separable_finalize_kernel!,

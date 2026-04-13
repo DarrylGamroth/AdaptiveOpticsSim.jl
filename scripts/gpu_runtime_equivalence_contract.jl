@@ -7,6 +7,51 @@ using .SubaruAO188Simulation
 const _RUNTIME_EQ_RTOL = 1f-4
 const _RUNTIME_EQ_ATOL = 5f-5
 
+struct StaticAtmosphere{A,B<:AbstractArrayBackend} <: AdaptiveOpticsSim.AbstractAtmosphere
+    screen::A
+end
+
+AdaptiveOpticsSim.backend(::StaticAtmosphere{<:Any,B}) where {B} = B()
+
+function _deterministic_phase_screen(tel::Telescope, ::Type{T}) where {T<:AbstractFloat}
+    n = tel.params.resolution
+    host = Matrix{T}(undef, n, n)
+    @inbounds for j in 1:n, i in 1:n
+        x = T((i - 1) / max(n - 1, 1))
+        y = T((j - 1) / max(n - 1, 1))
+        host[i, j] = T(3e-8) * sin(T(2π) * x) +
+                     T(2e-8) * cos(T(4π) * y) +
+                     T(1e-8) * sin(T(2π) * (x + y))
+    end
+    host .*= Array(tel.state.pupil)
+    return host
+end
+
+function StaticAtmosphere(tel::Telescope; T::Type{<:AbstractFloat}=Float32, backend::AbstractArrayBackend=backend(tel))
+    selector = AdaptiveOpticsSim.require_same_backend(tel, AdaptiveOpticsSim._resolve_backend_selector(backend))
+    array_backend = AdaptiveOpticsSim._resolve_array_backend(selector)
+    host = _deterministic_phase_screen(tel, T)
+    screen = array_backend{T}(undef, size(host)...)
+    copyto!(screen, host)
+    return StaticAtmosphere{typeof(screen),typeof(selector)}(screen)
+end
+
+AdaptiveOpticsSim.advance!(atm::StaticAtmosphere, tel::Telescope, rng::AbstractRNG) = atm
+AdaptiveOpticsSim.advance!(atm::StaticAtmosphere, tel::Telescope; rng::AbstractRNG=Random.default_rng()) = atm
+
+function AdaptiveOpticsSim.propagate!(atm::StaticAtmosphere, tel::Telescope)
+    copyto!(tel.state.opd, atm.screen)
+    return tel
+end
+
+function _gpu_backend_selector(::Type{AdaptiveOpticsSim.CUDABackendTag})
+    return AdaptiveOpticsSim.CUDABackend()
+end
+
+function _gpu_backend_selector(::Type{AdaptiveOpticsSim.AMDGPUBackendTag})
+    return AdaptiveOpticsSim.AMDGPUBackend()
+end
+
 function _ao188_noise_free_params(::Type{T}=Float32;
     branch_execution::AbstractExecutionPolicy=SequentialExecution()) where {T<:AbstractFloat}
     return AO188SimulationParams(
@@ -26,18 +71,7 @@ function _ao188_noise_free_params(::Type{T}=Float32;
 end
 
 function _set_deterministic_opd!(tel::Telescope)
-    n = tel.params.resolution
-    T = eltype(tel.state.opd)
-    host = Matrix{T}(undef, n, n)
-    @inbounds for j in 1:n, i in 1:n
-        x = T((i - 1) / max(n - 1, 1))
-        y = T((j - 1) / max(n - 1, 1))
-        host[i, j] = T(3e-8) * sin(T(2π) * x) +
-                     T(2e-8) * cos(T(4π) * y) +
-                     T(1e-8) * sin(T(2π) * (x + y))
-    end
-    host .*= Array(tel.state.pupil)
-    copyto!(tel.state.opd, host)
+    copyto!(tel.state.opd, _deterministic_phase_screen(tel, eltype(tel.state.opd)))
     return tel
 end
 
@@ -85,9 +119,10 @@ function _run_ao188_equivalence(::Type{B}, branch_mode::AbstractExecutionPolicy)
     disable_scalar_backend!(B)
     BackendArray = gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
+    backend = _gpu_backend_selector(B)
 
     cpu = subaru_ao188_simulation(; params=_ao188_noise_free_params(), backend=CPUBackend(), rng=MersenneTwister(1))
-    gpu = subaru_ao188_simulation(; params=_ao188_noise_free_params(Float32; branch_execution=branch_mode), backend=BackendArray, rng=MersenneTwister(1))
+    gpu = subaru_ao188_simulation(; params=_ao188_noise_free_params(Float32; branch_execution=branch_mode), backend=backend, rng=MersenneTwister(1))
 
     _evaluate_ao188!(cpu)
     _evaluate_ao188!(gpu)
@@ -120,13 +155,14 @@ function _run_ao188_post_command_equivalence(::Type{B}, branch_mode::AbstractExe
     disable_scalar_backend!(B)
     BackendArray = gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
+    backend = _gpu_backend_selector(B)
 
     cmd_src = subaru_ao188_simulation(; params=_ao188_noise_free_params(T), backend=CPUBackend(), rng=MersenneTwister(1))
     _evaluate_ao188!(cmd_src)
     host_command = Array(cmd_src.command)
 
     cpu = subaru_ao188_simulation(; params=_ao188_noise_free_params(T), backend=CPUBackend(), rng=MersenneTwister(2))
-    gpu = subaru_ao188_simulation(; params=_ao188_noise_free_params(T; branch_execution=branch_mode), backend=BackendArray, rng=MersenneTwister(2))
+    gpu = subaru_ao188_simulation(; params=_ao188_noise_free_params(T; branch_execution=branch_mode), backend=backend, rng=MersenneTwister(2))
     _post_command_observation!(cpu, host_command)
     _post_command_observation!(gpu, host_command)
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(gpu.command))
@@ -185,8 +221,8 @@ function _run_lgs_equivalence(::Type{B}, profile::Symbol) where {B<:AdaptiveOpti
     BackendArray === nothing && error("GPU backend $(B) is not available")
     T = Float32
 
-    tel_cpu, src_cpu, wfs_cpu, det_cpu = _build_lgs_case(Array, T, profile)
-    tel_gpu, src_gpu, wfs_gpu, det_gpu = _build_lgs_case(BackendArray, T, profile)
+    tel_cpu, src_cpu, wfs_cpu, det_cpu = _build_lgs_case(CPUBackend(), T, profile)
+    tel_gpu, src_gpu, wfs_gpu, det_gpu = _build_lgs_case(_gpu_backend_selector(B), T, profile)
 
     measure!(wfs_cpu, tel_cpu, src_cpu, det_cpu; rng=MersenneTwister(2))
     measure!(wfs_gpu, tel_gpu, src_gpu, det_gpu; rng=MersenneTwister(2))
@@ -228,8 +264,8 @@ function _run_mixed_sh_asterism_equivalence(::Type{B}) where {B<:AdaptiveOpticsS
     BackendArray === nothing && error("GPU backend $(B) is not available")
     T = Float32
 
-    tel_cpu, ast_cpu, wfs_cpu, det_cpu = _build_mixed_sh_asterism_case(Array, T)
-    tel_gpu, ast_gpu, wfs_gpu, det_gpu = _build_mixed_sh_asterism_case(BackendArray, T)
+    tel_cpu, ast_cpu, wfs_cpu, det_cpu = _build_mixed_sh_asterism_case(CPUBackend(), T)
+    tel_gpu, ast_gpu, wfs_gpu, det_gpu = _build_mixed_sh_asterism_case(_gpu_backend_selector(B), T)
 
     measure!(wfs_cpu, tel_cpu, ast_cpu, det_cpu; rng=MersenneTwister(3))
     measure!(wfs_gpu, tel_gpu, ast_gpu, det_gpu; rng=MersenneTwister(3))
@@ -262,8 +298,8 @@ function _run_zernike_equivalence(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBack
     BackendArray === nothing && error("GPU backend $(B) is not available")
     T = Float32
 
-    tel_cpu, src_cpu, wfs_cpu, det_cpu = _build_zernike_case(Array, T)
-    tel_gpu, src_gpu, wfs_gpu, det_gpu = _build_zernike_case(BackendArray, T)
+    tel_cpu, src_cpu, wfs_cpu, det_cpu = _build_zernike_case(CPUBackend(), T)
+    tel_gpu, src_gpu, wfs_gpu, det_gpu = _build_zernike_case(_gpu_backend_selector(B), T)
 
     measure!(wfs_cpu, tel_cpu, src_cpu, det_cpu; rng=MersenneTwister(4))
     measure!(wfs_gpu, tel_gpu, src_gpu, det_gpu; rng=MersenneTwister(4))
@@ -286,7 +322,7 @@ function _build_multi_optic_hil_case(backend, ::Type{T}) where {T<:AbstractFloat
         backend=backend,
     )
     src = Source(band=:I, magnitude=T(0), T=T)
-    atm = KolmogorovAtmosphere(tel; r0=T(0.2), L0=T(25.0), T=T, backend=backend)
+    atm = StaticAtmosphere(tel; T=T, backend=backend)
     tiptilt = TipTiltMirror(tel; scale=T(0.1), T=T, backend=backend, label=:tiptilt)
     dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=backend)
     optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm)
@@ -309,8 +345,8 @@ function _run_multi_optic_hil_equivalence(::Type{B}) where {B<:AdaptiveOpticsSim
     BackendArray === nothing && error("GPU backend $(B) is not available")
     T = Float32
 
-    cpu = _build_multi_optic_hil_case(Array, T)
-    gpu = _build_multi_optic_hil_case(BackendArray, T)
+    cpu = _build_multi_optic_hil_case(CPUBackend(), T)
+    gpu = _build_multi_optic_hil_case(_gpu_backend_selector(B), T)
 
     initial_tip = fill(T(0.0125), 2)
     initial_dm = fill(T(0.02), 16)

@@ -94,7 +94,7 @@ function _modal_mode_matrix(tel::Telescope, definitions::Tuple, ::Type{T}, backe
     selector = require_same_backend(tel, _resolve_backend_selector(backend))
     backend = _resolve_array_backend(selector)
     n = tel.params.resolution
-    pupil = tel.state.pupil
+    pupil = Array(tel.state.pupil)
     xs = collect(range(T(-1), T(1); length=n))
     ys = collect(range(T(-1), T(1); length=n))
     host = Matrix{T}(undef, n * n, length(definitions))
@@ -188,7 +188,7 @@ function FocusStage(tel::Telescope; scale::Real=1.0,
         (x, y) -> T(scale) * (x^2 + y^2),
     ), T, backend)
     host_focus = Array(host_modes)
-    _normalize_pupil_mode!(host_focus, tel.state.pupil)
+    _normalize_pupil_mode!(host_focus, Array(tel.state.pupil))
     modes = _backend_copy_matrix(host_focus, backend, T)
     coefs = backend{T}(undef, 1)
     fill!(coefs, zero(T))
