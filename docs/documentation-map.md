@@ -89,6 +89,8 @@ Use these when the task is cross-package or instrument-truth work:
   - phased plan for multi-surface controllable optics, GPU-native command routing, and ordered plant application
 - [`controllable-optic-self-check-plan-2026-04.md`](./controllable-optic-self-check-plan-2026-04.md)
   - traceable self-check plan for controllable optics, composite ordering, low-order behavior, and backend parity evidence
+- [`controllable-optic-self-check-expansion-plan-2026-04.md`](./controllable-optic-self-check-expansion-plan-2026-04.md)
+  - follow-on plan for amplitude sweeps, detector-in-the-loop invariants, multi-step statefulness, failure paths, and multi-WFS controllable-optic validation
 - [`backend-type-refactor-plan-2026-04.md`](./backend-type-refactor-plan-2026-04.md)
   - phased plan for explicit backend type parameters, homogeneous-path enforcement, and future explicit transfer boundaries
 - [`api-reference.md`](./api-reference.md)
