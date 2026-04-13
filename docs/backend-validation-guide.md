@@ -65,9 +65,20 @@ The reduced maintained smoke covers:
 - deterministic diffractive SH detector/export equivalence against CPU
 - deterministic composite-optic low-order runtime parity against CPU:
   - `tiptilt + dm`
+    - `ShackHartmann`
+    - `Pyramid`
+    - `BioEdge`
   - `steering + dm`
   - `focus + dm`
 - curvature-through-atmosphere
+
+For the maintained low-order composite surfaces, optional backend smoke now also
+checks:
+
+- short command-sequence correctness after `set_command!` / `update_command!`
+- command-isolation failure paths
+- backend replay determinism through repeated GPU execution on the runtime
+  equivalence contracts
 
 For the full maintained GPU smoke matrix, use:
 
@@ -123,6 +134,9 @@ Current intent:
   - runs the maintained CUDA smoke and runtime-equivalence scripts
   - runtime equivalence includes the composite-optic low-order HIL surfaces:
     - `tiptilt + dm`
+      - `ShackHartmann`
+      - `Pyramid`
+      - `BioEdge`
     - `steering + dm`
     - `focus + dm`
 - AMDGPU workflow:
@@ -130,6 +144,9 @@ Current intent:
   - runs the maintained AMDGPU smoke and runtime-equivalence scripts
   - runtime equivalence includes the composite-optic low-order HIL surfaces:
     - `tiptilt + dm`
+      - `ShackHartmann`
+      - `Pyramid`
+      - `BioEdge`
     - `steering + dm`
     - `focus + dm`
 

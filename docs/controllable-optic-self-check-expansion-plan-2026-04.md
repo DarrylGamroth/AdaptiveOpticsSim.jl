@@ -1,6 +1,6 @@
 # Controllable Optic Self-Check Expansion Plan 2026-04
 
-Status: active
+Status: implemented
 
 Plan traceability:
 
@@ -182,7 +182,7 @@ Verification evidence:
 
 Status:
 
-- pending
+- implemented
 
 ### OSX-A2 Add detector-in-the-loop self-check variants
 
@@ -210,7 +210,7 @@ Verification evidence:
 
 Status:
 
-- pending
+- implemented
 
 ### OSX-A3 Add short-sequence statefulness contracts
 
@@ -239,7 +239,7 @@ Verification evidence:
 
 Status:
 
-- pending
+- implemented
 
 ### OSX-A4 Add backend repeatability checks
 
@@ -269,7 +269,7 @@ Verification evidence:
 
 Status:
 
-- pending
+- implemented
 
 ### OSX-A5 Add invalid-input and failure-path coverage
 
@@ -296,7 +296,7 @@ Verification evidence:
 
 Status:
 
-- pending
+- implemented
 
 ### OSX-A6 Expand self-checks across WFS families and richer composites
 
@@ -331,7 +331,7 @@ Verification evidence:
 
 Status:
 
-- pending
+- implemented
 
 ## Recommended Execution Order
 
@@ -356,12 +356,12 @@ Rationale:
 
 | ID | Requirement | Planned actions | Primary evidence | Status |
 | --- | --- | --- | --- | --- |
-| `OSX-1` | Sensitivity envelope | `OSX-A1` | amplitude-sweep tests and artifact metrics | pending |
-| `OSX-2` | Detector-in-the-loop invariants | `OSX-A2` | detector-backed runtime tests and artifact observables | pending |
-| `OSX-3` | Multi-step statefulness | `OSX-A3` | deterministic multi-step replay tests | pending |
-| `OSX-4` | Backend replay determinism | `OSX-A4` | repeated-run parity logs and tolerances | pending |
-| `OSX-5` | Negative and failure-path contracts | `OSX-A5` | invalid-input tests and explicit exceptions | pending |
-| `OSX-6` | Multi-WFS and richer composites | `OSX-A6` | non-SH self-check surface and richer composite coverage | pending |
+| `OSX-1` | Sensitivity envelope | `OSX-A1` | amplitude-sweep tests and artifact metrics | implemented |
+| `OSX-2` | Detector-in-the-loop invariants | `OSX-A2` | detector-backed runtime tests and artifact observables | implemented |
+| `OSX-3` | Multi-step statefulness | `OSX-A3` | deterministic multi-step replay tests | implemented |
+| `OSX-4` | Backend replay determinism | `OSX-A4` | repeated-run parity logs and tolerances | implemented |
+| `OSX-5` | Negative and failure-path contracts | `OSX-A5` | invalid-input tests and explicit exceptions | implemented |
+| `OSX-6` | Multi-WFS and richer composites | `OSX-A6` | non-SH self-check surface and richer composite coverage | implemented |
 
 ## Done Definition
 
@@ -378,3 +378,14 @@ This plan is complete when:
 - at least one non-`ShackHartmann` WFS family is part of the maintained
   controllable-optic self-check surface
 - richer composite plants are either covered or explicitly deferred with reason
+
+Implemented evidence:
+
+- runtime self-check coverage in
+  [control_and_runtime.jl](../test/testsets/control_and_runtime.jl)
+- optional backend parity in
+  [backend_optional_common.jl](../test/backend_optional_common.jl)
+- deterministic CPU artifact in
+  [2026-04-13-multi-optic-hil.toml](../benchmarks/results/platform/2026-04-13-multi-optic-hil.toml)
+- maintained GPU replay/parity contract in
+  [gpu_runtime_equivalence_contract.jl](../scripts/gpu_runtime_equivalence_contract.jl)

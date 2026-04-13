@@ -35,6 +35,8 @@ function _set_command_segments!(setter, total_length::Int, layout::RuntimeComman
 end
 
 @inline function set_command!(optic::AbstractControllableOptic, command::AbstractVector)
+    length(command_storage(optic)) == length(command) ||
+        throw(DimensionMismatchError("command length must match controllable optic command length"))
     copyto!(command_storage(optic), command)
     return command_storage(optic)
 end
@@ -146,16 +148,16 @@ end
 function TipTiltMirror(tel::Telescope; scale::Real=1.0,
     T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel), label::Symbol=:tiptilt)
     selector = require_same_backend(tel, _resolve_backend_selector(backend))
-    backend = _resolve_array_backend(selector)
+    array_backend = _resolve_array_backend(selector)
     n = tel.params.resolution
-    opd = backend{T}(undef, n, n)
+    opd = array_backend{T}(undef, n, n)
     fill!(opd, zero(T))
     opd_vec = reshape(opd, :)
     modes = _modal_mode_matrix(tel, (
         (x, y) -> T(scale) * x,
         (x, y) -> T(scale) * y,
-    ), T, backend)
-    coefs = backend{T}(undef, 2)
+    ), T, selector)
+    coefs = array_backend{T}(undef, 2)
     fill!(coefs, zero(T))
     state = LowOrderControllableState{T,typeof(opd),typeof(modes),typeof(coefs)}(opd, opd_vec, modes, coefs)
     params = TipTiltMirrorParams{T}(T(scale))
@@ -179,18 +181,18 @@ end
 function FocusStage(tel::Telescope; scale::Real=1.0,
     T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel), label::Symbol=:focus)
     selector = require_same_backend(tel, _resolve_backend_selector(backend))
-    backend = _resolve_array_backend(selector)
+    array_backend = _resolve_array_backend(selector)
     n = tel.params.resolution
-    opd = backend{T}(undef, n, n)
+    opd = array_backend{T}(undef, n, n)
     fill!(opd, zero(T))
     opd_vec = reshape(opd, :)
     host_modes = _modal_mode_matrix(tel, (
         (x, y) -> T(scale) * (x^2 + y^2),
-    ), T, backend)
+    ), T, selector)
     host_focus = Array(host_modes)
     _normalize_pupil_mode!(host_focus, Array(tel.state.pupil))
-    modes = _backend_copy_matrix(host_focus, backend, T)
-    coefs = backend{T}(undef, 1)
+    modes = _backend_copy_matrix(host_focus, selector, T)
+    coefs = array_backend{T}(undef, 1)
     fill!(coefs, zero(T))
     state = LowOrderControllableState{T,typeof(opd),typeof(modes),typeof(coefs)}(opd, opd_vec, modes, coefs)
     params = FocusStageParams{T}(T(scale))
@@ -267,6 +269,8 @@ end
 @inline command_layout(optic::CompositeControllableOptic) = optic.layout
 
 @inline function set_command!(optic::CompositeControllableOptic, command::AbstractVector)
+    length(optic.command) == length(command) ||
+        throw(DimensionMismatchError("command length must match composite optic command length"))
     copyto!(optic.command, command)
     @inbounds for i in eachindex(optic.optics)
         set_command!(optic.optics[i], @view(optic.command[optic.child_ranges[i]]))

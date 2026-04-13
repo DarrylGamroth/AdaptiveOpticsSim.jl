@@ -11,6 +11,6 @@ purpose = "platform orchestration runtime artifact for PSP-15"
 id = "PLATFORM-ORCH-2026-04-03"
 path = "2026-04-03-phase5-psp15.toml"
 [[artifacts]]
-purpose = "multi-optic HIL validation artifact for tiptilt + dm runtime surface"
+purpose = "multi-optic HIL validation artifact for low-order composite runtime self-check surfaces"
 id = "MULTI-OPTIC-HIL-2026-04-13"
 path = "2026-04-13-multi-optic-hil.toml"

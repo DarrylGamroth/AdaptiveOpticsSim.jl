@@ -12,6 +12,8 @@ struct CompositeRuntimeExportPlan <: AbstractRuntimeExportPlan end
 @inline _runtime_layout_matches_optic(runtime::ClosedLoopRuntime) = runtime.command_layout == command_layout(runtime.optic)
 
 @inline function set_command!(runtime::ClosedLoopRuntime, command::AbstractVector)
+    length(runtime.command) == length(command) ||
+        throw(DimensionMismatchError("command length must match runtime command length"))
     copyto!(runtime.command, command)
     set_command!(runtime.optic, runtime.command)
     return command_storage(runtime.optic)
@@ -32,6 +34,8 @@ end
 end
 
 @inline function set_command!(interface::SimulationInterface, command::AbstractVector)
+    length(interface.command) == length(command) ||
+        throw(DimensionMismatchError("command length must match exported simulation interface command length"))
     copyto!(interface.command, command)
     set_command!(interface.runtime, command)
     return interface.command

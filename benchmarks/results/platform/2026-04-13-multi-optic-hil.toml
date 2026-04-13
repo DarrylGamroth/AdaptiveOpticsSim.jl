@@ -1,6 +1,11 @@
 generated_on = "2026-04-13"
 artifact_id = "MULTI-OPTIC-HIL-2026-04-13"
 
+[bioedge_behavior]
+tip_plus_slopes_l2 = 4.097142038972379e-7
+tip_frame_sum_delta = 64.0
+tip_minus_slopes_l2 = 3.9761258108228503e-7
+
 [surface]
 command_segment_lengths = [2, 16]
 command_length = 18
@@ -11,6 +16,13 @@ science_pixels_enabled = false
 [delta]
 slopes_delta_l2 = 3.762038230895996
 wfs_frame_delta_l2 = 5.2810048e8
+
+[pyramid_behavior]
+tip_plus_axis_ratio = 6.683387279510498
+tip_antisymmetry_l2 = 0.4573093354701996
+tip_plus_frame_sum = 3.80108672e8
+zero_slopes_l2 = 0.0
+tip_minus_frame_sum = 3.80108704e8
 
 [focus_behavior]
 antisymmetry_l2 = 4.805966455023736e-6
@@ -52,6 +64,20 @@ min = 117856.1953125
 l2_norm = 5.47261376e8
 mean = 2.4948376e7
 
+[sensitivity_envelope.pyramid]
+slopes_delta_l2 = [1.3273138999938965, 2.6960413455963135, 3.932098150253296]
+commands = [0.012500000186264515, 0.02500000037252903, 0.05000000074505806]
+frame_delta_l2 = [1.6024792e7, 3.2435156e7, 4.7638792e7]
+
+[sensitivity_envelope.bioedge]
+commands = [0.012500000186264515, 0.02500000037252903, 0.05000000074505806]
+frame_delta_l2 = [2.1745182e7, 4.5214476e7, 6.683822e7]
+
+[sensitivity_envelope.shack_hartmann]
+slopes_delta_l2 = [1.157675862312317, 2.2417595386505127, 3.897876739501953]
+commands = [0.012500000186264515, 0.02500000037252903, 0.05000000074505806]
+frame_delta_l2 = [4.64752736e8, 9.17382272e8, 1.713317248e9]
+
 [initial_state.slopes]
 length = 32
 maxabs = 0.9249493479728699
@@ -84,6 +110,21 @@ updated_slopes_exact = true
 initial_slopes_exact = true
 initial_wfs_frame_exact = true
 
+[detector_in_loop.pyramid]
+plus_frame_delta_l2 = 1.5854678e7
+minus_frame_delta_l2 = 1.5854679e7
+frame_sum_delta = 64.0
+
+[detector_in_loop.bioedge]
+plus_frame_delta_l2 = 2.1415326e7
+minus_frame_delta_l2 = 2.141533e7
+frame_sum_delta = 128.0
+
+[detector_in_loop.shack_hartmann]
+plus_frame_delta_l2 = 4.48914176e8
+minus_frame_delta_l2 = 4.48914016e8
+frame_sum_delta = 14336.0
+
 [composition]
 tiptilt_dm_opd_l2 = 0.0
 focus_dm_opd_l2 = 0.0
@@ -112,6 +153,18 @@ zero_slopes_l2 = 0.0
     frame_sum = 2.0463017984e10
     axis_1_norm = 0.09513004869222641
     axis_2_mean = 0.28351467847824097
+
+[stateful_sequence]
+step_1_frame_l2 = 5.21389568e8
+step_2_slopes_l2 = 2.2456629276275635
+step_1_command_sum = 0.3400000035762787
+step_3_command_sum = 0.29999998211860657
+step_1_slopes_l2 = 2.438511610031128
+step_2_frame_l2 = 5.114888e8
+step_3_frame_l2 = 5.42821376e8
+surface = "tiptilt_focus_dm_shack_hartmann"
+step_2_command_sum = 0.32499998807907104
+step_3_slopes_l2 = 2.708096742630005
 
 [behavior]
 tilt_dominant_axis = 1

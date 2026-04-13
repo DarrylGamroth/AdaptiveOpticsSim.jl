@@ -104,6 +104,42 @@ end
 @inline low_order_label(::Val{:steering}) = :steering
 @inline low_order_label(::Val{:focus}) = :focus
 
+@inline wfs_family_label(::Val{:sh}) = :shack_hartmann
+@inline wfs_family_label(::Val{:pyr}) = :pyramid
+@inline wfs_family_label(::Val{:bio}) = :bioedge
+
+function build_static_runtime_wfs(tel::Telescope, ::Val{:sh}; T::Type{<:AbstractFloat}=Float64,
+    backend::AbstractArrayBackend=backend(tel))
+    return ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
+end
+
+function build_static_runtime_wfs(tel::Telescope, ::Val{:pyr}; T::Type{<:AbstractFloat}=Float64,
+    backend::AbstractArrayBackend=backend(tel))
+    return PyramidWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+end
+
+function build_static_runtime_wfs(tel::Telescope, ::Val{:bio}; T::Type{<:AbstractFloat}=Float64,
+    backend::AbstractArrayBackend=backend(tel))
+    return BioEdgeWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+end
+
+@inline build_runtime_detector_response(::Val{:null}, ::Type{T}, backend::AbstractArrayBackend) where {T<:AbstractFloat} = NullFrameResponse()
+@inline build_runtime_detector_response(::Val{:gaussian}, ::Type{T}, backend::AbstractArrayBackend) where {T<:AbstractFloat} =
+    default_response_model(CMOSSensor(T=T); T=T, backend=backend)
+
+function build_runtime_detector(::Val{R}, ::Type{T}, backend::AbstractArrayBackend) where {R,T<:AbstractFloat}
+    return Detector(
+        noise=NoiseNone(),
+        integration_time=one(T),
+        qe=one(T),
+        binning=1,
+        sensor=CMOSSensor(T=T),
+        response_model=build_runtime_detector_response(Val(R), T, backend),
+        T=T,
+        backend=backend,
+    )
+end
+
 function build_static_low_order_optic(tel::Telescope, ::Val{:tiptilt}; scale::Real=0.1)
     return TipTiltMirror(tel; scale=scale, label=:tiptilt)
 end
@@ -117,15 +153,16 @@ function build_static_low_order_optic(tel::Telescope, ::Val{:focus}; scale::Real
 end
 
 function build_static_low_order_runtime(::Val{K}, low_order_cmd::AbstractVector{<:Real};
-    dm_cmd::AbstractVector{<:Real}=fill(0.0, 16), seed::Integer=91) where {K}
+    dm_cmd::AbstractVector{<:Real}=fill(0.0, 16), seed::Integer=91,
+    wfs_family::Symbol=:sh, detector_profile::Symbol=:null) where {K}
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     atm = build_static_runtime_atmosphere(tel)
     low_order = build_static_low_order_optic(tel, Val(K))
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
     optic = CompositeControllableOptic(low_order_label(Val(K)) => low_order, :dm => dm)
-    wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive())
-    det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
+    wfs = build_static_runtime_wfs(tel, Val(wfs_family))
+    det = build_runtime_detector(Val(detector_profile), Float64, CPUBackend())
     sim = AOSimulation(tel, src, atm, optic, wfs)
     runtime = ClosedLoopRuntime(sim, NullReconstructor();
         wfs_detector=det,
@@ -173,6 +210,71 @@ function low_order_opd(::Val{K}, low_order_cmd::AbstractVector{<:Real};
     end
     return copy(tel.state.opd)
 end
+
+function response_delta_metrics(::Val{K}, low_order_cmd::AbstractVector{<:Real};
+    wfs_family::Symbol=:sh, detector_profile::Symbol=:null) where {K}
+    active = low_order_response_metrics(build_static_low_order_runtime(
+        Val(K),
+        low_order_cmd;
+        wfs_family=wfs_family,
+        detector_profile=detector_profile,
+    ))
+    baseline = low_order_response_metrics(build_static_low_order_runtime(
+        Val(K),
+        zeros(eltype(low_order_cmd), length(low_order_cmd));
+        wfs_family=wfs_family,
+        detector_profile=detector_profile,
+    ))
+    return (
+        active=active,
+        baseline=baseline,
+        slopes_delta_l2=norm(active.slopes .- baseline.slopes),
+        frame_delta_l2=norm(active.frame .- baseline.frame),
+    )
+end
+
+function build_static_richer_runtime(spec::Val{S};
+    seed::Integer=91,
+    wfs_family::Symbol=:sh,
+    detector_profile::Symbol=:null) where {S}
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = Source(band=:I, magnitude=0.0)
+    atm = build_static_runtime_atmosphere(tel)
+    optic = if S === :tiptilt_focus_dm
+        CompositeControllableOptic(
+            :tiptilt => TipTiltMirror(tel; scale=0.1, label=:tiptilt),
+            :focus => FocusStage(tel; scale=0.1, label=:focus),
+            :dm => DeformableMirror(tel; n_act=4, influence_width=0.3),
+        )
+    elseif S === :steering_focus_dm
+        CompositeControllableOptic(
+            :steering => SteeringMirror(tel; scale=0.1, label=:steering),
+            :focus => FocusStage(tel; scale=0.1, label=:focus),
+            :dm => DeformableMirror(tel; n_act=4, influence_width=0.3),
+        )
+    else
+        throw(InvalidConfiguration("unsupported richer composite spec $(S)"))
+    end
+    wfs = build_static_runtime_wfs(tel, Val(wfs_family))
+    det = build_runtime_detector(Val(detector_profile), Float64, CPUBackend())
+    sim = AOSimulation(tel, src, atm, optic, wfs)
+    scenario = build_runtime_scenario(
+        SingleRuntimeConfig(
+            name=Symbol(:richer_runtime_, S, :_, wfs_family, :_, detector_profile),
+            branch_label=:main,
+            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false),
+        ),
+        RuntimeBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(seed)),
+    )
+    prepare!(scenario)
+    return scenario
+end
+
+runtime_snapshot(scenario) = (
+    command=copy(Array(command(scenario))),
+    slopes=copy(Array(slopes(scenario))),
+    wfs_frame=copy(Array(wfs_frame(scenario))),
+)
 
 @testset "Calibration and control" begin
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
@@ -732,6 +834,103 @@ end
     focus_a = low_order_opd(Val(:focus), [0.005])
     focus_2a = low_order_opd(Val(:focus), [0.01])
     @test focus_2a ≈ (2 .* focus_a) atol=1e-12 rtol=1e-12
+
+    @test_throws InvalidConfiguration set_command!(combo_scenario, (; focus=fill(eltype(command(combo_scenario))(0.01), 1), dm=fill(eltype(command(combo_scenario))(0.02), 16)))
+    @test_throws InvalidConfiguration update_command!(combo_scenario, (; focus=fill(eltype(command(combo_scenario))(0.01), 1)))
+    @test_throws DimensionMismatchError set_command!(combo_scenario, (; tiptilt=fill(eltype(command(combo_scenario))(0.01), 1), dm=fill(eltype(command(combo_scenario))(0.02), 16)))
+    @test_throws DimensionMismatchError set_command!(combo_scenario, fill(eltype(command(combo_scenario))(0.01), length(command(combo_scenario)) - 1))
+
+    richer_scenario = build_static_richer_runtime(Val(:tiptilt_focus_dm))
+    @test command_segment_labels(command_layout(richer_scenario)) == (:tiptilt, :focus, :dm)
+    richer_initial = (; tiptilt=[0.01, -0.005], focus=[0.015], dm=fill(0.02, 16))
+    richer_tip_update = (; tiptilt=[-0.02, 0.01])
+    richer_focus_update = (; focus=[-0.01])
+    richer_dm_update = (; dm=fill(0.03, 16))
+    expected_states = Any[]
+    for cmd in (
+        richer_initial,
+        merge(richer_initial, richer_tip_update),
+        merge(merge(richer_initial, richer_tip_update), richer_focus_update),
+        merge(merge(merge(richer_initial, richer_tip_update), richer_focus_update), richer_dm_update),
+    )
+        fresh = build_static_richer_runtime(Val(:tiptilt_focus_dm))
+        set_command!(fresh, cmd)
+        sense!(fresh)
+        push!(expected_states, runtime_snapshot(fresh))
+    end
+    set_command!(richer_scenario, richer_initial)
+    sense!(richer_scenario)
+    @test runtime_snapshot(richer_scenario) == expected_states[1]
+    update_command!(richer_scenario, richer_tip_update)
+    @test command(richer_scenario)[3] == richer_initial.focus[1]
+    @test command(richer_scenario)[4:end] == richer_initial.dm
+    sense!(richer_scenario)
+    @test runtime_snapshot(richer_scenario) == expected_states[2]
+    update_command!(richer_scenario, richer_focus_update)
+    @test command(richer_scenario)[1:2] == richer_tip_update.tiptilt
+    @test command(richer_scenario)[4:end] == richer_initial.dm
+    sense!(richer_scenario)
+    @test runtime_snapshot(richer_scenario) == expected_states[3]
+    update_command!(richer_scenario, richer_dm_update)
+    @test command(richer_scenario)[1:2] == richer_tip_update.tiptilt
+    @test command(richer_scenario)[3] == richer_focus_update.focus[1]
+    sense!(richer_scenario)
+    @test runtime_snapshot(richer_scenario) == expected_states[4]
+
+    richer_steering = build_static_richer_runtime(Val(:steering_focus_dm))
+    @test command_segment_labels(command_layout(richer_steering)) == (:steering, :focus, :dm)
+    set_command!(richer_steering, (; steering=[0.01, 0.0], focus=[0.02], dm=fill(0.01, 16)))
+    sense!(richer_steering)
+    update_command!(richer_steering, (; focus=[-0.01]))
+    @test command(richer_steering)[1:2] == [0.01, 0.0]
+    @test command(richer_steering)[4:end] == fill(0.01, 16)
+
+    sh_amp_1 = response_delta_metrics(Val(:tiptilt), [0.0125, 0.0])
+    sh_amp_2 = response_delta_metrics(Val(:tiptilt), [0.025, 0.0])
+    sh_amp_3 = response_delta_metrics(Val(:tiptilt), [0.05, 0.0])
+    @test sh_amp_1.slopes_delta_l2 < sh_amp_2.slopes_delta_l2 < sh_amp_3.slopes_delta_l2
+    @test sh_amp_1.frame_delta_l2 < sh_amp_2.frame_delta_l2 < sh_amp_3.frame_delta_l2
+
+    pyr_amp_1 = response_delta_metrics(Val(:tiptilt), [0.0125, 0.0]; wfs_family=:pyr)
+    pyr_amp_2 = response_delta_metrics(Val(:tiptilt), [0.025, 0.0]; wfs_family=:pyr)
+    pyr_amp_3 = response_delta_metrics(Val(:tiptilt), [0.05, 0.0]; wfs_family=:pyr)
+    @test pyr_amp_1.slopes_delta_l2 < pyr_amp_2.slopes_delta_l2 < pyr_amp_3.slopes_delta_l2
+    @test pyr_amp_1.frame_delta_l2 < pyr_amp_2.frame_delta_l2 < pyr_amp_3.frame_delta_l2
+
+    bio_amp_1 = response_delta_metrics(Val(:tiptilt), [0.0125, 0.0]; wfs_family=:bio)
+    bio_amp_2 = response_delta_metrics(Val(:tiptilt), [0.025, 0.0]; wfs_family=:bio)
+    bio_amp_3 = response_delta_metrics(Val(:tiptilt), [0.05, 0.0]; wfs_family=:bio)
+    @test bio_amp_1.frame_delta_l2 < bio_amp_2.frame_delta_l2 < bio_amp_3.frame_delta_l2
+
+    pyr_tip_plus = low_order_response_metrics(build_static_low_order_runtime(Val(:tiptilt), [0.0125, 0.0]; wfs_family=:pyr))
+    pyr_tip_minus = low_order_response_metrics(build_static_low_order_runtime(Val(:tiptilt), [-0.0125, 0.0]; wfs_family=:pyr))
+    pyr_tip_zero = low_order_response_metrics(build_static_low_order_runtime(Val(:tiptilt), [0.0, 0.0]; wfs_family=:pyr))
+    @test pyr_tip_plus.axis_1_norm < pyr_tip_plus.axis_2_norm
+    @test norm(pyr_tip_plus.slopes .+ pyr_tip_minus.slopes) ≤ 0.5
+    @test norm(pyr_tip_zero.slopes) ≤ 0.02
+    @test isapprox(pyr_tip_plus.frame_sum, pyr_tip_minus.frame_sum; rtol=1e-6, atol=5e1)
+
+    bio_tip_plus = low_order_response_metrics(build_static_low_order_runtime(Val(:tiptilt), [0.0125, 0.0]; wfs_family=:bio))
+    bio_tip_minus = low_order_response_metrics(build_static_low_order_runtime(Val(:tiptilt), [-0.0125, 0.0]; wfs_family=:bio))
+    bio_tip_zero = response_delta_metrics(Val(:tiptilt), [0.0125, 0.0]; wfs_family=:bio)
+    @test bio_tip_zero.frame_delta_l2 > 1e7
+    @test isapprox(bio_tip_plus.frame_sum, bio_tip_minus.frame_sum; rtol=1e-6, atol=5e1)
+    @test norm(bio_tip_plus.slopes) > 0
+
+    sh_det_plus = response_delta_metrics(Val(:tiptilt), [0.0125, 0.0]; detector_profile=:gaussian)
+    sh_det_minus = response_delta_metrics(Val(:tiptilt), [-0.0125, 0.0]; detector_profile=:gaussian)
+    @test sh_det_plus.frame_delta_l2 > 1e8
+    @test isapprox(sh_det_plus.active.frame_sum, sh_det_minus.active.frame_sum; rtol=1e-6, atol=1e4)
+
+    pyr_det_plus = response_delta_metrics(Val(:tiptilt), [0.0125, 0.0]; wfs_family=:pyr, detector_profile=:gaussian)
+    pyr_det_minus = response_delta_metrics(Val(:tiptilt), [-0.0125, 0.0]; wfs_family=:pyr, detector_profile=:gaussian)
+    @test pyr_det_plus.frame_delta_l2 > 1e7
+    @test isapprox(pyr_det_plus.active.frame_sum, pyr_det_minus.active.frame_sum; rtol=1e-6, atol=1e3)
+
+    bio_det_plus = response_delta_metrics(Val(:tiptilt), [0.0125, 0.0]; wfs_family=:bio, detector_profile=:gaussian)
+    bio_det_minus = response_delta_metrics(Val(:tiptilt), [-0.0125, 0.0]; wfs_family=:bio, detector_profile=:gaussian)
+    @test bio_det_plus.frame_delta_l2 > 1e7
+    @test isapprox(bio_det_plus.active.frame_sum, bio_det_minus.active.frame_sum; rtol=1e-6, atol=1e3)
 
     grouped_cfg = GroupedRuntimeConfig(
         (:branch_a, :branch_b);

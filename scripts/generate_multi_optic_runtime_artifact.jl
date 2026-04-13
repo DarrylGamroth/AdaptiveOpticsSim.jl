@@ -60,6 +60,42 @@ end
 @inline low_order_label(::Val{:steering}) = :steering
 @inline low_order_label(::Val{:focus}) = :focus
 
+@inline wfs_family_label(::Val{:sh}) = :shack_hartmann
+@inline wfs_family_label(::Val{:pyr}) = :pyramid
+@inline wfs_family_label(::Val{:bio}) = :bioedge
+
+function build_runtime_wfs(tel::Telescope, ::Val{:sh}; T::Type{<:AbstractFloat}=Float32,
+    backend::AbstractArrayBackend=CPUBackend())
+    return ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
+end
+
+function build_runtime_wfs(tel::Telescope, ::Val{:pyr}; T::Type{<:AbstractFloat}=Float32,
+    backend::AbstractArrayBackend=CPUBackend())
+    return PyramidWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+end
+
+function build_runtime_wfs(tel::Telescope, ::Val{:bio}; T::Type{<:AbstractFloat}=Float32,
+    backend::AbstractArrayBackend=CPUBackend())
+    return BioEdgeWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+end
+
+@inline build_runtime_detector_response(::Val{:null}, ::Type{T}, backend::AbstractArrayBackend) where {T<:AbstractFloat} = NullFrameResponse()
+@inline build_runtime_detector_response(::Val{:gaussian}, ::Type{T}, backend::AbstractArrayBackend) where {T<:AbstractFloat} =
+    default_response_model(CMOSSensor(T=T); T=T, backend=backend)
+
+function build_runtime_detector(::Val{R}, ::Type{T}, backend::AbstractArrayBackend) where {R,T<:AbstractFloat}
+    return Detector(
+        noise=NoiseNone(),
+        integration_time=T(1.0),
+        qe=T(1.0),
+        binning=1,
+        sensor=CMOSSensor(T=T),
+        response_model=build_runtime_detector_response(Val(R), T, backend),
+        T=T,
+        backend=backend,
+    )
+end
+
 function build_behavior_optic(tel::Telescope, ::Val{:tiptilt}; T::Type{<:AbstractFloat}=Float32)
     return CompositeControllableOptic(
         :tiptilt => TipTiltMirror(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:tiptilt),
@@ -81,18 +117,19 @@ function build_behavior_optic(tel::Telescope, ::Val{:focus}; T::Type{<:AbstractF
     )
 end
 
-function build_behavior_scenario(::Val{K}; seed::Integer=91) where {K}
+function build_behavior_scenario(::Val{K}; seed::Integer=91, wfs_family::Symbol=:sh,
+    detector_profile::Symbol=:null) where {K}
     T = Float32
     tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
         central_obstruction=T(0.0), T=T, backend=CPUBackend())
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = StaticAtmosphere(tel; T=T, backend=CPUBackend())
     optic = build_behavior_optic(tel, Val(K); T=T)
-    wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=CPUBackend())
-    det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=CPUBackend())
+    wfs = build_runtime_wfs(tel, Val(wfs_family); T=T, backend=CPUBackend())
+    det = build_runtime_detector(Val(detector_profile), T, CPUBackend())
     sim = AOSimulation(tel, src, atm, optic, wfs)
     scenario = build_runtime_scenario(
-        SingleRuntimeConfig(name=Symbol(:multi_optic_behavior_, K), branch_label=:main,
+        SingleRuntimeConfig(name=Symbol(:multi_optic_behavior_, K, :_, wfs_family, :_, detector_profile), branch_label=:main,
             products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
         RuntimeBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(seed)),
     )
@@ -100,8 +137,9 @@ function build_behavior_scenario(::Val{K}; seed::Integer=91) where {K}
     return scenario
 end
 
-function measure_behavior_response(::Val{K}, low_order_cmd::AbstractVector{<:AbstractFloat}) where {K}
-    scenario = build_behavior_scenario(Val(K))
+function measure_behavior_response(::Val{K}, low_order_cmd::AbstractVector{<:AbstractFloat};
+    wfs_family::Symbol=:sh, detector_profile::Symbol=:null) where {K}
+    scenario = build_behavior_scenario(Val(K); wfs_family=wfs_family, detector_profile=detector_profile)
     label = low_order_label(Val(K))
     set_command!(scenario, NamedTuple{(label, :dm)}((collect(Float32.(low_order_cmd)), fill(Float32(0), 16))))
     sense!(scenario)
@@ -119,6 +157,59 @@ function measure_behavior_response(::Val{K}, low_order_cmd::AbstractVector{<:Abs
         "frame_sum" => sum(frame),
     )
 end
+
+function response_delta_metrics(::Val{K}, low_order_cmd::AbstractVector{<:AbstractFloat};
+    wfs_family::Symbol=:sh, detector_profile::Symbol=:null) where {K}
+    active = measure_behavior_response(Val(K), low_order_cmd; wfs_family=wfs_family, detector_profile=detector_profile)
+    baseline = measure_behavior_response(Val(K), zeros(Float32, length(low_order_cmd)); wfs_family=wfs_family, detector_profile=detector_profile)
+    return Dict(
+        "command" => collect(Float32.(low_order_cmd)),
+        "slopes_delta_l2" => norm(active["slopes"] .- baseline["slopes"]),
+        "frame_delta_l2" => norm(active["wfs_frame"] .- baseline["wfs_frame"]),
+        "baseline_frame_sum" => baseline["frame_sum"],
+        "active_frame_sum" => active["frame_sum"],
+    )
+end
+
+function build_richer_runtime(::Val{S}; seed::Integer=91, wfs_family::Symbol=:sh,
+    detector_profile::Symbol=:null) where {S}
+    T = Float32
+    tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
+        central_obstruction=T(0.0), T=T, backend=CPUBackend())
+    src = Source(band=:I, magnitude=0.0, T=T)
+    atm = StaticAtmosphere(tel; T=T, backend=CPUBackend())
+    optic = if S === :tiptilt_focus_dm
+        CompositeControllableOptic(
+            :tiptilt => TipTiltMirror(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:tiptilt),
+            :focus => FocusStage(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:focus),
+            :dm => DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=CPUBackend()),
+        )
+    elseif S === :steering_focus_dm
+        CompositeControllableOptic(
+            :steering => SteeringMirror(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:steering),
+            :focus => FocusStage(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:focus),
+            :dm => DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=CPUBackend()),
+        )
+    else
+        throw(InvalidConfiguration("unsupported richer runtime spec $(S)"))
+    end
+    wfs = build_runtime_wfs(tel, Val(wfs_family); T=T, backend=CPUBackend())
+    det = build_runtime_detector(Val(detector_profile), T, CPUBackend())
+    sim = AOSimulation(tel, src, atm, optic, wfs)
+    scenario = build_runtime_scenario(
+        SingleRuntimeConfig(name=Symbol(:richer_runtime_, S, :_, wfs_family, :_, detector_profile), branch_label=:main,
+            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
+        RuntimeBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(seed)),
+    )
+    prepare!(scenario)
+    return scenario
+end
+
+runtime_snapshot(scenario) = Dict(
+    "command" => copy(Array(command(scenario))),
+    "slopes" => copy(Array(slopes(scenario))),
+    "wfs_frame" => copy(Array(wfs_frame(scenario))),
+)
 
 function low_order_opd(::Val{K}, low_order_cmd::AbstractVector{<:AbstractFloat};
     dm_cmd::AbstractVector{<:AbstractFloat}=fill(Float32(0), 16), composite::Bool=false) where {K}
@@ -225,6 +316,33 @@ function build_report()
     steer_2a = low_order_opd(Val(:steering), Float32[0.01, 0.0])
     focus_a = low_order_opd(Val(:focus), Float32[0.005])
     focus_2a = low_order_opd(Val(:focus), Float32[0.01])
+    pyr_tip_plus = measure_behavior_response(Val(:tiptilt), Float32[0.0125, 0.0]; wfs_family=:pyr)
+    pyr_tip_minus = measure_behavior_response(Val(:tiptilt), Float32[-0.0125, 0.0]; wfs_family=:pyr)
+    pyr_tip_zero = measure_behavior_response(Val(:tiptilt), Float32[0.0, 0.0]; wfs_family=:pyr)
+    bio_tip_plus = measure_behavior_response(Val(:tiptilt), Float32[0.0125, 0.0]; wfs_family=:bio)
+    bio_tip_minus = measure_behavior_response(Val(:tiptilt), Float32[-0.0125, 0.0]; wfs_family=:bio)
+    sh_sweep = map(cmd -> response_delta_metrics(Val(:tiptilt), Float32[cmd, 0.0]), Float32[0.0125, 0.025, 0.05])
+    pyr_sweep = map(cmd -> response_delta_metrics(Val(:tiptilt), Float32[cmd, 0.0]; wfs_family=:pyr), Float32[0.0125, 0.025, 0.05])
+    bio_sweep = map(cmd -> response_delta_metrics(Val(:tiptilt), Float32[cmd, 0.0]; wfs_family=:bio), Float32[0.0125, 0.025, 0.05])
+    sh_det_plus = response_delta_metrics(Val(:tiptilt), Float32[0.0125, 0.0]; detector_profile=:gaussian)
+    sh_det_minus = response_delta_metrics(Val(:tiptilt), Float32[-0.0125, 0.0]; detector_profile=:gaussian)
+    pyr_det_plus = response_delta_metrics(Val(:tiptilt), Float32[0.0125, 0.0]; wfs_family=:pyr, detector_profile=:gaussian)
+    pyr_det_minus = response_delta_metrics(Val(:tiptilt), Float32[-0.0125, 0.0]; wfs_family=:pyr, detector_profile=:gaussian)
+    bio_det_plus = response_delta_metrics(Val(:tiptilt), Float32[0.0125, 0.0]; wfs_family=:bio, detector_profile=:gaussian)
+    bio_det_minus = response_delta_metrics(Val(:tiptilt), Float32[-0.0125, 0.0]; wfs_family=:bio, detector_profile=:gaussian)
+    richer = build_richer_runtime(Val(:tiptilt_focus_dm))
+    richer_initial = (; tiptilt=Float32[0.01, -0.005], focus=Float32[0.015], dm=fill(Float32(0.02), 16))
+    richer_tip_update = (; tiptilt=Float32[-0.02, 0.01])
+    richer_focus_update = (; focus=Float32[-0.01])
+    set_command!(richer, richer_initial)
+    sense!(richer)
+    richer_step_1 = runtime_snapshot(richer)
+    update_command!(richer, richer_tip_update)
+    sense!(richer)
+    richer_step_2 = runtime_snapshot(richer)
+    update_command!(richer, richer_focus_update)
+    sense!(richer)
+    richer_step_3 = runtime_snapshot(richer)
 
     return Dict(
         "artifact_id" => "MULTI-OPTIC-HIL-2026-04-13",
@@ -345,6 +463,63 @@ function build_report()
             "zero_slopes_l2" => norm(focus_zero["slopes"]),
             "axis_balance_ratio" => focus_plus["axis_1_norm"] / max(focus_plus["axis_2_norm"], eps(Float32)),
         ),
+        "pyramid_behavior" => Dict(
+            "tip_plus_axis_ratio" => pyr_tip_plus["axis_2_norm"] / max(pyr_tip_plus["axis_1_norm"], eps(Float32)),
+            "tip_antisymmetry_l2" => norm(pyr_tip_plus["slopes"] .+ pyr_tip_minus["slopes"]),
+            "zero_slopes_l2" => norm(pyr_tip_zero["slopes"]),
+            "tip_plus_frame_sum" => pyr_tip_plus["frame_sum"],
+            "tip_minus_frame_sum" => pyr_tip_minus["frame_sum"],
+        ),
+        "bioedge_behavior" => Dict(
+            "tip_plus_slopes_l2" => norm(bio_tip_plus["slopes"]),
+            "tip_minus_slopes_l2" => norm(bio_tip_minus["slopes"]),
+            "tip_frame_sum_delta" => abs(bio_tip_plus["frame_sum"] - bio_tip_minus["frame_sum"]),
+        ),
+        "sensitivity_envelope" => Dict(
+            "shack_hartmann" => Dict(
+                "commands" => [entry["command"][1] for entry in sh_sweep],
+                "slopes_delta_l2" => [entry["slopes_delta_l2"] for entry in sh_sweep],
+                "frame_delta_l2" => [entry["frame_delta_l2"] for entry in sh_sweep],
+            ),
+            "pyramid" => Dict(
+                "commands" => [entry["command"][1] for entry in pyr_sweep],
+                "slopes_delta_l2" => [entry["slopes_delta_l2"] for entry in pyr_sweep],
+                "frame_delta_l2" => [entry["frame_delta_l2"] for entry in pyr_sweep],
+            ),
+            "bioedge" => Dict(
+                "commands" => [entry["command"][1] for entry in bio_sweep],
+                "frame_delta_l2" => [entry["frame_delta_l2"] for entry in bio_sweep],
+            ),
+        ),
+        "detector_in_loop" => Dict(
+            "shack_hartmann" => Dict(
+                "plus_frame_delta_l2" => sh_det_plus["frame_delta_l2"],
+                "minus_frame_delta_l2" => sh_det_minus["frame_delta_l2"],
+                "frame_sum_delta" => abs(sh_det_plus["active_frame_sum"] - sh_det_minus["active_frame_sum"]),
+            ),
+            "pyramid" => Dict(
+                "plus_frame_delta_l2" => pyr_det_plus["frame_delta_l2"],
+                "minus_frame_delta_l2" => pyr_det_minus["frame_delta_l2"],
+                "frame_sum_delta" => abs(pyr_det_plus["active_frame_sum"] - pyr_det_minus["active_frame_sum"]),
+            ),
+            "bioedge" => Dict(
+                "plus_frame_delta_l2" => bio_det_plus["frame_delta_l2"],
+                "minus_frame_delta_l2" => bio_det_minus["frame_delta_l2"],
+                "frame_sum_delta" => abs(bio_det_plus["active_frame_sum"] - bio_det_minus["active_frame_sum"]),
+            ),
+        ),
+        "stateful_sequence" => Dict(
+            "surface" => "tiptilt_focus_dm_shack_hartmann",
+            "step_1_command_sum" => sum(richer_step_1["command"]),
+            "step_2_command_sum" => sum(richer_step_2["command"]),
+            "step_3_command_sum" => sum(richer_step_3["command"]),
+            "step_1_slopes_l2" => norm(richer_step_1["slopes"]),
+            "step_2_slopes_l2" => norm(richer_step_2["slopes"]),
+            "step_3_slopes_l2" => norm(richer_step_3["slopes"]),
+            "step_1_frame_l2" => norm(richer_step_1["wfs_frame"]),
+            "step_2_frame_l2" => norm(richer_step_2["wfs_frame"]),
+            "step_3_frame_l2" => norm(richer_step_3["wfs_frame"]),
+        ),
         "composition" => Dict(
             "tiptilt_dm_opd_l2" => norm(tip_seq .- tip_comp),
             "steering_dm_opd_l2" => norm(steer_seq .- steer_comp),
@@ -365,7 +540,7 @@ function update_manifest!(artifact_path::AbstractString)
     artifacts = get!(manifest, "artifacts", Any[])
     kept = Any[item for item in artifacts if get(item, "id", "") != "MULTI-OPTIC-HIL-2026-04-13"]
     push!(kept, Dict(
-        "purpose" => "multi-optic HIL validation artifact for tiptilt + dm runtime surface",
+        "purpose" => "multi-optic HIL validation artifact for low-order composite runtime self-check surfaces",
         "id" => "MULTI-OPTIC-HIL-2026-04-13",
         "path" => basename(artifact_path),
     ))

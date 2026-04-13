@@ -67,8 +67,19 @@ end
 @inline _optional_low_order_label(::Val{:steering}) = :steering
 @inline _optional_low_order_label(::Val{:focus}) = :focus
 
-function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:tiptilt}) where {T<:AbstractFloat}
-    T = Float32
+function _build_optional_low_order_wfs(tel::Telescope, backend, ::Type{T}, ::Val{:sh}) where {T<:AbstractFloat}
+    return ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
+end
+
+function _build_optional_low_order_wfs(tel::Telescope, backend, ::Type{T}, ::Val{:pyr}) where {T<:AbstractFloat}
+    return PyramidWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+end
+
+function _build_optional_low_order_wfs(tel::Telescope, backend, ::Type{T}, ::Val{:bio}) where {T<:AbstractFloat}
+    return BioEdgeWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+end
+
+function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:tiptilt}, wfs_case::Val{W}=Val(:sh)) where {T<:AbstractFloat,W}
     tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
         central_obstruction=T(0.0), T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
@@ -76,18 +87,17 @@ function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:tiptilt
     tiptilt = TipTiltMirror(tel; scale=T(0.1), T=T, backend=backend, label=:tiptilt)
     dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=backend)
     optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm)
-    wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
+    wfs = _build_optional_low_order_wfs(tel, backend, T, wfs_case)
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
     sim = AOSimulation(tel, src, atm, optic, wfs)
     return build_runtime_scenario(
-        SingleRuntimeConfig(name=:optional_backend_composite_tiptilt, branch_label=:main,
+        SingleRuntimeConfig(name=Symbol(:optional_backend_composite_tiptilt_, W), branch_label=:main,
             products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
         RuntimeBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(91)),
     )
 end
 
-function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:steering}) where {T<:AbstractFloat}
-    T = Float32
+function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:steering}, ::Val{:sh}=Val(:sh)) where {T<:AbstractFloat}
     tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
         central_obstruction=T(0.0), T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
@@ -105,8 +115,7 @@ function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:steerin
     )
 end
 
-function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:focus}) where {T<:AbstractFloat}
-    T = Float32
+function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:focus}, ::Val{:sh}=Val(:sh)) where {T<:AbstractFloat}
     tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
         central_obstruction=T(0.0), T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
@@ -132,23 +141,27 @@ function _optional_low_order_commands(::Type{T}, ::Union{Val{:tiptilt},Val{:stee
     return fill(T(0.0125), 2), fill(T(0.025), 2), fill(T(0.02), 16)
 end
 
-function _optional_low_order_tolerances(::Val{:focus})
+function _optional_low_order_tolerances(::Val{:focus}, ::Val{:sh}=Val(:sh))
     return (slopes_rtol=5f-3, slopes_atol=6f-3, frame_rtol=6f-3, frame_atol=1f6)
 end
 
-function _optional_low_order_tolerances(::Union{Val{:tiptilt},Val{:steering}})
+function _optional_low_order_tolerances(::Union{Val{:tiptilt},Val{:steering}}, ::Union{Val{:sh},Val{:pyr}})
     return (slopes_rtol=3f-3, slopes_atol=4f-3, frame_rtol=4f-3, frame_atol=1f6)
 end
 
-function _run_optional_composite_optic_case(::Type{B}, case::Val{K}) where {B<:AdaptiveOpticsSim.GPUBackendTag,K}
+function _optional_low_order_tolerances(::Val{:tiptilt}, ::Val{:bio})
+    return (slopes_rtol=1.5f-1, slopes_atol=4f-3, frame_rtol=6f-1, frame_atol=1f6)
+end
+
+function _run_optional_composite_optic_case(::Type{B}, case::Val{K}, wfs_case::Val{W}=Val(:sh)) where {B<:AdaptiveOpticsSim.GPUBackendTag,K,W}
     T = Float32
-    cpu = _build_optional_composite_optic_case(CPUBackend(), T, case)
-    gpu = _build_optional_composite_optic_case(backend_selector(B), T, case)
+    cpu = _build_optional_composite_optic_case(CPUBackend(), T, case, wfs_case)
+    gpu = _build_optional_composite_optic_case(backend_selector(B), T, case, wfs_case)
     prepare!(cpu)
     prepare!(gpu)
     initial_low_order, updated_low_order, dm_cmd = _optional_low_order_commands(T, case)
     label = _optional_low_order_label(case)
-    tol = _optional_low_order_tolerances(case)
+    tol = _optional_low_order_tolerances(case, wfs_case)
     set_command!(cpu, NamedTuple{(label, :dm)}((initial_low_order, dm_cmd)))
     set_command!(gpu, NamedTuple{(label, :dm)}((initial_low_order, dm_cmd)))
     sense!(cpu)
@@ -169,9 +182,11 @@ function _run_optional_composite_optic_case(::Type{B}, case::Val{K}) where {B<:A
 end
 
 function run_optional_composite_optic_parity(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
-    _run_optional_composite_optic_case(B, Val(:tiptilt))
-    _run_optional_composite_optic_case(B, Val(:steering))
-    _run_optional_composite_optic_case(B, Val(:focus))
+    _run_optional_composite_optic_case(B, Val(:tiptilt), Val(:sh))
+    _run_optional_composite_optic_case(B, Val(:tiptilt), Val(:pyr))
+    _run_optional_composite_optic_case(B, Val(:tiptilt), Val(:bio))
+    _run_optional_composite_optic_case(B, Val(:steering), Val(:sh))
+    _run_optional_composite_optic_case(B, Val(:focus), Val(:sh))
     return nothing
 end
 

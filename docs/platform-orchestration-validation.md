@@ -79,15 +79,24 @@ The maintained platform artifacts record:
 - deterministic multi-optic HIL runtime
   - `tiptilt + dm`, `steering + dm`, and `focus + dm` composite optics with
     structured command update
+  - richer stateful composite sequences:
+    - `tiptilt + focus + dm`
+    - `steering + focus + dm`
   - exact replay of packed command, slopes, and WFS frame on the maintained CPU
     surface
+  - maintained non-SH low-order replay surfaces:
+    - `Pyramid`
+    - `BioEdge`
   - behavioral observables:
     - directional slope-axis dominance for low-order pointing terms
     - opposite-sign antisymmetry for signed low-order commands
     - bounded frame-sum invariants for rigid-shift-like perturbations
+    - detector-backed frame-response invariants under deterministic
+      non-null detector response
   - composition and small-signal observables:
     - sequential-vs-composite OPD equivalence
     - small-signal OPD additivity and scaling for low-order optics
+    - amplitude-sweep envelopes for maintained low-order response surfaces
 
 For each case, the artifact records:
 

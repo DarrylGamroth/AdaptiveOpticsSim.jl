@@ -927,6 +927,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     T::Type{<:AbstractFloat}, backend)
     validate_frame_detector_sensor(sensor)
     selector = _resolve_backend_selector(backend)
+    array_backend = _resolve_array_backend(backend)
     full_well_t = full_well === nothing ? nothing : T(full_well)
     flux_model = background_model(background_flux; T=T, backend=selector)
     map_model = background_model(background_map; T=T, backend=selector)
@@ -966,23 +967,23 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
         window,
         output_precision_t,
     )
-    frame = backend{T}(undef, 1, 1)
-    response_buffer = backend{T}(undef, 1, 1)
-    bin_buffer = backend{T}(undef, 1, 1)
-    noise_buffer = backend{T}(undef, 1, 1)
+    frame = array_backend{T}(undef, 1, 1)
+    response_buffer = array_backend{T}(undef, 1, 1)
+    bin_buffer = array_backend{T}(undef, 1, 1)
+    noise_buffer = array_backend{T}(undef, 1, 1)
     noise_buffer_host = Matrix{T}(undef, 1, 1)
-    accum_buffer = backend{T}(undef, 1, 1)
+    accum_buffer = array_backend{T}(undef, 1, 1)
     output_buffer = if output_precision_t === nothing
-        window === nothing ? nothing : backend{T}(undef, 1, 1)
+        window === nothing ? nothing : array_backend{T}(undef, 1, 1)
     else
-        backend{output_precision_t}(undef, 1, 1)
+        array_backend{output_precision_t}(undef, 1, 1)
     end
     fill!(frame, zero(T))
     fill!(response_buffer, zero(T))
     fill!(bin_buffer, zero(T))
     fill!(noise_buffer, zero(T))
     fill!(accum_buffer, zero(T))
-    latent_buffer = backend{T}(undef, 1, 1)
+    latent_buffer = array_backend{T}(undef, 1, 1)
     fill!(latent_buffer, zero(T))
     output_buffer === nothing || fill!(output_buffer, zero(eltype(output_buffer)))
     thermal_state = thermal_state_from_model(thermal, T)
@@ -1000,7 +1001,6 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
         zero(T),
         true,
     )
-    selector = _resolve_backend_selector(backend)
     return Detector{typeof(noise), typeof(params), typeof(state), typeof(flux_model), typeof(map_model), typeof(selector)}(
         noise,
         params,
@@ -1047,7 +1047,6 @@ function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
     output_precision::Union{Nothing,DataType}=nothing,
     background_flux=nothing, background_map=nothing,
     T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
-    backend = _resolve_array_backend(backend)
     converted = convert_noise(noise, T)
     validated = validate_noise(converted)
     return _build_detector(validated; integration_time=integration_time, qe=qe,
