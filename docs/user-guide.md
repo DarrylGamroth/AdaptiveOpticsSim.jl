@@ -49,7 +49,7 @@ The package is organized around a small set of modeling objects:
 - atmosphere objects such as `KolmogorovAtmosphere` and `MultiLayerAtmosphere`
 - sensing objects such as `ShackHartmann`, `PyramidWFS`, and `BioEdgeWFS`
 - `Detector` when the sensing path needs explicit detector physics
-- controllable optics such as `DeformableMirror`, `TipTiltMirror`, and `CompositeControllableOptic`
+- controllable optics such as `DeformableMirror`, `LowOrderMirror`, `TipTiltMirror`, `FocusStage`, and `CompositeControllableOptic`
 - `RuntimeScenario` when you want the maintained step-wise AO or HIL simulation surface
 
 ## Three Execution Layers

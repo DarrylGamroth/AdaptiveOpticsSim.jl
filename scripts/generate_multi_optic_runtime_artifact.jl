@@ -105,7 +105,10 @@ end
 
 function build_behavior_optic(tel::Telescope, ::Val{:steering}; T::Type{<:AbstractFloat}=Float32)
     return CompositeControllableOptic(
-        :steering => SteeringMirror(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:steering),
+        :steering => LowOrderMirror(tel, (
+            (x, y) -> T(0.1) * x,
+            (x, y) -> T(0.1) * y,
+        ); labels=:steering, T=T, backend=CPUBackend()),
         :dm => DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=CPUBackend()),
     )
 end
@@ -186,7 +189,10 @@ function build_richer_runtime(::Val{S}; seed::Integer=91, wfs_family::Symbol=:sh
         )
     elseif S === :steering_focus_dm
         CompositeControllableOptic(
-            :steering => SteeringMirror(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:steering),
+            :steering => LowOrderMirror(tel, (
+                (x, y) -> T(0.1) * x,
+                (x, y) -> T(0.1) * y,
+            ); labels=:steering, T=T, backend=CPUBackend()),
             :focus => FocusStage(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:focus),
             :dm => DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=CPUBackend()),
         )
@@ -217,7 +223,10 @@ function low_order_opd(::Val{K}, low_order_cmd::AbstractVector{<:AbstractFloat};
     tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
         central_obstruction=T(0.0), T=T, backend=CPUBackend())
     low_order = K === :tiptilt ? TipTiltMirror(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:tiptilt) :
-        K === :steering ? SteeringMirror(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:steering) :
+        K === :steering ? LowOrderMirror(tel, (
+            (x, y) -> T(0.1) * x,
+            (x, y) -> T(0.1) * y,
+        ); labels=:steering, T=T, backend=CPUBackend()) :
         FocusStage(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:focus)
     dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=CPUBackend())
     fill!(tel.state.opd, zero(T))

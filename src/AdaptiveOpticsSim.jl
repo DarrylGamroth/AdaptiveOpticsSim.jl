@@ -129,7 +129,7 @@ export phase_variance, phase_covariance, phase_spectrum, covariance_matrix
 export ft_phase_screen, ft_sh_phase_screen, PhaseStatsWorkspace
 export SubharmonicMode, FastSubharmonics, FidelitySubharmonics, default_subharmonic_mode
 export DeformableMirror, DeformableMirrorParams, DeformableMirrorState, build_influence_functions!, apply!
-export CompositeControllableOptic, TipTiltMirror, SteeringMirror, FocusStage
+export CompositeControllableOptic, LowOrderMirror, TipTiltMirror, FocusStage
 export command_storage, n_control_dofs, controllable_surface_labels, supports_segmented_command, update_command!
 export Misregistration, apply_misregistration, rotation_rad, rotation_deg, anamorphosis_angle_rad, anamorphosis_angle_deg
 export AbstractFrameDetector, AbstractCountingDetector

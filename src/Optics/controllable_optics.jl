@@ -133,84 +133,129 @@ mutable struct LowOrderControllableState{T<:AbstractFloat,A<:AbstractMatrix{T},M
     coefs::V
 end
 
-struct TipTiltMirrorParams{T<:AbstractFloat}
-    scale::T
+struct LowOrderMirrorParams{L}
+    labels::L
+    normalized_modes::Bool
 end
 
-struct TipTiltMirror{P<:TipTiltMirrorParams,S<:LowOrderControllableState,CL<:RuntimeCommandLayout,B<:AbstractArrayBackend} <: AbstractControllableOptic
+struct LowOrderMirror{P<:LowOrderMirrorParams,S<:LowOrderControllableState,CL<:RuntimeCommandLayout,B<:AbstractArrayBackend} <: AbstractControllableOptic
     params::P
     state::S
     layout::CL
 end
 
-@inline backend(::TipTiltMirror{<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline backend(::LowOrderMirror{<:Any,<:Any,<:Any,B}) where {B} = B()
+
+function _low_order_layout(labels::Symbol, n_modes::Int)
+    return RuntimeCommandLayout(labels => n_modes)
+end
+
+function _low_order_layout(labels::Tuple{Vararg{Symbol}}, n_modes::Int)
+    length(labels) == n_modes ||
+        throw(DimensionMismatchError("mode labels must have length $(n_modes)"))
+    return RuntimeCommandLayout((label => 1 for label in labels)...)
+end
+
+function _default_zernike_labels(zernike_modes)
+    return Tuple(Symbol(:zernike_, j) for j in zernike_modes)
+end
+
+function _materialize_low_order_modes(tel::Telescope, host_modes::AbstractMatrix, ::Type{T},
+    selector::AbstractArrayBackend; normalize_modes::Bool=false) where {T<:AbstractFloat}
+    array_backend = _resolve_array_backend(selector)
+    n = tel.params.resolution
+    size(host_modes, 1) == n * n ||
+        throw(DimensionMismatchError("mode matrix must have $(n * n) rows for telescope resolution $(n)"))
+    host = Matrix{T}(undef, size(host_modes)...)
+    copyto!(host, host_modes)
+    if normalize_modes
+        pupil = Array(tel.state.pupil)
+        for k in axes(host, 2)
+            _normalize_pupil_mode!(view(host, :, k:k), pupil)
+        end
+    end
+    modes = _backend_copy_matrix(host, selector, T)
+    opd = array_backend{T}(undef, n, n)
+    fill!(opd, zero(T))
+    opd_vec = reshape(opd, :)
+    coefs = array_backend{T}(undef, size(host, 2))
+    fill!(coefs, zero(T))
+    return LowOrderControllableState{T,typeof(opd),typeof(modes),typeof(coefs)}(opd, opd_vec, modes, coefs)
+end
+
+function LowOrderMirror(tel::Telescope, mode_definitions::Tuple;
+    labels::Union{Symbol,Tuple{Vararg{Symbol}}}=:low_order,
+    normalize_modes::Bool=false,
+    T::Type{<:AbstractFloat}=Float64,
+    backend::AbstractArrayBackend=backend(tel))
+    selector = require_same_backend(tel, _resolve_backend_selector(backend))
+    host_modes = Array(_modal_mode_matrix(tel, mode_definitions, T, selector))
+    layout = _low_order_layout(labels, length(mode_definitions))
+    state = _materialize_low_order_modes(tel, host_modes, T, selector; normalize_modes=normalize_modes)
+    params = LowOrderMirrorParams(labels, normalize_modes)
+    return LowOrderMirror{typeof(params),typeof(state),typeof(layout),typeof(selector)}(params, state, layout)
+end
+
+function LowOrderMirror(tel::Telescope, mode_matrix::AbstractMatrix;
+    labels::Union{Symbol,Tuple{Vararg{Symbol}}}=:low_order,
+    normalize_modes::Bool=false,
+    T::Type{<:AbstractFloat}=Float64,
+    backend::AbstractArrayBackend=backend(tel))
+    selector = require_same_backend(tel, _resolve_backend_selector(backend))
+    layout = _low_order_layout(labels, size(mode_matrix, 2))
+    state = _materialize_low_order_modes(tel, mode_matrix, T, selector; normalize_modes=normalize_modes)
+    params = LowOrderMirrorParams(labels, normalize_modes)
+    return LowOrderMirror{typeof(params),typeof(state),typeof(layout),typeof(selector)}(params, state, layout)
+end
+
+function LowOrderMirror(tel::Telescope;
+    zernike_modes::AbstractVector{<:Integer},
+    labels::Union{Nothing,Symbol,Tuple{Vararg{Symbol}}}=nothing,
+    scale::Real=1.0,
+    normalize_modes::Bool=true,
+    T::Type{<:AbstractFloat}=Float64,
+    backend::AbstractArrayBackend=backend(tel))
+    isempty(zernike_modes) && throw(InvalidConfiguration("zernike_modes must contain at least one mode"))
+    selector = require_same_backend(tel, _resolve_backend_selector(backend))
+    max_mode = maximum(zernike_modes)
+    zb = compute_zernike!(ZernikeBasis(tel, max_mode; T=T), tel)
+    n = tel.params.resolution
+    host_modes = Matrix{T}(undef, n * n, length(zernike_modes))
+    for (k, j) in pairs(zernike_modes)
+        copyto!(view(host_modes, :, k), vec(T(scale) .* zb.modes[:, :, j]))
+    end
+    resolved_labels = isnothing(labels) ? _default_zernike_labels(zernike_modes) : labels
+    layout = _low_order_layout(resolved_labels, length(zernike_modes))
+    state = _materialize_low_order_modes(tel, host_modes, T, selector; normalize_modes=normalize_modes)
+    params = LowOrderMirrorParams(resolved_labels, normalize_modes)
+    return LowOrderMirror{typeof(params),typeof(state),typeof(layout),typeof(selector)}(params, state, layout)
+end
 
 function TipTiltMirror(tel::Telescope; scale::Real=1.0,
     T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel), label::Symbol=:tiptilt)
-    selector = require_same_backend(tel, _resolve_backend_selector(backend))
-    array_backend = _resolve_array_backend(selector)
-    n = tel.params.resolution
-    opd = array_backend{T}(undef, n, n)
-    fill!(opd, zero(T))
-    opd_vec = reshape(opd, :)
-    modes = _modal_mode_matrix(tel, (
+    return LowOrderMirror(tel, (
         (x, y) -> T(scale) * x,
         (x, y) -> T(scale) * y,
-    ), T, selector)
-    coefs = array_backend{T}(undef, 2)
-    fill!(coefs, zero(T))
-    state = LowOrderControllableState{T,typeof(opd),typeof(modes),typeof(coefs)}(opd, opd_vec, modes, coefs)
-    params = TipTiltMirrorParams{T}(T(scale))
-    return TipTiltMirror{typeof(params),typeof(state),typeof(RuntimeCommandLayout(label => 2)),typeof(selector)}(params, state, RuntimeCommandLayout(label => 2))
+    ); labels=label, normalize_modes=false, T=T, backend=backend)
 end
-
-const SteeringMirror = TipTiltMirror
-
-struct FocusStageParams{T<:AbstractFloat}
-    scale::T
-end
-
-struct FocusStage{P<:FocusStageParams,S<:LowOrderControllableState,CL<:RuntimeCommandLayout,B<:AbstractArrayBackend} <: AbstractControllableOptic
-    params::P
-    state::S
-    layout::CL
-end
-
-@inline backend(::FocusStage{<:Any,<:Any,<:Any,B}) where {B} = B()
 
 function FocusStage(tel::Telescope; scale::Real=1.0,
     T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel), label::Symbol=:focus)
-    selector = require_same_backend(tel, _resolve_backend_selector(backend))
-    array_backend = _resolve_array_backend(selector)
-    n = tel.params.resolution
-    opd = array_backend{T}(undef, n, n)
-    fill!(opd, zero(T))
-    opd_vec = reshape(opd, :)
-    host_modes = _modal_mode_matrix(tel, (
+    return LowOrderMirror(tel, (
         (x, y) -> T(scale) * (x^2 + y^2),
-    ), T, selector)
-    host_focus = Array(host_modes)
-    _normalize_pupil_mode!(host_focus, Array(tel.state.pupil))
-    modes = _backend_copy_matrix(host_focus, selector, T)
-    coefs = array_backend{T}(undef, 1)
-    fill!(coefs, zero(T))
-    state = LowOrderControllableState{T,typeof(opd),typeof(modes),typeof(coefs)}(opd, opd_vec, modes, coefs)
-    params = FocusStageParams{T}(T(scale))
-    return FocusStage{typeof(params),typeof(state),typeof(RuntimeCommandLayout(label => 1)),typeof(selector)}(params, state, RuntimeCommandLayout(label => 1))
+    ); labels=label, normalize_modes=true, T=T, backend=backend)
 end
 
-@inline command_storage(optic::TipTiltMirror) = optic.state.coefs
-@inline command_layout(optic::TipTiltMirror) = optic.layout
-@inline command_storage(optic::FocusStage) = optic.state.coefs
-@inline command_layout(optic::FocusStage) = optic.layout
+@inline command_storage(optic::LowOrderMirror) = optic.state.coefs
+@inline command_layout(optic::LowOrderMirror) = optic.layout
 
-@inline function apply!(optic::Union{TipTiltMirror,FocusStage}, tel::Telescope, ::DMAdditive)
+@inline function apply!(optic::LowOrderMirror, tel::Telescope, ::DMAdditive)
     mul!(optic.state.opd_vec, optic.state.modes, optic.state.coefs)
     tel.state.opd .+= optic.state.opd
     return tel
 end
 
-@inline function apply!(optic::Union{TipTiltMirror,FocusStage}, tel::Telescope, ::DMReplace)
+@inline function apply!(optic::LowOrderMirror, tel::Telescope, ::DMReplace)
     mul!(optic.state.opd_vec, optic.state.modes, optic.state.coefs)
     tel.state.opd .= optic.state.opd
     return tel

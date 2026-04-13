@@ -84,9 +84,9 @@ Representative targets:
 
 - `Telescope{B,...}`
 - `DeformableMirror{B,...}`
-- `TipTiltMirror{B,...}`
-- `SteeringMirror{B,...}`
-- `FocusStage{B,...}`
+- `LowOrderMirror{B,...}`
+- `TipTiltMirror(...)` convenience constructor
+- `FocusStage(...)` convenience constructor
 - `CompositeControllableOptic{B,...}`
 - `ShackHartmann{B,...}`
 - `PyramidWFS{B,...}`
@@ -157,8 +157,8 @@ Deliverables:
 - add explicit backend parameter to:
   - `Telescope`
   - `DeformableMirror`
+  - `LowOrderMirror`
   - `TipTiltMirror`
-  - `SteeringMirror`
   - `FocusStage`
   - `CompositeControllableOptic`
 - constructors enforce that allocated arrays match the declared backend

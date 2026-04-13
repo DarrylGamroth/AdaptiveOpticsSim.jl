@@ -102,7 +102,10 @@ function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:steerin
         central_obstruction=T(0.0), T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = OptionalStaticAtmosphere(tel; T=T, backend=backend)
-    steering = SteeringMirror(tel; scale=T(0.1), T=T, backend=backend, label=:steering)
+    steering = LowOrderMirror(tel, (
+        (x, y) -> T(0.1) * x,
+        (x, y) -> T(0.1) * y,
+    ); labels=:steering, T=T, backend=backend)
     dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=backend)
     optic = CompositeControllableOptic(:steering => steering, :dm => dm)
     wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)

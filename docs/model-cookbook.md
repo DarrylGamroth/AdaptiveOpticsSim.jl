@@ -236,6 +236,15 @@ set_command!(composite_scenario, (
 ))
 sense!(composite_scenario)
 
+# For a configurable low-order surface, build the modes directly. This example
+# groups piston, tip, tilt, and focus-like Zernike commands into one segment.
+pttf = LowOrderMirror(
+    tel;
+    zernike_modes=[1, 2, 3, 4],
+    labels=:pttf,
+    scale=0.02,
+)
+
 # Partial updates do not require manual slice math either. Here only the
 # tip/tilt segment changes; the DM segment remains staged in-place.
 update_command!(composite_scenario, (

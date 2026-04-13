@@ -673,20 +673,23 @@ end
 convert_frame_response_model(::NullFrameResponse, ::Type{T}, backend) where {T<:AbstractFloat} = NullFrameResponse()
 
 function convert_frame_response_model(model::GaussianPixelResponse, ::Type{T}, backend) where {T<:AbstractFloat}
-    kernel = backend{T}(undef, length(model.kernel))
+    array_backend = _resolve_array_backend(backend)
+    kernel = array_backend{T}(undef, length(model.kernel))
     copyto!(kernel, T.(Array(model.kernel)))
     return GaussianPixelResponse{T,typeof(kernel)}(T(model.response_width_px), kernel)
 end
 
 function convert_frame_response_model(model::SampledFrameResponse, ::Type{T}, backend) where {T<:AbstractFloat}
-    kernel = backend{T}(undef, size(model.kernel)...)
+    array_backend = _resolve_array_backend(backend)
+    kernel = array_backend{T}(undef, size(model.kernel)...)
     copyto!(kernel, T.(Array(model.kernel)))
     return SampledFrameResponse{T,typeof(kernel)}(kernel)
 end
 
 function convert_frame_response_model(model::RectangularPixelAperture, ::Type{T}, backend) where {T<:AbstractFloat}
-    kernel_x = backend{T}(undef, length(model.kernel_x))
-    kernel_y = backend{T}(undef, length(model.kernel_y))
+    array_backend = _resolve_array_backend(backend)
+    kernel_x = array_backend{T}(undef, length(model.kernel_x))
+    kernel_y = array_backend{T}(undef, length(model.kernel_y))
     copyto!(kernel_x, T.(Array(model.kernel_x)))
     copyto!(kernel_y, T.(Array(model.kernel_y)))
     return RectangularPixelAperture{T,typeof(kernel_x),typeof(kernel_y)}(
@@ -694,8 +697,9 @@ function convert_frame_response_model(model::RectangularPixelAperture, ::Type{T}
 end
 
 function convert_frame_response_model(model::SeparablePixelMTF, ::Type{T}, backend) where {T<:AbstractFloat}
-    kernel_x = backend{T}(undef, length(model.kernel_x))
-    kernel_y = backend{T}(undef, length(model.kernel_y))
+    array_backend = _resolve_array_backend(backend)
+    kernel_x = array_backend{T}(undef, length(model.kernel_x))
+    kernel_y = array_backend{T}(undef, length(model.kernel_y))
     copyto!(kernel_x, T.(Array(model.kernel_x)))
     copyto!(kernel_y, T.(Array(model.kernel_y)))
     return SeparablePixelMTF{T,typeof(kernel_x),typeof(kernel_y)}(

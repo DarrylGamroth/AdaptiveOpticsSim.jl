@@ -14,7 +14,7 @@ Completed phases:
 - `CO-2` `AOSimulation`/runtime storage generalized from `dm` to `optic`
 - `CO-3` multi-optic apply/staging path through `sense!`, `step!`, and timing
 - `CO-4` `CompositeControllableOptic` with ordered packed-command routing
-- `CO-5` first extra controllable optics: `TipTiltMirror`, `SteeringMirror`, `FocusStage`
+- `CO-5` first extra controllable optics: `LowOrderMirror`, `TipTiltMirror`, `FocusStage`
 - `CO-6` backend-native command routing covered on the maintained GPU surfaces
 - `CO-7` public API/docs migrated to the preferred runtime vocabulary
 
@@ -110,8 +110,8 @@ Required first:
 
 Planned next:
 
+- `LowOrderMirror`
 - `TipTiltMirror`
-- `SteeringMirror`
 - `FocusStage` or `LinearStageFocus` for focus/defocus-like stage perturbation
 
 The first goal is not a perfect mechanical model of every stage. It is to
@@ -198,11 +198,12 @@ Success criteria:
 
 Deliverables:
 
+- `LowOrderMirror`
 - `TipTiltMirror`
 - one stage-like focus optic:
   - preferred first name: `FocusStage`
-- if the implementation splits naturally, `SteeringMirror` can initially alias
-  or wrap the same low-order tilt surface semantics as `TipTiltMirror`
+- `TipTiltMirror` should remain a convenience constructor over the general
+  low-order modal optic rather than a distinct implementation
 
 Notes:
 

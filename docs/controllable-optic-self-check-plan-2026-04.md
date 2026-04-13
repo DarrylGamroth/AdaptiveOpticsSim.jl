@@ -18,9 +18,9 @@ exact external OOPAO or SPECULA analogue does not yet exist for a given plant.
 
 This plan covers:
 
+- `LowOrderMirror`
 - `TipTiltMirror`
 - `FocusStage`
-- `SteeringMirror`
 - `DeformableMirror`
 - `CompositeControllableOptic`
 - runtime surfaces that expose one or more controllable optics through packed

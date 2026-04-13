@@ -370,7 +370,10 @@ function _build_multi_optic_hil_case(backend, ::Type{T}, ::Val{:steering}, ::Val
     )
     src = Source(band=:I, magnitude=T(0), T=T)
     atm = StaticAtmosphere(tel; T=T, backend=backend)
-    steering = SteeringMirror(tel; scale=T(0.1), T=T, backend=backend, label=:steering)
+    steering = LowOrderMirror(tel, (
+        (x, y) -> T(0.1) * x,
+        (x, y) -> T(0.1) * y,
+    ); labels=:steering, T=T, backend=backend)
     dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=backend)
     optic = CompositeControllableOptic(:steering => steering, :dm => dm)
     wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
