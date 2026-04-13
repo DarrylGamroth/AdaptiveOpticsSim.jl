@@ -40,12 +40,14 @@ julia --project=. --startup-file=no scripts/profile_platform_runtime.jl cuda med
 ## Archived Artifact
 
 - [2026-04-03-phase5-psp15.toml](../benchmarks/results/platform/2026-04-03-phase5-psp15.toml)
+- [2026-04-13-multi-optic-hil.toml](../benchmarks/results/platform/2026-04-13-multi-optic-hil.toml)
 - manifest:
   [manifest.toml](../benchmarks/results/platform/manifest.toml)
 
-Generator:
+Generators:
 
 - [generate_platform_orchestration_artifact.jl](../scripts/generate_platform_orchestration_artifact.jl)
+- [generate_multi_optic_runtime_artifact.jl](../scripts/generate_multi_optic_runtime_artifact.jl)
 
 ## Backend Functional Coverage
 
@@ -66,7 +68,7 @@ The maintained smoke verifies:
 
 ## Evidence Shape
 
-The Phase 5 artifact records:
+The maintained platform artifacts record:
 
 - single-branch platform runtime
   - detector-backed Pyramid branch with science output
@@ -74,6 +76,9 @@ The Phase 5 artifact records:
   - grouped WFS stack export enabled
 - mixed grouped platform runtime
   - grouped WFS stack export explicitly unavailable
+- deterministic multi-optic HIL runtime
+  - `tiptilt + dm` composite optic with structured command update
+  - exact replay of packed command, slopes, and WFS frame on the maintained CPU surface
 
 For each case, the artifact records:
 

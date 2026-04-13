@@ -496,15 +496,44 @@ end
     )
     prepare!(combo_scenario)
     @test command_segment_labels(command_layout(combo_scenario)) == (:tiptilt, :dm)
-    set_command!(combo_scenario, (; tiptilt=fill(eltype(command(combo_scenario))(0.01), 2), dm=fill(eltype(command(combo_scenario))(0.02), 16)))
+    initial_tip = fill(eltype(command(combo_scenario))(0.01), 2)
+    initial_dm = fill(eltype(command(combo_scenario))(0.02), 16)
+    set_command!(combo_scenario, (; tiptilt=initial_tip, dm=initial_dm))
     sense!(combo_scenario)
-    @test command(combo_scenario) == vcat(fill(eltype(command(combo_scenario))(0.01), 2), fill(eltype(command(combo_scenario))(0.02), 16))
+    @test command(combo_scenario) == vcat(initial_tip, initial_dm)
     update_command!(combo_scenario, (; tiptilt=fill(eltype(command(combo_scenario))(0.03), 2)))
     @test command(combo_scenario)[1:2] == fill(eltype(command(combo_scenario))(0.03), 2)
     @test command(combo_scenario)[3:end] == fill(eltype(command(combo_scenario))(0.02), 16)
     sense!(combo_scenario)
     @test science_frame(combo_scenario) !== nothing
     @test wfs_frame(combo_scenario) !== nothing
+
+    tel_ext_b = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src_ext_b = Source(band=:I, magnitude=0.0)
+    atm_ext_b = KolmogorovAtmosphere(tel_ext_b; r0=0.2, L0=25.0)
+    tiptilt_b = TipTiltMirror(tel_ext_b; scale=0.1, label=:tiptilt)
+    dm_combo_b = DeformableMirror(tel_ext_b; n_act=4, influence_width=0.3)
+    combo_optic_b = CompositeControllableOptic(:tiptilt => tiptilt_b, :dm => dm_combo_b)
+    wfs_ext_b = ShackHartmann(tel_ext_b; n_subap=4, mode=Diffractive())
+    det_ext_b = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
+    combo_sim_b = AOSimulation(tel_ext_b, src_ext_b, atm_ext_b, combo_optic_b, wfs_ext_b)
+    combo_scenario_b = build_runtime_scenario(
+        SingleRuntimeConfig(name=:combo_runtime_demo_b, branch_label=:external_branch,
+            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=true)),
+        RuntimeBranch(:external_branch, combo_sim_b, NullReconstructor();
+            wfs_detector=det_ext_b,
+            science_detector=det_ext_b,
+            rng=MersenneTwister(8)),
+    )
+    prepare!(combo_scenario_b)
+    set_command!(combo_scenario_b, (; tiptilt=initial_tip, dm=initial_dm))
+    sense!(combo_scenario_b)
+    update_command!(combo_scenario_b, (; tiptilt=fill(eltype(command(combo_scenario_b))(0.03), 2)))
+    sense!(combo_scenario_b)
+    @test command(combo_scenario_b) == command(combo_scenario)
+    @test slopes(combo_scenario_b) == slopes(combo_scenario)
+    @test wfs_frame(combo_scenario_b) == wfs_frame(combo_scenario)
+    @test science_frame(combo_scenario_b) == science_frame(combo_scenario)
 
     focus = FocusStage(tel_ext; scale=0.1, label=:focus)
     dm_focus = DeformableMirror(tel_ext; n_act=4, influence_width=0.3)

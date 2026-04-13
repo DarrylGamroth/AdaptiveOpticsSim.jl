@@ -10,3 +10,7 @@ path = "2026-04-02-phase3-psp10.toml"
 purpose = "platform orchestration runtime artifact for PSP-15"
 id = "PLATFORM-ORCH-2026-04-03"
 path = "2026-04-03-phase5-psp15.toml"
+[[artifacts]]
+purpose = "multi-optic HIL validation artifact for tiptilt + dm runtime surface"
+id = "MULTI-OPTIC-HIL-2026-04-13"
+path = "2026-04-13-multi-optic-hil.toml"
