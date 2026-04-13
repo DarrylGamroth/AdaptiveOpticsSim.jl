@@ -311,7 +311,7 @@ specula_contract = "deterministic geometric layered propagation yields a stable 
 [cases.shack_hartmann_polychromatic_frame]
 rtol = 1.0e-10
 data = "shack_hartmann_polychromatic_frame.txt"
-shape = [120, 120]
+shape = [20, 20]
 specula_test = "test_poly_chrom_sh.py::TestPolyChromSH::test_polychrom_sh_basic"
 kind = "shack_hartmann_frame"
 atol = 1.0e-10

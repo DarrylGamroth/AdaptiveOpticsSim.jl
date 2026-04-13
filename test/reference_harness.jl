@@ -1024,6 +1024,7 @@ function compute_reference_actual(case::ReferenceCase)
         if haskey(case.config, "opd")
             apply_reference_opd!(tel, case.config["opd"])
         end
+        AdaptiveOpticsSim.prepare_sampling!(wfs, tel, src)
         AdaptiveOpticsSim.sampled_spots_peak!(wfs, tel, src)
         @views return copy(wfs.state.spot_cube[1, :, :])
     elseif case.kind === :pyramid_frame

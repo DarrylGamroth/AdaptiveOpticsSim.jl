@@ -2,12 +2,14 @@
 
 ## Status
 
-The remaining `SPECULA reference regression` is **not** currently a frozen-data mismatch.
-The SPECULA bundle validates cleanly in isolation. The failure is an **order-dependent regression** that only appears after broader test execution.
+The remaining `SPECULA reference regression` has been **resolved**.
+The root cause was a missing Shack-Hartmann sampling preparation step in the SPECULA
+reference harness, which left the frozen `shack_hartmann_polychromatic_frame`
+contract as an unprepared all-`NaN` surface.
 
-## Failing Surface
+## Resolved Surface
 
-Current failing case:
+Resolved case:
 - `shack_hartmann_polychromatic_frame`
 - manifest entry: [test/reference_data_specula/manifest.toml](../test/reference_data_specula/manifest.toml)
 - case kind: `shack_hartmann_frame`
@@ -17,94 +19,66 @@ Current failing case:
 
 ## Observed Behavior
 
-### 1. Full `Pkg.test()` / broad test execution
+### 1. Root-cause harness path
 
-The broad suite still fails at:
-- [test/testsets/reference_and_tutorials.jl](../test/testsets/reference_and_tutorials.jl)
-- testset: `SPECULA reference regression`
+The failing branch in [test/reference_harness.jl](../test/reference_harness.jl) did:
+- optional `apply_reference_opd!`
+- `AdaptiveOpticsSim.sampled_spots_peak!(wfs, tel, src)`
+- return `copy(wfs.state.spot_cube[1, :, :])`
 
-Observed failure shape:
-- `result.ok == false`
-- failure occurs inside the SPECULA loop after earlier testsets have already run
+It did **not** call:
+- `AdaptiveOpticsSim.prepare_sampling!(wfs, tel, src)`
 
-### 2. SPECULA bundle in isolation
+That meant the reference surface was captured from an unprepared Shack-Hartmann state.
 
-Direct isolated validation of the SPECULA bundle succeeds:
-- `n_cases = 9`
-- all 9 cases passed
-- each case produced `maxabs = 0.0`
+### 2. Old frozen SH frame contract
 
-This includes:
-- `shack_hartmann_polychromatic_frame ok=true maxabs=0.0`
+Before the fix, the frozen SPECULA SH frame artifact was:
+- `shape = [120, 120]`
+- `actual_nan = expected_nan = 14400`
+- effectively an all-`NaN` contract
 
-### 3. Narrowed reproducer window
+That surface was fragile and not scientifically useful as a maintained reference.
 
-The failing SPECULA case remains clean after:
-- `core_optics`
-- `atmosphere`
-- `control_and_runtime`
-- `detectors_and_wfs`
+### 3. Prepared SH frame surface
 
-The failing SPECULA case also remains clean after:
-- `calibration_and_analysis` alone
-
-The regression appears only after the broader combined sequence that includes both:
-- the earlier WFS-heavy suites
-- the later calibration / analysis suite
-
-So the current diagnosis is:
-- **not** a bad reference bundle
-- **not** a stable numerical disagreement
-- **yes** an order-dependent interaction between earlier WFS tests and later calibration / analysis work
+After explicitly preparing the Shack-Hartmann sampling state:
+- `size = (20, 20)`
+- `nan = 0`
+- `finite = 400`
+- `min = 3.217715424077204e8`
+- `max = 1.2234702222504738e13`
 
 ## Concrete Evidence
 
-### Clean isolated SPECULA run
+### Harness fix
 
-Observed direct verdicts:
-- `atmospheric_chromatic_intensity ok=true maxabs=0.0`
-- `atmospheric_fresnel_intensity ok=true maxabs=0.0`
-- `atmospheric_geometric_intensity ok=true maxabs=0.0`
-- `curvature_flat_signal ok=true maxabs=0.0`
-- `curvature_quadratic_signal ok=true maxabs=0.0`
-- `pyramid_polychromatic_frame ok=true maxabs=0.0`
-- `shack_hartmann_polychromatic_frame ok=true maxabs=0.0`
-- `zernike_flat_signal ok=true maxabs=0.0`
-- `zernike_quadratic_signal ok=true maxabs=0.0`
+Resolved by adding:
+- `AdaptiveOpticsSim.prepare_sampling!(wfs, tel, src)`
 
-### Narrowed SH frame case in clean conditions
+immediately before:
+- `AdaptiveOpticsSim.sampled_spots_peak!(wfs, tel, src)`
 
-For `shack_hartmann_polychromatic_frame` in clean conditions:
-- `size_actual = (120, 120)`
-- `size_expected = (120, 120)`
-- `actual_nan = 14400`
-- `expected_nan = 14400`
-- `ok = true`
-- `maxabs = 0.0`
+in the `case.kind === :shack_hartmann_frame` branch.
 
-### Broad failing behavior
+### Refreshed SPECULA artifact
 
-In the failing broad run:
-- `validate_reference_case(case)` returned `ok = false`
-- `maxabs = Inf`
+Regenerated files:
+- [test/reference_data_specula/manifest.toml](../test/reference_data_specula/manifest.toml)
+- [test/reference_data_specula/shack_hartmann_polychromatic_frame.txt](../test/reference_data_specula/shack_hartmann_polychromatic_frame.txt)
 
-Since the clean run shows identical shapes and identical all-`NaN` patterns, the broad failure is most consistent with:
-- a `NaN`-pattern mismatch on the same `120 x 120` surface
-- not a small floating-point drift
+Updated contract:
+- `shape = [20, 20]`
+- finite prepared detector-plane frame
 
-## Likely Root Cause
+## Root Cause
 
-Most likely cause:
-- order-dependent mutable state contamination in the polychromatic Shack-Hartmann detector-frame path
+The SPECULA Shack-Hartmann frame reference branch was incomplete:
+- it sampled spots without preparing the Shack-Hartmann sampling/calibration state first
 
-Most plausible technical classes:
-- cached Shack-Hartmann sampling or calibration state leaking across tests
-- detector / export policy state leaking into the SPECULA frame contract path
-- a broad test modifying the conditions under which the `shack_hartmann_frame` reference case returns an all-`NaN` frame
-
-The most important conclusion is:
-- the SPECULA bundle itself is currently trustworthy
-- the regression is in **test-order / runtime-state interaction**, not in the frozen reference data
+The resulting frozen reference artifact was therefore not a reliable prepared sensing
+surface. The broad test failure exposed that weakness, but the underlying bug was in the
+reference harness, not in the runtime physics path.
 
 ## Relevant Code Paths
 
@@ -116,7 +90,8 @@ Primary reference harness path:
 Relevant SH frame branch:
 - [test/reference_harness.jl](../test/reference_harness.jl)
 - `case.kind === :shack_hartmann_frame`
-- current implementation calls:
+- current implementation now calls:
+  - `AdaptiveOpticsSim.prepare_sampling!(wfs, tel, src)`
   - `AdaptiveOpticsSim.sampled_spots_peak!(wfs, tel, src)`
   - then returns `copy(wfs.state.spot_cube[1, :, :])`
 
@@ -124,45 +99,21 @@ Relevant Shack-Hartmann runtime path:
 - [src/WFS/shack_hartmann/signals.jl](../src/WFS/shack_hartmann/signals.jl)
 - [src/WFS/shack_hartmann/setup.jl](../src/WFS/shack_hartmann/setup.jl)
 
-## Recommended Next Steps
+## Verification
 
-1. Add a dedicated reproducer script for this single SPECULA case.
-- Run the case:
-  - in isolation
-  - after `detectors_and_wfs`
-  - after `calibration_and_analysis`
-  - after both
-- Print:
-  - `size`
-  - `count(isnan, ...)`
-  - `valid_mask`
-  - `peak`
-  - `minimum` / `maximum` of finite values
+After the harness fix and SPECULA bundle refresh:
+- the SPECULA reference regression passes
+- the OOPAO reference regression still passes
+- the broad `Pkg.test(test_args=["control_and_runtime"])` run completes successfully
 
-2. Instrument the `:shack_hartmann_frame` reference branch.
-- Record before returning:
-  - `count(wfs.state.valid_mask)`
-  - `count(isnan, wfs.state.spot_cube)`
-  - whether `prepare_sampling!` / `ensure_sh_calibration!` materially changes the result
+Most relevant broad-suite results:
+- `SPECULA reference regression | 19 / 19`
+- `OOPAO reference regression | 35 / 35`
+- `Tutorial examples | 52 / 52`
 
-3. Bisect the interaction inside `calibration_and_analysis` after `detectors_and_wfs`.
-- Most likely suspects are the tests that touch:
-  - gain-sensing camera calibration
-  - modal / interaction-matrix calibration
-  - WFS-related calibration helpers
+## Recommendation
 
-4. Decide whether the frozen SPECULA SH frame contract itself is the right target.
-- A contract that is "all NaNs" is fragile as a long-term validation surface.
-- If that is truly the intended SPECULA-aligned surface, document why.
-- Otherwise replace it with a more stable, physically informative output surface.
+Keep the refreshed SPECULA bundle.
 
-## Current Recommendation
-
-Do **not** remove or silence the SPECULA regression yet.
-
-The right next action is:
-- treat it as an order-dependent SH frame regression
-- reproduce it with a dedicated focused script
-- then either:
-  - fix the state leak, or
-  - replace the fragile all-`NaN` contract with a better-maintained SPECULA reference surface
+The old all-`NaN` `120 x 120` Shack-Hartmann frame should not be restored. The prepared
+finite `20 x 20` surface is the correct maintained reference for this SPECULA contract.
