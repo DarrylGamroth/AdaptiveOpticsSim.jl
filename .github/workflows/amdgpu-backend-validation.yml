@@ -15,9 +15,10 @@ jobs:
     timeout-minutes: 120
     env:
       JULIA_NUM_THREADS: "1"
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Julia
         uses: julia-actions/setup-julia@v2
@@ -25,7 +26,7 @@ jobs:
           version: "1.12"
 
       - name: Cache Julia artifacts
-        uses: julia-actions/cache@v2
+        uses: julia-actions/cache@v3
 
       - name: Install AMDGPU weak dependency
         run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.add("AMDGPU"); Pkg.instantiate()'
