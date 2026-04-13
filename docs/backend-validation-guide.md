@@ -63,6 +63,7 @@ The reduced maintained smoke covers:
 - atmospheric field propagation
 - polychromatic diffractive SH
 - deterministic diffractive SH detector/export equivalence against CPU
+- deterministic composite-optic `tiptilt + dm` runtime parity against CPU
 - curvature-through-atmosphere
 
 For the full maintained GPU smoke matrix, use:
@@ -117,9 +118,11 @@ Current intent:
 - CUDA workflow:
   - targets a self-hosted runner labeled `self-hosted`, `linux`, `cuda`
   - runs the maintained CUDA smoke and runtime-equivalence scripts
+  - runtime equivalence includes the composite-optic `tiptilt + dm` HIL surface
 - AMDGPU workflow:
   - targets a self-hosted runner labeled `self-hosted`, `linux`, `amdgpu`
   - runs the maintained AMDGPU smoke and runtime-equivalence scripts
+  - runtime equivalence includes the composite-optic `tiptilt + dm` HIL surface
 
 These workflows are part of production hardening, but they are only fully
 effective once the expected self-hosted GPU runners are actually registered and
