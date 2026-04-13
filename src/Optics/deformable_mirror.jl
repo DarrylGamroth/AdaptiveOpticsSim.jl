@@ -245,8 +245,27 @@ function apply!(dm::DeformableMirror, tel::Telescope, ::DMReplace)
     return tel
 end
 
-@inline _use_separable_apply_kernels(::ScalarCPUStyle) = false
-@inline _use_separable_apply_kernels(::AcceleratorStyle) = true
+@inline function _apply_opd_separable!(::ScalarCPUStyle, dm::DeformableMirror, tel::Telescope)
+    xbasis = dm.state.separable_x::typeof(dm.state.opd)
+    ybasis_t = dm.state.separable_y_t::typeof(dm.state.opd)
+    tmp = dm.state.separable_tmp::typeof(dm.state.opd)
+    mul!(tmp, xbasis, dm.state.coefs_grid)
+    mul!(dm.state.opd, tmp, ybasis_t)
+    dm.state.opd .*= tel.state.pupil
+    return dm.state.opd
+end
+
+@inline function _apply_opd_separable!(style::AcceleratorStyle, dm::DeformableMirror, tel::Telescope)
+    xbasis = dm.state.separable_x::typeof(dm.state.opd)
+    ybasis_t = dm.state.separable_y_t::typeof(dm.state.opd)
+    tmp = dm.state.separable_tmp::typeof(dm.state.opd)
+    n_act = dm.params.n_act
+    launch_kernel_async!(style, dm_separable_tmp_kernel!,
+        tmp, xbasis, dm.state.coefs_grid, n_act; ndrange=size(tmp))
+    launch_kernel!(style, dm_separable_finalize_kernel!,
+        dm.state.opd, tmp, ybasis_t, tel.state.pupil, n_act; ndrange=size(dm.state.opd))
+    return dm.state.opd
+end
 
 @inline function apply_dense!(dm::DeformableMirror, tel::Telescope, ::DMAdditive)
     mul!(dm.state.opd_vec, dm.state.modes, dm.state.coefs)
@@ -277,21 +296,6 @@ telescope OPD.
 This chooses the separable `X * C * Y'` path when available and otherwise falls
 back to the dense matrix-vector application `modes * coefs`.
 """
-function apply_opd_separable!(dm::DeformableMirror, tel::Telescope)
-    xbasis = dm.state.separable_x::typeof(dm.state.opd)
-    ybasis_t = dm.state.separable_y_t::typeof(dm.state.opd)
-    tmp = dm.state.separable_tmp::typeof(dm.state.opd)
-    n_act = dm.params.n_act
-    style = execution_style(dm.state.opd)
-    if _use_separable_apply_kernels(style)
-        launch_kernel_async!(style, dm_separable_tmp_kernel!,
-            tmp, xbasis, dm.state.coefs_grid, n_act; ndrange=size(tmp))
-        launch_kernel!(style, dm_separable_finalize_kernel!,
-            dm.state.opd, tmp, ybasis_t, tel.state.pupil, n_act; ndrange=size(dm.state.opd))
-        return dm.state.opd
-    end
-    mul!(tmp, xbasis, dm.state.coefs_grid)
-    mul!(dm.state.opd, tmp, ybasis_t)
-    dm.state.opd .*= tel.state.pupil
-    return dm.state.opd
+@inline function apply_opd_separable!(dm::DeformableMirror, tel::Telescope)
+    return _apply_opd_separable!(execution_style(dm.state.opd), dm, tel)
 end
