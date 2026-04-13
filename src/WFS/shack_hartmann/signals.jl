@@ -100,14 +100,19 @@ end
 end
 
 function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
+    prepare_sampling!(wfs, tel, src)
     return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src)
 end
 
 function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::SpectralSource)
+    ref = spectral_reference_source(src)
+    prepare_sampling!(wfs, tel, ref)
     return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src)
 end
 
 function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::ExtendedSource)
+    ast = extended_source_asterism(src)
+    prepare_sampling!(wfs, tel, ast.sources[1])
     return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src)
 end
 
@@ -130,7 +135,7 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescop
             compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
             sample_spot!(wfs, wfs.state.intensity)
             copyto!(spot_view, wfs.state.spot)
-            peak = max(peak, maximum(spot_view))
+            peak = max(peak, sh_safe_peak_value(spot_view))
         else
             fill!(spot_view, zero(eltype(spot_view)))
         end
@@ -185,7 +190,7 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescop
         wfs.state.spot_cube_accum .+= wfs.state.spot_cube
     end
     copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
-    return max(peak, maximum(wfs.state.spot_cube))
+    return max(peak, sh_safe_peak_value(wfs.state.spot_cube))
 end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::SpectralSource)
@@ -271,7 +276,7 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescop
             apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
             sample_spot!(wfs, wfs.state.intensity)
             copyto!(spot_view, wfs.state.spot)
-            peak = max(peak, maximum(spot_view))
+            peak = max(peak, sh_safe_peak_value(spot_view))
         else
             fill!(spot_view, zero(eltype(spot_view)))
         end
@@ -286,16 +291,21 @@ end
 
 function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     det::AbstractDetector, rng::AbstractRNG)
+    prepare_sampling!(wfs, tel, src)
     return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src, det, rng)
 end
 
 function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::SpectralSource,
     det::AbstractDetector, rng::AbstractRNG)
+    ref = spectral_reference_source(src)
+    prepare_sampling!(wfs, tel, ref)
     return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src, det, rng)
 end
 
 function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::ExtendedSource,
     det::AbstractDetector, rng::AbstractRNG)
+    ast = extended_source_asterism(src)
+    prepare_sampling!(wfs, tel, ast.sources[1])
     return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src, det, rng)
 end
 
@@ -320,7 +330,7 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescop
             sample_spot!(wfs, wfs.state.intensity)
             frame = capture!(det, wfs.state.spot; rng=rng)
             copyto!(spot_view, frame)
-            peak = max(peak, maximum(spot_view))
+            peak = max(peak, sh_safe_peak_value(spot_view))
         else
             fill!(spot_view, zero(eltype(spot_view)))
         end
@@ -381,7 +391,7 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescop
     end
     copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
     capture_stack!(det, wfs.state.spot_cube, wfs.state.spot_cube_accum; rng=rng)
-    return maximum(wfs.state.spot_cube)
+    return sh_safe_peak_value(wfs.state.spot_cube)
 end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::SpectralSource,
@@ -479,7 +489,7 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescop
             sample_spot!(wfs, wfs.state.intensity)
             frame = capture!(det, wfs.state.spot; rng=rng)
             copyto!(spot_view, frame)
-            peak = max(peak, maximum(spot_view))
+            peak = max(peak, sh_safe_peak_value(spot_view))
         else
             fill!(spot_view, zero(eltype(spot_view)))
         end
@@ -500,7 +510,7 @@ function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs:
         tmp_view, wfs.state.elongation_kernel)
     sample_spot_stack!(style, wfs)
     sync_signal_spots_from_sampled!(wfs)
-    return maximum(wfs.state.spot_cube)
+    return sh_safe_peak_value(wfs.state.spot_cube)
 end
 
 function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::LGSSource,
@@ -514,7 +524,7 @@ function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs:
     capture_sampled_spot_stack!(wfs, det, rng)
     launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
         n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
-    return maximum(wfs.state.spot_cube)
+    return sh_safe_peak_value(wfs.state.spot_cube)
 end
 
 function sampled_spots_peak_lgs!(::LGSProfileNaProfile, style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::LGSSource)
@@ -525,7 +535,7 @@ function sampled_spots_peak_lgs!(::LGSProfileNaProfile, style::AcceleratorStyle,
         wfs.state.fft_stack, wfs.state.fft_stack_plan, wfs.state.ifft_stack_plan)
     sample_spot_stack!(style, wfs)
     sync_signal_spots_from_sampled!(wfs)
-    return maximum(wfs.state.spot_cube)
+    return sh_safe_peak_value(wfs.state.spot_cube)
 end
 
 function sampled_spots_peak_lgs!(::LGSProfileNaProfile, style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::LGSSource,
@@ -539,7 +549,7 @@ function sampled_spots_peak_lgs!(::LGSProfileNaProfile, style::AcceleratorStyle,
     capture_sampled_spot_stack!(wfs, det, rng)
     launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
         n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
-    return maximum(wfs.state.spot_cube)
+    return sh_safe_peak_value(wfs.state.spot_cube)
 end
 
 function sh_signal_from_spots!(wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}

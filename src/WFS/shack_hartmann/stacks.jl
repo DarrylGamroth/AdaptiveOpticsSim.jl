@@ -223,7 +223,7 @@ function sampled_spots_peak_asterism_stacked!(::ScalarCPUStyle, wfs::ShackHartma
         wfs.state.detector_noise_cube .+= wfs.state.spot_cube
     end
     copyto!(wfs.state.spot_cube, wfs.state.detector_noise_cube)
-    return maximum(wfs.state.spot_cube)
+    return sh_safe_peak_value(wfs.state.spot_cube)
 end
 
 function sampled_spots_peak_asterism_stacked!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, ast::Asterism,
@@ -234,14 +234,14 @@ function sampled_spots_peak_asterism_stacked!(::ScalarCPUStyle, wfs::ShackHartma
         wfs.state.detector_noise_cube .+= wfs.state.spot_cube
     end
     copyto!(wfs.state.spot_cube, wfs.state.detector_noise_cube)
-    return maximum(wfs.state.spot_cube)
+    return sh_safe_peak_value(wfs.state.spot_cube)
 end
 
 function sampled_spots_peak_asterism_stacked!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, ast::Asterism)
     compute_intensity_asterism_stack!(style, wfs, tel, ast)
     sample_spot_stack!(style, wfs)
     sync_signal_spots_from_sampled!(wfs)
-    return maximum(wfs.state.spot_cube)
+    return sh_safe_peak_value(wfs.state.spot_cube)
 end
 
 function sampled_spots_peak_asterism_stacked!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, ast::Asterism,
@@ -252,7 +252,7 @@ function sampled_spots_peak_asterism_stacked!(style::AcceleratorStyle, wfs::Shac
     capture_sampled_spot_stack!(wfs, det, rng)
     launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
         n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
-    return maximum(wfs.state.spot_cube)
+    return sh_safe_peak_value(wfs.state.spot_cube)
 end
 
 @kernel function sh_spot_centroid_stats_kernel!(stats, spot_cube, valid_mask, threshold, n_sub::Int, n1::Int, n2::Int)
