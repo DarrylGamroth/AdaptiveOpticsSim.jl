@@ -245,6 +245,9 @@ function apply!(dm::DeformableMirror, tel::Telescope, ::DMReplace)
     return tel
 end
 
+@inline _use_separable_apply_kernels(::ScalarCPUStyle) = false
+@inline _use_separable_apply_kernels(::AcceleratorStyle) = true
+
 @inline function apply_dense!(dm::DeformableMirror, tel::Telescope, ::DMAdditive)
     mul!(dm.state.opd_vec, dm.state.modes, dm.state.coefs)
     tel.state.opd .+= dm.state.opd
@@ -280,7 +283,7 @@ function apply_opd_separable!(dm::DeformableMirror, tel::Telescope)
     tmp = dm.state.separable_tmp::typeof(dm.state.opd)
     n_act = dm.params.n_act
     style = execution_style(dm.state.opd)
-    if style isa AcceleratorStyle
+    if _use_separable_apply_kernels(style)
         launch_kernel_async!(style, dm_separable_tmp_kernel!,
             tmp, xbasis, dm.state.coefs_grid, n_act; ndrange=size(tmp))
         launch_kernel!(style, dm_separable_finalize_kernel!,

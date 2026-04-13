@@ -90,7 +90,11 @@ Runs:
 - [gpu_runtime_equivalence_cuda.jl](../scripts/gpu_runtime_equivalence_cuda.jl)
 
 Use this on a CUDA-capable host with `CUDA.jl` available in the project
-environment. The archived `cuda` track defaults to backend-only validation by setting `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
+environment. Prefer a clean backend-specific environment or checkout rather than
+a copied development manifest that also installs unrelated GPU weakdeps; that
+avoids irrelevant ROCm extension precompile noise on CUDA-only hosts. The
+archived `cuda` track defaults to backend-only validation by setting
+`ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
 
 ### AMDGPU
 
@@ -104,7 +108,11 @@ Runs:
 - [gpu_runtime_equivalence_amdgpu.jl](../scripts/gpu_runtime_equivalence_amdgpu.jl)
 
 Use this on an AMDGPU-capable host with `AMDGPU.jl` available in the project
-environment. The archived `amdgpu` track defaults to backend-only validation by setting `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
+environment. Prefer a clean backend-specific environment or checkout rather than
+a copied development manifest that also installs unrelated GPU weakdeps; that
+avoids irrelevant CUDA extension precompile noise on ROCm-only hosts. The
+archived `amdgpu` track defaults to backend-only validation by setting
+`ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
 
 ### Cross-package comparisons
 
