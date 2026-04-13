@@ -238,7 +238,7 @@ sense!(composite_scenario)
 
 # For a configurable low-order surface, build the modes directly. This example
 # groups piston, tip, tilt, and focus-like Zernike commands into one segment.
-pttf = LowOrderMirror(
+pttf = ModalControllableOptic(
     tel;
     zernike_modes=[1, 2, 3, 4],
     labels=:pttf,

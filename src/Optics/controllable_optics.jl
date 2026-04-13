@@ -126,31 +126,31 @@ function _normalize_pupil_mode!(mode::AbstractMatrix{T}, pupil::AbstractMatrix{B
     return mode
 end
 
-mutable struct LowOrderControllableState{T<:AbstractFloat,A<:AbstractMatrix{T},M<:AbstractMatrix{T},V<:AbstractVector{T}}
+mutable struct ModalControllableOpticState{T<:AbstractFloat,A<:AbstractMatrix{T},M<:AbstractMatrix{T},V<:AbstractVector{T}}
     opd::A
     opd_vec::V
     modes::M
     coefs::V
 end
 
-struct LowOrderMirrorParams{L}
+struct ModalControllableOpticParams{L}
     labels::L
     normalized_modes::Bool
 end
 
-struct LowOrderMirror{P<:LowOrderMirrorParams,S<:LowOrderControllableState,CL<:RuntimeCommandLayout,B<:AbstractArrayBackend} <: AbstractControllableOptic
+struct ModalControllableOptic{P<:ModalControllableOpticParams,S<:ModalControllableOpticState,CL<:RuntimeCommandLayout,B<:AbstractArrayBackend} <: AbstractControllableOptic
     params::P
     state::S
     layout::CL
 end
 
-@inline backend(::LowOrderMirror{<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline backend(::ModalControllableOptic{<:Any,<:Any,<:Any,B}) where {B} = B()
 
-function _low_order_layout(labels::Symbol, n_modes::Int)
+function _modal_layout(labels::Symbol, n_modes::Int)
     return RuntimeCommandLayout(labels => n_modes)
 end
 
-function _low_order_layout(labels::Tuple{Vararg{Symbol}}, n_modes::Int)
+function _modal_layout(labels::Tuple{Vararg{Symbol}}, n_modes::Int)
     length(labels) == n_modes ||
         throw(DimensionMismatchError("mode labels must have length $(n_modes)"))
     return RuntimeCommandLayout((label => 1 for label in labels)...)
@@ -160,7 +160,7 @@ function _default_zernike_labels(zernike_modes)
     return Tuple(Symbol(:zernike_, j) for j in zernike_modes)
 end
 
-function _materialize_low_order_modes(tel::Telescope, host_modes::AbstractMatrix, ::Type{T},
+function _materialize_modal_modes(tel::Telescope, host_modes::AbstractMatrix, ::Type{T},
     selector::AbstractArrayBackend; normalize_modes::Bool=false) where {T<:AbstractFloat}
     array_backend = _resolve_array_backend(selector)
     n = tel.params.resolution
@@ -180,35 +180,35 @@ function _materialize_low_order_modes(tel::Telescope, host_modes::AbstractMatrix
     opd_vec = reshape(opd, :)
     coefs = array_backend{T}(undef, size(host, 2))
     fill!(coefs, zero(T))
-    return LowOrderControllableState{T,typeof(opd),typeof(modes),typeof(coefs)}(opd, opd_vec, modes, coefs)
+    return ModalControllableOpticState{T,typeof(opd),typeof(modes),typeof(coefs)}(opd, opd_vec, modes, coefs)
 end
 
-function LowOrderMirror(tel::Telescope, mode_definitions::Tuple;
-    labels::Union{Symbol,Tuple{Vararg{Symbol}}}=:low_order,
+function ModalControllableOptic(tel::Telescope, mode_definitions::Tuple;
+    labels::Union{Symbol,Tuple{Vararg{Symbol}}}=:modal_optic,
     normalize_modes::Bool=false,
     T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=backend(tel))
     selector = require_same_backend(tel, _resolve_backend_selector(backend))
     host_modes = Array(_modal_mode_matrix(tel, mode_definitions, T, selector))
-    layout = _low_order_layout(labels, length(mode_definitions))
-    state = _materialize_low_order_modes(tel, host_modes, T, selector; normalize_modes=normalize_modes)
-    params = LowOrderMirrorParams(labels, normalize_modes)
-    return LowOrderMirror{typeof(params),typeof(state),typeof(layout),typeof(selector)}(params, state, layout)
+    layout = _modal_layout(labels, length(mode_definitions))
+    state = _materialize_modal_modes(tel, host_modes, T, selector; normalize_modes=normalize_modes)
+    params = ModalControllableOpticParams(labels, normalize_modes)
+    return ModalControllableOptic{typeof(params),typeof(state),typeof(layout),typeof(selector)}(params, state, layout)
 end
 
-function LowOrderMirror(tel::Telescope, mode_matrix::AbstractMatrix;
-    labels::Union{Symbol,Tuple{Vararg{Symbol}}}=:low_order,
+function ModalControllableOptic(tel::Telescope, mode_matrix::AbstractMatrix;
+    labels::Union{Symbol,Tuple{Vararg{Symbol}}}=:modal_optic,
     normalize_modes::Bool=false,
     T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=backend(tel))
     selector = require_same_backend(tel, _resolve_backend_selector(backend))
-    layout = _low_order_layout(labels, size(mode_matrix, 2))
-    state = _materialize_low_order_modes(tel, mode_matrix, T, selector; normalize_modes=normalize_modes)
-    params = LowOrderMirrorParams(labels, normalize_modes)
-    return LowOrderMirror{typeof(params),typeof(state),typeof(layout),typeof(selector)}(params, state, layout)
+    layout = _modal_layout(labels, size(mode_matrix, 2))
+    state = _materialize_modal_modes(tel, mode_matrix, T, selector; normalize_modes=normalize_modes)
+    params = ModalControllableOpticParams(labels, normalize_modes)
+    return ModalControllableOptic{typeof(params),typeof(state),typeof(layout),typeof(selector)}(params, state, layout)
 end
 
-function LowOrderMirror(tel::Telescope;
+function ModalControllableOptic(tel::Telescope;
     zernike_modes::AbstractVector{<:Integer},
     labels::Union{Nothing,Symbol,Tuple{Vararg{Symbol}}}=nothing,
     scale::Real=1.0,
@@ -225,15 +225,15 @@ function LowOrderMirror(tel::Telescope;
         copyto!(view(host_modes, :, k), vec(T(scale) .* zb.modes[:, :, j]))
     end
     resolved_labels = isnothing(labels) ? _default_zernike_labels(zernike_modes) : labels
-    layout = _low_order_layout(resolved_labels, length(zernike_modes))
-    state = _materialize_low_order_modes(tel, host_modes, T, selector; normalize_modes=normalize_modes)
-    params = LowOrderMirrorParams(resolved_labels, normalize_modes)
-    return LowOrderMirror{typeof(params),typeof(state),typeof(layout),typeof(selector)}(params, state, layout)
+    layout = _modal_layout(resolved_labels, length(zernike_modes))
+    state = _materialize_modal_modes(tel, host_modes, T, selector; normalize_modes=normalize_modes)
+    params = ModalControllableOpticParams(resolved_labels, normalize_modes)
+    return ModalControllableOptic{typeof(params),typeof(state),typeof(layout),typeof(selector)}(params, state, layout)
 end
 
 function TipTiltMirror(tel::Telescope; scale::Real=1.0,
     T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel), label::Symbol=:tiptilt)
-    return LowOrderMirror(tel, (
+    return ModalControllableOptic(tel, (
         (x, y) -> T(scale) * x,
         (x, y) -> T(scale) * y,
     ); labels=label, normalize_modes=false, T=T, backend=backend)
@@ -241,21 +241,21 @@ end
 
 function FocusStage(tel::Telescope; scale::Real=1.0,
     T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel), label::Symbol=:focus)
-    return LowOrderMirror(tel, (
+    return ModalControllableOptic(tel, (
         (x, y) -> T(scale) * (x^2 + y^2),
     ); labels=label, normalize_modes=true, T=T, backend=backend)
 end
 
-@inline command_storage(optic::LowOrderMirror) = optic.state.coefs
-@inline command_layout(optic::LowOrderMirror) = optic.layout
+@inline command_storage(optic::ModalControllableOptic) = optic.state.coefs
+@inline command_layout(optic::ModalControllableOptic) = optic.layout
 
-@inline function apply!(optic::LowOrderMirror, tel::Telescope, ::DMAdditive)
+@inline function apply!(optic::ModalControllableOptic, tel::Telescope, ::DMAdditive)
     mul!(optic.state.opd_vec, optic.state.modes, optic.state.coefs)
     tel.state.opd .+= optic.state.opd
     return tel
 end
 
-@inline function apply!(optic::LowOrderMirror, tel::Telescope, ::DMReplace)
+@inline function apply!(optic::ModalControllableOptic, tel::Telescope, ::DMReplace)
     mul!(optic.state.opd_vec, optic.state.modes, optic.state.coefs)
     tel.state.opd .= optic.state.opd
     return tel

@@ -370,7 +370,7 @@ function _build_multi_optic_hil_case(backend, ::Type{T}, ::Val{:steering}, ::Val
     )
     src = Source(band=:I, magnitude=T(0), T=T)
     atm = StaticAtmosphere(tel; T=T, backend=backend)
-    steering = LowOrderMirror(tel, (
+    steering = ModalControllableOptic(tel, (
         (x, y) -> T(0.1) * x,
         (x, y) -> T(0.1) * y,
     ); labels=:steering, T=T, backend=backend)

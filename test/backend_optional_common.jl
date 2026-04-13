@@ -102,7 +102,7 @@ function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:steerin
         central_obstruction=T(0.0), T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = OptionalStaticAtmosphere(tel; T=T, backend=backend)
-    steering = LowOrderMirror(tel, (
+    steering = ModalControllableOptic(tel, (
         (x, y) -> T(0.1) * x,
         (x, y) -> T(0.1) * y,
     ); labels=:steering, T=T, backend=backend)

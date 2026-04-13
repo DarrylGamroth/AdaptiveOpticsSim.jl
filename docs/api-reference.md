@@ -221,7 +221,7 @@ not need the scenario/config layer.
 ### Controllable optics used by the runtime layer
 
 - `AbstractControllableOptic`, `CompositeControllableOptic`
-- `LowOrderMirror`, `TipTiltMirror`, `FocusStage`, `DeformableMirror`
+- `ModalControllableOptic`, `TipTiltMirror`, `FocusStage`, `DeformableMirror`
 
 ### Execution and scheduling helpers
 

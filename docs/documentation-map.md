@@ -87,8 +87,8 @@ Use these when the task is cross-package or instrument-truth work:
   - phased cleanup plan for the primitive, runtime, and orchestration-layer public interface story
 - [`controllable-optics-plan-2026-04.md`](./controllable-optics-plan-2026-04.md)
   - phased plan for multi-surface controllable optics, GPU-native command routing, and ordered plant application
-- [`low-order-mirror-refactor-plan-2026-04.md`](./low-order-mirror-refactor-plan-2026-04.md)
-  - implementation plan for the generalized `LowOrderMirror` surface, convenience constructors, and steering-alias removal
+- [`modal-controllable-optic-refactor-plan-2026-04.md`](./modal-controllable-optic-refactor-plan-2026-04.md)
+  - implementation plan for the generalized `ModalControllableOptic` surface, convenience constructors, and steering-alias removal
 - [`controllable-optic-self-check-plan-2026-04.md`](./controllable-optic-self-check-plan-2026-04.md)
   - traceable self-check plan for controllable optics, composite ordering, low-order behavior, and backend parity evidence
 - [`controllable-optic-self-check-expansion-plan-2026-04.md`](./controllable-optic-self-check-expansion-plan-2026-04.md)

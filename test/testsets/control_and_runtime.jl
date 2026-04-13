@@ -45,7 +45,7 @@ end
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0, backend=CPUBackend())
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, backend=CPUBackend())
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3, backend=CPUBackend())
-    low_order = LowOrderMirror(tel; zernike_modes=[2, 3], backend=CPUBackend())
+    low_order = ModalControllableOptic(tel; zernike_modes=[2, 3], backend=CPUBackend())
     tt = TipTiltMirror(tel; scale=0.1, backend=CPUBackend())
     focus = FocusStage(tel; scale=0.2, backend=CPUBackend())
     wfs = ShackHartmann(tel; n_subap=4, backend=CPUBackend())
@@ -153,7 +153,7 @@ function build_static_low_order_optic(tel::Telescope, ::Val{:tiptilt}; scale::Re
 end
 
 function build_static_low_order_optic(tel::Telescope, ::Val{:steering}; scale::Real=0.1)
-    return LowOrderMirror(tel, (
+    return ModalControllableOptic(tel, (
         (x, y) -> Float64(scale) * x,
         (x, y) -> Float64(scale) * y,
     ); labels=:steering)
@@ -259,7 +259,7 @@ function build_static_richer_runtime(spec::Val{S};
         )
     elseif S === :steering_focus_dm
         CompositeControllableOptic(
-            :steering => LowOrderMirror(tel, (
+            :steering => ModalControllableOptic(tel, (
                 (x, y) -> 0.1 * x,
                 (x, y) -> 0.1 * y,
             ); labels=:steering),
@@ -769,7 +769,7 @@ end
                 src_ext,
                 atm_ext,
                 CompositeControllableOptic(
-                    :steering => LowOrderMirror(tel_ext, (
+                    :steering => ModalControllableOptic(tel_ext, (
                         (x, y) -> 0.1 * x,
                         (x, y) -> 0.1 * y,
                     ); labels=:steering),

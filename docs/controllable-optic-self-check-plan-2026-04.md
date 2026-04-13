@@ -18,7 +18,7 @@ exact external OOPAO or SPECULA analogue does not yet exist for a given plant.
 
 This plan covers:
 
-- `LowOrderMirror`
+- `ModalControllableOptic`
 - `TipTiltMirror`
 - `FocusStage`
 - `DeformableMirror`

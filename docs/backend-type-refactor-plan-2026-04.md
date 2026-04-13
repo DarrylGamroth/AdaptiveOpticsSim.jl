@@ -84,7 +84,7 @@ Representative targets:
 
 - `Telescope{B,...}`
 - `DeformableMirror{B,...}`
-- `LowOrderMirror{B,...}`
+- `ModalControllableOptic{B,...}`
 - `TipTiltMirror(...)` convenience constructor
 - `FocusStage(...)` convenience constructor
 - `CompositeControllableOptic{B,...}`
@@ -157,7 +157,7 @@ Deliverables:
 - add explicit backend parameter to:
   - `Telescope`
   - `DeformableMirror`
-  - `LowOrderMirror`
+  - `ModalControllableOptic`
   - `TipTiltMirror`
   - `FocusStage`
   - `CompositeControllableOptic`

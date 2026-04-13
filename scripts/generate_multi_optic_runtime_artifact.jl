@@ -105,7 +105,7 @@ end
 
 function build_behavior_optic(tel::Telescope, ::Val{:steering}; T::Type{<:AbstractFloat}=Float32)
     return CompositeControllableOptic(
-        :steering => LowOrderMirror(tel, (
+        :steering => ModalControllableOptic(tel, (
             (x, y) -> T(0.1) * x,
             (x, y) -> T(0.1) * y,
         ); labels=:steering, T=T, backend=CPUBackend()),
@@ -189,7 +189,7 @@ function build_richer_runtime(::Val{S}; seed::Integer=91, wfs_family::Symbol=:sh
         )
     elseif S === :steering_focus_dm
         CompositeControllableOptic(
-            :steering => LowOrderMirror(tel, (
+            :steering => ModalControllableOptic(tel, (
                 (x, y) -> T(0.1) * x,
                 (x, y) -> T(0.1) * y,
             ); labels=:steering, T=T, backend=CPUBackend()),
@@ -223,7 +223,7 @@ function low_order_opd(::Val{K}, low_order_cmd::AbstractVector{<:AbstractFloat};
     tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
         central_obstruction=T(0.0), T=T, backend=CPUBackend())
     low_order = K === :tiptilt ? TipTiltMirror(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:tiptilt) :
-        K === :steering ? LowOrderMirror(tel, (
+        K === :steering ? ModalControllableOptic(tel, (
             (x, y) -> T(0.1) * x,
             (x, y) -> T(0.1) * y,
         ); labels=:steering, T=T, backend=CPUBackend()) :
