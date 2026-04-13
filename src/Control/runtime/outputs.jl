@@ -9,6 +9,8 @@ struct CompositeRuntimeExportPlan <: AbstractRuntimeExportPlan end
 @inline command_layout(runtime::ClosedLoopRuntime) = runtime.command_layout
 @inline command_layout(interface::SimulationInterface) = command_layout(interface.runtime)
 
+@inline _runtime_layout_matches_optic(runtime::ClosedLoopRuntime) = runtime.command_layout == command_layout(runtime.optic)
+
 @inline function set_command!(runtime::ClosedLoopRuntime, command::AbstractVector)
     copyto!(runtime.command, command)
     set_command!(runtime.optic, runtime.command)
@@ -16,10 +18,15 @@ struct CompositeRuntimeExportPlan <: AbstractRuntimeExportPlan end
 end
 
 @inline function set_command!(runtime::ClosedLoopRuntime, command::NamedTuple)
-    _set_command_segments!(length(runtime.command), command_layout(runtime), command) do seg, segment
-        rng = command_segment_range(seg)
-        copyto!(@view(runtime.command[rng]), segment)
-        copyto!(@view(command_storage(runtime.optic)[rng]), segment)
+    if _runtime_layout_matches_optic(runtime)
+        set_command!(runtime.optic, command)
+        copyto!(runtime.command, command_storage(runtime.optic))
+    else
+        _set_command_segments!(length(runtime.command), command_layout(runtime), command) do seg, segment
+            rng = command_segment_range(seg)
+            copyto!(@view(runtime.command[rng]), segment)
+        end
+        set_command!(runtime.optic, runtime.command)
     end
     return runtime.command
 end
@@ -37,10 +44,15 @@ end
 end
 
 @inline function update_command!(runtime::ClosedLoopRuntime, command::NamedTuple)
-    _set_command_segments!(length(runtime.command), runtime.command_layout, command; require_all=false) do seg, segment
-        rng = command_segment_range(seg)
-        copyto!(@view(runtime.command[rng]), segment)
-        copyto!(@view(command_storage(runtime.optic)[rng]), segment)
+    if _runtime_layout_matches_optic(runtime)
+        update_command!(runtime.optic, command)
+        copyto!(runtime.command, command_storage(runtime.optic))
+    else
+        _set_command_segments!(length(runtime.command), runtime.command_layout, command; require_all=false) do seg, segment
+            rng = command_segment_range(seg)
+            copyto!(@view(runtime.command[rng]), segment)
+        end
+        set_command!(runtime.optic, runtime.command)
     end
     return runtime.command
 end

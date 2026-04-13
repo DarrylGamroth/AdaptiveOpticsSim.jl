@@ -1,6 +1,40 @@
 artifact_id = "MULTI-OPTIC-HIL-2026-04-13"
 generated_on = "2026-04-13"
 
+[behavior]
+tilt_dominant_axis = 1
+tip_vs_tilt_l2 = 1.6372008323669434
+static_surface = "zero_phase_static_atmosphere"
+tilt_antisymmetry_l2 = 1.4607162484026048e-6
+tip_dominant_axis = 2
+tip_axis_ratio = 12.128215789794922
+tip_antisymmetry_l2 = 1.5211749087029602e-6
+tilt_axis_ratio = 12.128230094909668
+
+    [behavior.tip_plus]
+    axis_2_norm = 1.1537606716156006
+    axis_1_mean = 3.818422555923462e-8
+    axis_1_norm = 0.09513028711080551
+    axis_2_mean = -0.28351470828056335
+
+    [behavior.tip_minus]
+    axis_2_norm = 1.153760552406311
+    axis_1_mean = 8.591450750827789e-8
+    axis_1_norm = 0.09513004869222641
+    axis_2_mean = 0.28351467847824097
+
+    [behavior.tilt_plus]
+    axis_2_norm = 0.09513018280267715
+    axis_1_mean = -0.28351473808288574
+    axis_1_norm = 1.1537607908248901
+    axis_2_mean = -7.59027898311615e-8
+
+    [behavior.tilt_minus]
+    axis_2_norm = 0.09513042867183685
+    axis_1_mean = 0.28351470828056335
+    axis_1_norm = 1.1537606716156006
+    axis_2_mean = -9.546056389808655e-9
+
 [scope]
 families = ["runtime_orchestration", "composite_controllable_optic", "tiptilt_plus_dm", "shack_hartmann"]
 backend = "cpu"
@@ -8,10 +42,10 @@ artifact_kind = "multi_optic_hil_validation"
 
 [updated_state.slopes]
 length = 32
-maxabs = 1.1001514196395874
-l2_norm = 2.880524158477783
-sum = 2.734825611114502
-mean = 0.08546330034732819
+maxabs = 0.9624719619750977
+l2_norm = 2.546224355697632
+sum = 2.876756429672241
+mean = 0.08989863842725754
 
 [updated_state.command]
 tiptilt_mean = 0.02500000037252903
@@ -21,18 +55,18 @@ dm_segment_unchanged = true
 
 [updated_state.wfs_frame]
 shape = [16, 4, 4]
-sum = 6.500429824e9
-max = 1.59364256e8
-min = 147814.25
-l2_norm = 5.7933376e8
-mean = 2.5392304e7
+sum = 6.386784256e9
+max = 1.18459872e8
+min = 117856.1953125
+l2_norm = 5.47261376e8
+mean = 2.4948376e7
 
 [initial_state.slopes]
 length = 32
-maxabs = 0.9240293502807617
-l2_norm = 2.2973947525024414
-sum = 1.1387690305709839
-mean = 0.035586532205343246
+maxabs = 0.9249493479728699
+l2_norm = 2.7198314666748047
+sum = 3.594595193862915
+mean = 0.1123310998082161
 
 [initial_state.command]
 tiptilt_mean = 0.012500000186264515
@@ -41,11 +75,11 @@ packed_sum = 0.3449999988079071
 
 [initial_state.wfs_frame]
 shape = [16, 4, 4]
-sum = 6.562281472e9
-max = 1.95790944e8
-min = 83589.6484375
-l2_norm = 5.92958528e8
-mean = 2.5633912e7
+sum = 5.925198336e9
+max = 1.73313008e8
+min = 143038.75
+l2_norm = 5.45721472e8
+mean = 2.3145306e7
 
 [surface]
 command_segment_lengths = [2, 16]
@@ -55,8 +89,8 @@ command_segment_labels = ["tiptilt", "dm"]
 science_pixels_enabled = false
 
 [delta]
-slopes_delta_l2 = 4.184938907623291
-wfs_frame_delta_l2 = 5.54200448e8
+slopes_delta_l2 = 3.762038230895996
+wfs_frame_delta_l2 = 5.2810048e8
 
 [determinism]
 updated_wfs_frame_exact = true

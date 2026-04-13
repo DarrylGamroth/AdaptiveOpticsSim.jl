@@ -78,6 +78,28 @@ end
     @test_throws TypeError Detector(backend=Array)
 end
 
+struct StaticRuntimeAtmosphere{A,B<:AbstractArrayBackend} <: AdaptiveOpticsSim.AbstractAtmosphere
+    screen::A
+end
+
+AdaptiveOpticsSim.backend(::StaticRuntimeAtmosphere{<:Any,B}) where {B} = B()
+AdaptiveOpticsSim.advance!(atm::StaticRuntimeAtmosphere, tel::Telescope, rng::AbstractRNG) = atm
+AdaptiveOpticsSim.advance!(atm::StaticRuntimeAtmosphere, tel::Telescope; rng::AbstractRNG=Random.default_rng()) = atm
+function AdaptiveOpticsSim.propagate!(atm::StaticRuntimeAtmosphere, tel::Telescope)
+    copyto!(tel.state.opd, atm.screen)
+    return tel
+end
+
+function build_static_runtime_atmosphere(tel::Telescope; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel))
+    selector = AdaptiveOpticsSim.require_same_backend(tel, AdaptiveOpticsSim._resolve_backend_selector(backend))
+    array_backend = AdaptiveOpticsSim._resolve_array_backend(selector)
+    host = zeros(T, tel.params.resolution, tel.params.resolution)
+    host .*= Array(tel.state.pupil)
+    screen = array_backend{T}(undef, size(host)...)
+    copyto!(screen, host)
+    return StaticRuntimeAtmosphere{typeof(screen),typeof(selector)}(screen)
+end
+
 @testset "Calibration and control" begin
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
@@ -534,6 +556,42 @@ end
     @test slopes(combo_scenario_b) == slopes(combo_scenario)
     @test wfs_frame(combo_scenario_b) == wfs_frame(combo_scenario)
     @test science_frame(combo_scenario_b) == science_frame(combo_scenario)
+
+    function build_static_combo_runtime(tip_cmd)
+        tel_static = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+        src_static = Source(band=:I, magnitude=0.0)
+        atm_static = build_static_runtime_atmosphere(tel_static)
+        tip_static = TipTiltMirror(tel_static; scale=0.1, label=:tiptilt)
+        dm_static = DeformableMirror(tel_static; n_act=4, influence_width=0.3)
+        optic_static = CompositeControllableOptic(:tiptilt => tip_static, :dm => dm_static)
+        wfs_static = ShackHartmann(tel_static; n_subap=4, mode=Diffractive())
+        det_static = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
+        sim_static = AOSimulation(tel_static, src_static, atm_static, optic_static, wfs_static)
+        runtime_static = ClosedLoopRuntime(sim_static, NullReconstructor();
+            wfs_detector=det_static,
+            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false),
+            rng=MersenneTwister(91),
+        )
+        prepare!(runtime_static)
+        set_command!(runtime_static, (; tiptilt=tip_cmd, dm=fill(0.0, 16)))
+        sense!(runtime_static)
+        return runtime_static
+    end
+
+    tip_plus_runtime = build_static_combo_runtime([0.0125, 0.0])
+    tip_minus_runtime = build_static_combo_runtime([-0.0125, 0.0])
+    tilt_plus_runtime = build_static_combo_runtime([0.0, 0.0125])
+    tilt_minus_runtime = build_static_combo_runtime([0.0, -0.0125])
+    n_static = length(slopes(tip_plus_runtime)) ÷ 2
+    tip_plus_slopes = Array(slopes(tip_plus_runtime))
+    tip_minus_slopes = Array(slopes(tip_minus_runtime))
+    tilt_plus_slopes = Array(slopes(tilt_plus_runtime))
+    tilt_minus_slopes = Array(slopes(tilt_minus_runtime))
+    @test norm(tip_plus_slopes[1:n_static]) < norm(tip_plus_slopes[(n_static + 1):end])
+    @test norm(tilt_plus_slopes[1:n_static]) > norm(tilt_plus_slopes[(n_static + 1):end])
+    @test norm(tip_plus_slopes .+ tip_minus_slopes) ≤ 2e-5
+    @test norm(tilt_plus_slopes .+ tilt_minus_slopes) ≤ 2e-5
+    @test norm(tip_plus_slopes .- tilt_plus_slopes) > 1.0
 
     focus = FocusStage(tel_ext; scale=0.1, label=:focus)
     dm_focus = DeformableMirror(tel_ext; n_act=4, influence_width=0.3)
