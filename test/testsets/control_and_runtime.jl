@@ -14,6 +14,27 @@
     @test maximum(slopes) > 0
 end
 
+@testset "Composite controllable optic replace semantics" begin
+    tip_cmd = [5e-9, 0.0]
+    dm_cmd = zeros(16)
+
+    tip_tel = Telescope(resolution=24, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tip_optic = TipTiltMirror(tip_tel; scale=1.0)
+    set_command!(tip_optic, tip_cmd)
+    apply!(tip_optic, tip_tel, DMReplace())
+
+    comp_tel = Telescope(resolution=24, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    comp_optic = CompositeControllableOptic(
+        :tiptilt => TipTiltMirror(comp_tel; scale=1.0),
+        :dm => DeformableMirror(comp_tel; n_act=4, influence_width=0.3),
+    )
+    set_command!(comp_optic, vcat(tip_cmd, dm_cmd))
+    apply!(comp_optic, comp_tel, DMReplace())
+
+    @test comp_tel.state.opd ≈ tip_tel.state.opd atol=0 rtol=0
+    @test norm(comp_optic.optics[2].state.opd) == 0.0
+end
+
 @testset "AOSimulation constructors" begin
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)

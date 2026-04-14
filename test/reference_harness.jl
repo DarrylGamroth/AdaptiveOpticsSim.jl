@@ -367,6 +367,11 @@ function build_reference_controllable_optic(cfg::AbstractDict{<:AbstractString,<
     if kind == "tiptilt"
         scale = Float64(get(cfg, "scale", 1.0))
         return TipTiltMirror(tel; scale=scale, T=T, backend=backend(tel), label=label)
+    elseif kind == "dm"
+        n_act = Int(get(cfg, "n_act", 0))
+        n_act > 0 || throw(InvalidConfiguration("dm controllable optic requires n_act"))
+        influence_width = Float64(get(cfg, "influence_width", 0.2))
+        return DeformableMirror(tel; n_act=n_act, influence_width=influence_width, T=T, backend=backend(tel))
     elseif kind == "modal"
         basis_name = lowercase(String(get(cfg, "basis", "cartesian_tilt")))
         if basis_name == "cartesian_tilt"
@@ -381,6 +386,17 @@ function build_reference_controllable_optic(cfg::AbstractDict{<:AbstractString,<
                 labels=label, T=T, backend=backend(tel))
         end
         throw(InvalidConfiguration("unknown modal controllable optic basis '$basis_name'"))
+    elseif kind == "composite"
+        components = get(cfg, "components", nothing)
+        components isa AbstractVector || throw(InvalidConfiguration("composite controllable optic requires components"))
+        pairs = Pair{Symbol,AbstractControllableOptic}[]
+        for raw_component in components
+            component = raw_component isa AbstractDict{<:AbstractString,<:Any} ? raw_component :
+                throw(InvalidConfiguration("composite controllable optic components must be tables"))
+            component_label = Symbol(get(component, "label", "component"))
+            push!(pairs, component_label => build_reference_controllable_optic(component, tel))
+        end
+        return CompositeControllableOptic(pairs...)
     end
     throw(InvalidConfiguration("unknown controllable optic kind '$kind'"))
 end

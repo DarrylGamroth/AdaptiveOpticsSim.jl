@@ -22,6 +22,7 @@ DEFAULT_OOPAO_REF = "085d5e50ace0d20fe13cc2da20129d5400166973"
 Atmosphere = None
 BioEdge = None
 Detector = None
+DeformableMirror = None
 GainSensingCamera = None
 LiFT = None
 Pyramid = None
@@ -63,11 +64,12 @@ def prepare_oopao_checkout(args: argparse.Namespace) -> tuple[Path, str, tempfil
 
 def bootstrap_oopao(checkout: Path) -> None:
     global Atmosphere, BioEdge, Detector, GainSensingCamera, LiFT
-    global Pyramid, ShackHartmann, Source, Telescope, strehlMeter
+    global Pyramid, ShackHartmann, Source, Telescope, strehlMeter, DeformableMirror
 
     sys.path.insert(0, str(checkout))
     from OOPAO.Atmosphere import Atmosphere as _Atmosphere
     from OOPAO.BioEdge import BioEdge as _BioEdge
+    from OOPAO.DeformableMirror import DeformableMirror as _DeformableMirror
     from OOPAO.Detector import Detector as _Detector
     from OOPAO.GainSensingCamera import GainSensingCamera as _GainSensingCamera
     from OOPAO.LiFT import LiFT as _LiFT
@@ -79,6 +81,7 @@ def bootstrap_oopao(checkout: Path) -> None:
 
     Atmosphere = _Atmosphere
     BioEdge = _BioEdge
+    DeformableMirror = _DeformableMirror
     Detector = _Detector
     GainSensingCamera = _GainSensingCamera
     LiFT = _LiFT
@@ -169,10 +172,28 @@ def write_manifest(path: Path, cases: dict[str, dict], metadata: dict[str, str] 
             if section not in case:
                 continue
             lines.append(f"[cases.{case_id}.{section}]")
-            for key, value in case[section].items():
-                lines.append(f"{key} = {toml_literal(value)}")
-            lines.append("")
+            write_toml_mapping(lines, f"cases.{case_id}.{section}", case[section])
     path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def write_toml_mapping(lines, prefix, mapping):
+    nested_tables = []
+    array_tables = []
+    for key, value in mapping.items():
+        if isinstance(value, dict):
+            nested_tables.append((key, value))
+        elif isinstance(value, (list, tuple)) and all(isinstance(v, dict) for v in value):
+            array_tables.append((key, value))
+        else:
+            lines.append(f"{key} = {toml_literal(value)}")
+    lines.append("")
+    for key, value in nested_tables:
+        lines.append(f"[{prefix}.{key}]")
+        write_toml_mapping(lines, f"{prefix}.{key}", value)
+    for key, values in array_tables:
+        for value in values:
+            lines.append(f"[[{prefix}.{key}]]")
+            write_toml_mapping(lines, f"{prefix}.{key}", value)
 
 
 def toml_literal(value):
@@ -560,6 +581,107 @@ def modal_tiptilt_case(root: Path, *, case_id: str, kind: str, mode_index: int, 
             "label": "tiptilt",
             "scale": 1.0,
             "command": [amplitude, 0.0] if mode_index == 1 else [0.0, amplitude],
+        },
+        "wfs": {
+            "n_subap": 4,
+            "threshold": 0.0,
+            "mode": "diffractive",
+            **(
+                {
+                    "pixel_scale": 0.06,
+                    "n_pix_subap": 8,
+                }
+                if kind == "shack_hartmann_slopes"
+                else {
+                    "modulation": 1.0,
+                    "modulation_points": 8,
+                    "diffraction_padding": 2,
+                    "psf_centering": True,
+                    "n_pix_separation": 4,
+                    "binning": 2,
+                    **({"n_pix_edge": 2} if kind == "bioedge_slopes" else {}),
+                }
+            ),
+        },
+    }
+
+
+def julia_dm_mechanical_coupling(n_act: int, influence_width: float) -> float:
+    pitch_norm = 2.0 / (n_act - 1)
+    return float(np.exp(-(pitch_norm ** 2) / (2.0 * influence_width ** 2)))
+
+
+def julia_dm_coordinates(tel: Telescope, n_act: int) -> np.ndarray:
+    coords = np.linspace(-tel.D / 2.0, tel.D / 2.0, n_act, dtype=np.float64)
+    pairs = [(x, y) for x in coords for y in coords]
+    return np.asarray(pairs, dtype=np.float64)
+
+
+def composite_tiptilt_dm_case(root: Path, *, case_id: str, kind: str, tip_amplitude: float,
+    dm_command: np.ndarray, n_act: int = 4, influence_width: float = 0.3) -> dict:
+    tel = make_telescope(resolution=24, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = make_source(band="I", magnitude=0.0)
+    src ** tel
+    wfs = make_reference_wfs(kind, tel)
+    src ** tel
+    basis = cartesian_polynomial_basis(tel, n_modes=2)
+    dm = DeformableMirror(
+        telescope=tel,
+        nSubap=n_act - 1,
+        coordinates=julia_dm_coordinates(tel, n_act),
+        pitch=tel.D / (n_act - 1),
+        mechCoupling=julia_dm_mechanical_coupling(n_act, influence_width),
+    )
+    dm.coefs = np.asarray(dm_command, dtype=np.float64)
+    combined_opd = tip_amplitude * basis[:, :, 0] + np.asarray(dm.OPD, dtype=np.float64)
+    tel.resetOPD()
+    tel.OPD_no_pupil = combined_opd
+    data = measure_signal(kind, wfs, tel, src)
+    rel = f"{case_id}.txt"
+    write_array(root / rel, data)
+    if kind == "shack_hartmann_slopes":
+        atol = 4e-4
+        rtol = 4e-2
+    elif kind == "pyramid_slopes":
+        atol = 4e-4
+        rtol = 3e-2
+    else:
+        atol = 1e-3
+        rtol = 4e-2
+    return {
+        "kind": kind,
+        "data": rel,
+        "shape": [int(data.size)],
+        "atol": atol,
+        "rtol": rtol,
+        "telescope": {
+            "resolution": 24,
+            "diameter": 8.0,
+            "sampling_time": 1e-3,
+            "central_obstruction": 0.0,
+        },
+        "source": {
+            "kind": "ngs",
+            "band": "I",
+            "magnitude": 0.0,
+        },
+        "controllable_optic": {
+            "kind": "composite",
+            "command": np.concatenate((np.array([tip_amplitude, 0.0]), np.asarray(dm_command, dtype=np.float64))).tolist(),
+            "components": [
+                {
+                    "kind": "modal",
+                    "basis": "cartesian_tilt",
+                    "label": "tiptilt",
+                    "scale": 1.0,
+                },
+                {
+                    "kind": "dm",
+                    "label": "dm",
+                    "n_act": n_act,
+                    "influence_width": influence_width,
+                },
+            ],
         },
         "wfs": {
             "n_subap": 4,
@@ -1298,6 +1420,27 @@ def main() -> None:
     checkout, commit, workspace = prepare_oopao_checkout(args)
     try:
         bootstrap_oopao(checkout)
+        composite_dm_command = np.array(
+            [
+                0.0,
+                1.5e-9,
+                -0.5e-9,
+                0.0,
+                1.0e-9,
+                -2.0e-9,
+                0.75e-9,
+                -0.5e-9,
+                -0.75e-9,
+                1.25e-9,
+                -1.5e-9,
+                0.5e-9,
+                0.0,
+                -0.5e-9,
+                1.0e-9,
+                0.0,
+            ],
+            dtype=np.float64,
+        )
         cases = {
             "psf_baseline": psf_case(root),
             "shack_hartmann_geometric_ramp_xy": sh_geometric_case(
@@ -1327,6 +1470,13 @@ def main() -> None:
                 mode_index=2,
                 amplitude=5e-9,
             ),
+            "shack_hartmann_diffractive_tiptilt_dm": composite_tiptilt_dm_case(
+                root,
+                case_id="shack_hartmann_diffractive_tiptilt_dm",
+                kind="shack_hartmann_slopes",
+                tip_amplitude=5e-9,
+                dm_command=composite_dm_command,
+            ),
             "pyramid_diffractive_ramp": pyramid_case(root),
             "pyramid_diffractive_tip_mode": modal_tiptilt_case(
                 root,
@@ -1335,6 +1485,13 @@ def main() -> None:
                 mode_index=1,
                 amplitude=5e-9,
             ),
+            "pyramid_diffractive_tiptilt_dm": composite_tiptilt_dm_case(
+                root,
+                case_id="pyramid_diffractive_tiptilt_dm",
+                kind="pyramid_slopes",
+                tip_amplitude=5e-9,
+                dm_command=composite_dm_command,
+            ),
             "bioedge_diffractive_ramp": bioedge_case(root),
             "bioedge_diffractive_tip_mode": modal_tiptilt_case(
                 root,
@@ -1342,6 +1499,13 @@ def main() -> None:
                 kind="bioedge_slopes",
                 mode_index=1,
                 amplitude=5e-9,
+            ),
+            "bioedge_diffractive_tiptilt_dm": composite_tiptilt_dm_case(
+                root,
+                case_id="bioedge_diffractive_tiptilt_dm",
+                kind="bioedge_slopes",
+                tip_amplitude=5e-9,
+                dm_command=composite_dm_command,
             ),
             "gain_sensing_camera_optical_gains": gsc_case(root),
             "transfer_function_rejection": transfer_function_case(root),

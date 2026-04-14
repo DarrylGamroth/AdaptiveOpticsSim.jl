@@ -1,5 +1,10 @@
 version = 1
 
+[metadata.oopao]
+repo_url = "https://github.com/cheritier/OOPAO.git"
+requested_ref = "085d5e50ace0d20fe13cc2da20129d5400166973"
+resolved_commit = "085d5e50ace0d20fe13cc2da20129d5400166973"
+
 [cases.psf_baseline]
 kind = "psf"
 data = "psf_baseline.txt"
@@ -52,7 +57,8 @@ threshold = 0.0000000000000000e+00
 mode = "geometric"
 
 [cases.shack_hartmann_geometric_ramp_xy.compare]
-convention = "oopao_geometric_sh_signal_2d"
+swap_halves = true
+scale = 7.5949367088607559e+06
 
 [cases.shack_hartmann_geometric_ramp_y]
 kind = "shack_hartmann_slopes"
@@ -84,7 +90,8 @@ threshold = 0.0000000000000000e+00
 mode = "geometric"
 
 [cases.shack_hartmann_geometric_ramp_y.compare]
-convention = "oopao_geometric_sh_signal_2d"
+swap_halves = true
+scale = 7.5949367088607559e+06
 
 [cases.shack_hartmann_diffractive_ramp]
 kind = "shack_hartmann_slopes"
@@ -199,6 +206,47 @@ label = "tiptilt"
 scale = 1.0000000000000000e+00
 command = [0.0000000000000000e+00, 5.0000000000000001e-09]
 
+[cases.shack_hartmann_diffractive_tiptilt_dm]
+kind = "shack_hartmann_slopes"
+data = "shack_hartmann_diffractive_tiptilt_dm.txt"
+shape = [32]
+atol = 4.0000000000000002e-04
+rtol = 4.0000000000000001e-02
+
+[cases.shack_hartmann_diffractive_tiptilt_dm.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.shack_hartmann_diffractive_tiptilt_dm.source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0000000000000000e+00
+
+[cases.shack_hartmann_diffractive_tiptilt_dm.wfs]
+n_subap = 4
+threshold = 0.0000000000000000e+00
+mode = "diffractive"
+pixel_scale = 5.9999999999999998e-02
+n_pix_subap = 8
+
+[cases.shack_hartmann_diffractive_tiptilt_dm.controllable_optic]
+kind = "composite"
+command = [5.0000000000000001e-09, 0.0000000000000000e+00, 0.0000000000000000e+00, 1.5000000000000000e-09, -5.0000000000000003e-10, 0.0000000000000000e+00, 1.0000000000000001e-09, -2.0000000000000001e-09, 7.5000000000000000e-10, -5.0000000000000003e-10, -7.5000000000000000e-10, 1.2500000000000000e-09, -1.5000000000000000e-09, 5.0000000000000003e-10, 0.0000000000000000e+00, -5.0000000000000003e-10, 1.0000000000000001e-09, 0.0000000000000000e+00]
+
+[[cases.shack_hartmann_diffractive_tiptilt_dm.controllable_optic.components]]
+kind = "modal"
+basis = "cartesian_tilt"
+label = "tiptilt"
+scale = 1.0000000000000000e+00
+
+[[cases.shack_hartmann_diffractive_tiptilt_dm.controllable_optic.components]]
+kind = "dm"
+label = "dm"
+n_act = 4
+influence_width = 2.9999999999999999e-01
+
 [cases.pyramid_diffractive_ramp]
 kind = "pyramid_slopes"
 data = "pyramid_diffractive_ramp.txt"
@@ -278,6 +326,51 @@ basis = "cartesian_tilt"
 label = "tiptilt"
 scale = 1.0000000000000000e+00
 command = [5.0000000000000001e-09, 0.0000000000000000e+00]
+
+[cases.pyramid_diffractive_tiptilt_dm]
+kind = "pyramid_slopes"
+data = "pyramid_diffractive_tiptilt_dm.txt"
+shape = [8]
+atol = 4.0000000000000002e-04
+rtol = 2.9999999999999999e-02
+
+[cases.pyramid_diffractive_tiptilt_dm.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.pyramid_diffractive_tiptilt_dm.source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0000000000000000e+00
+
+[cases.pyramid_diffractive_tiptilt_dm.wfs]
+n_subap = 4
+threshold = 0.0000000000000000e+00
+mode = "diffractive"
+modulation = 1.0000000000000000e+00
+modulation_points = 8
+diffraction_padding = 2
+psf_centering = true
+n_pix_separation = 4
+binning = 2
+
+[cases.pyramid_diffractive_tiptilt_dm.controllable_optic]
+kind = "composite"
+command = [5.0000000000000001e-09, 0.0000000000000000e+00, 0.0000000000000000e+00, 1.5000000000000000e-09, -5.0000000000000003e-10, 0.0000000000000000e+00, 1.0000000000000001e-09, -2.0000000000000001e-09, 7.5000000000000000e-10, -5.0000000000000003e-10, -7.5000000000000000e-10, 1.2500000000000000e-09, -1.5000000000000000e-09, 5.0000000000000003e-10, 0.0000000000000000e+00, -5.0000000000000003e-10, 1.0000000000000001e-09, 0.0000000000000000e+00]
+
+[[cases.pyramid_diffractive_tiptilt_dm.controllable_optic.components]]
+kind = "modal"
+basis = "cartesian_tilt"
+label = "tiptilt"
+scale = 1.0000000000000000e+00
+
+[[cases.pyramid_diffractive_tiptilt_dm.controllable_optic.components]]
+kind = "dm"
+label = "dm"
+n_act = 4
+influence_width = 2.9999999999999999e-01
 
 [cases.bioedge_diffractive_ramp]
 kind = "bioedge_slopes"
@@ -359,6 +452,52 @@ basis = "cartesian_tilt"
 label = "tiptilt"
 scale = 1.0000000000000000e+00
 command = [5.0000000000000001e-09, 0.0000000000000000e+00]
+
+[cases.bioedge_diffractive_tiptilt_dm]
+kind = "bioedge_slopes"
+data = "bioedge_diffractive_tiptilt_dm.txt"
+shape = [32]
+atol = 1.0000000000000000e-03
+rtol = 4.0000000000000001e-02
+
+[cases.bioedge_diffractive_tiptilt_dm.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.bioedge_diffractive_tiptilt_dm.source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0000000000000000e+00
+
+[cases.bioedge_diffractive_tiptilt_dm.wfs]
+n_subap = 4
+threshold = 0.0000000000000000e+00
+mode = "diffractive"
+modulation = 1.0000000000000000e+00
+modulation_points = 8
+diffraction_padding = 2
+psf_centering = true
+n_pix_separation = 4
+binning = 2
+n_pix_edge = 2
+
+[cases.bioedge_diffractive_tiptilt_dm.controllable_optic]
+kind = "composite"
+command = [5.0000000000000001e-09, 0.0000000000000000e+00, 0.0000000000000000e+00, 1.5000000000000000e-09, -5.0000000000000003e-10, 0.0000000000000000e+00, 1.0000000000000001e-09, -2.0000000000000001e-09, 7.5000000000000000e-10, -5.0000000000000003e-10, -7.5000000000000000e-10, 1.2500000000000000e-09, -1.5000000000000000e-09, 5.0000000000000003e-10, 0.0000000000000000e+00, -5.0000000000000003e-10, 1.0000000000000001e-09, 0.0000000000000000e+00]
+
+[[cases.bioedge_diffractive_tiptilt_dm.controllable_optic.components]]
+kind = "modal"
+basis = "cartesian_tilt"
+label = "tiptilt"
+scale = 1.0000000000000000e+00
+
+[[cases.bioedge_diffractive_tiptilt_dm.controllable_optic.components]]
+kind = "dm"
+label = "dm"
+n_act = 4
+influence_width = 2.9999999999999999e-01
 
 [cases.gain_sensing_camera_optical_gains]
 kind = "gsc_optical_gains"
@@ -675,7 +814,7 @@ kind = "gsc_modulation_frame"
 data = "gsc_branch_step_modulation_frame.txt"
 shape = [48, 48]
 storage_order = "C"
-atol = 5.0000000000000001e-08
+atol = 4.9999999999999998e-08
 rtol = 9.9999999999999995e-07
 
 [cases.gsc_branch_step_modulation_frame.telescope]

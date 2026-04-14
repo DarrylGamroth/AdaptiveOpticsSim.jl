@@ -448,18 +448,36 @@ end
     return optic.command
 end
 
-@inline function apply!(optic::CompositeControllableOptic, tel::Telescope, mode)
+@inline function apply!(optic::CompositeControllableOptic, tel::Telescope, ::DMAdditive)
     @inbounds for child in optic.optics
-        apply!(child, tel, mode)
+        apply!(child, tel, DMAdditive())
     end
     return tel
 end
 
-@inline function _apply_selected!(optic::CompositeControllableOptic, tel::Telescope, mode,
+@inline function apply!(optic::CompositeControllableOptic, tel::Telescope, ::DMReplace)
+    fill!(tel.state.opd, zero(eltype(tel.state.opd)))
+    @inbounds for child in optic.optics
+        apply!(child, tel, DMAdditive())
+    end
+    return tel
+end
+
+@inline function _apply_selected!(optic::CompositeControllableOptic, tel::Telescope, ::DMAdditive,
     labels::Tuple{Vararg{Symbol}})
     label_set = Set(labels)
     @inbounds for child in optic.optics
-        any(in(label_set), controllable_surface_labels(child)) && apply!(child, tel, mode)
+        any(in(label_set), controllable_surface_labels(child)) && apply!(child, tel, DMAdditive())
+    end
+    return tel
+end
+
+@inline function _apply_selected!(optic::CompositeControllableOptic, tel::Telescope, ::DMReplace,
+    labels::Tuple{Vararg{Symbol}})
+    fill!(tel.state.opd, zero(eltype(tel.state.opd)))
+    label_set = Set(labels)
+    @inbounds for child in optic.optics
+        any(in(label_set), controllable_surface_labels(child)) && apply!(child, tel, DMAdditive())
     end
     return tel
 end

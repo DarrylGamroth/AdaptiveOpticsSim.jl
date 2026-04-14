@@ -26,35 +26,40 @@ The repository now commits a deterministic OOPAO bundle under
 4. `shack_hartmann_diffractive_ramp`
 5. `shack_hartmann_diffractive_tip_mode`
 6. `shack_hartmann_diffractive_tilt_mode`
-7. `pyramid_diffractive_ramp`
-8. `pyramid_diffractive_tip_mode`
-9. `bioedge_diffractive_ramp`
-10. `bioedge_diffractive_tip_mode`
-11. `gain_sensing_camera_optical_gains`
-12. `transfer_function_rejection`
-13. `lift_interaction_matrix`
-14. `closed_loop_shack_hartmann_trace`
-15. `closed_loop_pyramid_trace`
-16. `closed_loop_bioedge_trace`
-17. `gsc_closed_loop_trace`
-18. `gsc_atmosphere_replay_trace_bounded`
-19. `gsc_branch_step_modulation_frame`
-20. `gsc_branch_step_optical_gains`
-21. `gsc_branch_step_signal`
+7. `shack_hartmann_diffractive_tiptilt_dm`
+8. `pyramid_diffractive_ramp`
+9. `pyramid_diffractive_tip_mode`
+10. `pyramid_diffractive_tiptilt_dm`
+11. `bioedge_diffractive_ramp`
+12. `bioedge_diffractive_tip_mode`
+13. `bioedge_diffractive_tiptilt_dm`
+14. `gain_sensing_camera_optical_gains`
+15. `transfer_function_rejection`
+16. `lift_interaction_matrix`
+17. `closed_loop_shack_hartmann_trace`
+18. `closed_loop_pyramid_trace`
+19. `closed_loop_bioedge_trace`
+20. `gsc_closed_loop_trace`
+21. `gsc_atmosphere_replay_trace_bounded`
+22. `gsc_branch_step_modulation_frame`
+23. `gsc_branch_step_optical_gains`
+24. `gsc_branch_step_signal`
 
 These cases are stable enough to keep in CI and now cover the main image
-formation, diffractive WFS, narrow modal-optic tip/tilt responses on
-Shack-Hartmann, Pyramid, and BioEdge, LiFT Jacobians, compact closed-loop
-traces, GSC optical-gain, bounded atmosphere-replay, gain-updated closed-loop
-behavior, the first nonlinear GSC branch step, and analytical transfer-function
-paths.
+formation, diffractive WFS, narrow modal-optic tip/tilt responses and one
+maintained `tiptilt + dm` composite plant on Shack-Hartmann, Pyramid, and
+BioEdge, LiFT Jacobians, compact closed-loop traces, GSC optical-gain,
+bounded atmosphere-replay, gain-updated closed-loop behavior, the first
+nonlinear GSC branch step, and analytical transfer-function paths.
 
-The modal-optic claim is intentionally narrow:
+The controllable-optic claim is intentionally narrow:
 - committed OOPAO parity now exists for `TipTiltMirror`-equivalent Cartesian
   tip/tilt modes on diffractive `ShackHartmann`, `Pyramid`, and `BioEdge`
-- composite plants such as `tiptilt + dm`, `focus + dm`, or richer grouped
-  runtime surfaces are still validated through internal artifacts and backend
-  parity rather than external OOPAO equivalence
+- committed OOPAO parity also now exists for one representative composite plant:
+  `tiptilt + dm` on diffractive `ShackHartmann`, `Pyramid`, and `BioEdge`
+- broader composite families such as `focus + dm` or richer grouped runtime
+  surfaces are still validated through internal artifacts and backend parity
+  rather than external OOPAO equivalence
 
 The same `test/reference_data/` bundle also commits deterministic pyTomoAO
 tomography references for:
