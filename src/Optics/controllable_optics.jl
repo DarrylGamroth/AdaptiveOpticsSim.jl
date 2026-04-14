@@ -230,12 +230,32 @@ end
 
 function _modal_basis_matrix(tel::Telescope, basis::ZernikeOpticBasis, ::Type{T},
     selector::AbstractArrayBackend) where {T<:AbstractFloat}
-    max_mode = maximum(basis.mode_ids)
-    zb = compute_zernike!(ZernikeBasis(tel, max_mode; T=T), tel)
     n = tel.params.resolution
+    pupil = Array(tel.state.pupil)
+    cx = (n + 1) / 2
+    cy = (n + 1) / 2
+    scale = n / 2
     host_modes = Matrix{T}(undef, n * n, length(basis.mode_ids))
-    for (k, j) in pairs(basis.mode_ids)
-        copyto!(view(host_modes, :, k), vec(T(basis.scale) .* zb.modes[:, :, j]))
+    @inbounds for (k, j) in pairs(basis.mode_ids)
+        n_mode, m_mode = noll_to_nm(j)
+        for col in 1:n, row in 1:n
+            idx = (col - 1) * n + row
+            if pupil[row, col]
+                x = (row - cx) / scale
+                y = (col - cy) / scale
+                r = sqrt(x^2 + y^2)
+                theta = atan(y, x)
+                radial = zernike_radial(n_mode, m_mode, r)
+                value = if m_mode >= 0
+                    radial * cos(m_mode * theta)
+                else
+                    radial * sin(abs(m_mode) * theta)
+                end
+                host_modes[idx, k] = T(basis.scale) * T(value)
+            else
+                host_modes[idx, k] = zero(T)
+            end
+        end
     end
     return host_modes
 end

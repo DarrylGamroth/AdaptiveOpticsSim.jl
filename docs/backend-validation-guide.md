@@ -87,6 +87,16 @@ For the full maintained GPU smoke matrix, use:
 
 which route through [`gpu_smoke_contract.jl`](../scripts/gpu_smoke_contract.jl).
 
+For explicit hardware-backed backend targets that combine the optional backend
+smoke with the maintained runtime-equivalence contract, run:
+
+- `julia --project=. --startup-file=no test/runtests_amdgpu.jl`
+- `julia --project=. --startup-file=no test/runtests_cuda.jl`
+
+These targets are intended for hosts where the corresponding GPU package and
+runtime are actually available. They fail fast instead of skipping when the
+backend is unavailable.
+
 The full GPU smoke matrix now also pins the exact batched Shack-Hartmann
 detector/export surface that previously regressed on CUDA:
 
