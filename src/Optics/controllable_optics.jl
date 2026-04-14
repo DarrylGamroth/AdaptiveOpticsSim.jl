@@ -97,8 +97,10 @@ function _modal_mode_matrix(tel::Telescope, definitions::Tuple, ::Type{T}, backe
     backend = _resolve_array_backend(selector)
     n = tel.params.resolution
     pupil = Array(tel.state.pupil)
-    xs = collect(range(T(-1), T(1); length=n))
-    ys = collect(range(T(-1), T(1); length=n))
+    # Match the existing reference-harness and OOPAO bundle convention:
+    # use an n+1 half-open normalized grid and drop the final endpoint.
+    xs = collect(range(T(-1), T(1); length=n + 1))[1:n]
+    ys = collect(range(T(-1), T(1); length=n + 1))[1:n]
     host = Matrix{T}(undef, n * n, length(definitions))
     for (k, f) in pairs(definitions)
         for j in 1:n, i in 1:n
@@ -248,9 +250,18 @@ end
 
 function _modal_basis_matrix(tel::Telescope, basis::QuadraticFocusBasis, ::Type{T},
     selector::AbstractArrayBackend) where {T<:AbstractFloat}
-    return Array(_modal_mode_matrix(tel, (
-        (x, y) -> T(basis.scale) * (x^2 + y^2),
-    ), T, selector))
+    n = tel.params.resolution
+    pupil = Array(tel.state.pupil)
+    # Use a cell-centered symmetric grid so the quadratic focus mode does not
+    # leak tip/tilt under even-resolution sampling.
+    coords = collect(T.((2 .* (1:n) .- (n + 1)) ./ n))
+    host = Matrix{T}(undef, n * n, 1)
+    @inbounds for j in 1:n, i in 1:n
+        x = coords[i]
+        y = coords[j]
+        host[(j - 1) * n + i, 1] = pupil[i, j] ? T(basis.scale) * (x^2 + y^2) : zero(T)
+    end
+    return host
 end
 
 function _materialize_modal_modes(tel::Telescope, host_modes::AbstractMatrix, ::Type{T},

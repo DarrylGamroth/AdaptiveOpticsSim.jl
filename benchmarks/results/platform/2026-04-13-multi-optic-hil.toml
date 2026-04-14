@@ -2,9 +2,9 @@ generated_on = "2026-04-13"
 artifact_id = "MULTI-OPTIC-HIL-2026-04-13"
 
 [bioedge_behavior]
-tip_plus_slopes_l2 = 4.097142038972379e-7
-tip_frame_sum_delta = 64.0
-tip_minus_slopes_l2 = 3.9761258108228503e-7
+tip_plus_slopes_l2 = 3.551356542175199e-7
+tip_frame_sum_delta = 0.0
+tip_minus_slopes_l2 = 3.3717478231665154e-7
 
 [surface]
 command_segment_lengths = [2, 16]
@@ -14,41 +14,41 @@ command_segment_labels = ["tiptilt", "dm"]
 science_pixels_enabled = false
 
 [delta]
-slopes_delta_l2 = 3.762038230895996
-wfs_frame_delta_l2 = 5.2810048e8
+slopes_delta_l2 = 3.9709484577178955
+wfs_frame_delta_l2 = 6.00501504e8
 
 [pyramid_behavior]
-tip_plus_axis_ratio = 6.683387279510498
-tip_antisymmetry_l2 = 0.4573093354701996
-tip_plus_frame_sum = 3.80108672e8
+tip_plus_axis_ratio = 27.975929260253906
+tip_antisymmetry_l2 = 1.301174521446228
+tip_plus_frame_sum = 3.80108576e8
 zero_slopes_l2 = 0.0
-tip_minus_frame_sum = 3.80108704e8
+tip_minus_frame_sum = 3.80108672e8
 
 [focus_behavior]
-antisymmetry_l2 = 4.805966455023736e-6
+antisymmetry_l2 = 5.1475653890520334e-6
 zero_slopes_l2 = 0.0
-axis_balance_ratio = 0.9999999403953552
+axis_balance_ratio = 1.0
 
     [focus_behavior.focus_plus]
-    axis_2_norm = 1.6417784690856934
-    axis_1_mean = 3.0547380447387695e-7
-    frame_sum = 4.66780928e9
-    axis_1_norm = 1.6417783498764038
-    axis_2_mean = 2.5704503059387207e-7
+    axis_2_norm = 1.6270841360092163
+    axis_1_mean = 3.5390257835388184e-7
+    frame_sum = 4.667104768e9
+    axis_1_norm = 1.6270841360092163
+    axis_2_mean = 2.421438694000244e-7
 
     [focus_behavior.focus_minus]
-    axis_2_norm = 1.6417783498764038
-    axis_1_mean = 3.3527612686157227e-7
-    frame_sum = 4.667808768e9
-    axis_1_norm = 1.641778588294983
-    axis_2_mean = 3.203749656677246e-7
+    axis_2_norm = 1.6270842552185059
+    axis_1_mean = 3.390014171600342e-7
+    frame_sum = 4.667103744e9
+    axis_1_norm = 1.6270838975906372
+    axis_2_mean = 3.166496753692627e-7
 
 [updated_state.slopes]
 length = 32
-maxabs = 0.9624719619750977
-l2_norm = 2.546224355697632
-sum = 2.876756429672241
-mean = 0.08989863842725754
+maxabs = 1.1846716403961182
+l2_norm = 2.7856123447418213
+sum = 0.2208157181739807
+mean = 0.006900491192936897
 
 [updated_state.command]
 tiptilt_mean = 0.02500000037252903
@@ -58,32 +58,32 @@ dm_segment_unchanged = true
 
 [updated_state.wfs_frame]
 shape = [16, 4, 4]
-sum = 6.386784256e9
-max = 1.18459872e8
-min = 117856.1953125
-l2_norm = 5.47261376e8
-mean = 2.4948376e7
+sum = 6.547918848e9
+max = 1.83098976e8
+min = 112370.3515625
+l2_norm = 6.22303808e8
+mean = 2.5577808e7
 
 [sensitivity_envelope.pyramid]
-slopes_delta_l2 = [1.3273138999938965, 2.6960413455963135, 3.932098150253296]
+slopes_delta_l2 = [4.007532119750977, 3.0983009338378906, 3.963228702545166]
 commands = [0.012500000186264515, 0.02500000037252903, 0.05000000074505806]
-frame_delta_l2 = [1.6024792e7, 3.2435156e7, 4.7638792e7]
+frame_delta_l2 = [4.84899e7, 3.7857116e7, 4.7995596e7]
 
 [sensitivity_envelope.bioedge]
 commands = [0.012500000186264515, 0.02500000037252903, 0.05000000074505806]
-frame_delta_l2 = [2.1745182e7, 4.5214476e7, 6.683822e7]
+frame_delta_l2 = [6.8364416e7, 5.249672e7, 6.7450232e7]
 
 [sensitivity_envelope.shack_hartmann]
-slopes_delta_l2 = [1.157675862312317, 2.2417595386505127, 3.897876739501953]
+slopes_delta_l2 = [5.599578380584717, 2.470247268676758, 4.372751235961914]
 commands = [0.012500000186264515, 0.02500000037252903, 0.05000000074505806]
-frame_delta_l2 = [4.64752736e8, 9.17382272e8, 1.713317248e9]
+frame_delta_l2 = [2.3128256e9, 2.013741824e9, 1.9347584e9]
 
 [initial_state.slopes]
 length = 32
-maxabs = 0.9249493479728699
-l2_norm = 2.7198314666748047
-sum = 3.594595193862915
-mean = 0.1123310998082161
+maxabs = 0.9279879927635193
+l2_norm = 2.4775657653808594
+sum = 4.556797027587891
+mean = 0.14239990711212158
 
 [initial_state.command]
 tiptilt_mean = 0.012500000186264515
@@ -92,11 +92,11 @@ packed_sum = 0.3449999988079071
 
 [initial_state.wfs_frame]
 shape = [16, 4, 4]
-sum = 5.925198336e9
-max = 1.73313008e8
-min = 143038.75
-l2_norm = 5.45721472e8
-mean = 2.3145306e7
+sum = 6.236332032e9
+max = 1.29186824e8
+min = 83664.9765625
+l2_norm = 5.34063424e8
+mean = 2.4360672e7
 
 [opd_linearity]
 steering_scaling_l2 = 0.0
@@ -111,19 +111,19 @@ initial_slopes_exact = true
 initial_wfs_frame_exact = true
 
 [detector_in_loop.pyramid]
-plus_frame_delta_l2 = 1.5854678e7
-minus_frame_delta_l2 = 1.5854679e7
-frame_sum_delta = 64.0
+plus_frame_delta_l2 = 4.8080076e7
+minus_frame_delta_l2 = 4.8080224e7
+frame_sum_delta = 32.0
 
 [detector_in_loop.bioedge]
-plus_frame_delta_l2 = 2.1415326e7
-minus_frame_delta_l2 = 2.141533e7
-frame_sum_delta = 128.0
+plus_frame_delta_l2 = 6.7291128e7
+minus_frame_delta_l2 = 6.7291176e7
+frame_sum_delta = 192.0
 
 [detector_in_loop.shack_hartmann]
-plus_frame_delta_l2 = 4.48914176e8
-minus_frame_delta_l2 = 4.48914016e8
-frame_sum_delta = 14336.0
+plus_frame_delta_l2 = 2.228832256e9
+minus_frame_delta_l2 = 2.228832512e9
+frame_sum_delta = 7168.0
 
 [composition]
 tiptilt_dm_opd_l2 = 0.0
@@ -136,69 +136,69 @@ backend = "cpu"
 artifact_kind = "multi_optic_hil_validation"
 
 [steering_behavior]
-antisymmetry_l2 = 1.5211749087029602e-6
+antisymmetry_l2 = 2.053692469417001e-6
 matches_tiptilt_exactly = true
 zero_slopes_l2 = 0.0
 
     [steering_behavior.steering_plus]
-    axis_2_norm = 1.1537606716156006
-    axis_1_mean = 3.818422555923462e-8
-    frame_sum = 2.0463015936e10
-    axis_1_norm = 0.09513028711080551
-    axis_2_mean = -0.28351470828056335
+    axis_2_norm = 5.553636074066162
+    axis_1_mean = 0.0
+    frame_sum = 1.4147458048e10
+    axis_1_norm = 0.7158214449882507
+    axis_2_mean = -1.379546046257019
 
     [steering_behavior.steering_minus]
-    axis_2_norm = 1.153760552406311
-    axis_1_mean = 8.591450750827789e-8
-    frame_sum = 2.0463017984e10
-    axis_1_norm = 0.09513004869222641
-    axis_2_mean = 0.28351467847824097
+    axis_2_norm = 5.55363655090332
+    axis_1_mean = -7.450580596923828e-9
+    frame_sum = 1.414746112e10
+    axis_1_norm = 0.7158212661743164
+    axis_2_mean = 1.3795461654663086
 
 [stateful_sequence]
-step_1_frame_l2 = 5.21389568e8
-step_2_slopes_l2 = 2.2456629276275635
+step_1_frame_l2 = 5.26451968e8
+step_2_slopes_l2 = 2.209911346435547
 step_1_command_sum = 0.3400000035762787
 step_3_command_sum = 0.29999998211860657
-step_1_slopes_l2 = 2.438511610031128
-step_2_frame_l2 = 5.114888e8
-step_3_frame_l2 = 5.42821376e8
+step_1_slopes_l2 = 2.215498208999634
+step_2_frame_l2 = 5.11521024e8
+step_3_frame_l2 = 5.45747264e8
 surface = "tiptilt_focus_dm_shack_hartmann"
 step_2_command_sum = 0.32499998807907104
-step_3_slopes_l2 = 2.708096742630005
+step_3_slopes_l2 = 2.731740951538086
 
 [behavior]
 tilt_dominant_axis = 1
-tip_vs_tilt_l2 = 1.6372008323669434
+tip_vs_tilt_l2 = 7.918999195098877
 static_surface = "zero_phase_static_atmosphere"
-tilt_antisymmetry_l2 = 1.4607162484026048e-6
+tilt_antisymmetry_l2 = 2.130244411091553e-6
 tip_dominant_axis = 2
 zero_slopes_l2 = 0.0
-tip_axis_ratio = 12.128215789794922
-tip_antisymmetry_l2 = 1.5211749087029602e-6
-tilt_axis_ratio = 12.128230094909668
+tip_axis_ratio = 7.7584099769592285
+tip_antisymmetry_l2 = 2.053692469417001e-6
+tilt_axis_ratio = 7.7584052085876465
 
     [behavior.tip_plus]
-    axis_2_norm = 1.1537606716156006
-    axis_1_mean = 3.818422555923462e-8
-    frame_sum = 2.0463015936e10
-    axis_1_norm = 0.09513028711080551
-    axis_2_mean = -0.28351470828056335
+    axis_2_norm = 5.553636074066162
+    axis_1_mean = 0.0
+    frame_sum = 1.4147458048e10
+    axis_1_norm = 0.7158214449882507
+    axis_2_mean = -1.379546046257019
 
     [behavior.tip_minus]
-    axis_2_norm = 1.153760552406311
-    axis_1_mean = 8.591450750827789e-8
-    frame_sum = 2.0463017984e10
-    axis_1_norm = 0.09513004869222641
-    axis_2_mean = 0.28351467847824097
+    axis_2_norm = 5.55363655090332
+    axis_1_mean = -7.450580596923828e-9
+    frame_sum = 1.414746112e10
+    axis_1_norm = 0.7158212661743164
+    axis_2_mean = 1.3795461654663086
 
     [behavior.tilt_plus]
-    axis_2_norm = 0.09513018280267715
-    axis_1_mean = -0.28351473808288574
-    axis_1_norm = 1.1537607908248901
-    axis_2_mean = -7.59027898311615e-8
+    axis_2_norm = 0.7158218622207642
+    axis_1_mean = -1.37954580783844
+    axis_1_norm = 5.553636074066162
+    axis_2_mean = 2.0489096641540527e-8
 
     [behavior.tilt_minus]
-    axis_2_norm = 0.09513042867183685
-    axis_1_mean = 0.28351470828056335
-    axis_1_norm = 1.1537606716156006
-    axis_2_mean = -9.546056389808655e-9
+    axis_2_norm = 0.7158215641975403
+    axis_1_mean = 1.3795461654663086
+    axis_1_norm = 5.5536370277404785
+    axis_2_mean = 4.842877388000488e-8
