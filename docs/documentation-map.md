@@ -54,6 +54,7 @@ Use these when changing package structure or internals:
 Use these when the task is cross-package or instrument-truth work:
 
 - [`oopao-reference-datasets.md`](./oopao-reference-datasets.md)
+- [`composite-plant-oopao-review-2026-04.md`](./composite-plant-oopao-review-2026-04.md)
 - [`../scripts/generate_oopao_equivalence_artifact.jl`](../scripts/generate_oopao_equivalence_artifact.jl)
 - [`../scripts/generate_heart_boundary_truth_artifact.py`](../scripts/generate_heart_boundary_truth_artifact.py)
 - [`../benchmarks/results/truth/2026-04-09-heart-boundary-truth.toml`](../benchmarks/results/truth/2026-04-09-heart-boundary-truth.toml)
@@ -173,6 +174,9 @@ Use these when the task is cross-package or instrument-truth work:
   - reproducibility guidance
 - [`oopao-reference-datasets.md`](./oopao-reference-datasets.md)
   - OOPAO frozen bundle policy and provenance
+- [`composite-plant-oopao-review-2026-04.md`](./composite-plant-oopao-review-2026-04.md)
+  - targeted review showing that the remaining `tiptilt + dm` OOPAO residual is
+    a stable DM-model mismatch rather than a broad numerical-stability problem
 - [`specula-reference-datasets.md`](./specula-reference-datasets.md)
   - SPECULA-targeted frozen bundle policy and provenance
 - [`phase-statistics-accuracy.md`](./phase-statistics-accuracy.md)
