@@ -117,6 +117,88 @@ mode = "diffractive"
 pixel_scale = 5.9999999999999998e-02
 n_pix_subap = 8
 
+[cases.shack_hartmann_diffractive_tip_mode]
+kind = "shack_hartmann_slopes"
+data = "shack_hartmann_diffractive_tip_mode.txt"
+shape = [32]
+atol = 4.0000000000000002e-04
+rtol = 5.0000000000000003e-02
+
+[cases.shack_hartmann_diffractive_tip_mode.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.shack_hartmann_diffractive_tip_mode.source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0000000000000000e+00
+
+[cases.shack_hartmann_diffractive_tip_mode.opd]
+kind = "basis_mode"
+mode_index = 1
+amplitude = 5.0000000000000001e-09
+
+[cases.shack_hartmann_diffractive_tip_mode.wfs]
+n_subap = 4
+threshold = 0.0000000000000000e+00
+mode = "diffractive"
+pixel_scale = 5.9999999999999998e-02
+n_pix_subap = 8
+
+[cases.shack_hartmann_diffractive_tip_mode.basis]
+kind = "cartesian_polynomials"
+n_modes = 2
+
+[cases.shack_hartmann_diffractive_tip_mode.controllable_optic]
+kind = "modal"
+basis = "cartesian_tilt"
+label = "tiptilt"
+scale = 1.0000000000000000e+00
+command = [5.0000000000000001e-09, 0.0000000000000000e+00]
+
+[cases.shack_hartmann_diffractive_tilt_mode]
+kind = "shack_hartmann_slopes"
+data = "shack_hartmann_diffractive_tilt_mode.txt"
+shape = [32]
+atol = 4.0000000000000002e-04
+rtol = 5.0000000000000003e-02
+
+[cases.shack_hartmann_diffractive_tilt_mode.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.shack_hartmann_diffractive_tilt_mode.source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0000000000000000e+00
+
+[cases.shack_hartmann_diffractive_tilt_mode.opd]
+kind = "basis_mode"
+mode_index = 2
+amplitude = 5.0000000000000001e-09
+
+[cases.shack_hartmann_diffractive_tilt_mode.wfs]
+n_subap = 4
+threshold = 0.0000000000000000e+00
+mode = "diffractive"
+pixel_scale = 5.9999999999999998e-02
+n_pix_subap = 8
+
+[cases.shack_hartmann_diffractive_tilt_mode.basis]
+kind = "cartesian_polynomials"
+n_modes = 2
+
+[cases.shack_hartmann_diffractive_tilt_mode.controllable_optic]
+kind = "modal"
+basis = "cartesian_tilt"
+label = "tiptilt"
+scale = 1.0000000000000000e+00
+command = [0.0000000000000000e+00, 5.0000000000000001e-09]
+
 [cases.pyramid_diffractive_ramp]
 kind = "pyramid_slopes"
 data = "pyramid_diffractive_ramp.txt"
@@ -186,6 +268,52 @@ diffraction_padding = 2
 psf_centering = true
 n_pix_separation = 4
 binning = 2
+
+[cases.bioedge_diffractive_tip_mode]
+kind = "bioedge_slopes"
+data = "bioedge_diffractive_tip_mode.txt"
+shape = [32]
+atol = 2.0000000000000000e-03
+rtol = 5.0000000000000003e-02
+
+[cases.bioedge_diffractive_tip_mode.telescope]
+resolution = 24
+diameter = 8.0000000000000000e+00
+sampling_time = 1.0000000000000000e-03
+central_obstruction = 0.0000000000000000e+00
+
+[cases.bioedge_diffractive_tip_mode.source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0000000000000000e+00
+
+[cases.bioedge_diffractive_tip_mode.opd]
+kind = "basis_mode"
+mode_index = 1
+amplitude = 5.0000000000000001e-09
+
+[cases.bioedge_diffractive_tip_mode.wfs]
+n_subap = 4
+threshold = 0.0000000000000000e+00
+mode = "diffractive"
+modulation = 1.0000000000000000e+00
+modulation_points = 8
+diffraction_padding = 2
+psf_centering = true
+n_pix_separation = 4
+binning = 2
+n_pix_edge = 2
+
+[cases.bioedge_diffractive_tip_mode.basis]
+kind = "cartesian_polynomials"
+n_modes = 2
+
+[cases.bioedge_diffractive_tip_mode.controllable_optic]
+kind = "modal"
+basis = "cartesian_tilt"
+label = "tiptilt"
+scale = 1.0000000000000000e+00
+command = [5.0000000000000001e-09, 0.0000000000000000e+00]
 
 [cases.gain_sensing_camera_optical_gains]
 kind = "gsc_optical_gains"

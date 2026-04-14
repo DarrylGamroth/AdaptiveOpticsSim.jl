@@ -24,24 +24,38 @@ The repository now commits a deterministic OOPAO bundle under
 2. `shack_hartmann_geometric_ramp_xy`
 3. `shack_hartmann_geometric_ramp_y`
 4. `shack_hartmann_diffractive_ramp`
-5. `pyramid_diffractive_ramp`
-6. `bioedge_diffractive_ramp`
-7. `gain_sensing_camera_optical_gains`
-8. `transfer_function_rejection`
-9. `lift_interaction_matrix`
-10. `closed_loop_shack_hartmann_trace`
-11. `closed_loop_pyramid_trace`
-12. `closed_loop_bioedge_trace`
-13. `gsc_closed_loop_trace`
-14. `gsc_atmosphere_replay_trace_bounded`
-15. `gsc_branch_step_modulation_frame`
-16. `gsc_branch_step_optical_gains`
-17. `gsc_branch_step_signal`
+5. `shack_hartmann_diffractive_tip_mode`
+6. `shack_hartmann_diffractive_tilt_mode`
+7. `pyramid_diffractive_ramp`
+8. `bioedge_diffractive_ramp`
+9. `bioedge_diffractive_tip_mode`
+10. `gain_sensing_camera_optical_gains`
+11. `transfer_function_rejection`
+12. `lift_interaction_matrix`
+13. `closed_loop_shack_hartmann_trace`
+14. `closed_loop_pyramid_trace`
+15. `closed_loop_bioedge_trace`
+16. `gsc_closed_loop_trace`
+17. `gsc_atmosphere_replay_trace_bounded`
+18. `gsc_branch_step_modulation_frame`
+19. `gsc_branch_step_optical_gains`
+20. `gsc_branch_step_signal`
 
 These cases are stable enough to keep in CI and now cover the main image
-formation, diffractive WFS, LiFT Jacobians, compact closed-loop traces, GSC
+formation, diffractive WFS, narrow modal-optic tip/tilt responses on
+Shack-Hartmann and BioEdge, LiFT Jacobians, compact closed-loop traces, GSC
 optical-gain, bounded atmosphere-replay, gain-updated closed-loop behavior,
 the first nonlinear GSC branch step, and analytical transfer-function paths.
+
+The modal-optic claim is intentionally narrow:
+- committed OOPAO parity now exists for `TipTiltMirror`-equivalent Cartesian
+  tip/tilt modes on diffractive `ShackHartmann` and `BioEdge`
+- the corresponding `Pyramid` modal tip surface is not committed as an OOPAO
+  parity gate because it does not yet agree robustly enough to support that
+  claim
+- composite plants such as `tiptilt + dm`, `focus + dm`, or richer grouped
+  runtime surfaces are still validated through internal artifacts and backend
+  parity rather than external OOPAO equivalence
 
 The same `test/reference_data/` bundle also commits deterministic pyTomoAO
 tomography references for:
@@ -95,6 +109,9 @@ Current expectations:
     `C` / `numpy_row_major` for NumPy row-major arrays)
   - `atol` / `rtol`
   - nested config tables (`telescope`, `source`, `opd`, `wfs`, `compute`)
+  - optional `controllable_optic` table for cases that should be reconstructed
+    through the maintained modal/control-surface API instead of direct OPD
+    injection
   - optional `compare` rules for known convention adapters
 
 This lets the Julia test suite reconstruct the scenario, compute the local
@@ -151,6 +168,14 @@ LiFT reference cases also treat detector-coupled image sizing explicitly: if a
 case does not provide `compute.img_resolution`, the harness uses
 `detector.psf_sampling * telescope.resolution`, which matches the practical
 detector-pixel convention used by the current OOPAO and Julia LiFT surfaces.
+
+Modal reference cases can also carry both:
+- an `opd`/`basis` description for the OOPAO-side provenance
+- a `controllable_optic` description for the Julia-side maintained API path
+
+That lets the same frozen case compare OOPAO’s direct injected optical phase to
+the Julia package’s modal controllable-optic execution path without pretending
+the two codes assemble the surface internally in the same way.
 
 ## Generation workflow
 

@@ -360,6 +360,31 @@ function build_reference_basis(cfg::AbstractDict{<:AbstractString,<:Any}, tel::T
     throw(InvalidConfiguration("unknown basis kind '$kind'"))
 end
 
+function build_reference_controllable_optic(cfg::AbstractDict{<:AbstractString,<:Any}, tel::Telescope)
+    kind = lowercase(String(get(cfg, "kind", "modal")))
+    label = Symbol(get(cfg, "label", "modal_optic"))
+    T = Float64
+    if kind == "tiptilt"
+        scale = Float64(get(cfg, "scale", 1.0))
+        return TipTiltMirror(tel; scale=scale, T=T, backend=backend(tel), label=label)
+    elseif kind == "modal"
+        basis_name = lowercase(String(get(cfg, "basis", "cartesian_tilt")))
+        if basis_name == "cartesian_tilt"
+            scale = Float64(get(cfg, "scale", 1.0))
+            return ModalControllableOptic(tel, CartesianTiltBasis(; scale=scale);
+                labels=label, T=T, backend=backend(tel))
+        elseif basis_name == "zernike"
+            mode_ids = Int.(get(cfg, "mode_ids", Int[]))
+            isempty(mode_ids) && throw(InvalidConfiguration("modal controllable optic zernike basis requires mode_ids"))
+            scale = Float64(get(cfg, "scale", 1.0))
+            return ModalControllableOptic(tel, ZernikeOpticBasis(mode_ids; scale=scale);
+                labels=label, T=T, backend=backend(tel))
+        end
+        throw(InvalidConfiguration("unknown modal controllable optic basis '$basis_name'"))
+    end
+    throw(InvalidConfiguration("unknown controllable optic kind '$kind'"))
+end
+
 function matrix_from_rows(rows)
     n_row = length(rows)
     n_col = n_row == 0 ? 0 : length(rows[1])
@@ -1008,6 +1033,12 @@ function compute_reference_actual(case::ReferenceCase)
         residual = load_case_residual_opd(case)
         if residual !== nothing
             apply_opd!(tel, residual)
+        elseif haskey(case.config, "controllable_optic")
+            optic = build_reference_controllable_optic(case.config["controllable_optic"], tel)
+            cmd = Float64.(get(case.config["controllable_optic"], "command", Float64[]))
+            isempty(cmd) && throw(InvalidConfiguration("controllable_optic reference cases require a non-empty command"))
+            set_command!(optic, cmd)
+            apply!(optic, tel, DMReplace())
         elseif haskey(case.config, "opd")
             if haskey(case.config, "basis")
                 basis = build_reference_basis(case.config["basis"], tel)

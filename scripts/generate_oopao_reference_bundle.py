@@ -161,6 +161,7 @@ def write_manifest(path: Path, cases: dict[str, dict], metadata: dict[str, str] 
             "opd",
             "wfs",
             "basis",
+            "controllable_optic",
             "detector",
             "compute",
             "compare",
@@ -509,6 +510,75 @@ def bioedge_case(root: Path) -> dict:
             "psf_centering": True,
             "n_pix_separation": 4,
             "binning": 2,
+        },
+    }
+
+
+def modal_tiptilt_case(root: Path, *, case_id: str, kind: str, mode_index: int, amplitude: float) -> dict:
+    tel = make_telescope(resolution=24, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = make_source(band="I", magnitude=0.0)
+    src ** tel
+    wfs = make_reference_wfs(kind, tel)
+    src ** tel
+    basis = cartesian_polynomial_basis(tel, n_modes=2)
+    tel.resetOPD()
+    tel.OPD_no_pupil = amplitude * basis[:, :, mode_index - 1]
+    data = measure_signal(kind, wfs, tel, src)
+    rel = f"{case_id}.txt"
+    write_array(root / rel, data)
+    return {
+        "kind": kind,
+        "data": rel,
+        "shape": [int(data.size)],
+        "atol": 4e-4 if kind == "shack_hartmann_slopes" else 2e-3,
+        "rtol": 5e-2 if kind == "shack_hartmann_slopes" else 5e-2,
+        "telescope": {
+            "resolution": 24,
+            "diameter": 8.0,
+            "sampling_time": 1e-3,
+            "central_obstruction": 0.0,
+        },
+        "source": {
+            "kind": "ngs",
+            "band": "I",
+            "magnitude": 0.0,
+        },
+        "basis": {
+            "kind": "cartesian_polynomials",
+            "n_modes": 2,
+        },
+        "opd": {
+            "kind": "basis_mode",
+            "mode_index": mode_index,
+            "amplitude": amplitude,
+        },
+        "controllable_optic": {
+            "kind": "modal",
+            "basis": "cartesian_tilt",
+            "label": "tiptilt",
+            "scale": 1.0,
+            "command": [amplitude, 0.0] if mode_index == 1 else [0.0, amplitude],
+        },
+        "wfs": {
+            "n_subap": 4,
+            "threshold": 0.0,
+            "mode": "diffractive",
+            **(
+                {
+                    "pixel_scale": 0.06,
+                    "n_pix_subap": 8,
+                }
+                if kind == "shack_hartmann_slopes"
+                else {
+                    "modulation": 1.0,
+                    "modulation_points": 8,
+                    "diffraction_padding": 2,
+                    "psf_centering": True,
+                    "n_pix_separation": 4,
+                    "binning": 2,
+                    **({"n_pix_edge": 2} if kind == "bioedge_slopes" else {}),
+                }
+            ),
         },
     }
 
@@ -1241,8 +1311,29 @@ def main() -> None:
                 scale_y=4e-9,
             ),
             "shack_hartmann_diffractive_ramp": sh_diffractive_case(root),
+            "shack_hartmann_diffractive_tip_mode": modal_tiptilt_case(
+                root,
+                case_id="shack_hartmann_diffractive_tip_mode",
+                kind="shack_hartmann_slopes",
+                mode_index=1,
+                amplitude=5e-9,
+            ),
+            "shack_hartmann_diffractive_tilt_mode": modal_tiptilt_case(
+                root,
+                case_id="shack_hartmann_diffractive_tilt_mode",
+                kind="shack_hartmann_slopes",
+                mode_index=2,
+                amplitude=5e-9,
+            ),
             "pyramid_diffractive_ramp": pyramid_case(root),
             "bioedge_diffractive_ramp": bioedge_case(root),
+            "bioedge_diffractive_tip_mode": modal_tiptilt_case(
+                root,
+                case_id="bioedge_diffractive_tip_mode",
+                kind="bioedge_slopes",
+                mode_index=1,
+                amplitude=5e-9,
+            ),
             "gain_sensing_camera_optical_gains": gsc_case(root),
             "transfer_function_rejection": transfer_function_case(root),
             "lift_interaction_matrix": lift_case(root),
