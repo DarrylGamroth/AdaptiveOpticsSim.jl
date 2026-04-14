@@ -44,15 +44,22 @@ end
 end
 
 @inline function stage_sensed_slopes!(runtime::ClosedLoopRuntime)
+    synchronize_backend!(execution_style(runtime.wfs.state.slopes))
     measured = shift_delay!(runtime.measurement_delay, runtime.wfs.state.slopes)
+    synchronize_backend!(execution_style(measured))
     readout = shift_delay!(runtime.readout_delay, measured)
+    synchronize_backend!(execution_style(readout))
     copyto!(runtime.slopes, readout)
+    synchronize_backend!(execution_style(runtime.slopes))
     return runtime.slopes
 end
 
 @inline function stage_runtime_command!(runtime::ClosedLoopRuntime)
+    synchronize_backend!(execution_style(runtime.reconstruct_buffer))
     delayed = shift_delay!(runtime.reconstruction_delay, runtime.reconstruct_buffer)
+    synchronize_backend!(execution_style(delayed))
     copyto!(runtime.command, delayed)
+    synchronize_backend!(execution_style(runtime.command))
     return runtime.command
 end
 

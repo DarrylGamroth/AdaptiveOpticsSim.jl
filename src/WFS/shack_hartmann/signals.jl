@@ -99,6 +99,18 @@ end
     return @view wfs.state.spot_cube[idx, :, :]
 end
 
+@inline function sync_sh_staged_spot!(style::AcceleratorStyle, spot::AbstractMatrix)
+    synchronize_backend!(style)
+    synchronize_backend!(execution_style(spot))
+    return spot
+end
+
+@inline function sync_sh_staged_view!(style::AcceleratorStyle, spot_view::AbstractMatrix)
+    synchronize_backend!(style)
+    synchronize_backend!(execution_style(spot_view))
+    return spot_view
+end
+
 function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
     prepare_sampling!(wfs, tel, src)
     return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src)
@@ -162,9 +174,11 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
                 ys = (j - 1) * sub + 1
                 xe = min(i * sub, n)
                 ye = min(j * sub, n)
-                compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+                compute_intensity_safe!(style, wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
                 sample_spot!(wfs, wfs.state.intensity)
+                sync_sh_staged_spot!(style, wfs.state.spot)
                 copyto!(spot_view, wfs.state.spot)
+                sync_sh_staged_view!(style, spot_view)
                 peak = max(peak, sh_safe_peak_value(spot_view))
             else
                 fill!(spot_view, zero(eltype(spot_view)))
@@ -358,10 +372,13 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
                 ys = (j - 1) * sub + 1
                 xe = min(i * sub, n)
                 ye = min(j * sub, n)
-                compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+                compute_intensity_safe!(style, wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
                 sample_spot!(wfs, wfs.state.intensity)
+                sync_sh_staged_spot!(style, wfs.state.spot)
                 frame = capture!(det, wfs.state.spot; rng=rng)
+                sync_sh_staged_spot!(style, frame)
                 copyto!(spot_view, frame)
+                sync_sh_staged_view!(style, spot_view)
                 peak = max(peak, sh_safe_peak_value(spot_view))
             else
                 fill!(spot_view, zero(eltype(spot_view)))

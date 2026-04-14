@@ -115,6 +115,19 @@ function _assert_max_abs(label::AbstractString, actual, expected; atol::Real)
     @assert max_abs <= atol "$label mismatch (max_abs=$max_abs, atol=$atol)"
 end
 
+@inline function _synchronize_if_present(x)
+    isnothing(x) && return nothing
+    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(x))
+    return nothing
+end
+
+function _synchronize_runtime_products!(scenario)
+    _synchronize_if_present(command(scenario))
+    _synchronize_if_present(slopes(scenario))
+    _synchronize_if_present(wfs_frame(scenario))
+    return nothing
+end
+
 function _run_ao188_equivalence(::Type{B}, branch_mode::AbstractExecutionPolicy) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     disable_scalar_backend!(B)
     BackendArray = gpu_backend_array_type(B)
@@ -453,8 +466,8 @@ function _run_multi_optic_hil_equivalence(::Type{B}, case::Val{K}, wfs_case::Val
     sense!(cpu)
     sense!(gpu)
     sense!(gpu_repeat)
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(command(gpu)))
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(command(gpu_repeat)))
+    _synchronize_runtime_products!(gpu)
+    _synchronize_runtime_products!(gpu_repeat)
 
     println("$(K)_dm_", _wfs_case_label(wfs_case), "_hil_equivalence initial")
     _assert_close("command", command(gpu), command(cpu); rtol=1f-6, atol=1f-6)
@@ -470,8 +483,8 @@ function _run_multi_optic_hil_equivalence(::Type{B}, case::Val{K}, wfs_case::Val
     sense!(cpu)
     sense!(gpu)
     sense!(gpu_repeat)
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(command(gpu)))
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(command(gpu_repeat)))
+    _synchronize_runtime_products!(gpu)
+    _synchronize_runtime_products!(gpu_repeat)
 
     println("$(K)_dm_", _wfs_case_label(wfs_case), "_hil_equivalence updated")
     _assert_close("command", command(gpu), command(cpu); rtol=1f-6, atol=1f-6)

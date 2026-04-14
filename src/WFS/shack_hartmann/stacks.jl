@@ -13,6 +13,11 @@ function compute_intensity!(wfs::ShackHartmann, tel::Telescope, src::AbstractSou
     return wfs.state.intensity
 end
 
+@inline function compute_intensity_safe!(style::ExecutionStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
+    xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int)
+    return compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+end
+
 @kernel function sh_field_stack_kernel!(fft_stack, valid_mask, pupil, opd, phasor,
     amp_scale, opd_to_cycles, n_sub::Int, sub::Int, ox::Int, oy::Int, n::Int, pad::Int)
     x, y, idx = @index(Global, NTuple)

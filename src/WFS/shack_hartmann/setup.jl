@@ -290,12 +290,19 @@ struct ShackHartmannRocmSafePlan <: AbstractShackHartmannSensingPlan end
 @inline sh_sensing_execution_plan(wfs::ShackHartmann) =
     sh_sensing_execution_plan(execution_style(wfs.state.slopes), wfs)
 
+@inline sh_uses_rocm_safe_sensing_plan(::AbstractShackHartmannSensingPlan) = false
+@inline sh_uses_rocm_safe_sensing_plan(::ShackHartmannRocmSafePlan) = true
 @inline sh_uses_rocm_safe_sensing_plan(wfs::ShackHartmann) =
-    sh_sensing_execution_plan(wfs) isa ShackHartmannRocmSafePlan
+    sh_uses_rocm_safe_sensing_plan(sh_sensing_execution_plan(wfs))
+@inline sh_uses_batched_sensing_plan(::AbstractShackHartmannSensingPlan) = false
+@inline sh_uses_batched_sensing_plan(::ShackHartmannBatchedPlan) = true
+@inline sh_uses_batched_sensing_plan(::ShackHartmannDeviceStatsPlan) = true
 @inline sh_uses_batched_sensing_plan(wfs::ShackHartmann) =
-    sh_sensing_execution_plan(wfs) isa ShackHartmannBatchedPlan
+    sh_uses_batched_sensing_plan(sh_sensing_execution_plan(wfs))
+@inline sh_uses_device_stats_sensing_plan(::AbstractShackHartmannSensingPlan) = false
+@inline sh_uses_device_stats_sensing_plan(::ShackHartmannDeviceStatsPlan) = true
 @inline sh_uses_device_stats_sensing_plan(wfs::ShackHartmann) =
-    sh_sensing_execution_plan(wfs) isa ShackHartmannDeviceStatsPlan
+    sh_uses_device_stats_sensing_plan(sh_sensing_execution_plan(wfs))
 
 convert_valid_subaperture_policy(policy::GeometryValidSubapertures, ::Type{T}) where {T<:AbstractFloat} =
     GeometryValidSubapertures(threshold=T(policy.threshold), T=T)

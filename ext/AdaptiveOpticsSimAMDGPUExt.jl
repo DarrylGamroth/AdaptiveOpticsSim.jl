@@ -3,6 +3,7 @@ module AdaptiveOpticsSimAMDGPUExt
 using AdaptiveOpticsSim
 using AMDGPU
 using AbstractFFTs
+using KernelAbstractions
 using LinearAlgebra
 using Random
 
@@ -31,8 +32,16 @@ AdaptiveOpticsSim.backend_rand(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}, ::Typ
 AdaptiveOpticsSim.backend_randn(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}, ::Type{T}, dims::Vararg{Int}) where {T} = AMDGPU.randn(T, dims...)
 AdaptiveOpticsSim.backend_zeros(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}, ::Type{T}, dims::Vararg{Int}) where {T} = AMDGPU.zeros(T, dims...)
 AdaptiveOpticsSim.backend_fill(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}, value, dims::Vararg{Int}) = AMDGPU.fill(value, dims...)
-AdaptiveOpticsSim.execute_fft_plan!(buffer::AMDGPU.ROCArray, plan::AMDGPU.rocFFT.ROCFFTPlan) = (plan * buffer; buffer)
-AdaptiveOpticsSim.execute_fft_plan!(buffer::AMDGPU.ROCArray, plan::AbstractFFTs.ScaledPlan) = (plan * buffer; buffer)
+function AdaptiveOpticsSim.execute_fft_plan!(buffer::AMDGPU.ROCArray, plan::AMDGPU.rocFFT.ROCFFTPlan)
+    plan * buffer
+    AMDGPU.synchronize()
+    return buffer
+end
+function AdaptiveOpticsSim.execute_fft_plan!(buffer::AMDGPU.ROCArray, plan::AbstractFFTs.ScaledPlan)
+    plan * buffer
+    AMDGPU.synchronize()
+    return buffer
+end
 AdaptiveOpticsSim.default_build_backend(::AMDGPU.ROCArray) = AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.AMDGPUBackendTag)
 AdaptiveOpticsSim.prepare_build_matrix(::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag}, A::AbstractMatrix) = Matrix(A)
 AdaptiveOpticsSim.grouped_accumulation_plan(
@@ -43,10 +52,60 @@ AdaptiveOpticsSim.grouped_accumulation_plan(
     ::Type{<:AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:AdaptiveOpticsSim.BioEdgeWFS},
 ) = AdaptiveOpticsSim.GroupedStaged2DPlan()
-AdaptiveOpticsSim.sh_sensing_execution_plan(
-    ::Type{<:AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend}},
-    ::Type{<:AdaptiveOpticsSim.ShackHartmann},
-) = AdaptiveOpticsSim.ShackHartmannBatchedPlan()
+function AdaptiveOpticsSim.sh_sensing_execution_plan(
+    style::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
+    wfs::AdaptiveOpticsSim.ShackHartmann,
+)
+    return wfs.params.n_subap == 4 ?
+        AdaptiveOpticsSim.ShackHartmannRocmSafePlan() :
+        AdaptiveOpticsSim.ShackHartmannBatchedPlan()
+end
+
+function AdaptiveOpticsSim.compute_intensity_safe!(
+    ::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
+    wfs::AdaptiveOpticsSim.ShackHartmann,
+    tel::AdaptiveOpticsSim.Telescope,
+    src::AdaptiveOpticsSim.AbstractSource,
+    xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int,
+)
+    T = eltype(wfs.state.intensity)
+    field_host = Matrix{Complex{T}}(undef, size(wfs.state.field)...)
+    fill!(field_host, zero(eltype(field_host)))
+    pupil_host = Array(@view tel.state.pupil[xs:xe, ys:ye])
+    opd_host = Array(@view tel.state.opd[xs:xe, ys:ye])
+    phasor_host = Array(wfs.state.phasor)
+    opd_to_cycles = T(2) / AdaptiveOpticsSim.wavelength(src)
+    amp_scale = sqrt(T(AdaptiveOpticsSim.photon_flux(src) * tel.params.sampling_time *
+        (tel.params.diameter / tel.params.resolution)^2))
+    @views @. field_host[ox+1:ox+sub, oy+1:oy+sub] =
+        amp_scale * pupil_host * cispi(opd_to_cycles * opd_host)
+    @. field_host *= phasor_host
+    intensity_host = abs2.(AbstractFFTs.fft(field_host))
+    copyto!(wfs.state.intensity, intensity_host)
+    AMDGPU.synchronize()
+    return wfs.state.intensity
+end
+
+@kernel function roc_modal_opd_kernel!(opd_vec, modes, coefs, n_rows::Int, n_modes::Int)
+    i = @index(Global)
+    if i <= n_rows
+        acc = zero(eltype(opd_vec))
+        @inbounds for k in 1:n_modes
+            acc += modes[i, k] * coefs[k]
+        end
+        opd_vec[i] = acc
+    end
+end
+
+function AdaptiveOpticsSim._apply_modal_opd!(
+    style::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
+    optic::AdaptiveOpticsSim.ModalControllableOptic,
+)
+    AdaptiveOpticsSim.launch_kernel!(style, roc_modal_opd_kernel!, optic.state.opd_vec,
+        optic.state.modes, optic.state.coefs, length(optic.state.opd_vec),
+        length(optic.state.coefs); ndrange=length(optic.state.opd_vec))
+    return optic.state.opd
+end
 AdaptiveOpticsSim.detector_execution_plan(
     ::Type{<:AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:AdaptiveOpticsSim.Detector},

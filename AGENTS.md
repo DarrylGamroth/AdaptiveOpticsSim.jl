@@ -4,6 +4,7 @@
 #
 # Core design principles:
 # - Use multiple dispatch + traits; avoid OO-style inheritance patterns.
+# - Prefer dispatch/traits or small helper functions over `isa` checks in package code.
 # - Separate params (immutable structs) from state (mutable structs).
 # - Use explicit `!`-mutating functions for hot paths.
 # - Preallocate workspaces; avoid allocations in inner loops.

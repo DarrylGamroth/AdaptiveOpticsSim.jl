@@ -346,14 +346,23 @@ end
 @inline command_storage(optic::ModalControllableOptic) = optic.state.coefs
 @inline command_layout(optic::ModalControllableOptic) = optic.layout
 
-@inline function apply!(optic::ModalControllableOptic, tel::Telescope, ::DMAdditive)
+@inline function _apply_modal_opd!(::ExecutionStyle, optic::ModalControllableOptic)
     mul!(optic.state.opd_vec, optic.state.modes, optic.state.coefs)
+    return optic.state.opd
+end
+
+@inline function _apply_modal_opd!(optic::ModalControllableOptic)
+    return _apply_modal_opd!(execution_style(optic.state.opd_vec), optic)
+end
+
+@inline function apply!(optic::ModalControllableOptic, tel::Telescope, ::DMAdditive)
+    _apply_modal_opd!(optic)
     tel.state.opd .+= optic.state.opd
     return tel
 end
 
 @inline function apply!(optic::ModalControllableOptic, tel::Telescope, ::DMReplace)
-    mul!(optic.state.opd_vec, optic.state.modes, optic.state.coefs)
+    _apply_modal_opd!(optic)
     tel.state.opd .= optic.state.opd
     return tel
 end

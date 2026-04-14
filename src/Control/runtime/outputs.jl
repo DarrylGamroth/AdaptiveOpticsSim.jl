@@ -93,25 +93,38 @@ runtime state.
 This is the explicit copy boundary between the internal mutable runtime objects
 and the externally consumed `SimulationInterface` buffers.
 """
+@inline function sync_runtime_export_source!(source)
+    synchronize_backend!(execution_style(source))
+    return source
+end
+
 @inline snapshot_outputs!(interface::SimulationInterface) = snapshot_outputs!(runtime_export_plan(interface), interface)
 @inline snapshot_outputs!(multi::CompositeSimulationInterface) = snapshot_outputs!(runtime_export_plan(multi), multi)
 
 @inline function snapshot_outputs!(::DirectRuntimeExportPlan, interface::SimulationInterface)
+    sync_runtime_export_source!(interface.runtime.command)
     copyto!(interface.command, interface.runtime.command)
+    sync_runtime_export_source!(interface.command)
+    sync_runtime_export_source!(interface.runtime.slopes)
     copyto!(interface.slopes, interface.runtime.slopes)
+    sync_runtime_export_source!(interface.slopes)
     if !isnothing(interface.wfs_frame)
         source = wfs_output_frame(interface.runtime.wfs, interface.runtime.wfs_detector)
         if size(interface.wfs_frame) != size(source)
             interface.wfs_frame = similar(source)
         end
+        sync_runtime_export_source!(source)
         copyto!(interface.wfs_frame, source)
+        sync_runtime_export_source!(interface.wfs_frame)
     end
     if !isnothing(interface.science_frame)
         source = output_frame(interface.runtime.science_detector)
         if size(interface.science_frame) != size(source)
             interface.science_frame = similar(source)
         end
+        sync_runtime_export_source!(source)
         copyto!(interface.science_frame, source)
+        sync_runtime_export_source!(interface.science_frame)
     end
     return interface
 end
