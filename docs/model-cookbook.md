@@ -236,14 +236,16 @@ set_command!(composite_scenario, (
 ))
 sense!(composite_scenario)
 
-# For a configurable low-order surface, build the modes directly. This example
+# For a configurable modal surface, prefer an explicit basis spec. This example
 # groups piston, tip, tilt, and focus-like Zernike commands into one segment.
 pttf = ModalControllableOptic(
-    tel;
-    zernike_modes=[1, 2, 3, 4],
+    tel,
+    ZernikeOpticBasis([1, 2, 3, 4]; scale=0.02);
     labels=:pttf,
-    scale=0.02,
 )
+
+# A steering-style two-axis low-order optic can be spelled directly too.
+steering = ModalControllableOptic(tel, CartesianTiltBasis(scale=0.1); labels=:steering)
 
 # Partial updates do not require manual slice math either. Here only the
 # tip/tilt segment changes; the DM segment remains staged in-place.

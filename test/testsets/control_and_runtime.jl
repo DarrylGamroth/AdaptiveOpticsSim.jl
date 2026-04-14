@@ -45,7 +45,14 @@ end
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0, backend=CPUBackend())
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, backend=CPUBackend())
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3, backend=CPUBackend())
-    low_order = ModalControllableOptic(tel; zernike_modes=[2, 3], backend=CPUBackend())
+    function_modal = ModalControllableOptic(tel,
+        FunctionModalBasis((
+            (x, y) -> x,
+            (x, y) -> y,
+        )); labels=:function_modal, backend=CPUBackend())
+    low_order = ModalControllableOptic(tel, ZernikeOpticBasis([2, 3]); backend=CPUBackend())
+    matrix_modal = ModalControllableOptic(tel, MatrixModalBasis(reshape(collect(1.0:512.0), 16 * 16, 2)); backend=CPUBackend())
+    cartesian_modal = ModalControllableOptic(tel, CartesianTiltBasis(; scale=0.1); backend=CPUBackend())
     tt = TipTiltMirror(tel; scale=0.1, backend=CPUBackend())
     focus = FocusStage(tel; scale=0.2, backend=CPUBackend())
     wfs = ShackHartmann(tel; n_subap=4, backend=CPUBackend())
@@ -56,7 +63,10 @@ end
     @test tel.state.opd isa Matrix
     @test atm.state.opd isa Matrix
     @test dm.state.coefs isa Vector
+    @test function_modal.state.coefs isa Vector
     @test low_order.state.coefs isa Vector
+    @test matrix_modal.state.coefs isa Vector
+    @test cartesian_modal.state.coefs isa Vector
     @test tt.state.coefs isa Vector
     @test focus.state.coefs isa Vector
     @test wfs.state.slopes isa Vector
@@ -67,14 +77,20 @@ end
     @test backend(tel) isa CPUBackend
     @test backend(atm) isa CPUBackend
     @test backend(dm) isa CPUBackend
+    @test backend(function_modal) isa CPUBackend
     @test backend(low_order) isa CPUBackend
+    @test backend(matrix_modal) isa CPUBackend
+    @test backend(cartesian_modal) isa CPUBackend
     @test backend(tt) isa CPUBackend
     @test backend(focus) isa CPUBackend
     @test backend(wfs) isa CPUBackend
     @test backend(det) isa CPUBackend
     @test backend_type(tel) === CPUBackend
     @test backend_type(wfs) === CPUBackend
+    @test command_segment_labels(command_layout(function_modal)) == (:function_modal,)
     @test command_segment_labels(command_layout(low_order)) == (:zernike_2, :zernike_3)
+    @test command_segment_labels(command_layout(matrix_modal)) == (:modal_optic,)
+    @test command_segment_labels(command_layout(cartesian_modal)) == (:x_tilt, :y_tilt)
     set_command!(low_order, (zernike_2=[0.01], zernike_3=[-0.02]))
     fill!(tel.state.opd, 0.0)
     apply!(low_order, tel, DMAdditive())
@@ -153,10 +169,7 @@ function build_static_low_order_optic(tel::Telescope, ::Val{:tiptilt}; scale::Re
 end
 
 function build_static_low_order_optic(tel::Telescope, ::Val{:steering}; scale::Real=0.1)
-    return ModalControllableOptic(tel, (
-        (x, y) -> Float64(scale) * x,
-        (x, y) -> Float64(scale) * y,
-    ); labels=:steering)
+    return ModalControllableOptic(tel, CartesianTiltBasis(; scale=scale); labels=:steering)
 end
 
 function build_static_low_order_optic(tel::Telescope, ::Val{:focus}; scale::Real=0.1)
@@ -259,10 +272,7 @@ function build_static_richer_runtime(spec::Val{S};
         )
     elseif S === :steering_focus_dm
         CompositeControllableOptic(
-            :steering => ModalControllableOptic(tel, (
-                (x, y) -> 0.1 * x,
-                (x, y) -> 0.1 * y,
-            ); labels=:steering),
+            :steering => ModalControllableOptic(tel, CartesianTiltBasis(; scale=0.1); labels=:steering),
             :focus => FocusStage(tel; scale=0.1, label=:focus),
             :dm => DeformableMirror(tel; n_act=4, influence_width=0.3),
         )

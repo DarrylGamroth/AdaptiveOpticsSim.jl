@@ -126,6 +126,48 @@ function _normalize_pupil_mode!(mode::AbstractMatrix{T}, pupil::AbstractMatrix{B
     return mode
 end
 
+abstract type AbstractModalOpticBasis end
+
+struct FunctionModalBasis{D} <: AbstractModalOpticBasis
+    definitions::D
+    normalize_modes::Bool
+end
+
+FunctionModalBasis(definitions::Tuple; normalize_modes::Bool=false) =
+    FunctionModalBasis{typeof(definitions)}(definitions, normalize_modes)
+
+struct MatrixModalBasis{M<:AbstractMatrix} <: AbstractModalOpticBasis
+    matrix::M
+    normalize_modes::Bool
+end
+
+MatrixModalBasis(matrix::AbstractMatrix; normalize_modes::Bool=false) =
+    MatrixModalBasis{typeof(matrix)}(matrix, normalize_modes)
+
+struct ZernikeOpticBasis{I,S<:Real} <: AbstractModalOpticBasis
+    mode_ids::I
+    scale::S
+    normalize_modes::Bool
+end
+
+function ZernikeOpticBasis(mode_ids::AbstractVector{<:Integer};
+    scale::Real=1.0, normalize_modes::Bool=true)
+    isempty(mode_ids) && throw(InvalidConfiguration("mode_ids must contain at least one mode"))
+    return ZernikeOpticBasis{typeof(mode_ids),typeof(scale)}(mode_ids, scale, normalize_modes)
+end
+
+struct CartesianTiltBasis{S<:Real} <: AbstractModalOpticBasis
+    scale::S
+end
+
+CartesianTiltBasis(; scale::Real=1.0) = CartesianTiltBasis(scale)
+
+struct QuadraticFocusBasis{S<:Real} <: AbstractModalOpticBasis
+    scale::S
+end
+
+QuadraticFocusBasis(; scale::Real=1.0) = QuadraticFocusBasis(scale)
+
 mutable struct ModalControllableOpticState{T<:AbstractFloat,A<:AbstractMatrix{T},M<:AbstractMatrix{T},V<:AbstractVector{T}}
     opd::A
     opd_vec::V
@@ -160,6 +202,57 @@ function _default_zernike_labels(zernike_modes)
     return Tuple(Symbol(:zernike_, j) for j in zernike_modes)
 end
 
+@inline _modal_basis_normalize(basis::FunctionModalBasis) = basis.normalize_modes
+@inline _modal_basis_normalize(basis::MatrixModalBasis) = basis.normalize_modes
+@inline _modal_basis_normalize(basis::ZernikeOpticBasis) = basis.normalize_modes
+@inline _modal_basis_normalize(::CartesianTiltBasis) = false
+@inline _modal_basis_normalize(::QuadraticFocusBasis) = true
+@inline _default_modal_labels(::FunctionModalBasis) = :modal_optic
+@inline _default_modal_labels(::MatrixModalBasis) = :modal_optic
+@inline _default_modal_labels(basis::ZernikeOpticBasis) = _default_zernike_labels(basis.mode_ids)
+@inline _default_modal_labels(::CartesianTiltBasis) = (:x_tilt, :y_tilt)
+@inline _default_modal_labels(::QuadraticFocusBasis) = :focus
+
+function _modal_basis_matrix(tel::Telescope, basis::FunctionModalBasis, ::Type{T},
+    selector::AbstractArrayBackend) where {T<:AbstractFloat}
+    return Array(_modal_mode_matrix(tel, basis.definitions, T, selector))
+end
+
+function _modal_basis_matrix(tel::Telescope, basis::MatrixModalBasis, ::Type{T},
+    selector::AbstractArrayBackend) where {T<:AbstractFloat}
+    n = tel.params.resolution
+    size(basis.matrix, 1) == n * n ||
+        throw(DimensionMismatchError("mode matrix must have $(n * n) rows for telescope resolution $(n)"))
+    return Matrix{T}(basis.matrix)
+end
+
+function _modal_basis_matrix(tel::Telescope, basis::ZernikeOpticBasis, ::Type{T},
+    selector::AbstractArrayBackend) where {T<:AbstractFloat}
+    max_mode = maximum(basis.mode_ids)
+    zb = compute_zernike!(ZernikeBasis(tel, max_mode; T=T), tel)
+    n = tel.params.resolution
+    host_modes = Matrix{T}(undef, n * n, length(basis.mode_ids))
+    for (k, j) in pairs(basis.mode_ids)
+        copyto!(view(host_modes, :, k), vec(T(basis.scale) .* zb.modes[:, :, j]))
+    end
+    return host_modes
+end
+
+function _modal_basis_matrix(tel::Telescope, basis::CartesianTiltBasis, ::Type{T},
+    selector::AbstractArrayBackend) where {T<:AbstractFloat}
+    return Array(_modal_mode_matrix(tel, (
+        (x, y) -> T(basis.scale) * x,
+        (x, y) -> T(basis.scale) * y,
+    ), T, selector))
+end
+
+function _modal_basis_matrix(tel::Telescope, basis::QuadraticFocusBasis, ::Type{T},
+    selector::AbstractArrayBackend) where {T<:AbstractFloat}
+    return Array(_modal_mode_matrix(tel, (
+        (x, y) -> T(basis.scale) * (x^2 + y^2),
+    ), T, selector))
+end
+
 function _materialize_modal_modes(tel::Telescope, host_modes::AbstractMatrix, ::Type{T},
     selector::AbstractArrayBackend; normalize_modes::Bool=false) where {T<:AbstractFloat}
     array_backend = _resolve_array_backend(selector)
@@ -183,17 +276,27 @@ function _materialize_modal_modes(tel::Telescope, host_modes::AbstractMatrix, ::
     return ModalControllableOpticState{T,typeof(opd),typeof(modes),typeof(coefs)}(opd, opd_vec, modes, coefs)
 end
 
+function ModalControllableOptic(tel::Telescope, basis::AbstractModalOpticBasis;
+    labels::Union{Nothing,Symbol,Tuple{Vararg{Symbol}}}=nothing,
+    T::Type{<:AbstractFloat}=Float64,
+    backend::AbstractArrayBackend=backend(tel))
+    selector = require_same_backend(tel, _resolve_backend_selector(backend))
+    host_modes = _modal_basis_matrix(tel, basis, T, selector)
+    resolved_labels = isnothing(labels) ? _default_modal_labels(basis) : labels
+    normalize_modes = _modal_basis_normalize(basis)
+    layout = _modal_layout(resolved_labels, size(host_modes, 2))
+    state = _materialize_modal_modes(tel, host_modes, T, selector; normalize_modes=normalize_modes)
+    params = ModalControllableOpticParams(resolved_labels, normalize_modes)
+    return ModalControllableOptic{typeof(params),typeof(state),typeof(layout),typeof(selector)}(params, state, layout)
+end
+
 function ModalControllableOptic(tel::Telescope, mode_definitions::Tuple;
     labels::Union{Symbol,Tuple{Vararg{Symbol}}}=:modal_optic,
     normalize_modes::Bool=false,
     T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=backend(tel))
-    selector = require_same_backend(tel, _resolve_backend_selector(backend))
-    host_modes = Array(_modal_mode_matrix(tel, mode_definitions, T, selector))
-    layout = _modal_layout(labels, length(mode_definitions))
-    state = _materialize_modal_modes(tel, host_modes, T, selector; normalize_modes=normalize_modes)
-    params = ModalControllableOpticParams(labels, normalize_modes)
-    return ModalControllableOptic{typeof(params),typeof(state),typeof(layout),typeof(selector)}(params, state, layout)
+    return ModalControllableOptic(tel, FunctionModalBasis(mode_definitions; normalize_modes=normalize_modes);
+        labels=labels, T=T, backend=backend)
 end
 
 function ModalControllableOptic(tel::Telescope, mode_matrix::AbstractMatrix;
@@ -201,11 +304,8 @@ function ModalControllableOptic(tel::Telescope, mode_matrix::AbstractMatrix;
     normalize_modes::Bool=false,
     T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=backend(tel))
-    selector = require_same_backend(tel, _resolve_backend_selector(backend))
-    layout = _modal_layout(labels, size(mode_matrix, 2))
-    state = _materialize_modal_modes(tel, mode_matrix, T, selector; normalize_modes=normalize_modes)
-    params = ModalControllableOpticParams(labels, normalize_modes)
-    return ModalControllableOptic{typeof(params),typeof(state),typeof(layout),typeof(selector)}(params, state, layout)
+    return ModalControllableOptic(tel, MatrixModalBasis(mode_matrix; normalize_modes=normalize_modes);
+        labels=labels, T=T, backend=backend)
 end
 
 function ModalControllableOptic(tel::Telescope;
@@ -215,35 +315,21 @@ function ModalControllableOptic(tel::Telescope;
     normalize_modes::Bool=true,
     T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=backend(tel))
-    isempty(zernike_modes) && throw(InvalidConfiguration("zernike_modes must contain at least one mode"))
-    selector = require_same_backend(tel, _resolve_backend_selector(backend))
-    max_mode = maximum(zernike_modes)
-    zb = compute_zernike!(ZernikeBasis(tel, max_mode; T=T), tel)
-    n = tel.params.resolution
-    host_modes = Matrix{T}(undef, n * n, length(zernike_modes))
-    for (k, j) in pairs(zernike_modes)
-        copyto!(view(host_modes, :, k), vec(T(scale) .* zb.modes[:, :, j]))
-    end
-    resolved_labels = isnothing(labels) ? _default_zernike_labels(zernike_modes) : labels
-    layout = _modal_layout(resolved_labels, length(zernike_modes))
-    state = _materialize_modal_modes(tel, host_modes, T, selector; normalize_modes=normalize_modes)
-    params = ModalControllableOpticParams(resolved_labels, normalize_modes)
-    return ModalControllableOptic{typeof(params),typeof(state),typeof(layout),typeof(selector)}(params, state, layout)
+    return ModalControllableOptic(tel,
+        ZernikeOpticBasis(zernike_modes; scale=scale, normalize_modes=normalize_modes);
+        labels=labels, T=T, backend=backend)
 end
 
 function TipTiltMirror(tel::Telescope; scale::Real=1.0,
     T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel), label::Symbol=:tiptilt)
-    return ModalControllableOptic(tel, (
-        (x, y) -> T(scale) * x,
-        (x, y) -> T(scale) * y,
-    ); labels=label, normalize_modes=false, T=T, backend=backend)
+    return ModalControllableOptic(tel, CartesianTiltBasis(; scale=scale);
+        labels=label, T=T, backend=backend)
 end
 
 function FocusStage(tel::Telescope; scale::Real=1.0,
     T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel), label::Symbol=:focus)
-    return ModalControllableOptic(tel, (
-        (x, y) -> T(scale) * (x^2 + y^2),
-    ); labels=label, normalize_modes=true, T=T, backend=backend)
+    return ModalControllableOptic(tel, QuadraticFocusBasis(; scale=scale);
+        labels=label, T=T, backend=backend)
 end
 
 @inline command_storage(optic::ModalControllableOptic) = optic.state.coefs

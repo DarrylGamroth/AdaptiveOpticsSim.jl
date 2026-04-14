@@ -89,6 +89,8 @@ Use these when the task is cross-package or instrument-truth work:
   - phased plan for multi-surface controllable optics, GPU-native command routing, and ordered plant application
 - [`modal-controllable-optic-refactor-plan-2026-04.md`](./modal-controllable-optic-refactor-plan-2026-04.md)
   - implementation plan for the generalized `ModalControllableOptic` surface, convenience constructors, and steering-alias removal
+- [`modal-optic-basis-spec-plan-2026-04.md`](./modal-optic-basis-spec-plan-2026-04.md)
+  - basis-spec plan for the explicit `ModalControllableOptic` API and its maintained backend validation evidence
 - [`controllable-optic-self-check-plan-2026-04.md`](./controllable-optic-self-check-plan-2026-04.md)
   - traceable self-check plan for controllable optics, composite ordering, low-order behavior, and backend parity evidence
 - [`controllable-optic-self-check-expansion-plan-2026-04.md`](./controllable-optic-self-check-expansion-plan-2026-04.md)

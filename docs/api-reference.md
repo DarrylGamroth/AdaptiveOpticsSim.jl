@@ -221,7 +221,16 @@ not need the scenario/config layer.
 ### Controllable optics used by the runtime layer
 
 - `AbstractControllableOptic`, `CompositeControllableOptic`
+- `AbstractModalOpticBasis`
+- `FunctionModalBasis`, `MatrixModalBasis`
+- `ZernikeOpticBasis`, `CartesianTiltBasis`, `QuadraticFocusBasis`
 - `ModalControllableOptic`, `TipTiltMirror`, `FocusStage`, `DeformableMirror`
+
+Preferred construction style:
+
+- `ModalControllableOptic(tel, basis_spec; ...)`
+- `TipTiltMirror(...)` and `FocusStage(...)` remain convenience constructors over
+  the basis-spec path
 
 ### Execution and scheduling helpers
 

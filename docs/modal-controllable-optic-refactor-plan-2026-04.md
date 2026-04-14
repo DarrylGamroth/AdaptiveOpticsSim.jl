@@ -41,7 +41,9 @@ Status:
 
 ### LOM-4 Add configurable Zernike low-order support
 
-- support `ModalControllableOptic(tel; zernike_modes=..., ...)`
+- support `ModalControllableOptic(tel, ZernikeOpticBasis(...); ...)`
+- keep `ModalControllableOptic(tel; zernike_modes=..., ...)` as a compatibility
+  constructor
 - allow grouped or per-mode command labels
 
 Status:

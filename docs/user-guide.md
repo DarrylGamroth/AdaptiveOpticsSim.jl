@@ -50,6 +50,7 @@ The package is organized around a small set of modeling objects:
 - sensing objects such as `ShackHartmann`, `PyramidWFS`, and `BioEdgeWFS`
 - `Detector` when the sensing path needs explicit detector physics
 - controllable optics such as `DeformableMirror`, `ModalControllableOptic`, `TipTiltMirror`, `FocusStage`, and `CompositeControllableOptic`
+- modal-optic basis specs such as `CartesianTiltBasis`, `ZernikeOpticBasis`, and `MatrixModalBasis` when you want to choose controlled modes explicitly
 - `RuntimeScenario` when you want the maintained step-wise AO or HIL simulation surface
 
 ## Three Execution Layers
