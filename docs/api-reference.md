@@ -118,7 +118,8 @@ If you are maintaining the package, pair this document with
   `HgCdTeAvalancheArraySensorType`, `EMCCDSensor`, `InGaAsSensor`,
   `HgCdTeAvalancheArraySensor`, `APDSensor`
 - `DeformableMirror`, `DeformableMirrorParams`, `DeformableMirrorState`,
-  `build_influence_functions!`, `apply!`
+  `build_influence_functions!`, `apply!`,
+  `mechanical_coupling`, `influence_width_from_mechanical_coupling`
 - `Misregistration`, `apply_misregistration`, `rotation_rad`, `rotation_deg`,
   `anamorphosis_angle_rad`, `anamorphosis_angle_deg`
 - `OPDMap`

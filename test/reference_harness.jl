@@ -370,6 +370,10 @@ function build_reference_controllable_optic(cfg::AbstractDict{<:AbstractString,<
     elseif kind == "dm"
         n_act = Int(get(cfg, "n_act", 0))
         n_act > 0 || throw(InvalidConfiguration("dm controllable optic requires n_act"))
+        if haskey(cfg, "mechanical_coupling")
+            mech = Float64(cfg["mechanical_coupling"])
+            return DeformableMirror(tel; n_act=n_act, mechanical_coupling=mech, T=T, backend=backend(tel))
+        end
         influence_width = Float64(get(cfg, "influence_width", 0.2))
         return DeformableMirror(tel; n_act=n_act, influence_width=influence_width, T=T, backend=backend(tel))
     elseif kind == "modal"

@@ -200,6 +200,10 @@ slopes_vec = slopes(rt)
 frame = wfs_frame(rt)
 ```
 
+`DeformableMirror` is still natively parameterized by `influence_width`, but it
+also now accepts `mechanical_coupling=...` as an alternate input when you want
+to match OOPAO-style DM configuration directly.
+
 Use this when you care about:
 
 - loop staging

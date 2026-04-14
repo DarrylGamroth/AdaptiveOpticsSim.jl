@@ -12,6 +12,13 @@
     slopes = measure!(wfs, tel)
     @test length(slopes) == 2 * 4 * 4
     @test maximum(slopes) > 0
+
+    coupling = mechanical_coupling(dm)
+    dm_from_coupling = DeformableMirror(tel; n_act=4, mechanical_coupling=coupling)
+    @test dm_from_coupling.params.influence_width ≈ dm.params.influence_width
+    @test mechanical_coupling(4, dm.params.influence_width) ≈ coupling
+    @test influence_width_from_mechanical_coupling(4, coupling) ≈ dm.params.influence_width
+    @test_throws InvalidConfiguration DeformableMirror(tel; n_act=4, influence_width=0.3, mechanical_coupling=coupling)
 end
 
 @testset "Composite controllable optic replace semantics" begin

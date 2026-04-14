@@ -130,6 +130,11 @@ cmd = command(rt)
 slopes_vec = slopes(rt)
 ```
 
+For DM setup, `influence_width` remains the native parameter, but
+`mechanical_coupling=...` is also accepted when you want an explicit
+nearest-neighbor coupling input that matches OOPAO-style configuration more
+directly.
+
 Use this pattern when you need:
 
 - loop stepping

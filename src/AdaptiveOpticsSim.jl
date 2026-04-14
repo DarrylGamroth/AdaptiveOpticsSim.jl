@@ -129,6 +129,7 @@ export phase_variance, phase_covariance, phase_spectrum, covariance_matrix
 export ft_phase_screen, ft_sh_phase_screen, PhaseStatsWorkspace
 export SubharmonicMode, FastSubharmonics, FidelitySubharmonics, default_subharmonic_mode
 export DeformableMirror, DeformableMirrorParams, DeformableMirrorState, build_influence_functions!, apply!
+export mechanical_coupling, influence_width_from_mechanical_coupling
 export AbstractModalOpticBasis, FunctionModalBasis, MatrixModalBasis, ZernikeOpticBasis, CartesianTiltBasis, QuadraticFocusBasis
 export CompositeControllableOptic, ModalControllableOptic, TipTiltMirror, FocusStage
 export command_storage, n_control_dofs, controllable_surface_labels, supports_segmented_command, update_command!

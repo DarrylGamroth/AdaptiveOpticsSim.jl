@@ -84,6 +84,26 @@ end
 @inline command_storage(dm::DeformableMirror) = dm.state.coefs
 @inline command_layout(dm::DeformableMirror) = RuntimeCommandLayout(:dm => length(dm.state.coefs))
 
+@inline dm_normalized_pitch(n_act::Integer) = 2.0 / (n_act - 1)
+
+function mechanical_coupling(n_act::Integer, influence_width::Real)
+    n_act > 1 || throw(InvalidConfiguration("mechanical coupling requires n_act > 1"))
+    influence_width > 0 || throw(InvalidConfiguration("influence_width must be positive"))
+    pitch = dm_normalized_pitch(n_act)
+    return exp(-(pitch^2) / (2 * influence_width^2))
+end
+
+@inline mechanical_coupling(dm::DeformableMirror) =
+    mechanical_coupling(dm.params.n_act, dm.params.influence_width)
+
+function influence_width_from_mechanical_coupling(n_act::Integer, coupling::Real)
+    n_act > 1 || throw(InvalidConfiguration("mechanical coupling requires n_act > 1"))
+    zero(coupling) < coupling < one(coupling) ||
+        throw(InvalidConfiguration("mechanical_coupling must lie in (0, 1)"))
+    pitch = dm_normalized_pitch(n_act)
+    return pitch / sqrt(-2 * log(float(coupling)))
+end
+
 """
     DeformableMirror(tel; ...)
 
@@ -94,11 +114,21 @@ The stored dense operator is the flattened matrix `modes`, mapping actuator
 coefficients to OPD samples. When the misregistration keeps the Gaussian basis
 separable, the constructor also prepares a faster `X * C * Y'` runtime path.
 """
-function DeformableMirror(tel::Telescope; n_act::Int, influence_width::Real=0.2,
+function DeformableMirror(tel::Telescope; n_act::Int,
+    influence_width::Union{Nothing,Real}=nothing, mechanical_coupling::Union{Nothing,Real}=nothing,
     T::Type{<:AbstractFloat}=Float64, misregistration::Misregistration=Misregistration(T=T), backend::AbstractArrayBackend=backend(tel))
     selector = require_same_backend(tel, _resolve_backend_selector(backend))
     backend = _resolve_array_backend(selector)
-    params = DeformableMirrorParams{T}(n_act, T(influence_width), misregistration)
+    resolved_width = if mechanical_coupling !== nothing
+        influence_width === nothing ||
+            throw(InvalidConfiguration("specify either influence_width or mechanical_coupling, not both"))
+        influence_width_from_mechanical_coupling(n_act, mechanical_coupling)
+    elseif influence_width === nothing
+        0.2
+    else
+        influence_width
+    end
+    params = DeformableMirrorParams{T}(n_act, T(resolved_width), misregistration)
     n = tel.params.resolution
     opd = backend{T}(undef, n, n)
     fill!(opd, zero(T))
