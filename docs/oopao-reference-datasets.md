@@ -27,32 +27,31 @@ The repository now commits a deterministic OOPAO bundle under
 5. `shack_hartmann_diffractive_tip_mode`
 6. `shack_hartmann_diffractive_tilt_mode`
 7. `pyramid_diffractive_ramp`
-8. `bioedge_diffractive_ramp`
-9. `bioedge_diffractive_tip_mode`
-10. `gain_sensing_camera_optical_gains`
-11. `transfer_function_rejection`
-12. `lift_interaction_matrix`
-13. `closed_loop_shack_hartmann_trace`
-14. `closed_loop_pyramid_trace`
-15. `closed_loop_bioedge_trace`
-16. `gsc_closed_loop_trace`
-17. `gsc_atmosphere_replay_trace_bounded`
-18. `gsc_branch_step_modulation_frame`
-19. `gsc_branch_step_optical_gains`
-20. `gsc_branch_step_signal`
+8. `pyramid_diffractive_tip_mode`
+9. `bioedge_diffractive_ramp`
+10. `bioedge_diffractive_tip_mode`
+11. `gain_sensing_camera_optical_gains`
+12. `transfer_function_rejection`
+13. `lift_interaction_matrix`
+14. `closed_loop_shack_hartmann_trace`
+15. `closed_loop_pyramid_trace`
+16. `closed_loop_bioedge_trace`
+17. `gsc_closed_loop_trace`
+18. `gsc_atmosphere_replay_trace_bounded`
+19. `gsc_branch_step_modulation_frame`
+20. `gsc_branch_step_optical_gains`
+21. `gsc_branch_step_signal`
 
 These cases are stable enough to keep in CI and now cover the main image
 formation, diffractive WFS, narrow modal-optic tip/tilt responses on
-Shack-Hartmann and BioEdge, LiFT Jacobians, compact closed-loop traces, GSC
-optical-gain, bounded atmosphere-replay, gain-updated closed-loop behavior,
-the first nonlinear GSC branch step, and analytical transfer-function paths.
+Shack-Hartmann, Pyramid, and BioEdge, LiFT Jacobians, compact closed-loop
+traces, GSC optical-gain, bounded atmosphere-replay, gain-updated closed-loop
+behavior, the first nonlinear GSC branch step, and analytical transfer-function
+paths.
 
 The modal-optic claim is intentionally narrow:
 - committed OOPAO parity now exists for `TipTiltMirror`-equivalent Cartesian
-  tip/tilt modes on diffractive `ShackHartmann` and `BioEdge`
-- the corresponding `Pyramid` modal tip surface is not committed as an OOPAO
-  parity gate because it does not yet agree robustly enough to support that
-  claim
+  tip/tilt modes on diffractive `ShackHartmann`, `Pyramid`, and `BioEdge`
 - composite plants such as `tiptilt + dm`, `focus + dm`, or richer grouped
   runtime surfaces are still validated through internal artifacts and backend
   parity rather than external OOPAO equivalence

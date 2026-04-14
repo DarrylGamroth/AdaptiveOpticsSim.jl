@@ -236,6 +236,8 @@ def make_reference_wfs(kind: str, tel: Telescope):
             modulation=1.0,
             n_pix_separation=4,
             n_pix_edge=0,
+            binning=2,
+            psfCentering=True,
             postProcessing="slopesMaps",
         )
     if kind == "bioedge_slopes":
@@ -1326,6 +1328,13 @@ def main() -> None:
                 amplitude=5e-9,
             ),
             "pyramid_diffractive_ramp": pyramid_case(root),
+            "pyramid_diffractive_tip_mode": modal_tiptilt_case(
+                root,
+                case_id="pyramid_diffractive_tip_mode",
+                kind="pyramid_slopes",
+                mode_index=1,
+                amplitude=5e-9,
+            ),
             "bioedge_diffractive_ramp": bioedge_case(root),
             "bioedge_diffractive_tip_mode": modal_tiptilt_case(
                 root,
