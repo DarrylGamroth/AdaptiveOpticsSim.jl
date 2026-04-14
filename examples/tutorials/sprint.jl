@@ -9,7 +9,7 @@ function main(; resolution::Int=16)
         save_sensitivity=false)
 
     injected = Misregistration(shift_x=5e-4, shift_y=-5e-4, T=Float64)
-    dm_in = DeformableMirror(tel; n_act=dm.params.n_act, influence_width=dm.params.influence_width,
+    dm_in = DeformableMirror(tel; n_act=dm.params.n_act, influence_model=influence_model(dm),
         misregistration=injected)
     calib_in = interaction_matrix(dm_in, wfs, tel, basis; amplitude=1e-9).matrix
     estimate = AdaptiveOpticsSim.estimate!(sprint, calib_in; precision=4)

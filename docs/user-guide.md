@@ -200,9 +200,20 @@ slopes_vec = slopes(rt)
 frame = wfs_frame(rt)
 ```
 
-`DeformableMirror` is still natively parameterized by `influence_width`, but it
-also now accepts `mechanical_coupling=...` as an alternate input when you want
-to match OOPAO-style DM configuration directly.
+`DeformableMirror` keeps the concise public Gaussian inputs:
+
+- `influence_width=...`
+- `mechanical_coupling=...`
+
+It also now accepts an explicit advanced model object through
+`influence_model=...`, for example:
+
+- `GaussianInfluenceWidth(0.3)`
+- `GaussianMechanicalCoupling(0.08)`
+- `DenseInfluenceMatrix(modes)`
+
+Use the scalar keywords for normal work. Use `influence_model=...` when you
+need an explicit DM influence representation.
 
 Use this when you care about:
 

@@ -38,12 +38,16 @@ function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:
     T = Float32
     tel = Telescope(resolution=8, diameter=T(1), sampling_time=T(1e-3), central_obstruction=T(0), T=T, backend=selector)
     dm = DeformableMirror(tel; n_act=2, influence_width=T(0.3), T=T, backend=selector)
+    dm_dense = DeformableMirror(tel; n_act=2, influence_model=DenseInfluenceMatrix(Array(dm.state.modes)), T=T, backend=selector)
     zernike_modal = ModalControllableOptic(tel, ZernikeOpticBasis([2, 3]); T=T, backend=selector)
     cartesian_modal = ModalControllableOptic(tel, CartesianTiltBasis(; scale=T(0.1)); T=T, backend=selector)
     wfs = ShackHartmann(tel; n_subap=2, mode=Diffractive(), T=T, backend=selector)
     det = Detector(noise=NoiseNone(), integration_time=T(1), qe=T(1), binning=1, T=T, backend=selector)
     @test tel.state.opd isa BackendArray
     @test dm.state.coefs isa BackendArray
+    @test dm_dense.state.coefs isa BackendArray
+    @test dm_dense.state.modes isa BackendArray
+    @test Array(dm_dense.state.modes) ≈ Array(dm.state.modes) atol=0 rtol=0
     @test zernike_modal.state.coefs isa BackendArray
     @test zernike_modal.state.modes isa BackendArray
     @test cartesian_modal.state.coefs isa BackendArray

@@ -1,6 +1,6 @@
 # DM Influence Model Plan 2026-04
 
-Status: active
+Status: implemented
 
 ## Purpose
 
@@ -160,6 +160,10 @@ Success criteria:
 - no behavior change for the maintained DM surface
 - the scalar conversion helpers continue to work
 
+Status:
+
+- implemented
+
 ### DMI-2 Store the model in `DeformableMirrorParams`
 
 Deliverables:
@@ -176,6 +180,10 @@ Success criteria:
 - no user-visible regression in existing constructors
 - existing runtime and calibration code compiles through the new params shape
 
+Status:
+
+- implemented
+
 ### DMI-3 Route constructors through semantic model objects
 
 Deliverables:
@@ -189,6 +197,10 @@ Success criteria:
 
 - all currently documented constructors still work
 - advanced users can now pass a model object directly
+
+Status:
+
+- implemented
 
 ### DMI-4 Dispatch dense and separable influence generation on the model
 
@@ -204,6 +216,10 @@ Success criteria:
 - CPU, CUDA, and AMDGPU maintained DM surfaces remain green
 - separable Gaussian path still uses the fast specialized implementation
 
+Status:
+
+- implemented
+
 ### DMI-5 Add at least one non-Gaussian explicit model surface
 
 Deliverables:
@@ -216,6 +232,10 @@ Success criteria:
 - `DeformableMirror(...; influence_model=DenseInfluenceMatrix(...))` works
 - the model participates in runtime/control flows
 - unsupported fast paths fail structurally rather than silently
+
+Status:
+
+- implemented
 
 ### DMI-6 Update docs, examples, and validation surfaces
 
@@ -234,6 +254,10 @@ Success criteria:
 
 - stable docs present the clean semantic surface
 - validation evidence remains green on maintained CPU/CUDA/AMDGPU paths
+
+Status:
+
+- implemented
 
 ## Testing And Validation
 

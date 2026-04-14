@@ -87,8 +87,12 @@ function compute_meta_sensitivity_matrix(tel::Telescope, dm::DeformableMirror, w
 
     T = eltype(tel.state.opd)
     fields = collect(field_order)[1:min(n_mis_reg, length(field_order))]
+    dm_model = influence_model(dm)
 
-    dm0 = DeformableMirror(tel; n_act=dm.params.n_act, influence_width=dm.params.influence_width,
+    dm_model isa DenseInfluenceMatrix &&
+        throw(UnsupportedAlgorithm("misregistration identification is not supported for DeformableMirror objects built from DenseInfluenceMatrix"))
+
+    dm0 = DeformableMirror(tel; n_act=dm.params.n_act, influence_model=dm_model,
         misregistration=misregistration_zero, T=T)
     calib0 = interaction_matrix(dm0, wfs, tel, basis; amplitude=1e-9)
     calib0_vault = CalibrationVault(calib0.matrix)
@@ -118,9 +122,9 @@ function compute_meta_sensitivity_matrix(tel::Telescope, dm::DeformableMirror, w
             mis_p = update_misregistration(misregistration_zero, field, base_val + eps_val)
             mis_n = update_misregistration(misregistration_zero, field, base_val - eps_val)
 
-            dm_p = DeformableMirror(tel; n_act=dm.params.n_act, influence_width=dm.params.influence_width,
+            dm_p = DeformableMirror(tel; n_act=dm.params.n_act, influence_model=dm_model,
                 misregistration=mis_p, T=T)
-            dm_n = DeformableMirror(tel; n_act=dm.params.n_act, influence_width=dm.params.influence_width,
+            dm_n = DeformableMirror(tel; n_act=dm.params.n_act, influence_model=dm_model,
                 misregistration=mis_n, T=T)
             imat_p = interaction_matrix(dm_p, wfs, tel, basis; amplitude=1e-9)
             imat_n = interaction_matrix(dm_n, wfs, tel, basis; amplitude=1e-9)

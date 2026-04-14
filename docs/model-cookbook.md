@@ -130,10 +130,16 @@ cmd = command(rt)
 slopes_vec = slopes(rt)
 ```
 
-For DM setup, `influence_width` remains the native parameter, but
-`mechanical_coupling=...` is also accepted when you want an explicit
-nearest-neighbor coupling input that matches OOPAO-style configuration more
-directly.
+For DM setup, the common public inputs remain:
+
+- `influence_width=...`
+- `mechanical_coupling=...`
+
+For advanced cases you can also pass an explicit model object:
+
+- `influence_model=GaussianInfluenceWidth(0.3)`
+- `influence_model=GaussianMechanicalCoupling(0.08)`
+- `influence_model=DenseInfluenceMatrix(modes)`
 
 Use this pattern when you need:
 

@@ -15,10 +15,24 @@
 
     coupling = mechanical_coupling(dm)
     dm_from_coupling = DeformableMirror(tel; n_act=4, mechanical_coupling=coupling)
-    @test dm_from_coupling.params.influence_width ≈ dm.params.influence_width
-    @test mechanical_coupling(4, dm.params.influence_width) ≈ coupling
-    @test influence_width_from_mechanical_coupling(4, coupling) ≈ dm.params.influence_width
+    dm_from_model = DeformableMirror(tel; n_act=4, influence_model=GaussianInfluenceWidth(0.3))
+    dm_dense = DeformableMirror(tel; n_act=4, influence_model=DenseInfluenceMatrix(Array(dm.state.modes)))
+    @test influence_model(dm) isa GaussianInfluenceWidth
+    @test influence_model(dm_from_coupling) isa GaussianMechanicalCoupling
+    @test influence_model(dm_dense) isa DenseInfluenceMatrix
+    @test influence_width(dm_from_coupling) ≈ influence_width(dm)
+    @test influence_width(dm_from_model) ≈ influence_width(dm)
+    @test mechanical_coupling(4, influence_width(dm)) ≈ coupling
+    @test influence_width_from_mechanical_coupling(4, coupling) ≈ influence_width(dm)
+    @test Array(dm_dense.state.modes) ≈ Array(dm.state.modes) atol=0 rtol=0
     @test_throws InvalidConfiguration DeformableMirror(tel; n_act=4, influence_width=0.3, mechanical_coupling=coupling)
+    @test_throws InvalidConfiguration DeformableMirror(tel; n_act=4, influence_width=0.3,
+        influence_model=GaussianInfluenceWidth(0.3))
+    @test_throws DimensionMismatchError DeformableMirror(tel; n_act=4,
+        influence_model=DenseInfluenceMatrix(zeros(8, 8)))
+    @test_throws InvalidConfiguration DeformableMirror(tel; n_act=4,
+        influence_model=DenseInfluenceMatrix(Array(dm.state.modes)),
+        misregistration=Misregistration(shift_x=1e-3))
 end
 
 @testset "Composite controllable optic replace semantics" begin

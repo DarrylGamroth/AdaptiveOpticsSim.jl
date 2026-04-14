@@ -451,7 +451,7 @@ function _actuator_overlap_weights(tel::Telescope, dm::DeformableMirror)
     scale = n / 2
     px = [((i - cx) / scale) for i in 1:n]
     py = [((j - cx) / scale) for j in 1:n]
-    sigma2 = Float64(dm.params.influence_width)^2
+    sigma2 = Float64(influence_width(dm))^2
     overlaps = Vector{Float64}(undef, length(x_coords))
     @inbounds for k in eachindex(x_coords)
         x0 = x_coords[k]
