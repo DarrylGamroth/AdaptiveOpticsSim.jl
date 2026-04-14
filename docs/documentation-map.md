@@ -92,6 +92,9 @@ Use these when the task is cross-package or instrument-truth work:
   - implementation plan for the generalized `ModalControllableOptic` surface, convenience constructors, and steering-alias removal
 - [`modal-optic-basis-spec-plan-2026-04.md`](./modal-optic-basis-spec-plan-2026-04.md)
   - basis-spec plan for the explicit `ModalControllableOptic` API and its maintained backend validation evidence
+- [`dm-influence-model-plan-2026-04.md`](./dm-influence-model-plan-2026-04.md)
+  - phased plan for refactoring deformable-mirror influence handling onto an
+    explicit influence-model interface while keeping the public API concise
 - [`controllable-optic-self-check-plan-2026-04.md`](./controllable-optic-self-check-plan-2026-04.md)
   - traceable self-check plan for controllable optics, composite ordering, low-order behavior, and backend parity evidence
 - [`controllable-optic-self-check-expansion-plan-2026-04.md`](./controllable-optic-self-check-expansion-plan-2026-04.md)
