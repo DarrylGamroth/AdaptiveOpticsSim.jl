@@ -453,6 +453,153 @@ This is a maintained advanced surface, but it is not the default public runtime
 assembly path. Prefer `build_runtime_scenario(...)` for normal closed-loop and
 HIL work.
 
+## Recipe 8: External Coronagraph Science Model With Proper.jl
+
+Use this when AdaptiveOpticsSim should own the AO runtime or HIL boundary, but
+an external wave-optics package should own the science arm. This is the right
+shape for a coronagraph HIL model: AO commands and WFS products stay on the
+AdaptiveOpticsSim side, while the coronagraph PSF is evaluated in `Proper.jl`.
+
+```julia
+using AdaptiveOpticsSim
+using Proper
+using Random
+
+# Build the AO / HIL plant exactly as usual.
+tel = Telescope(resolution=256, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
+src = Source(band=:H, magnitude=0.0)
+atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+tiptilt = TipTiltMirror(tel; scale=0.05, label=:tiptilt)
+dm = DeformableMirror(tel; n_act=16, influence_width=0.3)
+optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm)
+wfs = PyramidWFS(tel; n_subap=32, modulation=3.0)
+sim = AOSimulation(tel, src, atm, optic, wfs)
+
+branch = RuntimeBranch(:main, sim, NullReconstructor(); rng=MersenneTwister(1))
+cfg = SingleRuntimeConfig(name=:hil_coronagraph, branch_label=:main, products=RuntimeProductRequirements(slopes=true))
+scenario = build_runtime_scenario(cfg, branch)
+prepare!(scenario)
+
+# Helper for PROPER-style PASSVALUE lookups.
+@inline function passget(passvalue, key::Symbol, default=nothing)
+    if passvalue === nothing
+        return default
+    elseif passvalue isa NamedTuple
+        return get(passvalue, key, default)
+    elseif passvalue isa AbstractDict
+        return get(passvalue, key, get(passvalue, String(key), default))
+    end
+    return default
+end
+
+# External coronagraph science arm. `prop_run(...)` receives wavelength in
+# microns, but the prescription itself receives wavelength in meters.
+function hil_coronagraph_prescription(λm, n; PASSVALUE=nothing)
+    phase_map_m = passget(PASSVALUE, :phase_map_m, nothing)
+    pupil_mask = passget(PASSVALUE, :pupil_mask, nothing)
+    diameter_m = Float64(passget(PASSVALUE, :diameter_m, 8.0))
+    focal_length_m = Float64(passget(PASSVALUE, :focal_length_m, 80.0))
+    lyot_stop_norm = Float64(passget(PASSVALUE, :lyot_stop_norm, 0.9))
+
+    wf = prop_begin(diameter_m, λm, n; beam_diam_fraction=1.0)
+    prop_circular_aperture(wf, diameter_m / 2)
+    prop_define_entrance(wf)
+
+    # Carry the exact AdaptiveOpticsSim pupil and residual OPD into the
+    # external coronagraph model.
+    if pupil_mask !== nothing
+        prop_multiply(wf, pupil_mask)
+    end
+    if phase_map_m !== nothing
+        prop_add_phase(wf, phase_map_m)
+    end
+
+    prop_lens(wf, focal_length_m, "science arm")
+    prop_propagate(wf, focal_length_m, "focal plane mask")
+    prop_8th_order_mask(wf, 4.0; circular=true)
+
+    prop_propagate(wf, focal_length_m, "lyot relay")
+    prop_lens(wf, focal_length_m, "lyot relay")
+    prop_propagate(wf, 2focal_length_m, "lyot stop")
+    prop_circular_aperture(wf, lyot_stop_norm; NORM=true)
+
+    prop_propagate(wf, focal_length_m, "science camera")
+    prop_lens(wf, focal_length_m, "science camera")
+    prop_propagate(wf, focal_length_m, "final focus")
+    return prop_end(wf)
+end
+
+# Prepare the coronagraph model once and reuse it on every AO step.
+science_λ_um = 1.65
+science_model = prepare_model(
+    :hil_coronagraph,
+    hil_coronagraph_prescription,
+    science_λ_um,
+    tel.params.resolution;
+    pool_size=1,
+)
+
+for k in 1:10
+    set_command!(scenario, (
+        tiptilt=[0.005 * sin(0.1 * k), -0.005 * cos(0.1 * k)],
+        dm=fill(5e-9 * k, 256),
+    ))
+    sense!(scenario)
+
+    # This is the integration seam: take the current AO residual from the
+    # telescope state and evaluate the external coronagraph science model.
+    phase_map_m = Array(sim.tel.state.opd)
+    pupil_mask = Float64.(Array(sim.tel.state.pupil))
+
+    coronagraph_psf, coronagraph_sampling = prop_run(
+        science_model;
+        PASSVALUE=(;
+            phase_map_m,
+            pupil_mask,
+            diameter_m=sim.tel.params.diameter,
+            focal_length_m=80.0,
+            lyot_stop_norm=0.9,
+        ),
+    )
+
+    rtc_slopes = slopes(scenario)
+    @show k length(rtc_slopes) size(coronagraph_psf) coronagraph_sampling
+end
+```
+
+This pattern gives you two clean boundaries:
+
+- `AdaptiveOpticsSim` owns the fast AO plant, commands, WFS products, and HIL runtime contract.
+- `Proper.jl` owns the external science arm and coronagraph propagation.
+
+For repeated HIL use, keep the integration seam explicit:
+
+- hand off the current residual pupil OPD when the external coronagraph should
+  see the full post-AO residual wavefront
+- hand off DM maps or commands instead when the external science model should
+  own its own DM surfaces internally through `prop_dm(...)`
+
+Practical notes:
+
+- `sim.tel.state.opd` is the simplest advanced handoff for an external science
+  arm because it already contains the currently staged atmosphere plus optic
+  residual seen by the AO plant.
+- `sim.tel.state.pupil` is worth handing across too when the coronagraph model
+  should respect the exact telescope pupil rather than a simplified circular
+  aperture.
+- If the AO runtime lives on GPU, `Array(...)` above is the intentional
+  host-transfer boundary into `Proper.jl`.
+- Start with plain `prop_run(...)` or `prepare_model(...)` in `Proper.jl`.
+  Only move to more elaborate prepared execution or asset pools if the
+  coronagraph model itself becomes a throughput bottleneck.
+
+Use this pattern when you need:
+
+- HIL AO control with an external coronagraph science path
+- explicit separation between RTC-facing plant logic and science propagation
+- reuse of an existing PROPER/Proper.jl prescription without forcing it into
+  the AO runtime layer
+
 ## How To Choose The Right Entry Surface
 
 Use:
