@@ -91,6 +91,19 @@ The main modeling objects are:
 For external-control / HIL paths, use `NullReconstructor()` plus
 `set_command!(scenario, cmd)` and `sense!(scenario)`.
 
+For advanced controllable-optic and DM modeling, see:
+
+- `ModalControllableOptic(...)` with basis specs such as
+  `CartesianTiltBasis(...)` and `ZernikeOpticBasis(...)`
+- `DeformableMirror(...; mechanical_coupling=...)`
+- `DeformableMirror(...; influence_model=...)` for explicit DM influence models
+
+The user-facing details for those surfaces live in:
+
+- [docs/model-cookbook.md](docs/model-cookbook.md)
+- [docs/user-guide.md](docs/user-guide.md)
+- [docs/api-reference.md](docs/api-reference.md)
+
 ## Tutorials
 
 Runnable tutorial ports live in `examples/tutorials/`. Start with:
