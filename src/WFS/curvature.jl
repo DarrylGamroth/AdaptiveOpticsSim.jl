@@ -189,6 +189,7 @@ mutable struct CurvatureWFSState{
     R<:AbstractMatrix{T},
     RS<:AbstractArray{T,3},
     Pfs,
+    AP,
 }
     valid_mask::A
     slopes::V
@@ -209,7 +210,7 @@ mutable struct CurvatureWFSState{
     effective_padding::Int
     calibrated::Bool
     calibration_wavelength::T
-    atmospheric_propagation::Any
+    atmospheric_propagation::AP
     atmospheric_signature::UInt
 end
 
@@ -302,6 +303,7 @@ function CurvatureWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, defocus
         typeof(frame_plus),
         typeof(intensity_stack),
         typeof(fft_stack_plan),
+        Union{Nothing,AtmosphericFieldPropagation},
     }(
         valid_mask,
         slopes,
@@ -400,11 +402,15 @@ function curvature_atmospheric_signature(wfs::CurvatureWFS, tel::Telescope, src:
     ))
 end
 
+@inline _curvature_cached_propagation(::Nothing, ::UInt, ::UInt) = nothing
+@inline _curvature_cached_propagation(prop::AtmosphericFieldPropagation, signature::UInt, cached_signature::UInt) =
+    cached_signature == signature ? prop : nothing
+
 function ensure_curvature_atmospheric_propagation!(wfs::CurvatureWFS, tel::Telescope, src::AbstractSource,
     atm::AbstractAtmosphere, model::AbstractAtmosphericFieldModel)
     sig = curvature_atmospheric_signature(wfs, tel, src, atm, model)
-    cache = wfs.state.atmospheric_propagation
-    if cache isa AtmosphericFieldPropagation && wfs.state.atmospheric_signature == sig
+    cache = _curvature_cached_propagation(wfs.state.atmospheric_propagation, sig, wfs.state.atmospheric_signature)
+    if !isnothing(cache)
         return cache
     end
     prop = AtmosphericFieldPropagation(atm, tel, src;
