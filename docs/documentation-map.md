@@ -38,6 +38,7 @@ Use these when the task is evidence, release support, or backend validation:
 - [`self-hosted-gpu-runner-setup.md`](./self-hosted-gpu-runner-setup.md)
 - [`benchmark-matrix-plan.md`](./benchmark-matrix-plan.md)
 - [`cross-package-benchmark-harness.md`](./cross-package-benchmark-harness.md)
+- [`gpu-support-boundary-plan-2026-04.md`](./gpu-support-boundary-plan-2026-04.md)
 
 ### Developer And Maintainer Path
 
@@ -82,25 +83,12 @@ Use these when the task is cross-package or instrument-truth work:
     external comparison workspace
 - [`scenario-builder-style.md`](./scenario-builder-style.md)
   - maintained conventions for script-first scenario construction
-- [`api-cleanup-plan-2026-04.md`](./api-cleanup-plan-2026-04.md)
-  - phased cleanup plan for runtime/HIL naming, accessors, and external-control semantics
-- [`layered-interface-plan-2026-04.md`](./layered-interface-plan-2026-04.md)
-  - phased cleanup plan for the primitive, runtime, and orchestration-layer public interface story
 - [`controllable-optics-plan-2026-04.md`](./controllable-optics-plan-2026-04.md)
   - phased plan for multi-surface controllable optics, GPU-native command routing, and ordered plant application
-- [`modal-controllable-optic-refactor-plan-2026-04.md`](./modal-controllable-optic-refactor-plan-2026-04.md)
-  - implementation plan for the generalized `ModalControllableOptic` surface, convenience constructors, and steering-alias removal
-- [`modal-optic-basis-spec-plan-2026-04.md`](./modal-optic-basis-spec-plan-2026-04.md)
-  - basis-spec plan for the explicit `ModalControllableOptic` API and its maintained backend validation evidence
-- [`dm-influence-model-plan-2026-04.md`](./dm-influence-model-plan-2026-04.md)
-  - phased plan for refactoring deformable-mirror influence handling onto an
-    explicit influence-model interface while keeping the public API concise
 - [`controllable-optic-self-check-plan-2026-04.md`](./controllable-optic-self-check-plan-2026-04.md)
   - traceable self-check plan for controllable optics, composite ordering, low-order behavior, and backend parity evidence
 - [`controllable-optic-self-check-expansion-plan-2026-04.md`](./controllable-optic-self-check-expansion-plan-2026-04.md)
   - follow-on plan for amplitude sweeps, detector-in-the-loop invariants, multi-step statefulness, failure paths, and multi-WFS controllable-optic validation
-- [`backend-type-refactor-plan-2026-04.md`](./backend-type-refactor-plan-2026-04.md)
-  - phased plan for explicit backend type parameters, homogeneous-path enforcement, and future explicit transfer boundaries
 - [`api-reference.md`](./api-reference.md)
   - maintained public API surface
 - [`maintainer-architecture.md`](./maintainer-architecture.md)
@@ -110,7 +98,9 @@ Use these when the task is cross-package or instrument-truth work:
 - [`model-validity-matrix.md`](./model-validity-matrix.md)
   - model claims, evidence, and limitations
 - [`supported-production-surfaces.md`](./supported-production-surfaces.md)
-  - explicit production-supported vs experimental scope
+  - explicit production-supported vs non-supported scope
+- [`gpu-support-boundary-plan-2026-04.md`](./gpu-support-boundary-plan-2026-04.md)
+  - explicit decision record that supported CUDA/AMDGPU scope is defined by the dedicated hardware validation targets rather than broad audit scripts
 - [`production-readiness-checklist.md`](./production-readiness-checklist.md)
   - remaining blockers before production-readiness claims
 - [`production-hardening-plan-2026-04.md`](./production-hardening-plan-2026-04.md)

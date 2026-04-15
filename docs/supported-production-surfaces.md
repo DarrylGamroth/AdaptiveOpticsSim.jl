@@ -7,9 +7,9 @@ Status: active
 This note defines the current production-supported scope for
 AdaptiveOpticsSim.jl.
 
-The intent is to be explicit about which surfaces are currently defended by
-maintained evidence, backend parity checks, and realistic runtime artifacts,
-and which surfaces should still be treated as experimental or research-grade.
+The intent is to be explicit about which surfaces are defended by maintained
+evidence, backend parity checks, and real-hardware validation, and which
+surfaces are outside the current support claim.
 
 This is a support-policy note, not a claim that every exported symbol or model
 family has identical maturity.
@@ -33,6 +33,7 @@ Use these supporting docs together:
 - [production-readiness-checklist.md](./production-readiness-checklist.md)
 - [operational-gpu-validation-cadence.md](./operational-gpu-validation-cadence.md)
 - [production-boundary-freeze-2026-04.md](./production-boundary-freeze-2026-04.md)
+- [gpu-support-boundary-plan-2026-04.md](./gpu-support-boundary-plan-2026-04.md)
 
 ## Production-Supported Surfaces
 
@@ -58,20 +59,24 @@ Primary evidence:
 
 ### CUDA backend
 
-CUDA is the strongest production-supported accelerator backend today.
+CUDA is a production-supported accelerator backend on the maintained surfaces
+covered by the dedicated hardware validation target:
+
+- [../test/runtests_cuda.jl](../test/runtests_cuda.jl)
 
 Current CUDA-supported scope:
 
-- maintained GPU smoke matrix surfaces
-- maintained GPU runtime-equivalence surfaces
+- maintained optional backend functional/parity checks
+- maintained runtime-equivalence surfaces
+- maintained high-accuracy post-command runtime-equivalence surfaces
 - maintained Shack-Hartmann exported-pixel parity surfaces
+- maintained composite low-order runtime surfaces
 - matched HEART RTC HIL runtime surfaces
 
 Primary evidence:
 
 - [backend-validation-guide.md](./backend-validation-guide.md)
-- [gpu-smoke-contract.jl](../scripts/gpu_smoke_contract.jl)
-- [gpu_runtime_equivalence_contract.jl](../scripts/gpu_runtime_equivalence_contract.jl)
+- [release-validation-runbook.md](./release-validation-runbook.md)
 - [cross-package-benchmark-harness.md](./cross-package-benchmark-harness.md)
 - [../benchmarks/results/validation_runs/2026-04-10-spiders-cuda.toml](../benchmarks/results/validation_runs/2026-04-10-spiders-cuda.toml)
 
@@ -82,14 +87,18 @@ Current expectation:
 
 ### AMDGPU backend
 
-AMDGPU is now production-supported on the maintained surfaces that are covered
-by the post-cleanup smoke, parity, and HEART runtime artifacts.
+AMDGPU is a production-supported accelerator backend on the maintained surfaces
+covered by the dedicated hardware validation target:
+
+- [../test/runtests_amdgpu.jl](../test/runtests_amdgpu.jl)
 
 Current AMDGPU-supported scope:
 
-- maintained GPU smoke matrix surfaces
-- maintained GPU runtime-equivalence surfaces
+- maintained optional backend functional/parity checks
+- maintained runtime-equivalence surfaces
+- maintained high-accuracy post-command runtime-equivalence surfaces
 - maintained Shack-Hartmann exported-pixel parity surfaces
+- maintained composite low-order runtime surfaces
 - matched HEART RTC HIL runtime surfaces
 
 Primary evidence:
@@ -97,15 +106,24 @@ Primary evidence:
 - [backend-validation-guide.md](./backend-validation-guide.md)
 - [rocm-failure-catalog.md](./rocm-failure-catalog.md)
 - [rocm-fallback-inventory.md](./rocm-fallback-inventory.md)
+- [release-validation-runbook.md](./release-validation-runbook.md)
 - [cross-package-benchmark-harness.md](./cross-package-benchmark-harness.md)
 - [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-amdgpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-amdgpu.toml)
 
-Important qualifier:
+Current expectation:
 
-- production support for AMDGPU is defined by the maintained validated
-  surfaces, not by every possible ROCm kernel path
-- unsupported or not-yet-recovered ROCm surfaces should remain explicit
-  fallbacks or experimental paths
+- if a maintained AMDGPU surface regresses numerically against CPU, that is a
+  release-blocking defect for the AMDGPU-supported scope
+
+### GPU support-boundary rule
+
+GPU support is defined by the maintained dedicated hardware targets and the
+release-validation path.
+
+The package does still contain broader backend-audit and subsystem-investigation
+scripts, but those do not by themselves define supported GPU scope. A GPU-touched
+surface is only support-claimed when it is also promoted into the maintained
+hardware targets and release-validation cadence.
 
 ### OOPAO-aligned external equivalence
 
@@ -144,10 +162,12 @@ Scientist-owned HEART boundary truth artifact:
 
 ## Explicitly Not Yet Production-Supported
 
-The following should still be treated as experimental, scoped, or unresolved:
+The following are outside the current support claim:
 
 - SPECULA pixel-level equivalence on the HEART Shack-Hartmann surface
 - Metal backend support
+- backend-audit surfaces that are not part of the maintained hardware targets
+  and release-validation cadence
 - broad claims about every detector/WFS/backend combination outside the
   maintained evidence surfaces
 - cross-package grouped/platform equivalence beyond the currently normalized
@@ -163,7 +183,7 @@ For current release/readiness decisions:
 - regressions on the maintained AMDGPU surfaces are release-blocking
 - unresolved SPECULA differences are not release-blocking unless the package
   starts claiming SPECULA equivalence for that surface
-- new features outside this supported surface should ship as experimental until
-  they gain the same evidence shape
+- new features outside this supported surface should not be described as
+  supported until they gain the same evidence shape
 - supported accelerator claims require routine validation on real hardware,
   either through CI or through the maintained release-validation host path

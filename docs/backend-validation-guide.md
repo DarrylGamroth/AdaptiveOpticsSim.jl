@@ -16,10 +16,11 @@ For backend-specific failure history that motivated current fallback plans,
 especially on ROCm/AMDGPU, see
 [rocm-failure-catalog.md](./rocm-failure-catalog.md).
 
-The goal is to keep three distinct classes of evidence separate:
+The goal is to keep four distinct classes of evidence separate:
 
 - functional tests in `Pkg.test()`
 - optional backend smoke/parity checks in `Pkg.test()`
+- dedicated hardware-backed backend validation targets
 - benchmark and profile evidence outside `Pkg.test()`
 
 For current release/support scope, use:
@@ -80,12 +81,16 @@ checks:
 - backend replay determinism through repeated GPU execution on the runtime
   equivalence contracts
 
-For the full maintained GPU smoke matrix, use:
+For broader backend-audit coverage, use:
 
 - `ADAPTIVEOPTICS_TEST_FULL_AMDGPU=1`
 - `ADAPTIVEOPTICS_TEST_FULL_CUDA=1`
 
 which route through [`gpu_smoke_contract.jl`](../scripts/gpu_smoke_contract.jl).
+
+That full matrix is useful for subsystem audit and backend triage, but it does
+not by itself define the supported GPU surface. The supported GPU surface is
+defined by the dedicated hardware-backed validation targets below.
 
 For explicit hardware-backed backend validation targets that combine the
 optional backend smoke with the maintained runtime-equivalence contracts,
@@ -96,7 +101,8 @@ including the high-accuracy post-command equivalence pass, run:
 
 These targets are intended for hosts where the corresponding GPU package and
 runtime are actually available. They fail fast instead of skipping when the
-backend is unavailable.
+backend is unavailable. They are the release-gated support boundary for CUDA
+and AMDGPU.
 
 The full GPU smoke matrix now also pins the exact batched Shack-Hartmann
 detector/export surface that previously regressed on CUDA:
