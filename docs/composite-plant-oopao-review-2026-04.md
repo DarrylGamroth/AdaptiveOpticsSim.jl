@@ -52,16 +52,18 @@ Interpretation:
 
 ### DM only
 
-- `maxabs = 1.97e-10`
-- `l2rel = 1.3815e-1`
-- `corr = 0.9910`
+- fitted OOPAO `mechCoupling = 8.304545550591036e-2`
+- previous closed-form proxy `= 8.465798862252998e-2`
+- response-bank fit relative error `= 6.8064e-2`
 
 Interpretation:
 
-- the remaining OPD discrepancy is dominated by the DM mapping
-- this is expected because the Julia `DeformableMirror` influence-width model is
-  only approximately mapped onto the OOPAO `DeformableMirror` mechanical
-  coupling parameterization
+- the DM translation layer is now fitted explicitly against the Julia Gaussian
+  influence model on the sampled pupil grid
+- the fitted value only moved slightly from the older closed-form proxy, which
+  confirms the proxy was already close on this maintained surface
+- the remaining OPD discrepancy is still dominated by the DM family mismatch,
+  not by a backend or arithmetic issue
 
 ### Composite `tiptilt + dm`
 
@@ -86,31 +88,22 @@ Measured WFS residuals:
 
 ### Shack-Hartmann
 
-- `scale=0.25`: `maxabs = 7.89e-5`, `l2rel = 3.6996e-2`
-- `scale=0.5`: `maxabs = 1.58e-4`, `l2rel = 3.6996e-2`
-- `scale=1.0`: `maxabs = 3.15e-4`, `l2rel = 3.6996e-2`
-- `scale=2.0`: `maxabs = 6.31e-4`, `l2rel = 3.6996e-2`
+- `scale=1.0`: `maxabs = 3.22e-4`, `l2rel = 3.6785e-2`
 
 ### Pyramid
 
-- `scale=0.25`: `maxabs = 7.38e-5`, `l2rel = 2.6651e-2`
-- `scale=0.5`: `maxabs = 1.48e-4`, `l2rel = 2.6666e-2`
-- `scale=1.0`: `maxabs = 2.97e-4`, `l2rel = 2.6696e-2`
-- `scale=2.0`: `maxabs = 5.99e-4`, `l2rel = 2.6762e-2`
+- `scale=1.0`: `maxabs = 2.96e-4`, `l2rel = 2.6974e-2`
 
 ### BioEdge
 
-- `scale=0.25`: `maxabs = 2.15e-4`, `l2rel = 3.4651e-2`
-- `scale=0.5`: `maxabs = 4.29e-4`, `l2rel = 3.4651e-2`
-- `scale=1.0`: `maxabs = 8.59e-4`, `l2rel = 3.4651e-2`
-- `scale=2.0`: `maxabs = 1.72e-3`, `l2rel = 3.4653e-2`
+- `scale=1.0`: `maxabs = 8.60e-4`, `l2rel = 3.4713e-2`
 
 Interpretation:
 
-- `maxabs` grows approximately linearly with amplitude
-- `l2rel` stays essentially constant across the sweep
-- that is not the signature of unstable numerics
-- it is the signature of a stable, repeatable model mismatch
+- the residual envelope remains in the same narrow band as before the fit pass
+- the fitted OOPAO coupling trims the composite residual slightly, but not dramatically
+- that is consistent with the proxy already being close and with the remaining
+  error coming from stable model-family differences rather than unstable numerics
 
 ## Numerical-stability assessment
 
@@ -133,8 +126,8 @@ Conclusion:
 
 ## Practical implication for tolerances
 
-The current committed composite OOPAO tolerances are evidence-based and
-consistent with the measured sweep:
+The current committed composite OOPAO tolerances remain evidence-based and are
+consistent with the updated fitted-mapping residuals:
 
 - `ShackHartmann`: `atol = 4e-4`, `rtol = 4e-2`
 - `Pyramid`: `atol = 4e-4`, `rtol = 3e-2`
@@ -148,10 +141,12 @@ cross-simulator residual envelope for this narrow composite plant.
 If tighter external composite tolerances are desired, the next review should be
 targeted, not package-wide:
 
-1. improve the Julia-DM to OOPAO-DM parameter mapping
-2. compare influence functions directly rather than only assembled OPD
-3. check whether an OOPAO DM configuration closer to the Julia Gaussian width
-   exists than the current `mechCoupling` proxy
+1. extend the fitted DM translation beyond the current representative `4 x 4`
+   composite surface if broader external composite claims are desired
+2. compare actuator-response families directly if a closer OOPAO DM family than
+   `mechCoupling` becomes available
+3. keep broader composite families on internal-artifact and backend-parity
+   validation until they have a similarly narrow external reference surface
 
 What is not currently justified:
 

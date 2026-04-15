@@ -247,6 +247,11 @@ label = "dm"
 n_act = 4
 influence_width = 2.9999999999999999e-01
 
+[cases.shack_hartmann_diffractive_tiptilt_dm.compute]
+fitted_mechanical_coupling = 8.3045455505910359e-02
+fit_relative_error = 6.8063994150797377e-02
+proxy_mechanical_coupling = 8.4657988622529975e-02
+
 [cases.pyramid_diffractive_ramp]
 kind = "pyramid_slopes"
 data = "pyramid_diffractive_ramp.txt"
@@ -371,6 +376,11 @@ kind = "dm"
 label = "dm"
 n_act = 4
 influence_width = 2.9999999999999999e-01
+
+[cases.pyramid_diffractive_tiptilt_dm.compute]
+fitted_mechanical_coupling = 8.3045455505910359e-02
+fit_relative_error = 6.8063994150797377e-02
+proxy_mechanical_coupling = 8.4657988622529975e-02
 
 [cases.bioedge_diffractive_ramp]
 kind = "bioedge_slopes"
@@ -498,6 +508,11 @@ kind = "dm"
 label = "dm"
 n_act = 4
 influence_width = 2.9999999999999999e-01
+
+[cases.bioedge_diffractive_tiptilt_dm.compute]
+fitted_mechanical_coupling = 8.3045455505910359e-02
+fit_relative_error = 6.8063994150797377e-02
+proxy_mechanical_coupling = 8.4657988622529975e-02
 
 [cases.gain_sensing_camera_optical_gains]
 kind = "gsc_optical_gains"

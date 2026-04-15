@@ -617,6 +617,118 @@ def julia_dm_coordinates(tel: Telescope, n_act: int) -> np.ndarray:
     return np.asarray(pairs, dtype=np.float64)
 
 
+def julia_dm_influence_cube(tel: Telescope, n_act: int, influence_width: float) -> np.ndarray:
+    n = int(tel.resolution)
+    pupil = np.asarray(tel.pupil, dtype=np.float64)
+    sigma2 = float(influence_width) ** 2
+    xs = np.linspace(-1.0, 1.0, n_act, dtype=np.float64)
+    ys = np.linspace(-1.0, 1.0, n_act, dtype=np.float64)
+    cx = (n + 1.0) / 2.0
+    cy = (n + 1.0) / 2.0
+    scale = n / 2.0
+    xgrid = (np.arange(1, n + 1, dtype=np.float64) - cx) / scale
+    ygrid = (np.arange(1, n + 1, dtype=np.float64) - cy) / scale
+    xx, yy = np.meshgrid(xgrid, ygrid, indexing="ij")
+    cube = np.zeros((n, n, n_act * n_act), dtype=np.float64)
+    k = 0
+    for y0 in ys:
+        for x0 in xs:
+            r2 = (xx - x0) ** 2 + (yy - y0) ** 2
+            cube[:, :, k] = pupil * np.exp(-r2 / (2.0 * sigma2))
+            k += 1
+    return cube
+
+
+def julia_dm_response(target_cube: np.ndarray, command: np.ndarray) -> np.ndarray:
+    return np.tensordot(target_cube, np.asarray(command, dtype=np.float64), axes=([2], [0]))
+
+
+def oopao_dm_response(tel: Telescope, n_act: int, mech_coupling: float, command: np.ndarray) -> np.ndarray:
+    coords = julia_dm_coordinates(tel, n_act)
+    dm = DeformableMirror(
+        telescope=tel,
+        nSubap=n_act - 1,
+        coordinates=coords,
+        pitch=tel.D / (n_act - 1),
+        mechCoupling=float(mech_coupling),
+    )
+    dm.coefs = np.asarray(command, dtype=np.float64).copy()
+    return np.asarray(dm.OPD, dtype=np.float64)
+
+
+def dm_fit_command_bank(n_act: int, amplitude: float = 1e-9) -> list[np.ndarray]:
+    n_mode = n_act * n_act
+    commands: list[np.ndarray] = []
+    corner = np.zeros(n_mode, dtype=np.float64)
+    corner[0] = amplitude
+    commands.append(corner)
+    center = np.zeros(n_mode, dtype=np.float64)
+    center[(n_act // 2) + (n_act // 2 - 1) * n_act] = amplitude
+    commands.append(center)
+    checker = np.zeros((n_act, n_act), dtype=np.float64)
+    for j in range(n_act):
+        for i in range(n_act):
+            checker[i, j] = amplitude if (i + j) % 2 == 0 else -amplitude
+    commands.append(checker.reshape(-1, order="F"))
+    rng = np.random.default_rng(10)
+    commands.append(amplitude * rng.standard_normal(n_mode))
+    smooth = np.zeros((n_act, n_act), dtype=np.float64)
+    for j in range(n_act):
+        for i in range(n_act):
+            smooth[i, j] = amplitude * (0.5 * i - 0.25 * j)
+    commands.append(smooth.reshape(-1, order="F"))
+    return commands
+
+
+def dm_fit_error(target_responses: list[np.ndarray], trial_responses: list[np.ndarray], pupil: np.ndarray) -> float:
+    mask = np.asarray(pupil, dtype=bool)
+    target = np.concatenate([resp[mask] for resp in target_responses])
+    trial = np.concatenate([resp[mask] for resp in trial_responses])
+    diff = target - trial
+    denom = np.linalg.norm(target)
+    return float(np.linalg.norm(diff) / denom)
+
+
+_DM_FIT_CACHE: dict[tuple[int, float, int, float], tuple[float, float]] = {}
+
+
+def fit_oopao_dm_mechanical_coupling(tel: Telescope, n_act: int, influence_width: float) -> tuple[float, float]:
+    key = (int(tel.resolution), float(tel.D), int(n_act), float(influence_width))
+    cached = _DM_FIT_CACHE.get(key)
+    if cached is not None:
+        return cached
+    target_cube = julia_dm_influence_cube(tel, n_act, influence_width)
+    pupil = np.asarray(tel.pupil, dtype=bool)
+    commands = dm_fit_command_bank(n_act)
+    target_responses = [julia_dm_response(target_cube, command) for command in commands]
+    proxy = julia_dm_mechanical_coupling(n_act, influence_width)
+    coarse = np.unique(np.concatenate((
+        np.geomspace(1e-4, 0.1, 64, dtype=np.float64),
+        np.linspace(0.1, 0.35, 96, dtype=np.float64),
+        np.array([proxy], dtype=np.float64),
+    )))
+    best_coupling = float(proxy)
+    best_error = float('inf')
+    for coupling in coarse:
+        trial_responses = [oopao_dm_response(tel, n_act, float(coupling), command) for command in commands]
+        err = dm_fit_error(target_responses, trial_responses, pupil)
+        if err < best_error:
+            best_error = err
+            best_coupling = float(coupling)
+    lower = max(1e-4, best_coupling * 0.6)
+    upper = min(0.95, best_coupling * 1.4)
+    fine = np.linspace(lower, upper, 64, dtype=np.float64)
+    for coupling in fine:
+        trial_responses = [oopao_dm_response(tel, n_act, float(coupling), command) for command in commands]
+        err = dm_fit_error(target_responses, trial_responses, pupil)
+        if err < best_error:
+            best_error = err
+            best_coupling = float(coupling)
+    result = (best_coupling, best_error)
+    _DM_FIT_CACHE[key] = result
+    return result
+
+
 def composite_tiptilt_dm_case(root: Path, *, case_id: str, kind: str, tip_amplitude: float,
     dm_command: np.ndarray, n_act: int = 4, influence_width: float = 0.3) -> dict:
     tel = make_telescope(resolution=24, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
@@ -625,12 +737,13 @@ def composite_tiptilt_dm_case(root: Path, *, case_id: str, kind: str, tip_amplit
     wfs = make_reference_wfs(kind, tel)
     src ** tel
     basis = cartesian_polynomial_basis(tel, n_modes=2)
+    fitted_mech_coupling, fit_error = fit_oopao_dm_mechanical_coupling(tel, n_act, influence_width)
     dm = DeformableMirror(
         telescope=tel,
         nSubap=n_act - 1,
         coordinates=julia_dm_coordinates(tel, n_act),
         pitch=tel.D / (n_act - 1),
-        mechCoupling=julia_dm_mechanical_coupling(n_act, influence_width),
+        mechCoupling=fitted_mech_coupling,
     )
     dm.coefs = np.asarray(dm_command, dtype=np.float64)
     combined_opd = tip_amplitude * basis[:, :, 0] + np.asarray(dm.OPD, dtype=np.float64)
@@ -703,6 +816,11 @@ def composite_tiptilt_dm_case(root: Path, *, case_id: str, kind: str, tip_amplit
                     **({"n_pix_edge": 2} if kind == "bioedge_slopes" else {}),
                 }
             ),
+        },
+        "compute": {
+            "fitted_mechanical_coupling": fitted_mech_coupling,
+            "fit_relative_error": fit_error,
+            "proxy_mechanical_coupling": julia_dm_mechanical_coupling(n_act, influence_width),
         },
     }
 
