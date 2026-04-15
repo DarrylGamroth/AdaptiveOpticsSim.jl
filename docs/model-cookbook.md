@@ -609,6 +609,11 @@ Practical notes:
 - Start with plain `prop_run(...)` or `prepare_model(...)` in `Proper.jl`.
   Only move to more elaborate prepared execution or asset pools if the
   coronagraph model itself becomes a throughput bottleneck.
+- The runnable seam benchmark currently shows that the AO step stays compact,
+  but `Proper.prop_run(...)` still allocates a fresh PSF on the science side.
+  Treat this recipe as the clean integration boundary first, then optimize the
+  external science arm only if its allocations or throughput become the next
+  bottleneck.
 
 Use this pattern when you need:
 
@@ -617,6 +622,23 @@ Use this pattern when you need:
 - explicit separation between RTC-facing plant logic and science propagation
 - reuse of an existing PROPER/Proper.jl prescription without forcing it into
   the AO runtime layer
+
+Runnable companion files:
+
+- executable example:
+  [proper_hil_coronagraph.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/examples/integrations/proper_hil_coronagraph.jl)
+- shared setup helper:
+  [proper_hil_coronagraph_common.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/examples/support/proper_hil_coronagraph_common.jl)
+- seam benchmark:
+  [profile_proper_hil_coronagraph.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/scripts/profile_proper_hil_coronagraph.jl)
+
+Install `Proper.jl` into the active environment before running them. For a
+local sibling checkout, the simplest path is:
+
+```julia
+using Pkg
+Pkg.develop(path="../proper.jl")
+```
 
 ## How To Choose The Right Entry Surface
 

@@ -66,7 +66,7 @@ Use these when the task is cross-package or instrument-truth work:
 - [`user-guide.md`](./user-guide.md)
   - workflow-oriented user entry point
 - [`model-cookbook.md`](./model-cookbook.md)
-  - compact recipe-first entry point for common model types, including HIL-style runtime surfaces
+  - compact recipe-first entry point for common model types, including HIL-style runtime surfaces and the external `Proper.jl` coronagraph seam
 - [`platform-architecture.md`](./platform-architecture.md)
   - stable synthesis guide for platform-scale structure and boundaries
 - [`platform-workflows.md`](./platform-workflows.md)
