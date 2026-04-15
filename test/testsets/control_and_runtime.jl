@@ -1,3 +1,5 @@
+include(normpath(joinpath(@__DIR__, "..", "..", "benchmarks", "support", "revolt_like_hil_common.jl")))
+
 @testset "Deformable mirror and WFS" begin
     tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
@@ -548,6 +550,11 @@ function closed_loop_runtime_allocations()
     return @allocated step!(runtime)
 end
 
+function revolt_like_runtime_allocations()
+    config_dir = normpath(joinpath(@__DIR__, "..", "..", "benchmarks", "assets", "revolt_like"))
+    return revolt_like_allocation_profile(; backend_name="cpu", config_dir=config_dir, sensor=CMOSSensor(), T=Float32)
+end
+
 @testset "Closed-loop runtime" begin
     rng = MersenneTwister(0)
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
@@ -572,6 +579,12 @@ end
     @test length(runtime.command) == length(dm.state.coefs)
     @test size(output_frame(det)) == (32, 32)
     @test closed_loop_runtime_allocations() == 0
+    revolt_allocs = revolt_like_runtime_allocations()
+    @test revolt_allocs.command_map == 0
+    @test revolt_allocs.dm_apply == 0
+    @test revolt_allocs.sense == 0
+    @test revolt_allocs.mosaic == 0
+    @test revolt_allocs.total == 0
     @test command(runtime) === runtime.command
     @test science_frame(runtime) === output_frame(det)
     @test command_segment_labels(command_layout(runtime)) == (:dm,)

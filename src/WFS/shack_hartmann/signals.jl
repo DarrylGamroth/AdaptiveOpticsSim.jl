@@ -325,32 +325,11 @@ end
 
 function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
     det::AbstractDetector, rng::AbstractRNG)
-    n = tel.params.resolution
-    n_sub = wfs.params.n_subap
-    sub = div(n, n_sub)
-    pad = size(wfs.state.field, 1)
-    ox = div(pad - sub, 2)
-    oy = div(pad - sub, 2)
-    peak = zero(eltype(wfs.state.slopes))
-    idx = 1
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        spot_view = sh_spot_view(wfs, idx)
-        if wfs.state.valid_mask[i, j]
-            xs = (i - 1) * sub + 1
-            ys = (j - 1) * sub + 1
-            xe = min(i * sub, n)
-            ye = min(j * sub, n)
-            compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
-            sample_spot!(wfs, wfs.state.intensity)
-            frame = capture!(det, wfs.state.spot; rng=rng)
-            copyto!(spot_view, frame)
-            peak = max(peak, sh_safe_peak_value(spot_view))
-        else
-            fill!(spot_view, zero(eltype(spot_view)))
-        end
-        idx += 1
-    end
-    return peak
+    compute_intensity_stack!(ScalarCPUStyle(), wfs, tel, src)
+    sample_spot_stack!(ScalarCPUStyle(), wfs)
+    capture_sampled_spot_stack!(wfs, det, rng)
+    zero_invalid_sh_spot_cube!(ScalarCPUStyle(), wfs.state.spot_cube, wfs.state.valid_mask)
+    return sh_safe_peak_value(wfs.state.spot_cube)
 end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource,
@@ -578,7 +557,7 @@ function sh_signal_from_spots!(::ScalarCPUStyle, wfs::ShackHartmann, cutoff::T) 
     idx = 1
     @inbounds for i in 1:n_sub, j in 1:n_sub
         if wfs.state.valid_mask[i, j]
-            total, sx, sy = centroid_from_intensity_cutoff!(sh_spot_view(wfs, idx), cutoff)
+            total, sx, sy = centroid_from_spot_cube_cutoff!(wfs.state.spot_cube, idx, cutoff)
             if total <= 0
                 wfs.state.slopes[idx] = zero(T)
                 wfs.state.slopes[idx + n_sub * n_sub] = zero(T)
@@ -676,16 +655,63 @@ function mean_valid_signal(::AcceleratorStyle, signal::AbstractVector{T}, valid_
     return packed_valid_pair_mean(execution_style(signal), signal, valid_mask)
 end
 
+@inline function centroid_from_spot_cube_cutoff!(spot_cube::AbstractArray{T,3}, idx::Int, cutoff::T) where {T<:AbstractFloat}
+    total = zero(T)
+    sx = zero(T)
+    sy = zero(T)
+    n1 = size(spot_cube, 2)
+    n2 = size(spot_cube, 3)
+    @inbounds for x in 1:n1, y in 1:n2
+        val = spot_cube[idx, x, y]
+        if val < cutoff
+            spot_cube[idx, x, y] = zero(T)
+        else
+            total += val
+            sx += T(x - 1) * val
+            sy += T(y - 1) * val
+        end
+    end
+    if total <= 0
+        return zero(T), zero(T), zero(T)
+    end
+    return total, sx / total, sy / total
+end
+
+@inline function zero_invalid_sh_spot_cube!(::ScalarCPUStyle, spot_cube::AbstractArray{T,3}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
+    n_sub = size(valid_mask, 1)
+    idx = 1
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        if !valid_mask[i, j]
+            for x in axes(spot_cube, 2), y in axes(spot_cube, 3)
+                spot_cube[idx, x, y] = zero(T)
+            end
+        end
+        idx += 1
+    end
+    return spot_cube
+end
+
+@inline function zero_invalid_sh_spot_cube!(style::AcceleratorStyle, spot_cube::AbstractArray{T,3}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
+    n_sub = size(valid_mask, 1)
+    launch_kernel!(style, zero_invalid_spots_kernel!, spot_cube, valid_mask,
+        n_sub, size(spot_cube, 2), size(spot_cube, 3); ndrange=size(spot_cube))
+    return spot_cube
+end
+
 function subtract_reference_and_scale!(wfs::ShackHartmann)
     inv_units = inv(wfs.state.slopes_units)
-    ref = vec(wfs.state.reference_signal_2d)
-    @. wfs.state.slopes = (wfs.state.slopes - ref) * inv_units
+    ref = wfs.state.reference_signal_2d
+    @inbounds for idx in eachindex(wfs.state.slopes)
+        wfs.state.slopes[idx] = (wfs.state.slopes[idx] - ref[idx]) * inv_units
+    end
     return wfs.state.slopes
 end
 
 function subtract_reference!(wfs::ShackHartmann)
-    ref = vec(wfs.state.reference_signal_2d)
-    @. wfs.state.slopes = wfs.state.slopes - ref
+    ref = wfs.state.reference_signal_2d
+    @inbounds for idx in eachindex(wfs.state.slopes)
+        wfs.state.slopes[idx] -= ref[idx]
+    end
     return wfs.state.slopes
 end
 

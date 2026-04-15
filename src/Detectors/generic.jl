@@ -952,7 +952,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     thermal = validate_thermal_model(convert_thermal_model(resolved_thermal, T))
     output_precision_t = resolve_output_precision(bits, output_precision)
     window = validate_readout_window(readout_window)
-    params = DetectorParams{T, typeof(sensor), typeof(response), typeof(thermal)}(
+    params = DetectorParams{T, typeof(sensor), typeof(response), typeof(defects), typeof(timing), typeof(correction), typeof(nonlinearity), typeof(thermal)}(
         T(integration_time),
         T(qe),
         psf_sampling,

@@ -724,7 +724,10 @@ end
     end
 end
 
-struct DetectorParams{T<:AbstractFloat,S<:SensorType,R<:AbstractFrameResponse,TM<:AbstractDetectorThermalModel}
+struct DetectorParams{T<:AbstractFloat,S<:SensorType,R<:AbstractFrameResponse,
+    D<:AbstractDetectorDefectModel,FT<:AbstractFrameTimingModel,
+    C<:FrameReadoutCorrectionModel,NL<:AbstractFrameNonlinearityModel,
+    TM<:AbstractDetectorThermalModel}
     integration_time::T
     qe::T
     psf_sampling::Int
@@ -735,10 +738,10 @@ struct DetectorParams{T<:AbstractFloat,S<:SensorType,R<:AbstractFrameResponse,TM
     full_well::Union{Nothing,T}
     sensor::S
     response_model::R
-    defect_model::AbstractDetectorDefectModel
-    timing_model::AbstractFrameTimingModel
-    correction_model::FrameReadoutCorrectionModel
-    nonlinearity_model::AbstractFrameNonlinearityModel
+    defect_model::D
+    timing_model::FT
+    correction_model::C
+    nonlinearity_model::NL
     thermal_model::TM
     readout_window::Union{Nothing,FrameWindow}
     output_precision::Union{Nothing,DataType}

@@ -101,6 +101,36 @@ end
     end
 end
 
+function compute_intensity_stack!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
+    pad = size(wfs.state.fft_stack, 1)
+    n_sub = wfs.params.n_subap
+    sub = div(tel.params.resolution, n_sub)
+    ox = div(pad - sub, 2)
+    oy = div(pad - sub, 2)
+    T = eltype(wfs.state.intensity)
+    opd_to_cycles = T(2) / wavelength(src)
+    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time *
+        (tel.params.diameter / tel.params.resolution)^2))
+    fill!(wfs.state.fft_stack, zero(eltype(wfs.state.fft_stack)))
+    idx = 1
+    @inbounds for i in 1:n_sub, j in 1:n_sub
+        if wfs.state.valid_mask[i, j]
+            for y in 1:sub, x in 1:sub
+                px = (i - 1) * sub + x
+                py = (j - 1) * sub + y
+                wfs.state.fft_stack[ox + x, oy + y, idx] = amp_scale * tel.state.pupil[px, py] *
+                    cispi(opd_to_cycles * tel.state.opd[px, py]) * wfs.state.phasor[ox + x, oy + y]
+            end
+        end
+        idx += 1
+    end
+    execute_fft_plan!(wfs.state.fft_stack, wfs.state.fft_stack_plan)
+    @inbounds for idx in axes(wfs.state.fft_stack, 3), y in axes(wfs.state.fft_stack, 2), x in axes(wfs.state.fft_stack, 1)
+        wfs.state.intensity_stack[x, y, idx] = abs2(wfs.state.fft_stack[x, y, idx])
+    end
+    return wfs.state.intensity_stack
+end
+
 function compute_intensity_stack!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
     pad = size(wfs.state.fft_stack, 1)
     n_sub = wfs.params.n_subap
@@ -201,11 +231,26 @@ function compute_intensity_spectral_stack!(style::AcceleratorStyle, wfs::ShackHa
     return wfs.state.intensity_stack
 end
 
+@inline function copy_stack_plane_to_matrix!(dest::AbstractMatrix{T}, stack::AbstractArray{T,3}, idx::Int) where {T}
+    @inbounds for y in axes(dest, 2), x in axes(dest, 1)
+        dest[x, y] = stack[x, y, idx]
+    end
+    return dest
+end
+
+@inline function copy_matrix_to_stack_plane!(stack::AbstractArray{T,3}, idx::Int, src::AbstractMatrix{T}) where {T}
+    @inbounds for y in axes(src, 2), x in axes(src, 1)
+        stack[idx, x, y] = src[x, y]
+    end
+    return stack
+end
+
 function sample_spot_stack!(::ScalarCPUStyle, wfs::ShackHartmann)
     n_spots = size(wfs.state.sampled_spot_cube, 1)
     @inbounds for idx in 1:n_spots
-        sample_spot!(wfs, @view(wfs.state.intensity_stack[:, :, idx]))
-        copyto!(@view(wfs.state.sampled_spot_cube[idx, :, :]), wfs.state.spot)
+        copy_stack_plane_to_matrix!(wfs.state.intensity, wfs.state.intensity_stack, idx)
+        sample_spot!(wfs, wfs.state.intensity)
+        copy_matrix_to_stack_plane!(wfs.state.sampled_spot_cube, idx, wfs.state.spot)
     end
     return wfs.state.sampled_spot_cube
 end

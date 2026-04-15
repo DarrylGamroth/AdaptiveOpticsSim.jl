@@ -112,12 +112,16 @@ end
 _batched_dark_defects!(::BadPixelMask, cube::AbstractArray, scratch::AbstractArray, exposure_time::Real) = cube
 
 function _batched_signal_defects!(model::CompositeDetectorDefectModel, cube::AbstractArray, scratch::AbstractArray, exposure_time::Real)
-    foreach(stage -> _batched_signal_defects!(stage, cube, scratch, exposure_time), model.stages)
+    for stage in model.stages
+        _batched_signal_defects!(stage, cube, scratch, exposure_time)
+    end
     return cube
 end
 
 function _batched_dark_defects!(model::CompositeDetectorDefectModel, cube::AbstractArray, scratch::AbstractArray, exposure_time::Real)
-    foreach(stage -> _batched_dark_defects!(stage, cube, scratch, exposure_time), model.stages)
+    for stage in model.stages
+        _batched_dark_defects!(stage, cube, scratch, exposure_time)
+    end
     return cube
 end
 
@@ -531,14 +535,19 @@ function _batched_apply_separable_response!(::ScalarCPUStyle, cube::AbstractArra
     return cube
 end
 
-function _capture_stack_fixed!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3};
-    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+function _capture_stack_fixed!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3},
+    rng::AbstractRNG) where {T<:AbstractFloat}
     _require_batched_detector_compat(det, cube, scratch)
-    return _apply_batched_detector_pipeline!(det, cube, scratch; rng=rng)
+    return _apply_batched_detector_pipeline!(det, cube, scratch, rng)
 end
 
-function _apply_batched_detector_pipeline!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3};
+function _capture_stack_fixed!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3};
     rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    return _capture_stack_fixed!(det, cube, scratch, rng)
+end
+
+function _apply_batched_detector_pipeline!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3},
+    rng::AbstractRNG) where {T<:AbstractFloat}
     exposure_time = det.params.integration_time
     cube .*= det.params.qe * exposure_time
     _batched_signal_defects!(det.params.defect_model, cube, scratch, exposure_time)
@@ -558,6 +567,11 @@ function _apply_batched_detector_pipeline!(det::Detector, cube::AbstractArray{T,
     _batched_background_map!(det.background_map, cube, scratch)
     synchronize_backend!(execution_style(cube))
     return cube
+end
+
+function _apply_batched_detector_pipeline!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3};
+    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    return _apply_batched_detector_pipeline!(det, cube, scratch, rng)
 end
 
 function _require_generalized_batched_detector_compat(det::Detector, out_cube::AbstractArray, in_cube::AbstractArray)
@@ -588,17 +602,27 @@ function _capture_stack_generalized!(det::Detector, out_cube::AbstractArray{TO,3
     return out_cube
 end
 
-function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{S,3};
-    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat,S<:AbstractFloat}
+function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{S,3},
+    rng::AbstractRNG) where {T<:AbstractFloat,S<:AbstractFloat}
     if size(cube) == size(scratch)
         return _capture_stack_fixed!(det, cube, scratch; rng=rng)
     end
     return _capture_stack_generalized!(det, cube, scratch; rng=rng)
 end
 
+function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{S,3};
+    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat,S<:AbstractFloat}
+    return capture_stack!(det, cube, scratch, rng)
+end
+
+function capture_stack!(det::Detector, out_cube::AbstractArray{TO,3}, in_cube::AbstractArray{TI,3},
+    rng::AbstractRNG) where {TO,TI<:AbstractFloat}
+    return _capture_stack_generalized!(det, out_cube, in_cube; rng=rng)
+end
+
 function capture_stack!(det::Detector, out_cube::AbstractArray{TO,3}, in_cube::AbstractArray{TI,3};
     rng::AbstractRNG=Random.default_rng()) where {TO,TI<:AbstractFloat}
-    return _capture_stack_generalized!(det, out_cube, in_cube; rng=rng)
+    return capture_stack!(det, out_cube, in_cube, rng)
 end
 
 function apply_saturation!(det::Detector, cube::AbstractArray)

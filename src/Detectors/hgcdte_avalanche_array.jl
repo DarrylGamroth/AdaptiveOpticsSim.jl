@@ -392,7 +392,7 @@ function finalize_readout_products!(sensor::HgCdTeAvalancheArraySensor, det::Det
     return products
 end
 
-function finalize_capture!(det::Detector{N,<:DetectorParams{T,<:HgCdTeAvalancheArraySensor,<:Any},S,BF,BM},
+function finalize_capture!(det::Detector{N,<:DetectorParams{T,<:HgCdTeAvalancheArraySensor,<:Any,<:Any,<:Any,<:Any,<:Any},S,BF,BM},
     rng::AbstractRNG, exposure_time::Real) where {N,T,S,BF,BM}
     apply_dark_current!(det, rng, exposure_time)
     apply_saturation!(det)
