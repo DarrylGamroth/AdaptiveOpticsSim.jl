@@ -642,7 +642,7 @@ function sh_signal_from_spots_calibrated!(::AcceleratorStyle, wfs::ShackHartmann
         n_sub = wfs.params.n_subap
         offset = n_sub * n_sub
         host_slopes = wfs.state.slopes_host
-        reference = vec(wfs.state.reference_signal_2d)
+        reference = wfs.state.reference_signal_host
         inv_units = inv(wfs.state.slopes_units)
         idx = 1
         @inbounds for i in 1:n_sub, j in 1:n_sub
