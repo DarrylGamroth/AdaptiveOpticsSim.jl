@@ -480,52 +480,40 @@ cfg = SingleRuntimeConfig(name=:hil_coronagraph, branch_label=:main, products=Ru
 scenario = build_runtime_scenario(cfg, branch)
 prepare!(scenario)
 
-# Helper for PROPER-style PASSVALUE lookups.
-@inline function passget(passvalue, key::Symbol, default=nothing)
-    if passvalue === nothing
-        return default
-    elseif passvalue isa NamedTuple
-        return get(passvalue, key, default)
-    elseif passvalue isa AbstractDict
-        return get(passvalue, key, get(passvalue, String(key), default))
-    end
-    return default
+# Use a typed payload at the package boundary. `Proper.jl` accepts any extra
+# object here; it does not need to be a Dict or untyped PASSVALUE blob.
+struct CoronagraphPayload{P,M,T}
+    phase_map_m::P
+    pupil_mask::M
+    diameter_m::T
+    focal_length_m::T
+    lyot_stop_norm::T
 end
 
 # External coronagraph science arm. `prop_run(...)` receives wavelength in
 # microns, but the prescription itself receives wavelength in meters.
-function hil_coronagraph_prescription(λm, n; PASSVALUE=nothing)
-    phase_map_m = passget(PASSVALUE, :phase_map_m, nothing)
-    pupil_mask = passget(PASSVALUE, :pupil_mask, nothing)
-    diameter_m = Float64(passget(PASSVALUE, :diameter_m, 8.0))
-    focal_length_m = Float64(passget(PASSVALUE, :focal_length_m, 80.0))
-    lyot_stop_norm = Float64(passget(PASSVALUE, :lyot_stop_norm, 0.9))
-
-    wf = prop_begin(diameter_m, λm, n; beam_diam_fraction=1.0)
-    prop_circular_aperture(wf, diameter_m / 2)
+function hil_coronagraph_prescription(λm, n, payload::CoronagraphPayload)
+    wf = prop_begin(payload.diameter_m, λm, n; beam_diam_fraction=1.0)
+    prop_circular_aperture(wf, payload.diameter_m / 2)
     prop_define_entrance(wf)
 
     # Carry the exact AdaptiveOpticsSim pupil and residual OPD into the
     # external coronagraph model.
-    if pupil_mask !== nothing
-        prop_multiply(wf, pupil_mask)
-    end
-    if phase_map_m !== nothing
-        prop_add_phase(wf, phase_map_m)
-    end
+    prop_multiply(wf, payload.pupil_mask)
+    prop_add_phase(wf, payload.phase_map_m)
 
-    prop_lens(wf, focal_length_m, "science arm")
-    prop_propagate(wf, focal_length_m, "focal plane mask")
+    prop_lens(wf, payload.focal_length_m, "science arm")
+    prop_propagate(wf, payload.focal_length_m, "focal plane mask")
     prop_8th_order_mask(wf, 4.0; circular=true)
 
-    prop_propagate(wf, focal_length_m, "lyot relay")
-    prop_lens(wf, focal_length_m, "lyot relay")
-    prop_propagate(wf, 2focal_length_m, "lyot stop")
-    prop_circular_aperture(wf, lyot_stop_norm; NORM=true)
+    prop_propagate(wf, payload.focal_length_m, "lyot relay")
+    prop_lens(wf, payload.focal_length_m, "lyot relay")
+    prop_propagate(wf, 2payload.focal_length_m, "lyot stop")
+    prop_circular_aperture(wf, payload.lyot_stop_norm; NORM=true)
 
-    prop_propagate(wf, focal_length_m, "science camera")
-    prop_lens(wf, focal_length_m, "science camera")
-    prop_propagate(wf, focal_length_m, "final focus")
+    prop_propagate(wf, payload.focal_length_m, "science camera")
+    prop_lens(wf, payload.focal_length_m, "science camera")
+    prop_propagate(wf, payload.focal_length_m, "final focus")
     return prop_end(wf)
 end
 
@@ -546,21 +534,17 @@ for k in 1:10
     ))
     sense!(scenario)
 
-    # This is the integration seam: take the current AO residual from the
-    # telescope state and evaluate the external coronagraph science model.
-    phase_map_m = Array(sim.tel.state.opd)
-    pupil_mask = Float64.(Array(sim.tel.state.pupil))
-
-    coronagraph_psf, coronagraph_sampling = prop_run(
-        science_model;
-        PASSVALUE=(;
-            phase_map_m,
-            pupil_mask,
-            diameter_m=sim.tel.params.diameter,
-            focal_length_m=80.0,
-            lyot_stop_norm=0.9,
-        ),
+    # This is the integration seam: hand the current AO residual directly to
+    # the external coronagraph model. On CPU, this can be zero-copy.
+    payload = CoronagraphPayload(
+        sim.tel.state.opd,
+        sim.tel.state.pupil,
+        sim.tel.params.diameter,
+        80.0,
+        0.9,
     )
+
+    coronagraph_psf, coronagraph_sampling = prop_run(science_model; PASSVALUE=payload)
 
     rtc_slopes = slopes(scenario)
     @show k length(rtc_slopes) size(coronagraph_psf) coronagraph_sampling
@@ -579,22 +563,56 @@ For repeated HIL use, keep the integration seam explicit:
 - hand off DM maps or commands instead when the external science model should
   own its own DM surfaces internally through `prop_dm(...)`
 
+GPU variant:
+
+```julia
+using CUDA
+
+proper_ctx = Proper.RunContext(typeof(sim.tel.state.opd))
+science_model_gpu = prepare_model(
+    :hil_coronagraph_gpu,
+    hil_coronagraph_prescription,
+    science_λ_um,
+    tel.params.resolution;
+    context=proper_ctx,
+    precision=Float32,
+    pool_size=1,
+)
+
+sense!(scenario)
+payload_gpu = CoronagraphPayload(
+    sim.tel.state.opd,
+    sim.tel.state.pupil,
+    Float32(sim.tel.params.diameter),
+    80.0f0,
+    0.9f0,
+)
+psf_gpu, sampling_gpu = prop_run(science_model_gpu; PASSVALUE=payload_gpu)
+```
+
 Practical notes:
 
+- `PASSVALUE` in `Proper.jl` is just the extra payload object forwarded into
+  the prescription. In Julia, it can be a typed struct like
+  `CoronagraphPayload`, not only a `Dict`.
 - `sim.tel.state.opd` is the simplest advanced handoff for an external science
   arm because it already contains the currently staged atmosphere plus optic
   residual seen by the AO plant.
 - `sim.tel.state.pupil` is worth handing across too when the coronagraph model
   should respect the exact telescope pupil rather than a simplified circular
   aperture.
-- If the AO runtime lives on GPU, `Array(...)` above is the intentional
-  host-transfer boundary into `Proper.jl`.
+- If both packages are on the same GPU backend, the payload arrays can stay on
+  device. Use a matching `Proper.RunContext(typeof(sim.tel.state.opd))` and
+  prepare the coronagraph model on that backend.
+- Only use `Array(...)` as an explicit host-transfer boundary when the AO plant
+  and the coronagraph model intentionally live on different backends.
 - Start with plain `prop_run(...)` or `prepare_model(...)` in `Proper.jl`.
   Only move to more elaborate prepared execution or asset pools if the
   coronagraph model itself becomes a throughput bottleneck.
 
 Use this pattern when you need:
 
+- a clean Julia-native HIL coronagraph boundary
 - HIL AO control with an external coronagraph science path
 - explicit separation between RTC-facing plant logic and science propagation
 - reuse of an existing PROPER/Proper.jl prescription without forcing it into
