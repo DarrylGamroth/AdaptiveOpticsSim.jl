@@ -493,6 +493,47 @@ end
     end
 end
 
+@kernel function sh_spot_centroid_reference_scale_kernel!(slopes, spot_cube, reference, valid_mask,
+    cutoff, slopes_units, n_sub::Int, offset::Int, n1::Int, n2::Int)
+    idx = @index(Global, Linear)
+    n_spots = n_sub * n_sub
+    if idx <= n_spots
+        i = (idx - 1) ÷ n_sub + 1
+        j = idx - (i - 1) * n_sub
+        T = eltype(slopes)
+        total = zero(T)
+        sx = zero(T)
+        sy = zero(T)
+        inv_units = inv(slopes_units)
+        ref_y = @inbounds reference[idx]
+        ref_x = @inbounds reference[idx + offset]
+        if @inbounds valid_mask[i, j]
+            @inbounds for x in 1:n1, y in 1:n2
+                val = spot_cube[idx, x, y]
+                if val < cutoff
+                    spot_cube[idx, x, y] = zero(T)
+                else
+                    total += val
+                    sx += T(x - 1) * val
+                    sy += T(y - 1) * val
+                end
+            end
+            if total <= 0
+                slopes[idx] = -ref_y * inv_units
+                slopes[idx + offset] = -ref_x * inv_units
+            else
+                slopes[idx] = (sy / total - ref_y) * inv_units
+                slopes[idx + offset] = (sx / total - ref_x) * inv_units
+            end
+        else
+            @inbounds begin
+                slopes[idx] = zero(T)
+                slopes[idx + offset] = zero(T)
+            end
+        end
+    end
+end
+
 @kernel function sh_spot_cutoff_stats_kernel!(stats, spot_cube, valid_mask, cutoff, n_sub::Int, n1::Int, n2::Int)
     idx = @index(Global, Linear)
     n_spots = n_sub * n_sub
@@ -543,6 +584,42 @@ end
                 @inbounds begin
                     slopes[idx] = zero(T)
                     slopes[idx + offset] = zero(T)
+                end
+            end
+        else
+            @inbounds begin
+                slopes[idx] = zero(T)
+                slopes[idx + offset] = zero(T)
+            end
+        end
+    end
+end
+
+@kernel function sh_finalize_spot_slopes_reference_scale_kernel!(slopes, stats, reference, valid_mask,
+    slopes_units, n_sub::Int, offset::Int)
+    idx = @index(Global, Linear)
+    n_spots = n_sub * n_sub
+    if idx <= n_spots
+        i = (idx - 1) ÷ n_sub + 1
+        j = idx - (i - 1) * n_sub
+        base = 3 * (idx - 1)
+        T = eltype(slopes)
+        inv_units = inv(slopes_units)
+        ref_y = @inbounds reference[idx]
+        ref_x = @inbounds reference[idx + offset]
+        if @inbounds valid_mask[i, j]
+            total = @inbounds stats[base + 1]
+            if total > zero(T)
+                sx = @inbounds stats[base + 2] / total
+                sy = @inbounds stats[base + 3] / total
+                @inbounds begin
+                    slopes[idx] = (sy - ref_y) * inv_units
+                    slopes[idx + offset] = (sx - ref_x) * inv_units
+                end
+            else
+                @inbounds begin
+                    slopes[idx] = -ref_y * inv_units
+                    slopes[idx + offset] = -ref_x * inv_units
                 end
             end
         else

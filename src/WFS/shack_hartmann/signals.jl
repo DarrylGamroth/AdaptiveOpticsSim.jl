@@ -95,6 +95,19 @@ function sh_signal_from_spots_device_stats!(style::AcceleratorStyle, wfs::ShackH
     return wfs.state.slopes
 end
 
+function sh_signal_from_spots_calibrated_device_stats!(style::AcceleratorStyle, wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}
+    n_sub = wfs.params.n_subap
+    offset = n_sub * n_sub
+    reference = vec(wfs.state.reference_signal_2d)
+    fill!(wfs.state.spot_stats, zero(eltype(wfs.state.spot_stats)))
+    launch_kernel!(style, sh_spot_cutoff_stats_kernel!, wfs.state.spot_stats, wfs.state.spot_cube,
+        wfs.state.valid_mask, cutoff, n_sub, size(wfs.state.spot_cube, 2),
+        size(wfs.state.spot_cube, 3); ndrange=offset)
+    launch_kernel!(style, sh_finalize_spot_slopes_reference_scale_kernel!, wfs.state.slopes, wfs.state.spot_stats,
+        reference, wfs.state.valid_mask, wfs.state.slopes_units, n_sub, offset; ndrange=offset)
+    return wfs.state.slopes
+end
+
 @inline function sh_spot_view(wfs::ShackHartmann, idx::Int)
     return @view wfs.state.spot_cube[idx, :, :]
 end
@@ -613,6 +626,58 @@ function sh_signal_from_spots!(::AcceleratorStyle, wfs::ShackHartmann, cutoff::T
     return wfs.state.slopes
 end
 
+function sh_signal_from_spots_calibrated!(wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}
+    return sh_signal_from_spots_calibrated!(execution_style(wfs.state.slopes), wfs, cutoff)
+end
+
+function sh_signal_from_spots_calibrated!(::ScalarCPUStyle, wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}
+    sh_signal_from_spots!(ScalarCPUStyle(), wfs, cutoff)
+    subtract_reference_and_scale!(ScalarCPUStyle(), wfs)
+    return wfs.state.slopes
+end
+
+function sh_signal_from_spots_calibrated!(::AcceleratorStyle, wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}
+    if sh_uses_rocm_safe_sensing_plan(wfs)
+        sh_refresh_valid_mask_host!(wfs)
+        n_sub = wfs.params.n_subap
+        offset = n_sub * n_sub
+        host_slopes = wfs.state.slopes_host
+        reference = vec(wfs.state.reference_signal_2d)
+        inv_units = inv(wfs.state.slopes_units)
+        idx = 1
+        @inbounds for i in 1:n_sub, j in 1:n_sub
+            if wfs.state.valid_mask_host[i, j]
+                total, sx, sy = centroid_from_spot_cutoff!(wfs, sh_spot_view(wfs, idx), cutoff)
+                if total <= 0
+                    host_slopes[idx] = -reference[idx] * inv_units
+                    host_slopes[idx + offset] = -reference[idx + offset] * inv_units
+                else
+                    host_slopes[idx] = (sy - reference[idx]) * inv_units
+                    host_slopes[idx + offset] = (sx - reference[idx + offset]) * inv_units
+                end
+            else
+                host_slopes[idx] = zero(T)
+                host_slopes[idx + offset] = zero(T)
+            end
+            idx += 1
+        end
+        copyto!(wfs.state.slopes, host_slopes)
+        return wfs.state.slopes
+    end
+    if sh_uses_device_stats_sensing_plan(wfs)
+        style = execution_style(wfs.state.slopes)
+        return sh_signal_from_spots_calibrated_device_stats!(style, wfs, cutoff)
+    end
+    n_sub = wfs.params.n_subap
+    offset = n_sub * n_sub
+    style = execution_style(wfs.state.slopes)
+    reference = vec(wfs.state.reference_signal_2d)
+    launch_kernel!(style, sh_spot_centroid_reference_scale_kernel!, wfs.state.slopes, wfs.state.spot_cube,
+        reference, wfs.state.valid_mask, cutoff, wfs.state.slopes_units, n_sub, offset,
+        size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=offset)
+    return wfs.state.slopes
+end
+
 @inline function zero_invalid_sh_slopes!(::ScalarCPUStyle, slopes::AbstractVector{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
     n_sub = size(valid_mask, 1)
     offset = n_sub * n_sub
@@ -641,6 +706,15 @@ end
 
 function sh_signal_from_spots!(wfs::ShackHartmann, peak::T, extraction::CenterOfGravityExtraction{T}) where {T<:AbstractFloat}
     return sh_signal_from_spots!(wfs, centroid_cutoff(extraction, peak))
+end
+
+function sh_signal_from_spots_calibrated!(wfs::ShackHartmann, peak::T, threshold::T) where {T<:AbstractFloat}
+    cutoff = peak <= 0 ? zero(T) : threshold * peak
+    return sh_signal_from_spots_calibrated!(wfs, cutoff)
+end
+
+function sh_signal_from_spots_calibrated!(wfs::ShackHartmann, peak::T, extraction::CenterOfGravityExtraction{T}) where {T<:AbstractFloat}
+    return sh_signal_from_spots_calibrated!(wfs, centroid_cutoff(extraction, peak))
 end
 
 function mean_valid_signal(signal::AbstractVector{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
@@ -699,19 +773,28 @@ end
 end
 
 function subtract_reference_and_scale!(wfs::ShackHartmann)
+    return subtract_reference_and_scale!(execution_style(wfs.state.slopes), wfs)
+end
+
+function subtract_reference_and_scale!(::ScalarCPUStyle, wfs::ShackHartmann)
     inv_units = inv(wfs.state.slopes_units)
-    ref = wfs.state.reference_signal_2d
-    @inbounds for idx in eachindex(wfs.state.slopes)
+    ref = vec(wfs.state.reference_signal_2d)
+    @inbounds for idx in eachindex(wfs.state.slopes, ref)
         wfs.state.slopes[idx] = (wfs.state.slopes[idx] - ref[idx]) * inv_units
     end
     return wfs.state.slopes
 end
 
+function subtract_reference_and_scale!(::AcceleratorStyle, wfs::ShackHartmann)
+    inv_units = inv(wfs.state.slopes_units)
+    ref = vec(wfs.state.reference_signal_2d)
+    @. wfs.state.slopes = (wfs.state.slopes - ref) * inv_units
+    return wfs.state.slopes
+end
+
 function subtract_reference!(wfs::ShackHartmann)
-    ref = wfs.state.reference_signal_2d
-    @inbounds for idx in eachindex(wfs.state.slopes)
-        wfs.state.slopes[idx] -= ref[idx]
-    end
+    ref = vec(wfs.state.reference_signal_2d)
+    @. wfs.state.slopes = wfs.state.slopes - ref
     return wfs.state.slopes
 end
 

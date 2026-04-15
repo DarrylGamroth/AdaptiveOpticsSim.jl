@@ -1,0 +1,40 @@
+soak_progress step=10000/100000
+soak_progress step=20000/100000
+soak_progress step=30000/100000
+soak_progress step=40000/100000
+soak_progress step=50000/100000
+soak_progress step=60000/100000
+soak_progress step=70000/100000
+soak_progress step=80000/100000
+soak_progress step=90000/100000
+soak_progress step=100000/100000
+revolt_like_hil_soak
+  backend: cuda
+  config_dir: benchmarks/assets/revolt_like
+  sensor: cmos
+  response_mode: default
+  thermal_mode: none
+  effective_frame_response: gaussian
+  thermal_model: none
+  detector_temperature_K: nothing
+  steps: 100000
+  warmup: 1000
+  steady_step_alloc_bytes: 26256
+  total_wall_ns: 53137007693
+  frame_rate_hz: 1881.927574427069
+  min_ns: 491200
+  mean_ns: 531054.08765
+  p50_ns: 520290
+  p95_ns: 533711
+  p99_ns: 542170
+  max_ns: 504184991
+  gc_collect_delta: 0
+  gc_allocd_delta: 682303344
+  gc_total_allocd_delta: 2018250112
+  gc_malloc_delta: 18
+  gc_realloc_delta: 0
+  gc_bigalloc_delta: 0
+  gc_total_time_delta: 618835342
+  gc_pause_delta: 4
+  gc_full_sweep_delta: 1
+  gc_max_pause_delta: 78083398

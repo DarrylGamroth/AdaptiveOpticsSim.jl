@@ -135,8 +135,20 @@ end
 @inline begin_kernel_phase(style::ExecutionStyle) = KernelLaunchPhase(style)
 @inline finish_kernel_phase!(phase::KernelLaunchPhase) = synchronize_backend!(phase.style)
 
+@inline preferred_workgroupsize(::AcceleratorStyle, ndrange) = nothing
+@inline preferred_workgroupsize(::AcceleratorStyle, ndrange::Integer) = min(ndrange, 256)
+@inline preferred_workgroupsize(::AcceleratorStyle, ndrange::Tuple{Int,Int}) =
+    (min(ndrange[1], 16), min(ndrange[2], 16))
+@inline preferred_workgroupsize(::AcceleratorStyle, ndrange::Tuple{Int,Int,Int}) =
+    (min(ndrange[1], 8), min(ndrange[2], 8), min(ndrange[3], 4))
+
 @inline function launch_kernel_async!(style::AcceleratorStyle, kernel, args...; ndrange)
-    kernel(style.backend)(args...; ndrange=ndrange)
+    workgroupsize = preferred_workgroupsize(style, ndrange)
+    if isnothing(workgroupsize)
+        kernel(style.backend)(args...; ndrange=ndrange)
+    else
+        kernel(style.backend)(args...; ndrange=ndrange, workgroupsize=workgroupsize)
+    end
     return nothing
 end
 

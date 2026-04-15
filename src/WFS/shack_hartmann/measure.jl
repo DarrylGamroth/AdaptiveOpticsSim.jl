@@ -75,8 +75,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
     ensure_sh_calibration!(wfs, tel, src)
     peak = sampled_spots_peak!(wfs, tel, src)
     sync_exported_spots!(wfs)
-    sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
-    subtract_reference_and_scale!(wfs)
+    sh_signal_from_spots_calibrated!(wfs, peak, slope_extraction_model(wfs))
     return wfs.state.slopes
 end
 
@@ -87,8 +86,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Spectr
     ensure_sh_calibration!(wfs, tel, src)
     peak = sampled_spots_peak!(wfs, tel, src)
     sync_exported_spots!(wfs)
-    sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
-    subtract_reference_and_scale!(wfs)
+    sh_signal_from_spots_calibrated!(wfs, peak, slope_extraction_model(wfs))
     return wfs.state.slopes
 end
 
@@ -113,8 +111,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Abstra
     ensure_sh_calibration!(wfs, tel, src)
     peak = sampled_spots_peak!(wfs, tel, src, det, rng)
     sync_exported_spots!(wfs)
-    sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
-    subtract_reference_and_scale!(wfs)
+    sh_signal_from_spots_calibrated!(wfs, peak, slope_extraction_model(wfs))
     return wfs.state.slopes
 end
 
@@ -126,8 +123,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, src::Spectr
     ensure_sh_calibration!(wfs, tel, src)
     peak = sampled_spots_peak!(wfs, tel, src, det, rng)
     sync_exported_spots!(wfs)
-    sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
-    subtract_reference_and_scale!(wfs)
+    sh_signal_from_spots_calibrated!(wfs, peak, slope_extraction_model(wfs))
     return wfs.state.slopes
 end
 
