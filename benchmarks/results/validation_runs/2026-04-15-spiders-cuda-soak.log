@@ -19,22 +19,22 @@ revolt_like_hil_soak
   detector_temperature_K: nothing
   steps: 100000
   warmup: 1000
-  steady_step_alloc_bytes: 26256
-  total_wall_ns: 53137007693
-  frame_rate_hz: 1881.927574427069
-  min_ns: 491200
-  mean_ns: 531054.08765
-  p50_ns: 520290
-  p95_ns: 533711
-  p99_ns: 542170
-  max_ns: 504184991
+  steady_step_alloc_bytes: 22976
+  total_wall_ns: 50891911430
+  frame_rate_hz: 1964.9487942213846
+  min_ns: 470400
+  mean_ns: 508591.9977
+  p50_ns: 497130
+  p95_ns: 510561
+  p99_ns: 517110
+  max_ns: 513671814
   gc_collect_delta: 0
-  gc_allocd_delta: 682303344
-  gc_total_allocd_delta: 2018250112
+  gc_allocd_delta: 463447328
+  gc_total_allocd_delta: 1899465248
   gc_malloc_delta: 18
   gc_realloc_delta: 0
   gc_bigalloc_delta: 0
-  gc_total_time_delta: 618835342
+  gc_total_time_delta: 620349324
   gc_pause_delta: 4
   gc_full_sweep_delta: 1
-  gc_max_pause_delta: 78083398
+  gc_max_pause_delta: 77802518

@@ -549,7 +549,8 @@ end
 function _apply_batched_detector_pipeline!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3},
     rng::AbstractRNG) where {T<:AbstractFloat}
     exposure_time = det.params.integration_time
-    cube .*= det.params.qe * exposure_time
+    qe_scale = det.params.qe * exposure_time
+    isone(qe_scale) || (cube .*= qe_scale)
     _batched_signal_defects!(det.params.defect_model, cube, scratch, exposure_time)
     _batched_apply_response!(execution_style(cube), det.params.response_model, cube, scratch)
     capture_stack_poisson_noise!(det, cube, rng)

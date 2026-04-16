@@ -143,4 +143,7 @@ function _require_batched_sensor_compat(sensor::CMOSSensor)
     return nothing
 end
 
-_batched_post_readout_gain!(::CMOSSensor, det::Detector, cube::AbstractArray) = (cube .*= det.params.gain; cube)
+function _batched_post_readout_gain!(::CMOSSensor, det::Detector, cube::AbstractArray)
+    isone(det.params.gain) || (cube .*= det.params.gain)
+    return cube
+end
