@@ -2,6 +2,7 @@ abstract type NoiseModel end
 abstract type SensorType end
 abstract type FrameSensorType <: SensorType end
 abstract type CountingSensorType <: SensorType end
+
 abstract type AbstractFrameDetector <: AbstractDetector end
 abstract type AbstractCountingDetector <: AbstractDetector end
 abstract type CountingDeadTimeModel end
@@ -34,6 +35,18 @@ struct FrameWindow
         return window
     end
 end
+
+frame_sampling_symbol(::FrameSensorType) = :single_read
+frame_sampling_reads(::FrameSensorType) = 1
+frame_sampling_reference_reads(::FrameSensorType) = nothing
+frame_sampling_signal_reads(::FrameSensorType) = nothing
+sampling_read_time(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = nothing
+sampling_read_time(sensor::FrameSensorType, frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat} =
+    sampling_read_time(sensor, T)
+sampling_wallclock_time(::FrameSensorType, integration_time, ::Type{T}) where {T<:AbstractFloat} = T(integration_time)
+sampling_wallclock_time(sensor::FrameSensorType, integration_time, frame_size::Tuple{Int,Int},
+    window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat} =
+    sampling_wallclock_time(sensor, integration_time, T)
 
 struct NullFrameReadoutCorrection <: FrameReadoutCorrectionModel end
 
@@ -401,7 +414,7 @@ struct SampledFrameResponse{T<:AbstractFloat,A<:AbstractMatrix{T}} <: AbstractFr
         all(size(kernel) .> 0) || throw(InvalidConfiguration("SampledFrameResponse kernel must not be empty"))
         isodd(size(kernel, 1)) || throw(InvalidConfiguration("SampledFrameResponse kernel row count must be odd"))
         isodd(size(kernel, 2)) || throw(InvalidConfiguration("SampledFrameResponse kernel column count must be odd"))
-        kernel_sum = execution_style(kernel) isa ScalarCPUStyle ? sum(kernel) : sum(Array(kernel))
+        kernel_sum = _frame_response_kernel_sum(kernel)
         kernel_sum > zero(T) || throw(InvalidConfiguration("SampledFrameResponse kernel must have positive sum"))
         return new{T,A}(kernel)
     end
@@ -426,6 +439,78 @@ struct SeparablePixelMTF{T<:AbstractFloat,VX<:AbstractVector{T},VY<:AbstractVect
 end
 
 const SeparableGaussianPixelResponse = GaussianPixelResponse
+
+@inline _frame_response_kernel_sum(kernel) = _frame_response_kernel_sum(execution_style(kernel), kernel)
+@inline _frame_response_kernel_sum(::ScalarCPUStyle, kernel) = sum(kernel)
+@inline _frame_response_kernel_sum(::ExecutionStyle, kernel) = sum(Array(kernel))
+
+response_family(::NullFrameResponse) = :none
+response_family(::GaussianPixelResponse) = :gaussian
+response_family(::SampledFrameResponse) = :sampled
+response_family(::RectangularPixelAperture) = :rectangular_aperture
+response_family(::SeparablePixelMTF) = :separable_mtf
+
+frame_response_symbol(model::AbstractFrameResponse) = response_family(model)
+
+response_application_domain(::AbstractFrameResponse) = :image
+
+is_shift_invariant(::AbstractFrameResponse) = true
+supports_frequency_domain_application(::AbstractFrameResponse) = false
+supports_frequency_domain_application(::AbstractFrameMTF) = true
+supports_separable_application(::AbstractFrameResponse) = false
+supports_separable_application(::NullFrameResponse) = true
+supports_separable_application(::GaussianPixelResponse) = true
+supports_separable_application(::RectangularPixelAperture) = true
+supports_separable_application(::SeparablePixelMTF) = true
+supports_batched_response_application(::ScalarCPUStyle, ::AbstractFrameResponse) = true
+supports_batched_response_application(::AcceleratorStyle, ::AbstractFrameResponse) = false
+supports_batched_response_application(::ScalarCPUStyle, ::NullFrameResponse) = true
+supports_batched_response_application(::AcceleratorStyle, ::NullFrameResponse) = true
+supports_batched_response_application(::ScalarCPUStyle, ::GaussianPixelResponse) = true
+supports_batched_response_application(::AcceleratorStyle, ::GaussianPixelResponse) = true
+supports_batched_response_application(::ScalarCPUStyle, ::SampledFrameResponse) = true
+supports_batched_response_application(::AcceleratorStyle, ::SampledFrameResponse) = true
+supports_batched_response_application(::ScalarCPUStyle, ::RectangularPixelAperture) = true
+supports_batched_response_application(::AcceleratorStyle, ::RectangularPixelAperture) = true
+supports_batched_response_application(::ScalarCPUStyle, ::SeparablePixelMTF) = true
+supports_batched_response_application(::AcceleratorStyle, ::SeparablePixelMTF) = true
+supports_subpixel_geometry(::AbstractFrameResponse) = false
+supports_subpixel_geometry(::AbstractFrameMTF) = true
+
+response_support(::NullFrameResponse) = nothing, nothing
+response_support(model::GaussianPixelResponse) = length(model.kernel), length(model.kernel)
+response_support(model::SampledFrameResponse) = size(model.kernel)
+response_support(model::RectangularPixelAperture) = length(model.kernel_y), length(model.kernel_x)
+response_support(model::SeparablePixelMTF) = length(model.kernel_y), length(model.kernel_x)
+
+response_width_px(::NullFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
+response_width_px(model::GaussianPixelResponse, ::Type{T}) where {T<:AbstractFloat} = T(model.response_width_px)
+response_width_px(::SampledFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
+response_width_px(::AbstractFrameMTF, ::Type{T}) where {T<:AbstractFloat} = nothing
+
+response_pitch_x_px(::AbstractFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
+response_pitch_y_px(::AbstractFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
+response_fill_factor_x(::AbstractFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
+response_fill_factor_y(::AbstractFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
+response_aperture_shape(::AbstractFrameResponse) = nothing
+response_aperture_shape(::SampledFrameResponse) = :sampled
+
+response_pitch_x_px(model::RectangularPixelAperture, ::Type{T}) where {T<:AbstractFloat} = T(model.pitch_x_px)
+response_pitch_y_px(model::RectangularPixelAperture, ::Type{T}) where {T<:AbstractFloat} = T(model.pitch_y_px)
+response_fill_factor_x(model::RectangularPixelAperture, ::Type{T}) where {T<:AbstractFloat} = T(model.fill_factor_x)
+response_fill_factor_y(model::RectangularPixelAperture, ::Type{T}) where {T<:AbstractFloat} = T(model.fill_factor_y)
+response_aperture_shape(::RectangularPixelAperture) = :rectangular
+
+response_pitch_x_px(model::SeparablePixelMTF, ::Type{T}) where {T<:AbstractFloat} = T(model.pitch_x_px)
+response_pitch_y_px(model::SeparablePixelMTF, ::Type{T}) where {T<:AbstractFloat} = T(model.pitch_y_px)
+response_fill_factor_x(model::SeparablePixelMTF, ::Type{T}) where {T<:AbstractFloat} = T(model.fill_factor_x)
+response_fill_factor_y(model::SeparablePixelMTF, ::Type{T}) where {T<:AbstractFloat} = T(model.fill_factor_y)
+response_aperture_shape(::SeparablePixelMTF) = :rectangular
+
+supports_detector_mtf(::AbstractFrameResponse) = false
+supports_detector_mtf(::GaussianPixelResponse) = true
+supports_detector_mtf(::SampledFrameResponse) = true
+supports_detector_mtf(::AbstractFrameMTF) = true
 
 struct NoBackground <: BackgroundModel end
 
@@ -747,7 +832,7 @@ struct DetectorParams{T<:AbstractFloat,S<:SensorType,R<:AbstractFrameResponse,
     output_precision::Union{Nothing,DataType}
 end
 
-mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O,P<:FrameReadoutProducts,TS<:AbstractDetectorThermalState}
+mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O,P,TS<:AbstractDetectorThermalState}
     frame::A
     response_buffer::A
     bin_buffer::A

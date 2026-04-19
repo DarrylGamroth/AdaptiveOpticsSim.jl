@@ -306,6 +306,26 @@
     @test detector_signal_cube(det_saphira_single) !== nothing
     @test detector_read_cube(det_saphira_single) === nothing
     @test detector_read_times(det_saphira_single) === nothing
+
+    @test fieldtype(typeof(det.state), :readout_products) === NoFrameReadoutProducts
+    @test fieldtype(typeof(det_saphira_single.state), :readout_products) !== FrameReadoutProducts
+
+    struct DummyReadoutProducts{A,V} <: FrameReadoutProducts
+        signal_frame::A
+        read_times::V
+    end
+    AdaptiveOpticsSim.detector_signal_frame(products::DummyReadoutProducts) = products.signal_frame
+    AdaptiveOpticsSim.detector_read_times(products::DummyReadoutProducts) = products.read_times
+
+    dummy_products = DummyReadoutProducts(fill(3.0, 2, 2), [0.25, 0.5])
+    @test detector_reference_frame(dummy_products) === nothing
+    @test detector_signal_frame(dummy_products) == fill(3.0, 2, 2)
+    @test detector_combined_frame(dummy_products) === nothing
+    @test detector_reference_cube(dummy_products) === nothing
+    @test detector_signal_cube(dummy_products) === nothing
+    @test detector_read_cube(dummy_products) === nothing
+    @test detector_read_times(dummy_products) == [0.25, 0.5]
+
     det_saphira_ndr = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeAvalancheArraySensor(sampling_mode=AveragedNonDestructiveReads(4)))
     frame_saphira_ndr = copy(capture!(det_saphira_ndr, zero_psf; rng=MersenneTwister(16)))

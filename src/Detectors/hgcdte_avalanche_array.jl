@@ -319,13 +319,13 @@ function _ensure_hgcdte_products!(sensor::HgCdTeAvalancheArraySensor, det::Detec
     n_sig = frame_sampling_signal_reads(sensor)
     n_reads = frame_sampling_reads(sensor)
 
-    reference_frame = current isa HgCdTeReadoutProducts ? current.reference_frame : nothing
-    signal_frame = current isa HgCdTeReadoutProducts ? current.signal_frame : nothing
-    combined_frame = current isa HgCdTeReadoutProducts ? current.combined_frame : nothing
-    reference_cube = current isa HgCdTeReadoutProducts ? current.reference_cube : nothing
-    signal_cube = current isa HgCdTeReadoutProducts ? current.signal_cube : nothing
-    read_cube = current isa HgCdTeReadoutProducts ? current.read_cube : nothing
-    read_times = current isa HgCdTeReadoutProducts ? current.read_times : nothing
+    reference_frame = detector_reference_frame(current)
+    signal_frame = detector_signal_frame(current)
+    combined_frame = detector_combined_frame(current)
+    reference_cube = detector_reference_cube(current)
+    signal_cube = detector_signal_cube(current)
+    read_cube = detector_read_cube(current)
+    read_times = detector_read_times(current)
 
     reference_frame = n_ref <= 0 ? nothing : _ensure_windowed_frame_buffer(reference_frame, det, frame)
     signal_frame = _ensure_windowed_frame_buffer(signal_frame, det, frame)

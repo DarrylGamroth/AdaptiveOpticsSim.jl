@@ -180,6 +180,11 @@ Use these when the task is cross-package or instrument-truth work:
   - maintained finite/infinite atmosphere statistics artifact and limitations
 - [`detector-validation.md`](./detector-validation.md)
   - maintained detector-family fixture artifact and scope limits
+- [`detector-interface-refactor-plan-2026-04.md`](./detector-interface-refactor-plan-2026-04.md)
+  - staged cleanup plan for the detector readout-product seam, state
+    concreteness, capability traits, and execution-plan cleanup
+- [`detector-interface-extension.md`](./detector-interface-extension.md)
+  - current extension notes for readout products and other detector seams
 - [`rocm-fallback-inventory.md`](./rocm-fallback-inventory.md)
   - explicit ROCm fallback classification and residual workaround status
 - [`rocm-phase3-rebaseline.md`](./rocm-phase3-rebaseline.md)

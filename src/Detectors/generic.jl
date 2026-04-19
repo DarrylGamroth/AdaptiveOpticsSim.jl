@@ -9,13 +9,13 @@ detector_signal_cube(det::Detector) = detector_signal_cube(det.state.readout_pro
 detector_read_cube(det::Detector) = detector_read_cube(det.state.readout_products)
 detector_read_times(det::Detector) = detector_read_times(det.state.readout_products)
 
-detector_reference_frame(::NoFrameReadoutProducts) = nothing
-detector_signal_frame(::NoFrameReadoutProducts) = nothing
-detector_combined_frame(::NoFrameReadoutProducts) = nothing
-detector_reference_cube(::NoFrameReadoutProducts) = nothing
-detector_signal_cube(::NoFrameReadoutProducts) = nothing
-detector_read_cube(::NoFrameReadoutProducts) = nothing
-detector_read_times(::NoFrameReadoutProducts) = nothing
+detector_reference_frame(::FrameReadoutProducts) = nothing
+detector_signal_frame(::FrameReadoutProducts) = nothing
+detector_combined_frame(::FrameReadoutProducts) = nothing
+detector_reference_cube(::FrameReadoutProducts) = nothing
+detector_signal_cube(::FrameReadoutProducts) = nothing
+detector_read_cube(::FrameReadoutProducts) = nothing
+detector_read_times(::FrameReadoutProducts) = nothing
 detector_reference_frame(products::SampledFrameReadoutProducts) = products.reference_frame
 detector_signal_frame(products::SampledFrameReadoutProducts) = products.signal_frame
 detector_combined_frame(::SampledFrameReadoutProducts) = nothing
@@ -130,87 +130,9 @@ counting_correlation_symbol(::AfterpulsingModel) = :afterpulsing
 counting_correlation_symbol(::ChannelCrosstalkModel) = :channel_crosstalk
 counting_correlation_symbol(::CompositeCountingCorrelation) = :composite
 
-response_family(::NullFrameResponse) = :none
-response_family(::GaussianPixelResponse) = :gaussian
-response_family(::SampledFrameResponse) = :sampled
-response_family(::RectangularPixelAperture) = :rectangular_aperture
-response_family(::SeparablePixelMTF) = :separable_mtf
-
-frame_response_symbol(model::AbstractFrameResponse) = response_family(model)
-
-response_application_domain(::AbstractFrameResponse) = :image
-
-is_shift_invariant(::AbstractFrameResponse) = true
-supports_frequency_domain_application(::AbstractFrameResponse) = false
-supports_frequency_domain_application(::AbstractFrameMTF) = true
-supports_separable_application(::AbstractFrameResponse) = false
-supports_separable_application(::NullFrameResponse) = true
-supports_separable_application(::GaussianPixelResponse) = true
-supports_separable_application(::RectangularPixelAperture) = true
-supports_separable_application(::SeparablePixelMTF) = true
-supports_batched_response_application(::ScalarCPUStyle, ::AbstractFrameResponse) = true
-supports_batched_response_application(::AcceleratorStyle, ::AbstractFrameResponse) = false
-supports_batched_response_application(::ScalarCPUStyle, ::NullFrameResponse) = true
-supports_batched_response_application(::AcceleratorStyle, ::NullFrameResponse) = true
-supports_batched_response_application(::ScalarCPUStyle, ::GaussianPixelResponse) = true
-supports_batched_response_application(::AcceleratorStyle, ::GaussianPixelResponse) = true
-supports_batched_response_application(::ScalarCPUStyle, ::SampledFrameResponse) = true
-supports_batched_response_application(::AcceleratorStyle, ::SampledFrameResponse) = true
-supports_batched_response_application(::ScalarCPUStyle, ::RectangularPixelAperture) = true
-supports_batched_response_application(::AcceleratorStyle, ::RectangularPixelAperture) = true
-supports_batched_response_application(::ScalarCPUStyle, ::SeparablePixelMTF) = true
-supports_batched_response_application(::AcceleratorStyle, ::SeparablePixelMTF) = true
-supports_subpixel_geometry(::AbstractFrameResponse) = false
-supports_subpixel_geometry(::AbstractFrameMTF) = true
-
-response_support(::NullFrameResponse) = nothing, nothing
-response_support(model::GaussianPixelResponse) = length(model.kernel), length(model.kernel)
-response_support(model::SampledFrameResponse) = size(model.kernel)
-response_support(model::RectangularPixelAperture) = length(model.kernel_y), length(model.kernel_x)
-response_support(model::SeparablePixelMTF) = length(model.kernel_y), length(model.kernel_x)
-
-response_width_px(::NullFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
-response_width_px(model::GaussianPixelResponse, ::Type{T}) where {T<:AbstractFloat} = T(model.response_width_px)
-response_width_px(::SampledFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
-response_width_px(::AbstractFrameMTF, ::Type{T}) where {T<:AbstractFloat} = nothing
-
-response_pitch_x_px(::AbstractFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
-response_pitch_y_px(::AbstractFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
-response_fill_factor_x(::AbstractFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
-response_fill_factor_y(::AbstractFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
-response_aperture_shape(::AbstractFrameResponse) = nothing
-response_aperture_shape(::SampledFrameResponse) = :sampled
-
-response_pitch_x_px(model::RectangularPixelAperture, ::Type{T}) where {T<:AbstractFloat} = T(model.pitch_x_px)
-response_pitch_y_px(model::RectangularPixelAperture, ::Type{T}) where {T<:AbstractFloat} = T(model.pitch_y_px)
-response_fill_factor_x(model::RectangularPixelAperture, ::Type{T}) where {T<:AbstractFloat} = T(model.fill_factor_x)
-response_fill_factor_y(model::RectangularPixelAperture, ::Type{T}) where {T<:AbstractFloat} = T(model.fill_factor_y)
-response_aperture_shape(::RectangularPixelAperture) = :rectangular
-
-response_pitch_x_px(model::SeparablePixelMTF, ::Type{T}) where {T<:AbstractFloat} = T(model.pitch_x_px)
-response_pitch_y_px(model::SeparablePixelMTF, ::Type{T}) where {T<:AbstractFloat} = T(model.pitch_y_px)
-response_fill_factor_x(model::SeparablePixelMTF, ::Type{T}) where {T<:AbstractFloat} = T(model.fill_factor_x)
-response_fill_factor_y(model::SeparablePixelMTF, ::Type{T}) where {T<:AbstractFloat} = T(model.fill_factor_y)
-response_aperture_shape(::SeparablePixelMTF) = :rectangular
-
-frame_sampling_symbol(::FrameSensorType) = :single_read
-frame_sampling_reads(::FrameSensorType) = 1
-frame_sampling_reference_reads(::FrameSensorType) = nothing
-frame_sampling_signal_reads(::FrameSensorType) = nothing
-sampling_read_time(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = nothing
-sampling_read_time(sensor::FrameSensorType, frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat} =
-    sampling_read_time(sensor, T)
-sampling_wallclock_time(::FrameSensorType, integration_time, ::Type{T}) where {T<:AbstractFloat} = T(integration_time)
-sampling_wallclock_time(sensor::FrameSensorType, integration_time, frame_size::Tuple{Int,Int},
-    window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat} =
-    sampling_wallclock_time(sensor, integration_time, T)
-
 supports_detector_mtf(::AbstractFrameDetector) = false
 supports_detector_mtf(det::Detector) = supports_detector_mtf(det.params.response_model)
-supports_detector_mtf(::AbstractFrameResponse) = false
-supports_detector_mtf(::GaussianPixelResponse) = true
-supports_detector_mtf(::SampledFrameResponse) = true
-supports_detector_mtf(::AbstractFrameMTF) = true
+
 supports_batched_readout_correction(::FrameReadoutCorrectionModel) = false
 supports_batched_readout_correction(::NullFrameReadoutCorrection) = true
 supports_batched_readout_correction(::ReferencePixelCommonModeCorrection) = true
@@ -719,7 +641,7 @@ function validate_frame_response_model(model::SampledFrameResponse)
     all(size(model.kernel) .> 0) || throw(InvalidConfiguration("SampledFrameResponse kernel must not be empty"))
     isodd(size(model.kernel, 1)) || throw(InvalidConfiguration("SampledFrameResponse kernel row count must be odd"))
     isodd(size(model.kernel, 2)) || throw(InvalidConfiguration("SampledFrameResponse kernel column count must be odd"))
-    kernel_sum = execution_style(model.kernel) isa ScalarCPUStyle ? sum(model.kernel) : sum(Array(model.kernel))
+    kernel_sum = _frame_response_kernel_sum(model.kernel)
     kernel_sum > zero(eltype(model.kernel)) ||
         throw(InvalidConfiguration("SampledFrameResponse kernel must have positive sum"))
     return model
@@ -919,6 +841,16 @@ function resolve_output_precision(bits::Union{Nothing,Int}, output_precision::Un
     return nothing
 end
 
+@inline detector_readout_products_type(::FrameSensorType, frame::A, ::Type{T}) where {T<:AbstractFloat,A<:AbstractMatrix{T}} = NoFrameReadoutProducts
+@inline initial_readout_products(::FrameSensorType, frame::AbstractMatrix, ::Type{T}) where {T<:AbstractFloat} = NoFrameReadoutProducts()
+
+@inline function detector_readout_products_type(::HgCdTeAvalancheArraySensor, frame::A, ::Type{T}) where {T<:AbstractFloat,A<:AbstractMatrix{T}}
+    cube_type = typeof(similar(frame, size(frame, 1), size(frame, 2), 1))
+    return Union{NoFrameReadoutProducts, HgCdTeReadoutProducts{A,Nothing,Nothing}, HgCdTeReadoutProducts{A,cube_type,Nothing}, HgCdTeReadoutProducts{A,cube_type,Vector{T}}}
+end
+
+@inline initial_readout_products(::HgCdTeAvalancheArraySensor, frame::AbstractMatrix, ::Type{T}) where {T<:AbstractFloat} = NoFrameReadoutProducts()
+
 function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     psf_sampling::Int, binning::Int, gain::Real, dark_current::Real,
     bits::Union{Nothing,Int}, full_well::Union{Nothing,Real}, sensor::SensorType,
@@ -991,7 +923,9 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     fill!(latent_buffer, zero(T))
     output_buffer === nothing || fill!(output_buffer, zero(eltype(output_buffer)))
     thermal_state = thermal_state_from_model(thermal, T)
-    state = DetectorState{T, typeof(frame), typeof(output_buffer), FrameReadoutProducts, typeof(thermal_state)}(
+    readout_products_type = detector_readout_products_type(sensor, frame, T)
+    readout_products = initial_readout_products(sensor, frame, T)
+    state = DetectorState{T, typeof(frame), typeof(output_buffer), readout_products_type, typeof(thermal_state)}(
         frame,
         response_buffer,
         bin_buffer,
@@ -1000,7 +934,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
         accum_buffer,
         latent_buffer,
         output_buffer,
-        NoFrameReadoutProducts(),
+        readout_products,
         thermal_state,
         zero(T),
         true,

@@ -207,12 +207,14 @@ function _apply_saturation!(::AcceleratorStyle, det::Detector)
     return det.state.frame
 end
 
+@inline _detector_value_plan(plan::DetectorDirectPlan, ::ExecutionStyle) = plan
+@inline _detector_value_plan(plan::DetectorHostMirrorPlan, ::ScalarCPUStyle) = plan
+@inline _detector_value_plan(::DetectorHostMirrorPlan, style::AcceleratorStyle) = style
+
 function apply_saturation!(det::Detector)
-    plan = detector_execution_plan(typeof(execution_style(det.state.frame)), typeof(det))
-    if plan isa DetectorHostMirrorPlan && execution_style(det.state.frame) isa AcceleratorStyle
-        return _apply_saturation!(execution_style(det.state.frame), det)
-    end
-    return _apply_saturation!(plan, det)
+    style = execution_style(det.state.frame)
+    plan = detector_execution_plan(typeof(style), typeof(det))
+    return _apply_saturation!(_detector_value_plan(plan, style), det)
 end
 
 apply_sensor_statistics!(sensor::FrameSensorType, det::Detector, rng::AbstractRNG) = det.state.frame
@@ -314,11 +316,9 @@ function _apply_quantization!(::AcceleratorStyle, det::Detector)
 end
 
 function apply_quantization!(det::Detector)
-    plan = detector_execution_plan(typeof(execution_style(det.state.frame)), typeof(det))
-    if plan isa DetectorHostMirrorPlan && execution_style(det.state.frame) isa AcceleratorStyle
-        return _apply_quantization!(execution_style(det.state.frame), det)
-    end
-    return _apply_quantization!(plan, det)
+    style = execution_style(det.state.frame)
+    plan = detector_execution_plan(typeof(style), typeof(det))
+    return _apply_quantization!(_detector_value_plan(plan, style), det)
 end
 
 subtract_background_map!(::NoBackground, det::Detector) = det.state.frame
