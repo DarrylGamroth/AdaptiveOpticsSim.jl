@@ -151,6 +151,6 @@ This order is deliberate:
 
 - `DIR-1`: completed
 - `DIR-2`: completed for maintained frame-detector families
-- `DIR-3`: in progress; response-family metadata/capability helpers moved out of the central detector registry
+- `DIR-3`: in progress; response-, sensor-, readout-correction-, thermal-, and counting-family metadata/capability helpers moved out of the central detector registry
 - `DIR-4`: completed for maintained detector capture/readout plan routing
 - `DIR-5`: in progress

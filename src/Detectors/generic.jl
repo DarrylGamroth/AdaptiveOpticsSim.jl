@@ -36,9 +36,6 @@ detector_noise_symbol(::NoisePhoton) = :photon
 detector_noise_symbol(::NoiseReadout) = :readout
 detector_noise_symbol(::NoisePhotonReadout) = :photon_readout
 
-detector_sensor_symbol(sensor::SensorType) =
-    throw(InvalidConfiguration("missing detector_sensor_symbol overload for $(typeof(sensor))"))
-
 detector_defect_symbol(::NullDetectorDefectModel) = :none
 detector_defect_symbol(::PixelResponseNonuniformity) = :prnu
 detector_defect_symbol(::DarkSignalNonuniformity) = :dsnu
@@ -60,101 +57,17 @@ persistence_symbol(::ExponentialPersistence) = :exponential
 is_null_persistence(::AbstractPersistenceModel) = false
 is_null_persistence(::NullPersistence) = true
 
-thermal_model_symbol(::NullDetectorThermalModel) = :none
-thermal_model_symbol(::FixedTemperature) = :fixed_temperature
-thermal_model_symbol(::FirstOrderThermalModel) = :first_order
-is_null_thermal_model(::AbstractDetectorThermalModel) = false
-is_null_thermal_model(::NullDetectorThermalModel) = true
-
-temperature_law_symbol(::NullTemperatureLaw) = :none
-temperature_law_symbol(::ArrheniusRateLaw) = :arrhenius
-temperature_law_symbol(::LinearTemperatureLaw) = :linear
-temperature_law_symbol(::ExponentialTemperatureLaw) = :exponential
-is_null_temperature_law(::AbstractTemperatureLaw) = false
-is_null_temperature_law(::NullTemperatureLaw) = true
-
 thermal_model(det::Detector) = det.params.thermal_model
 thermal_state(det::Detector) = det.state.thermal_state
 
-ambient_temperature_K(::AbstractDetectorThermalModel, ::Type{T}) where {T<:AbstractFloat} = nothing
-cooling_setpoint_K(::AbstractDetectorThermalModel, ::Type{T}) where {T<:AbstractFloat} = nothing
-thermal_time_constant_s(::AbstractDetectorThermalModel, ::Type{T}) where {T<:AbstractFloat} = nothing
-cooling_setpoint_K(model::FixedTemperature, ::Type{T}) where {T<:AbstractFloat} = T(model.temperature_K)
-ambient_temperature_K(model::FirstOrderThermalModel, ::Type{T}) where {T<:AbstractFloat} = T(model.ambient_temperature_K)
-cooling_setpoint_K(model::FirstOrderThermalModel, ::Type{T}) where {T<:AbstractFloat} = T(model.setpoint_temperature_K)
-thermal_time_constant_s(model::FirstOrderThermalModel, ::Type{T}) where {T<:AbstractFloat} = T(model.time_constant_s)
-detector_temperature_K(::NullDetectorThermalModel, ::AbstractDetectorThermalState, ::Type{T}) where {T<:AbstractFloat} = nothing
-detector_temperature_K(model::FixedTemperature, ::AbstractDetectorThermalState, ::Type{T}) where {T<:AbstractFloat} = T(model.temperature_K)
-detector_temperature_K(model::AbstractDetectorThermalModel, state::DetectorThermalState, ::Type{T}) where {T<:AbstractFloat} = T(state.temperature_K)
 detector_temperature(det::Detector, ::Type{T}=eltype(det.state.frame)) where {T<:AbstractFloat} =
     detector_temperature_K(det.params.thermal_model, det.state.thermal_state, T)
 
-advance_thermal!(::NullDetectorThermalModel, ::AbstractDetectorThermalState, dt) = nothing
-advance_thermal!(::FixedTemperature, ::AbstractDetectorThermalState, dt) = nothing
-function advance_thermal!(model::FirstOrderThermalModel, state::DetectorThermalState, dt)
-    dt >= 0 || throw(InvalidConfiguration("thermal evolution step dt must be >= 0"))
-    iszero(dt) && return nothing
-    equilibrium = clamp(model.setpoint_temperature_K, model.min_temperature_K, model.max_temperature_K)
-    state.temperature_K = clamp(equilibrium + (state.temperature_K - equilibrium) * exp(-dt / model.time_constant_s),
-        model.min_temperature_K, model.max_temperature_K)
-    return nothing
-end
 advance_thermal!(det::Detector, dt) = (advance_thermal!(det.params.thermal_model, det.state.thermal_state, dt); det)
-
-evaluate_temperature_law(::NullTemperatureLaw, base_value, detector_temperature) = base_value
-
-function evaluate_temperature_law(law::ArrheniusRateLaw{T}, base_value, detector_temperature) where {T<:AbstractFloat}
-    isnothing(detector_temperature) && return base_value
-    detector_temperature > zero(detector_temperature) ||
-        throw(InvalidConfiguration("detector temperature must be > 0 K"))
-    scale = exp(law.activation_temperature_K * (inv(law.reference_temperature_K) - inv(detector_temperature)))
-    return base_value * scale
-end
-
-function evaluate_temperature_law(law::LinearTemperatureLaw, base_value, detector_temperature)
-    isnothing(detector_temperature) && return base_value
-    scaled = base_value * (one(base_value) + law.slope_per_K * (detector_temperature - law.reference_temperature_K))
-    return max(zero(base_value), scaled)
-end
-
-function evaluate_temperature_law(law::ExponentialTemperatureLaw, base_value, detector_temperature)
-    isnothing(detector_temperature) && return base_value
-    return base_value * exp(law.exponent_per_K * (detector_temperature - law.reference_temperature_K))
-end
-
-counting_gate_symbol(::NullCountingGate) = :none
-counting_gate_symbol(::DutyCycleGate) = :duty_cycle
-
-counting_correlation_symbol(::NullCountingCorrelation) = :none
-counting_correlation_symbol(::AfterpulsingModel) = :afterpulsing
-counting_correlation_symbol(::ChannelCrosstalkModel) = :channel_crosstalk
-counting_correlation_symbol(::CompositeCountingCorrelation) = :composite
 
 supports_detector_mtf(::AbstractFrameDetector) = false
 supports_detector_mtf(det::Detector) = supports_detector_mtf(det.params.response_model)
 
-supports_batched_readout_correction(::FrameReadoutCorrectionModel) = false
-supports_batched_readout_correction(::NullFrameReadoutCorrection) = true
-supports_batched_readout_correction(::ReferencePixelCommonModeCorrection) = true
-supports_batched_readout_correction(::ReferenceRowCommonModeCorrection) = true
-supports_batched_readout_correction(::ReferenceColumnCommonModeCorrection) = true
-supports_batched_readout_correction(::ReferenceOutputCommonModeCorrection) = true
-supports_batched_readout_correction(model::CompositeFrameReadoutCorrection) =
-    all(supports_batched_readout_correction, model.stages)
-
-supports_clock_induced_charge(::FrameSensorType) = false
-supports_column_readout_noise(::FrameSensorType) = false
-supports_avalanche_gain(::FrameSensorType) = false
-supports_avalanche_gain(::AvalancheFrameSensorType) = true
-supports_sensor_glow(::FrameSensorType) = false
-supports_detector_defect_maps(::FrameSensorType) = false
-supports_detector_persistence(::FrameSensorType) = false
-supports_detector_nonlinearity(::FrameSensorType) = false
-supports_shutter_timing(::FrameSensorType) = false
-supports_nondestructive_reads(::FrameSensorType) = false
-supports_reference_read_subtraction(::FrameSensorType) = false
-supports_readout_correction(::FrameSensorType) = false
-supports_read_cube(::FrameSensorType) = false
 supports_detector_thermal_model(::AbstractFrameDetector) = false
 supports_detector_thermal_model(::AbstractCountingDetector) = false
 supports_dynamic_thermal_state(::AbstractDetectorThermalModel) = false
@@ -171,28 +84,6 @@ supports_temperature_dependent_dark_counts(::AbstractCountingDetector) = false
 configured_glow_rate(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = zero(T)
 configured_cic_rate(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = zero(T)
 
-readout_correction_symbol(::NullFrameReadoutCorrection) = :none
-readout_correction_symbol(::ReferencePixelCommonModeCorrection) = :reference_pixel_common_mode
-readout_correction_symbol(::ReferenceRowCommonModeCorrection) = :reference_row_common_mode
-readout_correction_symbol(::ReferenceColumnCommonModeCorrection) = :reference_column_common_mode
-readout_correction_symbol(::ReferenceOutputCommonModeCorrection) = :reference_output_common_mode
-readout_correction_symbol(::CompositeFrameReadoutCorrection) = :composite
-is_null_readout_correction(::FrameReadoutCorrectionModel) = false
-is_null_readout_correction(::NullFrameReadoutCorrection) = true
-correction_edge_rows(::FrameReadoutCorrectionModel) = nothing
-correction_edge_cols(::FrameReadoutCorrectionModel) = nothing
-correction_edge_rows(model::ReferencePixelCommonModeCorrection) = model.edge_rows
-correction_edge_cols(model::ReferencePixelCommonModeCorrection) = model.edge_cols
-correction_edge_rows(model::ReferenceColumnCommonModeCorrection) = model.edge_rows
-correction_edge_cols(model::ReferenceRowCommonModeCorrection) = model.edge_cols
-correction_edge_rows(model::ReferenceOutputCommonModeCorrection) = model.edge_rows
-correction_edge_cols(model::ReferenceOutputCommonModeCorrection) = model.edge_cols
-correction_group_rows(::FrameReadoutCorrectionModel) = nothing
-correction_group_cols(::FrameReadoutCorrectionModel) = nothing
-correction_group_cols(model::ReferenceOutputCommonModeCorrection) = model.output_cols
-correction_stage_count(::FrameReadoutCorrectionModel) = 1
-correction_stage_count(model::CompositeFrameReadoutCorrection) = length(model.stages)
-
 supports_counting_noise(::AbstractCountingDetector) = false
 supports_dead_time(::AbstractCountingDetector) = false
 supports_channel_gain_map(::AbstractCountingDetector) = false
@@ -200,9 +91,6 @@ supports_counting_gating(::AbstractCountingDetector) = false
 supports_afterpulsing(::AbstractCountingDetector) = false
 supports_channel_crosstalk(::AbstractCountingDetector) = false
 supports_paralyzable_dead_time(::AbstractCountingDetector) = false
-
-supports_detector_response(::SensorType, ::AbstractDetectorResponse) = false
-supports_detector_response(::FrameSensorType, ::AbstractFrameResponse) = true
 
 function default_response_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     return NullFrameResponse()
