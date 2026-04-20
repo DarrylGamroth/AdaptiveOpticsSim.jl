@@ -26,6 +26,16 @@ abstract type AbstractTemperatureLaw end
 abstract type AvalancheFrameSensorType <: FrameSensorType end
 abstract type HgCdTeAvalancheArraySensorType <: AvalancheFrameSensorType end
 
+supports_detector_thermal_model(::AbstractFrameDetector) = false
+supports_detector_thermal_model(::AbstractCountingDetector) = false
+supports_counting_noise(::AbstractCountingDetector) = false
+supports_dead_time(::AbstractCountingDetector) = false
+supports_channel_gain_map(::AbstractCountingDetector) = false
+supports_counting_gating(::AbstractCountingDetector) = false
+supports_afterpulsing(::AbstractCountingDetector) = false
+supports_channel_crosstalk(::AbstractCountingDetector) = false
+supports_paralyzable_dead_time(::AbstractCountingDetector) = false
+
 detector_sensor_symbol(sensor::SensorType) =
     throw(InvalidConfiguration("missing detector_sensor_symbol overload for $(typeof(sensor))"))
 
@@ -187,6 +197,13 @@ CompositeDetectorDefectModel(stages::Tuple) =
     throw(InvalidConfiguration("CompositeDetectorDefectModel stages must be AbstractDetectorDefectModel values"))
 CompositeDetectorDefectModel(stages::AbstractDetectorDefectModel...) = CompositeDetectorDefectModel(tuple(stages...))
 
+detector_defect_symbol(::NullDetectorDefectModel) = :none
+detector_defect_symbol(::PixelResponseNonuniformity) = :prnu
+detector_defect_symbol(::DarkSignalNonuniformity) = :dsnu
+detector_defect_symbol(::BadPixelMask) = :bad_pixel_mask
+detector_defect_symbol(::CompositeDetectorDefectModel) = :composite
+default_detector_defect_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend()) = NullDetectorDefectModel()
+
 struct GlobalShutter <: AbstractFrameTimingModel end
 
 struct RollingShutter{T<:AbstractFloat} <: AbstractFrameTimingModel
@@ -195,6 +212,12 @@ end
 
 RollingShutter(line_time::Real) = RollingShutter{Float64}(float(line_time))
 
+timing_model_symbol(::GlobalShutter) = :global_shutter
+timing_model_symbol(::RollingShutter) = :rolling_shutter
+is_global_shutter(::AbstractFrameTimingModel) = false
+is_global_shutter(::GlobalShutter) = true
+default_frame_timing_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64) = GlobalShutter()
+
 struct NullFrameNonlinearity <: AbstractFrameNonlinearityModel end
 
 struct SaturatingFrameNonlinearity{T<:AbstractFloat} <: AbstractFrameNonlinearityModel
@@ -202,6 +225,12 @@ struct SaturatingFrameNonlinearity{T<:AbstractFloat} <: AbstractFrameNonlinearit
 end
 
 SaturatingFrameNonlinearity(coefficient::Real) = SaturatingFrameNonlinearity{Float64}(float(coefficient))
+
+nonlinearity_symbol(::NullFrameNonlinearity) = :none
+nonlinearity_symbol(::SaturatingFrameNonlinearity) = :saturating
+is_null_frame_nonlinearity(::AbstractFrameNonlinearityModel) = false
+is_null_frame_nonlinearity(::NullFrameNonlinearity) = true
+default_frame_nonlinearity_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64) = NullFrameNonlinearity()
 
 struct NullPersistence <: AbstractPersistenceModel end
 
@@ -346,6 +375,11 @@ end
 
 ExponentialPersistence(coupling::Real, decay::Real) = ExponentialPersistence{Float64}(float(coupling), float(decay))
 
+persistence_symbol(::NullPersistence) = :none
+persistence_symbol(::ExponentialPersistence) = :exponential
+is_null_persistence(::AbstractPersistenceModel) = false
+is_null_persistence(::NullPersistence) = true
+
 thermal_model_symbol(::NullDetectorThermalModel) = :none
 thermal_model_symbol(::FixedTemperature) = :fixed_temperature
 thermal_model_symbol(::FirstOrderThermalModel) = :first_order
@@ -401,6 +435,10 @@ function evaluate_temperature_law(law::ExponentialTemperatureLaw, base_value, de
     isnothing(detector_temperature) && return base_value
     return base_value * exp(law.exponent_per_K * (detector_temperature - law.reference_temperature_K))
 end
+
+default_thermal_model(::SensorType; T::Type{<:AbstractFloat}=Float64) = NullDetectorThermalModel()
+supports_dynamic_thermal_state(::AbstractDetectorThermalModel) = false
+supports_dynamic_thermal_state(::FirstOrderThermalModel) = true
 
 struct NullCountingGate <: AbstractCountingGateModel end
 
@@ -519,6 +557,11 @@ struct NoisePhotonReadout{T<:AbstractFloat} <: NoiseModel
     sigma::T
 end
 
+detector_noise_symbol(::NoiseNone) = :none
+detector_noise_symbol(::NoisePhoton) = :photon
+detector_noise_symbol(::NoiseReadout) = :readout
+detector_noise_symbol(::NoisePhotonReadout) = :photon_readout
+
 struct NullFrameResponse <: AbstractFrameResponse end
 
 struct GaussianPixelResponse{T<:AbstractFloat,V<:AbstractVector{T}} <: AbstractFrameResponse
@@ -629,6 +672,9 @@ supports_detector_mtf(::AbstractFrameResponse) = false
 supports_detector_mtf(::GaussianPixelResponse) = true
 supports_detector_mtf(::SampledFrameResponse) = true
 supports_detector_mtf(::AbstractFrameMTF) = true
+
+default_response_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend()) =
+    NullFrameResponse()
 
 struct NoBackground <: BackgroundModel end
 

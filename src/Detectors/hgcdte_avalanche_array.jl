@@ -36,6 +36,8 @@ supports_nondestructive_reads(::HgCdTeAvalancheArraySensorType) = true
 supports_reference_read_subtraction(::HgCdTeAvalancheArraySensorType) = true
 supports_readout_correction(::HgCdTeAvalancheArraySensorType) = true
 supports_read_cube(::HgCdTeAvalancheArraySensorType) = true
+default_response_model(::HgCdTeAvalancheArraySensor; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend()) =
+    SampledFrameResponse([0.0 0.01 0.0; 0.01 0.96 0.01; 0.0 0.01 0.0]; T=T, backend=backend)
 configured_glow_rate(sensor::HgCdTeAvalancheArraySensor, ::Type{T}) where {T<:AbstractFloat} = T(sensor.glow_rate)
 
 frame_sampling_symbol(::SingleRead) = :single_read

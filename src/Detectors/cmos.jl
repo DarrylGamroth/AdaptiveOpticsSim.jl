@@ -46,6 +46,8 @@ supports_column_readout_noise(::CMOSSensor) = true
 supports_detector_defect_maps(::CMOSSensor) = true
 supports_shutter_timing(::CMOSSensor) = true
 default_frame_timing_model(sensor::CMOSSensor; T::Type{<:AbstractFloat}=Float64) = sensor.timing_model
+default_response_model(::CMOSSensor; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend()) =
+    GaussianPixelResponse(response_width_px=0.35, T=T, backend=backend)
 is_null_cmos_output_model(::AbstractCMOSOutputModel) = false
 is_null_cmos_output_model(::NullCMOSOutputModel) = true
 

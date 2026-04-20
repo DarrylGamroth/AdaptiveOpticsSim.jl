@@ -31,32 +31,6 @@ detector_signal_cube(products::HgCdTeReadoutProducts) = products.signal_cube
 detector_read_cube(products::HgCdTeReadoutProducts) = products.read_cube
 detector_read_times(products::HgCdTeReadoutProducts) = products.read_times
 
-detector_noise_symbol(::NoiseNone) = :none
-detector_noise_symbol(::NoisePhoton) = :photon
-detector_noise_symbol(::NoiseReadout) = :readout
-detector_noise_symbol(::NoisePhotonReadout) = :photon_readout
-
-detector_defect_symbol(::NullDetectorDefectModel) = :none
-detector_defect_symbol(::PixelResponseNonuniformity) = :prnu
-detector_defect_symbol(::DarkSignalNonuniformity) = :dsnu
-detector_defect_symbol(::BadPixelMask) = :bad_pixel_mask
-detector_defect_symbol(::CompositeDetectorDefectModel) = :composite
-
-timing_model_symbol(::GlobalShutter) = :global_shutter
-timing_model_symbol(::RollingShutter) = :rolling_shutter
-is_global_shutter(::AbstractFrameTimingModel) = false
-is_global_shutter(::GlobalShutter) = true
-
-nonlinearity_symbol(::NullFrameNonlinearity) = :none
-nonlinearity_symbol(::SaturatingFrameNonlinearity) = :saturating
-is_null_frame_nonlinearity(::AbstractFrameNonlinearityModel) = false
-is_null_frame_nonlinearity(::NullFrameNonlinearity) = true
-
-persistence_symbol(::NullPersistence) = :none
-persistence_symbol(::ExponentialPersistence) = :exponential
-is_null_persistence(::AbstractPersistenceModel) = false
-is_null_persistence(::NullPersistence) = true
-
 thermal_model(det::Detector) = det.params.thermal_model
 thermal_state(det::Detector) = det.state.thermal_state
 
@@ -68,10 +42,6 @@ advance_thermal!(det::Detector, dt) = (advance_thermal!(det.params.thermal_model
 supports_detector_mtf(::AbstractFrameDetector) = false
 supports_detector_mtf(det::Detector) = supports_detector_mtf(det.params.response_model)
 
-supports_detector_thermal_model(::AbstractFrameDetector) = false
-supports_detector_thermal_model(::AbstractCountingDetector) = false
-supports_dynamic_thermal_state(::AbstractDetectorThermalModel) = false
-supports_dynamic_thermal_state(::FirstOrderThermalModel) = true
 supports_detector_thermal_model(det::Detector) = !is_null_thermal_model(det.params.thermal_model)
 
 supports_temperature_dependent_dark_current(det::Detector) =
@@ -83,35 +53,6 @@ supports_temperature_dependent_dark_counts(::AbstractCountingDetector) = false
 
 configured_glow_rate(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = zero(T)
 configured_cic_rate(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = zero(T)
-
-supports_counting_noise(::AbstractCountingDetector) = false
-supports_dead_time(::AbstractCountingDetector) = false
-supports_channel_gain_map(::AbstractCountingDetector) = false
-supports_counting_gating(::AbstractCountingDetector) = false
-supports_afterpulsing(::AbstractCountingDetector) = false
-supports_channel_crosstalk(::AbstractCountingDetector) = false
-supports_paralyzable_dead_time(::AbstractCountingDetector) = false
-
-function default_response_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
-    return NullFrameResponse()
-end
-
-function default_response_model(::CMOSSensor; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
-    return GaussianPixelResponse(response_width_px=0.35, T=T, backend=backend)
-end
-
-function default_response_model(::InGaAsSensor; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
-    return GaussianPixelResponse(response_width_px=0.4, T=T, backend=backend)
-end
-
-function default_response_model(::HgCdTeAvalancheArraySensor; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
-    return SampledFrameResponse([0.0 0.01 0.0; 0.01 0.96 0.01; 0.0 0.01 0.0]; T=T, backend=backend)
-end
-
-default_detector_defect_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend()) = NullDetectorDefectModel()
-default_frame_timing_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64) = GlobalShutter()
-default_frame_nonlinearity_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64) = NullFrameNonlinearity()
-default_thermal_model(::SensorType; T::Type{<:AbstractFloat}=Float64) = NullDetectorThermalModel()
 
 convert_temperature_law(::NullTemperatureLaw, ::Type{T}) where {T<:AbstractFloat} = NullTemperatureLaw()
 convert_temperature_law(model::ArrheniusRateLaw, ::Type{T}) where {T<:AbstractFloat} =

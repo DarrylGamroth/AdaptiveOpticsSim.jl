@@ -16,6 +16,8 @@ supports_sensor_glow(::InGaAsSensor) = true
 supports_detector_defect_maps(::InGaAsSensor) = true
 supports_detector_persistence(::InGaAsSensor) = true
 supports_detector_nonlinearity(::InGaAsSensor) = true
+default_response_model(::InGaAsSensor; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend()) =
+    GaussianPixelResponse(response_width_px=0.4, T=T, backend=backend)
 persistence_model(sensor::InGaAsSensor) = sensor.persistence_model
 configured_glow_rate(sensor::InGaAsSensor, ::Type{T}) where {T<:AbstractFloat} = T(sensor.glow_rate)
 
