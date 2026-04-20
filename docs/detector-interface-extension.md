@@ -37,3 +37,44 @@ generic detector layer just to expose one additional product layout.
 Directly replacing `det.state.readout_products` with an arbitrary product type is
 not part of the supported extension contract. The supported seam is the product
 type plus its accessor methods.
+
+
+## Detector Families And Assembly
+
+The supported extension rule is:
+
+- family-local metadata, capability predicates, and default model methods should
+  live with the family/type definitions
+- detector-instance assembly, validation orchestration, and export-metadata
+  assembly stay centralized in `src/Detectors/generic.jl`
+
+Concretely:
+
+- open extension seams:
+  - `FrameReadoutProducts` accessor methods
+  - detector/sensor family capability methods such as `supports_*`
+  - family-local metadata helpers such as `*_symbol`
+  - detector family default-model methods such as `default_response_model`
+- centralized implementation surfaces:
+  - detector construction and state assembly
+  - detector export-metadata assembly
+  - detector capture/readout orchestration
+
+This means new detector families should normally add their family-specific
+methods in the file that owns the family type, not by extending a central
+registry table in `src/Detectors/generic.jl`.
+
+## Supported Vs Unsupported Mutation Surfaces
+
+Supported:
+
+- adding new `FrameReadoutProducts` subtypes plus accessor methods
+- adding new detector/sensor-family methods through dispatch
+- adding new response, defect, timing, nonlinearity, persistence, or thermal
+  families through their model interfaces
+
+Not supported as an external extension contract:
+
+- mutating detector state fields directly to unrelated implementation types
+- replacing centralized detector assembly helpers with external overrides
+- relying on the concrete internal storage layout of `DetectorState`
