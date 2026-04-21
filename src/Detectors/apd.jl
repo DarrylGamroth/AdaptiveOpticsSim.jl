@@ -163,6 +163,7 @@ function detector_export_metadata(det::APDDetector; T::Type{<:AbstractFloat}=elt
     return CountingDetectorExportMetadata{T}(
         T(det.params.integration_time),
         T(det.params.qe),
+        nothing,
         T(det.params.gain),
         T(det.params.dark_count_rate),
         counting_dead_time_symbol(det.params.dead_time_model),

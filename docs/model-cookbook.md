@@ -92,6 +92,24 @@ Use this pattern when you care about:
 - exported pixels
 - detector-backed WFS comparisons
 
+For counting-detector paths, keep the detector family explicit rather than
+using the generic frame-detector surface. For example, curvature sensing with a
+SPAD imaging array can use:
+
+```julia
+counting_wfs = CurvatureWFS(tel; n_subap=8, readout_model=CurvatureCountingReadout())
+spad = SPADArrayDetector(
+    integration_time=1.0,
+    noise=NoiseNone(),
+    sensor=SPADArraySensor(pde=0.5, fill_factor=0.8, dark_count_rate=0.0),
+)
+slopes = measure!(counting_wfs, tel, src, spad; rng=MersenneTwister(0))
+counts = output_frame(spad)
+```
+
+Use `APDDetector(...)` for channel-style counting readout and
+`SPADArrayDetector(...)` for accumulated-count imaging arrays.
+
 ## Recipe 4: Closed-Loop AO Model
 
 Use this when you want the maintained public AO runtime surface rather than

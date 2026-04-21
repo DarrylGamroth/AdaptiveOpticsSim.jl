@@ -78,6 +78,7 @@ If you are maintaining the package, pair this document with
 - `Detector`, `DetectorParams`, `DetectorState`, `DetectorExportMetadata`
 - `AbstractFrameDetector`, `AbstractCountingDetector`
 - `APDDetector`, `APDDetectorParams`, `APDDetectorState`
+- `SPADArrayDetector`, `SPADArrayDetectorParams`, `SPADArrayDetectorState`
 - `FrameWindow`
 - `AbstractDetectorThermalModel`, `NullDetectorThermalModel`,
   `FixedTemperature`, `FirstOrderThermalModel`
@@ -116,7 +117,7 @@ If you are maintaining the package, pair this document with
 - `SensorType`, `FrameSensorType`, `CountingSensorType`, `CCDSensor`,
   `CMOSSensor`, `AvalancheFrameSensorType`,
   `HgCdTeAvalancheArraySensorType`, `EMCCDSensor`, `InGaAsSensor`,
-  `HgCdTeAvalancheArraySensor`, `APDSensor`
+  `HgCdTeAvalancheArraySensor`, `APDSensor`, `SPADArraySensor`
 - `AbstractDMInfluenceModel`, `GaussianInfluenceWidth`,
   `GaussianMechanicalCoupling`, `DenseInfluenceMatrix`
 - `DeformableMirror`, `DeformableMirrorParams`, `DeformableMirrorState`,
@@ -433,9 +434,9 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - Export-facing code relies on `output_frame(det)` and
   `detector_export_metadata(det)` when detector-coupled outputs are present.
 - The maintained `Detector` type is a frame-detector implementation and accepts
-  `FrameSensorType` sensors only. Counting sensors such as `APDSensor` are a
-  distinct readout family and should be modeled through sensor/readout-specific
-  code rather than the generic frame-detector path.
+  `FrameSensorType` sensors only. Counting sensors such as `APDSensor` and
+  `SPADArraySensor` are a distinct readout family and should be modeled through
+  sensor/readout-specific code rather than the generic frame-detector path.
 - The maintained frame-detector response family is opt-in and null by default:
   `NullFrameResponse` is the identity model, `GaussianPixelResponse` is the
   maintained effective blur-like response, `SampledFrameResponse` is the
@@ -574,8 +575,9 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   combined detector frame.
 - HgCdTe-array subarray timing now scales with active readout rows rather than raw
   cropped area, which better matches row-wise frame-array readout semantics.
-- The maintained counting-detector family is currently `APDDetector`, with
-  optional capability queries surfaced through `supports_counting_noise`,
+- The maintained counting-detector families are `APDDetector` and
+  `SPADArrayDetector`, with optional capability queries surfaced through
+  `supports_counting_noise`,
   `supports_dead_time`, `supports_channel_gain_map`,
   `supports_counting_gating`, `supports_afterpulsing`,
   `supports_channel_crosstalk`, and `supports_paralyzable_dead_time`.
@@ -583,9 +585,10 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   `CountingDeadTimeModel`, with `NoDeadTime` as the null model and
   `NonParalyzableDeadTime` and `ParalyzableDeadTime` as maintained physical
   models.
-- APD counting control is now explicit through `AbstractCountingGateModel`,
+- Counting-detector gating control is now explicit through
+  `AbstractCountingGateModel`,
   with `NullCountingGate` and `DutyCycleGate`.
-- APD counting correlation is now explicit through
+- Counting-detector correlation is now explicit through
   `AbstractCountingCorrelationModel`, with `NullCountingCorrelation`,
   `AfterpulsingModel`, `ChannelCrosstalkModel`, and
   `CompositeCountingCorrelation`.

@@ -76,6 +76,14 @@ end
     counting_apd = copy(measure!(counting, tel, src, apd))
     @test counting_apd ≈ counting_flat atol=1e-10
     @test detector_export_metadata(apd).readout.output_size == size(counting.state.camera_frame)
+    spad = SPADArrayDetector(
+        integration_time=1.0,
+        noise=NoiseNone(),
+        sensor=SPADArraySensor(pde=1.0, dark_count_rate=0.0, fill_factor=1.0),
+    )
+    counting_spad = copy(measure!(counting, tel, src, spad))
+    @test counting_spad ≈ counting_flat atol=1e-10
+    @test detector_export_metadata(spad).readout.output_size == size(counting.state.camera_frame)
     apd_dead = APDDetector(integration_time=1.0, qe=1.0, gain=1.0, dark_count_rate=0.0,
         noise=NoiseNone(), dead_time_model=NonParalyzableDeadTime(0.25))
     counting_dead = copy(measure!(counting, tel, src, apd_dead))

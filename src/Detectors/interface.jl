@@ -25,6 +25,7 @@ abstract type AbstractDetectorThermalState end
 abstract type AbstractTemperatureLaw end
 abstract type AvalancheFrameSensorType <: FrameSensorType end
 abstract type HgCdTeAvalancheArraySensorType <: AvalancheFrameSensorType end
+abstract type SPADArraySensorType <: CountingSensorType end
 
 supports_detector_thermal_model(::AbstractFrameDetector) = false
 supports_detector_thermal_model(::AbstractCountingDetector) = false
@@ -867,6 +868,7 @@ end
 struct CountingDetectorExportMetadata{T<:AbstractFloat}
     integration_time::T
     qe::T
+    fill_factor::Union{Nothing,T}
     gain::T
     dark_count_rate::T
     dead_time_model::Symbol

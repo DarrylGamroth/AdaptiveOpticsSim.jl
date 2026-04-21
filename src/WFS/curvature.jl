@@ -808,8 +808,7 @@ function measure!(wfs::CurvatureWFS, tel::Telescope, src::AbstractSource, atm::A
     ensure_curvature_calibration!(wfs, tel, src)
     curvature_intensity!(wfs, tel, src, atm; propagation=propagation, model=model)
     capture!(det, wfs.state.camera_frame; rng=rng)
-    frame = det isa APDDetector ? channel_output(det) : output_frame(det)
-    return curvature_signal!(wfs, frame)
+    return curvature_signal!(wfs, output_frame(det))
 end
 
 function measure!(wfs::CurvatureWFS, tel::Telescope, ast::Asterism, atm::AbstractAtmosphere;
@@ -836,8 +835,7 @@ function measure!(wfs::CurvatureWFS, tel::Telescope, ast::Asterism, atm::Abstrac
     model::AbstractAtmosphericFieldModel=LayeredFresnelAtmosphericPropagation(T=eltype(wfs.state.frame_plus)))
     measure!(wfs, tel, ast, atm; model=model)
     capture!(det, wfs.state.camera_frame; rng=rng)
-    frame = det isa APDDetector ? channel_output(det) : output_frame(det)
-    return curvature_signal!(wfs, frame)
+    return curvature_signal!(wfs, output_frame(det))
 end
 
 function measure!(::Diffractive, wfs::CurvatureWFS, tel::Telescope, src::AbstractSource,
@@ -851,13 +849,13 @@ function measure_detector_coupled!(::CurvatureCountingReadout, wfs::CurvatureWFS
 end
 
 function measure_detector_coupled!(::CurvatureCountingReadout, wfs::CurvatureWFS, tel::Telescope,
-    src::AbstractSource, det::APDDetector; rng::AbstractRNG=Random.default_rng())
+    src::AbstractSource, det::AbstractCountingDetector; rng::AbstractRNG=Random.default_rng())
     ensure_curvature_calibration!(wfs, tel, src)
     curvature_intensity!(wfs, tel, src)
     capture!(det, wfs.state.camera_frame; rng=rng)
-    size(channel_output(det)) == size(wfs.state.camera_frame) ||
+    size(output_frame(det)) == size(wfs.state.camera_frame) ||
         throw(InvalidConfiguration("CurvatureWFS counting-detector output size must match the sampled channel readout"))
-    return curvature_signal!(wfs, channel_output(det))
+    return curvature_signal!(wfs, output_frame(det))
 end
 
 function measure_detector_coupled!(::CurvatureFrameReadout, wfs::CurvatureWFS, tel::Telescope,

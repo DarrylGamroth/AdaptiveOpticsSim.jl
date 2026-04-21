@@ -154,7 +154,8 @@ export AbstractPersistenceModel, NullPersistence, ExponentialPersistence
 export AbstractDetectorThermalModel, NullDetectorThermalModel, FixedTemperature, FirstOrderThermalModel
 export AbstractDetectorThermalState, NoThermalState, DetectorThermalState
 export AbstractTemperatureLaw, NullTemperatureLaw, ArrheniusRateLaw, LinearTemperatureLaw, ExponentialTemperatureLaw
-export APDDetector, APDDetectorParams, APDDetectorState, CountingReadoutMetadata, CountingDetectorExportMetadata
+export APDDetector, APDDetectorParams, APDDetectorState, SPADArrayDetector, SPADArrayDetectorParams, SPADArrayDetectorState
+export CountingReadoutMetadata, CountingDetectorExportMetadata
 export CountingDeadTimeModel, NoDeadTime, NonParalyzableDeadTime, ParalyzableDeadTime
 export AbstractCountingGateModel, NullCountingGate, DutyCycleGate
 export AbstractCountingCorrelationModel, NullCountingCorrelation, AfterpulsingModel, ChannelCrosstalkModel
@@ -177,8 +178,8 @@ export is_shift_invariant, supports_frequency_domain_application, supports_separ
 export default_response_model
 export thermal_model, thermal_state, detector_temperature, advance_thermal!
 export evaluate_temperature_law, effective_dark_current, effective_glow_rate, effective_cic_rate, effective_dark_count_rate
-export SensorType, FrameSensorType, CountingSensorType, AvalancheFrameSensorType, HgCdTeAvalancheArraySensorType
-export CCDSensor, CMOSSensor, EMCCDSensor, InGaAsSensor, HgCdTeAvalancheArraySensor, APDSensor
+export SensorType, FrameSensorType, CountingSensorType, AvalancheFrameSensorType, HgCdTeAvalancheArraySensorType, SPADArraySensorType
+export CCDSensor, CMOSSensor, EMCCDSensor, InGaAsSensor, HgCdTeAvalancheArraySensor, APDSensor, SPADArraySensor
 export AbstractCMOSOutputModel, NullCMOSOutputModel, StaticCMOSOutputPattern
 export AbstractEMGainModel, ExcessNoiseApproximation, StochasticMultiplicationRegister
 export ShackHartmann, ShackHartmannParams, ShackHartmannState, update_valid_mask!, measure!

@@ -272,6 +272,12 @@ Use this when you care about:
 Use an explicit `Detector(...)` when the sensing path needs detector physics,
 readout behavior, windowing, or exported frame products.
 
+For counting-imager or counting-channel paths, use a maintained counting
+detector family instead of the generic frame-detector surface:
+
+- `APDDetector(...)` for channel-style counting readout
+- `SPADArrayDetector(...)` for accumulated-count imaging arrays
+
 Leave detector effects simple or disabled when the goal is deterministic model
 comparison rather than detector realism.
 

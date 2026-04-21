@@ -185,6 +185,9 @@ Use these when the task is cross-package or instrument-truth work:
     concreteness, capability traits, and execution-plan cleanup
 - [`detector-interface-extension.md`](./detector-interface-extension.md)
   - current extension notes for readout products and other detector seams
+- [`spad-array-sensor-plan-2026-04.md`](./spad-array-sensor-plan-2026-04.md)
+  - concrete detector-family plan for SPAD imaging arrays built on the current
+    counting-detector extension seams
 - [`rocm-fallback-inventory.md`](./rocm-fallback-inventory.md)
   - explicit ROCm fallback classification and residual workaround status
 - [`rocm-phase3-rebaseline.md`](./rocm-phase3-rebaseline.md)
