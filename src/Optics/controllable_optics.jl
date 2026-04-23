@@ -7,6 +7,7 @@ command_storage(::AbstractControllableOptic) =
 @inline command_layout(optic::AbstractControllableOptic) = RuntimeCommandLayout(:optic => n_control_dofs(optic))
 @inline controllable_surface_labels(optic::AbstractControllableOptic) = command_segment_labels(command_layout(optic))
 @inline supports_segmented_command(optic::AbstractControllableOptic) = length(command_segments(command_layout(optic))) > 1
+@inline surface_opd(optic::AbstractControllableOptic) = optic.state.opd
 
 function _set_command_segments!(setter, total_length::Int, layout::RuntimeCommandLayout, command::NamedTuple;
     require_all::Bool=true)

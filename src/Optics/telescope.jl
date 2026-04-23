@@ -27,6 +27,8 @@ struct Telescope{P<:TelescopeParams,S<:TelescopeState,B<:AbstractArrayBackend} <
 end
 
 @inline backend(::Telescope{<:Any,<:Any,B}) where {B} = B()
+@inline pupil_mask(tel::Telescope) = tel.state.pupil
+@inline opd_map(tel::Telescope) = tel.state.opd
 
 function Telescope(; resolution::Int,
     diameter::Real,

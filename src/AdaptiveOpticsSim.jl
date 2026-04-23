@@ -99,7 +99,7 @@ export AbstractMaskPrimitive, MaskGrid
 export CircularAperture, AnnularAperture, SpiderMask, RectangularROI, SubapertureGridMask
 export default_mask_grid, pixel_mask_grid, build_mask!, apply_mask!
 export AbstractTelescope, Telescope, TelescopeParams, TelescopeState, generate_pupil!, reset_opd!, apply_opd!
-export set_pupil!, set_pupil_reflectivity!, flux_map, apply_spiders!
+export set_pupil!, set_pupil_reflectivity!, flux_map, apply_spiders!, pupil_mask, opd_map
 export Source, SourceParams, LGSSource, LGSSourceParams, wavelength, optical_path, print_optical_path
 export SpectralSample, SpectralBundle, SpectralSource, with_spectrum
 export spectral_bundle, spectral_reference_source, has_spectral_bundle, is_polychromatic, weighted_wavelength
@@ -137,7 +137,7 @@ export topology, topology_axis_count, topology_command_count, actuator_coordinat
 export influence_model, actuator_model, influence_width, mechanical_coupling, influence_width_from_mechanical_coupling, n_actuators
 export AbstractModalOpticBasis, FunctionModalBasis, MatrixModalBasis, ZernikeOpticBasis, CartesianTiltBasis, QuadraticFocusBasis
 export CompositeControllableOptic, ModalControllableOptic, TipTiltMirror, FocusStage
-export command_storage, n_control_dofs, controllable_surface_labels, supports_segmented_command, update_command!
+export command_storage, n_control_dofs, controllable_surface_labels, supports_segmented_command, update_command!, surface_opd
 export Misregistration, apply_misregistration, rotation_rad, rotation_deg, anamorphosis_angle_rad, anamorphosis_angle_deg
 export AbstractFrameDetector, AbstractCountingDetector
 export Detector, DetectorParams, DetectorState, DetectorExportMetadata

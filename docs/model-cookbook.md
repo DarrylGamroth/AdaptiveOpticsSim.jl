@@ -698,6 +698,32 @@ Use:
 - `ClosedLoopRuntime` plus `AdaptiveOpticsSim.simulation_interface(...)`
   - only when you are manually assembling or testing one low-level runtime
 
+## Visualization Companion
+
+Use `../AdaptiveOpticsSimPlots.jl` when you want plotting without adding
+plotting dependencies to the simulation core.
+
+The maintained plotting surface there is:
+
+- explicit helpers such as `plot_pupil`, `plot_opd`, `plot_wfs_frame`, and
+  `plot_dm_commands`
+- a package-owned `aoplot(...)` multiple-dispatch entrypoint for common
+  `AdaptiveOpticsSim` objects
+
+The plotting package is intentionally built on maintained accessors like:
+
+- `pupil_mask(tel)`
+- `opd_map(tel)`
+- `surface_opd(optic)`
+- `output_frame(det)`
+- `camera_frame(wfs)`
+- `slopes(x)`
+- `wfs_frame(x)`
+- `science_frame(x)`
+
+That keeps visualization optional and avoids coupling plotting code to
+subsystem internals.
+
 ## Next Step
 
 After the first working script:

@@ -210,6 +210,7 @@ end
 @inline backend(::DeformableMirror{<:Any,<:Any,B}) where {B} = B()
 
 @inline command_storage(dm::DeformableMirror) = dm.state.coefs
+@inline surface_opd(dm::DeformableMirror) = dm.state.opd
 @inline command_layout(dm::DeformableMirror) = RuntimeCommandLayout(:dm => length(dm.state.coefs))
 @inline influence_model(dm::DeformableMirror) = dm.params.influence_model
 @inline topology(dm::DeformableMirror) = dm.params.topology

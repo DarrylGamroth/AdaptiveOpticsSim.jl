@@ -234,6 +234,9 @@ Use these when the task is cross-package or instrument-truth work:
     tomography benchmark evidence
 - [`optional-integration-boundaries.md`](./optional-integration-boundaries.md)
   - optional integration and package-boundary rules
+- [`visualization-companion-package-plan-2026-04.md`](./visualization-companion-package-plan-2026-04.md)
+  - plan for a plotting-free core plus a separate `AdaptiveOpticsSimPlots.jl`
+    companion package built first around `Plots.jl`
 - [`future-platform-direction.md`](./future-platform-direction.md)
   - post-cleanup expansion policy
 - [`backend-validation-guide.md`](./backend-validation-guide.md)
