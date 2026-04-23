@@ -19,14 +19,18 @@ include(normpath(joinpath(@__DIR__, "..", "..", "benchmarks", "support", "revolt
     dm_from_coupling = DeformableMirror(tel; n_act=4, mechanical_coupling=coupling)
     dm_from_model = DeformableMirror(tel; n_act=4, influence_model=GaussianInfluenceWidth(0.3))
     dm_dense = DeformableMirror(tel; n_act=4, influence_model=DenseInfluenceMatrix(Array(dm.state.modes)))
-    @test influence_model(dm) isa GaussianInfluenceWidth
-    @test influence_model(dm_from_coupling) isa GaussianMechanicalCoupling
-    @test influence_model(dm_dense) isa DenseInfluenceMatrix
+    @test typeof(influence_model(dm)) == GaussianInfluenceWidth{Float64}
+    @test typeof(influence_model(dm_from_coupling)) == GaussianMechanicalCoupling{Float64}
+    @test typeof(influence_model(dm_dense)) <: DenseInfluenceMatrix
     @test influence_width(dm_from_coupling) ≈ influence_width(dm)
     @test influence_width(dm_from_model) ≈ influence_width(dm)
     @test mechanical_coupling(4, influence_width(dm)) ≈ coupling
     @test influence_width_from_mechanical_coupling(4, coupling) ≈ influence_width(dm)
     @test Array(dm_dense.state.modes) ≈ Array(dm.state.modes) atol=0 rtol=0
+    @test topology_axis_count(topology(dm)) == 4
+    @test topology_command_count(topology(dm)) == 16
+    @test size(actuator_coordinates(dm)) == (2, 16)
+    @test all(valid_actuator_mask(dm))
     @test_throws InvalidConfiguration DeformableMirror(tel; n_act=4, influence_width=0.3, mechanical_coupling=coupling)
     @test_throws InvalidConfiguration DeformableMirror(tel; n_act=4, influence_width=0.3,
         influence_model=GaussianInfluenceWidth(0.3))
@@ -35,6 +39,45 @@ include(normpath(joinpath(@__DIR__, "..", "..", "benchmarks", "support", "revolt
     @test_throws InvalidConfiguration DeformableMirror(tel; n_act=4,
         influence_model=DenseInfluenceMatrix(Array(dm.state.modes)),
         misregistration=Misregistration(shift_x=1e-3))
+
+    masked_topology = ActuatorGridTopology(4; valid_actuators=vcat(fill(true, 15), false))
+    dm_masked = DeformableMirror(tel; topology=masked_topology, influence_model=GaussianInfluenceWidth(0.3))
+    @test topology_command_count(topology(dm_masked)) == 15
+    @test length(dm_masked.state.coefs) == 15
+    @test isnothing(dm_masked.state.separable_x)
+
+    sampled_topology = SampledActuatorTopology(actuator_coordinates(dm)[:, 1:4];
+        metadata=(manufacturer=:alpao, source=:converted))
+    measured_modes = Array(dm.state.modes[:, 1:4])
+    dm_measured = DeformableMirror(tel; topology=sampled_topology,
+        influence_model=MeasuredInfluenceFunctions(measured_modes; metadata=(manufacturer=:alpao,)))
+    dm_sampled_dense = DeformableMirror(tel; topology=sampled_topology,
+        influence_model=DenseInfluenceMatrix(measured_modes))
+    test_cmd = [0.2, -0.1, 0.3, -0.2]
+    dm_measured.state.coefs .= test_cmd
+    dm_sampled_dense.state.coefs .= test_cmd
+    apply_opd!(dm_measured, tel)
+    apply_opd!(dm_sampled_dense, tel)
+    @test dm_measured.state.opd ≈ dm_sampled_dense.state.opd atol=0 rtol=0
+    @test topology_metadata(dm_measured) == (manufacturer=:alpao, source=:converted)
+    @test influence_model(dm_measured).metadata == (manufacturer=:alpao,)
+    @test_throws InvalidConfiguration DeformableMirror(tel; topology=sampled_topology,
+        influence_model=MeasuredInfluenceFunctions(measured_modes),
+        misregistration=Misregistration(shift_x=1e-3))
+
+    clipped_health = CompositeDMActuatorModel(
+        ActuatorHealthMap([1.0, 0.0, 0.5, 1.0]),
+        ClippedActuators(-0.2, 0.2),
+    )
+    dm_actuated = DeformableMirror(tel; topology=sampled_topology,
+        influence_model=MeasuredInfluenceFunctions(measured_modes),
+        actuator_model=clipped_health)
+    dm_actuated.state.coefs .= [0.5, 0.1, -1.0, 0.1]
+    apply_opd!(dm_actuated, tel)
+    @test dm_actuated.state.actuator_coefs ≈ [0.2, 0.0, -0.2, 0.1]
+    @test_throws DimensionMismatchError DeformableMirror(tel; topology=sampled_topology,
+        influence_model=MeasuredInfluenceFunctions(measured_modes),
+        actuator_model=ActuatorHealthMap([1.0, 1.0, 1.0]))
 end
 
 @testset "Composite controllable optic replace semantics" begin

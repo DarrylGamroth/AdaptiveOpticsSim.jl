@@ -75,6 +75,9 @@ end
 function assert_dm_interface(dm, tel)
     @test applicable(build_influence_functions!, dm, tel)
     @test applicable(apply!, dm, tel, DMAdditive())
+    @test topology_command_count(topology(dm)) == length(dm.state.coefs)
+    @test size(actuator_coordinates(dm), 2) == length(dm.state.coefs)
+    @test length(valid_actuator_mask(dm)) >= length(dm.state.coefs)
 end
 
 function assert_optical_element_interface(element, tel)

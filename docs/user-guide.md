@@ -205,15 +205,30 @@ frame = wfs_frame(rt)
 - `influence_width=...`
 - `mechanical_coupling=...`
 
-It also now accepts an explicit advanced model object through
-`influence_model=...`, for example:
+It also accepts explicit advanced composition through:
+
+- `topology=...`
+- `influence_model=...`
+- `actuator_model=...`
+
+For example:
 
 - `GaussianInfluenceWidth(0.3)`
 - `GaussianMechanicalCoupling(0.08)`
 - `DenseInfluenceMatrix(modes)`
+- `MeasuredInfluenceFunctions(modes; metadata=...)`
+- `ActuatorGridTopology(16)`
+- `SampledActuatorTopology(coords; valid_actuators=mask, metadata=...)`
+- `LinearStaticActuators()`
+- `ClippedActuators(-0.2, 0.2)`
+- `ActuatorHealthMap(gains)`
+- `CompositeDMActuatorModel(...)`
 
 Use the scalar keywords for normal work. Use `influence_model=...` when you
-need an explicit DM influence representation.
+need an explicit DM influence representation, `topology=...` when the actuator
+layout is not the default full square grid, and `actuator_model=...` when
+command preprocessing should model clipping or actuator health without changing
+the sampled influence basis.
 
 Use this when you care about:
 

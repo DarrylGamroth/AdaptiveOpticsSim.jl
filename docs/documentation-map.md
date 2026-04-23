@@ -172,6 +172,10 @@ Use these when the task is cross-package or instrument-truth work:
 - [`dm-oopao-equivalence-tightening-plan-2026-04.md`](./dm-oopao-equivalence-tightening-plan-2026-04.md)
   - targeted review showing that the remaining `tiptilt + dm` OOPAO residual is
     a stable DM-model mismatch rather than a broad numerical-stability problem
+- [`dm-interface-evolution-plan-2026-04.md`](./dm-interface-evolution-plan-2026-04.md)
+  - completed plan for separating DM topology, sampled influence bases, and
+    actuator behavior, including the measured-influence-function path for
+    manufacturer-style artifacts
 - [`specula-reference-datasets.md`](./specula-reference-datasets.md)
   - SPECULA-targeted frozen bundle policy and provenance
 - [`phase-statistics-accuracy.md`](./phase-statistics-accuracy.md)

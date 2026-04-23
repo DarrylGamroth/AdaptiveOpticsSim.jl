@@ -271,6 +271,12 @@ end
     est = AdaptiveOpticsSim.estimate_misregistration(meta, meta.calib0.D; misregistration_zero=Misregistration())
     @test est.shift_x ≈ 0.0
     @test est.shift_y ≈ 0.0
+
+    sampled_topology = SampledActuatorTopology(actuator_coordinates(dm)[:, 1:2])
+    measured_dm = DeformableMirror(tel; topology=sampled_topology,
+        influence_model=MeasuredInfluenceFunctions(Array(dm.state.modes[:, 1:2])))
+    @test_throws UnsupportedAlgorithm AdaptiveOpticsSim.compute_meta_sensitivity_matrix(
+        tel, measured_dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
 end
 
 @testset "Interface conformance" begin

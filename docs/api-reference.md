@@ -121,11 +121,17 @@ If you are maintaining the package, pair this document with
   `CMOSSensor`, `AvalancheFrameSensorType`,
   `HgCdTeAvalancheArraySensorType`, `EMCCDSensor`, `InGaAsSensor`,
   `HgCdTeAvalancheArraySensor`, `APDSensor`, `SPADArraySensor`
+- `AbstractDMTopology`, `ActuatorGridTopology`, `SampledActuatorTopology`
 - `AbstractDMInfluenceModel`, `GaussianInfluenceWidth`,
-  `GaussianMechanicalCoupling`, `DenseInfluenceMatrix`
+  `GaussianMechanicalCoupling`, `DenseInfluenceMatrix`,
+  `MeasuredInfluenceFunctions`
+- `AbstractDMActuatorModel`, `LinearStaticActuators`,
+  `ClippedActuators`, `ActuatorHealthMap`, `CompositeDMActuatorModel`
 - `DeformableMirror`, `DeformableMirrorParams`, `DeformableMirrorState`,
-  `build_influence_functions!`, `apply!`, `influence_model`,
-  `influence_width`, `mechanical_coupling`,
+  `build_influence_functions!`, `apply!`, `topology`, `actuator_model`,
+  `topology_axis_count`, `topology_command_count`, `actuator_coordinates`,
+  `valid_actuator_mask`, `active_actuator_indices`, `topology_metadata`,
+  `influence_model`, `influence_width`, `mechanical_coupling`,
   `influence_width_from_mechanical_coupling`
 - `Misregistration`, `apply_misregistration`, `rotation_rad`, `rotation_deg`,
   `anamorphosis_angle_rad`, `anamorphosis_angle_deg`
@@ -611,6 +617,21 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   `build_influence_functions!(dm, tel)` and `apply!(dm, tel, mode)`.
 - The maintained DM runtime path assumes `dm.state.coefs` is the active command
   vector and that `apply!` writes phase on the telescope OPD grid.
+- The DM interface now separates:
+  - topology through `AbstractDMTopology`
+  - static sampled influence bases through `AbstractDMInfluenceModel`
+  - actuator behavior through `AbstractDMActuatorModel`
+- `ActuatorGridTopology` is the maintained regular grid topology used by the
+  concise `n_act=...` constructor path.
+- `SampledActuatorTopology` is the maintained path for measured or externally
+  converted actuator coordinate sets.
+- `MeasuredInfluenceFunctions` is the maintained first-class path for sampled
+  manufacturer or lab-measured influence bases. `DenseInfluenceMatrix` remains
+  the low-level sampled-basis wrapper.
+- `LinearStaticActuators` is the maintained null/default actuator behavior.
+  `ClippedActuators`, `ActuatorHealthMap`, and
+  `CompositeDMActuatorModel` provide reusable constraint layers without
+  modifying the static influence basis.
 
 ### `IF-REC`: control reconstructors
 

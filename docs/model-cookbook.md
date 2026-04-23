@@ -158,6 +158,34 @@ For advanced cases you can also pass an explicit model object:
 - `influence_model=GaussianInfluenceWidth(0.3)`
 - `influence_model=GaussianMechanicalCoupling(0.08)`
 - `influence_model=DenseInfluenceMatrix(modes)`
+- `influence_model=MeasuredInfluenceFunctions(modes; metadata=(manufacturer=:alpao,))`
+
+For richer DM layout and command behavior, you can also compose:
+
+- `topology=ActuatorGridTopology(16)`
+- `topology=SampledActuatorTopology(coords; valid_actuators=mask, metadata=meta)`
+- `actuator_model=LinearStaticActuators()`
+- `actuator_model=ClippedActuators(-0.2, 0.2)`
+- `actuator_model=ActuatorHealthMap(gains)`
+- `actuator_model=CompositeDMActuatorModel(...)`
+
+For example, a measured manufacturer-style basis should be represented as:
+
+```julia
+coords = measured_coords_2xn
+modes = measured_sampled_modes
+top = SampledActuatorTopology(coords; metadata=(manufacturer=:alpao, source=:converted))
+dm = DeformableMirror(
+    tel;
+    topology=top,
+    influence_model=MeasuredInfluenceFunctions(modes; metadata=(manufacturer=:alpao,)),
+    actuator_model=LinearStaticActuators(),
+)
+```
+
+Keep external file-format conversion outside core. Convert vendor artifacts such
+as FITS influence files into a package-native sampled topology plus sampled
+influence basis first, then construct the DM from those native objects.
 
 Use this pattern when you need:
 
