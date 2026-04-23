@@ -425,6 +425,9 @@ function CompositeControllableOptic(entries::Vararg{Pair{<:Symbol,<:AbstractCont
     return optic
 end
 
+CompositeControllableOptic() =
+    throw(InvalidConfiguration("CompositeControllableOptic requires at least one child optic"))
+
 function CompositeControllableOptic(optics::AbstractControllableOptic...)
     length(optics) > 0 || throw(InvalidConfiguration("CompositeControllableOptic requires at least one child optic"))
     labels = map(optic -> begin

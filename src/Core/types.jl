@@ -72,6 +72,7 @@ RuntimeCommandLayout(specs::Pair...) = begin
     end
     RuntimeCommandLayout(Tuple(segments))
 end
+RuntimeCommandLayout() = RuntimeCommandLayout(())
 command_segments(layout::RuntimeCommandLayout) = layout.segments
 command_segment_labels(layout::RuntimeCommandLayout) = map(seg -> seg.label, layout.segments)
 command_segment_range(seg::RuntimeCommandSegment) = seg.offset:(seg.offset + seg.length - 1)

@@ -1,4 +1,5 @@
 using Test
+using Aqua
 using AdaptiveOpticsSim
 using LinearAlgebra
 using Random
@@ -314,3 +315,11 @@ function moving_closed_loop_trace(;
 end
 
 @test AdaptiveOpticsSim.PROJECT_STATUS == :in_development
+
+@testset "Aqua" begin
+    Aqua.test_all(
+        AdaptiveOpticsSim;
+        ambiguities=false,
+        undocumented_names=false,
+    )
+end

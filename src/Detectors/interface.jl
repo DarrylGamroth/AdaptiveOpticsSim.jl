@@ -454,6 +454,8 @@ cooling_setpoint_K(model::FirstOrderThermalModel, ::Type{T}) where {T<:AbstractF
 thermal_time_constant_s(model::FirstOrderThermalModel, ::Type{T}) where {T<:AbstractFloat} = T(model.time_constant_s)
 detector_temperature_K(::NullDetectorThermalModel, ::AbstractDetectorThermalState, ::Type{T}) where {T<:AbstractFloat} = nothing
 detector_temperature_K(model::FixedTemperature, ::AbstractDetectorThermalState, ::Type{T}) where {T<:AbstractFloat} = T(model.temperature_K)
+detector_temperature_K(::NullDetectorThermalModel, ::DetectorThermalState, ::Type{T}) where {T<:AbstractFloat} = nothing
+detector_temperature_K(model::FixedTemperature, ::DetectorThermalState, ::Type{T}) where {T<:AbstractFloat} = T(model.temperature_K)
 detector_temperature_K(model::AbstractDetectorThermalModel, state::DetectorThermalState, ::Type{T}) where {T<:AbstractFloat} = T(state.temperature_K)
 
 advance_thermal!(::NullDetectorThermalModel, ::AbstractDetectorThermalState, dt) = nothing
@@ -670,24 +672,29 @@ struct MultiReadFrameReadoutProducts{A<:AbstractMatrix,C,V} <: FrameReadoutProdu
     signal_cube::Union{Nothing,C}
     read_cube::Union{Nothing,C}
     read_times::Union{Nothing,V}
+
+    function MultiReadFrameReadoutProducts{A,C,V}(reference_frame::Union{Nothing,A}, signal_frame::A, combined_frame::A,
+        reference_cube::Union{Nothing,C}, signal_cube::Union{Nothing,C}, read_cube::Union{Nothing,C},
+        read_times::Union{Nothing,V}) where {A<:AbstractMatrix,C,V}
+        return new{A,C,V}(reference_frame, signal_frame, combined_frame,
+            reference_cube, signal_cube, read_cube, read_times)
+    end
+end
+
+@inline function _multi_read_cube_param(reference_cube, signal_cube, read_cube)
+    if !isnothing(reference_cube)
+        return typeof(reference_cube)
+    elseif !isnothing(signal_cube)
+        return typeof(signal_cube)
+    else
+        return typeof(read_cube)
+    end
 end
 
 function MultiReadFrameReadoutProducts(reference_frame::Union{Nothing,A}, signal_frame::A, combined_frame::A,
-    reference_cube::Nothing, signal_cube::Nothing, read_cube::Nothing, read_times::Nothing) where {A<:AbstractMatrix}
-    return MultiReadFrameReadoutProducts{A,Nothing,Nothing}(reference_frame, signal_frame, combined_frame,
-        reference_cube, signal_cube, read_cube, read_times)
-end
-
-function MultiReadFrameReadoutProducts(reference_frame::Union{Nothing,A}, signal_frame::A, combined_frame::A,
-    reference_cube::Union{Nothing,C}, signal_cube::Union{Nothing,C}, read_cube::Union{Nothing,C}, read_times::Nothing) where
-    {A<:AbstractMatrix,C<:AbstractArray}
-    return MultiReadFrameReadoutProducts{A,C,Nothing}(reference_frame, signal_frame, combined_frame,
-        reference_cube, signal_cube, read_cube, read_times)
-end
-
-function MultiReadFrameReadoutProducts(reference_frame::Union{Nothing,A}, signal_frame::A, combined_frame::A,
-    reference_cube::Union{Nothing,C}, signal_cube::Union{Nothing,C}, read_cube::Union{Nothing,C}, read_times::Union{Nothing,V}) where
-    {A<:AbstractMatrix,C<:AbstractArray,V<:AbstractVector}
+    reference_cube, signal_cube, read_cube, read_times) where {A<:AbstractMatrix}
+    C = _multi_read_cube_param(reference_cube, signal_cube, read_cube)
+    V = typeof(read_times)
     return MultiReadFrameReadoutProducts{A,C,V}(reference_frame, signal_frame, combined_frame,
         reference_cube, signal_cube, read_cube, read_times)
 end

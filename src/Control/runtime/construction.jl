@@ -295,6 +295,10 @@ function CompositeSimulationInterface(interfaces::SimulationInterface...;
     return snapshot_outputs!(multi)
 end
 
+function CompositeSimulationInterface(; products::GroupedRuntimeProductRequirements=default_grouped_runtime_products())
+    throw(InvalidConfiguration("CompositeSimulationInterface requires at least one interface"))
+end
+
 function CompositeSimulationInterface(runtimes::ClosedLoopRuntime...;
     products::GroupedRuntimeProductRequirements=default_grouped_runtime_products(map(SimulationInterface, runtimes)...))
     return CompositeSimulationInterface(map(SimulationInterface, runtimes)...; products=products)

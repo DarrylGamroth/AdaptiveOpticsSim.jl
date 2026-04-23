@@ -1,5 +1,7 @@
 # AdaptiveOpticsSim.jl
 
+[![CPU Validation](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/actions/workflows/cpu-validation.yml/badge.svg)](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/actions/workflows/cpu-validation.yml)
+
 Julia adaptive optics simulation toolkit. The package keeps the OOPAO modeling
 surface recognizable, but uses idiomatic Julia design for performance,
 reproducibility, and backend portability.
@@ -135,6 +137,14 @@ For validation and supported scope:
 For deeper developer reference:
 
 - [docs/documentation-map.md](docs/documentation-map.md)
+
+For maintainers extending subsystem families:
+
+- [docs/adding-detectors.md](docs/adding-detectors.md)
+- [docs/adding-deformable-mirrors.md](docs/adding-deformable-mirrors.md)
+- [docs/adding-wavefront-sensors.md](docs/adding-wavefront-sensors.md)
+- [docs/adding-controllable-optics.md](docs/adding-controllable-optics.md)
+- [docs/adding-controllers-and-reconstructors.md](docs/adding-controllers-and-reconstructors.md)
 
 ## Supported Production Surface
 
