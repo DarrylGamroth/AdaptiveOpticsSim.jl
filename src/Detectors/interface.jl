@@ -55,6 +55,19 @@ supports_readout_correction(::FrameSensorType) = false
 supports_read_cube(::FrameSensorType) = false
 supports_detector_response(::SensorType, ::AbstractDetectorResponse) = false
 supports_detector_response(::FrameSensorType, ::AbstractFrameResponse) = true
+supports_multi_read_readout_products(::FrameSensorType) = false
+
+struct SingleRead <: FrameSamplingMode end
+
+struct AveragedNonDestructiveReads <: FrameSamplingMode
+    n_reads::Int
+end
+
+struct CorrelatedDoubleSampling <: FrameSamplingMode end
+
+struct FowlerSampling <: FrameSamplingMode
+    n_pairs::Int
+end
 
 struct FrameWindow
     rows::UnitRange{Int}
@@ -66,10 +79,10 @@ struct FrameWindow
     end
 end
 
-frame_sampling_symbol(::FrameSensorType) = :single_read
-frame_sampling_reads(::FrameSensorType) = 1
-frame_sampling_reference_reads(::FrameSensorType) = nothing
-frame_sampling_signal_reads(::FrameSensorType) = nothing
+frame_sampling_symbol(sensor::FrameSensorType) = frame_sampling_symbol(multi_read_sampling_mode(sensor))
+frame_sampling_reads(sensor::FrameSensorType) = frame_sampling_reads(multi_read_sampling_mode(sensor))
+frame_sampling_reference_reads(sensor::FrameSensorType) = frame_sampling_reference_reads(multi_read_sampling_mode(sensor))
+frame_sampling_signal_reads(sensor::FrameSensorType) = frame_sampling_signal_reads(multi_read_sampling_mode(sensor))
 sampling_read_time(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = nothing
 sampling_read_time(sensor::FrameSensorType, frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat} =
     sampling_read_time(sensor, T)
@@ -77,6 +90,44 @@ sampling_wallclock_time(::FrameSensorType, integration_time, ::Type{T}) where {T
 sampling_wallclock_time(sensor::FrameSensorType, integration_time, frame_size::Tuple{Int,Int},
     window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat} =
     sampling_wallclock_time(sensor, integration_time, T)
+frame_sampling_symbol(::SingleRead) = :single_read
+frame_sampling_symbol(::AveragedNonDestructiveReads) = :averaged_non_destructive_reads
+frame_sampling_symbol(::CorrelatedDoubleSampling) = :correlated_double_sampling
+frame_sampling_symbol(::FowlerSampling) = :fowler_sampling
+
+frame_sampling_reads(::SingleRead) = 1
+frame_sampling_reads(mode::AveragedNonDestructiveReads) = mode.n_reads
+frame_sampling_reads(::CorrelatedDoubleSampling) = 2
+frame_sampling_reads(mode::FowlerSampling) = 2 * mode.n_pairs
+
+frame_sampling_reference_reads(::SingleRead) = 0
+frame_sampling_reference_reads(::AveragedNonDestructiveReads) = 0
+frame_sampling_reference_reads(::CorrelatedDoubleSampling) = 1
+frame_sampling_reference_reads(mode::FowlerSampling) = mode.n_pairs
+
+frame_sampling_signal_reads(::SingleRead) = 1
+frame_sampling_signal_reads(mode::AveragedNonDestructiveReads) = mode.n_reads
+frame_sampling_signal_reads(::CorrelatedDoubleSampling) = 1
+frame_sampling_signal_reads(mode::FowlerSampling) = mode.n_pairs
+
+effective_readout_sigma(::FrameSamplingMode, sigma) = sigma
+effective_readout_sigma(mode::AveragedNonDestructiveReads, sigma) = sigma / sqrt(mode.n_reads)
+effective_readout_sigma(::CorrelatedDoubleSampling, sigma) = sigma * sqrt(2)
+effective_readout_sigma(mode::FowlerSampling, sigma) = sigma * sqrt(2 / mode.n_pairs)
+
+validate_frame_sampling_mode(::SingleRead) = SingleRead()
+
+function validate_frame_sampling_mode(mode::AveragedNonDestructiveReads)
+    mode.n_reads >= 1 || throw(InvalidConfiguration("AveragedNonDestructiveReads n_reads must be >= 1"))
+    return mode
+end
+
+validate_frame_sampling_mode(::CorrelatedDoubleSampling) = CorrelatedDoubleSampling()
+
+function validate_frame_sampling_mode(mode::FowlerSampling)
+    mode.n_pairs >= 1 || throw(InvalidConfiguration("FowlerSampling n_pairs must be >= 1"))
+    return mode
+end
 
 struct NullFrameReadoutCorrection <: FrameReadoutCorrectionModel end
 
@@ -611,7 +662,7 @@ struct SampledFrameReadoutProducts{A<:AbstractMatrix,C} <: FrameReadoutProducts
     read_cube::Union{Nothing,C}
 end
 
-struct HgCdTeReadoutProducts{A<:AbstractMatrix,C,V} <: FrameReadoutProducts
+struct MultiReadFrameReadoutProducts{A<:AbstractMatrix,C,V} <: FrameReadoutProducts
     reference_frame::Union{Nothing,A}
     signal_frame::A
     combined_frame::A
@@ -621,25 +672,27 @@ struct HgCdTeReadoutProducts{A<:AbstractMatrix,C,V} <: FrameReadoutProducts
     read_times::Union{Nothing,V}
 end
 
-function HgCdTeReadoutProducts(reference_frame::Union{Nothing,A}, signal_frame::A, combined_frame::A,
+function MultiReadFrameReadoutProducts(reference_frame::Union{Nothing,A}, signal_frame::A, combined_frame::A,
     reference_cube::Nothing, signal_cube::Nothing, read_cube::Nothing, read_times::Nothing) where {A<:AbstractMatrix}
-    return HgCdTeReadoutProducts{A,Nothing,Nothing}(reference_frame, signal_frame, combined_frame,
+    return MultiReadFrameReadoutProducts{A,Nothing,Nothing}(reference_frame, signal_frame, combined_frame,
         reference_cube, signal_cube, read_cube, read_times)
 end
 
-function HgCdTeReadoutProducts(reference_frame::Union{Nothing,A}, signal_frame::A, combined_frame::A,
+function MultiReadFrameReadoutProducts(reference_frame::Union{Nothing,A}, signal_frame::A, combined_frame::A,
     reference_cube::Union{Nothing,C}, signal_cube::Union{Nothing,C}, read_cube::Union{Nothing,C}, read_times::Nothing) where
     {A<:AbstractMatrix,C<:AbstractArray}
-    return HgCdTeReadoutProducts{A,C,Nothing}(reference_frame, signal_frame, combined_frame,
+    return MultiReadFrameReadoutProducts{A,C,Nothing}(reference_frame, signal_frame, combined_frame,
         reference_cube, signal_cube, read_cube, read_times)
 end
 
-function HgCdTeReadoutProducts(reference_frame::Union{Nothing,A}, signal_frame::A, combined_frame::A,
+function MultiReadFrameReadoutProducts(reference_frame::Union{Nothing,A}, signal_frame::A, combined_frame::A,
     reference_cube::Union{Nothing,C}, signal_cube::Union{Nothing,C}, read_cube::Union{Nothing,C}, read_times::Union{Nothing,V}) where
     {A<:AbstractMatrix,C<:AbstractArray,V<:AbstractVector}
-    return HgCdTeReadoutProducts{A,C,V}(reference_frame, signal_frame, combined_frame,
+    return MultiReadFrameReadoutProducts{A,C,V}(reference_frame, signal_frame, combined_frame,
         reference_cube, signal_cube, read_cube, read_times)
 end
+
+const HgCdTeReadoutProducts = MultiReadFrameReadoutProducts
 
 function SampledFrameReadoutProducts(reference_frame::Union{Nothing,A}, signal_frame::A,
     read_cube::Nothing) where {A<:AbstractMatrix}

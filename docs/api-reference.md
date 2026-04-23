@@ -90,6 +90,9 @@ If you are maintaining the package, pair this document with
   `SampledFrameResponse`, `RectangularPixelAperture`, `SeparablePixelMTF`
 - `FrameSamplingMode`, `SingleRead`, `AveragedNonDestructiveReads`,
   `CorrelatedDoubleSampling`, `FowlerSampling`
+- `FrameReadoutProducts`, `NoFrameReadoutProducts`,
+  `SampledFrameReadoutProducts`, `MultiReadFrameReadoutProducts`,
+  `HgCdTeReadoutProducts`
 - `CountingReadoutMetadata`, `CountingDetectorExportMetadata`
 - `CountingDeadTimeModel`, `NoDeadTime`, `NonParalyzableDeadTime`
 - `capture!`, `output_frame`, `channel_output`, `detector_export_metadata`,
@@ -570,9 +573,9 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   `detector_reference_frame`, `detector_signal_frame`, `detector_combined_frame`,
   `detector_reference_cube`, `detector_signal_cube`, `detector_read_cube`, and
   `detector_read_times` expose the maintained readout-product surface. The
-  dedicated `HgCdTeReadoutProducts` payload makes pedestal/signal averages and
-  their corresponding cubes first-class rather than inferring them from only the
-  combined detector frame.
+  shared `MultiReadFrameReadoutProducts` payload is the reusable multi-read
+  frame-detector surface, and `HgCdTeReadoutProducts` is maintained as the
+  compatibility alias for the current HgCdTe family.
 - HgCdTe-array subarray timing now scales with active readout rows rather than raw
   cropped area, which better matches row-wise frame-array readout semantics.
 - The maintained counting-detector families are `APDDetector` and

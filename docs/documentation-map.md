@@ -185,6 +185,9 @@ Use these when the task is cross-package or instrument-truth work:
     concreteness, capability traits, and execution-plan cleanup
 - [`detector-interface-extension.md`](./detector-interface-extension.md)
   - current extension notes for readout products and other detector seams
+- [`hgcdte-validation-and-multiread-plan-2026-04.md`](./hgcdte-validation-and-multiread-plan-2026-04.md)
+  - focused plan for expanding HgCdTe detector validation and extracting the
+    reusable multi-read frame-readout layer
 - [`spad-array-sensor-plan-2026-04.md`](./spad-array-sensor-plan-2026-04.md)
   - concrete detector-family plan for SPAD imaging arrays built on the current
     counting-detector extension seams

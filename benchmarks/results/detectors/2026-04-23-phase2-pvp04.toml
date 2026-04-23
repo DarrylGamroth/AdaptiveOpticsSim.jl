@@ -1,0 +1,70 @@
+artifact_id = "DET-VAL-2026-04-23"
+generated_on = "2026-04-23"
+
+[interpretation]
+apd_counting_chain_ok = true
+hgcdte_multiread_ok = false
+hgcdte_timing_and_correction_ok = true
+ingaas_persistence_ok = true
+cmos_structured_output_ok = true
+hgcdte_avalanche_ok = true
+ccd_emccd_gain_ok = true
+
+[scope]
+families = ["ccd", "emccd", "cmos", "ingaas", "hgcdte_avalanche_array", "apd"]
+artifact_kind = "detector_fixture_validation"
+rng_policy = "fixed_seed_mersenne_twister"
+
+[cases.ingaas_persistence]
+persisted_mean = 2.0
+persisted_sum = 32.0
+contract_holds = true
+
+[cases.hgcdte_avalanche]
+excess_std = 6.319274261294794
+contract_holds = true
+gain_error_max = 0.0
+
+[cases.apd_counting_chain]
+contract_holds = true
+expected_mean = 0.7333333333333336
+error_max = 0.0
+mean = 0.7333333333333336
+
+[cases.hgcdte_timing_and_correction]
+correction_residual_max = 0.0
+single_sum = 158.0
+cds_sum = 261.0
+contract_holds = true
+combined_consistent_corrected = 0.0
+windowed_sampling_read_time = 0.5
+sampling_wallclock_time = 3.0
+windowed_read_times = [0.5, 1.0]
+sampling_read_time = 1.0
+windowed_sampling_wallclock_time = 2.0
+
+[cases.cmos_structured_output]
+contract_holds = true
+pixel_1_2 = 1.25
+pixel_2_3 = 10.5
+pixel_1_3 = 14.5
+mean = 7.375
+pixel_1_1 = 2.25
+
+[cases.ccd_emccd_gain]
+contract_holds = true
+gain_error_max = 0.0
+ccd_mean = -1.6144714053485099
+emccd_mean = -0.161447140534851
+
+[cases.hgcdte_multiread]
+ndr_read_cube_reads = 4
+cds_reference_cube_reads = 1
+ndr_std = 2.3322667850007734
+cds_std = 7.060204075116134
+combined_consistent_fowler = true
+contract_holds = false
+combined_consistent_cds = true
+fowler_std = 8.213618360597216
+fowler_signal_cube_reads = 8
+ndr_read_times_last = 0.0

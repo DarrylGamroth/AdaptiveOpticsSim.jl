@@ -1,6 +1,7 @@
 using Random
 
 include("interface.jl")
+include("frame_sampling.jl")
 include("pipeline.jl")
 include("ccd.jl")
 include("cmos.jl")

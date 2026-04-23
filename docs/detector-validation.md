@@ -1,6 +1,6 @@
 # Detector Validation
 
-Date: 2026-04-01
+Date: 2026-04-23
 
 Status: active
 
@@ -21,7 +21,7 @@ visible as maintained evidence in the validity matrix.
 
 ## Artifact
 
-- [2026-04-01-phase1-pvp04.toml](../benchmarks/results/detectors/2026-04-01-phase1-pvp04.toml)
+- [2026-04-23-phase2-pvp04.toml](../benchmarks/results/detectors/2026-04-23-phase2-pvp04.toml)
 - manifest:
   [manifest.toml](../benchmarks/results/detectors/manifest.toml)
 
@@ -31,6 +31,8 @@ Recorded detector families:
 - CMOS structured output with PRNU/DSNU/bad-pixel composition
 - InGaAs persistence
 - HgCdTe avalanche gain and excess-noise behavior
+- HgCdTe multi-read readout products and sampling-mode interactions
+- HgCdTe timing, windowing, read-overhead, and readout-correction interactions
 - APD counting chain with gating, dead time, and afterpulsing
 
 ## Generator

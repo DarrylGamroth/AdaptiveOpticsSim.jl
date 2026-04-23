@@ -23,13 +23,13 @@ detector_reference_cube(::SampledFrameReadoutProducts) = nothing
 detector_signal_cube(::SampledFrameReadoutProducts) = nothing
 detector_read_cube(products::SampledFrameReadoutProducts) = products.read_cube
 detector_read_times(::SampledFrameReadoutProducts) = nothing
-detector_reference_frame(products::HgCdTeReadoutProducts) = products.reference_frame
-detector_signal_frame(products::HgCdTeReadoutProducts) = products.signal_frame
-detector_combined_frame(products::HgCdTeReadoutProducts) = products.combined_frame
-detector_reference_cube(products::HgCdTeReadoutProducts) = products.reference_cube
-detector_signal_cube(products::HgCdTeReadoutProducts) = products.signal_cube
-detector_read_cube(products::HgCdTeReadoutProducts) = products.read_cube
-detector_read_times(products::HgCdTeReadoutProducts) = products.read_times
+detector_reference_frame(products::MultiReadFrameReadoutProducts) = products.reference_frame
+detector_signal_frame(products::MultiReadFrameReadoutProducts) = products.signal_frame
+detector_combined_frame(products::MultiReadFrameReadoutProducts) = products.combined_frame
+detector_reference_cube(products::MultiReadFrameReadoutProducts) = products.reference_cube
+detector_signal_cube(products::MultiReadFrameReadoutProducts) = products.signal_cube
+detector_read_cube(products::MultiReadFrameReadoutProducts) = products.read_cube
+detector_read_times(products::MultiReadFrameReadoutProducts) = products.read_times
 
 thermal_model(det::Detector) = det.params.thermal_model
 thermal_state(det::Detector) = det.state.thermal_state
@@ -566,15 +566,18 @@ function resolve_output_precision(bits::Union{Nothing,Int}, output_precision::Un
     return nothing
 end
 
-@inline detector_readout_products_type(::FrameSensorType, frame::A, ::Type{T}) where {T<:AbstractFloat,A<:AbstractMatrix{T}} = NoFrameReadoutProducts
-@inline initial_readout_products(::FrameSensorType, frame::AbstractMatrix, ::Type{T}) where {T<:AbstractFloat} = NoFrameReadoutProducts()
-
-@inline function detector_readout_products_type(::HgCdTeAvalancheArraySensor, frame::A, ::Type{T}) where {T<:AbstractFloat,A<:AbstractMatrix{T}}
+@inline function detector_readout_products_type(sensor::FrameSensorType, frame::A, ::Type{T}) where {T<:AbstractFloat,A<:AbstractMatrix{T}}
+    supports_multi_read_readout_products(sensor) || return NoFrameReadoutProducts
     cube_type = typeof(similar(frame, size(frame, 1), size(frame, 2), 1))
-    return Union{NoFrameReadoutProducts, HgCdTeReadoutProducts{A,Nothing,Nothing}, HgCdTeReadoutProducts{A,cube_type,Nothing}, HgCdTeReadoutProducts{A,cube_type,Vector{T}}}
+    return Union{
+        NoFrameReadoutProducts,
+        MultiReadFrameReadoutProducts{A,Nothing,Nothing},
+        MultiReadFrameReadoutProducts{A,cube_type,Nothing},
+        MultiReadFrameReadoutProducts{A,cube_type,Vector{T}},
+    }
 end
 
-@inline initial_readout_products(::HgCdTeAvalancheArraySensor, frame::AbstractMatrix, ::Type{T}) where {T<:AbstractFloat} = NoFrameReadoutProducts()
+@inline initial_readout_products(::FrameSensorType, frame::AbstractMatrix, ::Type{T}) where {T<:AbstractFloat} = NoFrameReadoutProducts()
 
 function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     psf_sampling::Int, binning::Int, gain::Real, dark_current::Real,
