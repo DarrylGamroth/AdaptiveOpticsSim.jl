@@ -192,6 +192,19 @@ Use these when the task is cross-package or instrument-truth work:
 - [`adding-detectors.md`](./adding-detectors.md)
   - practical authoring guide for adding a new detector family and deciding
     when a new physical behavior belongs in a shared detector layer
+- [`adding-deformable-mirrors.md`](./adding-deformable-mirrors.md)
+  - practical authoring guide for adding a new DM topology, sampled influence
+    model, or actuator-behavior layer without bypassing the composed DM
+    interface
+- [`adding-wavefront-sensors.md`](./adding-wavefront-sensors.md)
+  - practical authoring guide for adding a new WFS family against the
+  maintained accessor and runtime contract
+- [`adding-controllable-optics.md`](./adding-controllable-optics.md)
+  - practical authoring guide for adding a new modal/low-order controllable
+    optic and deciding when a surface belongs in the DM layer instead
+- [`adding-controllers-and-reconstructors.md`](./adding-controllers-and-reconstructors.md)
+  - practical authoring guide for adding temporal controllers and
+    slopes-to-command operator families on the maintained runtime contract
 - [`interface-contract-closeout-plan-2026-04.md`](./interface-contract-closeout-plan-2026-04.md)
   - completed closeout pass for WFS accessors, controller lifecycle accessors,
     and calibration/reconstructor diagnostics
