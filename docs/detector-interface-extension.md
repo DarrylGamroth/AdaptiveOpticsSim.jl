@@ -6,6 +6,9 @@ Status: active
 
 This note records the maintained extension seams for the detector subsystem.
 
+For the step-by-step authoring workflow, use
+[adding-detectors.md](./adding-detectors.md).
+
 Current priority seams:
 
 - `FrameReadoutProducts`

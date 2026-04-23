@@ -185,6 +185,9 @@ Use these when the task is cross-package or instrument-truth work:
     concreteness, capability traits, and execution-plan cleanup
 - [`detector-interface-extension.md`](./detector-interface-extension.md)
   - current extension notes for readout products and other detector seams
+- [`adding-detectors.md`](./adding-detectors.md)
+  - practical authoring guide for adding a new detector family and deciding
+    when a new physical behavior belongs in a shared detector layer
 - [`hgcdte-validation-and-multiread-plan-2026-04.md`](./hgcdte-validation-and-multiread-plan-2026-04.md)
   - focused plan for expanding HgCdTe detector validation and extracting the
     reusable multi-read frame-readout layer
