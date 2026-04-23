@@ -63,7 +63,9 @@ Current examples:
 
 Counting detectors currently own more of their capture path directly, because
 their physics and export shape differ more substantially from the frame
-pipeline.
+pipeline. But they now share a maintained counting-detector sublayer in
+[counting_common.jl](../src/Detectors/counting_common.jl) for common counting
+capture semantics and metadata assembly.
 
 ## File Placement
 
@@ -189,8 +191,8 @@ These accessors default to `nothing`, so a new payload should not require edits
 
 ## Adding A Counting Detector
 
-Counting detectors currently have a more explicit family-level implementation
- surface than frame detectors.
+Counting detectors still expose more family-level policy than frame detectors,
+but they no longer need to duplicate the full capture skeleton.
 
 Use [apd.jl](../src/Detectors/apd.jl) and
 [spad_array.jl](../src/Detectors/spad_array.jl) as the reference shapes.
@@ -199,9 +201,10 @@ Typical steps:
 
 1. define a sensor subtype of `CountingSensorType`
 2. define the detector type and its params/state
-3. implement family-specific counting capture
-4. implement detector export metadata
-5. reuse shared counting model families where applicable
+3. add the small counting accessors needed by the shared counting layer
+4. implement only the family-specific counting hooks that remain
+5. reuse the shared counting export metadata path unless the family genuinely
+   needs a different output contract
 
 Shared counting seams include:
 
@@ -209,9 +212,13 @@ Shared counting seams include:
 - dead-time models
 - gate models
 - correlation models such as afterpulsing and channel crosstalk
+- shared counting capture sequencing in
+  [counting_common.jl](../src/Detectors/counting_common.jl)
+- shared counting export metadata assembly
 
 If a counting behavior is reusable across multiple families, it should become a
- shared counting model rather than being embedded in one detector file.
+shared counting model or shared counting-layer hook rather than being embedded
+in one detector file.
 
 ## Reusable Feature Rule
 

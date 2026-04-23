@@ -28,14 +28,14 @@ abstract type HgCdTeAvalancheArraySensorType <: AvalancheFrameSensorType end
 abstract type SPADArraySensorType <: CountingSensorType end
 
 supports_detector_thermal_model(::AbstractFrameDetector) = false
-supports_detector_thermal_model(::AbstractCountingDetector) = false
-supports_counting_noise(::AbstractCountingDetector) = false
-supports_dead_time(::AbstractCountingDetector) = false
-supports_channel_gain_map(::AbstractCountingDetector) = false
-supports_counting_gating(::AbstractCountingDetector) = false
-supports_afterpulsing(::AbstractCountingDetector) = false
-supports_channel_crosstalk(::AbstractCountingDetector) = false
-supports_paralyzable_dead_time(::AbstractCountingDetector) = false
+supports_detector_thermal_model(det::AbstractCountingDetector) = !is_null_thermal_model(thermal_model(det))
+supports_counting_noise(::AbstractCountingDetector) = true
+supports_dead_time(det::AbstractCountingDetector) = supports_dead_time(counting_dead_time_model(det))
+supports_channel_gain_map(det::AbstractCountingDetector) = !isnothing(counting_channel_gain_map(det))
+supports_counting_gating(det::AbstractCountingDetector) = !is_null_counting_gate(counting_gate_model(det))
+supports_afterpulsing(det::AbstractCountingDetector) = _supports_afterpulsing(counting_correlation_model(det))
+supports_channel_crosstalk(det::AbstractCountingDetector) = _supports_channel_crosstalk(counting_correlation_model(det))
+supports_paralyzable_dead_time(det::AbstractCountingDetector) = is_paralyzable_dead_time(counting_dead_time_model(det))
 
 detector_sensor_symbol(sensor::SensorType) =
     throw(InvalidConfiguration("missing detector_sensor_symbol overload for $(typeof(sensor))"))

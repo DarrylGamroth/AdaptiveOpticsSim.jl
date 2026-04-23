@@ -70,78 +70,27 @@ end
 
 @inline backend(::SPADArrayDetector{<:Any,<:Any,<:Any,B}) where {B} = B()
 
-readout_ready(det::SPADArrayDetector) = true
-thermal_model(det::SPADArrayDetector) = det.params.thermal_model
-thermal_state(det::SPADArrayDetector) = det.state.thermal_state
-detector_temperature(det::SPADArrayDetector, ::Type{T}=eltype(det.state.counts)) where {T<:AbstractFloat} =
-    detector_temperature_K(det.params.thermal_model, det.state.thermal_state, T)
-advance_thermal!(det::SPADArrayDetector, dt) = (advance_thermal!(det.params.thermal_model, det.state.thermal_state, dt); det)
-channel_output(det::SPADArrayDetector) = det.state.output_buffer === nothing ? det.state.counts : det.state.output_buffer
-output_frame(det::SPADArrayDetector) = channel_output(det)
-reset_integration!(det::SPADArrayDetector) = det
+counting_sensor(det::SPADArrayDetector) = det.params.sensor
+counting_gate_model(det::SPADArrayDetector) = det.params.gate_model
+counting_dead_time_model(det::SPADArrayDetector) = det.params.sensor.dead_time_model
+counting_correlation_model(det::SPADArrayDetector) = det.params.sensor.correlation_model
+counting_integration_time(det::SPADArrayDetector) = det.params.integration_time
+counting_layout(det::SPADArrayDetector) = det.params.layout
+counting_output_precision(det::SPADArrayDetector) = det.params.output_precision
+counting_array(det::SPADArrayDetector) = det.state.counts
+counting_noise_buffer(det::SPADArrayDetector) = det.state.noise_buffer
+counting_output_buffer(det::SPADArrayDetector) = det.state.output_buffer
+set_counting_array!(det::SPADArrayDetector, values) = (det.state.counts = values; det)
+set_counting_noise_buffer!(det::SPADArrayDetector, values) = (det.state.noise_buffer = values; det)
+set_counting_output_buffer!(det::SPADArrayDetector, values) = (det.state.output_buffer = values; det)
+counting_qe(det::SPADArrayDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.sensor.pde)
+counting_fill_factor(det::SPADArrayDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.sensor.fill_factor)
+counting_reported_fill_factor(det::SPADArrayDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.sensor.fill_factor)
+counting_dark_count_rate(det::SPADArrayDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.sensor.dark_count_rate)
 
 detector_sensor_symbol(::SPADArraySensor) = :spad_array
-supports_counting_noise(::SPADArrayDetector) = true
-supports_dead_time(det::SPADArrayDetector) = supports_dead_time(det.params.sensor.dead_time_model)
-supports_channel_gain_map(::SPADArrayDetector) = false
-supports_counting_gating(det::SPADArrayDetector) = !is_null_counting_gate(det.params.gate_model)
-supports_afterpulsing(det::SPADArrayDetector) = _supports_afterpulsing(det.params.sensor.correlation_model)
-supports_channel_crosstalk(det::SPADArrayDetector) = _supports_channel_crosstalk(det.params.sensor.correlation_model)
-supports_paralyzable_dead_time(det::SPADArrayDetector) = is_paralyzable_dead_time(det.params.sensor.dead_time_model)
-supports_detector_thermal_model(det::SPADArrayDetector) = !is_null_thermal_model(det.params.thermal_model)
-supports_temperature_dependent_dark_counts(det::SPADArrayDetector) =
-    !is_null_temperature_law(active_dark_count_law(det, det.params.thermal_model))
 
 dark_count_law(::SPADArrayDetector) = NullTemperatureLaw()
-active_dark_count_law(det::SPADArrayDetector, ::NullDetectorThermalModel) = dark_count_law(det)
-
-function active_dark_count_law(det::SPADArrayDetector, model::FixedTemperature)
-    return is_null_temperature_law(model.dark_count_law) ? dark_count_law(det) : model.dark_count_law
-end
-
-function active_dark_count_law(det::SPADArrayDetector, model::FirstOrderThermalModel)
-    return is_null_temperature_law(model.dark_count_law) ? dark_count_law(det) : model.dark_count_law
-end
-
-effective_dark_count_rate(det::SPADArrayDetector, ::Type{T}=eltype(det.state.counts)) where {T<:AbstractFloat} =
-    T(evaluate_temperature_law(active_dark_count_law(det, det.params.thermal_model),
-        T(det.params.sensor.dark_count_rate), detector_temperature(det, T)))
-
-validate_spad_noise(noise::NoiseNone) = noise
-validate_spad_noise(noise::NoisePhoton) = noise
-validate_spad_noise(::NoiseReadout) =
-    throw(InvalidConfiguration("SPADArrayDetector does not support additive readout noise; use NoiseNone or NoisePhoton"))
-validate_spad_noise(::NoisePhotonReadout) =
-    throw(InvalidConfiguration("SPADArrayDetector does not support frame-style readout noise; use NoiseNone or NoisePhoton"))
-
-function detector_export_metadata(det::SPADArrayDetector; T::Type{<:AbstractFloat}=eltype(det.state.counts))
-    output = output_frame(det)
-    sensor = det.params.sensor
-    return CountingDetectorExportMetadata{T}(
-        T(det.params.integration_time),
-        T(sensor.pde),
-        T(sensor.fill_factor),
-        one(T),
-        T(sensor.dark_count_rate),
-        counting_dead_time_symbol(sensor.dead_time_model),
-        counting_dead_time_value(sensor.dead_time_model, T),
-        counting_gate_symbol(det.params.gate_model),
-        counting_gate_duty_cycle(det.params.gate_model, T),
-        counting_correlation_symbol(sensor.correlation_model),
-        afterpulse_probability(sensor.correlation_model, T),
-        crosstalk_value(sensor.correlation_model, T),
-        thermal_model_symbol(det.params.thermal_model),
-        detector_temperature(det, T),
-        ambient_temperature_K(det.params.thermal_model, T),
-        cooling_setpoint_K(det.params.thermal_model, T),
-        thermal_time_constant_s(det.params.thermal_model, T),
-        temperature_law_symbol(active_dark_count_law(det, det.params.thermal_model)),
-        detector_sensor_symbol(sensor),
-        detector_noise_symbol(det.noise),
-        det.params.output_precision,
-        CountingReadoutMetadata(det.params.layout, size(output), length(output)),
-    )
-end
 
 function _build_spad_array_detector(noise::NoiseModel; integration_time::Real,
     gate_model::AbstractCountingGateModel,
@@ -153,17 +102,10 @@ function _build_spad_array_detector(noise::NoiseModel; integration_time::Real,
     backend)
     integration_time > 0 || throw(InvalidConfiguration("SPADArrayDetector integration_time must be > 0"))
     converted = convert_noise(noise, T)
-    validated = validate_spad_noise(converted)
+    validated = validate_counting_noise(converted)
     gate = validate_gate_model(convert_gate_model(gate_model, T))
     thermal = validate_thermal_model(convert_thermal_model(thermal_model, T))
-    typed_sensor = sensor isa SPADArraySensor{T} ? sensor : SPADArraySensor(
-        pde=sensor.pde,
-        dark_count_rate=sensor.dark_count_rate,
-        fill_factor=sensor.fill_factor,
-        dead_time_model=sensor.dead_time_model,
-        correlation_model=sensor.correlation_model,
-        T=T,
-    )
+    typed_sensor = convert_spad_sensor(sensor, T)
     params = SPADArrayDetectorParams{T,typeof(typed_sensor),typeof(gate),typeof(thermal)}(
         T(integration_time),
         gate,
@@ -200,123 +142,15 @@ function SPADArrayDetector(; integration_time::Real=1.0, noise::NoiseModel=Noise
         output_precision=output_precision, layout=layout, T=T, backend=backend)
 end
 
-function ensure_buffers!(det::SPADArrayDetector, dims::Tuple{Int,Int})
-    if size(det.state.counts) != dims
-        det.state.counts = similar(det.state.counts, dims...)
-    end
-    if size(det.state.noise_buffer) != dims
-        det.state.noise_buffer = similar(det.state.noise_buffer, dims...)
-    end
-    if det.state.output_buffer !== nothing && size(det.state.output_buffer) != dims
-        det.state.output_buffer = similar(det.state.output_buffer, dims...)
-        fill!(det.state.output_buffer, zero(eltype(det.state.output_buffer)))
-    end
-    return det
+convert_spad_sensor(sensor::SPADArraySensor{T}, ::Type{T}) where {T<:AbstractFloat} = sensor
+
+function convert_spad_sensor(sensor::SPADArraySensorType, ::Type{T}) where {T<:AbstractFloat}
+    return SPADArraySensor(
+        pde=sensor.pde,
+        dark_count_rate=sensor.dark_count_rate,
+        fill_factor=sensor.fill_factor,
+        dead_time_model=sensor.dead_time_model,
+        correlation_model=sensor.correlation_model,
+        T=T,
+    )
 end
-
-counting_exposure_time(det::SPADArrayDetector) = effective_gate_time(det.params.gate_model, det.params.integration_time)
-
-function apply_dark_counts!(det::SPADArrayDetector, exposure_time::Real)
-    dark = effective_dark_count_rate(det) * exposure_time
-    dark <= 0 && return det.state.counts
-    det.state.counts .+= dark
-    return det.state.counts
-end
-
-apply_dead_time!(det::SPADArrayDetector) = apply_dead_time!(det.params.sensor.dead_time_model, det)
-apply_dead_time!(::NoDeadTime, det::SPADArrayDetector) = det.state.counts
-
-function apply_dead_time!(model::NonParalyzableDeadTime, det::SPADArrayDetector)
-    exposure_time = counting_exposure_time(det)
-    exposure_time > zero(exposure_time) || return det.state.counts
-    scale = model.dead_time / exposure_time
-    scale <= zero(scale) && return det.state.counts
-    @. det.state.counts = det.state.counts / (1 + det.state.counts * scale)
-    return det.state.counts
-end
-
-function apply_dead_time!(model::ParalyzableDeadTime, det::SPADArrayDetector)
-    exposure_time = counting_exposure_time(det)
-    exposure_time > zero(exposure_time) || return det.state.counts
-    scale = model.dead_time / exposure_time
-    scale <= zero(scale) && return det.state.counts
-    @. det.state.counts = det.state.counts * exp(-det.state.counts * scale)
-    return det.state.counts
-end
-
-apply_counting_noise!(det::SPADArrayDetector{NoiseNone}, rng::AbstractRNG) = det.state.counts
-
-function apply_counting_noise!(det::SPADArrayDetector{NoisePhoton}, rng::AbstractRNG)
-    poisson_noise!(rng, det.state.counts)
-    return det.state.counts
-end
-
-apply_counting_correlation!(::NullCountingCorrelation, det::SPADArrayDetector, rng::AbstractRNG) = det.state.counts
-
-function apply_counting_correlation!(model::AfterpulsingModel, det::SPADArrayDetector, rng::AbstractRNG)
-    p = model.probability
-    p <= zero(p) && return det.state.counts
-    det.state.counts .*= (one(p) + p)
-    return det.state.counts
-end
-
-function apply_counting_correlation!(model::ChannelCrosstalkModel, det::SPADArrayDetector, rng::AbstractRNG)
-    coupling = model.coupling
-    coupling <= zero(coupling) && return det.state.counts
-    copyto!(det.state.noise_buffer, det.state.counts)
-    fill!(det.state.counts, zero(eltype(det.state.counts)))
-    n, m = size(det.state.counts)
-    @inbounds for i in 1:n, j in 1:m
-        center = det.state.noise_buffer[i, j]
-        bleed = coupling * center
-        keep = center - bleed
-        det.state.counts[i, j] += keep
-        neighbors = 0
-        i > 1 && (neighbors += 1)
-        i < n && (neighbors += 1)
-        j > 1 && (neighbors += 1)
-        j < m && (neighbors += 1)
-        neighbors == 0 && continue
-        share = bleed / neighbors
-        i > 1 && (det.state.counts[i - 1, j] += share)
-        i < n && (det.state.counts[i + 1, j] += share)
-        j > 1 && (det.state.counts[i, j - 1] += share)
-        j < m && (det.state.counts[i, j + 1] += share)
-    end
-    return det.state.counts
-end
-
-function apply_counting_correlation!(model::CompositeCountingCorrelation, det::SPADArrayDetector, rng::AbstractRNG)
-    foreach(stage -> apply_counting_correlation!(stage, det, rng), model.stages)
-    return det.state.counts
-end
-
-function write_output!(det::SPADArrayDetector)
-    output = det.state.output_buffer
-    output === nothing && return det.state.counts
-    output_eltype = eltype(output)
-    if output_eltype <: Integer
-        lo = typemin(output_eltype)
-        hi = typemax(output_eltype)
-        @. output = output_eltype(clamp(round(det.state.counts), lo, hi))
-    else
-        copyto!(output, det.state.counts)
-    end
-    return output
-end
-
-function capture!(det::SPADArrayDetector, channels::AbstractMatrix{T}; rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
-    ensure_buffers!(det, size(channels))
-    copyto!(det.state.counts, channels)
-    exposure_time = counting_exposure_time(det)
-    det.state.counts .*= det.params.sensor.pde * det.params.sensor.fill_factor * exposure_time
-    apply_dark_counts!(det, exposure_time)
-    apply_counting_noise!(det, rng)
-    apply_dead_time!(det)
-    apply_counting_correlation!(det.params.sensor.correlation_model, det, rng)
-    advance_thermal!(det, det.params.integration_time)
-    return write_output!(det)
-end
-
-capture!(det::SPADArrayDetector, channels::AbstractMatrix{T}, rng::AbstractRNG) where {T<:AbstractFloat} =
-    capture!(det, channels; rng=rng)

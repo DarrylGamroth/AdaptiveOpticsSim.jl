@@ -49,7 +49,8 @@ supports_temperature_dependent_dark_current(det::Detector) =
 supports_temperature_dependent_glow(det::Detector) =
     !is_null_temperature_law(active_glow_rate_law(det.params.sensor, det.params.thermal_model))
 supports_temperature_dependent_persistence(::Detector) = false
-supports_temperature_dependent_dark_counts(::AbstractCountingDetector) = false
+supports_temperature_dependent_dark_counts(det::AbstractCountingDetector) =
+    !is_null_temperature_law(active_dark_count_law(det, thermal_model(det)))
 
 configured_glow_rate(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = zero(T)
 configured_cic_rate(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = zero(T)
