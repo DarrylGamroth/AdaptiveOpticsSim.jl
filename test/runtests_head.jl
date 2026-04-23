@@ -62,6 +62,10 @@ end
 function assert_wfs_interface(wfs, tel)
     @test applicable(update_valid_mask!, wfs, tel)
     @test applicable(measure!, wfs, tel)
+    @test slopes(wfs) === wfs.state.slopes
+    @test supports_valid_subaperture_mask(wfs) == !isnothing(valid_subaperture_mask(wfs))
+    @test supports_reference_signal(wfs) == !isnothing(reference_signal(wfs))
+    @test supports_camera_frame(wfs) == !isnothing(camera_frame(wfs))
 end
 
 function assert_detector_interface(det, psf)
@@ -84,6 +88,10 @@ function assert_reconstructor_interface(recon, slopes, expected_length::Int)
     @test applicable(reconstruct!, out, recon, slopes)
     reconstruct!(out, recon, slopes)
     @test length(out) == expected_length
+    @test inverse_policy(recon) === recon.policy
+    @test singular_values(recon) === recon.singular_values
+    @test condition_number(recon) == recon.cond
+    @test effective_rank(recon) == recon.effective_rank
     allocated = reconstruct(recon, slopes)
     @test length(allocated) == expected_length
 end
@@ -92,6 +100,11 @@ function assert_controller_interface(ctrl, input, dt::Real)
     @test applicable(update!, ctrl, input, dt)
     output = update!(ctrl, input, dt)
     @test length(output) == length(input)
+    @test controller_output(ctrl) === output
+    if supports_controller_reset(ctrl)
+        reset_controller!(ctrl)
+        @test all(iszero, controller_output(ctrl))
+    end
 end
 
 function assert_control_simulation_interface(sim)
@@ -112,23 +125,28 @@ function assert_interaction_matrix_contract(imat, expected_rows::Int, expected_c
     @test imat isa InteractionMatrix
     @test size(imat.matrix) == (expected_rows, expected_cols)
     @test forward_operator(imat) === imat.matrix
-    @test imat.amplitude ≈ amplitude
+    @test calibration_amplitude(imat) ≈ amplitude
 end
 
 function assert_calibration_vault_contract(vault, forward::AbstractMatrix; inverted::Bool=true)
     @test vault isa CalibrationVault
     @test vault.D === forward
     @test forward_operator(vault) === forward
+    @test inverse_policy(vault) === vault.policy
+    @test singular_values(vault) === vault.singular_values
+    @test isequal(condition_number(vault), vault.cond)
+    @test effective_rank(vault) == vault.effective_rank
+    @test truncation_count(vault) == vault.n_trunc
     if inverted
         @test inverse_operator_matrix(vault) === vault.M
         @test !isnothing(vault.M)
         @test size(vault.M, 2) == size(forward, 1)
-        @test length(vault.singular_values) == min(size(forward)...)
-        @test vault.effective_rank >= 0
+        @test length(singular_values(vault)) == min(size(forward)...)
+        @test effective_rank(vault) >= 0
     else
         @test isnothing(inverse_operator_matrix(vault))
         @test isnothing(vault.M)
-        @test isempty(vault.singular_values)
+        @test isempty(singular_values(vault))
     end
 end
 

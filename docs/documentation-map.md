@@ -188,6 +188,9 @@ Use these when the task is cross-package or instrument-truth work:
 - [`adding-detectors.md`](./adding-detectors.md)
   - practical authoring guide for adding a new detector family and deciding
     when a new physical behavior belongs in a shared detector layer
+- [`interface-contract-closeout-plan-2026-04.md`](./interface-contract-closeout-plan-2026-04.md)
+  - completed closeout pass for WFS accessors, controller lifecycle accessors,
+    and calibration/reconstructor diagnostics
 - [`hgcdte-validation-and-multiread-plan-2026-04.md`](./hgcdte-validation-and-multiread-plan-2026-04.md)
   - focused plan for expanding HgCdTe detector validation and extracting the
     reusable multi-read frame-readout layer

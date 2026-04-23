@@ -396,6 +396,15 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 
 - `AbstractWFS` implementations must provide `update_valid_mask!(wfs, tel)` and
   `measure!(wfs, tel)` or `measure!(wfs, tel, src)`.
+- `slopes(wfs)` is the maintained accessor for the exported 1-D WFS signal
+  vector.
+- Optional exported WFS-state surfaces are accessed through
+  `valid_subaperture_mask(wfs)`, `reference_signal(wfs)`, and
+  `camera_frame(wfs)`.
+- Optional WFS-state capabilities are surfaced through
+  `supports_valid_subaperture_mask(wfs)`,
+  `supports_reference_signal(wfs)`, and
+  `supports_camera_frame(wfs)`.
 - Optional capabilities are surfaced through traits and behavior:
   detector-coupled output, asterism support, prepared runtime support, and
   stacked-source execution.
@@ -421,8 +430,8 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   `supports_detector_output(wfs, det)`, and
   `supports_grouped_execution(wfs, src)` in addition to the simulation-level
   trait surface.
-- The maintained runtime expects the measured slope vector to live in
-  `wfs.state.slopes`.
+- The maintained runtime expects `slopes(wfs)` to expose the measured signal
+  vector consistently across WFS families.
 - Diffractive `ShackHartmann` and `PyramidWFS` now also support grouped
   broad-band execution through `SpectralSource`, including detector-coupled
   readout after wavelength accumulation.
@@ -613,13 +622,21 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - The maintained control reconstructor families are `ModalReconstructor` and
   `MappedReconstructor`, and both must present the same external
   slopes-to-command contract.
+- `inverse_policy(recon)`, `singular_values(recon)`,
+  `condition_number(recon)`, and `effective_rank(recon)` are the preferred
+  long-form accessors for maintained reconstructor diagnostics.
 
 ### `IF-CTRL`: controllers
 
 - `AbstractController` implementations should expose a canonical mutating update
   path through `update!(ctrl, input, dt)`.
+- `controller_output(ctrl)` is the maintained accessor for the current
+  command-like controller state.
+- `reset_controller!(ctrl)` is the preferred optional lifecycle hook for
+  controllers that support explicit state reset, and
+  `supports_controller_reset(ctrl)` advertises that capability.
 - The maintained controller family is `DiscreteIntegratorController`, which
-  returns the updated command-like controller state.
+  returns `controller_output(ctrl)` from `update!`.
 
 ### `IF-SIM`: control simulations
 
@@ -645,14 +662,16 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 
 - `interaction_matrix(...)` is the maintained linearized WFS-calibration entry
   point and must return an `InteractionMatrix` with a stored calibration
-  `amplitude`. `forward_operator(imat)` is the long-form accessor for the
-  stored matrix.
+  `amplitude`. `forward_operator(imat)` and `calibration_amplitude(imat)` are
+  the preferred long-form accessors for the stored matrix and drive amplitude.
 - `CalibrationVault(D; ...)` is the maintained inverse-storage workflow and
   should retain the forward operator `D`, the selected inverse representation
   when requested, and inversion diagnostics such as singular values, condition
-  number, effective rank, and truncation count. `forward_operator(vault)` and
-  `inverse_operator_matrix(vault)` are the preferred long-form accessors for
-  the stored operators.
+  number, effective rank, and truncation count. `forward_operator(vault)`,
+  `inverse_operator_matrix(vault)`, `inverse_policy(vault)`,
+  `singular_values(vault)`, `condition_number(vault)`,
+  `effective_rank(vault)`, and `truncation_count(vault)` are the preferred
+  long-form accessors for the stored operators and diagnostics.
 - `modal_basis(...)` is the maintained modal-basis workflow and must return a
   `ModalBasis` with consistent `M2C`, sampled basis vectors, and optional
   projector. `modal_to_command(basis)`, `sampled_basis(basis)`, and

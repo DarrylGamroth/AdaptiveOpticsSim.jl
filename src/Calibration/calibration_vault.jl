@@ -34,6 +34,11 @@ end
 
 @inline forward_operator(vault::CalibrationVault) = vault.D
 @inline inverse_operator_matrix(vault::CalibrationVault) = vault.M
+@inline inverse_policy(vault::CalibrationVault) = vault.policy
+@inline singular_values(vault::CalibrationVault) = vault.singular_values
+@inline condition_number(vault::CalibrationVault) = vault.cond
+@inline effective_rank(vault::CalibrationVault) = vault.effective_rank
+@inline truncation_count(vault::CalibrationVault) = vault.n_trunc
 
 """
     CalibrationVault(D; n_trunc=0, invert=true, policy=..., build_backend=...)

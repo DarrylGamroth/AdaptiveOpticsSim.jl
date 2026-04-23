@@ -35,6 +35,22 @@ slopes-to-command interface.
 """
 abstract type AbstractReconstructorOperator end
 
+function inverse_policy(::AbstractReconstructorOperator)
+    throw(InvalidConfiguration("inverse_policy is not defined for this reconstructor family"))
+end
+
+function singular_values(::AbstractReconstructorOperator)
+    throw(InvalidConfiguration("singular_values is not defined for this reconstructor family"))
+end
+
+function condition_number(::AbstractReconstructorOperator)
+    throw(InvalidConfiguration("condition_number is not defined for this reconstructor family"))
+end
+
+function effective_rank(::AbstractReconstructorOperator)
+    throw(InvalidConfiguration("effective_rank is not defined for this reconstructor family"))
+end
+
 """
     NullReconstructor()
 
@@ -75,6 +91,11 @@ struct ModalReconstructor{T<:AbstractFloat,M<:AbstractMatrix{T},P<:InversePolicy
     cond::T
     effective_rank::Int
 end
+
+@inline inverse_policy(recon::ModalReconstructor) = recon.policy
+@inline singular_values(recon::ModalReconstructor) = recon.singular_values
+@inline condition_number(recon::ModalReconstructor) = recon.cond
+@inline effective_rank(recon::ModalReconstructor) = recon.effective_rank
 
 function ModalReconstructor(imat::InteractionMatrix; gain::Real=1.0,
     policy::InversePolicy=default_modal_inverse_policy(eltype(imat.matrix)),
@@ -146,6 +167,11 @@ struct MappedReconstructor{
     effective_rank::Int
     n_control_modes::Int
 end
+
+@inline inverse_policy(recon::MappedReconstructor) = recon.policy
+@inline singular_values(recon::MappedReconstructor) = recon.singular_values
+@inline condition_number(recon::MappedReconstructor) = recon.cond
+@inline effective_rank(recon::MappedReconstructor) = recon.effective_rank
 
 function MappedReconstructor(command_basis::AbstractMatrix{T}, imat::InteractionMatrix{T};
     gain::Real=1.0,

@@ -344,6 +344,25 @@ end
     assert_atmosphere_layer_interface(infinite_atm.layers[1], tel, MersenneTwister(12), src)
     # IF-WFS
     assert_wfs_interface(wfs, tel)
+    assert_wfs_interface(wfs_diffractive, tel)
+    assert_wfs_interface(pyr, tel)
+    assert_wfs_interface(bio, tel)
+    assert_wfs_interface(zwfs, tel)
+    assert_wfs_interface(curv, tel)
+    assert_wfs_interface(curv_count, tel)
+    @test !supports_camera_frame(wfs)
+    @test supports_valid_subaperture_mask(wfs)
+    @test supports_reference_signal(wfs)
+    @test supports_camera_frame(pyr)
+    @test supports_camera_frame(bio)
+    @test supports_camera_frame(zwfs)
+    @test supports_camera_frame(curv)
+    @test valid_subaperture_mask(wfs) === wfs.state.valid_mask
+    @test reference_signal(wfs) === wfs.state.reference_signal_2d
+    @test camera_frame(pyr) === pyr.state.camera_frame
+    @test camera_frame(bio) === bio.state.camera_frame
+    @test camera_frame(zwfs) === zwfs.state.camera_frame
+    @test camera_frame(curv) === curv.state.camera_frame
     # IF-DM
     assert_dm_interface(dm, tel)
     # IF-DET
@@ -356,6 +375,7 @@ end
     assert_reconstructor_interface(mapped, wfs.state.slopes, length(dm.state.coefs))
     # IF-CTRL
     assert_controller_interface(ctrl, wfs.state.slopes, 0.01)
+    @test supports_controller_reset(ctrl)
     # IF-SIM
     iface = assert_control_simulation_interface(runtime)
     @test !supports_prepared_runtime(runtime)
@@ -418,6 +438,8 @@ end
     vault_trunc = with_truncation(vault, 0)
     assert_calibration_vault_contract(vault_trunc, imat.matrix)
     @test vault_trunc.n_trunc == 0
+    calib = ao_calibration(tel, dm, wfs; n_modes=2, amplitude=0.1)
+    assert_ao_calibration_contract(calib, length(dm.state.coefs), 2)
 
     calib = ao_calibration(tel, dm, wfs; n_modes=2, amplitude=0.1, basis=basis)
     assert_ao_calibration_contract(calib, length(dm.state.coefs), 2)

@@ -76,17 +76,17 @@ end
 
 @inline wfs_output_frame(wfs::AbstractWFS, det::AbstractDetector) = output_frame(det)
 @inline wfs_output_frame(wfs::ShackHartmann{<:Diffractive}, ::Nothing) = sh_exported_spot_cube(wfs)
-@inline wfs_output_frame(wfs::ZernikeWFS, ::Nothing) = wfs.state.camera_frame
-@inline wfs_output_frame(wfs::CurvatureWFS, ::Nothing) = wfs.state.camera_frame
-@inline wfs_output_frame_prototype(wfs::PyramidWFS, ::Nothing) = wfs.state.camera_frame
-@inline wfs_output_frame_prototype(wfs::BioEdgeWFS, ::Nothing) = wfs.state.camera_frame
+@inline wfs_output_frame(wfs::ZernikeWFS, ::Nothing) = camera_frame(wfs)
+@inline wfs_output_frame(wfs::CurvatureWFS, ::Nothing) = camera_frame(wfs)
+@inline wfs_output_frame_prototype(wfs::PyramidWFS, ::Nothing) = camera_frame(wfs)
+@inline wfs_output_frame_prototype(wfs::BioEdgeWFS, ::Nothing) = camera_frame(wfs)
 @inline wfs_output_frame_prototype(wfs::ShackHartmann{<:Diffractive}, ::Nothing) = sh_exported_spot_cube(wfs)
-@inline wfs_output_frame_prototype(wfs::ZernikeWFS, ::Nothing) = wfs.state.camera_frame
-@inline wfs_output_frame_prototype(wfs::CurvatureWFS, ::Nothing) = wfs.state.camera_frame
+@inline wfs_output_frame_prototype(wfs::ZernikeWFS, ::Nothing) = camera_frame(wfs)
+@inline wfs_output_frame_prototype(wfs::CurvatureWFS, ::Nothing) = camera_frame(wfs)
 @inline wfs_output_frame(wfs::ShackHartmann{<:Diffractive}, det::AbstractDetector) = sh_exported_spot_cube(wfs)
 @inline wfs_output_frame_prototype(wfs::AbstractWFS, det::AbstractDetector) = wfs_output_frame(wfs, det)
-@inline wfs_output_frame_prototype(wfs::PyramidWFS, det::AbstractDetector) = wfs.state.camera_frame
-@inline wfs_output_frame_prototype(wfs::BioEdgeWFS, det::AbstractDetector) = wfs.state.camera_frame
+@inline wfs_output_frame_prototype(wfs::PyramidWFS, det::AbstractDetector) = camera_frame(wfs)
+@inline wfs_output_frame_prototype(wfs::BioEdgeWFS, det::AbstractDetector) = camera_frame(wfs)
 @inline wfs_output_frame_prototype(wfs::ShackHartmann{<:Diffractive}, det::AbstractDetector) = sh_exported_spot_cube(wfs)
 @inline wfs_output_metadata(wfs::ShackHartmann) = (
     n_subap=subaperture_layout(wfs).n_subap,
@@ -96,10 +96,10 @@ end
     slopes_units=subaperture_calibration(wfs).slopes_units,
     calibrated=subaperture_calibration(wfs).calibrated,
 )
-@inline wfs_output_frame(wfs::ZernikeWFS, det::AbstractDetector) = wfs.state.camera_frame
-@inline wfs_output_frame(wfs::CurvatureWFS, det::AbstractDetector) = wfs.state.camera_frame
-@inline wfs_output_frame_prototype(wfs::ZernikeWFS, det::AbstractDetector) = wfs.state.camera_frame
-@inline wfs_output_frame_prototype(wfs::CurvatureWFS, det::AbstractDetector) = wfs.state.camera_frame
+@inline wfs_output_frame(wfs::ZernikeWFS, det::AbstractDetector) = camera_frame(wfs)
+@inline wfs_output_frame(wfs::CurvatureWFS, det::AbstractDetector) = camera_frame(wfs)
+@inline wfs_output_frame_prototype(wfs::ZernikeWFS, det::AbstractDetector) = camera_frame(wfs)
+@inline wfs_output_frame_prototype(wfs::CurvatureWFS, det::AbstractDetector) = camera_frame(wfs)
 @inline wfs_output_metadata(::AbstractWFS) = nothing
 @inline wfs_output_metadata(wfs::CurvatureWFS) = wfs_output_metadata(wfs.params.readout_model, wfs)
 @inline wfs_output_metadata(::CurvatureFrameReadout, wfs::CurvatureWFS) = nothing

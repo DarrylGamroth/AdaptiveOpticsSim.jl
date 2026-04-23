@@ -68,6 +68,7 @@ include("WFS/pyramid.jl")
 include("WFS/bioedge.jl")
 include("WFS/zernike.jl")
 include("WFS/curvature.jl")
+include("WFS/interface.jl")
 include("WFS/lift.jl")
 include("Calibration/interaction_matrix.jl")
 include("Calibration/reconstructor.jl")
@@ -191,6 +192,8 @@ export ZernikeWFS, ZernikeWFSParams, ZernikeWFSState
 export CurvatureReadoutModel, CurvatureFrameReadout, CurvatureCountingReadout, CurvatureBranchResponse
 export CurvatureWFS, CurvatureWFSParams, CurvatureWFSState, ensure_curvature_calibration!
 export apply_shift_wfs!, set_optical_gain!
+export valid_subaperture_mask, reference_signal, camera_frame
+export supports_valid_subaperture_mask, supports_reference_signal, supports_camera_frame
 export LiFT, lift_interaction_matrix, lift_interaction_matrix!
 export LiFTSolveMode, LiFTSolveAuto, LiFTSolveQR, LiFTSolveNormalEquations
 export LiFTDampingMode, LiFTDampingNone, LiFTLevenbergMarquardt, LiFTAdaptiveLevenbergMarquardt
@@ -201,13 +204,14 @@ export ModalBasis, KLBasisMethod, KLDMModes, KLHHtPSD
 export dm_basis, kl_modal_basis, modal_basis, basis_from_m2c, basis_projector
 export modal_to_command, sampled_basis, modal_projector
 export AOCalibration, ao_calibration, calibration_vault
+export calibration_amplitude, inverse_policy, singular_values, condition_number, effective_rank, truncation_count
 export AOSimulation, initialize_ao_pyramid, initialize_ao_shwfs
 export forward_operator, inverse_operator_matrix
 export fitting_error, fitting_error_dm
 export GainSensingCamera
 export calibrate!, reset_calibration!, compute_optical_gains!
 export AbstractReconstructorOperator, NullReconstructor, ModalReconstructor, MappedReconstructor, reconstruct!, reconstruct
-export AbstractController, DiscreteIntegratorController, update!
+export AbstractController, DiscreteIntegratorController, update!, controller_output, reset_controller!, supports_controller_reset
 export AbstractControlSimulation, AbstractExecutionPolicy
 export SequentialExecution, ThreadedExecution, BackendStreamExecution
 export AbstractRuntimeProfile, ScientificRuntimeProfile, HILRuntimeProfile

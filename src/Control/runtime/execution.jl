@@ -44,8 +44,8 @@ end
 end
 
 @inline function stage_sensed_slopes!(runtime::ClosedLoopRuntime)
-    synchronize_backend!(execution_style(runtime.wfs.state.slopes))
-    measured = shift_delay!(runtime.measurement_delay, runtime.wfs.state.slopes)
+    synchronize_backend!(execution_style(slopes(runtime.wfs)))
+    measured = shift_delay!(runtime.measurement_delay, slopes(runtime.wfs))
     synchronize_backend!(execution_style(measured))
     readout = shift_delay!(runtime.readout_delay, measured)
     synchronize_backend!(execution_style(readout))
@@ -76,7 +76,7 @@ only in whether WFS and science detectors participate in the step.
     wfs::AbstractWFS, src::AbstractSource, reconstructor, command::AbstractVector{T},
     rng::AbstractRNG, control_sign::T) where {T<:AbstractFloat}
     sense_core!(atm, tel, optic, wfs, src, rng)
-    reconstruct!(command, reconstructor, wfs.state.slopes)
+    reconstruct!(command, reconstructor, slopes(wfs))
     _stage_command!(optic, command, control_sign)
     return nothing
 end
@@ -85,7 +85,7 @@ end
     wfs::AbstractWFS, src::AbstractSource, wfs_detector::AbstractDetector, reconstructor,
     command::AbstractVector{T}, rng::AbstractRNG, control_sign::T) where {T<:AbstractFloat}
     sense_core!(atm, tel, optic, wfs, src, wfs_detector, rng)
-    reconstruct!(command, reconstructor, wfs.state.slopes)
+    reconstruct!(command, reconstructor, slopes(wfs))
     _stage_command!(optic, command, control_sign)
     return nothing
 end
@@ -95,7 +95,7 @@ end
     science_detector::AbstractDetector, rng::AbstractRNG, control_sign::T, science_zero_padding::Int) where {T<:AbstractFloat}
     sense_core!(atm, tel, optic, wfs, src, rng)
     capture_science_core!(tel, src, science_detector, rng, science_zero_padding)
-    reconstruct!(command, reconstructor, wfs.state.slopes)
+    reconstruct!(command, reconstructor, slopes(wfs))
     _stage_command!(optic, command, control_sign)
     return nothing
 end
@@ -106,7 +106,7 @@ end
     control_sign::T, science_zero_padding::Int) where {T<:AbstractFloat}
     sense_core!(atm, tel, optic, wfs, src, wfs_detector, rng)
     capture_science_core!(tel, src, science_detector, rng, science_zero_padding)
-    reconstruct!(command, reconstructor, wfs.state.slopes)
+    reconstruct!(command, reconstructor, slopes(wfs))
     _stage_command!(optic, command, control_sign)
     return nothing
 end
