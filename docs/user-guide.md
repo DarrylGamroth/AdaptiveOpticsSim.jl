@@ -161,6 +161,21 @@ propagate!(atm, tel)
 slopes = measure!(wfs, tel, src)
 ```
 
+For HIL or RTC export, attach a detector and request the detector image after
+measurement. `bits` defines the quantization depth, `full_well` defines the
+analog-to-digital scaling, and `output_type` defines the Julia array element
+type used for the exported frame:
+
+```julia
+det = Detector(noise=NoiseNone(), full_well=30_000.0, bits=12, output_type=UInt16)
+measure!(wfs, tel, src, det; rng=rng)
+adu = wfs_detector_image(wfs, det)
+```
+
+Here `adu` is a `UInt16` image containing 12-bit ADU values. For
+Shack-Hartmann sensors this is the lenslet spot mosaic; for frame-style WFSs it
+is the maintained detector/readout frame.
+
 Use this when you care about:
 
 - sensor behavior

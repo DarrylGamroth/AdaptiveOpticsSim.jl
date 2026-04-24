@@ -119,6 +119,28 @@ julia --project examples/tutorials/closed_loop_pyramid.jl
 
 Use `examples/closed_loop_demo.jl` for the smallest direct closed-loop script.
 
+## Detector ADU Output
+
+Detector quantization is controlled by `bits` and `full_well`. The Julia array
+element type returned to a HIL/RTC boundary is controlled separately by
+`output_type`:
+
+```julia
+det = Detector(
+    noise=NoiseNone(),
+    full_well=30_000.0,
+    bits=12,
+    output_type=UInt16,
+)
+
+measure!(wfs, tel, src, det; rng=rng)
+adu = wfs_detector_image(wfs, det)
+```
+
+In this example, `adu` is a `UInt16` detector image with 12-bit quantized
+values. Use `output_type=nothing` when you want the floating-point internal
+readout instead of a typed digital export.
+
 ## Documentation
 
 For users:
