@@ -91,9 +91,16 @@ end
     sh_det = ShackHartmann(tel; n_subap=4, mode=Diffractive())
     sh_det_slopes = measure!(sh_det, tel, ngs, det)
     @test length(sh_det_slopes) == 2 * 4 * 4
+    sh_det_image = wfs_detector_image(sh_det, det; gap=1)
+    @test ndims(sh_det_image) == 2
     pyr_det = PyramidWFS(tel; n_subap=4, mode=Diffractive())
     pyr_det_slopes = measure!(pyr_det, tel, ngs, det)
     @test length(pyr_det_slopes) == 2 * 4 * 4
+    @test wfs_detector_image(pyr_det, det) === output_frame(det)
+    bio_det = BioEdgeWFS(tel; n_subap=4, mode=Diffractive())
+    bio_det_slopes = measure!(bio_det, tel, ngs, det)
+    @test length(bio_det_slopes) == 2 * 4 * 4
+    @test wfs_detector_image(bio_det, det) === output_frame(det)
 
     ast = Asterism([ngs, Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0))])
     sh_ast = ShackHartmann(tel; n_subap=4, mode=Diffractive())

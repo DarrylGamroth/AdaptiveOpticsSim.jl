@@ -146,6 +146,10 @@ For maintainers extending subsystem families:
 - [docs/adding-controllable-optics.md](docs/adding-controllable-optics.md)
 - [docs/adding-controllers-and-reconstructors.md](docs/adding-controllers-and-reconstructors.md)
 
+For full plotted examples, use the companion plotting package in
+`../AdaptiveOpticsSimPlots.jl`. The examples in this repo remain plotting-free
+by design.
+
 ## Supported Production Surface
 
 The package has a documented maintained production-validation surface. Use:

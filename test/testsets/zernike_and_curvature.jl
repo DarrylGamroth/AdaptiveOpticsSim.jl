@@ -18,6 +18,7 @@
     det_slopes = copy(measure!(wfs, tel, src, det))
     @test det_slopes ≈ flat_slopes atol=1e-10
     @test size(output_frame(det)) == size(wfs.state.camera_frame)
+    @test wfs_detector_image(wfs, det) === output_frame(det)
 
     zb = ZernikeBasis(tel, 5)
     compute_zernike!(zb, tel)
@@ -53,6 +54,7 @@ end
     det_slopes = copy(measure!(wfs, tel, src, det))
     @test det_slopes ≈ flat_slopes atol=1e-10
     @test size(output_frame(det)) == size(wfs.state.camera_frame)
+    @test wfs_detector_image(wfs, det) === output_frame(det)
 
     zb = ZernikeBasis(tel, 5)
     compute_zernike!(zb, tel)

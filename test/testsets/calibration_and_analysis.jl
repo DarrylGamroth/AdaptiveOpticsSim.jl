@@ -369,6 +369,17 @@ end
     @test camera_frame(bio) === bio.state.camera_frame
     @test camera_frame(zwfs) === zwfs.state.camera_frame
     @test camera_frame(curv) === curv.state.camera_frame
+    @test wfs_detector_image(pyr) === pyr.state.camera_frame
+    @test wfs_detector_image(bio) === bio.state.camera_frame
+    @test wfs_detector_image(zwfs) === zwfs.state.camera_frame
+    @test wfs_detector_image(curv) === curv.state.camera_frame
+    sh_image = wfs_detector_image(wfs_diffractive; gap=1)
+    sh_cube = AdaptiveOpticsSim.sh_exported_spot_cube(wfs_diffractive)
+    @test ndims(sh_image) == 2
+    @test size(sh_image) == (wfs_diffractive.params.n_subap * size(sh_cube, 2) +
+                             wfs_diffractive.params.n_subap - 1,
+                             wfs_diffractive.params.n_subap * size(sh_cube, 3) +
+                             wfs_diffractive.params.n_subap - 1)
     # IF-DM
     assert_dm_interface(dm, tel)
     # IF-DET

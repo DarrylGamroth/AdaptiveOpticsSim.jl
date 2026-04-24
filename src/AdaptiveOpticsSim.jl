@@ -195,7 +195,8 @@ export ZernikeWFS, ZernikeWFSParams, ZernikeWFSState
 export CurvatureReadoutModel, CurvatureFrameReadout, CurvatureCountingReadout, CurvatureBranchResponse
 export CurvatureWFS, CurvatureWFSParams, CurvatureWFSState, ensure_curvature_calibration!
 export apply_shift_wfs!, set_optical_gain!
-export valid_subaperture_mask, reference_signal, camera_frame
+export valid_subaperture_mask, reference_signal, camera_frame, wfs_detector_image
+export shack_hartmann_detector_image, shack_hartmann_detector_image!
 export supports_valid_subaperture_mask, supports_reference_signal, supports_camera_frame
 export LiFT, lift_interaction_matrix, lift_interaction_matrix!
 export LiFTSolveMode, LiFTSolveAuto, LiFTSolveQR, LiFTSolveNormalEquations

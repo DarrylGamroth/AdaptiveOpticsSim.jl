@@ -407,6 +407,12 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
 - Optional exported WFS-state surfaces are accessed through
   `valid_subaperture_mask(wfs)`, `reference_signal(wfs)`, and
   `camera_frame(wfs)`.
+- HIL/RTC-facing WFS detector pixels are accessed through
+  `wfs_detector_image(wfs)` or `wfs_detector_image(wfs, det)` after
+  measurement. For detector-coupled WFSs this returns the configured detector
+  output where that is the maintained readout surface. Shack-Hartmann exports
+  its detector-coupled lenslet spots as a 2-D mosaic via
+  `shack_hartmann_detector_image(...)`.
 - Optional WFS-state capabilities are surfaced through
   `supports_valid_subaperture_mask(wfs)`,
   `supports_reference_signal(wfs)`, and
