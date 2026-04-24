@@ -19,6 +19,17 @@
     @test isempty(findall(flux_mask .& .!geom_mask))
 end
 
+@testset "Shack-Hartmann resized detector mosaic" begin
+    tel = Telescope(resolution=64, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
+    src = Source(band=:I, magnitude=7.0)
+    sh = ShackHartmann(tel; n_subap=16, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
+    prepare_runtime_wfs!(sh, tel, src)
+    measure!(sh, tel, src)
+    image = wfs_detector_image(sh)
+    @test size(image) == (128, 128)
+    @test size(AdaptiveOpticsSim.sh_exported_spot_cube(sh)) == (16 * 16, 8, 8)
+end
+
 @testset "Asterism PSF" begin
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src1 = Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0))

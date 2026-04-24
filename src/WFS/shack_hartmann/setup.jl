@@ -341,7 +341,7 @@ function ensure_sh_buffers!(wfs::ShackHartmann, pad::Int)
         wfs.state.field = similar(wfs.state.field, pad, pad)
         wfs.state.phasor = similar(wfs.state.phasor, pad, pad)
         wfs.state.fft_buffer = similar(wfs.state.fft_buffer, pad, pad)
-        wfs.state.fft_stack = similar(wfs.state.fft_stack, Complex{eltype(wfs.state.field)}, pad, pad, n_spots)
+        wfs.state.fft_stack = similar(wfs.state.fft_stack, eltype(wfs.state.field), pad, pad, n_spots)
         wfs.state.intensity = similar(wfs.state.intensity, pad, pad)
         wfs.state.intensity_stack = similar(wfs.state.intensity_stack, eltype(wfs.state.intensity), pad, pad, n_spots)
         total = sh_grouped_stack_capacity(wfs)
@@ -459,7 +459,7 @@ function prepare_sampling!(wfs::ShackHartmann, tel::Telescope, src::AbstractSour
 
     if padding != wfs.state.effective_padding || pad != size(wfs.state.field, 1)
         ensure_sh_buffers!(wfs, pad)
-        wfs.state.lgs_kernel_fft = similar(wfs.state.fft_buffer, Complex{eltype(wfs.state.fft_buffer)}, 0, 0, 0)
+        wfs.state.lgs_kernel_fft = similar(wfs.state.fft_buffer, eltype(wfs.state.fft_buffer), 0, 0, 0)
         wfs.state.lgs_kernel_tag = UInt(0)
         wfs.state.effective_padding = padding
     end
