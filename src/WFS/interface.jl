@@ -75,9 +75,9 @@ end
     local_x = (x - 1) % pitch_x + 1
     if tile_y <= n_sub && tile_x <= n_sub && local_y <= n_y && local_x <= n_x
         idx = (tile_y - 1) * n_sub + tile_x
-        @inbounds image[y, x] = spot_cube[idx, local_y, local_x]
+        @inbounds image[y, x] = detector_output_value(eltype(image), spot_cube[idx, local_y, local_x])
     else
-        @inbounds image[y, x] = gap_value
+        @inbounds image[y, x] = detector_output_value(eltype(image), gap_value)
     end
 end
 
@@ -87,7 +87,8 @@ end
 
 Tile a Shack-Hartmann lenslet spot cube into a 2-D detector image.
 """
-function shack_hartmann_detector_image(spot_cube::AbstractArray, n_subap::Integer; gap::Integer=0, gap_value=0)
+function shack_hartmann_detector_image(spot_cube::AbstractArray, n_subap::Integer; gap::Integer=0, gap_value=0,
+    output_type::Union{Nothing,DataType}=nothing)
     n_sub = Int(n_subap)
     n_sub > 0 || throw(ArgumentError("n_subap must be positive"))
     ndims(spot_cube) == 3 ||
@@ -97,7 +98,7 @@ function shack_hartmann_detector_image(spot_cube::AbstractArray, n_subap::Intege
         throw(DimensionMismatch("spot cube first dimension must equal n_subap^2; got $n_spots for n_subap=$n_sub"))
     gap_px = Int(gap)
     gap_px >= 0 || throw(ArgumentError("gap must be non-negative"))
-    T = promote_type(eltype(spot_cube), typeof(gap_value))
+    T = output_type === nothing ? promote_type(eltype(spot_cube), typeof(gap_value)) : output_type
     image = similar(spot_cube, T, n_sub * n_y + (n_sub - 1) * gap_px,
         n_sub * n_x + (n_sub - 1) * gap_px)
     return shack_hartmann_detector_image!(image, spot_cube, n_sub; gap=gap_px, gap_value=gap_value)
@@ -131,12 +132,15 @@ end
 
 function _shack_hartmann_detector_image!(::ScalarCPUStyle, ::ScalarCPUStyle, image::AbstractMatrix,
     spot_cube::AbstractArray, n_sub::Int, n_y::Int, n_x::Int, gap::Int, gap_value)
-    fill!(image, gap_value)
+    T = eltype(image)
+    fill!(image, detector_output_value(T, gap_value))
     @inbounds for i in 1:n_sub, j in 1:n_sub
         idx = (i - 1) * n_sub + j
         y0 = (i - 1) * (n_y + gap) + 1
         x0 = (j - 1) * (n_x + gap) + 1
-        @views image[y0:(y0 + n_y - 1), x0:(x0 + n_x - 1)] .= spot_cube[idx, :, :]
+        for jj in 1:n_x, ii in 1:n_y
+            image[y0 + ii - 1, x0 + jj - 1] = detector_output_value(T, spot_cube[idx, ii, jj])
+        end
     end
     return image
 end
@@ -157,8 +161,9 @@ end
 @inline shack_hartmann_detector_image(wfs::ShackHartmann; kwargs...) =
     shack_hartmann_detector_image(sh_exported_spot_cube(wfs), wfs.params.n_subap; kwargs...)
 @inline wfs_detector_image(wfs::ShackHartmann; kwargs...) = shack_hartmann_detector_image(wfs; kwargs...)
-@inline wfs_detector_image(wfs::ShackHartmann, ::Union{AbstractDetector,Nothing}; kwargs...) =
-    shack_hartmann_detector_image(wfs; kwargs...)
+@inline wfs_detector_image(wfs::ShackHartmann, ::Nothing; kwargs...) = shack_hartmann_detector_image(wfs; kwargs...)
+@inline wfs_detector_image(wfs::ShackHartmann, det::AbstractDetector; kwargs...) =
+    shack_hartmann_detector_image(wfs; output_type=detector_output_type(det), kwargs...)
 
 @inline valid_subaperture_mask(wfs::PyramidWFS) = wfs.state.valid_mask
 @inline reference_signal(wfs::PyramidWFS) = wfs.state.reference_signal_2d

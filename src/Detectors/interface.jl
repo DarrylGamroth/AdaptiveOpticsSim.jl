@@ -863,7 +863,7 @@ struct DetectorExportMetadata{T<:AbstractFloat}
     sensor::Symbol
     noise::Symbol
     readout_sigma::Union{Nothing,T}
-    output_precision::Union{Nothing,DataType}
+    output_type::Union{Nothing,DataType}
     frame_size::Tuple{Int,Int}
     output_size::Tuple{Int,Int}
     frame_response::Symbol
@@ -946,7 +946,7 @@ struct CountingDetectorExportMetadata{T<:AbstractFloat}
     dark_count_law::Symbol
     sensor::Symbol
     noise::Symbol
-    output_precision::Union{Nothing,DataType}
+    output_type::Union{Nothing,DataType}
     readout::CountingReadoutMetadata
 end
 
@@ -1159,7 +1159,7 @@ struct DetectorParams{T<:AbstractFloat,S<:SensorType,R<:AbstractFrameResponse,
     nonlinearity_model::NL
     thermal_model::TM
     readout_window::Union{Nothing,FrameWindow}
-    output_precision::Union{Nothing,DataType}
+    output_type::Union{Nothing,DataType}
 end
 
 mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O,P,TS<:AbstractDetectorThermalState}

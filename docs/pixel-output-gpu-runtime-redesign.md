@@ -328,16 +328,19 @@ Exit criterion:
 Status:
 - implemented for the maintained spot-stack path via `capture_stack!`
 - the fixed-shape in-place fast path is intentionally limited to
-  `psf_sampling == 1`, `binning == 1`, `output_precision === nothing`,
-  full-frame readout, global-shutter timing, and null persistence
+  `psf_sampling == 1`, `binning == 1`, full-frame readout,
+  global-shutter timing, and null persistence
+- the fixed-shape path applies `bits` / `full_well` quantization in-place; HIL
+  code that needs typed Shack-Hartmann detector pixels should call
+  `wfs_detector_image(wfs, det)` after measurement
 - maintained batched response models now include null, Gaussian,
   rectangular/separable MTF, and sampled frame responses
 - maintained batched readout correction now includes the null and reference-edge
   common-mode correction models
 - a second generalized `capture_stack!` path now exists for shape-changing
   detector configurations with separate input/output stacks
-  - this generalized path covers `psf_sampling`, `binning`,
-    `readout_window`, and `output_precision`
+  - this generalized path covers shape-changing `psf_sampling`, `binning`,
+    `readout_window`, and `output_type`
   - it is intentionally not the hot HIL fast path
   - it still requires global-shutter timing and null persistence
 - rolling-shutter timing and persistence are intentionally deferred rather than

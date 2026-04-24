@@ -7,8 +7,6 @@ function _require_batched_detector_compat(det::Detector, cube::AbstractArray, sc
         throw(InvalidConfiguration("batched detector capture currently requires psf_sampling == 1"))
     det.params.binning == 1 ||
         throw(InvalidConfiguration("batched detector capture currently requires binning == 1"))
-    det.params.output_precision === nothing ||
-        throw(InvalidConfiguration("batched detector capture currently requires output_precision === nothing"))
     det.params.readout_window === nothing ||
         throw(InvalidConfiguration("batched detector capture currently requires full-frame readout"))
     supports_batched_readout_correction(det.params.correction_model) ||

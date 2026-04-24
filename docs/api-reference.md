@@ -514,10 +514,12 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   currently requires:
   - `psf_sampling == 1`
   - `binning == 1`
-  - `output_precision === nothing`
   - full-frame readout
   - global-shutter timing
   - null persistence
+  It applies `bits` / `full_well` quantization in-place. Use
+  `wfs_detector_image(wfs, det)` to materialize a typed Shack-Hartmann detector
+  mosaic when `output_type` is set for HIL/RTC export.
 - The fixed-shape fast path now supports the maintained batched frame-response
   family:
   - `NullFrameResponse`
@@ -534,8 +536,8 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   - `ReferenceOutputCommonModeCorrection`
   - `CompositeFrameReadoutCorrection` when all stages are maintained batched
     corrections
-- The generalized batched path preserves detector semantics for
-  `psf_sampling`, `binning`, `readout_window`, and `output_precision` by using
+- The generalized batched path preserves shape-changing detector semantics for
+  `psf_sampling`, `binning`, `readout_window`, and `output_type` by using
   separate input/output stacks. It is more general but not the latency-critical
   fast path.
 - Rolling-shutter timing and detector persistence are intentionally not part of

@@ -86,7 +86,7 @@ struct SPADArrayDetectorParams{T,S,G,TM}
     gate_model::G
     thermal_model::TM
     sensor::S
-    output_precision::Union{Nothing,DataType}
+    output_type::Union{Nothing,DataType}
     frame_mode::Symbol
 end
 

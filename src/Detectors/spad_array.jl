@@ -41,7 +41,7 @@ struct SPADArrayDetectorParams{
     gate_model::G
     thermal_model::TM
     sensor::S
-    output_precision::Union{Nothing,DataType}
+    output_type::Union{Nothing,DataType}
     layout::Symbol
 end
 
@@ -76,7 +76,7 @@ counting_dead_time_model(det::SPADArrayDetector) = det.params.sensor.dead_time_m
 counting_correlation_model(det::SPADArrayDetector) = det.params.sensor.correlation_model
 counting_integration_time(det::SPADArrayDetector) = det.params.integration_time
 counting_layout(det::SPADArrayDetector) = det.params.layout
-counting_output_precision(det::SPADArrayDetector) = det.params.output_precision
+counting_output_type(det::SPADArrayDetector) = det.params.output_type
 counting_array(det::SPADArrayDetector) = det.state.counts
 counting_noise_buffer(det::SPADArrayDetector) = det.state.noise_buffer
 counting_output_buffer(det::SPADArrayDetector) = det.state.output_buffer
@@ -96,7 +96,7 @@ function _build_spad_array_detector(noise::NoiseModel; integration_time::Real,
     gate_model::AbstractCountingGateModel,
     thermal_model::AbstractDetectorThermalModel,
     sensor::SPADArraySensorType,
-    output_precision::Union{Nothing,DataType},
+    output_type::Union{Nothing,DataType},
     layout::Symbol,
     T::Type{<:AbstractFloat},
     backend)
@@ -111,12 +111,12 @@ function _build_spad_array_detector(noise::NoiseModel; integration_time::Real,
         gate,
         thermal,
         typed_sensor,
-        output_precision,
+        output_type,
         layout,
     )
     counts = backend{T}(undef, 1, 1)
     noise_buffer = backend{T}(undef, 1, 1)
-    output_buffer = output_precision === nothing ? nothing : backend{output_precision}(undef, 1, 1)
+    output_buffer = output_type === nothing ? nothing : backend{output_type}(undef, 1, 1)
     fill!(counts, zero(T))
     fill!(noise_buffer, zero(T))
     output_buffer === nothing || fill!(output_buffer, zero(eltype(output_buffer)))
@@ -130,7 +130,7 @@ end
 
 function SPADArrayDetector(; integration_time::Real=1.0, noise::NoiseModel=NoisePhoton(),
     sensor::SPADArraySensor=SPADArraySensor(),
-    output_precision::Union{Nothing,DataType}=nothing,
+    output_type::Union{Nothing,DataType}=nothing,
     layout::Symbol=:pixel_counts,
     gate_model::AbstractCountingGateModel=NullCountingGate(),
     thermal_model::AbstractDetectorThermalModel=NullDetectorThermalModel(),
@@ -139,7 +139,7 @@ function SPADArrayDetector(; integration_time::Real=1.0, noise::NoiseModel=Noise
     backend = _resolve_array_backend(backend)
     return _build_spad_array_detector(noise; integration_time=integration_time,
         gate_model=gate_model, thermal_model=thermal_model, sensor=sensor,
-        output_precision=output_precision, layout=layout, T=T, backend=backend)
+        output_type=output_type, layout=layout, T=T, backend=backend)
 end
 
 convert_spad_sensor(sensor::SPADArraySensor{T}, ::Type{T}) where {T<:AbstractFloat} = sensor

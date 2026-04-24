@@ -93,6 +93,12 @@ end
     @test length(sh_det_slopes) == 2 * 4 * 4
     sh_det_image = wfs_detector_image(sh_det, det; gap=1)
     @test ndims(sh_det_image) == 2
+    sh_adu_det = Detector(noise=NoiseNone(), binning=1, full_well=30_000.0, bits=12, output_type=UInt16)
+    sh_adu = ShackHartmann(tel; n_subap=4, mode=Diffractive())
+    measure!(sh_adu, tel, ngs, sh_adu_det; rng=MersenneTwister(15))
+    sh_adu_image = wfs_detector_image(sh_adu, sh_adu_det; gap=1)
+    @test sh_adu_image isa Matrix{UInt16}
+    @test maximum(sh_adu_image) <= 0x0fff
     pyr_det = PyramidWFS(tel; n_subap=4, mode=Diffractive())
     pyr_det_slopes = measure!(pyr_det, tel, ngs, det)
     @test length(pyr_det_slopes) == 2 * 4 * 4

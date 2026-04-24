@@ -347,7 +347,7 @@ so its shape and element type are detector-defined. Inspect
 `science_metadata(scenario)` to learn the exact export contract for:
 
 - `output_size`
-- `output_precision`
+- `output_type`
 - `binning`
 - `window_rows` / `window_cols`
 - `bits` / `full_well`

@@ -1,5 +1,6 @@
 readout_ready(det::Detector) = det.state.readout_ready
 output_frame(det::Detector) = det.state.output_buffer === nothing ? det.state.frame : det.state.output_buffer
+detector_output_type(det::Detector) = det.params.output_type
 readout_products(det::Detector) = det.state.readout_products
 detector_reference_frame(det::Detector) = detector_reference_frame(det.state.readout_products)
 detector_signal_frame(det::Detector) = detector_signal_frame(det.state.readout_products)
@@ -8,6 +9,11 @@ detector_reference_cube(det::Detector) = detector_reference_cube(det.state.reado
 detector_signal_cube(det::Detector) = detector_signal_cube(det.state.readout_products)
 detector_read_cube(det::Detector) = detector_read_cube(det.state.readout_products)
 detector_read_times(det::Detector) = detector_read_times(det.state.readout_products)
+
+@inline detector_output_value(::Nothing, value) = value
+@inline detector_output_value(::Type{T}, value) where {T<:Integer} =
+    T(clamp(round(value), typemin(T), typemax(T)))
+@inline detector_output_value(::Type{T}, value) where {T} = T(value)
 
 detector_reference_frame(::FrameReadoutProducts) = nothing
 detector_signal_frame(::FrameReadoutProducts) = nothing
@@ -133,7 +139,7 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         detector_sensor_symbol(det.params.sensor),
         detector_noise_symbol(det.noise),
         detector_readout_sigma(det.noise, det.params.sensor, T),
-        det.params.output_precision,
+        det.params.output_type,
         size(det.state.frame),
         size(output),
         response_family(det.params.response_model),
@@ -558,8 +564,8 @@ resolve_response_model(sensor::SensorType, ::Nothing; T::Type{<:AbstractFloat}, 
 resolve_response_model(sensor::SensorType, response_model::AbstractFrameResponse; T::Type{<:AbstractFloat}, backend) =
     response_model
 
-function resolve_output_precision(bits::Union{Nothing,Int}, output_precision::Union{Nothing,DataType})
-    output_precision !== nothing && return output_precision
+function resolve_output_type(bits::Union{Nothing,Int}, output_type::Union{Nothing,DataType})
+    output_type !== nothing && return output_type
     bits === 8 && return UInt8
     bits === 16 && return UInt16
     bits === 32 && return UInt32
@@ -588,7 +594,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     nonlinearity_model::Union{Nothing,AbstractFrameNonlinearityModel},
     thermal_model::Union{Nothing,AbstractDetectorThermalModel},
     readout_window::Union{Nothing,FrameWindow},
-    output_precision::Union{Nothing,DataType}, background_flux, background_map,
+    output_type::Union{Nothing,DataType}, background_flux, background_map,
     T::Type{<:AbstractFloat}, backend)
     validate_frame_detector_sensor(sensor)
     selector = _resolve_backend_selector(backend)
@@ -611,7 +617,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
         validate_frame_nonlinearity_model(convert_frame_nonlinearity_model(resolved_nonlinearity, T)))
     resolved_thermal = resolve_thermal_model(sensor, thermal_model; T=T)
     thermal = validate_thermal_model(convert_thermal_model(resolved_thermal, T))
-    output_precision_t = resolve_output_precision(bits, output_precision)
+    output_type_t = resolve_output_type(bits, output_type)
     window = validate_readout_window(readout_window)
     params = DetectorParams{T, typeof(sensor), typeof(response), typeof(defects), typeof(timing), typeof(correction), typeof(nonlinearity), typeof(thermal)}(
         T(integration_time),
@@ -630,7 +636,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
         nonlinearity,
         thermal,
         window,
-        output_precision_t,
+        output_type_t,
     )
     frame = array_backend{T}(undef, 1, 1)
     response_buffer = array_backend{T}(undef, 1, 1)
@@ -638,10 +644,10 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     noise_buffer = array_backend{T}(undef, 1, 1)
     noise_buffer_host = Matrix{T}(undef, 1, 1)
     accum_buffer = array_backend{T}(undef, 1, 1)
-    output_buffer = if output_precision_t === nothing
+    output_buffer = if output_type_t === nothing
         window === nothing ? nothing : array_backend{T}(undef, 1, 1)
     else
-        array_backend{output_precision_t}(undef, 1, 1)
+        array_backend{output_type_t}(undef, 1, 1)
     end
     fill!(frame, zero(T))
     fill!(response_buffer, zero(T))
@@ -688,7 +694,7 @@ function Detector(; integration_time::Real=1.0, qe::Real=1.0,
     nonlinearity_model::Union{Nothing,AbstractFrameNonlinearityModel}=nothing,
     thermal_model::Union{Nothing,AbstractDetectorThermalModel}=nothing,
     readout_window::Union{Nothing,FrameWindow}=nothing,
-    output_precision::Union{Nothing,DataType}=nothing, background_flux=nothing, background_map=nothing,
+    output_type::Union{Nothing,DataType}=nothing, background_flux=nothing, background_map=nothing,
     T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     normalized = normalize_noise(noise)
     return Detector(normalized; integration_time=integration_time, qe=qe,
@@ -696,7 +702,7 @@ function Detector(; integration_time::Real=1.0, qe::Real=1.0,
         dark_current=dark_current, bits=bits, full_well=full_well,
         sensor=sensor, response_model=response_model, defect_model=defect_model, timing_model=timing_model,
         correction_model=correction_model, nonlinearity_model=nonlinearity_model, thermal_model=thermal_model,
-        readout_window=readout_window, output_precision=output_precision,
+        readout_window=readout_window, output_type=output_type,
         background_flux=background_flux, background_map=background_map,
         T=T, backend=backend)
 end
@@ -711,7 +717,7 @@ function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
     nonlinearity_model::Union{Nothing,AbstractFrameNonlinearityModel}=nothing,
     thermal_model::Union{Nothing,AbstractDetectorThermalModel}=nothing,
     readout_window::Union{Nothing,FrameWindow}=nothing,
-    output_precision::Union{Nothing,DataType}=nothing,
+    output_type::Union{Nothing,DataType}=nothing,
     background_flux=nothing, background_map=nothing,
     T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     converted = convert_noise(noise, T)
@@ -722,7 +728,7 @@ function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
         sensor=sensor, response_model=response_model, defect_model=defect_model,
         timing_model=timing_model, correction_model=correction_model, nonlinearity_model=nonlinearity_model,
         thermal_model=thermal_model,
-        readout_window=readout_window, output_precision=output_precision,
+        readout_window=readout_window, output_type=output_type,
         background_flux=background_flux, background_map=background_map,
         T=T, backend=backend)
 end

@@ -38,8 +38,9 @@ counting_integration_time(det::AbstractCountingDetector) =
     throw(InvalidConfiguration("missing counting_integration_time overload for $(typeof(det))"))
 counting_layout(det::AbstractCountingDetector) =
     throw(InvalidConfiguration("missing counting_layout overload for $(typeof(det))"))
-counting_output_precision(det::AbstractCountingDetector) =
-    throw(InvalidConfiguration("missing counting_output_precision overload for $(typeof(det))"))
+counting_output_type(det::AbstractCountingDetector) =
+    throw(InvalidConfiguration("missing counting_output_type overload for $(typeof(det))"))
+detector_output_type(det::AbstractCountingDetector) = counting_output_type(det)
 counting_array(det::AbstractCountingDetector) =
     throw(InvalidConfiguration("missing counting_array overload for $(typeof(det))"))
 counting_noise_buffer(det::AbstractCountingDetector) =
@@ -178,7 +179,7 @@ function detector_export_metadata(det::AbstractCountingDetector; T::Type{<:Abstr
         temperature_law_symbol(active_dark_count_law(det, thermal_model(det))),
         detector_sensor_symbol(counting_sensor(det)),
         detector_noise_symbol(det.noise),
-        counting_output_precision(det),
+        counting_output_type(det),
         CountingReadoutMetadata(counting_layout(det), size(output), length(output)),
     )
 end

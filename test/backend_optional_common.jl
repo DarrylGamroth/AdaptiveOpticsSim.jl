@@ -380,14 +380,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
         ReferenceColumnCommonModeCorrection(1),
     ))
     cpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-        bits=8, full_well=T(100), readout_window=FrameWindow(2:5, 3:7), output_precision=UInt16,
+        bits=8, full_well=T(100), readout_window=FrameWindow(2:5, 3:7), output_type=UInt16,
         sensor=HgCdTeAvalancheArraySensor(T=T),
         response_model=NullFrameResponse(),
         correction_model=generalized_correction,
         T=T,
         backend=CPUBackend())
     gpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-        bits=8, full_well=T(100), readout_window=FrameWindow(2:5, 3:7), output_precision=UInt16,
+        bits=8, full_well=T(100), readout_window=FrameWindow(2:5, 3:7), output_type=UInt16,
         sensor=HgCdTeAvalancheArraySensor(T=T),
         response_model=NullFrameResponse(),
         correction_model=generalized_correction,
@@ -578,14 +578,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
         ReferenceColumnCommonModeCorrection(1),
     ))
     cpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-        bits=8, full_well=T(100), readout_window=FrameWindow(2:5, 3:7), output_precision=UInt16,
+        bits=8, full_well=T(100), readout_window=FrameWindow(2:5, 3:7), output_type=UInt16,
         sensor=HgCdTeAvalancheArraySensor(T=T),
         response_model=NullFrameResponse(),
         correction_model=generalized_correction,
         T=T,
         backend=CPUBackend())
     gpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-        bits=8, full_well=T(100), readout_window=FrameWindow(2:5, 3:7), output_precision=UInt16,
+        bits=8, full_well=T(100), readout_window=FrameWindow(2:5, 3:7), output_type=UInt16,
         sensor=HgCdTeAvalancheArraySensor(T=T),
         response_model=NullFrameResponse(),
         correction_model=generalized_correction,

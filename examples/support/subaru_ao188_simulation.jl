@@ -158,7 +158,7 @@ struct AO188APDDetectorConfig{T<:AbstractFloat,N<:NoiseModel,D<:CountingDeadTime
     dark_count_rate::T
     noise::N
     dead_time_model::D
-    output_precision::Union{Nothing,DataType}
+    output_type::Union{Nothing,DataType}
     channel_gain_map::GM
     thermal_model::TM
 end
@@ -171,7 +171,7 @@ function AO188APDDetectorConfig(;
     dark_count_rate::Real=0.0,
     noise::NoiseModel=NoisePhoton(),
     dead_time_model::CountingDeadTimeModel=NoDeadTime(),
-    output_precision::Union{Nothing,DataType}=nothing,
+    output_type::Union{Nothing,DataType}=nothing,
     channel_gain_map=nothing,
     thermal_model::Union{Nothing,AbstractDetectorThermalModel}=nothing,
 )
@@ -182,7 +182,7 @@ function AO188APDDetectorConfig(;
         T(dark_count_rate),
         convert_noise(noise, T),
         dead_time_model,
-        output_precision,
+        output_type,
         channel_gain_map,
         thermal_model,
     )
@@ -214,7 +214,7 @@ function detector_from_config(cfg::AO188APDDetectorConfig{T}; backend::AbstractA
         dark_count_rate=cfg.dark_count_rate,
         noise=cfg.noise,
         dead_time_model=cfg.dead_time_model,
-        output_precision=cfg.output_precision,
+        output_type=cfg.output_type,
         channel_gain_map=cfg.channel_gain_map,
         thermal_model=something(cfg.thermal_model, NullDetectorThermalModel()),
         T=T,

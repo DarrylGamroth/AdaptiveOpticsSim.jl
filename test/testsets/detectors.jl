@@ -29,18 +29,18 @@
     metadata_adc = detector_export_metadata(det_adc)
     @test metadata_adc.noise == :none
     @test metadata_adc.sensor == :ccd
-    @test metadata_adc.output_precision == UInt8
+    @test metadata_adc.output_type == UInt8
     @test metadata_adc.frame_size == (4, 4)
     @test metadata_adc.output_size == (4, 4)
 
     det_adc_float = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-        bits=8, full_well=10.0, output_precision=Float32)
+        bits=8, full_well=10.0, output_type=Float32)
     frame_adc_float = capture!(det_adc_float, fill(10.0, 4, 4); rng=MersenneTwister(2))
     @test frame_adc_float isa Matrix{Float32}
     @test maximum(frame_adc_float) == Float32(255.0)
 
     det_adc_window_corr = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-        bits=8, full_well=100.0, readout_window=FrameWindow(2:5, 3:7), output_precision=UInt16,
+        bits=8, full_well=100.0, readout_window=FrameWindow(2:5, 3:7), output_type=UInt16,
         sensor=HgCdTeAvalancheArraySensor(sampling_mode=SingleRead()),
         response_model=NullFrameResponse(),
         correction_model=CompositeFrameReadoutCorrection((
@@ -53,7 +53,7 @@
         rng=MersenneTwister(10))
     @test size(generalized_adc_window) == (2, 4, 5)
     @test generalized_adc_window[1, :, :] == capture!(Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-            bits=8, full_well=100.0, readout_window=FrameWindow(2:5, 3:7), output_precision=UInt16,
+            bits=8, full_well=100.0, readout_window=FrameWindow(2:5, 3:7), output_type=UInt16,
             sensor=HgCdTeAvalancheArraySensor(sampling_mode=SingleRead()),
             response_model=NullFrameResponse(),
             correction_model=CompositeFrameReadoutCorrection((
@@ -62,7 +62,7 @@
             ))),
         @view(adc_window_in[1, :, :]); rng=MersenneTwister(10))
     @test generalized_adc_window[2, :, :] == capture!(Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-            bits=8, full_well=100.0, readout_window=FrameWindow(2:5, 3:7), output_precision=UInt16,
+            bits=8, full_well=100.0, readout_window=FrameWindow(2:5, 3:7), output_type=UInt16,
             sensor=HgCdTeAvalancheArraySensor(sampling_mode=SingleRead()),
             response_model=NullFrameResponse(),
             correction_model=CompositeFrameReadoutCorrection((
@@ -652,6 +652,13 @@
     @test all(isfinite, stack_sampled)
     @test stack_sampled[1, :, :] ≈ sampled_frame atol=1e-6
     @test stack_sampled[2, :, :] ≈ sampled_frame atol=1e-6
+    det_stack_adc = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        bits=8, full_well=10.0, output_type=UInt16)
+    cube_stack_adc = fill(10.0, 2, 4, 4)
+    stack_adc = AdaptiveOpticsSim.capture_stack!(det_stack_adc, cube_stack_adc, similar(cube_stack_adc);
+        rng=MersenneTwister(10))
+    @test stack_adc === cube_stack_adc
+    @test all(stack_adc .== 255.0)
 
     rect_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         response_model=RectangularPixelAperture(pitch_x_px=2.0, pitch_y_px=2.0,
@@ -733,7 +740,7 @@
     @test_throws InvalidConfiguration AdaptiveOpticsSim.capture_stack!(det_cmos_batched, cube_mtf, scratch_mtf; rng=MersenneTwister(10))
 
     det_generalized = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, psf_sampling=2, binning=2,
-        bits=8, full_well=10.0, output_precision=UInt8)
+        bits=8, full_well=10.0, output_type=UInt8)
     input_generalized = zeros(Float64, 2, 8, 8)
     input_generalized[1, 4, 4] = 10.0
     input_generalized[2, 5, 5] = 10.0
