@@ -40,7 +40,7 @@ end
 end
 
 struct ZernikeWFSParams{T<:AbstractFloat,N<:WFSNormalization}
-    n_subap::Int
+    pupil_samples::Int
     threshold::T
     phase_shift_pi::T
     spot_radius_lambda_over_d::T
@@ -102,10 +102,10 @@ end
 
 Construct a Zernike WFS using a focal-plane circular phase-shifting spot.
 
-`n_subap` defines the nominal sampled pupil grid before optional `binning`
+`pupil_samples` defines the nominal sampled pupil grid before optional `binning`
 coarsens the final exported camera/signal frame.
 """
-function ZernikeWFS(tel::Telescope; n_subap::Int,
+function ZernikeWFS(tel::Telescope; pupil_samples::Int,
     phase_shift_pi::Real=0.5,
     spot_radius_lambda_over_d::Real=1.0,
     threshold::Real=0.0,
@@ -116,22 +116,22 @@ function ZernikeWFS(tel::Telescope; n_subap::Int,
     backend::AbstractArrayBackend=backend(tel))
     selector = require_same_backend(tel, _resolve_backend_selector(backend))
     backend = _resolve_array_backend(selector)
-    if tel.params.resolution % n_subap != 0
-        throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
+    if tel.params.resolution % pupil_samples != 0
+        throw(InvalidConfiguration("telescope resolution must be divisible by pupil_samples"))
     end
     if binning < 1
         throw(InvalidConfiguration("binning must be >= 1"))
     end
-    if n_subap % binning != 0
-        throw(InvalidConfiguration("n_subap must be divisible by binning"))
+    if pupil_samples % binning != 0
+        throw(InvalidConfiguration("pupil_samples must be divisible by binning"))
     end
     if diffraction_padding < 1
         throw(InvalidConfiguration("diffraction_padding must be >= 1"))
     end
-    n_signal = div(n_subap, binning)
+    n_signal = div(pupil_samples, binning)
     pad = tel.params.resolution * diffraction_padding
     params = ZernikeWFSParams{T,typeof(normalization)}(
-        n_subap,
+        pupil_samples,
         T(threshold),
         T(phase_shift_pi),
         T(spot_radius_lambda_over_d),
@@ -150,7 +150,7 @@ function ZernikeWFS(tel::Telescope; n_subap::Int,
     phasor = similar(field)
     phase_mask = similar(field)
     pupil_intensity = backend{T}(undef, tel.params.resolution, tel.params.resolution)
-    nominal_frame = backend{T}(undef, n_subap, n_subap)
+    nominal_frame = backend{T}(undef, pupil_samples, pupil_samples)
     camera_frame = backend{T}(undef, n_signal, n_signal)
     signal_2d = backend{T}(undef, n_signal, n_signal)
     reference_signal_2d = similar(signal_2d)
@@ -199,7 +199,7 @@ end
 sensing_mode(::ZernikeWFS) = Diffractive()
 
 function zernike_signal_resolution(wfs::ZernikeWFS)
-    return div(wfs.params.n_subap, wfs.params.binning)
+    return div(wfs.params.pupil_samples, wfs.params.binning)
 end
 
 function update_zernike_valid_indices!(wfs::ZernikeWFS)
@@ -294,7 +294,7 @@ end
 
 function sample_zernike_frame!(out::AbstractMatrix{T}, nominal::AbstractMatrix{T}, wfs::ZernikeWFS,
     input::AbstractMatrix{T}, tel::Telescope) where {T<:AbstractFloat}
-    sub = div(tel.params.resolution, wfs.params.n_subap)
+    sub = div(tel.params.resolution, wfs.params.pupil_samples)
     bin2d!(nominal, input, sub)
     if wfs.params.binning == 1
         copyto!(out, nominal)

@@ -518,7 +518,7 @@ Recorded results:
 Configuration context:
 
 - pupil resolution: `160`
-- `n_subap`: `32`
+- `n_lenslets`: `32`
 - high sensor: `hgcdte_avalanche_array`
 - high sampling mode: `correlated_double_sampling`
 - high readout correction: `reference_pixel_common_mode`

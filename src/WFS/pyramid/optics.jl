@@ -40,7 +40,7 @@ end
 
 function build_pyramid_mask_new_host!(mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, tel::Telescope) where {T<:AbstractFloat}
     n = size(mask, 1)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.pupil_samples
     sep = wfs.params.n_pix_separation === nothing ? 0 : wfs.params.n_pix_separation
     rooftop_pixels = wfs.params.rooftop * wfs.params.diffraction_padding / sqrt(T(2))
     norma = T(tel.params.resolution) / T(n_sub)
@@ -73,7 +73,7 @@ end
 
 function build_pyramid_mask_old_host!(mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, tel::Telescope) where {T<:AbstractFloat}
     n_tot = size(mask, 1)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.pupil_samples
     sep = wfs.params.n_pix_separation === nothing ? 0 : wfs.params.n_pix_separation
     sx = wfs.state.shift_x
     sy = wfs.state.shift_y
@@ -136,7 +136,7 @@ end
 
 function _build_pyramid_mask!(::ScalarCPUStyle, mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, tel::Telescope) where {T<:AbstractFloat}
     n = size(mask, 1)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.pupil_samples
     sep = wfs.params.n_pix_separation === nothing ? 0 : wfs.params.n_pix_separation
     r = (T(n_sub) + T(sep)) * wfs.params.mask_scale / 2
     pix_per_subap = T(tel.params.resolution) / T(n_sub)
@@ -162,7 +162,7 @@ end
 
 function _build_pyramid_mask!(style::AcceleratorStyle, mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, tel::Telescope) where {T<:AbstractFloat}
     n = size(mask, 1)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.pupil_samples
     sep = wfs.params.n_pix_separation === nothing ? 0 : wfs.params.n_pix_separation
     r = (T(n_sub) + T(sep)) * wfs.params.mask_scale / 2
     norma = T(tel.params.resolution) / T(n_sub)
@@ -291,7 +291,7 @@ function ensure_lgs_kernel!(wfs::PyramidWFS, tel::Telescope, src::LGSSource)
     end
     pad = size(wfs.state.intensity, 1)
     tag = objectid(na_profile) ⊻ hash(src.params.laser_coordinates) ⊻ hash(src.params.fwhm_spot_up) ⊻
-        hash(pad) ⊻ hash(wfs.params.n_subap)
+        hash(pad) ⊻ hash(wfs.params.pupil_samples)
     if size(wfs.state.lgs_kernel_fft, 1) == pad && wfs.state.lgs_kernel_tag == tag
         return wfs
     end
@@ -301,7 +301,7 @@ function ensure_lgs_kernel!(wfs::PyramidWFS, tel::Telescope, src::LGSSource)
         tel,
         src,
         pad,
-        wfs.params.n_subap,
+        wfs.params.pupil_samples,
         pixel_scale,
         wfs.state.focal_field,
         wfs.state.fft_plan,

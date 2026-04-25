@@ -5,30 +5,30 @@
         tel.state.opd[i, j] = i + j / 10
     end
 
-    sh_plain = ShackHartmann(tel; n_subap=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
-    sh_shift = ShackHartmann(tel; n_subap=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8,
+    sh_plain = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
+    sh_shift = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8,
         half_pixel_shift=true)
-    sh_thresh = ShackHartmann(tel; n_subap=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8,
+    sh_thresh = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8,
         threshold_cog=0.2)
     @test measure!(sh_plain, tel, src) != measure!(sh_shift, tel, src)
     @test measure!(sh_plain, tel, src) != measure!(sh_thresh, tel, src)
 
-    pyr_auto = PyramidWFS(tel; n_subap=4, mode=Diffractive(), modulation=1.0)
+    pyr_auto = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0)
     @test size(pyr_auto.state.modulation_phases, 3) == 8
 
-    pyr_path = PyramidWFS(tel; n_subap=4, mode=Diffractive(), modulation=0.0,
+    pyr_path = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=0.0,
         user_modulation_path=((1.0, 0.0), (0.0, 1.0)))
     @test size(pyr_path.state.modulation_phases, 3) == 2
 
-    pyr_default = PyramidWFS(tel; n_subap=4, mode=Diffractive(), modulation=1.0)
-    pyr_rooftop = PyramidWFS(tel; n_subap=4, mode=Diffractive(), modulation=1.0,
+    pyr_default = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0)
+    pyr_rooftop = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0,
         rooftop=0.5, theta_rotation=0.2)
-    pyr_old = PyramidWFS(tel; n_subap=4, mode=Diffractive(), modulation=1.0, old_mask=true)
+    pyr_old = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0, old_mask=true)
     @test pyr_default.state.pyramid_mask != pyr_rooftop.state.pyramid_mask
     @test pyr_default.state.pyramid_mask != pyr_old.state.pyramid_mask
 
-    bio_plain = BioEdgeWFS(tel; n_subap=4, mode=Diffractive(), modulation=1.0)
-    bio_gray = BioEdgeWFS(tel; n_subap=4, mode=Diffractive(), modulation=1.0,
+    bio_plain = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0)
+    bio_gray = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0,
         grey_width=0.5, grey_length=1.0)
     amps = real.(bio_gray.state.bioedge_masks[:, :, 1])
     @test any(x -> 0 < x < 1, amps)
@@ -265,7 +265,7 @@ end
 @testset "Mis-registration identification" begin
     tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
-    wfs = ShackHartmann(tel; n_subap=2)
+    wfs = ShackHartmann(tel; n_lenslets=2)
     basis = modal_basis(dm, tel; n_modes=2)
     meta = AdaptiveOpticsSim.compute_meta_sensitivity_matrix(tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
     est = AdaptiveOpticsSim.estimate_misregistration(meta, meta.calib0.D; misregistration_zero=Misregistration())
@@ -284,7 +284,7 @@ end
     src = Source(band=:I, magnitude=0.0)
     lgs = LGSSource()
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
-    wfs = ShackHartmann(tel; n_subap=2)
+    wfs = ShackHartmann(tel; n_lenslets=2)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     det = Detector(noise=NoiseNone())
     apd = APDDetector(noise=NoisePhoton())
@@ -297,13 +297,13 @@ end
     ctrl = DiscreteIntegratorController(length(wfs.state.slopes); gain=0.1, tau=0.02)
     sim = AOSimulation(tel, src, atm, dm, wfs)
     runtime = ClosedLoopRuntime(sim, modal; rng=MersenneTwister(9))
-    wfs_diffractive = ShackHartmann(tel; n_subap=2, mode=Diffractive())
+    wfs_diffractive = ShackHartmann(tel; n_lenslets=2, mode=Diffractive())
     poly = with_spectrum(src, SpectralBundle([wavelength(src), 1.1 * wavelength(src)], [0.7, 0.3]))
-    pyr = PyramidWFS(tel; n_subap=2, mode=Diffractive())
-    bio = BioEdgeWFS(tel; n_subap=2, mode=Diffractive())
-    zwfs = ZernikeWFS(tel; n_subap=2)
-    curv = CurvatureWFS(tel; n_subap=2)
-    curv_count = CurvatureWFS(tel; n_subap=2, readout_model=CurvatureCountingReadout())
+    pyr = PyramidWFS(tel; pupil_samples=2, mode=Diffractive())
+    bio = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
+    zwfs = ZernikeWFS(tel; pupil_samples=2)
+    curv = CurvatureWFS(tel; pupil_samples=2)
+    curv_count = CurvatureWFS(tel; pupil_samples=2, readout_model=CurvatureCountingReadout())
     ast = Asterism([src, Source(band=:I, magnitude=1.0, coordinates=(1.0, -45.0))])
     moving_atm = MultiLayerAtmosphere(tel; r0=0.2, L0=25.0, fractional_cn2=[1.0],
         wind_speed=[0.0], wind_direction=[0.0], altitude=[0.0])
@@ -376,10 +376,10 @@ end
     sh_image = wfs_detector_image(wfs_diffractive; gap=1)
     sh_cube = AdaptiveOpticsSim.sh_exported_spot_cube(wfs_diffractive)
     @test ndims(sh_image) == 2
-    @test size(sh_image) == (wfs_diffractive.params.n_subap * size(sh_cube, 2) +
-                             wfs_diffractive.params.n_subap - 1,
-                             wfs_diffractive.params.n_subap * size(sh_cube, 3) +
-                             wfs_diffractive.params.n_subap - 1)
+    @test size(sh_image) == (wfs_diffractive.params.n_lenslets * size(sh_cube, 2) +
+                             wfs_diffractive.params.n_lenslets - 1,
+                             wfs_diffractive.params.n_lenslets * size(sh_cube, 3) +
+                             wfs_diffractive.params.n_lenslets - 1)
     # IF-DM
     assert_dm_interface(dm, tel)
     # IF-DET
@@ -405,7 +405,7 @@ end
     @test supports_prepared_runtime(wfs_diffractive, ast)
     @test supports_prepared_runtime(zwfs, src)
     @test supports_prepared_runtime(curv, src)
-    @test supports_prepared_runtime(PyramidWFS(tel; n_subap=2, mode=Diffractive()), src)
+    @test supports_prepared_runtime(PyramidWFS(tel; pupil_samples=2, mode=Diffractive()), src)
     @test !supports_detector_output(wfs, det)
     @test supports_detector_output(wfs_diffractive, det)
     @test supports_detector_output(pyr, det)
@@ -436,7 +436,7 @@ end
     src = Source(band=:I, magnitude=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
-    wfs = ShackHartmann(tel; n_subap=2)
+    wfs = ShackHartmann(tel; n_lenslets=2)
     det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
 
     basis = modal_basis(dm, tel; n_modes=2)

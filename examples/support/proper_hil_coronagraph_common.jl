@@ -82,7 +82,7 @@ function _segment_range(layout::RuntimeCommandLayout, label::Symbol)
 end
 
 function _build_wfs(tel::Telescope; T::Type{<:AbstractFloat}, backend::AbstractArrayBackend)
-    return ShackHartmann(tel; n_subap=16, mode=Diffractive(), threshold=T(0), T=T, backend=backend)
+    return ShackHartmann(tel; n_lenslets=16, mode=Diffractive(), threshold=T(0), T=T, backend=backend)
 end
 
 function build_proper_hil_context(;

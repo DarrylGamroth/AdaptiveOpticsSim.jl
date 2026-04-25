@@ -26,7 +26,7 @@ function specula_reference_cases()
                 "magnitude" => 0.0,
             ),
             "wfs" => Dict(
-                "n_subap" => 24,
+                "pupil_samples" => 24,
                 "threshold" => 0.0,
                 "mode" => "diffractive",
                 "phase_shift_pi" => 0.5,
@@ -62,7 +62,7 @@ function specula_reference_cases()
                 "n_modes" => 4,
             ),
             "wfs" => Dict(
-                "n_subap" => 24,
+                "pupil_samples" => 24,
                 "threshold" => 0.0,
                 "mode" => "diffractive",
                 "phase_shift_pi" => 0.5,
@@ -96,14 +96,14 @@ function specula_reference_cases()
                 "magnitude" => 0.0,
             ),
             "wfs" => Dict(
-                "n_subap" => 12,
+                "pupil_samples" => 12,
                 "threshold" => 0.0,
                 "mode" => "diffractive",
                 "defocus_rms_nm" => 500.0,
                 "diffraction_padding" => 2,
                 "readout_model" => "frame",
                 "readout_crop_resolution" => 48,
-                "readout_pixels_per_subap" => 1,
+                "readout_pixels_per_sample" => 1,
             ),
             "opd" => Dict(
                 "kind" => "zeros",
@@ -133,14 +133,14 @@ function specula_reference_cases()
                 "n_modes" => 4,
             ),
             "wfs" => Dict(
-                "n_subap" => 12,
+                "pupil_samples" => 12,
                 "threshold" => 0.0,
                 "mode" => "diffractive",
                 "defocus_rms_nm" => 500.0,
                 "diffraction_padding" => 2,
                 "readout_model" => "frame",
                 "readout_crop_resolution" => 48,
-                "readout_pixels_per_subap" => 1,
+                "readout_pixels_per_sample" => 1,
             ),
             "opd" => Dict(
                 "kind" => "basis_mode",
@@ -286,7 +286,7 @@ function specula_reference_cases()
                 ),
             ),
             "wfs" => Dict(
-                "n_subap" => 1,
+                "n_lenslets" => 1,
                 "threshold" => 0.0,
                 "mode" => "diffractive",
                 "n_pix_subap" => 20,
@@ -320,7 +320,7 @@ function specula_reference_cases()
                 ),
             ),
             "wfs" => Dict(
-                "n_subap" => 30,
+                "pupil_samples" => 30,
                 "threshold" => 0.0,
                 "mode" => "diffractive",
                 "modulation" => 3.0,

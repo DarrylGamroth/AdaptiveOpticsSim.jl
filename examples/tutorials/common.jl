@@ -56,13 +56,13 @@ function combine_modes(basis::AbstractArray{T,3}, coeffs::AbstractVector{<:Real}
 end
 
 function run_closed_loop_example(make_wfs::Function; n_iter::Int=4, seed::Integer=0,
-    resolution::Int=16, n_subap::Int=4, n_act::Int=3, amplitude::Real=1e-9, gain::Real=0.4)
+    resolution::Int=16, wfs_samples::Int=4, n_act::Int=3, amplitude::Real=1e-9, gain::Real=0.4)
     rng = tutorial_rng(seed)
     tel = base_telescope(resolution=resolution, central_obstruction=0.0)
     src = base_source()
     atm = base_atmosphere(tel)
     dm = DeformableMirror(tel; n_act=n_act, influence_width=0.35)
-    wfs = make_wfs(tel, n_subap)
+    wfs = make_wfs(tel, wfs_samples)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=amplitude)
     recon = ModalReconstructor(imat; gain=gain)
     cmd = similar(dm.state.coefs)

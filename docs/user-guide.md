@@ -154,7 +154,7 @@ atm = MultiLayerAtmosphere(
     altitude=(0.0, 5000.0),
 )
 
-wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
+wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
 
 advance!(atm, tel)
 propagate!(atm, tel)

@@ -10,7 +10,7 @@ include(normpath(joinpath(@__DIR__, "..", "..", "benchmarks", "support", "revolt
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
         tel.state.opd[i, j] = i
     end
-    wfs = ShackHartmann(tel; n_subap=4)
+    wfs = ShackHartmann(tel; n_lenslets=4)
     slopes = measure!(wfs, tel)
     @test length(slopes) == 2 * 4 * 4
     @test maximum(slopes) > 0
@@ -106,7 +106,7 @@ end
     src = Source(band=:I, magnitude=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-    wfs = ShackHartmann(tel; n_subap=4)
+    wfs = ShackHartmann(tel; n_lenslets=4)
 
     sim_positional = AOSimulation(tel, src, atm, dm, wfs)
     sim_keyword = AOSimulation(
@@ -142,7 +142,7 @@ end
     cartesian_modal = ModalControllableOptic(tel, CartesianTiltBasis(; scale=0.1); backend=CPUBackend())
     tt = TipTiltMirror(tel; scale=0.1, backend=CPUBackend())
     focus = FocusStage(tel; scale=0.2, backend=CPUBackend())
-    wfs = ShackHartmann(tel; n_subap=4, backend=CPUBackend())
+    wfs = ShackHartmann(tel; n_lenslets=4, backend=CPUBackend())
     det = Detector(backend=CPUBackend())
     sf = SpatialFilter(tel; backend=CPUBackend())
     ef = ElectricField(tel, Source(band=:I, magnitude=0.0); backend=CPUBackend())
@@ -221,17 +221,17 @@ end
 
 function build_static_runtime_wfs(tel::Telescope, ::Val{:sh}; T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=backend(tel))
-    return ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
+    return ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
 end
 
 function build_static_runtime_wfs(tel::Telescope, ::Val{:pyr}; T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=backend(tel))
-    return PyramidWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+    return PyramidWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
 end
 
 function build_static_runtime_wfs(tel::Telescope, ::Val{:bio}; T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=backend(tel))
-    return BioEdgeWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+    return BioEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
 end
 
 @inline build_runtime_detector_response(::Val{:null}, ::Type{T}, backend::AbstractArrayBackend) where {T<:AbstractFloat} = NullFrameResponse()
@@ -390,7 +390,7 @@ runtime_snapshot(scenario) = (
 @testset "Calibration and control" begin
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
-    wfs = ShackHartmann(tel; n_subap=2)
+    wfs = ShackHartmann(tel; n_lenslets=2)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     @test size(imat.matrix) == (length(wfs.state.slopes), length(dm.state.coefs))
 
@@ -424,7 +424,7 @@ end
     @test default_params.n_act == 64
     @test default_params.n_active_actuators == 3228
     @test default_params.n_control_modes == 188
-    @test default_params.n_low_order_subap == 2
+    @test default_params.low_order_lenslets == 2
     @test default_params.low_order_resolution == 28
     @test default_params.n_low_order_modes == 4
     @test default_params.latency.high_measurement_delay_frames == 1
@@ -439,8 +439,8 @@ end
         n_active_actuators=180,
         n_control_modes=24,
         control_grid_side=6,
-        n_subap=4,
-        n_low_order_subap=2,
+        high_order_samples=4,
+        low_order_lenslets=2,
         n_low_order_modes=3,
         source_magnitude=0.0,
     )
@@ -493,8 +493,8 @@ end
         n_active_actuators=96,
         n_control_modes=12,
         control_grid_side=4,
-        n_subap=4,
-        n_low_order_subap=2,
+        high_order_samples=4,
+        low_order_lenslets=2,
         n_low_order_modes=2,
         source_magnitude=0.0,
         branch_execution=ThreadedExecution(),
@@ -513,8 +513,8 @@ end
         n_active_actuators=96,
         n_control_modes=12,
         control_grid_side=4,
-        n_subap=4,
-        n_low_order_subap=2,
+        high_order_samples=4,
+        low_order_lenslets=2,
         n_low_order_modes=2,
         source_magnitude=0.0,
         branch_execution=BackendStreamExecution(),
@@ -530,8 +530,8 @@ end
         n_active_actuators=180,
         n_control_modes=24,
         control_grid_side=6,
-        n_subap=4,
-        n_low_order_subap=2,
+        high_order_samples=4,
+        low_order_lenslets=2,
         n_low_order_modes=3,
         source_magnitude=0.0,
     )
@@ -539,13 +539,13 @@ end
     @test curvature_sim.high_wfs isa CurvatureWFS
     @test curvature_sim.high_wfs.params.readout_model isa CurvatureCountingReadout
     @test curvature_sim.high_wfs.params.readout_crop_resolution == 32
-    @test curvature_sim.high_wfs.params.readout_pixels_per_subap == 1
+    @test curvature_sim.high_wfs.params.readout_pixels_per_sample == 1
     @test curvature_params.high_detector isa AO188APDDetectorConfig
     @test curvature_sim.high_detector isa APDDetector
     step!(curvature_sim)
     @test length(curvature_sim.command) == curvature_params.n_act^2
     curvature_readout = readout(curvature_sim)
-    @test size(wfs_frame(curvature_readout)[1]) == (2, curvature_params.n_subap^2)
+    @test size(wfs_frame(curvature_readout)[1]) == (2, curvature_params.high_order_samples^2)
     @test wfs_metadata(curvature_readout)[1] isa CountingDetectorExportMetadata
 
     ao3k_params = AO3kSimulationParams(
@@ -555,8 +555,8 @@ end
         n_active_actuators=180,
         n_control_modes=32,
         control_grid_side=6,
-        n_subap=8,
-        n_low_order_subap=2,
+        high_order_samples=8,
+        low_order_lenslets=2,
         n_low_order_modes=3,
         source_magnitude=0.0,
     )
@@ -583,7 +583,7 @@ function closed_loop_runtime_allocations()
     src = Source(band=:I, magnitude=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-    wfs = ShackHartmann(tel; n_subap=4)
+    wfs = ShackHartmann(tel; n_lenslets=4)
     sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     recon = ModalReconstructor(imat; gain=0.5)
@@ -604,7 +604,7 @@ end
     src = Source(band=:I, magnitude=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-    wfs = ShackHartmann(tel; n_subap=4)
+    wfs = ShackHartmann(tel; n_lenslets=4)
     sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     recon = ModalReconstructor(imat; gain=0.5)
@@ -639,7 +639,7 @@ end
     src_ext = Source(band=:I, magnitude=0.0)
     atm_ext = KolmogorovAtmosphere(tel_ext; r0=0.2, L0=25.0)
     dm_ext = DeformableMirror(tel_ext; n_act=4, influence_width=0.3)
-    wfs_ext = ShackHartmann(tel_ext; n_subap=4, mode=Diffractive())
+    wfs_ext = ShackHartmann(tel_ext; n_lenslets=4, mode=Diffractive())
     sim_ext = AOSimulation(tel_ext, src_ext, atm_ext, dm_ext, wfs_ext)
     det_ext = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
     null_recon = NullReconstructor()
@@ -689,7 +689,7 @@ end
     src2 = Source(band=:I, magnitude=0.0)
     atm2 = KolmogorovAtmosphere(tel2; r0=0.2, L0=25.0)
     dm2 = DeformableMirror(tel2; n_act=4, influence_width=0.3)
-    wfs2 = ShackHartmann(tel2; n_subap=4, mode=Diffractive())
+    wfs2 = ShackHartmann(tel2; n_lenslets=4, mode=Diffractive())
     sim2 = AOSimulation(tel2, src2, atm2, dm2, wfs2)
     imat2 = interaction_matrix(dm2, wfs2, tel2, src2; amplitude=0.1)
     recon2 = ModalReconstructor(imat2; gain=0.5)
@@ -708,7 +708,7 @@ end
     @test all(wfs_frame(runtime2) .>= wfs2.state.spot_cube)
     boundary2 = SimulationInterface(runtime2)
     @test ndims(wfs_frame(boundary2)) == 3
-    @test size(wfs_frame(boundary2), 1) == wfs2.params.n_subap^2
+    @test size(wfs_frame(boundary2), 1) == wfs2.params.n_lenslets^2
 
     composite = CompositeSimulationInterface(boundary, boundary2)
     @test supports_grouped_execution(composite)
@@ -724,7 +724,7 @@ end
     src2b = Source(band=:I, magnitude=0.0)
     atm2b = KolmogorovAtmosphere(tel2b; r0=0.2, L0=25.0)
     dm2b = DeformableMirror(tel2b; n_act=4, influence_width=0.3)
-    wfs2b = ShackHartmann(tel2b; n_subap=4, mode=Diffractive())
+    wfs2b = ShackHartmann(tel2b; n_lenslets=4, mode=Diffractive())
     sim2b = AOSimulation(tel2b, src2b, atm2b, dm2b, wfs2b)
     imat2b = interaction_matrix(dm2b, wfs2b, tel2b, src2b; amplitude=0.1)
     recon2b = ModalReconstructor(imat2b; gain=0.5)
@@ -834,7 +834,7 @@ end
     tiptilt_b = TipTiltMirror(tel_ext_b; scale=0.1, label=:tiptilt)
     dm_combo_b = DeformableMirror(tel_ext_b; n_act=4, influence_width=0.3)
     combo_optic_b = CompositeControllableOptic(:tiptilt => tiptilt_b, :dm => dm_combo_b)
-    wfs_ext_b = ShackHartmann(tel_ext_b; n_subap=4, mode=Diffractive())
+    wfs_ext_b = ShackHartmann(tel_ext_b; n_lenslets=4, mode=Diffractive())
     det_ext_b = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
     combo_sim_b = AOSimulation(tel_ext_b, src_ext_b, atm_ext_b, combo_optic_b, wfs_ext_b)
     combo_scenario_b = build_runtime_scenario(
@@ -1119,8 +1119,8 @@ end
     @test !isnothing(grouped_wfs_stack(split_grouped_scenario))
 
     grouped_tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
-    grouped_pyr = PyramidWFS(grouped_tel; n_subap=4, modulation=1.0, mode=Diffractive())
-    grouped_bio = BioEdgeWFS(grouped_tel; n_subap=4, modulation=1.0, mode=Diffractive())
+    grouped_pyr = PyramidWFS(grouped_tel; pupil_samples=4, modulation=1.0, mode=Diffractive())
+    grouped_bio = BioEdgeWFS(grouped_tel; pupil_samples=4, modulation=1.0, mode=Diffractive())
     @test @inferred(AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(grouped_pyr.state.intensity), grouped_pyr)) isa AdaptiveOpticsSim.GroupedStackReducePlan
     @test @inferred(AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(grouped_bio.state.intensity), grouped_bio)) isa AdaptiveOpticsSim.GroupedStackReducePlan
     @test AdaptiveOpticsSim.reduction_execution_plan(grouped_pyr.state.intensity) isa AdaptiveOpticsSim.DirectReductionPlan
@@ -1154,7 +1154,7 @@ end
     src3 = Source(band=:I, magnitude=0.0)
     atm3 = KolmogorovAtmosphere(tel3; r0=0.2, L0=25.0)
     dm3 = DeformableMirror(tel3; n_act=4, influence_width=0.3)
-    wfs3 = ZernikeWFS(tel3; n_subap=4, diffraction_padding=2)
+    wfs3 = ZernikeWFS(tel3; pupil_samples=4, diffraction_padding=2)
     sim3 = AOSimulation(tel3, src3, atm3, dm3, wfs3)
     imat3 = interaction_matrix(dm3, wfs3, tel3, src3; amplitude=1e-8)
     recon3 = ModalReconstructor(imat3; gain=0.5)
@@ -1177,7 +1177,7 @@ end
     src4 = Source(band=:I, magnitude=0.0)
     atm4 = KolmogorovAtmosphere(tel4; r0=0.2, L0=25.0)
     dm4 = DeformableMirror(tel4; n_act=4, influence_width=0.3)
-    wfs4 = ShackHartmann(tel4; n_subap=4)
+    wfs4 = ShackHartmann(tel4; n_lenslets=4)
     sim4 = AOSimulation(tel4, src4, atm4, dm4, wfs4)
     imat4 = interaction_matrix(dm4, wfs4, tel4; amplitude=0.1)
     recon4 = ModalReconstructor(imat4; gain=0.5)

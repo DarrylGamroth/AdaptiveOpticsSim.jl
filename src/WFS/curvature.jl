@@ -170,12 +170,12 @@ function CurvatureBranchResponse(; plus_throughput::Real=1.0, minus_throughput::
 end
 
 struct CurvatureWFSParams{T<:AbstractFloat,R<:CurvatureReadoutModel,B<:CurvatureBranchResponse{T}}
-    n_subap::Int
+    pupil_samples::Int
     threshold::T
     defocus_rms_nm::T
     diffraction_padding::Int
     readout_crop_resolution::Int
-    readout_pixels_per_subap::Int
+    readout_pixels_per_sample::Int
     readout_model::R
     branch_response::B
 end
@@ -222,8 +222,8 @@ end
 @inline backend(::CurvatureWFS{<:Any,<:Any,B}) where {B} = B()
 
 """
-    CurvatureWFS(tel; n_subap, threshold=0.1, defocus_rms_nm=500.0, diffraction_padding=2,
-                 readout_crop_resolution=tel.params.resolution, readout_pixels_per_subap=1,
+    CurvatureWFS(tel; pupil_samples, threshold=0.1, defocus_rms_nm=500.0, diffraction_padding=2,
+                 readout_crop_resolution=tel.params.resolution, readout_pixels_per_sample=1,
                  readout_model=CurvatureFrameReadout(), branch_response=CurvatureBranchResponse(), ...)
 
 Construct a curvature WFS using two propagated defocus branches.
@@ -231,18 +231,18 @@ Construct a curvature WFS using two propagated defocus branches.
 `defocus_rms_nm` sets the RMS amplitude of the defocus term in nanometers.
 `branch_response` models intra-/extra-focal throughput and background imbalance.
 `readout_crop_resolution` selects the square detector-plane crop before export and
-`readout_pixels_per_subap` controls the exported frame sampling for frame-style
+`readout_pixels_per_sample` controls the exported frame sampling for frame-style
 readout.
 """
-function CurvatureWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, defocus_rms_nm::Real=500.0,
+function CurvatureWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1, defocus_rms_nm::Real=500.0,
     diffraction_padding::Int=2, readout_model::CurvatureReadoutModel=CurvatureFrameReadout(),
-    readout_crop_resolution::Integer=tel.params.resolution, readout_pixels_per_subap::Integer=1,
+    readout_crop_resolution::Integer=tel.params.resolution, readout_pixels_per_sample::Integer=1,
     branch_response::CurvatureBranchResponse=CurvatureBranchResponse(),
     T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel))
     selector = require_same_backend(tel, _resolve_backend_selector(backend))
     backend = _resolve_array_backend(selector)
-    tel.params.resolution % n_subap == 0 ||
-        throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
+    tel.params.resolution % pupil_samples == 0 ||
+        throw(InvalidConfiguration("telescope resolution must be divisible by pupil_samples"))
     diffraction_padding >= 1 ||
         throw(InvalidConfiguration("diffraction_padding must be >= 1"))
     defocus_rms_nm >= 0 ||
@@ -251,20 +251,20 @@ function CurvatureWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, defocus
         throw(InvalidConfiguration("readout_crop_resolution must be > 0"))
     readout_crop_resolution <= tel.params.resolution ||
         throw(InvalidConfiguration("readout_crop_resolution must be <= telescope resolution"))
-    readout_pixels_per_subap >= 1 ||
-        throw(InvalidConfiguration("readout_pixels_per_subap must be >= 1"))
-    readout_side = n_subap * Int(readout_pixels_per_subap)
+    readout_pixels_per_sample >= 1 ||
+        throw(InvalidConfiguration("readout_pixels_per_sample must be >= 1"))
+    readout_side = pupil_samples * Int(readout_pixels_per_sample)
     readout_crop_resolution % readout_side == 0 ||
-        throw(InvalidConfiguration("readout_crop_resolution must be divisible by n_subap * readout_pixels_per_subap"))
-    validate_curvature_readout_geometry(readout_model, Int(readout_pixels_per_subap))
+        throw(InvalidConfiguration("readout_crop_resolution must be divisible by pupil_samples * readout_pixels_per_sample"))
+    validate_curvature_readout_geometry(readout_model, Int(readout_pixels_per_sample))
     n = tel.params.resolution
     pad = n * diffraction_padding
     response = convert_curvature_branch_response(branch_response, T)
     params = CurvatureWFSParams{T, typeof(readout_model), typeof(response)}(
-        n_subap, T(threshold), T(defocus_rms_nm), diffraction_padding,
-        Int(readout_crop_resolution), Int(readout_pixels_per_subap), readout_model, response)
-    valid_mask = backend{Bool}(undef, n_subap, n_subap)
-    slopes = backend{T}(undef, n_subap * n_subap)
+        pupil_samples, T(threshold), T(defocus_rms_nm), diffraction_padding,
+        Int(readout_crop_resolution), Int(readout_pixels_per_sample), readout_model, response)
+    valid_mask = backend{Bool}(undef, pupil_samples, pupil_samples)
+    slopes = backend{T}(undef, pupil_samples * pupil_samples)
     n_branches = 2
     phasor = backend{Complex{T}}(undef, pad, pad)
     field_stack = backend{Complex{T}}(undef, pad, pad, n_branches)
@@ -272,15 +272,15 @@ function CurvatureWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, defocus
     intensity_stack = backend{T}(undef, pad, pad, n_branches)
     cropped_plus = backend{T}(undef, params.readout_crop_resolution, params.readout_crop_resolution)
     cropped_minus = backend{T}(undef, params.readout_crop_resolution, params.readout_crop_resolution)
-    frame_side = params.n_subap * params.readout_pixels_per_subap
+    frame_side = params.pupil_samples * params.readout_pixels_per_sample
     frame_plus = backend{T}(undef, frame_side, frame_side)
     frame_minus = backend{T}(undef, frame_side, frame_side)
-    reduced_plus = backend{T}(undef, params.n_subap, params.n_subap)
-    reduced_minus = backend{T}(undef, params.n_subap, params.n_subap)
-    signal_2d = backend{T}(undef, n_subap, n_subap)
+    reduced_plus = backend{T}(undef, params.pupil_samples, params.pupil_samples)
+    reduced_minus = backend{T}(undef, params.pupil_samples, params.pupil_samples)
+    signal_2d = backend{T}(undef, pupil_samples, pupil_samples)
     reference_signal_2d = similar(signal_2d)
-    camera_frame = curvature_camera_frame(backend, T, n_subap, readout_model;
-        readout_pixels_per_subap=Int(readout_pixels_per_subap))
+    camera_frame = curvature_camera_frame(backend, T, pupil_samples, readout_model;
+        readout_pixels_per_sample=Int(readout_pixels_per_sample))
     fill!(slopes, zero(T))
     fill!(field_stack, zero(eltype(field_stack)))
     fill!(intensity_stack, zero(T))
@@ -335,23 +335,23 @@ function CurvatureWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, defocus
 end
 
 sensing_mode(::CurvatureWFS) = Diffractive()
-validate_curvature_readout_geometry(::CurvatureFrameReadout, readout_pixels_per_subap::Int) = nothing
-function validate_curvature_readout_geometry(::CurvatureCountingReadout, readout_pixels_per_subap::Int)
-    readout_pixels_per_subap == 1 ||
-        throw(InvalidConfiguration("CurvatureCountingReadout requires readout_pixels_per_subap == 1"))
+validate_curvature_readout_geometry(::CurvatureFrameReadout, readout_pixels_per_sample::Int) = nothing
+function validate_curvature_readout_geometry(::CurvatureCountingReadout, readout_pixels_per_sample::Int)
+    readout_pixels_per_sample == 1 ||
+        throw(InvalidConfiguration("CurvatureCountingReadout requires readout_pixels_per_sample == 1"))
     return nothing
 end
 convert_curvature_branch_response(response::CurvatureBranchResponse, ::Type{T}) where {T<:AbstractFloat} =
     CurvatureBranchResponse(T=T, plus_throughput=response.plus_throughput, minus_throughput=response.minus_throughput,
         plus_background=response.plus_background, minus_background=response.minus_background)
-curvature_camera_dims(n_subap::Int, ::CurvatureFrameReadout) = (2 * n_subap, n_subap)
-curvature_camera_dims(n_subap::Int, ::CurvatureCountingReadout) = (2, n_subap * n_subap)
-curvature_camera_dims(n_subap::Int, readout_pixels_per_subap::Int, ::CurvatureFrameReadout) =
-    (2 * n_subap * readout_pixels_per_subap, n_subap * readout_pixels_per_subap)
-curvature_camera_dims(n_subap::Int, readout_pixels_per_subap::Int, ::CurvatureCountingReadout) = (2, n_subap * n_subap)
-curvature_camera_frame(backend, ::Type{T}, n_subap::Int, readout_model::CurvatureReadoutModel;
-    readout_pixels_per_subap::Int=1) where {T<:AbstractFloat} =
-    backend{T}(undef, curvature_camera_dims(n_subap, readout_pixels_per_subap, readout_model)...)
+curvature_camera_dims(pupil_samples::Int, ::CurvatureFrameReadout) = (2 * pupil_samples, pupil_samples)
+curvature_camera_dims(pupil_samples::Int, ::CurvatureCountingReadout) = (2, pupil_samples * pupil_samples)
+curvature_camera_dims(pupil_samples::Int, readout_pixels_per_sample::Int, ::CurvatureFrameReadout) =
+    (2 * pupil_samples * readout_pixels_per_sample, pupil_samples * readout_pixels_per_sample)
+curvature_camera_dims(pupil_samples::Int, readout_pixels_per_sample::Int, ::CurvatureCountingReadout) = (2, pupil_samples * pupil_samples)
+curvature_camera_frame(backend, ::Type{T}, pupil_samples::Int, readout_model::CurvatureReadoutModel;
+    readout_pixels_per_sample::Int=1) where {T<:AbstractFloat} =
+    backend{T}(undef, curvature_camera_dims(pupil_samples, readout_pixels_per_sample, readout_model)...)
 
 function update_valid_mask!(wfs::CurvatureWFS, tel::Telescope)
     set_valid_subapertures!(wfs.state.valid_mask, tel.state.pupil, wfs.params.threshold)
@@ -362,7 +362,7 @@ function ensure_curvature_buffers!(wfs::CurvatureWFS, tel::Telescope)
     n = tel.params.resolution
     pad = n * wfs.params.diffraction_padding
     crop_n = wfs.params.readout_crop_resolution
-    frame_side = wfs.params.n_subap * wfs.params.readout_pixels_per_subap
+    frame_side = wfs.params.pupil_samples * wfs.params.readout_pixels_per_sample
     if size(wfs.state.field_stack, 1) != pad || size(wfs.state.field_stack, 2) != pad
         wfs.state.phasor = similar(wfs.state.phasor, pad, pad)
         n_branches = size(wfs.state.field_stack, 3)
@@ -373,10 +373,10 @@ function ensure_curvature_buffers!(wfs::CurvatureWFS, tel::Telescope)
         wfs.state.cropped_minus = similar(wfs.state.cropped_minus, crop_n, crop_n)
         wfs.state.frame_plus = similar(wfs.state.frame_plus, frame_side, frame_side)
         wfs.state.frame_minus = similar(wfs.state.frame_minus, frame_side, frame_side)
-        wfs.state.reduced_plus = similar(wfs.state.reduced_plus, wfs.params.n_subap, wfs.params.n_subap)
-        wfs.state.reduced_minus = similar(wfs.state.reduced_minus, wfs.params.n_subap, wfs.params.n_subap)
+        wfs.state.reduced_plus = similar(wfs.state.reduced_plus, wfs.params.pupil_samples, wfs.params.pupil_samples)
+        wfs.state.reduced_minus = similar(wfs.state.reduced_minus, wfs.params.pupil_samples, wfs.params.pupil_samples)
         wfs.state.camera_frame = similar(wfs.state.camera_frame,
-            curvature_camera_dims(wfs.params.n_subap, wfs.params.readout_pixels_per_subap, wfs.params.readout_model)...)
+            curvature_camera_dims(wfs.params.pupil_samples, wfs.params.readout_pixels_per_sample, wfs.params.readout_model)...)
         wfs.state.fft_stack_plan = plan_fft_backend!(wfs.state.field_stack, (1, 2))
         wfs.state.effective_padding = wfs.params.diffraction_padding
         wfs.state.calibrated = false
@@ -476,7 +476,7 @@ function sample_curvature_frames!(::ScalarCPUStyle, wfs::CurvatureWFS, tel::Tele
     pad = size(wfs.state.intensity_stack, 1)
     ox = div(pad - crop_n, 2)
     oy = div(pad - crop_n, 2)
-    sub = div(crop_n, wfs.params.n_subap * wfs.params.readout_pixels_per_subap)
+    sub = div(crop_n, wfs.params.pupil_samples * wfs.params.readout_pixels_per_sample)
     copyto!(wfs.state.cropped_plus, @view(wfs.state.intensity_stack[ox+1:ox+crop_n, oy+1:oy+crop_n, 1]))
     copyto!(wfs.state.cropped_minus, @view(wfs.state.intensity_stack[ox+1:ox+crop_n, oy+1:oy+crop_n, 2]))
     bin2d!(wfs.state.frame_plus, wfs.state.cropped_plus, sub)
@@ -491,7 +491,7 @@ function sample_curvature_frames!(style::AcceleratorStyle, wfs::CurvatureWFS, te
     pad = size(wfs.state.intensity_stack, 1)
     ox = div(pad - crop_n, 2)
     oy = div(pad - crop_n, 2)
-    sub = div(crop_n, wfs.params.n_subap * wfs.params.readout_pixels_per_subap)
+    sub = div(crop_n, wfs.params.pupil_samples * wfs.params.readout_pixels_per_sample)
     response = wfs.params.branch_response
     n_out, m_out = size(wfs.state.frame_plus)
     launch_kernel_async!(style, curvature_sample_branch_kernel!, wfs.state.frame_plus, wfs.state.intensity_stack,
@@ -537,7 +537,7 @@ end
 
 function pack_curvature_readout!(style::AcceleratorStyle, ::CurvatureCountingReadout, wfs::CurvatureWFS)
     launch_kernel!(style, curvature_channel_pack_kernel!, wfs.state.camera_frame, wfs.state.frame_plus,
-        wfs.state.frame_minus, wfs.params.n_subap; ndrange=size(wfs.state.frame_plus))
+        wfs.state.frame_minus, wfs.params.pupil_samples; ndrange=size(wfs.state.frame_plus))
     return wfs.state.camera_frame
 end
 
@@ -660,7 +660,7 @@ function unpack_curvature_frame!(wfs::CurvatureWFS, frame::AbstractMatrix)
 end
 
 function reduce_curvature_frame_signal!(wfs::CurvatureWFS)
-    factor = wfs.params.readout_pixels_per_subap
+    factor = wfs.params.readout_pixels_per_sample
     if factor == 1
         copyto!(wfs.state.reduced_plus, wfs.state.frame_plus)
         copyto!(wfs.state.reduced_minus, wfs.state.frame_minus)
@@ -672,7 +672,7 @@ function reduce_curvature_frame_signal!(wfs::CurvatureWFS)
 end
 
 function curvature_signal_from_planes!(wfs::CurvatureWFS)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.pupil_samples
     epsval = eps(eltype(wfs.state.signal_2d))
     @inbounds for i in 1:n_sub, j in 1:n_sub
         idx = (i - 1) * n_sub + j
@@ -692,7 +692,7 @@ function curvature_signal_from_planes!(wfs::CurvatureWFS)
 end
 
 function curvature_signal_from_planes!(style::AcceleratorStyle, wfs::CurvatureWFS)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.pupil_samples
     epsval = eps(eltype(wfs.state.signal_2d))
     launch_kernel!(style, curvature_signal_from_frame_kernel!, wfs.state.signal_2d, wfs.state.slopes,
         wfs.state.reduced_plus, wfs.state.reduced_minus, wfs.state.reference_signal_2d, wfs.state.valid_mask, epsval, n_sub;
@@ -718,7 +718,7 @@ function curvature_signal!(::ScalarCPUStyle, ::CurvatureCountingReadout, wfs::Cu
     frame::AbstractMatrix{T}) where {T<:AbstractFloat}
     size(frame) == size(wfs.state.camera_frame) ||
         throw(DimensionMismatchError("CurvatureWFS frame size must match the sampled channel readout"))
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.pupil_samples
     epsval = eps(eltype(wfs.state.signal_2d))
     @inbounds for i in 1:n_sub, j in 1:n_sub
         idx = (i - 1) * n_sub + j
@@ -741,7 +741,7 @@ function curvature_signal!(style::AcceleratorStyle, ::CurvatureCountingReadout, 
     frame::AbstractMatrix{T}) where {T<:AbstractFloat}
     size(frame) == size(wfs.state.camera_frame) ||
         throw(DimensionMismatchError("CurvatureWFS frame size must match the sampled channel readout"))
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.pupil_samples
     epsval = eps(eltype(wfs.state.signal_2d))
     launch_kernel!(style, curvature_signal_from_channels_kernel!, wfs.state.signal_2d, wfs.state.slopes,
         frame, wfs.state.reference_signal_2d, wfs.state.valid_mask, epsval, n_sub;

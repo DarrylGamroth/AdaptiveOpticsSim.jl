@@ -15,7 +15,7 @@ sim = AdaptiveOpticsSim.initialize_ao_pyramid(
     wind_direction=[30.0],
     altitude=[0.0],
     n_act=4,
-    n_subap=4,
+    pupil_samples=4,
     modulation=2.0,
 )
 

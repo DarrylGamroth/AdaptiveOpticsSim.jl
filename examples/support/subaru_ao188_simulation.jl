@@ -27,14 +27,14 @@ struct AO188CurvatureModel{T<:AbstractFloat,R<:CurvatureReadoutModel,B<:Curvatur
     defocus_rms_nm::T
     readout_model::R
     branch_response::B
-    crop_samples_per_subap::Int
-    readout_pixels_per_subap::Int
+    crop_samples_per_pupil_sample::Int
+    readout_pixels_per_sample::Int
 end
 AO188CurvatureModel(; defocus_rms_nm::Real=500.0,
     readout_model::CurvatureReadoutModel=CurvatureCountingReadout(),
     branch_response::CurvatureBranchResponse=CurvatureBranchResponse(),
-    crop_samples_per_subap::Integer=8,
-    readout_pixels_per_subap::Integer=1,
+    crop_samples_per_pupil_sample::Integer=8,
+    readout_pixels_per_sample::Integer=1,
     T::Type{<:AbstractFloat}=Float32) =
     AO188CurvatureModel{T, typeof(readout_model), CurvatureBranchResponse{T}}(
         T(defocus_rms_nm), readout_model, CurvatureBranchResponse(T=T,
@@ -42,15 +42,15 @@ AO188CurvatureModel(; defocus_rms_nm::Real=500.0,
             minus_throughput=branch_response.minus_throughput,
             plus_background=branch_response.plus_background,
             minus_background=branch_response.minus_background),
-        Int(crop_samples_per_subap),
-        Int(readout_pixels_per_subap))
+        Int(crop_samples_per_pupil_sample),
+        Int(readout_pixels_per_sample))
 
-function ao188_curvature_readout_crop_resolution(resolution::Int, n_subap::Int, crop_samples_per_subap::Int)
-    crop_samples_per_subap >= 1 ||
-        throw(InvalidConfiguration("AO188 curvature crop_samples_per_subap must be >= 1"))
-    max_divisible = resolution - mod(resolution, n_subap)
-    max_divisible > 0 || throw(InvalidConfiguration("AO188 curvature resolution must be divisible by n_subap"))
-    requested = n_subap * crop_samples_per_subap
+function ao188_curvature_readout_crop_resolution(resolution::Int, pupil_samples::Int, crop_samples_per_pupil_sample::Int)
+    crop_samples_per_pupil_sample >= 1 ||
+        throw(InvalidConfiguration("AO188 curvature crop_samples_per_pupil_sample must be >= 1"))
+    max_divisible = resolution - mod(resolution, pupil_samples)
+    max_divisible > 0 || throw(InvalidConfiguration("AO188 curvature resolution must be divisible by pupil_samples"))
+    requested = pupil_samples * crop_samples_per_pupil_sample
     return min(requested, max_divisible)
 end
 
@@ -66,17 +66,17 @@ end
 
 function _build_high_order_wfs(::OperationalShackHartmannModel, tel::Telescope, params; backend::AbstractArrayBackend=CPUBackend())
     T = eltype(tel.state.opd)
-    return ShackHartmann(tel; n_subap=params.n_subap, mode=Diffractive(), T=T, backend=backend)
+    return ShackHartmann(tel; n_lenslets=params.high_order_samples, mode=Diffractive(), T=T, backend=backend)
 end
 
 function _build_high_order_wfs(model::AO188CurvatureModel, tel::Telescope, params; backend::AbstractArrayBackend=CPUBackend())
     T = eltype(tel.state.opd)
     readout_crop_resolution = ao188_curvature_readout_crop_resolution(
-        tel.params.resolution, params.n_subap, model.crop_samples_per_subap)
-    return CurvatureWFS(tel; n_subap=params.n_subap, defocus_rms_nm=model.defocus_rms_nm,
+        tel.params.resolution, params.high_order_samples, model.crop_samples_per_pupil_sample)
+    return CurvatureWFS(tel; pupil_samples=params.high_order_samples, defocus_rms_nm=model.defocus_rms_nm,
         readout_model=model.readout_model, branch_response=model.branch_response,
         readout_crop_resolution=readout_crop_resolution,
-        readout_pixels_per_subap=model.readout_pixels_per_subap, T=T, backend=backend)
+        readout_pixels_per_sample=model.readout_pixels_per_sample, T=T, backend=backend)
 end
 
 abstract type AO188ReplayMode end
@@ -222,12 +222,12 @@ function detector_from_config(cfg::AO188APDDetectorConfig{T}; backend::AbstractA
     )
 end
 
-function default_ao188_low_order_resolution(resolution::Integer, n_low_order_subap::Integer)
+function default_ao188_low_order_resolution(resolution::Integer, low_order_lenslets::Integer)
     resolution > 0 || throw(InvalidConfiguration("resolution must be > 0"))
-    n_low_order_subap > 0 || throw(InvalidConfiguration("n_low_order_subap must be > 0"))
-    target = max(n_low_order_subap, resolution ÷ 4)
-    snapped = target - mod(target, n_low_order_subap)
-    return max(n_low_order_subap, snapped)
+    low_order_lenslets > 0 || throw(InvalidConfiguration("low_order_lenslets must be > 0"))
+    target = max(low_order_lenslets, resolution ÷ 4)
+    snapped = target - mod(target, low_order_lenslets)
+    return max(low_order_lenslets, snapped)
 end
 
 struct AO188SimulationParams{
@@ -248,8 +248,8 @@ struct AO188SimulationParams{
     n_active_actuators::Int
     n_control_modes::Int
     control_grid_side::Int
-    n_subap::Int
-    n_low_order_subap::Int
+    high_order_samples::Int
+    low_order_lenslets::Int
     low_order_resolution::Int
     n_low_order_modes::Int
     influence_width::T
@@ -281,8 +281,8 @@ function AO188SimulationParams(;
     n_active_actuators::Int=3228,
     n_control_modes::Int=188,
     control_grid_side::Int=16,
-    n_subap::Int=14,
-    n_low_order_subap::Int=2,
+    high_order_samples::Int=14,
+    low_order_lenslets::Int=2,
     low_order_resolution::Union{Int,Nothing}=nothing,
     n_low_order_modes::Int=4,
     influence_width::Real=0.3,
@@ -324,7 +324,7 @@ function AO188SimulationParams(;
     ),
 )
     resolved_low_order_resolution = isnothing(low_order_resolution) ?
-        default_ao188_low_order_resolution(resolution, n_low_order_subap) :
+        default_ao188_low_order_resolution(resolution, low_order_lenslets) :
         low_order_resolution
 
     return AO188SimulationParams{T,typeof(profile),typeof(support_model),typeof(high_order_sensor_model),typeof(branch_execution),typeof(replay_mode),typeof(high_detector),typeof(low_detector)}(
@@ -336,8 +336,8 @@ function AO188SimulationParams(;
         n_active_actuators,
         n_control_modes,
         control_grid_side,
-        n_subap,
-        n_low_order_subap,
+        high_order_samples,
+        low_order_lenslets,
         resolved_low_order_resolution,
         n_low_order_modes,
         T(influence_width),
@@ -575,7 +575,7 @@ function _ao188_calibration_objects(params::AO188SimulationParams{T}) where {T<:
     dm = DeformableMirror(tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=CPUBackend())
     low_dm = DeformableMirror(low_tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=CPUBackend())
     high_wfs = _build_high_order_wfs(params.high_order_sensor_model, tel, params; backend=CPUBackend())
-    low_wfs = ShackHartmann(low_tel; n_subap=params.n_low_order_subap, mode=Diffractive(), T=T, backend=CPUBackend())
+    low_wfs = ShackHartmann(low_tel; n_lenslets=params.low_order_lenslets, mode=Diffractive(), T=T, backend=CPUBackend())
     return tel, low_tel, src, dm, low_dm, high_wfs, low_wfs
 end
 
@@ -652,8 +652,8 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
     if params.resolution % params.low_order_resolution != 0
         throw(InvalidConfiguration("low_order_resolution must evenly divide the main telescope resolution"))
     end
-    if params.low_order_resolution % params.n_low_order_subap != 0
-        throw(InvalidConfiguration("low_order_resolution must be divisible by n_low_order_subap"))
+    if params.low_order_resolution % params.low_order_lenslets != 0
+        throw(InvalidConfiguration("low_order_resolution must be divisible by low_order_lenslets"))
     end
     tel = Telescope(
         resolution=params.resolution,
@@ -676,7 +676,7 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
     dm = DeformableMirror(tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=backend)
     low_dm = DeformableMirror(low_tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=backend)
     high_wfs = _build_high_order_wfs(params.high_order_sensor_model, tel, params; backend=backend)
-    low_wfs = ShackHartmann(low_tel; n_subap=params.n_low_order_subap, mode=Diffractive(), T=T, backend=backend)
+    low_wfs = ShackHartmann(low_tel; n_lenslets=params.low_order_lenslets, mode=Diffractive(), T=T, backend=backend)
     high_detector = isnothing(params.high_detector) ? nothing : detector_from_config(params.high_detector; backend=backend)
     low_detector = detector_from_config(params.low_detector; backend=backend)
 

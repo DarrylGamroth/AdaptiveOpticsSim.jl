@@ -83,7 +83,7 @@ end
 
     @testset "Pyramid kernels" begin
         tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
-        wfs = PyramidWFS(tel; n_subap=4, modulation=2.0, modulation_points=3, mode=Diffractive())
+        wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, modulation_points=3, mode=Diffractive())
 
         scalar_phasor = similar(wfs.state.phasor)
         ka_phasor = similar(wfs.state.phasor)
@@ -118,7 +118,7 @@ end
 
     @testset "BioEdge kernels" begin
         tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
-        wfs = BioEdgeWFS(tel; n_subap=4, mode=Diffractive())
+        wfs = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
 
         scalar_edge_mask = similar(wfs.state.edge_mask)
         ka_edge_mask = similar(wfs.state.edge_mask)

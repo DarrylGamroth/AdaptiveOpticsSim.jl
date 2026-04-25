@@ -54,7 +54,7 @@ function _configure_benchmarks!()
     return nothing
 end
 
-function _runtime_case(target::BenchmarkExecutionTarget; resolution::Int, n_subap::Int, n_act::Int)
+function _runtime_case(target::BenchmarkExecutionTarget; resolution::Int, n_lenslets::Int, n_act::Int)
     policy = _benchmark_policy(target)
     T = AdaptiveOpticsSim.gpu_runtime_type(policy)
     BackendArray = _benchmark_backend_array(target)
@@ -64,7 +64,7 @@ function _runtime_case(target::BenchmarkExecutionTarget; resolution::Int, n_suba
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=BackendArray)
     dm = DeformableMirror(tel; n_act=n_act, influence_width=0.3, T=T, backend=BackendArray)
-    wfs = ShackHartmann(tel; n_subap=n_subap, mode=Diffractive(), T=T, backend=BackendArray)
+    wfs = ShackHartmann(tel; n_lenslets=n_lenslets, mode=Diffractive(), T=T, backend=BackendArray)
     sim = AOSimulation(tel, atm, src, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
     recon = ModalReconstructor(imat; gain=T(0.5))
@@ -170,7 +170,7 @@ end
 function _canonical_suite(target::BenchmarkExecutionTarget)
     _configure_benchmarks!()
 
-    runtime = _runtime_case(target; resolution=16, n_subap=4, n_act=4)
+    runtime = _runtime_case(target; resolution=16, n_lenslets=4, n_act=4)
     runtime_trial = run(@benchmarkable begin
         step!($runtime)
         _sync_target!($target, $runtime.command)

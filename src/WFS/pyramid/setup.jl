@@ -116,7 +116,7 @@ end
 end
 
 struct PyramidParams{T<:AbstractFloat,M,N<:WFSNormalization}
-    n_subap::Int
+    pupil_samples::Int
     threshold::T
     light_ratio::T
     normalization::N
@@ -208,7 +208,7 @@ The diffractive model forms four re-imaged pupil intensities through a
 focal-plane pyramid mask. Slopes are obtained from left/right and top/bottom
 intensity differences after optional modulation averaging and binning.
 """
-function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulation::Real=2.0,
+function PyramidWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1, modulation::Real=2.0,
     light_ratio::Real=0.0,
     normalization::WFSNormalization=MeanValidFluxNormalization(),
     calib_modulation::Real=min(50.0, tel.params.resolution / 2 - 1),
@@ -220,15 +220,15 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
 
     selector = require_same_backend(tel, _resolve_backend_selector(backend))
     backend = _resolve_array_backend(selector)
-    if tel.params.resolution % n_subap != 0
-        throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
+    if tel.params.resolution % pupil_samples != 0
+        throw(InvalidConfiguration("telescope resolution must be divisible by pupil_samples"))
     end
     if binning < 1
         throw(InvalidConfiguration("binning must be >= 1"))
     end
     n_mod = resolve_modulation_points(T(modulation), modulation_points, extra_modulation_factor, user_modulation_path)
     params = PyramidParams{T,typeof(user_modulation_path),typeof(normalization)}(
-        n_subap,
+        pupil_samples,
         T(threshold),
         T(light_ratio),
         normalization,
@@ -243,13 +243,13 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
         user_modulation_path,
         T(mask_scale),
         diffraction_padding, psf_centering, n_pix_separation, n_pix_edge, binning)
-    valid_mask = backend{Bool}(undef, n_subap, n_subap)
-    slopes = backend{T}(undef, 2 * n_subap * n_subap)
+    valid_mask = backend{Bool}(undef, pupil_samples, pupil_samples)
+    slopes = backend{T}(undef, 2 * pupil_samples * pupil_samples)
     fill!(slopes, zero(T))
     pad = tel.params.resolution * diffraction_padding
     if n_pix_separation !== nothing
         edge = n_pix_edge === nothing ? div(n_pix_separation, 2) : n_pix_edge
-        pad = Int(round((n_subap * 2 + n_pix_separation + 2 * edge) * tel.params.resolution / n_subap))
+        pad = Int(round((pupil_samples * 2 + n_pix_separation + 2 * edge) * tel.params.resolution / pupil_samples))
     end
     field = backend{Complex{T}}(undef, pad, pad)
     focal_field = similar(field)
@@ -262,7 +262,7 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
     scratch = similar(intensity)
     binned_intensity = similar(intensity)
     asterism_stack = backend{T}(undef, pad, pad, 1)
-    n_pix_signal = cld(n_subap, binning)
+    n_pix_signal = cld(pupil_samples, binning)
     valid_i4q = backend{Bool}(undef, n_pix_signal, n_pix_signal)
     valid_i4q_host = Matrix{Bool}(undef, n_pix_signal, n_pix_signal)
     valid_signal = backend{Bool}(undef, 2 * n_pix_signal, n_pix_signal)
@@ -273,7 +273,7 @@ function PyramidWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1, modulatio
     valid_flux_i4q_host = Matrix{T}(undef, size(temp)...)
     signal_2d = backend{T}(undef, 2 * n_pix_signal, n_pix_signal)
     reference_signal_2d = similar(signal_2d)
-    camera_frame = backend{T}(undef, max(1, n_subap), max(1, n_subap))
+    camera_frame = backend{T}(undef, max(1, pupil_samples), max(1, pupil_samples))
     fft_plan = plan_fft_backend!(focal_field)
     ifft_plan = plan_ifft_backend!(pupil_field)
     elongation_kernel = backend{T}(undef, 1)
@@ -466,7 +466,7 @@ function accumulate_pyramid_extended_intensity!(style::AcceleratorStyle, out::Ab
 end
 
 function prepare_pyramid_sampling!(wfs::PyramidWFS, tel::Telescope)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.pupil_samples
     pad = tel.params.resolution * wfs.params.diffraction_padding
     if wfs.params.n_pix_separation !== nothing
         edge = wfs.params.n_pix_edge === nothing ? div(wfs.params.n_pix_separation, 2) : wfs.params.n_pix_edge
@@ -491,7 +491,7 @@ end
 
 function resize_pyramid_signal_buffers!(wfs::PyramidWFS, frame_size::Int)
     nominal = wfs.state.nominal_detector_resolution
-    n_pixels = cld(wfs.params.n_subap, wfs.params.binning)
+    n_pixels = cld(wfs.params.pupil_samples, wfs.params.binning)
     if size(wfs.state.valid_i4q) != (n_pixels, n_pixels)
         wfs.state.valid_i4q = similar(wfs.state.valid_i4q, n_pixels, n_pixels)
         fill!(wfs.state.valid_i4q, false)
@@ -589,7 +589,7 @@ function select_pyramid_valid_i4q!(wfs::PyramidWFS, tel::Telescope, src::Abstrac
 end
 
 function select_pyramid_valid_i4q!(::ScalarCPUStyle, wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
-    n_pixels = cld(wfs.params.n_subap, wfs.params.binning)
+    n_pixels = cld(wfs.params.pupil_samples, wfs.params.binning)
     if size(wfs.state.valid_i4q) != (n_pixels, n_pixels)
         wfs.state.valid_i4q = similar(wfs.state.valid_i4q, n_pixels, n_pixels)
     end
@@ -641,7 +641,7 @@ function select_pyramid_valid_i4q!(::ScalarCPUStyle, wfs::PyramidWFS, tel::Teles
 end
 
 function select_pyramid_valid_i4q!(::AcceleratorStyle, wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
-    n_pixels = cld(wfs.params.n_subap, wfs.params.binning)
+    n_pixels = cld(wfs.params.pupil_samples, wfs.params.binning)
     if size(wfs.state.valid_i4q) != (n_pixels, n_pixels)
         wfs.state.valid_i4q = similar(wfs.state.valid_i4q, n_pixels, n_pixels)
     end
@@ -687,7 +687,7 @@ end
 
 function sample_pyramid_intensity!(wfs::PyramidWFS, tel::Telescope, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
     binning = wfs.params.binning
-    sub = div(tel.params.resolution, wfs.params.n_subap)
+    sub = div(tel.params.resolution, wfs.params.pupil_samples)
     if size(intensity, 1) % sub != 0
         throw(InvalidConfiguration("pyramid intensity size must be divisible by telescope pixels per subaperture"))
     end

@@ -90,7 +90,7 @@ Initial constructor sketch:
 ```julia
 ZernikeWFS(
     tel::Telescope;
-    n_subap::Int,
+    pupil_samples::Int,
     phase_shift_pi::Real = 0.5,
     spot_radius_lambda_over_d::Real = 1.0,
     threshold::Real = 0.0,

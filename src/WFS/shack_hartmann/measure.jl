@@ -28,7 +28,7 @@ end
 
 function measure!(::Geometric, wfs::ShackHartmann, tel::Telescope, src::LGSSource)
     slopes = measure!(Geometric(), wfs, tel)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     factor = lgs_elongation_factor(src)
     @views slopes[n_sub * n_sub + 1:end] .*= factor
     return slopes
@@ -136,7 +136,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
     prepare_sampling!(wfs, tel, ast.sources[1])
     ensure_sh_calibration!(wfs, tel, ast.sources[1])
     n = tel.params.resolution
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     sub = div(n, n_sub)
     pad = size(wfs.state.field, 1)
     ox = div(pad - sub, 2)
@@ -164,7 +164,7 @@ function measure!(::Diffractive, wfs::ShackHartmann, tel::Telescope, ast::Asteri
     prepare_sampling!(wfs, tel, ast.sources[1])
     ensure_sh_calibration!(wfs, tel, ast.sources[1])
     n = tel.params.resolution
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     sub = div(n, n_sub)
     pad = size(wfs.state.field, 1)
     ox = div(pad - sub, 2)

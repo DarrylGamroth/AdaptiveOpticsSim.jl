@@ -12,11 +12,11 @@ using KernelAbstractions: @kernel, @index
     end
 end
 
-@kernel function revolt_sh_spot_mosaic_kernel!(mosaic, spot_cube, n_subap::Int, roi::Int)
+@kernel function revolt_sh_spot_mosaic_kernel!(mosaic, spot_cube, n_lenslets::Int, roi::Int)
     idx, u, v = @index(Global, NTuple)
     if idx <= size(spot_cube, 1) && u <= roi && v <= roi
-        sub_i = mod1(idx, n_subap)
-        sub_j = fld(idx - 1, n_subap) + 1
+        sub_i = mod1(idx, n_lenslets)
+        sub_j = fld(idx - 1, n_lenslets) + 1
         out_i = (sub_i - 1) * roi + u
         out_j = (sub_j - 1) * roi + v
         @inbounds mosaic[out_i, out_j] = spot_cube[idx, u, v]
@@ -34,7 +34,7 @@ struct RevoltLikeHILContext{TEL,SRC,DM,WFS,DET,AI,AC,EC,EB,TF,RNG}
     extrapolated_command::EC
     extrapolation_backend::EB
     tiled_frame::TF
-    n_subap::Int
+    n_lenslets::Int
     roi::Int
     rng::RNG
 end
@@ -129,16 +129,16 @@ function revolt_scatter_active_command!(style::AdaptiveOpticsSim.AcceleratorStyl
     return full_command
 end
 
-function revolt_tile_spot_cube!(mosaic::AbstractMatrix{T}, spot_cube::AbstractArray{T,3}, n_subap::Int, roi::Int) where {T<:AbstractFloat}
-    revolt_tile_spot_cube!(AdaptiveOpticsSim.execution_style(mosaic), mosaic, spot_cube, n_subap, roi)
+function revolt_tile_spot_cube!(mosaic::AbstractMatrix{T}, spot_cube::AbstractArray{T,3}, n_lenslets::Int, roi::Int) where {T<:AbstractFloat}
+    revolt_tile_spot_cube!(AdaptiveOpticsSim.execution_style(mosaic), mosaic, spot_cube, n_lenslets, roi)
     return mosaic
 end
 
 function revolt_tile_spot_cube!(::AdaptiveOpticsSim.ScalarCPUStyle, mosaic::AbstractMatrix{T},
-    spot_cube::AbstractArray{T,3}, n_subap::Int, roi::Int) where {T<:AbstractFloat}
+    spot_cube::AbstractArray{T,3}, n_lenslets::Int, roi::Int) where {T<:AbstractFloat}
     @inbounds for idx in 1:size(spot_cube, 1)
-        sub_i = mod1(idx, n_subap)
-        sub_j = fld(idx - 1, n_subap) + 1
+        sub_i = mod1(idx, n_lenslets)
+        sub_j = fld(idx - 1, n_lenslets) + 1
         out_i = (sub_i - 1) * roi + 1
         out_j = (sub_j - 1) * roi + 1
         copyto!(@view(mosaic[out_i:out_i + roi - 1, out_j:out_j + roi - 1]), @view(spot_cube[idx, :, :]))
@@ -147,8 +147,8 @@ function revolt_tile_spot_cube!(::AdaptiveOpticsSim.ScalarCPUStyle, mosaic::Abst
 end
 
 function revolt_tile_spot_cube!(style::AdaptiveOpticsSim.AcceleratorStyle, mosaic::AbstractMatrix{T},
-    spot_cube::AbstractArray{T,3}, n_subap::Int, roi::Int) where {T<:AbstractFloat}
-    AdaptiveOpticsSim.launch_kernel!(style, revolt_sh_spot_mosaic_kernel!, mosaic, spot_cube, n_subap, roi;
+    spot_cube::AbstractArray{T,3}, n_lenslets::Int, roi::Int) where {T<:AbstractFloat}
+    AdaptiveOpticsSim.launch_kernel!(style, revolt_sh_spot_mosaic_kernel!, mosaic, spot_cube, n_lenslets, roi;
         ndrange=size(spot_cube))
     return mosaic
 end
@@ -163,7 +163,7 @@ function build_revolt_like_hil_context(; backend_name::AbstractString="cpu", con
     extrapolation_path = joinpath(config_dir, "revolt_like_dmExtrapolation.csv")
     actuator_map, active_indices_host = revolt_load_dm277_actuator_map(actuator_map_path)
     extrapolation_host = Matrix(revolt_load_dm_extrapolation(extrapolation_path, T))
-    n_subap = 16
+    n_lenslets = 16
     roi = 22
     resolution = 352
     n_act = size(actuator_map, 1)
@@ -179,7 +179,7 @@ function build_revolt_like_hil_context(; backend_name::AbstractString="cpu", con
     )
     src = Source(band=:I, magnitude=0.0, T=T)
     dm = DeformableMirror(tel; n_act=n_act, influence_width=0.3, T=T, backend=backend_cfg.selector)
-    wfs = ShackHartmann(tel; n_subap=n_subap, mode=Diffractive(), n_pix_subap=roi,
+    wfs = ShackHartmann(tel; n_lenslets=n_lenslets, mode=Diffractive(), n_pix_subap=roi,
         diffraction_padding=2, T=T, backend=backend_cfg.selector)
     det = Detector(noise=NoiseNone(), integration_time=T(1), qe=T(1), binning=1,
         dark_current=dark_current, sensor=sensor, response_model=response_model,
@@ -207,7 +207,7 @@ function build_revolt_like_hil_context(; backend_name::AbstractString="cpu", con
         extrapolated_command,
         extrapolation_backend,
         tiled_frame,
-        n_subap,
+        n_lenslets,
         roi,
         rng,
     )
@@ -243,7 +243,7 @@ function revolt_like_mosaic!(ctx::RevoltLikeHILContext)
     revolt_scatter_active_command!(ctx.dm.state.coefs, ctx.extrapolated_command, ctx.active_indices_backend)
     apply!(ctx.dm, ctx.tel, DMReplace())
     measure!(ctx.wfs, ctx.tel, ctx.src, ctx.det; rng=ctx.rng)
-    revolt_tile_spot_cube!(ctx.tiled_frame, ctx.wfs.state.spot_cube, ctx.n_subap, ctx.roi)
+    revolt_tile_spot_cube!(ctx.tiled_frame, ctx.wfs.state.spot_cube, ctx.n_lenslets, ctx.roi)
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.tiled_frame))
     return nothing
 end
@@ -254,7 +254,7 @@ function revolt_like_step!(ctx::RevoltLikeHILContext)
     revolt_scatter_active_command!(ctx.dm.state.coefs, ctx.extrapolated_command, ctx.active_indices_backend)
     apply!(ctx.dm, ctx.tel, DMReplace())
     measure!(ctx.wfs, ctx.tel, ctx.src, ctx.det; rng=ctx.rng)
-    revolt_tile_spot_cube!(ctx.tiled_frame, ctx.wfs.state.spot_cube, ctx.n_subap, ctx.roi)
+    revolt_tile_spot_cube!(ctx.tiled_frame, ctx.wfs.state.spot_cube, ctx.n_lenslets, ctx.roi)
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.dm.state.coefs))
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.wfs.state.spot_cube))
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.tiled_frame))

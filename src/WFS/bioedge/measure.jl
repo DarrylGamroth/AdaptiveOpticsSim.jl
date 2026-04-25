@@ -66,7 +66,7 @@ end
 
 function measure!(::Geometric, wfs::BioEdgeWFS, tel::Telescope, src::LGSSource)
     slopes = measure!(Geometric(), wfs, tel)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.pupil_samples
     factor = lgs_elongation_factor(src)
     @views slopes[n_sub * n_sub + 1:end] .*= factor
     return slopes

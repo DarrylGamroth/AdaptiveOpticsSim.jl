@@ -103,7 +103,7 @@ end
 
 function compute_intensity_stack!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
     pad = size(wfs.state.fft_stack, 1)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     sub = div(tel.params.resolution, n_sub)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
@@ -133,7 +133,7 @@ end
 
 function compute_intensity_stack!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
     pad = size(wfs.state.fft_stack, 1)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     sub = div(tel.params.resolution, n_sub)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
@@ -158,7 +158,7 @@ function compute_intensity_asterism_stack!(style::AcceleratorStyle, wfs::ShackHa
     n_src = length(ast.sources)
     ensure_sh_asterism_buffers!(wfs, n_src)
     pad = size(wfs.state.fft_stack, 1)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     n_spots = n_sub * n_sub
     sub = div(tel.params.resolution, n_sub)
     ox = div(pad - sub, 2)
@@ -197,7 +197,7 @@ function compute_intensity_spectral_stack!(style::AcceleratorStyle, wfs::ShackHa
     n_src = length(bundle)
     ensure_sh_asterism_buffers!(wfs, n_src)
     pad = size(wfs.state.fft_stack, 1)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     n_spots = n_sub * n_sub
     sub = div(tel.params.resolution, n_sub)
     ox = div(pad - sub, 2)
@@ -262,7 +262,7 @@ function sample_spot_stack!(style::AcceleratorStyle, wfs::ShackHartmann)
     n_binned = div(pad, binning)
     n_out = size(wfs.state.sampled_spot_cube, 2)
     launch_kernel!(style, sh_sample_spot_stack_kernel!, wfs.state.sampled_spot_cube, wfs.state.intensity_stack,
-        wfs.state.valid_mask, binning, wfs.params.n_subap, n_binned, n_out; ndrange=size(wfs.state.sampled_spot_cube))
+        wfs.state.valid_mask, binning, wfs.params.n_lenslets, n_binned, n_out; ndrange=size(wfs.state.sampled_spot_cube))
     return wfs.state.sampled_spot_cube
 end
 
@@ -298,7 +298,7 @@ function sampled_spots_peak_asterism_stacked!(style::AcceleratorStyle, wfs::Shac
     det::AbstractDetector, rng::AbstractRNG)
     compute_intensity_asterism_stack!(style, wfs, tel, ast)
     sample_spot_stack!(style, wfs)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     capture_sampled_spot_stack!(wfs, det, rng)
     launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
         n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
@@ -405,7 +405,7 @@ end
 
 function measure_sh_asterism_batched!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, ast::Asterism)
     n_src = length(ast.sources)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     n_spots = n_sub * n_sub
     fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
     fill!(wfs.state.spot_stats_accum, zero(eltype(wfs.state.spot_stats_accum)))
@@ -432,7 +432,7 @@ end
 function measure_sh_asterism_batched!(style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope,
     ast::Asterism, det::AbstractDetector, rng::AbstractRNG)
     n_src = length(ast.sources)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     n_spots = n_sub * n_sub
     fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
     fill!(wfs.state.spot_stats_accum, zero(eltype(wfs.state.spot_stats_accum)))

@@ -89,7 +89,7 @@ end
 @inline wfs_output_frame_prototype(wfs::BioEdgeWFS, det::AbstractDetector) = camera_frame(wfs)
 @inline wfs_output_frame_prototype(wfs::ShackHartmann{<:Diffractive}, det::AbstractDetector) = sh_exported_spot_cube(wfs)
 @inline wfs_output_metadata(wfs::ShackHartmann) = (
-    n_subap=subaperture_layout(wfs).n_subap,
+    n_lenslets=subaperture_layout(wfs).n_subap,
     n_valid_subap=n_valid_subapertures(subaperture_layout(wfs)),
     subap_pixels=subaperture_layout(wfs).subap_pixels,
     pitch_m=subaperture_layout(wfs).pitch_m,

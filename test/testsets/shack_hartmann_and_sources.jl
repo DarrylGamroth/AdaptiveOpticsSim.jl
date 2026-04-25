@@ -1,8 +1,8 @@
 @testset "Shack-Hartmann valid subaperture policies" begin
     tel = Telescope(resolution=352, diameter=1.22, sampling_time=1 / 500)
-    sh_geom = ShackHartmann(tel; n_subap=16, mode=Diffractive(), T=Float32)
+    sh_geom = ShackHartmann(tel; n_lenslets=16, mode=Diffractive(), T=Float32)
     sh_flux = ShackHartmann(tel;
-        n_subap=16,
+        n_lenslets=16,
         mode=Diffractive(),
         valid_subaperture_policy=FluxThresholdValidSubapertures(light_ratio=0.5, T=Float32),
         T=Float32)
@@ -22,7 +22,7 @@ end
 @testset "Shack-Hartmann resized detector mosaic" begin
     tel = Telescope(resolution=64, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
     src = Source(band=:I, magnitude=7.0)
-    sh = ShackHartmann(tel; n_subap=16, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
+    sh = ShackHartmann(tel; n_lenslets=16, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
     prepare_runtime_wfs!(sh, tel, src)
     measure!(sh, tel, src)
     image = wfs_detector_image(sh)
@@ -65,9 +65,9 @@ end
     focus = @view zb.modes[:, :, 5]
     @. tel.state.opd = 5e-8 * focus
 
-    sh_mono = ShackHartmann(tel; n_subap=8, mode=Diffractive())
-    sh_single = ShackHartmann(tel; n_subap=8, mode=Diffractive())
-    sh_broad = ShackHartmann(tel; n_subap=8, mode=Diffractive())
+    sh_mono = ShackHartmann(tel; n_lenslets=8, mode=Diffractive())
+    sh_single = ShackHartmann(tel; n_lenslets=8, mode=Diffractive())
+    sh_broad = ShackHartmann(tel; n_lenslets=8, mode=Diffractive())
 
     mono_slopes = copy(measure!(sh_mono, tel, src))
     single_slopes = copy(measure!(sh_single, tel, poly_single))
@@ -79,9 +79,9 @@ end
     @test norm(broad_slopes_1 - mono_slopes) > 1e-8
     @test supports_stacked_sources(sh_broad, poly_broad)
 
-    pyr_mono = PyramidWFS(tel; n_subap=8, mode=Diffractive(), modulation=1.0)
-    pyr_single = PyramidWFS(tel; n_subap=8, mode=Diffractive(), modulation=1.0)
-    pyr_broad = PyramidWFS(tel; n_subap=8, mode=Diffractive(), modulation=1.0)
+    pyr_mono = PyramidWFS(tel; pupil_samples=8, mode=Diffractive(), modulation=1.0)
+    pyr_single = PyramidWFS(tel; pupil_samples=8, mode=Diffractive(), modulation=1.0)
+    pyr_broad = PyramidWFS(tel; pupil_samples=8, mode=Diffractive(), modulation=1.0)
 
     mono_pyr = copy(measure!(pyr_mono, tel, src))
     single_pyr = copy(measure!(pyr_single, tel, poly_single))
@@ -130,9 +130,9 @@ end
     focus = @view zb.modes[:, :, 5]
     @. tel.state.opd = 5e-8 * focus
 
-    sh_point = ShackHartmann(tel; n_subap=8, mode=Diffractive())
-    sh_ext_point = ShackHartmann(tel; n_subap=8, mode=Diffractive())
-    sh_ext = ShackHartmann(tel; n_subap=8, mode=Diffractive())
+    sh_point = ShackHartmann(tel; n_lenslets=8, mode=Diffractive())
+    sh_ext_point = ShackHartmann(tel; n_lenslets=8, mode=Diffractive())
+    sh_ext = ShackHartmann(tel; n_lenslets=8, mode=Diffractive())
     point_slopes = copy(measure!(sh_point, tel, src))
     ext_point_slopes = copy(measure!(sh_ext_point, tel, ext_point))
     point_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_point, tel, src)
@@ -146,9 +146,9 @@ end
     @test norm(sh_ext.state.spot_cube - sh_point.state.spot_cube) > 1e-8
     @test supports_stacked_sources(sh_ext, ext_gauss)
 
-    pyr_point = PyramidWFS(tel; n_subap=8, mode=Diffractive(), modulation=1.0)
-    pyr_ext_point = PyramidWFS(tel; n_subap=8, mode=Diffractive(), modulation=1.0)
-    pyr_ext = PyramidWFS(tel; n_subap=8, mode=Diffractive(), modulation=1.0)
+    pyr_point = PyramidWFS(tel; pupil_samples=8, mode=Diffractive(), modulation=1.0)
+    pyr_ext_point = PyramidWFS(tel; pupil_samples=8, mode=Diffractive(), modulation=1.0)
+    pyr_ext = PyramidWFS(tel; pupil_samples=8, mode=Diffractive(), modulation=1.0)
     pyr_point_slopes = copy(measure!(pyr_point, tel, src))
     pyr_ext_point_slopes = copy(measure!(pyr_ext_point, tel, ext_point))
     pyr_ext_slopes_1 = copy(measure!(pyr_ext, tel, ext_gauss))

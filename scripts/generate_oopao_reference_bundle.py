@@ -362,7 +362,7 @@ def sh_geometric_case(root: Path, *, case_id: str, scale_x: float, scale_y: floa
             "bias": 0.0,
         },
         "wfs": {
-            "n_subap": 4,
+            "n_lenslets": 4,
             "threshold": 0.0,
             "mode": "geometric",
         },
@@ -415,7 +415,7 @@ def sh_diffractive_case(root: Path) -> dict:
             "bias": 0.0,
         },
         "wfs": {
-            "n_subap": 4,
+            "n_lenslets": 4,
             "threshold": 0.0,
             "mode": "diffractive",
             "pixel_scale": 0.06,
@@ -468,7 +468,7 @@ def pyramid_case(root: Path) -> dict:
             "bias": 0.0,
         },
         "wfs": {
-            "n_subap": 4,
+            "pupil_samples": 4,
             "threshold": 0.0,
             "mode": "diffractive",
             "modulation": 1.0,
@@ -524,7 +524,7 @@ def bioedge_case(root: Path) -> dict:
             "bias": 0.0,
         },
         "wfs": {
-            "n_subap": 4,
+            "pupil_samples": 4,
             "threshold": 0.0,
             "mode": "diffractive",
             "modulation": 1.0,
@@ -583,7 +583,7 @@ def modal_tiptilt_case(root: Path, *, case_id: str, kind: str, mode_index: int, 
             "command": [amplitude, 0.0] if mode_index == 1 else [0.0, amplitude],
         },
         "wfs": {
-            "n_subap": 4,
+            **({"n_lenslets": 4} if kind == "shack_hartmann_slopes" else {"pupil_samples": 4}),
             "threshold": 0.0,
             "mode": "diffractive",
             **(
@@ -797,7 +797,7 @@ def composite_tiptilt_dm_case(root: Path, *, case_id: str, kind: str, tip_amplit
             ],
         },
         "wfs": {
-            "n_subap": 4,
+            **({"n_lenslets": 4} if kind == "shack_hartmann_slopes" else {"pupil_samples": 4}),
             "threshold": 0.0,
             "mode": "diffractive",
             **(
@@ -878,7 +878,7 @@ def gsc_case(root: Path) -> dict:
             "amplitude": amplitude,
         },
         "wfs": {
-            "n_subap": 4,
+            "pupil_samples": 4,
             "threshold": 0.0,
             "mode": "diffractive",
             "modulation": 3.0,
@@ -990,7 +990,7 @@ def gsc_branch_step_cases(root: Path) -> dict[str, dict]:
         },
         "wfs": {
             "kind": "pyramid_slopes",
-            "n_subap": 4,
+            "pupil_samples": 4,
             "mode": "diffractive",
             "threshold": 0.5,
             "light_ratio": 0.5,
@@ -1189,11 +1189,13 @@ def closed_loop_trace_case(root: Path, *, case_id: str, kind: str) -> dict:
 
     rel = f"{case_id}.txt"
     write_array(root / rel, trace)
-    wfs_section = {"kind": kind, "n_subap": 4, "mode": "diffractive", "threshold": 0.0}
+    wfs_section = {"kind": kind, "mode": "diffractive", "threshold": 0.0}
     if kind == "shack_hartmann_slopes":
+        wfs_section["n_lenslets"] = 4
         wfs_section["pixel_scale"] = 0.06
         wfs_section["n_pix_subap"] = 8
     elif kind in ("pyramid_slopes", "bioedge_slopes"):
+        wfs_section["pupil_samples"] = 4
         wfs_section["modulation"] = 1.0
         wfs_section["n_pix_separation"] = 4
         wfs_section["n_pix_edge"] = 0 if kind == "pyramid_slopes" else 2
@@ -1327,7 +1329,7 @@ def gsc_closed_loop_trace_case(root: Path) -> dict:
         },
         "wfs": {
             "kind": "pyramid_slopes",
-            "n_subap": 4,
+            "pupil_samples": 4,
             "mode": "diffractive",
             "threshold": 0.5,
             "light_ratio": 0.5,
@@ -1485,7 +1487,7 @@ def gsc_atmosphere_replay_trace_case(root: Path, *, case_id: str = "gsc_atmosphe
         },
         "wfs": {
             "kind": "pyramid_slopes",
-            "n_subap": 4,
+            "pupil_samples": 4,
             "mode": "diffractive",
             "threshold": 0.5,
             "light_ratio": 0.5,

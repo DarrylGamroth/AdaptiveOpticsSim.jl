@@ -256,7 +256,7 @@ function moving_wfs_slope_trace(;
         wind_direction=[0.0, 90.0],
         altitude=[0.0, 5000.0],
     )
-    wfs = ShackHartmann(tel; n_subap=4)
+    wfs = ShackHartmann(tel; n_lenslets=4)
     rng = MersenneTwister(seed)
     trace = Vector{Vector{Float64}}(undef, steps)
     for i in 1:steps
@@ -284,7 +284,7 @@ function moving_closed_loop_trace(;
         altitude=[0.0, 5000.0],
     )
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-    wfs = ZernikeWFS(tel; n_subap=4, diffraction_padding=2)
+    wfs = ZernikeWFS(tel; pupil_samples=4, diffraction_padding=2)
     sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=1e-8)
     recon = ModalReconstructor(imat; gain=0.2)

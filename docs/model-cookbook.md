@@ -50,7 +50,7 @@ atm = MultiLayerAtmosphere(
     wind_direction=(0.0, 90.0),
     altitude=(0.0, 5000.0),
 )
-wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
+wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
 
 advance!(atm, tel)
 propagate!(atm, tel)
@@ -72,7 +72,7 @@ using Random
 tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)
 atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
-wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
+wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
 det = Detector(
     noise=NoiseReadout(1.0),
     integration_time=1.0,
@@ -97,7 +97,7 @@ using the generic frame-detector surface. For example, curvature sensing with a
 SPAD imaging array can use:
 
 ```julia
-counting_wfs = CurvatureWFS(tel; n_subap=8, readout_model=CurvatureCountingReadout())
+counting_wfs = CurvatureWFS(tel; pupil_samples=8, readout_model=CurvatureCountingReadout())
 spad = SPADArrayDetector(
     integration_time=1.0,
     noise=NoiseNone(),
@@ -123,7 +123,7 @@ tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruc
 src = Source(band=:I, magnitude=0.0)
 atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive())
+wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive())
 sim = AOSimulation(tel, src, atm, dm, wfs)
 
 imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
@@ -209,7 +209,7 @@ tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruc
 src = Source(band=:I, magnitude=0.0)
 atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive())
+wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive())
 sim = AOSimulation(tel, src, atm, dm, wfs)
 
 # Use NullReconstructor() when the controller lives outside the package and
@@ -416,7 +416,7 @@ tiptilt = TipTiltMirror(tel; scale=0.1f0, label=:tiptilt, T=Float32, backend=GPU
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3f0, T=Float32, backend=GPU)
 optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm)
 
-wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=Float32, backend=GPU)
+wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=Float32, backend=GPU)
 wfs_det = Detector(noise=NoiseNone(), integration_time=1.0f0, qe=1.0f0, binning=1; T=Float32, backend=GPU)
 science_det = Detector(noise=NoiseNone(), integration_time=1.0f0, qe=1.0f0, binning=1; T=Float32, backend=GPU)
 
@@ -518,7 +518,7 @@ atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
 tiptilt = TipTiltMirror(tel; scale=0.05, label=:tiptilt)
 dm = DeformableMirror(tel; n_act=16, influence_width=0.3)
 optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm)
-wfs = PyramidWFS(tel; n_subap=32, modulation=3.0)
+wfs = PyramidWFS(tel; pupil_samples=32, modulation=3.0)
 sim = AOSimulation(tel, src, atm, optic, wfs)
 
 branch = RuntimeBranch(:main, sim, NullReconstructor(); rng=MersenneTwister(1))

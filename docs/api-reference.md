@@ -435,7 +435,7 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   share that layout/calibration contract rather than managing independent
   valid-mask and reference-signal state.
 - `CurvatureWFS` also exposes detector-plane geometry controls through
-  `readout_crop_resolution` and `readout_pixels_per_subap` so the exported frame
+  `readout_crop_resolution` and `readout_pixels_per_sample` so the exported frame
   sampling can be decoupled from the control-grid sampling.
 - Maintained optional-capability queries use
   `supports_prepared_runtime(wfs, src)`, `supports_stacked_sources(wfs, src)`,

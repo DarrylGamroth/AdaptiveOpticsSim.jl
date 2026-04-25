@@ -20,7 +20,7 @@ function pyramid_signal!(::ScalarCPUStyle, wfs::PyramidWFS, tel::Telescope, fram
     src::Union{Nothing,AbstractSource}) where {T<:AbstractFloat}
     n_extra = round(Int, (something(wfs.params.n_pix_separation, 0) / 2) / wfs.params.binning)
     center = round(Int, wfs.state.nominal_detector_resolution / wfs.params.binning / 2)
-    n_pixels = cld(wfs.params.n_subap, wfs.params.binning)
+    n_pixels = cld(wfs.params.pupil_samples, wfs.params.binning)
     count = div(length(wfs.state.slopes), 2)
     norma = zero(T)
     @inbounds for j in 1:n_pixels, i in 1:n_pixels
@@ -57,7 +57,7 @@ function pyramid_signal!(::AcceleratorStyle, wfs::PyramidWFS, tel::Telescope, fr
     count = wfs.state.valid_signal_count
     n_extra = round(Int, (something(wfs.params.n_pix_separation, 0) / 2) / wfs.params.binning)
     center = round(Int, wfs.state.nominal_detector_resolution / wfs.params.binning / 2)
-    n_pixels = cld(wfs.params.n_subap, wfs.params.binning)
+    n_pixels = cld(wfs.params.pupil_samples, wfs.params.binning)
     rows_lo = center - n_extra - n_pixels + 1:center - n_extra
     rows_hi = center + n_extra + 1:center + n_extra + n_pixels
     cols_lo = center - n_extra - n_pixels + 1:center - n_extra
@@ -90,7 +90,7 @@ end
 function pyramid_normalization(::IncidenceFluxNormalization, wfs::PyramidWFS, tel::Telescope,
     src::AbstractSource, ::Int, summed_i4q)
     T = typeof(summed_i4q)
-    sub_area = (tel.params.diameter / wfs.params.n_subap)^2
+    sub_area = (tel.params.diameter / wfs.params.pupil_samples)^2
     return T(photon_flux(src) * tel.params.sampling_time * sub_area)
 end
 

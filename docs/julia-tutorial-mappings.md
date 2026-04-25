@@ -59,7 +59,7 @@ psf = compute_psf!(tel, src; zero_padding=2)
 ### Diffractive WFS measurement
 
 ```julia
-wfs = PyramidWFS(tel; n_subap=4, mode=Diffractive(), modulation=1.0, modulation_points=4)
+wfs = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0, modulation_points=4)
 slopes = measure!(wfs, tel, src)
 ```
 

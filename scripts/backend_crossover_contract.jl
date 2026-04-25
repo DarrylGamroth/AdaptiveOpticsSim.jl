@@ -45,7 +45,7 @@ function _time_block_ns(f::F) where {F<:Function}
     return time_ns() - t0, result
 end
 
-function _runtime_case(target::SweepExecutionTarget; resolution::Int, n_subap::Int, n_act::Int)
+function _runtime_case(target::SweepExecutionTarget; resolution::Int, n_lenslets::Int, n_act::Int)
     policy = _sweep_policy(target)
     T = AdaptiveOpticsSim.gpu_runtime_type(policy)
     BackendArray = _sweep_backend_array(target)
@@ -55,7 +55,7 @@ function _runtime_case(target::SweepExecutionTarget; resolution::Int, n_subap::I
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=BackendArray)
     dm = DeformableMirror(tel; n_act=n_act, influence_width=0.3, T=T, backend=BackendArray)
-    wfs = ShackHartmann(tel; n_subap=n_subap, mode=Diffractive(), T=T, backend=BackendArray)
+    wfs = ShackHartmann(tel; n_lenslets=n_lenslets, mode=Diffractive(), T=T, backend=BackendArray)
     sim = AOSimulation(tel, atm, src, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
     recon = ModalReconstructor(imat; gain=T(0.5))
@@ -65,8 +65,8 @@ function _runtime_case(target::SweepExecutionTarget; resolution::Int, n_subap::I
     return runtime
 end
 
-function _timed_runtime_case(target::SweepExecutionTarget; label::AbstractString, resolution::Int, n_subap::Int, n_act::Int)
-    runtime = _runtime_case(target; resolution, n_subap, n_act)
+function _timed_runtime_case(target::SweepExecutionTarget; label::AbstractString, resolution::Int, n_lenslets::Int, n_act::Int)
+    runtime = _runtime_case(target; resolution, n_lenslets, n_act)
     stats = runtime_timing(() -> begin
         step!(runtime)
         _sync_target!(target, runtime.command)
@@ -76,7 +76,7 @@ function _timed_runtime_case(target::SweepExecutionTarget; label::AbstractString
         label=String(label),
         backend=_backend_name(target),
         resolution=resolution,
-        n_subap=n_subap,
+        n_lenslets=n_lenslets,
         n_act=n_act,
         mean_ns=stats.mean_ns,
         p95_ns=stats.p95_ns,
@@ -181,7 +181,7 @@ function _timed_builder_case(target::SweepExecutionTarget; label::AbstractString
 
     modal_resolution = 4 * n_lenslet
     modal_act = max(4, n_lenslet + 2)
-    runtime = _runtime_case(target; resolution=modal_resolution, n_subap=n_lenslet, n_act=modal_act)
+    runtime = _runtime_case(target; resolution=modal_resolution, n_lenslets=n_lenslet, n_act=modal_act)
     imat = interaction_matrix(runtime.dm, runtime.wfs, runtime.tel, runtime.src;
         amplitude=eltype(runtime.command)(0.05))
     ModalReconstructor(imat; build_backend=p.build_backend)
@@ -290,7 +290,7 @@ function _timed_builder_case(target::SweepExecutionTarget; label::AbstractString
 end
 
 function _print_runtime_result(r)
-    println("runtime_case label=$(r.label) backend=$(r.backend) resolution=$(r.resolution) n_subap=$(r.n_subap) n_act=$(r.n_act) mean_ns=$(r.mean_ns) p95_ns=$(r.p95_ns)")
+    println("runtime_case label=$(r.label) backend=$(r.backend) resolution=$(r.resolution) n_lenslets=$(r.n_lenslets) n_act=$(r.n_act) mean_ns=$(r.mean_ns) p95_ns=$(r.p95_ns)")
 end
 
 function _print_builder_result(r)
@@ -299,9 +299,9 @@ end
 
 function run_backend_crossover_sweep(target::SweepExecutionTarget)
     runtime_cases = (
-        (label="compact", resolution=16, n_subap=4, n_act=4),
-        (label="small", resolution=32, n_subap=8, n_act=8),
-        (label="medium", resolution=64, n_subap=16, n_act=16),
+        (label="compact", resolution=16, n_lenslets=4, n_act=4),
+        (label="small", resolution=32, n_lenslets=8, n_act=8),
+        (label="medium", resolution=64, n_lenslets=16, n_act=16),
     )
     builder_cases = (
         (label="compact", n_lenslet=1, n_lgs=1, n_fit_src=1, n_dm=1),

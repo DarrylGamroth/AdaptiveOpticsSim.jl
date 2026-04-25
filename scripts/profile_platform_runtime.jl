@@ -77,10 +77,10 @@ function _platform_scale_config(name::AbstractString)
         return (
             scale=scale,
             single_resolution=24,
-            single_n_subap=6,
+            single_wfs_samples=6,
             single_dm_n_act=6,
             grouped_resolution=16,
-            grouped_n_subap=4,
+            grouped_wfs_samples=4,
             grouped_dm_n_act=4,
             grouped_branch_count=2,
             warmup=5,
@@ -90,10 +90,10 @@ function _platform_scale_config(name::AbstractString)
         return (
             scale=scale,
             single_resolution=48,
-            single_n_subap=12,
+            single_wfs_samples=12,
             single_dm_n_act=12,
             grouped_resolution=32,
-            grouped_n_subap=8,
+            grouped_wfs_samples=8,
             grouped_dm_n_act=8,
             grouped_branch_count=3,
             warmup=3,
@@ -103,10 +103,10 @@ function _platform_scale_config(name::AbstractString)
     return (
         scale=scale,
         single_resolution=72,
-        single_n_subap=18,
+        single_wfs_samples=18,
         single_dm_n_act=18,
         grouped_resolution=48,
-        grouped_n_subap=12,
+        grouped_wfs_samples=12,
         grouped_dm_n_act=12,
         grouped_branch_count=4,
         warmup=2,
@@ -119,7 +119,7 @@ function _build_recon(dm, wfs, tel, src)
     return ModalReconstructor(imat; gain=eltype(dm.state.coefs)(0.5))
 end
 
-function _runtime_components(::Type{T}, BackendArray, resolution::Int, n_subap::Int, n_act::Int;
+function _runtime_components(::Type{T}, BackendArray, resolution::Int, wfs_samples::Int, n_act::Int;
     sensor::Symbol=:sh) where {T<:AbstractFloat}
     tel = Telescope(resolution=resolution, diameter=T(8.0), sampling_time=T(1e-3),
         central_obstruction=T(0.0), T=T, backend=BackendArray)
@@ -127,9 +127,9 @@ function _runtime_components(::Type{T}, BackendArray, resolution::Int, n_subap::
     atm = KolmogorovAtmosphere(tel; r0=T(0.2), L0=T(25.0), T=T, backend=BackendArray)
     dm = DeformableMirror(tel; n_act=n_act, influence_width=T(0.3), T=T, backend=BackendArray)
     wfs = if sensor == :sh
-        ShackHartmann(tel; n_subap=n_subap, mode=Diffractive(), T=T, backend=BackendArray)
+        ShackHartmann(tel; n_lenslets=wfs_samples, mode=Diffractive(), T=T, backend=BackendArray)
     elseif sensor == :pyr
-        PyramidWFS(tel; n_subap=n_subap, modulation=T(1.0), mode=Diffractive(), T=T, backend=BackendArray)
+        PyramidWFS(tel; pupil_samples=wfs_samples, modulation=T(1.0), mode=Diffractive(), T=T, backend=BackendArray)
     else
         error("unsupported sensor '$sensor'")
     end
@@ -138,9 +138,9 @@ function _runtime_components(::Type{T}, BackendArray, resolution::Int, n_subap::
     return sim, recon
 end
 
-function _build_branch(::Type{T}, BackendArray, resolution::Int, n_subap::Int, n_act::Int,
+function _build_branch(::Type{T}, BackendArray, resolution::Int, wfs_samples::Int, n_act::Int,
     seed::Integer; sensor::Symbol=:sh, science::Bool=false, label::Symbol=Symbol("branch_", seed)) where {T<:AbstractFloat}
-    sim, recon = _runtime_components(T, BackendArray, resolution, n_subap, n_act; sensor=sensor)
+    sim, recon = _runtime_components(T, BackendArray, resolution, wfs_samples, n_act; sensor=sensor)
     wfs_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=BackendArray)
     science_det = science ?
         Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=BackendArray) :
@@ -174,7 +174,7 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
         products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=true),
     )
     single_branch = _build_branch(T, BackendArray,
-        cfg.single_resolution, cfg.single_n_subap, cfg.single_dm_n_act, 11;
+        cfg.single_resolution, cfg.single_wfs_samples, cfg.single_dm_n_act, 11;
         sensor=:pyr, science=true, label=:main)
     build_t0 = time_ns()
     single = build_platform_scenario(single_cfg, single_branch)
@@ -189,13 +189,13 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
 
     compatible_branches = ntuple(i ->
         _build_branch(T, BackendArray,
-            cfg.grouped_resolution, cfg.grouped_n_subap, cfg.grouped_dm_n_act, 100 + i;
+            cfg.grouped_resolution, cfg.grouped_wfs_samples, cfg.grouped_dm_n_act, 100 + i;
             sensor=:sh, label=Symbol("compatible_", i)),
         cfg.grouped_branch_count,
     )
     mixed_branches = ntuple(i ->
         _build_branch(T, BackendArray,
-            cfg.grouped_resolution, cfg.grouped_n_subap, cfg.grouped_dm_n_act, 200 + i;
+            cfg.grouped_resolution, cfg.grouped_wfs_samples, cfg.grouped_dm_n_act, 200 + i;
             sensor=(i == cfg.grouped_branch_count ? :pyr : :sh), label=Symbol("mixed_", i)),
         cfg.grouped_branch_count,
     )

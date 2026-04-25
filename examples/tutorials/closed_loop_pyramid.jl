@@ -2,7 +2,7 @@ include(joinpath(@__DIR__, "common.jl"))
 
 function main(; n_iter::Int=4)
     result = run_closed_loop_example(
-        (tel, n_subap) -> PyramidWFS(tel; n_subap=n_subap, mode=Diffractive(), modulation=1.0,
+        (tel, pupil_samples) -> PyramidWFS(tel; pupil_samples=pupil_samples, mode=Diffractive(), modulation=1.0,
             modulation_points=4, diffraction_padding=2);
         n_iter=n_iter,
     )

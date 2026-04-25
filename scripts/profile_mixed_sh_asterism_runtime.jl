@@ -70,7 +70,7 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=20, warm
         T=T,
     )
     ast = Asterism([ngs, lgs])
-    wfs = ShackHartmann(tel; n_subap=14, mode=Diffractive(), T=T, backend=BackendArray)
+    wfs = ShackHartmann(tel; n_lenslets=14, mode=Diffractive(), T=T, backend=BackendArray)
     det = Detector(noise=NoiseNone(), integration_time=T(1e-3), qe=T(1), binning=1, T=T, backend=BackendArray)
 
     rng = MersenneTwister(1)

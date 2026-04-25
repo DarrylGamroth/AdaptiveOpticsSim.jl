@@ -933,35 +933,36 @@ function apply_reference_opd!(tel::Telescope, cfg::AbstractDict{<:AbstractString
 end
 
 function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:Any}, tel::Telescope)
-    n_subap = Int(cfg["n_subap"])
     threshold = Float64(get(cfg, "threshold", 0.1))
     mode = parse_sensing_mode(get(cfg, "mode", "geometric"))
     if kind in (:shack_hartmann_slopes, :shack_hartmann_frame)
+        n_lenslets = Int(cfg["n_lenslets"])
         pixel_scale = get(cfg, "pixel_scale", nothing)
         n_pix_subap = get(cfg, "n_pix_subap", nothing)
         threshold_cog = Float64(get(cfg, "threshold_cog", 0.01))
         threshold_convolution = Float64(get(cfg, "threshold_convolution", 0.05))
         half_pixel_shift = Bool(get(cfg, "half_pixel_shift", false))
         if pixel_scale === nothing && n_pix_subap === nothing
-            return ShackHartmann(tel; n_subap=n_subap, threshold=threshold, mode=mode,
+            return ShackHartmann(tel; n_lenslets=n_lenslets, threshold=threshold, mode=mode,
                 threshold_cog=threshold_cog, threshold_convolution=threshold_convolution,
                 half_pixel_shift=half_pixel_shift)
         elseif n_pix_subap === nothing
-            return ShackHartmann(tel; n_subap=n_subap, threshold=threshold, mode=mode,
+            return ShackHartmann(tel; n_lenslets=n_lenslets, threshold=threshold, mode=mode,
                 pixel_scale=Float64(pixel_scale), threshold_cog=threshold_cog,
                 threshold_convolution=threshold_convolution, half_pixel_shift=half_pixel_shift)
         elseif pixel_scale === nothing
-            return ShackHartmann(tel; n_subap=n_subap, threshold=threshold, mode=mode,
+            return ShackHartmann(tel; n_lenslets=n_lenslets, threshold=threshold, mode=mode,
                 n_pix_subap=Int(n_pix_subap), threshold_cog=threshold_cog,
                 threshold_convolution=threshold_convolution, half_pixel_shift=half_pixel_shift)
         end
-        return ShackHartmann(tel; n_subap=n_subap, threshold=threshold, mode=mode,
+        return ShackHartmann(tel; n_lenslets=n_lenslets, threshold=threshold, mode=mode,
             pixel_scale=Float64(pixel_scale), n_pix_subap=Int(n_pix_subap),
             threshold_cog=threshold_cog, threshold_convolution=threshold_convolution,
             half_pixel_shift=half_pixel_shift)
     elseif kind in (:pyramid_slopes, :pyramid_frame)
+        pupil_samples = Int(cfg["pupil_samples"])
         return PyramidWFS(tel;
-            n_subap=n_subap,
+            pupil_samples=pupil_samples,
             threshold=threshold,
             modulation=Float64(get(cfg, "modulation", 0.0)),
             light_ratio=Float64(get(cfg, "light_ratio", 0.0)),
@@ -980,8 +981,9 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
             mode=mode,
         )
     elseif kind === :bioedge_slopes
+        pupil_samples = Int(cfg["pupil_samples"])
         return BioEdgeWFS(tel;
-            n_subap=n_subap,
+            pupil_samples=pupil_samples,
             threshold=threshold,
             modulation=Float64(get(cfg, "modulation", 0.0)),
             light_ratio=Float64(get(cfg, "light_ratio", 0.0)),
@@ -999,8 +1001,9 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
             mode=mode,
         )
     elseif kind === :zernike_signal
+        pupil_samples = Int(cfg["pupil_samples"])
         return ZernikeWFS(tel;
-            n_subap=n_subap,
+            pupil_samples=pupil_samples,
             threshold=threshold,
             phase_shift_pi=Float64(get(cfg, "phase_shift_pi", 0.5)),
             spot_radius_lambda_over_d=Float64(get(cfg, "spot_radius_lambda_over_d", 1.0)),
@@ -1009,6 +1012,7 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
             binning=Int(get(cfg, "binning", 1)),
         )
     elseif kind === :curvature_signal
+        pupil_samples = Int(cfg["pupil_samples"])
         readout_name = lowercase(String(get(cfg, "readout_model", "frame")))
         readout_model = if readout_name == "frame"
             CurvatureFrameReadout()
@@ -1024,12 +1028,12 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
             minus_background=Float64(get(cfg, "minus_background", 0.0)),
         )
         return CurvatureWFS(tel;
-            n_subap=n_subap,
+            pupil_samples=pupil_samples,
             threshold=threshold,
             defocus_rms_nm=Float64(get(cfg, "defocus_rms_nm", 500.0)),
             diffraction_padding=Int(get(cfg, "diffraction_padding", 2)),
             readout_crop_resolution=Int(get(cfg, "readout_crop_resolution", tel.params.resolution)),
-            readout_pixels_per_subap=Int(get(cfg, "readout_pixels_per_subap", 1)),
+            readout_pixels_per_sample=Int(get(cfg, "readout_pixels_per_sample", 1)),
             readout_model=readout_model,
             branch_response=branch_response,
         )
@@ -1329,7 +1333,7 @@ function compute_reference_actual_ka_cpu(case::ReferenceCase)
             throw(InvalidConfiguration("KA CPU reference path currently supports only geometric Shack-Hartmann cases"))
         end
         update_valid_mask!(wfs, tel)
-        n_sub = wfs.params.n_subap
+        n_sub = wfs.params.n_lenslets
         sub = div(tel.params.resolution, n_sub)
         offset = n_sub * n_sub
         slopes = similar(wfs.state.slopes)
@@ -1434,7 +1438,7 @@ function create_reference_fixture(root::AbstractString)
             "bias" => 0.0,
         ),
         "wfs" => Dict(
-            "n_subap" => 4,
+            "n_lenslets" => 4,
             "mode" => "geometric",
             "threshold" => 0.1,
         ),
@@ -1524,7 +1528,7 @@ function create_reference_fixture(root::AbstractString)
         ),
         "wfs" => Dict(
             "kind" => "shack_hartmann_slopes",
-            "n_subap" => 4,
+            "n_lenslets" => 4,
             "mode" => "geometric",
             "threshold" => 0.1,
         ),
@@ -1568,7 +1572,7 @@ function create_reference_fixture(root::AbstractString)
         ),
         "wfs" => Dict(
             "kind" => "pyramid_slopes",
-            "n_subap" => 4,
+            "pupil_samples" => 4,
             "mode" => "diffractive",
             "threshold" => 0.0,
             "modulation" => 3.0,

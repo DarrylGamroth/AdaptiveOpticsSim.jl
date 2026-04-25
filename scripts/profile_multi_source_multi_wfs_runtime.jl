@@ -75,10 +75,10 @@ function _multi_source_scale_config(name::AbstractString)
         return (
             scale=scale,
             asterism_resolution=32,
-            asterism_n_subap=4,
+            asterism_wfs_samples=4,
             source_coords=((0.0, 0.0), (1.0, 45.0)),
             runtime_resolution=16,
-            runtime_n_subap=4,
+            runtime_wfs_samples=4,
             runtime_dm_n_act=4,
             branch_count=2,
             warmup=5,
@@ -88,10 +88,10 @@ function _multi_source_scale_config(name::AbstractString)
         return (
             scale=scale,
             asterism_resolution=64,
-            asterism_n_subap=8,
+            asterism_wfs_samples=8,
             source_coords=((0.0, 0.0), (1.0, 45.0), (1.5, 135.0), (2.0, 225.0)),
             runtime_resolution=32,
-            runtime_n_subap=8,
+            runtime_wfs_samples=8,
             runtime_dm_n_act=8,
             branch_count=3,
             warmup=3,
@@ -101,10 +101,10 @@ function _multi_source_scale_config(name::AbstractString)
     return (
         scale=scale,
         asterism_resolution=96,
-        asterism_n_subap=12,
+        asterism_wfs_samples=12,
         source_coords=((0.0, 0.0), (1.0, 45.0), (1.5, 135.0), (2.0, 225.0), (2.5, 315.0), (3.0, 90.0)),
         runtime_resolution=72,
-        runtime_n_subap=12,
+        runtime_wfs_samples=12,
         runtime_dm_n_act=12,
         branch_count=4,
         warmup=2,
@@ -130,7 +130,7 @@ function _source_list(coords, T::Type{<:AbstractFloat})
     return [Source(band=:I, magnitude=0.0, coordinates=(coord[1], coord[2]), T=T) for coord in coords]
 end
 
-function _build_runtime_branch(::Type{T}, BackendArray, resolution::Int, n_subap::Int, n_act::Int,
+function _build_runtime_branch(::Type{T}, BackendArray, resolution::Int, wfs_samples::Int, n_act::Int,
     seed::Integer; sensor::Symbol=:sh) where {T<:AbstractFloat}
     tel = Telescope(resolution=resolution, diameter=T(8.0), sampling_time=T(1e-3),
         central_obstruction=T(0.0), T=T, backend=BackendArray)
@@ -138,8 +138,8 @@ function _build_runtime_branch(::Type{T}, BackendArray, resolution::Int, n_subap
     atm = KolmogorovAtmosphere(tel; r0=T(0.2), L0=T(25.0), T=T, backend=BackendArray)
     dm = DeformableMirror(tel; n_act=n_act, influence_width=T(0.3), T=T, backend=BackendArray)
     wfs = sensor == :sh ?
-        ShackHartmann(tel; n_subap=n_subap, mode=Diffractive(), T=T, backend=BackendArray) :
-        PyramidWFS(tel; n_subap=n_subap, modulation=T(1.0), mode=Diffractive(), T=T, backend=BackendArray)
+        ShackHartmann(tel; n_lenslets=wfs_samples, mode=Diffractive(), T=T, backend=BackendArray) :
+        PyramidWFS(tel; pupil_samples=wfs_samples, modulation=T(1.0), mode=Diffractive(), T=T, backend=BackendArray)
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=BackendArray)
     sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
     return ClosedLoopBranchConfig(
@@ -167,33 +167,33 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
 
     _seed_opd!(tel, T)
 
-    sh = ShackHartmann(tel; n_subap=cfg.asterism_n_subap, mode=Diffractive(), T=T, backend=BackendArray)
+    sh = ShackHartmann(tel; n_lenslets=cfg.asterism_wfs_samples, mode=Diffractive(), T=T, backend=BackendArray)
     sh_mean_ns, sh_p95_ns, sh_alloc_bytes = _timed_stats!(() -> begin
         measure!(sh, tel, ast, det; rng=rng)
         _sync_backend!(backend_tag, sh.state.slopes)
     end; warmup=resolved_warmup, samples=resolved_samples)
 
-    pyr = PyramidWFS(tel; n_subap=cfg.asterism_n_subap, modulation=T(1.0), mode=Diffractive(), T=T, backend=BackendArray)
+    pyr = PyramidWFS(tel; pupil_samples=cfg.asterism_wfs_samples, modulation=T(1.0), mode=Diffractive(), T=T, backend=BackendArray)
     pyr_mean_ns, pyr_p95_ns, pyr_alloc_bytes = _timed_stats!(() -> begin
         measure!(pyr, tel, ast, det; rng=rng)
         _sync_backend!(backend_tag, pyr.state.slopes)
     end; warmup=resolved_warmup, samples=resolved_samples)
 
-    bio = BioEdgeWFS(tel; n_subap=cfg.asterism_n_subap, modulation=T(1.0), mode=Diffractive(), T=T, backend=BackendArray)
+    bio = BioEdgeWFS(tel; pupil_samples=cfg.asterism_wfs_samples, modulation=T(1.0), mode=Diffractive(), T=T, backend=BackendArray)
     bio_mean_ns, bio_p95_ns, bio_alloc_bytes = _timed_stats!(() -> begin
         measure!(bio, tel, ast, det; rng=rng)
         _sync_backend!(backend_tag, bio.state.slopes)
     end; warmup=resolved_warmup, samples=resolved_samples)
 
     compatible_branches = [_build_runtime_branch(T, BackendArray,
-        cfg.runtime_resolution, cfg.runtime_n_subap, cfg.runtime_dm_n_act, 10 + i; sensor=:sh)
+        cfg.runtime_resolution, cfg.runtime_wfs_samples, cfg.runtime_dm_n_act, 10 + i; sensor=:sh)
         for i in 1:cfg.branch_count]
     mixed_branches = vcat(
         [_build_runtime_branch(T, BackendArray,
-            cfg.runtime_resolution, cfg.runtime_n_subap, cfg.runtime_dm_n_act, 30 + i; sensor=:sh)
+            cfg.runtime_resolution, cfg.runtime_wfs_samples, cfg.runtime_dm_n_act, 30 + i; sensor=:sh)
             for i in 1:max(cfg.branch_count - 1, 1)],
         [_build_runtime_branch(T, BackendArray,
-            cfg.runtime_resolution, cfg.runtime_n_subap, cfg.runtime_dm_n_act, 40; sensor=:pyr)],
+            cfg.runtime_resolution, cfg.runtime_wfs_samples, cfg.runtime_dm_n_act, 40; sensor=:pyr)],
     )
     compatible_cfg = GroupedPlatformConfig(
         Tuple(map(branch -> branch.label, compatible_branches));
@@ -249,9 +249,9 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
         composite_mixed_alloc_bytes=mixed_alloc_bytes,
         source_count=length(cfg.source_coords),
         asterism_resolution=cfg.asterism_resolution,
-        asterism_n_subap=cfg.asterism_n_subap,
+        asterism_wfs_samples=cfg.asterism_wfs_samples,
         runtime_resolution=cfg.runtime_resolution,
-        runtime_n_subap=cfg.runtime_n_subap,
+        runtime_wfs_samples=cfg.runtime_wfs_samples,
         runtime_branch_count=cfg.branch_count,
         compatible_grouped_wfs_stack=!isnothing(compatible_stack),
         mixed_grouped_wfs_stack=!isnothing(mixed_stack),
@@ -287,9 +287,9 @@ function print_profile(result)
         :composite_mixed_alloc_bytes,
         :source_count,
         :asterism_resolution,
-        :asterism_n_subap,
+        :asterism_wfs_samples,
         :runtime_resolution,
-        :runtime_n_subap,
+        :runtime_wfs_samples,
         :runtime_branch_count,
         :compatible_grouped_wfs_stack,
         :compatible_grouped_wfs_stack_shape,

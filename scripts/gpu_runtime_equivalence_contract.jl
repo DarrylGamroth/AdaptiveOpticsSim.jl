@@ -222,7 +222,7 @@ function _build_lgs_case(backend, ::Type{T}, profile::Symbol) where {T<:Abstract
             T=T,
         )
     end
-    wfs = ShackHartmann(tel; n_subap=14, mode=Diffractive(), T=T, backend=backend)
+    wfs = ShackHartmann(tel; n_lenslets=14, mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1e-3), qe=T(1), binning=1, T=T, backend=backend)
     _set_deterministic_opd!(tel)
     return tel, src, wfs, det
@@ -265,7 +265,7 @@ function _build_mixed_sh_asterism_case(backend, ::Type{T}) where {T<:AbstractFlo
         T=T,
     )
     ast = Asterism([ngs, lgs])
-    wfs = ShackHartmann(tel; n_subap=14, mode=Diffractive(), T=T, backend=backend)
+    wfs = ShackHartmann(tel; n_lenslets=14, mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1e-3), qe=T(1), binning=1, T=T, backend=backend)
     _set_deterministic_opd!(tel)
     return tel, ast, wfs, det
@@ -299,7 +299,7 @@ function _build_zernike_case(backend, ::Type{T}) where {T<:AbstractFloat}
         backend=backend,
     )
     src = Source(band=:I, magnitude=T(0), T=T)
-    wfs = ZernikeWFS(tel; n_subap=8, diffraction_padding=2, T=T, backend=backend)
+    wfs = ZernikeWFS(tel; pupil_samples=8, diffraction_padding=2, T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1e-3), qe=T(1), binning=1, T=T, backend=backend)
     _set_deterministic_opd!(tel)
     return tel, src, wfs, det
@@ -334,15 +334,15 @@ end
 @inline _wfs_case_label(::Val{:bio}) = "bio"
 
 function _build_low_order_wfs(tel::Telescope, backend, ::Type{T}, ::Val{:sh}) where {T<:AbstractFloat}
-    return ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
+    return ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
 end
 
 function _build_low_order_wfs(tel::Telescope, backend, ::Type{T}, ::Val{:pyr}) where {T<:AbstractFloat}
-    return PyramidWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+    return PyramidWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
 end
 
 function _build_low_order_wfs(tel::Telescope, backend, ::Type{T}, ::Val{:bio}) where {T<:AbstractFloat}
-    return BioEdgeWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+    return BioEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
 end
 
 function _build_multi_optic_hil_case(backend, ::Type{T}, ::Val{:tiptilt}, wfs_case::Val{W}=Val(:sh)) where {T<:AbstractFloat,W}
@@ -387,7 +387,7 @@ function _build_multi_optic_hil_case(backend, ::Type{T}, ::Val{:steering}, ::Val
         labels=:steering, T=T, backend=backend)
     dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=backend)
     optic = CompositeControllableOptic(:steering => steering, :dm => dm)
-    wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
+    wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
     scenario = build_runtime_scenario(
         SingleRuntimeConfig(name=:steering_multi_optic_equivalence, branch_label=:main,
@@ -414,7 +414,7 @@ function _build_multi_optic_hil_case(backend, ::Type{T}, ::Val{:focus}, ::Val{:s
     focus = FocusStage(tel; scale=T(0.1), T=T, backend=backend, label=:focus)
     dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=backend)
     optic = CompositeControllableOptic(:focus => focus, :dm => dm)
-    wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
+    wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
     scenario = build_runtime_scenario(
         SingleRuntimeConfig(name=:focus_multi_optic_equivalence, branch_label=:main,

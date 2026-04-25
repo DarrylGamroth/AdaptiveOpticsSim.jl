@@ -44,7 +44,7 @@ function build_scenario(; seed::Integer=91)
     tiptilt = TipTiltMirror(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:tiptilt)
     dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=CPUBackend())
     optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm)
-    wfs = ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=CPUBackend())
+    wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=CPUBackend())
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=CPUBackend())
     sim = AOSimulation(tel, src, atm, optic, wfs)
     scenario = build_runtime_scenario(
@@ -66,17 +66,17 @@ end
 
 function build_runtime_wfs(tel::Telescope, ::Val{:sh}; T::Type{<:AbstractFloat}=Float32,
     backend::AbstractArrayBackend=CPUBackend())
-    return ShackHartmann(tel; n_subap=4, mode=Diffractive(), T=T, backend=backend)
+    return ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
 end
 
 function build_runtime_wfs(tel::Telescope, ::Val{:pyr}; T::Type{<:AbstractFloat}=Float32,
     backend::AbstractArrayBackend=CPUBackend())
-    return PyramidWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+    return PyramidWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
 end
 
 function build_runtime_wfs(tel::Telescope, ::Val{:bio}; T::Type{<:AbstractFloat}=Float32,
     backend::AbstractArrayBackend=CPUBackend())
-    return BioEdgeWFS(tel; n_subap=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+    return BioEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
 end
 
 @inline build_runtime_detector_response(::Val{:null}, ::Type{T}, backend::AbstractArrayBackend) where {T<:AbstractFloat} = NullFrameResponse()

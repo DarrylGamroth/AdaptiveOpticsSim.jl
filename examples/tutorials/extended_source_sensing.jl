@@ -12,15 +12,15 @@ function main(; resolution::Int=24)
     compute_zernike!(zb, tel)
     @. tel.state.opd = 5e-8 * zb.modes[:, :, 5]
 
-    sh_point = ShackHartmann(tel; n_subap=6, mode=Diffractive())
-    sh_ext = ShackHartmann(tel; n_subap=6, mode=Diffractive())
+    sh_point = ShackHartmann(tel; n_lenslets=6, mode=Diffractive())
+    sh_ext = ShackHartmann(tel; n_lenslets=6, mode=Diffractive())
     point_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_point, tel, src)
     ext_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_ext, tel, ext)
     point_slopes = copy(measure!(sh_point, tel, src))
     ext_slopes = copy(measure!(sh_ext, tel, ext))
 
-    pyr_point = PyramidWFS(tel; n_subap=6, mode=Diffractive(), modulation=1.0)
-    pyr_ext = PyramidWFS(tel; n_subap=6, mode=Diffractive(), modulation=1.0)
+    pyr_point = PyramidWFS(tel; pupil_samples=6, mode=Diffractive(), modulation=1.0)
+    pyr_ext = PyramidWFS(tel; pupil_samples=6, mode=Diffractive(), modulation=1.0)
     pyr_point_slopes = copy(measure!(pyr_point, tel, src))
     pyr_ext_slopes = copy(measure!(pyr_ext, tel, ext))
 

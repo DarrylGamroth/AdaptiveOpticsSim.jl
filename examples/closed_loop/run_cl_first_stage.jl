@@ -15,7 +15,7 @@ sim = AdaptiveOpticsSim.initialize_ao_shwfs(
     wind_direction=[0.0, 90.0],
     altitude=[0.0, 8000.0],
     n_act=4,
-    n_subap=4,
+    n_lenslets=4,
 )
 
 imat = interaction_matrix(sim.optic, sim.wfs, sim.tel; amplitude=0.1)

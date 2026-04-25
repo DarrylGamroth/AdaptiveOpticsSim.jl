@@ -87,7 +87,7 @@ function _resolve_model(name::AbstractString)
             resolution=40,
             source_magnitude=5.752575f0,
             calibration_magnitude=3.252575f0,
-            n_subap=20,
+            pupil_samples=20,
             modulation=5.0f0,
             modulation_points=32,
             light_ratio=0.1f0,
@@ -102,7 +102,7 @@ function _resolve_model(name::AbstractString)
             resolution=480,
             source_magnitude=3.252575f0,
             calibration_magnitude=3.252575f0,
-            n_subap=20,
+            pupil_samples=20,
             modulation=0.0f0,
             modulation_points=1,
             light_ratio=0.1f0,
@@ -224,7 +224,7 @@ function run_profile(; backend_name::AbstractString="cpu", model_name::AbstractS
     )
     dm = DeformableMirror(tel; n_act=16, influence_width=T(0.2), T=T, backend=BackendArray)
     wfs = PyramidWFS(tel;
-        n_subap=cfg.n_subap,
+        pupil_samples=cfg.pupil_samples,
         threshold=T(0.1),
         modulation=cfg.modulation,
         modulation_points=cfg.modulation_points,
@@ -339,7 +339,7 @@ function run_profile(; backend_name::AbstractString="cpu", model_name::AbstractS
     println("  gain_detector_sensor: ", gain_metadata.sensor)
     println("  gain_detector_nominal_resolution: ", cameras.cs165cu.resolution)
     println("  pupil_resolution: ", cfg.resolution)
-    println("  n_subap: ", cfg.n_subap)
+    println("  pupil_samples: ", cfg.pupil_samples)
     println("  dm_grid_shape: ", (dm.params.n_act, dm.params.n_act))
     println("  dm_command_length: ", length(dm.state.coefs))
     println("  slope_length: ", length(wfs.state.slopes))

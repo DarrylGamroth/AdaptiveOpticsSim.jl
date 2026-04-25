@@ -121,11 +121,11 @@ function atmosphere_gsc_trace(
     return trace
 end
 
-function main(; resolution::Int=24, n_subap::Int=4)
+function main(; resolution::Int=24, pupil_samples::Int=4)
     tel = base_telescope(resolution=resolution, central_obstruction=0.0)
     src = base_source(band=:R, magnitude=8.0)
     sci = base_source(band=:K, magnitude=8.0, coordinates=(0.5, 0.0))
-    wfs = PyramidWFS(tel; n_subap=n_subap, mode=Diffractive(), threshold=0.5, modulation=3.0,
+    wfs = PyramidWFS(tel; pupil_samples=pupil_samples, mode=Diffractive(), threshold=0.5, modulation=3.0,
         normalization=IncidenceFluxNormalization(),
         modulation_points=8, diffraction_padding=2, n_pix_separation=2, n_pix_edge=1)
     basis = cartesian_basis(tel, 4)

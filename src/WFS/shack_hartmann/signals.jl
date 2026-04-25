@@ -84,7 +84,7 @@ end
 end
 
 function sh_signal_from_spots_device_stats!(style::AcceleratorStyle, wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     offset = n_sub * n_sub
     fill!(wfs.state.spot_stats, zero(eltype(wfs.state.spot_stats)))
     launch_kernel!(style, sh_spot_cutoff_stats_kernel!, wfs.state.spot_stats, wfs.state.spot_cube,
@@ -96,7 +96,7 @@ function sh_signal_from_spots_device_stats!(style::AcceleratorStyle, wfs::ShackH
 end
 
 function sh_signal_from_spots_calibrated_device_stats!(style::AcceleratorStyle, wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     offset = n_sub * n_sub
     reference = vec(wfs.state.reference_signal_2d)
     fill!(wfs.state.spot_stats, zero(eltype(wfs.state.spot_stats)))
@@ -143,7 +143,7 @@ end
 
 function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::AbstractSource)
     n = tel.params.resolution
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     sub = div(n, n_sub)
     pad = size(wfs.state.field, 1)
     ox = div(pad - sub, 2)
@@ -173,7 +173,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
     if sh_uses_rocm_safe_sensing_plan(wfs)
         sh_refresh_valid_mask_host!(wfs)
         n = tel.params.resolution
-        n_sub = wfs.params.n_subap
+        n_sub = wfs.params.n_lenslets
         sub = div(n, n_sub)
         pad = size(wfs.state.field, 1)
         ox = div(pad - sub, 2)
@@ -285,7 +285,7 @@ end
 
 function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::LGSSource)
     n = tel.params.resolution
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     sub = div(n, n_sub)
     pad = size(wfs.state.field, 1)
     ox = div(pad - sub, 2)
@@ -350,7 +350,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
     if sh_uses_rocm_safe_sensing_plan(wfs)
         sh_refresh_valid_mask_host!(wfs)
         n = tel.params.resolution
-        n_sub = wfs.params.n_subap
+        n_sub = wfs.params.n_lenslets
         sub = div(n, n_sub)
         pad = size(wfs.state.field, 1)
         ox = div(pad - sub, 2)
@@ -381,7 +381,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
     end
     compute_intensity_stack!(style, wfs, tel, src)
     sample_spot_stack!(style, wfs)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     capture_sampled_spot_stack!(wfs, det, rng)
     launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
         n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
@@ -428,7 +428,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
             @. wfs.state.spot_cube_accum = wfs.state.spot_cube_accum + wfs.state.spot_cube
         end
         copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
-        n_sub = wfs.params.n_subap
+        n_sub = wfs.params.n_lenslets
         capture_stack!(det, wfs.state.spot_cube, wfs.state.spot_cube_accum; rng=rng)
         launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
             n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
@@ -436,7 +436,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
     end
     compute_intensity_spectral_stack!(style, wfs, tel, src)
     sample_spot_stack!(style, wfs)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     capture_sampled_spot_stack!(wfs, det, rng)
     launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
         n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
@@ -479,7 +479,7 @@ end
 function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmann, tel::Telescope, src::LGSSource,
     det::AbstractDetector, rng::AbstractRNG)
     n = tel.params.resolution
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     sub = div(n, n_sub)
     pad = size(wfs.state.field, 1)
     ox = div(pad - sub, 2)
@@ -529,7 +529,7 @@ function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs:
     apply_elongation_stack!(wfs.state.intensity_stack, lgs_elongation_factor(src),
         tmp_view, wfs.state.elongation_kernel)
     sample_spot_stack!(style, wfs)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     capture_sampled_spot_stack!(wfs, det, rng)
     launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
         n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
@@ -537,7 +537,7 @@ function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs:
 end
 
 function sampled_spots_peak_lgs!(::LGSProfileNaProfile, style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::LGSSource)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     compute_intensity_stack!(style, wfs, tel, src)
     ensure_lgs_kernels!(wfs, tel, src)
     apply_lgs_convolution_stack!(wfs.state.intensity_stack, wfs.state.lgs_kernel_fft,
@@ -549,7 +549,7 @@ end
 
 function sampled_spots_peak_lgs!(::LGSProfileNaProfile, style::AcceleratorStyle, wfs::ShackHartmann, tel::Telescope, src::LGSSource,
     det::AbstractDetector, rng::AbstractRNG)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     compute_intensity_stack!(style, wfs, tel, src)
     ensure_lgs_kernels!(wfs, tel, src)
     apply_lgs_convolution_stack!(wfs.state.intensity_stack, wfs.state.lgs_kernel_fft,
@@ -566,7 +566,7 @@ function sh_signal_from_spots!(wfs::ShackHartmann, cutoff::T) where {T<:Abstract
 end
 
 function sh_signal_from_spots!(::ScalarCPUStyle, wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     idx = 1
     @inbounds for i in 1:n_sub, j in 1:n_sub
         if wfs.state.valid_mask[i, j]
@@ -590,7 +590,7 @@ end
 function sh_signal_from_spots!(::AcceleratorStyle, wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}
     if sh_uses_rocm_safe_sensing_plan(wfs)
         sh_refresh_valid_mask_host!(wfs)
-        n_sub = wfs.params.n_subap
+        n_sub = wfs.params.n_lenslets
         offset = n_sub * n_sub
         host_slopes = wfs.state.slopes_host
         idx = 1
@@ -617,7 +617,7 @@ function sh_signal_from_spots!(::AcceleratorStyle, wfs::ShackHartmann, cutoff::T
         style = execution_style(wfs.state.slopes)
         return sh_signal_from_spots_device_stats!(style, wfs, cutoff)
     end
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     offset = n_sub * n_sub
     style = execution_style(wfs.state.slopes)
     launch_kernel!(style, sh_spot_centroid_kernel!, wfs.state.slopes, wfs.state.spot_cube,
@@ -639,7 +639,7 @@ end
 function sh_signal_from_spots_calibrated!(::AcceleratorStyle, wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}
     if sh_uses_rocm_safe_sensing_plan(wfs)
         sh_refresh_valid_mask_host!(wfs)
-        n_sub = wfs.params.n_subap
+        n_sub = wfs.params.n_lenslets
         offset = n_sub * n_sub
         host_slopes = wfs.state.slopes_host
         reference = wfs.state.reference_signal_host
@@ -668,7 +668,7 @@ function sh_signal_from_spots_calibrated!(::AcceleratorStyle, wfs::ShackHartmann
         style = execution_style(wfs.state.slopes)
         return sh_signal_from_spots_calibrated_device_stats!(style, wfs, cutoff)
     end
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     offset = n_sub * n_sub
     style = execution_style(wfs.state.slopes)
     reference = vec(wfs.state.reference_signal_2d)
@@ -880,7 +880,7 @@ function ensure_sh_calibration!(wfs::ShackHartmann, tel::Telescope, src::Abstrac
 
     T = eltype(wfs.state.slopes)
     n = tel.params.resolution
-    pixel_scale_init = sh_pixel_scale_init(tel.params.diameter / wfs.params.n_subap, wfs.state.effective_padding, src)
+    pixel_scale_init = sh_pixel_scale_init(tel.params.diameter / wfs.params.n_lenslets, wfs.state.effective_padding, src)
     pixel_scale = T(wfs.state.binning_pixel_scale) * pixel_scale_init
     rad2arcsec = T(180 * 3600 / π)
     scale = T(T(tel.params.diameter) * pixel_scale / (T(2π) * rad2arcsec))

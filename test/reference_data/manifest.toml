@@ -52,7 +52,7 @@ scale_y = -2.0000000000000001e-09
 bias = 0.0000000000000000e+00
 
 [cases.shack_hartmann_geometric_ramp_xy.wfs]
-n_subap = 4
+n_lenslets = 4
 threshold = 0.0000000000000000e+00
 mode = "geometric"
 
@@ -85,7 +85,7 @@ scale_y = 4.0000000000000002e-09
 bias = 0.0000000000000000e+00
 
 [cases.shack_hartmann_geometric_ramp_y.wfs]
-n_subap = 4
+n_lenslets = 4
 threshold = 0.0000000000000000e+00
 mode = "geometric"
 
@@ -118,7 +118,7 @@ scale_y = -2.0000000000000001e-09
 bias = 0.0000000000000000e+00
 
 [cases.shack_hartmann_diffractive_ramp.wfs]
-n_subap = 4
+n_lenslets = 4
 threshold = 0.0000000000000000e+00
 mode = "diffractive"
 pixel_scale = 5.9999999999999998e-02
@@ -148,7 +148,7 @@ mode_index = 1
 amplitude = 5.0000000000000001e-09
 
 [cases.shack_hartmann_diffractive_tip_mode.wfs]
-n_subap = 4
+n_lenslets = 4
 threshold = 0.0000000000000000e+00
 mode = "diffractive"
 pixel_scale = 5.9999999999999998e-02
@@ -189,7 +189,7 @@ mode_index = 2
 amplitude = 5.0000000000000001e-09
 
 [cases.shack_hartmann_diffractive_tilt_mode.wfs]
-n_subap = 4
+n_lenslets = 4
 threshold = 0.0000000000000000e+00
 mode = "diffractive"
 pixel_scale = 5.9999999999999998e-02
@@ -225,7 +225,7 @@ band = "I"
 magnitude = 0.0000000000000000e+00
 
 [cases.shack_hartmann_diffractive_tiptilt_dm.wfs]
-n_subap = 4
+n_lenslets = 4
 threshold = 0.0000000000000000e+00
 mode = "diffractive"
 pixel_scale = 5.9999999999999998e-02
@@ -277,7 +277,7 @@ scale_y = -2.0000000000000001e-09
 bias = 0.0000000000000000e+00
 
 [cases.pyramid_diffractive_ramp.wfs]
-n_subap = 4
+pupil_samples = 4
 threshold = 0.0000000000000000e+00
 mode = "diffractive"
 modulation = 1.0000000000000000e+00
@@ -311,7 +311,7 @@ mode_index = 1
 amplitude = 5.0000000000000001e-09
 
 [cases.pyramid_diffractive_tip_mode.wfs]
-n_subap = 4
+pupil_samples = 4
 threshold = 0.0000000000000000e+00
 mode = "diffractive"
 modulation = 1.0000000000000000e+00
@@ -351,7 +351,7 @@ band = "I"
 magnitude = 0.0000000000000000e+00
 
 [cases.pyramid_diffractive_tiptilt_dm.wfs]
-n_subap = 4
+pupil_samples = 4
 threshold = 0.0000000000000000e+00
 mode = "diffractive"
 modulation = 1.0000000000000000e+00
@@ -407,7 +407,7 @@ scale_y = -2.0000000000000001e-09
 bias = 0.0000000000000000e+00
 
 [cases.bioedge_diffractive_ramp.wfs]
-n_subap = 4
+pupil_samples = 4
 threshold = 0.0000000000000000e+00
 mode = "diffractive"
 modulation = 1.0000000000000000e+00
@@ -441,7 +441,7 @@ mode_index = 1
 amplitude = 5.0000000000000001e-09
 
 [cases.bioedge_diffractive_tip_mode.wfs]
-n_subap = 4
+pupil_samples = 4
 threshold = 0.0000000000000000e+00
 mode = "diffractive"
 modulation = 1.0000000000000000e+00
@@ -482,7 +482,7 @@ band = "I"
 magnitude = 0.0000000000000000e+00
 
 [cases.bioedge_diffractive_tiptilt_dm.wfs]
-n_subap = 4
+pupil_samples = 4
 threshold = 0.0000000000000000e+00
 mode = "diffractive"
 modulation = 1.0000000000000000e+00
@@ -538,7 +538,7 @@ mode_index = 1
 amplitude = 4.9999999999999998e-08
 
 [cases.gain_sensing_camera_optical_gains.wfs]
-n_subap = 4
+pupil_samples = 4
 threshold = 0.0000000000000000e+00
 mode = "diffractive"
 modulation = 3.0000000000000000e+00
@@ -626,7 +626,7 @@ magnitude = 0.0000000000000000e+00
 
 [cases.closed_loop_shack_hartmann_trace.wfs]
 kind = "shack_hartmann_slopes"
-n_subap = 4
+n_lenslets = 4
 mode = "diffractive"
 threshold = 0.0000000000000000e+00
 pixel_scale = 5.9999999999999998e-02
@@ -664,7 +664,7 @@ magnitude = 0.0000000000000000e+00
 
 [cases.closed_loop_pyramid_trace.wfs]
 kind = "pyramid_slopes"
-n_subap = 4
+pupil_samples = 4
 mode = "diffractive"
 threshold = 0.0000000000000000e+00
 modulation = 1.0000000000000000e+00
@@ -703,7 +703,7 @@ magnitude = 0.0000000000000000e+00
 
 [cases.closed_loop_bioedge_trace.wfs]
 kind = "bioedge_slopes"
-n_subap = 4
+pupil_samples = 4
 mode = "diffractive"
 threshold = 0.0000000000000000e+00
 modulation = 1.0000000000000000e+00
@@ -746,7 +746,7 @@ magnitude = 8.0000000000000000e+00
 
 [cases.gsc_closed_loop_trace.wfs]
 kind = "pyramid_slopes"
-n_subap = 4
+pupil_samples = 4
 mode = "diffractive"
 threshold = 5.0000000000000000e-01
 light_ratio = 5.0000000000000000e-01
@@ -796,7 +796,7 @@ coordinates = [5.0000000000000000e-01, 0.0000000000000000e+00]
 
 [cases.gsc_atmosphere_replay_trace_bounded.wfs]
 kind = "pyramid_slopes"
-n_subap = 4
+pupil_samples = 4
 mode = "diffractive"
 threshold = 5.0000000000000000e-01
 light_ratio = 5.0000000000000000e-01
@@ -846,7 +846,7 @@ magnitude = 8.0000000000000000e+00
 
 [cases.gsc_branch_step_modulation_frame.wfs]
 kind = "pyramid_slopes"
-n_subap = 4
+pupil_samples = 4
 mode = "diffractive"
 threshold = 5.0000000000000000e-01
 light_ratio = 5.0000000000000000e-01
@@ -889,7 +889,7 @@ magnitude = 8.0000000000000000e+00
 
 [cases.gsc_branch_step_optical_gains.wfs]
 kind = "pyramid_slopes"
-n_subap = 4
+pupil_samples = 4
 mode = "diffractive"
 threshold = 5.0000000000000000e-01
 light_ratio = 5.0000000000000000e-01
@@ -932,7 +932,7 @@ magnitude = 8.0000000000000000e+00
 
 [cases.gsc_branch_step_signal.wfs]
 kind = "pyramid_slopes"
-n_subap = 4
+pupil_samples = 4
 mode = "diffractive"
 threshold = 5.0000000000000000e-01
 light_ratio = 5.0000000000000000e-01

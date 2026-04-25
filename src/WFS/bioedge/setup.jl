@@ -77,7 +77,7 @@ end
 end
 
 struct BioEdgeParams{T<:AbstractFloat,M,N<:WFSNormalization}
-    n_subap::Int
+    pupil_samples::Int
     threshold::T
     light_ratio::T
     normalization::N
@@ -170,7 +170,7 @@ focal-plane BioEdge masks. Slopes are then built from the resulting
 left/right and top/bottom differential signals after optional binning and
 modulation averaging.
 """
-function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
+function BioEdgeWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1,
     light_ratio::Real=0.0, modulation::Real=0.0, modulation_points::Union{Int,Nothing}=nothing,
     normalization::WFSNormalization=MeanValidFluxNormalization(),
     calib_modulation::Real=min(50.0, tel.params.resolution / 2 - 1),
@@ -182,8 +182,8 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
 
     selector = require_same_backend(tel, _resolve_backend_selector(backend))
     backend = _resolve_array_backend(selector)
-    if tel.params.resolution % n_subap != 0
-        throw(InvalidConfiguration("telescope resolution must be divisible by n_subap"))
+    if tel.params.resolution % pupil_samples != 0
+        throw(InvalidConfiguration("telescope resolution must be divisible by pupil_samples"))
     end
     if binning < 1
         throw(InvalidConfiguration("binning must be >= 1"))
@@ -191,7 +191,7 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     grey_length_val = grey_length === false ? false : T(grey_length)
     n_mod = resolve_modulation_points(T(modulation), modulation_points, extra_modulation_factor, user_modulation_path)
     params = BioEdgeParams{T,typeof(user_modulation_path),typeof(normalization)}(
-        n_subap,
+        pupil_samples,
         T(threshold),
         T(light_ratio),
         normalization,
@@ -209,15 +209,15 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
         n_pix_edge,
         binning,
     )
-    valid_mask = backend{Bool}(undef, n_subap, n_subap)
+    valid_mask = backend{Bool}(undef, pupil_samples, pupil_samples)
     edge_mask = backend{Bool}(undef, size(tel.state.pupil))
-    slopes = backend{T}(undef, 2 * n_subap * n_subap)
+    slopes = backend{T}(undef, 2 * pupil_samples * pupil_samples)
     fill!(slopes, zero(T))
     sf = SpatialFilter(tel; shape=FoucaultFilter(), zero_padding=diffraction_padding, T=T, backend=selector)
     pad = tel.params.resolution * diffraction_padding
     if n_pix_separation !== nothing
         edge = n_pix_edge === nothing ? div(n_pix_separation, 2) : n_pix_edge
-        pad = Int(round((n_subap * 2 + n_pix_separation + 2 * edge) * tel.params.resolution / n_subap))
+        pad = Int(round((pupil_samples * 2 + n_pix_separation + 2 * edge) * tel.params.resolution / pupil_samples))
     end
     field = backend{Complex{T}}(undef, pad, pad)
     focal_field = similar(field)
@@ -230,7 +230,7 @@ function BioEdgeWFS(tel::Telescope; n_subap::Int, threshold::Real=0.1,
     scratch = similar(temp)
     binned_intensity = similar(intensity)
     asterism_stack = backend{T}(undef, 2 * pad, 2 * pad, 1)
-    nominal_detector_resolution = max(1, round(Int, n_subap * pad / tel.params.resolution))
+    nominal_detector_resolution = max(1, round(Int, pupil_samples * pad / tel.params.resolution))
     camera_frame = backend{T}(undef, 2 * nominal_detector_resolution, 2 * nominal_detector_resolution)
     valid_i4q = backend{Bool}(undef, nominal_detector_resolution ÷ 2, nominal_detector_resolution ÷ 2)
     valid_i4q_host = Matrix{Bool}(undef, size(valid_i4q)...)
@@ -561,7 +561,7 @@ function prepare_bioedge_sampling!(wfs::BioEdgeWFS, tel::Telescope)
     if binning < 1
         throw(InvalidConfiguration("binning must be >= 1"))
     end
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.pupil_samples
     pad = tel.params.resolution * wfs.params.diffraction_padding
     if wfs.params.n_pix_separation !== nothing
         edge = wfs.params.n_pix_edge === nothing ? div(wfs.params.n_pix_separation, 2) : wfs.params.n_pix_edge
@@ -652,7 +652,7 @@ function resize_bioedge_signal_buffers!(wfs::BioEdgeWFS, frame_rows::Int)
 end
 
 function sample_bioedge_intensity!(wfs::BioEdgeWFS, tel::Telescope, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
-    sub = div(tel.params.resolution, wfs.params.n_subap)
+    sub = div(tel.params.resolution, wfs.params.pupil_samples)
     if size(intensity, 1) % sub != 0
         throw(InvalidConfiguration("bioedge intensity size must be divisible by telescope pixels per subaperture"))
     end
@@ -661,7 +661,7 @@ function sample_bioedge_intensity!(wfs::BioEdgeWFS, tel::Telescope, intensity::A
         wfs.state.camera_frame = similar(wfs.state.camera_frame, n_camera, n_camera)
     end
     frame = wfs.state.camera_frame
-    wfs.state.nominal_detector_resolution = round(Int, wfs.params.n_subap * wfs.state.effective_resolution / tel.params.resolution)
+    wfs.state.nominal_detector_resolution = round(Int, wfs.params.pupil_samples * wfs.state.effective_resolution / tel.params.resolution)
     if wfs.params.binning != 1
         target = div(wfs.state.nominal_detector_resolution, wfs.params.binning)
         factor = div(size(frame, 1), target)

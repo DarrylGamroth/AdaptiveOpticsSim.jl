@@ -82,20 +82,20 @@ end
 end
 
 """
-    shack_hartmann_detector_image(spot_cube, n_subap; gap=0, gap_value=0)
+    shack_hartmann_detector_image(spot_cube, n_lenslets; gap=0, gap_value=0)
     shack_hartmann_detector_image(wfs; gap=0, gap_value=0)
 
 Tile a Shack-Hartmann lenslet spot cube into a 2-D detector image.
 """
-function shack_hartmann_detector_image(spot_cube::AbstractArray, n_subap::Integer; gap::Integer=0, gap_value=0,
+function shack_hartmann_detector_image(spot_cube::AbstractArray, n_lenslets::Integer; gap::Integer=0, gap_value=0,
     output_type::Union{Nothing,DataType}=nothing)
-    n_sub = Int(n_subap)
-    n_sub > 0 || throw(ArgumentError("n_subap must be positive"))
+    n_sub = Int(n_lenslets)
+    n_sub > 0 || throw(ArgumentError("n_lenslets must be positive"))
     ndims(spot_cube) == 3 ||
-        throw(DimensionMismatch("spot cube must have shape (n_subap^2, n_pix_subap_y, n_pix_subap_x)"))
+        throw(DimensionMismatch("spot cube must have shape (n_lenslets^2, n_pix_subap_y, n_pix_subap_x)"))
     n_spots, n_y, n_x = size(spot_cube)
     n_spots == n_sub * n_sub ||
-        throw(DimensionMismatch("spot cube first dimension must equal n_subap^2; got $n_spots for n_subap=$n_sub"))
+        throw(DimensionMismatch("spot cube first dimension must equal n_lenslets^2; got $n_spots for n_lenslets=$n_sub"))
     gap_px = Int(gap)
     gap_px >= 0 || throw(ArgumentError("gap must be non-negative"))
     T = output_type === nothing ? promote_type(eltype(spot_cube), typeof(gap_value)) : output_type
@@ -104,17 +104,17 @@ function shack_hartmann_detector_image(spot_cube::AbstractArray, n_subap::Intege
     return shack_hartmann_detector_image!(image, spot_cube, n_sub; gap=gap_px, gap_value=gap_value)
 end
 
-function shack_hartmann_detector_image!(image::AbstractMatrix, spot_cube::AbstractArray, n_subap::Integer;
+function shack_hartmann_detector_image!(image::AbstractMatrix, spot_cube::AbstractArray, n_lenslets::Integer;
     gap::Integer=0, gap_value=0)
     image_style = execution_style(image)
     spot_style = execution_style(spot_cube)
-    n_sub = Int(n_subap)
-    n_sub > 0 || throw(ArgumentError("n_subap must be positive"))
+    n_sub = Int(n_lenslets)
+    n_sub > 0 || throw(ArgumentError("n_lenslets must be positive"))
     ndims(spot_cube) == 3 ||
-        throw(DimensionMismatch("spot cube must have shape (n_subap^2, n_pix_subap_y, n_pix_subap_x)"))
+        throw(DimensionMismatch("spot cube must have shape (n_lenslets^2, n_pix_subap_y, n_pix_subap_x)"))
     n_spots, n_y, n_x = size(spot_cube)
     n_spots == n_sub * n_sub ||
-        throw(DimensionMismatch("spot cube first dimension must equal n_subap^2; got $n_spots for n_subap=$n_sub"))
+        throw(DimensionMismatch("spot cube first dimension must equal n_lenslets^2; got $n_spots for n_lenslets=$n_sub"))
     gap_px = Int(gap)
     gap_px >= 0 || throw(ArgumentError("gap must be non-negative"))
     size(image) == (n_sub * n_y + (n_sub - 1) * gap_px, n_sub * n_x + (n_sub - 1) * gap_px) ||
@@ -159,7 +159,7 @@ end
 @inline valid_subaperture_mask(wfs::ShackHartmann) = wfs.state.valid_mask
 @inline reference_signal(wfs::ShackHartmann) = wfs.state.reference_signal_2d
 @inline shack_hartmann_detector_image(wfs::ShackHartmann; kwargs...) =
-    shack_hartmann_detector_image(sh_exported_spot_cube(wfs), wfs.params.n_subap; kwargs...)
+    shack_hartmann_detector_image(sh_exported_spot_cube(wfs), wfs.params.n_lenslets; kwargs...)
 @inline wfs_detector_image(wfs::ShackHartmann; kwargs...) = shack_hartmann_detector_image(wfs; kwargs...)
 @inline wfs_detector_image(wfs::ShackHartmann, ::Nothing; kwargs...) = shack_hartmann_detector_image(wfs; kwargs...)
 @inline wfs_detector_image(wfs::ShackHartmann, det::AbstractDetector; kwargs...) =

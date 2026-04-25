@@ -4,20 +4,20 @@
         tel.state.opd[i, j] = i
     end
 
-    pyr = PyramidWFS(tel; n_subap=4, modulation=1.0)
+    pyr = PyramidWFS(tel; pupil_samples=4, modulation=1.0)
     pyr_slopes = measure!(pyr, tel)
     @test length(pyr_slopes) == 2 * 4 * 4
 
-    bio = BioEdgeWFS(tel; n_subap=4)
+    bio = BioEdgeWFS(tel; pupil_samples=4)
     bio_slopes = measure!(bio, tel)
     @test length(bio_slopes) == 2 * 4 * 4
 
-    sh = ShackHartmann(tel; n_subap=4)
+    sh = ShackHartmann(tel; n_lenslets=4)
     ngs = Source(band=:I, magnitude=0.0)
     lgs = LGSSource(elongation_factor=2.0)
     slopes_ngs = measure!(sh, tel, ngs)
     slopes_lgs = measure!(sh, tel, lgs)
-    n = sh.params.n_subap * sh.params.n_subap
+    n = sh.params.n_lenslets * sh.params.n_lenslets
     @test slopes_lgs[n+1:end] ≈ slopes_ngs[n+1:end] .* 2.0
 end
 
@@ -29,7 +29,7 @@ end
     ngs = Source(band=:I, magnitude=0.0)
     lgs = LGSSource(elongation_factor=1.5)
 
-    sh = ShackHartmann(tel; n_subap=4, mode=Diffractive())
+    sh = ShackHartmann(tel; n_lenslets=4, mode=Diffractive())
     @test_throws InvalidConfiguration measure!(sh, tel)
     sh_slopes = measure!(sh, tel, ngs)
     @test length(sh_slopes) == 2 * 4 * 4
@@ -39,15 +39,15 @@ end
 
     na_profile = [80000.0 90000.0 100000.0; 0.2 0.6 0.2]
     lgs_profile = LGSSource(elongation_factor=1.2, na_profile=na_profile, fwhm_spot_up=1.0)
-    sh_profile = ShackHartmann(tel; n_subap=4, mode=Diffractive())
+    sh_profile = ShackHartmann(tel; n_lenslets=4, mode=Diffractive())
     sh_profile_slopes = measure!(sh_profile, tel, lgs_profile)
     @test all(isfinite, sh_profile_slopes)
 
-    sh_sampled = ShackHartmann(tel; n_subap=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
+    sh_sampled = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
     sh_sampled_slopes = measure!(sh_sampled, tel, ngs)
     @test length(sh_sampled_slopes) == 2 * 4 * 4
 
-    pyr_sampled = PyramidWFS(tel; n_subap=4, mode=Diffractive(), n_pix_separation=4, binning=2)
+    pyr_sampled = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), n_pix_separation=4, binning=2)
     pyr_sampled_slopes = measure!(pyr_sampled, tel, ngs)
     @test length(pyr_sampled_slopes) == 2 * count(pyr_sampled.state.valid_i4q)
     pyr_intensity = reshape(Float64.(1:size(tel.state.opd, 1)^2), size(tel.state.opd))
@@ -58,7 +58,7 @@ end
     AdaptiveOpticsSim.bin2d!(pyr_manual, pyr_camera, 2)
     @test pyr_frame == pyr_manual
 
-    bio_sampled = BioEdgeWFS(tel; n_subap=4, mode=Diffractive(), binning=2)
+    bio_sampled = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(), binning=2)
     bio_sampled_slopes = measure!(bio_sampled, tel, ngs)
     @test length(bio_sampled_slopes) == 2 * count(bio_sampled.state.valid_i4q)
     bio_intensity = reshape(Float64.(1:size(tel.state.opd, 1)^2), size(tel.state.opd))
@@ -69,50 +69,50 @@ end
     AdaptiveOpticsSim.bin2d!(bio_manual, bio_camera, div(size(bio_camera, 1), size(bio_frame, 1)))
     @test bio_frame == bio_manual
 
-    pyr_profile = PyramidWFS(tel; n_subap=4, mode=Diffractive())
+    pyr_profile = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
     pyr_profile_slopes = measure!(pyr_profile, tel, lgs_profile)
     @test all(isfinite, pyr_profile_slopes)
 
-    bio_profile = BioEdgeWFS(tel; n_subap=4, mode=Diffractive())
+    bio_profile = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     bio_profile_slopes = measure!(bio_profile, tel, lgs_profile)
     @test all(isfinite, bio_profile_slopes)
 
-    pyr = PyramidWFS(tel; n_subap=4, mode=Diffractive())
+    pyr = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
     @test_throws InvalidConfiguration measure!(pyr, tel)
     pyr_slopes = measure!(pyr, tel, ngs)
     @test length(pyr_slopes) == 2 * 4 * 4
 
-    bio = BioEdgeWFS(tel; n_subap=4, mode=Diffractive())
+    bio = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     @test_throws InvalidConfiguration measure!(bio, tel)
     bio_slopes = measure!(bio, tel, ngs)
     @test length(bio_slopes) == 2 * 4 * 4
 
     det = Detector(noise=NoiseNone(), binning=1)
-    sh_det = ShackHartmann(tel; n_subap=4, mode=Diffractive())
+    sh_det = ShackHartmann(tel; n_lenslets=4, mode=Diffractive())
     sh_det_slopes = measure!(sh_det, tel, ngs, det)
     @test length(sh_det_slopes) == 2 * 4 * 4
     sh_det_image = wfs_detector_image(sh_det, det; gap=1)
     @test ndims(sh_det_image) == 2
     sh_adu_det = Detector(noise=NoiseNone(), binning=1, full_well=30_000.0, bits=12, output_type=UInt16)
-    sh_adu = ShackHartmann(tel; n_subap=4, mode=Diffractive())
+    sh_adu = ShackHartmann(tel; n_lenslets=4, mode=Diffractive())
     measure!(sh_adu, tel, ngs, sh_adu_det; rng=MersenneTwister(15))
     sh_adu_image = wfs_detector_image(sh_adu, sh_adu_det; gap=1)
     @test sh_adu_image isa Matrix{UInt16}
     @test maximum(sh_adu_image) <= 0x0fff
-    pyr_det = PyramidWFS(tel; n_subap=4, mode=Diffractive())
+    pyr_det = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
     pyr_det_slopes = measure!(pyr_det, tel, ngs, det)
     @test length(pyr_det_slopes) == 2 * 4 * 4
     @test wfs_detector_image(pyr_det, det) === output_frame(det)
-    bio_det = BioEdgeWFS(tel; n_subap=4, mode=Diffractive())
+    bio_det = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     bio_det_slopes = measure!(bio_det, tel, ngs, det)
     @test length(bio_det_slopes) == 2 * 4 * 4
     @test wfs_detector_image(bio_det, det) === output_frame(det)
 
     ast = Asterism([ngs, Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0))])
-    sh_ast = ShackHartmann(tel; n_subap=4, mode=Diffractive())
+    sh_ast = ShackHartmann(tel; n_lenslets=4, mode=Diffractive())
     sh_ast_slopes = copy(measure!(sh_ast, tel, ast))
     @test length(sh_ast_slopes) == 2 * 4 * 4
-    sh_ast_serial = ShackHartmann(tel; n_subap=4, mode=Diffractive())
+    sh_ast_serial = ShackHartmann(tel; n_lenslets=4, mode=Diffractive())
     AdaptiveOpticsSim.prepare_sampling!(sh_ast_serial, tel, ast.sources[1])
     AdaptiveOpticsSim.ensure_sh_calibration!(sh_ast_serial, tel, ast.sources[1])
     fill!(sh_ast_serial.state.detector_noise_cube, zero(eltype(sh_ast_serial.state.detector_noise_cube)))
@@ -128,10 +128,10 @@ end
     @test norm(sh_ast_slopes - sh_ast_serial_slopes) / norm(sh_ast_slopes) < 0.07
     mixed_ngs = Source(wavelength=wavelength(lgs_profile), magnitude=0.0, coordinates=(0.0, 0.0))
     mixed_ast = Asterism([mixed_ngs, lgs_profile])
-    sh_mixed_det = ShackHartmann(tel; n_subap=4, mode=Diffractive())
+    sh_mixed_det = ShackHartmann(tel; n_lenslets=4, mode=Diffractive())
     sh_mixed_det_slopes = copy(measure!(sh_mixed_det, tel, mixed_ast, det; rng=MersenneTwister(14)))
     sh_mixed_det_frame = copy(sh_mixed_det.state.spot_cube)
-    sh_mixed_det_manual = ShackHartmann(tel; n_subap=4, mode=Diffractive())
+    sh_mixed_det_manual = ShackHartmann(tel; n_lenslets=4, mode=Diffractive())
     AdaptiveOpticsSim.prepare_sampling!(sh_mixed_det_manual, tel, mixed_ast.sources[1])
     AdaptiveOpticsSim.ensure_sh_calibration!(sh_mixed_det_manual, tel, mixed_ast.sources[1])
     fill!(sh_mixed_det_manual.state.detector_noise_cube, zero(eltype(sh_mixed_det_manual.state.detector_noise_cube)))
@@ -142,10 +142,10 @@ end
     copyto!(sh_mixed_det_manual.state.spot_cube, sh_mixed_det_manual.state.detector_noise_cube)
     @test sh_mixed_det_frame ≈ sh_mixed_det_manual.state.spot_cube
     @test length(sh_mixed_det_slopes) == 2 * 4 * 4
-    pyr_ast = PyramidWFS(tel; n_subap=4, mode=Diffractive())
+    pyr_ast = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
     pyr_ast_slopes = copy(measure!(pyr_ast, tel, ast))
     @test length(pyr_ast_slopes) == 2 * 4 * 4
-    pyr_ast_serial = PyramidWFS(tel; n_subap=4, mode=Diffractive())
+    pyr_ast_serial = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
     AdaptiveOpticsSim.ensure_pyramid_calibration!(pyr_ast_serial, tel, ast.sources[1])
     pyr_ast_stack = @view AdaptiveOpticsSim.ensure_pyramid_asterism_stack!(pyr_ast_serial, length(ast.sources))[:, :, 1:length(ast.sources)]
     fill!(pyr_ast_serial.state.intensity, zero(eltype(pyr_ast_serial.state.intensity)))
@@ -157,10 +157,10 @@ end
     AdaptiveOpticsSim.pyramid_signal!(pyr_ast_serial, tel, pyr_ast_intensity)
     @. pyr_ast_serial.state.slopes *= pyr_ast_serial.state.optical_gain
     @test pyr_ast_slopes ≈ pyr_ast_serial.state.slopes
-    bio_ast = BioEdgeWFS(tel; n_subap=4, mode=Diffractive())
+    bio_ast = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     bio_ast_slopes = copy(measure!(bio_ast, tel, ast))
     @test length(bio_ast_slopes) == 2 * 4 * 4
-    bio_ast_serial = BioEdgeWFS(tel; n_subap=4, mode=Diffractive())
+    bio_ast_serial = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     AdaptiveOpticsSim.ensure_bioedge_calibration!(bio_ast_serial, tel, ast.sources[1])
     fill!(bio_ast_serial.state.binned_intensity, zero(eltype(bio_ast_serial.state.binned_intensity)))
     for src in ast.sources
@@ -171,9 +171,9 @@ end
     AdaptiveOpticsSim.bioedge_signal!(bio_ast_serial, tel, bio_ast_intensity)
     @test bio_ast_slopes ≈ bio_ast_serial.state.slopes
 
-    pyr_ast_det = PyramidWFS(tel; n_subap=4, mode=Diffractive())
+    pyr_ast_det = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
     pyr_ast_det_slopes = copy(measure!(pyr_ast_det, tel, ast, det))
-    pyr_ast_det_serial = PyramidWFS(tel; n_subap=4, mode=Diffractive())
+    pyr_ast_det_serial = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
     AdaptiveOpticsSim.ensure_pyramid_calibration!(pyr_ast_det_serial, tel, ast.sources[1])
     pyr_ast_det_stack = @view AdaptiveOpticsSim.ensure_pyramid_asterism_stack!(pyr_ast_det_serial, length(ast.sources))[:, :, 1:length(ast.sources)]
     fill!(pyr_ast_det_serial.state.intensity, zero(eltype(pyr_ast_det_serial.state.intensity)))
@@ -188,9 +188,9 @@ end
     @. pyr_ast_det_serial.state.slopes *= pyr_ast_det_serial.state.optical_gain
     @test pyr_ast_det_slopes ≈ pyr_ast_det_serial.state.slopes
 
-    bio_ast_det = BioEdgeWFS(tel; n_subap=4, mode=Diffractive())
+    bio_ast_det = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     bio_ast_det_slopes = copy(measure!(bio_ast_det, tel, ast, det; rng=MersenneTwister(13)))
-    bio_ast_det_serial = BioEdgeWFS(tel; n_subap=4, mode=Diffractive())
+    bio_ast_det_serial = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     AdaptiveOpticsSim.ensure_bioedge_calibration!(bio_ast_det_serial, tel, ast.sources[1])
     fill!(bio_ast_det_serial.state.binned_intensity, zero(eltype(bio_ast_det_serial.state.binned_intensity)))
     for src in ast.sources
@@ -207,7 +207,7 @@ end
 @testset "Shack-Hartmann subapertures" begin
     tel = Telescope(resolution=24, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
     src = Source(band=:I, magnitude=0.0)
-    sh = ShackHartmann(tel; n_subap=6, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8, threshold_cog=0.02)
+    sh = ShackHartmann(tel; n_lenslets=6, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8, threshold_cog=0.02)
 
     layout = subaperture_layout(sh)
     calibration = subaperture_calibration(sh)

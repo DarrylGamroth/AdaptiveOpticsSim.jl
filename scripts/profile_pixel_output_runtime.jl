@@ -87,8 +87,8 @@ function _pixel_scale_params(scale_name::AbstractString)
                 n_active_actuators=768,
                 n_control_modes=64,
                 control_grid_side=10,
-                n_subap=8,
-                n_low_order_subap=2,
+                high_order_samples=8,
+                low_order_lenslets=2,
                 n_low_order_modes=4,
                 r0=0.18,
                 source_magnitude=7.0,
@@ -112,8 +112,8 @@ function _pixel_scale_params(scale_name::AbstractString)
             n_active_actuators=3228,
             n_control_modes=512,
             control_grid_side=32,
-            n_subap=20,
-            n_low_order_subap=4,
+            high_order_samples=20,
+            low_order_lenslets=4,
             n_low_order_modes=16,
             r0=0.14,
             source_magnitude=9.0,
@@ -170,8 +170,8 @@ function run_profile(; backend_name::AbstractString="cpu", branch_name::Abstract
     println("  total_phase_mean_ns: ", phase.total_mean_ns)
     println("  total_phase_p95_ns: ", phase.total_p95_ns)
     println("  pupil_resolution: ", params.resolution)
-    println("  n_subap: ", params.n_subap)
-    println("  low_order_n_subap: ", params.n_low_order_subap)
+    println("  high_order_samples: ", params.high_order_samples)
+    println("  low_order_lenslets: ", params.low_order_lenslets)
     println("  dm_n_act: ", params.n_act)
     println("  n_control_modes: ", params.n_control_modes)
     println("  wfs_frame_shape: ", size(scenario.high_wfs.state.spot_cube))

@@ -8,7 +8,7 @@ function main(; resolution::Int=24)
     compute_zernike!(zb, tel)
     @. tel.state.opd = 3e-8 * zb.modes[:, :, 4]
 
-    sh = ShackHartmann(tel; n_subap=6, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
+    sh = ShackHartmann(tel; n_lenslets=6, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
     prepare_runtime_wfs!(sh, tel, src)
     slopes = copy(measure!(sh, tel, src))
 

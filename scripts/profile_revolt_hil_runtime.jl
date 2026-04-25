@@ -142,7 +142,7 @@ function run_profile(; backend_name::AbstractString="cpu", config_dir::AbstractS
     println("  dm_grid_command_length: ", dm_grid_command_length)
     println("  dm_layout_shape: ", size(ctx.dm.state.coefs))
     println("  pupil_resolution: ", size(ctx.tel.state.opd, 1))
-    println("  n_subap: ", ctx.n_subap)
+    println("  n_lenslets: ", ctx.n_lenslets)
     println("  roi_size: ", ctx.roi)
     println("  tiled_wfs_frame_shape: ", size(ctx.tiled_frame))
     println("  spot_cube_shape: ", size(ctx.wfs.state.spot_cube))

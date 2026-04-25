@@ -152,7 +152,7 @@ function _profile_field_path(mode::Symbol, atmo_kind::Symbol, backend_name::Abst
         model=mode === :geometric ? GeometricAtmosphericPropagation(T=T) : LayeredFresnelAtmosphericPropagation(T=T),
         zero_padding=2,
         T=T)
-    wfs = CurvatureWFS(tel; n_subap=8, T=T, backend=BackendArray)
+    wfs = CurvatureWFS(tel; pupil_samples=8, T=T, backend=BackendArray)
 
     step! = if mode === :curvature
         () -> begin

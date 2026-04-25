@@ -124,7 +124,7 @@ function _ao3k_scale_params(scale_name::AbstractString)
             scale=scale,
             kwargs=(
                 resolution=96,
-                n_subap=16,
+                high_order_samples=16,
                 n_control_modes=256,
                 control_grid_side=20,
                 source_magnitude=8.5,
@@ -146,7 +146,7 @@ function _ao3k_scale_params(scale_name::AbstractString)
         scale=scale,
         kwargs=(
             resolution=240,
-            n_subap=40,
+            high_order_samples=40,
             n_control_modes=2048,
             control_grid_side=56,
             source_magnitude=11.0,
@@ -248,7 +248,7 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     println("  total_phase_mean_ns: ", phase.total_mean_ns)
     println("  total_phase_p95_ns: ", phase.total_p95_ns)
     println("  pupil_resolution: ", params.resolution)
-    println("  n_subap: ", params.n_subap)
+    println("  high_order_samples: ", params.high_order_samples)
     println("  n_control_modes: ", params.n_control_modes)
     println("  high_frame_shape: ", isnothing(high_frame) ? nothing : size(high_frame))
     println("  low_frame_shape: ", isnothing(low_frame) ? nothing : size(low_frame))

@@ -40,13 +40,13 @@ function AO3kSimulationParams(; kwargs...)
             glow_rate_law=ArrheniusRateLaw(293.0, 3000.0),
             T=T0),
     ))
-    rest = Base.structdiff(nt, (; source_band=nothing, n_control_modes=nothing, n_subap=nothing,
+    rest = Base.structdiff(nt, (; source_band=nothing, n_control_modes=nothing, high_order_samples=nothing,
         resolution=nothing, source_magnitude=nothing, high_order_sensor_model=nothing, high_detector=nothing))
     return SubaruAO188Simulation.AO188SimulationParams(
         ;
         source_band=:H,
         n_control_modes=get(nt, :n_control_modes, 1024),
-        n_subap=get(nt, :n_subap, 32),
+        high_order_samples=get(nt, :high_order_samples, 32),
         resolution=get(nt, :resolution, 160),
         source_magnitude=get(nt, :source_magnitude, 10.0),
         high_order_sensor_model=AO3kNIRPyramidModel(T=T0),
@@ -59,7 +59,7 @@ function SubaruAO188Simulation._build_high_order_wfs(model::AO3kNIRPyramidModel,
     T = eltype(tel.state.opd)
     return PyramidWFS(
         tel;
-        n_subap=params.n_subap,
+        pupil_samples=params.high_order_samples,
         mode=Diffractive(),
         modulation=model.modulation,
         modulation_points=model.modulation_points,

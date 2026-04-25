@@ -91,7 +91,7 @@ end
 function bioedge_normalization(::IncidenceFluxNormalization, wfs::BioEdgeWFS, tel::Telescope,
     src::AbstractSource, ::Int, summed_i4q)
     T = typeof(summed_i4q)
-    sub_area = (tel.params.diameter / wfs.params.n_subap)^2
+    sub_area = (tel.params.diameter / wfs.params.pupil_samples)^2
     return T(photon_flux(src) * tel.params.sampling_time * sub_area)
 end
 
@@ -341,7 +341,7 @@ function ensure_lgs_kernel!(wfs::BioEdgeWFS, tel::Telescope, src::LGSSource)
     end
     pad = size(wfs.state.fft_buffer, 1)
     tag = objectid(na_profile) ⊻ hash(src.params.laser_coordinates) ⊻ hash(src.params.fwhm_spot_up) ⊻
-        hash(pad) ⊻ hash(wfs.params.n_subap)
+        hash(pad) ⊻ hash(wfs.params.pupil_samples)
     if size(wfs.state.lgs_kernel_fft, 1) == pad && wfs.state.lgs_kernel_tag == tag
         return wfs
     end
@@ -351,7 +351,7 @@ function ensure_lgs_kernel!(wfs::BioEdgeWFS, tel::Telescope, src::LGSSource)
         tel,
         src,
         pad,
-        wfs.params.n_subap,
+        wfs.params.pupil_samples,
         pixel_scale,
         wfs.state.fft_buffer,
         wfs.state.fft_plan,

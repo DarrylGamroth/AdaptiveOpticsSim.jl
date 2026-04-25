@@ -56,7 +56,7 @@ function AdaptiveOpticsSim.sh_sensing_execution_plan(
     style::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
     wfs::AdaptiveOpticsSim.ShackHartmann,
 )
-    return wfs.params.n_subap == 4 ?
+    return wfs.params.n_lenslets == 4 ?
         AdaptiveOpticsSim.ShackHartmannRocmSafePlan() :
         AdaptiveOpticsSim.ShackHartmannBatchedPlan()
 end
@@ -223,7 +223,7 @@ function AdaptiveOpticsSim.sh_signal_from_spots_device_stats!(
     wfs::AdaptiveOpticsSim.ShackHartmann,
     cutoff::T,
 ) where {T<:AbstractFloat}
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     offset = n_sub * n_sub
     n1 = size(wfs.state.spot_cube, 2)
     n2 = size(wfs.state.spot_cube, 3)

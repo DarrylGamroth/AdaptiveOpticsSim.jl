@@ -27,7 +27,7 @@ function ensure_lgs_kernels!(wfs::ShackHartmann, tel::Telescope, src::LGSSource)
         return wfs
     end
     pad = size(wfs.state.intensity, 1)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     tag = objectid(na_profile) ⊻ hash(src.params.laser_coordinates) ⊻ hash(src.params.fwhm_spot_up) ⊻ hash(pad)
     if size(wfs.state.lgs_kernel_fft, 1) == pad &&
         size(wfs.state.lgs_kernel_fft, 3) == n_sub * n_sub &&
@@ -51,7 +51,7 @@ end
 
 function lgs_spot_kernels_fft(tel::Telescope, wfs::ShackHartmann, src::LGSSource, pad::Int)
     T = eltype(wfs.state.intensity)
-    n_sub = wfs.params.n_subap
+    n_sub = wfs.params.n_lenslets
     na_profile = src.params.na_profile
     altitudes = na_profile[1, :]
     weights = na_profile[2, :]
@@ -60,7 +60,7 @@ function lgs_spot_kernels_fft(tel::Telescope, wfs::ShackHartmann, src::LGSSource
     end
 
     pixel_scale = lgs_pixel_scale(
-        tel.params.diameter / wfs.params.n_subap,
+        tel.params.diameter / wfs.params.n_lenslets,
         wfs.state.effective_padding,
         wavelength(src),
     )

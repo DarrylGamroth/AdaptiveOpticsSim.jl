@@ -60,8 +60,8 @@ specula_contract = "low-order quadratic phase produces a non-trivial curvature s
 
     [cases.curvature_quadratic_signal.wfs]
     readout_crop_resolution = 48
-    readout_pixels_per_subap = 1
-    n_subap = 12
+    readout_pixels_per_sample = 1
+    pupil_samples = 12
     threshold = 0.0
     diffraction_padding = 2
     mode = "diffractive"
@@ -107,7 +107,7 @@ specula_contract = "polychromatic pyramid sensing yields a stable sampled detect
     modulation = 3.0
     n_pix_separation = 20
     modulation_points = 16
-    n_subap = 30
+    pupil_samples = 30
 
     [cases.pyramid_polychromatic_frame.opd]
     kind = "zeros"
@@ -144,7 +144,7 @@ specula_contract = "low-order quadratic phase produces a structured non-flat dif
     diffraction_padding = 2
     mode = "diffractive"
     phase_shift_pi = 0.5
-    n_subap = 24
+    pupil_samples = 24
 
     [cases.zernike_quadratic_signal.opd]
     kind = "basis_mode"
@@ -183,7 +183,7 @@ specula_contract = "flat output shape and non-negative signal surface"
     diffraction_padding = 2
     mode = "diffractive"
     phase_shift_pi = 0.5
-    n_subap = 24
+    pupil_samples = 24
 
     [cases.zernike_flat_signal.opd]
     kind = "zeros"
@@ -211,8 +211,8 @@ specula_contract = "flat wavefront produces zero curvature signal after referenc
 
     [cases.curvature_flat_signal.wfs]
     readout_crop_resolution = 48
-    readout_pixels_per_subap = 1
-    n_subap = 12
+    readout_pixels_per_sample = 1
+    pupil_samples = 12
     threshold = 0.0
     diffraction_padding = 2
     mode = "diffractive"
@@ -323,7 +323,7 @@ specula_contract = "polychromatic Shack-Hartmann sensing yields a stable sampled
     threshold = 0.0
     mode = "diffractive"
     n_pix_subap = 20
-    n_subap = 1
+    n_lenslets = 1
 
     [cases.shack_hartmann_polychromatic_frame.opd]
     kind = "zeros"
