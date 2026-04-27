@@ -52,7 +52,7 @@ function pyramid_signal!(::ScalarCPUStyle, wfs::PyramidWFS, tel::Telescope, fram
     return wfs.state.slopes
 end
 
-function pyramid_signal!(::AcceleratorStyle, wfs::PyramidWFS, tel::Telescope, frame::AbstractMatrix{T},
+function pyramid_signal!(style::AcceleratorStyle, wfs::PyramidWFS, tel::Telescope, frame::AbstractMatrix{T},
     src::Union{Nothing,AbstractSource}) where {T<:AbstractFloat}
     count = wfs.state.valid_signal_count
     n_extra = round(Int, (something(wfs.params.n_pix_separation, 0) / 2) / wfs.params.binning)
@@ -72,11 +72,11 @@ function pyramid_signal!(::AcceleratorStyle, wfs::PyramidWFS, tel::Telescope, fr
     refy = @view wfs.state.reference_signal_2d[n_pixels+1:2*n_pixels, :]
     i4q = @view wfs.state.temp[1:n_pixels, 1:n_pixels]
     @. i4q = q1 + q2 + q3 + q4
-    summed_i4q = pyramid_valid_flux_sum!(execution_style(frame), wfs, i4q)
+    summed_i4q = pyramid_valid_flux_sum!(style, wfs, i4q)
     norma = pyramid_normalization(wfs.params.normalization, wfs, tel, src, count, summed_i4q)
     @. sx = (q1 - q2 + q4 - q3) / norma - refx
     @. sy = (q1 - q4 + q2 - q3) / norma - refy
-    launch_kernel!(execution_style(frame), gather_pyramid_slopes_kernel!, wfs.state.slopes,
+    launch_kernel!(style, gather_pyramid_slopes_kernel!, wfs.state.slopes,
         wfs.state.signal_2d, wfs.state.valid_signal_indices, count, n_pixels; ndrange=count)
     return wfs.state.slopes
 end

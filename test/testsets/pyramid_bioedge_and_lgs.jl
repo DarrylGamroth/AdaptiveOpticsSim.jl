@@ -19,6 +19,8 @@
     AdaptiveOpticsSim.resize_pyramid_signal_buffers!(pyr_direct, 4)
     pyr_direct.state.valid_i4q .= Bool[1 0; 1 1]
     AdaptiveOpticsSim.update_pyramid_valid_signal!(pyr_direct)
+    pyr_direct.state.valid_signal_indices = Int[]
+    pyr_direct.state.valid_signal_indices_host = Int[]
     @test AdaptiveOpticsSim.update_pyramid_valid_signal_indices!(pyr_direct) == 3
     AdaptiveOpticsSim.resize_pyramid_slope_buffers!(pyr_direct)
     fill!(pyr_direct.state.reference_signal_2d, 0.0)
@@ -30,6 +32,38 @@
     @test length(pyr_direct_slopes) == 6
     @test pyr_direct_slopes[1:3] ≈ fill(0.4, 3)
     @test pyr_direct_slopes[4:6] ≈ zeros(3)
+    copyto!(pyr_direct.state.camera_frame, pyr_frame)
+    @test AdaptiveOpticsSim.pyramid_slopes!(pyr_direct, tel) ≈ pyr_direct_slopes
+    @test AdaptiveOpticsSim.pyramid_slopes!(pyr_direct, tel, pyr_frame) ≈ pyr_direct_slopes
+    pyr_direct_accel = PyramidWFS(tel; pupil_samples=2, mode=Diffractive(), modulation=0.0)
+    pyr_direct_accel.state.nominal_detector_resolution = 4
+    AdaptiveOpticsSim.resize_pyramid_signal_buffers!(pyr_direct_accel, 4)
+    pyr_direct_accel.state.valid_i4q .= pyr_direct.state.valid_i4q
+    AdaptiveOpticsSim.update_pyramid_valid_signal!(pyr_direct_accel)
+    @test AdaptiveOpticsSim.update_pyramid_valid_signal_indices!(pyr_direct_accel) == 3
+    AdaptiveOpticsSim.resize_pyramid_slope_buffers!(pyr_direct_accel)
+    fill!(pyr_direct_accel.state.reference_signal_2d, 0.0)
+    @test AdaptiveOpticsSim.pyramid_signal!(KA_CPU_STYLE, pyr_direct_accel, tel, pyr_frame, nothing) ≈ pyr_direct_slopes
+    zero_slopes = fill(1.0, 8)
+    AdaptiveOpticsSim._pyramid_slopes!(AdaptiveOpticsSim.ScalarCPUStyle(), zero_slopes, zeros(4, 4), trues(2, 2),
+        2, 2, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, (0, 0, 0, 0), (0, 0, 0, 0))
+    @test all(iszero, zero_slopes)
+    invalid_slopes = fill(1.0, 8)
+    AdaptiveOpticsSim._pyramid_slopes!(AdaptiveOpticsSim.ScalarCPUStyle(), invalid_slopes, ones(4, 4), falses(2, 2),
+        2, 2, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, (0, 0, 0, 0), (0, 0, 0, 0))
+    @test all(iszero, invalid_slopes)
+    AdaptiveOpticsSim.apply_shift_wfs!(pyr_direct; sx=1.2, sy=-1.8)
+    @test pyr_direct.state.shift_x == (1, 1, 1, 1)
+    @test pyr_direct.state.shift_y == (-2, -2, -2, -2)
+    shift_x, shift_y = AdaptiveOpticsSim.pyramid_shift_components([0, 1, 2, 3], [3, 2, 1, 0])
+    @test shift_x == (0, 1, 2, 3)
+    @test shift_y == (3, 2, 1, 0)
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.pyramid_shift_components([1, 2, 3], [1, 2, 3, 4])
+    AdaptiveOpticsSim.set_optical_gain!(pyr_direct, 2.0)
+    @test all(==(2.0), pyr_direct.state.optical_gain)
+    AdaptiveOpticsSim.set_optical_gain!(pyr_direct, collect(1.0:length(pyr_direct.state.optical_gain)))
+    @test pyr_direct.state.optical_gain[end] == length(pyr_direct.state.optical_gain)
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.set_optical_gain!(pyr_direct, [1.0])
 
     pyr_invalid = PyramidWFS(tel; pupil_samples=2, mode=Diffractive(), modulation=0.0)
     pyr_invalid.state.nominal_detector_resolution = 4
@@ -53,6 +87,8 @@
     AdaptiveOpticsSim.resize_bioedge_signal_buffers!(bio_direct, 4)
     bio_direct.state.valid_i4q .= Bool[1 0; 1 1]
     AdaptiveOpticsSim.update_bioedge_valid_signal!(bio_direct)
+    bio_direct.state.valid_signal_indices = Int[]
+    bio_direct.state.valid_signal_indices_host = Int[]
     @test AdaptiveOpticsSim.update_bioedge_valid_signal_indices!(bio_direct) == 3
     AdaptiveOpticsSim.resize_bioedge_slope_buffers!(bio_direct)
     fill!(bio_direct.state.reference_signal_2d, 0.0)
@@ -62,6 +98,29 @@
     @test length(bio_direct_slopes) == 6
     @test bio_direct_slopes[1:3] ≈ fill(0.8, 3)
     @test bio_direct_slopes[4:6] ≈ zeros(3)
+    @test AdaptiveOpticsSim.bioedge_slopes_intensity!(bio_direct, tel, bio_frame) ≈ bio_direct_slopes
+    bio_phase = reshape(collect(range(0.0, 1.0; length=32 * 32)), 32, 32)
+    bio_edge_mask = falses(32, 32)
+    bio_edge_mask[1, :] .= true
+    bio_edge_mask[end, :] .= true
+    bio_edge_mask[:, 1] .= true
+    bio_edge_mask[:, end] .= true
+    @test length(AdaptiveOpticsSim.bioedge_slopes!(bio, bio_phase, bio_edge_mask)) == 2 * 4 * 4
+    bio_direct_accel = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
+    bio_direct_accel.state.nominal_detector_resolution = 4
+    AdaptiveOpticsSim.resize_bioedge_signal_buffers!(bio_direct_accel, 4)
+    bio_direct_accel.state.valid_i4q .= bio_direct.state.valid_i4q
+    AdaptiveOpticsSim.update_bioedge_valid_signal!(bio_direct_accel)
+    @test AdaptiveOpticsSim.update_bioedge_valid_signal_indices!(bio_direct_accel) == 3
+    AdaptiveOpticsSim.resize_bioedge_slope_buffers!(bio_direct_accel)
+    fill!(bio_direct_accel.state.reference_signal_2d, 0.0)
+    fill!(bio_direct_accel.state.optical_gain, 2.0)
+    @test AdaptiveOpticsSim.bioedge_signal!(KA_CPU_STYLE, bio_direct_accel, tel, bio_frame, nothing) ≈ bio_direct_slopes
+    AdaptiveOpticsSim.set_optical_gain!(bio_direct, 3.0)
+    @test all(==(3.0), bio_direct.state.optical_gain)
+    AdaptiveOpticsSim.set_optical_gain!(bio_direct, collect(1.0:length(bio_direct.state.optical_gain)))
+    @test bio_direct.state.optical_gain[end] == length(bio_direct.state.optical_gain)
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.set_optical_gain!(bio_direct, [1.0])
 
     bio_invalid = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
     bio_invalid.state.nominal_detector_resolution = 4
@@ -79,13 +138,30 @@
         bio_incidence, tel, ngs, 3, 10.0) ≈ expected_bio_norm
     @test AdaptiveOpticsSim.bioedge_normalization(bio_incidence.params.normalization,
         bio_incidence, tel, nothing, 3, 10.0) == 1.0
-
+    bio_flux_select = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive(), light_ratio=0.25)
+    @test AdaptiveOpticsSim.select_bioedge_valid_i4q!(
+        AdaptiveOpticsSim.ScalarCPUStyle(), bio_flux_select, tel, ngs) === bio_flux_select
+    @test bio_flux_select.state.valid_signal_count > 0
+    bio_flux_select_accel = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive(), light_ratio=0.25)
+    @test AdaptiveOpticsSim.select_bioedge_valid_i4q!(
+        KA_CPU_STYLE, bio_flux_select_accel, tel, ngs) === bio_flux_select_accel
+    @test bio_flux_select_accel.state.valid_signal_count > 0
     sh = ShackHartmann(tel; n_lenslets=4)
     lgs = LGSSource(elongation_factor=2.0)
     slopes_ngs = measure!(sh, tel, ngs)
     slopes_lgs = measure!(sh, tel, lgs)
     n = sh.params.n_lenslets * sh.params.n_lenslets
     @test slopes_lgs[n+1:end] ≈ slopes_ngs[n+1:end] .* 2.0
+
+    bio_lgs = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+    @test AdaptiveOpticsSim.ensure_lgs_kernel!(bio_lgs, tel, lgs) === bio_lgs
+    na_profile = [80000.0 90000.0 100000.0; 0.2 0.6 0.2]
+    lgs_profile = LGSSource(elongation_factor=1.2, na_profile=na_profile, fwhm_spot_up=1.0)
+    bio_lgs_profile = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+    @test AdaptiveOpticsSim.ensure_lgs_kernel!(bio_lgs_profile, tel, lgs_profile) === bio_lgs_profile
+    cached_tag = bio_lgs_profile.state.lgs_kernel_tag
+    @test AdaptiveOpticsSim.ensure_lgs_kernel!(bio_lgs_profile, tel, lgs_profile) === bio_lgs_profile
+    @test bio_lgs_profile.state.lgs_kernel_tag == cached_tag
 end
 
 @testset "Diffractive WFS" begin

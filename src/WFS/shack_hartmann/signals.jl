@@ -587,7 +587,7 @@ function sh_signal_from_spots!(::ScalarCPUStyle, wfs::ShackHartmann, cutoff::T) 
     return wfs.state.slopes
 end
 
-function sh_signal_from_spots!(::AcceleratorStyle, wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}
+function sh_signal_from_spots!(style::AcceleratorStyle, wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}
     if sh_uses_rocm_safe_sensing_plan(wfs)
         sh_refresh_valid_mask_host!(wfs)
         n_sub = wfs.params.n_lenslets
@@ -614,12 +614,10 @@ function sh_signal_from_spots!(::AcceleratorStyle, wfs::ShackHartmann, cutoff::T
         return wfs.state.slopes
     end
     if sh_uses_device_stats_sensing_plan(wfs)
-        style = execution_style(wfs.state.slopes)
         return sh_signal_from_spots_device_stats!(style, wfs, cutoff)
     end
     n_sub = wfs.params.n_lenslets
     offset = n_sub * n_sub
-    style = execution_style(wfs.state.slopes)
     launch_kernel!(style, sh_spot_centroid_kernel!, wfs.state.slopes, wfs.state.spot_cube,
         wfs.state.valid_mask, cutoff, n_sub, offset, size(wfs.state.spot_cube, 2),
         size(wfs.state.spot_cube, 3); ndrange=offset)
@@ -636,7 +634,7 @@ function sh_signal_from_spots_calibrated!(::ScalarCPUStyle, wfs::ShackHartmann, 
     return wfs.state.slopes
 end
 
-function sh_signal_from_spots_calibrated!(::AcceleratorStyle, wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}
+function sh_signal_from_spots_calibrated!(style::AcceleratorStyle, wfs::ShackHartmann, cutoff::T) where {T<:AbstractFloat}
     if sh_uses_rocm_safe_sensing_plan(wfs)
         sh_refresh_valid_mask_host!(wfs)
         n_sub = wfs.params.n_lenslets
@@ -665,12 +663,10 @@ function sh_signal_from_spots_calibrated!(::AcceleratorStyle, wfs::ShackHartmann
         return wfs.state.slopes
     end
     if sh_uses_device_stats_sensing_plan(wfs)
-        style = execution_style(wfs.state.slopes)
         return sh_signal_from_spots_calibrated_device_stats!(style, wfs, cutoff)
     end
     n_sub = wfs.params.n_lenslets
     offset = n_sub * n_sub
-    style = execution_style(wfs.state.slopes)
     reference = vec(wfs.state.reference_signal_2d)
     launch_kernel!(style, sh_spot_centroid_reference_scale_kernel!, wfs.state.slopes, wfs.state.spot_cube,
         reference, wfs.state.valid_mask, cutoff, wfs.state.slopes_units, n_sub, offset,

@@ -169,6 +169,63 @@ end
         mark_ka_cpu_kernel!(:reduce_grouped_blocks_kernel!)
         @test block_out == block_stack[:, :, 1:4] .+ block_stack[:, :, 5:8]
 
+        @test size(AdaptiveOpticsSim.grouped_stack_view(stack, 2), 3) == 2
+        grouped_tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+        grouped_wfs = ShackHartmann(grouped_tel; n_lenslets=2, mode=Diffractive(), n_pix_subap=2)
+        grouped_sources = [1.0, 2.0, 3.0]
+        function fill_grouped_stage!(dest, scale, value)
+            fill!(dest, scale * value)
+            return dest
+        end
+        scalar_accum = zeros(Float64, 2, 2)
+        scalar_stack = zeros(Float64, 2, 2, length(grouped_sources))
+        AdaptiveOpticsSim.accumulate_grouped_sources!(
+            AdaptiveOpticsSim.GroupedStackReducePlan(), SCALAR_CPU_STYLE, grouped_wfs,
+            scalar_accum, scalar_stack, grouped_sources, fill_grouped_stage!, 2.0)
+        @test scalar_accum == fill(12.0, 2, 2)
+        ka_accum = zeros(Float64, 2, 2)
+        ka_stack = zeros(Float64, 2, 2, length(grouped_sources))
+        AdaptiveOpticsSim.accumulate_grouped_sources!(
+            AdaptiveOpticsSim.GroupedStackReducePlan(), KA_CPU_STYLE, grouped_wfs,
+            ka_accum, ka_stack, grouped_sources, fill_grouped_stage!, 2.0)
+        @test ka_accum == scalar_accum
+        staged_scalar = zeros(Float64, 2, 2)
+        staged_scalar_stack = zeros(Float64, 2, 2, length(grouped_sources))
+        AdaptiveOpticsSim.accumulate_grouped_sources!(
+            AdaptiveOpticsSim.GroupedStaged2DPlan(), SCALAR_CPU_STYLE, grouped_wfs,
+            staged_scalar, staged_scalar_stack, grouped_sources, fill_grouped_stage!, 3.0)
+        @test staged_scalar == fill(18.0, 2, 2)
+        staged_ka = zeros(Float64, 2, 2)
+        staged_ka_stack = zeros(Float64, 2, 2, length(grouped_sources))
+        AdaptiveOpticsSim.accumulate_grouped_sources!(
+            AdaptiveOpticsSim.GroupedStaged2DPlan(), KA_CPU_STYLE, grouped_wfs,
+            staged_ka, staged_ka_stack, grouped_sources, fill_grouped_stage!, 3.0)
+        @test staged_ka == staged_scalar
+        dispatch_accum = zeros(Float64, 2, 2)
+        dispatch_stack = zeros(Float64, 2, 2, length(grouped_sources))
+        @test AdaptiveOpticsSim.grouped_accumulation_plan(KA_CPU_STYLE, grouped_wfs) isa
+              AdaptiveOpticsSim.GroupedStackReducePlan
+        AdaptiveOpticsSim.accumulate_grouped_sources!(
+            KA_CPU_STYLE, grouped_wfs, dispatch_accum, dispatch_stack,
+            grouped_sources, fill_grouped_stage!, 1.0)
+        @test dispatch_accum == fill(6.0, 2, 2)
+
+        mask = Bool[1 0; 1 1]
+        values = [1.0 2.0; 3.0 4.0]
+        values_view = @view values[1:2, 1:2]
+        @test AdaptiveOpticsSim.masked_sum2d(values, mask) == 8.0
+        scalar_buffer = zeros(Float64, 1)
+        scalar_host = zeros(Float64, 1)
+        host_parent = zeros(Float64, size(values)...)
+        @test first(AdaptiveOpticsSim.masked_sum2d(KA_CPU_STYLE, values_view, mask, mask,
+            scalar_buffer, scalar_host, host_parent)) == 8.0
+        @test AdaptiveOpticsSim.backend_maximum_value(KA_CPU_STYLE, values) == 4.0
+        signal = collect(1.0:8.0)
+        @test AdaptiveOpticsSim.packed_valid_pair_mean(KA_CPU_STYLE, signal, mask) ==
+              AdaptiveOpticsSim.packed_valid_pair_mean(AdaptiveOpticsSim.DirectReductionPlan(), signal, mask)
+        @test AdaptiveOpticsSim.packed_valid_pair_mean(AdaptiveOpticsSim.HostMirrorReductionPlan(), signal, mask) ==
+              AdaptiveOpticsSim.packed_valid_pair_mean(SCALAR_CPU_STYLE, signal, mask)
+
         n_sub = 2
         sub = 2
         n = 4

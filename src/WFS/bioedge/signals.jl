@@ -53,7 +53,7 @@ function bioedge_signal!(::ScalarCPUStyle, wfs::BioEdgeWFS, tel::Telescope, fram
     return wfs.state.slopes
 end
 
-function bioedge_signal!(::AcceleratorStyle, wfs::BioEdgeWFS, tel::Telescope, frame::AbstractMatrix{T},
+function bioedge_signal!(style::AcceleratorStyle, wfs::BioEdgeWFS, tel::Telescope, frame::AbstractMatrix{T},
     src::Union{Nothing,AbstractSource}) where {T<:AbstractFloat}
     count = wfs.state.valid_signal_count
     center = round(Int, wfs.state.nominal_detector_resolution / wfs.params.binning / 2)
@@ -72,11 +72,11 @@ function bioedge_signal!(::AcceleratorStyle, wfs::BioEdgeWFS, tel::Telescope, fr
     refy = @view wfs.state.reference_signal_2d[n_pixels+1:2*n_pixels, :]
     i4q = @view wfs.state.temp[1:n_pixels, 1:n_pixels]
     @. i4q = q1 + q2 + q3 + q4
-    summed_i4q = bioedge_valid_flux_sum!(execution_style(frame), wfs, i4q)
+    summed_i4q = bioedge_valid_flux_sum!(style, wfs, i4q)
     norma = bioedge_normalization(wfs.params.normalization, wfs, tel, src, count, summed_i4q)
     @. sx = (q1 - q2 + q4 - q3) / norma - refx
     @. sy = (q1 - q4 + q2 - q3) / norma - refy
-    launch_kernel!(execution_style(frame), gather_bioedge_slopes_kernel!, wfs.state.slopes,
+    launch_kernel!(style, gather_bioedge_slopes_kernel!, wfs.state.slopes,
         wfs.state.signal_2d, wfs.state.valid_signal_indices, count, n_pixels; ndrange=count)
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
@@ -207,8 +207,8 @@ function select_bioedge_valid_i4q!(::ScalarCPUStyle, wfs::BioEdgeWFS, tel::Teles
         wfs.params.delta_theta,
         wfs.params.user_modulation_path,
     ))
-    bioedge_intensity!(wfs.state.temp, wfs, tel, src)
-    frame = sample_bioedge_intensity!(wfs, tel, wfs.state.temp)
+    bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
+    frame = sample_bioedge_intensity!(wfs, tel, wfs.state.intensity)
     build_modulation_phases!(wfs, tel)
 
     center = round(Int, wfs.state.nominal_detector_resolution / wfs.params.binning / 2)
@@ -268,8 +268,8 @@ function select_bioedge_valid_i4q!(::AcceleratorStyle, wfs::BioEdgeWFS, tel::Tel
         wfs.params.delta_theta,
         wfs.params.user_modulation_path,
     ))
-    bioedge_intensity!(wfs.state.temp, wfs, tel, src)
-    frame = sample_bioedge_intensity!(wfs, tel, wfs.state.temp)
+    bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
+    frame = sample_bioedge_intensity!(wfs, tel, wfs.state.intensity)
     build_modulation_phases!(wfs, tel)
 
     center = round(Int, wfs.state.nominal_detector_resolution / wfs.params.binning / 2)

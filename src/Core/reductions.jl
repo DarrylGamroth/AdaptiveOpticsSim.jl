@@ -25,6 +25,7 @@ struct HostMirrorReductionPlan <: AbstractReductionExecutionPlan end
 @inline reduction_execution_plan(A::AbstractArray) = reduction_execution_plan(execution_style(A), reduction_parent_source(A))
 @inline reduction_execution_plan(::ScalarCPUStyle, ::AbstractArray) = DirectReductionPlan()
 @inline reduction_execution_plan(::AcceleratorStyle, ::AbstractArray) = DirectReductionPlan()
+@inline reduction_execution_plan(::AcceleratorStyle{<:KernelAbstractions.CPU}, ::Array) = HostMirrorReductionPlan()
 
 @inline function ensure_reduction_host_parent(host_parent::AbstractMatrix{T}, src::AbstractMatrix{T}) where {T}
     return size(host_parent) == size(src) ? host_parent : Matrix{T}(undef, size(src)...)

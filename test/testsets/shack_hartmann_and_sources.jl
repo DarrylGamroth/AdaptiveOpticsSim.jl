@@ -44,8 +44,33 @@ end
     @test total == 13.0
     @test sx ≈ 22 / 13
     @test sy ≈ 22 / 13
+    @test AdaptiveOpticsSim.centroid_from_intensity!(copy(centroid_input), 0.25) ==
+          AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), 0.25)
+    @test AdaptiveOpticsSim.centroid_from_intensity_cutoff!(copy(centroid_input), 3.0) ==
+          AdaptiveOpticsSim.centroid_from_intensity_cutoff!(AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), 3.0)
+    @test AdaptiveOpticsSim.centroid_from_intensity!(KA_CPU_STYLE, copy(centroid_input), 0.25) ==
+          AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), 0.25)
+    @test AdaptiveOpticsSim.centroid_from_intensity_cutoff!(KA_CPU_STYLE, copy(centroid_input), 3.0) ==
+          AdaptiveOpticsSim.centroid_from_intensity_cutoff!(AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), 3.0)
+    @test AdaptiveOpticsSim.centroid_from_intensity_cutoff!(
+        AdaptiveOpticsSim.ScalarCPUStyle(), fill(1.0, 2, 2), 2.0) == (0.0, 0.0, 0.0)
 
     sh = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4, threshold_cog=0.2)
+    @test AdaptiveOpticsSim.centroid_from_spot!(sh, copy(centroid_input), 0.25) ==
+          AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), 0.25)
+    @test AdaptiveOpticsSim.centroid_from_spot!(sh, copy(centroid_input)) ==
+          AdaptiveOpticsSim.centroid_from_intensity!(
+              AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), AdaptiveOpticsSim.centroid_threshold(sh))
+    @test AdaptiveOpticsSim.centroid_from_spot_cutoff!(sh, copy(centroid_input), 3.0) ==
+          AdaptiveOpticsSim.centroid_from_intensity_cutoff!(AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), 3.0)
+    @test AdaptiveOpticsSim.centroid_from_spot!(KA_CPU_STYLE, sh, copy(centroid_input), 0.25) ==
+          AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), 0.25)
+    @test AdaptiveOpticsSim.centroid_from_spot_cutoff!(KA_CPU_STYLE, sh, copy(centroid_input), 3.0) ==
+          AdaptiveOpticsSim.centroid_from_intensity_cutoff!(AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), 3.0)
+    spot_view = @view centroid_input[:, :]
+    @test AdaptiveOpticsSim.sync_sh_staged_spot!(KA_CPU_STYLE, centroid_input) === centroid_input
+    @test AdaptiveOpticsSim.sync_sh_staged_view!(KA_CPU_STYLE, spot_view) === spot_view
+
     fill!(sh.state.valid_mask, true)
     fill!(sh.state.valid_mask_host, true)
     sh.state.valid_mask[1, 3] = false
@@ -63,6 +88,16 @@ end
     @test scalar_slopes[offset + 2] == 0.0
     @test scalar_slopes[3] == 0.0
     @test scalar_slopes[offset + 3] == 0.0
+    @test AdaptiveOpticsSim.sh_signal_from_spots!(sh, 10.0, 0.05)[1] == 2.0
+    @test AdaptiveOpticsSim.sh_signal_from_spots!(sh, 10.0, slope_extraction_model(sh))[1] == 2.0
+
+    sh_accel = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    fill!(sh_accel.state.valid_mask, true)
+    fill!(sh_accel.state.spot_cube, 0.0)
+    sh_accel.state.spot_cube[1, 2, 3] = 10.0
+    accel_slopes = copy(AdaptiveOpticsSim.sh_signal_from_spots!(KA_CPU_STYLE, sh_accel, 0.5))
+    @test accel_slopes[1] == 2.0
+    @test accel_slopes[offset + 1] == 1.0
 
     sh.state.reference_signal_2d .= reshape(collect(range(0.1, 3.2; length=2 * offset)), 2 * sh.params.n_lenslets, :)
     sh.state.slopes_units = 2.0
@@ -74,21 +109,44 @@ end
     @test calibrated[offset + 1] ≈ (1.0 - reference[offset + 1]) / 2
     @test calibrated[3] ≈ -reference[3] / 2
     @test calibrated[offset + 3] ≈ -reference[offset + 3] / 2
+    @test AdaptiveOpticsSim.sh_signal_from_spots_calibrated!(sh, 10.0, 0.05)[1] ≈
+          (2.0 - reference[1]) / 2
+    @test AdaptiveOpticsSim.sh_signal_from_spots_calibrated!(sh, 10.0, slope_extraction_model(sh))[1] ≈
+          (2.0 - reference[1]) / 2
+
+    sh_accel.state.reference_signal_2d .= 0.25
+    sh_accel.state.slopes_units = 2.0
+    fill!(sh_accel.state.spot_cube, 0.0)
+    sh_accel.state.spot_cube[1, 2, 3] = 10.0
+    accel_calibrated = copy(AdaptiveOpticsSim.sh_signal_from_spots_calibrated!(KA_CPU_STYLE, sh_accel, 0.5))
+    @test accel_calibrated[1] ≈ (2.0 - 0.25) / 2
+    @test accel_calibrated[offset + 1] ≈ (1.0 - 0.25) / 2
 
     slopes_for_invalid = ones(Float64, 2 * offset)
     AdaptiveOpticsSim.zero_invalid_sh_slopes!(AdaptiveOpticsSim.ScalarCPUStyle(), slopes_for_invalid, sh.state.valid_mask)
     @test slopes_for_invalid[3] == 0.0
     @test slopes_for_invalid[offset + 3] == 0.0
     @test slopes_for_invalid[1] == 1.0
+    slopes_for_invalid_accel = ones(Float64, 2 * offset)
+    AdaptiveOpticsSim.zero_invalid_sh_slopes!(KA_CPU_STYLE, slopes_for_invalid_accel, sh.state.valid_mask)
+    @test slopes_for_invalid_accel[3] == 0.0
+    @test slopes_for_invalid_accel[offset + 3] == 0.0
+    @test slopes_for_invalid_accel[1] == 1.0
 
     cube_for_invalid = ones(Float64, offset, 2, 2)
     AdaptiveOpticsSim.zero_invalid_sh_spot_cube!(AdaptiveOpticsSim.ScalarCPUStyle(), cube_for_invalid, sh.state.valid_mask)
     @test all(iszero, cube_for_invalid[3, :, :])
     @test all(==(1.0), cube_for_invalid[1, :, :])
+    cube_for_invalid_accel = ones(Float64, offset, 2, 2)
+    AdaptiveOpticsSim.zero_invalid_sh_spot_cube!(KA_CPU_STYLE, cube_for_invalid_accel, sh.state.valid_mask)
+    @test all(iszero, cube_for_invalid_accel[3, :, :])
+    @test all(==(1.0), cube_for_invalid_accel[1, :, :])
 
     mean_signal = collect(1.0:(2 * offset))
     @test AdaptiveOpticsSim.mean_valid_signal(mean_signal, sh.state.valid_mask) ≈
           AdaptiveOpticsSim.packed_valid_pair_mean(AdaptiveOpticsSim.ScalarCPUStyle(), mean_signal, sh.state.valid_mask)
+    @test AdaptiveOpticsSim.mean_valid_signal(KA_CPU_STYLE, mean_signal, sh.state.valid_mask) ≈
+          AdaptiveOpticsSim.mean_valid_signal(mean_signal, sh.state.valid_mask)
 
     scalar_ramp = zeros(Float64, 8, 8)
     ka_ramp = similar(scalar_ramp)
@@ -126,6 +184,10 @@ end
     point_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_det, tel, src, det, MersenneTwister(21))
     @test isfinite(point_peak)
     @test point_peak > 0
+    sh_det_accel = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    AdaptiveOpticsSim.prepare_sampling!(sh_det_accel, tel, src)
+    point_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(KA_CPU_STYLE, sh_det_accel, tel, src, det, MersenneTwister(21))
+    @test point_peak_accel ≈ point_peak
 
     poly = with_spectrum(src, SpectralBundle([SpectralSample(0.95 * wavelength(src), 0.5),
         SpectralSample(1.05 * wavelength(src), 0.5)]))
@@ -133,17 +195,58 @@ end
     poly_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_poly, tel, poly, det, MersenneTwister(22))
     @test isfinite(poly_peak)
     @test poly_peak > 0
+    sh_poly_accel = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    AdaptiveOpticsSim.prepare_sampling!(sh_poly_accel, tel, src)
+    poly_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(KA_CPU_STYLE, sh_poly_accel, tel, poly, det, MersenneTwister(22))
+    @test poly_peak_accel ≈ poly_peak
 
     ext_single = with_extended_source(src, PointCloudSourceModel([(0.0, 0.0)], [1.0]))
     sh_ext_single = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     ext_single_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_ext_single, tel, ext_single, det, MersenneTwister(23))
     @test ext_single_peak ≈ point_peak atol=1e-8 rtol=1e-8
+    ext_double = with_extended_source(src, PointCloudSourceModel([(0.0, 0.0), (0.1, 0.0)], [0.5, 0.5]))
+    sh_ext_double_accel = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    AdaptiveOpticsSim.prepare_sampling!(sh_ext_double_accel, tel, src)
+    ext_double_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(
+        KA_CPU_STYLE, sh_ext_double_accel, tel, ext_double, det, MersenneTwister(23))
+    @test isfinite(ext_double_peak_accel)
+    @test ext_double_peak_accel > 0
+
+    ast_batched = Asterism([src, Source(band=:I, magnitude=0.0, coordinates=(0.1, 0.0))])
+    sh_ast_batched = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    AdaptiveOpticsSim.prepare_sampling!(sh_ast_batched, tel, src)
+    AdaptiveOpticsSim.ensure_sh_calibration!(sh_ast_batched, tel, src)
+    ast_batched_slopes = AdaptiveOpticsSim.measure_sh_asterism_batched!(KA_CPU_STYLE, sh_ast_batched, tel, ast_batched)
+    @test length(ast_batched_slopes) == 2 * 4 * 4
+    @test all(isfinite, ast_batched_slopes)
+    sh_ast_batched_det = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    AdaptiveOpticsSim.prepare_sampling!(sh_ast_batched_det, tel, src)
+    AdaptiveOpticsSim.ensure_sh_calibration!(sh_ast_batched_det, tel, src)
+    ast_batched_det_slopes = AdaptiveOpticsSim.measure_sh_asterism_batched!(
+        KA_CPU_STYLE, sh_ast_batched_det, tel, ast_batched, det, MersenneTwister(26))
+    @test length(ast_batched_det_slopes) == 2 * 4 * 4
+    @test all(isfinite, ast_batched_det_slopes)
 
     lgs = LGSSource(elongation_factor=1.3)
     sh_lgs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     lgs_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_lgs, tel, lgs, det, MersenneTwister(24))
     @test isfinite(lgs_peak)
     @test lgs_peak >= 0
+    sh_lgs_accel = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    AdaptiveOpticsSim.prepare_sampling!(sh_lgs_accel, tel, lgs)
+    lgs_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(KA_CPU_STYLE, sh_lgs_accel, tel, lgs, det, MersenneTwister(24))
+    @test isfinite(lgs_peak_accel)
+    @test lgs_peak_accel >= 0
+
+    na_profile = [80000.0 90000.0 100000.0; 0.2 0.6 0.2]
+    lgs_profile = LGSSource(elongation_factor=1.2, na_profile=na_profile, fwhm_spot_up=1.0)
+    sh_lgs_profile_accel = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    AdaptiveOpticsSim.prepare_sampling!(sh_lgs_profile_accel, tel, lgs_profile)
+    @test AdaptiveOpticsSim.sampled_spots_peak!(KA_CPU_STYLE, sh_lgs_profile_accel, tel, lgs_profile) >= 0
+    sh_lgs_profile_det_accel = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    AdaptiveOpticsSim.prepare_sampling!(sh_lgs_profile_det_accel, tel, lgs_profile)
+    @test AdaptiveOpticsSim.sampled_spots_peak!(
+        KA_CPU_STYLE, sh_lgs_profile_det_accel, tel, lgs_profile, det, MersenneTwister(25)) >= 0
 end
 
 @testset "Asterism PSF" begin
