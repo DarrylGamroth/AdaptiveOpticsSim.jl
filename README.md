@@ -1,6 +1,7 @@
 # AdaptiveOpticsSim.jl
 
 [![CPU Validation](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/actions/workflows/cpu-validation.yml/badge.svg)](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/actions/workflows/cpu-validation.yml)
+[![Coverage](https://codecov.io/gh/DarrylGamroth/AdaptiveOpticsSim.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/DarrylGamroth/AdaptiveOpticsSim.jl)
 
 Julia adaptive optics simulation toolkit. The package keeps the OOPAO modeling
 surface recognizable, but uses idiomatic Julia design for performance,
