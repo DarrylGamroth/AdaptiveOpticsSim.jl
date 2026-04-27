@@ -12,8 +12,75 @@
     bio_slopes = measure!(bio, tel)
     @test length(bio_slopes) == 2 * 4 * 4
 
-    sh = ShackHartmann(tel; n_lenslets=4)
     ngs = Source(band=:I, magnitude=0.0)
+
+    pyr_direct = PyramidWFS(tel; pupil_samples=2, mode=Diffractive(), modulation=0.0)
+    pyr_direct.state.nominal_detector_resolution = 4
+    AdaptiveOpticsSim.resize_pyramid_signal_buffers!(pyr_direct, 4)
+    pyr_direct.state.valid_i4q .= Bool[1 0; 1 1]
+    AdaptiveOpticsSim.update_pyramid_valid_signal!(pyr_direct)
+    @test AdaptiveOpticsSim.update_pyramid_valid_signal_indices!(pyr_direct) == 3
+    AdaptiveOpticsSim.resize_pyramid_slope_buffers!(pyr_direct)
+    fill!(pyr_direct.state.reference_signal_2d, 0.0)
+    pyr_frame = [4.0 4.0 1.0 1.0;
+                 4.0 4.0 1.0 1.0;
+                 3.0 3.0 2.0 2.0;
+                 3.0 3.0 2.0 2.0]
+    pyr_direct_slopes = AdaptiveOpticsSim.pyramid_signal!(pyr_direct, tel, pyr_frame)
+    @test length(pyr_direct_slopes) == 6
+    @test pyr_direct_slopes[1:3] ≈ fill(0.4, 3)
+    @test pyr_direct_slopes[4:6] ≈ zeros(3)
+
+    pyr_invalid = PyramidWFS(tel; pupil_samples=2, mode=Diffractive(), modulation=0.0)
+    pyr_invalid.state.nominal_detector_resolution = 4
+    AdaptiveOpticsSim.resize_pyramid_signal_buffers!(pyr_invalid, 4)
+    fill!(pyr_invalid.state.valid_i4q, false)
+    AdaptiveOpticsSim.update_pyramid_valid_signal!(pyr_invalid)
+    @test AdaptiveOpticsSim.update_pyramid_valid_signal_indices!(pyr_invalid) == 0
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.resize_pyramid_slope_buffers!(pyr_invalid)
+
+    pyr_incidence = PyramidWFS(tel; pupil_samples=2, mode=Diffractive(), modulation=0.0,
+        normalization=IncidenceFluxNormalization())
+    expected_pyr_norm = AdaptiveOpticsSim.photon_flux(ngs) * tel.params.sampling_time *
+                        (tel.params.diameter / pyr_incidence.params.pupil_samples)^2
+    @test AdaptiveOpticsSim.pyramid_normalization(pyr_incidence.params.normalization,
+        pyr_incidence, tel, ngs, 3, 10.0) ≈ expected_pyr_norm
+    @test AdaptiveOpticsSim.pyramid_normalization(pyr_incidence.params.normalization,
+        pyr_incidence, tel, nothing, 3, 10.0) == 1.0
+
+    bio_direct = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
+    bio_direct.state.nominal_detector_resolution = 4
+    AdaptiveOpticsSim.resize_bioedge_signal_buffers!(bio_direct, 4)
+    bio_direct.state.valid_i4q .= Bool[1 0; 1 1]
+    AdaptiveOpticsSim.update_bioedge_valid_signal!(bio_direct)
+    @test AdaptiveOpticsSim.update_bioedge_valid_signal_indices!(bio_direct) == 3
+    AdaptiveOpticsSim.resize_bioedge_slope_buffers!(bio_direct)
+    fill!(bio_direct.state.reference_signal_2d, 0.0)
+    fill!(bio_direct.state.optical_gain, 2.0)
+    bio_frame = copy(pyr_frame)
+    bio_direct_slopes = AdaptiveOpticsSim.bioedge_signal!(bio_direct, tel, bio_frame)
+    @test length(bio_direct_slopes) == 6
+    @test bio_direct_slopes[1:3] ≈ fill(0.8, 3)
+    @test bio_direct_slopes[4:6] ≈ zeros(3)
+
+    bio_invalid = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
+    bio_invalid.state.nominal_detector_resolution = 4
+    AdaptiveOpticsSim.resize_bioedge_signal_buffers!(bio_invalid, 4)
+    fill!(bio_invalid.state.valid_i4q, false)
+    AdaptiveOpticsSim.update_bioedge_valid_signal!(bio_invalid)
+    @test AdaptiveOpticsSim.update_bioedge_valid_signal_indices!(bio_invalid) == 0
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.resize_bioedge_slope_buffers!(bio_invalid)
+
+    bio_incidence = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive(),
+        normalization=IncidenceFluxNormalization())
+    expected_bio_norm = AdaptiveOpticsSim.photon_flux(ngs) * tel.params.sampling_time *
+                        (tel.params.diameter / bio_incidence.params.pupil_samples)^2
+    @test AdaptiveOpticsSim.bioedge_normalization(bio_incidence.params.normalization,
+        bio_incidence, tel, ngs, 3, 10.0) ≈ expected_bio_norm
+    @test AdaptiveOpticsSim.bioedge_normalization(bio_incidence.params.normalization,
+        bio_incidence, tel, nothing, 3, 10.0) == 1.0
+
+    sh = ShackHartmann(tel; n_lenslets=4)
     lgs = LGSSource(elongation_factor=2.0)
     slopes_ngs = measure!(sh, tel, ngs)
     slopes_lgs = measure!(sh, tel, lgs)

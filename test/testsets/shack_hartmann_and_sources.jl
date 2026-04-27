@@ -30,6 +30,122 @@ end
     @test size(AdaptiveOpticsSim.sh_exported_spot_cube(sh)) == (16 * 16, 8, 8)
 end
 
+@testset "Shack-Hartmann signal extraction branches" begin
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    src = Source(band=:I, magnitude=0.0)
+
+    zero_intensity = zeros(Float64, 3, 3)
+    @test AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.ScalarCPUStyle(), zero_intensity, 0.1) ==
+          (0.0, 0.0, 0.0)
+
+    centroid_input = [1.0 0.0 0.0; 0.0 4.0 0.0; 0.0 0.0 9.0]
+    total, sx, sy = AdaptiveOpticsSim.centroid_from_intensity_cutoff!(
+        AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), 3.0)
+    @test total == 13.0
+    @test sx ≈ 22 / 13
+    @test sy ≈ 22 / 13
+
+    sh = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4, threshold_cog=0.2)
+    fill!(sh.state.valid_mask, true)
+    fill!(sh.state.valid_mask_host, true)
+    sh.state.valid_mask[1, 3] = false
+    sh.state.valid_mask_host[1, 3] = false
+    fill!(sh.state.spot_cube, 0.0)
+    sh.state.spot_cube[1, 2, 3] = 10.0
+    sh.state.spot_cube[2, 1, 1] = 0.1
+    sh.state.spot_cube[4, 4, 1] = 8.0
+
+    scalar_slopes = AdaptiveOpticsSim.sh_signal_from_spots!(AdaptiveOpticsSim.ScalarCPUStyle(), sh, 0.5)
+    offset = sh.params.n_lenslets * sh.params.n_lenslets
+    @test scalar_slopes[1] == 2.0
+    @test scalar_slopes[offset + 1] == 1.0
+    @test scalar_slopes[2] == 0.0
+    @test scalar_slopes[offset + 2] == 0.0
+    @test scalar_slopes[3] == 0.0
+    @test scalar_slopes[offset + 3] == 0.0
+
+    sh.state.reference_signal_2d .= reshape(collect(range(0.1, 3.2; length=2 * offset)), 2 * sh.params.n_lenslets, :)
+    sh.state.slopes_units = 2.0
+    fill!(sh.state.spot_cube, 0.0)
+    sh.state.spot_cube[1, 2, 3] = 10.0
+    calibrated = copy(AdaptiveOpticsSim.sh_signal_from_spots_calibrated!(AdaptiveOpticsSim.ScalarCPUStyle(), sh, 0.5))
+    reference = vec(sh.state.reference_signal_2d)
+    @test calibrated[1] ≈ (2.0 - reference[1]) / 2
+    @test calibrated[offset + 1] ≈ (1.0 - reference[offset + 1]) / 2
+    @test calibrated[3] ≈ -reference[3] / 2
+    @test calibrated[offset + 3] ≈ -reference[offset + 3] / 2
+
+    slopes_for_invalid = ones(Float64, 2 * offset)
+    AdaptiveOpticsSim.zero_invalid_sh_slopes!(AdaptiveOpticsSim.ScalarCPUStyle(), slopes_for_invalid, sh.state.valid_mask)
+    @test slopes_for_invalid[3] == 0.0
+    @test slopes_for_invalid[offset + 3] == 0.0
+    @test slopes_for_invalid[1] == 1.0
+
+    cube_for_invalid = ones(Float64, offset, 2, 2)
+    AdaptiveOpticsSim.zero_invalid_sh_spot_cube!(AdaptiveOpticsSim.ScalarCPUStyle(), cube_for_invalid, sh.state.valid_mask)
+    @test all(iszero, cube_for_invalid[3, :, :])
+    @test all(==(1.0), cube_for_invalid[1, :, :])
+
+    mean_signal = collect(1.0:(2 * offset))
+    @test AdaptiveOpticsSim.mean_valid_signal(mean_signal, sh.state.valid_mask) ≈
+          AdaptiveOpticsSim.packed_valid_pair_mean(AdaptiveOpticsSim.ScalarCPUStyle(), mean_signal, sh.state.valid_mask)
+
+    scalar_ramp = zeros(Float64, 8, 8)
+    ka_ramp = similar(scalar_ramp)
+    AdaptiveOpticsSim.fill_calibration_ramp!(AdaptiveOpticsSim.ScalarCPUStyle(), scalar_ramp, 1e-3, 8)
+    AdaptiveOpticsSim.fill_calibration_ramp!(KA_CPU_STYLE, ka_ramp, 1e-3, 8)
+    @test ka_ramp ≈ scalar_ramp
+
+    sh_scalar = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    sh_ka = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    for wfs in (sh_scalar, sh_ka)
+        fill!(wfs.state.valid_mask, true)
+        fill!(wfs.state.spot_cube, 0.0)
+        wfs.state.spot_cube[1, 2, 3] = 10.0
+        wfs.state.spot_cube[4, 4, 1] = 8.0
+    end
+    scalar_device_reference = copy(AdaptiveOpticsSim.sh_signal_from_spots!(AdaptiveOpticsSim.ScalarCPUStyle(), sh_scalar, 0.5))
+    ka_device_stats = copy(AdaptiveOpticsSim.sh_signal_from_spots_device_stats!(KA_CPU_STYLE, sh_ka, 0.5))
+    @test ka_device_stats ≈ scalar_device_reference
+
+    sh_scalar.state.reference_signal_2d .= 0.25
+    sh_ka.state.reference_signal_2d .= 0.25
+    sh_scalar.state.slopes_units = 2.0
+    sh_ka.state.slopes_units = 2.0
+    fill!(sh_scalar.state.spot_cube, 0.0)
+    fill!(sh_ka.state.spot_cube, 0.0)
+    sh_scalar.state.spot_cube[1, 2, 3] = 10.0
+    sh_ka.state.spot_cube[1, 2, 3] = 10.0
+    scalar_calibrated = copy(AdaptiveOpticsSim.sh_signal_from_spots_calibrated!(
+        AdaptiveOpticsSim.ScalarCPUStyle(), sh_scalar, 0.5))
+    ka_calibrated = copy(AdaptiveOpticsSim.sh_signal_from_spots_calibrated_device_stats!(KA_CPU_STYLE, sh_ka, 0.5))
+    @test ka_calibrated ≈ scalar_calibrated
+
+    det = Detector(noise=NoiseNone(), binning=1)
+    sh_det = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    point_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_det, tel, src, det, MersenneTwister(21))
+    @test isfinite(point_peak)
+    @test point_peak > 0
+
+    poly = with_spectrum(src, SpectralBundle([SpectralSample(0.95 * wavelength(src), 0.5),
+        SpectralSample(1.05 * wavelength(src), 0.5)]))
+    sh_poly = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    poly_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_poly, tel, poly, det, MersenneTwister(22))
+    @test isfinite(poly_peak)
+    @test poly_peak > 0
+
+    ext_single = with_extended_source(src, PointCloudSourceModel([(0.0, 0.0)], [1.0]))
+    sh_ext_single = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    ext_single_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_ext_single, tel, ext_single, det, MersenneTwister(23))
+    @test ext_single_peak ≈ point_peak atol=1e-8 rtol=1e-8
+
+    lgs = LGSSource(elongation_factor=1.3)
+    sh_lgs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    lgs_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_lgs, tel, lgs, det, MersenneTwister(24))
+    @test isfinite(lgs_peak)
+    @test lgs_peak >= 0
+end
+
 @testset "Asterism PSF" begin
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src1 = Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0))
