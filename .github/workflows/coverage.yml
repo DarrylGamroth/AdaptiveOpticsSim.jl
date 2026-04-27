@@ -49,3 +49,42 @@ jobs:
           flags: cpu
           name: adaptiveopticssim-cpu
           use_oidc: true
+
+  ka-cpu-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JULIA_NUM_THREADS: "1"
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+
+      - name: Cache Julia artifacts
+        uses: julia-actions/cache@v3
+
+      - name: Instantiate
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+
+      - name: Run KA CPU matrix with coverage
+        run: julia --project=. --startup-file=no --code-coverage=user test/ka_cpu_runtests.jl
+
+      - name: Process KA CPU coverage
+        uses: julia-actions/julia-processcoverage@v1
+        with:
+          directories: src
+
+      - name: Upload KA CPU coverage to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          files: lcov.info
+          disable_search: true
+          fail_ci_if_error: true
+          flags: ka-cpu
+          name: adaptiveopticssim-ka-cpu
+          use_oidc: true
