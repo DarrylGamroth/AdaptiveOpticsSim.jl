@@ -188,7 +188,7 @@ Use this when you care about:
 ```julia
 using Random
 
-rng = MersenneTwister(0)
+rng = runtime_rng(0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 sim = AOSimulation(tel, src, atm, dm, wfs)
 
@@ -326,14 +326,20 @@ For advanced utilities such as telemetry/config helpers, scenario builders, and
 some backend policy helpers, use namespaced access. Examples:
 
 ```julia
-ws = AdaptiveOpticsSim.Workspace(tel; rng=MersenneTwister(0))
+ws = AdaptiveOpticsSim.Workspace(tel; rng=deterministic_reference_rng(0))
 sim = AdaptiveOpticsSim.initialize_ao_shwfs(...)
 sprint = AdaptiveOpticsSim.SPRINT(tel, dm, wfs, basis)
 ```
 
 ## Determinism
 
-- Use a fixed `MersenneTwister` and pass it into `advance!` or detector calls.
+- Use a fixed RNG and pass it into `advance!`, detector calls, or runtime
+  constructors instead of relying on `Random.default_rng()`.
+- Use `deterministic_reference_rng(seed)` for reference datasets and regression
+  fixtures. This preserves the long-standing `MersenneTwister` stream.
+- Use `runtime_rng(seed)` for new RTC/HIL-style simulations and benchmarks.
+  This uses `Xoshiro`, which is a better default for throughput-oriented hot
+  paths while still being repeatable for a fixed software stack.
 - Keep detector noise disabled when comparing against reference datasets unless
   the test is explicitly about noise.
 - Run single-threaded when strict reproducibility matters.

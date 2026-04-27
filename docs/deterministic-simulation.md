@@ -25,6 +25,13 @@ reproducible run-to-run with identical inputs and configuration.
    - All stochastic components accept an explicit `rng` (phase screens, photon
      noise, read noise, source jitter).
    - `Workspace` owns the RNG so every step uses the same stream.
+   - Use `deterministic_reference_rng(seed)` for reference-data generation,
+     regression fixtures, and examples where preserving historical streams
+     matters. This currently returns `MersenneTwister(seed)`.
+   - Use `runtime_rng(seed)` for new long-running runtime or HIL simulations
+     where the stream only needs to be repeatable for a fixed Julia/runtime
+     configuration. This currently returns `Xoshiro(seed)`, which has smaller
+     state and is generally a better throughput-oriented choice for hot paths.
    - For cross-version reproducibility, consider `StableRNGs.jl`.
 
 2) Deterministic configuration:
@@ -51,8 +58,24 @@ function init_deterministic!(cfg::DeterministicConfig)
     set_fft_provider_threads!(cfg.fft_threads)
 end
 
-ws = AdaptiveOpticsSim.Workspace(tel; rng=MersenneTwister(0x1234))
+ws = AdaptiveOpticsSim.Workspace(tel; rng=deterministic_reference_rng(0x1234))
+runtime = ClosedLoopRuntime(sim, recon; rng=runtime_rng(0x1234))
 ```
+
+## RNG Policy
+
+The package accepts `AbstractRNG` through stochastic APIs rather than owning a
+single global stream. That keeps detector noise, phase screens, and runtime
+simulation reproducible when users pass an explicit RNG.
+
+Use `MersenneTwister` through `deterministic_reference_rng` when changing the
+stream would invalidate stored references or regression baselines. Use `Xoshiro`
+through `runtime_rng` for new RTC/HIL-style simulations and benchmarks where
+throughput and lower RNG state overhead are more important than preserving an
+older fixture stream.
+
+Do not rely on `Random.default_rng()` for validation artifacts or reference
+comparisons. Always pass the RNG explicitly.
 
 ## Phase screens
 - Use a deterministic phase screen generator with fixed `rng` draws.

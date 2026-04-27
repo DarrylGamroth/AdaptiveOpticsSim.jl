@@ -60,7 +60,7 @@ function bench_reconstructor_inplace()
 end
 
 function bench_closed_loop_runtime()
-    rng = MersenneTwister(0)
+    rng = runtime_rng(0)
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
@@ -75,7 +75,7 @@ function bench_closed_loop_runtime()
 end
 
 function bench_closed_loop_runtime_timing()
-    rng = MersenneTwister(0)
+    rng = runtime_rng(0)
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
@@ -143,7 +143,7 @@ function alloc_checks()
     reconstruct!(out, recon, slopes)
     alloc_recon = @allocated reconstruct!(out, recon, slopes)
 
-    rng = MersenneTwister(0)
+    rng = runtime_rng(0)
     tel_rt = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src_rt = Source(band=:I, magnitude=0.0)
     atm_rt = KolmogorovAtmosphere(tel_rt; r0=0.2, L0=25.0)

@@ -233,6 +233,7 @@ export readout, command, slopes, wfs_frame, science_frame, wfs_metadata, science
 export grouped_wfs_stack, grouped_science_stack
 export runtime_profile, runtime_latency
 export RuntimeTimingStats, RuntimePhaseTimingStats, runtime_timing, runtime_phase_timing
+export runtime_rng, deterministic_reference_rng
 export with_reconstructor, with_reconstructors
 export AbstractOpticalElement, AbstractSource, AbstractAtmosphere, AbstractWFS
 export AbstractDetector, AbstractControllableOptic, AbstractDeformableMirror, SensingMode, Diffractive, Geometric

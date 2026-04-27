@@ -17,6 +17,17 @@ include("reference_harness.jl")
 include("ka_cpu_matrix.jl")
 include("tomography.jl")
 
+_rng_family(::Xoshiro) = :xoshiro
+_rng_family(::MersenneTwister) = :mersenne_twister
+_rng_family(::AbstractRNG) = :other
+
+@testset "RNG policy helpers" begin
+    @test _rng_family(runtime_rng(1)) == :xoshiro
+    @test _rng_family(deterministic_reference_rng(1)) == :mersenne_twister
+    @test rand(runtime_rng(42), UInt64) == rand(runtime_rng(42), UInt64)
+    @test rand(deterministic_reference_rng(42), UInt64) == rand(deterministic_reference_rng(42), UInt64)
+end
+
 function run_tutorial_example(name::AbstractString)
     path = joinpath(dirname(@__DIR__), "examples", "tutorials", name)
     mod = Module(Symbol("Tutorial_", replace(basename(name), "." => "_")))

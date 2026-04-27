@@ -135,7 +135,7 @@ function run_profile(; backend_name::AbstractString="cpu", branch_name::Abstract
     resolved_warmup = something(warmup, cfg.warmup)
 
     t0 = time_ns()
-    scenario = subaru_ao188_simulation(; params=params, backend=BackendArray, rng=MersenneTwister(1))
+    scenario = subaru_ao188_simulation(; params=params, backend=BackendArray, rng=runtime_rng(1))
     _sync_runtime!(backend_tag, scenario)
     build_time_ns = time_ns() - t0
 

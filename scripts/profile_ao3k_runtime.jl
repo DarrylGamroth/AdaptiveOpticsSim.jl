@@ -200,7 +200,7 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     ))
 
     t0 = time_ns()
-    simulation = subaru_ao3k_simulation(; params=params, backend=BackendArray, rng=MersenneTwister(1))
+    simulation = subaru_ao3k_simulation(; params=params, backend=BackendArray, rng=runtime_rng(1))
     _sync_simulation!(backend_tag, simulation)
     build_time_ns = time_ns() - t0
 

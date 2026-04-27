@@ -156,7 +156,7 @@ end
 function build_revolt_like_hil_context(; backend_name::AbstractString="cpu", config_dir::AbstractString,
     sensor=CMOSSensor(), response_model=nothing,
     thermal_model=nothing, T::Type{<:AbstractFloat}=Float32,
-    rng=MersenneTwister(0))
+    rng=runtime_rng())
     backend_cfg = revolt_profile_backend(backend_name)
     dark_current = isnothing(thermal_model) ? zero(T) : T(0.02)
     actuator_map_path = joinpath(config_dir, "revolt_like_dmActuatorMap_277.csv")

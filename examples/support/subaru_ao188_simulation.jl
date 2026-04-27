@@ -608,8 +608,12 @@ function _measure_low!(surrogate::AO188Simulation, rng::AbstractRNG)
     return measure!(surrogate.low_wfs, surrogate.low_tel, surrogate.src, surrogate.low_detector; rng=rng)
 end
 
+_child_frame_rng(::MersenneTwister, seed::UInt64) = MersenneTwister(seed)
+_child_frame_rng(::Xoshiro, seed::UInt64) = Xoshiro(seed)
+_child_frame_rng(::AbstractRNG, seed::UInt64) = runtime_rng(seed)
+
 function _frame_rngs!(rng::AbstractRNG)
-    return MersenneTwister(rand(rng, UInt64)), MersenneTwister(rand(rng, UInt64))
+    return _child_frame_rng(rng, rand(rng, UInt64)), _child_frame_rng(rng, rand(rng, UInt64))
 end
 
 function measure_branches_backend!(::BackendStreamExecution, simulation::AO188Simulation, state)
@@ -645,7 +649,7 @@ function prepare_replay!(simulation::AO188Simulation)
 end
 
 function subaru_ao188_simulation(; params::AO188SimulationParams=AO188SimulationParams(),
-    backend::AbstractArrayBackend=CPUBackend(), build_backend::Union{Nothing,AdaptiveOpticsSim.BuildBackend}=nothing, rng=MersenneTwister(0))
+    backend::AbstractArrayBackend=CPUBackend(), build_backend::Union{Nothing,AdaptiveOpticsSim.BuildBackend}=nothing, rng=runtime_rng())
     resolved_materialize_backend = isnothing(build_backend) ? _auto_build_backend(backend) : build_backend
     resolved_calibration_backend = isnothing(build_backend) && !(backend isa CPUBackend) ? AdaptiveOpticsSim.CPUBuildBackend() : resolved_materialize_backend
     T = typeof(params.diameter)

@@ -145,7 +145,7 @@ function _profile_field_path(mode::Symbol, atmo_kind::Symbol, backend_name::Abst
         central_obstruction=0.0f0, T=T, backend=BackendArray)
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = _make_atmosphere(atmo_kind, tel, cfg, T, BackendArray)
-    rng = MersenneTwister(3)
+    rng = runtime_rng(3)
     advance!(atm, tel; rng=rng)
 
     prop = AtmosphericFieldPropagation(atm, tel, src;

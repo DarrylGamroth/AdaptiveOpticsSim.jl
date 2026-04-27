@@ -112,7 +112,7 @@ function build_proper_hil_context(;
     wfs = _build_wfs(tel; T=T, backend=selector)
     sim = AOSimulation(tel, src, atm, optic, wfs)
 
-    branch = RuntimeBranch(:main, sim, NullReconstructor(); rng=MersenneTwister(rng_seed))
+    branch = RuntimeBranch(:main, sim, NullReconstructor(); rng=runtime_rng(rng_seed))
     cfg = SingleRuntimeConfig(
         name=:proper_hil,
         branch_label=:main,

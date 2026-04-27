@@ -73,7 +73,7 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=20, warm
     wfs = ShackHartmann(tel; n_lenslets=14, mode=Diffractive(), T=T, backend=BackendArray)
     det = Detector(noise=NoiseNone(), integration_time=T(1e-3), qe=T(1), binning=1, T=T, backend=BackendArray)
 
-    rng = MersenneTwister(1)
+    rng = runtime_rng(1)
     AdaptiveOpticsSim.randn_backend!(rng, tel.state.opd)
     tel.state.opd .*= T(5e-8)
 

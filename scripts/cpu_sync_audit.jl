@@ -19,7 +19,7 @@ function run_cpu_sync_audit()
     T = gpu_runtime_type(policy)
     TB = gpu_build_type(policy)
     TH = gpu_build_type(high_accuracy)
-    rng = MersenneTwister(1)
+    rng = runtime_rng(1)
     build_backend = AdaptiveOpticsSim.CPUBuildBackend()
 
     tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,

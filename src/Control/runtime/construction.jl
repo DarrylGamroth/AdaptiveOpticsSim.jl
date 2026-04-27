@@ -1,5 +1,5 @@
 function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
-    wfs_detector=nothing, science_detector=nothing, rng=MersenneTwister(0),
+    wfs_detector=nothing, science_detector=nothing, rng=runtime_rng(),
     profile::AbstractRuntimeProfile=default_runtime_profile(),
     products::RuntimeProductRequirements=default_runtime_products(wfs_detector=wfs_detector, science_detector=science_detector),
     latency::RuntimeLatencyModel=default_runtime_latency(profile),

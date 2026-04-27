@@ -109,7 +109,7 @@ function run_profile(; backend_name::AbstractString="cpu", profile_name::Abstrac
         backend=BackendArray,
     )
 
-    rng = MersenneTwister(1)
+    rng = runtime_rng(1)
     opd_scale = T(5e-8)
     AdaptiveOpticsSim.randn_backend!(rng, tel.state.opd)
     tel.state.opd .*= opd_scale

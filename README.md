@@ -58,7 +58,7 @@ slopes = measure!(wfs, tel, src)
 ```julia
 using Random
 
-rng = MersenneTwister(0)
+rng = runtime_rng(0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 sim = AOSimulation(tel, src, atm, dm, wfs)
 
@@ -140,6 +140,11 @@ adu = wfs_detector_image(wfs, det)
 In this example, `adu` is a `UInt16` detector image with 12-bit quantized
 values. Use `output_type=nothing` when you want the floating-point internal
 readout instead of a typed digital export.
+
+For stored references and regression fixtures, prefer
+`deterministic_reference_rng(seed)` to preserve the historical
+`MersenneTwister` stream. For new RTC/HIL runtime simulations and benchmarks,
+prefer `runtime_rng(seed)`, which uses `Xoshiro`.
 
 ## Documentation
 

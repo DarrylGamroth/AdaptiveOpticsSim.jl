@@ -92,7 +92,7 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     samples::Union{Int,Nothing}=nothing, warmup::Union{Int,Nothing}=nothing)
     BackendArray, backend_tag, backend_label = _resolve_backend(backend_name)
     T = Float32
-    rng = MersenneTwister(5)
+    rng = runtime_rng(5)
     cfg = _zernike_scale_config(scale_name, T)
     resolved_samples = something(samples, cfg.samples)
     resolved_warmup = something(warmup, cfg.warmup)

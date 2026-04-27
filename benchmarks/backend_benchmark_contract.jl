@@ -58,7 +58,7 @@ function _runtime_case(target::BenchmarkExecutionTarget; resolution::Int, n_lens
     policy = _benchmark_policy(target)
     T = AdaptiveOpticsSim.gpu_runtime_type(policy)
     BackendArray = _benchmark_backend_array(target)
-    rng = MersenneTwister(1)
+    rng = runtime_rng(1)
     tel = Telescope(resolution=resolution, diameter=8.0f0, sampling_time=1.0f-3,
         central_obstruction=0.0f0, T=T, backend=BackendArray)
     src = Source(band=:I, magnitude=0.0, T=T)

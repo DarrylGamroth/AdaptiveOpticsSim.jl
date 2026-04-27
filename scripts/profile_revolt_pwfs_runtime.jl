@@ -260,7 +260,7 @@ function run_profile(; backend_name::AbstractString="cpu", model_name::AbstractS
     t0 = time_ns()
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
     recon = ModalReconstructor(imat; gain=T(0.5))
-    runtime = ClosedLoopRuntime(sim, recon; rng=MersenneTwister(0), wfs_detector=wfs_detector)
+    runtime = ClosedLoopRuntime(sim, recon; rng=runtime_rng(0), wfs_detector=wfs_detector)
     prepare!(runtime)
     _phase_step!(runtime, backend_tag; phase_index=1)
     build_time_ns = time_ns() - t0

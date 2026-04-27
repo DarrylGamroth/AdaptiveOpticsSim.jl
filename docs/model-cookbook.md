@@ -82,7 +82,7 @@ det = Detector(
 
 advance!(atm, tel)
 propagate!(atm, tel)
-measure!(wfs, tel, src; detector=det, rng=MersenneTwister(0))
+measure!(wfs, tel, src; detector=det, rng=runtime_rng(0))
 frame = output_frame(det)
 ```
 
@@ -103,7 +103,7 @@ spad = SPADArrayDetector(
     noise=NoiseNone(),
     sensor=SPADArraySensor(pde=0.5, fill_factor=0.8, dark_count_rate=0.0),
 )
-slopes = measure!(counting_wfs, tel, src, spad; rng=MersenneTwister(0))
+slopes = measure!(counting_wfs, tel, src, spad; rng=runtime_rng(0))
 counts = output_frame(spad)
 ```
 
@@ -128,7 +128,7 @@ sim = AOSimulation(tel, src, atm, dm, wfs)
 
 imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
-branch = RuntimeBranch(:main, sim, recon; rng=MersenneTwister(0))
+branch = RuntimeBranch(:main, sim, recon; rng=runtime_rng(0))
 
 cfg = SingleRuntimeConfig(
     name=:closed_loop_demo,
@@ -226,7 +226,7 @@ branch = RuntimeBranch(
     recon;
     wfs_detector=wfs_det,
     science_detector=science_det,
-    rng=MersenneTwister(1),
+    rng=runtime_rng(1),
 )
 
 cfg = SingleRuntimeConfig(
@@ -283,7 +283,7 @@ composite_branch = RuntimeBranch(
     recon;
     wfs_detector=wfs_det,
     science_detector=science_det,
-    rng=MersenneTwister(2),
+    rng=runtime_rng(2),
 )
 composite_scenario = build_runtime_scenario(cfg, composite_branch)
 prepare!(composite_scenario)
@@ -318,7 +318,7 @@ split_branch = RuntimeBranch(
     sim,
     recon;
     science_detector=science_det,
-    rng=MersenneTwister(3),
+    rng=runtime_rng(3),
     command_layout=RuntimeCommandLayout(:woofer => 8, :tweeter => 8),
 )
 split_scenario = build_runtime_scenario(cfg, split_branch)
@@ -427,7 +427,7 @@ branch = RuntimeBranch(
     NullReconstructor();
     wfs_detector=wfs_det,
     science_detector=science_det,
-    rng=MersenneTwister(1),
+    rng=runtime_rng(1),
 )
 cfg = SingleRuntimeConfig(
     name=:hil_gpu,
@@ -488,7 +488,7 @@ Use this only when you are manually assembling or testing a single runtime and
 do not need the full scenario/config layer.
 
 ```julia
-runtime = ClosedLoopRuntime(sim, recon; rng=MersenneTwister(0))
+runtime = ClosedLoopRuntime(sim, recon; rng=runtime_rng(0))
 interface = AdaptiveOpticsSim.simulation_interface(runtime)
 prepare!(interface)
 step!(interface)
@@ -521,7 +521,7 @@ optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm)
 wfs = PyramidWFS(tel; pupil_samples=32, modulation=3.0)
 sim = AOSimulation(tel, src, atm, optic, wfs)
 
-branch = RuntimeBranch(:main, sim, NullReconstructor(); rng=MersenneTwister(1))
+branch = RuntimeBranch(:main, sim, NullReconstructor(); rng=runtime_rng(1))
 cfg = SingleRuntimeConfig(name=:hil_coronagraph, branch_label=:main, products=RuntimeProductRequirements(slopes=true))
 scenario = build_runtime_scenario(cfg, branch)
 prepare!(scenario)

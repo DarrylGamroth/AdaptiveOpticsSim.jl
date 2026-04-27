@@ -27,7 +27,7 @@ function run_gpu_sync_audit(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag
     T = AdaptiveOpticsSim.gpu_runtime_type(policy)
     TB = AdaptiveOpticsSim.gpu_build_type(policy)
     TH = AdaptiveOpticsSim.gpu_build_type(high_accuracy)
-    rng = MersenneTwister(1)
+    rng = runtime_rng(1)
     build_backend = AdaptiveOpticsSim.GPUArrayBuildBackend(B)
 
     tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,

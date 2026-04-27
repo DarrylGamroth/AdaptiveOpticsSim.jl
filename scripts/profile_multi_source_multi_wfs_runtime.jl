@@ -155,7 +155,7 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     T::Type{<:AbstractFloat}=Float32, samples::Union{Int,Nothing}=nothing,
     warmup::Union{Int,Nothing}=nothing)
     BackendArray, backend_tag, label = _resolve_backend(backend_name)
-    rng = MersenneTwister(7)
+    rng = runtime_rng(7)
     cfg = _multi_source_scale_config(scale_name)
     resolved_samples = something(samples, cfg.samples)
     resolved_warmup = something(warmup, cfg.warmup)

@@ -1,3 +1,20 @@
+"""
+    runtime_rng(seed=0)
+
+Return the preferred RNG for new runtime, benchmark, and RTC/HIL simulations.
+The stream is repeatable for a fixed software stack, but is not intended to
+preserve historical regression fixtures.
+"""
+runtime_rng(seed::Integer=0) = Xoshiro(seed)
+
+"""
+    deterministic_reference_rng(seed=0)
+
+Return the preferred RNG for reference data, regression fixtures, and examples
+where preserving the historical stream matters.
+"""
+deterministic_reference_rng(seed::Integer=0) = MersenneTwister(seed)
+
 @kernel function randn_fill_kernel!(out, seed::UInt64, n::Int)
     i = @index(Global, Linear)
     if i <= n
