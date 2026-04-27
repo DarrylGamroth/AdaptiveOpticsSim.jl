@@ -280,6 +280,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmann, tel::T
 end
 
 function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::LGSSource)
+    prepare_sampling!(wfs, tel, src)
     return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src)
 end
 
@@ -473,6 +474,7 @@ end
 
 function sampled_spots_peak!(wfs::ShackHartmann, tel::Telescope, src::LGSSource,
     det::AbstractDetector, rng::AbstractRNG)
+    prepare_sampling!(wfs, tel, src)
     return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src, det, rng)
 end
 
