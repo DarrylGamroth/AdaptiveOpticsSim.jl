@@ -157,7 +157,7 @@ Focused `LinearAlgebra` audit result for AMDGPU:
   extension methods rather than generic `svd(ROCArray)` or generic
   `lu(ROCArray)` dispatch,
 - the remaining obvious generic CPU-oriented dense-LA call in the codebase is
-  [fitting.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Tomography/fitting.jl),
+  [fitting.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/tomography/fitting.jl),
   which still uses `pinv(Matrix(...))` and is not part of the maintained AMD
   smoke/builder/HIL surface,
 - the core generic fallbacks remain in place intentionally for CPU and
@@ -690,7 +690,7 @@ Current recommendation:
     AO188 GPU path now defaults to CPU-built calibration/operators, then
     uploads the resulting reconstructors to the runtime backend.
   - The same CPU-build/GPU-run rule now applies to the generic runtime
-    calibration surfaces too: `ModalReconstructor`, `CalibrationVault`, and
+    calibration surfaces too: `ModalReconstructor`, `ControlMatrix`, and
     `ao_calibration` default to CPU build when their source matrices live on a
     GPU backend, while still materializing the resulting operators back onto
     the runtime backend.
@@ -832,13 +832,13 @@ The key output was:
 The dominant hotspot is not generic Julia dispatch. It is repeated stream
 synchronization during GPU covariance assembly:
 
-- [launch_kernel!](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Core/backends.jl#L64)
+- [launch_kernel!](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/core/backends.jl#L64)
   currently synchronizes after every accelerator kernel launch
-- [_covariance_matrix](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Tomography/reconstructors.jl#L384)
+- [_covariance_matrix](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/tomography/reconstructors.jl#L384)
   launches a kernel for every covariance block
-- [cross_correlation](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Tomography/reconstructors.jl#L710)
+- [cross_correlation](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/tomography/reconstructors.jl#L710)
   calls `_covariance_matrix` inside nested `fit_idx`, `gs`, and `layer` loops
-- [build_reconstructor](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Tomography/reconstructors.jl#L1160)
+- [build_reconstructor](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/tomography/reconstructors.jl#L1160)
   spends most of its time in that `cross_correlation` path
 
 The profile showed thousands of samples in CUDA stream synchronization under
@@ -910,7 +910,7 @@ That makes the remaining priority inside `auto_correlation` clearer:
    which remains about `8.95e7 ns` on `spiders`.
 
 A narrower follow-up change then precomputed the LGS shifted-coordinate stack in
-GPU [cross_correlation](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Tomography/reconstructors.jl#L781)
+GPU [cross_correlation](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/tomography/reconstructors.jl#L781)
 instead of rebuilding those coordinates inside every `fit_idx × gs × layer`
 iteration. On the same `medium` CUDA case on `spiders`, that moved
 `cross_correlation` from about `4.69e9 ns` down to about `2.37e9 ns` in the
@@ -1030,7 +1030,7 @@ These paths now execute without scalar indexing failures on GPU.
 The following builder paths are now validated on CUDA with
 `CUDA.allowscalar(false)` via `scripts/gpu_builder_cuda.jl`:
 
-- `CalibrationVault(...; build_backend=GPUArrayBuildBackend(CUDABackendTag))`
+- `ControlMatrix(...; build_backend=GPUArrayBuildBackend(CUDABackendTag))`
 - `ModalReconstructor(...; build_backend=GPUArrayBuildBackend(CUDABackendTag))`
 - `build_reconstructor(InteractionMatrixTomography(), ...; build_backend=GPUArrayBuildBackend(CUDABackendTag))`
 - `build_reconstructor(ModelBasedTomography(), ...; build_backend=GPUArrayBuildBackend(CUDABackendTag))`

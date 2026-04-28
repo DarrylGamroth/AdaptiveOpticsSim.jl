@@ -11,7 +11,7 @@ and the `ATM-*` requirements in
 
 ## Purpose
 
-The current [multilayer.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Atmosphere/multilayer.jl)
+The current [multilayer.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/atmosphere/multilayer.jl)
 model is scientifically and operationally better than the older redraw-based
 path, but it still uses a finite periodic canvas. That is acceptable for fast
 HIL-oriented runs and short sequences, but it is not yet the final frozen-flow
@@ -127,11 +127,11 @@ RNG ownership remains external per `ATM-030` and `ATM-031`.
 The following should be reused where possible:
 
 - backend-generic FFT/PSD utilities from
-  [kolmogorov.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Atmosphere/kolmogorov.jl)
+  [kolmogorov.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/atmosphere/kolmogorov.jl)
 - backend-generic extraction flow from
-  [multilayer.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Atmosphere/multilayer.jl)
+  [multilayer.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/atmosphere/multilayer.jl)
 - shared `K_{5/6}` helper from
-  [kv56.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Core/kv56.jl)
+  [kv56.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/core/kv56.jl)
 - existing `fractional_cn2` semantics and multilayer validation tests
 
 ## Algorithm Plan
@@ -235,7 +235,7 @@ hidden behind a heuristic.
 Files:
 
 - `docs/atmosphere-runtime-spec.md`
-- `src/Atmosphere/`
+- `src/atmosphere/`
 
 Tasks:
 
@@ -251,8 +251,8 @@ Acceptance:
 
 Files:
 
-- `src/Atmosphere/infinite_screen_math.jl`
-- `src/Atmosphere/phase_stats.jl`
+- `src/atmosphere/infinite_screen_math.jl`
+- `src/atmosphere/phase_stats.jl`
 
 Tasks:
 
@@ -278,8 +278,8 @@ Builder-time constraints and current failure modes:
 
 Files:
 
-- `src/Atmosphere/infinite_screen.jl`
-- `src/Atmosphere/multilayer.jl`
+- `src/atmosphere/infinite_screen.jl`
+- `src/atmosphere/multilayer.jl`
 - `test/runtests.jl`
 
 Tasks:
@@ -308,8 +308,8 @@ Implementation status:
 
 Files:
 
-- `src/Atmosphere/multilayer.jl`
-- `src/Optics/source.jl`
+- `src/atmosphere/multilayer.jl`
+- `src/optics/source.jl`
 - `test/runtests.jl`
 
 Tasks:
@@ -336,8 +336,8 @@ Implementation status:
 
 Files:
 
-- `src/Atmosphere/infinite_screen.jl`
-- `src/Core/backends.jl`
+- `src/atmosphere/infinite_screen.jl`
+- `src/core/backends.jl`
 - `scripts/gpu_smoke_contract.jl`
 
 Tasks:

@@ -12,8 +12,8 @@ function run_gpu_builder_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackend
     A = backend_rand(B, T, 8, 4)
     imat = InteractionMatrix(A, T(0.1))
     cpu_A = Array(A)
-    vault = CalibrationVault(A; build_backend=build_backend)
-    @assert vault.M isa BackendArray
+    control_matrix = ControlMatrix(A; build_backend=build_backend)
+    @assert control_matrix.M isa BackendArray
 
     recon = ModalReconstructor(imat; build_backend=build_backend)
     @assert recon.reconstructor isa BackendArray

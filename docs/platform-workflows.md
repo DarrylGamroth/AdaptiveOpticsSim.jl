@@ -67,7 +67,7 @@ Typical shape:
 4. build DM and calibration/reconstruction surfaces
 5. create runtime or higher-level simulation wrapper
 6. `prepare!` if the runtime supports preparation
-7. step the simulation and inspect exported products
+7. step the simulation and inspect exported outputs
 
 Use:
 
@@ -132,7 +132,7 @@ Do not treat benchmark scripts as a substitute for normal workflow examples.
 Use this when you need:
 
 - multi-source sensing
-- grouped WFS products
+- grouped WFS outputs
 - composite runtime interfaces
 - multi-branch exported readouts
 
@@ -143,7 +143,7 @@ Start with:
 - the grouped runtime surfaces in the runtime API
 
 This is still script-first. The grouped/platform-scale path should be built
-from typed Julia objects and explicit runtime products, not from ad hoc hidden
+from typed Julia objects and explicit runtime outputs, not from ad hoc hidden
 configuration.
 
 ## Canonical Script Shape
@@ -158,7 +158,7 @@ function build_scenario(; T=Float32, backend=CPUBackend())
     tel = Telescope(...)
     src = Source(...)
     atm = MultiLayerAtmosphere(tel; ..., T=T, backend=backend)
-    wfs = ShackHartmann(tel; ..., T=T, backend=backend)
+    wfs = ShackHartmannWFS(tel; ..., T=T, backend=backend)
     det = Detector(...; T=T, backend=backend)
     dm = DeformableMirror(tel; ..., T=T, backend=backend)
     imat = interaction_matrix(dm, wfs, tel, src; ...)
@@ -301,15 +301,15 @@ one-off scripts.
 Use grouped/platform workflows when:
 
 - multiple sources contribute to the same sensing product
-- you need grouped WFS/science export stacks
+- you need grouped wfs/science export stacks
 - you need `CompositeSimulationInterface`
 - you are studying multi-branch runtime behavior
 
 The practical rules are:
 
-- request only the runtime products you need
-- prefer `RuntimeScenario` plus `SingleRuntimeConfig` or
-  `GroupedRuntimeConfig` when a script is assembling reusable runtime
+- request only the runtime outputs you need
+- prefer `ControlLoopScenario` plus `SingleControlLoopConfig` or
+  `GroupedControlLoopConfig` when a script is assembling reusable runtime
   composition rather than a one-off local demo
 - keep grouped export policy explicit
 - rely on `grouped_wfs_stack` and
@@ -340,7 +340,7 @@ This preserves continuity between:
 
 - [`platform-architecture.md`](./platform-architecture.md)
   - package-level platform picture
-- [`platform-orchestration.md`](./platform-orchestration.md)
+- [`control-loop-orchestration.md`](./control-loop-orchestration.md)
   - typed platform scenario/config layer
 - [`runtime-dataflow.md`](./runtime-dataflow.md)
   - step-by-step runtime ownership

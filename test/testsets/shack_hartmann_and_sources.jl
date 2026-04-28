@@ -1,7 +1,7 @@
 @testset "Shack-Hartmann valid subaperture policies" begin
     tel = Telescope(resolution=352, diameter=1.22, sampling_time=1 / 500)
-    sh_geom = ShackHartmann(tel; n_lenslets=16, mode=Diffractive(), T=Float32)
-    sh_flux = ShackHartmann(tel;
+    sh_geom = ShackHartmannWFS(tel; n_lenslets=16, mode=Diffractive(), T=Float32)
+    sh_flux = ShackHartmannWFS(tel;
         n_lenslets=16,
         mode=Diffractive(),
         valid_subaperture_policy=FluxThresholdValidSubapertures(light_ratio=0.5, T=Float32),
@@ -22,7 +22,7 @@ end
 @testset "Shack-Hartmann resized detector mosaic" begin
     tel = Telescope(resolution=64, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
     src = Source(band=:I, magnitude=7.0)
-    sh = ShackHartmann(tel; n_lenslets=16, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
+    sh = ShackHartmannWFS(tel; n_lenslets=16, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
     prepare_runtime_wfs!(sh, tel, src)
     measure!(sh, tel, src)
     image = wfs_detector_image(sh)
@@ -55,7 +55,7 @@ end
     @test AdaptiveOpticsSim.centroid_from_intensity_cutoff!(
         AdaptiveOpticsSim.ScalarCPUStyle(), fill(1.0, 2, 2), 2.0) == (0.0, 0.0, 0.0)
 
-    sh = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4, threshold_cog=0.2)
+    sh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4, threshold_cog=0.2)
     @test AdaptiveOpticsSim.centroid_from_spot!(sh, copy(centroid_input), 0.25) ==
           AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), 0.25)
     @test AdaptiveOpticsSim.centroid_from_spot!(sh, copy(centroid_input)) ==
@@ -91,7 +91,7 @@ end
     @test AdaptiveOpticsSim.sh_signal_from_spots!(sh, 10.0, 0.05)[1] == 2.0
     @test AdaptiveOpticsSim.sh_signal_from_spots!(sh, 10.0, slope_extraction_model(sh))[1] == 2.0
 
-    sh_accel = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    sh_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     fill!(sh_accel.state.valid_mask, true)
     fill!(sh_accel.state.spot_cube, 0.0)
     sh_accel.state.spot_cube[1, 2, 3] = 10.0
@@ -154,8 +154,8 @@ end
     AdaptiveOpticsSim.fill_calibration_ramp!(KA_CPU_STYLE, ka_ramp, 1e-3, 8)
     @test ka_ramp ≈ scalar_ramp
 
-    sh_scalar = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    sh_ka = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    sh_scalar = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    sh_ka = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     for wfs in (sh_scalar, sh_ka)
         fill!(wfs.state.valid_mask, true)
         fill!(wfs.state.spot_cube, 0.0)
@@ -180,32 +180,32 @@ end
     @test ka_calibrated ≈ scalar_calibrated
 
     det = Detector(noise=NoiseNone(), binning=1)
-    sh_det = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    sh_det = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     point_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_det, tel, src, det, MersenneTwister(21))
     @test isfinite(point_peak)
     @test point_peak > 0
-    sh_det_accel = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    sh_det_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     AdaptiveOpticsSim.prepare_sampling!(sh_det_accel, tel, src)
     point_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(KA_CPU_STYLE, sh_det_accel, tel, src, det, MersenneTwister(21))
     @test point_peak_accel ≈ point_peak
 
     poly = with_spectrum(src, SpectralBundle([SpectralSample(0.95 * wavelength(src), 0.5),
         SpectralSample(1.05 * wavelength(src), 0.5)]))
-    sh_poly = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    sh_poly = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     poly_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_poly, tel, poly, det, MersenneTwister(22))
     @test isfinite(poly_peak)
     @test poly_peak > 0
-    sh_poly_accel = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    sh_poly_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     AdaptiveOpticsSim.prepare_sampling!(sh_poly_accel, tel, src)
     poly_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(KA_CPU_STYLE, sh_poly_accel, tel, poly, det, MersenneTwister(22))
     @test poly_peak_accel ≈ poly_peak
 
     ext_single = with_extended_source(src, PointCloudSourceModel([(0.0, 0.0)], [1.0]))
-    sh_ext_single = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    sh_ext_single = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     ext_single_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_ext_single, tel, ext_single, det, MersenneTwister(23))
     @test ext_single_peak ≈ point_peak atol=1e-8 rtol=1e-8
     ext_double = with_extended_source(src, PointCloudSourceModel([(0.0, 0.0), (0.1, 0.0)], [0.5, 0.5]))
-    sh_ext_double_accel = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    sh_ext_double_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     AdaptiveOpticsSim.prepare_sampling!(sh_ext_double_accel, tel, src)
     ext_double_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(
         KA_CPU_STYLE, sh_ext_double_accel, tel, ext_double, det, MersenneTwister(23))
@@ -213,13 +213,13 @@ end
     @test ext_double_peak_accel > 0
 
     ast_batched = Asterism([src, Source(band=:I, magnitude=0.0, coordinates=(0.1, 0.0))])
-    sh_ast_batched = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    sh_ast_batched = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     AdaptiveOpticsSim.prepare_sampling!(sh_ast_batched, tel, src)
     AdaptiveOpticsSim.ensure_sh_calibration!(sh_ast_batched, tel, src)
     ast_batched_slopes = AdaptiveOpticsSim.measure_sh_asterism_batched!(KA_CPU_STYLE, sh_ast_batched, tel, ast_batched)
     @test length(ast_batched_slopes) == 2 * 4 * 4
     @test all(isfinite, ast_batched_slopes)
-    sh_ast_batched_det = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    sh_ast_batched_det = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     AdaptiveOpticsSim.prepare_sampling!(sh_ast_batched_det, tel, src)
     AdaptiveOpticsSim.ensure_sh_calibration!(sh_ast_batched_det, tel, src)
     ast_batched_det_slopes = AdaptiveOpticsSim.measure_sh_asterism_batched!(
@@ -228,11 +228,11 @@ end
     @test all(isfinite, ast_batched_det_slopes)
 
     lgs = LGSSource(elongation_factor=1.3)
-    sh_lgs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    sh_lgs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     lgs_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_lgs, tel, lgs, det, MersenneTwister(24))
     @test isfinite(lgs_peak)
     @test lgs_peak >= 0
-    sh_lgs_accel = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    sh_lgs_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     AdaptiveOpticsSim.prepare_sampling!(sh_lgs_accel, tel, lgs)
     lgs_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(KA_CPU_STYLE, sh_lgs_accel, tel, lgs, det, MersenneTwister(24))
     @test isfinite(lgs_peak_accel)
@@ -240,10 +240,10 @@ end
 
     na_profile = [80000.0 90000.0 100000.0; 0.2 0.6 0.2]
     lgs_profile = LGSSource(elongation_factor=1.2, na_profile=na_profile, fwhm_spot_up=1.0)
-    sh_lgs_profile_accel = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    sh_lgs_profile_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     AdaptiveOpticsSim.prepare_sampling!(sh_lgs_profile_accel, tel, lgs_profile)
     @test AdaptiveOpticsSim.sampled_spots_peak!(KA_CPU_STYLE, sh_lgs_profile_accel, tel, lgs_profile) >= 0
-    sh_lgs_profile_det_accel = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    sh_lgs_profile_det_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     AdaptiveOpticsSim.prepare_sampling!(sh_lgs_profile_det_accel, tel, lgs_profile)
     @test AdaptiveOpticsSim.sampled_spots_peak!(
         KA_CPU_STYLE, sh_lgs_profile_det_accel, tel, lgs_profile, det, MersenneTwister(25)) >= 0
@@ -284,9 +284,9 @@ end
     focus = @view zb.modes[:, :, 5]
     @. tel.state.opd = 5e-8 * focus
 
-    sh_mono = ShackHartmann(tel; n_lenslets=8, mode=Diffractive())
-    sh_single = ShackHartmann(tel; n_lenslets=8, mode=Diffractive())
-    sh_broad = ShackHartmann(tel; n_lenslets=8, mode=Diffractive())
+    sh_mono = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive())
+    sh_single = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive())
+    sh_broad = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive())
 
     mono_slopes = copy(measure!(sh_mono, tel, src))
     single_slopes = copy(measure!(sh_single, tel, poly_single))
@@ -349,9 +349,9 @@ end
     focus = @view zb.modes[:, :, 5]
     @. tel.state.opd = 5e-8 * focus
 
-    sh_point = ShackHartmann(tel; n_lenslets=8, mode=Diffractive())
-    sh_ext_point = ShackHartmann(tel; n_lenslets=8, mode=Diffractive())
-    sh_ext = ShackHartmann(tel; n_lenslets=8, mode=Diffractive())
+    sh_point = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive())
+    sh_ext_point = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive())
+    sh_ext = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive())
     point_slopes = copy(measure!(sh_point, tel, src))
     ext_point_slopes = copy(measure!(sh_ext_point, tel, ext_point))
     point_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_point, tel, src)

@@ -52,8 +52,8 @@ active-mask structure.
 
 Current maintained examples:
 
-- [ActuatorGridTopology](../src/Optics/deformable_mirror.jl)
-- [SampledActuatorTopology](../src/Optics/deformable_mirror.jl)
+- [ActuatorGridTopology](../src/optics/deformable_mirror.jl)
+- [SampledActuatorTopology](../src/optics/deformable_mirror.jl)
 
 Topology should answer:
 
@@ -115,13 +115,13 @@ Actuator models should not own:
 ## File Placement
 
 Most DM extensions should be implemented in
-[deformable_mirror.jl](../src/Optics/deformable_mirror.jl), because the DM
+[deformable_mirror.jl](../src/optics/deformable_mirror.jl), because the DM
 composition layer is intentionally centralized there.
 
 Typical steps:
 
 1. add the new topology, influence model, or actuator model in
-   [deformable_mirror.jl](../src/Optics/deformable_mirror.jl)
+   [deformable_mirror.jl](../src/optics/deformable_mirror.jl)
 2. export the new public type or accessor from
    [AdaptiveOpticsSim.jl](../src/AdaptiveOpticsSim.jl) if it is meant to be
    public

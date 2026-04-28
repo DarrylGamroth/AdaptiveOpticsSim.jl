@@ -29,7 +29,7 @@ Each script exposes a `main()` function and logs a short completion summary with
 | `tutorials/how_to_LIFT.ipynb` | `examples/tutorials/lift.jl` | LiFT setup and coefficient recovery |
 | `tutorials/how_to_SPRINT.py` | `examples/tutorials/sprint.jl` | Mis-registration sensitivity and estimation |
 | `tutorials/AO_transfer_function.py` | `examples/tutorials/transfer_function.jl` | Closed-loop rejection and closed-loop transfer functions |
-| `tutorials/AO_closed_loop_ShackHartmann_WFS.py` | `examples/tutorials/closed_loop_shack_hartmann.jl` | Deterministic diffractive SH loop; compact OOPAO regression trace committed |
+| `tutorials/AO_closed_loop_ShackHartmannWFS_WFS.py` | `examples/tutorials/closed_loop_shack_hartmann.jl` | Deterministic diffractive SH loop; compact OOPAO regression trace committed |
 | `tutorials/AO_closed_loop_Pyramid_WFS.py` | `examples/tutorials/closed_loop_pyramid.jl` | Deterministic diffractive Pyramid loop; compact OOPAO regression trace committed |
 | `tutorials/AO_closed_loop_BioEdge_WFS.py` | `examples/tutorials/closed_loop_bioedge.jl` | Deterministic diffractive BioEdge loop; compact OOPAO regression trace committed |
 | `tutorials/AO_closed_loop_Pyramid_WFS_GSC.py` | `examples/tutorials/gain_sensing_camera.jl` | Pyramid modulation-frame, optical-gain estimation, and compact GSC closed-loop regression; the full atmosphere-driven tutorial trace is still being completed |

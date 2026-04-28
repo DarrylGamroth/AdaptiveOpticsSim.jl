@@ -47,11 +47,11 @@ The package is organized around a small set of modeling objects:
 
 - `Telescope` and `Source`
 - atmosphere objects such as `KolmogorovAtmosphere` and `MultiLayerAtmosphere`
-- sensing objects such as `ShackHartmann`, `PyramidWFS`, and `BioEdgeWFS`
+- sensing objects such as `ShackHartmannWFS`, `PyramidWFS`, and `BioEdgeWFS`
 - `Detector` when the sensing path needs explicit detector physics
 - controllable optics such as `DeformableMirror`, `ModalControllableOptic`, `TipTiltMirror`, `FocusStage`, and `CompositeControllableOptic`
 - modal-optic basis specs such as `CartesianTiltBasis`, `ZernikeOpticBasis`, and `MatrixModalBasis` when you want to choose controlled modes explicitly
-- `RuntimeScenario` when you want the maintained step-wise AO or HIL simulation surface
+- `ControlLoopScenario` when you want the maintained step-wise AO or HIL simulation surface
 
 ## Three Execution Layers
 
@@ -104,11 +104,11 @@ Use this as the default public runtime assembly surface.
 
 Canonical types and builder:
 
-- `RuntimeBranch`
-- `SingleRuntimeConfig`
-- `GroupedRuntimeConfig`
-- `RuntimeScenario`
-- `build_runtime_scenario(...)`
+- `ControlLoopBranch`
+- `SingleControlLoopConfig`
+- `GroupedControlLoopConfig`
+- `ControlLoopScenario`
+- `build_control_loop_scenario(...)`
 
 This layer is the recommended path for:
 
@@ -154,7 +154,7 @@ atm = MultiLayerAtmosphere(
     altitude=(0.0, 5000.0),
 )
 
-wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
+wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
 
 advance!(atm, tel)
 propagate!(atm, tel)
@@ -194,15 +194,15 @@ sim = AOSimulation(tel, src, atm, dm, wfs)
 
 imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
-branch = RuntimeBranch(:main, sim, recon; rng=rng)
+branch = ControlLoopBranch(:main, sim, recon; rng=rng)
 
-cfg = SingleRuntimeConfig(
+cfg = SingleControlLoopConfig(
     name=:closed_loop_demo,
     branch_label=:main,
-    products=RuntimeProductRequirements(slopes=true, wfs_pixels=true),
+    outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true),
 )
 
-scenario = build_runtime_scenario(cfg, branch)
+scenario = build_control_loop_scenario(cfg, branch)
 prepare!(scenario)
 
 for _ in 1:5
@@ -249,10 +249,10 @@ Use this when you care about:
 
 - loop staging
 - latency
-- exported runtime products
+- exported runtime outputs
 - HIL-style or detector-backed sensing paths
 
-`prepare!(...)` performs any WFS/runtime precomputation once before repeated
+`prepare!(...)` performs any wfs/runtime precomputation once before repeated
 `step!(...)` or `sense!(...)` calls. `step!(...)` runs the full closed-loop
 update, while `sense!(...)` runs only the plant/sensor side and is the right
 entry point when commands come from an external controller.
@@ -286,7 +286,7 @@ Use this when you care about:
 
 ### Wavefront sensor
 
-- `ShackHartmann`
+- `ShackHartmannWFS`
   - general SH studies and HIL-style RTC surfaces
 - `PyramidWFS`
   - pyramid sensing and modulation studies
@@ -300,7 +300,7 @@ Use this when you care about:
 ### Detector
 
 Use an explicit `Detector(...)` when the sensing path needs detector physics,
-readout behavior, windowing, or exported frame products.
+readout behavior, windowing, or exported frame outputs.
 
 For counting-imager or counting-channel paths, use a maintained counting
 detector family instead of the generic frame-detector surface:
@@ -327,7 +327,7 @@ some backend policy helpers, use namespaced access. Examples:
 
 ```julia
 ws = AdaptiveOpticsSim.Workspace(tel; rng=deterministic_reference_rng(0))
-sim = AdaptiveOpticsSim.initialize_ao_shwfs(...)
+sim = AdaptiveOpticsSim.initialize_ao_shack_hartmann(...)
 sprint = AdaptiveOpticsSim.SPRINT(tel, dm, wfs, basis)
 ```
 

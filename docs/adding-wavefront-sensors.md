@@ -30,7 +30,7 @@ The WFS subsystem is organized around this split:
 In practice:
 
 - if a quantity is part of the maintained WFS contract, expose it through an
-  accessor in [interface.jl](../src/WFS/interface.jl)
+  accessor in [interface.jl](../src/wfs/interface.jl)
 - if a behavior is reused across multiple WFS families, factor it into a shared
   seam instead of duplicating it
 - do not make runtime or calibration code depend on undocumented family-local
@@ -43,13 +43,13 @@ Start by deciding how the sensor fundamentally produces its exported signal.
 Common maintained patterns:
 
 - subaperture/centroid style
-  - [shack_hartmann](../src/WFS/shack_hartmann/)
+  - [shack_hartmann](../src/wfs/shack_hartmann/)
 - focal-plane modulation and differential pupil-plane style
-  - [pyramid](../src/WFS/pyramid/)
-  - [bioedge](../src/WFS/bioedge/)
+  - [pyramid](../src/wfs/pyramid/)
+  - [bioedge](../src/wfs/bioedge/)
 - modal or normalized-signal style
-  - [zernike.jl](../src/WFS/zernike.jl)
-  - [curvature.jl](../src/WFS/curvature.jl)
+  - [zernike.jl](../src/wfs/zernike.jl)
+  - [curvature.jl](../src/wfs/curvature.jl)
 
 The maintained subsystem contract still uses `slopes(wfs)` as the generic
 exported 1-D signal vector even when the values are not geometric slopes.
@@ -57,17 +57,17 @@ exported 1-D signal vector even when the values are not geometric slopes.
 ## File Placement
 
 New WFS families should normally add one new file or one new family directory
-under [`src/WFS/`](../src/WFS/).
+under [`src/wfs/`](../src/wfs/).
 
 Typical steps:
 
-1. add the WFS family implementation under `src/WFS/`
+1. add the WFS family implementation under `src/wfs/`
 2. include it from the relevant WFS entry file
 3. export public types and constructors from
    [AdaptiveOpticsSim.jl](../src/AdaptiveOpticsSim.jl) if the family is meant
    to be public
 4. extend the maintained WFS accessors in
-   [interface.jl](../src/WFS/interface.jl) when the family exports a stable
+   [interface.jl](../src/wfs/interface.jl) when the family exports a stable
    interface quantity
 5. add tests in the family testset plus
    [control_and_runtime.jl](../test/testsets/control_and_runtime.jl) when the
@@ -91,7 +91,7 @@ The hot-path contract should stay explicit:
 ## Maintained Accessors
 
 These are the maintained subsystem-level accessors in
-[interface.jl](../src/WFS/interface.jl):
+[interface.jl](../src/wfs/interface.jl):
 
 - `slopes(wfs)`
 - `valid_subaperture_mask(wfs)`

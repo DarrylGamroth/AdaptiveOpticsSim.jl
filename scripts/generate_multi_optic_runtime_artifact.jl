@@ -44,13 +44,13 @@ function build_scenario(; seed::Integer=91)
     tiptilt = TipTiltMirror(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:tiptilt)
     dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=CPUBackend())
     optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm)
-    wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=CPUBackend())
+    wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=CPUBackend())
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=CPUBackend())
     sim = AOSimulation(tel, src, atm, optic, wfs)
-    scenario = build_runtime_scenario(
-        SingleRuntimeConfig(name=:multi_optic_hil, branch_label=:main,
-            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
-        RuntimeBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(seed)),
+    scenario = build_control_loop_scenario(
+        SingleControlLoopConfig(name=:multi_optic_hil, branch_label=:main,
+            outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
+        ControlLoopBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(seed)),
     )
     prepare!(scenario)
     return scenario
@@ -66,7 +66,7 @@ end
 
 function build_runtime_wfs(tel::Telescope, ::Val{:sh}; T::Type{<:AbstractFloat}=Float32,
     backend::AbstractArrayBackend=CPUBackend())
-    return ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
+    return ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
 end
 
 function build_runtime_wfs(tel::Telescope, ::Val{:pyr}; T::Type{<:AbstractFloat}=Float32,
@@ -129,10 +129,10 @@ function build_behavior_scenario(::Val{K}; seed::Integer=91, wfs_family::Symbol=
     wfs = build_runtime_wfs(tel, Val(wfs_family); T=T, backend=CPUBackend())
     det = build_runtime_detector(Val(detector_profile), T, CPUBackend())
     sim = AOSimulation(tel, src, atm, optic, wfs)
-    scenario = build_runtime_scenario(
-        SingleRuntimeConfig(name=Symbol(:multi_optic_behavior_, K, :_, wfs_family, :_, detector_profile), branch_label=:main,
-            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
-        RuntimeBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(seed)),
+    scenario = build_control_loop_scenario(
+        SingleControlLoopConfig(name=Symbol(:multi_optic_behavior_, K, :_, wfs_family, :_, detector_profile), branch_label=:main,
+            outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
+        ControlLoopBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(seed)),
     )
     prepare!(scenario)
     return scenario
@@ -198,10 +198,10 @@ function build_richer_runtime(::Val{S}; seed::Integer=91, wfs_family::Symbol=:sh
     wfs = build_runtime_wfs(tel, Val(wfs_family); T=T, backend=CPUBackend())
     det = build_runtime_detector(Val(detector_profile), T, CPUBackend())
     sim = AOSimulation(tel, src, atm, optic, wfs)
-    scenario = build_runtime_scenario(
-        SingleRuntimeConfig(name=Symbol(:richer_runtime_, S, :_, wfs_family, :_, detector_profile), branch_label=:main,
-            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
-        RuntimeBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(seed)),
+    scenario = build_control_loop_scenario(
+        SingleControlLoopConfig(name=Symbol(:richer_runtime_, S, :_, wfs_family, :_, detector_profile), branch_label=:main,
+            outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
+        ControlLoopBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(seed)),
     )
     prepare!(scenario)
     return scenario

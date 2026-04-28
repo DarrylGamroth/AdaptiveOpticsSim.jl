@@ -36,12 +36,12 @@ Normalized comparison fields:
 
 Accepted known differences:
 
-- `typed_platform_scenario_surface`
+- `typed_control_loop_scenario_surface`
 - `grouped_export_stack_contract`
 - `composite_runtime_entrypoint_shape`
 
 These differences remain recorded because `main` now routes this rung through
-the typed `RuntimeScenario` layer, while the former REVOLT-aligned fork was
+the typed `ControlLoopScenario` layer, while the former REVOLT-aligned fork was
 never normalized into a distinct external grouped-platform runner before the
 comparison-workspace migration.
 

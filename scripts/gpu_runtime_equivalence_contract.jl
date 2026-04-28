@@ -121,7 +121,7 @@ end
     return nothing
 end
 
-function _synchronize_runtime_products!(scenario)
+function _synchronize_runtime_outputs!(scenario)
     _synchronize_if_present(command(scenario))
     _synchronize_if_present(slopes(scenario))
     _synchronize_if_present(wfs_frame(scenario))
@@ -222,7 +222,7 @@ function _build_lgs_case(backend, ::Type{T}, profile::Symbol) where {T<:Abstract
             T=T,
         )
     end
-    wfs = ShackHartmann(tel; n_lenslets=14, mode=Diffractive(), T=T, backend=backend)
+    wfs = ShackHartmannWFS(tel; n_lenslets=14, mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1e-3), qe=T(1), binning=1, T=T, backend=backend)
     _set_deterministic_opd!(tel)
     return tel, src, wfs, det
@@ -265,7 +265,7 @@ function _build_mixed_sh_asterism_case(backend, ::Type{T}) where {T<:AbstractFlo
         T=T,
     )
     ast = Asterism([ngs, lgs])
-    wfs = ShackHartmann(tel; n_lenslets=14, mode=Diffractive(), T=T, backend=backend)
+    wfs = ShackHartmannWFS(tel; n_lenslets=14, mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1e-3), qe=T(1), binning=1, T=T, backend=backend)
     _set_deterministic_opd!(tel)
     return tel, ast, wfs, det
@@ -334,7 +334,7 @@ end
 @inline _wfs_case_label(::Val{:bio}) = "bio"
 
 function _build_low_order_wfs(tel::Telescope, backend, ::Type{T}, ::Val{:sh}) where {T<:AbstractFloat}
-    return ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
+    return ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
 end
 
 function _build_low_order_wfs(tel::Telescope, backend, ::Type{T}, ::Val{:pyr}) where {T<:AbstractFloat}
@@ -361,10 +361,10 @@ function _build_multi_optic_hil_case(backend, ::Type{T}, ::Val{:tiptilt}, wfs_ca
     optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm)
     wfs = _build_low_order_wfs(tel, backend, T, wfs_case)
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
-    scenario = build_runtime_scenario(
-        SingleRuntimeConfig(name=Symbol(:multi_optic_equivalence_, _wfs_case_label(wfs_case)), branch_label=:main,
-            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
-        RuntimeBranch(:main, AOSimulation(tel, src, atm, optic, wfs), NullReconstructor();
+    scenario = build_control_loop_scenario(
+        SingleControlLoopConfig(name=Symbol(:multi_optic_equivalence_, _wfs_case_label(wfs_case)), branch_label=:main,
+            outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
+        ControlLoopBranch(:main, AOSimulation(tel, src, atm, optic, wfs), NullReconstructor();
             wfs_detector=det,
             rng=MersenneTwister(91)),
     )
@@ -387,12 +387,12 @@ function _build_multi_optic_hil_case(backend, ::Type{T}, ::Val{:steering}, ::Val
         labels=:steering, T=T, backend=backend)
     dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=backend)
     optic = CompositeControllableOptic(:steering => steering, :dm => dm)
-    wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
+    wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
-    scenario = build_runtime_scenario(
-        SingleRuntimeConfig(name=:steering_multi_optic_equivalence, branch_label=:main,
-            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
-        RuntimeBranch(:main, AOSimulation(tel, src, atm, optic, wfs), NullReconstructor();
+    scenario = build_control_loop_scenario(
+        SingleControlLoopConfig(name=:steering_multi_optic_equivalence, branch_label=:main,
+            outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
+        ControlLoopBranch(:main, AOSimulation(tel, src, atm, optic, wfs), NullReconstructor();
             wfs_detector=det,
             rng=MersenneTwister(91)),
     )
@@ -414,12 +414,12 @@ function _build_multi_optic_hil_case(backend, ::Type{T}, ::Val{:focus}, ::Val{:s
     focus = FocusStage(tel; scale=T(0.1), T=T, backend=backend, label=:focus)
     dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=backend)
     optic = CompositeControllableOptic(:focus => focus, :dm => dm)
-    wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
+    wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
-    scenario = build_runtime_scenario(
-        SingleRuntimeConfig(name=:focus_multi_optic_equivalence, branch_label=:main,
-            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
-        RuntimeBranch(:main, AOSimulation(tel, src, atm, optic, wfs), NullReconstructor();
+    scenario = build_control_loop_scenario(
+        SingleControlLoopConfig(name=:focus_multi_optic_equivalence, branch_label=:main,
+            outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
+        ControlLoopBranch(:main, AOSimulation(tel, src, atm, optic, wfs), NullReconstructor();
             wfs_detector=det,
             rng=MersenneTwister(91)),
     )
@@ -466,8 +466,8 @@ function _run_multi_optic_hil_equivalence(::Type{B}, case::Val{K}, wfs_case::Val
     sense!(cpu)
     sense!(gpu)
     sense!(gpu_repeat)
-    _synchronize_runtime_products!(gpu)
-    _synchronize_runtime_products!(gpu_repeat)
+    _synchronize_runtime_outputs!(gpu)
+    _synchronize_runtime_outputs!(gpu_repeat)
 
     println("$(K)_dm_", _wfs_case_label(wfs_case), "_hil_equivalence initial")
     _assert_close("command", command(gpu), command(cpu); rtol=1f-6, atol=1f-6)
@@ -483,8 +483,8 @@ function _run_multi_optic_hil_equivalence(::Type{B}, case::Val{K}, wfs_case::Val
     sense!(cpu)
     sense!(gpu)
     sense!(gpu_repeat)
-    _synchronize_runtime_products!(gpu)
-    _synchronize_runtime_products!(gpu_repeat)
+    _synchronize_runtime_outputs!(gpu)
+    _synchronize_runtime_outputs!(gpu_repeat)
 
     println("$(K)_dm_", _wfs_case_label(wfs_case), "_hil_equivalence updated")
     _assert_close("command", command(gpu), command(cpu); rtol=1f-6, atol=1f-6)

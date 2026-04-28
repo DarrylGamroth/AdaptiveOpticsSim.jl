@@ -11,7 +11,7 @@ end
 
 function bench_wfs()
     tel = Telescope(resolution=64, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
-    wfs = ShackHartmann(tel; n_lenslets=8)
+    wfs = ShackHartmannWFS(tel; n_lenslets=8)
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
         tel.state.opd[i, j] = i
     end
@@ -20,7 +20,7 @@ end
 
 function bench_wfs_lgs()
     tel = Telescope(resolution=48, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
-    wfs = ShackHartmann(tel; n_lenslets=6, mode=Diffractive())
+    wfs = ShackHartmannWFS(tel; n_lenslets=6, mode=Diffractive())
     lgs = LGSSource(elongation_factor=1.3)
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
         tel.state.opd[i, j] = i - j
@@ -41,7 +41,7 @@ end
 function bench_reconstructor()
     tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=4)
-    wfs = ShackHartmann(tel; n_lenslets=4)
+    wfs = ShackHartmannWFS(tel; n_lenslets=4)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     recon = ModalReconstructor(imat; gain=1.0)
     slopes = wfs.state.slopes
@@ -51,7 +51,7 @@ end
 function bench_reconstructor_inplace()
     tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=4)
-    wfs = ShackHartmann(tel; n_lenslets=4)
+    wfs = ShackHartmannWFS(tel; n_lenslets=4)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     recon = ModalReconstructor(imat; gain=1.0)
     slopes = wfs.state.slopes
@@ -65,7 +65,7 @@ function bench_closed_loop_runtime()
     src = Source(band=:I, magnitude=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-    wfs = ShackHartmann(tel; n_lenslets=4)
+    wfs = ShackHartmannWFS(tel; n_lenslets=4)
     sim = AOSimulation(tel, atm, src, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     recon = ModalReconstructor(imat; gain=0.5)
@@ -80,7 +80,7 @@ function bench_closed_loop_runtime_timing()
     src = Source(band=:I, magnitude=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-    wfs = ShackHartmann(tel; n_lenslets=4)
+    wfs = ShackHartmannWFS(tel; n_lenslets=4)
     sim = AOSimulation(tel, atm, src, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     recon = ModalReconstructor(imat; gain=0.5)
@@ -135,7 +135,7 @@ function alloc_checks()
 
     tel_r = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm = DeformableMirror(tel_r; n_act=4)
-    wfs = ShackHartmann(tel_r; n_lenslets=4)
+    wfs = ShackHartmannWFS(tel_r; n_lenslets=4)
     imat = interaction_matrix(dm, wfs, tel_r; amplitude=0.1)
     recon = ModalReconstructor(imat; gain=1.0)
     slopes = wfs.state.slopes
@@ -148,7 +148,7 @@ function alloc_checks()
     src_rt = Source(band=:I, magnitude=0.0)
     atm_rt = KolmogorovAtmosphere(tel_rt; r0=0.2, L0=25.0)
     dm_rt = DeformableMirror(tel_rt; n_act=4, influence_width=0.3)
-    wfs_rt = ShackHartmann(tel_rt; n_lenslets=4)
+    wfs_rt = ShackHartmannWFS(tel_rt; n_lenslets=4)
     sim_rt = AOSimulation(tel_rt, atm_rt, src_rt, dm_rt, wfs_rt)
     imat_rt = interaction_matrix(dm_rt, wfs_rt, tel_rt; amplitude=0.1)
     recon_rt = ModalReconstructor(imat_rt; gain=0.5)

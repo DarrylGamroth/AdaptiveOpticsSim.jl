@@ -16,21 +16,17 @@ end
 function _resolve_backend(name::AbstractString)
     lowered = lowercase(name)
     if lowered == "cpu"
-        return Array, nothing, "cpu"
+        return CPUBackend(), nothing, "cpu"
     elseif lowered == "cuda"
         isdefined(Main, :CUDA) || (@eval import CUDA)
         CUDA.functional() || error("profile_multi_source_multi_wfs_runtime.jl requires a functional CUDA driver/device")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.CUDABackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.CUDABackendTag)
-        backend === nothing && error("CUDA backend array type is unavailable")
-        return backend, AdaptiveOpticsSim.CUDABackendTag, "cuda"
+        return CUDABackend(), AdaptiveOpticsSim.CUDABackendTag, "cuda"
     elseif lowered == "amdgpu"
         isdefined(Main, :AMDGPU) || (@eval import AMDGPU)
         AMDGPU.functional() || error("profile_multi_source_multi_wfs_runtime.jl requires a functional ROCm installation and GPU")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.AMDGPUBackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.AMDGPUBackendTag)
-        backend === nothing && error("AMDGPU backend array type is unavailable")
-        return backend, AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
+        return AMDGPUBackend(), AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
     end
     error("unsupported backend '$name'; use cpu, cuda, or amdgpu")
 end
@@ -130,19 +126,19 @@ function _source_list(coords, T::Type{<:AbstractFloat})
     return [Source(band=:I, magnitude=0.0, coordinates=(coord[1], coord[2]), T=T) for coord in coords]
 end
 
-function _build_runtime_branch(::Type{T}, BackendArray, resolution::Int, wfs_samples::Int, n_act::Int,
+function _build_runtime_branch(::Type{T}, backend_selector, resolution::Int, wfs_samples::Int, n_act::Int,
     seed::Integer; sensor::Symbol=:sh) where {T<:AbstractFloat}
     tel = Telescope(resolution=resolution, diameter=T(8.0), sampling_time=T(1e-3),
-        central_obstruction=T(0.0), T=T, backend=BackendArray)
+        central_obstruction=T(0.0), T=T, backend=backend_selector)
     src = Source(band=:I, magnitude=0.0, T=T)
-    atm = KolmogorovAtmosphere(tel; r0=T(0.2), L0=T(25.0), T=T, backend=BackendArray)
-    dm = DeformableMirror(tel; n_act=n_act, influence_width=T(0.3), T=T, backend=BackendArray)
+    atm = KolmogorovAtmosphere(tel; r0=T(0.2), L0=T(25.0), T=T, backend=backend_selector)
+    dm = DeformableMirror(tel; n_act=n_act, influence_width=T(0.3), T=T, backend=backend_selector)
     wfs = sensor == :sh ?
-        ShackHartmann(tel; n_lenslets=wfs_samples, mode=Diffractive(), T=T, backend=BackendArray) :
-        PyramidWFS(tel; pupil_samples=wfs_samples, modulation=T(1.0), mode=Diffractive(), T=T, backend=BackendArray)
-    det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=BackendArray)
-    sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
-    return ClosedLoopBranchConfig(
+        ShackHartmannWFS(tel; n_lenslets=wfs_samples, mode=Diffractive(), T=T, backend=backend_selector) :
+        PyramidWFS(tel; pupil_samples=wfs_samples, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend_selector)
+    det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend_selector)
+    sim = AdaptiveOpticsSim.AOSimulation(tel, src, atm, dm, wfs)
+    return ControlLoopBranch(
         Symbol("branch_", seed),
         sim,
         _build_recon(dm, wfs, tel, src);
@@ -154,59 +150,59 @@ end
 function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractString="compact",
     T::Type{<:AbstractFloat}=Float32, samples::Union{Int,Nothing}=nothing,
     warmup::Union{Int,Nothing}=nothing)
-    BackendArray, backend_tag, label = _resolve_backend(backend_name)
+    backend_selector, backend_tag, label = _resolve_backend(backend_name)
     rng = runtime_rng(7)
     cfg = _multi_source_scale_config(scale_name)
     resolved_samples = something(samples, cfg.samples)
     resolved_warmup = something(warmup, cfg.warmup)
 
     tel = Telescope(resolution=cfg.asterism_resolution, diameter=T(8.0), sampling_time=T(1e-3),
-        central_obstruction=T(0.0), T=T, backend=BackendArray)
+        central_obstruction=T(0.0), T=T, backend=backend_selector)
     ast = Asterism(_source_list(cfg.source_coords, T))
-    det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=BackendArray)
+    det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend_selector)
 
     _seed_opd!(tel, T)
 
-    sh = ShackHartmann(tel; n_lenslets=cfg.asterism_wfs_samples, mode=Diffractive(), T=T, backend=BackendArray)
+    sh = ShackHartmannWFS(tel; n_lenslets=cfg.asterism_wfs_samples, mode=Diffractive(), T=T, backend=backend_selector)
     sh_mean_ns, sh_p95_ns, sh_alloc_bytes = _timed_stats!(() -> begin
         measure!(sh, tel, ast, det; rng=rng)
         _sync_backend!(backend_tag, sh.state.slopes)
     end; warmup=resolved_warmup, samples=resolved_samples)
 
-    pyr = PyramidWFS(tel; pupil_samples=cfg.asterism_wfs_samples, modulation=T(1.0), mode=Diffractive(), T=T, backend=BackendArray)
+    pyr = PyramidWFS(tel; pupil_samples=cfg.asterism_wfs_samples, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend_selector)
     pyr_mean_ns, pyr_p95_ns, pyr_alloc_bytes = _timed_stats!(() -> begin
         measure!(pyr, tel, ast, det; rng=rng)
         _sync_backend!(backend_tag, pyr.state.slopes)
     end; warmup=resolved_warmup, samples=resolved_samples)
 
-    bio = BioEdgeWFS(tel; pupil_samples=cfg.asterism_wfs_samples, modulation=T(1.0), mode=Diffractive(), T=T, backend=BackendArray)
+    bio = BioEdgeWFS(tel; pupil_samples=cfg.asterism_wfs_samples, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend_selector)
     bio_mean_ns, bio_p95_ns, bio_alloc_bytes = _timed_stats!(() -> begin
         measure!(bio, tel, ast, det; rng=rng)
         _sync_backend!(backend_tag, bio.state.slopes)
     end; warmup=resolved_warmup, samples=resolved_samples)
 
-    compatible_branches = [_build_runtime_branch(T, BackendArray,
+    compatible_branches = [_build_runtime_branch(T, backend_selector,
         cfg.runtime_resolution, cfg.runtime_wfs_samples, cfg.runtime_dm_n_act, 10 + i; sensor=:sh)
         for i in 1:cfg.branch_count]
     mixed_branches = vcat(
-        [_build_runtime_branch(T, BackendArray,
+        [_build_runtime_branch(T, backend_selector,
             cfg.runtime_resolution, cfg.runtime_wfs_samples, cfg.runtime_dm_n_act, 30 + i; sensor=:sh)
             for i in 1:max(cfg.branch_count - 1, 1)],
-        [_build_runtime_branch(T, BackendArray,
+        [_build_runtime_branch(T, backend_selector,
             cfg.runtime_resolution, cfg.runtime_wfs_samples, cfg.runtime_dm_n_act, 40; sensor=:pyr)],
     )
-    compatible_cfg = GroupedPlatformConfig(
+    compatible_cfg = GroupedControlLoopConfig(
         Tuple(map(branch -> branch.label, compatible_branches));
         name=:compatible_grouped_runtime,
-        products=GroupedRuntimeProductRequirements(wfs_frames=true, science_frames=false, wfs_stack=true, science_stack=false),
+        outputs=GroupedRuntimeOutputRequirements(wfs_frames=true, science_frames=false, wfs_stack=true, science_stack=false),
     )
-    mixed_cfg = GroupedPlatformConfig(
+    mixed_cfg = GroupedControlLoopConfig(
         Tuple(map(branch -> branch.label, mixed_branches));
         name=:mixed_grouped_runtime,
-        products=GroupedRuntimeProductRequirements(wfs_frames=true, science_frames=false, wfs_stack=false, science_stack=false),
+        outputs=GroupedRuntimeOutputRequirements(wfs_frames=true, science_frames=false, wfs_stack=false, science_stack=false),
     )
-    composite_compatible = build_platform_scenario(compatible_cfg, compatible_branches...)
-    composite_mixed = build_platform_scenario(mixed_cfg, mixed_branches...)
+    composite_compatible = build_control_loop_scenario(compatible_cfg, compatible_branches...)
+    composite_mixed = build_control_loop_scenario(mixed_cfg, mixed_branches...)
     prepare!(composite_compatible)
     prepare!(composite_mixed)
     step!(composite_compatible)
@@ -214,15 +210,15 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
 
     comp_mean_ns, comp_p95_ns, comp_alloc_bytes = _timed_stats!(() -> begin
         step!(composite_compatible)
-        _sync_backend!(backend_tag, simulation_command(composite_compatible))
+        _sync_backend!(backend_tag, command(composite_compatible))
     end; warmup=resolved_warmup, samples=resolved_samples)
     mixed_mean_ns, mixed_p95_ns, mixed_alloc_bytes = _timed_stats!(() -> begin
         step!(composite_mixed)
-        _sync_backend!(backend_tag, simulation_command(composite_mixed))
+        _sync_backend!(backend_tag, command(composite_mixed))
     end; warmup=resolved_warmup, samples=resolved_samples)
 
-    compatible_stack = simulation_grouped_wfs_stack(composite_compatible)
-    mixed_stack = simulation_grouped_wfs_stack(composite_mixed)
+    compatible_stack = grouped_wfs_stack(composite_compatible)
+    mixed_stack = grouped_wfs_stack(composite_mixed)
 
     return (
         backend=label,

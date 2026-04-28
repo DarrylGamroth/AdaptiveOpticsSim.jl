@@ -60,7 +60,7 @@ Status:
 
 - completed
 
-### `ICC-3` Calibration/Reconstructor Contract Closeout
+### `ICC-3` calibration/Reconstructor Contract Closeout
 
 Add preferred long-form accessors for the calibration/reconstructor diagnostics
 that had been exposed mainly through fields:
@@ -70,12 +70,12 @@ that had been exposed mainly through fields:
 - `singular_values(x)`
 - `condition_number(x)`
 - `effective_rank(x)`
-- `truncation_count(vault)`
+- `truncation_count(control_matrix)`
 
 Apply this to:
 
 - `InteractionMatrix`
-- `CalibrationVault`
+- `ControlMatrix`
 - `ModalReconstructor`
 - `MappedReconstructor`
 
@@ -91,7 +91,7 @@ The closeout is complete when:
 2. runtime and calibration code use the new WFS accessors where they are part
    of the maintained contract
 3. interface-conformance tests pin the new accessors and optional capabilities
-4. the maintained detector/WFS/calibration/runtime test surfaces pass
+4. the maintained detector/wfs/calibration/runtime test surfaces pass
 
 ## Outcome
 

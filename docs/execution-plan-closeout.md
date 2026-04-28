@@ -48,10 +48,10 @@ The outcome is:
 Reason:
 
 - the builder surfaces already have an explicit typed policy layer through
-  [`BuildBackend`](../src/Core/inverse_policies.jl),
+  [`BuildBackend`](../src/core/inverse_policies.jl),
 - tomography already routes backend-sensitive matrix/materialization decisions
-  through [`GPUArrayBuildBackend`](../src/Core/inverse_policies.jl) and
-  [`prepare_build_matrix`](../src/Core/inverse_policies.jl),
+  through [`GPUArrayBuildBackend`](../src/core/inverse_policies.jl) and
+  [`prepare_build_matrix`](../src/core/inverse_policies.jl),
 - adding a second execution-plan abstraction there now would duplicate an
   existing mechanism without a demonstrated benchmark problem.
 

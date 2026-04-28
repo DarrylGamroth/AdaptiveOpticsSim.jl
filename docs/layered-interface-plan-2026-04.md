@@ -29,14 +29,14 @@ still too mixed:
   - `set_command!`
   - `readout`
 - orchestration builders:
-  - `build_runtime_scenario`
+  - `build_control_loop_scenario`
   - `simulation_interface`
 
 This is not a problem in the implementation itself. It is a problem in public
 layering:
 
 - the cookbook still mixes `AdaptiveOpticsSim.simulation_interface(runtime)` with
-  `build_runtime_scenario(...)`
+  `build_control_loop_scenario(...)`
 - the user path does not yet treat one runtime/orchestration surface as the
   clear default
 - low-level and high-level APIs are both visible without enough guidance about
@@ -112,11 +112,11 @@ This layer exists for:
 
 Canonical interface:
 
-- `RuntimeBranch`
-- `SingleRuntimeConfig`
-- `GroupedRuntimeConfig`
-- `RuntimeScenario`
-- `build_runtime_scenario`
+- `ControlLoopBranch`
+- `SingleControlLoopConfig`
+- `GroupedControlLoopConfig`
+- `ControlLoopScenario`
+- `build_control_loop_scenario`
 - then the same execution verbs as Layer 2:
   - `prepare!`
   - `sense!`
@@ -126,7 +126,7 @@ Canonical interface:
 Policy:
 
 - this is the preferred public surface for cookbook/runtime assembly examples
-- single-runtime cookbook examples should prefer `build_runtime_scenario(...)`
+- single-runtime cookbook examples should prefer `build_control_loop_scenario(...)`
   unless the example is explicitly teaching low-level runtime assembly
 
 ## Scope Boundary
@@ -153,9 +153,9 @@ The package should present the execution stack like this:
 2. Plant assembly
    - `AOSimulation(...)`
 3. Runtime assembly
-   - `RuntimeBranch(...)`
-   - `SingleRuntimeConfig(...)` or `GroupedRuntimeConfig(...)`
-   - `build_runtime_scenario(...)`
+   - `ControlLoopBranch(...)`
+   - `SingleControlLoopConfig(...)` or `GroupedControlLoopConfig(...)`
+   - `build_control_loop_scenario(...)`
 4. Execution
    - `prepare!(...)`
    - `sense!(...)` for external control
@@ -183,11 +183,11 @@ Required changes:
 - `docs/user-guide.md`
   - explicitly describe Layers 1-3
 - `docs/model-cookbook.md`
-  - keep normal runtime recipes on `build_runtime_scenario(...)`
+  - keep normal runtime recipes on `build_control_loop_scenario(...)`
   - label any `AdaptiveOpticsSim.simulation_interface(...)` example as advanced/low-level
 - `docs/api-reference.md`
   - group exported execution APIs by layer
-- `docs/platform-orchestration.md`
+- `docs/control-loop-orchestration.md`
   - explicitly state that this is the preferred public runtime assembly layer
 
 Success criteria:
@@ -195,7 +195,7 @@ Success criteria:
 - a normal user can stay on the orchestration/runtime path without seeing the
   low-level runtime wrapper first
 - the docs do not imply that `AdaptiveOpticsSim.simulation_interface(...)` and
-  `build_runtime_scenario(...)` are equally preferred entry points
+  `build_control_loop_scenario(...)` are equally preferred entry points
 
 ### LI-2 Cookbook Normalization
 
@@ -297,7 +297,7 @@ This plan is complete when:
 - the stable user path (`README.md`, `user-guide.md`, `model-cookbook.md`)
   stays on the orchestration/runtime surface by default
 - `api-reference.md` explicitly groups the interfaces by layer
-- `platform-orchestration.md` is the clear first stop for public runtime
+- `control-loop-orchestration.md` is the clear first stop for public runtime
   assembly
 - at least one advanced doc/example still covers direct
   `AdaptiveOpticsSim.simulation_interface(...)` usage for power users
@@ -308,9 +308,9 @@ This plan complements, but does not replace:
 
 - [`interface-style-spec-plan.md`](./interface-style-spec-plan.md)
   - broad interface/naming contract work across abstract families
-- [`api-cleanup-plan-2026-04.md`](./api-cleanup-plan-2026-04.md)
-  - runtime/HIL naming and accessors cleanup
-- [`platform-orchestration.md`](./platform-orchestration.md)
+- [`archive/2026-04/api-cleanup-plan-2026-04.md`](./archive/2026-04/api-cleanup-plan-2026-04.md)
+  - completed runtime/HIL naming and accessors cleanup record
+- [`control-loop-orchestration.md`](./control-loop-orchestration.md)
   - maintained orchestration-layer guide
 
 This document is the narrower execution-layer cleanup plan that turns those

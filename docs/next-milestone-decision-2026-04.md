@@ -76,7 +76,7 @@ The chosen milestone should focus on:
 
 - grouped sensing execution semantics
 - grouped runtime product ownership
-- grouped detector/WFS/science export planning
+- grouped detector/wfs/science export planning
 - grouped benchmark and validation surfaces
 
 The chosen milestone should not include:

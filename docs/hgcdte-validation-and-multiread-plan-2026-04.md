@@ -96,7 +96,7 @@ Completed in the first maintained slice:
   readout payload, with `HgCdTeReadoutProducts` preserved as a compatibility
   alias
 - shared sampling-mode and read-cube assembly logic now lives in
-  `src/Detectors/frame_sampling.jl`
+  `src/detectors/frame_sampling.jl`
 - `HgCdTeAvalancheArraySensor` now supplies family-specific physics and
   cadence policy while delegating reusable multi-read assembly to the shared
   layer

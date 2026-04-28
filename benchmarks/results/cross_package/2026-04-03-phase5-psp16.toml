@@ -287,7 +287,7 @@ class = "medium"
 description = "Grouped platform runtime comparison between main and revolt-real on the maintained multi-source / multi-WFS medium rung."
 family = "CP-06"
 kind = "runtime_profile"
-known_differences = ["typed_platform_scenario_surface", "grouped_export_stack_contract", "composite_runtime_entrypoint_shape"]
+known_differences = ["typed_control_loop_scenario_surface", "grouped_export_stack_contract", "composite_runtime_entrypoint_shape"]
 normalized_fields = ["backend", "scale", "runtime_resolution", "runtime_n_subap", "runtime_branch_count"]
 status = "passed"
 

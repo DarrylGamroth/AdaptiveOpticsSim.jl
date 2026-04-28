@@ -101,12 +101,12 @@ Deliverables:
 
 Primary file targets:
 
-- New: `src/Optics/atmospheric_field_propagation.jl`
+- New: `src/optics/atmospheric_field_propagation.jl`
 - Update: `src/AdaptiveOpticsSim.jl`
-- Update: `src/Atmosphere/source_geometry.jl`
-- Update: `src/Atmosphere/multilayer.jl`
-- Update: `src/Atmosphere/infinite_screen.jl`
-- Update: `src/Optics/electric_field.jl`
+- Update: `src/atmosphere/source_geometry.jl`
+- Update: `src/atmosphere/multilayer.jl`
+- Update: `src/atmosphere/infinite_screen.jl`
+- Update: `src/optics/electric_field.jl`
 - Update: `docs/api-reference.md`
 - Update: `docs/atmosphere-runtime-spec.md`
 - Update: `test/runtests.jl`
@@ -114,7 +114,7 @@ Primary file targets:
 Implementation plan:
 
 1. Introduce the new type family and export surface in
-   `src/Optics/atmospheric_field_propagation.jl`.
+   `src/optics/atmospheric_field_propagation.jl`.
 2. Factor any missing shared layer helpers out of the finite/infinite backends
    so the propagation layer does not special-case one backend.
 3. Normalize layer ordering and direction semantics:
@@ -160,11 +160,11 @@ Deliverables:
 
 Primary file targets:
 
-- New: `src/Optics/atmospheric_field_propagation.jl`
-- Update: `src/Atmosphere/source_geometry.jl`
-- Update: `src/Atmosphere/multilayer.jl`
-- Update: `src/Atmosphere/infinite_screen.jl`
-- Update: `src/Optics/electric_field.jl`
+- New: `src/optics/atmospheric_field_propagation.jl`
+- Update: `src/atmosphere/source_geometry.jl`
+- Update: `src/atmosphere/multilayer.jl`
+- Update: `src/atmosphere/infinite_screen.jl`
+- Update: `src/optics/electric_field.jl`
 - Update: `docs/api-reference.md`
 - Update: `scripts/gpu_smoke_contract.jl`
 - Update: `test/runtests.jl`
@@ -214,11 +214,11 @@ Deliverables:
 
 Primary file targets:
 
-- Update: `src/Optics/propagation.jl`
-- Update: `src/Optics/atmospheric_field_propagation.jl`
-- Update: `src/Atmosphere/multilayer.jl`
-- Update: `src/Atmosphere/infinite_screen.jl`
-- Update: `src/WFS/curvature.jl`
+- Update: `src/optics/propagation.jl`
+- Update: `src/optics/atmospheric_field_propagation.jl`
+- Update: `src/atmosphere/multilayer.jl`
+- Update: `src/atmosphere/infinite_screen.jl`
+- Update: `src/wfs/curvature.jl`
 - Update: `docs/api-reference.md`
 - Update: `docs/benchmark-matrix-plan.md`
 - Update: `test/runtests.jl`
@@ -266,11 +266,11 @@ Deliverables:
 
 Primary file targets:
 
-- Update: `src/Optics/spectrum.jl`
-- Update: `src/Optics/atmospheric_field_propagation.jl`
-- Update: `src/Optics/propagation.jl`
-- Update: `src/Atmosphere/source_geometry.jl`
-- Update: `src/Control/runtime.jl`
+- Update: `src/optics/spectrum.jl`
+- Update: `src/optics/atmospheric_field_propagation.jl`
+- Update: `src/optics/propagation.jl`
+- Update: `src/atmosphere/source_geometry.jl`
+- Update: `src/control/runtime.jl`
 - Update: `docs/api-reference.md`
 - Update: `test/runtests.jl`
 
@@ -314,9 +314,9 @@ Deliverables:
 
 Primary file targets:
 
-- Update: `src/Control/runtime.jl`
-- Update: `src/WFS/curvature.jl`
-- Update: `src/Optics/atmospheric_field_propagation.jl`
+- Update: `src/control/runtime.jl`
+- Update: `src/wfs/curvature.jl`
+- Update: `src/optics/atmospheric_field_propagation.jl`
 - Update: `examples/tutorials/`
 - Update: `docs/api-reference.md`
 - Update: `test/runtests.jl`

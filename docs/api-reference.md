@@ -154,7 +154,7 @@ If you are maintaining the package, pair this document with
 
 ## Wavefront sensing
 
-- `ShackHartmann`, `ShackHartmannParams`, `ShackHartmannState`
+- `ShackHartmannWFS`, `ShackHartmannWFSParams`, `ShackHartmannWFSState`
 - `SubapertureLayout`, `SubapertureCalibration`,
   `AbstractSlopeExtractionModel`, `CenterOfGravityExtraction`
 - `subaperture_layout`, `subaperture_calibration`,
@@ -174,7 +174,7 @@ If you are maintaining the package, pair this document with
 ## Calibration and reconstruction
 
 - `InteractionMatrix`, `interaction_matrix`
-- `CalibrationVault`, `with_truncation`
+- `ControlMatrix`, `with_truncation`
 - `ModalBasis`, `KLBasisMethod`, `KLDMModes`, `KLHHtPSD`
 - `dm_basis`, `kl_modal_basis`, `modal_basis`, `basis_from_m2c`,
   `basis_projector`
@@ -216,10 +216,10 @@ If you are maintaining the package, pair this document with
 
 ### Orchestration layer
 
-- `RuntimeBranch`, `SingleRuntimeConfig`, `GroupedRuntimeConfig`, `RuntimeScenario`
-- `build_runtime_scenario`
-- `RuntimeProductRequirements`, `GroupedRuntimeProductRequirements`
-- `platform_config`, `platform_boundary`, `platform_name`, `platform_branch_labels`
+- `ControlLoopBranch`, `SingleControlLoopConfig`, `GroupedControlLoopConfig`, `ControlLoopScenario`
+- `build_control_loop_scenario`
+- `RuntimeOutputRequirements`, `GroupedRuntimeOutputRequirements`
+- `control_loop_config`, `control_loop_boundary`, `control_loop_name`, `control_loop_branch_labels`
 
 This is the preferred public runtime assembly surface for normal closed-loop and
 HIL usage.
@@ -279,7 +279,7 @@ top-level namespace. Access them as `AdaptiveOpticsSim.<name>`.
 ### Scenario builders and calibration workflow helpers
 
 - `AdaptiveOpticsSim.fast_atmosphere`
-- `AdaptiveOpticsSim.initialize_ao_shwfs`
+- `AdaptiveOpticsSim.initialize_ao_shack_hartmann`
 - `AdaptiveOpticsSim.initialize_ao_pyramid`
 - `AdaptiveOpticsSim.GSCDetectorMetadata`
 - `AdaptiveOpticsSim.detector_metadata`
@@ -429,7 +429,7 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   propagation layer.
 - `CurvatureBranchResponse` models reusable intra-/extra-focal throughput and
   background imbalance independently of any one instrument example.
-- `ShackHartmann` now exposes its maintained subaperture/calibration surface
+- `ShackHartmannWFS` now exposes its maintained subaperture/calibration surface
   through `SubapertureLayout` and `SubapertureCalibration`.
 - Grouped-runtime and detector-coupled Shack-Hartmann paths are expected to
   share that layout/calibration contract rather than managing independent
@@ -444,10 +444,10 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   trait surface.
 - The maintained runtime expects `slopes(wfs)` to expose the measured signal
   vector consistently across WFS families.
-- Diffractive `ShackHartmann` and `PyramidWFS` now also support grouped
+- Diffractive `ShackHartmannWFS` and `PyramidWFS` now also support grouped
   broad-band execution through `SpectralSource`, including detector-coupled
   readout after wavelength accumulation.
-- Diffractive `ShackHartmann` and `PyramidWFS` also support grouped
+- Diffractive `ShackHartmannWFS` and `PyramidWFS` also support grouped
   extended-source execution through `ExtendedSource`, reusing the same
   maintained grouped accumulation pattern used for asterisms and broad-band
   sensing.
@@ -693,13 +693,13 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   point and must return an `InteractionMatrix` with a stored calibration
   `amplitude`. `forward_operator(imat)` and `calibration_amplitude(imat)` are
   the preferred long-form accessors for the stored matrix and drive amplitude.
-- `CalibrationVault(D; ...)` is the maintained inverse-storage workflow and
+- `ControlMatrix(D; ...)` is the maintained inverse-storage workflow and
   should retain the forward operator `D`, the selected inverse representation
   when requested, and inversion diagnostics such as singular values, condition
-  number, effective rank, and truncation count. `forward_operator(vault)`,
-  `inverse_operator_matrix(vault)`, `inverse_policy(vault)`,
-  `singular_values(vault)`, `condition_number(vault)`,
-  `effective_rank(vault)`, and `truncation_count(vault)` are the preferred
+  number, effective rank, and truncation count. `forward_operator(control_matrix)`,
+  `inverse_operator_matrix(control_matrix)`, `inverse_policy(control_matrix)`,
+  `singular_values(control_matrix)`, `condition_number(control_matrix)`,
+  `effective_rank(control_matrix)`, and `truncation_count(control_matrix)` are the preferred
   long-form accessors for the stored operators and diagnostics.
 - `modal_basis(...)` is the maintained modal-basis workflow and must return a
   `ModalBasis` with consistent `M2C`, sampled basis vectors, and optional
@@ -707,8 +707,8 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   `modal_projector(basis)` provide the long-form result accessors.
 - `ao_calibration(...)` is the maintained packaged AO-calibration workflow and
   should return an `AOCalibration` bundling basis operators with the measured
-  `CalibrationVault`. `modal_to_command(calib)`, `sampled_basis(calib)`,
-  `modal_projector(calib)`, and `calibration_vault(calib)` provide the
+  `ControlMatrix`. `modal_to_command(calib)`, `sampled_basis(calib)`,
+  `modal_projector(calib)`, and `control_matrix(calib)` provide the
   preferred long-form accessors for the result fields.
 - `AdaptiveOpticsSim.compute_meta_sensitivity_matrix(...)` and
   `AdaptiveOpticsSim.SPRINT(...)` are the maintained

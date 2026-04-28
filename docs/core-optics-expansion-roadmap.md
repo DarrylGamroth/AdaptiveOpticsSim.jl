@@ -91,18 +91,18 @@ Deliverables:
 
 Primary file targets:
 
-- New: `src/Optics/electric_field.jl`
+- New: `src/optics/electric_field.jl`
 - Update: `src/AdaptiveOpticsSim.jl`
-- Update: `src/Optics/telescope.jl`
-- Update: `src/Optics/source.jl`
-- Update: `src/Optics/psf.jl`
+- Update: `src/optics/telescope.jl`
+- Update: `src/optics/source.jl`
+- Update: `src/optics/psf.jl`
 - Update: `docs/api-reference.md`
 - Update: `test/runtests.jl`
 
 Implementation plan:
 
 1. Introduce the new type family and export surface in
-   `src/Optics/electric_field.jl`.
+   `src/optics/electric_field.jl`.
 2. Factor the existing PSF input preparation into reusable field-construction
    helpers instead of duplicating telescope-to-field code.
 3. Keep units explicit at the boundary:
@@ -150,18 +150,18 @@ Deliverables:
 
 Primary file targets:
 
-- New: `src/Optics/propagation.jl`
+- New: `src/optics/propagation.jl`
 - Update: `src/AdaptiveOpticsSim.jl`
-- Update: `src/Optics/electric_field.jl`
-- Update: `src/Optics/psf.jl`
-- Update: `src/WFS/curvature.jl`
+- Update: `src/optics/electric_field.jl`
+- Update: `src/optics/psf.jl`
+- Update: `src/wfs/curvature.jl`
 - Update: `docs/api-reference.md`
 - Update: `docs/benchmark-matrix-plan.md`
 - Update: `test/runtests.jl`
 
 Implementation plan:
 
-1. Extract the current pupil-to-PSF FFT path in `src/Optics/psf.jl` into a
+1. Extract the current pupil-to-PSF FFT path in `src/optics/psf.jl` into a
    reusable Fraunhofer propagation helper.
 2. Add a Fresnel transfer-function path with precomputed phase factors and
    explicit propagation distance.
@@ -200,20 +200,20 @@ Deliverables:
   - `SpectralBundle`
 - Add source-side helpers for weighted wavelength samples.
 - Add maintained polychromatic execution for:
-  - `ShackHartmann`
+  - `ShackHartmannWFS`
   - `PyramidWFS`
 - Keep the single-wavelength case allocation-free and on the current fast path.
 
 Primary file targets:
 
-- New: `src/Optics/spectrum.jl`
+- New: `src/optics/spectrum.jl`
 - Update: `src/AdaptiveOpticsSim.jl`
-- Update: `src/Optics/source.jl`
-- Update: `src/Optics/electric_field.jl`
-- Update: `src/Optics/propagation.jl`
-- Update: `src/WFS/shack_hartmann.jl`
-- Update: `src/WFS/pyramid.jl`
-- Update: `src/Control/runtime.jl`
+- Update: `src/optics/source.jl`
+- Update: `src/optics/electric_field.jl`
+- Update: `src/optics/propagation.jl`
+- Update: `src/wfs/shack_hartmann.jl`
+- Update: `src/wfs/pyramid.jl`
+- Update: `src/control/runtime.jl`
 - Update: `docs/api-reference.md`
 - Update: `test/runtests.jl`
 
@@ -256,19 +256,19 @@ Deliverables:
   - `GaussianDiskSourceModel`
   - `SampledImageSourceModel`
 - Add maintained extended-source execution for:
-  - `ShackHartmann` first,
+  - `ShackHartmannWFS` first,
   - `PyramidWFS` second.
 - Reuse the same grouped accumulation machinery used for polychromatic
   propagation where possible.
 
 Primary file targets:
 
-- New: `src/Optics/extended_source.jl`
+- New: `src/optics/extended_source.jl`
 - Update: `src/AdaptiveOpticsSim.jl`
-- Update: `src/Optics/source.jl`
-- Update: `src/WFS/shack_hartmann.jl`
-- Update: `src/WFS/pyramid.jl`
-- Update: `src/Control/runtime.jl`
+- Update: `src/optics/source.jl`
+- Update: `src/wfs/shack_hartmann.jl`
+- Update: `src/wfs/pyramid.jl`
+- Update: `src/control/runtime.jl`
 - Update: `examples/tutorials/`
 - Update: `docs/api-reference.md`
 - Update: `test/runtests.jl`
@@ -321,13 +321,13 @@ Deliverables:
 
 Primary file targets:
 
-- New: `src/Optics/aperture_masks.jl`
+- New: `src/optics/aperture_masks.jl`
 - Update: `src/AdaptiveOpticsSim.jl`
-- Update: `src/Optics/telescope.jl`
-- Update: `src/Optics/spatial_filter.jl`
-- Update: `src/WFS/shack_hartmann.jl`
-- Update: `src/WFS/pyramid.jl`
-- Update: `src/Tomography/reconstructors.jl`
+- Update: `src/optics/telescope.jl`
+- Update: `src/optics/spatial_filter.jl`
+- Update: `src/wfs/shack_hartmann.jl`
+- Update: `src/wfs/pyramid.jl`
+- Update: `src/tomography/reconstructors.jl`
 - Update: `docs/api-reference.md`
 - Update: `test/runtests.jl`
 
@@ -376,11 +376,11 @@ Deliverables:
 
 Primary file targets:
 
-- New: `src/WFS/subapertures.jl`
+- New: `src/wfs/subapertures.jl`
 - Update: `src/AdaptiveOpticsSim.jl`
-- Update: `src/WFS/shack_hartmann.jl`
-- Update: `src/Calibration/interaction_matrix.jl`
-- Update: `src/Control/runtime.jl`
+- Update: `src/wfs/shack_hartmann.jl`
+- Update: `src/calibration/interaction_matrix.jl`
+- Update: `src/control/runtime.jl`
 - Update: `docs/api-reference.md`
 - Update: `examples/tutorials/`
 - Update: `test/runtests.jl`

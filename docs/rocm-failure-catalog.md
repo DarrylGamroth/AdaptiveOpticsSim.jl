@@ -47,8 +47,8 @@ The intended end state is still:
 Files:
 
 - [AdaptiveOpticsSimAMDGPUExt.jl](../ext/AdaptiveOpticsSimAMDGPUExt.jl)
-- [pipeline.jl](../src/Detectors/pipeline.jl)
-- [frame_capture.jl](../src/Detectors/frame_capture.jl)
+- [pipeline.jl](../src/detectors/pipeline.jl)
+- [frame_capture.jl](../src/detectors/frame_capture.jl)
 
 Current fallback:
 
@@ -79,7 +79,7 @@ Current status:
 
 Files:
 
-- [reductions.jl](../src/Core/reductions.jl)
+- [reductions.jl](../src/core/reductions.jl)
 - [AdaptiveOpticsSimAMDGPUExt.jl](../ext/AdaptiveOpticsSimAMDGPUExt.jl)
 
 Current fallback:
@@ -105,15 +105,15 @@ Current status:
 
 Files:
 
-- [setup.jl](../src/WFS/shack_hartmann/setup.jl)
-- [signals.jl](../src/WFS/shack_hartmann/signals.jl)
-- [measure.jl](../src/WFS/shack_hartmann/measure.jl)
-- [stacks.jl](../src/WFS/shack_hartmann/stacks.jl)
+- [setup.jl](../src/wfs/shack_hartmann/setup.jl)
+- [signals.jl](../src/wfs/shack_hartmann/signals.jl)
+- [measure.jl](../src/wfs/shack_hartmann/measure.jl)
+- [stacks.jl](../src/wfs/shack_hartmann/stacks.jl)
 
 Current maintained path:
 
-- AMDGPU now selects `ShackHartmannBatchedPlan`
-- `ShackHartmannRocmSafePlan` remains available as an escape hatch, not the
+- AMDGPU now selects `ShackHartmannWFSBatchedPlan`
+- `ShackHartmannWFSRocmSafePlan` remains available as an escape hatch, not the
   default
 
 Why this exists:
@@ -151,7 +151,7 @@ Current status:
 
 Files:
 
-- [signals.jl](../src/WFS/shack_hartmann/signals.jl)
+- [signals.jl](../src/wfs/shack_hartmann/signals.jl)
 
 Current behavior:
 
@@ -167,7 +167,7 @@ Observed symptom classes:
 
 Evidence:
 
-- [2026-04-08-heart-hil-julia-backend-runtime.toml](../AdaptiveOpticsComparisons/results/archived/2026-04-08-heart-hil-julia-backend-runtime.toml)
+- [2026-04-08-heart-hil-julia-backend-runtime.toml](../../AdaptiveOpticsComparisons/results/archived/2026-04-08-heart-hil-julia-backend-runtime.toml)
   identified `sense_mean_ns` as the dominant AMDGPU cost on the maintained
   HEART surface
 
@@ -250,7 +250,7 @@ Current status:
 
 Files:
 
-- [kolmogorov.jl](../src/Atmosphere/kolmogorov.jl)
+- [kolmogorov.jl](../src/atmosphere/kolmogorov.jl)
 - [AdaptiveOpticsSimAMDGPUExt.jl](../ext/AdaptiveOpticsSimAMDGPUExt.jl)
 
 Current behavior:

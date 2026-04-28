@@ -35,7 +35,7 @@ function run_gpu_sync_audit(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=BackendArray)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3, T=T, backend=BackendArray)
-    wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=BackendArray)
+    wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=BackendArray)
     sim = AOSimulation(tel, atm, src, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
     recon = ModalReconstructor(imat; gain=T(0.5))

@@ -37,7 +37,7 @@ The primary external reference is SPECULA:
 ## Architectural Fit
 
 `ZernikeWFS` should be implemented as another `AbstractWFS` under
-[`src/WFS`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/WFS),
+[`src/wfs`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/wfs),
 following the established split:
 
 - immutable params
@@ -48,7 +48,7 @@ following the established split:
 - accelerator path added without changing the public API
 
 The closest internal structural reference is
-[`pyramid.jl`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/WFS/pyramid.jl),
+[`pyramid.jl`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/wfs/pyramid.jl),
 because the Zernike sensor is also a focal-plane-mask, pupil-reimaging,
 diffractive WFS.
 
@@ -146,7 +146,7 @@ reference centroids.
 
 ### Phase 1: Scalar CPU MVP
 
-- add `src/WFS/zernike.jl`
+- add `src/wfs/zernike.jl`
 - include/export from
   [`src/AdaptiveOpticsSim.jl`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/AdaptiveOpticsSim.jl)
 - implement params/state/constructor

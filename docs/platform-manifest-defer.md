@@ -53,8 +53,8 @@ If manifests are revisited later, the allowed form is:
 
 That means:
 
-- manifests should lower into `SingleRuntimeConfig`,
-  `GroupedRuntimeConfig`, and related typed builders
+- manifests should lower into `SingleControlLoopConfig`,
+  `GroupedControlLoopConfig`, and related typed builders
 - manifests should not replace the script-first workflow
 - manifests should not become the authoritative runtime ownership model
 

@@ -315,7 +315,7 @@ Primary files in scope:
 Detailed work:
 
 - write one workflow-oriented guide for:
-  - defining sources/telescope/atmosphere/WFS/detector/runtime
+  - defining sources/telescope/atmosphere/wfs/detector/runtime
   - building a reproducible script
   - running validation/reference comparisons
   - running maintained benchmarks
@@ -713,7 +713,7 @@ files.
 | Milestone | Task | Outputs |
 | --- | --- | --- |
 | `PSP-11` | Define typed platform scenario/config families for representative runtime compositions. | scenario/config types and guide |
-| `PSP-12` | Add builders for representative multi-branch platform compositions. | builder surfaces for grouped/multi-WFS/multi-detector cases |
+| `PSP-12` | Add builders for representative multi-branch platform compositions. | builder surfaces for grouped/multi-wfs/multi-detector cases |
 | `PSP-13` | Add runtime entry points that make these scenario objects easy to execute, benchmark, and validate from scripts. | maintained runner/API surfaces |
 | `PSP-14` | Add one or two canonical main-platform example scripts that use the new orchestration layer. | examples and docs |
 
@@ -725,19 +725,19 @@ files.
 
 ### Implementation record
 
-- typed orchestration layer added in [src/Control/platform.jl](../src/Control/platform.jl)
+- typed orchestration layer added in [src/control/control_loop.jl](../src/control/control_loop.jl)
 - new exported scenario/config families:
-  - `RuntimeBranch`
-  - `SingleRuntimeConfig`
-  - `GroupedRuntimeConfig`
-  - `RuntimeScenario`
+  - `ControlLoopBranch`
+  - `SingleControlLoopConfig`
+  - `GroupedControlLoopConfig`
+  - `ControlLoopScenario`
 - maintained orchestration guide added:
-  [platform-orchestration.md](./platform-orchestration.md)
+  [control-loop-orchestration.md](./control-loop-orchestration.md)
 - maintained grouped runtime runner migrated to the new layer:
   [profile_multi_source_multi_wfs_runtime.jl](../scripts/profile_multi_source_multi_wfs_runtime.jl)
 - canonical example scripts added:
-  - [platform_single_runtime.jl](../examples/closed_loop/platform_single_runtime.jl)
-  - [platform_grouped_runtime.jl](../examples/closed_loop/platform_grouped_runtime.jl)
+  - [control_loop_single_runtime.jl](../examples/closed_loop/control_loop_single_runtime.jl)
+  - [control_loop_grouped_runtime.jl](../examples/closed_loop/control_loop_grouped_runtime.jl)
 
 ## Phase 5: Platform-Scale Validation And Benchmarking
 
@@ -762,18 +762,18 @@ Back the new orchestration layer with realistic evidence.
 Implementation record:
 
 - direct platform runner added:
-  [profile_platform_runtime.jl](../scripts/profile_platform_runtime.jl)
+  [profile_control_loop_runtime.jl](../scripts/profile_control_loop_runtime.jl)
 - archived direct orchestration artifact added:
   [2026-04-03-phase5-psp15.toml](../benchmarks/results/platform/2026-04-03-phase5-psp15.toml)
 - orchestration validation note added:
-  [platform-orchestration-validation.md](./platform-orchestration-validation.md)
+  [control-loop-orchestration-validation.md](./control-loop-orchestration-validation.md)
 - normalized cross-package platform contract added:
   [cross_package.toml](../benchmarks/contracts/cross_package.toml)
 - archived cross-package result added:
   [2026-04-03-phase5-psp16.toml](../benchmarks/results/cross_package/2026-04-03-phase5-psp16.toml)
 - contract note added:
   [revolt-platform-benchmark-contract.md](./revolt-platform-benchmark-contract.md)
-- backend smoke widened to instantiate `RuntimeScenario` directly in:
+- backend smoke widened to instantiate `ControlLoopScenario` directly in:
   [backend_optional_common.jl](../test/backend_optional_common.jl)
 
 ## Phase 6: Closeout And Deferred Tracks

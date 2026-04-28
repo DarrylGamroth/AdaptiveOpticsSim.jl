@@ -59,15 +59,22 @@ Use together with:
 - [x] Versioned bootstrap/runner instructions for production validation hosts
 - [x] One-command release validation procedure documented
 
-## Required Before Claiming Production Readiness
+## Required Before Claiming Release Readiness
 
-There are no remaining blockers on the currently supported production surface.
+There are no known code blockers on the currently supported production surface.
+Before claiming a specific release or handoff commit as production-ready, rerun
+and archive the release-validation evidence for that exact commit.
 
-Recorded operational evidence on commit `2192140`:
+Historical operational evidence was recorded on commit `2192140`:
 
 - [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml)
 - [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-amdgpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-amdgpu.toml)
 - [../benchmarks/results/validation_runs/2026-04-10-spiders-cuda.toml](../benchmarks/results/validation_runs/2026-04-10-spiders-cuda.toml)
+
+Current automated CI evidence is provided by the CPU validation and coverage
+workflows on `main`. CUDA and AMDGPU validation are hardware-gated manual
+workflows and should be treated as release-validation evidence once they have
+completed successfully on the target hardware.
 
 ## Next Recommended Order
 

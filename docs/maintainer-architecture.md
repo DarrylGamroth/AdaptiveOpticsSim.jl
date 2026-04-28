@@ -36,23 +36,27 @@ The implemented system follows these package-level rules:
 
 The codebase is organized into subsystem directories:
 
-- `src/Core`
+- `src/core`
   - traits, errors, backend services, reduction/random helpers, shared low-level
     infrastructure
-- `src/Optics`
+- `src/optics`
   - telescope, sources, electric fields, propagation, masks, DMs, PSFs
-- `src/Atmosphere`
+- `src/atmosphere`
   - Von Karman/Kolmogorov screens, multilayer atmospheres, infinite-screen
     evolution, atmosphere-field propagation support
-- `src/WFS`
+- `src/wfs`
   - Shack-Hartmann, Pyramid, BioEdge, Curvature, Zernike, grouped execution,
     calibration scaffolding
-- `src/Detectors`
+- `src/detectors`
   - frame/counting detectors, response models, thermal models, readout pipeline
-- `src/Calibration`
-  - interaction matrices, modal bases, LiFT, gain sensing, AO initialization
-- `src/Control`
-  - runtime construction, execution, product planning, timing, controllers
+- `src/calibration`
+  - interaction matrices, modal bases, control matrices, AO calibration bundles,
+    gain sensing, and misregistration sensitivity
+- `src/control`
+  - reconstructors, runtime construction, execution, output planning, timing,
+    controllers
+- `src/simulation`
+  - compact simulation assembly types and maintained scenario-builder helpers
 - `ext`
   - optional backend or ecosystem integrations
 
@@ -67,9 +71,9 @@ The dominant pattern is:
 Examples:
 
 - `Telescope` with `TelescopeParams` and `TelescopeState`
-- `ShackHartmann` with `ShackHartmannParams` and `ShackHartmannState`
+- `ShackHartmannWFS` with `ShackHartmannWFSParams` and `ShackHartmannWFSState`
 - `Detector` with `DetectorParams` and `DetectorState`
-- `ClosedLoopRuntime` with runtime profile, product plan, and prepared state
+- `ClosedLoopRuntime` with runtime profile, output plan, and prepared state
 
 This gives:
 
@@ -99,7 +103,7 @@ Examples:
 
 - detector pipeline helpers
 - grouped WFS execution helpers
-- runtime product planning
+- runtime output planning
 - propagation contexts
 - backend reductions and random/noise services
 
@@ -116,15 +120,15 @@ Examples:
 - `runtime_profile`
 - `simulation_readout`
 
-This layer coordinates prepared objects, latency staging, exported products,
-and detector/WFS/science readout ownership.
+This layer coordinates prepared objects, latency staging, exported outputs,
+and detector/wfs/science readout ownership.
 
 ## Runtime Ownership Model
 
 The current runtime model is:
 
 - product requirements are explicit
-- exported products are distinct from scratch buffers
+- exported outputs are distinct from scratch buffers
 - prepared runtime state is separated from per-step mutation
 - WFS and detector pipelines own their sampled/readout/intermediate products
   explicitly rather than relying on in-place aliasing

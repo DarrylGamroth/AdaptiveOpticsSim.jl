@@ -12,11 +12,11 @@ Plan traceability:
 This note summarizes the maintained accuracy evidence for the shared
 `K_{5/6}` helper used by:
 
-- [`phase_covariance`](../src/Atmosphere/phase_stats.jl)
+- [`phase_covariance`](../src/atmosphere/phase_stats.jl)
 - tomography covariance paths in
-  [`reconstructors.jl`](../src/Tomography/reconstructors.jl)
+  [`reconstructors.jl`](../src/tomography/reconstructors.jl)
 
-The implementation lives in [kv56.jl](../src/Core/kv56.jl) and evaluates the
+The implementation lives in [kv56.jl](../src/core/kv56.jl) and evaluates the
 fixed-order quantity needed by the package rather than a generic `besselk(ν,x)`
 surface.
 

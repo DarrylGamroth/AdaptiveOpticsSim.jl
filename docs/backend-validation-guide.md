@@ -66,7 +66,7 @@ The reduced maintained smoke covers:
 - deterministic diffractive SH detector/export equivalence against CPU
 - deterministic composite-optic low-order runtime parity against CPU:
   - `tiptilt + dm`
-    - `ShackHartmann`
+    - `ShackHartmannWFS`
     - `Pyramid`
     - `BioEdge`
   - `steering + dm`
@@ -109,8 +109,8 @@ detector/export surface that previously regressed on CUDA:
 
 - null-noise diffractive SH with detector capture
 - CPU vs GPU comparison of:
-  - [`sh_exported_spot_cube`](../src/WFS/shack_hartmann/setup.jl)
-  - [`wfs_output_frame`](../src/Control/runtime/construction.jl)
+  - [`sh_exported_spot_cube`](../src/wfs/shack_hartmann/setup.jl)
+  - [`wfs_output_frame`](../src/control/runtime/construction.jl)
 
 This keeps the public exported-pixel surface under backend parity coverage, not
 just the slope output.
@@ -123,7 +123,7 @@ Representative runtime evidence should be gathered with maintained profile or
 benchmark scripts such as:
 
 - [`profile_ao3k_runtime.jl`](../scripts/profile_ao3k_runtime.jl)
-- [`profile_platform_runtime.jl`](../scripts/profile_platform_runtime.jl)
+- [`profile_control_loop_runtime.jl`](../scripts/profile_control_loop_runtime.jl)
 - [`profile_multi_source_multi_wfs_runtime.jl`](../scripts/profile_multi_source_multi_wfs_runtime.jl)
 - [`run_cross_package_benchmarks.jl`](../scripts/run_cross_package_benchmarks.jl)
 - [`benchmarks/`](../benchmarks)
@@ -151,7 +151,7 @@ Current intent:
   - runs the maintained CUDA smoke and runtime-equivalence scripts
   - runtime equivalence includes the composite-optic low-order HIL surfaces:
     - `tiptilt + dm`
-      - `ShackHartmann`
+      - `ShackHartmannWFS`
       - `Pyramid`
       - `BioEdge`
     - `steering + dm`
@@ -161,7 +161,7 @@ Current intent:
   - runs the maintained AMDGPU smoke and runtime-equivalence scripts
   - runtime equivalence includes the composite-optic low-order HIL surfaces:
     - `tiptilt + dm`
-      - `ShackHartmann`
+      - `ShackHartmannWFS`
       - `Pyramid`
       - `BioEdge`
     - `steering + dm`

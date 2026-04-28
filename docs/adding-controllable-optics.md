@@ -80,12 +80,12 @@ then it belongs in the DM layer, not in `ModalControllableOptic`.
 ## File Placement
 
 Most modal controllable-optic extensions should be implemented in
-[controllable_optics.jl](../src/Optics/controllable_optics.jl).
+[controllable_optics.jl](../src/optics/controllable_optics.jl).
 
 Typical steps:
 
 1. add the new basis or convenience wrapper in
-   [controllable_optics.jl](../src/Optics/controllable_optics.jl)
+   [controllable_optics.jl](../src/optics/controllable_optics.jl)
 2. export public types or constructors from
    [AdaptiveOpticsSim.jl](../src/AdaptiveOpticsSim.jl) if the surface is meant
    to be public

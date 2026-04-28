@@ -79,8 +79,8 @@ Acceptance gate:
 Suggested files:
 
 - `docs/atmosphere-runtime-spec.md`
-- `src/Atmosphere/`
-- `src/Calibration/initialization.jl`
+- `src/atmosphere/`
+- `src/simulation/assembly.jl`
 - `examples/`
 
 ## Milestone 1: Replace The Current Moving Atmosphere
@@ -90,7 +90,7 @@ persistent moving-screen model.
 
 Current blocker:
 
-- [multilayer.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Atmosphere/multilayer.jl) redraws each layer every step and then shifts it.
+- [multilayer.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/atmosphere/multilayer.jl) redraws each layer every step and then shifts it.
 
 Deliverables:
 
@@ -122,7 +122,7 @@ Acceptance gate:
 
 Suggested files:
 
-- `src/Atmosphere/`
+- `src/atmosphere/`
 - `test/`
 - `docs/deterministic-simulation.md`
 - `docs/infinite-boundary-atmosphere-plan.md`
@@ -141,7 +141,7 @@ helpers and the runtime atmosphere.
 
 Deliverables:
 
-- Make [phase_stats.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Atmosphere/phase_stats.jl) and the runtime atmosphere share the same PSD/normalization conventions, or split them into explicitly different APIs with clear names.
+- Make [phase_stats.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/atmosphere/phase_stats.jl) and the runtime atmosphere share the same PSD/normalization conventions, or split them into explicitly different APIs with clear names.
 - Add explicit conversion helpers if both phase-space and OPD-space representations are kept.
 - Audit:
   - `ft_phase_screen`
@@ -161,8 +161,8 @@ Acceptance gate:
 
 Suggested files:
 
-- `src/Atmosphere/kolmogorov.jl`
-- `src/Atmosphere/phase_stats.jl`
+- `src/atmosphere/kolmogorov.jl`
+- `src/atmosphere/phase_stats.jl`
 - `test/runtests.jl`
 
 ## Milestone 3: Build A HIL-Focused Runtime Core
@@ -220,8 +220,8 @@ Acceptance gate:
 
 Suggested files:
 
-- `src/Control/runtime.jl`
-- `src/Core/parallel.jl`
+- `src/control/runtime.jl`
+- `src/core/parallel.jl`
 - `docs/benchmark-matrix-plan.md`
 - `docs/control-simulation-architecture-plan.md`
 - `scripts/profile_*`
@@ -323,7 +323,7 @@ Acceptance gate:
 
 Suggested files:
 
-- `src/Control/`
+- `src/control/`
 - `docs/control-simulation-architecture-plan.md`
 
 ## Milestone 7: Selective Post-OOPAO Expansion

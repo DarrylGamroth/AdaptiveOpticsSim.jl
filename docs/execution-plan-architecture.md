@@ -187,11 +187,11 @@ giant global registry.
 
 Recommended package layout:
 
-- grouped WFS plans near [grouped.jl](../src/WFS/grouped.jl)
+- grouped WFS plans near [grouped.jl](../src/wfs/grouped.jl)
 - detector-readout plans near the detector pipeline layer
 - atmospheric-field plans near
-  [atmospheric_field_propagation.jl](../src/Optics/atmospheric_field_propagation.jl)
-- reduction plans near [reductions.jl](../src/Core/reductions.jl)
+  [atmospheric_field_propagation.jl](../src/optics/atmospheric_field_propagation.jl)
+- reduction plans near [reductions.jl](../src/core/reductions.jl)
 - runtime export plans near the runtime product layer
 
 Core helper code may exist for shared dispatch patterns, but subsystem-specific

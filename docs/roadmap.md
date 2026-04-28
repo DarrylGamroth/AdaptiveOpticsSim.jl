@@ -44,34 +44,34 @@ Direction guardrails:
 - [x] P1: Geometric WFS sensing mode (gradient-only) option.
 
 ## OOPAO Feature Parity (Module-level)
-- [x] `Telescope.py` -> `src/Optics/telescope.jl`
-- [x] `Source.py` -> `src/Optics/source.jl`
-- [x] `Atmosphere.py` (basic phase screens, multi-layer) -> `src/Atmosphere/kolmogorov.jl`, `src/Atmosphere/multilayer.jl`
-- [x] `ShackHartmann.py` -> `src/WFS/shack_hartmann.jl`
-- [x] `Pyramid.py` -> `src/WFS/pyramid.jl`
-- [x] `BioEdge.py` -> `src/WFS/bioedge.jl`
-- [x] `DeformableMirror.py` -> `src/Optics/deformable_mirror.jl`
-- [x] `Detector.py` -> `src/Detectors/`
-- [x] `Asterism.py` -> `src/Optics/asterism.jl`
-- [x] `MisRegistration.py` -> `src/Optics/misregistration.jl`
-- [x] `Zernike.py` -> `src/Optics/zernike.jl`
-- [x] `GainSensingCamera.py` -> `src/Calibration/gain_sensing_camera.jl`
-- [x] `LiFT.py` -> `src/WFS/lift.jl`
-- [x] `NCPA.py` -> `src/Optics/ncpa.jl`
-- [x] `OPD_map.py` -> `src/Optics/opd_map.jl`
-- [x] `phaseStats.py` -> `src/Atmosphere/phase_stats.jl`
-- [x] `SpatialFilter.py` -> `src/Optics/spatial_filter.jl`
-- [x] `SPRINT.py` -> `src/Calibration/misregistration_identification.jl`
-- [x] `calibration/ao_calibration.py` -> `src/Calibration/ao_calibration.jl`
-- [x] `calibration/InteractionMatrix.py` -> `src/Calibration/interaction_matrix.jl`
-- [x] `calibration/CalibrationVault.py` -> `src/Calibration/calibration_vault.jl`
-- [x] `calibration/compute_KL_modal_basis.py` -> `src/Calibration/modal_basis.jl`
-- [x] `calibration/get_modal_basis.py` -> `src/Calibration/modal_basis.jl`
-- [x] `calibration/getFittingError.py` -> `src/Calibration/fitting_error.jl`
-- [x] `calibration/get_fast_atmosphere.py` -> `src/Calibration/fast_atmosphere.jl`
-- [x] `calibration/initialization_AO.py` -> `src/Calibration/initialization.jl`
-- [x] `calibration/initialization_AO_PWFS.py` -> `src/Calibration/initialization.jl`
-- [x] `calibration/initialization_AO_SHWFS.py` -> `src/Calibration/initialization.jl`
+- [x] `Telescope.py` -> `src/optics/telescope.jl`
+- [x] `Source.py` -> `src/optics/source.jl`
+- [x] `Atmosphere.py` (basic phase screens, multi-layer) -> `src/atmosphere/kolmogorov.jl`, `src/atmosphere/multilayer.jl`
+- [x] `ShackHartmannWFS.py` -> `src/wfs/shack_hartmann.jl`
+- [x] `Pyramid.py` -> `src/wfs/pyramid.jl`
+- [x] `BioEdge.py` -> `src/wfs/bioedge.jl`
+- [x] `DeformableMirror.py` -> `src/optics/deformable_mirror.jl`
+- [x] `Detector.py` -> `src/detectors/`
+- [x] `Asterism.py` -> `src/optics/asterism.jl`
+- [x] `MisRegistration.py` -> `src/optics/misregistration.jl`
+- [x] `Zernike.py` -> `src/optics/zernike.jl`
+- [x] `GainSensingCamera.py` -> `src/calibration/gain_sensing_camera.jl`
+- [x] `LiFT.py` -> `src/wfs/lift.jl`
+- [x] `NCPA.py` -> `src/optics/ncpa.jl`
+- [x] `OPD_map.py` -> `src/optics/opd_map.jl`
+- [x] `phaseStats.py` -> `src/atmosphere/phase_stats.jl`
+- [x] `SpatialFilter.py` -> `src/optics/spatial_filter.jl`
+- [x] `SPRINT.py` -> `src/calibration/misregistration_identification.jl`
+- [x] `calibration/ao_calibration.py` -> `src/calibration/ao_calibration.jl`
+- [x] `calibration/InteractionMatrix.py` -> `src/calibration/interaction_matrix.jl`
+- [x] `calibration/ControlMatrix.py` -> `src/calibration/control_matrix.jl`
+- [x] `calibration/compute_KL_modal_basis.py` -> `src/calibration/modal_basis.jl`
+- [x] `calibration/get_modal_basis.py` -> `src/calibration/modal_basis.jl`
+- [x] `calibration/getFittingError.py` -> `src/calibration/fitting_error.jl`
+- [x] `calibration/get_fast_atmosphere.py` -> `src/atmosphere/fast_atmosphere.jl`
+- [x] `calibration/initialization_AO.py` -> `src/simulation/assembly.jl`
+- [x] `calibration/initialization_AO_PWFS.py` -> `src/simulation/assembly.jl`
+- [x] `calibration/initialization_AO_SHWFS.py` -> `src/simulation/assembly.jl`
 - [x] `closed_loop/run_cl.py` -> `examples/closed_loop/run_cl.jl`
 - [x] `closed_loop/run_cl_first_stage.py` -> `examples/closed_loop/run_cl_first_stage.jl`
 - [x] `closed_loop/run_cl_from_phase_screens.py` -> `examples/closed_loop/run_cl_from_phase_screens.jl`
@@ -79,7 +79,7 @@ Direction guardrails:
 - [x] `closed_loop/run_cl_sinusoidal_modulation.py` -> `examples/closed_loop/run_cl_sinusoidal_modulation.jl`
 - [x] `closed_loop/run_cl_two_stages.py` -> `examples/closed_loop/run_cl_two_stages.jl`
 - [x] `closed_loop/run_cl_two_stages_atm_change.py` -> `examples/closed_loop/run_cl_two_stages_atm_change.jl`
-- [x] `mis_registration_identification_algorithm/*` -> `src/Calibration/misregistration_identification.jl`
+- [x] `mis_registration_identification_algorithm/*` -> `src/calibration/misregistration_identification.jl`
 - [ ] `tools/displayTools.py` -> not yet implemented
 - [ ] `tools/OopaoGUI.py` -> not yet implemented
 - [ ] `tools/interpolateGeometricalTransformation.py` -> not yet implemented
@@ -98,19 +98,19 @@ Equivalent or improved relative to the practical OOPAO surface:
 - Diffractive SH, Pyramid, and BioEdge all use FFT-based propagation and now
   cover the practical OOPAO parity surface, including the main SH parity knobs
   and the current deterministic reference bundle
-  (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`, `src/WFS/bioedge.jl`).
+  (`src/wfs/shack_hartmann.jl`, `src/wfs/pyramid.jl`, `src/wfs/bioedge.jl`).
 - LiFT analytical mode uses FFT-based Jacobians with object convolution and
   readout-weighted noise; detector-pixel treatment for binned data matches the
-  practical OOPAO surface (`src/WFS/lift.jl`).
+  practical OOPAO surface (`src/wfs/lift.jl`).
 - GainSensingCamera is parity-backed for the committed deterministic cases and
   now has a cleaner threaded/cache-aware implementation plus explicit detector
-  metadata attachment (`src/Calibration/gain_sensing_camera.jl`).
+  metadata attachment (`src/calibration/gain_sensing_camera.jl`).
 
 Intentional Julia differences:
 
 - SPRINT / mis-registration keeps cached sensitivity matrices and optional WFS
   shifts, but deliberately does not bake FITS into core
-  (`src/Calibration/misregistration_identification.jl`).
+  (`src/calibration/misregistration_identification.jl`).
 - Detector, tomography, inverse-policy, and backend/GPU abstractions are more
   explicit than in OOPAO. In several of these areas Julia now exceeds OOPAO in
   engineering structure rather than lagging it.
@@ -122,14 +122,14 @@ Julia extensions beyond the main OOPAO surface:
   OOPAO-compatible path; Pyramid/BioEdge use averaged Na-profile kernels as a
   Julia-side extension. OOPAO does not appear to expose an equivalent
   per-subaperture Na-profile path for Pyramid/BioEdge in the main
-  code/tutorial surface (`src/WFS/shack_hartmann.jl`,
-  `src/WFS/pyramid.jl`, `src/WFS/bioedge.jl`).
+  code/tutorial surface (`src/wfs/shack_hartmann.jl`,
+  `src/wfs/pyramid.jl`, `src/wfs/bioedge.jl`).
 
 Remaining narrower defaults or simplifications:
 
 - `ft_sh_phase_screen` now uses adaptive sub-harmonic levels and a wider
   stencil by default, but the atmosphere model is still simpler than a fully
-  layer/outer-scale-specific construction (`src/Atmosphere/phase_stats.jl`).
+  layer/outer-scale-specific construction (`src/atmosphere/phase_stats.jl`).
 
 This is not a deterministic-parity blocker, but it remains part of the
 model-fidelity roadmap and should be revisited if additional tilt/statistics
@@ -171,7 +171,7 @@ validation shows the new default is still too coarse.
 - [x] Port and validate the pyTomoAO-backed tomography workflow needed for
   OOPAO parity, including model-based wavefront reconstruction and assembled
   DM commands against the KAPA benchmark configuration.
-- [x] Julia tomography subsystem now exists under `src/Tomography/` with typed
+- [x] Julia tomography subsystem now exists under `src/tomography/` with typed
   parameter objects, geometry helpers, DM fitting, sparse gradient assembly,
   model-based covariance/reconstructor operators (`Gamma`, `Cxx`, `Cox`, `Cnz`,
   `RecStatSA`), the IM-based reconstructor path, and committed pyTomoAO compact
@@ -188,14 +188,14 @@ validation shows the new default is still too coarse.
   or are explicitly marked as fast-path approximations.
 
 ## Candidate Algorithm Upgrades (Similar Results)
-- (DONE) Add sub-harmonic augmentation to `ft_sh_phase_screen` for better low-frequency tilt statistics (`src/Atmosphere/phase_stats.jl`) [E:med, R:low].
-- (DONE) Implement diffractive WFS paths via pupil→focal propagation with planned FFTs (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`, `src/WFS/bioedge.jl`) [E:high, R:med].
-- (DONE) Replace LGS slope scaling with focal-plane elongated PSF modeling (`src/WFS/shack_hartmann.jl`, `src/WFS/pyramid.jl`) [E:med, R:med].
-- (DONE) Implement LiFT analytic Jacobians via FFT-based formulation (`src/WFS/lift.jl`) [E:med, R:med].
-- (DONE) Add KL basis from atmospheric covariance (HHt/PSD) instead of DM-mode covariance (`src/Calibration/modal_basis.jl`) [E:high, R:med].
-- (DONE) Implement SPRINT fast path with cached sensitivity matrices (Serialization) (`src/Calibration/misregistration_identification.jl`) [E:med, R:low].
-- (DONE) Add Pyramid modulation and optical gain hooks; BioEdge adds optical gain (`src/WFS/pyramid.jl`, `src/WFS/bioedge.jl`) [E:med, R:med].
-- Add a fast-path config/trait layer that explicitly opts into simplified models for speed, leaving high-fidelity models as opt-in (`src/Core/parallel.jl`, `src/Core/types.jl`) [E:low, R:low].
+- (DONE) Add sub-harmonic augmentation to `ft_sh_phase_screen` for better low-frequency tilt statistics (`src/atmosphere/phase_stats.jl`) [E:med, R:low].
+- (DONE) Implement diffractive WFS paths via pupil→focal propagation with planned FFTs (`src/wfs/shack_hartmann.jl`, `src/wfs/pyramid.jl`, `src/wfs/bioedge.jl`) [E:high, R:med].
+- (DONE) Replace LGS slope scaling with focal-plane elongated PSF modeling (`src/wfs/shack_hartmann.jl`, `src/wfs/pyramid.jl`) [E:med, R:med].
+- (DONE) Implement LiFT analytic Jacobians via FFT-based formulation (`src/wfs/lift.jl`) [E:med, R:med].
+- (DONE) Add KL basis from atmospheric covariance (HHt/PSD) instead of DM-mode covariance (`src/calibration/modal_basis.jl`) [E:high, R:med].
+- (DONE) Implement SPRINT fast path with cached sensitivity matrices (Serialization) (`src/calibration/misregistration_identification.jl`) [E:med, R:low].
+- (DONE) Add Pyramid modulation and optical gain hooks; BioEdge adds optical gain (`src/wfs/pyramid.jl`, `src/wfs/bioedge.jl`) [E:med, R:med].
+- Add a fast-path config/trait layer that explicitly opts into simplified models for speed, leaving high-fidelity models as opt-in (`src/core/parallel.jl`, `src/core/types.jl`) [E:low, R:low].
 
 ## Reference Packages and Candidate Algorithms
 - OOMAO (MATLAB): maps to KL basis from HHt/PSD, slope covariance, LQG/predictive control, and tomography upgrades.
@@ -247,9 +247,9 @@ validation shows the new default is still too coarse.
 - [x] Complete the platform-strengthening plan through the orchestration,
   evidence, and closeout phases.
   - orchestration guide:
-    [`platform-orchestration.md`](./platform-orchestration.md)
+    [`control-loop-orchestration.md`](./control-loop-orchestration.md)
   - orchestration evidence:
-    [`platform-orchestration-validation.md`](./platform-orchestration-validation.md)
+    [`control-loop-orchestration-validation.md`](./control-loop-orchestration-validation.md)
   - closeout decision:
     [`platform-strengthening-closeout.md`](./platform-strengthening-closeout.md)
 - [ ] Choose and plan the next focused controller/process-breadth milestone now

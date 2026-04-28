@@ -5,7 +5,7 @@ using Logging
 
 rng = MersenneTwister(0)
 
-sim = AdaptiveOpticsSim.initialize_ao_shwfs(
+sim = AdaptiveOpticsSim.initialize_ao_shack_hartmann(
     resolution=32,
     diameter=8.0,
     sampling_time=1e-3,
@@ -21,9 +21,9 @@ sim = AdaptiveOpticsSim.initialize_ao_shwfs(
 
 imat = interaction_matrix(sim.optic, sim.wfs, sim.tel; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
-branch = RuntimeBranch(:main, sim, recon; rng=rng)
-cfg = SingleRuntimeConfig(name=:run_cl_demo, branch_label=:main)
-scenario = build_runtime_scenario(cfg, branch)
+branch = ControlLoopBranch(:main, sim, recon; rng=rng)
+cfg = SingleControlLoopConfig(name=:run_cl_demo, branch_label=:main)
+scenario = build_control_loop_scenario(cfg, branch)
 prepare!(scenario)
 
 for _ in 1:5

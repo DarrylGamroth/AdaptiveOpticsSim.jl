@@ -76,7 +76,7 @@ Each extension should own only backend-specific glue:
 AdaptiveOpticsSim.jl/
   src/
     AdaptiveOpticsSim.jl
-    Core/
+    core/
       backends.jl
       fft.jl
       rng.jl

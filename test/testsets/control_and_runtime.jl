@@ -10,7 +10,7 @@ include(normpath(joinpath(@__DIR__, "..", "..", "benchmarks", "support", "revolt
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
         tel.state.opd[i, j] = i
     end
-    wfs = ShackHartmann(tel; n_lenslets=4)
+    wfs = ShackHartmannWFS(tel; n_lenslets=4)
     slopes = measure!(wfs, tel)
     @test length(slopes) == 2 * 4 * 4
     @test maximum(slopes) > 0
@@ -106,7 +106,7 @@ end
     src = Source(band=:I, magnitude=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-    wfs = ShackHartmann(tel; n_lenslets=4)
+    wfs = ShackHartmannWFS(tel; n_lenslets=4)
 
     sim_positional = AOSimulation(tel, src, atm, dm, wfs)
     sim_keyword = AOSimulation(
@@ -142,7 +142,7 @@ end
     cartesian_modal = ModalControllableOptic(tel, CartesianTiltBasis(; scale=0.1); backend=CPUBackend())
     tt = TipTiltMirror(tel; scale=0.1, backend=CPUBackend())
     focus = FocusStage(tel; scale=0.2, backend=CPUBackend())
-    wfs = ShackHartmann(tel; n_lenslets=4, backend=CPUBackend())
+    wfs = ShackHartmannWFS(tel; n_lenslets=4, backend=CPUBackend())
     det = Detector(backend=CPUBackend())
     sf = SpatialFilter(tel; backend=CPUBackend())
     ef = ElectricField(tel, Source(band=:I, magnitude=0.0); backend=CPUBackend())
@@ -221,7 +221,7 @@ end
 
 function build_static_runtime_wfs(tel::Telescope, ::Val{:sh}; T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=backend(tel))
-    return ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
+    return ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
 end
 
 function build_static_runtime_wfs(tel::Telescope, ::Val{:pyr}; T::Type{<:AbstractFloat}=Float64,
@@ -277,7 +277,7 @@ function build_static_low_order_runtime(::Val{K}, low_order_cmd::AbstractVector{
     sim = AOSimulation(tel, src, atm, optic, wfs)
     runtime = ClosedLoopRuntime(sim, NullReconstructor();
         wfs_detector=det,
-        products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false),
+        outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false),
         rng=MersenneTwister(seed),
     )
     prepare!(runtime)
@@ -369,13 +369,13 @@ function build_static_richer_runtime(spec::Val{S};
     wfs = build_static_runtime_wfs(tel, Val(wfs_family))
     det = build_runtime_detector(Val(detector_profile), Float64, CPUBackend())
     sim = AOSimulation(tel, src, atm, optic, wfs)
-    scenario = build_runtime_scenario(
-        SingleRuntimeConfig(
+    scenario = build_control_loop_scenario(
+        SingleControlLoopConfig(
             name=Symbol(:richer_runtime_, S, :_, wfs_family, :_, detector_profile),
             branch_label=:main,
-            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false),
+            outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false),
         ),
-        RuntimeBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(seed)),
+        ControlLoopBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(seed)),
     )
     prepare!(scenario)
     return scenario
@@ -390,7 +390,7 @@ runtime_snapshot(scenario) = (
 @testset "Calibration and control" begin
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
-    wfs = ShackHartmann(tel; n_lenslets=2)
+    wfs = ShackHartmannWFS(tel; n_lenslets=2)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     @test size(imat.matrix) == (length(wfs.state.slopes), length(dm.state.coefs))
 
@@ -413,8 +413,8 @@ runtime_snapshot(scenario) = (
     dm_cmd = update!(ctrl, wfs.state.slopes, 0.01)
     @test length(dm_cmd) == length(wfs.state.slopes)
 
-    vault = CalibrationVault(imat.matrix; build_backend=AdaptiveOpticsSim.CPUBuildBackend())
-    @test vault.M isa Matrix
+    control_matrix = ControlMatrix(imat.matrix; build_backend=AdaptiveOpticsSim.CPUBuildBackend())
+    @test control_matrix.M isa Matrix
     recon_cpu = ModalReconstructor(imat; build_backend=AdaptiveOpticsSim.CPUBuildBackend())
     @test recon_cpu.reconstructor isa Matrix
 end
@@ -583,7 +583,7 @@ function closed_loop_runtime_allocations()
     src = Source(band=:I, magnitude=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-    wfs = ShackHartmann(tel; n_lenslets=4)
+    wfs = ShackHartmannWFS(tel; n_lenslets=4)
     sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     recon = ModalReconstructor(imat; gain=0.5)
@@ -606,7 +606,7 @@ coverage_instrumented() = Base.JLOptions().code_coverage != 0
     src = Source(band=:I, magnitude=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-    wfs = ShackHartmann(tel; n_lenslets=4)
+    wfs = ShackHartmannWFS(tel; n_lenslets=4)
     sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     recon = ModalReconstructor(imat; gain=0.5)
@@ -645,26 +645,26 @@ coverage_instrumented() = Base.JLOptions().code_coverage != 0
     src_ext = Source(band=:I, magnitude=0.0)
     atm_ext = KolmogorovAtmosphere(tel_ext; r0=0.2, L0=25.0)
     dm_ext = DeformableMirror(tel_ext; n_act=4, influence_width=0.3)
-    wfs_ext = ShackHartmann(tel_ext; n_lenslets=4, mode=Diffractive())
+    wfs_ext = ShackHartmannWFS(tel_ext; n_lenslets=4, mode=Diffractive())
     sim_ext = AOSimulation(tel_ext, src_ext, atm_ext, dm_ext, wfs_ext)
     det_ext = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
     null_recon = NullReconstructor()
     @test_throws InvalidConfiguration reconstruct!(similar(dm_ext.state.coefs), null_recon, wfs_ext.state.slopes)
 
-    external_branch = RuntimeBranch(
+    external_branch = ControlLoopBranch(
         :external_branch,
         sim_ext,
         null_recon;
         science_detector=det_ext,
         rng=MersenneTwister(7),
     )
-    external_cfg = SingleRuntimeConfig(
+    external_cfg = SingleControlLoopConfig(
         name=:external_runtime_demo,
         branch_label=:external_branch,
-        products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=true),
+        outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=true),
     )
-    external_scenario = build_runtime_scenario(external_cfg, external_branch)
-    @test external_scenario isa RuntimeScenario
+    external_scenario = build_control_loop_scenario(external_cfg, external_branch)
+    @test external_scenario isa ControlLoopScenario
     prepare!(external_scenario)
     external_command = fill(eltype(command(external_scenario))(0.03), length(command(external_scenario)))
     set_command!(external_scenario, external_command)
@@ -695,7 +695,7 @@ coverage_instrumented() = Base.JLOptions().code_coverage != 0
     src2 = Source(band=:I, magnitude=0.0)
     atm2 = KolmogorovAtmosphere(tel2; r0=0.2, L0=25.0)
     dm2 = DeformableMirror(tel2; n_act=4, influence_width=0.3)
-    wfs2 = ShackHartmann(tel2; n_lenslets=4, mode=Diffractive())
+    wfs2 = ShackHartmannWFS(tel2; n_lenslets=4, mode=Diffractive())
     sim2 = AOSimulation(tel2, src2, atm2, dm2, wfs2)
     imat2 = interaction_matrix(dm2, wfs2, tel2, src2; amplitude=0.1)
     recon2 = ModalReconstructor(imat2; gain=0.5)
@@ -730,7 +730,7 @@ coverage_instrumented() = Base.JLOptions().code_coverage != 0
     src2b = Source(band=:I, magnitude=0.0)
     atm2b = KolmogorovAtmosphere(tel2b; r0=0.2, L0=25.0)
     dm2b = DeformableMirror(tel2b; n_act=4, influence_width=0.3)
-    wfs2b = ShackHartmann(tel2b; n_lenslets=4, mode=Diffractive())
+    wfs2b = ShackHartmannWFS(tel2b; n_lenslets=4, mode=Diffractive())
     sim2b = AOSimulation(tel2b, src2b, atm2b, dm2b, wfs2b)
     imat2b = interaction_matrix(dm2b, wfs2b, tel2b, src2b; amplitude=0.1)
     recon2b = ModalReconstructor(imat2b; gain=0.5)
@@ -742,7 +742,7 @@ coverage_instrumented() = Base.JLOptions().code_coverage != 0
     grouped = CompositeSimulationInterface(
         boundary2,
         boundary2b;
-        products=GroupedRuntimeProductRequirements(wfs_frames=true, science_frames=false, wfs_stack=true, science_stack=false),
+        outputs=GroupedRuntimeOutputRequirements(wfs_frames=true, science_frames=false, wfs_stack=true, science_stack=false),
     )
     @test length(wfs_frame(grouped)) == 2
     @test !isnothing(grouped_wfs_stack(grouped))
@@ -755,27 +755,27 @@ coverage_instrumented() = Base.JLOptions().code_coverage != 0
     grouped_stack_only = CompositeSimulationInterface(
         boundary2,
         boundary2b;
-        products=GroupedRuntimeProductRequirements(wfs_frames=false, science_frames=false, wfs_stack=true, science_stack=false),
+        outputs=GroupedRuntimeOutputRequirements(wfs_frames=false, science_frames=false, wfs_stack=true, science_stack=false),
     )
     @test wfs_frame(grouped_stack_only) === nothing
     @test !isnothing(grouped_wfs_stack(grouped_stack_only))
 
-    single_cfg = SingleRuntimeConfig(
+    single_cfg = SingleControlLoopConfig(
         name=:single_runtime_demo,
         branch_label=:science_branch,
-        products=RuntimeProductRequirements(slopes=true, wfs_pixels=false, science_pixels=true),
+        outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=false, science_pixels=true),
     )
-    single_branch = RuntimeBranch(
+    single_branch = ControlLoopBranch(
         :science_branch,
         sim,
         recon;
         science_detector=det,
         rng=MersenneTwister(31),
     )
-    single_scenario = build_runtime_scenario(single_cfg, single_branch)
-    @test single_scenario isa RuntimeScenario
-    @test platform_name(single_scenario) == :single_runtime_demo
-    @test platform_branch_labels(single_scenario) == (:science_branch,)
+    single_scenario = build_control_loop_scenario(single_cfg, single_branch)
+    @test single_scenario isa ControlLoopScenario
+    @test control_loop_name(single_scenario) == :single_runtime_demo
+    @test control_loop_branch_labels(single_scenario) == (:science_branch,)
     @test AdaptiveOpticsSim.simulation_interface(single_scenario) isa SimulationInterface
     @test supports_detector_output(single_scenario)
     single_layout = command_layout(single_scenario)
@@ -792,10 +792,10 @@ coverage_instrumented() = Base.JLOptions().code_coverage != 0
     @test readout(single_scenario).science_frame === science_frame(single_scenario)
 
     split_layout = RuntimeCommandLayout(:woofer => 8, :tweeter => 8)
-    split_scenario = build_runtime_scenario(
-        SingleRuntimeConfig(name=:split_runtime_demo, branch_label=:science_branch,
-            products=RuntimeProductRequirements(slopes=true, wfs_pixels=false, science_pixels=true)),
-        RuntimeBranch(:science_branch, sim, NullReconstructor();
+    split_scenario = build_control_loop_scenario(
+        SingleControlLoopConfig(name=:split_runtime_demo, branch_label=:science_branch,
+            outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=false, science_pixels=true)),
+        ControlLoopBranch(:science_branch, sim, NullReconstructor();
             science_detector=det,
             rng=MersenneTwister(32),
             command_layout=split_layout),
@@ -812,10 +812,10 @@ coverage_instrumented() = Base.JLOptions().code_coverage != 0
     dm_combo = DeformableMirror(tel_ext; n_act=4, influence_width=0.3)
     combo_optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm_combo)
     combo_sim = AOSimulation(tel_ext, src_ext, atm_ext, combo_optic, wfs_ext)
-    combo_scenario = build_runtime_scenario(
-        SingleRuntimeConfig(name=:combo_runtime_demo, branch_label=:external_branch,
-            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=true)),
-        RuntimeBranch(:external_branch, combo_sim, NullReconstructor();
+    combo_scenario = build_control_loop_scenario(
+        SingleControlLoopConfig(name=:combo_runtime_demo, branch_label=:external_branch,
+            outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=true)),
+        ControlLoopBranch(:external_branch, combo_sim, NullReconstructor();
             wfs_detector=det_ext,
             science_detector=det_ext,
             rng=MersenneTwister(8)),
@@ -840,13 +840,13 @@ coverage_instrumented() = Base.JLOptions().code_coverage != 0
     tiptilt_b = TipTiltMirror(tel_ext_b; scale=0.1, label=:tiptilt)
     dm_combo_b = DeformableMirror(tel_ext_b; n_act=4, influence_width=0.3)
     combo_optic_b = CompositeControllableOptic(:tiptilt => tiptilt_b, :dm => dm_combo_b)
-    wfs_ext_b = ShackHartmann(tel_ext_b; n_lenslets=4, mode=Diffractive())
+    wfs_ext_b = ShackHartmannWFS(tel_ext_b; n_lenslets=4, mode=Diffractive())
     det_ext_b = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
     combo_sim_b = AOSimulation(tel_ext_b, src_ext_b, atm_ext_b, combo_optic_b, wfs_ext_b)
-    combo_scenario_b = build_runtime_scenario(
-        SingleRuntimeConfig(name=:combo_runtime_demo_b, branch_label=:external_branch,
-            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=true)),
-        RuntimeBranch(:external_branch, combo_sim_b, NullReconstructor();
+    combo_scenario_b = build_control_loop_scenario(
+        SingleControlLoopConfig(name=:combo_runtime_demo_b, branch_label=:external_branch,
+            outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=true)),
+        ControlLoopBranch(:external_branch, combo_sim_b, NullReconstructor();
             wfs_detector=det_ext_b,
             science_detector=det_ext_b,
             rng=MersenneTwister(8)),
@@ -874,10 +874,10 @@ coverage_instrumented() = Base.JLOptions().code_coverage != 0
     @test norm(tip_zero.slopes) ≤ 1e-12
     @test isapprox(tip_plus.frame_sum, tip_minus.frame_sum; rtol=1e-12, atol=1e-6)
 
-    steering_scenario = build_runtime_scenario(
-        SingleRuntimeConfig(name=:steering_runtime_demo, branch_label=:external_branch,
-            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
-        RuntimeBranch(:external_branch,
+    steering_scenario = build_control_loop_scenario(
+        SingleControlLoopConfig(name=:steering_runtime_demo, branch_label=:external_branch,
+            outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
+        ControlLoopBranch(:external_branch,
             AOSimulation(
                 tel_ext,
                 src_ext,
@@ -917,10 +917,10 @@ coverage_instrumented() = Base.JLOptions().code_coverage != 0
     dm_focus = DeformableMirror(tel_ext; n_act=4, influence_width=0.3)
     focus_optic = CompositeControllableOptic(:focus => focus, :dm => dm_focus)
     focus_sim = AOSimulation(tel_ext, src_ext, atm_ext, focus_optic, wfs_ext)
-    focus_scenario = build_runtime_scenario(
-        SingleRuntimeConfig(name=:focus_runtime_demo, branch_label=:external_branch,
-            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
-        RuntimeBranch(:external_branch, focus_sim, NullReconstructor();
+    focus_scenario = build_control_loop_scenario(
+        SingleControlLoopConfig(name=:focus_runtime_demo, branch_label=:external_branch,
+            outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
+        ControlLoopBranch(:external_branch, focus_sim, NullReconstructor();
             wfs_detector=det_ext,
             rng=MersenneTwister(9)),
     )
@@ -1066,19 +1066,19 @@ coverage_instrumented() = Base.JLOptions().code_coverage != 0
     @test bio_det_plus.frame_delta_l2 > 1e7
     @test isapprox(bio_det_plus.active.frame_sum, bio_det_minus.active.frame_sum; rtol=1e-6, atol=1e3)
 
-    grouped_cfg = GroupedRuntimeConfig(
+    grouped_cfg = GroupedControlLoopConfig(
         (:branch_a, :branch_b);
         name=:grouped_runtime_demo,
-        products=GroupedRuntimeProductRequirements(wfs_frames=true, science_frames=false, wfs_stack=true, science_stack=false),
+        outputs=GroupedRuntimeOutputRequirements(wfs_frames=true, science_frames=false, wfs_stack=true, science_stack=false),
     )
-    grouped_scenario = build_runtime_scenario(
+    grouped_scenario = build_control_loop_scenario(
         grouped_cfg,
-        RuntimeBranch(:branch_a, sim2, recon2; wfs_detector=wfs_det, rng=MersenneTwister(41)),
-        RuntimeBranch(:branch_b, sim2b, recon2b; wfs_detector=wfs_det_b, rng=MersenneTwister(42)),
+        ControlLoopBranch(:branch_a, sim2, recon2; wfs_detector=wfs_det, rng=MersenneTwister(41)),
+        ControlLoopBranch(:branch_b, sim2b, recon2b; wfs_detector=wfs_det_b, rng=MersenneTwister(42)),
     )
-    @test grouped_scenario isa RuntimeScenario
-    @test platform_name(grouped_scenario) == :grouped_runtime_demo
-    @test platform_branch_labels(grouped_scenario) == (:branch_a, :branch_b)
+    @test grouped_scenario isa ControlLoopScenario
+    @test control_loop_name(grouped_scenario) == :grouped_runtime_demo
+    @test control_loop_branch_labels(grouped_scenario) == (:branch_a, :branch_b)
     @test AdaptiveOpticsSim.simulation_interface(grouped_scenario) isa CompositeSimulationInterface
     @test supports_grouped_execution(grouped_scenario)
     grouped_layout = command_layout(grouped_scenario)
@@ -1101,13 +1101,13 @@ coverage_instrumented() = Base.JLOptions().code_coverage != 0
     grouped_readout = readout(grouped_scenario)
     @test grouped_readout.grouped_wfs_stack === grouped_wfs_stack(grouped_scenario)
 
-    split_grouped_scenario = build_runtime_scenario(
+    split_grouped_scenario = build_control_loop_scenario(
         grouped_cfg,
-        RuntimeBranch(:branch_a, sim2, NullReconstructor();
+        ControlLoopBranch(:branch_a, sim2, NullReconstructor();
             wfs_detector=wfs_det,
             rng=MersenneTwister(43),
             command_layout=RuntimeCommandLayout(:woofer => 8, :tweeter => 8)),
-        RuntimeBranch(:branch_b, sim2b, NullReconstructor();
+        ControlLoopBranch(:branch_b, sim2b, NullReconstructor();
             wfs_detector=wfs_det_b,
             rng=MersenneTwister(44),
             command_layout=RuntimeCommandLayout(:steering => 2, :dm => 14)),
@@ -1137,10 +1137,10 @@ coverage_instrumented() = Base.JLOptions().code_coverage != 0
         recon2;
         rng=MersenneTwister(22),
         wfs_detector=wfs_det,
-        products=RuntimeProductRequirements(slopes=true, wfs_pixels=false, science_pixels=false),
+        outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=false, science_pixels=false),
     )
     prepare!(runtime2_slopes_only)
-    @test runtime_products(runtime2_slopes_only).wfs_pixels == false
+    @test runtime_outputs(runtime2_slopes_only).wfs_pixels == false
     @test !supports_detector_output(runtime2_slopes_only)
     @test !runtime2_slopes_only.wfs.state.export_pixels_enabled
     step!(runtime2_slopes_only)
@@ -1183,7 +1183,7 @@ coverage_instrumented() = Base.JLOptions().code_coverage != 0
     src4 = Source(band=:I, magnitude=0.0)
     atm4 = KolmogorovAtmosphere(tel4; r0=0.2, L0=25.0)
     dm4 = DeformableMirror(tel4; n_act=4, influence_width=0.3)
-    wfs4 = ShackHartmann(tel4; n_lenslets=4)
+    wfs4 = ShackHartmannWFS(tel4; n_lenslets=4)
     sim4 = AOSimulation(tel4, src4, atm4, dm4, wfs4)
     imat4 = interaction_matrix(dm4, wfs4, tel4; amplitude=0.1)
     recon4 = ModalReconstructor(imat4; gain=0.5)

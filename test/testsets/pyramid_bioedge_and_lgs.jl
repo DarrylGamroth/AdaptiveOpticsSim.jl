@@ -146,7 +146,7 @@
     @test AdaptiveOpticsSim.select_bioedge_valid_i4q!(
         KA_CPU_STYLE, bio_flux_select_accel, tel, ngs) === bio_flux_select_accel
     @test bio_flux_select_accel.state.valid_signal_count > 0
-    sh = ShackHartmann(tel; n_lenslets=4)
+    sh = ShackHartmannWFS(tel; n_lenslets=4)
     lgs = LGSSource(elongation_factor=2.0)
     slopes_ngs = measure!(sh, tel, ngs)
     slopes_lgs = measure!(sh, tel, lgs)
@@ -172,7 +172,7 @@ end
     ngs = Source(band=:I, magnitude=0.0)
     lgs = LGSSource(elongation_factor=1.5)
 
-    sh = ShackHartmann(tel; n_lenslets=4, mode=Diffractive())
+    sh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
     @test_throws InvalidConfiguration measure!(sh, tel)
     sh_slopes = measure!(sh, tel, ngs)
     @test length(sh_slopes) == 2 * 4 * 4
@@ -182,11 +182,11 @@ end
 
     na_profile = [80000.0 90000.0 100000.0; 0.2 0.6 0.2]
     lgs_profile = LGSSource(elongation_factor=1.2, na_profile=na_profile, fwhm_spot_up=1.0)
-    sh_profile = ShackHartmann(tel; n_lenslets=4, mode=Diffractive())
+    sh_profile = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
     sh_profile_slopes = measure!(sh_profile, tel, lgs_profile)
     @test all(isfinite, sh_profile_slopes)
 
-    sh_sampled = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
+    sh_sampled = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
     sh_sampled_slopes = measure!(sh_sampled, tel, ngs)
     @test length(sh_sampled_slopes) == 2 * 4 * 4
 
@@ -231,13 +231,13 @@ end
     @test length(bio_slopes) == 2 * 4 * 4
 
     det = Detector(noise=NoiseNone(), binning=1)
-    sh_det = ShackHartmann(tel; n_lenslets=4, mode=Diffractive())
+    sh_det = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
     sh_det_slopes = measure!(sh_det, tel, ngs, det)
     @test length(sh_det_slopes) == 2 * 4 * 4
     sh_det_image = wfs_detector_image(sh_det, det; gap=1)
     @test ndims(sh_det_image) == 2
     sh_adu_det = Detector(noise=NoiseNone(), binning=1, full_well=30_000.0, bits=12, output_type=UInt16)
-    sh_adu = ShackHartmann(tel; n_lenslets=4, mode=Diffractive())
+    sh_adu = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
     measure!(sh_adu, tel, ngs, sh_adu_det; rng=MersenneTwister(15))
     sh_adu_image = wfs_detector_image(sh_adu, sh_adu_det; gap=1)
     @test sh_adu_image isa Matrix{UInt16}
@@ -252,10 +252,10 @@ end
     @test wfs_detector_image(bio_det, det) === output_frame(det)
 
     ast = Asterism([ngs, Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0))])
-    sh_ast = ShackHartmann(tel; n_lenslets=4, mode=Diffractive())
+    sh_ast = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
     sh_ast_slopes = copy(measure!(sh_ast, tel, ast))
     @test length(sh_ast_slopes) == 2 * 4 * 4
-    sh_ast_serial = ShackHartmann(tel; n_lenslets=4, mode=Diffractive())
+    sh_ast_serial = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
     AdaptiveOpticsSim.prepare_sampling!(sh_ast_serial, tel, ast.sources[1])
     AdaptiveOpticsSim.ensure_sh_calibration!(sh_ast_serial, tel, ast.sources[1])
     fill!(sh_ast_serial.state.detector_noise_cube, zero(eltype(sh_ast_serial.state.detector_noise_cube)))
@@ -271,10 +271,10 @@ end
     @test norm(sh_ast_slopes - sh_ast_serial_slopes) / norm(sh_ast_slopes) < 0.07
     mixed_ngs = Source(wavelength=wavelength(lgs_profile), magnitude=0.0, coordinates=(0.0, 0.0))
     mixed_ast = Asterism([mixed_ngs, lgs_profile])
-    sh_mixed_det = ShackHartmann(tel; n_lenslets=4, mode=Diffractive())
+    sh_mixed_det = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
     sh_mixed_det_slopes = copy(measure!(sh_mixed_det, tel, mixed_ast, det; rng=MersenneTwister(14)))
     sh_mixed_det_frame = copy(sh_mixed_det.state.spot_cube)
-    sh_mixed_det_manual = ShackHartmann(tel; n_lenslets=4, mode=Diffractive())
+    sh_mixed_det_manual = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
     AdaptiveOpticsSim.prepare_sampling!(sh_mixed_det_manual, tel, mixed_ast.sources[1])
     AdaptiveOpticsSim.ensure_sh_calibration!(sh_mixed_det_manual, tel, mixed_ast.sources[1])
     fill!(sh_mixed_det_manual.state.detector_noise_cube, zero(eltype(sh_mixed_det_manual.state.detector_noise_cube)))
@@ -350,7 +350,7 @@ end
 @testset "Shack-Hartmann subapertures" begin
     tel = Telescope(resolution=24, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
     src = Source(band=:I, magnitude=0.0)
-    sh = ShackHartmann(tel; n_lenslets=6, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8, threshold_cog=0.02)
+    sh = ShackHartmannWFS(tel; n_lenslets=6, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8, threshold_cog=0.02)
 
     layout = subaperture_layout(sh)
     calibration = subaperture_calibration(sh)

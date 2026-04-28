@@ -44,7 +44,8 @@ The main weaknesses are no longer scientific fundamentals. They are structural:
 - Current tests in [`test/runtests.jl`](../test/runtests.jl),
   [`test/tomography.jl`](../test/tomography.jl),
   [`test/ka_cpu_matrix.jl`](../test/ka_cpu_matrix.jl), and
-  [`test/optional_gpu_backends.jl`](../test/optional_gpu_backends.jl)
+  [`test/optional_cuda_backends.jl`](../test/optional_cuda_backends.jl) /
+  [`test/optional_amdgpu_backends.jl`](../test/optional_amdgpu_backends.jl)
 
 ## Findings
 
@@ -54,7 +55,7 @@ Evidence:
 
 - [`src/AdaptiveOpticsSim.jl`](../src/AdaptiveOpticsSim.jl) currently exports
   about `566` names.
-- The export surface includes not only user-facing optics/WFS/runtime types,
+- The export surface includes not only user-facing optics/wfs/runtime types,
   but also many infrastructure, backend, trait, and metadata surfaces.
 - [`docs/api-reference.md`](./api-reference.md) is already `538` lines and is
   still mostly a flat catalog rather than a layered entry point for users.
@@ -81,10 +82,10 @@ Assessment:
 Evidence:
 
 - [`test/runtests.jl`](../test/runtests.jl): `3300` lines
-- [`src/WFS/shack_hartmann.jl`](../src/WFS/shack_hartmann.jl): `2167` lines
-- [`src/WFS/pyramid.jl`](../src/WFS/pyramid.jl): `1463` lines
-- [`src/WFS/bioedge.jl`](../src/WFS/bioedge.jl): `1241` lines
-- [`src/Control/runtime.jl`](../src/Control/runtime.jl): `1123` lines
+- [`src/wfs/shack_hartmann.jl`](../src/wfs/shack_hartmann.jl): `2167` lines
+- [`src/wfs/pyramid.jl`](../src/wfs/pyramid.jl): `1463` lines
+- [`src/wfs/bioedge.jl`](../src/wfs/bioedge.jl): `1241` lines
+- [`src/control/runtime.jl`](../src/control/runtime.jl): `1123` lines
 
 Why this matters:
 
@@ -109,10 +110,10 @@ Assessment:
 
 Evidence:
 
-- [`src/Core/reductions.jl`](../src/Core/reductions.jl) contains backend-name
+- [`src/core/reductions.jl`](../src/core/reductions.jl) contains backend-name
   checks and backend-specific behavior.
-- [`src/Detectors/frame_capture.jl`](../src/Detectors/frame_capture.jl) and
-  [`src/WFS/shack_hartmann.jl`](../src/WFS/shack_hartmann.jl) still contain
+- [`src/detectors/frame_capture.jl`](../src/detectors/frame_capture.jl) and
+  [`src/wfs/shack_hartmann.jl`](../src/wfs/shack_hartmann.jl) still contain
   ROCm-aware branches.
 - [`ext/AdaptiveOpticsSimAMDGPUExt.jl`](../ext/AdaptiveOpticsSimAMDGPUExt.jl)
   includes explicit ROCm workaround behavior for random fills and linear
@@ -172,9 +173,10 @@ Assessment:
 
 Evidence:
 
-- The naming audit in
-  [`docs/exported-surface-naming-audit.md`](./exported-surface-naming-audit.md)
-  is directionally reasonable and correctly avoids churn.
+- The archived naming audit in
+  [`docs/archive/2026-04/exported-surface-naming-audit.md`](./archive/2026-04/exported-surface-naming-audit.md)
+  records the pre-cleanup review that led to the current clearer exported
+  surface.
 - At the same time, the public surface still leans heavily on generic verbs
   such as `measure!`, `apply!`, `update!`, `prepare!`, `capture!`, and `step!`
   across many unrelated contexts.
@@ -201,7 +203,7 @@ Evidence:
 - The end-to-end runtime path spans many files:
   atmosphere, field propagation, WFS, detector capture, runtime orchestration,
   and telemetry.
-- [`src/Control/runtime.jl`](../src/Control/runtime.jl) is large and central,
+- [`src/control/runtime.jl`](../src/control/runtime.jl) is large and central,
   but the package still lacks a compact “single-frame dataflow” document that
   explains the maintained runtime pipeline in one place.
 - The interface docs in [`docs/api-reference.md`](./api-reference.md) define
@@ -254,9 +256,10 @@ Evidence:
   atmosphere, optics, WFS, detector, runtime, tomography, tutorials, and
   reference harnesses all have explicit testsets.
 - But most of that still lives in [`test/runtests.jl`](../test/runtests.jl).
-- [`test/optional_gpu_backends.jl`](../test/optional_gpu_backends.jl) gives
-  conditional AMDGPU coverage, while CUDA validation currently lives more in
-  smoke scripts than in the main test tree.
+- [`test/optional_cuda_backends.jl`](../test/optional_cuda_backends.jl) and
+  [`test/optional_amdgpu_backends.jl`](../test/optional_amdgpu_backends.jl)
+  give conditional backend coverage, while hardware-backed validation also
+  lives in smoke and runtime-equivalence scripts.
 
 Why this matters:
 
@@ -356,14 +359,14 @@ Priority: Highest
 
 Do:
 
-- Split [`src/WFS/shack_hartmann.jl`](../src/WFS/shack_hartmann.jl) into:
+- Split [`src/wfs/shack_hartmann.jl`](../src/wfs/shack_hartmann.jl) into:
   - params/state
   - grouped execution
   - detector coupling
   - calibration/subaperture logic
-- Split [`src/WFS/pyramid.jl`](../src/WFS/pyramid.jl) and
-  [`src/WFS/bioedge.jl`](../src/WFS/bioedge.jl) similarly.
-- Split [`src/Control/runtime.jl`](../src/Control/runtime.jl) by:
+- Split [`src/wfs/pyramid.jl`](../src/wfs/pyramid.jl) and
+  [`src/wfs/bioedge.jl`](../src/wfs/bioedge.jl) similarly.
+- Split [`src/control/runtime.jl`](../src/control/runtime.jl) by:
   - product planning
   - latency staging
   - execution
@@ -388,9 +391,9 @@ Do:
 
 Primary files:
 
-- [`src/Core/reductions.jl`](../src/Core/reductions.jl)
-- [`src/Detectors/frame_capture.jl`](../src/Detectors/frame_capture.jl)
-- [`src/WFS/shack_hartmann.jl`](../src/WFS/shack_hartmann.jl)
+- [`src/core/reductions.jl`](../src/core/reductions.jl)
+- [`src/detectors/frame_capture.jl`](../src/detectors/frame_capture.jl)
+- [`src/wfs/shack_hartmann.jl`](../src/wfs/shack_hartmann.jl)
 - [`ext/AdaptiveOpticsSimAMDGPUExt.jl`](../ext/AdaptiveOpticsSimAMDGPUExt.jl)
 - [`ext/AdaptiveOpticsSimCUDAExt.jl`](../ext/AdaptiveOpticsSimCUDAExt.jl)
 
@@ -502,20 +505,20 @@ Concrete recommendation:
 
 Highest-value internal splits:
 
-- [`src/WFS/shack_hartmann.jl`](../src/WFS/shack_hartmann.jl)
+- [`src/wfs/shack_hartmann.jl`](../src/wfs/shack_hartmann.jl)
   - params/state
   - grouped execution
   - detector coupling
   - calibration/subaperture logic
-- [`src/WFS/pyramid.jl`](../src/WFS/pyramid.jl)
+- [`src/wfs/pyramid.jl`](../src/wfs/pyramid.jl)
   - params/state
   - modulation/calibration
   - signal normalization and grouped execution
-- [`src/WFS/bioedge.jl`](../src/WFS/bioedge.jl)
+- [`src/wfs/bioedge.jl`](../src/wfs/bioedge.jl)
   - params/state
   - mask/calibration
   - grouped execution
-- [`src/Control/runtime.jl`](../src/Control/runtime.jl)
+- [`src/control/runtime.jl`](../src/control/runtime.jl)
   - product planning
   - latency staging
   - execution state
@@ -606,7 +609,7 @@ Recommendation:
 - These should not be unit tests. They should be maintained benchmark and
   validation artifacts.
 - The REVOLT-related trees already make this practical:
-  - [`../REVOLT`](../REVOLT)
+  - [`../REVOLT`](../../REVOLT)
   - [`../AdaptiveOpticsComparisons`](../../AdaptiveOpticsComparisons)
 
 Recommended benchmark structure:

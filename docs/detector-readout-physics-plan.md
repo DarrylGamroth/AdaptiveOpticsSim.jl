@@ -20,12 +20,12 @@ The immediate driver is AO188 curvature sensing, but the goal is broader:
 The package now has a cleaner split than before:
 
 - sensor optics live in sensor modules such as
-  `src/WFS/shack_hartmann.jl`,
-  `src/WFS/pyramid.jl`,
-  `src/WFS/bioedge.jl`,
-  `src/WFS/zernike.jl`,
-  `src/WFS/curvature.jl`
-- the generic frame detector family lives in `src/Detectors/`
+  `src/wfs/shack_hartmann.jl`,
+  `src/wfs/pyramid.jl`,
+  `src/wfs/bioedge.jl`,
+  `src/wfs/zernike.jl`,
+  `src/wfs/curvature.jl`
+- the generic frame detector family lives in `src/detectors/`
 - detector families are now explicit:
   - `FrameSensorType`
   - `CountingSensorType`
@@ -300,7 +300,7 @@ Frame detectors deserve a separate improvement track.
 ### Phase 1: Detector MTF / Pixel Response
 
 Add an optional frame-detector MTF or pixel-response stage in
-`src/Detectors/`.
+`src/detectors/`.
 
 Requirements:
 

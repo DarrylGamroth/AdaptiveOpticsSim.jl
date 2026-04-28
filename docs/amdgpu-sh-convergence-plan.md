@@ -52,9 +52,9 @@ Goal:
 
 Outputs:
 
-- `ShackHartmannScalarPlan`
-- `ShackHartmannBatchedPlan`
-- `ShackHartmannRocmSafePlan`
+- `ShackHartmannWFSScalarPlan`
+- `ShackHartmannWFSBatchedPlan`
+- `ShackHartmannWFSRocmSafePlan`
 - AMDGPU extension override for the ROCm-safe plan
 - backend plan tests pinning CUDA vs AMDGPU selection
 
@@ -100,7 +100,7 @@ Goal:
 
 Work:
 
-- route AMDGPU through `ShackHartmannBatchedPlan` for maintained surfaces
+- route AMDGPU through `ShackHartmannWFSBatchedPlan` for maintained surfaces
 - add targeted ROCm-specific kernels only for failing/regressing operations
 - keep the ROCm-safe plan as an escape hatch until parity is proven
 
@@ -112,7 +112,7 @@ Acceptance:
 Current status:
 
 - completed for the maintained HEART SH surface
-- AMDGPU now defaults back to `ShackHartmannBatchedPlan`
+- AMDGPU now defaults back to `ShackHartmannWFSBatchedPlan`
 - maintained HEART runtime improved from about `90.8 ms` total / `11.0 Hz` to
   about `39.1 ms` total / `25.6 Hz`
 - this is still slower than CPU and much slower than CUDA, so convergence work

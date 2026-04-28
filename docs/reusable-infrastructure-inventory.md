@@ -25,19 +25,19 @@ The goal is not to refactor the code in this document. The goal is to:
 Phase 3 implementation status:
 
 - `RI-01` implemented via shared detector pipeline helpers in
-  [`src/Detectors/pipeline.jl`](../src/Detectors/pipeline.jl)
+  [`src/detectors/pipeline.jl`](../src/detectors/pipeline.jl)
 - `RI-02` implemented via grouped WFS helpers in
-  [`src/WFS/grouped.jl`](../src/WFS/grouped.jl)
-- `RI-03` implemented via shared runtime product planning in
-  [`src/Control/products.jl`](../src/Control/products.jl)
+  [`src/wfs/grouped.jl`](../src/wfs/grouped.jl)
+- `RI-03` implemented via shared runtime output planning in
+  [`src/control/runtime_outputs.jl`](../src/control/runtime_outputs.jl)
 - `RI-04` implemented via shared propagation context helpers in
-  [`src/Optics/propagation_context.jl`](../src/Optics/propagation_context.jl)
+  [`src/optics/propagation_context.jl`](../src/optics/propagation_context.jl)
 - `RI-05` implemented in part through shared reduction infrastructure in
-  [`src/Core/reductions.jl`](../src/Core/reductions.jl) and grouped WFS helpers
+  [`src/core/reductions.jl`](../src/core/reductions.jl) and grouped WFS helpers
 - `RI-06` implemented in part through shared random/noise services in
-  [`src/Core/random_services.jl`](../src/Core/random_services.jl)
+  [`src/core/random_services.jl`](../src/core/random_services.jl)
 - `RI-07` implemented via shared calibration scaffolding in
-  [`src/WFS/calibration.jl`](../src/WFS/calibration.jl)
+  [`src/wfs/calibration.jl`](../src/wfs/calibration.jl)
 
 ## Inventory
 
@@ -56,14 +56,14 @@ Duplicated pattern:
 
 Current occurrences:
 
-- [`src/Detectors/frame_capture.jl`](../src/Detectors/frame_capture.jl)
+- [`src/detectors/frame_capture.jl`](../src/detectors/frame_capture.jl)
 - sensor specializations in:
-  - [`src/Detectors/ccd.jl`](../src/Detectors/ccd.jl)
-  - [`src/Detectors/cmos.jl`](../src/Detectors/cmos.jl)
-  - [`src/Detectors/emccd.jl`](../src/Detectors/emccd.jl)
-  - [`src/Detectors/ingaas.jl`](../src/Detectors/ingaas.jl)
-  - [`src/Detectors/hgcdte_avalanche_array.jl`](../src/Detectors/hgcdte_avalanche_array.jl)
-- batched analog in [`src/Detectors/frame_batched.jl`](../src/Detectors/frame_batched.jl)
+  - [`src/detectors/ccd.jl`](../src/detectors/ccd.jl)
+  - [`src/detectors/cmos.jl`](../src/detectors/cmos.jl)
+  - [`src/detectors/emccd.jl`](../src/detectors/emccd.jl)
+  - [`src/detectors/ingaas.jl`](../src/detectors/ingaas.jl)
+  - [`src/detectors/hgcdte_avalanche_array.jl`](../src/detectors/hgcdte_avalanche_array.jl)
+- batched analog in [`src/detectors/frame_batched.jl`](../src/detectors/frame_batched.jl)
 
 Proposed shared abstraction:
 
@@ -72,7 +72,7 @@ Proposed shared abstraction:
 
 Likely owner:
 
-- `src/Detectors/`
+- `src/detectors/`
 
 Risk of abstraction:
 
@@ -85,7 +85,7 @@ Expected payoff:
 Implementation note:
 
 - shared detector pipeline helpers now own reusable scalar capture/readout
-  staging in [`src/Detectors/pipeline.jl`](../src/Detectors/pipeline.jl)
+  staging in [`src/detectors/pipeline.jl`](../src/detectors/pipeline.jl)
 
 ### `RI-02`: Grouped WFS accumulation skeleton
 
@@ -99,11 +99,11 @@ Duplicated pattern:
 Current occurrences:
 
 - Shack-Hartmann grouped stack paths in
-  [`src/WFS/shack_hartmann.jl`](../src/WFS/shack_hartmann.jl)
+  [`src/wfs/shack_hartmann.jl`](../src/wfs/shack_hartmann.jl)
 - Pyramid grouped accumulation in
-  [`src/WFS/pyramid.jl`](../src/WFS/pyramid.jl)
+  [`src/wfs/pyramid.jl`](../src/wfs/pyramid.jl)
 - BioEdge grouped accumulation in
-  [`src/WFS/bioedge.jl`](../src/WFS/bioedge.jl)
+  [`src/wfs/bioedge.jl`](../src/wfs/bioedge.jl)
 
 Proposed shared abstraction:
 
@@ -112,7 +112,7 @@ Proposed shared abstraction:
 
 Likely owner:
 
-- `src/WFS/`
+- `src/wfs/`
 
 Risk of abstraction:
 
@@ -125,33 +125,33 @@ Expected payoff:
 Implementation note:
 
 - shared grouped reduction/view helpers now live in
-  [`src/WFS/grouped.jl`](../src/WFS/grouped.jl)
+  [`src/wfs/grouped.jl`](../src/wfs/grouped.jl)
 
-### `RI-03`: Runtime product planning and export policy
+### `RI-03`: Runtime output planning and export policy
 
 Duplicated pattern:
 
 - decide which products are needed
 - allocate or skip frame buffers
-- snapshot WFS/science products
+- snapshot wfs/science outputs
 - expose readout metadata consistently
 
 Current occurrences:
 
-- product policy in [`src/Control/runtime.jl`](../src/Control/runtime.jl)
+- output policy in [`src/control/runtime.jl`](../src/control/runtime.jl)
 - SH pixel export behavior in
-  [`src/WFS/shack_hartmann.jl`](../src/WFS/shack_hartmann.jl)
+  [`src/wfs/shack_hartmann.jl`](../src/wfs/shack_hartmann.jl)
 - detector readout-product surfaces in
-  [`src/Detectors/generic.jl`](../src/Detectors/generic.jl)
+  [`src/detectors/generic.jl`](../src/detectors/generic.jl)
 
 Proposed shared abstraction:
 
-- a runtime product-planning layer lowered from high-level requirements into a
-  concrete per-runtime product plan
+- a runtime output-planning layer lowered from high-level requirements into a
+  concrete per-runtime output plan
 
 Likely owner:
 
-- `src/Control/`
+- `src/control/`
 
 Risk of abstraction:
 
@@ -163,8 +163,8 @@ Expected payoff:
 
 Implementation note:
 
-- runtime product requirements and lowering now live in
-  [`src/Control/products.jl`](../src/Control/products.jl)
+- runtime output requirements and lowering now live in
+  [`src/control/runtime_outputs.jl`](../src/control/runtime_outputs.jl)
 
 ### `RI-04`: Source / field / atmosphere accumulation pipeline
 
@@ -178,12 +178,12 @@ Duplicated pattern:
 Current occurrences:
 
 - source-aware atmosphere propagation in:
-  - [`src/Atmosphere/source_geometry.jl`](../src/Atmosphere/source_geometry.jl)
-  - [`src/Atmosphere/multilayer.jl`](../src/Atmosphere/multilayer.jl)
-  - [`src/Atmosphere/infinite_screen.jl`](../src/Atmosphere/infinite_screen.jl)
+  - [`src/atmosphere/source_geometry.jl`](../src/atmosphere/source_geometry.jl)
+  - [`src/atmosphere/multilayer.jl`](../src/atmosphere/multilayer.jl)
+  - [`src/atmosphere/infinite_screen.jl`](../src/atmosphere/infinite_screen.jl)
 - atmospheric field propagation in
-  [`src/Optics/atmospheric_field_propagation.jl`](../src/Optics/atmospheric_field_propagation.jl)
-- spectral field slicing in [`src/Optics/spectrum.jl`](../src/Optics/spectrum.jl)
+  [`src/optics/atmospheric_field_propagation.jl`](../src/optics/atmospheric_field_propagation.jl)
+- spectral field slicing in [`src/optics/spectrum.jl`](../src/optics/spectrum.jl)
 
 Proposed shared abstraction:
 
@@ -192,7 +192,7 @@ Proposed shared abstraction:
 
 Likely owner:
 
-- `src/Optics/` plus shared atmosphere helpers
+- `src/optics/` plus shared atmosphere helpers
 
 Risk of abstraction:
 
@@ -205,7 +205,7 @@ Expected payoff:
 Implementation note:
 
 - source-aware layer render context and shared render entry points now live in
-  [`src/Optics/propagation_context.jl`](../src/Optics/propagation_context.jl)
+  [`src/optics/propagation_context.jl`](../src/optics/propagation_context.jl)
 
 ### `RI-05`: Backend reduction services
 
@@ -217,12 +217,12 @@ Duplicated pattern:
 
 Current occurrences:
 
-- shared masked reduction in [`src/Core/reductions.jl`](../src/Core/reductions.jl)
+- shared masked reduction in [`src/core/reductions.jl`](../src/core/reductions.jl)
 - CUDA extension hook in [`ext/AdaptiveOpticsSimCUDAExt.jl`](../ext/AdaptiveOpticsSimCUDAExt.jl)
 - model-local grouped reduction kernels in:
-  - [`src/WFS/shack_hartmann.jl`](../src/WFS/shack_hartmann.jl)
-  - [`src/WFS/pyramid.jl`](../src/WFS/pyramid.jl)
-  - [`src/WFS/bioedge.jl`](../src/WFS/bioedge.jl)
+  - [`src/wfs/shack_hartmann.jl`](../src/wfs/shack_hartmann.jl)
+  - [`src/wfs/pyramid.jl`](../src/wfs/pyramid.jl)
+  - [`src/wfs/bioedge.jl`](../src/wfs/bioedge.jl)
 
 Proposed shared abstraction:
 
@@ -231,7 +231,7 @@ Proposed shared abstraction:
 
 Likely owner:
 
-- `src/Core/`
+- `src/core/`
 
 Risk of abstraction:
 
@@ -244,7 +244,7 @@ Expected payoff:
 Implementation note:
 
 - grouped WFS reduction kernels were moved onto shared helpers; masked reduction
-  services remain centered in [`src/Core/reductions.jl`](../src/Core/reductions.jl)
+  services remain centered in [`src/core/reductions.jl`](../src/core/reductions.jl)
 
 ### `RI-06`: Backend random-fill and noise services
 
@@ -256,10 +256,10 @@ Duplicated pattern:
 
 Current occurrences:
 
-- generic helpers in [`src/Core/utils.jl`](../src/Core/utils.jl)
+- generic helpers in [`src/core/utils.jl`](../src/core/utils.jl)
 - AMDGPU specialization in [`ext/AdaptiveOpticsSimAMDGPUExt.jl`](../ext/AdaptiveOpticsSimAMDGPUExt.jl)
-- detector-owned wrappers in [`src/Detectors/frame_capture.jl`](../src/Detectors/frame_capture.jl)
-- atmosphere Gaussian fill in [`src/Atmosphere/kolmogorov.jl`](../src/Atmosphere/kolmogorov.jl)
+- detector-owned wrappers in [`src/detectors/frame_capture.jl`](../src/detectors/frame_capture.jl)
+- atmosphere Gaussian fill in [`src/atmosphere/kolmogorov.jl`](../src/atmosphere/kolmogorov.jl)
 
 Proposed shared abstraction:
 
@@ -270,7 +270,7 @@ Proposed shared abstraction:
 
 Likely owner:
 
-- `src/Core/` with narrow opt-in hooks from detectors/atmosphere
+- `src/core/` with narrow opt-in hooks from detectors/atmosphere
 
 Risk of abstraction:
 
@@ -283,7 +283,7 @@ Expected payoff:
 Implementation note:
 
 - random fill and Poisson services were moved out of `utils.jl` into
-  [`src/Core/random_services.jl`](../src/Core/random_services.jl), with backend
+  [`src/core/random_services.jl`](../src/core/random_services.jl), with backend
   extensions remaining responsible for specializations
 
 ### `RI-07`: WFS calibration orchestration skeleton
@@ -298,12 +298,12 @@ Duplicated pattern:
 Current occurrences:
 
 - Shack-Hartmann calibration in
-  [`src/WFS/shack_hartmann.jl`](../src/WFS/shack_hartmann.jl)
-- Pyramid calibration in [`src/WFS/pyramid.jl`](../src/WFS/pyramid.jl)
-- BioEdge calibration in [`src/WFS/bioedge.jl`](../src/WFS/bioedge.jl)
-- Curvature calibration in [`src/WFS/curvature.jl`](../src/WFS/curvature.jl)
-- Zernike calibration in [`src/WFS/zernike.jl`](../src/WFS/zernike.jl)
-- runtime preparation hooks in [`src/Control/runtime.jl`](../src/Control/runtime.jl)
+  [`src/wfs/shack_hartmann.jl`](../src/wfs/shack_hartmann.jl)
+- Pyramid calibration in [`src/wfs/pyramid.jl`](../src/wfs/pyramid.jl)
+- BioEdge calibration in [`src/wfs/bioedge.jl`](../src/wfs/bioedge.jl)
+- Curvature calibration in [`src/wfs/curvature.jl`](../src/wfs/curvature.jl)
+- Zernike calibration in [`src/wfs/zernike.jl`](../src/wfs/zernike.jl)
+- runtime preparation hooks in [`src/control/runtime.jl`](../src/control/runtime.jl)
 
 Proposed shared abstraction:
 
@@ -311,7 +311,7 @@ Proposed shared abstraction:
 
 Likely owner:
 
-- `src/WFS/` with runtime integration in `src/Control/`
+- `src/wfs/` with runtime integration in `src/control/`
 
 Risk of abstraction:
 
@@ -332,11 +332,11 @@ Duplicated pattern:
 
 Current occurrences:
 
-- [`src/Calibration/modal_basis.jl`](../src/Calibration/modal_basis.jl)
-- [`src/Calibration/interaction_matrix.jl`](../src/Calibration/interaction_matrix.jl)
-- [`src/Calibration/calibration_vault.jl`](../src/Calibration/calibration_vault.jl)
-- [`src/Calibration/reconstructor.jl`](../src/Calibration/reconstructor.jl)
-- [`src/Calibration/ao_calibration.jl`](../src/Calibration/ao_calibration.jl)
+- [`src/calibration/modal_basis.jl`](../src/calibration/modal_basis.jl)
+- [`src/calibration/interaction_matrix.jl`](../src/calibration/interaction_matrix.jl)
+- [`src/calibration/control_matrix.jl`](../src/calibration/control_matrix.jl)
+- [`src/control/reconstructors.jl`](../src/control/reconstructors.jl)
+- [`src/calibration/ao_calibration.jl`](../src/calibration/ao_calibration.jl)
 
 Proposed shared abstraction:
 
@@ -345,7 +345,7 @@ Proposed shared abstraction:
 
 Likely owner:
 
-- `src/Calibration/`
+- `src/calibration/`
 
 Risk of abstraction:
 
@@ -358,7 +358,7 @@ Expected payoff:
 Implementation note:
 
 - shared calibration signature/wavelength/reference helpers now live in
-  [`src/WFS/calibration.jl`](../src/WFS/calibration.jl)
+  [`src/wfs/calibration.jl`](../src/wfs/calibration.jl)
 
 ### `RI-09`: Runtime grouped execution orchestration
 
@@ -372,7 +372,7 @@ Duplicated pattern:
 
 Current occurrences:
 
-- [`src/Control/runtime.jl`](../src/Control/runtime.jl) around
+- [`src/control/runtime.jl`](../src/control/runtime.jl) around
   `CompositeSimulationInterface` and grouped `step!`
 
 Proposed shared abstraction:
@@ -382,7 +382,7 @@ Proposed shared abstraction:
 
 Likely owner:
 
-- `src/Control/`
+- `src/control/`
 
 Risk of abstraction:
 
@@ -396,7 +396,7 @@ Expected payoff:
 
 Recommended first extraction targets:
 
-1. `RI-03` runtime product planning and export policy
+1. `RI-03` runtime output planning and export policy
 2. `RI-07` WFS calibration orchestration skeleton
 3. `RI-01` detector frame-capture pipeline scaffolding
 4. `RI-05` backend reduction services

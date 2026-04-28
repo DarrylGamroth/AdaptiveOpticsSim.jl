@@ -41,7 +41,7 @@ function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:
     dm_dense = DeformableMirror(tel; n_act=2, influence_model=DenseInfluenceMatrix(Array(dm.state.modes)), T=T, backend=selector)
     zernike_modal = ModalControllableOptic(tel, ZernikeOpticBasis([2, 3]); T=T, backend=selector)
     cartesian_modal = ModalControllableOptic(tel, CartesianTiltBasis(; scale=T(0.1)); T=T, backend=selector)
-    wfs = ShackHartmann(tel; n_lenslets=2, mode=Diffractive(), T=T, backend=selector)
+    wfs = ShackHartmannWFS(tel; n_lenslets=2, mode=Diffractive(), T=T, backend=selector)
     det = Detector(noise=NoiseNone(), integration_time=T(1), qe=T(1), binning=1, T=T, backend=selector)
     @test tel.state.opd isa BackendArray
     @test dm.state.coefs isa BackendArray
@@ -57,20 +57,20 @@ function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:
     return nothing
 end
 
-function build_optional_platform_branch(::Type{T}, backend, label::Symbol; sensor::Symbol=:sh, seed::Integer=1) where {T<:AbstractFloat}
+function build_optional_control_loop_branch(::Type{T}, backend, label::Symbol; sensor::Symbol=:sh, seed::Integer=1) where {T<:AbstractFloat}
     tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
         central_obstruction=T(0.0), T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = KolmogorovAtmosphere(tel; r0=T(0.2), L0=T(25.0), T=T, backend=backend)
     dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=backend)
     wfs = sensor == :sh ?
-        ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend) :
+        ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend) :
         PyramidWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
     sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
     recon = ModalReconstructor(imat; gain=T(0.5))
-    return RuntimeBranch(label, sim, recon; wfs_detector=det, rng=MersenneTwister(seed))
+    return ControlLoopBranch(label, sim, recon; wfs_detector=det, rng=MersenneTwister(seed))
 end
 
 @inline _optional_low_order_label(::Val{:tiptilt}) = :tiptilt
@@ -78,7 +78,7 @@ end
 @inline _optional_low_order_label(::Val{:focus}) = :focus
 
 function _build_optional_low_order_wfs(tel::Telescope, backend, ::Type{T}, ::Val{:sh}) where {T<:AbstractFloat}
-    return ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
+    return ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
 end
 
 function _build_optional_low_order_wfs(tel::Telescope, backend, ::Type{T}, ::Val{:pyr}) where {T<:AbstractFloat}
@@ -100,10 +100,10 @@ function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:tiptilt
     wfs = _build_optional_low_order_wfs(tel, backend, T, wfs_case)
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
     sim = AOSimulation(tel, src, atm, optic, wfs)
-    return build_runtime_scenario(
-        SingleRuntimeConfig(name=Symbol(:optional_backend_composite_tiptilt_, W), branch_label=:main,
-            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
-        RuntimeBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(91)),
+    return build_control_loop_scenario(
+        SingleControlLoopConfig(name=Symbol(:optional_backend_composite_tiptilt_, W), branch_label=:main,
+            outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
+        ControlLoopBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(91)),
     )
 end
 
@@ -116,13 +116,13 @@ function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:steerin
         labels=:steering, T=T, backend=backend)
     dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=backend)
     optic = CompositeControllableOptic(:steering => steering, :dm => dm)
-    wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
+    wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
     sim = AOSimulation(tel, src, atm, optic, wfs)
-    return build_runtime_scenario(
-        SingleRuntimeConfig(name=:optional_backend_composite_steering, branch_label=:main,
-            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
-        RuntimeBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(91)),
+    return build_control_loop_scenario(
+        SingleControlLoopConfig(name=:optional_backend_composite_steering, branch_label=:main,
+            outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
+        ControlLoopBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(91)),
     )
 end
 
@@ -134,13 +134,13 @@ function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:focus},
     focus = FocusStage(tel; scale=T(0.1), T=T, backend=backend, label=:focus)
     dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=backend)
     optic = CompositeControllableOptic(:focus => focus, :dm => dm)
-    wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
+    wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
     sim = AOSimulation(tel, src, atm, optic, wfs)
-    return build_runtime_scenario(
-        SingleRuntimeConfig(name=:optional_backend_composite_focus, branch_label=:main,
-            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
-        RuntimeBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(91)),
+    return build_control_loop_scenario(
+        SingleControlLoopConfig(name=:optional_backend_composite_focus, branch_label=:main,
+            outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
+        ControlLoopBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(91)),
     )
 end
 
@@ -230,7 +230,7 @@ run_optional_backend_plan_checks(::Type{<:AdaptiveOpticsSim.GPUBackendTag}, tel,
 function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}, tel, backend)
     T = Float32
     array_backend = AdaptiveOpticsSim._resolve_array_backend(backend)
-    sh = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
+    sh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
     pyr = PyramidWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
     bio = BioEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, sensor=HgCdTeAvalancheArraySensor(T=T), T=T, backend=backend)
@@ -257,7 +257,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
         T=T)
     @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(pyr.state.intensity), pyr) isa AdaptiveOpticsSim.GroupedStaged2DPlan
     @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(bio.state.intensity), bio) isa AdaptiveOpticsSim.GroupedStaged2DPlan
-    @test typeof(AdaptiveOpticsSim.sh_sensing_execution_plan(AdaptiveOpticsSim.execution_style(sh.state.slopes), sh)) === AdaptiveOpticsSim.ShackHartmannRocmSafePlan
+    @test typeof(AdaptiveOpticsSim.sh_sensing_execution_plan(AdaptiveOpticsSim.execution_style(sh.state.slopes), sh)) === AdaptiveOpticsSim.ShackHartmannWFSRocmSafePlan
     @test AdaptiveOpticsSim.detector_execution_plan(typeof(AdaptiveOpticsSim.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.DetectorHostMirrorPlan
     capture_psf = array_backend{T}(undef, 4, 4)
     fill!(capture_psf, T(10))
@@ -293,9 +293,9 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
         sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=CPUBackend())
     gpu_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
         sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=backend)
-    cpu_sh_stats = ShackHartmann(cpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=CPUBackend(),
+    cpu_sh_stats = ShackHartmannWFS(cpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=CPUBackend(),
         valid_subaperture_policy=FluxThresholdValidSubapertures(light_ratio=0.5f0))
-    gpu_sh_stats = ShackHartmann(gpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend,
+    gpu_sh_stats = ShackHartmannWFS(gpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend,
         valid_subaperture_policy=FluxThresholdValidSubapertures(light_ratio=0.5f0))
     measure!(cpu_sh_stats, cpu_tel, cpu_src, cpu_det; rng=MersenneTwister(3))
     measure!(gpu_sh_stats, gpu_tel, gpu_src, gpu_det; rng=MersenneTwister(3))
@@ -433,7 +433,7 @@ end
 function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTag}, tel, backend)
     T = Float32
     array_backend = AdaptiveOpticsSim._resolve_array_backend(backend)
-    sh = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
+    sh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
     pyr = PyramidWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
     bio = BioEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, sensor=HgCdTeAvalancheArraySensor(T=T), T=T, backend=backend)
@@ -458,7 +458,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
         T=T)
     @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(pyr.state.intensity), pyr) isa AdaptiveOpticsSim.GroupedStackReducePlan
     @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(bio.state.intensity), bio) isa AdaptiveOpticsSim.GroupedStackReducePlan
-    @test AdaptiveOpticsSim.sh_sensing_execution_plan(AdaptiveOpticsSim.execution_style(sh.state.slopes), sh) isa AdaptiveOpticsSim.ShackHartmannBatchedPlan
+    @test AdaptiveOpticsSim.sh_sensing_execution_plan(AdaptiveOpticsSim.execution_style(sh.state.slopes), sh) isa AdaptiveOpticsSim.ShackHartmannWFSBatchedPlan
     @test AdaptiveOpticsSim.detector_execution_plan(typeof(AdaptiveOpticsSim.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.DetectorDirectPlan
     @test AdaptiveOpticsSim.reduction_execution_plan(pyr.state.intensity) isa AdaptiveOpticsSim.DirectReductionPlan
     @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
@@ -475,8 +475,8 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
         central_obstruction=0.0f0, T=T, backend=backend)
     cpu_src = Source(band=:I, magnitude=0.0, T=T)
     gpu_src = Source(band=:I, magnitude=0.0, T=T)
-    cpu_sh = ShackHartmann(cpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=CPUBackend())
-    gpu_sh = ShackHartmann(gpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
+    cpu_sh = ShackHartmannWFS(cpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=CPUBackend())
+    gpu_sh = ShackHartmannWFS(gpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
     cpu_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
         sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=CPUBackend())
     gpu_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
@@ -491,9 +491,9 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
     @test isapprox(gpu_export, cpu_export; rtol=1f-5, atol=1f-4)
     @test size(gpu_frame) == size(cpu_frame)
     @test isapprox(gpu_frame, cpu_frame; rtol=1f-5, atol=1f-4)
-    cpu_sh_stats = ShackHartmann(cpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=CPUBackend(),
+    cpu_sh_stats = ShackHartmannWFS(cpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=CPUBackend(),
         valid_subaperture_policy=FluxThresholdValidSubapertures(light_ratio=0.5f0))
-    gpu_sh_stats = ShackHartmann(gpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend,
+    gpu_sh_stats = ShackHartmannWFS(gpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend,
         valid_subaperture_policy=FluxThresholdValidSubapertures(light_ratio=0.5f0))
     measure!(cpu_sh_stats, cpu_tel, cpu_src, cpu_det; rng=MersenneTwister(3))
     measure!(gpu_sh_stats, gpu_tel, gpu_src, gpu_det; rng=MersenneTwister(3))
@@ -709,7 +709,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
 
     bundle = SpectralBundle(T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.4, 0.6]; T=T)
     poly = with_spectrum(src, bundle)
-    sh = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=selector)
+    sh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=selector)
     slopes = measure!(sh, tel, poly)
     @test slopes isa BackendArray
 
@@ -720,34 +720,34 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     curv_slopes = measure!(curv, tel, src, atm)
     @test curv_slopes isa BackendArray
 
-    single_platform = build_runtime_scenario(
-        SingleRuntimeConfig(
+    single_control_loop = build_control_loop_scenario(
+        SingleControlLoopConfig(
             name=:optional_backend_single,
             branch_label=:main,
-            products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=false),
+            outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false),
         ),
-        build_optional_platform_branch(T, selector, :main; sensor=:sh, seed=21),
+        build_optional_control_loop_branch(T, selector, :main; sensor=:sh, seed=21),
     )
-    prepare!(single_platform)
-    step!(single_platform)
-    @test AdaptiveOpticsSim.simulation_interface(single_platform) isa SimulationInterface
-    @test wfs_frame(single_platform) isa BackendArray
-    @test platform_branch_labels(single_platform) == (:main,)
+    prepare!(single_control_loop)
+    step!(single_control_loop)
+    @test AdaptiveOpticsSim.simulation_interface(single_control_loop) isa SimulationInterface
+    @test wfs_frame(single_control_loop) isa BackendArray
+    @test control_loop_branch_labels(single_control_loop) == (:main,)
 
-    grouped_platform = build_runtime_scenario(
-        GroupedRuntimeConfig(
+    grouped_control_loop = build_control_loop_scenario(
+        GroupedControlLoopConfig(
             (:hi, :lo);
             name=:optional_backend_grouped,
-            products=GroupedRuntimeProductRequirements(wfs_frames=true, science_frames=false, wfs_stack=true, science_stack=false),
+            outputs=GroupedRuntimeOutputRequirements(wfs_frames=true, science_frames=false, wfs_stack=true, science_stack=false),
         ),
-        build_optional_platform_branch(T, selector, :hi; sensor=:sh, seed=31),
-        build_optional_platform_branch(T, selector, :lo; sensor=:sh, seed=32),
+        build_optional_control_loop_branch(T, selector, :hi; sensor=:sh, seed=31),
+        build_optional_control_loop_branch(T, selector, :lo; sensor=:sh, seed=32),
     )
-    prepare!(grouped_platform)
-    step!(grouped_platform)
-    @test AdaptiveOpticsSim.simulation_interface(grouped_platform) isa CompositeSimulationInterface
-    @test grouped_wfs_stack(grouped_platform) isa BackendArray
-    @test size(grouped_wfs_stack(grouped_platform), ndims(grouped_wfs_stack(grouped_platform))) == 2
-    @test platform_branch_labels(grouped_platform) == (:hi, :lo)
+    prepare!(grouped_control_loop)
+    step!(grouped_control_loop)
+    @test AdaptiveOpticsSim.simulation_interface(grouped_control_loop) isa CompositeSimulationInterface
+    @test grouped_wfs_stack(grouped_control_loop) isa BackendArray
+    @test size(grouped_wfs_stack(grouped_control_loop), ndims(grouped_wfs_stack(grouped_control_loop))) == 2
+    @test control_loop_branch_labels(grouped_control_loop) == (:hi, :lo)
     return nothing
 end

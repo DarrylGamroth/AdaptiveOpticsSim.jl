@@ -48,7 +48,7 @@ Goal:
 
 In scope:
 
-- [grouped.jl](../src/WFS/grouped.jl)
+- [grouped.jl](../src/wfs/grouped.jl)
 - grouped Pyramid/BioEdge call sites
 - grouped runtime tests
 
@@ -227,7 +227,7 @@ Outcome:
 Verification:
 
 - reviewed current builder policy in
-  [inverse_policies.jl](../src/Core/inverse_policies.jl)
+  [inverse_policies.jl](../src/core/inverse_policies.jl)
 - confirmed rollout benchmark and validation evidence in the milestone notes
   above
   

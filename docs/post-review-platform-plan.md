@@ -59,7 +59,7 @@ These are the concrete surfaces that justify this plan.
 - `MV-02`: no standalone maintained report for `K_{5/6}` helper accuracy
 - `MV-03`: no frozen external atmospheric-field bundle yet
 - `MV-04`: detector-family frozen references are still limited
-- `MV-08`: LiFT/gain-sensing runtime evidence is lighter than core WFS/runtime surfaces
+- `MV-08`: LiFT/gain-sensing runtime evidence is lighter than core wfs/runtime surfaces
 - `MV-10`: tomography representative benchmark evidence remains thin
 
 ### Cross-Package Benchmark Gaps

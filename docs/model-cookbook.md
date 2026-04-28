@@ -50,14 +50,14 @@ atm = MultiLayerAtmosphere(
     wind_direction=(0.0, 90.0),
     altitude=(0.0, 5000.0),
 )
-wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
+wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
 
 advance!(atm, tel)
 propagate!(atm, tel)
 slopes = measure!(wfs, tel, src)
 ```
 
-Swap `ShackHartmann(...)` for `PyramidWFS(...)`, `BioEdgeWFS(...)`,
+Swap `ShackHartmannWFS(...)` for `PyramidWFS(...)`, `BioEdgeWFS(...)`,
 `CurvatureWFS(...)`, or `ZernikeWFS(...)` when the sensing family changes.
 
 ## Recipe 3: Detector-Backed Sensing
@@ -72,7 +72,7 @@ using Random
 tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)
 atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
-wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
+wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
 det = Detector(
     noise=NoiseReadout(1.0),
     integration_time=1.0,
@@ -82,7 +82,7 @@ det = Detector(
 
 advance!(atm, tel)
 propagate!(atm, tel)
-measure!(wfs, tel, src; detector=det, rng=runtime_rng(0))
+measure!(wfs, tel, src, det; rng=runtime_rng(0))
 frame = output_frame(det)
 ```
 
@@ -123,20 +123,20 @@ tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruc
 src = Source(band=:I, magnitude=0.0)
 atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive())
+wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
 sim = AOSimulation(tel, src, atm, dm, wfs)
 
 imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
-branch = RuntimeBranch(:main, sim, recon; rng=runtime_rng(0))
+branch = ControlLoopBranch(:main, sim, recon; rng=runtime_rng(0))
 
-cfg = SingleRuntimeConfig(
+cfg = SingleControlLoopConfig(
     name=:closed_loop_demo,
     branch_label=:main,
-    products=RuntimeProductRequirements(slopes=true, wfs_pixels=true),
+    outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true),
 )
 
-scenario = build_runtime_scenario(cfg, branch)
+scenario = build_control_loop_scenario(cfg, branch)
 prepare!(scenario)
 
 for _ in 1:5
@@ -196,7 +196,7 @@ Use this pattern when you need:
 ## Recipe 5: HIL / RTC Boundary Simulation
 
 Use this when the simulation should behave like a hardware-in-the-loop or RTC
-boundary surface: commands in, WFS/science products out.
+boundary surface: commands in, wfs/science outputs out.
 
 For a single-branch RTC-style runtime with an external command source:
 
@@ -209,18 +209,18 @@ tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruc
 src = Source(band=:I, magnitude=0.0)
 atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive())
+wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
 sim = AOSimulation(tel, src, atm, dm, wfs)
 
 # Use NullReconstructor() when the controller lives outside the package and
 # commands are injected explicitly through set_command!(...).
 recon = NullReconstructor()
 
-# Attach detectors when the external interface should export pixel products.
+# Attach detectors when the external interface should export pixel outputs.
 wfs_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
 science_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
 
-branch = RuntimeBranch(
+branch = ControlLoopBranch(
     :main,
     sim,
     recon;
@@ -229,13 +229,13 @@ branch = RuntimeBranch(
     rng=runtime_rng(1),
 )
 
-cfg = SingleRuntimeConfig(
+cfg = SingleControlLoopConfig(
     name=:single_runtime_demo,
     branch_label=:main,
-    products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=true),
+    outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=true),
 )
 
-scenario = build_runtime_scenario(cfg, branch)
+scenario = build_control_loop_scenario(cfg, branch)
 
 # `prepare!` performs one-time runtime/WFS precomputation and enables the
 # requested export surfaces before repeated `sense!` or `step!` calls.
@@ -250,7 +250,7 @@ external_command = zeros(eltype(command(scenario)), n_command)
 #   1. get a command from the external controller
 #   2. inject it into the simulated plant
 #   3. run only the sensing side of the package
-#   4. read the exported products that go back to the controller
+#   4. read the exported outputs that go back to the controller
 for k in 1:3
     fill!(external_command, 0)
     external_command[1] = 0.05 * k
@@ -277,7 +277,7 @@ high_order_dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 composite_optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => high_order_dm)
 composite_sim = AOSimulation(tel, src, atm, composite_optic, wfs)
 
-composite_branch = RuntimeBranch(
+composite_branch = ControlLoopBranch(
     :main,
     composite_sim,
     recon;
@@ -285,7 +285,7 @@ composite_branch = RuntimeBranch(
     science_detector=science_det,
     rng=runtime_rng(2),
 )
-composite_scenario = build_runtime_scenario(cfg, composite_branch)
+composite_scenario = build_control_loop_scenario(cfg, composite_branch)
 prepare!(composite_scenario)
 set_command!(composite_scenario, (
     tiptilt=fill(0.01, 2),
@@ -313,7 +313,7 @@ sense!(composite_scenario)
 
 # If a runtime boundary only needs a logical split over one existing optic, you
 # can still provide an explicit command layout without changing the plant.
-split_branch = RuntimeBranch(
+split_branch = ControlLoopBranch(
     :main,
     sim,
     recon;
@@ -321,7 +321,7 @@ split_branch = RuntimeBranch(
     rng=runtime_rng(3),
     command_layout=RuntimeCommandLayout(:woofer => 8, :tweeter => 8),
 )
-split_scenario = build_runtime_scenario(cfg, split_branch)
+split_scenario = build_control_loop_scenario(cfg, split_branch)
 prepare!(split_scenario)
 set_command!(split_scenario, (
     woofer=fill(0.01, 8),
@@ -367,7 +367,7 @@ Grouped output semantics differ from the single-branch case:
 - `command(grouped_scenario)` and `slopes(grouped_scenario)` are still one
   packed vector each, aggregated across branches.
 - `wfs_frame(grouped_scenario)` and `science_frame(grouped_scenario)` become
-  per-branch frame collections when those grouped frame products are enabled.
+  per-branch frame collections when those grouped frame outputs are enabled.
 - `grouped_wfs_stack(grouped_scenario)` and
   `grouped_science_stack(grouped_scenario)` provide stacked array forms when
   the grouped contract requests them.
@@ -377,14 +377,14 @@ frame into another controller, transport layer, or logging path.
 
 For grouped or multi-branch RTC-style composition, start from:
 
-- [platform_grouped_runtime.jl](../examples/closed_loop/platform_grouped_runtime.jl)
-- [platform_single_runtime.jl](../examples/closed_loop/platform_single_runtime.jl)
+- [control_loop_grouped_runtime.jl](../examples/closed_loop/control_loop_grouped_runtime.jl)
+- [control_loop_single_runtime.jl](../examples/closed_loop/control_loop_single_runtime.jl)
 
 Use this pattern when you need:
 
 - a clear input/output simulation boundary
 - exported WFS or science frames per step
-- grouped runtime products
+- grouped runtime outputs
 - HIL-style benchmarking or controller integration
 
 ## Recipe 6: GPU HIL Runtime
@@ -416,12 +416,12 @@ tiptilt = TipTiltMirror(tel; scale=0.1f0, label=:tiptilt, T=Float32, backend=GPU
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3f0, T=Float32, backend=GPU)
 optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm)
 
-wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), T=Float32, backend=GPU)
+wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=Float32, backend=GPU)
 wfs_det = Detector(noise=NoiseNone(), integration_time=1.0f0, qe=1.0f0, binning=1; T=Float32, backend=GPU)
 science_det = Detector(noise=NoiseNone(), integration_time=1.0f0, qe=1.0f0, binning=1; T=Float32, backend=GPU)
 
 sim = AOSimulation(tel, src, atm, optic, wfs)
-branch = RuntimeBranch(
+branch = ControlLoopBranch(
     :main,
     sim,
     NullReconstructor();
@@ -429,13 +429,13 @@ branch = RuntimeBranch(
     science_detector=science_det,
     rng=runtime_rng(1),
 )
-cfg = SingleRuntimeConfig(
+cfg = SingleControlLoopConfig(
     name=:hil_gpu,
     branch_label=:main,
-    products=RuntimeProductRequirements(slopes=true, wfs_pixels=true, science_pixels=true),
+    outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=true),
 )
 
-scenario = build_runtime_scenario(cfg, branch)
+scenario = build_control_loop_scenario(cfg, branch)
 
 # `prepare!` performs one-time runtime/WFS precomputation and enables the
 # requested export surfaces before repeated `sense!` or `step!` calls.
@@ -496,14 +496,14 @@ rt = readout(interface)
 ```
 
 This is a maintained advanced surface, but it is not the default public runtime
-assembly path. Prefer `build_runtime_scenario(...)` for normal closed-loop and
+assembly path. Prefer `build_control_loop_scenario(...)` for normal closed-loop and
 HIL work.
 
 ## Recipe 8: External Coronagraph Science Model With Proper.jl
 
 Use this when AdaptiveOpticsSim should own the AO runtime or HIL boundary, but
 an external wave-optics package should own the science arm. This is the right
-shape for a coronagraph HIL model: AO commands and WFS products stay on the
+shape for a coronagraph HIL model: AO commands and WFS outputs stay on the
 AdaptiveOpticsSim side, while the coronagraph PSF is evaluated in `Proper.jl`.
 
 ```julia
@@ -521,9 +521,9 @@ optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm)
 wfs = PyramidWFS(tel; pupil_samples=32, modulation=3.0)
 sim = AOSimulation(tel, src, atm, optic, wfs)
 
-branch = RuntimeBranch(:main, sim, NullReconstructor(); rng=runtime_rng(1))
-cfg = SingleRuntimeConfig(name=:hil_coronagraph, branch_label=:main, products=RuntimeProductRequirements(slopes=true))
-scenario = build_runtime_scenario(cfg, branch)
+branch = ControlLoopBranch(:main, sim, NullReconstructor(); rng=runtime_rng(1))
+cfg = SingleControlLoopConfig(name=:hil_coronagraph, branch_label=:main, outputs=RuntimeOutputRequirements(slopes=true))
+scenario = build_control_loop_scenario(cfg, branch)
 prepare!(scenario)
 
 # Use a typed payload at the package boundary. `Proper.jl` accepts any extra
@@ -599,7 +599,7 @@ end
 
 This pattern gives you two clean boundaries:
 
-- `AdaptiveOpticsSim` owns the fast AO plant, commands, WFS products, and HIL runtime contract.
+- `AdaptiveOpticsSim` owns the fast AO plant, commands, WFS outputs, and HIL runtime contract.
 - `Proper.jl` owns the external science arm and coronagraph propagation.
 
 For repeated HIL use, keep the integration seam explicit:
@@ -693,7 +693,7 @@ Use:
 - subsystem functions such as `compute_psf!`, `advance!`, `propagate!`, and
   `measure!`
   - when you are studying one physical layer
-- `SingleRuntimeConfig` or `GroupedRuntimeConfig`
+- `SingleControlLoopConfig` or `GroupedControlLoopConfig`
   - when you want the maintained public runtime/orchestration surface
 - `ClosedLoopRuntime` plus `AdaptiveOpticsSim.simulation_interface(...)`
   - only when you are manually assembling or testing one low-level runtime

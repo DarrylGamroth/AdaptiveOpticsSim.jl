@@ -10,7 +10,7 @@ Plan traceability:
 ## Purpose
 
 This plan extends the implemented controllable-optic self-check surface beyond
-the current static `ShackHartmann` composite-optic contract.
+the current static `ShackHartmannWFS` composite-optic contract.
 
 The current maintained evidence is strong for:
 
@@ -51,11 +51,11 @@ reference does not yet exist for a specific composite plant.
 
 ## Maintained WFS Matrix
 
-The self-check work should no longer be treated as `ShackHartmann`-only.
+The self-check work should no longer be treated as `ShackHartmannWFS`-only.
 
 The maintained rollout order is:
 
-1. `ShackHartmann`
+1. `ShackHartmannWFS`
    - current reference surface
    - remains the first contract for every new composite optic
 2. `Pyramid`
@@ -141,7 +141,7 @@ This includes:
 ### OSX-6 Multi-WFS And Richer Composite Families
 
 The maintained self-check surface must expand beyond the current
-`tiptilt/steering/focus + dm` `ShackHartmann` baseline.
+`tiptilt/steering/focus + dm` `ShackHartmannWFS` baseline.
 
 This includes:
 
@@ -200,7 +200,7 @@ Target locations:
 
 - [test/testsets/control_and_runtime.jl](../test/testsets/control_and_runtime.jl)
 - [test/testsets/detectors_and_wfs.jl](../test/testsets/detectors_and_wfs.jl)
-- [docs/platform-orchestration-validation.md](./platform-orchestration-validation.md)
+- [docs/control-loop-orchestration-validation.md](./control-loop-orchestration-validation.md)
 
 Verification evidence:
 
@@ -286,8 +286,8 @@ Deliverables:
 Target locations:
 
 - [test/testsets/control_and_runtime.jl](../test/testsets/control_and_runtime.jl)
-- [src/Control/runtime/outputs.jl](../src/Control/runtime/outputs.jl)
-- [src/Optics/controllable_optics.jl](../src/Optics/controllable_optics.jl)
+- [src/control/runtime/outputs.jl](../src/control/runtime/outputs.jl)
+- [src/optics/controllable_optics.jl](../src/optics/controllable_optics.jl)
 
 Verification evidence:
 
@@ -307,7 +307,7 @@ Requirement coverage:
 Deliverables:
 
 - a maintained WFS-family matrix for low-order composite self-checks:
-  - `ShackHartmann`
+  - `ShackHartmannWFS`
   - `Pyramid`
   - `BioEdge`
 - a staged richer-composite rollout:
@@ -321,7 +321,7 @@ Target locations:
 - [test/testsets/control_and_runtime.jl](../test/testsets/control_and_runtime.jl)
 - [scripts/generate_multi_optic_runtime_artifact.jl](../scripts/generate_multi_optic_runtime_artifact.jl)
 - [docs/model-validity-matrix.md](./model-validity-matrix.md)
-- [docs/platform-orchestration-validation.md](./platform-orchestration-validation.md)
+- [docs/control-loop-orchestration-validation.md](./control-loop-orchestration-validation.md)
 
 Verification evidence:
 
@@ -375,7 +375,7 @@ This plan is complete when:
 - backend repeatability is documented and checked for maintained GPU-claimed
   surfaces
 - invalid composite/runtime command inputs fail predictably
-- at least one non-`ShackHartmann` WFS family is part of the maintained
+- at least one non-`ShackHartmannWFS` WFS family is part of the maintained
   controllable-optic self-check surface
 - richer composite plants are either covered or explicitly deferred with reason
 

@@ -17,7 +17,7 @@ for HIL-oriented GPU paths.
 
 ### 1. Synchronization granularity is too eager
 
-In [backends.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Core/backends.jl),
+In [backends.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/core/backends.jl),
 `launch_kernel!` fences immediately. That keeps correctness simple, but it also
 means many hot paths are written as:
 
@@ -29,7 +29,7 @@ rather than as a phase-level dependency chain.
 
 ### 2. SHWFS internal buffers and exported products are too tightly coupled
 
-In [runtime.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Control/runtime.jl),
+In [runtime.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/control/runtime.jl),
 diffractive SHWFS currently exports the same `spot_cube` surface that is also
 used as an internal working set in the sensing path.
 
@@ -39,7 +39,7 @@ also changing the externally visible pixel product.
 
 ### 3. Detector/WFS composition is still frame-centric
 
-The batched detector path in [frame_batched.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Detectors/frame_batched.jl)
+The batched detector path in [frame_batched.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/detectors/frame_batched.jl)
 is reasonably structured, but the surrounding WFS code still tends to:
 
 1. materialize full cubes
@@ -94,8 +94,8 @@ harder to reason about where GPU reductions are genuinely first-class.
 
 Primary files:
 
-- [runtime.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Control/runtime.jl)
-- [shack_hartmann.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/WFS/shack_hartmann.jl)
+- [runtime.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/control/runtime.jl)
+- [shack_hartmann.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/wfs/shack_hartmann.jl)
 - any helper files that define output-frame metadata
 
 ### Rationale
@@ -139,7 +139,7 @@ centroid-side passes without risking exported-frame regressions.
 
 Primary files:
 
-- [runtime.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Control/runtime.jl)
+- [runtime.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/control/runtime.jl)
 - any WFS export metadata helpers
 
 ### Rationale
@@ -178,7 +178,7 @@ implicitly through shared buffers.
 
 Primary files:
 
-- [backends.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Core/backends.jl)
+- [backends.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/core/backends.jl)
 - selected WFS hot-path files
 
 ### Rationale
@@ -220,8 +220,8 @@ table, especially on GPU paths that already have clear phase structure.
 
 Primary files:
 
-- core reduction helper file or `src/Core/` addition
-- [shack_hartmann.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/WFS/shack_hartmann.jl)
+- core reduction helper file or `src/core/` addition
+- [shack_hartmann.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/wfs/shack_hartmann.jl)
 - other detector/WFS files that currently do model-local reductions
 
 ### Rationale
@@ -256,15 +256,15 @@ infrastructure rather than repeated local repair.
 
 ### Scope
 
-- Rework frame-centric WFS/detector composition so the pipeline is driven by
+- Rework frame-centric wfs/detector composition so the pipeline is driven by
   required products rather than by default full-frame materialization.
 - Reduce avoidable full-cube passes where the detector, centroid, and export
   stages can share a more explicit contract.
 
 Primary files:
 
-- [frame_batched.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Detectors/frame_batched.jl)
-- [shack_hartmann.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/WFS/shack_hartmann.jl)
+- [frame_batched.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/detectors/frame_batched.jl)
+- [shack_hartmann.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/wfs/shack_hartmann.jl)
 - possibly other WFS families if the pattern generalizes
 
 ### Rationale
@@ -303,7 +303,7 @@ is smaller or more constrained.
 
 Primary files:
 
-- [shack_hartmann.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/WFS/shack_hartmann.jl)
+- [shack_hartmann.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/wfs/shack_hartmann.jl)
 - related FFT-heavy WFS files as needed
 
 ### Rationale
@@ -371,10 +371,10 @@ refactor phases above.
 
 Files:
 
-- [frame_capture.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Detectors/frame_capture.jl)
-- [interface.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Detectors/interface.jl)
-- [frame_response.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Detectors/frame_response.jl)
-- [hgcdte_avalanche_array.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/Detectors/hgcdte_avalanche_array.jl)
+- [frame_capture.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/detectors/frame_capture.jl)
+- [interface.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/detectors/interface.jl)
+- [frame_response.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/detectors/frame_response.jl)
+- [hgcdte_avalanche_array.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/detectors/hgcdte_avalanche_array.jl)
 
 Current behavior:
 
@@ -392,8 +392,8 @@ Status:
 
 Files:
 
-- [pyramid.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/WFS/pyramid.jl)
-- [bioedge.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/WFS/bioedge.jl)
+- [pyramid.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/wfs/pyramid.jl)
+- [bioedge.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/wfs/bioedge.jl)
 
 Current behavior:
 
@@ -411,7 +411,7 @@ Status:
 
 File:
 
-- [shack_hartmann.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/WFS/shack_hartmann.jl)
+- [shack_hartmann.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/wfs/shack_hartmann.jl)
 
 Current behavior:
 

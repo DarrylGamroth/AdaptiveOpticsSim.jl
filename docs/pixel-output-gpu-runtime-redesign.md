@@ -120,7 +120,7 @@ The dominant cost is still the high-order diffractive Shack-Hartmann pixel
 path, but the shape of the bottleneck has changed materially.
 
 The current accelerator implementation in
-[`src/WFS/shack_hartmann.jl`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/WFS/shack_hartmann.jl)
+[`src/wfs/shack_hartmann.jl`](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/src/wfs/shack_hartmann.jl)
 now has this structure for the maintained non-LGS path:
 
 1. build a stacked complex field cube for all subapertures

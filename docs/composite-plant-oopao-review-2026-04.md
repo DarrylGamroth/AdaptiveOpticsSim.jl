@@ -7,7 +7,7 @@ Status: active
 This note records the targeted review of the narrow external OOPAO composite
 plant surface added for:
 
-- `tiptilt + dm` on diffractive `ShackHartmann`
+- `tiptilt + dm` on diffractive `ShackHartmannWFS`
 - `tiptilt + dm` on diffractive `Pyramid`
 - `tiptilt + dm` on diffractive `BioEdge`
 
@@ -129,7 +129,7 @@ Conclusion:
 The current committed composite OOPAO tolerances remain evidence-based and are
 consistent with the updated fitted-mapping residuals:
 
-- `ShackHartmann`: `atol = 4e-4`, `rtol = 4e-2`
+- `ShackHartmannWFS`: `atol = 4e-4`, `rtol = 4e-2`
 - `Pyramid`: `atol = 4e-4`, `rtol = 3e-2`
 - `BioEdge`: `atol = 1e-3`, `rtol = 4e-2`
 

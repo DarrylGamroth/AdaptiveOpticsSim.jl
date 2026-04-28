@@ -36,7 +36,7 @@ The most important runtime-facing objects are:
 - calibration/reconstructor objects
 - `ClosedLoopRuntime`
 
-The orchestration layer is in `src/Control`.
+The orchestration layer is in `src/control`.
 
 ## Build Phase
 
@@ -95,7 +95,7 @@ The package now makes product ownership more explicit than before.
 
 Important distinctions:
 
-- scratch buffers are not exported products
+- scratch buffers are not exported outputs
 - sampled detector inputs are not the same thing as detector outputs
 - grouped WFS intermediate stacks are not the same thing as archived or
   exported readouts
@@ -105,7 +105,7 @@ boundary between:
 
 - sampled pre-detector spot stacks
 - post-detector signal stacks
-- exported runtime pixel products
+- exported runtime pixel outputs
 
 That separation matters for:
 
@@ -120,16 +120,16 @@ The maintained detector/WFS pipeline now follows a more explicit shape:
 1. produce sampled optical signal
 2. apply detector/readout pipeline if configured
 3. reduce or extract slopes/signals
-4. snapshot only the runtime products that were requested
+4. snapshot only the runtime outputs that were requested
 
-The runtime product plan decides whether a given simulation step must produce:
+The runtime output plan decides whether a given simulation step must produce:
 
 - slopes only
 - slopes plus WFS pixels
 - science pixels
 - metadata surfaces
 
-For grouped composite execution, exported products can additionally include:
+For grouped composite execution, exported outputs can additionally include:
 
 - per-branch grouped WFS frames
 - per-branch grouped science frames

@@ -148,7 +148,7 @@ description = "Grouped platform runtime comparison family retained historically 
 comparison_fields = ["backend", "scale", "runtime_resolution", "runtime_n_subap", "runtime_branch_count"]
 normalized_fields = ["backend", "scale", "runtime_resolution", "runtime_n_subap", "runtime_branch_count"]
 known_differences = [
-    "typed_platform_scenario_surface",
+    "typed_control_loop_scenario_surface",
     "grouped_export_stack_contract",
     "composite_runtime_entrypoint_shape",
 ]

@@ -30,8 +30,8 @@ The goal is to keep the remaining workaround debt:
 
 Files:
 
-- [frame_capture.jl](../src/Detectors/frame_capture.jl)
-- [pipeline.jl](../src/Detectors/pipeline.jl)
+- [frame_capture.jl](../src/detectors/frame_capture.jl)
+- [pipeline.jl](../src/detectors/pipeline.jl)
 - [AdaptiveOpticsSimAMDGPUExt.jl](../ext/AdaptiveOpticsSimAMDGPUExt.jl)
 
 Current behavior:
@@ -55,7 +55,7 @@ Reason:
 
 Files:
 
-- [reductions.jl](../src/Core/reductions.jl)
+- [reductions.jl](../src/core/reductions.jl)
 - [AdaptiveOpticsSimAMDGPUExt.jl](../ext/AdaptiveOpticsSimAMDGPUExt.jl)
 
 Current behavior:
@@ -78,9 +78,9 @@ Reason:
 
 Files:
 
-- [setup.jl](../src/WFS/shack_hartmann/setup.jl)
-- [signals.jl](../src/WFS/shack_hartmann/signals.jl)
-- [measure.jl](../src/WFS/shack_hartmann/measure.jl)
+- [setup.jl](../src/wfs/shack_hartmann/setup.jl)
+- [signals.jl](../src/wfs/shack_hartmann/signals.jl)
+- [measure.jl](../src/wfs/shack_hartmann/measure.jl)
 
 Current behavior:
 
@@ -104,7 +104,7 @@ Reason:
 
 Files:
 
-- [kolmogorov.jl](../src/Atmosphere/kolmogorov.jl)
+- [kolmogorov.jl](../src/atmosphere/kolmogorov.jl)
 - [AdaptiveOpticsSimAMDGPUExt.jl](../ext/AdaptiveOpticsSimAMDGPUExt.jl)
 
 Current behavior:

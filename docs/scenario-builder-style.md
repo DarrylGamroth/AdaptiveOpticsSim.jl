@@ -193,7 +193,7 @@ Scenario scripts should be explicit about what outputs they need.
 
 Rules:
 
-- request runtime products intentionally
+- request runtime outputs intentionally
 - use `prepare!` when the runtime supports a prepared path
 - access outputs through maintained readout accessors
 - keep grouped export policy explicit in grouped/composite scenarios

@@ -274,10 +274,10 @@ Detailed work:
 
 - `[x]` record file size baselines for the largest source and test files
 - `[x]` identify responsibility clusters inside:
-  - [`src/WFS/shack_hartmann.jl`](../src/WFS/shack_hartmann.jl)
-  - [`src/WFS/pyramid.jl`](../src/WFS/pyramid.jl)
-  - [`src/WFS/bioedge.jl`](../src/WFS/bioedge.jl)
-  - [`src/Control/runtime.jl`](../src/Control/runtime.jl)
+  - [`src/wfs/shack_hartmann.jl`](../src/wfs/shack_hartmann.jl)
+  - [`src/wfs/pyramid.jl`](../src/wfs/pyramid.jl)
+  - [`src/wfs/bioedge.jl`](../src/wfs/bioedge.jl)
+  - [`src/control/runtime.jl`](../src/control/runtime.jl)
   - [`test/runtests.jl`](../test/runtests.jl)
 - `[x]` propose concrete target file/module boundaries for each
 - `[x]` identify high-risk split points where cyclic dependencies or implicit
@@ -429,7 +429,7 @@ Objective:
 Detailed work:
 
 - `[x]` inspect relevant benchmark/runtime assets in:
-  - [`../REVOLT`](../REVOLT)
+  - [`../REVOLT`](../../REVOLT)
   - [`../AdaptiveOpticsComparisons`](../../AdaptiveOpticsComparisons)
   - local `scripts/profile_*`
 - `[x]` identify scenario families that exist in at least two of:
@@ -701,14 +701,14 @@ Goal:
 
 Tasks:
 
-- `[x]` `PLAN-11` Split [`src/WFS/shack_hartmann.jl`](../src/WFS/shack_hartmann.jl)
+- `[x]` `PLAN-11` Split [`src/wfs/shack_hartmann.jl`](../src/wfs/shack_hartmann.jl)
   into smaller units
   - traces to: `PR-05`
-- `[x]` `PLAN-12` Split [`src/WFS/pyramid.jl`](../src/WFS/pyramid.jl)
+- `[x]` `PLAN-12` Split [`src/wfs/pyramid.jl`](../src/wfs/pyramid.jl)
   - traces to: `PR-05`
-- `[x]` `PLAN-13` Split [`src/WFS/bioedge.jl`](../src/WFS/bioedge.jl)
+- `[x]` `PLAN-13` Split [`src/wfs/bioedge.jl`](../src/wfs/bioedge.jl)
   - traces to: `PR-05`
-- `[x]` `PLAN-14` Split [`src/Control/runtime.jl`](../src/Control/runtime.jl)
+- `[x]` `PLAN-14` Split [`src/control/runtime.jl`](../src/control/runtime.jl)
   by product planning, latency staging, execution, and exports
   - traces to: `PR-05`, `PR-11`
 - `[x]` `PLAN-15` Split [`test/runtests.jl`](../test/runtests.jl) into:
@@ -730,10 +730,10 @@ Verification:
 Phase 2 evidence summary:
 
 - large entry-point files were reduced to thin include surfaces:
-  - [`src/WFS/shack_hartmann.jl`](../src/WFS/shack_hartmann.jl): `2167 -> 12`
-  - [`src/WFS/pyramid.jl`](../src/WFS/pyramid.jl): `1463 -> 11`
-  - [`src/WFS/bioedge.jl`](../src/WFS/bioedge.jl): `1241 -> 10`
-  - [`src/Control/runtime.jl`](../src/Control/runtime.jl): `1123 -> 12`
+  - [`src/wfs/shack_hartmann.jl`](../src/wfs/shack_hartmann.jl): `2167 -> 12`
+  - [`src/wfs/pyramid.jl`](../src/wfs/pyramid.jl): `1463 -> 11`
+  - [`src/wfs/bioedge.jl`](../src/wfs/bioedge.jl): `1241 -> 10`
+  - [`src/control/runtime.jl`](../src/control/runtime.jl): `1123 -> 12`
   - [`test/runtests.jl`](../test/runtests.jl): `3300 -> 8`
 - split layout and boundary notes recorded in
   [`docs/modularization-inventory.md`](./modularization-inventory.md)
@@ -777,10 +777,10 @@ Tasks:
 
 Primary files:
 
-- [`src/Core/`](../src/Core)
-- [`src/Detectors/`](../src/Detectors)
-- [`src/WFS/`](../src/WFS)
-- [`src/Control/`](../src/Control)
+- [`src/core/`](../src/core)
+- [`src/detectors/`](../src/detectors)
+- [`src/wfs/`](../src/wfs)
+- [`src/control/`](../src/control)
 - [`ext/`](../ext)
 
 Verification:
@@ -792,16 +792,16 @@ Verification:
 Evidence recorded:
 
 - shared detector pipeline helpers in
-  [`src/Detectors/pipeline.jl`](../src/Detectors/pipeline.jl)
-- shared grouped WFS helpers in [`src/WFS/grouped.jl`](../src/WFS/grouped.jl)
+  [`src/detectors/pipeline.jl`](../src/detectors/pipeline.jl)
+- shared grouped WFS helpers in [`src/wfs/grouped.jl`](../src/wfs/grouped.jl)
 - shared calibration helpers in
-  [`src/WFS/calibration.jl`](../src/WFS/calibration.jl)
+  [`src/wfs/calibration.jl`](../src/wfs/calibration.jl)
 - shared runtime product planning in
-  [`src/Control/products.jl`](../src/Control/products.jl)
+  [`src/control/runtime_outputs.jl`](../src/control/runtime_outputs.jl)
 - shared propagation context helpers in
-  [`src/Optics/propagation_context.jl`](../src/Optics/propagation_context.jl)
+  [`src/optics/propagation_context.jl`](../src/optics/propagation_context.jl)
 - shared random/noise services in
-  [`src/Core/random_services.jl`](../src/Core/random_services.jl)
+  [`src/core/random_services.jl`](../src/core/random_services.jl)
 - verification run:
   `julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'`
 

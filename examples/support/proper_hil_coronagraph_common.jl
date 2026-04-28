@@ -82,7 +82,7 @@ function _segment_range(layout::RuntimeCommandLayout, label::Symbol)
 end
 
 function _build_wfs(tel::Telescope; T::Type{<:AbstractFloat}, backend::AbstractArrayBackend)
-    return ShackHartmann(tel; n_lenslets=16, mode=Diffractive(), threshold=T(0), T=T, backend=backend)
+    return ShackHartmannWFS(tel; n_lenslets=16, mode=Diffractive(), threshold=T(0), T=T, backend=backend)
 end
 
 function build_proper_hil_context(;
@@ -112,13 +112,13 @@ function build_proper_hil_context(;
     wfs = _build_wfs(tel; T=T, backend=selector)
     sim = AOSimulation(tel, src, atm, optic, wfs)
 
-    branch = RuntimeBranch(:main, sim, NullReconstructor(); rng=runtime_rng(rng_seed))
-    cfg = SingleRuntimeConfig(
+    branch = ControlLoopBranch(:main, sim, NullReconstructor(); rng=runtime_rng(rng_seed))
+    cfg = SingleControlLoopConfig(
         name=:proper_hil,
         branch_label=:main,
-        products=RuntimeProductRequirements(slopes=true),
+        outputs=RuntimeOutputRequirements(slopes=true),
     )
-    scenario = build_runtime_scenario(cfg, branch)
+    scenario = build_control_loop_scenario(cfg, branch)
     prepare!(scenario)
 
     proper_ctx = Proper.RunContext(typeof(sim.tel.state.opd))

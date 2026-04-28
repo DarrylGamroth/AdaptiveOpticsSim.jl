@@ -238,7 +238,7 @@ Acceptance:
 
 Goal:
 
-- decide whether AMDGPU can move from `ShackHartmannRocmSafePlan` to the shared
+- decide whether AMDGPU can move from `ShackHartmannWFSRocmSafePlan` to the shared
   GPU SH path by default
 
 Decision rule:

@@ -93,7 +93,7 @@ function run_profile(; backend_name::AbstractString="cpu", profile_name::Abstrac
         backend=BackendArray,
     )
     src, lgs_label = _resolve_lgs(profile_name, T)
-    wfs = ShackHartmann(tel; n_lenslets=14, mode=Diffractive(), T=T, backend=BackendArray)
+    wfs = ShackHartmannWFS(tel; n_lenslets=14, mode=Diffractive(), T=T, backend=BackendArray)
     det = AdaptiveOpticsSim.detector_from_config(
         AO188WFSDetectorConfig(
             T=T,

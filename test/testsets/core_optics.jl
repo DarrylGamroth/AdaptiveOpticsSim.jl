@@ -12,7 +12,7 @@ end
 
 @testset "API export curation" begin
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
-    @test Base.isexported(AdaptiveOpticsSim, :ShackHartmann)
+    @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
     @test !Base.isexported(AdaptiveOpticsSim, :BuildBackend)
     @test !Base.isexported(AdaptiveOpticsSim, :CPUBuildBackend)
     @test !Base.isexported(AdaptiveOpticsSim, :GPUArrayBuildBackend)

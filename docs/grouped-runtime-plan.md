@@ -36,7 +36,7 @@ In scope:
 
 - grouped source and grouped WFS execution contracts
 - grouped runtime product planning and export ownership
-- grouped detector/WFS/science pipeline reuse
+- grouped detector/wfs/science pipeline reuse
 - grouped benchmark surfaces and validation notes
 
 Out of scope:
@@ -107,7 +107,7 @@ Acceptance:
 Status:
 
 - implemented through shared grouped accumulation helpers in
-  [grouped.jl](../src/WFS/grouped.jl)
+  [grouped.jl](../src/wfs/grouped.jl)
 
 ### GR-4: Grouped Validation Surface
 

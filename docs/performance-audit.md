@@ -70,7 +70,7 @@ Measured allocations for representative calls:
 `compute_optical_gains!` and `calibrate!` both allocate substantially for what
 should ideally be a reusable analysis path.
 
-The main reason is visible in `src/Calibration/gain_sensing_camera.jl`:
+The main reason is visible in `src/calibration/gain_sensing_camera.jl`:
 
 - `frame_norm = frame ./ total`
 - `impulse_response(...)` returns a new matrix
@@ -89,7 +89,7 @@ The two more important LiFT findings are:
 - `lift_interaction_matrix!` still allocates nontrivially
 - `AdaptiveOpticsSim.reconstruct(lift, ...)` allocates more noticeably
 
-Likely sources in `src/WFS/lift.jl`:
+Likely sources in `src/wfs/lift.jl`:
 
 - `coeffs = copy(coeffs0)` or a new `zeros(...)`
 - `diagw = Diagonal(sqrtw)`
@@ -128,7 +128,7 @@ The real tomography cost is build-time:
 - `build_reconstructor(ModelBasedTomography(), ...)` allocated about `185 MB`
 
 This is not surprising. The current model-based build path forms dense
-covariance and signal matrices in `src/Tomography/reconstructors.jl`.
+covariance and signal matrices in `src/tomography/reconstructors.jl`.
 
 That cost is acceptable if tomography build is treated as setup, but it is not
 acceptable if users need to rebuild reconstructors repeatedly inside a control

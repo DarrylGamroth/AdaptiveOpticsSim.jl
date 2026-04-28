@@ -56,14 +56,14 @@ Reference and parity assets:
 
 ### 2. REVOLT / SPECULA assets
 
-Relevant available files in [`../REVOLT`](../REVOLT):
+Relevant available files in [`../REVOLT`](../../REVOLT):
 
 - SPECULA REVOLT sequencer:
-  [`../REVOLT/Python/specula/revolt.py`](../REVOLT/Python/specula/revolt.py)
+  [`../REVOLT/Python/specula/revolt.py`](../../REVOLT/Python/specula/revolt.py)
 - SPECULA SH modal SCAO config:
-  [`../REVOLT/Python/specula/params_revolt_modal.yml`](../REVOLT/Python/specula/params_revolt_modal.yml)
+  [`../REVOLT/Python/specula/params_revolt_modal.yml`](../../REVOLT/Python/specula/params_revolt_modal.yml)
 - SPECULA PWFS modal SCAO config:
-  [`../REVOLT/Python/specula/PWFS/params_revolt_modal_PWFS.yml`](../REVOLT/Python/specula/PWFS/params_revolt_modal_PWFS.yml)
+  [`../REVOLT/Python/specula/PWFS/params_revolt_modal_PWFS.yml`](../../REVOLT/Python/specula/PWFS/params_revolt_modal_PWFS.yml)
 - associated calibration assets in the same tree:
   - `calib_subaps_revolt.yml`
   - `calib_im_rec_modal_revolt.yml`
@@ -136,7 +136,7 @@ Available in:
 - REVOLT Julia:
   [`../REVOLT/Julia/runners/revolt/shwfs.jl`](../../REVOLT/Julia/runners/revolt/shwfs.jl)
 - REVOLT/SPECULA SH config:
-  [`../REVOLT/Python/specula/params_revolt_modal.yml`](../REVOLT/Python/specula/params_revolt_modal.yml)
+  [`../REVOLT/Python/specula/params_revolt_modal.yml`](../../REVOLT/Python/specula/params_revolt_modal.yml)
 
 Recommended class:
 
@@ -164,7 +164,7 @@ Available in:
 - REVOLT Julia:
   [`../REVOLT/Julia/runners/revolt/pwfs.jl`](../../REVOLT/Julia/runners/revolt/pwfs.jl)
 - REVOLT/SPECULA PWFS config:
-  [`../REVOLT/Python/specula/PWFS/params_revolt_modal_PWFS.yml`](../REVOLT/Python/specula/PWFS/params_revolt_modal_PWFS.yml)
+  [`../REVOLT/Python/specula/PWFS/params_revolt_modal_PWFS.yml`](../../REVOLT/Python/specula/PWFS/params_revolt_modal_PWFS.yml)
 - related maintained main-repo runtime surfaces:
   - [`scripts/profile_ao3k_runtime.jl`](../scripts/profile_ao3k_runtime.jl)
   - [`scripts/profile_multi_source_multi_wfs_runtime.jl`](../scripts/profile_multi_source_multi_wfs_runtime.jl)
@@ -218,7 +218,7 @@ Available in:
 - AdaptiveOpticsSim main:
   [`scripts/profile_atmospheric_field_runtime.jl`](../scripts/profile_atmospheric_field_runtime.jl)
 - SPECULA conceptual baseline in:
-  [`../REVOLT/Python/specula/revolt.py`](../REVOLT/Python/specula/revolt.py)
+  [`../REVOLT/Python/specula/revolt.py`](../../REVOLT/Python/specula/revolt.py)
   and associated `AtmoPropagation`-style configs
 
 Recommended class:

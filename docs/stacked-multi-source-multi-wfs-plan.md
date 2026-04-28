@@ -105,7 +105,7 @@ Relevant OOPAO references:
 - `tutorials/how_to_multi_sources.py`
 - `tutorials/how_to_asterism.py`
 - `OOPAO/Telescope.py`
-- `OOPAO/ShackHartmann.py`
+- `OOPAO/ShackHartmannWFS.py`
 - `OOPAO/Pyramid.py`
 - `OOPAO/BioEdge.py`
 
@@ -186,7 +186,7 @@ Julia- and backend-friendly execution model.
 - preserve existing aggregation semantics:
   - concatenated command vector
   - concatenated slopes
-  - per-branch WFS/science frame outputs
+  - per-branch wfs/science frame outputs
 
 ### Validation
 

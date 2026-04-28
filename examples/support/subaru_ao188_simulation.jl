@@ -11,7 +11,7 @@ import AdaptiveOpticsSim: step!, readout, runtime_timing, convert_noise, validat
     supports_detector_output, supports_grouped_execution, wfs_output_metadata, init_execution_state
 
 export AO188ActuatorSupportModel, CircularActuatorSupport
-export SubaruHighOrderWFSModel, OperationalShackHartmannModel, AO188CurvatureModel
+export SubaruHighOrderWFSModel, OperationalShackHartmannWFSModel, AO188CurvatureModel
 export AO188ReplayMode, DirectReplayMode, PreparedReplayMode
 export AO188LatencyModel, AO188DetectorConfig, AO188WFSDetectorConfig, AO188APDDetectorConfig
 export AO188SimulationParams, AO188CurvatureSimulationParams
@@ -22,7 +22,7 @@ abstract type AO188ActuatorSupportModel end
 struct CircularActuatorSupport <: AO188ActuatorSupportModel end
 
 abstract type SubaruHighOrderWFSModel end
-struct OperationalShackHartmannModel <: SubaruHighOrderWFSModel end
+struct OperationalShackHartmannWFSModel <: SubaruHighOrderWFSModel end
 struct AO188CurvatureModel{T<:AbstractFloat,R<:CurvatureReadoutModel,B<:CurvatureBranchResponse{T}} <: SubaruHighOrderWFSModel
     defocus_rms_nm::T
     readout_model::R
@@ -64,9 +64,9 @@ function AO188CurvatureSimulationParams(; kwargs...)
         high_detector=high_detector, rest...)
 end
 
-function _build_high_order_wfs(::OperationalShackHartmannModel, tel::Telescope, params; backend::AbstractArrayBackend=CPUBackend())
+function _build_high_order_wfs(::OperationalShackHartmannWFSModel, tel::Telescope, params; backend::AbstractArrayBackend=CPUBackend())
     T = eltype(tel.state.opd)
-    return ShackHartmann(tel; n_lenslets=params.high_order_samples, mode=Diffractive(), T=T, backend=backend)
+    return ShackHartmannWFS(tel; n_lenslets=params.high_order_samples, mode=Diffractive(), T=T, backend=backend)
 end
 
 function _build_high_order_wfs(model::AO188CurvatureModel, tel::Telescope, params; backend::AbstractArrayBackend=CPUBackend())
@@ -296,7 +296,7 @@ function AO188SimulationParams(;
     profile::FidelityProfile=FastProfile(),
     source_band::Symbol=:I,
     support_model::AO188ActuatorSupportModel=CircularActuatorSupport(),
-    high_order_sensor_model::SubaruHighOrderWFSModel=OperationalShackHartmannModel(),
+    high_order_sensor_model::SubaruHighOrderWFSModel=OperationalShackHartmannWFSModel(),
     branch_execution::AbstractExecutionPolicy=SequentialExecution(),
     replay_mode::AO188ReplayMode=DirectReplayMode(),
     latency::AO188LatencyModel=AO188LatencyModel(),
@@ -575,7 +575,7 @@ function _ao188_calibration_objects(params::AO188SimulationParams{T}) where {T<:
     dm = DeformableMirror(tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=CPUBackend())
     low_dm = DeformableMirror(low_tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=CPUBackend())
     high_wfs = _build_high_order_wfs(params.high_order_sensor_model, tel, params; backend=CPUBackend())
-    low_wfs = ShackHartmann(low_tel; n_lenslets=params.low_order_lenslets, mode=Diffractive(), T=T, backend=CPUBackend())
+    low_wfs = ShackHartmannWFS(low_tel; n_lenslets=params.low_order_lenslets, mode=Diffractive(), T=T, backend=CPUBackend())
     return tel, low_tel, src, dm, low_dm, high_wfs, low_wfs
 end
 
@@ -680,7 +680,7 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
     dm = DeformableMirror(tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=backend)
     low_dm = DeformableMirror(low_tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=backend)
     high_wfs = _build_high_order_wfs(params.high_order_sensor_model, tel, params; backend=backend)
-    low_wfs = ShackHartmann(low_tel; n_lenslets=params.low_order_lenslets, mode=Diffractive(), T=T, backend=backend)
+    low_wfs = ShackHartmannWFS(low_tel; n_lenslets=params.low_order_lenslets, mode=Diffractive(), T=T, backend=backend)
     high_detector = isnothing(params.high_detector) ? nothing : detector_from_config(params.high_detector; backend=backend)
     low_detector = detector_from_config(params.low_detector; backend=backend)
 

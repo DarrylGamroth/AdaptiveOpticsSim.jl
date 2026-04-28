@@ -26,10 +26,10 @@ The goal is not to refactor the code in this document. The goal is to:
 
 Current line counts:
 
-- [`src/WFS/shack_hartmann.jl`](../src/WFS/shack_hartmann.jl): `2167`
-- [`src/WFS/pyramid.jl`](../src/WFS/pyramid.jl): `1463`
-- [`src/WFS/bioedge.jl`](../src/WFS/bioedge.jl): `1241`
-- [`src/Control/runtime.jl`](../src/Control/runtime.jl): `1123`
+- [`src/wfs/shack_hartmann.jl`](../src/wfs/shack_hartmann.jl): `2167`
+- [`src/wfs/pyramid.jl`](../src/wfs/pyramid.jl): `1463`
+- [`src/wfs/bioedge.jl`](../src/wfs/bioedge.jl): `1241`
+- [`src/control/runtime.jl`](../src/control/runtime.jl): `1123`
 - [`test/runtests.jl`](../test/runtests.jl): `12`
 - [`test/testsets/detectors_and_wfs.jl`](../test/testsets/detectors_and_wfs.jl): `4`
 
@@ -40,35 +40,35 @@ package boundary.
 
 Current entry-point line counts:
 
-- [`src/WFS/shack_hartmann.jl`](../src/WFS/shack_hartmann.jl): `12`
-- [`src/WFS/pyramid.jl`](../src/WFS/pyramid.jl): `11`
-- [`src/WFS/bioedge.jl`](../src/WFS/bioedge.jl): `10`
-- [`src/Control/runtime.jl`](../src/Control/runtime.jl): `12`
+- [`src/wfs/shack_hartmann.jl`](../src/wfs/shack_hartmann.jl): `12`
+- [`src/wfs/pyramid.jl`](../src/wfs/pyramid.jl): `11`
+- [`src/wfs/bioedge.jl`](../src/wfs/bioedge.jl): `10`
+- [`src/control/runtime.jl`](../src/control/runtime.jl): `12`
 - [`test/runtests.jl`](../test/runtests.jl): `8`
 
 Current split layout:
 
 - Shack-Hartmann:
-  - [`src/WFS/shack_hartmann/setup.jl`](../src/WFS/shack_hartmann/setup.jl)
-  - [`src/WFS/shack_hartmann/measure.jl`](../src/WFS/shack_hartmann/measure.jl)
-  - [`src/WFS/shack_hartmann/stacks.jl`](../src/WFS/shack_hartmann/stacks.jl)
-  - [`src/WFS/shack_hartmann/signals.jl`](../src/WFS/shack_hartmann/signals.jl)
-  - [`src/WFS/shack_hartmann/lgs.jl`](../src/WFS/shack_hartmann/lgs.jl)
+  - [`src/wfs/shack_hartmann/setup.jl`](../src/wfs/shack_hartmann/setup.jl)
+  - [`src/wfs/shack_hartmann/measure.jl`](../src/wfs/shack_hartmann/measure.jl)
+  - [`src/wfs/shack_hartmann/stacks.jl`](../src/wfs/shack_hartmann/stacks.jl)
+  - [`src/wfs/shack_hartmann/signals.jl`](../src/wfs/shack_hartmann/signals.jl)
+  - [`src/wfs/shack_hartmann/lgs.jl`](../src/wfs/shack_hartmann/lgs.jl)
 - Pyramid:
-  - [`src/WFS/pyramid/setup.jl`](../src/WFS/pyramid/setup.jl)
-  - [`src/WFS/pyramid/measure.jl`](../src/WFS/pyramid/measure.jl)
-  - [`src/WFS/pyramid/optics.jl`](../src/WFS/pyramid/optics.jl)
-  - [`src/WFS/pyramid/signals.jl`](../src/WFS/pyramid/signals.jl)
+  - [`src/wfs/pyramid/setup.jl`](../src/wfs/pyramid/setup.jl)
+  - [`src/wfs/pyramid/measure.jl`](../src/wfs/pyramid/measure.jl)
+  - [`src/wfs/pyramid/optics.jl`](../src/wfs/pyramid/optics.jl)
+  - [`src/wfs/pyramid/signals.jl`](../src/wfs/pyramid/signals.jl)
 - BioEdge:
-  - [`src/WFS/bioedge/setup.jl`](../src/WFS/bioedge/setup.jl)
-  - [`src/WFS/bioedge/measure.jl`](../src/WFS/bioedge/measure.jl)
-  - [`src/WFS/bioedge/signals.jl`](../src/WFS/bioedge/signals.jl)
+  - [`src/wfs/bioedge/setup.jl`](../src/wfs/bioedge/setup.jl)
+  - [`src/wfs/bioedge/measure.jl`](../src/wfs/bioedge/measure.jl)
+  - [`src/wfs/bioedge/signals.jl`](../src/wfs/bioedge/signals.jl)
 - Runtime:
-  - [`src/Control/runtime/types.jl`](../src/Control/runtime/types.jl)
-  - [`src/Control/runtime/construction.jl`](../src/Control/runtime/construction.jl)
-  - [`src/Control/runtime/outputs.jl`](../src/Control/runtime/outputs.jl)
-  - [`src/Control/runtime/execution.jl`](../src/Control/runtime/execution.jl)
-  - [`src/Control/runtime/timing.jl`](../src/Control/runtime/timing.jl)
+  - [`src/control/runtime/types.jl`](../src/control/runtime/types.jl)
+  - [`src/control/runtime/construction.jl`](../src/control/runtime/construction.jl)
+  - [`src/control/runtime/outputs.jl`](../src/control/runtime/outputs.jl)
+  - [`src/control/runtime/execution.jl`](../src/control/runtime/execution.jl)
+  - [`src/control/runtime/timing.jl`](../src/control/runtime/timing.jl)
 - Tests:
   - [`test/runtests_head.jl`](../test/runtests_head.jl)
   - [`test/testsets/core_optics.jl`](../test/testsets/core_optics.jl)
@@ -84,7 +84,7 @@ Current split layout:
 
 ## Inventory
 
-### 1. `src/WFS/shack_hartmann.jl`
+### 1. `src/wfs/shack_hartmann.jl`
 
 Current responsibility clusters:
 
@@ -108,31 +108,31 @@ Current responsibility clusters:
 
 Recommended split target:
 
-- `src/WFS/shack_hartmann_types.jl`
+- `src/wfs/shack_hartmann_types.jl`
   - params/state/type
   - constructor
-- `src/WFS/shack_hartmann_sampling.jl`
+- `src/wfs/shack_hartmann_sampling.jl`
   - valid mask
   - phasor
   - buffer prep
   - sample-spot helpers
-- `src/WFS/shack_hartmann_measure.jl`
+- `src/wfs/shack_hartmann_measure.jl`
   - main geometric/diffractive `measure!` dispatch surface
-- `src/WFS/shack_hartmann_grouped.jl`
+- `src/wfs/shack_hartmann_grouped.jl`
   - spectral
   - asterism
   - batched grouped execution
-- `src/WFS/shack_hartmann_detector.jl`
+- `src/wfs/shack_hartmann_detector.jl`
   - detector-coupled paths
   - pixel-product ownership
-- `src/WFS/shack_hartmann_lgs.jl`
+- `src/wfs/shack_hartmann_lgs.jl`
   - elongation
   - kernel generation
-- `src/WFS/shack_hartmann_calibration.jl`
+- `src/wfs/shack_hartmann_calibration.jl`
   - reference signal
   - calibration ramp
   - centroid sums
-- `src/WFS/shack_hartmann_kernels.jl`
+- `src/wfs/shack_hartmann_kernels.jl`
   - KA kernels only
 
 Highest-risk dependencies:
@@ -158,7 +158,7 @@ Implementation risk:
 
 - high
 
-### 2. `src/WFS/pyramid.jl`
+### 2. `src/wfs/pyramid.jl`
 
 Current responsibility clusters:
 
@@ -178,22 +178,22 @@ Current responsibility clusters:
 
 Recommended split target:
 
-- `src/WFS/pyramid_types.jl`
-- `src/WFS/pyramid_masks.jl`
+- `src/wfs/pyramid_types.jl`
+- `src/wfs/pyramid_masks.jl`
   - phasor
   - mask construction
   - modulation phases
-- `src/WFS/pyramid_grouped.jl`
+- `src/wfs/pyramid_grouped.jl`
   - grouped asterism/spectral/extended-source accumulation
-- `src/WFS/pyramid_signal.jl`
+- `src/wfs/pyramid_signal.jl`
   - `pyramid_signal!`
   - normalization
   - valid-i4q selection
-- `src/WFS/pyramid_measure.jl`
+- `src/wfs/pyramid_measure.jl`
   - main `measure!` dispatch
-- `src/WFS/pyramid_lgs.jl`
-- `src/WFS/pyramid_calibration.jl`
-- `src/WFS/pyramid_kernels.jl`
+- `src/wfs/pyramid_lgs.jl`
+- `src/wfs/pyramid_calibration.jl`
+- `src/wfs/pyramid_kernels.jl`
 
 Highest-risk dependencies:
 
@@ -217,7 +217,7 @@ Implementation risk:
 
 - medium-high
 
-### 3. `src/WFS/bioedge.jl`
+### 3. `src/wfs/bioedge.jl`
 
 Current responsibility clusters:
 
@@ -235,19 +235,19 @@ Current responsibility clusters:
 
 Recommended split target:
 
-- `src/WFS/bioedge_types.jl`
-- `src/WFS/bioedge_masks.jl`
+- `src/wfs/bioedge_types.jl`
+- `src/wfs/bioedge_masks.jl`
   - edge mask
   - phasor
   - mask construction
-- `src/WFS/bioedge_grouped.jl`
-- `src/WFS/bioedge_signal.jl`
+- `src/wfs/bioedge_grouped.jl`
+- `src/wfs/bioedge_signal.jl`
   - signal and normalization
   - valid-i4q handling
-- `src/WFS/bioedge_measure.jl`
-- `src/WFS/bioedge_lgs.jl`
-- `src/WFS/bioedge_calibration.jl`
-- `src/WFS/bioedge_kernels.jl`
+- `src/wfs/bioedge_measure.jl`
+- `src/wfs/bioedge_lgs.jl`
+- `src/wfs/bioedge_calibration.jl`
+- `src/wfs/bioedge_kernels.jl`
 
 Highest-risk dependencies:
 
@@ -271,7 +271,7 @@ Implementation risk:
 
 - medium
 
-### 4. `src/Control/runtime.jl`
+### 4. `src/control/runtime.jl`
 
 Current responsibility clusters:
 
@@ -291,25 +291,25 @@ Current responsibility clusters:
 
 Recommended split target:
 
-- `src/Control/runtime_types.jl`
+- `src/control/runtime_types.jl`
   - policies
   - profiles
   - data structs
-- `src/Control/runtime_latency.jl`
+- `src/control/runtime_latency.jl`
   - delay lines
   - latency model
-- `src/Control/runtime_prepare.jl`
+- `src/control/runtime_prepare.jl`
   - build/preparation
   - prepared-state helpers
-- `src/Control/runtime_interfaces.jl`
+- `src/control/runtime_interfaces.jl`
   - interface wrappers
   - readout views
   - composition
-- `src/Control/runtime_execute.jl`
+- `src/control/runtime_execute.jl`
   - `sense!`
   - `step!`
   - command application and staged execution
-- `src/Control/runtime_timing.jl`
+- `src/control/runtime_timing.jl`
   - timing and profiling helpers
 
 Highest-risk dependencies:
@@ -394,18 +394,18 @@ These are not priority split targets yet:
 
 - [`src/AdaptiveOpticsSim.jl`](../src/AdaptiveOpticsSim.jl)
   - large export surface, but not a monolithic algorithm file
-- [`src/Atmosphere/multilayer.jl`](../src/Atmosphere/multilayer.jl)
-  - still manageable in size compared with the WFS/runtime files
-- [`src/Detectors/frame_capture.jl`](../src/Detectors/frame_capture.jl)
+- [`src/atmosphere/multilayer.jl`](../src/atmosphere/multilayer.jl)
+  - still manageable in size compared with the wfs/runtime files
+- [`src/detectors/frame_capture.jl`](../src/detectors/frame_capture.jl)
   - worth watching, but not the first modularization target
 
 ## Ranked Split Order Across The Package
 
 1. `test/runtests.jl`
-2. `src/Control/runtime.jl`
-3. `src/WFS/shack_hartmann.jl`
-4. `src/WFS/pyramid.jl`
-5. `src/WFS/bioedge.jl`
+2. `src/control/runtime.jl`
+3. `src/wfs/shack_hartmann.jl`
+4. `src/wfs/pyramid.jl`
+5. `src/wfs/bioedge.jl`
 
 Rationale:
 

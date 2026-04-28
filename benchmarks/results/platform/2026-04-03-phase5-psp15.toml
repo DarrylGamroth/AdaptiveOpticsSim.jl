@@ -2,9 +2,9 @@ artifact_id = "PLATFORM-ORCH-2026-04-03"
 generated_on = "2026-04-03"
 
 [scope]
-families = ["single_platform_runtime", "compatible_grouped_runtime", "mixed_grouped_runtime"]
+families = ["single_control_loop_runtime", "compatible_grouped_runtime", "mixed_grouped_runtime"]
 notes = "CUDA result is recorded from the maintained spiders host run because this local environment does not provide a CUDA device."
-artifact_kind = "platform_orchestration_runtime"
+artifact_kind = "control_loop_orchestration_runtime"
 backends = ["cpu", "amdgpu", "cuda"]
 
 [cases.cuda_medium]

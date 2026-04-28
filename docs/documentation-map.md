@@ -71,10 +71,10 @@ Use these when the task is cross-package or instrument-truth work:
   - stable synthesis guide for platform-scale structure and boundaries
 - [`platform-workflows.md`](./platform-workflows.md)
   - stable workflow guide for script-first simulation, validation, and benchmarking
-- [`platform-orchestration.md`](./platform-orchestration.md)
+- [`control-loop-orchestration.md`](./control-loop-orchestration.md)
   - typed scenario/config layer for Julia-native runtime composition
-- [`platform-orchestration-validation.md`](./platform-orchestration-validation.md)
-  - maintained benchmark and backend evidence for the `RuntimeScenario` layer
+- [`control-loop-orchestration-validation.md`](./control-loop-orchestration-validation.md)
+  - maintained benchmark and backend evidence for the `ControlLoopScenario` layer
 - [`platform-strengthening-closeout.md`](./platform-strengthening-closeout.md)
   - explicit post-plan decision on what still trails SPECULA and what comes next
 - [`platform-manifest-defer.md`](./platform-manifest-defer.md)
@@ -218,6 +218,13 @@ Use these when the task is cross-package or instrument-truth work:
   - explicit ROCm fallback classification and residual workaround status
 - [`rocm-phase3-rebaseline.md`](./rocm-phase3-rebaseline.md)
   - maintained Phase 3 CPU/AMDGPU/CUDA runtime rebaseline
+
+## Archived Cleanup Records
+
+- [`archive/2026-04/api-cleanup-plan-2026-04.md`](./archive/2026-04/api-cleanup-plan-2026-04.md)
+  - completed runtime/control-loop naming cleanup record
+- [`archive/2026-04/exported-surface-naming-audit.md`](./archive/2026-04/exported-surface-naming-audit.md)
+  - completed exported-surface naming audit that preceded the breaking rename
 - [`gpu-sh-centroid-redesign-plan.md`](./gpu-sh-centroid-redesign-plan.md)
   - redesign plan for a genuinely GPU-friendly Shack-Hartmann centroid/export
     path shared across CUDA and AMDGPU

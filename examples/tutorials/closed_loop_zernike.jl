@@ -12,13 +12,13 @@ function main(; n_iter::Int=4)
     sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=1e-8)
     recon = ModalReconstructor(imat; gain=0.4)
-    branch = RuntimeBranch(:main, sim, recon; rng=rng, wfs_detector=det)
-    cfg = SingleRuntimeConfig(
+    branch = ControlLoopBranch(:main, sim, recon; rng=rng, wfs_detector=det)
+    cfg = SingleControlLoopConfig(
         name=:tutorial_closed_loop_zernike,
         branch_label=:main,
-        products=RuntimeProductRequirements(slopes=true, wfs_pixels=true),
+        outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true),
     )
-    scenario = build_runtime_scenario(cfg, branch)
+    scenario = build_control_loop_scenario(cfg, branch)
 
     prepare!(scenario)
     residual_before = zeros(Float64, n_iter)

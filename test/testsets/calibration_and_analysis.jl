@@ -5,10 +5,10 @@
         tel.state.opd[i, j] = i + j / 10
     end
 
-    sh_plain = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
-    sh_shift = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8,
+    sh_plain = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
+    sh_shift = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8,
         half_pixel_shift=true)
-    sh_thresh = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8,
+    sh_thresh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8,
         threshold_cog=0.2)
     @test measure!(sh_plain, tel, src) != measure!(sh_shift, tel, src)
     @test measure!(sh_plain, tel, src) != measure!(sh_thresh, tel, src)
@@ -38,22 +38,22 @@
     @test length(bio_gray_slopes) == 2 * 4 * 4
     @test all(isfinite, bio_gray_slopes)
 end
-@testset "Calibration vault and modal basis" begin
+@testset "Control matrix and modal basis" begin
     D = rand(4, 3)
-    vault = CalibrationVault(D)
-    @test size(vault.M) == (3, 4)
-    @test vault.cond > 0
-    @test vault.effective_rank == 3
-    vault_trunc = with_truncation(vault, 1)
-    @test vault_trunc.n_trunc == 1
+    control_matrix = ControlMatrix(D)
+    @test size(control_matrix.M) == (3, 4)
+    @test control_matrix.cond > 0
+    @test control_matrix.effective_rank == 3
+    truncated_control_matrix = with_truncation(control_matrix, 1)
+    @test truncated_control_matrix.n_trunc == 1
 
     D_sing = [1.0 0.0; 0.0 1e-12]
-    vault_exact = CalibrationVault(D_sing; policy=ExactPseudoInverse())
-    vault_tsvd = CalibrationVault(D_sing; policy=TSVDInverse(rtol=1e-9))
-    @test vault_exact.effective_rank == 2
-    @test vault_tsvd.effective_rank == 1
-    @test maximum(abs, vault_exact.M .- vault_tsvd.M) > 0
-    @test CalibrationVault(D_sing).policy isa TSVDInverse
+    exact_control_matrix = ControlMatrix(D_sing; policy=ExactPseudoInverse())
+    tsvd_control_matrix = ControlMatrix(D_sing; policy=TSVDInverse(rtol=1e-9))
+    @test exact_control_matrix.effective_rank == 2
+    @test tsvd_control_matrix.effective_rank == 1
+    @test maximum(abs, exact_control_matrix.M .- tsvd_control_matrix.M) > 0
+    @test ControlMatrix(D_sing).policy isa TSVDInverse
 
     imat = InteractionMatrix(D_sing, 0.1)
     recon_exact = ModalReconstructor(imat; policy=ExactPseudoInverse())
@@ -265,7 +265,7 @@ end
 @testset "Mis-registration identification" begin
     tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
-    wfs = ShackHartmann(tel; n_lenslets=2)
+    wfs = ShackHartmannWFS(tel; n_lenslets=2)
     basis = modal_basis(dm, tel; n_modes=2)
     meta = AdaptiveOpticsSim.compute_meta_sensitivity_matrix(tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
     est = AdaptiveOpticsSim.estimate_misregistration(meta, meta.calib0.D; misregistration_zero=Misregistration())
@@ -284,7 +284,7 @@ end
     src = Source(band=:I, magnitude=0.0)
     lgs = LGSSource()
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
-    wfs = ShackHartmann(tel; n_lenslets=2)
+    wfs = ShackHartmannWFS(tel; n_lenslets=2)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     det = Detector(noise=NoiseNone())
     apd = APDDetector(noise=NoisePhoton())
@@ -297,7 +297,7 @@ end
     ctrl = DiscreteIntegratorController(length(wfs.state.slopes); gain=0.1, tau=0.02)
     sim = AOSimulation(tel, src, atm, dm, wfs)
     runtime = ClosedLoopRuntime(sim, modal; rng=MersenneTwister(9))
-    wfs_diffractive = ShackHartmann(tel; n_lenslets=2, mode=Diffractive())
+    wfs_diffractive = ShackHartmannWFS(tel; n_lenslets=2, mode=Diffractive())
     poly = with_spectrum(src, SpectralBundle([wavelength(src), 1.1 * wavelength(src)], [0.7, 0.3]))
     pyr = PyramidWFS(tel; pupil_samples=2, mode=Diffractive())
     bio = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
@@ -436,7 +436,7 @@ end
     src = Source(band=:I, magnitude=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
-    wfs = ShackHartmann(tel; n_lenslets=2)
+    wfs = ShackHartmannWFS(tel; n_lenslets=2)
     det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
 
     basis = modal_basis(dm, tel; n_modes=2)
@@ -448,13 +448,13 @@ end
     imat_basis = interaction_matrix(dm, wfs, tel, basis.M2C; amplitude=0.1)
     assert_interaction_matrix_contract(imat_basis, length(wfs.state.slopes), size(basis.M2C, 2), 0.1)
 
-    vault = CalibrationVault(imat.matrix)
-    assert_calibration_vault_contract(vault, imat.matrix)
-    vault_noinv = CalibrationVault(imat.matrix; invert=false)
-    assert_calibration_vault_contract(vault_noinv, imat.matrix; inverted=false)
-    vault_trunc = with_truncation(vault, 0)
-    assert_calibration_vault_contract(vault_trunc, imat.matrix)
-    @test vault_trunc.n_trunc == 0
+    control_matrix = ControlMatrix(imat.matrix)
+    assert_control_matrix_contract(control_matrix, imat.matrix)
+    noninverted_control_matrix = ControlMatrix(imat.matrix; invert=false)
+    assert_control_matrix_contract(noninverted_control_matrix, imat.matrix; inverted=false)
+    truncated_control_matrix = with_truncation(control_matrix, 0)
+    assert_control_matrix_contract(truncated_control_matrix, imat.matrix)
+    @test truncated_control_matrix.n_trunc == 0
     calib = ao_calibration(tel, dm, wfs; n_modes=2, amplitude=0.1)
     assert_ao_calibration_contract(calib, length(dm.state.coefs), 2)
 

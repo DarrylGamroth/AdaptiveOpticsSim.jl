@@ -168,7 +168,7 @@ The following are outside the current support claim:
 - Metal backend support
 - backend-audit surfaces that are not part of the maintained hardware targets
   and release-validation cadence
-- broad claims about every detector/WFS/backend combination outside the
+- broad claims about every detector/wfs/backend combination outside the
   maintained evidence surfaces
 - cross-package grouped/platform equivalence beyond the currently normalized
   contracts

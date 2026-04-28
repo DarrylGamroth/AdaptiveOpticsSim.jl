@@ -46,17 +46,17 @@ The goal is not to redefine the final validation matrix here. The goal is to:
 
 | Family ID | Model family | Primary code surface | Current evidence | Primary baseline today | Current status | Main gaps |
 | --- | --- | --- | --- | --- | --- | --- |
-| `MV-01` | Atmosphere: finite and infinite multilayer propagation | [`src/Atmosphere/multilayer.jl`](../src/Atmosphere/multilayer.jl), [`src/Atmosphere/infinite_screen.jl`](../src/Atmosphere/infinite_screen.jl) | `A`, `G`, `P`, `M` | analytic + backend parity | strong | no frozen OOPAO/SPECULA bundle for infinite atmosphere statistics |
-| `MV-02` | Phase statistics and covariance helpers | [`src/Atmosphere/phase_stats.jl`](../src/Atmosphere/phase_stats.jl), [`src/Core/kv56.jl`](../src/Core/kv56.jl) | `A`, `G`, `M` | analytic | medium | no dedicated benchmark/accuracy report beyond tests and smoke |
-| `MV-03` | Core optics: electric field, Fraunhofer, Fresnel, atmospheric field propagation | [`src/Optics/electric_field.jl`](../src/Optics/electric_field.jl), [`src/Optics/propagation.jl`](../src/Optics/propagation.jl), [`src/Optics/atmospheric_field_propagation.jl`](../src/Optics/atmospheric_field_propagation.jl) | `A`, `G`, `P`, `M` | analytic + SPECULA-informed design | medium-strong | no frozen SPECULA comparison bundle yet |
-| `MV-04` | Detectors and detector-family execution | [`src/Detectors/`](../src/Detectors) | `A`, `G`, `P`, `M` | analytic + runtime behavior | medium | limited frozen detector reference datasets; realism mostly exercised through runtime scenarios |
-| `MV-05` | Shack-Hartmann WFS | [`src/WFS/shack_hartmann.jl`](../src/WFS/shack_hartmann.jl), [`src/WFS/subapertures.jl`](../src/WFS/subapertures.jl) | `A`, `R`, `G`, `P`, `M` | OOPAO | strong | no separate maintained cross-package benchmark report yet |
-| `MV-06` | Pyramid and BioEdge WFS | [`src/WFS/pyramid.jl`](../src/WFS/pyramid.jl), [`src/WFS/bioedge.jl`](../src/WFS/bioedge.jl) | `A`, `R`, `G`, `P`, `M` | OOPAO | strong | SPECULA-targeted parity missing for grouped/polychromatic cases |
-| `MV-07` | Curvature and Zernike WFS | [`src/WFS/curvature.jl`](../src/WFS/curvature.jl), [`src/WFS/zernike.jl`](../src/WFS/zernike.jl) | `A`, `G`, `P`, `M` | analytic + local regression | medium | no frozen external reference bundles yet |
-| `MV-08` | LiFT and gain-sensing camera | [`src/Calibration/lift.jl`](../src/Calibration/lift.jl), gain-sensing surfaces in [`src/`](../src) | `A`, `R`, `G`, `M` | OOPAO | medium-strong | limited runtime/benchmark evidence outside compact regression cases |
-| `MV-09` | Runtime and closed-loop execution | [`src/Control/runtime.jl`](../src/Control/runtime.jl) | `A`, `R`, `G`, `P`, `M` | OOPAO + runtime benchmarks | strong | cross-package benchmark harness not yet formalized |
-| `MV-10` | Tomography and reconstruction | [`src/Tomography/`](../src/Tomography), [`test/tomography.jl`](../test/tomography.jl) | `A`, `R`, `G`, `M` | pyTomoAO / OOPAO-adjacent frozen references | medium-strong | benchmark evidence and representative runtime coverage are thin |
-| `MV-11` | GPU backend execution policy | [`test/optional_gpu_backends.jl`](../test/optional_gpu_backends.jl), [`scripts/gpu_smoke_contract.jl`](../scripts/gpu_smoke_contract.jl), backend extensions in [`ext/`](../ext) | `G`, `P`, `M` | backend parity | strong | still lacks a single synthesized backend validation guide |
+| `MV-01` | Atmosphere: finite and infinite multilayer propagation | [`src/atmosphere/multilayer.jl`](../src/atmosphere/multilayer.jl), [`src/atmosphere/infinite_screen.jl`](../src/atmosphere/infinite_screen.jl) | `A`, `G`, `P`, `M` | analytic + backend parity | strong | no frozen OOPAO/SPECULA bundle for infinite atmosphere statistics |
+| `MV-02` | Phase statistics and covariance helpers | [`src/atmosphere/phase_stats.jl`](../src/atmosphere/phase_stats.jl), [`src/core/kv56.jl`](../src/core/kv56.jl) | `A`, `G`, `M` | analytic | medium | no dedicated benchmark/accuracy report beyond tests and smoke |
+| `MV-03` | Core optics: electric field, Fraunhofer, Fresnel, atmospheric field propagation | [`src/optics/electric_field.jl`](../src/optics/electric_field.jl), [`src/optics/propagation.jl`](../src/optics/propagation.jl), [`src/optics/atmospheric_field_propagation.jl`](../src/optics/atmospheric_field_propagation.jl) | `A`, `G`, `P`, `M` | analytic + SPECULA-informed design | medium-strong | no frozen SPECULA comparison bundle yet |
+| `MV-04` | Detectors and detector-family execution | [`src/detectors/`](../src/detectors) | `A`, `G`, `P`, `M` | analytic + runtime behavior | medium | limited frozen detector reference datasets; realism mostly exercised through runtime scenarios |
+| `MV-05` | Shack-Hartmann WFS | [`src/wfs/shack_hartmann.jl`](../src/wfs/shack_hartmann.jl), [`src/wfs/subapertures.jl`](../src/wfs/subapertures.jl) | `A`, `R`, `G`, `P`, `M` | OOPAO | strong | no separate maintained cross-package benchmark report yet |
+| `MV-06` | Pyramid and BioEdge WFS | [`src/wfs/pyramid.jl`](../src/wfs/pyramid.jl), [`src/wfs/bioedge.jl`](../src/wfs/bioedge.jl) | `A`, `R`, `G`, `P`, `M` | OOPAO | strong | SPECULA-targeted parity missing for grouped/polychromatic cases |
+| `MV-07` | Curvature and Zernike WFS | [`src/wfs/curvature.jl`](../src/wfs/curvature.jl), [`src/wfs/zernike.jl`](../src/wfs/zernike.jl) | `A`, `G`, `P`, `M` | analytic + local regression | medium | no frozen external reference bundles yet |
+| `MV-08` | LiFT and gain-sensing camera | [`src/wfs/lift.jl`](../src/wfs/lift.jl), gain-sensing surfaces in [`src/`](../src) | `A`, `R`, `G`, `M` | OOPAO | medium-strong | limited runtime/benchmark evidence outside compact regression cases |
+| `MV-09` | Runtime and closed-loop execution | [`src/control/runtime.jl`](../src/control/runtime.jl) | `A`, `R`, `G`, `P`, `M` | OOPAO + runtime benchmarks | strong | cross-package benchmark harness not yet formalized |
+| `MV-10` | Tomography and reconstruction | [`src/tomography/`](../src/tomography), [`test/tomography.jl`](../test/tomography.jl) | `A`, `R`, `G`, `M` | pyTomoAO / OOPAO-adjacent frozen references | medium-strong | benchmark evidence and representative runtime coverage are thin |
+| `MV-11` | GPU backend execution policy | [`test/optional_cuda_backends.jl`](../test/optional_cuda_backends.jl), [`test/optional_amdgpu_backends.jl`](../test/optional_amdgpu_backends.jl), [`scripts/gpu_smoke_contract.jl`](../scripts/gpu_smoke_contract.jl), backend extensions in [`ext/`](../ext) | `G`, `P`, `M` | backend parity | strong | backend validation guide now exists; release evidence still requires hardware runs |
 | `MV-12` | Tutorials and workflow examples | [`examples/tutorials/`](../examples/tutorials), [`test/runtests.jl`](../test/runtests.jl) | `A`, `M` | local workflow correctness | medium | examples are exercised, but not organized as a user-facing validity story |
 
 ## Evidence Inventory by Family
@@ -119,7 +119,8 @@ Primary evidence:
 - detector regression set in [`test/runtests.jl`](../test/runtests.jl)
 - realistic runtime exercise via
   [`scripts/profile_ao3k_runtime.jl`](../scripts/profile_ao3k_runtime.jl)
-- backend exercise in [`test/optional_gpu_backends.jl`](../test/optional_gpu_backends.jl)
+- backend exercise in [`test/optional_cuda_backends.jl`](../test/optional_cuda_backends.jl)
+  and [`test/optional_amdgpu_backends.jl`](../test/optional_amdgpu_backends.jl)
 
 Current gaps:
 
@@ -233,7 +234,8 @@ Current gaps:
 
 Primary evidence:
 
-- optional AMDGPU smoke in [`test/optional_gpu_backends.jl`](../test/optional_gpu_backends.jl)
+- optional backend smoke in [`test/optional_cuda_backends.jl`](../test/optional_cuda_backends.jl)
+  and [`test/optional_amdgpu_backends.jl`](../test/optional_amdgpu_backends.jl)
 - CUDA/AMDGPU smoke matrix in
   [`scripts/gpu_smoke_contract.jl`](../scripts/gpu_smoke_contract.jl)
 - realistic backend benchmarks in:

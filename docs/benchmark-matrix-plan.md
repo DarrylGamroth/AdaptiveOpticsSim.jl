@@ -41,10 +41,10 @@ Status:
     with interpretation in
     [`./rocm-phase3-rebaseline.md`](./rocm-phase3-rebaseline.md)
 - [x] platform-strengthening Phase 5 orchestration evidence added
-  - direct `RuntimeScenario` runtime evidence now lives under
+  - direct `ControlLoopScenario` runtime evidence now lives under
     [`../benchmarks/results/platform`](../benchmarks/results/platform)
     with interpretation in
-    [`./platform-orchestration-validation.md`](./platform-orchestration-validation.md)
+    [`./control-loop-orchestration-validation.md`](./control-loop-orchestration-validation.md)
   - the normalized cross-package platform contract now lives in
     [`./revolt-platform-benchmark-contract.md`](./revolt-platform-benchmark-contract.md)
 
@@ -153,9 +153,9 @@ Examples already in place:
 - GPU smoke now also guards the maintained coupled atmosphere-to-field
   propagation surface and curvature-through-atmosphere sensing path
 - GPU smoke now also guards maintained broad-band diffractive WFS execution for
-  `ShackHartmann` and `PyramidWFS` through `SpectralSource`
+  `ShackHartmannWFS` and `PyramidWFS` through `SpectralSource`
 - GPU smoke now also guards maintained extended-source diffractive WFS
-  execution for `ShackHartmann` and `PyramidWFS` through `ExtendedSource`
+  execution for `ShackHartmannWFS` and `PyramidWFS` through `ExtendedSource`
 
 ### Class B: Representative Benchmarks
 

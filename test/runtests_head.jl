@@ -143,25 +143,25 @@ function assert_interaction_matrix_contract(imat, expected_rows::Int, expected_c
     @test calibration_amplitude(imat) ≈ amplitude
 end
 
-function assert_calibration_vault_contract(vault, forward::AbstractMatrix; inverted::Bool=true)
-    @test vault isa CalibrationVault
-    @test vault.D === forward
-    @test forward_operator(vault) === forward
-    @test inverse_policy(vault) === vault.policy
-    @test singular_values(vault) === vault.singular_values
-    @test isequal(condition_number(vault), vault.cond)
-    @test effective_rank(vault) == vault.effective_rank
-    @test truncation_count(vault) == vault.n_trunc
+function assert_control_matrix_contract(control_matrix, forward::AbstractMatrix; inverted::Bool=true)
+    @test control_matrix isa ControlMatrix
+    @test control_matrix.D === forward
+    @test forward_operator(control_matrix) === forward
+    @test inverse_policy(control_matrix) === control_matrix.policy
+    @test singular_values(control_matrix) === control_matrix.singular_values
+    @test isequal(condition_number(control_matrix), control_matrix.cond)
+    @test effective_rank(control_matrix) == control_matrix.effective_rank
+    @test truncation_count(control_matrix) == control_matrix.n_trunc
     if inverted
-        @test inverse_operator_matrix(vault) === vault.M
-        @test !isnothing(vault.M)
-        @test size(vault.M, 2) == size(forward, 1)
-        @test length(singular_values(vault)) == min(size(forward)...)
-        @test effective_rank(vault) >= 0
+        @test inverse_operator_matrix(control_matrix) === control_matrix.M
+        @test !isnothing(control_matrix.M)
+        @test size(control_matrix.M, 2) == size(forward, 1)
+        @test length(singular_values(control_matrix)) == min(size(forward)...)
+        @test effective_rank(control_matrix) >= 0
     else
-        @test isnothing(inverse_operator_matrix(vault))
-        @test isnothing(vault.M)
-        @test isempty(singular_values(vault))
+        @test isnothing(inverse_operator_matrix(control_matrix))
+        @test isnothing(control_matrix.M)
+        @test isempty(singular_values(control_matrix))
     end
 end
 
@@ -181,15 +181,15 @@ function assert_ao_calibration_contract(calib::AOCalibration, n_commands::Int, n
     @test modal_to_command(calib) === calib.M2C
     @test sampled_basis(calib) === calib.basis
     @test modal_projector(calib) === calib.projector
-    @test calibration_vault(calib) === calib.calibration
+    @test control_matrix(calib) === calib.calibration
     @test size(calib.M2C) == (n_commands, n_modes)
     @test size(calib.basis, 2) == n_modes
-    @test calib.calibration isa CalibrationVault
+    @test calib.calibration isa ControlMatrix
 end
 
 function assert_meta_sensitivity_contract(meta::AdaptiveOpticsSim.MetaSensitivity, n_fields::Int)
-    @test meta.calib0 isa CalibrationVault
-    @test meta.meta isa CalibrationVault
+    @test meta.calib0 isa ControlMatrix
+    @test meta.meta isa ControlMatrix
     @test length(meta.field_order) == n_fields
     @test size(meta.meta.D, 2) == n_fields
     @test meta.meta.M !== nothing
@@ -267,7 +267,7 @@ function moving_wfs_slope_trace(;
         wind_direction=[0.0, 90.0],
         altitude=[0.0, 5000.0],
     )
-    wfs = ShackHartmann(tel; n_lenslets=4)
+    wfs = ShackHartmannWFS(tel; n_lenslets=4)
     rng = MersenneTwister(seed)
     trace = Vector{Vector{Float64}}(undef, steps)
     for i in 1:steps

@@ -55,7 +55,7 @@ Implementation:
 - switch HgCdTe readout buffering to those accessors instead of explicit type
   tests
 - add a test that a custom `FrameReadoutProducts` subtype can participate in the
-  public accessor surface without editing `src/Detectors/generic.jl`
+  public accessor surface without editing `src/detectors/generic.jl`
 
 Done when:
 
@@ -84,7 +84,7 @@ Done when:
 
 Goal:
 
-- shrink the central detector capability registry in `src/Detectors/generic.jl`
+- shrink the central detector capability registry in `src/detectors/generic.jl`
 
 Implementation:
 

@@ -18,75 +18,75 @@ Julia adaptive optics simulation toolkit (in development).
 """
 const PROJECT_STATUS = :in_development
 
-include("Core/errors.jl")
-include("Core/types.jl")
-include("Core/profiles.jl")
-include("Core/inverse_policies.jl")
-include("Core/backends.jl")
-include("Core/reductions.jl")
-include("Core/random_services.jl")
-include("Core/config.jl")
-include("Core/utils.jl")
-include("Core/kv56.jl")
-include("Core/workspace.jl")
-include("Core/parallel.jl")
-include("Core/telemetry.jl")
+include("core/errors.jl")
+include("core/types.jl")
+include("core/profiles.jl")
+include("core/inverse_policies.jl")
+include("core/backends.jl")
+include("core/reductions.jl")
+include("core/random_services.jl")
+include("core/config.jl")
+include("core/utils.jl")
+include("core/kv56.jl")
+include("core/workspace.jl")
+include("core/parallel.jl")
+include("core/telemetry.jl")
 
-include("Optics/aperture_masks.jl")
-include("Optics/telescope.jl")
-include("Optics/source.jl")
-include("Optics/spectrum.jl")
-include("Optics/electric_field.jl")
-include("Optics/propagation.jl")
-include("Optics/psf.jl")
-include("Optics/zernike.jl")
-include("Optics/misregistration.jl")
-include("Optics/controllable_optics.jl")
-include("Optics/deformable_mirror.jl")
-include("Detectors/detector.jl")
-include("Optics/asterism.jl")
-include("Optics/extended_source.jl")
-include("Optics/opd_map.jl")
-include("Optics/spatial_filter.jl")
-include("Atmosphere/source_geometry.jl")
-include("Optics/propagation_context.jl")
-include("Atmosphere/kolmogorov.jl")
-include("Atmosphere/infinite_screen_math.jl")
-include("Atmosphere/infinite_screen.jl")
-include("Atmosphere/multilayer.jl")
-include("Atmosphere/phase_stats.jl")
-include("Optics/atmospheric_field_propagation.jl")
-include("Calibration/modal_basis.jl")
-include("Optics/ncpa.jl")
-include("WFS/sensing_modes.jl")
-include("WFS/grouped.jl")
-include("WFS/calibration.jl")
-include("WFS/elongation.jl")
-include("WFS/subapertures.jl")
-include("WFS/shack_hartmann.jl")
-include("WFS/pyramid.jl")
-include("WFS/bioedge.jl")
-include("WFS/zernike.jl")
-include("WFS/curvature.jl")
-include("WFS/interface.jl")
-include("WFS/lift.jl")
-include("Calibration/interaction_matrix.jl")
-include("Calibration/reconstructor.jl")
-include("Calibration/calibration_vault.jl")
-include("Calibration/fitting_error.jl")
-include("Calibration/ao_calibration.jl")
-include("Calibration/fast_atmosphere.jl")
-include("Calibration/initialization.jl")
-include("Calibration/gain_sensing_camera.jl")
-include("Calibration/misregistration_identification.jl")
-include("Control/controller.jl")
-include("Control/products.jl")
-include("Control/runtime.jl")
-include("Control/platform.jl")
-include("Tomography/parameters.jl")
-include("Tomography/geometry.jl")
-include("Tomography/fitting.jl")
-include("Tomography/reconstructors.jl")
+include("optics/aperture_masks.jl")
+include("optics/telescope.jl")
+include("optics/source.jl")
+include("optics/spectrum.jl")
+include("optics/electric_field.jl")
+include("optics/propagation.jl")
+include("optics/psf.jl")
+include("optics/zernike.jl")
+include("optics/misregistration.jl")
+include("optics/controllable_optics.jl")
+include("optics/deformable_mirror.jl")
+include("detectors/detector.jl")
+include("optics/asterism.jl")
+include("optics/extended_source.jl")
+include("optics/opd_map.jl")
+include("optics/spatial_filter.jl")
+include("atmosphere/source_geometry.jl")
+include("optics/propagation_context.jl")
+include("atmosphere/kolmogorov.jl")
+include("atmosphere/infinite_screen_math.jl")
+include("atmosphere/infinite_screen.jl")
+include("atmosphere/multilayer.jl")
+include("atmosphere/phase_stats.jl")
+include("atmosphere/fast_atmosphere.jl")
+include("optics/atmospheric_field_propagation.jl")
+include("calibration/modal_basis.jl")
+include("optics/ncpa.jl")
+include("wfs/sensing_modes.jl")
+include("wfs/grouped.jl")
+include("wfs/calibration.jl")
+include("wfs/elongation.jl")
+include("wfs/subapertures.jl")
+include("wfs/shack_hartmann.jl")
+include("wfs/pyramid.jl")
+include("wfs/bioedge.jl")
+include("wfs/zernike.jl")
+include("wfs/curvature.jl")
+include("wfs/interface.jl")
+include("wfs/lift.jl")
+include("calibration/interaction_matrix.jl")
+include("control/reconstructors.jl")
+include("calibration/control_matrix.jl")
+include("calibration/fitting_error.jl")
+include("calibration/ao_calibration.jl")
+include("simulation/assembly.jl")
+include("calibration/gain_sensing_camera.jl")
+include("calibration/misregistration_identification.jl")
+include("control/controller.jl")
+include("control/runtime_outputs.jl")
+include("control/runtime.jl")
+include("control/control_loop.jl")
+include("tomography/parameters.jl")
+include("tomography/geometry.jl")
+include("tomography/fitting.jl")
+include("tomography/reconstructors.jl")
 
 export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError, UnsupportedAlgorithm, NumericalConditionError
 export FidelityProfile, ScientificProfile, FastProfile, ProfileBundle, default_fidelity_profile
@@ -186,7 +186,7 @@ export SensorType, FrameSensorType, CountingSensorType, AvalancheFrameSensorType
 export CCDSensor, CMOSSensor, EMCCDSensor, InGaAsSensor, HgCdTeAvalancheArraySensor, APDSensor, SPADArraySensor
 export AbstractCMOSOutputModel, NullCMOSOutputModel, StaticCMOSOutputPattern
 export AbstractEMGainModel, ExcessNoiseApproximation, StochasticMultiplicationRegister
-export ShackHartmann, ShackHartmannParams, ShackHartmannState, update_valid_mask!, measure!
+export ShackHartmannWFS, ShackHartmannWFSParams, ShackHartmannWFSState, update_valid_mask!, measure!
 export AbstractValidSubaperturePolicy, GeometryValidSubapertures, FluxThresholdValidSubapertures
 export PyramidWFS, PyramidParams, PyramidState
 export pyramid_modulation_frame!
@@ -203,13 +203,13 @@ export LiFTSolveMode, LiFTSolveAuto, LiFTSolveQR, LiFTSolveNormalEquations
 export LiFTDampingMode, LiFTDampingNone, LiFTLevenbergMarquardt, LiFTAdaptiveLevenbergMarquardt
 export LiFTDiagnostics, diagnostics
 export InteractionMatrix, interaction_matrix
-export CalibrationVault, with_truncation
+export ControlMatrix, with_truncation
 export ModalBasis, KLBasisMethod, KLDMModes, KLHHtPSD
 export dm_basis, kl_modal_basis, modal_basis, basis_from_m2c, basis_projector
 export modal_to_command, sampled_basis, modal_projector
-export AOCalibration, ao_calibration, calibration_vault
+export AOCalibration, ao_calibration, control_matrix
 export calibration_amplitude, inverse_policy, singular_values, condition_number, effective_rank, truncation_count
-export AOSimulation, initialize_ao_pyramid, initialize_ao_shwfs
+export AOSimulation, initialize_ao_pyramid, initialize_ao_shack_hartmann
 export forward_operator, inverse_operator_matrix
 export fitting_error, fitting_error_dm
 export GainSensingCamera
@@ -219,15 +219,15 @@ export AbstractController, DiscreteIntegratorController, update!, controller_out
 export AbstractControlSimulation, AbstractExecutionPolicy
 export SequentialExecution, ThreadedExecution, BackendStreamExecution
 export AbstractRuntimeProfile, ScientificRuntimeProfile, HILRuntimeProfile
-export RuntimeProductRequirements, GroupedRuntimeProductRequirements
-export runtime_products, grouped_runtime_products
-export RuntimeLatencyModel, default_runtime_profile, default_runtime_products, default_grouped_runtime_products
+export RuntimeOutputRequirements, GroupedRuntimeOutputRequirements
+export runtime_outputs, grouped_runtime_outputs
+export RuntimeLatencyModel, default_runtime_profile, default_runtime_outputs, default_grouped_runtime_outputs
 export VectorDelayLine, shift_delay!, prepare!, prepare_runtime_wfs!, init_execution_state
 export supports_prepared_runtime, supports_detector_output, supports_stacked_sources, supports_grouped_execution
 export ClosedLoopRuntime, SimulationInterface, CompositeSimulationInterface, SimulationReadout
 export RuntimeCommandSegment, RuntimeCommandLayout, command_layout, branch_command_layout, branch_command_layouts, command_segments, command_segment_labels, command_segment_range
-export AbstractPlatformConfig, RuntimeBranch, SingleRuntimeConfig, GroupedRuntimeConfig, RuntimeScenario
-export build_runtime_scenario, platform_config, platform_boundary, platform_name, platform_branch_labels
+export AbstractControlLoopConfig, ControlLoopBranch, SingleControlLoopConfig, GroupedControlLoopConfig, ControlLoopScenario
+export build_control_loop_scenario, control_loop_config, control_loop_boundary, control_loop_name, control_loop_branch_labels
 export sense!, step!, set_command!, snapshot_outputs!
 export readout, command, slopes, wfs_frame, science_frame, wfs_metadata, science_metadata
 export grouped_wfs_stack, grouped_science_stack

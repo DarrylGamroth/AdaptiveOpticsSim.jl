@@ -54,16 +54,16 @@ AdaptiveOpticsSim.grouped_accumulation_plan(
 ) = AdaptiveOpticsSim.GroupedStaged2DPlan()
 function AdaptiveOpticsSim.sh_sensing_execution_plan(
     style::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
-    wfs::AdaptiveOpticsSim.ShackHartmann,
+    wfs::AdaptiveOpticsSim.ShackHartmannWFS,
 )
     return wfs.params.n_lenslets == 4 ?
-        AdaptiveOpticsSim.ShackHartmannRocmSafePlan() :
-        AdaptiveOpticsSim.ShackHartmannBatchedPlan()
+        AdaptiveOpticsSim.ShackHartmannWFSRocmSafePlan() :
+        AdaptiveOpticsSim.ShackHartmannWFSBatchedPlan()
 end
 
 function AdaptiveOpticsSim.compute_intensity_safe!(
     ::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
-    wfs::AdaptiveOpticsSim.ShackHartmann,
+    wfs::AdaptiveOpticsSim.ShackHartmannWFS,
     tel::AdaptiveOpticsSim.Telescope,
     src::AdaptiveOpticsSim.AbstractSource,
     xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int,
@@ -220,7 +220,7 @@ function roc_sh_spot_cutoff_stats_kernel!(stats, spot_cube, valid_mask, cutoff, 
 end
 function AdaptiveOpticsSim.sh_signal_from_spots_device_stats!(
     ::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
-    wfs::AdaptiveOpticsSim.ShackHartmann,
+    wfs::AdaptiveOpticsSim.ShackHartmannWFS,
     cutoff::T,
 ) where {T<:AbstractFloat}
     n_sub = wfs.params.n_lenslets
@@ -411,14 +411,16 @@ function AdaptiveOpticsSim.solve_lift_fallback!(diag::AdaptiveOpticsSim.LiFTDiag
     damping::AdaptiveOpticsSim.LiFTDampingMode) where {T<:AbstractFloat}
     H_mat = dense_copy_to_roc(H)
     svd_parts = roc_svd(H_mat)
-    λ = damping isa AdaptiveOpticsSim.LiFTLevenbergMarquardt ?
-        AdaptiveOpticsSim.damping_lambda(damping, adjoint(H_mat) * H_mat) : zero(T)
+    λ = AdaptiveOpticsSim.fallback_damping_lambda(damping, T, H_mat)
     work = AMDGPU.ROCArray{T}(undef, length(svd_parts.S))
     mul!(work, transpose(svd_parts.U), residual)
     @. work = ifelse(iszero(svd_parts.S^2 + λ^2), zero(T), (svd_parts.S * work) / (svd_parts.S^2 + λ^2))
     mul!(rhs, adjoint(svd_parts.Vt), work)
     return rhs
 end
+
+roc_factor_matrix(factor::AMDGPU.ROCArray{T,2}) where {T} = factor
+roc_factor_matrix(factor::AbstractMatrix{T}) where {T} = dense_copy_to_roc(factor)
 
 """
     solve_normal_system!(diag, rhs, factor, normal, H, residual, damping)
@@ -433,7 +435,7 @@ robustness guarantees as the CPU implementation.
 function AdaptiveOpticsSim.solve_normal_system!(diag::AdaptiveOpticsSim.LiFTDiagnostics{T}, rhs::AMDGPU.ROCArray{T,1},
     factor::AbstractMatrix{T}, normal::AbstractMatrix{T}, H::AbstractMatrix{T}, residual::AbstractVector{T},
     ::AdaptiveOpticsSim.LiFTDampingNone) where {T<:AbstractFloat}
-    factor_mat = factor isa AMDGPU.ROCArray{T,2} ? factor : dense_copy_to_roc(factor)
+    factor_mat = roc_factor_matrix(factor)
     copyto!(factor_mat, normal)
     _, chol = roc_cholesky_solve!(factor_mat, rhs; check=false)
     λ = zero(T)
@@ -458,7 +460,7 @@ end
 function AdaptiveOpticsSim.solve_normal_system!(diag::AdaptiveOpticsSim.LiFTDiagnostics{T}, rhs::AMDGPU.ROCArray{T,1},
     factor::AbstractMatrix{T}, normal::AbstractMatrix{T}, H::AbstractMatrix{T}, residual::AbstractVector{T},
     damping::AdaptiveOpticsSim.LiFTLevenbergMarquardt) where {T<:AbstractFloat}
-    factor_mat = factor isa AMDGPU.ROCArray{T,2} ? factor : dense_copy_to_roc(factor)
+    factor_mat = roc_factor_matrix(factor)
     copyto!(factor_mat, normal)
     λ = AdaptiveOpticsSim.damping_lambda(damping, normal)
     if λ > zero(T)

@@ -49,9 +49,9 @@ are optional, and which names are canonical.
 
 Keep concrete and abstract types as nouns:
 
-- `ShackHartmann`
+- `ShackHartmannWFS`
 - `PyramidWFS`
-- `CalibrationVault`
+- `ControlMatrix`
 - `TomographicReconstructor`
 - `ClosedLoopRuntime`
 
@@ -249,7 +249,7 @@ These are not all abstract types, but they need explicit contract shape.
 Targets:
 
 - `interaction_matrix`
-- `CalibrationVault`
+- `ControlMatrix`
 - `ao_calibration`
 - `modal_basis`
 - `compute_meta_sensitivity_matrix`
@@ -267,7 +267,7 @@ Status:
 - partially implemented
 - the maintained API reference now documents explicit workflow contracts for:
   - `interaction_matrix`
-  - `CalibrationVault`
+  - `ControlMatrix`
   - `modal_basis`
   - `ao_calibration`
   - `compute_meta_sensitivity_matrix`
@@ -275,12 +275,12 @@ Status:
   - `LiFT`
 - long-form result accessors now exist for the main modal-calibration surfaces:
   - `forward_operator(imat)`
-  - `forward_operator(vault)`
-  - `inverse_operator_matrix(vault)`
+  - `forward_operator(control_matrix)`
+  - `inverse_operator_matrix(control_matrix)`
   - `modal_to_command(basis/calib)`
   - `sampled_basis(basis/calib)`
   - `modal_projector(basis/calib)`
-  - `calibration_vault(calib)`
+  - `control_matrix(calib)`
 - conformance coverage exists in the `Calibration workflow contracts` testset
   in [runtests.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/test/runtests.jl)
 - broader problem/algorithm/result decomposition is still open
@@ -313,11 +313,11 @@ Status:
 
 Add inline file-header notes and docstrings for the main interface families:
 
-- `src/Core/types.jl`
-- `src/Control/runtime.jl`
-- `src/Control/controller.jl`
-- `src/Calibration/*.jl`
-- `src/WFS/*.jl`
+- `src/core/types.jl`
+- `src/control/runtime.jl`
+- `src/control/controller.jl`
+- `src/calibration/*.jl`
+- `src/wfs/*.jl`
 
 Status:
 
@@ -370,7 +370,7 @@ Candidate areas:
 Status:
 
 - partially implemented
-- runtime preparation now uses explicit WFS/source capability queries through
+- runtime preparation now uses explicit wfs/source capability queries through
   `supports_prepared_runtime(wfs, src)` and `prepare_runtime_wfs!(...)`
 - stacked-source support is now queried explicitly through
   `supports_stacked_sources(wfs, src)` for the maintained WFS families

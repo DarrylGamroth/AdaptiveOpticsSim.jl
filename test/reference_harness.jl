@@ -943,19 +943,19 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
         threshold_convolution = Float64(get(cfg, "threshold_convolution", 0.05))
         half_pixel_shift = Bool(get(cfg, "half_pixel_shift", false))
         if pixel_scale === nothing && n_pix_subap === nothing
-            return ShackHartmann(tel; n_lenslets=n_lenslets, threshold=threshold, mode=mode,
+            return ShackHartmannWFS(tel; n_lenslets=n_lenslets, threshold=threshold, mode=mode,
                 threshold_cog=threshold_cog, threshold_convolution=threshold_convolution,
                 half_pixel_shift=half_pixel_shift)
         elseif n_pix_subap === nothing
-            return ShackHartmann(tel; n_lenslets=n_lenslets, threshold=threshold, mode=mode,
+            return ShackHartmannWFS(tel; n_lenslets=n_lenslets, threshold=threshold, mode=mode,
                 pixel_scale=Float64(pixel_scale), threshold_cog=threshold_cog,
                 threshold_convolution=threshold_convolution, half_pixel_shift=half_pixel_shift)
         elseif pixel_scale === nothing
-            return ShackHartmann(tel; n_lenslets=n_lenslets, threshold=threshold, mode=mode,
+            return ShackHartmannWFS(tel; n_lenslets=n_lenslets, threshold=threshold, mode=mode,
                 n_pix_subap=Int(n_pix_subap), threshold_cog=threshold_cog,
                 threshold_convolution=threshold_convolution, half_pixel_shift=half_pixel_shift)
         end
-        return ShackHartmann(tel; n_lenslets=n_lenslets, threshold=threshold, mode=mode,
+        return ShackHartmannWFS(tel; n_lenslets=n_lenslets, threshold=threshold, mode=mode,
             pixel_scale=Float64(pixel_scale), n_pix_subap=Int(n_pix_subap),
             threshold_cog=threshold_cog, threshold_convolution=threshold_convolution,
             half_pixel_shift=half_pixel_shift)

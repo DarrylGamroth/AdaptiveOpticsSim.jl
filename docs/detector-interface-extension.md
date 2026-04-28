@@ -49,7 +49,7 @@ The supported extension rule is:
 - family-local metadata, capability predicates, and default model methods should
   live with the family/type definitions
 - detector-instance assembly, validation orchestration, and export-metadata
-  assembly stay centralized in `src/Detectors/generic.jl`
+  assembly stay centralized in `src/detectors/generic.jl`
 
 Concretely:
 
@@ -65,7 +65,7 @@ Concretely:
 
 This means new detector families should normally add their family-specific
 methods in the file that owns the family type, not by extending a central
-registry table in `src/Detectors/generic.jl`.
+registry table in `src/detectors/generic.jl`.
 
 ## Supported Vs Unsupported Mutation Surfaces
 

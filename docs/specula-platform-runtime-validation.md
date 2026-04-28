@@ -41,7 +41,7 @@ julia --project=. --startup-file=no scripts/generate_specula_platform_runtime_ar
 The scenario is aligned to the class of platform compositions where SPECULA is
 the stronger reference:
 
-- multiple WFS/runtime branches
+- multiple wfs/runtime branches
 - integrated WFS + detector style pipelines
 - orchestration behavior rather than only isolated kernel correctness
 

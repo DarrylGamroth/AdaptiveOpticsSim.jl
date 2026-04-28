@@ -35,7 +35,7 @@ partially mitigated rather than current top blockers.
 The central diagnosis still holds: the main remaining weaknesses are structural,
 not language-level. The package is already aligned with Julia's strengths in:
 
-- backend-parametric arrays and dispatch in [src/Core/backends.jl](../src/Core/backends.jl)
+- backend-parametric arrays and dispatch in [src/core/backends.jl](../src/core/backends.jl)
 - a broad AO surface in [src/AdaptiveOpticsSim.jl](../src/AdaptiveOpticsSim.jl)
 - mutating hot paths and zero-allocation runtime evidence in [performance-audit.md](./performance-audit.md)
 

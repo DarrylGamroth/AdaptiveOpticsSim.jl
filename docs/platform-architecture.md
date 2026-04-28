@@ -86,7 +86,7 @@ This layer is responsible for:
 - sampled optical signal generation
 - detector/readout application
 - slope or branch-signal extraction
-- explicit ownership of scratch versus exported products
+- explicit ownership of scratch versus exported outputs
 
 ### Calibration and reconstruction
 
@@ -94,7 +94,7 @@ This layer turns prepared sensing models into reusable operators:
 
 - interaction matrices
 - modal bases
-- calibration vaults
+- control matrices
 - reconstructors
 - LiFT and gain-sensing workflows
 - tomography builders and command assembly
@@ -109,7 +109,7 @@ This is the platform coordination layer:
 - `ClosedLoopRuntime`
 - `SimulationInterface`
 - `CompositeSimulationInterface`
-- runtime product planning
+- runtime output planning
 - grouped export policy
 - execution policy and prepared runtime state
 
@@ -120,7 +120,7 @@ It is responsible for:
 
 - deciding what products are needed
 - staging prepared state outside hot loops
-- coordinating detector/WFS/science ownership
+- coordinating detector/wfs/science ownership
 - exposing reusable runtime entry points for simulation, validation, and
   benchmarking
 
@@ -160,8 +160,8 @@ This pattern supports:
 The same rule carries upward into runtime/orchestration:
 
 - prepared runtime state should be distinct from per-step mutation
-- exported products should be distinct from scratch buffers
-- grouped runtime products should be explicit rather than implied by shared
+- exported outputs should be distinct from scratch buffers
+- grouped runtime outputs should be explicit rather than implied by shared
   temporary stacks
 
 ## How Platform Composition Works Today

@@ -96,8 +96,8 @@ Relevant SH frame branch:
   - then returns `copy(wfs.state.spot_cube[1, :, :])`
 
 Relevant Shack-Hartmann runtime path:
-- [src/WFS/shack_hartmann/signals.jl](../src/WFS/shack_hartmann/signals.jl)
-- [src/WFS/shack_hartmann/setup.jl](../src/WFS/shack_hartmann/setup.jl)
+- [src/wfs/shack_hartmann/signals.jl](../src/wfs/shack_hartmann/signals.jl)
+- [src/wfs/shack_hartmann/setup.jl](../src/wfs/shack_hartmann/setup.jl)
 
 ## Verification
 

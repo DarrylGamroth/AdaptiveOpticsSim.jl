@@ -146,8 +146,8 @@ Deliverables:
 Target locations:
 
 - [test/testsets/control_and_runtime.jl](../test/testsets/control_and_runtime.jl)
-- [src/Control/runtime/outputs.jl](../src/Control/runtime/outputs.jl)
-- [src/Optics/controllable_optics.jl](../src/Optics/controllable_optics.jl)
+- [src/control/runtime/outputs.jl](../src/control/runtime/outputs.jl)
+- [src/optics/controllable_optics.jl](../src/optics/controllable_optics.jl)
 
 Verification evidence:
 
@@ -216,7 +216,7 @@ Target locations:
 
 - [scripts/generate_multi_optic_runtime_artifact.jl](../scripts/generate_multi_optic_runtime_artifact.jl)
 - new optic-behavior generators if needed
-- [docs/platform-orchestration-validation.md](./platform-orchestration-validation.md)
+- [docs/control-loop-orchestration-validation.md](./control-loop-orchestration-validation.md)
 
 Verification evidence:
 

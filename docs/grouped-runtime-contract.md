@@ -15,8 +15,8 @@ It applies to:
 
 - grouped source execution inside maintained WFS paths
 - grouped branch execution through
-  [`CompositeSimulationInterface`](../src/Control/runtime/types.jl)
-- grouped exported runtime products
+  [`CompositeSimulationInterface`](../src/control/runtime/types.jl)
+- grouped exported runtime outputs
 
 ## Grouped Source Semantics
 
@@ -32,7 +32,7 @@ Maintained grouped source families are queried through:
 
 Current maintained grouped families:
 
-- diffractive `ShackHartmann` with `Asterism`, `SpectralSource`, and
+- diffractive `ShackHartmannWFS` with `Asterism`, `SpectralSource`, and
   `ExtendedSource`
 - diffractive `PyramidWFS` with `Asterism`, `SpectralSource`, and
   `ExtendedSource`
@@ -55,7 +55,7 @@ The grouped WFS contract distinguishes:
 
 Required rule:
 
-- scratch state must never be treated as an exported runtime product
+- scratch state must never be treated as an exported runtime output
 
 ## Grouped Detector Export Rules
 

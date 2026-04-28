@@ -55,7 +55,7 @@ The key rule is:
 
 Current maintained example:
 
-- [controller.jl](../src/Control/controller.jl)
+- [controller.jl](../src/control/controller.jl)
 
 ### When To Add A Controller
 

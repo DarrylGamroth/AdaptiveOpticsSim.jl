@@ -54,9 +54,9 @@ nonlinear GSC branch step, and analytical transfer-function paths.
 
 The controllable-optic claim is intentionally narrow:
 - committed OOPAO parity now exists for `TipTiltMirror`-equivalent Cartesian
-  tip/tilt modes on diffractive `ShackHartmann`, `Pyramid`, and `BioEdge`
+  tip/tilt modes on diffractive `ShackHartmannWFS`, `Pyramid`, and `BioEdge`
 - committed OOPAO parity also now exists for one representative composite plant:
-  `tiptilt + dm` on diffractive `ShackHartmann`, `Pyramid`, and `BioEdge`
+  `tiptilt + dm` on diffractive `ShackHartmannWFS`, `Pyramid`, and `BioEdge`
 - those composite cases now also record the fitted OOPAO `mechCoupling` and the
   corresponding fit residual in the manifest `compute` block, so the DM
   translation layer is inspectable rather than hidden behind a single proxy

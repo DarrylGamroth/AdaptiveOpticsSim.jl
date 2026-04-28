@@ -171,7 +171,7 @@ end
 
         @test size(AdaptiveOpticsSim.grouped_stack_view(stack, 2), 3) == 2
         grouped_tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
-        grouped_wfs = ShackHartmann(grouped_tel; n_lenslets=2, mode=Diffractive(), n_pix_subap=2)
+        grouped_wfs = ShackHartmannWFS(grouped_tel; n_lenslets=2, mode=Diffractive(), n_pix_subap=2)
         grouped_sources = [1.0, 2.0, 3.0]
         function fill_grouped_stage!(dest, scale, value)
             fill!(dest, scale * value)
@@ -700,7 +700,7 @@ end
 
     @testset "KA CPU kernel inventory" begin
         # Deferred kernels are still accounted for: most require larger
-        # end-to-end WFS/tomography fixtures, while masked_sum2d_kernel! uses
+        # end-to-end wfs/tomography fixtures, while masked_sum2d_kernel! uses
         # atomics that are meaningful for GPU backends but not portable to the
         # KA CPU Array backend on Julia 1.12.
         deferred = Set([

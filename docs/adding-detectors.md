@@ -43,13 +43,13 @@ Use a `FrameSensorType` when the detector fundamentally produces a frame image.
 
 Current examples:
 
-- [ccd.jl](../src/Detectors/ccd.jl)
-- [cmos.jl](../src/Detectors/cmos.jl)
-- [ingaas.jl](../src/Detectors/ingaas.jl)
-- [hgcdte_avalanche_array.jl](../src/Detectors/hgcdte_avalanche_array.jl)
+- [ccd.jl](../src/detectors/ccd.jl)
+- [cmos.jl](../src/detectors/cmos.jl)
+- [ingaas.jl](../src/detectors/ingaas.jl)
+- [hgcdte_avalanche_array.jl](../src/detectors/hgcdte_avalanche_array.jl)
 
 Frame detectors usually reuse the generic `Detector(...)` constructor and the
-shared frame-capture pipeline in [frame_capture.jl](../src/Detectors/frame_capture.jl).
+shared frame-capture pipeline in [frame_capture.jl](../src/detectors/frame_capture.jl).
 
 ### Counting Detector
 
@@ -58,25 +58,25 @@ channels or counts rather than a linear frame sensor pipeline.
 
 Current examples:
 
-- [apd.jl](../src/Detectors/apd.jl)
-- [spad_array.jl](../src/Detectors/spad_array.jl)
+- [apd.jl](../src/detectors/apd.jl)
+- [spad_array.jl](../src/detectors/spad_array.jl)
 
 Counting detectors currently own more of their capture path directly, because
 their physics and export shape differ more substantially from the frame
 pipeline. But they now share a maintained counting-detector sublayer in
-[counting_common.jl](../src/Detectors/counting_common.jl) for common counting
+[counting_common.jl](../src/detectors/counting_common.jl) for common counting
 capture semantics and metadata assembly.
 
 ## File Placement
 
 A new detector family should normally add one new file under
-[`src/Detectors/`](../src/Detectors/) and then be included from
-[detector.jl](../src/Detectors/detector.jl).
+[`src/detectors/`](../src/detectors/) and then be included from
+[detector.jl](../src/detectors/detector.jl).
 
 Typical steps:
 
-1. add the detector family file under `src/Detectors/`
-2. include it from [detector.jl](../src/Detectors/detector.jl)
+1. add the detector family file under `src/detectors/`
+2. include it from [detector.jl](../src/detectors/detector.jl)
 3. export public types and constructors from [AdaptiveOpticsSim.jl](../src/AdaptiveOpticsSim.jl)
 4. add tests in [test/testsets/detectors.jl](../test/testsets/detectors.jl)
 5. update user docs if the detector is intended to be public
@@ -117,7 +117,7 @@ Then add capability predicates only when they are true for the new family, for
 - `supports_shutter_timing`
 
 These methods live with the sensor family, not in
-[generic.jl](../src/Detectors/generic.jl).
+[generic.jl](../src/detectors/generic.jl).
 
 ### 3. Provide Family Defaults
 
@@ -147,7 +147,7 @@ If the feature is already represented there, use it. Do not clone the logic in
 ### 5. Add Family-Specific Physics Hooks
 
 Most frame detectors customize the generic capture pipeline by extending a small
- set of hooks in [frame_capture.jl](../src/Detectors/frame_capture.jl):
+ set of hooks in [frame_capture.jl](../src/detectors/frame_capture.jl):
 
 - `apply_sensor_statistics!(sensor, det, rng)`
 - `apply_pre_readout_gain!(sensor, det, rng)`
@@ -158,7 +158,7 @@ Only add a detector-specific `finalize_capture!` when the family genuinely
 
 Current example:
 
-- [hgcdte_avalanche_array.jl](../src/Detectors/hgcdte_avalanche_array.jl)
+- [hgcdte_avalanche_array.jl](../src/detectors/hgcdte_avalanche_array.jl)
 
 That family keeps avalanche-specific gain/glow/saturation behavior local while
  reusing the shared multi-read layer.
@@ -194,8 +194,8 @@ These accessors default to `nothing`, so a new payload should not require edits
 Counting detectors still expose more family-level policy than frame detectors,
 but they no longer need to duplicate the full capture skeleton.
 
-Use [apd.jl](../src/Detectors/apd.jl) and
-[spad_array.jl](../src/Detectors/spad_array.jl) as the reference shapes.
+Use [apd.jl](../src/detectors/apd.jl) and
+[spad_array.jl](../src/detectors/spad_array.jl) as the reference shapes.
 
 Typical steps:
 
@@ -213,7 +213,7 @@ Shared counting seams include:
 - gate models
 - correlation models such as afterpulsing and channel crosstalk
 - shared counting capture sequencing in
-  [counting_common.jl](../src/Detectors/counting_common.jl)
+  [counting_common.jl](../src/detectors/counting_common.jl)
 - shared counting export metadata assembly
 
 If a counting behavior is reusable across multiple families, it should become a
@@ -246,7 +246,7 @@ Bad pattern:
 Every detector family should expose enough metadata to qualify generated output.
 
 For frame detectors, much of this is already assembled in
-[generic.jl](../src/Detectors/generic.jl) through `detector_export_metadata(det)`.
+[generic.jl](../src/detectors/generic.jl) through `detector_export_metadata(det)`.
 
 For counting detectors, or for families with materially different export
  surfaces, define a detector-specific `detector_export_metadata(...)`.
@@ -290,7 +290,7 @@ Create or extend a shared detector layer when all of the following are true:
 Recent example:
 
 - the reusable multi-read layer in
-  [frame_sampling.jl](../src/Detectors/frame_sampling.jl)
+  [frame_sampling.jl](../src/detectors/frame_sampling.jl)
 
 That was the right refactor because explicit multi-read readout products and
  read-time assembly were not really HgCdTe-specific concepts.

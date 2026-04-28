@@ -136,7 +136,7 @@ Target behavior:
 Rationale:
 
 - Shack-Hartmann replay prep is not unique to AO188
-- other WFS/runtime cases may need the same lifecycle
+- other wfs/runtime cases may need the same lifecycle
 
 ## New Core Interfaces
 
@@ -192,7 +192,7 @@ Status:
 
 - partially implemented
 - simulation-level traits are in core
-- WFS/source-pairing traits now drive runtime preparation and stacked-source
+- wfs/source-pairing traits now drive runtime preparation and stacked-source
   capability checks through `prepare_runtime_wfs!(...)`,
   `supports_prepared_runtime(wfs, src)`, and
   `supports_stacked_sources(wfs, src)`

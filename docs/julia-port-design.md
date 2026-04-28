@@ -23,11 +23,11 @@ inheritance and hidden mutation.
 
 ## Package layout (proposed)
 - `AdaptiveOpticsSim.jl` root module
-- `Core/` interfaces, shared types, traits, workspaces
-- `Optics/` telescope, DM, Zernike, propagation utilities
-- `Atmosphere/` phase screens, turbulence models
-- `WFS/` Shack-Hartmann, Pyramid, shared WFS utilities
-- `Calibration/` interaction matrices, reconstructors
+- `core/` interfaces, shared types, traits, workspaces
+- `optics/` telescope, DM, Zernike, propagation utilities
+- `atmosphere/` phase screens, turbulence models
+- `wfs/` Shack-Hartmann, Pyramid, shared WFS utilities
+- `calibration/` interaction matrices, reconstructors
 - `Sim/` optical chains and loop orchestration
 - `IO/` optional format helpers, configuration, serialization
 - `Viz/` thin plotting helpers (optional)
@@ -44,7 +44,7 @@ abstract type AbstractWFS <: AbstractOpticalElement end
 abstract type AbstractDetector <: AbstractOpticalElement end
 ```
 
-Concrete types (e.g., `Telescope`, `KolmogorovAtmosphere`, `ShackHartmann`) live
+Concrete types (e.g., `Telescope`, `KolmogorovAtmosphere`, `ShackHartmannWFS`) live
 in domain modules and implement these interfaces via methods.
 
 ## Traits
@@ -58,7 +58,7 @@ struct Geometric  <: SensingMode end
 sensing_mode(::AbstractWFS) = Diffractive()
 
 # WFS types carry the sensing mode as a type parameter (e.g.,
-# `ShackHartmann{Geometric}`), not as a field.
+# `ShackHartmannWFS{Geometric}`), not as a field.
 
 abstract type NoiseModel end
 struct NoiseNone <: NoiseModel end
@@ -464,7 +464,7 @@ eqs = [
 sys = ODESystem(eqs)
 ```
 
-The ModelingToolkit model can live in a `Control/` submodule and be swapped with a
+The ModelingToolkit model can live in a `control/` submodule and be swapped with a
 lightweight numeric controller for performance-critical runs.
 
 ## Testing and validation

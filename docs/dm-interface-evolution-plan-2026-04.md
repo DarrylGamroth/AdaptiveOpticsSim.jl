@@ -47,7 +47,7 @@ not be the only expressive path for measured DM data.
 ## Current Surface
 
 The maintained DM influence-model surface in
-[`src/Optics/deformable_mirror.jl`](../src/Optics/deformable_mirror.jl) is:
+[`src/optics/deformable_mirror.jl`](../src/optics/deformable_mirror.jl) is:
 
 - `AbstractDMInfluenceModel`
 - `GaussianInfluenceWidth`
