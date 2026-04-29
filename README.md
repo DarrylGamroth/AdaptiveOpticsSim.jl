@@ -7,6 +7,9 @@ Julia adaptive optics simulation toolkit. The package keeps the OOPAO modeling
 surface recognizable, but uses idiomatic Julia design for performance,
 reproducibility, and backend portability.
 
+Requires Julia 1.12 or newer. The package relies on current Julia atomics and
+backend behavior for maintained CPU/GPU execution paths.
+
 ## Start Here
 
 If you are a normal user, read these in order:
@@ -47,7 +50,7 @@ atm = MultiLayerAtmosphere(
     altitude=(0.0, 5000.0),
 )
 
-wfs = ShackHartmann(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
+wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
 
 advance!(atm, tel)
 propagate!(atm, tel)
@@ -66,9 +69,9 @@ sim = AOSimulation(tel, src, atm, dm, wfs)
 imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
 
-branch = RuntimeBranch(:main, sim, recon; rng=rng)
-cfg = SingleRuntimeConfig(name=:demo, branch_label=:main)
-scenario = build_runtime_scenario(cfg, branch)
+branch = ControlLoopBranch(:main, sim, recon; rng=rng)
+cfg = SingleControlLoopConfig(name=:demo, branch_label=:main)
+scenario = build_control_loop_scenario(cfg, branch)
 prepare!(scenario)
 
 for _ in 1:5
@@ -87,9 +90,9 @@ The main modeling objects are:
 
 - `Telescope` and `Source` for optical geometry and illumination
 - `MultiLayerAtmosphere` or `KolmogorovAtmosphere` for turbulence
-- `ShackHartmann`, `PyramidWFS`, `BioEdgeWFS`, `CurvatureWFS`, `ZernikeWFS` for sensing
+- `ShackHartmannWFS`, `PyramidWFS`, `BioEdgeWFS`, `CurvatureWFS`, `ZernikeWFS` for sensing
 - `DeformableMirror` plus a reconstructor for control
-- `RuntimeScenario` when you want the maintained step-wise AO simulation surface
+- `ControlLoopScenario` when you want the maintained step-wise AO simulation surface
 
 For external-control / HIL paths, use `NullReconstructor()` plus
 `set_command!(scenario, cmd)` and `sense!(scenario)`.

@@ -24,8 +24,6 @@ jobs:
             julia-version: "1.12"
           - os: windows-latest
             julia-version: "1.12"
-          - os: ubuntu-latest
-            julia-version: "1.10"
     env:
       JULIA_NUM_THREADS: "1"
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
