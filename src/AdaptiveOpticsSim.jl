@@ -209,7 +209,7 @@ export dm_basis, kl_modal_basis, modal_basis, basis_from_m2c, basis_projector
 export modal_to_command, sampled_basis, modal_projector
 export AOCalibration, ao_calibration, control_matrix
 export calibration_amplitude, inverse_policy, singular_values, condition_number, effective_rank, truncation_count
-export AOSimulation, initialize_ao_pyramid, initialize_ao_shack_hartmann
+export AOSimulation
 export forward_operator, inverse_operator_matrix
 export fitting_error, fitting_error_dm
 export GainSensingCamera

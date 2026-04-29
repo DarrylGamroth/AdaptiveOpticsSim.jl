@@ -4,19 +4,13 @@ using Logging
 
 rng = MersenneTwister(5)
 
-sim = AdaptiveOpticsSim.initialize_ao_shack_hartmann(
-    resolution=32,
-    diameter=8.0,
-    sampling_time=1e-3,
-    r0=0.2,
-    L0=25.0,
-    fractional_cn2=[1.0],
-    wind_speed=[7.0],
-    wind_direction=[10.0],
-    altitude=[0.0],
-    n_act=4,
-    n_lenslets=4,
-)
+tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3)
+src = Source()
+atm = MultiLayerAtmosphere(tel; r0=0.2, L0=25.0, fractional_cn2=[1.0],
+    wind_speed=[7.0], wind_direction=[10.0], altitude=[0.0])
+dm = DeformableMirror(tel; n_act=4, influence_width=0.2)
+wfs = ShackHartmannWFS(tel; n_lenslets=4)
+sim = AOSimulation(tel, src, atm, dm, wfs)
 
 dm_coarse = DeformableMirror(sim.tel; n_act=2, influence_width=0.6)
 dm_fine = sim.optic

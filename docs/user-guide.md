@@ -322,12 +322,11 @@ The package distinguishes between:
 For ordinary usage, start with the exported workflow surface shown above and in
 [api-reference.md](./api-reference.md).
 
-For advanced utilities such as telemetry/config helpers, scenario builders, and
-some backend policy helpers, use namespaced access. Examples:
+For advanced utilities such as telemetry/config helpers and some backend policy
+helpers, use namespaced access. Examples:
 
 ```julia
 ws = AdaptiveOpticsSim.Workspace(tel; rng=deterministic_reference_rng(0))
-sim = AdaptiveOpticsSim.initialize_ao_shack_hartmann(...)
 sprint = AdaptiveOpticsSim.SPRINT(tel, dm, wfs, basis)
 ```
 

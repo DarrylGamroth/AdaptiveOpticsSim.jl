@@ -112,7 +112,7 @@ Phase 1 moved the following names to documented namespaced access:
 - `write_telemetry_csv`
 - `bin2d`, `poisson_noise!`, `poisson_sample`
 - `fast_atmosphere`
-- `AOSimulation`, `initialize_ao_shack_hartmann`, `initialize_ao_pyramid`
+- `AOSimulation`
 - `GSCDetectorMetadata`, `detector_metadata`
 - `weak_mode_mask`, `attach_detector!`, `detach_detector!`
 - `MetaSensitivity`, `compute_meta_sensitivity_matrix`
@@ -670,8 +670,6 @@ Symbols:
 - `fitting_error_dm`
 - `fast_atmosphere`
 - `AOSimulation`
-- `initialize_ao_pyramid`
-- `initialize_ao_shack_hartmann`
 - `GainSensingCamera`
 - `GSCDetectorMetadata`
 - `detector_metadata`

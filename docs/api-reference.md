@@ -276,11 +276,9 @@ top-level namespace. Access them as `AdaptiveOpticsSim.<name>`.
 - `AdaptiveOpticsSim.bin2d`, `AdaptiveOpticsSim.poisson_noise!`,
   `AdaptiveOpticsSim.poisson_sample`
 
-### Scenario builders and calibration workflow helpers
+### Calibration workflow helpers
 
 - `AdaptiveOpticsSim.fast_atmosphere`
-- `AdaptiveOpticsSim.initialize_ao_shack_hartmann`
-- `AdaptiveOpticsSim.initialize_ao_pyramid`
 - `AdaptiveOpticsSim.GSCDetectorMetadata`
 - `AdaptiveOpticsSim.detector_metadata`
 - `AdaptiveOpticsSim.weak_mode_mask`
