@@ -75,71 +75,14 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
 end
 
 @inline wfs_output_frame(wfs::AbstractWFS, det::AbstractDetector) = output_frame(det)
-@inline wfs_output_frame(wfs::ShackHartmannWFS{<:Diffractive}, ::Nothing) = sh_exported_spot_cube(wfs)
-@inline wfs_output_frame(wfs::ZernikeWFS, ::Nothing) = camera_frame(wfs)
-@inline wfs_output_frame(wfs::CurvatureWFS, ::Nothing) = camera_frame(wfs)
-@inline wfs_output_frame_prototype(wfs::PyramidWFS, ::Nothing) = camera_frame(wfs)
-@inline wfs_output_frame_prototype(wfs::BioEdgeWFS, ::Nothing) = camera_frame(wfs)
-@inline wfs_output_frame_prototype(wfs::ShackHartmannWFS{<:Diffractive}, ::Nothing) = sh_exported_spot_cube(wfs)
-@inline wfs_output_frame_prototype(wfs::ZernikeWFS, ::Nothing) = camera_frame(wfs)
-@inline wfs_output_frame_prototype(wfs::CurvatureWFS, ::Nothing) = camera_frame(wfs)
-@inline wfs_output_frame(wfs::ShackHartmannWFS{<:Diffractive}, det::AbstractDetector) = sh_exported_spot_cube(wfs)
 @inline wfs_output_frame_prototype(wfs::AbstractWFS, det::AbstractDetector) = wfs_output_frame(wfs, det)
-@inline wfs_output_frame_prototype(wfs::PyramidWFS, det::AbstractDetector) = camera_frame(wfs)
-@inline wfs_output_frame_prototype(wfs::BioEdgeWFS, det::AbstractDetector) = camera_frame(wfs)
-@inline wfs_output_frame_prototype(wfs::ShackHartmannWFS{<:Diffractive}, det::AbstractDetector) = sh_exported_spot_cube(wfs)
-@inline wfs_output_metadata(wfs::ShackHartmannWFS) = (
-    n_lenslets=subaperture_layout(wfs).n_subap,
-    n_valid_subap=n_valid_subapertures(subaperture_layout(wfs)),
-    subap_pixels=subaperture_layout(wfs).subap_pixels,
-    pitch_m=subaperture_layout(wfs).pitch_m,
-    slopes_units=subaperture_calibration(wfs).slopes_units,
-    calibrated=subaperture_calibration(wfs).calibrated,
-)
-@inline wfs_output_frame(wfs::ZernikeWFS, det::AbstractDetector) = camera_frame(wfs)
-@inline wfs_output_frame(wfs::CurvatureWFS, det::AbstractDetector) = camera_frame(wfs)
-@inline wfs_output_frame_prototype(wfs::ZernikeWFS, det::AbstractDetector) = camera_frame(wfs)
-@inline wfs_output_frame_prototype(wfs::CurvatureWFS, det::AbstractDetector) = camera_frame(wfs)
 @inline wfs_output_metadata(::AbstractWFS) = nothing
-@inline wfs_output_metadata(wfs::CurvatureWFS) = wfs_output_metadata(wfs.params.readout_model, wfs)
-@inline wfs_output_metadata(::CurvatureFrameReadout, wfs::CurvatureWFS) = nothing
-@inline wfs_output_metadata(::CurvatureCountingReadout, wfs::CurvatureWFS) =
-    CountingReadoutMetadata(:branch_by_channel, size(wfs.state.camera_frame), length(wfs.state.camera_frame))
 
 simulation_interface(runtime::ClosedLoopRuntime) = SimulationInterface(runtime)
 @inline backend(interface::SimulationInterface) = backend(interface.runtime)
 @inline backend(interface::CompositeSimulationInterface) = backend(interface.interfaces[1])
 simulation_interface(interface::SimulationInterface) = interface
 simulation_interface(interface::CompositeSimulationInterface) = interface
-
-@inline supports_prepared_runtime(::ShackHartmannWFS{<:Diffractive}, ::AbstractSource) = true
-@inline supports_prepared_runtime(::ShackHartmannWFS{<:Diffractive}, ::Asterism) = true
-@inline supports_prepared_runtime(::PyramidWFS, ::AbstractSource) = true
-@inline supports_prepared_runtime(::PyramidWFS, ::Asterism) = true
-@inline supports_prepared_runtime(::ZernikeWFS, ::AbstractSource) = true
-@inline supports_prepared_runtime(::CurvatureWFS, ::AbstractSource) = true
-@inline supports_detector_output(::ShackHartmannWFS{<:Diffractive}, ::AbstractDetector) = true
-@inline supports_detector_output(::PyramidWFS{<:Diffractive}, ::AbstractDetector) = true
-@inline supports_detector_output(::BioEdgeWFS{<:Diffractive}, ::AbstractDetector) = true
-@inline supports_detector_output(::ZernikeWFS, ::AbstractDetector) = true
-@inline supports_detector_output(wfs::CurvatureWFS, det::AbstractDetector) = supports_detector_output(wfs.params.readout_model, det)
-@inline supports_detector_output(::CurvatureFrameReadout, ::AbstractDetector) = true
-@inline supports_detector_output(::CurvatureCountingReadout, ::AbstractDetector) = false
-@inline supports_detector_output(::CurvatureCountingReadout, ::AbstractCountingDetector) = true
-@inline supports_stacked_sources(::ShackHartmannWFS, ::Asterism) = true
-@inline supports_stacked_sources(::ShackHartmannWFS, ::SpectralSource) = true
-@inline supports_stacked_sources(::ShackHartmannWFS, ::ExtendedSource) = true
-@inline supports_stacked_sources(::PyramidWFS, ::Asterism) = true
-@inline supports_stacked_sources(::PyramidWFS, ::SpectralSource) = true
-@inline supports_stacked_sources(::PyramidWFS, ::ExtendedSource) = true
-@inline supports_stacked_sources(::BioEdgeWFS, ::Asterism) = true
-@inline supports_grouped_execution(::ShackHartmannWFS{<:Diffractive}, ::Asterism) = true
-@inline supports_grouped_execution(::ShackHartmannWFS{<:Diffractive}, ::SpectralSource) = true
-@inline supports_grouped_execution(::ShackHartmannWFS{<:Diffractive}, ::ExtendedSource) = true
-@inline supports_grouped_execution(::PyramidWFS{<:Diffractive}, ::Asterism) = true
-@inline supports_grouped_execution(::PyramidWFS{<:Diffractive}, ::SpectralSource) = true
-@inline supports_grouped_execution(::PyramidWFS{<:Diffractive}, ::ExtendedSource) = true
-@inline supports_grouped_execution(::BioEdgeWFS{<:Diffractive}, ::Asterism) = true
 
 """
     prepare_runtime_wfs!(wfs, tel, src)
@@ -151,59 +94,7 @@ calls. The default implementation is a no-op and returns `wfs`.
     return wfs
 end
 
-@inline function prepare_runtime_wfs!(wfs::ShackHartmannWFS{<:Diffractive}, tel::Telescope, src::AbstractSource)
-    prepare_sampling!(wfs, tel, src)
-    ensure_sh_calibration!(wfs, tel, src)
-    return wfs
-end
-
-@inline function prepare_runtime_wfs!(wfs::ShackHartmannWFS{<:Diffractive}, tel::Telescope, src::SpectralSource)
-    prepare_sampling!(wfs, tel, spectral_reference_source(src))
-    ensure_sh_calibration!(wfs, tel, src)
-    return wfs
-end
-
-@inline function prepare_runtime_wfs!(wfs::ShackHartmannWFS{<:Diffractive}, tel::Telescope, ast::Asterism)
-    isempty(ast.sources) && throw(InvalidConfiguration("asterism must contain at least one source"))
-    prepare_sampling!(wfs, tel, ast.sources[1])
-    ensure_sh_calibration!(wfs, tel, ast.sources[1])
-    return wfs
-end
-
-@inline function prepare_runtime_wfs!(wfs::ZernikeWFS, tel::Telescope, src::AbstractSource)
-    ensure_zernike_calibration!(wfs, tel, src)
-    return wfs
-end
-
-@inline function prepare_runtime_wfs!(wfs::CurvatureWFS, tel::Telescope, src::AbstractSource)
-    ensure_curvature_calibration!(wfs, tel, src)
-    return wfs
-end
-
-@inline function prepare_runtime_wfs!(wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
-    prepare_pyramid_sampling!(wfs, tel)
-    ensure_pyramid_calibration!(wfs, tel, src)
-    return wfs
-end
-
-@inline function prepare_runtime_wfs!(wfs::PyramidWFS, tel::Telescope, src::SpectralSource)
-    prepare_pyramid_sampling!(wfs, tel)
-    ensure_pyramid_calibration!(wfs, tel, src)
-    return wfs
-end
-
-@inline function prepare_runtime_wfs!(wfs::PyramidWFS, tel::Telescope, ast::Asterism)
-    isempty(ast.sources) && throw(InvalidConfiguration("asterism must contain at least one source"))
-    prepare_pyramid_sampling!(wfs, tel)
-    ensure_pyramid_calibration!(wfs, tel, ast.sources[1])
-    return wfs
-end
-
-@inline set_runtime_wfs_output_policy!(wfs::AbstractWFS, outputs::RuntimeOutputRequirements) = wfs
-@inline function set_runtime_wfs_output_policy!(wfs::ShackHartmannWFS{<:Diffractive}, outputs::RuntimeOutputRequirements)
-    wfs.state.export_pixels_enabled = outputs.wfs_pixels
-    return wfs
-end
+@inline set_runtime_wfs_output_policy!(wfs::AbstractWFS, outputs) = wfs
 
 supports_prepared_runtime(runtime::ClosedLoopRuntime) = supports_prepared_runtime(runtime.wfs, runtime.src)
 supports_detector_output(runtime::ClosedLoopRuntime) = requires_runtime_wfs_pixels(runtime) || requires_runtime_science_pixels(runtime)

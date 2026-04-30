@@ -404,7 +404,8 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   vector.
 - Optional exported WFS-state surfaces are accessed through
   `valid_subaperture_mask(wfs)`, `reference_signal(wfs)`, and
-  `camera_frame(wfs)`.
+  `camera_frame(wfs)`. The generic fallbacks live in `src/wfs/interface.jl`;
+  concrete methods should live with the owning WFS implementation.
 - HIL/RTC-facing WFS detector pixels are accessed through
   `wfs_detector_image(wfs)` or `wfs_detector_image(wfs, det)` after
   measurement. For detector-coupled WFSs this returns the configured detector
@@ -442,6 +443,11 @@ lives in the `Interface conformance` testset in `test/runtests.jl`.
   trait surface.
 - The maintained runtime expects `slopes(wfs)` to expose the measured signal
   vector consistently across WFS families.
+- Runtime sensing delegates WFS-specific propagation and measurement through
+  `prepropagate_runtime_wfs!`, `measure_runtime_wfs!`, and
+  `finish_runtime_wfs_sensing!`. Most families use the generic path; families
+  such as `CurvatureWFS` own concrete methods when their physics requires
+  atmosphere-coupled sensing semantics.
 - Diffractive `ShackHartmannWFS` and `PyramidWFS` now also support grouped
   broad-band execution through `SpectralSource`, including detector-coupled
   readout after wavelength accumulation.

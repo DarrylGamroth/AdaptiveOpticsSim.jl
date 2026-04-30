@@ -867,3 +867,53 @@ function measure_detector_coupled!(::CurvatureFrameReadout, wfs::CurvatureWFS, t
         throw(InvalidConfiguration("CurvatureWFS detector output size must match the sampled camera frame"))
     return curvature_signal!(wfs, output_frame(det))
 end
+
+@inline valid_subaperture_mask(wfs::CurvatureWFS) = wfs.state.valid_mask
+@inline reference_signal(wfs::CurvatureWFS) = wfs.state.reference_signal_2d
+@inline camera_frame(wfs::CurvatureWFS) = wfs.state.camera_frame
+
+@inline wfs_output_frame(wfs::CurvatureWFS, ::Nothing) = camera_frame(wfs)
+@inline wfs_output_frame(wfs::CurvatureWFS, det::AbstractDetector) = camera_frame(wfs)
+@inline wfs_output_frame_prototype(wfs::CurvatureWFS, ::Nothing) = camera_frame(wfs)
+@inline wfs_output_frame_prototype(wfs::CurvatureWFS, det::AbstractDetector) = camera_frame(wfs)
+@inline wfs_output_metadata(wfs::CurvatureWFS) = wfs_output_metadata(wfs.params.readout_model, wfs)
+@inline wfs_output_metadata(::CurvatureFrameReadout, wfs::CurvatureWFS) = nothing
+@inline wfs_output_metadata(::CurvatureCountingReadout, wfs::CurvatureWFS) =
+    CountingReadoutMetadata(:branch_by_channel, size(wfs.state.camera_frame), length(wfs.state.camera_frame))
+
+@inline supports_prepared_runtime(::CurvatureWFS, ::AbstractSource) = true
+@inline supports_detector_output(wfs::CurvatureWFS, det::AbstractDetector) = supports_detector_output(wfs.params.readout_model, det)
+@inline supports_detector_output(::CurvatureFrameReadout, ::AbstractDetector) = true
+@inline supports_detector_output(::CurvatureCountingReadout, ::AbstractDetector) = false
+@inline supports_detector_output(::CurvatureCountingReadout, ::AbstractCountingDetector) = true
+
+@inline function prepare_runtime_wfs!(wfs::CurvatureWFS, tel::Telescope, src::AbstractSource)
+    ensure_curvature_calibration!(wfs, tel, src)
+    return wfs
+end
+
+@inline function prepropagate_runtime_wfs!(wfs::CurvatureWFS, atm::AbstractAtmosphere,
+    tel::Telescope, optic::AbstractControllableOptic, src::AbstractSource, rng::AbstractRNG)
+    reset_opd!(tel)
+    advance!(atm, tel, rng)
+    apply!(optic, tel, DMAdditive())
+    return nothing
+end
+
+@inline function measure_runtime_wfs!(wfs::CurvatureWFS, atm::AbstractAtmosphere,
+    tel::Telescope, src::AbstractSource, rng::AbstractRNG)
+    measure!(wfs, tel, src, atm)
+    return nothing
+end
+
+@inline function measure_runtime_wfs!(wfs::CurvatureWFS, atm::AbstractAtmosphere,
+    tel::Telescope, src::AbstractSource, det::AbstractDetector, rng::AbstractRNG)
+    measure!(wfs, tel, src, atm, det; rng=rng)
+    return nothing
+end
+
+@inline function finish_runtime_wfs_sensing!(wfs::CurvatureWFS, atm::AbstractAtmosphere,
+    tel::Telescope, src::AbstractSource)
+    tel.state.opd .+= atm.state.opd .* tel.state.pupil
+    return nothing
+end

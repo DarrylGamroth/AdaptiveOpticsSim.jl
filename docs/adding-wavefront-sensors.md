@@ -29,8 +29,9 @@ The WFS subsystem is organized around this split:
 
 In practice:
 
-- if a quantity is part of the maintained WFS contract, expose it through an
-  accessor in [interface.jl](../src/wfs/interface.jl)
+- if a quantity is part of the maintained WFS contract, expose it through the
+  generic accessor names documented in [interface.jl](../src/wfs/interface.jl)
+  and put the concrete methods in the owning WFS implementation file
 - if a behavior is reused across multiple WFS families, factor it into a shared
   seam instead of duplicating it
 - do not make runtime or calibration code depend on undocumented family-local
@@ -66,9 +67,8 @@ Typical steps:
 3. export public types and constructors from
    [AdaptiveOpticsSim.jl](../src/AdaptiveOpticsSim.jl) if the family is meant
    to be public
-4. extend the maintained WFS accessors in
-   [interface.jl](../src/wfs/interface.jl) when the family exports a stable
-   interface quantity
+4. add concrete methods for maintained WFS accessors in the owning family file
+   when the family exports a stable interface quantity
 5. add tests in the family testset plus
    [control_and_runtime.jl](../test/testsets/control_and_runtime.jl) when the
    family participates in maintained runtime flows
@@ -106,11 +106,15 @@ And the corresponding capability helpers:
 
 The rule is simple:
 
-- if the quantity is a stable part of the maintained family contract, add the
-  accessor
+- if the quantity is a stable part of the maintained family contract, add a
+  concrete method in the owning WFS implementation
 - if it is just a family-local implementation detail, keep it local
 
 Do not extend the interface accessors for ephemeral internal buffers.
+
+`interface.jl` should remain the generic contract layer: docstrings, fallback
+methods, and capability helpers. It should not grow a registry of concrete WFS
+families.
 
 ## Detector-Coupled Vs Detector-Free Sensors
 
@@ -139,6 +143,19 @@ When adding a new WFS family, decide explicitly whether it supports:
 
 If the answer is no for a maintained workflow, reject it structurally rather
 than letting runtime code fail later.
+
+Runtime sensing has a small WFS-owned hook surface:
+
+- `prepropagate_runtime_wfs!(wfs, atm, tel, optic, src, rng)`
+- `measure_runtime_wfs!(wfs, atm, tel, src, rng)`
+- `measure_runtime_wfs!(wfs, atm, tel, src, det, rng)`
+- `finish_runtime_wfs_sensing!(wfs, atm, tel, src)`
+
+Most WFS families use the generic methods. A family should add concrete methods
+only when its sensing physics needs different propagation or post-measurement
+telescope-state semantics. For example, `CurvatureWFS` owns the atmosphere-
+coupled runtime sensing path instead of making the shared runtime branch on
+that concrete family.
 
 ## Reuse Rule
 

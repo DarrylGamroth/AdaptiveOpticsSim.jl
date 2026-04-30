@@ -1,38 +1,16 @@
 @inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
     wfs::AbstractWFS, src::AbstractSource, rng::AbstractRNG)
-    advance!(atm, tel, rng)
-    propagate!(atm, tel)
-    apply!(optic, tel, DMAdditive())
-    measure!(wfs, tel, src)
-    return nothing
-end
-
-@inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
-    wfs::CurvatureWFS, src::AbstractSource, rng::AbstractRNG)
-    reset_opd!(tel)
-    advance!(atm, tel, rng)
-    apply!(optic, tel, DMAdditive())
-    measure!(wfs, tel, src, atm)
-    tel.state.opd .+= atm.state.opd .* tel.state.pupil
+    prepropagate_runtime_wfs!(wfs, atm, tel, optic, src, rng)
+    measure_runtime_wfs!(wfs, atm, tel, src, rng)
+    finish_runtime_wfs_sensing!(wfs, atm, tel, src)
     return nothing
 end
 
 @inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
     wfs::AbstractWFS, src::AbstractSource, det::AbstractDetector, rng::AbstractRNG)
-    advance!(atm, tel, rng)
-    propagate!(atm, tel)
-    apply!(optic, tel, DMAdditive())
-    measure!(wfs, tel, src, det; rng=rng)
-    return nothing
-end
-
-@inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
-    wfs::CurvatureWFS, src::AbstractSource, det::AbstractDetector, rng::AbstractRNG)
-    reset_opd!(tel)
-    advance!(atm, tel, rng)
-    apply!(optic, tel, DMAdditive())
-    measure!(wfs, tel, src, atm, det; rng=rng)
-    tel.state.opd .+= atm.state.opd .* tel.state.pupil
+    prepropagate_runtime_wfs!(wfs, atm, tel, optic, src, rng)
+    measure_runtime_wfs!(wfs, atm, tel, src, det, rng)
+    finish_runtime_wfs_sensing!(wfs, atm, tel, src)
     return nothing
 end
 

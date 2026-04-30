@@ -29,18 +29,6 @@ end
     return measure!(wfs, tel, src)
 end
 
-@inline function _measure_for_calibration!(wfs::ShackHartmannWFS{<:Diffractive}, tel::Telescope, src::AbstractSource)
-    prepare_sampling!(wfs, tel, src)
-    ensure_sh_calibration!(wfs, tel, src)
-    return measure!(wfs, tel, src)
-end
-
-@inline function _measure_for_calibration!(wfs::ShackHartmannWFS{<:Diffractive}, tel::Telescope, src::SpectralSource)
-    prepare_sampling!(wfs, tel, spectral_reference_source(src))
-    ensure_sh_calibration!(wfs, tel, src)
-    return measure!(wfs, tel, src)
-end
-
 @inline function _interaction_matrix_buffer(ref::AbstractArray{T}, n_rows::Int, n_cols::Int) where {T}
     return similar(ref, T, n_rows, n_cols)
 end

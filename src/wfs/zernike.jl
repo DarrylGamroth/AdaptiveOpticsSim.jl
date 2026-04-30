@@ -442,3 +442,19 @@ function measure!(::Diffractive, wfs::ZernikeWFS, tel::Telescope, src::AbstractS
         throw(InvalidConfiguration("ZernikeWFS detector output size must match the sampled camera frame"))
     return zernike_signal!(wfs, tel, output_frame(det), src)
 end
+
+@inline valid_subaperture_mask(wfs::ZernikeWFS) = wfs.state.valid_mask
+@inline reference_signal(wfs::ZernikeWFS) = wfs.state.reference_signal_2d
+@inline camera_frame(wfs::ZernikeWFS) = wfs.state.camera_frame
+
+@inline wfs_output_frame(wfs::ZernikeWFS, ::Nothing) = camera_frame(wfs)
+@inline wfs_output_frame(wfs::ZernikeWFS, det::AbstractDetector) = camera_frame(wfs)
+@inline wfs_output_frame_prototype(wfs::ZernikeWFS, ::Nothing) = camera_frame(wfs)
+@inline wfs_output_frame_prototype(wfs::ZernikeWFS, det::AbstractDetector) = camera_frame(wfs)
+@inline supports_prepared_runtime(::ZernikeWFS, ::AbstractSource) = true
+@inline supports_detector_output(::ZernikeWFS, ::AbstractDetector) = true
+
+@inline function prepare_runtime_wfs!(wfs::ZernikeWFS, tel::Telescope, src::AbstractSource)
+    ensure_zernike_calibration!(wfs, tel, src)
+    return wfs
+end
