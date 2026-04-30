@@ -15,9 +15,13 @@ rather than by source file.
 Project-wide units guidance lives in
 [units-policy.md](units-policy.md).
 
-## Public API policy
+## Public API Policy
 
-The package now uses a tiered API surface:
+The exported API is curated in [`../src/exports.jl`](../src/exports.jl). The
+current top-level export surface is intentionally smaller than the complete
+module namespace.
+
+The package uses a tiered API surface:
 
 - `Stable top-level API`
   - exported by default
@@ -27,21 +31,48 @@ The package now uses a tiered API surface:
   - may require qualification as `AdaptiveOpticsSim.<name>`
 - `Developer / backend support API`
   - primarily for extensions, benchmark tooling, and backend validation
-  - some of this surface remains exported for compatibility, but it should not
-    be treated as entry-level workflow API
+  - not exported by default unless it is also part of a stable user workflow or
+    extension seam
 
 The practical rule is:
 
 - start with the stable exported workflow surface
-- use `AdaptiveOpticsSim.<name>` for advanced helpers such as telemetry,
-  scenario builders, build/backend policy utilities, and specialized
-  calibration-identification utilities
+- use `AdaptiveOpticsSim.<name>` for advanced helpers, support traits,
+  params/state internals, telemetry, build/backend policy utilities, and
+  specialized calibration-identification utilities
 
 If you are new to the package, read [`user-guide.md`](user-guide.md) first.
 If you are maintaining the package, pair this document with
 [`maintainer-architecture.md`](maintainer-architecture.md).
 
-## Core types and utilities
+## Export Rules
+
+Names should be exported only when they satisfy at least one of these criteria:
+
+- a normal user needs the name in a script, tutorial, or HIL workflow
+- the name is a constructor for a maintained physical model family
+- the name is a generic mutating operation such as `measure!`, `propagate!`, or
+  `step!`
+- the name is a stable extension seam documented in
+  [`extension-guide.md`](extension-guide.md)
+
+Names should generally remain qualified when they are:
+
+- `Params` or `State` implementation details
+- backend allocation, random, or launch helpers
+- `supports_*` capability traits
+- one-off telemetry/config helpers
+- low-level runtime layout or execution-plan internals
+
+Use `Base.isexported(AdaptiveOpticsSim, :name)` or inspect
+[`../src/exports.jl`](../src/exports.jl) when in doubt.
+
+The subsystem lists below include the stable exported workflow names plus
+selected advanced names that are part of documented extension contracts. Names
+that fall under the qualification rules above should be used as
+`AdaptiveOpticsSim.<name>` even when they appear in these lists.
+
+## Core Types And Utilities
 
 - `FidelityProfile`, `ScientificProfile`, `FastProfile`, `ProfileBundle`,
   `default_fidelity_profile`
@@ -254,8 +285,8 @@ Preferred construction style:
 
 ## Advanced documented API
 
-These surfaces are maintained, but Phase 1 moved them out of the default
-top-level namespace. Access them as `AdaptiveOpticsSim.<name>`.
+These surfaces are maintained, but they are intentionally not part of the
+default top-level namespace. Access them as `AdaptiveOpticsSim.<name>`.
 
 ### Telemetry, config, and trace containers
 

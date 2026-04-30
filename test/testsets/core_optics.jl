@@ -11,8 +11,28 @@
 end
 
 @testset "API export curation" begin
+    exported = names(AdaptiveOpticsSim)
+    @test length(exported) <= 300
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
+    @test Base.isexported(AdaptiveOpticsSim, :Detector)
+    @test Base.isexported(AdaptiveOpticsSim, :ControlLoopScenario)
+    @test Base.isexported(AdaptiveOpticsSim, :DeformableMirror)
+    @test Base.isexported(AdaptiveOpticsSim, :PyramidWFS)
+    @test Base.isexported(AdaptiveOpticsSim, :BioEdgeWFS)
+    @test Base.isexported(AdaptiveOpticsSim, :ZernikeWFS)
+    @test Base.isexported(AdaptiveOpticsSim, :CurvatureWFS)
+    @test Base.isexported(AdaptiveOpticsSim, :influence_model)
+    @test Base.isexported(AdaptiveOpticsSim, :prepare_runtime_wfs!)
+    @test Base.isexported(AdaptiveOpticsSim, :subaperture_layout)
+    @test !Base.isexported(AdaptiveOpticsSim, :TelescopeParams)
+    @test !Base.isexported(AdaptiveOpticsSim, :TelescopeState)
+    @test !Base.isexported(AdaptiveOpticsSim, :DetectorParams)
+    @test !Base.isexported(AdaptiveOpticsSim, :DetectorState)
+    @test !Base.isexported(AdaptiveOpticsSim, :supports_detector_mtf)
+    @test !Base.isexported(AdaptiveOpticsSim, :supports_prepared_runtime)
+    @test !Base.isexported(AdaptiveOpticsSim, :backend_rand)
+    @test !Base.isexported(AdaptiveOpticsSim, :backend_zeros)
     @test !Base.isexported(AdaptiveOpticsSim, :BuildBackend)
     @test !Base.isexported(AdaptiveOpticsSim, :CPUBuildBackend)
     @test !Base.isexported(AdaptiveOpticsSim, :GPUArrayBuildBackend)

@@ -8,6 +8,16 @@ using Statistics
 using Tables
 using TOML
 
+# The package exports only the user-facing API. The tests intentionally exercise
+# internal extension seams too, so make those names available without expanding
+# the public export list.
+for name in names(AdaptiveOpticsSim; all=true)
+    s = String(name)
+    if Base.isidentifier(s) && !startswith(s, "#") && !isdefined(@__MODULE__, name)
+        @eval const $(name) = getfield(AdaptiveOpticsSim, $(QuoteNode(name)))
+    end
+end
+
 include(joinpath(dirname(@__DIR__), "examples", "support", "subaru_ao188_simulation.jl"))
 include(joinpath(dirname(@__DIR__), "examples", "support", "subaru_ao3k_simulation.jl"))
 using .SubaruAO188Simulation
