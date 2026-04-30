@@ -25,7 +25,7 @@ struct GSCDetectorMetadata{T<:AbstractFloat}
     readout_sigma::Union{Nothing,T}
 end
 
-mutable struct GSCFFTWorkspace{T<:AbstractFloat,
+struct GSCFFTWorkspace{T<:AbstractFloat,
     C<:AbstractMatrix{Complex{T}},
     Pf,
     Pi}

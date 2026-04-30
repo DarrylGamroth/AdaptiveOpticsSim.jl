@@ -22,7 +22,7 @@ struct AtmosphericFieldPropagationParams{T<:AbstractFloat,M<:AbstractAtmospheric
     layer_distances_m::D
 end
 
-mutable struct AtmosphericFieldSlice{
+struct AtmosphericFieldSlice{
     T<:AbstractFloat,
     S<:AbstractSource,
     F<:ElectricField,
@@ -35,7 +35,7 @@ mutable struct AtmosphericFieldSlice{
     propagators::V
 end
 
-mutable struct AtmosphericFieldPropagationState{
+struct AtmosphericFieldPropagationState{
     T<:AbstractFloat,
     S<:AbstractVector,
     R<:AbstractMatrix{T},

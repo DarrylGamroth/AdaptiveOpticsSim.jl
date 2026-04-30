@@ -76,7 +76,7 @@ Preallocated fixed-length frame delay for vector-valued control signals.
 The delay line stores `delay_frames` historical samples and returns the signal
 that exits the tail when a new sample is shifted in.
 """
-mutable struct VectorDelayLine{A<:AbstractMatrix,V<:AbstractVector}
+struct VectorDelayLine{A<:AbstractMatrix,V<:AbstractVector}
     buffer::A
     scratch::V
 end
@@ -233,7 +233,7 @@ slope, and frame surface.
 This is used for grouped multi-branch execution while preserving per-runtime
 state internally.
 """
-mutable struct CompositeSimulationInterface{IT,C,S,WF,SF,PR,WS,SS}
+struct CompositeSimulationInterface{IT,C,S,WF,SF,PR,WS,SS}
     interfaces::IT
     command::C
     slopes::S

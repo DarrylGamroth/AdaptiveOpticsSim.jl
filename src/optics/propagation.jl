@@ -7,7 +7,7 @@ struct FraunhoferPropagationParams{T<:AbstractFloat}
     output_sampling_rad::T
 end
 
-mutable struct FraunhoferPropagationState{C<:AbstractMatrix,P}
+struct FraunhoferPropagationState{C<:AbstractMatrix,P}
     scratch::C
     fft_plan::P
 end
@@ -25,7 +25,7 @@ struct FresnelPropagationParams{T<:AbstractFloat}
     distance_m::T
 end
 
-mutable struct FresnelPropagationState{C<:AbstractMatrix,V<:AbstractVector,M<:AbstractMatrix,Pf,Pi}
+struct FresnelPropagationState{C<:AbstractMatrix,V<:AbstractVector,M<:AbstractMatrix,Pf,Pi}
     spectrum::C
     propagated::C
     freqs::V

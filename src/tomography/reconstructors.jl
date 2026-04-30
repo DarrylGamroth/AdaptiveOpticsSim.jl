@@ -130,7 +130,7 @@ struct TomographicReconstructor{
     operators::O
 end
 
-mutable struct TomographyCommandReconstructor{
+struct TomographyCommandReconstructor{
     T<:AbstractFloat,
     M<:AbstractMatrix{T},
     F<:TomographyFitting,

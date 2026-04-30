@@ -169,7 +169,7 @@ end
 
 QuadraticFocusBasis(; scale::Real=1.0) = QuadraticFocusBasis(scale)
 
-mutable struct ModalControllableOpticState{T<:AbstractFloat,A<:AbstractMatrix{T},M<:AbstractMatrix{T},V<:AbstractVector{T}}
+struct ModalControllableOpticState{T<:AbstractFloat,A<:AbstractMatrix{T},M<:AbstractMatrix{T},V<:AbstractVector{T}}
     opd::A
     opd_vec::V
     modes::M

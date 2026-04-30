@@ -5,7 +5,7 @@ using Random
 function bench_psf()
     tel = Telescope(resolution=64, diameter=8.0, sampling_time=1e-3, central_obstruction=0.2)
     src = Source(band=:I, magnitude=0.0)
-    ws = Workspace(128; T=Float64)
+    ws = AdaptiveOpticsSim.Workspace(128; T=Float64)
     return @benchmark compute_psf!($tel, $src; zero_padding=2, ws=$ws)
 end
 
@@ -66,10 +66,10 @@ function bench_closed_loop_runtime()
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
     wfs = ShackHartmannWFS(tel; n_lenslets=4)
-    sim = AOSimulation(tel, atm, src, dm, wfs)
+    sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     recon = ModalReconstructor(imat; gain=0.5)
-    runtime = ClosedLoopRuntime(sim, recon; rng=rng)
+    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; rng=rng)
     step!(runtime)
     return @benchmark step!($runtime)
 end
@@ -81,10 +81,10 @@ function bench_closed_loop_runtime_timing()
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
     wfs = ShackHartmannWFS(tel; n_lenslets=4)
-    sim = AOSimulation(tel, atm, src, dm, wfs)
+    sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     recon = ModalReconstructor(imat; gain=0.5)
-    runtime = ClosedLoopRuntime(sim, recon; rng=rng)
+    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; rng=rng)
     return runtime_timing(runtime; warmup=10, samples=200, gc_before=false)
 end
 
@@ -97,7 +97,7 @@ function bench_lift(numerical::Bool)
     lift = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=1,
         img_resolution=16, numerical=numerical)
     coeffs = zeros(6)
-    return @benchmark lift_interaction_matrix($lift, $coeffs, 1:3)
+    return @benchmark AdaptiveOpticsSim.lift_interaction_matrix($lift, $coeffs, 1:3)
 end
 
 function bench_lift_inplace(numerical::Bool)
@@ -111,7 +111,7 @@ function bench_lift_inplace(numerical::Bool)
     coeffs = zeros(6)
     mode_ids = 1:3
     H = @view lift.state.H_buffer[:, 1:length(mode_ids)]
-    return @benchmark lift_interaction_matrix!($H, $lift, $coeffs, $mode_ids)
+    return @benchmark AdaptiveOpticsSim.lift_interaction_matrix!($H, $lift, $coeffs, $mode_ids)
 end
 
 function alloc_checks()
@@ -128,10 +128,10 @@ function alloc_checks()
     mode_ids = 1:3
     H_a = @view lift_a.state.H_buffer[:, 1:length(mode_ids)]
     H_n = @view lift_n.state.H_buffer[:, 1:length(mode_ids)]
-    lift_interaction_matrix!(H_a, lift_a, coeffs, mode_ids)
-    lift_interaction_matrix!(H_n, lift_n, coeffs, mode_ids)
-    alloc_lift_a = @allocated lift_interaction_matrix!(H_a, lift_a, coeffs, mode_ids)
-    alloc_lift_n = @allocated lift_interaction_matrix!(H_n, lift_n, coeffs, mode_ids)
+    AdaptiveOpticsSim.lift_interaction_matrix!(H_a, lift_a, coeffs, mode_ids)
+    AdaptiveOpticsSim.lift_interaction_matrix!(H_n, lift_n, coeffs, mode_ids)
+    alloc_lift_a = @allocated AdaptiveOpticsSim.lift_interaction_matrix!(H_a, lift_a, coeffs, mode_ids)
+    alloc_lift_n = @allocated AdaptiveOpticsSim.lift_interaction_matrix!(H_n, lift_n, coeffs, mode_ids)
 
     tel_r = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm = DeformableMirror(tel_r; n_act=4)
@@ -149,10 +149,10 @@ function alloc_checks()
     atm_rt = KolmogorovAtmosphere(tel_rt; r0=0.2, L0=25.0)
     dm_rt = DeformableMirror(tel_rt; n_act=4, influence_width=0.3)
     wfs_rt = ShackHartmannWFS(tel_rt; n_lenslets=4)
-    sim_rt = AOSimulation(tel_rt, atm_rt, src_rt, dm_rt, wfs_rt)
+    sim_rt = AOSimulation(tel_rt, src_rt, atm_rt, dm_rt, wfs_rt)
     imat_rt = interaction_matrix(dm_rt, wfs_rt, tel_rt; amplitude=0.1)
     recon_rt = ModalReconstructor(imat_rt; gain=0.5)
-    runtime = ClosedLoopRuntime(sim_rt, recon_rt; rng=rng)
+    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim_rt, recon_rt; rng=rng)
     step!(runtime)
     alloc_runtime = @allocated step!(runtime)
 

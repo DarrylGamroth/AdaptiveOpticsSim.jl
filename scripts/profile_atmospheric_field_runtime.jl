@@ -18,21 +18,17 @@ end
 function _resolve_backend(name::AbstractString)
     lowered = lowercase(name)
     if lowered == "cpu"
-        return Array, nothing, "cpu"
+        return CPUBackend(), nothing, "cpu"
     elseif lowered == "cuda"
         isdefined(Main, :CUDA) || error("profile_atmospheric_field_runtime.jl requires CUDA.jl for backend=cuda")
         CUDA.functional() || error("profile_atmospheric_field_runtime.jl requires a functional CUDA driver/device")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.CUDABackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.CUDABackendTag)
-        backend === nothing && error("CUDA backend array type is unavailable")
-        return backend, AdaptiveOpticsSim.CUDABackendTag, "cuda"
+        return CUDABackend(), AdaptiveOpticsSim.CUDABackendTag, "cuda"
     elseif lowered == "amdgpu"
         isdefined(Main, :AMDGPU) || error("profile_atmospheric_field_runtime.jl requires AMDGPU.jl for backend=amdgpu")
         AMDGPU.functional() || error("profile_atmospheric_field_runtime.jl requires a functional ROCm installation and GPU")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.AMDGPUBackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.AMDGPUBackendTag)
-        backend === nothing && error("AMDGPU backend array type is unavailable")
-        return backend, AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
+        return AMDGPUBackend(), AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
     end
     error("unsupported backend '$name'; use cpu, cuda, or amdgpu")
 end
@@ -100,7 +96,7 @@ function _sync_array!(::Type{B}, A) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     return nothing
 end
 
-function _make_atmosphere(kind::Symbol, tel, cfg, T, BackendArray)
+function _make_atmosphere(kind::Symbol, tel, cfg, T, backend)
     if kind === :finite
         return MultiLayerAtmosphere(tel;
             r0=cfg.r0,
@@ -110,7 +106,7 @@ function _make_atmosphere(kind::Symbol, tel, cfg, T, BackendArray)
             wind_direction=cfg.wind_direction,
             altitude=cfg.altitude,
             T=T,
-            backend=BackendArray,
+            backend=backend,
         )
     elseif kind === :infinite
         return InfiniteMultiLayerAtmosphere(tel;
@@ -123,7 +119,7 @@ function _make_atmosphere(kind::Symbol, tel, cfg, T, BackendArray)
             screen_resolution=cfg.screen_resolution,
             stencil_size=cfg.stencil_size,
             T=T,
-            backend=BackendArray,
+            backend=backend,
         )
     end
     error("unsupported atmosphere kind '$kind'")
@@ -138,13 +134,13 @@ function _allocated_bytes(f!::F; warmup::Int=2, gc_before::Bool=true) where {F<:
 end
 
 function _profile_field_path(mode::Symbol, atmo_kind::Symbol, backend_name::AbstractString, scale_name::AbstractString)
-    BackendArray, backend_tag, backend_label = _resolve_backend(backend_name)
+    backend, backend_tag, backend_label = _resolve_backend(backend_name)
     cfg = _resolve_scale(scale_name)
     T = Float32
     tel = Telescope(resolution=cfg.resolution, diameter=cfg.diameter, sampling_time=1.0f-3,
-        central_obstruction=0.0f0, T=T, backend=BackendArray)
+        central_obstruction=0.0f0, T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
-    atm = _make_atmosphere(atmo_kind, tel, cfg, T, BackendArray)
+    atm = _make_atmosphere(atmo_kind, tel, cfg, T, backend)
     rng = runtime_rng(3)
     advance!(atm, tel; rng=rng)
 
@@ -152,7 +148,7 @@ function _profile_field_path(mode::Symbol, atmo_kind::Symbol, backend_name::Abst
         model=mode === :geometric ? GeometricAtmosphericPropagation(T=T) : LayeredFresnelAtmosphericPropagation(T=T),
         zero_padding=2,
         T=T)
-    wfs = CurvatureWFS(tel; pupil_samples=8, T=T, backend=BackendArray)
+    wfs = CurvatureWFS(tel; pupil_samples=8, T=T, backend=backend)
 
     step! = if mode === :curvature
         () -> begin
@@ -164,7 +160,7 @@ function _profile_field_path(mode::Symbol, atmo_kind::Symbol, backend_name::Abst
     else
         () -> begin
             advance!(atm, tel; rng=rng)
-            field = propagate_atmosphere_field!(prop, atm, tel, src)
+            field = AdaptiveOpticsSim.propagate_atmosphere_field!(prop, atm, tel, src)
             _sync_array!(backend_tag, field.state.field)
             return field.state.field
         end

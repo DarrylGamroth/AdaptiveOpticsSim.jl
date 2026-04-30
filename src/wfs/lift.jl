@@ -93,7 +93,7 @@ mutable struct LiFTDiagnostics{T<:AbstractFloat}
     used_fallback::Bool
 end
 
-mutable struct LiFTState{T<:AbstractFloat,
+struct LiFTState{T<:AbstractFloat,
     W<:Workspace,
     B<:AbstractMatrix{T},
     C<:AbstractMatrix{Complex{T}},

@@ -53,7 +53,7 @@ abstract type SubharmonicMode end
 struct FastSubharmonics <: SubharmonicMode end
 struct FidelitySubharmonics <: SubharmonicMode end
 
-mutable struct PhaseStatsWorkspace{T<:AbstractFloat,
+struct PhaseStatsWorkspace{T<:AbstractFloat,
     C<:AbstractMatrix{Complex{T}},
     R<:AbstractMatrix{T},
     V<:AbstractVector{T},
