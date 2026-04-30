@@ -2,12 +2,6 @@
 
 Status: active
 
-Plan traceability:
-
-- ``PLAN-15``
-- ``PLAN-32``
-- review IDs: `PR-31`, `PR-32`, `PR-33`
-
 ## Purpose
 
 This document explains how backend validation is organized.
@@ -26,7 +20,6 @@ The goal is to keep four distinct classes of evidence separate:
 For current release/support scope, use:
 
 - [supported-production-surfaces.md](supported-production-surfaces.md)
-- [production-readiness-checklist.md](production-readiness-checklist.md)
 - [release-validation-runbook.md](release-validation-runbook.md)
 
 ## Test Layout

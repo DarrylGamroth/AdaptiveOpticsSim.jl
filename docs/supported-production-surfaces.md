@@ -29,7 +29,6 @@ Use these supporting docs together:
 
 - [model-validity-matrix.md](model-validity-matrix.md)
 - [backend-validation-guide.md](backend-validation-guide.md)
-- [production-readiness-checklist.md](production-readiness-checklist.md)
 - [release-validation-runbook.md](release-validation-runbook.md)
 
 ## Production-Supported Surfaces

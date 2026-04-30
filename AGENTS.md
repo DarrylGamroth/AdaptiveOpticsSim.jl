@@ -49,7 +49,6 @@
 # Reference docs:
 # - docs/documentation-map.md
 # - docs/extension-guide.md
-# - docs/julia-port-design.md
 # - docs/julia-tutorial-mappings.md
 # - docs/roadmap.md
 # - docs/model-validity-matrix.md

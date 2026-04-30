@@ -155,7 +155,6 @@ Before a release or production handoff:
 Use together with:
 
 - [supported-production-surfaces.md](supported-production-surfaces.md)
-- [production-readiness-checklist.md](production-readiness-checklist.md)
 - [backend-validation-guide.md](backend-validation-guide.md)
 
 ## Validation host bootstrap

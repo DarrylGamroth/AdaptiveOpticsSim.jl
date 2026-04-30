@@ -162,8 +162,8 @@ For users:
 For validation and supported scope:
 
 - [docs/supported-production-surfaces.md](docs/supported-production-surfaces.md)
-- [docs/production-readiness-checklist.md](docs/production-readiness-checklist.md)
 - [docs/release-validation-runbook.md](docs/release-validation-runbook.md)
+- [docs/backend-validation-guide.md](docs/backend-validation-guide.md)
 
 For deeper developer reference:
 
@@ -182,7 +182,6 @@ by design.
 The package has a documented maintained production-validation surface. Use:
 
 - [docs/supported-production-surfaces.md](docs/supported-production-surfaces.md)
-- [docs/production-readiness-checklist.md](docs/production-readiness-checklist.md)
 - [docs/release-validation-runbook.md](docs/release-validation-runbook.md)
 
 Release validation entry point:

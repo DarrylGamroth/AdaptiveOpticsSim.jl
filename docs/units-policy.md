@@ -43,9 +43,9 @@ AdaptiveOpticsSim.jl.
   established user expectations, but those values should not remain degree-based
   in the runtime state.
 
-## Current Cleanup Targets
+## Implemented Normalization Surfaces
 
-The first cleanup pass covered by this policy is:
+The current implementation follows this policy for:
 
 - `Source` / `LGSSource`: normalize polar sky coordinates to Cartesian arcsecond
   offsets at construction time.

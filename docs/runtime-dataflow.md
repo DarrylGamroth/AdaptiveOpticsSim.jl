@@ -2,11 +2,6 @@
 
 Status: active
 
-Plan traceability:
-
-- ``PLAN-36``
-- review ID: `PR-30`
-
 ## Purpose
 
 This document explains the end-to-end runtime and dataflow of the maintained

@@ -19,13 +19,11 @@ implementation records are needed.
 - [`maintainer-architecture.md`](./maintainer-architecture.md)
 - [`runtime-dataflow.md`](./runtime-dataflow.md)
 - [`extension-guide.md`](./extension-guide.md)
-- [`julia-port-design.md`](./julia-port-design.md)
 - [`roadmap.md`](./roadmap.md)
 
 ## Validation Docs
 
 - [`supported-production-surfaces.md`](./supported-production-surfaces.md)
-- [`production-readiness-checklist.md`](./production-readiness-checklist.md)
 - [`release-validation-runbook.md`](./release-validation-runbook.md)
 - [`backend-validation-guide.md`](./backend-validation-guide.md)
 - [`model-validity-matrix.md`](./model-validity-matrix.md)
