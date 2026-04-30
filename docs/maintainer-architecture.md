@@ -2,23 +2,17 @@
 
 Status: active
 
-Plan traceability:
-
-- [`PLAN-34`](./package-review-action-plan.md)
-- review ID: `PR-28`
-
 ## Purpose
 
 This document describes the current implemented architecture of
 AdaptiveOpticsSim.jl.
 
-It is the maintainer-facing synthesis layer that sits between:
+It is the maintainer-facing synthesis layer for:
 
-- the platform synthesis guide in
-  [`platform-architecture.md`](./platform-architecture.md)
-- the public workflow docs in [`user-guide.md`](./user-guide.md)
-- the symbol inventory in [`api-reference.md`](./api-reference.md)
-- the subsystem plans and audits under [`docs/`](./)
+- the public workflow docs in [`user-guide.md`](user-guide.md)
+- the symbol inventory in [`api-reference.md`](api-reference.md)
+- the extension seams in [`extension-guide.md`](extension-guide.md)
+- the runtime flow in [`runtime-dataflow.md`](runtime-dataflow.md)
 
 ## Architectural Principles
 
@@ -107,8 +101,8 @@ Examples:
 - propagation contexts
 - backend reductions and random/noise services
 
-These were expanded during the package-review cleanup to reduce duplicated
-orchestration logic across SH, Pyramid, BioEdge, detectors, and runtime.
+These shared services reduce duplicated orchestration logic across SH, Pyramid,
+BioEdge, detectors, and runtime.
 
 ### 3. Simulation/runtime orchestration
 
@@ -133,7 +127,7 @@ The current runtime model is:
 - WFS and detector pipelines own their sampled/readout/intermediate products
   explicitly rather than relying on in-place aliasing
 
-For the step-by-step view, see [`runtime-dataflow.md`](./runtime-dataflow.md).
+For the step-by-step view, see [`runtime-dataflow.md`](runtime-dataflow.md).
 
 ## Backend Strategy
 
@@ -157,9 +151,8 @@ This package currently maintains:
 
 Validation and benchmark evidence for these backends lives in:
 
-- [`model-validity-matrix.md`](./model-validity-matrix.md)
-- [`benchmark-matrix-plan.md`](./benchmark-matrix-plan.md)
-- [`cross-package-benchmark-harness.md`](./cross-package-benchmark-harness.md)
+- [`model-validity-matrix.md`](model-validity-matrix.md)
+- benchmark artifacts under `benchmarks/results/`
 
 ## Validation Structure
 
@@ -171,7 +164,7 @@ The package uses four distinct evidence classes:
 - benchmark evidence, including cross-package benchmark archives
 
 The maintained synthesis doc for this is
-[`model-validity-matrix.md`](./model-validity-matrix.md).
+[`model-validity-matrix.md`](model-validity-matrix.md).
 
 ## Optional Boundaries
 
@@ -190,13 +183,13 @@ Optional or boundary-managed surfaces include:
 - heavyweight format or ecosystem adapters
 - extra plotting or notebook-facing helpers
 
-See [`optional-integration-boundaries.md`](./optional-integration-boundaries.md).
+See the optional-boundary policy in this guide.
 
 ## Recommended Reading Order for Maintainers
 
-1. [`documentation-map.md`](./documentation-map.md)
-2. [`platform-architecture.md`](./platform-architecture.md)
-3. [`maintainer-architecture.md`](./maintainer-architecture.md)
-4. [`runtime-dataflow.md`](./runtime-dataflow.md)
-5. [`model-validity-matrix.md`](./model-validity-matrix.md)
-6. subsystem plan docs only as needed
+1. [`documentation-map.md`](documentation-map.md)
+2. [`user-guide.md`](user-guide.md)
+3. [`maintainer-architecture.md`](maintainer-architecture.md)
+4. [`runtime-dataflow.md`](runtime-dataflow.md)
+5. [`extension-guide.md`](extension-guide.md)
+6. [`model-validity-matrix.md`](model-validity-matrix.md)

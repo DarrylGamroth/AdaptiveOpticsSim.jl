@@ -27,13 +27,10 @@ following are true:
 
 Use these supporting docs together:
 
-- [model-validity-matrix.md](./model-validity-matrix.md)
-- [backend-validation-guide.md](./backend-validation-guide.md)
-- [cross-package-benchmark-harness.md](./cross-package-benchmark-harness.md)
-- [production-readiness-checklist.md](./production-readiness-checklist.md)
-- [operational-gpu-validation-cadence.md](./operational-gpu-validation-cadence.md)
-- [production-boundary-freeze-2026-04.md](./production-boundary-freeze-2026-04.md)
-- [gpu-support-boundary-plan-2026-04.md](./gpu-support-boundary-plan-2026-04.md)
+- [model-validity-matrix.md](model-validity-matrix.md)
+- [backend-validation-guide.md](backend-validation-guide.md)
+- [production-readiness-checklist.md](production-readiness-checklist.md)
+- [release-validation-runbook.md](release-validation-runbook.md)
 
 ## Production-Supported Surfaces
 
@@ -52,9 +49,9 @@ Current CPU-supported families:
 
 Primary evidence:
 
-- [model-validity-matrix.md](./model-validity-matrix.md)
-- [platform-workflows.md](./platform-workflows.md)
-- [benchmark-matrix-plan.md](./benchmark-matrix-plan.md)
+- [model-validity-matrix.md](model-validity-matrix.md)
+- the workflows in [`user-guide.md`](user-guide.md) and [`release-validation-runbook.md`](release-validation-runbook.md)
+- benchmark artifacts under `benchmarks/results/`
 - [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml)
 
 ### CUDA backend
@@ -75,9 +72,9 @@ Current CUDA-supported scope:
 
 Primary evidence:
 
-- [backend-validation-guide.md](./backend-validation-guide.md)
-- [release-validation-runbook.md](./release-validation-runbook.md)
-- [cross-package-benchmark-harness.md](./cross-package-benchmark-harness.md)
+- [backend-validation-guide.md](backend-validation-guide.md)
+- [release-validation-runbook.md](release-validation-runbook.md)
+- benchmark artifacts under `benchmarks/results/`
 - [../benchmarks/results/validation_runs/2026-04-10-spiders-cuda.toml](../benchmarks/results/validation_runs/2026-04-10-spiders-cuda.toml)
 
 Current expectation:
@@ -103,11 +100,9 @@ Current AMDGPU-supported scope:
 
 Primary evidence:
 
-- [backend-validation-guide.md](./backend-validation-guide.md)
-- [rocm-failure-catalog.md](./rocm-failure-catalog.md)
-- [rocm-fallback-inventory.md](./rocm-fallback-inventory.md)
-- [release-validation-runbook.md](./release-validation-runbook.md)
-- [cross-package-benchmark-harness.md](./cross-package-benchmark-harness.md)
+- [backend-validation-guide.md](backend-validation-guide.md)
+- [release-validation-runbook.md](release-validation-runbook.md)
+- benchmark artifacts under `benchmarks/results/`
 - [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-amdgpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-amdgpu.toml)
 
 Current expectation:
@@ -140,9 +135,9 @@ Current production-supported external equivalence surface:
 
 Primary evidence:
 
-- [oopao-reference-datasets.md](./oopao-reference-datasets.md)
-- [/home/dgamroth/workspaces/codex/AdaptiveOpticsComparisons/docs/cross-package-benchmark-harness.md](/home/dgamroth/workspaces/codex/AdaptiveOpticsComparisons/docs/cross-package-benchmark-harness.md)
-- [/home/dgamroth/workspaces/codex/AdaptiveOpticsComparisons/results/archived/2026-04-08-heart-hil-oopao-baseline.toml](/home/dgamroth/workspaces/codex/AdaptiveOpticsComparisons/results/archived/2026-04-08-heart-hil-oopao-baseline.toml)
+- committed OOPAO reference data under `test/reference_data`
+- `../AdaptiveOpticsComparisons/docs/cross-package-benchmark-harness.md`
+- `../AdaptiveOpticsComparisons/results/archived/2026-04-08-heart-hil-oopao-baseline.toml`
 
 Additional production-supported frozen OOPAO equivalence surfaces:
 
@@ -151,7 +146,7 @@ Additional production-supported frozen OOPAO equivalence surfaces:
 
 Primary evidence:
 
-- [oopao-reference-datasets.md](./oopao-reference-datasets.md)
+- committed OOPAO reference data under `test/reference_data`
 - [../scripts/generate_oopao_equivalence_artifact.jl](../scripts/generate_oopao_equivalence_artifact.jl)
 - [../benchmarks/results/equivalence/2026-04-09-oopao-production-equivalence.toml](../benchmarks/results/equivalence/2026-04-09-oopao-production-equivalence.toml)
 

@@ -42,5 +42,5 @@
 # - docs/julia-port-design.md
 # - docs/julia-tutorial-mappings.md
 # - docs/roadmap.md
-# - docs/oopao-reference-datasets.md
+# - docs/model-validity-matrix.md
 # - docs/deterministic-simulation.md

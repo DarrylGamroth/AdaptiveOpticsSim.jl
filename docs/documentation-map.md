@@ -2,301 +2,49 @@
 
 Status: active
 
-Plan traceability:
+This is the maintained navigation surface for the documentation set. The docs
+directory is intentionally small. Historical plans, audits, inventories, and
+triage notes are not kept as live documentation; use git history if old
+implementation records are needed.
 
-- [`PLAN-33`](./package-review-action-plan.md)
-- [`PLAN-37`](./package-review-action-plan.md)
-- review IDs: `PR-26`, `PR-27`, `PR-29`
-
-## Purpose
-
-This is the maintained navigation surface for the documentation set.
-
-Use this page first instead of scanning the full `docs/` directory. The goal is
-to keep a small set of stable entry points while preserving the more detailed
-planning and audit records for subsystem work.
-
-## Start Here
-
-### User Path
-
-Most users should stop after these three:
+## User Docs
 
 - [`user-guide.md`](./user-guide.md)
 - [`model-cookbook.md`](./model-cookbook.md)
 - [`api-reference.md`](./api-reference.md)
-- `examples/tutorials/`
+- [`julia-tutorial-mappings.md`](./julia-tutorial-mappings.md)
 
-### Validation And Production Path
-
-Use these when the task is evidence, release support, or backend validation:
-
-- [`model-validity-matrix.md`](./model-validity-matrix.md)
-- [`supported-production-surfaces.md`](./supported-production-surfaces.md)
-- [`production-readiness-checklist.md`](./production-readiness-checklist.md)
-- [`release-validation-runbook.md`](./release-validation-runbook.md)
-- [`self-hosted-gpu-runner-setup.md`](./self-hosted-gpu-runner-setup.md)
-- [`benchmark-matrix-plan.md`](./benchmark-matrix-plan.md)
-- [`cross-package-benchmark-harness.md`](./cross-package-benchmark-harness.md)
-- [`gpu-support-boundary-plan-2026-04.md`](./gpu-support-boundary-plan-2026-04.md)
-
-### Developer And Maintainer Path
-
-Use these when changing package structure or internals:
+## Maintainer Docs
 
 - [`maintainer-architecture.md`](./maintainer-architecture.md)
-- [`platform-architecture.md`](./platform-architecture.md)
-- [`platform-workflows.md`](./platform-workflows.md)
-- [`scenario-builder-style.md`](./scenario-builder-style.md)
 - [`runtime-dataflow.md`](./runtime-dataflow.md)
-
-### External Truth And Equivalence
-
-Use these when the task is cross-package or instrument-truth work:
-
-- [`oopao-reference-datasets.md`](./oopao-reference-datasets.md)
-- [`composite-plant-oopao-review-2026-04.md`](./composite-plant-oopao-review-2026-04.md)
-- [`dm-oopao-equivalence-tightening-plan-2026-04.md`](./dm-oopao-equivalence-tightening-plan-2026-04.md)
-- [`../scripts/generate_oopao_equivalence_artifact.jl`](../scripts/generate_oopao_equivalence_artifact.jl)
-- [`../scripts/generate_heart_boundary_truth_artifact.py`](../scripts/generate_heart_boundary_truth_artifact.py)
-- [`../benchmarks/results/truth/2026-04-09-heart-boundary-truth.toml`](../benchmarks/results/truth/2026-04-09-heart-boundary-truth.toml)
-
-## Active Stable Guides
-
-- [`user-guide.md`](./user-guide.md)
-  - workflow-oriented user entry point
-- [`model-cookbook.md`](./model-cookbook.md)
-  - compact recipe-first entry point for common model types, including HIL-style runtime surfaces and the external `Proper.jl` coronagraph seam
-- [`platform-architecture.md`](./platform-architecture.md)
-  - stable synthesis guide for platform-scale structure and boundaries
-- [`platform-workflows.md`](./platform-workflows.md)
-  - stable workflow guide for script-first simulation, validation, and benchmarking
-- [`control-loop-orchestration.md`](./control-loop-orchestration.md)
-  - typed scenario/config layer for Julia-native runtime composition
-- [`control-loop-orchestration-validation.md`](./control-loop-orchestration-validation.md)
-  - maintained benchmark and backend evidence for the `ControlLoopScenario` layer
-- [`platform-strengthening-closeout.md`](./platform-strengthening-closeout.md)
-  - explicit post-plan decision on what still trails SPECULA and what comes next
-- [`platform-manifest-defer.md`](./platform-manifest-defer.md)
-  - explicit defer note for optional scenario manifests/config-style orchestration
-- [`external-comparison-workspace-plan.md`](./external-comparison-workspace-plan.md)
-  - migration plan for replacing the `revolt-real` fork with a dedicated
-    external comparison workspace
-- [`scenario-builder-style.md`](./scenario-builder-style.md)
-  - maintained conventions for script-first scenario construction
-- [`controllable-optics-plan-2026-04.md`](./controllable-optics-plan-2026-04.md)
-  - phased plan for multi-surface controllable optics, GPU-native command routing, and ordered plant application
-- [`controllable-optic-self-check-plan-2026-04.md`](./controllable-optic-self-check-plan-2026-04.md)
-  - traceable self-check plan for controllable optics, composite ordering, low-order behavior, and backend parity evidence
-- [`controllable-optic-self-check-expansion-plan-2026-04.md`](./controllable-optic-self-check-expansion-plan-2026-04.md)
-  - follow-on plan for amplitude sweeps, detector-in-the-loop invariants, multi-step statefulness, failure paths, and multi-WFS controllable-optic validation
-- [`api-reference.md`](./api-reference.md)
-  - maintained public API surface
-- [`maintainer-architecture.md`](./maintainer-architecture.md)
-  - current system structure and subsystem ownership
-- [`runtime-dataflow.md`](./runtime-dataflow.md)
-  - end-to-end build, step, and export dataflow
-- [`model-validity-matrix.md`](./model-validity-matrix.md)
-  - model claims, evidence, and limitations
-- [`supported-production-surfaces.md`](./supported-production-surfaces.md)
-  - explicit production-supported vs non-supported scope
-- [`gpu-support-boundary-plan-2026-04.md`](./gpu-support-boundary-plan-2026-04.md)
-  - explicit decision record that supported CUDA/AMDGPU scope is defined by the dedicated hardware validation targets rather than broad audit scripts
-- [`production-readiness-checklist.md`](./production-readiness-checklist.md)
-  - remaining blockers before production-readiness claims
-- [`production-hardening-plan-2026-04.md`](./production-hardening-plan-2026-04.md)
-  - ordered execution plan for finishing the current production-hardening pass
-- [`operational-gpu-validation-cadence.md`](./operational-gpu-validation-cadence.md)
-  - required real-hardware release-validation cadence for CUDA and AMDGPU
-- [`production-boundary-freeze-2026-04.md`](./production-boundary-freeze-2026-04.md)
-  - explicit decision to freeze the current supported production boundary for this release train
-- [`release-validation-runbook.md`](./release-validation-runbook.md)
-- [`self-hosted-gpu-runner-setup.md`](./self-hosted-gpu-runner-setup.md)
-  - one-command release validation procedure and optional GPU/comparison tracks
-- [`benchmark-matrix-plan.md`](./benchmark-matrix-plan.md)
-  - maintained performance surfaces and benchmark classes
-- [`cross-package-benchmark-harness.md`](./cross-package-benchmark-harness.md)
-  - cross-package benchmark execution, archived evidence, and scenario policy
-- [`revolt-sh-benchmark-contract.md`](./revolt-sh-benchmark-contract.md)
-  - normalization rules and accepted differences for the maintained `CP-02`
-    REVOLT-like Shack-Hartmann comparison
-- [`revolt-pwfs-benchmark-contract.md`](./revolt-pwfs-benchmark-contract.md)
-  - normalization rules and accepted differences for the maintained `CP-03`
-    REVOLT-like Pyramid comparison
-- [`revolt-platform-benchmark-contract.md`](./revolt-platform-benchmark-contract.md)
-  - normalization rules and accepted differences for the maintained `CP-06`
-    grouped platform-runtime comparison
-- [`specula-atmo-field-benchmark-scope.md`](./specula-atmo-field-benchmark-scope.md)
-  - current scope and defer conditions for the `CP-05`
-    SPECULA-aligned atmospheric-field benchmark family
-- [`future-platform-direction.md`](./future-platform-direction.md)
-  - post-review platform direction and scope guardrails
-- [`platform-strengthening-closeout.md`](./platform-strengthening-closeout.md)
-  - Phase 6 closeout decision for the main platform-strengthening pass
-- [`post-review-platform-plan.md`](./post-review-platform-plan.md)
-  - phased next-step plan for validation hardening, benchmark expansion, and
-    next capability selection
-- [`execution-plan-milestones.md`](./execution-plan-milestones.md)
-  - phased rollout for backend-specific execution-plan adoption
-- [`execution-plan-closeout.md`](./execution-plan-closeout.md)
-  - rollout outcome, builder decision, and follow-up triggers
-- [`platform-strengthening-plan.md`](./platform-strengthening-plan.md)
-  - next main-platform implementation plan after the execution-plan rollout
-- [`next-milestone-decision-2026-04.md`](./next-milestone-decision-2026-04.md)
-  - evidence-backed selection memo for the next breadth milestone
-- [`grouped-runtime-plan.md`](./grouped-runtime-plan.md)
-  - chosen next breadth milestone for grouped sensing/runtime orchestration
-- [`grouped-runtime-contract.md`](./grouped-runtime-contract.md)
-  - maintained grouped source/runtime/export contract
-- [`grouped-runtime-validation.md`](./grouped-runtime-validation.md)
-  - grouped runtime validation artifact and scope limits
-- [`specula-platform-runtime-validation.md`](./specula-platform-runtime-validation.md)
-  - Julia-native SPECULA-informed platform/runtime artifact and scope limits
-- [`rocm-fallback-inventory.md`](./rocm-fallback-inventory.md)
-  - explicit ROCm fallback classification after the execution-plan rollout and
-    Phase 3 cleanup
-- [`rocm-phase3-rebaseline.md`](./rocm-phase3-rebaseline.md)
-  - CPU/AMDGPU/CUDA realistic runtime rebaseline after the Phase 3 ROCm cleanup
-
-## Active Supporting Reference
-
+- [`extension-guide.md`](./extension-guide.md)
+- [`julia-port-design.md`](./julia-port-design.md)
 - [`roadmap.md`](./roadmap.md)
-  - package-level implementation status and backlog
-- [`units-policy.md`](./units-policy.md)
-  - unit normalization rules
-- [`deterministic-simulation.md`](./deterministic-simulation.md)
-  - reproducibility guidance
-- [`oopao-reference-datasets.md`](./oopao-reference-datasets.md)
-  - OOPAO frozen bundle policy and provenance
-- [`composite-plant-oopao-review-2026-04.md`](./composite-plant-oopao-review-2026-04.md)
-- [`dm-oopao-equivalence-tightening-plan-2026-04.md`](./dm-oopao-equivalence-tightening-plan-2026-04.md)
-  - targeted review showing that the remaining `tiptilt + dm` OOPAO residual is
-    a stable DM-model mismatch rather than a broad numerical-stability problem
-- [`dm-interface-evolution-plan-2026-04.md`](./dm-interface-evolution-plan-2026-04.md)
-  - completed plan for separating DM topology, sampled influence bases, and
-    actuator behavior, including the measured-influence-function path for
-    manufacturer-style artifacts
-- [`specula-reference-datasets.md`](./specula-reference-datasets.md)
-  - SPECULA-targeted frozen bundle policy and provenance
-- [`phase-statistics-accuracy.md`](./phase-statistics-accuracy.md)
-  - maintained accuracy note for the shared `K_{5/6}` covariance helper
-- [`atmosphere-statistics-validation.md`](./atmosphere-statistics-validation.md)
-  - maintained finite/infinite atmosphere statistics artifact and limitations
-- [`detector-validation.md`](./detector-validation.md)
-  - maintained detector-family fixture artifact and scope limits
-- [`detector-interface-refactor-plan-2026-04.md`](./detector-interface-refactor-plan-2026-04.md)
-  - staged cleanup plan for the detector readout-product seam, state
-    concreteness, capability traits, and execution-plan cleanup
-- [`detector-interface-extension.md`](./detector-interface-extension.md)
-  - current extension notes for readout products and other detector seams
-- [`adding-detectors.md`](./adding-detectors.md)
-  - practical authoring guide for adding a new detector family and deciding
-    when a new physical behavior belongs in a shared detector layer
-- [`adding-deformable-mirrors.md`](./adding-deformable-mirrors.md)
-  - practical authoring guide for adding a new DM topology, sampled influence
-    model, or actuator-behavior layer without bypassing the composed DM
-    interface
-- [`adding-wavefront-sensors.md`](./adding-wavefront-sensors.md)
-  - practical authoring guide for adding a new WFS family against the
-  maintained accessor and runtime contract
-- [`adding-controllable-optics.md`](./adding-controllable-optics.md)
-  - practical authoring guide for adding a new modal/low-order controllable
-    optic and deciding when a surface belongs in the DM layer instead
-- [`adding-controllers-and-reconstructors.md`](./adding-controllers-and-reconstructors.md)
-  - practical authoring guide for adding temporal controllers and
-    slopes-to-command operator families on the maintained runtime contract
-- [`interface-contract-closeout-plan-2026-04.md`](./interface-contract-closeout-plan-2026-04.md)
-  - completed closeout pass for WFS accessors, controller lifecycle accessors,
-    and calibration/reconstructor diagnostics
-- [`hgcdte-validation-and-multiread-plan-2026-04.md`](./hgcdte-validation-and-multiread-plan-2026-04.md)
-  - focused plan for expanding HgCdTe detector validation and extracting the
-    reusable multi-read frame-readout layer
-- [`spad-array-sensor-plan-2026-04.md`](./spad-array-sensor-plan-2026-04.md)
-  - concrete detector-family plan for SPAD imaging arrays built on the current
-    counting-detector extension seams
-- [`rocm-fallback-inventory.md`](./rocm-fallback-inventory.md)
-  - explicit ROCm fallback classification and residual workaround status
-- [`rocm-phase3-rebaseline.md`](./rocm-phase3-rebaseline.md)
-  - maintained Phase 3 CPU/AMDGPU/CUDA runtime rebaseline
 
-## Archived Cleanup Records
+## Validation Docs
 
-- [`archive/2026-04/api-cleanup-plan-2026-04.md`](./archive/2026-04/api-cleanup-plan-2026-04.md)
-  - completed runtime/control-loop naming cleanup record
-- [`archive/2026-04/exported-surface-naming-audit.md`](./archive/2026-04/exported-surface-naming-audit.md)
-  - completed exported-surface naming audit that preceded the breaking rename
-- [`gpu-sh-centroid-redesign-plan.md`](./gpu-sh-centroid-redesign-plan.md)
-  - redesign plan for a genuinely GPU-friendly Shack-Hartmann centroid/export
-    path shared across CUDA and AMDGPU
-- [`gpu-readout-correction-plan.md`](./gpu-readout-correction-plan.md)
-  - completed/active plan for stack-aware GPU readout-correction on maintained
-    detector surfaces
-- [`gpu-detector-followup-plan.md`](./gpu-detector-followup-plan.md)
-  - follow-on plan for detector finalization, generalized batching, and
-    GPU-native output surfaces after readout-correction recovery
-- [`lift-gsc-runtime-validation.md`](./lift-gsc-runtime-validation.md)
-  - maintained workflow-profile artifact for LiFT and gain-sensing camera
-- [`tomography-benchmark-scope.md`](./tomography-benchmark-scope.md)
-  - current maintained scope and archived re-scoping record for representative
-    tomography benchmark evidence
-- [`optional-integration-boundaries.md`](./optional-integration-boundaries.md)
-  - optional integration and package-boundary rules
-- [`visualization-companion-package-plan-2026-04.md`](./visualization-companion-package-plan-2026-04.md)
-  - plan for a plotting-free core plus a separate `AdaptiveOpticsSimPlots.jl`
-    companion package built first around `Plots.jl`
-- [`future-platform-direction.md`](./future-platform-direction.md)
-  - post-cleanup expansion policy
+- [`supported-production-surfaces.md`](./supported-production-surfaces.md)
+- [`production-readiness-checklist.md`](./production-readiness-checklist.md)
+- [`release-validation-runbook.md`](./release-validation-runbook.md)
 - [`backend-validation-guide.md`](./backend-validation-guide.md)
-  - functional vs backend smoke vs benchmark separation
-- [`execution-plan-architecture.md`](./execution-plan-architecture.md)
-  - shared semantic contracts with backend-specific execution-plan policy
-- [`execution-plan-closeout.md`](./execution-plan-closeout.md)
-  - completed rollout summary and maintained decision record
+- [`model-validity-matrix.md`](./model-validity-matrix.md)
 
-## Active Implementation Plans
+## Policy Docs
 
-These documents are still useful, but they are subsystem plans rather than
-entry-point guides.
+- [`deterministic-simulation.md`](./deterministic-simulation.md)
+- [`units-policy.md`](./units-policy.md)
 
-- [`algorithmic-implementation-roadmap.md`](./algorithmic-implementation-roadmap.md)
-- [`atmospheric-field-propagation-roadmap.md`](./atmospheric-field-propagation-roadmap.md)
-- [`core-optics-expansion-roadmap.md`](./core-optics-expansion-roadmap.md)
-- [`gpu-runtime-structural-refactor-plan.md`](./gpu-runtime-structural-refactor-plan.md)
-- [`execution-plan-architecture.md`](./execution-plan-architecture.md)
-- [`infinite-boundary-atmosphere-plan.md`](./infinite-boundary-atmosphere-plan.md)
-- [`execution-plan-milestones.md`](./execution-plan-milestones.md)
-- [`execution-plan-closeout.md`](./execution-plan-closeout.md)
-- [`platform-strengthening-plan.md`](./platform-strengthening-plan.md)
-- [`post-review-platform-plan.md`](./post-review-platform-plan.md)
-- [`amdgpu-sh-convergence-plan.md`](./amdgpu-sh-convergence-plan.md)
-- [`gpu-sh-centroid-redesign-plan.md`](./gpu-sh-centroid-redesign-plan.md)
+## Archive Policy
 
-Use these when actively working in that subsystem. Do not treat them as the
-primary orientation docs for new contributors.
+The April 2026 cleanup removed completed plans and one-off audit records from
+the live docs tree. [`archive/2026-04/README.md`](./archive/2026-04/README.md)
+records that decision. Use git history for the deleted documents.
 
-## Completed Reviews and Inventories
+## Adding New Docs
 
-These remain useful as implementation evidence, but they are no longer the
-recommended entry point for normal use.
-
-- [`package-review-2026-03.md`](./package-review-2026-03.md)
-- [`package-review-status-2026-04.md`](./package-review-status-2026-04.md)
-  - current read of which March review findings still stand vs have been mitigated
-- [`package-review-action-plan.md`](./package-review-action-plan.md)
-- [`api-tier-inventory.md`](./api-tier-inventory.md)
-- [`modularization-inventory.md`](./modularization-inventory.md)
-- [`reusable-infrastructure-inventory.md`](./reusable-infrastructure-inventory.md)
-- [`model-validation-inventory.md`](./model-validation-inventory.md)
-- [`cross-package-benchmark-inventory.md`](./cross-package-benchmark-inventory.md)
-
-## Status Conventions
-
-- `active`
-  - maintained as a current guide or currently relevant implementation plan
-- `completed`
-  - retained as an implemented review, inventory, or plan artifact
-- `archived/superseded`
-  - no longer current; kept only for historical context
-
-When adding new docs, prefer one of the stable guides above unless the document
-is specifically a review, inventory, or subsystem plan.
+- Prefer updating an existing document.
+- Add a new top-level document only when it is a durable guide or runbook.
+- Do not add one-off plans, audit notes, or temporary triage documents under
+  `docs/`; use issues, PR descriptions, or git history for those records.
+- Every top-level Markdown document must include `Status: active` near the top.

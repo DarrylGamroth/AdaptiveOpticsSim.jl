@@ -7,8 +7,8 @@ This is the main user-facing guide.
 If you only need the normal package entry points, read these and stop there:
 
 - [../README.md](../README.md)
-- [model-cookbook.md](./model-cookbook.md)
-- [api-reference.md](./api-reference.md)
+- [model-cookbook.md](model-cookbook.md)
+- [api-reference.md](api-reference.md)
 - `examples/tutorials/`
 
 You do not need the platform, benchmark, audit, or production-hardening docs to
@@ -120,7 +120,7 @@ The lower-level `ClosedLoopRuntime` + `AdaptiveOpticsSim.simulation_interface(..
 available, but it is an advanced single-runtime surface rather than the default
 user entry point.
 
-For a compact recipe-first version of this guide, use [model-cookbook.md](./model-cookbook.md).
+For a compact recipe-first version of this guide, use [model-cookbook.md](model-cookbook.md).
 
 ## Build A Model
 
@@ -320,7 +320,7 @@ The package distinguishes between:
 - developer/backend support APIs used mainly by benchmark and extension code
 
 For ordinary usage, start with the exported workflow surface shown above and in
-[api-reference.md](./api-reference.md).
+[api-reference.md](api-reference.md).
 
 For advanced utilities such as telemetry/config helpers and some backend policy
 helpers, use namespaced access. Examples:
@@ -343,7 +343,7 @@ sprint = AdaptiveOpticsSim.SPRINT(tel, dm, wfs, basis)
   the test is explicitly about noise.
 - Run single-threaded when strict reproducibility matters.
 
-See [deterministic-simulation.md](./deterministic-simulation.md).
+See [deterministic-simulation.md](deterministic-simulation.md).
 
 ## Tutorials and Examples
 
@@ -356,7 +356,7 @@ Runnable example ports live under `examples/tutorials/`. Good starting points:
 - `examples/tutorials/closed_loop_bioedge.jl`
 - `examples/tutorials/closed_loop_zernike.jl`
 
-See [julia-tutorial-mappings.md](./julia-tutorial-mappings.md) for the mapping
+See [julia-tutorial-mappings.md](julia-tutorial-mappings.md) for the mapping
 back to OOPAO tutorials.
 
 ## When You Need More Than The User Guide
@@ -364,13 +364,13 @@ back to OOPAO tutorials.
 Only go deeper if your task actually needs it:
 
 - public API details:
-  - [api-reference.md](./api-reference.md)
+  - [api-reference.md](api-reference.md)
 - maintained validation status:
-  - [model-validity-matrix.md](./model-validity-matrix.md)
+  - [model-validity-matrix.md](model-validity-matrix.md)
 - supported production scope:
-  - [supported-production-surfaces.md](./supported-production-surfaces.md)
+  - [supported-production-surfaces.md](supported-production-surfaces.md)
 - benchmark and cross-package evidence:
-  - [cross-package-benchmark-harness.md](./cross-package-benchmark-harness.md)
-  - [benchmark-matrix-plan.md](./benchmark-matrix-plan.md)
+  - benchmark artifacts under `benchmarks/results/`
+  - benchmark artifacts under `benchmarks/results/`
 - maintainer/developer navigation:
-  - [documentation-map.md](./documentation-map.md)
+  - [documentation-map.md](documentation-map.md)

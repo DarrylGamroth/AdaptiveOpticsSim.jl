@@ -472,7 +472,8 @@ lightweight numeric controller for performance-critical runs.
 - Integration tests for a minimal AO loop with fixed seeds.
 - A tutorial validation suite that compares OOPAO reference outputs within tolerance.
 - Store reference outputs from OOPAO (PSF, slopes, reconstructor outputs) with fixed seeds.
-See `docs/oopao-reference-datasets.md` for a proposed reference dataset plan.
+See [`model-validity-matrix.md`](./model-validity-matrix.md) for the maintained
+validation and reference-evidence surface.
 
 ## Julia ecosystem building blocks
 These packages cover most of the OOPAO dependency surface area:

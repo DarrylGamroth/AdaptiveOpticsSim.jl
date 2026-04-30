@@ -123,7 +123,7 @@ Enabled with:
 Runs the maintained HEART all-package ladder in the sibling comparison
 workspace when it exists:
 
-- [/home/dgamroth/workspaces/codex/AdaptiveOpticsComparisons/contracts/heart_hil.toml](/home/dgamroth/workspaces/codex/AdaptiveOpticsComparisons/contracts/heart_hil.toml)
+- `../AdaptiveOpticsComparisons/contracts/heart_hil.toml`
 
 If the sibling comparison workspace is absent, this track skips cleanly.
 
@@ -154,11 +154,9 @@ Before a release or production handoff:
 
 Use together with:
 
-- [supported-production-surfaces.md](./supported-production-surfaces.md)
-- [production-readiness-checklist.md](./production-readiness-checklist.md)
-- [backend-validation-guide.md](./backend-validation-guide.md)
-- [self-hosted-gpu-runner-setup.md](./self-hosted-gpu-runner-setup.md)
-- [operational-gpu-validation-cadence.md](./operational-gpu-validation-cadence.md)
+- [supported-production-surfaces.md](supported-production-surfaces.md)
+- [production-readiness-checklist.md](production-readiness-checklist.md)
+- [backend-validation-guide.md](backend-validation-guide.md)
 
 ## Validation host bootstrap
 

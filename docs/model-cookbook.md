@@ -8,8 +8,8 @@ AdaptiveOpticsSim.jl script.
 Use this together with:
 
 - [../README.md](../README.md)
-- [user-guide.md](./user-guide.md)
-- [api-reference.md](./api-reference.md)
+- [user-guide.md](user-guide.md)
+- [api-reference.md](api-reference.md)
 
 Each recipe is intentionally small. Start here, then grow the script toward your
 real instrument or benchmark surface.
@@ -672,11 +672,11 @@ Use this pattern when you need:
 Runnable companion files:
 
 - executable example:
-  [proper_hil_coronagraph.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/examples/integrations/proper_hil_coronagraph.jl)
+  [proper_hil_coronagraph.jl](../examples/integrations/proper_hil_coronagraph.jl)
 - shared setup helper:
-  [proper_hil_coronagraph_common.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/examples/support/proper_hil_coronagraph_common.jl)
+  [proper_hil_coronagraph_common.jl](../examples/support/proper_hil_coronagraph_common.jl)
 - seam benchmark:
-  [profile_proper_hil_coronagraph.jl](/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/scripts/profile_proper_hil_coronagraph.jl)
+  [profile_proper_hil_coronagraph.jl](../scripts/profile_proper_hil_coronagraph.jl)
 
 Install `Proper.jl` into the active environment before running them. For a
 local sibling checkout, the simplest path is:
@@ -731,6 +731,6 @@ After the first working script:
 1. move constants into a small `build_scenario(...)` helper
 2. make RNG setup explicit when reproducibility matters
 3. add detector realism only when the study needs it
-4. move to [user-guide.md](./user-guide.md) for broader workflow guidance
-5. move to [api-reference.md](./api-reference.md) when you need the full public
+4. move to [user-guide.md](user-guide.md) for broader workflow guidance
+5. move to [api-reference.md](api-reference.md) when you need the full public
    surface

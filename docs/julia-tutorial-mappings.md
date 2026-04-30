@@ -1,5 +1,7 @@
 # Tutorial Mapping Guide
 
+Status: active
+
 This document maps high-value OOPAO tutorials to deterministic Julia examples in
 `examples/tutorials/`. The Julia versions favor multiple dispatch, explicit
 state transitions, and small runnable scripts over notebook-style mutation.

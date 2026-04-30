@@ -14,10 +14,10 @@ AO toolchain release surface.
 
 Use together with:
 
-- [supported-production-surfaces.md](./supported-production-surfaces.md)
-- [model-validity-matrix.md](./model-validity-matrix.md)
-- [backend-validation-guide.md](./backend-validation-guide.md)
-- [cross-package-benchmark-harness.md](./cross-package-benchmark-harness.md)
+- [supported-production-surfaces.md](supported-production-surfaces.md)
+- [model-validity-matrix.md](model-validity-matrix.md)
+- [backend-validation-guide.md](backend-validation-guide.md)
+- benchmark artifacts under `benchmarks/results/`
 
 ## Current Status
 

@@ -4,7 +4,7 @@ Status: active
 
 Plan traceability:
 
-- [`PLAN-36`](./package-review-action-plan.md)
+- ``PLAN-36``
 - review ID: `PR-30`
 
 ## Purpose
@@ -21,7 +21,7 @@ It is not a symbol reference. It is the operational picture of:
 - where validation and benchmark evidence attach
 
 For the broader package/platform picture, start with
-[`platform-architecture.md`](./platform-architecture.md).
+[`maintainer-architecture.md`](maintainer-architecture.md).
 
 ## Main Runtime Objects
 
@@ -160,23 +160,20 @@ There are two relevant evidence layers:
 
 ### Functional/validation evidence
 
-- [`model-validity-matrix.md`](./model-validity-matrix.md)
+- [`model-validity-matrix.md`](model-validity-matrix.md)
 - frozen OOPAO and SPECULA reference bundles
 
 ### Runtime/engineering evidence
 
-- [`benchmark-matrix-plan.md`](./benchmark-matrix-plan.md)
-- [`cross-package-benchmark-harness.md`](./cross-package-benchmark-harness.md)
-- archived result files under `benchmarks/results/`
+- benchmark artifacts under `benchmarks/results/`
+- profile scripts under `scripts/`
 
 ## How to Use This Guide
 
 When debugging or extending runtime behavior:
 
 1. use this doc to identify the layer that owns the behavior
-2. use [`platform-architecture.md`](./platform-architecture.md) for the
+2. use [`maintainer-architecture.md`](maintainer-architecture.md) for the
    package-level composition picture
-3. use [`maintainer-architecture.md`](./maintainer-architecture.md) for the
-   subsystem map
-4. use [`api-reference.md`](./api-reference.md) for specific symbols
-5. use subsystem plans only after the stable guides above are no longer enough
+3. use [`extension-guide.md`](extension-guide.md) for new subsystem families
+4. use [`api-reference.md`](api-reference.md) for specific symbols

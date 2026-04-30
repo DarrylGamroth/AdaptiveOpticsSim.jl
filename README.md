@@ -171,11 +171,7 @@ For deeper developer reference:
 
 For maintainers extending subsystem families:
 
-- [docs/adding-detectors.md](docs/adding-detectors.md)
-- [docs/adding-deformable-mirrors.md](docs/adding-deformable-mirrors.md)
-- [docs/adding-wavefront-sensors.md](docs/adding-wavefront-sensors.md)
-- [docs/adding-controllable-optics.md](docs/adding-controllable-optics.md)
-- [docs/adding-controllers-and-reconstructors.md](docs/adding-controllers-and-reconstructors.md)
+- [docs/extension-guide.md](docs/extension-guide.md)
 
 For full plotted examples, use the companion plotting package in
 `../AdaptiveOpticsSimPlots.jl`. The examples in this repo remain plotting-free

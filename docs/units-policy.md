@@ -1,5 +1,7 @@
 # Units Policy
 
+Status: active
+
 This document defines the maintained project-wide units policy for
 AdaptiveOpticsSim.jl.
 
