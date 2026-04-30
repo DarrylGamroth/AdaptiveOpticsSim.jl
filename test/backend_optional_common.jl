@@ -180,7 +180,7 @@ function _run_optional_composite_optic_case(::Type{B}, case::Val{K}, wfs_case::V
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(command(gpu)))
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(slopes(gpu)))
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(wfs_frame(gpu)))
-    @test command_segment_labels(command_layout(gpu)) == (label, :dm)
+    @test AdaptiveOpticsSim.command_segment_labels(AdaptiveOpticsSim.command_layout(gpu)) == (label, :dm)
     @test isapprox(Array(command(gpu)), Array(command(cpu)); rtol=1f-6, atol=1f-6)
     @test isapprox(Array(slopes(gpu)), Array(slopes(cpu)); rtol=tol.slopes_rtol, atol=tol.slopes_atol)
     @test isapprox(Array(wfs_frame(gpu)), Array(wfs_frame(cpu)); rtol=tol.frame_rtol, atol=tol.frame_atol)
@@ -380,14 +380,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
         ReferenceColumnCommonModeCorrection(1),
     ))
     cpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-        bits=8, full_well=T(100), readout_window=FrameWindow(2:5, 3:7), output_type=UInt16,
+        bits=8, full_well=T(100), readout_window=AdaptiveOpticsSim.FrameWindow(2:5, 3:7), output_type=UInt16,
         sensor=HgCdTeAvalancheArraySensor(T=T),
         response_model=NullFrameResponse(),
         correction_model=generalized_correction,
         T=T,
         backend=CPUBackend())
     gpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-        bits=8, full_well=T(100), readout_window=FrameWindow(2:5, 3:7), output_type=UInt16,
+        bits=8, full_well=T(100), readout_window=AdaptiveOpticsSim.FrameWindow(2:5, 3:7), output_type=UInt16,
         sensor=HgCdTeAvalancheArraySensor(T=T),
         response_model=NullFrameResponse(),
         correction_model=generalized_correction,
@@ -406,27 +406,27 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
         gain=T(1.0),
         sensor=HgCdTeAvalancheArraySensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
         response_model=NullFrameResponse(),
-        readout_window=FrameWindow(2:3, 2:3),
+        readout_window=AdaptiveOpticsSim.FrameWindow(2:3, 2:3),
         T=T,
         backend=CPUBackend())
     gpu_windowed_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1,
         gain=T(1.0),
         sensor=HgCdTeAvalancheArraySensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
         response_model=NullFrameResponse(),
-        readout_window=FrameWindow(2:3, 2:3),
+        readout_window=AdaptiveOpticsSim.FrameWindow(2:3, 2:3),
         T=T,
         backend=backend)
     windowed_input = fill(T(10), 4, 4)
     cpu_windowed_frame = capture!(cpu_windowed_det, windowed_input; rng=MersenneTwister(15))
     gpu_windowed_frame = capture!(gpu_windowed_det, array_backend(copy(windowed_input)); rng=MersenneTwister(15))
     @test isapprox(Array(gpu_windowed_frame), cpu_windowed_frame; rtol=1f-5, atol=1f-4)
-    @test isapprox(Array(detector_reference_frame(gpu_windowed_det)), detector_reference_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
-    @test isapprox(Array(detector_signal_frame(gpu_windowed_det)), detector_signal_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
-    @test isapprox(Array(detector_combined_frame(gpu_windowed_det)), detector_combined_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
-    @test isapprox(Array(detector_reference_cube(gpu_windowed_det)), detector_reference_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
-    @test isapprox(Array(detector_signal_cube(gpu_windowed_det)), detector_signal_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
-    @test isapprox(Array(detector_read_cube(gpu_windowed_det)), detector_read_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
-    @test detector_read_times(gpu_windowed_det) == detector_read_times(cpu_windowed_det)
+    @test isapprox(Array(AdaptiveOpticsSim.detector_reference_frame(gpu_windowed_det)), AdaptiveOpticsSim.detector_reference_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(AdaptiveOpticsSim.detector_signal_frame(gpu_windowed_det)), AdaptiveOpticsSim.detector_signal_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(AdaptiveOpticsSim.detector_combined_frame(gpu_windowed_det)), AdaptiveOpticsSim.detector_combined_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(AdaptiveOpticsSim.detector_reference_cube(gpu_windowed_det)), AdaptiveOpticsSim.detector_reference_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(AdaptiveOpticsSim.detector_signal_cube(gpu_windowed_det)), AdaptiveOpticsSim.detector_signal_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(AdaptiveOpticsSim.detector_read_cube(gpu_windowed_det)), AdaptiveOpticsSim.detector_read_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test AdaptiveOpticsSim.detector_read_times(gpu_windowed_det) == AdaptiveOpticsSim.detector_read_times(cpu_windowed_det)
     return nothing
 end
 
@@ -578,14 +578,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
         ReferenceColumnCommonModeCorrection(1),
     ))
     cpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-        bits=8, full_well=T(100), readout_window=FrameWindow(2:5, 3:7), output_type=UInt16,
+        bits=8, full_well=T(100), readout_window=AdaptiveOpticsSim.FrameWindow(2:5, 3:7), output_type=UInt16,
         sensor=HgCdTeAvalancheArraySensor(T=T),
         response_model=NullFrameResponse(),
         correction_model=generalized_correction,
         T=T,
         backend=CPUBackend())
     gpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-        bits=8, full_well=T(100), readout_window=FrameWindow(2:5, 3:7), output_type=UInt16,
+        bits=8, full_well=T(100), readout_window=AdaptiveOpticsSim.FrameWindow(2:5, 3:7), output_type=UInt16,
         sensor=HgCdTeAvalancheArraySensor(T=T),
         response_model=NullFrameResponse(),
         correction_model=generalized_correction,
@@ -604,27 +604,27 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
         gain=T(1.0),
         sensor=HgCdTeAvalancheArraySensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
         response_model=NullFrameResponse(),
-        readout_window=FrameWindow(2:3, 2:3),
+        readout_window=AdaptiveOpticsSim.FrameWindow(2:3, 2:3),
         T=T,
         backend=CPUBackend())
     gpu_windowed_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1,
         gain=T(1.0),
         sensor=HgCdTeAvalancheArraySensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
         response_model=NullFrameResponse(),
-        readout_window=FrameWindow(2:3, 2:3),
+        readout_window=AdaptiveOpticsSim.FrameWindow(2:3, 2:3),
         T=T,
         backend=backend)
     windowed_input = fill(T(10), 4, 4)
     cpu_windowed_frame = capture!(cpu_windowed_det, windowed_input; rng=MersenneTwister(15))
     gpu_windowed_frame = capture!(gpu_windowed_det, array_backend(copy(windowed_input)); rng=MersenneTwister(15))
     @test isapprox(Array(gpu_windowed_frame), cpu_windowed_frame; rtol=1f-5, atol=1f-4)
-    @test isapprox(Array(detector_reference_frame(gpu_windowed_det)), detector_reference_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
-    @test isapprox(Array(detector_signal_frame(gpu_windowed_det)), detector_signal_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
-    @test isapprox(Array(detector_combined_frame(gpu_windowed_det)), detector_combined_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
-    @test isapprox(Array(detector_reference_cube(gpu_windowed_det)), detector_reference_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
-    @test isapprox(Array(detector_signal_cube(gpu_windowed_det)), detector_signal_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
-    @test isapprox(Array(detector_read_cube(gpu_windowed_det)), detector_read_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
-    @test detector_read_times(gpu_windowed_det) == detector_read_times(cpu_windowed_det)
+    @test isapprox(Array(AdaptiveOpticsSim.detector_reference_frame(gpu_windowed_det)), AdaptiveOpticsSim.detector_reference_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(AdaptiveOpticsSim.detector_signal_frame(gpu_windowed_det)), AdaptiveOpticsSim.detector_signal_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(AdaptiveOpticsSim.detector_combined_frame(gpu_windowed_det)), AdaptiveOpticsSim.detector_combined_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(AdaptiveOpticsSim.detector_reference_cube(gpu_windowed_det)), AdaptiveOpticsSim.detector_reference_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(AdaptiveOpticsSim.detector_signal_cube(gpu_windowed_det)), AdaptiveOpticsSim.detector_signal_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(AdaptiveOpticsSim.detector_read_cube(gpu_windowed_det)), AdaptiveOpticsSim.detector_read_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
+    @test AdaptiveOpticsSim.detector_read_times(gpu_windowed_det) == AdaptiveOpticsSim.detector_read_times(cpu_windowed_det)
 
     return nothing
 end
@@ -702,9 +702,9 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         model=GeometricAtmosphericPropagation(T=T),
         zero_padding=2,
         T=T)
-    field = propagate_atmosphere_field!(prop, atm, tel, src)
+    field = AdaptiveOpticsSim.propagate_atmosphere_field!(prop, atm, tel, src)
     @test field.state.field isa BackendArray
-    intensity = atmospheric_intensity!(prop, atm, tel, src)
+    intensity = AdaptiveOpticsSim.atmospheric_intensity!(prop, atm, tel, src)
     @test intensity isa BackendArray
 
     bundle = SpectralBundle(T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.4, 0.6]; T=T)
@@ -730,7 +730,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     )
     prepare!(single_control_loop)
     step!(single_control_loop)
-    @test AdaptiveOpticsSim.simulation_interface(single_control_loop) isa SimulationInterface
+    @test AdaptiveOpticsSim.simulation_interface(single_control_loop) isa AdaptiveOpticsSim.SimulationInterface
     @test wfs_frame(single_control_loop) isa BackendArray
     @test control_loop_branch_labels(single_control_loop) == (:main,)
 
@@ -745,7 +745,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     )
     prepare!(grouped_control_loop)
     step!(grouped_control_loop)
-    @test AdaptiveOpticsSim.simulation_interface(grouped_control_loop) isa CompositeSimulationInterface
+    @test AdaptiveOpticsSim.simulation_interface(grouped_control_loop) isa AdaptiveOpticsSim.CompositeSimulationInterface
     @test grouped_wfs_stack(grouped_control_loop) isa BackendArray
     @test size(grouped_wfs_stack(grouped_control_loop), ndims(grouped_wfs_stack(grouped_control_loop))) == 2
     @test control_loop_branch_labels(grouped_control_loop) == (:hi, :lo)

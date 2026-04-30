@@ -129,8 +129,8 @@ function _synchronize_runtime_outputs!(scenario)
 end
 
 function _run_ao188_equivalence(::Type{B}, branch_mode::AbstractExecutionPolicy) where {B<:AdaptiveOpticsSim.GPUBackendTag}
-    disable_scalar_backend!(B)
-    BackendArray = gpu_backend_array_type(B)
+    AdaptiveOpticsSim.disable_scalar_backend!(B)
+    BackendArray = AdaptiveOpticsSim.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
     backend = _gpu_backend_selector(B)
 
@@ -165,8 +165,8 @@ end
 
 function _run_ao188_post_command_equivalence(::Type{B}, branch_mode::AbstractExecutionPolicy;
     T::Type{<:AbstractFloat}=Float64) where {B<:AdaptiveOpticsSim.GPUBackendTag}
-    disable_scalar_backend!(B)
-    BackendArray = gpu_backend_array_type(B)
+    AdaptiveOpticsSim.disable_scalar_backend!(B)
+    BackendArray = AdaptiveOpticsSim.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
     backend = _gpu_backend_selector(B)
 
@@ -229,8 +229,8 @@ function _build_lgs_case(backend, ::Type{T}, profile::Symbol) where {T<:Abstract
 end
 
 function _run_lgs_equivalence(::Type{B}, profile::Symbol) where {B<:AdaptiveOpticsSim.GPUBackendTag}
-    disable_scalar_backend!(B)
-    BackendArray = gpu_backend_array_type(B)
+    AdaptiveOpticsSim.disable_scalar_backend!(B)
+    BackendArray = AdaptiveOpticsSim.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
     T = Float32
 
@@ -272,8 +272,8 @@ function _build_mixed_sh_asterism_case(backend, ::Type{T}) where {T<:AbstractFlo
 end
 
 function _run_mixed_sh_asterism_equivalence(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
-    disable_scalar_backend!(B)
-    BackendArray = gpu_backend_array_type(B)
+    AdaptiveOpticsSim.disable_scalar_backend!(B)
+    BackendArray = AdaptiveOpticsSim.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
     T = Float32
 
@@ -306,8 +306,8 @@ function _build_zernike_case(backend, ::Type{T}) where {T<:AbstractFloat}
 end
 
 function _run_zernike_equivalence(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
-    disable_scalar_backend!(B)
-    BackendArray = gpu_backend_array_type(B)
+    AdaptiveOpticsSim.disable_scalar_backend!(B)
+    BackendArray = AdaptiveOpticsSim.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
     T = Float32
 
@@ -448,8 +448,8 @@ function _multi_optic_case_tolerances(::Val{:tiptilt}, ::Val{:bio})
 end
 
 function _run_multi_optic_hil_equivalence(::Type{B}, case::Val{K}, wfs_case::Val{W}=Val(:sh)) where {B<:AdaptiveOpticsSim.GPUBackendTag,K,W}
-    disable_scalar_backend!(B)
-    BackendArray = gpu_backend_array_type(B)
+    AdaptiveOpticsSim.disable_scalar_backend!(B)
+    BackendArray = AdaptiveOpticsSim.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
     T = Float32
 
