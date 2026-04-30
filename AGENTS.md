@@ -34,13 +34,22 @@
 # - Optional features (I/O helpers, ModelingToolkit control, plotting extras)
 #   should be in extension modules or separate packages.
 #
+# Documentation:
+# - Keep docs/ intentionally small and navigable.
+# - Prefer updating an existing maintained guide over adding a new document.
+# - Do not add one-off plan, audit, triage, or inventory documents under docs/.
+# - Use PR descriptions, issues, or git history for temporary planning records.
+#
 # Tutorials:
 # - Port most OOPAO tutorials to Julia scripts/notebooks.
 # - Use deterministic inputs for reference comparisons where possible.
 
 # Reference docs:
+# - docs/documentation-map.md
+# - docs/extension-guide.md
 # - docs/julia-port-design.md
 # - docs/julia-tutorial-mappings.md
 # - docs/roadmap.md
 # - docs/model-validity-matrix.md
+# - docs/supported-production-surfaces.md
 # - docs/deterministic-simulation.md
