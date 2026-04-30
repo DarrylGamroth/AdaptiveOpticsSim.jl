@@ -74,7 +74,7 @@ function hil_coronagraph_prescription(λm, n, payload::CoronagraphPayload)
     return prop_end(wf)
 end
 
-function _segment_range(layout::RuntimeCommandLayout, label::Symbol)
+function _segment_range(layout::AdaptiveOpticsSim.RuntimeCommandLayout, label::Symbol)
     for seg in command_segments(layout)
         seg.label == label && return command_segment_range(seg)
     end
@@ -142,7 +142,7 @@ function build_proper_hil_context(;
 
     command_buffer = similar(command(scenario))
     copyto!(command_buffer, command(scenario))
-    layout = command_layout(scenario)
+    layout = AdaptiveOpticsSim.command_layout(scenario)
     tiptilt_range = _segment_range(layout, :tiptilt)
     dm_range = _segment_range(layout, :dm)
 

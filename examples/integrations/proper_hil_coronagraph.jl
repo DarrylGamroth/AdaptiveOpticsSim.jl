@@ -1,5 +1,5 @@
 Base.find_package("Proper") === nothing &&
-    error("Proper.jl is not available in the active environment. Install it with `using Pkg; Pkg.develop(path=\"../proper.jl\")` before running this example.")
+    error("Proper.jl is not available in the active environment. Install it with `using Pkg; Pkg.add(\"Proper\")` before running this example.")
 
 using AdaptiveOpticsSim
 using Proper
