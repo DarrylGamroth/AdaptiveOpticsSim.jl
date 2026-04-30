@@ -9,6 +9,12 @@ controllers, and reconstructors.
 Prefer small concrete types plus multiple dispatch. Do not add central
 type-switching registries for new families.
 
+## Source Layout
+
+Use lower-case directory names for new source-tree locations. Julia type names
+may use CamelCase, but package directories should remain lower-case subsystem
+names such as `src/wfs`, `src/detectors`, `src/optics`, or `src/control`.
+
 ## Detectors
 
 Physical detector families live in `src/detectors/`.

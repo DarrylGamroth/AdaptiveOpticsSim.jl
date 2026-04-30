@@ -30,6 +30,9 @@ The implemented system follows these package-level rules:
 
 The codebase is organized into subsystem directories:
 
+- Directory names should be lower-case. Use lower-case subsystem names such as
+  `src/wfs`, `src/detectors`, and `src/control`; reserve CamelCase for Julia
+  types and constructors, not filesystem directories.
 - `src/core`
   - traits, errors, backend services, reduction/random helpers, shared low-level
     infrastructure
