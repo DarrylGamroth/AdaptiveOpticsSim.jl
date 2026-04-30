@@ -1,5 +1,3 @@
-using Statistics
-
 #
 # BioEdge wavefront sensing
 #

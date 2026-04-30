@@ -1,5 +1,3 @@
-using Statistics
-
 #
 # Shack-Hartmann wavefront sensing
 #

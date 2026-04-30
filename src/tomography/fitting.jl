@@ -1,5 +1,3 @@
-using LinearAlgebra
-
 struct TomographyFitting{T<:AbstractFloat, M<:AbstractMatrix{T}}
     influence_functions::M
     fitting_matrix::M

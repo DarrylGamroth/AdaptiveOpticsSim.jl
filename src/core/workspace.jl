@@ -1,5 +1,3 @@
-using Random
-
 mutable struct Workspace{R<:AbstractRNG,T,A<:AbstractMatrix{Complex{T}},B<:AbstractMatrix{T},P}
     rng::R
     pupil_field::A

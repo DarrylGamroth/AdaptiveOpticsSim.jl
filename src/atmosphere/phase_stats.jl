@@ -1,6 +1,3 @@
-using Random
-using SpecialFunctions
-
 @kernel function phase_screen_psd_kernel!(psd, freqs, coeff, two_pi_sq, inv_L0_sq, exponent, inv_fm_sq, n::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= n

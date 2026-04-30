@@ -1,5 +1,3 @@
-using Logging
-
 #
 # Gain-sensing camera optical-gain estimation
 #

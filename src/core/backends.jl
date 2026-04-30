@@ -1,5 +1,3 @@
-import FFTW
-
 abstract type ExecutionStyle end
 
 abstract type AbstractArrayBackend end

@@ -1,6 +1,3 @@
-using LinearAlgebra
-using Logging
-
 struct ParallelConfig
     threads::Int
     fft_threads::Int

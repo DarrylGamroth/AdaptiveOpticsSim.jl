@@ -1,6 +1,3 @@
-using LinearAlgebra
-using Logging
-
 #
 # LiFT phase retrieval
 #

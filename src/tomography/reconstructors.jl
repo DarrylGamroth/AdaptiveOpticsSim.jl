@@ -1,6 +1,3 @@
-using LinearAlgebra
-using SparseArrays
-
 #
 # Model-based and interaction-matrix tomography reconstructors
 #

@@ -1,6 +1,3 @@
-using Random
-using Statistics
-
 #
 # Static non-common-path aberrations
 #

@@ -3,13 +3,18 @@ module AdaptiveOpticsSim
 __precompile__(true)
 
 using AbstractFFTs
+import FFTW
 using KernelAbstractions
 using LinearAlgebra
 using Logging
 using Random
+using Serialization
 using SparseArrays
 using SpecialFunctions
 using Statistics
+import TOML
+
+import Base: filter!
 
 """
 AdaptiveOpticsSim.jl

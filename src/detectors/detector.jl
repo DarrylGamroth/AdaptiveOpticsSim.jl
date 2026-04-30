@@ -1,5 +1,3 @@
-using Random
-
 include("interface.jl")
 include("frame_sampling.jl")
 include("pipeline.jl")

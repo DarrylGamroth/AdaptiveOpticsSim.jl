@@ -1,5 +1,3 @@
-import Base: filter!
-
 #
 # Focal-plane spatial filtering
 #

@@ -1,5 +1,3 @@
-import TOML
-
 config_value(x::Symbol) = String(x)
 config_value(x::AbstractArray) = [config_value(v) for v in x]
 config_value(x::Tuple) = [config_value(v) for v in x]

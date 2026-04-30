@@ -1,6 +1,3 @@
-using LinearAlgebra
-using Serialization
-
 #
 # Misregistration identification and SPRINT
 #

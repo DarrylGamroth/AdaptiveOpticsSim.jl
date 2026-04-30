@@ -1,5 +1,3 @@
-using LinearAlgebra
-
 command_storage(::AbstractControllableOptic) =
     throw(InvalidConfiguration("command_storage is not implemented for this controllable optic"))
 

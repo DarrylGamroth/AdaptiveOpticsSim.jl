@@ -1,5 +1,3 @@
-using Statistics
-
 #
 # Pyramid wavefront sensing
 #
