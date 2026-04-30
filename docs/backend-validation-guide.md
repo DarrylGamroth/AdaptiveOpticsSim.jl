@@ -89,13 +89,15 @@ For explicit hardware-backed backend validation targets that combine the
 optional backend smoke with the maintained runtime-equivalence contracts,
 including the high-accuracy post-command equivalence pass, run:
 
-- `julia --project=. --startup-file=no test/runtests_amdgpu.jl`
-- `julia --project=. --startup-file=no test/runtests_cuda.jl`
+- `julia --project=test/amdgpu --startup-file=no test/runtests_amdgpu.jl`
+- `julia --project=test/cuda --startup-file=no test/runtests_cuda.jl`
 
 These targets are intended for hosts where the corresponding GPU package and
 runtime are actually available. They fail fast instead of skipping when the
 backend is unavailable. They are the release-gated support boundary for CUDA
-and AMDGPU.
+and AMDGPU. The backend projects under [`test/amdgpu`](../test/amdgpu) and
+[`test/cuda`](../test/cuda) keep accelerator packages out of the normal
+`Pkg.test()` environment while still loading the root package from the checkout.
 
 The full GPU smoke matrix now also pins the exact batched Shack-Hartmann
 detector/export surface that previously regressed on CUDA:
@@ -141,7 +143,8 @@ Current intent:
   - runs the normal `Pkg.test()` suite on a hosted runner
 - CUDA workflow:
   - targets a self-hosted runner labeled `self-hosted`, `linux`, `cuda`
-  - runs the maintained CUDA smoke and runtime-equivalence scripts
+  - instantiates [`test/cuda`](../test/cuda)
+  - runs the maintained CUDA hardware target
   - runtime equivalence includes the composite-optic low-order HIL surfaces:
     - `tiptilt + dm`
       - `ShackHartmannWFS`
@@ -151,7 +154,8 @@ Current intent:
     - `focus + dm`
 - AMDGPU workflow:
   - targets a self-hosted runner labeled `self-hosted`, `linux`, `amdgpu`
-  - runs the maintained AMDGPU smoke and runtime-equivalence scripts
+  - instantiates [`test/amdgpu`](../test/amdgpu)
+  - runs the maintained AMDGPU hardware target
   - runtime equivalence includes the composite-optic low-order HIL surfaces:
     - `tiptilt + dm`
       - `ShackHartmannWFS`

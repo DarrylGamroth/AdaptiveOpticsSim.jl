@@ -24,11 +24,8 @@ jobs:
       - name: Cache Julia artifacts
         uses: julia-actions/cache@v3
 
-      - name: Install AMDGPU weak dependency
-        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.add("AMDGPU"); Pkg.instantiate()'
+      - name: Instantiate AMDGPU test project
+        run: julia --project=test/amdgpu --startup-file=no -e 'using Pkg; Pkg.instantiate()'
 
-      - name: Run maintained AMDGPU smoke
-        run: julia --project=. --startup-file=no scripts/gpu_smoke_amdgpu.jl
-
-      - name: Run maintained AMDGPU runtime equivalence
-        run: julia --project=. --startup-file=no scripts/gpu_runtime_equivalence_amdgpu.jl
+      - name: Run maintained AMDGPU hardware target
+        run: julia --project=test/amdgpu --startup-file=no test/runtests_amdgpu.jl

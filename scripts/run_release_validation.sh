@@ -22,17 +22,17 @@ else
 fi
 
 if [[ "${ADAPTIVEOPTICS_VALIDATE_CUDA:-0}" == "1" ]]; then
-    run_step "CUDA smoke" \
-        julia --project=. --startup-file=no scripts/gpu_smoke_cuda.jl
-    run_step "CUDA runtime equivalence" \
-        julia --project=. --startup-file=no scripts/gpu_runtime_equivalence_cuda.jl
+    run_step "CUDA test project instantiate" \
+        julia --project=test/cuda --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+    run_step "CUDA hardware target" \
+        julia --project=test/cuda --startup-file=no test/runtests_cuda.jl
 fi
 
 if [[ "${ADAPTIVEOPTICS_VALIDATE_AMDGPU:-0}" == "1" ]]; then
-    run_step "AMDGPU smoke" \
-        julia --project=. --startup-file=no scripts/gpu_smoke_amdgpu.jl
-    run_step "AMDGPU runtime equivalence" \
-        julia --project=. --startup-file=no scripts/gpu_runtime_equivalence_amdgpu.jl
+    run_step "AMDGPU test project instantiate" \
+        julia --project=test/amdgpu --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+    run_step "AMDGPU hardware target" \
+        julia --project=test/amdgpu --startup-file=no test/runtests_amdgpu.jl
 fi
 
 if [[ "${ADAPTIVEOPTICS_VALIDATE_COMPARISONS:-0}" == "1" ]]; then

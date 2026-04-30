@@ -24,11 +24,8 @@ jobs:
       - name: Cache Julia artifacts
         uses: julia-actions/cache@v3
 
-      - name: Install CUDA weak dependency
-        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.add("CUDA"); Pkg.instantiate()'
+      - name: Instantiate CUDA test project
+        run: julia --project=test/cuda --startup-file=no -e 'using Pkg; Pkg.instantiate()'
 
-      - name: Run maintained CUDA smoke
-        run: julia --project=. --startup-file=no scripts/gpu_smoke_cuda.jl
-
-      - name: Run maintained CUDA runtime equivalence
-        run: julia --project=. --startup-file=no scripts/gpu_runtime_equivalence_cuda.jl
+      - name: Run maintained CUDA hardware target
+        run: julia --project=test/cuda --startup-file=no test/runtests_cuda.jl

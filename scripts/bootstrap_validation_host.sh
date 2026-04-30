@@ -21,9 +21,9 @@ bootstrap_project() {
 
 bootstrap_cuda() {
     need_cmd nvidia-smi
-    julia --project="${ROOT_DIR}" --startup-file=no -e '
+    julia --project="${ROOT_DIR}/test/cuda" --startup-file=no -e '
         using Pkg
-        Pkg.add("CUDA")
+        Pkg.instantiate()
         Pkg.precompile()
     '
     nvidia-smi >/dev/null
@@ -31,9 +31,9 @@ bootstrap_cuda() {
 
 bootstrap_amdgpu() {
     need_cmd rocminfo
-    julia --project="${ROOT_DIR}" --startup-file=no -e '
+    julia --project="${ROOT_DIR}/test/amdgpu" --startup-file=no -e '
         using Pkg
-        Pkg.add("AMDGPU")
+        Pkg.instantiate()
         Pkg.precompile()
     '
     rocminfo >/dev/null

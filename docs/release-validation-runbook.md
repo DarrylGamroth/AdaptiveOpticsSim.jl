@@ -86,14 +86,13 @@ Enabled with:
 
 Runs:
 
-- [gpu_smoke_cuda.jl](../scripts/gpu_smoke_cuda.jl)
-- [gpu_runtime_equivalence_cuda.jl](../scripts/gpu_runtime_equivalence_cuda.jl)
+- [runtests_cuda.jl](../test/runtests_cuda.jl) with the
+  [`test/cuda`](../test/cuda) project
 
-Use this on a CUDA-capable host with `CUDA.jl` available in the project
-environment. Prefer a clean backend-specific environment or checkout rather than
-a copied development manifest that also installs unrelated GPU weakdeps; that
-avoids irrelevant ROCm extension precompile noise on CUDA-only hosts. The
-archived `cuda` track defaults to backend-only validation by setting
+Use this on a CUDA-capable host. The validation script instantiates the
+backend-specific `test/cuda` project so `CUDA.jl` does not need to be installed
+in the root package environment. The archived `cuda` track defaults to
+backend-only validation by setting
 `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
 
 ### AMDGPU
@@ -104,14 +103,13 @@ Enabled with:
 
 Runs:
 
-- [gpu_smoke_amdgpu.jl](../scripts/gpu_smoke_amdgpu.jl)
-- [gpu_runtime_equivalence_amdgpu.jl](../scripts/gpu_runtime_equivalence_amdgpu.jl)
+- [runtests_amdgpu.jl](../test/runtests_amdgpu.jl) with the
+  [`test/amdgpu`](../test/amdgpu) project
 
-Use this on an AMDGPU-capable host with `AMDGPU.jl` available in the project
-environment. Prefer a clean backend-specific environment or checkout rather than
-a copied development manifest that also installs unrelated GPU weakdeps; that
-avoids irrelevant CUDA extension precompile noise on ROCm-only hosts. The
-archived `amdgpu` track defaults to backend-only validation by setting
+Use this on an AMDGPU-capable host. The validation script instantiates the
+backend-specific `test/amdgpu` project so `AMDGPU.jl` does not need to be
+installed in the root package environment. The archived `amdgpu` track defaults
+to backend-only validation by setting
 `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
 
 ### Cross-package comparisons
