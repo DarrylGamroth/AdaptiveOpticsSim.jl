@@ -164,7 +164,6 @@ For richer DM layout and command behavior, you can also compose:
 
 - `topology=ActuatorGridTopology(16)`
 - `topology=SampledActuatorTopology(coords; valid_actuators=mask, metadata=meta)`
-- `actuator_model=LinearStaticActuators()`
 - `actuator_model=ClippedActuators(-0.2, 0.2)`
 - `actuator_model=ActuatorHealthMap(gains)`
 - `actuator_model=CompositeDMActuatorModel(...)`
@@ -179,7 +178,6 @@ dm = DeformableMirror(
     tel;
     topology=top,
     influence_model=MeasuredInfluenceFunctions(modes; metadata=(manufacturer=:alpao,)),
-    actuator_model=LinearStaticActuators(),
 )
 ```
 
@@ -488,7 +486,7 @@ Use this only when you are manually assembling or testing a single runtime and
 do not need the full scenario/config layer.
 
 ```julia
-runtime = ClosedLoopRuntime(sim, recon; rng=runtime_rng(0))
+runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; rng=runtime_rng(0))
 interface = AdaptiveOpticsSim.simulation_interface(runtime)
 prepare!(interface)
 step!(interface)
@@ -705,10 +703,9 @@ plotting dependencies to the simulation core.
 
 The maintained plotting surface there is:
 
-- explicit helpers such as `plot_pupil`, `plot_opd`, `plot_wfs_frame`, and
-  `plot_dm_commands`
-- a package-owned `aoplot(...)` multiple-dispatch entrypoint for common
-  `AdaptiveOpticsSim` objects
+- a package-owned `aoplot(obj, selector)` multiple-dispatch entrypoint
+- selector types such as `Pupil()`, `OPD()`, `PSF()`, `DetectorFrame()`,
+  `WFSFrame()`, `Commands()`, `Signal()`, and `RuntimeTimeseries()`
 
 The plotting package is intentionally built on maintained accessors like:
 

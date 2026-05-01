@@ -234,7 +234,6 @@ For example:
 - `MeasuredInfluenceFunctions(modes; metadata=...)`
 - `ActuatorGridTopology(16)`
 - `SampledActuatorTopology(coords; valid_actuators=mask, metadata=...)`
-- `LinearStaticActuators()`
 - `ClippedActuators(-0.2, 0.2)`
 - `ActuatorHealthMap(gains)`
 - `CompositeDMActuatorModel(...)`
@@ -318,6 +317,10 @@ The package distinguishes between:
 - stable exported workflow APIs
 - advanced but maintained APIs that may require qualification as `AdaptiveOpticsSim.<name>`
 - developer/backend support APIs used mainly by benchmark and extension code
+
+Use [api-reference.md](api-reference.md) for the exported surface. If a name is
+not exported, prefer qualifying it rather than adding it to the public namespace
+unless it is part of an ordinary workflow or documented extension seam.
 
 For ordinary usage, start with the exported workflow surface shown above and in
 [api-reference.md](api-reference.md).

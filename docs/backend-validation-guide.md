@@ -104,7 +104,8 @@ detector/export surface that previously regressed on CUDA:
 
 - null-noise diffractive SH with detector capture
 - CPU vs GPU comparison of:
-  - [`sh_exported_spot_cube`](../src/wfs/shack_hartmann/setup.jl)
+  - the Shack-Hartmann exported spot-cube path in
+    [`shack_hartmann.jl`](../src/wfs/shack_hartmann.jl)
   - [`wfs_output_frame`](../src/control/runtime/construction.jl)
 
 This keeps the public exported-pixel surface under backend parity coverage, not

@@ -35,6 +35,11 @@ if [[ "${ADAPTIVEOPTICS_VALIDATE_AMDGPU:-0}" == "1" ]]; then
         julia --project=test/amdgpu --startup-file=no test/runtests_amdgpu.jl
 fi
 
+if [[ "${ADAPTIVEOPTICS_VALIDATE_EXAMPLES:-0}" == "1" ]]; then
+    run_step "Core example scripts" \
+        ./scripts/run_core_examples.sh
+fi
+
 if [[ "${ADAPTIVEOPTICS_VALIDATE_COMPARISONS:-0}" == "1" ]]; then
     if [[ -d "${COMPARISON_ROOT}" ]]; then
         run_step "HEART all-package runtime ladder" \

@@ -40,6 +40,7 @@ Optional validation tracks are enabled through environment flags:
 ```bash
 ADAPTIVEOPTICS_VALIDATE_CUDA=1 ./scripts/run_release_validation.sh
 ADAPTIVEOPTICS_VALIDATE_AMDGPU=1 ./scripts/run_release_validation.sh
+ADAPTIVEOPTICS_VALIDATE_EXAMPLES=1 ./scripts/run_release_validation.sh
 ADAPTIVEOPTICS_VALIDATE_COMPARISONS=1 ./scripts/run_release_validation.sh
 ADAPTIVEOPTICS_VALIDATE_TRUTH=1 ./scripts/run_release_validation.sh
 ```
@@ -49,6 +50,7 @@ They may be combined:
 ```bash
 ADAPTIVEOPTICS_VALIDATE_CUDA=1 \
 ADAPTIVEOPTICS_VALIDATE_AMDGPU=1 \
+ADAPTIVEOPTICS_VALIDATE_EXAMPLES=1 \
 ADAPTIVEOPTICS_VALIDATE_COMPARISONS=1 \
 ADAPTIVEOPTICS_VALIDATE_TRUTH=1 \
 ./scripts/run_release_validation.sh
@@ -111,6 +113,21 @@ backend-specific `test/amdgpu` project so `AMDGPU.jl` does not need to be
 installed in the root package environment. The archived `amdgpu` track defaults
 to backend-only validation by setting
 `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
+
+### Core examples
+
+Enabled with:
+
+- `ADAPTIVEOPTICS_VALIDATE_EXAMPLES=1`
+
+Runs:
+
+- [run_core_examples.sh](../scripts/run_core_examples.sh)
+
+This track executes the maintained plotting-free example scripts in
+`examples/closed_loop` and `examples/tutorials`. It is intentionally separate
+from `Pkg.test()` so examples can be used as a user-facing smoke/regression
+surface without making the normal unit-test path slower.
 
 ### Cross-package comparisons
 

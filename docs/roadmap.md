@@ -31,6 +31,20 @@ hardware-validated GPU workflows. The core package now has:
 5. Treat CUDA and AMDGPU support as maintained only on surfaces covered by the
    dedicated backend validation targets.
 
+## Active Cleanup Themes
+
+- Keep the README and `user-guide.md` focused on one recommended user path.
+- Keep `api-reference.md` aligned with the exported API instead of documenting
+  every internal or qualified helper.
+- Keep full visual examples in `../AdaptiveOpticsSimPlots.jl`; the core
+  package examples remain plotting-free and runnable through
+  [`run_core_examples.sh`](../scripts/run_core_examples.sh).
+- Prefer a few high-value OOPAO/SPECULA/REVOLT-like equivalence artifacts over
+  broad claims that are not release-gated.
+- Consolidate validation around maintained entry points:
+  `Pkg.test()`, backend-specific hardware targets, the core example runner, and
+  the release-validation script.
+
 ## Deferred Areas
 
 The following remain valid future directions, but should not drive ad hoc API

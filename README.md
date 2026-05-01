@@ -115,13 +115,18 @@ The user-facing details for those surfaces live in:
 Runnable tutorial ports live in `examples/tutorials/`. Start with:
 
 ```bash
-julia --project examples/tutorials/image_formation.jl
-julia --project examples/tutorials/detector.jl
-julia --project examples/tutorials/closed_loop_shack_hartmann.jl
-julia --project examples/tutorials/closed_loop_pyramid.jl
+julia --project=. examples/tutorials/image_formation.jl
+julia --project=. examples/tutorials/detector.jl
+julia --project=. examples/tutorials/closed_loop_shack_hartmann.jl
+julia --project=. examples/tutorials/closed_loop_pyramid.jl
 ```
 
 Use `examples/closed_loop_demo.jl` for the smallest direct closed-loop script.
+To verify the maintained core examples as a group, run:
+
+```bash
+./scripts/run_core_examples.sh
+```
 
 ## Detector ADU Output
 
@@ -175,7 +180,12 @@ For maintainers extending subsystem families:
 
 For full plotted examples, use the companion plotting package in
 `../AdaptiveOpticsSimPlots.jl`. The examples in this repo remain plotting-free
-by design.
+by design. In the plotting package, run visual examples with:
+
+```bash
+GKSwstype=100 julia --project=. examples/image_formation_visual.jl
+GKSwstype=100 julia --project=. examples/wfs_detector_comparison_visual.jl
+```
 
 ## Supported Production Surface
 
@@ -188,4 +198,13 @@ Release validation entry point:
 
 ```bash
 ./scripts/run_release_validation.sh
+```
+
+Optional release-validation tracks are enabled with environment flags, for
+example:
+
+```bash
+ADAPTIVEOPTICS_VALIDATE_EXAMPLES=1 ./scripts/run_release_validation.sh
+ADAPTIVEOPTICS_VALIDATE_AMDGPU=1 ./scripts/run_release_validation.sh
+ADAPTIVEOPTICS_VALIDATE_CUDA=1 ./scripts/run_release_validation.sh
 ```
