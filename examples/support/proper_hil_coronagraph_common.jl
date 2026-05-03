@@ -13,7 +13,7 @@ export CoronagraphPayload,
     hil_step!
 
 struct CoronagraphPayload{P,M,T}
-    phase_map_m::P
+    opd_m::P
     pupil_mask::M
     diameter_m::T
     focal_length_m::T
@@ -52,12 +52,12 @@ function resolve_hil_backend(name::AbstractString)
     error("unsupported backend '$name'; use cpu, cuda, or amdgpu")
 end
 
-function hil_coronagraph_prescription(λm, n, payload::CoronagraphPayload)
+function hil_coronagraph_prescription(λm, n; payload::CoronagraphPayload)
     wf = prop_begin(payload.diameter_m, λm, n; beam_diam_fraction=1.0)
     prop_circular_aperture(wf, payload.diameter_m / 2)
     prop_define_entrance(wf)
     prop_multiply(wf, payload.pupil_mask)
-    prop_add_phase(wf, payload.phase_map_m)
+    prop_add_phase(wf, payload.opd_m)
 
     prop_lens(wf, payload.focal_length_m, "science arm")
     prop_propagate(wf, payload.focal_length_m, "focal plane mask")
@@ -162,13 +162,13 @@ end
 function _stage_command!(ctx::ProperHILCoronagraphContext)
     ctx.step_index += 1
     T = eltype(ctx.command_buffer)
-    phase = T(ctx.step_index)
+    tstep = T(ctx.step_index)
     @views begin
         tiptilt = ctx.command_buffer[ctx.tiptilt_range]
         dm = ctx.command_buffer[ctx.dm_range]
-        tiptilt[1] = T(5e-3) * sin(T(0.1) * phase)
-        tiptilt[2] = -T(5e-3) * cos(T(0.1) * phase)
-        fill!(dm, T(5e-9) * phase)
+        tiptilt[1] = T(5e-3) * sin(T(0.1) * tstep)
+        tiptilt[2] = -T(5e-3) * cos(T(0.1) * tstep)
+        fill!(dm, T(5e-9) * tstep)
     end
     set_command!(ctx.scenario, ctx.command_buffer)
     return ctx.command_buffer
@@ -181,7 +181,7 @@ function ao_step!(ctx::ProperHILCoronagraphContext)
 end
 
 function science_step!(ctx::ProperHILCoronagraphContext)
-    return prop_run(ctx.science_model; PASSVALUE=ctx.payload)
+    return prop_run(ctx.science_model; payload=ctx.payload)
 end
 
 function hil_step!(ctx::ProperHILCoronagraphContext)

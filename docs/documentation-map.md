@@ -11,6 +11,7 @@ implementation records are needed.
 
 - [`user-guide.md`](./user-guide.md)
 - [`model-cookbook.md`](./model-cookbook.md)
+- [`proper-integration-guide.md`](./proper-integration-guide.md)
 - [`api-reference.md`](./api-reference.md)
 - [`julia-tutorial-mappings.md`](./julia-tutorial-mappings.md)
 

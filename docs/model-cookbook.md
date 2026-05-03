@@ -524,10 +524,10 @@ cfg = SingleControlLoopConfig(name=:hil_coronagraph, branch_label=:main, outputs
 scenario = build_control_loop_scenario(cfg, branch)
 prepare!(scenario)
 
-# Use a typed payload at the package boundary. `Proper.jl` accepts any extra
-# object here; it does not need to be a Dict or untyped PASSVALUE blob.
+# Use a typed payload at the package boundary. `Proper.jl` accepts ordinary
+# Julia keywords, so this does not need a Dict or PASSVALUE blob.
 struct CoronagraphPayload{P,M,T}
-    phase_map_m::P
+    opd_m::P
     pupil_mask::M
     diameter_m::T
     focal_length_m::T
@@ -536,7 +536,7 @@ end
 
 # External coronagraph science arm. `prop_run(...)` receives wavelength in
 # microns, but the prescription itself receives wavelength in meters.
-function hil_coronagraph_prescription(λm, n, payload::CoronagraphPayload)
+function hil_coronagraph_prescription(λm, n; payload::CoronagraphPayload)
     wf = prop_begin(payload.diameter_m, λm, n; beam_diam_fraction=1.0)
     prop_circular_aperture(wf, payload.diameter_m / 2)
     prop_define_entrance(wf)
@@ -544,7 +544,7 @@ function hil_coronagraph_prescription(λm, n, payload::CoronagraphPayload)
     # Carry the exact AdaptiveOpticsSim pupil and residual OPD into the
     # external coronagraph model.
     prop_multiply(wf, payload.pupil_mask)
-    prop_add_phase(wf, payload.phase_map_m)
+    prop_add_phase(wf, payload.opd_m)
 
     prop_lens(wf, payload.focal_length_m, "science arm")
     prop_propagate(wf, payload.focal_length_m, "focal plane mask")
@@ -588,7 +588,7 @@ for k in 1:10
         0.9,
     )
 
-    coronagraph_psf, coronagraph_sampling = prop_run(science_model; PASSVALUE=payload)
+    coronagraph_psf, coronagraph_sampling = prop_run(science_model; payload=payload)
 
     rtc_slopes = slopes(scenario)
     @show k length(rtc_slopes) size(coronagraph_psf) coronagraph_sampling
@@ -631,14 +631,15 @@ payload_gpu = CoronagraphPayload(
     80.0f0,
     0.9f0,
 )
-psf_gpu, sampling_gpu = prop_run(science_model_gpu; PASSVALUE=payload_gpu)
+psf_gpu, sampling_gpu = prop_run(science_model_gpu; payload=payload_gpu)
 ```
 
 Practical notes:
 
-- `PASSVALUE` in `Proper.jl` is just the extra payload object forwarded into
-  the prescription. In Julia, it can be a typed struct like
-  `CoronagraphPayload`, not only a `Dict`.
+- Prefer ordinary Julia keywords for new integrations, as shown with
+  `payload=payload`. `PASSVALUE` remains useful when porting upstream PROPER
+  prescriptions or preserving an existing parity harness, but it is not the
+  preferred interface for new Julia-native HIL code.
 - `sim.tel.state.opd` is the simplest advanced handoff for an external science
   arm because it already contains the currently staged atmosphere plus optic
   residual seen by the AO plant.

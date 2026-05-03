@@ -213,6 +213,8 @@ detector frame.
 `ControlLoopScenario` is the preferred public assembly surface for normal
 closed-loop and HIL simulations. Lower-level runtime construction remains
 available as qualified advanced API for tests and specialized tooling.
+For external Proper science-arm integration, use
+[`proper-integration-guide.md`](./proper-integration-guide.md).
 
 ## Tomography
 
