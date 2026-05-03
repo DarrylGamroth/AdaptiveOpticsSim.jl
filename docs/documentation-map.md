@@ -18,6 +18,7 @@ implementation records are needed.
 ## Maintainer Docs
 
 - [`maintainer-architecture.md`](./maintainer-architecture.md)
+- [`hil-package-boundary.md`](./hil-package-boundary.md)
 - [`runtime-dataflow.md`](./runtime-dataflow.md)
 - [`extension-guide.md`](./extension-guide.md)
 - [`roadmap.md`](./roadmap.md)

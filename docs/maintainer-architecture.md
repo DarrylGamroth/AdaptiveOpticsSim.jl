@@ -183,6 +183,8 @@ Core owns:
 Optional or boundary-managed surfaces include:
 
 - external science-path integrations
+- HIL orchestration, telemetry transport, artifact lifecycle, and RTC/testbench
+  operation; see [`hil-package-boundary.md`](hil-package-boundary.md)
 - heavyweight format or ecosystem adapters
 - extra plotting or notebook-facing helpers
 

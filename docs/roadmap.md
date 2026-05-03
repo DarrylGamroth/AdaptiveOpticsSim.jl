@@ -56,6 +56,9 @@ growth:
 - wider cross-package numerical equivalence beyond the maintained reference data
   and artifacts
 - companion visualization and analysis packages outside the core package
+- HIL orchestration, telemetry transport, artifact lifecycle, and real-time
+  testbench workflows in a companion package; see
+  [`hil-package-boundary.md`](hil-package-boundary.md)
 - science-path integrations that belong in optional extensions or sibling
   packages
 
