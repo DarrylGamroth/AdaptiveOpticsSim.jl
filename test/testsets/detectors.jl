@@ -171,6 +171,72 @@
     @test_throws InvalidConfiguration CMOSSensor(timing_model=RollingShutter(-1.0))
     @test_throws InvalidConfiguration CMOSSensor(output_model=StaticCMOSOutputPattern(2, [1.0], [0.0, 1.0]))
 
+    qcmos_sensor = QCMOSSensor(T=Float32)
+    @test detector_sensor_symbol(qcmos_sensor) == :qcmos
+    @test qcmos_camera_symbol(qcmos_camera_model(qcmos_sensor)) == :orca_quest_2
+    @test qcmos_scan_mode_symbol(qcmos_scan_mode(qcmos_sensor)) == :ultra_quiet
+    @test qcmos_readout_noise_sigma(qcmos_sensor) ≈ 0.30f0
+    @test qcmos_readout_noise_median(qcmos_sensor) ≈ 0.25f0
+    @test qcmos_dsnu_sigma(qcmos_sensor) ≈ 0.06f0
+    @test qcmos_prnu_sigma(qcmos_sensor) ≈ 0.001f0
+    @test qcmos_conversion_factor_e_per_count(qcmos_sensor) ≈ 0.107f0
+    @test qcmos_pixel_size_um(qcmos_sensor) ≈ 4.6f0
+    @test qcmos_peak_qe(qcmos_sensor) ≈ 0.85f0
+    @test qcmos_full_well(qcmos_sensor) ≈ 7000.0f0
+    @test qcmos_dark_current(qcmos_sensor) ≈ 0.016f0
+    @test qcmos_frame_size(qcmos_sensor) == (2304, 4096)
+    @test qcmos_frame_rate_hz(qcmos_sensor) ≈ 25.4f0
+    @test qcmos_min_exposure_time(qcmos_sensor) ≈ 33.9f-6
+    @test qcmos_sensor.timing_model isa RollingShutter{Float32}
+    @test qcmos_sensor.timing_model.line_time ≈ 33.9f-6
+    @test supports_detector_defect_maps(qcmos_sensor)
+    @test supports_shutter_timing(qcmos_sensor)
+    @test supports_photon_number_resolving(qcmos_sensor)
+    @test !supports_raw_digital_output(qcmos_sensor)
+    @test supports_raw_digital_output(QCMOSSensor(scan_mode=QCMOSRawScan()))
+
+    det_qcmos = ORCAQuest2Detector(integration_time=1e-3, response_model=NullFrameResponse(), T=Float32)
+    @test det_qcmos.noise isa NoisePhotonReadout
+    @test det_qcmos.noise.sigma ≈ 0.30f0
+    @test det_qcmos.params.sensor isa QCMOSSensor
+    @test det_qcmos.params.qe ≈ 0.85f0
+    @test det_qcmos.params.full_well ≈ 7000.0f0
+    @test det_qcmos.params.bits == 16
+    @test det_qcmos.params.output_type == UInt16
+    frame_qcmos = capture!(det_qcmos, fill(100.0f0, 4, 4); rng=MersenneTwister(130))
+    @test frame_qcmos isa Matrix{UInt16}
+    meta_qcmos = detector_export_metadata(det_qcmos)
+    @test meta_qcmos.sensor == :qcmos
+    @test meta_qcmos.noise == :photon_readout
+    @test meta_qcmos.readout_sigma ≈ 0.30f0
+    @test meta_qcmos.frame_response == :none
+    @test meta_qcmos.timing_model == :rolling_shutter
+    @test meta_qcmos.timing_line_time ≈ 33.9f-6
+    @test meta_qcmos.sampling_wallclock_time ≈ inv(25.4f0)
+
+    qcmos_standard = ORCAQuest2Sensor(scan_mode=QCMOSStandardScan(), T=Float32)
+    @test qcmos_readout_noise_sigma(qcmos_standard) ≈ 0.43f0
+    @test qcmos_readout_noise_median(qcmos_standard) ≈ 0.39f0
+    @test qcmos_frame_rate_hz(qcmos_standard) ≈ 120.0f0
+    @test qcmos_min_exposure_time(qcmos_standard) ≈ 7.2f-6
+    @test qcmos_standard.timing_model.line_time ≈ 7.2f-6
+    qcmos_legacy = ORCAQuestSensor(scan_mode=QCMOSUltraQuietScan(), T=Float32)
+    @test qcmos_readout_noise_sigma(qcmos_legacy) ≈ 0.27f0
+    @test qcmos_frame_rate_hz(qcmos_legacy) ≈ 5.0f0
+    @test qcmos_min_exposure_time(qcmos_legacy) ≈ 199.9f-3
+    @test qcmos_legacy.timing_model.line_time ≈ 172.8f-6
+    qcmos_iq = ORCAQuestIQSensor(T=Float32)
+    @test qcmos_dark_current(qcmos_iq) ≈ 0.032f0
+    det_qcmos_custom = ORCAQuestIQDetector(scan_mode=QCMOSStandardScan(), integration_time=2e-3,
+        response_model=NullFrameResponse(), noise=NoiseNone(), T=Float32)
+    @test det_qcmos_custom.noise isa NoiseNone
+    @test det_qcmos_custom.params.integration_time ≈ 2.0f-3
+    @test det_qcmos_custom.params.sensor.scan_mode isa QCMOSStandardScan
+    @test_throws InvalidConfiguration QCMOSSensor(readout_noise_sigma=-1.0)
+    @test_throws InvalidConfiguration QCMOSSensor(peak_qe=1.5)
+    @test_throws InvalidConfiguration QCMOSSensor(full_well=0.0)
+    @test_throws InvalidConfiguration QCMOSSensor(frame_size=(0, 4096))
+
     det_ingaas = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=InGaAsSensor(glow_rate=3.0))
     frame_ingaas = capture!(det_ingaas, zero_psf; rng=MersenneTwister(13))

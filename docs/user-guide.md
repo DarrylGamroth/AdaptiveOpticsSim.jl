@@ -176,6 +176,29 @@ Here `adu` is a `UInt16` image containing 12-bit ADU values. For
 Shack-Hartmann sensors this is the lenslet spot mosaic; for frame-style WFSs it
 is the maintained detector/readout frame.
 
+For a quantitative CMOS camera similar to the Hamamatsu ORCA-Quest family, use
+the qCMOS convenience constructors. The camera preset supplies the family-level
+readout noise, QE, full well, dark current, frame rate, and pixel metadata;
+ORCA-Quest presets default to rolling-shutter timing. `bits` and `output_type`
+still define the exported RTC/HIL frame:
+
+```julia
+det = ORCAQuest2Detector(
+    scan_mode=QCMOSUltraQuietScan(),
+    integration_time=1e-3,
+    bits=16,
+    output_type=UInt16,
+)
+
+measure!(wfs, tel, src, det; rng=rng)
+adu = wfs_detector_image(wfs, det)
+```
+
+The qCMOS model intentionally keeps camera-specific defaults separate from
+measured calibration data. Add `PixelResponseNonuniformity`,
+`DarkSignalNonuniformity`, or `BadPixelMask` through the detector defect model
+when you have a calibrated ORCA-Quest unit.
+
 Use this when you care about:
 
 - sensor behavior

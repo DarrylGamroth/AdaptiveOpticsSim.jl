@@ -311,6 +311,7 @@ end
         wind_speed=[0.0], wind_direction=[0.0], altitude=[0.0], screen_resolution=33, stencil_size=35)
     @test CCDSensor <: FrameSensorType
     @test CMOSSensor <: FrameSensorType
+    @test QCMOSSensor <: FrameSensorType
     @test AvalancheFrameSensorType <: FrameSensorType
     @test HgCdTeAvalancheArraySensorType <: AvalancheFrameSensorType
     @test EMCCDSensor <: AvalancheFrameSensorType
@@ -319,9 +320,14 @@ end
     @test !supports_avalanche_gain(CCDSensor())
     @test !supports_sensor_glow(CMOSSensor())
     @test supports_detector_defect_maps(CMOSSensor())
+    @test supports_detector_defect_maps(QCMOSSensor())
     @test supports_detector_defect_maps(InGaAsSensor())
     @test supports_shutter_timing(CMOSSensor())
+    @test supports_shutter_timing(QCMOSSensor())
     @test !supports_shutter_timing(CCDSensor())
+    @test supports_photon_number_resolving(QCMOSSensor())
+    @test !supports_raw_digital_output(QCMOSSensor())
+    @test supports_raw_digital_output(QCMOSSensor(scan_mode=QCMOSRawScan()))
     @test !supports_detector_persistence(CMOSSensor())
     @test supports_detector_persistence(InGaAsSensor(persistence_model=ExponentialPersistence(0.1, 0.9)))
     @test !supports_detector_nonlinearity(CMOSSensor())

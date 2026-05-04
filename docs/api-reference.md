@@ -122,8 +122,14 @@ influence functions, non-square actuator layouts, clipping, or actuator health.
 - Noise: `NoiseModel`, `NoiseNone`, `NoisePhoton`, `NoiseReadout`,
   `NoisePhotonReadout`
 - Sensor families: `SensorType`, `CCDSensor`, `CMOSSensor`, `EMCCDSensor`,
-  `InGaAsSensor`, `HgCdTeAvalancheArraySensor`, `APDSensor`,
+  `QCMOSSensor`, `InGaAsSensor`, `HgCdTeAvalancheArraySensor`, `APDSensor`,
   `SPADArraySensor`
+- qCMOS camera presets: `ORCAQuest`, `ORCAQuest2`, `ORCAQuestIQ`,
+  `ORCAQuestSensor`, `ORCAQuest2Sensor`, `ORCAQuestIQSensor`,
+  `QCMOSDetector`, `ORCAQuestDetector`, `ORCAQuest2Detector`,
+  `ORCAQuestIQDetector`
+- qCMOS scan modes: `QCMOSStandardScan`, `QCMOSUltraQuietScan`,
+  `QCMOSPhotonNumberResolvingScan`, `QCMOSRawScan`
 - Frame response: `FrameResponseModel`, `NullFrameResponse`,
   `GaussianPixelResponse`, `SampledFrameResponse`,
   `RectangularPixelAperture`, `SeparablePixelMTF`
@@ -151,6 +157,14 @@ influence functions, non-square actuator layouts, clipping, or actuator health.
 
 Use `bits` for detector quantization depth and `output_type` for the Julia
 element type exported to an RTC/HIL boundary.
+
+`QCMOSSensor` models Hamamatsu ORCA-Quest-family quantitative CMOS cameras as a
+frame-sensor family on the normal `Detector` path. The built-in ORCA-Quest
+presets provide published family defaults for pixel size, QE, full well,
+readout noise, DSNU, PRNU, dark current, frame size, frame rate, minimum
+exposure, and rolling-shutter line-pair timing. Use detector defect models such
+as `PixelResponseNonuniformity`, `DarkSignalNonuniformity`, and `BadPixelMask`
+for measured per-camera calibration maps.
 
 ## Wavefront Sensors
 

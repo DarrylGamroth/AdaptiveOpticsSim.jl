@@ -54,6 +54,10 @@ export DMAdditive, DMReplace
 export Detector, APDDetector, SPADArrayDetector
 export NoiseModel, NoiseNone, NoisePhoton, NoiseReadout, NoisePhotonReadout
 export SensorType, CCDSensor, CMOSSensor, EMCCDSensor, InGaAsSensor
+export QCMOSSensor, ORCAQuestSensor, ORCAQuest2Sensor, ORCAQuestIQSensor
+export ORCAQuest, ORCAQuest2, ORCAQuestIQ
+export QCMOSStandardScan, QCMOSUltraQuietScan, QCMOSPhotonNumberResolvingScan, QCMOSRawScan
+export QCMOSDetector, ORCAQuestDetector, ORCAQuest2Detector, ORCAQuestIQDetector
 export HgCdTeAvalancheArraySensor, APDSensor, SPADArraySensor
 export FrameResponseModel, NullFrameResponse, GaussianPixelResponse, SampledFrameResponse
 export RectangularPixelAperture, SeparablePixelMTF
