@@ -24,6 +24,7 @@ abstract type AbstractDetectorThermalModel end
 abstract type AbstractDetectorThermalState end
 abstract type AbstractTemperatureLaw end
 abstract type AbstractTemporalFrameSource end
+abstract type AbstractRollingShutterExposureMode end
 abstract type AvalancheFrameSensorType <: FrameSensorType end
 abstract type HgCdTeAvalancheArraySensorType <: AvalancheFrameSensorType end
 abstract type SPADArraySensorType <: CountingSensorType end
@@ -261,15 +262,21 @@ default_detector_defect_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float6
 
 struct GlobalShutter <: AbstractFrameTimingModel end
 
-struct RollingShutter{T<:AbstractFloat} <: AbstractFrameTimingModel
+struct RollingExposure <: AbstractRollingShutterExposureMode end
+struct GlobalResetExposure <: AbstractRollingShutterExposureMode end
+
+struct RollingShutter{T<:AbstractFloat,M<:AbstractRollingShutterExposureMode} <: AbstractFrameTimingModel
     line_time::T
     row_group_size::Int
+    exposure_mode::M
 end
 
-RollingShutter(line_time::Real; row_group_size::Integer=1) =
-    RollingShutter{Float64}(float(line_time), Int(row_group_size))
-RollingShutter{T}(line_time::Real; row_group_size::Integer=1) where {T<:AbstractFloat} =
-    RollingShutter{T}(T(line_time), Int(row_group_size))
+RollingShutter(line_time::Real; row_group_size::Integer=1,
+    exposure_mode::AbstractRollingShutterExposureMode=RollingExposure()) =
+    RollingShutter{Float64,typeof(exposure_mode)}(float(line_time), Int(row_group_size), exposure_mode)
+RollingShutter{T}(line_time::Real, row_group_size::Integer=1;
+    exposure_mode::AbstractRollingShutterExposureMode=RollingExposure()) where {T<:AbstractFloat} =
+    RollingShutter{T,typeof(exposure_mode)}(T(line_time), Int(row_group_size), exposure_mode)
 
 timing_model_symbol(::GlobalShutter) = :global_shutter
 timing_model_symbol(::RollingShutter) = :rolling_shutter
@@ -298,6 +305,9 @@ function sample_frame!(dest::AbstractMatrix, source::InPlaceFrameSource, time)
     source.f(dest, time)
     return dest
 end
+
+sample_exposure_frame!(dest::AbstractMatrix, source::AbstractTemporalFrameSource, start_time, exposure_time) =
+    sample_frame!(dest, source, start_time)
 
 struct NullFrameNonlinearity <: AbstractFrameNonlinearityModel end
 

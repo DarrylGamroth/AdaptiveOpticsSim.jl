@@ -62,7 +62,7 @@ export HgCdTeAvalancheArraySensor, APDSensor, SPADArraySensor
 export FrameResponseModel, NullFrameResponse, GaussianPixelResponse, SampledFrameResponse
 export RectangularPixelAperture, SeparablePixelMTF
 export PixelResponseNonuniformity, DarkSignalNonuniformity, BadPixelMask, CompositeDetectorDefectModel
-export RollingShutter, CorrelatedDoubleSampling, FowlerSampling
+export RollingShutter, RollingExposure, GlobalResetExposure, CorrelatedDoubleSampling, FowlerSampling
 export FunctionFrameSource, InPlaceFrameSource
 export FrameReadoutCorrectionModel, NullFrameReadoutCorrection
 export ReferencePixelCommonModeCorrection, ReferenceRowCommonModeCorrection

@@ -135,7 +135,8 @@ influence functions, non-square actuator layouts, clipping, or actuator health.
   `RectangularPixelAperture`, `SeparablePixelMTF`
 - Defects: `PixelResponseNonuniformity`, `DarkSignalNonuniformity`,
   `BadPixelMask`, `CompositeDetectorDefectModel`
-- Readout timing and correction: `RollingShutter`,
+- Readout timing and correction: `RollingShutter`, `RollingExposure`,
+  `GlobalResetExposure`,
   `FunctionFrameSource`, `InPlaceFrameSource`,
   `CorrelatedDoubleSampling`, `FowlerSampling`,
   `FrameReadoutCorrectionModel`, `NullFrameReadoutCorrection`,

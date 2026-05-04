@@ -584,6 +584,15 @@ function capture_temporal_signal!(det::Detector, source::AbstractTemporalFrameSo
     return det.state.frame
 end
 
+rolling_exposure_start(::RollingExposure, line_index, line_time, exposure_time, ::Type{T}) where {T<:AbstractFloat} =
+    T(line_index) * T(line_time)
+rolling_exposure_duration(::RollingExposure, line_index, line_time, exposure_time, ::Type{T}) where {T<:AbstractFloat} =
+    T(exposure_time)
+rolling_exposure_start(::GlobalResetExposure, line_index, line_time, exposure_time, ::Type{T}) where {T<:AbstractFloat} =
+    zero(T)
+rolling_exposure_duration(::GlobalResetExposure, line_index, line_time, exposure_time, ::Type{T}) where {T<:AbstractFloat} =
+    T(exposure_time) + T(line_index) * T(line_time)
+
 function capture_temporal_signal!(det::Detector, source::AbstractTemporalFrameSource, first_frame::AbstractMatrix,
     rng::AbstractRNG, exposure_time::Real, timing::RollingShutter)
     fill_frame!(det, first_frame, exposure_time)
@@ -592,12 +601,14 @@ function capture_temporal_signal!(det::Detector, source::AbstractTemporalFrameSo
     scratch = similar(first_frame)
     n_rows = size(det.state.frame, 1)
     group_size = timing.row_group_size
+    value_type = eltype(det.state.frame)
     for row_lo in (firstindex(det.state.frame, 1) + group_size):group_size:n_rows
         row_hi = min(row_lo + group_size - 1, n_rows)
         line_index = div(row_lo - 1, group_size)
-        sample_time = eltype(det.state.frame)(line_index) * eltype(det.state.frame)(timing.line_time)
-        sample_frame!(scratch, source, sample_time)
-        fill_frame!(det, scratch, exposure_time)
+        sample_time = rolling_exposure_start(timing.exposure_mode, line_index, timing.line_time, exposure_time, value_type)
+        group_exposure = rolling_exposure_duration(timing.exposure_mode, line_index, timing.line_time, exposure_time, value_type)
+        sample_exposure_frame!(scratch, source, sample_time, group_exposure)
+        fill_frame!(det, scratch, group_exposure)
         @views det.state.accum_buffer[row_lo:row_hi, :] .= det.state.frame[row_lo:row_hi, :]
     end
 

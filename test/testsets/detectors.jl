@@ -180,6 +180,14 @@
     @test rolling_frame == repeat(reshape([0.0, 0.25, 0.5, 0.75], :, 1), 1, 4)
     @test detector_export_metadata(rolling_det).sampling_wallclock_time == 2.0
 
+    global_reset_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        sensor=CMOSSensor(timing_model=RollingShutter(0.25; exposure_mode=GlobalResetExposure())),
+        response_model=NullFrameResponse())
+    constant_source = FunctionFrameSource(t -> ones(4, 4))
+    global_reset_frame = capture!(global_reset_det, constant_source; rng=MersenneTwister(129))
+    @test global_reset_frame == repeat(reshape([1.0, 1.25, 1.5, 1.75], :, 1), 1, 4)
+    @test global_reset_det.params.timing_model.exposure_mode == GlobalResetExposure()
+
     pulse_source = FunctionFrameSource(t -> fill(t >= 0.5 ? 10.0 : 0.0, 4, 4))
     pulse_frame = capture!(rolling_det, pulse_source; rng=MersenneTwister(128))
     @test pulse_frame[1:2, :] == zeros(2, 4)
@@ -204,6 +212,7 @@
     @test qcmos_sensor.timing_model isa RollingShutter{Float32}
     @test qcmos_sensor.timing_model.line_time ≈ 33.9f-6
     @test qcmos_sensor.timing_model.row_group_size == 2
+    @test qcmos_sensor.timing_model.exposure_mode == RollingExposure()
     @test supports_detector_defect_maps(qcmos_sensor)
     @test supports_shutter_timing(qcmos_sensor)
     @test supports_photon_number_resolving(qcmos_sensor)

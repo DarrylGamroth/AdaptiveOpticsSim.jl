@@ -224,6 +224,21 @@ can show transient illumination and rolling-shutter artifacts. Static
 `capture!(det, image)` remains the preferred path when the scene does not vary
 during the exposure.
 
+For cameras that use global reset with rolling readout, set
+`exposure_mode=GlobalResetExposure()`. This starts all row groups together and
+then increases the effective exposure time for later row groups as the rolling
+readout reaches them:
+
+```julia
+det = Detector(
+    noise=NoiseNone(),
+    sensor=CMOSSensor(
+        timing_model=RollingShutter(25e-6; exposure_mode=GlobalResetExposure()),
+    ),
+    response_model=NullFrameResponse(),
+)
+```
+
 Use this when you care about:
 
 - sensor behavior

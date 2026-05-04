@@ -453,7 +453,7 @@ end
 
 convert_frame_timing_model(::GlobalShutter, ::Type{T}) where {T<:AbstractFloat} = GlobalShutter()
 convert_frame_timing_model(model::RollingShutter, ::Type{T}) where {T<:AbstractFloat} =
-    RollingShutter{T}(T(model.line_time), model.row_group_size)
+    RollingShutter{T}(T(model.line_time), model.row_group_size; exposure_mode=model.exposure_mode)
 
 validate_frame_timing_model(::GlobalShutter) = GlobalShutter()
 
