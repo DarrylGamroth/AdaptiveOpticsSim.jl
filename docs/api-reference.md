@@ -138,6 +138,7 @@ influence functions, non-square actuator layouts, clipping, or actuator health.
 - Readout timing and correction: `RollingShutter`, `RollingExposure`,
   `GlobalResetExposure`,
   `FunctionFrameSource`, `InPlaceFrameSource`,
+  `FunctionExposureFrameSource`, `InPlaceExposureFrameSource`,
   `CorrelatedDoubleSampling`, `FowlerSampling`,
   `FrameReadoutCorrectionModel`, `NullFrameReadoutCorrection`,
   `ReferencePixelCommonModeCorrection`, `ReferenceRowCommonModeCorrection`,

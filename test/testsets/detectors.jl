@@ -188,6 +188,16 @@
     @test global_reset_frame == repeat(reshape([1.0, 1.25, 1.5, 1.75], :, 1), 1, 4)
     @test global_reset_det.params.timing_model.exposure_mode == GlobalResetExposure()
 
+    interval_source = FunctionExposureFrameSource((start_time, exposure_time) ->
+        fill(start_time <= 1.4 < start_time + exposure_time ? 10.0 : 0.0, 4, 4))
+    rolling_interval_frame = capture!(rolling_det, interval_source; rng=MersenneTwister(132))
+    @test rolling_interval_frame[1:2, :] == zeros(2, 4)
+    @test rolling_interval_frame[3:4, :] == fill(10.0, 2, 4)
+    global_reset_interval_frame = capture!(global_reset_det, interval_source; rng=MersenneTwister(133))
+    @test global_reset_interval_frame[1:2, :] == zeros(2, 4)
+    @test global_reset_interval_frame[3, :] == fill(15.0, 4)
+    @test global_reset_interval_frame[4, :] == fill(17.5, 4)
+
     pulse_source = FunctionFrameSource(t -> fill(t >= 0.5 ? 10.0 : 0.0, 4, 4))
     pulse_frame = capture!(rolling_det, pulse_source; rng=MersenneTwister(128))
     @test pulse_frame[1:2, :] == zeros(2, 4)

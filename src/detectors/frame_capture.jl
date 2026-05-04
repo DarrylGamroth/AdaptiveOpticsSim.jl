@@ -578,6 +578,16 @@ function initial_temporal_frame(source::InPlaceFrameSource, det::Detector, time)
     return frame
 end
 
+function initial_temporal_frame(source::FunctionExposureFrameSource, det::Detector, time)
+    return validated_temporal_frame(source.f(time, zero(eltype(det.state.frame))))
+end
+
+function initial_temporal_frame(source::InPlaceExposureFrameSource, det::Detector, time)
+    frame = similar(det.state.frame, source.frame_size...)
+    sample_exposure_frame!(frame, source, time, zero(eltype(det.state.frame)))
+    return frame
+end
+
 function capture_temporal_signal!(det::Detector, source::AbstractTemporalFrameSource, first_frame::AbstractMatrix,
     rng::AbstractRNG, exposure_time::Real, ::GlobalShutter)
     capture_signal_pipeline!(det, first_frame, rng, exposure_time)

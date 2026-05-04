@@ -293,6 +293,15 @@ struct InPlaceFrameSource{F} <: AbstractTemporalFrameSource
     frame_size::Tuple{Int,Int}
 end
 
+struct FunctionExposureFrameSource{F} <: AbstractTemporalFrameSource
+    f::F
+end
+
+struct InPlaceExposureFrameSource{F} <: AbstractTemporalFrameSource
+    f::F
+    frame_size::Tuple{Int,Int}
+end
+
 function sample_frame!(dest::AbstractMatrix, source::FunctionFrameSource, time)
     frame = source.f(time)
     size(frame) == size(dest) || throw(DimensionMismatchError("temporal frame source returned an unexpected frame size"))
@@ -308,6 +317,20 @@ end
 
 sample_exposure_frame!(dest::AbstractMatrix, source::AbstractTemporalFrameSource, start_time, exposure_time) =
     sample_frame!(dest, source, start_time)
+
+function sample_exposure_frame!(dest::AbstractMatrix, source::FunctionExposureFrameSource, start_time, exposure_time)
+    frame = source.f(start_time, exposure_time)
+    size(frame) == size(dest) || throw(DimensionMismatchError("temporal exposure frame source returned an unexpected frame size"))
+    copyto!(dest, frame)
+    return dest
+end
+
+function sample_exposure_frame!(dest::AbstractMatrix, source::InPlaceExposureFrameSource, start_time, exposure_time)
+    size(dest) == source.frame_size ||
+        throw(DimensionMismatchError("temporal exposure frame source destination has an unexpected frame size"))
+    source.f(dest, start_time, exposure_time)
+    return dest
+end
 
 struct NullFrameNonlinearity <: AbstractFrameNonlinearityModel end
 

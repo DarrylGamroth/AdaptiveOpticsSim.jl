@@ -224,6 +224,18 @@ can show transient illumination and rolling-shutter artifacts. Static
 `capture!(det, image)` remains the preferred path when the scene does not vary
 during the exposure.
 
+For transient sources where the flux rate depends on the full exposure
+interval, use `InPlaceExposureFrameSource` or `FunctionExposureFrameSource`.
+These receive `start_time` and `exposure_time`, which is important for
+global-reset rolling readout:
+
+```julia
+pulse = FunctionExposureFrameSource((start_time, exposure_time) -> begin
+    active = start_time <= 50e-6 < start_time + exposure_time
+    return fill(active ? 1.0 : 0.0, 64, 64)
+end)
+```
+
 For cameras that use global reset with rolling readout, set
 `exposure_mode=GlobalResetExposure()`. This starts all row groups together and
 then increases the effective exposure time for later row groups as the rolling
