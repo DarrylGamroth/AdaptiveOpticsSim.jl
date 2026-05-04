@@ -63,6 +63,7 @@ export FrameResponseModel, NullFrameResponse, GaussianPixelResponse, SampledFram
 export RectangularPixelAperture, SeparablePixelMTF
 export PixelResponseNonuniformity, DarkSignalNonuniformity, BadPixelMask, CompositeDetectorDefectModel
 export RollingShutter, CorrelatedDoubleSampling, FowlerSampling
+export FunctionFrameSource, InPlaceFrameSource
 export FrameReadoutCorrectionModel, NullFrameReadoutCorrection
 export ReferencePixelCommonModeCorrection, ReferenceRowCommonModeCorrection
 export ReferenceColumnCommonModeCorrection, ReferenceOutputCommonModeCorrection

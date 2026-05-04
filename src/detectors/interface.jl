@@ -23,6 +23,7 @@ abstract type AbstractPersistenceModel end
 abstract type AbstractDetectorThermalModel end
 abstract type AbstractDetectorThermalState end
 abstract type AbstractTemperatureLaw end
+abstract type AbstractTemporalFrameSource end
 abstract type AvalancheFrameSensorType <: FrameSensorType end
 abstract type HgCdTeAvalancheArraySensorType <: AvalancheFrameSensorType end
 abstract type SPADArraySensorType <: CountingSensorType end
@@ -262,15 +263,41 @@ struct GlobalShutter <: AbstractFrameTimingModel end
 
 struct RollingShutter{T<:AbstractFloat} <: AbstractFrameTimingModel
     line_time::T
+    row_group_size::Int
 end
 
-RollingShutter(line_time::Real) = RollingShutter{Float64}(float(line_time))
+RollingShutter(line_time::Real; row_group_size::Integer=1) =
+    RollingShutter{Float64}(float(line_time), Int(row_group_size))
+RollingShutter{T}(line_time::Real; row_group_size::Integer=1) where {T<:AbstractFloat} =
+    RollingShutter{T}(T(line_time), Int(row_group_size))
 
 timing_model_symbol(::GlobalShutter) = :global_shutter
 timing_model_symbol(::RollingShutter) = :rolling_shutter
 is_global_shutter(::AbstractFrameTimingModel) = false
 is_global_shutter(::GlobalShutter) = true
 default_frame_timing_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64) = GlobalShutter()
+
+struct FunctionFrameSource{F} <: AbstractTemporalFrameSource
+    f::F
+end
+
+struct InPlaceFrameSource{F} <: AbstractTemporalFrameSource
+    f::F
+    frame_size::Tuple{Int,Int}
+end
+
+function sample_frame!(dest::AbstractMatrix, source::FunctionFrameSource, time)
+    frame = source.f(time)
+    size(frame) == size(dest) || throw(DimensionMismatchError("temporal frame source returned an unexpected frame size"))
+    copyto!(dest, frame)
+    return dest
+end
+
+function sample_frame!(dest::AbstractMatrix, source::InPlaceFrameSource, time)
+    size(dest) == source.frame_size || throw(DimensionMismatchError("temporal frame source destination has an unexpected frame size"))
+    source.f(dest, time)
+    return dest
+end
 
 struct NullFrameNonlinearity <: AbstractFrameNonlinearityModel end
 

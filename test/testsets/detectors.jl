@@ -169,7 +169,21 @@
     @test supports_detector_defect_maps(det_cmos_structured.params.sensor)
     @test supports_shutter_timing(det_cmos_structured.params.sensor)
     @test_throws InvalidConfiguration CMOSSensor(timing_model=RollingShutter(-1.0))
+    @test_throws InvalidConfiguration CMOSSensor(timing_model=RollingShutter(1e-3; row_group_size=0))
     @test_throws InvalidConfiguration CMOSSensor(output_model=StaticCMOSOutputPattern(2, [1.0], [0.0, 1.0]))
+
+    rolling_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        sensor=CMOSSensor(timing_model=RollingShutter(0.25)),
+        response_model=NullFrameResponse())
+    rolling_source = InPlaceFrameSource((out, t) -> fill!(out, t), (4, 4))
+    rolling_frame = capture!(rolling_det, rolling_source; rng=MersenneTwister(127))
+    @test rolling_frame == repeat(reshape([0.0, 0.25, 0.5, 0.75], :, 1), 1, 4)
+    @test detector_export_metadata(rolling_det).sampling_wallclock_time == 2.0
+
+    pulse_source = FunctionFrameSource(t -> fill(t >= 0.5 ? 10.0 : 0.0, 4, 4))
+    pulse_frame = capture!(rolling_det, pulse_source; rng=MersenneTwister(128))
+    @test pulse_frame[1:2, :] == zeros(2, 4)
+    @test pulse_frame[3:4, :] == fill(10.0, 2, 4)
 
     qcmos_sensor = QCMOSSensor(T=Float32)
     @test detector_sensor_symbol(qcmos_sensor) == :qcmos
@@ -189,6 +203,7 @@
     @test qcmos_min_exposure_time(qcmos_sensor) ≈ 33.9f-6
     @test qcmos_sensor.timing_model isa RollingShutter{Float32}
     @test qcmos_sensor.timing_model.line_time ≈ 33.9f-6
+    @test qcmos_sensor.timing_model.row_group_size == 2
     @test supports_detector_defect_maps(qcmos_sensor)
     @test supports_shutter_timing(qcmos_sensor)
     @test supports_photon_number_resolving(qcmos_sensor)
@@ -232,6 +247,12 @@
     @test det_qcmos_custom.noise isa NoiseNone
     @test det_qcmos_custom.params.integration_time ≈ 2.0f-3
     @test det_qcmos_custom.params.sensor.scan_mode isa QCMOSStandardScan
+    det_qcmos_temporal = ORCAQuest2Detector(integration_time=1.0, response_model=NullFrameResponse(),
+        noise=NoiseNone(), qe=1.0, dark_current=0.0, bits=nothing, output_type=nothing, T=Float32)
+    qcmos_temporal_source = InPlaceFrameSource((out, t) -> fill!(out, t * 1.0f6), (4, 4))
+    qcmos_temporal = capture!(det_qcmos_temporal, qcmos_temporal_source; rng=MersenneTwister(131))
+    @test qcmos_temporal[1:2, :] == zeros(Float32, 2, 4)
+    @test qcmos_temporal[3:4, :] == fill(33.9f0, 2, 4)
     @test_throws InvalidConfiguration QCMOSSensor(readout_noise_sigma=-1.0)
     @test_throws InvalidConfiguration QCMOSSensor(peak_qe=1.5)
     @test_throws InvalidConfiguration QCMOSSensor(full_well=0.0)

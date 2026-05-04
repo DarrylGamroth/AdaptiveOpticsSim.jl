@@ -199,6 +199,31 @@ measured calibration data. Add `PixelResponseNonuniformity`,
 `DarkSignalNonuniformity`, or `BadPixelMask` through the detector defect model
 when you have a calibrated ORCA-Quest unit.
 
+Rolling-shutter detectors can also capture a time-varying scene. Use
+`InPlaceFrameSource` when the source can write into a preallocated frame, or
+`FunctionFrameSource` when a function returns a frame for each sample time:
+
+```julia
+det = Detector(
+    noise=NoiseNone(),
+    sensor=CMOSSensor(timing_model=RollingShutter(25e-6)),
+    response_model=NullFrameResponse(),
+)
+
+pulse = InPlaceFrameSource((out, t) -> begin
+    fill!(out, 0.0)
+    t >= 50e-6 && fill!(out, 1.0)
+    return out
+end, (64, 64))
+
+frame = capture!(det, pulse; rng=rng)
+```
+
+This path samples each rolling-shutter row group at its own readout time, so it
+can show transient illumination and rolling-shutter artifacts. Static
+`capture!(det, image)` remains the preferred path when the scene does not vary
+during the exposure.
+
 Use this when you care about:
 
 - sensor behavior

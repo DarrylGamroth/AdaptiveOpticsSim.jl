@@ -136,6 +136,7 @@ influence functions, non-square actuator layouts, clipping, or actuator health.
 - Defects: `PixelResponseNonuniformity`, `DarkSignalNonuniformity`,
   `BadPixelMask`, `CompositeDetectorDefectModel`
 - Readout timing and correction: `RollingShutter`,
+  `FunctionFrameSource`, `InPlaceFrameSource`,
   `CorrelatedDoubleSampling`, `FowlerSampling`,
   `FrameReadoutCorrectionModel`, `NullFrameReadoutCorrection`,
   `ReferencePixelCommonModeCorrection`, `ReferenceRowCommonModeCorrection`,

@@ -564,6 +564,51 @@ function finalize_capture!(det::Detector, rng::AbstractRNG, exposure_time::Real)
     return finalize_readout_pipeline!(det, rng, exposure_time)
 end
 
+validated_temporal_frame(frame::AbstractMatrix) = frame
+validated_temporal_frame(frame) =
+    throw(InvalidConfiguration("FunctionFrameSource must return an AbstractMatrix"))
+
+function initial_temporal_frame(source::FunctionFrameSource, det::Detector, time)
+    return validated_temporal_frame(source.f(time))
+end
+
+function initial_temporal_frame(source::InPlaceFrameSource, det::Detector, time)
+    frame = similar(det.state.frame, source.frame_size...)
+    sample_frame!(frame, source, time)
+    return frame
+end
+
+function capture_temporal_signal!(det::Detector, source::AbstractTemporalFrameSource, first_frame::AbstractMatrix,
+    rng::AbstractRNG, exposure_time::Real, ::GlobalShutter)
+    capture_signal_pipeline!(det, first_frame, rng, exposure_time)
+    return det.state.frame
+end
+
+function capture_temporal_signal!(det::Detector, source::AbstractTemporalFrameSource, first_frame::AbstractMatrix,
+    rng::AbstractRNG, exposure_time::Real, timing::RollingShutter)
+    fill_frame!(det, first_frame, exposure_time)
+    det.state.accum_buffer .= det.state.frame
+
+    scratch = similar(first_frame)
+    n_rows = size(det.state.frame, 1)
+    group_size = timing.row_group_size
+    for row_lo in (firstindex(det.state.frame, 1) + group_size):group_size:n_rows
+        row_hi = min(row_lo + group_size - 1, n_rows)
+        line_index = div(row_lo - 1, group_size)
+        sample_time = eltype(det.state.frame)(line_index) * eltype(det.state.frame)(timing.line_time)
+        sample_frame!(scratch, source, sample_time)
+        fill_frame!(det, scratch, exposure_time)
+        @views det.state.accum_buffer[row_lo:row_hi, :] .= det.state.frame[row_lo:row_hi, :]
+    end
+
+    det.state.frame .= det.state.accum_buffer
+    apply_signal_defects!(det.params.defect_model, det, exposure_time)
+    apply_sensor_persistence!(det.params.sensor, det, exposure_time)
+    photon_noise_enabled(det) && poisson_noise_frame!(det, rng, det.state.frame)
+    apply_background_flux!(det.background_flux, det, rng, exposure_time)
+    return det.state.frame
+end
+
 function write_output!(det::Detector)
     window = det.params.readout_window
     output = det.state.output_buffer
@@ -588,6 +633,18 @@ function capture!(det::Detector, psf::AbstractMatrix{T}, rng::AbstractRNG) where
     finalize_capture!(det, rng, det.params.integration_time)
     advance_thermal!(det, det.params.integration_time)
     return write_output!(det)
+end
+
+function capture!(det::Detector, source::AbstractTemporalFrameSource, rng::AbstractRNG)
+    first_frame = initial_temporal_frame(source, det, zero(eltype(det.state.frame)))
+    capture_temporal_signal!(det, source, first_frame, rng, det.params.integration_time, det.params.timing_model)
+    finalize_capture!(det, rng, det.params.integration_time)
+    advance_thermal!(det, det.params.integration_time)
+    return write_output!(det)
+end
+
+function capture!(det::Detector, source::AbstractTemporalFrameSource; rng::AbstractRNG=Random.default_rng())
+    return capture!(det, source, rng)
 end
 
 function capture!(det::Detector, psf::AbstractMatrix{T}; rng::AbstractRNG=Random.default_rng(),

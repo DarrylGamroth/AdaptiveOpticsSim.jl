@@ -134,7 +134,7 @@ qcmos_line_time(::ORCAQuest, ::QCMOSUltraQuietScan, ::Type{T}) where {T<:Abstrac
 qcmos_line_time(::ORCAQuest, ::QCMOSPhotonNumberResolvingScan, ::Type{T}) where {T<:AbstractFloat} = T(172.8e-6)
 qcmos_line_time(::ORCAQuest, ::QCMOSRawScan, ::Type{T}) where {T<:AbstractFloat} = T(172.8e-6)
 qcmos_default_timing_model(camera::AbstractQCMOSCameraModel, scan_mode::AbstractQCMOSScanMode, ::Type{T}) where {T<:AbstractFloat} =
-    RollingShutter{T}(qcmos_line_time(camera, scan_mode, T))
+    RollingShutter{T}(qcmos_line_time(camera, scan_mode, T), 2)
 
 function QCMOSSensor(;
     camera_model::AbstractQCMOSCameraModel=ORCAQuest2(),

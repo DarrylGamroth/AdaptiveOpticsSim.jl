@@ -75,7 +75,7 @@ function sampling_wallclock_time(sensor::CMOSSensor, integration_time, frame_siz
     window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat}
     is_global_shutter(sensor.timing_model) && return T(integration_time)
     active_rows = window === nothing ? frame_size[1] : length(window.rows)
-    return T(integration_time) + T(active_rows) * T(sensor.timing_model.line_time)
+    return T(integration_time) + T(cld(active_rows, sensor.timing_model.row_group_size)) * T(sensor.timing_model.line_time)
 end
 
 function apply_sensor_statistics!(sensor::CMOSSensor, det::Detector, rng::AbstractRNG)
