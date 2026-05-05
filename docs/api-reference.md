@@ -132,6 +132,11 @@ influence functions, non-square actuator layouts, clipping, or actuator health.
   `ORCAQuestIQDetector`
 - qCMOS scan modes: `QCMOSStandardScan`, `QCMOSUltraQuietScan`,
   `QCMOSPhotonNumberResolvingScan`, `QCMOSRawScan`
+  Use `QCMOSPhotonNumberResolvingScan(gain=..., offset=...)` when a
+  calibrated photon-number output should round the post-readout signal to an
+  electron count. The helper functions `AdaptiveOpticsSim.qcmos_snr(...)` and
+  `AdaptiveOpticsSim.qcmos_relative_snr(...)` are available as qualified
+  validation utilities.
 - Frame response: `FrameResponseModel`, `NullFrameResponse`,
   `GaussianPixelResponse`, `SampledFrameResponse`,
   `RectangularPixelAperture`, `SeparablePixelMTF`
@@ -169,7 +174,11 @@ presets provide published family defaults for pixel size, QE, full well,
 readout noise, DSNU, PRNU, dark current, frame size, frame rate, minimum
 exposure, and rolling-shutter line-pair timing. Use detector defect models such
 as `PixelResponseNonuniformity`, `DarkSignalNonuniformity`, and `BadPixelMask`
-for measured per-camera calibration maps.
+for measured per-camera calibration maps. Photon-number resolving scan mode can
+optionally apply calibrated electron-number quantization before detector output
+conversion; when enabled through `QCMOSPhotonNumberResolvingScan(gain=...)`,
+`QCMOSDetector` defaults `bits` to `nothing` so the exported integer frame is
+one count per calibrated electron rather than a second ADC-scaled value.
 
 ## Wavefront Sensors
 

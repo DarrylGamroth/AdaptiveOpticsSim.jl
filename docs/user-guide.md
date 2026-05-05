@@ -199,6 +199,27 @@ measured calibration data. Add `PixelResponseNonuniformity`,
 `DarkSignalNonuniformity`, or `BadPixelMask` through the detector defect model
 when you have a calibrated ORCA-Quest unit.
 
+For photon-number resolving operation, use `QCMOSPhotonNumberResolvingScan`.
+By default this only selects the low-noise scan family. If you also provide a
+calibration `gain` and optional `offset`, the scan mode rounds the post-readout
+signal to a calibrated electron count before export:
+
+```julia
+det = ORCAQuest2Detector(
+    scan_mode=QCMOSPhotonNumberResolvingScan(gain=1.0, offset=0.0),
+    integration_time=1e-3,
+    output_type=UInt16,
+)
+```
+
+When calibrated photon-number quantization is enabled, `QCMOSDetector` defaults
+`bits` to `nothing`; the integer output is then one count per calibrated
+electron instead of a second full-well-scaled ADC value. Use matrix-valued
+`gain` and `offset` maps when you have per-pixel qCMOS calibration data.
+`AdaptiveOpticsSim.qcmos_snr(...)` and
+`AdaptiveOpticsSim.qcmos_relative_snr(...)` provide lightweight SNR/rSNR checks
+for comparing low-light qCMOS configurations against the ideal Poisson limit.
+
 For EMCCD cameras, the core package models the generic sensor physics rather
 than vendor camera presets. Use `EMOutput()` for the electron-multiplication
 register path and `ConventionalOutput()` for a conventional output channel.

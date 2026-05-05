@@ -256,6 +256,7 @@
     @test supports_detector_defect_maps(qcmos_sensor)
     @test supports_shutter_timing(qcmos_sensor)
     @test supports_photon_number_resolving(qcmos_sensor)
+    @test !supports_calibrated_photon_number_output(qcmos_sensor)
     @test !supports_raw_digital_output(qcmos_sensor)
     @test supports_raw_digital_output(QCMOSSensor(scan_mode=QCMOSRawScan()))
 
@@ -291,6 +292,39 @@
     @test qcmos_legacy.timing_model.line_time ≈ 172.8f-6
     qcmos_iq = ORCAQuestIQSensor(T=Float32)
     @test qcmos_dark_current(qcmos_iq) ≈ 0.032f0
+    qcmos_pnr_plain = ORCAQuest2Detector(scan_mode=QCMOSPhotonNumberResolvingScan(),
+        integration_time=1e-3, response_model=NullFrameResponse(), noise=NoiseNone(), T=Float32)
+    @test qcmos_pnr_plain.params.bits == 16
+    pnr_gain = Float32[1.0 2.0; 1.0 0.5]
+    pnr_offset = Float32[0.0 0.0; 0.4 0.0]
+    qcmos_pnr_sensor = QCMOSSensor(
+        scan_mode=QCMOSPhotonNumberResolvingScan(gain=pnr_gain, offset=pnr_offset, max_electrons=3.0, T=Float32),
+        frame_size=(2, 2),
+        timing_model=GlobalShutter(),
+        T=Float32,
+    )
+    @test supports_calibrated_photon_number_output(qcmos_pnr_sensor)
+    det_qcmos_pnr = QCMOSDetector(sensor=qcmos_pnr_sensor, integration_time=1.0,
+        response_model=NullFrameResponse(), noise=NoiseNone(), qe=1.0, dark_current=0.0,
+        full_well=10.0, output_type=UInt16, T=Float32)
+    @test det_qcmos_pnr.params.bits === nothing
+    frame_qcmos_pnr = capture!(det_qcmos_pnr, Float32[0.2 0.6; 1.4 9.8]; rng=MersenneTwister(134))
+    @test frame_qcmos_pnr == UInt16[0 1; 2 3]
+    qcmos_pnr_bad_shape = QCMOSDetector(
+        sensor=QCMOSSensor(scan_mode=QCMOSPhotonNumberResolvingScan(gain=ones(Float32, 1, 2), T=Float32),
+            frame_size=(2, 2), timing_model=GlobalShutter(), T=Float32),
+        integration_time=1.0, response_model=NullFrameResponse(), noise=NoiseNone(), qe=1.0,
+        dark_current=0.0, full_well=10.0, output_type=UInt16, T=Float32)
+    @test_throws DimensionMismatchError capture!(qcmos_pnr_bad_shape, ones(Float32, 2, 2); rng=MersenneTwister(135))
+    @test_throws InvalidConfiguration QCMOSPhotonNumberQuantization(gain=0.0)
+    @test_throws InvalidConfiguration QCMOSPhotonNumberQuantization(gain=1.0, max_electrons=-1.0)
+    @test_throws InvalidConfiguration QCMOSPhotonNumberResolvingScan(offset=1.0)
+    @test qcmos_snr(100.0; quantum_efficiency=0.85, dark_electrons=0.0, readout_noise=0.0) ≈ sqrt(85.0)
+    @test qcmos_relative_snr(100.0; quantum_efficiency=0.85, dark_electrons=0.0, readout_noise=0.0) ≈ sqrt(0.85)
+    @test qcmos_relative_snr(1.0; quantum_efficiency=0.85, readout_noise=0.30) <
+        qcmos_relative_snr(100.0; quantum_efficiency=0.85, readout_noise=0.30)
+    @test qcmos_snr(qcmos_sensor, 10.0; exposure_time=2.0) <
+        qcmos_snr(qcmos_sensor, 10.0; exposure_time=0.0)
     det_qcmos_custom = ORCAQuestIQDetector(scan_mode=QCMOSStandardScan(), integration_time=2e-3,
         response_model=NullFrameResponse(), noise=NoiseNone(), T=Float32)
     @test det_qcmos_custom.noise isa NoiseNone
