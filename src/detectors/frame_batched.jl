@@ -545,9 +545,9 @@ function _capture_stack_fixed!(det::Detector, cube::AbstractArray{T,3}, scratch:
 end
 
 function _apply_batched_detector_pipeline!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3},
-    rng::AbstractRNG) where {T<:AbstractFloat}
+    rng::AbstractRNG, qe=det.params.qe) where {T<:AbstractFloat}
     exposure_time = det.params.integration_time
-    qe_scale = det.params.qe * exposure_time
+    qe_scale = qe * exposure_time
     isone(qe_scale) || (cube .*= qe_scale)
     _batched_signal_defects!(det.params.defect_model, cube, scratch, exposure_time)
     _batched_apply_response!(execution_style(cube), det.params.response_model, cube, scratch)
@@ -607,6 +607,20 @@ function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::Abstra
         return _capture_stack_fixed!(det, cube, scratch; rng=rng)
     end
     return _capture_stack_generalized!(det, cube, scratch; rng=rng)
+end
+
+function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{S,3},
+    src::AbstractSource, rng::AbstractRNG) where {T<:AbstractFloat,S<:AbstractFloat}
+    if size(cube) == size(scratch)
+        _require_batched_detector_compat(det, cube, scratch)
+        return _apply_batched_detector_pipeline!(det, cube, scratch, rng, effective_qe(det, src, eltype(cube)))
+    end
+    return _capture_stack_generalized!(det, cube, scratch; rng=rng)
+end
+
+function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{S,3},
+    src::AbstractSource; rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat,S<:AbstractFloat}
+    return capture_stack!(det, cube, scratch, src, rng)
 end
 
 function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{S,3};

@@ -475,7 +475,7 @@ function QCMOSDetector(;
     sensor::Union{Nothing,QCMOSSensor}=nothing,
     integration_time::Union{Nothing,Real}=nothing,
     noise::Union{Nothing,NoiseModel}=nothing,
-    qe::Union{Nothing,Real}=nothing,
+    qe::Union{Nothing,Real,AbstractQuantumEfficiencyModel}=nothing,
     dark_current::Union{Nothing,Real}=nothing,
     full_well::Union{Nothing,Real}=nothing,
     bits::Union{Nothing,Int,Symbol}=:default,

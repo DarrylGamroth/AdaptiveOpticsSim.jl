@@ -136,9 +136,17 @@ function capture_signal!(det::Detector{NoiseNone}, psf::AbstractMatrix{T}, rng::
     capture_signal_pipeline!(det, psf, rng, exposure_time)
     return nothing
 end
+function capture_signal!(det::Detector{NoiseNone}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real, qe) where {T}
+    capture_signal_pipeline!(det, psf, rng, exposure_time, qe)
+    return nothing
+end
 
 function capture_signal!(det::Detector{NoisePhoton}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
     capture_signal_pipeline!(det, psf, rng, exposure_time)
+    return nothing
+end
+function capture_signal!(det::Detector{NoisePhoton}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real, qe) where {T}
+    capture_signal_pipeline!(det, psf, rng, exposure_time, qe)
     return nothing
 end
 
@@ -146,9 +154,17 @@ function capture_signal!(det::Detector{<:NoiseReadout}, psf::AbstractMatrix{T}, 
     capture_signal_pipeline!(det, psf, rng, exposure_time)
     return nothing
 end
+function capture_signal!(det::Detector{<:NoiseReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real, qe) where {T}
+    capture_signal_pipeline!(det, psf, rng, exposure_time, qe)
+    return nothing
+end
 
 function capture_signal!(det::Detector{<:NoisePhotonReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
     capture_signal_pipeline!(det, psf, rng, exposure_time)
+    return nothing
+end
+function capture_signal!(det::Detector{<:NoisePhotonReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real, qe) where {T}
+    capture_signal_pipeline!(det, psf, rng, exposure_time, qe)
     return nothing
 end
 
@@ -654,6 +670,17 @@ function capture!(det::Detector, psf::AbstractMatrix{T}, rng::AbstractRNG) where
     finalize_capture!(det, rng, det.params.integration_time)
     advance_thermal!(det, det.params.integration_time)
     return write_output!(det)
+end
+
+function capture!(det::Detector, psf::AbstractMatrix{T}, src::AbstractSource, rng::AbstractRNG) where {T}
+    capture_signal!(det, psf, rng, det.params.integration_time, effective_qe(det, src, eltype(det.state.frame)))
+    finalize_capture!(det, rng, det.params.integration_time)
+    advance_thermal!(det, det.params.integration_time)
+    return write_output!(det)
+end
+
+function capture!(det::Detector, psf::AbstractMatrix{T}, src::AbstractSource; rng::AbstractRNG=Random.default_rng()) where {T}
+    return capture!(det, psf, src, rng)
 end
 
 function capture!(det::Detector, source::AbstractTemporalFrameSource, rng::AbstractRNG)

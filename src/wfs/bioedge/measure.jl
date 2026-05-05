@@ -121,7 +121,7 @@ function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, src::AbstractS
     ensure_bioedge_calibration!(wfs, tel, src)
     bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
     intensity = sample_bioedge_intensity!(wfs, tel, wfs.state.intensity)
-    frame = capture!(det, intensity; rng=rng)
+    frame = capture!(det, intensity, src; rng=rng)
     resize_bioedge_signal_buffers!(wfs, size(frame, 1))
     return bioedge_signal!(wfs, tel, frame, src)
 end
@@ -131,7 +131,7 @@ function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, src::LGSSource
     ensure_bioedge_calibration!(wfs, tel, src)
     bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
     intensity = sample_bioedge_intensity!(wfs, tel, wfs.state.intensity)
-    frame = capture!(det, intensity; rng=rng)
+    frame = capture!(det, intensity, src; rng=rng)
     resize_bioedge_signal_buffers!(wfs, size(frame, 1))
     return bioedge_signal!(wfs, tel, frame, src)
 end
@@ -162,4 +162,3 @@ function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, ast::Asterism,
     resize_bioedge_signal_buffers!(wfs, size(frame, 1))
     return bioedge_signal!(wfs, tel, frame)
 end
-

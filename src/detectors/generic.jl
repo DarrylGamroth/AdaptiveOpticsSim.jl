@@ -58,6 +58,92 @@ supports_temperature_dependent_persistence(::Detector) = false
 supports_temperature_dependent_dark_counts(det::AbstractCountingDetector) =
     !is_null_temperature_law(active_dark_count_law(det, thermal_model(det)))
 
+quantum_efficiency_model(det::Detector) = det.params.quantum_efficiency_model
+
+ScalarQuantumEfficiency(qe::Real; T::Type{<:AbstractFloat}=Float64) =
+    validate_quantum_efficiency_model(ScalarQuantumEfficiency{T}(T(qe)))
+
+function SampledQuantumEfficiency(wavelengths::AbstractVector, values::AbstractVector;
+    out_of_band::Real=0.0, T::Type{<:AbstractFloat}=Float64)
+    length(wavelengths) == length(values) ||
+        throw(DimensionMismatchError("SampledQuantumEfficiency wavelengths and values must have the same length"))
+    return validate_quantum_efficiency_model(
+        SampledQuantumEfficiency{T,Vector{T}}(T.(wavelengths), T.(values), T(out_of_band)))
+end
+
+resolve_quantum_efficiency_model(qe::Real, ::Type{T}) where {T<:AbstractFloat} =
+    ScalarQuantumEfficiency{T}(T(qe))
+resolve_quantum_efficiency_model(qe::AbstractQuantumEfficiencyModel, ::Type{T}) where {T<:AbstractFloat} =
+    convert_quantum_efficiency_model(qe, T)
+
+convert_quantum_efficiency_model(model::ScalarQuantumEfficiency, ::Type{T}) where {T<:AbstractFloat} =
+    ScalarQuantumEfficiency{T}(T(model.value))
+convert_quantum_efficiency_model(model::SampledQuantumEfficiency, ::Type{T}) where {T<:AbstractFloat} =
+    SampledQuantumEfficiency{T,Vector{T}}(T.(model.wavelengths), T.(model.values), T(model.out_of_band))
+
+function validate_quantum_efficiency_model(model::ScalarQuantumEfficiency)
+    zero(model.value) <= model.value <= one(model.value) ||
+        throw(InvalidConfiguration("ScalarQuantumEfficiency value must lie in [0, 1]"))
+    return model
+end
+
+function validate_quantum_efficiency_model(model::SampledQuantumEfficiency)
+    length(model.wavelengths) >= 2 ||
+        throw(InvalidConfiguration("SampledQuantumEfficiency requires at least two samples"))
+    length(model.wavelengths) == length(model.values) ||
+        throw(DimensionMismatchError("SampledQuantumEfficiency wavelengths and values must have the same length"))
+    zero(model.out_of_band) <= model.out_of_band <= one(model.out_of_band) ||
+        throw(InvalidConfiguration("SampledQuantumEfficiency out_of_band must lie in [0, 1]"))
+    @inbounds for i in eachindex(model.wavelengths)
+        model.wavelengths[i] > zero(model.wavelengths[i]) ||
+            throw(InvalidConfiguration("SampledQuantumEfficiency wavelengths must be > 0"))
+        zero(model.values[i]) <= model.values[i] <= one(model.values[i]) ||
+            throw(InvalidConfiguration("SampledQuantumEfficiency values must lie in [0, 1]"))
+        if i > firstindex(model.wavelengths)
+            model.wavelengths[i] > model.wavelengths[i - 1] ||
+                throw(InvalidConfiguration("SampledQuantumEfficiency wavelengths must be strictly increasing"))
+        end
+    end
+    return model
+end
+
+qe_at(model::ScalarQuantumEfficiency, wavelength) = model.value
+
+function qe_at(model::SampledQuantumEfficiency{T}, wavelength) where {T<:AbstractFloat}
+    λ = T(wavelength)
+    λ < first(model.wavelengths) && return model.out_of_band
+    λ > last(model.wavelengths) && return model.out_of_band
+    @inbounds for hi in eachindex(model.wavelengths)
+        λ == model.wavelengths[hi] && return model.values[hi]
+        if λ < model.wavelengths[hi]
+            lo = hi - 1
+            λ0 = model.wavelengths[lo]
+            λ1 = model.wavelengths[hi]
+            v0 = model.values[lo]
+            v1 = model.values[hi]
+            return v0 + (v1 - v0) * (λ - λ0) / (λ1 - λ0)
+        end
+    end
+    return last(model.values)
+end
+
+effective_qe(model::AbstractQuantumEfficiencyModel, src::AbstractSource, ::Type{T}=Float64) where {T<:AbstractFloat} =
+    T(qe_at(model, wavelength(src)))
+
+function effective_qe(model::AbstractQuantumEfficiencyModel, src::SpectralSource, ::Type{T}=Float64) where {T<:AbstractFloat}
+    total = zero(T)
+    @inbounds for sample in spectral_bundle(src)
+        total += T(sample.weight) * T(qe_at(model, sample.wavelength))
+    end
+    return total
+end
+
+effective_qe(det::Detector, src::AbstractSource, ::Type{T}=eltype(det.state.frame)) where {T<:AbstractFloat} =
+    effective_qe(det.params.quantum_efficiency_model, src, T)
+
+reference_qe(model::ScalarQuantumEfficiency, ::Type{T}) where {T<:AbstractFloat} = T(model.value)
+reference_qe(model::SampledQuantumEfficiency, ::Type{T}) where {T<:AbstractFloat} = T(maximum(model.values))
+
 configured_glow_rate(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = zero(T)
 configured_cic_rate(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = zero(T)
 
@@ -588,7 +674,7 @@ end
 
 @inline initial_readout_products(::FrameSensorType, frame::AbstractMatrix, ::Type{T}) where {T<:AbstractFloat} = NoFrameReadoutProducts()
 
-function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
+function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Real,AbstractQuantumEfficiencyModel},
     psf_sampling::Int, binning::Int, gain::Real, dark_current::Real,
     bits::Union{Nothing,Int}, full_well::Union{Nothing,Real}, sensor::SensorType,
     response_model::Union{Nothing,FrameResponseModel}, defect_model::Union{Nothing,AbstractDetectorDefectModel},
@@ -602,6 +688,8 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     selector = _resolve_backend_selector(backend)
     array_backend = _resolve_array_backend(backend)
     full_well_t = full_well === nothing ? nothing : T(full_well)
+    qe_model = validate_quantum_efficiency_model(resolve_quantum_efficiency_model(qe, T))
+    qe_scalar = reference_qe(qe_model, T)
     flux_model = background_model(background_flux; T=T, backend=selector)
     map_model = background_model(background_map; T=T, backend=selector)
     resolved_response = resolve_response_model(sensor, response_model; T=T, backend=selector)
@@ -621,9 +709,9 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     thermal = validate_thermal_model(convert_thermal_model(resolved_thermal, T))
     output_type_t = resolve_output_type(bits, output_type)
     window = validate_readout_window(readout_window)
-    params = DetectorParams{T, typeof(sensor), typeof(response), typeof(defects), typeof(timing), typeof(correction), typeof(nonlinearity), typeof(thermal)}(
+    params = DetectorParams{T, typeof(sensor), typeof(qe_model), typeof(response), typeof(defects), typeof(timing), typeof(correction), typeof(nonlinearity), typeof(thermal)}(
         T(integration_time),
-        T(qe),
+        qe_scalar,
         psf_sampling,
         binning,
         T(gain),
@@ -631,6 +719,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
         bits,
         full_well_t,
         sensor,
+        qe_model,
         response,
         defects,
         timing,
@@ -685,7 +774,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Real,
     )
 end
 
-function Detector(; integration_time::Real=1.0, qe::Real=1.0,
+function Detector(; integration_time::Real=1.0, qe::Union{Real,AbstractQuantumEfficiencyModel}=1.0,
     psf_sampling::Int=1, binning::Int=1, noise=NoisePhoton(),
     gain::Real=1.0, dark_current::Real=0.0, bits::Union{Nothing,Int}=nothing,
     full_well::Union{Nothing,Real}=nothing, sensor::SensorType=CCDSensor(),
@@ -709,7 +798,7 @@ function Detector(; integration_time::Real=1.0, qe::Real=1.0,
         T=T, backend=backend)
 end
 
-function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Real=1.0,
+function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Union{Real,AbstractQuantumEfficiencyModel}=1.0,
     psf_sampling::Int=1, binning::Int=1, gain::Real=1.0, dark_current::Real=0.0,
     bits::Union{Nothing,Int}=nothing, full_well::Union{Nothing,Real}=nothing,
     sensor::SensorType=CCDSensor(), response_model::Union{Nothing,FrameResponseModel}=nothing,

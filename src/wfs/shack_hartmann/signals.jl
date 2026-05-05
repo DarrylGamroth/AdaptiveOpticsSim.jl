@@ -368,7 +368,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
                 compute_intensity_safe!(style, wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
                 sample_spot!(wfs, wfs.state.intensity)
                 sync_sh_staged_spot!(style, wfs.state.spot)
-                frame = capture!(det, wfs.state.spot; rng=rng)
+                frame = capture!(det, wfs.state.spot, src; rng=rng)
                 sync_sh_staged_spot!(style, frame)
                 copyto!(spot_view, frame)
                 sync_sh_staged_view!(style, spot_view)
@@ -400,7 +400,7 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Teles
         wfs.state.spot_cube_accum .+= wfs.state.spot_cube
     end
     copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
-    capture_stack!(det, wfs.state.spot_cube, wfs.state.spot_cube_accum; rng=rng)
+    capture_stack!(det, wfs.state.spot_cube, wfs.state.spot_cube_accum, src; rng=rng)
     return sh_safe_peak_value(wfs.state.spot_cube)
 end
 
@@ -416,7 +416,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
             @. wfs.state.spot_cube_accum = wfs.state.spot_cube_accum + wfs.state.spot_cube
         end
         copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
-        capture_stack!(det, wfs.state.spot_cube, wfs.state.spot_cube_accum; rng=rng)
+        capture_stack!(det, wfs.state.spot_cube, wfs.state.spot_cube_accum, src; rng=rng)
         return sh_safe_peak_value(wfs.state.spot_cube)
     end
     if is_lgs_source(src)
@@ -430,7 +430,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
         end
         copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
         n_sub = wfs.params.n_lenslets
-        capture_stack!(det, wfs.state.spot_cube, wfs.state.spot_cube_accum; rng=rng)
+        capture_stack!(det, wfs.state.spot_cube, wfs.state.spot_cube_accum, src; rng=rng)
         launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
             n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
         return sh_safe_peak_value(wfs.state.spot_cube)
@@ -498,7 +498,7 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Teles
             compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
             apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
             sample_spot!(wfs, wfs.state.intensity)
-            frame = capture!(det, wfs.state.spot; rng=rng)
+            frame = capture!(det, wfs.state.spot, src; rng=rng)
             copyto!(spot_view, frame)
             peak = max(peak, sh_safe_peak_value(spot_view))
         else
@@ -842,7 +842,7 @@ function centroid_sums!(wfs::ShackHartmannWFS, tel::Telescope, src::AbstractSour
     det::AbstractDetector, rng::AbstractRNG)
     compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
     spot = sample_spot!(wfs, wfs.state.intensity)
-    frame = capture!(det, spot; rng=rng)
+    frame = capture!(det, spot, src; rng=rng)
     copyto!(sh_spot_view(wfs, idx), frame)
     return centroid_from_spot!(wfs, frame)
 end
@@ -853,7 +853,7 @@ function centroid_sums!(wfs::ShackHartmannWFS, tel::Telescope, src::LGSSource,
     compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
     apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
     spot = sample_spot!(wfs, wfs.state.intensity)
-    frame = capture!(det, spot; rng=rng)
+    frame = capture!(det, spot, src; rng=rng)
     copyto!(sh_spot_view(wfs, idx), frame)
     return centroid_from_spot!(wfs, frame)
 end

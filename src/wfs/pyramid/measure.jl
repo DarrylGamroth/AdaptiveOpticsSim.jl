@@ -75,7 +75,7 @@ function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::AbstractS
     ensure_pyramid_calibration!(wfs, tel, src)
     pyramid_intensity!(wfs.state.intensity, wfs, tel, src)
     intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
-    frame = capture!(det, intensity; rng=rng)
+    frame = capture!(det, intensity, src; rng=rng)
     resize_pyramid_signal_buffers!(wfs, size(frame, 1))
     pyramid_signal!(wfs, tel, frame, src)
     @. wfs.state.slopes *= wfs.state.optical_gain
@@ -87,7 +87,7 @@ function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::SpectralS
     ensure_pyramid_calibration!(wfs, tel, src)
     accumulate_pyramid_spectral_intensity!(execution_style(wfs.state.intensity), wfs, tel, src)
     intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
-    frame = capture!(det, intensity; rng=rng)
+    frame = capture!(det, intensity, src; rng=rng)
     resize_pyramid_signal_buffers!(wfs, size(frame, 1))
     pyramid_signal!(wfs, tel, frame, spectral_reference_source(src))
     @. wfs.state.slopes *= wfs.state.optical_gain
@@ -124,4 +124,3 @@ function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, ast::Asterism,
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
 end
-

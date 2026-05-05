@@ -142,7 +142,7 @@ function detector_output_shape(det::Detector, input_shape::Tuple{Int,Int})
     return window === nothing ? (n_out, m_out) : (length(window.rows), length(window.cols))
 end
 
-function fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real) where {T}
+function fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real, qe) where {T}
     n_in, m_in = size(psf)
     sampling = det.params.psf_sampling
     binning = det.params.binning
@@ -175,9 +175,11 @@ function fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real)
             det.state.frame .= psf
         end
     end
-    @. det.state.frame *= det.params.qe * exposure_time
+    @. det.state.frame *= qe * exposure_time
     apply_response!(det.params.response_model, det)
     return det.state.frame
 end
 
+fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real) where {T} =
+    fill_frame!(det, psf, exposure_time, det.params.qe)
 fill_frame!(det::Detector, psf::AbstractMatrix{T}) where {T} = fill_frame!(det, psf, det.params.integration_time)

@@ -168,6 +168,14 @@ influence functions, non-square actuator layouts, clipping, or actuator health.
 Use `bits` for detector quantization depth and `output_type` for the Julia
 element type exported to an RTC/HIL boundary.
 
+`Detector(...; qe=...)` accepts either a scalar quantum efficiency or a
+qualified QE model such as
+`AdaptiveOpticsSim.SampledQuantumEfficiency(wavelengths, values)`. Matrix-only
+capture uses the scalar `params.qe` value, which is the supplied scalar or the
+peak sampled QE. Source-aware capture, `capture!(det, image, src; rng=...)`,
+evaluates the QE model at `wavelength(src)`. For `SpectralSource`, it uses the
+flux-weighted effective QE over the spectral bundle.
+
 `QCMOSSensor` models Hamamatsu ORCA-Quest-family quantitative CMOS cameras as a
 frame-sensor family on the normal `Detector` path. The built-in ORCA-Quest
 presets provide published family defaults for pixel size, QE, full well,

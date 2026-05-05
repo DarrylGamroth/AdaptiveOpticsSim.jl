@@ -437,7 +437,7 @@ function measure!(::Diffractive, wfs::ZernikeWFS, tel::Telescope, src::AbstractS
     ensure_zernike_calibration!(wfs, tel, src)
     zernike_pupil_intensity!(wfs, tel, src)
     sample_zernike_frame!(wfs.state.camera_frame, wfs.state.nominal_frame, wfs, wfs.state.pupil_intensity, tel)
-    capture!(det, wfs.state.camera_frame; rng=rng)
+    capture!(det, wfs.state.camera_frame, src; rng=rng)
     size(output_frame(det)) == size(wfs.state.camera_frame) ||
         throw(InvalidConfiguration("ZernikeWFS detector output size must match the sampled camera frame"))
     return zernike_signal!(wfs, tel, output_frame(det), src)

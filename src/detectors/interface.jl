@@ -23,6 +23,7 @@ abstract type AbstractPersistenceModel end
 abstract type AbstractDetectorThermalModel end
 abstract type AbstractDetectorThermalState end
 abstract type AbstractTemperatureLaw end
+abstract type AbstractQuantumEfficiencyModel end
 abstract type AbstractTemporalFrameSource end
 abstract type AbstractRollingShutterExposureMode end
 abstract type AvalancheFrameSensorType <: FrameSensorType end
@@ -913,6 +914,40 @@ struct BackgroundFrame{T<:AbstractFloat,A<:AbstractMatrix{T}} <: BackgroundModel
     map::A
 end
 
+struct ScalarQuantumEfficiency{T<:AbstractFloat} <: AbstractQuantumEfficiencyModel
+    value::T
+    function ScalarQuantumEfficiency{T}(value::T) where {T<:AbstractFloat}
+        zero(T) <= value <= one(T) ||
+            throw(InvalidConfiguration("ScalarQuantumEfficiency value must lie in [0, 1]"))
+        return new{T}(value)
+    end
+end
+
+struct SampledQuantumEfficiency{T<:AbstractFloat,V<:AbstractVector{T}} <: AbstractQuantumEfficiencyModel
+    wavelengths::V
+    values::V
+    out_of_band::T
+    function SampledQuantumEfficiency{T,V}(wavelengths::V, values::V, out_of_band::T) where {T<:AbstractFloat,V<:AbstractVector{T}}
+        length(wavelengths) >= 2 ||
+            throw(InvalidConfiguration("SampledQuantumEfficiency requires at least two samples"))
+        length(wavelengths) == length(values) ||
+            throw(DimensionMismatchError("SampledQuantumEfficiency wavelengths and values must have the same length"))
+        zero(T) <= out_of_band <= one(T) ||
+            throw(InvalidConfiguration("SampledQuantumEfficiency out_of_band must lie in [0, 1]"))
+        @inbounds for i in eachindex(wavelengths)
+            wavelengths[i] > zero(T) ||
+                throw(InvalidConfiguration("SampledQuantumEfficiency wavelengths must be > 0"))
+            zero(T) <= values[i] <= one(T) ||
+                throw(InvalidConfiguration("SampledQuantumEfficiency values must lie in [0, 1]"))
+            if i > firstindex(wavelengths)
+                wavelengths[i] > wavelengths[i - 1] ||
+                    throw(InvalidConfiguration("SampledQuantumEfficiency wavelengths must be strictly increasing"))
+            end
+        end
+        return new{T,V}(wavelengths, values, out_of_band)
+    end
+end
+
 struct DetectorExportMetadata{T<:AbstractFloat}
     integration_time::T
     qe::T
@@ -1201,7 +1236,7 @@ end
     end
 end
 
-struct DetectorParams{T<:AbstractFloat,S<:SensorType,R<:AbstractFrameResponse,
+struct DetectorParams{T<:AbstractFloat,S<:SensorType,QE<:AbstractQuantumEfficiencyModel,R<:AbstractFrameResponse,
     D<:AbstractDetectorDefectModel,FT<:AbstractFrameTimingModel,
     C<:FrameReadoutCorrectionModel,NL<:AbstractFrameNonlinearityModel,
     TM<:AbstractDetectorThermalModel}
@@ -1214,6 +1249,7 @@ struct DetectorParams{T<:AbstractFloat,S<:SensorType,R<:AbstractFrameResponse,
     bits::Union{Nothing,Int}
     full_well::Union{Nothing,T}
     sensor::S
+    quantum_efficiency_model::QE
     response_model::R
     defect_model::D
     timing_model::FT

@@ -807,7 +807,7 @@ function measure!(wfs::CurvatureWFS, tel::Telescope, src::AbstractSource, atm::A
     model::AbstractAtmosphericFieldModel=LayeredFresnelAtmosphericPropagation(T=eltype(wfs.state.frame_plus)))
     ensure_curvature_calibration!(wfs, tel, src)
     curvature_intensity!(wfs, tel, src, atm; propagation=propagation, model=model)
-    capture!(det, wfs.state.camera_frame; rng=rng)
+    capture!(det, wfs.state.camera_frame, src; rng=rng)
     return curvature_signal!(wfs, output_frame(det))
 end
 
@@ -862,7 +862,7 @@ function measure_detector_coupled!(::CurvatureFrameReadout, wfs::CurvatureWFS, t
     src::AbstractSource, det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
     ensure_curvature_calibration!(wfs, tel, src)
     curvature_intensity!(wfs, tel, src)
-    capture!(det, wfs.state.camera_frame; rng=rng)
+    capture!(det, wfs.state.camera_frame, src; rng=rng)
     size(output_frame(det)) == size(wfs.state.camera_frame) ||
         throw(InvalidConfiguration("CurvatureWFS detector output size must match the sampled camera frame"))
     return curvature_signal!(wfs, output_frame(det))

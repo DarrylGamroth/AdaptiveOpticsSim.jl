@@ -10,6 +10,24 @@
     @test size(frame_sampling) == (2, 2)
     @test sum(frame_sampling) == sum(psf)
 
+    qe_curve = SampledQuantumEfficiency([0.50e-6, 0.60e-6], [0.2, 0.8])
+    @test qe_at(qe_curve, 0.55e-6) ≈ 0.5
+    @test qe_at(qe_curve, 0.70e-6) == 0.0
+    det_qe_curve = Detector(integration_time=1.0, noise=NoiseNone(), qe=qe_curve, binning=1,
+        response_model=NullFrameResponse())
+    @test det_qe_curve.params.qe ≈ 0.8
+    @test capture!(det_qe_curve, ones(2, 2); rng=MersenneTwister(30)) ≈ fill(0.8, 2, 2)
+    src_qe = Source(wavelength=0.55e-6)
+    @test effective_qe(det_qe_curve, src_qe) ≈ 0.5
+    @test capture!(det_qe_curve, ones(2, 2), src_qe; rng=MersenneTwister(31)) ≈ fill(0.5, 2, 2)
+    spectral_qe = with_spectrum(Source(wavelength=0.55e-6),
+        SpectralBundle([0.50e-6, 0.60e-6], [0.25, 0.75]))
+    @test effective_qe(det_qe_curve, spectral_qe) ≈ 0.65
+    @test capture!(det_qe_curve, ones(2, 2), spectral_qe; rng=MersenneTwister(32)) ≈ fill(0.65, 2, 2)
+    @test_throws InvalidConfiguration ScalarQuantumEfficiency(1.5)
+    @test_throws InvalidConfiguration SampledQuantumEfficiency([0.60e-6, 0.50e-6], [0.8, 0.2])
+    @test_throws InvalidConfiguration SampledQuantumEfficiency([0.50e-6, 0.60e-6], [0.2, 1.2])
+
     det_tuple = Detector(integration_time=1.0, noise=(NoisePhoton(), NoiseReadout(0.5)),
         qe=1.0, binning=1)
     @test det_tuple.noise isa NoisePhotonReadout

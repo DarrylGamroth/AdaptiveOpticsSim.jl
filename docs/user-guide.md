@@ -176,6 +176,24 @@ Here `adu` is a `UInt16` image containing 12-bit ADU values. For
 Shack-Hartmann sensors this is the lenslet spot mosaic; for frame-style WFSs it
 is the maintained detector/readout frame.
 
+Detector QE may be a scalar or a sampled QE curve. Scalar QE is the simplest
+and fastest path. Use a sampled curve when the source spectrum matters:
+
+```julia
+qe = AdaptiveOpticsSim.SampledQuantumEfficiency(
+    [0.50e-6, 0.60e-6, 0.70e-6],
+    [0.35, 0.85, 0.60],
+)
+
+det = Detector(noise=NoiseNone(), qe=qe)
+frame = capture!(det, image, src; rng=rng)
+```
+
+For `Source`, detector capture evaluates the curve at `wavelength(src)`. For
+`SpectralSource`, capture uses the flux-weighted effective QE over the spectral
+bundle. Matrix-only capture without a source uses the detector's scalar
+reference QE, which is the peak value of a sampled curve.
+
 For a quantitative CMOS camera similar to the Hamamatsu ORCA-Quest family, use
 the qCMOS convenience constructors. The camera preset supplies the family-level
 readout noise, QE, full well, dark current, frame rate, and pixel metadata;
