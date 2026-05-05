@@ -45,10 +45,10 @@ atm = MultiLayerAtmosphere(
     tel;
     r0=0.15,
     L0=25.0,
-    fractional_cn2=(0.6, 0.4),
-    wind_speed=(8.0, 12.0),
-    wind_direction=(0.0, 90.0),
-    altitude=(0.0, 5000.0),
+    fractional_cn2=[0.6, 0.4],
+    wind_speed=[8.0, 12.0],
+    wind_direction=[0.0, 90.0],
+    altitude=[0.0, 5000.0],
 )
 wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
 
@@ -260,12 +260,12 @@ for k in 1:3
     slopes_vec = slopes(scenario)
     wfs_img = wfs_frame(scenario)
     science_img = science_frame(scenario)
-    wfs_meta = wfs_metadata(scenario)
-    science_meta = science_metadata(scenario)
+    wfs_meta = AdaptiveOpticsSim.wfs_metadata(scenario)
+    science_meta = AdaptiveOpticsSim.science_metadata(scenario)
 
     @show k length(command_vec) length(slopes_vec)
     @show size(wfs_img) size(science_img)
-    @show wfs_meta.output_size science_meta.output_size
+    @show wfs_meta.sensor science_meta.output_size
 end
 
 # If the plant itself contains several controllable surfaces, make them explicit
@@ -317,7 +317,7 @@ split_branch = ControlLoopBranch(
     recon;
     science_detector=science_det,
     rng=runtime_rng(3),
-    command_layout=RuntimeCommandLayout(:woofer => 8, :tweeter => 8),
+    command_layout=AdaptiveOpticsSim.RuntimeCommandLayout(:woofer => 8, :tweeter => 8),
 )
 split_scenario = build_control_loop_scenario(cfg, split_branch)
 prepare!(split_scenario)
@@ -342,13 +342,20 @@ above.
 
 The exported science frame is the configured science detector's `output_frame`,
 so its shape and element type are detector-defined. Inspect
-`science_metadata(scenario)` to learn the exact export contract for:
+`AdaptiveOpticsSim.science_metadata(scenario)` to learn the exact science
+camera export contract for:
 
 - `output_size`
 - `output_type`
 - `binning`
 - `window_rows` / `window_cols`
 - `bits` / `full_well`
+
+The WFS frame shape is WFS-family specific. For Shack-Hartmann this is the
+exported spot cube or mosaic returned by `wfs_frame(scenario)` or
+`wfs_detector_image(...)`; the detector metadata attached to the WFS describes
+the detector model used by that path, not necessarily the assembled
+Shack-Hartmann image-product shape.
 
 For grouped RTC boundaries, keep the outer structure branch-oriented and nest
 structured commands per branch when needed:
@@ -367,8 +374,8 @@ Grouped output semantics differ from the single-branch case:
 - `wfs_frame(grouped_scenario)` and `science_frame(grouped_scenario)` become
   per-branch frame collections when those grouped frame outputs are enabled.
 - `grouped_wfs_stack(grouped_scenario)` and
-  `grouped_science_stack(grouped_scenario)` provide stacked array forms when
-  the grouped contract requests them.
+  `AdaptiveOpticsSim.grouped_science_stack(grouped_scenario)` provide stacked
+  array forms when the grouped contract requests them.
 
 That lets an external HIL client validate the runtime boundary before wiring the
 frame into another controller, transport layer, or logging path.
@@ -711,8 +718,8 @@ The maintained plotting surface there is:
 The plotting package is intentionally built on maintained accessors like:
 
 - `pupil_mask(tel)`
-- `opd_map(tel)`
-- `surface_opd(optic)`
+- `AdaptiveOpticsSim.opd_map(tel)`
+- `AdaptiveOpticsSim.surface_opd(optic)`
 - `output_frame(det)`
 - `camera_frame(wfs)`
 - `slopes(x)`

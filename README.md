@@ -44,10 +44,10 @@ atm = MultiLayerAtmosphere(
     tel;
     r0=0.15,
     L0=25.0,
-    fractional_cn2=(0.6, 0.4),
-    wind_speed=(8.0, 12.0),
-    wind_direction=(0.0, 90.0),
-    altitude=(0.0, 5000.0),
+    fractional_cn2=[0.6, 0.4],
+    wind_speed=[8.0, 12.0],
+    wind_direction=[0.0, 90.0],
+    altitude=[0.0, 5000.0],
 )
 
 wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
@@ -142,6 +142,7 @@ det = Detector(
     output_type=UInt16,
 )
 
+rng = runtime_rng(0)
 measure!(wfs, tel, src, det; rng=rng)
 adu = wfs_detector_image(wfs, det)
 ```

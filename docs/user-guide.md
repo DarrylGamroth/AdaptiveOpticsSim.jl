@@ -148,10 +148,10 @@ atm = MultiLayerAtmosphere(
     tel;
     r0=0.15,
     L0=25.0,
-    fractional_cn2=(0.6, 0.4),
-    wind_speed=(8.0, 12.0),
-    wind_direction=(0.0, 90.0),
-    altitude=(0.0, 5000.0),
+    fractional_cn2=[0.6, 0.4],
+    wind_speed=[8.0, 12.0],
+    wind_direction=[0.0, 90.0],
+    altitude=[0.0, 5000.0],
 )
 
 wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
@@ -168,6 +168,7 @@ type used for the exported frame:
 
 ```julia
 det = Detector(noise=NoiseNone(), full_well=30_000.0, bits=12, output_type=UInt16)
+rng = runtime_rng(0)
 measure!(wfs, tel, src, det; rng=rng)
 adu = wfs_detector_image(wfs, det)
 ```
@@ -186,6 +187,8 @@ qe = AdaptiveOpticsSim.SampledQuantumEfficiency(
 )
 
 det = Detector(noise=NoiseNone(), qe=qe)
+image = ones(32, 32)
+rng = runtime_rng(1)
 frame = capture!(det, image, src; rng=rng)
 ```
 
@@ -198,7 +201,7 @@ For a quantitative CMOS camera similar to the Hamamatsu ORCA-Quest family, use
 the qCMOS convenience constructors. The camera preset supplies the family-level
 readout noise, QE, full well, dark current, frame rate, and pixel metadata;
 ORCA-Quest presets default to rolling-shutter timing. `bits` and `output_type`
-still define the exported RTC/HIL frame:
+still define the exported frame for direct camera capture:
 
 ```julia
 det = ORCAQuest2Detector(
@@ -208,9 +211,15 @@ det = ORCAQuest2Detector(
     output_type=UInt16,
 )
 
-measure!(wfs, tel, src, det; rng=rng)
-adu = wfs_detector_image(wfs, det)
+rng = runtime_rng(2)
+adu = capture!(det, image; rng=rng)
 ```
+
+The Shack-Hartmann spot-stack capture path is batched and currently requires
+global-shutter timing. Use the generic detector/CMOS path shown above for
+detector-backed Shack-Hartmann HIL export, or configure qCMOS timing
+intentionally when the camera model is being used outside the batched spot-stack
+path.
 
 The qCMOS model intentionally keeps camera-specific defaults separate from
 measured calibration data. Add `PixelResponseNonuniformity`,
@@ -296,6 +305,7 @@ pulse = InPlaceFrameSource((out, t) -> begin
     return out
 end, (64, 64))
 
+rng = runtime_rng(3)
 frame = capture!(det, pulse; rng=rng)
 ```
 
@@ -528,7 +538,6 @@ Only go deeper if your task actually needs it:
 - supported production scope:
   - [supported-production-surfaces.md](supported-production-surfaces.md)
 - benchmark and cross-package evidence:
-  - benchmark artifacts under `benchmarks/results/`
   - benchmark artifacts under `benchmarks/results/`
 - maintainer/developer navigation:
   - [documentation-map.md](documentation-map.md)

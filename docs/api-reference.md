@@ -187,6 +187,10 @@ optionally apply calibrated electron-number quantization before detector output
 conversion; when enabled through `QCMOSPhotonNumberResolvingScan(gain=...)`,
 `QCMOSDetector` defaults `bits` to `nothing` so the exported integer frame is
 one count per calibrated electron rather than a second ADC-scaled value.
+Because the ORCA-Quest presets default to rolling-shutter timing, they are best
+used through direct detector frame capture or explicitly configured timing. The
+batched Shack-Hartmann spot-stack detector path currently requires
+global-shutter-compatible timing.
 
 ## Wavefront Sensors
 
