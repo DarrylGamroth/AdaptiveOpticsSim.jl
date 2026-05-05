@@ -124,6 +124,8 @@ influence functions, non-square actuator layouts, clipping, or actuator health.
 - Sensor families: `SensorType`, `CCDSensor`, `CMOSSensor`, `EMCCDSensor`,
   `QCMOSSensor`, `InGaAsSensor`, `HgCdTeAvalancheArraySensor`, `APDSensor`,
   `SPADArraySensor`
+- EMCCD modes and helpers: `LinearEMMode`, `PhotonCountingEMMode`,
+  `EMOutput`, `ConventionalOutput`, `emccd_snr`
 - qCMOS camera presets: `ORCAQuest`, `ORCAQuest2`, `ORCAQuestIQ`,
   `ORCAQuestSensor`, `ORCAQuest2Sensor`, `ORCAQuestIQSensor`,
   `QCMOSDetector`, `ORCAQuestDetector`, `ORCAQuest2Detector`,

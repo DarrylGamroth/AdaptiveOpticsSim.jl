@@ -131,6 +131,36 @@
     @test_throws InvalidConfiguration EMCCDSensor(cic_rate=-1.0)
     @test_throws InvalidConfiguration EMCCDSensor(register_full_well=0.0)
     @test_throws InvalidConfiguration EMCCDSensor(multiplication_model=StochasticMultiplicationRegister(-1.0))
+    @test_throws InvalidConfiguration EMCCDSensor(em_gain_range=(10.0, 1.0))
+    @test_throws InvalidConfiguration EMCCDSensor(readout_rate_hz=-1.0)
+    @test_throws InvalidConfiguration PhotonCountingEMMode(threshold=-1.0)
+    @test_throws InvalidConfiguration PhotonCountingEMMode(threshold=1.0, detection_efficiency=1.5)
+
+    det_emccd_conventional = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        gain=10.0, sensor=EMCCDSensor(output_path=ConventionalOutput()))
+    @test capture!(det_emccd_conventional, uniform_signal; rng=MersenneTwister(127)) == uniform_signal
+
+    det_emccd_pc = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        gain=10.0,
+        sensor=EMCCDSensor(operating_mode=PhotonCountingEMMode(threshold=5.0, detection_efficiency=0.8)))
+    pc_frame = capture!(det_emccd_pc, [0.0 0.4; 0.6 1.0]; rng=MersenneTwister(128))
+    @test pc_frame == [0.0 0.0; 0.8 0.8]
+    @test supports_photon_number_resolving(det_emccd_pc.params.sensor)
+
+    det_emccd_pc_batched = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        gain=10.0, response_model=NullFrameResponse(),
+        sensor=EMCCDSensor(operating_mode=PhotonCountingEMMode(threshold=5.0)))
+    pc_cube = reshape(Float64[0.0, 0.4, 0.6, 1.0], 1, 2, 2)
+    pc_scratch = similar(pc_cube)
+    capture_stack!(det_emccd_pc_batched, pc_cube, pc_scratch, MersenneTwister(129))
+    @test pc_cube == reshape(Float64[0.0, 0.0, 1.0, 1.0], 1, 2, 2)
+
+    @test emccd_snr(1.0; readout_noise=20.0, gain=100.0, excess_noise_factor=1.0) >
+        emccd_snr(1.0; readout_noise=20.0, gain=100.0, excess_noise_factor=sqrt(2.0))
+    @test emccd_snr(1.0; readout_noise=20.0, gain=100.0, operating_mode=PhotonCountingEMMode(threshold=0.5)) >
+        emccd_snr(1.0; readout_noise=20.0, gain=100.0, excess_noise_factor=sqrt(2.0))
+    @test emccd_snr(1.0; readout_noise=20.0, gain=100.0, output_path=EMOutput()) >
+        emccd_snr(1.0; readout_noise=20.0, gain=100.0, output_path=ConventionalOutput())
 
     det_cmos = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=CMOSSensor(column_readout_sigma=1.0))

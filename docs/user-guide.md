@@ -199,6 +199,47 @@ measured calibration data. Add `PixelResponseNonuniformity`,
 `DarkSignalNonuniformity`, or `BadPixelMask` through the detector defect model
 when you have a calibrated ORCA-Quest unit.
 
+For EMCCD cameras, the core package models the generic sensor physics rather
+than vendor camera presets. Use `EMOutput()` for the electron-multiplication
+register path and `ConventionalOutput()` for a conventional output channel.
+Linear EM operation is the default; use `excess_noise_factor=sqrt(2)` when you
+want the common high-gain linear-mode excess-noise approximation:
+
+```julia
+det = Detector(
+    noise=NoisePhotonReadout(30.0),
+    gain=300.0,
+    sensor=EMCCDSensor(
+        output_path=EMOutput(),
+        operating_mode=LinearEMMode(),
+        excess_noise_factor=sqrt(2.0),
+        cic_rate=0.01,
+        em_gain_range=(1.0, 5000.0),
+    ),
+)
+```
+
+Use `PhotonCountingEMMode` when you want a thresholded photon-counting
+approximation for low-flux operation. The threshold is applied after EM gain and
+readout noise, so it is expressed in post-EM frame units:
+
+```julia
+det = Detector(
+    noise=NoiseReadout(30.0),
+    gain=1000.0,
+    sensor=EMCCDSensor(
+        operating_mode=PhotonCountingEMMode(threshold=300.0),
+        output_path=EMOutput(),
+    ),
+)
+```
+
+`emccd_snr(...)` provides a lightweight analytic check for linear EM,
+conventional output, and photon-counting operating modes. Treat it as a design
+and validation helper, not a replacement for a calibrated camera model.
+Vendor-specific presets such as Andor iXon or NUVU HNü parameter packs should
+live in an extension package unless they are needed by core package tests.
+
 Rolling-shutter detectors can also capture a time-varying scene. Use
 `InPlaceFrameSource` when the source can write into a preallocated frame, or
 `FunctionFrameSource` when a function returns a frame for each sample time:
