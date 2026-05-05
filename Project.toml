@@ -33,7 +33,7 @@ AdaptiveOpticsSimMetalExt = "Metal"
 AdaptiveOpticsSimTablesExt = "Tables"
 
 [compat]
-AMDGPU = "1"
+AMDGPU = "2.3"
 AbstractFFTs = "1.5"
 Aqua = "0.8"
 CSV = "0.10"

@@ -441,21 +441,31 @@ end
 @inline command_storage(optic::CompositeControllableOptic) = optic.command
 @inline command_layout(optic::CompositeControllableOptic) = optic.layout
 
+@inline _set_child_commands!(::Tuple{}, ::Tuple{}, command) = command
+
+@inline function _set_child_commands!(optics::Tuple, ranges::Tuple, command)
+    set_command!(first(optics), @view(command[first(ranges)]))
+    return _set_child_commands!(Base.tail(optics), Base.tail(ranges), command)
+end
+
+@inline _apply_children!(::Tuple{}, tel::Telescope, mode) = tel
+
+@inline function _apply_children!(optics::Tuple, tel::Telescope, mode)
+    apply!(first(optics), tel, mode)
+    return _apply_children!(Base.tail(optics), tel, mode)
+end
+
 @inline function set_command!(optic::CompositeControllableOptic, command::AbstractVector)
     length(optic.command) == length(command) ||
         throw(DimensionMismatchError("command length must match composite optic command length"))
     copyto!(optic.command, command)
-    @inbounds for i in eachindex(optic.optics)
-        set_command!(optic.optics[i], @view(optic.command[optic.child_ranges[i]]))
-    end
+    _set_child_commands!(optic.optics, optic.child_ranges, optic.command)
     return optic.command
 end
 
 @inline function _stage_command!(optic::CompositeControllableOptic, command::AbstractVector{T}, sign::T) where {T<:AbstractFloat}
     apply_command!(optic.command, command, sign)
-    @inbounds for i in eachindex(optic.optics)
-        set_command!(optic.optics[i], @view(optic.command[optic.child_ranges[i]]))
-    end
+    _set_child_commands!(optic.optics, optic.child_ranges, optic.command)
     return optic.command
 end
 
@@ -463,9 +473,7 @@ end
     _set_command_segments!(length(optic.command), optic.layout, command) do seg, segment
         copyto!(@view(optic.command[command_segment_range(seg)]), segment)
     end
-    @inbounds for i in eachindex(optic.optics)
-        set_command!(optic.optics[i], @view(optic.command[optic.child_ranges[i]]))
-    end
+    _set_child_commands!(optic.optics, optic.child_ranges, optic.command)
     return optic.command
 end
 
@@ -473,25 +481,17 @@ end
     _set_command_segments!(length(optic.command), optic.layout, command; require_all=false) do seg, segment
         copyto!(@view(optic.command[command_segment_range(seg)]), segment)
     end
-    @inbounds for i in eachindex(optic.optics)
-        set_command!(optic.optics[i], @view(optic.command[optic.child_ranges[i]]))
-    end
+    _set_child_commands!(optic.optics, optic.child_ranges, optic.command)
     return optic.command
 end
 
 @inline function apply!(optic::CompositeControllableOptic, tel::Telescope, ::DMAdditive)
-    @inbounds for child in optic.optics
-        apply!(child, tel, DMAdditive())
-    end
-    return tel
+    return _apply_children!(optic.optics, tel, DMAdditive())
 end
 
 @inline function apply!(optic::CompositeControllableOptic, tel::Telescope, ::DMReplace)
     fill!(tel.state.opd, zero(eltype(tel.state.opd)))
-    @inbounds for child in optic.optics
-        apply!(child, tel, DMAdditive())
-    end
-    return tel
+    return _apply_children!(optic.optics, tel, DMAdditive())
 end
 
 @inline function _apply_selected!(optic::CompositeControllableOptic, tel::Telescope, ::DMAdditive,
