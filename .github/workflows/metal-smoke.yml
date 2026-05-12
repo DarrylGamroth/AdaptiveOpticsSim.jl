@@ -28,6 +28,9 @@ jobs:
       - name: Cache Julia artifacts
         uses: julia-actions/cache@v3
 
+      - name: Instantiate package project
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+
       - name: Instantiate Metal test project
         run: julia --project=test/metal --startup-file=no -e 'using Pkg; Pkg.instantiate()'
 
