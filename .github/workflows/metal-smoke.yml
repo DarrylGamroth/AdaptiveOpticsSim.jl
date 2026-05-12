@@ -1,6 +1,9 @@
 name: Metal Smoke
 
 on:
+  push:
+    branches:
+      - codex/metal-smoke-ci
   workflow_dispatch:
 
 permissions:
