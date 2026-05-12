@@ -1,13 +1,17 @@
 backend_package_name(::Type{AdaptiveOpticsSim.CUDABackendTag}) = "CUDA"
+backend_package_name(::Type{AdaptiveOpticsSim.MetalBackendTag}) = "Metal"
 backend_package_name(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = "AMDGPU"
 
 backend_label(::Type{AdaptiveOpticsSim.CUDABackendTag}) = "CUDA"
+backend_label(::Type{AdaptiveOpticsSim.MetalBackendTag}) = "Metal"
 backend_label(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = "AMDGPU"
 
 backend_full_smoke_env(::Type{AdaptiveOpticsSim.CUDABackendTag}) = "ADAPTIVEOPTICS_TEST_FULL_CUDA"
+backend_full_smoke_env(::Type{AdaptiveOpticsSim.MetalBackendTag}) = "ADAPTIVEOPTICS_TEST_FULL_METAL"
 backend_full_smoke_env(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = "ADAPTIVEOPTICS_TEST_FULL_AMDGPU"
 
 backend_selector(::Type{AdaptiveOpticsSim.CUDABackendTag}) = AdaptiveOpticsSim.CUDABackend()
+backend_selector(::Type{AdaptiveOpticsSim.MetalBackendTag}) = AdaptiveOpticsSim.MetalBackend()
 backend_selector(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = AdaptiveOpticsSim.AMDGPUBackend()
 
 struct OptionalStaticAtmosphere{A,B<:AbstractArrayBackend} <: AdaptiveOpticsSim.AbstractAtmosphere
@@ -212,6 +216,11 @@ function import_backend_package!(::Type{AdaptiveOpticsSim.CUDABackendTag})
     return nothing
 end
 
+function import_backend_package!(::Type{AdaptiveOpticsSim.MetalBackendTag})
+    @eval import Metal
+    return nothing
+end
+
 function import_backend_package!(::Type{AdaptiveOpticsSim.AMDGPUBackendTag})
     @eval import AMDGPU
     return nothing
@@ -219,6 +228,10 @@ end
 
 function backend_functional(::Type{AdaptiveOpticsSim.CUDABackendTag})
     return Base.invokelatest(getproperty(getfield(Main, :CUDA), :functional))
+end
+
+function backend_functional(::Type{AdaptiveOpticsSim.MetalBackendTag})
+    return Base.invokelatest(getproperty(getfield(Main, :Metal), :functional))
 end
 
 function backend_functional(::Type{AdaptiveOpticsSim.AMDGPUBackendTag})

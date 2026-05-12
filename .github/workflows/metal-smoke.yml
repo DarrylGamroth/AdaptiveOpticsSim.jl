@@ -1,0 +1,32 @@
+name: Metal Smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  metal:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      JULIA_NUM_THREADS: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.12"
+          arch: aarch64
+
+      - name: Cache Julia artifacts
+        uses: julia-actions/cache@v3
+
+      - name: Instantiate Metal test project
+        run: julia --project=test/metal --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+
+      - name: Run Metal hosted runner smoke
+        run: julia --project=test/metal --startup-file=no test/runtests_metal_smoke.jl
