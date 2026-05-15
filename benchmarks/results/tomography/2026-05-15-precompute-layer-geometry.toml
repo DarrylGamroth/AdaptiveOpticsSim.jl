@@ -1,0 +1,39 @@
+artifact_id = "TOMO-PRECOMPUTE-LAYER-GEOMETRY-2026-05-15"
+generated_on = "2026-05-15"
+status = "held"
+
+[scope]
+artifact_kind = "tomography_precompute_experiment"
+family = "tomography"
+branch = "codex/precompute-tomography-layer-geometry"
+commit = "215b7e8"
+
+[benchmark]
+harness = "/tmp/aosim_precompute_candidate_benchmarks.jl"
+seconds = 0.5
+samples = 8
+baseline_commit = "8809677"
+
+[baseline.tomography_auto_correlation]
+median_ns = 1.2056027e7
+memory_bytes = 200344
+allocs = 282
+
+[baseline.tomography_cross_correlation]
+median_ns = 2.43157715e7
+memory_bytes = 367912
+allocs = 544
+
+[candidate.tomography_auto_correlation]
+median_ns = 1.2043184e7
+memory_bytes = 60600
+allocs = 48
+
+[candidate.tomography_cross_correlation]
+median_ns = 2.43074625e7
+memory_bytes = 77016
+allocs = 64
+
+[decision]
+recommendation = "hold"
+rationale = "The branch exactly matched baseline output for the benchmark case and substantially reduced allocations, but median runtime was flat on the small tomography benchmark. Revisit with larger grids and representative tomography workloads before merging."
