@@ -382,6 +382,22 @@ function _scaled_shifted_coords(
 end
 
 function _scaled_shifted_coords(
+    x::AbstractMatrix{T},
+    y::AbstractMatrix{T},
+    direction_vectors::AbstractVector{<:SVector{3,T}},
+    src_index::Int,
+    altitude::AbstractVector{T},
+    layer_index::Int,
+    src_height::T,
+) where {T<:AbstractFloat}
+    direction = direction_vectors[src_index]
+    beta_x = direction[1] * altitude[layer_index]
+    beta_y = direction[2] * altitude[layer_index]
+    scale = isfinite(src_height) ? one(T) - altitude[layer_index] / src_height : one(T)
+    return @. complex(x * scale + beta_x, y * scale + beta_y)
+end
+
+function _scaled_shifted_coords(
     ::GPUArrayBuildBackend,
     x::AbstractMatrix{T},
     y::AbstractMatrix{T},
@@ -690,7 +706,7 @@ function auto_correlation(
     r0 = _fried_parameter(atmosphere)
     support_d = support_diameter(wfs)
     lgs_dir = lgs_directions(asterism)
-    directions = direction_vectors(view(lgs_dir, :, 1), view(lgs_dir, :, 2))
+    directions = direction_svectors(view(lgs_dir, :, 1), view(lgs_dir, :, 2))
     source_height = lgs_height_m(asterism, atmosphere)
     rotations, offsets_x, offsets_y = _active_guide_grid_params(
         wfs.lenslet_rotation_rad,
@@ -863,9 +879,9 @@ function cross_correlation(
     r0 = _fried_parameter(atmosphere)
     support_d = support_diameter(wfs)
     lgs_dir = lgs_directions(asterism)
-    lgs_directions_xyz = direction_vectors(view(lgs_dir, :, 1), view(lgs_dir, :, 2))
+    lgs_directions_xyz = direction_svectors(view(lgs_dir, :, 1), view(lgs_dir, :, 2))
     fit_zenith, fit_azimuth = optimization_geometry(tomography)
-    fit_directions_xyz = direction_vectors(fit_zenith, fit_azimuth)
+    fit_directions_xyz = direction_svectors(fit_zenith, fit_azimuth)
     source_height = lgs_height_m(asterism, atmosphere)
     target_x, target_y = _guide_star_grid(sampling, support_d, zero(T), zero(T), zero(T))
     rotations, offsets_x, offsets_y = _active_guide_grid_params(

@@ -58,6 +58,18 @@ function direction_vectors(zenith::AbstractVector{T}, azimuth::AbstractVector{T}
     return direction_vectors!(out, zenith, azimuth)
 end
 
+function direction_svectors(zenith::AbstractVector{T}, azimuth::AbstractVector{T}) where {T<:AbstractFloat}
+    length(zenith) == length(azimuth) ||
+        throw(DimensionMismatchError("direction vector inputs must have matching lengths"))
+    out = Vector{SVector{3,T}}(undef, length(zenith))
+    @inbounds for k in eachindex(zenith, azimuth)
+        tangent = tan(zenith[k])
+        s, c = sincos(azimuth[k])
+        out[k] = SVector{3,T}(tangent * c, tangent * s, one(T))
+    end
+    return out
+end
+
 function lgs_directions!(out::AbstractMatrix{T}, params::LGSAsterismParams{T}) where {T<:AbstractFloat}
     size(out) == (params.n_lgs, 2) ||
         throw(DimensionMismatchError("LGS directions output must have size (n_lgs, 2)"))
