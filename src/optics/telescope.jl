@@ -11,10 +11,12 @@ mutable struct TelescopeState{T,
     Apsf<:AbstractMatrix{T},
     Amask<:AbstractMatrix{Bool},
     Aref<:AbstractMatrix{T},
+    Aamp<:AbstractMatrix{T},
     Spsf<:AbstractArray{T,3},
     W<:Workspace}
     pupil::Amask
     pupil_reflectivity::Aref
+    pupil_amplitude::Aamp
     opd::Aopd
     psf::Apsf
     psf_stack::Spsf
@@ -53,6 +55,7 @@ function Telescope(; resolution::Int,
     pupil = backend{Bool}(undef, resolution, resolution)
     generate_pupil!(pupil, params)
     reflectivity = initialize_reflectivity(pupil, pupil_reflectivity, T, backend)
+    amplitude = initialize_pupil_amplitude(reflectivity, T, backend)
 
     opd = backend{T}(undef, resolution, resolution)
     fill!(opd, zero(T))
@@ -62,9 +65,10 @@ function Telescope(; resolution::Int,
 
     psf_stack = backend{T}(undef, resolution, resolution, 0)
     psf_workspace = Workspace(opd, resolution; T=T)
-    state = TelescopeState{T, typeof(opd), typeof(psf), typeof(pupil), typeof(reflectivity), typeof(psf_stack), typeof(psf_workspace)}(
+    state = TelescopeState{T, typeof(opd), typeof(psf), typeof(pupil), typeof(reflectivity), typeof(amplitude), typeof(psf_stack), typeof(psf_workspace)}(
         pupil,
         reflectivity,
+        amplitude,
         opd,
         psf,
         psf_stack,
@@ -113,6 +117,17 @@ function initialize_reflectivity(pupil::AbstractMatrix{Bool}, reflectivity::Abst
     return out
 end
 
+function initialize_pupil_amplitude(reflectivity::AbstractMatrix, ::Type{T}, backend) where {T<:AbstractFloat}
+    out = backend{T}(undef, size(reflectivity)...)
+    @. out = sqrt(reflectivity)
+    return out
+end
+
+function update_pupil_amplitude!(tel::Telescope)
+    @. tel.state.pupil_amplitude = sqrt(tel.state.pupil_reflectivity)
+    return tel
+end
+
 function apply_opd!(tel::Telescope, opd::AbstractMatrix)
     if size(opd) != size(tel.state.opd)
         throw(DimensionMismatchError("OPD size does not match telescope resolution"))
@@ -127,12 +142,14 @@ function set_pupil!(tel::Telescope, pupil::AbstractMatrix{Bool})
     end
     tel.state.pupil .= pupil
     tel.state.pupil_reflectivity .= pupil
+    update_pupil_amplitude!(tel)
     return tel
 end
 
 function set_pupil_reflectivity!(tel::Telescope, reflectivity::Real)
     fill!(tel.state.pupil_reflectivity, eltype(tel.state.pupil_reflectivity)(reflectivity))
     tel.state.pupil_reflectivity .*= tel.state.pupil
+    update_pupil_amplitude!(tel)
     return tel
 end
 
@@ -142,6 +159,7 @@ function set_pupil_reflectivity!(tel::Telescope, reflectivity::AbstractMatrix)
     end
     tel.state.pupil_reflectivity .= reflectivity
     tel.state.pupil_reflectivity .*= tel.state.pupil
+    update_pupil_amplitude!(tel)
     return tel
 end
 

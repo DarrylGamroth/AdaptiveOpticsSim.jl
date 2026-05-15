@@ -1,4 +1,4 @@
-@kernel function fill_telescope_field_kernel!(out, pupil_reflectivity, opd, phase_shift, amp_scale,
+@kernel function fill_telescope_field_kernel!(out, pupil_amplitude, opd, phase_shift, amp_scale,
     opd_to_cycles, ox::Int, oy::Int, n::Int, n_pad::Int, center_even_grid::Bool)
     i, j = @index(Global, NTuple)
     if i <= n_pad && j <= n_pad
@@ -6,7 +6,7 @@
         yj = j - oy
         val = zero(eltype(out))
         if 1 <= xi <= n && 1 <= yj <= n
-            @inbounds val = amp_scale * sqrt(pupil_reflectivity[xi, yj]) * cispi(opd_to_cycles * opd[xi, yj])
+            @inbounds val = amp_scale * pupil_amplitude[xi, yj] * cispi(opd_to_cycles * opd[xi, yj])
         end
         if center_even_grid
             val *= cis(phase_shift * (i + j - 2))
@@ -166,7 +166,7 @@ function _fill_telescope_field!(::ScalarCPUStyle, out::AbstractMatrix{Complex{T}
     opd_to_cycles = T(2) / T(wavelength(src))
     amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
     ox, oy = field_embedding_offsets(n, n_pad)
-    @views @. out[ox+1:ox+n, oy+1:oy+n] = amp_scale * sqrt(tel.state.pupil_reflectivity) * cispi(opd_to_cycles * tel.state.opd)
+    @views @. out[ox+1:ox+n, oy+1:oy+n] = amp_scale * tel.state.pupil_amplitude * cispi(opd_to_cycles * tel.state.opd)
     if center_even_grid && iseven(n_pad)
         phase_shift = -T(pi) * (T(n_pad) + one(T)) / T(n_pad)
         apply_centering_phase!(ScalarCPUStyle(), out, phase_shift)
@@ -182,7 +182,7 @@ function _fill_telescope_field!(style::AcceleratorStyle, out::AbstractMatrix{Com
     amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
     ox, oy = field_embedding_offsets(n, n_pad)
     phase_shift = center_even_grid && iseven(n_pad) ? -T(pi) * (T(n_pad) + one(T)) / T(n_pad) : zero(T)
-    launch_kernel!(style, fill_telescope_field_kernel!, out, tel.state.pupil_reflectivity, tel.state.opd, phase_shift,
+    launch_kernel!(style, fill_telescope_field_kernel!, out, tel.state.pupil_amplitude, tel.state.opd, phase_shift,
         amp_scale, opd_to_cycles, ox, oy, n, n_pad, center_even_grid && iseven(n_pad); ndrange=size(out))
     return out
 end
@@ -200,7 +200,7 @@ function _fill_telescope_field_async!(style::AcceleratorStyle, out::AbstractMatr
     amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
     ox, oy = field_embedding_offsets(n, n_pad)
     phase_shift = center_even_grid && iseven(n_pad) ? -T(pi) * (T(n_pad) + one(T)) / T(n_pad) : zero(T)
-    launch_kernel_async!(style, fill_telescope_field_kernel!, out, tel.state.pupil_reflectivity, tel.state.opd, phase_shift,
+    launch_kernel_async!(style, fill_telescope_field_kernel!, out, tel.state.pupil_amplitude, tel.state.opd, phase_shift,
         amp_scale, opd_to_cycles, ox, oy, n, n_pad, center_even_grid && iseven(n_pad); ndrange=size(out))
     return out
 end
