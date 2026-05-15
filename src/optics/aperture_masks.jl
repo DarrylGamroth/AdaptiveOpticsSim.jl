@@ -25,6 +25,7 @@ struct SpiderMask{T<:AbstractFloat} <: AbstractMaskPrimitive
     angle_rad::T
     offset_x::T
     offset_y::T
+    normal::NTuple{2,T}
 end
 
 struct RectangularROI <: AbstractMaskPrimitive
@@ -44,8 +45,11 @@ CircularAperture(; radius::Real=1.0, center_x::Real=0.0, center_y::Real=0.0, T::
 AnnularAperture(; inner_radius::Real=0.0, outer_radius::Real=1.0, center_x::Real=0.0, center_y::Real=0.0, T::Type{<:AbstractFloat}=Float64) =
     AnnularAperture{T}(T(inner_radius), T(outer_radius), T(center_x), T(center_y))
 
-SpiderMask(; thickness::Real, angle_rad::Real, offset_x::Real=0.0, offset_y::Real=0.0, T::Type{<:AbstractFloat}=Float64) =
-    SpiderMask{T}(T(thickness), T(angle_rad), T(offset_x), T(offset_y))
+function SpiderMask(; thickness::Real, angle_rad::Real, offset_x::Real=0.0, offset_y::Real=0.0, T::Type{<:AbstractFloat}=Float64)
+    angle = T(angle_rad)
+    sθ, cθ = sincos(angle)
+    return SpiderMask{T}(T(thickness), angle, T(offset_x), T(offset_y), (-sθ, cθ))
+end
 
 RectangularROI(rows::UnitRange{Int}, cols::UnitRange{Int}) = RectangularROI(first(rows), last(rows), first(cols), last(cols))
 
@@ -202,9 +206,7 @@ function _build_rectangular_roi!(style::AcceleratorStyle, out::AbstractMatrix, r
 end
 
 function _apply_spider_mask!(::ScalarCPUStyle, out::AbstractMatrix, primitive::SpiderMask, grid::MaskGrid, masked)
-    sθ, cθ = sincos(primitive.angle_rad)
-    a = -sθ
-    b = cθ
+    a, b = primitive.normal
     n_i, n_j = size(out)
     @inbounds for i in 1:n_i, j in 1:n_j
         x = (i - grid.center_i) / grid.scale_i - primitive.offset_x
@@ -218,9 +220,7 @@ function _apply_spider_mask!(::ScalarCPUStyle, out::AbstractMatrix, primitive::S
 end
 
 function _apply_spider_mask!(style::AcceleratorStyle, out::AbstractMatrix, primitive::SpiderMask, grid::MaskGrid, masked)
-    sθ, cθ = sincos(primitive.angle_rad)
-    a = -sθ
-    b = cθ
+    a, b = primitive.normal
     n_i, n_j = size(out)
     launch_kernel!(style, spider_mask_kernel!, out, primitive.thickness, a, b, primitive.offset_x, primitive.offset_y,
         grid.center_i, grid.center_j, grid.scale_i, grid.scale_j, masked, n_i, n_j; ndrange=size(out))
