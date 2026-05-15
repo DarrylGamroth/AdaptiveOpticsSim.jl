@@ -98,9 +98,9 @@ struct MovingAtmosphereLayer{
     state::S
 end
 
-mutable struct MultiLayerState{T<:AbstractFloat,A<:AbstractMatrix{T}}
+mutable struct MultiLayerState{T<:AbstractFloat,A<:AbstractMatrix{T},C<:AtmosphereSourceGeometryCache{T}}
     opd::A
-    source_geometry::AtmosphereSourceGeometryCache{T,Vector{T}}
+    source_geometry::C
 end
 
 struct MultiLayerAtmosphere{
@@ -402,7 +402,8 @@ function MultiLayerAtmosphere(tel::Telescope;
 
     opd = backend_array{T}(undef, tel.params.resolution, tel.params.resolution)
     fill!(opd, zero(T))
-    state = MultiLayerState{T, typeof(opd)}(opd, AtmosphereSourceGeometryCache(n_layers, T))
+    source_geometry = AtmosphereSourceGeometryCache(n_layers, T)
+    state = MultiLayerState{T, typeof(opd), typeof(source_geometry)}(opd, source_geometry)
 
     return MultiLayerAtmosphere{typeof(params), typeof(state), typeof(layers), typeof(selector)}(params, layers, state)
 end

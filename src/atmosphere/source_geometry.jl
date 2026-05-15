@@ -37,11 +37,17 @@ mutable struct AtmosphereSourceGeometryCache{T<:AbstractFloat,V<:AbstractVector{
     valid::Bool
 end
 
+function _source_geometry_cache_buffer(::Type{T}, n_layers::Int, value::T) where {T<:AbstractFloat}
+    out = FixedSizeVectorDefault{T}(undef, n_layers)
+    fill!(out, value)
+    return out
+end
+
 function AtmosphereSourceGeometryCache(n_layers::Int, ::Type{T}=Float64) where {T<:AbstractFloat}
     return AtmosphereSourceGeometryCache(
-        zeros(T, n_layers),
-        zeros(T, n_layers),
-        ones(T, n_layers),
+        _source_geometry_cache_buffer(T, n_layers, zero(T)),
+        _source_geometry_cache_buffer(T, n_layers, zero(T)),
+        _source_geometry_cache_buffer(T, n_layers, one(T)),
         T(NaN),
         T(NaN),
         T(NaN),

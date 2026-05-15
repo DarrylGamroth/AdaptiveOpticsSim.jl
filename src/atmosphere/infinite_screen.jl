@@ -155,9 +155,9 @@ end
 """
 Runtime state for the planned infinite multilayer atmosphere backend.
 """
-mutable struct InfiniteMultiLayerState{T<:AbstractFloat,A<:AbstractMatrix{T}}
+mutable struct InfiniteMultiLayerState{T<:AbstractFloat,A<:AbstractMatrix{T},C<:AtmosphereSourceGeometryCache{T}}
     opd::A
-    source_geometry::AtmosphereSourceGeometryCache{T,Vector{T}}
+    source_geometry::C
 end
 
 """
@@ -703,7 +703,8 @@ function InfiniteMultiLayerAtmosphere(tel::Telescope;
     ]
     opd = backend_array{T}(undef, tel.params.resolution, tel.params.resolution)
     fill!(opd, zero(T))
-    state = InfiniteMultiLayerState{T, typeof(opd)}(opd, AtmosphereSourceGeometryCache(n_layers, T))
+    source_geometry = AtmosphereSourceGeometryCache(n_layers, T)
+    state = InfiniteMultiLayerState{T, typeof(opd), typeof(source_geometry)}(opd, source_geometry)
     return InfiniteMultiLayerAtmosphere{typeof(params), typeof(state), typeof(layers), typeof(selector)}(params, layers, state)
 end
 
