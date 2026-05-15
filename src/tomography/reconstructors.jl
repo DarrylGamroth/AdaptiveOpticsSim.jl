@@ -304,6 +304,60 @@ function _guide_star_grid(
     return xr, yr
 end
 
+function _guide_star_grid!(
+    xr::AbstractMatrix{T},
+    yr::AbstractMatrix{T},
+    sampling::Integer,
+    diameter::T,
+    rotation_angle_rad::T,
+    offset_x::T,
+    offset_y::T,
+) where {T<:AbstractFloat}
+    size(xr) == (sampling, sampling) && size(yr) == (sampling, sampling) ||
+        throw(DimensionMismatchError("guide-star grid workspaces must match sampling"))
+    coords = sampling == 1 ? range(zero(T), zero(T); length=1) : range(-diameter / 2, diameter / 2; length=sampling)
+    s, c = sincos(rotation_angle_rad)
+    offset_x_d = offset_x * diameter
+    offset_y_d = offset_y * diameter
+    @inbounds for j in 1:sampling
+        y = coords[j]
+        for i in 1:sampling
+            x = coords[i]
+            xr[j, i] = x * c - y * s - offset_x_d
+            yr[j, i] = y * c + x * s - offset_y_d
+        end
+    end
+    return xr, yr
+end
+
+function _guide_star_grids!(
+    xr::AbstractArray{T,3},
+    yr::AbstractArray{T,3},
+    sampling::Integer,
+    diameter::T,
+    rotations::AbstractVector{T},
+    offsets_x::AbstractVector{T},
+    offsets_y::AbstractVector{T},
+) where {T<:AbstractFloat}
+    n_gs = length(rotations)
+    size(xr) == (sampling, sampling, n_gs) && size(yr) == (sampling, sampling, n_gs) ||
+        throw(DimensionMismatchError("guide-star grid stack workspaces must match sampling and guide-star count"))
+    length(offsets_x) == n_gs == length(offsets_y) ||
+        throw(DimensionMismatchError("guide-star grid parameter vectors must have equal length"))
+    @inbounds for gs in 1:n_gs
+        _guide_star_grid!(
+            @view(xr[:, :, gs]),
+            @view(yr[:, :, gs]),
+            sampling,
+            diameter,
+            rotations[gs],
+            offsets_x[gs],
+            offsets_y[gs],
+        )
+    end
+    return xr, yr
+end
+
 function _guide_star_grids(
     sampling::Integer,
     diameter::T,
@@ -316,11 +370,7 @@ function _guide_star_grids(
         throw(DimensionMismatchError("guide-star grid parameter vectors must have equal length"))
     xr = Array{T}(undef, sampling, sampling, n_gs)
     yr = similar(xr)
-    @inbounds for gs in 1:n_gs
-        xg, yg = _guide_star_grid(sampling, diameter, rotations[gs], offsets_x[gs], offsets_y[gs])
-        @views xr[:, :, gs] .= xg
-        @views yr[:, :, gs] .= yg
-    end
+    _guide_star_grids!(xr, yr, sampling, diameter, rotations, offsets_x, offsets_y)
     return xr, yr
 end
 
