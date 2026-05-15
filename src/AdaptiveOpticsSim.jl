@@ -11,6 +11,7 @@ using Random
 using Serialization
 using SparseArrays
 using SpecialFunctions
+using StaticArrays
 using Statistics
 import TOML
 

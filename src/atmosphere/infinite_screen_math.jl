@@ -5,11 +5,13 @@ The coordinate matrices are geometry coordinates, not Julia array indices.
 Interior stencil coordinates live on the positive side of the boundary and the
 boundary coordinates lie exactly one pixel outside the maintained screen.
 """
-struct InfiniteBoundaryStencil{T<:AbstractFloat,I<:AbstractMatrix{Int},P<:AbstractMatrix{T}}
+struct InfiniteBoundaryStencil{T<:AbstractFloat,I<:AbstractMatrix{Int},P<:AbstractMatrix{T},V<:AbstractVector}
     stencil_coords::I
     boundary_coords::I
     stencil_positions::P
     boundary_positions::P
+    stencil_position_vectors::V
+    boundary_position_vectors::V
     orientation::Symbol
     side::Symbol
 end
@@ -99,14 +101,23 @@ function infinite_boundary_stencil(screen_resolution::Int, pixel_scale::Real;
 
     stencil_positions = T.(stencil_coords) .* T(pixel_scale)
     boundary_positions = T.(boundary_coords) .* T(pixel_scale)
+    stencil_position_vectors = _position_vectors(stencil_positions)
+    boundary_position_vectors = _position_vectors(boundary_positions)
     return InfiniteBoundaryStencil(
         stencil_coords,
         boundary_coords,
         stencil_positions,
         boundary_positions,
+        stencil_position_vectors,
+        boundary_position_vectors,
         orientation,
         side,
     )
+end
+
+function _position_vectors(positions::AbstractMatrix{T}) where {T<:AbstractFloat}
+    size(positions, 2) == 2 || throw(DimensionMismatchError("positions must have shape (N, 2)"))
+    return [SVector{2,T}(positions[i, 1], positions[i, 2]) for i in axes(positions, 1)]
 end
 
 function pairwise_separations(positions_a::AbstractMatrix{T}, positions_b::AbstractMatrix{T}) where {T<:AbstractFloat}
@@ -121,11 +132,26 @@ function pairwise_separations(positions_a::AbstractMatrix{T}, positions_b::Abstr
     return out
 end
 
+function pairwise_separations(
+    positions_a::AbstractVector{<:SVector{2,T}},
+    positions_b::AbstractVector{<:SVector{2,T}},
+) where {T<:AbstractFloat}
+    out = Matrix{T}(undef, length(positions_a), length(positions_b))
+    @inbounds for i in eachindex(positions_a), j in eachindex(positions_b)
+        a = positions_a[i]
+        b = positions_b[j]
+        dx = a[1] - b[1]
+        dy = a[2] - b[2]
+        out[i, j] = sqrt(dx * dx + dy * dy)
+    end
+    return out
+end
+
 function boundary_injection_covariances(stencil::InfiniteBoundaryStencil, r0::Real, L0::Real)
-    cov_zz = phase_covariance(pairwise_separations(stencil.stencil_positions, stencil.stencil_positions), r0, L0)
-    cov_xx = phase_covariance(pairwise_separations(stencil.boundary_positions, stencil.boundary_positions), r0, L0)
-    cov_xz = phase_covariance(pairwise_separations(stencil.boundary_positions, stencil.stencil_positions), r0, L0)
-    cov_zx = phase_covariance(pairwise_separations(stencil.stencil_positions, stencil.boundary_positions), r0, L0)
+    cov_zz = phase_covariance(pairwise_separations(stencil.stencil_position_vectors, stencil.stencil_position_vectors), r0, L0)
+    cov_xx = phase_covariance(pairwise_separations(stencil.boundary_position_vectors, stencil.boundary_position_vectors), r0, L0)
+    cov_xz = phase_covariance(pairwise_separations(stencil.boundary_position_vectors, stencil.stencil_position_vectors), r0, L0)
+    cov_zx = phase_covariance(pairwise_separations(stencil.stencil_position_vectors, stencil.boundary_position_vectors), r0, L0)
     return (; cov_zz, cov_xx, cov_xz, cov_zx)
 end
 
