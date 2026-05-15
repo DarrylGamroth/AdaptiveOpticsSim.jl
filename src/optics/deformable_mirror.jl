@@ -60,6 +60,7 @@ struct ActuatorGridTopology{
     T<:AbstractFloat,
     M1<:AbstractMatrix{T},
     M2<:AbstractMatrix{T},
+    CV<:AbstractVector,
     V1<:AbstractVector{Bool},
     V2<:AbstractVector{Int},
     MD,
@@ -67,6 +68,7 @@ struct ActuatorGridTopology{
     n_act::Int
     coords::M1
     active_coords::M2
+    active_coord_vectors::CV
     valid_actuators::V1
     active_indices::V2
     metadata::MD
@@ -76,12 +78,14 @@ struct SampledActuatorTopology{
     T<:AbstractFloat,
     M1<:AbstractMatrix{T},
     M2<:AbstractMatrix{T},
+    CV<:AbstractVector,
     V1<:AbstractVector{Bool},
     V2<:AbstractVector{Int},
     MD,
 } <: AbstractDMTopology
     coords::M1
     active_coords::M2
+    active_coord_vectors::CV
     valid_actuators::V1
     active_indices::V2
     metadata::MD
@@ -147,8 +151,9 @@ function ActuatorGridTopology(n_act::Integer; valid_actuators::Union{Nothing,Abs
     end
     active_idx = findall(identity, mask)
     active_coords = coords[:, active_idx]
-    return ActuatorGridTopology{T,typeof(coords),typeof(active_coords),typeof(mask),typeof(active_idx),typeof(metadata)}(
-        Int(n_act), coords, active_coords, mask, active_idx, metadata)
+    active_coord_vectors = [SVector{2,T}(active_coords[1, i], active_coords[2, i]) for i in axes(active_coords, 2)]
+    return ActuatorGridTopology{T,typeof(coords),typeof(active_coords),typeof(active_coord_vectors),typeof(mask),typeof(active_idx),typeof(metadata)}(
+        Int(n_act), coords, active_coords, active_coord_vectors, mask, active_idx, metadata)
 end
 
 function SampledActuatorTopology(coords::AbstractMatrix{<:Real};
@@ -165,8 +170,9 @@ function SampledActuatorTopology(coords::AbstractMatrix{<:Real};
     coords_t = Matrix{T}(coords)
     active_idx = findall(identity, mask)
     active_coords = coords_t[:, active_idx]
-    return SampledActuatorTopology{T,typeof(coords_t),typeof(active_coords),typeof(mask),typeof(active_idx),typeof(metadata)}(
-        coords_t, active_coords, mask, active_idx, metadata)
+    active_coord_vectors = [SVector{2,T}(active_coords[1, i], active_coords[2, i]) for i in axes(active_coords, 2)]
+    return SampledActuatorTopology{T,typeof(coords_t),typeof(active_coords),typeof(active_coord_vectors),typeof(mask),typeof(active_idx),typeof(metadata)}(
+        coords_t, active_coords, active_coord_vectors, mask, active_idx, metadata)
 end
 
 struct DeformableMirrorParams{
@@ -220,6 +226,8 @@ end
 @inline topology_command_count(topology::AbstractDMTopology) = size(actuator_coordinates(topology), 2)
 @inline actuator_coordinates(topology::ActuatorGridTopology) = topology.active_coords
 @inline actuator_coordinates(topology::SampledActuatorTopology) = topology.active_coords
+@inline actuator_coordinate(topology::ActuatorGridTopology, idx::Integer) = topology.active_coord_vectors[idx]
+@inline actuator_coordinate(topology::SampledActuatorTopology, idx::Integer) = topology.active_coord_vectors[idx]
 @inline valid_actuator_mask(topology::ActuatorGridTopology) = topology.valid_actuators
 @inline valid_actuator_mask(topology::SampledActuatorTopology) = topology.valid_actuators
 @inline active_actuator_indices(topology::ActuatorGridTopology) = topology.active_indices
@@ -586,14 +594,14 @@ function build_influence_functions!(::ScalarCPUStyle, dm::DeformableMirror, tel:
     Base.require_one_based_indexing(tel.state.pupil, dm.state.modes)
     n = tel.params.resolution
     sigma = influence_width(model, topology)
-    coords = actuator_coordinates(topology)
     cx = (n + 1) / 2
     cy = (n + 1) / 2
     scale = n / 2
     n_commands = topology_command_count(topology)
     @inbounds for idx in 1:n_commands
-        x0 = coords[1, idx]
-        y0 = coords[2, idx]
+        coord = actuator_coordinate(topology, idx)
+        x0 = coord[1]
+        y0 = coord[2]
         x_m, y_m = apply_misregistration(dm.params.misregistration, x0, y0)
         for i in 1:n, j in 1:n
             x = (i - cx) / scale
@@ -611,14 +619,14 @@ function build_influence_functions!(style::AcceleratorStyle, dm::DeformableMirro
     n = tel.params.resolution
     T = eltype(dm.state.modes)
     sigma2 = T(influence_width(model, topology))^2
-    coords = actuator_coordinates(topology)
     cx = T((n + 1) / 2)
     cy = T((n + 1) / 2)
     scale = T(n / 2)
     n_commands = topology_command_count(topology)
     @inbounds for idx in 1:n_commands
-        x0 = T(coords[1, idx])
-        y0 = T(coords[2, idx])
+        coord = actuator_coordinate(topology, idx)
+        x0 = T(coord[1])
+        y0 = T(coord[2])
         x_m, y_m = apply_misregistration(dm.params.misregistration, x0, y0)
         launch_kernel!(style, dm_mode_kernel!, @view(dm.state.modes[:, idx]), tel.state.pupil,
             T(x_m), T(y_m), cx, cy, scale, sigma2, n; ndrange=(n, n))
