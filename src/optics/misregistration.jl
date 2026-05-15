@@ -5,18 +5,37 @@ struct Misregistration{T<:AbstractFloat}
     anamorphosis_angle_rad::T
     tangential_scaling::T
     radial_scaling::T
+    transform::NTuple{4,T}
 end
 
 function Misregistration(; shift_x::Real=0.0, shift_y::Real=0.0, rotation_deg::Real=0.0,
     anamorphosis_angle::Real=0.0, tangential_scaling::Real=1.0, radial_scaling::Real=1.0, T::Type{<:AbstractFloat}=Float64)
+    θ = T(deg2rad(anamorphosis_angle))
+    sθ, cθ = sincos(θ)
+    φ = T(deg2rad(rotation_deg))
+    sφ, cφ = sincos(φ)
+    tan_scale = T(tangential_scaling)
+    rad_scale = T(radial_scaling)
+
+    b11 = tan_scale * cθ * cθ + rad_scale * sθ * sθ
+    b12 = (tan_scale - rad_scale) * sθ * cθ
+    b21 = b12
+    b22 = tan_scale * sθ * sθ + rad_scale * cθ * cθ
+    transform = (
+        cφ * b11 - sφ * b21,
+        cφ * b12 - sφ * b22,
+        sφ * b11 + cφ * b21,
+        sφ * b12 + cφ * b22,
+    )
 
     return Misregistration{T}(
         T(shift_x),
         T(shift_y),
-        T(deg2rad(rotation_deg)),
-        T(deg2rad(anamorphosis_angle)),
-        T(tangential_scaling),
-        T(radial_scaling),
+        φ,
+        θ,
+        tan_scale,
+        rad_scale,
+        transform,
     )
 end
 
@@ -42,22 +61,9 @@ end
     throw(InvalidConfiguration("unsupported misregistration field $(field)"))
 end
 
-function apply_misregistration(mis::Misregistration, x::Real, y::Real)
-    θ = mis.anamorphosis_angle_rad
-    sθ, cθ = sincos(θ)
-    x1 = cθ * x + sθ * y
-    y1 = -sθ * x + cθ * y
-
-    x1 *= mis.tangential_scaling
-    y1 *= mis.radial_scaling
-
-    x2 = cθ * x1 - sθ * y1
-    y2 = sθ * x1 + cθ * y1
-
-    φ = mis.rotation_rad
-    sφ, cφ = sincos(φ)
-    xr = cφ * x2 - sφ * y2
-    yr = sφ * x2 + cφ * y2
-
+@inline function apply_misregistration(mis::Misregistration, x::Real, y::Real)
+    m11, m12, m21, m22 = mis.transform
+    xr = muladd(m12, y, m11 * x)
+    yr = muladd(m22, y, m21 * x)
     return xr - mis.shift_x, yr - mis.shift_y
 end
