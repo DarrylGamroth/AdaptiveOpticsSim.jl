@@ -109,6 +109,7 @@ struct LiFTState{T<:AbstractFloat,
     conv_buffer::B
     conv_aux_buffer::B
     opd_buffer::B
+    opd_work_buffer::B
     residual_buffer::V
     weight_buffer::V
     H_buffer::B
@@ -197,6 +198,7 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
     conv_buffer = similar(psf_buffer)
     conv_aux_buffer = similar(psf_buffer)
     opd_buffer = similar(amp_buffer)
+    opd_work_buffer = similar(amp_buffer)
     residual_buffer = similar(psf_buffer, eltype(psf_buffer), img_resolution * img_resolution)
     weight_buffer = similar(residual_buffer)
     H_buffer = similar(psf_buffer, eltype(psf_buffer), img_resolution * img_resolution, size(basis, 3))
@@ -207,8 +209,8 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
     diagnostics = LiFTDiagnostics(T(NaN), T(NaN), T(NaN), T(NaN), zero(T), false, false)
     state = LiFTState(ws, psf_buffer, amp_buffer, field_scratch, focal_buffer, mode_buffer, pd_buffer, conv_buffer,
         conv_aux_buffer,
-        opd_buffer, residual_buffer, weight_buffer, H_buffer, normal_buffer, factor_buffer, rhs_buffer, mode_id_buffer,
-        diagnostics)
+        opd_buffer, opd_work_buffer, residual_buffer, weight_buffer, H_buffer, normal_buffer, factor_buffer, rhs_buffer,
+        mode_id_buffer, diagnostics)
     mode = numerical ? LiFTNumerical() : LiFTAnalytic()
     return LiFT{typeof(mode), typeof(params), typeof(state), typeof(basis), typeof(src), typeof(det)}(
         tel,
@@ -254,7 +256,7 @@ function lift_interaction_matrix!(H::AbstractMatrix, lift::LiFT{LiFTNumerical}, 
     delta = T(1e-9)
 
     initial_opd = prepare_opd!(lift, coefficients)
-    opd_work = lift.state.amp_buffer
+    opd_work = lift.state.opd_work_buffer
     @inbounds for (idx, mode_id) in enumerate(mode_ids)
         @views mode = lift.basis[:, :, mode_id]
         @. opd_work = initial_opd + delta * mode
