@@ -363,6 +363,7 @@ end
     @test slope_extraction_model(sh) isa CenterOfGravityExtraction
     @test slope_extraction_model(sh).threshold ≈ 0.02
     @test n_valid_subapertures(layout) == count(layout.valid_mask_host)
+    @test valid_subaperture_indices(layout) == findall(layout.valid_mask_host)
 
     prepare_runtime_wfs!(sh, tel, src)
     @test calibration.calibrated

@@ -76,9 +76,10 @@ Preallocated fixed-length frame delay for vector-valued control signals.
 The delay line stores `delay_frames` historical samples and returns the signal
 that exits the tail when a new sample is shifted in.
 """
-struct VectorDelayLine{A<:AbstractMatrix,V<:AbstractVector}
+mutable struct VectorDelayLine{A<:AbstractMatrix,V<:AbstractVector}
     buffer::A
     scratch::V
+    head::Int
 end
 
 function VectorDelayLine(ref::AbstractVector{T}, delay_frames::Int) where {T<:AbstractFloat}
@@ -87,7 +88,7 @@ function VectorDelayLine(ref::AbstractVector{T}, delay_frames::Int) where {T<:Ab
     fill!(buffer, zero(T))
     scratch = similar(ref, T, length(ref))
     fill!(scratch, zero(T))
-    return VectorDelayLine{typeof(buffer),typeof(scratch)}(buffer, scratch)
+    return VectorDelayLine{typeof(buffer),typeof(scratch)}(buffer, scratch, 1)
 end
 
 function shift_delay!(line::VectorDelayLine, sample::AbstractVector)
@@ -96,11 +97,10 @@ function shift_delay!(line::VectorDelayLine, sample::AbstractVector)
         copyto!(line.scratch, sample)
         return line.scratch
     end
-    copyto!(line.scratch, @view(line.buffer[:, 1]))
-    @inbounds for i in 1:n_delay-1
-        copyto!(@view(line.buffer[:, i]), @view(line.buffer[:, i + 1]))
-    end
-    copyto!(@view(line.buffer[:, n_delay]), sample)
+    head = line.head
+    copyto!(line.scratch, @view(line.buffer[:, head]))
+    copyto!(@view(line.buffer[:, head]), sample)
+    line.head = head == n_delay ? 1 : head + 1
     return line.scratch
 end
 

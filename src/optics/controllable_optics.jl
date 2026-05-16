@@ -494,21 +494,41 @@ end
     return _apply_children!(optic.optics, tel, DMAdditive())
 end
 
+@inline _tuple_contains_label(::Tuple{}, ::Symbol) = false
+@inline _tuple_contains_label(labels::Tuple, label::Symbol) =
+    first(labels) === label || _tuple_contains_label(Base.tail(labels), label)
+
+@inline function _ranges_overlap(a::UnitRange{Int}, b::UnitRange{Int})
+    return first(a) <= last(b) && first(b) <= last(a)
+end
+
+@inline _segment_selected_for_range(seg::RuntimeCommandSegment, range::UnitRange{Int}, selected::Tuple) =
+    _tuple_contains_label(selected, seg.label) && _ranges_overlap(command_segment_range(seg), range)
+
+@inline _any_selected_segment_for_range(::Tuple{}, ::UnitRange{Int}, ::Tuple) = false
+
+@inline function _any_selected_segment_for_range(segments::Tuple, range::UnitRange{Int}, selected::Tuple)
+    return _segment_selected_for_range(first(segments), range, selected) ||
+           _any_selected_segment_for_range(Base.tail(segments), range, selected)
+end
+
+@inline _apply_selected_children!(::Tuple{}, ::Tuple{}, ::Tuple, tel::Telescope, ::Tuple) = tel
+
+@inline function _apply_selected_children!(optics::Tuple, ranges::Tuple, segments::Tuple,
+    tel::Telescope, labels::Tuple)
+    if _any_selected_segment_for_range(segments, first(ranges), labels)
+        apply!(first(optics), tel, DMAdditive())
+    end
+    return _apply_selected_children!(Base.tail(optics), Base.tail(ranges), segments, tel, labels)
+end
+
 @inline function _apply_selected!(optic::CompositeControllableOptic, tel::Telescope, ::DMAdditive,
     labels::Tuple{Vararg{Symbol}})
-    label_set = Set(labels)
-    @inbounds for child in optic.optics
-        any(in(label_set), controllable_surface_labels(child)) && apply!(child, tel, DMAdditive())
-    end
-    return tel
+    return _apply_selected_children!(optic.optics, optic.child_ranges, command_segments(optic.layout), tel, labels)
 end
 
 @inline function _apply_selected!(optic::CompositeControllableOptic, tel::Telescope, ::DMReplace,
     labels::Tuple{Vararg{Symbol}})
     fill!(tel.state.opd, zero(eltype(tel.state.opd)))
-    label_set = Set(labels)
-    @inbounds for child in optic.optics
-        any(in(label_set), controllable_surface_labels(child)) && apply!(child, tel, DMAdditive())
-    end
-    return tel
+    return _apply_selected_children!(optic.optics, optic.child_ranges, command_segments(optic.layout), tel, labels)
 end

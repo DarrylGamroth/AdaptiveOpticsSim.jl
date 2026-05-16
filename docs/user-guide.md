@@ -503,6 +503,11 @@ default for grid-backed Gaussian mirrors. Use `sensitivity=:finite_difference`
 for validation runs, supported WFS-misregistration finite differences, or
 accelerator-backed arrays.
 
+The lower-level Gaussian influence Jacobian probe is CPU-only and intended for
+small-case correctness checks. Prefer finite differences there unless the AD
+probe demonstrates a better accuracy/performance tradeoff for the specific
+offline simulation.
+
 ## Determinism
 
 - Use a fixed RNG and pass it into `advance!`, detector calls, or runtime

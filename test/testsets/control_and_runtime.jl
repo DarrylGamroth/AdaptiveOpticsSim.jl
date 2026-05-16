@@ -99,6 +99,15 @@ end
 
     @test comp_tel.state.opd ≈ tip_tel.state.opd atol=0 rtol=0
     @test norm(comp_optic.optics[2].state.opd) == 0.0
+
+    selected_tel = Telescope(resolution=24, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    selected_optic = CompositeControllableOptic(
+        :tiptilt => TipTiltMirror(selected_tel; scale=1.0),
+        :dm => DeformableMirror(selected_tel; n_act=4, influence_width=0.3),
+    )
+    set_command!(selected_optic, vcat(tip_cmd, fill(1e-8, 16)))
+    AdaptiveOpticsSim._apply_selected!(selected_optic, selected_tel, DMReplace(), (:tiptilt,))
+    @test selected_tel.state.opd ≈ tip_tel.state.opd atol=0 rtol=0
 end
 
 @testset "AOSimulation constructors" begin
@@ -408,6 +417,13 @@ runtime_snapshot(scenario) = (
     @test all(iszero, delayed0)
     delayed1 = shift_delay!(delay, fill(2.0, length(dm.state.coefs)))
     @test all(==(1.0), delayed1)
+    delay2 = VectorDelayLine(dm.state.coefs, 2)
+    delayed20 = copy(shift_delay!(delay2, fill(1.0, length(dm.state.coefs))))
+    delayed21 = copy(shift_delay!(delay2, fill(2.0, length(dm.state.coefs))))
+    delayed22 = copy(shift_delay!(delay2, fill(3.0, length(dm.state.coefs))))
+    @test all(iszero, delayed20)
+    @test all(iszero, delayed21)
+    @test all(==(1.0), delayed22)
 
     ctrl = DiscreteIntegratorController(length(wfs.state.slopes); gain=0.1, tau=0.02)
     dm_cmd = update!(ctrl, wfs.state.slopes, 0.01)

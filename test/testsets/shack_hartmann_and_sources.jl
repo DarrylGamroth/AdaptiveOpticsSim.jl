@@ -341,8 +341,21 @@ end
     @test !has_extended_source_model(src)
     @test length(point_ast) == 1
     @test length(image_ast) == 5
+    @test extended_source_asterism(ext_image) !== image_ast
+    cached_ast = AdaptiveOpticsSim._cached_extended_source_asterism(ext_image)
+    @test AdaptiveOpticsSim._cached_extended_source_asterism(ext_image) === cached_ast
     @test AdaptiveOpticsSim.photon_flux(point_ast.sources[1]) ≈ AdaptiveOpticsSim.photon_flux(src)
     @test sum(AdaptiveOpticsSim.photon_flux(sample) for sample in image_ast.sources) ≈ AdaptiveOpticsSim.photon_flux(src)
+    old_offset = image_model.offsets_xy_arcsec[1]
+    image_model.offsets_xy_arcsec[1] = (old_offset[1] + 0.1, old_offset[2])
+    refreshed_ast = AdaptiveOpticsSim._cached_extended_source_asterism(ext_image)
+    @test refreshed_ast !== cached_ast
+    expected_coords = (
+        coordinates_xy_arcsec(src)[1] + image_model.offsets_xy_arcsec[1][1],
+        coordinates_xy_arcsec(src)[2] + image_model.offsets_xy_arcsec[1][2],
+    )
+    @test coordinates_xy_arcsec(refreshed_ast.sources[1]) == expected_coords
+    @test AdaptiveOpticsSim._cached_extended_source_asterism(ext_image) === refreshed_ast
 
     zb = ZernikeBasis(tel, 5)
     compute_zernike!(zb, tel)

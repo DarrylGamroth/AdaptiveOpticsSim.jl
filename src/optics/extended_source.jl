@@ -129,9 +129,11 @@ function source_model_signature(model::AbstractExtendedSourceModel)
     return sig
 end
 
-struct ExtendedSource{S<:Union{Source,LGSSource},M<:AbstractExtendedSourceModel} <: AbstractSource
+mutable struct ExtendedSource{S<:Union{Source,LGSSource},M<:AbstractExtendedSourceModel,A<:Asterism} <: AbstractSource
     source::S
     model::M
+    cached_signature::UInt
+    cached_asterism::A
 end
 
 function with_extended_source(src::Union{Source,LGSSource}, model::AbstractExtendedSourceModel)
@@ -182,16 +184,35 @@ function source_with_coordinates_and_flux(src::LGSSource, coords_xy_arcsec::NTup
     ))
 end
 
-function extended_source_asterism(src::ExtendedSource)
-    base_coords = coordinates_xy_arcsec(src.source)
-    total_flux = photon_flux(src.source)
-    offsets = source_model_offsets(src.model)
-    weights = source_model_weights(src.model)
-    samples = Vector{typeof(source_with_coordinates_and_flux(src.source, base_coords, total_flux * eltype(weights)(weights[1])))}(undef, length(weights))
+function _build_extended_source_asterism(src::Union{Source,LGSSource}, model::AbstractExtendedSourceModel)
+    base_coords = coordinates_xy_arcsec(src)
+    total_flux = photon_flux(src)
+    offsets = source_model_offsets(model)
+    weights = source_model_weights(model)
+    samples = Vector{typeof(source_with_coordinates_and_flux(src, base_coords, total_flux * eltype(weights)(weights[1])))}(undef, length(weights))
     @inbounds for i in eachindex(offsets, weights)
         offset = offsets[i]
         coords = (base_coords[1] + offset[1], base_coords[2] + offset[2])
-        samples[i] = source_with_coordinates_and_flux(src.source, coords, total_flux * weights[i])
+        samples[i] = source_with_coordinates_and_flux(src, coords, total_flux * weights[i])
     end
     return Asterism(samples)
+end
+
+function ExtendedSource(src::S, model::M) where {S<:Union{Source,LGSSource},M<:AbstractExtendedSourceModel}
+    ast = _build_extended_source_asterism(src, model)
+    sig = hash((source_measurement_signature(src), source_model_signature(model)))
+    return ExtendedSource{S,M,typeof(ast)}(src, model, sig, ast)
+end
+
+function extended_source_asterism(src::ExtendedSource)
+    return _build_extended_source_asterism(src.source, src.model)
+end
+
+function _cached_extended_source_asterism(src::ExtendedSource)
+    sig = source_measurement_signature(src)
+    if src.cached_signature != sig
+        src.cached_asterism = _build_extended_source_asterism(src.source, src.model)
+        src.cached_signature = sig
+    end
+    return src.cached_asterism
 end

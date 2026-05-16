@@ -41,12 +41,11 @@ function gaussian_dm_influence_parameter_jacobian(
 
     fields = _normalize_ad_field_order(field_order)
     _validate_gaussian_dm_ad_field_order(fields)
+    T = eltype(dm.state.modes)
     base = _base_parameter_vector(tel, dm, Int(actuator_index), fields)
-    values = _gaussian_influence_vector(tel, dm, Int(actuator_index), fields, base)
-    jacobian = ForwardDiff.jacobian(
-        p -> _gaussian_influence_vector(tel, dm, Int(actuator_index), fields, p),
-        base,
-    )
+    values = Vector{T}(undef, tel.params.resolution * tel.params.resolution)
+    jacobian = Matrix{T}(undef, length(values), length(base))
+    _gaussian_influence_jacobian!(values, jacobian, tel, dm, Int(actuator_index), fields, base)
     return (values=values, jacobian=jacobian, field_order=fields)
 end
 
@@ -115,14 +114,27 @@ function _require_cpu_ad_probe(tel, dm, wfs=nothing)
     return nothing
 end
 
-@inline _is_cpu_array(x) = execution_style(x) isa ScalarCPUStyle
+@inline _is_cpu_array(x) = _is_cpu_execution_style(execution_style(x))
+@inline _is_cpu_execution_style(::ScalarCPUStyle) = true
+@inline _is_cpu_execution_style(::ExecutionStyle) = false
 
 _normalize_ad_field_order(field_order::Symbol) = (field_order,)
+_normalize_ad_field_order(field_order::Tuple{Vararg{Symbol}}) = field_order
 _normalize_ad_field_order(field_order) = Tuple(Symbol.(field_order))
+
+function _has_duplicate_ad_fields(fields::Tuple)
+    @inbounds for i in eachindex(fields)
+        field = fields[i]
+        for j in 1:(i - 1)
+            fields[j] === field && return true
+        end
+    end
+    return false
+end
 
 function _validate_gaussian_dm_ad_field_order(fields::Tuple)
     isempty(fields) && throw(InvalidConfiguration("field_order must contain at least one field"))
-    length(unique(fields)) == length(fields) ||
+    !_has_duplicate_ad_fields(fields) ||
         throw(InvalidConfiguration("field_order must not contain duplicates"))
     for field in fields
         field in GAUSSIAN_DM_AD_FIELDS ||
@@ -135,7 +147,7 @@ end
 
 function _validate_misregistration_ad_field_order(fields::Tuple)
     isempty(fields) && throw(InvalidConfiguration("field_order must contain at least one field"))
-    length(unique(fields)) == length(fields) ||
+    !_has_duplicate_ad_fields(fields) ||
         throw(InvalidConfiguration("field_order must not contain duplicates"))
     for field in fields
         field in MISREGISTRATION_AD_FIELDS ||
@@ -162,10 +174,15 @@ function _gaussian_dm_mode_parameter_jacobians(tel, dm, fields::Tuple)
     T = eltype(dm.state.modes)
     n_elements, n_commands = size(dm.state.modes)
     out = [Matrix{T}(undef, n_elements, n_commands) for _ in fields]
+    base = Vector{T}(undef, length(fields))
+    values = Vector{T}(undef, n_elements)
+    jacobian = Matrix{T}(undef, n_elements, length(fields))
+    cfg = _gaussian_influence_jacobian_config(values, tel, dm, 1, fields, base)
     @inbounds for actuator_index in 1:n_commands
-        ad = gaussian_dm_influence_parameter_jacobian(tel, dm, actuator_index; field_order=fields)
+        _base_parameter_vector!(base, tel, dm, actuator_index, fields)
+        _gaussian_influence_jacobian!(values, jacobian, tel, dm, actuator_index, fields, base, cfg)
         for field_index in eachindex(fields)
-            out[field_index][:, actuator_index] .= @view ad.jacobian[:, field_index]
+            out[field_index][:, actuator_index] .= @view jacobian[:, field_index]
         end
     end
     return out
@@ -216,6 +233,11 @@ end
 function _base_parameter_vector(tel, dm, actuator_index::Int, fields::Tuple)
     T = eltype(dm.state.modes)
     params = Vector{T}(undef, length(fields))
+    return _base_parameter_vector!(params, tel, dm, actuator_index, fields)
+end
+
+function _base_parameter_vector!(params::AbstractVector, tel, dm, actuator_index::Int, fields::Tuple)
+    T = eltype(params)
     @inbounds for (idx, field) in pairs(fields)
         params[idx] = T(_base_parameter_value(tel, dm, actuator_index, field))
     end
@@ -252,10 +274,35 @@ end
     return idx === nothing ? convert(eltype(p), default) : p[idx]
 end
 
-function _gaussian_influence_vector(tel, dm, actuator_index::Int, fields::Tuple, p::AbstractVector)
+struct GaussianInfluenceADFunction{TEL,DM,F}
+    tel::TEL
+    dm::DM
+    actuator_index::Int
+    fields::F
+end
+
+@inline function (f::GaussianInfluenceADFunction)(out::AbstractVector, p::AbstractVector)
+    return _gaussian_influence_vector!(out, f.tel, f.dm, f.actuator_index, f.fields, p)
+end
+
+function _gaussian_influence_jacobian_config(values, tel, dm, actuator_index::Int, fields::Tuple, base::AbstractVector)
+    f = GaussianInfluenceADFunction(tel, dm, actuator_index, fields)
+    return ForwardDiff.JacobianConfig(f, values, base)
+end
+
+function _gaussian_influence_jacobian!(values::AbstractVector, jacobian::AbstractMatrix, tel, dm,
+    actuator_index::Int, fields::Tuple, base::AbstractVector,
+    cfg=_gaussian_influence_jacobian_config(values, tel, dm, actuator_index, fields, base))
+    f = GaussianInfluenceADFunction(tel, dm, actuator_index, fields)
+    ForwardDiff.jacobian!(jacobian, f, values, base, cfg, Val(false))
+    return values, jacobian
+end
+
+function _gaussian_influence_vector!(out::AbstractVector, tel, dm, actuator_index::Int, fields::Tuple, p::AbstractVector)
     T = eltype(p)
     n = tel.params.resolution
-    out = Vector{T}(undef, n * n)
+    length(out) == n * n ||
+        throw(DimensionMismatchError("Gaussian influence output length must match telescope resolution"))
 
     dm_topology = topology(dm)
     coords = actuator_coordinates(dm_topology)

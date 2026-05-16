@@ -136,7 +136,7 @@ function sampled_spots_peak!(wfs::ShackHartmannWFS, tel::Telescope, src::Spectra
 end
 
 function sampled_spots_peak!(wfs::ShackHartmannWFS, tel::Telescope, src::ExtendedSource)
-    ast = extended_source_asterism(src)
+    ast = _cached_extended_source_asterism(src)
     prepare_sampling!(wfs, tel, ast.sources[1])
     return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src)
 end
@@ -254,7 +254,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
 end
 
 function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Telescope, src::ExtendedSource)
-    ast = extended_source_asterism(src)
+    ast = _cached_extended_source_asterism(src)
     if length(ast.sources) == 1
         return sampled_spots_peak!(ScalarCPUStyle(), wfs, tel, ast.sources[1])
     end
@@ -262,7 +262,7 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Teles
 end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel::Telescope, src::ExtendedSource)
-    ast = extended_source_asterism(src)
+    ast = _cached_extended_source_asterism(src)
     if length(ast.sources) == 1
         return sampled_spots_peak!(style, wfs, tel, ast.sources[1])
     end
@@ -332,7 +332,7 @@ end
 
 function sampled_spots_peak!(wfs::ShackHartmannWFS, tel::Telescope, src::ExtendedSource,
     det::AbstractDetector, rng::AbstractRNG)
-    ast = extended_source_asterism(src)
+    ast = _cached_extended_source_asterism(src)
     prepare_sampling!(wfs, tel, ast.sources[1])
     return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src, det, rng)
 end
@@ -446,7 +446,7 @@ end
 
 function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Telescope, src::ExtendedSource,
     det::AbstractDetector, rng::AbstractRNG)
-    ast = extended_source_asterism(src)
+    ast = _cached_extended_source_asterism(src)
     if length(ast.sources) == 1
         return sampled_spots_peak!(ScalarCPUStyle(), wfs, tel, ast.sources[1], det, rng)
     end
@@ -455,7 +455,7 @@ end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel::Telescope, src::ExtendedSource,
     det::AbstractDetector, rng::AbstractRNG)
-    ast = extended_source_asterism(src)
+    ast = _cached_extended_source_asterism(src)
     if length(ast.sources) == 1
         return sampled_spots_peak!(style, wfs, tel, ast.sources[1], det, rng)
     end

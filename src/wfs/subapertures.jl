@@ -48,6 +48,8 @@ function SubapertureLayout(n_subap::Int, pupil_resolution::Int, diameter::Real, 
     T = promote_type(typeof(diameter), typeof(threshold))
     subap_pixels = div(pupil_resolution, n_subap)
     pitch_m = T(diameter / n_subap)
+    valid_indices_host = CartesianIndex{2}[]
+    sizehint!(valid_indices_host, length(valid_mask_host))
     return SubapertureLayout{T, typeof(valid_mask), typeof(valid_mask_host), Vector{CartesianIndex{2}}}(
         n_subap,
         subap_pixels,
@@ -55,8 +57,31 @@ function SubapertureLayout(n_subap::Int, pupil_resolution::Int, diameter::Real, 
         T(threshold),
         valid_mask,
         valid_mask_host,
-        CartesianIndex{2}[],
+        valid_indices_host,
     )
+end
+
+@inline function _copy_valid_mask_to_host!(host::Matrix{Bool}, mask::AbstractMatrix{Bool})
+    return _copy_valid_mask_to_host!(execution_style(mask), host, mask)
+end
+
+@inline function _copy_valid_mask_to_host!(::ScalarCPUStyle, host::Matrix{Bool}, mask::AbstractMatrix{Bool})
+    copyto!(host, mask)
+    return host
+end
+
+@inline function _copy_valid_mask_to_host!(::ExecutionStyle, host::Matrix{Bool}, mask::AbstractMatrix{Bool})
+    copyto!(host, Array(mask))
+    return host
+end
+
+@inline function _refresh_valid_indices_host!(layout::SubapertureLayout)
+    indices = layout.valid_indices_host
+    resize!(indices, 0)
+    @inbounds for I in CartesianIndices(layout.valid_mask_host)
+        layout.valid_mask_host[I] && push!(indices, I)
+    end
+    return indices
 end
 
 function SubapertureCalibration(reference_signal_2d::AbstractMatrix{T}, reference_signal_host::AbstractVector{T},
@@ -74,9 +99,8 @@ end
 
 function update_subaperture_layout!(layout::SubapertureLayout, pupil::AbstractMatrix{Bool})
     build_mask!(layout.valid_mask, SubapertureGridMask(threshold=layout.threshold, T=typeof(layout.threshold)), pupil)
-    copyto!(layout.valid_mask_host, Array(layout.valid_mask))
-    resize!(layout.valid_indices_host, 0)
-    append!(layout.valid_indices_host, findall(layout.valid_mask_host))
+    _copy_valid_mask_to_host!(layout.valid_mask_host, layout.valid_mask)
+    _refresh_valid_indices_host!(layout)
     return layout
 end
 
@@ -84,11 +108,13 @@ function update_subaperture_layout!(layout::SubapertureLayout, pupil::AbstractMa
     policy::GeometryValidSubapertures)
     layout.threshold = convert(typeof(layout.threshold), policy.threshold)
     build_mask!(layout.valid_mask, SubapertureGridMask(threshold=layout.threshold, T=typeof(layout.threshold)), pupil)
-    copyto!(layout.valid_mask_host, Array(layout.valid_mask))
-    resize!(layout.valid_indices_host, 0)
-    append!(layout.valid_indices_host, findall(layout.valid_mask_host))
+    _copy_valid_mask_to_host!(layout.valid_mask_host, layout.valid_mask)
+    _refresh_valid_indices_host!(layout)
     return layout
 end
+
+@inline _host_support_map(::ScalarCPUStyle, support_map::AbstractMatrix) = support_map
+@inline _host_support_map(::ExecutionStyle, support_map::AbstractMatrix) = Array(support_map)
 
 function update_subaperture_layout!(layout::SubapertureLayout, support_map::AbstractMatrix{T},
     policy::FluxThresholdValidSubapertures) where {T<:Real}
@@ -96,25 +122,26 @@ function update_subaperture_layout!(layout::SubapertureLayout, support_map::Abst
     sub = layout.subap_pixels
     size(support_map, 1) == n_sub * sub || throw(DimensionMismatchError("support map size must match subaperture layout"))
     size(support_map, 2) == n_sub * sub || throw(DimensionMismatchError("support map size must match subaperture layout"))
-    support_host = Array(support_map)
-    flux_per_subap = Matrix{Float64}(undef, n_sub, n_sub)
-    peak = 0.0
+    support_host = _host_support_map(execution_style(support_map), support_map)
+    peak = zero(eltype(support_host))
     @inbounds for i in 1:n_sub, j in 1:n_sub
         xs = (i - 1) * sub + 1
         ys = (j - 1) * sub + 1
         xe = i * sub
         ye = j * sub
         total = sum(@view support_host[xs:xe, ys:ye])
-        flux_per_subap[i, j] = total
         peak = max(peak, total)
     end
-    cutoff = convert(Float64, policy.light_ratio) * peak
+    cutoff = convert(eltype(support_host), policy.light_ratio) * peak
     @inbounds for i in 1:n_sub, j in 1:n_sub
-        layout.valid_mask_host[i, j] = flux_per_subap[i, j] >= cutoff
+        xs = (i - 1) * sub + 1
+        ys = (j - 1) * sub + 1
+        xe = i * sub
+        ye = j * sub
+        layout.valid_mask_host[i, j] = sum(@view support_host[xs:xe, ys:ye]) >= cutoff
     end
     copyto!(layout.valid_mask, layout.valid_mask_host)
-    resize!(layout.valid_indices_host, 0)
-    append!(layout.valid_indices_host, findall(layout.valid_mask_host))
+    _refresh_valid_indices_host!(layout)
     return layout
 end
 
