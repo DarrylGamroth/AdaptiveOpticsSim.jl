@@ -1,3 +1,60 @@
+function finite_difference_gaussian_dm_influence_column(tel, dm, actuator_index::Integer, field::Symbol, epsilon::Real)
+    base = gaussian_dm_influence_field_value(dm, actuator_index, field)
+    plus = gaussian_dm_influence_column_with_field(tel, dm, actuator_index, field, base + epsilon)
+    minus = gaussian_dm_influence_column_with_field(tel, dm, actuator_index, field, base - epsilon)
+    return (plus .- minus) ./ (2 * epsilon)
+end
+
+function gaussian_dm_influence_field_value(dm, actuator_index::Integer, field::Symbol)
+    coords = AdaptiveOpticsSim.actuator_coordinates(AdaptiveOpticsSim.topology(dm))
+    mis = dm.params.misregistration
+    if field === :influence_width
+        return influence_width(dm)
+    elseif field === :mechanical_coupling
+        return mechanical_coupling(dm)
+    elseif field === :actuator_x
+        return coords[1, actuator_index]
+    elseif field === :actuator_y
+        return coords[2, actuator_index]
+    elseif field === :shift_x
+        return mis.shift_x
+    elseif field === :shift_y
+        return mis.shift_y
+    elseif field === :rotation_deg
+        return rotation_deg(mis)
+    elseif field === :radial_scaling
+        return mis.radial_scaling
+    elseif field === :tangential_scaling
+        return mis.tangential_scaling
+    end
+    throw(ArgumentError("unsupported finite-difference field $(field)"))
+end
+
+function gaussian_dm_influence_column_with_field(tel, dm, actuator_index::Integer, field::Symbol, value::Real)
+    T = eltype(dm.state.modes)
+    mis = dm.params.misregistration
+    topology = AdaptiveOpticsSim.topology(dm)
+    model = influence_model(dm)
+    if field === :influence_width
+        perturbed = DeformableMirror(tel; topology=topology, influence_width=value,
+            misregistration=mis, T=T)
+    elseif field === :mechanical_coupling
+        perturbed = DeformableMirror(tel; topology=topology, mechanical_coupling=value,
+            misregistration=mis, T=T)
+    elseif field === :actuator_x || field === :actuator_y
+        coords = Matrix(AdaptiveOpticsSim.actuator_coordinates(topology))
+        coords[field === :actuator_x ? 1 : 2, actuator_index] = T(value)
+        perturbed_topology = SampledActuatorTopology(coords; T=T)
+        perturbed = DeformableMirror(tel; topology=perturbed_topology,
+            influence_width=influence_width(dm), misregistration=mis, T=T)
+    else
+        perturbed_mis = update_misregistration(mis, field, value)
+        perturbed = DeformableMirror(tel; topology=topology, influence_model=model,
+            misregistration=perturbed_mis, T=T)
+    end
+    return copy(@view perturbed.state.modes[:, actuator_index])
+end
+
 @testset "OOPAO parity knobs" begin
     tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
@@ -272,11 +329,69 @@ end
     @test est.shift_x ≈ 0.0
     @test est.shift_y ≈ 0.0
 
+    fields = collect(AdaptiveOpticsSim.MISREG_FIELDS)
+    meta_fd = AdaptiveOpticsSim.compute_meta_sensitivity_matrix(
+        tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=length(fields), field_order=fields,
+        sensitivity=:finite_difference)
+    meta_ad = AdaptiveOpticsSim.compute_meta_sensitivity_matrix(
+        tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=length(fields), field_order=fields)
+    @test meta_ad.field_order == fields
+    @test isapprox(meta_ad.calib0.D, meta_fd.calib0.D; rtol=1e-12, atol=1e-12)
+    @test isapprox(meta_ad.meta.D, meta_fd.meta.D; rtol=2e-3, atol=1e-9)
+
     sampled_topology = SampledActuatorTopology(actuator_coordinates(dm)[:, 1:2])
     measured_dm = DeformableMirror(tel; topology=sampled_topology,
         influence_model=MeasuredInfluenceFunctions(Array(dm.state.modes[:, 1:2])))
     @test_throws UnsupportedAlgorithm AdaptiveOpticsSim.compute_meta_sensitivity_matrix(
         tel, measured_dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
+    @test_throws UnsupportedAlgorithm AdaptiveOpticsSim.compute_meta_sensitivity_matrix(
+        tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2, wfs_mis_registered=true)
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.compute_meta_sensitivity_matrix(
+        tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2, wfs_mis_registered=true,
+        sensitivity=:finite_difference)
+end
+
+@testset "Gaussian DM influence AD calibration" begin
+    mis = Misregistration(shift_x=0.03, shift_y=-0.02, rotation_deg=1.5,
+        radial_scaling=1.01, tangential_scaling=0.98)
+    tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    dm = DeformableMirror(tel; n_act=3, influence_width=0.35, misregistration=mis)
+    actuator_index = 2
+    field_order = (:influence_width, :actuator_x, :actuator_y, :shift_x, :shift_y,
+        :rotation_deg, :radial_scaling, :tangential_scaling)
+
+    ad = AdaptiveOpticsSim.gaussian_dm_influence_parameter_jacobian(
+        tel, dm, actuator_index; field_order=field_order)
+    @test ad.field_order == field_order
+    @test ad.values ≈ dm.state.modes[:, actuator_index]
+    @test size(ad.jacobian) == (tel.params.resolution^2, length(field_order))
+
+    epsilons = Dict(
+        :influence_width => 1e-6,
+        :actuator_x => 1e-6,
+        :actuator_y => 1e-6,
+        :shift_x => 1e-6,
+        :shift_y => 1e-6,
+        :rotation_deg => 1e-5,
+        :radial_scaling => 1e-6,
+        :tangential_scaling => 1e-6,
+    )
+    for (idx, field) in pairs(field_order)
+        fd = finite_difference_gaussian_dm_influence_column(tel, dm, actuator_index, field, epsilons[field])
+        @test isapprox(ad.jacobian[:, idx], fd; rtol=2e-4, atol=2e-7)
+    end
+
+    coupling_dm = DeformableMirror(tel; n_act=3, mechanical_coupling=mechanical_coupling(3, 0.35),
+        misregistration=mis)
+    coupling_ad = AdaptiveOpticsSim.gaussian_dm_influence_parameter_jacobian(
+        tel, coupling_dm, actuator_index; field_order=(:mechanical_coupling,))
+    coupling_fd = finite_difference_gaussian_dm_influence_column(
+        tel, coupling_dm, actuator_index, :mechanical_coupling, 1e-6)
+    @test isapprox(coupling_ad.values, coupling_dm.state.modes[:, actuator_index]; rtol=1e-12, atol=1e-12)
+    @test isapprox(coupling_ad.jacobian[:, 1], coupling_fd; rtol=2e-4, atol=2e-7)
+
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.gaussian_dm_influence_parameter_jacobian(
+        tel, dm, actuator_index; field_order=(:influence_width, :mechanical_coupling))
 end
 
 @testset "Interface conformance" begin

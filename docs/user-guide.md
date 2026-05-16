@@ -498,6 +498,11 @@ ws = AdaptiveOpticsSim.Workspace(tel; rng=deterministic_reference_rng(0))
 sprint = AdaptiveOpticsSim.SPRINT(tel, dm, wfs, basis)
 ```
 
+On CPU, SPRINT uses ForwardDiff-backed DM misregistration sensitivity by
+default for grid-backed Gaussian mirrors. Use `sensitivity=:finite_difference`
+for validation runs, supported WFS-misregistration finite differences, or
+accelerator-backed arrays.
+
 ## Determinism
 
 - Use a fixed RNG and pass it into `advance!`, detector calls, or runtime
