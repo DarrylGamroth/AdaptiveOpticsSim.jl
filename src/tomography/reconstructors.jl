@@ -431,6 +431,71 @@ function _scaled_shifted_coords(
     return @. complex(x * scale + beta_x, y * scale + beta_y)
 end
 
+struct TomographySourceLayerGeometry{T<:AbstractFloat,M<:AbstractMatrix{T}}
+    beta_x::M
+    beta_y::M
+    scale::M
+end
+
+function _source_layer_geometry(
+    direction_vectors::AbstractMatrix{T},
+    altitude::AbstractVector{T},
+    src_height::T,
+) where {T<:AbstractFloat}
+    n_src = size(direction_vectors, 2)
+    n_layers = length(altitude)
+    beta_x = Matrix{T}(undef, n_src, n_layers)
+    beta_y = similar(beta_x)
+    scale = similar(beta_x)
+    finite_height = isfinite(src_height)
+    @inbounds for layer in 1:n_layers
+        alt = altitude[layer]
+        layer_scale = finite_height ? one(T) - alt / src_height : one(T)
+        for src in 1:n_src
+            beta_x[src, layer] = direction_vectors[1, src] * alt
+            beta_y[src, layer] = direction_vectors[2, src] * alt
+            scale[src, layer] = layer_scale
+        end
+    end
+    return TomographySourceLayerGeometry{T,typeof(beta_x)}(beta_x, beta_y, scale)
+end
+
+function _scaled_shifted_coords!(
+    out::AbstractVector{Complex{T}},
+    x::AbstractMatrix{T},
+    y::AbstractMatrix{T},
+    positions::AbstractVector{Int},
+    beta_x::T,
+    beta_y::T,
+    scale::T,
+) where {T<:AbstractFloat}
+    length(out) == length(positions) ||
+        throw(DimensionMismatchError("coordinate workspace length must match selected positions"))
+    @inbounds for k in eachindex(out, positions)
+        idx = positions[k]
+        out[k] = complex(x[idx] * scale + beta_x, y[idx] * scale + beta_y)
+    end
+    return out
+end
+
+function _add_covariance!(block::AbstractMatrix{T}, cov::AbstractMatrix{T}) where {T<:AbstractFloat}
+    axes(block) == axes(cov) ||
+        throw(DimensionMismatchError("covariance block size must match covariance workspace"))
+    @inbounds for j in axes(cov, 2), i in axes(cov, 1)
+        block[i, j] += cov[i, j]
+    end
+    return block
+end
+
+function _add_transposed_covariance!(block::AbstractMatrix{T}, cov::AbstractMatrix{T}) where {T<:AbstractFloat}
+    size(block, 1) == size(cov, 2) && size(block, 2) == size(cov, 1) ||
+        throw(DimensionMismatchError("transposed covariance block size must match covariance workspace"))
+    @inbounds for j in axes(block, 2), i in axes(block, 1)
+        block[i, j] += cov[j, i]
+    end
+    return block
+end
+
 function _scaled_shifted_coords(
     ::GPUArrayBuildBackend,
     x::AbstractMatrix{T},
@@ -732,6 +797,7 @@ function auto_correlation(
     sampling = size(grid_mask, 1)
     size(grid_mask, 2) == sampling || throw(DimensionMismatchError("grid_mask must be square"))
     mask_vec = vec(grid_mask)
+    valid_positions = findall(mask_vec)
     n_valid = count(mask_vec)
     n_gs = asterism.n_lgs
     result = zeros(T, n_gs * n_valid, n_gs * n_valid)
@@ -742,6 +808,7 @@ function auto_correlation(
     lgs_dir = lgs_directions(asterism)
     directions = direction_vectors(view(lgs_dir, :, 1), view(lgs_dir, :, 2))
     source_height = lgs_height_m(asterism, atmosphere)
+    geometry = _source_layer_geometry(directions, altitude, source_height)
     rotations, offsets_x, offsets_y = _active_guide_grid_params(
         wfs.lenslet_rotation_rad,
         view(wfs.lenslet_offset, 1, :),
@@ -757,36 +824,44 @@ function auto_correlation(
         offsets_y,
     )
 
+    iz = Vector{Complex{T}}(undef, n_valid)
+    jz = similar(iz)
+    cov = Matrix{T}(undef, n_valid, n_valid)
+    block = similar(cov)
+    cst, var_term, inv_L0 = _covariance_constants(r0, atmosphere.L0)
+
     for jgs in 1:n_gs
         for igs in 1:jgs
-            block = zeros(T, n_valid, n_valid)
+            fill!(block, zero(T))
             for layer in eachindex(altitude)
-                iz = _scaled_shifted_coords(
+                _scaled_shifted_coords!(
+                    iz,
                     @view(guide_x[:, :, igs]),
                     @view(guide_y[:, :, igs]),
-                    directions,
-                    igs,
-                    altitude,
-                    layer,
-                    source_height,
+                    valid_positions,
+                    geometry.beta_x[igs, layer],
+                    geometry.beta_y[igs, layer],
+                    geometry.scale[igs, layer],
                 )
-                jz = _scaled_shifted_coords(
+                _scaled_shifted_coords!(
+                    jz,
                     @view(guide_x[:, :, jgs]),
                     @view(guide_y[:, :, jgs]),
-                    directions,
-                    jgs,
-                    altitude,
-                    layer,
-                    source_height,
+                    valid_positions,
+                    geometry.beta_x[jgs, layer],
+                    geometry.beta_y[jgs, layer],
+                    geometry.scale[jgs, layer],
                 )
-                cov = _covariance_matrix(
-                    vec(iz),
-                    vec(jz),
-                    r0,
-                    atmosphere.L0,
+                _covariance_matrix!(
+                    cov,
+                    iz,
+                    jz,
+                    cst,
+                    var_term,
+                    inv_L0,
                     atmosphere.fractional_cn2[layer],
                 )
-                block .+= @view cov[mask_vec, mask_vec]
+                _add_covariance!(block, cov)
             end
             rows = (igs - 1) * n_valid + 1:igs * n_valid
             cols = (jgs - 1) * n_valid + 1:jgs * n_valid
@@ -904,6 +979,7 @@ function cross_correlation(
     mask = isnothing(grid_mask) ? trues(sampling, sampling) : grid_mask
     size(mask, 2) == sampling || throw(DimensionMismatchError("grid_mask must be square"))
     row_mask = vec(mask)
+    row_positions = findall(row_mask)
     n_row = count(row_mask)
     n_fit = tomography.n_fit_src^2
     n_gs = asterism.n_lgs
@@ -917,6 +993,8 @@ function cross_correlation(
     fit_zenith, fit_azimuth = optimization_geometry(tomography)
     fit_directions_xyz = direction_vectors(fit_zenith, fit_azimuth)
     source_height = lgs_height_m(asterism, atmosphere)
+    lgs_geometry = _source_layer_geometry(lgs_directions_xyz, altitude, source_height)
+    fit_geometry = _source_layer_geometry(fit_directions_xyz, altitude, tomography.fit_src_height_m)
     target_x, target_y = _guide_star_grid(sampling, support_d, zero(T), zero(T), zero(T))
     rotations, offsets_x, offsets_y = _active_guide_grid_params(
         wfs.lenslet_rotation_rad,
@@ -932,36 +1010,44 @@ function cross_correlation(
         offsets_y,
     )
 
+    iz = Vector{Complex{T}}(undef, n_row)
+    jz = similar(iz)
+    cov = Matrix{T}(undef, n_row, n_row)
+    block = similar(cov)
+    cst, var_term, inv_L0 = _covariance_constants(r0, atmosphere.L0)
+
     for fit_idx in 1:n_fit
         for gs in 1:n_gs
-            block = zeros(T, n_row, n_row)
+            fill!(block, zero(T))
             for layer in eachindex(altitude)
-                iz = _scaled_shifted_coords(
+                _scaled_shifted_coords!(
+                    iz,
                     @view(guide_x[:, :, gs]),
                     @view(guide_y[:, :, gs]),
-                    lgs_directions_xyz,
-                    gs,
-                    altitude,
-                    layer,
-                    source_height,
+                    row_positions,
+                    lgs_geometry.beta_x[gs, layer],
+                    lgs_geometry.beta_y[gs, layer],
+                    lgs_geometry.scale[gs, layer],
                 )
-                jz = _scaled_shifted_coords(
+                _scaled_shifted_coords!(
+                    jz,
                     target_x,
                     target_y,
-                    fit_directions_xyz,
-                    fit_idx,
-                    altitude,
-                    layer,
-                    tomography.fit_src_height_m,
+                    row_positions,
+                    fit_geometry.beta_x[fit_idx, layer],
+                    fit_geometry.beta_y[fit_idx, layer],
+                    fit_geometry.scale[fit_idx, layer],
                 )
-                cov = _covariance_matrix(
-                    vec(iz),
-                    vec(jz),
-                    r0,
-                    atmosphere.L0,
+                _covariance_matrix!(
+                    cov,
+                    iz,
+                    jz,
+                    cst,
+                    var_term,
+                    inv_L0,
                     atmosphere.fractional_cn2[layer],
                 )
-                block .+= transpose(@view cov[row_mask, row_mask])
+                _add_transposed_covariance!(block, cov)
             end
             cols = (gs - 1) * n_row + 1:gs * n_row
             result[fit_idx, :, cols] .= block
