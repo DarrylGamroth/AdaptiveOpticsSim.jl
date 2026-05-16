@@ -216,6 +216,7 @@ end
     lift = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=2, img_resolution=8, numerical=true)
     H = lift_interaction_matrix(lift, zeros(3), [1, 2])
     @test size(H) == (64, 2)
+    @test maximum(abs, H) > 0
     kernel = [0.0 1.0 0.0; 1.0 4.0 1.0; 0.0 1.0 0.0]
     lift_analytic = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=2,
         img_resolution=8, numerical=false, object_kernel=kernel)
