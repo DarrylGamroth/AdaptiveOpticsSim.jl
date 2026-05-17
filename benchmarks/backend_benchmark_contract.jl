@@ -7,6 +7,13 @@ using AdaptiveOpticsSim
 using BenchmarkTools
 using Random
 
+for name in names(AdaptiveOpticsSim; all=true)
+    s = String(name)
+    if Base.isidentifier(s) && !startswith(s, "#") && !isdefined(@__MODULE__, name)
+        @eval const $(name) = getfield(AdaptiveOpticsSim, $(QuoteNode(name)))
+    end
+end
+
 abstract type BenchmarkExecutionTarget end
 struct CPUBenchmarkTarget <: BenchmarkExecutionTarget end
 struct GPUBenchmarkTarget{B<:GPUBackendTag} <: BenchmarkExecutionTarget end
@@ -29,9 +36,15 @@ _high_accuracy_policy(::CPUBenchmarkTarget) = SplitGPUPrecision(Float32, Float64
 _high_accuracy_policy(::GPUBenchmarkTarget{B}) where {B<:GPUBackendTag} =
     AdaptiveOpticsSim.high_accuracy_gpu_precision_policy(B)
 
-_benchmark_backend_array(::CPUBenchmarkTarget) = Array
+_benchmark_backend_array(::CPUBenchmarkTarget) = CPUBackend()
 
-function _benchmark_backend_array(::GPUBenchmarkTarget{B}) where {B<:GPUBackendTag}
+_benchmark_backend_array(::GPUBenchmarkTarget{CUDABackendTag}) = CUDABackend()
+
+_benchmark_backend_array(::GPUBenchmarkTarget{AMDGPUBackendTag}) = AMDGPUBackend()
+
+_require_benchmark_gpu_backend(::CPUBenchmarkTarget) = nothing
+
+function _require_benchmark_gpu_backend(::GPUBenchmarkTarget{B}) where {B<:GPUBackendTag}
     AdaptiveOpticsSim.disable_scalar_backend!(B)
     BackendArray = AdaptiveOpticsSim.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
@@ -57,15 +70,16 @@ end
 function _runtime_case(target::BenchmarkExecutionTarget; resolution::Int, n_lenslets::Int, n_act::Int)
     policy = _benchmark_policy(target)
     T = AdaptiveOpticsSim.gpu_runtime_type(policy)
-    BackendArray = _benchmark_backend_array(target)
+    backend = _benchmark_backend_array(target)
+    _require_benchmark_gpu_backend(target)
     rng = runtime_rng(1)
     tel = Telescope(resolution=resolution, diameter=8.0f0, sampling_time=1.0f-3,
-        central_obstruction=0.0f0, T=T, backend=BackendArray)
+        central_obstruction=0.0f0, T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
-    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=BackendArray)
-    dm = DeformableMirror(tel; n_act=n_act, influence_width=0.3, T=T, backend=BackendArray)
-    wfs = ShackHartmannWFS(tel; n_lenslets=n_lenslets, mode=Diffractive(), T=T, backend=BackendArray)
-    sim = AOSimulation(tel, atm, src, dm, wfs)
+    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=backend)
+    dm = DeformableMirror(tel; n_act=n_act, influence_width=0.3, T=T, backend=backend)
+    wfs = ShackHartmannWFS(tel; n_lenslets=n_lenslets, mode=Diffractive(), T=T, backend=backend)
+    sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
     recon = ModalReconstructor(imat; gain=T(0.5))
     runtime = ClosedLoopRuntime(sim, recon; rng=rng)
@@ -105,7 +119,7 @@ function _tomography_case_params(target::BenchmarkExecutionTarget; n_lenslet::In
         altitude_km=TB[0.0, 10.0],
         L0=TB(25.0),
         r0_zenith=TB(0.2),
-        fractional_r0=TB[0.6, 0.4],
+        fractional_cn2=TB[0.6, 0.4],
         wavelength=TB(500e-9),
         wind_direction_deg=TB[0.0, 45.0],
         wind_speed=TB[10.0, 20.0],
@@ -131,7 +145,7 @@ function _tomography_case_params(target::BenchmarkExecutionTarget; n_lenslet::In
         altitude_km=TH[0.0, 10.0],
         L0=TH(25.0),
         r0_zenith=TH(0.2),
-        fractional_r0=TH[0.6, 0.4],
+        fractional_cn2=TH[0.6, 0.4],
         wavelength=TH(500e-9),
         wind_direction_deg=TH[0.0, 45.0],
         wind_speed=TH[10.0, 20.0],

@@ -1,10 +1,10 @@
-include(joinpath(@__DIR__, "backend_benchmark_contract.jl"))
-
 try
     using CUDA
 catch err
     error("benchmark_cuda.jl requires CUDA.jl: $(sprint(showerror, err))")
 end
+
+include(joinpath(@__DIR__, "backend_benchmark_contract.jl"))
 
 CUDA.functional() || error("benchmark_cuda.jl requires a functional CUDA driver/device")
 
