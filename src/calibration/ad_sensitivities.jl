@@ -1,17 +1,5 @@
 import ForwardDiff
 
-const GAUSSIAN_DM_AD_FIELDS = (
-    :influence_width,
-    :mechanical_coupling,
-    :actuator_x,
-    :actuator_y,
-    :shift_x,
-    :shift_y,
-    :rotation_deg,
-    :radial_scaling,
-    :tangential_scaling,
-)
-
 const MISREGISTRATION_AD_FIELDS = (
     :shift_x,
     :shift_y,
@@ -19,35 +7,6 @@ const MISREGISTRATION_AD_FIELDS = (
     :radial_scaling,
     :tangential_scaling,
 )
-
-function gaussian_dm_influence_parameter_jacobian(
-    tel::Telescope,
-    dm::DeformableMirror,
-    actuator_index::Integer;
-    field_order=(:influence_width, :actuator_x, :actuator_y, :shift_x, :shift_y,
-        :rotation_deg, :radial_scaling, :tangential_scaling),
-)
-    _require_cpu_ad_probe(tel, dm)
-    dm_topology = topology(dm)
-    model = influence_model(dm)
-    supports_dm_misregistration_identification(model, dm_topology) ||
-        throw(UnsupportedAlgorithm(
-            "Gaussian DM influence AD is supported for grid-backed Gaussian DeformableMirror models"))
-
-    coords = actuator_coordinates(dm_topology)
-    n_commands = size(coords, 2)
-    1 <= actuator_index <= n_commands ||
-        throw(DimensionMismatchError("actuator_index $(actuator_index) is outside 1:$(n_commands)"))
-
-    fields = _normalize_ad_field_order(field_order)
-    _validate_gaussian_dm_ad_field_order(fields)
-    T = eltype(dm.state.modes)
-    base = _base_parameter_vector(tel, dm, Int(actuator_index), fields)
-    values = Vector{T}(undef, tel.params.resolution * tel.params.resolution)
-    jacobian = Matrix{T}(undef, length(values), length(base))
-    _gaussian_influence_jacobian!(values, jacobian, tel, dm, Int(actuator_index), fields, base)
-    return (values=values, jacobian=jacobian, field_order=fields)
-end
 
 function _compute_meta_sensitivity_matrix_ad(tel::Telescope, dm::DeformableMirror, wfs::AbstractWFS,
     basis::AbstractMatrix; source=nothing,
@@ -130,19 +89,6 @@ function _has_duplicate_ad_fields(fields::Tuple)
         end
     end
     return false
-end
-
-function _validate_gaussian_dm_ad_field_order(fields::Tuple)
-    isempty(fields) && throw(InvalidConfiguration("field_order must contain at least one field"))
-    !_has_duplicate_ad_fields(fields) ||
-        throw(InvalidConfiguration("field_order must not contain duplicates"))
-    for field in fields
-        field in GAUSSIAN_DM_AD_FIELDS ||
-            throw(InvalidConfiguration("unsupported Gaussian DM AD field $(field)"))
-    end
-    (:influence_width in fields && :mechanical_coupling in fields) &&
-        throw(InvalidConfiguration("differentiate either influence_width or mechanical_coupling, not both"))
-    return fields
 end
 
 function _validate_misregistration_ad_field_order(fields::Tuple)
@@ -228,12 +174,6 @@ function _wfs_directional_meta_sensitivity(tel, wfs, basis, source, calib0::Abst
     end
     n_elements == length(base_vec) || throw(DimensionMismatchError("DM modes do not match telescope OPD"))
     return meta
-end
-
-function _base_parameter_vector(tel, dm, actuator_index::Int, fields::Tuple)
-    T = eltype(dm.state.modes)
-    params = Vector{T}(undef, length(fields))
-    return _base_parameter_vector!(params, tel, dm, actuator_index, fields)
 end
 
 function _base_parameter_vector!(params::AbstractVector, tel, dm, actuator_index::Int, fields::Tuple)

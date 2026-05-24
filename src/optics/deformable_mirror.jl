@@ -483,21 +483,6 @@ end
 @inline supports_dm_misregistration_identification(::GaussianInfluenceWidth, ::ActuatorGridTopology) = true
 @inline supports_dm_misregistration_identification(::GaussianMechanicalCoupling, ::ActuatorGridTopology) = true
 
-"""
-    gaussian_dm_influence_parameter_jacobian(tel, dm, actuator_index; field_order)
-
-Differentiate one sampled Gaussian DM influence function with respect to
-calibration parameters.
-
-This ForwardDiff-backed path is CPU-only and is maintained as a small-case
-correctness probe. Use the higher-level SPRINT/meta-sensitivity surface for
-the benchmarked CPU AD path, or finite differences when this probe is not the
-right accuracy/performance tradeoff.
-"""
-function gaussian_dm_influence_parameter_jacobian(args...; kwargs...)
-    throw(UnsupportedAlgorithm("gaussian_dm_influence_parameter_jacobian is supported for CPU Gaussian DeformableMirror inputs"))
-end
-
 @inline function _clear_separable_influence!(dm::DeformableMirror)
     dm.state.separable_x = nothing
     dm.state.separable_y_t = nothing

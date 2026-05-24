@@ -8,11 +8,10 @@ using BenchmarkTools
 
 const CPU_HOTPATH_CARDS = (
     ("CPU-PERF-01", "extended-source cached asterism", :extended_source_cache),
-    ("CPU-PERF-02", "ForwardDiff Gaussian influence Jacobian workspace", :gaussian_ad),
-    ("CPU-PERF-03", "Shack-Hartmann reference subtraction", :sh_reference),
-    ("CPU-PERF-04", "subaperture valid-index reuse", :subaperture_layout),
-    ("CPU-PERF-05", "VectorDelayLine ring buffer", :delay_line),
-    ("CPU-PERF-06", "composite selected apply without Set allocation", :composite_apply),
+    ("CPU-PERF-02", "Shack-Hartmann reference subtraction", :sh_reference),
+    ("CPU-PERF-03", "subaperture valid-index reuse", :subaperture_layout),
+    ("CPU-PERF-04", "VectorDelayLine ring buffer", :delay_line),
+    ("CPU-PERF-05", "composite selected apply without Set allocation", :composite_apply),
 )
 
 function configure_cpu_hotpath_benchmarks!()
@@ -33,19 +32,6 @@ function extended_source_cache_probe()
     ext = with_extended_source(src, model)
     AdaptiveOpticsSim._cached_extended_source_asterism(ext)
     return () -> AdaptiveOpticsSim._cached_extended_source_asterism(ext)
-end
-
-function gaussian_ad_probe()
-    mis = Misregistration(shift_x=0.03, shift_y=-0.02, rotation_deg=1.5,
-        radial_scaling=1.01, tangential_scaling=0.98)
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3,
-        central_obstruction=0.0)
-    dm = DeformableMirror(tel; n_act=4, influence_width=0.35, misregistration=mis)
-    fields = (:influence_width, :actuator_x, :actuator_y, :shift_x, :shift_y,
-        :rotation_deg, :radial_scaling, :tangential_scaling)
-    actuator_index = 6
-    return () -> AdaptiveOpticsSim.gaussian_dm_influence_parameter_jacobian(
-        tel, dm, actuator_index; field_order=fields)
 end
 
 function sh_reference_probe()
@@ -113,17 +99,16 @@ function run_cpu_hotpath_card_benchmarks()
     geometry_probe, flux_probe = subaperture_layout_probes()
     probes = (
         ("CPU-PERF-01", "extended_source_cache", extended_source_cache_probe()),
-        ("CPU-PERF-02", "gaussian_ad", gaussian_ad_probe()),
-        ("CPU-PERF-03", "sh_reference", sh_reference_probe()),
-        ("CPU-PERF-04a", "subaperture_geometry", geometry_probe),
-        ("CPU-PERF-04b", "subaperture_flux", flux_probe),
-        ("CPU-PERF-05", "delay_line", delay_line_probe()),
-        ("CPU-PERF-06", "composite_apply", composite_apply_probe()),
+        ("CPU-PERF-02", "sh_reference", sh_reference_probe()),
+        ("CPU-PERF-03a", "subaperture_geometry", geometry_probe),
+        ("CPU-PERF-03b", "subaperture_flux", flux_probe),
+        ("CPU-PERF-04", "delay_line", delay_line_probe()),
+        ("CPU-PERF-05", "composite_apply", composite_apply_probe()),
     )
     results = map(probe -> run_probe(probe...), probes)
     println("recommendation")
     println("  Keep the benchmarked CPU SPRINT AD path as default.")
-    println("  Keep the allocating Gaussian influence AD probe explicit unless accuracy justifies it.")
+    println("  The standalone Gaussian influence AD probe was removed because it allocated without a demonstrated benefit.")
     return results
 end
 
