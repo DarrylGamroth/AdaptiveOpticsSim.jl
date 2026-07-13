@@ -53,6 +53,19 @@ New WFS types should provide:
 The generic runtime should call WFS-owned seams rather than branching on sensor
 families directly.
 
+## Runtime Source Roles
+
+`AOSimulation` keeps WFS and science sources as separate typed roles. Extension
+code should use `wfs_source(simulation)` and `science_source(simulation)` rather
+than assuming one source serves both paths.
+
+An atmosphere with directional geometry should implement
+`propagate!(atmosphere, telescope, source)` without advancing its time state.
+The runtime advances once through the WFS path and may call source-aware
+propagation again for a distinct science path. Atmospheres without directional
+geometry inherit the source-insensitive fallback. Keep the second propagation
+allocation-free when it is part of a maintained HIL path.
+
 ## Deformable Mirrors
 
 DM implementation lives in `src/optics/deformable_mirror.jl`.

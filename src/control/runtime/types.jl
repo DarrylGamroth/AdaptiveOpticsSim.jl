@@ -32,6 +32,13 @@ struct BackendStreamExecution <: AbstractExecutionPolicy end
 struct ScientificRuntimeProfile <: AbstractRuntimeProfile end
 struct HILRuntimeProfile <: AbstractRuntimeProfile end
 
+abstract type AbstractSciencePathPlan end
+struct ReuseSensedOpticalPath <: AbstractSciencePathPlan end
+struct RepropagateScienceOpticalPath <: AbstractSciencePathPlan end
+
+@inline science_path_plan(wfs_src::AbstractSource, science_src::AbstractSource) =
+    wfs_src === science_src ? ReuseSensedOpticalPath() : RepropagateScienceOpticalPath()
+
 struct RuntimeLatencyModel
     measurement_delay_frames::Int
     readout_delay_frames::Int
@@ -162,6 +169,7 @@ mutable struct ClosedLoopRuntime{
     TEL,
     A,
     S,
+    SS,
     O,
     W,
     R,
@@ -177,6 +185,7 @@ mutable struct ClosedLoopRuntime{
     CD,
     DD,
     CL,
+    SP<:AbstractSciencePathPlan,
     T<:AbstractFloat,
     B<:AbstractArrayBackend,
 } <: AbstractControlSimulation
@@ -184,6 +193,7 @@ mutable struct ClosedLoopRuntime{
     tel::TEL
     atm::A
     src::S
+    science_src::SS
     optic::O
     wfs::W
     reconstructor::R
@@ -201,12 +211,15 @@ mutable struct ClosedLoopRuntime{
     reconstruction_delay::CD
     dm_delay::DD
     command_layout::CL
+    science_path::SP
     control_sign::T
     science_zero_padding::Int
     prepared::Bool
 end
 
-@inline backend(::ClosedLoopRuntime{<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline backend(runtime::ClosedLoopRuntime) = backend(runtime.simulation)
+@inline wfs_source(runtime::ClosedLoopRuntime) = runtime.src
+@inline science_source(runtime::ClosedLoopRuntime) = runtime.science_src
 
 """
     SimulationInterface(runtime)

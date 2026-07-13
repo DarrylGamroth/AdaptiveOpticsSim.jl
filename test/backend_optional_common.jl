@@ -827,6 +827,32 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     slopes = measure!(sh, tel, poly)
     @test slopes isa BackendArray
 
+    science_src = Source(band=:K, magnitude=1.0, coordinates=(4.0, 90.0), T=T)
+    split_dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T,
+        backend=selector)
+    split_det = Detector(noise=NoiseNone(), integration_time=one(T), qe=one(T),
+        binning=1, T=T, backend=selector)
+    split_sim = AOSimulation(tel, src, atm, split_dm, sh;
+        science_source=science_src)
+    split_runtime = AdaptiveOpticsSim.ClosedLoopRuntime(
+        split_sim,
+        NullReconstructor();
+        science_detector=split_det,
+        outputs=RuntimeOutputRequirements(
+            slopes=true,
+            wfs_pixels=false,
+            science_pixels=true,
+        ),
+        science_zero_padding=1,
+        rng=MersenneTwister(17),
+    )
+    sense!(split_runtime)
+    @test wfs_source(split_runtime) === src
+    @test science_source(split_runtime) === science_src
+    @test split_runtime.science_path isa AdaptiveOpticsSim.RepropagateScienceOpticalPath
+    @test science_frame(split_runtime) isa BackendArray
+    @test all(isfinite, Array(science_frame(split_runtime)))
+
     run_optional_backend_plan_checks(B, tel, selector)
     run_optional_composite_optic_parity(B, BackendArray)
 

@@ -69,10 +69,15 @@ end
 @inline supports_reference_signal(wfs::AbstractWFS) = !isnothing(reference_signal(wfs))
 @inline supports_camera_frame(wfs::AbstractWFS) = !isnothing(camera_frame(wfs))
 
+@inline propagate_runtime_atmosphere!(atm::AbstractAtmosphere, tel::Telescope,
+    src::AbstractSource) = propagate!(atm, tel, src)
+@inline propagate_runtime_atmosphere!(atm::AbstractAtmosphere, tel::Telescope,
+    ::Asterism) = propagate!(atm, tel)
+
 @inline function prepropagate_runtime_wfs!(wfs::AbstractWFS, atm::AbstractAtmosphere,
     tel::Telescope, optic::AbstractControllableOptic, src::AbstractSource, rng::AbstractRNG)
     advance!(atm, tel, rng)
-    propagate!(atm, tel)
+    propagate_runtime_atmosphere!(atm, tel, src)
     apply!(optic, tel, DMAdditive())
     return nothing
 end
@@ -90,6 +95,6 @@ end
 end
 
 @inline function finish_runtime_wfs_sensing!(wfs::AbstractWFS, atm::AbstractAtmosphere,
-    tel::Telescope, src::AbstractSource)
+    tel::Telescope, optic::AbstractControllableOptic, src::AbstractSource)
     return nothing
 end

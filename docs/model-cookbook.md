@@ -155,6 +155,22 @@ cmd = command(rt)
 slopes_vec = slopes(rt)
 ```
 
+The five-argument constructor uses the same source for WFS sensing and science
+capture. When those optical paths differ, attach the science source explicitly:
+
+```julia
+guide = Source(band=:R, magnitude=8.0, coordinates=(10.0, 0.0))
+science = Source(band=:K, magnitude=10.0, coordinates=(3.0, 90.0))
+sim = AOSimulation(tel, guide, atm, dm, wfs; science_source=science)
+```
+
+The runtime advances the atmosphere once, senses through `wfs_source(sim)`,
+then re-renders the existing atmosphere state through `science_source(sim)`
+before science-camera capture. No second atmosphere time step is introduced.
+An `Asterism` still shares a single pupil OPD within one WFS or science
+measurement; use separate control-loop branches when each direction must
+receive an independently rendered atmospheric path.
+
 For DM setup, the common public inputs remain:
 
 - `influence_width=...`

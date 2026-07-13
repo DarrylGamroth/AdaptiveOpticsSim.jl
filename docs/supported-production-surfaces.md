@@ -44,6 +44,7 @@ Current CPU-supported families:
 - detector-family execution on maintained detector surfaces
 - Shack-Hartmann, Pyramid, and BioEdge WFS on maintained validated surfaces
 - runtime and closed-loop execution on maintained local/runtime artifacts
+- source-aware runtime propagation with distinct WFS and science sources
 - grouped/runtime orchestration surfaces with committed validation artifacts
 
 Primary evidence:
@@ -66,6 +67,7 @@ Current AMDGPU-supported scope:
 - maintained runtime-equivalence surfaces
 - maintained high-accuracy post-command runtime-equivalence surfaces
 - maintained Shack-Hartmann exported-pixel parity surfaces
+- maintained distinct WFS/science-source runtime smoke
 - maintained composite low-order runtime surfaces
 - matched HEART RTC HIL runtime surfaces
 

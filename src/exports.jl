@@ -107,7 +107,8 @@ export reconstruct!, reconstruct
 export DiscreteIntegratorController
 
 export AbstractControlSimulation, AbstractExecutionPolicy, SimulationReadout
-export AOSimulation, SequentialExecution, ThreadedExecution, BackendStreamExecution
+export AOSimulation, wfs_source, science_source
+export SequentialExecution, ThreadedExecution, BackendStreamExecution
 export ScientificRuntimeProfile, HILRuntimeProfile, RuntimeOutputRequirements, GroupedRuntimeOutputRequirements
 export VectorDelayLine, shift_delay!
 export prepare!, prepare_runtime_wfs!

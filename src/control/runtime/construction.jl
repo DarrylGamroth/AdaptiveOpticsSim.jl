@@ -22,11 +22,13 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
     resolved_command_layout = something(command_layout, AdaptiveOpticsSim.command_layout(simulation.optic))
     resolved_command_layout.total_length == length(command) ||
         throw(InvalidConfiguration("runtime command layout total length must match the runtime command vector length"))
+    resolved_science_path = science_path_plan(wfs_source(simulation), science_source(simulation))
     runtime = ClosedLoopRuntime{
         typeof(simulation),
         typeof(simulation.tel),
         typeof(simulation.atm),
         typeof(simulation.src),
+        typeof(simulation.science_src),
         typeof(simulation.optic),
         typeof(simulation.wfs),
         typeof(reconstructor),
@@ -42,6 +44,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
         typeof(reconstruction_delay),
         typeof(dm_delay),
         typeof(resolved_command_layout),
+        typeof(resolved_science_path),
         T,
         typeof(selector),
     }(
@@ -49,6 +52,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
         simulation.tel,
         simulation.atm,
         simulation.src,
+        simulation.science_src,
         simulation.optic,
         simulation.wfs,
         reconstructor,
@@ -66,6 +70,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
         reconstruction_delay,
         dm_delay,
         resolved_command_layout,
+        resolved_science_path,
         T(control_sign),
         resolved_zero_padding,
         false,
@@ -81,6 +86,8 @@ end
 simulation_interface(runtime::ClosedLoopRuntime) = SimulationInterface(runtime)
 @inline backend(interface::SimulationInterface) = backend(interface.runtime)
 @inline backend(interface::CompositeSimulationInterface) = backend(interface.interfaces[1])
+@inline wfs_source(interface::SimulationInterface) = wfs_source(interface.runtime)
+@inline science_source(interface::SimulationInterface) = science_source(interface.runtime)
 simulation_interface(interface::SimulationInterface) = interface
 simulation_interface(interface::CompositeSimulationInterface) = interface
 

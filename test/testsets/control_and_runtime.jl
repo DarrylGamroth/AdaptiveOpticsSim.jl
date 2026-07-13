@@ -113,6 +113,7 @@ end
 @testset "AOSimulation constructors" begin
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
+    science_src = Source(band=:K, magnitude=1.0, coordinates=(3.0, 45.0))
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
     wfs = ShackHartmannWFS(tel; n_lenslets=4)
@@ -125,14 +126,21 @@ end
         optic=dm,
         sensor=wfs,
     )
+    sim_split = AOSimulation(tel, src, atm, dm, wfs;
+        science_source=science_src)
+    sim_split_positional = AOSimulation(tel, src, science_src, atm, dm, wfs)
 
     @test sim_keyword.tel === tel
     @test sim_keyword.src === src
+    @test sim_keyword.science_src === src
     @test sim_keyword.atm === atm
     @test sim_keyword.optic === dm
     @test sim_keyword.wfs === wfs
     @test backend(sim_keyword) isa CPUBackend
     @test typeof(sim_keyword) === typeof(sim_positional)
+    @test wfs_source(sim_split) === src
+    @test science_source(sim_split) === science_src
+    @test typeof(sim_split) === typeof(sim_split_positional)
 end
 
 @testset "Semantic backend descriptors" begin
@@ -616,6 +624,98 @@ end
 
 coverage_instrumented() = Base.JLOptions().code_coverage != 0
 
+@testset "Source-aware runtime optical paths" begin
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3,
+        central_obstruction=0.0)
+    wfs_src = Source(band=:I, magnitude=0.0, coordinates=(8.0, 0.0))
+    science_src = Source(band=:K, magnitude=1.0, coordinates=(8.0, 90.0))
+    atm = MultiLayerAtmosphere(tel;
+        r0=0.2,
+        L0=25.0,
+        fractional_cn2=[0.4, 0.6],
+        wind_speed=[0.0, 0.0],
+        wind_direction=[0.0, 0.0],
+        altitude=[0.0, 6000.0],
+    )
+    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
+    wfs = ShackHartmannWFS(tel; n_lenslets=4)
+    sim = AOSimulation(tel, wfs_src, atm, dm, wfs;
+        science_source=science_src)
+    det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
+        binning=1)
+    runtime = ClosedLoopRuntime(sim, NullReconstructor();
+        science_detector=det,
+        outputs=RuntimeOutputRequirements(
+            slopes=true,
+            wfs_pixels=false,
+            science_pixels=true,
+        ),
+        rng=MersenneTwister(20260713),
+    )
+
+    @test wfs_source(runtime) === wfs_src
+    @test science_source(runtime) === science_src
+    @test runtime.science_path isa AdaptiveOpticsSim.RepropagateScienceOpticalPath
+    sense!(runtime)
+
+    expected_wfs_tel = Telescope(resolution=16, diameter=8.0,
+        sampling_time=1e-3, central_obstruction=0.0)
+    propagate!(atm, expected_wfs_tel, wfs_src)
+    apply!(dm, expected_wfs_tel, DMAdditive())
+    expected_slopes = similar(runtime.slopes)
+    AdaptiveOpticsSim.geometric_slopes!(expected_slopes,
+        expected_wfs_tel.state.opd, wfs.state.valid_mask)
+    @test runtime.slopes ≈ expected_slopes
+
+    expected_science_tel = Telescope(resolution=16, diameter=8.0,
+        sampling_time=1e-3, central_obstruction=0.0)
+    propagate!(atm, expected_science_tel, science_src)
+    apply!(dm, expected_science_tel, DMAdditive())
+    @test tel.state.opd ≈ expected_science_tel.state.opd
+    @test norm(expected_science_tel.state.opd - expected_wfs_tel.state.opd) > 0
+
+    expected_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
+        binning=1)
+    expected_psf = compute_psf!(expected_science_tel, science_src;
+        zero_padding=runtime.science_zero_padding)
+    capture!(expected_det, expected_psf, science_src;
+        rng=MersenneTwister(20260713))
+    @test science_frame(runtime) ≈ output_frame(expected_det)
+
+    curvature_tel = Telescope(resolution=16, diameter=8.0,
+        sampling_time=1e-3, central_obstruction=0.0)
+    curvature_src = Source(band=:I, magnitude=0.0,
+        coordinates=(6.0, 30.0))
+    curvature_atm = MultiLayerAtmosphere(curvature_tel;
+        r0=0.2,
+        L0=25.0,
+        fractional_cn2=[1.0],
+        wind_speed=[0.0],
+        wind_direction=[0.0],
+        altitude=[5000.0],
+    )
+    curvature_dm = DeformableMirror(curvature_tel; n_act=4,
+        influence_width=0.3)
+    curvature_wfs = CurvatureWFS(curvature_tel; pupil_samples=4)
+    curvature_sim = AOSimulation(curvature_tel, curvature_src, curvature_atm,
+        curvature_dm, curvature_wfs)
+    curvature_runtime = ClosedLoopRuntime(curvature_sim, NullReconstructor();
+        outputs=RuntimeOutputRequirements(
+            slopes=true,
+            wfs_pixels=false,
+            science_pixels=false,
+        ),
+        rng=MersenneTwister(31),
+    )
+    sense!(curvature_runtime)
+    expected_curvature_tel = Telescope(resolution=16, diameter=8.0,
+        sampling_time=1e-3, central_obstruction=0.0)
+    propagate!(curvature_atm, expected_curvature_tel, curvature_src)
+    apply!(curvature_dm, expected_curvature_tel, DMAdditive())
+    @test curvature_tel.state.opd ≈ expected_curvature_tel.state.opd
+    @test all(isfinite, curvature_runtime.slopes)
+end
+
 @testset "Closed-loop runtime" begin
     rng = MersenneTwister(0)
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
@@ -634,6 +734,9 @@ coverage_instrumented() = Base.JLOptions().code_coverage != 0
     @test runtime_profile(runtime) isa ScientificRuntimeProfile
     @test runtime_latency(runtime).measurement_delay_frames == 0
     @test runtime.science_zero_padding == 2
+    @test wfs_source(runtime) === src
+    @test science_source(runtime) === src
+    @test runtime.science_path isa AdaptiveOpticsSim.ReuseSensedOpticalPath
     @test !runtime.prepared
 
     step!(runtime)

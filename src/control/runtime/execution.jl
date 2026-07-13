@@ -2,7 +2,7 @@
     wfs::AbstractWFS, src::AbstractSource, rng::AbstractRNG)
     prepropagate_runtime_wfs!(wfs, atm, tel, optic, src, rng)
     measure_runtime_wfs!(wfs, atm, tel, src, rng)
-    finish_runtime_wfs_sensing!(wfs, atm, tel, src)
+    finish_runtime_wfs_sensing!(wfs, atm, tel, optic, src)
     return nothing
 end
 
@@ -10,7 +10,7 @@ end
     wfs::AbstractWFS, src::AbstractSource, det::AbstractDetector, rng::AbstractRNG)
     prepropagate_runtime_wfs!(wfs, atm, tel, optic, src, rng)
     measure_runtime_wfs!(wfs, atm, tel, src, det, rng)
-    finish_runtime_wfs_sensing!(wfs, atm, tel, src)
+    finish_runtime_wfs_sensing!(wfs, atm, tel, optic, src)
     return nothing
 end
 
@@ -19,6 +19,25 @@ end
     psf = compute_psf!(tel, src; zero_padding=zero_padding)
     capture!(det, psf, src; rng=rng)
     return nothing
+end
+
+@inline prepare_science_path!(::ReuseSensedOpticalPath, atm::AbstractAtmosphere,
+    tel::Telescope, optic::AbstractControllableOptic, src::AbstractSource) = tel
+
+@inline function prepare_science_path!(::RepropagateScienceOpticalPath,
+    atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
+    src::AbstractSource)
+    propagate_runtime_atmosphere!(atm, tel, src)
+    apply!(optic, tel, DMAdditive())
+    return tel
+end
+
+@inline function capture_science_core!(plan::AbstractSciencePathPlan,
+    atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
+    src::AbstractSource, det::AbstractDetector, rng::AbstractRNG,
+    zero_padding::Int)
+    prepare_science_path!(plan, atm, tel, optic, src)
+    return capture_science_core!(tel, src, det, rng, zero_padding)
 end
 
 @inline function stage_sensed_slopes!(runtime::ClosedLoopRuntime)
@@ -133,7 +152,9 @@ function sense!(runtime::ClosedLoopRuntime)
         sense_core!(runtime.atm, runtime.tel, runtime.optic, runtime.wfs, runtime.src, runtime.wfs_detector, runtime.rng)
     end
     if requires_runtime_science_pixels(runtime)
-        capture_science_core!(runtime.tel, runtime.src, runtime.science_detector, runtime.rng, runtime.science_zero_padding)
+        capture_science_core!(runtime.science_path, runtime.atm, runtime.tel,
+            runtime.optic, runtime.science_src, runtime.science_detector,
+            runtime.rng, runtime.science_zero_padding)
     end
     if requires_runtime_slopes(runtime)
         stage_sensed_slopes!(runtime)

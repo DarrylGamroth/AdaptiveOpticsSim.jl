@@ -251,6 +251,9 @@ detector frame.
 - Simulation/runtime types: `AbstractControlSimulation`,
   `AbstractExecutionPolicy`, `SimulationReadout`, `AOSimulation`,
   `SequentialExecution`, `ThreadedExecution`, `BackendStreamExecution`
+- Optical-path sources: `wfs_source`, `science_source`. `AOSimulation` uses its
+  WFS source for atmosphere/WFS sensing and may carry a distinct science source
+  for science-camera propagation.
 - Runtime profiles and outputs: `ScientificRuntimeProfile`,
   `HILRuntimeProfile`, `RuntimeOutputRequirements`,
   `GroupedRuntimeOutputRequirements`

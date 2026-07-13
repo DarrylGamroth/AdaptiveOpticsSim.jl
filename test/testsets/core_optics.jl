@@ -12,7 +12,7 @@ end
 
 @testset "API export curation" begin
     exported = names(AdaptiveOpticsSim)
-    @test length(exported) <= 302
+    @test length(exported) <= 304
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
     @test Base.isexported(AdaptiveOpticsSim, :Detector)
@@ -25,6 +25,8 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :CurvatureWFS)
     @test Base.isexported(AdaptiveOpticsSim, :influence_model)
     @test Base.isexported(AdaptiveOpticsSim, :prepare_runtime_wfs!)
+    @test Base.isexported(AdaptiveOpticsSim, :wfs_source)
+    @test Base.isexported(AdaptiveOpticsSim, :science_source)
     @test Base.isexported(AdaptiveOpticsSim, :subaperture_layout)
     @test !Base.isexported(AdaptiveOpticsSim, :TelescopeParams)
     @test !Base.isexported(AdaptiveOpticsSim, :TelescopeState)

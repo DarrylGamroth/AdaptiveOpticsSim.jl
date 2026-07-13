@@ -943,7 +943,8 @@ end
 end
 
 @inline function finish_runtime_wfs_sensing!(wfs::CurvatureWFS, atm::AbstractAtmosphere,
-    tel::Telescope, src::AbstractSource)
-    tel.state.opd .+= atm.state.opd .* tel.state.pupil
+    tel::Telescope, optic::AbstractControllableOptic, src::AbstractSource)
+    propagate_runtime_atmosphere!(atm, tel, src)
+    apply!(optic, tel, DMAdditive())
     return nothing
 end

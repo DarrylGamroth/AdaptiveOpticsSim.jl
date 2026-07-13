@@ -25,6 +25,11 @@ argument provides:
 """
 abstract type AbstractAtmosphereLayer end
 
+# Atmospheres without directional layer geometry retain their ordinary
+# propagation semantics when a runtime supplies an explicit source.
+@inline propagate!(atm::AbstractAtmosphere, tel::Telescope, ::AbstractSource) =
+    propagate!(atm, tel)
+
 @inline layer_altitude(layer::AbstractAtmosphereLayer) = layer.params.altitude
 
 mutable struct AtmosphereSourceGeometryCache{T<:AbstractFloat,V<:AbstractVector{T}}
