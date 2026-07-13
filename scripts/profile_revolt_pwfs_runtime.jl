@@ -28,21 +28,17 @@ end
 function _resolve_backend(name::AbstractString)
     lowered = lowercase(name)
     if lowered == "cpu"
-        return Array, nothing, "cpu"
+        return CPUBackend(), nothing, "cpu"
     elseif lowered == "cuda"
         isdefined(Main, :CUDA) || error("profile_revolt_pwfs_runtime.jl requires CUDA.jl for backend=cuda")
         CUDA.functional() || error("profile_revolt_pwfs_runtime.jl requires a functional CUDA driver/device")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.CUDABackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.CUDABackendTag)
-        backend === nothing && error("CUDA backend array type is unavailable")
-        return backend, AdaptiveOpticsSim.CUDABackendTag, "cuda"
+        return CUDABackend(), AdaptiveOpticsSim.CUDABackendTag, "cuda"
     elseif lowered == "amdgpu"
         isdefined(Main, :AMDGPU) || error("profile_revolt_pwfs_runtime.jl requires AMDGPU.jl for backend=amdgpu")
         AMDGPU.functional() || error("profile_revolt_pwfs_runtime.jl requires a functional ROCm installation and GPU")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.AMDGPUBackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.AMDGPUBackendTag)
-        backend === nothing && error("AMDGPU backend array type is unavailable")
-        return backend, AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
+        return AMDGPUBackend(), AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
     end
     error("unsupported backend '$name'; use cpu, cuda, or amdgpu")
 end
@@ -196,7 +192,7 @@ end
 
 function run_profile(; backend_name::AbstractString="cpu", model_name::AbstractString="pwfs_unmod",
     response_name::AbstractString="default", samples::Int=4, warmup::Int=1)
-    BackendArray, backend_tag, backend_label = _resolve_backend(backend_name)
+    backend, backend_tag, backend_label = _resolve_backend(backend_name)
     cfg = _resolve_model(model_name)
     response_model, response_label = _resolve_response(response_name)
     T = Float32
@@ -208,7 +204,7 @@ function run_profile(; backend_name::AbstractString="cpu", model_name::AbstractS
         sampling_time=0.002,
         central_obstruction=0.0,
         T=T,
-        backend=BackendArray,
+        backend=backend,
     )
     src = Source(band=:R, magnitude=cfg.source_magnitude, T=T)
     calibration_source = Source(band=:R, magnitude=cfg.calibration_magnitude, T=T)
@@ -220,9 +216,9 @@ function run_profile(; backend_name::AbstractString="cpu", model_name::AbstractS
         wind_direction=T[0.0, 45.0, 90.0],
         altitude=T[0.0, 6000.0, 12000.0],
         T=T,
-        backend=BackendArray,
+        backend=backend,
     )
-    dm = DeformableMirror(tel; n_act=16, influence_width=T(0.2), T=T, backend=BackendArray)
+    dm = DeformableMirror(tel; n_act=16, influence_width=T(0.2), T=T, backend=backend)
     wfs = PyramidWFS(tel;
         pupil_samples=cfg.pupil_samples,
         threshold=T(0.1),
@@ -234,33 +230,33 @@ function run_profile(; backend_name::AbstractString="cpu", model_name::AbstractS
         psf_centering=cfg.psf_centering,
         mode=Diffractive(),
         T=T,
-        backend=BackendArray,
+        backend=backend,
     )
-    sim = AdaptiveOpticsSim.AOSimulation(tel, atm, src, dm, wfs)
+    sim = AdaptiveOpticsSim.AOSimulation(tel, src, atm, dm, wfs)
 
     wfs_detector = _detector_from_spec(cameras.ixon;
         integration_time=tel.params.sampling_time,
         response_model=response_model,
         T=T,
-        backend=BackendArray,
+        backend=backend,
     )
     gain_detector = _detector_from_spec(cameras.cs165cu;
         integration_time=tel.params.sampling_time,
         response_model=response_model,
         T=T,
-        backend=BackendArray,
+        backend=backend,
     )
     science_detector = _detector_from_spec(cameras.cred2;
         integration_time=tel.params.sampling_time,
         response_model=response_model,
         T=T,
-        backend=BackendArray,
+        backend=backend,
     )
 
     t0 = time_ns()
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
     recon = ModalReconstructor(imat; gain=T(0.5))
-    runtime = ClosedLoopRuntime(sim, recon; rng=runtime_rng(0), wfs_detector=wfs_detector)
+    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; rng=runtime_rng(0), wfs_detector=wfs_detector)
     prepare!(runtime)
     _phase_step!(runtime, backend_tag; phase_index=1)
     build_time_ns = time_ns() - t0

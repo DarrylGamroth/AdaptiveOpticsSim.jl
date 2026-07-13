@@ -408,6 +408,10 @@ need an explicit DM influence representation, `topology=...` when the actuator
 layout is not the default full square grid, and `actuator_model=...` when
 command preprocessing should model clipping or actuator health without changing
 the sampled influence basis.
+Actuator print-through is represented only when it is already present in a
+sampled influence basis supplied through `DenseInfluenceMatrix` or
+`MeasuredInfluenceFunctions`; the built-in Gaussian DM path does not add a
+separate print-through model.
 
 Use this when you care about:
 
@@ -471,6 +475,12 @@ detector family instead of the generic frame-detector surface:
 
 - `APDDetector(...)` for channel-style counting readout
 - `SPADArrayDetector(...)` for accumulated-count imaging arrays
+- `MKIDArrayDetector(...)` for accumulated-count imaging with MKID
+  energy/timing metadata and an optional meter-valued source passband
+
+MKID source filtering is applied by source-aware `capture!` and WFS/runtime
+paths that carry a source through detector capture. Matrix-only capture assumes
+the input was already spectrally filtered.
 
 Leave detector effects simple or disabled when the goal is deterministic model
 comparison rather than detector realism.

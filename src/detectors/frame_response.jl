@@ -9,21 +9,31 @@ function _apply_separable_response!(::ScalarCPUStyle, frame::AbstractMatrix, scr
     n, m = size(frame)
     radius_x = fld(length(kernel_x), 2)
     radius_y = fld(length(kernel_y), 2)
-    @inbounds for i in 1:n, j in 1:m
-        acc = zero(eltype(frame))
+    zero_t = zero(eltype(frame))
+    @inbounds for j in 1:m
+        for i in 1:n
+            scratch[i, j] = zero_t
+        end
         for kk in eachindex(kernel_x)
             jj = clamp(j + kk - radius_x - 1, 1, m)
-            acc += kernel_x[kk] * frame[i, jj]
+            weight = kernel_x[kk]
+            for i in 1:n
+                scratch[i, j] += weight * frame[i, jj]
+            end
         end
-        scratch[i, j] = acc
     end
-    @inbounds for i in 1:n, j in 1:m
-        acc = zero(eltype(frame))
-        for kk in eachindex(kernel_y)
-            ii = clamp(i + kk - radius_y - 1, 1, n)
-            acc += kernel_y[kk] * scratch[ii, j]
+    @inbounds for j in 1:m
+        for i in 1:n
+            frame[i, j] = zero_t
         end
-        frame[i, j] = acc
+        for kk in eachindex(kernel_y)
+            offset = kk - radius_y - 1
+            weight = kernel_y[kk]
+            for i in 1:n
+                ii = clamp(i + offset, 1, n)
+                frame[i, j] += weight * scratch[ii, j]
+            end
+        end
     end
     return frame
 end
@@ -47,16 +57,20 @@ function apply_response!(::ScalarCPUStyle, model::SampledFrameResponse, frame::A
     kn, km = size(model.kernel)
     radius_i = fld(kn, 2)
     radius_j = fld(km, 2)
-    @inbounds for i in 1:n, j in 1:m
-        acc = zero(eltype(frame))
-        for ki in 1:kn
-            ii = clamp(i + ki - radius_i - 1, 1, n)
-            for kj in 1:km
-                jj = clamp(j + kj - radius_j - 1, 1, m)
-                acc += model.kernel[ki, kj] * frame[ii, jj]
+    fill!(scratch, zero(eltype(scratch)))
+    @inbounds for ki in 1:kn
+        offset_i = ki - radius_i - 1
+        for kj in 1:km
+            offset_j = kj - radius_j - 1
+            weight = model.kernel[ki, kj]
+            for j in 1:m
+                jj = clamp(j + offset_j, 1, m)
+                for i in 1:n
+                    ii = clamp(i + offset_i, 1, n)
+                    scratch[i, j] += weight * frame[ii, jj]
+                end
             end
         end
-        scratch[i, j] = acc
     end
     copyto!(frame, scratch)
     return frame
@@ -114,6 +128,12 @@ function ensure_buffers!(det::Detector, n_mid::Int, m_mid::Int, n_out::Int, m_ou
     if det.state.output_buffer !== nothing && size(det.state.output_buffer) != (out_rows, out_cols)
         det.state.output_buffer = similar(det.state.output_buffer, out_rows, out_cols)
         fill!(det.state.output_buffer, zero(eltype(det.state.output_buffer)))
+    end
+    if det.state.output_buffer_host !== nothing &&
+        size(det.state.output_buffer_host) != (out_rows, out_cols)
+        det.state.output_buffer_host = similar(det.state.output_buffer_host,
+            out_rows, out_cols)
+        fill!(det.state.output_buffer_host, zero(eltype(det.state.output_buffer_host)))
     end
     return det
 end

@@ -108,7 +108,14 @@ counts = output_frame(spad)
 ```
 
 Use `APDDetector(...)` for channel-style counting readout and
-`SPADArrayDetector(...)` for accumulated-count imaging arrays.
+`SPADArrayDetector(...)` for accumulated-count imaging arrays. Use
+`MKIDArrayDetector(...)` when the downstream HIL boundary should receive an
+accumulated photon-count image plus MKID energy-resolution and timing metadata,
+rather than a frame-detector readout or a per-photon event stream. Configure an
+inclusive passband in meters with
+`MKIDArraySensor(wavelength_range_m=(0.8e-6, 1.4e-6))` and pass the source to
+`capture!` when that passband should be applied. A matrix-only capture is
+treated as already spectrally filtered.
 
 ## Recipe 4: Closed-Loop AO Model
 
@@ -184,6 +191,10 @@ dm = DeformableMirror(
 Keep external file-format conversion outside core. Convert vendor artifacts such
 as FITS influence files into a package-native sampled topology plus sampled
 influence basis first, then construct the DM from those native objects.
+Actuator print-through is currently supported through this measured/sampled
+influence path: include the print-through structure in the columns passed to
+`DenseInfluenceMatrix` or `MeasuredInfluenceFunctions`. The built-in Gaussian
+DM models do not add a separate analytic print-through term.
 
 Use this pattern when you need:
 
@@ -394,15 +405,15 @@ Use this pattern when you need:
 
 ## Recipe 6: GPU HIL Runtime
 
-Use this when the plant should run on CUDA or AMDGPU and the external
+Use this when the plant should run on AMDGPU and the external
 controller still talks to the same HIL runtime boundary.
 
 ```julia
 using AdaptiveOpticsSim
-using CUDA
+using AMDGPU
 using Random
 
-const GPU = CUDABackend()
+const GPU = AMDGPUBackend()
 
 # Choose backend and precision once near the top of the script.
 tel = Telescope(
@@ -470,7 +481,8 @@ science_host = Array(science_img)
 
 Notes:
 
-- Replace `CUDABackend()` with `AMDGPUBackend()` for the AMDGPU path.
+- The in-tree CUDA selector and extension are retained, but CUDA is currently
+  unverified because no CUDA validation device is available.
 - Keep `backend=GPU` on the long-lived plant objects so runtime buffers stay on
   device.
 - If you need a GPU-built internal reconstructor as well, build that
@@ -484,7 +496,7 @@ Use this pattern when you need:
 
 - external-control / HIL semantics on GPU
 - backend-native WFS and science exports
-- realistic CUDA or AMDGPU runtime profiling
+- realistic AMDGPU runtime profiling
 - plant models with several controllable surfaces on one RTC boundary
 
 ## Recipe 7: Advanced Direct Runtime Interface
@@ -617,7 +629,7 @@ For repeated HIL use, keep the integration seam explicit:
 GPU variant:
 
 ```julia
-using CUDA
+using AMDGPU
 
 proper_ctx = Proper.RunContext(typeof(sim.tel.state.opd))
 science_model_gpu = prepare_model(

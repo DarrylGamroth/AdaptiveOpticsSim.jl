@@ -146,13 +146,14 @@ function _batched_sensor_statistics!(sensor::EMCCDSensor, det::Detector, cube::A
     return cube
 end
 
-function _batched_pre_readout_gain!(sensor::EMCCDSensor, det::Detector, cube::AbstractArray, rng::AbstractRNG)
-    return _batched_pre_readout_gain!(sensor.output_path, sensor, det, cube, rng)
+function _batched_pre_readout_gain!(sensor::EMCCDSensor, det::Detector, cube::AbstractArray,
+    scratch::AbstractArray, rng::AbstractRNG)
+    return _batched_pre_readout_gain!(sensor.output_path, sensor, det, cube, scratch, rng)
 end
 
-function _batched_pre_readout_gain!(::EMOutput, sensor::EMCCDSensor, det::Detector, cube::AbstractArray, rng::AbstractRNG)
+function _batched_pre_readout_gain!(::EMOutput, sensor::EMCCDSensor, det::Detector,
+    cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
     cube .*= det.params.gain
-    scratch = similar(cube)
     if is_excess_noise_model(sensor.multiplication_model)
         _batched_avalanche_excess_noise!(sensor.excess_noise_factor, cube, scratch, rng)
         return cube
@@ -166,7 +167,8 @@ function _batched_pre_readout_gain!(::EMOutput, sensor::EMCCDSensor, det::Detect
     return cube
 end
 
-_batched_pre_readout_gain!(::ConventionalOutput, sensor::EMCCDSensor, det::Detector, cube::AbstractArray, rng::AbstractRNG) = cube
+_batched_pre_readout_gain!(::ConventionalOutput, sensor::EMCCDSensor, det::Detector,
+    cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
 
 function _batched_post_readout_gain!(sensor::EMCCDSensor, det::Detector, cube::AbstractArray)
     return _batched_emccd_operating_mode_output!(sensor.operating_mode, sensor, det, cube)

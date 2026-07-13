@@ -569,6 +569,19 @@
     @test fowler_meta.signal_cube_reads == 8
     @test detector_combined_frame(det_saphira_fowler) ≈
         detector_signal_frame(det_saphira_fowler) .- detector_reference_frame(det_saphira_fowler)
+    multiread_noise_fixture = zeros(64, 64)
+    single_std = std(vec(copy(capture!(det_saphira_single, multiread_noise_fixture;
+        rng=MersenneTwister(160)))))
+    ndr_std = std(vec(copy(capture!(det_saphira_ndr, multiread_noise_fixture;
+        rng=MersenneTwister(160)))))
+    cds_std = std(vec(copy(capture!(det_saphira_cds, multiread_noise_fixture;
+        rng=MersenneTwister(160)))))
+    fowler_std = std(vec(copy(capture!(det_saphira_fowler, multiread_noise_fixture;
+        rng=MersenneTwister(160)))))
+    @test isapprox(single_std, 4.0; rtol=0.15)
+    @test isapprox(ndr_std, 2.0; rtol=0.15)
+    @test isapprox(cds_std, 4.0 * sqrt(2.0); rtol=0.15)
+    @test isapprox(fowler_std, 2.0; rtol=0.15)
     det_saphira_timed_single = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         dark_current=1000.0, gain=1.0, sensor=HgCdTeAvalancheArraySensor(read_time=1.0))
     frame_saphira_timed_single = copy(capture!(det_saphira_timed_single, zero_psf; rng=MersenneTwister(17)))
@@ -765,7 +778,16 @@
     @test spad_crosstalk_out[2, 1] ≈ 1.0
     @test spad_crosstalk_out[2, 3] ≈ 1.0
     @test spad_crosstalk_out[3, 2] ≈ 1.0
+    @test sum(spad_crosstalk_out) ≈ sum(spad_crosstalk_in)
     @test supports_channel_crosstalk(spad_crosstalk)
+
+    spad_single = SPADArrayDetector(
+        integration_time=1.0,
+        noise=NoiseNone(),
+        sensor=SPADArraySensor(pde=1.0, dark_count_rate=0.0, fill_factor=1.0,
+            correlation_model=ChannelCrosstalkModel(0.4)),
+    )
+    @test capture!(spad_single, fill(10.0, 1, 1), MersenneTwister(9)) == fill(10.0, 1, 1)
 
     spad_dynamic = SPADArrayDetector(
         integration_time=1.0,
@@ -785,6 +807,94 @@
     @test_throws InvalidConfiguration SPADArraySensor(dark_count_rate=-1.0)
     @test_throws InvalidConfiguration SPADArraySensor(fill_factor=0.0)
     @test_throws InvalidConfiguration SPADArrayDetector(noise=NoiseReadout(1.0))
+
+    mkid_sensor = MKIDArraySensor(qe=0.7, dark_count_rate=0.0, fill_factor=0.9,
+        energy_resolution=12.0, timing_jitter_s=2e-6, wavelength_range_m=(0.8e-6, 1.4e-6))
+    mkid = MKIDArrayDetector(integration_time=2.0, noise=NoiseNone(), sensor=mkid_sensor,
+        output_type=UInt16)
+    mkid_out = capture!(mkid, fill(10.0, 2, 8); rng=MersenneTwister(9))
+    @test mkid_out == fill(UInt16(13), 2, 8)
+    @test output_frame(mkid) === mkid_out
+    @test supports_photon_number_resolving(mkid.params.sensor)
+    @test supports_energy_resolving(mkid.params.sensor)
+    @test !supports_dead_time(mkid)
+    mkid_meta = detector_export_metadata(mkid)
+    @test mkid_meta isa CountingDetectorExportMetadata
+    @test mkid_meta.sensor == :mkid_array
+    @test mkid_meta.qe == 0.7
+    @test mkid_meta.fill_factor == 0.9
+    @test mkid_meta.energy_resolution == 12.0
+    @test mkid_meta.timing_jitter_s == 2e-6
+    @test mkid_meta.wavelength_min_m == 0.8e-6
+    @test mkid_meta.wavelength_max_m == 1.4e-6
+    @test mkid_meta.readout.output_size == (2, 8)
+    @test mkid_meta.readout.n_channels == 16
+
+    mkid_band = MKIDArrayDetector(
+        integration_time=1.0,
+        noise=NoiseNone(),
+        sensor=MKIDArraySensor(qe=1.0, dark_count_rate=0.0, fill_factor=1.0,
+            wavelength_range_m=(0.8e-6, 1.4e-6)),
+    )
+    inside_band = Source(band=:custom, wavelength=1.0e-6)
+    outside_band = Source(band=:custom, wavelength=0.55e-6)
+    @test capture!(mkid_band, fill(2.0, 2, 2), inside_band, MersenneTwister(10)) == fill(2.0, 2, 2)
+    @test capture!(mkid_band, fill(2.0, 2, 2),
+        Source(band=:custom, wavelength=0.8e-6), MersenneTwister(10)) == fill(2.0, 2, 2)
+    @test capture!(mkid_band, fill(2.0, 2, 2),
+        Source(band=:custom, wavelength=1.4e-6), MersenneTwister(10)) == fill(2.0, 2, 2)
+    @test capture!(mkid_band, fill(2.0, 2, 2), outside_band, MersenneTwister(10)) == zeros(2, 2)
+    spectral_band = with_spectrum(
+        inside_band,
+        SpectralBundle([0.6e-6, 1.0e-6, 1.6e-6], [0.2, 0.3, 0.5]),
+    )
+    @test capture!(mkid_band, fill(10.0, 2, 2), spectral_band, MersenneTwister(10)) ≈ fill(3.0, 2, 2)
+
+    mkid_dead = MKIDArrayDetector(
+        integration_time=1.0,
+        noise=NoiseNone(),
+        sensor=MKIDArraySensor(qe=1.0, dark_count_rate=0.0, fill_factor=1.0,
+            dead_time_model=ParalyzableDeadTime(0.5)),
+    )
+    @test capture!(mkid_dead, fill(4.0, 2, 8); rng=MersenneTwister(9)) ≈ fill(4.0 * exp(-2.0), 2, 8)
+    @test supports_dead_time(mkid_dead)
+    @test supports_paralyzable_dead_time(mkid_dead)
+
+    mkid_gate = MKIDArrayDetector(
+        integration_time=1.0,
+        noise=NoiseNone(),
+        gate_model=DutyCycleGate(0.25),
+        sensor=MKIDArraySensor(qe=1.0, dark_count_rate=0.0, fill_factor=1.0),
+    )
+    @test capture!(mkid_gate, fill(8.0, 2, 8); rng=MersenneTwister(9)) == fill(2.0, 2, 8)
+    @test supports_counting_gating(mkid_gate)
+
+    @test_throws InvalidConfiguration MKIDArraySensor(qe=1.5)
+    @test_throws InvalidConfiguration MKIDArraySensor(dark_count_rate=-1.0)
+    @test_throws InvalidConfiguration MKIDArraySensor(fill_factor=0.0)
+    @test_throws InvalidConfiguration MKIDArraySensor(energy_resolution=0.0)
+    @test_throws InvalidConfiguration MKIDArraySensor(timing_jitter_s=-1.0)
+    @test_throws InvalidConfiguration MKIDArraySensor(wavelength_range_m=(1.4e-6, 0.8e-6))
+    @test_throws InvalidConfiguration MKIDArraySensor(wavelength_range_m=(NaN, 1.4e-6))
+    @test_throws InvalidConfiguration MKIDArraySensor(energy_resolution=Inf)
+    @test_throws InvalidConfiguration MKIDArraySensor(timing_jitter_s=NaN)
+    @test_throws InvalidConfiguration MKIDArrayDetector(noise=NoiseReadout(1.0))
+
+    detector_artifact_path = normpath(joinpath(@__DIR__, "..", "..", "benchmarks", "results",
+        "detectors", "2026-07-12-detector-mkid-validation.toml"))
+    @test isfile(detector_artifact_path)
+    detector_artifact = TOML.parsefile(detector_artifact_path)
+    @test all(values(detector_artifact["interpretation"]))
+    @test issubset(Set(["apd", "spad_array", "mkid_array"]),
+        Set(detector_artifact["scope"]["families"]))
+    detector_manifest = TOML.parsefile(joinpath(dirname(detector_artifact_path),
+        "manifest.toml"))
+    detector_entries = Dict(entry["id"] => entry for entry in
+        detector_manifest["artifacts"])
+    @test detector_entries["DET-VAL-2026-07-12"]["status"] == "active"
+    @test detector_entries["DET-VAL-2026-04-23"]["status"] == "superseded"
+    @test detector_entries["DET-VAL-2026-04-23"]["superseded_by"] ==
+        "DET-VAL-2026-07-12"
 
     det_mtf = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         response_model=GaussianPixelResponse(response_width_px=0.75))

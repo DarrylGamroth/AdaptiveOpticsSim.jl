@@ -115,15 +115,19 @@ Atmosphere implementations are expected to mutate preallocated state in
 The normal DM constructor supports concise Gaussian keywords. Use explicit
 topology, influence, and actuator-model objects when modeling measured
 influence functions, non-square actuator layouts, clipping, or actuator health.
+Actuator print-through is not a separate analytic DM model today; represent it
+through `DenseInfluenceMatrix` or `MeasuredInfluenceFunctions` when the sampled
+influence basis already includes the print-through structure.
 
 ## Detectors
 
-- Detector types: `Detector`, `APDDetector`, `SPADArrayDetector`
+- Detector types: `Detector`, `APDDetector`, `SPADArrayDetector`,
+  `MKIDArrayDetector`
 - Noise: `NoiseModel`, `NoiseNone`, `NoisePhoton`, `NoiseReadout`,
   `NoisePhotonReadout`
 - Sensor families: `SensorType`, `CCDSensor`, `CMOSSensor`, `EMCCDSensor`,
   `QCMOSSensor`, `InGaAsSensor`, `HgCdTeAvalancheArraySensor`, `APDSensor`,
-  `SPADArraySensor`
+  `SPADArraySensor`, `MKIDArraySensor`
 - EMCCD modes and helpers: `LinearEMMode`, `PhotonCountingEMMode`,
   `EMOutput`, `ConventionalOutput`, `emccd_snr`
 - qCMOS camera presets: `ORCAQuest`, `ORCAQuest2`, `ORCAQuestIQ`,
@@ -175,6 +179,17 @@ capture uses the scalar `params.qe` value, which is the supplied scalar or the
 peak sampled QE. Source-aware capture, `capture!(det, image, src; rng=...)`,
 evaluates the QE model at `wavelength(src)`. For `SpectralSource`, it uses the
 flux-weighted effective QE over the spectral bundle.
+
+`MKIDArrayDetector` is the maintained MKID surface for accumulated counting-array
+HIL use. It models photon-counting output with quantum efficiency, fill factor,
+dark count rate, optional counting dead time/correlation models, and exported
+energy-resolution and timing-jitter metadata. `energy_resolution` is the
+dimensionless resolving power `E/ΔE`, and `timing_jitter_s` is in seconds.
+Configure its optional inclusive passband in meters with
+`wavelength_range_m=(minimum, maximum)`. Source-aware capture applies that
+passband, including weighted `SpectralSource` bundles; matrix-only capture
+assumes spectrally prefiltered input. The current model does not emit per-photon
+timestamp/energy event lists.
 
 `QCMOSSensor` models Hamamatsu ORCA-Quest-family quantitative CMOS cameras as a
 frame-sensor family on the normal `Detector` path. The built-in ORCA-Quest

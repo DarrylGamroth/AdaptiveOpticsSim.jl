@@ -173,7 +173,31 @@ function _build_pyramid_mask!(style::AcceleratorStyle, mask::AbstractMatrix{Comp
     return mask
 end
 
-function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::Telescope, src::AbstractSource) where {T<:AbstractFloat}
+function accumulate_pyramid_focal_intensity!(out::AbstractMatrix, wfs::PyramidWFS)
+    if wfs.params.psf_centering
+        @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.phasor
+        execute_fft_plan!(wfs.state.focal_field, wfs.state.fft_plan)
+        @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.pyramid_mask
+        copyto!(wfs.state.pupil_field, wfs.state.focal_field)
+        execute_fft_plan!(wfs.state.pupil_field, wfs.state.ifft_plan)
+    else
+        execute_fft_plan!(wfs.state.focal_field, wfs.state.fft_plan)
+        fftshift2d!(wfs.state.pupil_field, wfs.state.focal_field)
+        @. wfs.state.pupil_field = wfs.state.pupil_field * wfs.state.pyramid_mask
+        execute_fft_plan!(wfs.state.pupil_field, wfs.state.ifft_plan)
+    end
+    @. wfs.state.temp = abs2(wfs.state.pupil_field)
+    out .+= wfs.state.temp
+    return out
+end
+
+function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS,
+    tel::Telescope, src::AbstractSource) where {T<:AbstractFloat}
+    return pyramid_intensity_core!(execution_style(out), out, wfs, tel, src)
+end
+
+function pyramid_intensity_core!(::ScalarCPUStyle, out::AbstractMatrix{T}, wfs::PyramidWFS,
+    tel::Telescope, src::AbstractSource) where {T<:AbstractFloat}
     prepare_pyramid_sampling!(wfs, tel)
     n = tel.params.resolution
     pad = size(wfs.state.field, 1)
@@ -182,7 +206,30 @@ function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::T
     opd_to_cycles = T(2) / wavelength(src)
     amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2 /
         wfs.params.modulation_points))
-    fft_scale2 = inv(T(pad) * T(pad))
+
+    fill!(out, zero(T))
+    fill!(wfs.state.field, zero(eltype(wfs.state.field)))
+    @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * tel.state.pupil *
+        cispi(opd_to_cycles * tel.state.opd)
+    for p in 1:wfs.params.modulation_points
+        copyto!(wfs.state.focal_field, wfs.state.field)
+        @views @. wfs.state.focal_field[ox+1:ox+n, oy+1:oy+n] *=
+            wfs.state.modulation_phases[:, :, p]
+        accumulate_pyramid_focal_intensity!(out, wfs)
+    end
+    return out
+end
+
+function pyramid_intensity_core!(::AcceleratorStyle, out::AbstractMatrix{T}, wfs::PyramidWFS,
+    tel::Telescope, src::AbstractSource) where {T<:AbstractFloat}
+    prepare_pyramid_sampling!(wfs, tel)
+    n = tel.params.resolution
+    pad = size(wfs.state.field, 1)
+    ox = div(pad - n, 2)
+    oy = div(pad - n, 2)
+    opd_to_cycles = T(2) / wavelength(src)
+    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2 /
+        wfs.params.modulation_points))
 
     fill!(out, zero(T))
     for p in 1:wfs.params.modulation_points
@@ -190,20 +237,7 @@ function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel::T
         @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * tel.state.pupil *
             wfs.state.modulation_phases[:, :, p] * cispi(opd_to_cycles * tel.state.opd)
         copyto!(wfs.state.focal_field, wfs.state.field)
-        if wfs.params.psf_centering
-            @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.phasor
-            execute_fft_plan!(wfs.state.focal_field, wfs.state.fft_plan)
-            @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.pyramid_mask
-            copyto!(wfs.state.pupil_field, wfs.state.focal_field)
-            execute_fft_plan!(wfs.state.pupil_field, wfs.state.ifft_plan)
-        else
-            execute_fft_plan!(wfs.state.focal_field, wfs.state.fft_plan)
-            fftshift2d!(wfs.state.pupil_field, wfs.state.focal_field)
-            @. wfs.state.pupil_field = wfs.state.pupil_field * wfs.state.pyramid_mask
-            execute_fft_plan!(wfs.state.pupil_field, wfs.state.ifft_plan)
-        end
-        @. wfs.state.temp = abs2(wfs.state.pupil_field)
-        out .+= wfs.state.temp
+        accumulate_pyramid_focal_intensity!(out, wfs)
     end
     return out
 end

@@ -213,7 +213,7 @@ sensitivities, and the weak-mode mask used later when converting sensitivities
 into optical-gain estimates.
 """
 function calibrate!(gsc::GainSensingCamera, frame::AbstractMatrix; n_jobs::Int=10)
-    total = sum(frame)
+    total = backend_sum_value(frame)
     if total <= 0
         throw(InvalidConfiguration("frame sum must be > 0 for calibration"))
     end
@@ -257,7 +257,7 @@ function compute_optical_gains!(gsc::GainSensingCamera, frame::AbstractMatrix)
     ir_calib === nothing && throw(InvalidConfiguration("GainSensingCamera calibration IR is not available"))
     sensi_calib = gsc.sensi_calib
     sensi_calib === nothing && throw(InvalidConfiguration("GainSensingCamera calibration sensitivity is not available"))
-    total = sum(frame)
+    total = backend_sum_value(frame)
     if total <= 0
         throw(InvalidConfiguration("frame sum must be > 0 for optical gain computation"))
     end

@@ -8,6 +8,9 @@ using Statistics
 using Tables
 using TOML
 
+BLAS.set_num_threads(1)
+AdaptiveOpticsSim.set_fft_provider_threads!(1)
+
 # The package exports only the user-facing API. The tests intentionally exercise
 # internal extension seams too, so make those names available without expanding
 # the public export list.
@@ -340,7 +343,6 @@ end
 @testset "Aqua" begin
     Aqua.test_all(
         AdaptiveOpticsSim;
-        ambiguities=false,
         undocumented_names=false,
     )
 end

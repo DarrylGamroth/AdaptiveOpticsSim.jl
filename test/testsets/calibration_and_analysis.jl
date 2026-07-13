@@ -258,8 +258,10 @@ end
         approx = AdaptiveOpticsSim._kv56_scalar(z)
         scaled_ref = z^(5 / 6) * ref
         scaled_approx = AdaptiveOpticsSim._scaled_kv56_scalar(z)
+        scaled_cpu = AdaptiveOpticsSim._scaled_kv56_cpu(z)
         @test isapprox(real(approx), ref; rtol=2e-4, atol=1e-10)
         @test isapprox(scaled_approx, scaled_ref; rtol=1e-7, atol=1e-12)
+        @test isapprox(scaled_cpu, scaled_ref; rtol=8eps(Float64), atol=1e-12)
     end
 end
 
@@ -304,6 +306,8 @@ end
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     det = Detector(noise=NoiseNone())
     apd = APDDetector(noise=NoisePhoton())
+    spad = SPADArrayDetector(noise=NoisePhoton())
+    mkid = MKIDArrayDetector(noise=NoisePhoton())
     psf = fill(1.0, 8, 8)
     opd_map = OPDMap(fill(0.1, size(tel.state.opd)))
     ncpa = NCPA(tel, dm, atm; coefficients=[0.01, -0.02])
@@ -359,6 +363,9 @@ end
     @test AdaptiveOpticsSim.readout_correction_symbol(ReferenceColumnCommonModeCorrection()) == :reference_column_common_mode
     @test AdaptiveOpticsSim.readout_correction_symbol(ReferenceOutputCommonModeCorrection(4)) == :reference_output_common_mode
     @test APDSensor <: CountingSensorType
+    @test SPADArraySensorType <: CountingSensorType
+    @test MKIDArraySensorType <: CountingSensorType
+    @test supports_energy_resolving(mkid.params.sensor)
     @test curv_count.params.readout_model isa CurvatureCountingReadout
 
     # IF-SRC
@@ -406,6 +413,9 @@ end
     assert_dm_interface(dm, tel)
     # IF-DET
     assert_detector_interface(det, psf)
+    assert_detector_interface(apd, psf)
+    assert_detector_interface(spad, psf)
+    assert_detector_interface(mkid, psf)
     # IF-OPT
     assert_optical_element_interface(opd_map, tel)
     assert_optical_element_interface(ncpa, tel)

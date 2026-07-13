@@ -27,7 +27,6 @@ To archive an operational validation run with dated logs and metadata:
 
 ```bash
 ./scripts/archive_release_validation.sh amdgpu
-./scripts/archive_release_validation.sh cuda spiders
 ```
 
 By default:
@@ -97,6 +96,11 @@ in the root package environment. The archived `cuda` track defaults to
 backend-only validation by setting
 `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
 
+The CUDA track is retained for future hardware restoration, but there is no
+current CUDA validation host. It is not part of the present production support
+claim and archived CUDA results must be treated as historical until this target
+passes again on real hardware.
+
 ### AMDGPU
 
 Enabled with:
@@ -160,8 +164,10 @@ needs the maintained scientist-owned HEART boundary artifact refreshed.
 Before a release or production handoff:
 
 1. CPU validation must pass.
-2. CUDA validation must pass if CUDA is in the supported delivery scope.
-3. AMDGPU validation must pass if AMDGPU is in the supported delivery scope.
+2. AMDGPU validation must pass because it is the currently supported GPU
+   delivery scope.
+3. CUDA validation must pass on real hardware before CUDA can be returned to
+   the supported delivery scope.
 4. Cross-package HEART comparison should be rerun when external equivalence
    claims are part of the release story.
 5. Scientist-owned HEART truth should be rerun when boundary-truth claims are

@@ -90,7 +90,9 @@ function apply_post_readout_gain!(::HgCdTeAvalancheArraySensor, det::Detector)
     return det.state.frame
 end
 
-_batched_pre_readout_gain!(sensor::HgCdTeAvalancheArraySensor, det::Detector, cube::AbstractArray, rng::AbstractRNG) = (cube .*= sensor.avalanche_gain; cube)
+_batched_pre_readout_gain!(sensor::HgCdTeAvalancheArraySensor, det::Detector,
+    cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) =
+    (cube .*= sensor.avalanche_gain; cube)
 
 function _batched_sensor_statistics!(sensor::HgCdTeAvalancheArraySensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
     rate = effective_glow_rate(det) * effective_sensor_glow_time(sensor, det.params.integration_time)
@@ -107,8 +109,8 @@ _batched_post_readout_gain!(::HgCdTeAvalancheArraySensor, det::Detector, cube::A
 finalize_readout_products!(sensor::HgCdTeAvalancheArraySensor, det::Detector, rng::AbstractRNG, exposure_time::Real) =
     finalize_multi_read_readout_products!(sensor, det, rng)
 
-function finalize_capture!(det::Detector{N,<:DetectorParams{T,<:HgCdTeAvalancheArraySensor,<:Any,<:Any,<:Any,<:Any,<:Any},S,BF,BM},
-    rng::AbstractRNG, exposure_time::Real) where {N,T,S,BF,BM}
+function _finalize_capture!(::HgCdTeAvalancheArraySensorType, det::Detector,
+    rng::AbstractRNG, exposure_time::Real)
     apply_dark_current!(det, rng, exposure_time)
     apply_saturation!(det)
     apply_sensor_statistics!(det.params.sensor, det, rng)

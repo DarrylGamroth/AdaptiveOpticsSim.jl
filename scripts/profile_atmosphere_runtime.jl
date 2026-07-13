@@ -17,21 +17,17 @@ end
 function _resolve_backend(name::AbstractString)
     lowered = lowercase(name)
     if lowered == "cpu"
-        return Array, nothing, "cpu"
+        return CPUBackend(), nothing, "cpu"
     elseif lowered == "cuda"
         isdefined(Main, :CUDA) || error("profile_atmosphere_runtime.jl requires CUDA.jl for backend=cuda")
         CUDA.functional() || error("profile_atmosphere_runtime.jl requires a functional CUDA driver/device")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.CUDABackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.CUDABackendTag)
-        backend === nothing && error("CUDA backend array type is unavailable")
-        return backend, AdaptiveOpticsSim.CUDABackendTag, "cuda"
+        return CUDABackend(), AdaptiveOpticsSim.CUDABackendTag, "cuda"
     elseif lowered == "amdgpu"
         isdefined(Main, :AMDGPU) || error("profile_atmosphere_runtime.jl requires AMDGPU.jl for backend=amdgpu")
         AMDGPU.functional() || error("profile_atmosphere_runtime.jl requires a functional ROCm installation and GPU")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.AMDGPUBackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.AMDGPUBackendTag)
-        backend === nothing && error("AMDGPU backend array type is unavailable")
-        return backend, AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
+        return AMDGPUBackend(), AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
     end
     error("unsupported backend '$name'; use cpu, cuda, or amdgpu")
 end
@@ -127,7 +123,7 @@ function _step_with_sync!(atm, tel, src, backend_tag, rng)
     return tel.state.opd
 end
 
-function _benchmark_model(model_name::Symbol, tel, src, backend_tag, BackendArray, cfg, T)
+function _benchmark_model(model_name::Symbol, tel, src, backend_tag, backend, cfg, T)
     rng_build = MersenneTwister(1)
     rng_step = MersenneTwister(2)
     t0 = time_ns()
@@ -140,7 +136,7 @@ function _benchmark_model(model_name::Symbol, tel, src, backend_tag, BackendArra
             wind_direction=cfg.wind_direction,
             altitude=cfg.altitude,
             T=T,
-            backend=BackendArray,
+            backend=backend,
         )
     elseif model_name === :infinite
         InfiniteMultiLayerAtmosphere(tel;
@@ -153,7 +149,7 @@ function _benchmark_model(model_name::Symbol, tel, src, backend_tag, BackendArra
             screen_resolution=cfg.screen_resolution,
             stencil_size=cfg.stencil_size,
             T=T,
-            backend=BackendArray,
+            backend=backend,
         )
     else
         error("unsupported atmosphere model '$model_name'")
@@ -178,14 +174,14 @@ end
 
 function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractString="medium",
     source_name::AbstractString="onaxis")
-    BackendArray, backend_tag, backend_label = _resolve_backend(backend_name)
+    backend, backend_tag, backend_label = _resolve_backend(backend_name)
     cfg = _resolve_scale(scale_name)
     T = Float32
     tel = Telescope(resolution=cfg.resolution, diameter=cfg.diameter, sampling_time=1.0f-3,
-        central_obstruction=0.0f0, T=T, backend=BackendArray)
+        central_obstruction=0.0f0, T=T, backend=backend)
     src, source_label = _resolve_source(source_name, T)
-    finite = _benchmark_model(:finite, tel, src, backend_tag, BackendArray, cfg, T)
-    infinite = _benchmark_model(:infinite, tel, src, backend_tag, BackendArray, cfg, T)
+    finite = _benchmark_model(:finite, tel, src, backend_tag, backend, cfg, T)
+    infinite = _benchmark_model(:infinite, tel, src, backend_tag, backend, cfg, T)
 
     println("atmosphere_runtime_profile")
     println("  backend: ", backend_label)

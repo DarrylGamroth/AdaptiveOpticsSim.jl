@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export JULIA_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPARISON_ROOT="${ROOT_DIR%/AdaptiveOpticsSim.jl}/AdaptiveOpticsComparisons"
 STAMP="$(date +%F)"

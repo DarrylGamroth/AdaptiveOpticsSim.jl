@@ -20,20 +20,17 @@ end
 
 @kernel function sh_field_stack_kernel!(fft_stack, valid_mask, pupil, opd, phasor,
     amp_scale, opd_to_cycles, n_sub::Int, sub::Int, ox::Int, oy::Int, n::Int, pad::Int)
-    x, y, idx = @index(Global, NTuple)
-    if x <= pad && y <= pad && idx <= n_sub * n_sub
-        i = (idx - 1) ÷ n_sub + 1
-        j = idx - (i - 1) * n_sub
-        T = eltype(phasor)
-        val = zero(T)
-        if @inbounds valid_mask[i, j]
-            if ox + 1 <= x <= ox + sub && oy + 1 <= y <= oy + sub
-                px = (i - 1) * sub + (x - ox)
-                py = (j - 1) * sub + (y - oy)
-                if px <= n && py <= n
-                    amp = amp_scale * pupil[px, py]
-                    val = amp * cispi(opd_to_cycles * opd[px, py]) * phasor[x, y]
-                end
+    x, y, i, j = @index(Global, NTuple)
+    if x <= pad && y <= pad && i <= n_sub && j <= n_sub
+        idx = (i - 1) * n_sub + j
+        xi = x - ox
+        yi = y - oy
+        val = zero(eltype(fft_stack))
+        if 1 <= xi <= sub && 1 <= yi <= sub && @inbounds(valid_mask[i, j])
+            px = (i - 1) * sub + xi
+            py = (j - 1) * sub + yi
+            if px <= n && py <= n && @inbounds(pupil[px, py])
+                @inbounds val = amp_scale * cispi(opd_to_cycles * opd[px, py]) * phasor[x, y]
             end
         end
         @inbounds fft_stack[x, y, idx] = val
@@ -48,23 +45,21 @@ end
 end
 
 @kernel function sh_field_asterism_stack_kernel!(fft_stack, valid_mask, pupil, opd, phasor,
-    amp_scales, opd_to_cycles, n_sub::Int, sub::Int, ox::Int, oy::Int, n::Int, pad::Int, n_spots::Int)
-    x, y, idx_total = @index(Global, NTuple)
-    if x <= pad && y <= pad && idx_total <= size(fft_stack, 3)
-        src_idx = (idx_total - 1) ÷ n_spots + 1
-        idx = idx_total - (src_idx - 1) * n_spots
-        i = (idx - 1) ÷ n_sub + 1
-        j = idx - (i - 1) * n_sub
-        T = eltype(phasor)
-        val = zero(T)
-        if @inbounds valid_mask[i, j]
-            if ox + 1 <= x <= ox + sub && oy + 1 <= y <= oy + sub
-                px = (i - 1) * sub + (x - ox)
-                py = (j - 1) * sub + (y - oy)
-                if px <= n && py <= n
-                    amp = (@inbounds amp_scales[src_idx]) * pupil[px, py]
-                    val = amp * cispi((@inbounds opd_to_cycles[src_idx]) * opd[px, py]) * phasor[x, y]
-                end
+    amp_scales, opd_to_cycles, n_sub::Int, sub::Int, ox::Int, oy::Int, n::Int,
+    pad::Int, n_spots::Int, n_src::Int)
+    x, y, src_idx, i, j = @index(Global, NTuple)
+    if x <= pad && y <= pad && src_idx <= n_src && i <= n_sub && j <= n_sub
+        idx = (i - 1) * n_sub + j
+        idx_total = (src_idx - 1) * n_spots + idx
+        xi = x - ox
+        yi = y - oy
+        val = zero(eltype(fft_stack))
+        if 1 <= xi <= sub && 1 <= yi <= sub && @inbounds(valid_mask[i, j])
+            px = (i - 1) * sub + xi
+            py = (j - 1) * sub + yi
+            if px <= n && py <= n && @inbounds(pupil[px, py])
+                @inbounds val = amp_scales[src_idx] *
+                    cispi(opd_to_cycles[src_idx] * opd[px, py]) * phasor[x, y]
             end
         end
         @inbounds fft_stack[x, y, idx_total] = val
@@ -72,17 +67,13 @@ end
 end
 
 @kernel function sh_sample_spot_stack_kernel!(spot_cube, intensity_stack, valid_mask,
-    binning::Int, n_sub::Int, n_binned::Int, n_out::Int)
-    idx, u, v = @index(Global, NTuple)
-    n_spots = n_sub * n_sub
-    if idx <= n_spots && u <= n_out && v <= n_out
-        i = (idx - 1) ÷ n_sub + 1
-        j = idx - (i - 1) * n_sub
+    binning::Int, n_sub::Int, n_binned::Int, n_out::Int, ox::Int, oy::Int)
+    i, j, u, v = @index(Global, NTuple)
+    if i <= n_sub && j <= n_sub && u <= n_out && v <= n_out
+        idx = (i - 1) * n_sub + j
         T = eltype(spot_cube)
         val = zero(T)
         if @inbounds valid_mask[i, j]
-            ox = div(n_out - n_binned, 2)
-            oy = div(n_out - n_binned, 2)
             bu = u - ox
             bv = v - oy
             if 1 <= bu <= n_binned && 1 <= bv <= n_binned
@@ -143,7 +134,7 @@ function compute_intensity_stack!(style::AcceleratorStyle, wfs::ShackHartmannWFS
         (tel.params.diameter / tel.params.resolution)^2))
     launch_kernel_async!(style, sh_field_stack_kernel!, wfs.state.fft_stack, wfs.state.valid_mask,
         tel.state.pupil, tel.state.opd, wfs.state.phasor, amp_scale, opd_to_cycles, n_sub, sub, ox, oy,
-        tel.params.resolution, pad; ndrange=size(wfs.state.fft_stack))
+        tel.params.resolution, pad; ndrange=(pad, pad, n_sub, n_sub))
     synchronize_backend!(style)
     execute_fft_plan!(wfs.state.fft_stack, wfs.state.fft_stack_plan)
     launch_kernel!(style, complex_abs2_stack_kernel!, wfs.state.intensity_stack, wfs.state.fft_stack,
@@ -181,7 +172,8 @@ function compute_intensity_asterism_stack!(style::AcceleratorStyle, wfs::ShackHa
     intensity_view = @view wfs.state.intensity_tmp_stack[:, :, 1:total]
     launch_kernel_async!(style, sh_field_asterism_stack_kernel!, fft_view, wfs.state.valid_mask,
         tel.state.pupil, tel.state.opd, wfs.state.phasor, amp_scales, opd_to_cycles,
-        n_sub, sub, ox, oy, tel.params.resolution, pad, n_spots; ndrange=size(fft_view))
+        n_sub, sub, ox, oy, tel.params.resolution, pad, n_spots, n_src;
+        ndrange=(pad, pad, n_src, n_sub, n_sub))
     synchronize_backend!(style)
     execute_fft_plan!(fft_view, wfs.state.fft_asterism_plan)
     phase = begin_kernel_phase(style)
@@ -220,7 +212,8 @@ function compute_intensity_spectral_stack!(style::AcceleratorStyle, wfs::ShackHa
     intensity_view = @view wfs.state.intensity_tmp_stack[:, :, 1:total]
     launch_kernel_async!(style, sh_field_asterism_stack_kernel!, fft_view, wfs.state.valid_mask,
         tel.state.pupil, tel.state.opd, wfs.state.phasor, amp_scales, opd_to_cycles,
-        n_sub, sub, ox, oy, tel.params.resolution, pad, n_spots; ndrange=size(fft_view))
+        n_sub, sub, ox, oy, tel.params.resolution, pad, n_spots, n_src;
+        ndrange=(pad, pad, n_src, n_sub, n_sub))
     synchronize_backend!(style)
     execute_fft_plan!(fft_view, wfs.state.fft_asterism_plan)
     phase = begin_kernel_phase(style)
@@ -261,8 +254,12 @@ function sample_spot_stack!(style::AcceleratorStyle, wfs::ShackHartmannWFS)
     @assert pad % binning == 0
     n_binned = div(pad, binning)
     n_out = size(wfs.state.sampled_spot_cube, 2)
+    ox = div(n_out - n_binned, 2)
+    oy = div(n_out - n_binned, 2)
+    n_sub = wfs.params.n_lenslets
     launch_kernel!(style, sh_sample_spot_stack_kernel!, wfs.state.sampled_spot_cube, wfs.state.intensity_stack,
-        wfs.state.valid_mask, binning, wfs.params.n_lenslets, n_binned, n_out; ndrange=size(wfs.state.sampled_spot_cube))
+        wfs.state.valid_mask, binning, n_sub, n_binned, n_out, ox, oy;
+        ndrange=(n_sub, n_sub, n_out, n_out))
     return wfs.state.sampled_spot_cube
 end
 
@@ -300,17 +297,16 @@ function sampled_spots_peak_asterism_stacked!(style::AcceleratorStyle, wfs::Shac
     sample_spot_stack!(style, wfs)
     n_sub = wfs.params.n_lenslets
     capture_sampled_spot_stack!(wfs, det, rng)
+    n1, n2 = size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3)
     launch_kernel!(style, zero_invalid_spots_kernel!, wfs.state.spot_cube, wfs.state.valid_mask,
-        n_sub, size(wfs.state.spot_cube, 2), size(wfs.state.spot_cube, 3); ndrange=size(wfs.state.spot_cube))
+        n_sub, n1, n2; ndrange=(n_sub, n_sub, n1, n2))
     return sh_safe_peak_value(wfs.state.spot_cube)
 end
 
 @kernel function sh_spot_centroid_stats_kernel!(stats, spot_cube, valid_mask, threshold, n_sub::Int, n1::Int, n2::Int)
-    idx = @index(Global, Linear)
-    n_spots = n_sub * n_sub
-    if idx <= n_spots
-        i = (idx - 1) ÷ n_sub + 1
-        j = idx - (i - 1) * n_sub
+    i, j = @index(Global, NTuple)
+    if i <= n_sub && j <= n_sub
+        idx = (i - 1) * n_sub + j
         base = 3 * (idx - 1)
         T = eltype(stats)
         peak = zero(T)
@@ -353,11 +349,9 @@ end
 
 @kernel function sh_finalize_asterism_slopes_kernel!(slopes, stats_accum, reference, valid_mask,
     slopes_units, n_src::Int, n_sub::Int, offset::Int)
-    idx = @index(Global, Linear)
-    n_spots = n_sub * n_sub
-    if idx <= n_spots
-        i = (idx - 1) ÷ n_sub + 1
-        j = idx - (i - 1) * n_sub
+    i, j = @index(Global, NTuple)
+    if i <= n_sub && j <= n_sub
+        idx = (i - 1) * n_sub + j
         base = 3 * (idx - 1)
         T = eltype(slopes)
         if @inbounds valid_mask[i, j]
@@ -415,7 +409,7 @@ function measure_sh_asterism_batched!(style::AcceleratorStyle, wfs::ShackHartman
         phase = begin_kernel_phase(style)
         queue_kernel!(phase, sh_spot_centroid_stats_kernel!, wfs.state.spot_stats, wfs.state.spot_cube,
             wfs.state.valid_mask, centroid_threshold(wfs), n_sub, size(wfs.state.spot_cube, 2),
-            size(wfs.state.spot_cube, 3); ndrange=n_spots)
+            size(wfs.state.spot_cube, 3); ndrange=(n_sub, n_sub))
         queue_kernel!(phase, accumulate_spot_stats_kernel!, wfs.state.spot_stats_accum,
             wfs.state.spot_stats, n_spots; ndrange=3 * n_spots)
         finish_kernel_phase!(phase)
@@ -425,7 +419,8 @@ function measure_sh_asterism_batched!(style::AcceleratorStyle, wfs::ShackHartman
     offset = n_spots
     reference = vec(wfs.state.reference_signal_2d)
     launch_kernel!(style, sh_finalize_asterism_slopes_kernel!, wfs.state.slopes, wfs.state.spot_stats_accum,
-        reference, wfs.state.valid_mask, wfs.state.slopes_units, n_src, n_sub, offset; ndrange=n_spots)
+        reference, wfs.state.valid_mask, wfs.state.slopes_units, n_src, n_sub, offset;
+        ndrange=(n_sub, n_sub))
     return wfs.state.slopes
 end
 
@@ -442,7 +437,7 @@ function measure_sh_asterism_batched!(style::AcceleratorStyle, wfs::ShackHartman
         phase = begin_kernel_phase(style)
         queue_kernel!(phase, sh_spot_centroid_stats_kernel!, wfs.state.spot_stats, wfs.state.spot_cube,
             wfs.state.valid_mask, centroid_threshold(wfs), n_sub, size(wfs.state.spot_cube, 2),
-            size(wfs.state.spot_cube, 3); ndrange=n_spots)
+            size(wfs.state.spot_cube, 3); ndrange=(n_sub, n_sub))
         queue_kernel!(phase, accumulate_spot_stats_kernel!, wfs.state.spot_stats_accum,
             wfs.state.spot_stats, n_spots; ndrange=3 * n_spots)
         finish_kernel_phase!(phase)
@@ -452,16 +447,15 @@ function measure_sh_asterism_batched!(style::AcceleratorStyle, wfs::ShackHartman
     offset = n_spots
     reference = vec(wfs.state.reference_signal_2d)
     launch_kernel!(style, sh_finalize_asterism_slopes_kernel!, wfs.state.slopes, wfs.state.spot_stats_accum,
-        reference, wfs.state.valid_mask, wfs.state.slopes_units, n_src, n_sub, offset; ndrange=n_spots)
+        reference, wfs.state.valid_mask, wfs.state.slopes_units, n_src, n_sub, offset;
+        ndrange=(n_sub, n_sub))
     return wfs.state.slopes
 end
 
 @kernel function sh_spot_centroid_kernel!(slopes, spot_cube, valid_mask, cutoff, n_sub::Int, offset::Int, n1::Int, n2::Int)
-    idx = @index(Global, Linear)
-    n_spots = n_sub * n_sub
-    if idx <= n_spots
-        i = (idx - 1) ÷ n_sub + 1
-        j = idx - (i - 1) * n_sub
+    i, j = @index(Global, NTuple)
+    if i <= n_sub && j <= n_sub
+        idx = (i - 1) * n_sub + j
         T = eltype(slopes)
         total = zero(T)
         sx = zero(T)
@@ -495,11 +489,9 @@ end
 
 @kernel function sh_spot_centroid_reference_scale_kernel!(slopes, spot_cube, reference, valid_mask,
     cutoff, slopes_units, n_sub::Int, offset::Int, n1::Int, n2::Int)
-    idx = @index(Global, Linear)
-    n_spots = n_sub * n_sub
-    if idx <= n_spots
-        i = (idx - 1) ÷ n_sub + 1
-        j = idx - (i - 1) * n_sub
+    i, j = @index(Global, NTuple)
+    if i <= n_sub && j <= n_sub
+        idx = (i - 1) * n_sub + j
         T = eltype(slopes)
         total = zero(T)
         sx = zero(T)
@@ -535,11 +527,9 @@ end
 end
 
 @kernel function sh_spot_cutoff_stats_kernel!(stats, spot_cube, valid_mask, cutoff, n_sub::Int, n1::Int, n2::Int)
-    idx = @index(Global, Linear)
-    n_spots = n_sub * n_sub
-    if idx <= n_spots
-        i = (idx - 1) ÷ n_sub + 1
-        j = idx - (i - 1) * n_sub
+    i, j = @index(Global, NTuple)
+    if i <= n_sub && j <= n_sub
+        idx = (i - 1) * n_sub + j
         base = 3 * (idx - 1)
         T = eltype(stats)
         total = zero(T)
@@ -564,11 +554,9 @@ end
 end
 
 @kernel function sh_finalize_spot_slopes_kernel!(slopes, stats, valid_mask, n_sub::Int, offset::Int)
-    idx = @index(Global, Linear)
-    n_spots = n_sub * n_sub
-    if idx <= n_spots
-        i = (idx - 1) ÷ n_sub + 1
-        j = idx - (i - 1) * n_sub
+    i, j = @index(Global, NTuple)
+    if i <= n_sub && j <= n_sub
+        idx = (i - 1) * n_sub + j
         base = 3 * (idx - 1)
         T = eltype(slopes)
         if @inbounds valid_mask[i, j]
@@ -597,11 +585,9 @@ end
 
 @kernel function sh_finalize_spot_slopes_reference_scale_kernel!(slopes, stats, reference, valid_mask,
     slopes_units, n_sub::Int, offset::Int)
-    idx = @index(Global, Linear)
-    n_spots = n_sub * n_sub
-    if idx <= n_spots
-        i = (idx - 1) ÷ n_sub + 1
-        j = idx - (i - 1) * n_sub
+    i, j = @index(Global, NTuple)
+    if i <= n_sub && j <= n_sub
+        idx = (i - 1) * n_sub + j
         base = 3 * (idx - 1)
         T = eltype(slopes)
         inv_units = inv(slopes_units)
@@ -632,11 +618,9 @@ end
 end
 
 @kernel function zero_invalid_spots_kernel!(spot_cube, valid_mask, n_sub::Int, n1::Int, n2::Int)
-    idx, x, y = @index(Global, NTuple)
-    n_spots = n_sub * n_sub
-    if idx <= n_spots && x <= n1 && y <= n2
-        i = (idx - 1) ÷ n_sub + 1
-        j = idx - (i - 1) * n_sub
+    i, j, x, y = @index(Global, NTuple)
+    if i <= n_sub && j <= n_sub && x <= n1 && y <= n2
+        idx = (i - 1) * n_sub + j
         if !(@inbounds valid_mask[i, j])
             @inbounds spot_cube[idx, x, y] = zero(eltype(spot_cube))
         end
@@ -644,11 +628,9 @@ end
 end
 
 @kernel function zero_invalid_sh_slopes_kernel!(slopes, valid_mask, n_sub::Int, offset::Int)
-    idx = @index(Global, Linear)
-    n_spots = n_sub * n_sub
-    if idx <= n_spots
-        i = (idx - 1) ÷ n_sub + 1
-        j = idx - (i - 1) * n_sub
+    i, j = @index(Global, NTuple)
+    if i <= n_sub && j <= n_sub
+        idx = (i - 1) * n_sub + j
         if !(@inbounds valid_mask[i, j])
             T = eltype(slopes)
             @inbounds begin

@@ -12,6 +12,9 @@ jobs:
     timeout-minutes: 120
     env:
       JULIA_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v6

@@ -17,7 +17,7 @@ end
 @inline function capture_science_core!(tel::Telescope, src::AbstractSource,
     det::AbstractDetector, rng::AbstractRNG, zero_padding::Int)
     psf = compute_psf!(tel, src; zero_padding=zero_padding)
-    capture!(det, psf; rng=rng)
+    capture!(det, psf, src; rng=rng)
     return nothing
 end
 

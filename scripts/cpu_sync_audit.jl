@@ -14,11 +14,11 @@ function _warm_builder!(f::F) where {F<:Function}
 end
 
 function run_cpu_sync_audit()
-    policy = SplitGPUPrecision(Float32, Float32)
-    high_accuracy = SplitGPUPrecision(Float32, Float64)
-    T = gpu_runtime_type(policy)
-    TB = gpu_build_type(policy)
-    TH = gpu_build_type(high_accuracy)
+    policy = AdaptiveOpticsSim.SplitGPUPrecision(Float32, Float32)
+    high_accuracy = AdaptiveOpticsSim.SplitGPUPrecision(Float32, Float64)
+    T = AdaptiveOpticsSim.gpu_runtime_type(policy)
+    TB = AdaptiveOpticsSim.gpu_build_type(policy)
+    TH = AdaptiveOpticsSim.gpu_build_type(high_accuracy)
     rng = runtime_rng(1)
     build_backend = AdaptiveOpticsSim.CPUBuildBackend()
 
@@ -28,14 +28,14 @@ function run_cpu_sync_audit()
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=CPUBackend())
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3, T=T, backend=CPUBackend())
     wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=CPUBackend())
-    sim = AOSimulation(tel, atm, src, dm, wfs)
+    sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
     recon = ModalReconstructor(imat; gain=T(0.5))
-    runtime = ClosedLoopRuntime(sim, recon; rng=rng)
+    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; rng=rng)
     step!(runtime)
 
     runtime_stats = runtime_timing(runtime; warmup=10, samples=100, gc_before=false)
-    phase_stats = runtime_phase_timing(runtime; warmup=10, samples=100, gc_before=false)
+    phase_stats = AdaptiveOpticsSim.runtime_phase_timing(runtime; warmup=10, samples=100, gc_before=false)
 
     _warm_builder!() do
         ModalReconstructor(imat; build_backend=build_backend)
@@ -49,7 +49,7 @@ function run_cpu_sync_audit()
         altitude_km=TB[0.0],
         L0=TB(25.0),
         r0_zenith=TB(0.2),
-        fractional_r0=TB[1.0],
+        fractional_cn2=TB[1.0],
         wavelength=TB(500e-9),
         wind_direction_deg=TB[0.0],
         wind_speed=TB[10.0],
@@ -64,7 +64,7 @@ function run_cpu_sync_audit()
     tdm = TomographyDMParams(heights_m=TB[0.0], pitch_m=TB[0.5],
         cross_coupling=TB(0.2), n_actuators=[1], valid_actuators=trues(1, 1))
     grid_mask = trues(1, 1)
-    tomo_noise = RelativeSignalNoise(TB(0.1))
+    tomo_noise = AdaptiveOpticsSim.RelativeSignalNoise(TB(0.1))
     imat_t = reshape(TB[1.0, 0.5], 2, 1)
 
     _warm_builder!() do
@@ -126,7 +126,7 @@ function run_cpu_sync_audit()
         altitude_km=TH[0.0],
         L0=TH(25.0),
         r0_zenith=TH(0.2),
-        fractional_r0=TH[1.0],
+        fractional_cn2=TH[1.0],
         wavelength=TH(500e-9),
         wind_direction_deg=TH[0.0],
         wind_speed=TH[10.0],
@@ -149,7 +149,7 @@ function run_cpu_sync_audit()
             lgswfs_hi,
             tomo_hi,
             tdm_hi;
-            noise_model=RelativeSignalNoise(TH(0.1)),
+            noise_model=AdaptiveOpticsSim.RelativeSignalNoise(TH(0.1)),
             build_backend=build_backend,
         )
     end
@@ -161,7 +161,7 @@ function run_cpu_sync_audit()
             lgswfs_hi,
             tomo_hi,
             tdm_hi;
-            noise_model=RelativeSignalNoise(TH(0.1)),
+            noise_model=AdaptiveOpticsSim.RelativeSignalNoise(TH(0.1)),
             build_backend=build_backend,
         )
     end

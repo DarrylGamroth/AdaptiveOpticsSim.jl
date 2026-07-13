@@ -209,12 +209,11 @@ function bin2d(input::AbstractMatrix, binning::Int)
     n_out = div(n, binning)
     m_out = div(m, binning)
     out = similar(input, n_out, m_out)
-    @inbounds for i in 1:n_out, j in 1:m_out
-        acc = zero(eltype(out))
-        for ii in 1:binning, jj in 1:binning
-            acc += input[(i - 1) * binning + ii, (j - 1) * binning + jj]
+    fill!(out, zero(eltype(out)))
+    @inbounds for ii in 1:binning, jj in 1:binning
+        for j in 1:m_out, i in 1:n_out
+            out[i, j] += input[(i - 1) * binning + ii, (j - 1) * binning + jj]
         end
-        out[i, j] = acc
     end
     return out
 end
@@ -243,12 +242,11 @@ end
 
 function _bin2d!(::ScalarCPUStyle, out::AbstractMatrix, input::AbstractMatrix, binning::Int)
     n_out, m_out = size(out)
-    @inbounds for i in 1:n_out, j in 1:m_out
-        acc = zero(eltype(out))
-        for ii in 1:binning, jj in 1:binning
-            acc += input[(i - 1) * binning + ii, (j - 1) * binning + jj]
+    fill!(out, zero(eltype(out)))
+    @inbounds for ii in 1:binning, jj in 1:binning
+        for j in 1:m_out, i in 1:n_out
+            out[i, j] += input[(i - 1) * binning + ii, (j - 1) * binning + jj]
         end
-        out[i, j] = acc
     end
     return out
 end

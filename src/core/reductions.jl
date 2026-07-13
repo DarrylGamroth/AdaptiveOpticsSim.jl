@@ -38,6 +38,13 @@ end
 @inline _backend_maximum_value(::DirectReductionPlan, A::AbstractArray{T}) where {T<:AbstractFloat} = maximum(A)
 @inline _backend_maximum_value(::HostMirrorReductionPlan, A::AbstractArray{T}) where {T<:AbstractFloat} = maximum(Array(A))
 
+@inline backend_sum_value(A::AbstractArray{T}) where {T<:AbstractFloat} = backend_sum_value(execution_style(A), A)
+@inline backend_sum_value(::ScalarCPUStyle, A::AbstractArray{T}) where {T<:AbstractFloat} = sum(A)
+@inline backend_sum_value(style::AcceleratorStyle, A::AbstractArray{T}) where {T<:AbstractFloat} =
+    _backend_sum_value(reduction_execution_plan(style, reduction_parent_source(A)), A)
+@inline _backend_sum_value(::DirectReductionPlan, A::AbstractArray{T}) where {T<:AbstractFloat} = sum(A)
+@inline _backend_sum_value(::HostMirrorReductionPlan, A::AbstractArray{T}) where {T<:AbstractFloat} = sum(Array(A))
+
 @inline function masked_sum2d(values::AbstractMatrix{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
     return masked_sum2d(ScalarCPUStyle(), values, valid_mask)
 end

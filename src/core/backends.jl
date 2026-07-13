@@ -165,3 +165,56 @@ end
     synchronize_backend!(style)
     return nothing
 end
+
+@kernel function clamp_array_kernel!(array, lower, upper, n::Int)
+    i = @index(Global, Linear)
+    if i <= n
+        @inbounds array[i] = clamp(array[i], lower, upper)
+    end
+end
+
+@kernel function integer_output_kernel!(output, input, lower, upper, n::Int, m::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= m
+        value = round(@inbounds input[i, j])
+        @inbounds output[i, j] = clamp(value, lower, upper)
+    end
+end
+
+function clamp_array!(array::AbstractArray, lower, upper)
+    return _clamp_array!(execution_style(array), array, lower, upper)
+end
+
+function _clamp_array!(::ScalarCPUStyle, array::AbstractArray, lower, upper)
+    clamp!(array, lower, upper)
+    return array
+end
+
+function _clamp_array!(style::AcceleratorStyle, array::AbstractArray, lower, upper)
+    isempty(array) && return array
+    launch_kernel!(style, clamp_array_kernel!, array, lower, upper, length(array);
+        ndrange=length(array))
+    return array
+end
+
+function write_integer_output!(output::AbstractMatrix, input::AbstractMatrix)
+    return _write_integer_output!(execution_style(output), output, input)
+end
+
+function _write_integer_output!(::ScalarCPUStyle, output::AbstractMatrix,
+    input::AbstractMatrix)
+    output_type = eltype(output)
+    lower = typemin(output_type)
+    upper = typemax(output_type)
+    @. output = output_type(clamp(round(input), lower, upper))
+    return output
+end
+
+function _write_integer_output!(style::AcceleratorStyle, output::AbstractMatrix,
+    input::AbstractMatrix)
+    output_type = eltype(output)
+    n, m = size(output)
+    launch_kernel!(style, integer_output_kernel!, output, input, typemin(output_type),
+        typemax(output_type), n, m; ndrange=(n, m))
+    return output
+end

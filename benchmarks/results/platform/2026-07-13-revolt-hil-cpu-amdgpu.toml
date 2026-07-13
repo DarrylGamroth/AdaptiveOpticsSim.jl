@@ -1,0 +1,70 @@
+artifact_id = "REVOLT-HIL-CPU-AMDGPU-2026-07-13"
+generated_on = "2026-07-13"
+evidence_class = "warmed closed-loop diagnostic summary"
+source_revision = "a097f73 with PR-0 worktree changes"
+raw_histogram_archived = false
+
+[environment]
+julia_version = "1.12.6"
+kernel = "Linux 6.12.57+deb13-amd64 x86_64"
+cpu = "AMD Ryzen 7 6800H with Radeon Graphics"
+cpu_cores = 8
+cpu_threads = 16
+numa_nodes = 1
+gpu = "AMD Radeon Graphics"
+gpu_architecture = "gfx1030"
+amdgpu_version = "2.7.0"
+julia_threads = 1
+blas_threads = 1
+omp_threads = 1
+mkl_threads = 1
+
+[workload]
+sensor = "cmos"
+response_mode = "default"
+effective_frame_response = "gaussian"
+thermal_mode = "none"
+pupil_resolution = 352
+lenslets = 16
+roi_size = 22
+actuator_command_length = 277
+dm_grid_command_length = 361
+samples = 100
+warmup = 10
+arrival_model = "closed_loop"
+
+[cpu]
+build_time_ns = 520773110
+command_map_mean_ns = 11405.53
+command_map_p95_ns = 16381
+dm_apply_mean_ns = 152774.37
+dm_apply_p95_ns = 160992
+sense_mean_ns = 4450894.93
+sense_p95_ns = 4867843
+mosaic_mean_ns = 4578816.98
+mosaic_p95_ns = 4877861
+total_mean_ns = 4513049.39
+total_p95_ns = 4693356
+frame_rate_hz = 221.5796712120627
+steady_total_alloc_bytes = 0
+
+[amdgpu]
+build_time_ns = 113115823
+command_map_mean_ns = 67415.69
+command_map_p95_ns = 76243
+dm_apply_mean_ns = 167020.04
+dm_apply_p95_ns = 267821
+sense_mean_ns = 165630755.27
+sense_p95_ns = 279849675
+mosaic_mean_ns = 191055744.14
+mosaic_p95_ns = 322574320
+total_mean_ns = 201679716.15
+total_p95_ns = 346308223
+frame_rate_hz = 4.958356839694511
+steady_total_alloc_bytes = 1927560
+
+[interpretation]
+cpu_default_for_hil = true
+amdgpu_correctness_gate_passed = true
+amdgpu_hil_latency_gate_passed = false
+notes = "The maintained AMDGPU correctness target passed, but this synchronized detector-output path crosses documented ROCm host-mirror boundaries. Results describe this integrated gfx1030 host only and do not predict a discrete GPU's fully device-resident throughput. One hundred samples support the reported p95 diagnostic; no p99 or open-loop SLO claim is made from this artifact."

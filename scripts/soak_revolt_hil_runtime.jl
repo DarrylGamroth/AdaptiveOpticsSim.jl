@@ -1,8 +1,6 @@
 using AdaptiveOpticsSim
 using Statistics: mean
 
-include(joinpath(dirname(@__DIR__), "benchmarks", "support", "revolt_like_hil_common.jl"))
-
 const _backend_arg = isempty(ARGS) ? "cuda" : lowercase(ARGS[1])
 const _default_config_dir = joinpath(dirname(@__DIR__), "benchmarks", "assets", "revolt_like")
 const _config_dir_arg = length(ARGS) >= 2 ? ARGS[2] : get(ENV, "REVOLT_CONFIG_DIR", _default_config_dir)
@@ -14,11 +12,11 @@ const _warmup_arg = length(ARGS) >= 7 ? parse(Int, ARGS[7]) : 1_000
 
 if _backend_arg == "cuda"
     import CUDA
-end
-
-if _backend_arg == "amdgpu"
+elseif _backend_arg == "amdgpu"
     import AMDGPU
 end
+
+include(joinpath(dirname(@__DIR__), "benchmarks", "support", "revolt_like_hil_common.jl"))
 
 function _resolve_sensor(name::AbstractString)
     lowered = lowercase(name)

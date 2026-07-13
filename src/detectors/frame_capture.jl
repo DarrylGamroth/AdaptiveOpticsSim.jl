@@ -196,7 +196,7 @@ sensor_saturation_limit(::FrameSensorType, det::Detector) = det.params.full_well
 function _apply_saturation!(::DetectorDirectPlan, det::Detector)
     full_well = sensor_saturation_limit(det)
     full_well === nothing && return det.state.frame
-    clamp!(det.state.frame, zero(eltype(det.state.frame)), full_well)
+    clamp_array!(det.state.frame, zero(eltype(det.state.frame)), full_well)
     return det.state.frame
 end
 
@@ -216,10 +216,10 @@ function _apply_saturation!(::ScalarCPUStyle, det::Detector)
     return det.state.frame
 end
 
-function _apply_saturation!(::AcceleratorStyle, det::Detector)
+function _apply_saturation!(style::AcceleratorStyle, det::Detector)
     full_well = sensor_saturation_limit(det)
     full_well === nothing && return det.state.frame
-    clamp!(det.state.frame, zero(eltype(det.state.frame)), full_well)
+    _clamp_array!(style, det.state.frame, zero(eltype(det.state.frame)), full_well)
     return det.state.frame
 end
 
@@ -273,7 +273,7 @@ function _apply_quantization!(::DetectorDirectPlan, det::Detector)
         end
     else
         det.state.frame .*= (levels - one(levels)) / full_well
-        clamp!(det.state.frame, zero(eltype(det.state.frame)), levels - one(levels))
+        clamp_array!(det.state.frame, zero(eltype(det.state.frame)), levels - one(levels))
     end
     return det.state.frame
 end
@@ -314,7 +314,7 @@ function _apply_quantization!(::ScalarCPUStyle, det::Detector)
     return det.state.frame
 end
 
-function _apply_quantization!(::AcceleratorStyle, det::Detector)
+function _apply_quantization!(style::AcceleratorStyle, det::Detector)
     bits = det.params.bits
     bits === nothing && return det.state.frame
     levels = exp2(eltype(det.state.frame)(bits))
@@ -326,7 +326,8 @@ function _apply_quantization!(::AcceleratorStyle, det::Detector)
         end
     else
         det.state.frame .*= (levels - one(levels)) / full_well
-        clamp!(det.state.frame, zero(eltype(det.state.frame)), levels - one(levels))
+        _clamp_array!(style, det.state.frame, zero(eltype(det.state.frame)),
+            levels - one(levels))
     end
     return det.state.frame
 end
@@ -357,6 +358,12 @@ readout_product_shape(det::Detector) = det.params.readout_window === nothing ?
     (length(det.params.readout_window.rows), length(det.params.readout_window.cols))
 
 function _copy_windowed_frame(frame::AbstractMatrix, det::Detector)
+    plan = detector_execution_plan(typeof(execution_style(frame)), typeof(det))
+    return _copy_windowed_frame(plan, frame, det)
+end
+
+function _copy_windowed_frame(::DetectorDirectPlan, frame::AbstractMatrix,
+    det::Detector)
     window = det.params.readout_window
     if window === nothing
         return copy(frame)
@@ -365,11 +372,39 @@ function _copy_windowed_frame(frame::AbstractMatrix, det::Detector)
 end
 
 function _copy_windowed_cube(cube::AbstractArray{T,3}, det::Detector) where {T}
+    plan = detector_execution_plan(typeof(execution_style(cube)), typeof(det))
+    return _copy_windowed_cube(plan, cube, det)
+end
+
+function _copy_windowed_cube(::DetectorDirectPlan, cube::AbstractArray{T,3},
+    det::Detector) where {T}
     window = det.params.readout_window
     if window === nothing
         return copy(cube)
     end
     return copy(@view(cube[window.rows, window.cols, :]))
+end
+
+function _copy_windowed_frame(::DetectorHostMirrorPlan, frame::AbstractMatrix,
+    det::Detector)
+    frame_host = Array(frame)
+    window = det.params.readout_window
+    selected = window === nothing ? frame_host :
+        copy(@view(frame_host[window.rows, window.cols]))
+    output = similar(frame, size(selected)...)
+    copyto!(output, selected)
+    return output
+end
+
+function _copy_windowed_cube(::DetectorHostMirrorPlan, cube::AbstractArray{T,3},
+    det::Detector) where {T}
+    cube_host = Array(cube)
+    window = det.params.readout_window
+    selected = window === nothing ? cube_host :
+        copy(@view(cube_host[window.rows, window.cols, :]))
+    output = similar(cube, size(selected)...)
+    copyto!(output, selected)
+    return output
 end
 
 apply_readout_correction!(::NullFrameReadoutCorrection, frame::AbstractMatrix) = frame
@@ -576,8 +611,13 @@ end
 finalize_readout_products!(::FrameSensorType, det::Detector, rng::AbstractRNG, exposure_time::Real) =
     reset_readout_products!(det)
 
-function finalize_capture!(det::Detector, rng::AbstractRNG, exposure_time::Real)
+function _finalize_capture!(::FrameSensorType, det::Detector, rng::AbstractRNG,
+    exposure_time::Real)
     return finalize_readout_pipeline!(det, rng, exposure_time)
+end
+
+function finalize_capture!(det::Detector, rng::AbstractRNG, exposure_time::Real)
+    return _finalize_capture!(det.params.sensor, det, rng, exposure_time)
 end
 
 validated_temporal_frame(frame::AbstractMatrix) = frame
@@ -646,6 +686,34 @@ function capture_temporal_signal!(det::Detector, source::AbstractTemporalFrameSo
     return det.state.frame
 end
 
+function _write_output!(::DetectorDirectPlan, det::Detector, output::AbstractMatrix,
+    source::AbstractMatrix)
+    if eltype(output) <: Integer
+        write_integer_output!(output, source)
+    else
+        copyto!(output, source)
+    end
+    return output
+end
+
+function _write_output!(::DetectorHostMirrorPlan, det::Detector,
+    output::AbstractMatrix, source::AbstractMatrix)
+    frame_host = detector_host_frame!(det, det.state.frame)
+    window = det.params.readout_window
+    source_host = window === nothing ? frame_host :
+        @view(frame_host[window.rows, window.cols])
+    output_host = det.state.output_buffer_host
+    output_host === nothing && throw(InvalidConfiguration(
+        "Detector host-mirror output requires a host output buffer"))
+    if eltype(output_host) <: Integer
+        _write_integer_output!(ScalarCPUStyle(), output_host, source_host)
+    else
+        copyto!(output_host, source_host)
+    end
+    copyto!(output, output_host)
+    return output
+end
+
 function write_output!(det::Detector)
     window = det.params.readout_window
     output = det.state.output_buffer
@@ -653,16 +721,9 @@ function write_output!(det::Detector)
         window === nothing && return det.state.frame
         throw(InvalidConfiguration("Detector readout_window requires an allocated output buffer"))
     end
-    output_eltype = eltype(output)
     source = window === nothing ? det.state.frame : @view(det.state.frame[window.rows, window.cols])
-    if output_eltype <: Integer
-        lo = typemin(output_eltype)
-        hi = typemax(output_eltype)
-        @. output = output_eltype(clamp(round(source), lo, hi))
-    else
-        output .= source
-    end
-    return output
+    plan = detector_execution_plan(typeof(execution_style(output)), typeof(det))
+    return _write_output!(plan, det, output, source)
 end
 
 function capture!(det::Detector, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}

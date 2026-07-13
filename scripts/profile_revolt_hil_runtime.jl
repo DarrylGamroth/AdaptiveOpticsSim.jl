@@ -1,18 +1,26 @@
 using AdaptiveOpticsSim
 using Statistics: mean
 
-include(joinpath(dirname(@__DIR__), "benchmarks", "support", "revolt_like_hil_common.jl"))
-
 const _backend_arg = isempty(ARGS) ? "cpu" : lowercase(ARGS[1])
 const _default_config_dir = joinpath(dirname(@__DIR__), "benchmarks", "assets", "revolt_like")
 const _config_dir_arg = length(ARGS) >= 2 ? ARGS[2] : get(ENV, "REVOLT_CONFIG_DIR", _default_config_dir)
 const _sensor_arg = length(ARGS) >= 3 ? lowercase(ARGS[3]) : "ccd"
 const _response_arg = length(ARGS) >= 4 ? lowercase(ARGS[4]) : "default"
 const _thermal_arg = length(ARGS) >= 5 ? lowercase(ARGS[5]) : "none"
-const _samples_arg = length(ARGS) >= 6 ? parse(Int, ARGS[6]) : 6
+const _samples_arg = length(ARGS) >= 6 ? parse(Int, ARGS[6]) : 100
 const _warmup_arg = length(ARGS) >= 7 ? parse(Int, ARGS[7]) : 2
 
-function _timed_stats!(f!::F; warmup::Int=2, samples::Int=6) where {F<:Function}
+if _backend_arg == "cuda"
+    import CUDA
+elseif _backend_arg == "amdgpu"
+    import AMDGPU
+end
+
+include(joinpath(dirname(@__DIR__), "benchmarks", "support", "revolt_like_hil_common.jl"))
+
+function _timed_stats!(f!::F; warmup::Int=2, samples::Int=100) where {F<:Function}
+    warmup >= 0 || error("warmup must be non-negative")
+    samples >= 20 || error("samples must be at least 20 for the reported p95")
     for _ in 1:warmup
         f!()
     end
@@ -100,7 +108,7 @@ _thermalized_sensor(sensor::HgCdTeAvalancheArraySensor, enabled::Bool, ::Type{T}
 
 function run_profile(; backend_name::AbstractString="cpu", config_dir::AbstractString=_config_dir_arg,
     sensor_name::AbstractString="ccd", response_name::AbstractString="default",
-    thermal_name::AbstractString="none", samples::Int=6, warmup::Int=2)
+    thermal_name::AbstractString="none", samples::Int=100, warmup::Int=2)
     backend_cfg = revolt_profile_backend(backend_name)
     sensor, sensor_label = _resolve_sensor(sensor_name)
     response_model, response_label = _resolve_response_model(response_name)
@@ -137,6 +145,10 @@ function run_profile(; backend_name::AbstractString="cpu", config_dir::AbstractS
     println("  detector_temperature_K: ", metadata.detector_temperature_K)
     println("  cooling_setpoint_K: ", metadata.cooling_setpoint_K)
     println("  ambient_temperature_K: ", metadata.ambient_temperature_K)
+    println("  julia_version: ", VERSION)
+    println("  julia_threads: ", Threads.nthreads(:default))
+    println("  samples: ", samples)
+    println("  warmup: ", warmup)
     println("  actuator_command_length: ", n_active)
     println("  extrapolated_command_length: ", length(ctx.extrapolated_command))
     println("  dm_grid_command_length: ", dm_grid_command_length)

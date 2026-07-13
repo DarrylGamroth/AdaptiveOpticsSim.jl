@@ -14,10 +14,13 @@ struct APDDetectorParams{T<:AbstractFloat,S<:APDSensor,D<:CountingDeadTimeModel,
     layout::Symbol
 end
 
-mutable struct APDDetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O,TS<:AbstractDetectorThermalState}
+mutable struct APDDetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},H<:AbstractMatrix{T},
+    O,OH,TS<:AbstractDetectorThermalState}
     channels::A
     noise_buffer::A
+    host_buffer::H
     output_buffer::O
+    output_buffer_host::OH
     thermal_state::TS
 end
 
@@ -39,10 +42,15 @@ counting_layout(det::APDDetector) = det.params.layout
 counting_output_type(det::APDDetector) = det.params.output_type
 counting_array(det::APDDetector) = det.state.channels
 counting_noise_buffer(det::APDDetector) = det.state.noise_buffer
+counting_host_buffer(det::APDDetector) = det.state.host_buffer
 counting_output_buffer(det::APDDetector) = det.state.output_buffer
+counting_output_host_buffer(det::APDDetector) = det.state.output_buffer_host
 set_counting_array!(det::APDDetector, values) = (det.state.channels = values; det)
 set_counting_noise_buffer!(det::APDDetector, values) = (det.state.noise_buffer = values; det)
+set_counting_host_buffer!(det::APDDetector, values) = (det.state.host_buffer = values; det)
 set_counting_output_buffer!(det::APDDetector, values) = (det.state.output_buffer = values; det)
+set_counting_output_host_buffer!(det::APDDetector, values) =
+    (det.state.output_buffer_host = values; det)
 counting_qe(det::APDDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.qe)
 counting_post_gain(det::APDDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.gain)
 counting_dark_count_rate(det::APDDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.dark_count_rate)
@@ -85,13 +93,20 @@ function _build_apd_detector(noise::NoiseModel; integration_time::Real, qe::Real
     )
     channels = backend{T}(undef, 1, 1)
     noise_buffer = backend{T}(undef, 1, 1)
+    host_buffer = Matrix{T}(undef, 1, 1)
     output_buffer = output_type === nothing ? nothing : backend{output_type}(undef, 1, 1)
+    output_buffer_host = output_type === nothing ? nothing : Matrix{output_type}(undef, 1, 1)
     fill!(channels, zero(T))
     fill!(noise_buffer, zero(T))
+    fill!(host_buffer, zero(T))
     output_buffer === nothing || fill!(output_buffer, zero(eltype(output_buffer)))
+    output_buffer_host === nothing || fill!(output_buffer_host,
+        zero(eltype(output_buffer_host)))
     thermal_state = thermal_state_from_model(thermal, T)
-    state = APDDetectorState{T,typeof(channels),typeof(output_buffer),typeof(thermal_state)}(
-        channels, noise_buffer, output_buffer, thermal_state)
+    state = APDDetectorState{T,typeof(channels),typeof(host_buffer),
+        typeof(output_buffer),typeof(output_buffer_host),typeof(thermal_state)}(
+        channels, noise_buffer, host_buffer, output_buffer, output_buffer_host,
+        thermal_state)
     selector = _resolve_backend_selector(backend)
     return APDDetector{typeof(validated),typeof(params),typeof(state),typeof(gain_map),typeof(selector)}(
         validated, params, state, gain_map)

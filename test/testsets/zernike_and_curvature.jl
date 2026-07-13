@@ -86,6 +86,19 @@ end
     counting_spad = copy(measure!(counting, tel, src, spad))
     @test counting_spad ≈ counting_flat atol=1e-10
     @test detector_export_metadata(spad).readout.output_size == size(counting.state.camera_frame)
+    mkid = MKIDArrayDetector(
+        integration_time=1.0,
+        noise=NoiseNone(),
+        sensor=MKIDArraySensor(qe=1.0, dark_count_rate=0.0, fill_factor=1.0,
+            wavelength_range_m=(0.9 * wavelength(src), 1.1 * wavelength(src))),
+    )
+    counting_mkid = copy(measure!(counting, tel, src, mkid))
+    @test counting_mkid ≈ counting_flat atol=1e-10
+    outside_mkid_band = Source(band=:custom, magnitude=0.0,
+        wavelength=2 * wavelength(src))
+    counting_mkid_outside = copy(measure!(counting, tel, outside_mkid_band, mkid))
+    @test all(iszero, output_frame(mkid))
+    @test all(iszero, counting_mkid_outside)
     apd_dead = APDDetector(integration_time=1.0, qe=1.0, gain=1.0, dark_count_rate=0.0,
         noise=NoiseNone(), dead_time_model=NonParalyzableDeadTime(0.25))
     counting_dead = copy(measure!(counting, tel, src, apd_dead))

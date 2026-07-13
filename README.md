@@ -207,5 +207,8 @@ example:
 ```bash
 ADAPTIVEOPTICS_VALIDATE_EXAMPLES=1 ./scripts/run_release_validation.sh
 ADAPTIVEOPTICS_VALIDATE_AMDGPU=1 ./scripts/run_release_validation.sh
-ADAPTIVEOPTICS_VALIDATE_CUDA=1 ./scripts/run_release_validation.sh
 ```
+
+AMDGPU is the currently hardware-validated accelerator. The CUDA extension and
+validation target remain in-tree for restoration, but CUDA is not currently a
+production-supported backend because no CUDA validation device is available.

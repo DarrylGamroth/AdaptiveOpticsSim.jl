@@ -30,7 +30,7 @@ function run_gpu_model_tomography_phase_profile(::Type{B}) where {B<:AdaptiveOpt
         altitude_km=TB[0.0, 10.0],
         L0=TB(25.0),
         r0_zenith=TB(0.2),
-        fractional_r0=TB[0.6, 0.4],
+        fractional_cn2=TB[0.6, 0.4],
         wavelength=TB(500e-9),
         wind_direction_deg=TB[0.0, 45.0],
         wind_speed=TB[10.0, 20.0],
@@ -62,7 +62,7 @@ function run_gpu_model_tomography_phase_profile(::Type{B}) where {B<:AdaptiveOpt
         n_actuators=fill(grid_side, n_dm),
         valid_actuators=trues(grid_side, grid_side),
     )
-    noise_model = RelativeSignalNoise(TB(0.1))
+    noise_model = AdaptiveOpticsSim.RelativeSignalNoise(TB(0.1))
 
     gamma_single, t_gamma_single = _time_phase() do
         AdaptiveOpticsSim.sparse_gradient_matrix(AdaptiveOpticsSim.valid_lenslet_support(wfs); over_sampling=2)

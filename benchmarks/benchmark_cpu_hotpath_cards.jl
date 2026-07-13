@@ -1,8 +1,3 @@
-const ROOT_ENV = normpath(joinpath(@__DIR__, ".."))
-const BENCHMARK_ENV = @__DIR__
-ROOT_ENV in LOAD_PATH || pushfirst!(LOAD_PATH, ROOT_ENV)
-BENCHMARK_ENV in LOAD_PATH || push!(LOAD_PATH, BENCHMARK_ENV)
-
 using AdaptiveOpticsSim
 using BenchmarkTools
 
@@ -12,6 +7,11 @@ const CPU_HOTPATH_CARDS = (
     ("CPU-PERF-03", "subaperture valid-index reuse", :subaperture_layout),
     ("CPU-PERF-04", "VectorDelayLine ring buffer", :delay_line),
     ("CPU-PERF-05", "composite selected apply without Set allocation", :composite_apply),
+    ("CPU-PERF-06", "SAPHIRA sampled frame response", :sampled_frame_response),
+    ("CPU-PERF-07", "batched SAPHIRA sampled frame response", :batched_sampled_frame_response),
+    ("CPU-PERF-08", "detector frame binning", :detector_binning),
+    ("CPU-PERF-09", "separable Gaussian frame response", :gaussian_frame_response),
+    ("CPU-PERF-10", "batched EMCCD capture", :batched_emccd_capture),
 )
 
 function configure_cpu_hotpath_benchmarks!()
@@ -81,6 +81,61 @@ function composite_apply_probe()
     return () -> AdaptiveOpticsSim._apply_selected!(optic, tel, DMReplace(), (:tiptilt,))
 end
 
+function sampled_frame_response_probe()
+    model = SampledFrameResponse(Float32[
+        0.00 0.01 0.00
+        0.01 0.96 0.01
+        0.00 0.01 0.00
+    ]; T=Float32)
+    frame = rand(Float32, 96, 96)
+    scratch = similar(frame)
+    return () -> AdaptiveOpticsSim.apply_response!(
+        AdaptiveOpticsSim.ScalarCPUStyle(), model, frame, scratch)
+end
+
+function batched_sampled_frame_response_probe()
+    model = SampledFrameResponse(Float32[
+        0.00 0.01 0.00
+        0.01 0.96 0.01
+        0.00 0.01 0.00
+    ]; T=Float32)
+    cube = rand(Float32, 256, 4, 4)
+    scratch = similar(cube)
+    return () -> AdaptiveOpticsSim._batched_apply_response!(
+        AdaptiveOpticsSim.ScalarCPUStyle(), model, cube, scratch)
+end
+
+function detector_binning_probe()
+    input = rand(Float32, 512, 512)
+    output = similar(input, 256, 256)
+    return () -> AdaptiveOpticsSim._bin2d!(
+        AdaptiveOpticsSim.ScalarCPUStyle(), output, input, 2)
+end
+
+function gaussian_frame_response_probe()
+    model = GaussianPixelResponse(response_width_px=1.5, T=Float32)
+    frame = rand(Float32, 96, 96)
+    scratch = similar(frame)
+    return () -> AdaptiveOpticsSim.apply_response!(
+        AdaptiveOpticsSim.ScalarCPUStyle(), model, frame, scratch)
+end
+
+function batched_emccd_capture_probe()
+    detector = Detector(
+        noise=NoiseNone(),
+        sensor=EMCCDSensor(excess_noise_factor=1.4, T=Float32),
+        gain=20,
+        T=Float32,
+    )
+    cube = fill(Float32(10), 256, 4, 4)
+    scratch = similar(cube)
+    rng = runtime_rng(17)
+    return function ()
+        fill!(cube, Float32(10))
+        return AdaptiveOpticsSim.capture_stack!(detector, cube, scratch, rng)
+    end
+end
+
 function run_probe(card_id::AbstractString, label::AbstractString, f)
     f()
     alloc = @allocated f()
@@ -104,6 +159,11 @@ function run_cpu_hotpath_card_benchmarks()
         ("CPU-PERF-03b", "subaperture_flux", flux_probe),
         ("CPU-PERF-04", "delay_line", delay_line_probe()),
         ("CPU-PERF-05", "composite_apply", composite_apply_probe()),
+        ("CPU-PERF-06", "sampled_frame_response", sampled_frame_response_probe()),
+        ("CPU-PERF-07", "batched_sampled_frame_response", batched_sampled_frame_response_probe()),
+        ("CPU-PERF-08", "detector_binning", detector_binning_probe()),
+        ("CPU-PERF-09", "gaussian_frame_response", gaussian_frame_response_probe()),
+        ("CPU-PERF-10", "batched_emccd_capture", batched_emccd_capture_probe()),
     )
     results = map(probe -> run_probe(probe...), probes)
     println("recommendation")

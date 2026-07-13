@@ -1,8 +1,3 @@
-using Pkg
-Pkg.activate(@__DIR__)
-Pkg.develop(PackageSpec(path=joinpath(@__DIR__, "..")))
-Pkg.instantiate()
-
 using AdaptiveOpticsSim
 using BenchmarkTools
 using Random
@@ -243,6 +238,8 @@ end
 
 function _print_trial(label::AbstractString, trial::BenchmarkTools.Trial)
     println(label)
+    println("  samples: ", length(trial.times))
+    println("  evals_per_sample: ", trial.params.evals)
     println("  median_ns: ", BenchmarkTools.median(trial).time)
     println("  mean_ns: ", BenchmarkTools.mean(trial).time)
     println("  memory_bytes: ", BenchmarkTools.memory(trial))

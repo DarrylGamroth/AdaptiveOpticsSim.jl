@@ -62,12 +62,37 @@ function _copy_windowed_cube!(target::AbstractArray{T,3}, full_cube::AbstractArr
     return target
 end
 
+_multi_read_products_ready(::FrameReadoutProducts, ::Detector,
+    ::Int, ::Int, ::Int) = false
+
+function _multi_read_products_ready(products::MultiReadFrameReadoutProducts,
+    det::Detector, n_ref::Int, n_sig::Int, n_reads::Int)
+    frame_shape = readout_product_shape(det)
+    reference_frame_ready = n_ref <= 0 ? products.reference_frame === nothing :
+        products.reference_frame !== nothing && size(products.reference_frame) == frame_shape
+    reference_cube_ready = n_ref <= 0 ? products.reference_cube === nothing :
+        products.reference_cube !== nothing && size(products.reference_cube) == (frame_shape..., n_ref)
+    read_cube_ready = n_reads <= 1 ? products.read_cube === nothing :
+        products.read_cube !== nothing && size(products.read_cube) == (frame_shape..., n_reads)
+    read_times_ready = n_reads <= 1 ? products.read_times === nothing :
+        products.read_times !== nothing && length(products.read_times) == n_reads &&
+        eltype(products.read_times) === eltype(det.state.frame)
+    return reference_frame_ready &&
+        size(products.signal_frame) == frame_shape &&
+        size(products.combined_frame) == frame_shape &&
+        reference_cube_ready &&
+        products.signal_cube !== nothing &&
+        size(products.signal_cube) == (frame_shape..., n_sig) &&
+        read_cube_ready && read_times_ready
+end
+
 function _ensure_multi_read_products!(sensor::FrameSensorType, det::Detector)
     current = readout_products(det)
     frame = det.state.frame
     n_ref = frame_sampling_reference_reads(sensor)
     n_sig = frame_sampling_signal_reads(sensor)
     n_reads = frame_sampling_reads(sensor)
+    _multi_read_products_ready(current, det, n_ref, n_sig, n_reads) && return current
 
     reference_frame = detector_reference_frame(current)
     signal_frame = detector_signal_frame(current)
@@ -104,8 +129,8 @@ end
 function _sampling_reference_cube!(cube::AbstractArray{T,3}, sensor::FrameSensorType,
     det::Detector, sigma, rng::AbstractRNG, baseline::AbstractMatrix{T}) where {T}
     n_ref = frame_sampling_reference_reads(sensor)
-    fill!(baseline, zero(eltype(baseline)))
     for read_idx in 1:n_ref
+        fill!(baseline, zero(eltype(baseline)))
         sample_frame_read!(sensor, det, baseline, baseline, sigma, rng)
         @views copyto!(cube[:, :, read_idx], baseline)
     end
@@ -137,17 +162,42 @@ function _sampling_signal_cube(sensor::FrameSensorType, det::Detector, sigma, rn
     return _sampling_signal_cube!(cube, sensor, det, sigma, rng, baseline)
 end
 
-function _sampling_read_cube!(cube::AbstractArray{T,3}, sensor::FrameSensorType,
-    reference_cube::Union{Nothing,AbstractArray{T,3}}, signal_cube::AbstractArray{T,3}) where {T}
-    offset = 0
-    if !isnothing(reference_cube)
-        for read_idx in axes(reference_cube, 3)
-            @views copyto!(cube[:, :, read_idx], reference_cube[:, :, read_idx])
-        end
-        offset = size(reference_cube, 3)
+function _copy_sampling_plane!(target::AbstractArray{T,3}, target_index::Int,
+    source::AbstractArray{T,3}, source_index::Int) where {T}
+    return _copy_sampling_plane!(execution_style(target), target, target_index,
+        source, source_index)
+end
+
+function _copy_sampling_plane!(::ScalarCPUStyle, target::AbstractArray{T,3},
+    target_index::Int, source::AbstractArray{T,3}, source_index::Int) where {T}
+    @inbounds for j in axes(target, 2), i in axes(target, 1)
+        target[i, j, target_index] = source[i, j, source_index]
     end
+    return target
+end
+
+function _copy_sampling_plane!(::AcceleratorStyle, target::AbstractArray{T,3},
+    target_index::Int, source::AbstractArray{T,3}, source_index::Int) where {T}
+    @views copyto!(target[:, :, target_index], source[:, :, source_index])
+    return target
+end
+
+function _sampling_read_cube!(cube::AbstractArray{T,3}, ::FrameSensorType,
+    ::Nothing, signal_cube::AbstractArray{T,3}) where {T}
     for read_idx in axes(signal_cube, 3)
-        @views copyto!(cube[:, :, offset + read_idx], signal_cube[:, :, read_idx])
+        _copy_sampling_plane!(cube, read_idx, signal_cube, read_idx)
+    end
+    return cube
+end
+
+function _sampling_read_cube!(cube::AbstractArray{T,3}, ::FrameSensorType,
+    reference_cube::AbstractArray{T,3}, signal_cube::AbstractArray{T,3}) where {T}
+    for read_idx in axes(reference_cube, 3)
+        _copy_sampling_plane!(cube, read_idx, reference_cube, read_idx)
+    end
+    offset = size(reference_cube, 3)
+    for read_idx in axes(signal_cube, 3)
+        _copy_sampling_plane!(cube, offset + read_idx, signal_cube, read_idx)
     end
     return cube
 end

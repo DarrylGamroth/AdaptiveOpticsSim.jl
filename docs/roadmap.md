@@ -14,7 +14,7 @@ hardware-validated GPU workflows. The core package now has:
 - typed AO model objects for optics, atmosphere, WFS, detectors, DMs, control,
   and runtime orchestration
 - CPU tests across Linux, macOS, and Windows
-- optional CUDA and AMDGPU validation entry points for hosts with hardware
+- an active AMDGPU validation entry point and a retained CUDA restoration target
 - a maintained zero-allocation hot-path focus for CPU HIL-style runtime loops
 - committed reference data and regression tests for core WFS and detector paths
 - a compact docs set with one extension guide instead of subsystem plan sprawl
@@ -28,8 +28,8 @@ hardware-validated GPU workflows. The core package now has:
    [`api-reference.md`](api-reference.md) and [`extension-guide.md`](extension-guide.md).
 4. Preserve allocation-free CPU HIL hot paths when changing runtime,
    detector/WFS, controller, or DM code.
-5. Treat CUDA and AMDGPU support as maintained only on surfaces covered by the
-   dedicated backend validation targets.
+5. Maintain AMDGPU support only on surfaces covered by its dedicated hardware
+   target; keep CUDA explicitly unverified until a CUDA target is restored.
 
 ## Active Cleanup Themes
 

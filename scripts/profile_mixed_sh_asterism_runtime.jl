@@ -14,21 +14,17 @@ end
 function _resolve_backend(name::AbstractString)
     lowered = lowercase(name)
     if lowered == "cpu"
-        return Array, nothing, "cpu"
+        return CPUBackend(), nothing, "cpu"
     elseif lowered == "cuda"
         isdefined(Main, :CUDA) || error("profile_mixed_sh_asterism_runtime.jl requires CUDA.jl for backend=cuda")
         CUDA.functional() || error("profile_mixed_sh_asterism_runtime.jl requires a functional CUDA driver/device")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.CUDABackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.CUDABackendTag)
-        backend === nothing && error("CUDA backend array type is unavailable")
-        return backend, AdaptiveOpticsSim.CUDABackendTag, "cuda"
+        return CUDABackend(), AdaptiveOpticsSim.CUDABackendTag, "cuda"
     elseif lowered == "amdgpu"
         isdefined(Main, :AMDGPU) || error("profile_mixed_sh_asterism_runtime.jl requires AMDGPU.jl for backend=amdgpu")
         AMDGPU.functional() || error("profile_mixed_sh_asterism_runtime.jl requires a functional ROCm installation and GPU")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.AMDGPUBackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.AMDGPUBackendTag)
-        backend === nothing && error("AMDGPU backend array type is unavailable")
-        return backend, AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
+        return AMDGPUBackend(), AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
     end
     error("unsupported backend '$name'; use cpu, cuda, or amdgpu")
 end
@@ -48,7 +44,7 @@ function _na_profile(T::Type{<:AbstractFloat})
 end
 
 function run_profile(; backend_name::AbstractString="cpu", samples::Int=20, warmup::Int=5)
-    BackendArray, backend_tag, backend_label = _resolve_backend(backend_name)
+    backend, backend_tag, backend_label = _resolve_backend(backend_name)
     T = Float32
 
     tel = Telescope(
@@ -57,7 +53,7 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=20, warm
         sampling_time=1e-3,
         central_obstruction=0.30,
         T=T,
-        backend=BackendArray,
+        backend=backend,
     )
     ngs = Source(wavelength=T(589e-9), magnitude=0.0, coordinates=(0.0, 0.0), T=T)
     lgs = LGSSource(
@@ -70,8 +66,8 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=20, warm
         T=T,
     )
     ast = Asterism([ngs, lgs])
-    wfs = ShackHartmannWFS(tel; n_lenslets=14, mode=Diffractive(), T=T, backend=BackendArray)
-    det = Detector(noise=NoiseNone(), integration_time=T(1e-3), qe=T(1), binning=1, T=T, backend=BackendArray)
+    wfs = ShackHartmannWFS(tel; n_lenslets=14, mode=Diffractive(), T=T, backend=backend)
+    det = Detector(noise=NoiseNone(), integration_time=T(1e-3), qe=T(1), binning=1, T=T, backend=backend)
 
     rng = runtime_rng(1)
     AdaptiveOpticsSim.randn_backend!(rng, tel.state.opd)

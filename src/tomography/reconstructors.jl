@@ -196,6 +196,13 @@ end
     end
 end
 
+@kernel function extract_diagonal_kernel!(out, matrix, n::Int)
+    i = @index(Global, Linear)
+    if i <= n
+        @inbounds out[i] = matrix[i, i]
+    end
+end
+
 @kernel function submatrix_extract_kernel!(out, src, rows, cols, n_rows::Int, n_cols::Int)
     i, j = @index(Global, NTuple)
     if i <= n_rows && j <= n_cols
@@ -602,7 +609,7 @@ function _covariance_matrix(
                 out[i, j] = var_term * fractional_cn2
             else
                 u = T(2π) * rho * inv_L0
-                out[i, j] = cst * _scaled_kv56_scalar(u) * fractional_cn2
+                out[i, j] = cst * _scaled_kv56_cpu(u) * fractional_cn2
             end
         end
     end
@@ -627,7 +634,7 @@ function _covariance_matrix!(
                 out[i, j] = var_term * fractional_cn2
             else
                 u = T(2π) * rho * inv_L0
-                out[i, j] = cst * _scaled_kv56_scalar(u) * fractional_cn2
+                out[i, j] = cst * _scaled_kv56_cpu(u) * fractional_cn2
             end
         end
     end
@@ -1207,6 +1214,19 @@ end
 tomography_noise_covariance(model::TomographyNoiseModel, reference_diag::AbstractVector) =
     tomography_noise_covariance(NativeBuildBackend(), model, reference_diag)
 
+tomography_reference_diagonal(::BuildBackend, matrix::AbstractMatrix) = diag(matrix)
+
+function tomography_reference_diagonal(
+    ::GPUArrayBuildBackend{B},
+    matrix::AbstractMatrix{T},
+) where {B,T<:AbstractFloat}
+    n = min(size(matrix)...)
+    diagonal = _backend_array(B, T, n)
+    launch_kernel_async!(execution_style(matrix), extract_diagonal_kernel!, diagonal, matrix, n;
+        ndrange=n)
+    return diagonal
+end
+
 function _build_diagonal_noise(::NativeBuildBackend, variances::AbstractVector{T}) where {T<:AbstractFloat}
     return Diagonal(variances)
 end
@@ -1329,7 +1349,8 @@ function build_reconstructor(
     cxx_native = materialize_build(build_backend, interaction_native, cxx)
     cox_native = materialize_build(build_backend, interaction_native, cox)
     css_signal = backend_symmetric_product(interaction_native, cxx_native)
-    cnz = tomography_noise_covariance(build_backend, noise_model, diag(css_signal))
+    reference_diag = tomography_reference_diagonal(build_backend, css_signal)
+    cnz = tomography_noise_covariance(build_backend, noise_model, reference_diag)
     css = css_signal .+ cnz
     recstat = stable_hermitian_right_division(build_backend,
         backend_matmul_transpose_right(cox_native, interaction_native), css)
@@ -1589,7 +1610,8 @@ function build_reconstructor(
     cox_native = materialize_build(build_backend, gamma_native, cox)
     native_mask = materialize_build(build_backend, gamma_native, grid_mask)
     css_signal = backend_symmetric_product(gamma_native, cxx_native)
-    cnz = tomography_noise_covariance(build_backend, noise_model, diag(css_signal))
+    reference_diag = tomography_reference_diagonal(build_backend, css_signal)
+    cnz = tomography_noise_covariance(build_backend, noise_model, reference_diag)
     css = css_signal .+ cnz
     recstat = stable_hermitian_right_division(build_backend,
         backend_matmul_transpose_right(cox_native, gamma_native), css)

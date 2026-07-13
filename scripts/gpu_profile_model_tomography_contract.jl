@@ -28,7 +28,7 @@ function run_gpu_model_tomography_profile(::Type{B}) where {B<:AdaptiveOpticsSim
         altitude_km=TB[0.0, 10.0],
         L0=TB(25.0),
         r0_zenith=TB(0.2),
-        fractional_r0=TB[0.6, 0.4],
+        fractional_cn2=TB[0.6, 0.4],
         wavelength=TB(500e-9),
         wind_direction_deg=TB[0.0, 45.0],
         wind_speed=TB[10.0, 20.0],
@@ -60,7 +60,7 @@ function run_gpu_model_tomography_profile(::Type{B}) where {B<:AdaptiveOpticsSim
         n_actuators=fill(grid_side, n_dm),
         valid_actuators=trues(grid_side, grid_side),
     )
-    noise_model = RelativeSignalNoise(TB(0.1))
+    noise_model = AdaptiveOpticsSim.RelativeSignalNoise(TB(0.1))
 
     function build_model()
         recon = build_reconstructor(
@@ -82,7 +82,7 @@ function run_gpu_model_tomography_profile(::Type{B}) where {B<:AdaptiveOpticsSim
         altitude_km=TH[0.0, 10.0],
         L0=TH(25.0),
         r0_zenith=TH(0.2),
-        fractional_r0=TH[0.6, 0.4],
+        fractional_cn2=TH[0.6, 0.4],
         wavelength=TH(500e-9),
         wind_direction_deg=TH[0.0, 45.0],
         wind_speed=TH[10.0, 20.0],
@@ -123,7 +123,7 @@ function run_gpu_model_tomography_profile(::Type{B}) where {B<:AdaptiveOpticsSim
             lgswfs_hi,
             tomo_hi,
             tdm_hi;
-            noise_model=RelativeSignalNoise(TH(0.1)),
+            noise_model=AdaptiveOpticsSim.RelativeSignalNoise(TH(0.1)),
             build_backend=build_backend,
         )
         _sync_backend_array!(recon.reconstructor)

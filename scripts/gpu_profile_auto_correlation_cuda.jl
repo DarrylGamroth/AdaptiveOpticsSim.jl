@@ -35,7 +35,7 @@ function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
         altitude_km=T[0.0, 10.0],
         L0=T(25.0),
         r0_zenith=T(0.2),
-        fractional_r0=T[0.6, 0.4],
+        fractional_cn2=T[0.6, 0.4],
         wavelength=T(500e-9),
         wind_direction_deg=T[0.0, 45.0],
         wind_speed=T[10.0, 20.0],
@@ -110,7 +110,7 @@ function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
 
     cst, var_term, inv_L0 = AdaptiveOpticsSim._covariance_constants(r0, atmosphere.L0)
     block = AdaptiveOpticsSim._backend_array(B, T, n_valid, n_valid)
-    fractional_r0_native = AdaptiveOpticsSim.materialize_build(backend, atmosphere.fractional_r0)
+    fractional_cn2_native = AdaptiveOpticsSim.materialize_build(backend, atmosphere.fractional_cn2)
 
     t_selected = 0
     t_scatter = 0
@@ -124,7 +124,7 @@ function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
                     block,
                     shifted_flat,
                     valid_positions_native,
-                    fractional_r0_native,
+                    fractional_cn2_native,
                     igs,
                     jgs,
                     cst,

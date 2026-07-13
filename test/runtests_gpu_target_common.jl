@@ -3,6 +3,11 @@ using AdaptiveOpticsSim
 using LinearAlgebra
 using Random
 include("backend_optional_common.jl")
+include(normpath(joinpath(@__DIR__, "..", "benchmarks", "support", "revolt_like_hil_common.jl")))
+include(normpath(joinpath(@__DIR__, "..", "scripts", "gpu_builder_contract.jl")))
+
+BLAS.set_num_threads(1)
+AdaptiveOpticsSim.set_fft_provider_threads!(1)
 
 backend_target_branch_mode(::Type{AdaptiveOpticsSim.CUDABackendTag}) = BackendStreamExecution()
 backend_target_branch_mode(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = SequentialExecution()
@@ -25,6 +30,25 @@ function run_gpu_backend_target(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBacken
         Base.invokelatest(run_equivalence, B; branch_mode=backend_target_branch_mode(B))
         run_equivalence_high_accuracy = getfield(Main, :run_gpu_runtime_equivalence_high_accuracy)
         Base.invokelatest(run_equivalence_high_accuracy, B; branch_mode=backend_target_branch_mode(B))
+        run_gpu_builder_smoke(B)
+        run_revolt_like_hil_backend_smoke(B)
     end
+    return nothing
+end
+
+function run_revolt_like_hil_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    config_dir = normpath(joinpath(@__DIR__, "..", "benchmarks", "assets", "revolt_like"))
+    backend_name = lowercase(backend_label(B))
+    ctx = build_revolt_like_hil_context(;
+        backend_name,
+        config_dir,
+        sensor=CMOSSensor(T=Float32),
+        T=Float32,
+        rng=runtime_rng(20260713),
+    )
+    revolt_like_step!(ctx)
+    @test size(ctx.tiled_frame) == (352, 352)
+    @test all(isfinite, Array(ctx.tiled_frame))
+    @test sum(Array(ctx.tiled_frame)) > 0
     return nothing
 end

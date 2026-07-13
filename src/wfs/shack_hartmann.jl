@@ -30,6 +30,15 @@ include("shack_hartmann/lgs.jl")
     end
 end
 
+@kernel function shack_hartmann_detector_image_copy_kernel!(image, spot_cube,
+    n_sub::Int, n_y::Int, n_x::Int, gap::Int)
+    tile_y, tile_x, local_y, local_x = @index(Global, NTuple)
+    idx = (tile_y - 1) * n_sub + tile_x
+    y = (tile_y - 1) * (n_y + gap) + local_y
+    x = (tile_x - 1) * (n_x + gap) + local_x
+    @inbounds image[y, x] = spot_cube[idx, local_y, local_x]
+end
+
 """
     shack_hartmann_detector_image(spot_cube, n_lenslets; gap=0, gap_value=0)
     shack_hartmann_detector_image(wfs; gap=0, gap_value=0)
@@ -96,8 +105,15 @@ end
 
 function _shack_hartmann_detector_image!(style::AcceleratorStyle{B}, ::AcceleratorStyle{B},
     image::AbstractMatrix, spot_cube::AbstractArray, n_sub::Int, n_y::Int, n_x::Int, gap::Int, gap_value) where {B}
-    launch_kernel!(style, shack_hartmann_detector_image_kernel!, image, spot_cube, n_sub, n_y, n_x, gap,
-        eltype(image)(gap_value); ndrange=size(image))
+    output_gap_value = eltype(image)(gap_value)
+    if eltype(image) === eltype(spot_cube)
+        gap > 0 && fill!(image, output_gap_value)
+        launch_kernel!(style, shack_hartmann_detector_image_copy_kernel!, image, spot_cube,
+            n_sub, n_y, n_x, gap; ndrange=(n_sub, n_sub, n_y, n_x))
+    else
+        launch_kernel!(style, shack_hartmann_detector_image_kernel!, image, spot_cube,
+            n_sub, n_y, n_x, gap, output_gap_value; ndrange=size(image))
+    end
     return image
 end
 

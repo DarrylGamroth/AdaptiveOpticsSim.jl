@@ -29,6 +29,7 @@ abstract type AbstractRollingShutterExposureMode end
 abstract type AvalancheFrameSensorType <: FrameSensorType end
 abstract type HgCdTeAvalancheArraySensorType <: AvalancheFrameSensorType end
 abstract type SPADArraySensorType <: CountingSensorType end
+abstract type MKIDArraySensorType <: CountingSensorType end
 
 supports_detector_thermal_model(::AbstractFrameDetector) = false
 supports_detector_thermal_model(det::AbstractCountingDetector) = !is_null_thermal_model(thermal_model(det))
@@ -53,6 +54,7 @@ supports_detector_persistence(::FrameSensorType) = false
 supports_detector_nonlinearity(::FrameSensorType) = false
 supports_shutter_timing(::FrameSensorType) = false
 supports_photon_number_resolving(::SensorType) = false
+supports_energy_resolving(::SensorType) = false
 supports_raw_digital_output(::SensorType) = false
 supports_nondestructive_reads(::FrameSensorType) = false
 supports_reference_read_subtraction(::FrameSensorType) = false
@@ -1045,6 +1047,10 @@ struct CountingDetectorExportMetadata{T<:AbstractFloat}
     noise::Symbol
     output_type::Union{Nothing,DataType}
     readout::CountingReadoutMetadata
+    energy_resolution::Union{Nothing,T}
+    timing_jitter_s::Union{Nothing,T}
+    wavelength_min_m::Union{Nothing,T}
+    wavelength_max_m::Union{Nothing,T}
 end
 
 NoiseReadout(sigma::Real) = NoiseReadout{Float64}(float(sigma))
@@ -1260,15 +1266,18 @@ struct DetectorParams{T<:AbstractFloat,S<:SensorType,QE<:AbstractQuantumEfficien
     output_type::Union{Nothing,DataType}
 end
 
-mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O,P,TS<:AbstractDetectorThermalState}
+mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O,OH,P,
+    TS<:AbstractDetectorThermalState}
     frame::A
     response_buffer::A
     bin_buffer::A
     noise_buffer::A
     noise_buffer_host::Matrix{T}
+    batched_buffer_host::Array{T,3}
     accum_buffer::A
     latent_buffer::A
     output_buffer::O
+    output_buffer_host::OH
     readout_products::P
     thermal_state::TS
     integrated_time::T

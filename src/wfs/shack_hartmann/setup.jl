@@ -280,6 +280,7 @@ struct ShackHartmannWFSScalarPlan <: AbstractShackHartmannWFSSensingPlan end
 struct ShackHartmannWFSBatchedPlan <: AbstractShackHartmannWFSSensingPlan end
 struct ShackHartmannWFSDeviceStatsPlan <: AbstractShackHartmannWFSSensingPlan end
 struct ShackHartmannWFSRocmSafePlan <: AbstractShackHartmannWFSSensingPlan end
+struct ShackHartmannWFSRocmHostStatsPlan <: AbstractShackHartmannWFSSensingPlan end
 
 @inline sh_sensing_execution_plan(style::ExecutionStyle, wfs::ShackHartmannWFS) =
     sh_sensing_execution_plan(typeof(style), typeof(wfs))
@@ -292,6 +293,11 @@ struct ShackHartmannWFSRocmSafePlan <: AbstractShackHartmannWFSSensingPlan end
 @inline sh_uses_rocm_safe_sensing_plan(::ShackHartmannWFSRocmSafePlan) = true
 @inline sh_uses_rocm_safe_sensing_plan(wfs::ShackHartmannWFS) =
     sh_uses_rocm_safe_sensing_plan(sh_sensing_execution_plan(wfs))
+@inline sh_uses_host_stats_sensing_plan(::AbstractShackHartmannWFSSensingPlan) = false
+@inline sh_uses_host_stats_sensing_plan(::ShackHartmannWFSRocmSafePlan) = true
+@inline sh_uses_host_stats_sensing_plan(::ShackHartmannWFSRocmHostStatsPlan) = true
+@inline sh_uses_host_stats_sensing_plan(wfs::ShackHartmannWFS) =
+    sh_uses_host_stats_sensing_plan(sh_sensing_execution_plan(wfs))
 @inline sh_uses_batched_sensing_plan(::AbstractShackHartmannWFSSensingPlan) = false
 @inline sh_uses_batched_sensing_plan(::ShackHartmannWFSBatchedPlan) = true
 @inline sh_uses_batched_sensing_plan(::ShackHartmannWFSDeviceStatsPlan) = true

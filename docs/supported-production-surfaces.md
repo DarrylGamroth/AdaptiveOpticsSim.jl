@@ -53,34 +53,6 @@ Primary evidence:
 - benchmark artifacts under `benchmarks/results/`
 - [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml)
 
-### CUDA backend
-
-CUDA is a production-supported accelerator backend on the maintained surfaces
-covered by the dedicated hardware validation target:
-
-- [../test/runtests_cuda.jl](../test/runtests_cuda.jl)
-
-Current CUDA-supported scope:
-
-- maintained optional backend functional/parity checks
-- maintained runtime-equivalence surfaces
-- maintained high-accuracy post-command runtime-equivalence surfaces
-- maintained Shack-Hartmann exported-pixel parity surfaces
-- maintained composite low-order runtime surfaces
-- matched HEART RTC HIL runtime surfaces
-
-Primary evidence:
-
-- [backend-validation-guide.md](backend-validation-guide.md)
-- [release-validation-runbook.md](release-validation-runbook.md)
-- benchmark artifacts under `benchmarks/results/`
-- [../benchmarks/results/validation_runs/2026-04-10-spiders-cuda.toml](../benchmarks/results/validation_runs/2026-04-10-spiders-cuda.toml)
-
-Current expectation:
-
-- if a maintained CUDA surface regresses numerically against CPU, that is a
-  release-blocking defect for the CUDA-supported scope
-
 ### AMDGPU backend
 
 AMDGPU is a production-supported accelerator backend on the maintained surfaces
@@ -158,6 +130,10 @@ Scientist-owned HEART boundary truth artifact:
 
 The following are outside the current support claim:
 
+- CUDA execution. The extension, dedicated test project, and fail-fast hardware
+  target are retained, but no CUDA runner or device is currently available for
+  routine validation. The latest archived evidence is historical and does not
+  establish support for the current checkout.
 - SPECULA pixel-level equivalence on the HEART Shack-Hartmann surface
 - Metal backend support
 - backend-audit surfaces that are not part of the maintained hardware targets
@@ -173,8 +149,9 @@ The following are outside the current support claim:
 For current release/readiness decisions:
 
 - regressions on the CPU baseline are release-blocking
-- regressions on the maintained CUDA surfaces are release-blocking
 - regressions on the maintained AMDGPU surfaces are release-blocking
+- CUDA becomes release-blocking only after CUDA hardware validation is restored
+  and CUDA is explicitly returned to the supported delivery scope
 - unresolved SPECULA differences are not release-blocking unless the package
   starts claiming SPECULA equivalence for that surface
 - new features outside this supported surface should not be described as

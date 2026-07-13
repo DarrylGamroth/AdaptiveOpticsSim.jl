@@ -30,25 +30,10 @@
     end
 end
 
-@kernel function dm_separable_tmp_kernel!(tmp, xbasis, coefs_grid, n_act::Int)
-    i, a = @index(Global, NTuple)
-    if i <= size(tmp, 1) && a <= size(tmp, 2)
-        acc = zero(eltype(tmp))
-        @inbounds for b in 1:n_act
-            acc = muladd(xbasis[i, b], coefs_grid[b, a], acc)
-        end
-        tmp[i, a] = acc
-    end
-end
-
-@kernel function dm_separable_finalize_kernel!(opd, tmp, ybasis_t, pupil, n_act::Int)
+@kernel function dm_apply_pupil_kernel!(opd, pupil)
     i, j = @index(Global, NTuple)
     if i <= size(opd, 1) && j <= size(opd, 2)
-        acc = zero(eltype(opd))
-        @inbounds for a in 1:n_act
-            acc = muladd(tmp[i, a], ybasis_t[a, j], acc)
-        end
-        opd[i, j] = ifelse(pupil[i, j], acc, zero(eltype(opd)))
+        @inbounds opd[i, j] = ifelse(pupil[i, j], opd[i, j], zero(eltype(opd)))
     end
 end
 
@@ -703,11 +688,10 @@ end
     tmp = dm.state.separable_tmp::typeof(dm.state.opd)
     coefs_grid = dm.state.coefs_grid
     coefs_grid === nothing && throw(InvalidConfiguration("separable DM application requires a grid-backed command buffer"))
-    n_act = topology_axis_count(topology(dm))
-    launch_kernel_async!(style, dm_separable_tmp_kernel!,
-        tmp, xbasis, coefs_grid, n_act; ndrange=size(tmp))
-    launch_kernel!(style, dm_separable_finalize_kernel!,
-        dm.state.opd, tmp, ybasis_t, tel.state.pupil, n_act; ndrange=size(dm.state.opd))
+    mul!(tmp, xbasis, coefs_grid)
+    mul!(dm.state.opd, tmp, ybasis_t)
+    launch_kernel!(style, dm_apply_pupil_kernel!, dm.state.opd, tel.state.pupil;
+        ndrange=size(dm.state.opd))
     return dm.state.opd
 end
 

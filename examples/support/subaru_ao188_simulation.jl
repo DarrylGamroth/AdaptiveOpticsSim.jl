@@ -801,6 +801,7 @@ supports_detector_output(::Type{<:AO188Simulation}) = true
 supports_grouped_execution(::Type{<:AO188Simulation}) = true
 
 readout(simulation::AO188Simulation) = ao188_readout(simulation)
+AdaptiveOpticsSim.simulation_readout(simulation::AO188Simulation) = ao188_readout(simulation)
 
 function ao188_readout(simulation::AO188Simulation)
     return SimulationReadout(

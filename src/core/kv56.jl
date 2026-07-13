@@ -54,6 +54,11 @@ end
     return _scaled_kv56_integral(x, coeffs.nu, dt, _kv56_integral_bins())
 end
 
+@inline function _scaled_kv56_cpu(x::T) where {T<:AbstractFloat}
+    nu = _kv56_order(T)
+    return T(x^nu * besselk(nu, x))
+end
+
 @inline function _kv56_scalar(x::T) where {T<:AbstractFloat}
     x == zero(T) && return T(Inf)
     return _scaled_kv56_scalar(x) / x^_kv56_order(T)

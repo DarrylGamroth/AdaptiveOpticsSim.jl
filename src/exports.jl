@@ -51,7 +51,7 @@ export CompositeControllableOptic, ModalControllableOptic, TipTiltMirror, FocusS
 export update_command!
 export DMAdditive, DMReplace
 
-export Detector, APDDetector, SPADArrayDetector
+export Detector, APDDetector, SPADArrayDetector, MKIDArrayDetector
 export NoiseModel, NoiseNone, NoisePhoton, NoiseReadout, NoisePhotonReadout
 export SensorType, CCDSensor, CMOSSensor, EMCCDSensor, InGaAsSensor
 export LinearEMMode, PhotonCountingEMMode, EMOutput, ConventionalOutput, emccd_snr
@@ -59,7 +59,7 @@ export QCMOSSensor, ORCAQuestSensor, ORCAQuest2Sensor, ORCAQuestIQSensor
 export ORCAQuest, ORCAQuest2, ORCAQuestIQ
 export QCMOSStandardScan, QCMOSUltraQuietScan, QCMOSPhotonNumberResolvingScan, QCMOSRawScan
 export QCMOSDetector, ORCAQuestDetector, ORCAQuest2Detector, ORCAQuestIQDetector
-export HgCdTeAvalancheArraySensor, APDSensor, SPADArraySensor
+export HgCdTeAvalancheArraySensor, APDSensor, SPADArraySensor, MKIDArraySensor
 export FrameResponseModel, NullFrameResponse, GaussianPixelResponse, SampledFrameResponse
 export RectangularPixelAperture, SeparablePixelMTF
 export PixelResponseNonuniformity, DarkSignalNonuniformity, BadPixelMask, CompositeDetectorDefectModel

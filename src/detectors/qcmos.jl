@@ -404,7 +404,7 @@ end
 _apply_qcmos_photon_number_limit!(::Nothing, frame) = frame
 
 function _apply_qcmos_photon_number_limit!(limit, frame)
-    clamp!(frame, zero(eltype(frame)), eltype(frame)(limit))
+    clamp_array!(frame, zero(eltype(frame)), eltype(frame)(limit))
     return frame
 end
 

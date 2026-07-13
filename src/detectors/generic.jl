@@ -734,12 +734,15 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
     bin_buffer = array_backend{T}(undef, 1, 1)
     noise_buffer = array_backend{T}(undef, 1, 1)
     noise_buffer_host = Matrix{T}(undef, 1, 1)
+    batched_buffer_host = Array{T,3}(undef, 0, 0, 0)
     accum_buffer = array_backend{T}(undef, 1, 1)
     output_buffer = if output_type_t === nothing
         window === nothing ? nothing : array_backend{T}(undef, 1, 1)
     else
         array_backend{output_type_t}(undef, 1, 1)
     end
+    output_buffer_host = output_buffer === nothing ? nothing :
+        Matrix{eltype(output_buffer)}(undef, 1, 1)
     fill!(frame, zero(T))
     fill!(response_buffer, zero(T))
     fill!(bin_buffer, zero(T))
@@ -748,18 +751,23 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
     latent_buffer = array_backend{T}(undef, 1, 1)
     fill!(latent_buffer, zero(T))
     output_buffer === nothing || fill!(output_buffer, zero(eltype(output_buffer)))
+    output_buffer_host === nothing || fill!(output_buffer_host,
+        zero(eltype(output_buffer_host)))
     thermal_state = thermal_state_from_model(thermal, T)
     readout_products_type = detector_readout_products_type(sensor, frame, T)
     readout_products = initial_readout_products(sensor, frame, T)
-    state = DetectorState{T, typeof(frame), typeof(output_buffer), readout_products_type, typeof(thermal_state)}(
+    state = DetectorState{T, typeof(frame), typeof(output_buffer),
+        typeof(output_buffer_host), readout_products_type, typeof(thermal_state)}(
         frame,
         response_buffer,
         bin_buffer,
         noise_buffer,
         noise_buffer_host,
+        batched_buffer_host,
         accum_buffer,
         latent_buffer,
         output_buffer,
+        output_buffer_host,
         readout_products,
         thermal_state,
         zero(T),

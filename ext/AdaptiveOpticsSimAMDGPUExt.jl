@@ -53,12 +53,10 @@ AdaptiveOpticsSim.grouped_accumulation_plan(
     ::Type{<:AdaptiveOpticsSim.BioEdgeWFS},
 ) = AdaptiveOpticsSim.GroupedStaged2DPlan()
 function AdaptiveOpticsSim.sh_sensing_execution_plan(
-    style::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
-    wfs::AdaptiveOpticsSim.ShackHartmannWFS,
+    ::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
+    ::AdaptiveOpticsSim.ShackHartmannWFS,
 )
-    return wfs.params.n_lenslets == 4 ?
-        AdaptiveOpticsSim.ShackHartmannWFSRocmSafePlan() :
-        AdaptiveOpticsSim.ShackHartmannWFSBatchedPlan()
+    return AdaptiveOpticsSim.ShackHartmannWFSRocmHostStatsPlan()
 end
 
 function AdaptiveOpticsSim.compute_intensity_safe!(
@@ -71,8 +69,12 @@ function AdaptiveOpticsSim.compute_intensity_safe!(
     T = eltype(wfs.state.intensity)
     field_host = Matrix{Complex{T}}(undef, size(wfs.state.field)...)
     fill!(field_host, zero(eltype(field_host)))
-    pupil_host = Array(@view tel.state.pupil[xs:xe, ys:ye])
-    opd_host = Array(@view tel.state.opd[xs:xe, ys:ye])
+    # AMDGPU 2.7 routes host conversion of a ROCArray view through a generic
+    # gather kernel that is not usable on this path. Copy the dense parents
+    # through the direct transfer path, then slice on the host for this
+    # deliberately conservative ROCm fallback.
+    pupil_host = @view Array(tel.state.pupil)[xs:xe, ys:ye]
+    opd_host = @view Array(tel.state.opd)[xs:xe, ys:ye]
     phasor_host = Array(wfs.state.phasor)
     opd_to_cycles = T(2) / AdaptiveOpticsSim.wavelength(src)
     amp_scale = sqrt(T(AdaptiveOpticsSim.photon_flux(src) * tel.params.sampling_time *
@@ -86,30 +88,23 @@ function AdaptiveOpticsSim.compute_intensity_safe!(
     return wfs.state.intensity
 end
 
-@kernel function roc_modal_opd_kernel!(opd_vec, modes, coefs, n_rows::Int, n_modes::Int)
-    i = @index(Global)
-    if i <= n_rows
-        acc = zero(eltype(opd_vec))
-        @inbounds for k in 1:n_modes
-            acc += modes[i, k] * coefs[k]
-        end
-        opd_vec[i] = acc
-    end
-end
-
-function AdaptiveOpticsSim._apply_modal_opd!(
-    style::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
-    optic::AdaptiveOpticsSim.ModalControllableOptic,
-)
-    AdaptiveOpticsSim.launch_kernel!(style, roc_modal_opd_kernel!, optic.state.opd_vec,
-        optic.state.modes, optic.state.coefs, length(optic.state.opd_vec),
-        length(optic.state.coefs); ndrange=length(optic.state.opd_vec))
-    return optic.state.opd
-end
 AdaptiveOpticsSim.detector_execution_plan(
     ::Type{<:AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:AdaptiveOpticsSim.Detector},
 ) = AdaptiveOpticsSim.DetectorHostMirrorPlan()
+AdaptiveOpticsSim._detector_value_plan(
+    plan::AdaptiveOpticsSim.DetectorHostMirrorPlan,
+    ::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
+) = plan
+AdaptiveOpticsSim.can_apply_device_readout_correction(
+    ::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
+    ::AdaptiveOpticsSim.FrameReadoutCorrectionModel,
+) = false
+AdaptiveOpticsSim.counting_output_execution_plan(
+    ::Type{<:AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend}},
+    ::Type{<:AdaptiveOpticsSim.AbstractCountingDetector},
+    ::Type{<:AMDGPU.ROCArray{T,2}},
+) where {T<:Integer} = AdaptiveOpticsSim.DetectorHostMirrorPlan()
 AdaptiveOpticsSim.reduction_execution_plan(
     ::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
     ::AMDGPU.ROCArray,
@@ -140,7 +135,9 @@ function AdaptiveOpticsSim._poisson_noise_frame!(
     rng::AbstractRNG,
     img::AMDGPU.ROCArray{T,2},
 ) where {T<:AbstractFloat}
-    AdaptiveOpticsSim._poisson_noise!(AdaptiveOpticsSim.execution_style(img), rng, img)
+    host = AdaptiveOpticsSim.detector_host_frame!(det, img)
+    AdaptiveOpticsSim._poisson_noise!(AdaptiveOpticsSim.ScalarCPUStyle(), rng, host)
+    copyto!(img, host)
     return img
 end
 function AdaptiveOpticsSim._poisson_noise_frame!(
@@ -149,7 +146,9 @@ function AdaptiveOpticsSim._poisson_noise_frame!(
     rng::AbstractRNG,
     cube::AMDGPU.ROCArray{T,3},
 ) where {T<:AbstractFloat}
-    AdaptiveOpticsSim._poisson_noise!(AdaptiveOpticsSim.execution_style(cube), rng, cube)
+    host = AdaptiveOpticsSim.detector_host_cube!(det, cube)
+    AdaptiveOpticsSim._poisson_noise!(AdaptiveOpticsSim.ScalarCPUStyle(), rng, host)
+    copyto!(cube, host)
     return cube
 end
 function AdaptiveOpticsSim.randn_phase_noise!(rng::AbstractRNG, out::AMDGPU.ROCArray{T,2}, host::Matrix{T}) where {T<:AbstractFloat}
@@ -160,89 +159,61 @@ function AdaptiveOpticsSim.randn_phase_noise!(rng::AbstractRNG, out::AMDGPU.ROCA
     copyto!(out, host)
     return host
 end
-function roc_sh_spot_cutoff_stats_kernel!(stats, spot_cube, valid_mask, cutoff, n_sub::Int, n1::Int, n2::Int)
-    lane = Int(AMDGPU.workitemIdx().x)
-    idx = Int(AMDGPU.workgroupIdx().x)
-    n_spots = n_sub * n_sub
-    if idx <= n_spots
-        i = (idx - 1) ÷ n_sub + 1
-        j = idx - (i - 1) * n_sub
-        if @inbounds valid_mask[i, j]
-            T = eltype(stats)
-            total_sh = AMDGPU.@ROCStaticLocalArray(T, 256, false)
-            sx_sh = AMDGPU.@ROCStaticLocalArray(T, 256, false)
-            sy_sh = AMDGPU.@ROCStaticLocalArray(T, 256, false)
-            total = zero(T)
-            sx = zero(T)
-            sy = zero(T)
-            npix = n1 * n2
-            p = lane
-            while p <= npix
-                x = (p - 1) ÷ n2 + 1
-                y = p - (x - 1) * n2
-                val = @inbounds spot_cube[idx, x, y]
-                if val >= cutoff
-                    total += val
-                    sx += T(x - 1) * val
-                    sy += T(y - 1) * val
-                end
-                p += 256
-            end
-            @inbounds begin
-                total_sh[lane] = total
-                sx_sh[lane] = sx
-                sy_sh[lane] = sy
-            end
-            AMDGPU.sync_workgroup()
-            stride = 128
-            while stride >= 1
-                if lane <= stride
-                    @inbounds begin
-                        total_sh[lane] += total_sh[lane + stride]
-                        sx_sh[lane] += sx_sh[lane + stride]
-                        sy_sh[lane] += sy_sh[lane + stride]
-                    end
-                end
-                AMDGPU.sync_workgroup()
-                stride ÷= 2
-            end
-            if lane == 1
-                base = 3 * (idx - 1)
-                @inbounds begin
-                    stats[base + 1] = total_sh[1]
-                    stats[base + 2] = sx_sh[1]
-                    stats[base + 3] = sy_sh[1]
-                end
-            end
-        end
-    end
-    return
-end
-function AdaptiveOpticsSim.sh_signal_from_spots_device_stats!(
+function AdaptiveOpticsSim._fill_phase_psd!(
     ::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
-    wfs::AdaptiveOpticsSim.ShackHartmannWFS,
-    cutoff::T,
+    psd::AMDGPU.ROCArray{T,2},
+    freqs::AMDGPU.ROCArray{T,1},
+    coeff::T,
+    two_pi_sq::T,
+    inv_L0_sq::T,
+    exponent::T,
+    inv_fm_sq::T,
+    n::Int,
 ) where {T<:AbstractFloat}
-    n_sub = wfs.params.n_lenslets
-    offset = n_sub * n_sub
-    n1 = size(wfs.state.spot_cube, 2)
-    n2 = size(wfs.state.spot_cube, 3)
-    fill!(wfs.state.spot_stats, zero(eltype(wfs.state.spot_stats)))
-    AMDGPU.@roc groupsize=256 gridsize=offset roc_sh_spot_cutoff_stats_kernel!(
-        wfs.state.spot_stats,
-        wfs.state.spot_cube,
-        wfs.state.valid_mask,
-        cutoff,
-        n_sub,
-        n1,
-        n2,
-    )
-    AMDGPU.synchronize()
-    style = AdaptiveOpticsSim.execution_style(wfs.state.slopes)
-    AdaptiveOpticsSim.launch_kernel!(style, AdaptiveOpticsSim.sh_finalize_spot_slopes_kernel!, wfs.state.slopes,
-        wfs.state.spot_stats, wfs.state.valid_mask, n_sub, offset; ndrange=offset)
-    return wfs.state.slopes
+    host_psd = Matrix{T}(undef, size(psd))
+    AdaptiveOpticsSim._fill_phase_psd!(AdaptiveOpticsSim.ScalarCPUStyle(), host_psd,
+        Array(freqs), coeff, two_pi_sq, inv_L0_sq, exponent, inv_fm_sq, n)
+    copyto!(psd, host_psd)
+    return psd
 end
+
+# AMDGPU 2.7/GPUCompiler currently fails IR validation for the variable-trip
+# KernelAbstractions slope kernels on gfx1030. Keep these compatibility paths
+# explicit so other accelerator backends retain the device kernels.
+function AdaptiveOpticsSim._geometric_slopes!(
+    ::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
+    slopes::AMDGPU.ROCArray{T,1},
+    opd::AMDGPU.ROCArray{T,2},
+    valid_mask::AMDGPU.ROCArray{Bool,2},
+    sub::Int,
+    n_sub::Int,
+    offset::Int,
+) where {T<:AbstractFloat}
+    host_slopes = Vector{T}(undef, length(slopes))
+    AdaptiveOpticsSim._geometric_slopes!(AdaptiveOpticsSim.ScalarCPUStyle(),
+        host_slopes, Array(opd), Array(valid_mask), sub, n_sub, offset)
+    copyto!(slopes, host_slopes)
+    return slopes
+end
+
+function AdaptiveOpticsSim._edge_geometric_slopes!(
+    ::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
+    slopes::AMDGPU.ROCArray{T,1},
+    opd::AMDGPU.ROCArray{T,2},
+    valid_mask::AMDGPU.ROCArray{Bool,2},
+    edge_mask::AMDGPU.ROCArray{Bool,2},
+    sub::Int,
+    n_sub::Int,
+    offset::Int,
+) where {T<:AbstractFloat}
+    host_slopes = Vector{T}(undef, length(slopes))
+    AdaptiveOpticsSim._edge_geometric_slopes!(AdaptiveOpticsSim.ScalarCPUStyle(),
+        host_slopes, Array(opd), Array(valid_mask), Array(edge_mask), sub,
+        n_sub, offset)
+    copyto!(slopes, host_slopes)
+    return slopes
+end
+
 AdaptiveOpticsSim.backend_matmul(A::AMDGPU.ROCArray{T,2}, B::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat} =
     AMDGPU.rocBLAS.gemm('N', 'N', A, B)
 AdaptiveOpticsSim.backend_matmul_transpose_right(A::AMDGPU.ROCArray{T,2}, B::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat} =
@@ -253,6 +224,19 @@ function dense_copy_to_roc(A::AbstractMatrix{T}) where {T<:AbstractFloat}
     copyto!(out, A)
     return out
 end
+
+function dense_host_matrix(A::SubArray{T,2,<:AMDGPU.ROCArray}) where {T<:AbstractFloat}
+    host_parent = Array(parent(A))
+    return Matrix(@view host_parent[parentindices(A)...])
+end
+
+dense_copy_to_roc(A::SubArray{T,2,<:AMDGPU.ROCArray}) where {T<:AbstractFloat} =
+    AMDGPU.ROCArray(dense_host_matrix(A))
+
+copy_dense_to_roc!(dest::AMDGPU.ROCArray, src::AMDGPU.ROCArray) = copyto!(dest, src)
+copy_dense_to_roc!(dest::AMDGPU.ROCArray, src::SubArray{T,2,<:AMDGPU.ROCArray}) where {T<:AbstractFloat} =
+    copyto!(dest, dense_host_matrix(src))
+copy_dense_to_roc!(dest::AMDGPU.ROCArray, src::AbstractMatrix) = copyto!(dest, src)
 
 function roc_svd(A::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat}
     F = copy(A)
@@ -436,7 +420,7 @@ function AdaptiveOpticsSim.solve_normal_system!(diag::AdaptiveOpticsSim.LiFTDiag
     factor::AbstractMatrix{T}, normal::AbstractMatrix{T}, H::AbstractMatrix{T}, residual::AbstractVector{T},
     ::AdaptiveOpticsSim.LiFTDampingNone) where {T<:AbstractFloat}
     factor_mat = roc_factor_matrix(factor)
-    copyto!(factor_mat, normal)
+    copy_dense_to_roc!(factor_mat, normal)
     _, chol = roc_cholesky_solve!(factor_mat, rhs; check=false)
     λ = zero(T)
     if !issuccess(chol)
@@ -461,7 +445,7 @@ function AdaptiveOpticsSim.solve_normal_system!(diag::AdaptiveOpticsSim.LiFTDiag
     factor::AbstractMatrix{T}, normal::AbstractMatrix{T}, H::AbstractMatrix{T}, residual::AbstractVector{T},
     damping::AdaptiveOpticsSim.LiFTLevenbergMarquardt) where {T<:AbstractFloat}
     factor_mat = roc_factor_matrix(factor)
-    copyto!(factor_mat, normal)
+    copy_dense_to_roc!(factor_mat, normal)
     λ = AdaptiveOpticsSim.damping_lambda(damping, normal)
     if λ > zero(T)
         @views factor_mat[diagind(factor_mat)] .+= λ
@@ -469,7 +453,7 @@ function AdaptiveOpticsSim.solve_normal_system!(diag::AdaptiveOpticsSim.LiFTDiag
     _, chol = roc_cholesky_solve!(factor_mat, rhs; check=false)
     while !issuccess(chol)
         λ = max(λ * T(damping.growth), AdaptiveOpticsSim.regularization_load(normal))
-        copyto!(factor_mat, normal)
+        copy_dense_to_roc!(factor_mat, normal)
         @views factor_mat[diagind(factor_mat)] .+= λ
         _, chol = roc_cholesky_solve!(factor_mat, rhs; check=false)
         if λ > T(1e12)

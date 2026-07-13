@@ -365,8 +365,37 @@ end
 @inline command_storage(optic::ModalControllableOptic) = optic.state.coefs
 @inline command_layout(optic::ModalControllableOptic) = optic.layout
 
+@kernel function modal_opd_one_kernel!(opd, modes, coefs, n::Int)
+    idx = @index(Global, Linear)
+    if idx <= n
+        @inbounds opd[idx] = modes[idx, 1] * coefs[1]
+    end
+end
+
+@kernel function modal_opd_two_kernel!(opd, modes, coefs, n::Int)
+    idx = @index(Global, Linear)
+    if idx <= n
+        @inbounds opd[idx] = modes[idx, 1] * coefs[1] + modes[idx, 2] * coefs[2]
+    end
+end
+
 @inline function _apply_modal_opd!(::ExecutionStyle, optic::ModalControllableOptic)
     mul!(optic.state.opd_vec, optic.state.modes, optic.state.coefs)
+    return optic.state.opd
+end
+
+@inline function _apply_modal_opd!(style::AcceleratorStyle, optic::ModalControllableOptic)
+    n_modes = size(optic.state.modes, 2)
+    n = length(optic.state.opd_vec)
+    if n_modes == 1
+        launch_kernel!(style, modal_opd_one_kernel!, optic.state.opd_vec,
+            optic.state.modes, optic.state.coefs, n; ndrange=n)
+    elseif n_modes == 2
+        launch_kernel!(style, modal_opd_two_kernel!, optic.state.opd_vec,
+            optic.state.modes, optic.state.coefs, n; ndrange=n)
+    else
+        mul!(optic.state.opd_vec, optic.state.modes, optic.state.coefs)
+    end
     return optic.state.opd
 end
 

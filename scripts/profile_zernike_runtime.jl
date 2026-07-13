@@ -15,21 +15,17 @@ end
 function _resolve_backend(name::AbstractString)
     lowered = lowercase(name)
     if lowered == "cpu"
-        return Array, nothing, "cpu"
+        return CPUBackend(), nothing, "cpu"
     elseif lowered == "cuda"
         isdefined(Main, :CUDA) || error("profile_zernike_runtime.jl requires CUDA.jl for backend=cuda")
         CUDA.functional() || error("profile_zernike_runtime.jl requires a functional CUDA driver/device")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.CUDABackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.CUDABackendTag)
-        backend === nothing && error("CUDA backend array type is unavailable")
-        return backend, AdaptiveOpticsSim.CUDABackendTag, "cuda"
+        return CUDABackend(), AdaptiveOpticsSim.CUDABackendTag, "cuda"
     elseif lowered == "amdgpu"
         isdefined(Main, :AMDGPU) || error("profile_zernike_runtime.jl requires AMDGPU.jl for backend=amdgpu")
         AMDGPU.functional() || error("profile_zernike_runtime.jl requires a functional ROCm installation and GPU")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.AMDGPUBackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.AMDGPUBackendTag)
-        backend === nothing && error("AMDGPU backend array type is unavailable")
-        return backend, AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
+        return AMDGPUBackend(), AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
     end
     error("unsupported backend '$name'; use cpu, cuda, or amdgpu")
 end
@@ -90,7 +86,7 @@ end
 
 function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractString="compact",
     samples::Union{Int,Nothing}=nothing, warmup::Union{Int,Nothing}=nothing)
-    BackendArray, backend_tag, backend_label = _resolve_backend(backend_name)
+    backend, backend_tag, backend_label = _resolve_backend(backend_name)
     T = Float32
     rng = runtime_rng(5)
     cfg = _zernike_scale_config(scale_name, T)
@@ -103,17 +99,17 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
         sampling_time=1e-3,
         central_obstruction=0.0,
         T=T,
-        backend=BackendArray,
+        backend=backend,
     )
     src = Source(band=:I, magnitude=0.0, T=T)
-    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=BackendArray)
-    dm = DeformableMirror(tel; n_act=cfg.n_act, influence_width=0.35, T=T, backend=BackendArray)
-    wfs = ZernikeWFS(tel; pupil_samples=cfg.pupil_samples, diffraction_padding=cfg.diffraction_padding, T=T, backend=BackendArray)
-    det = Detector(noise=NoiseNone(), integration_time=T(1), qe=T(1), binning=1, T=T, backend=BackendArray)
-    sim = AOSimulation(tel, atm, src, dm, wfs)
+    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=backend)
+    dm = DeformableMirror(tel; n_act=cfg.n_act, influence_width=0.35, T=T, backend=backend)
+    wfs = ZernikeWFS(tel; pupil_samples=cfg.pupil_samples, diffraction_padding=cfg.diffraction_padding, T=T, backend=backend)
+    det = Detector(noise=NoiseNone(), integration_time=T(1), qe=T(1), binning=1, T=T, backend=backend)
+    sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=cfg.interaction_amplitude)
     recon = ModalReconstructor(imat; gain=T(0.4))
-    runtime = ClosedLoopRuntime(sim, recon; rng=rng, wfs_detector=det)
+    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; rng=rng, wfs_detector=det)
     interface = simulation_interface(runtime)
 
     t0 = time_ns()
@@ -127,7 +123,7 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
         step!(interface)
         _sync_interface!(backend_tag, interface)
     end; warmup=resolved_warmup, samples=resolved_samples, gc_before=false)
-    phase = runtime_phase_timing(interface; warmup=resolved_warmup, samples=resolved_samples, gc_before=false)
+    phase = AdaptiveOpticsSim.runtime_phase_timing(interface; warmup=resolved_warmup, samples=resolved_samples, gc_before=false)
 
     println("zernike_runtime_profile")
     println("  backend: ", backend_label)

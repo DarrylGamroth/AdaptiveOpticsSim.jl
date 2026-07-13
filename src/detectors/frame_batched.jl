@@ -94,7 +94,7 @@ _batched_signal_defects!(::DarkSignalNonuniformity, cube::AbstractArray, scratch
 function _batched_dark_defects!(model::DarkSignalNonuniformity, cube::AbstractArray, scratch::AbstractArray, exposure_time::Real)
     size(model.dark_map) == _batched_frame_shape(cube) ||
         throw(DimensionMismatchError("DarkSignalNonuniformity dark_map size must match detector frame size"))
-    cube .+= _batched_frame_map(model.dark_map .* exposure_time)
+    cube .+= _batched_frame_map(model.dark_map) .* exposure_time
     return cube
 end
 
@@ -132,7 +132,8 @@ function _batched_frame_nonlinearity!(model::SaturatingFrameNonlinearity, cube::
     return cube
 end
 
-_batched_pre_readout_gain!(::FrameSensorType, det::Detector, cube::AbstractArray, rng::AbstractRNG) = cube
+_batched_pre_readout_gain!(::FrameSensorType, det::Detector, cube::AbstractArray,
+    scratch::AbstractArray, rng::AbstractRNG) = cube
 _batched_sensor_statistics!(sensor::FrameSensorType, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
 
 function _batched_avalanche_excess_noise!(factor, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
@@ -159,6 +160,42 @@ end
 
 function _batched_apply_readout_correction!(model::FrameReadoutCorrectionModel, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
     return _batched_apply_readout_correction!(execution_style(cube), model, cube, scratch)
+end
+
+function detector_host_cube!(det::Detector, cube::AbstractArray{T,3}) where {T<:AbstractFloat}
+    host = det.state.batched_buffer_host
+    if size(host) != size(cube)
+        host = Array{T,3}(undef, size(cube))
+        det.state.batched_buffer_host = host
+    end
+    copyto!(host, cube)
+    return host
+end
+
+@inline _batched_apply_readout_correction!(det::Detector,
+    ::NullFrameReadoutCorrection, cube::AbstractArray{T,3},
+    scratch::AbstractArray{T,3}) where {T<:AbstractFloat} = cube
+
+function _batched_apply_readout_correction!(det::Detector,
+    model::FrameReadoutCorrectionModel, cube::AbstractArray{T,3},
+    scratch::AbstractArray{T,3}) where {T<:AbstractFloat}
+    plan = detector_execution_plan(typeof(execution_style(cube)), typeof(det))
+    return _batched_apply_readout_correction!(plan, det, model, cube, scratch)
+end
+
+function _batched_apply_readout_correction!(::DetectorDirectPlan, det::Detector,
+    model::FrameReadoutCorrectionModel, cube::AbstractArray{T,3},
+    scratch::AbstractArray{T,3}) where {T<:AbstractFloat}
+    return _batched_apply_readout_correction!(model, cube, scratch)
+end
+
+function _batched_apply_readout_correction!(::DetectorHostMirrorPlan, det::Detector,
+    model::FrameReadoutCorrectionModel, cube::AbstractArray{T,3},
+    scratch::AbstractArray{T,3}) where {T<:AbstractFloat}
+    host = detector_host_cube!(det, cube)
+    _batched_apply_readout_correction!(model, host)
+    copyto!(cube, host)
+    return cube
 end
 
 function _batched_apply_readout_correction!(::ExecutionStyle, model::FrameReadoutCorrectionModel,
@@ -396,7 +433,7 @@ function _batched_quantization!(det::Detector, cube::AbstractArray)
         end
     else
         cube .*= (levels - one(levels)) / full_well
-        clamp!(cube, zero(eltype(cube)), levels - one(levels))
+        clamp_array!(cube, zero(eltype(cube)), levels - one(levels))
     end
     return cube
 end
@@ -434,16 +471,22 @@ function _batched_apply_response!(::ScalarCPUStyle, model::SampledFrameResponse,
     kn, km = size(model.kernel)
     radius_i = fld(kn, 2)
     radius_j = fld(km, 2)
-    @inbounds for j in 1:m, i in 1:n, b in 1:n_batch
-        acc = zero(T)
-        for ki in 1:kn
-            ii = clamp(i + ki - radius_i - 1, 1, n)
-            for kj in 1:km
-                jj = clamp(j + kj - radius_j - 1, 1, m)
-                acc += model.kernel[ki, kj] * cube[b, ii, jj]
+    fill!(scratch, zero(T))
+    @inbounds for ki in 1:kn
+        offset_i = ki - radius_i - 1
+        for kj in 1:km
+            offset_j = kj - radius_j - 1
+            weight = model.kernel[ki, kj]
+            for j in 1:m
+                jj = clamp(j + offset_j, 1, m)
+                for i in 1:n
+                    ii = clamp(i + offset_i, 1, n)
+                    for b in 1:n_batch
+                        scratch[b, i, j] += weight * cube[b, ii, jj]
+                    end
+                end
             end
         end
-        scratch[b, i, j] = acc
     end
     copyto!(cube, scratch)
     return cube
@@ -514,21 +557,27 @@ function _batched_apply_separable_response!(::ScalarCPUStyle, cube::AbstractArra
     n_batch, n, m = size(cube)
     radius_x = fld(length(kernel_x), 2)
     radius_y = fld(length(kernel_y), 2)
-    @inbounds for j in 1:m, i in 1:n, b in 1:n_batch
-        acc = zero(T)
-        for kk in eachindex(kernel_x)
-            jj = clamp(j + kk - radius_x - 1, 1, m)
-            acc += kernel_x[kk] * cube[b, i, jj]
+    fill!(scratch, zero(T))
+    @inbounds for kk in eachindex(kernel_x)
+        offset = kk - radius_x - 1
+        weight = kernel_x[kk]
+        for j in 1:m
+            jj = clamp(j + offset, 1, m)
+            for i in 1:n, b in 1:n_batch
+                scratch[b, i, j] += weight * cube[b, i, jj]
+            end
         end
-        scratch[b, i, j] = acc
     end
-    @inbounds for j in 1:m, i in 1:n, b in 1:n_batch
-        acc = zero(T)
-        for kk in eachindex(kernel_y)
-            ii = clamp(i + kk - radius_y - 1, 1, n)
-            acc += kernel_y[kk] * scratch[b, ii, j]
+    fill!(cube, zero(T))
+    @inbounds for kk in eachindex(kernel_y)
+        offset = kk - radius_y - 1
+        weight = kernel_y[kk]
+        for j in 1:m, i in 1:n
+            ii = clamp(i + offset, 1, n)
+            for b in 1:n_batch
+                cube[b, i, j] += weight * scratch[b, ii, j]
+            end
         end
-        cube[b, i, j] = acc
     end
     return cube
 end
@@ -558,10 +607,10 @@ function _apply_batched_detector_pipeline!(det::Detector, cube::AbstractArray{T,
     _batched_sensor_statistics!(det.params.sensor, det, cube, scratch, rng)
     _batched_frame_nonlinearity!(det.params.nonlinearity_model, cube)
     apply_saturation!(det, cube)
-    _batched_pre_readout_gain!(det.params.sensor, det, cube, rng)
+    _batched_pre_readout_gain!(det.params.sensor, det, cube, scratch, rng)
     _batched_readout_noise!(det, cube, scratch, rng)
     _batched_post_readout_gain!(det.params.sensor, det, cube)
-    _batched_apply_readout_correction!(det.params.correction_model, cube, scratch)
+    _batched_apply_readout_correction!(det, det.params.correction_model, cube, scratch)
     _batched_quantization!(det, cube)
     _batched_background_map!(det.background_map, cube, scratch)
     synchronize_backend!(execution_style(cube))
@@ -641,6 +690,6 @@ end
 function apply_saturation!(det::Detector, cube::AbstractArray)
     full_well = det.params.full_well
     full_well === nothing && return cube
-    clamp!(cube, zero(eltype(cube)), full_well)
+    clamp_array!(cube, zero(eltype(cube)), full_well)
     return cube
 end

@@ -31,6 +31,13 @@ end
     end
 end
 
+@kernel function lift_sqrt_weights_kernel!(weights, n::Int)
+    i = @index(Global, Linear)
+    if i <= n
+        @inbounds weights[i] = sqrt(weights[i])
+    end
+end
+
 abstract type LiFTMode end
 struct LiFTAnalytic <: LiFTMode end
 struct LiFTNumerical <: LiFTMode end
@@ -371,14 +378,14 @@ function reconstruct!(coeffs::AbstractVector{T}, lift::LiFT, psf_in::AbstractMat
         model_psf = psf_from_opd!(lift, current_opd)
         scale = one(T)
         if optimize_norm == :sum
-            denom = sum(model_psf)
+            denom = backend_sum_value(model_psf)
             if denom > 0
-                scale = sum(psf_in) / denom
+                scale = backend_sum_value(psf_in) / denom
             end
         elseif optimize_norm == :max
-            denom = maximum(model_psf)
+            denom = backend_maximum_value(model_psf)
             if denom > 0
-                scale = maximum(psf_in) / denom
+                scale = backend_maximum_value(psf_in) / denom
             end
         end
         if scale != one(T)
@@ -658,12 +665,21 @@ function qr_condition_ratio(qr_factor, n_modes::Int)
     return maxabs / max(minabs, eps(T))
 end
 
-function normal_condition_ratio(normal::AbstractMatrix{T}) where {T<:AbstractFloat}
+@inline normal_condition_ratio(normal::AbstractMatrix{T}) where {T<:AbstractFloat} =
+    normal_condition_ratio(reduction_execution_plan(normal), normal)
+
+function normal_condition_ratio(::DirectReductionPlan, normal::AbstractMatrix{T}) where {T<:AbstractFloat}
     diagvals = abs.(@view normal[diagind(normal)])
     maxabs = maximum(diagvals)
     minabs = minimum(diagvals)
     maxabs == zero(T) && return T(Inf)
     return maxabs / max(minabs, eps(T))
+end
+
+function normal_condition_ratio(::HostMirrorReductionPlan, normal::AbstractMatrix{T}) where {T<:AbstractFloat}
+    host_parent = Array(reduction_parent_source(normal))
+    host_normal = reduction_host_view(host_parent, normal)
+    return normal_condition_ratio(DirectReductionPlan(), host_normal)
 end
 
 @inline function init_weights!(sqrtw::AbstractVector{T}, ::LiFTWeightingDynamic,
@@ -674,7 +690,7 @@ end
 @inline function init_weights!(sqrtw::AbstractVector{T}, mode::LiFTWeightingStatic,
     psf_in::AbstractMatrix{T}, det::AbstractDetector) where {T<:AbstractFloat}
     weight_vector!(sqrtw, psf_in, mode, det)
-    map!(sqrt, sqrtw, sqrtw)
+    sqrt_weights!(execution_style(sqrtw), sqrtw)
     return sqrtw
 end
 
@@ -686,8 +702,22 @@ end
 @inline function update_weights!(sqrtw::AbstractVector{T}, mode::LiFTWeightingDynamic,
     model_psf::AbstractMatrix{T}, det::AbstractDetector) where {T<:AbstractFloat}
     weight_vector!(sqrtw, model_psf, mode, det)
-    map!(sqrt, sqrtw, sqrtw)
+    sqrt_weights!(execution_style(sqrtw), sqrtw)
     return sqrtw
+end
+
+
+@inline function sqrt_weights!(::ScalarCPUStyle, weights::AbstractVector)
+    @inbounds @simd for i in eachindex(weights)
+        weights[i] = sqrt(weights[i])
+    end
+    return weights
+end
+
+@inline function sqrt_weights!(style::AcceleratorStyle, weights::AbstractVector)
+    launch_kernel!(style, lift_sqrt_weights_kernel!, weights, length(weights);
+        ndrange=length(weights))
+    return weights
 end
 
 function weight_vector!(out::AbstractVector{T}, psf::AbstractMatrix{T}, ::LiFTWeightModel,

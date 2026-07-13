@@ -29,21 +29,21 @@ end
 function _resolve_backend(name::AbstractString)
     lowered = lowercase(name)
     if lowered == "cpu"
-        return Array, nothing, "cpu"
+        return CPUBackend(), Array, nothing, "cpu"
     elseif lowered == "cuda"
         isdefined(Main, :CUDA) || error("profile_external_optics_hil.jl requires CUDA.jl for backend=cuda")
         CUDA.functional() || error("profile_external_optics_hil.jl requires a functional CUDA driver/device")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.CUDABackendTag)
         backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.CUDABackendTag)
         backend === nothing && error("CUDA backend array type is unavailable")
-        return backend, AdaptiveOpticsSim.CUDABackendTag, "cuda"
+        return CUDABackend(), backend, AdaptiveOpticsSim.CUDABackendTag, "cuda"
     elseif lowered == "amdgpu"
         isdefined(Main, :AMDGPU) || error("profile_external_optics_hil.jl requires AMDGPU.jl for backend=amdgpu")
         AMDGPU.functional() || error("profile_external_optics_hil.jl requires a functional ROCm installation and GPU")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.AMDGPUBackendTag)
         backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.AMDGPUBackendTag)
         backend === nothing && error("AMDGPU backend array type is unavailable")
-        return backend, AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
+        return AMDGPUBackend(), backend, AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
     end
     error("unsupported backend '$name'; use cpu, cuda, or amdgpu")
 end
@@ -133,7 +133,7 @@ function _export_phase_crop!(dest::AbstractMatrix{T}, src::AbstractMatrix{T}) wh
 end
 
 function run_profile(; backend_name::AbstractString="cpu", samples::Int=6, warmup::Int=2)
-    BackendArray, backend_tag, label = _resolve_backend(backend_name)
+    backend, BackendArray, backend_tag, label = _resolve_backend(backend_name)
     T = Float32
     phase_resolution = 640
     external_shape = (640, 512)
@@ -146,9 +146,9 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=6, warmu
         sampling_time=1e-3,
         central_obstruction=0.0,
         T=T,
-        backend=BackendArray,
+        backend=backend,
     )
-    dm = DeformableMirror(tel; n_act=n_act, influence_width=0.25, T=T, backend=BackendArray)
+    dm = DeformableMirror(tel; n_act=n_act, influence_width=0.25, T=T, backend=backend)
     active_indices_host = _active_support_indices(n_act, n_active)
     active_indices_backend = BackendArray{Int}(undef, n_active)
     copyto!(active_indices_backend, active_indices_host)

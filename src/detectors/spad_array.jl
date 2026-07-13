@@ -48,12 +48,16 @@ end
 mutable struct SPADArrayDetectorState{
     T<:AbstractFloat,
     A<:AbstractMatrix{T},
+    H<:AbstractMatrix{T},
     O,
+    OH,
     TS<:AbstractDetectorThermalState,
 }
     counts::A
     noise_buffer::A
+    host_buffer::H
     output_buffer::O
+    output_buffer_host::OH
     thermal_state::TS
 end
 
@@ -79,10 +83,15 @@ counting_layout(det::SPADArrayDetector) = det.params.layout
 counting_output_type(det::SPADArrayDetector) = det.params.output_type
 counting_array(det::SPADArrayDetector) = det.state.counts
 counting_noise_buffer(det::SPADArrayDetector) = det.state.noise_buffer
+counting_host_buffer(det::SPADArrayDetector) = det.state.host_buffer
 counting_output_buffer(det::SPADArrayDetector) = det.state.output_buffer
+counting_output_host_buffer(det::SPADArrayDetector) = det.state.output_buffer_host
 set_counting_array!(det::SPADArrayDetector, values) = (det.state.counts = values; det)
 set_counting_noise_buffer!(det::SPADArrayDetector, values) = (det.state.noise_buffer = values; det)
+set_counting_host_buffer!(det::SPADArrayDetector, values) = (det.state.host_buffer = values; det)
 set_counting_output_buffer!(det::SPADArrayDetector, values) = (det.state.output_buffer = values; det)
+set_counting_output_host_buffer!(det::SPADArrayDetector, values) =
+    (det.state.output_buffer_host = values; det)
 counting_qe(det::SPADArrayDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.sensor.pde)
 counting_fill_factor(det::SPADArrayDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.sensor.fill_factor)
 counting_reported_fill_factor(det::SPADArrayDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.sensor.fill_factor)
@@ -116,13 +125,20 @@ function _build_spad_array_detector(noise::NoiseModel; integration_time::Real,
     )
     counts = backend{T}(undef, 1, 1)
     noise_buffer = backend{T}(undef, 1, 1)
+    host_buffer = Matrix{T}(undef, 1, 1)
     output_buffer = output_type === nothing ? nothing : backend{output_type}(undef, 1, 1)
+    output_buffer_host = output_type === nothing ? nothing : Matrix{output_type}(undef, 1, 1)
     fill!(counts, zero(T))
     fill!(noise_buffer, zero(T))
+    fill!(host_buffer, zero(T))
     output_buffer === nothing || fill!(output_buffer, zero(eltype(output_buffer)))
+    output_buffer_host === nothing || fill!(output_buffer_host,
+        zero(eltype(output_buffer_host)))
     thermal_state = thermal_state_from_model(thermal, T)
-    state = SPADArrayDetectorState{T,typeof(counts),typeof(output_buffer),typeof(thermal_state)}(
-        counts, noise_buffer, output_buffer, thermal_state)
+    state = SPADArrayDetectorState{T,typeof(counts),typeof(host_buffer),
+        typeof(output_buffer),typeof(output_buffer_host),typeof(thermal_state)}(
+        counts, noise_buffer, host_buffer, output_buffer, output_buffer_host,
+        thermal_state)
     selector = _resolve_backend_selector(backend)
     return SPADArrayDetector{typeof(validated),typeof(params),typeof(state),typeof(selector)}(
         validated, params, state)

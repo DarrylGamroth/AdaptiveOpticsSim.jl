@@ -12,10 +12,11 @@ end
 
 @testset "API export curation" begin
     exported = names(AdaptiveOpticsSim)
-    @test length(exported) <= 300
+    @test length(exported) <= 302
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
     @test Base.isexported(AdaptiveOpticsSim, :Detector)
+    @test Base.isexported(AdaptiveOpticsSim, :MKIDArrayDetector)
     @test Base.isexported(AdaptiveOpticsSim, :ControlLoopScenario)
     @test Base.isexported(AdaptiveOpticsSim, :DeformableMirror)
     @test Base.isexported(AdaptiveOpticsSim, :PyramidWFS)

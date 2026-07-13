@@ -5,6 +5,7 @@ const _backend_arg = isempty(ARGS) ? "cpu" : lowercase(ARGS[1])
 const _branch_arg = length(ARGS) >= 2 ? lowercase(ARGS[2]) : "sequential"
 const _replay_arg = length(ARGS) >= 3 ? lowercase(ARGS[3]) : "direct"
 const _scale_arg = length(ARGS) >= 4 ? lowercase(ARGS[4]) : "medium"
+const _fft_threads_arg = length(ARGS) >= 5 ? parse(Int, ARGS[5]) : parse(Int, get(ENV, "AOS_FFT_THREADS", "1"))
 
 if _backend_arg == "cuda"
     import CUDA
@@ -20,21 +21,17 @@ using .SubaruAO188Simulation
 function _resolve_backend(name::AbstractString)
     lowered = lowercase(name)
     if lowered == "cpu"
-        return Array, nothing, "cpu"
+        return CPUBackend(), nothing, "cpu"
     elseif lowered == "cuda"
         isdefined(Main, :CUDA) || error("profile_pixel_output_runtime.jl requires CUDA.jl for backend=cuda")
         CUDA.functional() || error("profile_pixel_output_runtime.jl requires a functional CUDA driver/device")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.CUDABackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.CUDABackendTag)
-        backend === nothing && error("CUDA backend array type is unavailable")
-        return backend, AdaptiveOpticsSim.CUDABackendTag, "cuda"
+        return CUDABackend(), AdaptiveOpticsSim.CUDABackendTag, "cuda"
     elseif lowered == "amdgpu"
         isdefined(Main, :AMDGPU) || error("profile_pixel_output_runtime.jl requires AMDGPU.jl for backend=amdgpu")
         AMDGPU.functional() || error("profile_pixel_output_runtime.jl requires a functional ROCm installation and GPU")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.AMDGPUBackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.AMDGPUBackendTag)
-        backend === nothing && error("AMDGPU backend array type is unavailable")
-        return backend, AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
+        return AMDGPUBackend(), AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
     end
     error("unsupported backend '$name'; use cpu, cuda, or amdgpu")
 end
@@ -125,8 +122,10 @@ end
 
 function run_profile(; backend_name::AbstractString="cpu", branch_name::AbstractString="sequential",
     replay_name::AbstractString="direct", scale_name::AbstractString="medium",
-    samples::Union{Int,Nothing}=nothing, warmup::Union{Int,Nothing}=nothing)
-    BackendArray, backend_tag, label = _resolve_backend(backend_name)
+    fft_threads::Int=1, samples::Union{Int,Nothing}=nothing, warmup::Union{Int,Nothing}=nothing)
+    fft_threads > 0 || error("fft_threads must be positive")
+    AdaptiveOpticsSim.set_fft_provider_threads!(fft_threads)
+    backend, backend_tag, label = _resolve_backend(backend_name)
     branch_mode = _resolve_branch_mode(branch_name)
     replay_mode = _resolve_replay_mode(replay_name)
     cfg = _pixel_scale_params(scale_name)
@@ -135,7 +134,7 @@ function run_profile(; backend_name::AbstractString="cpu", branch_name::Abstract
     resolved_warmup = something(warmup, cfg.warmup)
 
     t0 = time_ns()
-    scenario = subaru_ao188_simulation(; params=params, backend=BackendArray, rng=runtime_rng(1))
+    scenario = subaru_ao188_simulation(; params=params, backend=backend, rng=runtime_rng(1))
     _sync_runtime!(backend_tag, scenario)
     build_time_ns = time_ns() - t0
 
@@ -156,6 +155,7 @@ function run_profile(; backend_name::AbstractString="cpu", branch_name::Abstract
     println("  branch_mode: ", branch_name)
     println("  replay_mode: ", replay_name)
     println("  scale: ", cfg.scale)
+    println("  fft_threads: ", fft_threads)
     println("  build_time_ns: ", build_time_ns)
     println("  runtime_step_mean_ns: ", timing.mean_ns)
     println("  runtime_step_p95_ns: ", timing.p95_ns)
@@ -178,4 +178,5 @@ function run_profile(; backend_name::AbstractString="cpu", branch_name::Abstract
     return nothing
 end
 
-run_profile(; backend_name=_backend_arg, branch_name=_branch_arg, replay_name=_replay_arg, scale_name=_scale_arg)
+run_profile(; backend_name=_backend_arg, branch_name=_branch_arg, replay_name=_replay_arg,
+    scale_name=_scale_arg, fft_threads=_fft_threads_arg)

@@ -30,8 +30,10 @@ end
         if @inbounds valid_mask[i, j]
             plus = @inbounds frame_plus[i, j]
             minus = @inbounds frame_minus[i, j]
-            signal = (plus - minus) / (plus + minus + epsval)
-            corrected = signal - @inbounds(reference_signal_2d[i, j])
+            total = plus + minus
+            corrected = total > epsval ?
+                (plus - minus) / (total + epsval) - @inbounds(reference_signal_2d[i, j]) :
+                zero(eltype(signal_2d))
             @inbounds begin
                 signal_2d[i, j] = corrected
                 slopes[idx] = corrected
@@ -97,6 +99,16 @@ end
     end
 end
 
+@kernel function curvature_frame_unpack_kernel!(frame_plus, frame_minus, camera_frame, side::Int)
+    i, j = @index(Global, NTuple)
+    if i <= side && j <= size(camera_frame, 2)
+        @inbounds begin
+            frame_plus[i, j] = camera_frame[i, j]
+            frame_minus[i, j] = camera_frame[i + side, j]
+        end
+    end
+end
+
 @kernel function curvature_channel_pack_kernel!(camera_frame, frame_plus, frame_minus, n_sub::Int)
     i, j = @index(Global, NTuple)
     if i <= n_sub && j <= n_sub
@@ -116,8 +128,10 @@ end
         if @inbounds valid_mask[i, j]
             plus = @inbounds frame[1, idx]
             minus = @inbounds frame[2, idx]
-            signal = (plus - minus) / (plus + minus + epsval)
-            corrected = signal - @inbounds(reference_signal_2d[i, j])
+            total = plus + minus
+            corrected = total > epsval ?
+                (plus - minus) / (total + epsval) - @inbounds(reference_signal_2d[i, j]) :
+                zero(eltype(signal_2d))
             @inbounds begin
                 signal_2d[i, j] = corrected
                 slopes[idx] = corrected
@@ -653,9 +667,21 @@ function curvature_signal!(style::AcceleratorStyle, ::CurvatureFrameReadout, wfs
 end
 
 function unpack_curvature_frame!(wfs::CurvatureWFS, frame::AbstractMatrix)
+    return _unpack_curvature_frame!(execution_style(frame), wfs, frame)
+end
+
+function _unpack_curvature_frame!(::ScalarCPUStyle, wfs::CurvatureWFS, frame::AbstractMatrix)
     side = size(wfs.state.frame_plus, 1)
     @views copyto!(wfs.state.frame_plus, frame[1:side, :])
     @views copyto!(wfs.state.frame_minus, frame[side+1:2*side, :])
+    return wfs
+end
+
+function _unpack_curvature_frame!(style::AcceleratorStyle, wfs::CurvatureWFS,
+    frame::AbstractMatrix)
+    side = size(wfs.state.frame_plus, 1)
+    launch_kernel!(style, curvature_frame_unpack_kernel!, wfs.state.frame_plus,
+        wfs.state.frame_minus, frame, side; ndrange=size(wfs.state.frame_plus))
     return wfs
 end
 
@@ -679,8 +705,10 @@ function curvature_signal_from_planes!(wfs::CurvatureWFS)
         if wfs.state.valid_mask[i, j]
             plus = wfs.state.reduced_plus[i, j]
             minus = wfs.state.reduced_minus[i, j]
-            signal = (plus - minus) / (plus + minus + epsval)
-            corrected = signal - wfs.state.reference_signal_2d[i, j]
+            total = plus + minus
+            corrected = total > epsval ?
+                (plus - minus) / (total + epsval) - wfs.state.reference_signal_2d[i, j] :
+                zero(eltype(wfs.state.signal_2d))
             wfs.state.signal_2d[i, j] = corrected
             wfs.state.slopes[idx] = corrected
         else
@@ -725,8 +753,10 @@ function curvature_signal!(::ScalarCPUStyle, ::CurvatureCountingReadout, wfs::Cu
         if wfs.state.valid_mask[i, j]
             plus = frame[1, idx]
             minus = frame[2, idx]
-            signal = (plus - minus) / (plus + minus + epsval)
-            corrected = signal - wfs.state.reference_signal_2d[i, j]
+            total = plus + minus
+            corrected = total > epsval ?
+                (plus - minus) / (total + epsval) - wfs.state.reference_signal_2d[i, j] :
+                zero(eltype(wfs.state.signal_2d))
             wfs.state.signal_2d[i, j] = corrected
             wfs.state.slopes[idx] = corrected
         else
@@ -852,7 +882,7 @@ function measure_detector_coupled!(::CurvatureCountingReadout, wfs::CurvatureWFS
     src::AbstractSource, det::AbstractCountingDetector; rng::AbstractRNG=Random.default_rng())
     ensure_curvature_calibration!(wfs, tel, src)
     curvature_intensity!(wfs, tel, src)
-    capture!(det, wfs.state.camera_frame; rng=rng)
+    capture!(det, wfs.state.camera_frame, src; rng=rng)
     size(output_frame(det)) == size(wfs.state.camera_frame) ||
         throw(InvalidConfiguration("CurvatureWFS counting-detector output size must match the sampled channel readout"))
     return curvature_signal!(wfs, output_frame(det))

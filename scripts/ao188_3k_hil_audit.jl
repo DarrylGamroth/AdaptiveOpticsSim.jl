@@ -17,21 +17,17 @@ end
 function _resolve_backend(name::AbstractString)
     lowered = lowercase(name)
     if lowered == "cpu"
-        return Array, nothing, "cpu"
+        return CPUBackend(), nothing, "cpu"
     elseif lowered == "cuda"
         isdefined(Main, :CUDA) || error("ao188_3k_hil_audit.jl requires CUDA.jl for backend=cuda")
         CUDA.functional() || error("ao188_3k_hil_audit.jl requires a functional CUDA driver/device")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.CUDABackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.CUDABackendTag)
-        backend === nothing && error("CUDA backend array type is unavailable")
-        return backend, AdaptiveOpticsSim.CUDABackendTag, "cuda"
+        return CUDABackend(), AdaptiveOpticsSim.CUDABackendTag, "cuda"
     elseif lowered == "amdgpu"
         isdefined(Main, :AMDGPU) || error("ao188_3k_hil_audit.jl requires AMDGPU.jl for backend=amdgpu")
         AMDGPU.functional() || error("ao188_3k_hil_audit.jl requires a functional ROCm installation and GPU")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.AMDGPUBackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.AMDGPUBackendTag)
-        backend === nothing && error("AMDGPU backend array type is unavailable")
-        return backend, AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
+        return AMDGPUBackend(), AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
     end
     error("unsupported backend '$name'; use cpu, cuda, or amdgpu")
 end
@@ -43,18 +39,18 @@ function _sync_runtime!(::Type{B}, runtime) where {B<:AdaptiveOpticsSim.GPUBacke
     return nothing
 end
 
-function _build_scenario(params, BackendArray, rng, backend_tag)
+function _build_scenario(params, backend, rng, backend_tag)
     t0 = time_ns()
-    scenario = subaru_ao188_simulation(; params=params, backend=BackendArray, rng=rng)
+    scenario = subaru_ao188_simulation(; params=params, backend, rng=rng)
     _sync_runtime!(backend_tag, scenario)
     build_time_ns = time_ns() - t0
     return scenario, build_time_ns
 end
 
 function run_ao188_3k_hil_audit(; backend_name::AbstractString="cpu", samples::Int=20, warmup::Int=5)
-    BackendArray, backend_tag, label = _resolve_backend(backend_name)
+    backend, backend_tag, label = _resolve_backend(backend_name)
     params = AO188SimulationParams()
-    scenario, build_time_ns = _build_scenario(params, BackendArray, MersenneTwister(1), backend_tag)
+    scenario, build_time_ns = _build_scenario(params, backend, MersenneTwister(1), backend_tag)
     step!(scenario)
     _sync_runtime!(backend_tag, scenario)
     timing = runtime_timing(() -> begin

@@ -7,6 +7,9 @@ using Random
 using SpecialFunctions
 using TOML
 
+BLAS.set_num_threads(1)
+AdaptiveOpticsSim.set_fft_provider_threads!(1)
+
 # The package exports only the user-facing API. This standalone coverage target
 # shares reference helpers with the full test suite, so make internal test-only
 # names available without expanding the public export list.

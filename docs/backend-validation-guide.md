@@ -65,6 +65,8 @@ The reduced maintained smoke covers:
   - `steering + dm`
   - `focus + dm`
 - curvature-through-atmosphere
+- MKID accumulated-count capture, source passband handling, and
+  flux-conserving channel-crosstalk parity
 
 For the maintained low-order composite surfaces, optional backend smoke now also
 checks:
@@ -94,10 +96,14 @@ including the high-accuracy post-command equivalence pass, run:
 
 These targets are intended for hosts where the corresponding GPU package and
 runtime are actually available. They fail fast instead of skipping when the
-backend is unavailable. They are the release-gated support boundary for CUDA
-and AMDGPU. The backend projects under [`test/amdgpu`](../test/amdgpu) and
-[`test/cuda`](../test/cuda) keep accelerator packages out of the normal
-`Pkg.test()` environment while still loading the root package from the checkout.
+backend is unavailable. The AMDGPU target is the current release-gated
+accelerator support boundary. The CUDA target is retained as a fail-fast
+restoration target, but is not a current support gate because no CUDA validation
+device is available. The backend projects under
+[`test/amdgpu`](../test/amdgpu) and [`test/cuda`](../test/cuda) declare the root
+package as a path source, keeping accelerator packages out of normal
+`Pkg.test()` while still resolving the full checkout dependency graph in a
+clean environment.
 
 The full GPU smoke matrix now also pins the exact batched Shack-Hartmann
 detector/export surface that previously regressed on CUDA:
@@ -111,6 +117,35 @@ detector/export surface that previously regressed on CUDA:
 This keeps the public exported-pixel surface under backend parity coverage, not
 just the slope output.
 
+### AMDGPU host-mirror boundaries
+
+With AMDGPU 2.7, photon Poisson sampling, detector readout correction, windowed
+multi-read products, and float-to-integer detector export use host-mirror
+paths. Poisson sampling, correction, and integer export reuse detector host
+buffers; windowed readout-product construction retains its existing allocation
+behavior. Counting crosstalk and the rest of the maintained detector array math
+remain backend kernels.
+
+On the normal point-source and spectral-stack paths, Shack-Hartmann field
+formation, FFTs, and spot sampling remain batched on the device. Centroid
+cutoff/statistics use the reusable host centroid workspace and copy the
+thresholded spot back to the device so exported pixels retain CPU semantics.
+Non-stackable asterism fallbacks retain conservative host field construction.
+These are correctness boundaries with explicit transfers, so detector-heavy or
+high-rate Shack-Hartmann HIL workloads should be profiled on the target AMD
+device before making latency claims.
+
+Atmospheric phase-screen PSD construction is a setup-time host-mirror boundary
+on AMDGPU 2.7. Geometric Shack-Hartmann slopes also use an explicit host
+compatibility path because the variable-trip KA kernel fails GPUCompiler IR
+validation on the current gfx1030 target. Gain-sensing-camera scalar reductions
+follow the same backend reduction policy. LiFT keeps its FFTs, Jacobian math,
+and dense linear algebra on the device, but stages small factor-matrix subviews
+and condition checks through dense host storage where AMDGPU's generic ROCArray
+gather path is not usable. These boundaries are covered by the dedicated AMDGPU
+target and the full smoke matrix; they are not evidence of a fully
+device-resident AMD execution plan.
+
 ## Benchmark Separation
 
 Benchmarks do not belong in `Pkg.test()`.
@@ -123,6 +158,50 @@ benchmark scripts such as:
 - [`profile_multi_source_multi_wfs_runtime.jl`](../scripts/profile_multi_source_multi_wfs_runtime.jl)
 - [`run_cross_package_benchmarks.jl`](../scripts/run_cross_package_benchmarks.jl)
 - [`benchmarks/`](../benchmarks)
+
+The benchmark environments are split so a CPU benchmark does not resolve both
+GPU stacks:
+
+```bash
+julia --project=benchmarks -e 'using Pkg; Pkg.instantiate()'
+julia --project=benchmarks benchmarks/benchmark_cpu.jl
+julia --project=benchmarks benchmarks/benchmark_cpu_hotpath_cards.jl
+
+julia --project=benchmarks/amdgpu -e 'using Pkg; Pkg.instantiate()'
+julia --project=benchmarks/amdgpu benchmarks/benchmark_amdgpu.jl
+```
+
+For the detector-output HIL path, use the same workload and sample count on
+both backends:
+
+```bash
+julia --project=. scripts/profile_revolt_hil_runtime.jl cpu benchmarks/assets/revolt_like cmos default none 100 10
+julia --project=benchmarks/amdgpu scripts/profile_revolt_hil_runtime.jl amdgpu benchmarks/assets/revolt_like cmos default none 100 10
+```
+
+The profile defaults to 100 warmed samples and reports p95; it rejects smaller
+sample counts because they do not support that percentile usefully. Treat it as
+a closed-loop diagnostic, not a fixed-arrival-rate latency contract. Use
+[`soak_revolt_hil_runtime.jl`](../scripts/soak_revolt_hil_runtime.jl) for the
+100,000-sample p99/GC soak, and retain raw run output when making release or
+hardware-capacity claims. A current CPU/AMDGPU summary for the local validation
+host is archived in
+[`2026-07-13-revolt-hil-cpu-amdgpu.toml`](../benchmarks/results/platform/2026-07-13-revolt-hil-cpu-amdgpu.toml).
+
+The AO188/AO3k CPU profile scripts accept an FFT thread count as their final
+argument, or through `AOS_FFT_THREADS`. Tune this per workload and host rather
+than treating the machine's core count as a default; small FFTs can become
+slower with too many provider threads. For example:
+
+```bash
+AOS_FFT_THREADS=4 julia --project=. scripts/profile_ao3k_runtime.jl cpu compact
+```
+
+Keep FFT, BLAS, and coarse Julia task parallelism from oversubscribing the same
+cores. Deterministic validation continues to use one thread.
+
+The retained CUDA benchmark has the equivalent isolated
+`--project=benchmarks/cuda` environment, but requires restored CUDA hardware.
 
 This separation exists so:
 
@@ -145,7 +224,8 @@ Current intent:
 - CUDA workflow:
   - targets a self-hosted runner labeled `self-hosted`, `linux`, `cuda`
   - instantiates [`test/cuda`](../test/cuda)
-  - runs the maintained CUDA hardware target
+  - is dormant until a CUDA runner is restored, then runs the retained CUDA
+    hardware target
   - runtime equivalence includes the composite-optic low-order HIL surfaces:
     - `tiptilt + dm`
       - `ShackHartmannWFS`
@@ -165,9 +245,9 @@ Current intent:
     - `steering + dm`
     - `focus + dm`
 
-These workflows are part of production hardening, but they are only fully
-effective once the expected self-hosted GPU runners are actually registered and
-kept healthy.
+The CPU and AMDGPU workflows are the active validation paths. The CUDA workflow
+remains useful restoration scaffolding, but archived CUDA evidence does not
+validate the current checkout while its runner is unavailable.
 
 ## Validation Rule
 

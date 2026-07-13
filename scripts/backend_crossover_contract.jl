@@ -15,21 +15,21 @@ end
 _gpu_target_type(::CPUSweepTarget) = nothing
 _gpu_target_type(::GPUSweepTarget{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag} = B
 
-_sweep_policy(::CPUSweepTarget) = SplitGPUPrecision(Float32, Float32)
+_sweep_policy(::CPUSweepTarget) = AdaptiveOpticsSim.SplitGPUPrecision(Float32, Float32)
 _sweep_policy(::GPUSweepTarget{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag} =
     AdaptiveOpticsSim.default_gpu_precision_policy(B)
 
-_high_accuracy_policy(::CPUSweepTarget) = SplitGPUPrecision(Float32, Float64)
+_high_accuracy_policy(::CPUSweepTarget) = AdaptiveOpticsSim.SplitGPUPrecision(Float32, Float64)
 _high_accuracy_policy(::GPUSweepTarget{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag} =
     AdaptiveOpticsSim.high_accuracy_gpu_precision_policy(B)
 
-_sweep_backend_array(::CPUSweepTarget) = Array
+_sweep_backend(::CPUSweepTarget) = CPUBackend()
 
-function _sweep_backend_array(::GPUSweepTarget{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+function _sweep_backend(::GPUSweepTarget{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     AdaptiveOpticsSim.disable_scalar_backend!(B)
     BackendArray = AdaptiveOpticsSim.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
-    return BackendArray
+    return AdaptiveOpticsSim.array_backend_selector(BackendArray)
 end
 
 _build_backend(::CPUSweepTarget) = AdaptiveOpticsSim.CPUBuildBackend()
@@ -48,18 +48,18 @@ end
 function _runtime_case(target::SweepExecutionTarget; resolution::Int, n_lenslets::Int, n_act::Int)
     policy = _sweep_policy(target)
     T = AdaptiveOpticsSim.gpu_runtime_type(policy)
-    BackendArray = _sweep_backend_array(target)
+    backend = _sweep_backend(target)
     rng = runtime_rng(1)
     tel = Telescope(resolution=resolution, diameter=8.0f0, sampling_time=1.0f-3,
-        central_obstruction=0.0f0, T=T, backend=BackendArray)
+        central_obstruction=0.0f0, T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
-    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=BackendArray)
-    dm = DeformableMirror(tel; n_act=n_act, influence_width=0.3, T=T, backend=BackendArray)
-    wfs = ShackHartmannWFS(tel; n_lenslets=n_lenslets, mode=Diffractive(), T=T, backend=BackendArray)
-    sim = AOSimulation(tel, atm, src, dm, wfs)
+    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=backend)
+    dm = DeformableMirror(tel; n_act=n_act, influence_width=0.3, T=T, backend=backend)
+    wfs = ShackHartmannWFS(tel; n_lenslets=n_lenslets, mode=Diffractive(), T=T, backend=backend)
+    sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
     recon = ModalReconstructor(imat; gain=T(0.5))
-    runtime = ClosedLoopRuntime(sim, recon; rng=rng)
+    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; rng=rng)
     step!(runtime)
     _sync_target!(target, runtime.command)
     return runtime
@@ -114,7 +114,7 @@ function _tomography_case_params(target::SweepExecutionTarget; n_lenslet::Int, n
         altitude_km=TB[0.0, 10.0],
         L0=TB(25.0),
         r0_zenith=TB(0.2),
-        fractional_r0=TB[0.6, 0.4],
+        fractional_cn2=TB[0.6, 0.4],
         wavelength=TB(500e-9),
         wind_direction_deg=TB[0.0, 45.0],
         wind_speed=TB[10.0, 20.0],
@@ -129,7 +129,7 @@ function _tomography_case_params(target::SweepExecutionTarget; n_lenslet::Int, n
         n_actuators=fill(grid_side, n_dm),
         valid_actuators=valid,
     )
-    noise_model = RelativeSignalNoise(TB(0.1))
+    noise_model = AdaptiveOpticsSim.RelativeSignalNoise(TB(0.1))
     imat_rows = 2 * n_lenslet^2 * n_lgs
     grid_mask = trues(grid_side, grid_side)
     imat_cols = n_lgs * count(grid_mask)
@@ -140,7 +140,7 @@ function _tomography_case_params(target::SweepExecutionTarget; n_lenslet::Int, n
         altitude_km=TH[0.0, 10.0],
         L0=TH(25.0),
         r0_zenith=TH(0.2),
-        fractional_r0=TH[0.6, 0.4],
+        fractional_cn2=TH[0.6, 0.4],
         wavelength=TH(500e-9),
         wind_direction_deg=TH[0.0, 45.0],
         wind_speed=TH[10.0, 20.0],
@@ -252,7 +252,7 @@ function _timed_builder_case(target::SweepExecutionTarget; label::AbstractString
         p.lgswfs_hi,
         p.tomo_hi,
         p.tdm_hi;
-        noise_model=RelativeSignalNoise(AdaptiveOpticsSim.gpu_build_type(p.high_accuracy)(0.1)),
+        noise_model=AdaptiveOpticsSim.RelativeSignalNoise(AdaptiveOpticsSim.gpu_build_type(p.high_accuracy)(0.1)),
         build_backend=p.build_backend,
     )
     model_hi_ns, model_hi_recon = _time_block_ns() do
@@ -263,7 +263,7 @@ function _timed_builder_case(target::SweepExecutionTarget; label::AbstractString
             p.lgswfs_hi,
             p.tomo_hi,
             p.tdm_hi;
-            noise_model=RelativeSignalNoise(AdaptiveOpticsSim.gpu_build_type(p.high_accuracy)(0.1)),
+            noise_model=AdaptiveOpticsSim.RelativeSignalNoise(AdaptiveOpticsSim.gpu_build_type(p.high_accuracy)(0.1)),
             build_backend=p.build_backend,
         )
         _sync_target!(target, recon_local.reconstructor)

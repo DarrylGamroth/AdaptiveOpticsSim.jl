@@ -61,6 +61,60 @@ end
         mark_ka_cpu_kernel!(:fftfreq_kernel!)
         @test ka_freqs == scalar_freqs
 
+        scalar_clamped = [-1.0, 0.5, 2.0]
+        ka_clamped = copy(scalar_clamped)
+        AdaptiveOpticsSim._clamp_array!(SCALAR_CPU_STYLE, scalar_clamped, 0.0, 1.0)
+        AdaptiveOpticsSim._clamp_array!(KA_CPU_STYLE, ka_clamped, 0.0, 1.0)
+        mark_ka_cpu_kernel!(:clamp_array_kernel!)
+        @test ka_clamped == scalar_clamped == [0.0, 0.5, 1.0]
+
+        integer_input = [-1.0 1.4; 2.6 300.0]
+        scalar_integer_output = Matrix{UInt8}(undef, 2, 2)
+        ka_integer_output = similar(scalar_integer_output)
+        AdaptiveOpticsSim._write_integer_output!(SCALAR_CPU_STYLE,
+            scalar_integer_output, integer_input)
+        AdaptiveOpticsSim._write_integer_output!(KA_CPU_STYLE, ka_integer_output,
+            integer_input)
+        mark_ka_cpu_kernel!(:integer_output_kernel!)
+        @test ka_integer_output == scalar_integer_output == UInt8[0 1; 3 255]
+
+        diagonal_input = reshape(collect(1.0:16.0), 4, 4)
+        diagonal_output = zeros(4)
+        AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE,
+            AdaptiveOpticsSim.extract_diagonal_kernel!, diagonal_output,
+            diagonal_input, 4; ndrange=4)
+        mark_ka_cpu_kernel!(:extract_diagonal_kernel!)
+        @test diagonal_output == diag(diagonal_input)
+
+        lift_weights = [1.0, 4.0, 9.0, 16.0]
+        AdaptiveOpticsSim.sqrt_weights!(KA_CPU_STYLE, lift_weights)
+        mark_ka_cpu_kernel!(:lift_sqrt_weights_kernel!)
+        @test lift_weights == [1.0, 2.0, 3.0, 4.0]
+
+        modal_modes = reshape(collect(1.0:8.0), 4, 2)
+        modal_coefs = [0.25, -0.5]
+        modal_one = zeros(4)
+        modal_two = zeros(4)
+        AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE,
+            AdaptiveOpticsSim.modal_opd_one_kernel!, modal_one, modal_modes,
+            modal_coefs, 4; ndrange=4)
+        AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE,
+            AdaptiveOpticsSim.modal_opd_two_kernel!, modal_two, modal_modes,
+            modal_coefs, 4; ndrange=4)
+        mark_ka_cpu_kernel!(:modal_opd_one_kernel!, :modal_opd_two_kernel!)
+        @test modal_one == modal_modes[:, 1] .* modal_coefs[1]
+        @test modal_two == modal_modes * modal_coefs
+
+        curvature_camera = reshape(collect(1.0:8.0), 4, 2)
+        curvature_plus = zeros(2, 2)
+        curvature_minus = zeros(2, 2)
+        AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE,
+            AdaptiveOpticsSim.curvature_frame_unpack_kernel!, curvature_plus,
+            curvature_minus, curvature_camera, 2; ndrange=(2, 2))
+        mark_ka_cpu_kernel!(:curvature_frame_unpack_kernel!)
+        @test curvature_plus == curvature_camera[1:2, :]
+        @test curvature_minus == curvature_camera[3:4, :]
+
         rng1 = MersenneTwister(11)
         rng2 = MersenneTwister(11)
         ka_randn_a = zeros(Float64, 8)
@@ -150,8 +204,19 @@ end
             SCALAR_CPU_STYLE, SCALAR_CPU_STYLE, scalar_image, spot_cube, 2, 3, 3, 1, -1.0)
         AdaptiveOpticsSim._shack_hartmann_detector_image!(
             KA_CPU_STYLE, KA_CPU_STYLE, ka_image, spot_cube, 2, 3, 3, 1, -1.0)
-        mark_ka_cpu_kernel!(:shack_hartmann_detector_image_kernel!)
+        mark_ka_cpu_kernel!(:shack_hartmann_detector_image_copy_kernel!)
         @test ka_image == scalar_image
+
+        scalar_converted_image = Matrix{Float32}(undef, 7, 7)
+        ka_converted_image = similar(scalar_converted_image)
+        AdaptiveOpticsSim._shack_hartmann_detector_image!(
+            SCALAR_CPU_STYLE, SCALAR_CPU_STYLE, scalar_converted_image, spot_cube,
+            2, 3, 3, 1, -1.0)
+        AdaptiveOpticsSim._shack_hartmann_detector_image!(
+            KA_CPU_STYLE, KA_CPU_STYLE, ka_converted_image, spot_cube,
+            2, 3, 3, 1, -1.0)
+        mark_ka_cpu_kernel!(:shack_hartmann_detector_image_kernel!)
+        @test ka_converted_image == scalar_converted_image
     end
 
     @testset "Grouped and Shack-Hartmann stack kernels" begin
@@ -240,7 +305,7 @@ end
         fft_stack = fill(99.0 + 0.0im, pad, pad, n_spots)
         AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_field_stack_kernel!,
             fft_stack, valid_mask, pupil, opd, phasor, 2.0, 0.0, n_sub, sub, ox, oy, n, pad;
-            ndrange=size(fft_stack))
+            ndrange=(pad, pad, n_sub, n_sub))
         mark_ka_cpu_kernel!(:sh_field_stack_kernel!)
         @test fft_stack[2, 2, 1] == 2.0 + 0.0im
         @test fft_stack[2, 2, 2] == 0.0 + 0.0im
@@ -259,7 +324,7 @@ end
         fft_ast = fill(99.0 + 0.0im, pad, pad, 2 * n_spots)
         AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_field_asterism_stack_kernel!,
             fft_ast, valid_mask, pupil, opd, phasor, amp_scales, opd_to_cycles, n_sub, sub, ox, oy, n, pad,
-            n_spots; ndrange=size(fft_ast))
+            n_spots, length(amp_scales); ndrange=(pad, pad, length(amp_scales), n_sub, n_sub))
         mark_ka_cpu_kernel!(:sh_field_asterism_stack_kernel!)
         @test fft_ast[2, 2, 1] == 2.0 + 0.0im
         @test fft_ast[2, 2, n_spots + 1] == 3.0 + 0.0im
@@ -268,7 +333,8 @@ end
         sample_input = reshape(collect(1.0:64.0), 4, 4, n_spots)
         sampled = fill(-1.0, n_spots, 2, 2)
         AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_sample_spot_stack_kernel!,
-            sampled, sample_input, valid_mask, 2, n_sub, 2, 2; ndrange=size(sampled))
+            sampled, sample_input, valid_mask, 2, n_sub, 2, 2, 0, 0;
+            ndrange=(n_sub, n_sub, 2, 2))
         mark_ka_cpu_kernel!(:sh_sample_spot_stack_kernel!)
         @test sampled[1, 1, 1] == sum(sample_input[1:2, 1:2, 1])
         @test sampled[2, 1, 1] == 0.0
@@ -281,7 +347,7 @@ end
         spot_cube[4, 2, 2] = 4.0
         stats = zeros(Float64, 3 * n_spots)
         AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_spot_centroid_stats_kernel!,
-            stats, spot_cube, valid_mask, 0.5, n_sub, 3, 3; ndrange=n_spots)
+            stats, spot_cube, valid_mask, 0.5, n_sub, 3, 3; ndrange=(n_sub, n_sub))
         mark_ka_cpu_kernel!(:sh_spot_centroid_stats_kernel!)
         @test stats[1] == 10.0
         @test stats[2] == 1.0
@@ -297,7 +363,8 @@ end
         slopes = fill(-1.0, 2 * n_spots)
         reference = zeros(Float64, 2 * n_spots)
         AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_finalize_asterism_slopes_kernel!,
-            slopes, accum, reference, valid_mask, 2.0, 2, n_sub, n_spots; ndrange=n_spots)
+            slopes, accum, reference, valid_mask, 2.0, 2, n_sub, n_spots;
+            ndrange=(n_sub, n_sub))
         mark_ka_cpu_kernel!(:sh_finalize_asterism_slopes_kernel!)
         @test slopes[1] == (accum[3] / 2) / 2
         @test slopes[n_spots + 1] == (accum[2] / 2) / 2
@@ -307,7 +374,8 @@ end
         centroid_slopes = fill(-1.0, 2 * n_spots)
         centroid_cube = copy(spot_cube)
         AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_spot_centroid_kernel!,
-            centroid_slopes, centroid_cube, valid_mask, 2.0, n_sub, n_spots, 3, 3; ndrange=n_spots)
+            centroid_slopes, centroid_cube, valid_mask, 2.0, n_sub, n_spots, 3, 3;
+            ndrange=(n_sub, n_sub))
         mark_ka_cpu_kernel!(:sh_spot_centroid_kernel!)
         @test centroid_slopes[1] == 2.0
         @test centroid_slopes[n_spots + 1] == 1.0
@@ -318,7 +386,7 @@ end
         reference .= 0.5
         AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_spot_centroid_reference_scale_kernel!,
             ref_scaled_slopes, copy(spot_cube), reference, valid_mask, 2.0, 2.0, n_sub, n_spots, 3, 3;
-            ndrange=n_spots)
+            ndrange=(n_sub, n_sub))
         mark_ka_cpu_kernel!(:sh_spot_centroid_reference_scale_kernel!)
         @test ref_scaled_slopes[1] == (2.0 - 0.5) / 2
         @test ref_scaled_slopes[n_spots + 1] == (1.0 - 0.5) / 2
@@ -326,34 +394,37 @@ end
 
         cutoff_stats = zeros(Float64, 3 * n_spots)
         AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_spot_cutoff_stats_kernel!,
-            cutoff_stats, spot_cube, valid_mask, 2.0, n_sub, 3, 3; ndrange=n_spots)
+            cutoff_stats, spot_cube, valid_mask, 2.0, n_sub, 3, 3;
+            ndrange=(n_sub, n_sub))
         mark_ka_cpu_kernel!(:sh_spot_cutoff_stats_kernel!)
         @test cutoff_stats[1:3] == [10.0, 10.0, 20.0]
 
         simple_slopes = fill(-1.0, 2 * n_spots)
         AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_finalize_spot_slopes_kernel!,
-            simple_slopes, cutoff_stats, valid_mask, n_sub, n_spots; ndrange=n_spots)
+            simple_slopes, cutoff_stats, valid_mask, n_sub, n_spots;
+            ndrange=(n_sub, n_sub))
         mark_ka_cpu_kernel!(:sh_finalize_spot_slopes_kernel!)
         @test simple_slopes[1] == 2.0
         @test simple_slopes[n_spots + 1] == 1.0
 
         scaled_slopes = fill(-1.0, 2 * n_spots)
         AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_finalize_spot_slopes_reference_scale_kernel!,
-            scaled_slopes, cutoff_stats, reference, valid_mask, 2.0, n_sub, n_spots; ndrange=n_spots)
+            scaled_slopes, cutoff_stats, reference, valid_mask, 2.0, n_sub, n_spots;
+            ndrange=(n_sub, n_sub))
         mark_ka_cpu_kernel!(:sh_finalize_spot_slopes_reference_scale_kernel!)
         @test scaled_slopes[1] == (2.0 - 0.5) / 2
         @test scaled_slopes[n_spots + 1] == (1.0 - 0.5) / 2
 
         invalid_cube = ones(Float64, n_spots, 2, 2)
         AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.zero_invalid_spots_kernel!,
-            invalid_cube, valid_mask, n_sub, 2, 2; ndrange=size(invalid_cube))
+            invalid_cube, valid_mask, n_sub, 2, 2; ndrange=(n_sub, n_sub, 2, 2))
         mark_ka_cpu_kernel!(:zero_invalid_spots_kernel!)
         @test all(iszero, invalid_cube[2, :, :])
         @test all(==(1.0), invalid_cube[1, :, :])
 
         invalid_slopes = ones(Float64, 2 * n_spots)
         AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.zero_invalid_sh_slopes_kernel!,
-            invalid_slopes, valid_mask, n_sub, n_spots; ndrange=n_spots)
+            invalid_slopes, valid_mask, n_sub, n_spots; ndrange=(n_sub, n_sub))
         mark_ka_cpu_kernel!(:zero_invalid_sh_slopes_kernel!)
         @test invalid_slopes[2] == 0.0
         @test invalid_slopes[n_spots + 2] == 0.0
@@ -509,7 +580,7 @@ end
         AdaptiveOpticsSim.prepare_actuator_commands!(dm_ka)
         AdaptiveOpticsSim._apply_opd_separable!(SCALAR_CPU_STYLE, dm_scalar, tel)
         AdaptiveOpticsSim._apply_opd_separable!(KA_CPU_STYLE, dm_ka, tel)
-        mark_ka_cpu_kernel!(:dm_separable_tmp_kernel!, :dm_separable_finalize_kernel!)
+        mark_ka_cpu_kernel!(:dm_apply_pupil_kernel!)
         @test ka_cpu_close(dm_ka.state.opd, dm_scalar.state.opd)
     end
 
@@ -566,6 +637,18 @@ end
         AdaptiveOpticsSim.apply_output_model!(KA_CPU_STYLE, output_model, ka_frame)
         mark_ka_cpu_kernel!(:apply_cmos_output_pattern_kernel!)
         @test ka_cpu_close(ka_frame, scalar_frame)
+
+        counting_input = zeros(5, 5)
+        counting_input[3, 3] = 10.0
+        scalar_counting = similar(counting_input)
+        ka_counting = similar(counting_input)
+        AdaptiveOpticsSim._apply_counting_channel_crosstalk!(
+            SCALAR_CPU_STYLE, scalar_counting, counting_input, 0.4)
+        AdaptiveOpticsSim._apply_counting_channel_crosstalk!(
+            KA_CPU_STYLE, ka_counting, counting_input, 0.4)
+        mark_ka_cpu_kernel!(:counting_channel_crosstalk_kernel!)
+        @test ka_cpu_close(ka_counting, scalar_counting)
+        @test sum(ka_counting) ≈ sum(counting_input)
 
         for model in (
             ReferencePixelCommonModeCorrection(1, 1),

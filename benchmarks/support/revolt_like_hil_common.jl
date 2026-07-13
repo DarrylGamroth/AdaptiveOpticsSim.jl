@@ -12,17 +12,6 @@ using KernelAbstractions: @kernel, @index
     end
 end
 
-@kernel function revolt_sh_spot_mosaic_kernel!(mosaic, spot_cube, n_lenslets::Int, roi::Int)
-    idx, u, v = @index(Global, NTuple)
-    if idx <= size(spot_cube, 1) && u <= roi && v <= roi
-        sub_i = mod1(idx, n_lenslets)
-        sub_j = fld(idx - 1, n_lenslets) + 1
-        out_i = (sub_i - 1) * roi + u
-        out_j = (sub_j - 1) * roi + v
-        @inbounds mosaic[out_i, out_j] = spot_cube[idx, u, v]
-    end
-end
-
 struct RevoltLikeHILContext{TEL,SRC,DM,WFS,DET,AI,AC,EC,EB,TF,RNG}
     tel::TEL
     src::SRC
@@ -44,15 +33,17 @@ function revolt_profile_backend(name::AbstractString)
     if lowered == "cpu"
         return (; selector=CPUBackend(), array_backend=Array, label="cpu")
     elseif lowered == "cuda"
-        @eval import CUDA
-        CUDA.functional() || error("REVOLT-like HIL profiling requires a functional CUDA driver/device")
+        isdefined(Main, :CUDA) || error("load CUDA.jl before selecting the CUDA HIL backend")
+        Base.invokelatest(getproperty(getfield(Main, :CUDA), :functional)) ||
+            error("REVOLT-like HIL profiling requires a functional CUDA driver/device")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.CUDABackendTag)
         array_backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.CUDABackendTag)
         array_backend === nothing && error("CUDA backend array type is unavailable")
         return (; selector=CUDABackend(), array_backend, label="cuda")
     elseif lowered == "amdgpu"
-        @eval import AMDGPU
-        AMDGPU.functional() || error("REVOLT-like HIL profiling requires a functional ROCm installation and GPU")
+        isdefined(Main, :AMDGPU) || error("load AMDGPU.jl before selecting the AMDGPU HIL backend")
+        Base.invokelatest(getproperty(getfield(Main, :AMDGPU), :functional)) ||
+            error("REVOLT-like HIL profiling requires a functional ROCm installation and GPU")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.AMDGPUBackendTag)
         array_backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.AMDGPUBackendTag)
         array_backend === nothing && error("AMDGPU backend array type is unavailable")
@@ -130,27 +121,9 @@ function revolt_scatter_active_command!(style::AdaptiveOpticsSim.AcceleratorStyl
 end
 
 function revolt_tile_spot_cube!(mosaic::AbstractMatrix{T}, spot_cube::AbstractArray{T,3}, n_lenslets::Int, roi::Int) where {T<:AbstractFloat}
-    revolt_tile_spot_cube!(AdaptiveOpticsSim.execution_style(mosaic), mosaic, spot_cube, n_lenslets, roi)
-    return mosaic
-end
-
-function revolt_tile_spot_cube!(::AdaptiveOpticsSim.ScalarCPUStyle, mosaic::AbstractMatrix{T},
-    spot_cube::AbstractArray{T,3}, n_lenslets::Int, roi::Int) where {T<:AbstractFloat}
-    @inbounds for idx in 1:size(spot_cube, 1)
-        sub_i = mod1(idx, n_lenslets)
-        sub_j = fld(idx - 1, n_lenslets) + 1
-        out_i = (sub_i - 1) * roi + 1
-        out_j = (sub_j - 1) * roi + 1
-        copyto!(@view(mosaic[out_i:out_i + roi - 1, out_j:out_j + roi - 1]), @view(spot_cube[idx, :, :]))
-    end
-    return mosaic
-end
-
-function revolt_tile_spot_cube!(style::AdaptiveOpticsSim.AcceleratorStyle, mosaic::AbstractMatrix{T},
-    spot_cube::AbstractArray{T,3}, n_lenslets::Int, roi::Int) where {T<:AbstractFloat}
-    AdaptiveOpticsSim.launch_kernel!(style, revolt_sh_spot_mosaic_kernel!, mosaic, spot_cube, n_lenslets, roi;
-        ndrange=size(spot_cube))
-    return mosaic
+    size(spot_cube, 2) == roi && size(spot_cube, 3) == roi ||
+        throw(DimensionMismatch("spot cube ROI does not match requested mosaic ROI"))
+    return shack_hartmann_detector_image!(mosaic, spot_cube, n_lenslets)
 end
 
 function build_revolt_like_hil_context(; backend_name::AbstractString="cpu", config_dir::AbstractString,

@@ -7,6 +7,7 @@ const _response_arg = length(ARGS) >= 3 ? lowercase(ARGS[3]) : "default"
 const _sampling_arg = length(ARGS) >= 4 ? lowercase(ARGS[4]) : "default"
 const _correction_arg = length(ARGS) >= 5 ? lowercase(ARGS[5]) : "default"
 const _thermal_arg = length(ARGS) >= 6 ? lowercase(ARGS[6]) : "default"
+const _fft_threads_arg = length(ARGS) >= 7 ? parse(Int, ARGS[7]) : parse(Int, get(ENV, "AOS_FFT_THREADS", "1"))
 
 if _backend_arg == "cuda"
     import CUDA
@@ -23,21 +24,17 @@ using .SubaruAO3kSimulation.SubaruAO188Simulation: AO188WFSDetectorConfig, subar
 function _resolve_backend(name::AbstractString)
     lowered = lowercase(name)
     if lowered == "cpu"
-        return Array, nothing, "cpu"
+        return CPUBackend(), nothing, "cpu"
     elseif lowered == "cuda"
         isdefined(Main, :CUDA) || error("profile_ao3k_runtime.jl requires CUDA.jl for backend=cuda")
         CUDA.functional() || error("profile_ao3k_runtime.jl requires a functional CUDA driver/device")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.CUDABackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.CUDABackendTag)
-        backend === nothing && error("CUDA backend array type is unavailable")
-        return backend, AdaptiveOpticsSim.CUDABackendTag, "cuda"
+        return CUDABackend(), AdaptiveOpticsSim.CUDABackendTag, "cuda"
     elseif lowered == "amdgpu"
         isdefined(Main, :AMDGPU) || error("profile_ao3k_runtime.jl requires AMDGPU.jl for backend=amdgpu")
         AMDGPU.functional() || error("profile_ao3k_runtime.jl requires a functional ROCm installation and GPU")
         AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.AMDGPUBackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.AMDGPUBackendTag)
-        backend === nothing && error("AMDGPU backend array type is unavailable")
-        return backend, AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
+        return AMDGPUBackend(), AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
     end
     error("unsupported backend '$name'; use cpu, cuda, or amdgpu")
 end
@@ -50,8 +47,7 @@ function _sync_simulation!(::Type{B}, simulation) where {B<:AdaptiveOpticsSim.GP
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(simulation.command))
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(simulation.high_wfs.state.slopes))
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(simulation.low_wfs.state.slopes))
-    high_frame = simulation_wfs_frame(simulation)[1]
-    low_frame = simulation_wfs_frame(simulation)[2]
+    high_frame, low_frame = wfs_frame(simulation)
     isnothing(high_frame) || AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(high_frame))
     isnothing(low_frame) || AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(low_frame))
     return nothing
@@ -167,9 +163,12 @@ end
 function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractString="medium",
     response_name::AbstractString="default", sampling_name::AbstractString="default",
     correction_name::AbstractString="default", thermal_name::AbstractString="default",
+    fft_threads::Int=1,
     samples::Union{Int,Nothing}=nothing,
     warmup::Union{Int,Nothing}=nothing)
-    BackendArray, backend_tag, backend_label = _resolve_backend(backend_name)
+    fft_threads > 0 || error("fft_threads must be positive")
+    AdaptiveOpticsSim.set_fft_provider_threads!(fft_threads)
+    backend, backend_tag, backend_label = _resolve_backend(backend_name)
     response_model, response_label = _resolve_response(response_name)
     sensor, sampling_label = _resolve_sampling(sampling_name, Float32)
     correction_model, correction_label = _resolve_correction(correction_name)
@@ -200,7 +199,7 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     ))
 
     t0 = time_ns()
-    simulation = subaru_ao3k_simulation(; params=params, backend=BackendArray, rng=runtime_rng(1))
+    simulation = subaru_ao3k_simulation(; params=params, backend=backend, rng=runtime_rng(1))
     _sync_simulation!(backend_tag, simulation)
     build_time_ns = time_ns() - t0
 
@@ -215,17 +214,18 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
         _sync_simulation!(backend_tag, simulation)
     end; warmup=resolved_warmup, gc_before=false)
     phase = subaru_ao188_phase_timing(simulation; warmup=resolved_warmup, samples=resolved_samples, gc_before=false)
-    high_metadata, low_metadata = simulation_wfs_metadata(simulation)
-    high_frame, low_frame = simulation_wfs_frame(simulation)
-    high_slopes, low_slopes = simulation_slopes(simulation)
+    simulation_output = readout(simulation)
+    high_metadata, low_metadata = simulation_output.wfs_metadata
+    high_frame, low_frame = simulation_output.wfs_frame
+    high_slopes, low_slopes = simulation_output.slopes
     high_detector = simulation.high_detector
-    high_reference_frame = isnothing(high_detector) ? nothing : detector_reference_frame(high_detector)
-    high_signal_frame = isnothing(high_detector) ? nothing : detector_signal_frame(high_detector)
-    high_combined_frame = isnothing(high_detector) ? nothing : detector_combined_frame(high_detector)
-    high_reference_cube = isnothing(high_detector) ? nothing : detector_reference_cube(high_detector)
-    high_signal_cube = isnothing(high_detector) ? nothing : detector_signal_cube(high_detector)
-    high_read_cube = isnothing(high_detector) ? nothing : detector_read_cube(high_detector)
-    high_read_times = isnothing(high_detector) ? nothing : detector_read_times(high_detector)
+    high_reference_frame = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.detector_reference_frame(high_detector)
+    high_signal_frame = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.detector_signal_frame(high_detector)
+    high_combined_frame = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.detector_combined_frame(high_detector)
+    high_reference_cube = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.detector_reference_cube(high_detector)
+    high_signal_cube = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.detector_signal_cube(high_detector)
+    high_read_cube = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.detector_read_cube(high_detector)
+    high_read_times = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.detector_read_times(high_detector)
 
     println("ao3k_runtime_profile")
     println("  backend: ", backend_label)
@@ -234,6 +234,7 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     println("  sampling_mode: ", sampling_label)
     println("  correction_mode: ", correction_label)
     println("  thermal_mode: ", thermal_label)
+    println("  fft_threads: ", fft_threads)
     println("  build_time_ns: ", build_time_ns)
     println("  runtime_step_mean_ns: ", timing.mean_ns)
     println("  runtime_step_p95_ns: ", timing.p95_ns)
@@ -254,7 +255,7 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     println("  low_frame_shape: ", isnothing(low_frame) ? nothing : size(low_frame))
     println("  high_slopes_length: ", length(high_slopes))
     println("  low_slopes_length: ", length(low_slopes))
-    println("  command_length: ", length(simulation_command(simulation)))
+    println("  command_length: ", length(command(simulation)))
     println("  high_response_family: ", isnothing(high_metadata) ? nothing : high_metadata.frame_response)
     println("  low_response_family: ", isnothing(low_metadata) ? nothing : low_metadata.frame_response)
     println("  high_sensor: ", isnothing(high_metadata) ? nothing : high_metadata.sensor)
@@ -275,4 +276,5 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
 end
 
 run_profile(; backend_name=_backend_arg, scale_name=_scale_arg, response_name=_response_arg,
-    sampling_name=_sampling_arg, correction_name=_correction_arg, thermal_name=_thermal_arg)
+    sampling_name=_sampling_arg, correction_name=_correction_arg, thermal_name=_thermal_arg,
+    fft_threads=_fft_threads_arg)
