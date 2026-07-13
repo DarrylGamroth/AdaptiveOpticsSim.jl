@@ -115,6 +115,9 @@ Atmosphere implementations are expected to mutate preallocated state in
 The normal DM constructor supports concise Gaussian keywords. Use explicit
 topology, influence, and actuator-model objects when modeling measured
 influence functions, non-square actuator layouts, clipping, or actuator health.
+Analytic Gaussian models use lazy operator storage with separable or fused
+matrix-free application; dense sampled matrices are materialized only by
+setup/calibration consumers that require them.
 Actuator print-through is not a separate analytic DM model today; represent it
 through `DenseInfluenceMatrix` or `MeasuredInfluenceFunctions` when the sampled
 influence basis already includes the print-through structure.

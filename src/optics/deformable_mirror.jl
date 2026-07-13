@@ -16,17 +16,40 @@
 #
 #   opd(x, y) = X * C * Y'
 #
-# path, while richer sampled-basis models fall back to the dense matrix-vector
-# application.
+# path. Other analytic Gaussian layouts use a fused matrix-free operator, while
+# explicitly sampled/measured bases retain dense matrix-vector application.
 #
-@kernel function dm_mode_kernel!(mode, pupil, x_m, y_m, cx, cy, scale, sigma2, n::Int)
+@kernel function dm_materialize_gaussian_kernel!(modes, pupil, coords, cx,
+    inv_scale, inv_two_sigma2, n::Int, n_commands::Int)
+    i, j, k = @index(Global, NTuple)
+    if i <= n && j <= n && k <= n_commands
+        x = (i - cx) * inv_scale
+        y = (j - cx) * inv_scale
+        dx = x - @inbounds(coords[1, k])
+        dy = y - @inbounds(coords[2, k])
+        val = exp(-(dx * dx + dy * dy) * inv_two_sigma2)
+        @inbounds modes[(j - 1) * n + i, k] =
+            ifelse(pupil[i, j], val, zero(eltype(modes)))
+    end
+end
+
+@kernel function dm_apply_gaussian_operator_kernel!(opd, pupil, coords, coefs,
+    cx, inv_scale, inv_two_sigma2, alpha, beta, n::Int, n_commands::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= n
-        x = (i - cx) / scale
-        y = (j - cy) / scale
-        r2 = (x - x_m)^2 + (y - y_m)^2
-        val = exp(-r2 / (2 * sigma2))
-        @inbounds mode[(j - 1) * n + i] = ifelse(pupil[i, j], val, zero(eltype(mode)))
+        row = (j - 1) * n + i
+        value = zero(eltype(opd))
+        if @inbounds(pupil[i, j])
+            x = (i - cx) * inv_scale
+            y = (j - cx) * inv_scale
+            @inbounds for k in 1:n_commands
+                dx = x - coords[1, k]
+                dy = y - coords[2, k]
+                value += exp(-(dx * dx + dy * dy) * inv_two_sigma2) * coefs[k]
+            end
+        end
+        @inbounds opd[row] = iszero(beta) ? alpha * value :
+            alpha * value + beta * opd[row]
     end
 end
 
@@ -89,6 +112,71 @@ struct MeasuredInfluenceFunctions{T<:AbstractFloat,M<:AbstractMatrix{T},MD} <: A
     metadata::MD
 end
 
+"""
+    GaussianInfluenceOperator
+
+Lazy sampled actuator-to-OPD operator for analytic Gaussian influence models.
+It retains only a pupil snapshot and registered actuator coordinates; applying
+the operator evaluates the Gaussian response directly, while regular-grid DMs
+use the still cheaper factored `X * C * Y'` runtime path.
+"""
+struct GaussianInfluenceOperator{
+    T<:AbstractFloat,
+    HP<:AbstractMatrix{Bool},
+    HC<:AbstractMatrix{T},
+    BP<:AbstractMatrix{Bool},
+    BC<:AbstractMatrix{T},
+} <: AbstractMatrix{T}
+    resolution::Int
+    pupil_host::HP
+    coordinates_host::HC
+    pupil_backend::BP
+    coordinates_backend::BC
+    center::T
+    inv_scale::T
+    inv_two_sigma2::T
+end
+
+Base.size(operator::GaussianInfluenceOperator) =
+    (operator.resolution * operator.resolution,
+        size(operator.coordinates_host, 2))
+Base.IndexStyle(::Type{<:GaussianInfluenceOperator}) = IndexLinear()
+
+Base.@propagate_inbounds function Base.getindex(
+    operator::GaussianInfluenceOperator{T}, row::Int, column::Int) where {T}
+    @boundscheck checkbounds(operator, row, column)
+    n = operator.resolution
+    i = (row - 1) % n + 1
+    j = (row - 1) ÷ n + 1
+    @inbounds operator.pupil_host[i, j] || return zero(T)
+    x = (T(i) - operator.center) * operator.inv_scale
+    y = (T(j) - operator.center) * operator.inv_scale
+    dx = x - @inbounds(operator.coordinates_host[1, column])
+    dy = y - @inbounds(operator.coordinates_host[2, column])
+    return exp(-(dx * dx + dy * dy) * operator.inv_two_sigma2)
+end
+
+Base.@propagate_inbounds function Base.getindex(
+    operator::GaussianInfluenceOperator, index::Int)
+    @boundscheck checkbounds(operator, index)
+    n_rows = size(operator, 1)
+    row = (index - 1) % n_rows + 1
+    column = (index - 1) ÷ n_rows + 1
+    return @inbounds operator[row, column]
+end
+
+@inline execution_style(operator::GaussianInfluenceOperator) =
+    execution_style(operator.pupil_backend)
+@inline backend(operator::GaussianInfluenceOperator) =
+    backend(operator.pupil_backend)
+
+Base.similar(operator::GaussianInfluenceOperator, ::Type{S},
+    dims::Dims) where {S} = similar(operator.pupil_backend, S, dims)
+Base.similar(operator::GaussianInfluenceOperator, ::Type{S}) where {S} =
+    similar(operator.pupil_backend, S, size(operator))
+Base.similar(operator::GaussianInfluenceOperator) =
+    similar(operator, eltype(operator))
+
 struct LinearStaticActuators <: AbstractDMActuatorModel end
 
 struct ClippedActuators{T<:AbstractFloat} <: AbstractDMActuatorModel
@@ -125,7 +213,9 @@ function ActuatorGridTopology(n_act::Integer; valid_actuators::Union{Nothing,Abs
     ys = collect(range(T(-1), T(1); length=Int(n_act)))
     coords = Matrix{T}(undef, 2, total)
     idx = 1
-    @inbounds for x0 in xs, y0 in ys
+    # Keep x as the first/fast actuator axis so a command vector reshapes to
+    # C[x, y] using Julia's native column-major layout.
+    @inbounds for y0 in ys, x0 in xs
         coords[1, idx] = x0
         coords[2, idx] = y0
         idx += 1
@@ -393,6 +483,73 @@ function _resolve_dm_influence_model(; n::Integer, topology::AbstractDMTopology,
     return GaussianInfluenceWidth{T}(resolved_width)
 end
 
+@inline _operator_backend_copy(::CPUBackend, host::AbstractArray) = host
+
+function _operator_backend_copy(selector::AbstractArrayBackend,
+    host::AbstractArray{T,N}) where {T,N}
+    storage = allocate_array(selector, T, size(host)...)
+    copyto!(storage, host)
+    return storage
+end
+
+function _registered_actuator_coordinates(topology::AbstractDMTopology,
+    misregistration::Misregistration, ::Type{T}) where {T<:AbstractFloat}
+    source = actuator_coordinates(topology)
+    coordinates = Matrix{T}(undef, size(source))
+    @inbounds for k in axes(source, 2)
+        x, y = apply_misregistration(misregistration,
+            T(source[1, k]), T(source[2, k]))
+        coordinates[1, k] = T(x)
+        coordinates[2, k] = T(y)
+    end
+    return coordinates
+end
+
+function _gaussian_influence_operator(tel::Telescope,
+    model::Union{GaussianInfluenceWidth,GaussianMechanicalCoupling},
+    topology::AbstractDMTopology, misregistration::Misregistration,
+    ::Type{T}, selector::AbstractArrayBackend) where {T<:AbstractFloat}
+    n = tel.params.resolution
+    pupil_host = Matrix{Bool}(Array(tel.state.pupil))
+    coordinates_host = _registered_actuator_coordinates(topology,
+        misregistration, T)
+    pupil_backend = _operator_backend_copy(selector, pupil_host)
+    coordinates_backend = _operator_backend_copy(selector, coordinates_host)
+    sigma2 = T(influence_width(model, topology))^2
+    return GaussianInfluenceOperator{
+        T,
+        typeof(pupil_host),
+        typeof(coordinates_host),
+        typeof(pupil_backend),
+        typeof(coordinates_backend),
+    }(
+        n,
+        pupil_host,
+        coordinates_host,
+        pupil_backend,
+        coordinates_backend,
+        T((n + 1) / 2),
+        inv(T(n / 2)),
+        inv(T(2) * sigma2),
+    )
+end
+
+function _dm_influence_storage(tel::Telescope,
+    model::Union{GaussianInfluenceWidth,GaussianMechanicalCoupling},
+    topology::AbstractDMTopology, misregistration::Misregistration,
+    ::Type{T}, selector::AbstractArrayBackend) where {T<:AbstractFloat}
+    return _gaussian_influence_operator(tel, model, topology,
+        misregistration, T, selector)
+end
+
+@inline _dm_influence_storage(::Telescope, model::DenseInfluenceMatrix,
+    ::AbstractDMTopology, ::Misregistration, ::Type, ::AbstractArrayBackend) =
+    model.modes
+
+@inline _dm_influence_storage(::Telescope, model::MeasuredInfluenceFunctions,
+    ::AbstractDMTopology, ::Misregistration, ::Type, ::AbstractArrayBackend) =
+    model.modes
+
 """
     DeformableMirror(tel; ...)
 
@@ -435,13 +592,15 @@ function DeformableMirror(tel::Telescope; n_act::Union{Nothing,Int}=nothing,
     opd = backend{T}(undef, n, n)
     fill!(opd, zero(T))
     opd_vec = reshape(opd, :)
-    modes = backend{T}(undef, n * n, n_commands)
+    modes = _dm_influence_storage(tel, resolved_model, resolved_topology,
+        misregistration, T, selector)
     coefs = backend{T}(undef, n_commands)
     actuator_coefs = similar(coefs)
     fill!(coefs, zero(T))
     fill!(actuator_coefs, zero(T))
     coefs_grid = supports_separable_topology(resolved_topology) ?
-        reshape(actuator_coefs, resolved_topology.n_act, resolved_topology.n_act) :
+        reshape(actuator_coefs, resolved_topology.n_act,
+            resolved_topology.n_act) :
         nothing
     state = DeformableMirrorState{T,typeof(opd),typeof(modes),typeof(opd_vec),typeof(coefs_grid)}(
         opd, opd_vec, modes, coefs, actuator_coefs, coefs_grid, nothing, nothing, nothing)
@@ -560,70 +719,114 @@ end
 """
     build_influence_functions!(dm, tel)
 
-Materialize the dense actuator-to-OPD operator.
+Refresh the actuator-to-OPD operator for the telescope pupil.
 
-Each column corresponds to one active actuator's influence function sampled on
-the telescope pupil grid. This is the reference linear model used for
-calibration and for the dense DM application fallback.
+Analytic Gaussian models retain a lazy operator rather than an eager
+`resolution^2 × n_actuators` matrix. Sampled and measured models retain their
+dense backend storage. Use `materialize_influence_matrix(dm)` in setup or
+calibration code that explicitly requires a dense matrix.
 """
-function build_influence_functions!(::ScalarCPUStyle, dm::DeformableMirror, tel::Telescope,
-    model::GaussianInfluenceWidth, topology::AbstractDMTopology)
-    Base.require_one_based_indexing(tel.state.pupil, dm.state.modes)
-    n = tel.params.resolution
-    sigma = influence_width(model, topology)
-    coords = actuator_coordinates(topology)
-    cx = (n + 1) / 2
-    cy = (n + 1) / 2
-    scale = n / 2
-    n_commands = topology_command_count(topology)
-    @inbounds for idx in 1:n_commands
-        x0 = coords[1, idx]
-        y0 = coords[2, idx]
-        x_m, y_m = apply_misregistration(dm.params.misregistration, x0, y0)
-        for i in 1:n, j in 1:n
-            x = (i - cx) / scale
-            y = (j - cy) / scale
-            r2 = (x - x_m)^2 + (y - y_m)^2
-            dm.state.modes[(j - 1) * n + i, idx] = exp(-r2 / (2 * sigma^2)) * tel.state.pupil[i, j]
-        end
+function build_influence_functions!(::ExecutionStyle, dm::DeformableMirror,
+    tel::Telescope, ::GaussianInfluenceWidth, ::AbstractDMTopology)
+    return _refresh_gaussian_influence_operator!(dm.state.modes, dm, tel)
+end
+
+function _refresh_gaussian_influence_operator!(
+    operator::GaussianInfluenceOperator, dm::DeformableMirror,
+    tel::Telescope)
+    pupil_host = Array(tel.state.pupil)
+    copyto!(operator.pupil_host, pupil_host)
+    if operator.pupil_backend !== operator.pupil_host
+        copyto!(operator.pupil_backend, pupil_host)
     end
     return dm
 end
 
-function build_influence_functions!(style::AcceleratorStyle, dm::DeformableMirror, tel::Telescope,
-    model::GaussianInfluenceWidth, topology::AbstractDMTopology)
-    Base.require_one_based_indexing(tel.state.pupil, dm.state.modes)
-    n = tel.params.resolution
-    T = eltype(dm.state.modes)
-    sigma2 = T(influence_width(model, topology))^2
-    coords = actuator_coordinates(topology)
-    cx = T((n + 1) / 2)
-    cy = T((n + 1) / 2)
-    scale = T(n / 2)
-    n_commands = topology_command_count(topology)
-    @inbounds for idx in 1:n_commands
-        x0 = T(coords[1, idx])
-        y0 = T(coords[2, idx])
-        x_m, y_m = apply_misregistration(dm.params.misregistration, x0, y0)
-        launch_kernel!(style, dm_mode_kernel!, @view(dm.state.modes[:, idx]), tel.state.pupil,
-            T(x_m), T(y_m), cx, cy, scale, sigma2, n; ndrange=(n, n))
-    end
-    synchronize_backend!(style)
-    return dm
-end
-
-function build_influence_functions!(::ScalarCPUStyle, dm::DeformableMirror, tel::Telescope,
-    model::GaussianMechanicalCoupling, topology::AbstractDMTopology)
-    return build_influence_functions!(ScalarCPUStyle(), dm, tel,
-        GaussianInfluenceWidth(influence_width(model, topology)), topology)
-end
-
-function build_influence_functions!(style::AcceleratorStyle, dm::DeformableMirror, tel::Telescope,
+function build_influence_functions!(style::ExecutionStyle,
+    dm::DeformableMirror, tel::Telescope,
     model::GaussianMechanicalCoupling, topology::AbstractDMTopology)
     return build_influence_functions!(style, dm, tel,
         GaussianInfluenceWidth(influence_width(model, topology)), topology)
 end
 
+function _materialize_gaussian_influence!(::ScalarCPUStyle,
+    destination::AbstractMatrix{T}, operator::GaussianInfluenceOperator{T}) where {T}
+    Base.require_one_based_indexing(destination, operator.pupil_host,
+        operator.coordinates_host)
+    size(destination) == size(operator) ||
+        throw(DimensionMismatchError(
+            "influence destination size $(size(destination)) does not match operator size $(size(operator))"))
+    n = operator.resolution
+    @inbounds for k in axes(operator.coordinates_host, 2)
+        x_m = operator.coordinates_host[1, k]
+        y_m = operator.coordinates_host[2, k]
+        for j in axes(operator.pupil_host, 2), i in axes(operator.pupil_host, 1)
+            row = (j - 1) * n + i
+            if operator.pupil_host[i, j]
+                x = (T(i) - operator.center) * operator.inv_scale
+                y = (T(j) - operator.center) * operator.inv_scale
+                dx = x - x_m
+                dy = y - y_m
+                destination[row, k] =
+                    exp(-(dx * dx + dy * dy) * operator.inv_two_sigma2)
+            else
+                destination[row, k] = zero(T)
+            end
+        end
+    end
+    return destination
+end
+
+function _materialize_gaussian_influence!(style::AcceleratorStyle,
+    destination::AbstractMatrix, operator::GaussianInfluenceOperator)
+    size(destination) == size(operator) ||
+        throw(DimensionMismatchError(
+            "influence destination size $(size(destination)) does not match operator size $(size(operator))"))
+    n = operator.resolution
+    n_commands = size(operator, 2)
+    launch_kernel!(style, dm_materialize_gaussian_kernel!, destination,
+        operator.pupil_backend, operator.coordinates_backend, operator.center,
+        operator.inv_scale, operator.inv_two_sigma2, n, n_commands;
+        ndrange=(n, n, n_commands))
+    return destination
+end
+
+function materialize_influence_matrix(dm::DeformableMirror)
+    return _materialize_influence_matrix(dm.state.modes, dm.state.opd)
+end
+
+@inline sampled_influence_matrix(dm::DeformableMirror) =
+    _sampled_influence_matrix(dm.state.modes, dm)
+
+@inline _sampled_influence_matrix(operator::GaussianInfluenceOperator,
+    dm::DeformableMirror) = materialize_influence_matrix(dm)
+
+@inline _sampled_influence_matrix(modes::AbstractMatrix,
+    ::DeformableMirror) = modes
+
+function _materialize_influence_matrix(operator::GaussianInfluenceOperator,
+    prototype::AbstractMatrix)
+    destination = similar(prototype, eltype(operator), size(operator))
+    return _materialize_gaussian_influence!(execution_style(destination),
+        destination, operator)
+end
+
+function _materialize_influence_matrix(modes::AbstractMatrix,
+    prototype::AbstractMatrix)
+    destination = similar(prototype, eltype(modes), size(modes))
+    copyto!(destination, modes)
+    return destination
+end
+
+function Base.Array(operator::GaussianInfluenceOperator{T}) where {T}
+    destination = Matrix{T}(undef, size(operator))
+    return _materialize_gaussian_influence!(ScalarCPUStyle(), destination,
+        operator)
+end
+
+Base.copy(operator::GaussianInfluenceOperator) =
+    _materialize_influence_matrix(operator, operator.pupil_backend)
+
 function build_influence_functions!(::ScalarCPUStyle, dm::DeformableMirror, tel::Telescope,
     model::DenseInfluenceMatrix, topology::AbstractDMTopology)
     Base.require_one_based_indexing(dm.state.modes)
@@ -656,6 +859,69 @@ function build_influence_functions!(::AcceleratorStyle, dm::DeformableMirror, te
         throw(DimensionMismatchError("MeasuredInfluenceFunctions size $(size(model.modes)) does not match DM state size $(size(dm.state.modes))"))
     copyto!(dm.state.modes, model.modes)
     return dm
+end
+
+@inline function _check_gaussian_mul_dimensions(y::AbstractVector,
+    operator::GaussianInfluenceOperator, x::AbstractVector)
+    length(y) == size(operator, 1) ||
+        throw(DimensionMismatchError(
+            "Gaussian influence output length $(length(y)) does not match $(size(operator, 1))"))
+    length(x) == size(operator, 2) ||
+        throw(DimensionMismatchError(
+            "Gaussian influence command length $(length(x)) does not match $(size(operator, 2))"))
+    return nothing
+end
+
+function _mul_gaussian_influence!(::ScalarCPUStyle, y::AbstractVector{T},
+    operator::GaussianInfluenceOperator{T}, x::AbstractVector{T},
+    alpha::T, beta::T) where {T<:AbstractFloat}
+    Base.require_one_based_indexing(y, x, operator.pupil_host,
+        operator.coordinates_host)
+    n = operator.resolution
+    n_commands = size(operator, 2)
+    @inbounds for j in axes(operator.pupil_host, 2), i in axes(operator.pupil_host, 1)
+        row = (j - 1) * n + i
+        value = zero(T)
+        if operator.pupil_host[i, j]
+            x_grid = (T(i) - operator.center) * operator.inv_scale
+            y_grid = (T(j) - operator.center) * operator.inv_scale
+            for k in 1:n_commands
+                dx = x_grid - operator.coordinates_host[1, k]
+                dy = y_grid - operator.coordinates_host[2, k]
+                value += exp(-(dx * dx + dy * dy) *
+                    operator.inv_two_sigma2) * x[k]
+            end
+        end
+        y[row] = iszero(beta) ? alpha * value :
+            alpha * value + beta * y[row]
+    end
+    return y
+end
+
+function _mul_gaussian_influence!(style::AcceleratorStyle,
+    y::AbstractVector{T}, operator::GaussianInfluenceOperator{T},
+    x::AbstractVector{T}, alpha::T, beta::T) where {T<:AbstractFloat}
+    n = operator.resolution
+    n_commands = size(operator, 2)
+    launch_kernel!(style, dm_apply_gaussian_operator_kernel!, y,
+        operator.pupil_backend, operator.coordinates_backend, x,
+        operator.center, operator.inv_scale, operator.inv_two_sigma2,
+        alpha, beta, n, n_commands; ndrange=(n, n))
+    return y
+end
+
+function LinearAlgebra.mul!(y::AbstractVector{T},
+    operator::GaussianInfluenceOperator{T}, x::AbstractVector{T},
+    alpha::Number, beta::Number) where {T<:AbstractFloat}
+    _check_gaussian_mul_dimensions(y, operator, x)
+    return _mul_gaussian_influence!(execution_style(y), y, operator, x,
+        T(alpha), T(beta))
+end
+
+function LinearAlgebra.mul!(y::AbstractVector{T},
+    operator::GaussianInfluenceOperator{T},
+    x::AbstractVector{T}) where {T<:AbstractFloat}
+    return mul!(y, operator, x, one(T), zero(T))
 end
 
 function apply!(dm::DeformableMirror, tel::Telescope, ::DMAdditive)
@@ -725,7 +991,8 @@ Assemble the DM OPD from the current actuator coefficients without mutating the
 telescope OPD.
 
 This chooses the separable `X * C * Y'` path when available and otherwise
-falls back to the dense matrix-vector application `modes * actuator_coefs`.
+applies the stored operator: fused matrix-free evaluation for analytic Gaussian
+layouts or dense matrix-vector application for sampled/measured influence data.
 """
 @inline function apply_opd_separable!(dm::DeformableMirror, tel::Telescope)
     return _apply_opd_separable!(execution_style(dm.state.opd), dm, tel)

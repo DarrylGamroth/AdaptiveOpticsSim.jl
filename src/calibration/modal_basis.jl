@@ -41,12 +41,12 @@ end
 function dm_basis(dm::DeformableMirror, tel::Telescope)
     n = tel.params.resolution
     n_modes = size(dm.state.modes, 2)
-    return reshape(dm.state.modes, n, n, n_modes)
+    return reshape(sampled_influence_matrix(dm), n, n, n_modes)
 end
 
 function basis_from_m2c(dm::DeformableMirror, tel::Telescope, M2C::AbstractMatrix)
     n = tel.params.resolution
-    basis_mat = dm.state.modes * M2C
+    basis_mat = sampled_influence_matrix(dm) * M2C
     return reshape(basis_mat, n, n, size(M2C, 2))
 end
 
@@ -92,7 +92,7 @@ end
 
 function kl_modal_basis(::KLDMModes, dm::DeformableMirror, tel::Telescope;
     n_modes::Int=size(dm.state.modes, 2), remove_piston::Bool=true)
-    M = dm.state.modes
+    M = sampled_influence_matrix(dm)
     C = transpose(M) * M
     evals, evecs = eigen(Symmetric(C))
     order = sortperm(evals; rev=true)
@@ -117,6 +117,7 @@ function kl_modal_basis(::KLHHtPSD, dm::DeformableMirror, tel::Telescope, atm::A
     mode_count = size(dm.state.modes, 2)
     n_keep = min(n_modes, mode_count)
     T = eltype(dm.state.modes)
+    modes = sampled_influence_matrix(dm)
 
     delta_val = delta === nothing ? tel.params.diameter / n : delta
     freqs = Vector{T}(undef, n)
@@ -136,7 +137,7 @@ function kl_modal_basis(::KLHHtPSD, dm::DeformableMirror, tel::Telescope, atm::A
     buffer = Matrix{Complex{T}}(undef, n, n)
     fft_plan = plan_fft_backend!(buffer)
     @inbounds for k in 1:mode_count
-        mode = reshape(view(dm.state.modes, :, k), n, n)
+        mode = reshape(view(modes, :, k), n, n)
         @inbounds for i in 1:n, j in 1:n
             buffer[i, j] = complex(mode[i, j], zero(T))
         end
@@ -158,7 +159,7 @@ function kl_modal_basis(::KLHHtPSD, dm::DeformableMirror, tel::Telescope, atm::A
     evals, evecs = eigen(Symmetric(C))
     order = sortperm(evals; rev=true)
     V = evecs[:, order[1:n_keep]]
-    basis_mat = dm.state.modes * V
+    basis_mat = modes * V
     if remove_piston
         for i in 1:n_keep
             mode = reshape(view(basis_mat, :, i), n, n)

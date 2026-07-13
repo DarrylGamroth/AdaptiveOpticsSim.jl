@@ -46,8 +46,9 @@ function _compute_meta_sensitivity_matrix_ad(tel::Telescope, dm::DeformableMirro
     calib0_control_matrix = ControlMatrix(calib0.matrix)
 
     d_modes = _gaussian_dm_mode_parameter_jacobians(tel, dm0, fields)
+    base_modes = sampled_influence_matrix(dm0)
     meta = _wfs_directional_meta_sensitivity(tel, wfs, basis, source, calib0.matrix,
-        dm0.state.modes, d_modes, T(amplitude), T(direction_epsilon))
+        base_modes, d_modes, T(amplitude), T(direction_epsilon))
 
     meta_control_matrix = ControlMatrix(meta)
     out = MetaSensitivity(meta_control_matrix, calib0_control_matrix, epsilon, collect(fields))

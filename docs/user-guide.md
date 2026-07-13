@@ -408,6 +408,18 @@ need an explicit DM influence representation, `topology=...` when the actuator
 layout is not the default full square grid, and `actuator_model=...` when
 command preprocessing should model clipping or actuator health without changing
 the sampled influence basis.
+
+Analytic Gaussian DMs keep a lazy actuator-to-OPD operator instead of storing a
+`resolution^2 × n_actuators` sampled matrix. A complete regular grid applies
+through the allocation-free factored `X * C * Y'` path; masked, sampled, or
+non-separable misregistered Gaussian layouts use a fused matrix-free path.
+Dense storage is retained only when explicitly supplied through
+`DenseInfluenceMatrix` or `MeasuredInfluenceFunctions`, and calibration code
+may materialize the lazy operator during setup when a dense matrix is genuinely
+required.
+Regular-grid command vectors follow Julia column-major `C[x, y]` ordering, so
+the x actuator coordinate is the first and fastest-varying axis.
+
 Actuator print-through is represented only when it is already present in a
 sampled influence basis supplied through `DenseInfluenceMatrix` or
 `MeasuredInfluenceFunctions`; the built-in Gaussian DM path does not add a

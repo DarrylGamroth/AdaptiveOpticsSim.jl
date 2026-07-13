@@ -434,7 +434,7 @@ function _dm_grid_coordinates(n_act::Int, misregistration::Misregistration)
     x_coords = Vector{Float64}(undef, n_act * n_act)
     y_coords = Vector{Float64}(undef, n_act * n_act)
     idx = 1
-    for x0 in xs, y0 in ys
+    for y0 in ys, x0 in xs
         x_m, y_m = apply_misregistration(misregistration, x0, y0)
         x_coords[idx] = x_m
         y_coords[idx] = y_m

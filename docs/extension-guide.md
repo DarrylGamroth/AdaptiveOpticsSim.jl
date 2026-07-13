@@ -78,6 +78,13 @@ Use the composed model:
   dynamic behavior
 - `DeformableMirror` composes those pieces into the runtime optic
 
+Analytic Gaussian influence models are operator-backed: regular grids use a
+factored separable operator and other Gaussian topologies evaluate a fused
+matrix-free operator. Do not require `state.modes` to be mutable dense storage.
+Code that truly needs the full sampled basis should materialize it during setup,
+then keep that result out of repeated HIL application. Explicit dense and
+measured influence models continue to own backend-native matrix storage.
+
 Measured manufacturer influence functions should enter as sampled influence
 bases with explicit metadata. Do not force measured data through an anonymous
 dense matrix unless it is truly only an escape hatch.

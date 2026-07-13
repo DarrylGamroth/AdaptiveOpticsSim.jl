@@ -1,5 +1,6 @@
 using AdaptiveOpticsSim
 using BenchmarkTools
+using LinearAlgebra
 
 const CPU_HOTPATH_CARDS = (
     ("CPU-PERF-01", "extended-source cached asterism", :extended_source_cache),
@@ -12,9 +13,12 @@ const CPU_HOTPATH_CARDS = (
     ("CPU-PERF-08", "detector frame binning", :detector_binning),
     ("CPU-PERF-09", "separable Gaussian frame response", :gaussian_frame_response),
     ("CPU-PERF-10", "batched EMCCD capture", :batched_emccd_capture),
+    ("CPU-PERF-11", "lazy Gaussian DM operator application", :gaussian_dm_operator),
 )
 
 function configure_cpu_hotpath_benchmarks!()
+    BLAS.set_num_threads(1)
+    AdaptiveOpticsSim.set_fft_provider_threads!(1)
     BenchmarkTools.DEFAULT_PARAMETERS.seconds = 1.0
     BenchmarkTools.DEFAULT_PARAMETERS.samples = 20
     BenchmarkTools.DEFAULT_PARAMETERS.evals = 1
@@ -136,6 +140,14 @@ function batched_emccd_capture_probe()
     end
 end
 
+function gaussian_dm_operator_probe()
+    tel = Telescope(resolution=128, diameter=8.0, sampling_time=1e-3,
+        central_obstruction=0.0)
+    dm = DeformableMirror(tel; n_act=32, influence_width=0.3)
+    dm.state.coefs .= range(-1e-7, 1e-7; length=length(dm.state.coefs))
+    return () -> AdaptiveOpticsSim.apply_opd!(dm, tel)
+end
+
 function run_probe(card_id::AbstractString, label::AbstractString, f)
     f()
     alloc = @allocated f()
@@ -164,6 +176,7 @@ function run_cpu_hotpath_card_benchmarks()
         ("CPU-PERF-08", "detector_binning", detector_binning_probe()),
         ("CPU-PERF-09", "gaussian_frame_response", gaussian_frame_response_probe()),
         ("CPU-PERF-10", "batched_emccd_capture", batched_emccd_capture_probe()),
+        ("CPU-PERF-11", "gaussian_dm_operator", gaussian_dm_operator_probe()),
     )
     results = map(probe -> run_probe(probe...), probes)
     println("recommendation")

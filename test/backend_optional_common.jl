@@ -45,6 +45,10 @@ function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:
     det = Detector(noise=NoiseNone(), integration_time=T(1), qe=T(1), binning=1, T=T, backend=selector)
     @test tel.state.opd isa BackendArray
     @test dm.state.coefs isa BackendArray
+    @test dm.state.modes isa AdaptiveOpticsSim.GaussianInfluenceOperator
+    @test typeof(backend(dm.state.modes)) === typeof(selector)
+    @test similar(dm.state.modes, T, 2, 2) isa BackendArray
+    @test AdaptiveOpticsSim.materialize_influence_matrix(dm) isa BackendArray
     @test dm_dense.state.coefs isa BackendArray
     @test dm_dense.state.modes isa BackendArray
     @test Array(dm_dense.state.modes) ≈ Array(dm.state.modes) atol=0 rtol=0

@@ -1,8 +1,26 @@
 include(normpath(joinpath(@__DIR__, "..", "..", "benchmarks", "support", "revolt_like_hil_common.jl")))
 
+function dm_apply_allocations(dm, tel)
+    apply_opd!(dm, tel)
+    return @allocated apply_opd!(dm, tel)
+end
+
 @testset "Deformable mirror and WFS" begin
     tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
+    @test dm.state.modes isa AdaptiveOpticsSim.GaussianInfluenceOperator
+    @test Base.summarysize(dm.state.modes) <
+        prod(size(dm.state.modes)) * sizeof(eltype(dm.state.modes)) ÷ 10
+    dm.state.coefs .= range(-0.2, 0.3; length=length(dm.state.coefs))
+    apply_opd!(dm, tel)
+    dense_reference = reshape(Array(dm.state.modes) * Array(dm.state.coefs),
+        size(dm.state.opd))
+    @test dm.state.opd ≈ dense_reference rtol=5e-14
+    if Base.JLOptions().code_coverage == 0
+        @test dm_apply_allocations(dm, tel) == 0
+    else
+        @test_skip "DM allocation assertions are disabled under coverage instrumentation"
+    end
     dm.state.coefs .= 0.1
     apply!(dm, tel, DMReplace())
     @test sum(abs.(tel.state.opd)) > 0
@@ -30,6 +48,8 @@ include(normpath(joinpath(@__DIR__, "..", "..", "benchmarks", "support", "revolt
     @test topology_axis_count(topology(dm)) == 4
     @test topology_command_count(topology(dm)) == 16
     @test size(actuator_coordinates(dm)) == (2, 16)
+    @test actuator_coordinates(dm)[:, 1:4] ≈
+        [-1.0 -1 / 3 1 / 3 1.0; -1.0 -1.0 -1.0 -1.0]
     @test all(valid_actuator_mask(dm))
     @test_throws InvalidConfiguration DeformableMirror(tel; n_act=4, influence_width=0.3, mechanical_coupling=coupling)
     @test_throws InvalidConfiguration DeformableMirror(tel; n_act=4, influence_width=0.3,
@@ -45,6 +65,17 @@ include(normpath(joinpath(@__DIR__, "..", "..", "benchmarks", "support", "revolt
     @test topology_command_count(topology(dm_masked)) == 15
     @test length(dm_masked.state.coefs) == 15
     @test isnothing(dm_masked.state.separable_x)
+    dm_masked.state.coefs .= range(-0.1, 0.2;
+        length=length(dm_masked.state.coefs))
+    apply_opd!(dm_masked, tel)
+    masked_reference = reshape(Array(dm_masked.state.modes) *
+        Array(dm_masked.state.coefs), size(dm_masked.state.opd))
+    @test dm_masked.state.opd ≈ masked_reference rtol=5e-14
+    if Base.JLOptions().code_coverage == 0
+        @test dm_apply_allocations(dm_masked, tel) == 0
+    else
+        @test_skip "DM allocation assertions are disabled under coverage instrumentation"
+    end
 
     sampled_topology = SampledActuatorTopology(actuator_coordinates(dm)[:, 1:4];
         metadata=(manufacturer=:alpao, source=:converted))

@@ -207,6 +207,9 @@ dm = DeformableMirror(
 Keep external file-format conversion outside core. Convert vendor artifacts such
 as FITS influence files into a package-native sampled topology plus sampled
 influence basis first, then construct the DM from those native objects.
+The built-in analytic Gaussian models remain lazy and allocation-free during
+steady-state application; use an explicit dense or measured model only when the
+sampled columns carry information that the analytic operator cannot represent.
 Actuator print-through is currently supported through this measured/sampled
 influence path: include the print-through structure in the columns passed to
 `DenseInfluenceMatrix` or `MeasuredInfluenceFunctions`. The built-in Gaussian

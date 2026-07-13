@@ -565,14 +565,14 @@ end
 
         dm_scalar = DeformableMirror(tel; n_act=3, influence_width=0.3)
         dm_ka = DeformableMirror(tel; n_act=3, influence_width=0.3)
-        fill!(dm_scalar.state.modes, 0.0)
-        fill!(dm_ka.state.modes, 0.0)
-        AdaptiveOpticsSim.build_influence_functions!(
-            SCALAR_CPU_STYLE, dm_scalar, tel, dm_scalar.params.influence_model, AdaptiveOpticsSim.topology(dm_scalar))
-        AdaptiveOpticsSim.build_influence_functions!(
-            KA_CPU_STYLE, dm_ka, tel, dm_ka.params.influence_model, AdaptiveOpticsSim.topology(dm_ka))
-        mark_ka_cpu_kernel!(:dm_mode_kernel!)
-        @test ka_cpu_close(dm_ka.state.modes, dm_scalar.state.modes)
+        scalar_modes = Matrix{Float64}(undef, size(dm_scalar.state.modes))
+        ka_modes = similar(scalar_modes)
+        AdaptiveOpticsSim._materialize_gaussian_influence!(
+            SCALAR_CPU_STYLE, scalar_modes, dm_scalar.state.modes)
+        AdaptiveOpticsSim._materialize_gaussian_influence!(
+            KA_CPU_STYLE, ka_modes, dm_ka.state.modes)
+        mark_ka_cpu_kernel!(:dm_materialize_gaussian_kernel!)
+        @test ka_cpu_close(ka_modes, scalar_modes)
 
         dm_scalar.state.coefs .= collect(range(-0.1, 0.1; length=length(dm_scalar.state.coefs)))
         dm_ka.state.coefs .= dm_scalar.state.coefs
@@ -803,6 +803,7 @@ end
             :curvature_signal_from_channels_kernel!,
             :curvature_signal_from_frame_kernel!,
             :diagonal_matrix_kernel!,
+            :dm_apply_gaussian_operator_kernel!,
             :fit_source_average_kernel!,
             :gather_bioedge_slopes_kernel!,
             :gather_pyramid_slopes_kernel!,
