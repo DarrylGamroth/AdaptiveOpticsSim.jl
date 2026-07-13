@@ -1,11 +1,14 @@
 function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
     wfs_detector=nothing, science_detector=nothing, rng=runtime_rng(),
     profile::AbstractRuntimeProfile=default_runtime_profile(),
+    execution_plan::Union{AbstractRuntimeExecutionPlan,Nothing}=nothing,
     outputs::RuntimeOutputRequirements=default_runtime_outputs(wfs_detector=wfs_detector, science_detector=science_detector),
     latency::RuntimeLatencyModel=default_runtime_latency(profile),
     control_sign::Real=-1.0, science_zero_padding::Union{Int,Nothing}=nothing,
     command_layout::Union{RuntimeCommandLayout,Nothing}=nothing)
     selector = require_same_backend(simulation, wfs_detector, science_detector)
+    resolved_execution_plan = something(execution_plan, default_runtime_execution_plan(selector))
+    validate_runtime_execution_plan!(resolved_execution_plan, selector, reconstructor)
     outputs.slopes || throw(InvalidConfiguration("ClosedLoopRuntime requires slope outputs for reconstruction"))
     T = eltype(command_storage(simulation.optic))
     command = similar(command_storage(simulation.optic))
@@ -38,6 +41,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
         typeof(science_detector),
         typeof(rng),
         typeof(profile),
+        typeof(resolved_execution_plan),
         typeof(outputs),
         typeof(measurement_delay),
         typeof(readout_delay),
@@ -63,6 +67,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
         science_detector,
         rng,
         profile,
+        resolved_execution_plan,
         outputs,
         latency,
         measurement_delay,
@@ -210,6 +215,7 @@ function with_reconstructor(runtime::ClosedLoopRuntime, reconstructor)
         science_detector=runtime.science_detector,
         rng=runtime.rng,
         profile=runtime.profile,
+        execution_plan=runtime.execution_plan,
         outputs=runtime.outputs,
         latency=runtime.latency,
         control_sign=runtime.control_sign,

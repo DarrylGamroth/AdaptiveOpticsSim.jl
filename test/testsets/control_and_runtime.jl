@@ -763,14 +763,21 @@ end
     @test !supports_prepared_runtime(runtime)
     @test supports_detector_output(runtime)
     @test runtime_profile(runtime) isa ScientificRuntimeProfile
+    @test runtime_execution_plan(runtime) isa CPUHILExecutionPlan
     @test runtime_latency(runtime).measurement_delay_frames == 0
     @test runtime.science_zero_padding == 2
     @test wfs_source(runtime) === src
     @test science_source(runtime) === src
     @test runtime.science_path isa AdaptiveOpticsSim.ReuseSensedOpticalPath
     @test !runtime.prepared
+    @test AdaptiveOpticsSim.runtime_reconstructor_storage(recon) == (recon.reconstructor,)
+    @test_throws InvalidConfiguration ClosedLoopRuntime(sim, recon;
+        execution_plan=DeviceResidentExecutionPlan())
 
     step!(runtime)
+    @test synchronize_runtime!(runtime) === runtime
+    refreshed_runtime = AdaptiveOpticsSim.with_reconstructor(runtime, recon)
+    @test runtime_execution_plan(refreshed_runtime) isa CPUHILExecutionPlan
     @test length(runtime.command) == length(dm.state.coefs)
     @test size(output_frame(det)) == (32, 32)
     if coverage_instrumented()
@@ -927,6 +934,7 @@ end
     @test control_loop_name(single_scenario) == :single_runtime_demo
     @test control_loop_branch_labels(single_scenario) == (:science_branch,)
     @test AdaptiveOpticsSim.simulation_interface(single_scenario) isa SimulationInterface
+    @test runtime_execution_plan(single_scenario) isa CPUHILExecutionPlan
     @test supports_detector_output(single_scenario)
     single_layout = command_layout(single_scenario)
     @test single_layout isa RuntimeCommandLayout
@@ -1230,6 +1238,8 @@ end
     @test control_loop_name(grouped_scenario) == :grouped_runtime_demo
     @test control_loop_branch_labels(grouped_scenario) == (:branch_a, :branch_b)
     @test AdaptiveOpticsSim.simulation_interface(grouped_scenario) isa CompositeSimulationInterface
+    @test all(plan -> plan isa CPUHILExecutionPlan,
+        runtime_execution_plan(grouped_scenario))
     @test supports_grouped_execution(grouped_scenario)
     grouped_layout = command_layout(grouped_scenario)
     @test grouped_layout isa RuntimeCommandLayout
@@ -1340,6 +1350,7 @@ end
     runtime4 = ClosedLoopRuntime(sim4, recon4;
         rng=rng4,
         profile=HILRuntimeProfile(),
+        execution_plan=CPUHILExecutionPlan(),
         latency=RuntimeLatencyModel(
             measurement_delay_frames=1,
             readout_delay_frames=1,
@@ -1348,6 +1359,7 @@ end
         ),
     )
     @test runtime_profile(runtime4) isa HILRuntimeProfile
+    @test runtime_execution_plan(runtime4) isa CPUHILExecutionPlan
     @test runtime4.science_zero_padding == 0
     slope_norms = Float64[]
     command_norms = Float64[]

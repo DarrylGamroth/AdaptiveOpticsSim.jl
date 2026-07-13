@@ -24,6 +24,7 @@ end
 abstract type AbstractControlSimulation end
 abstract type AbstractExecutionPolicy end
 abstract type AbstractRuntimeProfile end
+abstract type AbstractRuntimeExecutionPlan end
 
 struct SequentialExecution <: AbstractExecutionPolicy end
 struct ThreadedExecution <: AbstractExecutionPolicy end
@@ -31,6 +32,24 @@ struct BackendStreamExecution <: AbstractExecutionPolicy end
 
 struct ScientificRuntimeProfile <: AbstractRuntimeProfile end
 struct HILRuntimeProfile <: AbstractRuntimeProfile end
+
+"""
+    CPUHILExecutionPlan()
+
+Host-resident, direct-call execution for low-latency HIL and external-RTC
+workloads. This is the default for CPU-backed simulations.
+"""
+struct CPUHILExecutionPlan <: AbstractRuntimeExecutionPlan end
+
+"""
+    DeviceResidentExecutionPlan()
+
+Keep simulation, reconstruction, delay-line, and command state on one
+accelerator backend. Runtime staging relies on backend stream ordering and
+adds a barrier only at an explicit observation or export boundary. Individual
+optical subsystems may still own synchronization required by their kernels.
+"""
+struct DeviceResidentExecutionPlan <: AbstractRuntimeExecutionPlan end
 
 abstract type AbstractSciencePathPlan end
 struct ReuseSensedOpticalPath <: AbstractSciencePathPlan end
@@ -47,6 +66,45 @@ struct RuntimeLatencyModel
 end
 
 default_runtime_profile() = ScientificRuntimeProfile()
+
+default_runtime_execution_plan(::CPUBackend) = CPUHILExecutionPlan()
+default_runtime_execution_plan(::AbstractArrayBackend) = DeviceResidentExecutionPlan()
+
+requires_declared_reconstructor_storage(::CPUHILExecutionPlan) = false
+requires_declared_reconstructor_storage(::DeviceResidentExecutionPlan) = true
+
+@inline function _validate_runtime_reconstructor_backend!(plan::AbstractRuntimeExecutionPlan,
+    selector::AbstractArrayBackend, reconstructor)
+    storage = runtime_reconstructor_storage(reconstructor)
+    if isnothing(storage)
+        requires_declared_reconstructor_storage(plan) &&
+            throw(InvalidConfiguration("device-resident reconstructors must implement runtime_reconstructor_storage so runtime array residency can be validated"))
+        return plan
+    end
+    @inbounds for array in storage
+        same_backend(selector, array) ||
+            throw(InvalidConfiguration("runtime reconstructor storage must share the simulation backend for $(typeof(plan))"))
+    end
+    return plan
+end
+
+function validate_runtime_execution_plan!(plan::CPUHILExecutionPlan,
+    selector::CPUBackend, reconstructor)
+    return _validate_runtime_reconstructor_backend!(plan, selector, reconstructor)
+end
+
+function validate_runtime_execution_plan!(plan::DeviceResidentExecutionPlan,
+    selector::AbstractArrayBackend, reconstructor)
+    return _validate_runtime_reconstructor_backend!(plan, selector, reconstructor)
+end
+
+validate_runtime_execution_plan!(::CPUHILExecutionPlan,
+    ::AbstractArrayBackend, reconstructor) =
+    throw(InvalidConfiguration("CPUHILExecutionPlan requires CPU-backed simulation state"))
+
+validate_runtime_execution_plan!(::DeviceResidentExecutionPlan,
+    ::CPUBackend, reconstructor) =
+    throw(InvalidConfiguration("DeviceResidentExecutionPlan requires an accelerator-backed simulation"))
 
 function RuntimeLatencyModel(;
     measurement_delay_frames::Integer=0,
@@ -179,6 +237,7 @@ mutable struct ClosedLoopRuntime{
     SD,
     RNG,
     RP<:AbstractRuntimeProfile,
+    EP<:AbstractRuntimeExecutionPlan,
     PR<:RuntimeOutputRequirements,
     MD,
     RD,
@@ -204,6 +263,7 @@ mutable struct ClosedLoopRuntime{
     science_detector::SD
     rng::RNG
     profile::RP
+    execution_plan::EP
     outputs::PR
     latency::RuntimeLatencyModel
     measurement_delay::MD

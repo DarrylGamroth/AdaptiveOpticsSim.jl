@@ -33,6 +33,20 @@ slopes-to-command interface.
 """
 abstract type AbstractReconstructorOperator end
 
+"""
+    runtime_reconstructor_storage(reconstructor)
+
+Return the tuple of array-backed state used by `reconstruct!` at runtime, or
+`nothing` when the reconstructor has not declared its runtime storage.
+
+Device-resident execution plans use this trait to reject control operators
+that would otherwise introduce an implicit host/device boundary. Custom
+device-resident reconstructors should extend this function with their control
+matrix and any hot-path workspaces. Backend-agnostic reconstructors return an
+empty tuple.
+"""
+runtime_reconstructor_storage(::Any) = nothing
+
 function inverse_policy(::AbstractReconstructorOperator)
     throw(InvalidConfiguration("inverse_policy is not defined for this reconstructor family"))
 end
@@ -60,6 +74,8 @@ constructing a fake slopes-to-command map. It is valid with `sense!` plus
 internal reconstruction stage to run.
 """
 struct NullReconstructor <: AbstractReconstructorOperator end
+
+@inline runtime_reconstructor_storage(::NullReconstructor) = ()
 
 function reconstruct!(out::AbstractVector, ::NullReconstructor, slopes::AbstractVector)
     throw(InvalidConfiguration("NullReconstructor does not define an internal slopes-to-command update; use set_command! with sense! for external-control runtimes"))
@@ -89,6 +105,9 @@ struct ModalReconstructor{T<:AbstractFloat,M<:AbstractMatrix{T},P<:InversePolicy
     cond::T
     effective_rank::Int
 end
+
+@inline runtime_reconstructor_storage(recon::ModalReconstructor) =
+    (recon.reconstructor,)
 
 @inline inverse_policy(recon::ModalReconstructor) = recon.policy
 @inline singular_values(recon::ModalReconstructor) = recon.singular_values
@@ -162,6 +181,10 @@ struct MappedReconstructor{
     effective_rank::Int
     n_control_modes::Int
 end
+
+
+@inline runtime_reconstructor_storage(recon::MappedReconstructor) =
+    (recon.reconstructor, recon.command_basis, recon.modal_workspace)
 
 @inline inverse_policy(recon::MappedReconstructor) = recon.policy
 @inline singular_values(recon::MappedReconstructor) = recon.singular_values

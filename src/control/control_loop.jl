@@ -48,10 +48,11 @@ end
 
 @inline backend(::ControlLoopBranch{<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
 
-struct SingleControlLoopConfig{RP<:AbstractRuntimeProfile,PR<:RuntimeOutputRequirements,T<:AbstractFloat} <: AbstractControlLoopConfig
+struct SingleControlLoopConfig{RP<:AbstractRuntimeProfile,EP,PR<:RuntimeOutputRequirements,T<:AbstractFloat} <: AbstractControlLoopConfig
     name::Symbol
     branch_label::Symbol
     profile::RP
+    execution_plan::EP
     outputs::PR
     latency::RuntimeLatencyModel
     control_sign::T
@@ -62,6 +63,7 @@ function SingleControlLoopConfig(;
     name::Symbol=:control_loop_runtime,
     branch_label::Symbol=:main,
     profile::AbstractRuntimeProfile=default_runtime_profile(),
+    execution_plan::Union{AbstractRuntimeExecutionPlan,Nothing}=nothing,
     outputs::RuntimeOutputRequirements=default_runtime_outputs(),
     latency::RuntimeLatencyModel=default_runtime_latency(profile),
     control_sign::Real=1.0,
@@ -70,12 +72,14 @@ function SingleControlLoopConfig(;
     T = typeof(float(control_sign))
     return SingleControlLoopConfig{
         typeof(profile),
+        typeof(execution_plan),
         typeof(outputs),
         T,
     }(
         name,
         branch_label,
         profile,
+        execution_plan,
         outputs,
         latency,
         T(control_sign),
@@ -83,10 +87,11 @@ function SingleControlLoopConfig(;
     )
 end
 
-struct GroupedControlLoopConfig{N,RP<:AbstractRuntimeProfile,PR<:GroupedRuntimeOutputRequirements,T<:AbstractFloat} <: AbstractControlLoopConfig
+struct GroupedControlLoopConfig{N,RP<:AbstractRuntimeProfile,EP,PR<:GroupedRuntimeOutputRequirements,T<:AbstractFloat} <: AbstractControlLoopConfig
     name::Symbol
     branch_labels::NTuple{N,Symbol}
     profile::RP
+    execution_plan::EP
     outputs::PR
     latency::RuntimeLatencyModel
     control_sign::T
@@ -96,6 +101,7 @@ end
 function GroupedControlLoopConfig(branch_labels::NTuple{N,Symbol};
     name::Symbol=:grouped_control_loop_runtime,
     profile::AbstractRuntimeProfile=default_runtime_profile(),
+    execution_plan::Union{AbstractRuntimeExecutionPlan,Nothing}=nothing,
     outputs::GroupedRuntimeOutputRequirements=default_grouped_runtime_outputs(),
     latency::RuntimeLatencyModel=default_runtime_latency(profile),
     control_sign::Real=1.0,
@@ -105,12 +111,14 @@ function GroupedControlLoopConfig(branch_labels::NTuple{N,Symbol};
     return GroupedControlLoopConfig{
         N,
         typeof(profile),
+        typeof(execution_plan),
         typeof(outputs),
         T,
     }(
         name,
         branch_labels,
         profile,
+        execution_plan,
         outputs,
         latency,
         T(control_sign),
@@ -138,6 +146,8 @@ end
 @inline control_loop_branch_labels(config::GroupedControlLoopConfig) = config.branch_labels
 @inline control_loop_branch_labels(scenario::ControlLoopScenario) = control_loop_branch_labels(control_loop_config(scenario))
 @inline runtime_profile(scenario::ControlLoopScenario) = control_loop_config(scenario).profile
+@inline runtime_execution_plan(scenario::ControlLoopScenario) =
+    runtime_execution_plan(control_loop_boundary(scenario))
 @inline runtime_latency(scenario::ControlLoopScenario) = control_loop_config(scenario).latency
 
 @inline function _branch_runtime_outputs(config::SingleControlLoopConfig, branch::ControlLoopBranch)
@@ -162,6 +172,7 @@ end
         science_detector=branch.science_detector,
         rng=branch.rng,
         profile=config.profile,
+        execution_plan=config.execution_plan,
         outputs=_branch_runtime_outputs(config, branch),
         latency=config.latency,
         control_sign=config.control_sign,
@@ -227,6 +238,11 @@ end
 
 function step!(scenario::ControlLoopScenario)
     step!(control_loop_boundary(scenario))
+    return scenario
+end
+
+function synchronize_runtime!(scenario::ControlLoopScenario)
+    synchronize_runtime!(control_loop_boundary(scenario))
     return scenario
 end
 

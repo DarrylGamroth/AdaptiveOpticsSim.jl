@@ -6,13 +6,15 @@
     @test gpu_backend_array_type(AdaptiveOpticsSim.MetalBackendTag) === nothing
     @test gpu_backend_array_type(AdaptiveOpticsSim.AMDGPUBackendTag) === nothing
     @test gpu_backend_name(Matrix{Float64}) === nothing
+    @test backend(zeros(2, 2)) isa CPUBackend
+    @test backend(zeros(2)) isa CPUBackend
     @test available_gpu_backends() == ()
     @test AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.CUDABackendTag) isa AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.CUDABackendTag}
 end
 
 @testset "API export curation" begin
     exported = names(AdaptiveOpticsSim)
-    @test length(exported) <= 304
+    @test length(exported) <= 308
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
     @test Base.isexported(AdaptiveOpticsSim, :Detector)
@@ -27,6 +29,10 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :prepare_runtime_wfs!)
     @test Base.isexported(AdaptiveOpticsSim, :wfs_source)
     @test Base.isexported(AdaptiveOpticsSim, :science_source)
+    @test Base.isexported(AdaptiveOpticsSim, :CPUHILExecutionPlan)
+    @test Base.isexported(AdaptiveOpticsSim, :DeviceResidentExecutionPlan)
+    @test Base.isexported(AdaptiveOpticsSim, :runtime_execution_plan)
+    @test Base.isexported(AdaptiveOpticsSim, :synchronize_runtime!)
     @test Base.isexported(AdaptiveOpticsSim, :subaperture_layout)
     @test !Base.isexported(AdaptiveOpticsSim, :TelescopeParams)
     @test !Base.isexported(AdaptiveOpticsSim, :TelescopeState)
@@ -42,6 +48,8 @@ end
     @test !Base.isexported(AdaptiveOpticsSim, :default_build_backend)
     @test !Base.isexported(AdaptiveOpticsSim, :set_fft_provider_threads!)
     @test !Base.isexported(AdaptiveOpticsSim, :GPUBackendTag)
+    @test !Base.isexported(AdaptiveOpticsSim, :AbstractRuntimeExecutionPlan)
+    @test !Base.isexported(AdaptiveOpticsSim, :runtime_reconstructor_storage)
     @test !Base.isexported(AdaptiveOpticsSim, :CUDABackendTag)
     @test !Base.isexported(AdaptiveOpticsSim, :MetalBackendTag)
     @test !Base.isexported(AdaptiveOpticsSim, :AMDGPUBackendTag)

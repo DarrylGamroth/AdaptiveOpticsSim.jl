@@ -40,24 +40,55 @@ end
     return capture_science_core!(tel, src, det, rng, zero_padding)
 end
 
+@inline _runtime_staging_barrier!(::CPUHILExecutionPlan, array) =
+    synchronize_backend!(execution_style(array))
+@inline _runtime_staging_barrier!(::DeviceResidentExecutionPlan, array) = nothing
+
 @inline function stage_sensed_slopes!(runtime::ClosedLoopRuntime)
-    synchronize_backend!(execution_style(slopes(runtime.wfs)))
+    plan = runtime.execution_plan
+    _runtime_staging_barrier!(plan, slopes(runtime.wfs))
     measured = shift_delay!(runtime.measurement_delay, slopes(runtime.wfs))
-    synchronize_backend!(execution_style(measured))
+    _runtime_staging_barrier!(plan, measured)
     readout = shift_delay!(runtime.readout_delay, measured)
-    synchronize_backend!(execution_style(readout))
+    _runtime_staging_barrier!(plan, readout)
     copyto!(runtime.slopes, readout)
-    synchronize_backend!(execution_style(runtime.slopes))
+    _runtime_staging_barrier!(plan, runtime.slopes)
     return runtime.slopes
 end
 
 @inline function stage_runtime_command!(runtime::ClosedLoopRuntime)
-    synchronize_backend!(execution_style(runtime.reconstruct_buffer))
+    plan = runtime.execution_plan
+    _runtime_staging_barrier!(plan, runtime.reconstruct_buffer)
     delayed = shift_delay!(runtime.reconstruction_delay, runtime.reconstruct_buffer)
-    synchronize_backend!(execution_style(delayed))
+    _runtime_staging_barrier!(plan, delayed)
     copyto!(runtime.command, delayed)
-    synchronize_backend!(execution_style(runtime.command))
+    _runtime_staging_barrier!(plan, runtime.command)
     return runtime.command
+end
+
+"""
+    synchronize_runtime!(runtime)
+
+Wait for queued backend work at an explicit observation boundary. Repeated
+`step!` calls under `DeviceResidentExecutionPlan` do not require this barrier;
+call it before host observation or timing when no exporting interface already
+provides the boundary.
+"""
+function synchronize_runtime!(runtime::ClosedLoopRuntime)
+    synchronize_backend!(execution_style(runtime.command))
+    return runtime
+end
+
+function synchronize_runtime!(interface::SimulationInterface)
+    synchronize_runtime!(interface.runtime)
+    return interface
+end
+
+function synchronize_runtime!(interface::CompositeSimulationInterface)
+    @inbounds for child in interface.interfaces
+        synchronize_runtime!(child.runtime)
+    end
+    return interface
 end
 
 """

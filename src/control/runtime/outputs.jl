@@ -176,6 +176,10 @@ end
 @inline simulation_grouped_wfs_stack(::ClosedLoopRuntime) = nothing
 @inline simulation_grouped_science_stack(::ClosedLoopRuntime) = nothing
 @inline runtime_profile(runtime::ClosedLoopRuntime) = runtime.profile
+@inline runtime_execution_plan(runtime::ClosedLoopRuntime) = runtime.execution_plan
+@inline runtime_execution_plan(interface::SimulationInterface) = runtime_execution_plan(interface.runtime)
+@inline runtime_execution_plan(interface::CompositeSimulationInterface) =
+    map(child -> runtime_execution_plan(child.runtime), interface.interfaces)
 @inline runtime_latency(runtime::ClosedLoopRuntime) = runtime.latency
 
 @inline simulation_command(sim::AbstractControlSimulation) = simulation_command(simulation_readout(sim))

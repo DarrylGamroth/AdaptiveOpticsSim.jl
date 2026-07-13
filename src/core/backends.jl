@@ -57,7 +57,7 @@ array_backend_type(::MetalBackend) = _require_gpu_array_backend(MetalBackendTag,
 array_backend_type(::AMDGPUBackend) = _require_gpu_array_backend(AMDGPUBackendTag, "AMDGPUBackend()")
 resolve_array_backend(backend::AbstractArrayBackend) = array_backend_type(backend)
 
-array_backend_selector(::Type{Array}) = CPUBackend()
+array_backend_selector(::Type{<:Array}) = CPUBackend()
 array_backend_selector(::Type{<:AbstractArray}) =
     throw(InvalidConfiguration("no semantic backend selector is registered for the array storage type"))
 

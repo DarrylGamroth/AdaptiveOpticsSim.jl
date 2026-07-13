@@ -110,6 +110,8 @@ export AbstractControlSimulation, AbstractExecutionPolicy, SimulationReadout
 export AOSimulation, wfs_source, science_source
 export SequentialExecution, ThreadedExecution, BackendStreamExecution
 export ScientificRuntimeProfile, HILRuntimeProfile, RuntimeOutputRequirements, GroupedRuntimeOutputRequirements
+export CPUHILExecutionPlan, DeviceResidentExecutionPlan, runtime_execution_plan
+export synchronize_runtime!
 export VectorDelayLine, shift_delay!
 export prepare!, prepare_runtime_wfs!
 export command_segments, command_segment_range

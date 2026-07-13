@@ -44,6 +44,8 @@ Current CPU-supported families:
 - detector-family execution on maintained detector surfaces
 - Shack-Hartmann, Pyramid, and BioEdge WFS on maintained validated surfaces
 - runtime and closed-loop execution on maintained local/runtime artifacts
+- direct `CPUHILExecutionPlan` execution as the default CPU runtime residency
+  policy
 - source-aware runtime propagation with distinct WFS and science sources
 - grouped/runtime orchestration surfaces with committed validation artifacts
 
@@ -65,6 +67,8 @@ Current AMDGPU-supported scope:
 
 - maintained optional backend functional/parity checks
 - maintained runtime-equivalence surfaces
+- default `DeviceResidentExecutionPlan` runtime construction with validated
+  accelerator-resident reconstructor storage
 - maintained high-accuracy post-command runtime-equivalence surfaces
 - maintained Shack-Hartmann exported-pixel parity surfaces
 - maintained distinct WFS/science-source runtime smoke

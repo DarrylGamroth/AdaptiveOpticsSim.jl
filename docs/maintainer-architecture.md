@@ -127,6 +127,10 @@ The current runtime model is:
 - product requirements are explicit
 - exported outputs are distinct from scratch buffers
 - prepared runtime state is separated from per-step mutation
+- runtime profiles model delays/output fidelity independently of execution
+  residency
+- CPU HIL is a direct host-resident plan, while accelerator runtimes use a
+  device-resident plan with explicit observation barriers
 - WFS and detector pipelines own their sampled/readout/intermediate products
   explicitly rather than relying on in-place aliasing
 

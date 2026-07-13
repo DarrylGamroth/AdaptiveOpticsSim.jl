@@ -60,7 +60,10 @@ function runtime_timing(f!::F; warmup::Int=10, samples::Int=1000, gc_before::Boo
     )
 end
 
-runtime_timing(runtime::ClosedLoopRuntime; kwargs...) = runtime_timing(() -> step!(runtime); kwargs...)
+runtime_timing(runtime::ClosedLoopRuntime; kwargs...) = runtime_timing(() -> begin
+    step!(runtime)
+    synchronize_runtime!(runtime)
+end; kwargs...)
 runtime_timing(interface::SimulationInterface; kwargs...) = runtime_timing(() -> step!(interface); kwargs...)
 runtime_timing(interface::CompositeSimulationInterface; kwargs...) = runtime_timing(() -> step!(interface); kwargs...)
 runtime_timing(sim::AbstractControlSimulation; kwargs...) = runtime_timing(() -> step!(sim); kwargs...)

@@ -120,6 +120,23 @@ Use this split:
 Prefer concrete state and workspace fields. Avoid hidden allocations in the
 per-step control path.
 
+Runtime profiles and execution plans are orthogonal. A profile such as
+`HILRuntimeProfile` selects modeled delays and output fidelity. An execution
+plan selects storage and synchronization behavior:
+
+- `CPUHILExecutionPlan` is the direct, host-resident low-latency path
+- `DeviceResidentExecutionPlan` keeps repeated simulation and control work on
+  one accelerator and synchronizes at explicit observation/export boundaries
+
+The runtime chooses the plan from the simulation backend unless one is
+provided explicitly. Accelerator reconstructors must implement
+`AdaptiveOpticsSim.runtime_reconstructor_storage(reconstructor)` and return a tuple containing
+their hot-path control matrices and workspaces. This lets construction reject
+mixed host/device control paths before the first step. Return `()` only for a
+truly backend-agnostic operator. Use `synchronize_runtime!` before direct host
+observation; `SimulationInterface` snapshots already provide an export
+boundary.
+
 ## Backend And Allocation Rules
 
 Extension code should follow the package-wide backend rules:

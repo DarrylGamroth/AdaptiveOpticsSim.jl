@@ -850,7 +850,15 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         science_zero_padding=1,
         rng=MersenneTwister(17),
     )
+    @test runtime_execution_plan(split_runtime) isa DeviceResidentExecutionPlan
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.ClosedLoopRuntime(
+        split_sim,
+        NullReconstructor();
+        science_detector=split_det,
+        execution_plan=CPUHILExecutionPlan(),
+    )
     sense!(split_runtime)
+    @test synchronize_runtime!(split_runtime) === split_runtime
     @test wfs_source(split_runtime) === src
     @test science_source(split_runtime) === science_src
     @test split_runtime.science_path isa AdaptiveOpticsSim.RepropagateScienceOpticalPath
@@ -874,6 +882,11 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     )
     prepare!(single_control_loop)
     step!(single_control_loop)
+    @test runtime_execution_plan(single_control_loop) isa DeviceResidentExecutionPlan
+    @test synchronize_runtime!(single_control_loop) === single_control_loop
+    single_runtime = AdaptiveOpticsSim.simulation_interface(single_control_loop).runtime
+    @test all(storage -> typeof(AdaptiveOpticsSim.backend(storage)) === typeof(selector),
+        AdaptiveOpticsSim.runtime_reconstructor_storage(single_runtime.reconstructor))
     @test AdaptiveOpticsSim.simulation_interface(single_control_loop) isa AdaptiveOpticsSim.SimulationInterface
     @test wfs_frame(single_control_loop) isa BackendArray
     @test control_loop_branch_labels(single_control_loop) == (:main,)
