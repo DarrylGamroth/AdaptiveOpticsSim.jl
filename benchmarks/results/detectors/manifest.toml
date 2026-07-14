@@ -13,3 +13,8 @@ purpose = "detector-family validation with HgCdTe multi-read and MKID counting c
 status = "active"
 id = "DET-VAL-2026-07-12"
 path = "2026-07-12-detector-mkid-validation.toml"
+[[artifacts]]
+purpose = "warmed conventional-detector CPU HIL latency baseline with HdrHistogram tails"
+status = "active"
+id = "DET-HIL-2026-07-14"
+path = "2026-07-14-detector-hil-latency.toml"

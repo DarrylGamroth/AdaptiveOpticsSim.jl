@@ -179,8 +179,9 @@ function _apply_stochastic_em_register!(::AcceleratorStyle,
     rng::AbstractRNG) where {T<:AbstractFloat}
     randn_backend!(rng, scratch)
     factor = T(em_register_noise_factor(model, sensor))
+    gain_t = T(gain)
     zero_t = zero(T)
-    @. frame = T(gain) * max(frame + factor * sqrt(max(frame, zero_t)) * scratch,
+    @. frame = gain_t * max(frame + factor * sqrt(max(frame, zero_t)) * scratch,
         zero_t)
     return frame
 end

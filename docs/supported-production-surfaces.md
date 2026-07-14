@@ -63,6 +63,7 @@ Primary evidence:
 - [model-validity-matrix.md](model-validity-matrix.md)
 - the workflows in [`user-guide.md`](user-guide.md) and [`release-validation-runbook.md`](release-validation-runbook.md)
 - benchmark artifacts under `benchmarks/results/`
+- [conventional-detector CPU HIL latency baseline](../benchmarks/results/detectors/2026-07-14-detector-hil-latency.toml)
 - [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml)
 
 ### AMDGPU backend

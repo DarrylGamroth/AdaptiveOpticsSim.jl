@@ -130,6 +130,18 @@ end
         @test ka_randn_a == ka_randn_b
         @test all(isfinite, ka_randn_a)
 
+        uniform_rng1 = MersenneTwister(13)
+        uniform_rng2 = MersenneTwister(13)
+        ka_uniform_a = zeros(Float64, 8)
+        ka_uniform_b = zeros(Float64, 8)
+        AdaptiveOpticsSim._rand_uniform_backend!(KA_CPU_STYLE, uniform_rng1,
+            ka_uniform_a)
+        AdaptiveOpticsSim._rand_uniform_backend!(KA_CPU_STYLE, uniform_rng2,
+            ka_uniform_b)
+        mark_ka_cpu_kernel!(:uniform_fill_kernel!)
+        @test ka_uniform_a == ka_uniform_b
+        @test all(x -> 0 < x < 1, ka_uniform_a)
+
         rng3 = MersenneTwister(12)
         rng4 = MersenneTwister(12)
         ka_poisson_a = fill(4.0, 8)
@@ -631,6 +643,14 @@ end
         AdaptiveOpticsSim.apply_column_noise!(SCALAR_CPU_STYLE, scalar_frame, noise, 0.5)
         AdaptiveOpticsSim.apply_column_noise!(KA_CPU_STYLE, ka_frame, noise, 0.5)
         mark_ka_cpu_kernel!(:add_column_noise_kernel!)
+        @test ka_cpu_close(ka_frame, scalar_frame)
+
+        scalar_frame .= frame
+        ka_frame .= frame
+        AdaptiveOpticsSim.apply_row_noise!(SCALAR_CPU_STYLE, scalar_frame,
+            noise, 0.5)
+        AdaptiveOpticsSim.apply_row_noise!(KA_CPU_STYLE, ka_frame, noise, 0.5)
+        mark_ka_cpu_kernel!(:add_row_noise_kernel!)
         @test ka_cpu_close(ka_frame, scalar_frame)
 
         output_model = StaticCMOSOutputPattern(2, [1.0, 1.1, 1.2], [0.0, 0.5, 1.0])

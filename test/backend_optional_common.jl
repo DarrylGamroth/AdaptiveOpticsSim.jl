@@ -311,6 +311,48 @@ function run_optional_counting_detector_parity(::Type{B}, BackendArray) where {B
     return nothing
 end
 
+function run_optional_avalanche_detector_parity(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    T = Float32
+    selector = backend_selector(B)
+    input = BackendArray(fill(one(T), 128, 128))
+
+    pc_detector = Detector(noise=NoiseNone(), qe=one(T), gain=T(10),
+        sensor=EMCCDSensor(operating_mode=PhotonCountingEMMode(
+            threshold=T(5), detection_efficiency=T(0.5)), T=T),
+        response_model=NullFrameResponse(), T=T, backend=selector)
+    pc_output = capture!(pc_detector, input; rng=MersenneTwister(2026))
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(pc_output))
+    pc_host = Array(pc_output)
+    @test all(x -> x == zero(T) || x == one(T), pc_host)
+    @test T(0.47) <= sum(pc_host) / length(pc_host) <= T(0.53)
+
+    stochastic_detector = Detector(noise=NoiseNone(), qe=one(T), gain=T(5),
+        sensor=EMCCDSensor(excess_noise_factor=T(1.4),
+            multiplication_model=AdaptiveOpticsSim.StochasticMultiplicationRegister(T(0.6)),
+            T=T), response_model=NullFrameResponse(), T=T, backend=selector)
+    stochastic_input = BackendArray(fill(T(50), 128, 128))
+    stochastic_output = capture!(stochastic_detector, stochastic_input;
+        rng=MersenneTwister(2027))
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(stochastic_output))
+    stochastic_host = Array(stochastic_output)
+    @test all(x -> x >= zero(T), stochastic_host)
+    @test isapprox(sum(stochastic_host) / length(stochastic_host), T(250);
+        rtol=T(0.03))
+
+    linear_apd = LinearAPDDetector(topology=APDChannelBank(4),
+        integration_time=T(0.5), qe=T(0.5), avalanche_gain=T(4),
+        conversion_gain=T(2), noise=NoiseNone(), T=T, backend=selector)
+    linear_output = capture!(linear_apd, BackendArray(fill(T(10), 4));
+        rng=MersenneTwister(2028))
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(linear_output))
+    @test linear_output isa BackendArray
+    @test Array(linear_output) == fill(T(20), 4)
+    return nothing
+end
+
 function import_backend_package!(::Type{AdaptiveOpticsSim.CUDABackendTag})
     @eval import CUDA
     return nothing
@@ -827,6 +869,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     selector = backend_selector(B)
 
     run_optional_counting_detector_parity(B, BackendArray)
+    run_optional_avalanche_detector_parity(B, BackendArray)
 
     tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
         central_obstruction=0.0f0, T=T, backend=selector)

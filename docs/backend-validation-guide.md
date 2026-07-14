@@ -207,6 +207,23 @@ limit is 1.25 times its median p99 and can be changed with
 `AOS_DETECTOR_HIL_REGRESSION_FACTOR`. The script rejects baselines whose sensor,
 frame size, response, coupling, sampling, noise, or output type differs.
 
+The current local-host baseline is archived in
+[`2026-07-14-detector-hil-latency.toml`](../benchmarks/results/detectors/2026-07-14-detector-hil-latency.toml).
+It used 64×64 frames, three 100,000-sample runs, and an AMD Ryzen 7 6800H. All
+cards were allocation-free after warmup. Median-over-run latency summaries were:
+
+| Card | p50 | p99 | p99.9 |
+| --- | ---: | ---: | ---: |
+| CMOS | 56.5 μs | 71.4 μs | 103.8 μs |
+| CMOS with MTF and IPC | 92.0 μs | 110.5 μs | 167.9 μs |
+| CCD | 79.6 μs | 96.3 μs | 144.1 μs |
+| fast linear EMCCD | 85.2 μs | 102.9 μs | 153.1 μs |
+| HgCdTe avalanche CDS | 188.9 μs | 223.5 μs | 326.1 μs |
+| 16-sample Skipper CCD | 202.4 μs | 233.2 μs | 338.4 μs |
+
+These values are a regression baseline for that host and contract, not an
+external-RTC latency SLO or a prediction for other frame sizes and CPUs.
+
 For the detector-output HIL path, use the same workload and sample count on
 both backends:
 

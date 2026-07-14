@@ -1,0 +1,982 @@
+all_gates_passed = true
+benchmark = "detector_hil_latency"
+evidence_class = "warmed in-process detector capture latency"
+schema_version = 1
+
+[[cards]]
+first_capture_ns = 81723
+id = "DET-HIL-01"
+label = "CMOS global-shutter capture"
+steady_alloc_bytes = 0
+
+    [cards.detector]
+    charge_coupling = "none"
+    frame_response = "none"
+    frame_size = [64, 64]
+    noise = "photon_readout"
+    output_size = [64, 64]
+    output_type = "UInt16"
+    sampling_mode = "single_read"
+    sampling_reads = 1
+    sensor = "cmos"
+
+    [cards.regression]
+    allocation_gate_passed = true
+    latency_gate_evaluated = false
+    latency_gate_passed = true
+
+    [[cards.runs]]
+    max_ns = 270591
+    mean_ns = 56684.03168
+    min_ns = 53184
+    p50_ns = 56255
+    p90_ns = 56959
+    p99_9_ns = 103807
+    p99_ns = 72255
+    samples = 100000
+    throughput_hz = 17632.414398075234
+    wall_ns = 5671373060
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    max_ns = 294655
+    mean_ns = 56817.47712
+    min_ns = 53760
+    p50_ns = 56511
+    p90_ns = 57279
+    p99_9_ns = 124607
+    p99_ns = 63679
+    samples = 100000
+    throughput_hz = 17590.59121802761
+    wall_ns = 5684857249
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    max_ns = 165375
+    mean_ns = 56968.08576
+    min_ns = 53792
+    p50_ns = 56575
+    p90_ns = 57311
+    p99_9_ns = 100991
+    p99_ns = 71359
+    samples = 100000
+    throughput_hz = 17544.242516819457
+    wall_ns = 5699875609
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+
+    [cards.summary]
+    median_p50_ns = 56511
+    median_p90_ns = 57279
+    median_p99_9_ns = 103807
+    median_p99_ns = 71359
+    median_throughput_hz = 17590.59121802761
+    worst_p99_9_ns = 124607
+    worst_p99_ns = 72255
+[[cards]]
+first_capture_ns = 336480
+id = "DET-HIL-02"
+label = "CMOS capture with MTF and IPC"
+steady_alloc_bytes = 0
+
+    [cards.detector]
+    charge_coupling = "interpixel_capacitance"
+    frame_response = "gaussian"
+    frame_size = [64, 64]
+    noise = "photon_readout"
+    output_size = [64, 64]
+    output_type = "UInt16"
+    sampling_mode = "single_read"
+    sampling_reads = 1
+    sensor = "cmos"
+
+    [cards.regression]
+    allocation_gate_passed = true
+    latency_gate_evaluated = false
+    latency_gate_passed = true
+
+    [[cards.runs]]
+    max_ns = 292607
+    mean_ns = 93262.07264
+    min_ns = 84288
+    p50_ns = 92031
+    p90_ns = 93567
+    p99_9_ns = 164223
+    p99_ns = 132223
+    samples = 100000
+    throughput_hz = 10718.16634239585
+    wall_ns = 9329954099
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    max_ns = 268799
+    mean_ns = 92633.3008
+    min_ns = 88128
+    p50_ns = 92095
+    p90_ns = 92927
+    p99_9_ns = 167935
+    p99_ns = 110527
+    samples = 100000
+    throughput_hz = 10791.433580842564
+    wall_ns = 9266609413
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    max_ns = 270847
+    mean_ns = 92537.37344
+    min_ns = 87488
+    p50_ns = 91839
+    p90_ns = 92991
+    p99_9_ns = 174079
+    p99_ns = 109823
+    samples = 100000
+    throughput_hz = 10802.565145100552
+    wall_ns = 9257060583
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+
+    [cards.summary]
+    median_p50_ns = 92031
+    median_p90_ns = 92991
+    median_p99_9_ns = 167935
+    median_p99_ns = 110527
+    median_throughput_hz = 10791.433580842564
+    worst_p99_9_ns = 174079
+    worst_p99_ns = 132223
+[[cards]]
+first_capture_ns = 236904
+id = "DET-HIL-03"
+label = "CCD capture"
+steady_alloc_bytes = 0
+
+    [cards.detector]
+    charge_coupling = "none"
+    frame_response = "none"
+    frame_size = [64, 64]
+    noise = "photon_readout"
+    output_size = [64, 64]
+    output_type = "UInt16"
+    sampling_mode = "single_read"
+    sampling_reads = 1
+    sensor = "ccd"
+
+    [cards.regression]
+    allocation_gate_passed = true
+    latency_gate_evaluated = false
+    latency_gate_passed = true
+
+    [[cards.runs]]
+    max_ns = 455935
+    mean_ns = 80373.70432
+    min_ns = 74752
+    p50_ns = 79743
+    p90_ns = 80767
+    p99_9_ns = 147711
+    p99_ns = 99199
+    samples = 100000
+    throughput_hz = 12437.08822669554
+    wall_ns = 8040467204
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    max_ns = 222079
+    mean_ns = 79982.68704
+    min_ns = 74368
+    p50_ns = 79487
+    p90_ns = 80447
+    p99_9_ns = 144127
+    p99_ns = 95231
+    samples = 100000
+    throughput_hz = 12497.8224325351
+    wall_ns = 8001393886
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    max_ns = 246783
+    mean_ns = 80008.39552
+    min_ns = 76096
+    p50_ns = 79551
+    p90_ns = 80383
+    p99_9_ns = 134015
+    p99_ns = 96319
+    samples = 100000
+    throughput_hz = 12493.881516646226
+    wall_ns = 8003917747
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+
+    [cards.summary]
+    median_p50_ns = 79551
+    median_p90_ns = 80447
+    median_p99_9_ns = 144127
+    median_p99_ns = 96319
+    median_throughput_hz = 12493.881516646226
+    worst_p99_9_ns = 147711
+    worst_p99_ns = 99199
+[[cards]]
+first_capture_ns = 314519
+id = "DET-HIL-04"
+label = "EMCCD fast linear capture"
+steady_alloc_bytes = 0
+
+    [cards.detector]
+    charge_coupling = "none"
+    frame_response = "none"
+    frame_size = [64, 64]
+    noise = "photon_readout"
+    output_size = [64, 64]
+    output_type = "UInt16"
+    sampling_mode = "single_read"
+    sampling_reads = 1
+    sensor = "emccd"
+
+    [cards.regression]
+    allocation_gate_passed = true
+    latency_gate_evaluated = false
+    latency_gate_passed = true
+
+    [[cards.runs]]
+    max_ns = 264191
+    mean_ns = 85976.64448
+    min_ns = 80256
+    p50_ns = 85247
+    p90_ns = 87615
+    p99_9_ns = 151935
+    p99_ns = 102911
+    samples = 100000
+    throughput_hz = 11626.916698729285
+    wall_ns = 8600732472
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    max_ns = 244991
+    mean_ns = 86083.25728
+    min_ns = 79616
+    p50_ns = 85311
+    p90_ns = 87679
+    p99_9_ns = 156799
+    p99_ns = 101119
+    samples = 100000
+    throughput_hz = 11612.309744928862
+    wall_ns = 8611551207
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    max_ns = 258431
+    mean_ns = 86132.54304
+    min_ns = 77888
+    p50_ns = 85247
+    p90_ns = 87679
+    p99_9_ns = 153087
+    p99_ns = 105343
+    samples = 100000
+    throughput_hz = 11605.759891375435
+    wall_ns = 8616411242
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+
+    [cards.summary]
+    median_p50_ns = 85247
+    median_p90_ns = 87679
+    median_p99_9_ns = 153087
+    median_p99_ns = 102911
+    median_throughput_hz = 11612.309744928862
+    worst_p99_9_ns = 156799
+    worst_p99_ns = 105343
+[[cards]]
+first_capture_ns = 226754
+id = "DET-HIL-05"
+label = "HgCdTe avalanche CDS capture"
+steady_alloc_bytes = 0
+
+    [cards.detector]
+    charge_coupling = "interpixel_capacitance"
+    frame_response = "none"
+    frame_size = [64, 64]
+    noise = "photon_readout"
+    output_size = [64, 64]
+    output_type = "UInt16"
+    sampling_mode = "correlated_double_sampling"
+    sampling_reads = 2
+    sensor = "hgcdte_avalanche_array"
+
+    [cards.regression]
+    allocation_gate_passed = true
+    latency_gate_evaluated = false
+    latency_gate_passed = true
+
+    [[cards.runs]]
+    max_ns = 509183
+    mean_ns = 190544.01088
+    min_ns = 171904
+    p50_ns = 188927
+    p90_ns = 192127
+    p99_9_ns = 326143
+    p99_ns = 235007
+    samples = 100000
+    throughput_hz = 5247.044523951568
+    wall_ns = 19058347903
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    max_ns = 536063
+    mean_ns = 190825.23584
+    min_ns = 175616
+    p50_ns = 189311
+    p90_ns = 191999
+    p99_9_ns = 326399
+    p99_ns = 222207
+    samples = 100000
+    throughput_hz = 5239.116446373587
+    wall_ns = 19087187892
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    max_ns = 553983
+    mean_ns = 190304.90688
+    min_ns = 176256
+    p50_ns = 188671
+    p90_ns = 192255
+    p99_9_ns = 316159
+    p99_ns = 223487
+    samples = 100000
+    throughput_hz = 5253.331083012228
+    wall_ns = 19035541149
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+
+    [cards.summary]
+    median_p50_ns = 188927
+    median_p90_ns = 192127
+    median_p99_9_ns = 326143
+    median_p99_ns = 223487
+    median_throughput_hz = 5247.044523951568
+    worst_p99_9_ns = 326399
+    worst_p99_ns = 235007
+[[cards]]
+first_capture_ns = 440445
+id = "DET-HIL-06"
+label = "Skipper CCD 16-sample capture"
+steady_alloc_bytes = 0
+
+    [cards.detector]
+    charge_coupling = "none"
+    frame_response = "none"
+    frame_size = [64, 64]
+    noise = "photon_readout"
+    output_size = [64, 64]
+    output_type = "UInt16"
+    sampling_mode = "skipper"
+    sampling_reads = 16
+    sensor = "ccd"
+
+    [cards.regression]
+    allocation_gate_passed = true
+    latency_gate_evaluated = false
+    latency_gate_passed = true
+
+    [[cards.runs]]
+    max_ns = 631807
+    mean_ns = 203183.85472
+    min_ns = 185728
+    p50_ns = 201983
+    p90_ns = 205439
+    p99_9_ns = 309247
+    p99_ns = 231935
+    samples = 100000
+    throughput_hz = 4920.749263687215
+    wall_ns = 20322108411
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    max_ns = 607231
+    mean_ns = 204105.32544
+    min_ns = 194432
+    p50_ns = 202367
+    p90_ns = 206207
+    p99_9_ns = 347903
+    p99_ns = 241535
+    samples = 100000
+    throughput_hz = 4898.516042898462
+    wall_ns = 20414345717
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    max_ns = 594943
+    mean_ns = 204216.0352
+    min_ns = 187520
+    p50_ns = 202495
+    p90_ns = 205183
+    p99_9_ns = 338431
+    p99_ns = 233215
+    samples = 100000
+    throughput_hz = 4895.865823512705
+    wall_ns = 20425396366
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+
+    [cards.summary]
+    median_p50_ns = 202367
+    median_p90_ns = 205439
+    median_p99_9_ns = 338431
+    median_p99_ns = 233215
+    median_throughput_hz = 4898.516042898462
+    worst_p99_9_ns = 347903
+    worst_p99_ns = 241535
+
+[contract]
+arrival_model = "next capture starts after the previous capture completes"
+blas_threads = 1
+boundary = "input detector frame available to converted output frame ready"
+coordinated_omission_correction = false
+coordinated_omission_reason = "no independent arrival schedule is modeled"
+fft_threads = 1
+first_use_note = "first capture of each constructed card in card order; package loading is excluded"
+first_use_separate = true
+julia_threads = 1
+load_model = "warmed serial closed-loop"
+runs = 3
+samples_per_run = 100000
+scope_exclusions = ["external RTC transport and scheduling", "fixed-rate open-loop arrivals and overload", "camera-link or frame-grabber I/O", "CPU affinity, isolation, and frequency-governor control"]
+single_writer = true
+tail_resolution_note = "at least 100 observations are expected beyond p99.9 per run"
+timer = "time_ns; timer overhead is included and not subtracted"
+warmup_captures = 1000
+
+[environment]
+adaptive_optics_sim_version = "0.1.0"
+architecture = "x86_64"
+blas_config = "LBTConfig([ILP64] libopenblas64_.so)"
+blas_threads = 1
+cpu_model = "AMD Ryzen 7 6800H with Radeon Graphics"
+cpu_target = "znver3"
+fft_threads = 1
+git_commit = "dfed5aadacc6676717e832e95a589c249a77a271"
+hdrhistogram_version = "0.4.0"
+julia_threads = 1
+julia_version = "1.12.6"
+kernel = "Linux"
+logical_cpu_threads = 16
+timestamp_utc = "2026-07-14T08:15:29.258"
