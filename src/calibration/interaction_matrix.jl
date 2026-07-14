@@ -31,6 +31,120 @@ end
     return similar(ref, T, n_rows, n_cols)
 end
 
+abstract type AbstractCalibrationCommandPlan end
+
+struct ActuatorCalibrationCommands <: AbstractCalibrationCommandPlan
+    count::Int
+end
+
+struct MatrixCalibrationCommands{M<:AbstractMatrix} <: AbstractCalibrationCommandPlan
+    commands::M
+end
+
+@inline calibration_command_count(plan::ActuatorCalibrationCommands) = plan.count
+@inline calibration_command_count(plan::MatrixCalibrationCommands) =
+    size(plan.commands, 2)
+
+@inline function stage_calibration_command!(coefs::AbstractVector{T},
+    ::ActuatorCalibrationCommands, k::Int, amplitude::T) where {T}
+    fill!(coefs, zero(T))
+    @views coefs[k:k] .= amplitude
+    return coefs
+end
+
+@inline function stage_calibration_command!(coefs::AbstractVector{T},
+    plan::MatrixCalibrationCommands, k::Int, amplitude::T) where {T}
+    copyto!(coefs, @view(plan.commands[:, k]))
+    coefs .*= amplitude
+    return coefs
+end
+
+function validate_interaction_matrix_output(out::AbstractMatrix,
+    dm::DeformableMirror, wfs::AbstractWFS,
+    plan::AbstractCalibrationCommandPlan)
+    size(out, 1) == length(slopes(wfs)) ||
+        throw(DimensionMismatchError("interaction-matrix output row count must match WFS slopes"))
+    size(out, 2) == calibration_command_count(plan) ||
+        throw(DimensionMismatchError("interaction-matrix output column count must match calibration commands"))
+    eltype(out) == eltype(dm.state.coefs) ||
+        throw(InvalidConfiguration("interaction-matrix output element type must match DM coefficients"))
+    return out
+end
+
+function validate_calibration_commands(dm::DeformableMirror,
+    commands::AbstractMatrix)
+    size(commands, 1) == length(dm.state.coefs) ||
+        throw(DimensionMismatchError("command matrix row count must match DM coefficients"))
+    size(commands, 2) > 0 ||
+        throw(InvalidConfiguration("interaction matrix requires at least one command mode"))
+    return MatrixCalibrationCommands(commands)
+end
+
+@inline _interaction_source(::Nothing) = nothing
+@inline _interaction_source(src::AbstractSource) = src
+
+function _fill_interaction_matrix!(out::AbstractMatrix{T},
+    dm::DeformableMirror, wfs::AbstractWFS, tel::Telescope,
+    plan::AbstractCalibrationCommandPlan, src, amplitude::T) where {T<:AbstractFloat}
+    validate_interaction_matrix_output(out, dm, wfs, plan)
+    coefs = dm.state.coefs
+    opd_base = copy(tel.state.opd)
+    coefs_base = copy(coefs)
+    try
+        @inbounds for k in axes(out, 2)
+            stage_calibration_command!(coefs, plan, k, amplitude)
+            apply!(dm, tel, DMReplace())
+            _measure_for_calibration!(wfs, tel, _interaction_source(src))
+            copyto!(@view(out[:, k]), slopes(wfs))
+        end
+    finally
+        copyto!(coefs, coefs_base)
+        copyto!(tel.state.opd, opd_base)
+    end
+    return out
+end
+
+"""
+    interaction_matrix!(out, dm, wfs, tel; amplitude=1)
+    interaction_matrix!(out, dm, wfs, tel, src; amplitude=1)
+    interaction_matrix!(out, dm, wfs, tel, commands; amplitude=1)
+    interaction_matrix!(out, dm, wfs, tel, commands, src; amplitude=1)
+
+Fill caller-owned interaction-matrix storage and return an `InteractionMatrix`
+view of that storage. `out` may be a normal array, backend-native array, or a
+disk-backed `AbstractMatrix` supplied by an integration package.
+"""
+function interaction_matrix!(out::AbstractMatrix{T}, dm::DeformableMirror,
+    wfs::AbstractWFS, tel::Telescope; amplitude::Real=1.0) where {T<:AbstractFloat}
+    plan = ActuatorCalibrationCommands(length(dm.state.coefs))
+    _fill_interaction_matrix!(out, dm, wfs, tel, plan, nothing, T(amplitude))
+    return InteractionMatrix(out, T(amplitude))
+end
+
+function interaction_matrix!(out::AbstractMatrix{T}, dm::DeformableMirror,
+    wfs::AbstractWFS, tel::Telescope, src::AbstractSource;
+    amplitude::Real=1.0) where {T<:AbstractFloat}
+    plan = ActuatorCalibrationCommands(length(dm.state.coefs))
+    _fill_interaction_matrix!(out, dm, wfs, tel, plan, src, T(amplitude))
+    return InteractionMatrix(out, T(amplitude))
+end
+
+function interaction_matrix!(out::AbstractMatrix{T}, dm::DeformableMirror,
+    wfs::AbstractWFS, tel::Telescope, commands::AbstractMatrix;
+    amplitude::Real=1.0) where {T<:AbstractFloat}
+    plan = validate_calibration_commands(dm, commands)
+    _fill_interaction_matrix!(out, dm, wfs, tel, plan, nothing, T(amplitude))
+    return InteractionMatrix(out, T(amplitude))
+end
+
+function interaction_matrix!(out::AbstractMatrix{T}, dm::DeformableMirror,
+    wfs::AbstractWFS, tel::Telescope, commands::AbstractMatrix,
+    src::AbstractSource; amplitude::Real=1.0) where {T<:AbstractFloat}
+    plan = validate_calibration_commands(dm, commands)
+    _fill_interaction_matrix!(out, dm, wfs, tel, plan, src, T(amplitude))
+    return InteractionMatrix(out, T(amplitude))
+end
+
 """
     interaction_matrix(dm, wfs, tel; amplitude=1)
     interaction_matrix(dm, wfs, tel, src; amplitude=1)
@@ -46,104 +160,36 @@ perturbation, scaled by the requested calibration amplitude.
 function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS, tel::Telescope; amplitude::Real=1.0)
     n_act = length(dm.state.coefs)
     T = eltype(dm.state.coefs)
-    mat = nothing
-
-    opd_base = copy(tel.state.opd)
-    coefs = dm.state.coefs
-
-    for k in 1:n_act
-        fill!(coefs, zero(T))
-        @views coefs[k:k] .= T(amplitude)
-        apply!(dm, tel, DMReplace())
-        _measure_for_calibration!(wfs, tel, nothing)
-        if mat === nothing
-            mat = _interaction_matrix_buffer(tel.state.opd, length(slopes(wfs)), n_act)
-        end
-        copyto!(@view(mat[:, k]), slopes(wfs))
-    end
-
-    tel.state.opd .= opd_base
-    mat === nothing && throw(InvalidConfiguration("interaction matrix requires at least one actuator"))
-    return InteractionMatrix{T, typeof(mat)}(mat, T(amplitude))
+    n_act > 0 || throw(InvalidConfiguration("interaction matrix requires at least one actuator"))
+    out = _interaction_matrix_buffer(tel.state.opd, length(slopes(wfs)), n_act)
+    return interaction_matrix!(out, dm, wfs, tel; amplitude=amplitude)
 end
 
 function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS, tel::Telescope,
     src::AbstractSource; amplitude::Real=1.0)
     n_act = length(dm.state.coefs)
     T = eltype(dm.state.coefs)
-    mat = nothing
-
-    opd_base = copy(tel.state.opd)
-    coefs = dm.state.coefs
-
-    for k in 1:n_act
-        fill!(coefs, zero(T))
-        @views coefs[k:k] .= T(amplitude)
-        apply!(dm, tel, DMReplace())
-        _measure_for_calibration!(wfs, tel, src)
-        if mat === nothing
-            mat = _interaction_matrix_buffer(tel.state.opd, length(slopes(wfs)), n_act)
-        end
-        copyto!(@view(mat[:, k]), slopes(wfs))
-    end
-
-    tel.state.opd .= opd_base
-    mat === nothing && throw(InvalidConfiguration("interaction matrix requires at least one actuator"))
-    return InteractionMatrix{T, typeof(mat)}(mat, T(amplitude))
+    n_act > 0 || throw(InvalidConfiguration("interaction matrix requires at least one actuator"))
+    out = _interaction_matrix_buffer(tel.state.opd, length(slopes(wfs)), n_act)
+    return interaction_matrix!(out, dm, wfs, tel, src; amplitude=amplitude)
 end
 
 function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS, tel::Telescope,
     commands::AbstractMatrix; amplitude::Real=1.0)
-    n_act = length(dm.state.coefs)
-    if size(commands, 1) != n_act
-        throw(DimensionMismatchError("command matrix row count must match DM coefficients"))
-    end
-    n_modes = size(commands, 2)
+    plan = validate_calibration_commands(dm, commands)
     T = eltype(dm.state.coefs)
-    mat = nothing
-
-    opd_base = copy(tel.state.opd)
-    coefs = dm.state.coefs
-
-    for k in 1:n_modes
-        @views coefs .= T(amplitude) .* commands[:, k]
-        apply!(dm, tel, DMReplace())
-        _measure_for_calibration!(wfs, tel, nothing)
-        if mat === nothing
-            mat = _interaction_matrix_buffer(tel.state.opd, length(slopes(wfs)), n_modes)
-        end
-        copyto!(@view(mat[:, k]), slopes(wfs))
-    end
-
-    tel.state.opd .= opd_base
-    mat === nothing && throw(InvalidConfiguration("interaction matrix requires at least one command mode"))
-    return InteractionMatrix{T, typeof(mat)}(mat, T(amplitude))
+    out = _interaction_matrix_buffer(tel.state.opd, length(slopes(wfs)),
+        calibration_command_count(plan))
+    return interaction_matrix!(out, dm, wfs, tel, commands;
+        amplitude=amplitude)
 end
 
 function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS, tel::Telescope,
     commands::AbstractMatrix, src::AbstractSource; amplitude::Real=1.0)
-    n_act = length(dm.state.coefs)
-    if size(commands, 1) != n_act
-        throw(DimensionMismatchError("command matrix row count must match DM coefficients"))
-    end
-    n_modes = size(commands, 2)
+    plan = validate_calibration_commands(dm, commands)
     T = eltype(dm.state.coefs)
-    mat = nothing
-
-    opd_base = copy(tel.state.opd)
-    coefs = dm.state.coefs
-
-    for k in 1:n_modes
-        @views coefs .= T(amplitude) .* commands[:, k]
-        apply!(dm, tel, DMReplace())
-        _measure_for_calibration!(wfs, tel, src)
-        if mat === nothing
-            mat = _interaction_matrix_buffer(tel.state.opd, length(slopes(wfs)), n_modes)
-        end
-        copyto!(@view(mat[:, k]), slopes(wfs))
-    end
-
-    tel.state.opd .= opd_base
-    mat === nothing && throw(InvalidConfiguration("interaction matrix requires at least one command mode"))
-    return InteractionMatrix{T, typeof(mat)}(mat, T(amplitude))
+    out = _interaction_matrix_buffer(tel.state.opd, length(slopes(wfs)),
+        calibration_command_count(plan))
+    return interaction_matrix!(out, dm, wfs, tel, commands, src;
+        amplitude=amplitude)
 end

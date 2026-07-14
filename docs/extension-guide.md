@@ -128,6 +128,20 @@ Use this split:
 Prefer concrete state and workspace fields. Avoid hidden allocations in the
 per-step control path.
 
+For large calibration/control surfaces:
+
+- use `AdaptiveOpticsSim.interaction_matrix!` with caller-owned storage when
+  the calibration matrix should live in a memory map, shared buffer, or
+  backend-native allocation
+- use `FactorizedReconstructor` when a validated truncated SVD rank can bound
+  runtime storage and compute without materializing the dense inverse
+- use `ControlledReconstructor` to compose temporal state with any maintained
+  reconstructor while preserving the existing runtime contract
+
+Rank selection is an optical/control validation decision. A benchmark win from
+truncation is not evidence that discarded modes are acceptable for a real
+plant. The dense `ModalReconstructor` remains the compatibility baseline.
+
 Runtime profiles and execution plans are orthogonal. A profile such as
 `HILRuntimeProfile` selects modeled delays and output fidelity. An execution
 plan selects storage and synchronization behavior:
@@ -144,6 +158,14 @@ mixed host/device control paths before the first step. Return `()` only for a
 truly backend-agnostic operator. Use `synchronize_runtime!` before direct host
 observation; `SimulationInterface` snapshots already provide an export
 boundary.
+
+Stateful reconstructors should additionally implement
+`AdaptiveOpticsSim.runtime_reconstructor_ownership_roots(reconstructor)` and
+return their mutable workspaces. This prevents two threaded ensemble members
+from sharing operator scratch state. Stateful controllers used inside
+`ControlledReconstructor` implement `runtime_controller_storage` for backend
+residency; controller objects are conservatively treated as mutable ownership
+roots by default.
 
 ## Ensemble Scheduling
 

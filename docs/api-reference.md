@@ -239,15 +239,19 @@ detector frame.
 ## Calibration And Reconstruction
 
 - Interaction/control matrices: `InteractionMatrix`, `interaction_matrix`,
-  `ControlMatrix`
+  `ControlMatrix`. Caller-owned calibration storage is available through the
+  qualified `AdaptiveOpticsSim.interaction_matrix!` API.
 - Modal bases: `ModalBasis`, `KLDMModes`, `KLHHtPSD`,
   `kl_modal_basis`, `modal_basis`, `basis_from_m2c`
 - AO calibration: `AOCalibration`, `ao_calibration`, `control_matrix`
 - Error and optical-gain calibration: `fitting_error`, `GainSensingCamera`,
   `calibrate!`, `compute_optical_gains!`
 - Reconstructors: `NullReconstructor`, `ModalReconstructor`,
-  `MappedReconstructor`, `reconstruct!`, `reconstruct`
-- Controller: `DiscreteIntegratorController`
+  `FactorizedReconstructor`, `MappedReconstructor`,
+  `ControlledReconstructor`, `reconstruct!`, `reconstruct`
+- Controller: `DiscreteIntegratorController`. `ControlledReconstructor`
+  composes a reconstructor and stateful controller without adding a runtime
+  branch.
 
 ## Runtime And HIL
 

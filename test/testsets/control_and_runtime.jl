@@ -1,5 +1,7 @@
 include(normpath(joinpath(@__DIR__, "..", "..", "benchmarks", "support", "revolt_like_hil_common.jl")))
 
+coverage_instrumented() = Base.JLOptions().code_coverage != 0
+
 function dm_apply_allocations(dm, tel)
     apply_opd!(dm, tel)
     return @allocated apply_opd!(dm, tel)
@@ -442,6 +444,21 @@ runtime_snapshot(scenario) = (
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     @test size(imat.matrix) == (length(wfs.state.slopes), length(dm.state.coefs))
 
+    fill!(dm.state.coefs, 0.03)
+    fill!(tel.state.opd, 0.02)
+    coefs_before = copy(dm.state.coefs)
+    opd_before = copy(tel.state.opd)
+    imat_storage = similar(imat.matrix)
+    imat_inplace = AdaptiveOpticsSim.interaction_matrix!(
+        imat_storage, dm, wfs, tel; amplitude=0.1)
+    @test imat_inplace.matrix === imat_storage
+    @test imat_inplace.matrix ≈ imat.matrix atol=0 rtol=0
+    @test dm.state.coefs == coefs_before
+    @test tel.state.opd == opd_before
+    @test_throws DimensionMismatchError AdaptiveOpticsSim.interaction_matrix!(
+        similar(imat_storage, size(imat_storage, 1) + 1,
+            size(imat_storage, 2)), dm, wfs, tel; amplitude=0.1)
+
     recon = ModalReconstructor(imat; gain=1.0)
     cmd = reconstruct(recon, wfs.state.slopes)
     @test length(cmd) == length(dm.state.coefs)
@@ -467,6 +484,37 @@ runtime_snapshot(scenario) = (
     ctrl = DiscreteIntegratorController(length(wfs.state.slopes); gain=0.1, tau=0.02)
     dm_cmd = update!(ctrl, wfs.state.slopes, 0.01)
     @test length(dm_cmd) == length(wfs.state.slopes)
+    @test_throws DimensionMismatchError update!(ctrl,
+        zeros(length(wfs.state.slopes) + 1), 0.01)
+    @test_throws InvalidConfiguration update!(ctrl, wfs.state.slopes, -0.01)
+    @test_throws InvalidConfiguration DiscreteIntegratorController(0)
+    @test_throws InvalidConfiguration DiscreteIntegratorController(2;
+        tau=0.0)
+
+    factorized = FactorizedReconstructor(imat; gain=1.0)
+    controlled = ControlledReconstructor(
+        factorized,
+        DiscreteIntegratorController(length(dm.state.coefs);
+            gain=1.0, tau=tel.params.sampling_time);
+        dt=tel.params.sampling_time,
+    )
+    controlled_command = similar(dm.state.coefs)
+    reconstruct!(controlled_command, controlled, wfs.state.slopes)
+    @test all(isfinite, controlled_command)
+    reconstruct!(controlled_command, controlled, wfs.state.slopes)
+    if coverage_instrumented()
+        @test_skip "allocation assertions are disabled under coverage instrumentation"
+    else
+        @test @allocated(reconstruct!(controlled_command, controlled,
+            wfs.state.slopes)) == 0
+    end
+    @test reset_controller!(controlled) === controlled
+    @test all(iszero, controller_output(controlled))
+    @test_throws DimensionMismatchError ControlledReconstructor(
+        factorized,
+        DiscreteIntegratorController(length(dm.state.coefs) + 1);
+        dt=tel.params.sampling_time,
+    )
 
     control_matrix = ControlMatrix(imat.matrix; build_backend=AdaptiveOpticsSim.CPUBuildBackend())
     @test control_matrix.M isa Matrix
@@ -688,8 +736,6 @@ function AdaptiveOpticsSim.propagate!(atmosphere::SharedArmCountingAtmosphere, t
     return tel
 end
 
-coverage_instrumented() = Base.JLOptions().code_coverage != 0
-
 @testset "Source-aware runtime optical paths" begin
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3,
         central_obstruction=0.0)
@@ -899,6 +945,21 @@ end
     @test_throws InvalidConfiguration SimulationEnsemble(
         shared_runtime,
         duplicate_runtime;
+        policy=ThreadedExecution(),
+    )
+    shared_control = ControlledReconstructor(
+        runtime_a.reconstructor,
+        DiscreteIntegratorController(length(runtime_a.command);
+            gain=0.5, tau=0.01);
+        dt=runtime_a.tel.params.sampling_time,
+    )
+    controlled_a = AdaptiveOpticsSim.with_reconstructor(runtime_a,
+        shared_control)
+    controlled_b = AdaptiveOpticsSim.with_reconstructor(runtime_b,
+        shared_control)
+    @test_throws InvalidConfiguration SimulationEnsemble(
+        controlled_a,
+        controlled_b;
         policy=ThreadedExecution(),
     )
     @test_throws InvalidConfiguration SimulationEnsemble(())

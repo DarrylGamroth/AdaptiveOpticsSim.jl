@@ -48,10 +48,11 @@ The codebase is organized into subsystem directories:
   - frame/counting detectors, response models, thermal models, readout pipeline
 - `src/calibration`
   - interaction matrices, modal bases, control matrices, AO calibration bundles,
-    gain sensing, and misregistration sensitivity
+    gain sensing, misregistration sensitivity, and caller-owned calibration
+    storage seams
 - `src/control`
   - reconstructors, runtime construction, execution, output planning, timing,
-    controllers
+    controllers, and dense/factorized composable control operators
 - `src/simulation`
   - compact simulation assembly types and maintained scenario-builder helpers
 - `ext`

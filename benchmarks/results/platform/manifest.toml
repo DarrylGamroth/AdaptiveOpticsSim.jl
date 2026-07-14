@@ -22,3 +22,7 @@ path = "2026-07-13-revolt-hil-cpu-amdgpu.toml"
 purpose = "local CPU ensemble scheduler throughput comparison for sequential, Julia tasks, AcceleratedKernels, and Dagger policies"
 id = "ENSEMBLE-SCHEDULERS-2026-07-13"
 path = "2026-07-13-ensemble-schedulers.toml"
+[[artifacts]]
+purpose = "synthetic dense versus factorized and controlled reconstruction latency/storage comparison"
+id = "CONTROL-OPERATORS-2026-07-13"
+path = "2026-07-13-control-operators.toml"

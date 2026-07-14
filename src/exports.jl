@@ -102,7 +102,8 @@ export AOCalibration, ao_calibration, control_matrix
 export fitting_error
 export GainSensingCamera, calibrate!, compute_optical_gains!
 
-export NullReconstructor, ModalReconstructor, MappedReconstructor
+export NullReconstructor, ModalReconstructor, FactorizedReconstructor, MappedReconstructor
+export ControlledReconstructor
 export reconstruct!, reconstruct
 export DiscreteIntegratorController
 

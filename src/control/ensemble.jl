@@ -59,6 +59,7 @@ end
         runtime.wfs_detector,
         runtime.science_detector,
         runtime.rng,
+        runtime_reconstructor_ownership_roots(runtime.reconstructor)...,
     )
 end
 

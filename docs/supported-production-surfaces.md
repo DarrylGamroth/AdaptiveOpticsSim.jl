@@ -50,6 +50,8 @@ Current CPU-supported families:
 - allocation-free shared multi-arm CPU execution with one atmosphere advance
   and shared same-arm science PSF formation
 - grouped/runtime orchestration surfaces with committed validation artifacts
+- dense and factorized reconstruction operators, including allocation-free
+  controller composition and backend-residency validation
 
 Optional AK and Dagger ensemble policies are maintained offline orchestration
 surfaces, but are not part of the CPU HIL latency claim. Scheduler choice is

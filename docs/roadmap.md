@@ -18,6 +18,8 @@ hardware-validated GPU workflows. The core package now has:
 - a maintained zero-allocation hot-path focus for CPU HIL-style runtime loops
 - explicit coarse ensemble scheduling for independent plants, with optional
   AcceleratedKernels and Dagger integrations kept outside the HIL inner loop
+- caller-owned calibration storage plus compact factorized and controller-
+  composed reconstruction operators for validated large control surfaces
 - committed reference data and regression tests for core WFS and detector paths
 - a compact docs set with one extension guide instead of subsystem plan sprawl
 

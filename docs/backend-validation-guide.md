@@ -166,6 +166,7 @@ GPU stacks:
 julia --project=benchmarks -e 'using Pkg; Pkg.instantiate()'
 julia --project=benchmarks benchmarks/benchmark_cpu.jl
 julia --project=benchmarks benchmarks/benchmark_cpu_hotpath_cards.jl
+julia --project=benchmarks benchmarks/benchmark_control_operators.jl
 
 julia --project=benchmarks/amdgpu -e 'using Pkg; Pkg.instantiate()'
 julia --project=benchmarks/amdgpu benchmarks/benchmark_amdgpu.jl
@@ -215,6 +216,13 @@ workloads. Keep direct sequential runtime stepping as the HIL baseline.
 The current local-host comparison is archived in
 [`2026-07-13-ensemble-schedulers.toml`](../benchmarks/results/platform/2026-07-13-ensemble-schedulers.toml);
 rebaseline it on an EPYC or Threadripper target before enabling a site policy.
+
+For dense versus truncated factorized reconstruction, use
+`benchmark_control_operators.jl`. The current synthetic local-host result is
+archived in
+[`2026-07-13-control-operators.toml`](../benchmarks/results/platform/2026-07-13-control-operators.toml).
+Treat its rank as a performance workload only; production rank must come from
+optical and control validation.
 
 The retained CUDA benchmark has the equivalent isolated
 `--project=benchmarks/cuda` environment, but requires restored CUDA hardware.

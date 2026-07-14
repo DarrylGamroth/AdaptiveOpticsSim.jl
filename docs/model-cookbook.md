@@ -155,6 +155,27 @@ cmd = command(rt)
 slopes_vec = slopes(rt)
 ```
 
+For a large calibration, the caller can own the matrix storage and choose a
+compact validated control rank:
+
+```julia
+storage = Matrix{Float64}(undef,
+    length(slopes(wfs)), length(dm.state.coefs))
+imat = AdaptiveOpticsSim.interaction_matrix!(
+    storage, dm, wfs, tel, src; amplitude=0.1)
+
+recon = FactorizedReconstructor(imat; max_rank=12, gain=1.0)
+controller = DiscreteIntegratorController(
+    length(dm.state.coefs); gain=0.5, tau=0.01)
+controlled = ControlledReconstructor(
+    recon, controller; dt=tel.params.sampling_time)
+```
+
+`storage` may instead be a compatible memory-mapped or backend-native
+`AbstractMatrix`; file-format ownership stays outside the core package.
+Validate `max_rank` against residual error, stability, and optical performance
+before using it on a real plant. Omit it to retain every nonzero inverse factor.
+
 The five-argument constructor uses the same source for WFS sensing and science
 capture. When those optical paths differ, attach the science source explicitly:
 

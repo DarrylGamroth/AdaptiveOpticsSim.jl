@@ -58,9 +58,32 @@ end
     imat = InteractionMatrix(D_sing, 0.1)
     recon_exact = ModalReconstructor(imat; policy=ExactPseudoInverse())
     recon_tsvd = ModalReconstructor(imat; policy=TSVDInverse(rtol=1e-9))
+    recon_factorized = FactorizedReconstructor(imat;
+        policy=ExactPseudoInverse())
+    recon_rank_one = FactorizedReconstructor(imat;
+        policy=ExactPseudoInverse(), max_rank=1)
     @test recon_exact.effective_rank == 2
     @test recon_tsvd.effective_rank == 1
     @test ModalReconstructor(imat).policy isa TSVDInverse
+    @test AdaptiveOpticsSim.factorized_rank(recon_factorized) == 2
+    @test AdaptiveOpticsSim.factorized_rank(recon_rank_one) == 1
+    probe_slopes = [0.3, -0.2]
+    dense_command = zeros(2)
+    factorized_command = zeros(2)
+    reconstruct!(dense_command, recon_exact, probe_slopes)
+    reconstruct!(factorized_command, recon_factorized, probe_slopes)
+    @test factorized_command ≈ dense_command atol=1e-12 rtol=1e-12
+    reconstruct!(factorized_command, recon_factorized, probe_slopes)
+    if coverage_instrumented()
+        @test_skip "allocation assertions are disabled under coverage instrumentation"
+    else
+        @test @allocated(reconstruct!(factorized_command,
+            recon_factorized, probe_slopes)) == 0
+    end
+    @test sum(length,
+        AdaptiveOpticsSim.runtime_reconstructor_storage(recon_rank_one)) <
+        sum(length,
+            AdaptiveOpticsSim.runtime_reconstructor_storage(recon_factorized))
 
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
@@ -313,8 +336,15 @@ end
     ncpa = NCPA(tel, dm, atm; coefficients=[0.01, -0.02])
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     modal = ModalReconstructor(imat; gain=1.0)
+    factorized = FactorizedReconstructor(imat; gain=1.0)
     mapped = MappedReconstructor(Matrix{Float64}(I, length(dm.state.coefs), length(dm.state.coefs)), imat; gain=0.5)
     ctrl = DiscreteIntegratorController(length(wfs.state.slopes); gain=0.1, tau=0.02)
+    controlled = ControlledReconstructor(
+        factorized,
+        DiscreteIntegratorController(length(dm.state.coefs);
+            gain=0.1, tau=0.02);
+        dt=tel.params.sampling_time,
+    )
     sim = AOSimulation(tel, src, atm, dm, wfs)
     runtime = ClosedLoopRuntime(sim, modal; rng=MersenneTwister(9))
     wfs_diffractive = ShackHartmannWFS(tel; n_lenslets=2, mode=Diffractive())
@@ -421,7 +451,10 @@ end
     assert_optical_element_interface(ncpa, tel)
     # IF-REC
     assert_reconstructor_interface(modal, wfs.state.slopes, length(dm.state.coefs))
+    assert_reconstructor_interface(factorized, wfs.state.slopes, length(dm.state.coefs))
     assert_reconstructor_interface(mapped, wfs.state.slopes, length(dm.state.coefs))
+    assert_reconstructor_interface(controlled, wfs.state.slopes, length(dm.state.coefs))
+    @test reset_controller!(controlled) === controlled
     # IF-CTRL
     assert_controller_interface(ctrl, wfs.state.slopes, 0.01)
     @test supports_controller_reset(ctrl)

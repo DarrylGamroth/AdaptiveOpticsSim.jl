@@ -1,0 +1,61 @@
+artifact_id = "CONTROL-OPERATORS-2026-07-13"
+generated_on = "2026-07-13"
+evidence_class = "warmed synthetic reconstruction latency and storage comparison"
+source_revision = "5a4ed4c with PR-6 worktree changes"
+raw_histogram_archived = false
+
+[environment]
+julia_version = "1.12.6"
+kernel = "Linux 6.12.57+deb13-amd64 x86_64"
+cpu = "AMD Ryzen 7 6800H with Radeon Graphics"
+physical_cores = 8
+hardware_threads = 16
+julia_threads = 1
+blas_threads = 1
+fft_threads = 1
+
+[workload]
+slopes = 512
+commands = 256
+retained_rank = 32
+warmup = 10
+samples_per_trial = 200
+measurement_trials = 3
+element_type = "Float64"
+arrival_model = "closed_loop"
+
+[dense]
+operator = "ModalReconstructor"
+build_time_ns = 21876317
+trial_median_ns = [13044, 13130, 12984]
+median_of_trial_medians_ns = 13044
+median_trial_p95_ns = 15758
+median_trial_p99_ns = 23284
+allocated_bytes = 0
+runtime_storage_bytes = 1048624
+
+[factorized]
+operator = "FactorizedReconstructor"
+build_time_ns = 19311579
+trial_median_ns = [1864, 1844, 1893]
+median_of_trial_medians_ns = 1864
+median_trial_p95_ns = 1923
+median_trial_p99_ns = 1955
+allocated_bytes = 0
+runtime_storage_bytes = 197296
+relative_output_error_vs_dense = 5.646730638002959e-16
+
+[controlled]
+operator = "ControlledReconstructor"
+trial_median_ns = [1944, 1934, 1933]
+median_of_trial_medians_ns = 1934
+median_trial_p95_ns = 1964
+median_trial_p99_ns = 2007
+allocated_bytes = 0
+runtime_storage_bytes = 203560
+
+[interpretation]
+factorized_latency_gate_passed = true
+factorized_storage_gate_passed = true
+controlled_allocation_gate_passed = true
+notes = "For this deliberately rank-32 synthetic operator, the compact SVD-factor representation reduced measured runtime storage by about 81 percent and median reconstruction latency by about 7x while matching the equivalently truncated dense inverse. Results do not predict performance for full-rank operators, different BLAS thread counts, or hardware with different cache/NUMA topology. Calibration factorization remains setup work, and real AO interaction matrices must choose rank from optical/control validation rather than this benchmark."

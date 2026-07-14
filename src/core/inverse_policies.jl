@@ -183,24 +183,30 @@ function inverse_operator(::BuildBackend, A::AbstractMatrix{T}, policy::InverseP
     throw(UnsupportedAlgorithm("inverse_operator is not implemented for $(typeof(policy))"))
 end
 
-function inverse_operator(backend::BuildBackend, A::AbstractMatrix{T}, ::ExactPseudoInverse) where {T<:AbstractFloat}
+function inverse_factorization(::BuildBackend, A::AbstractMatrix{T},
+    policy::InversePolicy) where {T<:AbstractFloat}
+    throw(UnsupportedAlgorithm("inverse_factorization is not implemented for $(typeof(policy))"))
+end
+
+function inverse_factorization(backend::BuildBackend, A::AbstractMatrix{T},
+    ::ExactPseudoInverse) where {T<:AbstractFloat}
     F = svd(prepare_build_matrix(backend, A); full=false)
     s_host = singular_values_host(F.S)
     inv_s_host = similar(s_host)
     @inbounds for i in eachindex(s_host)
         inv_s_host[i] = iszero(s_host[i]) ? zero(T) : inv(s_host[i])
     end
-    M = finalize_inverse_operator(backend, A, F, inv_s_host)
     effective_rank = count(!iszero, s_host)
     cond = effective_rank == 0 ? T(Inf) : s_host[begin] / s_host[effective_rank]
-    return M, InverseStats(s_host, cond, effective_rank, 0)
+    return F, inv_s_host, InverseStats(s_host, cond, effective_rank, 0)
 end
 
-function inverse_operator(backend::BuildBackend, A::AbstractMatrix{T}, policy::TSVDInverse) where {T<:AbstractFloat}
+function inverse_factorization(backend::BuildBackend, A::AbstractMatrix{T},
+    policy::TSVDInverse) where {T<:AbstractFloat}
     policy.n_trunc >= 0 || throw(InvalidConfiguration("TSVD n_trunc must be >= 0"))
     F = svd(prepare_build_matrix(backend, A); full=false)
     s_host = singular_values_host(F.S)
-    isempty(s_host) && return materialize_build(backend, similar(A, T, size(A, 2), size(A, 1))),
+    isempty(s_host) && return F, similar(s_host),
         InverseStats(s_host, T(Inf), 0, 0)
     cutoff = _inverse_cutoff(s_host, T(policy.rtol), T(policy.atol))
     rank_by_tol = count(>(cutoff), s_host)
@@ -210,12 +216,14 @@ function inverse_operator(backend::BuildBackend, A::AbstractMatrix{T}, policy::T
     @inbounds for i in 1:effective_rank
         inv_s_host[i] = inv(s_host[i])
     end
-    M = finalize_inverse_operator(backend, A, F, inv_s_host)
     cond = effective_rank == 0 ? T(Inf) : s_host[begin] / s_host[effective_rank]
-    return M, InverseStats(s_host, cond, effective_rank, length(s_host) - effective_rank)
+    return F, inv_s_host,
+        InverseStats(s_host, cond, effective_rank,
+            length(s_host) - effective_rank)
 end
 
-function inverse_operator(backend::BuildBackend, A::AbstractMatrix{T}, policy::TikhonovInverse) where {T<:AbstractFloat}
+function inverse_factorization(backend::BuildBackend, A::AbstractMatrix{T},
+    policy::TikhonovInverse) where {T<:AbstractFloat}
     policy.lambda >= 0 || throw(InvalidConfiguration("Tikhonov lambda must be >= 0"))
     F = svd(prepare_build_matrix(backend, A); full=false)
     s_host = singular_values_host(F.S)
@@ -228,6 +236,12 @@ function inverse_operator(backend::BuildBackend, A::AbstractMatrix{T}, policy::T
     effective_rank = count(>(cutoff), s_host)
     denom = max(isempty(s_host) ? zero(T) : s_host[end], T(policy.lambda))
     cond = (isempty(s_host) || iszero(denom)) ? T(Inf) : s_host[begin] / denom
+    return F, inv_s_host, InverseStats(s_host, cond, effective_rank, 0)
+end
+
+function inverse_operator(backend::BuildBackend, A::AbstractMatrix{T},
+    policy::Union{ExactPseudoInverse,TSVDInverse,TikhonovInverse}) where {T<:AbstractFloat}
+    F, inv_s_host, stats = inverse_factorization(backend, A, policy)
     M = finalize_inverse_operator(backend, A, F, inv_s_host)
-    return M, InverseStats(s_host, cond, effective_rank, 0)
+    return M, stats
 end

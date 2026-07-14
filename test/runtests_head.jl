@@ -116,10 +116,15 @@ function assert_reconstructor_interface(recon, slopes, expected_length::Int)
     @test applicable(reconstruct!, out, recon, slopes)
     reconstruct!(out, recon, slopes)
     @test length(out) == expected_length
-    @test inverse_policy(recon) === recon.policy
-    @test singular_values(recon) === recon.singular_values
-    @test condition_number(recon) == recon.cond
-    @test effective_rank(recon) == recon.effective_rank
+    policy = inverse_policy(recon)
+    spectrum = singular_values(recon)
+    cond = condition_number(recon)
+    rank = effective_rank(recon)
+    @test policy isa InversePolicy
+    @test spectrum isa AbstractVector
+    @test cond isa Real
+    @test rank isa Integer
+    @test 0 <= rank <= length(spectrum)
     allocated = reconstruct(recon, slopes)
     @test length(allocated) == expected_length
 end
