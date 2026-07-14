@@ -16,7 +16,7 @@ AdaptiveOpticsSim.backend_zeros(::Type{AdaptiveOpticsSim.CUDABackendTag}, ::Type
 AdaptiveOpticsSim.backend_fill(::Type{AdaptiveOpticsSim.CUDABackendTag}, value, dims::Vararg{Int}) = CUDA.fill(value, dims...)
 
 function AdaptiveOpticsSim.masked_sum2d_accelerator(
-    ::AdaptiveOpticsSim.AcceleratorStyle{<:CUDA.CUDAKernels.CUDABackend},
+    ::AdaptiveOpticsSim.AcceleratorStyle{<:CUDA.CUDABackend},
     values_parent::CUDA.CuArray{T,2},
     valid_mask::CUDA.CuArray{Bool,2},
     scalar_buffer::AbstractVector{T},

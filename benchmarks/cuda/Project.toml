@@ -10,6 +10,6 @@ AdaptiveOpticsSim = {path = "../.."}
 [compat]
 AdaptiveOpticsSim = "0.1"
 BenchmarkTools = "1"
-CUDA = "5"
+CUDA = "6"
 KernelAbstractions = "0.9.42"
 julia = "1.12"
