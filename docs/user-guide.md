@@ -266,7 +266,7 @@ det = Detector(
         output_path=EMOutput(),
         operating_mode=LinearEMMode(),
         excess_noise_factor=sqrt(2.0),
-        cic_rate=0.01,
+        clock_induced_charge_per_frame=0.01,
         em_gain_range=(1.0, 5000.0),
     ),
 )
@@ -274,7 +274,9 @@ det = Detector(
 
 Use `PhotonCountingEMMode` when you want a thresholded photon-counting
 approximation for low-flux operation. The threshold is applied after EM gain and
-readout noise, so it is expressed in post-EM frame units:
+readout noise, so it is expressed in post-EM frame units. Detection efficiency
+is a Bernoulli probability for each threshold crossing; accepted events have
+unit amplitude rather than using efficiency as an output scale:
 
 ```julia
 det = Detector(
@@ -290,8 +292,45 @@ det = Detector(
 `emccd_snr(...)` provides a lightweight analytic check for linear EM,
 conventional output, and photon-counting operating modes. Treat it as a design
 and validation helper, not a replacement for a calibrated camera model.
-Vendor-specific presets such as Andor iXon or NUVU HNü parameter packs should
-live in an extension package unless they are needed by core package tests.
+`clock_induced_charge_per_frame` is explicitly per frame and is not scaled by
+integration time. The default excess-noise model is the fast moment
+approximation. `AdaptiveOpticsSim.StochasticMultiplicationRegister` uses a
+conditional Gamma model on CPU and a nonnegative moment approximation on
+accelerators. Camera-specific parameter packs belong in a companion profiles
+package.
+
+HgCdTe avalanche arrays likewise have no implicit optical blur or interpixel
+coupling. Configure detector MTF and post-collection IPC as separate effects:
+
+```julia
+det = Detector(
+    sensor=HgCdTeAvalancheArraySensor(avalanche_gain=20.0),
+    response_model=RectangularPixelAperture(fill_factor_x=0.9,
+        fill_factor_y=0.9),
+    charge_coupling_model=InterpixelCapacitance(
+        [0.0 0.01 0.0; 0.01 0.96 0.01; 0.0 0.01 0.0]),
+)
+```
+
+For a linear-mode single-element APD, use `LinearAPDDetector`. Its channel
+storage is a vector rather than a fake 1×1 image. `SingleElementAPD()` accepts
+either a scalar photon flux or a one-element vector; `APDChannelBank(n)` uses a
+fixed-size vector suitable for preallocated channel readout:
+
+```julia
+apd = LinearAPDDetector(
+    topology=SingleElementAPD(),
+    integration_time=100e-6,
+    qe=0.75,
+    avalanche_gain=30.0,
+    excess_noise_factor=1.2,
+    noise=NoisePhotonReadout(2.0),
+)
+value = only(capture!(apd, 2.0e5; rng=runtime_rng(4)))
+```
+
+The existing `APDDetector` remains the Geiger/counting channel model; SPAD and
+MKID detectors remain accumulated counting-array models.
 
 Rolling-shutter detectors can also capture a time-varying scene. Use
 `InPlaceFrameSource` when the source can write into a preallocated frame, or

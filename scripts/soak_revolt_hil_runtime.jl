@@ -67,7 +67,7 @@ end
 _thermalized_sensor(sensor::CCDSensor, ::Bool, ::Type{T}) where {T<:AbstractFloat} = sensor
 _thermalized_sensor(sensor::CMOSSensor, ::Bool, ::Type{T}) where {T<:AbstractFloat} = sensor
 _thermalized_sensor(sensor::EMCCDSensor, enabled::Bool, ::Type{T}) where {T<:AbstractFloat} =
-    enabled ? EMCCDSensor(cic_rate=T(0.02), excess_noise_factor=sensor.excess_noise_factor,
+    enabled ? EMCCDSensor(clock_induced_charge_per_frame=T(0.02), excess_noise_factor=sensor.excess_noise_factor,
         em_gain_model=sensor.em_gain_model, T=T) : sensor
 _thermalized_sensor(sensor::InGaAsSensor, enabled::Bool, ::Type{T}) where {T<:AbstractFloat} =
     enabled ? InGaAsSensor(glow_rate=T(0.02), persistence_model=sensor.persistence_model, T=T) : sensor

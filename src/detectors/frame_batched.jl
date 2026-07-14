@@ -146,6 +146,8 @@ function _batched_avalanche_excess_noise!(factor, cube::AbstractArray, scratch::
 end
 
 _batched_post_readout_gain!(::FrameSensorType, det::Detector, cube::AbstractArray) = cube
+_batched_detection_output!(::FrameSensorType, det::Detector,
+    cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
 _batched_readout_noise!(det::Detector{NoiseNone}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
 _batched_readout_noise!(det::Detector{NoisePhoton}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
 _batched_apply_readout_correction!(::NullFrameReadoutCorrection, cube::AbstractArray{T,3}) where {T} = cube
@@ -622,6 +624,7 @@ function _apply_batched_detector_pipeline!(det::Detector, cube::AbstractArray{T,
     _batched_readout_noise!(det, cube, scratch, rng)
     _batched_sensor_readout_noise!(det.params.sensor, det, cube, scratch, rng)
     _batched_post_readout_gain!(det.params.sensor, det, cube)
+    _batched_detection_output!(det.params.sensor, det, cube, scratch, rng)
     _batched_apply_readout_correction!(det, det.params.correction_model, cube, scratch)
     _batched_quantization!(det, cube)
     _batched_background_map!(det.background_map, cube, scratch)

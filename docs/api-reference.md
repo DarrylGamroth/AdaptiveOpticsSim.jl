@@ -124,8 +124,8 @@ influence basis already includes the print-through structure.
 
 ## Detectors
 
-- Detector types: `Detector`, `APDDetector`, `SPADArrayDetector`,
-  `MKIDArrayDetector`
+- Detector types: `Detector`, `LinearAPDDetector`, `APDDetector`,
+  `SPADArrayDetector`, `MKIDArrayDetector`
 - Noise: `NoiseModel`, `NoiseNone`, `NoisePhoton`, `NoiseReadout`,
   `NoisePhotonReadout`
 - Sensor families: `SensorType`, `CCDSensor`, `CMOSSensor`, `EMCCDSensor`,
@@ -133,6 +133,8 @@ influence basis already includes the print-through structure.
   `MKIDArraySensor`
 - EMCCD modes and helpers: `LinearEMMode`, `PhotonCountingEMMode`,
   `EMOutput`, `ConventionalOutput`, `emccd_snr`
+- Linear APD topology: `SingleElementAPD`, `APDChannelBank`; analog APD output
+  uses `channel_output`, while `APDDetector` remains the counting-channel path.
 - CMOS readout structure: `CMOSReadNoiseMap`; row and column noise, output
   groups, shutter timing, and detector defect maps compose through
   `CMOSSensor`. Vendor camera profiles are intentionally outside core.
@@ -168,8 +170,9 @@ influence basis already includes the print-through structure.
   `NonParalyzableDeadTime`, `ParalyzableDeadTime`, `DutyCycleGate`,
   `AfterpulsingModel`, `ChannelCrosstalkModel`,
   `CompositeCountingCorrelation`
-- Runtime functions: `capture!`, `output_frame`, `detector_export_metadata`,
-  `readout_ready`, `reset_integration!`, `thermal_model`
+- Runtime functions: `capture!`, `output_frame`, `channel_output`,
+  `detector_export_metadata`, `readout_ready`, `reset_integration!`,
+  `thermal_model`
 
 Use `bits` for detector quantization depth and `output_type` for the Julia
 element type exported to an RTC/HIL boundary. A detector with `bits` must also

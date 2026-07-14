@@ -136,6 +136,8 @@
             multiplication_model=StochasticMultiplicationRegister(0.6)))
     frame_emccd_stochastic = copy(capture!(det_emccd_stochastic, uniform_signal; rng=MersenneTwister(124)))
     @test std(vec(frame_emccd_stochastic)) > 0
+    @test isapprox(mean(frame_emccd_stochastic), 250.0; rtol=0.1)
+    @test isapprox(var(frame_emccd_stochastic), 1200.0; rtol=0.35)
 
     det_ccd_cic = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=CCDSensor(clock_induced_charge_per_frame=5.0))
@@ -180,12 +182,19 @@
     @test @allocated(capture!(skipper_many, skipper_input,
         skipper_many_rng)) == 0
     det_emccd_cic = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-        sensor=EMCCDSensor(cic_rate=3.0))
-    @test sum(capture!(det_emccd_cic, zero_psf; rng=MersenneTwister(125))) > 0
+        sensor=EMCCDSensor(clock_induced_charge_per_frame=3.0))
+    frame_emccd_cic = copy(capture!(det_emccd_cic, zero_psf;
+        rng=MersenneTwister(125)))
+    @test sum(frame_emccd_cic) > 0
+    det_emccd_cic_long = Detector(integration_time=10.0, noise=NoiseNone(),
+        qe=1.0, sensor=EMCCDSensor(clock_induced_charge_per_frame=3.0))
+    @test capture!(det_emccd_cic_long, zero_psf;
+        rng=MersenneTwister(125)) == frame_emccd_cic
     det_emccd_sat = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=5.0, sensor=EMCCDSensor(register_full_well=100.0))
     @test maximum(capture!(det_emccd_sat, fill(50.0, 4, 4); rng=MersenneTwister(126))) == 100.0
-    @test_throws InvalidConfiguration EMCCDSensor(cic_rate=-1.0)
+    @test_throws InvalidConfiguration EMCCDSensor(
+        clock_induced_charge_per_frame=-1.0)
     @test_throws InvalidConfiguration EMCCDSensor(register_full_well=0.0)
     @test_throws InvalidConfiguration EMCCDSensor(multiplication_model=StochasticMultiplicationRegister(-1.0))
     @test_throws InvalidConfiguration EMCCDSensor(em_gain_range=(10.0, 1.0))
@@ -199,10 +208,19 @@
 
     det_emccd_pc = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=10.0,
-        sensor=EMCCDSensor(operating_mode=PhotonCountingEMMode(threshold=5.0, detection_efficiency=0.8)))
+        sensor=EMCCDSensor(operating_mode=PhotonCountingEMMode(threshold=5.0)))
     pc_frame = capture!(det_emccd_pc, [0.0 0.4; 0.6 1.0]; rng=MersenneTwister(128))
-    @test pc_frame == [0.0 0.0; 0.8 0.8]
+    @test pc_frame == [0.0 0.0; 1.0 1.0]
     @test supports_photon_number_resolving(det_emccd_pc.params.sensor)
+
+    det_emccd_efficiency = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=1.0, gain=10.0,
+        sensor=EMCCDSensor(operating_mode=PhotonCountingEMMode(
+            threshold=5.0, detection_efficiency=0.8)))
+    efficiency_frame = capture!(det_emccd_efficiency, ones(100, 100);
+        rng=MersenneTwister(128))
+    @test all(x -> x == 0.0 || x == 1.0, efficiency_frame)
+    @test isapprox(mean(efficiency_frame), 0.8; atol=0.025)
 
     det_emccd_pc_batched = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=10.0, response_model=NullFrameResponse(),
@@ -417,7 +435,7 @@
     thermal_emccd = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         response_model=NullFrameResponse(),
         thermal_model=FixedTemperature(temperature_K=250.0, cic_rate_law=linear),
-        sensor=EMCCDSensor(cic_rate=2.0))
+        sensor=EMCCDSensor(clock_induced_charge_per_frame=2.0))
     @test effective_cic_rate(thermal_emccd) ≈ 1.0
 
     det_saphira = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
@@ -426,7 +444,20 @@
     @test frame_saphira == 5.0 .* uniform_signal
     @test supports_avalanche_gain(det_saphira.params.sensor)
     @test supports_sensor_glow(det_saphira.params.sensor)
-    @test detector_export_metadata(det_saphira).frame_response == :sampled
+    @test detector_export_metadata(det_saphira).frame_response == :none
+    @test detector_export_metadata(det_saphira).charge_coupling == :none
+    saphira_impulse = zeros(5, 5)
+    saphira_impulse[3, 3] = 100.0
+    det_saphira_ipc = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=1.0, sensor=HgCdTeAvalancheArraySensor(),
+        charge_coupling_model=InterpixelCapacitance(
+            [0.0 0.01 0.0; 0.01 0.96 0.01; 0.0 0.01 0.0]))
+    frame_saphira_ipc = capture!(det_saphira_ipc, saphira_impulse;
+        rng=MersenneTwister(14))
+    @test frame_saphira_ipc[3, 3] == 96.0
+    @test frame_saphira_ipc[2, 3] == 1.0
+    @test detector_export_metadata(det_saphira_ipc).charge_coupling ==
+        :interpixel_capacitance
     det_saphira_excess = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeAvalancheArraySensor(avalanche_gain=1.0, excess_noise_factor=sqrt(2.0)))
     frame_saphira_excess = copy(capture!(det_saphira_excess, uniform_signal; rng=MersenneTwister(14)))
@@ -671,6 +702,45 @@
         noise=NoiseNone(), channel_gain_map=fill(0.5, 2, 8))
     @test capture!(apd_gain_map, fill(2.0, 2, 8); rng=MersenneTwister(9)) == fill(1.0, 2, 8)
     @test supports_channel_gain_map(apd_gain_map)
+
+    linear_apd = LinearAPDDetector(integration_time=0.5, qe=0.5,
+        avalanche_gain=4.0, conversion_gain=2.0, noise=NoiseNone())
+    linear_apd_out = capture!(linear_apd, 10.0; rng=MersenneTwister(90))
+    @test linear_apd_out == [20.0]
+    @test channel_output(linear_apd) === linear_apd_out
+    @test supports_avalanche_gain(linear_apd)
+    linear_apd_meta = detector_export_metadata(linear_apd)
+    @test linear_apd_meta.topology == :single_element
+    @test linear_apd_meta.n_channels == 1
+    linear_apd_rng = MersenneTwister(90)
+    capture!(linear_apd, 10.0; rng=linear_apd_rng)
+    @test @allocated(capture!(linear_apd, 10.0;
+        rng=linear_apd_rng)) == 0
+
+    linear_apd_bank = LinearAPDDetector(topology=APDChannelBank(4),
+        integration_time=1.0, qe=0.5, avalanche_gain=2.0,
+        dark_current=1.0, noise=NoiseNone())
+    @test capture!(linear_apd_bank, fill(3.0, 4);
+        rng=MersenneTwister(91)) == fill(5.0, 4)
+    @test detector_export_metadata(linear_apd_bank).topology == :channel_bank
+    @test_throws DimensionMismatchError capture!(linear_apd_bank, 3.0)
+    @test_throws DimensionMismatchError capture!(linear_apd_bank, fill(3.0, 3))
+
+    linear_apd_noisy = LinearAPDDetector(topology=APDChannelBank(4096),
+        noise=NoisePhotonReadout(2.0), avalanche_gain=3.0,
+        excess_noise_factor=1.3)
+    noisy_apd_out = capture!(linear_apd_noisy, fill(20.0, 4096);
+        rng=MersenneTwister(92))
+    @test std(noisy_apd_out) > 0
+    @test isapprox(mean(noisy_apd_out), 60.0; rtol=0.05)
+
+    @test_throws InvalidConfiguration APDChannelBank(1)
+    @test_throws InvalidConfiguration LinearAPDDetector(integration_time=0.0)
+    @test_throws InvalidConfiguration LinearAPDDetector(qe=1.1)
+    @test_throws InvalidConfiguration LinearAPDDetector(avalanche_gain=0.5)
+    @test_throws InvalidConfiguration LinearAPDDetector(excess_noise_factor=0.5)
+    @test_throws InvalidConfiguration LinearAPDDetector(dark_current=-1.0)
+    @test_throws InvalidConfiguration LinearAPDDetector(conversion_gain=0.0)
 
     spad_sensor = SPADArraySensor(pde=0.5, dark_count_rate=0.0, fill_factor=0.8)
     spad = SPADArrayDetector(integration_time=1.0, noise=NoiseNone(), sensor=spad_sensor)

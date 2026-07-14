@@ -28,7 +28,7 @@ StochasticMultiplicationRegister(register_noise_factor::Real) = StochasticMultip
 
 struct EMCCDSensor{T<:AbstractFloat,M<:AbstractEMGainModel,O<:AbstractEMCCDOperatingMode,P<:AbstractEMCCDOutputPath} <: AvalancheFrameSensorType
     excess_noise_factor::T
-    cic_rate::T
+    clock_induced_charge_per_frame::T
     multiplication_model::M
     register_full_well::Union{Nothing,T}
     operating_mode::O
@@ -37,7 +37,8 @@ struct EMCCDSensor{T<:AbstractFloat,M<:AbstractEMGainModel,O<:AbstractEMCCDOpera
     readout_rate_hz::Union{Nothing,T}
 end
 
-function EMCCDSensor(; excess_noise_factor::Real=1.0, cic_rate::Real=0.0,
+function EMCCDSensor(; excess_noise_factor::Real=1.0,
+    clock_induced_charge_per_frame::Real=0.0,
     multiplication_model::AbstractEMGainModel=ExcessNoiseApproximation(),
     register_full_well::Union{Nothing,Real}=nothing,
     operating_mode::AbstractEMCCDOperatingMode=LinearEMMode(),
@@ -45,7 +46,8 @@ function EMCCDSensor(; excess_noise_factor::Real=1.0, cic_rate::Real=0.0,
     em_gain_range::Tuple{<:Real,<:Real}=(1.0, Inf),
     readout_rate_hz::Union{Nothing,Real}=nothing, T::Type{<:AbstractFloat}=Float64)
     excess_noise_factor >= 1 || throw(InvalidConfiguration("EMCCDSensor excess_noise_factor must be >= 1"))
-    cic_rate >= 0 || throw(InvalidConfiguration("EMCCDSensor cic_rate must be >= 0"))
+    clock_induced_charge_per_frame >= 0 || throw(InvalidConfiguration(
+        "EMCCDSensor clock_induced_charge_per_frame must be >= 0"))
     reg_full_well = register_full_well === nothing ? nothing : T(register_full_well)
     reg_full_well === nothing || reg_full_well > zero(reg_full_well) ||
         throw(InvalidConfiguration("EMCCDSensor register_full_well must be > 0"))
@@ -61,7 +63,8 @@ function EMCCDSensor(; excess_noise_factor::Real=1.0, cic_rate::Real=0.0,
     converted_mode = convert_emccd_operating_mode(operating_mode, T)
     validated_mode = validate_emccd_operating_mode(converted_mode)
     return EMCCDSensor{T,typeof(validated_model),typeof(validated_mode),typeof(output_path)}(
-        T(excess_noise_factor), T(cic_rate), validated_model, reg_full_well, validated_mode,
+        T(excess_noise_factor), T(clock_induced_charge_per_frame), validated_model,
+        reg_full_well, validated_mode,
         output_path, em_range, readout_rate)
 end
 
@@ -70,7 +73,8 @@ supports_clock_induced_charge(::EMCCDSensor) = true
 supports_photon_number_resolving(sensor::EMCCDSensor) = supports_emccd_photon_counting(sensor.operating_mode)
 supports_emccd_photon_counting(::AbstractEMCCDOperatingMode) = false
 supports_emccd_photon_counting(::PhotonCountingEMMode) = true
-configured_cic_rate(sensor::EMCCDSensor, ::Type{T}) where {T<:AbstractFloat} = T(sensor.cic_rate)
+configured_cic_rate(sensor::EMCCDSensor, ::Type{T}) where {T<:AbstractFloat} =
+    T(sensor.clock_induced_charge_per_frame)
 is_excess_noise_model(::AbstractEMGainModel) = false
 is_excess_noise_model(::ExcessNoiseApproximation) = true
 
@@ -91,7 +95,7 @@ function validate_em_gain_model(model::StochasticMultiplicationRegister)
 end
 
 function apply_sensor_statistics!(sensor::EMCCDSensor, det::Detector, rng::AbstractRNG)
-    rate = effective_cic_rate(det) * det.params.integration_time
+    rate = effective_cic_rate(det)
     add_poisson_rate!(det.state.frame, det, rng, rate)
     return det.state.frame
 end
@@ -107,37 +111,107 @@ end
 apply_pre_readout_gain!(::ConventionalOutput, sensor::EMCCDSensor, det::Detector, rng::AbstractRNG) = det.state.frame
 
 function apply_em_register_gain!(::ExcessNoiseApproximation, sensor::EMCCDSensor, det::Detector, rng::AbstractRNG)
-    det.state.frame .*= det.params.gain
     apply_avalanche_excess_noise!(sensor.excess_noise_factor, det, rng)
+    det.state.frame .*= det.params.gain
     return det.state.frame
 end
 
 function apply_em_register_gain!(model::StochasticMultiplicationRegister, sensor::EMCCDSensor, det::Detector, rng::AbstractRNG)
-    det.state.frame .*= det.params.gain
-    randn_frame_noise!(det, rng, det.state.noise_buffer)
-    factor = sensor.excess_noise_factor <= one(sensor.excess_noise_factor) ?
-        model.register_noise_factor :
-        max(model.register_noise_factor, sqrt(sensor.excess_noise_factor^2 - one(sensor.excess_noise_factor)))
-    zero_t = zero(eltype(det.state.frame))
-    @. det.state.frame = max(det.state.frame + factor * sqrt(max(det.state.frame, zero_t)) * det.state.noise_buffer, zero_t)
-    return det.state.frame
+    return _apply_stochastic_em_register!(execution_style(det.state.frame), model,
+        sensor, det.state.frame, det.state.noise_buffer, det.params.gain, rng)
 end
 
 function apply_post_readout_gain!(sensor::EMCCDSensor, det::Detector)
-    return apply_emccd_operating_mode_output!(sensor.operating_mode, sensor, det)
+    return det.state.frame
 end
 
-apply_emccd_operating_mode_output!(::LinearEMMode, sensor::EMCCDSensor, det::Detector) = det.state.frame
+@inline function em_register_noise_factor(model::StochasticMultiplicationRegister,
+    sensor::EMCCDSensor)
+    sensor.excess_noise_factor <= one(sensor.excess_noise_factor) &&
+        return model.register_noise_factor
+    return max(model.register_noise_factor,
+        sqrt(sensor.excess_noise_factor^2 - one(sensor.excess_noise_factor)))
+end
 
-function apply_emccd_operating_mode_output!(mode::PhotonCountingEMMode, sensor::EMCCDSensor, det::Detector)
+@inline function _gamma_unit_scale(rng::AbstractRNG, shape::T) where {T<:AbstractFloat}
+    if shape < one(T)
+        return _gamma_unit_scale(rng, shape + one(T)) *
+            rand(rng, T)^inv(shape)
+    end
+
+    d = shape - one(T) / T(3)
+    c = inv(sqrt(T(9) * d))
+    while true
+        x = randn(rng, T)
+        base = one(T) + c * x
+        base <= zero(T) && continue
+        v = base^3
+        u = rand(rng, T)
+        if u < one(T) - T(0.0331) * x^4 ||
+            log(u) < T(0.5) * x^2 + d * (one(T) - v + log(v))
+            return d * v
+        end
+    end
+end
+
+function _apply_stochastic_em_register!(::ScalarCPUStyle,
+    model::StochasticMultiplicationRegister, sensor::EMCCDSensor,
+    frame::AbstractArray{T}, scratch::AbstractArray, gain,
+    rng::AbstractRNG) where {T<:AbstractFloat}
+    factor = T(em_register_noise_factor(model, sensor))
+    gain_t = T(gain)
+    if factor <= zero(T)
+        frame .*= gain_t
+        return frame
+    end
+    factor2 = factor * factor
+    @inbounds for i in eachindex(frame)
+        charge = max(frame[i], zero(T))
+        frame[i] = charge <= zero(T) ? zero(T) :
+            gain_t * factor2 * _gamma_unit_scale(rng, charge / factor2)
+    end
+    return frame
+end
+
+function _apply_stochastic_em_register!(::AcceleratorStyle,
+    model::StochasticMultiplicationRegister, sensor::EMCCDSensor,
+    frame::AbstractArray{T}, scratch::AbstractArray, gain,
+    rng::AbstractRNG) where {T<:AbstractFloat}
+    randn_backend!(rng, scratch)
+    factor = T(em_register_noise_factor(model, sensor))
+    zero_t = zero(T)
+    @. frame = T(gain) * max(frame + factor * sqrt(max(frame, zero_t)) * scratch,
+        zero_t)
+    return frame
+end
+
+apply_detection_output!(sensor::EMCCDSensor, det::Detector,
+    rng::AbstractRNG) = apply_emccd_detection_output!(sensor.operating_mode,
+    det, rng)
+
+apply_emccd_detection_output!(::LinearEMMode, det::Detector,
+    rng::AbstractRNG) = det.state.frame
+
+function apply_emccd_detection_output!(mode::PhotonCountingEMMode,
+    det::Detector, rng::AbstractRNG)
     threshold = eltype(det.state.frame)(mode.threshold)
-    detected = eltype(det.state.frame)(mode.detection_efficiency)
-    @. det.state.frame = ifelse(det.state.frame >= threshold, detected, zero(det.state.frame))
+    efficiency = eltype(det.state.frame)(mode.detection_efficiency)
+    zero_t = zero(eltype(det.state.frame))
+    one_t = one(eltype(det.state.frame))
+    if efficiency <= zero_t
+        fill!(det.state.frame, zero_t)
+    elseif efficiency >= one_t
+        @. det.state.frame = ifelse(det.state.frame >= threshold, one_t, zero_t)
+    else
+        rand_uniform_backend!(rng, det.state.noise_buffer)
+        @. det.state.frame = ifelse(det.state.frame >= threshold,
+            ifelse(det.state.noise_buffer <= efficiency, one_t, zero_t), zero_t)
+    end
     return det.state.frame
 end
 
 function _batched_sensor_statistics!(sensor::EMCCDSensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
-    rate = effective_cic_rate(det) * det.params.integration_time
+    rate = effective_cic_rate(det)
     if rate > zero(rate)
         fill!(scratch, rate)
         poisson_noise_frame!(det, rng, scratch)
@@ -153,33 +227,44 @@ end
 
 function _batched_pre_readout_gain!(::EMOutput, sensor::EMCCDSensor, det::Detector,
     cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
-    cube .*= det.params.gain
     if is_excess_noise_model(sensor.multiplication_model)
         _batched_avalanche_excess_noise!(sensor.excess_noise_factor, cube, scratch, rng)
+        cube .*= det.params.gain
         return cube
     end
-    randn_backend!(rng, scratch)
-    factor = sensor.excess_noise_factor <= one(sensor.excess_noise_factor) ?
-        sensor.multiplication_model.register_noise_factor :
-        max(sensor.multiplication_model.register_noise_factor, sqrt(sensor.excess_noise_factor^2 - one(sensor.excess_noise_factor)))
-    zero_t = zero(eltype(cube))
-    @. cube = max(cube + factor * sqrt(max(cube, zero_t)) * scratch, zero_t)
-    return cube
+    return _apply_stochastic_em_register!(execution_style(cube),
+        sensor.multiplication_model, sensor, cube, scratch, det.params.gain, rng)
 end
 
 _batched_pre_readout_gain!(::ConventionalOutput, sensor::EMCCDSensor, det::Detector,
     cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
 
 function _batched_post_readout_gain!(sensor::EMCCDSensor, det::Detector, cube::AbstractArray)
-    return _batched_emccd_operating_mode_output!(sensor.operating_mode, sensor, det, cube)
+    return cube
 end
 
-_batched_emccd_operating_mode_output!(::LinearEMMode, sensor::EMCCDSensor, det::Detector, cube::AbstractArray) = cube
+_batched_detection_output!(sensor::EMCCDSensor, det::Detector,
+    cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) =
+    _batched_emccd_detection_output!(sensor.operating_mode, cube, scratch, rng)
 
-function _batched_emccd_operating_mode_output!(mode::PhotonCountingEMMode, sensor::EMCCDSensor, det::Detector, cube::AbstractArray)
+_batched_emccd_detection_output!(::LinearEMMode, cube::AbstractArray,
+    scratch::AbstractArray, rng::AbstractRNG) = cube
+
+function _batched_emccd_detection_output!(mode::PhotonCountingEMMode,
+    cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
     threshold = eltype(cube)(mode.threshold)
-    detected = eltype(cube)(mode.detection_efficiency)
-    @. cube = ifelse(cube >= threshold, detected, zero(cube))
+    efficiency = eltype(cube)(mode.detection_efficiency)
+    zero_t = zero(eltype(cube))
+    one_t = one(eltype(cube))
+    if efficiency <= zero_t
+        fill!(cube, zero_t)
+    elseif efficiency >= one_t
+        @. cube = ifelse(cube >= threshold, one_t, zero_t)
+    else
+        rand_uniform_backend!(rng, scratch)
+        @. cube = ifelse(cube >= threshold,
+            ifelse(scratch <= efficiency, one_t, zero_t), zero_t)
+    end
     return cube
 end
 

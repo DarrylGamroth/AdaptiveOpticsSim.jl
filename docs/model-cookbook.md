@@ -107,7 +107,8 @@ slopes = measure!(counting_wfs, tel, src, spad; rng=runtime_rng(0))
 counts = output_frame(spad)
 ```
 
-Use `APDDetector(...)` for channel-style counting readout and
+Use `LinearAPDDetector(...)` for analog single-element or fixed-bank APD
+channels, `APDDetector(...)` for Geiger-mode channel counting, and
 `SPADArrayDetector(...)` for accumulated-count imaging arrays. Use
 `MKIDArrayDetector(...)` when the downstream HIL boundary should receive an
 accumulated photon-count image plus MKID energy-resolution and timing metadata,

@@ -51,11 +51,12 @@ export CompositeControllableOptic, ModalControllableOptic, TipTiltMirror, FocusS
 export update_command!
 export DMAdditive, DMReplace
 
-export Detector, APDDetector, SPADArrayDetector, MKIDArrayDetector
+export Detector, APDDetector, LinearAPDDetector, SPADArrayDetector, MKIDArrayDetector
 export NoiseModel, NoiseNone, NoisePhoton, NoiseReadout, NoisePhotonReadout
 export SensorType, CCDSensor, CMOSSensor, EMCCDSensor, InGaAsSensor
 export LinearEMMode, PhotonCountingEMMode, EMOutput, ConventionalOutput, emccd_snr
 export HgCdTeAvalancheArraySensor, APDSensor, SPADArraySensor, MKIDArraySensor
+export SingleElementAPD, APDChannelBank
 export FrameResponseModel, NullFrameResponse, GaussianPixelResponse, SampledFrameResponse
 export RectangularPixelAperture, SeparablePixelMTF
 export CMOSReadNoiseMap, InterpixelCapacitance, detector_mtf
@@ -74,7 +75,7 @@ export AbstractDetectorThermalModel, NullDetectorThermalModel, FixedTemperature,
 export ArrheniusRateLaw, LinearTemperatureLaw, ExponentialTemperatureLaw
 export CountingDeadTimeModel, NoDeadTime, NonParalyzableDeadTime, ParalyzableDeadTime
 export DutyCycleGate, AfterpulsingModel, ChannelCrosstalkModel, CompositeCountingCorrelation
-export capture!, output_frame, detector_export_metadata
+export capture!, output_frame, channel_output, detector_export_metadata
 export readout_ready, reset_integration!, thermal_model
 
 export Diffractive, Geometric

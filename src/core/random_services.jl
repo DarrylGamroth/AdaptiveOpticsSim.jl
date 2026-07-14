@@ -23,6 +23,14 @@ deterministic_reference_rng(seed::Integer=0) = MersenneTwister(seed)
     end
 end
 
+@kernel function uniform_fill_kernel!(out, seed::UInt64, n::Int)
+    i = @index(Global, Linear)
+    if i <= n
+        T = eltype(out)
+        @inbounds out[i] = uniform01(T, splitmix64(seed + UInt64(i)))
+    end
+end
+
 @kernel function poisson_noise_kernel!(img, seed::UInt64, n::Int)
     i = @index(Global, Linear)
     if i <= n
@@ -111,5 +119,24 @@ end
 function randn_backend_async!(style::AcceleratorStyle, rng::AbstractRNG, out::AbstractArray{T}) where {T<:AbstractFloat}
     seed = rand(rng, UInt64)
     launch_kernel_async!(style, randn_fill_kernel!, out, seed, length(out); ndrange=length(out))
+    return out
+end
+
+function rand_uniform_backend!(rng::AbstractRNG, out::AbstractArray)
+    _rand_uniform_backend!(execution_style(out), rng, out)
+    return out
+end
+
+function _rand_uniform_backend!(::ScalarCPUStyle, rng::AbstractRNG,
+    out::AbstractArray)
+    rand!(rng, out)
+    return out
+end
+
+function _rand_uniform_backend!(style::AcceleratorStyle, rng::AbstractRNG,
+    out::AbstractArray{T}) where {T<:AbstractFloat}
+    seed = rand(rng, UInt64)
+    launch_kernel!(style, uniform_fill_kernel!, out, seed, length(out);
+        ndrange=length(out))
     return out
 end

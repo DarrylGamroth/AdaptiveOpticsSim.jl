@@ -26,7 +26,7 @@ supports_readout_correction(::HgCdTeAvalancheArraySensorType) = true
 supports_read_cube(::HgCdTeAvalancheArraySensorType) = true
 supports_multi_read_readout_products(::HgCdTeAvalancheArraySensorType) = true
 default_response_model(::HgCdTeAvalancheArraySensor; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend()) =
-    SampledFrameResponse([0.0 0.01 0.0; 0.01 0.96 0.01; 0.0 0.01 0.0]; T=T, backend=backend)
+    NullFrameResponse()
 configured_glow_rate(sensor::HgCdTeAvalancheArraySensor, ::Type{T}) where {T<:AbstractFloat} = T(sensor.glow_rate)
 multi_read_sampling_mode(sensor::HgCdTeAvalancheArraySensor) = sensor.sampling_mode
 
@@ -111,12 +111,14 @@ finalize_readout_products!(sensor::HgCdTeAvalancheArraySensor, det::Detector, rn
 
 function _finalize_capture!(::HgCdTeAvalancheArraySensorType, det::Detector,
     rng::AbstractRNG, exposure_time::Real)
-    apply_dark_current!(det, rng, exposure_time)
-    apply_saturation!(det)
-    apply_sensor_statistics!(det.params.sensor, det, rng)
-    apply_pre_readout_gain!(det.params.sensor, det, rng)
+    finalize_charge_generation!(det, rng, exposure_time)
+    finalize_charge_transport!(det, rng)
+    # Multi-read products generate each raw read, including read noise,
+    # conversion gain, and per-read correction. Running the generic
+    # electronics stage as well would apply those effects twice.
     finalize_readout_products!(det.params.sensor, det, rng, exposure_time)
     apply_quantization!(det)
     subtract_background_map!(det.background_map, det)
+    update_sensor_persistence!(det.params.sensor, det, exposure_time)
     return det.state.frame
 end

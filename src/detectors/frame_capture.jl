@@ -246,6 +246,8 @@ end
 
 apply_pre_readout_gain!(::FrameSensorType, det::Detector, rng::AbstractRNG) = det.state.frame
 apply_post_readout_gain!(::FrameSensorType, det::Detector) = det.state.frame
+apply_detection_output!(::FrameSensorType, det::Detector,
+    rng::AbstractRNG) = det.state.frame
 apply_charge_transfer!(::FrameSensorType, det::Detector) = det.state.frame
 reset_readout_products!(det::Detector) = (det.state.readout_products = NoFrameReadoutProducts(); det)
 
