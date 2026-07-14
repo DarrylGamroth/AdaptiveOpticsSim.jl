@@ -168,10 +168,44 @@ julia --project=benchmarks benchmarks/benchmark_cpu.jl
 julia --project=benchmarks benchmarks/benchmark_cpu_hotpath_cards.jl
 julia --project=benchmarks benchmarks/benchmark_control_operators.jl
 julia --project=benchmarks benchmarks/benchmark_loop_order_simd.jl
+julia --project=benchmarks benchmarks/benchmark_detector_hil_latency.jl
 
 julia --project=benchmarks/amdgpu -e 'using Pkg; Pkg.instantiate()'
 julia --project=benchmarks/amdgpu benchmarks/benchmark_amdgpu.jl
 ```
+
+`benchmark_detector_hil_latency.jl` is the conventional-detector latency card
+suite. It covers CMOS, CMOS with explicit MTF and IPC, CCD, fast linear EMCCD,
+HgCdTe avalanche CDS, and 16-sample Skipper CCD capture. The measured boundary
+starts with an input detector frame already available in memory and ends when
+the converted output frame is ready. It therefore excludes external RTC
+transport, frame-grabber I/O, and camera-link scheduling.
+
+The default contract uses one Julia, BLAS, and FFT thread; three warmed serial
+closed-loop repetitions; 100,000 samples per card; and a fixed-size
+`HdrHistogram.Histogram`. Since the next capture begins only after the previous
+one completes, there is no independent arrival schedule and coordinated-
+omission correction is intentionally not applied. First capture and steady-
+state allocation measurements are reported separately. The histogram source
+is an untagged commit from the GitHub `HdrHistogram.jl` repository, pinned in
+the benchmark project rather than resolved from a local checkout.
+
+For a quick harness check, reduce the sample count, repetitions, and frame size:
+
+```bash
+AOS_DETECTOR_HIL_SAMPLES=1000 \
+AOS_DETECTOR_HIL_RUNS=1 \
+AOS_DETECTOR_HIL_SIZE=32 \
+julia --project=benchmarks benchmarks/benchmark_detector_hil_latency.jl
+```
+
+Runs below 100,000 samples label p99.9 as diagnostic. Set
+`AOS_DETECTOR_HIL_OUTPUT` to retain a TOML artifact. Allocation gates are always
+enforced. Machine-specific latency gates are evaluated only when
+`AOS_DETECTOR_HIL_BASELINE` names a compatible prior artifact; the default p99
+limit is 1.25 times its median p99 and can be changed with
+`AOS_DETECTOR_HIL_REGRESSION_FACTOR`. The script rejects baselines whose sensor,
+frame size, response, coupling, sampling, noise, or output type differs.
 
 For the detector-output HIL path, use the same workload and sample count on
 both backends:
