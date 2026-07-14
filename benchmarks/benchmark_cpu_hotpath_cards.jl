@@ -14,6 +14,7 @@ const CPU_HOTPATH_CARDS = (
     ("CPU-PERF-09", "separable Gaussian frame response", :gaussian_frame_response),
     ("CPU-PERF-10", "batched EMCCD capture", :batched_emccd_capture),
     ("CPU-PERF-11", "lazy Gaussian DM operator application", :gaussian_dm_operator),
+    ("CPU-PERF-12", "shared multi-arm optical runtime", :shared_optical_runtime),
 )
 
 function configure_cpu_hotpath_benchmarks!()
@@ -148,6 +149,38 @@ function gaussian_dm_operator_probe()
     return () -> AdaptiveOpticsSim.apply_opd!(dm, tel)
 end
 
+function shared_optical_runtime_probe()
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3,
+        central_obstruction=0.0)
+    guide = Source(band=:I, magnitude=0.0)
+    science = Source(band=:K, magnitude=1.0, coordinates=(4.0, 90.0))
+    atmosphere = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
+    wfs = ShackHartmannWFS(tel; n_lenslets=4)
+    simulation = AOSimulation(tel, guide, atmosphere, dm, wfs)
+    reconstructor = ModalReconstructor(
+        interaction_matrix(dm, wfs, tel; amplitude=0.1);
+        gain=0.5,
+    )
+    primary = AdaptiveOpticsSim.ClosedLoopRuntime(simulation, reconstructor;
+        rng=runtime_rng(17))
+    arm = SharedOpticalArm(
+        :science,
+        science;
+        wfs_channels=OpticalWFSChannel(
+            ShackHartmannWFS(tel; n_lenslets=4)),
+        science_detectors=(
+            Detector(noise=NoiseNone()),
+            Detector(noise=NoiseNone()),
+        ),
+        science_zero_padding=1,
+    )
+    runtime = SharedOpticalRuntime(primary, arm)
+    prepare!(runtime)
+    sense!(runtime)
+    return () -> sense!(runtime)
+end
+
 function run_probe(card_id::AbstractString, label::AbstractString, f)
     f()
     alloc = @allocated f()
@@ -177,6 +210,7 @@ function run_cpu_hotpath_card_benchmarks()
         ("CPU-PERF-09", "gaussian_frame_response", gaussian_frame_response_probe()),
         ("CPU-PERF-10", "batched_emccd_capture", batched_emccd_capture_probe()),
         ("CPU-PERF-11", "gaussian_dm_operator", gaussian_dm_operator_probe()),
+        ("CPU-PERF-12", "shared_optical_runtime", shared_optical_runtime_probe()),
     )
     results = map(probe -> run_probe(probe...), probes)
     println("recommendation")

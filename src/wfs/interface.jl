@@ -74,13 +74,29 @@ end
 @inline propagate_runtime_atmosphere!(atm::AbstractAtmosphere, tel::Telescope,
     ::Asterism) = propagate!(atm, tel)
 
-@inline function prepropagate_runtime_wfs!(wfs::AbstractWFS, atm::AbstractAtmosphere,
-    tel::Telescope, optic::AbstractControllableOptic, src::AbstractSource, rng::AbstractRNG)
+@inline function advance_runtime_atmosphere!(wfs::AbstractWFS,
+    atm::AbstractAtmosphere, tel::Telescope, rng::AbstractRNG)
     advance!(atm, tel, rng)
+    return nothing
+end
+
+@inline function render_runtime_wfs_path!(wfs::AbstractWFS,
+    atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
+    src::AbstractSource)
     propagate_runtime_atmosphere!(atm, tel, src)
     apply!(optic, tel, DMAdditive())
     return nothing
 end
+
+@inline function prepropagate_runtime_wfs!(wfs::AbstractWFS, atm::AbstractAtmosphere,
+    tel::Telescope, optic::AbstractControllableOptic, src::AbstractSource, rng::AbstractRNG)
+    advance_runtime_atmosphere!(wfs, atm, tel, rng)
+    render_runtime_wfs_path!(wfs, atm, tel, optic, src)
+    return nothing
+end
+
+@inline prepare_shared_runtime_wfs!(wfs::AbstractWFS, atm::AbstractAtmosphere,
+    tel::Telescope, optic::AbstractControllableOptic, src::AbstractSource) = nothing
 
 @inline function measure_runtime_wfs!(wfs::AbstractWFS, atm::AbstractAtmosphere,
     tel::Telescope, src::AbstractSource, rng::AbstractRNG)

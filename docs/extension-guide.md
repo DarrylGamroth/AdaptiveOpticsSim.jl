@@ -66,6 +66,14 @@ propagation again for a distinct science path. Atmospheres without directional
 geometry inherit the source-insensitive fallback. Keep the second propagation
 allocation-free when it is part of a maintained HIL path.
 
+Shared multi-arm execution separates atmosphere advancement from path
+rendering through `advance_runtime_atmosphere!` and
+`render_runtime_wfs_path!`. A custom WFS that needs special pupil preparation
+when consuming an already-rendered shared arm should extend
+`prepare_shared_runtime_wfs!`; the default is a no-op. The Curvature WFS uses
+this seam to establish its measurement path and then restores the normal
+source path in `finish_runtime_wfs_sensing!`.
+
 ## Deformable Mirrors
 
 DM implementation lives in `src/optics/deformable_mirror.jl`.

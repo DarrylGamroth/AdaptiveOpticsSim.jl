@@ -6,9 +6,27 @@
     return nothing
 end
 
+@inline function sense_core_after_advance!(atm::AbstractAtmosphere,
+    tel::Telescope, optic::AbstractControllableOptic, wfs::AbstractWFS,
+    src::AbstractSource, rng::AbstractRNG)
+    render_runtime_wfs_path!(wfs, atm, tel, optic, src)
+    measure_runtime_wfs!(wfs, atm, tel, src, rng)
+    finish_runtime_wfs_sensing!(wfs, atm, tel, optic, src)
+    return nothing
+end
+
 @inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
     wfs::AbstractWFS, src::AbstractSource, det::AbstractDetector, rng::AbstractRNG)
     prepropagate_runtime_wfs!(wfs, atm, tel, optic, src, rng)
+    measure_runtime_wfs!(wfs, atm, tel, src, det, rng)
+    finish_runtime_wfs_sensing!(wfs, atm, tel, optic, src)
+    return nothing
+end
+
+@inline function sense_core_after_advance!(atm::AbstractAtmosphere,
+    tel::Telescope, optic::AbstractControllableOptic, wfs::AbstractWFS,
+    src::AbstractSource, det::AbstractDetector, rng::AbstractRNG)
+    render_runtime_wfs_path!(wfs, atm, tel, optic, src)
     measure_runtime_wfs!(wfs, atm, tel, src, det, rng)
     finish_runtime_wfs_sensing!(wfs, atm, tel, optic, src)
     return nothing
@@ -176,12 +194,35 @@ end
     return snapshot_outputs!(interface)
 end
 
-function sense!(runtime::ClosedLoopRuntime)
+abstract type AbstractRuntimeAtmosphereStep end
+struct AdvanceRuntimeAtmosphere <: AbstractRuntimeAtmosphereStep end
+struct ReuseAdvancedRuntimeAtmosphere <: AbstractRuntimeAtmosphereStep end
+
+@inline function sense_primary_core!(::AdvanceRuntimeAtmosphere,
+    runtime::ClosedLoopRuntime)
     if isnothing(runtime.wfs_detector)
         sense_core!(runtime.atm, runtime.tel, runtime.optic, runtime.wfs, runtime.src, runtime.rng)
     else
         sense_core!(runtime.atm, runtime.tel, runtime.optic, runtime.wfs, runtime.src, runtime.wfs_detector, runtime.rng)
     end
+    return nothing
+end
+
+@inline function sense_primary_core!(::ReuseAdvancedRuntimeAtmosphere,
+    runtime::ClosedLoopRuntime)
+    if isnothing(runtime.wfs_detector)
+        sense_core_after_advance!(runtime.atm, runtime.tel, runtime.optic,
+            runtime.wfs, runtime.src, runtime.rng)
+    else
+        sense_core_after_advance!(runtime.atm, runtime.tel, runtime.optic,
+            runtime.wfs, runtime.src, runtime.wfs_detector, runtime.rng)
+    end
+    return nothing
+end
+
+@inline function sense_runtime!(atmosphere_step::AbstractRuntimeAtmosphereStep,
+    runtime::ClosedLoopRuntime)
+    sense_primary_core!(atmosphere_step, runtime)
     if requires_runtime_science_pixels(runtime)
         capture_science_core!(runtime.science_path, runtime.atm, runtime.tel,
             runtime.optic, runtime.science_src, runtime.science_detector,
@@ -191,6 +232,11 @@ function sense!(runtime::ClosedLoopRuntime)
         stage_sensed_slopes!(runtime)
     end
     return runtime
+end
+
+
+function sense!(runtime::ClosedLoopRuntime)
+    return sense_runtime!(AdvanceRuntimeAtmosphere(), runtime)
 end
 
 function step!(runtime::ClosedLoopRuntime)

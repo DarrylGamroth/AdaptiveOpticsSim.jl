@@ -47,6 +47,8 @@ Current CPU-supported families:
 - direct `CPUHILExecutionPlan` execution as the default CPU runtime residency
   policy
 - source-aware runtime propagation with distinct WFS and science sources
+- allocation-free shared multi-arm CPU execution with one atmosphere advance
+  and shared same-arm science PSF formation
 - grouped/runtime orchestration surfaces with committed validation artifacts
 
 Primary evidence:
@@ -72,6 +74,7 @@ Current AMDGPU-supported scope:
 - maintained high-accuracy post-command runtime-equivalence surfaces
 - maintained Shack-Hartmann exported-pixel parity surfaces
 - maintained distinct WFS/science-source runtime smoke
+- maintained shared multi-arm science-detector smoke
 - maintained composite low-order runtime surfaces
 - matched HEART RTC HIL runtime surfaces
 

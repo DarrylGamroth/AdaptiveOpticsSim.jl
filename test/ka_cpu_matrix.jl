@@ -46,6 +46,9 @@ end
         AdaptiveOpticsSim._circshift2d!(KA_CPU_STYLE, ka_shift, src, (1, -1))
         mark_ka_cpu_kernel!(:circshift2d_kernel!)
         @test ka_shift == scalar_shift
+        @test scalar_shift == circshift(src, (1, -1))
+        @test @allocated(AdaptiveOpticsSim._circshift2d!(SCALAR_CPU_STYLE,
+            scalar_shift, src, (1, -1))) == 0
 
         scalar_bin = Matrix{Float64}(undef, 2, 2)
         ka_bin = similar(scalar_bin)

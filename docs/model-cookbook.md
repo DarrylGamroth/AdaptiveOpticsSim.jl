@@ -168,8 +168,39 @@ The runtime advances the atmosphere once, senses through `wfs_source(sim)`,
 then re-renders the existing atmosphere state through `science_source(sim)`
 before science-camera capture. No second atmosphere time step is introduced.
 An `Asterism` still shares a single pupil OPD within one WFS or science
-measurement; use separate control-loop branches when each direction must
-receive an independently rendered atmospheric path.
+measurement. Use the shared optical-arm surface below when each direction must
+receive an independently rendered atmospheric path without duplicating the
+plant or advancing its atmosphere again.
+
+When several physical WFS or science arms share one telescope, atmosphere,
+and controllable optic, attach typed auxiliary arms to one primary runtime
+instead of building independent closed loops:
+
+```julia
+primary = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; rng=runtime_rng(1))
+
+off_axis_wfs = ShackHartmannWFS(tel; n_lenslets=4)
+science_a = Detector(noise=NoiseNone())
+science_b = Detector(noise=NoiseNone())
+
+arm = SharedOpticalArm(
+    :off_axis,
+    science;
+    wfs_channels=OpticalWFSChannel(off_axis_wfs),
+    science_detectors=(science_a, science_b),
+    science_zero_padding=1,
+)
+runtime = SharedOpticalRuntime(primary, arm)
+prepare!(runtime)
+step!(runtime)
+```
+
+`SharedOpticalRuntime` advances the atmosphere once per step, renders each
+distinct source path in order, and shares one PSF calculation across all
+science detectors on an arm. Consecutive arms that use the same source object
+reuse the current pupil rendering. WFS signals remain owned by each
+`OpticalWFSChannel`; assembling them into a joint reconstructor is a separate
+control-layer decision.
 
 For DM setup, the common public inputs remain:
 

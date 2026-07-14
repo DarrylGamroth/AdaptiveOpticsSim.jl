@@ -653,6 +653,41 @@ function revolt_like_runtime_allocations()
     return revolt_like_allocation_profile(; backend_name="cpu", config_dir=config_dir, sensor=CMOSSensor(), T=Float32)
 end
 
+mutable struct SharedArmCountingAtmosphere{A,B<:AbstractArrayBackend} <: AdaptiveOpticsSim.AbstractAtmosphere
+    atmosphere::A
+    advances::Int
+    renders::Int
+end
+
+function SharedArmCountingAtmosphere(atmosphere)
+    selector = backend(atmosphere)
+    return SharedArmCountingAtmosphere{typeof(atmosphere),typeof(selector)}(
+        atmosphere, 0, 0)
+end
+
+@inline AdaptiveOpticsSim.backend(::SharedArmCountingAtmosphere{<:Any,B}) where {B} = B()
+
+function AdaptiveOpticsSim.advance!(atmosphere::SharedArmCountingAtmosphere, tel::Telescope,
+    rng::AbstractRNG)
+    atmosphere.advances += 1
+    AdaptiveOpticsSim.advance!(atmosphere.atmosphere, tel, rng)
+    return atmosphere
+end
+
+function AdaptiveOpticsSim.propagate!(atmosphere::SharedArmCountingAtmosphere, tel::Telescope)
+    atmosphere.renders += 1
+    AdaptiveOpticsSim.propagate!(atmosphere.atmosphere, tel)
+    return tel
+end
+
+
+function AdaptiveOpticsSim.propagate!(atmosphere::SharedArmCountingAtmosphere, tel::Telescope,
+    source::AbstractSource)
+    atmosphere.renders += 1
+    AdaptiveOpticsSim.propagate!(atmosphere.atmosphere, tel, source)
+    return tel
+end
+
 coverage_instrumented() = Base.JLOptions().code_coverage != 0
 
 @testset "Source-aware runtime optical paths" begin
@@ -745,6 +780,76 @@ coverage_instrumented() = Base.JLOptions().code_coverage != 0
     apply!(curvature_dm, expected_curvature_tel, DMAdditive())
     @test curvature_tel.state.opd ≈ expected_curvature_tel.state.opd
     @test all(isfinite, curvature_runtime.slopes)
+end
+
+@testset "Shared multi-arm optical runtime" begin
+    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3,
+        central_obstruction=0.0)
+    guide = Source(band=:I, magnitude=0.0)
+    off_axis = Source(band=:K, magnitude=1.0, coordinates=(4.0, 90.0))
+    base_atmosphere = MultiLayerAtmosphere(tel;
+        r0=0.2,
+        L0=25.0,
+        fractional_cn2=[0.5, 0.5],
+        wind_speed=[0.0, 0.0],
+        wind_direction=[0.0, 90.0],
+        altitude=[0.0, 5000.0],
+    )
+    atmosphere = SharedArmCountingAtmosphere(base_atmosphere)
+    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
+    primary_wfs = ShackHartmannWFS(tel; n_lenslets=4)
+    simulation = AOSimulation(tel, guide, atmosphere, dm, primary_wfs)
+    reconstructor = ModalReconstructor(
+        interaction_matrix(dm, primary_wfs, tel; amplitude=0.1);
+        gain=0.5,
+    )
+    primary = ClosedLoopRuntime(simulation, reconstructor;
+        rng=MersenneTwister(20260713))
+
+    auxiliary_wfs = ShackHartmannWFS(tel; n_lenslets=4)
+    detector_a = Detector(noise=NoiseNone(), integration_time=1.0,
+        qe=1.0, binning=1)
+    detector_b = Detector(noise=NoiseNone(), integration_time=1.0,
+        qe=1.0, binning=1)
+    arm = SharedOpticalArm(
+        :off_axis,
+        off_axis;
+        wfs_channels=OpticalWFSChannel(auxiliary_wfs),
+        science_detectors=(detector_a, detector_b),
+        science_zero_padding=1,
+    )
+    shared = SharedOpticalRuntime(primary, arm)
+
+    @test primary_runtime(shared) === primary
+    @test optical_arms(shared) === (arm,)
+    @test runtime_execution_plan(shared) isa CPUHILExecutionPlan
+    @test_throws InvalidConfiguration SharedOpticalArm(:empty, off_axis)
+    @test_throws InvalidConfiguration SharedOpticalArm(:invalid_padding,
+        off_axis; science_detectors=detector_a, science_zero_padding=0)
+    @test_throws InvalidConfiguration SharedOpticalRuntime(primary, arm, arm)
+
+    prepare!(shared)
+    atmosphere.advances = 0
+    atmosphere.renders = 0
+    step!(shared)
+    @test atmosphere.advances == 1
+    @test atmosphere.renders == 2
+    @test all(isfinite, first(wfs_signals(arm)))
+    @test science_frames(arm)[1] === output_frame(detector_a)
+    @test science_frames(arm)[2] === output_frame(detector_b)
+    @test science_frames(arm)[1] == science_frames(arm)[2]
+    @test command(shared) === command(primary)
+    @test synchronize_runtime!(shared) === shared
+
+    atmosphere.advances = 0
+    atmosphere.renders = 0
+    if coverage_instrumented()
+        @test_skip "allocation assertions are disabled under coverage instrumentation"
+    else
+        @test @allocated(step!(shared)) == 0
+    end
+    @test atmosphere.advances == 1
+    @test atmosphere.renders == 2
 end
 
 @testset "Closed-loop runtime" begin

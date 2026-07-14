@@ -112,6 +112,8 @@ export SequentialExecution, ThreadedExecution, BackendStreamExecution
 export ScientificRuntimeProfile, HILRuntimeProfile, RuntimeOutputRequirements, GroupedRuntimeOutputRequirements
 export CPUHILExecutionPlan, DeviceResidentExecutionPlan, runtime_execution_plan
 export synchronize_runtime!
+export OpticalWFSChannel, SharedOpticalArm, SharedOpticalRuntime
+export primary_runtime, optical_arms, science_frames, wfs_signals
 export VectorDelayLine, shift_delay!
 export prepare!, prepare_runtime_wfs!
 export command_segments, command_segment_range

@@ -260,6 +260,12 @@ detector frame.
 - Runtime profiles and outputs: `ScientificRuntimeProfile`,
   `HILRuntimeProfile`, `RuntimeOutputRequirements`,
   `GroupedRuntimeOutputRequirements`
+- Runtime residency: `CPUHILExecutionPlan`,
+  `DeviceResidentExecutionPlan`, `runtime_execution_plan`,
+  `synchronize_runtime!`
+- Shared optical arms: `OpticalWFSChannel`, `SharedOpticalArm`,
+  `SharedOpticalRuntime`, `primary_runtime`, `optical_arms`,
+  `science_frames`, `wfs_signals`
 - Delay lines: `VectorDelayLine`, `shift_delay!`
 - Runtime setup and commands: `prepare!`, `prepare_runtime_wfs!`,
   `set_command!`, `command_segments`, `command_segment_range`
@@ -272,7 +278,9 @@ detector frame.
   `science_frame`, `grouped_wfs_stack`, `runtime_timing`
 
 `ControlLoopScenario` is the preferred public assembly surface for normal
-closed-loop and HIL simulations. Lower-level runtime construction remains
+single-plant closed-loop and HIL simulations. `SharedOpticalRuntime` is the
+typed surface when auxiliary source/WFS/science arms share that plant.
+Lower-level runtime construction remains
 available as qualified advanced API for tests and specialized tooling.
 For external Proper science-arm integration, use
 [`proper-integration-guide.md`](./proper-integration-guide.md).

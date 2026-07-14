@@ -865,6 +865,24 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     @test science_frame(split_runtime) isa BackendArray
     @test all(isfinite, Array(science_frame(split_runtime)))
 
+    shared_detector_a = Detector(noise=NoiseNone(), integration_time=one(T),
+        qe=one(T), binning=1, T=T, backend=selector)
+    shared_detector_b = Detector(noise=NoiseNone(), integration_time=one(T),
+        qe=one(T), binning=1, T=T, backend=selector)
+    shared_arm = SharedOpticalArm(
+        :shared_science,
+        science_src;
+        science_detectors=(shared_detector_a, shared_detector_b),
+        science_zero_padding=1,
+    )
+    shared_runtime = SharedOpticalRuntime(split_runtime, shared_arm)
+    sense!(shared_runtime)
+    @test runtime_execution_plan(shared_runtime) isa DeviceResidentExecutionPlan
+    @test all(frame -> frame isa BackendArray, science_frames(shared_arm))
+    @test Array(science_frames(shared_arm)[1]) ≈
+        Array(science_frames(shared_arm)[2]) atol=0 rtol=0
+    @test synchronize_runtime!(shared_runtime) === shared_runtime
+
     run_optional_backend_plan_checks(B, tel, selector)
     run_optional_composite_optic_parity(B, BackendArray)
 

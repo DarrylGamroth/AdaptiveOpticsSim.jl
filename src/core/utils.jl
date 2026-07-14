@@ -187,7 +187,19 @@ function circshift2d!(dest::AbstractMatrix, src::AbstractMatrix, shifts::NTuple{
 end
 
 function _circshift2d!(::ScalarCPUStyle, dest::AbstractMatrix, src::AbstractMatrix, shifts::NTuple{2,Int})
-    copyto!(dest, circshift(src, shifts))
+    isempty(src) && return dest
+    n, m = size(src)
+    shift_i = mod(shifts[1], n)
+    shift_j = mod(shifts[2], m)
+    @inbounds for j in 1:m
+        source_j = j - shift_j
+        source_j <= 0 && (source_j += m)
+        for i in 1:n
+            source_i = i - shift_i
+            source_i <= 0 && (source_i += n)
+            dest[i, j] = src[source_i, source_j]
+        end
+    end
     return dest
 end
 

@@ -922,12 +922,19 @@ end
     return wfs
 end
 
-@inline function prepropagate_runtime_wfs!(wfs::CurvatureWFS, atm::AbstractAtmosphere,
-    tel::Telescope, optic::AbstractControllableOptic, src::AbstractSource, rng::AbstractRNG)
+@inline function render_runtime_wfs_path!(wfs::CurvatureWFS,
+    atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
+    src::AbstractSource)
     reset_opd!(tel)
-    advance!(atm, tel, rng)
     apply!(optic, tel, DMAdditive())
     return nothing
+end
+
+
+@inline function prepare_shared_runtime_wfs!(wfs::CurvatureWFS,
+    atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
+    src::AbstractSource)
+    return render_runtime_wfs_path!(wfs, atm, tel, optic, src)
 end
 
 @inline function measure_runtime_wfs!(wfs::CurvatureWFS, atm::AbstractAtmosphere,

@@ -131,6 +131,8 @@ The current runtime model is:
   residency
 - CPU HIL is a direct host-resident plan, while accelerator runtimes use a
   device-resident plan with explicit observation barriers
+- shared multi-arm runtimes own one atmosphere advance and command state while
+  source-specific arms own their WFS and science consumers
 - WFS and detector pipelines own their sampled/readout/intermediate products
   explicitly rather than relying on in-place aliasing
 
