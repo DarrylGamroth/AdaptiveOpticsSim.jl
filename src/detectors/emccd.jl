@@ -1,11 +1,33 @@
 abstract type AbstractEMGainModel end
 abstract type AbstractEMCCDOperatingMode end
 abstract type AbstractEMCCDOutputPath end
+abstract type AbstractEMCCDAcquisitionMode end
 
 struct ExcessNoiseApproximation <: AbstractEMGainModel end
 struct LinearEMMode <: AbstractEMCCDOperatingMode end
 struct EMOutput <: AbstractEMCCDOutputPath end
 struct ConventionalOutput <: AbstractEMCCDOutputPath end
+struct SequentialAcquisition <: AbstractEMCCDAcquisitionMode end
+
+"""
+    FrameTransferAcquisition(; transfer_time=0, T=Float64)
+
+EMCCD acquisition timing in which the image area is rapidly shifted into a
+storage area and storage readout overlaps the next integration. This affects
+latency and steady-state frame period only; it does not alter detector optical
+response, charge multiplication, or noise.
+"""
+struct FrameTransferAcquisition{T<:AbstractFloat} <:
+    AbstractEMCCDAcquisitionMode
+    transfer_time::T
+end
+
+FrameTransferAcquisition(transfer_time::Real) =
+    validate_emccd_acquisition_mode(
+        FrameTransferAcquisition{Float64}(float(transfer_time)))
+FrameTransferAcquisition(; transfer_time::Real=0.0,
+    T::Type{<:AbstractFloat}=Float64) =
+    validate_emccd_acquisition_mode(FrameTransferAcquisition{T}(T(transfer_time)))
 
 struct PhotonCountingEMMode{T<:AbstractFloat} <: AbstractEMCCDOperatingMode
     threshold::T
@@ -26,13 +48,16 @@ end
 
 StochasticMultiplicationRegister(register_noise_factor::Real) = StochasticMultiplicationRegister{Float64}(float(register_noise_factor))
 
-struct EMCCDSensor{T<:AbstractFloat,M<:AbstractEMGainModel,O<:AbstractEMCCDOperatingMode,P<:AbstractEMCCDOutputPath} <: AvalancheFrameSensorType
+struct EMCCDSensor{T<:AbstractFloat,M<:AbstractEMGainModel,
+    O<:AbstractEMCCDOperatingMode,P<:AbstractEMCCDOutputPath,
+    A<:AbstractEMCCDAcquisitionMode} <: AvalancheFrameSensorType
     excess_noise_factor::T
     clock_induced_charge_per_frame::T
     multiplication_model::M
     register_full_well::Union{Nothing,T}
     operating_mode::O
     output_path::P
+    acquisition_mode::A
     em_gain_range::Tuple{T,T}
     readout_rate_hz::Union{Nothing,T}
 end
@@ -43,6 +68,7 @@ function EMCCDSensor(; excess_noise_factor::Real=1.0,
     register_full_well::Union{Nothing,Real}=nothing,
     operating_mode::AbstractEMCCDOperatingMode=LinearEMMode(),
     output_path::AbstractEMCCDOutputPath=EMOutput(),
+    acquisition_mode::AbstractEMCCDAcquisitionMode=SequentialAcquisition(),
     em_gain_range::Tuple{<:Real,<:Real}=(1.0, Inf),
     readout_rate_hz::Union{Nothing,Real}=nothing, T::Type{<:AbstractFloat}=Float64)
     excess_noise_factor >= 1 || throw(InvalidConfiguration("EMCCDSensor excess_noise_factor must be >= 1"))
@@ -62,10 +88,13 @@ function EMCCDSensor(; excess_noise_factor::Real=1.0,
     validated_model = validate_em_gain_model(converted_model)
     converted_mode = convert_emccd_operating_mode(operating_mode, T)
     validated_mode = validate_emccd_operating_mode(converted_mode)
-    return EMCCDSensor{T,typeof(validated_model),typeof(validated_mode),typeof(output_path)}(
+    converted_acquisition = convert_emccd_acquisition_mode(acquisition_mode, T)
+    validated_acquisition = validate_emccd_acquisition_mode(converted_acquisition)
+    return EMCCDSensor{T,typeof(validated_model),typeof(validated_mode),
+        typeof(output_path),typeof(validated_acquisition)}(
         T(excess_noise_factor), T(clock_induced_charge_per_frame), validated_model,
         reg_full_well, validated_mode,
-        output_path, em_range, readout_rate)
+        output_path, validated_acquisition, em_range, readout_rate)
 end
 
 detector_sensor_symbol(::EMCCDSensor) = :emccd
@@ -78,6 +107,64 @@ configured_cic_rate(sensor::EMCCDSensor, ::Type{T}) where {T<:AbstractFloat} =
 is_excess_noise_model(::AbstractEMGainModel) = false
 is_excess_noise_model(::ExcessNoiseApproximation) = true
 
+acquisition_mode_symbol(sensor::EMCCDSensor) =
+    emccd_acquisition_mode_symbol(sensor.acquisition_mode)
+emccd_acquisition_mode_symbol(::SequentialAcquisition) = :sequential
+emccd_acquisition_mode_symbol(::FrameTransferAcquisition) = :frame_transfer
+
+frame_transfer_time(sensor::EMCCDSensor, ::Type{T}) where {T<:AbstractFloat} =
+    emccd_frame_transfer_time(sensor.acquisition_mode, T)
+emccd_frame_transfer_time(::SequentialAcquisition,
+    ::Type{T}) where {T<:AbstractFloat} = nothing
+emccd_frame_transfer_time(mode::FrameTransferAcquisition,
+    ::Type{T}) where {T<:AbstractFloat} = T(mode.transfer_time)
+
+_emccd_readout_pixels(frame_size::Tuple{Int,Int}, ::Nothing) =
+    frame_size[1] * frame_size[2]
+_emccd_readout_pixels(frame_size::Tuple{Int,Int}, window::FrameWindow) =
+    length(window.rows) * length(window.cols)
+
+function sampling_read_time(sensor::EMCCDSensor, frame_size::Tuple{Int,Int},
+    window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat}
+    sensor.readout_rate_hz === nothing && return nothing
+    return T(_emccd_readout_pixels(frame_size, window)) /
+        T(sensor.readout_rate_hz)
+end
+
+sampling_read_time(::EMCCDSensor, ::Type{T}) where {T<:AbstractFloat} = nothing
+
+function sampling_wallclock_time(sensor::EMCCDSensor, integration_time,
+    frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow},
+    ::Type{T}) where {T<:AbstractFloat}
+    readout_time = sampling_read_time(sensor, frame_size, window, T)
+    readout_time === nothing && return nothing
+    return emccd_first_frame_latency(sensor.acquisition_mode,
+        T(integration_time), readout_time)
+end
+
+sampling_wallclock_time(::EMCCDSensor, integration_time,
+    ::Type{T}) where {T<:AbstractFloat} = nothing
+
+emccd_first_frame_latency(::SequentialAcquisition, integration_time,
+    readout_time) = integration_time + readout_time
+emccd_first_frame_latency(mode::FrameTransferAcquisition, integration_time,
+    readout_time) = integration_time + mode.transfer_time + readout_time
+
+function steady_state_frame_period(sensor::EMCCDSensor, integration_time,
+    frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow},
+    ::Type{T}) where {T<:AbstractFloat}
+    readout_time = sampling_read_time(sensor, frame_size, window, T)
+    readout_time === nothing && return nothing
+    return emccd_steady_state_frame_period(sensor.acquisition_mode,
+        T(integration_time), readout_time)
+end
+
+emccd_steady_state_frame_period(::SequentialAcquisition, integration_time,
+    readout_time) = integration_time + readout_time
+emccd_steady_state_frame_period(mode::FrameTransferAcquisition,
+    integration_time, readout_time) =
+    max(integration_time, readout_time) + mode.transfer_time
+
 convert_em_gain_model(::ExcessNoiseApproximation, ::Type{T}) where {T<:AbstractFloat} = ExcessNoiseApproximation()
 convert_em_gain_model(model::StochasticMultiplicationRegister, ::Type{T}) where {T<:AbstractFloat} =
     StochasticMultiplicationRegister{T}(T(model.register_noise_factor))
@@ -87,6 +174,18 @@ convert_emccd_operating_mode(mode::PhotonCountingEMMode, ::Type{T}) where {T<:Ab
 validate_em_gain_model(::ExcessNoiseApproximation) = ExcessNoiseApproximation()
 validate_emccd_operating_mode(::LinearEMMode) = LinearEMMode()
 validate_emccd_operating_mode(mode::PhotonCountingEMMode) = mode
+convert_emccd_acquisition_mode(::SequentialAcquisition, ::Type{T}) where
+    {T<:AbstractFloat} = SequentialAcquisition()
+convert_emccd_acquisition_mode(mode::FrameTransferAcquisition,
+    ::Type{T}) where {T<:AbstractFloat} =
+    FrameTransferAcquisition{T}(T(mode.transfer_time))
+validate_emccd_acquisition_mode(::SequentialAcquisition) = SequentialAcquisition()
+
+function validate_emccd_acquisition_mode(mode::FrameTransferAcquisition)
+    mode.transfer_time >= zero(mode.transfer_time) || throw(InvalidConfiguration(
+        "FrameTransferAcquisition transfer_time must be >= 0"))
+    return mode
+end
 
 function validate_em_gain_model(model::StochasticMultiplicationRegister)
     model.register_noise_factor >= zero(model.register_noise_factor) ||

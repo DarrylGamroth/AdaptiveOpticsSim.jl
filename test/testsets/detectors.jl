@@ -199,8 +199,59 @@
     @test_throws InvalidConfiguration EMCCDSensor(multiplication_model=StochasticMultiplicationRegister(-1.0))
     @test_throws InvalidConfiguration EMCCDSensor(em_gain_range=(10.0, 1.0))
     @test_throws InvalidConfiguration EMCCDSensor(readout_rate_hz=-1.0)
+    @test_throws InvalidConfiguration FrameTransferAcquisition(
+        transfer_time=-1.0)
     @test_throws InvalidConfiguration PhotonCountingEMMode(threshold=-1.0)
     @test_throws InvalidConfiguration PhotonCountingEMMode(threshold=1.0, detection_efficiency=1.5)
+
+    emccd_timing_input = fill(2.0, 4, 4)
+    emccd_sequential = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=1.0, gain=1.0, response_model=NullFrameResponse(),
+        sensor=EMCCDSensor(readout_rate_hz=1000.0,
+            acquisition_mode=SequentialAcquisition()))
+    emccd_frame_transfer = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0, gain=1.0,
+        response_model=NullFrameResponse(),
+        sensor=EMCCDSensor(readout_rate_hz=1000.0,
+            acquisition_mode=FrameTransferAcquisition(
+                transfer_time=0.002)))
+    sequential_frame = copy(capture!(emccd_sequential, emccd_timing_input;
+        rng=MersenneTwister(126)))
+    frame_transfer_frame = copy(capture!(emccd_frame_transfer,
+        emccd_timing_input; rng=MersenneTwister(126)))
+    @test frame_transfer_frame == sequential_frame
+    sequential_meta = detector_export_metadata(emccd_sequential)
+    frame_transfer_meta = detector_export_metadata(emccd_frame_transfer)
+    @test sequential_meta.acquisition_mode == :sequential
+    @test sequential_meta.frame_transfer_time === nothing
+    @test sequential_meta.sampling_read_time == 0.016
+    @test sequential_meta.sampling_wallclock_time == 1.016
+    @test sequential_meta.steady_state_frame_period == 1.016
+    @test frame_transfer_meta.acquisition_mode == :frame_transfer
+    @test frame_transfer_meta.frame_transfer_time == 0.002
+    @test frame_transfer_meta.sampling_read_time == 0.016
+    @test frame_transfer_meta.sampling_wallclock_time == 1.018
+    @test frame_transfer_meta.steady_state_frame_period == 1.002
+
+    emccd_readout_limited = Detector(integration_time=0.001,
+        noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
+        sensor=EMCCDSensor(readout_rate_hz=1000.0,
+            acquisition_mode=FrameTransferAcquisition(
+                transfer_time=0.002)))
+    capture!(emccd_readout_limited, emccd_timing_input;
+        rng=MersenneTwister(126))
+    readout_limited_meta = detector_export_metadata(emccd_readout_limited)
+    @test readout_limited_meta.steady_state_frame_period ≈ 0.018
+
+    emccd_unknown_timing = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0,
+        sensor=EMCCDSensor(acquisition_mode=FrameTransferAcquisition()))
+    capture!(emccd_unknown_timing, emccd_timing_input;
+        rng=MersenneTwister(126))
+    unknown_timing_meta = detector_export_metadata(emccd_unknown_timing)
+    @test unknown_timing_meta.sampling_read_time === nothing
+    @test unknown_timing_meta.sampling_wallclock_time === nothing
+    @test unknown_timing_meta.steady_state_frame_period === nothing
 
     det_emccd_conventional = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=10.0, sensor=EMCCDSensor(output_path=ConventionalOutput()))
@@ -553,6 +604,93 @@
     @test fowler_meta.signal_cube_reads == 8
     @test detector_combined_frame(det_saphira_fowler) ≈
         detector_signal_frame(det_saphira_fowler) .- detector_reference_frame(det_saphira_fowler)
+
+    ramp_input = fill(5.0, 4, 4)
+    ramp_detector = Detector(integration_time=2.0, noise=NoiseNone(),
+        qe=1.0, gain=1.0, response_model=NullFrameResponse(),
+        sensor=HgCdTeAvalancheArraySensor(read_time=0.1,
+            sampling_mode=UpTheRampSampling(5)))
+    ramp_rng = MersenneTwister(161)
+    ramp_frame = copy(capture!(ramp_detector, ramp_input, ramp_rng))
+    @test ramp_frame == fill(10.0, 4, 4)
+    @test detector_ramp_slope(ramp_detector) == fill(5.0, 4, 4)
+    @test detector_ramp_intercept(ramp_detector) == zeros(4, 4)
+    @test detector_signal_frame(ramp_detector) == ramp_frame
+    @test detector_combined_frame(ramp_detector) == ramp_frame
+    @test detector_reference_frame(ramp_detector) === nothing
+    @test detector_reference_cube(ramp_detector) === nothing
+    @test size(detector_signal_cube(ramp_detector)) == (4, 4, 5)
+    @test detector_signal_cube(ramp_detector) ===
+        detector_read_cube(ramp_detector)
+    @test detector_ramp_cube(ramp_detector) ===
+        detector_read_cube(ramp_detector)
+    @test detector_ramp_times(ramp_detector) ===
+        detector_read_times(ramp_detector)
+    @test detector_read_times(ramp_detector) == [0.0, 0.5, 1.0, 1.5, 2.0]
+    @test vec(Array(detector_read_cube(ramp_detector)[1, 1, :])) ==
+        [0.0, 2.5, 5.0, 7.5, 10.0]
+    ramp_meta = detector_export_metadata(ramp_detector)
+    @test ramp_meta.sampling_mode == :up_the_ramp
+    @test ramp_meta.sampling_reads == 5
+    @test ramp_meta.sampling_reference_reads == 0
+    @test ramp_meta.sampling_signal_reads == 5
+    @test ramp_meta.sampling_read_time == 0.1
+    @test ramp_meta.sampling_wallclock_time == 2.1
+    @test ramp_meta.provides_signal_frame
+    @test ramp_meta.provides_combined_frame
+    @test ramp_meta.provides_signal_cube
+    @test ramp_meta.provides_read_cube
+    @test ramp_meta.signal_cube_reads == 5
+    @test ramp_meta.read_cube_reads == 5
+    @test supports_up_the_ramp(ramp_detector.params.sensor)
+    capture!(ramp_detector, ramp_input, ramp_rng)
+    @test @allocated(capture!(ramp_detector, ramp_input, ramp_rng)) == 0
+    ramp_stack = fill(5.0, 2, 4, 4)
+    @test_throws InvalidConfiguration capture_stack!(ramp_detector,
+        ramp_stack, similar(ramp_stack), MersenneTwister(161))
+
+    ramp_window_detector = Detector(integration_time=2.0,
+        noise=NoiseNone(), qe=1.0, gain=1.0,
+        response_model=NullFrameResponse(),
+        sensor=HgCdTeAvalancheArraySensor(read_time=0.1,
+            sampling_mode=UpTheRampSampling(5)),
+        readout_window=FrameWindow(2:3, 2:4))
+    ramp_window_rng = MersenneTwister(162)
+    ramp_window_frame = capture!(ramp_window_detector, ramp_input,
+        ramp_window_rng)
+    @test size(ramp_window_frame) == (2, 3)
+    @test ramp_window_frame == fill(10.0, 2, 3)
+    @test size(detector_ramp_slope(ramp_window_detector)) == (2, 3)
+    @test size(detector_read_cube(ramp_window_detector)) == (2, 3, 5)
+    capture!(ramp_window_detector, ramp_input, ramp_window_rng)
+    @test @allocated(capture!(ramp_window_detector, ramp_input,
+        ramp_window_rng)) == 0
+
+    ramp_noise_detector = Detector(integration_time=1.0,
+        noise=NoiseReadout(4.0), qe=1.0, gain=1.0,
+        response_model=NullFrameResponse(),
+        sensor=HgCdTeAvalancheArraySensor(read_time=0.01,
+            sampling_mode=UpTheRampSampling(16)))
+    ramp_noise_frame = copy(capture!(ramp_noise_detector, zeros(64, 64);
+        rng=MersenneTwister(163)))
+    expected_ramp_sigma = 4.0 * sqrt(12 * 15 / (16 * 17))
+    @test isapprox(std(ramp_noise_frame), expected_ramp_sigma; rtol=0.12)
+    @test detector_export_metadata(ramp_noise_detector).readout_sigma ≈
+        expected_ramp_sigma
+
+    @test_throws InvalidConfiguration validate_frame_sampling_mode(
+        UpTheRampSampling(1))
+    @test_throws InvalidConfiguration CCDSensor(
+        sampling_mode=UpTheRampSampling(4))
+    @test_throws InvalidConfiguration HgCdTeAvalancheArraySensor(
+        sampling_mode=SkipperSampling(4))
+    invalid_ramp_schedule = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0,
+        sensor=HgCdTeAvalancheArraySensor(read_time=0.3,
+            sampling_mode=UpTheRampSampling(5)))
+    @test_throws InvalidConfiguration capture!(invalid_ramp_schedule,
+        ones(4, 4); rng=MersenneTwister(164))
+
     multiread_noise_fixture = zeros(64, 64)
     single_std = std(vec(copy(capture!(det_saphira_single, multiread_noise_fixture;
         rng=MersenneTwister(160)))))

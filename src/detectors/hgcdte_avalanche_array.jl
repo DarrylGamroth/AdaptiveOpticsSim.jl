@@ -13,14 +13,27 @@ function HgCdTeAvalancheArraySensor(; avalanche_gain::Real=1.0, excess_noise_fac
     excess_noise_factor >= 1 || throw(InvalidConfiguration("HgCdTeAvalancheArraySensor excess_noise_factor must be >= 1"))
     glow_rate >= 0 || throw(InvalidConfiguration("HgCdTeAvalancheArraySensor glow_rate must be >= 0"))
     read_time >= 0 || throw(InvalidConfiguration("HgCdTeAvalancheArraySensor read_time must be >= 0"))
-    validate_frame_sampling_mode(sampling_mode)
-    return HgCdTeAvalancheArraySensor{T,typeof(sampling_mode)}(
-        T(avalanche_gain), T(excess_noise_factor), T(glow_rate), T(read_time), sampling_mode)
+    mode = validate_hgcdte_sampling_mode(sampling_mode)
+    return HgCdTeAvalancheArraySensor{T,typeof(mode)}(
+        T(avalanche_gain), T(excess_noise_factor), T(glow_rate), T(read_time), mode)
 end
+
+validate_hgcdte_sampling_mode(mode::SingleRead) = validate_frame_sampling_mode(mode)
+validate_hgcdte_sampling_mode(mode::AveragedNonDestructiveReads) =
+    validate_frame_sampling_mode(mode)
+validate_hgcdte_sampling_mode(mode::CorrelatedDoubleSampling) =
+    validate_frame_sampling_mode(mode)
+validate_hgcdte_sampling_mode(mode::FowlerSampling) = validate_frame_sampling_mode(mode)
+validate_hgcdte_sampling_mode(mode::UpTheRampSampling) = validate_frame_sampling_mode(mode)
+validate_hgcdte_sampling_mode(::FrameSamplingMode) = throw(InvalidConfiguration(
+    "HgCdTeAvalancheArraySensor sampling_mode must be SingleRead, " *
+    "AveragedNonDestructiveReads, CorrelatedDoubleSampling, FowlerSampling, " *
+    "or UpTheRampSampling"))
 
 detector_sensor_symbol(::HgCdTeAvalancheArraySensor) = :hgcdte_avalanche_array
 supports_sensor_glow(::HgCdTeAvalancheArraySensor) = true
 supports_nondestructive_reads(::HgCdTeAvalancheArraySensorType) = true
+supports_up_the_ramp(::HgCdTeAvalancheArraySensorType) = true
 supports_reference_read_subtraction(::HgCdTeAvalancheArraySensorType) = true
 supports_readout_correction(::HgCdTeAvalancheArraySensorType) = true
 supports_read_cube(::HgCdTeAvalancheArraySensorType) = true
@@ -49,12 +62,25 @@ function sampling_wallclock_time(sensor::HgCdTeAvalancheArraySensor, integration
     return T(integration_time) + T(reads) * T(sensor.read_time)
 end
 
+function sampling_wallclock_time(
+    sensor::HgCdTeAvalancheArraySensor{<:AbstractFloat,<:UpTheRampSampling},
+    integration_time, ::Type{T}) where {T<:AbstractFloat}
+    return T(integration_time) + T(sensor.read_time)
+end
+
 function sampling_wallclock_time(sensor::HgCdTeAvalancheArraySensor, integration_time, frame_size::Tuple{Int,Int},
     window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat}
     reads = frame_sampling_reads(sensor)
     reads === nothing && return T(integration_time)
     read_dt = sampling_read_time(sensor, frame_size, window, T)
     return T(integration_time) + T(reads) * read_dt
+end
+
+function sampling_wallclock_time(
+    sensor::HgCdTeAvalancheArraySensor{<:AbstractFloat,<:UpTheRampSampling},
+    integration_time, frame_size::Tuple{Int,Int},
+    window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat}
+    return T(integration_time) + sampling_read_time(sensor, frame_size, window, T)
 end
 
 effective_readout_sigma(sensor::HgCdTeAvalancheArraySensorType, sigma) = effective_readout_sigma(multi_read_sampling_mode(sensor), sigma)
@@ -64,6 +90,11 @@ function effective_dark_current_time(sensor::HgCdTeAvalancheArraySensorType, exp
     reads === nothing && return exposure_time
     return exposure_time + reads * sensor.read_time
 end
+
+
+effective_dark_current_time(
+    ::HgCdTeAvalancheArraySensor{<:AbstractFloat,<:UpTheRampSampling},
+    exposure_time) = exposure_time
 
 effective_sensor_glow_time(sensor::HgCdTeAvalancheArraySensorType, exposure_time) =
     effective_dark_current_time(sensor, exposure_time)
@@ -106,8 +137,33 @@ end
 
 _batched_post_readout_gain!(::HgCdTeAvalancheArraySensor, det::Detector, cube::AbstractArray) = (cube .*= det.params.gain; cube)
 
-finalize_readout_products!(sensor::HgCdTeAvalancheArraySensor, det::Detector, rng::AbstractRNG, exposure_time::Real) =
-    finalize_multi_read_readout_products!(sensor, det, rng)
+_require_batched_sensor_compat(
+    ::HgCdTeAvalancheArraySensor{<:AbstractFloat,<:UpTheRampSampling}) =
+    throw(InvalidConfiguration(
+        "batched detector capture does not retain up-the-ramp read products; " *
+        "use repeated capture! calls"))
+
+function detector_readout_products_type(
+    ::HgCdTeAvalancheArraySensor{<:AbstractFloat,<:UpTheRampSampling},
+    frame::A, ::Type{T}) where {T<:AbstractFloat,A<:AbstractMatrix{T}}
+    cube_type = typeof(similar(frame, size(frame, 1), size(frame, 2), 1))
+    return Union{NoFrameReadoutProducts,UpTheRampReadoutProducts{A,cube_type,Vector{T}}}
+end
+
+function finalize_readout_products!(sensor::HgCdTeAvalancheArraySensor,
+    det::Detector, rng::AbstractRNG, exposure_time::Real)
+    return finalize_hgcdte_readout_products!(sensor.sampling_mode, sensor, det,
+        rng, exposure_time)
+end
+
+finalize_hgcdte_readout_products!(::FrameSamplingMode,
+    sensor::HgCdTeAvalancheArraySensor, det::Detector, rng::AbstractRNG,
+    exposure_time::Real) = finalize_multi_read_readout_products!(sensor, det, rng)
+
+finalize_hgcdte_readout_products!(mode::UpTheRampSampling,
+    sensor::HgCdTeAvalancheArraySensor, det::Detector, rng::AbstractRNG,
+    exposure_time::Real) =
+    finalize_up_the_ramp_readout_products!(mode, sensor, det, rng, exposure_time)
 
 function _finalize_capture!(::HgCdTeAvalancheArraySensorType, det::Detector,
     rng::AbstractRNG, exposure_time::Real)

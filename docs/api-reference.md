@@ -149,18 +149,21 @@ influence basis already includes the print-through structure.
   generated-charge statistics rather than as a pre-shot image blur.
 - Defects: `PixelResponseNonuniformity`, `DarkSignalNonuniformity`,
   `BadPixelMask`, `CompositeDetectorDefectModel`
-- Readout timing and correction: `RollingShutter`, `RollingExposure`,
-  `GlobalResetExposure`,
+- Readout timing and correction: `GlobalShutter`, `RollingShutter`,
+  `RollingExposure`, `GlobalResetExposure`, `SequentialAcquisition`,
+  `FrameTransferAcquisition`, `SingleRead`,
+  `AveragedNonDestructiveReads`,
   `FunctionFrameSource`, `InPlaceFrameSource`,
   `FunctionExposureFrameSource`, `InPlaceExposureFrameSource`,
-  `CorrelatedDoubleSampling`, `FowlerSampling`, `SkipperSampling`,
+  `CorrelatedDoubleSampling`, `FowlerSampling`, `UpTheRampSampling`,
+  `SkipperSampling`,
   `FrameReadoutCorrectionModel`, `NullFrameReadoutCorrection`,
   `ReferencePixelCommonModeCorrection`, `ReferenceRowCommonModeCorrection`,
   `ReferenceColumnCommonModeCorrection`,
   `ReferenceOutputCommonModeCorrection`, `CompositeFrameReadoutCorrection`
 - Readout products: `FrameReadoutProducts`, `NoFrameReadoutProducts`,
-  `MultiReadFrameReadoutProducts`, `SkipperReadoutProducts`,
-  `HgCdTeReadoutProducts`
+  `MultiReadFrameReadoutProducts`, `UpTheRampReadoutProducts`,
+  `SkipperReadoutProducts`, `HgCdTeReadoutProducts`
 - Nonlinearity and persistence: `SaturatingFrameNonlinearity`,
   `ExponentialPersistence`
 - Thermal models: `AbstractDetectorThermalModel`,
@@ -172,7 +175,8 @@ influence basis already includes the print-through structure.
   `CompositeCountingCorrelation`
 - Runtime functions: `capture!`, `output_frame`, `channel_output`,
   `detector_export_metadata`, `readout_ready`, `reset_integration!`,
-  `thermal_model`
+  `thermal_model`, `detector_ramp_slope`, `detector_ramp_intercept`,
+  `detector_ramp_cube`, `detector_ramp_times`
 
 Use `bits` for detector quantization depth and `output_type` for the Julia
 element type exported to an RTC/HIL boundary. A detector with `bits` must also
@@ -213,6 +217,29 @@ sample count and keeps the warmed repeated-capture path allocation-free. The
 current model assumes independent read samples. Configure CCD clock-induced
 charge with `clock_induced_charge_per_frame`; unlike dark current, it is not
 scaled by integration time.
+
+`UpTheRampSampling(n)` is available on `HgCdTeAvalancheArraySensor`, including
+the conventional gain-one configuration. It retains `n` evenly spaced
+nondestructive reads, fits an intercept and slope, and returns
+`slope * integration_time` so ordinary `capture!` output units do not change.
+Use `detector_ramp_slope(det)`, `detector_ramp_intercept(det)`,
+`detector_ramp_cube(det)`, and `detector_ramp_times(det)` for diagnostics.
+Reads start at exposure time zero and end at the configured integration time;
+`read_time` must fit within the resulting cadence. Full-frame and windowed
+repeated capture reuse
+their products after warmup.
+
+The current ramp model assumes linear accumulation and independent per-read
+Gaussian read noise. It shares the exposure's photon/dark realization across
+the ramp and does not yet provide cosmic-ray segmentation, saturation-aware
+fitting, or correlated 1/f-noise estimation.
+
+`EMCCDSensor(...; acquisition_mode=FrameTransferAcquisition(...))` models frame
+transfer as timing only. With `readout_rate_hz` configured, metadata reports
+the pixel-read duration, one-frame output latency in `sampling_wallclock_time`,
+and the overlapped `steady_state_frame_period`. `SequentialAcquisition()` is
+the default. Neither acquisition policy changes MTF, QE, charge multiplication,
+or detector noise.
 
 ## Wavefront Sensors
 

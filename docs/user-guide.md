@@ -299,6 +299,26 @@ conditional Gamma model on CPU and a nonnegative moment approximation on
 accelerators. Camera-specific parameter packs belong in a companion profiles
 package.
 
+Frame transfer is an acquisition-timing policy, not an optical response. Set a
+pixel readout rate and transfer time when frame latency or sustained cadence
+matters:
+
+```julia
+frame_transfer_emccd = Detector(
+    integration_time=1e-3,
+    sensor=EMCCDSensor(
+        readout_rate_hz=10e6,
+        acquisition_mode=FrameTransferAcquisition(transfer_time=20e-6),
+    ),
+)
+```
+
+After the first capture, `detector_export_metadata(frame_transfer_emccd)`
+reports one-frame output latency as `sampling_wallclock_time` and the overlapped
+cadence as `steady_state_frame_period`. `SequentialAcquisition()` instead adds
+integration and readout durations. Both modes run the same optical, charge, EM
+gain, and noise pipeline.
+
 HgCdTe avalanche arrays likewise have no implicit optical blur or interpixel
 coupling. Configure detector MTF and post-collection IPC as separate effects:
 
@@ -311,6 +331,34 @@ det = Detector(
         [0.0 0.01 0.0; 0.01 0.96 0.01; 0.0 0.01 0.0]),
 )
 ```
+
+Conventional gain-one HgCdTe arrays and avalanche/SAPHIRA-style arrays support
+up-the-ramp fitting:
+
+```julia
+ramp_detector = Detector(
+    integration_time=1.0,
+    noise=NoisePhotonReadout(8.0),
+    sensor=HgCdTeAvalancheArraySensor(
+        avalanche_gain=1.0,
+        read_time=20e-3,
+        sampling_mode=UpTheRampSampling(16),
+    ),
+)
+
+integrated = capture!(ramp_detector, image; rng=runtime_rng(5))
+slope = detector_ramp_slope(ramp_detector)
+intercept = detector_ramp_intercept(ramp_detector)
+read_cube = detector_ramp_cube(ramp_detector)
+read_times = detector_ramp_times(ramp_detector)
+```
+
+Reads are evenly spaced from zero through the integration time. The returned
+frame is `slope * integration_time`, while the fitted slope, intercept, read
+cube, and timestamps remain in detector-owned reusable products. The read time
+must not exceed the spacing between ramp samples. This linear estimator does
+not yet perform cosmic-ray segmentation, saturation-aware fitting, or
+correlated-noise estimation.
 
 For a linear-mode single-element APD, use `LinearAPDDetector`. Its channel
 storage is a vector rather than a fake 1×1 image. `SingleElementAPD()` accepts

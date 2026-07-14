@@ -58,6 +58,7 @@ supports_photon_number_resolving(::SensorType) = false
 supports_energy_resolving(::SensorType) = false
 supports_raw_digital_output(::SensorType) = false
 supports_nondestructive_reads(::FrameSensorType) = false
+supports_up_the_ramp(::FrameSensorType) = false
 supports_reference_read_subtraction(::FrameSensorType) = false
 supports_readout_correction(::FrameSensorType) = false
 supports_read_cube(::FrameSensorType) = false
@@ -75,6 +76,18 @@ struct CorrelatedDoubleSampling <: FrameSamplingMode end
 
 struct FowlerSampling <: FrameSamplingMode
     n_pairs::Int
+end
+
+"""
+    UpTheRampSampling(n_reads)
+
+Fit a line to `n_reads` evenly spaced nondestructive reads spanning the
+integration. The detector output remains in integrated-frame units and is the
+fitted slope multiplied by the integration time. At least two reads are
+required so that both an intercept and slope can be estimated.
+"""
+struct UpTheRampSampling <: FrameSamplingMode
+    n_reads::Int
 end
 
 """
@@ -108,34 +121,46 @@ sampling_wallclock_time(::FrameSensorType, integration_time, ::Type{T}) where {T
 sampling_wallclock_time(sensor::FrameSensorType, integration_time, frame_size::Tuple{Int,Int},
     window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat} =
     sampling_wallclock_time(sensor, integration_time, T)
+acquisition_mode_symbol(::FrameSensorType) = :standard
+frame_transfer_time(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = nothing
+steady_state_frame_period(sensor::FrameSensorType, integration_time,
+    frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow},
+    ::Type{T}) where {T<:AbstractFloat} =
+    sampling_wallclock_time(sensor, integration_time, frame_size, window, T)
 frame_sampling_symbol(::SingleRead) = :single_read
 frame_sampling_symbol(::AveragedNonDestructiveReads) = :averaged_non_destructive_reads
 frame_sampling_symbol(::CorrelatedDoubleSampling) = :correlated_double_sampling
 frame_sampling_symbol(::FowlerSampling) = :fowler_sampling
+frame_sampling_symbol(::UpTheRampSampling) = :up_the_ramp
 frame_sampling_symbol(::SkipperSampling) = :skipper
 
 frame_sampling_reads(::SingleRead) = 1
 frame_sampling_reads(mode::AveragedNonDestructiveReads) = mode.n_reads
 frame_sampling_reads(::CorrelatedDoubleSampling) = 2
 frame_sampling_reads(mode::FowlerSampling) = 2 * mode.n_pairs
+frame_sampling_reads(mode::UpTheRampSampling) = mode.n_reads
 frame_sampling_reads(mode::SkipperSampling) = mode.n_samples
 
 frame_sampling_reference_reads(::SingleRead) = 0
 frame_sampling_reference_reads(::AveragedNonDestructiveReads) = 0
 frame_sampling_reference_reads(::CorrelatedDoubleSampling) = 1
 frame_sampling_reference_reads(mode::FowlerSampling) = mode.n_pairs
+frame_sampling_reference_reads(::UpTheRampSampling) = 0
 frame_sampling_reference_reads(::SkipperSampling) = 0
 
 frame_sampling_signal_reads(::SingleRead) = 1
 frame_sampling_signal_reads(mode::AveragedNonDestructiveReads) = mode.n_reads
 frame_sampling_signal_reads(::CorrelatedDoubleSampling) = 1
 frame_sampling_signal_reads(mode::FowlerSampling) = mode.n_pairs
+frame_sampling_signal_reads(mode::UpTheRampSampling) = mode.n_reads
 frame_sampling_signal_reads(mode::SkipperSampling) = mode.n_samples
 
 effective_readout_sigma(::FrameSamplingMode, sigma) = sigma
 effective_readout_sigma(mode::AveragedNonDestructiveReads, sigma) = sigma / sqrt(mode.n_reads)
 effective_readout_sigma(::CorrelatedDoubleSampling, sigma) = sigma * sqrt(2)
 effective_readout_sigma(mode::FowlerSampling, sigma) = sigma * sqrt(2 / mode.n_pairs)
+effective_readout_sigma(mode::UpTheRampSampling, sigma) =
+    sigma * sqrt(12 * (mode.n_reads - 1) / (mode.n_reads * (mode.n_reads + 1)))
 effective_readout_sigma(mode::SkipperSampling, sigma) = sigma / sqrt(mode.n_samples)
 
 validate_frame_sampling_mode(::SingleRead) = SingleRead()
@@ -149,6 +174,12 @@ validate_frame_sampling_mode(::CorrelatedDoubleSampling) = CorrelatedDoubleSampl
 
 function validate_frame_sampling_mode(mode::FowlerSampling)
     mode.n_pairs >= 1 || throw(InvalidConfiguration("FowlerSampling n_pairs must be >= 1"))
+    return mode
+end
+
+function validate_frame_sampling_mode(mode::UpTheRampSampling)
+    mode.n_reads >= 2 ||
+        throw(InvalidConfiguration("UpTheRampSampling n_reads must be >= 2"))
     return mode
 end
 
@@ -774,6 +805,27 @@ struct MultiReadFrameReadoutProducts{A<:AbstractMatrix,C,V} <: FrameReadoutProdu
     end
 end
 
+"""
+    UpTheRampReadoutProducts
+
+Preallocated products from an up-the-ramp fit. `integrated_frame` is the slope
+multiplied by the integration time and therefore matches ordinary detector
+output units. The `workspace_*` arrays are detector-owned full-frame storage;
+the public products may be windowed views copied into reusable arrays.
+"""
+struct UpTheRampReadoutProducts{A<:AbstractMatrix,C<:AbstractArray,V<:AbstractVector} <:
+    FrameReadoutProducts
+    slope_frame::A
+    intercept_frame::A
+    integrated_frame::A
+    read_cube::C
+    read_times::V
+    workspace_slope::A
+    workspace_intercept::A
+    workspace_integrated::A
+    workspace_cube::C
+end
+
 @inline function _multi_read_cube_param(reference_cube, signal_cube, read_cube)
     if !isnothing(reference_cube)
         return typeof(reference_cube)
@@ -1083,6 +1135,9 @@ struct DetectorExportMetadata{T<:AbstractFloat}
     window_cols::Union{Nothing,Tuple{Int,Int}}
     timing_model::Symbol
     timing_line_time::Union{Nothing,T}
+    acquisition_mode::Symbol
+    frame_transfer_time::Union{Nothing,T}
+    steady_state_frame_period::Union{Nothing,T}
     thermal_model::Symbol
     detector_temperature_K::Union{Nothing,T}
     ambient_temperature_K::Union{Nothing,T}

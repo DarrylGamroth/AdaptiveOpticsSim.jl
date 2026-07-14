@@ -55,27 +55,31 @@ export Detector, APDDetector, LinearAPDDetector, SPADArrayDetector, MKIDArrayDet
 export NoiseModel, NoiseNone, NoisePhoton, NoiseReadout, NoisePhotonReadout
 export SensorType, CCDSensor, CMOSSensor, EMCCDSensor, InGaAsSensor
 export LinearEMMode, PhotonCountingEMMode, EMOutput, ConventionalOutput, emccd_snr
+export SequentialAcquisition, FrameTransferAcquisition
 export HgCdTeAvalancheArraySensor, APDSensor, SPADArraySensor, MKIDArraySensor
 export SingleElementAPD, APDChannelBank
 export FrameResponseModel, NullFrameResponse, GaussianPixelResponse, SampledFrameResponse
 export RectangularPixelAperture, SeparablePixelMTF
 export CMOSReadNoiseMap, InterpixelCapacitance, detector_mtf
 export PixelResponseNonuniformity, DarkSignalNonuniformity, BadPixelMask, CompositeDetectorDefectModel
-export RollingShutter, RollingExposure, GlobalResetExposure, CorrelatedDoubleSampling, FowlerSampling
-export SkipperSampling
+export GlobalShutter, RollingShutter, RollingExposure, GlobalResetExposure
+export SingleRead, AveragedNonDestructiveReads, CorrelatedDoubleSampling, FowlerSampling
+export UpTheRampSampling, SkipperSampling
 export FunctionFrameSource, InPlaceFrameSource, FunctionExposureFrameSource, InPlaceExposureFrameSource
 export FrameReadoutCorrectionModel, NullFrameReadoutCorrection
 export ReferencePixelCommonModeCorrection, ReferenceRowCommonModeCorrection
 export ReferenceColumnCommonModeCorrection, ReferenceOutputCommonModeCorrection
 export CompositeFrameReadoutCorrection
 export FrameReadoutProducts, NoFrameReadoutProducts, MultiReadFrameReadoutProducts
-export SkipperReadoutProducts, HgCdTeReadoutProducts
+export UpTheRampReadoutProducts, SkipperReadoutProducts, HgCdTeReadoutProducts
 export SaturatingFrameNonlinearity, ExponentialPersistence
 export AbstractDetectorThermalModel, NullDetectorThermalModel, FixedTemperature, FirstOrderThermalModel
 export ArrheniusRateLaw, LinearTemperatureLaw, ExponentialTemperatureLaw
 export CountingDeadTimeModel, NoDeadTime, NonParalyzableDeadTime, ParalyzableDeadTime
 export DutyCycleGate, AfterpulsingModel, ChannelCrosstalkModel, CompositeCountingCorrelation
 export capture!, output_frame, channel_output, detector_export_metadata
+export detector_ramp_slope, detector_ramp_intercept
+export detector_ramp_cube, detector_ramp_times
 export readout_ready, reset_integration!, thermal_model
 
 export Diffractive, Geometric

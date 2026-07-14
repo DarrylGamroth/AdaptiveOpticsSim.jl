@@ -276,3 +276,186 @@ function finalize_multi_read_readout_products!(sensor::FrameSensorType, det::Det
     end
     return products
 end
+
+function _up_the_ramp_products_ready(products::UpTheRampReadoutProducts,
+    det::Detector, n_reads::Int)
+    output_shape = readout_product_shape(det)
+    frame_shape = size(det.state.frame)
+    return size(products.slope_frame) == output_shape &&
+        size(products.intercept_frame) == output_shape &&
+        size(products.integrated_frame) == output_shape &&
+        size(products.read_cube) == (output_shape..., n_reads) &&
+        length(products.read_times) == n_reads &&
+        size(products.workspace_slope) == frame_shape &&
+        size(products.workspace_intercept) == frame_shape &&
+        size(products.workspace_integrated) == frame_shape &&
+        size(products.workspace_cube) == (frame_shape..., n_reads)
+end
+
+_up_the_ramp_products_ready(::FrameReadoutProducts, det::Detector,
+    n_reads::Int) = false
+
+function ensure_up_the_ramp_products!(det::Detector, n_reads::Int)
+    current = readout_products(det)
+    _up_the_ramp_products_ready(current, det, n_reads) && return current
+
+    frame = det.state.frame
+    output_shape = readout_product_shape(det)
+    frame_shape = size(frame)
+    slope_frame = similar(frame, output_shape...)
+    intercept_frame = similar(frame, output_shape...)
+    integrated_frame = similar(frame, output_shape...)
+    read_cube = similar(frame, output_shape..., n_reads)
+    read_times = Vector{eltype(frame)}(undef, n_reads)
+
+    if det.params.readout_window === nothing
+        workspace_slope = slope_frame
+        workspace_intercept = intercept_frame
+        workspace_integrated = integrated_frame
+        workspace_cube = read_cube
+    else
+        workspace_slope = similar(frame, frame_shape...)
+        workspace_intercept = similar(frame, frame_shape...)
+        workspace_integrated = similar(frame, frame_shape...)
+        workspace_cube = similar(frame, frame_shape..., n_reads)
+    end
+
+    products = UpTheRampReadoutProducts(slope_frame, intercept_frame,
+        integrated_frame, read_cube, read_times, workspace_slope,
+        workspace_intercept, workspace_integrated, workspace_cube)
+    det.state.readout_products = products
+    return products
+end
+
+function validate_up_the_ramp_schedule(sensor::FrameSensorType, det::Detector,
+    mode::UpTheRampSampling, exposure_time::Real)
+    T = eltype(det.state.frame)
+    read_time = sampling_read_time(sensor, size(det.state.frame),
+        det.params.readout_window, T)
+    read_spacing = T(exposure_time) / T(mode.n_reads - 1)
+    read_time <= read_spacing + eps(read_spacing) || throw(InvalidConfiguration(
+        "up-the-ramp read_time must not exceed the spacing between reads"))
+    return read_spacing
+end
+
+function _fill_up_the_ramp_times!(times::AbstractVector{T},
+    exposure_time::Real) where {T<:AbstractFloat}
+    n_reads = length(times)
+    dt = T(exposure_time) / T(n_reads - 1)
+    for read_idx in eachindex(times)
+        times[read_idx] = T(read_idx - firstindex(times)) * dt
+    end
+    times[end] = T(exposure_time)
+    return times
+end
+
+function _sample_up_the_ramp_cube!(cube::AbstractArray{T,3},
+    sensor::FrameSensorType, det::Detector, sigma, rng::AbstractRNG) where {T}
+    n_reads = size(cube, 3)
+    denominator = T(n_reads - 1)
+    for read_idx in 1:n_reads
+        fraction = T(read_idx - 1) / denominator
+        target = @view cube[:, :, read_idx]
+        @. target = fraction * det.state.frame
+        add_gaussian_noise!(target, det, rng, sigma)
+        target .*= det.params.gain
+        apply_readout_correction!(det.params.correction_model, target, det)
+    end
+    return cube
+end
+
+@kernel function fit_up_the_ramp_kernel!(integrated, slope, intercept, cube,
+    dt, mean_time, inv_denominator, inv_n_reads, exposure_time,
+    n_reads::Int, n::Int, m::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= m
+        sum_y = zero(eltype(slope))
+        centered_dot = zero(eltype(slope))
+        @inbounds for read_idx in 1:n_reads
+            centered_time = (read_idx - 1) * dt - mean_time
+            value = cube[i, j, read_idx]
+            sum_y += value
+            centered_dot = muladd(centered_time, value, centered_dot)
+        end
+        fitted_slope = centered_dot * inv_denominator
+        fitted_intercept = sum_y * inv_n_reads - fitted_slope * mean_time
+        @inbounds begin
+            slope[i, j] = fitted_slope
+            intercept[i, j] = fitted_intercept
+            integrated[i, j] = fitted_slope * exposure_time
+        end
+    end
+end
+
+function _up_the_ramp_fit_coefficients(::Type{T}, n_reads::Int,
+    exposure_time::Real) where {T<:AbstractFloat}
+    exposure = T(exposure_time)
+    n = T(n_reads)
+    dt = exposure / T(n_reads - 1)
+    mean_time = exposure / T(2)
+    denominator = exposure * exposure * n * (n + one(T)) /
+        (T(12) * (n - one(T)))
+    return dt, mean_time, inv(denominator), inv(n), exposure
+end
+
+function _fit_up_the_ramp!(::ScalarCPUStyle, integrated::AbstractMatrix{T},
+    slope::AbstractMatrix{T}, intercept::AbstractMatrix{T},
+    cube::AbstractArray{T,3}, exposure_time::Real) where {T<:AbstractFloat}
+    n_reads = size(cube, 3)
+    dt, mean_time, inv_denominator, inv_n_reads, exposure =
+        _up_the_ramp_fit_coefficients(T, n_reads, exposure_time)
+    @inbounds for j in axes(slope, 2), i in axes(slope, 1)
+        sum_y = zero(T)
+        centered_dot = zero(T)
+        for read_idx in 1:n_reads
+            centered_time = T(read_idx - 1) * dt - mean_time
+            value = cube[i, j, read_idx]
+            sum_y += value
+            centered_dot = muladd(centered_time, value, centered_dot)
+        end
+        fitted_slope = centered_dot * inv_denominator
+        slope[i, j] = fitted_slope
+        intercept[i, j] = sum_y * inv_n_reads - fitted_slope * mean_time
+        integrated[i, j] = fitted_slope * exposure
+    end
+    return integrated
+end
+
+function _fit_up_the_ramp!(style::AcceleratorStyle,
+    integrated::AbstractMatrix{T}, slope::AbstractMatrix{T},
+    intercept::AbstractMatrix{T}, cube::AbstractArray{T,3},
+    exposure_time::Real) where {T<:AbstractFloat}
+    n_reads = size(cube, 3)
+    dt, mean_time, inv_denominator, inv_n_reads, exposure =
+        _up_the_ramp_fit_coefficients(T, n_reads, exposure_time)
+    n, m = size(slope)
+    launch_kernel!(style, fit_up_the_ramp_kernel!, integrated, slope, intercept,
+        cube, dt, mean_time, inv_denominator, inv_n_reads, exposure, n_reads,
+        n, m; ndrange=(n, m))
+    return integrated
+end
+
+function finalize_up_the_ramp_readout_products!(mode::UpTheRampSampling,
+    sensor::FrameSensorType, det::Detector, rng::AbstractRNG,
+    exposure_time::Real)
+    validate_up_the_ramp_schedule(sensor, det, mode, exposure_time)
+    products = ensure_up_the_ramp_products!(det, mode.n_reads)
+    _fill_up_the_ramp_times!(products.read_times, exposure_time)
+    _sample_up_the_ramp_cube!(products.workspace_cube, sensor, det,
+        _raw_sampling_sigma(det), rng)
+    _fit_up_the_ramp!(execution_style(products.workspace_integrated),
+        products.workspace_integrated, products.workspace_slope,
+        products.workspace_intercept, products.workspace_cube, exposure_time)
+
+    if det.params.readout_window !== nothing
+        _copy_windowed_frame!(products.slope_frame, products.workspace_slope, det)
+        _copy_windowed_frame!(products.intercept_frame,
+            products.workspace_intercept, det)
+        _copy_windowed_frame!(products.integrated_frame,
+            products.workspace_integrated, det)
+        _copy_windowed_cube!(products.read_cube, products.workspace_cube, det)
+    end
+
+    copyto!(det.state.frame, products.workspace_integrated)
+    return products
+end

@@ -620,6 +620,31 @@ end
         mark_ka_cpu_kernel!(:sampled_response_kernel!)
         @test ka_cpu_close(ka_frame, scalar_frame)
 
+        ramp_cube = Array{Float64}(undef, 5, 5, 5)
+        for read_idx in axes(ramp_cube, 3)
+            @views ramp_cube[:, :, read_idx] .=
+                ((read_idx - 1) / (size(ramp_cube, 3) - 1)) .* frame
+        end
+        scalar_ramp_integrated = similar(frame)
+        scalar_ramp_slope = similar(frame)
+        scalar_ramp_intercept = similar(frame)
+        ka_ramp_integrated = similar(frame)
+        ka_ramp_slope = similar(frame)
+        ka_ramp_intercept = similar(frame)
+        AdaptiveOpticsSim._fit_up_the_ramp!(SCALAR_CPU_STYLE,
+            scalar_ramp_integrated, scalar_ramp_slope,
+            scalar_ramp_intercept, ramp_cube, 2.0)
+        AdaptiveOpticsSim._fit_up_the_ramp!(KA_CPU_STYLE,
+            ka_ramp_integrated, ka_ramp_slope, ka_ramp_intercept,
+            ramp_cube, 2.0)
+        mark_ka_cpu_kernel!(:fit_up_the_ramp_kernel!)
+        @test ka_cpu_close(ka_ramp_integrated, scalar_ramp_integrated)
+        @test ka_cpu_close(ka_ramp_slope, scalar_ramp_slope)
+        @test ka_cpu_close(ka_ramp_intercept, scalar_ramp_intercept)
+        @test ka_cpu_close(ka_ramp_integrated, frame)
+        @test ka_cpu_close(ka_ramp_slope, frame ./ 2)
+        @test ka_cpu_close(ka_ramp_intercept, zeros(5, 5))
+
         cube = reshape(collect(1.0:50.0), 2, 5, 5)
         scalar_cube = copy(cube)
         ka_cube = copy(cube)

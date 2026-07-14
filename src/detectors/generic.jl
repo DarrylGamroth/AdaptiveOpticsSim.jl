@@ -9,6 +9,10 @@ detector_reference_cube(det::Detector) = detector_reference_cube(det.state.reado
 detector_signal_cube(det::Detector) = detector_signal_cube(det.state.readout_products)
 detector_read_cube(det::Detector) = detector_read_cube(det.state.readout_products)
 detector_read_times(det::Detector) = detector_read_times(det.state.readout_products)
+detector_ramp_slope(det::Detector) = detector_ramp_slope(det.state.readout_products)
+detector_ramp_intercept(det::Detector) = detector_ramp_intercept(det.state.readout_products)
+detector_ramp_cube(det::Detector) = detector_ramp_cube(det.state.readout_products)
+detector_ramp_times(det::Detector) = detector_ramp_times(det.state.readout_products)
 
 @inline detector_output_value(::Nothing, value) = value
 @inline detector_output_value(::Type{T}, value) where {T<:Integer} =
@@ -22,6 +26,10 @@ detector_reference_cube(::FrameReadoutProducts) = nothing
 detector_signal_cube(::FrameReadoutProducts) = nothing
 detector_read_cube(::FrameReadoutProducts) = nothing
 detector_read_times(::FrameReadoutProducts) = nothing
+detector_ramp_slope(::FrameReadoutProducts) = nothing
+detector_ramp_intercept(::FrameReadoutProducts) = nothing
+detector_ramp_cube(::FrameReadoutProducts) = nothing
+detector_ramp_times(::FrameReadoutProducts) = nothing
 detector_reference_frame(products::SampledFrameReadoutProducts) = products.reference_frame
 detector_signal_frame(products::SampledFrameReadoutProducts) = products.signal_frame
 detector_combined_frame(::SampledFrameReadoutProducts) = nothing
@@ -38,6 +46,15 @@ detector_read_cube(products::MultiReadFrameReadoutProducts) = products.read_cube
 detector_read_times(products::MultiReadFrameReadoutProducts) = products.read_times
 detector_signal_frame(products::SkipperReadoutProducts) = products.mean_frame
 detector_combined_frame(products::SkipperReadoutProducts) = products.mean_frame
+detector_signal_frame(products::UpTheRampReadoutProducts) = products.integrated_frame
+detector_combined_frame(products::UpTheRampReadoutProducts) = products.integrated_frame
+detector_signal_cube(products::UpTheRampReadoutProducts) = products.read_cube
+detector_read_cube(products::UpTheRampReadoutProducts) = products.read_cube
+detector_read_times(products::UpTheRampReadoutProducts) = products.read_times
+detector_ramp_slope(products::UpTheRampReadoutProducts) = products.slope_frame
+detector_ramp_intercept(products::UpTheRampReadoutProducts) = products.intercept_frame
+detector_ramp_cube(products::UpTheRampReadoutProducts) = products.read_cube
+detector_ramp_times(products::UpTheRampReadoutProducts) = products.read_times
 
 thermal_model(det::Detector) = det.params.thermal_model
 thermal_state(det::Detector) = det.state.thermal_state
@@ -256,6 +273,10 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         col_window,
         timing_model_symbol(det.params.timing_model),
         line_time(det.params.timing_model, T),
+        acquisition_mode_symbol(det.params.sensor),
+        frame_transfer_time(det.params.sensor, T),
+        steady_state_frame_period(det.params.sensor, det.params.integration_time,
+            size(det.state.frame), det.params.readout_window, T),
         thermal_model_symbol(det.params.thermal_model),
         detector_temperature(det, T),
         ambient_temperature_K(det.params.thermal_model, T),

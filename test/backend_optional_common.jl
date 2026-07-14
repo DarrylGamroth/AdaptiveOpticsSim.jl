@@ -341,11 +341,26 @@ function run_optional_avalanche_detector_parity(::Type{B}, BackendArray) where {
     @test isapprox(sum(stochastic_host) / length(stochastic_host), T(250);
         rtol=T(0.03))
 
+    ramp_detector = Detector(integration_time=T(2), noise=NoiseNone(),
+        qe=one(T), gain=one(T),
+        sensor=HgCdTeAvalancheArraySensor(read_time=zero(T),
+            sampling_mode=UpTheRampSampling(5), T=T),
+        response_model=NullFrameResponse(), T=T, backend=selector)
+    ramp_output = capture!(ramp_detector,
+        BackendArray(fill(T(3), 32, 32)); rng=MersenneTwister(2028))
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(ramp_output))
+    @test Array(ramp_output) == fill(T(6), 32, 32)
+    @test Array(detector_ramp_slope(ramp_detector)) == fill(T(3), 32, 32)
+    @test Array(detector_ramp_intercept(ramp_detector)) == zeros(T, 32, 32)
+    @test size(detector_ramp_cube(ramp_detector)) == (32, 32, 5)
+    @test detector_ramp_times(ramp_detector) == T[0, 0.5, 1, 1.5, 2]
+
     linear_apd = LinearAPDDetector(topology=APDChannelBank(4),
         integration_time=T(0.5), qe=T(0.5), avalanche_gain=T(4),
         conversion_gain=T(2), noise=NoiseNone(), T=T, backend=selector)
     linear_output = capture!(linear_apd, BackendArray(fill(T(10), 4));
-        rng=MersenneTwister(2028))
+        rng=MersenneTwister(2029))
     AdaptiveOpticsSim.synchronize_backend!(
         AdaptiveOpticsSim.execution_style(linear_output))
     @test linear_output isa BackendArray
