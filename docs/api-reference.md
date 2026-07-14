@@ -253,7 +253,8 @@ detector frame.
 
 - Simulation/runtime types: `AbstractControlSimulation`,
   `AbstractExecutionPolicy`, `SimulationReadout`, `AOSimulation`,
-  `SequentialExecution`, `ThreadedExecution`, `BackendStreamExecution`
+  `SequentialExecution`, `ThreadedExecution`, `BackendStreamExecution`,
+  `DeterministicExecution`, `AcceleratedKernelsExecution`, `DaggerExecution`
 - Optical-path sources: `wfs_source`, `science_source`. `AOSimulation` uses its
   WFS source for atmosphere/WFS sensing and may carry a distinct science source
   for science-camera propagation.
@@ -273,6 +274,10 @@ detector frame.
   `GroupedControlLoopConfig`, `ControlLoopScenario`,
   `build_control_loop_scenario`, `control_loop_name`,
   `control_loop_branch_labels`
+- Coarse ensembles: `SimulationEnsemble`; `prepare!`, `sense!`, and `step!`
+  apply to every member. Qualified advanced access is available through
+  `AdaptiveOpticsSim.run_ensemble!`, `ensemble_members`, `execution_policy`,
+  and `ensemble_readouts`.
 - Runtime execution: `sense!`, `step!`
 - Readout accessors: `readout`, `command`, `slopes`, `wfs_frame`,
   `science_frame`, `grouped_wfs_stack`, `runtime_timing`
@@ -280,6 +285,10 @@ detector frame.
 `ControlLoopScenario` is the preferred public assembly surface for normal
 single-plant closed-loop and HIL simulations. `SharedOpticalRuntime` is the
 typed surface when auxiliary source/WFS/science arms share that plant.
+`SimulationEnsemble` owns independent plants for offline sweeps and ensemble
+simulation. Direct `step!` calls remain the CPU HIL path; Dagger and
+AcceleratedKernels are optional coarse schedulers, not inner-loop runtime
+plans.
 Lower-level runtime construction remains
 available as qualified advanced API for tests and specialized tooling.
 For external Proper science-arm integration, use

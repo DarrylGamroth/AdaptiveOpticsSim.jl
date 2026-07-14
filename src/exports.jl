@@ -109,6 +109,7 @@ export DiscreteIntegratorController
 export AbstractControlSimulation, AbstractExecutionPolicy, SimulationReadout
 export AOSimulation, wfs_source, science_source
 export SequentialExecution, ThreadedExecution, BackendStreamExecution
+export DeterministicExecution, AcceleratedKernelsExecution, DaggerExecution
 export ScientificRuntimeProfile, HILRuntimeProfile, RuntimeOutputRequirements, GroupedRuntimeOutputRequirements
 export CPUHILExecutionPlan, DeviceResidentExecutionPlan, runtime_execution_plan
 export synchronize_runtime!
@@ -119,6 +120,7 @@ export prepare!, prepare_runtime_wfs!
 export command_segments, command_segment_range
 export ControlLoopBranch, SingleControlLoopConfig, GroupedControlLoopConfig, ControlLoopScenario
 export build_control_loop_scenario, control_loop_name, control_loop_branch_labels
+export SimulationEnsemble
 export sense!, step!, set_command!
 export readout, command, slopes, wfs_frame, science_frame, grouped_wfs_stack
 export runtime_timing

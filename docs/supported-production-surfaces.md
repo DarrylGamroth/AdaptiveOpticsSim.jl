@@ -51,6 +51,11 @@ Current CPU-supported families:
   and shared same-arm science PSF formation
 - grouped/runtime orchestration surfaces with committed validation artifacts
 
+Optional AK and Dagger ensemble policies are maintained offline orchestration
+surfaces, but are not part of the CPU HIL latency claim. Scheduler choice is
+evidence-gated per host and workload; direct `CPUHILExecutionPlan` stepping
+remains the production baseline.
+
 Primary evidence:
 
 - [model-validity-matrix.md](model-validity-matrix.md)

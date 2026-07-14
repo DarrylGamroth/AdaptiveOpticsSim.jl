@@ -1,0 +1,63 @@
+artifact_id = "ENSEMBLE-SCHEDULERS-2026-07-13"
+generated_on = "2026-07-13"
+evidence_class = "warmed closed-loop offline throughput comparison"
+source_revision = "200f757 with PR-5 worktree changes"
+raw_histogram_archived = false
+
+[environment]
+julia_version = "1.12.6"
+kernel = "Linux 6.12.57+deb13-amd64 x86_64"
+cpu = "AMD Ryzen 7 6800H with Radeon Graphics"
+physical_cores = 8
+hardware_threads = 16
+numa_nodes = 1
+julia_threads = 8
+blas_threads = 1
+fft_threads = 1
+accelerated_kernels_version = "0.4.3"
+dagger_version = "0.19.4"
+
+[workload]
+ensemble_members = 8
+pupil_resolution = 16
+lenslets = 4
+dm_actuators_per_axis = 4
+runtime_profile = "HILRuntimeProfile"
+warmup_steps_per_trial = 10
+samples_per_trial = 100
+independent_process_trials = 3
+arrival_model = "closed_loop"
+
+[sequential]
+trial_median_ns = [30226, 29901, 31424]
+median_of_trial_medians_ns = 30226
+median_trial_p95_ns = 32232
+allocated_bytes = 0
+member_steps_per_second = 264668.4
+
+[julia_threads]
+trial_median_ns = [18780, 21475, 22427]
+median_of_trial_medians_ns = 21475
+median_trial_p95_ns = 40749
+median_allocated_bytes = 3696
+member_steps_per_second = 372526.2
+
+[accelerated_kernels]
+trial_median_ns = [15774, 22868, 14908]
+median_of_trial_medians_ns = 15774
+median_trial_p95_ns = 31419
+allocated_bytes = 3584
+member_steps_per_second = 507163.7
+
+[dagger]
+trial_median_ns = [828103, 666123, 637224]
+median_of_trial_medians_ns = 666123
+median_trial_p95_ns = 1033142
+median_allocated_bytes = 595968
+member_steps_per_second = 12009.8
+
+[interpretation]
+direct_hil_default_unchanged = true
+local_ak_throughput_gate_passed = true
+dagger_small_local_latency_gate_passed = false
+notes = "On this 8-core host and 8-member micro-workload, reusable AcceleratedKernels partitioning had the best median offline throughput. Julia Threads also improved median throughput but had wider tails. Dagger was intentionally evaluated in a process-local scope and had much higher overhead; retain it for task topology, locality, and process/node scaling rather than small local latency. These closed-loop samples do not model fixed-rate arrivals, do not establish a tail-latency SLO, and do not apply to direct external-RTC HIL stepping. Rebenchmark member size/count and FFT/BLAS partitioning on EPYC or Threadripper hardware before choosing a production policy."

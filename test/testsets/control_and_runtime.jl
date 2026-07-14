@@ -852,6 +852,85 @@ end
     @test atmosphere.renders == 2
 end
 
+@testset "Coarse simulation ensembles" begin
+    function make_ensemble_runtime(seed)
+        tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3,
+            central_obstruction=0.0)
+        src = Source(band=:I, magnitude=0.0)
+        atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+        dm = DeformableMirror(tel; n_act=2, influence_width=0.3)
+        wfs = ShackHartmannWFS(tel; n_lenslets=2)
+        sim = AOSimulation(tel, src, atm, dm, wfs)
+        response = zeros(eltype(tel.state.opd), length(slopes(wfs)),
+            length(dm.state.coefs))
+        @inbounds for i in 1:min(size(response)...)
+            response[i, i] = one(eltype(response))
+        end
+        reconstructor = ModalReconstructor(InteractionMatrix(response, 0.1);
+            gain=0.5)
+        return ClosedLoopRuntime(sim, reconstructor;
+            rng=MersenneTwister(seed))
+    end
+
+    runtime_a = make_ensemble_runtime(101)
+    runtime_b = make_ensemble_runtime(102)
+    ensemble = SimulationEnsemble(runtime_a, runtime_b)
+    @test ensemble_members(ensemble) === (runtime_a, runtime_b)
+    @test execution_policy(ensemble) isa SequentialExecution
+    @test simulation_interface(ensemble) isa Tuple
+    @test length(ensemble_readouts(ensemble)) == 2
+    @test command(ensemble) == (command(runtime_a), command(runtime_b))
+    @test prepare!(ensemble) === ensemble
+    @test step!(ensemble) === ensemble
+    @test all(runtime -> any(!iszero, runtime.tel.state.opd),
+        ensemble_members(ensemble))
+    @test synchronize_runtime!(ensemble) === ensemble
+
+    threaded = SimulationEnsemble(make_ensemble_runtime(103),
+        make_ensemble_runtime(104); policy=ThreadedExecution())
+    @test step!(threaded) === threaded
+
+    shared_runtime = make_ensemble_runtime(105)
+    duplicate_runtime = ClosedLoopRuntime(
+        shared_runtime.simulation,
+        shared_runtime.reconstructor;
+        rng=MersenneTwister(106),
+    )
+    @test_throws InvalidConfiguration SimulationEnsemble(
+        shared_runtime,
+        duplicate_runtime;
+        policy=ThreadedExecution(),
+    )
+    @test_throws InvalidConfiguration SimulationEnsemble(())
+    missing_ak = SimulationEnsemble(
+        make_ensemble_runtime(107);
+        policy=AcceleratedKernelsExecution(),
+    )
+    @test_throws UnsupportedAlgorithm step!(missing_ak)
+    missing_dagger = SimulationEnsemble(
+        make_ensemble_runtime(108);
+        policy=DaggerExecution(),
+    )
+    @test_throws UnsupportedAlgorithm step!(missing_dagger)
+    missing_stream = SimulationEnsemble(
+        make_ensemble_runtime(109);
+        policy=BackendStreamExecution(),
+    )
+    @test_throws UnsupportedAlgorithm step!(missing_stream)
+
+    if Threads.nthreads() == 1
+        deterministic = SimulationEnsemble(make_ensemble_runtime(110);
+            policy=DeterministicExecution())
+        @test step!(deterministic) === deterministic
+        @test BLAS.get_num_threads() == 1
+    else
+        @test_throws InvalidConfiguration SimulationEnsemble(
+            make_ensemble_runtime(110);
+            policy=DeterministicExecution(),
+        )
+    end
+end
+
 @testset "Closed-loop runtime" begin
     rng = MersenneTwister(0)
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)

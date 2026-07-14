@@ -55,6 +55,9 @@ rng = deterministic_reference_rng(0x1234)
 - Use fixed seeds.
 - Run with one Julia thread, one BLAS thread, and one FFT-provider thread when
   strict reproducibility matters.
+- Use `DeterministicExecution()` for a `SimulationEnsemble`. It rejects a
+  multi-threaded Julia process and configures BLAS and the FFT provider for one
+  thread before execution.
 - Keep detector noise disabled for deterministic baseline comparisons unless
   the test is explicitly about noise.
 - Capture commands, configuration, and RNG seed/state in validation artifacts.

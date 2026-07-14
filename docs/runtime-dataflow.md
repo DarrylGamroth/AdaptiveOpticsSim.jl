@@ -147,6 +147,13 @@ Backend validation is attached at three levels:
 - smoke scripts
 - benchmark evidence
 
+Independent runtime plants may be collected into `SimulationEnsemble` for
+coarse sweeps. Sequential execution remains the default. Julia threads,
+AcceleratedKernels task partitioning, and Dagger task graphs are explicit
+policies above each runtime; they do not replace the runtime's CPU-HIL or
+device-resident execution plan. In particular, external-RTC HIL continues to
+call the single-plant runtime directly.
+
 Representative performance evidence is intentionally kept out of `Pkg.test()`.
 
 ## Benchmarks and Evidence

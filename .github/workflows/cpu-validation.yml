@@ -46,3 +46,30 @@ jobs:
 
       - name: Run full test suite
         run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'
+
+  scheduler-extensions:
+    name: Optional CPU scheduler extensions
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JULIA_NUM_THREADS: "4"
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.12"
+
+      - name: Cache Julia artifacts
+        uses: julia-actions/cache@v3
+
+      - name: Instantiate scheduler test environment
+        run: julia --project=test/schedulers --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+
+      - name: Run scheduler extension tests
+        run: julia --project=test/schedulers --startup-file=no test/schedulers/runtests.jl

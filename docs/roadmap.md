@@ -16,6 +16,8 @@ hardware-validated GPU workflows. The core package now has:
 - CPU tests across Linux, macOS, and Windows
 - an active AMDGPU validation entry point and a retained CUDA restoration target
 - a maintained zero-allocation hot-path focus for CPU HIL-style runtime loops
+- explicit coarse ensemble scheduling for independent plants, with optional
+  AcceleratedKernels and Dagger integrations kept outside the HIL inner loop
 - committed reference data and regression tests for core WFS and detector paths
 - a compact docs set with one extension guide instead of subsystem plan sprawl
 

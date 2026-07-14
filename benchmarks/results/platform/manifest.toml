@@ -18,3 +18,7 @@ path = "2026-04-13-multi-optic-hil.toml"
 purpose = "CPU and AMDGPU REVOLT-like detector-output HIL diagnostic on the local validation host"
 id = "REVOLT-HIL-CPU-AMDGPU-2026-07-13"
 path = "2026-07-13-revolt-hil-cpu-amdgpu.toml"
+[[artifacts]]
+purpose = "local CPU ensemble scheduler throughput comparison for sequential, Julia tasks, AcceleratedKernels, and Dagger policies"
+id = "ENSEMBLE-SCHEDULERS-2026-07-13"
+path = "2026-07-13-ensemble-schedulers.toml"

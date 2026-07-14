@@ -200,6 +200,22 @@ AOS_FFT_THREADS=4 julia --project=. scripts/profile_ao3k_runtime.jl cpu compact
 Keep FFT, BLAS, and coarse Julia task parallelism from oversubscribing the same
 cores. Deterministic validation continues to use one thread.
 
+For independent simulation sweeps, run the ensemble scheduler benchmark before
+selecting `ThreadedExecution`, `AcceleratedKernelsExecution`, or
+`DaggerExecution`:
+
+```bash
+julia --threads=8 --project=benchmarks benchmarks/benchmark_ensemble_schedulers.jl
+```
+
+This is offline throughput evidence, not an external-RTC latency result.
+Dagger is intended for task graphs, locality, and process/node scaling; AK is
+intended for reusable local task partitioning on sufficiently large many-core
+workloads. Keep direct sequential runtime stepping as the HIL baseline.
+The current local-host comparison is archived in
+[`2026-07-13-ensemble-schedulers.toml`](../benchmarks/results/platform/2026-07-13-ensemble-schedulers.toml);
+rebaseline it on an EPYC or Threadripper target before enabling a site policy.
+
 The retained CUDA benchmark has the equivalent isolated
 `--project=benchmarks/cuda` environment, but requires restored CUDA hardware.
 
@@ -221,6 +237,8 @@ Current intent:
 
 - CPU workflow:
   - runs the normal `Pkg.test()` suite on a hosted runner
+  - runs the isolated AcceleratedKernels/Dagger scheduler extension tests on a
+    four-thread Linux job
 - CUDA workflow:
   - targets a self-hosted runner labeled `self-hosted`, `linux`, `cuda`
   - instantiates [`test/cuda`](../test/cuda)

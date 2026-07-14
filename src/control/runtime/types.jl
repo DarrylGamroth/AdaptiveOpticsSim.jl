@@ -22,13 +22,8 @@
 end
 
 abstract type AbstractControlSimulation end
-abstract type AbstractExecutionPolicy end
 abstract type AbstractRuntimeProfile end
 abstract type AbstractRuntimeExecutionPlan end
-
-struct SequentialExecution <: AbstractExecutionPolicy end
-struct ThreadedExecution <: AbstractExecutionPolicy end
-struct BackendStreamExecution <: AbstractExecutionPolicy end
 
 struct ScientificRuntimeProfile <: AbstractRuntimeProfile end
 struct HILRuntimeProfile <: AbstractRuntimeProfile end

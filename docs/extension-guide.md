@@ -145,6 +145,44 @@ truly backend-agnostic operator. Use `synchronize_runtime!` before direct host
 observation; `SimulationInterface` snapshots already provide an export
 boundary.
 
+## Ensemble Scheduling
+
+`SimulationEnsemble` schedules independent simulation boundaries at coarse
+granularity. Keep it outside an external-RTC HIL loop: the direct scalar CPU
+runtime has tighter and more predictable latency than task creation or task
+graph scheduling.
+
+Available policies have deliberately different scopes:
+
+- `SequentialExecution` is the default and preserves fixed member order
+- `DeterministicExecution` additionally requires a one-thread Julia process
+  and sets BLAS and FFT providers to one thread
+- `ThreadedExecution` uses Julia tasks for independent local members
+- `AcceleratedKernelsExecution` uses a reusable task partitioner when the
+  AcceleratedKernels weak dependency is loaded
+- `DaggerExecution` uses Dagger task graphs and an optional processor scope
+  when the Dagger weak dependency is loaded
+
+Use Dagger for large sweeps, multi-process or multi-node work, and locality
+constraints. Its callable and simulation state must be serializable when tasks
+may leave the current process. The current integration fetches each updated
+member at the end of `run_ensemble!`; for distributed use, make the supplied
+operation encompass a complete trajectory or sweep unit rather than calling
+one remote `step!` at a time. Use AK only after measuring a representative
+member size and count on the target many-core host; its scheduling overhead can
+outweigh gains on small local workloads.
+
+Ensemble construction rejects shared mutable plant ownership. A custom wrapper
+around another runtime should implement
+`AdaptiveOpticsSim.ensemble_ownership_roots(wrapper)` and return the mutable
+plant/state objects that cannot safely be updated by another member at the
+same time. The scheduler operation passed to `run_ensemble!` must mutate and
+return normally only after the member is safe for the next coarse operation.
+
+Avoid nested parallelism. When using a threaded ensemble policy, normally keep
+BLAS and FFT-provider thread counts at one and let the ensemble own the coarse
+parallelism.
+
 ## Backend And Allocation Rules
 
 Extension code should follow the package-wide backend rules:

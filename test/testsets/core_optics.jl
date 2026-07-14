@@ -14,12 +14,16 @@ end
 
 @testset "API export curation" begin
     exported = names(AdaptiveOpticsSim)
-    @test length(exported) <= 315
+    @test length(exported) <= 319
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
     @test Base.isexported(AdaptiveOpticsSim, :Detector)
     @test Base.isexported(AdaptiveOpticsSim, :MKIDArrayDetector)
     @test Base.isexported(AdaptiveOpticsSim, :ControlLoopScenario)
+    @test Base.isexported(AdaptiveOpticsSim, :SimulationEnsemble)
+    @test Base.isexported(AdaptiveOpticsSim, :DeterministicExecution)
+    @test Base.isexported(AdaptiveOpticsSim, :AcceleratedKernelsExecution)
+    @test Base.isexported(AdaptiveOpticsSim, :DaggerExecution)
     @test Base.isexported(AdaptiveOpticsSim, :DeformableMirror)
     @test Base.isexported(AdaptiveOpticsSim, :PyramidWFS)
     @test Base.isexported(AdaptiveOpticsSim, :BioEdgeWFS)
@@ -54,6 +58,8 @@ end
     @test !Base.isexported(AdaptiveOpticsSim, :GPUBackendTag)
     @test !Base.isexported(AdaptiveOpticsSim, :AbstractRuntimeExecutionPlan)
     @test !Base.isexported(AdaptiveOpticsSim, :runtime_reconstructor_storage)
+    @test !Base.isexported(AdaptiveOpticsSim, :ensemble_ownership_roots)
+    @test !Base.isexported(AdaptiveOpticsSim, :run_ensemble!)
     @test !Base.isexported(AdaptiveOpticsSim, :CUDABackendTag)
     @test !Base.isexported(AdaptiveOpticsSim, :MetalBackendTag)
     @test !Base.isexported(AdaptiveOpticsSim, :AMDGPUBackendTag)
