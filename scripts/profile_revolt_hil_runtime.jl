@@ -149,6 +149,7 @@ function run_profile(; backend_name::AbstractString="cpu", config_dir::AbstractS
     println("  julia_threads: ", Threads.nthreads(:default))
     println("  samples: ", samples)
     println("  warmup: ", warmup)
+    println("  active_command_scale_m: ", REVOLT_COMMAND_SCALE_M)
     println("  actuator_command_length: ", n_active)
     println("  extrapolated_command_length: ", length(ctx.extrapolated_command))
     println("  dm_grid_command_length: ", dm_grid_command_length)

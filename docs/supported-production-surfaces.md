@@ -147,10 +147,10 @@ Scientist-owned HEART boundary truth artifact:
 
 The following are outside the current support claim:
 
-- CUDA execution. The extension, dedicated test project, and fail-fast hardware
-  target are retained, but no CUDA runner or device is currently available for
-  routine validation. The latest archived evidence is historical and does not
-  establish support for the current checkout.
+- CUDA execution. The extension, dedicated test project, fail-fast hardware
+  target, and current manual WSL hardware evidence are available, but CUDA has
+  not yet been explicitly returned to the supported delivery scope or a routine
+  validation cadence.
 - SPECULA pixel-level equivalence on the HEART Shack-Hartmann surface
 - Metal backend support
 - backend-audit surfaces that are not part of the maintained hardware targets
@@ -167,8 +167,8 @@ For current release/readiness decisions:
 
 - regressions on the CPU baseline are release-blocking
 - regressions on the maintained AMDGPU surfaces are release-blocking
-- CUDA becomes release-blocking only after CUDA hardware validation is restored
-  and CUDA is explicitly returned to the supported delivery scope
+- CUDA becomes release-blocking only after it is explicitly returned to the
+  supported delivery scope and assigned a routine validation cadence
 - unresolved SPECULA differences are not release-blocking unless the package
   starts claiming SPECULA equivalence for that surface
 - new features outside this supported surface should not be described as

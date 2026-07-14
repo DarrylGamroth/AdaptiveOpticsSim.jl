@@ -5,6 +5,8 @@ using SparseArrays
 using LinearAlgebra: mul!
 using KernelAbstractions: @kernel, @index
 
+const REVOLT_COMMAND_SCALE_M = 1e-7
+
 @kernel function revolt_scatter_active_command_kernel!(full_command, active_command, active_indices, n_active::Int)
     i = @index(Global, Linear)
     if i <= n_active
@@ -89,8 +91,9 @@ end
 
 function revolt_fill_active_command!(active_command::AbstractVector{T}) where {T<:AbstractFloat}
     host = Vector{T}(undef, length(active_command))
+    command_scale = T(REVOLT_COMMAND_SCALE_M)
     @inbounds for i in eachindex(host)
-        host[i] = T(sin(0.013 * i) + 0.25 * cos(0.031 * i))
+        host[i] = command_scale * T(sin(0.013 * i) + 0.25 * cos(0.031 * i))
     end
     copyto!(active_command, host)
     return active_command

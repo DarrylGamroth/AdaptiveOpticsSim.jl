@@ -96,10 +96,11 @@ in the root package environment. The archived `cuda` track defaults to
 backend-only validation by setting
 `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
 
-The CUDA track is retained for future hardware restoration, but there is no
-current CUDA validation host. It is not part of the present production support
-claim and archived CUDA results must be treated as historical until this target
-passes again on real hardware.
+The CUDA track has a current manual WSL validation host and passed the maintained
+hardware target on Julia 1.12.6. That evidence is archived in the platform
+benchmark results. CUDA is still outside the present production support claim
+until it is explicitly restored to the supported delivery scope and assigned a
+routine validation cadence.
 
 ### AMDGPU
 

@@ -39,6 +39,13 @@ end
 function run_revolt_like_hil_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     config_dir = normpath(joinpath(@__DIR__, "..", "benchmarks", "assets", "revolt_like"))
     backend_name = lowercase(backend_label(B))
+    cpu_ctx = build_revolt_like_hil_context(;
+        backend_name="cpu",
+        config_dir,
+        sensor=CMOSSensor(T=Float32),
+        T=Float32,
+        rng=runtime_rng(20260713),
+    )
     ctx = build_revolt_like_hil_context(;
         backend_name,
         config_dir,
@@ -46,9 +53,12 @@ function run_revolt_like_hil_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSi
         T=Float32,
         rng=runtime_rng(20260713),
     )
+    revolt_like_step!(cpu_ctx)
     revolt_like_step!(ctx)
     @test size(ctx.tiled_frame) == (352, 352)
     @test all(isfinite, Array(ctx.tiled_frame))
     @test sum(Array(ctx.tiled_frame)) > 0
+    @test isapprox(Array(ctx.tiled_frame), cpu_ctx.tiled_frame;
+        rtol=1f-5, atol=1f-3)
     return nothing
 end

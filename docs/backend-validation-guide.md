@@ -225,10 +225,11 @@ These values are a regression baseline for that host and contract, not an
 external-RTC latency SLO or a prediction for other frame sizes and CPUs.
 
 For the detector-output HIL path, use the same workload and sample count on
-both backends:
+all backends:
 
 ```bash
 julia --project=. scripts/profile_revolt_hil_runtime.jl cpu benchmarks/assets/revolt_like cmos default none 100 10
+julia --project=benchmarks/cuda scripts/profile_revolt_hil_runtime.jl cuda benchmarks/assets/revolt_like cmos default none 100 10
 julia --project=benchmarks/amdgpu scripts/profile_revolt_hil_runtime.jl amdgpu benchmarks/assets/revolt_like cmos default none 100 10
 ```
 
@@ -240,6 +241,10 @@ a closed-loop diagnostic, not a fixed-arrival-rate latency contract. Use
 hardware-capacity claims. A current CPU/AMDGPU summary for the local validation
 host is archived in
 [`2026-07-13-revolt-hil-cpu-amdgpu.toml`](../benchmarks/results/platform/2026-07-13-revolt-hil-cpu-amdgpu.toml).
+The current Julia 1.12.6 cross-host rerun, including WSL CPU/CUDA, local
+CPU/AMDGPU, a preallocated CUDA host-readout boundary, physical command parity,
+and all individual repetitions, is archived in
+[`2026-07-14-wsl-cuda-local-amdgpu.toml`](../benchmarks/results/platform/2026-07-14-wsl-cuda-local-amdgpu.toml).
 
 The AO188/AO3k CPU profile scripts accept an FFT thread count as their final
 argument, or through `AOS_FFT_THREADS`. Tune this per workload and host rather
@@ -287,8 +292,11 @@ Julia's built-in `@simd` was sufficient for the independent contiguous loops;
 profiled kernel that native code generation fails to vectorize and only with
 separate CPU-feature and backend-portability validation.
 
-The retained CUDA benchmark has the equivalent isolated
-`--project=benchmarks/cuda` environment, but requires restored CUDA hardware.
+The CUDA hardware target is current again on the WSL RTX 3050 Ti host. Use the
+isolated `test/cuda` environment for maintained hardware validation and the
+equivalent `benchmarks/cuda` environment for benchmark-only dependencies.
+Treat comparisons with the native AMD host as whole-system comparisons because
+the CPU, OS, GPU, and power-management paths all differ.
 
 This separation exists so:
 

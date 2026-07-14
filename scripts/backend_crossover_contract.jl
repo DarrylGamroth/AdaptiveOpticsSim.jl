@@ -182,7 +182,7 @@ function _timed_builder_case(target::SweepExecutionTarget; label::AbstractString
     modal_resolution = 4 * n_lenslet
     modal_act = max(4, n_lenslet + 2)
     runtime = _runtime_case(target; resolution=modal_resolution, n_lenslets=n_lenslet, n_act=modal_act)
-    imat = interaction_matrix(runtime.dm, runtime.wfs, runtime.tel, runtime.src;
+    imat = interaction_matrix(runtime.optic, runtime.wfs, runtime.tel, runtime.src;
         amplitude=eltype(runtime.command)(0.05))
     ModalReconstructor(imat; build_backend=p.build_backend)
     modal_build_ns, modal_recon = _time_block_ns() do

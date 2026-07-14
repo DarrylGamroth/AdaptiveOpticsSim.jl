@@ -1,0 +1,343 @@
+artifact_id = "CROSS-HOST-CPU-GPU-2026-07-14"
+generated_on = "2026-07-14"
+source_revision = "0272576d01893ec2a79648c42e3d47c9e270d7c7"
+source_dirty = true
+source_changes = [
+    "physical 100 nm REVOLT-like command fixture and CPU/GPU parity assertion",
+    "backend crossover runtime.optic API repair",
+    "direct KernelAbstractions dependency in both isolated GPU benchmark projects",
+]
+evidence_class = "warmed serial closed-loop diagnostic"
+hypothesis = "On the corrected 352x352 REVOLT-like workload, the discrete CUDA GPU should reduce synchronized device-ready latency relative to its same-host CPU, while the local integrated AMD GPU may remain slower than CPU if host-mediated work and launch allocations dominate; both GPU outputs must preserve CPU optical parity."
+raw_timings_archived = false
+
+[contract]
+device_ready_boundary = "reset telescope OPD through command extrapolation/scatter, DM application, diffractive Shack-Hartmann sensing, CMOS detector capture, 352x352 mosaic construction, and backend synchronization"
+cuda_host_ready_boundary = "device-ready boundary plus copy into a preallocated 352x352 host Matrix{Float32}"
+load_model = "warmed serial closed-loop"
+arrival_model = "the next step starts only after the prior step completes"
+coordinated_omission_correction = false
+coordinated_omission_reason = "no independent arrival schedule is modeled"
+timer = "time_ns; timer overhead is included and not subtracted"
+process_repetitions = 3
+samples_per_run = 500
+warmup_steps_per_run = 100
+julia_threads = 1
+blas_threads = 1
+omp_threads = 1
+mkl_threads = 1
+tail_note = "Each run has 25 observations beyond p95 and only 5 beyond p99; p50/p95 and run dispersion are primary, while p99 is diagnostic."
+scope_exclusions = [
+    "external RTC transport, scheduling, and response processing",
+    "fixed-rate open-loop arrivals, saturation, overload, and recovery",
+    "CPU affinity, core isolation, and controlled mobile power or thermal state",
+    "cold package load and first kernel compilation",
+]
+
+[workload]
+sensor = "cmos"
+noise = "none"
+response_mode = "default"
+effective_frame_response = "none"
+numeric_type = "Float32"
+active_command_scale_m = 1.0e-7
+active_command_length = 277
+extrapolated_command_length = 277
+dm_grid_command_length = 361
+pupil_resolution = 352
+lenslets = 16
+roi_size = 22
+tiled_frame_shape = [352, 352]
+frame_bytes = 495616
+
+[environment.local]
+host = "rtc-devel"
+os = "Debian GNU/Linux"
+kernel = "6.12.57+deb13-amd64"
+cpu = "AMD Ryzen 7 6800H with Radeon Graphics"
+logical_cpu_threads = 16
+cpu_target = "znver3"
+cpu_governor_observed = "powersave"
+gpu = "AMD Radeon Graphics"
+gpu_architecture = "gfx1030"
+gpu_memory_model = "integrated/unified; AMDGPU reported 15.301 GiB, rocm-smi reported 512 MiB VRAM aperture"
+rocm = "7.2.1"
+amdgpu_jl = "2.7.0"
+kernel_abstractions_jl = "0.9.42"
+julia = "1.12.6"
+
+[environment.wsl]
+host = "DGAMROTH-XPS"
+os = "WSL2 Linux"
+kernel = "6.18.33.2-microsoft-standard-WSL2"
+cpu = "12th Gen Intel Core i7-12700H"
+logical_cpu_threads = 20
+cpu_target = "alderlake"
+cpu_governor_observed = "unavailable through WSL"
+gpu = "NVIDIA GeForce RTX 3050 Ti Laptop GPU"
+gpu_architecture = "sm_86"
+gpu_memory_gib = 4.0
+cuda_driver = "596.8.0"
+cuda_runtime = "13.2"
+cuda_jl = "5.11.3"
+kernel_abstractions_jl = "0.9.42"
+julia = "1.12.6"
+
+[summary.local_cpu_device_ready]
+median_mean_ns = 4424880.986
+median_p50_ns = 4390231
+median_p95_ns = 4670146
+median_p99_ns = 4869118
+throughput_from_median_mean_hz = 225.994778880
+median_reported_wall_rate_hz = 223.3176816014764
+steady_step_alloc_bytes = 0
+
+[summary.wsl_cpu_device_ready]
+median_mean_ns = 5928879.44
+median_p50_ns = 5886153
+median_p95_ns = 6573259
+median_p99_ns = 7268357
+throughput_from_median_mean_hz = 168.665935970
+median_reported_wall_rate_hz = 166.78664547402164
+steady_step_alloc_bytes = 0
+
+[summary.wsl_cuda_device_ready]
+median_mean_ns = 1711781.518
+median_p50_ns = 1626355
+median_p95_ns = 2278730
+median_p99_ns = 3057640
+throughput_from_median_mean_hz = 584.186702266
+median_reported_wall_rate_hz = 561.1887350300057
+median_steady_step_alloc_bytes = 47328
+
+[summary.wsl_cuda_host_ready]
+median_mean_ns = 2047216.518
+median_p50_ns = 1651965
+median_p95_ns = 3746056
+median_p99_ns = 4392457
+throughput_from_median_mean_hz = 488.467143177
+median_steady_step_alloc_bytes = 52112
+
+[summary.local_amdgpu_device_ready]
+median_mean_ns = 213035176.354
+median_p50_ns = 172718388
+median_p95_ns = 548456543
+median_p99_ns = 715128207
+throughput_from_median_mean_hz = 4.694060470
+median_reported_wall_rate_hz = 4.692930877348595
+median_steady_step_alloc_bytes = 1921944
+d2h_only_median_p50_ns = 45855
+d2h_only_median_p95_ns = 78426
+
+[[device_ready_runs]]
+system = "local"
+backend = "cpu"
+run = 1
+mean_ns = 4397445.714
+p50_ns = 4372318
+p95_ns = 4571251
+p99_ns = 4819546
+max_ns = 5070526
+reported_wall_rate_hz = 224.70788471591356
+steady_step_alloc_bytes = 0
+
+[[device_ready_runs]]
+system = "local"
+backend = "cpu"
+run = 2
+mean_ns = 4424880.986
+p50_ns = 4390231
+p95_ns = 4670146
+p99_ns = 4869118
+max_ns = 6066371
+reported_wall_rate_hz = 223.3176816014764
+steady_step_alloc_bytes = 0
+
+[[device_ready_runs]]
+system = "local"
+backend = "cpu"
+run = 3
+mean_ns = 4518885.798
+p50_ns = 4471275
+p95_ns = 4839754
+p99_ns = 5131701
+max_ns = 5755719
+reported_wall_rate_hz = 218.66564331845325
+steady_step_alloc_bytes = 0
+
+[[device_ready_runs]]
+system = "wsl"
+backend = "cpu"
+run = 1
+mean_ns = 6264788.514
+p50_ns = 6131417
+p95_ns = 7160216
+p99_ns = 11017905
+max_ns = 16072330
+reported_wall_rate_hz = 157.79229208997336
+steady_step_alloc_bytes = 0
+
+[[device_ready_runs]]
+system = "wsl"
+backend = "cpu"
+run = 2
+mean_ns = 5928879.44
+p50_ns = 5886153
+p95_ns = 6573259
+p99_ns = 7075743
+max_ns = 7882628
+reported_wall_rate_hz = 166.78664547402164
+steady_step_alloc_bytes = 0
+
+[[device_ready_runs]]
+system = "wsl"
+backend = "cpu"
+run = 3
+mean_ns = 5723782.348
+p50_ns = 5689566
+p95_ns = 6336020
+p99_ns = 7268357
+max_ns = 8452098
+reported_wall_rate_hz = 172.77862243333416
+steady_step_alloc_bytes = 0
+
+[[device_ready_runs]]
+system = "wsl"
+backend = "cuda"
+run = 1
+mean_ns = 1963978.1
+p50_ns = 1854569
+p95_ns = 2701839
+p99_ns = 3291714
+max_ns = 4440172
+reported_wall_rate_hz = 490.6435987870344
+steady_step_alloc_bytes = 47328
+
+[[device_ready_runs]]
+system = "wsl"
+backend = "cuda"
+run = 2
+mean_ns = 1601928.332
+p50_ns = 1508038
+p95_ns = 2226830
+p99_ns = 3057640
+max_ns = 3695983
+reported_wall_rate_hz = 599.6362853343312
+steady_step_alloc_bytes = 51536
+
+[[device_ready_runs]]
+system = "wsl"
+backend = "cuda"
+run = 3
+mean_ns = 1711781.518
+p50_ns = 1626355
+p95_ns = 2278730
+p99_ns = 2842190
+max_ns = 3958389
+reported_wall_rate_hz = 561.1887350300057
+steady_step_alloc_bytes = 46816
+
+[[device_ready_runs]]
+system = "local"
+backend = "amdgpu"
+run = 1
+mean_ns = 219934044.436
+p50_ns = 171450454
+p95_ns = 557908424
+p99_ns = 796360196
+max_ns = 1309412208
+reported_wall_rate_hz = 4.545441122436333
+steady_step_alloc_bytes = 1921624
+
+[[device_ready_runs]]
+system = "local"
+backend = "amdgpu"
+run = 2
+mean_ns = 212474726.51
+p50_ns = 174305292
+p95_ns = 510788542
+p99_ns = 704709169
+max_ns = 1113143502
+reported_wall_rate_hz = 4.705239939380288
+steady_step_alloc_bytes = 1921944
+
+[[device_ready_runs]]
+system = "local"
+backend = "amdgpu"
+run = 3
+mean_ns = 213035176.354
+p50_ns = 172718388
+p95_ns = 548456543
+p99_ns = 715128207
+max_ns = 1138486935
+reported_wall_rate_hz = 4.692930877348595
+steady_step_alloc_bytes = 1922920
+
+[[cuda_host_ready_runs]]
+run = 1
+mean_ns = 2123720.602
+p50_ns = 1755933
+p95_ns = 3870382
+p99_ns = 4443585
+steady_step_alloc_bytes = 52112
+
+[[cuda_host_ready_runs]]
+run = 2
+mean_ns = 1789159.79
+p50_ns = 1513301
+p95_ns = 3394206
+p99_ns = 3922958
+steady_step_alloc_bytes = 49776
+
+[[cuda_host_ready_runs]]
+run = 3
+mean_ns = 2047216.518
+p50_ns = 1651965
+p95_ns = 3746056
+p99_ns = 4392457
+steady_step_alloc_bytes = 58928
+
+[correctness]
+cpu_checksum = 6.341299e11
+cuda_checksum = 6.341299e11
+amdgpu_checksum = 6.341299e11
+cuda_relative_l2_error = 1.5650701e-7
+amdgpu_relative_l2_error = 1.4013048e-7
+cuda_max_error_relative_to_cpu_peak = 4.3517315e-7
+amdgpu_max_error_relative_to_cpu_peak = 3.626443e-7
+parity_rtol = 1.0e-5
+parity_atol = 1.0e-3
+
+[validation]
+cpu_pkg_test = "passed"
+cuda_hardware_target = "154/154 passed in 4m36.9s"
+amdgpu_hardware_target = "164/164 passed in 5m33.0s"
+cpu_crossover_full_script = "passed after runtime.optic API repair"
+artifact_toml_and_manifest = "parsed and cross-reference validated"
+isolated_gpu_benchmark_environments = "AMDGPU 2.7.0 / CUDA 5.11.3 with KernelAbstractions 0.9.42 loaded successfully"
+
+[crossover]
+boundary = "one synchronized ClosedLoopRuntime step; 50 samples after 10 warmups, repeated three times"
+note = "The compact/small/medium cards are synthetic launch-overhead diagnostics, not the physical REVOLT-like workload. AMDGPU results were highly unstable and do not support a crossover threshold claim."
+resolutions = [16, 32, 64]
+local_cpu_median_mean_ns = [12336.96, 44701.44, 177006.8]
+wsl_cpu_median_mean_ns = [16097.32, 55226.48, 201091.26]
+wsl_cuda_median_mean_ns = [1012102.62, 1082959.36, 1103909.94]
+local_amdgpu_median_mean_ns = [29962705.78, 31165712.84, 419483308.14]
+local_amdgpu_observed_mean_ns_min = [2010445.5, 23560727.52, 265833901.02]
+local_amdgpu_observed_mean_ns_max = [43094602.02, 155450798.8, 465237687.92]
+
+[interpretation]
+cuda_vs_wsl_cpu_p50_speedup = 3.619230119
+cuda_vs_wsl_cpu_p95_speedup = 2.884615115
+cuda_vs_local_cpu_p50_speedup = 2.699429706
+cuda_vs_local_cpu_p95_speedup = 2.049451229
+local_cpu_vs_local_amdgpu_p50_speedup = 39.341526220
+local_cpu_vs_local_amdgpu_p95_speedup = 117.438843025
+recommendation = "Use the local CPU path for external-RTC HIL on the AMD integrated-GPU host. The WSL CUDA device is useful for this synchronized optical workload and remains the stronger candidate for larger fully device-resident simulation, but the external transport and RTC must be benchmarked separately."
+caveats = [
+    "The CPU hosts use different processors, kernels, and power-management paths; their difference is a system comparison, not an isolated WSL overhead measurement.",
+    "Both machines are mobile systems with uncontrolled clocks and thermals; individual runs are retained because dispersion is material.",
+    "The local AMDGPU path allocates about 1.92 MB per step and shows GC-driven tails, so it is not representative of a corrected allocation-free device-resident implementation.",
+    "No raw timing vectors or mergeable histograms were archived; this is diagnostic evidence rather than a release SLO or capacity result.",
+]

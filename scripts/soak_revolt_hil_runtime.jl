@@ -165,6 +165,7 @@ function run_soak(; backend_name::AbstractString="cuda", config_dir::AbstractStr
     println("  detector_temperature_K: ", metadata.detector_temperature_K)
     println("  steps: ", steps)
     println("  warmup: ", warmup)
+    println("  active_command_scale_m: ", REVOLT_COMMAND_SCALE_M)
     println("  steady_step_alloc_bytes: ", steady_alloc_bytes)
     println("  total_wall_ns: ", total_wall_ns)
     println("  frame_rate_hz: ", 1.0e9 * steps / total_wall_ns)
