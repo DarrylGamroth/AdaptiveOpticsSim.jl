@@ -129,21 +129,13 @@ influence basis already includes the print-through structure.
 - Noise: `NoiseModel`, `NoiseNone`, `NoisePhoton`, `NoiseReadout`,
   `NoisePhotonReadout`
 - Sensor families: `SensorType`, `CCDSensor`, `CMOSSensor`, `EMCCDSensor`,
-  `QCMOSSensor`, `InGaAsSensor`, `HgCdTeAvalancheArraySensor`, `APDSensor`,
-  `SPADArraySensor`, `MKIDArraySensor`
+  `InGaAsSensor`, `HgCdTeAvalancheArraySensor`, `APDSensor`, `SPADArraySensor`,
+  `MKIDArraySensor`
 - EMCCD modes and helpers: `LinearEMMode`, `PhotonCountingEMMode`,
   `EMOutput`, `ConventionalOutput`, `emccd_snr`
-- qCMOS camera presets: `ORCAQuest`, `ORCAQuest2`, `ORCAQuestIQ`,
-  `ORCAQuestSensor`, `ORCAQuest2Sensor`, `ORCAQuestIQSensor`,
-  `QCMOSDetector`, `ORCAQuestDetector`, `ORCAQuest2Detector`,
-  `ORCAQuestIQDetector`
-- qCMOS scan modes: `QCMOSStandardScan`, `QCMOSUltraQuietScan`,
-  `QCMOSPhotonNumberResolvingScan`, `QCMOSRawScan`
-  Use `QCMOSPhotonNumberResolvingScan(gain=..., offset=...)` when a
-  calibrated photon-number output should round the post-readout signal to an
-  electron count. The helper functions `AdaptiveOpticsSim.qcmos_snr(...)` and
-  `AdaptiveOpticsSim.qcmos_relative_snr(...)` are available as qualified
-  validation utilities.
+- CMOS readout structure: `CMOSReadNoiseMap`; row and column noise, output
+  groups, shutter timing, and detector defect maps compose through
+  `CMOSSensor`. Vendor camera profiles are intentionally outside core.
 - Frame response: `FrameResponseModel`, `NullFrameResponse`,
   `GaussianPixelResponse`, `SampledFrameResponse`,
   `RectangularPixelAperture`, `SeparablePixelMTF`. Evaluate the normalized
@@ -159,13 +151,14 @@ influence basis already includes the print-through structure.
   `GlobalResetExposure`,
   `FunctionFrameSource`, `InPlaceFrameSource`,
   `FunctionExposureFrameSource`, `InPlaceExposureFrameSource`,
-  `CorrelatedDoubleSampling`, `FowlerSampling`,
+  `CorrelatedDoubleSampling`, `FowlerSampling`, `SkipperSampling`,
   `FrameReadoutCorrectionModel`, `NullFrameReadoutCorrection`,
   `ReferencePixelCommonModeCorrection`, `ReferenceRowCommonModeCorrection`,
   `ReferenceColumnCommonModeCorrection`,
   `ReferenceOutputCommonModeCorrection`, `CompositeFrameReadoutCorrection`
 - Readout products: `FrameReadoutProducts`, `NoFrameReadoutProducts`,
-  `MultiReadFrameReadoutProducts`, `HgCdTeReadoutProducts`
+  `MultiReadFrameReadoutProducts`, `SkipperReadoutProducts`,
+  `HgCdTeReadoutProducts`
 - Nonlinearity and persistence: `SaturatingFrameNonlinearity`,
   `ExponentialPersistence`
 - Thermal models: `AbstractDetectorThermalModel`,
@@ -202,21 +195,21 @@ passband, including weighted `SpectralSource` bundles; matrix-only capture
 assumes spectrally prefiltered input. The current model does not emit per-photon
 timestamp/energy event lists.
 
-`QCMOSSensor` models Hamamatsu ORCA-Quest-family quantitative CMOS cameras as a
-frame-sensor family on the normal `Detector` path. The built-in ORCA-Quest
-presets provide published family defaults for pixel size, QE, full well,
-readout noise, DSNU, PRNU, dark current, frame size, frame rate, minimum
-exposure, and rolling-shutter line-pair timing. Use detector defect models such
-as `PixelResponseNonuniformity`, `DarkSignalNonuniformity`, and `BadPixelMask`
-for measured per-camera calibration maps. Photon-number resolving scan mode can
-optionally apply calibrated electron-number quantization before detector output
-conversion; when enabled through `QCMOSPhotonNumberResolvingScan(gain=...)`,
-`QCMOSDetector` defaults `bits` to `nothing` so the exported integer frame is
-one count per calibrated electron rather than a second ADC-scaled value.
-Because the ORCA-Quest presets default to rolling-shutter timing, they are best
-used through direct detector frame capture or explicitly configured timing. The
-batched Shack-Hartmann spot-stack detector path currently requires
-global-shutter-compatible timing.
+`CMOSSensor` covers CMOS, sCMOS, and quantitative low-noise CMOS architectures
+through composition rather than camera classes. `NoiseReadout` supplies a
+uniform independent component; `row_readout_sigma`, `column_readout_sigma`,
+and `CMOSReadNoiseMap` add structured components at the readout stage.
+`PixelResponseNonuniformity`, `DarkSignalNonuniformity`, `BadPixelMask`, and
+`StaticCMOSOutputPattern` carry measured calibration structure. Core provides
+no vendor defaults or named cameras.
+
+`SkipperSampling(n)` configures repeated nondestructive CCD sampling. The
+implementation accumulates a mean online and exposes `SkipperReadoutProducts`
+without retaining an `n`-plane read cube. This bounds memory independently of
+sample count and keeps the warmed repeated-capture path allocation-free. The
+current model assumes independent read samples. Configure CCD clock-induced
+charge with `clock_induced_charge_per_frame`; unlike dark current, it is not
+scaled by integration time.
 
 ## Wavefront Sensors
 

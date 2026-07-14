@@ -64,6 +64,7 @@ end
 function finalize_electronics!(det::Detector, rng::AbstractRNG,
     exposure_time::Real)
     apply_readout_noise!(det, rng)
+    apply_sensor_readout_noise!(det.params.sensor, det, rng)
     apply_post_readout_gain!(det.params.sensor, det)
     finalize_readout_products!(det.params.sensor, det, rng, exposure_time)
     apply_readout_correction!(det.params.correction_model, det.state.frame, det)

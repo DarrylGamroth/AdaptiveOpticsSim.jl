@@ -421,6 +421,9 @@ function _batched_readout_noise!(det::Detector{<:NoisePhotonReadout}, cube::Abst
     return cube
 end
 
+_batched_sensor_readout_noise!(::FrameSensorType, det::Detector,
+    cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
+
 function _batched_quantization!(det::Detector, cube::AbstractArray)
     bits = det.params.bits
     bits === nothing && return cube
@@ -617,6 +620,7 @@ function _apply_batched_detector_pipeline!(det::Detector, cube::AbstractArray{T,
     _batched_apply_charge_coupling!(execution_style(cube),
         det.params.charge_coupling_model, cube, scratch)
     _batched_readout_noise!(det, cube, scratch, rng)
+    _batched_sensor_readout_noise!(det.params.sensor, det, cube, scratch, rng)
     _batched_post_readout_gain!(det.params.sensor, det, cube)
     _batched_apply_readout_correction!(det, det.params.correction_model, cube, scratch)
     _batched_quantization!(det, cube)

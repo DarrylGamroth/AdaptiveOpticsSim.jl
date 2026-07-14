@@ -199,55 +199,58 @@ For `Source`, detector capture evaluates the curve at `wavelength(src)`. For
 bundle. Matrix-only capture without a source uses the detector's scalar
 reference QE, which is the peak value of a sampled curve.
 
-For a quantitative CMOS camera similar to the Hamamatsu ORCA-Quest family, use
-the qCMOS convenience constructors. The camera preset supplies the family-level
-readout noise, QE, full well, dark current, frame rate, and pixel metadata;
-ORCA-Quest presets default to rolling-shutter timing. `bits` and `output_type`
-still define the exported frame for direct camera capture:
+For CMOS, sCMOS, and quantitative low-noise CMOS sensors, compose the generic
+`CMOSSensor` from measured properties. Core does not contain camera names or
+vendor presets; those belong in a companion profiles package. Uniform
+independent read noise uses `NoiseReadout` or `NoisePhotonReadout`, while
+row/column components and a heteroscedastic per-pixel map are sensor
+properties:
 
 ```julia
-det = ORCAQuest2Detector(
-    scan_mode=QCMOSUltraQuietScan(),
-    integration_time=1e-3,
+sigma_map = fill(0.30, size(image))
+sensor = CMOSSensor(
+    row_readout_sigma=0.05,
+    column_readout_sigma=0.08,
+    readout_noise_model=CMOSReadNoiseMap(sigma_map),
+    timing_model=RollingShutter(10e-6; row_group_size=2),
+)
+det = Detector(
+    sensor=sensor,
+    noise=NoisePhoton(),
+    qe=0.85,
+    full_well=7_000.0,
     bits=16,
     output_type=UInt16,
 )
-
-rng = runtime_rng(2)
-adu = capture!(det, image; rng=rng)
 ```
 
-The Shack-Hartmann spot-stack capture path is batched and currently requires
-global-shutter timing. Use the generic detector/CMOS path shown above for
-detector-backed Shack-Hartmann HIL export, or configure qCMOS timing
-intentionally when the camera model is being used outside the batched spot-stack
-path.
+`CMOSReadNoiseMap` is an absolute per-pixel read-noise sigma map and is added
+to any uniform `NoiseReadout` component. Use `PixelResponseNonuniformity`,
+`DarkSignalNonuniformity`, `BadPixelMask`, and `StaticCMOSOutputPattern` for
+measured gain, dark, bad-pixel, and output-amplifier structure. CMOS has no
+implicit blur: select `RectangularPixelAperture`, another frame response, or
+`InterpixelCapacitance` only when the detector sampling or calibration supports
+it.
 
-The qCMOS model intentionally keeps camera-specific defaults separate from
-measured calibration data. Add `PixelResponseNonuniformity`,
-`DarkSignalNonuniformity`, or `BadPixelMask` through the detector defect model
-when you have a calibrated ORCA-Quest unit.
-
-For photon-number resolving operation, use `QCMOSPhotonNumberResolvingScan`.
-By default this only selects the low-noise scan family. If you also provide a
-calibration `gain` and optional `offset`, the scan mode rounds the post-readout
-signal to a calibrated electron count before export:
+Skipper CCD readout is a CCD sampling mode rather than a photon-counting
+detector. It averages nondestructive samples online and retains only the mean,
+so memory remains proportional to frame size instead of sample count:
 
 ```julia
-det = ORCAQuest2Detector(
-    scan_mode=QCMOSPhotonNumberResolvingScan(gain=1.0, offset=0.0),
-    integration_time=1e-3,
-    output_type=UInt16,
+skipper = Detector(
+    sensor=CCDSensor(
+        sampling_mode=SkipperSampling(64),
+        read_time=20e-6,
+    ),
+    noise=NoisePhotonReadout(3.0),
 )
+frame = capture!(skipper, image; rng=runtime_rng(3))
 ```
 
-When calibrated photon-number quantization is enabled, `QCMOSDetector` defaults
-`bits` to `nothing`; the integer output is then one count per calibrated
-electron instead of a second full-well-scaled ADC value. Use matrix-valued
-`gain` and `offset` maps when you have per-pixel qCMOS calibration data.
-`AdaptiveOpticsSim.qcmos_snr(...)` and
-`AdaptiveOpticsSim.qcmos_relative_snr(...)` provide lightweight SNR/rSNR checks
-for comparing low-light qCMOS configurations against the ideal Poisson limit.
+The reported effective read-noise sigma scales as `1/sqrt(n_samples)`, and
+sampling wall-clock metadata includes all reads. The core model assumes
+independent read samples; calibrated correlated-noise and adaptive-read
+policies remain future extensions.
 
 For EMCCD cameras, the core package models the generic sensor physics rather
 than vendor camera presets. Use `EMOutput()` for the electron-multiplication

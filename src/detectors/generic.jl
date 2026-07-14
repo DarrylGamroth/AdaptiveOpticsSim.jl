@@ -36,6 +36,8 @@ detector_reference_cube(products::MultiReadFrameReadoutProducts) = products.refe
 detector_signal_cube(products::MultiReadFrameReadoutProducts) = products.signal_cube
 detector_read_cube(products::MultiReadFrameReadoutProducts) = products.read_cube
 detector_read_times(products::MultiReadFrameReadoutProducts) = products.read_times
+detector_signal_frame(products::SkipperReadoutProducts) = products.mean_frame
+detector_combined_frame(products::SkipperReadoutProducts) = products.mean_frame
 
 thermal_model(det::Detector) = det.params.thermal_model
 thermal_state(det::Detector) = det.state.thermal_state

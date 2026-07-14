@@ -262,6 +262,9 @@ function apply_readout_noise!(det::Detector{<:NoisePhotonReadout}, rng::Abstract
     return add_gaussian_noise!(det.state.frame, det, rng, sigma)
 end
 
+apply_sensor_readout_noise!(::FrameSensorType, det::Detector,
+    rng::AbstractRNG) = det.state.frame
+
 function _apply_quantization!(::DetectorDirectPlan, det::Detector)
     bits = det.params.bits
     bits === nothing && return det.state.frame

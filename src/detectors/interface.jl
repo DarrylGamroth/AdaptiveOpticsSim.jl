@@ -77,6 +77,16 @@ struct FowlerSampling <: FrameSamplingMode
     n_pairs::Int
 end
 
+"""
+    SkipperSampling(n_samples)
+
+Repeated nondestructive sampling of a CCD charge packet. The detector keeps a
+streaming mean and does not retain a rows-by-columns-by-samples cube.
+"""
+struct SkipperSampling <: FrameSamplingMode
+    n_samples::Int
+end
+
 struct FrameWindow
     rows::UnitRange{Int}
     cols::UnitRange{Int}
@@ -102,26 +112,31 @@ frame_sampling_symbol(::SingleRead) = :single_read
 frame_sampling_symbol(::AveragedNonDestructiveReads) = :averaged_non_destructive_reads
 frame_sampling_symbol(::CorrelatedDoubleSampling) = :correlated_double_sampling
 frame_sampling_symbol(::FowlerSampling) = :fowler_sampling
+frame_sampling_symbol(::SkipperSampling) = :skipper
 
 frame_sampling_reads(::SingleRead) = 1
 frame_sampling_reads(mode::AveragedNonDestructiveReads) = mode.n_reads
 frame_sampling_reads(::CorrelatedDoubleSampling) = 2
 frame_sampling_reads(mode::FowlerSampling) = 2 * mode.n_pairs
+frame_sampling_reads(mode::SkipperSampling) = mode.n_samples
 
 frame_sampling_reference_reads(::SingleRead) = 0
 frame_sampling_reference_reads(::AveragedNonDestructiveReads) = 0
 frame_sampling_reference_reads(::CorrelatedDoubleSampling) = 1
 frame_sampling_reference_reads(mode::FowlerSampling) = mode.n_pairs
+frame_sampling_reference_reads(::SkipperSampling) = 0
 
 frame_sampling_signal_reads(::SingleRead) = 1
 frame_sampling_signal_reads(mode::AveragedNonDestructiveReads) = mode.n_reads
 frame_sampling_signal_reads(::CorrelatedDoubleSampling) = 1
 frame_sampling_signal_reads(mode::FowlerSampling) = mode.n_pairs
+frame_sampling_signal_reads(mode::SkipperSampling) = mode.n_samples
 
 effective_readout_sigma(::FrameSamplingMode, sigma) = sigma
 effective_readout_sigma(mode::AveragedNonDestructiveReads, sigma) = sigma / sqrt(mode.n_reads)
 effective_readout_sigma(::CorrelatedDoubleSampling, sigma) = sigma * sqrt(2)
 effective_readout_sigma(mode::FowlerSampling, sigma) = sigma * sqrt(2 / mode.n_pairs)
+effective_readout_sigma(mode::SkipperSampling, sigma) = sigma / sqrt(mode.n_samples)
 
 validate_frame_sampling_mode(::SingleRead) = SingleRead()
 
@@ -134,6 +149,13 @@ validate_frame_sampling_mode(::CorrelatedDoubleSampling) = CorrelatedDoubleSampl
 
 function validate_frame_sampling_mode(mode::FowlerSampling)
     mode.n_pairs >= 1 || throw(InvalidConfiguration("FowlerSampling n_pairs must be >= 1"))
+    return mode
+end
+
+
+function validate_frame_sampling_mode(mode::SkipperSampling)
+    mode.n_samples >= 1 ||
+        throw(InvalidConfiguration("SkipperSampling n_samples must be >= 1"))
     return mode
 end
 
@@ -229,6 +251,11 @@ supports_batched_readout_correction(model::CompositeFrameReadoutCorrection) =
     all(supports_batched_readout_correction, model.stages)
 
 struct NoFrameReadoutProducts <: FrameReadoutProducts end
+
+struct SkipperReadoutProducts{A<:AbstractMatrix} <: FrameReadoutProducts
+    mean_frame::A
+    sample_count::Int
+end
 
 struct NullDetectorDefectModel <: AbstractDetectorDefectModel end
 
