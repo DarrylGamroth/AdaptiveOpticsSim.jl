@@ -96,6 +96,12 @@ end
 
 const apply_frame_response! = apply_response!
 
+apply_charge_coupling!(::NullChargeCoupling, det::Detector) = det.state.frame
+
+function apply_charge_coupling!(model::InterpixelCapacitance, det::Detector)
+    return apply_response!(model.response, det)
+end
+
 function ensure_buffers!(det::Detector, n_mid::Int, m_mid::Int, n_out::Int, m_out::Int)
     if size(det.state.frame) != (n_out, m_out)
         det.state.frame = similar(det.state.frame, n_out, m_out)

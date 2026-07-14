@@ -11,6 +11,7 @@ abstract type AbstractCountingCorrelationModel end
 abstract type AbstractDetectorResponse end
 abstract type AbstractFrameResponse <: AbstractDetectorResponse end
 abstract type AbstractFrameMTF <: AbstractFrameResponse end
+abstract type AbstractChargeCouplingModel end
 const FrameResponseModel = AbstractFrameResponse
 abstract type BackgroundModel end
 abstract type AbstractDetectorDefectModel end
@@ -811,6 +812,20 @@ struct SampledFrameResponse{T<:AbstractFloat,A<:AbstractMatrix{T}} <: AbstractFr
     end
 end
 
+struct NullChargeCoupling <: AbstractChargeCouplingModel end
+
+"""
+    InterpixelCapacitance(kernel; normalize=true, T=Float64, backend=CPUBackend())
+
+Post-collection capacitive coupling between neighboring detector nodes. Unlike a
+`FrameResponseModel`, this stage is applied after photon and generated-charge
+statistics, so it correlates the collected charge without smoothing the
+Poisson expectation before sampling.
+"""
+struct InterpixelCapacitance{R<:SampledFrameResponse} <: AbstractChargeCouplingModel
+    response::R
+end
+
 struct RectangularPixelAperture{T<:AbstractFloat,VX<:AbstractVector{T},VY<:AbstractVector{T}} <: AbstractFrameMTF
     pitch_x_px::T
     pitch_y_px::T
@@ -847,7 +862,6 @@ response_application_domain(::AbstractFrameResponse) = :image
 
 is_shift_invariant(::AbstractFrameResponse) = true
 supports_frequency_domain_application(::AbstractFrameResponse) = false
-supports_frequency_domain_application(::AbstractFrameMTF) = true
 supports_separable_application(::AbstractFrameResponse) = false
 supports_separable_application(::NullFrameResponse) = true
 supports_separable_application(::GaussianPixelResponse) = true
@@ -903,8 +917,62 @@ supports_detector_mtf(::GaussianPixelResponse) = true
 supports_detector_mtf(::SampledFrameResponse) = true
 supports_detector_mtf(::AbstractFrameMTF) = true
 
+"""
+    detector_mtf(response, spatial_frequency_x, spatial_frequency_y)
+
+Evaluate the normalized detector modulation transfer function at spatial
+frequencies expressed in cycles per detector pixel. This is a diagnostic and
+validation operation; it does not imply that the response is applied through
+an FFT in the capture hot path.
+"""
+detector_mtf(::NullFrameResponse, spatial_frequency_x::Real,
+    spatial_frequency_y::Real) = one(float(spatial_frequency_x + spatial_frequency_y))
+
+function detector_mtf(model::GaussianPixelResponse, spatial_frequency_x::Real,
+    spatial_frequency_y::Real)
+    fx, fy, sigma = promote(float(spatial_frequency_x), float(spatial_frequency_y),
+        float(model.response_width_px))
+    return exp(-2 * oftype(sigma, pi)^2 * sigma^2 * (fx^2 + fy^2))
+end
+
+function detector_mtf(model::SampledFrameResponse, spatial_frequency_x::Real,
+    spatial_frequency_y::Real)
+    kernel = Array(model.kernel)
+    T = promote_type(eltype(kernel), typeof(float(spatial_frequency_x)),
+        typeof(float(spatial_frequency_y)))
+    fx = T(spatial_frequency_x)
+    fy = T(spatial_frequency_y)
+    center_i = fld(size(kernel, 1), 2) + 1
+    center_j = fld(size(kernel, 2), 2) + 1
+    response = zero(Complex{T})
+    normalization = zero(T)
+    @inbounds for j in axes(kernel, 2), i in axes(kernel, 1)
+        weight = T(kernel[i, j])
+        phase = -T(2pi) * (fy * T(i - center_i) + fx * T(j - center_j))
+        response += weight * cis(phase)
+        normalization += weight
+    end
+    return abs(response) / normalization
+end
+
+function detector_mtf(model::Union{RectangularPixelAperture,SeparablePixelMTF},
+    spatial_frequency_x::Real, spatial_frequency_y::Real)
+    fx, fy, pitch_x, pitch_y, fill_x, fill_y = promote(
+        float(spatial_frequency_x), float(spatial_frequency_y),
+        float(model.pitch_x_px), float(model.pitch_y_px),
+        float(model.fill_factor_x), float(model.fill_factor_y))
+    return abs(sinc(pitch_x * fill_x * fx) * sinc(pitch_y * fill_y * fy))
+end
+
 default_response_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend()) =
     NullFrameResponse()
+default_charge_coupling_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64,
+    backend::AbstractArrayBackend=CPUBackend()) = NullChargeCoupling()
+
+charge_coupling_symbol(::NullChargeCoupling) = :none
+charge_coupling_symbol(::InterpixelCapacitance) = :interpixel_capacitance
+charge_coupling_support(::NullChargeCoupling) = (nothing, nothing)
+charge_coupling_support(model::InterpixelCapacitance) = size(model.response.kernel)
 
 struct NoBackground <: BackgroundModel end
 
@@ -977,6 +1045,9 @@ struct DetectorExportMetadata{T<:AbstractFloat}
     fill_factor_x::Union{Nothing,T}
     fill_factor_y::Union{Nothing,T}
     aperture_shape::Union{Nothing,Symbol}
+    charge_coupling::Symbol
+    charge_coupling_support_rows::Union{Nothing,Int}
+    charge_coupling_support_cols::Union{Nothing,Int}
     detector_defects::Symbol
     has_prnu::Bool
     has_dsnu::Bool
@@ -1153,6 +1224,12 @@ function SampledFrameResponse(kernel::AbstractMatrix; normalize::Bool=true,
     return validate_frame_response_model(model)
 end
 
+function InterpixelCapacitance(kernel::AbstractMatrix; normalize::Bool=true,
+    T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
+    response = SampledFrameResponse(kernel; normalize=normalize, T=T, backend=backend)
+    return InterpixelCapacitance{typeof(response)}(response)
+end
+
 @kernel function separable_response_rows_kernel!(out, img, kernel, radius::Int, n::Int, m::Int, klen::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= m
@@ -1243,6 +1320,7 @@ end
 end
 
 struct DetectorParams{T<:AbstractFloat,S<:SensorType,QE<:AbstractQuantumEfficiencyModel,R<:AbstractFrameResponse,
+    CC<:AbstractChargeCouplingModel,
     D<:AbstractDetectorDefectModel,FT<:AbstractFrameTimingModel,
     C<:FrameReadoutCorrectionModel,NL<:AbstractFrameNonlinearityModel,
     TM<:AbstractDetectorThermalModel}
@@ -1257,6 +1335,7 @@ struct DetectorParams{T<:AbstractFloat,S<:SensorType,QE<:AbstractQuantumEfficien
     sensor::S
     quantum_efficiency_model::QE
     response_model::R
+    charge_coupling_model::CC
     defect_model::D
     timing_model::FT
     correction_model::C
@@ -1271,6 +1350,7 @@ mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O,OH,P,
     frame::A
     response_buffer::A
     bin_buffer::A
+    temporal_buffer::A
     noise_buffer::A
     noise_buffer_host::Matrix{T}
     batched_buffer_host::Array{T,3}

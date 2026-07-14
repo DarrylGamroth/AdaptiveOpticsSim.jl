@@ -425,16 +425,9 @@ function _batched_quantization!(det::Detector, cube::AbstractArray)
     bits = det.params.bits
     bits === nothing && return cube
     levels = exp2(eltype(cube)(bits))
-    full_well = det.params.full_well
-    if full_well === nothing
-        peak = maximum(cube)
-        if peak > 0
-            cube .*= levels / peak
-        end
-    else
-        cube .*= (levels - one(levels)) / full_well
-        clamp_array!(cube, zero(eltype(cube)), levels - one(levels))
-    end
+    full_well = something(det.params.full_well)
+    cube .*= (levels - one(levels)) / full_well
+    clamp_array!(cube, zero(eltype(cube)), levels - one(levels))
     return cube
 end
 
@@ -540,6 +533,18 @@ function _batched_apply_response!(style::AcceleratorStyle, model::SeparablePixel
     return cube
 end
 
+_batched_charge_transfer!(::FrameSensorType, det::Detector, cube::AbstractArray,
+    scratch::AbstractArray) = cube
+
+_batched_apply_charge_coupling!(::ExecutionStyle, ::NullChargeCoupling,
+    cube::AbstractArray, scratch::AbstractArray) = cube
+
+function _batched_apply_charge_coupling!(style::ExecutionStyle,
+    model::InterpixelCapacitance, cube::AbstractArray{T,3},
+    scratch::AbstractArray{T,3}) where {T}
+    return _batched_apply_response!(style, model.response, cube, scratch)
+end
+
 function _batched_apply_separable_response!(style::AcceleratorStyle, cube::AbstractArray{T,3},
     scratch::AbstractArray{T,3}, kernel_y::AbstractVector, kernel_x::AbstractVector) where {T}
     n_batch, n, m = size(cube)
@@ -607,7 +612,10 @@ function _apply_batched_detector_pipeline!(det::Detector, cube::AbstractArray{T,
     _batched_sensor_statistics!(det.params.sensor, det, cube, scratch, rng)
     _batched_frame_nonlinearity!(det.params.nonlinearity_model, cube)
     apply_saturation!(det, cube)
+    _batched_charge_transfer!(det.params.sensor, det, cube, scratch)
     _batched_pre_readout_gain!(det.params.sensor, det, cube, scratch, rng)
+    _batched_apply_charge_coupling!(execution_style(cube),
+        det.params.charge_coupling_model, cube, scratch)
     _batched_readout_noise!(det, cube, scratch, rng)
     _batched_post_readout_gain!(det.params.sensor, det, cube)
     _batched_apply_readout_correction!(det, det.params.correction_model, cube, scratch)

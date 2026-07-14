@@ -44,13 +44,25 @@ function capture_signal_pipeline!(det::Detector, psf::AbstractMatrix, rng::Abstr
     return det.state.frame
 end
 
-function finalize_readout_pipeline!(det::Detector, rng::AbstractRNG, exposure_time::Real)
+function finalize_charge_generation!(det::Detector, rng::AbstractRNG,
+    exposure_time::Real)
     apply_dark_current!(det, rng, exposure_time)
     apply_dark_defects!(det.params.defect_model, det, exposure_time)
     apply_sensor_statistics!(det.params.sensor, det, rng)
+    return det.state.frame
+end
+
+function finalize_charge_transport!(det::Detector, rng::AbstractRNG)
     apply_frame_nonlinearity!(det.params.nonlinearity_model, det)
     apply_saturation!(det)
+    apply_charge_transfer!(det.params.sensor, det)
     apply_pre_readout_gain!(det.params.sensor, det, rng)
+    apply_charge_coupling!(det.params.charge_coupling_model, det)
+    return det.state.frame
+end
+
+function finalize_electronics!(det::Detector, rng::AbstractRNG,
+    exposure_time::Real)
     apply_readout_noise!(det, rng)
     apply_post_readout_gain!(det.params.sensor, det)
     finalize_readout_products!(det.params.sensor, det, rng, exposure_time)
@@ -59,4 +71,11 @@ function finalize_readout_pipeline!(det::Detector, rng::AbstractRNG, exposure_ti
     subtract_background_map!(det.background_map, det)
     update_sensor_persistence!(det.params.sensor, det, exposure_time)
     return det.state.frame
+end
+
+function finalize_readout_pipeline!(det::Detector, rng::AbstractRNG,
+    exposure_time::Real)
+    finalize_charge_generation!(det, rng, exposure_time)
+    finalize_charge_transport!(det, rng)
+    return finalize_electronics!(det, rng, exposure_time)
 end

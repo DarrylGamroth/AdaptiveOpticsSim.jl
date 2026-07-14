@@ -146,7 +146,13 @@ influence basis already includes the print-through structure.
   validation utilities.
 - Frame response: `FrameResponseModel`, `NullFrameResponse`,
   `GaussianPixelResponse`, `SampledFrameResponse`,
-  `RectangularPixelAperture`, `SeparablePixelMTF`
+  `RectangularPixelAperture`, `SeparablePixelMTF`. Evaluate the normalized
+  analytic response with `AdaptiveOpticsSim.detector_mtf(model, fx, fy)`, where
+  frequency is in cycles per detector pixel.
+- Post-collection coupling: `AdaptiveOpticsSim.NullChargeCoupling` and
+  `AdaptiveOpticsSim.InterpixelCapacitance`. Configure these with
+  `Detector(...; charge_coupling_model=...)`; this stage runs after photon and
+  generated-charge statistics rather than as a pre-shot image blur.
 - Defects: `PixelResponseNonuniformity`, `DarkSignalNonuniformity`,
   `BadPixelMask`, `CompositeDetectorDefectModel`
 - Readout timing and correction: `RollingShutter`, `RollingExposure`,
@@ -173,7 +179,9 @@ influence basis already includes the print-through structure.
   `readout_ready`, `reset_integration!`, `thermal_model`
 
 Use `bits` for detector quantization depth and `output_type` for the Julia
-element type exported to an RTC/HIL boundary.
+element type exported to an RTC/HIL boundary. A detector with `bits` must also
+provide a fixed positive `full_well`; per-frame peak normalization is not an
+ADC model and is rejected.
 
 `Detector(...; qe=...)` accepts either a scalar quantum efficiency or a
 qualified QE model such as

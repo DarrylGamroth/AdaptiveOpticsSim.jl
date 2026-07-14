@@ -246,6 +246,7 @@ end
 
 apply_pre_readout_gain!(::FrameSensorType, det::Detector, rng::AbstractRNG) = det.state.frame
 apply_post_readout_gain!(::FrameSensorType, det::Detector) = det.state.frame
+apply_charge_transfer!(::FrameSensorType, det::Detector) = det.state.frame
 reset_readout_products!(det::Detector) = (det.state.readout_products = NoFrameReadoutProducts(); det)
 
 apply_readout_noise!(det::Detector{NoiseNone}, rng::AbstractRNG) = det.state.frame
@@ -265,16 +266,9 @@ function _apply_quantization!(::DetectorDirectPlan, det::Detector)
     bits = det.params.bits
     bits === nothing && return det.state.frame
     levels = exp2(eltype(det.state.frame)(bits))
-    full_well = det.params.full_well
-    if full_well === nothing
-        peak = maximum(det.state.frame)
-        if peak > 0
-            det.state.frame .*= levels / peak
-        end
-    else
-        det.state.frame .*= (levels - one(levels)) / full_well
-        clamp_array!(det.state.frame, zero(eltype(det.state.frame)), levels - one(levels))
-    end
+    full_well = something(det.params.full_well)
+    det.state.frame .*= (levels - one(levels)) / full_well
+    clamp_array!(det.state.frame, zero(eltype(det.state.frame)), levels - one(levels))
     return det.state.frame
 end
 
@@ -283,16 +277,9 @@ function _apply_quantization!(::DetectorHostMirrorPlan, det::Detector)
     bits === nothing && return det.state.frame
     host = detector_host_frame!(det, det.state.frame)
     levels = exp2(eltype(host)(bits))
-    full_well = det.params.full_well
-    if full_well === nothing
-        peak = maximum(host)
-        if peak > 0
-            host .*= levels / peak
-        end
-    else
-        host .*= (levels - one(levels)) / full_well
-        clamp!(host, zero(eltype(host)), levels - one(levels))
-    end
+    full_well = something(det.params.full_well)
+    host .*= (levels - one(levels)) / full_well
+    clamp!(host, zero(eltype(host)), levels - one(levels))
     copyto!(det.state.frame, host)
     return det.state.frame
 end
@@ -301,16 +288,9 @@ function _apply_quantization!(::ScalarCPUStyle, det::Detector)
     bits = det.params.bits
     bits === nothing && return det.state.frame
     levels = exp2(eltype(det.state.frame)(bits))
-    full_well = det.params.full_well
-    if full_well === nothing
-        peak = maximum(det.state.frame)
-        if peak > 0
-            det.state.frame .*= levels / peak
-        end
-    else
-        det.state.frame .*= (levels - one(levels)) / full_well
-        clamp!(det.state.frame, zero(eltype(det.state.frame)), levels - one(levels))
-    end
+    full_well = something(det.params.full_well)
+    det.state.frame .*= (levels - one(levels)) / full_well
+    clamp!(det.state.frame, zero(eltype(det.state.frame)), levels - one(levels))
     return det.state.frame
 end
 
@@ -318,17 +298,10 @@ function _apply_quantization!(style::AcceleratorStyle, det::Detector)
     bits = det.params.bits
     bits === nothing && return det.state.frame
     levels = exp2(eltype(det.state.frame)(bits))
-    full_well = det.params.full_well
-    if full_well === nothing
-        peak = maximum(det.state.frame)
-        if peak > 0
-            det.state.frame .*= levels / peak
-        end
-    else
-        det.state.frame .*= (levels - one(levels)) / full_well
-        _clamp_array!(style, det.state.frame, zero(eltype(det.state.frame)),
-            levels - one(levels))
-    end
+    full_well = something(det.params.full_well)
+    det.state.frame .*= (levels - one(levels)) / full_well
+    _clamp_array!(style, det.state.frame, zero(eltype(det.state.frame)),
+        levels - one(levels))
     return det.state.frame
 end
 
@@ -629,7 +602,7 @@ function initial_temporal_frame(source::FunctionFrameSource, det::Detector, time
 end
 
 function initial_temporal_frame(source::InPlaceFrameSource, det::Detector, time)
-    frame = similar(det.state.frame, source.frame_size...)
+    frame = ensure_temporal_buffer!(det, source.frame_size)
     sample_frame!(frame, source, time)
     return frame
 end
@@ -639,9 +612,16 @@ function initial_temporal_frame(source::FunctionExposureFrameSource, det::Detect
 end
 
 function initial_temporal_frame(source::InPlaceExposureFrameSource, det::Detector, time)
-    frame = similar(det.state.frame, source.frame_size...)
+    frame = ensure_temporal_buffer!(det, source.frame_size)
     sample_exposure_frame!(frame, source, time, zero(eltype(det.state.frame)))
     return frame
+end
+
+function ensure_temporal_buffer!(det::Detector, dims::Tuple{Int,Int})
+    if size(det.state.temporal_buffer) != dims
+        det.state.temporal_buffer = similar(det.state.temporal_buffer, dims...)
+    end
+    return det.state.temporal_buffer
 end
 
 function capture_temporal_signal!(det::Detector, source::AbstractTemporalFrameSource, first_frame::AbstractMatrix,
@@ -664,7 +644,7 @@ function capture_temporal_signal!(det::Detector, source::AbstractTemporalFrameSo
     fill_frame!(det, first_frame, exposure_time)
     det.state.accum_buffer .= det.state.frame
 
-    scratch = similar(first_frame)
+    scratch = ensure_temporal_buffer!(det, size(first_frame))
     n_rows = size(det.state.frame, 1)
     group_size = timing.row_group_size
     value_type = eltype(det.state.frame)

@@ -47,6 +47,8 @@ advance_thermal!(det::Detector, dt) = (advance_thermal!(det.params.thermal_model
 
 supports_detector_mtf(::AbstractFrameDetector) = false
 supports_detector_mtf(det::Detector) = supports_detector_mtf(det.params.response_model)
+detector_mtf(det::Detector, spatial_frequency_x::Real, spatial_frequency_y::Real) =
+    detector_mtf(det.params.response_model, spatial_frequency_x, spatial_frequency_y)
 
 supports_detector_thermal_model(det::Detector) = !is_null_thermal_model(det.params.thermal_model)
 
@@ -209,6 +211,7 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
     col_window = det.params.readout_window === nothing ? nothing :
         (first(det.params.readout_window.cols), last(det.params.readout_window.cols))
     support_rows, support_cols = response_support(det.params.response_model)
+    coupling_rows, coupling_cols = charge_coupling_support(det.params.charge_coupling_model)
     products = readout_products(det)
     reference_cube = detector_reference_cube(products)
     signal_cube = detector_signal_cube(products)
@@ -240,6 +243,9 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         response_fill_factor_x(det.params.response_model, T),
         response_fill_factor_y(det.params.response_model, T),
         response_aperture_shape(det.params.response_model),
+        charge_coupling_symbol(det.params.charge_coupling_model),
+        coupling_rows,
+        coupling_cols,
         detector_defect_symbol(det.params.defect_model),
         has_prnu(det.params.defect_model),
         has_dsnu(det.params.defect_model),
@@ -446,6 +452,14 @@ function convert_frame_response_model(model::SeparablePixelMTF, ::Type{T}, backe
         T(model.pitch_x_px), T(model.pitch_y_px), T(model.fill_factor_x), T(model.fill_factor_y), kernel_x, kernel_y)
 end
 
+convert_charge_coupling_model(::NullChargeCoupling, ::Type{T}, backend) where {T<:AbstractFloat} =
+    NullChargeCoupling()
+
+function convert_charge_coupling_model(model::InterpixelCapacitance, ::Type{T}, backend) where {T<:AbstractFloat}
+    response = convert_frame_response_model(model.response, T, backend)
+    return InterpixelCapacitance{typeof(response)}(response)
+end
+
 validate_frame_response_model(model::NullFrameResponse) = model
 
 function validate_frame_response_model(model::GaussianPixelResponse)
@@ -487,6 +501,13 @@ function validate_frame_response_model(model::SeparablePixelMTF)
     isodd(length(model.kernel_x)) || throw(InvalidConfiguration("SeparablePixelMTF kernel_x length must be odd"))
     isodd(length(model.kernel_y)) || throw(InvalidConfiguration("SeparablePixelMTF kernel_y length must be odd"))
     return model
+end
+
+validate_charge_coupling_model(::NullChargeCoupling) = NullChargeCoupling()
+
+function validate_charge_coupling_model(model::InterpixelCapacitance)
+    response = validate_frame_response_model(model.response)
+    return InterpixelCapacitance{typeof(response)}(response)
 end
 
 convert_detector_defect_model(::NullDetectorDefectModel, ::Type{T}, backend) where {T<:AbstractFloat} = NullDetectorDefectModel()
@@ -652,6 +673,12 @@ resolve_response_model(sensor::SensorType, ::Nothing; T::Type{<:AbstractFloat}, 
 resolve_response_model(sensor::SensorType, response_model::AbstractFrameResponse; T::Type{<:AbstractFloat}, backend) =
     response_model
 
+resolve_charge_coupling_model(sensor::FrameSensorType, ::Nothing;
+    T::Type{<:AbstractFloat}, backend) =
+    default_charge_coupling_model(sensor; T=T, backend=backend)
+resolve_charge_coupling_model(::FrameSensorType, model::AbstractChargeCouplingModel;
+    T::Type{<:AbstractFloat}, backend) = model
+
 function resolve_output_type(bits::Union{Nothing,Int}, output_type::Union{Nothing,DataType})
     output_type !== nothing && return output_type
     bits === 8 && return UInt8
@@ -677,7 +704,9 @@ end
 function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Real,AbstractQuantumEfficiencyModel},
     psf_sampling::Int, binning::Int, gain::Real, dark_current::Real,
     bits::Union{Nothing,Int}, full_well::Union{Nothing,Real}, sensor::SensorType,
-    response_model::Union{Nothing,FrameResponseModel}, defect_model::Union{Nothing,AbstractDetectorDefectModel},
+    response_model::Union{Nothing,FrameResponseModel},
+    charge_coupling_model::Union{Nothing,AbstractChargeCouplingModel},
+    defect_model::Union{Nothing,AbstractDetectorDefectModel},
     timing_model::Union{Nothing,AbstractFrameTimingModel}, correction_model::Union{Nothing,FrameReadoutCorrectionModel},
     nonlinearity_model::Union{Nothing,AbstractFrameNonlinearityModel},
     thermal_model::Union{Nothing,AbstractDetectorThermalModel},
@@ -687,6 +716,12 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
     validate_frame_detector_sensor(sensor)
     selector = _resolve_backend_selector(backend)
     array_backend = _resolve_array_backend(backend)
+    bits === nothing || (bits > 0 && bits <= 64) ||
+        throw(InvalidConfiguration("Detector bits must lie in 1:64"))
+    bits === nothing || full_well !== nothing ||
+        throw(InvalidConfiguration("Detector bits requires a fixed full_well ADC scale"))
+    full_well === nothing || full_well > 0 ||
+        throw(InvalidConfiguration("Detector full_well must be > 0"))
     full_well_t = full_well === nothing ? nothing : T(full_well)
     qe_model = validate_quantum_efficiency_model(resolve_quantum_efficiency_model(qe, T))
     qe_scalar = reference_qe(qe_model, T)
@@ -695,6 +730,10 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
     resolved_response = resolve_response_model(sensor, response_model; T=T, backend=selector)
     response = validate_detector_response(sensor,
         validate_frame_response_model(convert_frame_response_model(resolved_response, T, backend)))
+    resolved_coupling = resolve_charge_coupling_model(sensor, charge_coupling_model;
+        T=T, backend=selector)
+    coupling = validate_charge_coupling_model(
+        convert_charge_coupling_model(resolved_coupling, T, backend))
     resolved_defect = resolve_detector_defect_model(sensor, defect_model; T=T, backend=selector)
     defects = validate_detector_defect(sensor,
         validate_detector_defect_model(convert_detector_defect_model(resolved_defect, T, backend)))
@@ -709,7 +748,9 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
     thermal = validate_thermal_model(convert_thermal_model(resolved_thermal, T))
     output_type_t = resolve_output_type(bits, output_type)
     window = validate_readout_window(readout_window)
-    params = DetectorParams{T, typeof(sensor), typeof(qe_model), typeof(response), typeof(defects), typeof(timing), typeof(correction), typeof(nonlinearity), typeof(thermal)}(
+    params = DetectorParams{T, typeof(sensor), typeof(qe_model), typeof(response),
+        typeof(coupling), typeof(defects), typeof(timing), typeof(correction),
+        typeof(nonlinearity), typeof(thermal)}(
         T(integration_time),
         qe_scalar,
         psf_sampling,
@@ -721,6 +762,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
         sensor,
         qe_model,
         response,
+        coupling,
         defects,
         timing,
         correction,
@@ -732,6 +774,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
     frame = array_backend{T}(undef, 1, 1)
     response_buffer = array_backend{T}(undef, 1, 1)
     bin_buffer = array_backend{T}(undef, 1, 1)
+    temporal_buffer = array_backend{T}(undef, 1, 1)
     noise_buffer = array_backend{T}(undef, 1, 1)
     noise_buffer_host = Matrix{T}(undef, 1, 1)
     batched_buffer_host = Array{T,3}(undef, 0, 0, 0)
@@ -746,6 +789,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
     fill!(frame, zero(T))
     fill!(response_buffer, zero(T))
     fill!(bin_buffer, zero(T))
+    fill!(temporal_buffer, zero(T))
     fill!(noise_buffer, zero(T))
     fill!(accum_buffer, zero(T))
     latent_buffer = array_backend{T}(undef, 1, 1)
@@ -761,6 +805,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
         frame,
         response_buffer,
         bin_buffer,
+        temporal_buffer,
         noise_buffer,
         noise_buffer_host,
         batched_buffer_host,
@@ -787,6 +832,7 @@ function Detector(; integration_time::Real=1.0, qe::Union{Real,AbstractQuantumEf
     gain::Real=1.0, dark_current::Real=0.0, bits::Union{Nothing,Int}=nothing,
     full_well::Union{Nothing,Real}=nothing, sensor::SensorType=CCDSensor(),
     response_model::Union{Nothing,FrameResponseModel}=nothing,
+    charge_coupling_model::Union{Nothing,AbstractChargeCouplingModel}=nothing,
     defect_model::Union{Nothing,AbstractDetectorDefectModel}=nothing,
     timing_model::Union{Nothing,AbstractFrameTimingModel}=nothing,
     correction_model::Union{Nothing,FrameReadoutCorrectionModel}=nothing,
@@ -799,7 +845,9 @@ function Detector(; integration_time::Real=1.0, qe::Union{Real,AbstractQuantumEf
     return Detector(normalized; integration_time=integration_time, qe=qe,
         psf_sampling=psf_sampling, binning=binning, gain=gain,
         dark_current=dark_current, bits=bits, full_well=full_well,
-        sensor=sensor, response_model=response_model, defect_model=defect_model, timing_model=timing_model,
+        sensor=sensor, response_model=response_model,
+        charge_coupling_model=charge_coupling_model,
+        defect_model=defect_model, timing_model=timing_model,
         correction_model=correction_model, nonlinearity_model=nonlinearity_model, thermal_model=thermal_model,
         readout_window=readout_window, output_type=output_type,
         background_flux=background_flux, background_map=background_map,
@@ -810,6 +858,7 @@ function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Union{Real,
     psf_sampling::Int=1, binning::Int=1, gain::Real=1.0, dark_current::Real=0.0,
     bits::Union{Nothing,Int}=nothing, full_well::Union{Nothing,Real}=nothing,
     sensor::SensorType=CCDSensor(), response_model::Union{Nothing,FrameResponseModel}=nothing,
+    charge_coupling_model::Union{Nothing,AbstractChargeCouplingModel}=nothing,
     defect_model::Union{Nothing,AbstractDetectorDefectModel}=nothing,
     timing_model::Union{Nothing,AbstractFrameTimingModel}=nothing,
     correction_model::Union{Nothing,FrameReadoutCorrectionModel}=nothing,
@@ -824,7 +873,8 @@ function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Union{Real,
     return _build_detector(validated; integration_time=integration_time, qe=qe,
         psf_sampling=psf_sampling, binning=binning, gain=gain,
         dark_current=dark_current, bits=bits, full_well=full_well,
-        sensor=sensor, response_model=response_model, defect_model=defect_model,
+        sensor=sensor, response_model=response_model,
+        charge_coupling_model=charge_coupling_model, defect_model=defect_model,
         timing_model=timing_model, correction_model=correction_model, nonlinearity_model=nonlinearity_model,
         thermal_model=thermal_model,
         readout_window=readout_window, output_type=output_type,

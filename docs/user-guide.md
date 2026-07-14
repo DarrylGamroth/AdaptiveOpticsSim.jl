@@ -175,7 +175,9 @@ adu = wfs_detector_image(wfs, det)
 
 Here `adu` is a `UInt16` image containing 12-bit ADU values. For
 Shack-Hartmann sensors this is the lenslet spot mosaic; for frame-style WFSs it
-is the maintained detector/readout frame.
+is the maintained detector/readout frame. Quantized detectors require a fixed
+positive `full_well`; the capture path never rescales each frame by its own
+peak.
 
 Detector QE may be a scalar or a sampled QE curve. Scalar QE is the simplest
 and fastest path. Use a sampled curve when the source spectrum matters:

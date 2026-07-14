@@ -50,6 +50,9 @@
     @test metadata_adc.output_type == UInt8
     @test metadata_adc.frame_size == (4, 4)
     @test metadata_adc.output_size == (4, 4)
+    @test_throws InvalidConfiguration Detector(noise=NoiseNone(), bits=8)
+    @test_throws InvalidConfiguration Detector(noise=NoiseNone(), bits=0,
+        full_well=10.0)
 
     det_adc_float = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         bits=8, full_well=10.0, output_type=Float32)
@@ -224,9 +227,11 @@
         sensor=CMOSSensor(timing_model=RollingShutter(0.25)),
         response_model=NullFrameResponse())
     rolling_source = InPlaceFrameSource((out, t) -> fill!(out, t), (4, 4))
-    rolling_frame = capture!(rolling_det, rolling_source; rng=MersenneTwister(127))
+    rolling_rng = MersenneTwister(127)
+    rolling_frame = capture!(rolling_det, rolling_source, rolling_rng)
     @test rolling_frame == repeat(reshape([0.0, 0.25, 0.5, 0.75], :, 1), 1, 4)
     @test detector_export_metadata(rolling_det).sampling_wallclock_time == 2.0
+    @test @allocated(capture!(rolling_det, rolling_source, rolling_rng)) == 0
 
     global_reset_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=CMOSSensor(timing_model=RollingShutter(0.25; exposure_mode=GlobalResetExposure())),
@@ -905,6 +910,8 @@
     @test frame_mtf[5, 5] < 1.0
     @test frame_mtf[5, 4] > 0
     @test supports_detector_mtf(det_mtf)
+    @test detector_mtf(det_mtf, 0.0, 0.0) ≈ 1.0
+    @test detector_mtf(det_mtf, 0.5, 0.0) < 1.0
     mtf_meta = detector_export_metadata(det_mtf)
     @test mtf_meta.frame_response == :gaussian
     @test mtf_meta.response_width_px == 0.75
@@ -931,6 +938,7 @@
     @test sampled_meta.response_support_cols == 3
     @test sampled_meta.aperture_shape == :sampled
     @test supports_detector_mtf(sampled_det)
+    @test detector_mtf(sampled_det, 0.0, 0.0) ≈ 1.0
     @test_throws InvalidConfiguration SampledFrameResponse(zeros(3, 3))
     @test_throws InvalidConfiguration SampledFrameResponse(ones(2, 3))
 
@@ -973,6 +981,7 @@
     @test rect_meta.aperture_shape == :rectangular
     @test rect_meta.response_application_domain == :image
     @test supports_detector_mtf(rect_det)
+    @test detector_mtf(RectangularPixelAperture(), 0.5, 0.0) ≈ 2 / pi
 
     mtf_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         response_model=SeparablePixelMTF(pitch_x_px=1.0, pitch_y_px=1.0,
@@ -986,6 +995,21 @@
     @test mtf_meta2.aperture_shape == :rectangular
     @test_throws InvalidConfiguration RectangularPixelAperture(fill_factor_x=0.0)
     @test_throws InvalidConfiguration SeparablePixelMTF(fill_factor_y=1.5)
+
+    ipc_kernel = [0.0 0.01 0.0; 0.01 0.96 0.01; 0.0 0.01 0.0]
+    ipc_det = Detector(integration_time=1.0, noise=NoisePhoton(), qe=1.0,
+        response_model=NullFrameResponse(),
+        charge_coupling_model=InterpixelCapacitance(ipc_kernel))
+    ipc_input = zeros(9, 9)
+    ipc_input[5, 5] = 100.0
+    ipc_frame = capture!(ipc_det, ipc_input; rng=MersenneTwister(45))
+    @test ipc_frame[5, 4] > 0
+    @test !isinteger(ipc_frame[5, 4])
+    @test sum(ipc_frame) ≈ round(sum(ipc_frame)) atol=1e-10
+    ipc_meta = detector_export_metadata(ipc_det)
+    @test ipc_meta.charge_coupling == :interpixel_capacitance
+    @test ipc_meta.charge_coupling_support_rows == 3
+    @test ipc_meta.charge_coupling_support_cols == 3
 
     det_window_stack = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         readout_window=FrameWindow(2:8, 2:8))
