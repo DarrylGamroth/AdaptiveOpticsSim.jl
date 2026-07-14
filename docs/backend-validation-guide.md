@@ -167,6 +167,7 @@ julia --project=benchmarks -e 'using Pkg; Pkg.instantiate()'
 julia --project=benchmarks benchmarks/benchmark_cpu.jl
 julia --project=benchmarks benchmarks/benchmark_cpu_hotpath_cards.jl
 julia --project=benchmarks benchmarks/benchmark_control_operators.jl
+julia --project=benchmarks benchmarks/benchmark_loop_order_simd.jl
 
 julia --project=benchmarks/amdgpu -e 'using Pkg; Pkg.instantiate()'
 julia --project=benchmarks/amdgpu benchmarks/benchmark_amdgpu.jl
@@ -223,6 +224,17 @@ archived in
 [`2026-07-13-control-operators.toml`](../benchmarks/results/platform/2026-07-13-control-operators.toml).
 Treat its rank as a performance workload only; production rank must come from
 optical and control validation.
+
+For CPU loop-order and vectorization work, use
+`benchmark_loop_order_simd.jl`. The maintained comparison archives legacy and
+current implementations for LiFT convolution and LGS elongation, checks
+bitwise output equality, and reports warmed allocations and tails. The current
+local-host artifact is
+[`2026-07-13-loop-order-native-simd.toml`](../benchmarks/results/platform/2026-07-13-loop-order-native-simd.toml).
+Julia's built-in `@simd` was sufficient for the independent contiguous loops;
+`SIMD.jl` is not a dependency. Reconsider explicit vector types only for a
+profiled kernel that native code generation fails to vectorize and only with
+separate CPU-feature and backend-portability validation.
 
 The retained CUDA benchmark has the equivalent isolated
 `--project=benchmarks/cuda` environment, but requires restored CUDA hardware.

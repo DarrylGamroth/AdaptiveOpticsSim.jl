@@ -26,3 +26,7 @@ path = "2026-07-13-ensemble-schedulers.toml"
 purpose = "synthetic dense versus factorized and controlled reconstruction latency/storage comparison"
 id = "CONTROL-OPERATORS-2026-07-13"
 path = "2026-07-13-control-operators.toml"
+[[artifacts]]
+purpose = "CPU column-major loop-order and native SIMD comparison for LiFT convolution and LGS elongation"
+id = "LOOP-ORDER-NATIVE-SIMD-2026-07-13"
+path = "2026-07-13-loop-order-native-simd.toml"

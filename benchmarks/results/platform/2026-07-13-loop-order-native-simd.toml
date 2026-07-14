@@ -1,0 +1,80 @@
+artifact_id = "LOOP-ORDER-NATIVE-SIMD-2026-07-13"
+generated_on = "2026-07-13"
+evidence_class = "warmed CPU loop-order and native SIMD microbenchmark"
+source_revision = "6ab8999 with PR-8 worktree changes"
+raw_histogram_archived = false
+
+[environment]
+julia_version = "1.12.6"
+kernel = "Linux 6.12.57+deb13-amd64 x86_64"
+cpu = "AMD Ryzen 7 6800H with Radeon Graphics"
+cpu_target = "znver3"
+physical_cores = 8
+hardware_threads = 16
+julia_threads = 1
+
+[workload]
+element_type = "Float32"
+warmup_calls = 5
+measurement_trials = 3
+samples_per_trial = 100
+generic_convolution_shape = [96, 96]
+generic_kernel_shape = [5, 5]
+separable_convolution_shape = [128, 128]
+separable_kernel_length = 9
+elongation_frame_shape = [256, 256]
+elongation_stack_shape = [32, 32, 256]
+elongation_kernel_length = 9
+
+[conv2d_same]
+legacy_trial_median_ns = [383443, 376240, 376285]
+current_trial_median_ns = [151334, 151363, 151304]
+legacy_median_of_medians_ns = 376285
+current_median_of_medians_ns = 151334
+current_median_trial_p95_ns = 151785
+current_median_trial_p99_ns = 154452
+speedup = 2.49
+legacy_allocated_bytes = 0
+current_allocated_bytes = 0
+bitwise_equal = true
+
+[conv2d_same_separable]
+legacy_trial_median_ns = [225758, 221630, 230141]
+current_trial_median_ns = [111198, 111258, 115426]
+legacy_median_of_medians_ns = 225758
+current_median_of_medians_ns = 111258
+current_median_trial_p95_ns = 120295
+current_median_trial_p99_ns = 139630
+speedup = 2.03
+legacy_allocated_bytes = 0
+current_allocated_bytes = 0
+bitwise_equal = true
+
+[elongation_frame]
+legacy_trial_median_ns = [547966, 551257, 548527]
+current_trial_median_ns = [50770, 50775, 50650]
+legacy_median_of_medians_ns = 548527
+current_median_of_medians_ns = 50770
+current_median_trial_p95_ns = 60734
+current_median_trial_p99_ns = 63161
+speedup = 10.8
+legacy_allocated_bytes = 0
+current_allocated_bytes = 0
+bitwise_equal = true
+
+[elongation_stack]
+legacy_trial_median_ns = [2518146, 2472811, 2476127]
+current_trial_median_ns = [289582, 289908, 292613]
+legacy_median_of_medians_ns = 2476127
+current_median_of_medians_ns = 289908
+current_median_trial_p95_ns = 322658
+current_median_trial_p99_ns = 332647
+speedup = 8.54
+legacy_allocated_bytes = 0
+current_allocated_bytes = 0
+bitwise_equal = true
+
+[interpretation]
+native_simd_gate_passed = true
+simd_jl_dependency_added = false
+notes = "Column-major accumulation with Julia's built-in @simd was bitwise-identical to the former per-output loop order for all four workloads. SIMD.jl was not added: the representative Shack-Hartmann profile was dominated by cispi field formation and FFT execution, while native @simd already captured the independent contiguous accumulation loops. These are CPU microbenchmarks, not end-to-end HIL latency or GPU throughput claims."

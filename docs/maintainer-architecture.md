@@ -25,6 +25,10 @@ The implemented system follows these package-level rules:
 - isolate backend policy away from model code when possible
 - keep deterministic validation and frozen-reference evidence first-class
 - keep optional integrations outside core or in extension modules
+- traverse column-major arrays with the first index in the innermost CPU loop;
+  use `eachindex` for linear elementwise passes
+- use native `@simd` only on measured, independent iterations with correctness
+  and allocation evidence; do not add explicit SIMD packages speculatively
 
 ## Package Shape
 

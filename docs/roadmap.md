@@ -20,6 +20,8 @@ hardware-validated GPU workflows. The core package now has:
   AcceleratedKernels and Dagger integrations kept outside the HIL inner loop
 - caller-owned calibration storage plus compact factorized and controller-
   composed reconstruction operators for validated large control surfaces
+- measured column-major/native-SIMD CPU kernels for LiFT convolution and LGS
+  elongation, without adding an explicit SIMD dependency
 - committed reference data and regression tests for core WFS and detector paths
 - a compact docs set with one extension guide instead of subsystem plan sprawl
 

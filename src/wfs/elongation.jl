@@ -112,13 +112,15 @@ end
 
 function _apply_elongation!(::ScalarCPUStyle, intensity::AbstractMatrix{T}, tmp::AbstractMatrix{T},
     kernel::AbstractVector{T}, half::Int, n1::Int, n2::Int) where {T<:AbstractFloat}
-    @inbounds for i in 1:n1, j in 1:n2
-        acc = zero(T)
-        for k in -half:half
+    fill!(tmp, zero(T))
+    @inbounds for k in -half:half
+        weight = kernel[k + half + 1]
+        for j in 1:n2
             jj = clamp(j + k, 1, n2)
-            acc += intensity[i, jj] * kernel[k + half + 1]
+            @simd for i in 1:n1
+                tmp[i, j] += intensity[i, jj] * weight
+            end
         end
-        tmp[i, j] = acc
     end
     return tmp
 end
@@ -131,13 +133,15 @@ end
 
 function _apply_elongation_stack!(::ScalarCPUStyle, intensity_stack::AbstractArray{T,3}, tmp::AbstractArray{T,3},
     kernel::AbstractVector{T}, half::Int, n1::Int, n2::Int, n3::Int) where {T<:AbstractFloat}
-    @inbounds for k in 1:n3, i in 1:n1, j in 1:n2
-        acc = zero(T)
-        for dk in -half:half
+    fill!(tmp, zero(T))
+    @inbounds for plane in 1:n3, dk in -half:half
+        weight = kernel[dk + half + 1]
+        for j in 1:n2
             jj = clamp(j + dk, 1, n2)
-            acc += intensity_stack[i, jj, k] * kernel[dk + half + 1]
+            @simd for i in 1:n1
+                tmp[i, j, plane] += intensity_stack[i, jj, plane] * weight
+            end
         end
-        tmp[i, j, k] = acc
     end
     return tmp
 end

@@ -850,14 +850,21 @@ function conv2d_same!(dest::AbstractMatrix{T}, src::AbstractMatrix{T}, kernel::A
     cy = div(kw, 2)
     norm = sum(kernel)
     inv_norm = norm == 0 ? one(T) : T(1) / T(norm)
-    @inbounds for i in 1:n, j in 1:m
-        acc = zero(T)
-        for ki in 1:kh, kj in 1:kw
-            ii = symm_index(i + ki - cx - 1, n)
-            jj = symm_index(j + kj - cy - 1, m)
-            acc += src[ii, jj] * kernel[ki, kj]
+    fill!(dest, zero(T))
+    @inbounds for ki in 1:kh, kj in 1:kw
+        offset_i = ki - cx - 1
+        offset_j = kj - cy - 1
+        weight = kernel[ki, kj]
+        for j in 1:m
+            jj = symm_index(j + offset_j, m)
+            @simd for i in 1:n
+                ii = symm_index(i + offset_i, n)
+                dest[i, j] += src[ii, jj] * weight
+            end
         end
-        dest[i, j] = acc * inv_norm
+    end
+    @inbounds @simd for index in eachindex(dest)
+        dest[index] *= inv_norm
     end
     return dest
 end
@@ -872,21 +879,29 @@ function conv2d_same_separable!(dest::AbstractMatrix{T}, tmp::AbstractMatrix{T},
     row_norm = sum(row_kernel)
     col_norm = sum(col_kernel)
     inv_norm = (iszero(row_norm) || iszero(col_norm)) ? one(T) : inv(row_norm * col_norm)
-    @inbounds for i in 1:n, j in 1:m
-        acc = zero(T)
-        for ki in 1:kr
-            ii = symm_index(i + ki - cx - 1, n)
-            acc += src[ii, j] * row_kernel[ki]
+    @inbounds for j in 1:m
+        for i in 1:n
+            acc = zero(T)
+            for ki in 1:kr
+                ii = symm_index(i + ki - cx - 1, n)
+                acc += src[ii, j] * row_kernel[ki]
+            end
+            tmp[i, j] = acc
         end
-        tmp[i, j] = acc
     end
-    @inbounds for i in 1:n, j in 1:m
-        acc = zero(T)
-        for kj in 1:kc
-            jj = symm_index(j + kj - cy - 1, m)
-            acc += tmp[i, jj] * col_kernel[kj]
+    fill!(dest, zero(T))
+    @inbounds for kj in 1:kc
+        offset_j = kj - cy - 1
+        weight = col_kernel[kj]
+        for j in 1:m
+            jj = symm_index(j + offset_j, m)
+            @simd for i in 1:n
+                dest[i, j] += tmp[i, jj] * weight
+            end
         end
-        dest[i, j] = acc * inv_norm
+    end
+    @inbounds @simd for index in eachindex(dest)
+        dest[index] *= inv_norm
     end
     return dest
 end
