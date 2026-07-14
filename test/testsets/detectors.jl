@@ -644,7 +644,11 @@
     @test ramp_meta.read_cube_reads == 5
     @test supports_up_the_ramp(ramp_detector.params.sensor)
     capture!(ramp_detector, ramp_input, ramp_rng)
-    @test @allocated(capture!(ramp_detector, ramp_input, ramp_rng)) == 0
+    if coverage_instrumented()
+        @test_skip "up-the-ramp allocation assertions are disabled under coverage instrumentation"
+    else
+        @test @allocated(capture!(ramp_detector, ramp_input, ramp_rng)) == 0
+    end
     ramp_stack = fill(5.0, 2, 4, 4)
     @test_throws InvalidConfiguration capture_stack!(ramp_detector,
         ramp_stack, similar(ramp_stack), MersenneTwister(161))
@@ -663,8 +667,12 @@
     @test size(detector_ramp_slope(ramp_window_detector)) == (2, 3)
     @test size(detector_read_cube(ramp_window_detector)) == (2, 3, 5)
     capture!(ramp_window_detector, ramp_input, ramp_window_rng)
-    @test @allocated(capture!(ramp_window_detector, ramp_input,
-        ramp_window_rng)) == 0
+    if coverage_instrumented()
+        @test_skip "up-the-ramp allocation assertions are disabled under coverage instrumentation"
+    else
+        @test @allocated(capture!(ramp_window_detector, ramp_input,
+            ramp_window_rng)) == 0
+    end
 
     ramp_noise_detector = Detector(integration_time=1.0,
         noise=NoiseReadout(4.0), qe=1.0, gain=1.0,

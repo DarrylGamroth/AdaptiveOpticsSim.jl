@@ -890,6 +890,7 @@ end
     atmosphere.advances = 0
     atmosphere.renders = 0
     if coverage_instrumented()
+        step!(shared)
         @test_skip "allocation assertions are disabled under coverage instrumentation"
     else
         @test @allocated(step!(shared)) == 0
