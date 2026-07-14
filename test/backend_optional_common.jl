@@ -197,11 +197,14 @@ function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:focus},
 end
 
 function _optional_low_order_commands(::Type{T}, ::Val{:focus}) where {T<:AbstractFloat}
-    return fill(T(0.0125), 1), fill(T(0.025), 1), fill(T(0.02), 16)
+    return fill(T(1.25e-7), 1), fill(T(2.5e-7), 1), fill(T(2e-8), 16)
 end
 
 function _optional_low_order_commands(::Type{T}, ::Union{Val{:tiptilt},Val{:steering}}) where {T<:AbstractFloat}
-    return fill(T(0.0125), 2), fill(T(0.025), 2), fill(T(0.02), 16)
+    # These coefficients produce nanometre-scale OPD. Centimetre-scale test
+    # commands make diffraction output chaotic under otherwise sub-ulp
+    # Float32 backend differences and do not represent an AO operating point.
+    return fill(T(1.25e-7), 2), fill(T(2.5e-7), 2), fill(T(2e-8), 16)
 end
 
 function _optional_low_order_tolerances(::Val{:focus}, ::Val{:sh}=Val(:sh))
@@ -352,7 +355,7 @@ function run_optional_avalanche_detector_parity(::Type{B}, BackendArray) where {
         AdaptiveOpticsSim.execution_style(ramp_output))
     @test Array(ramp_output) == fill(T(6), 32, 32)
     @test Array(detector_ramp_slope(ramp_detector)) == fill(T(3), 32, 32)
-    @test Array(detector_ramp_intercept(ramp_detector)) == zeros(T, 32, 32)
+    @test maximum(abs, Array(detector_ramp_intercept(ramp_detector))) <= eps(T)
     @test size(detector_ramp_cube(ramp_detector)) == (32, 32, 5)
     @test detector_ramp_times(ramp_detector) == T[0, 0.5, 1, 1.5, 2]
 

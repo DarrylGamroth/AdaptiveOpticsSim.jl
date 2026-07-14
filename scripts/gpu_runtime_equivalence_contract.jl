@@ -428,11 +428,14 @@ function _build_multi_optic_hil_case(backend, ::Type{T}, ::Val{:focus}, ::Val{:s
 end
 
 function _multi_optic_case_commands(::Type{T}, ::Val{:focus}) where {T<:AbstractFloat}
-    return fill(T(0.0125), 1), fill(T(0.025), 1), fill(T(0.02), 16)
+    return fill(T(1.25e-7), 1), fill(T(2.5e-7), 1), fill(T(2e-8), 16)
 end
 
 function _multi_optic_case_commands(::Type{T}, ::Union{Val{:tiptilt},Val{:steering}}) where {T<:AbstractFloat}
-    return fill(T(0.0125), 2), fill(T(0.025), 2), fill(T(0.02), 16)
+    # Keep the parity fixture in a physical AO regime. Unrealistic
+    # centimetre-scale OPD amplifies sub-ulp Float32 backend differences into
+    # unrelated diffraction patterns.
+    return fill(T(1.25e-7), 2), fill(T(2.5e-7), 2), fill(T(2e-8), 16)
 end
 
 function _multi_optic_case_tolerances(::Val{:focus}, ::Val{:sh}=Val(:sh))
