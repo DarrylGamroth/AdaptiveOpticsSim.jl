@@ -6,6 +6,7 @@ include("testsets/control_and_runtime.jl")
 include("testsets/detectors_and_wfs.jl")
 include("testsets/calibration_and_analysis.jl")
 include("testsets/reference_and_tutorials.jl")
+include("testsets/gate0_characterization.jl")
 
 include("backend_optional_common.jl")
 include("optional_amdgpu_backends.jl")

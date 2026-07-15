@@ -27,6 +27,7 @@ using .SubaruAO188Simulation
 using .SubaruAO3kSimulation
 
 include("reference_harness.jl")
+include("gate0_characterization_harness.jl")
 include("ka_cpu_matrix.jl")
 include("tomography.jl")
 
