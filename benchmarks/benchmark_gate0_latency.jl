@@ -256,20 +256,24 @@ function load_gate0_baselines(path::AbstractString)
 end
 
 function gate0_regression(card::Gate0LatencyCard, summary,
-    steady_alloc_bytes::Int64, relative_factor::Float64, baselines)
+    steady_alloc_bytes::Int64, relative_factor::Float64, baselines,
+    p99_gate_supported::Bool)
     absolute_observed = Int64(summary["worst_p99_ns"])
     relative_observed = Int64(summary["median_p99_ns"])
     allocation_passed = steady_alloc_bytes <= card.max_alloc_bytes
-    absolute_passed = absolute_observed <= card.absolute_p99_ns
+    absolute_passed = !p99_gate_supported ||
+        absolute_observed <= card.absolute_p99_ns
     result = Dict{String,Any}(
         "allocation_gate_passed" => allocation_passed,
         "allocation_limit_bytes" => card.max_alloc_bytes,
+        "absolute_p99_gate_evaluated" => p99_gate_supported,
         "absolute_p99_gate_passed" => absolute_passed,
         "absolute_p99_observed_ns" => absolute_observed,
         "absolute_p99_limit_ns" => card.absolute_p99_ns,
         "relative_p99_gate_evaluated" => false,
         "relative_p99_gate_passed" => true,
     )
+    p99_gate_supported || return result
     haskey(baselines, card.id) || return result
     baseline = baselines[card.id]
     baseline["kind"] == card.kind || error(
@@ -387,6 +391,8 @@ function run_gate0_latency_benchmarks()
     samples > 0 || error("AOS_GATE0_SAMPLES must be > 0")
     runs_count > 0 || error("AOS_GATE0_RUNS must be > 0")
     warmup >= 0 || error("AOS_GATE0_WARMUP must be >= 0")
+    minimum_p99_samples = Int(contract["minimum_samples_for_p99_gate"])
+    p99_gate_supported = samples >= minimum_p99_samples
     lowest_ns = Int64(contract["histogram_lowest_ns"])
     highest_ns = Int64(contract["histogram_highest_ns"])
     significant_figures = Int(contract["histogram_significant_figures"])
@@ -402,6 +408,10 @@ function run_gate0_latency_benchmarks()
     println("  runs: ", runs_count)
     println("  warmup_operations: ", warmup)
     println("  p99_relative_factor: ", relative_factor)
+    if !p99_gate_supported
+        println("  p99_gates: skipped (requires at least ",
+            minimum_p99_samples, " samples per run)")
+    end
 
     for card in cards
         GC.gc()
@@ -423,7 +433,7 @@ function run_gate0_latency_benchmarks()
         end
         summary = summarize_gate0_runs(runs)
         regression = gate0_regression(card, summary, steady_alloc_bytes,
-            relative_factor, baselines)
+            relative_factor, baselines, p99_gate_supported)
         card_passed = regression["allocation_gate_passed"] &&
             regression["absolute_p99_gate_passed"] &&
             regression["relative_p99_gate_passed"]
@@ -450,6 +460,8 @@ function run_gate0_latency_benchmarks()
         "configured_samples_per_run" => samples,
         "configured_runs" => runs_count,
         "configured_warmup_operations" => warmup,
+        "minimum_samples_for_p99_gate" => minimum_p99_samples,
+        "p99_gate_supported" => p99_gate_supported,
         "contract" => contract["contract"],
         "scope_exclusions" => contract["scope_exclusions"],
         "histogram" => Dict(

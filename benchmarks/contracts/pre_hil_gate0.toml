@@ -5,6 +5,7 @@ source_revision = "7cf8564a63508ec94209dde41c7af0261abee592"
 samples_per_run = 10000
 runs = 3
 warmup_operations = 100
+minimum_samples_for_p99_gate = 10000
 histogram_lowest_ns = 1
 histogram_highest_ns = 60000000000
 histogram_significant_figures = 3
