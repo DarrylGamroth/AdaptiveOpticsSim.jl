@@ -15,6 +15,6 @@ function fitting_error_dm(opd::AbstractMatrix{T}, projector::AbstractMatrix{T},
     tel.state.opd .= opd
     apply!(dm, tel, DMAdditive())
     opd_fit = copy(tel.state.opd)
-    opd_corr = dm.state.opd .* tel.state.pupil
+    opd_corr = dm.state.opd .* pupil_mask(tel)
     return opd_fit, opd_corr, copy(opd), coeffs
 end

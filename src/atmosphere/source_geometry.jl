@@ -145,6 +145,6 @@ function propagate_source_aware!(atm, tel::Telescope, src::AbstractSource)
     cache = ensure_source_geometry_cache!(atm.state.source_geometry, src, atm.params.altitude, tel, T)
     accumulate_rendered_layers!(atm.state.opd, atm.layers,
         cache.shift_x, cache.shift_y, cache.footprint_scale)
-    tel.state.opd .= atm.state.opd .* tel.state.pupil
+    tel.state.opd .= atm.state.opd .* pupil_mask(tel)
     return tel
 end

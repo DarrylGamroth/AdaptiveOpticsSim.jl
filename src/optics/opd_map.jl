@@ -10,6 +10,9 @@ struct OPDMap{T<:AbstractFloat,A<:AbstractMatrix{T}} <: AbstractOpticalElement
     opd::A
 end
 
+
+@inline surface_opd(map::OPDMap) = map.opd
+
 """
     apply!(map, tel, mode)
 

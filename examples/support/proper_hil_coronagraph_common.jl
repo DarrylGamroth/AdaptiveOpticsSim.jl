@@ -134,7 +134,7 @@ function build_proper_hil_context(;
 
     payload = CoronagraphPayload(
         sim.tel.state.opd,
-        sim.tel.state.pupil,
+        pupil_mask(sim.tel),
         T(sim.tel.params.diameter),
         T(focal_length_m),
         T(lyot_stop_norm),

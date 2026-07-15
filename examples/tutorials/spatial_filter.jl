@@ -5,12 +5,22 @@ function main(; resolution::Int=24)
     src = base_source()
     apply_demo_ramp!(tel; scale_x=4e-9, scale_y=-2e-9)
     filter = SpatialFilter(tel; shape=CircularFilter(), diameter=resolution ÷ 3, zero_padding=2)
-    phase, amplitude = filter!(filter, tel, src)
+    wavefront = PupilWavefront(tel)
+    apply_opd!(wavefront, opd_map(tel))
+    field = ElectricField(wavefront, src; zero_padding=2)
+    formation = prepare_pupil_field(tel, wavefront, src, field;
+        center_even_grid=false, amplitude_scale=1)
+    fill_electric_field!(field, wavefront, formation)
+    filtered = PupilWavefront(tel)
+    plan = prepare_spatial_filter(tel, filter, field, filtered)
+    workspace = SpatialFilterWorkspace(filter)
+    filter!(filtered, field, filter, plan, workspace)
+    phase = filtered.opd .* (2pi / wavelength(src))
 
-    @info "Spatial-filter tutorial complete" phase_rms=pupil_rms(phase, tel.state.pupil)
+    @info "Spatial-filter tutorial complete" phase_rms=pupil_rms(phase, pupil_mask(tel))
     return (
         filtered_phase=copy(phase),
-        filtered_amplitude=copy(amplitude),
+        filtered_amplitude=copy(filtered.amplitude),
     )
 end
 

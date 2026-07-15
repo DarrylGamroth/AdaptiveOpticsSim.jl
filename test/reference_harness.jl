@@ -342,7 +342,7 @@ function build_reference_basis(cfg::AbstractDict{<:AbstractString,<:Any}, tel::T
         @inbounds for j in 1:n, i in 1:n
             px = x[i]
             py = y[j]
-            pupil = tel.state.pupil[i, j] ? 1.0 : 0.0
+            pupil = pupil_mask(tel)[i, j] ? 1.0 : 0.0
             if n_modes >= 1
                 basis[i, j, 1] = pupil * px
             end
@@ -726,8 +726,8 @@ function closed_loop_trace(wfs::AbstractWFS, tel::Telescope, src::AbstractSource
         combine_reference_modes!(correction_opd, control_basis, control_coeffs)
         @. residual_opd = forcing_opd - correction_opd
         tel.state.opd .= residual_opd
-        trace[iter, 1] = pupil_rms_nm(forcing_opd, tel.state.pupil)
-        trace[iter, 2] = pupil_rms_nm(residual_opd, tel.state.pupil)
+        trace[iter, 1] = pupil_rms_nm(forcing_opd, pupil_mask(tel))
+        trace[iter, 2] = pupil_rms_nm(residual_opd, pupil_mask(tel))
         psf = compute_psf!(tel, src; zero_padding=psf_zero_padding)
         trace[iter, 3] = strehl_ratio(psf, psf_ref)
         slopes = measure!(wfs, tel, src)
@@ -776,8 +776,8 @@ function gsc_closed_loop_trace(tel::Telescope, src::AbstractSource, wfs::Pyramid
         combine_reference_modes!(correction_opd, control_basis, control_coeffs)
         @. residual_opd = forcing_opd - correction_opd
         tel.state.opd .= residual_opd
-        trace[iter, 1] = pupil_rms_nm(forcing_opd, tel.state.pupil)
-        trace[iter, 2] = pupil_rms_nm(residual_opd, tel.state.pupil)
+        trace[iter, 1] = pupil_rms_nm(forcing_opd, pupil_mask(tel))
+        trace[iter, 2] = pupil_rms_nm(residual_opd, pupil_mask(tel))
         psf = compute_psf!(tel, src; zero_padding=psf_zero_padding)
         trace[iter, 3] = strehl_ratio(psf, psf_ref)
         slopes = measure!(wfs, tel, src)
@@ -854,8 +854,8 @@ function gsc_atmosphere_replay_trace(
         @. residual_src = forcing_src_i - correction_opd
 
         apply_opd!(tel, residual_ngs)
-        trace[iter, 1] = pupil_rms_nm(forcing_ngs_i, tel.state.pupil)
-        trace[iter, 2] = pupil_rms_nm(residual_ngs, tel.state.pupil)
+        trace[iter, 1] = pupil_rms_nm(forcing_ngs_i, pupil_mask(tel))
+        trace[iter, 2] = pupil_rms_nm(residual_ngs, pupil_mask(tel))
         ngs_psf = compute_psf!(tel, ngs; zero_padding=psf_zero_padding)
         trace[iter, 4] = strehl_ratio(ngs_psf, ngs_psf_ref)
         slopes = measure!(wfs, tel, ngs)
@@ -865,7 +865,7 @@ function gsc_atmosphere_replay_trace(
         @. og_safe = max(abs(og), og_floor)
 
         apply_opd!(tel, residual_src)
-        trace[iter, 3] = pupil_rms_nm(residual_src, tel.state.pupil)
+        trace[iter, 3] = pupil_rms_nm(residual_src, pupil_mask(tel))
         src_psf = compute_psf!(tel, sci; zero_padding=psf_zero_padding)
         trace[iter, 5] = strehl_ratio(src_psf, sci_psf_ref)
 

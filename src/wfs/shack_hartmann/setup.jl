@@ -329,12 +329,12 @@ function update_valid_mask!(wfs::ShackHartmannWFS, tel::Telescope)
 end
 
 function update_valid_mask!(wfs::ShackHartmannWFS, tel::Telescope, policy::GeometryValidSubapertures)
-    update_subaperture_layout!(subaperture_layout(wfs), tel.state.pupil, policy)
+    update_subaperture_layout!(subaperture_layout(wfs), pupil_mask(tel), policy)
     return wfs
 end
 
 function update_valid_mask!(wfs::ShackHartmannWFS, tel::Telescope, policy::FluxThresholdValidSubapertures)
-    update_subaperture_layout!(subaperture_layout(wfs), tel.state.pupil_reflectivity, policy)
+    update_subaperture_layout!(subaperture_layout(wfs), pupil_reflectivity(tel), policy)
     return wfs
 end
 

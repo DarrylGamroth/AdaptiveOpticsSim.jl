@@ -363,7 +363,7 @@ function resolve_modulation_points(modulation::T, modulation_points::Union{Int,N
 end
 
 function update_valid_mask!(wfs::PyramidWFS, tel::Telescope)
-    set_valid_subapertures!(wfs.state.valid_mask, tel.state.pupil, wfs.params.threshold)
+    set_valid_subapertures!(wfs.state.valid_mask, pupil_mask(tel), wfs.params.threshold)
     return wfs
 end
 

@@ -209,7 +209,7 @@ function pyramid_intensity_core!(::ScalarCPUStyle, out::AbstractMatrix{T}, wfs::
 
     fill!(out, zero(T))
     fill!(wfs.state.field, zero(eltype(wfs.state.field)))
-    @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * tel.state.pupil *
+    @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * $(pupil_mask(tel)) *
         cispi(opd_to_cycles * tel.state.opd)
     for p in 1:wfs.params.modulation_points
         copyto!(wfs.state.focal_field, wfs.state.field)
@@ -234,7 +234,7 @@ function pyramid_intensity_core!(::AcceleratorStyle, out::AbstractMatrix{T}, wfs
     fill!(out, zero(T))
     for p in 1:wfs.params.modulation_points
         fill!(wfs.state.field, zero(eltype(wfs.state.field)))
-        @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * tel.state.pupil *
+        @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * $(pupil_mask(tel)) *
             wfs.state.modulation_phases[:, :, p] * cispi(opd_to_cycles * tel.state.opd)
         copyto!(wfs.state.focal_field, wfs.state.field)
         accumulate_pyramid_focal_intensity!(out, wfs)
@@ -274,7 +274,7 @@ function pyramid_modulation_frame!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel:
     fill!(out, zero(T))
     for p in 1:wfs.params.modulation_points
         fill!(wfs.state.field, zero(eltype(wfs.state.field)))
-        @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * tel.state.pupil *
+        @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * $(pupil_mask(tel)) *
             wfs.state.modulation_phases[:, :, p] * cispi(opd_to_cycles * tel.state.opd)
         copyto!(wfs.state.focal_field, wfs.state.field)
         if wfs.params.psf_centering
@@ -362,7 +362,7 @@ function host_modulation_phases(::Type{T}, tel::Telescope, modulation::T, n_pts:
     tip_vals = range(-T(π), T(π); length=n)
     Tilt = reshape(tip_vals, n, 1)
     Tip = reshape(tip_vals, 1, n)
-    pupil = Array(tel.state.pupil)
+    pupil = Array(pupil_mask(tel))
     if user_modulation_path === nothing
         @inbounds for p in 1:n_pts
             θ = delta_theta + T(2 * π * (p - 1) / n_pts)

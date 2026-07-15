@@ -161,8 +161,8 @@ function _profile_field_path(mode::Symbol, atmo_kind::Symbol, backend_name::Abst
         () -> begin
             advance!(atm, tel; rng=rng)
             field = AdaptiveOpticsSim.propagate_atmosphere_field!(prop, atm, tel, src)
-            _sync_array!(backend_tag, field.state.field)
-            return field.state.field
+            _sync_array!(backend_tag, field.values)
+            return field.values
         end
     end
 

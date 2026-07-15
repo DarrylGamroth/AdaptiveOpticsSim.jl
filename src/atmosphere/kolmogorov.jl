@@ -146,6 +146,6 @@ end
 
 
 function propagate!(atm::KolmogorovAtmosphere, tel::Telescope)
-    tel.state.opd .= atm.state.opd .* tel.state.pupil
+    tel.state.opd .= atm.state.opd .* pupil_mask(tel)
     return tel
 end

@@ -25,12 +25,16 @@ end
 struct AtmosphericFieldSlice{
     T<:AbstractFloat,
     S<:AbstractSource,
+    W<:PupilWavefront,
     F<:ElectricField,
+    FP<:PupilFieldFormationPlan,
     P<:AbstractMatrix{T},
     V,
 }
     source::S
+    wavefront::W
     field::F
+    formation_plan::FP
     phase_buffer::P
     propagators::V
 end
@@ -90,22 +94,33 @@ end
 
 function _build_field_slice(atm, tel::Telescope, src::AbstractSource, zero_padding::Int,
     ::Type{T}, model::GeometricAtmosphericPropagation{T}) where {T<:AbstractFloat}
-    field = ElectricField(tel, src; zero_padding=zero_padding, T=T)
-    phase_buffer = similar(tel.state.opd, T, tel.params.resolution, tel.params.resolution)
+    wavefront = PupilWavefront(tel; T=T)
+    field = ElectricField(wavefront, src; zero_padding=zero_padding, T=T)
+    formation_plan = prepare_pupil_field(tel, wavefront, src, field)
+    phase_buffer = similar(wavefront.opd)
     fill!(phase_buffer, zero(T))
-    return AtmosphericFieldSlice{T, typeof(src), typeof(field), typeof(phase_buffer), Nothing}(src, field, phase_buffer, nothing)
+    return AtmosphericFieldSlice{
+        T,typeof(src),typeof(wavefront),typeof(field),
+        typeof(formation_plan),typeof(phase_buffer),Nothing,
+    }(src, wavefront, field, formation_plan, phase_buffer, nothing)
 end
 
 function _build_field_slice(atm, tel::Telescope, src::AbstractSource, zero_padding::Int,
     ::Type{T}, model::LayeredFresnelAtmosphericPropagation{T}) where {T<:AbstractFloat}
-    field = ElectricField(tel, src; zero_padding=zero_padding, T=T)
-    phase_buffer = similar(tel.state.opd, T, tel.params.resolution, tel.params.resolution)
+    wavefront = PupilWavefront(tel; T=T)
+    field = ElectricField(wavefront, src; zero_padding=zero_padding, T=T)
+    formation_plan = prepare_pupil_field(tel, wavefront, src, field)
+    phase_buffer = similar(wavefront.opd)
     fill!(phase_buffer, zero(T))
     _, distances = _layer_order_and_distances(atm, T)
     propagators = map(distances) do dist
-        dist == zero(T) ? nothing : FresnelPropagation(field; distance_m=dist)
+        dist == zero(T) ? nothing : FresnelPropagation(field;
+            distance_m=dist, output_kind=field.metadata.kind)
     end
-    return AtmosphericFieldSlice{T, typeof(src), typeof(field), typeof(phase_buffer), typeof(propagators)}(src, field, phase_buffer, propagators)
+    return AtmosphericFieldSlice{
+        T,typeof(src),typeof(wavefront),typeof(field),
+        typeof(formation_plan),typeof(phase_buffer),typeof(propagators),
+    }(src, wavefront, field, formation_plan, phase_buffer, propagators)
 end
 
 function _build_slices(atm, tel::Telescope, src::AbstractSource, zero_padding::Int,
@@ -139,7 +154,8 @@ function AtmosphericFieldPropagation(atm, tel::Telescope, src;
     zero_padding >= 1 || throw(InvalidConfiguration("zero_padding must be >= 1"))
     order, distances = _layer_order_and_distances(atm, T)
     slices = _build_slices(atm, tel, src, zero_padding, T, model)
-    intensity = similar(first(slices).field.state.intensity)
+    intensity = similar(first(slices).field.values, T,
+        size(first(slices).field.values)...)
     fill!(intensity, zero(T))
     params = AtmosphericFieldPropagationParams{T, typeof(model), typeof(order), typeof(distances)}(
         zero_padding,
@@ -165,12 +181,16 @@ end
 
 function _propagate_slice!(::GeometricFieldSynchronousPlan, slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
     atm, tel::Telescope) where {T<:AbstractFloat}
-    style = execution_style(slice.field.state.field)
-    fill_from_telescope_async!(slice.field, tel, slice.source)
+    style = execution_style(slice.field.values)
+    copyto!(slice.wavefront.opd, opd_map(tel))
+    fill_electric_field_async!(slice.field, slice.wavefront,
+        slice.formation_plan)
     @inbounds for idx in prop.params.layer_order
         layer = atm.layers[idx]
-        _render_layer_phase!(slice.phase_buffer, layer, tel, slice.source, prop.params.model, slice.field.params.wavelength)
-        apply_phase_async!(slice.field, slice.phase_buffer; units=:opd)
+        _render_layer_phase!(slice.phase_buffer, layer, tel, slice.source,
+            prop.params.model, electric_field_wavelength(slice.field))
+        apply_phase_async!(slice.field, slice.phase_buffer,
+            slice.formation_plan; units=:opd)
     end
     synchronize_backend!(style)
     return slice.field
@@ -178,43 +198,57 @@ end
 
 function _propagate_slice!(::GeometricFieldAsyncPlan, slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
     atm, tel::Telescope) where {T<:AbstractFloat}
-    fill_from_telescope_async!(slice.field, tel, slice.source)
+    copyto!(slice.wavefront.opd, opd_map(tel))
+    fill_electric_field_async!(slice.field, slice.wavefront,
+        slice.formation_plan)
     @inbounds for idx in prop.params.layer_order
         layer = atm.layers[idx]
-        _render_layer_phase!(slice.phase_buffer, layer, tel, slice.source, prop.params.model, slice.field.params.wavelength)
-        apply_phase_async!(slice.field, slice.phase_buffer; units=:opd)
+        _render_layer_phase!(slice.phase_buffer, layer, tel, slice.source,
+            prop.params.model, electric_field_wavelength(slice.field))
+        apply_phase_async!(slice.field, slice.phase_buffer,
+            slice.formation_plan; units=:opd)
     end
     return slice.field
 end
 
 function _propagate_slice!(::LayeredFresnelFieldSynchronousPlan, slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
     atm, tel::Telescope) where {T<:AbstractFloat}
-    style = execution_style(slice.field.state.field)
-    fill_from_telescope_async!(slice.field, tel, slice.source)
+    style = execution_style(slice.field.values)
+    copyto!(slice.wavefront.opd, opd_map(tel))
+    fill_electric_field_async!(slice.field, slice.wavefront,
+        slice.formation_plan)
     @inbounds for k in eachindex(prop.params.layer_order)
         idx = prop.params.layer_order[k]
         layer = atm.layers[idx]
-        _render_layer_phase!(slice.phase_buffer, layer, tel, slice.source, prop.params.model, slice.field.params.wavelength)
-        apply_phase_async!(slice.field, slice.phase_buffer; units=:opd)
+        _render_layer_phase!(slice.phase_buffer, layer, tel, slice.source,
+            prop.params.model, electric_field_wavelength(slice.field))
+        apply_phase_async!(slice.field, slice.phase_buffer,
+            slice.formation_plan; units=:opd)
         synchronize_backend!(style)
         local propagator = slice.propagators[k]
-        isnothing(propagator) || propagate_field!(slice.field, propagator)
+        isnothing(propagator) || propagate_field!(slice.field.values,
+            slice.field, propagator)
     end
     return slice.field
 end
 
 function _propagate_slice!(::LayeredFresnelFieldAsyncPlan, slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
     atm, tel::Telescope) where {T<:AbstractFloat}
-    style = execution_style(slice.field.state.field)
-    fill_from_telescope_async!(slice.field, tel, slice.source)
+    style = execution_style(slice.field.values)
+    copyto!(slice.wavefront.opd, opd_map(tel))
+    fill_electric_field_async!(slice.field, slice.wavefront,
+        slice.formation_plan)
     @inbounds for k in eachindex(prop.params.layer_order)
         idx = prop.params.layer_order[k]
         layer = atm.layers[idx]
-        _render_layer_phase!(slice.phase_buffer, layer, tel, slice.source, prop.params.model, slice.field.params.wavelength)
-        apply_phase_async!(slice.field, slice.phase_buffer; units=:opd)
+        _render_layer_phase!(slice.phase_buffer, layer, tel, slice.source,
+            prop.params.model, electric_field_wavelength(slice.field))
+        apply_phase_async!(slice.field, slice.phase_buffer,
+            slice.formation_plan; units=:opd)
         synchronize_backend!(style)
         local propagator = slice.propagators[k]
-        isnothing(propagator) || propagate_field!(slice.field, propagator)
+        isnothing(propagator) || propagate_field!(slice.field.values,
+            slice.field, propagator)
     end
     return slice.field
 end
@@ -222,22 +256,25 @@ end
 function propagate_atmosphere_field!(prop::AtmosphericFieldPropagation, atm, tel::Telescope, src::AbstractSource)
     length(prop.state.slices) == 1 || throw(InvalidConfiguration("monochromatic atmosphere propagation requires a monochromatic workspace"))
     slice = prop.state.slices[1]
-    plan = atmospheric_field_execution_plan(execution_style(slice.field.state.field), prop.params.model)
+    plan = atmospheric_field_execution_plan(execution_style(slice.field.values),
+        prop.params.model)
     return _propagate_slice!(plan, slice, prop, atm, tel)
 end
 
 function propagate_atmosphere_field!(field::ElectricField, prop::AtmosphericFieldPropagation, atm, tel::Telescope, src::AbstractSource)
     propagated = propagate_atmosphere_field!(prop, atm, tel, src)
-    size(field.state.field) == size(propagated.state.field) ||
+    size(field.values) == size(propagated.values) ||
         throw(DimensionMismatchError("ElectricField size must match propagated atmosphere field size"))
-    copyto!(field.state.field, propagated.state.field)
+    field.metadata == propagated.metadata || throw(InvalidConfiguration(
+        "ElectricField metadata must match propagated atmosphere field metadata"))
+    copyto!(field.values, propagated.values)
     return field
 end
 
 function atmospheric_intensity!(out::AbstractMatrix{T}, prop::AtmosphericFieldPropagation, atm, tel::Telescope,
     src::AbstractSource) where {T<:AbstractFloat}
     propagated = propagate_atmosphere_field!(prop, atm, tel, src)
-    size(out) == size(propagated.state.field) ||
+    size(out) == size(propagated.values) ||
         throw(DimensionMismatchError("atmospheric intensity output must match propagated field size"))
     intensity!(out, propagated)
     return out

@@ -51,6 +51,8 @@ struct NCPA{T<:AbstractFloat,A<:AbstractMatrix{T},B,V} <: AbstractOpticalElement
     coeffs::V
 end
 
+@inline surface_opd(ncpa::NCPA) = ncpa.opd
+
 function NCPA(tel::Telescope, dm::DeformableMirror, atm::AbstractAtmosphere;
     profile::FidelityProfile=default_fidelity_profile(),
     basis::NCPABasis=default_ncpa_basis(profile), coefficients=nothing, f2=nothing, seed::Integer=5,
@@ -59,12 +61,12 @@ function NCPA(tel::Telescope, dm::DeformableMirror, atm::AbstractAtmosphere;
     T = eltype(tel.state.opd)
     if f2 === nothing
         if coefficients === nothing
-            opd = copy(tel.state.pupil)
+            opd = copy(pupil_mask(tel))
             return NCPA{T, typeof(opd), Nothing, Nothing}(opd, nothing, nothing)
         end
         coeffs = T.(coefficients)
         basis_grid = ncpa_basis(basis, tel, dm, atm; n_modes=length(coeffs), M2C=M2C)
-        opd = combine_basis(basis_grid, coeffs, tel.state.pupil)
+        opd = combine_basis(basis_grid, coeffs, pupil_mask(tel))
         return NCPA{T, typeof(opd), typeof(basis_grid), typeof(coeffs)}(opd, basis_grid, coeffs)
     end
 
@@ -78,8 +80,8 @@ function NCPA(tel::Telescope, dm::DeformableMirror, atm::AbstractAtmosphere;
     for i in Int(start_mode):Int(end_mode)
         coeffs[i] = T(randn(rng)) / sqrt(T(i) + T(cutoff))
     end
-    opd = combine_basis(basis_grid, coeffs, tel.state.pupil)
-    σ = std(opd[tel.state.pupil])
+    opd = combine_basis(basis_grid, coeffs, pupil_mask(tel))
+    σ = std(opd[pupil_mask(tel)])
     if σ > 0
         opd .*= T(amplitude) / σ
     end

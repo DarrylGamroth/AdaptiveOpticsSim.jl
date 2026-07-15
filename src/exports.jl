@@ -21,21 +21,36 @@ export AbstractAtmosphere
 export Telescope, Source, LGSSource, Asterism
 export wavelength, optical_path
 export reset_opd!, apply_opd!, set_pupil!, set_pupil_reflectivity!
-export pupil_mask, apply_spiders!
+export pupil_mask, pupil_reflectivity, apply_spiders!
 export compute_psf!, psf_pixel_scale_arcsec
 
 export SpectralSample, SpectralBundle, SpectralSource, with_spectrum
 export GaussianDiskSourceModel, PointCloudSourceModel, SampledImageSourceModel
 export with_extended_source, extended_source_asterism
 
-export ElectricField, FraunhoferPropagation, FresnelPropagation
+export AbstractOpticalProduct, AbstractOpticalPlaneKind
+export PupilPlane, FocalPlane, PropagationPlane, DetectorPlane
+export PlaneCentering, SampleCentered, InterpixelCentered
+export PlaneAxisOrientation, AchromaticChannel, MonochromaticChannel
+export UnspecifiedNormalization, UnspecifiedSpatialMeasure, UnspecifiedCoherence
+export OpticalPlaneMetadata, plane_metadata, plane_device
+export PupilWavefront, pupil_amplitude, opd_map
+export surface_opd, update_surface!, apply_surface!
+export ElectricField, field_values, IrradiancePlane, irradiance_values
+export PupilFieldFormationPlan, prepare_pupil_field
+export fill_electric_field!, fill_electric_field_async!
+export FraunhoferPropagation, FresnelPropagation
+export propagation_output, propagate_field!, fraunhofer_intensity_from_field!
+export DirectPSFPlan, DirectPSFWorkspace, prepare_direct_psf
 export GeometricAtmosphericPropagation, LayeredFresnelAtmosphericPropagation
 export AtmosphericFieldPropagation
 
 export ZernikeBasis, compute_zernike!
 export OPDMap, Misregistration, apply_misregistration
 export NCPA, KLBasis, ZernikeModalBasis
-export SpatialFilter, CircularFilter, SquareFilter, FoucaultFilter, filter!
+export SpatialFilter, SpatialFilterWorkspace, SpatialFilterPlan
+export CircularFilter, SquareFilter, FoucaultFilter
+export prepare_spatial_filter, filter!
 
 export KolmogorovAtmosphere, MultiLayerAtmosphere, InfinitePhaseScreen, InfiniteMultiLayerAtmosphere
 export advance!, propagate!

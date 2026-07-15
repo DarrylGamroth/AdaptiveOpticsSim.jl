@@ -59,9 +59,9 @@ function subaperture_layout_probes()
     layout = subaperture_layout(wfs)
     geometry_policy = AdaptiveOpticsSim.GeometryValidSubapertures(threshold=0.1)
     flux_policy = FluxThresholdValidSubapertures(light_ratio=0.5)
-    support = Float64.(tel.state.pupil)
+    support = Float64.(pupil_mask(tel))
     geometry_probe = () -> AdaptiveOpticsSim.update_subaperture_layout!(
-        layout, tel.state.pupil, geometry_policy)
+        layout, pupil_mask(tel), geometry_policy)
     flux_probe = () -> AdaptiveOpticsSim.update_subaperture_layout!(
         layout, support, flux_policy)
     return geometry_probe, flux_probe

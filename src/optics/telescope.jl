@@ -6,28 +6,39 @@ struct TelescopeParams{T<:AbstractFloat}
     fov_arcsec::T
 end
 
-mutable struct TelescopeState{T,
+struct TelescopeAperture{T<:AbstractFloat,
+    Amask<:AbstractMatrix{Bool},
+    Aref<:AbstractMatrix{T}}
+    pupil::Amask
+    reflectivity::Aref
+    sampling_m::NTuple{2,T}
+    origin_m::NTuple{2,T}
+end
+
+# Transitional storage used by simulation paths that have not yet migrated to
+# caller-owned optical products. Gate 0 removes these fields from `Telescope`
+# as the atmosphere and WFS families move to the explicit plane API.
+mutable struct LegacyTelescopePathState{T<:AbstractFloat,
     Aopd<:AbstractMatrix{T},
     Apsf<:AbstractMatrix{T},
-    Amask<:AbstractMatrix{Bool},
-    Aref<:AbstractMatrix{T},
     Spsf<:AbstractArray{T,3},
     W<:Workspace}
-    pupil::Amask
-    pupil_reflectivity::Aref
     opd::Aopd
     psf::Apsf
     psf_stack::Spsf
     psf_workspace::W
 end
 
-struct Telescope{P<:TelescopeParams,S<:TelescopeState,B<:AbstractArrayBackend} <: AbstractTelescope
+struct Telescope{P<:TelescopeParams,A<:TelescopeAperture,S<:LegacyTelescopePathState,
+    B<:AbstractArrayBackend} <: AbstractTelescope
     params::P
+    aperture::A
     state::S
 end
 
-@inline backend(::Telescope{<:Any,<:Any,B}) where {B} = B()
-@inline pupil_mask(tel::Telescope) = tel.state.pupil
+@inline backend(::Telescope{<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline pupil_mask(tel::Telescope) = tel.aperture.pupil
+@inline pupil_reflectivity(tel::Telescope) = tel.aperture.reflectivity
 @inline opd_map(tel::Telescope) = tel.state.opd
 
 function Telescope(; resolution::Int,
@@ -53,6 +64,14 @@ function Telescope(; resolution::Int,
     pupil = backend{Bool}(undef, resolution, resolution)
     generate_pupil!(pupil, params)
     reflectivity = initialize_reflectivity(pupil, pupil_reflectivity, T, backend)
+    sampling_m = T(diameter) / T(resolution)
+    origin = -T(resolution - 1) * sampling_m / T(2)
+    aperture = TelescopeAperture{T,typeof(pupil),typeof(reflectivity)}(
+        pupil,
+        reflectivity,
+        (sampling_m, sampling_m),
+        (origin, origin),
+    )
 
     opd = backend{T}(undef, resolution, resolution)
     fill!(opd, zero(T))
@@ -62,15 +81,15 @@ function Telescope(; resolution::Int,
 
     psf_stack = backend{T}(undef, resolution, resolution, 0)
     psf_workspace = Workspace(opd, resolution; T=T)
-    state = TelescopeState{T, typeof(opd), typeof(psf), typeof(pupil), typeof(reflectivity), typeof(psf_stack), typeof(psf_workspace)}(
-        pupil,
-        reflectivity,
+    state = LegacyTelescopePathState{T,typeof(opd),typeof(psf),
+        typeof(psf_stack),typeof(psf_workspace)}(
         opd,
         psf,
         psf_stack,
         psf_workspace,
     )
-    return Telescope{typeof(params), typeof(state), typeof(selector)}(params, state)
+    return Telescope{typeof(params),typeof(aperture),typeof(state),
+        typeof(selector)}(params, aperture, state)
 end
 
 function generate_pupil!(pupil::AbstractMatrix{Bool}, params::TelescopeParams)
@@ -122,43 +141,46 @@ function apply_opd!(tel::Telescope, opd::AbstractMatrix)
 end
 
 function set_pupil!(tel::Telescope, pupil::AbstractMatrix{Bool})
-    if size(pupil) != size(tel.state.pupil)
+    if size(pupil) != size(pupil_mask(tel))
         throw(DimensionMismatchError("pupil mask size does not match telescope resolution"))
     end
-    tel.state.pupil .= pupil
-    tel.state.pupil_reflectivity .= pupil
+    pupil_mask(tel) .= pupil
+    pupil_reflectivity(tel) .= pupil
     return tel
 end
 
 function set_pupil_reflectivity!(tel::Telescope, reflectivity::Real)
-    fill!(tel.state.pupil_reflectivity, eltype(tel.state.pupil_reflectivity)(reflectivity))
-    tel.state.pupil_reflectivity .*= tel.state.pupil
+    fill!(pupil_reflectivity(tel), eltype(pupil_reflectivity(tel))(reflectivity))
+    pupil_reflectivity(tel) .*= pupil_mask(tel)
     return tel
 end
 
 function set_pupil_reflectivity!(tel::Telescope, reflectivity::AbstractMatrix)
-    if size(reflectivity) != size(tel.state.pupil_reflectivity)
+    if size(reflectivity) != size(pupil_reflectivity(tel))
         throw(DimensionMismatchError("pupil_reflectivity size does not match telescope resolution"))
     end
-    tel.state.pupil_reflectivity .= reflectivity
-    tel.state.pupil_reflectivity .*= tel.state.pupil
+    pupil_reflectivity(tel) .= reflectivity
+    pupil_reflectivity(tel) .*= pupil_mask(tel)
     return tel
 end
 
 function flux_map(tel::Telescope, src::AbstractSource)
     scale = photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
-    out = similar(tel.state.pupil_reflectivity)
-    @. out = scale * tel.state.pupil_reflectivity
+    out = similar(pupil_reflectivity(tel))
+    reflectivity = pupil_reflectivity(tel)
+    @. out = scale * reflectivity
     return out
 end
 
 function apply_spiders!(tel::Telescope; thickness::Real, angles::AbstractVector, offset_x::Real=0.0, offset_y::Real=0.0)
-    Base.require_one_based_indexing(tel.state.pupil)
+    Base.require_one_based_indexing(pupil_mask(tel))
     radius = tel.params.diameter / 2
     thickness_norm = thickness / radius
     offset_x_norm = offset_x / radius
     offset_y_norm = offset_y / radius
-    _apply_spiders!(tel.state.pupil, angles, thickness_norm, offset_x_norm, offset_y_norm)
+    _apply_spiders!(pupil_mask(tel), angles, thickness_norm, offset_x_norm,
+        offset_y_norm)
+    pupil_reflectivity(tel) .*= pupil_mask(tel)
     return tel
 end
 

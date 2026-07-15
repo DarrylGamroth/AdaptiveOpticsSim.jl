@@ -225,7 +225,7 @@ function update_zernike_valid_indices!(wfs::ZernikeWFS)
 end
 
 function update_valid_mask!(wfs::ZernikeWFS, tel::Telescope)
-    set_valid_subapertures!(wfs.state.valid_mask, tel.state.pupil, wfs.params.threshold)
+    set_valid_subapertures!(wfs.state.valid_mask, pupil_mask(tel), wfs.params.threshold)
     update_zernike_valid_indices!(wfs)
     return wfs
 end
@@ -314,7 +314,7 @@ function zernike_pupil_intensity!(wfs::ZernikeWFS, tel::Telescope, src::Abstract
         photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
     ))
     fill!(wfs.state.field, zero(eltype(wfs.state.field)))
-    @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * tel.state.pupil *
+    @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * $(pupil_mask(tel)) *
         cispi(opd_to_cycles * tel.state.opd)
     copyto!(wfs.state.focal_field, wfs.state.field)
     @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.phasor

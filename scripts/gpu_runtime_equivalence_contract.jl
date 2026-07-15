@@ -23,7 +23,7 @@ function _deterministic_phase_screen(tel::Telescope, ::Type{T}) where {T<:Abstra
                      T(2e-8) * cos(T(4π) * y) +
                      T(1e-8) * sin(T(2π) * (x + y))
     end
-    host .*= Array(tel.state.pupil)
+    host .*= Array(pupil_mask(tel))
     return host
 end
 

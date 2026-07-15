@@ -238,7 +238,7 @@ Assemble the current model OPD from the modal basis coefficients plus the fixed
 diversity OPD.
 """
 @inline function prepare_opd!(lift::LiFT, coeffs::AbstractVector)
-    combine_basis!(lift.state.opd_buffer, lift.basis, coeffs, lift.tel.state.pupil)
+    combine_basis!(lift.state.opd_buffer, lift.basis, coeffs, pupil_mask(lift.tel))
     @. lift.state.opd_buffer += lift.params.diversity_opd
     return lift.state.opd_buffer
 end
@@ -291,7 +291,7 @@ function lift_interaction_matrix!(H::AbstractMatrix, lift::LiFT{LiFTAnalytic}, c
 
     amp_scale = sqrt(T(photon_flux(lift.src) * flux_norm *
         lift.tel.params.sampling_time * (lift.tel.params.diameter / lift.tel.params.resolution)^2))
-    @. lift.state.amp_buffer = ifelse(lift.tel.state.pupil, amp_scale, zero(T))
+    @. lift.state.amp_buffer = ifelse($(pupil_mask(lift.tel)), amp_scale, zero(T))
 
     oversampling = focal_field_from_opd!(lift.state.focal_buffer, lift, lift.state.amp_buffer, initial_opd)
     conjugate_field!(lift.state.pd_buffer, lift.state.focal_buffer)
@@ -300,7 +300,7 @@ function lift_interaction_matrix!(H::AbstractMatrix, lift::LiFT{LiFTAnalytic}, c
     k = T(2 * pi) / wavelength(lift.src)
     @inbounds for (idx, mode_id) in enumerate(mode_ids)
         @views mode = lift.basis[:, :, mode_id]
-        @. lift.state.amp_buffer = ifelse(lift.tel.state.pupil, amp_scale * mode, zero(T))
+        @. lift.state.amp_buffer = ifelse($(pupil_mask(lift.tel)), amp_scale * mode, zero(T))
         focal_field_from_opd!(lift.state.mode_buffer, lift, lift.state.amp_buffer, initial_opd)
         field_derivative!(lift.state.psf_buffer, lift.state.mode_buffer, Pd, oversampling, 2 * k,
             lift.state.field_scratch)
@@ -770,7 +770,7 @@ resampling, and optional object convolution.
 function psf_from_opd!(lift::LiFT, opd::AbstractMatrix; flux_norm::Real=1.0)
     amp_scale = sqrt(eltype(lift.state.psf_buffer)(photon_flux(lift.src) * flux_norm *
         lift.tel.params.sampling_time * (lift.tel.params.diameter / lift.tel.params.resolution)^2))
-    @. lift.state.amp_buffer = ifelse(lift.tel.state.pupil, amp_scale, zero(eltype(lift.state.amp_buffer)))
+    @. lift.state.amp_buffer = ifelse($(pupil_mask(lift.tel)), amp_scale, zero(eltype(lift.state.amp_buffer)))
     oversampling = focal_field_from_opd!(lift.state.focal_buffer, lift, lift.state.amp_buffer, opd)
     field_intensity!(lift.state.psf_buffer, lift.state.focal_buffer, oversampling, lift.state.field_scratch)
     maybe_object_convolve!(lift, lift.state.psf_buffer)

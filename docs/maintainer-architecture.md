@@ -72,7 +72,10 @@ The dominant pattern is:
 
 Examples:
 
-- `Telescope` with `TelescopeParams` and `TelescopeState`
+- `Telescope` with immutable `TelescopeParams`, prepared `TelescopeAperture`,
+  and transitional `LegacyTelescopePathState`
+- caller-owned `PupilWavefront`, `ElectricField`, and `IrradiancePlane`
+  products with immutable `OpticalPlaneMetadata`
 - `ShackHartmannWFS` with `ShackHartmannWFSParams` and `ShackHartmannWFSState`
 - `Detector` with `DetectorParams` and `DetectorState`
 - `ClosedLoopRuntime` with runtime profile, output plan, and prepared state
