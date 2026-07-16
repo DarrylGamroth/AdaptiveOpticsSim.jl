@@ -66,8 +66,12 @@ atm = MultiLayerAtmosphere(
 )
 wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
 
-advance!(atm, tel)
-propagate!(atm, tel)
+rng = runtime_rng(0)
+renderer = prepare_atmosphere_renderer(atm, tel, src)
+atmosphere_pupil = PupilFunction(tel)
+epoch = advance_by!(atm, 1e-3; rng=rng)
+render_atmosphere!(atmosphere_pupil, renderer, atm, epoch)
+apply_opd!(tel, opd_map(atmosphere_pupil))
 slopes = measure!(wfs, tel, src)
 ```
 
@@ -94,9 +98,13 @@ det = Detector(
     binning=1,
 )
 
-advance!(atm, tel)
-propagate!(atm, tel)
-measure!(wfs, tel, src, det; rng=runtime_rng(0))
+rng = runtime_rng(0)
+renderer = prepare_atmosphere_renderer(atm, tel, src)
+atmosphere_pupil = PupilFunction(tel)
+epoch = advance_by!(atm, 1e-3; rng=rng)
+render_atmosphere!(atmosphere_pupil, renderer, atm, epoch)
+apply_opd!(tel, opd_map(atmosphere_pupil))
+measure!(wfs, tel, src, det; rng=rng)
 frame = output_frame(det)
 ```
 
@@ -201,12 +209,13 @@ sim = AOSimulation(tel, guide, atm, dm, wfs; science_source=science)
 ```
 
 The runtime advances the atmosphere once, senses through `wfs_source(sim)`,
-then re-renders the existing atmosphere state through `science_source(sim)`
-before science-camera capture. No second atmosphere time step is introduced.
-An `Asterism` still shares a single pupil OPD within one WFS or science
-measurement. Use the shared optical-arm surface below when each direction must
-receive an independently rendered atmospheric path without duplicating the
-plant or advancing its atmosphere again.
+then re-renders the same published atmosphere epoch through
+`science_source(sim)` before science-camera capture. No second atmosphere time
+step is introduced. A timed-atmosphere branch is one prepared source direction;
+an `Asterism` or `ExtendedSource` must be expanded with
+`prepare_atmosphere_renderers`. Use the shared optical-arm surface below when
+each direction needs an independently rendered atmospheric path without
+duplicating the plant or advancing its atmosphere again.
 
 When several physical WFS or science arms share one telescope, atmosphere,
 and controllable optic, attach typed auxiliary arms to one primary runtime
@@ -794,8 +803,8 @@ Pkg.develop(path="../proper.jl")
 
 Use:
 
-- subsystem functions such as `compute_psf!`, `advance!`, `propagate!`, and
-  `measure!`
+- subsystem functions such as `compute_psf!`, `advance_by!`,
+  `render_atmosphere!`, `propagate!`, and `measure!`
   - when you are studying one physical layer
 - `SingleControlLoopConfig` or `GroupedControlLoopConfig`
   - when you want the maintained public runtime/orchestration surface

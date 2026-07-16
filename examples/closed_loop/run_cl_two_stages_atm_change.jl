@@ -22,14 +22,12 @@ recon_fine = ModalReconstructor(imat_fine; gain=0.5)
 cmd_coarse = similar(dm_coarse.state.coefs)
 cmd_fine = similar(dm_fine.state.coefs)
 
-let current_atm = sim.atm
-    for k in 1:6
-        if k == 4
-            current_atm = KolmogorovAtmosphere(sim.tel; r0=0.1, L0=25.0)
-            @info "Atmosphere r0 updated to 0.1"
-        end
-        advance!(current_atm, sim.tel; rng=rng)
-        propagate!(current_atm, sim.tel)
+function run_segment!(atm, renderer, atmosphere_output, sim, dm_coarse,
+    dm_fine, recon_coarse, recon_fine, cmd_coarse, cmd_fine, rng, n_iter)
+    for _ in 1:n_iter
+        epoch = advance_by!(atm, sim.tel.params.sampling_time; rng=rng)
+        render_atmosphere!(atmosphere_output, renderer, atm, epoch)
+        copyto!(sim.tel.state.opd, atmosphere_output.opd)
         apply!(dm_coarse, sim.tel, DMAdditive())
         apply!(dm_fine, sim.tel, DMAdditive())
         measure!(sim.wfs, sim.tel)
@@ -38,6 +36,18 @@ let current_atm = sim.atm
         dm_coarse.state.coefs .= -cmd_coarse
         dm_fine.state.coefs .= -cmd_fine
     end
+    return nothing
 end
+
+atmosphere_output = PupilFunction(sim.tel)
+renderer = prepare_atmosphere_renderer(sim.atm, sim.tel, sim.src)
+run_segment!(sim.atm, renderer, atmosphere_output, sim, dm_coarse, dm_fine,
+    recon_coarse, recon_fine, cmd_coarse, cmd_fine, rng, 3)
+
+changed_atm = KolmogorovAtmosphere(sim.tel; r0=0.1, L0=25.0)
+changed_renderer = prepare_atmosphere_renderer(changed_atm, sim.tel, sim.src)
+@info "Atmosphere r0 updated to 0.1"
+run_segment!(changed_atm, changed_renderer, atmosphere_output, sim, dm_coarse,
+    dm_fine, recon_coarse, recon_fine, cmd_coarse, cmd_fine, rng, 3)
 
 @info "Closed-loop two stages with atmosphere change complete"

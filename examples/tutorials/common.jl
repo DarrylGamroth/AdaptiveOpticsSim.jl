@@ -68,10 +68,13 @@ function run_closed_loop_example(make_wfs::Function; n_iter::Int=4, seed::Intege
     cmd = similar(dm.state.coefs)
     residual_before = zeros(Float64, n_iter)
     residual_after = similar(residual_before)
+    atmosphere_renderer = prepare_atmosphere_renderer(atm, tel, src)
+    atmosphere_output = PupilFunction(tel)
 
     for k in 1:n_iter
-        advance!(atm, tel; rng=rng)
-        propagate!(atm, tel)
+        epoch = advance_by!(atm, tel.params.sampling_time; rng=rng)
+        render_atmosphere!(atmosphere_output, atmosphere_renderer, atm, epoch)
+        copyto!(tel.state.opd, atmosphere_output.opd)
         residual_before[k] = pupil_rms(tel.state.opd, pupil_mask(tel))
         measure!(wfs, tel, src)
         reconstruct!(cmd, recon, wfs.state.slopes)

@@ -64,7 +64,8 @@ time.
 
 Canonical verbs:
 
-- `advance!`
+- `advance_by!` or `advance_to!`
+- `render_atmosphere!`
 - `propagate!`
 - `apply!`
 - `measure!`
@@ -156,10 +157,19 @@ atm = MultiLayerAtmosphere(
 
 wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
 
-advance!(atm, tel)
-propagate!(atm, tel)
+rng = runtime_rng(0)
+renderer = prepare_atmosphere_renderer(atm, tel, src)
+atmosphere_pupil = PupilFunction(tel)
+epoch = advance_by!(atm, 1e-3; rng=rng)
+render_atmosphere!(atmosphere_pupil, renderer, atm, epoch)
+apply_opd!(tel, opd_map(atmosphere_pupil))
 slopes = measure!(wfs, tel, src)
 ```
+
+Atmosphere time is explicit and belongs to the caller. A prepared renderer is
+bound to one atmosphere and one frozen source direction; it can render the
+current epoch repeatedly without advancing time or consuming RNG. Use
+`prepare_atmosphere_renderers` for an `Asterism` or `ExtendedSource`.
 
 For HIL or RTC export, attach a detector and request the detector image after
 measurement. `bits` defines the quantization depth, `full_well` defines the
@@ -620,7 +630,7 @@ accelerator-backed arrays.
 
 ## Determinism
 
-- Use a fixed RNG and pass it into `advance!`, detector calls, or runtime
+- Use a fixed RNG and pass it into `advance_by!`/`advance_to!`, detector calls, or runtime
   constructors instead of relying on `Random.default_rng()`.
 - Use `deterministic_reference_rng(seed)` for reference datasets and regression
   fixtures. This preserves the long-standing `MersenneTwister` stream.

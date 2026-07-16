@@ -95,13 +95,22 @@ There are three main execution layers:
 
 Examples:
 
-- `advance!(atm, tel)`
-- `propagate!(atm, tel, src)`
+- `advance_by!(atm, elapsed_seconds)` or `advance_to!(atm, model_time)`
+- `render_atmosphere!(pupil, renderer, atm, epoch)`
+- `propagate!(atm, tel, src)` as a transitional convenience adapter
 - `measure!(wfs, tel, src, det)`
 - `apply!(dm, tel, DMAdditive())`
 
 These functions should own local physics and algorithm behavior, but not broad
 backend policy.
+
+Timed atmosphere models have one evolution writer. Evolution publishes an
+immutable `AtmosphereEpoch`; prepared, path-local renderers consume only the
+current epoch and write caller-owned products. Atmosphere state therefore owns
+physical layers and timeline state, not a shared pupil-sized render target or a
+mutable last-source geometry cache. Telescope sampling time is never read by
+the timed atmosphere API; the current closed-loop adapter chooses an elapsed
+duration until the HIL scheduler owns that policy.
 
 ### 2. Shared subsystem services
 

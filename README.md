@@ -52,8 +52,12 @@ atm = MultiLayerAtmosphere(
 
 wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
 
-advance!(atm, tel)
-propagate!(atm, tel)
+rng = runtime_rng(0)
+renderer = prepare_atmosphere_renderer(atm, tel, src)
+atmosphere_pupil = PupilFunction(tel)
+epoch = advance_by!(atm, 1e-3; rng=rng)
+render_atmosphere!(atmosphere_pupil, renderer, atm, epoch)
+apply_opd!(tel, opd_map(atmosphere_pupil))
 slopes = measure!(wfs, tel, src)
 ```
 

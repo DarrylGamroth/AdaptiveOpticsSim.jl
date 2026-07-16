@@ -78,6 +78,7 @@ struct MovingLayerParams{T<:AbstractFloat}
     wind_velocity_x::T
     wind_velocity_y::T
     altitude::T
+    sampling_m::T
 end
 
 mutable struct MovingLayerState{T<:AbstractFloat}
@@ -98,23 +99,26 @@ struct MovingAtmosphereLayer{
     state::S
 end
 
-mutable struct MultiLayerState{T<:AbstractFloat,A<:AbstractMatrix{T}}
-    opd::A
-    source_geometry::AtmosphereSourceGeometryCache{T,Vector{T}}
+mutable struct MultiLayerState{T<:AbstractFloat}
+    timeline::AtmosphereTimelineState{T}
 end
 
 struct MultiLayerAtmosphere{
     P<:MultiLayerParams,
     S<:MultiLayerState,
     L<:AbstractVector{<:MovingAtmosphereLayer},
+    I<:AtmosphereIdentity,
     B<:AbstractArrayBackend,
-} <: AbstractAtmosphere
+} <: AbstractTimedAtmosphere
     params::P
     layers::L
     state::S
+    identity::I
 end
 
-@inline backend(::MultiLayerAtmosphere{<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline backend(::MultiLayerAtmosphere{<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline atmosphere_numeric_type(atm::MultiLayerAtmosphere) =
+    typeof(atm.params.r0)
 
 @inline moving_layer_screen_resolution(n::Int) = 3 * n
 
@@ -128,7 +132,7 @@ function moving_layer_telescope(
     return Telescope(
         resolution=resolution,
         diameter=delta * resolution,
-        sampling_time=tel.params.sampling_time,
+        sampling_time=one(T),
         central_obstruction=0.0,
         fov_arcsec=tel.params.fov_arcsec,
         T=T,
@@ -148,18 +152,18 @@ function MovingAtmosphereLayer(
     backend::AbstractArrayBackend=CPUBackend(),
 )
     selector = require_same_backend(tel, backend)
-    backend_array = _resolve_array_backend(selector)
     screen_resolution = moving_layer_screen_resolution(tel.params.resolution)
     screen_telescope = moving_layer_telescope(tel; resolution=screen_resolution, T=T, backend=selector)
     generator = KolmogorovAtmosphere(screen_telescope; r0=r0, L0=L0, T=T, backend=selector)
-    params = MovingLayerParams(T(sqrt(cn2_fraction)), T(wind_velocity_x), T(wind_velocity_y), T(altitude))
+    params = MovingLayerParams(T(sqrt(cn2_fraction)), T(wind_velocity_x),
+        T(wind_velocity_y), T(altitude), T(tel.aperture.sampling_m[1]))
     state = MovingLayerState(zero(T), zero(T), false)
     return MovingAtmosphereLayer(params, generator, screen_telescope, state)
 end
 
 function ensure_initialized!(layer::MovingAtmosphereLayer, rng::AbstractRNG)
     if !layer.state.initialized
-        advance!(layer.generator, layer.generator_telescope, rng)
+        regenerate_phase_screen!(layer.generator, rng)
         layer.state.initialized = true
     end
     return layer
@@ -335,22 +339,13 @@ function render_layer_accumulate!(out::AbstractMatrix{T}, layer::MovingAtmospher
     return out
 end
 
-function sample_layer!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer, tel::Telescope, rng::AbstractRNG) where {T<:AbstractFloat}
-    ensure_initialized!(layer, rng)
-    delta = T(tel.params.diameter / tel.params.resolution)
-    dt = T(tel.params.sampling_time)
-    layer.state.offset_x += T(layer.params.wind_velocity_x) * dt / delta
-    layer.state.offset_y += T(layer.params.wind_velocity_y) * dt / delta
-    return render_layer!(out, layer, tel)
-end
-
-function sample_layer_accumulate!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer, tel::Telescope, rng::AbstractRNG) where {T<:AbstractFloat}
-    ensure_initialized!(layer, rng)
-    delta = T(tel.params.diameter / tel.params.resolution)
-    dt = T(tel.params.sampling_time)
-    layer.state.offset_x += T(layer.params.wind_velocity_x) * dt / delta
-    layer.state.offset_y += T(layer.params.wind_velocity_y) * dt / delta
-    return render_layer_accumulate!(out, layer, tel)
+function evolve_layer!(layer::MovingAtmosphereLayer, duration::Real)
+    T = typeof(layer.state.offset_x)
+    dt = T(duration)
+    delta = layer.params.sampling_m
+    layer.state.offset_x += layer.params.wind_velocity_x * dt / delta
+    layer.state.offset_y += layer.params.wind_velocity_y * dt / delta
+    return layer
 end
 
 function MultiLayerAtmosphere(tel::Telescope;
@@ -364,8 +359,6 @@ function MultiLayerAtmosphere(tel::Telescope;
     backend::AbstractArrayBackend=backend(tel))
 
     selector = require_same_backend(tel, backend)
-    backend_array = _resolve_array_backend(selector)
-
     n_layers = length(fractional_cn2)
     n_layers > 0 || throw(InvalidConfiguration("fractional_cn2 cannot be empty"))
     if length(wind_speed) != n_layers || length(wind_direction) != n_layers || length(altitude) != n_layers
@@ -400,27 +393,23 @@ function MultiLayerAtmosphere(tel::Telescope;
         ) for i in 1:n_layers
     ]
 
-    opd = backend_array{T}(undef, tel.params.resolution, tel.params.resolution)
-    fill!(opd, zero(T))
-    state = MultiLayerState{T, typeof(opd)}(opd, AtmosphereSourceGeometryCache(n_layers, T))
-
-    return MultiLayerAtmosphere{typeof(params), typeof(state), typeof(layers), typeof(selector)}(params, layers, state)
+    state = MultiLayerState{T}(new_atmosphere_timeline(T))
+    identity = AtmosphereIdentity()
+    return MultiLayerAtmosphere{typeof(params), typeof(state), typeof(layers),
+        typeof(identity), typeof(selector)}(params, layers, state, identity)
 end
 
-function advance!(atm::MultiLayerAtmosphere, tel::Telescope, rng::AbstractRNG)
-    accumulate_sampled_layers!(atm.state.opd, atm.layers, tel, rng)
+function initialize_atmosphere!(atm::MultiLayerAtmosphere, rng::AbstractRNG)
+    @inbounds for layer in atm.layers
+        ensure_initialized!(layer, rng)
+    end
     return atm
 end
 
-function advance!(atm::MultiLayerAtmosphere, tel::Telescope; rng::AbstractRNG=Random.default_rng())
-    return advance!(atm, tel, rng)
-end
-
-function propagate!(atm::MultiLayerAtmosphere, tel::Telescope)
-    tel.state.opd .= atm.state.opd .* pupil_mask(tel)
-    return tel
-end
-
-function propagate!(atm::MultiLayerAtmosphere, tel::Telescope, src::AbstractSource)
-    return propagate_source_aware!(atm, tel, src)
+function evolve_atmosphere!(atm::MultiLayerAtmosphere, duration::Real,
+    ::AbstractRNG)
+    @inbounds for layer in atm.layers
+        evolve_layer!(layer, duration)
+    end
+    return atm
 end

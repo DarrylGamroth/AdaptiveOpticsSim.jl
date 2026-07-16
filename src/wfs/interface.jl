@@ -74,9 +74,37 @@ end
 @inline propagate_runtime_atmosphere!(atm::AbstractAtmosphere, tel::Telescope,
     ::Asterism) = propagate!(atm, tel)
 
+@inline prepare_runtime_atmosphere_path(::AbstractAtmosphere,
+    ::Telescope, ::AbstractSource) = nothing
+
+@inline prepare_runtime_atmosphere_path(atm::AbstractTimedAtmosphere,
+    tel::Telescope, src::AbstractSource) =
+    prepare_atmosphere_renderer(atm, tel, src)
+
+@inline render_prepared_atmosphere_path!(::Nothing,
+    atm::AbstractAtmosphere, tel::Telescope, src::AbstractSource) =
+    propagate_runtime_atmosphere!(atm, tel, src)
+
+@inline function render_prepared_atmosphere_path!(
+    renderer::AtmosphereDirectionRenderer,
+    atm::AbstractTimedAtmosphere, tel::Telescope, ::AbstractSource)
+    render_atmosphere_opd!(opd_map(tel), renderer, atm,
+        current_epoch(atm))
+    return tel
+end
+
 @inline function advance_runtime_atmosphere!(wfs::AbstractWFS,
     atm::AbstractAtmosphere, tel::Telescope, rng::AbstractRNG)
     advance!(atm, tel, rng)
+    return nothing
+end
+
+# Transitional pre-HIL runtime adapter. The explicit atmosphere API itself has
+# no telescope cadence; this legacy loop remains responsible for choosing its
+# elapsed duration until the multi-rate scheduler replaces it.
+@inline function advance_runtime_atmosphere!(::AbstractWFS,
+    atm::AbstractTimedAtmosphere, tel::Telescope, rng::AbstractRNG)
+    advance_by!(atm, tel.params.sampling_time, rng)
     return nothing
 end
 
@@ -84,6 +112,14 @@ end
     atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
     src::AbstractSource)
     propagate_runtime_atmosphere!(atm, tel, src)
+    apply!(optic, tel, DMAdditive())
+    return nothing
+end
+
+@inline function render_runtime_wfs_path!(renderer, wfs::AbstractWFS,
+    atm::AbstractAtmosphere, tel::Telescope,
+    optic::AbstractControllableOptic, src::AbstractSource)
+    render_prepared_atmosphere_path!(renderer, atm, tel, src)
     apply!(optic, tel, DMAdditive())
     return nothing
 end

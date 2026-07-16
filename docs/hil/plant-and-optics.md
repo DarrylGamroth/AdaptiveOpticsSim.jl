@@ -137,13 +137,15 @@ Atmosphere evolution also remains separate from direction rendering. One
 writer advances shared layers to an explicit model time and publishes a stable
 epoch identity. Advancement never infers a duration from telescope sampling,
 detector cadence, or wall clock. Prepared path-local renderers own mutable
-source-geometry caches, direction shifts, finite-height footprint scales,
-propagation workspace, and output storage. Several NGS, LGS, spectral, or
-extended-source renderers may consume the same frozen epoch in any order without
-mutating shared output, RNG, or cache state. Source definitions are run-
-immutable execution descriptions; mutable user profile/image inputs are frozen
-during preparation, and extended-source quadrature expansion and other mutable
-preparation belong to the prepared renderer or path.
+single-writer propagation workspace where required, plus frozen source
+descriptions and precomputed direction shifts and finite-height footprint
+scales. Direction renderers write caller-owned pupil products; field renderers
+own their reusable field scratch. Several NGS, LGS, spectral, or extended-source
+renderers may consume the same frozen epoch in any order without mutating shared
+output, RNG, or geometry-cache state. Source definitions are run-immutable
+execution descriptions; mutable user profile/image inputs are frozen during
+preparation, and extended-source quadrature expansion belongs to the prepared
+renderer or path.
 
 A native direct-science front end consumes an explicit pupil function or field
 and writes a caller-owned focal-plane photon-arrival-rate `IntensityMap`. One

@@ -40,7 +40,9 @@ runtime and validation surfaces.
 
 Current CPU-supported families:
 
-- finite and infinite multilayer atmosphere
+- finite and infinite multilayer atmosphere with explicit elapsed/absolute
+  model time, stable epochs, frozen direction preparation, and caller-owned
+  rendering
 - detector-family execution on maintained detector surfaces
 - Shack-Hartmann, Pyramid, and BioEdge WFS on maintained validated surfaces
 - runtime and closed-loop execution on maintained local/runtime artifacts

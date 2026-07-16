@@ -25,7 +25,7 @@ end
 
 @testset "API export curation" begin
     exported = names(AdaptiveOpticsSim)
-    @test length(exported) <= 370
+    @test length(exported) <= 385
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
     @test Base.isexported(AdaptiveOpticsSim, :Detector)
@@ -75,6 +75,11 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :prepare_pupil_field)
     @test Base.isexported(AdaptiveOpticsSim, :prepare_direct_psf)
     @test Base.isexported(AdaptiveOpticsSim, :prepare_spatial_filter)
+    @test Base.isexported(AdaptiveOpticsSim, :AtmosphereEpoch)
+    @test Base.isexported(AdaptiveOpticsSim, :advance_by!)
+    @test Base.isexported(AdaptiveOpticsSim, :advance_to!)
+    @test Base.isexported(AdaptiveOpticsSim, :prepare_atmosphere_renderer)
+    @test Base.isexported(AdaptiveOpticsSim, :render_atmosphere!)
     @test !Base.isexported(AdaptiveOpticsSim, :TelescopeParams)
     @test !Base.isexported(AdaptiveOpticsSim, :TelescopeState)
     @test !Base.isexported(AdaptiveOpticsSim, :DetectorParams)
@@ -202,7 +207,7 @@ end
         wind_direction=[0.0, 90.0],
         altitude=[0.0, 5000.0],
     )
-    advance!(atm, atm_tel; rng=MersenneTwister(1))
+    advance_by!(atm, atm_tel.params.sampling_time; rng=MersenneTwister(1))
     geom_prop = AtmosphericFieldPropagation(atm, atm_tel, atm_src;
         model=GeometricAtmosphericPropagation(T=Float64),
         zero_padding=1,
@@ -230,7 +235,7 @@ end
         wind_direction=[0.0],
         altitude=[0.0],
     )
-    advance!(fresnel_atm, atm_tel; rng=MersenneTwister(2))
+    advance_by!(fresnel_atm, atm_tel.params.sampling_time; rng=MersenneTwister(2))
     fresnel_prop = AtmosphericFieldPropagation(fresnel_atm, atm_tel, atm_src;
         model=LayeredFresnelAtmosphericPropagation(T=Float64),
         zero_padding=1,

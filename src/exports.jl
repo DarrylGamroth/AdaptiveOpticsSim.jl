@@ -6,6 +6,7 @@
 
 export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError
 export UnsupportedAlgorithm, NumericalConditionError
+export AtmosphereTimeError, AtmosphereEpochError
 
 export FidelityProfile, ScientificProfile, FastProfile, default_fidelity_profile
 export runtime_rng, deterministic_reference_rng
@@ -45,6 +46,7 @@ export propagation_output, propagate_field!, fraunhofer_intensity_from_field!
 export DirectPSFPlan, DirectPSFWorkspace, prepare_direct_psf
 export GeometricAtmosphericPropagation, LayeredFresnelAtmosphericPropagation
 export AtmosphericFieldPropagation
+export propagate_atmosphere_field!, atmospheric_intensity!
 
 export ZernikeBasis, compute_zernike!
 export OPDMap, Misregistration, apply_misregistration
@@ -54,7 +56,10 @@ export CircularFilter, SquareFilter, FoucaultFilter
 export prepare_spatial_filter, filter!
 
 export KolmogorovAtmosphere, MultiLayerAtmosphere, InfinitePhaseScreen, InfiniteMultiLayerAtmosphere
-export advance!, propagate!
+export AtmosphereEpoch, epoch_time, epoch_sequence, current_epoch
+export prepare_atmosphere_renderer, prepare_atmosphere_renderers, direction_renderers
+export advance!, advance_by!, advance_to!, propagate!
+export render_atmosphere!
 
 export ActuatorGridTopology, SampledActuatorTopology
 export GaussianInfluenceWidth, GaussianMechanicalCoupling, DenseInfluenceMatrix, MeasuredInfluenceFunctions

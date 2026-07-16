@@ -378,6 +378,7 @@ mutable struct AO188Simulation{
     LOWTEL,
     ATM,
     SRC,
+    ATMRENDERER,
     DM,
     HOWFS,
     LOWFS,
@@ -403,6 +404,7 @@ mutable struct AO188Simulation{
     low_tel::LOWTEL
     atm::ATM
     src::SRC
+    atmosphere_renderer::ATMRENDERER
     dm::DM
     high_wfs::HOWFS
     low_wfs::LOWFS
@@ -677,6 +679,7 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
     )
     src = Source(band=params.source_band, magnitude=params.source_magnitude, T=T)
     atm = KolmogorovAtmosphere(tel; r0=params.r0, L0=params.L0, T=T, backend=backend)
+    atmosphere_renderer = prepare_atmosphere_renderer(atm, tel, src)
     dm = DeformableMirror(tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=backend)
     low_dm = DeformableMirror(low_tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=backend)
     high_wfs = _build_high_order_wfs(params.high_order_sensor_model, tel, params; backend=backend)
@@ -735,6 +738,7 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
         low_tel,
         atm,
         src,
+        atmosphere_renderer,
         dm,
         high_wfs,
         low_wfs,
@@ -770,12 +774,19 @@ function subaru_ao188_curvature_simulation(; params::AO188SimulationParams=AO188
     return subaru_ao188_simulation(; params=params, kwargs...)
 end
 
+@inline function _advance_and_render_atmosphere!(surrogate::AO188Simulation)
+    epoch = advance_by!(surrogate.atm, surrogate.tel.params.sampling_time,
+        surrogate.rng)
+    AdaptiveOpticsSim.render_atmosphere_opd!(surrogate.tel.state.opd,
+        surrogate.atmosphere_renderer, surrogate.atm, epoch)
+    return epoch
+end
+
 function step!(surrogate::AO188Simulation)
     if surrogate.params.replay_mode isa PreparedReplayMode && !surrogate.replay_prepared
         prepare!(surrogate)
     end
-    advance!(surrogate.atm, surrogate.tel, surrogate.rng)
-    propagate!(surrogate.atm, surrogate.tel)
+    _advance_and_render_atmosphere!(surrogate)
     apply!(surrogate.dm, surrogate.tel, DMAdditive())
 
     _measure_branches!(surrogate.params.branch_execution, surrogate)
@@ -838,8 +849,7 @@ function subaru_ao188_phase_timing(surrogate::AO188Simulation; warmup::Int=10, s
     total_times = Vector{Int}(undef, samples)
     @inbounds for i in 1:samples
         t0 = time_ns()
-        advance!(surrogate.atm, surrogate.tel, surrogate.rng)
-        propagate!(surrogate.atm, surrogate.tel)
+        _advance_and_render_atmosphere!(surrogate)
         apply!(surrogate.dm, surrogate.tel, DMAdditive())
         if isnothing(surrogate.high_detector)
             measure!(surrogate.high_wfs, surrogate.tel, surrogate.src)

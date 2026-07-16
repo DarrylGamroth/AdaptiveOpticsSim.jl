@@ -84,12 +84,14 @@ function atmosphere_gsc_trace(
         reset_opd!(tel)
         copy(compute_psf!(tel, sci; zero_padding=psf_zero_padding))
     end
+    atmosphere_renderer = prepare_atmosphere_renderer(atm, tel, ngs)
+    atmosphere_output = PupilFunction(tel)
 
     trace = Matrix{Float64}(undef, n_iter, 7)
     for iter in 1:n_iter
-        advance!(atm, tel; rng=rng)
-        propagate!(atm, tel)
-        forcing_opd .= tel.state.opd
+        epoch = advance_by!(atm, tel.params.sampling_time; rng=rng)
+        render_atmosphere!(atmosphere_output, atmosphere_renderer, atm, epoch)
+        forcing_opd .= atmosphere_output.opd
         combine_modes!(correction_opd, basis, control_coeffs)
         @. residual_opd = forcing_opd - correction_opd
         apply_opd!(tel, residual_opd)

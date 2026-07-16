@@ -57,14 +57,14 @@ function assert_source_interface(src)
 end
 
 function assert_atmosphere_interface(atm, tel)
-    @test applicable(advance!, atm, tel)
+    @test applicable(advance_by!, atm, tel.params.sampling_time)
+    @test applicable(advance_to!, atm, tel.params.sampling_time)
+    @test applicable(prepare_atmosphere_renderer, atm, tel)
     @test applicable(propagate!, atm, tel)
 end
 
 function assert_atmosphere_layer_interface(layer, tel, rng, src)
     @test layer isa AdaptiveOpticsSim.AbstractAtmosphereLayer
-    @test applicable(AdaptiveOpticsSim.sample_layer!, similar(tel.state.opd), layer, tel, rng)
-    @test applicable(AdaptiveOpticsSim.sample_layer_accumulate!, similar(tel.state.opd), layer, tel, rng)
     @test applicable(AdaptiveOpticsSim.render_layer!, similar(tel.state.opd), layer, zero(eltype(tel.state.opd)),
         zero(eltype(tel.state.opd)), one(eltype(tel.state.opd)))
     @test applicable(AdaptiveOpticsSim.render_layer_accumulate!, similar(tel.state.opd), layer, zero(eltype(tel.state.opd)),
@@ -72,12 +72,6 @@ function assert_atmosphere_layer_interface(layer, tel, rng, src)
     altitude = AdaptiveOpticsSim.layer_altitude(layer)
     shift_x, shift_y, footprint_scale = AdaptiveOpticsSim.layer_source_geometry(src, altitude, tel, eltype(tel.state.opd))
     sample = similar(tel.state.opd)
-    fill!(sample, zero(eltype(sample)))
-    AdaptiveOpticsSim.sample_layer!(sample, layer, tel, rng)
-    @test size(sample) == size(tel.state.opd)
-    fill!(sample, zero(eltype(sample)))
-    AdaptiveOpticsSim.sample_layer_accumulate!(sample, layer, tel, rng)
-    @test size(sample) == size(tel.state.opd)
     fill!(sample, zero(eltype(sample)))
     AdaptiveOpticsSim.render_layer!(sample, layer, shift_x, shift_y, footprint_scale)
     @test size(sample) == size(tel.state.opd)
@@ -266,8 +260,9 @@ function moving_atmosphere_trace(;
     rng = MersenneTwister(seed)
     trace = Matrix{Float64}[]
     for _ in 1:steps
-        advance!(atm, tel; rng=rng)
-        push!(trace, copy(atm.state.opd))
+        advance_by!(atm, tel.params.sampling_time; rng=rng)
+        propagate!(atm, tel)
+        push!(trace, copy(tel.state.opd))
     end
     return trace
 end
@@ -291,7 +286,7 @@ function moving_wfs_slope_trace(;
     rng = MersenneTwister(seed)
     trace = Vector{Vector{Float64}}(undef, steps)
     for i in 1:steps
-        advance!(atm, tel; rng=rng)
+        advance_by!(atm, tel.params.sampling_time; rng=rng)
         propagate!(atm, tel)
         measure!(wfs, tel, src)
         trace[i] = copy(wfs.state.slopes)

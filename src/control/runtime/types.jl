@@ -221,6 +221,8 @@ mutable struct ClosedLoopRuntime{
     SIM<:AOSimulation,
     TEL,
     A,
+    AR,
+    ASR,
     S,
     SS,
     O,
@@ -246,6 +248,8 @@ mutable struct ClosedLoopRuntime{
     simulation::SIM
     tel::TEL
     atm::A
+    wfs_atmosphere_renderer::AR
+    science_atmosphere_renderer::ASR
     src::S
     science_src::SS
     optic::O

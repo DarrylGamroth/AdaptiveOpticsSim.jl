@@ -155,9 +155,8 @@ end
 """
 Runtime state for the planned infinite multilayer atmosphere backend.
 """
-mutable struct InfiniteMultiLayerState{T<:AbstractFloat,A<:AbstractMatrix{T}}
-    opd::A
-    source_geometry::AtmosphereSourceGeometryCache{T,Vector{T}}
+mutable struct InfiniteMultiLayerState{T<:AbstractFloat}
+    timeline::AtmosphereTimelineState{T}
 end
 
 """
@@ -171,14 +170,18 @@ struct InfiniteMultiLayerAtmosphere{
     P<:InfiniteMultiLayerParams,
     S<:InfiniteMultiLayerState,
     L<:AbstractVector{<:InfiniteAtmosphereLayer},
+    I<:AtmosphereIdentity,
     B<:AbstractArrayBackend,
-} <: AbstractAtmosphere
+} <: AbstractTimedAtmosphere
     params::P
     layers::L
     state::S
+    identity::I
 end
 
-@inline backend(::InfiniteMultiLayerAtmosphere{<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline backend(::InfiniteMultiLayerAtmosphere{<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline atmosphere_numeric_type(atm::InfiniteMultiLayerAtmosphere) =
+    typeof(atm.params.r0)
 
 @inline default_infinite_screen_resolution(n::Int) = 3 * n
 
@@ -195,7 +198,7 @@ function infinite_screen_telescope(
     return Telescope(
         resolution=resolution,
         diameter=delta * resolution,
-        sampling_time=tel.params.sampling_time,
+        sampling_time=one(T),
         central_obstruction=0.0,
         fov_arcsec=tel.params.fov_arcsec,
         T=T,
@@ -353,7 +356,7 @@ end
 
 function ensure_initialized!(screen::InfinitePhaseScreen, rng::AbstractRNG)
     if !screen.state.initialized
-        advance!(screen.generator, screen.generator_telescope, rng)
+        regenerate_phase_screen!(screen.generator, rng)
         copyto!(screen.state.screen, screen.generator.state.opd)
         screen.state.initialized = true
     end
@@ -388,11 +391,11 @@ function _apply_integer_shift_y!(screen::InfinitePhaseScreen, shift::Int, rng::A
     return screen
 end
 
-function sample_layer!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer, tel::Telescope,
-    rng::AbstractRNG) where {T<:AbstractFloat}
-    ensure_initialized!(layer.screen, rng)
-    delta = T(tel.params.diameter / tel.params.resolution)
-    dt = T(tel.params.sampling_time)
+function evolve_layer!(layer::InfiniteAtmosphereLayer, duration::Real,
+    rng::AbstractRNG)
+    T = typeof(layer.state.offset_x)
+    delta = T(layer.screen.params.pixel_scale)
+    dt = T(duration)
     next_offset_x = layer.state.offset_x + T(layer.params.wind_velocity_x) * dt / delta
     next_offset_y = layer.state.offset_y + T(layer.params.wind_velocity_y) * dt / delta
     shift_x = trunc(Int, next_offset_x)
@@ -405,27 +408,7 @@ function sample_layer!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer, t
     layer.state.offset_y = residual_y
     layer.state.integer_shift_x += shift_x
     layer.state.integer_shift_y += shift_y
-    return render_layer!(out, layer, tel)
-end
-
-function sample_layer_accumulate!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer, tel::Telescope,
-    rng::AbstractRNG) where {T<:AbstractFloat}
-    ensure_initialized!(layer.screen, rng)
-    delta = T(tel.params.diameter / tel.params.resolution)
-    dt = T(tel.params.sampling_time)
-    next_offset_x = layer.state.offset_x + T(layer.params.wind_velocity_x) * dt / delta
-    next_offset_y = layer.state.offset_y + T(layer.params.wind_velocity_y) * dt / delta
-    shift_x = trunc(Int, next_offset_x)
-    shift_y = trunc(Int, next_offset_y)
-    residual_x = next_offset_x - T(shift_x)
-    residual_y = next_offset_y - T(shift_y)
-    _apply_integer_shift_x!(layer.screen, shift_x, rng)
-    _apply_integer_shift_y!(layer.screen, shift_y, rng)
-    layer.state.offset_x = residual_x
-    layer.state.offset_y = residual_y
-    layer.state.integer_shift_x += shift_x
-    layer.state.integer_shift_y += shift_y
-    return render_layer_accumulate!(out, layer, tel)
+    return layer
 end
 
 function render_layer!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer, tel::Telescope,
@@ -662,7 +645,6 @@ function InfiniteMultiLayerAtmosphere(tel::Telescope;
     T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=backend(tel))
     selector = require_same_backend(tel, backend)
-    backend_array = _resolve_array_backend(selector)
     n_layers = length(fractional_cn2)
     n_layers > 0 || throw(InvalidConfiguration("fractional_cn2 cannot be empty"))
     if length(wind_speed) != n_layers || length(wind_direction) != n_layers || length(altitude) != n_layers
@@ -701,26 +683,25 @@ function InfiniteMultiLayerAtmosphere(tel::Telescope;
             InfiniteLayerState(zero(T), zero(T), 0, 0),
         ) for i in 1:n_layers
     ]
-    opd = backend_array{T}(undef, tel.params.resolution, tel.params.resolution)
-    fill!(opd, zero(T))
-    state = InfiniteMultiLayerState{T, typeof(opd)}(opd, AtmosphereSourceGeometryCache(n_layers, T))
-    return InfiniteMultiLayerAtmosphere{typeof(params), typeof(state), typeof(layers), typeof(selector)}(params, layers, state)
+    state = InfiniteMultiLayerState{T}(new_atmosphere_timeline(T))
+    identity = AtmosphereIdentity()
+    return InfiniteMultiLayerAtmosphere{typeof(params), typeof(state),
+        typeof(layers), typeof(identity), typeof(selector)}(
+        params, layers, state, identity)
 end
 
-function advance!(atm::InfiniteMultiLayerAtmosphere, tel::Telescope, rng::AbstractRNG)
-    accumulate_sampled_layers!(atm.state.opd, atm.layers, tel, rng)
+function initialize_atmosphere!(atm::InfiniteMultiLayerAtmosphere,
+    rng::AbstractRNG)
+    @inbounds for layer in atm.layers
+        ensure_initialized!(layer.screen, rng)
+    end
     return atm
 end
 
-function advance!(atm::InfiniteMultiLayerAtmosphere, tel::Telescope; rng::AbstractRNG=Random.default_rng())
-    return advance!(atm, tel, rng)
-end
-
-function propagate!(atm::InfiniteMultiLayerAtmosphere, tel::Telescope)
-    tel.state.opd .= atm.state.opd .* pupil_mask(tel)
-    return tel
-end
-
-function propagate!(atm::InfiniteMultiLayerAtmosphere, tel::Telescope, src::AbstractSource)
-    return propagate_source_aware!(atm, tel, src)
+function evolve_atmosphere!(atm::InfiniteMultiLayerAtmosphere,
+    duration::Real, rng::AbstractRNG)
+    @inbounds for layer in atm.layers
+        evolve_layer!(layer, duration, rng)
+    end
+    return atm
 end

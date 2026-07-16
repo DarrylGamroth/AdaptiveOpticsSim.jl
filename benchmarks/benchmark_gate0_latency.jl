@@ -104,10 +104,14 @@ function make_gate0_card(raw::AbstractDict)
             wind_direction=[0.0, 120.0], altitude=[0.0, 6000.0])
         src = Source(band=:I, magnitude=0.0, coordinates=(3.0, 45.0))
         rng = runtime_rng(Int(raw["rng_seed"]))
-        let atmosphere=atmosphere, tel=tel, src=src, rng=rng
+        duration = tel.params.sampling_time
+        renderer = prepare_atmosphere_renderer(atmosphere, tel, src)
+        output = PupilFunction(tel)
+        let atmosphere=atmosphere, renderer=renderer, output=output, rng=rng,
+            duration=duration
             () -> begin
-                advance!(atmosphere, tel; rng=rng)
-                propagate!(atmosphere, tel, src)
+                epoch = advance_by!(atmosphere, duration; rng=rng)
+                render_atmosphere!(output, renderer, atmosphere, epoch)
             end
         end
     elseif kind == "shack_hartmann"

@@ -59,17 +59,43 @@ families directly.
 code should use `wfs_source(simulation)` and `science_source(simulation)` rather
 than assuming one source serves both paths.
 
-An atmosphere with directional geometry should implement
-`propagate!(atmosphere, telescope, source)` without advancing its time state.
-The runtime advances once through the WFS path and may call source-aware
-propagation again for a distinct science path. Atmospheres without directional
-geometry inherit the source-insensitive fallback. Keep the second propagation
-allocation-free when it is part of a maintained HIL path.
+Maintained timed atmospheres separate evolution from direction rendering. Their
+public execution boundary is:
 
-Shared multi-arm execution separates atmosphere advancement from path
-rendering through `advance_runtime_atmosphere!` and
-`render_runtime_wfs_path!`. A custom WFS that needs special pupil preparation
-when consuming an already-rendered shared arm should extend
+- `advance_by!(atmosphere, elapsed_seconds; rng)` or
+  `advance_to!(atmosphere, model_time; rng)` for the single evolution writer
+- `prepare_atmosphere_renderer(atmosphere, telescope, source)` during cold
+  preparation for one source direction
+- `render_atmosphere!(destination, renderer, atmosphere, epoch)` for warmed,
+  caller-owned output
+
+The timed atmosphere must not read telescope sampling time, detector cadence,
+wall time, or a renderer to determine elapsed time. Rendering must not evolve
+the atmosphere or consume RNG. A stale epoch, renderer from another atmosphere,
+or incompatible output must fail before output mutation.
+
+`AdaptiveOpticsSim.AbstractTimedAtmosphere` and its model hooks are an advanced
+qualified extension seam. A concrete implementation owns an atmosphere
+identity and timeline, implements `initialize_atmosphere!` and
+`evolve_atmosphere!`, declares its layer-storage element type through
+`atmosphere_numeric_type`, and exposes physical layers whose render methods
+accept precomputed direction geometry. Wrappers around a timed atmosphere must
+delegate its identity, timeline, layer, numeric-type, and rendering seams.
+Source-independent static extensions may stay subtypes of `AbstractAtmosphere`
+and implement the ordinary two-argument `propagate!`; the source-sensitive
+fallback delegates to it.
+
+Use `prepare_atmosphere_renderers` for `Asterism` and `ExtendedSource`. The
+singular preparation call rejects them so a multi-direction source cannot be
+silently treated as its reference direction. A custom source that owns mutable
+profile data should specialize the qualified `AdaptiveOpticsSim.freeze_source`
+seam and return a run-owned copy.
+
+Shared multi-arm execution advances once and stores one prepared atmosphere
+renderer per source arm. Runtime construction freezes mutable source inputs and
+preserves source identity across arms so identical paths can still be reused. A
+custom WFS that needs special pupil preparation when consuming an
+already-rendered shared arm should extend
 `prepare_shared_runtime_wfs!`; the default is a no-op. The Curvature WFS uses
 this seam to establish its measurement path and then restores the normal
 source path in `finish_runtime_wfs_sensing!`.

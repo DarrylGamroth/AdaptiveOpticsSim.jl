@@ -1,6 +1,15 @@
 struct Asterism{S<:AbstractSource,V<:AbstractVector{S}} <: AbstractSource
     sources::V
+    function Asterism(sources::AbstractVector{S}) where {S<:AbstractSource}
+        frozen = Vector{S}(undef, length(sources))
+        @inbounds for i in eachindex(sources)
+            frozen[i] = freeze_source(sources[i])
+        end
+        return new{S,typeof(frozen)}(frozen)
+    end
 end
+
+freeze_source(ast::Asterism) = Asterism(ast.sources)
 
 Base.length(ast::Asterism) = length(ast.sources)
 
