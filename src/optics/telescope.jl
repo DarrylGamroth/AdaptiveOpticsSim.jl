@@ -164,8 +164,8 @@ function set_pupil_reflectivity!(tel::Telescope, reflectivity::AbstractMatrix)
     return tel
 end
 
-function flux_map(tel::Telescope, src::AbstractSource)
-    scale = photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
+function pupil_expected_photon_map(tel::Telescope, src::AbstractSource)
+    scale = photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
     out = similar(pupil_reflectivity(tel))
     reflectivity = pupil_reflectivity(tel)
     @. out = scale * reflectivity

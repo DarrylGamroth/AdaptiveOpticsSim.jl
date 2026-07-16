@@ -16,7 +16,7 @@ subsystem specifications.
 Different source directions are the primary coarse-grained parallel unit. They
 share an atmosphere epoch and effective optic commands, but require different
 direction-dependent layer footprints. Detectors on the same compatible path
-reuse the propagated field or photon-rate irradiance before their independent
+reuse the propagated field or photon-arrival-rate product before their independent
 detector integrations and pipelines run.
 
 The current shared-arm runtime mutates common telescope OPD/PSF state and an

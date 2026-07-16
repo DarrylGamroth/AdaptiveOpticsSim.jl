@@ -81,6 +81,8 @@ end
 function FraunhoferPropagation(field::ElectricField)
     require_centered_plane_geometry(field.metadata;
         label="Fraunhofer input ElectricField")
+    require_metric_coordinates(field.metadata;
+        label="Fraunhofer input ElectricField")
     T = real(eltype(field.values))
     n = field.metadata.dimensions[1]
     n == field.metadata.dimensions[2] || throw(DimensionMismatchError(
@@ -101,6 +103,7 @@ function FraunhoferPropagation(field::ElectricField)
     )
     state = FraunhoferPropagationState{typeof(scratch), typeof(fft_plan)}(scratch, fft_plan)
     output_metadata = OpticalPlaneMetadata(FocalPlane(), scratch;
+        coordinate_domain=AngularCoordinates(),
         sampling=(output_sampling, output_sampling),
         spectral=field.metadata.spectral,
         normalization=field.metadata.normalization,
@@ -111,8 +114,10 @@ function FraunhoferPropagation(field::ElectricField)
 end
 
 function FresnelPropagation(field::ElectricField; distance_m::Real,
-    output_kind::AbstractOpticalPlaneKind=PropagationPlane())
+    output_kind::AbstractOpticalPlaneKind=IntermediatePlane())
     require_centered_plane_geometry(field.metadata;
+        label="Fresnel input ElectricField")
+    require_metric_coordinates(field.metadata;
         label="Fresnel input ElectricField")
     T = real(eltype(field.values))
     n = field.metadata.dimensions[1]
@@ -144,6 +149,7 @@ function FresnelPropagation(field::ElectricField; distance_m::Real,
         ifft_plan,
     )
     output_metadata = OpticalPlaneMetadata(output_kind, propagated;
+        coordinate_domain=MetricCoordinates(),
         sampling=field.metadata.sampling,
         spectral=field.metadata.spectral,
         normalization=field.metadata.normalization,
@@ -278,12 +284,13 @@ function propagation_output(field::ElectricField,
     return ElectricField(model.output_metadata, values)
 end
 
-function IrradiancePlane(field::ElectricField,
+function IntensityMap(field::ElectricField,
     model::FraunhoferPropagation)
     _require_model_match(field, model)
     T = real(eltype(field.values))
     values = similar(field.values, T, model.output_metadata.dimensions...)
     metadata = OpticalPlaneMetadata(model.output_metadata.kind, values;
+        coordinate_domain=model.output_metadata.coordinate_domain,
         sampling=model.output_metadata.sampling,
         origin=model.output_metadata.origin,
         centering=model.output_metadata.centering,
@@ -293,7 +300,7 @@ function IrradiancePlane(field::ElectricField,
         spatial_measure=model.output_metadata.spatial_measure,
         coherence=model.output_metadata.coherence,
         device=model.output_metadata.device)
-    return IrradiancePlane(metadata, values)
+    return IntensityMap(metadata, values)
 end
 
 function fraunhofer_intensity_from_field!(out::AbstractMatrix{T},
@@ -308,10 +315,10 @@ function fraunhofer_intensity_from_field!(out::AbstractMatrix{T},
     return out
 end
 
-function fraunhofer_intensity_from_field!(out::IrradiancePlane,
+function fraunhofer_intensity_from_field!(out::IntensityMap,
     field::ElectricField, model::FraunhoferPropagation)
     require_same_plane_grid(out.metadata, model.output_metadata;
-        label="Fraunhofer irradiance destination",
+        label="Fraunhofer intensity destination",
         require_numeric_type=false)
     fraunhofer_intensity_from_field!(out.values, field, model)
     return out

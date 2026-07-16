@@ -23,16 +23,16 @@ using AdaptiveOpticsSim
 
 tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)
-wavefront = PupilWavefront(tel)
-field = ElectricField(wavefront, src; zero_padding=2)
-prepared = prepare_direct_psf(tel, wavefront, src, field)
+pupil = PupilFunction(tel)
+field = ElectricField(pupil, src; zero_padding=2)
+prepared = prepare_direct_psf(tel, pupil, src, field)
 
-compute_psf!(prepared.output, field, wavefront, prepared.plan,
+compute_psf!(prepared.output, field, pupil, prepared.plan,
     prepared.workspace)
-psf = irradiance_values(prepared.output)
+psf = intensity_values(prepared.output)
 ```
 
-Keep `wavefront`, `field`, `prepared.output`, and `prepared.workspace` owned by
+Keep `pupil`, `field`, `prepared.output`, and `prepared.workspace` owned by
 the path that writes them. Preparation allocates and plans once; repeated
 `compute_psf!` calls are fixed-shape and allocation-free after warmup.
 
@@ -40,9 +40,9 @@ Key objects:
 
 - `Telescope`
 - `Source`
-- `PupilWavefront`
+- `PupilFunction`
 - `ElectricField`
-- `IrradiancePlane`
+- `IntensityMap`
 - `prepare_direct_psf`
 - `compute_psf!`
 

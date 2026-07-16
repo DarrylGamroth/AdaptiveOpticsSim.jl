@@ -567,7 +567,7 @@ function curvature_intensity!(::ScalarCPUStyle, wfs::CurvatureWFS, tel::Telescop
     oy = div(pad - n, 2)
     opd_to_cycles = eltype(wfs.state.frame_plus)(2) / wavelength(src)
     amp_scale = sqrt(eltype(wfs.state.frame_plus)(
-        photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
+        photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
     ))
     fill!(wfs.state.field_stack, zero(eltype(wfs.state.field_stack)))
     @inbounds for y in 1:n, x in 1:n
@@ -592,7 +592,7 @@ function curvature_intensity!(style::AcceleratorStyle, wfs::CurvatureWFS, tel::T
     oy = div(pad - n, 2)
     opd_to_cycles = eltype(wfs.state.frame_plus)(2) / wavelength(src)
     amp_scale = sqrt(eltype(wfs.state.frame_plus)(
-        photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
+        photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
     ))
     phase = begin_kernel_phase(style)
     queue_kernel!(phase, curvature_branch_field_stack_kernel!, wfs.state.field_stack, pupil_mask(tel),

@@ -75,7 +75,7 @@
 
     pyr_incidence = PyramidWFS(tel; pupil_samples=2, mode=Diffractive(), modulation=0.0,
         normalization=IncidenceFluxNormalization())
-    expected_pyr_norm = AdaptiveOpticsSim.photon_flux(ngs) * tel.params.sampling_time *
+    expected_pyr_norm = AdaptiveOpticsSim.photon_irradiance(ngs) * tel.params.sampling_time *
                         (tel.params.diameter / pyr_incidence.params.pupil_samples)^2
     @test AdaptiveOpticsSim.pyramid_normalization(pyr_incidence.params.normalization,
         pyr_incidence, tel, ngs, 3, 10.0) ≈ expected_pyr_norm
@@ -132,7 +132,7 @@
 
     bio_incidence = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive(),
         normalization=IncidenceFluxNormalization())
-    expected_bio_norm = AdaptiveOpticsSim.photon_flux(ngs) * tel.params.sampling_time *
+    expected_bio_norm = AdaptiveOpticsSim.photon_irradiance(ngs) * tel.params.sampling_time *
                         (tel.params.diameter / bio_incidence.params.pupil_samples)^2
     @test AdaptiveOpticsSim.bioedge_normalization(bio_incidence.params.normalization,
         bio_incidence, tel, ngs, 3, 10.0) ≈ expected_bio_norm

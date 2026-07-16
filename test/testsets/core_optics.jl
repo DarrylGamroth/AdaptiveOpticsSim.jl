@@ -56,6 +56,7 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :prepare_runtime_wfs!)
     @test Base.isexported(AdaptiveOpticsSim, :wfs_source)
     @test Base.isexported(AdaptiveOpticsSim, :science_source)
+    @test Base.isexported(AdaptiveOpticsSim, :photon_irradiance)
     @test Base.isexported(AdaptiveOpticsSim, :CPUHILExecutionPlan)
     @test Base.isexported(AdaptiveOpticsSim, :DeviceResidentExecutionPlan)
     @test Base.isexported(AdaptiveOpticsSim, :runtime_execution_plan)
@@ -66,9 +67,11 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :optical_arms)
     @test Base.isexported(AdaptiveOpticsSim, :subaperture_layout)
     @test Base.isexported(AdaptiveOpticsSim, :OpticalPlaneMetadata)
-    @test Base.isexported(AdaptiveOpticsSim, :PupilWavefront)
+    @test Base.isexported(AdaptiveOpticsSim, :MetricCoordinates)
+    @test Base.isexported(AdaptiveOpticsSim, :AngularCoordinates)
+    @test Base.isexported(AdaptiveOpticsSim, :PupilFunction)
     @test Base.isexported(AdaptiveOpticsSim, :ElectricField)
-    @test Base.isexported(AdaptiveOpticsSim, :IrradiancePlane)
+    @test Base.isexported(AdaptiveOpticsSim, :IntensityMap)
     @test Base.isexported(AdaptiveOpticsSim, :prepare_pupil_field)
     @test Base.isexported(AdaptiveOpticsSim, :prepare_direct_psf)
     @test Base.isexported(AdaptiveOpticsSim, :prepare_spatial_filter)
@@ -99,14 +102,16 @@ end
 @testset "Telescope and PSF" begin
     tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.2)
     src = Source(band=:I, magnitude=0.0)
-    wavefront = PupilWavefront(tel)
+    wavefront = PupilFunction(tel)
     apply_opd!(wavefront, opd_map(tel))
     field = ElectricField(wavefront, src; zero_padding=2)
     formation = prepare_pupil_field(tel, wavefront, src, field)
     fill_electric_field!(field, wavefront, formation)
     @test size(field.values) == (64, 64)
+    @test field.metadata.coordinate_domain isa MetricCoordinates
     @test field.metadata.spectral == MonochromaticChannel(wavelength(src))
     fraunhofer = FraunhoferPropagation(field)
+    @test fraunhofer.output_metadata.coordinate_domain isa AngularCoordinates
     centered_psf = similar(field.values, Float64)
     AdaptiveOpticsSim.centered_psf_from_field!(centered_psf, field,
         fraunhofer)
@@ -124,14 +129,14 @@ end
         pupil_reflectivity=0.25)
     psf_dim = compute_psf!(tel_dim, src; zero_padding=2)
     @test sum(psf_dim) ≈ 0.25 * sum(psf)
-    fmap = flux_map(tel_dim, src)
-    @test size(fmap) == size(pupil_mask(tel_dim))
-    @test maximum(fmap) > 0
+    expected_photons = pupil_expected_photon_map(tel_dim, src)
+    @test size(expected_photons) == size(pupil_mask(tel_dim))
+    @test maximum(expected_photons) > 0
     @test optical_path(src, tel_dim) == "source(I) -> telescope"
 
     tel_simple = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src_simple = Source(band=:I, magnitude=0.0)
-    wavefront_simple = PupilWavefront(tel_simple)
+    wavefront_simple = PupilFunction(tel_simple)
     field_simple = ElectricField(wavefront_simple, src_simple;
         zero_padding=1)
     formation_simple = prepare_pupil_field(tel_simple, wavefront_simple,
@@ -209,7 +214,7 @@ end
     geom_field = propagate_atmosphere_field!(geom_prop, atm, atm_tel, atm_src)
     tel_geom = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     propagate!(atm, tel_geom, atm_src)
-    collapsed_wavefront = PupilWavefront(tel_geom)
+    collapsed_wavefront = PupilFunction(tel_geom)
     apply_opd!(collapsed_wavefront, opd_map(tel_geom))
     collapsed = ElectricField(collapsed_wavefront, atm_src; zero_padding=1)
     collapsed_plan = prepare_pupil_field(tel_geom, collapsed_wavefront,
@@ -271,8 +276,8 @@ end
     aperture_before = copy(pupil_mask(tel))
     reflectivity_before = copy(pupil_reflectivity(tel))
 
-    path_a = PupilWavefront(tel)
-    path_b = PupilWavefront(tel)
+    path_a = PupilFunction(tel)
+    path_b = PupilFunction(tel)
     static_map = OPDMap(fill(2e-9, 16, 16))
     apply_surface!(path_a, static_map, DMAdditive())
     @test path_a.opd == static_map.opd
@@ -316,7 +321,7 @@ end
     spatial_formation = prepare_pupil_field(tel, path_a, src, field;
         center_even_grid=false, amplitude_scale=1)
     fill_electric_field!(field, path_a, spatial_formation)
-    spatial_output = PupilWavefront(tel)
+    spatial_output = PupilFunction(tel)
     spatial_plan = prepare_spatial_filter(tel, spatial_filter, field,
         spatial_output)
     spatial_workspace = SpatialFilterWorkspace(spatial_filter)
@@ -330,17 +335,31 @@ end
     tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3,
         central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
-    wavefront = PupilWavefront(tel)
+    wavefront = PupilFunction(tel)
     field = ElectricField(wavefront, src; zero_padding=1)
     values = similar(field.values)
 
     sampling_metadata = OpticalPlaneMetadata(PupilPlane(), values;
+        coordinate_domain=field.metadata.coordinate_domain,
         sampling=(2.0, 2.0), spectral=field.metadata.spectral)
     sampling_field = ElectricField(sampling_metadata, values)
     @test_throws InvalidConfiguration prepare_pupil_field(tel, wavefront,
         src, sampling_field)
 
+    coordinate_metadata = OpticalPlaneMetadata(PupilPlane(), values;
+        coordinate_domain=AngularCoordinates(),
+        sampling=field.metadata.sampling, origin=field.metadata.origin,
+        spectral=field.metadata.spectral)
+    coordinate_field = ElectricField(coordinate_metadata, values)
+    @test_throws InvalidConfiguration prepare_pupil_field(tel, wavefront,
+        src, coordinate_field)
+    @test_throws InvalidConfiguration FraunhoferPropagation(coordinate_field)
+    spatial_filter = SpatialFilter(tel; zero_padding=1)
+    @test_throws InvalidConfiguration prepare_spatial_filter(tel,
+        spatial_filter, coordinate_field, wavefront)
+
     kind_metadata = OpticalPlaneMetadata(FocalPlane(), values;
+        coordinate_domain=field.metadata.coordinate_domain,
         sampling=field.metadata.sampling, origin=field.metadata.origin,
         spectral=field.metadata.spectral)
     kind_field = ElectricField(kind_metadata, values)
@@ -348,6 +367,7 @@ end
         src, kind_field)
 
     origin_metadata = OpticalPlaneMetadata(PupilPlane(), values;
+        coordinate_domain=field.metadata.coordinate_domain,
         sampling=field.metadata.sampling, origin=(0.0, 0.0),
         spectral=field.metadata.spectral)
     origin_field = ElectricField(origin_metadata, values)
@@ -355,6 +375,7 @@ end
         src, origin_field)
 
     centering_metadata = OpticalPlaneMetadata(PupilPlane(), values;
+        coordinate_domain=field.metadata.coordinate_domain,
         sampling=field.metadata.sampling, origin=field.metadata.origin,
         centering=(SampleCentered, SampleCentered),
         spectral=field.metadata.spectral)
@@ -363,6 +384,7 @@ end
         src, centering_field)
 
     orientation_metadata = OpticalPlaneMetadata(PupilPlane(), values;
+        coordinate_domain=field.metadata.coordinate_domain,
         sampling=field.metadata.sampling, origin=field.metadata.origin,
         orientation=PlaneAxisOrientation((:y, :x)),
         spectral=field.metadata.spectral)
@@ -371,6 +393,7 @@ end
         src, orientation_field)
 
     spectral_metadata = OpticalPlaneMetadata(PupilPlane(), values;
+        coordinate_domain=field.metadata.coordinate_domain,
         sampling=field.metadata.sampling, origin=field.metadata.origin,
         spectral=MonochromaticChannel(1.1 * wavelength(src)))
     spectral_field = ElectricField(spectral_metadata, values)
@@ -379,6 +402,7 @@ end
 
     float32_values = Matrix{ComplexF32}(undef, size(values))
     numeric_metadata = OpticalPlaneMetadata(PupilPlane(), float32_values;
+        coordinate_domain=field.metadata.coordinate_domain,
         sampling=field.metadata.sampling, origin=field.metadata.origin,
         spectral=field.metadata.spectral)
     numeric_field = ElectricField(numeric_metadata, float32_values)
@@ -387,7 +411,8 @@ end
 
     wrong_size_values = Matrix{ComplexF64}(undef, 9, 9)
     dimension_metadata = OpticalPlaneMetadata(PupilPlane(),
-        wrong_size_values; sampling=field.metadata.sampling,
+        wrong_size_values; coordinate_domain=field.metadata.coordinate_domain,
+        sampling=field.metadata.sampling,
         spectral=field.metadata.spectral)
     dimension_field = ElectricField(dimension_metadata, wrong_size_values)
     @test_throws DimensionMismatchError prepare_pupil_field(tel, wavefront,
@@ -396,14 +421,17 @@ end
     propagation = FraunhoferPropagation(field)
     wrong_destination_values = Matrix{Float64}(undef, 9, 9)
     wrong_destination_metadata = OpticalPlaneMetadata(FocalPlane(),
-        wrong_destination_values; sampling=propagation.output_metadata.sampling,
+        wrong_destination_values;
+        coordinate_domain=propagation.output_metadata.coordinate_domain,
+        sampling=propagation.output_metadata.sampling,
         spectral=propagation.output_metadata.spectral)
-    wrong_destination = IrradiancePlane(wrong_destination_metadata,
+    wrong_destination = IntensityMap(wrong_destination_metadata,
         wrong_destination_values)
     @test_throws DimensionMismatchError prepare_direct_psf(tel, wavefront,
         src, field, wrong_destination)
 
     declared_device_metadata = OpticalPlaneMetadata(PupilPlane(), values;
+        coordinate_domain=field.metadata.coordinate_domain,
         sampling=field.metadata.sampling, origin=field.metadata.origin,
         spectral=field.metadata.spectral,
         device=AdaptiveOpticsSim.AcceleratorPlaneDevice(

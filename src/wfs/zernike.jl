@@ -311,7 +311,7 @@ function zernike_pupil_intensity!(wfs::ZernikeWFS, tel::Telescope, src::Abstract
     oy = div(pad - n, 2)
     opd_to_cycles = eltype(wfs.state.camera_frame)(2) / wavelength(src)
     amp_scale = sqrt(eltype(wfs.state.camera_frame)(
-        photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
+        photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
     ))
     fill!(wfs.state.field, zero(eltype(wfs.state.field)))
     @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * $(pupil_mask(tel)) *
@@ -336,8 +336,9 @@ end
 
 function zernike_normalization(::IncidenceFluxNormalization, wfs::ZernikeWFS, tel::Telescope,
     src::AbstractSource, frame::AbstractMatrix)
-    fmap = flux_map(tel, src)
-    sample_zernike_frame!(wfs.state.normalization_frame, wfs.state.nominal_frame, wfs, fmap, tel)
+    expected_photons = pupil_expected_photon_map(tel, src)
+    sample_zernike_frame!(wfs.state.normalization_frame,
+        wfs.state.nominal_frame, wfs, expected_photons, tel)
     norm_host = host_array(wfs.state.normalization_frame)
     valid_host = host_array(wfs.state.valid_mask)
     vals = norm_host[valid_host]

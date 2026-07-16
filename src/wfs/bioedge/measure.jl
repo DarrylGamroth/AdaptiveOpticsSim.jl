@@ -6,7 +6,7 @@ function bioedge_intensity_core!(out::AbstractMatrix{T}, wfs::BioEdgeWFS, tel::T
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
     opd_to_cycles = T(2) / wavelength(src)
-    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2 /
+    amp_scale = sqrt(T(photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2 /
         wfs.params.modulation_points))
 
     fill!(out, zero(T))

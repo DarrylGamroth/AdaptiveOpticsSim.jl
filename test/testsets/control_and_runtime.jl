@@ -195,7 +195,7 @@ end
     wfs = ShackHartmannWFS(tel; n_lenslets=4, backend=CPUBackend())
     det = Detector(backend=CPUBackend())
     sf = SpatialFilter(tel; backend=CPUBackend())
-    wavefront = PupilWavefront(tel; backend=CPUBackend())
+    wavefront = PupilFunction(tel; backend=CPUBackend())
     ef = ElectricField(wavefront, Source(band=:I, magnitude=0.0))
 
     @test tel.state.opd isa Matrix

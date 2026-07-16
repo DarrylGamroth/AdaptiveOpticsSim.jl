@@ -58,7 +58,7 @@ function with_spectrum(src::AbstractSource, bundle::SpectralBundle)
 end
 
 wavelength(src::SpectralSource) = wavelength(src.source)
-photon_flux(src::SpectralSource) = photon_flux(src.source)
+photon_irradiance(src::SpectralSource) = photon_irradiance(src.source)
 coordinates_xy_arcsec(src::SpectralSource) = coordinates_xy_arcsec(src.source)
 source_height_m(src::SpectralSource) = source_height_m(src.source)
 optical_tag(src::SpectralSource) = optical_tag(src.source)
@@ -84,12 +84,17 @@ function source_measurement_signature(src::SpectralSource)
     return hash((typeof(src.source), wavelength(src.source), spectral_bundle_signature(src.bundle)))
 end
 
-function source_with_wavelength_and_flux(src::Source, λ::T, flux::T) where {T<:AbstractFloat}
+function source_with_wavelength_and_irradiance(src::Source, λ::T,
+    irradiance::T) where {T<:AbstractFloat}
     params = src.params
-    return Source(SourceParams{T}(params.band, T(params.magnitude), (T(params.coordinates_xy_arcsec[1]), T(params.coordinates_xy_arcsec[2])), λ, flux))
+    coordinates = (T(params.coordinates_xy_arcsec[1]),
+        T(params.coordinates_xy_arcsec[2]))
+    return Source(SourceParams{T}(params.band, T(params.magnitude),
+        coordinates, λ, irradiance))
 end
 
-function source_with_wavelength_and_flux(src::LGSSource, λ::T, flux::T) where {T<:AbstractFloat}
+function source_with_wavelength_and_irradiance(src::LGSSource, λ::T,
+    irradiance::T) where {T<:AbstractFloat}
     params = src.params
     lcoords = (T(params.laser_coordinates[1]), T(params.laser_coordinates[2]))
     coords = (T(params.coordinates_xy_arcsec[1]), T(params.coordinates_xy_arcsec[2]))
@@ -102,9 +107,10 @@ function source_with_wavelength_and_flux(src::LGSSource, λ::T, flux::T) where {
         lcoords,
         params.na_profile,
         T(params.fwhm_spot_up),
-        flux,
+        irradiance,
     ))
 end
 
-source_with_wavelength_and_flux(src::SpectralSource, λ::T, flux::T) where {T<:AbstractFloat} =
-    source_with_wavelength_and_flux(src.source, λ, flux)
+source_with_wavelength_and_irradiance(src::SpectralSource, λ::T,
+    irradiance::T) where {T<:AbstractFloat} =
+    source_with_wavelength_and_irradiance(src.source, λ, irradiance)

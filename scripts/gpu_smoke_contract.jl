@@ -25,7 +25,7 @@ end
 
 function prepared_gpu_field(tel::Telescope, src::AbstractSource;
     zero_padding::Int, T::Type{<:AbstractFloat})
-    wavefront = PupilWavefront(tel; T=T)
+    wavefront = PupilFunction(tel; T=T)
     apply_opd!(wavefront, opd_map(tel))
     field = ElectricField(wavefront, src; zero_padding=zero_padding, T=T)
     plan = prepare_pupil_field(tel, wavefront, src, field)

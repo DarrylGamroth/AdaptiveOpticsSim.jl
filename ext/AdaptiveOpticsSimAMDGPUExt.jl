@@ -79,7 +79,7 @@ function AdaptiveOpticsSim.compute_intensity_safe!(
     opd_host = @view Array(tel.state.opd)[xs:xe, ys:ye]
     phasor_host = Array(wfs.state.phasor)
     opd_to_cycles = T(2) / AdaptiveOpticsSim.wavelength(src)
-    amp_scale = sqrt(T(AdaptiveOpticsSim.photon_flux(src) * tel.params.sampling_time *
+    amp_scale = sqrt(T(AdaptiveOpticsSim.photon_irradiance(src) * tel.params.sampling_time *
         (tel.params.diameter / tel.params.resolution)^2))
     @views @. field_host[ox+1:ox+sub, oy+1:oy+sub] =
         amp_scale * pupil_host * cispi(opd_to_cycles * opd_host)

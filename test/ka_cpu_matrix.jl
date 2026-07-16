@@ -511,7 +511,7 @@ end
         mark_ka_cpu_kernel!(:fill_telescope_field_kernel!)
         @test ka_cpu_close(ka_field, scalar_field)
 
-        wavefront = PupilWavefront(tel)
+        wavefront = PupilFunction(tel)
         scalar_ef = ElectricField(wavefront, src; zero_padding=2)
         ka_ef = ElectricField(wavefront, src; zero_padding=2)
         formation = prepare_pupil_field(tel, wavefront, src, scalar_ef)

@@ -19,7 +19,7 @@ export build_mask!, apply_mask!
 
 export AbstractAtmosphere
 export Telescope, Source, LGSSource, Asterism
-export wavelength, optical_path
+export wavelength, photon_irradiance, optical_path
 export reset_opd!, apply_opd!, set_pupil!, set_pupil_reflectivity!
 export pupil_mask, pupil_reflectivity, apply_spiders!
 export compute_psf!, psf_pixel_scale_arcsec
@@ -29,14 +29,15 @@ export GaussianDiskSourceModel, PointCloudSourceModel, SampledImageSourceModel
 export with_extended_source, extended_source_asterism
 
 export AbstractOpticalProduct, AbstractOpticalPlaneKind
-export PupilPlane, FocalPlane, PropagationPlane, DetectorPlane
-export PlaneCentering, SampleCentered, InterpixelCentered
-export PlaneAxisOrientation, AchromaticChannel, MonochromaticChannel
+export PupilPlane, FocalPlane, IntermediatePlane, DetectorPlane
+export AbstractPlaneCoordinateDomain, MetricCoordinates, AngularCoordinates
+export PlaneCentering, SampleCentered, InterSampleCentered
+export PlaneAxisOrientation, UnspecifiedSpectralCoordinate, MonochromaticChannel
 export UnspecifiedNormalization, UnspecifiedSpatialMeasure, UnspecifiedCoherence
 export OpticalPlaneMetadata, plane_metadata, plane_device
-export PupilWavefront, pupil_amplitude, opd_map
+export PupilFunction, pupil_amplitude, opd_map
 export surface_opd, update_surface!, apply_surface!
-export ElectricField, field_values, IrradiancePlane, irradiance_values
+export ElectricField, field_values, IntensityMap, intensity_values
 export PupilFieldFormationPlan, prepare_pupil_field
 export fill_electric_field!, fill_electric_field_async!
 export FraunhoferPropagation, FresnelPropagation
@@ -74,7 +75,7 @@ export SequentialAcquisition, FrameTransferAcquisition
 export HgCdTeAvalancheArraySensor, APDSensor, SPADArraySensor, MKIDArraySensor
 export SingleElementAPD, APDChannelBank
 export FrameResponseModel, NullFrameResponse, GaussianPixelResponse, SampledFrameResponse
-export RectangularPixelAperture, SeparablePixelMTF
+export RectangularPixelAperture
 export CMOSReadNoiseMap, InterpixelCapacitance, detector_mtf
 export PixelResponseNonuniformity, DarkSignalNonuniformity, BadPixelMask, CompositeDetectorDefectModel
 export GlobalShutter, RollingShutter, RollingExposure, GlobalResetExposure

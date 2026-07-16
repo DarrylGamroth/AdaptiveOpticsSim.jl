@@ -90,10 +90,6 @@ function apply_response!(style::ExecutionStyle, model::RectangularPixelAperture,
     return _apply_separable_response!(style, frame, scratch, model.kernel_y, model.kernel_x)
 end
 
-function apply_response!(style::ExecutionStyle, model::SeparablePixelMTF, frame::AbstractMatrix, scratch::AbstractMatrix)
-    return _apply_separable_response!(style, frame, scratch, model.kernel_y, model.kernel_x)
-end
-
 const apply_frame_response! = apply_response!
 
 apply_charge_coupling!(::NullChargeCoupling, det::Detector) = det.state.frame

@@ -6,6 +6,7 @@ Related guides:
 
 - [`user-guide.md`](user-guide.md)
 - [`model-cookbook.md`](model-cookbook.md)
+- [`glossary.md`](glossary.md)
 - [`extension-guide.md`](extension-guide.md)
 - [`runtime-dataflow.md`](runtime-dataflow.md)
 
@@ -64,7 +65,7 @@ The package intentionally distinguishes three tiers:
 ## Optical Models
 
 - Telescope/source: `Telescope`, `Source`, `LGSSource`, `Asterism`
-- Source accessors: `wavelength`, `optical_path`
+- Source accessors: `wavelength`, `photon_irradiance`, `optical_path`
 - Telescope mutation: `reset_opd!`, `apply_opd!`, `set_pupil!`,
   `set_pupil_reflectivity!`
 - Pupil helpers: `pupil_mask`, `apply_spiders!`
@@ -74,7 +75,10 @@ The package intentionally distinguishes three tiers:
 - Extended sources: `GaussianDiskSourceModel`, `PointCloudSourceModel`,
   `SampledImageSourceModel`, `with_extended_source`,
   `extended_source_asterism`
-- Fields/propagation: `ElectricField`, `FraunhoferPropagation`,
+- Optical products: `PupilFunction`, `ElectricField`, `IntensityMap`,
+  `OpticalPlaneMetadata`; coordinates are declared with `MetricCoordinates` or
+  `AngularCoordinates`
+- Fields/propagation: `FraunhoferPropagation`,
   `FresnelPropagation`, `GeometricAtmosphericPropagation`,
   `LayeredFresnelAtmosphericPropagation`, `AtmosphericFieldPropagation`
 - Zernike/OPD/NCPA: `ZernikeBasis`, `compute_zernike!`, `OPDMap`,
@@ -140,9 +144,10 @@ influence basis already includes the print-through structure.
   `CMOSSensor`. Vendor camera profiles are intentionally outside core.
 - Frame response: `FrameResponseModel`, `NullFrameResponse`,
   `GaussianPixelResponse`, `SampledFrameResponse`,
-  `RectangularPixelAperture`, `SeparablePixelMTF`. Evaluate the normalized
-  analytic response with `AdaptiveOpticsSim.detector_mtf(model, fx, fy)`, where
-  frequency is in cycles per detector pixel.
+  and `RectangularPixelAperture`. These are spatial-domain presampling response
+  models. Evaluate their derived normalized modulation transfer function with
+  `AdaptiveOpticsSim.detector_mtf(model, fx, fy)`, where frequency is in cycles
+  per detector pixel.
 - Post-collection coupling: `AdaptiveOpticsSim.NullChargeCoupling` and
   `AdaptiveOpticsSim.InterpixelCapacitance`. Configure these with
   `Detector(...; charge_coupling_model=...)`; this stage runs after photon and
@@ -238,8 +243,8 @@ fitting, or correlated 1/f-noise estimation.
 transfer as timing only. With `readout_rate_hz` configured, metadata reports
 the pixel-read duration, one-frame output latency in `sampling_wallclock_time`,
 and the overlapped `steady_state_frame_period`. `SequentialAcquisition()` is
-the default. Neither acquisition policy changes MTF, QE, charge multiplication,
-or detector noise.
+the default. Neither acquisition policy changes the presampling response or its
+derived MTF, QE, charge multiplication, or detector noise.
 
 ## Wavefront Sensors
 
@@ -253,8 +258,8 @@ or detector noise.
   `SubapertureCalibration`, `subaperture_layout`,
   `subaperture_calibration`, `slope_extraction_model`,
   `valid_subaperture_indices`, `n_valid_subapertures`
-- Flux normalization: `MeanValidFluxNormalization`,
-  `IncidenceFluxNormalization`
+- WFS normalization policies (with transitional type names):
+  `MeanValidFluxNormalization`, `IncidenceFluxNormalization`
 - Measurement and WFS images: `measure!`, `pyramid_modulation_frame!`,
   `valid_subaperture_mask`, `camera_frame`, `wfs_detector_image`,
   `shack_hartmann_detector_image`, `shack_hartmann_detector_image!`

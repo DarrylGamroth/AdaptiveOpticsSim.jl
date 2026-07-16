@@ -204,7 +204,7 @@ function pyramid_intensity_core!(::ScalarCPUStyle, out::AbstractMatrix{T}, wfs::
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
     opd_to_cycles = T(2) / wavelength(src)
-    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2 /
+    amp_scale = sqrt(T(photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2 /
         wfs.params.modulation_points))
 
     fill!(out, zero(T))
@@ -228,7 +228,7 @@ function pyramid_intensity_core!(::AcceleratorStyle, out::AbstractMatrix{T}, wfs
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
     opd_to_cycles = T(2) / wavelength(src)
-    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2 /
+    amp_scale = sqrt(T(photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2 /
         wfs.params.modulation_points))
 
     fill!(out, zero(T))
@@ -268,7 +268,7 @@ function pyramid_modulation_frame!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel:
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
     opd_to_cycles = T(2) / wavelength(src)
-    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2 /
+    amp_scale = sqrt(T(photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2 /
         wfs.params.modulation_points))
 
     fill!(out, zero(T))

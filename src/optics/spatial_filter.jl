@@ -3,7 +3,7 @@
 #
 # `SpatialFilter` owns only its fixed focal-plane mask definition.
 # `SpatialFilterWorkspace` owns the single-writer FFT plans and scratch.
-# The input `ElectricField` and output `PupilWavefront` remain caller-owned.
+# The input `ElectricField` and output `PupilFunction` remain caller-owned.
 #
 abstract type SpatialFilterShape end
 struct CircularFilter <: SpatialFilterShape end
@@ -61,7 +61,7 @@ end
 
 Prepare an immutable focal-plane mask. Repeated filtering additionally uses a
 `SpatialFilterWorkspace`, explicit input `ElectricField`, caller-owned output
-`PupilWavefront`, and a `SpatialFilterPlan` returned by
+`PupilFunction`, and a `SpatialFilterPlan` returned by
 `prepare_spatial_filter`.
 """
 function SpatialFilter(tel::Telescope;
@@ -149,11 +149,15 @@ end
 
 function prepare_spatial_filter(tel::Telescope,
     spatial_filter::SpatialFilter, input::ElectricField,
-    output::PupilWavefront)
+    output::PupilFunction)
     require_centered_plane_geometry(input.metadata;
         label="spatial-filter input ElectricField")
     require_centered_plane_geometry(output.metadata;
-        label="spatial-filter output PupilWavefront")
+        label="spatial-filter output PupilFunction")
+    require_metric_coordinates(input.metadata;
+        label="spatial-filter input ElectricField")
+    require_metric_coordinates(output.metadata;
+        label="spatial-filter output PupilFunction")
     input.metadata.dimensions == (
         spatial_filter.params.padded_resolution,
         spatial_filter.params.padded_resolution,
@@ -163,14 +167,14 @@ function prepare_spatial_filter(tel::Telescope,
         spatial_filter.params.pupil_resolution,
         spatial_filter.params.pupil_resolution,
     ) || throw(DimensionMismatchError(
-        "PupilWavefront dimensions must match the spatial-filter pupil grid"))
+        "PupilFunction dimensions must match the spatial-filter pupil grid"))
     output.metadata.dimensions == size(pupil_mask(tel)) ||
         throw(DimensionMismatchError(
             "spatial-filter output must match the telescope aperture"))
     typeof(input.metadata.kind) === PupilPlane || throw(InvalidConfiguration(
         "spatial-filter input must be a pupil-plane ElectricField"))
     typeof(output.metadata.kind) === PupilPlane || throw(InvalidConfiguration(
-        "spatial-filter output must be a pupil-plane PupilWavefront"))
+        "spatial-filter output must be a pupil-plane PupilFunction"))
     input.metadata.sampling == output.metadata.sampling ||
         throw(InvalidConfiguration(
             "spatial-filter input and output sampling must match"))
@@ -207,13 +211,13 @@ function prepare_spatial_filter(tel::Telescope,
     )
 end
 
-function filter!(output::PupilWavefront, input::ElectricField,
+function filter!(output::PupilFunction, input::ElectricField,
     spatial_filter::SpatialFilter, plan::SpatialFilterPlan,
     workspace::SpatialFilterWorkspace)
     input.metadata == plan.input_metadata || throw(InvalidConfiguration(
         "ElectricField metadata does not match the prepared spatial-filter plan"))
     output.metadata == plan.output_metadata || throw(InvalidConfiguration(
-        "PupilWavefront metadata does not match the prepared spatial-filter plan"))
+        "PupilFunction metadata does not match the prepared spatial-filter plan"))
     spatial_filter.params == plan.filter_params ||
         throw(InvalidConfiguration(
             "SpatialFilter does not match the prepared spatial-filter plan"))

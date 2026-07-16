@@ -51,27 +51,27 @@ struct DirectPSFWorkspace{
     R<:AbstractMatrix,
 }
     propagation::P
-    unshifted_irradiance::R
+    unshifted_intensity::R
 end
 
-function prepare_direct_psf(tel::Telescope, wavefront::PupilWavefront,
-    src::Source, field::ElectricField, output::IrradiancePlane)
+function prepare_direct_psf(tel::Telescope, wavefront::PupilFunction,
+    src::Source, field::ElectricField, output::IntensityMap)
     propagation = FraunhoferPropagation(field)
     return _prepare_direct_psf(tel, wavefront, src, field, output,
         propagation)
 end
 
-function prepare_direct_psf(tel::Telescope, wavefront::PupilWavefront,
+function prepare_direct_psf(tel::Telescope, wavefront::PupilFunction,
     src::Source, field::ElectricField)
     propagation = FraunhoferPropagation(field)
-    output = IrradiancePlane(field, propagation)
+    output = IntensityMap(field, propagation)
     prepared = _prepare_direct_psf(tel, wavefront, src, field, output,
         propagation)
     return (; output, prepared.plan, prepared.workspace)
 end
 
-function _prepare_direct_psf(tel::Telescope, wavefront::PupilWavefront,
-    src::Source, field::ElectricField, output::IrradiancePlane,
+function _prepare_direct_psf(tel::Telescope, wavefront::PupilFunction,
+    src::Source, field::ElectricField, output::IntensityMap,
     propagation::FraunhoferPropagation)
     formation = prepare_pupil_field(tel, wavefront, src, field)
     require_same_plane_grid(output.metadata, propagation.output_metadata;
@@ -92,20 +92,20 @@ function _prepare_direct_psf(tel::Telescope, wavefront::PupilWavefront,
     return (; plan, workspace)
 end
 
-function compute_psf!(output::IrradiancePlane, field::ElectricField,
-    wavefront::PupilWavefront, plan::DirectPSFPlan,
+function compute_psf!(output::IntensityMap, field::ElectricField,
+    wavefront::PupilFunction, plan::DirectPSFPlan,
     workspace::DirectPSFWorkspace)
     output.metadata == plan.output_metadata || throw(InvalidConfiguration(
-        "IrradiancePlane metadata does not match its prepared direct-PSF plan"))
+        "IntensityMap metadata does not match its prepared direct-PSF plan"))
     fill_electric_field!(field, wavefront, plan.field_formation)
     dx, dy = plan.shift_pixels
     if iszero(dx) && iszero(dy)
         fraunhofer_intensity_from_field!(output.values, field,
             workspace.propagation)
     else
-        fraunhofer_intensity_from_field!(workspace.unshifted_irradiance,
+        fraunhofer_intensity_from_field!(workspace.unshifted_intensity,
             field, workspace.propagation)
-        shift_psf!(output.values, workspace.unshifted_irradiance, dx, dy)
+        shift_psf!(output.values, workspace.unshifted_intensity, dx, dy)
     end
     return output
 end

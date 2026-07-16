@@ -100,19 +100,20 @@ end
     return (ox + 1:ox + n, oy + 1:oy + m)
 end
 
-function ElectricField(wavefront::PupilWavefront, src::AbstractSource;
+function ElectricField(wavefront::PupilFunction, src::AbstractSource;
     zero_padding::Int=1,
     T::Type{<:AbstractFloat}=eltype(wavefront.opd))
     zero_padding >= 1 || throw(InvalidConfiguration("zero_padding must be >= 1"))
     n, m = wavefront.metadata.dimensions
     n == m || throw(DimensionMismatchError(
-        "PupilWavefront must be square to prepare an ElectricField"))
+        "PupilFunction must be square to prepare an ElectricField"))
     n_pad = n * zero_padding
     values = similar(wavefront.opd, Complex{T}, n_pad, n_pad)
     fill!(values, zero(eltype(values)))
     sampling = (T(wavefront.metadata.sampling[1]),
         T(wavefront.metadata.sampling[2]))
     metadata = OpticalPlaneMetadata(PupilPlane(), values;
+        coordinate_domain=MetricCoordinates(),
         sampling=sampling,
         spectral=MonochromaticChannel(T(wavelength(src))))
     return ElectricField(metadata, values)
@@ -121,7 +122,7 @@ end
 @inline electric_field_wavelength(field::ElectricField) =
     field.metadata.spectral.wavelength_m
 
-function prepare_pupil_field(tel::Telescope, wavefront::PupilWavefront,
+function prepare_pupil_field(tel::Telescope, wavefront::PupilFunction,
     src::AbstractSource, field::ElectricField;
     center_even_grid::Bool=true,
     amplitude_scale::Union{Real,Nothing}=nothing)
@@ -132,9 +133,13 @@ function prepare_pupil_field(tel::Telescope, wavefront::PupilWavefront,
     validate_plane_storage(field.metadata, field.values;
         label="electric field")
     require_centered_plane_geometry(wavefront.metadata;
-        label="PupilWavefront")
+        label="PupilFunction")
     require_centered_plane_geometry(field.metadata;
         label="ElectricField")
+    require_metric_coordinates(wavefront.metadata;
+        label="pupil-field input PupilFunction")
+    require_metric_coordinates(field.metadata;
+        label="pupil-field output ElectricField")
     typeof(wavefront.metadata.kind) === PupilPlane ||
         throw(InvalidConfiguration(
             "pupil-field formation requires a pupil-plane wavefront"))
@@ -143,25 +148,25 @@ function prepare_pupil_field(tel::Telescope, wavefront::PupilWavefront,
             "pupil-field formation requires a pupil-plane ElectricField"))
     wavefront.metadata.dimensions == size(pupil_mask(tel)) ||
         throw(DimensionMismatchError(
-            "PupilWavefront dimensions must match telescope aperture"))
+            "PupilFunction dimensions must match telescope aperture"))
     plane_device(pupil_mask(tel)) == wavefront.metadata.device ||
         throw(InvalidConfiguration(
-            "telescope aperture and PupilWavefront occupy different physical devices"))
+            "telescope aperture and PupilFunction occupy different physical devices"))
     typeof(backend(tel)) === typeof(backend(wavefront)) ===
         typeof(backend(field)) || throw(InvalidConfiguration(
-            "telescope, PupilWavefront, and ElectricField backends must match"))
+            "telescope, PupilFunction, and ElectricField backends must match"))
     wavefront.metadata.device == field.metadata.device ||
         throw(InvalidConfiguration(
-            "PupilWavefront and ElectricField must occupy the same physical device"))
+            "PupilFunction and ElectricField must occupy the same physical device"))
     wavefront.metadata.sampling == field.metadata.sampling ||
         throw(InvalidConfiguration(
-            "PupilWavefront and ElectricField sampling must match"))
+            "PupilFunction and ElectricField sampling must match"))
     wavefront.metadata.orientation == field.metadata.orientation ||
         throw(InvalidConfiguration(
-            "PupilWavefront and ElectricField axis orientation must match"))
+            "PupilFunction and ElectricField axis orientation must match"))
     eltype(wavefront.opd) === real(eltype(field.values)) ||
         throw(InvalidConfiguration(
-            "PupilWavefront and ElectricField real numeric types must match"))
+            "PupilFunction and ElectricField real numeric types must match"))
     field.metadata.spectral == MonochromaticChannel(
         eltype(wavefront.opd)(wavelength(src))) ||
         throw(InvalidConfiguration(
@@ -181,7 +186,7 @@ function prepare_pupil_field(tel::Telescope, wavefront::PupilWavefront,
     pixel_area = wavefront.metadata.sampling[1] *
         wavefront.metadata.sampling[2]
     resolved_amplitude_scale = isnothing(amplitude_scale) ?
-        sqrt(T(photon_flux(src) * tel.params.sampling_time * pixel_area)) :
+        sqrt(T(photon_irradiance(src) * tel.params.sampling_time * pixel_area)) :
         T(amplitude_scale)
     resolved_amplitude_scale >= zero(T) || throw(InvalidConfiguration(
         "pupil-field amplitude scale must be non-negative"))
@@ -229,7 +234,7 @@ function _fill_telescope_field!(::ScalarCPUStyle, out::AbstractMatrix{Complex{T}
     n_pad = n * zero_padding
     fill!(out, zero(eltype(out)))
     opd_to_cycles = T(2) / T(wavelength(src))
-    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
+    amp_scale = sqrt(T(photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
     ox, oy = field_embedding_offsets(n, n_pad)
     reflectivity = pupil_reflectivity(tel)
     @views @. out[ox+1:ox+n, oy+1:oy+n] = amp_scale *
@@ -246,7 +251,7 @@ function _fill_telescope_field!(style::AcceleratorStyle, out::AbstractMatrix{Com
     n = tel.params.resolution
     n_pad = n * zero_padding
     opd_to_cycles = T(2) / T(wavelength(src))
-    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
+    amp_scale = sqrt(T(photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
     ox, oy = field_embedding_offsets(n, n_pad)
     phase_shift = center_even_grid && iseven(n_pad) ? -T(pi) * (T(n_pad) + one(T)) / T(n_pad) : zero(T)
     launch_kernel!(style, fill_telescope_field_kernel!, out, pupil_reflectivity(tel), tel.state.opd, phase_shift,
@@ -264,7 +269,7 @@ function _fill_telescope_field_async!(style::AcceleratorStyle, out::AbstractMatr
     n = tel.params.resolution
     n_pad = n * zero_padding
     opd_to_cycles = T(2) / T(wavelength(src))
-    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
+    amp_scale = sqrt(T(photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
     ox, oy = field_embedding_offsets(n, n_pad)
     phase_shift = center_even_grid && iseven(n_pad) ? -T(pi) * (T(n_pad) + one(T)) / T(n_pad) : zero(T)
     launch_kernel_async!(style, fill_telescope_field_kernel!, out, pupil_reflectivity(tel), tel.state.opd, phase_shift,
@@ -273,29 +278,29 @@ function _fill_telescope_field_async!(style::AcceleratorStyle, out::AbstractMatr
 end
 
 function fill_electric_field!(field::ElectricField,
-    wavefront::PupilWavefront, plan::PupilFieldFormationPlan)
+    wavefront::PupilFunction, plan::PupilFieldFormationPlan)
     field.metadata == plan.output_metadata || throw(InvalidConfiguration(
         "ElectricField metadata does not match its prepared formation plan"))
     wavefront.metadata == plan.input_metadata || throw(InvalidConfiguration(
-        "PupilWavefront metadata does not match its prepared formation plan"))
+        "PupilFunction metadata does not match its prepared formation plan"))
     _fill_electric_field!(execution_style(field.values), field, wavefront,
         plan)
     return field
 end
 
 function fill_electric_field_async!(field::ElectricField,
-    wavefront::PupilWavefront, plan::PupilFieldFormationPlan)
+    wavefront::PupilFunction, plan::PupilFieldFormationPlan)
     field.metadata == plan.output_metadata || throw(InvalidConfiguration(
         "ElectricField metadata does not match its prepared formation plan"))
     wavefront.metadata == plan.input_metadata || throw(InvalidConfiguration(
-        "PupilWavefront metadata does not match its prepared formation plan"))
+        "PupilFunction metadata does not match its prepared formation plan"))
     _fill_electric_field_async!(execution_style(field.values), field,
         wavefront, plan)
     return field
 end
 
 function _fill_electric_field!(::ScalarCPUStyle, field::ElectricField,
-    wavefront::PupilWavefront, plan::PupilFieldFormationPlan)
+    wavefront::PupilFunction, plan::PupilFieldFormationPlan)
     out = field.values
     fill!(out, zero(eltype(out)))
     axes = field_active_axes(plan)
@@ -310,7 +315,7 @@ end
 
 
 function _fill_electric_field!(style::AcceleratorStyle,
-    field::ElectricField, wavefront::PupilWavefront,
+    field::ElectricField, wavefront::PupilFunction,
     plan::PupilFieldFormationPlan)
     n = plan.input_metadata.dimensions[1]
     n_pad = plan.output_metadata.dimensions[1]
@@ -323,13 +328,13 @@ function _fill_electric_field!(style::AcceleratorStyle,
 end
 
 function _fill_electric_field_async!(::ScalarCPUStyle,
-    field::ElectricField, wavefront::PupilWavefront,
+    field::ElectricField, wavefront::PupilFunction,
     plan::PupilFieldFormationPlan)
     return _fill_electric_field!(ScalarCPUStyle(), field, wavefront, plan)
 end
 
 function _fill_electric_field_async!(style::AcceleratorStyle,
-    field::ElectricField, wavefront::PupilWavefront,
+    field::ElectricField, wavefront::PupilFunction,
     plan::PupilFieldFormationPlan)
     n = plan.input_metadata.dimensions[1]
     n_pad = plan.output_metadata.dimensions[1]

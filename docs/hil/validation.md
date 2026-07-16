@@ -27,12 +27,12 @@ evidence includes:
   centering/orientation, wavelength/channel, units/normalization,
   coherence/combination policy, backend, and physical device
 - source-to-optical-to-detector dimensional accounting with non-unit unequal
-  durations proving optical outputs remain photon rates and acquisition applies
-  elapsed time exactly once
-- two detector exposures consuming one immutable rate-irradiance product
+  durations proving optical outputs remain photon-arrival-rate products and
+  acquisition applies elapsed time exactly once
+- two detector exposures consuming one immutable photon-arrival-rate product
   without optical recomputation
-- spatial-density and cell-integrated-rate fixtures establishing flux
-  conservation through the declared detector MTF and pixel-integration order
+- spatial-density and cell-integrated-rate fixtures establishing photon
+  conservation through the declared presampling response and pixel-integration order
 - compatible spectral grids preserving flux under declared incoherent
   accumulation and incompatible grids remaining bundled or failing preparation
   instead of being silently summed by array index
@@ -42,7 +42,7 @@ evidence includes:
 - mixed NGS/LGS path scheduling against one atmosphere epoch
 - detector integration, rolling shutter, frame-transfer timing, and
   up-the-ramp nondestructive reads where supported
-- detector MTF and charge-coupling stages remain in their declared order when
+- presampling detector response and charge-coupling stages remain in their declared order when
   acquisition is split across scheduled events
 - multiple schedules with different periods and phases on one plant timeline
 - common-source detector triggers with fixed per-link phase/skew, correlated

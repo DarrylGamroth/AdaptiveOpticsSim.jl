@@ -91,7 +91,7 @@ function pyramid_normalization(::IncidenceFluxNormalization, wfs::PyramidWFS, te
     src::AbstractSource, ::Int, summed_i4q)
     T = typeof(summed_i4q)
     sub_area = (tel.params.diameter / wfs.params.pupil_samples)^2
-    return T(photon_flux(src) * tel.params.sampling_time * sub_area)
+    return T(photon_irradiance(src) * tel.params.sampling_time * sub_area)
 end
 
 function pyramid_normalization(::IncidenceFluxNormalization, ::PyramidWFS, ::Telescope,

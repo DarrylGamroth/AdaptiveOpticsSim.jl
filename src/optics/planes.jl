@@ -3,12 +3,20 @@ abstract type AbstractOpticalProduct end
 abstract type AbstractOpticalPlaneKind end
 struct PupilPlane <: AbstractOpticalPlaneKind end
 struct FocalPlane <: AbstractOpticalPlaneKind end
-struct PropagationPlane <: AbstractOpticalPlaneKind end
+struct IntermediatePlane <: AbstractOpticalPlaneKind end
 struct DetectorPlane <: AbstractOpticalPlaneKind end
+
+abstract type AbstractPlaneCoordinateDomain end
+
+"""Metric plane coordinates whose sampling and origin are expressed in metres."""
+struct MetricCoordinates <: AbstractPlaneCoordinateDomain end
+
+"""Angular plane coordinates whose sampling and origin are expressed in radians."""
+struct AngularCoordinates <: AbstractPlaneCoordinateDomain end
 
 @enum PlaneCentering begin
     SampleCentered
-    InterpixelCentered
+    InterSampleCentered
 end
 
 struct PlaneAxisOrientation
@@ -27,7 +35,7 @@ struct PlaneAxisOrientation
 end
 
 abstract type AbstractSpectralCoordinate end
-struct AchromaticChannel <: AbstractSpectralCoordinate end
+struct UnspecifiedSpectralCoordinate <: AbstractSpectralCoordinate end
 
 struct MonochromaticChannel{T<:AbstractFloat} <: AbstractSpectralCoordinate
     wavelength_m::T
@@ -42,9 +50,9 @@ end
 MonochromaticChannel(wavelength_m::T) where {T<:AbstractFloat} =
     MonochromaticChannel{T}(wavelength_m)
 
-# These markers reserve the radiometric contract fields that Pre-HIL 5/12
-# finalizes. They prevent an implicit default from being mistaken for a
-# physical normalization, spatial measure, or coherence policy.
+# These markers reserve the radiometric contract fields finalized by the later
+# Gate 0 radiometry work. They prevent an implicit default from being mistaken
+# for a physical normalization, spatial measure, or coherence policy.
 struct UnspecifiedNormalization end
 struct UnspecifiedSpatialMeasure end
 struct UnspecifiedCoherence end
@@ -70,6 +78,7 @@ struct OpticalPlaneMetadata{
     T<:AbstractFloat,
     E,
     K<:AbstractOpticalPlaneKind,
+    Q<:AbstractPlaneCoordinateDomain,
     S<:AbstractSpectralCoordinate,
     N,
     M,
@@ -78,6 +87,7 @@ struct OpticalPlaneMetadata{
     D<:AbstractPlaneDevice,
 }
     kind::K
+    coordinate_domain::Q
     dimensions::NTuple{2,Int}
     sampling::NTuple{2,T}
     origin::NTuple{2,T}
@@ -93,7 +103,7 @@ struct OpticalPlaneMetadata{
 end
 
 @inline axis_centering(n::Int) =
-    isodd(n) ? SampleCentered : InterpixelCentered
+    isodd(n) ? SampleCentered : InterSampleCentered
 
 @inline function centered_grid_origin(dimensions::NTuple{2,Int},
     sampling::NTuple{2,T}) where {T<:AbstractFloat}
@@ -105,6 +115,7 @@ end
 
 function OpticalPlaneMetadata(kind::AbstractOpticalPlaneKind,
     storage::AbstractMatrix{E};
+    coordinate_domain::AbstractPlaneCoordinateDomain,
     sampling::NTuple{2,T},
     origin::NTuple{2,T}=centered_grid_origin(size(storage), sampling),
     centering::NTuple{2,PlaneCentering}=(
@@ -112,7 +123,7 @@ function OpticalPlaneMetadata(kind::AbstractOpticalPlaneKind,
         axis_centering(size(storage, 2)),
     ),
     orientation::PlaneAxisOrientation=PlaneAxisOrientation(),
-    spectral::AbstractSpectralCoordinate=AchromaticChannel(),
+    spectral::AbstractSpectralCoordinate=UnspecifiedSpectralCoordinate(),
     normalization=UnspecifiedNormalization(),
     spatial_measure=UnspecifiedSpatialMeasure(),
     coherence=UnspecifiedCoherence(),
@@ -120,11 +131,12 @@ function OpticalPlaneMetadata(kind::AbstractOpticalPlaneKind,
 ) where {T<:AbstractFloat,E}
     selector = backend(storage)
     return OpticalPlaneMetadata{
-        T,E,typeof(kind),typeof(spectral),typeof(normalization),
+        T,E,typeof(kind),typeof(coordinate_domain),typeof(spectral),typeof(normalization),
         typeof(spatial_measure),typeof(coherence),typeof(selector),
         typeof(device),
     }(
         kind,
+        coordinate_domain,
         size(storage),
         sampling,
         origin,
@@ -162,6 +174,9 @@ function require_same_plane_grid(a::OpticalPlaneMetadata,
     require_numeric_type::Bool=true)
     (!require_kind || typeof(a.kind) === typeof(b.kind)) ||
         throw(InvalidConfiguration("$label have incompatible plane kinds"))
+    typeof(a.coordinate_domain) === typeof(b.coordinate_domain) ||
+        throw(InvalidConfiguration(
+            "$label have incompatible coordinate domains"))
     a.dimensions == b.dimensions || throw(DimensionMismatchError(
         "$label have incompatible dimensions $(a.dimensions) and $(b.dimensions)"))
     a.sampling == b.sampling || throw(InvalidConfiguration(
@@ -200,7 +215,26 @@ function require_centered_plane_geometry(metadata::OpticalPlaneMetadata;
     return metadata
 end
 
-struct PupilWavefront{
+@inline require_metric_coordinates(metadata::OpticalPlaneMetadata;
+    label::AbstractString="optical plane") =
+    require_metric_coordinates(metadata.coordinate_domain, label)
+
+@inline require_metric_coordinates(::MetricCoordinates, ::AbstractString) =
+    nothing
+
+function require_metric_coordinates(::AbstractPlaneCoordinateDomain,
+    label::AbstractString)
+    throw(InvalidConfiguration("$label must use metric coordinates"))
+end
+
+"""
+    PupilFunction
+
+Caller-owned pupil-plane amplitude and optical-path-difference representation.
+It is converted to a wavelength-specific scalar `ElectricField` by a prepared
+field-formation plan.
+"""
+struct PupilFunction{
     M<:OpticalPlaneMetadata,
     A<:AbstractMatrix,
     O<:AbstractMatrix,
@@ -211,11 +245,11 @@ struct PupilWavefront{
     opd::O
 end
 
-@inline backend(::PupilWavefront{<:Any,<:Any,<:Any,B}) where {B} = B()
-@inline pupil_amplitude(wavefront::PupilWavefront) = wavefront.amplitude
-@inline opd_map(wavefront::PupilWavefront) = wavefront.opd
+@inline backend(::PupilFunction{<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline pupil_amplitude(pupil::PupilFunction) = pupil.amplitude
+@inline opd_map(pupil::PupilFunction) = pupil.opd
 
-function PupilWavefront(tel::Telescope;
+function PupilFunction(tel::Telescope;
     T::Type{<:AbstractFloat}=eltype(opd_map(tel)),
     backend::AbstractArrayBackend=backend(tel))
     selector = require_same_backend(tel, _resolve_backend_selector(backend))
@@ -230,56 +264,56 @@ function PupilWavefront(tel::Telescope;
         T(tel.aperture.sampling_m[2]))
     origin = (T(tel.aperture.origin_m[1]), T(tel.aperture.origin_m[2]))
     metadata = OpticalPlaneMetadata(PupilPlane(), opd;
-        sampling=sampling, origin=origin)
+        coordinate_domain=MetricCoordinates(), sampling=sampling, origin=origin)
     validate_plane_storage(metadata, amplitude; label="pupil amplitude")
-    return PupilWavefront{
+    return PupilFunction{
         typeof(metadata),typeof(amplitude),typeof(opd),typeof(selector),
     }(metadata, amplitude, opd)
 end
 
-function reset_opd!(wavefront::PupilWavefront)
-    fill!(wavefront.opd, zero(eltype(wavefront.opd)))
-    return wavefront
+function reset_opd!(pupil::PupilFunction)
+    fill!(pupil.opd, zero(eltype(pupil.opd)))
+    return pupil
 end
 
-function apply_opd!(wavefront::PupilWavefront, opd::AbstractMatrix)
-    size(opd) == size(wavefront.opd) || throw(DimensionMismatchError(
-        "OPD size does not match pupil-wavefront dimensions"))
-    require_same_backend(wavefront, opd)
-    copyto!(wavefront.opd, opd)
-    return wavefront
+function apply_opd!(pupil::PupilFunction, opd::AbstractMatrix)
+    size(opd) == size(pupil.opd) || throw(DimensionMismatchError(
+        "OPD size does not match pupil-function dimensions"))
+    require_same_backend(pupil, opd)
+    copyto!(pupil.opd, opd)
+    return pupil
 end
 
-function _validate_surface_application(wavefront::PupilWavefront,
+function _validate_surface_application(pupil::PupilFunction,
     surface)
     opd = surface_opd(surface)
-    size(opd) == wavefront.metadata.dimensions ||
+    size(opd) == pupil.metadata.dimensions ||
         throw(DimensionMismatchError(
-            "optical-surface OPD dimensions do not match PupilWavefront"))
-    require_same_backend(wavefront, opd)
-    plane_device(opd) == wavefront.metadata.device ||
+            "optical-surface OPD dimensions do not match PupilFunction"))
+    require_same_backend(pupil, opd)
+    plane_device(opd) == pupil.metadata.device ||
         throw(InvalidConfiguration(
-            "optical surface and PupilWavefront occupy different physical devices"))
+            "optical surface and PupilFunction occupy different physical devices"))
     return opd
 end
 
 """
-    apply_surface!(wavefront, surface, mode)
+    apply_surface!(pupil, surface, mode)
 
 Apply an already formed optical-surface OPD to an explicit caller-owned pupil
-wavefront. Controllable surfaces must first be formed with `update_surface!`;
+function. Controllable surfaces must first be formed with `update_surface!`;
 this operation never mutates telescope path state.
 """
-function apply_surface!(wavefront::PupilWavefront, surface, ::DMAdditive)
-    surface_values = _validate_surface_application(wavefront, surface)
-    @. wavefront.opd += surface_values
-    return wavefront
+function apply_surface!(pupil::PupilFunction, surface, ::DMAdditive)
+    surface_values = _validate_surface_application(pupil, surface)
+    @. pupil.opd += surface_values
+    return pupil
 end
 
-function apply_surface!(wavefront::PupilWavefront, surface, ::DMReplace)
-    surface_values = _validate_surface_application(wavefront, surface)
-    copyto!(wavefront.opd, surface_values)
-    return wavefront
+function apply_surface!(pupil::PupilFunction, surface, ::DMReplace)
+    surface_values = _validate_surface_application(pupil, surface)
+    copyto!(pupil.opd, surface_values)
+    return pupil
 end
 
 struct ElectricField{
@@ -304,7 +338,15 @@ function ElectricField(metadata::OpticalPlaneMetadata,
         metadata, values)
 end
 
-struct IrradiancePlane{
+"""
+    IntensityMap
+
+Caller-owned real-valued samples of computational optical intensity (`abs2` of
+a scalar `ElectricField`). The plane location, coordinate domain, and physical
+normalization are properties of `metadata`; this type alone does not claim SI
+irradiance units.
+"""
+struct IntensityMap{
     M<:OpticalPlaneMetadata,
     A<:AbstractMatrix,
     B<:AbstractArrayBackend,
@@ -313,13 +355,13 @@ struct IrradiancePlane{
     values::A
 end
 
-@inline backend(::IrradiancePlane{<:Any,<:Any,B}) where {B} = B()
-@inline irradiance_values(plane::IrradiancePlane) = plane.values
+@inline backend(::IntensityMap{<:Any,<:Any,B}) where {B} = B()
+@inline intensity_values(map::IntensityMap) = map.values
 
-function IrradiancePlane(metadata::OpticalPlaneMetadata,
+function IntensityMap(metadata::OpticalPlaneMetadata,
     values::AbstractMatrix{<:AbstractFloat})
-    validate_plane_storage(metadata, values; label="irradiance plane")
+    validate_plane_storage(metadata, values; label="intensity map")
     selector = backend(values)
-    return IrradiancePlane{typeof(metadata),typeof(values),typeof(selector)}(
+    return IntensityMap{typeof(metadata),typeof(values),typeof(selector)}(
         metadata, values)
 end

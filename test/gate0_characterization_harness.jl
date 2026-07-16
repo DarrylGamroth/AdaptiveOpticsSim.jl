@@ -37,7 +37,7 @@ function gate0_electric_field(case::ReferenceCase)
     tel = gate0_telescope(case)
     src = build_reference_source(case.config["source"])
     zero_padding = Int(get(case.config["compute"], "zero_padding", 1))
-    wavefront = PupilWavefront(tel; T=Float64)
+    wavefront = PupilFunction(tel; T=Float64)
     apply_opd!(wavefront, opd_map(tel))
     field = ElectricField(wavefront, src; zero_padding=zero_padding,
         T=Float64)
@@ -57,14 +57,14 @@ function gate0_spatial_filter(case::ReferenceCase)
         zero_padding=Int(get(cfg, "zero_padding", 2)),
         T=Float64,
     )
-    wavefront = PupilWavefront(tel; T=Float64)
+    wavefront = PupilFunction(tel; T=Float64)
     apply_opd!(wavefront, opd_map(tel))
     field = ElectricField(wavefront, src;
         zero_padding=sf.params.zero_padding, T=Float64)
     formation = prepare_pupil_field(tel, wavefront, src, field;
         center_even_grid=false, amplitude_scale=1)
     fill_electric_field!(field, wavefront, formation)
-    output = PupilWavefront(tel; T=Float64)
+    output = PupilFunction(tel; T=Float64)
     plan = prepare_spatial_filter(tel, sf, field, output)
     workspace = SpatialFilterWorkspace(sf)
     filter!(output, field, sf, plan, workspace)
@@ -96,22 +96,22 @@ function gate0_radiometric_chain(case::ReferenceCase)
     detectors = [build_reference_detector(cfg) for cfg in
         case.config["detectors"]]
     zero_padding = Int(get(case.config["compute"], "zero_padding", 1))
-    wavefront = PupilWavefront(tel; T=Float64)
+    wavefront = PupilFunction(tel; T=Float64)
     apply_opd!(wavefront, opd_map(tel))
     field = ElectricField(wavefront, src; zero_padding=zero_padding,
         T=Float64)
     formation = prepare_pupil_field(tel, wavefront, src, field)
     fill_electric_field!(field, wavefront, formation)
-    flux = flux_map(tel, src)
-    size(flux) == size(field.values) || throw(DimensionMismatchError(
+    expected_photons = pupil_expected_photon_map(tel, src)
+    size(expected_photons) == size(field.values) || throw(DimensionMismatchError(
         "Gate 0 radiometric fixture requires zero_padding=1"))
     psf = copy(compute_psf!(tel, src; zero_padding=zero_padding))
     seed = Int(get(case.config["compute"], "seed", 1))
     frames = [copy(capture!(detector, psf;
         rng=MersenneTwister(seed + index - 1)))
         for (index, detector) in enumerate(detectors)]
-    return cat(Array(flux), abs2.(field.values), Array(psf), frames...;
-        dims=3)
+    return cat(Array(expected_photons), abs2.(field.values), Array(psf),
+        frames...; dims=3)
 end
 
 function gate0_spectral_psf(case::ReferenceCase)
@@ -125,8 +125,8 @@ function gate0_spectral_psf(case::ReferenceCase)
     stack = Array{Float64}(undef, n, n, length(bundle) + 1)
     combined = zeros(Float64, n, n)
     for (index, sample) in enumerate(bundle)
-        sample_src = AdaptiveOpticsSim.source_with_wavelength_and_flux(src,
-            sample.wavelength, photon_flux(src) * sample.weight)
+        sample_src = AdaptiveOpticsSim.source_with_wavelength_and_irradiance(src,
+            sample.wavelength, photon_irradiance(src) * sample.weight)
         plane = compute_psf!(tel, sample_src; zero_padding=zero_padding)
         @views stack[:, :, index] .= plane
         combined .+= plane

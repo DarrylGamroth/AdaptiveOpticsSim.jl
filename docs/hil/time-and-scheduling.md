@@ -285,7 +285,7 @@ from one integration. Rolling shutter requires row or row-band timing. Frame
 transfer changes acquisition/readout overlap and timing, while the optical
 surface model remains unchanged.
 
-Each physical optical sample is a declared photon-rate product, not a frame
+Each physical optical sample is a declared photon-arrival-rate product, not a frame
 already scaled by a telescope step. The prepared acquisition quadrature owns
 the sample duration or weight used to integrate that rate over the half-open
 exposure or row-band interval. Its weights account for the interval exactly

@@ -50,9 +50,10 @@ the payload from an explicit science-path product rather than
 `sim.tel.state.opd`. The returned product is accompanied by prepared plane
 metadata covering physical sampling, centering/orientation, wavelength,
 backend/device, and radiometric normalization. A PROPER result enters physical
-detector acquisition only when it is already a photon-rate irradiance or has an
-explicit prepared conversion from its documented normalization. Detector
-exposure duration is never folded into the payload or PROPER result.
+detector acquisition only when it is already a declared photon-arrival-rate
+product—photon irradiance or cell-integrated photon rate—or has an explicit
+prepared conversion from its documented normalization. Detector exposure
+duration is never folded into the payload or PROPER result.
 
 The `payload=...` keyword is preferred for new Julia-native integrations.
 `PASSVALUE` is a PROPER compatibility adapter and should be kept for upstream
@@ -109,11 +110,10 @@ Before treating a new instrument integration as supported, validate these
 conventions with small deterministic cases:
 
 - **Units:** the OPD handoff is in meters.
-- **Radiometry:** declare whether the returned array is photon-rate irradiance,
-  normalized intensity, contrast, or another quantity; for a rate, also declare
-  whether samples are a spatial density or cell-integrated. Validate any
-  conversion and flux conservation before detector acquisition with a non-unit
-  exposure.
+- **Radiometry:** declare whether the returned array is photon irradiance,
+  cell-integrated photon rate, normalized intensity, contrast, or another
+  quantity. Validate any conversion and photon conservation before detector
+  acquisition with a non-unit exposure.
 - **Spectral coordinates:** wavelength-dependent results may be summed by array
   index only when their physical focal grids are compatible and the declared
   combination is incoherent; otherwise retain a bundle or use an explicit

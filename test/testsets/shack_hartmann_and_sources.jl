@@ -344,8 +344,8 @@ end
     @test extended_source_asterism(ext_image) !== image_ast
     cached_ast = AdaptiveOpticsSim._cached_extended_source_asterism(ext_image)
     @test AdaptiveOpticsSim._cached_extended_source_asterism(ext_image) === cached_ast
-    @test AdaptiveOpticsSim.photon_flux(point_ast.sources[1]) ≈ AdaptiveOpticsSim.photon_flux(src)
-    @test sum(AdaptiveOpticsSim.photon_flux(sample) for sample in image_ast.sources) ≈ AdaptiveOpticsSim.photon_flux(src)
+    @test AdaptiveOpticsSim.photon_irradiance(point_ast.sources[1]) ≈ AdaptiveOpticsSim.photon_irradiance(src)
+    @test sum(AdaptiveOpticsSim.photon_irradiance(sample) for sample in image_ast.sources) ≈ AdaptiveOpticsSim.photon_irradiance(src)
     old_offset = image_model.offsets_xy_arcsec[1]
     image_model.offsets_xy_arcsec[1] = (old_offset[1] + 0.1, old_offset[2])
     refreshed_ast = AdaptiveOpticsSim._cached_extended_source_asterism(ext_image)

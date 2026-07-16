@@ -11,6 +11,7 @@ It is the maintainer-facing synthesis layer for:
 
 - the public workflow docs in [`user-guide.md`](user-guide.md)
 - the symbol inventory in [`api-reference.md`](api-reference.md)
+- the canonical terminology in [`glossary.md`](glossary.md)
 - the extension seams in [`extension-guide.md`](extension-guide.md)
 - the runtime flow in [`runtime-dataflow.md`](runtime-dataflow.md)
 
@@ -74,7 +75,7 @@ Examples:
 
 - `Telescope` with immutable `TelescopeParams`, prepared `TelescopeAperture`,
   and transitional `LegacyTelescopePathState`
-- caller-owned `PupilWavefront`, `ElectricField`, and `IrradiancePlane`
+- caller-owned `PupilFunction`, `ElectricField`, and `IntensityMap`
   products with immutable `OpticalPlaneMetadata`
 - `ShackHartmannWFS` with `ShackHartmannWFSParams` and `ShackHartmannWFSState`
 - `Detector` with `DetectorParams` and `DetectorState`

@@ -65,7 +65,7 @@ function run_optional_plane_product_checks(tel::Telescope,
     src::AdaptiveOpticsSim.AbstractSource,
     selector::AdaptiveOpticsSim.AbstractArrayBackend, BackendArray,
     ::Type{T}) where {T<:AbstractFloat}
-    wavefront = PupilWavefront(tel; T=T, backend=selector)
+    wavefront = PupilFunction(tel; T=T, backend=selector)
     apply_opd!(wavefront, opd_map(tel))
     field = ElectricField(wavefront, src; zero_padding=2, T=T)
     formation = prepare_pupil_field(tel, wavefront, src, field)
@@ -93,7 +93,7 @@ function run_optional_plane_product_checks(tel::Telescope,
     spatial_formation = prepare_pupil_field(tel, wavefront, src, field;
         center_even_grid=false, amplitude_scale=1)
     fill_electric_field!(field, wavefront, spatial_formation)
-    filtered = PupilWavefront(tel; T=T, backend=selector)
+    filtered = PupilFunction(tel; T=T, backend=selector)
     spatial_plan = prepare_spatial_filter(tel, spatial_filter, field,
         filtered)
     spatial_workspace = SpatialFilterWorkspace(spatial_filter)

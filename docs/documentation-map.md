@@ -33,6 +33,7 @@ implementation records are needed.
 
 ## Policy Docs
 
+- [`glossary.md`](./glossary.md), canonical scientific and API terminology
 - [`deterministic-simulation.md`](./deterministic-simulation.md)
 - [`units-policy.md`](./units-policy.md)
 

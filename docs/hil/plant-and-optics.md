@@ -94,14 +94,14 @@ or parallelized:
 ```text
 prepared telescope definition + explicitly advanced atmosphere epoch + optic surfaces
   -> prepared direction/path renderer
-  -> caller-owned pupil wavefront or electric field
+  -> caller-owned pupil function or electric field
   -> prepared WFS or science optical front end
-  -> caller-owned detector-plane photon-rate irradiance plane or bundle
+  -> caller-owned detector-plane photon-arrival-rate intensity map or bundle
   -> detector-owned temporal integration and acquisition
 ```
 
-The names of the concrete products are selected during implementation; the
-ownership boundary is normative. A prepared telescope definition owns aperture,
+Concrete product names follow the maintained
+[`glossary`](../glossary.md); the ownership boundary is normative. A prepared telescope definition owns aperture,
 reflectivity, spatial sampling, and geometry. It does not own temporal cadence,
 exposure duration, any path's current OPD or electric field, a focal-plane PSF
 result, or FFT/intensity scratch. Scenario, atmosphere, acquisition, and control
@@ -112,8 +112,8 @@ one execution writer, and remain fixed in shape, numeric type, backend, and
 physical device for a prepared run.
 
 Every prepared optical product carries run-immutable compatibility metadata.
-The metadata declares plane kind, dimensions, physical sampling, origin and
-centering, axis orientation, wavelength or spectral channel, units or
+The metadata declares plane kind, coordinate domain, dimensions, sampling,
+origin and centering, axis orientation, wavelength or spectral channel, units or
 normalization, whether samples represent a spatial density or a cell-integrated
 quantity, coherence and combination policy, numeric type, backend, and physical
 device where applicable. Preparation rejects incompatible handoffs. Metadata
@@ -145,28 +145,30 @@ immutable execution descriptions; mutable user profile/image inputs are frozen
 during preparation, and extended-source quadrature expansion and other mutable
 preparation belong to the prepared renderer or path.
 
-A native direct-science front end consumes an explicit pupil wavefront or field
-and writes caller-owned focal-plane photon-rate irradiance. One compatible rate
-result may then feed several independent detectors with different exposure
-durations, each applying elapsed-time integration exactly once and its own MTF,
-pixel integration, coupling, stochastic response, and readout. Changing a
+A native direct-science front end consumes an explicit pupil function or field
+and writes a caller-owned focal-plane photon-arrival-rate `IntensityMap`. One
+compatible rate product may then feed several independent detectors with
+different exposure durations, each applying elapsed-time integration exactly
+once and its own presampling response, pixel integration, coupling, stochastic
+response, and readout. Changing a
 detector exposure cannot change or recompute the optical result. A prepared
 external-optics result, including one produced through `Proper.jl`, enters at
-the same irradiance/acquisition boundary after declaring physical rate units or
-an explicit prepared conversion from its documented normalization; this does
-not make `Proper.jl` a required core dependency.
+the same arrival-rate/acquisition boundary after declaring either photon
+irradiance or cell-integrated photon-rate units, or an explicit prepared
+conversion from its documented normalization; this does not make `Proper.jl` a
+required core dependency.
 
 Physical complex fields declare a normalization whose squared magnitude is a
-photon rate on the represented grid and states whether each sample is a density
-or is integrated over its represented cell. Dimensionless or otherwise
-normalized fields and irradiances remain valid for calibration, estimation, or
+photon-arrival-rate product on the represented grid and state whether each
+sample is photon irradiance or is integrated over its represented cell.
+Dimensionless or otherwise normalized fields and intensity maps remain valid for calibration, estimation, or
 synthetic tests, but cannot enter a physical detector acquisition without an
-explicit prepared scaling stage. Source photon flux also has declared units;
+explicit prepared scaling stage. Source photon irradiance also has declared units;
 elapsed time is never hidden in telescope or optical-front-end normalization.
 
 Spectral or extended-source components may be accumulated elementwise only
 when their physical coordinate grids are compatible and their declared policy
-is incoherent irradiance addition. Otherwise the optical front end retains a
+is incoherent intensity addition. Otherwise the optical front end retains a
 typed plane bundle or uses an explicitly prepared mapping. Gate 0 does not add
 a general image-resampling or coherent-source framework.
 
@@ -182,9 +184,9 @@ maintained wavefront-sensor family is decomposed across the same semantic
 stages without forcing the families into one concrete representation:
 
 ```text
-caller-owned pupil wavefront or electric field
+caller-owned pupil function or electric field
   -> WFS optical front end
-  -> detector-plane photon-rate irradiance plane or bundle
+  -> detector-plane photon-arrival-rate intensity map or bundle
   -> detector-owned temporal integration and acquisition
   -> observation frame or bundle
   -> estimator and calibration
@@ -193,19 +195,20 @@ caller-owned pupil wavefront or electric field
 
 The optical front end owns the sensor-specific propagation and physical optics.
 It may produce one detector plane, several simultaneous planes, or a prepared
-bundle of channels. A physical detector-facing product is a photon rate, not an
-exposure-integrated frame. The front end does not apply elapsed-time integration,
-detector MTF, pixel integration, charge coupling, stochastic detector response,
-readout packing, or signal estimation.
+bundle of channels. A physical detector-facing product is a photon-arrival-rate
+product, not an exposure-integrated frame. The front end does not apply
+elapsed-time integration, presampling detector response, pixel integration,
+charge coupling, stochastic detector response, readout packing, or signal
+estimation.
 
 Detector acquisition consumes the rate product, integrates its explicit whole-
 exposure or incremental optical-sample duration exactly once, and applies each
 selected detector model in its declared spatial, temporal, or charge domain.
-MTF, pixel integration, and temporal integration may be reordered only when the
-prepared model establishes their equivalence for that acquisition. The contract
+Presampling response, pixel integration, and temporal integration may be
+reordered only when the prepared model establishes their equivalence for that acquisition. The contract
 supports one detector, several independent detectors, or several regions or
 channels of one detector without assuming that every WFS has one two-dimensional
-camera. Elapsed-time integration, detector MTF, and pixel sampling therefore
+camera. Elapsed-time integration, presampling response, and pixel sampling therefore
 remain downstream of optical spot or pupil-image formation and upstream of the
 estimator.
 
@@ -242,7 +245,7 @@ and does not allocate a new product wrapper or bundle on every sample.
 
 Geometric and reduced-order policies do not allocate or initialize unused
 diffractive FFT workspaces. An approximate raw-pixel policy still forms its
-declared approximate irradiance and passes through the selected detector
+declared approximate photon-arrival-rate product and passes through the selected detector
 acquisition. A direct slope or modal provider may intentionally bypass optical
 and detector stages, but it declares that validity boundary rather than
 constructing fictitious intermediate arrays.
@@ -288,7 +291,8 @@ A reduced-order provider remains responsive to effective optic commands. It
 may use existing geometric WFS measurements for slope products, a calibrated
 interaction operator for modal or slope products, or a base image plus
 precomputed response images for approximate pixels. Selected detector timing,
-noise, MTF, coupling, and readout stages may still follow that approximation.
+noise, presampling response, coupling, and readout stages may still follow that
+approximation.
 Its validated input domain, approximation error, and excluded physical effects
 are recorded. A constant or replayed product is not a closed-loop plant and
 must not be used to claim controller stability or optical performance.
@@ -378,7 +382,7 @@ One atmosphere epoch may feed several different path families:
 shared atmosphere + telescope epoch
 ├── NGS or LGS WFS path -> WFS model -> optional detector -> RTC frame
 ├── another WFS path    -> different WFS/direction/rate -> RTC frame
-├── direct science path -> focal-plane photon-rate irradiance -> science camera
+├── direct science path -> focal-plane photon-arrival-rate map -> science camera
 └── coronagraph path    -> residual pupil -> PROPER model -> science camera
 ```
 
@@ -396,9 +400,9 @@ itself promote every WFS/source/backend combination to production support.
 
 Science products are also paths rather than one distinguished camera. A direct
 science path can feed one or more compatible maintained detector models from a
-shared photon-rate irradiance field. A coronagraph path hands the appropriate
+shared photon-arrival-rate product. A coronagraph path hands the appropriate
 residual pupil field or OPD to a prepared `Proper.jl` model and then applies
-the science-camera acquisition semantics to a declared photon-rate result or
+the science-camera acquisition semantics to a declared photon-arrival-rate result or
 an explicitly prepared normalization conversion. Slow science or coronagraph
 work must not delay a higher-rate WFS publication.
 
@@ -439,7 +443,7 @@ trigger, product, and port semantics.
 The generic contract records only what the simulator must execute:
 
 - the typed entry boundary and payload it accepts, such as a native electric
-  field, a photon-rate or explicitly normalized irradiance plane, detector
+  field, a photon-arrival-rate or explicitly normalized intensity map, detector
   input, or prepared external-optics result
 - the downstream optical segment and explicit path visibility
 - the source evaluator's immutable parameters, single-writer mutable state,
@@ -465,7 +469,7 @@ detailed relay or coherent calibration unit may be a prepared `Proper.jl` or
 other external optical executor.
 
 The core also does not infer how simultaneous contributions combine. A model
-that needs coherent field addition, incoherent irradiance addition, switching,
+that needs coherent field addition, incoherent intensity addition, switching,
 or a more specialized rule declares that rule or produces the already-combined
 entry payload. Unsupported combinations fail during preparation rather than
 being assigned a convenient default.
@@ -514,9 +518,9 @@ configuration and recorded in the run manifest.
 shell. Its native scope includes telescope pupil, reflectivity and OPD;
 source-aware atmospheric propagation; controllable-surface formation;
 electric-field, Fraunhofer, and Fresnel propagation; WFS optics; direct PSF and
-irradiance formation; spatial filtering; and detector response. Detector MTF
-and charge-coupling effects remain detector models applied after the incident
-irradiance has been formed.
+intensity formation; spatial filtering; and detector response. Presampling
+detector response (with a derived MTF) and charge-coupling effects remain
+detector models applied after the incident optical product has been formed.
 
 The core should own aberrations that are naturally expressed on its sampled
 optical planes:
