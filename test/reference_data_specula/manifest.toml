@@ -316,7 +316,7 @@ specula_test = "test_poly_chrom_sh.py::TestPolyChromSH::test_polychrom_sh_basic"
 kind = "shack_hartmann_frame"
 atol = 1.0e-10
 baseline = "specula"
-specula_contract = "polychromatic Shack-Hartmann sensing yields a stable sampled detector-plane frame on the maintained Julia surface"
+specula_contract = "the retired distinct-wavelength Shack-Hartmann index-grid approximation is preserved only as frozen external-reference characterization, not as a maintained production surface"
 
     [cases.shack_hartmann_polychromatic_frame.wfs]
     pixel_scale = 0.1

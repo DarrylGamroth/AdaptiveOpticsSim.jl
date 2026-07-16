@@ -37,6 +37,9 @@ end
 abstract type AbstractSpectralCoordinate end
 struct UnspecifiedSpectralCoordinate <: AbstractSpectralCoordinate end
 
+"""The product is explicitly independent of wavelength."""
+struct AchromaticSpectralCoordinate <: AbstractSpectralCoordinate end
+
 struct MonochromaticChannel{T<:AbstractFloat} <: AbstractSpectralCoordinate
     wavelength_m::T
 
@@ -50,6 +53,24 @@ end
 
 MonochromaticChannel(wavelength_m::T) where {T<:AbstractFloat} =
     MonochromaticChannel{T}(wavelength_m)
+
+"""
+    IntegratedSpectralChannel(identifier)
+
+Declare that a product has already been integrated over an application-defined
+spectral channel. Products are compatible only when their identifiers match.
+The identifier names a passband contract owned by the application; it does not
+make a wavelength-dependent detector response safe to apply after integration.
+"""
+struct IntegratedSpectralChannel <: AbstractSpectralCoordinate
+    identifier::Symbol
+
+    function IntegratedSpectralChannel(identifier::Symbol)
+        isempty(String(identifier)) && throw(InvalidConfiguration(
+            "integrated spectral-channel identifier must not be empty"))
+        return new(identifier)
+    end
+end
 
 abstract type AbstractOpticalNormalization end
 
@@ -344,6 +365,7 @@ function PupilFunction(tel::Telescope;
     origin = (T(tel.aperture.origin_m[1]), T(tel.aperture.origin_m[2]))
     metadata = OpticalPlaneMetadata(PupilPlane(), opd;
         coordinate_domain=MetricCoordinates(), sampling=sampling, origin=origin,
+        spectral=AchromaticSpectralCoordinate(),
         normalization=DimensionlessNormalization(),
         spatial_measure=PointSampledMeasure(),
         coherence=CoherentFieldCombination())
@@ -486,15 +508,34 @@ function prepare_incoherent_sum(output::IntensityMap,
     inputs::Vararg{IntensityMap,N}) where {N}
     N > 0 || throw(InvalidConfiguration(
         "incoherent accumulation requires at least one input"))
+    _require_declared_intensity_spectral(output.metadata.spectral,
+        "incoherent intensity output")
     _require_nonaliasing_intensity_inputs(output.values, inputs)
     metadata = ntuple(index -> begin
         input = inputs[index]
+        _require_declared_intensity_spectral(input.metadata.spectral,
+            "incoherent intensity input")
         require_incoherent_addition(output.metadata, input.metadata;
             label="incoherent intensity accumulation")
         input.metadata
     end, N)
     return PreparedIncoherentSum(_PREPARED_INCOHERENT_SUM_TOKEN,
         output.metadata, metadata)
+end
+
+@inline _require_declared_intensity_spectral(::MonochromaticChannel,
+    ::AbstractString) = nothing
+
+@inline _require_declared_intensity_spectral(::AchromaticSpectralCoordinate,
+    ::AbstractString) = nothing
+
+@inline _require_declared_intensity_spectral(::IntegratedSpectralChannel,
+    ::AbstractString) = nothing
+
+function _require_declared_intensity_spectral(::AbstractSpectralCoordinate,
+    label::AbstractString)
+    throw(InvalidConfiguration(
+        "$label requires an explicit achromatic, monochromatic, or integrated spectral coordinate"))
 end
 
 function accumulate_intensity!(output::IntensityMap,

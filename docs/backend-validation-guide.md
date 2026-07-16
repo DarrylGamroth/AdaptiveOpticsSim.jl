@@ -55,7 +55,10 @@ The reduced maintained smoke covers:
 - explicit atmosphere epochs and prepared, device-resident finite/infinite
   direction rendering into caller-owned pupil products
 - atmospheric field propagation
-- polychromatic diffractive SH
+- same-grid, multi-component spectral diffractive SH, plus fail-closed rejection
+  of distinct-wavelength angular grids
+- same-grid spectral SH detector acquisition with non-unit sampled QE and
+  exposure scaling
 - deterministic diffractive SH detector/export equivalence against CPU
 - deterministic composite-optic low-order runtime parity against CPU:
   - `tiptilt + dm`
@@ -97,9 +100,10 @@ including the high-accuracy post-command equivalence pass, run:
 These targets are intended for hosts where the corresponding GPU package and
 runtime are actually available. They fail fast instead of skipping when the
 backend is unavailable. The AMDGPU target is the current release-gated
-accelerator support boundary. The CUDA target is retained as a fail-fast
-restoration target, but is not a current support gate because no CUDA validation
-device is available. The backend projects under
+accelerator support boundary. The CUDA target is also current and manually
+hardware-validated on the WSL RTX host, but is not yet a release gate because
+a continuously available CUDA CI runner has not been established. The backend
+projects under
 [`test/amdgpu`](../test/amdgpu) and [`test/cuda`](../test/cuda) declare the root
 package as a path source, keeping accelerator packages out of normal
 `Pkg.test()` while still resolving the full checkout dependency graph in a
@@ -126,9 +130,15 @@ buffers; windowed readout-product construction retains its existing allocation
 behavior. Counting crosstalk and the rest of the maintained detector array math
 remain backend kernels.
 
-On the normal point-source and spectral-stack paths, Shack-Hartmann field
-formation, FFTs, and spot sampling remain batched on the device. Centroid
-cutoff/statistics use the reusable host centroid workspace and copy the
+On the normal point-source and compatible spectral-stack paths, Shack-Hartmann
+field formation, FFTs, and spot sampling remain batched on the device. A
+diffractive spectral stack is compatible only when every component has the
+same wavelength, because its samples then share one prepared angular grid.
+Distinct wavelengths fail before execution until a flux-conserving
+native-to-detector grid mapping is prepared by the later Shack-Hartmann optical
+front-end decomposition.
+
+Centroid cutoff/statistics use the reusable host centroid workspace and copy the
 thresholded spot back to the device so exported pixels retain CPU semantics.
 Non-stackable asterism fallbacks retain conservative host field construction.
 These are correctness boundaries with explicit transfers, so detector-heavy or
@@ -321,8 +331,9 @@ Current intent:
 - CUDA workflow:
   - targets a self-hosted runner labeled `self-hosted`, `linux`, `cuda`
   - instantiates [`test/cuda`](../test/cuda)
-  - is dormant until a CUDA runner is restored, then runs the retained CUDA
-    hardware target
+  - runs the maintained CUDA hardware target whenever a matching self-hosted
+    runner is online; the current manual WSL validation host is not a
+    continuously available release runner
   - runtime equivalence includes the composite-optic low-order HIL surfaces:
     - `tiptilt + dm`
       - `ShackHartmannWFS`
@@ -342,9 +353,10 @@ Current intent:
     - `steering + dm`
     - `focus + dm`
 
-The CPU and AMDGPU workflows are the active validation paths. The CUDA workflow
-remains useful restoration scaffolding, but archived CUDA evidence does not
-validate the current checkout while its runner is unavailable.
+The CPU and AMDGPU workflows are the continuously available validation paths.
+The CUDA workflow and manual WSL target exercise the same fail-fast hardware
+surface, but CUDA remains outside the release gate until runner availability is
+continuous. Evidence applies only to the exact checkout that was tested.
 
 ## Validation Rule
 

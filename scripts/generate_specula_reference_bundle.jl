@@ -269,7 +269,7 @@ function specula_reference_cases()
             "atol" => 1e-10,
             "rtol" => 1e-10,
             "specula_test" => "test_poly_chrom_sh.py::TestPolyChromSH::test_polychrom_sh_basic",
-            "specula_contract" => "polychromatic Shack-Hartmann sensing yields a stable sampled detector-plane frame on the maintained Julia surface",
+            "specula_contract" => "the retired distinct-wavelength Shack-Hartmann index-grid approximation is preserved only as frozen external-reference characterization, not as a maintained production surface",
             "telescope" => Dict(
                 "resolution" => 120,
                 "diameter" => 8.0,

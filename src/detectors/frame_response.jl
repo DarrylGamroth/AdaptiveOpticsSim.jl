@@ -118,6 +118,10 @@ end
 
 function ensure_buffers!(det::Detector, n_in::Int, m_in::Int, n_mid::Int,
     m_mid::Int, n_out::Int, m_out::Int)
+    window = det.params.readout_window === nothing ? nothing :
+        validate_readout_window(det.params.readout_window, n_out, m_out)
+    out_rows = window === nothing ? n_out : length(window.rows)
+    out_cols = window === nothing ? m_out : length(window.cols)
     if size(det.state.frame) != (n_out, m_out)
         det.state.frame = similar(det.state.frame, n_out, m_out)
     end
@@ -151,9 +155,6 @@ function ensure_buffers!(det::Detector, n_in::Int, m_in::Int, n_mid::Int,
         det.state.latent_buffer = similar(det.state.latent_buffer, n_out, m_out)
         fill!(det.state.latent_buffer, zero(eltype(det.state.latent_buffer)))
     end
-    window = det.params.readout_window === nothing ? nothing : validate_readout_window(det.params.readout_window, n_out, m_out)
-    out_rows = window === nothing ? n_out : length(window.rows)
-    out_cols = window === nothing ? m_out : length(window.cols)
     if det.state.output_buffer !== nothing && size(det.state.output_buffer) != (out_rows, out_cols)
         det.state.output_buffer = similar(det.state.output_buffer, out_rows, out_cols)
         fill!(det.state.output_buffer, zero(eltype(det.state.output_buffer)))

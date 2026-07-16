@@ -77,6 +77,9 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :OpticalPlaneMetadata)
     @test Base.isexported(AdaptiveOpticsSim, :MetricCoordinates)
     @test Base.isexported(AdaptiveOpticsSim, :AngularCoordinates)
+    @test Base.isexported(AdaptiveOpticsSim, :AchromaticSpectralCoordinate)
+    @test Base.isexported(AdaptiveOpticsSim, :MonochromaticChannel)
+    @test Base.isexported(AdaptiveOpticsSim, :IntegratedSpectralChannel)
     @test Base.isexported(AdaptiveOpticsSim, :PupilFunction)
     @test Base.isexported(AdaptiveOpticsSim, :ElectricField)
     @test Base.isexported(AdaptiveOpticsSim, :IntensityMap)
@@ -131,6 +134,7 @@ end
         @test_throws InvalidConfiguration MonochromaticChannel(
             invalid_wavelength)
     end
+    @test_throws InvalidConfiguration IntegratedSpectralChannel(Symbol(""))
 
     metadata_storage = zeros(2, 2)
     for invalid_sampling in (
@@ -177,6 +181,7 @@ end
     tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0,
         pupil_reflectivity=0.25)
     wavefront = PupilFunction(tel)
+    @test wavefront.metadata.spectral isa AchromaticSpectralCoordinate
 
     physical_source = Source(band=:custom, wavelength=1.0e-6,
         photon_irradiance=3.0)
@@ -444,6 +449,61 @@ end
     @test output.values == fill(3.0, 4, 4)
     @test @allocated(accumulate_intensity!(output,
         (first_input, second_input), sum_plan)) == 0
+
+    integrated_metadata = OpticalPlaneMetadata(FocalPlane(), zeros(4, 4);
+        coordinate_domain=AngularCoordinates(), sampling=(1.0, 1.0),
+        spectral=IntegratedSpectralChannel(:science_passband),
+        normalization=PhotonRateNormalization(),
+        spatial_measure=CellIntegratedMeasure(),
+        coherence=IncoherentIntensityAddition())
+    integrated_output = IntensityMap(integrated_metadata, zeros(4, 4))
+    integrated_first = IntensityMap(integrated_metadata, fill(1.0, 4, 4))
+    integrated_second = IntensityMap(integrated_metadata, fill(2.0, 4, 4))
+    integrated_plan = prepare_incoherent_sum(integrated_output,
+        integrated_first, integrated_second)
+    accumulate_intensity!(integrated_output,
+        (integrated_first, integrated_second), integrated_plan)
+    @test integrated_output.values == fill(3.0, 4, 4)
+
+    achromatic_metadata = OpticalPlaneMetadata(FocalPlane(), zeros(4, 4);
+        coordinate_domain=AngularCoordinates(), sampling=(1.0, 1.0),
+        spectral=AchromaticSpectralCoordinate(),
+        normalization=PhotonRateNormalization(),
+        spatial_measure=CellIntegratedMeasure(),
+        coherence=IncoherentIntensityAddition())
+    achromatic_output = IntensityMap(achromatic_metadata, zeros(4, 4))
+    achromatic_first = IntensityMap(achromatic_metadata, fill(1.0, 4, 4))
+    achromatic_second = IntensityMap(achromatic_metadata, fill(2.0, 4, 4))
+    achromatic_plan = prepare_incoherent_sum(achromatic_output,
+        achromatic_first, achromatic_second)
+    accumulate_intensity!(achromatic_output,
+        (achromatic_first, achromatic_second), achromatic_plan)
+    @test achromatic_output.values == fill(3.0, 4, 4)
+    @test_throws InvalidConfiguration prepare_incoherent_sum(
+        achromatic_output, first_input)
+
+    other_integrated_metadata = OpticalPlaneMetadata(FocalPlane(),
+        fill(1.0, 4, 4); coordinate_domain=AngularCoordinates(),
+        sampling=(1.0, 1.0),
+        spectral=IntegratedSpectralChannel(:other_passband),
+        normalization=PhotonRateNormalization(),
+        spatial_measure=CellIntegratedMeasure(),
+        coherence=IncoherentIntensityAddition())
+    other_integrated = IntensityMap(other_integrated_metadata,
+        fill(1.0, 4, 4))
+    @test_throws InvalidConfiguration prepare_incoherent_sum(
+        integrated_output, other_integrated)
+
+    unspecified_sum_values = zeros(4, 4)
+    unspecified_sum_metadata = OpticalPlaneMetadata(FocalPlane(),
+        unspecified_sum_values; coordinate_domain=AngularCoordinates(),
+        sampling=(1.0, 1.0), normalization=PhotonRateNormalization(),
+        spatial_measure=CellIntegratedMeasure(),
+        coherence=IncoherentIntensityAddition())
+    unspecified_sum = IntensityMap(unspecified_sum_metadata,
+        unspecified_sum_values)
+    @test_throws InvalidConfiguration prepare_incoherent_sum(
+        unspecified_sum, unspecified_sum)
     identity_alias = IntensityMap{
         typeof(first_input.metadata),typeof(output.values),CPUBackend,
     }(first_input.metadata, output.values)

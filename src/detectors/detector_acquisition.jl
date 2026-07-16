@@ -123,23 +123,23 @@ end
 end
 
 @inline function _prepared_quantum_efficiency(det::Detector,
-    ::UnspecifiedSpectralCoordinate, ::Type{T}) where {T<:AbstractFloat}
-    return _unspecified_spectral_qe(det.params.quantum_efficiency_model, T)
+    ::IntegratedSpectralChannel, ::Type{T}) where {T<:AbstractFloat}
+    return _integrated_spectral_qe(det.params.quantum_efficiency_model, T)
 end
 
-@inline _unspecified_spectral_qe(model::ScalarQuantumEfficiency,
+@inline _integrated_spectral_qe(model::ScalarQuantumEfficiency,
     ::Type{T}) where {T<:AbstractFloat} = T(model.value)
 
-function _unspecified_spectral_qe(::SampledQuantumEfficiency,
+function _integrated_spectral_qe(::SampledQuantumEfficiency,
     ::Type{T}) where {T<:AbstractFloat}
     throw(InvalidConfiguration(
-        "wavelength-dependent detector QE requires a declared spectral channel"))
+        "wavelength-dependent detector QE cannot be applied after passband integration"))
 end
 
 function _prepared_quantum_efficiency(det::Detector,
     ::AbstractSpectralCoordinate, ::Type{T}) where {T<:AbstractFloat}
     throw(InvalidConfiguration(
-        "detector acquisition does not support this spectral coordinate"))
+        "detector acquisition requires a declared monochromatic or integrated spectral channel"))
 end
 
 @inline _require_prepared_response_sampling(::NullFrameResponse, ::Int) = nothing
@@ -204,11 +204,12 @@ function prepare_detector_acquisition(det::Detector, map::IntensityMap;
         "prepared detector photon-rate scaling is not representable"))
     _require_prepared_response_sampling(det.params.response_model,
         det.params.psf_sampling)
+    quantum_efficiency = _prepared_quantum_efficiency(det,
+        metadata.spectral, T)
     prepare_detector_buffers!(det, metadata.dimensions)
     return DetectorAcquisitionPlan(_DETECTOR_ACQUISITION_PLAN_TOKEN,
         det.params, det.state, det.state.frame, backend(det), metadata,
-        map.values, rate_scale,
-        _prepared_quantum_efficiency(det, metadata.spectral, T))
+        map.values, rate_scale, quantum_efficiency)
 end
 
 @inline function _require_prepared_acquisition(det::Detector,

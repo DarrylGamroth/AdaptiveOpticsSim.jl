@@ -203,13 +203,16 @@ Important distinctions:
 - grouped WFS intermediate stacks are not the same thing as archived or
   exported readouts
 
-For example, diffractive Shack–Hartmann spectral, extended-source, and asterism
-components are accumulated into one optical-rate stack before a single
-detector acquisition. The current polychromatic SH path still uses its legacy
-reference-wavelength index grid and does not physically resample each wavelength
-plane; its sum-before-acquisition result is therefore an ordering guarantee, not
-a general physical-grid-compatibility claim. There is now a clearer boundary
-between:
+For example, diffractive Shack–Hartmann compatible spectral, extended-source,
+and asterism components are accumulated into one optical-rate stack before a
+single detector acquisition. A spectral stack is compatible only when every
+component has the same wavelength and therefore the same prepared angular
+grid. Distinct wavelengths fail before preparation until the later
+Shack–Hartmann optical-front-end decomposition provides an explicit,
+flux-conserving native-to-detector grid mapping. Frozen references for the
+retired reference-wavelength index-grid approximation are test-only
+characterization data, not a production capability. There is now a clearer
+boundary between:
 
 - pre-detector optical-rate spot stacks
 - post-detector signal stacks

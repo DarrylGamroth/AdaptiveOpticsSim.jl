@@ -578,8 +578,9 @@ science_host = Array(science_img)
 
 Notes:
 
-- The in-tree CUDA selector and extension are retained, but CUDA is currently
-  unverified because no CUDA validation device is available.
+- The CUDA selector and extension have current manual hardware validation on
+  the WSL RTX host. CUDA is not yet release-gated because a continuously
+  available CUDA CI runner has not been established.
 - Keep `backend=GPU` on the long-lived plant objects so runtime buffers stay on
   device.
 - If you need a GPU-built internal reconstructor as well, build that

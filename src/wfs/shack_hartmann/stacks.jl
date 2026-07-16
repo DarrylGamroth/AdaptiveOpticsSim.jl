@@ -212,6 +212,7 @@ end
 function compute_intensity_spectral_stack!(style::AcceleratorStyle,
     wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource,
     qe_model::Union{Nothing,AbstractQuantumEfficiencyModel})
+    grid_wavelength = require_sh_common_spectral_grid(wfs, src)
     bundle = spectral_bundle(src)
     n_src = length(bundle)
     ensure_sh_asterism_buffers!(wfs, n_src)
@@ -232,7 +233,7 @@ function compute_intensity_spectral_stack!(style::AcceleratorStyle,
         channel_qe = sh_spectral_component_qe(qe_model, sample, T)
         host_amp_scales[i] = sqrt(base_photon_rate * sample.weight *
             channel_qe)
-        host_opd_to_cycles[i] = T(2) / sample.wavelength
+        host_opd_to_cycles[i] = T(2) / grid_wavelength
     end
     copyto!(amp_scales, host_amp_scales)
     copyto!(opd_to_cycles, host_opd_to_cycles)

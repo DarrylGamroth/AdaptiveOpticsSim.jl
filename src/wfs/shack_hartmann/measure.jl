@@ -81,8 +81,7 @@ end
 
 function measure!(::Diffractive, wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource)
     Base.require_one_based_indexing(tel.state.opd)
-    ref = spectral_reference_source(src)
-    prepare_sampling!(wfs, tel, ref)
+    prepare_sampling!(wfs, tel, src)
     ensure_sh_calibration!(wfs, tel, src)
     peak = sampled_spots_peak!(wfs, tel, src)
     sync_exported_spots!(wfs)
@@ -118,8 +117,7 @@ end
 function measure!(::Diffractive, wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource,
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
     Base.require_one_based_indexing(tel.state.opd)
-    ref = spectral_reference_source(src)
-    prepare_sampling!(wfs, tel, ref)
+    prepare_sampling!(wfs, tel, src)
     ensure_sh_calibration!(wfs, tel, src)
     peak = sampled_spots_peak!(wfs, tel, src, det, rng)
     sync_exported_spots!(wfs)

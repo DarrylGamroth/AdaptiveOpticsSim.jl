@@ -86,13 +86,25 @@ mutation is unsupported because it bypasses that revision boundary.
   source-scaled, cell-integrated photon-arrival-rate product before exposure
 - Spectral sources: `SpectralSample`, `SpectralBundle`, `SpectralSource`,
   `with_spectrum`; construct a `SpectralSource` through `with_spectrum` from a
-  `Source` or `LGSSource` leaf rather than nesting source expansions
+  `Source` or `LGSSource` leaf rather than nesting source expansions. Bundle
+  weights are normalized photon-number fractions of the source's total photon
+  irradiance, not radiant-energy fractions
 - Extended sources: `GaussianDiskSourceModel`, `PointCloudSourceModel`,
   `SampledImageSourceModel`, `with_extended_source`,
   `extended_source_asterism`
 - Optical products: `PupilFunction`, `ElectricField`, `IntensityMap`,
   `OpticalProductBundle`, `OpticalPlaneMetadata`; coordinates are declared
   with `MetricCoordinates` or `AngularCoordinates`
+- Spectral coordinates: `AchromaticSpectralCoordinate`,
+  `MonochromaticChannel`, or `IntegratedSpectralChannel`;
+  `UnspecifiedSpectralCoordinate` is rejected by prepared intensity
+  accumulation. Detector acquisition is channel-specific and requires a
+  monochromatic or integrated channel; sampled QE requires the monochromatic
+  case
+- Diffractive Shack–Hartmann spectral execution accepts same-wavelength
+  components on one prepared angular grid. Distinct wavelengths are rejected
+  until an explicit flux-conserving native-to-detector mapping is available;
+  use separate channel products when independent processing is appropriate
 - Product semantics: `PhotonRateNormalization` or
   `DimensionlessNormalization`; `PointSampledMeasure`,
   `SpatialDensityMeasure`, or `CellIntegratedMeasure`; and
@@ -244,11 +256,13 @@ qualified QE model such as
 capture uses the scalar `params.qe` value, which is the supplied scalar or the
 peak sampled QE. Source-aware capture, `capture!(det, image, src; rng=...)`,
 evaluates the QE model at `wavelength(src)`. For `SpectralSource`, it uses the
-flux-weighted effective QE over the spectral bundle. Diffractive
-Shack–Hartmann and Pyramid frame-detector paths specialize this boundary by
-applying sampled QE per wavelength before incoherent optical-rate
-accumulation; other source-aware detector paths retain the effective-QE
-contract unless explicitly documented otherwise.
+flux-weighted effective QE over the spectral bundle. Pyramid frame-detector
+paths specialize this boundary by applying sampled QE per wavelength before
+incoherent optical-rate accumulation. Diffractive Shack–Hartmann does the same
+for multiple contributions on one common wavelength grid; it rejects distinct
+wavelengths until an explicit native-to-detector grid mapping is available.
+Other source-aware detector paths retain the effective-QE contract unless
+explicitly documented otherwise.
 
 Response kernels, sampled QE vectors, and detector defect maps are copied at
 their public construction boundaries, and `Detector` takes another run-owned

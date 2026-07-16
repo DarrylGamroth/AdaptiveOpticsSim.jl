@@ -382,13 +382,31 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         return slopes
     end
 
-    record_gpu_smoke!(failures, "measure_shack_diffractive_polychromatic") do
-        bundle = SpectralBundle(T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.4, 0.6]; T=T)
-        poly = with_spectrum(src, bundle)
+    record_gpu_smoke!(failures, "measure_shack_diffractive_spectral_common_grid") do
+        bundle = SpectralBundle(fill(wavelength(src), 2), T[0.4, 0.6]; T=T)
+        spectral = with_spectrum(src, bundle)
         wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, tel, poly)
+        slopes = measure!(wfs, tel, spectral)
         @assert slopes isa BackendArray
         return slopes
+    end
+
+    record_gpu_smoke!(failures, "reject_shack_diffractive_distinct_wavelength_grids") do
+        bundle = SpectralBundle(
+            T[0.9 * wavelength(src), 1.1 * wavelength(src)],
+            T[0.4, 0.6]; T=T)
+        spectral = with_spectrum(src, bundle)
+        wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(),
+            T=T, backend=backend)
+        rejected = false
+        try
+            measure!(wfs, tel, spectral)
+        catch err
+            err isa InvalidConfiguration || rethrow()
+            rejected = true
+        end
+        @assert rejected
+        return nothing
     end
 
     record_gpu_smoke!(failures, "measure_shack_diffractive_extended") do

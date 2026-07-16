@@ -216,8 +216,10 @@ example:
 ```bash
 ADAPTIVEOPTICS_VALIDATE_EXAMPLES=1 ./scripts/run_release_validation.sh
 ADAPTIVEOPTICS_VALIDATE_AMDGPU=1 ./scripts/run_release_validation.sh
+ADAPTIVEOPTICS_VALIDATE_CUDA=1 ./scripts/run_release_validation.sh
 ```
 
-AMDGPU is the currently hardware-validated accelerator. The CUDA extension and
-validation target remain in-tree for restoration, but CUDA is not currently a
-production-supported backend because no CUDA validation device is available.
+AMDGPU and CUDA both have current hardware validation through their dedicated
+targets. AMDGPU remains the release-gated production accelerator; CUDA is
+validated manually on the WSL RTX host but is not yet release-gated because a
+continuously available CUDA CI runner has not been established.

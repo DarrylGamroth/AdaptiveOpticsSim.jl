@@ -354,6 +354,7 @@ function run_optional_plane_product_checks(tel::Telescope,
     density_values = BackendArray(density_host)
     density_metadata = OpticalPlaneMetadata(FocalPlane(), density_values;
         coordinate_domain=AngularCoordinates(), sampling=(T(0.5), T(0.25)),
+        spectral=MonochromaticChannel(T(wavelength(src))),
         normalization=AdaptiveOpticsSim.PhotonRateNormalization(),
         spatial_measure=AdaptiveOpticsSim.SpatialDensityMeasure(),
         coherence=AdaptiveOpticsSim.IncoherentIntensityAddition())
@@ -385,6 +386,7 @@ function run_optional_plane_product_checks(tel::Telescope,
     edge_values = BackendArray(edge_host)
     edge_metadata = OpticalPlaneMetadata(FocalPlane(), edge_values;
         coordinate_domain=AngularCoordinates(), sampling=(one(T), one(T)),
+        spectral=MonochromaticChannel(T(wavelength(src))),
         normalization=AdaptiveOpticsSim.PhotonRateNormalization(),
         spatial_measure=AdaptiveOpticsSim.CellIntegratedMeasure(),
         coherence=AdaptiveOpticsSim.IncoherentIntensityAddition())
@@ -1337,11 +1339,35 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     intensity = atmospheric_intensity!(prop, atm, epoch)
     @test intensity isa BackendArray
 
-    bundle = SpectralBundle(T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.4, 0.6]; T=T)
+    bundle = SpectralBundle(fill(wavelength(src), 2), T[0.4, 0.6]; T=T)
     poly = with_spectrum(src, bundle)
     sh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=selector)
     slopes = measure!(sh, tel, poly)
     @test slopes isa BackendArray
+
+    spectral_optical_sh = ShackHartmannWFS(tel; n_lenslets=4,
+        mode=Diffractive(), T=T, backend=selector)
+    AdaptiveOpticsSim.sampled_spots_peak!(spectral_optical_sh, tel, poly)
+    spectral_optical_spots = Array(spectral_optical_sh.state.spot_cube)
+    spectral_qe = SampledQuantumEfficiency(
+        T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.2, 0.8])
+    spectral_exposure = T(2.5)
+    spectral_detector = Detector(noise=NoiseNone(), qe=spectral_qe,
+        integration_time=spectral_exposure, binning=1,
+        response_model=NullFrameResponse(), T=T, backend=selector)
+    spectral_detector_sh = ShackHartmannWFS(tel; n_lenslets=4,
+        mode=Diffractive(), T=T, backend=selector)
+    AdaptiveOpticsSim.sampled_spots_peak!(spectral_detector_sh, tel, poly,
+        spectral_detector, MersenneTwister(149))
+    expected_spectral_scale = spectral_exposure *
+        T(AdaptiveOpticsSim.qe_at(spectral_qe, wavelength(src)))
+    @test Array(spectral_detector_sh.state.spot_cube) ≈
+        spectral_optical_spots .* expected_spectral_scale rtol=5e-5
+
+    distinct = with_spectrum(src, SpectralBundle(
+        T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.4, 0.6];
+        T=T))
+    @test_throws InvalidConfiguration measure!(sh, tel, distinct)
 
     science_src = Source(band=:K, magnitude=1.0, coordinates=(4.0, 90.0), T=T)
     split_dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T,

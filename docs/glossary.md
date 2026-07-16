@@ -45,8 +45,13 @@ defined here before they become public API.
 | Non-common-path aberration (NCPA) | Aberration visible to one optical branch but not to its reference or sensing branch. Model it in the branch where it physically occurs. |
 
 `UnspecifiedSpectralCoordinate()` means that no spectral coordinate has yet been
-declared; it does not mean wavelength independence. `MonochromaticChannel(λ)`
-declares one wavelength in metres.
+declared; it does not mean wavelength independence.
+`AchromaticSpectralCoordinate()` explicitly declares wavelength-independent
+geometry or data. `MonochromaticChannel(λ)` declares one wavelength in metres.
+`IntegratedSpectralChannel(id)` declares that values have already been integrated
+over an application-defined passband identified by `id`; equal identifiers are
+the compatibility contract, while the passband definition remains application
+owned.
 
 ## Radiometry And Photon Quantities
 
@@ -54,6 +59,7 @@ declares one wavelength in metres.
 |---|---|
 | Radiant irradiance | Incident radiant flux density, W·m⁻². Use *irradiance* without a photon qualifier only when this radiometric meaning is intended. |
 | Photon irradiance | Incident photon-rate density, photons·s⁻¹·m⁻². `photon_irradiance(source)` uses this quantity. |
+| Spectral sample weight | The normalized photon-number fraction of `photon_irradiance(source)` assigned to one `SpectralSample` in a `SpectralBundle`. It is not a radiant-energy fraction. Ordinary bundle constructors normalize nonnegative proportional input weights to sum to one. |
 | Photon flux | Photon rate, photons·s⁻¹, integrated over a stated receiving area or channel. Do not use it for a per-area source value. |
 | Photon-arrival-rate product | Detector-facing umbrella term when metadata may declare either a spatial density or a cell-integrated photon rate. |
 | Photon exposure | Time-integrated photon irradiance, photons·m⁻². |

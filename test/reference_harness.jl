@@ -21,6 +21,13 @@ struct ReferenceBundle
     cases::Vector{ReferenceCase}
 end
 
+const LEGACY_SH_INDEX_GRID_REFERENCE_ID =
+    "shack_hartmann_polychromatic_frame"
+
+@inline uses_legacy_sh_index_grid_reference(case::ReferenceCase) =
+    case.baseline === :specula &&
+    case.id == LEGACY_SH_INDEX_GRID_REFERENCE_ID
+
 abstract type ReferenceStorageConvention end
 
 struct JuliaColumnMajorStorage <: ReferenceStorageConvention end
@@ -259,6 +266,35 @@ function build_reference_measurement_source(cfg::AbstractDict{<:AbstractString,<
         Float64.(spectrum_cfg["weights"]),
     )
     return with_spectrum(src, bundle)
+end
+
+"""
+    legacy_reference_sh_index_grid_frame!(wfs, tel, src)
+
+Reproduce the retired Shack-Hartmann spectral index-grid approximation solely
+to characterize frozen external reference data.  This adapter intentionally
+prepares one detector grid at the wrapped source wavelength and adds the
+per-channel sampled spots by array index.  Production Shack-Hartmann APIs must
+not use this helper: distinct-wavelength channels require an explicit
+native-to-detector grid mapping.
+"""
+function legacy_reference_sh_index_grid_frame!(wfs::ShackHartmannWFS,
+    tel::Telescope, src::SpectralSource)
+    AdaptiveOpticsSim.prepare_sampling!(wfs, tel,
+        AdaptiveOpticsSim.spectral_reference_source(src))
+    fill!(wfs.state.spot_cube_accum,
+        zero(eltype(wfs.state.spot_cube_accum)))
+    total_irradiance = AdaptiveOpticsSim.photon_irradiance(src)
+    @inbounds for sample in AdaptiveOpticsSim.spectral_bundle(src)
+        variant = AdaptiveOpticsSim.source_with_wavelength_and_radiometric_value(
+            src, sample.wavelength,
+            eltype(wfs.state.slopes)(total_irradiance * sample.weight))
+        AdaptiveOpticsSim.sampled_spots_peak!(
+            AdaptiveOpticsSim.ScalarCPUStyle(), wfs, tel, variant)
+        wfs.state.spot_cube_accum .+= wfs.state.spot_cube
+    end
+    copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
+    return wfs.state.spot_cube
 end
 
 function build_reference_detector(cfg::AbstractDict{<:AbstractString,<:Any})
@@ -1080,8 +1116,12 @@ function compute_reference_actual(case::ReferenceCase)
         if haskey(case.config, "opd")
             apply_reference_opd!(tel, case.config["opd"])
         end
-        AdaptiveOpticsSim.prepare_sampling!(wfs, tel, src)
-        AdaptiveOpticsSim.sampled_spots_peak!(wfs, tel, src)
+        if src isa SpectralSource && uses_legacy_sh_index_grid_reference(case)
+            legacy_reference_sh_index_grid_frame!(wfs, tel, src)
+        else
+            AdaptiveOpticsSim.prepare_sampling!(wfs, tel, src)
+            AdaptiveOpticsSim.sampled_spots_peak!(wfs, tel, src)
+        end
         @views return copy(wfs.state.spot_cube[1, :, :])
     elseif case.kind === :pyramid_frame
         tel = build_reference_telescope(case.config["telescope"])
@@ -1413,11 +1453,13 @@ function specula_legacy_radiometric_factor(case::ReferenceCase)
     duration = legacy_reference_optical_duration(case, SPECULA_LEGACY_OPTICAL_INTEGRATION_KINDS)
     duration === nothing && return nothing
     factor = duration * legacy_reference_spectral_weight_sum(case)
-    if case.kind === :shack_hartmann_frame
+    if case.kind === :shack_hartmann_frame &&
+            uses_legacy_sh_index_grid_reference(case)
         tel = build_reference_telescope(case.config["telescope"])
         src = build_reference_measurement_source(case.config["source"])
         wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
-        prepare_sampling!(wfs, tel, spectral_reference_source(src))
+        AdaptiveOpticsSim.prepare_sampling!(wfs, tel,
+            AdaptiveOpticsSim.spectral_reference_source(src))
         pad = size(wfs.state.fft_stack, 1)
         factor *= pad * pad
     end

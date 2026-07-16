@@ -211,10 +211,12 @@ frame = capture!(det, image, src; rng=rng)
 
 For `Source`, detector capture evaluates the curve at `wavelength(src)`. The
 generic `capture!(det, image, spectral_source)` boundary uses the
-flux-weighted effective QE over the spectral bundle. Diffractive
-Shack–Hartmann and Pyramid acquisition with a frame `Detector` instead folds
-the sampled QE into each wavelength's optical-rate contribution before the
-incoherent sum, preserving wavelength-dependent morphology. Matrix-only
+flux-weighted effective QE over the spectral bundle. Pyramid acquisition with
+a frame `Detector` instead folds the sampled QE into each wavelength's
+optical-rate contribution before the incoherent sum. Diffractive
+Shack–Hartmann applies the same ordering to multiple contributions on one
+common wavelength grid, and rejects distinct wavelengths until an explicit
+native-to-detector mapping is available. Matrix-only
 capture without a source uses the detector's scalar reference QE, which is the
 peak value of a sampled curve.
 The bare-matrix path treats its values as cell-integrated photon-arrival rates;
@@ -585,10 +587,20 @@ source expansions in the maintained API. An `Asterism` is a flat,
 common-wavelength directional list and rejects `SpectralSource`,
 `ExtendedSource`, and nested `Asterism` children. `with_spectrum` accepts a
 `Source` or `LGSSource` leaf and rejects an existing spectral, extended, or
-directional expansion. When a model needs a
+directional expansion. Each `SpectralBundle` weight is the normalized
+photon-number fraction of `photon_irradiance(source)` assigned to that sample;
+ordinary constructors normalize nonnegative proportional weights to sum to
+one. The weights are not radiant-energy fractions. When a model needs a
 spectral-by-spatial-by-directional Cartesian quadrature, prepare the components
 explicitly and accumulate only metadata-compatible intensity products; there is
 not yet a nested convenience API for that product space.
+
+Diffractive Shack–Hartmann spectral components may be accumulated together only
+when they have the same wavelength and therefore share one prepared angular
+sampling grid. Distinct wavelengths fail during preparation until a later
+optical-front-end decomposition supplies an explicit, flux-conserving mapping
+from each native wavelength grid to the detector grid. Model such channels as
+separate products when independent processing is appropriate.
 
 A single diffractive Shack–Hartmann, Pyramid, BioEdge, or atmosphere-aware
 Curvature acquisition also requires every asterism leaf to share one optical

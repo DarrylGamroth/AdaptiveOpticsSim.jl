@@ -35,7 +35,9 @@ export AbstractOpticalProduct, AbstractOpticalPlaneKind
 export PupilPlane, FocalPlane, IntermediatePlane, DetectorPlane
 export AbstractPlaneCoordinateDomain, MetricCoordinates, AngularCoordinates
 export PlaneCentering, SampleCentered, InterSampleCentered
-export PlaneAxisOrientation, UnspecifiedSpectralCoordinate, MonochromaticChannel
+export PlaneAxisOrientation, UnspecifiedSpectralCoordinate
+export AchromaticSpectralCoordinate, MonochromaticChannel
+export IntegratedSpectralChannel
 export AbstractOpticalNormalization, PhotonRateNormalization
 export DimensionlessNormalization
 export AbstractSpatialMeasure, PointSampledMeasure, SpatialDensityMeasure

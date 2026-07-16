@@ -133,14 +133,20 @@ end
     return spot_view
 end
 
+@inline function sh_spectral_source_variant(wfs::ShackHartmannWFS,
+    src::SpectralSource, sample::SpectralSample, radiometric_value::Real)
+    T = eltype(wfs.state.slopes)
+    return source_with_wavelength_and_radiometric_value(src,
+        T(sample.wavelength), T(radiometric_value))
+end
+
 function sampled_spots_peak!(wfs::ShackHartmannWFS, tel::Telescope, src::AbstractSource)
     prepare_sampling!(wfs, tel, src)
     return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src)
 end
 
 function sampled_spots_peak!(wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource)
-    ref = spectral_reference_source(src)
-    prepare_sampling!(wfs, tel, ref)
+    prepare_sampling!(wfs, tel, src)
     return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src)
 end
 
@@ -195,12 +201,13 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
 end
 
 function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource)
+    require_sh_common_spectral_grid(wfs, src)
     fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
     peak = zero(eltype(wfs.state.slopes))
     total_irradiance = photon_irradiance(src)
     @inbounds for sample in src.bundle.samples
-        variant = source_with_wavelength_and_radiometric_value(src, sample.wavelength,
-            eltype(wfs.state.slopes)(total_irradiance * sample.weight))
+        variant = sh_spectral_source_variant(wfs, src, sample,
+            total_irradiance * sample.weight)
         peak = max(peak, sampled_spots_peak!(ScalarCPUStyle(), wfs, tel, variant))
         wfs.state.spot_cube_accum .+= wfs.state.spot_cube
     end
@@ -209,13 +216,14 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Teles
 end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource)
+    require_sh_common_spectral_grid(wfs, src)
     if sh_uses_rocm_safe_sensing_plan(wfs)
         fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
         peak = zero(eltype(wfs.state.slopes))
         total_irradiance = photon_irradiance(src)
         @inbounds for sample in src.bundle.samples
-            variant = source_with_wavelength_and_radiometric_value(src, sample.wavelength,
-                eltype(wfs.state.slopes)(total_irradiance * sample.weight))
+            variant = sh_spectral_source_variant(wfs, src, sample,
+                total_irradiance * sample.weight)
             peak = max(peak, sampled_spots_peak!(style, wfs, tel, variant))
             @. wfs.state.spot_cube_accum = wfs.state.spot_cube_accum + wfs.state.spot_cube
         end
@@ -227,8 +235,8 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
         peak = zero(eltype(wfs.state.slopes))
         total_irradiance = photon_irradiance(src)
         @inbounds for sample in src.bundle.samples
-            variant = source_with_wavelength_and_radiometric_value(src, sample.wavelength,
-                eltype(wfs.state.slopes)(total_irradiance * sample.weight))
+            variant = sh_spectral_source_variant(wfs, src, sample,
+                total_irradiance * sample.weight)
             peak = max(peak, sampled_spots_peak!(style, wfs, tel, variant))
             @. wfs.state.spot_cube_accum = wfs.state.spot_cube_accum + wfs.state.spot_cube
         end
@@ -313,8 +321,7 @@ end
 
 function sampled_spots_peak!(wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource,
     det::AbstractDetector, rng::AbstractRNG)
-    ref = spectral_reference_source(src)
-    prepare_sampling!(wfs, tel, ref)
+    prepare_sampling!(wfs, tel, src)
     return sampled_spots_peak!(execution_style(wfs.state.valid_mask), wfs, tel, src, det, rng)
 end
 
@@ -380,14 +387,14 @@ end
 
 function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource,
     det::AbstractDetector, rng::AbstractRNG)
+    require_sh_common_spectral_grid(wfs, src)
     fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
     total_irradiance = photon_irradiance(src)
     qe_model = quantum_efficiency_model(det)
     @inbounds for sample in src.bundle.samples
         channel_qe = qe_at(qe_model, sample.wavelength)
-        variant = source_with_wavelength_and_radiometric_value(src, sample.wavelength,
-            eltype(wfs.state.slopes)(total_irradiance * sample.weight *
-                channel_qe))
+        variant = sh_spectral_source_variant(wfs, src, sample,
+            total_irradiance * sample.weight * channel_qe)
         sampled_spots_peak!(ScalarCPUStyle(), wfs, tel, variant)
         wfs.state.spot_cube_accum .+= wfs.state.spot_cube
     end
@@ -397,15 +404,15 @@ end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource,
     det::AbstractDetector, rng::AbstractRNG)
+    require_sh_common_spectral_grid(wfs, src)
     if sh_uses_rocm_safe_sensing_plan(wfs)
         fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
         total_irradiance = photon_irradiance(src)
         qe_model = quantum_efficiency_model(det)
         @inbounds for sample in src.bundle.samples
             channel_qe = qe_at(qe_model, sample.wavelength)
-            variant = source_with_wavelength_and_radiometric_value(src, sample.wavelength,
-                eltype(wfs.state.slopes)(total_irradiance * sample.weight *
-                    channel_qe))
+            variant = sh_spectral_source_variant(wfs, src, sample,
+                total_irradiance * sample.weight * channel_qe)
             sampled_spots_peak!(style, wfs, tel, variant)
             @. wfs.state.spot_cube_accum = wfs.state.spot_cube_accum + wfs.state.spot_cube
         end
@@ -418,9 +425,8 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
         qe_model = quantum_efficiency_model(det)
         @inbounds for sample in src.bundle.samples
             channel_qe = qe_at(qe_model, sample.wavelength)
-            variant = source_with_wavelength_and_radiometric_value(src, sample.wavelength,
-                eltype(wfs.state.slopes)(total_irradiance * sample.weight *
-                    channel_qe))
+            variant = sh_spectral_source_variant(wfs, src, sample,
+                total_irradiance * sample.weight * channel_qe)
             sampled_spots_peak!(style, wfs, tel, variant)
             @. wfs.state.spot_cube_accum = wfs.state.spot_cube_accum + wfs.state.spot_cube
         end
@@ -855,7 +861,7 @@ function sh_reference_signal!(wfs::ShackHartmannWFS, tel::Telescope, src::Abstra
 end
 
 function ensure_sh_calibration!(wfs::ShackHartmannWFS, tel::Telescope, src::AbstractSource)
-    λ = calibration_wavelength(src, eltype(wfs.state.slopes))
+    λ = sh_calibration_wavelength(wfs, src)
     sig = telescope_aperture_calibration_signature(tel,
         calibration_signature(src))
     if calibration_matches(wfs.state.calibrated, wfs.state.calibration_wavelength, λ,
@@ -872,7 +878,7 @@ function ensure_sh_calibration!(wfs::ShackHartmannWFS, tel::Telescope, src::Abst
         n = tel.params.resolution
         pixel_scale_init = sh_pixel_scale_init(
             tel.params.diameter / wfs.params.n_lenslets,
-            wfs.state.effective_padding, src)
+            wfs.state.effective_padding, λ)
         pixel_scale = T(wfs.state.binning_pixel_scale) * pixel_scale_init
         rad2arcsec = T(180 * 3600 / π)
         scale = T(T(tel.params.diameter) * pixel_scale /
@@ -901,3 +907,10 @@ function ensure_sh_calibration!(wfs::ShackHartmannWFS, tel::Telescope, src::Abst
         signature=wfs.state.calibration_signature)
     return wfs
 end
+
+@inline sh_calibration_wavelength(wfs::ShackHartmannWFS,
+    src::AbstractSource) = calibration_wavelength(src,
+    eltype(wfs.state.slopes))
+
+@inline sh_calibration_wavelength(wfs::ShackHartmannWFS,
+    src::SpectralSource) = require_sh_common_spectral_grid(wfs, src)

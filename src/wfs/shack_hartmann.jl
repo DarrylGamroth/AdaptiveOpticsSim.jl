@@ -138,13 +138,18 @@ end
 )
 
 @inline supports_prepared_runtime(::ShackHartmannWFS{<:Diffractive}, ::AbstractSource) = true
+@inline supports_prepared_runtime(wfs::ShackHartmannWFS{<:Diffractive},
+    src::SpectralSource) = sh_has_common_spectral_grid(wfs, src)
 @inline supports_prepared_runtime(::ShackHartmannWFS{<:Diffractive}, ::Asterism) = true
 @inline supports_detector_output(::ShackHartmannWFS{<:Diffractive}, ::AbstractDetector) = true
 @inline supports_stacked_sources(::ShackHartmannWFS, ::Asterism) = true
 @inline supports_stacked_sources(::ShackHartmannWFS, ::SpectralSource) = true
+@inline supports_stacked_sources(wfs::ShackHartmannWFS{<:Diffractive},
+    src::SpectralSource) = sh_has_common_spectral_grid(wfs, src)
 @inline supports_stacked_sources(::ShackHartmannWFS, ::ExtendedSource) = true
 @inline supports_grouped_execution(::ShackHartmannWFS{<:Diffractive}, ::Asterism) = true
-@inline supports_grouped_execution(::ShackHartmannWFS{<:Diffractive}, ::SpectralSource) = true
+@inline supports_grouped_execution(wfs::ShackHartmannWFS{<:Diffractive},
+    src::SpectralSource) = sh_has_common_spectral_grid(wfs, src)
 @inline supports_grouped_execution(::ShackHartmannWFS{<:Diffractive}, ::ExtendedSource) = true
 
 @inline function prepare_runtime_wfs!(wfs::ShackHartmannWFS{<:Diffractive}, tel::Telescope, src::AbstractSource)
@@ -154,7 +159,7 @@ end
 end
 
 @inline function prepare_runtime_wfs!(wfs::ShackHartmannWFS{<:Diffractive}, tel::Telescope, src::SpectralSource)
-    prepare_sampling!(wfs, tel, spectral_reference_source(src))
+    prepare_sampling!(wfs, tel, src)
     ensure_sh_calibration!(wfs, tel, src)
     return wfs
 end
@@ -173,7 +178,7 @@ end
 end
 
 @inline function _measure_for_calibration!(wfs::ShackHartmannWFS{<:Diffractive}, tel::Telescope, src::SpectralSource)
-    prepare_sampling!(wfs, tel, spectral_reference_source(src))
+    prepare_sampling!(wfs, tel, src)
     ensure_sh_calibration!(wfs, tel, src)
     return measure!(wfs, tel, src)
 end

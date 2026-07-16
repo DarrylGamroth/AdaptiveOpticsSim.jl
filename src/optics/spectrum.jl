@@ -1,3 +1,12 @@
+"""
+    SpectralSample(wavelength, weight)
+
+One wavelength quadrature sample. Within a validated `SpectralBundle`, `weight`
+is the normalized fraction of the source's total photon irradiance carried by
+that sample. It is a photon-number fraction, not a radiant-energy fraction.
+The ordinary `SpectralBundle` constructors accept nonnegative proportional
+weights and normalize them to sum to one.
+"""
 struct SpectralSample{T<:AbstractFloat}
     wavelength::T
     weight::T

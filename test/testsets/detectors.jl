@@ -4,12 +4,23 @@ function detector_test_intensity_map(values::AbstractMatrix{T};
     normalization::AbstractOpticalNormalization=PhotonRateNormalization(),
     spatial_measure::AbstractSpatialMeasure=CellIntegratedMeasure(),
     coherence::AbstractCombinationPolicy=IncoherentIntensityAddition(),
-    spectral::AbstractSpectralCoordinate=UnspecifiedSpectralCoordinate()) where {T<:AbstractFloat}
+    spectral::AbstractSpectralCoordinate=MonochromaticChannel(0.55e-6)) where {T<:AbstractFloat}
     metadata = OpticalPlaneMetadata(kind, values;
         coordinate_domain=AngularCoordinates(), sampling=sampling,
         normalization=normalization, spatial_measure=spatial_measure,
         coherence=coherence, spectral=spectral)
     return IntensityMap(metadata, values)
+end
+
+function detector_state_snapshot(det::Detector)
+    names = fieldnames(typeof(det.state))
+    values = map(name -> getfield(det.state, name), names)
+    return NamedTuple{names}(values)
+end
+
+function detector_state_matches_snapshot(det::Detector, snapshot::NamedTuple)
+    return all(name -> getfield(det.state, name) === getfield(snapshot, name),
+        keys(snapshot))
 end
 
 struct UnkeyedCalibrationFrameResponse{T<:AbstractFloat} <:
@@ -337,7 +348,41 @@ end
     @test capture!(spectral_detector, spectral_rate, spectral_plan;
         rng=MersenneTwister(200)) ≈ fill(1.0, 2, 2)
     @test_throws InvalidConfiguration prepare_detector_acquisition(
-        spectral_detector, detector_test_intensity_map(ones(2, 2)))
+        spectral_detector, detector_test_intensity_map(ones(2, 2);
+            spectral=UnspecifiedSpectralCoordinate()))
+    @test_throws InvalidConfiguration prepare_detector_acquisition(
+        Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0,
+            response_model=NullFrameResponse()),
+        detector_test_intensity_map(ones(2, 2);
+            spectral=UnspecifiedSpectralCoordinate()))
+    @test_throws InvalidConfiguration prepare_detector_acquisition(
+        spectral_detector, detector_test_intensity_map(ones(2, 2);
+            spectral=IntegratedSpectralChannel(:science_passband)))
+
+    for (qe, spectral) in (
+        (1.0, UnspecifiedSpectralCoordinate()),
+        (SampledQuantumEfficiency([0.50e-6, 0.60e-6], [0.2, 0.8]),
+            IntegratedSpectralChannel(:science_passband)),
+    )
+        rejecting_detector = Detector(integration_time=1.0,
+            noise=NoiseNone(), qe=qe, response_model=NullFrameResponse())
+        state_before = detector_state_snapshot(rejecting_detector)
+        @test_throws InvalidConfiguration prepare_detector_acquisition(
+            rejecting_detector, detector_test_intensity_map(ones(2, 2);
+                spectral=spectral))
+        @test detector_state_matches_snapshot(rejecting_detector,
+            state_before)
+    end
+
+    invalid_window_detector = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0, readout_window=FrameWindow(1:3, 1:3),
+        response_model=NullFrameResponse())
+    invalid_window_state_before = detector_state_snapshot(
+        invalid_window_detector)
+    @test_throws DimensionMismatchError prepare_detector_acquisition(
+        invalid_window_detector, detector_test_intensity_map(ones(2, 2)))
+    @test detector_state_matches_snapshot(invalid_window_detector,
+        invalid_window_state_before)
 
     response_kernel = [0.0 0.1 0.0; 0.1 0.6 0.1; 0.0 0.1 0.0]
     density_values = zeros(9, 9)
@@ -395,6 +440,7 @@ end
     external_values = fill(3.0, 2, 2)
     external_metadata = OpticalPlaneMetadata(DetectorPlane(), external_values;
         coordinate_domain=AngularCoordinates(), sampling=(0.2, 0.2),
+        spectral=IntegratedSpectralChannel(:proper_science_passband),
         normalization=PhotonRateNormalization(),
         spatial_measure=CellIntegratedMeasure(),
         coherence=IncoherentIntensityAddition())

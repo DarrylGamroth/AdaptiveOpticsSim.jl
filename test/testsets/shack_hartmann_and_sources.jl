@@ -1,3 +1,9 @@
+function sh_spectral_grid_guard_allocation_bytes(wfs, src)
+    AdaptiveOpticsSim.require_sh_common_spectral_grid(wfs, src)
+    return @allocated AdaptiveOpticsSim.require_sh_common_spectral_grid(
+        wfs, src)
+end
+
 @testset "Shack-Hartmann valid subaperture policies" begin
     tel = Telescope(resolution=352, diameter=1.22)
     sh_geom = ShackHartmannWFS(tel; n_lenslets=16, mode=Diffractive(), T=Float32)
@@ -182,6 +188,7 @@ end
     det = Detector(noise=NoiseNone(), binning=1)
     sh_det = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     point_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_det, tel, src, det, MersenneTwister(21))
+    point_spots = copy(sh_det.state.spot_cube)
     @test isfinite(point_peak)
     @test point_peak > 0
     sh_det_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
@@ -189,16 +196,44 @@ end
     point_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(KA_CPU_STYLE, sh_det_accel, tel, src, det, MersenneTwister(21))
     @test point_peak_accel ≈ point_peak
 
-    poly = with_spectrum(src, SpectralBundle([SpectralSample(0.95 * wavelength(src), 0.5),
-        SpectralSample(1.05 * wavelength(src), 0.5)]))
-    sh_poly = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    poly_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_poly, tel, poly, det, MersenneTwister(22))
-    @test isfinite(poly_peak)
-    @test poly_peak > 0
-    sh_poly_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    AdaptiveOpticsSim.prepare_sampling!(sh_poly_accel, tel, src)
-    poly_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(KA_CPU_STYLE, sh_poly_accel, tel, poly, det, MersenneTwister(22))
-    @test poly_peak_accel ≈ poly_peak
+    distinct_spectral = with_spectrum(src, SpectralBundle([
+        SpectralSample(0.95 * wavelength(src), 0.5),
+        SpectralSample(1.05 * wavelength(src), 0.5),
+    ]))
+    sh_distinct = ShackHartmannWFS(tel; n_lenslets=4,
+        mode=Diffractive(), n_pix_subap=4)
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.sampled_spots_peak!(
+        sh_distinct, tel, distinct_spectral, det, MersenneTwister(22))
+    AdaptiveOpticsSim.prepare_sampling!(sh_distinct, tel, src)
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.sampled_spots_peak!(
+        AdaptiveOpticsSim.ScalarCPUStyle(), sh_distinct, tel,
+        distinct_spectral, det, MersenneTwister(22))
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.sampled_spots_peak!(
+        KA_CPU_STYLE, sh_distinct, tel, distinct_spectral, det,
+        MersenneTwister(22))
+
+    common_spectral = with_spectrum(src, SpectralBundle([
+        SpectralSample(wavelength(src), 0.5),
+        SpectralSample(wavelength(src), 0.5),
+    ]))
+    sh_spectral = ShackHartmannWFS(tel; n_lenslets=4,
+        mode=Diffractive(), n_pix_subap=4)
+    spectral_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_spectral, tel,
+        common_spectral, det, MersenneTwister(22))
+    spectral_spots = copy(sh_spectral.state.spot_cube)
+    @test isfinite(spectral_peak)
+    @test spectral_peak > 0
+    @test spectral_peak ≈ point_peak
+    @test spectral_spots ≈ point_spots
+    sh_spectral_accel = ShackHartmannWFS(tel; n_lenslets=4,
+        mode=Diffractive(), n_pix_subap=4)
+    AdaptiveOpticsSim.prepare_sampling!(sh_spectral_accel, tel,
+        common_spectral)
+    spectral_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(
+        KA_CPU_STYLE, sh_spectral_accel, tel, common_spectral, det,
+        MersenneTwister(22))
+    @test spectral_peak_accel ≈ spectral_peak
+    @test sh_spectral_accel.state.spot_cube ≈ spectral_spots
 
     ext_single = with_extended_source(src, PointCloudSourceModel([(0.0, 0.0)], [1.0]))
     sh_ext_single = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
@@ -464,16 +499,30 @@ end
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     λ0 = wavelength(src)
+    λshift = 1.05 * λ0
     bundle_single = SpectralBundle([SpectralSample(λ0, 1.0)])
+    bundle_shifted_single = SpectralBundle([
+        SpectralSample(λshift, 1.0),
+    ])
+    bundle_common = SpectralBundle([
+        SpectralSample(λshift, 0.4),
+        SpectralSample(λshift, 0.6),
+    ])
     bundle_broad = SpectralBundle([SpectralSample(0.9 * λ0, 0.4), SpectralSample(1.1 * λ0, 0.6)])
     poly_single = with_spectrum(src, bundle_single)
+    poly_shifted_single = with_spectrum(src, bundle_shifted_single)
+    poly_common = with_spectrum(src, bundle_common)
     poly_broad = with_spectrum(src, bundle_broad)
+    shifted_mono = source_with_wavelength_and_radiometric_value(src,
+        λshift, photon_irradiance(src))
 
     @test sum(sample.weight for sample in bundle_broad) ≈ 1.0
     @test weighted_wavelength(bundle_broad) ≈ (0.9 * λ0 * 0.4 + 1.1 * λ0 * 0.6)
     @test has_spectral_bundle(poly_broad)
     @test is_polychromatic(poly_broad)
+    @test is_polychromatic(poly_common)
     @test !is_polychromatic(poly_single)
+    @test !is_polychromatic(poly_shifted_single)
     @test spectral_reference_source(poly_broad) === src
 
     zb = ZernikeBasis(tel, 5)
@@ -483,17 +532,45 @@ end
 
     sh_mono = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive())
     sh_single = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive())
+    sh_shifted_mono = ShackHartmannWFS(tel; n_lenslets=8,
+        mode=Diffractive())
+    sh_shifted_single = ShackHartmannWFS(tel; n_lenslets=8,
+        mode=Diffractive())
+    sh_common = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive())
     sh_broad = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive())
 
     mono_slopes = copy(measure!(sh_mono, tel, src))
     single_slopes = copy(measure!(sh_single, tel, poly_single))
-    broad_slopes_1 = copy(measure!(sh_broad, tel, poly_broad))
-    broad_slopes_2 = copy(measure!(sh_broad, tel, poly_broad))
+    shifted_mono_slopes = copy(measure!(sh_shifted_mono, tel,
+        shifted_mono))
+    shifted_single_slopes = copy(measure!(sh_shifted_single, tel,
+        poly_shifted_single))
+    common_slopes_1 = copy(measure!(sh_common, tel, poly_common))
+    common_slopes_2 = copy(measure!(sh_common, tel, poly_common))
 
     @test single_slopes ≈ mono_slopes atol=1e-10 rtol=1e-10
-    @test broad_slopes_1 ≈ broad_slopes_2 atol=1e-10 rtol=1e-10
-    @test norm(broad_slopes_1 - mono_slopes) > 1e-8
-    @test supports_stacked_sources(sh_broad, poly_broad)
+    @test shifted_single_slopes ≈ shifted_mono_slopes atol=1e-10 rtol=1e-10
+    @test common_slopes_1 ≈ common_slopes_2 atol=1e-10 rtol=1e-10
+    @test common_slopes_1 ≈ shifted_mono_slopes atol=1e-10 rtol=1e-10
+    @test sh_common.state.spot_cube ≈
+        sh_shifted_mono.state.spot_cube atol=1e-8 rtol=1e-12
+    @test sum(sh_common.state.spot_cube) ≈
+        sum(sh_shifted_mono.state.spot_cube) atol=1e-8 rtol=1e-12
+    @test sh_shifted_single.state.calibration_wavelength == λshift
+    @test sh_common.state.calibration_wavelength == λshift
+    @test AdaptiveOpticsSim.sh_has_common_spectral_grid(sh_common,
+        poly_common)
+    @test !AdaptiveOpticsSim.sh_has_common_spectral_grid(sh_broad,
+        poly_broad)
+    @test sh_spectral_grid_guard_allocation_bytes(sh_common,
+        poly_common) == 0
+    @test supports_prepared_runtime(sh_common, poly_common)
+    @test supports_stacked_sources(sh_common, poly_common)
+    @test supports_grouped_execution(sh_common, poly_common)
+    @test !supports_prepared_runtime(sh_broad, poly_broad)
+    @test !supports_stacked_sources(sh_broad, poly_broad)
+    @test !supports_grouped_execution(sh_broad, poly_broad)
+    @test_throws InvalidConfiguration measure!(sh_broad, tel, poly_broad)
 
     pyr_mono = PyramidWFS(tel; pupil_samples=8, mode=Diffractive(), modulation=1.0)
     pyr_single = PyramidWFS(tel; pupil_samples=8, mode=Diffractive(), modulation=1.0)
@@ -510,9 +587,123 @@ end
     @test supports_stacked_sources(pyr_broad, poly_broad)
 
     det = Detector(noise=NoiseNone(), binning=1)
-    spectral_frame = measure!(sh_broad, tel, poly_broad, det)
-    @test size(sh_broad.state.detector_noise_cube) == size(sh_broad.state.spot_cube)
-    @test spectral_frame ≈ broad_slopes_1 atol=1e-10 rtol=1e-10
+    spectral_frame = copy(measure!(sh_common, tel, poly_common, det))
+    @test size(sh_common.state.detector_noise_cube) ==
+        size(sh_common.state.spot_cube)
+    @test spectral_frame ≈ common_slopes_1 atol=1e-10 rtol=1e-10
+    @test sh_common.state.spot_cube ≈
+        sh_shifted_mono.state.spot_cube atol=1e-8 rtol=1e-12
+
+    sampled_qe = SampledQuantumEfficiency(
+        [0.9 * λshift, 1.1 * λshift], [0.25, 0.75])
+    effective_qe = qe_at(sampled_qe, λshift)
+    exposure = 2.5
+    for style in (ScalarCPUStyle(), KA_CPU_STYLE)
+        spectral_wfs = ShackHartmannWFS(tel; n_lenslets=8,
+            mode=Diffractive())
+        spectral_detector = Detector(noise=NoiseNone(), qe=sampled_qe,
+            integration_time=exposure, binning=1,
+            response_model=NullFrameResponse())
+        prepare_sampling!(spectral_wfs, tel, poly_common)
+        sampled_spots_peak!(style, spectral_wfs, tel, poly_common,
+            spectral_detector, MersenneTwister(793))
+
+        monochromatic_wfs = ShackHartmannWFS(tel; n_lenslets=8,
+            mode=Diffractive())
+        monochromatic_detector = Detector(noise=NoiseNone(), qe=sampled_qe,
+            integration_time=exposure, binning=1,
+            response_model=NullFrameResponse())
+        prepare_sampling!(monochromatic_wfs, tel, shifted_mono)
+        sampled_spots_peak!(style, monochromatic_wfs, tel, shifted_mono,
+            monochromatic_detector, MersenneTwister(793))
+
+        optical_wfs = ShackHartmannWFS(tel; n_lenslets=8,
+            mode=Diffractive())
+        prepare_sampling!(optical_wfs, tel, shifted_mono)
+        sampled_spots_peak!(style, optical_wfs, tel, shifted_mono)
+
+        @test spectral_wfs.state.spot_cube ≈
+            monochromatic_wfs.state.spot_cube atol=1e-8 rtol=1e-11
+        @test spectral_wfs.state.spot_cube ≈ (
+            optical_wfs.state.spot_cube .* (effective_qe * exposure)
+        ) atol=1e-8 rtol=1e-11
+    end
+
+    mixed_wavelengths = [
+        4.000015249516764e-7,
+        4.0000149709840115e-7,
+    ]
+    @test Float32(mixed_wavelengths[1]) == Float32(mixed_wavelengths[2])
+    mixed_source = with_spectrum(src, SpectralBundle(
+        mixed_wavelengths, [0.5, 0.5]; T=Float64))
+    mixed_scalar_wfs = ShackHartmannWFS(tel; n_lenslets=8,
+        mode=Diffractive(), T=Float32)
+    mixed_ka_wfs = ShackHartmannWFS(tel; n_lenslets=8,
+        mode=Diffractive(), T=Float32)
+    @test AdaptiveOpticsSim.sh_has_common_spectral_grid(mixed_scalar_wfs,
+        mixed_source)
+    prepare_sampling!(mixed_scalar_wfs, tel, mixed_source)
+    prepare_sampling!(mixed_ka_wfs, tel, mixed_source)
+    sampled_spots_peak!(ScalarCPUStyle(), mixed_scalar_wfs, tel,
+        mixed_source)
+    sampled_spots_peak!(KA_CPU_STYLE, mixed_ka_wfs, tel, mixed_source)
+    @test mixed_ka_wfs.state.opd_to_cycles_host[1] ==
+        mixed_ka_wfs.state.opd_to_cycles_host[2]
+    @test mixed_ka_wfs.state.spot_cube ≈
+        mixed_scalar_wfs.state.spot_cube atol=2e-5 rtol=2e-5
+
+    guard_wfs = ShackHartmannWFS(tel; n_lenslets=8,
+        mode=Diffractive())
+    guard_detector = Detector(noise=NoisePhotonReadout(0.1), binning=1)
+    measure!(guard_wfs, tel, poly_common, guard_detector;
+        rng=MersenneTwister(791))
+    guard_state_before = (
+        slopes=copy(guard_wfs.state.slopes),
+        intensity=copy(guard_wfs.state.intensity),
+        spot_cube=copy(guard_wfs.state.spot_cube),
+        exported_spot_cube=copy(guard_wfs.state.exported_spot_cube),
+        reference_signal=copy(guard_wfs.state.reference_signal_2d),
+        effective_padding=guard_wfs.state.effective_padding,
+        binning_pixel_scale=guard_wfs.state.binning_pixel_scale,
+        sampled_n_pix_subap=guard_wfs.state.sampled_n_pix_subap,
+        phasor_ratio=guard_wfs.state.phasor_ratio,
+        calibrated=guard_wfs.state.calibrated,
+        calibration_wavelength=guard_wfs.state.calibration_wavelength,
+        calibration_signature=guard_wfs.state.calibration_signature,
+    )
+    detector_frame_before = copy(output_frame(guard_detector))
+    detector_integrated_time_before = guard_detector.state.integrated_time
+    detector_readout_ready_before = guard_detector.state.readout_ready
+    rejection_rng = MersenneTwister(792)
+    rejection_rng_reference = copy(rejection_rng)
+    @test_throws InvalidConfiguration measure!(guard_wfs, tel, poly_broad,
+        guard_detector; rng=rejection_rng)
+    @test isequal(guard_wfs.state.slopes, guard_state_before.slopes)
+    @test isequal(guard_wfs.state.intensity, guard_state_before.intensity)
+    @test isequal(guard_wfs.state.spot_cube,
+        guard_state_before.spot_cube)
+    @test isequal(guard_wfs.state.exported_spot_cube,
+        guard_state_before.exported_spot_cube)
+    @test isequal(guard_wfs.state.reference_signal_2d,
+        guard_state_before.reference_signal)
+    @test guard_wfs.state.effective_padding ==
+        guard_state_before.effective_padding
+    @test guard_wfs.state.binning_pixel_scale ==
+        guard_state_before.binning_pixel_scale
+    @test guard_wfs.state.sampled_n_pix_subap ==
+        guard_state_before.sampled_n_pix_subap
+    @test guard_wfs.state.phasor_ratio == guard_state_before.phasor_ratio
+    @test guard_wfs.state.calibrated == guard_state_before.calibrated
+    @test guard_wfs.state.calibration_wavelength ==
+        guard_state_before.calibration_wavelength
+    @test guard_wfs.state.calibration_signature ==
+        guard_state_before.calibration_signature
+    @test isequal(output_frame(guard_detector), detector_frame_before)
+    @test guard_detector.state.integrated_time ==
+        detector_integrated_time_before
+    @test guard_detector.state.readout_ready == detector_readout_ready_before
+    @test rand(rejection_rng, UInt64) ==
+        rand(rejection_rng_reference, UInt64)
 
     pyr_det = Detector(noise=NoiseNone(), binning=1)
     pyr_det_slopes = measure!(pyr_broad, tel, poly_broad, pyr_det)
@@ -532,26 +723,20 @@ end
     for style in (ScalarCPUStyle(), KA_CPU_STYLE)
         selective_sh = ShackHartmannWFS(tel;
             n_lenslets=8, mode=Diffractive())
-        prepare_sampling!(selective_sh, tel,
-            spectral_reference_source(selective_source))
+        prepare_sampling!(selective_sh, tel, src)
+        fill!(selective_sh.state.spot_cube, 17.0)
+        spot_cube_before = copy(selective_sh.state.spot_cube)
         selective_detector = Detector(noise=NoiseNone(), qe=selective_qe,
             integration_time=1.0, binning=1,
             response_model=NullFrameResponse())
-        sampled_spots_peak!(style, selective_sh, tel, selective_source,
-            selective_detector, MersenneTwister(780))
-
-        transmitted_sh = ShackHartmannWFS(tel;
-            n_lenslets=8, mode=Diffractive())
-        prepare_sampling!(transmitted_sh, tel,
-            spectral_reference_source(selective_source))
-        transmitted_detector = Detector(noise=NoiseNone(), qe=1.0,
-            integration_time=1.0, binning=1,
-            response_model=NullFrameResponse())
-        sampled_spots_peak!(style, transmitted_sh, tel,
-            transmitted_source, transmitted_detector, MersenneTwister(780))
-
-        @test selective_sh.state.spot_cube ≈
-            transmitted_sh.state.spot_cube atol=1e-8 rtol=1e-11
+        selective_rng = MersenneTwister(780)
+        selective_rng_reference = copy(selective_rng)
+        @test_throws InvalidConfiguration sampled_spots_peak!(style,
+            selective_sh, tel, selective_source, selective_detector,
+            selective_rng)
+        @test isequal(selective_sh.state.spot_cube, spot_cube_before)
+        @test rand(selective_rng, UInt64) ==
+            rand(selective_rng_reference, UInt64)
     end
 
     selective_pyramid = PyramidWFS(tel;
