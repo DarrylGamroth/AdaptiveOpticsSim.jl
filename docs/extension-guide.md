@@ -49,7 +49,51 @@ returned at a HIL/RTC boundary.
 WFS families live in `src/wfs/`. Family-specific implementation should stay
 near the family, usually in the corresponding directory under `src/wfs/`.
 
-New WFS types should provide:
+New physical WFS work should first implement the prepared semantic stages:
+
+- `prepare_wfs_optical_formation(model, input, output)` validates an explicit
+  caller-owned pupil function or electric field and one or more
+  detector-plane photon-arrival-rate outputs; the returned concrete plan is
+  executed by `form_wfs_optical_products!`
+- `prepare_wfs_acquisition(model, optical_products, observation)` validates
+  detector mappings, explicit duration, backend/device placement, and one or
+  more caller-owned `WFSObservation` destinations; the returned concrete plan
+  is executed by `acquire_wfs_observation!` with an explicit caller-owned RNG
+- `prepare_wfs_estimation(model, observation, measurement)` validates the
+  estimator and caller-owned `WFSMeasurement`; the returned concrete plan is
+  executed by `estimate_wfs_measurement!` and declares
+  `AcquiredObservationPath()` through `wfs_measurement_path`
+
+A geometric or reduced-order provider may instead prepare estimation directly
+from a `PupilFunction` or pupil-plane `ElectricField`. It must declare
+`DirectMeasurementPath()` and must not create unused rate, detector, or
+observation storage. `WFSObservation` supports scalar `Ref` storage and arrays
+of any rank, as does `WFSMeasurement`; use concrete tuples for multiple
+observations. Preserve incompatible spectral or branch rate products in
+`OpticalProductBundle`.
+
+Extensions should call the qualified validation seams
+`AdaptiveOpticsSim.validate_wfs_optical_input`,
+`AdaptiveOpticsSim.validate_wfs_optical_products`,
+`AdaptiveOpticsSim.validate_wfs_observation` or
+`AdaptiveOpticsSim.validate_wfs_observations`, and
+`AdaptiveOpticsSim.validate_wfs_measurement` as applicable before returning a
+prepared plan. These remain qualified extension APIs rather than ordinary
+exported workflow names.
+
+Prepared types should contain concrete immutable plans/params and separately
+typed single-writer workspace, detector, calibration, and RNG state. Bind exact
+array/state identities, validate physical device as well as semantic backend,
+and create detector-output aliases or packed views only after detector buffers
+are prepared. Repeated execution must not resize, rebuild metadata, query a
+device, copy to the host, or select stages through an abstract container.
+Raise `WFSPreparationError(stage, reason, msg)` for preparation
+incompatibility and for execution-time prepared-binding rejection before any
+destination mutation. The protocol stages are `:optical_formation`,
+`:acquisition`, and `:estimation`; `reason` is an open extension identifier.
+
+The current maintained WFS families are being migrated incrementally. During
+that transition, a legacy `AbstractWFS` family also provides:
 
 - a concrete sensor type subtype of the package WFS abstraction
 - setup/precomputation methods owned by the WFS family
@@ -58,8 +102,8 @@ New WFS types should provide:
   products
 - detector image formation if the sensor has a maintained detector-facing path
 
-The generic runtime should call WFS-owned seams rather than branching on sensor
-families directly.
+The generic runtime and future family adapters call prepared seams or WFS-owned
+legacy seams through dispatch rather than branching on sensor families.
 
 ## Runtime Source Roles
 

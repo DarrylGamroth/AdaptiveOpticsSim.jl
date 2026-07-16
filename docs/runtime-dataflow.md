@@ -106,11 +106,14 @@ prepared flow:
 2. render each due direction through a path-local prepared renderer into a
    caller-owned pupil function or electric field
 3. apply visible static and controllable surfaces to that path product
-4. form a WFS or direct-science photon-arrival-rate `IntensityMap` through a
-   prepared optical front end
-5. integrate each compatible detector's explicit sample/exposure duration and
-   acquire independently from the immutable arrival-rate product
-6. estimate a WFS measurement where the endpoint requires one
+4. call `form_wfs_optical_products!` to form one WFS photon-arrival-rate
+   `IntensityMap`, a concrete tuple of them, or an `OpticalProductBundle`
+   through a prepared optical front end
+5. call `acquire_wfs_observation!` to integrate each compatible detector's
+   explicit sample/exposure duration independently without mutating the
+   prepared arrival-rate storage or its immutable metadata/binding
+6. call `estimate_wfs_measurement!` to write a typed `WFSMeasurement` where the
+   endpoint requires one
 
 The telescope owns aperture, reflectivity, spatial sampling, and geometry; it
 does not own cadence/exposure duration, the path OPD/field, PSF result, FFT
@@ -239,10 +242,12 @@ The prepared frame-detector path now follows this order:
 6. reduce or estimate WFS signals where required
 7. snapshot only the runtime outputs that were requested
 
-Most WFS state types still compose several of these stages internally; the
-typed front-end/observation/estimator split is later Gate 0 work. Raw matrix
-detector entry remains a documented legacy cell-integrated-rate path, while
-`DetectorAcquisitionPlan` is the metadata-validated prepared boundary.
+`WFSObservation`, `WFSMeasurement`, and the generic prepared
+formation/acquisition/estimation protocols now establish this static boundary.
+Most maintained WFS state types still compose several stages internally; their
+adoption of the contract remains later Gate 0 family work. Raw matrix detector
+entry remains a documented legacy cell-integrated-rate path, while
+`DetectorAcquisitionPlan` is the metadata-validated prepared frame boundary.
 
 The runtime output plan decides whether a given simulation step must produce:
 

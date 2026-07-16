@@ -7,6 +7,7 @@
 export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError
 export UnsupportedAlgorithm, NumericalConditionError
 export AtmosphereTimeError, AtmosphereEpochError
+export WFSPreparationError
 
 export FidelityProfile, ScientificProfile, FastProfile, default_fidelity_profile
 export runtime_rng, deterministic_reference_rng
@@ -117,6 +118,15 @@ export detector_ramp_cube, detector_ramp_times
 export readout_ready, reset_integration!, thermal_model
 
 export Diffractive, Geometric
+export WFSObservationMetadata, WFSMeasurementMetadata
+export WFSObservation, WFSMeasurement
+export observation_storage, observation_units, observation_metadata
+export measurement_storage, measurement_units, measurement_metadata
+export prepare_wfs_optical_formation, form_wfs_optical_products!
+export prepare_wfs_acquisition, acquire_wfs_observation!
+export prepare_wfs_estimation, estimate_wfs_measurement!
+export AbstractWFSMeasurementPath, AcquiredObservationPath
+export DirectMeasurementPath, wfs_measurement_path
 export ShackHartmannWFS, PyramidWFS, BioEdgeWFS, ZernikeWFS, CurvatureWFS
 export CurvatureReadoutModel, CurvatureCountingReadout, CurvatureBranchResponse
 export FluxThresholdValidSubapertures
