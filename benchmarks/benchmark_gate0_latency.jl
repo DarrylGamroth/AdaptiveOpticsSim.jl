@@ -54,11 +54,12 @@ function make_gate0_card(raw::AbstractDict)
             sampling_time=1e-3, central_obstruction=0.2)
         gate0_opd_ramp!(tel)
         src = Source(band=:I, magnitude=1.0)
-        field = Matrix{ComplexF64}(undef, resolution * zero_padding,
-            resolution * zero_padding)
-        let field=field, tel=tel, src=src, zero_padding=zero_padding
-            () -> AdaptiveOpticsSim.fill_telescope_field!(field, tel, src;
-                zero_padding=zero_padding)
+        wavefront = PupilFunction(tel)
+        apply_opd!(wavefront, opd_map(tel))
+        field = ElectricField(wavefront, src; zero_padding=zero_padding)
+        plan = prepare_pupil_field(tel, wavefront, src, field)
+        let field=field, wavefront=wavefront, plan=plan
+            () -> fill_electric_field!(field, wavefront, plan)
         end
     elseif kind == "direct_psf"
         zero_padding = Int(raw["zero_padding"])
@@ -66,12 +67,13 @@ function make_gate0_card(raw::AbstractDict)
             sampling_time=1e-3, central_obstruction=0.2)
         gate0_opd_ramp!(tel)
         src = Source(band=:I, magnitude=1.0)
-        workspace = AdaptiveOpticsSim.Workspace(resolution * zero_padding;
-            T=Float64)
-        let tel=tel, src=src, workspace=workspace,
-            zero_padding=zero_padding
-            () -> compute_psf!(tel, src; zero_padding=zero_padding,
-                ws=workspace)
+        wavefront = PupilFunction(tel)
+        apply_opd!(wavefront, opd_map(tel))
+        field = ElectricField(wavefront, src; zero_padding=zero_padding)
+        prepared = prepare_direct_psf(tel, wavefront, src, field)
+        let output=prepared.output, field=field, wavefront=wavefront,
+            plan=prepared.plan, workspace=prepared.workspace
+            () -> compute_psf!(output, field, wavefront, plan, workspace)
         end
     elseif kind == "spatial_filter"
         zero_padding = Int(raw["zero_padding"])
@@ -81,8 +83,18 @@ function make_gate0_card(raw::AbstractDict)
         src = Source(band=:I, magnitude=1.0)
         spatial_filter = SpatialFilter(tel; shape=SquareFilter(),
             diameter=resolution / 3, zero_padding=zero_padding)
-        let spatial_filter=spatial_filter, tel=tel, src=src
-            () -> filter!(spatial_filter, tel, src)
+        wavefront = PupilFunction(tel)
+        apply_opd!(wavefront, opd_map(tel))
+        field = ElectricField(wavefront, src; zero_padding=zero_padding)
+        formation = prepare_pupil_field(tel, wavefront, src, field;
+            center_even_grid=false, amplitude_scale=1)
+        fill_electric_field!(field, wavefront, formation)
+        output = PupilFunction(tel)
+        plan = prepare_spatial_filter(tel, spatial_filter, field, output)
+        workspace = SpatialFilterWorkspace(spatial_filter)
+        let output=output, field=field, spatial_filter=spatial_filter,
+            plan=plan, workspace=workspace
+            () -> filter!(output, field, spatial_filter, plan, workspace)
         end
     elseif kind == "atmosphere_direction"
         tel = Telescope(resolution=resolution, diameter=8.0,

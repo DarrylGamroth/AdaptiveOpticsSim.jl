@@ -502,12 +502,6 @@ function _batched_apply_response!(::ScalarCPUStyle, model::RectangularPixelApert
     return cube
 end
 
-function _batched_apply_response!(::ScalarCPUStyle, model::SeparablePixelMTF,
-    cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
-    _batched_apply_separable_response!(ScalarCPUStyle(), cube, scratch, model.kernel_y, model.kernel_x)
-    return cube
-end
-
 function _batched_apply_response!(style::AcceleratorStyle, model::GaussianPixelResponse,
     cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
     _batched_apply_separable_response!(style, cube, scratch, model.kernel, model.kernel)
@@ -527,12 +521,6 @@ function _batched_apply_response!(style::AcceleratorStyle, model::SampledFrameRe
 end
 
 function _batched_apply_response!(style::AcceleratorStyle, model::RectangularPixelAperture,
-    cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
-    _batched_apply_separable_response!(style, cube, scratch, model.kernel_y, model.kernel_x)
-    return cube
-end
-
-function _batched_apply_response!(style::AcceleratorStyle, model::SeparablePixelMTF,
     cube::AbstractArray{T,3}, scratch::AbstractArray{T,3}) where {T}
     _batched_apply_separable_response!(style, cube, scratch, model.kernel_y, model.kernel_x)
     return cube

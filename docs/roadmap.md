@@ -38,8 +38,8 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    planes and propagation workspaces; separate shared atmosphere evolution from
    path-local NGS/LGS/source rendering; remove temporal cadence from the
    telescope; define plane geometry/radiometry and safe spectral combination;
-   and separate direct-science photon-rate irradiance formation from detector-
-   owned temporal integration and acquisition. Then decompose every maintained
+   and separate direct-science photon-arrival-rate formation from detector-owned
+   temporal integration and acquisition. Then decompose every maintained
    WFS into a prepared optical front end, detector acquisition, and estimator.
    Extract the Shack-Hartmann microlens array; separate Pyramid/BioEdge
    modulation and focal-plane optics; separate Zernike/Curvature propagation

@@ -9,7 +9,7 @@ function main(; resolution::Int=24)
     apply!(ncpa, tel, DMReplace())
     psf = copy(compute_psf!(tel, src; zero_padding=2))
 
-    @info "NCPA tutorial complete" opd_rms=pupil_rms(tel.state.opd, tel.state.pupil)
+    @info "NCPA tutorial complete" opd_rms=pupil_rms(tel.state.opd, pupil_mask(tel))
     return (
         ncpa_opd=copy(tel.state.opd),
         psf=psf,

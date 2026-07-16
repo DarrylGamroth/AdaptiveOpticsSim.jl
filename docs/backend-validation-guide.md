@@ -175,8 +175,8 @@ julia --project=benchmarks/amdgpu benchmarks/benchmark_amdgpu.jl
 ```
 
 `benchmark_detector_hil_latency.jl` is the conventional-detector latency card
-suite. It covers CMOS, CMOS with explicit MTF and IPC, CCD, fast linear EMCCD,
-HgCdTe avalanche CDS, and 16-sample Skipper CCD capture. The measured boundary
+suite. It covers CMOS, CMOS with explicit presampling response and IPC, CCD,
+fast linear EMCCD, HgCdTe avalanche CDS, and 16-sample Skipper CCD capture. The measured boundary
 starts with an input detector frame already available in memory and ends when
 the converted output frame is ready. It therefore excludes external RTC
 transport, frame-grabber I/O, and camera-link scheduling.
@@ -215,7 +215,7 @@ cards were allocation-free after warmup. Median-over-run latency summaries were:
 | Card | p50 | p99 | p99.9 |
 | --- | ---: | ---: | ---: |
 | CMOS | 56.5 μs | 71.4 μs | 103.8 μs |
-| CMOS with MTF and IPC | 92.0 μs | 110.5 μs | 167.9 μs |
+| CMOS with response and IPC | 92.0 μs | 110.5 μs | 167.9 μs |
 | CCD | 79.6 μs | 96.3 μs | 144.1 μs |
 | fast linear EMCCD | 85.2 μs | 102.9 μs | 153.1 μs |
 | HgCdTe avalanche CDS | 188.9 μs | 223.5 μs | 326.1 μs |

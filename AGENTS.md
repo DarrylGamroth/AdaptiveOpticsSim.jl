@@ -42,12 +42,18 @@
 # - Do not add one-off plan, audit, triage, or inventory documents under docs/.
 # - Use PR descriptions, issues, or git history for temporary planning records.
 #
+# Terminology:
+# - Use the canonical scientific and API terms in docs/glossary.md.
+# - Plane names describe optical location; product names describe quantities.
+# - Define new public scientific terms in the glossary before adding APIs.
+#
 # Tutorials:
 # - Port most OOPAO tutorials to Julia scripts/notebooks.
 # - Use deterministic inputs for reference comparisons where possible.
 
 # Reference docs:
 # - docs/documentation-map.md
+# - docs/glossary.md
 # - docs/extension-guide.md
 # - docs/julia-tutorial-mappings.md
 # - docs/roadmap.md

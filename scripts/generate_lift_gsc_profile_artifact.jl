@@ -26,7 +26,7 @@ function cartesian_basis(tel::Telescope, n_modes::Int)
     @inbounds for j in 1:n, i in 1:n
         px = x[i]
         py = y[j]
-        pupil = tel.state.pupil[i, j] ? 1.0 : 0.0
+        pupil = pupil_mask(tel)[i, j] ? 1.0 : 0.0
         if n_modes >= 1
             basis[i, j, 1] = pupil * px
         end

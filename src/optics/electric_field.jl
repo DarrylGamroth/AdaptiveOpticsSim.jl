@@ -15,6 +15,25 @@
     end
 end
 
+@kernel function fill_pupil_field_kernel!(out, amplitude, opd, phase_shift,
+    amplitude_scale, opd_to_cycles, ox::Int, oy::Int, n::Int, n_pad::Int,
+    apply_centering::Bool)
+    i, j = @index(Global, NTuple)
+    if i <= n_pad && j <= n_pad
+        xi = i - ox
+        yj = j - oy
+        value = zero(eltype(out))
+        if 1 <= xi <= n && 1 <= yj <= n
+            @inbounds value = amplitude_scale * amplitude[xi, yj] *
+                cispi(opd_to_cycles * opd[xi, yj])
+        end
+        if apply_centering
+            value *= cis(phase_shift * (i + j - 2))
+        end
+        @inbounds out[i, j] = value
+    end
+end
+
 @kernel function apply_phase_opd_kernel!(field, phase_or_opd, opd_to_cycles, ox::Int, oy::Int, n::Int,
     full_field::Bool)
     i, j = @index(Global, NTuple)
@@ -57,80 +76,131 @@ end
     end
 end
 
-struct ElectricFieldParams{T<:AbstractFloat}
-    resolution::Int
-    padded_resolution::Int
-    zero_padding::Int
-    wavelength::T
-    sampling_m::T
-end
-
-mutable struct ElectricFieldState{T<:AbstractFloat,
-    C<:AbstractMatrix{Complex{T}},
-    R<:AbstractMatrix{T},
-    P}
-    field::C
-    fft_buffer::C
-    intensity::R
-    fft_plan::P
-end
-
-struct ElectricField{P<:ElectricFieldParams,S<:ElectricFieldState} <: AbstractOpticalElement
-    params::P
-    state::S
+struct PupilFieldFormationPlan{
+    T<:AbstractFloat,
+    I<:OpticalPlaneMetadata,
+    O<:OpticalPlaneMetadata,
+}
+    input_metadata::I
+    output_metadata::O
+    embedding_offsets::NTuple{2,Int}
+    amplitude_scale::T
+    opd_to_cycles::T
+    centering_phase_shift::T
+    apply_centering_phase::Bool
 end
 
 @inline function field_embedding_offsets(resolution::Int, padded_resolution::Int)
     return div(padded_resolution - resolution, 2), div(padded_resolution - resolution, 2)
 end
 
-@inline function field_active_axes(params::ElectricFieldParams)
-    ox, oy = field_embedding_offsets(params.resolution, params.padded_resolution)
-    return (ox + 1:ox + params.resolution, oy + 1:oy + params.resolution)
+@inline function field_active_axes(plan::PupilFieldFormationPlan)
+    ox, oy = plan.embedding_offsets
+    n, m = plan.input_metadata.dimensions
+    return (ox + 1:ox + n, oy + 1:oy + m)
 end
 
-function ElectricField(tel::Telescope, src::AbstractSource;
+function ElectricField(wavefront::PupilFunction, src::AbstractSource;
     zero_padding::Int=1,
-    T::Type{<:AbstractFloat}=eltype(tel.state.opd),
-    backend=nothing)
-    backend = isnothing(backend) ? nothing : _resolve_array_backend(backend)
+    T::Type{<:AbstractFloat}=eltype(wavefront.opd))
     zero_padding >= 1 || throw(InvalidConfiguration("zero_padding must be >= 1"))
-    n = tel.params.resolution
+    n, m = wavefront.metadata.dimensions
+    n == m || throw(DimensionMismatchError(
+        "PupilFunction must be square to prepare an ElectricField"))
     n_pad = n * zero_padding
-    field = if backend === nothing
-        similar(tel.state.opd, Complex{T}, n_pad, n_pad)
-    else
-        backend{Complex{T}}(undef, n_pad, n_pad)
-    end
-    fft_buffer = similar(field)
-    intensity = if backend === nothing
-        similar(tel.state.opd, T, n_pad, n_pad)
-    else
-        backend{T}(undef, n_pad, n_pad)
-    end
-    fft_plan = plan_fft_backend!(fft_buffer)
-    sampling_m = T(tel.params.diameter / tel.params.resolution)
-    params = ElectricFieldParams{T}(n, n_pad, zero_padding, T(wavelength(src)), sampling_m)
-    state = ElectricFieldState{T, typeof(field), typeof(intensity), typeof(fft_plan)}(
-        field,
-        fft_buffer,
-        intensity,
-        fft_plan,
-    )
-    ef = ElectricField(params, state)
-    fill_from_telescope!(ef, tel, src)
-    return ef
+    values = similar(wavefront.opd, Complex{T}, n_pad, n_pad)
+    fill!(values, zero(eltype(values)))
+    sampling = (T(wavefront.metadata.sampling[1]),
+        T(wavefront.metadata.sampling[2]))
+    metadata = OpticalPlaneMetadata(PupilPlane(), values;
+        coordinate_domain=MetricCoordinates(),
+        sampling=sampling,
+        spectral=MonochromaticChannel(T(wavelength(src))))
+    return ElectricField(metadata, values)
 end
 
-function ensure_field_buffers!(ef::ElectricField)
-    n_pad = ef.params.padded_resolution
-    if size(ef.state.field) != (n_pad, n_pad)
-        ef.state.field = similar(ef.state.field, n_pad, n_pad)
-        ef.state.fft_buffer = similar(ef.state.fft_buffer, n_pad, n_pad)
-        ef.state.intensity = similar(ef.state.intensity, n_pad, n_pad)
-        ef.state.fft_plan = plan_fft_backend!(ef.state.fft_buffer)
-    end
-    return ef
+@inline electric_field_wavelength(field::ElectricField) =
+    field.metadata.spectral.wavelength_m
+
+function prepare_pupil_field(tel::Telescope, wavefront::PupilFunction,
+    src::AbstractSource, field::ElectricField;
+    center_even_grid::Bool=true,
+    amplitude_scale::Union{Real,Nothing}=nothing)
+    validate_plane_storage(wavefront.metadata, wavefront.amplitude;
+        label="pupil-wavefront amplitude")
+    validate_plane_storage(wavefront.metadata, wavefront.opd;
+        label="pupil-wavefront OPD")
+    validate_plane_storage(field.metadata, field.values;
+        label="electric field")
+    require_centered_plane_geometry(wavefront.metadata;
+        label="PupilFunction")
+    require_centered_plane_geometry(field.metadata;
+        label="ElectricField")
+    require_metric_coordinates(wavefront.metadata;
+        label="pupil-field input PupilFunction")
+    require_metric_coordinates(field.metadata;
+        label="pupil-field output ElectricField")
+    typeof(wavefront.metadata.kind) === PupilPlane ||
+        throw(InvalidConfiguration(
+            "pupil-field formation requires a pupil-plane wavefront"))
+    typeof(field.metadata.kind) === PupilPlane ||
+        throw(InvalidConfiguration(
+            "pupil-field formation requires a pupil-plane ElectricField"))
+    wavefront.metadata.dimensions == size(pupil_mask(tel)) ||
+        throw(DimensionMismatchError(
+            "PupilFunction dimensions must match telescope aperture"))
+    plane_device(pupil_mask(tel)) == wavefront.metadata.device ||
+        throw(InvalidConfiguration(
+            "telescope aperture and PupilFunction occupy different physical devices"))
+    typeof(backend(tel)) === typeof(backend(wavefront)) ===
+        typeof(backend(field)) || throw(InvalidConfiguration(
+            "telescope, PupilFunction, and ElectricField backends must match"))
+    wavefront.metadata.device == field.metadata.device ||
+        throw(InvalidConfiguration(
+            "PupilFunction and ElectricField must occupy the same physical device"))
+    wavefront.metadata.sampling == field.metadata.sampling ||
+        throw(InvalidConfiguration(
+            "PupilFunction and ElectricField sampling must match"))
+    wavefront.metadata.orientation == field.metadata.orientation ||
+        throw(InvalidConfiguration(
+            "PupilFunction and ElectricField axis orientation must match"))
+    eltype(wavefront.opd) === real(eltype(field.values)) ||
+        throw(InvalidConfiguration(
+            "PupilFunction and ElectricField real numeric types must match"))
+    field.metadata.spectral == MonochromaticChannel(
+        eltype(wavefront.opd)(wavelength(src))) ||
+        throw(InvalidConfiguration(
+            "source wavelength must match ElectricField wavelength"))
+
+    n, m = wavefront.metadata.dimensions
+    n_pad, m_pad = field.metadata.dimensions
+    n == m && n_pad == m_pad || throw(DimensionMismatchError(
+        "pupil-field formation requires square input and output grids"))
+    n_pad % n == 0 || throw(DimensionMismatchError(
+        "ElectricField dimensions must be an integer multiple of the pupil grid"))
+    T = eltype(wavefront.opd)
+    ox, oy = field_embedding_offsets(n, n_pad)
+    apply_centering = center_even_grid && iseven(n_pad)
+    phase_shift = apply_centering ?
+        -T(pi) * (T(n_pad) + one(T)) / T(n_pad) : zero(T)
+    pixel_area = wavefront.metadata.sampling[1] *
+        wavefront.metadata.sampling[2]
+    resolved_amplitude_scale = isnothing(amplitude_scale) ?
+        sqrt(T(photon_irradiance(src) * tel.params.sampling_time * pixel_area)) :
+        T(amplitude_scale)
+    resolved_amplitude_scale >= zero(T) || throw(InvalidConfiguration(
+        "pupil-field amplitude scale must be non-negative"))
+    return PupilFieldFormationPlan{
+        T,typeof(wavefront.metadata),typeof(field.metadata),
+    }(
+        wavefront.metadata,
+        field.metadata,
+        (ox, oy),
+        resolved_amplitude_scale,
+        T(2) / T(wavelength(src)),
+        phase_shift,
+        apply_centering,
+    )
 end
 
 function fill_telescope_field!(out::AbstractMatrix{Complex{T}}, tel::Telescope, src::AbstractSource;
@@ -164,9 +234,11 @@ function _fill_telescope_field!(::ScalarCPUStyle, out::AbstractMatrix{Complex{T}
     n_pad = n * zero_padding
     fill!(out, zero(eltype(out)))
     opd_to_cycles = T(2) / T(wavelength(src))
-    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
+    amp_scale = sqrt(T(photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
     ox, oy = field_embedding_offsets(n, n_pad)
-    @views @. out[ox+1:ox+n, oy+1:oy+n] = amp_scale * sqrt(tel.state.pupil_reflectivity) * cispi(opd_to_cycles * tel.state.opd)
+    reflectivity = pupil_reflectivity(tel)
+    @views @. out[ox+1:ox+n, oy+1:oy+n] = amp_scale *
+        sqrt(reflectivity) * cispi(opd_to_cycles * tel.state.opd)
     if center_even_grid && iseven(n_pad)
         phase_shift = -T(pi) * (T(n_pad) + one(T)) / T(n_pad)
         apply_centering_phase!(ScalarCPUStyle(), out, phase_shift)
@@ -179,10 +251,10 @@ function _fill_telescope_field!(style::AcceleratorStyle, out::AbstractMatrix{Com
     n = tel.params.resolution
     n_pad = n * zero_padding
     opd_to_cycles = T(2) / T(wavelength(src))
-    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
+    amp_scale = sqrt(T(photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
     ox, oy = field_embedding_offsets(n, n_pad)
     phase_shift = center_even_grid && iseven(n_pad) ? -T(pi) * (T(n_pad) + one(T)) / T(n_pad) : zero(T)
-    launch_kernel!(style, fill_telescope_field_kernel!, out, tel.state.pupil_reflectivity, tel.state.opd, phase_shift,
+    launch_kernel!(style, fill_telescope_field_kernel!, out, pupil_reflectivity(tel), tel.state.opd, phase_shift,
         amp_scale, opd_to_cycles, ox, oy, n, n_pad, center_even_grid && iseven(n_pad); ndrange=size(out))
     return out
 end
@@ -197,70 +269,136 @@ function _fill_telescope_field_async!(style::AcceleratorStyle, out::AbstractMatr
     n = tel.params.resolution
     n_pad = n * zero_padding
     opd_to_cycles = T(2) / T(wavelength(src))
-    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
+    amp_scale = sqrt(T(photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
     ox, oy = field_embedding_offsets(n, n_pad)
     phase_shift = center_even_grid && iseven(n_pad) ? -T(pi) * (T(n_pad) + one(T)) / T(n_pad) : zero(T)
-    launch_kernel_async!(style, fill_telescope_field_kernel!, out, tel.state.pupil_reflectivity, tel.state.opd, phase_shift,
+    launch_kernel_async!(style, fill_telescope_field_kernel!, out, pupil_reflectivity(tel), tel.state.opd, phase_shift,
         amp_scale, opd_to_cycles, ox, oy, n, n_pad, center_even_grid && iseven(n_pad); ndrange=size(out))
     return out
 end
 
-function fill_from_telescope!(ef::ElectricField, tel::Telescope, src::AbstractSource)
-    wavelength(src) == ef.params.wavelength ||
-        throw(InvalidConfiguration("source wavelength must match ElectricField wavelength"))
-    tel.params.resolution == ef.params.resolution ||
-        throw(DimensionMismatchError("ElectricField resolution must match telescope resolution"))
-    ensure_field_buffers!(ef)
-    fill_telescope_field!(ef.state.field, tel, src; zero_padding=ef.params.zero_padding)
-    return ef
+function fill_electric_field!(field::ElectricField,
+    wavefront::PupilFunction, plan::PupilFieldFormationPlan)
+    field.metadata == plan.output_metadata || throw(InvalidConfiguration(
+        "ElectricField metadata does not match its prepared formation plan"))
+    wavefront.metadata == plan.input_metadata || throw(InvalidConfiguration(
+        "PupilFunction metadata does not match its prepared formation plan"))
+    _fill_electric_field!(execution_style(field.values), field, wavefront,
+        plan)
+    return field
 end
 
-function fill_from_telescope_async!(ef::ElectricField, tel::Telescope, src::AbstractSource)
-    wavelength(src) == ef.params.wavelength ||
-        throw(InvalidConfiguration("source wavelength must match ElectricField wavelength"))
-    tel.params.resolution == ef.params.resolution ||
-        throw(DimensionMismatchError("ElectricField resolution must match telescope resolution"))
-    ensure_field_buffers!(ef)
-    fill_telescope_field_async!(ef.state.field, tel, src; zero_padding=ef.params.zero_padding)
-    return ef
+function fill_electric_field_async!(field::ElectricField,
+    wavefront::PupilFunction, plan::PupilFieldFormationPlan)
+    field.metadata == plan.output_metadata || throw(InvalidConfiguration(
+        "ElectricField metadata does not match its prepared formation plan"))
+    wavefront.metadata == plan.input_metadata || throw(InvalidConfiguration(
+        "PupilFunction metadata does not match its prepared formation plan"))
+    _fill_electric_field_async!(execution_style(field.values), field,
+        wavefront, plan)
+    return field
 end
 
-function field_target_view(field::ElectricField, input::AbstractMatrix)
-    if size(input) == size(field.state.field)
-        return field.state.field
+function _fill_electric_field!(::ScalarCPUStyle, field::ElectricField,
+    wavefront::PupilFunction, plan::PupilFieldFormationPlan)
+    out = field.values
+    fill!(out, zero(eltype(out)))
+    axes = field_active_axes(plan)
+    @views @. out[axes...] = plan.amplitude_scale * wavefront.amplitude *
+        cispi(plan.opd_to_cycles * wavefront.opd)
+    if plan.apply_centering_phase
+        apply_centering_phase!(ScalarCPUStyle(), out,
+            plan.centering_phase_shift)
     end
-    active_axes = field_active_axes(field.params)
-    if size(input) == (field.params.resolution, field.params.resolution)
-        return @view field.state.field[active_axes...]
+    return field
+end
+
+
+function _fill_electric_field!(style::AcceleratorStyle,
+    field::ElectricField, wavefront::PupilFunction,
+    plan::PupilFieldFormationPlan)
+    n = plan.input_metadata.dimensions[1]
+    n_pad = plan.output_metadata.dimensions[1]
+    ox, oy = plan.embedding_offsets
+    launch_kernel!(style, fill_pupil_field_kernel!, field.values,
+        wavefront.amplitude, wavefront.opd, plan.centering_phase_shift,
+        plan.amplitude_scale, plan.opd_to_cycles, ox, oy, n, n_pad,
+        plan.apply_centering_phase; ndrange=size(field.values))
+    return field
+end
+
+function _fill_electric_field_async!(::ScalarCPUStyle,
+    field::ElectricField, wavefront::PupilFunction,
+    plan::PupilFieldFormationPlan)
+    return _fill_electric_field!(ScalarCPUStyle(), field, wavefront, plan)
+end
+
+function _fill_electric_field_async!(style::AcceleratorStyle,
+    field::ElectricField, wavefront::PupilFunction,
+    plan::PupilFieldFormationPlan)
+    n = plan.input_metadata.dimensions[1]
+    n_pad = plan.output_metadata.dimensions[1]
+    ox, oy = plan.embedding_offsets
+    launch_kernel_async!(style, fill_pupil_field_kernel!, field.values,
+        wavefront.amplitude, wavefront.opd, plan.centering_phase_shift,
+        plan.amplitude_scale, plan.opd_to_cycles, ox, oy, n, n_pad,
+        plan.apply_centering_phase; ndrange=size(field.values))
+    return field
+end
+
+function field_target_view(field::ElectricField, input::AbstractMatrix,
+    plan::Union{PupilFieldFormationPlan,Nothing}=nothing)
+    if size(input) == size(field.values)
+        return field.values
+    elseif !isnothing(plan) && size(input) == plan.input_metadata.dimensions
+        active_axes = field_active_axes(plan)
+        return @view field.values[active_axes...]
     end
-    throw(DimensionMismatchError("field map size must match the active pupil or full padded field"))
+    throw(DimensionMismatchError(
+        "field map size must match the full field or prepared active pupil"))
 end
 
 function apply_phase!(field::ElectricField, phase_or_opd::AbstractMatrix; units::Symbol=:opd)
-    _apply_phase!(execution_style(field.state.field), field, phase_or_opd, units)
+    _apply_phase!(execution_style(field.values), field, phase_or_opd, units,
+        nothing)
     return field
 end
 
-function apply_phase_async!(field::ElectricField, phase_or_opd::AbstractMatrix; units::Symbol=:opd)
-    _apply_phase_async!(execution_style(field.state.field), field, phase_or_opd, units)
+function apply_phase!(field::ElectricField, phase_or_opd::AbstractMatrix,
+    plan::PupilFieldFormationPlan; units::Symbol=:opd)
+    _apply_phase!(execution_style(field.values), field, phase_or_opd, units,
+        plan)
     return field
 end
 
-function _phase_target_layout(field::ElectricField, input::AbstractMatrix)
-    if size(input) == size(field.state.field)
+function apply_phase_async!(field::ElectricField,
+    phase_or_opd::AbstractMatrix,
+    plan::Union{PupilFieldFormationPlan,Nothing}=nothing; units::Symbol=:opd)
+    _apply_phase_async!(execution_style(field.values), field, phase_or_opd,
+        units, plan)
+    return field
+end
+
+function _phase_target_layout(field::ElectricField,
+    input::AbstractMatrix,
+    plan::Union{PupilFieldFormationPlan,Nothing})
+    if size(input) == size(field.values)
         return true, 0, 0
-    elseif size(input) == (field.params.resolution, field.params.resolution)
-        ox, oy = field_embedding_offsets(field.params.resolution, field.params.padded_resolution)
+    elseif !isnothing(plan) && size(input) == plan.input_metadata.dimensions
+        ox, oy = plan.embedding_offsets
         return false, ox, oy
     end
-    throw(DimensionMismatchError("field map size must match the active pupil or full padded field"))
+    throw(DimensionMismatchError(
+        "field map size must match the full field or prepared active pupil"))
 end
 
-function _apply_phase!(::ScalarCPUStyle, field::ElectricField, phase_or_opd::AbstractMatrix, units::Symbol)
-    target = field_target_view(field, phase_or_opd)
+function _apply_phase!(::ScalarCPUStyle, field::ElectricField,
+    phase_or_opd::AbstractMatrix, units::Symbol,
+    plan::Union{PupilFieldFormationPlan,Nothing})
+    target = field_target_view(field, phase_or_opd, plan)
     if units === :opd
-        T = eltype(field.state.intensity)
-        opd_to_cycles = (T(2) / field.params.wavelength)
+        T = real(eltype(field.values))
+        opd_to_cycles = T(2) / T(electric_field_wavelength(field))
         @. target *= cispi(opd_to_cycles * phase_or_opd)
         return field
     elseif units === :phase
@@ -270,71 +408,104 @@ function _apply_phase!(::ScalarCPUStyle, field::ElectricField, phase_or_opd::Abs
     throw(InvalidConfiguration("units must be :opd or :phase"))
 end
 
-function _apply_phase!(style::AcceleratorStyle, field::ElectricField, phase_or_opd::AbstractMatrix, units::Symbol)
-    full_field, ox, oy = _phase_target_layout(field, phase_or_opd)
+function _apply_phase!(style::AcceleratorStyle, field::ElectricField,
+    phase_or_opd::AbstractMatrix, units::Symbol,
+    plan::Union{PupilFieldFormationPlan,Nothing})
+    full_field, ox, oy = _phase_target_layout(field, phase_or_opd, plan)
     if units === :opd
-        T = eltype(field.state.intensity)
-        opd_to_cycles = T(2) / field.params.wavelength
-        launch_kernel!(style, apply_phase_opd_kernel!, field.state.field, phase_or_opd, opd_to_cycles,
-            ox, oy, field.params.resolution, full_field; ndrange=size(phase_or_opd))
+        T = real(eltype(field.values))
+        opd_to_cycles = T(2) / T(electric_field_wavelength(field))
+        launch_kernel!(style, apply_phase_opd_kernel!, field.values,
+            phase_or_opd, opd_to_cycles, ox, oy,
+            isnothing(plan) ? size(field.values, 1) :
+                plan.input_metadata.dimensions[1],
+            full_field; ndrange=size(phase_or_opd))
         return field
     elseif units === :phase
-        launch_kernel!(style, apply_phase_rad_kernel!, field.state.field, phase_or_opd,
-            ox, oy, field.params.resolution, full_field; ndrange=size(phase_or_opd))
+        launch_kernel!(style, apply_phase_rad_kernel!, field.values,
+            phase_or_opd, ox, oy,
+            isnothing(plan) ? size(field.values, 1) :
+                plan.input_metadata.dimensions[1],
+            full_field; ndrange=size(phase_or_opd))
         return field
     end
     throw(InvalidConfiguration("units must be :opd or :phase"))
 end
 
-function _apply_phase_async!(::ScalarCPUStyle, field::ElectricField, phase_or_opd::AbstractMatrix, units::Symbol)
-    return _apply_phase!(ScalarCPUStyle(), field, phase_or_opd, units)
+function _apply_phase_async!(::ScalarCPUStyle, field::ElectricField,
+    phase_or_opd::AbstractMatrix, units::Symbol,
+    plan::Union{PupilFieldFormationPlan,Nothing})
+    return _apply_phase!(ScalarCPUStyle(), field, phase_or_opd, units, plan)
 end
 
-function _apply_phase_async!(style::AcceleratorStyle, field::ElectricField, phase_or_opd::AbstractMatrix, units::Symbol)
-    full_field, ox, oy = _phase_target_layout(field, phase_or_opd)
+function _apply_phase_async!(style::AcceleratorStyle,
+    field::ElectricField, phase_or_opd::AbstractMatrix, units::Symbol,
+    plan::Union{PupilFieldFormationPlan,Nothing})
+    full_field, ox, oy = _phase_target_layout(field, phase_or_opd, plan)
     if units === :opd
-        T = eltype(field.state.intensity)
-        opd_to_cycles = T(2) / field.params.wavelength
-        launch_kernel_async!(style, apply_phase_opd_kernel!, field.state.field, phase_or_opd, opd_to_cycles,
-            ox, oy, field.params.resolution, full_field; ndrange=size(phase_or_opd))
+        T = real(eltype(field.values))
+        opd_to_cycles = T(2) / T(electric_field_wavelength(field))
+        launch_kernel_async!(style, apply_phase_opd_kernel!, field.values,
+            phase_or_opd, opd_to_cycles, ox, oy,
+            isnothing(plan) ? size(field.values, 1) :
+                plan.input_metadata.dimensions[1],
+            full_field; ndrange=size(phase_or_opd))
         return field
     elseif units === :phase
-        launch_kernel_async!(style, apply_phase_rad_kernel!, field.state.field, phase_or_opd,
-            ox, oy, field.params.resolution, full_field; ndrange=size(phase_or_opd))
+        launch_kernel_async!(style, apply_phase_rad_kernel!, field.values,
+            phase_or_opd, ox, oy,
+            isnothing(plan) ? size(field.values, 1) :
+                plan.input_metadata.dimensions[1],
+            full_field; ndrange=size(phase_or_opd))
         return field
     end
     throw(InvalidConfiguration("units must be :opd or :phase"))
 end
 
 function apply_amplitude!(field::ElectricField, amplitude::AbstractMatrix)
-    _apply_amplitude!(execution_style(field.state.field), field, amplitude)
+    _apply_amplitude!(execution_style(field.values), field, amplitude, nothing)
     return field
 end
 
-function _apply_amplitude!(::ScalarCPUStyle, field::ElectricField, amplitude::AbstractMatrix)
-    target = field_target_view(field, amplitude)
+function apply_amplitude!(field::ElectricField, amplitude::AbstractMatrix,
+    plan::PupilFieldFormationPlan)
+    _apply_amplitude!(execution_style(field.values), field, amplitude, plan)
+    return field
+end
+
+function _apply_amplitude!(::ScalarCPUStyle, field::ElectricField,
+    amplitude::AbstractMatrix,
+    plan::Union{PupilFieldFormationPlan,Nothing})
+    target = field_target_view(field, amplitude, plan)
     @. target *= amplitude
     return field
 end
 
-function _apply_amplitude!(style::AcceleratorStyle, field::ElectricField, amplitude::AbstractMatrix)
-    full_field, ox, oy = _phase_target_layout(field, amplitude)
-    launch_kernel!(style, apply_amplitude_kernel!, field.state.field, amplitude,
-        ox, oy, field.params.resolution, full_field; ndrange=size(amplitude))
+function _apply_amplitude!(style::AcceleratorStyle, field::ElectricField,
+    amplitude::AbstractMatrix,
+    plan::Union{PupilFieldFormationPlan,Nothing})
+    full_field, ox, oy = _phase_target_layout(field, amplitude, plan)
+    launch_kernel!(style, apply_amplitude_kernel!, field.values, amplitude,
+        ox, oy,
+        isnothing(plan) ? size(field.values, 1) :
+            plan.input_metadata.dimensions[1],
+        full_field; ndrange=size(amplitude))
     return field
 end
 
 function intensity!(out::AbstractMatrix{T}, field::ElectricField) where {T<:AbstractFloat}
-    size(out) == size(field.state.field) ||
+    size(out) == size(field.values) ||
         throw(DimensionMismatchError("intensity output must match ElectricField size"))
-    _intensity!(execution_style(out), out, field.state.field)
+    require_same_backend(out, field)
+    _intensity!(execution_style(out), out, field.values)
     return out
 end
 
 function intensity_async!(out::AbstractMatrix{T}, field::ElectricField) where {T<:AbstractFloat}
-    size(out) == size(field.state.field) ||
+    size(out) == size(field.values) ||
         throw(DimensionMismatchError("intensity output must match ElectricField size"))
-    _intensity_async!(execution_style(out), out, field.state.field)
+    require_same_backend(out, field)
+    _intensity_async!(execution_style(out), out, field.values)
     return out
 end
 
@@ -359,16 +530,18 @@ function _intensity_async!(style::AcceleratorStyle, out::AbstractMatrix{T}, fiel
 end
 
 function accumulate_intensity!(out::AbstractMatrix{T}, field::ElectricField) where {T<:AbstractFloat}
-    size(out) == size(field.state.field) ||
+    size(out) == size(field.values) ||
         throw(DimensionMismatchError("intensity output must match ElectricField size"))
-    _accumulate_intensity!(execution_style(out), out, field.state.field)
+    require_same_backend(out, field)
+    _accumulate_intensity!(execution_style(out), out, field.values)
     return out
 end
 
 function accumulate_intensity_async!(out::AbstractMatrix{T}, field::ElectricField) where {T<:AbstractFloat}
-    size(out) == size(field.state.field) ||
+    size(out) == size(field.values) ||
         throw(DimensionMismatchError("intensity output must match ElectricField size"))
-    _accumulate_intensity_async!(execution_style(out), out, field.state.field)
+    require_same_backend(out, field)
+    _accumulate_intensity_async!(execution_style(out), out, field.values)
     return out
 end
 
@@ -390,9 +563,4 @@ end
 function _accumulate_intensity_async!(style::AcceleratorStyle, out::AbstractMatrix{T}, field_values::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
     launch_kernel_async!(style, accumulate_abs2_kernel!, out, field_values, size(out, 1), size(out, 2); ndrange=size(out))
     return out
-end
-
-function intensity!(field::ElectricField)
-    intensity!(field.state.intensity, field)
-    return field.state.intensity
 end

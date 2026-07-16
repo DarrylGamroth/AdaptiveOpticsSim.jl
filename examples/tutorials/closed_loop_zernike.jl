@@ -25,9 +25,9 @@ function main(; n_iter::Int=4)
     residual_after = similar(residual_before)
 
     for k in 1:n_iter
-        residual_before[k] = pupil_rms(tel.state.opd, tel.state.pupil)
+        residual_before[k] = pupil_rms(tel.state.opd, pupil_mask(tel))
         step!(scenario)
-        residual_after[k] = pupil_rms(tel.state.opd, tel.state.pupil)
+        residual_after[k] = pupil_rms(tel.state.opd, pupil_mask(tel))
     end
 
     rt = readout(scenario)

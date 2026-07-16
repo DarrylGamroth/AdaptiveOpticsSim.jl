@@ -29,7 +29,7 @@ struct SourceParams{T<:AbstractFloat}
     magnitude::T
     coordinates_xy_arcsec::NTuple{2,T}
     wavelength::T
-    n_photon::T
+    photon_irradiance::T
 end
 
 struct Source{P<:SourceParams} <: AbstractSource
@@ -52,17 +52,25 @@ function Source(; band::Symbol=:I, magnitude::Real=0.0, coordinates=(0.0, 0.0), 
         end
     end
     coords_xy_arcsec = polar_arcsec_deg_to_xy_arcsec(coordinates[1], coordinates[2], T)
-    n_photon = if haskey(BAND_ZEROPOINTS, band)
+    photon_irradiance_value = if haskey(BAND_ZEROPOINTS, band)
         T(BAND_ZEROPOINTS[band] * 10.0^(-0.4 * magnitude))
     else
         one(T)
     end
-    params = SourceParams{T}(band, T(magnitude), coords_xy_arcsec, T(wavelength), n_photon)
+    params = SourceParams{T}(band, T(magnitude), coords_xy_arcsec,
+        T(wavelength), photon_irradiance_value)
     return Source(params)
 end
 
 wavelength(src::Source) = src.params.wavelength
-photon_flux(src::Source) = src.params.n_photon
+
+"""
+    photon_irradiance(src)
+
+Return source photon irradiance at the telescope entrance pupil in
+photons·s⁻¹·m⁻².
+"""
+@inline photon_irradiance(src::Source) = src.params.photon_irradiance
 optical_tag(src::Source) = "source($(src.params.band))"
 source_height_m(::Source) = Inf
 is_lgs_source(::AbstractSource) = false
@@ -78,7 +86,7 @@ struct LGSSourceParams{T<:AbstractFloat,A}
     laser_coordinates::NTuple{2,T}
     na_profile::A
     fwhm_spot_up::T
-    n_photon::T
+    photon_irradiance::T
 end
 
 struct LGSSource{P<:LGSSourceParams} <: AbstractSource
@@ -115,7 +123,7 @@ function LGSSource(; magnitude::Real=0.0, coordinates=(0.0, 0.0), wavelength::Re
 end
 
 wavelength(src::LGSSource) = src.params.wavelength
-photon_flux(src::LGSSource) = src.params.n_photon
+@inline photon_irradiance(src::LGSSource) = src.params.photon_irradiance
 optical_tag(::LGSSource) = "lgs"
 source_height_m(src::LGSSource) = src.params.altitude
 is_lgs_source(::LGSSource) = true

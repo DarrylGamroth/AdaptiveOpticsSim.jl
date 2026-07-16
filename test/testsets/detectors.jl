@@ -1147,18 +1147,8 @@
     @test supports_detector_mtf(rect_det)
     @test detector_mtf(RectangularPixelAperture(), 0.5, 0.0) ≈ 2 / pi
 
-    mtf_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-        response_model=SeparablePixelMTF(pitch_x_px=1.0, pitch_y_px=1.0,
-            fill_factor_x=0.7, fill_factor_y=0.7))
-    mtf_frame = capture!(mtf_det, impulse; rng=MersenneTwister(5))
-    @test sum(mtf_frame) ≈ 1.0 atol=1e-6
-    mtf_meta2 = detector_export_metadata(mtf_det)
-    @test mtf_meta2.frame_response == :separable_mtf
-    @test mtf_meta2.response_is_separable
-    @test mtf_meta2.response_application_domain == :image
-    @test mtf_meta2.aperture_shape == :rectangular
     @test_throws InvalidConfiguration RectangularPixelAperture(fill_factor_x=0.0)
-    @test_throws InvalidConfiguration SeparablePixelMTF(fill_factor_y=1.5)
+    @test_throws InvalidConfiguration RectangularPixelAperture(fill_factor_y=1.5)
 
     ipc_kernel = [0.0 0.01 0.0; 0.01 0.96 0.01; 0.0 0.01 0.0]
     ipc_det = Detector(integration_time=1.0, noise=NoisePhoton(), qe=1.0,

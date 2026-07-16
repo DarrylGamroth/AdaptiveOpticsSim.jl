@@ -10,7 +10,6 @@ abstract type AbstractCountingGateModel end
 abstract type AbstractCountingCorrelationModel end
 abstract type AbstractDetectorResponse end
 abstract type AbstractFrameResponse <: AbstractDetectorResponse end
-abstract type AbstractFrameMTF <: AbstractFrameResponse end
 abstract type AbstractChargeCouplingModel end
 const FrameResponseModel = AbstractFrameResponse
 abstract type BackgroundModel end
@@ -905,16 +904,7 @@ struct InterpixelCapacitance{R<:SampledFrameResponse} <: AbstractChargeCouplingM
     response::R
 end
 
-struct RectangularPixelAperture{T<:AbstractFloat,VX<:AbstractVector{T},VY<:AbstractVector{T}} <: AbstractFrameMTF
-    pitch_x_px::T
-    pitch_y_px::T
-    fill_factor_x::T
-    fill_factor_y::T
-    kernel_x::VX
-    kernel_y::VY
-end
-
-struct SeparablePixelMTF{T<:AbstractFloat,VX<:AbstractVector{T},VY<:AbstractVector{T}} <: AbstractFrameMTF
+struct RectangularPixelAperture{T<:AbstractFloat,VX<:AbstractVector{T},VY<:AbstractVector{T}} <: AbstractFrameResponse
     pitch_x_px::T
     pitch_y_px::T
     fill_factor_x::T
@@ -933,7 +923,6 @@ response_family(::NullFrameResponse) = :none
 response_family(::GaussianPixelResponse) = :gaussian
 response_family(::SampledFrameResponse) = :sampled
 response_family(::RectangularPixelAperture) = :rectangular_aperture
-response_family(::SeparablePixelMTF) = :separable_mtf
 
 frame_response_symbol(model::AbstractFrameResponse) = response_family(model)
 
@@ -945,7 +934,6 @@ supports_separable_application(::AbstractFrameResponse) = false
 supports_separable_application(::NullFrameResponse) = true
 supports_separable_application(::GaussianPixelResponse) = true
 supports_separable_application(::RectangularPixelAperture) = true
-supports_separable_application(::SeparablePixelMTF) = true
 supports_batched_response_application(::ScalarCPUStyle, ::AbstractFrameResponse) = true
 supports_batched_response_application(::AcceleratorStyle, ::AbstractFrameResponse) = false
 supports_batched_response_application(::ScalarCPUStyle, ::NullFrameResponse) = true
@@ -956,21 +944,18 @@ supports_batched_response_application(::ScalarCPUStyle, ::SampledFrameResponse) 
 supports_batched_response_application(::AcceleratorStyle, ::SampledFrameResponse) = true
 supports_batched_response_application(::ScalarCPUStyle, ::RectangularPixelAperture) = true
 supports_batched_response_application(::AcceleratorStyle, ::RectangularPixelAperture) = true
-supports_batched_response_application(::ScalarCPUStyle, ::SeparablePixelMTF) = true
-supports_batched_response_application(::AcceleratorStyle, ::SeparablePixelMTF) = true
 supports_subpixel_geometry(::AbstractFrameResponse) = false
-supports_subpixel_geometry(::AbstractFrameMTF) = true
+supports_subpixel_geometry(::RectangularPixelAperture) = true
 
 response_support(::NullFrameResponse) = nothing, nothing
 response_support(model::GaussianPixelResponse) = length(model.kernel), length(model.kernel)
 response_support(model::SampledFrameResponse) = size(model.kernel)
 response_support(model::RectangularPixelAperture) = length(model.kernel_y), length(model.kernel_x)
-response_support(model::SeparablePixelMTF) = length(model.kernel_y), length(model.kernel_x)
 
 response_width_px(::NullFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
 response_width_px(model::GaussianPixelResponse, ::Type{T}) where {T<:AbstractFloat} = T(model.response_width_px)
 response_width_px(::SampledFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
-response_width_px(::AbstractFrameMTF, ::Type{T}) where {T<:AbstractFloat} = nothing
+response_width_px(::RectangularPixelAperture, ::Type{T}) where {T<:AbstractFloat} = nothing
 
 response_pitch_x_px(::AbstractFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
 response_pitch_y_px(::AbstractFrameResponse, ::Type{T}) where {T<:AbstractFloat} = nothing
@@ -985,16 +970,10 @@ response_fill_factor_x(model::RectangularPixelAperture, ::Type{T}) where {T<:Abs
 response_fill_factor_y(model::RectangularPixelAperture, ::Type{T}) where {T<:AbstractFloat} = T(model.fill_factor_y)
 response_aperture_shape(::RectangularPixelAperture) = :rectangular
 
-response_pitch_x_px(model::SeparablePixelMTF, ::Type{T}) where {T<:AbstractFloat} = T(model.pitch_x_px)
-response_pitch_y_px(model::SeparablePixelMTF, ::Type{T}) where {T<:AbstractFloat} = T(model.pitch_y_px)
-response_fill_factor_x(model::SeparablePixelMTF, ::Type{T}) where {T<:AbstractFloat} = T(model.fill_factor_x)
-response_fill_factor_y(model::SeparablePixelMTF, ::Type{T}) where {T<:AbstractFloat} = T(model.fill_factor_y)
-response_aperture_shape(::SeparablePixelMTF) = :rectangular
-
 supports_detector_mtf(::AbstractFrameResponse) = false
 supports_detector_mtf(::GaussianPixelResponse) = true
 supports_detector_mtf(::SampledFrameResponse) = true
-supports_detector_mtf(::AbstractFrameMTF) = true
+supports_detector_mtf(::RectangularPixelAperture) = true
 
 """
     detector_mtf(response, spatial_frequency_x, spatial_frequency_y)
@@ -1034,7 +1013,7 @@ function detector_mtf(model::SampledFrameResponse, spatial_frequency_x::Real,
     return abs(response) / normalization
 end
 
-function detector_mtf(model::Union{RectangularPixelAperture,SeparablePixelMTF},
+function detector_mtf(model::RectangularPixelAperture,
     spatial_frequency_x::Real, spatial_frequency_y::Real)
     fx, fy, pitch_x, pitch_y, fill_x, fill_y = promote(
         float(spatial_frequency_x), float(spatial_frequency_y),
@@ -1277,16 +1256,6 @@ function RectangularPixelAperture(; pitch_x_px::Real=1.0, pitch_y_px::Real=1.0,
     kernel_x = _to_backend_vector(_pixel_aperture_kernel(pitch_x_px, fill_factor_x, T), backend)
     kernel_y = _to_backend_vector(_pixel_aperture_kernel(pitch_y_px, fill_factor_y, T), backend)
     return RectangularPixelAperture{T,typeof(kernel_x),typeof(kernel_y)}(
-        T(pitch_x_px), T(pitch_y_px), T(fill_factor_x), T(fill_factor_y), kernel_x, kernel_y)
-end
-
-function SeparablePixelMTF(; pitch_x_px::Real=1.0, pitch_y_px::Real=1.0,
-    fill_factor_x::Real=1.0, fill_factor_y::Real=1.0,
-    T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
-    backend = _resolve_array_backend(backend)
-    kernel_x = _to_backend_vector(_pixel_aperture_kernel(pitch_x_px, fill_factor_x, T), backend)
-    kernel_y = _to_backend_vector(_pixel_aperture_kernel(pitch_y_px, fill_factor_y, T), backend)
-    return SeparablePixelMTF{T,typeof(kernel_x),typeof(kernel_y)}(
         T(pitch_x_px), T(pitch_y_px), T(fill_factor_x), T(fill_factor_y), kernel_x, kernel_y)
 end
 

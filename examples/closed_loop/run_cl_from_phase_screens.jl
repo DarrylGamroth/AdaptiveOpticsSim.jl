@@ -23,7 +23,7 @@ recon = ModalReconstructor(imat; gain=0.5)
 cmd = similar(sim.optic.state.coefs)
 
 for k in 1:length(screens)
-    sim.tel.state.opd .= screens[k] .* sim.tel.state.pupil
+    sim.tel.state.opd .= screens[k] .* pupil_mask(sim.tel)
     apply!(sim.optic, sim.tel, DMAdditive())
     measure!(sim.wfs, sim.tel)
     reconstruct!(cmd, recon, sim.wfs.state.slopes)

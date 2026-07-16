@@ -225,7 +225,7 @@ function update_zernike_valid_indices!(wfs::ZernikeWFS)
 end
 
 function update_valid_mask!(wfs::ZernikeWFS, tel::Telescope)
-    set_valid_subapertures!(wfs.state.valid_mask, tel.state.pupil, wfs.params.threshold)
+    set_valid_subapertures!(wfs.state.valid_mask, pupil_mask(tel), wfs.params.threshold)
     update_zernike_valid_indices!(wfs)
     return wfs
 end
@@ -311,10 +311,10 @@ function zernike_pupil_intensity!(wfs::ZernikeWFS, tel::Telescope, src::Abstract
     oy = div(pad - n, 2)
     opd_to_cycles = eltype(wfs.state.camera_frame)(2) / wavelength(src)
     amp_scale = sqrt(eltype(wfs.state.camera_frame)(
-        photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
+        photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
     ))
     fill!(wfs.state.field, zero(eltype(wfs.state.field)))
-    @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * tel.state.pupil *
+    @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * $(pupil_mask(tel)) *
         cispi(opd_to_cycles * tel.state.opd)
     copyto!(wfs.state.focal_field, wfs.state.field)
     @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.phasor
@@ -336,8 +336,9 @@ end
 
 function zernike_normalization(::IncidenceFluxNormalization, wfs::ZernikeWFS, tel::Telescope,
     src::AbstractSource, frame::AbstractMatrix)
-    fmap = flux_map(tel, src)
-    sample_zernike_frame!(wfs.state.normalization_frame, wfs.state.nominal_frame, wfs, fmap, tel)
+    expected_photons = pupil_expected_photon_map(tel, src)
+    sample_zernike_frame!(wfs.state.normalization_frame,
+        wfs.state.nominal_frame, wfs, expected_photons, tel)
     norm_host = host_array(wfs.state.normalization_frame)
     valid_host = host_array(wfs.state.valid_mask)
     vals = norm_host[valid_host]

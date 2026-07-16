@@ -30,8 +30,84 @@ function ensure_psf_workspace!(tel::Telescope, n::Int)
     return tel.state.psf_workspace
 end
 
-function centered_psf_from_field!(out::AbstractMatrix{T}, field::ElectricField) where {T<:AbstractFloat}
-    return fraunhofer_intensity_from_field!(out, field)
+function centered_psf_from_field!(out::AbstractMatrix{T},
+    field::ElectricField,
+    propagation::FraunhoferPropagation) where {T<:AbstractFloat}
+    return fraunhofer_intensity_from_field!(out, field, propagation)
+end
+
+struct DirectPSFPlan{
+    T<:AbstractFloat,
+    F<:PupilFieldFormationPlan,
+    O<:OpticalPlaneMetadata,
+}
+    field_formation::F
+    output_metadata::O
+    shift_pixels::NTuple{2,T}
+end
+
+struct DirectPSFWorkspace{
+    P<:FraunhoferPropagation,
+    R<:AbstractMatrix,
+}
+    propagation::P
+    unshifted_intensity::R
+end
+
+function prepare_direct_psf(tel::Telescope, wavefront::PupilFunction,
+    src::Source, field::ElectricField, output::IntensityMap)
+    propagation = FraunhoferPropagation(field)
+    return _prepare_direct_psf(tel, wavefront, src, field, output,
+        propagation)
+end
+
+function prepare_direct_psf(tel::Telescope, wavefront::PupilFunction,
+    src::Source, field::ElectricField)
+    propagation = FraunhoferPropagation(field)
+    output = IntensityMap(field, propagation)
+    prepared = _prepare_direct_psf(tel, wavefront, src, field, output,
+        propagation)
+    return (; output, prepared.plan, prepared.workspace)
+end
+
+function _prepare_direct_psf(tel::Telescope, wavefront::PupilFunction,
+    src::Source, field::ElectricField, output::IntensityMap,
+    propagation::FraunhoferPropagation)
+    formation = prepare_pupil_field(tel, wavefront, src, field)
+    require_same_plane_grid(output.metadata, propagation.output_metadata;
+        label="direct-PSF output", require_numeric_type=false)
+    scale_arcsec = propagation.params.output_sampling_rad *
+        (180 / pi) * 3600
+    coordinates = src.params.coordinates_xy_arcsec
+    T = eltype(output.values)
+    shift_pixels = (
+        T(coordinates[1] / scale_arcsec),
+        T(coordinates[2] / scale_arcsec),
+    )
+    unshifted = similar(output.values)
+    plan = DirectPSFPlan{
+        T,typeof(formation),typeof(output.metadata),
+    }(formation, output.metadata, shift_pixels)
+    workspace = DirectPSFWorkspace(propagation, unshifted)
+    return (; plan, workspace)
+end
+
+function compute_psf!(output::IntensityMap, field::ElectricField,
+    wavefront::PupilFunction, plan::DirectPSFPlan,
+    workspace::DirectPSFWorkspace)
+    output.metadata == plan.output_metadata || throw(InvalidConfiguration(
+        "IntensityMap metadata does not match its prepared direct-PSF plan"))
+    fill_electric_field!(field, wavefront, plan.field_formation)
+    dx, dy = plan.shift_pixels
+    if iszero(dx) && iszero(dy)
+        fraunhofer_intensity_from_field!(output.values, field,
+            workspace.propagation)
+    else
+        fraunhofer_intensity_from_field!(workspace.unshifted_intensity,
+            field, workspace.propagation)
+        shift_psf!(output.values, workspace.unshifted_intensity, dx, dy)
+    end
+    return output
 end
 
 function compute_psf_centered!(tel::Telescope, src::Source, ws::Workspace, zero_padding::Int=1)

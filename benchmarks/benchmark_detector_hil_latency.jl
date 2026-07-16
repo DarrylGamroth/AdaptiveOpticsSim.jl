@@ -72,7 +72,7 @@ function detector_hil_cards(n::Int=DETECTOR_HIL_SIZE)
         response_model=NullFrameResponse(),
         T=T,
     )
-    cmos_mtf_ipc = Detector(
+    cmos_response_ipc = Detector(
         integration_time=1e-3,
         qe=0.8,
         noise=NoisePhotonReadout(1.2),
@@ -134,8 +134,8 @@ function detector_hil_cards(n::Int=DETECTOR_HIL_SIZE)
     return (
         DetectorHILCard("DET-HIL-01", "CMOS global-shutter capture", cmos,
             input, runtime_rng(101)),
-        DetectorHILCard("DET-HIL-02", "CMOS capture with MTF and IPC",
-            cmos_mtf_ipc, input, runtime_rng(102)),
+        DetectorHILCard("DET-HIL-02", "CMOS capture with response and IPC",
+            cmos_response_ipc, input, runtime_rng(102)),
         DetectorHILCard("DET-HIL-03", "CCD capture", ccd, input,
             runtime_rng(103)),
         DetectorHILCard("DET-HIL-04", "EMCCD fast linear capture", emccd,

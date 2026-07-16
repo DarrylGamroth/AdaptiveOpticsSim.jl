@@ -32,6 +32,8 @@ AdaptiveOpticsSim.backend_rand(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}, ::Typ
 AdaptiveOpticsSim.backend_randn(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}, ::Type{T}, dims::Vararg{Int}) where {T} = AMDGPU.randn(T, dims...)
 AdaptiveOpticsSim.backend_zeros(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}, ::Type{T}, dims::Vararg{Int}) where {T} = AMDGPU.zeros(T, dims...)
 AdaptiveOpticsSim.backend_fill(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}, value, dims::Vararg{Int}) = AMDGPU.fill(value, dims...)
+AdaptiveOpticsSim.physical_device_identifier(array::AMDGPU.ROCArray) =
+    AMDGPU.device_id(AMDGPU.device(array))
 function AdaptiveOpticsSim.execute_fft_plan!(buffer::AMDGPU.ROCArray, plan::AMDGPU.rocFFT.ROCFFTPlan)
     plan * buffer
     AMDGPU.synchronize()
@@ -73,11 +75,11 @@ function AdaptiveOpticsSim.compute_intensity_safe!(
     # gather kernel that is not usable on this path. Copy the dense parents
     # through the direct transfer path, then slice on the host for this
     # deliberately conservative ROCm fallback.
-    pupil_host = @view Array(tel.state.pupil)[xs:xe, ys:ye]
+    pupil_host = @view Array(AdaptiveOpticsSim.pupil_mask(tel))[xs:xe, ys:ye]
     opd_host = @view Array(tel.state.opd)[xs:xe, ys:ye]
     phasor_host = Array(wfs.state.phasor)
     opd_to_cycles = T(2) / AdaptiveOpticsSim.wavelength(src)
-    amp_scale = sqrt(T(AdaptiveOpticsSim.photon_flux(src) * tel.params.sampling_time *
+    amp_scale = sqrt(T(AdaptiveOpticsSim.photon_irradiance(src) * tel.params.sampling_time *
         (tel.params.diameter / tel.params.resolution)^2))
     @views @. field_host[ox+1:ox+sub, oy+1:oy+sub] =
         amp_scale * pupil_host * cispi(opd_to_cycles * opd_host)

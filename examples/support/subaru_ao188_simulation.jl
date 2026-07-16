@@ -445,7 +445,7 @@ end
 
 function _actuator_overlap_weights(tel::Telescope, dm::DeformableMirror)
     n = tel.params.resolution
-    pupil = Array(tel.state.pupil)
+    pupil = Array(pupil_mask(tel))
     x_coords, y_coords = _dm_grid_coordinates(dm.params.n_act, dm.params.misregistration)
     cx = (n + 1) / 2
     scale = n / 2
@@ -599,7 +599,7 @@ function _downsample_low_order_opd!(surrogate::AO188Simulation)
     factor = div(high_res, low_res)
     bin2d!(surrogate.low_tel.state.opd, surrogate.tel.state.opd, factor)
     surrogate.low_tel.state.opd .*= inv(eltype(surrogate.low_tel.state.opd)(factor * factor))
-    surrogate.low_tel.state.opd .*= surrogate.low_tel.state.pupil
+    surrogate.low_tel.state.opd .*= pupil_mask(surrogate.low_tel)
     return surrogate.low_tel
 end
 

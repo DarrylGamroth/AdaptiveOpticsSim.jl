@@ -344,8 +344,8 @@ end
     @test extended_source_asterism(ext_image) !== image_ast
     cached_ast = AdaptiveOpticsSim._cached_extended_source_asterism(ext_image)
     @test AdaptiveOpticsSim._cached_extended_source_asterism(ext_image) === cached_ast
-    @test AdaptiveOpticsSim.photon_flux(point_ast.sources[1]) ≈ AdaptiveOpticsSim.photon_flux(src)
-    @test sum(AdaptiveOpticsSim.photon_flux(sample) for sample in image_ast.sources) ≈ AdaptiveOpticsSim.photon_flux(src)
+    @test AdaptiveOpticsSim.photon_irradiance(point_ast.sources[1]) ≈ AdaptiveOpticsSim.photon_irradiance(src)
+    @test sum(AdaptiveOpticsSim.photon_irradiance(sample) for sample in image_ast.sources) ≈ AdaptiveOpticsSim.photon_irradiance(src)
     old_offset = image_model.offsets_xy_arcsec[1]
     image_model.offsets_xy_arcsec[1] = (old_offset[1] + 0.1, old_offset[2])
     refreshed_ast = AdaptiveOpticsSim._cached_extended_source_asterism(ext_image)
@@ -406,20 +406,20 @@ end
 
 @testset "Pupil masks and misregistration" begin
     tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
-    base_sum = sum(tel.state.pupil)
+    base_sum = sum(pupil_mask(tel))
     apply_spiders!(tel; thickness=0.5, angles=[0.0, 90.0])
-    @test sum(tel.state.pupil) < base_sum
+    @test sum(pupil_mask(tel)) < base_sum
 
     custom = trues(16, 16)
     custom[:, 9:end] .= false
     set_pupil!(tel, custom)
-    @test sum(tel.state.pupil) == sum(custom)
-    @test tel.state.pupil_reflectivity == Float64.(custom)
+    @test sum(pupil_mask(tel)) == sum(custom)
+    @test pupil_reflectivity(tel) == Float64.(custom)
 
     reflectivity = fill(0.5, 16, 16)
     set_pupil_reflectivity!(tel, reflectivity)
-    @test tel.state.pupil_reflectivity[:, 1:8] == fill(0.5, 16, 8)
-    @test tel.state.pupil_reflectivity[:, 9:end] == fill(0.0, 16, 8)
+    @test pupil_reflectivity(tel)[:, 1:8] == fill(0.5, 16, 8)
+    @test pupil_reflectivity(tel)[:, 9:end] == fill(0.0, 16, 8)
 
     tel2 = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     dm1 = DeformableMirror(tel2; n_act=2, influence_width=0.3)

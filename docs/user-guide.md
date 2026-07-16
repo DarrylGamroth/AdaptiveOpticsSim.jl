@@ -195,7 +195,7 @@ frame = capture!(det, image, src; rng=rng)
 ```
 
 For `Source`, detector capture evaluates the curve at `wavelength(src)`. For
-`SpectralSource`, capture uses the flux-weighted effective QE over the spectral
+`SpectralSource`, capture uses the spectrally weighted effective QE over the spectral
 bundle. Matrix-only capture without a source uses the detector's scalar
 reference QE, which is the peak value of a sampled curve.
 
@@ -320,7 +320,8 @@ integration and readout durations. Both modes run the same optical, charge, EM
 gain, and noise pipeline.
 
 HgCdTe avalanche arrays likewise have no implicit optical blur or interpixel
-coupling. Configure detector MTF and post-collection IPC as separate effects:
+coupling. Configure presampling detector response and post-collection IPC as
+separate effects; inspect the response's derived MTF with `detector_mtf`:
 
 ```julia
 det = Detector(

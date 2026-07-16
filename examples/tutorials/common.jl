@@ -72,12 +72,12 @@ function run_closed_loop_example(make_wfs::Function; n_iter::Int=4, seed::Intege
     for k in 1:n_iter
         advance!(atm, tel; rng=rng)
         propagate!(atm, tel)
-        residual_before[k] = pupil_rms(tel.state.opd, tel.state.pupil)
+        residual_before[k] = pupil_rms(tel.state.opd, pupil_mask(tel))
         measure!(wfs, tel, src)
         reconstruct!(cmd, recon, wfs.state.slopes)
         dm.state.coefs .= -cmd
         apply!(dm, tel, DMAdditive())
-        residual_after[k] = pupil_rms(tel.state.opd, tel.state.pupil)
+        residual_after[k] = pupil_rms(tel.state.opd, pupil_mask(tel))
     end
 
     psf = copy(compute_psf!(tel, src; zero_padding=2))

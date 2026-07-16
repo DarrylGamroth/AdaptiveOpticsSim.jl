@@ -63,7 +63,7 @@ function compute_meta_sensitivity_matrix_ad_probe(args...; kwargs...)
 end
 
 function _require_cpu_ad_probe(tel, dm, wfs=nothing)
-    _is_cpu_array(tel.state.opd) && _is_cpu_array(tel.state.pupil) && _is_cpu_array(dm.state.modes) ||
+    _is_cpu_array(tel.state.opd) && _is_cpu_array(pupil_mask(tel)) && _is_cpu_array(dm.state.modes) ||
         throw(UnsupportedAlgorithm(
             "ForwardDiff AD sensitivity is CPU-only; use sensitivity=:finite_difference for accelerator-backed arrays"))
     if wfs !== nothing
@@ -285,7 +285,7 @@ function _gaussian_influence_vector!(out::AbstractVector, tel, dm, actuator_inde
             x = (convert(T, i) - cx) / scale
             r2 = (x - x_m)^2 + (y - y_m)^2
             idx = (j - 1) * n + i
-            out[idx] = ifelse(tel.state.pupil[i, j], exp(-r2 / two_sigma2), zero(T))
+            out[idx] = ifelse(pupil_mask(tel)[i, j], exp(-r2 / two_sigma2), zero(T))
         end
     end
     return out

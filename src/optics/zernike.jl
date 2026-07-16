@@ -41,7 +41,7 @@ function zernike_radial(n::Int, m::Int, r::Real)
 end
 
 function compute_zernike!(zb::ZernikeBasis, tel::Telescope)
-    Base.require_one_based_indexing(zb.modes, tel.state.pupil)
+    Base.require_one_based_indexing(zb.modes, pupil_mask(tel))
     n = tel.params.resolution
     cx = (n + 1) / 2
     cy = (n + 1) / 2
@@ -50,7 +50,7 @@ function compute_zernike!(zb::ZernikeBasis, tel::Telescope)
     for j in 1:zb.n_modes
         n_mode, m_mode = noll_to_nm(j)
         @inbounds for i in 1:n, k in 1:n
-            if tel.state.pupil[i, k]
+            if pupil_mask(tel)[i, k]
                 x = (i - cx) / scale
                 y = (k - cy) / scale
                 r = sqrt(x^2 + y^2)

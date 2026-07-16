@@ -9,7 +9,7 @@ function cartesian_basis(tel::Telescope, n_modes::Int)
     @inbounds for j in 1:n, i in 1:n
         px = x[i]
         py = y[j]
-        pupil = tel.state.pupil[i, j] ? 1.0 : 0.0
+        pupil = pupil_mask(tel)[i, j] ? 1.0 : 0.0
         if n_modes >= 1
             basis[i, j, 1] = pupil * px
         end
@@ -94,8 +94,8 @@ function atmosphere_gsc_trace(
         @. residual_opd = forcing_opd - correction_opd
         apply_opd!(tel, residual_opd)
 
-        trace[iter, 1] = pupil_rms(forcing_opd, tel.state.pupil) * 1e9
-        trace[iter, 2] = pupil_rms(residual_opd, tel.state.pupil) * 1e9
+        trace[iter, 1] = pupil_rms(forcing_opd, pupil_mask(tel)) * 1e9
+        trace[iter, 2] = pupil_rms(residual_opd, pupil_mask(tel)) * 1e9
         ngs_psf = compute_psf!(tel, ngs; zero_padding=psf_zero_padding)
         trace[iter, 4] = maximum(ngs_psf) / maximum(ngs_psf_ref)
         slopes = measure!(wfs, tel, ngs)
@@ -104,7 +104,7 @@ function atmosphere_gsc_trace(
         og = compute_optical_gains!(gsc, frame)
         @. og_safe = max(abs(og), og_floor)
 
-        trace[iter, 3] = pupil_rms(residual_opd, tel.state.pupil) * 1e9
+        trace[iter, 3] = pupil_rms(residual_opd, pupil_mask(tel)) * 1e9
         sci_psf = compute_psf!(tel, sci; zero_padding=psf_zero_padding)
         trace[iter, 5] = maximum(sci_psf) / maximum(sci_psf_ref)
 
@@ -164,7 +164,7 @@ function main(; resolution::Int=24, pupil_samples::Int=4)
     for iter in 1:size(forcing_coeffs, 1)
         opd = combine_modes(basis, @view forcing_coeffs[iter, :]) .- combine_modes(basis, control_coeffs)
         apply_opd!(tel, opd)
-        trace[iter, 1] = pupil_rms(tel.state.opd, tel.state.pupil) * 1e9
+        trace[iter, 1] = pupil_rms(tel.state.opd, pupil_mask(tel)) * 1e9
         psf = compute_psf!(tel, src; zero_padding=2)
         trace[iter, 2] = maximum(psf) / maximum(psf_ref)
         slopes = measure!(wfs, tel, src)

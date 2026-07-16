@@ -132,9 +132,17 @@ end
     tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     sf = SpatialFilter(tel; shape=CircularFilter(), diameter=4, zero_padding=2)
-    phase, amp = filter!(sf, tel, src)
-    @test size(phase) == (8, 8)
-    @test size(amp) == (8, 8)
+    wavefront = PupilFunction(tel)
+    field = ElectricField(wavefront, src; zero_padding=2)
+    formation = prepare_pupil_field(tel, wavefront, src, field;
+        center_even_grid=false, amplitude_scale=1)
+    fill_electric_field!(field, wavefront, formation)
+    filtered = PupilFunction(tel)
+    plan = prepare_spatial_filter(tel, sf, field, filtered)
+    workspace = SpatialFilterWorkspace(sf)
+    filter!(filtered, field, sf, plan, workspace)
+    @test size(filtered.opd) == (8, 8)
+    @test size(filtered.amplitude) == (8, 8)
 end
 
 @testset "Gain sensing camera" begin

@@ -88,7 +88,7 @@ end
     @test atm.layers[1].screen.state.initialized
     @test atm.layers[1].state.integer_shift_x == 0
     @test atm.layers[1].state.integer_shift_y == 0
-    @test tel.state.opd == atm.state.opd .* tel.state.pupil
+    @test tel.state.opd == atm.state.opd .* pupil_mask(tel)
 
     @test_throws InvalidConfiguration AdaptiveOpticsSim.infinite_boundary_stencil(4, 0.25;
         stencil_size=8,

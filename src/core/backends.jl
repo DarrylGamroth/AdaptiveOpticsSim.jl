@@ -82,16 +82,31 @@ end
     return same_backend(x, y) && same_backend(x, z) && all(arg -> same_backend(x, arg), rest)
 end
 
-function require_same_backend(xs...)
-    filtered = Tuple(x for x in xs if !isnothing(x))
-    isempty(filtered) && return CPUBackend()
-    ref = backend(filtered[1])
-    refT = typeof(ref)
-    for x in filtered[2:end]
-        bx = backend(x)
-        typeof(bx) === refT || throw(InvalidConfiguration("all composed objects in a simulation path must share the same backend; got $(refT) and $(typeof(bx))"))
+@inline _first_composed_backend(::Tuple{}) = nothing
+
+@inline function _first_composed_backend(xs::Tuple)
+    value = first(xs)
+    return isnothing(value) ? _first_composed_backend(Base.tail(xs)) :
+        backend(value)
+end
+
+@inline _require_backend_matches!(ref, ::Tuple{}) = ref
+
+@inline function _require_backend_matches!(ref, xs::Tuple)
+    value = first(xs)
+    if !isnothing(value)
+        candidate = backend(value)
+        typeof(candidate) === typeof(ref) || throw(InvalidConfiguration(
+            "all composed objects in a simulation path must share the same backend; got $(typeof(ref)) and $(typeof(candidate))"))
     end
-    return ref
+    return _require_backend_matches!(ref, Base.tail(xs))
+end
+
+@inline function require_same_backend(xs...)
+    values = xs
+    ref = _first_composed_backend(values)
+    isnothing(ref) && return CPUBackend()
+    return _require_backend_matches!(ref, values)
 end
 
 gpu_runtime_type(::UnifiedGPUPrecision{T}) where {T<:AbstractFloat} = T

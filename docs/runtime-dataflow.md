@@ -94,12 +94,12 @@ scratch with this explicit prepared flow:
 
 1. advance one shared atmosphere epoch to explicit model time
 2. render each due direction through a path-local prepared renderer into a
-   caller-owned pupil wavefront or electric field
+   caller-owned pupil function or electric field
 3. apply visible static and controllable surfaces to that path product
-4. form WFS or direct-science photon-rate irradiance through a prepared optical
-   front end
+4. form a WFS or direct-science photon-arrival-rate `IntensityMap` through a
+   prepared optical front end
 5. integrate each compatible detector's explicit sample/exposure duration and
-   acquire independently from immutable rate irradiance
+   acquire independently from the immutable arrival-rate product
 6. estimate a WFS measurement where the endpoint requires one
 
 The telescope owns aperture, reflectivity, spatial sampling, and geometry; it
@@ -109,16 +109,18 @@ time rather than telescope sampling time. Source geometry and extended-source
 expansion caches are frozen or prepared per path rather than mutated in the
 shared atmosphere or source definition.
 
-Every prepared plane declares physical sampling, centering/orientation,
+Every prepared plane declares coordinate domain and sampling,
+centering/orientation,
 wavelength/channel, units/normalization, coherence/combination policy, backend,
 device compatibility, and whether values are spatial densities or integrated
-over represented cells. Physical detector-facing irradiance is a photon rate;
-detector acquisition applies elapsed time exactly once and preserves the
-declared spatial measure through response and pixel integration. Incompatible
-spectral grids remain a bundle or require an explicit prepared mapping. Native
-direct science and prepared PROPER output meet at this same caller-owned rate-
-irradiance/acquisition boundary. These are concrete products and functions,
-not a universal optical graph or resampling framework.
+over represented cells. A physical detector-facing product is either photon
+irradiance (photons·s⁻¹·m⁻²) or a cell-integrated photon rate
+(photons·s⁻¹); detector acquisition applies elapsed time exactly once and
+preserves the declared spatial measure through response and pixel integration.
+Incompatible spectral grids remain a bundle or require an explicit prepared
+mapping. Native direct science and prepared PROPER output meet at this same
+caller-owned photon-arrival-rate/acquisition boundary. These are concrete
+products and functions, not a universal optical graph or resampling framework.
 
 The target then separates reusable optical paths from independently scheduled
 or triggered acquisition state, and schedules exposure, optical sampling,

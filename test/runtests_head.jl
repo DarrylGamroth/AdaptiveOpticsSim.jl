@@ -53,6 +53,7 @@ end
 
 function assert_source_interface(src)
     @test hasmethod(wavelength, Tuple{typeof(src)})
+    @test hasmethod(photon_irradiance, Tuple{typeof(src)})
 end
 
 function assert_atmosphere_interface(atm, tel)

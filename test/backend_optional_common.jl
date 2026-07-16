@@ -27,7 +27,7 @@ function OptionalStaticAtmosphere(tel::Telescope; T::Type{<:AbstractFloat}=Float
     selector = AdaptiveOpticsSim.require_same_backend(tel, AdaptiveOpticsSim._resolve_backend_selector(backend))
     array_backend = AdaptiveOpticsSim._resolve_array_backend(selector)
     host = zeros(T, tel.params.resolution, tel.params.resolution)
-    host .*= Array(tel.state.pupil)
+    host .*= Array(pupil_mask(tel))
     screen = array_backend{T}(undef, size(host)...)
     copyto!(screen, host)
     return OptionalStaticAtmosphere{typeof(screen),typeof(selector)}(screen)
@@ -58,6 +58,60 @@ function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:
     @test cartesian_modal.state.modes isa BackendArray
     @test wfs.state.slopes isa BackendArray
     @test det.state.frame isa BackendArray
+    return nothing
+end
+
+function run_optional_plane_product_checks(tel::Telescope,
+    src::AdaptiveOpticsSim.AbstractSource,
+    selector::AdaptiveOpticsSim.AbstractArrayBackend, BackendArray,
+    ::Type{T}) where {T<:AbstractFloat}
+    wavefront = PupilFunction(tel; T=T, backend=selector)
+    apply_opd!(wavefront, opd_map(tel))
+    field = ElectricField(wavefront, src; zero_padding=2, T=T)
+    formation = prepare_pupil_field(tel, wavefront, src, field)
+    fill_electric_field!(field, wavefront, formation)
+    @test wavefront.amplitude isa BackendArray
+    @test wavefront.opd isa BackendArray
+    @test field.values isa BackendArray
+    @test field.metadata.device == plane_device(field.values)
+
+    prepared = prepare_direct_psf(tel, wavefront, src, field)
+    compute_psf!(prepared.output, field, wavefront, prepared.plan,
+        prepared.workspace)
+    legacy_psf = copy(compute_psf!(tel, src; zero_padding=2))
+    @test prepared.output.values isa BackendArray
+    @test Array(prepared.output.values) ≈ Array(legacy_psf) atol=T(2e-5) rtol=T(2e-5)
+
+    fraunhofer = FraunhoferPropagation(field)
+    propagated = propagation_output(field, fraunhofer)
+    propagate_field!(propagated, field, fraunhofer)
+    @test propagated.values isa BackendArray
+    @test propagated.metadata.kind isa FocalPlane
+
+    spatial_filter = SpatialFilter(tel; shape=SquareFilter(), diameter=5,
+        zero_padding=2, T=T, backend=selector)
+    spatial_formation = prepare_pupil_field(tel, wavefront, src, field;
+        center_even_grid=false, amplitude_scale=1)
+    fill_electric_field!(field, wavefront, spatial_formation)
+    filtered = PupilFunction(tel; T=T, backend=selector)
+    spatial_plan = prepare_spatial_filter(tel, spatial_filter, field,
+        filtered)
+    spatial_workspace = SpatialFilterWorkspace(spatial_filter)
+    filter!(filtered, field, spatial_filter, spatial_plan,
+        spatial_workspace)
+    @test filtered.opd isa BackendArray
+    @test filtered.amplitude isa BackendArray
+    @test all(isfinite, Array(filtered.opd))
+    @test all(isfinite, Array(filtered.amplitude))
+
+    telescope_opd = copy(Array(opd_map(tel)))
+    dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T,
+        backend=selector)
+    fill!(dm.state.coefs, T(1e-8))
+    update_surface!(dm, tel)
+    apply_surface!(wavefront, dm, DMReplace())
+    @test Array(wavefront.opd) ≈ Array(surface_opd(dm)) atol=zero(T) rtol=zero(T)
+    @test Array(opd_map(tel)) == telescope_opd
     return nothing
 end
 
@@ -504,11 +558,11 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
     )
     @test occursin("AdaptiveOpticsSimAMDGPUExt", String(randn_method.file))
     @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
-        AdaptiveOpticsSim.execution_style(first(geom_prop.state.slices).field.state.field),
+        AdaptiveOpticsSim.execution_style(first(geom_prop.state.slices).field.values),
         geom_prop.params.model,
     ) isa AdaptiveOpticsSim.GeometricFieldAsyncPlan
     @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
-        AdaptiveOpticsSim.execution_style(first(fresnel_prop.state.slices).field.state.field),
+        AdaptiveOpticsSim.execution_style(first(fresnel_prop.state.slices).field.values),
         fresnel_prop.params.model,
     ) isa AdaptiveOpticsSim.LayeredFresnelFieldAsyncPlan
     correction_models = (
@@ -686,11 +740,11 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
     @test AdaptiveOpticsSim.detector_execution_plan(typeof(AdaptiveOpticsSim.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.DetectorDirectPlan
     @test AdaptiveOpticsSim.reduction_execution_plan(pyr.state.intensity) isa AdaptiveOpticsSim.DirectReductionPlan
     @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
-        AdaptiveOpticsSim.execution_style(first(geom_prop.state.slices).field.state.field),
+        AdaptiveOpticsSim.execution_style(first(geom_prop.state.slices).field.values),
         geom_prop.params.model,
     ) isa AdaptiveOpticsSim.GeometricFieldAsyncPlan
     @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
-        AdaptiveOpticsSim.execution_style(first(fresnel_prop.state.slices).field.state.field),
+        AdaptiveOpticsSim.execution_style(first(fresnel_prop.state.slices).field.values),
         fresnel_prop.params.model,
     ) isa AdaptiveOpticsSim.LayeredFresnelFieldAsyncPlan
     cpu_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
@@ -892,6 +946,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
         central_obstruction=0.0f0, T=T, backend=selector)
     src = Source(band=:I, magnitude=0.0, T=T)
+    run_optional_plane_product_checks(tel, src, selector, BackendArray, T)
 
     atm = MultiLayerAtmosphere(tel;
         r0=T(0.2),
@@ -930,7 +985,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         zero_padding=2,
         T=T)
     field = AdaptiveOpticsSim.propagate_atmosphere_field!(prop, atm, tel, src)
-    @test field.state.field isa BackendArray
+    @test field.values isa BackendArray
     intensity = AdaptiveOpticsSim.atmospheric_intensity!(prop, atm, tel, src)
     @test intensity isa BackendArray
 

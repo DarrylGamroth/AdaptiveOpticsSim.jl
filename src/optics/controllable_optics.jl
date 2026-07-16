@@ -95,7 +95,7 @@ function _modal_mode_matrix(tel::Telescope, definitions::Tuple, ::Type{T}, backe
     selector = require_same_backend(tel, _resolve_backend_selector(backend))
     backend = _resolve_array_backend(selector)
     n = tel.params.resolution
-    pupil = Array(tel.state.pupil)
+    pupil = Array(pupil_mask(tel))
     # Match the existing reference-harness and OOPAO bundle convention:
     # use an n+1 half-open normalized grid and drop the final endpoint.
     xs = collect(range(T(-1), T(1); length=n + 1))[1:n]
@@ -230,7 +230,7 @@ end
 function _modal_basis_matrix(tel::Telescope, basis::ZernikeOpticBasis, ::Type{T},
     selector::AbstractArrayBackend) where {T<:AbstractFloat}
     n = tel.params.resolution
-    pupil = Array(tel.state.pupil)
+    pupil = Array(pupil_mask(tel))
     cx = (n + 1) / 2
     cy = (n + 1) / 2
     scale = n / 2
@@ -270,7 +270,7 @@ end
 function _modal_basis_matrix(tel::Telescope, basis::QuadraticFocusBasis, ::Type{T},
     selector::AbstractArrayBackend) where {T<:AbstractFloat}
     n = tel.params.resolution
-    pupil = Array(tel.state.pupil)
+    pupil = Array(pupil_mask(tel))
     # Use a cell-centered symmetric grid so the quadratic focus mode does not
     # leak tip/tilt under even-resolution sampling.
     coords = collect(T.((2 .* (1:n) .- (n + 1)) ./ n))
@@ -292,7 +292,7 @@ function _materialize_modal_modes(tel::Telescope, host_modes::AbstractMatrix, ::
     host = Matrix{T}(undef, size(host_modes)...)
     copyto!(host, host_modes)
     if normalize_modes
-        pupil = Array(tel.state.pupil)
+        pupil = Array(pupil_mask(tel))
         for k in axes(host, 2)
             _normalize_pupil_mode!(view(host, :, k:k), pupil)
         end
@@ -401,6 +401,18 @@ end
 
 @inline function _apply_modal_opd!(optic::ModalControllableOptic)
     return _apply_modal_opd!(execution_style(optic.state.opd_vec), optic)
+end
+
+function update_surface!(optic::ModalControllableOptic, tel::Telescope)
+    size(optic.state.opd) == size(pupil_mask(tel)) ||
+        throw(DimensionMismatchError(
+            "modal-optic surface dimensions do not match telescope aperture"))
+    require_same_backend(optic, tel)
+    plane_device(optic.state.opd) == plane_device(pupil_mask(tel)) ||
+        throw(InvalidConfiguration(
+            "modal optic and telescope aperture occupy different physical devices"))
+    _apply_modal_opd!(optic)
+    return optic
 end
 
 @inline function apply!(optic::ModalControllableOptic, tel::Telescope, ::DMAdditive)

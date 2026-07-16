@@ -3,12 +3,16 @@
 Status: active
 
 This document defines the maintained project-wide units policy for
-AdaptiveOpticsSim.jl.
+AdaptiveOpticsSim.jl. Scientific term definitions follow the
+[`project glossary`](./glossary.md).
 
 ## Core Rules
 
 - Internal runtime OPD fields are in meters.
 - Internal wavelength-dependent optical phase is in radians.
+- `MetricCoordinates()` declares plane sampling and origin in metres.
+- `AngularCoordinates()` declares plane sampling and origin in radians.
+- Source `photon_irradiance` is in photons·s⁻¹·m⁻².
 - Pure internal angles and rotations are in radians.
 - Human-facing angular API inputs may remain in convenient units such as:
   - degrees for orientation-like quantities,

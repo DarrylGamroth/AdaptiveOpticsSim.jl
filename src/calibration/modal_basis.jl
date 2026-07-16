@@ -103,7 +103,7 @@ function kl_modal_basis(::KLDMModes, dm::DeformableMirror, tel::Telescope;
         n = tel.params.resolution
         for i in 1:n_keep
             mode = reshape(view(basis_mat, :, i), n, n)
-            mean_mode = mean(mode[tel.state.pupil])
+            mean_mode = mean(mode[pupil_mask(tel)])
             @views basis_mat[:, i] .-= mean_mode
         end
     end
@@ -163,7 +163,7 @@ function kl_modal_basis(::KLHHtPSD, dm::DeformableMirror, tel::Telescope, atm::A
     if remove_piston
         for i in 1:n_keep
             mode = reshape(view(basis_mat, :, i), n, n)
-            mean_mode = mean(mode[tel.state.pupil])
+            mean_mode = mean(mode[pupil_mask(tel)])
             @views basis_mat[:, i] .-= mean_mode
         end
     end

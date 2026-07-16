@@ -22,7 +22,7 @@ end
 
 function deterministic_phase_screen(tel::Telescope, ::Type{T}) where {T<:AbstractFloat}
     host = zeros(T, tel.params.resolution, tel.params.resolution)
-    host .*= Array(tel.state.pupil)
+    host .*= Array(pupil_mask(tel))
     return host
 end
 

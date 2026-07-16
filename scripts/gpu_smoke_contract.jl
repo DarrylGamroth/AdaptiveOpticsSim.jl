@@ -23,6 +23,16 @@ function record_gpu_smoke!(f::Function, failures::Vector{String}, name::Abstract
     return nothing
 end
 
+function prepared_gpu_field(tel::Telescope, src::AbstractSource;
+    zero_padding::Int, T::Type{<:AbstractFloat})
+    wavefront = PupilFunction(tel; T=T)
+    apply_opd!(wavefront, opd_map(tel))
+    field = ElectricField(wavefront, src; zero_padding=zero_padding, T=T)
+    plan = prepare_pupil_field(tel, wavefront, src, field)
+    fill_electric_field!(field, wavefront, plan)
+    return (; wavefront, field, plan)
+end
+
 function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     disable_scalar_backend!(B)
     failures = String[]
@@ -48,51 +58,56 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
     end
 
     record_gpu_smoke!(failures, "electric_field_core") do
-        field = ElectricField(tel, src; zero_padding=2, T=T)
-        @assert field.state.field isa BackendArray
-        @assert field.state.fft_buffer isa BackendArray
-        @assert field.state.intensity isa BackendArray
-        intensity = intensity!(field)
+        prepared = prepared_gpu_field(tel, src; zero_padding=2, T=T)
+        field = prepared.field
+        @assert field.values isa BackendArray
+        intensity = similar(field.values, T)
+        intensity!(intensity, field)
         @assert intensity isa BackendArray
 
         amplitude = similar(tel.state.opd, T, tel.params.resolution, tel.params.resolution)
         fill!(amplitude, T(0.5))
-        apply_amplitude!(field, amplitude)
-        intensity!(field)
-        @assert field.state.intensity isa BackendArray
+        apply_amplitude!(field, amplitude, prepared.plan)
+        intensity!(intensity, field)
+        @assert intensity isa BackendArray
 
-        field2 = ElectricField(tel, src; zero_padding=2, T=T)
-        psf_from_field = similar(field2.state.intensity)
-        AdaptiveOpticsSim.centered_psf_from_field!(psf_from_field, field2)
+        prepared2 = prepared_gpu_field(tel, src; zero_padding=2, T=T)
+        field2 = prepared2.field
+        propagation = FraunhoferPropagation(field2)
+        psf_from_field = similar(field2.values, T)
+        AdaptiveOpticsSim.centered_psf_from_field!(psf_from_field, field2,
+            propagation)
         psf = compute_psf!(tel, src; zero_padding=2)
         rel = maximum(abs.(Array(psf_from_field) .- Array(psf))) / max(maximum(abs.(Array(psf))), eps(Float64))
         @assert rel < 1f-5
-        return field.state.intensity
+        return intensity
     end
 
     record_gpu_smoke!(failures, "field_propagation") do
-        field = ElectricField(tel, src; zero_padding=2, T=T)
+        prepared = prepared_gpu_field(tel, src; zero_padding=2, T=T)
+        field = prepared.field
         fraunhofer = FraunhoferPropagation(field)
-        propagated = similar(field.state.field)
+        propagated = propagation_output(field, fraunhofer)
         propagate_field!(propagated, field, fraunhofer)
-        psf_from_prop = similar(field.state.intensity)
-        @. psf_from_prop = abs2(propagated)
+        psf_from_prop = similar(field.values, T)
+        @. psf_from_prop = abs2(propagated.values)
         psf = compute_psf!(tel, src; zero_padding=2)
         rel = maximum(abs.(Array(psf_from_prop) .- Array(psf))) / max(maximum(abs.(Array(psf))), eps(Float64))
         @assert rel < 1f-5
 
         fresnel = FresnelPropagation(field; distance_m=T(10))
-        fresnel_out = similar(field.state.field)
+        fresnel_out = propagation_output(field, fresnel)
         propagate_field!(fresnel_out, field, fresnel)
-        @assert fresnel_out isa BackendArray
-        reverse = FresnelPropagation(field; distance_m=T(-10))
-        field_reverse = ElectricField(tel, src; zero_padding=2, T=T)
-        copyto!(field_reverse.state.field, fresnel_out)
-        propagate_field!(field_reverse, reverse)
-        roundtrip_rel = maximum(abs.(Array(field_reverse.state.field) .- Array(field.state.field))) /
-            max(maximum(abs.(Array(field.state.field))), eps(Float64))
+        @assert fresnel_out.values isa BackendArray
+        reverse = FresnelPropagation(fresnel_out; distance_m=T(-10),
+            output_kind=PupilPlane())
+        field_reverse = propagation_output(fresnel_out, reverse)
+        propagate_field!(field_reverse, fresnel_out, reverse)
+        roundtrip_rel = maximum(abs.(Array(field_reverse.values) .-
+            Array(field.values))) /
+            max(maximum(abs.(Array(field.values))), eps(Float64))
         @assert roundtrip_rel < 1f-4
-        return fresnel_out
+        return fresnel_out.values
     end
 
     record_gpu_smoke!(failures, "psf_asterism") do
@@ -246,7 +261,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
             zero_padding=2,
             T=T)
         field = propagate_atmosphere_field!(prop, atm, tel, src)
-        @assert field.state.field isa BackendArray
+        @assert field.values isa BackendArray
         intensity = atmospheric_intensity!(prop, atm, tel, src)
         @assert intensity isa BackendArray
         return intensity
@@ -269,8 +284,8 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
             zero_padding=2,
             T=T)
         field = propagate_atmosphere_field!(prop, atm, tel, src)
-        @assert field.state.field isa BackendArray
-        return field.state.field
+        @assert field.values isa BackendArray
+        return field.values
     end
 
     record_gpu_smoke!(failures, "atmosphere_infinite_statistical_agreement") do

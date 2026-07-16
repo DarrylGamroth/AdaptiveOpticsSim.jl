@@ -368,7 +368,7 @@ curvature_camera_frame(backend, ::Type{T}, pupil_samples::Int, readout_model::Cu
     backend{T}(undef, curvature_camera_dims(pupil_samples, readout_pixels_per_sample, readout_model)...)
 
 function update_valid_mask!(wfs::CurvatureWFS, tel::Telescope)
-    set_valid_subapertures!(wfs.state.valid_mask, tel.state.pupil, wfs.params.threshold)
+    set_valid_subapertures!(wfs.state.valid_mask, pupil_mask(tel), wfs.params.threshold)
     return wfs
 end
 
@@ -567,11 +567,11 @@ function curvature_intensity!(::ScalarCPUStyle, wfs::CurvatureWFS, tel::Telescop
     oy = div(pad - n, 2)
     opd_to_cycles = eltype(wfs.state.frame_plus)(2) / wavelength(src)
     amp_scale = sqrt(eltype(wfs.state.frame_plus)(
-        photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
+        photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
     ))
     fill!(wfs.state.field_stack, zero(eltype(wfs.state.field_stack)))
     @inbounds for y in 1:n, x in 1:n
-        if tel.state.pupil[x, y]
+        if pupil_mask(tel)[x, y]
             val = amp_scale * cispi(opd_to_cycles * tel.state.opd[x, y])
             xx = ox + x
             yy = oy + y
@@ -592,10 +592,10 @@ function curvature_intensity!(style::AcceleratorStyle, wfs::CurvatureWFS, tel::T
     oy = div(pad - n, 2)
     opd_to_cycles = eltype(wfs.state.frame_plus)(2) / wavelength(src)
     amp_scale = sqrt(eltype(wfs.state.frame_plus)(
-        photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
+        photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
     ))
     phase = begin_kernel_phase(style)
-    queue_kernel!(phase, curvature_branch_field_stack_kernel!, wfs.state.field_stack, tel.state.pupil,
+    queue_kernel!(phase, curvature_branch_field_stack_kernel!, wfs.state.field_stack, pupil_mask(tel),
         tel.state.opd, wfs.state.defocus_stack, wfs.state.phasor, amp_scale, opd_to_cycles, ox, oy, n, pad;
         ndrange=size(wfs.state.field_stack))
     finish_kernel_phase!(phase)
@@ -608,22 +608,24 @@ function curvature_branch_stack_from_field!(wfs::CurvatureWFS, field::ElectricFi
 end
 
 function curvature_branch_stack_from_field!(::ScalarCPUStyle, wfs::CurvatureWFS, field::ElectricField)
-    size(field.state.field) == (size(wfs.state.field_stack, 1), size(wfs.state.field_stack, 2)) ||
+    size(field.values) == (size(wfs.state.field_stack, 1), size(wfs.state.field_stack, 2)) ||
         throw(DimensionMismatchError("ElectricField padded resolution must match CurvatureWFS diffraction grid"))
     n_branches = size(wfs.state.field_stack, 3)
     pad = size(wfs.state.field_stack, 1)
     @inbounds for branch in 1:n_branches, y in 1:pad, x in 1:pad
-        wfs.state.field_stack[x, y, branch] = field.state.field[x, y] * wfs.state.defocus_stack[x, y, branch] * wfs.state.phasor[x, y]
+        wfs.state.field_stack[x, y, branch] = field.values[x, y] *
+            wfs.state.defocus_stack[x, y, branch] * wfs.state.phasor[x, y]
     end
     return wfs.state.field_stack
 end
 
 function curvature_branch_stack_from_field!(style::AcceleratorStyle, wfs::CurvatureWFS, field::ElectricField)
-    size(field.state.field) == (size(wfs.state.field_stack, 1), size(wfs.state.field_stack, 2)) ||
+    size(field.values) == (size(wfs.state.field_stack, 1), size(wfs.state.field_stack, 2)) ||
         throw(DimensionMismatchError("ElectricField padded resolution must match CurvatureWFS diffraction grid"))
     phase = begin_kernel_phase(style)
     queue_kernel!(phase, curvature_branch_field_from_input_kernel!, wfs.state.field_stack,
-        field.state.field, wfs.state.defocus_stack, wfs.state.phasor, size(wfs.state.field_stack, 1), size(wfs.state.field_stack, 3);
+        field.values, wfs.state.defocus_stack, wfs.state.phasor,
+        size(wfs.state.field_stack, 1), size(wfs.state.field_stack, 3);
         ndrange=size(wfs.state.field_stack))
     finish_kernel_phase!(phase)
     return wfs.state.field_stack

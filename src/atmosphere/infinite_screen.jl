@@ -717,7 +717,7 @@ function advance!(atm::InfiniteMultiLayerAtmosphere, tel::Telescope; rng::Abstra
 end
 
 function propagate!(atm::InfiniteMultiLayerAtmosphere, tel::Telescope)
-    tel.state.opd .= atm.state.opd .* tel.state.pupil
+    tel.state.opd .= atm.state.opd .* pupil_mask(tel)
     return tel
 end
 

@@ -465,16 +465,6 @@ function convert_frame_response_model(model::RectangularPixelAperture, ::Type{T}
         T(model.pitch_x_px), T(model.pitch_y_px), T(model.fill_factor_x), T(model.fill_factor_y), kernel_x, kernel_y)
 end
 
-function convert_frame_response_model(model::SeparablePixelMTF, ::Type{T}, backend) where {T<:AbstractFloat}
-    array_backend = _resolve_array_backend(backend)
-    kernel_x = array_backend{T}(undef, length(model.kernel_x))
-    kernel_y = array_backend{T}(undef, length(model.kernel_y))
-    copyto!(kernel_x, T.(Array(model.kernel_x)))
-    copyto!(kernel_y, T.(Array(model.kernel_y)))
-    return SeparablePixelMTF{T,typeof(kernel_x),typeof(kernel_y)}(
-        T(model.pitch_x_px), T(model.pitch_y_px), T(model.fill_factor_x), T(model.fill_factor_y), kernel_x, kernel_y)
-end
-
 convert_charge_coupling_model(::NullChargeCoupling, ::Type{T}, backend) where {T<:AbstractFloat} =
     NullChargeCoupling()
 
@@ -511,18 +501,6 @@ function validate_frame_response_model(model::RectangularPixelAperture)
         throw(InvalidConfiguration("RectangularPixelAperture fill_factor_y must lie in (0, 1]"))
     isodd(length(model.kernel_x)) || throw(InvalidConfiguration("RectangularPixelAperture kernel_x length must be odd"))
     isodd(length(model.kernel_y)) || throw(InvalidConfiguration("RectangularPixelAperture kernel_y length must be odd"))
-    return model
-end
-
-function validate_frame_response_model(model::SeparablePixelMTF)
-    model.pitch_x_px > 0 || throw(InvalidConfiguration("SeparablePixelMTF pitch_x_px must be > 0"))
-    model.pitch_y_px > 0 || throw(InvalidConfiguration("SeparablePixelMTF pitch_y_px must be > 0"))
-    zero(model.fill_factor_x) < model.fill_factor_x <= one(model.fill_factor_x) ||
-        throw(InvalidConfiguration("SeparablePixelMTF fill_factor_x must lie in (0, 1]"))
-    zero(model.fill_factor_y) < model.fill_factor_y <= one(model.fill_factor_y) ||
-        throw(InvalidConfiguration("SeparablePixelMTF fill_factor_y must lie in (0, 1]"))
-    isodd(length(model.kernel_x)) || throw(InvalidConfiguration("SeparablePixelMTF kernel_x length must be odd"))
-    isodd(length(model.kernel_y)) || throw(InvalidConfiguration("SeparablePixelMTF kernel_y length must be odd"))
     return model
 end
 

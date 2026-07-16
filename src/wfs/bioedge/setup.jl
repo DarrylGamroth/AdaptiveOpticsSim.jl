@@ -208,7 +208,7 @@ function BioEdgeWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1,
         binning,
     )
     valid_mask = backend{Bool}(undef, pupil_samples, pupil_samples)
-    edge_mask = backend{Bool}(undef, size(tel.state.pupil))
+    edge_mask = backend{Bool}(undef, size(pupil_mask(tel)))
     slopes = backend{T}(undef, 2 * pupil_samples * pupil_samples)
     fill!(slopes, zero(T))
     sf = SpatialFilter(tel; shape=FoucaultFilter(), zero_padding=diffraction_padding, T=T, backend=selector)
@@ -319,13 +319,13 @@ end
 sensing_mode(::BioEdgeWFS{M}) where {M} = M()
 
 function update_valid_mask!(wfs::BioEdgeWFS, tel::Telescope)
-    set_valid_subapertures!(wfs.state.valid_mask, tel.state.pupil, wfs.params.threshold)
+    set_valid_subapertures!(wfs.state.valid_mask, pupil_mask(tel), wfs.params.threshold)
     return wfs
 end
 
 function update_edge_mask!(wfs::BioEdgeWFS, tel::Telescope)
-    Base.require_one_based_indexing(wfs.state.edge_mask, tel.state.pupil)
-    _update_edge_mask!(execution_style(wfs.state.edge_mask), wfs.state.edge_mask, tel.state.pupil, tel.params.resolution)
+    Base.require_one_based_indexing(wfs.state.edge_mask, pupil_mask(tel))
+    _update_edge_mask!(execution_style(wfs.state.edge_mask), wfs.state.edge_mask, pupil_mask(tel), tel.params.resolution)
     return wfs
 end
 

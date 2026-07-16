@@ -363,7 +363,7 @@ function resolve_modulation_points(modulation::T, modulation_points::Union{Int,N
 end
 
 function update_valid_mask!(wfs::PyramidWFS, tel::Telescope)
-    set_valid_subapertures!(wfs.state.valid_mask, tel.state.pupil, wfs.params.threshold)
+    set_valid_subapertures!(wfs.state.valid_mask, pupil_mask(tel), wfs.params.threshold)
     return wfs
 end
 
@@ -420,10 +420,10 @@ end
 function accumulate_pyramid_spectral_intensity!(::ScalarCPUStyle, wfs::PyramidWFS, tel::Telescope, src::SpectralSource)
     count = length(src.bundle.samples)
     stack = grouped_stack_view(ensure_pyramid_asterism_stack!(wfs, count), count)
-    total_flux = photon_flux(src)
+    total_irradiance = photon_irradiance(src)
     @inbounds for (sample_idx, sample) in pairs(src.bundle.samples)
-        variant = source_with_wavelength_and_flux(src, sample.wavelength,
-            eltype(wfs.state.intensity)(total_flux * sample.weight))
+        variant = source_with_wavelength_and_irradiance(src, sample.wavelength,
+            eltype(wfs.state.intensity)(total_irradiance * sample.weight))
         pyramid_intensity!(@view(stack[:, :, sample_idx]), wfs, tel, variant)
     end
     return reduce_grouped_stack!(ScalarCPUStyle(), wfs.state.intensity, stack, count)
@@ -432,10 +432,10 @@ end
 function accumulate_pyramid_spectral_intensity!(style::AcceleratorStyle, wfs::PyramidWFS, tel::Telescope, src::SpectralSource)
     count = length(src.bundle.samples)
     stack = grouped_stack_view(ensure_pyramid_asterism_stack!(wfs, count), count)
-    total_flux = photon_flux(src)
+    total_irradiance = photon_irradiance(src)
     @inbounds for (sample_idx, sample) in pairs(src.bundle.samples)
-        variant = source_with_wavelength_and_flux(src, sample.wavelength,
-            eltype(wfs.state.intensity)(total_flux * sample.weight))
+        variant = source_with_wavelength_and_irradiance(src, sample.wavelength,
+            eltype(wfs.state.intensity)(total_irradiance * sample.weight))
         pyramid_intensity!(@view(stack[:, :, sample_idx]), wfs, tel, variant)
     end
     return reduce_grouped_stack!(style, wfs.state.intensity, stack, count)

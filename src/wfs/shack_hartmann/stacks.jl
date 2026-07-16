@@ -1,11 +1,12 @@
 function compute_intensity!(wfs::ShackHartmannWFS, tel::Telescope, src::AbstractSource,
     xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int)
     opd_to_cycles = eltype(wfs.state.intensity)(2) / wavelength(src)
-    amp_scale = sqrt(eltype(wfs.state.intensity)(photon_flux(src) * tel.params.sampling_time *
+    amp_scale = sqrt(eltype(wfs.state.intensity)(photon_irradiance(src) * tel.params.sampling_time *
         (tel.params.diameter / tel.params.resolution)^2))
     fill!(wfs.state.field, zero(eltype(wfs.state.field)))
+    pupil = pupil_mask(tel)
     @views @. wfs.state.field[ox+1:ox+sub, oy+1:oy+sub] =
-        amp_scale * tel.state.pupil[xs:xe, ys:ye] * cispi(opd_to_cycles * tel.state.opd[xs:xe, ys:ye])
+        amp_scale * pupil[xs:xe, ys:ye] * cispi(opd_to_cycles * tel.state.opd[xs:xe, ys:ye])
     @. wfs.state.field *= wfs.state.phasor
     copyto!(wfs.state.fft_buffer, wfs.state.field)
     execute_fft_plan!(wfs.state.fft_buffer, wfs.state.fft_plan)
@@ -100,7 +101,7 @@ function compute_intensity_stack!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::
     oy = div(pad - sub, 2)
     T = eltype(wfs.state.intensity)
     opd_to_cycles = T(2) / wavelength(src)
-    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time *
+    amp_scale = sqrt(T(photon_irradiance(src) * tel.params.sampling_time *
         (tel.params.diameter / tel.params.resolution)^2))
     fill!(wfs.state.fft_stack, zero(eltype(wfs.state.fft_stack)))
     idx = 1
@@ -109,7 +110,7 @@ function compute_intensity_stack!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::
             for y in 1:sub, x in 1:sub
                 px = (i - 1) * sub + x
                 py = (j - 1) * sub + y
-                wfs.state.fft_stack[ox + x, oy + y, idx] = amp_scale * tel.state.pupil[px, py] *
+                wfs.state.fft_stack[ox + x, oy + y, idx] = amp_scale * pupil_mask(tel)[px, py] *
                     cispi(opd_to_cycles * tel.state.opd[px, py]) * wfs.state.phasor[ox + x, oy + y]
             end
         end
@@ -130,10 +131,10 @@ function compute_intensity_stack!(style::AcceleratorStyle, wfs::ShackHartmannWFS
     oy = div(pad - sub, 2)
     T = eltype(wfs.state.intensity)
     opd_to_cycles = T(2) / wavelength(src)
-    amp_scale = sqrt(T(photon_flux(src) * tel.params.sampling_time *
+    amp_scale = sqrt(T(photon_irradiance(src) * tel.params.sampling_time *
         (tel.params.diameter / tel.params.resolution)^2))
     launch_kernel_async!(style, sh_field_stack_kernel!, wfs.state.fft_stack, wfs.state.valid_mask,
-        tel.state.pupil, tel.state.opd, wfs.state.phasor, amp_scale, opd_to_cycles, n_sub, sub, ox, oy,
+        pupil_mask(tel), tel.state.opd, wfs.state.phasor, amp_scale, opd_to_cycles, n_sub, sub, ox, oy,
         tel.params.resolution, pad; ndrange=(pad, pad, n_sub, n_sub))
     synchronize_backend!(style)
     execute_fft_plan!(wfs.state.fft_stack, wfs.state.fft_stack_plan)
@@ -161,7 +162,7 @@ function compute_intensity_asterism_stack!(style::AcceleratorStyle, wfs::ShackHa
     host_opd_to_cycles = wfs.state.opd_to_cycles_host
     @inbounds for i in eachindex(ast.sources)
         src = ast.sources[i]
-        host_amp_scales[i] = sqrt(T(photon_flux(src) * tel.params.sampling_time *
+        host_amp_scales[i] = sqrt(T(photon_irradiance(src) * tel.params.sampling_time *
             (tel.params.diameter / tel.params.resolution)^2))
         host_opd_to_cycles[i] = T(2) / wavelength(src)
     end
@@ -171,7 +172,7 @@ function compute_intensity_asterism_stack!(style::AcceleratorStyle, wfs::ShackHa
     fft_view = @view wfs.state.fft_asterism_stack[:, :, 1:total]
     intensity_view = @view wfs.state.intensity_tmp_stack[:, :, 1:total]
     launch_kernel_async!(style, sh_field_asterism_stack_kernel!, fft_view, wfs.state.valid_mask,
-        tel.state.pupil, tel.state.opd, wfs.state.phasor, amp_scales, opd_to_cycles,
+        pupil_mask(tel), tel.state.opd, wfs.state.phasor, amp_scales, opd_to_cycles,
         n_sub, sub, ox, oy, tel.params.resolution, pad, n_spots, n_src;
         ndrange=(pad, pad, n_src, n_sub, n_sub))
     synchronize_backend!(style)
@@ -199,10 +200,10 @@ function compute_intensity_spectral_stack!(style::AcceleratorStyle, wfs::ShackHa
     host_amp_scales = wfs.state.amp_scales_host
     opd_to_cycles = wfs.state.opd_to_cycles
     host_opd_to_cycles = wfs.state.opd_to_cycles_host
-    base_flux = T(photon_flux(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2)
+    base_expected_photons = T(photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2)
     @inbounds for i in eachindex(bundle.samples)
         sample = bundle.samples[i]
-        host_amp_scales[i] = sqrt(base_flux * sample.weight)
+        host_amp_scales[i] = sqrt(base_expected_photons * sample.weight)
         host_opd_to_cycles[i] = T(2) / sample.wavelength
     end
     copyto!(amp_scales, host_amp_scales)
@@ -211,7 +212,7 @@ function compute_intensity_spectral_stack!(style::AcceleratorStyle, wfs::ShackHa
     fft_view = @view wfs.state.fft_asterism_stack[:, :, 1:total]
     intensity_view = @view wfs.state.intensity_tmp_stack[:, :, 1:total]
     launch_kernel_async!(style, sh_field_asterism_stack_kernel!, fft_view, wfs.state.valid_mask,
-        tel.state.pupil, tel.state.opd, wfs.state.phasor, amp_scales, opd_to_cycles,
+        pupil_mask(tel), tel.state.opd, wfs.state.phasor, amp_scales, opd_to_cycles,
         n_sub, sub, ox, oy, tel.params.resolution, pad, n_spots, n_src;
         ndrange=(pad, pad, n_src, n_sub, n_sub))
     synchronize_backend!(style)

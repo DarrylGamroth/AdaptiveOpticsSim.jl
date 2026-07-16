@@ -86,7 +86,7 @@
         actual = compute_gate0_actual(case)
         tel = gate0_telescope(case)
         @views begin
-            @test actual[:, :, 2] == actual[:, :, 1] .* tel.state.pupil
+            @test actual[:, :, 2] == actual[:, :, 1] .* pupil_mask(tel)
             @test actual[:, :, 3] != actual[:, :, 2]
             @test actual[:, :, 4] != actual[:, :, 3]
         end

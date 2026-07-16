@@ -23,13 +23,27 @@ using AdaptiveOpticsSim
 
 tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)
-psf = compute_psf!(tel, src; zero_padding=2)
+pupil = PupilFunction(tel)
+field = ElectricField(pupil, src; zero_padding=2)
+prepared = prepare_direct_psf(tel, pupil, src, field)
+
+compute_psf!(prepared.output, field, pupil, prepared.plan,
+    prepared.workspace)
+psf = intensity_values(prepared.output)
 ```
+
+Keep `pupil`, `field`, `prepared.output`, and `prepared.workspace` owned by
+the path that writes them. Preparation allocates and plans once; repeated
+`compute_psf!` calls are fixed-shape and allocation-free after warmup.
 
 Key objects:
 
 - `Telescope`
 - `Source`
+- `PupilFunction`
+- `ElectricField`
+- `IntensityMap`
+- `prepare_direct_psf`
 - `compute_psf!`
 
 ## Recipe 2: Atmosphere Plus Shack-Hartmann Sensing
@@ -673,7 +687,7 @@ for k in 1:10
     # the external coronagraph model. On CPU, this can be zero-copy.
     payload = CoronagraphPayload(
         sim.tel.state.opd,
-        sim.tel.state.pupil,
+        pupil_mask(sim.tel),
         sim.tel.params.diameter,
         80.0,
         0.9,
@@ -717,7 +731,7 @@ science_model_gpu = prepare_model(
 sense!(scenario)
 payload_gpu = CoronagraphPayload(
     sim.tel.state.opd,
-    sim.tel.state.pupil,
+    pupil_mask(sim.tel),
     Float32(sim.tel.params.diameter),
     80.0f0,
     0.9f0,
@@ -734,7 +748,7 @@ Practical notes:
 - `sim.tel.state.opd` is the simplest advanced handoff for an external science
   arm because it already contains the currently staged atmosphere plus optic
   residual seen by the AO plant.
-- `sim.tel.state.pupil` is worth handing across too when the coronagraph model
+- `pupil_mask(sim.tel)` is worth handing across too when the coronagraph model
   should respect the exact telescope pupil rather than a simplified circular
   aperture.
 - If both packages are on the same GPU backend, the payload arrays can stay on

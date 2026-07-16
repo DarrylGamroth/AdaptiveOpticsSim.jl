@@ -1,17 +1,9 @@
 #
-# Focal-plane spatial filtering
+# Prepared focal-plane spatial filtering
 #
-# A `SpatialFilter` propagates the pupil field to the focal plane, applies a
-# focal-plane mask, and returns the filtered pupil-plane phase and amplitude.
-#
-# The algorithm is:
-# 1. embed the complex pupil field into the padded focal-grid size
-# 2. FFT to the focal plane
-# 3. multiply by the shifted focal mask
-# 4. inverse FFT back to the pupil plane
-# 5. extract filtered phase and amplitude over the original pupil support
-#
-# Different filter shapes only differ in how the focal-plane mask is built.
+# `SpatialFilter` owns only its fixed focal-plane mask definition.
+# `SpatialFilterWorkspace` owns the single-writer FFT plans and scratch.
+# The input `ElectricField` and output `PupilFunction` remain caller-owned.
 #
 abstract type SpatialFilterShape end
 struct CircularFilter <: SpatialFilterShape end
@@ -21,173 +13,231 @@ struct FoucaultFilter <: SpatialFilterShape end
 struct SpatialFilterParams{T<:AbstractFloat}
     diameter::T
     zero_padding::Int
-    resolution::Int
+    pupil_resolution::Int
+    padded_resolution::Int
 end
 
-mutable struct SpatialFilterState{T<:AbstractFloat,
-    C<:AbstractMatrix{Complex{T}},
-    R<:AbstractMatrix{T},
-    Pf,
-    Pi}
+struct SpatialFilter{
+    S<:SpatialFilterShape,
+    P<:SpatialFilterParams,
+    C<:AbstractMatrix,
+    B<:AbstractArrayBackend,
+} <: AbstractOpticalElement
+    params::P
     mask::C
     mask_shifted::C
-    field::C
+end
+
+@inline backend(::SpatialFilter{<:Any,<:Any,<:Any,B}) where {B} = B()
+
+struct SpatialFilterWorkspace{
+    C<:AbstractMatrix,
+    Pf,
+    Pi,
+}
     fft_buffer::C
     filtered_field::C
     fft_plan::Pf
     ifft_plan::Pi
-    phase::R
-    amplitude::R
 end
 
-struct SpatialFilter{S<:SpatialFilterShape,P<:SpatialFilterParams,Sf<:SpatialFilterState} <: AbstractOpticalElement
-    params::P
-    state::Sf
+struct SpatialFilterPlan{
+    T<:AbstractFloat,
+    P<:SpatialFilterParams,
+    I<:OpticalPlaneMetadata,
+    O<:OpticalPlaneMetadata,
+    M<:AbstractMatrix{Bool},
+}
+    filter_params::P
+    input_metadata::I
+    output_metadata::O
+    active_axes::NTuple{2,UnitRange{Int}}
+    support::M
+    wavelength_m::T
 end
 
 """
-    SpatialFilter(tel; shape=CircularFilter(), diameter=..., zero_padding=2, T=Float64, backend::AbstractArrayBackend=CPUBackend())
+    SpatialFilter(tel; shape=CircularFilter(), diameter=..., zero_padding=2)
 
-Construct a focal-plane spatial filter for a telescope.
-
-`shape` determines the focal-plane mask geometry, `diameter` sets the mask
-size in pupil-resolution units, and `zero_padding` controls the focal-plane
-sampling used during propagation.
+Prepare an immutable focal-plane mask. Repeated filtering additionally uses a
+`SpatialFilterWorkspace`, explicit input `ElectricField`, caller-owned output
+`PupilFunction`, and a `SpatialFilterPlan` returned by
+`prepare_spatial_filter`.
 """
-function SpatialFilter(tel::Telescope; shape::SpatialFilterShape=CircularFilter(),
-    diameter::Real=tel.params.resolution / 2, zero_padding::Int=2,
-    T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
-    backend = _resolve_array_backend(backend)
-    n_pad = tel.params.resolution * zero_padding
-    params = SpatialFilterParams{T}(T(diameter), zero_padding, n_pad)
-    mask = backend{Complex{T}}(undef, n_pad, n_pad)
+function SpatialFilter(tel::Telescope;
+    shape::SpatialFilterShape=CircularFilter(),
+    diameter::Real=tel.params.resolution / 2,
+    zero_padding::Int=2,
+    T::Type{<:AbstractFloat}=eltype(opd_map(tel)),
+    backend::AbstractArrayBackend=backend(tel))
+    zero_padding >= 1 || throw(InvalidConfiguration(
+        "spatial-filter zero_padding must be >= 1"))
+    selector = require_same_backend(tel, _resolve_backend_selector(backend))
+    array_backend = _resolve_array_backend(selector)
+    n = tel.params.resolution
+    n_pad = n * zero_padding
+    params = SpatialFilterParams{T}(T(diameter), zero_padding, n, n_pad)
+    mask = array_backend{Complex{T}}(undef, n_pad, n_pad)
     mask_shifted = similar(mask)
-    field = similar(mask)
-    fft_buffer = similar(mask)
-    filtered_field = similar(mask)
+    spatial_filter = SpatialFilter{
+        typeof(shape),typeof(params),typeof(mask),typeof(selector),
+    }(params, mask, mask_shifted)
+    set_spatial_filter!(spatial_filter, shape)
+    return spatial_filter
+end
+
+function SpatialFilterWorkspace(spatial_filter::SpatialFilter)
+    fft_buffer = similar(spatial_filter.mask_shifted)
+    filtered_field = similar(spatial_filter.mask_shifted)
     fft_plan = plan_fft_backend!(fft_buffer)
     ifft_plan = plan_ifft_backend!(filtered_field)
-    phase = backend{T}(undef, tel.params.resolution, tel.params.resolution)
-    amplitude = similar(phase)
-    state = SpatialFilterState{T, typeof(mask), typeof(phase), typeof(fft_plan), typeof(ifft_plan)}(
-        mask,
-        mask_shifted,
-        field,
-        fft_buffer,
-        filtered_field,
-        fft_plan,
-        ifft_plan,
-        phase,
-        amplitude,
-    )
-    sf = SpatialFilter{typeof(shape), typeof(params), typeof(state)}(params, state)
-    set_spatial_filter!(sf)
-    return sf
+    return SpatialFilterWorkspace(fft_buffer, filtered_field, fft_plan,
+        ifft_plan)
 end
 
-function set_spatial_filter!(sf::SpatialFilter{CircularFilter})
-    _set_spatial_filter!(execution_style(sf.state.mask), sf, CircularFilter())
-    return sf
+set_spatial_filter!(spatial_filter::SpatialFilter{S}) where {S} =
+    set_spatial_filter!(spatial_filter, S())
+
+function set_spatial_filter!(spatial_filter::SpatialFilter,
+    ::CircularFilter)
+    diameter_padded = spatial_filter.params.diameter *
+        spatial_filter.params.zero_padding
+    T = real(eltype(spatial_filter.mask))
+    inside = (one(eltype(spatial_filter.mask)) +
+        im * one(eltype(spatial_filter.mask))) / sqrt(T(2))
+    build_mask!(spatial_filter.mask,
+        CircularAperture(radius=diameter_padded, T=T);
+        grid=pixel_mask_grid(spatial_filter.mask; T=T), inside=inside)
+    return finalize_spatial_filter_mask!(spatial_filter)
 end
 
-function _set_spatial_filter!(::ScalarCPUStyle, sf::SpatialFilter, ::CircularFilter)
-    diameter_padded = sf.params.diameter * sf.params.zero_padding
-    inside = (one(eltype(sf.state.mask)) + im * one(eltype(sf.state.mask))) / sqrt(2)
-    build_mask!(sf.state.mask, CircularAperture(radius=diameter_padded, T=eltype(sf.state.phase));
-        grid=pixel_mask_grid(sf.state.mask; T=eltype(sf.state.phase)), inside=inside)
-    finalize_spatial_filter_mask!(sf)
-    return sf
-end
-
-function _set_spatial_filter!(style::AcceleratorStyle, sf::SpatialFilter, ::CircularFilter)
-    diameter_padded = sf.params.diameter * sf.params.zero_padding
-    inside = (one(eltype(sf.state.mask)) + im * one(eltype(sf.state.mask))) / sqrt(2)
-    build_mask!(sf.state.mask, CircularAperture(radius=diameter_padded, T=eltype(sf.state.phase));
-        grid=pixel_mask_grid(sf.state.mask; T=eltype(sf.state.phase)), inside=inside)
-    finalize_spatial_filter_mask!(sf)
-    return sf
-end
-
-function set_spatial_filter!(sf::SpatialFilter{SquareFilter})
-    n = sf.params.resolution
-    diameter_padded = sf.params.diameter * sf.params.zero_padding
+function set_spatial_filter!(spatial_filter::SpatialFilter, ::SquareFilter)
+    n = spatial_filter.params.padded_resolution
+    diameter_padded = spatial_filter.params.diameter *
+        spatial_filter.params.zero_padding
     half = Int(round(diameter_padded / 2))
-    cx = Int(round((n + 1) / 2))
-    xs = max(1, cx - half)
-    xe = min(n, cx + half)
-    inside = (one(eltype(sf.state.mask)) + im * one(eltype(sf.state.mask))) / sqrt(2)
-    build_mask!(sf.state.mask, RectangularROI(xs:xe, xs:xe); inside=inside)
-    finalize_spatial_filter_mask!(sf)
-    return sf
+    center = Int(round((n + 1) / 2))
+    range = max(1, center - half):min(n, center + half)
+    T = real(eltype(spatial_filter.mask))
+    inside = (one(eltype(spatial_filter.mask)) +
+        im * one(eltype(spatial_filter.mask))) / sqrt(T(2))
+    build_mask!(spatial_filter.mask, RectangularROI(range, range);
+        inside=inside)
+    return finalize_spatial_filter_mask!(spatial_filter)
 end
 
-function set_spatial_filter!(sf::SpatialFilter{FoucaultFilter})
-    n = sf.params.resolution
-    inside = (one(eltype(sf.state.mask)) + im * one(eltype(sf.state.mask))) / sqrt(2)
-    build_mask!(sf.state.mask, RectangularROI(1:floor(Int, n / 2), 1:n); inside=inside)
-    finalize_spatial_filter_mask!(sf)
-    return sf
+function set_spatial_filter!(spatial_filter::SpatialFilter,
+    ::FoucaultFilter)
+    n = spatial_filter.params.padded_resolution
+    T = real(eltype(spatial_filter.mask))
+    inside = (one(eltype(spatial_filter.mask)) +
+        im * one(eltype(spatial_filter.mask))) / sqrt(T(2))
+    build_mask!(spatial_filter.mask,
+        RectangularROI(1:floor(Int, n / 2), 1:n); inside=inside)
+    return finalize_spatial_filter_mask!(spatial_filter)
 end
 
-function finalize_spatial_filter_mask!(sf::SpatialFilter)
-    tmp = similar(sf.state.mask)
-    fill!(tmp, zero(eltype(tmp)))
-    @views tmp[1:end-1, 1:end-1] .= sf.state.mask[2:end, 2:end]
-    copyto!(sf.state.mask, tmp)
-    fftshift2d!(sf.state.mask_shifted, sf.state.mask)
-    return sf
+function finalize_spatial_filter_mask!(spatial_filter::SpatialFilter)
+    temporary = similar(spatial_filter.mask)
+    fill!(temporary, zero(eltype(temporary)))
+    @views temporary[1:end-1, 1:end-1] .=
+        spatial_filter.mask[2:end, 2:end]
+    copyto!(spatial_filter.mask, temporary)
+    fftshift2d!(spatial_filter.mask_shifted, spatial_filter.mask)
+    return spatial_filter
 end
 
-function ensure_spatial_filter_buffers!(sf::SpatialFilter, n::Int, n_pad::Int)
-    resized = false
-    if size(sf.state.field) != (n_pad, n_pad)
-        sf.state.field = similar(sf.state.field, n_pad, n_pad)
-        sf.state.fft_buffer = similar(sf.state.fft_buffer, n_pad, n_pad)
-        sf.state.filtered_field = similar(sf.state.filtered_field, n_pad, n_pad)
-        sf.state.mask = similar(sf.state.mask, n_pad, n_pad)
-        sf.state.mask_shifted = similar(sf.state.mask_shifted, n_pad, n_pad)
-        sf.state.fft_plan = plan_fft_backend!(sf.state.fft_buffer)
-        sf.state.ifft_plan = plan_ifft_backend!(sf.state.filtered_field)
-        resized = true
-    end
-    if size(sf.state.phase) != (n, n)
-        sf.state.phase = similar(sf.state.phase, n, n)
-        sf.state.amplitude = similar(sf.state.amplitude, n, n)
-    end
-    if resized
-        set_spatial_filter!(sf)
-    end
-    return sf
+function prepare_spatial_filter(tel::Telescope,
+    spatial_filter::SpatialFilter, input::ElectricField,
+    output::PupilFunction)
+    require_centered_plane_geometry(input.metadata;
+        label="spatial-filter input ElectricField")
+    require_centered_plane_geometry(output.metadata;
+        label="spatial-filter output PupilFunction")
+    require_metric_coordinates(input.metadata;
+        label="spatial-filter input ElectricField")
+    require_metric_coordinates(output.metadata;
+        label="spatial-filter output PupilFunction")
+    input.metadata.dimensions == (
+        spatial_filter.params.padded_resolution,
+        spatial_filter.params.padded_resolution,
+    ) || throw(DimensionMismatchError(
+        "ElectricField dimensions must match the spatial-filter mask"))
+    output.metadata.dimensions == (
+        spatial_filter.params.pupil_resolution,
+        spatial_filter.params.pupil_resolution,
+    ) || throw(DimensionMismatchError(
+        "PupilFunction dimensions must match the spatial-filter pupil grid"))
+    output.metadata.dimensions == size(pupil_mask(tel)) ||
+        throw(DimensionMismatchError(
+            "spatial-filter output must match the telescope aperture"))
+    typeof(input.metadata.kind) === PupilPlane || throw(InvalidConfiguration(
+        "spatial-filter input must be a pupil-plane ElectricField"))
+    typeof(output.metadata.kind) === PupilPlane || throw(InvalidConfiguration(
+        "spatial-filter output must be a pupil-plane PupilFunction"))
+    input.metadata.sampling == output.metadata.sampling ||
+        throw(InvalidConfiguration(
+            "spatial-filter input and output sampling must match"))
+    input.metadata.orientation == output.metadata.orientation ||
+        throw(InvalidConfiguration(
+            "spatial-filter input and output orientation must match"))
+    selector = require_same_backend(tel, spatial_filter, input, output)
+    input.metadata.device == output.metadata.device ||
+        throw(InvalidConfiguration(
+            "spatial-filter input and output must occupy the same device"))
+    plane_device(spatial_filter.mask_shifted) == input.metadata.device ||
+        throw(InvalidConfiguration(
+            "spatial-filter mask and input must occupy the same device"))
+    typeof(selector) === typeof(input.metadata.backend) ||
+        throw(InvalidConfiguration(
+            "spatial-filter metadata backend does not match storage"))
+    ox, oy = field_embedding_offsets(
+        spatial_filter.params.pupil_resolution,
+        spatial_filter.params.padded_resolution)
+    n = spatial_filter.params.pupil_resolution
+    axes = (ox + 1:ox + n, oy + 1:oy + n)
+    T = eltype(output.opd)
+    return SpatialFilterPlan{
+        T,typeof(spatial_filter.params),typeof(input.metadata),
+        typeof(output.metadata),
+        typeof(pupil_mask(tel)),
+    }(
+        spatial_filter.params,
+        input.metadata,
+        output.metadata,
+        axes,
+        pupil_mask(tel),
+        T(electric_field_wavelength(input)),
+    )
 end
 
-"""
-    filter!(sf, tel, src)
+function filter!(output::PupilFunction, input::ElectricField,
+    spatial_filter::SpatialFilter, plan::SpatialFilterPlan,
+    workspace::SpatialFilterWorkspace)
+    input.metadata == plan.input_metadata || throw(InvalidConfiguration(
+        "ElectricField metadata does not match the prepared spatial-filter plan"))
+    output.metadata == plan.output_metadata || throw(InvalidConfiguration(
+        "PupilFunction metadata does not match the prepared spatial-filter plan"))
+    spatial_filter.params == plan.filter_params ||
+        throw(InvalidConfiguration(
+            "SpatialFilter does not match the prepared spatial-filter plan"))
+    size(spatial_filter.mask_shifted) == input.metadata.dimensions ||
+        throw(DimensionMismatchError(
+            "spatial-filter mask does not match its prepared field"))
+    size(workspace.fft_buffer) == input.metadata.dimensions ||
+        throw(DimensionMismatchError(
+            "spatial-filter workspace does not match its prepared field"))
 
-Propagate the telescope field through the spatial filter and return the
-filtered pupil-plane phase and amplitude.
-
-This is a full focal-plane filtering operation rather than a direct pupil-space
-mask.
-"""
-function filter!(sf::SpatialFilter, tel::Telescope, src::AbstractSource)
-    n = tel.params.resolution
-    n_pad = sf.params.resolution
-    ensure_spatial_filter_buffers!(sf, n, n_pad)
-
-    fill!(sf.state.field, zero(eltype(sf.state.field)))
-    opd_to_cycles = eltype(sf.state.field)(2) / wavelength(src)
-    ox = div(n_pad - n, 2)
-    oy = div(n_pad - n, 2)
-    @views @. sf.state.field[ox+1:ox+n, oy+1:oy+n] = tel.state.pupil * cispi(opd_to_cycles * tel.state.opd)
-
-    copyto!(sf.state.fft_buffer, sf.state.field)
-    execute_fft_plan!(sf.state.fft_buffer, sf.state.fft_plan)
-    @. sf.state.filtered_field = sf.state.fft_buffer * sf.state.mask_shifted
-    execute_fft_plan!(sf.state.filtered_field, sf.state.ifft_plan)
+    copyto!(workspace.fft_buffer, input.values)
+    execute_fft_plan!(workspace.fft_buffer, workspace.fft_plan)
+    @. workspace.filtered_field = workspace.fft_buffer *
+        spatial_filter.mask_shifted
+    execute_fft_plan!(workspace.filtered_field, workspace.ifft_plan)
+    opd_per_radian = plan.wavelength_m / (2 * eltype(output.opd)(pi))
     @views begin
-        region = sf.state.filtered_field[ox+1:ox+n, oy+1:oy+n]
-        @. sf.state.phase = angle(region) * tel.state.pupil
-        @. sf.state.amplitude = abs(region)
+        region = workspace.filtered_field[plan.active_axes...]
+        @. output.opd = angle(region) * opd_per_radian * plan.support
+        @. output.amplitude = abs(region)
     end
-    return sf.state.phase, sf.state.amplitude
+    return output
 end

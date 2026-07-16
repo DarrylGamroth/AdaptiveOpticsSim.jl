@@ -99,15 +99,15 @@ authoritative. This table is only an orientation to the principal transitions:
 
 | Area | Current foundation | Target contract |
 |---|---|---|
-| Optical planes and workspaces | `TelescopeState`, `ElectricFieldState`, and `SpatialFilterState` combine some path products, PSF/filtered output, plans, and scratch | A prepared telescope definition feeds compatible caller-owned wavefront/field/irradiance products through single-writer prepared workspaces and reusable optics |
-| Time and radiometry | Telescope sampling time drives atmosphere advancement and is folded into several optical/WFS flux normalizations before detector exposure scaling | Telescope owns only spatial geometry; atmosphere receives explicit model time, optical front ends produce declared photon rates, and acquisition applies elapsed time exactly once |
+| Optical planes and workspaces | `TelescopeAperture` now separates prepared geometry from transitional legacy path state; caller-owned `PupilFunction`, `ElectricField`, and `IntensityMap` products use separate propagation and spatial-filter workspaces | Complete migration of atmosphere, WFS, and legacy convenience paths to the explicit products, then remove transitional telescope path state and cadence |
+| Time and radiometry | Telescope sampling time drives atmosphere advancement and is folded into several optical/WFS radiometric normalizations before detector exposure scaling | Telescope owns only spatial geometry; atmosphere receives explicit model time, optical front ends produce declared photon-arrival-rate products, and acquisition applies elapsed time exactly once |
 | Atmosphere and source rendering | Atmosphere layers, rendered OPD, direction geometry, telescope-derived advancement time, and some source expansion caches share mutable state | One explicitly timed stable atmosphere epoch is consumed by path-local prepared NGS/LGS/spectral/extended-source renderers in any order |
-| WFS composition | Sensor-specific state commonly combines optical propagation, exposure-scaled detector-facing buffers, calibration, and estimation | Prepared optical front ends produce photon-rate irradiance products consumed by independent detector acquisition and estimators, including multi-plane/multi-detector cases |
+| WFS composition | Sensor-specific state commonly combines optical propagation, exposure-scaled detector-facing buffers, calibration, and estimation | Prepared optical front ends produce photon-arrival-rate products with an explicit spatial measure, consumed by independent detector acquisition and estimators, including multi-plane/multi-detector cases |
 | Shared plant and paths | One telescope/atmosphere with sequential shared arms | Immutable event snapshots, path-local propagation workspace, and reusable optical paths separated from acquisition state |
 | Detector acquisition | Detector families, incremental accumulation, rolling shutter, frame transfer, and supported nondestructive reads | Independent acquisition integrates declared rate products over explicit sample/exposure durations, followed by readout events, publication, and explicit equal-time semantics |
 | Guide stars and AO modes | NGS, finite-height LGS, elongation, tomography, co-conjugated additive optics | Mixed NGS/LGS scheduling, independent co-conjugated devices, altitude-conjugated MCAO, and path-specific MOAO |
 | Controllable optics | One runtime optic or packed composite at the pupil | Named placed optics with independent command endpoints, effective times, visibility, and bounded late/future policies |
-| Science optics and NCPA | Direct science products, telescope-owned exposure-scaled PSF storage, sampled NCPA primitives, and a prepared PROPER handoff | Caller-owned native or explicitly converted external photon-rate irradiance feeds independent detector acquisition; later path composition adds explicit NCPA visibility and scheduling |
+| Science optics and NCPA | Direct science products, telescope-owned exposure-scaled PSF storage, sampled NCPA primitives, and a prepared PROPER handoff | Caller-owned native or explicitly converted external photon-arrival-rate products feed independent detector acquisition; later path composition adds explicit NCPA visibility and scheduling |
 | Product fidelity | Full optical models plus separate geometric WFS implementations and deterministic benchmark inputs | One prepared acquisition seam for full, reduced-order, and synthetic/replay providers with invariant RTC boundary semantics and explicit claim limits |
 | Calibration illumination | Optical source models plus static and temporal detector-input sources | A narrow typed path-entry seam where users declare injection, visibility, physics, timing, and composition without instrument assumptions in core |
 | CPU and accelerators | Direct CPU execution and one implicit backend/device per plant | Prepared path owners plus fully explicit or constrained deterministic CPU/GPU and multi-GPU placement; fully automatic cost optimization is deferred |
@@ -133,8 +133,9 @@ When refining this architecture:
 - attach run-immutable plane geometry, wavelength/channel, radiometric,
   density-versus-cell-integrated measure, combination, backend, and device
   metadata and reject incompatible handoffs during preparation
-- form native, external, or WFS photon-rate irradiance before detector-owned
-  elapsed-time integration, MTF, sampling, readout, and estimation; support
+- form native, external, or WFS photon-arrival-rate products before
+  detector-owned elapsed-time integration, presampling response, sampling,
+  readout, and estimation; support
   multiple detector planes without assuming one area frame
 - combine spectral/source planes by index only when their physical grids and
   incoherent-addition semantics are compatible; otherwise retain a bundle or

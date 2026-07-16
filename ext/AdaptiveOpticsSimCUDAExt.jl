@@ -14,6 +14,8 @@ AdaptiveOpticsSim.backend_rand(::Type{AdaptiveOpticsSim.CUDABackendTag}, ::Type{
 AdaptiveOpticsSim.backend_randn(::Type{AdaptiveOpticsSim.CUDABackendTag}, ::Type{T}, dims::Vararg{Int}) where {T} = CUDA.randn(T, dims...)
 AdaptiveOpticsSim.backend_zeros(::Type{AdaptiveOpticsSim.CUDABackendTag}, ::Type{T}, dims::Vararg{Int}) where {T} = CUDA.zeros(T, dims...)
 AdaptiveOpticsSim.backend_fill(::Type{AdaptiveOpticsSim.CUDABackendTag}, value, dims::Vararg{Int}) = CUDA.fill(value, dims...)
+AdaptiveOpticsSim.physical_device_identifier(array::CUDA.CuArray) =
+    CUDA.deviceid(CUDA.device(array))
 
 function AdaptiveOpticsSim.masked_sum2d_accelerator(
     ::AdaptiveOpticsSim.AcceleratorStyle{<:CUDA.CUDABackend},

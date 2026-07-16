@@ -511,32 +511,50 @@ end
         mark_ka_cpu_kernel!(:fill_telescope_field_kernel!)
         @test ka_cpu_close(ka_field, scalar_field)
 
-        scalar_ef = ElectricField(tel, src; zero_padding=2)
-        ka_ef = ElectricField(tel, src; zero_padding=2)
+        wavefront = PupilFunction(tel)
+        scalar_ef = ElectricField(wavefront, src; zero_padding=2)
+        ka_ef = ElectricField(wavefront, src; zero_padding=2)
+        formation = prepare_pupil_field(tel, wavefront, src, scalar_ef)
+        AdaptiveOpticsSim._fill_electric_field!(SCALAR_CPU_STYLE,
+            scalar_ef, wavefront, formation)
+        AdaptiveOpticsSim._fill_electric_field!(KA_CPU_STYLE, ka_ef,
+            wavefront, formation)
+        mark_ka_cpu_kernel!(:fill_pupil_field_kernel!)
+        @test ka_cpu_close(ka_ef.values, scalar_ef.values)
         opd = reshape(collect(range(0.0, 1e-8; length=64)), 8, 8)
         phase = reshape(collect(range(0.0, 0.1; length=64)), 8, 8)
         amp = reshape(collect(range(0.9, 1.1; length=64)), 8, 8)
-        AdaptiveOpticsSim._apply_phase!(SCALAR_CPU_STYLE, scalar_ef, opd, :opd)
-        AdaptiveOpticsSim._apply_phase!(KA_CPU_STYLE, ka_ef, opd, :opd)
+        AdaptiveOpticsSim._apply_phase!(SCALAR_CPU_STYLE, scalar_ef, opd,
+            :opd, formation)
+        AdaptiveOpticsSim._apply_phase!(KA_CPU_STYLE, ka_ef, opd, :opd,
+            formation)
         mark_ka_cpu_kernel!(:apply_phase_opd_kernel!)
-        @test ka_cpu_close(ka_ef.state.field, scalar_ef.state.field)
-        AdaptiveOpticsSim._apply_phase!(SCALAR_CPU_STYLE, scalar_ef, phase, :phase)
-        AdaptiveOpticsSim._apply_phase!(KA_CPU_STYLE, ka_ef, phase, :phase)
+        @test ka_cpu_close(ka_ef.values, scalar_ef.values)
+        AdaptiveOpticsSim._apply_phase!(SCALAR_CPU_STYLE, scalar_ef, phase,
+            :phase, formation)
+        AdaptiveOpticsSim._apply_phase!(KA_CPU_STYLE, ka_ef, phase, :phase,
+            formation)
         mark_ka_cpu_kernel!(:apply_phase_rad_kernel!)
-        @test ka_cpu_close(ka_ef.state.field, scalar_ef.state.field)
-        AdaptiveOpticsSim._apply_amplitude!(SCALAR_CPU_STYLE, scalar_ef, amp)
-        AdaptiveOpticsSim._apply_amplitude!(KA_CPU_STYLE, ka_ef, amp)
+        @test ka_cpu_close(ka_ef.values, scalar_ef.values)
+        AdaptiveOpticsSim._apply_amplitude!(SCALAR_CPU_STYLE, scalar_ef,
+            amp, formation)
+        AdaptiveOpticsSim._apply_amplitude!(KA_CPU_STYLE, ka_ef, amp,
+            formation)
         mark_ka_cpu_kernel!(:apply_amplitude_kernel!)
-        @test ka_cpu_close(ka_ef.state.field, scalar_ef.state.field)
+        @test ka_cpu_close(ka_ef.values, scalar_ef.values)
 
-        scalar_intensity = similar(scalar_ef.state.intensity)
-        ka_intensity = similar(ka_ef.state.intensity)
-        AdaptiveOpticsSim._intensity!(SCALAR_CPU_STYLE, scalar_intensity, scalar_ef.state.field)
-        AdaptiveOpticsSim._intensity!(KA_CPU_STYLE, ka_intensity, ka_ef.state.field)
+        scalar_intensity = similar(scalar_ef.values, Float64)
+        ka_intensity = similar(ka_ef.values, Float64)
+        AdaptiveOpticsSim._intensity!(SCALAR_CPU_STYLE, scalar_intensity,
+            scalar_ef.values)
+        AdaptiveOpticsSim._intensity!(KA_CPU_STYLE, ka_intensity,
+            ka_ef.values)
         mark_ka_cpu_kernel!(:intensity_kernel!)
         @test ka_cpu_close(ka_intensity, scalar_intensity)
-        AdaptiveOpticsSim._accumulate_intensity!(SCALAR_CPU_STYLE, scalar_intensity, scalar_ef.state.field)
-        AdaptiveOpticsSim._accumulate_intensity!(KA_CPU_STYLE, ka_intensity, ka_ef.state.field)
+        AdaptiveOpticsSim._accumulate_intensity!(SCALAR_CPU_STYLE,
+            scalar_intensity, scalar_ef.values)
+        AdaptiveOpticsSim._accumulate_intensity!(KA_CPU_STYLE,
+            ka_intensity, ka_ef.values)
         mark_ka_cpu_kernel!(:accumulate_abs2_kernel!)
         @test ka_cpu_close(ka_intensity, scalar_intensity)
 
@@ -768,8 +786,8 @@ end
 
         scalar_edge_mask = similar(wfs.state.edge_mask)
         ka_edge_mask = similar(wfs.state.edge_mask)
-        AdaptiveOpticsSim._update_edge_mask!(SCALAR_CPU_STYLE, scalar_edge_mask, tel.state.pupil, tel.params.resolution)
-        AdaptiveOpticsSim._update_edge_mask!(KA_CPU_STYLE, ka_edge_mask, tel.state.pupil, tel.params.resolution)
+        AdaptiveOpticsSim._update_edge_mask!(SCALAR_CPU_STYLE, scalar_edge_mask, pupil_mask(tel), tel.params.resolution)
+        AdaptiveOpticsSim._update_edge_mask!(KA_CPU_STYLE, ka_edge_mask, pupil_mask(tel), tel.params.resolution)
         mark_ka_cpu_kernel!(:edge_mask_kernel!)
         @test ka_edge_mask == scalar_edge_mask
 

@@ -195,7 +195,8 @@ end
     wfs = ShackHartmannWFS(tel; n_lenslets=4, backend=CPUBackend())
     det = Detector(backend=CPUBackend())
     sf = SpatialFilter(tel; backend=CPUBackend())
-    ef = ElectricField(tel, Source(band=:I, magnitude=0.0); backend=CPUBackend())
+    wavefront = PupilFunction(tel; backend=CPUBackend())
+    ef = ElectricField(wavefront, Source(band=:I, magnitude=0.0))
 
     @test tel.state.opd isa Matrix
     @test atm.state.opd isa Matrix
@@ -208,8 +209,8 @@ end
     @test focus.state.coefs isa Vector
     @test wfs.state.slopes isa Vector
     @test det.state.frame isa Matrix
-    @test sf.state.phase isa Matrix
-    @test ef.state.field isa Matrix{ComplexF64}
+    @test sf.mask isa Matrix{ComplexF64}
+    @test ef.values isa Matrix{ComplexF64}
 
     @test backend(tel) isa CPUBackend
     @test backend(atm) isa CPUBackend
@@ -255,7 +256,7 @@ function build_static_runtime_atmosphere(tel::Telescope; T::Type{<:AbstractFloat
     selector = AdaptiveOpticsSim.require_same_backend(tel, AdaptiveOpticsSim._resolve_backend_selector(backend))
     array_backend = AdaptiveOpticsSim._resolve_array_backend(selector)
     host = zeros(T, tel.params.resolution, tel.params.resolution)
-    host .*= Array(tel.state.pupil)
+    host .*= Array(pupil_mask(tel))
     screen = array_backend{T}(undef, size(host)...)
     copyto!(screen, host)
     return StaticRuntimeAtmosphere{typeof(screen),typeof(selector)}(screen)

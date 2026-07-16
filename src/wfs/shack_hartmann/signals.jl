@@ -197,10 +197,10 @@ end
 function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource)
     fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
     peak = zero(eltype(wfs.state.slopes))
-    total_flux = photon_flux(src)
+    total_irradiance = photon_irradiance(src)
     @inbounds for sample in src.bundle.samples
-        variant = source_with_wavelength_and_flux(src, sample.wavelength,
-            eltype(wfs.state.slopes)(total_flux * sample.weight))
+        variant = source_with_wavelength_and_irradiance(src, sample.wavelength,
+            eltype(wfs.state.slopes)(total_irradiance * sample.weight))
         peak = max(peak, sampled_spots_peak!(ScalarCPUStyle(), wfs, tel, variant))
         wfs.state.spot_cube_accum .+= wfs.state.spot_cube
     end
@@ -212,10 +212,10 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
     if sh_uses_rocm_safe_sensing_plan(wfs)
         fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
         peak = zero(eltype(wfs.state.slopes))
-        total_flux = photon_flux(src)
+        total_irradiance = photon_irradiance(src)
         @inbounds for sample in src.bundle.samples
-            variant = source_with_wavelength_and_flux(src, sample.wavelength,
-                eltype(wfs.state.slopes)(total_flux * sample.weight))
+            variant = source_with_wavelength_and_irradiance(src, sample.wavelength,
+                eltype(wfs.state.slopes)(total_irradiance * sample.weight))
             peak = max(peak, sampled_spots_peak!(style, wfs, tel, variant))
             @. wfs.state.spot_cube_accum = wfs.state.spot_cube_accum + wfs.state.spot_cube
         end
@@ -225,10 +225,10 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
     if is_lgs_source(src)
         fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
         peak = zero(eltype(wfs.state.slopes))
-        total_flux = photon_flux(src)
+        total_irradiance = photon_irradiance(src)
         @inbounds for sample in src.bundle.samples
-            variant = source_with_wavelength_and_flux(src, sample.wavelength,
-                eltype(wfs.state.slopes)(total_flux * sample.weight))
+            variant = source_with_wavelength_and_irradiance(src, sample.wavelength,
+                eltype(wfs.state.slopes)(total_irradiance * sample.weight))
             peak = max(peak, sampled_spots_peak!(style, wfs, tel, variant))
             @. wfs.state.spot_cube_accum = wfs.state.spot_cube_accum + wfs.state.spot_cube
         end
@@ -381,10 +381,10 @@ end
 function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource,
     det::AbstractDetector, rng::AbstractRNG)
     fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
-    total_flux = photon_flux(src)
+    total_irradiance = photon_irradiance(src)
     @inbounds for sample in src.bundle.samples
-        variant = source_with_wavelength_and_flux(src, sample.wavelength,
-            eltype(wfs.state.slopes)(total_flux * sample.weight))
+        variant = source_with_wavelength_and_irradiance(src, sample.wavelength,
+            eltype(wfs.state.slopes)(total_irradiance * sample.weight))
         sampled_spots_peak!(ScalarCPUStyle(), wfs, tel, variant)
         wfs.state.spot_cube_accum .+= wfs.state.spot_cube
     end
@@ -397,10 +397,10 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
     det::AbstractDetector, rng::AbstractRNG)
     if sh_uses_rocm_safe_sensing_plan(wfs)
         fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
-        total_flux = photon_flux(src)
+        total_irradiance = photon_irradiance(src)
         @inbounds for sample in src.bundle.samples
-            variant = source_with_wavelength_and_flux(src, sample.wavelength,
-                eltype(wfs.state.slopes)(total_flux * sample.weight))
+            variant = source_with_wavelength_and_irradiance(src, sample.wavelength,
+                eltype(wfs.state.slopes)(total_irradiance * sample.weight))
             sampled_spots_peak!(style, wfs, tel, variant, det, rng)
             @. wfs.state.spot_cube_accum = wfs.state.spot_cube_accum + wfs.state.spot_cube
         end
@@ -410,10 +410,10 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
     end
     if is_lgs_source(src)
         fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
-        total_flux = photon_flux(src)
+        total_irradiance = photon_irradiance(src)
         @inbounds for sample in src.bundle.samples
-            variant = source_with_wavelength_and_flux(src, sample.wavelength,
-                eltype(wfs.state.slopes)(total_flux * sample.weight))
+            variant = source_with_wavelength_and_irradiance(src, sample.wavelength,
+                eltype(wfs.state.slopes)(total_irradiance * sample.weight))
             sampled_spots_peak!(style, wfs, tel, variant)
             @. wfs.state.spot_cube_accum = wfs.state.spot_cube_accum + wfs.state.spot_cube
         end

@@ -510,7 +510,7 @@ function _gaussian_influence_operator(tel::Telescope,
     topology::AbstractDMTopology, misregistration::Misregistration,
     ::Type{T}, selector::AbstractArrayBackend) where {T<:AbstractFloat}
     n = tel.params.resolution
-    pupil_host = Matrix{Bool}(Array(tel.state.pupil))
+    pupil_host = Matrix{Bool}(Array(pupil_mask(tel)))
     coordinates_host = _registered_actuator_coordinates(topology,
         misregistration, T)
     pupil_backend = _operator_backend_copy(selector, pupil_host)
@@ -734,7 +734,7 @@ end
 function _refresh_gaussian_influence_operator!(
     operator::GaussianInfluenceOperator, dm::DeformableMirror,
     tel::Telescope)
-    pupil_host = Array(tel.state.pupil)
+    pupil_host = Array(pupil_mask(tel))
     copyto!(operator.pupil_host, pupil_host)
     if operator.pupil_backend !== operator.pupil_host
         copyto!(operator.pupil_backend, pupil_host)
@@ -944,7 +944,7 @@ end
     coefs_grid === nothing && throw(InvalidConfiguration("separable DM application requires a grid-backed command buffer"))
     mul!(tmp, xbasis, coefs_grid)
     mul!(dm.state.opd, tmp, ybasis_t)
-    dm.state.opd .*= tel.state.pupil
+    dm.state.opd .*= pupil_mask(tel)
     return dm.state.opd
 end
 
@@ -956,7 +956,7 @@ end
     coefs_grid === nothing && throw(InvalidConfiguration("separable DM application requires a grid-backed command buffer"))
     mul!(tmp, xbasis, coefs_grid)
     mul!(dm.state.opd, tmp, ybasis_t)
-    launch_kernel!(style, dm_apply_pupil_kernel!, dm.state.opd, tel.state.pupil;
+    launch_kernel!(style, dm_apply_pupil_kernel!, dm.state.opd, pupil_mask(tel);
         ndrange=size(dm.state.opd))
     return dm.state.opd
 end
@@ -982,6 +982,18 @@ end
     end
     mul!(dm.state.opd_vec, dm.state.modes, dm.state.actuator_coefs)
     return dm.state.opd
+end
+
+function update_surface!(dm::DeformableMirror, tel::Telescope)
+    size(dm.state.opd) == size(pupil_mask(tel)) ||
+        throw(DimensionMismatchError(
+            "DM surface dimensions do not match telescope aperture"))
+    require_same_backend(dm, tel)
+    plane_device(dm.state.opd) == plane_device(pupil_mask(tel)) ||
+        throw(InvalidConfiguration(
+            "DM and telescope aperture occupy different physical devices"))
+    apply_opd!(dm, tel)
+    return dm
 end
 
 """

@@ -145,7 +145,7 @@ function with_extended_source(src::AbstractSource, ::AbstractExtendedSourceModel
 end
 
 wavelength(src::ExtendedSource) = wavelength(src.source)
-photon_flux(src::ExtendedSource) = photon_flux(src.source)
+photon_irradiance(src::ExtendedSource) = photon_irradiance(src.source)
 coordinates_xy_arcsec(src::ExtendedSource) = coordinates_xy_arcsec(src.source)
 source_height_m(src::ExtendedSource) = source_height_m(src.source)
 optical_tag(src::ExtendedSource) = "extended(" * optical_tag(src.source) * ")"
@@ -164,12 +164,15 @@ function source_measurement_signature(src::ExtendedSource)
     return hash((source_measurement_signature(src.source), source_model_signature(src.model)))
 end
 
-function source_with_coordinates_and_flux(src::Source, coords_xy_arcsec::NTuple{2,T}, flux::T) where {T<:AbstractFloat}
+function source_with_coordinates_and_irradiance(src::Source,
+    coords_xy_arcsec::NTuple{2,T}, irradiance::T) where {T<:AbstractFloat}
     params = src.params
-    return Source(SourceParams{T}(params.band, T(params.magnitude), coords_xy_arcsec, T(params.wavelength), flux))
+    return Source(SourceParams{T}(params.band, T(params.magnitude),
+        coords_xy_arcsec, T(params.wavelength), irradiance))
 end
 
-function source_with_coordinates_and_flux(src::LGSSource, coords_xy_arcsec::NTuple{2,T}, flux::T) where {T<:AbstractFloat}
+function source_with_coordinates_and_irradiance(src::LGSSource,
+    coords_xy_arcsec::NTuple{2,T}, irradiance::T) where {T<:AbstractFloat}
     params = src.params
     return LGSSource(LGSSourceParams{T, typeof(params.na_profile)}(
         T(params.magnitude),
@@ -180,20 +183,23 @@ function source_with_coordinates_and_flux(src::LGSSource, coords_xy_arcsec::NTup
         (T(params.laser_coordinates[1]), T(params.laser_coordinates[2])),
         params.na_profile,
         T(params.fwhm_spot_up),
-        flux,
+        irradiance,
     ))
 end
 
 function _build_extended_source_asterism(src::Union{Source,LGSSource}, model::AbstractExtendedSourceModel)
     base_coords = coordinates_xy_arcsec(src)
-    total_flux = photon_flux(src)
+    total_irradiance = photon_irradiance(src)
     offsets = source_model_offsets(model)
     weights = source_model_weights(model)
-    samples = Vector{typeof(source_with_coordinates_and_flux(src, base_coords, total_flux * eltype(weights)(weights[1])))}(undef, length(weights))
+    first_irradiance = total_irradiance * eltype(weights)(weights[1])
+    samples = Vector{typeof(source_with_coordinates_and_irradiance(
+        src, base_coords, first_irradiance))}(undef, length(weights))
     @inbounds for i in eachindex(offsets, weights)
         offset = offsets[i]
         coords = (base_coords[1] + offset[1], base_coords[2] + offset[2])
-        samples[i] = source_with_coordinates_and_flux(src, coords, total_flux * weights[i])
+        samples[i] = source_with_coordinates_and_irradiance(src, coords,
+            total_irradiance * weights[i])
     end
     return Asterism(samples)
 end
