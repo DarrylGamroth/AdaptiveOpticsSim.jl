@@ -58,6 +58,10 @@ happen inside the hot loop:
 - allocate exported readout and metadata surfaces
 - precompute calibration products
 - prepare grouped execution stacks
+- bind each acquisition to a full-optical, reduced-order, or synthetic/replay
+  product provider with preallocated state
+- prepare any user-declared illumination evaluator at its supported typed path
+  entry or detector input
 - prepare delay lines and runtime staging
 - ensure detector and WFS pipeline buffers exist
 
@@ -83,6 +87,97 @@ At a high level, one closed-loop step is:
 8. stage delayed commands or delayed readout products as needed
 
 This split is visible in runtime timing and benchmark surfaces.
+
+This is the current implemented single-step flow. The HIL-focused target keeps
+the same model-local computations but first replaces shared telescope path
+scratch with this explicit prepared flow:
+
+1. advance one shared atmosphere epoch to explicit model time
+2. render each due direction through a path-local prepared renderer into a
+   caller-owned pupil wavefront or electric field
+3. apply visible static and controllable surfaces to that path product
+4. form WFS or direct-science photon-rate irradiance through a prepared optical
+   front end
+5. integrate each compatible detector's explicit sample/exposure duration and
+   acquire independently from immutable rate irradiance
+6. estimate a WFS measurement where the endpoint requires one
+
+The telescope owns aperture, reflectivity, spatial sampling, and geometry; it
+does not own cadence/exposure duration, the path OPD/field, PSF result, FFT
+plans, or propagation scratch. Atmosphere advancement receives explicit model
+time rather than telescope sampling time. Source geometry and extended-source
+expansion caches are frozen or prepared per path rather than mutated in the
+shared atmosphere or source definition.
+
+Every prepared plane declares physical sampling, centering/orientation,
+wavelength/channel, units/normalization, coherence/combination policy, backend,
+device compatibility, and whether values are spatial densities or integrated
+over represented cells. Physical detector-facing irradiance is a photon rate;
+detector acquisition applies elapsed time exactly once and preserves the
+declared spatial measure through response and pixel integration. Incompatible
+spectral grids remain a bundle or require an explicit prepared mapping. Native
+direct science and prepared PROPER output meet at this same caller-owned rate-
+irradiance/acquisition boundary. These are concrete products and functions,
+not a universal optical graph or resampling framework.
+
+The target then separates reusable optical paths from independently scheduled
+or triggered acquisition state, and schedules exposure, optical sampling,
+readout, and publication as separate events. Commands arrive from an external
+RTC and become effective independently of detector cadence.
+Acquisitions may follow independent schedules or delivered edges from a common
+trigger source with per-detector delay, skew, jitter, and explicit dropped or
+duplicate-edge faults. Physical exposure timing, reported detector timestamps,
+and HIL execution-clock lateness remain distinct.
+
+That target admits heterogeneous NGS/LGS WFS paths, direct science cameras,
+PROPER-backed coronagraph paths, common MCAO planes, and path-specific MOAO
+planes while preserving independently commanded co-conjugated optics. Sampled
+NCPA belongs to the selected native branch; detailed instrument and
+coronagraph propagation remains at the prepared PROPER seam.
+
+The target also decouples acquisition scheduling and publication from product
+generation fidelity. A prepared acquisition may use the full optical path, a
+command-responsive geometric/linear/reduced-resolution provider, or a
+preallocated synthetic/replay source. All providers produce the same declared
+shape, type, geometry/radiometry, metadata, sequence, complete-product lease,
+and port behavior, so
+an RTC adapter can be tested at production rate without paying for optics that
+are outside the test boundary. Fidelity is mixed per acquisition and never
+changes during a run; another fidelity tier requires another prepare/arm cycle.
+
+The reduced-order provider remains a causal AO plant: it advances a seeded or
+replayed time-correlated disturbance, projects it into each sensing direction,
+subtracts the response of commands that are physically effective at the sample
+time, and emits calibrated slopes or approximate pixels with selected noise and
+detector timing. The external RTC still performs its normal reconstruction,
+tomography, controller, command-splitting, and recovery work; only the expensive
+optical evaluation is replaced by a validated surrogate.
+
+Calibration illumination follows the same path machinery rather than entering
+a special runtime mode. User or companion code declares the supported entry
+boundary, downstream visibility, source evaluator, state timing, and any
+combination rule. Core executes that prepared evaluator and the ordinary
+acquisition pipeline; a calibration label alone never changes propagation.
+
+The current `AOSimulation` stores one controllable optic, so existing
+multi-surface plants use `CompositeControllableOptic` as a packed-command and
+additive-application adapter. The breaking HIL refactor removes that type and
+registers each optic and independently timed command endpoint explicitly, then
+derives co-located optical execution groups during preparation. Packed transport
+schemas belong to user integration outside the general HIL package. They map to
+canonical command transactions submitted through the HIL ports and carry no
+physical grouping, clock, or atomicity semantics of their own.
+
+Each canonical command endpoint prepares its payload type/shape, units, basis
+and calibration revision, absolute or incremental semantics, limits, session
+epoch, sequence behavior, and silence/watchdog policy. Sampled actuator or
+device feedback returns through an ordinary acquisition endpoint rather than
+being conflated with the terminal outcome of a command.
+
+The maintained target architecture is indexed by
+[`hil-package-boundary.md`](hil-package-boundary.md); durable capability IDs,
+states, and acceptance gates are tracked in
+[`hil/compliance-matrix.md`](hil/compliance-matrix.md).
 
 ## Product Ownership
 
@@ -133,6 +228,12 @@ For grouped composite execution, exported outputs can additionally include:
 
 This keeps slopes-only runs from paying unnecessary export costs.
 
+For synthetic load tests, the output plan also declares whether payloads are
+reused, touched, generated, copied, replayed, and consumed. Descriptor-only
+tests measure descriptor throughput; production-shaped pixel tests retain the
+representative payload and memory traffic needed for an RTC pixel-processing
+claim.
+
 ## Backend Flow
 
 The intended backend execution model is:
@@ -151,8 +252,15 @@ Independent runtime plants may be collected into `SimulationEnsemble` for
 coarse sweeps. Sequential execution remains the default. Julia threads,
 AcceleratedKernels task partitioning, and Dagger task graphs are explicit
 policies above each runtime; they do not replace the runtime's CPU-HIL or
-device-resident execution plan. In particular, external-RTC HIL continues to
-call the single-plant runtime directly.
+device-resident execution plan. The current CPU HIL baseline calls one plant
+directly. The target HIL companion drives one immutable prepared plant plan
+through its owned CPU/GPU agents and canonical ports; it does not schedule that
+deadline path as a `SimulationEnsemble`.
+
+Within one HIL process, same-owner stages call directly and owner changes use
+bounded SPSC descriptors. Iceoryx2 or another middleware is reserved for a
+deliberate process or external-RTC boundary; it is not the fan-out mechanism
+for ordinary in-process optical arms.
 
 Representative performance evidence is intentionally kept out of `Pkg.test()`.
 

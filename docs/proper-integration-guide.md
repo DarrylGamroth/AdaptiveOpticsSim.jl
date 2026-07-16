@@ -22,8 +22,11 @@ Keep the packages loosely coupled.
 - `AdaptiveOpticsSim.jl` should receive RTC commands and update AO runtime state.
 - `AdaptiveOpticsSim.jl` should convert actuator commands into a sampled OPD
   surface when its DM model is being used.
-- `Proper.jl` should receive the sampled OPD and pupil arrays needed by the
-  science prescription.
+- `AdaptiveOpticsSim.jl` should own common AO-path aberrations and sampled
+  path-specific NCPA when they are represented on its native planes.
+- `Proper.jl` should receive the caller-owned path OPD/field and prepared pupil
+  geometry needed by the science prescription; it should not require mutable
+  telescope path state after the Gate 0 refactor.
 - Neither package should depend directly on the other for core functionality.
   Keep integration examples and benchmarks at the application boundary unless a
   stable shared package is justified.
@@ -41,6 +44,15 @@ payload = CoronagraphPayload(
 
 psf, sampling = prop_run(science_model; payload=payload)
 ```
+
+This snippet shows the currently implemented handoff. The Gate 0 target builds
+the payload from an explicit science-path product rather than
+`sim.tel.state.opd`. The returned product is accompanied by prepared plane
+metadata covering physical sampling, centering/orientation, wavelength,
+backend/device, and radiometric normalization. A PROPER result enters physical
+detector acquisition only when it is already a photon-rate irradiance or has an
+explicit prepared conversion from its documented normalization. Detector
+exposure duration is never folded into the payload or PROPER result.
 
 The `payload=...` keyword is preferred for new Julia-native integrations.
 `PASSVALUE` is a PROPER compatibility adapter and should be kept for upstream
@@ -71,12 +83,41 @@ Use the direct `Proper.prop_dm(wf, dm_surface)` path only when the external
 science prescription should own a DM surface internally. If the AO runtime has
 already applied the DM, pass the total sampled OPD instead.
 
+## NCPA Ownership
+
+Use the native `NCPA` or `OPDMap` model for a static or slowly varying
+aberration that is adequately represented as sampled pupil OPD. Apply it only
+to the branch that contains the aberration. The current `NCPA` application API
+updates telescope OPD, so a science-only integration must apply it to a
+science-local telescope or OPD workspace rather than mutate shared state later
+reused by a WFS path.
+
+Keep the NCPA inside the `Proper.jl` prescription when its behavior depends on
+the detailed instrument relay, wavelength-dependent surfaces, amplitude
+effects that depend on that relay, coronagraph planes, or propagation between
+several physical optics. Do not also add a collapsed native NCPA map for the
+same surfaces.
+
+A useful HIL compromise is to derive a sampled NCPA surrogate from a detailed
+`Proper.jl` model, validate the surrogate over the required wavelength and
+field range, and use it on a high-rate native path. The full prescription can
+still execute at science cadence or offline without blocking a WFS deadline.
+
 ## Conventions To Validate
 
 Before treating a new instrument integration as supported, validate these
 conventions with small deterministic cases:
 
 - **Units:** the OPD handoff is in meters.
+- **Radiometry:** declare whether the returned array is photon-rate irradiance,
+  normalized intensity, contrast, or another quantity; for a rate, also declare
+  whether samples are a spatial density or cell-integrated. Validate any
+  conversion and flux conservation before detector acquisition with a non-unit
+  exposure.
+- **Spectral coordinates:** wavelength-dependent results may be summed by array
+  index only when their physical focal grids are compatible and the declared
+  combination is incoherent; otherwise retain a bundle or use an explicit
+  prepared mapping.
 - **Sign:** a positive OPD perturbation should produce the expected science
   response for piston, tilt, focus, and one actuator poke.
 - **Centering:** array center conventions should match between the telescope
@@ -98,7 +139,9 @@ For repeated HIL execution:
 
 1. Build and prepare the AO scenario once.
 2. Build and prepare the Proper science model once.
-3. Reuse a typed payload whose arrays point at current AO runtime state.
+3. Reuse a typed payload whose arrays point at the current caller-owned science-
+   path product and whose geometry/radiometry metadata was validated during
+   preparation.
 4. Each frame, update the scenario command, run `sense!` or `step!`, then call
    `prop_run(science_model; payload=payload)`.
 5. Benchmark the combined command-to-pixels path on each claimed backend.
@@ -110,15 +153,17 @@ backends.
 ## Installation For Examples
 
 `Proper.jl` is intentionally not a dependency of `AdaptiveOpticsSim.jl`.
-Install it into the active example or benchmark environment before running the
-companion scripts:
+Install it from its maintained GitHub repository into the active example or
+benchmark environment before running the companion scripts:
 
 ```julia
 using Pkg
-Pkg.add("Proper")
+Pkg.add(url="https://github.com/DarrylGamroth/Proper.jl.git")
 ```
 
-For a local sibling checkout, use development mode instead:
+Validation and benchmark environments should pin an exact source revision and
+retain their manifest. For local package development, a sibling checkout may
+instead use development mode:
 
 ```julia
 using Pkg

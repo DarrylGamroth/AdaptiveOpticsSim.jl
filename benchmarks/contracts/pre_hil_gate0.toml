@@ -1,0 +1,111 @@
+schema_version = 1
+name = "pre_hil_gate0_cpu"
+evidence_class = "warmed in-process serial CPU service time"
+source_revision = "7cf8564a63508ec94209dde41c7af0261abee592"
+samples_per_run = 10000
+runs = 3
+warmup_operations = 100
+minimum_samples_for_p99_gate = 10000
+histogram_lowest_ns = 1
+histogram_highest_ns = 60000000000
+histogram_significant_figures = 3
+relative_p99_factor = 1.25
+
+scope_exclusions = [
+    "package import and construction",
+    "fixed-rate open-loop arrivals, queues, overload, and recovery",
+    "external RTC transport and publication",
+    "GPU execution and host-device transfer",
+    "CPU affinity, isolation, governor control, and interrupt placement",
+]
+
+[contract]
+load_model = "closed_loop"
+arrival_model = "the next operation starts after the previous operation and histogram recording complete"
+coordinated_omission_correction = false
+coordinated_omission_reason = "these cards measure serial service time and do not make a fixed-arrival-rate claim"
+timed_boundary = "prepared input and workspace available through mutation of the declared output/state"
+timer = "time_ns; the final clock read is included, histogram recording is excluded from latency and included in achieved throughput"
+correctness_oracle = "test/reference_data_gate0 plus maintained OOPAO and SPECULA reference bundles"
+threading = "one Julia thread, one BLAS thread, one FFT provider thread"
+first_use = "recorded separately after construction and before warmup; package import is excluded"
+tail_claim = "p99 is gated with 100 expected observations beyond p99 per 10000-sample run; p99.9 is diagnostic"
+absolute_gate_scope = "regression safety bound for these compact cards, not an RTC deadline or production-size capability claim"
+
+[[cards]]
+id = "G0-PERF-01"
+label = "pupil electric-field formation"
+kind = "electric_field"
+resolution = 64
+zero_padding = 2
+absolute_p99_ns = 1000000
+max_alloc_bytes = 0
+
+[[cards]]
+id = "G0-PERF-02"
+label = "direct PSF formation"
+kind = "direct_psf"
+resolution = 64
+zero_padding = 2
+absolute_p99_ns = 2000000
+max_alloc_bytes = 0
+
+[[cards]]
+id = "G0-PERF-03"
+label = "prepared square spatial filter"
+kind = "spatial_filter"
+resolution = 64
+zero_padding = 2
+absolute_p99_ns = 2000000
+max_alloc_bytes = 0
+
+[[cards]]
+id = "G0-PERF-04"
+label = "atmosphere advance and off-axis render"
+kind = "atmosphere_direction"
+resolution = 64
+rng_seed = 71
+absolute_p99_ns = 5000000
+max_alloc_bytes = 0
+
+[[cards]]
+id = "G0-PERF-05"
+label = "diffractive Shack-Hartmann measurement"
+kind = "shack_hartmann"
+resolution = 64
+n_lenslets = 8
+n_pix_subap = 8
+absolute_p99_ns = 5000000
+max_alloc_bytes = 0
+
+[[cards]]
+id = "G0-PERF-06"
+label = "modulated diffractive pyramid measurement"
+kind = "pyramid"
+resolution = 48
+pupil_samples = 6
+modulation_points = 8
+absolute_p99_ns = 10000000
+max_alloc_bytes = 0
+
+[[cards]]
+id = "G0-PERF-07"
+label = "direct science PSF with two detector acquisitions"
+kind = "direct_science_two_detectors"
+resolution = 64
+zero_padding = 2
+rng_seed_a = 81
+rng_seed_b = 82
+absolute_p99_ns = 5000000
+max_alloc_bytes = 0
+
+[[cards]]
+id = "G0-PERF-08"
+label = "compact closed-loop runtime step"
+kind = "closed_loop_step"
+resolution = 16
+n_lenslets = 4
+n_actuators = 4
+rng_seed = 91
+absolute_p99_ns = 5000000
+max_alloc_bytes = 0

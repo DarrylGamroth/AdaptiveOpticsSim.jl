@@ -215,6 +215,7 @@ function build_reference_telescope(cfg::AbstractDict{<:AbstractString,<:Any})
         sampling_time=Float64(cfg["sampling_time"]),
         central_obstruction=Float64(get(cfg, "central_obstruction", 0.0)),
         fov_arcsec=Float64(get(cfg, "fov_arcsec", 0.0)),
+        pupil_reflectivity=Float64(get(cfg, "pupil_reflectivity", 1.0)),
     )
 end
 

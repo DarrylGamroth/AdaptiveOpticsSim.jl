@@ -1,0 +1,341 @@
+version = 1
+
+[metadata]
+baseline = "julia_pre_hil_gate0"
+source_revision = "7cf8564a63508ec94209dde41c7af0261abee592"
+julia_version = "1.12.6"
+description = "Pre-refactor Gate 0 characterization of optical ownership, radiometry, atmosphere rendering, direct science, and maintained WFS evidence."
+time_semantics = "Optical fields include TelescopeParams.sampling_time and detector frames apply DetectorParams.integration_time; this legacy factorization is characterized, not endorsed."
+spatial_measure = "Current pupil and focal samples are treated as cell-integrated photon counts over the telescope sampling interval."
+required_reference_cases = [
+    "shack_hartmann_geometric_ramp_xy",
+    "shack_hartmann_diffractive_ramp",
+    "shack_hartmann_polychromatic_frame",
+    "pyramid_diffractive_ramp",
+    "pyramid_polychromatic_frame",
+    "bioedge_diffractive_ramp",
+    "zernike_flat_signal",
+    "zernike_quadratic_signal",
+    "curvature_flat_signal",
+    "curvature_quadratic_signal",
+    "lift_interaction_matrix",
+]
+
+[cases.telescope_planes]
+kind = "gate0_telescope_planes"
+baseline = "julia_gate0"
+data = "telescope_planes.txt"
+shape = [8, 8, 3]
+atol = 1.0e-15
+rtol = 1.0e-13
+
+[cases.telescope_planes.telescope]
+resolution = 8
+diameter = 4.0
+sampling_time = 0.0025
+central_obstruction = 0.25
+pupil_reflectivity = 0.64
+
+[cases.telescope_planes.opd]
+kind = "ramp"
+scale_x = 3.0e-9
+scale_y = -2.0e-9
+bias = 1.0e-9
+
+[cases.electric_field]
+kind = "gate0_electric_field"
+baseline = "julia_gate0"
+data = "electric_field.txt"
+shape = [8, 8, 3]
+atol = 1.0e-10
+rtol = 1.0e-12
+
+[cases.electric_field.telescope]
+resolution = 8
+diameter = 4.0
+sampling_time = 0.0025
+central_obstruction = 0.25
+pupil_reflectivity = 0.64
+
+[cases.electric_field.source]
+kind = "ngs"
+band = "I"
+magnitude = 2.0
+
+[cases.electric_field.opd]
+kind = "ramp"
+scale_x = 3.0e-9
+scale_y = -2.0e-9
+bias = 1.0e-9
+
+[cases.electric_field.compute]
+zero_padding = 1
+
+[cases.spatial_filter]
+kind = "gate0_spatial_filter"
+baseline = "julia_gate0"
+data = "spatial_filter.txt"
+shape = [8, 8, 2]
+atol = 1.0e-12
+rtol = 1.0e-11
+
+[cases.spatial_filter.telescope]
+resolution = 8
+diameter = 4.0
+sampling_time = 0.0025
+central_obstruction = 0.0
+
+[cases.spatial_filter.source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0
+
+[cases.spatial_filter.opd]
+kind = "ramp"
+scale_x = 8.0e-9
+scale_y = -5.0e-9
+bias = 0.0
+
+[cases.spatial_filter.spatial_filter]
+shape = "square"
+diameter = 3.0
+zero_padding = 2
+
+[cases.optic_surface]
+kind = "gate0_optic_surface"
+baseline = "julia_gate0"
+data = "optic_surface.txt"
+shape = [8, 8]
+atol = 1.0e-15
+rtol = 1.0e-12
+
+[cases.optic_surface.telescope]
+resolution = 8
+diameter = 4.0
+sampling_time = 0.0025
+central_obstruction = 0.0
+
+[cases.optic_surface.controllable_optic]
+kind = "composite"
+application = "additive"
+command = [2.0e-8, -1.0e-8, 0.0, 1.0e-9, -2.0e-9, 3.0e-9, -1.0e-9, 2.0e-9, 0.0, -1.0e-9, 1.0e-9]
+
+[[cases.optic_surface.controllable_optic.components]]
+kind = "modal"
+basis = "cartesian_tilt"
+label = "tiptilt"
+scale = 1.0
+
+[[cases.optic_surface.controllable_optic.components]]
+kind = "dm"
+label = "dm"
+n_act = 3
+influence_width = 0.3
+
+[cases.radiometric_chain]
+kind = "gate0_radiometric_chain"
+baseline = "julia_gate0"
+data = "radiometric_chain.txt"
+shape = [8, 8, 5]
+atol = 1.0e-10
+rtol = 1.0e-12
+
+[cases.radiometric_chain.telescope]
+resolution = 8
+diameter = 4.0
+sampling_time = 0.0025
+central_obstruction = 0.25
+pupil_reflectivity = 0.64
+
+[cases.radiometric_chain.source]
+kind = "ngs"
+band = "I"
+magnitude = 3.0
+
+[[cases.radiometric_chain.detectors]]
+noise = "none"
+integration_time = 0.007
+qe = 0.73
+psf_sampling = 1
+binning = 1
+
+[[cases.radiometric_chain.detectors]]
+noise = "none"
+integration_time = 0.011
+qe = 0.73
+psf_sampling = 1
+binning = 1
+
+[cases.radiometric_chain.compute]
+zero_padding = 1
+seed = 41
+
+[cases.spectral_compatible]
+kind = "gate0_spectral_psf"
+baseline = "julia_gate0"
+data = "spectral_compatible.txt"
+shape = [16, 16, 3]
+atol = 1.0e-10
+rtol = 1.0e-11
+
+[cases.spectral_compatible.telescope]
+resolution = 8
+diameter = 4.0
+sampling_time = 0.0017
+central_obstruction = 0.0
+
+[cases.spectral_compatible.source]
+kind = "ngs"
+band = "I"
+magnitude = 1.0
+
+[cases.spectral_compatible.spectrum]
+wavelengths = [7.9e-7, 7.9e-7]
+weights = [0.35, 0.65]
+
+[cases.spectral_compatible.compute]
+zero_padding = 2
+physical_grid_class = "compatible"
+
+[cases.spectral_incompatible]
+kind = "gate0_spectral_psf"
+baseline = "julia_gate0"
+data = "spectral_incompatible.txt"
+shape = [16, 16, 3]
+atol = 1.0e-10
+rtol = 1.0e-11
+
+[cases.spectral_incompatible.telescope]
+resolution = 8
+diameter = 4.0
+sampling_time = 0.0017
+central_obstruction = 0.0
+
+[cases.spectral_incompatible.source]
+kind = "ngs"
+band = "I"
+magnitude = 1.0
+
+[cases.spectral_incompatible.spectrum]
+wavelengths = [6.4e-7, 1.215e-6]
+weights = [0.4, 0.6]
+
+[cases.spectral_incompatible.compute]
+zero_padding = 2
+physical_grid_class = "incompatible"
+
+[cases.direct_science]
+kind = "gate0_direct_science"
+baseline = "julia_gate0"
+data = "direct_science.txt"
+shape = [16, 16, 5]
+atol = 1.0e-10
+rtol = 1.0e-11
+
+[cases.direct_science.telescope]
+resolution = 8
+diameter = 4.0
+sampling_time = 0.0017
+central_obstruction = 0.25
+pupil_reflectivity = 0.81
+
+[[cases.direct_science.sources]]
+kind = "ngs"
+band = "I"
+magnitude = 1.0
+coordinates = [0.0, 0.0]
+
+[[cases.direct_science.sources]]
+kind = "ngs"
+band = "I"
+magnitude = 2.0
+coordinates = [0.12, 90.0]
+
+[cases.direct_science.compute]
+zero_padding = 2
+
+[cases.atmosphere_short]
+kind = "gate0_atmosphere_directions"
+baseline = "julia_gate0"
+data = "atmosphere_short.txt"
+shape = [8, 8, 4]
+atol = 1.0e-12
+rtol = 1.0e-11
+
+[cases.atmosphere_short.telescope]
+resolution = 8
+diameter = 4.0
+sampling_time = 0.0005
+central_obstruction = 0.0
+
+[cases.atmosphere_short.atmosphere]
+kind = "finite"
+r0 = 0.2
+L0 = 25.0
+fractional_cn2 = [0.6, 0.4]
+wind_speed = [7.0, 13.0]
+wind_direction = [0.0, 120.0]
+altitude = [0.0, 6000.0]
+advance_seed = 71
+advance_steps = 1
+legacy_elapsed_duration = 0.0005
+
+[cases.atmosphere_short.onaxis_source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0
+coordinates = [0.0, 0.0]
+
+[cases.atmosphere_short.offaxis_source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0
+coordinates = [3.0, 45.0]
+
+[cases.atmosphere_short.lgs_source]
+kind = "lgs"
+magnitude = 0.0
+coordinates = [3.0, 45.0]
+
+[cases.atmosphere_long]
+kind = "gate0_atmosphere_directions"
+baseline = "julia_gate0"
+data = "atmosphere_long.txt"
+shape = [8, 8, 4]
+atol = 1.0e-12
+rtol = 1.0e-11
+
+[cases.atmosphere_long.telescope]
+resolution = 8
+diameter = 4.0
+sampling_time = 0.002
+central_obstruction = 0.0
+
+[cases.atmosphere_long.atmosphere]
+kind = "finite"
+r0 = 0.2
+L0 = 25.0
+fractional_cn2 = [0.6, 0.4]
+wind_speed = [7.0, 13.0]
+wind_direction = [0.0, 120.0]
+altitude = [0.0, 6000.0]
+advance_seed = 71
+advance_steps = 3
+legacy_elapsed_duration = 0.006
+
+[cases.atmosphere_long.onaxis_source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0
+coordinates = [0.0, 0.0]
+
+[cases.atmosphere_long.offaxis_source]
+kind = "ngs"
+band = "I"
+magnitude = 0.0
+coordinates = [3.0, 45.0]
+
+[cases.atmosphere_long.lgs_source]
+kind = "lgs"
+magnitude = 0.0
+coordinates = [3.0, 45.0]
