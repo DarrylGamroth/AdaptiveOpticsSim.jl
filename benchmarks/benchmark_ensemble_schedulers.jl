@@ -12,7 +12,6 @@ function make_runtime(seed::Integer, resolution::Int)
     tel = Telescope(
         resolution=resolution,
         diameter=8.0,
-        sampling_time=1e-3,
         central_obstruction=0.0,
     )
     src = Source(band=:I, magnitude=0.0)
@@ -35,6 +34,7 @@ function make_runtime(seed::Integer, resolution::Int)
     runtime = AdaptiveOpticsSim.ClosedLoopRuntime(
         simulation,
         reconstructor;
+        atmosphere_step=1e-3,
         rng=MersenneTwister(seed),
         profile=HILRuntimeProfile(),
     )

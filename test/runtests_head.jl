@@ -11,6 +11,8 @@ using TOML
 BLAS.set_num_threads(1)
 AdaptiveOpticsSim.set_fft_provider_threads!(1)
 
+const TEST_ATMOSPHERE_STEP = 1e-3
+
 # The package exports only the user-facing API. The tests intentionally exercise
 # internal extension seams too, so make those names available without expanding
 # the public export list.
@@ -57,8 +59,9 @@ function assert_source_interface(src)
 end
 
 function assert_atmosphere_interface(atm, tel)
-    @test applicable(advance_by!, atm, tel.params.sampling_time)
-    @test applicable(advance_to!, atm, tel.params.sampling_time)
+    test_time = one(eltype(opd_map(tel)))
+    @test applicable(advance_by!, atm, test_time)
+    @test applicable(advance_to!, atm, test_time)
     @test applicable(prepare_atmosphere_renderer, atm, tel)
     @test applicable(propagate!, atm, tel)
 end
@@ -240,7 +243,7 @@ function moving_atmosphere_trace(;
     steps::Integer=4,
     resolution::Int=16,
     diameter::Real=8.0,
-    sampling_time::Real=1e-3,
+    atmosphere_step::Real=1e-3,
     r0::Real=0.2,
     L0::Real=25.0,
     fractional_cn2::AbstractVector=[1.0],
@@ -248,7 +251,7 @@ function moving_atmosphere_trace(;
     wind_direction::AbstractVector=[0.0],
     altitude::AbstractVector=[0.0],
 )
-    tel = Telescope(resolution=resolution, diameter=diameter, sampling_time=sampling_time, central_obstruction=0.0)
+    tel = Telescope(resolution=resolution, diameter=diameter, central_obstruction=0.0)
     atm = MultiLayerAtmosphere(tel;
         r0=r0,
         L0=L0,
@@ -260,7 +263,7 @@ function moving_atmosphere_trace(;
     rng = MersenneTwister(seed)
     trace = Matrix{Float64}[]
     for _ in 1:steps
-        advance_by!(atm, tel.params.sampling_time; rng=rng)
+        advance_by!(atm, atmosphere_step; rng=rng)
         propagate!(atm, tel)
         push!(trace, copy(tel.state.opd))
     end
@@ -271,14 +274,15 @@ function moving_wfs_slope_trace(;
     seed::Integer=1,
     steps::Integer=4,
 )
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
+    atmosphere_step = 1e-3
     delta = tel.params.diameter / tel.params.resolution
     atm = MultiLayerAtmosphere(tel;
         r0=0.2,
         L0=25.0,
         fractional_cn2=[0.7, 0.3],
-        wind_speed=[delta / tel.params.sampling_time, 0.5 * delta / tel.params.sampling_time],
+        wind_speed=[delta / atmosphere_step, 0.5 * delta / atmosphere_step],
         wind_direction=[0.0, 90.0],
         altitude=[0.0, 5000.0],
     )
@@ -286,7 +290,7 @@ function moving_wfs_slope_trace(;
     rng = MersenneTwister(seed)
     trace = Vector{Vector{Float64}}(undef, steps)
     for i in 1:steps
-        advance_by!(atm, tel.params.sampling_time; rng=rng)
+        advance_by!(atm, atmosphere_step; rng=rng)
         propagate!(atm, tel)
         measure!(wfs, tel, src)
         trace[i] = copy(wfs.state.slopes)
@@ -298,14 +302,15 @@ function moving_closed_loop_trace(;
     seed::Integer=1,
     steps::Integer=5,
 )
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
+    atmosphere_step = 1e-3
     delta = tel.params.diameter / tel.params.resolution
     atm = MultiLayerAtmosphere(tel;
         r0=0.2,
         L0=25.0,
         fractional_cn2=[0.7, 0.3],
-        wind_speed=[delta / tel.params.sampling_time, 0.5 * delta / tel.params.sampling_time],
+        wind_speed=[delta / atmosphere_step, 0.5 * delta / atmosphere_step],
         wind_direction=[0.0, 90.0],
         altitude=[0.0, 5000.0],
     )
@@ -316,7 +321,7 @@ function moving_closed_loop_trace(;
     recon = ModalReconstructor(imat; gain=0.2)
     wfs_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
     science_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
-    runtime = ClosedLoopRuntime(sim, recon; rng=MersenneTwister(seed), wfs_detector=wfs_det, science_detector=science_det)
+    runtime = ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=MersenneTwister(seed), wfs_detector=wfs_det, science_detector=science_det)
     prepare!(runtime)
     delay = VectorDelayLine(runtime.command, 1)
 

@@ -137,12 +137,12 @@ function _profile_field_path(mode::Symbol, atmo_kind::Symbol, backend_name::Abst
     backend, backend_tag, backend_label = _resolve_backend(backend_name)
     cfg = _resolve_scale(scale_name)
     T = Float32
-    tel = Telescope(resolution=cfg.resolution, diameter=cfg.diameter, sampling_time=1.0f-3,
-        central_obstruction=0.0f0, T=T, backend=backend)
+    atmosphere_step = T(1e-3)
+    tel = Telescope(resolution=cfg.resolution, diameter=cfg.diameter, central_obstruction=0.0f0, T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = _make_atmosphere(atmo_kind, tel, cfg, T, backend)
     rng = runtime_rng(3)
-    advance!(atm, tel; rng=rng)
+    advance_by!(atm, atmosphere_step; rng=rng)
 
     prop = AtmosphericFieldPropagation(atm, tel, src;
         model=mode === :geometric ? GeometricAtmosphericPropagation(T=T) : LayeredFresnelAtmosphericPropagation(T=T),
@@ -152,14 +152,14 @@ function _profile_field_path(mode::Symbol, atmo_kind::Symbol, backend_name::Abst
 
     step! = if mode === :curvature
         () -> begin
-            advance!(atm, tel; rng=rng)
+            advance_by!(atm, atmosphere_step; rng=rng)
             measure!(wfs, tel, src, atm)
             _sync_array!(backend_tag, wfs.state.slopes)
             return wfs.state.slopes
         end
     else
         () -> begin
-            advance!(atm, tel; rng=rng)
+            advance_by!(atm, atmosphere_step; rng=rng)
             field = AdaptiveOpticsSim.propagate_atmosphere_field!(prop, atm, tel, src)
             _sync_array!(backend_tag, field.values)
             return field.values
@@ -176,6 +176,7 @@ function _profile_field_path(mode::Symbol, atmo_kind::Symbol, backend_name::Abst
     println("  backend: ", backend_label)
     println("  mode: ", String(mode))
     println("  atmosphere: ", String(atmo_kind))
+    println("  atmosphere_step_s: ", atmosphere_step)
     println("  scale: ", cfg.scale)
     println("  pupil_resolution: ", cfg.resolution)
     println("  n_layers: ", length(cfg.fractional_cn2))

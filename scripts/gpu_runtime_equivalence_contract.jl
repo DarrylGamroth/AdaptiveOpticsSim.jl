@@ -199,7 +199,6 @@ function _build_lgs_case(backend, ::Type{T}, profile::Symbol) where {T<:Abstract
     tel = Telescope(
         resolution=112,
         diameter=8.2,
-        sampling_time=1e-3,
         central_obstruction=0.30,
         T=T,
         backend=backend,
@@ -210,6 +209,7 @@ function _build_lgs_case(backend, ::Type{T}, profile::Symbol) where {T<:Abstract
             wavelength=T(589e-9),
             laser_coordinates=(T(5.0), T(0.0)),
             elongation_factor=T(1.6),
+            photon_irradiance=one(T),
             T=T,
         )
     else
@@ -219,6 +219,7 @@ function _build_lgs_case(backend, ::Type{T}, profile::Symbol) where {T<:Abstract
             laser_coordinates=(T(5.0), T(0.0)),
             na_profile=_na_profile(T),
             fwhm_spot_up=T(1.0),
+            photon_irradiance=one(T),
             T=T,
         )
     end
@@ -246,45 +247,55 @@ function _run_lgs_equivalence(::Type{B}, profile::Symbol) where {B<:AdaptiveOpti
     _assert_close("slopes", wfs_gpu.state.slopes, wfs_cpu.state.slopes)
 end
 
-function _build_mixed_sh_asterism_case(backend, ::Type{T}) where {T<:AbstractFloat}
+function _build_lgs_asterism_case(backend, ::Type{T}) where {T<:AbstractFloat}
     tel = Telescope(
         resolution=112,
         diameter=8.2,
-        sampling_time=1e-3,
         central_obstruction=0.30,
         T=T,
         backend=backend,
     )
-    ngs = Source(wavelength=T(589e-9), magnitude=T(0), coordinates=(T(0.0), T(0.0)), T=T)
     lgs = LGSSource(
         magnitude=T(0),
         wavelength=T(589e-9),
+        coordinates=(T(0.0), T(0.0)),
         laser_coordinates=(T(5.0), T(0.0)),
         na_profile=_na_profile(T),
         fwhm_spot_up=T(1.0),
+        photon_irradiance=one(T),
         T=T,
     )
-    ast = Asterism([ngs, lgs])
+    second_lgs = LGSSource(
+        magnitude=T(0),
+        wavelength=T(589e-9),
+        coordinates=(T(5.0), T(90.0)),
+        laser_coordinates=(T(5.0), T(0.0)),
+        na_profile=_na_profile(T),
+        fwhm_spot_up=T(1.0),
+        photon_irradiance=T(0.75),
+        T=T,
+    )
+    ast = Asterism([lgs, second_lgs])
     wfs = ShackHartmannWFS(tel; n_lenslets=14, mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1e-3), qe=T(1), binning=1, T=T, backend=backend)
     _set_deterministic_opd!(tel)
     return tel, ast, wfs, det
 end
 
-function _run_mixed_sh_asterism_equivalence(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+function _run_lgs_asterism_equivalence(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     AdaptiveOpticsSim.disable_scalar_backend!(B)
     BackendArray = AdaptiveOpticsSim.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
     T = Float32
 
-    tel_cpu, ast_cpu, wfs_cpu, det_cpu = _build_mixed_sh_asterism_case(CPUBackend(), T)
-    tel_gpu, ast_gpu, wfs_gpu, det_gpu = _build_mixed_sh_asterism_case(_gpu_backend_selector(B), T)
+    tel_cpu, ast_cpu, wfs_cpu, det_cpu = _build_lgs_asterism_case(CPUBackend(), T)
+    tel_gpu, ast_gpu, wfs_gpu, det_gpu = _build_lgs_asterism_case(_gpu_backend_selector(B), T)
 
     measure!(wfs_cpu, tel_cpu, ast_cpu, det_cpu; rng=MersenneTwister(3))
     measure!(wfs_gpu, tel_gpu, ast_gpu, det_gpu; rng=MersenneTwister(3))
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(wfs_gpu.state.slopes))
 
-    println("mixed_sh_asterism_equivalence")
+    println("common_calibration_lgs_asterism_equivalence")
     _assert_close("spot_cube", wfs_gpu.state.spot_cube, wfs_cpu.state.spot_cube)
     _assert_close("slopes", wfs_gpu.state.slopes, wfs_cpu.state.slopes)
 end
@@ -293,7 +304,6 @@ function _build_zernike_case(backend, ::Type{T}) where {T<:AbstractFloat}
     tel = Telescope(
         resolution=32,
         diameter=8.0,
-        sampling_time=1e-3,
         central_obstruction=0.0,
         T=T,
         backend=backend,
@@ -349,7 +359,6 @@ function _build_multi_optic_hil_case(backend, ::Type{T}, ::Val{:tiptilt}, wfs_ca
     tel = Telescope(
         resolution=16,
         diameter=T(8.0),
-        sampling_time=T(1e-3),
         central_obstruction=T(0.0),
         T=T,
         backend=backend,
@@ -362,7 +371,7 @@ function _build_multi_optic_hil_case(backend, ::Type{T}, ::Val{:tiptilt}, wfs_ca
     wfs = _build_low_order_wfs(tel, backend, T, wfs_case)
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
     scenario = build_control_loop_scenario(
-        SingleControlLoopConfig(name=Symbol(:multi_optic_equivalence_, _wfs_case_label(wfs_case)), branch_label=:main,
+        SingleControlLoopConfig(atmosphere_step=1e-3, name=Symbol(:multi_optic_equivalence_, _wfs_case_label(wfs_case)), branch_label=:main,
             outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
         ControlLoopBranch(:main, AOSimulation(tel, src, atm, optic, wfs), NullReconstructor();
             wfs_detector=det,
@@ -376,7 +385,6 @@ function _build_multi_optic_hil_case(backend, ::Type{T}, ::Val{:steering}, ::Val
     tel = Telescope(
         resolution=16,
         diameter=T(8.0),
-        sampling_time=T(1e-3),
         central_obstruction=T(0.0),
         T=T,
         backend=backend,
@@ -390,7 +398,7 @@ function _build_multi_optic_hil_case(backend, ::Type{T}, ::Val{:steering}, ::Val
     wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
     scenario = build_control_loop_scenario(
-        SingleControlLoopConfig(name=:steering_multi_optic_equivalence, branch_label=:main,
+        SingleControlLoopConfig(atmosphere_step=1e-3, name=:steering_multi_optic_equivalence, branch_label=:main,
             outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
         ControlLoopBranch(:main, AOSimulation(tel, src, atm, optic, wfs), NullReconstructor();
             wfs_detector=det,
@@ -404,7 +412,6 @@ function _build_multi_optic_hil_case(backend, ::Type{T}, ::Val{:focus}, ::Val{:s
     tel = Telescope(
         resolution=16,
         diameter=T(8.0),
-        sampling_time=T(1e-3),
         central_obstruction=T(0.0),
         T=T,
         backend=backend,
@@ -417,7 +424,7 @@ function _build_multi_optic_hil_case(backend, ::Type{T}, ::Val{:focus}, ::Val{:s
     wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
     scenario = build_control_loop_scenario(
-        SingleControlLoopConfig(name=:focus_multi_optic_equivalence, branch_label=:main,
+        SingleControlLoopConfig(atmosphere_step=1e-3, name=:focus_multi_optic_equivalence, branch_label=:main,
             outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
         ControlLoopBranch(:main, AOSimulation(tel, src, atm, optic, wfs), NullReconstructor();
             wfs_detector=det,
@@ -502,7 +509,7 @@ function run_gpu_runtime_equivalence(::Type{B}; branch_mode::AbstractExecutionPo
     _run_ao188_equivalence(B, branch_mode)
     _run_lgs_equivalence(B, :none)
     _run_lgs_equivalence(B, :na)
-    _run_mixed_sh_asterism_equivalence(B)
+    _run_lgs_asterism_equivalence(B)
     _run_zernike_equivalence(B)
     _run_multi_optic_hil_equivalence(B, Val(:tiptilt), Val(:sh))
     _run_multi_optic_hil_equivalence(B, Val(:tiptilt), Val(:pyr))

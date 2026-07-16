@@ -287,27 +287,93 @@ struct SkipperReadoutProducts{A<:AbstractMatrix} <: FrameReadoutProducts
     sample_count::Int
 end
 
+# Sampled detector parameters are copied into run-owned storage at every
+# public construction boundary. The token is reserved for package code that
+# has already allocated and populated a fresh owned buffer.
+struct OwnedDetectorParameterToken end
+const OWNED_DETECTOR_PARAMETER = OwnedDetectorParameterToken()
+
 struct NullDetectorDefectModel <: AbstractDetectorDefectModel end
 
 struct PixelResponseNonuniformity{T<:AbstractFloat,A<:AbstractMatrix{T}} <: AbstractDetectorDefectModel
     gain_map::A
+    function PixelResponseNonuniformity{T,A}(
+        ::OwnedDetectorParameterToken, gain_map::A) where {
+        T<:AbstractFloat,A<:AbstractMatrix{T}}
+        return new{T,A}(gain_map)
+    end
+
+    function PixelResponseNonuniformity{T,A}(gain_map::A) where {
+        T<:AbstractFloat,A<:AbstractMatrix{T}}
+        owned = copy(gain_map)
+        return validate_detector_defect_model(
+            PixelResponseNonuniformity{T,typeof(owned)}(
+                OWNED_DETECTOR_PARAMETER, owned))
+    end
 end
 
 struct DarkSignalNonuniformity{T<:AbstractFloat,A<:AbstractMatrix{T}} <: AbstractDetectorDefectModel
     dark_map::A
+    function DarkSignalNonuniformity{T,A}(
+        ::OwnedDetectorParameterToken, dark_map::A) where {
+        T<:AbstractFloat,A<:AbstractMatrix{T}}
+        return new{T,A}(dark_map)
+    end
+
+    function DarkSignalNonuniformity{T,A}(dark_map::A) where {
+        T<:AbstractFloat,A<:AbstractMatrix{T}}
+        owned = copy(dark_map)
+        return validate_detector_defect_model(
+            DarkSignalNonuniformity{T,typeof(owned)}(
+                OWNED_DETECTOR_PARAMETER, owned))
+    end
 end
 
 struct BadPixelMask{T<:AbstractFloat,A<:AbstractMatrix{Bool}} <: AbstractDetectorDefectModel
     mask::A
     throughput::T
+    function BadPixelMask{T,A}(::OwnedDetectorParameterToken, mask::A,
+        throughput::T) where {T<:AbstractFloat,A<:AbstractMatrix{Bool}}
+        return new{T,A}(mask, throughput)
+    end
+
+    function BadPixelMask{T,A}(mask::A, throughput::T) where {
+        T<:AbstractFloat,A<:AbstractMatrix{Bool}}
+        owned = copy(mask)
+        return validate_detector_defect_model(
+            BadPixelMask{T,typeof(owned)}(OWNED_DETECTOR_PARAMETER,
+                owned, throughput))
+    end
 end
 
 struct CompositeDetectorDefectModel{M<:Tuple} <: AbstractDetectorDefectModel
     stages::M
-    function CompositeDetectorDefectModel(stages::Tuple{Vararg{AbstractDetectorDefectModel}})
+    function CompositeDetectorDefectModel(::OwnedDetectorParameterToken,
+        stages::Tuple{Vararg{AbstractDetectorDefectModel}})
         isempty(stages) && throw(InvalidConfiguration("CompositeDetectorDefectModel requires at least one stage"))
         return new{typeof(stages)}(stages)
     end
+end
+
+@inline owned_detector_defect_model(model::AbstractDetectorDefectModel) = model
+@inline owned_detector_defect_model(::NullDetectorDefectModel) =
+    NullDetectorDefectModel()
+@inline owned_detector_defect_model(model::PixelResponseNonuniformity) =
+    PixelResponseNonuniformity(model.gain_map)
+@inline owned_detector_defect_model(model::DarkSignalNonuniformity) =
+    DarkSignalNonuniformity(model.dark_map)
+@inline owned_detector_defect_model(model::BadPixelMask) =
+    BadPixelMask(model.mask; throughput=model.throughput)
+
+function owned_detector_defect_model(model::CompositeDetectorDefectModel)
+    return CompositeDetectorDefectModel(model.stages)
+end
+
+function CompositeDetectorDefectModel(
+    stages::Tuple{Vararg{AbstractDetectorDefectModel}})
+    owned_stages = map(owned_detector_defect_model, stages)
+    return CompositeDetectorDefectModel(OWNED_DETECTOR_PARAMETER,
+        owned_stages)
 end
 
 CompositeDetectorDefectModel(stages::Tuple) =
@@ -766,19 +832,25 @@ counting_correlation_symbol(::CompositeCountingCorrelation) = :composite
 function PixelResponseNonuniformity(gain_map::AbstractMatrix; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
     backend_map = _to_backend_matrix(T.(gain_map), backend)
-    return validate_detector_defect_model(PixelResponseNonuniformity{T,typeof(backend_map)}(backend_map))
+    return validate_detector_defect_model(
+        PixelResponseNonuniformity{T,typeof(backend_map)}(
+            OWNED_DETECTOR_PARAMETER, backend_map))
 end
 
 function DarkSignalNonuniformity(dark_map::AbstractMatrix; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
     backend_map = _to_backend_matrix(T.(dark_map), backend)
-    return validate_detector_defect_model(DarkSignalNonuniformity{T,typeof(backend_map)}(backend_map))
+    return validate_detector_defect_model(
+        DarkSignalNonuniformity{T,typeof(backend_map)}(
+            OWNED_DETECTOR_PARAMETER, backend_map))
 end
 
 function BadPixelMask(mask::AbstractMatrix{Bool}; throughput::Real=0.0, T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
     backend_mask = _to_backend_bool_matrix(mask, backend)
-    return validate_detector_defect_model(BadPixelMask{T,typeof(backend_mask)}(backend_mask, T(throughput)))
+    return validate_detector_defect_model(
+        BadPixelMask{T,typeof(backend_mask)}(OWNED_DETECTOR_PARAMETER,
+            backend_mask, T(throughput)))
 end
 
 struct SampledFrameReadoutProducts{A<:AbstractMatrix,C} <: FrameReadoutProducts
@@ -876,17 +948,44 @@ struct NullFrameResponse <: AbstractFrameResponse end
 struct GaussianPixelResponse{T<:AbstractFloat,V<:AbstractVector{T}} <: AbstractFrameResponse
     response_width_px::T
     kernel::V
+    function GaussianPixelResponse{T,V}(::OwnedDetectorParameterToken,
+        response_width_px::T,
+        kernel::V) where {T<:AbstractFloat,V<:AbstractVector{T}}
+        isfinite(response_width_px) && response_width_px > zero(T) ||
+            throw(InvalidConfiguration(
+                "GaussianPixelResponse response_width_px must be finite and > 0"))
+        isempty(kernel) && throw(InvalidConfiguration(
+            "GaussianPixelResponse kernel must not be empty"))
+        isodd(length(kernel)) || throw(InvalidConfiguration(
+            "GaussianPixelResponse kernel length must be odd"))
+        _validate_physical_response_kernel(kernel, "GaussianPixelResponse")
+        return new{T,V}(response_width_px, kernel)
+    end
+
+    function GaussianPixelResponse{T,V}(response_width_px::T,
+        kernel::V) where {T<:AbstractFloat,V<:AbstractVector{T}}
+        owned = copy(kernel)
+        return GaussianPixelResponse{T,typeof(owned)}(
+            OWNED_DETECTOR_PARAMETER, response_width_px, owned)
+    end
 end
 
 struct SampledFrameResponse{T<:AbstractFloat,A<:AbstractMatrix{T}} <: AbstractFrameResponse
     kernel::A
-    function SampledFrameResponse{T,A}(kernel::A) where {T<:AbstractFloat,A<:AbstractMatrix{T}}
+    function SampledFrameResponse{T,A}(::OwnedDetectorParameterToken,
+        kernel::A) where {T<:AbstractFloat,A<:AbstractMatrix{T}}
         all(size(kernel) .> 0) || throw(InvalidConfiguration("SampledFrameResponse kernel must not be empty"))
         isodd(size(kernel, 1)) || throw(InvalidConfiguration("SampledFrameResponse kernel row count must be odd"))
         isodd(size(kernel, 2)) || throw(InvalidConfiguration("SampledFrameResponse kernel column count must be odd"))
-        kernel_sum = _frame_response_kernel_sum(kernel)
-        kernel_sum > zero(T) || throw(InvalidConfiguration("SampledFrameResponse kernel must have positive sum"))
+        _validate_physical_response_kernel(kernel, "SampledFrameResponse")
         return new{T,A}(kernel)
+    end
+
+    function SampledFrameResponse{T,A}(kernel::A) where {
+        T<:AbstractFloat,A<:AbstractMatrix{T}}
+        owned = copy(kernel)
+        return SampledFrameResponse{T,typeof(owned)}(
+            OWNED_DETECTOR_PARAMETER, owned)
     end
 end
 
@@ -911,6 +1010,48 @@ struct RectangularPixelAperture{T<:AbstractFloat,VX<:AbstractVector{T},VY<:Abstr
     fill_factor_y::T
     kernel_x::VX
     kernel_y::VY
+    function RectangularPixelAperture{T,VX,VY}(
+        ::OwnedDetectorParameterToken, pitch_x_px::T,
+        pitch_y_px::T, fill_factor_x::T, fill_factor_y::T, kernel_x::VX,
+        kernel_y::VY) where {T<:AbstractFloat,VX<:AbstractVector{T},VY<:AbstractVector{T}}
+        isfinite(pitch_x_px) && pitch_x_px > zero(T) ||
+            throw(InvalidConfiguration(
+                "RectangularPixelAperture pitch_x_px must be finite and > 0"))
+        isfinite(pitch_y_px) && pitch_y_px > zero(T) ||
+            throw(InvalidConfiguration(
+                "RectangularPixelAperture pitch_y_px must be finite and > 0"))
+        isfinite(fill_factor_x) && zero(T) < fill_factor_x <= one(T) ||
+            throw(InvalidConfiguration(
+                "RectangularPixelAperture fill_factor_x must be finite and lie in (0, 1]"))
+        isfinite(fill_factor_y) && zero(T) < fill_factor_y <= one(T) ||
+            throw(InvalidConfiguration(
+                "RectangularPixelAperture fill_factor_y must be finite and lie in (0, 1]"))
+        isempty(kernel_x) && throw(InvalidConfiguration(
+            "RectangularPixelAperture kernel_x must not be empty"))
+        isempty(kernel_y) && throw(InvalidConfiguration(
+            "RectangularPixelAperture kernel_y must not be empty"))
+        isodd(length(kernel_x)) || throw(InvalidConfiguration(
+            "RectangularPixelAperture kernel_x length must be odd"))
+        isodd(length(kernel_y)) || throw(InvalidConfiguration(
+            "RectangularPixelAperture kernel_y length must be odd"))
+        _validate_physical_response_kernel(kernel_x,
+            "RectangularPixelAperture kernel_x")
+        _validate_physical_response_kernel(kernel_y,
+            "RectangularPixelAperture kernel_y")
+        return new{T,VX,VY}(pitch_x_px, pitch_y_px, fill_factor_x,
+            fill_factor_y, kernel_x, kernel_y)
+    end
+
+
+    function RectangularPixelAperture{T,VX,VY}(pitch_x_px::T,
+        pitch_y_px::T, fill_factor_x::T, fill_factor_y::T, kernel_x::VX,
+        kernel_y::VY) where {T<:AbstractFloat,VX<:AbstractVector{T},VY<:AbstractVector{T}}
+        owned_x = copy(kernel_x)
+        owned_y = copy(kernel_y)
+        return RectangularPixelAperture{T,typeof(owned_x),typeof(owned_y)}(
+            OWNED_DETECTOR_PARAMETER, pitch_x_px, pitch_y_px,
+            fill_factor_x, fill_factor_y, owned_x, owned_y)
+    end
 end
 
 const SeparableGaussianPixelResponse = GaussianPixelResponse
@@ -918,6 +1059,29 @@ const SeparableGaussianPixelResponse = GaussianPixelResponse
 @inline _frame_response_kernel_sum(kernel) = _frame_response_kernel_sum(execution_style(kernel), kernel)
 @inline _frame_response_kernel_sum(::ScalarCPUStyle, kernel) = sum(kernel)
 @inline _frame_response_kernel_sum(::ExecutionStyle, kernel) = sum(Array(kernel))
+
+function _validate_physical_response_kernel(kernel::AbstractArray{T},
+    label::AbstractString; require_nonamplifying::Bool=true) where {T<:AbstractFloat}
+    host_kernel = Array(kernel)
+    isempty(host_kernel) && throw(InvalidConfiguration(
+        "$(label) kernel must not be empty"))
+    kernel_sum = zero(T)
+    @inbounds for weight in host_kernel
+        isfinite(weight) || throw(InvalidConfiguration(
+            "$(label) kernel weights must be finite"))
+        weight >= zero(T) || throw(InvalidConfiguration(
+            "$(label) kernel weights must be nonnegative"))
+        kernel_sum += weight
+    end
+    isfinite(kernel_sum) && kernel_sum > zero(T) ||
+        throw(InvalidConfiguration("$(label) kernel must have finite positive sum"))
+    if require_nonamplifying
+        tolerance = T(16) * eps(T) * T(max(length(host_kernel), 1))
+        kernel_sum <= one(T) + tolerance || throw(InvalidConfiguration(
+            "$(label) kernel sum must not exceed one"))
+    end
+    return kernel_sum
+end
 
 response_family(::NullFrameResponse) = :none
 response_family(::GaussianPixelResponse) = :gaussian
@@ -928,7 +1092,11 @@ frame_response_symbol(model::AbstractFrameResponse) = response_family(model)
 
 response_application_domain(::AbstractFrameResponse) = :image
 
-is_shift_invariant(::AbstractFrameResponse) = true
+# The sampled kernels are shift invariant only in the interior. Their finite
+# frame realization uses zero extension, so the full applied operator is not
+# shift invariant at a boundary.
+is_shift_invariant(::AbstractFrameResponse) = false
+is_shift_invariant(::NullFrameResponse) = true
 supports_frequency_domain_application(::AbstractFrameResponse) = false
 supports_separable_application(::AbstractFrameResponse) = false
 supports_separable_application(::NullFrameResponse) = true
@@ -945,7 +1113,6 @@ supports_batched_response_application(::AcceleratorStyle, ::SampledFrameResponse
 supports_batched_response_application(::ScalarCPUStyle, ::RectangularPixelAperture) = true
 supports_batched_response_application(::AcceleratorStyle, ::RectangularPixelAperture) = true
 supports_subpixel_geometry(::AbstractFrameResponse) = false
-supports_subpixel_geometry(::RectangularPixelAperture) = true
 
 response_support(::NullFrameResponse) = nothing, nothing
 response_support(model::GaussianPixelResponse) = length(model.kernel), length(model.kernel)
@@ -978,19 +1145,43 @@ supports_detector_mtf(::RectangularPixelAperture) = true
 """
     detector_mtf(response, spatial_frequency_x, spatial_frequency_y)
 
-Evaluate the normalized detector modulation transfer function at spatial
-frequencies expressed in cycles per detector pixel. This is a diagnostic and
-validation operation; it does not imply that the response is applied through
-an FFT in the capture hot path.
+Evaluate the normalized, interior modulation transfer function of the sampled
+response kernel applied by detector acquisition, at spatial frequencies in
+cycles per detector pixel. This is the infinite-grid transfer function of the
+realized discrete kernel. A finite detector frame uses non-amplifying zero
+extension, so edge pixels do not share one global transfer function with the
+interior. This diagnostic does not imply that the response is applied through
+an FFT in the capture hot path. Continuous subpixel aperture MTF requires an
+explicitly prepared oversampled optical-grid mapping.
 """
 detector_mtf(::NullFrameResponse, spatial_frequency_x::Real,
     spatial_frequency_y::Real) = one(float(spatial_frequency_x + spatial_frequency_y))
 
+function _sampled_axis_transfer(kernel::AbstractVector,
+    spatial_frequency::Real)
+    host_kernel = Array(kernel)
+    T = promote_type(eltype(host_kernel),
+        typeof(float(spatial_frequency)))
+    frequency = T(spatial_frequency)
+    center = fld(length(host_kernel), 2) + 1
+    response = zero(Complex{T})
+    normalization = zero(T)
+    @inbounds for index in eachindex(host_kernel)
+        weight = T(host_kernel[index])
+        phase = -T(2pi) * frequency * T(index - center)
+        response += weight * cis(phase)
+        normalization += weight
+    end
+    return response / normalization
+end
+
 function detector_mtf(model::GaussianPixelResponse, spatial_frequency_x::Real,
     spatial_frequency_y::Real)
-    fx, fy, sigma = promote(float(spatial_frequency_x), float(spatial_frequency_y),
-        float(model.response_width_px))
-    return exp(-2 * oftype(sigma, pi)^2 * sigma^2 * (fx^2 + fy^2))
+    response_x = _sampled_axis_transfer(model.kernel,
+        spatial_frequency_x)
+    response_y = _sampled_axis_transfer(model.kernel,
+        spatial_frequency_y)
+    return abs(response_x * response_y)
 end
 
 function detector_mtf(model::SampledFrameResponse, spatial_frequency_x::Real,
@@ -1015,11 +1206,11 @@ end
 
 function detector_mtf(model::RectangularPixelAperture,
     spatial_frequency_x::Real, spatial_frequency_y::Real)
-    fx, fy, pitch_x, pitch_y, fill_x, fill_y = promote(
-        float(spatial_frequency_x), float(spatial_frequency_y),
-        float(model.pitch_x_px), float(model.pitch_y_px),
-        float(model.fill_factor_x), float(model.fill_factor_y))
-    return abs(sinc(pitch_x * fill_x * fx) * sinc(pitch_y * fill_y * fy))
+    response_x = _sampled_axis_transfer(model.kernel_x,
+        spatial_frequency_x)
+    response_y = _sampled_axis_transfer(model.kernel_y,
+        spatial_frequency_y)
+    return abs(response_x * response_y)
 end
 
 default_response_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend()) =
@@ -1040,7 +1231,21 @@ end
 
 struct BackgroundFrame{T<:AbstractFloat,A<:AbstractMatrix{T}} <: BackgroundModel
     map::A
+    function BackgroundFrame{T,A}(::OwnedDetectorParameterToken,
+        map::A) where {T<:AbstractFloat,A<:AbstractMatrix{T}}
+        return new{T,A}(map)
+    end
+
+    function BackgroundFrame{T,A}(map::A) where {
+        T<:AbstractFloat,A<:AbstractMatrix{T}}
+        owned = copy(map)
+        return BackgroundFrame{T,typeof(owned)}(
+            OWNED_DETECTOR_PARAMETER, owned)
+    end
 end
+
+BackgroundFrame(map::A) where {T<:AbstractFloat,A<:AbstractMatrix{T}} =
+    BackgroundFrame{T,A}(map)
 
 struct ScalarQuantumEfficiency{T<:AbstractFloat} <: AbstractQuantumEfficiencyModel
     value::T
@@ -1055,7 +1260,9 @@ struct SampledQuantumEfficiency{T<:AbstractFloat,V<:AbstractVector{T}} <: Abstra
     wavelengths::V
     values::V
     out_of_band::T
-    function SampledQuantumEfficiency{T,V}(wavelengths::V, values::V, out_of_band::T) where {T<:AbstractFloat,V<:AbstractVector{T}}
+    function SampledQuantumEfficiency{T,V}(
+        ::OwnedDetectorParameterToken, wavelengths::V, values::V,
+        out_of_band::T) where {T<:AbstractFloat,V<:AbstractVector{T}}
         length(wavelengths) >= 2 ||
             throw(InvalidConfiguration("SampledQuantumEfficiency requires at least two samples"))
         length(wavelengths) == length(values) ||
@@ -1073,6 +1280,16 @@ struct SampledQuantumEfficiency{T<:AbstractFloat,V<:AbstractVector{T}} <: Abstra
             end
         end
         return new{T,V}(wavelengths, values, out_of_band)
+    end
+
+
+    function SampledQuantumEfficiency{T,V}(wavelengths::V, values::V,
+        out_of_band::T) where {T<:AbstractFloat,V<:AbstractVector{T}}
+        owned_wavelengths = copy(wavelengths)
+        owned_values = copy(values)
+        return SampledQuantumEfficiency{T,typeof(owned_wavelengths)}(
+            OWNED_DETECTOR_PARAMETER, owned_wavelengths, owned_values,
+            out_of_band)
     end
 end
 
@@ -1204,17 +1421,25 @@ end
 
 function _to_backend_bool_matrix(host_data::AbstractMatrix{Bool}, backend)
     backend = _resolve_array_backend(backend)
+    host_matrix = Matrix{Bool}(host_data)
     data = backend{Bool}(undef, size(host_data)...)
-    copyto!(data, host_data)
+    copyto!(data, host_matrix)
     return data
 end
 
 function _gaussian_kernel(response_width_px::Real, truncate_at::Real, ::Type{T}) where {T<:AbstractFloat}
-    response_width_px > 0 || throw(InvalidConfiguration("GaussianPixelResponse response_width_px must be > 0"))
-    truncate_at > 0 || throw(InvalidConfiguration("GaussianPixelResponse truncate_at must be > 0"))
-    radius = max(1, ceil(Int, truncate_at * response_width_px))
+    width = T(response_width_px)
+    truncation = T(truncate_at)
+    isfinite(width) && width > zero(T) || throw(InvalidConfiguration(
+        "GaussianPixelResponse response_width_px must be finite and > 0"))
+    isfinite(truncation) && truncation > zero(T) || throw(InvalidConfiguration(
+        "GaussianPixelResponse truncate_at must be finite and > 0"))
+    support_radius = truncation * width
+    isfinite(support_radius) || throw(InvalidConfiguration(
+        "GaussianPixelResponse response support must be finite"))
+    radius = max(1, ceil(Int, support_radius))
     host_kernel = Vector{T}(undef, 2 * radius + 1)
-    inv_sigma2 = inv(T(response_width_px)^2)
+    inv_sigma2 = inv(width^2)
     for (idx, offset) in enumerate(-radius:radius)
         host_kernel[idx] = exp(-T(0.5) * T(offset * offset) * inv_sigma2)
     end
@@ -1223,10 +1448,13 @@ function _gaussian_kernel(response_width_px::Real, truncate_at::Real, ::Type{T})
 end
 
 function _pixel_aperture_kernel(pitch_px::Real, fill_factor::Real, ::Type{T}) where {T<:AbstractFloat}
-    pitch_px > 0 || throw(InvalidConfiguration("pixel pitch must be > 0"))
-    (zero(fill_factor) < fill_factor <= one(fill_factor)) ||
-        throw(InvalidConfiguration("pixel fill factor must lie in (0, 1]"))
-    width = T(pitch_px * fill_factor)
+    pitch = T(pitch_px)
+    fill = T(fill_factor)
+    isfinite(pitch) && pitch > zero(T) ||
+        throw(InvalidConfiguration("pixel pitch must be finite and > 0"))
+    isfinite(fill) && zero(T) < fill <= one(T) ||
+        throw(InvalidConfiguration("pixel fill factor must be finite and lie in (0, 1]"))
+    width = pitch * fill
     radius = max(1, ceil(Int, width))
     host_kernel = Vector{T}(undef, 2 * radius + 1)
     half_width = width / T(2)
@@ -1246,7 +1474,8 @@ function GaussianPixelResponse(; response_width_px::Real=0.5, truncate_at::Real=
     T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
     kernel = _to_backend_vector(_gaussian_kernel(response_width_px, truncate_at, T), backend)
-    return GaussianPixelResponse{T,typeof(kernel)}(T(response_width_px), kernel)
+    return GaussianPixelResponse{T,typeof(kernel)}(
+        OWNED_DETECTOR_PARAMETER, T(response_width_px), kernel)
 end
 
 function RectangularPixelAperture(; pitch_x_px::Real=1.0, pitch_y_px::Real=1.0,
@@ -1256,7 +1485,8 @@ function RectangularPixelAperture(; pitch_x_px::Real=1.0, pitch_y_px::Real=1.0,
     kernel_x = _to_backend_vector(_pixel_aperture_kernel(pitch_x_px, fill_factor_x, T), backend)
     kernel_y = _to_backend_vector(_pixel_aperture_kernel(pitch_y_px, fill_factor_y, T), backend)
     return RectangularPixelAperture{T,typeof(kernel_x),typeof(kernel_y)}(
-        T(pitch_x_px), T(pitch_y_px), T(fill_factor_x), T(fill_factor_y), kernel_x, kernel_y)
+        OWNED_DETECTOR_PARAMETER, T(pitch_x_px), T(pitch_y_px),
+        T(fill_factor_x), T(fill_factor_y), kernel_x, kernel_y)
 end
 
 function SampledFrameResponse(kernel::AbstractMatrix; normalize::Bool=true,
@@ -1264,14 +1494,15 @@ function SampledFrameResponse(kernel::AbstractMatrix; normalize::Bool=true,
     backend = _resolve_array_backend(backend)
     isempty(kernel) && throw(InvalidConfiguration("SampledFrameResponse kernel must not be empty"))
     host_kernel = T.(kernel)
+    kernel_sum = _validate_physical_response_kernel(host_kernel,
+        "SampledFrameResponse"; require_nonamplifying=false)
     if normalize
-        kernel_sum = sum(host_kernel)
-        kernel_sum > zero(T) || throw(InvalidConfiguration("SampledFrameResponse normalized kernel must have positive sum"))
         host_kernel ./= kernel_sum
     end
     kernel_backend = backend{T}(undef, size(host_kernel)...)
     copyto!(kernel_backend, host_kernel)
-    model = SampledFrameResponse{T,typeof(kernel_backend)}(kernel_backend)
+    model = SampledFrameResponse{T,typeof(kernel_backend)}(
+        OWNED_DETECTOR_PARAMETER, kernel_backend)
     return validate_frame_response_model(model)
 end
 
@@ -1286,8 +1517,10 @@ end
     if i <= n && j <= m
         acc = zero(eltype(out))
         @inbounds for kk in 1:klen
-            jj = clamp(j + kk - radius - 1, 1, m)
-            acc += kernel[kk] * img[i, jj]
+            jj = j + kk - radius - 1
+            if 1 <= jj <= m
+                acc += kernel[kk] * img[i, jj]
+            end
         end
         @inbounds out[i, j] = acc
     end
@@ -1298,8 +1531,10 @@ end
     if i <= n && j <= m
         acc = zero(eltype(out))
         @inbounds for kk in 1:klen
-            ii = clamp(i + kk - radius - 1, 1, n)
-            acc += kernel[kk] * img[ii, j]
+            ii = i + kk - radius - 1
+            if 1 <= ii <= n
+                acc += kernel[kk] * img[ii, j]
+            end
         end
         @inbounds out[i, j] = acc
     end
@@ -1311,10 +1546,14 @@ end
     if i <= n && j <= m
         acc = zero(eltype(out))
         @inbounds for ki in 1:kn
-            ii = clamp(i + ki - radius_i - 1, 1, n)
-            for kj in 1:km
-                jj = clamp(j + kj - radius_j - 1, 1, m)
-                acc += kernel[ki, kj] * img[ii, jj]
+            ii = i + ki - radius_i - 1
+            if 1 <= ii <= n
+                for kj in 1:km
+                    jj = j + kj - radius_j - 1
+                    if 1 <= jj <= m
+                        acc += kernel[ki, kj] * img[ii, jj]
+                    end
+                end
             end
         end
         @inbounds out[i, j] = acc
@@ -1327,10 +1566,14 @@ end
     if b <= n_batch && i <= n && j <= m
         acc = zero(eltype(out))
         @inbounds for ki in 1:kn
-            ii = clamp(i + ki - radius_i - 1, 1, n)
-            for kj in 1:km
-                jj = clamp(j + kj - radius_j - 1, 1, m)
-                acc += kernel[ki, kj] * img[b, ii, jj]
+            ii = i + ki - radius_i - 1
+            if 1 <= ii <= n
+                for kj in 1:km
+                    jj = j + kj - radius_j - 1
+                    if 1 <= jj <= m
+                        acc += kernel[ki, kj] * img[b, ii, jj]
+                    end
+                end
             end
         end
         @inbounds out[b, i, j] = acc
@@ -1343,8 +1586,10 @@ end
     if b <= n_batch && i <= n && j <= m
         acc = zero(eltype(out))
         @inbounds for kk in 1:klen
-            jj = clamp(j + kk - radius - 1, 1, m)
-            acc += kernel[kk] * img[b, i, jj]
+            jj = j + kk - radius - 1
+            if 1 <= jj <= m
+                acc += kernel[kk] * img[b, i, jj]
+            end
         end
         @inbounds out[b, i, j] = acc
     end
@@ -1356,8 +1601,10 @@ end
     if b <= n_batch && i <= n && j <= m
         acc = zero(eltype(out))
         @inbounds for kk in 1:klen
-            ii = clamp(i + kk - radius - 1, 1, n)
-            acc += kernel[kk] * img[b, ii, j]
+            ii = i + kk - radius - 1
+            if 1 <= ii <= n
+                acc += kernel[kk] * img[b, ii, j]
+            end
         end
         @inbounds out[b, i, j] = acc
     end
@@ -1399,6 +1646,8 @@ end
 mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O,OH,P,
     TS<:AbstractDetectorThermalState}
     frame::A
+    presampling_buffer::A
+    presampling_scratch::A
     response_buffer::A
     bin_buffer::A
     temporal_buffer::A

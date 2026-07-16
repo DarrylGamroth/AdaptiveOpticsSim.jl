@@ -130,17 +130,22 @@ For a compact recipe-first version of this guide, use [model-cookbook.md](model-
 ```julia
 using AdaptiveOpticsSim
 
-tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
+tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)
-psf = compute_psf!(tel, src; zero_padding=2)
+photon_rate_psf = compute_psf!(tel, src; zero_padding=2)
 ```
 
 Use this when you care about:
 
 - pupil construction
-- PSF normalization
+- source-scaled focal-plane photon-arrival rates
 - image formation
 - simple aberration studies
+
+The matrix returned by this convenience path is a cell-integrated photon rate
+before detector exposure, not an inherently unit-normalized PSF. Use the
+explicit optical-product API when downstream code needs metadata-validated
+normalization and spatial-measure contracts.
 
 ### Workflow 2: Atmosphere plus one WFS
 
@@ -199,15 +204,22 @@ qe = AdaptiveOpticsSim.SampledQuantumEfficiency(
 )
 
 det = Detector(noise=NoiseNone(), qe=qe)
-image = ones(32, 32)
+image = ones(32, 32) # cell-integrated photon-arrival rate per represented cell
 rng = runtime_rng(1)
 frame = capture!(det, image, src; rng=rng)
 ```
 
-For `Source`, detector capture evaluates the curve at `wavelength(src)`. For
-`SpectralSource`, capture uses the spectrally weighted effective QE over the spectral
-bundle. Matrix-only capture without a source uses the detector's scalar
-reference QE, which is the peak value of a sampled curve.
+For `Source`, detector capture evaluates the curve at `wavelength(src)`. The
+generic `capture!(det, image, spectral_source)` boundary uses the
+flux-weighted effective QE over the spectral bundle. Diffractive
+Shack–Hartmann and Pyramid acquisition with a frame `Detector` instead folds
+the sampled QE into each wavelength's optical-rate contribution before the
+incoherent sum, preserving wavelength-dependent morphology. Matrix-only
+capture without a source uses the detector's scalar reference QE, which is the
+peak value of a sampled curve.
+The bare-matrix path treats its values as cell-integrated photon-arrival rates;
+use `IntensityMap` plus `DetectorAcquisitionPlan` when spatial-density versus
+cell-integrated semantics must be checked explicitly.
 
 For CMOS, sCMOS, and quantitative low-noise CMOS sensors, compose the generic
 `CMOSSensor` from measured properties. Core does not contain camera names or
@@ -331,7 +343,11 @@ gain, and noise pipeline.
 
 HgCdTe avalanche arrays likewise have no implicit optical blur or interpixel
 coupling. Configure presampling detector response and post-collection IPC as
-separate effects; inspect the response's derived MTF with `detector_mtf`:
+separate effects. `detector_mtf` reports the normalized discrete-space transfer
+magnitude of the realized response kernel on its shift-invariant interior.
+Finite frames use zero extension, so edge response is boundary-dependent and
+can lose signal outside detector support. The diagnostic does not substitute
+for a continuous subpixel-aperture model on an oversampled optical grid:
 
 ```julia
 det = Detector(
@@ -342,6 +358,13 @@ det = Detector(
         [0.0 0.01 0.0; 0.01 0.96 0.01; 0.0 0.01 0.0]),
 )
 ```
+
+`RectangularPixelAperture` records pitch and fill-factor configuration and
+applies the resulting discrete detector-grid kernel. It deliberately reports
+no subpixel-geometry capability: at unit detector-grid sampling, distinct
+continuous apertures can collapse to the same discrete kernel. Prepare an
+explicitly oversampled optical mapping when those differences must affect the
+image or MTF.
 
 Conventional gain-one HgCdTe arrays and avalanche/SAPHIRA-style arrays support
 up-the-ramp fitting:
@@ -465,6 +488,7 @@ recon = ModalReconstructor(imat; gain=0.5)
 branch = ControlLoopBranch(:main, sim, recon; rng=rng)
 
 cfg = SingleControlLoopConfig(
+    atmosphere_step=1e-3,
     name=:closed_loop_demo,
     branch_label=:main,
     outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true),
@@ -555,6 +579,22 @@ Use this when you care about:
 - polychromatic sensing
 - extended sources
 - curvature or atmosphere-aware field propagation
+
+`SpectralSource`, `ExtendedSource`, and `Asterism` are alternative top-level
+source expansions in the maintained API. An `Asterism` is a flat,
+common-wavelength directional list and rejects `SpectralSource`,
+`ExtendedSource`, and nested `Asterism` children. `with_spectrum` accepts a
+`Source` or `LGSSource` leaf and rejects an existing spectral, extended, or
+directional expansion. When a model needs a
+spectral-by-spatial-by-directional Cartesian quadrature, prepare the components
+explicitly and accumulate only metadata-compatible intensity products; there is
+not yet a nested convenience API for that product space.
+
+A single diffractive Shack–Hartmann, Pyramid, BioEdge, or atmosphere-aware
+Curvature acquisition also requires every asterism leaf to share one optical
+calibration signature. In particular, mixed NGS/LGS lists and LGS leaves with
+different elongation or sodium-profile geometry belong on independently
+calibrated WFS paths.
 
 ## Choosing Components
 

@@ -1,5 +1,144 @@
+@testset "LGS convolution normalization" begin
+    n = 8
+    expected = reshape(collect(range(0.25, 2.0; length=n * n)), n, n)
+    identity_kernel_fft = ones(ComplexF64, n, n)
+
+    fft_buffer = zeros(ComplexF64, n, n)
+    fft_plan = AdaptiveOpticsSim.plan_fft_backend!(fft_buffer)
+    ifft_plan = AdaptiveOpticsSim.plan_ifft_backend!(fft_buffer)
+    same_buffer = copy(expected)
+    AdaptiveOpticsSim.apply_lgs_convolution!(
+        same_buffer, identity_kernel_fft, fft_buffer, fft_plan, ifft_plan)
+    @test same_buffer ≈ expected rtol=1e-12 atol=1e-12
+    @test sum(same_buffer) ≈ sum(expected) rtol=1e-12
+
+    split_fft_buffer = zeros(ComplexF64, n, n)
+    split_ifft_buffer = similar(split_fft_buffer)
+    split_fft_plan = AdaptiveOpticsSim.plan_fft_backend!(split_fft_buffer)
+    split_ifft_plan = AdaptiveOpticsSim.plan_ifft_backend!(split_ifft_buffer)
+    split_buffer = copy(expected)
+    AdaptiveOpticsSim.apply_lgs_convolution!(split_buffer, identity_kernel_fft,
+        split_fft_buffer, split_fft_plan, split_ifft_buffer, split_ifft_plan)
+    @test split_buffer ≈ expected rtol=1e-12 atol=1e-12
+    @test sum(split_buffer) ≈ sum(expected) rtol=1e-12
+
+    expected_stack = cat(expected, reverse(expected; dims=2); dims=3)
+    identity_kernel_stack_fft = ones(ComplexF64, n, n, 2)
+
+    scalar_fft_stack = zeros(ComplexF64, n, n, 2)
+    scalar_fft_plan = AdaptiveOpticsSim.plan_fft_backend!(scalar_fft_stack, (1, 2))
+    scalar_ifft_plan = AdaptiveOpticsSim.plan_ifft_backend!(scalar_fft_stack, (1, 2))
+    scalar_stack = copy(expected_stack)
+    AdaptiveOpticsSim.apply_lgs_convolution_stack!(scalar_stack,
+        identity_kernel_stack_fft, scalar_fft_stack, scalar_fft_plan, scalar_ifft_plan)
+    @test scalar_stack ≈ expected_stack rtol=1e-12 atol=1e-12
+    @test vec(sum(scalar_stack; dims=(1, 2))) ≈ vec(sum(expected_stack; dims=(1, 2))) rtol=1e-12
+
+    accelerator_fft_stack = zeros(ComplexF64, n, n, 2)
+    accelerator_fft_plan = AdaptiveOpticsSim.plan_fft_backend!(accelerator_fft_stack, (1, 2))
+    accelerator_ifft_plan = AdaptiveOpticsSim.plan_ifft_backend!(accelerator_fft_stack, (1, 2))
+    accelerator_stack = copy(expected_stack)
+    AdaptiveOpticsSim._apply_lgs_convolution_stack!(KA_CPU_STYLE, accelerator_stack,
+        identity_kernel_stack_fft, accelerator_fft_stack, accelerator_fft_plan, accelerator_ifft_plan)
+    @test accelerator_stack ≈ scalar_stack rtol=1e-12 atol=1e-12
+    @test vec(sum(accelerator_stack; dims=(1, 2))) ≈
+          vec(sum(expected_stack; dims=(1, 2))) rtol=1e-12
+end
+
+@testset "Sodium-profile LGS kernel cache invalidation" begin
+    tel = Telescope(resolution=16, diameter=8.0,
+        central_obstruction=0.0)
+    signature_source = LGSSource(
+        na_profile=[80000.0 90000.0 100000.0; 0.2 0.6 0.2],
+        laser_coordinates=(1.0, -0.5),
+        fwhm_spot_up=0.8,
+        photon_irradiance=1.0,
+    )
+    signature_args = (tel, signature_source, 16, 4, 0.1, Float64)
+    base_signature = AdaptiveOpticsSim.lgs_kernel_signature(
+        signature_args...; model=:subaperture_average)
+    @test AdaptiveOpticsSim.lgs_kernel_signature(
+        signature_args...; model=:per_subaperture) != base_signature
+    @test AdaptiveOpticsSim.lgs_kernel_signature(
+        signature_args...; model=:per_subaperture,
+        threshold=0.2) != AdaptiveOpticsSim.lgs_kernel_signature(
+        signature_args...; model=:per_subaperture, threshold=0.1)
+    @test AdaptiveOpticsSim.lgs_kernel_signature(
+        tel, signature_source, 32, 4, 0.1, Float64;
+        model=:subaperture_average) != base_signature
+    @test AdaptiveOpticsSim.lgs_kernel_signature(
+        tel, signature_source, 16, 8, 0.1, Float64;
+        model=:subaperture_average) != base_signature
+    @test AdaptiveOpticsSim.lgs_kernel_signature(
+        tel, signature_source, 16, 4, 0.2, Float64;
+        model=:subaperture_average) != base_signature
+    @test AdaptiveOpticsSim.lgs_kernel_signature(
+        tel, signature_source, 16, 4, 0.1, Float32;
+        model=:subaperture_average) != base_signature
+    @test AdaptiveOpticsSim.lgs_kernel_signature(
+        Telescope(resolution=16, diameter=10.0), signature_source,
+        16, 4, 0.1, Float64;
+        model=:subaperture_average) != base_signature
+    changed_wavelength = LGSSource(
+        wavelength=600e-9,
+        na_profile=signature_source.params.na_profile,
+        laser_coordinates=signature_source.params.laser_coordinates,
+        fwhm_spot_up=signature_source.params.fwhm_spot_up,
+        photon_irradiance=1.0,
+    )
+    @test AdaptiveOpticsSim.lgs_kernel_signature(
+        tel, changed_wavelength, 16, 4, 0.1, Float64;
+        model=:subaperture_average) != base_signature
+
+    for family in (:shack_hartmann, :pyramid, :bioedge)
+        src = LGSSource(
+            na_profile=[80000.0 90000.0 100000.0; 0.2 0.6 0.2],
+            laser_coordinates=(1.0, -0.5),
+            fwhm_spot_up=0.8,
+            photon_irradiance=1.0,
+        )
+        wfs = if family === :shack_hartmann
+            sensor = ShackHartmannWFS(tel; n_lenslets=4,
+                mode=Diffractive(), n_pix_subap=4)
+            prepare_sampling!(sensor, tel, src)
+            sensor
+        elseif family === :pyramid
+            PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
+                modulation=0.0)
+        else
+            BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
+                modulation=0.0)
+        end
+        ensure_kernel! = family === :shack_hartmann ?
+            AdaptiveOpticsSim.ensure_lgs_kernels! :
+            AdaptiveOpticsSim.ensure_lgs_kernel!
+
+        ensure_kernel!(wfs, tel, src)
+        original_tag = wfs.state.lgs_kernel_tag
+        original_kernel = copy(wfs.state.lgs_kernel_fft)
+        ensure_kernel!(wfs, tel, src)
+        @test wfs.state.lgs_kernel_tag == original_tag
+
+        src.params.na_profile[2, :] .= [0.8, 0.1, 0.1]
+        ensure_kernel!(wfs, tel, src)
+        @test wfs.state.lgs_kernel_tag != original_tag
+        @test !isapprox(wfs.state.lgs_kernel_fft, original_kernel;
+            rtol=1e-12, atol=1e-14)
+    end
+end
+
+function pyramid_signal_allocation_bytes(wfs, tel, frame, src, scale)
+    pyramid_signal!(wfs, tel, frame, src, scale)
+    return @allocated pyramid_signal!(wfs, tel, frame, src, scale)
+end
+
+function detector_calibration_signature_allocation_bytes(det, sig)
+    detector_calibration_signature(det, sig)
+    return @allocated detector_calibration_signature(det, sig)
+end
+
 @testset "Pyramid, BioEdge, and LGS" begin
-    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
         tel.state.opd[i, j] = i
     end
@@ -44,6 +183,72 @@
     AdaptiveOpticsSim.resize_pyramid_slope_buffers!(pyr_direct_accel)
     fill!(pyr_direct_accel.state.reference_signal_2d, 0.0)
     @test AdaptiveOpticsSim.pyramid_signal!(KA_CPU_STYLE, pyr_direct_accel, tel, pyr_frame, nothing) ≈ pyr_direct_slopes
+
+    pyr_unit_mask = PyramidWFS(tel; pupil_samples=2, mode=Diffractive(),
+        modulation=0.0, mask_scale=1.0)
+    pyr_scaled_mask = PyramidWFS(tel; pupil_samples=2, mode=Diffractive(),
+        modulation=0.0, mask_scale=1.5)
+    @test pyr_scaled_mask.state.pyramid_mask != pyr_unit_mask.state.pyramid_mask
+    pyr_old_unit_mask = PyramidWFS(tel; pupil_samples=2, mode=Diffractive(),
+        modulation=0.0, old_mask=true, mask_scale=1.0)
+    pyr_old_scaled_mask = PyramidWFS(tel; pupil_samples=2,
+        mode=Diffractive(), modulation=0.0, old_mask=true, mask_scale=1.5)
+    @test pyr_old_scaled_mask.state.pyramid_mask !=
+          pyr_old_unit_mask.state.pyramid_mask
+    for invalid_scale in (0.0, -1.0, NaN, Inf)
+        @test_throws InvalidConfiguration PyramidWFS(tel; pupil_samples=2,
+            mode=Diffractive(), mask_scale=invalid_scale)
+    end
+
+    # Separated pupil images occupy the configured centered regions, not the
+    # outer corners of a padded detector frame.
+    @test_throws InvalidConfiguration PyramidWFS(tel; pupil_samples=2,
+        mode=Diffractive(), n_pix_separation=-1)
+    @test_throws InvalidConfiguration PyramidWFS(tel; pupil_samples=2,
+        mode=Diffractive(), n_pix_separation=2, n_pix_edge=-1)
+    @test_throws InvalidConfiguration PyramidWFS(tel; pupil_samples=2,
+        mode=Diffractive(), n_pix_separation=2, n_pix_edge=1, binning=2)
+    pyr_separated = PyramidWFS(tel; pupil_samples=2, mode=Diffractive(),
+        modulation=0.0, n_pix_separation=2, n_pix_edge=1)
+    pyr_separated.state.nominal_detector_resolution = 8
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.resize_pyramid_signal_buffers!(
+        pyr_separated, 0)
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.resize_pyramid_signal_buffers!(
+        pyr_separated, 4)
+    AdaptiveOpticsSim.resize_pyramid_signal_buffers!(pyr_separated, 8)
+    @test_throws DimensionMismatchError AdaptiveOpticsSim.pyramid_signal!(
+        pyr_separated, tel, zeros(0, 0))
+    fill!(pyr_separated.state.valid_i4q, true)
+    AdaptiveOpticsSim.update_pyramid_valid_signal!(pyr_separated)
+    @test AdaptiveOpticsSim.update_pyramid_valid_signal_indices!(pyr_separated) == 4
+    AdaptiveOpticsSim.resize_pyramid_slope_buffers!(pyr_separated)
+    fill!(pyr_separated.state.reference_signal_2d, 0.0)
+    separated_frame = zeros(8, 8)
+    separated_frame[[1, 8], :] .= 100.0
+    separated_frame[:, [1, 8]] .= 100.0
+    separated_frame[2:3, 2:3] .= 4.0
+    separated_frame[2:3, 6:7] .= 1.0
+    separated_frame[6:7, 6:7] .= 2.0
+    separated_frame[6:7, 2:3] .= 3.0
+    separated_slopes = AdaptiveOpticsSim.pyramid_signal!(
+        pyr_separated, tel, separated_frame)
+    @test separated_slopes[1:4] ≈ fill(0.4, 4)
+    @test separated_slopes[5:8] ≈ zeros(4)
+
+    pyr_separated_accel = PyramidWFS(tel; pupil_samples=2,
+        mode=Diffractive(), modulation=0.0, n_pix_separation=2,
+        n_pix_edge=1)
+    pyr_separated_accel.state.nominal_detector_resolution = 8
+    AdaptiveOpticsSim.resize_pyramid_signal_buffers!(pyr_separated_accel, 8)
+    fill!(pyr_separated_accel.state.valid_i4q, true)
+    AdaptiveOpticsSim.update_pyramid_valid_signal!(pyr_separated_accel)
+    @test AdaptiveOpticsSim.update_pyramid_valid_signal_indices!(
+        pyr_separated_accel) == 4
+    AdaptiveOpticsSim.resize_pyramid_slope_buffers!(pyr_separated_accel)
+    fill!(pyr_separated_accel.state.reference_signal_2d, 0.0)
+    @test AdaptiveOpticsSim.pyramid_signal!(KA_CPU_STYLE,
+        pyr_separated_accel, tel, separated_frame, nothing) ≈ separated_slopes
+
     zero_slopes = fill(1.0, 8)
     AdaptiveOpticsSim._pyramid_slopes!(AdaptiveOpticsSim.ScalarCPUStyle(), zero_slopes, zeros(4, 4), trues(2, 2),
         2, 2, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, (0, 0, 0, 0), (0, 0, 0, 0))
@@ -75,7 +280,7 @@
 
     pyr_incidence = PyramidWFS(tel; pupil_samples=2, mode=Diffractive(), modulation=0.0,
         normalization=IncidenceFluxNormalization())
-    expected_pyr_norm = AdaptiveOpticsSim.photon_irradiance(ngs) * tel.params.sampling_time *
+    expected_pyr_norm = AdaptiveOpticsSim.photon_irradiance(ngs) *
                         (tel.params.diameter / pyr_incidence.params.pupil_samples)^2
     @test AdaptiveOpticsSim.pyramid_normalization(pyr_incidence.params.normalization,
         pyr_incidence, tel, ngs, 3, 10.0) ≈ expected_pyr_norm
@@ -132,7 +337,7 @@
 
     bio_incidence = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive(),
         normalization=IncidenceFluxNormalization())
-    expected_bio_norm = AdaptiveOpticsSim.photon_irradiance(ngs) * tel.params.sampling_time *
+    expected_bio_norm = AdaptiveOpticsSim.photon_irradiance(ngs) *
                         (tel.params.diameter / bio_incidence.params.pupil_samples)^2
     @test AdaptiveOpticsSim.bioedge_normalization(bio_incidence.params.normalization,
         bio_incidence, tel, ngs, 3, 10.0) ≈ expected_bio_norm
@@ -165,12 +370,12 @@
 end
 
 @testset "Diffractive WFS" begin
-    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
         tel.state.opd[i, j] = i
     end
     ngs = Source(band=:I, magnitude=0.0)
-    lgs = LGSSource(elongation_factor=1.5)
+    lgs = LGSSource(elongation_factor=1.5, photon_irradiance=1.0)
 
     sh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
     @test_throws InvalidConfiguration measure!(sh, tel)
@@ -181,7 +386,8 @@ end
     @test all(isfinite, sh_lgs)
 
     na_profile = [80000.0 90000.0 100000.0; 0.2 0.6 0.2]
-    lgs_profile = LGSSource(elongation_factor=1.2, na_profile=na_profile, fwhm_spot_up=1.0)
+    lgs_profile = LGSSource(elongation_factor=1.2, na_profile=na_profile,
+        fwhm_spot_up=1.0, photon_irradiance=1.0)
     sh_profile = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
     sh_profile_slopes = measure!(sh_profile, tel, lgs_profile)
     @test all(isfinite, sh_profile_slopes)
@@ -190,13 +396,17 @@ end
     sh_sampled_slopes = measure!(sh_sampled, tel, ngs)
     @test length(sh_sampled_slopes) == 2 * 4 * 4
 
-    pyr_sampled = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), n_pix_separation=4, binning=2)
+    pyr_sampled = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
+        n_pix_separation=4, n_pix_edge=2, binning=2)
     pyr_sampled_slopes = measure!(pyr_sampled, tel, ngs)
     @test length(pyr_sampled_slopes) == 2 * count(pyr_sampled.state.valid_i4q)
-    pyr_intensity = reshape(Float64.(1:size(tel.state.opd, 1)^2), size(tel.state.opd))
+    pyr_intensity = reshape(
+        Float64.(1:length(pyr_sampled.state.intensity)),
+        size(pyr_sampled.state.intensity),
+    )
     pyr_frame = copy(AdaptiveOpticsSim.sample_pyramid_intensity!(pyr_sampled, tel, pyr_intensity))
-    pyr_camera = zeros(Float64, 4, 4)
-    pyr_manual = zeros(Float64, 2, 2)
+    pyr_camera = zeros(Float64, 16, 16)
+    pyr_manual = zeros(Float64, 8, 8)
     AdaptiveOpticsSim.bin2d!(pyr_camera, pyr_intensity, 8)
     AdaptiveOpticsSim.bin2d!(pyr_manual, pyr_camera, 2)
     @test pyr_frame == pyr_manual
@@ -272,19 +482,9 @@ end
     mixed_ngs = Source(wavelength=wavelength(lgs_profile), magnitude=0.0, coordinates=(0.0, 0.0))
     mixed_ast = Asterism([mixed_ngs, lgs_profile])
     sh_mixed_det = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
-    sh_mixed_det_slopes = copy(measure!(sh_mixed_det, tel, mixed_ast, det; rng=MersenneTwister(14)))
-    sh_mixed_det_frame = copy(sh_mixed_det.state.spot_cube)
-    sh_mixed_det_manual = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
-    AdaptiveOpticsSim.prepare_sampling!(sh_mixed_det_manual, tel, mixed_ast.sources[1])
-    AdaptiveOpticsSim.ensure_sh_calibration!(sh_mixed_det_manual, tel, mixed_ast.sources[1])
-    fill!(sh_mixed_det_manual.state.detector_noise_cube, zero(eltype(sh_mixed_det_manual.state.detector_noise_cube)))
-    for src in mixed_ast.sources
-        AdaptiveOpticsSim.sampled_spots_peak!(sh_mixed_det_manual, tel, src, det, MersenneTwister(14))
-        sh_mixed_det_manual.state.detector_noise_cube .+= sh_mixed_det_manual.state.spot_cube
-    end
-    copyto!(sh_mixed_det_manual.state.spot_cube, sh_mixed_det_manual.state.detector_noise_cube)
-    @test sh_mixed_det_frame ≈ sh_mixed_det_manual.state.spot_cube
-    @test length(sh_mixed_det_slopes) == 2 * 4 * 4
+    @test_throws InvalidConfiguration measure!(sh_mixed_det, tel,
+        mixed_ast, det; rng=MersenneTwister(14))
+    @test !sh_mixed_det.state.calibrated
     pyr_ast = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
     pyr_ast_slopes = copy(measure!(pyr_ast, tel, ast))
     @test length(pyr_ast_slopes) == 2 * 4 * 4
@@ -325,7 +525,8 @@ end
         pyr_ast_det_serial.state.intensity .+= @view(pyr_ast_det_stack[:, :, src_idx])
     end
     pyr_ast_det_intensity = AdaptiveOpticsSim.sample_pyramid_intensity!(pyr_ast_det_serial, tel, pyr_ast_det_serial.state.intensity)
-    pyr_ast_det_frame = capture!(det, pyr_ast_det_intensity; rng=MersenneTwister(12))
+    pyr_ast_det_frame = capture!(det, pyr_ast_det_intensity,
+        first(ast.sources); rng=MersenneTwister(12))
     AdaptiveOpticsSim.resize_pyramid_signal_buffers!(pyr_ast_det_serial, size(pyr_ast_det_frame, 1))
     AdaptiveOpticsSim.pyramid_signal!(pyr_ast_det_serial, tel, pyr_ast_det_frame)
     @. pyr_ast_det_serial.state.slopes *= pyr_ast_det_serial.state.optical_gain
@@ -341,14 +542,489 @@ end
         bio_ast_det_serial.state.binned_intensity .+= bio_ast_det_serial.state.intensity
     end
     bio_ast_det_intensity = AdaptiveOpticsSim.sample_bioedge_intensity!(bio_ast_det_serial, tel, bio_ast_det_serial.state.binned_intensity)
-    bio_ast_det_frame = capture!(det, bio_ast_det_intensity; rng=MersenneTwister(13))
+    bio_ast_det_frame = capture!(det, bio_ast_det_intensity,
+        first(ast.sources); rng=MersenneTwister(13))
     AdaptiveOpticsSim.resize_bioedge_signal_buffers!(bio_ast_det_serial, size(bio_ast_det_frame, 1))
     AdaptiveOpticsSim.bioedge_signal!(bio_ast_det_serial, tel, bio_ast_det_frame)
     @test bio_ast_det_slopes ≈ bio_ast_det_serial.state.slopes
+
+    common_qe_wavelength = 550e-9
+    common_qe_ast = Asterism([
+        Source(band=:custom, wavelength=common_qe_wavelength,
+            photon_irradiance=1.0, coordinates=(0.0, 0.0)),
+        Source(band=:custom, wavelength=common_qe_wavelength,
+            photon_irradiance=2.0, coordinates=(0.5, 90.0)),
+    ])
+    wavelength_dependent_qe = SampledQuantumEfficiency(
+        [500e-9, common_qe_wavelength, 600e-9], [0.1, 0.35, 0.9])
+
+    pyr_sampled_qe = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
+    pyr_sampled_qe_det = Detector(noise=NoiseNone(),
+        qe=wavelength_dependent_qe, integration_time=1.0, binning=1)
+    measure!(pyr_sampled_qe, tel, common_qe_ast, pyr_sampled_qe_det;
+        rng=MersenneTwister(21))
+    pyr_sampled_qe_frame = copy(output_frame(pyr_sampled_qe_det))
+    pyr_scalar_qe = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
+    pyr_scalar_qe_det = Detector(noise=NoiseNone(), qe=0.35,
+        integration_time=1.0, binning=1)
+    measure!(pyr_scalar_qe, tel, common_qe_ast, pyr_scalar_qe_det;
+        rng=MersenneTwister(21))
+    @test sum(pyr_sampled_qe_frame) > 0
+    @test pyr_sampled_qe_frame ≈ output_frame(pyr_scalar_qe_det)
+
+    bio_sampled_qe = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+    bio_sampled_qe_det = Detector(noise=NoiseNone(),
+        qe=wavelength_dependent_qe, integration_time=1.0, binning=1)
+    measure!(bio_sampled_qe, tel, common_qe_ast, bio_sampled_qe_det;
+        rng=MersenneTwister(22))
+    bio_sampled_qe_frame = copy(output_frame(bio_sampled_qe_det))
+    bio_scalar_qe = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+    bio_scalar_qe_det = Detector(noise=NoiseNone(), qe=0.35,
+        integration_time=1.0, binning=1)
+    measure!(bio_scalar_qe, tel, common_qe_ast, bio_scalar_qe_det;
+        rng=MersenneTwister(22))
+    @test sum(bio_sampled_qe_frame) > 0
+    @test bio_sampled_qe_frame ≈ output_frame(bio_scalar_qe_det)
+
+    mixed_qe_ast = Asterism([
+        Source(band=:custom, wavelength=common_qe_wavelength,
+            photon_irradiance=1.0),
+        Source(band=:custom, wavelength=600e-9,
+            photon_irradiance=1.0),
+    ])
+    @test_throws InvalidConfiguration measure!(
+        PyramidWFS(tel; pupil_samples=4, mode=Diffractive()),
+        tel, mixed_qe_ast, pyr_sampled_qe_det)
+    @test_throws InvalidConfiguration measure!(
+        BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive()),
+        tel, mixed_qe_ast, bio_sampled_qe_det)
+end
+
+@testset "Pyramid and BioEdge incidence-normalization contracts" begin
+    tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
+    @inbounds for j in axes(tel.state.opd, 2), i in axes(tel.state.opd, 1)
+        tel.state.opd[i, j] = 2e-8 * sinpi(2 * i / 32) * cospi(2 * j / 32)
+    end
+    src = Source(band=:custom, wavelength=0.75e-6,
+        photon_irradiance=10.0)
+
+    for family in (:pyramid, :bioedge)
+        make_wfs = () -> family === :pyramid ?
+            PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
+                modulation=1.0,
+                normalization=IncidenceFluxNormalization()) :
+            BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
+                modulation=1.0,
+                normalization=IncidenceFluxNormalization())
+
+        asymmetric_response = [0.0 0.0 0.0;
+                               0.0 0.2 0.8;
+                               0.0 0.0 0.0]
+        reference = copy(measure!(make_wfs(), tel, src,
+            Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
+                response_model=SampledFrameResponse(asymmetric_response))))
+        scaled = copy(measure!(make_wfs(), tel, src,
+            Detector(noise=NoiseNone(), integration_time=0.5, qe=0.25,
+                response_model=SampledFrameResponse(asymmetric_response))))
+        @test norm(reference) > 1e-6
+        @test scaled ≈ reference atol=1e-12 rtol=1e-12
+
+        gained = copy(measure!(make_wfs(), tel, src,
+            Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
+                gain=4.0,
+                response_model=SampledFrameResponse(asymmetric_response))))
+        @test gained ≈ reference atol=1e-12 rtol=1e-12
+
+        hgcdte_reference = copy(measure!(make_wfs(), tel, src,
+            Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
+                gain=1.0,
+                sensor=HgCdTeAvalancheArraySensor(avalanche_gain=1.0,
+                    sampling_mode=CorrelatedDoubleSampling()),
+                response_model=SampledFrameResponse(asymmetric_response))))
+        hgcdte_gained = copy(measure!(make_wfs(), tel, src,
+            Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
+                gain=3.0,
+                sensor=HgCdTeAvalancheArraySensor(avalanche_gain=2.0,
+                    sampling_mode=CorrelatedDoubleSampling()),
+                response_model=SampledFrameResponse(asymmetric_response))))
+        @test norm(hgcdte_reference) > 1e-6
+        @test hgcdte_gained ≈ hgcdte_reference atol=1e-12 rtol=1e-12
+
+        ast = Asterism([src, src])
+        single_source = copy(measure!(make_wfs(), tel, src))
+        two_sources = copy(measure!(make_wfs(), tel, ast))
+        @test norm(single_source) > 1e-6
+        @test two_sources ≈ single_source atol=1e-12 rtol=1e-12
+
+        expected_ast_norm = 2 * photon_irradiance(src) *
+            (tel.params.diameter / 4)^2
+        ast_wfs = make_wfs()
+        normalization = ast_wfs.params.normalization
+        actual_ast_norm = family === :pyramid ?
+            pyramid_normalization(normalization, ast_wfs, tel, ast, 16, 1.0) :
+            bioedge_normalization(normalization, ast_wfs, tel, ast, 16, 1.0)
+        @test actual_ast_norm ≈ expected_ast_norm
+    end
+
+    zero_src = Source(band=:custom, wavelength=wavelength(src),
+        photon_irradiance=0.0)
+    for normalization in (MeanValidFluxNormalization(),
+            IncidenceFluxNormalization())
+        zero_pyramid = PyramidWFS(tel; pupil_samples=4,
+            mode=Diffractive(), modulation=0.0,
+            normalization=normalization)
+        zero_bioedge = BioEdgeWFS(tel; pupil_samples=4,
+            mode=Diffractive(), normalization=normalization)
+        @test all(iszero, measure!(zero_pyramid, tel, zero_src))
+        @test all(isfinite, zero_pyramid.state.slopes)
+        @test all(iszero, measure!(zero_bioedge, tel, zero_src))
+        @test all(isfinite, zero_bioedge.state.slopes)
+    end
+    undetectable = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
+        modulation=0.0, normalization=IncidenceFluxNormalization())
+    @test all(iszero, measure!(undetectable, tel, src,
+        Detector(noise=NoiseNone(), integration_time=0.5, qe=0.0)))
+
+    flat_tel = Telescope(resolution=32, diameter=8.0,
+        central_obstruction=0.0)
+    lgs = LGSSource(wavelength=589e-9, photon_irradiance=10.0,
+        elongation_factor=1.8)
+    spectral_lgs = with_spectrum(lgs,
+        SpectralBundle([0.57e-6, 0.61e-6], [0.4, 0.6]))
+    spectral_flat = PyramidWFS(flat_tel; pupil_samples=4,
+        mode=Diffractive(), modulation=1.0,
+        normalization=IncidenceFluxNormalization())
+    @test measure!(spectral_flat, flat_tel, spectral_lgs) ≈
+        zeros(length(spectral_flat.state.slopes)) atol=1e-12
+
+    sampled_qe = SampledQuantumEfficiency(
+        [0.50e-6, 0.57e-6, 0.61e-6, 0.70e-6],
+        [0.1, 0.2, 0.9, 0.7])
+    spectral_detector = Detector(noise=NoiseNone(), integration_time=0.4,
+        qe=sampled_qe)
+    spectral_detected = PyramidWFS(flat_tel; pupil_samples=4,
+        mode=Diffractive(), modulation=1.0,
+        normalization=IncidenceFluxNormalization())
+    @test measure!(spectral_detected, flat_tel, spectral_lgs,
+        spectral_detector) ≈ zeros(length(spectral_detected.state.slopes)) atol=1e-12
+    spectral_scale = wfs_detector_incidence_scale(spectral_detector,
+        spectral_lgs, eltype(output_frame(spectral_detector)))
+    @test pyramid_signal_allocation_bytes(spectral_detected, flat_tel,
+        output_frame(spectral_detector), spectral_lgs, spectral_scale) == 0
+
+    aberrated_qe_tel = Telescope(resolution=32, diameter=8.0,
+        central_obstruction=0.0)
+    @inbounds for j in axes(aberrated_qe_tel.state.opd, 2),
+            i in axes(aberrated_qe_tel.state.opd, 1)
+        aberrated_qe_tel.state.opd[i, j] =
+            2e-8 * sinpi(2 * i / 32) * cospi(2 * j / 32)
+    end
+    qe_reference_wfs = PyramidWFS(aberrated_qe_tel; pupil_samples=4,
+        mode=Diffractive(), modulation=1.0,
+        normalization=IncidenceFluxNormalization())
+    qe_reference = copy(measure!(qe_reference_wfs, aberrated_qe_tel,
+        spectral_lgs, Detector(noise=NoiseNone(), integration_time=1.0,
+            qe=sampled_qe)))
+    scaled_qe = SampledQuantumEfficiency(
+        [0.50e-6, 0.57e-6, 0.61e-6, 0.70e-6],
+        0.5 .* [0.1, 0.2, 0.9, 0.7])
+    qe_scaled_wfs = PyramidWFS(aberrated_qe_tel; pupil_samples=4,
+        mode=Diffractive(), modulation=1.0,
+        normalization=IncidenceFluxNormalization())
+    qe_scaled = copy(measure!(qe_scaled_wfs, aberrated_qe_tel,
+        spectral_lgs, Detector(noise=NoiseNone(), integration_time=0.5,
+            qe=scaled_qe)))
+    @test norm(qe_reference) > 1e-6
+    @test qe_scaled ≈ qe_reference atol=1e-12 rtol=1e-12
+end
+
+
+@testset "Pyramid and BioEdge detector-response references" begin
+    tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
+    src = Source(band=:custom, wavelength=0.75e-6,
+        photon_irradiance=10.0)
+    asymmetric_response = [0.0 0.0 0.0;
+                           0.0 0.2 0.8;
+                           0.0 0.0 0.0]
+    responses = (
+        GaussianPixelResponse(response_width_px=0.75),
+        SampledFrameResponse(asymmetric_response),
+    )
+
+    for response in responses, family in (:pyramid, :bioedge)
+        wfs = family === :pyramid ?
+            PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
+                modulation=1.0) :
+            BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
+                modulation=1.0)
+        det = Detector(noise=NoiseNone(), integration_time=0.4, qe=0.3,
+            response_model=response)
+        flat = copy(measure!(wfs, tel, src, det))
+        @test all(iszero, flat)
+        @test wfs.state.calibration_signature ==
+            detector_calibration_signature(det,
+                telescope_aperture_calibration_signature(tel,
+                    calibration_signature(src)))
+        @test detector_calibration_signature_allocation_bytes(det,
+            telescope_aperture_calibration_signature(tel,
+                calibration_signature(src))) == 0
+        @test measure!(wfs, tel, src, det) == flat
+    end
+
+    make_wfs = family -> family === :pyramid ?
+        PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
+            modulation=1.0, light_ratio=0.0) :
+        BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
+            modulation=1.0, light_ratio=0.0)
+
+    for family in (:pyramid, :bioedge)
+        probe_wfs = make_wfs(family)
+        probe_detector = Detector(noise=NoiseNone(), sensor=CMOSSensor())
+        measure!(probe_wfs, tel, src, probe_detector;
+            rng=MersenneTwister(701))
+        detector_size = size(output_frame(probe_detector))
+
+        gain_map = ones(detector_size)
+        gain_map[1:2:end] .= 0.65
+        bad_mask = falses(detector_size)
+        bad_mask[2, 2] = true
+        prnu = PixelResponseNonuniformity(gain_map)
+        bad_pixels = BadPixelMask(bad_mask; throughput=0.0)
+        detector = Detector(noise=NoiseNone(), sensor=CMOSSensor(),
+            defect_model=CompositeDetectorDefectModel(prnu, bad_pixels))
+        wfs = make_wfs(family)
+
+        flat = copy(measure!(wfs, tel, src, detector;
+            rng=MersenneTwister(702)))
+        @test all(iszero, flat)
+        @test all(iszero, measure!(wfs, tel, src, detector;
+            rng=MersenneTwister(703)))
+        signature = wfs.state.calibration_signature
+        @test detector_calibration_signature_allocation_bytes(detector,
+            telescope_aperture_calibration_signature(tel,
+                calibration_signature(src))) == 0
+
+        # Public models and Detector each own their parameter storage. Changes
+        # to the model used to build a run do not mutate or invalidate that
+        # run's frozen detector configuration.
+        prnu.gain_map[1, 1] = 0.2
+        bad_pixels.mask[end, end] = true
+        @test detector_calibration_signature(detector,
+            telescope_aperture_calibration_signature(tel,
+                calibration_signature(src))) == signature
+
+        replacement_gain = copy(gain_map)
+        replacement_gain[1, 1] = 0.4
+        replacement_mask = copy(bad_mask)
+        replacement_mask[end, end] = true
+        replacement = Detector(noise=NoiseNone(), sensor=CMOSSensor(),
+            defect_model=CompositeDetectorDefectModel(
+                PixelResponseNonuniformity(replacement_gain),
+                BadPixelMask(replacement_mask; throughput=0.0)))
+        replacement_signature = detector_calibration_signature(replacement,
+            telescope_aperture_calibration_signature(tel,
+                calibration_signature(src)))
+        @test replacement_signature != signature
+        @test all(iszero, measure!(wfs, tel, src, replacement;
+            rng=MersenneTwister(704)))
+        @test wfs.state.calibration_signature == replacement_signature
+    end
+
+    hgcdte_probe_wfs = make_wfs(:pyramid)
+    hgcdte_probe_detector = Detector(noise=NoiseNone(),
+        sensor=HgCdTeAvalancheArraySensor(
+            sampling_mode=CorrelatedDoubleSampling()))
+    measure!(hgcdte_probe_wfs, tel, src, hgcdte_probe_detector;
+        rng=MersenneTwister(705))
+    hgcdte_size = size(output_frame(hgcdte_probe_detector))
+    hgcdte_gain_map = ones(hgcdte_size)
+    hgcdte_gain_map[1:2:end] .= 0.7
+    hgcdte_bad_mask = falses(hgcdte_size)
+    hgcdte_bad_mask[2, 2] = true
+    hgcdte_correction = ReferencePixelCommonModeCorrection(1, 1)
+    hgcdte_detector = Detector(noise=NoiseNone(),
+        sensor=HgCdTeAvalancheArraySensor(
+            sampling_mode=CorrelatedDoubleSampling()),
+        correction_model=hgcdte_correction,
+        defect_model=CompositeDetectorDefectModel(
+            PixelResponseNonuniformity(hgcdte_gain_map),
+            BadPixelMask(hgcdte_bad_mask; throughput=0.0)))
+    hgcdte_wfs = make_wfs(:pyramid)
+    @test all(iszero, measure!(hgcdte_wfs, tel, src, hgcdte_detector;
+        rng=MersenneTwister(706)))
+    hgcdte_seed = telescope_aperture_calibration_signature(tel,
+        calibration_signature(src))
+    @test detector_calibration_signature_allocation_bytes(hgcdte_detector,
+        hgcdte_seed) == 0
+
+    correction_one = Detector(noise=NoiseNone(),
+        sensor=HgCdTeAvalancheArraySensor(
+            sampling_mode=CorrelatedDoubleSampling()),
+        correction_model=ReferencePixelCommonModeCorrection(1, 1))
+    correction_two = Detector(noise=NoiseNone(),
+        sensor=HgCdTeAvalancheArraySensor(
+            sampling_mode=CorrelatedDoubleSampling()),
+        correction_model=ReferencePixelCommonModeCorrection(2, 1))
+    @test detector_calibration_signature(correction_one, hgcdte_seed) !=
+        detector_calibration_signature(correction_two, hgcdte_seed)
+    composite_correction = Detector(noise=NoiseNone(),
+        sensor=HgCdTeAvalancheArraySensor(
+            sampling_mode=CorrelatedDoubleSampling()),
+        correction_model=CompositeFrameReadoutCorrection((
+            ReferenceRowCommonModeCorrection(1),
+            ReferenceColumnCommonModeCorrection(1),
+        )))
+    @test detector_calibration_signature_allocation_bytes(
+        composite_correction, hgcdte_seed) == 0
+
+    ramp_correction = ReferencePixelCommonModeCorrection(1, 1)
+    ramp_detector = Detector(noise=NoiseNone(), integration_time=1.0,
+        gain=3.0,
+        sensor=HgCdTeAvalancheArraySensor(avalanche_gain=2.0,
+            read_time=0.1, sampling_mode=UpTheRampSampling(4)),
+        correction_model=ramp_correction)
+    @test detector_calibration_signature_allocation_bytes(
+        ramp_detector, hgcdte_seed) == 0
+    ramp_flat = measure!(make_wfs(:pyramid), tel, src,
+        ramp_detector; rng=MersenneTwister(707))
+    @test maximum(abs, ramp_flat) <= 16eps(eltype(ramp_flat))
+
+    gain_signature_detector = Detector(noise=NoiseNone(), gain=2.0,
+        sensor=HgCdTeAvalancheArraySensor(
+            sampling_mode=CorrelatedDoubleSampling()),
+        correction_model=hgcdte_correction)
+    avalanche_signature_detector = Detector(noise=NoiseNone(),
+        sensor=HgCdTeAvalancheArraySensor(avalanche_gain=2.0,
+            sampling_mode=CorrelatedDoubleSampling()),
+        correction_model=hgcdte_correction)
+    ramp_read_time_detector = Detector(noise=NoiseNone(),
+        integration_time=1.0, gain=3.0,
+        sensor=HgCdTeAvalancheArraySensor(avalanche_gain=2.0,
+            read_time=0.2, sampling_mode=UpTheRampSampling(4)),
+        correction_model=ramp_correction)
+    @test detector_calibration_signature(gain_signature_detector,
+        hgcdte_seed) != detector_calibration_signature(correction_one,
+        hgcdte_seed)
+    @test detector_calibration_signature(avalanche_signature_detector,
+        hgcdte_seed) != detector_calibration_signature(correction_one,
+        hgcdte_seed)
+    @test detector_calibration_signature(ramp_read_time_detector,
+        hgcdte_seed) != detector_calibration_signature(ramp_detector,
+        hgcdte_seed)
+
+    windowed = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
+        readout_window=FrameWindow(1:2, 1:2))
+    @test_throws InvalidConfiguration measure!(
+        PyramidWFS(tel; pupil_samples=4, mode=Diffractive()),
+        tel, src, windowed)
+
+    unsupported_calibration_detectors = (
+        Detector(noise=NoiseNone(),
+            charge_coupling_model=InterpixelCapacitance(
+                [0.0 0.1 0.0; 0.1 0.6 0.1; 0.0 0.1 0.0])),
+        Detector(noise=NoiseNone(), sensor=InGaAsSensor(),
+            response_model=NullFrameResponse(),
+            nonlinearity_model=SaturatingFrameNonlinearity(0.1)),
+        Detector(noise=NoiseNone(), sensor=CMOSSensor(),
+            defect_model=DarkSignalNonuniformity(ones(8, 8))),
+        Detector(noise=NoiseNone(),
+            sensor=HgCdTeAvalancheArraySensor(
+                read_time=0.4, sampling_mode=UpTheRampSampling(4))),
+    )
+    for detector in unsupported_calibration_detectors
+        @test_throws InvalidConfiguration measure!(
+            PyramidWFS(tel; pupil_samples=4, mode=Diffractive()),
+            tel, src, detector)
+        @test_throws InvalidConfiguration measure!(
+            BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive()),
+            tel, src, detector)
+    end
+
+    fill!(tel.state.opd, 1e-8)
+    opd_before_failure = copy(tel.state.opd)
+    for family in (:pyramid, :bioedge)
+        wfs = family === :pyramid ?
+            PyramidWFS(tel; pupil_samples=4, mode=Diffractive()) :
+            BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+        invalid_sampling = Detector(noise=NoiseNone(), psf_sampling=3)
+        @test_throws DimensionMismatchError measure!(
+            wfs, tel, src, invalid_sampling)
+        @test tel.state.opd == opd_before_failure
+    end
+end
+
+@testset "BioEdge source-composition support boundary" begin
+    tel = Telescope(resolution=16, diameter=8.0,
+        central_obstruction=0.0)
+    src = Source(band=:custom, wavelength=0.75e-6,
+        photon_irradiance=1.0)
+    spectral = with_spectrum(src,
+        SpectralBundle([0.70e-6, 0.80e-6], [0.5, 0.5]))
+    extended = with_extended_source(src,
+        PointCloudSourceModel([(0.0, 0.0)], [1.0]))
+
+    for expanded in (spectral, extended)
+        @test_throws UnsupportedAlgorithm measure!(
+            BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive()),
+            tel, expanded)
+        @test_throws UnsupportedAlgorithm measure!(
+            BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive()),
+            tel, expanded,
+            Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0))
+    end
+end
+
+@testset "Pyramid and BioEdge pupil-reflectivity throughput" begin
+    transmission = 0.25
+    src = Source(band=:custom, wavelength=0.75e-6,
+        photon_irradiance=1.0)
+    full_tel = Telescope(resolution=16, diameter=8.0,
+        central_obstruction=0.0)
+    attenuated_tel = Telescope(resolution=16, diameter=8.0,
+        central_obstruction=0.0, pupil_reflectivity=transmission)
+
+    for style in (ScalarCPUStyle(), KA_CPU_STYLE)
+        full_wfs = PyramidWFS(full_tel; pupil_samples=2,
+            mode=Diffractive(), modulation=0.0)
+        attenuated_wfs = PyramidWFS(attenuated_tel; pupil_samples=2,
+            mode=Diffractive(), modulation=0.0)
+        pyramid_intensity_core!(style, full_wfs.state.intensity,
+            full_wfs, full_tel, src)
+        pyramid_intensity_core!(style, attenuated_wfs.state.intensity,
+            attenuated_wfs, attenuated_tel, src)
+        full_rate = sum(full_wfs.state.intensity)
+        @test full_rate > 0
+        @test sum(attenuated_wfs.state.intensity) ≈ transmission * full_rate rtol=1e-12
+    end
+
+    full_pyramid = PyramidWFS(full_tel; pupil_samples=2,
+        mode=Diffractive(), modulation=0.0)
+    attenuated_pyramid = PyramidWFS(attenuated_tel; pupil_samples=2,
+        mode=Diffractive(), modulation=0.0)
+    full_modulation_frame = similar(full_pyramid.state.intensity)
+    attenuated_modulation_frame = similar(attenuated_pyramid.state.intensity)
+    pyramid_modulation_frame!(full_modulation_frame, full_pyramid, full_tel, src)
+    pyramid_modulation_frame!(attenuated_modulation_frame,
+        attenuated_pyramid, attenuated_tel, src)
+    @test sum(attenuated_modulation_frame) ≈
+        transmission * sum(full_modulation_frame) rtol=1e-12
+
+    full_bioedge = BioEdgeWFS(full_tel; pupil_samples=2,
+        mode=Diffractive(), modulation=0.0)
+    attenuated_bioedge = BioEdgeWFS(attenuated_tel; pupil_samples=2,
+        mode=Diffractive(), modulation=0.0)
+    bioedge_intensity_core!(full_bioedge.state.intensity,
+        full_bioedge, full_tel, src)
+    bioedge_intensity_core!(attenuated_bioedge.state.intensity,
+        attenuated_bioedge, attenuated_tel, src)
+    full_bioedge_rate = sum(full_bioedge.state.intensity)
+    @test full_bioedge_rate > 0
+    @test sum(attenuated_bioedge.state.intensity) ≈
+        transmission * full_bioedge_rate rtol=1e-12
 end
 
 @testset "Shack-Hartmann subapertures" begin
-    tel = Telescope(resolution=24, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
+    tel = Telescope(resolution=24, diameter=8.0, central_obstruction=0.1)
     src = Source(band=:I, magnitude=0.0)
     sh = ShackHartmannWFS(tel; n_lenslets=6, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8, threshold_cog=0.02)
 

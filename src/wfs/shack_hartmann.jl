@@ -160,9 +160,9 @@ end
 end
 
 @inline function prepare_runtime_wfs!(wfs::ShackHartmannWFS{<:Diffractive}, tel::Telescope, ast::Asterism)
-    isempty(ast.sources) && throw(InvalidConfiguration("asterism must contain at least one source"))
-    prepare_sampling!(wfs, tel, ast.sources[1])
-    ensure_sh_calibration!(wfs, tel, ast.sources[1])
+    common_source = common_wfs_calibration_source(ast, "ShackHartmannWFS")
+    prepare_sampling!(wfs, tel, common_source)
+    ensure_sh_calibration!(wfs, tel, common_source)
     return wfs
 end
 

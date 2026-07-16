@@ -1,6 +1,7 @@
 @inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
-    wfs::AbstractWFS, src::AbstractSource, rng::AbstractRNG)
-    prepropagate_runtime_wfs!(wfs, atm, tel, optic, src, rng)
+    wfs::AbstractWFS, src::AbstractSource, atmosphere_step::Real,
+    rng::AbstractRNG)
+    prepropagate_runtime_wfs!(wfs, atm, tel, optic, src, atmosphere_step, rng)
     measure_runtime_wfs!(wfs, atm, tel, src, rng)
     finish_runtime_wfs_sensing!(wfs, atm, tel, optic, src)
     return nothing
@@ -17,8 +18,9 @@ end
 
 @inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope,
     optic::AbstractControllableOptic, wfs::AbstractWFS,
-    src::AbstractSource, rng::AbstractRNG, atmosphere_renderer)
-    advance_runtime_atmosphere!(wfs, atm, tel, rng)
+    src::AbstractSource, atmosphere_step::Real, rng::AbstractRNG,
+    atmosphere_renderer)
+    advance_runtime_atmosphere!(wfs, atm, tel, atmosphere_step, rng)
     render_runtime_wfs_path!(atmosphere_renderer, wfs, atm, tel, optic, src)
     measure_runtime_wfs!(wfs, atm, tel, src, rng)
     finish_runtime_wfs_sensing!(wfs, atm, tel, optic, src)
@@ -35,8 +37,9 @@ end
 end
 
 @inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
-    wfs::AbstractWFS, src::AbstractSource, det::AbstractDetector, rng::AbstractRNG)
-    prepropagate_runtime_wfs!(wfs, atm, tel, optic, src, rng)
+    wfs::AbstractWFS, src::AbstractSource, det::AbstractDetector,
+    atmosphere_step::Real, rng::AbstractRNG)
+    prepropagate_runtime_wfs!(wfs, atm, tel, optic, src, atmosphere_step, rng)
     measure_runtime_wfs!(wfs, atm, tel, src, det, rng)
     finish_runtime_wfs_sensing!(wfs, atm, tel, optic, src)
     return nothing
@@ -53,9 +56,10 @@ end
 
 @inline function sense_core!(atm::AbstractAtmosphere, tel::Telescope,
     optic::AbstractControllableOptic, wfs::AbstractWFS,
-    src::AbstractSource, det::AbstractDetector, rng::AbstractRNG,
+    src::AbstractSource, det::AbstractDetector, atmosphere_step::Real,
+    rng::AbstractRNG,
     atmosphere_renderer)
-    advance_runtime_atmosphere!(wfs, atm, tel, rng)
+    advance_runtime_atmosphere!(wfs, atm, tel, atmosphere_step, rng)
     render_runtime_wfs_path!(atmosphere_renderer, wfs, atm, tel, optic, src)
     measure_runtime_wfs!(wfs, atm, tel, src, det, rng)
     finish_runtime_wfs_sensing!(wfs, atm, tel, optic, src)
@@ -180,8 +184,9 @@ only in whether WFS and science detectors participate in the step.
 """
 @inline function step_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
     wfs::AbstractWFS, src::AbstractSource, reconstructor, command::AbstractVector{T},
-    rng::AbstractRNG, control_sign::T) where {T<:AbstractFloat}
-    sense_core!(atm, tel, optic, wfs, src, rng)
+    atmosphere_step::Real, rng::AbstractRNG,
+    control_sign::T) where {T<:AbstractFloat}
+    sense_core!(atm, tel, optic, wfs, src, atmosphere_step, rng)
     reconstruct!(command, reconstructor, slopes(wfs))
     _stage_command!(optic, command, control_sign)
     return nothing
@@ -189,8 +194,9 @@ end
 
 @inline function step_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
     wfs::AbstractWFS, src::AbstractSource, wfs_detector::AbstractDetector, reconstructor,
-    command::AbstractVector{T}, rng::AbstractRNG, control_sign::T) where {T<:AbstractFloat}
-    sense_core!(atm, tel, optic, wfs, src, wfs_detector, rng)
+    command::AbstractVector{T}, atmosphere_step::Real, rng::AbstractRNG,
+    control_sign::T) where {T<:AbstractFloat}
+    sense_core!(atm, tel, optic, wfs, src, wfs_detector, atmosphere_step, rng)
     reconstruct!(command, reconstructor, slopes(wfs))
     _stage_command!(optic, command, control_sign)
     return nothing
@@ -198,8 +204,10 @@ end
 
 @inline function step_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
     wfs::AbstractWFS, src::AbstractSource, reconstructor, command::AbstractVector{T},
-    science_detector::AbstractDetector, rng::AbstractRNG, control_sign::T, science_zero_padding::Int) where {T<:AbstractFloat}
-    sense_core!(atm, tel, optic, wfs, src, rng)
+    science_detector::AbstractDetector, atmosphere_step::Real,
+    rng::AbstractRNG, control_sign::T,
+    science_zero_padding::Int) where {T<:AbstractFloat}
+    sense_core!(atm, tel, optic, wfs, src, atmosphere_step, rng)
     capture_science_core!(tel, src, science_detector, rng, science_zero_padding)
     reconstruct!(command, reconstructor, slopes(wfs))
     _stage_command!(optic, command, control_sign)
@@ -208,9 +216,10 @@ end
 
 @inline function step_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
     wfs::AbstractWFS, src::AbstractSource, wfs_detector::AbstractDetector, reconstructor,
-    command::AbstractVector{T}, science_detector::AbstractDetector, rng::AbstractRNG,
+    command::AbstractVector{T}, science_detector::AbstractDetector,
+    atmosphere_step::Real, rng::AbstractRNG,
     control_sign::T, science_zero_padding::Int) where {T<:AbstractFloat}
-    sense_core!(atm, tel, optic, wfs, src, wfs_detector, rng)
+    sense_core!(atm, tel, optic, wfs, src, wfs_detector, atmosphere_step, rng)
     capture_science_core!(tel, src, science_detector, rng, science_zero_padding)
     reconstruct!(command, reconstructor, slopes(wfs))
     _stage_command!(optic, command, control_sign)
@@ -262,10 +271,12 @@ struct ReuseAdvancedRuntimeAtmosphere <: AbstractRuntimeAtmosphereStep end
     runtime::ClosedLoopRuntime)
     if isnothing(runtime.wfs_detector)
         sense_core!(runtime.atm, runtime.tel, runtime.optic, runtime.wfs,
-            runtime.src, runtime.rng, runtime.wfs_atmosphere_renderer)
+            runtime.src, runtime.atmosphere_step, runtime.rng,
+            runtime.wfs_atmosphere_renderer)
     else
         sense_core!(runtime.atm, runtime.tel, runtime.optic, runtime.wfs,
-            runtime.src, runtime.wfs_detector, runtime.rng,
+            runtime.src, runtime.wfs_detector, runtime.atmosphere_step,
+            runtime.rng,
             runtime.wfs_atmosphere_renderer)
     end
     return nothing
@@ -285,9 +296,9 @@ end
     return nothing
 end
 
-@inline function sense_runtime!(atmosphere_step::AbstractRuntimeAtmosphereStep,
+@inline function sense_runtime!(advance_policy::AbstractRuntimeAtmosphereStep,
     runtime::ClosedLoopRuntime)
-    sense_primary_core!(atmosphere_step, runtime)
+    sense_primary_core!(advance_policy, runtime)
     if requires_runtime_science_pixels(runtime)
         capture_science_core!(runtime.science_path,
             runtime.science_atmosphere_renderer, runtime.atm, runtime.tel,

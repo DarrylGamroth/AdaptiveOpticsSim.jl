@@ -9,7 +9,7 @@ infinite_nonperiodic_long_run = true
 finite_infinite_single_layer_close = true
 
 [scope]
-sampling_time_s = 0.001
+atmosphere_step_s = 0.001
 finite_model = "MultiLayerAtmosphere"
 resolution = 16
 r0_m = 0.2

@@ -7,7 +7,10 @@ function main(; resolution::Int=24)
     filter = SpatialFilter(tel; shape=CircularFilter(), diameter=resolution ÷ 3, zero_padding=2)
     wavefront = PupilFunction(tel)
     apply_opd!(wavefront, opd_map(tel))
-    field = ElectricField(wavefront, src; zero_padding=2)
+    field = ElectricField(wavefront, src; zero_padding=2,
+        normalization=DimensionlessNormalization(),
+        spatial_measure=PointSampledMeasure(),
+        coherence=CoherentFieldCombination())
     formation = prepare_pupil_field(tel, wavefront, src, field;
         center_even_grid=false, amplitude_scale=1)
     fill_electric_field!(field, wavefront, formation)

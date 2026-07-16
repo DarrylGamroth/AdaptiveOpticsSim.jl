@@ -22,8 +22,7 @@ function run_cpu_sync_audit()
     rng = runtime_rng(1)
     build_backend = AdaptiveOpticsSim.CPUBuildBackend()
 
-    tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
-        central_obstruction=0.0f0, T=T, backend=CPUBackend())
+    tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=CPUBackend())
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=CPUBackend())
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3, T=T, backend=CPUBackend())
@@ -31,7 +30,7 @@ function run_cpu_sync_audit()
     sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
     recon = ModalReconstructor(imat; gain=T(0.5))
-    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; rng=rng)
+    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=rng)
     step!(runtime)
 
     runtime_stats = runtime_timing(runtime; warmup=10, samples=100, gc_before=false)

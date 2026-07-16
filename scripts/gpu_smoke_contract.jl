@@ -38,17 +38,16 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
     failures = String[]
     rng = MersenneTwister(1)
     T = Float32
+    atmosphere_step = T(1e-3)
     BackendArray = gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
     backend = AdaptiveOpticsSim.array_backend_selector(BackendArray)
 
-    tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
-        central_obstruction=0.0f0, T=T, backend=backend)
+    tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
     lgs = LGSSource(; magnitude=0.0, wavelength=589e-9, altitude=90_000.0,
-        laser_coordinates=(0.0, 0.0), T=T)
-    spider_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
-        central_obstruction=0.0f0, T=T, backend=backend)
+        laser_coordinates=(0.0, 0.0), photon_irradiance=one(T), T=T)
+    spider_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
     apply_spiders!(spider_tel; thickness=0.5, angles=[0.0, 90.0])
 
     record_gpu_smoke!(failures, "psf_source") do
@@ -160,7 +159,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
 
     record_gpu_smoke!(failures, "atmosphere_step") do
         atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=backend)
-        advance!(atm, tel; rng=rng)
+        advance_by!(atm, atmosphere_step; rng=rng)
         propagate!(atm, tel)
         @assert tel.state.opd isa BackendArray
         return tel.state.opd
@@ -177,11 +176,11 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
             T=T,
             backend=backend,
         )
-        advance!(atm, tel; rng=rng)
+        advance_by!(atm, atmosphere_step; rng=rng)
         propagate!(atm, tel)
-        @assert atm.state.opd isa BackendArray
+        @assert atm.layers[1].generator.state.opd isa BackendArray
         @assert tel.state.opd isa BackendArray
-        return atm.state.opd
+        return tel.state.opd
     end
 
     record_gpu_smoke!(failures, "atmosphere_multilayer_step_spiders") do
@@ -195,9 +194,9 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
             T=T,
             backend=backend,
         )
-        advance!(atm, spider_tel; rng=rng)
+        advance_by!(atm, atmosphere_step; rng=rng)
         propagate!(atm, spider_tel, src)
-        @assert atm.state.opd isa BackendArray
+        @assert atm.layers[1].generator.state.opd isa BackendArray
         @assert spider_tel.state.opd isa BackendArray
         return spider_tel.state.opd
     end
@@ -215,13 +214,12 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
             T=T,
             backend=backend,
         )
-        advance!(atm, tel; rng=rng)
+        advance_by!(atm, atmosphere_step; rng=rng)
         propagate!(atm, tel, src)
-        @assert atm.state.opd isa BackendArray
         @assert tel.state.opd isa BackendArray
         @assert atm.layers[1].screen.state.screen isa BackendArray
         @assert atm.layers[1].screen.state.screen_scratch isa BackendArray
-        return atm.state.opd
+        return tel.state.opd
     end
 
     record_gpu_smoke!(failures, "atmosphere_infinite_multilayer_step_spiders") do
@@ -237,9 +235,8 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
             T=T,
             backend=backend,
         )
-        advance!(atm, spider_tel; rng=rng)
+        advance_by!(atm, atmosphere_step; rng=rng)
         propagate!(atm, spider_tel, src)
-        @assert atm.state.opd isa BackendArray
         @assert spider_tel.state.opd isa BackendArray
         return spider_tel.state.opd
     end
@@ -255,7 +252,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
             T=T,
             backend=backend,
         )
-        advance!(atm, tel; rng=rng)
+        advance_by!(atm, atmosphere_step; rng=rng)
         prop = AtmosphericFieldPropagation(atm, tel, src;
             model=GeometricAtmosphericPropagation(T=T),
             zero_padding=2,
@@ -278,7 +275,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
             T=T,
             backend=backend,
         )
-        advance!(atm, tel; rng=rng)
+        advance_by!(atm, atmosphere_step; rng=rng)
         prop = AtmosphericFieldPropagation(atm, tel, src;
             model=LayeredFresnelAtmosphericPropagation(T=T),
             zero_padding=2,
@@ -290,8 +287,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
 
     record_gpu_smoke!(failures, "atmosphere_infinite_statistical_agreement") do
         function trajectory_stats(backend; steps::Int=10)
-            local_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
-                central_obstruction=0.0f0, T=T, backend=backend)
+            local_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
             local_src = Source(band=:I, magnitude=0.0, coordinates=(30.0, 20.0), T=T)
             local_atm = InfiniteMultiLayerAtmosphere(local_tel;
                 r0=T(0.2),
@@ -310,7 +306,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
             corrs = Float64[]
             previous = nothing
             for _ in 1:steps
-                advance!(local_atm, local_tel; rng=local_rng)
+                advance_by!(local_atm, atmosphere_step; rng=local_rng)
                 propagate!(local_atm, local_tel, local_src)
                 opd = Array(local_tel.state.opd)
                 push!(stds, std(vec(opd)))
@@ -442,10 +438,8 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
     end
 
     record_gpu_smoke!(failures, "measure_shack_diffractive_detector_equivalence") do
-        cpu_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
-            central_obstruction=0.0f0, T=T, backend=CPUBackend())
-        gpu_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
-            central_obstruction=0.0f0, T=T, backend=backend)
+        cpu_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=CPUBackend())
+        gpu_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
         cpu_src = Source(band=:I, magnitude=0.0, T=T)
         gpu_src = Source(band=:I, magnitude=0.0, T=T)
         cpu_wfs = ShackHartmannWFS(cpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=CPUBackend())
@@ -550,7 +544,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
             T=T,
             backend=backend,
         )
-        advance!(atm, tel; rng=rng)
+        advance_by!(atm, atmosphere_step; rng=rng)
         wfs = CurvatureWFS(tel; pupil_samples=4, T=T, backend=backend)
         slopes = measure!(wfs, tel, src, atm)
         @assert slopes isa BackendArray
@@ -558,13 +552,12 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
     end
 
     record_gpu_smoke!(failures, "closed_loop_step") do
-        step_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
-            central_obstruction=0.0f0, T=T, backend=backend)
+        step_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
         atm = KolmogorovAtmosphere(step_tel; r0=0.2, L0=25.0, T=T, backend=backend)
         dm = DeformableMirror(step_tel; n_act=4, influence_width=0.3, T=T, backend=backend)
         wfs = ShackHartmannWFS(step_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
         det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1, T=T, backend=backend)
-        advance!(atm, step_tel; rng=rng)
+        advance_by!(atm, atmosphere_step; rng=rng)
         propagate!(atm, step_tel)
         apply!(dm, step_tel, DMAdditive())
         slopes = measure!(wfs, step_tel, src, det; rng=rng)
@@ -576,8 +569,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
     end
 
     record_gpu_smoke!(failures, "closed_loop_runtime") do
-        rt_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
-            central_obstruction=0.0f0, T=T, backend=backend)
+        rt_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
         rt_src = Source(band=:I, magnitude=0.0, T=T)
         rt_atm = KolmogorovAtmosphere(rt_tel; r0=0.2, L0=25.0, T=T, backend=backend)
         rt_dm = DeformableMirror(rt_tel; n_act=4, influence_width=0.3, T=T, backend=backend)
@@ -585,7 +577,8 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         rt_sim = AdaptiveOpticsSim.AOSimulation(rt_tel, rt_src, rt_atm, rt_dm, rt_wfs)
         rt_imat = interaction_matrix(rt_dm, rt_wfs, rt_tel; amplitude=T(0.05))
         rt_recon = ModalReconstructor(rt_imat; gain=T(0.5))
-        runtime = AdaptiveOpticsSim.ClosedLoopRuntime(rt_sim, rt_recon; rng=rng)
+        runtime = AdaptiveOpticsSim.ClosedLoopRuntime(rt_sim, rt_recon;
+            atmosphere_step=atmosphere_step, rng=rng)
         step!(runtime)
         @assert runtime.command isa BackendArray
         @assert rt_dm.state.coefs isa BackendArray
@@ -593,8 +586,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
     end
 
     record_gpu_smoke!(failures, "closed_loop_runtime_science") do
-        rt_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
-            central_obstruction=0.0f0, T=T, backend=backend)
+        rt_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
         rt_src = Source(band=:I, magnitude=0.0, T=T)
         rt_atm = KolmogorovAtmosphere(rt_tel; r0=0.2, L0=25.0, T=T, backend=backend)
         rt_dm = DeformableMirror(rt_tel; n_act=4, influence_width=0.3, T=T, backend=backend)
@@ -603,7 +595,9 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         rt_sim = AdaptiveOpticsSim.AOSimulation(rt_tel, rt_src, rt_atm, rt_dm, rt_wfs)
         rt_imat = interaction_matrix(rt_dm, rt_wfs, rt_tel; amplitude=T(0.05))
         rt_recon = ModalReconstructor(rt_imat; gain=T(0.5))
-        runtime = AdaptiveOpticsSim.ClosedLoopRuntime(rt_sim, rt_recon; rng=rng, science_detector=rt_det)
+        runtime = AdaptiveOpticsSim.ClosedLoopRuntime(rt_sim, rt_recon;
+            atmosphere_step=atmosphere_step, rng=rng,
+            science_detector=rt_det)
         step!(runtime)
         frame = output_frame(rt_det)
         @assert frame isa BackendArray
@@ -611,25 +605,25 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
     end
 
     record_gpu_smoke!(failures, "closed_loop_multi_boundary") do
-        rt1_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
-            central_obstruction=0.0f0, T=T, backend=backend)
+        rt1_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
         rt1_src = Source(band=:I, magnitude=0.0, T=T)
         rt1_atm = KolmogorovAtmosphere(rt1_tel; r0=0.2, L0=25.0, T=T, backend=backend)
         rt1_dm = DeformableMirror(rt1_tel; n_act=4, influence_width=0.3, T=T, backend=backend)
         rt1_wfs = ShackHartmannWFS(rt1_tel; n_lenslets=4, T=T, backend=backend)
         rt1_sim = AdaptiveOpticsSim.AOSimulation(rt1_tel, rt1_src, rt1_atm, rt1_dm, rt1_wfs)
         rt1_recon = ModalReconstructor(interaction_matrix(rt1_dm, rt1_wfs, rt1_tel; amplitude=T(0.05)); gain=T(0.5))
-        rt1 = AdaptiveOpticsSim.ClosedLoopRuntime(rt1_sim, rt1_recon; rng=rng)
+        rt1 = AdaptiveOpticsSim.ClosedLoopRuntime(rt1_sim, rt1_recon;
+            atmosphere_step=atmosphere_step, rng=rng)
 
-        rt2_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
-            central_obstruction=0.0f0, T=T, backend=backend)
+        rt2_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
         rt2_src = Source(band=:I, magnitude=0.0, T=T)
         rt2_atm = KolmogorovAtmosphere(rt2_tel; r0=0.2, L0=25.0, T=T, backend=backend)
         rt2_dm = DeformableMirror(rt2_tel; n_act=4, influence_width=0.3, T=T, backend=backend)
         rt2_wfs = PyramidWFS(rt2_tel; pupil_samples=4, mode=Geometric(), T=T, backend=backend)
         rt2_sim = AdaptiveOpticsSim.AOSimulation(rt2_tel, rt2_src, rt2_atm, rt2_dm, rt2_wfs)
         rt2_recon = ModalReconstructor(interaction_matrix(rt2_dm, rt2_wfs, rt2_tel; amplitude=T(0.05)); gain=T(0.5))
-        rt2 = AdaptiveOpticsSim.ClosedLoopRuntime(rt2_sim, rt2_recon; rng=rng)
+        rt2 = AdaptiveOpticsSim.ClosedLoopRuntime(rt2_sim, rt2_recon;
+            atmosphere_step=atmosphere_step, rng=rng)
 
         boundary = CompositeSimulationInterface(rt1, rt2)
         step!(boundary)
@@ -639,15 +633,16 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
     end
 
     record_gpu_smoke!(failures, "runtime_reconstructor_refresh") do
-        rt_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
-            central_obstruction=0.0f0, T=T, backend=backend)
+        rt_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
         rt_src = Source(band=:I, magnitude=0.0, T=T)
         rt_atm = KolmogorovAtmosphere(rt_tel; r0=0.2, L0=25.0, T=T, backend=backend)
         rt_dm = DeformableMirror(rt_tel; n_act=4, influence_width=0.3, T=T, backend=backend)
         rt_wfs = ShackHartmannWFS(rt_tel; n_lenslets=4, T=T, backend=backend)
         rt_sim = AdaptiveOpticsSim.AOSimulation(rt_tel, rt_src, rt_atm, rt_dm, rt_wfs)
         rt_imat = interaction_matrix(rt_dm, rt_wfs, rt_tel; amplitude=T(0.05))
-        runtime = AdaptiveOpticsSim.ClosedLoopRuntime(rt_sim, ModalReconstructor(rt_imat; gain=T(0.5)); rng=rng)
+        runtime = AdaptiveOpticsSim.ClosedLoopRuntime(rt_sim,
+            ModalReconstructor(rt_imat; gain=T(0.5));
+            atmosphere_step=atmosphere_step, rng=rng)
         refreshed = with_reconstructor(runtime, ModalReconstructor(rt_imat; gain=T(0.25)))
         step!(refreshed)
         @assert refreshed.command isa BackendArray
@@ -655,8 +650,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
     end
 
     record_gpu_smoke!(failures, "interaction_matrix_reconstructor") do
-        cal_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
-            central_obstruction=0.0f0, T=T, backend=backend)
+        cal_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
         dm = DeformableMirror(cal_tel; n_act=4, influence_width=0.3, T=T, backend=backend)
         wfs = ShackHartmannWFS(cal_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
         imat = interaction_matrix(dm, wfs, cal_tel, src; amplitude=T(0.05))
@@ -680,8 +674,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
     end
 
     record_gpu_smoke!(failures, "lift") do
-        lift_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
-            central_obstruction=0.0f0, T=T, backend=backend)
+        lift_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
         lift_src = Source(band=:I, magnitude=8.0, T=T)
         basis = backend_rand(B, T, 16, 16, 3)
         diversity = backend_zeros(B, T, 16, 16)

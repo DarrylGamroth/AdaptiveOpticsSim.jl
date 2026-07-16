@@ -50,7 +50,7 @@ function build_pyramid_mask_new_host!(mask::AbstractMatrix{Complex{T}}, wfs::Pyr
     else
         xvals = range(-lim, lim; length=n + 1)[1:n]
     end
-    r = (T(n_sub) + T(sep)) / 2
+    r = (T(n_sub) + T(sep)) * wfs.params.mask_scale / 2
     sx = wfs.state.shift_x
     sy = wfs.state.shift_y
     θ = wfs.params.theta_rotation
@@ -86,7 +86,7 @@ function build_pyramid_mask_old_host!(mask::AbstractMatrix{Complex{T}}, wfs::Pyr
         Tilt = repeat(tilt, 1, n_tot ÷ 2)
         Tip .-= mean(Tip)
         Tilt .-= mean(Tilt)
-        q = T(n_sub + sep)
+        q = T(n_sub + sep) * wfs.params.mask_scale
         @views begin
             mask[1:n_tot÷2, 1:n_tot÷2] .= cis.((Tip .* (q + sx[1]) .+ Tilt .* (q - sy[1])) .* norma)
             mask[1:n_tot÷2, n_tot÷2+1:end] .= cis.((-Tip .* (q - sx[2]) .+ Tilt .* (q - sy[2])) .* norma)
@@ -113,7 +113,7 @@ function build_pyramid_mask_old_host!(mask::AbstractMatrix{Complex{T}}, wfs::Pyr
         Tip2 .-= mean(Tip2); Tilt2 .-= mean(Tilt2)
         Tip3 .-= mean(Tip3); Tilt3 .-= mean(Tilt3)
         Tip4 .-= mean(Tip4); Tilt4 .-= mean(Tilt4)
-        q = T(n_sub + sep)
+        q = T(n_sub + sep) * wfs.params.mask_scale
         @views begin
             mask[1:n_tot÷2+1, 1:n_tot÷2+1] .= cis.((Tip1 .* (q + sx[1]) .+ Tilt1 .* (q - sy[1])) .* norma)
             mask[1:n_tot÷2+1, n_tot÷2:end] .= cis.((-Tip4 .* (q - sx[2]) .+ Tilt4 .* (q - sy[2])) .* norma)
@@ -204,12 +204,12 @@ function pyramid_intensity_core!(::ScalarCPUStyle, out::AbstractMatrix{T}, wfs::
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
     opd_to_cycles = T(2) / wavelength(src)
-    amp_scale = sqrt(T(photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2 /
+    amp_scale = sqrt(T(photon_irradiance(src) * (tel.params.diameter / tel.params.resolution)^2 /
         wfs.params.modulation_points))
 
     fill!(out, zero(T))
     fill!(wfs.state.field, zero(eltype(wfs.state.field)))
-    @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * $(pupil_mask(tel)) *
+    @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * sqrt($(pupil_reflectivity(tel))) *
         cispi(opd_to_cycles * tel.state.opd)
     for p in 1:wfs.params.modulation_points
         copyto!(wfs.state.focal_field, wfs.state.field)
@@ -228,13 +228,13 @@ function pyramid_intensity_core!(::AcceleratorStyle, out::AbstractMatrix{T}, wfs
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
     opd_to_cycles = T(2) / wavelength(src)
-    amp_scale = sqrt(T(photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2 /
+    amp_scale = sqrt(T(photon_irradiance(src) * (tel.params.diameter / tel.params.resolution)^2 /
         wfs.params.modulation_points))
 
     fill!(out, zero(T))
     for p in 1:wfs.params.modulation_points
         fill!(wfs.state.field, zero(eltype(wfs.state.field)))
-        @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * $(pupil_mask(tel)) *
+        @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * sqrt($(pupil_reflectivity(tel))) *
             wfs.state.modulation_phases[:, :, p] * cispi(opd_to_cycles * tel.state.opd)
         copyto!(wfs.state.focal_field, wfs.state.field)
         accumulate_pyramid_focal_intensity!(out, wfs)
@@ -268,13 +268,13 @@ function pyramid_modulation_frame!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel:
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
     opd_to_cycles = T(2) / wavelength(src)
-    amp_scale = sqrt(T(photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2 /
+    amp_scale = sqrt(T(photon_irradiance(src) * (tel.params.diameter / tel.params.resolution)^2 /
         wfs.params.modulation_points))
 
     fill!(out, zero(T))
     for p in 1:wfs.params.modulation_points
         fill!(wfs.state.field, zero(eltype(wfs.state.field)))
-        @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * $(pupil_mask(tel)) *
+        @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * sqrt($(pupil_reflectivity(tel))) *
             wfs.state.modulation_phases[:, :, p] * cispi(opd_to_cycles * tel.state.opd)
         copyto!(wfs.state.focal_field, wfs.state.field)
         if wfs.params.psf_centering
@@ -324,13 +324,21 @@ function ensure_lgs_kernel!(wfs::PyramidWFS, tel::Telescope, src::LGSSource)
         return wfs
     end
     pad = size(wfs.state.intensity, 1)
-    tag = objectid(na_profile) ⊻ hash(src.params.laser_coordinates) ⊻ hash(src.params.fwhm_spot_up) ⊻
-        hash(pad) ⊻ hash(wfs.params.pupil_samples)
+    padding = wfs.state.effective_resolution / tel.params.resolution
+    pixel_scale = lgs_pixel_scale(tel.params.diameter, padding,
+        wavelength(src))
+    tag = lgs_kernel_signature(
+        tel,
+        src,
+        pad,
+        wfs.params.pupil_samples,
+        pixel_scale,
+        eltype(wfs.state.intensity);
+        model=:subaperture_average,
+    )
     if size(wfs.state.lgs_kernel_fft, 1) == pad && wfs.state.lgs_kernel_tag == tag
         return wfs
     end
-    padding = wfs.state.effective_resolution / tel.params.resolution
-    pixel_scale = lgs_pixel_scale(tel.params.diameter, padding, wavelength(src))
     wfs.state.lgs_kernel_fft = lgs_average_kernel_fft(
         tel,
         src,

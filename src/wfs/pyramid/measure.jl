@@ -65,45 +65,65 @@ function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::SpectralS
     ensure_pyramid_calibration!(wfs, tel, src)
     accumulate_pyramid_spectral_intensity!(execution_style(wfs.state.intensity), wfs, tel, src)
     intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
-    pyramid_signal!(wfs, tel, intensity, spectral_reference_source(src))
+    pyramid_signal!(wfs, tel, intensity, src)
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
 end
 
 function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::AbstractSource,
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
-    ensure_pyramid_calibration!(wfs, tel, src)
+    ensure_pyramid_calibration!(wfs, tel, src, det)
     pyramid_intensity!(wfs.state.intensity, wfs, tel, src)
     intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
     frame = capture!(det, intensity, src; rng=rng)
     resize_pyramid_signal_buffers!(wfs, size(frame, 1))
-    pyramid_signal!(wfs, tel, frame, src)
+    normalization_scale = wfs_detector_incidence_scale(det, src,
+        eltype(frame))
+    pyramid_signal!(wfs, tel, frame, src, normalization_scale)
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
 end
 
 function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::SpectralSource,
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
-    ensure_pyramid_calibration!(wfs, tel, src)
-    accumulate_pyramid_spectral_intensity!(execution_style(wfs.state.intensity), wfs, tel, src)
+    ensure_pyramid_calibration!(wfs, tel, src, det)
+    accumulate_pyramid_spectral_intensity!(execution_style(wfs.state.intensity),
+        wfs, tel, src)
     intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
     frame = capture!(det, intensity, src; rng=rng)
     resize_pyramid_signal_buffers!(wfs, size(frame, 1))
-    pyramid_signal!(wfs, tel, frame, spectral_reference_source(src))
+    normalization_scale = wfs_detector_incidence_scale(det, src,
+        eltype(frame))
+    pyramid_signal!(wfs, tel, frame, src, normalization_scale)
+    @. wfs.state.slopes *= wfs.state.optical_gain
+    return wfs.state.slopes
+end
+
+function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope,
+    src::SpectralSource, det::Detector;
+    rng::AbstractRNG=Random.default_rng())
+    qe_model = quantum_efficiency_model(det)
+    ensure_pyramid_calibration!(wfs, tel, src, det)
+    accumulate_pyramid_spectral_intensity!(execution_style(wfs.state.intensity),
+        wfs, tel, src, qe_model)
+    intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
+    frame = capture_with_quantum_efficiency!(det, intensity,
+        one(eltype(intensity)), rng)
+    resize_pyramid_signal_buffers!(wfs, size(frame, 1))
+    normalization_scale = wfs_detector_incidence_scale(det, src,
+        eltype(frame))
+    pyramid_signal!(wfs, tel, frame, src, normalization_scale)
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
 end
 
 function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, ast::Asterism)
     Base.require_one_based_indexing(tel.state.opd)
-    if isempty(ast.sources)
-        throw(InvalidConfiguration("asterism must contain at least one source"))
-    end
-    wavelength(ast)
-    ensure_pyramid_calibration!(wfs, tel, ast.sources[1])
+    common_source = common_wfs_calibration_source(ast, "PyramidWFS")
+    ensure_pyramid_calibration!(wfs, tel, common_source)
     accumulate_pyramid_asterism_intensity!(execution_style(wfs.state.intensity), wfs, tel, ast)
     intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
-    pyramid_signal!(wfs, tel, intensity)
+    pyramid_signal!(wfs, tel, intensity, ast)
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
 end
@@ -111,16 +131,15 @@ end
 function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, ast::Asterism,
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
     Base.require_one_based_indexing(tel.state.opd)
-    if isempty(ast.sources)
-        throw(InvalidConfiguration("asterism must contain at least one source"))
-    end
-    wavelength(ast)
-    ensure_pyramid_calibration!(wfs, tel, ast.sources[1])
+    common_source = common_wfs_calibration_source(ast, "PyramidWFS")
+    ensure_pyramid_calibration!(wfs, tel, common_source, det)
     accumulate_pyramid_asterism_intensity!(execution_style(wfs.state.intensity), wfs, tel, ast)
     intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
-    frame = capture!(det, intensity; rng=rng)
+    frame = capture!(det, intensity, common_source; rng=rng)
     resize_pyramid_signal_buffers!(wfs, size(frame, 1))
-    pyramid_signal!(wfs, tel, frame)
+    normalization_scale = wfs_detector_incidence_scale(det, common_source,
+        eltype(frame))
+    pyramid_signal!(wfs, tel, frame, ast, normalization_scale)
     @. wfs.state.slopes *= wfs.state.optical_gain
     return wfs.state.slopes
 end

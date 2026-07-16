@@ -58,6 +58,26 @@ array_backend_type(::AMDGPUBackend) = _require_gpu_array_backend(AMDGPUBackendTa
 resolve_array_backend(backend::AbstractArrayBackend) = array_backend_type(backend)
 
 array_backend_selector(::Type{<:Array}) = CPUBackend()
+@inline array_backend_selector(
+    ::Type{<:SubArray{T,N,P}}) where {T,N,P<:AbstractArray} =
+    array_backend_selector(P)
+@inline array_backend_selector(
+    ::Type{<:Base.ReshapedArray{T,N,P}}) where {T,N,P<:AbstractArray} =
+    array_backend_selector(P)
+@inline array_backend_selector(
+    ::Type{<:Base.ReinterpretArray{T,N,S,P}}) where {
+        T,N,S,P<:AbstractArray,
+    } = array_backend_selector(P)
+@inline array_backend_selector(
+    ::Type{<:PermutedDimsArray{T,N,Perm,IPerm,P}}) where {
+        T,N,Perm,IPerm,P<:AbstractArray,
+    } = array_backend_selector(P)
+@inline array_backend_selector(
+    ::Type{<:Transpose{T,P}}) where {T,P<:AbstractArray} =
+    array_backend_selector(P)
+@inline array_backend_selector(
+    ::Type{<:Adjoint{T,P}}) where {T,P<:AbstractArray} =
+    array_backend_selector(P)
 array_backend_selector(::Type{<:AbstractArray}) =
     throw(InvalidConfiguration("no semantic backend selector is registered for the array storage type"))
 
@@ -72,6 +92,12 @@ _resolve_array_backend(backend::Type{<:AbstractArray}) = backend
 
 backend(backend::AbstractArrayBackend) = backend
 backend(A::AbstractArray) = array_backend_selector(typeof(A))
+@inline backend(A::SubArray) = backend(parent(A))
+@inline backend(A::Base.ReshapedArray) = backend(parent(A))
+@inline backend(A::Base.ReinterpretArray) = backend(parent(A))
+@inline backend(A::PermutedDimsArray) = backend(parent(A))
+@inline backend(A::Transpose) = backend(parent(A))
+@inline backend(A::Adjoint) = backend(parent(A))
 backend_type(x) = typeof(backend(x))
 
 @inline function same_backend(x, y)

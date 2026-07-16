@@ -100,9 +100,21 @@ end
     return (ox + 1:ox + n, oy + 1:oy + m)
 end
 
+@inline source_field_normalization(::PhysicalPhotonIrradianceSource) =
+    PhotonRateNormalization()
+@inline source_field_normalization(::NormalizedTestSource) =
+    DimensionlessNormalization()
+@inline source_field_measure(::AbstractSourceRadiometry) =
+    CellIntegratedMeasure()
+
 function ElectricField(wavefront::PupilFunction, src::AbstractSource;
     zero_padding::Int=1,
-    T::Type{<:AbstractFloat}=eltype(wavefront.opd))
+    T::Type{<:AbstractFloat}=eltype(wavefront.opd),
+    normalization::AbstractOpticalNormalization=
+        source_field_normalization(source_radiometry(src)),
+    spatial_measure::AbstractSpatialMeasure=
+        source_field_measure(source_radiometry(src)),
+    coherence::AbstractCombinationPolicy=CoherentFieldCombination())
     zero_padding >= 1 || throw(InvalidConfiguration("zero_padding must be >= 1"))
     n, m = wavefront.metadata.dimensions
     n == m || throw(DimensionMismatchError(
@@ -115,12 +127,22 @@ function ElectricField(wavefront::PupilFunction, src::AbstractSource;
     metadata = OpticalPlaneMetadata(PupilPlane(), values;
         coordinate_domain=MetricCoordinates(),
         sampling=sampling,
-        spectral=MonochromaticChannel(T(wavelength(src))))
+        orientation=wavefront.metadata.orientation,
+        spectral=MonochromaticChannel(T(wavelength(src))),
+        normalization=normalization,
+        spatial_measure=spatial_measure,
+        coherence=coherence)
     return ElectricField(metadata, values)
 end
 
 @inline electric_field_wavelength(field::ElectricField) =
-    field.metadata.spectral.wavelength_m
+    electric_field_wavelength(field.metadata.spectral)
+@inline electric_field_wavelength(channel::MonochromaticChannel) =
+    channel.wavelength_m
+function electric_field_wavelength(::AbstractSpectralCoordinate)
+    throw(InvalidConfiguration(
+        "ElectricField must declare a monochromatic wavelength"))
+end
 
 function prepare_pupil_field(tel::Telescope, wavefront::PupilFunction,
     src::AbstractSource, field::ElectricField;
@@ -185,9 +207,9 @@ function prepare_pupil_field(tel::Telescope, wavefront::PupilFunction,
         -T(pi) * (T(n_pad) + one(T)) / T(n_pad) : zero(T)
     pixel_area = wavefront.metadata.sampling[1] *
         wavefront.metadata.sampling[2]
-    resolved_amplitude_scale = isnothing(amplitude_scale) ?
-        sqrt(T(photon_irradiance(src) * tel.params.sampling_time * pixel_area)) :
-        T(amplitude_scale)
+    resolved_amplitude_scale = _resolve_pupil_amplitude_scale(
+        source_radiometry(src), wavefront, field.metadata, src,
+        pixel_area, amplitude_scale, T)
     resolved_amplitude_scale >= zero(T) || throw(InvalidConfiguration(
         "pupil-field amplitude scale must be non-negative"))
     return PupilFieldFormationPlan{
@@ -201,6 +223,100 @@ function prepare_pupil_field(tel::Telescope, wavefront::PupilFunction,
         phase_shift,
         apply_centering,
     )
+end
+
+function _resolve_pupil_amplitude_scale(
+    radiometry::AbstractSourceRadiometry, wavefront::PupilFunction,
+    metadata::OpticalPlaneMetadata, src::AbstractSource, pixel_area,
+    ::Nothing, ::Type{T}) where {T<:AbstractFloat}
+    _require_source_field_contract(radiometry, metadata)
+    return _default_pupil_amplitude_scale(radiometry, wavefront, src,
+        pixel_area, T)
+end
+
+function _resolve_pupil_amplitude_scale(::AbstractSourceRadiometry,
+    ::PupilFunction, metadata::OpticalPlaneMetadata, ::AbstractSource,
+    pixel_area, amplitude_scale::Real, ::Type{T}) where {T<:AbstractFloat}
+    _require_dimensionless_field_normalization(metadata.normalization)
+    _require_dimensionless_field_measure(metadata.spatial_measure)
+    _require_coherent_field(metadata.coherence)
+    return T(amplitude_scale)
+end
+
+@inline _require_dimensionless_field_normalization(
+    ::DimensionlessNormalization) = nothing
+function _require_dimensionless_field_normalization(
+    ::AbstractOpticalNormalization)
+    throw(InvalidConfiguration(
+        "an explicit pupil-field amplitude scale requires dimensionless field metadata"))
+end
+
+@inline _require_dimensionless_field_measure(::PointSampledMeasure) = nothing
+@inline _require_dimensionless_field_measure(::CellIntegratedMeasure) = nothing
+function _require_dimensionless_field_measure(::AbstractSpatialMeasure)
+    throw(InvalidConfiguration(
+        "dimensionless source fields must be point-sampled or cell-integrated"))
+end
+
+
+@inline function _require_source_field_contract(
+    ::PhysicalPhotonIrradianceSource, metadata::OpticalPlaneMetadata)
+    _require_physical_field_normalization(metadata.normalization)
+    _require_cell_integrated_field(metadata.spatial_measure)
+    _require_coherent_field(metadata.coherence)
+    return nothing
+end
+
+@inline function _require_source_field_contract(::NormalizedTestSource,
+    metadata::OpticalPlaneMetadata)
+    _require_normalized_field_normalization(metadata.normalization)
+    _require_cell_integrated_field(metadata.spatial_measure)
+    _require_coherent_field(metadata.coherence)
+    return nothing
+end
+
+@inline _require_physical_field_normalization(::PhotonRateNormalization) =
+    nothing
+function _require_physical_field_normalization(::AbstractOpticalNormalization)
+    throw(InvalidConfiguration(
+        "physical sources require photon-rate field normalization"))
+end
+
+@inline _require_normalized_field_normalization(
+    ::DimensionlessNormalization) = nothing
+function _require_normalized_field_normalization(
+    ::AbstractOpticalNormalization)
+    throw(InvalidConfiguration(
+        "normalized sources require dimensionless field normalization"))
+end
+
+@inline _require_cell_integrated_field(::CellIntegratedMeasure) = nothing
+function _require_cell_integrated_field(::AbstractSpatialMeasure)
+    throw(InvalidConfiguration(
+        "source fields must use a cell-integrated spatial measure"))
+end
+
+@inline _require_coherent_field(::CoherentFieldCombination) = nothing
+function _require_coherent_field(::AbstractCombinationPolicy)
+    throw(InvalidConfiguration(
+        "source fields must declare coherent field combination"))
+end
+
+
+@inline function _default_pupil_amplitude_scale(
+    ::PhysicalPhotonIrradianceSource, ::PupilFunction, src::AbstractSource,
+    pixel_area, ::Type{T}) where {T<:AbstractFloat}
+    return sqrt(T(photon_irradiance(src) * pixel_area))
+end
+
+
+function _default_pupil_amplitude_scale(::NormalizedTestSource,
+    wavefront::PupilFunction, src::AbstractSource, pixel_area,
+    ::Type{T}) where {T<:AbstractFloat}
+    transmitted = T(sum(abs2, wavefront.amplitude))
+    transmitted > zero(T) || throw(InvalidConfiguration(
+        "normalized pupil field requires non-zero transmitting amplitude"))
+    return sqrt(T(source_radiometric_value(src)) / transmitted)
 end
 
 function fill_telescope_field!(out::AbstractMatrix{Complex{T}}, tel::Telescope, src::AbstractSource;
@@ -234,7 +350,8 @@ function _fill_telescope_field!(::ScalarCPUStyle, out::AbstractMatrix{Complex{T}
     n_pad = n * zero_padding
     fill!(out, zero(eltype(out)))
     opd_to_cycles = T(2) / T(wavelength(src))
-    amp_scale = sqrt(T(photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
+    amp_scale = sqrt(T(photon_irradiance(src) *
+        (tel.params.diameter / tel.params.resolution)^2))
     ox, oy = field_embedding_offsets(n, n_pad)
     reflectivity = pupil_reflectivity(tel)
     @views @. out[ox+1:ox+n, oy+1:oy+n] = amp_scale *
@@ -251,7 +368,8 @@ function _fill_telescope_field!(style::AcceleratorStyle, out::AbstractMatrix{Com
     n = tel.params.resolution
     n_pad = n * zero_padding
     opd_to_cycles = T(2) / T(wavelength(src))
-    amp_scale = sqrt(T(photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
+    amp_scale = sqrt(T(photon_irradiance(src) *
+        (tel.params.diameter / tel.params.resolution)^2))
     ox, oy = field_embedding_offsets(n, n_pad)
     phase_shift = center_even_grid && iseven(n_pad) ? -T(pi) * (T(n_pad) + one(T)) / T(n_pad) : zero(T)
     launch_kernel!(style, fill_telescope_field_kernel!, out, pupil_reflectivity(tel), tel.state.opd, phase_shift,
@@ -269,7 +387,8 @@ function _fill_telescope_field_async!(style::AcceleratorStyle, out::AbstractMatr
     n = tel.params.resolution
     n_pad = n * zero_padding
     opd_to_cycles = T(2) / T(wavelength(src))
-    amp_scale = sqrt(T(photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2))
+    amp_scale = sqrt(T(photon_irradiance(src) *
+        (tel.params.diameter / tel.params.resolution)^2))
     ox, oy = field_embedding_offsets(n, n_pad)
     phase_shift = center_even_grid && iseven(n_pad) ? -T(pi) * (T(n_pad) + one(T)) / T(n_pad) : zero(T)
     launch_kernel_async!(style, fill_telescope_field_kernel!, out, pupil_reflectivity(tel), tel.state.opd, phase_shift,
@@ -529,7 +648,7 @@ function _intensity_async!(style::AcceleratorStyle, out::AbstractMatrix{T}, fiel
     return out
 end
 
-function accumulate_intensity!(out::AbstractMatrix{T}, field::ElectricField) where {T<:AbstractFloat}
+function _accumulate_field_intensity!(out::AbstractMatrix{T}, field::ElectricField) where {T<:AbstractFloat}
     size(out) == size(field.values) ||
         throw(DimensionMismatchError("intensity output must match ElectricField size"))
     require_same_backend(out, field)
@@ -537,7 +656,7 @@ function accumulate_intensity!(out::AbstractMatrix{T}, field::ElectricField) whe
     return out
 end
 
-function accumulate_intensity_async!(out::AbstractMatrix{T}, field::ElectricField) where {T<:AbstractFloat}
+function _accumulate_field_intensity_async!(out::AbstractMatrix{T}, field::ElectricField) where {T<:AbstractFloat}
     size(out) == size(field.values) ||
         throw(DimensionMismatchError("intensity output must match ElectricField size"))
     require_same_backend(out, field)

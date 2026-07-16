@@ -150,9 +150,10 @@ renderer or path.
 A native direct-science front end consumes an explicit pupil function or field
 and writes a caller-owned focal-plane photon-arrival-rate `IntensityMap`. One
 compatible rate product may then feed several independent detectors with
-different exposure durations, each applying elapsed-time integration exactly
-once and its own presampling response, pixel integration, coupling, stochastic
-response, and readout. Changing a
+different exposure durations. Each applies its presampling response on the
+declared optical grid, integrates over physical pixels, applies QE and elapsed
+time exactly once, and then applies its coupling, stochastic response, and
+readout. Changing a
 detector exposure cannot change or recompute the optical result. A prepared
 external-optics result, including one produced through `Proper.jl`, enters at
 the same arrival-rate/acquisition boundary after declaring either photon
@@ -203,16 +204,18 @@ elapsed-time integration, presampling detector response, pixel integration,
 charge coupling, stochastic detector response, readout packing, or signal
 estimation.
 
-Detector acquisition consumes the rate product, integrates its explicit whole-
-exposure or incremental optical-sample duration exactly once, and applies each
-selected detector model in its declared spatial, temporal, or charge domain.
-Presampling response, pixel integration, and temporal integration may be
-reordered only when the prepared model establishes their equivalence for that acquisition. The contract
+Detector acquisition consumes the rate product and applies each selected model
+in its declared spatial, temporal, or charge domain. The baseline prepared
+frame path applies presampling response before physical-pixel integration, then
+applies QE and its explicit whole-exposure or incremental optical-sample
+duration exactly once. A different ordering requires a separately prepared
+model whose contract and validation establish the physical meaning. The
+contract
 supports one detector, several independent detectors, or several regions or
 channels of one detector without assuming that every WFS has one two-dimensional
-camera. Elapsed-time integration, presampling response, and pixel sampling therefore
-remain downstream of optical spot or pupil-image formation and upstream of the
-estimator.
+camera. Presampling response, physical-pixel integration, QE and elapsed-time
+integration therefore remain downstream of optical spot or pupil-image
+formation and upstream of the estimator.
 
 The estimator consumes acquired observations and owns reference subtraction,
 normalization, calibration, masking, centroiding, correlation, differential
@@ -521,8 +524,12 @@ shell. Its native scope includes telescope pupil, reflectivity and OPD;
 source-aware atmospheric propagation; controllable-surface formation;
 electric-field, Fraunhofer, and Fresnel propagation; WFS optics; direct PSF and
 intensity formation; spatial filtering; and detector response. Presampling
-detector response (with a derived MTF) and charge-coupling effects remain
-detector models applied after the incident optical product has been formed.
+detector response and charge-coupling effects remain detector models applied
+after the incident optical product has been formed. Its reported MTF is the
+interior, infinite-grid transfer magnitude of the realized discrete acquisition
+kernel. Finite frames use non-amplifying zero extension and therefore have
+boundary-dependent response; a continuous subpixel-aperture MTF belongs to an
+explicitly oversampled optical-grid model.
 
 The core should own aberrations that are naturally expressed on its sampled
 optical planes:

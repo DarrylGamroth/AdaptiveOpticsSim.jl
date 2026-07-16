@@ -13,7 +13,7 @@ function main(; n_iter::Int=4)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=1e-8)
     recon = ModalReconstructor(imat; gain=0.4)
     branch = ControlLoopBranch(:main, sim, recon; rng=rng, wfs_detector=det)
-    cfg = SingleControlLoopConfig(
+    cfg = SingleControlLoopConfig(atmosphere_step=1e-3,
         name=:tutorial_closed_loop_zernike,
         branch_label=:main,
         outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true),

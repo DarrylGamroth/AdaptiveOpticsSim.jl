@@ -290,7 +290,7 @@ function lift_interaction_matrix!(H::AbstractMatrix, lift::LiFT{LiFTAnalytic}, c
     initial_opd = prepare_opd!(lift, coefficients)
 
     amp_scale = sqrt(T(photon_irradiance(lift.src) * flux_norm *
-        lift.tel.params.sampling_time * (lift.tel.params.diameter / lift.tel.params.resolution)^2))
+        (lift.tel.params.diameter / lift.tel.params.resolution)^2))
     @. lift.state.amp_buffer = ifelse($(pupil_mask(lift.tel)), amp_scale, zero(T))
 
     oversampling = focal_field_from_opd!(lift.state.focal_buffer, lift, lift.state.amp_buffer, initial_opd)
@@ -769,7 +769,7 @@ resampling, and optional object convolution.
 """
 function psf_from_opd!(lift::LiFT, opd::AbstractMatrix; flux_norm::Real=1.0)
     amp_scale = sqrt(eltype(lift.state.psf_buffer)(photon_irradiance(lift.src) * flux_norm *
-        lift.tel.params.sampling_time * (lift.tel.params.diameter / lift.tel.params.resolution)^2))
+        (lift.tel.params.diameter / lift.tel.params.resolution)^2))
     @. lift.state.amp_buffer = ifelse($(pupil_mask(lift.tel)), amp_scale, zero(eltype(lift.state.amp_buffer)))
     oversampling = focal_field_from_opd!(lift.state.focal_buffer, lift, lift.state.amp_buffer, opd)
     field_intensity!(lift.state.psf_buffer, lift.state.focal_buffer, oversampling, lift.state.field_scratch)

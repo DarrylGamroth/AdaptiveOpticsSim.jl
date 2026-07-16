@@ -39,10 +39,10 @@ end
     end
 end
 
-@kernel function complex_to_real_scaled_stack_kernel!(dest, src, scale, n1::Int, n2::Int, n3::Int)
+@kernel function complex_to_real_stack_kernel!(dest, src, n1::Int, n2::Int, n3::Int)
     i, j, k = @index(Global, NTuple)
     if i <= n1 && j <= n2 && k <= n3
-        @inbounds dest[i, j, k] = real(src[i, j, k]) * scale
+        @inbounds dest[i, j, k] = real(src[i, j, k])
     end
 end
 
@@ -165,6 +165,47 @@ end
     return lgs_pixel_scale(diameter, diffraction_padding, wavelength(src))
 end
 
+"""
+    lgs_kernel_signature(telescope, source, pad, n_subapertures,
+        pixel_scale, kernel_eltype; model, threshold=nothing)
+
+Return the content-based identity of an LGS sodium-profile convolution kernel.
+The signature includes every source, telescope, sampling-grid, and numerical
+parameter used to build the cached kernel. In particular, profile values are
+hashed rather than identified by their array object so an in-place profile
+update invalidates the cache.
+"""
+function lgs_kernel_signature(tel::Telescope, src::LGSSource, pad::Int,
+    n_subapertures::Int, pixel_scale::Real, kernel_eltype::Type;
+    model::Symbol, threshold::Union{Nothing,Real}=nothing)
+    params = src.params
+    sig = hash(:lgs_sodium_profile_kernel_v1)
+    sig = hash(model, sig)
+    sig = hash(kernel_eltype, sig)
+    sig = hash(pad, sig)
+    sig = hash(n_subapertures, sig)
+    sig = hash(pixel_scale, sig)
+    sig = hash(threshold, sig)
+    sig = hash(params.wavelength, sig)
+    sig = hash(params.laser_coordinates, sig)
+    sig = hash(params.fwhm_spot_up, sig)
+    sig = hash(tel.params.resolution, sig)
+    sig = hash(tel.params.diameter, sig)
+    sig = hash(tel.aperture.sampling_m, sig)
+    sig = hash(tel.aperture.origin_m, sig)
+
+    profile = params.na_profile
+    if profile === nothing
+        return sig
+    end
+    sig = hash(eltype(profile), sig)
+    sig = hash(size(profile), sig)
+    @inbounds for value in profile
+        sig = hash(value, sig)
+    end
+    return sig
+end
+
 function lgs_reference_vector(tel::Telescope, x0::Real, y0::Real, altitude::Real)
     T = promote_type(typeof(tel.params.diameter), typeof(x0), typeof(y0), typeof(altitude))
     diameter = T(tel.params.diameter)
@@ -229,18 +270,18 @@ function lgs_spot_kernel!(kernel::AbstractMatrix{T}, tel::Telescope, src::LGSSou
     return kernel
 end
 
+# `plan_ifft_backend!` follows the normalized AbstractFFTs inverse contract, so
+# these convolution paths must not apply an additional `1 / prod(size)` factor.
 function apply_lgs_convolution!(intensity::AbstractMatrix{T}, kernel_fft::AbstractMatrix{Complex{T}},
     fft_buffer::AbstractMatrix{Complex{T}}, fft_plan, ifft_plan) where {T<:AbstractFloat}
     if size(kernel_fft, 1) == 0
         return intensity
     end
-    n = size(intensity, 1)
     @. fft_buffer = complex(intensity, zero(T))
     execute_fft_plan!(fft_buffer, fft_plan)
     @. fft_buffer *= kernel_fft
     execute_fft_plan!(fft_buffer, ifft_plan)
-    scale = T(1) / (n * n)
-    @. intensity = real(fft_buffer) * scale
+    @. intensity = real(fft_buffer)
     return intensity
 end
 
@@ -250,14 +291,12 @@ function apply_lgs_convolution!(intensity::AbstractMatrix{T}, kernel_fft::Abstra
     if size(kernel_fft, 1) == 0
         return intensity
     end
-    n = size(intensity, 1)
     @. fft_buffer = complex(intensity, zero(T))
     execute_fft_plan!(fft_buffer, fft_plan)
     @. fft_buffer *= kernel_fft
     copyto!(ifft_buffer, fft_buffer)
     execute_fft_plan!(ifft_buffer, ifft_plan)
-    scale = T(1) / (n * n)
-    @. intensity = real(ifft_buffer) * scale
+    @. intensity = real(ifft_buffer)
     return intensity
 end
 
@@ -270,8 +309,7 @@ end
 
 function _apply_lgs_convolution_stack!(::ScalarCPUStyle, intensity_stack::AbstractArray{T,3}, kernels_fft::AbstractArray{Complex{T},3},
     fft_stack::AbstractArray{Complex{T},3}, fft_plan, ifft_plan) where {T<:AbstractFloat}
-    n1, n2, n3 = size(intensity_stack)
-    scale = T(1) / (n1 * n2)
+    _, _, n3 = size(intensity_stack)
     @inbounds for k in 1:n3
         @views fft_stack[:, :, k] .= complex.(intensity_stack[:, :, k], zero(T))
     end
@@ -279,7 +317,7 @@ function _apply_lgs_convolution_stack!(::ScalarCPUStyle, intensity_stack::Abstra
     @. fft_stack *= kernels_fft
     execute_fft_plan!(fft_stack, ifft_plan)
     @inbounds for k in 1:n3
-        @views intensity_stack[:, :, k] .= real.(fft_stack[:, :, k]) .* scale
+        @views intensity_stack[:, :, k] .= real.(fft_stack[:, :, k])
     end
     return intensity_stack
 end
@@ -295,9 +333,27 @@ function _apply_lgs_convolution_stack!(style::AcceleratorStyle, intensity_stack:
     queue_kernel!(phase, multiply_kernel_fft_stack_kernel!, fft_stack, kernels_fft, n1, n2, n3; ndrange=size(fft_stack))
     finish_kernel_phase!(phase)
     execute_fft_plan!(fft_stack, ifft_plan)
-    scale = T(1) / (n1 * n2)
-    launch_kernel!(style, complex_to_real_scaled_stack_kernel!, intensity_stack, fft_stack, scale, n1, n2, n3; ndrange=size(fft_stack))
+    launch_kernel!(style, complex_to_real_stack_kernel!, intensity_stack, fft_stack, n1, n2, n3;
+        ndrange=size(fft_stack))
     return intensity_stack
+end
+
+function _copy_host_real_kernel_to_complex!(::ScalarCPUStyle,
+    dest::AbstractMatrix{Complex{T}},
+    kernel::AbstractMatrix{T}) where {T<:AbstractFloat}
+    @. dest = Complex{T}(kernel, zero(T))
+    return dest
+end
+
+function _copy_host_real_kernel_to_complex!(::AcceleratorStyle,
+    dest::AbstractMatrix{Complex{T}},
+    kernel::AbstractMatrix{T}) where {T<:AbstractFloat}
+    host_complex = Matrix{Complex{T}}(undef, size(kernel)...)
+    @inbounds for j in axes(kernel, 2), i in axes(kernel, 1)
+        host_complex[i, j] = Complex{T}(kernel[i, j], zero(T))
+    end
+    copyto!(dest, host_complex)
+    return dest
 end
 
 function lgs_average_kernel_fft(tel::Telescope, src::LGSSource, pad::Int, n_subap::Int,
@@ -334,7 +390,8 @@ function lgs_average_kernel_fft(tel::Telescope, src::LGSSource, pad::Int, n_suba
     end
     kernel ./= max(n_subap * n_subap, 1)
 
-    @. fft_buffer = complex(kernel, zero(T))
+    _copy_host_real_kernel_to_complex!(execution_style(fft_buffer), fft_buffer,
+        kernel)
     execute_fft_plan!(fft_buffer, fft_plan)
     kernel_fft = similar(fft_buffer, Complex{T}, pad, pad)
     copyto!(kernel_fft, fft_buffer)

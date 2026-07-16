@@ -59,7 +59,7 @@ ccd_sampling_wallclock_time(mode::SkipperSampling, integration_time, read_time,
     T(integration_time) + T(mode.n_samples) * T(read_time)
 
 function apply_sensor_statistics!(sensor::CCDSensor, det::Detector,
-    rng::AbstractRNG)
+    rng::AbstractRNG, exposure_time::Real)
     rate = effective_cic_rate(det)
     rate <= zero(rate) && return det.state.frame
     fill!(det.state.noise_buffer, rate)
@@ -74,7 +74,8 @@ function apply_post_readout_gain!(::CCDSensor, det::Detector)
 end
 
 function _batched_sensor_statistics!(sensor::CCDSensor, det::Detector,
-    cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
+    cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG,
+    exposure_time::Real)
     rate = effective_cic_rate(det)
     rate <= zero(rate) && return cube
     fill!(scratch, rate)
@@ -119,16 +120,24 @@ end
 function _finalize_capture!(sensor::CCDSensor, det::Detector,
     rng::AbstractRNG, exposure_time::Real)
     return finalize_ccd_capture!(sensor.sampling_mode, sensor, det, rng,
-        exposure_time)
+        exposure_time, exposure_time)
+end
+
+function _finalize_incremental_capture!(sensor::CCDSensor, det::Detector,
+    rng::AbstractRNG, exposure_time::Real)
+    return finalize_ccd_capture!(sensor.sampling_mode, sensor, det, rng,
+        exposure_time, zero(exposure_time))
 end
 
 finalize_ccd_capture!(::SingleRead, sensor::CCDSensor, det::Detector,
-    rng::AbstractRNG, exposure_time::Real) =
-    finalize_readout_pipeline!(det, rng, exposure_time)
+    rng::AbstractRNG, exposure_time::Real, charge_exposure_time::Real) =
+    finalize_readout_pipeline!(det, rng, exposure_time,
+        charge_exposure_time)
 
 function finalize_ccd_capture!(mode::SkipperSampling, sensor::CCDSensor,
-    det::Detector, rng::AbstractRNG, exposure_time::Real)
-    finalize_charge_generation!(det, rng, exposure_time)
+    det::Detector, rng::AbstractRNG, exposure_time::Real,
+    charge_exposure_time::Real)
+    finalize_charge_generation!(det, rng, charge_exposure_time)
     finalize_charge_transport!(det, rng)
 
     copyto!(det.state.response_buffer, det.state.frame)

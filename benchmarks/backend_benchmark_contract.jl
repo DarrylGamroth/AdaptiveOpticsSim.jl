@@ -68,8 +68,7 @@ function _runtime_case(target::BenchmarkExecutionTarget; resolution::Int, n_lens
     backend = _benchmark_backend_array(target)
     _require_benchmark_gpu_backend(target)
     rng = runtime_rng(1)
-    tel = Telescope(resolution=resolution, diameter=8.0f0, sampling_time=1.0f-3,
-        central_obstruction=0.0f0, T=T, backend=backend)
+    tel = Telescope(resolution=resolution, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=backend)
     dm = DeformableMirror(tel; n_act=n_act, influence_width=0.3, T=T, backend=backend)
@@ -77,7 +76,7 @@ function _runtime_case(target::BenchmarkExecutionTarget; resolution::Int, n_lens
     sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
     recon = ModalReconstructor(imat; gain=T(0.5))
-    runtime = ClosedLoopRuntime(sim, recon; rng=rng)
+    runtime = ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=rng)
     step!(runtime)
     _sync_target!(target, runtime.command)
     return runtime

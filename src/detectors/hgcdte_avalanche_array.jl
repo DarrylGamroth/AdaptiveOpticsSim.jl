@@ -105,10 +105,19 @@ function sensor_saturation_limit(sensor::HgCdTeAvalancheArraySensor, det::Detect
     return full_well / sensor.avalanche_gain
 end
 
-function apply_sensor_statistics!(sensor::HgCdTeAvalancheArraySensor, det::Detector, rng::AbstractRNG)
-    rate = effective_glow_rate(det) * effective_sensor_glow_time(sensor, det.params.integration_time)
+function apply_sensor_statistics!(sensor::HgCdTeAvalancheArraySensor,
+    det::Detector, rng::AbstractRNG, exposure_time::Real)
+    rate = effective_glow_rate(det) *
+        effective_sensor_glow_time(sensor, exposure_time)
     add_poisson_rate!(det.state.frame, det, rng, rate)
     return apply_avalanche_excess_noise!(sensor.excess_noise_factor, det, rng)
+end
+
+function apply_incremental_sensor_statistics!(
+    sensor::HgCdTeAvalancheArraySensor, det::Detector, rng::AbstractRNG,
+    exposure_time::Real)
+    rate = effective_glow_rate(det) * exposure_time
+    return add_poisson_rate!(det.state.frame, det, rng, rate)
 end
 
 function apply_pre_readout_gain!(sensor::HgCdTeAvalancheArraySensor, det::Detector, rng::AbstractRNG)
@@ -125,8 +134,11 @@ _batched_pre_readout_gain!(sensor::HgCdTeAvalancheArraySensor, det::Detector,
     cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) =
     (cube .*= sensor.avalanche_gain; cube)
 
-function _batched_sensor_statistics!(sensor::HgCdTeAvalancheArraySensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
-    rate = effective_glow_rate(det) * effective_sensor_glow_time(sensor, det.params.integration_time)
+function _batched_sensor_statistics!(sensor::HgCdTeAvalancheArraySensor,
+    det::Detector, cube::AbstractArray, scratch::AbstractArray,
+    rng::AbstractRNG, exposure_time::Real)
+    rate = effective_glow_rate(det) *
+        effective_sensor_glow_time(sensor, exposure_time)
     if rate > zero(rate)
         fill!(scratch, rate)
         poisson_noise_frame!(det, rng, scratch)
@@ -167,7 +179,18 @@ finalize_hgcdte_readout_products!(mode::UpTheRampSampling,
 
 function _finalize_capture!(::HgCdTeAvalancheArraySensorType, det::Detector,
     rng::AbstractRNG, exposure_time::Real)
-    finalize_charge_generation!(det, rng, exposure_time)
+    return finalize_hgcdte_capture!(det, rng, exposure_time, exposure_time)
+end
+
+function _finalize_incremental_capture!(::HgCdTeAvalancheArraySensorType,
+    det::Detector, rng::AbstractRNG, exposure_time::Real)
+    return finalize_hgcdte_capture!(det, rng, exposure_time,
+        zero(exposure_time))
+end
+
+function finalize_hgcdte_capture!(det::Detector, rng::AbstractRNG,
+    exposure_time::Real, charge_exposure_time::Real)
+    finalize_charge_generation!(det, rng, charge_exposure_time)
     finalize_charge_transport!(det, rng)
     # Multi-read products generate each raw read, including read noise,
     # conversion gain, and per-read correction. Running the generic

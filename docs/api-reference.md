@@ -65,20 +65,41 @@ The package intentionally distinguishes three tiers:
 
 ## Optical Models
 
-- Telescope/source: `Telescope`, `Source`, `LGSSource`, `Asterism`
-- Source accessors: `wavelength`, `photon_irradiance`, `optical_path`
+- Telescope/source: `Telescope`, `Source`, `LGSSource`, `Asterism`;
+  source radiometry is declared with `PhysicalPhotonIrradianceSource` or
+  `NormalizedTestSource`
+- Source accessors: `wavelength`, `photon_irradiance`, `source_radiometry`,
+  `source_radiometric_value`, `optical_path`
 - Telescope mutation: `reset_opd!`, `apply_opd!`, `set_pupil!`,
   `set_pupil_reflectivity!`
 - Pupil helpers: `pupil_mask`, `apply_spiders!`
-- PSF: `compute_psf!`, `psf_pixel_scale_arcsec`
+
+`pupil_mask(telescope)` and `pupil_reflectivity(telescope)` are zero-copy
+read views of backend-resident aperture storage. Treat them as read-only.
+Change the aperture through `set_pupil!`, `set_pupil_reflectivity!`, or
+`apply_spiders!`; these APIs advance the telescope aperture revision so every
+WFS reference calibration is invalidated coherently. Direct array or field
+mutation is unsupported because it bypasses that revision boundary.
+
+- Focal-plane photon-rate / PSF formation: `compute_psf!`,
+  `psf_pixel_scale_arcsec`; the telescope convenience matrix is a
+  source-scaled, cell-integrated photon-arrival-rate product before exposure
 - Spectral sources: `SpectralSample`, `SpectralBundle`, `SpectralSource`,
-  `with_spectrum`
+  `with_spectrum`; construct a `SpectralSource` through `with_spectrum` from a
+  `Source` or `LGSSource` leaf rather than nesting source expansions
 - Extended sources: `GaussianDiskSourceModel`, `PointCloudSourceModel`,
   `SampledImageSourceModel`, `with_extended_source`,
   `extended_source_asterism`
 - Optical products: `PupilFunction`, `ElectricField`, `IntensityMap`,
-  `OpticalPlaneMetadata`; coordinates are declared with `MetricCoordinates` or
-  `AngularCoordinates`
+  `OpticalProductBundle`, `OpticalPlaneMetadata`; coordinates are declared
+  with `MetricCoordinates` or `AngularCoordinates`
+- Product semantics: `PhotonRateNormalization` or
+  `DimensionlessNormalization`; `PointSampledMeasure`,
+  `SpatialDensityMeasure`, or `CellIntegratedMeasure`; and
+  `CoherentFieldCombination`, `IncoherentIntensityAddition`, or
+  `NonCombinableProduct`
+- Compatible intensity accumulation: `PreparedIncoherentSum`,
+  `prepare_incoherent_sum`, `accumulate_intensity!`
 - Fields/propagation: `FraunhoferPropagation`,
   `FresnelPropagation`, `GeometricAtmosphericPropagation`,
   `LayeredFresnelAtmosphericPropagation`, `AtmosphericFieldPropagation`
@@ -87,6 +108,13 @@ The package intentionally distinguishes three tiers:
   `ZernikeModalBasis`
 - Spatial filtering: `SpatialFilter`, `CircularFilter`, `SquareFilter`,
   `FoucaultFilter`, `filter!`
+
+Known photometric bands use physical photon-irradiance radiometry by default.
+A custom-band source is a normalized test source unless it supplies
+`photon_irradiance` or an explicit radiometry policy. `LGSSource` likewise
+requires explicit photon irradiance to claim a physical rate; its default is a
+normalized source. Calling `photon_irradiance` on a normalized source is an
+error rather than an implicit unit conversion.
 
 ## Atmosphere
 
@@ -161,9 +189,13 @@ influence basis already includes the print-through structure.
 - Frame response: `FrameResponseModel`, `NullFrameResponse`,
   `GaussianPixelResponse`, `SampledFrameResponse`,
   and `RectangularPixelAperture`. These are spatial-domain presampling response
-  models. Evaluate their derived normalized modulation transfer function with
+  models. Evaluate the normalized interior, infinite-grid transfer magnitude
+  of the realized discrete acquisition kernel with
   `AdaptiveOpticsSim.detector_mtf(model, fx, fy)`, where frequency is in cycles
-  per detector pixel.
+  per detector pixel. Finite frames use zero extension and therefore have
+  boundary-dependent response. This diagnostic is not a continuous
+  subpixel-aperture MTF; such a model requires an explicitly prepared
+  oversampled optical grid.
 - Post-collection coupling: `AdaptiveOpticsSim.NullChargeCoupling` and
   `AdaptiveOpticsSim.InterpixelCapacitance`. Configure these with
   `Detector(...; charge_coupling_model=...)`; this stage runs after photon and
@@ -198,6 +230,8 @@ influence basis already includes the print-through structure.
   `detector_export_metadata`, `readout_ready`, `reset_integration!`,
   `thermal_model`, `detector_ramp_slope`, `detector_ramp_intercept`,
   `detector_ramp_cube`, `detector_ramp_times`
+- Prepared intensity-map acquisition: `DetectorAcquisitionPlan`,
+  `prepare_detector_acquisition`
 
 Use `bits` for detector quantization depth and `output_type` for the Julia
 element type exported to an RTC/HIL boundary. A detector with `bits` must also
@@ -210,7 +244,47 @@ qualified QE model such as
 capture uses the scalar `params.qe` value, which is the supplied scalar or the
 peak sampled QE. Source-aware capture, `capture!(det, image, src; rng=...)`,
 evaluates the QE model at `wavelength(src)`. For `SpectralSource`, it uses the
-flux-weighted effective QE over the spectral bundle.
+flux-weighted effective QE over the spectral bundle. Diffractive
+Shack–Hartmann and Pyramid frame-detector paths specialize this boundary by
+applying sampled QE per wavelength before incoherent optical-rate
+accumulation; other source-aware detector paths retain the effective-QE
+contract unless explicitly documented otherwise.
+
+Response kernels, sampled QE vectors, and detector defect maps are copied at
+their public construction boundaries, and `Detector` takes another run-owned
+copy. Treat the resulting parameter arrays as immutable and rebuild the model
+or detector to change them; direct mutation of detector parameter fields is
+unsupported. WFS calibration keys use the identity of this frozen storage, so
+warmed CPU and GPU checks are constant-time and do not copy device arrays to
+the host. Detector-aware Pyramid, BioEdge, and Zernike reference frames apply
+the same deterministic presampling, sampling, QE/exposure, binning, PRNU, and
+bad-pixel-throughput path as ordinary signal acquisition, followed by a
+configured built-in homogeneous reference-pixel correction. Noiseless
+single-read, averaged nondestructive, correlated-double, Fowler, and valid
+up-the-ramp HgCdTe readout all reduce to that transform. Calibration applies
+HgCdTe avalanche gain, detector gain, and homogeneous correction in acquisition
+order. Up-the-ramp schedules are validated, but calibration does not create or
+mutate acquisition readout products.
+They fail closed when deterministic stages outside that reference path are
+configured, including saturation/quantization, nonlinearity, IPC, DSNU,
+persistence, background-map subtraction, or output grouping. Stochastic
+detector noise remains an acquisition effect, not part of the reference frame;
+custom correction models are rejected unless their calibration behavior is
+explicitly implemented.
+
+For a metadata-validated repeated path, call
+`prepare_detector_acquisition(detector, intensity_map)` once and pass the
+returned plan to `capture!`. Photon-rate maps cannot be rescaled;
+dimensionless maps require an explicit `normalized_to_photon_rate` conversion.
+Spatial-density maps use their declared cell measure, while cell-integrated
+maps are already rates per represented cell. The prepared frame path applies a
+non-null presampling response before physical-pixel integration, then applies
+QE and the explicit whole or incremental exposure once. A sampled QE model
+requires a declared monochromatic channel on this path. Until an explicit
+optical-grid mapping is prepared, a non-null response requires
+`psf_sampling == 1`. Preparation rejects empty, negative, NaN, or infinite
+intensity values. Repeated capture trusts later writes to the prepared storage,
+so its producer is responsible for preserving finite nonnegative samples.
 
 `MKIDArrayDetector` is the maintained MKID surface for accumulated counting-array
 HIL use. It models photon-counting output with quantum efficiency, fill factor,
@@ -336,11 +410,15 @@ detector frame.
   and `ensemble_readouts`.
 - Runtime execution: `sense!`, `step!`
 - Readout accessors: `readout`, `command`, `slopes`, `wfs_frame`,
-  `science_frame`, `grouped_wfs_stack`, `runtime_timing`
+  `science_frame`, `grouped_wfs_stack`, `runtime_timing`,
+  `runtime_atmosphere_step`
 
 `ControlLoopScenario` is the preferred public assembly surface for normal
 single-plant closed-loop and HIL simulations. `SharedOpticalRuntime` is the
 typed surface when auxiliary source/WFS/science arms share that plant.
+Single and grouped control-loop configurations require an explicit positive
+`atmosphere_step`; it advances model time for one sensing update and is
+independent of detector exposure.
 `SimulationEnsemble` owns independent plants for offline sweeps and ensemble
 simulation. Direct `step!` calls remain the CPU HIL path; Dagger and
 AcceleratedKernels are optional coarse schedulers, not inner-loop runtime

@@ -105,6 +105,7 @@ function FraunhoferPropagation(field::ElectricField)
     output_metadata = OpticalPlaneMetadata(FocalPlane(), scratch;
         coordinate_domain=AngularCoordinates(),
         sampling=(output_sampling, output_sampling),
+        orientation=field.metadata.orientation,
         spectral=field.metadata.spectral,
         normalization=field.metadata.normalization,
         spatial_measure=field.metadata.spatial_measure,
@@ -151,6 +152,7 @@ function FresnelPropagation(field::ElectricField; distance_m::Real,
     output_metadata = OpticalPlaneMetadata(output_kind, propagated;
         coordinate_domain=MetricCoordinates(),
         sampling=field.metadata.sampling,
+        orientation=field.metadata.orientation,
         spectral=field.metadata.spectral,
         normalization=field.metadata.normalization,
         spatial_measure=field.metadata.spatial_measure,
@@ -287,6 +289,7 @@ end
 function IntensityMap(field::ElectricField,
     model::FraunhoferPropagation)
     _require_model_match(field, model)
+    _require_coherent_field(field.metadata.coherence)
     T = real(eltype(field.values))
     values = similar(field.values, T, model.output_metadata.dimensions...)
     metadata = OpticalPlaneMetadata(model.output_metadata.kind, values;
@@ -298,7 +301,7 @@ function IntensityMap(field::ElectricField,
         spectral=model.output_metadata.spectral,
         normalization=model.output_metadata.normalization,
         spatial_measure=model.output_metadata.spatial_measure,
-        coherence=model.output_metadata.coherence,
+        coherence=IncoherentIntensityAddition(),
         device=model.output_metadata.device)
     return IntensityMap(metadata, values)
 end
@@ -320,12 +323,17 @@ function fraunhofer_intensity_from_field!(out::IntensityMap,
     require_same_plane_grid(out.metadata, model.output_metadata;
         label="Fraunhofer intensity destination",
         require_numeric_type=false)
+    require_compatible_radiometry(out.metadata, model.output_metadata;
+        label="Fraunhofer intensity destination")
+    _require_incoherent_policy(out.metadata.coherence,
+        "Fraunhofer intensity destination")
     fraunhofer_intensity_from_field!(out.values, field, model)
     return out
 end
 
 function fraunhofer_intensity_stack!(intensity_stack::AbstractArray{T,3}, field_stack::AbstractArray{Complex{T},3}, fft_stack_plan) where {T<:AbstractFloat}
     execute_fft_plan!(field_stack, fft_stack_plan)
-    @. intensity_stack = abs2(field_stack)
+    intensity_scale = inv(T(size(field_stack, 1)) * T(size(field_stack, 2)))
+    @. intensity_stack = abs2(field_stack) * intensity_scale
     return intensity_stack
 end

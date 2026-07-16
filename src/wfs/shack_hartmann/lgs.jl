@@ -28,7 +28,21 @@ function ensure_lgs_kernels!(wfs::ShackHartmannWFS, tel::Telescope, src::LGSSour
     end
     pad = size(wfs.state.intensity, 1)
     n_sub = wfs.params.n_lenslets
-    tag = objectid(na_profile) ⊻ hash(src.params.laser_coordinates) ⊻ hash(src.params.fwhm_spot_up) ⊻ hash(pad)
+    pixel_scale = lgs_pixel_scale(
+        tel.params.diameter / n_sub,
+        wfs.state.effective_padding,
+        wavelength(src),
+    )
+    tag = lgs_kernel_signature(
+        tel,
+        src,
+        pad,
+        n_sub,
+        pixel_scale,
+        eltype(wfs.state.intensity);
+        model=:per_subaperture,
+        threshold=wfs.params.threshold_convolution,
+    )
     if size(wfs.state.lgs_kernel_fft, 1) == pad &&
         size(wfs.state.lgs_kernel_fft, 3) == n_sub * n_sub &&
         wfs.state.lgs_kernel_tag == tag
@@ -96,25 +110,12 @@ function lgs_spot_kernels_fft(tel::Telescope, wfs::ShackHartmannWFS, src::LGSSou
             end
         end
         fft_buffer = wfs.state.fft_buffer
-        _copy_real_kernel_to_complex!(execution_style(fft_buffer), fft_buffer, kernel)
+        _copy_host_real_kernel_to_complex!(execution_style(fft_buffer),
+            fft_buffer, kernel)
         execute_fft_plan!(fft_buffer, wfs.state.fft_plan)
         @views kernels_fft[:, :, idx] .= fft_buffer
         idx += 1
     end
 
     return kernels_fft
-end
-
-function _copy_real_kernel_to_complex!(::ScalarCPUStyle, dest::AbstractMatrix{Complex{T}}, kernel::AbstractMatrix{T}) where {T<:AbstractFloat}
-    @. dest = Complex{T}(kernel, zero(T))
-    return dest
-end
-
-function _copy_real_kernel_to_complex!(::AcceleratorStyle, dest::AbstractMatrix{Complex{T}}, kernel::AbstractMatrix{T}) where {T<:AbstractFloat}
-    host_complex = Matrix{Complex{T}}(undef, size(kernel)...)
-    @inbounds for j in axes(kernel, 2), i in axes(kernel, 1)
-        host_complex[i, j] = Complex{T}(kernel[i, j], zero(T))
-    end
-    copyto!(dest, host_complex)
-    return dest
 end

@@ -49,7 +49,7 @@ function _alloc_bytes(f!::Function)
 end
 
 function lift_profile()
-    tel = Telescope(resolution=24, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=24, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     zb = ZernikeBasis(tel, 6)
     compute_zernike!(zb, tel)
@@ -88,7 +88,7 @@ function lift_profile()
 end
 
 function gsc_profile()
-    tel = Telescope(resolution=24, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=24, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:R, magnitude=8.0)
     wfs = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), threshold=0.5, modulation=3.0,
         normalization=IncidenceFluxNormalization(),

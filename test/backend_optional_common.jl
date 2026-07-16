@@ -18,6 +18,13 @@ AdaptiveOpticsSim.backend(::OptionalStaticAtmosphere{<:Any,B}) where {B} = B()
 AdaptiveOpticsSim.advance!(atm::OptionalStaticAtmosphere, tel::Telescope, rng::AbstractRNG) = atm
 AdaptiveOpticsSim.advance!(atm::OptionalStaticAtmosphere, tel::Telescope; rng::AbstractRNG=Random.default_rng()) = atm
 
+function optional_detector_calibration_signature_allocation_bytes(
+    det, seed::UInt)
+    AdaptiveOpticsSim.detector_calibration_signature(det, seed)
+    return @allocated AdaptiveOpticsSim.detector_calibration_signature(
+        det, seed)
+end
+
 function AdaptiveOpticsSim.propagate!(atm::OptionalStaticAtmosphere, tel::Telescope)
     copyto!(tel.state.opd, atm.screen)
     return tel
@@ -35,14 +42,24 @@ end
 
 function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     selector = backend_selector(B)
+    array_backend = AdaptiveOpticsSim._resolve_array_backend(selector)
     T = Float32
-    tel = Telescope(resolution=8, diameter=T(1), sampling_time=T(1e-3), central_obstruction=T(0), T=T, backend=selector)
+    tel = Telescope(resolution=8, diameter=T(1), central_obstruction=T(0),
+        T=T, backend=selector)
     dm = DeformableMirror(tel; n_act=2, influence_width=T(0.3), T=T, backend=selector)
     dm_dense = DeformableMirror(tel; n_act=2, influence_model=DenseInfluenceMatrix(Array(dm.state.modes)), T=T, backend=selector)
     zernike_modal = ModalControllableOptic(tel, ZernikeOpticBasis([2, 3]); T=T, backend=selector)
     cartesian_modal = ModalControllableOptic(tel, CartesianTiltBasis(; scale=T(0.1)); T=T, backend=selector)
     wfs = ShackHartmannWFS(tel; n_lenslets=2, mode=Diffractive(), T=T, backend=selector)
     det = Detector(noise=NoiseNone(), integration_time=T(1), qe=T(1), binning=1, T=T, backend=selector)
+    sampled_response = SampledFrameResponse(
+        T[0 0.1 0; 0.1 0.6 0.1; 0 0.1 0]; T=T,
+        backend=selector)
+    sampled_qe = AdaptiveOpticsSim.SampledQuantumEfficiency(
+        T[0.5e-6, 0.6e-6, 0.7e-6], T[0.2, 0.8, 0.4]; T=T)
+    calibration_det = Detector(noise=NoiseNone(), integration_time=T(1),
+        qe=sampled_qe, response_model=sampled_response, T=T,
+        backend=selector)
     @test tel.state.opd isa BackendArray
     @test dm.state.coefs isa BackendArray
     @test dm.state.modes isa AdaptiveOpticsSim.GaussianInfluenceOperator
@@ -58,6 +75,162 @@ function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:
     @test cartesian_modal.state.modes isa BackendArray
     @test wfs.state.slopes isa BackendArray
     @test det.state.frame isa BackendArray
+    @test calibration_det.params.response_model.kernel isa BackendArray
+    seed = UInt(0x51a7)
+    AdaptiveOpticsSim.detector_calibration_signature(calibration_det, seed)
+    optional_detector_calibration_signature_allocation_bytes(
+        calibration_det, seed)
+    @test optional_detector_calibration_signature_allocation_bytes(
+        calibration_det, seed) == 0
+
+    gain_map = reshape(T.(range(T(0.6), T(1.2); length=16)), 4, 4)
+    bad_mask = falses(4, 4)
+    bad_mask[2, 3] = true
+    defect_det = Detector(noise=NoiseNone(), sensor=CMOSSensor(T=T,
+            backend=selector),
+        defect_model=CompositeDetectorDefectModel(
+            PixelResponseNonuniformity(gain_map; T=T, backend=selector),
+            BadPixelMask(bad_mask; T=T, backend=selector)),
+        T=T, backend=selector)
+    photon_rate = array_backend(fill(T(2), 4, 4))
+    calibration_frame = AdaptiveOpticsSim.detector_calibration_frame!(
+        defect_det, photon_rate, one(T))
+    expected_frame = T(2) .* gain_map
+    expected_frame[2, 3] = zero(T)
+    @test Array(calibration_frame) ≈ expected_frame rtol=T(1e-6)
+    @test optional_detector_calibration_signature_allocation_bytes(
+        defect_det, seed) == 0
+
+    invalid_values = array_backend(T[-1 1; 1 1])
+    invalid_metadata = OpticalPlaneMetadata(FocalPlane(), invalid_values;
+        coordinate_domain=AngularCoordinates(), sampling=(one(T), one(T)),
+        normalization=PhotonRateNormalization(),
+        spatial_measure=CellIntegratedMeasure(),
+        coherence=IncoherentIntensityAddition())
+    invalid_map = IntensityMap(invalid_metadata, invalid_values)
+    @test_throws InvalidConfiguration prepare_detector_acquisition(
+        det, invalid_map)
+    return nothing
+end
+
+function run_optional_lgs_convolution_normalization(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    selector = backend_selector(B)
+    array_backend = AdaptiveOpticsSim._resolve_array_backend(selector)
+    T = Float32
+    n = 8
+    expected = reshape(collect(range(T(0.25), T(2); length=n * n)), n, n)
+    expected_stack = cat(expected, reverse(expected; dims=2); dims=3)
+    intensity_stack = array_backend(copy(expected_stack))
+    kernel_fft = array_backend(ones(Complex{T}, n, n, 2))
+    fft_stack = array_backend(zeros(Complex{T}, n, n, 2))
+    fft_plan = AdaptiveOpticsSim.plan_fft_backend!(fft_stack, (1, 2))
+    ifft_plan = AdaptiveOpticsSim.plan_ifft_backend!(fft_stack, (1, 2))
+
+    AdaptiveOpticsSim.apply_lgs_convolution_stack!(
+        intensity_stack, kernel_fft, fft_stack, fft_plan, ifft_plan)
+    actual = Array(intensity_stack)
+    @test actual ≈ expected_stack rtol=T(1e-5) atol=T(1e-6)
+    @test vec(sum(actual; dims=(1, 2))) ≈
+          vec(sum(expected_stack; dims=(1, 2))) rtol=T(1e-5)
+    return nothing
+end
+
+function run_optional_sodium_profile_wfs(::Type{B},
+    BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    selector = backend_selector(B)
+    T = Float32
+    tel = Telescope(resolution=16, diameter=T(8),
+        central_obstruction=zero(T), T=T, backend=selector)
+
+    for family in (:pyramid, :bioedge)
+        src = LGSSource(
+            na_profile=T[80000 90000 100000; 0.2 0.6 0.2],
+            laser_coordinates=(T(1), T(-0.5)),
+            fwhm_spot_up=T(0.8),
+            photon_irradiance=one(T),
+            T=T,
+        )
+        wfs = family === :pyramid ?
+            PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
+                modulation=zero(T), T=T, backend=selector) :
+            BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
+                modulation=zero(T), T=T, backend=selector)
+
+        AdaptiveOpticsSim.ensure_lgs_kernel!(wfs, tel, src)
+        @test wfs.state.lgs_kernel_fft isa BackendArray
+        original_tag = wfs.state.lgs_kernel_tag
+        original_kernel = Array(wfs.state.lgs_kernel_fft)
+        @test all(isfinite, original_kernel)
+        slopes = measure!(wfs, tel, src)
+        AdaptiveOpticsSim.synchronize_backend!(
+            AdaptiveOpticsSim.execution_style(slopes))
+        @test slopes isa BackendArray
+        @test all(isfinite, Array(slopes))
+
+        src.params.na_profile[2, :] .= T[0.8, 0.1, 0.1]
+        AdaptiveOpticsSim.ensure_lgs_kernel!(wfs, tel, src)
+        @test wfs.state.lgs_kernel_tag != original_tag
+        @test !isapprox(Array(wfs.state.lgs_kernel_fft), original_kernel;
+            rtol=T(1e-5), atol=T(1e-6))
+    end
+    return nothing
+end
+
+function run_optional_zernike_normalization(
+    ::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    selector = backend_selector(B)
+    T = Float32
+    cpu_tel = Telescope(resolution=16, diameter=T(8),
+        central_obstruction=zero(T), T=T, backend=CPUBackend())
+    gpu_tel = Telescope(resolution=16, diameter=T(8),
+        central_obstruction=zero(T), T=T, backend=selector)
+    src = Source(band=:custom, wavelength=T(0.75e-6),
+        photon_irradiance=T(10), T=T)
+    normalization_scale = T(0.375)
+    frame_host = reshape(collect(range(T(0.25), T(2); length=16)),
+        4, 4)
+
+    for normalization in (MeanValidFluxNormalization(),
+            IncidenceFluxNormalization())
+        cpu_wfs = ZernikeWFS(cpu_tel; pupil_samples=8, binning=2,
+            normalization=normalization, T=T, backend=CPUBackend())
+        gpu_wfs = ZernikeWFS(gpu_tel; pupil_samples=8, binning=2,
+            normalization=normalization, T=T, backend=selector)
+        fill!(cpu_wfs.state.reference_signal_2d, zero(T))
+        fill!(gpu_wfs.state.reference_signal_2d, zero(T))
+        frame = BackendArray(copy(frame_host))
+
+        expected_normalization = AdaptiveOpticsSim.zernike_normalization(
+            normalization, cpu_wfs, cpu_tel, src, frame_host,
+            normalization_scale)
+        actual_normalization = AdaptiveOpticsSim.zernike_normalization(
+            normalization, gpu_wfs, gpu_tel, src, frame,
+            normalization_scale)
+        @test actual_normalization ≈ expected_normalization rtol=T(2e-5)
+
+        expected = copy(AdaptiveOpticsSim.zernike_signal!(cpu_wfs,
+            cpu_tel, frame_host, src, normalization_scale))
+        actual = AdaptiveOpticsSim.zernike_signal!(gpu_wfs, gpu_tel,
+            frame, src, normalization_scale)
+        AdaptiveOpticsSim.synchronize_backend!(
+            AdaptiveOpticsSim.execution_style(actual))
+        @test gpu_wfs.state.normalization_sum isa BackendArray
+        @test actual isa BackendArray
+        @test Array(actual) ≈ expected rtol=T(2e-5) atol=T(2e-6)
+    end
+
+    zero_src = Source(band=:custom, wavelength=wavelength(src),
+        photon_irradiance=zero(T), T=T)
+    zero_wfs = ZernikeWFS(gpu_tel; pupil_samples=8, binning=2,
+        normalization=IncidenceFluxNormalization(), T=T,
+        backend=selector)
+    fill!(zero_wfs.state.reference_signal_2d, zero(T))
+    zero_slopes = AdaptiveOpticsSim.zernike_signal!(zero_wfs, gpu_tel,
+        BackendArray(copy(frame_host)), zero_src, one(T))
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(zero_slopes))
+    @test all(iszero, Array(zero_slopes))
+    @test all(isfinite, Array(zero_slopes))
     return nothing
 end
 
@@ -74,6 +247,38 @@ function run_optional_plane_product_checks(tel::Telescope,
     @test wavefront.opd isa BackendArray
     @test field.values isa BackendArray
     @test field.metadata.device == plane_device(field.values)
+    field_view = @view field.values[:, :]
+    for wrapper in (
+        field_view,
+        reshape(field_view, 1, length(field_view)),
+        transpose(field_view),
+        PermutedDimsArray(field_view, (2, 1)),
+    )
+        @test plane_device(wrapper) == field.metadata.device
+    end
+
+    wrapped_intensity_parent = similar(wavefront.opd, T, 4, 4)
+    fill!(wrapped_intensity_parent, one(T))
+    wrapped_intensity_view = @view wrapped_intensity_parent[:, :]
+    for wrapper in (
+        wrapped_intensity_view,
+        reshape(wrapped_intensity_view, 1, length(wrapped_intensity_view)),
+        transpose(wrapped_intensity_view),
+        PermutedDimsArray(wrapped_intensity_view, (2, 1)),
+    )
+        @test typeof(backend(wrapper)) === typeof(selector)
+        @test typeof(AdaptiveOpticsSim.array_backend_selector(
+            typeof(wrapper))) === typeof(selector)
+        wrapper_metadata = OpticalPlaneMetadata(FocalPlane(), wrapper;
+            coordinate_domain=AngularCoordinates(),
+            sampling=(one(T), one(T)),
+            normalization=PhotonRateNormalization(),
+            spatial_measure=CellIntegratedMeasure(),
+            coherence=IncoherentIntensityAddition())
+        wrapper_map = IntensityMap(wrapper_metadata, wrapper)
+        @test wrapper_map.values === wrapper
+        @test wrapper_map.metadata.device == field.metadata.device
+    end
 
     prepared = prepare_direct_psf(tel, wavefront, src, field)
     compute_psf!(prepared.output, field, wavefront, prepared.plan,
@@ -81,6 +286,132 @@ function run_optional_plane_product_checks(tel::Telescope,
     legacy_psf = copy(compute_psf!(tel, src; zero_padding=2))
     @test prepared.output.values isa BackendArray
     @test Array(prepared.output.values) ≈ Array(legacy_psf) atol=T(2e-5) rtol=T(2e-5)
+
+    sum_output_values = similar(prepared.output.values)
+    first_sum_values = similar(prepared.output.values)
+    second_sum_values = similar(prepared.output.values)
+    fill!(first_sum_values, one(T))
+    fill!(second_sum_values, T(2))
+    sum_output = IntensityMap(prepared.output.metadata, sum_output_values)
+    first_sum_input = IntensityMap(prepared.output.metadata, first_sum_values)
+    second_sum_input = IntensityMap(prepared.output.metadata, second_sum_values)
+    sum_plan = prepare_incoherent_sum(sum_output, first_sum_input,
+        second_sum_input)
+    accumulate_intensity!(sum_output,
+        (first_sum_input, second_sum_input), sum_plan)
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(sum_output.values))
+    @test sum_output.values isa BackendArray
+    @test Array(sum_output.values) == fill(T(3), size(sum_output.values))
+
+    detector = Detector(integration_time=T(0.5), noise=NoiseNone(),
+        qe=T(0.5), response_model=NullFrameResponse(), T=T,
+        backend=selector)
+    acquisition = prepare_detector_acquisition(detector, prepared.output)
+    detector_frame = capture!(detector, prepared.output, acquisition;
+        rng=MersenneTwister(301))
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(detector_frame))
+    @test detector_frame isa BackendArray
+    @test sum(Array(detector_frame)) ≈
+        sum(Array(prepared.output.values)) * T(0.25) atol=T(2e-5) rtol=T(2e-5)
+    identical_detector = Detector(integration_time=T(0.5), noise=NoiseNone(),
+        qe=T(0.5), response_model=NullFrameResponse(), T=T,
+        backend=selector)
+    @test identical_detector.params === detector.params
+    @test identical_detector.state !== detector.state
+    @test_throws InvalidConfiguration capture!(identical_detector,
+        prepared.output, acquisition; rng=MersenneTwister(301))
+
+    incremental_detector = Detector(integration_time=T(0.5),
+        noise=NoiseNone(), qe=T(0.5), response_model=NullFrameResponse(),
+        T=T, backend=selector)
+    incremental_acquisition = prepare_detector_acquisition(
+        incremental_detector, prepared.output)
+    capture!(incremental_detector, prepared.output,
+        incremental_acquisition; rng=MersenneTwister(305),
+        sample_time=T(0.2))
+    @test !readout_ready(incremental_detector)
+    incremental_frame = capture!(incremental_detector, prepared.output,
+        incremental_acquisition; rng=MersenneTwister(306),
+        sample_time=T(0.3))
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(incremental_frame))
+    @test incremental_frame isa BackendArray
+    @test readout_ready(incremental_detector)
+    @test sum(Array(incremental_frame)) ≈
+        sum(Array(prepared.output.values)) * T(0.25) atol=T(2e-5) rtol=T(2e-5)
+    cpu_detector = Detector(integration_time=T(0.5), noise=NoiseNone(),
+        qe=T(0.5), response_model=NullFrameResponse(), T=T,
+        backend=CPUBackend())
+    @test_throws InvalidConfiguration prepare_detector_acquisition(
+        cpu_detector, prepared.output)
+    @test_throws InvalidConfiguration capture!(cpu_detector,
+        prepared.output, acquisition; rng=MersenneTwister(306))
+
+    density_host = zeros(T, 9, 9)
+    density_host[3, 5] = T(8)
+    density_values = BackendArray(density_host)
+    density_metadata = OpticalPlaneMetadata(FocalPlane(), density_values;
+        coordinate_domain=AngularCoordinates(), sampling=(T(0.5), T(0.25)),
+        normalization=AdaptiveOpticsSim.PhotonRateNormalization(),
+        spatial_measure=AdaptiveOpticsSim.SpatialDensityMeasure(),
+        coherence=AdaptiveOpticsSim.IncoherentIntensityAddition())
+    density_map = IntensityMap(density_metadata, density_values)
+    response_kernel = T[0 0.1 0; 0.1 0.6 0.1; 0 0.1 0]
+    response_detector = Detector(integration_time=T(2), noise=NoiseNone(),
+        qe=T(0.5), binning=3,
+        response_model=SampledFrameResponse(response_kernel; T=T), T=T,
+        backend=selector)
+    response_acquisition = prepare_detector_acquisition(response_detector,
+        density_map)
+    response_frame = capture!(response_detector, density_map,
+        response_acquisition; rng=MersenneTwister(302))
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(response_frame))
+    manual_response = zeros(T, 9, 9)
+    manual_response[3, 5] = T(4.8)
+    manual_response[2, 5] = T(0.8)
+    manual_response[4, 5] = T(0.8)
+    manual_response[3, 4] = T(0.8)
+    manual_response[3, 6] = T(0.8)
+    manual_binned = zeros(T, 3, 3)
+    AdaptiveOpticsSim.bin2d!(manual_binned, manual_response, 3)
+    @test Array(response_frame) ≈ manual_binned .* T(0.125) atol=T(1e-6) rtol=T(1e-6)
+
+    asymmetric_kernel = T[0 0 0; 0.1 0.2 0.7; 0 0 0]
+    edge_host = zeros(T, 9, 9)
+    edge_host[5, end] = one(T)
+    edge_values = BackendArray(edge_host)
+    edge_metadata = OpticalPlaneMetadata(FocalPlane(), edge_values;
+        coordinate_domain=AngularCoordinates(), sampling=(one(T), one(T)),
+        normalization=AdaptiveOpticsSim.PhotonRateNormalization(),
+        spatial_measure=AdaptiveOpticsSim.CellIntegratedMeasure(),
+        coherence=AdaptiveOpticsSim.IncoherentIntensityAddition())
+    edge_map = IntensityMap(edge_metadata, edge_values)
+    edge_detector = Detector(integration_time=one(T), noise=NoiseNone(),
+        qe=one(T), response_model=SampledFrameResponse(asymmetric_kernel; T=T),
+        T=T, backend=selector)
+    edge_acquisition = prepare_detector_acquisition(edge_detector, edge_map)
+    edge_frame = capture!(edge_detector, edge_map, edge_acquisition;
+        rng=MersenneTwister(303))
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(edge_frame))
+    @test sum(Array(edge_frame)) ≈ T(0.9) atol=T(2e-6) rtol=T(2e-6)
+    @test sum(Array(edge_frame)) <= sum(edge_host) + T(2e-6)
+
+    edge_cube_host = zeros(T, 2, 9, 9)
+    edge_cube_host[1, 5, end] = one(T)
+    edge_cube_host[2, 5, 1] = one(T)
+    edge_cube = BackendArray(edge_cube_host)
+    edge_scratch = similar(edge_cube)
+    edge_stack = AdaptiveOpticsSim.capture_stack!(edge_detector, edge_cube,
+        edge_scratch; rng=MersenneTwister(304))
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(edge_stack))
+    edge_stack_host = Array(edge_stack)
+    @test sum(@view(edge_stack_host[1, :, :])) ≈ T(0.9) atol=T(2e-6) rtol=T(2e-6)
+    @test sum(@view(edge_stack_host[2, :, :])) ≈ T(0.3) atol=T(2e-6) rtol=T(2e-6)
 
     fraunhofer = FraunhoferPropagation(field)
     propagated = propagation_output(field, fraunhofer)
@@ -90,14 +421,18 @@ function run_optional_plane_product_checks(tel::Telescope,
 
     spatial_filter = SpatialFilter(tel; shape=SquareFilter(), diameter=5,
         zero_padding=2, T=T, backend=selector)
-    spatial_formation = prepare_pupil_field(tel, wavefront, src, field;
+    spatial_field = ElectricField(wavefront, src; zero_padding=2, T=T,
+        normalization=DimensionlessNormalization(),
+        spatial_measure=PointSampledMeasure(),
+        coherence=CoherentFieldCombination())
+    spatial_formation = prepare_pupil_field(tel, wavefront, src, spatial_field;
         center_even_grid=false, amplitude_scale=1)
-    fill_electric_field!(field, wavefront, spatial_formation)
+    fill_electric_field!(spatial_field, wavefront, spatial_formation)
     filtered = PupilFunction(tel; T=T, backend=selector)
-    spatial_plan = prepare_spatial_filter(tel, spatial_filter, field,
+    spatial_plan = prepare_spatial_filter(tel, spatial_filter, spatial_field,
         filtered)
     spatial_workspace = SpatialFilterWorkspace(spatial_filter)
-    filter!(filtered, field, spatial_filter, spatial_plan,
+    filter!(filtered, spatial_field, spatial_filter, spatial_plan,
         spatial_workspace)
     @test filtered.opd isa BackendArray
     @test filtered.amplitude isa BackendArray
@@ -116,7 +451,7 @@ function run_optional_plane_product_checks(tel::Telescope,
 end
 
 function build_optional_control_loop_branch(::Type{T}, backend, label::Symbol; sensor::Symbol=:sh, seed::Integer=1) where {T<:AbstractFloat}
-    tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
+    tel = Telescope(resolution=16, diameter=T(8.0),
         central_obstruction=T(0.0), T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = KolmogorovAtmosphere(tel; r0=T(0.2), L0=T(25.0), T=T, backend=backend)
@@ -196,7 +531,7 @@ function _build_optional_low_order_wfs(tel::Telescope, backend, ::Type{T}, ::Val
 end
 
 function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:tiptilt}, wfs_case::Val{W}=Val(:sh)) where {T<:AbstractFloat,W}
-    tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
+    tel = Telescope(resolution=16, diameter=T(8.0),
         central_obstruction=T(0.0), T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = OptionalStaticAtmosphere(tel; T=T, backend=backend)
@@ -207,14 +542,15 @@ function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:tiptilt
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
     sim = AOSimulation(tel, src, atm, optic, wfs)
     return build_control_loop_scenario(
-        SingleControlLoopConfig(name=Symbol(:optional_backend_composite_tiptilt_, W), branch_label=:main,
+        SingleControlLoopConfig(atmosphere_step=T(1e-3),
+            name=Symbol(:optional_backend_composite_tiptilt_, W), branch_label=:main,
             outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
         ControlLoopBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(91)),
     )
 end
 
 function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:steering}, ::Val{:sh}=Val(:sh)) where {T<:AbstractFloat}
-    tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
+    tel = Telescope(resolution=16, diameter=T(8.0),
         central_obstruction=T(0.0), T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = OptionalStaticAtmosphere(tel; T=T, backend=backend)
@@ -226,14 +562,15 @@ function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:steerin
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
     sim = AOSimulation(tel, src, atm, optic, wfs)
     return build_control_loop_scenario(
-        SingleControlLoopConfig(name=:optional_backend_composite_steering, branch_label=:main,
+        SingleControlLoopConfig(atmosphere_step=T(1e-3),
+            name=:optional_backend_composite_steering, branch_label=:main,
             outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
         ControlLoopBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(91)),
     )
 end
 
 function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:focus}, ::Val{:sh}=Val(:sh)) where {T<:AbstractFloat}
-    tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
+    tel = Telescope(resolution=16, diameter=T(8.0),
         central_obstruction=T(0.0), T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = OptionalStaticAtmosphere(tel; T=T, backend=backend)
@@ -244,7 +581,8 @@ function _build_optional_composite_optic_case(backend, ::Type{T}, ::Val{:focus},
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
     sim = AOSimulation(tel, src, atm, optic, wfs)
     return build_control_loop_scenario(
-        SingleControlLoopConfig(name=:optional_backend_composite_focus, branch_label=:main,
+        SingleControlLoopConfig(atmosphere_step=T(1e-3),
+            name=:optional_backend_composite_focus, branch_label=:main,
             outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
         ControlLoopBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(91)),
     )
@@ -691,7 +1029,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
     @test optical_gains isa array_backend
     @test all(isfinite, Array(optical_gains))
 
-    lift_tel = Telescope(resolution=8, diameter=T(8), sampling_time=T(1e-3),
+    lift_tel = Telescope(resolution=8, diameter=T(8),
         central_obstruction=zero(T), T=T, backend=backend)
     lift_src = Source(band=:I, magnitude=zero(T), T=T)
     lift_det = Detector(noise=NoiseNone(), psf_sampling=1, T=T,
@@ -747,9 +1085,9 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
         AdaptiveOpticsSim.execution_style(first(fresnel_prop.state.slices).field.values),
         fresnel_prop.params.model,
     ) isa AdaptiveOpticsSim.LayeredFresnelFieldAsyncPlan
-    cpu_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
+    cpu_tel = Telescope(resolution=16, diameter=8.0f0,
         central_obstruction=0.0f0, T=T, backend=CPUBackend())
-    gpu_tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
+    gpu_tel = Telescope(resolution=16, diameter=8.0f0,
         central_obstruction=0.0f0, T=T, backend=backend)
     cpu_src = Source(band=:I, magnitude=0.0, T=T)
     gpu_src = Source(band=:I, magnitude=0.0, T=T)
@@ -927,10 +1265,15 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     backend = AdaptiveOpticsSim.gpu_backend_array_type(B)
     @test backend !== nothing
     run_optional_backend_selector_smoke(B, backend)
+    run_optional_lgs_convolution_normalization(B)
+    run_optional_sodium_profile_wfs(B, backend)
+    run_optional_zernike_normalization(B, backend)
 
     if get(ENV, backend_full_smoke_env(B), "0") == "1"
         include(joinpath(dirname(@__DIR__), "scripts", "gpu_smoke_contract.jl"))
-        run_gpu_smoke_matrix(B)
+        run_smoke_matrix = Base.invokelatest(
+            getfield, Main, :run_gpu_smoke_matrix)
+        Base.invokelatest(run_smoke_matrix, B)
         @test true
         return nothing
     end
@@ -943,7 +1286,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     run_optional_counting_detector_parity(B, BackendArray)
     run_optional_avalanche_detector_parity(B, BackendArray)
 
-    tel = Telescope(resolution=16, diameter=8.0f0, sampling_time=1.0f-3,
+    tel = Telescope(resolution=16, diameter=8.0f0,
         central_obstruction=0.0f0, T=T, backend=selector)
     src = Source(band=:I, magnitude=0.0, T=T)
     run_optional_plane_product_checks(tel, src, selector, BackendArray, T)
@@ -958,7 +1301,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         T=T,
         backend=selector,
     )
-    epoch = advance_by!(atm, tel.params.sampling_time; rng=rng)
+    epoch = advance_by!(atm, T(1e-3); rng=rng)
     renderer = prepare_atmosphere_renderer(atm, tel, src)
     atmosphere_output = PupilFunction(tel; T=T)
     render_atmosphere!(atmosphere_output, renderer, atm, epoch)
@@ -978,7 +1321,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         T=T,
         backend=selector,
     )
-    infinite_epoch = advance_by!(inf_atm, tel.params.sampling_time; rng=rng)
+    infinite_epoch = advance_by!(inf_atm, T(1e-3); rng=rng)
     infinite_renderer = prepare_atmosphere_renderer(inf_atm, tel, src)
     render_atmosphere!(atmosphere_output, infinite_renderer, inf_atm,
         infinite_epoch)
@@ -1010,6 +1353,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     split_runtime = AdaptiveOpticsSim.ClosedLoopRuntime(
         split_sim,
         NullReconstructor();
+        atmosphere_step=T(1e-3),
         science_detector=split_det,
         outputs=RuntimeOutputRequirements(
             slopes=true,
@@ -1023,6 +1367,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     @test_throws InvalidConfiguration AdaptiveOpticsSim.ClosedLoopRuntime(
         split_sim,
         NullReconstructor();
+        atmosphere_step=T(1e-3),
         science_detector=split_det,
         execution_plan=CPUHILExecutionPlan(),
     )
@@ -1062,6 +1407,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
 
     single_control_loop = build_control_loop_scenario(
         SingleControlLoopConfig(
+            atmosphere_step=T(1e-3),
             name=:optional_backend_single,
             branch_label=:main,
             outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false),
@@ -1082,6 +1428,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     grouped_control_loop = build_control_loop_scenario(
         GroupedControlLoopConfig(
             (:hi, :lo);
+            atmosphere_step=T(1e-3),
             name=:optional_backend_grouped,
             outputs=GroupedRuntimeOutputRequirements(wfs_frames=true, science_frames=false, wfs_stack=true, science_stack=false),
         ),

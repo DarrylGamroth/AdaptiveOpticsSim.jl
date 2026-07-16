@@ -355,7 +355,7 @@ function build_specula_manifest(root::AbstractString)
         kind = Symbol(case_cfg["kind"])
         baseline = parse_reference_baseline(kind, case_cfg)
         case = ReferenceCase(id, kind, baseline, joinpath(root, case_cfg["data"]), (), 0.0, 0.0, case_cfg)
-        actual = compute_reference_actual(case)
+        actual = compute_reference_expected(case)
         case_cfg["shape"] = collect(size(actual))
         writedlm(joinpath(root, case_cfg["data"]), actual)
         manifest["cases"][id] = case_cfg

@@ -53,7 +53,7 @@ Each script exposes a `main()` function and logs a short completion summary with
 ### Image formation
 
 ```julia
-tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
+tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=10.0)
 psf = compute_psf!(tel, src; zero_padding=2)
 ```

@@ -181,6 +181,12 @@ end
 @inline runtime_execution_plan(interface::CompositeSimulationInterface) =
     map(child -> runtime_execution_plan(child.runtime), interface.interfaces)
 @inline runtime_latency(runtime::ClosedLoopRuntime) = runtime.latency
+@inline runtime_atmosphere_step(runtime::ClosedLoopRuntime) =
+    runtime.atmosphere_step
+@inline runtime_atmosphere_step(interface::SimulationInterface) =
+    runtime_atmosphere_step(interface.runtime)
+@inline runtime_atmosphere_step(interface::CompositeSimulationInterface) =
+    map(child -> runtime_atmosphere_step(child.runtime), interface.interfaces)
 
 @inline simulation_command(sim::AbstractControlSimulation) = simulation_command(simulation_readout(sim))
 @inline simulation_slopes(sim::AbstractControlSimulation) = simulation_slopes(simulation_readout(sim))

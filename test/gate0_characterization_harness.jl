@@ -15,6 +15,11 @@ function gate0_telescope(case::ReferenceCase)
     return tel
 end
 
+# Frozen Gate 0 optical references predate rate-based optical products. Keep
+# their former telescope duration explicit in this comparison adapter only.
+gate0_legacy_optical_duration(case::ReferenceCase) =
+    Float64(case.config["telescope"]["sampling_time"])
+
 function gate0_spatial_filter_shape(name)
     normalized = lowercase(String(name))
     normalized == "circular" && return CircularFilter()
@@ -43,8 +48,11 @@ function gate0_electric_field(case::ReferenceCase)
         T=Float64)
     plan = prepare_pupil_field(tel, wavefront, src, field)
     fill_electric_field!(field, wavefront, plan)
-    return cat(real.(field.values), imag.(field.values),
-        abs2.(field.values); dims=3)
+    duration = gate0_legacy_optical_duration(case)
+    amplitude_duration_scale = sqrt(duration)
+    return cat(real.(field.values) .* amplitude_duration_scale,
+        imag.(field.values) .* amplitude_duration_scale,
+        abs2.(field.values) .* duration; dims=3)
 end
 
 function gate0_spatial_filter(case::ReferenceCase)
@@ -60,7 +68,10 @@ function gate0_spatial_filter(case::ReferenceCase)
     wavefront = PupilFunction(tel; T=Float64)
     apply_opd!(wavefront, opd_map(tel))
     field = ElectricField(wavefront, src;
-        zero_padding=sf.params.zero_padding, T=Float64)
+        zero_padding=sf.params.zero_padding, T=Float64,
+        normalization=DimensionlessNormalization(),
+        spatial_measure=PointSampledMeasure(),
+        coherence=CoherentFieldCombination())
     formation = prepare_pupil_field(tel, wavefront, src, field;
         center_even_grid=false, amplitude_scale=1)
     fill_electric_field!(field, wavefront, formation)
@@ -102,16 +113,18 @@ function gate0_radiometric_chain(case::ReferenceCase)
         T=Float64)
     formation = prepare_pupil_field(tel, wavefront, src, field)
     fill_electric_field!(field, wavefront, formation)
-    expected_photons = pupil_expected_photon_map(tel, src)
-    size(expected_photons) == size(field.values) || throw(DimensionMismatchError(
+    photon_rate = pupil_photon_rate_map(tel, src)
+    size(photon_rate) == size(field.values) || throw(DimensionMismatchError(
         "Gate 0 radiometric fixture requires zero_padding=1"))
-    psf = copy(compute_psf!(tel, src; zero_padding=zero_padding))
+    psf_rate = copy(compute_psf!(tel, src; zero_padding=zero_padding))
     seed = Int(get(case.config["compute"], "seed", 1))
-    frames = [copy(capture!(detector, psf;
+    frames = [copy(capture!(detector, psf_rate;
         rng=MersenneTwister(seed + index - 1)))
         for (index, detector) in enumerate(detectors)]
-    return cat(Array(expected_photons), abs2.(field.values), Array(psf),
-        frames...; dims=3)
+    duration = gate0_legacy_optical_duration(case)
+    return cat(Array(photon_rate) .* duration,
+        abs2.(field.values) .* duration, Array(psf_rate) .* duration,
+        (frame .* duration for frame in frames)...; dims=3)
 end
 
 function gate0_spectral_psf(case::ReferenceCase)
@@ -125,13 +138,14 @@ function gate0_spectral_psf(case::ReferenceCase)
     stack = Array{Float64}(undef, n, n, length(bundle) + 1)
     combined = zeros(Float64, n, n)
     for (index, sample) in enumerate(bundle)
-        sample_src = AdaptiveOpticsSim.source_with_wavelength_and_irradiance(src,
+        sample_src = AdaptiveOpticsSim.source_with_wavelength_and_radiometric_value(src,
             sample.wavelength, photon_irradiance(src) * sample.weight)
         plane = compute_psf!(tel, sample_src; zero_padding=zero_padding)
         @views stack[:, :, index] .= plane
         combined .+= plane
     end
     @views stack[:, :, end] .= combined
+    stack .*= gate0_legacy_optical_duration(case)
     return stack
 end
 function gate0_direct_science(case::ReferenceCase)
@@ -154,6 +168,7 @@ function gate0_direct_science(case::ReferenceCase)
         stack[:, :, 4] .= tel.state.psf_stack[:, :, 2]
         stack[:, :, 5] .= combined
     end
+    stack .*= gate0_legacy_optical_duration(case)
     return stack
 end
 

@@ -1,3 +1,11 @@
+struct TestExpandedSourceWrapper{S<:AdaptiveOpticsSim.AbstractSource} <:
+    AdaptiveOpticsSim.AbstractSource
+    source::S
+end
+
+AdaptiveOpticsSim.source_composition_style(::TestExpandedSourceWrapper) =
+    AdaptiveOpticsSim.ExpandedSourceComposition()
+
 @testset "GPU backend registry" begin
     @test !gpu_backend_loaded(AdaptiveOpticsSim.CUDABackendTag)
     @test !gpu_backend_loaded(AdaptiveOpticsSim.MetalBackendTag)
@@ -25,7 +33,7 @@ end
 
 @testset "API export curation" begin
     exported = names(AdaptiveOpticsSim)
-    @test length(exported) <= 385
+    @test length(exported) <= 410
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
     @test Base.isexported(AdaptiveOpticsSim, :Detector)
@@ -72,6 +80,20 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :PupilFunction)
     @test Base.isexported(AdaptiveOpticsSim, :ElectricField)
     @test Base.isexported(AdaptiveOpticsSim, :IntensityMap)
+    @test Base.isexported(AdaptiveOpticsSim, :PhotonRateNormalization)
+    @test Base.isexported(AdaptiveOpticsSim, :DimensionlessNormalization)
+    @test Base.isexported(AdaptiveOpticsSim, :PointSampledMeasure)
+    @test Base.isexported(AdaptiveOpticsSim, :SpatialDensityMeasure)
+    @test Base.isexported(AdaptiveOpticsSim, :CellIntegratedMeasure)
+    @test Base.isexported(AdaptiveOpticsSim, :CoherentFieldCombination)
+    @test Base.isexported(AdaptiveOpticsSim, :IncoherentIntensityAddition)
+    @test Base.isexported(AdaptiveOpticsSim, :NonCombinableProduct)
+    @test Base.isexported(AdaptiveOpticsSim, :PhysicalPhotonIrradianceSource)
+    @test Base.isexported(AdaptiveOpticsSim, :NormalizedTestSource)
+    @test Base.isexported(AdaptiveOpticsSim, :source_radiometry)
+    @test Base.isexported(AdaptiveOpticsSim, :OpticalProductBundle)
+    @test Base.isexported(AdaptiveOpticsSim, :prepare_incoherent_sum)
+    @test Base.isexported(AdaptiveOpticsSim, :accumulate_intensity!)
     @test Base.isexported(AdaptiveOpticsSim, :prepare_pupil_field)
     @test Base.isexported(AdaptiveOpticsSim, :prepare_direct_psf)
     @test Base.isexported(AdaptiveOpticsSim, :prepare_spatial_filter)
@@ -104,8 +126,393 @@ end
     @test AdaptiveOpticsSim.CPUBuildBackend() isa AdaptiveOpticsSim.BuildBackend
 end
 
+@testset "Optical radiometry and combination contracts" begin
+    for invalid_wavelength in (0.0, -1.0, Inf, NaN)
+        @test_throws InvalidConfiguration MonochromaticChannel(
+            invalid_wavelength)
+    end
+
+    metadata_storage = zeros(2, 2)
+    for invalid_sampling in (
+        (0.0, 1.0),
+        (-1.0, 1.0),
+        (Inf, 1.0),
+        (NaN, 1.0),
+    )
+        @test_throws InvalidConfiguration OpticalPlaneMetadata(
+            FocalPlane(), metadata_storage;
+            coordinate_domain=AngularCoordinates(),
+            sampling=invalid_sampling)
+    end
+    for invalid_origin in ((Inf, 0.0), (NaN, 0.0))
+        @test_throws InvalidConfiguration OpticalPlaneMetadata(
+            FocalPlane(), metadata_storage;
+            coordinate_domain=AngularCoordinates(), sampling=(1.0, 1.0),
+            origin=invalid_origin)
+    end
+
+    host_view = @view metadata_storage[:, :]
+    host_wrappers = (
+        host_view,
+        reshape(host_view, 1, 4),
+        transpose(host_view),
+        PermutedDimsArray(host_view, (2, 1)),
+        reinterpret(Float32, host_view),
+    )
+    host_device = plane_device(metadata_storage)
+    for wrapper in host_wrappers
+        @test plane_device(wrapper) == host_device
+        @test backend(wrapper) isa CPUBackend
+        @test AdaptiveOpticsSim.array_backend_selector(typeof(wrapper)) isa
+            CPUBackend
+        wrapper_metadata = OpticalPlaneMetadata(FocalPlane(), wrapper;
+            coordinate_domain=AngularCoordinates(), sampling=(1.0, 1.0),
+            normalization=PhotonRateNormalization(),
+            spatial_measure=CellIntegratedMeasure(),
+            coherence=IncoherentIntensityAddition())
+        wrapper_map = IntensityMap(wrapper_metadata, wrapper)
+        @test wrapper_map.values === wrapper
+    end
+
+    tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0,
+        pupil_reflectivity=0.25)
+    wavefront = PupilFunction(tel)
+
+    physical_source = Source(band=:custom, wavelength=1.0e-6,
+        photon_irradiance=3.0)
+    physical_field = ElectricField(wavefront, physical_source;
+        zero_padding=2)
+    physical_formation = prepare_pupil_field(tel, wavefront,
+        physical_source, physical_field)
+    fill_electric_field!(physical_field, wavefront, physical_formation)
+    expected_rate = photon_irradiance(physical_source) *
+        prod(wavefront.metadata.sampling) * sum(abs2, wavefront.amplitude)
+    @test source_radiometry(physical_source) isa
+        PhysicalPhotonIrradianceSource
+    @test physical_field.metadata.normalization isa PhotonRateNormalization
+    @test physical_field.metadata.spatial_measure isa CellIntegratedMeasure
+    @test physical_field.metadata.coherence isa CoherentFieldCombination
+    @test sum(abs2, physical_field.values) ≈ expected_rate
+
+    physical_propagation = FraunhoferPropagation(physical_field)
+    physical_intensity = IntensityMap(physical_field, physical_propagation)
+    fraunhofer_intensity_from_field!(physical_intensity, physical_field,
+        physical_propagation)
+    @test physical_intensity.metadata.normalization isa
+        PhotonRateNormalization
+    @test physical_intensity.metadata.spatial_measure isa
+        CellIntegratedMeasure
+    @test physical_intensity.metadata.coherence isa
+        IncoherentIntensityAddition
+    @test sum(physical_intensity.values) ≈ expected_rate
+
+    normalized_source = Source(band=:custom, wavelength=1.0e-6,
+        normalized_power=2.5)
+    normalized_field = ElectricField(wavefront, normalized_source;
+        zero_padding=2)
+    normalized_formation = prepare_pupil_field(tel, wavefront,
+        normalized_source, normalized_field)
+    fill_electric_field!(normalized_field, wavefront, normalized_formation)
+    @test source_radiometry(normalized_source) isa NormalizedTestSource
+    @test_throws InvalidConfiguration photon_irradiance(normalized_source)
+    @test normalized_field.metadata.normalization isa
+        DimensionlessNormalization
+    @test normalized_field.metadata.spatial_measure isa CellIntegratedMeasure
+    @test sum(abs2, normalized_field.values) ≈ 2.5
+
+    source_bundle = SpectralBundle(
+        [wavelength(physical_source), 1.1 * wavelength(physical_source)],
+        [0.5, 0.5])
+    spectral_leaf = with_spectrum(physical_source, source_bundle)
+    directional = Asterism([physical_source])
+    extended = with_extended_source(physical_source,
+        PointCloudSourceModel([(0.0, 0.0)], [1.0]))
+    third_party_expansion = TestExpandedSourceWrapper(physical_source)
+    @test_throws UnsupportedAlgorithm with_spectrum(spectral_leaf,
+        source_bundle)
+    @test_throws UnsupportedAlgorithm with_spectrum(directional,
+        source_bundle)
+    @test_throws UnsupportedAlgorithm with_spectrum(extended,
+        source_bundle)
+    @test_throws UnsupportedAlgorithm SpectralSource(physical_source,
+        source_bundle)
+    @test_throws UnsupportedAlgorithm SpectralSource(spectral_leaf,
+        source_bundle)
+    @test_throws UnsupportedAlgorithm Asterism([third_party_expansion])
+    @test_throws UnsupportedAlgorithm Asterism(
+        AdaptiveOpticsSim.AbstractSource[
+            physical_source,
+            third_party_expansion,
+        ])
+
+    normalized_propagation = FraunhoferPropagation(normalized_field)
+    normalized_intensity = IntensityMap(normalized_field,
+        normalized_propagation)
+    fraunhofer_intensity_from_field!(normalized_intensity, normalized_field,
+        normalized_propagation)
+    @test normalized_intensity.metadata.normalization isa
+        DimensionlessNormalization
+    @test sum(normalized_intensity.values) ≈ 2.5
+
+    normalized_direct = IntensityMap(normalized_field,
+        normalized_propagation)
+    normalized_direct_prepared = prepare_direct_psf(tel, wavefront,
+        normalized_source, normalized_field, normalized_direct)
+    compute_psf!(normalized_direct, normalized_field, wavefront,
+        normalized_direct_prepared.plan,
+        normalized_direct_prepared.workspace)
+    @test normalized_direct.metadata.normalization isa
+        DimensionlessNormalization
+    @test sum(normalized_direct.values) ≈ 2.5
+
+    @test_throws InvalidConfiguration pupil_photon_rate_map(tel,
+        normalized_source)
+    @test_throws InvalidConfiguration compute_psf!(tel,
+        normalized_source; zero_padding=2)
+
+    float32_overflow = 2 * Float64(floatmax(Float32))
+    for invalid_wavelength in (0.0, -1.0, Inf, -Inf, NaN,
+        float32_overflow)
+        @test_throws InvalidConfiguration Source(band=:custom,
+            wavelength=invalid_wavelength, normalized_power=1.0,
+            T=Float32)
+        @test_throws InvalidConfiguration LGSSource(
+            wavelength=invalid_wavelength, normalized_power=1.0,
+            T=Float32)
+    end
+    for invalid_value in (-1.0, Inf, -Inf, NaN, float32_overflow)
+        @test_throws InvalidConfiguration Source(band=:custom,
+            wavelength=1.0e-6, photon_irradiance=invalid_value,
+            T=Float32)
+        @test_throws InvalidConfiguration Source(band=:custom,
+            wavelength=1.0e-6, normalized_power=invalid_value,
+            T=Float32)
+        @test_throws InvalidConfiguration LGSSource(
+            photon_irradiance=invalid_value, T=Float32)
+    end
+    @test source_radiometric_value(Source(band=:custom,
+        wavelength=1.0e-6, normalized_power=0.0, T=Float32)) === 0.0f0
+
+    for invalid_finite_value in (Inf, -Inf, NaN, float32_overflow)
+        @test_throws InvalidConfiguration Source(band=:custom,
+            wavelength=1.0e-6, magnitude=invalid_finite_value,
+            normalized_power=1.0, T=Float32)
+        @test_throws InvalidConfiguration Source(band=:custom,
+            wavelength=1.0e-6,
+            coordinates=(invalid_finite_value, 0.0),
+            normalized_power=1.0, T=Float32)
+        @test_throws InvalidConfiguration Source(band=:custom,
+            wavelength=1.0e-6,
+            coordinates=(1.0, invalid_finite_value),
+            normalized_power=1.0, T=Float32)
+        @test_throws InvalidConfiguration LGSSource(
+            magnitude=invalid_finite_value, T=Float32)
+        @test_throws InvalidConfiguration LGSSource(
+            coordinates=(invalid_finite_value, 0.0), T=Float32)
+        @test_throws InvalidConfiguration LGSSource(
+            laser_coordinates=(invalid_finite_value, 0.0), T=Float32)
+    end
+    for invalid_altitude in (0.0, -1.0, Inf, -Inf, NaN,
+        float32_overflow)
+        @test_throws InvalidConfiguration LGSSource(
+            altitude=invalid_altitude, T=Float32)
+    end
+    for invalid_nonnegative in (-1.0, Inf, -Inf, NaN,
+        float32_overflow)
+        @test_throws InvalidConfiguration LGSSource(
+            elongation_factor=invalid_nonnegative, T=Float32)
+        @test_throws InvalidConfiguration LGSSource(
+            fwhm_spot_up=invalid_nonnegative, T=Float32)
+    end
+    @test LGSSource(elongation_factor=0.0,
+        fwhm_spot_up=0.0).params.elongation_factor == 0.0
+
+    valid_profile = [80_000.0 90_000.0 100_000.0; 0.25 0.5 0.25]
+    profile_source = LGSSource(na_profile=valid_profile, T=Float32)
+    @test profile_source.params.altitude ≈ 90_000.0f0
+    @test profile_source.params.na_profile == Float32.(valid_profile)
+    @test_throws InvalidConfiguration LGSSource(
+        na_profile=zeros(2, 0), T=Float32)
+    @test_throws InvalidConfiguration LGSSource(
+        na_profile=[80_000.0 90_000.0; 0.0 0.0], T=Float32)
+    @test_throws InvalidConfiguration LGSSource(
+        na_profile=[0.0 90_000.0; 0.5 0.5], T=Float32)
+    @test_throws InvalidConfiguration LGSSource(
+        na_profile=[80_000.0 Inf; 0.5 0.5], T=Float32)
+    @test_throws InvalidConfiguration LGSSource(
+        na_profile=[80_000.0 float32_overflow; 0.5 0.5], T=Float32)
+    @test_throws InvalidConfiguration LGSSource(
+        na_profile=[80_000.0 90_000.0; -0.1 1.1], T=Float32)
+    @test_throws InvalidConfiguration LGSSource(
+        na_profile=[80_000.0 90_000.0; NaN 1.0], T=Float32)
+    @test_throws InvalidConfiguration LGSSource(
+        na_profile=[80_000.0 90_000.0; Inf 1.0], T=Float32)
+    @test_throws InvalidConfiguration LGSSource(
+        na_profile=[80_000.0 90_000.0;
+            floatmax(Float32) floatmax(Float32)], T=Float32)
+
+    @test_throws InvalidConfiguration GeometricAtmosphericPropagation(
+        chromatic_reference_wavelength=Inf, T=Float32)
+    @test_throws InvalidConfiguration LayeredFresnelAtmosphericPropagation(
+        chromatic_reference_wavelength=-1.0, T=Float32)
+    for invalid_wavelength in (0.0, -1.0, Inf, -Inf, NaN,
+        float32_overflow)
+        @test_throws InvalidConfiguration SpectralBundle(
+            [invalid_wavelength], [1.0]; T=Float32)
+    end
+    for invalid_weight in (-1.0, Inf, -Inf, NaN, float32_overflow)
+        @test_throws InvalidConfiguration SpectralBundle(
+            [1.0e-6], [invalid_weight]; T=Float32)
+    end
+    @test_throws InvalidConfiguration SpectralBundle(
+        SpectralSample{Float32}[
+            SpectralSample{Float32}(1.0f-6, floatmax(Float32)),
+            SpectralSample{Float32}(1.1f-6, floatmax(Float32)),
+        ])
+    parameterized_samples = SpectralSample{Float64}[
+        SpectralSample(1.0e-6, 0.25),
+        SpectralSample(1.1e-6, 0.75),
+    ]
+    parameterized_bundle = SpectralBundle{Float64,
+        typeof(parameterized_samples)}(parameterized_samples)
+    @test parameterized_bundle.samples == parameterized_samples
+    @test_throws InvalidConfiguration SpectralBundle{Float64,
+        Vector{SpectralSample{Float64}}}([
+            SpectralSample(NaN, -1.0),
+        ])
+    @test_throws InvalidConfiguration SpectralBundle{Float64,
+        Vector{SpectralSample{Float64}}}([
+            SpectralSample(1.0e-6, 2.0),
+        ])
+
+    density_field = ElectricField(wavefront, physical_source;
+        normalization=DimensionlessNormalization(),
+        spatial_measure=SpatialDensityMeasure(),
+        coherence=CoherentFieldCombination())
+    @test_throws InvalidConfiguration prepare_pupil_field(tel, wavefront,
+        physical_source, density_field; amplitude_scale=1.0)
+
+    noncombinable_field = ElectricField(wavefront, physical_source;
+        normalization=DimensionlessNormalization(),
+        spatial_measure=CellIntegratedMeasure(),
+        coherence=NonCombinableProduct())
+    @test_throws InvalidConfiguration prepare_pupil_field(tel, wavefront,
+        physical_source, noncombinable_field; amplitude_scale=1.0)
+    noncombinable_propagation = FraunhoferPropagation(noncombinable_field)
+    @test_throws InvalidConfiguration IntensityMap(noncombinable_field,
+        noncombinable_propagation)
+
+    unspecified_values = zeros(ComplexF64, 8, 8)
+    unspecified_metadata = OpticalPlaneMetadata(PupilPlane(),
+        unspecified_values; coordinate_domain=MetricCoordinates(),
+        sampling=(1.0, 1.0),
+        normalization=PhotonRateNormalization(),
+        spatial_measure=CellIntegratedMeasure(),
+        coherence=CoherentFieldCombination())
+    unspecified_field = ElectricField(unspecified_metadata,
+        unspecified_values)
+    @test_throws InvalidConfiguration FraunhoferPropagation(
+        unspecified_field)
+    @test_throws InvalidConfiguration FresnelPropagation(unspecified_field;
+        distance_m=1.0)
+
+    function intensity_map(values;
+        sampling=(1.0, 1.0), wavelength_m=1.0e-6,
+        normalization=PhotonRateNormalization(),
+        spatial_measure=CellIntegratedMeasure(),
+        coherence=IncoherentIntensityAddition())
+        metadata = OpticalPlaneMetadata(FocalPlane(), values;
+            coordinate_domain=AngularCoordinates(), sampling=sampling,
+            spectral=MonochromaticChannel(wavelength_m),
+            normalization=normalization, spatial_measure=spatial_measure,
+            coherence=coherence)
+        return IntensityMap(metadata, values)
+    end
+
+    output = intensity_map(zeros(4, 4))
+    first_input = intensity_map(fill(1.0, 4, 4))
+    second_input = intensity_map(fill(2.0, 4, 4))
+    sum_plan = prepare_incoherent_sum(output, first_input, second_input)
+    @test !applicable(PreparedIncoherentSum, output.metadata,
+        (first_input.metadata, second_input.metadata))
+    @test !applicable(
+        PreparedIncoherentSum{typeof(output.metadata),
+            typeof((first_input.metadata, second_input.metadata))},
+        output.metadata, (first_input.metadata, second_input.metadata))
+    @test @inferred(accumulate_intensity!(output,
+        (first_input, second_input), sum_plan)) === output
+    @test output.values == fill(3.0, 4, 4)
+    @test @allocated(accumulate_intensity!(output,
+        (first_input, second_input), sum_plan)) == 0
+    identity_alias = IntensityMap{
+        typeof(first_input.metadata),typeof(output.values),CPUBackend,
+    }(first_input.metadata, output.values)
+    view_values = @view output.values[:, :]
+    view_alias = IntensityMap{
+        typeof(first_input.metadata),typeof(view_values),CPUBackend,
+    }(first_input.metadata, view_values)
+    @test_throws InvalidConfiguration prepare_incoherent_sum(output,
+        identity_alias)
+    @test_throws InvalidConfiguration prepare_incoherent_sum(output,
+        view_alias)
+    fill!(output.values, 7.0)
+    @test_throws InvalidConfiguration accumulate_intensity!(output,
+        (view_alias, second_input), sum_plan)
+    @test output.values == fill(7.0, 4, 4)
+    unplanned_input = intensity_map(fill(1.0, 4, 4);
+        sampling=(2.0, 2.0))
+    @test_throws InvalidConfiguration accumulate_intensity!(output,
+        (unplanned_input, second_input), sum_plan)
+    @test output.values == fill(7.0, 4, 4)
+    @test !applicable(accumulate_intensity!, output.values, physical_field)
+    @test_throws DimensionMismatchError accumulate_intensity!(output,
+        (first_input,), sum_plan)
+    @test_throws InvalidConfiguration prepare_incoherent_sum(output)
+
+    incompatible_normalization = intensity_map(fill(1.0, 4, 4);
+        normalization=DimensionlessNormalization())
+    incompatible_measure = intensity_map(fill(1.0, 4, 4);
+        spatial_measure=SpatialDensityMeasure())
+    incompatible_policy = intensity_map(fill(1.0, 4, 4);
+        coherence=NonCombinableProduct())
+    incompatible_sampling = intensity_map(fill(1.0, 4, 4);
+        sampling=(2.0, 2.0))
+    incompatible_spectral = intensity_map(fill(1.0, 4, 4);
+        wavelength_m=1.1e-6)
+    for incompatible in (
+        incompatible_normalization,
+        incompatible_measure,
+        incompatible_policy,
+        incompatible_sampling,
+        incompatible_spectral,
+    )
+        @test_throws InvalidConfiguration prepare_incoherent_sum(output,
+            incompatible)
+    end
+
+    bundle = OpticalProductBundle(first_input, incompatible_spectral)
+    @test length(bundle) == 2
+    @test bundle[1] === first_input
+    @test bundle[2] === incompatible_spectral
+
+    mixed_wavelengths = Asterism([
+        Source(band=:custom, wavelength=1.0e-6, photon_irradiance=1.0),
+        Source(band=:custom, wavelength=1.1e-6, photon_irradiance=1.0),
+    ])
+    @test_throws InvalidConfiguration compute_psf!(tel, mixed_wavelengths)
+end
+
 @testset "Telescope and PSF" begin
-    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.2)
+    for invalid_reflectivity in (-0.1, 1.1, Inf, NaN)
+        @test_throws InvalidConfiguration Telescope(resolution=8,
+            diameter=8.0, pupil_reflectivity=invalid_reflectivity)
+    end
+    invalid_reflectivity_map = ones(8, 8)
+    invalid_reflectivity_map[1, 1] = NaN
+    @test_throws InvalidConfiguration Telescope(resolution=8,
+        diameter=8.0, pupil_reflectivity=invalid_reflectivity_map)
+
+    tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.2)
     src = Source(band=:I, magnitude=0.0)
     wavefront = PupilFunction(tel)
     apply_opd!(wavefront, opd_map(tel))
@@ -130,16 +537,19 @@ end
     compute_psf!(tel, src; zero_padding=2)
     @test tel.state.psf_workspace === cached_ws
 
-    tel_dim = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.2,
+    tel_dim = Telescope(resolution=32, diameter=8.0, central_obstruction=0.2,
         pupil_reflectivity=0.25)
     psf_dim = compute_psf!(tel_dim, src; zero_padding=2)
     @test sum(psf_dim) ≈ 0.25 * sum(psf)
-    expected_photons = pupil_expected_photon_map(tel_dim, src)
-    @test size(expected_photons) == size(pupil_mask(tel_dim))
-    @test maximum(expected_photons) > 0
+    photon_rate = pupil_photon_rate_map(tel_dim, src)
+    @test size(photon_rate) == size(pupil_mask(tel_dim))
+    @test maximum(photon_rate) > 0
     @test optical_path(src, tel_dim) == "source(I) -> telescope"
+    reflectivity_before_invalid_set = copy(pupil_reflectivity(tel_dim))
+    @test_throws InvalidConfiguration set_pupil_reflectivity!(tel_dim, -0.1)
+    @test pupil_reflectivity(tel_dim) == reflectivity_before_invalid_set
 
-    tel_simple = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel_simple = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     src_simple = Source(band=:I, magnitude=0.0)
     wavefront_simple = PupilFunction(tel_simple)
     field_simple = ElectricField(wavefront_simple, src_simple;
@@ -197,7 +607,7 @@ end
     propagate_field!(zero_out, field, zero_fresnel)
     @test zero_out.values ≈ field.values atol=1e-10 rtol=1e-10
 
-    atm_tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    atm_tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     atm_src = Source(band=:I, magnitude=0.0)
     atm = MultiLayerAtmosphere(atm_tel;
         r0=0.2,
@@ -207,7 +617,7 @@ end
         wind_direction=[0.0, 90.0],
         altitude=[0.0, 5000.0],
     )
-    advance_by!(atm, atm_tel.params.sampling_time; rng=MersenneTwister(1))
+    advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(1))
     geom_prop = AtmosphericFieldPropagation(atm, atm_tel, atm_src;
         model=GeometricAtmosphericPropagation(T=Float64),
         zero_padding=1,
@@ -217,7 +627,7 @@ end
         geom_prop.params.model,
     ) isa AdaptiveOpticsSim.GeometricFieldSynchronousPlan
     geom_field = propagate_atmosphere_field!(geom_prop, atm, atm_tel, atm_src)
-    tel_geom = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel_geom = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     propagate!(atm, tel_geom, atm_src)
     collapsed_wavefront = PupilFunction(tel_geom)
     apply_opd!(collapsed_wavefront, opd_map(tel_geom))
@@ -235,7 +645,7 @@ end
         wind_direction=[0.0],
         altitude=[0.0],
     )
-    advance_by!(fresnel_atm, atm_tel.params.sampling_time; rng=MersenneTwister(2))
+    advance_by!(fresnel_atm, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(2))
     fresnel_prop = AtmosphericFieldPropagation(fresnel_atm, atm_tel, atm_src;
         model=LayeredFresnelAtmosphericPropagation(T=Float64),
         zero_padding=1,
@@ -271,11 +681,27 @@ end
     @test atmospheric_intensity!(single_spectral_prop, atm, atm_tel, single_spectral) ≈ mono_intensity atol=1e-8 rtol=1e-8
     @test size(spectral_intensity) == size(mono_intensity)
     @test sum(spectral_intensity) > 0
+
+    normalized_atm_src = Source(band=:custom,
+        wavelength=wavelength(atm_src), normalized_power=2.0)
+    normalized_spectral = with_spectrum(normalized_atm_src,
+        SpectralBundle([wavelength(atm_src), 1.1 * wavelength(atm_src)],
+            [0.75, 0.25]))
+    normalized_spectral_prop = AtmosphericFieldPropagation(atm, atm_tel,
+        normalized_spectral;
+        model=GeometricAtmosphericPropagation(T=Float64),
+        zero_padding=1,
+        T=Float64)
+    @test all(slice.field.metadata.normalization isa
+        DimensionlessNormalization for slice in
+        normalized_spectral_prop.state.slices)
+    normalized_spectral_intensity = atmospheric_intensity!(
+        normalized_spectral_prop, atm, atm_tel, normalized_spectral)
+    @test sum(normalized_spectral_intensity) ≈ 2.0 rtol=1e-10
 end
 
 @testset "Explicit optical products and surfaces" begin
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3,
-        central_obstruction=0.1)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.1)
     src = Source(band=:I, magnitude=0.0)
     telescope_opd_before = copy(opd_map(tel))
     aperture_before = copy(pupil_mask(tel))
@@ -323,22 +749,25 @@ end
 
     spatial_filter = SpatialFilter(tel; shape=SquareFilter(), diameter=5,
         zero_padding=2)
-    spatial_formation = prepare_pupil_field(tel, path_a, src, field;
+    spatial_field = ElectricField(path_a, src; zero_padding=2,
+        normalization=DimensionlessNormalization(),
+        spatial_measure=PointSampledMeasure(),
+        coherence=CoherentFieldCombination())
+    spatial_formation = prepare_pupil_field(tel, path_a, src, spatial_field;
         center_even_grid=false, amplitude_scale=1)
-    fill_electric_field!(field, path_a, spatial_formation)
+    fill_electric_field!(spatial_field, path_a, spatial_formation)
     spatial_output = PupilFunction(tel)
-    spatial_plan = prepare_spatial_filter(tel, spatial_filter, field,
+    spatial_plan = prepare_spatial_filter(tel, spatial_filter, spatial_field,
         spatial_output)
     spatial_workspace = SpatialFilterWorkspace(spatial_filter)
-    explicit_spatial_filter_cycle!(spatial_output, field, spatial_filter,
+    explicit_spatial_filter_cycle!(spatial_output, spatial_field, spatial_filter,
         spatial_plan, spatial_workspace)
-    @test @allocated(explicit_spatial_filter_cycle!(spatial_output, field,
+    @test @allocated(explicit_spatial_filter_cycle!(spatial_output, spatial_field,
         spatial_filter, spatial_plan, spatial_workspace)) == 0
 end
 
 @testset "Optical-plane compatibility validation" begin
-    tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3,
-        central_obstruction=0.0)
+    tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     wavefront = PupilFunction(tel)
     field = ElectricField(wavefront, src; zero_padding=1)
@@ -465,7 +894,7 @@ end
     apply_mask!(spider, SpiderMask(thickness=0.08, angle_rad=pi / 2))
     @test count(spider) < length(spider)
 
-    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.25)
+    tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.25)
     expected = falses(32, 32)
     build_mask!(expected, AnnularAperture(inner_radius=0.25, outer_radius=1.0))
     @test pupil_mask(tel) == expected
@@ -475,7 +904,7 @@ end
     apply_mask!(manual, SpiderMask(thickness=0.1, angle_rad=pi / 2))
     @test pupil_mask(tel) == manual
 
-    sf_tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    sf_tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     sf = SpatialFilter(sf_tel; shape=SquareFilter(), diameter=4, zero_padding=2)
     @test count(x -> !iszero(x), sf.mask) > 0
     foucault = SpatialFilter(sf_tel; shape=FoucaultFilter(), diameter=4, zero_padding=2)
@@ -494,7 +923,7 @@ end
 end
 
 @testset "Zernike basis" begin
-    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     zb = ZernikeBasis(tel, 5)
     compute_zernike!(zb, tel)
     @test size(zb.modes) == (32, 32, 5)

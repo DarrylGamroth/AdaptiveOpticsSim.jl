@@ -99,7 +99,6 @@ function build_proper_hil_context(;
     tel = Telescope(
         resolution=resolution,
         diameter=diameter,
-        sampling_time=T(1e-3),
         central_obstruction=T(0.1),
         T=T,
         backend=selector,
@@ -113,7 +112,7 @@ function build_proper_hil_context(;
     sim = AOSimulation(tel, src, atm, optic, wfs)
 
     branch = ControlLoopBranch(:main, sim, NullReconstructor(); rng=runtime_rng(rng_seed))
-    cfg = SingleControlLoopConfig(
+    cfg = SingleControlLoopConfig(atmosphere_step=1e-3,
         name=:proper_hil,
         branch_label=:main,
         outputs=RuntimeOutputRequirements(slopes=true),

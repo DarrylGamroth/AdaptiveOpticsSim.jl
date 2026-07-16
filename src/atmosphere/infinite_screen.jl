@@ -198,7 +198,6 @@ function infinite_screen_telescope(
     return Telescope(
         resolution=resolution,
         diameter=delta * resolution,
-        sampling_time=one(T),
         central_obstruction=0.0,
         fov_arcsec=tel.params.fov_arcsec,
         T=T,

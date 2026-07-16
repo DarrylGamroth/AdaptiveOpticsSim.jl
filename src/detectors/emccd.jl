@@ -193,7 +193,8 @@ function validate_em_gain_model(model::StochasticMultiplicationRegister)
     return model
 end
 
-function apply_sensor_statistics!(sensor::EMCCDSensor, det::Detector, rng::AbstractRNG)
+function apply_sensor_statistics!(sensor::EMCCDSensor, det::Detector,
+    rng::AbstractRNG, exposure_time::Real)
     rate = effective_cic_rate(det)
     add_poisson_rate!(det.state.frame, det, rng, rate)
     return det.state.frame
@@ -310,7 +311,9 @@ function apply_emccd_detection_output!(mode::PhotonCountingEMMode,
     return det.state.frame
 end
 
-function _batched_sensor_statistics!(sensor::EMCCDSensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
+function _batched_sensor_statistics!(sensor::EMCCDSensor, det::Detector,
+    cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG,
+    exposure_time::Real)
     rate = effective_cic_rate(det)
     if rate > zero(rate)
         fill!(scratch, rate)

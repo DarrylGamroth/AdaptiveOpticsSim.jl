@@ -4,6 +4,20 @@ function apply_response!(model::AbstractFrameResponse, det::Detector)
     return apply_response!(execution_style(det.state.frame), model, det.state.frame, det.state.response_buffer)
 end
 
+@inline presampling_response_input!(::NullFrameResponse, det::Detector,
+    input::AbstractMatrix) = input
+
+function presampling_response_input!(model::AbstractFrameResponse, det::Detector,
+    input::AbstractMatrix)
+    det.params.psf_sampling == 1 || throw(InvalidConfiguration(
+        "a non-null detector response currently requires psf_sampling == 1; " *
+        "prepare an explicit optical-grid mapping before detector acquisition"))
+    copyto!(det.state.presampling_buffer, input)
+    apply_response!(execution_style(det.state.presampling_buffer), model,
+        det.state.presampling_buffer, det.state.presampling_scratch)
+    return det.state.presampling_buffer
+end
+
 function _apply_separable_response!(::ScalarCPUStyle, frame::AbstractMatrix, scratch::AbstractMatrix,
     kernel_y::AbstractVector, kernel_x::AbstractVector)
     n, m = size(frame)
@@ -15,7 +29,8 @@ function _apply_separable_response!(::ScalarCPUStyle, frame::AbstractMatrix, scr
             scratch[i, j] = zero_t
         end
         for kk in eachindex(kernel_x)
-            jj = clamp(j + kk - radius_x - 1, 1, m)
+            jj = j + kk - radius_x - 1
+            1 <= jj <= m || continue
             weight = kernel_x[kk]
             for i in 1:n
                 scratch[i, j] += weight * frame[i, jj]
@@ -30,7 +45,8 @@ function _apply_separable_response!(::ScalarCPUStyle, frame::AbstractMatrix, scr
             offset = kk - radius_y - 1
             weight = kernel_y[kk]
             for i in 1:n
-                ii = clamp(i + offset, 1, n)
+                ii = i + offset
+                1 <= ii <= n || continue
                 frame[i, j] += weight * scratch[ii, j]
             end
         end
@@ -64,9 +80,11 @@ function apply_response!(::ScalarCPUStyle, model::SampledFrameResponse, frame::A
             offset_j = kj - radius_j - 1
             weight = model.kernel[ki, kj]
             for j in 1:m
-                jj = clamp(j + offset_j, 1, m)
+                jj = j + offset_j
+                1 <= jj <= m || continue
                 for i in 1:n
-                    ii = clamp(i + offset_i, 1, n)
+                    ii = i + offset_i
+                    1 <= ii <= n || continue
                     scratch[i, j] += weight * frame[ii, jj]
                 end
             end
@@ -98,9 +116,18 @@ function apply_charge_coupling!(model::InterpixelCapacitance, det::Detector)
     return apply_response!(model.response, det)
 end
 
-function ensure_buffers!(det::Detector, n_mid::Int, m_mid::Int, n_out::Int, m_out::Int)
+function ensure_buffers!(det::Detector, n_in::Int, m_in::Int, n_mid::Int,
+    m_mid::Int, n_out::Int, m_out::Int)
     if size(det.state.frame) != (n_out, m_out)
         det.state.frame = similar(det.state.frame, n_out, m_out)
+    end
+    if size(det.state.presampling_buffer) != (n_in, m_in)
+        det.state.presampling_buffer = similar(det.state.presampling_buffer,
+            n_in, m_in)
+    end
+    if size(det.state.presampling_scratch) != (n_in, m_in)
+        det.state.presampling_scratch = similar(det.state.presampling_scratch,
+            n_in, m_in)
     end
     if size(det.state.response_buffer) != (n_out, m_out)
         det.state.response_buffer = similar(det.state.response_buffer, n_out, m_out)
@@ -158,50 +185,48 @@ function detector_frame_shape(det::Detector, input_shape::Tuple{Int,Int})
     return div(n_mid, binning), div(m_mid, binning)
 end
 
+function prepare_detector_buffers!(det::Detector,
+    input_shape::Tuple{Int,Int})
+    n_in, m_in = input_shape
+    n_out, m_out = detector_frame_shape(det, input_shape)
+    n_mid = div(n_in, det.params.psf_sampling)
+    m_mid = div(m_in, det.params.psf_sampling)
+    ensure_buffers!(det, n_in, m_in, n_mid, m_mid, n_out, m_out)
+    return det
+end
+
 function detector_output_shape(det::Detector, input_shape::Tuple{Int,Int})
     n_out, m_out = detector_frame_shape(det, input_shape)
     window = det.params.readout_window === nothing ? nothing : validate_readout_window(det.params.readout_window, n_out, m_out)
     return window === nothing ? (n_out, m_out) : (length(window.rows), length(window.cols))
 end
 
-function fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real, qe) where {T}
+function fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real,
+    qe, rate_scale) where {T}
     n_in, m_in = size(psf)
     sampling = det.params.psf_sampling
     binning = det.params.binning
-    if sampling < 1 || binning < 1
-        throw(InvalidConfiguration("psf_sampling and binning must be >= 1"))
-    end
-    if n_in % sampling != 0 || m_in % sampling != 0
-        throw(DimensionMismatchError("psf_sampling must evenly divide input dimensions"))
-    end
-    n_mid = div(n_in, sampling)
-    m_mid = div(m_in, sampling)
-    if n_mid % binning != 0 || m_mid % binning != 0
-        throw(DimensionMismatchError("binning must evenly divide sampled dimensions"))
-    end
-    n_out = div(n_mid, binning)
-    m_out = div(m_mid, binning)
-    ensure_buffers!(det, n_mid, m_mid, n_out, m_out)
+    prepare_detector_buffers!(det, (n_in, m_in))
 
+    optical_rate = presampling_response_input!(det.params.response_model, det,
+        psf)
     if sampling > 1
-        if binning > 1
-            bin2d!(det.state.frame, psf, sampling * binning)
-        else
-            bin2d!(det.state.bin_buffer, psf, sampling)
-            det.state.frame .= det.state.bin_buffer
-        end
+        bin2d!(det.state.bin_buffer, optical_rate, sampling)
     else
-        if binning > 1
-            bin2d!(det.state.frame, psf, binning)
-        else
-            det.state.frame .= psf
-        end
+        copyto!(det.state.bin_buffer, optical_rate)
     end
-    @. det.state.frame *= qe * exposure_time
-    apply_response!(det.params.response_model, det)
+    @. det.state.bin_buffer *= qe * exposure_time * rate_scale
+    if binning > 1
+        bin2d!(det.state.frame, det.state.bin_buffer, binning)
+    else
+        copyto!(det.state.frame, det.state.bin_buffer)
+    end
     return det.state.frame
 end
 
+fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real,
+    qe) where {T} = fill_frame!(det, psf, exposure_time, qe,
+        one(eltype(det.state.frame)))
 fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real) where {T} =
     fill_frame!(det, psf, exposure_time, det.params.qe)
 fill_frame!(det::Detector, psf::AbstractMatrix{T}) where {T} = fill_frame!(det, psf, det.params.integration_time)

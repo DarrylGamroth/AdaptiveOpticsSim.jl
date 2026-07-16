@@ -20,7 +20,9 @@ export build_mask!, apply_mask!
 
 export AbstractAtmosphere
 export Telescope, Source, LGSSource, Asterism
-export wavelength, photon_irradiance, optical_path
+export AbstractSourceRadiometry, PhysicalPhotonIrradianceSource
+export NormalizedTestSource, source_radiometry, source_radiometric_value
+export wavelength, photon_irradiance, optical_path, pupil_photon_rate_map
 export reset_opd!, apply_opd!, set_pupil!, set_pupil_reflectivity!
 export pupil_mask, pupil_reflectivity, apply_spiders!
 export compute_psf!, psf_pixel_scale_arcsec
@@ -34,11 +36,19 @@ export PupilPlane, FocalPlane, IntermediatePlane, DetectorPlane
 export AbstractPlaneCoordinateDomain, MetricCoordinates, AngularCoordinates
 export PlaneCentering, SampleCentered, InterSampleCentered
 export PlaneAxisOrientation, UnspecifiedSpectralCoordinate, MonochromaticChannel
+export AbstractOpticalNormalization, PhotonRateNormalization
+export DimensionlessNormalization
+export AbstractSpatialMeasure, PointSampledMeasure, SpatialDensityMeasure
+export CellIntegratedMeasure
+export AbstractCombinationPolicy, CoherentFieldCombination
+export IncoherentIntensityAddition, NonCombinableProduct
 export UnspecifiedNormalization, UnspecifiedSpatialMeasure, UnspecifiedCoherence
 export OpticalPlaneMetadata, plane_metadata, plane_device
 export PupilFunction, pupil_amplitude, opd_map
 export surface_opd, update_surface!, apply_surface!
 export ElectricField, field_values, IntensityMap, intensity_values
+export OpticalProductBundle, PreparedIncoherentSum
+export prepare_incoherent_sum, accumulate_intensity!
 export PupilFieldFormationPlan, prepare_pupil_field
 export fill_electric_field!, fill_electric_field_async!
 export FraunhoferPropagation, FresnelPropagation
@@ -99,6 +109,7 @@ export ArrheniusRateLaw, LinearTemperatureLaw, ExponentialTemperatureLaw
 export CountingDeadTimeModel, NoDeadTime, NonParalyzableDeadTime, ParalyzableDeadTime
 export DutyCycleGate, AfterpulsingModel, ChannelCrosstalkModel, CompositeCountingCorrelation
 export capture!, output_frame, channel_output, detector_export_metadata
+export DetectorAcquisitionPlan, prepare_detector_acquisition
 export detector_ramp_slope, detector_ramp_intercept
 export detector_ramp_cube, detector_ramp_times
 export readout_ready, reset_integration!, thermal_model
@@ -150,6 +161,7 @@ export SimulationEnsemble
 export sense!, step!, set_command!
 export readout, command, slopes, wfs_frame, science_frame, grouped_wfs_stack
 export runtime_timing
+export runtime_atmosphere_step
 
 export TomographyAtmosphereParams, LGSAsterismParams, LGSWFSParams
 export TomographyParams, TomographyDMParams

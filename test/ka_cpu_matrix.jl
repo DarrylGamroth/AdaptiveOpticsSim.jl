@@ -156,7 +156,7 @@ end
     end
 
     @testset "Telescope and pupil kernels" begin
-        params = TelescopeParams{Float64}(16, 8.0, 1e-3, 0.15, 0.0)
+        params = TelescopeParams{Float64}(16, 8.0, 0.15, 0.0)
         scalar_pupil = Matrix{Bool}(undef, 16, 16)
         ka_pupil = similar(scalar_pupil)
         AdaptiveOpticsSim._generate_pupil!(SCALAR_CPU_STYLE, scalar_pupil, params)
@@ -250,7 +250,7 @@ end
         @test block_out == block_stack[:, :, 1:4] .+ block_stack[:, :, 5:8]
 
         @test size(AdaptiveOpticsSim.grouped_stack_view(stack, 2), 3) == 2
-        grouped_tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+        grouped_tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
         grouped_wfs = ShackHartmannWFS(grouped_tel; n_lenslets=2, mode=Diffractive(), n_pix_subap=2)
         grouped_sources = [1.0, 2.0, 3.0]
         function fill_grouped_stage!(dest, scale, value)
@@ -299,6 +299,21 @@ end
         host_parent = zeros(Float64, size(values)...)
         @test first(AdaptiveOpticsSim.masked_sum2d(KA_CPU_STYLE, values_view, mask, mask,
             scalar_buffer, scalar_host, host_parent)) == 8.0
+        normalization_partials = zeros(Float64, size(values, 1))
+        normalization_sum = zeros(Float64, 1)
+        AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE,
+            AdaptiveOpticsSim.zernike_masked_row_sum_kernel!,
+            normalization_partials, values, mask, size(values, 1),
+            size(values, 2); ndrange=size(values, 1))
+        AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE,
+            AdaptiveOpticsSim.zernike_finalize_normalization_sum_kernel!,
+            normalization_sum, normalization_partials,
+            length(normalization_partials); ndrange=1)
+        mark_ka_cpu_kernel!(
+            :zernike_masked_row_sum_kernel!,
+            :zernike_finalize_normalization_sum_kernel!,
+        )
+        @test only(normalization_sum) == 8.0
         @test AdaptiveOpticsSim.backend_maximum_value(KA_CPU_STYLE, values) == 4.0
         signal = collect(1.0:8.0)
         @test AdaptiveOpticsSim.packed_valid_pair_mean(KA_CPU_STYLE, signal, mask) ==
@@ -328,10 +343,12 @@ end
         @test fft_stack[1, 1, 1] == 0.0 + 0.0im
 
         intensity_stack = zeros(Float64, pad, pad, n_spots)
+        intensity_scale = AdaptiveOpticsSim.sh_fft_intensity_scale(Float64, pad)
         AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.complex_abs2_stack_kernel!,
-            intensity_stack, fft_stack, pad, n_spots; ndrange=size(intensity_stack))
+            intensity_stack, fft_stack, intensity_scale, pad, n_spots;
+            ndrange=size(intensity_stack))
         mark_ka_cpu_kernel!(:complex_abs2_stack_kernel!)
-        @test intensity_stack[2, 2, 1] == 4.0
+        @test intensity_stack[2, 2, 1] == 4.0 * intensity_scale
         @test intensity_stack[2, 2, 2] == 0.0
 
         amp_scales = [2.0, 3.0]
@@ -502,7 +519,7 @@ end
     end
 
     @testset "Optics kernels" begin
-        tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+        tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
         src = Source(band=:I, magnitude=0.0)
         scalar_field = Matrix{ComplexF64}(undef, 16, 16)
         ka_field = similar(scalar_field)
@@ -638,6 +655,19 @@ end
         mark_ka_cpu_kernel!(:sampled_response_kernel!)
         @test ka_cpu_close(ka_frame, scalar_frame)
 
+        asymmetric = SampledFrameResponse(
+            [0.0 0.0 0.0; 0.1 0.2 0.7; 0.0 0.0 0.0])
+        fill!(scalar_frame, 0.0)
+        fill!(ka_frame, 0.0)
+        scalar_frame[3, end] = 1.0
+        ka_frame[3, end] = 1.0
+        AdaptiveOpticsSim.apply_response!(SCALAR_CPU_STYLE, asymmetric,
+            scalar_frame, scalar_scratch)
+        AdaptiveOpticsSim.apply_response!(KA_CPU_STYLE, asymmetric, ka_frame,
+            ka_scratch)
+        @test ka_cpu_close(ka_frame, scalar_frame)
+        @test sum(ka_frame) ≈ 0.9
+
         ramp_cube = Array{Float64}(undef, 5, 5, 5)
         for read_idx in axes(ramp_cube, 3)
             @views ramp_cube[:, :, read_idx] .=
@@ -679,6 +709,19 @@ end
         AdaptiveOpticsSim._batched_apply_response!(KA_CPU_STYLE, sampled, ka_cube, ka_cube_scratch)
         mark_ka_cpu_kernel!(:sampled_response_stack_kernel!)
         @test ka_cpu_close(ka_cube, scalar_cube)
+
+        fill!(scalar_cube, 0.0)
+        fill!(ka_cube, 0.0)
+        scalar_cube[1, 3, end] = 1.0
+        scalar_cube[2, 3, 1] = 1.0
+        ka_cube .= scalar_cube
+        AdaptiveOpticsSim._batched_apply_response!(SCALAR_CPU_STYLE,
+            asymmetric, scalar_cube, scalar_cube_scratch)
+        AdaptiveOpticsSim._batched_apply_response!(KA_CPU_STYLE, asymmetric,
+            ka_cube, ka_cube_scratch)
+        @test ka_cpu_close(ka_cube, scalar_cube)
+        @test sum(@view(ka_cube[1, :, :])) ≈ 0.9
+        @test sum(@view(ka_cube[2, :, :])) ≈ 0.3
 
         noise = reshape(collect(range(-0.2, 0.2; length=25)), 5, 5)
         scalar_frame .= frame
@@ -742,7 +785,7 @@ end
     end
 
     @testset "Pyramid kernels" begin
-        tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+        tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
         wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, modulation_points=3, mode=Diffractive())
 
         scalar_phasor = similar(wfs.state.phasor)
@@ -781,7 +824,7 @@ end
     end
 
     @testset "BioEdge kernels" begin
-        tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+        tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
         wfs = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
 
         scalar_edge_mask = similar(wfs.state.edge_mask)
@@ -845,6 +888,35 @@ end
         copyto!(ka_stack, ka_stack_tmp)
         mark_ka_cpu_kernel!(:elongation_apply_stack_kernel!)
         @test ka_cpu_close(ka_stack, scalar_stack)
+
+        n = 8
+        expected = reshape(collect(range(0.25, 2.0; length=n * n)), n, n)
+        expected_lgs_stack = cat(expected, reverse(expected; dims=2); dims=3)
+        identity_kernel_fft = ones(ComplexF64, n, n, 2)
+        scalar_lgs_stack = copy(expected_lgs_stack)
+        scalar_lgs_buffer = zeros(ComplexF64, n, n, 2)
+        scalar_fft_plan = AdaptiveOpticsSim.plan_fft_backend!(scalar_lgs_buffer, (1, 2))
+        scalar_ifft_plan = AdaptiveOpticsSim.plan_ifft_backend!(scalar_lgs_buffer, (1, 2))
+        AdaptiveOpticsSim._apply_lgs_convolution_stack!(SCALAR_CPU_STYLE,
+            scalar_lgs_stack, identity_kernel_fft, scalar_lgs_buffer,
+            scalar_fft_plan, scalar_ifft_plan)
+
+        ka_lgs_stack = copy(expected_lgs_stack)
+        ka_lgs_buffer = zeros(ComplexF64, n, n, 2)
+        ka_fft_plan = AdaptiveOpticsSim.plan_fft_backend!(ka_lgs_buffer, (1, 2))
+        ka_ifft_plan = AdaptiveOpticsSim.plan_ifft_backend!(ka_lgs_buffer, (1, 2))
+        AdaptiveOpticsSim._apply_lgs_convolution_stack!(KA_CPU_STYLE,
+            ka_lgs_stack, identity_kernel_fft, ka_lgs_buffer,
+            ka_fft_plan, ka_ifft_plan)
+        mark_ka_cpu_kernel!(
+            :real_to_complex_stack_kernel!,
+            :multiply_kernel_fft_stack_kernel!,
+            :complex_to_real_stack_kernel!,
+        )
+        @test ka_cpu_close(ka_lgs_stack, scalar_lgs_stack)
+        @test ka_cpu_close(ka_lgs_stack, expected_lgs_stack)
+        @test ka_cpu_close(vec(sum(ka_lgs_stack; dims=(1, 2))),
+            vec(sum(expected_lgs_stack; dims=(1, 2))))
     end
 
     @testset "KA CPU kernel inventory" begin
@@ -857,7 +929,6 @@ end
             :accumulate_selected_block_transpose_kernel!,
             :apply_command_kernel!,
             :calibration_ramp_kernel!,
-            :complex_to_real_scaled_stack_kernel!,
             :covariance_matrix_kernel!,
             :curvature_abs2_stack_kernel!,
             :curvature_branch_field_from_input_kernel!,
@@ -884,8 +955,6 @@ end
             :lift_gather_kernel!,
             :lift_scatter_update_kernel!,
             :masked_sum2d_kernel!,
-            :multiply_kernel_fft_stack_kernel!,
-            :real_to_complex_stack_kernel!,
             :scaled_shifted_coord_stack_kernel!,
             :selected_covariance_block_kernel!,
             :submatrix_extract_kernel!,

@@ -233,7 +233,8 @@ function apply_saturation!(det::Detector)
     return _apply_saturation!(_detector_value_plan(plan, style), det)
 end
 
-apply_sensor_statistics!(sensor::FrameSensorType, det::Detector, rng::AbstractRNG) = det.state.frame
+apply_sensor_statistics!(sensor::FrameSensorType, det::Detector,
+    rng::AbstractRNG, exposure_time::Real) = det.state.frame
 
 function apply_avalanche_excess_noise!(factor, det::Detector, rng::AbstractRNG)
     factor <= one(factor) && return det.state.frame
@@ -598,27 +599,43 @@ function finalize_capture!(det::Detector, rng::AbstractRNG, exposure_time::Real)
     return _finalize_capture!(det.params.sensor, det, rng, exposure_time)
 end
 
+function _finalize_incremental_capture!(::FrameSensorType, det::Detector,
+    rng::AbstractRNG, exposure_time::Real)
+    return finalize_readout_pipeline!(det, rng, exposure_time,
+        zero(exposure_time))
+end
+
+function finalize_incremental_capture!(det::Detector, rng::AbstractRNG,
+    exposure_time::Real)
+    return _finalize_incremental_capture!(det.params.sensor, det, rng,
+        exposure_time)
+end
+
 validated_temporal_frame(frame::AbstractMatrix) = frame
 validated_temporal_frame(frame) =
     throw(InvalidConfiguration("FunctionFrameSource must return an AbstractMatrix"))
 
-function initial_temporal_frame(source::FunctionFrameSource, det::Detector, time)
+function initial_temporal_frame(source::FunctionFrameSource, det::Detector,
+    time, exposure_time)
     return validated_temporal_frame(source.f(time))
 end
 
-function initial_temporal_frame(source::InPlaceFrameSource, det::Detector, time)
+function initial_temporal_frame(source::InPlaceFrameSource, det::Detector,
+    time, exposure_time)
     frame = ensure_temporal_buffer!(det, source.frame_size)
     sample_frame!(frame, source, time)
     return frame
 end
 
-function initial_temporal_frame(source::FunctionExposureFrameSource, det::Detector, time)
-    return validated_temporal_frame(source.f(time, zero(eltype(det.state.frame))))
+function initial_temporal_frame(source::FunctionExposureFrameSource,
+    det::Detector, time, exposure_time)
+    return validated_temporal_frame(source.f(time, exposure_time))
 end
 
-function initial_temporal_frame(source::InPlaceExposureFrameSource, det::Detector, time)
+function initial_temporal_frame(source::InPlaceExposureFrameSource,
+    det::Detector, time, exposure_time)
     frame = ensure_temporal_buffer!(det, source.frame_size)
-    sample_exposure_frame!(frame, source, time, zero(eltype(det.state.frame)))
+    sample_exposure_frame!(frame, source, time, exposure_time)
     return frame
 end
 
@@ -711,18 +728,52 @@ function write_output!(det::Detector)
     return _write_output!(plan, det, output, source)
 end
 
-function capture!(det::Detector, psf::AbstractMatrix{T}, rng::AbstractRNG) where {T}
-    capture_signal!(det, psf, rng, det.params.integration_time)
-    finalize_capture!(det, rng, det.params.integration_time)
-    advance_thermal!(det, det.params.integration_time)
-    return write_output!(det)
+@inline function require_whole_capture_idle(det::Detector)
+    iszero(det.state.integrated_time) && det.state.readout_ready ||
+        throw(InvalidConfiguration(
+            "cannot start a whole detector exposure while an incremental " *
+            "exposure is pending; complete it with sample_time or call " *
+            "reset_integration!"))
+    return nothing
+end
+
+@inline function completed_whole_capture_output!(det::Detector)
+    output = write_output!(det)
+    det.state.integrated_time = zero(det.state.integrated_time)
+    det.state.readout_ready = true
+    return output
+end
+
+function capture_with_quantum_efficiency!(det::Detector,
+    photon_rate::AbstractMatrix{T}, quantum_efficiency::Real,
+    rng::AbstractRNG) where {T}
+    require_whole_capture_idle(det)
+    exposure_time = det.params.integration_time
+    capture_signal!(det, photon_rate, rng, exposure_time,
+        quantum_efficiency)
+    finalize_capture!(det, rng, exposure_time)
+    advance_thermal!(det, exposure_time)
+    return completed_whole_capture_output!(det)
+end
+
+"""
+    capture!(detector, photon_rate, rng)
+
+Legacy matrix acquisition path. Each matrix value is interpreted as a
+cell-integrated photon-arrival rate on the input optical grid. The detector
+applies its configured exposure duration exactly once. Use
+`prepare_detector_acquisition` with an `IntensityMap` when geometry,
+radiometry, backend, and device contracts must be checked explicitly.
+"""
+function capture!(det::Detector, psf::AbstractMatrix{T},
+    rng::AbstractRNG) where {T}
+    return capture_with_quantum_efficiency!(det, psf, det.params.qe, rng)
 end
 
 function capture!(det::Detector, psf::AbstractMatrix{T}, src::AbstractSource, rng::AbstractRNG) where {T}
-    capture_signal!(det, psf, rng, det.params.integration_time, effective_qe(det, src, eltype(det.state.frame)))
-    finalize_capture!(det, rng, det.params.integration_time)
-    advance_thermal!(det, det.params.integration_time)
-    return write_output!(det)
+    require_whole_capture_idle(det)
+    return capture_with_quantum_efficiency!(det, psf,
+        effective_qe(det, src, eltype(det.state.frame)), rng)
 end
 
 function capture!(det::Detector, psf::AbstractMatrix{T}, src::AbstractSource; rng::AbstractRNG=Random.default_rng()) where {T}
@@ -730,15 +781,59 @@ function capture!(det::Detector, psf::AbstractMatrix{T}, src::AbstractSource; rn
 end
 
 function capture!(det::Detector, source::AbstractTemporalFrameSource, rng::AbstractRNG)
-    first_frame = initial_temporal_frame(source, det, zero(eltype(det.state.frame)))
-    capture_temporal_signal!(det, source, first_frame, rng, det.params.integration_time, det.params.timing_model)
-    finalize_capture!(det, rng, det.params.integration_time)
-    advance_thermal!(det, det.params.integration_time)
-    return write_output!(det)
+    require_whole_capture_idle(det)
+    exposure_time = det.params.integration_time
+    first_frame = initial_temporal_frame(source, det,
+        zero(eltype(det.state.frame)), exposure_time)
+    capture_temporal_signal!(det, source, first_frame, rng, exposure_time,
+        det.params.timing_model)
+    finalize_capture!(det, rng, exposure_time)
+    advance_thermal!(det, exposure_time)
+    return completed_whole_capture_output!(det)
 end
 
 function capture!(det::Detector, source::AbstractTemporalFrameSource; rng::AbstractRNG=Random.default_rng())
     return capture!(det, source, rng)
+end
+
+function capture_incremental!(det::Detector, psf::AbstractMatrix,
+    rng::AbstractRNG, sample_time::Real, qe=det.params.qe)
+    if !iszero(det.state.integrated_time) || !det.state.readout_ready
+        size(psf) == size(det.state.presampling_buffer) ||
+            throw(DimensionMismatchError(
+                "incremental detector input dimensions cannot change while " *
+                "an exposure is pending"))
+    end
+    prepare_detector_buffers!(det, size(psf))
+    T = eltype(det.state.frame)
+    dt = T(sample_time)
+    isfinite(dt) && dt > zero(T) || throw(InvalidConfiguration(
+        "sample_time must be finite and > 0"))
+    remaining = det.params.integration_time - det.state.integrated_time
+    tolerance = T(8) * eps(det.params.integration_time) *
+        max(one(T), abs(det.params.integration_time))
+    dt <= remaining + tolerance || throw(InvalidConfiguration(
+        "sample_time exceeds the remaining detector integration duration"))
+    dt = min(dt, remaining)
+
+    exposure_start = iszero(det.state.integrated_time)
+    exposure_start && fill!(det.state.accum_buffer,
+        zero(eltype(det.state.accum_buffer)))
+    capture_signal_pipeline!(det, psf, rng, dt, qe, exposure_start,
+        det.params.integration_time)
+    accumulate_incremental_charge_generation!(det, rng, dt)
+    det.state.accum_buffer .+= det.state.frame
+    det.state.integrated_time += dt
+    advance_thermal!(det, dt)
+    det.state.readout_ready = false
+    if det.state.integrated_time + tolerance >= det.params.integration_time
+        det.state.frame .= det.state.accum_buffer
+        finalize_incremental_capture!(det, rng, det.state.integrated_time)
+        fill!(det.state.accum_buffer, zero(eltype(det.state.accum_buffer)))
+        det.state.integrated_time = zero(det.state.integrated_time)
+        det.state.readout_ready = true
+    end
+    return write_output!(det)
 end
 
 function capture!(det::Detector, psf::AbstractMatrix{T}; rng::AbstractRNG=Random.default_rng(),
@@ -746,28 +841,5 @@ function capture!(det::Detector, psf::AbstractMatrix{T}; rng::AbstractRNG=Random
     if sample_time === nothing
         return capture!(det, psf, rng)
     end
-    dt = eltype(det.state.frame)(sample_time)
-    if dt <= 0
-        throw(InvalidConfiguration("sample_time must be > 0"))
-    end
-    if det.params.integration_time < dt
-        throw(InvalidConfiguration("sample_time must be <= detector integration_time"))
-    end
-    capture_signal!(det, psf, rng, dt)
-    if size(det.state.accum_buffer) != size(det.state.frame)
-        det.state.accum_buffer = similar(det.state.frame, size(det.state.frame)...)
-        fill!(det.state.accum_buffer, zero(eltype(det.state.accum_buffer)))
-    end
-    det.state.accum_buffer .+= det.state.frame
-    det.state.integrated_time += dt
-    advance_thermal!(det, dt)
-    det.state.readout_ready = false
-    if det.state.integrated_time + eps(dt) >= det.params.integration_time
-        det.state.frame .= det.state.accum_buffer
-        finalize_capture!(det, rng, det.state.integrated_time)
-        fill!(det.state.accum_buffer, zero(eltype(det.state.accum_buffer)))
-        det.state.integrated_time = zero(det.state.integrated_time)
-        det.state.readout_ready = true
-    end
-    return write_output!(det)
+    return capture_incremental!(det, psf, rng, sample_time)
 end

@@ -134,7 +134,9 @@ end
 
 _batched_pre_readout_gain!(::FrameSensorType, det::Detector, cube::AbstractArray,
     scratch::AbstractArray, rng::AbstractRNG) = cube
-_batched_sensor_statistics!(sensor::FrameSensorType, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
+_batched_sensor_statistics!(sensor::FrameSensorType, det::Detector,
+    cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG,
+    exposure_time::Real) = cube
 
 function _batched_avalanche_excess_noise!(factor, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
     factor <= one(factor) && return cube
@@ -476,9 +478,11 @@ function _batched_apply_response!(::ScalarCPUStyle, model::SampledFrameResponse,
             offset_j = kj - radius_j - 1
             weight = model.kernel[ki, kj]
             for j in 1:m
-                jj = clamp(j + offset_j, 1, m)
+                jj = j + offset_j
+                1 <= jj <= m || continue
                 for i in 1:n
-                    ii = clamp(i + offset_i, 1, n)
+                    ii = i + offset_i
+                    1 <= ii <= n || continue
                     for b in 1:n_batch
                         scratch[b, i, j] += weight * cube[b, ii, jj]
                     end
@@ -560,7 +564,8 @@ function _batched_apply_separable_response!(::ScalarCPUStyle, cube::AbstractArra
         offset = kk - radius_x - 1
         weight = kernel_x[kk]
         for j in 1:m
-            jj = clamp(j + offset, 1, m)
+            jj = j + offset
+            1 <= jj <= m || continue
             for i in 1:n, b in 1:n_batch
                 scratch[b, i, j] += weight * cube[b, i, jj]
             end
@@ -571,7 +576,8 @@ function _batched_apply_separable_response!(::ScalarCPUStyle, cube::AbstractArra
         offset = kk - radius_y - 1
         weight = kernel_y[kk]
         for j in 1:m, i in 1:n
-            ii = clamp(i + offset, 1, n)
+            ii = i + offset
+            1 <= ii <= n || continue
             for b in 1:n_batch
                 cube[b, i, j] += weight * scratch[b, ii, j]
             end
@@ -593,16 +599,19 @@ end
 
 function _apply_batched_detector_pipeline!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3},
     rng::AbstractRNG, qe=det.params.qe) where {T<:AbstractFloat}
+    require_whole_capture_idle(det)
     exposure_time = det.params.integration_time
+    _batched_apply_response!(execution_style(cube), det.params.response_model,
+        cube, scratch)
     qe_scale = qe * exposure_time
     isone(qe_scale) || (cube .*= qe_scale)
     _batched_signal_defects!(det.params.defect_model, cube, scratch, exposure_time)
-    _batched_apply_response!(execution_style(cube), det.params.response_model, cube, scratch)
     capture_stack_poisson_noise!(det, cube, rng)
     _batched_background_flux!(det.background_flux, det, cube, scratch, rng, exposure_time)
     _batched_dark_current!(det, cube, scratch, rng, exposure_time)
     _batched_dark_defects!(det.params.defect_model, cube, scratch, exposure_time)
-    _batched_sensor_statistics!(det.params.sensor, det, cube, scratch, rng)
+    _batched_sensor_statistics!(det.params.sensor, det, cube, scratch, rng,
+        exposure_time)
     _batched_frame_nonlinearity!(det.params.nonlinearity_model, cube)
     apply_saturation!(det, cube)
     _batched_charge_transfer!(det.params.sensor, det, cube, scratch)
@@ -617,6 +626,9 @@ function _apply_batched_detector_pipeline!(det::Detector, cube::AbstractArray{T,
     _batched_quantization!(det, cube)
     _batched_background_map!(det.background_map, cube, scratch)
     synchronize_backend!(execution_style(cube))
+    advance_thermal!(det, exposure_time)
+    det.state.integrated_time = zero(det.state.integrated_time)
+    det.state.readout_ready = true
     return cube
 end
 
@@ -640,16 +652,23 @@ function _require_generalized_batched_detector_compat(det::Detector, out_cube::A
     return nothing
 end
 
-function _capture_stack_generalized!(det::Detector, out_cube::AbstractArray{TO,3}, in_cube::AbstractArray{TI,3};
-    rng::AbstractRNG=Random.default_rng()) where {TO,TI}
+function _capture_stack_generalized!(det::Detector,
+    out_cube::AbstractArray{TO,3}, in_cube::AbstractArray{TI,3};
+    rng::AbstractRNG=Random.default_rng(),
+    qe=det.params.qe) where {TO,TI}
     _require_generalized_batched_detector_compat(det, out_cube, in_cube)
+    require_whole_capture_idle(det)
+    exposure_time = det.params.integration_time
     for b in axes(in_cube, 1)
         input_frame = @view(in_cube[b, :, :])
         output_frame = @view(out_cube[b, :, :])
-        capture_signal!(det, input_frame, rng, det.params.integration_time)
-        finalize_capture!(det, rng, det.params.integration_time)
+        capture_signal!(det, input_frame, rng, exposure_time, qe)
+        finalize_capture!(det, rng, exposure_time)
         copyto!(output_frame, write_output!(det))
     end
+    advance_thermal!(det, exposure_time)
+    det.state.integrated_time = zero(det.state.integrated_time)
+    det.state.readout_ready = true
     return out_cube
 end
 
@@ -667,7 +686,21 @@ function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::Abstra
         _require_batched_detector_compat(det, cube, scratch)
         return _apply_batched_detector_pipeline!(det, cube, scratch, rng, effective_qe(det, src, eltype(cube)))
     end
-    return _capture_stack_generalized!(det, cube, scratch; rng=rng)
+    return _capture_stack_generalized!(det, cube, scratch; rng=rng,
+        qe=effective_qe(det, src, eltype(det.state.frame)))
+end
+
+function capture_stack_with_quantum_efficiency!(det::Detector,
+    cube::AbstractArray{T,3}, scratch::AbstractArray{S,3}, qe::Real,
+    rng::AbstractRNG) where {T<:AbstractFloat,S<:AbstractFloat}
+    size(cube) == size(scratch) || throw(DimensionMismatchError(
+        "explicit-QE batched detector scratch must match cube size"))
+    qe_t = T(qe)
+    isfinite(qe_t) && zero(T) <= qe_t <= one(T) || throw(
+        InvalidConfiguration(
+            "explicit batched quantum efficiency must lie in [0, 1]"))
+    _require_batched_detector_compat(det, cube, scratch)
+    return _apply_batched_detector_pipeline!(det, cube, scratch, rng, qe_t)
 end
 
 function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{S,3},
@@ -685,13 +718,26 @@ function capture_stack!(det::Detector, out_cube::AbstractArray{TO,3}, in_cube::A
     return _capture_stack_generalized!(det, out_cube, in_cube; rng=rng)
 end
 
+function capture_stack!(det::Detector, out_cube::AbstractArray{TO,3},
+    in_cube::AbstractArray{TI,3}, src::AbstractSource,
+    rng::AbstractRNG) where {TO,TI<:AbstractFloat}
+    return _capture_stack_generalized!(det, out_cube, in_cube; rng=rng,
+        qe=effective_qe(det, src, eltype(det.state.frame)))
+end
+
 function capture_stack!(det::Detector, out_cube::AbstractArray{TO,3}, in_cube::AbstractArray{TI,3};
     rng::AbstractRNG=Random.default_rng()) where {TO,TI<:AbstractFloat}
     return capture_stack!(det, out_cube, in_cube, rng)
 end
 
+function capture_stack!(det::Detector, out_cube::AbstractArray{TO,3},
+    in_cube::AbstractArray{TI,3}, src::AbstractSource;
+    rng::AbstractRNG=Random.default_rng()) where {TO,TI<:AbstractFloat}
+    return capture_stack!(det, out_cube, in_cube, src, rng)
+end
+
 function apply_saturation!(det::Detector, cube::AbstractArray)
-    full_well = det.params.full_well
+    full_well = sensor_saturation_limit(det)
     full_well === nothing && return cube
     clamp_array!(cube, zero(eltype(cube)), full_well)
     return cube

@@ -149,6 +149,7 @@ mutable struct BioEdgeState{T<:AbstractFloat,
     asterism_capacity::Int
     calibrated::Bool
     calibration_wavelength::T
+    calibration_signature::UInt
 end
 
 struct BioEdgeWFS{M<:SensingMode,P<:BioEdgeParams,S<:BioEdgeState,B<:AbstractArrayBackend} <: AbstractWFS
@@ -180,11 +181,17 @@ function BioEdgeWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1,
 
     selector = require_same_backend(tel, _resolve_backend_selector(backend))
     backend = _resolve_array_backend(selector)
+    pupil_samples >= 1 || throw(InvalidConfiguration(
+        "pupil_samples must be >= 1"))
     if tel.params.resolution % pupil_samples != 0
         throw(InvalidConfiguration("telescope resolution must be divisible by pupil_samples"))
     end
     if binning < 1
         throw(InvalidConfiguration("binning must be >= 1"))
+    end
+    if pupil_samples % binning != 0
+        throw(InvalidConfiguration(
+            "BioEdge binning must evenly divide pupil_samples"))
     end
     grey_length_val = grey_length === false ? false : T(grey_length)
     n_mod = resolve_modulation_points(T(modulation), modulation_points, extra_modulation_factor, user_modulation_path)
@@ -306,6 +313,7 @@ function BioEdgeWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1,
         1,
         false,
         zero(T),
+        UInt(0),
     )
     wfs = BioEdgeWFS{typeof(mode), typeof(params), typeof(state), typeof(selector)}(params, state)
     update_valid_mask!(wfs, tel)
@@ -626,9 +634,33 @@ function sample_bioedge_phase!(wfs::BioEdgeWFS, phase::AbstractMatrix{T}) where 
     return wfs.state.binned_phase, wfs.state.edge_mask_binned
 end
 
-function resize_bioedge_signal_buffers!(wfs::BioEdgeWFS, frame_rows::Int)
+@inline resize_bioedge_signal_buffers!(wfs::BioEdgeWFS,
+    frame_rows::Int) = resize_bioedge_signal_buffers!(wfs, frame_rows, 1)
+
+@inline resize_bioedge_signal_buffers!(wfs::BioEdgeWFS,
+    frame_rows::Int, ::AbstractDetector) =
+    resize_bioedge_signal_buffers!(wfs, frame_rows)
+
+@inline resize_bioedge_signal_buffers!(wfs::BioEdgeWFS,
+    frame_rows::Int, det::Detector) = resize_bioedge_signal_buffers!(wfs,
+    frame_rows, det.params.psf_sampling * det.params.binning)
+
+function resize_bioedge_signal_buffers!(wfs::BioEdgeWFS, frame_rows::Int,
+    detector_reduction::Int)
     nominal = wfs.state.nominal_detector_resolution
-    n_pixels = max(1, round(Int, nominal / (2 * wfs.params.binning)))
+    detector_reduction >= 1 || throw(InvalidConfiguration(
+        "BioEdge detector sampling reduction must be >= 1"))
+    nominal_pixels = max(1,
+        round(Int, nominal / (2 * wfs.params.binning)))
+    nominal_pixels % detector_reduction == 0 || throw(InvalidConfiguration(
+        "detector sampling and binning must preserve an integer BioEdge pupil image"))
+    n_pixels = div(nominal_pixels, detector_reduction)
+    n_pixels >= 1 || throw(InvalidConfiguration(
+        "detector sampling and binning removed every BioEdge pupil sample"))
+    iseven(frame_rows) || throw(InvalidConfiguration(
+        "BioEdge camera frame must have even dimensions for symmetric pupil extraction"))
+    frame_rows >= 2 * n_pixels || throw(InvalidConfiguration(
+        "BioEdge camera frame does not contain four complete pupil images"))
     if size(wfs.state.valid_i4q) != (n_pixels, n_pixels)
         wfs.state.valid_i4q = similar(wfs.state.valid_i4q, n_pixels, n_pixels)
         fill!(wfs.state.valid_i4q, false)
@@ -647,6 +679,19 @@ function resize_bioedge_signal_buffers!(wfs::BioEdgeWFS, frame_rows::Int)
     end
     update_bioedge_valid_signal!(wfs)
     return wfs
+end
+
+@inline function require_bioedge_frame_geometry(wfs::BioEdgeWFS,
+    frame::AbstractMatrix)
+    n_rows, n_cols = size(frame)
+    n_rows == n_cols || throw(DimensionMismatchError(
+        "BioEdge camera frame must be square"))
+    iseven(n_rows) || throw(InvalidConfiguration(
+        "BioEdge camera frame must have even dimensions for symmetric pupil extraction"))
+    n_pixels = size(wfs.state.signal_2d, 2)
+    n_rows >= 2 * n_pixels || throw(DimensionMismatchError(
+        "BioEdge camera frame does not contain four complete pupil images"))
+    return div(n_rows, 2)
 end
 
 function sample_bioedge_intensity!(wfs::BioEdgeWFS, tel::Telescope, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}

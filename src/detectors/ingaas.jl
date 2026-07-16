@@ -34,13 +34,21 @@ function validate_persistence_model(model::ExponentialPersistence)
     return model
 end
 
-function apply_sensor_statistics!(sensor::InGaAsSensor, det::Detector, rng::AbstractRNG)
-    rate = effective_glow_rate(det) * effective_sensor_glow_time(sensor, det.params.integration_time)
+function apply_sensor_statistics!(sensor::InGaAsSensor, det::Detector,
+    rng::AbstractRNG, exposure_time::Real)
+    rate = effective_glow_rate(det) *
+        effective_sensor_glow_time(sensor, exposure_time)
     rate <= zero(rate) && return det.state.frame
     fill!(det.state.noise_buffer, rate)
     poisson_noise!(rng, det.state.noise_buffer)
     det.state.frame .+= det.state.noise_buffer
     return det.state.frame
+end
+
+function apply_incremental_sensor_statistics!(sensor::InGaAsSensor,
+    det::Detector, rng::AbstractRNG, exposure_time::Real)
+    rate = effective_glow_rate(det) * exposure_time
+    return add_poisson_rate!(det.state.frame, det, rng, rate)
 end
 
 apply_sensor_persistence!(::InGaAsSensor{T,NullPersistence}, det::Detector, exposure_time::Real) where {T} = det.state.frame
@@ -65,8 +73,11 @@ function apply_post_readout_gain!(::InGaAsSensor, det::Detector)
     return det.state.frame
 end
 
-function _batched_sensor_statistics!(sensor::InGaAsSensor, det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
-    rate = effective_glow_rate(det) * effective_sensor_glow_time(sensor, det.params.integration_time)
+function _batched_sensor_statistics!(sensor::InGaAsSensor, det::Detector,
+    cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG,
+    exposure_time::Real)
+    rate = effective_glow_rate(det) *
+        effective_sensor_glow_time(sensor, exposure_time)
     rate <= zero(rate) && return cube
     fill!(scratch, rate)
     poisson_noise!(rng, scratch)

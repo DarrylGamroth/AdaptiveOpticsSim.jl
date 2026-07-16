@@ -51,6 +51,7 @@ function atmosphere_gsc_trace(
     og_floor::Real=0.05,
     n_iter::Int=6,
     seed::Integer=7,
+    atmosphere_step::Real=1e-3,
 )
     rng = tutorial_rng(seed)
     H = zeros(Float64, length(wfs.state.slopes), size(basis, 3))
@@ -89,7 +90,7 @@ function atmosphere_gsc_trace(
 
     trace = Matrix{Float64}(undef, n_iter, 7)
     for iter in 1:n_iter
-        epoch = advance_by!(atm, tel.params.sampling_time; rng=rng)
+        epoch = advance_by!(atm, atmosphere_step; rng=rng)
         render_atmosphere!(atmosphere_output, atmosphere_renderer, atm, epoch)
         forcing_opd .= atmosphere_output.opd
         combine_modes!(correction_opd, basis, control_coeffs)

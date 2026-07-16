@@ -58,7 +58,7 @@ function subharmonic_metrics(atm::KolmogorovAtmosphere, D::Real;
 end
 
 function main()
-    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     println("L0\tmode\ttiptilt_power\tstructure_energy\tadded_variance\ttheory_variance\tratio")
     for L0 in (25.0, 50.0, 100.0, 200.0)
         atm = KolmogorovAtmosphere(tel; r0=0.2, L0=L0)

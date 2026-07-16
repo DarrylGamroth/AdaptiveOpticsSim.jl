@@ -160,6 +160,8 @@ end
 @inline runtime_profile(runtime::SharedOpticalRuntime) = runtime_profile(runtime.runtime)
 @inline runtime_execution_plan(runtime::SharedOpticalRuntime) = runtime_execution_plan(runtime.runtime)
 @inline runtime_latency(runtime::SharedOpticalRuntime) = runtime_latency(runtime.runtime)
+@inline runtime_atmosphere_step(runtime::SharedOpticalRuntime) =
+    runtime_atmosphere_step(runtime.runtime)
 @inline command_layout(runtime::SharedOpticalRuntime) = command_layout(runtime.runtime)
 @inline simulation_readout(runtime::SharedOpticalRuntime) = simulation_readout(runtime.runtime)
 
@@ -277,7 +279,7 @@ end
 function sense!(runtime::SharedOpticalRuntime)
     primary = runtime.runtime
     advance_runtime_atmosphere!(primary.wfs, primary.atm, primary.tel,
-        primary.rng)
+        primary.atmosphere_step, primary.rng)
     sense_runtime!(ReuseAdvancedRuntimeAtmosphere(), primary)
     execute_shared_optical_arms!(runtime.arms, runtime.atmosphere_renderers,
         primary,

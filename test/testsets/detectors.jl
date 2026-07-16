@@ -1,4 +1,278 @@
+function detector_test_intensity_map(values::AbstractMatrix{T};
+    kind::AbstractOpticalPlaneKind=FocalPlane(),
+    sampling::NTuple{2,T}=(one(T), one(T)),
+    normalization::AbstractOpticalNormalization=PhotonRateNormalization(),
+    spatial_measure::AbstractSpatialMeasure=CellIntegratedMeasure(),
+    coherence::AbstractCombinationPolicy=IncoherentIntensityAddition(),
+    spectral::AbstractSpectralCoordinate=UnspecifiedSpectralCoordinate()) where {T<:AbstractFloat}
+    metadata = OpticalPlaneMetadata(kind, values;
+        coordinate_domain=AngularCoordinates(), sampling=sampling,
+        normalization=normalization, spatial_measure=spatial_measure,
+        coherence=coherence, spectral=spectral)
+    return IntensityMap(metadata, values)
+end
+
+struct UnkeyedCalibrationFrameResponse{T<:AbstractFloat} <:
+    AdaptiveOpticsSim.AbstractFrameResponse
+    alpha::T
+end
+
+function AdaptiveOpticsSim.convert_frame_response_model(
+    model::UnkeyedCalibrationFrameResponse, ::Type{T}, backend) where
+    {T<:AbstractFloat}
+    return UnkeyedCalibrationFrameResponse{T}(T(model.alpha))
+end
+
+AdaptiveOpticsSim.validate_frame_response_model(
+    model::UnkeyedCalibrationFrameResponse) = model
+
+@testset "Sampled detector parameter ownership" begin
+    raw_kernel = [0.0 0.1 0.0; 0.1 0.6 0.1; 0.0 0.1 0.0]
+    sampled_response = SampledFrameResponse(raw_kernel)
+    sampled_snapshot = copy(sampled_response.kernel)
+    raw_kernel[2, 2] = 0.2
+    @test sampled_response.kernel == sampled_snapshot
+
+    typed_kernel = copy(sampled_snapshot)
+    typed_response = SampledFrameResponse{
+        Float64,typeof(typed_kernel)}(typed_kernel)
+    typed_kernel[2, 2] = 0.2
+    @test typed_response.kernel == sampled_snapshot
+
+    gaussian_kernel = [0.25, 0.5, 0.25]
+    gaussian_response = GaussianPixelResponse{
+        Float64,typeof(gaussian_kernel)}(0.75, gaussian_kernel)
+    gaussian_kernel[2] = 0.25
+    @test gaussian_response.kernel == [0.25, 0.5, 0.25]
+
+    rectangular_kernel_x = [0.25, 0.5, 0.25]
+    rectangular_kernel_y = [0.125, 0.75, 0.125]
+    rectangular_response = RectangularPixelAperture{
+        Float64,typeof(rectangular_kernel_x),typeof(rectangular_kernel_y)}(
+            2.0, 2.0, 0.75, 0.5, rectangular_kernel_x,
+            rectangular_kernel_y)
+    rectangular_kernel_x[2] = 0.25
+    rectangular_kernel_y[2] = 0.5
+    @test rectangular_response.kernel_x == [0.25, 0.5, 0.25]
+    @test rectangular_response.kernel_y == [0.125, 0.75, 0.125]
+
+    raw_wavelengths = [0.5e-6, 0.6e-6, 0.7e-6]
+    raw_qe = [0.2, 0.8, 0.4]
+    sampled_qe = SampledQuantumEfficiency(raw_wavelengths, raw_qe)
+    wavelength_snapshot = copy(sampled_qe.wavelengths)
+    qe_snapshot = copy(sampled_qe.values)
+    raw_wavelengths[1] = 0.4e-6
+    raw_qe[1] = 0.9
+    @test sampled_qe.wavelengths == wavelength_snapshot
+    @test sampled_qe.values == qe_snapshot
+
+    typed_wavelengths = copy(wavelength_snapshot)
+    typed_values = copy(qe_snapshot)
+    typed_qe = AdaptiveOpticsSim.SampledQuantumEfficiency{
+        Float64,typeof(typed_wavelengths)}(
+            typed_wavelengths, typed_values, 0.0)
+    typed_wavelengths[1] = 0.4e-6
+    typed_values[1] = 0.9
+    @test typed_qe.wavelengths == wavelength_snapshot
+    @test typed_qe.values == qe_snapshot
+
+    raw_cmos_sigma = [0.1 0.2; 0.3 0.4]
+    cmos_noise = CMOSReadNoiseMap(raw_cmos_sigma)
+    raw_cmos_sigma[1, 1] = 9.0
+    @test cmos_noise.sigma == [0.1 0.2; 0.3 0.4]
+
+    typed_cmos_sigma = [0.1 0.2; 0.3 0.4]
+    typed_cmos_noise = CMOSReadNoiseMap{
+        Float64,typeof(typed_cmos_sigma)}(typed_cmos_sigma)
+    typed_cmos_sigma[1, 1] = 9.0
+    @test typed_cmos_noise.sigma == [0.1 0.2; 0.3 0.4]
+
+    raw_output_gains = [1.0, 1.1]
+    raw_output_offsets = [0.0, 0.2]
+    output_pattern = StaticCMOSOutputPattern(2, raw_output_gains,
+        raw_output_offsets)
+    typed_output_pattern = StaticCMOSOutputPattern{
+        Float64,typeof(raw_output_gains),typeof(raw_output_offsets)}(
+            2, raw_output_gains, raw_output_offsets)
+    raw_output_gains[1] = 9.0
+    raw_output_offsets[1] = 9.0
+    @test output_pattern.gains == [1.0, 1.1]
+    @test output_pattern.offsets == [0.0, 0.2]
+    @test typed_output_pattern.gains == [1.0, 1.1]
+    @test typed_output_pattern.offsets == [0.0, 0.2]
+
+    raw_background = [0.1 0.2; 0.3 0.4]
+    typed_background = BackgroundFrame{
+        Float64,typeof(raw_background)}(raw_background)
+    raw_background[1, 1] = 9.0
+    @test typed_background.map == [0.1 0.2; 0.3 0.4]
+
+    inferred_background_values = [0.4 0.3; 0.2 0.1]
+    inferred_background = BackgroundFrame(inferred_background_values)
+    inferred_background_values[1, 1] = 9.0
+    @test inferred_background.map == [0.4 0.3; 0.2 0.1]
+
+    sensor_sigma = zeros(2, 2)
+    sensor_gains = [1.0, 2.0]
+    sensor_offsets = [0.0, 10.0]
+    external_cmos_sensor = CMOSSensor(
+        column_readout_sigma=0.25,
+        row_readout_sigma=0.5,
+        readout_noise_model=CMOSReadNoiseMap(sensor_sigma),
+        output_model=StaticCMOSOutputPattern(1, sensor_gains,
+            sensor_offsets),
+        timing_model=RollingShutter(0.01),
+    )
+    owned_cmos_detector = Detector(noise=NoiseNone(), qe=1.0,
+        response_model=NullFrameResponse(), sensor=external_cmos_sensor,
+        T=Float32)
+    owned_cmos_sensor = owned_cmos_detector.params.sensor
+    @test owned_cmos_sensor !== external_cmos_sensor
+    @test owned_cmos_sensor.readout_noise_model.sigma !==
+        external_cmos_sensor.readout_noise_model.sigma
+    @test owned_cmos_sensor.output_model.gains !==
+        external_cmos_sensor.output_model.gains
+    @test owned_cmos_sensor.output_model.offsets !==
+        external_cmos_sensor.output_model.offsets
+    @test eltype(owned_cmos_sensor.readout_noise_model.sigma) === Float32
+    @test eltype(owned_cmos_sensor.output_model.gains) === Float32
+    @test owned_cmos_sensor.column_readout_sigma == 0.25f0
+    @test owned_cmos_sensor.row_readout_sigma == 0.5f0
+    @test owned_cmos_sensor.timing_model.line_time == 0.01f0
+    owned_cmos_before = copy(capture!(owned_cmos_detector,
+        ones(Float32, 2, 2); rng=MersenneTwister(2300)))
+    fill!(external_cmos_sensor.readout_noise_model.sigma, 9.0)
+    fill!(external_cmos_sensor.output_model.gains, 9.0)
+    fill!(external_cmos_sensor.output_model.offsets, 9.0)
+    owned_cmos_after = copy(capture!(owned_cmos_detector,
+        ones(Float32, 2, 2); rng=MersenneTwister(2300)))
+    @test owned_cmos_after == owned_cmos_before
+    @test all(iszero, owned_cmos_sensor.readout_noise_model.sigma)
+    @test owned_cmos_sensor.output_model.gains == Float32[1, 2]
+    @test owned_cmos_sensor.output_model.offsets == Float32[0, 10]
+
+    # Ordinary detector construction accepts an extension response after the
+    # extension supplies conversion and validation, but WFS reference caching
+    # must not key instance-dependent behavior by type alone.
+    unkeyed_response = Detector(noise=NoiseNone(),
+        response_model=UnkeyedCalibrationFrameResponse(0.25))
+    @test_throws InvalidConfiguration begin
+        AdaptiveOpticsSim.detector_calibration_signature(
+            unkeyed_response, UInt(0))
+    end
+
+    detector = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=sampled_qe, response_model=sampled_response)
+    @test detector.params.response_model.kernel !== sampled_response.kernel
+    @test detector.params.quantum_efficiency_model.wavelengths !==
+        sampled_qe.wavelengths
+    @test detector.params.quantum_efficiency_model.values !==
+        sampled_qe.values
+    src = Source(band=:custom, wavelength=0.6e-6,
+        photon_irradiance=1.0)
+    impulse = zeros(5, 5)
+    impulse[3, 3] = 1.0
+    before = copy(capture!(detector, impulse, src;
+        rng=MersenneTwister(2301)))
+    signature_before = AdaptiveOpticsSim.detector_calibration_signature(
+        detector, UInt(7))
+
+    sampled_response.kernel[2, 2] = 0.2
+    sampled_qe.values[2] = 0.1
+    after = copy(capture!(detector, impulse, src;
+        rng=MersenneTwister(2301)))
+    @test after == before
+    @test AdaptiveOpticsSim.detector_calibration_signature(
+        detector, UInt(7)) == signature_before
+
+    raw_gain_map = [1.0 0.8; 0.9 1.1]
+    raw_dark_map = [0.1 0.2; 0.3 0.4]
+    raw_bad_mask = Bool[false true; false false]
+    prnu = PixelResponseNonuniformity(raw_gain_map)
+    dsnu = DarkSignalNonuniformity(raw_dark_map)
+    bad_pixels = BadPixelMask(raw_bad_mask; throughput=0.0)
+    raw_gain_map[1, 1] = 0.1
+    raw_dark_map[1, 1] = 0.9
+    raw_bad_mask[1, 1] = true
+    @test prnu.gain_map == [1.0 0.8; 0.9 1.1]
+    @test dsnu.dark_map == [0.1 0.2; 0.3 0.4]
+    @test bad_pixels.mask == Bool[false true; false false]
+
+    typed_gain_map = [1.0 0.8; 0.9 1.1]
+    typed_dark_map = [0.1 0.2; 0.3 0.4]
+    typed_bad_mask = Bool[false true; false false]
+    typed_prnu = PixelResponseNonuniformity{
+        Float64,typeof(typed_gain_map)}(typed_gain_map)
+    typed_dsnu = DarkSignalNonuniformity{
+        Float64,typeof(typed_dark_map)}(typed_dark_map)
+    typed_bad_pixels = BadPixelMask{
+        Float64,typeof(typed_bad_mask)}(typed_bad_mask, 0.0)
+    typed_gain_map[1, 1] = 0.2
+    typed_dark_map[1, 1] = 0.9
+    typed_bad_mask[1, 1] = true
+    @test typed_prnu.gain_map[1, 1] == 1.0
+    @test typed_dsnu.dark_map[1, 1] == 0.1
+    @test !typed_bad_pixels.mask[1, 1]
+
+    composite_defects = CompositeDetectorDefectModel(prnu, bad_pixels)
+    @test composite_defects.stages[1].gain_map !== prnu.gain_map
+    @test composite_defects.stages[2].mask !== bad_pixels.mask
+
+    defect_detector = Detector(noise=NoiseNone(), sensor=CMOSSensor(),
+        defect_model=composite_defects)
+    defect_signature = AdaptiveOpticsSim.detector_calibration_signature(
+        defect_detector, UInt(8))
+    @test defect_detector.params.defect_model.stages[1].gain_map !==
+        prnu.gain_map
+    @test defect_detector.params.defect_model.stages[2].mask !==
+        bad_pixels.mask
+    prnu.gain_map[1, 1] = 0.2
+    bad_pixels.mask[2, 2] = true
+    @test composite_defects.stages[1].gain_map[1, 1] == 1.0
+    @test !composite_defects.stages[2].mask[2, 2]
+    @test AdaptiveOpticsSim.detector_calibration_signature(
+        defect_detector, UInt(8)) == defect_signature
+
+    replacement_detector = Detector(noise=NoiseNone(), sensor=CMOSSensor(),
+        defect_model=CompositeDetectorDefectModel(
+            PixelResponseNonuniformity([0.7 0.8; 0.9 1.1]),
+            BadPixelMask(Bool[false true; true false]; throughput=0.0)))
+    @test AdaptiveOpticsSim.detector_calibration_signature(
+        replacement_detector, UInt(8)) != defect_signature
+end
+
+function prepared_detector_capture_allocations(det, map, plan, rng)
+    capture!(det, map, plan, rng)
+    return @allocated capture!(det, map, plan, rng)
+end
+
+function prepared_incremental_capture_allocations(det, map, plan, rng,
+    sample_time)
+    capture!(det, map, plan; rng=rng, sample_time=sample_time)
+    return @allocated capture!(det, map, plan; rng=rng,
+        sample_time=sample_time)
+end
+
+function prepared_first_incremental_capture_allocations(det, map, plan, rng,
+    sample_time)
+    capture!(det, map, plan; rng=rng, sample_time=sample_time)
+    reset_integration!(det)
+    return @allocated capture!(det, map, plan; rng=rng,
+        sample_time=sample_time)
+end
+
+function fixed_stack_capture_allocations(det, cube, scratch, rng)
+    AdaptiveOpticsSim.capture_stack!(det, cube, scratch, rng)
+    fill!(cube, one(eltype(cube)))
+    return @allocated AdaptiveOpticsSim.capture_stack!(det, cube, scratch,
+        rng)
+end
+
 @testset "Detector" begin
+    cadence_free_tel = Telescope(resolution=8, diameter=1.0,
+        central_obstruction=0.0)
+    @test !hasfield(typeof(cadence_free_tel.params), :sampling_time)
+
     psf = fill(1.0, 8, 8)
     det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=2)
     frame = capture!(det, psf; rng=MersenneTwister(2))
@@ -10,6 +284,321 @@
     @test size(frame_sampling) == (2, 2)
     @test sum(frame_sampling) == sum(psf)
 
+    rate_values = reshape(Float64.(1:16), 4, 4)
+    shared_rate = detector_test_intensity_map(rate_values)
+    shared_rate_before = copy(shared_rate.values)
+    short_exposure = Detector(integration_time=0.25, noise=NoiseNone(),
+        qe=0.5, response_model=NullFrameResponse())
+    long_exposure = Detector(integration_time=1.5, noise=NoiseNone(),
+        qe=0.5, response_model=NullFrameResponse())
+    short_plan = prepare_detector_acquisition(short_exposure, shared_rate)
+    long_plan = prepare_detector_acquisition(long_exposure, shared_rate)
+    @test !applicable(DetectorAcquisitionPlan, short_exposure.params,
+        shared_rate.metadata, 1.0, 1.0)
+    @test !applicable(typeof(short_plan),
+        short_exposure.params, shared_rate.metadata, 1.0, 1.0)
+    short_frame = copy(capture!(short_exposure, shared_rate, short_plan;
+        rng=MersenneTwister(200)))
+    long_frame = copy(capture!(long_exposure, shared_rate, long_plan;
+        rng=MersenneTwister(200)))
+    @test short_frame == rate_values .* 0.125
+    @test long_frame == rate_values .* 0.75
+    @test long_frame == short_frame .* 6
+    @test shared_rate.values == shared_rate_before
+
+    for invalid_values in (
+            [-1.0 1.0; 1.0 1.0],
+            [NaN 1.0; 1.0 1.0],
+            [Inf 1.0; 1.0 1.0],
+            [-Inf 1.0; 1.0 1.0],
+            Matrix{Float64}(undef, 0, 0),
+        )
+        @test_throws InvalidConfiguration prepare_detector_acquisition(
+            short_exposure, detector_test_intensity_map(invalid_values))
+    end
+
+    trusted_values = ones(2, 2)
+    trusted_rate = detector_test_intensity_map(trusted_values)
+    trusted_detector = Detector(integration_time=1.0, noise=NoiseNone(),
+        response_model=NullFrameResponse())
+    trusted_plan = prepare_detector_acquisition(trusted_detector,
+        trusted_rate)
+    trusted_values[1, 1] = -1.0
+    @test capture!(trusted_detector, trusted_rate, trusted_plan;
+        rng=MersenneTwister(201))[1, 1] == -1.0
+
+    spectral_rate = detector_test_intensity_map(ones(2, 2);
+        spectral=MonochromaticChannel(0.55e-6))
+    spectral_detector = Detector(integration_time=2.0, noise=NoiseNone(),
+        qe=SampledQuantumEfficiency([0.50e-6, 0.60e-6], [0.2, 0.8]),
+        response_model=NullFrameResponse())
+    spectral_plan = prepare_detector_acquisition(spectral_detector,
+        spectral_rate)
+    @test capture!(spectral_detector, spectral_rate, spectral_plan;
+        rng=MersenneTwister(200)) ≈ fill(1.0, 2, 2)
+    @test_throws InvalidConfiguration prepare_detector_acquisition(
+        spectral_detector, detector_test_intensity_map(ones(2, 2)))
+
+    response_kernel = [0.0 0.1 0.0; 0.1 0.6 0.1; 0.0 0.1 0.0]
+    density_values = zeros(9, 9)
+    density_values[3, 5] = 8.0
+    density_rate = detector_test_intensity_map(density_values;
+        sampling=(0.5, 0.25), spatial_measure=SpatialDensityMeasure())
+    density_detector = Detector(integration_time=2.0, noise=NoiseNone(),
+        qe=0.5, binning=3,
+        response_model=SampledFrameResponse(response_kernel))
+    density_plan = prepare_detector_acquisition(density_detector, density_rate)
+    density_frame = copy(capture!(density_detector, density_rate,
+        density_plan; rng=MersenneTwister(201)))
+    manual_response = zeros(9, 9)
+    manual_response[3, 5] = 4.8
+    manual_response[2, 5] = 0.8
+    manual_response[4, 5] = 0.8
+    manual_response[3, 4] = 0.8
+    manual_response[3, 6] = 0.8
+    manual_binned = zeros(3, 3)
+    bin2d!(manual_binned, manual_response, 3)
+    @test density_frame ≈ manual_binned .* 0.125
+    @test sum(density_frame) ≈ sum(density_values) * 0.125
+    @test prepared_detector_capture_allocations(density_detector,
+        density_rate, density_plan, Xoshiro(202)) == 0
+
+    cell_rate = detector_test_intensity_map(copy(density_values);
+        sampling=(0.5, 0.25), spatial_measure=CellIntegratedMeasure())
+    cell_detector = Detector(integration_time=2.0, noise=NoiseNone(),
+        qe=0.5, binning=3,
+        response_model=SampledFrameResponse(response_kernel))
+    cell_plan = prepare_detector_acquisition(cell_detector, cell_rate)
+    cell_frame = capture!(cell_detector, cell_rate, cell_plan;
+        rng=MersenneTwister(202))
+    @test cell_frame ≈ manual_binned
+    @test sum(cell_frame) ≈ sum(density_values)
+
+    normalized_map = detector_test_intensity_map(ones(2, 2);
+        normalization=DimensionlessNormalization())
+    normalized_detector = Detector(integration_time=0.5,
+        noise=NoiseNone(), qe=0.25, response_model=NullFrameResponse())
+    @test_throws InvalidConfiguration prepare_detector_acquisition(
+        normalized_detector, normalized_map)
+    normalized_plan = prepare_detector_acquisition(normalized_detector,
+        normalized_map; normalized_to_photon_rate=40.0)
+    @test capture!(normalized_detector, normalized_map, normalized_plan;
+        rng=MersenneTwister(203)) == fill(5.0, 2, 2)
+    @test_throws InvalidConfiguration prepare_detector_acquisition(
+        normalized_detector, normalized_map; normalized_to_photon_rate=0.0)
+    @test_throws InvalidConfiguration prepare_detector_acquisition(
+        normalized_detector, shared_rate; normalized_to_photon_rate=40.0)
+
+    # An external optical executor, including Proper.jl, enters through the
+    # same declared product boundary. The package does not infer semantics from
+    # an otherwise bare array.
+    external_values = fill(3.0, 2, 2)
+    external_metadata = OpticalPlaneMetadata(DetectorPlane(), external_values;
+        coordinate_domain=AngularCoordinates(), sampling=(0.2, 0.2),
+        normalization=PhotonRateNormalization(),
+        spatial_measure=CellIntegratedMeasure(),
+        coherence=IncoherentIntensityAddition())
+    external_product = IntensityMap(external_metadata, external_values)
+    external_detector = Detector(integration_time=0.4, noise=NoiseNone(),
+        qe=0.5, response_model=NullFrameResponse())
+    external_plan = prepare_detector_acquisition(external_detector,
+        external_product)
+    @test capture!(external_detector, external_product, external_plan;
+        rng=MersenneTwister(2031)) ≈ fill(0.6, 2, 2)
+    undeclared_external_metadata = OpticalPlaneMetadata(DetectorPlane(),
+        external_values; coordinate_domain=AngularCoordinates(),
+        sampling=(0.2, 0.2))
+    undeclared_external_product = IntensityMap(
+        undeclared_external_metadata, external_values)
+    @test_throws InvalidConfiguration prepare_detector_acquisition(
+        external_detector, undeclared_external_product)
+
+    pupil_rate = detector_test_intensity_map(ones(2, 2); kind=PupilPlane())
+    point_rate = detector_test_intensity_map(ones(2, 2);
+        spatial_measure=PointSampledMeasure())
+    coherent_rate = detector_test_intensity_map(ones(2, 2);
+        coherence=CoherentFieldCombination())
+    @test_throws InvalidConfiguration prepare_detector_acquisition(
+        normalized_detector, pupil_rate)
+    @test_throws InvalidConfiguration prepare_detector_acquisition(
+        normalized_detector, point_rate)
+    @test_throws InvalidConfiguration prepare_detector_acquisition(
+        normalized_detector, coherent_rate)
+    float32_detector = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=1.0, response_model=NullFrameResponse(), T=Float32)
+    @test_throws InvalidConfiguration prepare_detector_acquisition(
+        float32_detector, shared_rate)
+
+    oversampled_response_detector = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0, psf_sampling=2,
+        response_model=SampledFrameResponse(response_kernel))
+    @test_throws InvalidConfiguration prepare_detector_acquisition(
+        oversampled_response_detector, shared_rate)
+    @test_throws InvalidConfiguration capture!(oversampled_response_detector,
+        rate_values; rng=MersenneTwister(204))
+
+    allocation_detector = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse())
+    allocation_plan = prepare_detector_acquisition(allocation_detector,
+        shared_rate)
+    @test prepared_detector_capture_allocations(allocation_detector,
+        shared_rate, allocation_plan, Xoshiro(205)) == 0
+    replacement_storage = copy(shared_rate.values)
+    replacement_storage_map = IntensityMap(shared_rate.metadata,
+        replacement_storage)
+    @test replacement_storage_map.metadata === shared_rate.metadata
+    @test replacement_storage_map.values !== shared_rate.values
+    @test_throws InvalidConfiguration capture!(allocation_detector,
+        replacement_storage_map, allocation_plan; rng=MersenneTwister(205))
+    @test prepared_detector_capture_allocations(allocation_detector,
+        shared_rate, allocation_plan, Xoshiro(205)) == 0
+    identical_allocation_detector = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse())
+    @test identical_allocation_detector.params === allocation_detector.params
+    @test identical_allocation_detector.state !== allocation_detector.state
+    @test_throws InvalidConfiguration capture!(identical_allocation_detector,
+        shared_rate, allocation_plan; rng=MersenneTwister(205))
+    incremental_allocation_detector = Detector(integration_time=4.0,
+        noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse())
+    incremental_allocation_plan = prepare_detector_acquisition(
+        incremental_allocation_detector, shared_rate)
+    @test prepared_incremental_capture_allocations(
+        incremental_allocation_detector, shared_rate,
+        incremental_allocation_plan, Xoshiro(206), 0.5) == 0
+
+    mismatched_rate = detector_test_intensity_map(copy(rate_values);
+        sampling=(2.0, 1.0))
+    @test_throws InvalidConfiguration capture!(allocation_detector,
+        mismatched_rate, allocation_plan; rng=MersenneTwister(207))
+    @test_throws InvalidConfiguration capture!(long_exposure, shared_rate,
+        allocation_plan; rng=MersenneTwister(207))
+
+    incremental_detector = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse())
+    capture!(incremental_detector, ones(2, 2); rng=MersenneTwister(206),
+        sample_time=0.6)
+    @test_throws InvalidConfiguration capture!(incremental_detector,
+        ones(2, 2); rng=MersenneTwister(206), sample_time=0.5)
+    @test incremental_detector.state.integrated_time == 0.6
+    @test !readout_ready(incremental_detector)
+    incremental_pending_accum = copy(incremental_detector.state.accum_buffer)
+    @test_throws DimensionMismatchError capture!(incremental_detector,
+        ones(4, 4); rng=MersenneTwister(206), sample_time=0.1)
+    @test incremental_detector.state.integrated_time == 0.6
+    @test !readout_ready(incremental_detector)
+    @test incremental_detector.state.accum_buffer == incremental_pending_accum
+    @test_throws InvalidConfiguration Detector(integration_time=0.0)
+    @test_throws InvalidConfiguration Detector(integration_time=Inf)
+
+    transition_values = fill(2.0, 2, 2)
+    transition_map = detector_test_intensity_map(transition_values)
+    transition_detector = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse())
+    transition_plan = prepare_detector_acquisition(transition_detector,
+        transition_map)
+    transition_source = Source(band=:custom, wavelength=0.6e-6,
+        photon_irradiance=1.0)
+    temporal_calls = Ref(0)
+    transition_temporal = FunctionFrameSource(t -> begin
+        temporal_calls[] += 1
+        transition_values
+    end)
+
+    capture!(transition_detector, transition_map, transition_plan;
+        rng=MersenneTwister(208), sample_time=0.25)
+    pending_time = transition_detector.state.integrated_time
+    pending_frame = copy(transition_detector.state.frame)
+    pending_accum = copy(transition_detector.state.accum_buffer)
+    @test pending_time == 0.25
+    @test !readout_ready(transition_detector)
+
+    @test_throws InvalidConfiguration capture!(transition_detector,
+        transition_values; rng=MersenneTwister(209))
+    @test_throws InvalidConfiguration capture!(transition_detector,
+        transition_values, transition_source; rng=MersenneTwister(210))
+    @test_throws InvalidConfiguration capture!(transition_detector,
+        transition_temporal; rng=MersenneTwister(211))
+    @test_throws InvalidConfiguration capture!(transition_detector,
+        transition_map, transition_plan; rng=MersenneTwister(212))
+    @test_throws InvalidConfiguration capture_with_quantum_efficiency!(
+        transition_detector, transition_values, 0.25,
+        MersenneTwister(213))
+    pending_stack = fill(3.0, 1, 2, 2)
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.capture_stack!(
+        transition_detector, pending_stack, similar(pending_stack);
+        rng=MersenneTwister(213))
+    pending_generalized_output = fill(UInt8(7), 1, 2, 2)
+    pending_generalized_input = fill(3.0, 1, 2, 2)
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.capture_stack!(
+        transition_detector, pending_generalized_output,
+        pending_generalized_input; rng=MersenneTwister(213))
+    @test all(==(UInt8(7)), pending_generalized_output)
+    @test temporal_calls[] == 0
+    @test transition_detector.state.integrated_time == pending_time
+    @test !readout_ready(transition_detector)
+    @test transition_detector.state.frame == pending_frame
+    @test transition_detector.state.accum_buffer == pending_accum
+
+    pending_prepare_values = fill(4.0, 4, 4)
+    pending_prepare_map = detector_test_intensity_map(pending_prepare_values)
+    pending_frame_shape = size(transition_detector.state.frame)
+    pending_accum_shape = size(transition_detector.state.accum_buffer)
+    @test_throws InvalidConfiguration prepare_detector_acquisition(
+        transition_detector, pending_prepare_map)
+    @test transition_detector.state.integrated_time == pending_time
+    @test !readout_ready(transition_detector)
+    @test size(transition_detector.state.frame) == pending_frame_shape
+    @test size(transition_detector.state.accum_buffer) == pending_accum_shape
+    @test transition_detector.state.frame == pending_frame
+    @test transition_detector.state.accum_buffer == pending_accum
+
+    capture!(transition_detector, transition_map, transition_plan;
+        rng=MersenneTwister(214), sample_time=0.75)
+    @test readout_ready(transition_detector)
+    @test iszero(transition_detector.state.integrated_time)
+    @test all(iszero, transition_detector.state.accum_buffer)
+
+    capture!(transition_detector, transition_values;
+        rng=MersenneTwister(215))
+    @test readout_ready(transition_detector)
+    @test iszero(transition_detector.state.integrated_time)
+    capture!(transition_detector, transition_values, transition_source;
+        rng=MersenneTwister(216))
+    @test readout_ready(transition_detector)
+    @test iszero(transition_detector.state.integrated_time)
+    capture!(transition_detector, transition_temporal;
+        rng=MersenneTwister(217))
+    @test temporal_calls[] > 0
+    @test readout_ready(transition_detector)
+    @test iszero(transition_detector.state.integrated_time)
+    capture!(transition_detector, transition_map, transition_plan;
+        rng=MersenneTwister(218))
+    @test readout_ready(transition_detector)
+    @test iszero(transition_detector.state.integrated_time)
+    @test all(iszero, transition_detector.state.accum_buffer)
+    explicit_qe_frame = capture_with_quantum_efficiency!(
+        transition_detector, transition_values, 0.25,
+        MersenneTwister(219))
+    @test explicit_qe_frame == transition_values .* 0.25
+    @test readout_ready(transition_detector)
+    @test iszero(transition_detector.state.integrated_time)
+
+    glow_full_duration = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=1.0, response_model=NullFrameResponse(),
+        sensor=InGaAsSensor(glow_rate=20.0))
+    glow_short_duration = Detector(integration_time=0.25,
+        noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
+        sensor=InGaAsSensor(glow_rate=20.0))
+    prepare_detector_buffers!(glow_full_duration, (2, 2))
+    prepare_detector_buffers!(glow_short_duration, (2, 2))
+    fill!(glow_full_duration.state.frame, 0.0)
+    fill!(glow_short_duration.state.frame, 0.0)
+    apply_sensor_statistics!(glow_full_duration.params.sensor,
+        glow_full_duration, MersenneTwister(207), 0.25)
+    apply_sensor_statistics!(glow_short_duration.params.sensor,
+        glow_short_duration, MersenneTwister(207), 0.25)
+    @test glow_full_duration.state.frame == glow_short_duration.state.frame
+
     qe_curve = SampledQuantumEfficiency([0.50e-6, 0.60e-6], [0.2, 0.8])
     @test qe_at(qe_curve, 0.55e-6) ≈ 0.5
     @test qe_at(qe_curve, 0.70e-6) == 0.0
@@ -20,6 +609,17 @@
     src_qe = Source(wavelength=0.55e-6)
     @test effective_qe(det_qe_curve, src_qe) ≈ 0.5
     @test capture!(det_qe_curve, ones(2, 2), src_qe; rng=MersenneTwister(31)) ≈ fill(0.5, 2, 2)
+    generalized_qe_detector = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=qe_curve, psf_sampling=2,
+        response_model=NullFrameResponse())
+    generalized_qe_input = ones(2, 4, 4)
+    generalized_qe_output = zeros(2, 2, 2)
+    AdaptiveOpticsSim.capture_stack!(generalized_qe_detector,
+        generalized_qe_output, generalized_qe_input, src_qe;
+        rng=MersenneTwister(31))
+    @test generalized_qe_output ≈ fill(2.0, 2, 2, 2)
+    @test readout_ready(generalized_qe_detector)
+    @test iszero(generalized_qe_detector.state.integrated_time)
     spectral_qe = with_spectrum(Source(wavelength=0.55e-6),
         SpectralBundle([0.50e-6, 0.60e-6], [0.25, 0.75]))
     @test effective_qe(det_qe_curve, spectral_qe) ≈ 0.65
@@ -181,6 +781,17 @@
     capture!(skipper_many, skipper_input, skipper_many_rng)
     @test @allocated(capture!(skipper_many, skipper_input,
         skipper_many_rng)) == 0
+    skipper_transition = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
+        sensor=CCDSensor(sampling_mode=SkipperSampling(2)))
+    capture!(skipper_transition, ones(2, 2); rng=MersenneTwister(92))
+    @test all(==(2.0), skipper_transition.state.accum_buffer)
+    capture!(skipper_transition, zeros(2, 2); rng=MersenneTwister(93),
+        sample_time=0.5)
+    skipper_incremental_frame = copy(capture!(skipper_transition,
+        zeros(2, 2); rng=MersenneTwister(94), sample_time=0.5))
+    @test all(iszero, skipper_incremental_frame)
+    @test readout_ready(skipper_transition)
     det_emccd_cic = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=EMCCDSensor(clock_induced_charge_per_frame=3.0))
     frame_emccd_cic = copy(capture!(det_emccd_cic, zero_psf;
@@ -190,9 +801,26 @@
         qe=1.0, sensor=EMCCDSensor(clock_induced_charge_per_frame=3.0))
     @test capture!(det_emccd_cic_long, zero_psf;
         rng=MersenneTwister(125)) == frame_emccd_cic
+    emccd_cic_whole = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=1.0, gain=5.0, response_model=NullFrameResponse(),
+        sensor=EMCCDSensor(clock_induced_charge_per_frame=3.0))
+    emccd_cic_split = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=1.0, gain=5.0, response_model=NullFrameResponse(),
+        sensor=EMCCDSensor(clock_induced_charge_per_frame=3.0))
+    emccd_cic_whole_frame = copy(capture!(emccd_cic_whole, zero_psf;
+        rng=MersenneTwister(130)))
+    capture!(emccd_cic_split, zero_psf; rng=MersenneTwister(130),
+        sample_time=0.5)
+    emccd_cic_split_frame = copy(capture!(emccd_cic_split, zero_psf;
+        rng=MersenneTwister(130), sample_time=0.5))
+    @test emccd_cic_split_frame == emccd_cic_whole_frame
     det_emccd_sat = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=5.0, sensor=EMCCDSensor(register_full_well=100.0))
     @test maximum(capture!(det_emccd_sat, fill(50.0, 4, 4); rng=MersenneTwister(126))) == 100.0
+    emccd_saturated_stack = fill(50.0, 2, 4, 4)
+    AdaptiveOpticsSim.capture_stack!(det_emccd_sat, emccd_saturated_stack,
+        similar(emccd_saturated_stack); rng=MersenneTwister(126))
+    @test all(==(100.0), emccd_saturated_stack)
     @test_throws InvalidConfiguration EMCCDSensor(
         clock_induced_charge_per_frame=-1.0)
     @test_throws InvalidConfiguration EMCCDSensor(register_full_well=0.0)
@@ -357,6 +985,35 @@
     @test detector_export_metadata(rolling_det).sampling_wallclock_time == 2.0
     @test @allocated(capture!(rolling_det, rolling_source, rolling_rng)) == 0
 
+    global_exposure_calls = Tuple{Float64,Float64}[]
+    global_exposure_source = FunctionExposureFrameSource(
+        (start_time, exposure_time) -> begin
+            push!(global_exposure_calls, (start_time, exposure_time))
+            fill(exposure_time, 2, 2)
+        end)
+    global_exposure_det = Detector(integration_time=2.0,
+        noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse())
+    global_exposure_frame = capture!(global_exposure_det,
+        global_exposure_source; rng=MersenneTwister(1271))
+    @test global_exposure_calls == [(0.0, 2.0)]
+    @test global_exposure_frame == fill(4.0, 2, 2)
+
+    rolling_exposure_calls = Tuple{Float64,Float64}[]
+    rolling_exposure_source = InPlaceExposureFrameSource(
+        (out, start_time, exposure_time) -> begin
+            push!(rolling_exposure_calls, (start_time, exposure_time))
+            fill!(out, start_time + exposure_time)
+        end, (4, 4))
+    rolling_exposure_det = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0,
+        sensor=CMOSSensor(timing_model=RollingShutter(0.25;
+            row_group_size=2)), response_model=NullFrameResponse())
+    rolling_exposure_frame = capture!(rolling_exposure_det,
+        rolling_exposure_source; rng=MersenneTwister(1272))
+    @test rolling_exposure_calls == [(0.0, 1.0), (0.25, 1.0)]
+    @test rolling_exposure_frame ==
+        repeat(reshape([1.0, 1.0, 1.25, 1.25], :, 1), 1, 4)
+
     global_reset_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=CMOSSensor(timing_model=RollingShutter(0.25; exposure_mode=GlobalResetExposure())),
         response_model=NullFrameResponse())
@@ -394,6 +1051,68 @@
     capture!(det_ingaas_persist, fill(4.0, 4, 4); rng=MersenneTwister(121))
     persisted = capture!(det_ingaas_persist, zeros(4, 4); rng=MersenneTwister(122))
     @test sum(persisted) ≈ 32.0
+
+    persistence_sensor = InGaAsSensor(
+        persistence_model=ExponentialPersistence(0.5, 0.0))
+    persistence_whole = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=1.0, binning=1, response_model=NullFrameResponse(),
+        sensor=persistence_sensor)
+    persistence_split = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=1.0, binning=1, response_model=NullFrameResponse(),
+        sensor=persistence_sensor)
+    persistence_seed = fill(4.0, 4, 4)
+    persistence_dark = zeros(4, 4)
+    capture!(persistence_whole, persistence_seed; rng=MersenneTwister(123))
+    capture!(persistence_split, persistence_seed; rng=MersenneTwister(123))
+    persistence_whole_frame = copy(capture!(persistence_whole,
+        persistence_dark; rng=MersenneTwister(124)))
+    persistence_partial_frame = copy(capture!(persistence_split,
+        persistence_dark; rng=MersenneTwister(124), sample_time=0.5))
+    persistence_split_frame = copy(capture!(persistence_split,
+        persistence_dark; rng=MersenneTwister(124), sample_time=0.5))
+    @test persistence_partial_frame == persistence_whole_frame
+    @test persistence_split_frame == persistence_whole_frame
+    @test persistence_split.state.latent_buffer ==
+        persistence_whole.state.latent_buffer
+
+    persistence_prepared_whole = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0, binning=1,
+        response_model=NullFrameResponse(), sensor=persistence_sensor)
+    persistence_prepared_split = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0, binning=1,
+        response_model=NullFrameResponse(), sensor=persistence_sensor)
+    persistence_rate_map = detector_test_intensity_map(persistence_dark)
+    persistence_whole_plan = prepare_detector_acquisition(
+        persistence_prepared_whole, persistence_rate_map)
+    persistence_split_plan = prepare_detector_acquisition(
+        persistence_prepared_split, persistence_rate_map)
+    capture!(persistence_prepared_whole, persistence_seed;
+        rng=MersenneTwister(125))
+    capture!(persistence_prepared_split, persistence_seed;
+        rng=MersenneTwister(125))
+    persistence_prepared_whole_frame = copy(capture!(
+        persistence_prepared_whole, persistence_rate_map,
+        persistence_whole_plan; rng=MersenneTwister(126)))
+    capture!(persistence_prepared_split, persistence_rate_map,
+        persistence_split_plan; rng=MersenneTwister(126), sample_time=0.5)
+    persistence_prepared_split_frame = copy(capture!(
+        persistence_prepared_split, persistence_rate_map,
+        persistence_split_plan; rng=MersenneTwister(126), sample_time=0.5))
+    @test persistence_prepared_split_frame ==
+        persistence_prepared_whole_frame
+    @test persistence_prepared_split.state.latent_buffer ==
+        persistence_prepared_whole.state.latent_buffer
+
+    persistence_allocation_detector = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0, binning=1,
+        response_model=NullFrameResponse(), sensor=persistence_sensor)
+    persistence_allocation_plan = prepare_detector_acquisition(
+        persistence_allocation_detector, persistence_rate_map)
+    capture!(persistence_allocation_detector, persistence_seed;
+        rng=Xoshiro(127))
+    @test prepared_first_incremental_capture_allocations(
+        persistence_allocation_detector, persistence_rate_map,
+        persistence_allocation_plan, Xoshiro(128), 0.5) == 0
     persist_meta = detector_export_metadata(det_ingaas_persist)
     @test persist_meta.persistence_model == :exponential
     det_ingaas_nonlinear = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
@@ -476,6 +1195,121 @@
         max_temperature_K=320.0,
     )
 
+    dynamic_stack_det = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=1.0, response_model=NullFrameResponse(),
+        thermal_model=dynamic_model, sensor=CCDSensor())
+    dynamic_stack_cube = zeros(2, 2, 2)
+    AdaptiveOpticsSim.capture_stack!(dynamic_stack_det, dynamic_stack_cube,
+        similar(dynamic_stack_cube); rng=MersenneTwister(24))
+    expected_stack_temperature = 120.0 + 180.0 * exp(-0.5)
+    @test detector_temperature(dynamic_stack_det) ≈ expected_stack_temperature
+    @test readout_ready(dynamic_stack_det)
+
+    dynamic_generalized_det = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0, psf_sampling=2,
+        response_model=NullFrameResponse(), thermal_model=dynamic_model,
+        sensor=CCDSensor())
+    dynamic_generalized_input = zeros(2, 4, 4)
+    dynamic_generalized_output = zeros(2, 2, 2)
+    AdaptiveOpticsSim.capture_stack!(dynamic_generalized_det,
+        dynamic_generalized_output, dynamic_generalized_input;
+        rng=MersenneTwister(24))
+    @test detector_temperature(dynamic_generalized_det) ≈
+        expected_stack_temperature
+    @test readout_ready(dynamic_generalized_det)
+
+    incremental_rate_law = LinearTemperatureLaw(120.0, 0.005)
+    incremental_rate_input = zeros(128, 128)
+    static_rate_model = FixedTemperature(temperature_K=250.0,
+        dark_current_law=incremental_rate_law)
+    static_rate_whole = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=1.0, dark_current=100.0, response_model=NullFrameResponse(),
+        thermal_model=static_rate_model, sensor=CCDSensor())
+    static_rate_split = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=1.0, dark_current=100.0, response_model=NullFrameResponse(),
+        thermal_model=static_rate_model, sensor=CCDSensor())
+    static_rate_whole_frame = copy(capture!(static_rate_whole,
+        incremental_rate_input; rng=MersenneTwister(25)))
+    capture!(static_rate_split, incremental_rate_input;
+        rng=MersenneTwister(26), sample_time=0.5)
+    static_rate_split_frame = copy(capture!(static_rate_split,
+        incremental_rate_input; rng=MersenneTwister(27), sample_time=0.5))
+    static_rate_expected = evaluate_temperature_law(incremental_rate_law,
+        100.0, 250.0)
+    @test mean(static_rate_whole_frame) ≈ static_rate_expected rtol=0.01
+    @test mean(static_rate_split_frame) ≈ static_rate_expected rtol=0.01
+    @test mean(static_rate_split_frame) ≈
+        mean(static_rate_whole_frame) rtol=0.01
+
+    incremental_dynamic_model = FirstOrderThermalModel(
+        ambient_temperature_K=300.0,
+        setpoint_temperature_K=120.0,
+        initial_temperature_K=300.0,
+        time_constant_s=1.0,
+        min_temperature_K=100.0,
+        max_temperature_K=320.0,
+        dark_current_law=incremental_rate_law,
+    )
+    dynamic_rate_whole = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=1.0, dark_current=100.0, response_model=NullFrameResponse(),
+        thermal_model=incremental_dynamic_model, sensor=CCDSensor())
+    dynamic_rate_split = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=1.0, dark_current=100.0, response_model=NullFrameResponse(),
+        thermal_model=incremental_dynamic_model, sensor=CCDSensor())
+    dynamic_rate_whole_frame = copy(capture!(dynamic_rate_whole,
+        incremental_rate_input; rng=MersenneTwister(28)))
+    capture!(dynamic_rate_split, incremental_rate_input;
+        rng=MersenneTwister(29), sample_time=0.5)
+    dynamic_rate_split_frame = copy(capture!(dynamic_rate_split,
+        incremental_rate_input; rng=MersenneTwister(30), sample_time=0.5))
+    half_exposure_temperature = 120.0 + 180.0 * exp(-0.5)
+    dynamic_whole_expected = evaluate_temperature_law(
+        incremental_rate_law, 100.0, 300.0)
+    dynamic_split_expected = 0.5 * dynamic_whole_expected +
+        0.5 * evaluate_temperature_law(incremental_rate_law, 100.0,
+            half_exposure_temperature)
+    @test mean(dynamic_rate_whole_frame) ≈ dynamic_whole_expected rtol=0.01
+    @test mean(dynamic_rate_split_frame) ≈ dynamic_split_expected rtol=0.01
+    @test detector_temperature(dynamic_rate_split) ≈
+        120.0 + 180.0 * exp(-1.0)
+
+    incremental_glow_model = FirstOrderThermalModel(
+        ambient_temperature_K=300.0,
+        setpoint_temperature_K=120.0,
+        initial_temperature_K=300.0,
+        time_constant_s=1.0,
+        min_temperature_K=100.0,
+        max_temperature_K=320.0,
+        glow_rate_law=incremental_rate_law,
+    )
+    dynamic_glow_split = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=1.0, response_model=NullFrameResponse(),
+        thermal_model=incremental_glow_model,
+        sensor=InGaAsSensor(glow_rate=100.0))
+    capture!(dynamic_glow_split, incremental_rate_input;
+        rng=MersenneTwister(31), sample_time=0.5)
+    dynamic_glow_frame = copy(capture!(dynamic_glow_split,
+        incremental_rate_input; rng=MersenneTwister(32), sample_time=0.5))
+    @test mean(dynamic_glow_frame) ≈ dynamic_split_expected rtol=0.01
+
+    hgcdte_glow_sensor = HgCdTeAvalancheArraySensor(glow_rate=60.0,
+        read_time=0.1, sampling_mode=CorrelatedDoubleSampling())
+    hgcdte_glow_whole = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=1.0, dark_current=40.0, response_model=NullFrameResponse(),
+        sensor=hgcdte_glow_sensor)
+    hgcdte_glow_split = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=1.0, dark_current=40.0, response_model=NullFrameResponse(),
+        sensor=hgcdte_glow_sensor)
+    hgcdte_glow_whole_frame = copy(capture!(hgcdte_glow_whole,
+        incremental_rate_input; rng=MersenneTwister(33)))
+    capture!(hgcdte_glow_split, incremental_rate_input;
+        rng=MersenneTwister(34), sample_time=0.5)
+    hgcdte_glow_split_frame = copy(capture!(hgcdte_glow_split,
+        incremental_rate_input; rng=MersenneTwister(35), sample_time=0.5))
+    hgcdte_glow_expected = (40.0 + 60.0) * (1.0 + 2 * 0.1)
+    @test mean(hgcdte_glow_whole_frame) ≈ hgcdte_glow_expected rtol=0.01
+    @test mean(hgcdte_glow_split_frame) ≈ hgcdte_glow_expected rtol=0.01
+
     thermal_ingaas = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         response_model=NullFrameResponse(),
         thermal_model=FixedTemperature(temperature_K=250.0, glow_rate_law=linear),
@@ -517,6 +1351,11 @@
         gain=1.0, full_well=100.0, sensor=HgCdTeAvalancheArraySensor(avalanche_gain=5.0))
     frame_saphira_sat = copy(capture!(det_saphira_sat, uniform_signal; rng=MersenneTwister(15)))
     @test maximum(frame_saphira_sat) == 100.0
+    saphira_saturated_stack = fill(50.0, 2, 8, 8)
+    AdaptiveOpticsSim.capture_stack!(det_saphira_sat,
+        saphira_saturated_stack, similar(saphira_saturated_stack);
+        rng=MersenneTwister(15))
+    @test all(==(100.0), saphira_saturated_stack)
     det_saphira_single = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeAvalancheArraySensor())
     frame_saphira_single = copy(capture!(det_saphira_single, zero_psf; rng=MersenneTwister(16)))
@@ -776,6 +1615,63 @@
     @test corrected_meta.correction_edge_rows == 1
     @test corrected_meta.correction_edge_cols == 1
     @test abs(mean(corrected_frame)) < 1e-6
+
+    calibration_input = reshape(collect(1.0:64.0), 8, 8)
+    calibration_sensor = HgCdTeAvalancheArraySensor(avalanche_gain=2.0,
+        read_time=0.1, sampling_mode=CorrelatedDoubleSampling())
+    calibration_correction = ReferencePixelCommonModeCorrection(1, 1)
+    calibration_detector = Detector(noise=NoiseNone(), qe=1.0, gain=3.0,
+        sensor=calibration_sensor, response_model=NullFrameResponse(),
+        correction_model=calibration_correction)
+    capture_detector = Detector(noise=NoiseNone(), qe=1.0, gain=3.0,
+        sensor=calibration_sensor, response_model=NullFrameResponse(),
+        correction_model=calibration_correction)
+    deterministic_reference = copy(
+        AdaptiveOpticsSim.detector_calibration_frame!(
+            calibration_detector, calibration_input, 1.0))
+    noiseless_cds = copy(capture!(capture_detector, calibration_input;
+        rng=MersenneTwister(1901)))
+    @test deterministic_reference == noiseless_cds
+    @test iszero(calibration_detector.state.integrated_time)
+    @test readout_ready(calibration_detector)
+    @test readout_products(calibration_detector) isa NoFrameReadoutProducts
+
+    ramp_calibration_sensor = HgCdTeAvalancheArraySensor(
+        avalanche_gain=2.0, read_time=0.1,
+        sampling_mode=UpTheRampSampling(4))
+    ramp_calibration_detector = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0, gain=3.0,
+        sensor=ramp_calibration_sensor, response_model=NullFrameResponse(),
+        correction_model=calibration_correction)
+    ramp_capture_detector = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0, gain=3.0,
+        sensor=ramp_calibration_sensor, response_model=NullFrameResponse(),
+        correction_model=calibration_correction)
+    ramp_reference = copy(
+        AdaptiveOpticsSim.detector_calibration_frame!(
+            ramp_calibration_detector, calibration_input, 1.0))
+    noiseless_ramp = copy(capture!(ramp_capture_detector,
+        calibration_input; rng=MersenneTwister(1902)))
+    @test ramp_reference ≈ noiseless_ramp atol=1e-12 rtol=1e-12
+    @test iszero(ramp_calibration_detector.state.integrated_time)
+    @test readout_ready(ramp_calibration_detector)
+    @test readout_products(ramp_calibration_detector) isa NoFrameReadoutProducts
+
+    invalid_ramp_calibration = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0, gain=3.0,
+        sensor=HgCdTeAvalancheArraySensor(avalanche_gain=2.0,
+            read_time=0.4, sampling_mode=UpTheRampSampling(4)),
+        response_model=NullFrameResponse(),
+        correction_model=calibration_correction)
+    @test_throws InvalidConfiguration begin
+        AdaptiveOpticsSim.detector_calibration_signature(
+            invalid_ramp_calibration, UInt(0))
+    end
+    @test_throws InvalidConfiguration begin
+        AdaptiveOpticsSim.detector_calibration_frame!(
+            invalid_ramp_calibration, calibration_input, 1.0)
+    end
+
     det_saphira_row_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeAvalancheArraySensor(),
         response_model=NullFrameResponse(),
@@ -1065,6 +1961,19 @@
     @test detector_entries["DET-VAL-2026-04-23"]["superseded_by"] ==
         "DET-VAL-2026-07-12"
 
+    function impulse_transfer_magnitude(frame, spatial_frequency_x,
+        spatial_frequency_y)
+        center_i = fld(size(frame, 1), 2) + 1
+        center_j = fld(size(frame, 2), 2) + 1
+        response = zero(Complex{eltype(frame)})
+        @inbounds for j in axes(frame, 2), i in axes(frame, 1)
+            phase = -2pi * (spatial_frequency_y * (i - center_i) +
+                            spatial_frequency_x * (j - center_j))
+            response += frame[i, j] * cis(phase)
+        end
+        return abs(response) / sum(frame)
+    end
+
     det_mtf = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         response_model=GaussianPixelResponse(response_width_px=0.75))
     impulse = zeros(9, 9)
@@ -1076,12 +1985,14 @@
     @test supports_detector_mtf(det_mtf)
     @test detector_mtf(det_mtf, 0.0, 0.0) ≈ 1.0
     @test detector_mtf(det_mtf, 0.5, 0.0) < 1.0
+    @test detector_mtf(det_mtf, 0.5, 0.0) ≈
+        impulse_transfer_magnitude(frame_mtf, 0.5, 0.0)
     mtf_meta = detector_export_metadata(det_mtf)
     @test mtf_meta.frame_response == :gaussian
     @test mtf_meta.response_width_px == 0.75
     @test mtf_meta.response_application_domain == :image
     @test mtf_meta.response_is_separable
-    @test mtf_meta.response_is_shift_invariant
+    @test !mtf_meta.response_is_shift_invariant
     @test mtf_meta.response_support_rows == mtf_meta.response_support_cols
     @test mtf_meta.pitch_x_px === nothing
     @test mtf_meta.aperture_shape === nothing
@@ -1105,6 +2016,44 @@
     @test detector_mtf(sampled_det, 0.0, 0.0) ≈ 1.0
     @test_throws InvalidConfiguration SampledFrameResponse(zeros(3, 3))
     @test_throws InvalidConfiguration SampledFrameResponse(ones(2, 3))
+    negative_kernel = copy(sampled_kernel)
+    negative_kernel[1, 1] = -0.1
+    @test_throws InvalidConfiguration SampledFrameResponse(negative_kernel)
+    nan_kernel = copy(sampled_kernel)
+    nan_kernel[1, 1] = NaN
+    @test_throws InvalidConfiguration SampledFrameResponse(nan_kernel)
+    infinite_kernel = copy(sampled_kernel)
+    infinite_kernel[1, 1] = Inf
+    @test_throws InvalidConfiguration SampledFrameResponse(infinite_kernel)
+    @test_throws InvalidConfiguration SampledFrameResponse(
+        fill(0.2, 3, 3); normalize=false)
+
+    asymmetric_kernel = [0.0 0.0 0.0; 0.1 0.2 0.7; 0.0 0.0 0.0]
+    asymmetric_det = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=1.0, binning=1,
+        response_model=SampledFrameResponse(asymmetric_kernel))
+    center_impulse = zeros(9, 9)
+    center_impulse[5, 5] = 1.0
+    center_frame = copy(capture!(asymmetric_det, center_impulse;
+        rng=MersenneTwister(61)))
+    left_impulse = zeros(9, 9)
+    left_impulse[5, 1] = 1.0
+    left_frame = copy(capture!(asymmetric_det, left_impulse;
+        rng=MersenneTwister(62)))
+    right_impulse = zeros(9, 9)
+    right_impulse[5, end] = 1.0
+    right_frame = copy(capture!(asymmetric_det, right_impulse;
+        rng=MersenneTwister(63)))
+    @test sum(center_frame) ≈ 1.0
+    @test sum(left_frame) ≈ 0.3
+    @test sum(right_frame) ≈ 0.9
+    @test sum(left_frame) <= sum(left_impulse)
+    @test sum(right_frame) <= sum(right_impulse)
+    @test minimum(left_frame) >= 0
+    @test minimum(right_frame) >= 0
+    @test detector_mtf(asymmetric_det, 0.37, 0.0) ≈
+        impulse_transfer_magnitude(center_frame, 0.37, 0.0)
+    @test !detector_export_metadata(asymmetric_det).response_is_shift_invariant
 
     cube_mtf = Array{Float64}(undef, 2, size(impulse, 1), size(impulse, 2))
     cube_mtf[1, :, :] .= impulse
@@ -1145,10 +2094,26 @@
     @test rect_meta.aperture_shape == :rectangular
     @test rect_meta.response_application_domain == :image
     @test supports_detector_mtf(rect_det)
-    @test detector_mtf(RectangularPixelAperture(), 0.5, 0.0) ≈ 2 / pi
+    @test detector_mtf(rect_det, 0.5, 0.0) ≈
+        impulse_transfer_magnitude(rect_frame, 0.5, 0.0)
+    unit_rectangular = RectangularPixelAperture()
+    half_fill_rectangular = RectangularPixelAperture(fill_factor_x=0.5,
+        fill_factor_y=0.5)
+    @test detector_mtf(unit_rectangular, 0.5, 0.0) ≈ 1.0
+    @test unit_rectangular.kernel_x == half_fill_rectangular.kernel_x
+    @test unit_rectangular.kernel_y == half_fill_rectangular.kernel_y
+    @test detector_mtf(unit_rectangular, 0.5, 0.0) ==
+        detector_mtf(half_fill_rectangular, 0.5, 0.0)
+    @test !AdaptiveOpticsSim.supports_subpixel_geometry(unit_rectangular)
+    @test !AdaptiveOpticsSim.supports_subpixel_geometry(
+        half_fill_rectangular)
 
     @test_throws InvalidConfiguration RectangularPixelAperture(fill_factor_x=0.0)
     @test_throws InvalidConfiguration RectangularPixelAperture(fill_factor_y=1.5)
+    @test_throws InvalidConfiguration RectangularPixelAperture(pitch_x_px=Inf)
+    @test_throws InvalidConfiguration RectangularPixelAperture(fill_factor_y=NaN)
+    @test_throws InvalidConfiguration GaussianPixelResponse(response_width_px=Inf)
+    @test_throws InvalidConfiguration GaussianPixelResponse(truncate_at=Inf)
 
     ipc_kernel = [0.0 0.01 0.0; 0.01 0.96 0.01; 0.0 0.01 0.0]
     ipc_det = Detector(integration_time=1.0, noise=NoisePhoton(), qe=1.0,
@@ -1223,6 +2188,8 @@
     output_generalized = Array{UInt8}(undef, 2, 2, 2)
     generalized_stack = AdaptiveOpticsSim.capture_stack!(det_generalized, output_generalized, input_generalized; rng=MersenneTwister(10))
     @test size(generalized_stack) == (2, 2, 2)
+    @test readout_ready(det_generalized)
+    @test iszero(det_generalized.state.integrated_time)
     @test generalized_stack[1, :, :] == capture!(det_generalized, @view(input_generalized[1, :, :]); rng=MersenneTwister(10))
     @test generalized_stack[2, :, :] == capture!(det_generalized, @view(input_generalized[2, :, :]); rng=MersenneTwister(10))
 
@@ -1334,6 +2301,13 @@
     AdaptiveOpticsSim.capture_stack!(det_stack, cube, scratch; rng=MersenneTwister(10))
     @test cube[1, :, :] ≈ fill(0.5, 4, 4)
     @test cube[2, :, :] ≈ fill(1.0, 4, 4)
+
+    allocation_stack_detector = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse())
+    allocation_stack_cube = ones(2, 4, 4)
+    allocation_stack_scratch = similar(allocation_stack_cube)
+    @test fixed_stack_capture_allocations(allocation_stack_detector,
+        allocation_stack_cube, allocation_stack_scratch, Xoshiro(10)) == 0
 
     psf = reshape(Float64.(1:256), 16, 16)
     det_fused = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, psf_sampling=2, binning=2)
