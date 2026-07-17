@@ -366,6 +366,7 @@ end
 
 @testset "Prepared physical Shack-Hartmann stages" begin
     T = Float64
+    coverage_enabled = Base.JLOptions().code_coverage != 0
     tel = Telescope(resolution=16, diameter=T(8),
         central_obstruction=zero(T), T=T)
     src = Source(band=:custom, wavelength=T(0.75e-6),
@@ -392,7 +393,11 @@ end
     @test geometric.optical_workspace === nothing
     @test geometric.acquisition === nothing
     measure!(geometric, tel)
-    @test @allocated(measure!(geometric, tel)) == 0
+    if coverage_enabled
+        @test_skip "geometric allocation assertion is disabled under coverage instrumentation"
+    else
+        @test @allocated(measure!(geometric, tel)) == 0
+    end
     direct_measurement = WFSMeasurement(similar(slopes(geometric));
         units=:radian, kind=:geometric_slopes)
     direct_plan = prepare_wfs_estimation(geometric, pupil,
@@ -421,8 +426,12 @@ end
     @test rate.metadata.normalization isa PhotonRateNormalization
     @test rate.metadata.spatial_measure isa CellIntegratedMeasure
     @test rate.metadata.coherence isa IncoherentIntensityAddition
-    @test @allocated(form_wfs_optical_products!(rate, pupil,
-        optical_plan)) == 0
+    if coverage_enabled
+        @test_skip "optical-stage allocation assertion is disabled under coverage instrumentation"
+    else
+        @test @allocated(form_wfs_optical_products!(rate, pupil,
+            optical_plan)) == 0
+    end
 
     field = ElectricField(pupil, src; zero_padding=1, T=T)
     field_formation = prepare_pupil_field(tel, pupil, src, field;
@@ -435,8 +444,12 @@ end
         ShackHartmannOpticalFrontEnd(field_sensor), field, field_rate)
     form_wfs_optical_products!(field_rate, field, field_plan)
     @test field_rate.values ≈ rate.values atol=T(2e-12) rtol=T(2e-12)
-    @test @allocated(form_wfs_optical_products!(field_rate, field,
-        field_plan)) == 0
+    if coverage_enabled
+        @test_skip "field-stage allocation assertion is disabled under coverage instrumentation"
+    else
+        @test @allocated(form_wfs_optical_products!(field_rate, field,
+            field_plan)) == 0
+    end
 
     rate_before = copy(rate.values)
     tel.state.opd .= T(99)
@@ -464,8 +477,12 @@ end
     @test long_observation.storage ≈ rate.values .* T(0.75) atol=0 rtol=0
     @test long_observation.storage ≈ T(3) .* short_observation.storage
     @test rate.values == rate_before
-    @test @allocated(acquire_wfs_observation!(short_observation, rate,
-        short_plan, short_rng)) == 0
+    if coverage_enabled
+        @test_skip "acquisition allocation assertion is disabled under coverage instrumentation"
+    else
+        @test @allocated(acquire_wfs_observation!(short_observation, rate,
+            short_plan, short_rng)) == 0
+    end
 
     fill!(staged.calibration.reference_signal_2d, zero(T))
     staged.calibration.slopes_units = one(T)
@@ -477,8 +494,12 @@ end
     estimate_wfs_measurement!(measurement, short_observation,
         estimator_plan)
     @test all(isfinite, measurement.storage)
-    @test @allocated(estimate_wfs_measurement!(measurement,
-        short_observation, estimator_plan)) == 0
+    if coverage_enabled
+        @test_skip "estimator allocation assertion is disabled under coverage instrumentation"
+    else
+        @test @allocated(estimate_wfs_measurement!(measurement,
+            short_observation, estimator_plan)) == 0
+    end
 
     response_values = zeros(T, size(rate.values))
     response_values[7, 6] = T(4)
