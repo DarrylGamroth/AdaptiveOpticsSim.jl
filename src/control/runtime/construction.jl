@@ -25,13 +25,24 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
     resolved_command_layout = something(command_layout, AdaptiveOpticsSim.command_layout(simulation.optic))
     resolved_command_layout.total_length == length(command) ||
         throw(InvalidConfiguration("runtime command layout total length must match the runtime command vector length"))
-    resolved_science_path = science_path_plan(wfs_source(simulation), science_source(simulation))
+    runtime_source = freeze_source(wfs_source(simulation))
+    runtime_science_source = science_source(simulation) === wfs_source(simulation) ?
+        runtime_source : freeze_source(science_source(simulation))
+    resolved_science_path = science_path_plan(runtime_source,
+        runtime_science_source)
+    wfs_atmosphere_renderer = prepare_runtime_atmosphere_path(
+        simulation.atm, simulation.tel, runtime_source)
+    science_atmosphere_renderer = runtime_science_source === runtime_source ?
+        wfs_atmosphere_renderer : prepare_runtime_atmosphere_path(
+            simulation.atm, simulation.tel, runtime_science_source)
     runtime = ClosedLoopRuntime{
         typeof(simulation),
         typeof(simulation.tel),
         typeof(simulation.atm),
-        typeof(simulation.src),
-        typeof(simulation.science_src),
+        typeof(wfs_atmosphere_renderer),
+        typeof(science_atmosphere_renderer),
+        typeof(runtime_source),
+        typeof(runtime_science_source),
         typeof(simulation.optic),
         typeof(simulation.wfs),
         typeof(reconstructor),
@@ -55,8 +66,10 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
         simulation,
         simulation.tel,
         simulation.atm,
-        simulation.src,
-        simulation.science_src,
+        wfs_atmosphere_renderer,
+        science_atmosphere_renderer,
+        runtime_source,
+        runtime_science_source,
         simulation.optic,
         simulation.wfs,
         reconstructor,

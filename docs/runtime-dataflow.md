@@ -62,6 +62,8 @@ happen inside the hot loop:
   product provider with preallocated state
 - prepare any user-declared illumination evaluator at its supported typed path
   entry or detector input
+- freeze mutable source/profile inputs while preserving intentional source
+  identity across shared optical arms
 - prepare delay lines and runtime staging
 - ensure detector and WFS pipeline buffers exist
 
@@ -88,9 +90,10 @@ At a high level, one closed-loop step is:
 
 This split is visible in runtime timing and benchmark surfaces.
 
-This is the current implemented single-step flow. The HIL-focused target keeps
-the same model-local computations but first replaces shared telescope path
-scratch with this explicit prepared flow:
+This is the current implemented single-step flow. Atmosphere evolution and
+direction rendering already use the first two explicit ownership boundaries
+below; the remaining Gate 0/2 work replaces shared telescope path scratch and
+finishes the full prepared flow:
 
 1. advance one shared atmosphere epoch to explicit model time
 2. render each due direction through a path-local prepared renderer into a
@@ -106,8 +109,8 @@ The telescope owns aperture, reflectivity, spatial sampling, and geometry; it
 does not own cadence/exposure duration, the path OPD/field, PSF result, FFT
 plans, or propagation scratch. Atmosphere advancement receives explicit model
 time rather than telescope sampling time. Source geometry and extended-source
-expansion caches are frozen or prepared per path rather than mutated in the
-shared atmosphere or source definition.
+expansion are frozen or prepared per path rather than mutated in the shared
+atmosphere or source definition.
 
 Every prepared plane declares coordinate domain and sampling,
 centering/orientation,

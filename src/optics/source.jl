@@ -97,25 +97,33 @@ function LGSSource(; magnitude::Real=0.0, coordinates=(0.0, 0.0), wavelength::Re
     altitude::Real=90000.0, elongation_factor::Real=1.2, laser_coordinates=(0.0, 0.0),
     na_profile=nothing, fwhm_spot_up::Real=0.0, T::Type{<:AbstractFloat}=Float64)
 
+    frozen_profile = if na_profile === nothing
+        nothing
+    else
+        size(na_profile, 1) == 2 ||
+            throw(InvalidConfiguration("na_profile must be a 2xN matrix of (altitude, weight)"))
+        Matrix{T}(na_profile)
+    end
+
     alt_val = T(altitude)
-    if na_profile !== nothing
-        if size(na_profile, 1) != 2
+    if frozen_profile !== nothing
+        if size(frozen_profile, 1) != 2
             throw(InvalidConfiguration("na_profile must be a 2xN matrix of (altitude, weight)"))
         end
-        weights = na_profile[2, :]
+        weights = frozen_profile[2, :]
         if sum(weights) > 0
-            alt_val = T(sum(na_profile[1, :] .* weights) / sum(weights))
+            alt_val = T(sum(frozen_profile[1, :] .* weights) / sum(weights))
         end
     end
 
-    params = LGSSourceParams{T, typeof(na_profile)}(
+    params = LGSSourceParams{T, typeof(frozen_profile)}(
         T(magnitude),
         polar_arcsec_deg_to_xy_arcsec(coordinates[1], coordinates[2], T),
         T(wavelength),
         alt_val,
         T(elongation_factor),
         (T(laser_coordinates[1]), T(laser_coordinates[2])),
-        na_profile,
+        frozen_profile,
         T(fwhm_spot_up),
         one(T),
     )
@@ -144,3 +152,30 @@ end
 
 lgs_profile(::LGSSource{<:LGSSourceParams{<:AbstractFloat,Nothing}}) = LGSProfileNone()
 lgs_profile(::LGSSource{<:LGSSourceParams{<:AbstractFloat,<:AbstractMatrix}}) = LGSProfileNaProfile()
+
+"""
+    freeze_source(source)
+
+Return a run-owned source description. Maintained source types containing
+mutable user inputs specialize this function and copy those inputs.
+"""
+@inline freeze_source(src::AbstractSource) = src
+@inline freeze_source(src::Source) = src
+
+function freeze_source(src::LGSSource)
+    params = src.params
+    profile = isnothing(params.na_profile) ? nothing : copy(params.na_profile)
+    return LGSSource(LGSSourceParams{
+        typeof(params.altitude),typeof(profile),
+    }(
+        params.magnitude,
+        params.coordinates_xy_arcsec,
+        params.wavelength,
+        params.altitude,
+        params.elongation_factor,
+        params.laser_coordinates,
+        profile,
+        params.fwhm_spot_up,
+        params.photon_irradiance,
+    ))
+end

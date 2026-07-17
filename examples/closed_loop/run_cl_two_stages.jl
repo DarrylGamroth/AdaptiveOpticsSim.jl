@@ -11,6 +11,8 @@ atm = MultiLayerAtmosphere(tel; r0=0.2, L0=25.0, fractional_cn2=[1.0],
 dm = DeformableMirror(tel; n_act=4, influence_width=0.2)
 wfs = ShackHartmannWFS(tel; n_lenslets=4)
 sim = AOSimulation(tel, src, atm, dm, wfs)
+atmosphere_renderer = prepare_atmosphere_renderer(sim.atm, sim.tel, sim.src)
+atmosphere_output = PupilFunction(sim.tel)
 
 dm_coarse = DeformableMirror(sim.tel; n_act=2, influence_width=0.6)
 dm_fine = sim.optic
@@ -23,8 +25,9 @@ cmd_coarse = similar(dm_coarse.state.coefs)
 cmd_fine = similar(dm_fine.state.coefs)
 
 for _ in 1:5
-    advance!(sim.atm, sim.tel; rng=rng)
-    propagate!(sim.atm, sim.tel)
+    epoch = advance_by!(sim.atm, sim.tel.params.sampling_time; rng=rng)
+    render_atmosphere!(atmosphere_output, atmosphere_renderer, sim.atm, epoch)
+    copyto!(sim.tel.state.opd, atmosphere_output.opd)
     apply!(dm_coarse, sim.tel, DMAdditive())
     apply!(dm_fine, sim.tel, DMAdditive())
     measure!(sim.wfs, sim.tel)

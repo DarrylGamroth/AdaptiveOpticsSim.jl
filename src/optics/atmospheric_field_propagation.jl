@@ -15,11 +15,12 @@ struct LayeredFresnelAtmosphericPropagation{T<:AbstractFloat} <: AbstractAtmosph
     chromatic_reference_wavelength::Union{Nothing,T}
 end
 
-struct AtmosphericFieldPropagationParams{T<:AbstractFloat,M<:AbstractAtmosphericFieldModel,V<:AbstractVector{Int},D<:AbstractVector{T}}
+struct AtmosphericFieldPropagationParams{T<:AbstractFloat,M<:AbstractAtmosphericFieldModel,V<:AbstractVector{Int},D<:AbstractVector{T},I<:AtmosphereIdentity}
     zero_padding::Int
     model::M
     layer_order::V
     layer_distances_m::D
+    atmosphere_identity::I
 end
 
 struct AtmosphericFieldSlice{
@@ -30,6 +31,7 @@ struct AtmosphericFieldSlice{
     FP<:PupilFieldFormationPlan,
     P<:AbstractMatrix{T},
     V,
+    C<:AbstractVector{LayerRenderContext{T}},
 }
     source::S
     wavefront::W
@@ -37,6 +39,7 @@ struct AtmosphericFieldSlice{
     formation_plan::FP
     phase_buffer::P
     propagators::V
+    contexts::C
 end
 
 struct AtmosphericFieldPropagationState{
@@ -95,19 +98,22 @@ end
 function _build_field_slice(atm, tel::Telescope, src::AbstractSource, zero_padding::Int,
     ::Type{T}, model::GeometricAtmosphericPropagation{T}) where {T<:AbstractFloat}
     wavefront = PupilFunction(tel; T=T)
+    copyto!(wavefront.opd, opd_map(tel))
     field = ElectricField(wavefront, src; zero_padding=zero_padding, T=T)
     formation_plan = prepare_pupil_field(tel, wavefront, src, field)
     phase_buffer = similar(wavefront.opd)
     fill!(phase_buffer, zero(T))
+    contexts = _build_layer_contexts(atm, tel, src, model, wavelength(src), T)
     return AtmosphericFieldSlice{
         T,typeof(src),typeof(wavefront),typeof(field),
-        typeof(formation_plan),typeof(phase_buffer),Nothing,
-    }(src, wavefront, field, formation_plan, phase_buffer, nothing)
+        typeof(formation_plan),typeof(phase_buffer),Nothing,typeof(contexts),
+    }(src, wavefront, field, formation_plan, phase_buffer, nothing, contexts)
 end
 
 function _build_field_slice(atm, tel::Telescope, src::AbstractSource, zero_padding::Int,
     ::Type{T}, model::LayeredFresnelAtmosphericPropagation{T}) where {T<:AbstractFloat}
     wavefront = PupilFunction(tel; T=T)
+    copyto!(wavefront.opd, opd_map(tel))
     field = ElectricField(wavefront, src; zero_padding=zero_padding, T=T)
     formation_plan = prepare_pupil_field(tel, wavefront, src, field)
     phase_buffer = similar(wavefront.opd)
@@ -117,10 +123,12 @@ function _build_field_slice(atm, tel::Telescope, src::AbstractSource, zero_paddi
         dist == zero(T) ? nothing : FresnelPropagation(field;
             distance_m=dist, output_kind=field.metadata.kind)
     end
+    contexts = _build_layer_contexts(atm, tel, src, model, wavelength(src), T)
     return AtmosphericFieldSlice{
         T,typeof(src),typeof(wavefront),typeof(field),
         typeof(formation_plan),typeof(phase_buffer),typeof(propagators),
-    }(src, wavefront, field, formation_plan, phase_buffer, propagators)
+        typeof(contexts),
+    }(src, wavefront, field, formation_plan, phase_buffer, propagators, contexts)
 end
 
 function _build_slices(atm, tel::Telescope, src::AbstractSource, zero_padding::Int,
@@ -147,21 +155,29 @@ function _build_slices(atm, tel::Telescope, src::SpectralSource, zero_padding::I
     return slices
 end
 
-function AtmosphericFieldPropagation(atm, tel::Telescope, src;
+function AtmosphericFieldPropagation(atm::AbstractTimedAtmosphere,
+    tel::Telescope, src;
     model::AbstractAtmosphericFieldModel=GeometricAtmosphericPropagation(T=eltype(tel.state.opd)),
     zero_padding::Int=1,
     T::Type{<:AbstractFloat}=eltype(tel.state.opd))
     zero_padding >= 1 || throw(InvalidConfiguration("zero_padding must be >= 1"))
+    require_same_backend(atm, tel)
+    atmosphere_numeric_type(atm) === T || throw(InvalidConfiguration(
+        "atmospheric field numeric type must match atmosphere layer storage"))
+    frozen_source = freeze_source(src)
     order, distances = _layer_order_and_distances(atm, T)
-    slices = _build_slices(atm, tel, src, zero_padding, T, model)
+    slices = _build_slices(atm, tel, frozen_source, zero_padding, T, model)
     intensity = similar(first(slices).field.values, T,
         size(first(slices).field.values)...)
     fill!(intensity, zero(T))
-    params = AtmosphericFieldPropagationParams{T, typeof(model), typeof(order), typeof(distances)}(
+    identity = atmosphere_identity(atm)
+    params = AtmosphericFieldPropagationParams{T, typeof(model), typeof(order),
+        typeof(distances),typeof(identity)}(
         zero_padding,
         model,
         order,
         distances,
+        identity,
     )
     state = AtmosphericFieldPropagationState{T, typeof(slices), typeof(intensity)}(slices, intensity)
     return AtmosphericFieldPropagation(params, state)
@@ -172,23 +188,31 @@ end
     return isnothing(ref) ? one(T) : T(ref / λ)
 end
 
-function _render_layer_phase!(out::AbstractMatrix{T}, layer::AbstractAtmosphereLayer, tel::Telescope,
-    src::AbstractSource, model::AbstractAtmosphericFieldModel, λ::T) where {T<:AbstractFloat}
-    ctx = layer_render_context(src, layer, tel, T)
-    shift_scale = _chromatic_shift_scale(model, λ)
-    return render_layer!(out, layer, ctx.shift_x * shift_scale, ctx.shift_y * shift_scale, ctx.footprint_scale)
+function _build_layer_contexts(atm, tel::Telescope, src::AbstractSource,
+    model::AbstractAtmosphericFieldModel, λ::Real,
+    ::Type{T}) where {T<:AbstractFloat}
+    shift_scale = _chromatic_shift_scale(model, T(λ))
+    contexts = Vector{LayerRenderContext{T}}(undef, length(atm.layers))
+    @inbounds for i in eachindex(atm.layers)
+        ctx = layer_render_context(src, atm.layers[i], tel, T)
+        contexts[i] = LayerRenderContext{T}(
+            ctx.shift_x * shift_scale,
+            ctx.shift_y * shift_scale,
+            ctx.footprint_scale,
+        )
+    end
+    return contexts
 end
 
-function _propagate_slice!(::GeometricFieldSynchronousPlan, slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
-    atm, tel::Telescope) where {T<:AbstractFloat}
+function _propagate_slice!(::GeometricFieldSynchronousPlan,
+    slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
+    atm::AbstractTimedAtmosphere) where {T<:AbstractFloat}
     style = execution_style(slice.field.values)
-    copyto!(slice.wavefront.opd, opd_map(tel))
     fill_electric_field_async!(slice.field, slice.wavefront,
         slice.formation_plan)
     @inbounds for idx in prop.params.layer_order
         layer = atm.layers[idx]
-        _render_layer_phase!(slice.phase_buffer, layer, tel, slice.source,
-            prop.params.model, electric_field_wavelength(slice.field))
+        render_layer!(slice.phase_buffer, layer, slice.contexts[idx])
         apply_phase_async!(slice.field, slice.phase_buffer,
             slice.formation_plan; units=:opd)
     end
@@ -196,32 +220,30 @@ function _propagate_slice!(::GeometricFieldSynchronousPlan, slice::AtmosphericFi
     return slice.field
 end
 
-function _propagate_slice!(::GeometricFieldAsyncPlan, slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
-    atm, tel::Telescope) where {T<:AbstractFloat}
-    copyto!(slice.wavefront.opd, opd_map(tel))
+function _propagate_slice!(::GeometricFieldAsyncPlan,
+    slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
+    atm::AbstractTimedAtmosphere) where {T<:AbstractFloat}
     fill_electric_field_async!(slice.field, slice.wavefront,
         slice.formation_plan)
     @inbounds for idx in prop.params.layer_order
         layer = atm.layers[idx]
-        _render_layer_phase!(slice.phase_buffer, layer, tel, slice.source,
-            prop.params.model, electric_field_wavelength(slice.field))
+        render_layer!(slice.phase_buffer, layer, slice.contexts[idx])
         apply_phase_async!(slice.field, slice.phase_buffer,
             slice.formation_plan; units=:opd)
     end
     return slice.field
 end
 
-function _propagate_slice!(::LayeredFresnelFieldSynchronousPlan, slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
-    atm, tel::Telescope) where {T<:AbstractFloat}
+function _propagate_slice!(::LayeredFresnelFieldSynchronousPlan,
+    slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
+    atm::AbstractTimedAtmosphere) where {T<:AbstractFloat}
     style = execution_style(slice.field.values)
-    copyto!(slice.wavefront.opd, opd_map(tel))
     fill_electric_field_async!(slice.field, slice.wavefront,
         slice.formation_plan)
     @inbounds for k in eachindex(prop.params.layer_order)
         idx = prop.params.layer_order[k]
         layer = atm.layers[idx]
-        _render_layer_phase!(slice.phase_buffer, layer, tel, slice.source,
-            prop.params.model, electric_field_wavelength(slice.field))
+        render_layer!(slice.phase_buffer, layer, slice.contexts[idx])
         apply_phase_async!(slice.field, slice.phase_buffer,
             slice.formation_plan; units=:opd)
         synchronize_backend!(style)
@@ -232,17 +254,16 @@ function _propagate_slice!(::LayeredFresnelFieldSynchronousPlan, slice::Atmosphe
     return slice.field
 end
 
-function _propagate_slice!(::LayeredFresnelFieldAsyncPlan, slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
-    atm, tel::Telescope) where {T<:AbstractFloat}
+function _propagate_slice!(::LayeredFresnelFieldAsyncPlan,
+    slice::AtmosphericFieldSlice{T}, prop::AtmosphericFieldPropagation,
+    atm::AbstractTimedAtmosphere) where {T<:AbstractFloat}
     style = execution_style(slice.field.values)
-    copyto!(slice.wavefront.opd, opd_map(tel))
     fill_electric_field_async!(slice.field, slice.wavefront,
         slice.formation_plan)
     @inbounds for k in eachindex(prop.params.layer_order)
         idx = prop.params.layer_order[k]
         layer = atm.layers[idx]
-        _render_layer_phase!(slice.phase_buffer, layer, tel, slice.source,
-            prop.params.model, electric_field_wavelength(slice.field))
+        render_layer!(slice.phase_buffer, layer, slice.contexts[idx])
         apply_phase_async!(slice.field, slice.phase_buffer,
             slice.formation_plan; units=:opd)
         synchronize_backend!(style)
@@ -253,65 +274,106 @@ function _propagate_slice!(::LayeredFresnelFieldAsyncPlan, slice::AtmosphericFie
     return slice.field
 end
 
-function propagate_atmosphere_field!(prop::AtmosphericFieldPropagation, atm, tel::Telescope, src::AbstractSource)
-    length(prop.state.slices) == 1 || throw(InvalidConfiguration("monochromatic atmosphere propagation requires a monochromatic workspace"))
+function _validate_field_epoch(prop::AtmosphericFieldPropagation,
+    atm::AbstractTimedAtmosphere, epoch::AtmosphereEpoch)
+    _validate_epoch_identity(prop.params.atmosphere_identity, atm, epoch)
+    n_layers = length(atm.layers)
+    length(prop.params.layer_order) == n_layers ||
+        throw(AtmosphereEpochError(
+            "atmosphere layer shape changed after field renderer preparation"))
+    @inbounds for slice in prop.state.slices
+        length(slice.contexts) == n_layers || throw(AtmosphereEpochError(
+            "atmosphere layer shape changed after field renderer preparation"))
+    end
+    return epoch
+end
+
+function propagate_atmosphere_field!(prop::AtmosphericFieldPropagation,
+    atm::AbstractTimedAtmosphere, epoch::AtmosphereEpoch)
+    _validate_field_epoch(prop, atm, epoch)
+    length(prop.state.slices) == 1 || throw(InvalidConfiguration(
+        "monochromatic atmosphere propagation requires a monochromatic workspace"))
     slice = prop.state.slices[1]
     plan = atmospheric_field_execution_plan(execution_style(slice.field.values),
         prop.params.model)
-    return _propagate_slice!(plan, slice, prop, atm, tel)
+    return _propagate_slice!(plan, slice, prop, atm)
 end
 
-function propagate_atmosphere_field!(field::ElectricField, prop::AtmosphericFieldPropagation, atm, tel::Telescope, src::AbstractSource)
-    propagated = propagate_atmosphere_field!(prop, atm, tel, src)
-    size(field.values) == size(propagated.values) ||
+function propagate_atmosphere_field!(field::ElectricField,
+    prop::AtmosphericFieldPropagation, atm::AbstractTimedAtmosphere,
+    epoch::AtmosphereEpoch)
+    _validate_field_epoch(prop, atm, epoch)
+    length(prop.state.slices) == 1 || throw(InvalidConfiguration(
+        "monochromatic atmosphere propagation requires a monochromatic workspace"))
+    prepared = prop.state.slices[1].field
+    size(field.values) == size(prepared.values) ||
         throw(DimensionMismatchError("ElectricField size must match propagated atmosphere field size"))
-    field.metadata == propagated.metadata || throw(InvalidConfiguration(
+    field.metadata == prepared.metadata || throw(InvalidConfiguration(
         "ElectricField metadata must match propagated atmosphere field metadata"))
+    validate_plane_storage(field.metadata, field.values;
+        label="atmospheric ElectricField destination")
+    propagated = propagate_atmosphere_field!(prop, atm, epoch)
     copyto!(field.values, propagated.values)
     return field
 end
 
-function atmospheric_intensity!(out::AbstractMatrix{T}, prop::AtmosphericFieldPropagation, atm, tel::Telescope,
-    src::AbstractSource) where {T<:AbstractFloat}
-    propagated = propagate_atmosphere_field!(prop, atm, tel, src)
-    size(out) == size(propagated.values) ||
+function _validate_atmospheric_intensity_destination(out::AbstractMatrix{T},
+    prop::AtmosphericFieldPropagation) where {T<:AbstractFloat}
+    prepared = prop.state.intensity
+    size(out) == size(prepared) ||
         throw(DimensionMismatchError("atmospheric intensity output must match propagated field size"))
-    intensity!(out, propagated)
+    eltype(out) === eltype(prepared) || throw(InvalidConfiguration(
+        "atmospheric intensity numeric type does not match prepared output"))
+    typeof(backend(out)) === typeof(backend(prepared)) ||
+        throw(InvalidConfiguration(
+            "atmospheric intensity backend does not match prepared output"))
+    plane_device(out) == plane_device(prepared) || throw(InvalidConfiguration(
+        "atmospheric intensity destination is on a different physical device"))
     return out
 end
 
-function atmospheric_intensity!(out::AbstractMatrix{T}, prop::AtmosphericFieldPropagation, atm, tel::Telescope,
-    src::SpectralSource) where {T<:AbstractFloat}
-    return _spectral_atmospheric_intensity!(execution_style(out), out, prop, atm, tel, src)
+function atmospheric_intensity!(out::AbstractMatrix{T},
+    prop::AtmosphericFieldPropagation, atm::AbstractTimedAtmosphere,
+    epoch::AtmosphereEpoch) where {T<:AbstractFloat}
+    _validate_field_epoch(prop, atm, epoch)
+    _validate_atmospheric_intensity_destination(out, prop)
+    if length(prop.state.slices) == 1
+        slice = prop.state.slices[1]
+        plan = atmospheric_field_execution_plan(execution_style(slice.field.values),
+            prop.params.model)
+        _propagate_slice!(plan, slice, prop, atm)
+        intensity!(out, slice.field)
+        return out
+    end
+    return _spectral_atmospheric_intensity!(execution_style(out), out, prop,
+        atm)
 end
 
-function _spectral_atmospheric_intensity!(::ScalarCPUStyle, out::AbstractMatrix{T}, prop::AtmosphericFieldPropagation,
-    atm, tel::Telescope, src::SpectralSource) where {T<:AbstractFloat}
-    size(out) == size(prop.state.intensity) ||
-        throw(DimensionMismatchError("spectral atmospheric intensity output must match propagation workspace size"))
+function _spectral_atmospheric_intensity!(::ScalarCPUStyle,
+    out::AbstractMatrix{T}, prop::AtmosphericFieldPropagation,
+    atm::AbstractTimedAtmosphere) where {T<:AbstractFloat}
     fill!(out, zero(T))
     plan = atmospheric_field_execution_plan(ScalarCPUStyle(), prop.params.model)
-    _spectral_atmospheric_intensity_model!(plan, out, prop, atm, tel)
+    _spectral_atmospheric_intensity_model!(plan, out, prop, atm)
     return out
 end
 
-function _spectral_atmospheric_intensity!(style::AcceleratorStyle, out::AbstractMatrix{T}, prop::AtmosphericFieldPropagation,
-    atm, tel::Telescope, src::SpectralSource) where {T<:AbstractFloat}
-    size(out) == size(prop.state.intensity) ||
-        throw(DimensionMismatchError("spectral atmospheric intensity output must match propagation workspace size"))
+function _spectral_atmospheric_intensity!(style::AcceleratorStyle,
+    out::AbstractMatrix{T}, prop::AtmosphericFieldPropagation,
+    atm::AbstractTimedAtmosphere) where {T<:AbstractFloat}
     fill!(out, zero(T))
     plan = atmospheric_field_execution_plan(style, prop.params.model)
-    _spectral_atmospheric_intensity_model!(plan, out, prop, atm, tel)
+    _spectral_atmospheric_intensity_model!(plan, out, prop, atm)
     synchronize_backend!(style)
     return out
 end
 
 function _spectral_atmospheric_intensity_model!(::GeometricFieldSynchronousPlan, out::AbstractMatrix{T},
     prop::AtmosphericFieldPropagation{<:AtmosphericFieldPropagationParams{T,<:GeometricAtmosphericPropagation}},
-    atm, tel::Telescope) where {T<:AbstractFloat}
+    atm::AbstractTimedAtmosphere) where {T<:AbstractFloat}
     plan = GeometricFieldSynchronousPlan()
     @inbounds for slice in prop.state.slices
-        _propagate_slice!(plan, slice, prop, atm, tel)
+        _propagate_slice!(plan, slice, prop, atm)
         accumulate_intensity!(out, slice.field)
     end
     return out
@@ -319,10 +381,10 @@ end
 
 function _spectral_atmospheric_intensity_model!(::GeometricFieldAsyncPlan, out::AbstractMatrix{T},
     prop::AtmosphericFieldPropagation{<:AtmosphericFieldPropagationParams{T,<:GeometricAtmosphericPropagation}},
-    atm, tel::Telescope) where {T<:AbstractFloat}
+    atm::AbstractTimedAtmosphere) where {T<:AbstractFloat}
     plan = GeometricFieldAsyncPlan()
     @inbounds for slice in prop.state.slices
-        _propagate_slice!(plan, slice, prop, atm, tel)
+        _propagate_slice!(plan, slice, prop, atm)
         accumulate_intensity_async!(out, slice.field)
     end
     return out
@@ -330,10 +392,10 @@ end
 
 function _spectral_atmospheric_intensity_model!(::LayeredFresnelFieldSynchronousPlan, out::AbstractMatrix{T},
     prop::AtmosphericFieldPropagation{<:AtmosphericFieldPropagationParams{T,<:LayeredFresnelAtmosphericPropagation}},
-    atm, tel::Telescope) where {T<:AbstractFloat}
+    atm::AbstractTimedAtmosphere) where {T<:AbstractFloat}
     plan = LayeredFresnelFieldSynchronousPlan()
     @inbounds for slice in prop.state.slices
-        _propagate_slice!(plan, slice, prop, atm, tel)
+        _propagate_slice!(plan, slice, prop, atm)
         accumulate_intensity!(out, slice.field)
     end
     return out
@@ -341,16 +403,38 @@ end
 
 function _spectral_atmospheric_intensity_model!(::LayeredFresnelFieldAsyncPlan, out::AbstractMatrix{T},
     prop::AtmosphericFieldPropagation{<:AtmosphericFieldPropagationParams{T,<:LayeredFresnelAtmosphericPropagation}},
-    atm, tel::Telescope) where {T<:AbstractFloat}
+    atm::AbstractTimedAtmosphere) where {T<:AbstractFloat}
     plan = LayeredFresnelFieldAsyncPlan()
     @inbounds for slice in prop.state.slices
-        _propagate_slice!(plan, slice, prop, atm, tel)
+        _propagate_slice!(plan, slice, prop, atm)
         accumulate_intensity_async!(out, slice.field)
     end
     return out
 end
 
-function atmospheric_intensity!(prop::AtmosphericFieldPropagation, atm, tel::Telescope, src)
-    atmospheric_intensity!(prop.state.intensity, prop, atm, tel, src)
+function atmospheric_intensity!(prop::AtmosphericFieldPropagation,
+    atm::AbstractTimedAtmosphere, epoch::AtmosphereEpoch)
+    atmospheric_intensity!(prop.state.intensity, prop, atm, epoch)
     return prop.state.intensity
 end
+
+# Transitional call shapes for optical consumers that have not yet migrated to
+# the explicit epoch executor. Preparation has already frozen telescope and
+# source state, so these arguments are intentionally not read on execution.
+@inline propagate_atmosphere_field!(prop::AtmosphericFieldPropagation,
+    atm::AbstractTimedAtmosphere, ::Telescope, ::AbstractSource) =
+    propagate_atmosphere_field!(prop, atm, current_epoch(atm))
+
+@inline propagate_atmosphere_field!(field::ElectricField,
+    prop::AtmosphericFieldPropagation, atm::AbstractTimedAtmosphere,
+    ::Telescope, ::AbstractSource) =
+    propagate_atmosphere_field!(field, prop, atm, current_epoch(atm))
+
+@inline atmospheric_intensity!(out::AbstractMatrix,
+    prop::AtmosphericFieldPropagation, atm::AbstractTimedAtmosphere,
+    ::Telescope, ::AbstractSource) =
+    atmospheric_intensity!(out, prop, atm, current_epoch(atm))
+
+@inline atmospheric_intensity!(prop::AtmosphericFieldPropagation,
+    atm::AbstractTimedAtmosphere, ::Telescope, ::AbstractSource) =
+    atmospheric_intensity!(prop, atm, current_epoch(atm))

@@ -52,8 +52,8 @@ Shared smoke scaffolding lives in:
 
 The reduced maintained smoke covers:
 
-- multilayer atmosphere
-- infinite atmosphere
+- explicit atmosphere epochs and prepared, device-resident finite/infinite
+  direction rendering into caller-owned pupil products
 - atmospheric field propagation
 - polychromatic diffractive SH
 - deterministic diffractive SH detector/export equivalence against CPU

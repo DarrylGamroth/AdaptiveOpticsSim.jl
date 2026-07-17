@@ -443,7 +443,7 @@ end
 
 function accumulate_pyramid_extended_intensity!(::ScalarCPUStyle, out::AbstractMatrix, wfs::PyramidWFS,
     tel::Telescope, src::ExtendedSource)
-    ast = _cached_extended_source_asterism(src)
+    ast = extended_source_asterism(src)
     if length(ast.sources) == 1
         return pyramid_intensity!(out, wfs, tel, ast.sources[1])
     end
@@ -454,7 +454,7 @@ end
 
 function accumulate_pyramid_extended_intensity!(style::AcceleratorStyle, out::AbstractMatrix, wfs::PyramidWFS,
     tel::Telescope, src::ExtendedSource)
-    ast = _cached_extended_source_asterism(src)
+    ast = extended_source_asterism(src)
     if length(ast.sources) == 1
         return pyramid_intensity!(out, wfs, tel, ast.sources[1])
     end

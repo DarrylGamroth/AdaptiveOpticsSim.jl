@@ -958,10 +958,13 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         T=T,
         backend=selector,
     )
-    advance!(atm, tel; rng=rng)
-    propagate!(atm, tel, src)
-    @test atm.state.opd isa BackendArray
-    @test tel.state.opd isa BackendArray
+    epoch = advance_by!(atm, tel.params.sampling_time; rng=rng)
+    renderer = prepare_atmosphere_renderer(atm, tel, src)
+    atmosphere_output = PupilFunction(tel; T=T)
+    render_atmosphere!(atmosphere_output, renderer, atm, epoch)
+    @test atm.layers[1].generator.state.opd isa BackendArray
+    @test atmosphere_output.opd isa BackendArray
+    copyto!(tel.state.opd, atmosphere_output.opd)
 
     inf_atm = InfiniteMultiLayerAtmosphere(tel;
         r0=T(0.2),
@@ -975,18 +978,20 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         T=T,
         backend=selector,
     )
-    advance!(inf_atm, tel; rng=rng)
-    propagate!(inf_atm, tel, src)
-    @test inf_atm.state.opd isa BackendArray
+    infinite_epoch = advance_by!(inf_atm, tel.params.sampling_time; rng=rng)
+    infinite_renderer = prepare_atmosphere_renderer(inf_atm, tel, src)
+    render_atmosphere!(atmosphere_output, infinite_renderer, inf_atm,
+        infinite_epoch)
     @test inf_atm.layers[1].screen.state.screen isa BackendArray
+    @test atmosphere_output.opd isa BackendArray
 
     prop = AtmosphericFieldPropagation(atm, tel, src;
         model=GeometricAtmosphericPropagation(T=T),
         zero_padding=2,
         T=T)
-    field = AdaptiveOpticsSim.propagate_atmosphere_field!(prop, atm, tel, src)
+    field = propagate_atmosphere_field!(prop, atm, epoch)
     @test field.values isa BackendArray
-    intensity = AdaptiveOpticsSim.atmospheric_intensity!(prop, atm, tel, src)
+    intensity = atmospheric_intensity!(prop, atm, epoch)
     @test intensity isa BackendArray
 
     bundle = SpectralBundle(T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.4, 0.6]; T=T)

@@ -702,7 +702,8 @@ function revolt_like_runtime_allocations()
     return revolt_like_allocation_profile(; backend_name="cpu", config_dir=config_dir, sensor=CMOSSensor(), T=Float32)
 end
 
-mutable struct SharedArmCountingAtmosphere{A,B<:AbstractArrayBackend} <: AdaptiveOpticsSim.AbstractAtmosphere
+mutable struct SharedArmCountingAtmosphere{A,B<:AbstractArrayBackend} <:
+    AdaptiveOpticsSim.AbstractTimedAtmosphere
     atmosphere::A
     advances::Int
     renders::Int
@@ -715,12 +716,36 @@ function SharedArmCountingAtmosphere(atmosphere)
 end
 
 @inline AdaptiveOpticsSim.backend(::SharedArmCountingAtmosphere{<:Any,B}) where {B} = B()
+@inline AdaptiveOpticsSim.atmosphere_timeline(atmosphere::SharedArmCountingAtmosphere) =
+    AdaptiveOpticsSim.atmosphere_timeline(atmosphere.atmosphere)
+@inline AdaptiveOpticsSim.atmosphere_identity(atmosphere::SharedArmCountingAtmosphere) =
+    AdaptiveOpticsSim.atmosphere_identity(atmosphere.atmosphere)
+@inline AdaptiveOpticsSim.atmosphere_layers(atmosphere::SharedArmCountingAtmosphere) =
+    AdaptiveOpticsSim.atmosphere_layers(atmosphere.atmosphere)
+@inline AdaptiveOpticsSim.atmosphere_numeric_type(
+    atmosphere::SharedArmCountingAtmosphere) =
+    AdaptiveOpticsSim.atmosphere_numeric_type(atmosphere.atmosphere)
+
+function AdaptiveOpticsSim.advance_by!(
+    atmosphere::SharedArmCountingAtmosphere, duration::Real,
+    rng::AbstractRNG)
+    atmosphere.advances += 1
+    AdaptiveOpticsSim.advance_by!(atmosphere.atmosphere, duration, rng)
+    return AdaptiveOpticsSim.current_epoch(atmosphere)
+end
 
 function AdaptiveOpticsSim.advance!(atmosphere::SharedArmCountingAtmosphere, tel::Telescope,
     rng::AbstractRNG)
-    atmosphere.advances += 1
-    AdaptiveOpticsSim.advance!(atmosphere.atmosphere, tel, rng)
+    AdaptiveOpticsSim.advance_by!(atmosphere, tel.params.sampling_time, rng)
     return atmosphere
+end
+
+function AdaptiveOpticsSim.render_atmosphere_opd_impl!(dest::AbstractMatrix,
+    renderer::AdaptiveOpticsSim.AtmosphereDirectionRenderer,
+    atmosphere::SharedArmCountingAtmosphere)
+    atmosphere.renders += 1
+    return AdaptiveOpticsSim.render_atmosphere_opd_impl!(dest, renderer,
+        atmosphere.atmosphere)
 end
 
 function AdaptiveOpticsSim.propagate!(atmosphere::SharedArmCountingAtmosphere, tel::Telescope)
@@ -887,6 +912,20 @@ end
     @test science_frames(arm)[1] == science_frames(arm)[2]
     @test command(shared) === command(primary)
     @test synchronize_runtime!(shared) === shared
+
+    lgs_profile = [80_000.0 90_000.0; 0.4 0.6]
+    lgs = LGSSource(na_profile=lgs_profile)
+    lgs_arm_a = SharedOpticalArm(:lgs_a, lgs;
+        wfs_channels=OpticalWFSChannel(auxiliary_wfs))
+    lgs_arm_b = SharedOpticalArm(:lgs_b, lgs;
+        wfs_channels=OpticalWFSChannel(auxiliary_wfs))
+    frozen_lgs_runtime = SharedOpticalRuntime(primary, lgs_arm_a, lgs_arm_b)
+    frozen_lgs_a, frozen_lgs_b = optical_arms(frozen_lgs_runtime)
+    @test frozen_lgs_a.source === frozen_lgs_b.source
+    @test frozen_lgs_a.source !== lgs
+    lgs_profile[1, 1] = 1.0
+    lgs.params.na_profile[1, 1] = 2.0
+    @test frozen_lgs_a.source.params.na_profile[1, 1] == 80_000.0
 
     atmosphere.advances = 0
     atmosphere.renders = 0

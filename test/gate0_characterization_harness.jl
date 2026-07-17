@@ -162,11 +162,19 @@ function gate0_atmosphere_directions(case::ReferenceCase)
     atmosphere = build_reference_atmosphere(case.config["atmosphere"], tel)
     seed = Int(get(case.config["atmosphere"], "advance_seed", 1))
     steps = Int(get(case.config["atmosphere"], "advance_steps", 1))
+    duration = Float64(case.config["atmosphere"]["legacy_elapsed_duration"])
+    step_duration = duration / steps
     rng = MersenneTwister(seed)
     for _ in 1:steps
-        advance!(atmosphere, tel; rng=rng)
+        advance_by!(atmosphere, step_duration; rng=rng)
     end
-    epoch = copy(Array(atmosphere.state.opd))
+    T = eltype(tel.state.opd)
+    shifts = zeros(T, length(atmosphere.layers))
+    scales = ones(T, length(atmosphere.layers))
+    epoch_device = similar(tel.state.opd)
+    AdaptiveOpticsSim.accumulate_rendered_layers!(epoch_device,
+        atmosphere.layers, shifts, shifts, scales)
+    epoch = copy(Array(epoch_device))
     onaxis = build_reference_source(case.config["onaxis_source"])
     offaxis = build_reference_source(case.config["offaxis_source"])
     lgs = build_reference_source(case.config["lgs_source"])

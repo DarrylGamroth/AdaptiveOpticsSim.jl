@@ -1104,7 +1104,7 @@ function compute_reference_actual(case::ReferenceCase)
         advance_seed = Int(get(case.config["atmosphere"], "advance_seed", 1))
         rng = MersenneTwister(advance_seed)
         for _ in 1:advance_steps
-            advance!(atm, tel; rng=rng)
+            advance_by!(atm, tel.params.sampling_time; rng=rng)
         end
         prop = AtmosphericFieldPropagation(
             atm,

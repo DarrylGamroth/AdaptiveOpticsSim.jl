@@ -54,8 +54,16 @@ struct SpectralSource{S<:AbstractSource,B<:SpectralBundle} <: AbstractSource
 end
 
 function with_spectrum(src::AbstractSource, bundle::SpectralBundle)
-    return SpectralSource(src, bundle)
+    return SpectralSource(freeze_source(src), freeze_spectral_bundle(bundle))
 end
+
+function freeze_spectral_bundle(bundle::SpectralBundle{T}) where {T<:AbstractFloat}
+    samples = copy(bundle.samples)
+    return SpectralBundle{T,typeof(samples)}(samples)
+end
+
+freeze_source(src::SpectralSource) =
+    SpectralSource(freeze_source(src.source), freeze_spectral_bundle(src.bundle))
 
 wavelength(src::SpectralSource) = wavelength(src.source)
 photon_irradiance(src::SpectralSource) = photon_irradiance(src.source)
@@ -98,14 +106,15 @@ function source_with_wavelength_and_irradiance(src::LGSSource, λ::T,
     params = src.params
     lcoords = (T(params.laser_coordinates[1]), T(params.laser_coordinates[2]))
     coords = (T(params.coordinates_xy_arcsec[1]), T(params.coordinates_xy_arcsec[2]))
-    return LGSSource(LGSSourceParams{T, typeof(params.na_profile)}(
+    profile = isnothing(params.na_profile) ? nothing : copy(params.na_profile)
+    return LGSSource(LGSSourceParams{T, typeof(profile)}(
         T(params.magnitude),
         coords,
         λ,
         T(params.altitude),
         T(params.elongation_factor),
         lcoords,
-        params.na_profile,
+        profile,
         T(params.fwhm_spot_up),
         irradiance,
     ))

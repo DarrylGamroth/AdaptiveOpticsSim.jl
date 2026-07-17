@@ -40,9 +40,15 @@ Example:
 
 ```julia
 rng = runtime_rng(0x1234)
-advance!(atm, tel; rng=rng)
+epoch = advance_by!(atm, 1e-3; rng=rng)
 measure!(wfs, tel, src, det; rng=rng)
 ```
+
+Rendering a published `AtmosphereEpoch` is deterministic and does not consume
+RNG. A zero-duration advance after initialization returns the current epoch
+without changing the RNG stream or epoch sequence. For order-independent
+multi-path replay, prepare one renderer per direction and render the same epoch
+in any order.
 
 For reference-data refreshes:
 

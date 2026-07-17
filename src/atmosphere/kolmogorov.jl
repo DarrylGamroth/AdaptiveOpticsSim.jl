@@ -16,6 +16,7 @@ end
 struct KolmogorovParams{T<:AbstractFloat}
     r0::T
     L0::T
+    sampling_m::T
 end
 
 mutable struct KolmogorovState{T<:AbstractFloat,A<:AbstractMatrix{T},B<:AbstractMatrix{Complex{T}},V<:AbstractVector{T},P}
@@ -31,19 +32,24 @@ mutable struct KolmogorovState{T<:AbstractFloat,A<:AbstractMatrix{T},B<:Abstract
     last_delta::T
     last_r0::T
     last_L0::T
+    timeline::AtmosphereTimelineState{T}
 end
 
-struct KolmogorovAtmosphere{P<:KolmogorovParams,S<:KolmogorovState,B<:AbstractArrayBackend} <: AbstractAtmosphere
+struct KolmogorovAtmosphere{P<:KolmogorovParams,S<:KolmogorovState,I<:AtmosphereIdentity,B<:AbstractArrayBackend} <: AbstractTimedAtmosphere
     params::P
     state::S
+    identity::I
 end
 
-@inline backend(::KolmogorovAtmosphere{<:Any,<:Any,B}) where {B} = B()
+@inline backend(::KolmogorovAtmosphere{<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline atmosphere_layers(::KolmogorovAtmosphere) = ()
+@inline atmosphere_numeric_type(atm::KolmogorovAtmosphere) =
+    typeof(atm.params.r0)
 
 function KolmogorovAtmosphere(tel::Telescope; r0::Real, L0::Real=25.0, T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel))
     selector = require_same_backend(tel, _resolve_backend_selector(backend))
     backend = _resolve_array_backend(selector)
-    params = KolmogorovParams{T}(T(r0), T(L0))
+    params = KolmogorovParams{T}(T(r0), T(L0), T(tel.aperture.sampling_m[1]))
     n = tel.params.resolution
     opd = backend{T}(undef, n, n)
     psd = backend{T}(undef, n, n)
@@ -70,8 +76,11 @@ function KolmogorovAtmosphere(tel::Telescope; r0::Real, L0::Real=25.0, T::Type{<
         T(-1),
         T(-1),
         T(-1),
+        new_atmosphere_timeline(T),
     )
-    return KolmogorovAtmosphere{typeof(params), typeof(state), typeof(selector)}(params, state)
+    identity = AtmosphereIdentity()
+    return KolmogorovAtmosphere{typeof(params), typeof(state), typeof(identity),
+        typeof(selector)}(params, state, identity)
 end
 
 function update_psd!(atm::KolmogorovAtmosphere, delta::Real)
@@ -114,17 +123,24 @@ function ensure_psd!(atm::KolmogorovAtmosphere, delta::Real)
     return atm
 end
 
-function advance!(atm::KolmogorovAtmosphere, tel::Telescope, rng::AbstractRNG)
-    n = tel.params.resolution
-    delta = tel.params.diameter / n
+function regenerate_phase_screen!(atm::KolmogorovAtmosphere,
+    rng::AbstractRNG)
+    delta = atm.params.sampling_m
     ensure_psd!(atm, delta)
     phase_screen_von_karman!(atm.state.opd, atm, delta, rng)
     return atm
 end
 
-function advance!(atm::KolmogorovAtmosphere, tel::Telescope; rng::AbstractRNG=Random.default_rng())
-    return advance!(atm, tel, rng)
-end
+@inline initialize_atmosphere!(atm::KolmogorovAtmosphere, rng::AbstractRNG) =
+    regenerate_phase_screen!(atm, rng)
+
+# Initial publication already generated the independent screen. Subsequent
+# positive-time publications refresh it once, preserving legacy semantics.
+@inline evolve_initial_atmosphere!(atm::KolmogorovAtmosphere, ::Real,
+    ::AbstractRNG) = atm
+
+@inline evolve_atmosphere!(atm::KolmogorovAtmosphere, ::Real,
+    rng::AbstractRNG) = regenerate_phase_screen!(atm, rng)
 
 function phase_screen_von_karman!(out::AbstractMatrix, atm::KolmogorovAtmosphere, delta::Real, rng::AbstractRNG)
     n = size(out, 1)
@@ -143,9 +159,11 @@ function randn_phase_noise!(rng::AbstractRNG, out::AbstractMatrix{T}, host::Matr
     randn_backend!(rng, out)
     return host
 end
-
-
-function propagate!(atm::KolmogorovAtmosphere, tel::Telescope)
-    tel.state.opd .= atm.state.opd .* pupil_mask(tel)
-    return tel
+function render_atmosphere_opd_impl!(dest::AbstractMatrix,
+    renderer::AtmosphereDirectionRenderer, atm::KolmogorovAtmosphere)
+    size(dest) == size(atm.state.opd) || throw(DimensionMismatchError(
+        "Kolmogorov screen dimensions do not match prepared output"))
+    copyto!(dest, atm.state.opd)
+    dest .*= renderer.pupil
+    return dest
 end

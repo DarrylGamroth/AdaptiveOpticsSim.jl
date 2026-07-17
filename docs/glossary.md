@@ -100,6 +100,9 @@ a channel detector and is not forced into an area-frame API.
 | WFS slopes | Gradient or centroid-equivalent slope signals where the sensor and calibration establish that meaning. The existing generic `slopes` accessor is transitional and must not be extended to new non-slope sensors. |
 | WFS flux normalization | Historical AO shorthand for normalization by summed detector signal or incident expected photon count. Existing `*FluxNormalization` names are transitional; they do not establish SI photon-flux units and should not be copied into new interfaces. |
 | Microlens array | An independent optical element that partitions and focuses a field. A Shack–Hartmann WFS composes it with acquisition and spot estimation. |
+| Atmosphere model time | Explicit simulation time, in seconds, owned by the scenario or scheduler and passed to atmosphere evolution. It is not inferred from telescope sampling, detector cadence, or wall time. |
+| Atmosphere epoch | An immutable identity for one published atmosphere state, including atmosphere identity, model time, and a monotonic publication sequence. It is not an independently retained copy of every layer array. |
+| Atmosphere direction renderer | A prepared, path-local mapping from one frozen source direction and telescope sampling geometry to caller-owned atmospheric output for a compatible epoch. It does not advance atmosphere time or consume RNG. |
 | Trigger | An acquisition-start event delivered to a detector endpoint. It is distinct from an internal camera oscillator or the simulation execution clock. |
 | Cadence | Intended recurrence of an operation or acquisition. Cadence does not imply common trigger phase. |
 | Clock source | The timebase used to timestamp or schedule events. Detector trigger skew is modeled separately from clock-source error. |

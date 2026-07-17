@@ -129,15 +129,22 @@ function source_model_signature(model::AbstractExtendedSourceModel)
     return sig
 end
 
-mutable struct ExtendedSource{S<:Union{Source,LGSSource},M<:AbstractExtendedSourceModel,A<:Asterism} <: AbstractSource
+struct ExtendedSource{
+    S<:Union{Source,LGSSource},
+    M<:AbstractExtendedSourceModel,
+    A<:Asterism,
+} <: AbstractSource
     source::S
     model::M
-    cached_signature::UInt
-    cached_asterism::A
+    quadrature::A
 end
 
 function with_extended_source(src::Union{Source,LGSSource}, model::AbstractExtendedSourceModel)
-    return ExtendedSource(src, model)
+    frozen_source = freeze_source(src)
+    frozen_model = freeze_extended_source_model(model)
+    quadrature = _build_extended_source_asterism(frozen_source, frozen_model)
+    return ExtendedSource{typeof(frozen_source),typeof(frozen_model),
+        typeof(quadrature)}(frozen_source, frozen_model, quadrature)
 end
 
 function with_extended_source(src::AbstractSource, ::AbstractExtendedSourceModel)
@@ -174,14 +181,15 @@ end
 function source_with_coordinates_and_irradiance(src::LGSSource,
     coords_xy_arcsec::NTuple{2,T}, irradiance::T) where {T<:AbstractFloat}
     params = src.params
-    return LGSSource(LGSSourceParams{T, typeof(params.na_profile)}(
+    profile = isnothing(params.na_profile) ? nothing : copy(params.na_profile)
+    return LGSSource(LGSSourceParams{T, typeof(profile)}(
         T(params.magnitude),
         coords_xy_arcsec,
         T(params.wavelength),
         T(params.altitude),
         T(params.elongation_factor),
         (T(params.laser_coordinates[1]), T(params.laser_coordinates[2])),
-        params.na_profile,
+        profile,
         T(params.fwhm_spot_up),
         irradiance,
     ))
@@ -204,21 +212,29 @@ function _build_extended_source_asterism(src::Union{Source,LGSSource}, model::Ab
     return Asterism(samples)
 end
 
-function ExtendedSource(src::S, model::M) where {S<:Union{Source,LGSSource},M<:AbstractExtendedSourceModel}
-    ast = _build_extended_source_asterism(src, model)
-    sig = hash((source_measurement_signature(src), source_model_signature(model)))
-    return ExtendedSource{S,M,typeof(ast)}(src, model, sig, ast)
+function freeze_extended_source_model(model::PointCloudSourceModel{T}) where {T<:AbstractFloat}
+    offsets = copy(model.offsets_xy_arcsec)
+    weights = copy(model.weights)
+    return PointCloudSourceModel{T,typeof(offsets),typeof(weights)}(offsets, weights)
 end
+
+function freeze_extended_source_model(model::GaussianDiskSourceModel{T}) where {T<:AbstractFloat}
+    offsets = copy(model.offsets_xy_arcsec)
+    weights = copy(model.weights)
+    return GaussianDiskSourceModel{T,typeof(offsets),typeof(weights)}(
+        model.sigma_arcsec, model.radius_sigma, model.n_side, offsets, weights)
+end
+
+function freeze_extended_source_model(model::SampledImageSourceModel{T}) where {T<:AbstractFloat}
+    image = copy(model.image)
+    offsets = copy(model.offsets_xy_arcsec)
+    weights = copy(model.weights)
+    return SampledImageSourceModel{T,typeof(image),typeof(offsets),typeof(weights)}(
+        image, model.pixel_scale_arcsec, offsets, weights)
+end
+
+freeze_source(src::ExtendedSource) = with_extended_source(src.source, src.model)
 
 function extended_source_asterism(src::ExtendedSource)
-    return _build_extended_source_asterism(src.source, src.model)
-end
-
-function _cached_extended_source_asterism(src::ExtendedSource)
-    sig = source_measurement_signature(src)
-    if src.cached_signature != sig
-        src.cached_asterism = _build_extended_source_asterism(src.source, src.model)
-        src.cached_signature = sig
-    end
-    return src.cached_asterism
+    return src.quadrature
 end

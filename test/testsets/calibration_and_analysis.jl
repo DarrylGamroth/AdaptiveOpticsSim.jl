@@ -279,7 +279,7 @@ end
     ensure_psd!(atm, delta)
     runtime_screen_rng = MersenneTwister(7)
     helper_screen_rng = MersenneTwister(7)
-    advance!(atm, tel; rng=runtime_screen_rng)
+    advance_by!(atm, tel.params.sampling_time; rng=runtime_screen_rng)
     helper_screen, helper_psd = ft_phase_screen(atm, tel.params.resolution, delta; rng=helper_screen_rng, return_psd=true)
     @test helper_screen ≈ atm.state.opd
     @test helper_psd ≈ atm.state.psd

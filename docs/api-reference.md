@@ -44,7 +44,8 @@ The package intentionally distinguishes three tiers:
 ## Core
 
 - Errors: `AdaptiveOpticsSimError`, `InvalidConfiguration`,
-  `DimensionMismatchError`, `UnsupportedAlgorithm`, `NumericalConditionError`
+  `DimensionMismatchError`, `UnsupportedAlgorithm`, `NumericalConditionError`,
+  `AtmosphereTimeError`, `AtmosphereEpochError`
 - Profiles and RNG: `FidelityProfile`, `ScientificProfile`, `FastProfile`,
   `default_fidelity_profile`, `runtime_rng`, `deterministic_reference_rng`
 - Backend selectors: `CPUBackend`, `CUDABackend`, `AMDGPUBackend`,
@@ -94,11 +95,26 @@ The package intentionally distinguishes three tiers:
 - `MultiLayerAtmosphere`
 - `InfinitePhaseScreen`
 - `InfiniteMultiLayerAtmosphere`
-- `advance!`
-- `propagate!`
+- Epochs: `AtmosphereEpoch`, `current_epoch`, `epoch_time`, `epoch_sequence`
+- Explicit evolution: `advance_by!`, `advance_to!`
+- Direction preparation: `prepare_atmosphere_renderer`,
+  `prepare_atmosphere_renderers`, `direction_renderers`
+- Caller-owned rendering: `render_atmosphere!`
+- Field execution: `propagate_atmosphere_field!`, `atmospheric_intensity!`
+- Transitional/static extension verbs: `advance!`, `propagate!`
 
-Atmosphere implementations are expected to mutate preallocated state in
-`advance!` and apply the resulting OPD in `propagate!`.
+Timed atmosphere implementations mutate physical layer state only during an
+explicit advance and publish a stable epoch. A prepared single-direction
+renderer consumes the current epoch, writes a compatible caller-owned
+`PupilFunction`, and neither advances the atmosphere nor consumes RNG. The
+plural preparation API expands an `Asterism` or `ExtendedSource`; the singular
+API rejects multi-direction sources.
+
+`propagate!(atmosphere, telescope, source)` remains a transitional convenience
+that prepares a renderer on each call. Repeated and HIL-sensitive paths should
+prepare once and call `render_atmosphere!`. `advance!` remains the extension
+verb for source-independent untimed/static atmosphere models; maintained timed
+models use `advance_by!` or `advance_to!`.
 
 ## Deformable Mirrors And Controllable Optics
 

@@ -7,8 +7,18 @@ abstract type AbstractTelescope <: AbstractOpticalElement end
 """Sources must provide wavelength(src)."""
 abstract type AbstractSource <: AbstractOpticalElement end
 
-"""Atmospheres implement advance!(atm, tel; rng) and propagate!(atm, tel)."""
+"""Base type for atmospheric models."""
 abstract type AbstractAtmosphere <: AbstractOpticalElement end
+
+"""
+Atmospheres whose shared evolution is advanced with explicit model time and
+published as immutable epoch identities.
+"""
+abstract type AbstractTimedAtmosphere <: AbstractAtmosphere end
+
+# Extension seam retained for untimed/static test atmospheres and user models.
+# Maintained stochastic atmospheres use `advance_by!` / `advance_to!` instead.
+function advance! end
 
 """
 Wavefront sensors implement `measure!(wfs, tel[, src])` and

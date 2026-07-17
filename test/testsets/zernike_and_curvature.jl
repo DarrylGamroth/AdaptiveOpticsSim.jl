@@ -132,7 +132,7 @@ end
         wind_direction=[0.0, 90.0],
         altitude=[0.0, 5000.0],
     )
-    advance!(atm, tel; rng=MersenneTwister(3))
+    advance_by!(atm, tel.params.sampling_time; rng=MersenneTwister(3))
     atm_slopes = copy(measure!(wfs, tel, src, atm))
     @test all(isfinite, atm_slopes)
     @test norm(atm_slopes) > 0
