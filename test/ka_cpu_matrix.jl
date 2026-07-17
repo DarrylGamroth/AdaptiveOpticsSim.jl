@@ -376,6 +376,41 @@ end
         @test explicit_fft_ast[2, 2, n_spots + 1] == 1.5 + 0.0im
         @test explicit_fft_ast[2, 2, 2] == 0.0 + 0.0im
 
+        explicit_pupil_fft = fill(99.0 + 0.0im, pad, pad, n_spots)
+        AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE,
+            AdaptiveOpticsSim.sh_explicit_pupil_stack_kernel!,
+            explicit_pupil_fft, valid_mask, explicit_amplitude, opd, phasor,
+            2.0, 0.0, n_sub, sub, ox, oy, n, pad;
+            ndrange=(pad, pad, n_sub, n_sub))
+        mark_ka_cpu_kernel!(:sh_explicit_pupil_stack_kernel!)
+        @test explicit_pupil_fft[2, 2, 1] == 1.0 + 0.0im
+        @test explicit_pupil_fft[2, 2, 2] == 0.0 + 0.0im
+        @test explicit_pupil_fft[3, 3, 4] == 1.0 + 0.0im
+        @test explicit_pupil_fft[1, 1, 1] == 0.0 + 0.0im
+
+        pupil_field = fill(0.25 + 0.5im, n, n)
+        explicit_field_fft = fill(99.0 + 0.0im, pad, pad, n_spots)
+        AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE,
+            AdaptiveOpticsSim.sh_explicit_field_stack_kernel!,
+            explicit_field_fft, valid_mask, pupil_field, phasor, n_sub, sub,
+            ox, oy, n, pad; ndrange=(pad, pad, n_sub, n_sub))
+        mark_ka_cpu_kernel!(:sh_explicit_field_stack_kernel!)
+        @test explicit_field_fft[2, 2, 1] == 0.25 + 0.5im
+        @test explicit_field_fft[2, 2, 2] == 0.0 + 0.0im
+        @test explicit_field_fft[3, 3, 4] == 0.25 + 0.5im
+        @test explicit_field_fft[1, 1, 1] == 0.0 + 0.0im
+
+        mosaic = reshape(collect(1.0:16.0), 4, 4)
+        unpacked = fill(-1.0, n_spots, sub, sub)
+        AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE,
+            AdaptiveOpticsSim.sh_unpack_mosaic_kernel!, unpacked, mosaic,
+            n_sub, sub; ndrange=(n_sub, n_sub, sub, sub))
+        mark_ka_cpu_kernel!(:sh_unpack_mosaic_kernel!)
+        @test unpacked[1, :, :] == mosaic[1:2, 1:2]
+        @test unpacked[2, :, :] == mosaic[1:2, 3:4]
+        @test unpacked[3, :, :] == mosaic[3:4, 1:2]
+        @test unpacked[4, :, :] == mosaic[3:4, 3:4]
+
         sample_input = reshape(collect(1.0:64.0), 4, 4, n_spots)
         sampled = fill(-1.0, n_spots, 2, 2)
         AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_sample_spot_stack_kernel!,
@@ -965,9 +1000,6 @@ end
             :masked_sum2d_kernel!,
             :scaled_shifted_coord_stack_kernel!,
             :selected_covariance_block_kernel!,
-            :sh_explicit_field_stack_kernel!,
-            :sh_explicit_pupil_stack_kernel!,
-            :sh_unpack_mosaic_kernel!,
             :submatrix_extract_kernel!,
             :zernike_phasor_kernel!,
             :zernike_signal_kernel!,
