@@ -12,19 +12,20 @@ export CoronagraphPayload,
     science_step!,
     hil_step!
 
-struct CoronagraphPayload{P,M,T}
+struct CoronagraphPayload{P,A,T}
     opd_m::P
-    pupil_mask::M
+    pupil_amplitude::A
     diameter_m::T
     focal_length_m::T
     lyot_stop_norm::T
 end
 
-mutable struct ProperHILCoronagraphContext{SC,SM,PM,P,CB,R1,R2,T}
+mutable struct ProperHILCoronagraphContext{SC,SM,PM,P,SP,CB,R1,R2,T}
     scenario::SC
     sim::SM
     science_model::PM
     payload::P
+    science_pupil::SP
     command_buffer::CB
     tiptilt_range::R1
     dm_range::R2
@@ -56,7 +57,7 @@ function hil_coronagraph_prescription(λm, n; payload::CoronagraphPayload)
     wf = prop_begin(payload.diameter_m, λm, n; beam_diam_fraction=1.0)
     prop_circular_aperture(wf, payload.diameter_m / 2)
     prop_define_entrance(wf)
-    prop_multiply(wf, payload.pupil_mask)
+    prop_multiply(wf, payload.pupil_amplitude)
     prop_add_phase(wf, payload.opd_m)
 
     prop_lens(wf, payload.focal_length_m, "science arm")
@@ -120,7 +121,8 @@ function build_proper_hil_context(;
     scenario = build_control_loop_scenario(cfg, branch)
     prepare!(scenario)
 
-    proper_ctx = Proper.RunContext(typeof(sim.tel.state.opd))
+    science_pupil = PupilFunction(sim.tel)
+    proper_ctx = Proper.RunContext(typeof(opd_map(science_pupil)))
     science_model = prepare_model(
         :proper_hil_coronagraph,
         hil_coronagraph_prescription,
@@ -132,8 +134,8 @@ function build_proper_hil_context(;
     )
 
     payload = CoronagraphPayload(
-        sim.tel.state.opd,
-        pupil_mask(sim.tel),
+        opd_map(science_pupil),
+        pupil_amplitude(science_pupil),
         T(sim.tel.params.diameter),
         T(focal_length_m),
         T(lyot_stop_norm),
@@ -150,6 +152,7 @@ function build_proper_hil_context(;
         sim,
         science_model,
         payload,
+        science_pupil,
         command_buffer,
         tiptilt_range,
         dm_range,
@@ -180,6 +183,7 @@ function ao_step!(ctx::ProperHILCoronagraphContext)
 end
 
 function science_step!(ctx::ProperHILCoronagraphContext)
+    apply_opd!(ctx.science_pupil, opd_map(ctx.sim.tel))
     return prop_run(ctx.science_model; payload=ctx.payload)
 end
 

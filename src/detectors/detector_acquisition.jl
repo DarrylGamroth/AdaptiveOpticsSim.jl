@@ -164,6 +164,173 @@ function _require_finite_nonnegative_intensity(values::AbstractMatrix)
     return nothing
 end
 
+@inline _require_detector_defect_shape(::NullDetectorDefectModel,
+    ::Tuple{Int,Int}) = nothing
+
+function _require_detector_defect_shape(model::PixelResponseNonuniformity,
+    frame_shape::Tuple{Int,Int})
+    size(model.gain_map) == frame_shape || throw(DimensionMismatchError(
+        "PixelResponseNonuniformity gain_map size must match detector frame size"))
+    return nothing
+end
+
+function _require_detector_defect_shape(model::DarkSignalNonuniformity,
+    frame_shape::Tuple{Int,Int})
+    size(model.dark_map) == frame_shape || throw(DimensionMismatchError(
+        "DarkSignalNonuniformity dark_map size must match detector frame size"))
+    return nothing
+end
+
+function _require_detector_defect_shape(model::BadPixelMask,
+    frame_shape::Tuple{Int,Int})
+    size(model.mask) == frame_shape || throw(DimensionMismatchError(
+        "BadPixelMask mask size must match detector frame size"))
+    return nothing
+end
+
+@inline _require_detector_defect_shapes(::Tuple{},
+    ::Tuple{Int,Int}) = nothing
+
+@inline function _require_detector_defect_shapes(models::Tuple,
+    frame_shape::Tuple{Int,Int})
+    _require_detector_defect_shape(first(models), frame_shape)
+    _require_detector_defect_shapes(Base.tail(models), frame_shape)
+    return nothing
+end
+
+@inline function _require_detector_defect_shape(
+    model::CompositeDetectorDefectModel, frame_shape::Tuple{Int,Int})
+    return _require_detector_defect_shapes(model.stages, frame_shape)
+end
+
+@inline _require_background_flux_shape(::NoBackground,
+    ::Tuple{Int,Int}) = nothing
+@inline _require_background_flux_shape(::ScalarBackground,
+    ::Tuple{Int,Int}) = nothing
+
+function _require_background_flux_shape(background::BackgroundFrame,
+    frame_shape::Tuple{Int,Int})
+    size(background.map) == frame_shape || throw(DimensionMismatchError(
+        "background_flux size must match detector frame size"))
+    return nothing
+end
+
+@inline _require_background_map_shape(::NoBackground,
+    ::Tuple{Int,Int}) = nothing
+@inline _require_background_map_shape(::ScalarBackground,
+    ::Tuple{Int,Int}) = nothing
+
+function _require_background_map_shape(background::BackgroundFrame,
+    frame_shape::Tuple{Int,Int})
+    size(background.map) == frame_shape || throw(DimensionMismatchError(
+        "background_map size must match detector frame size"))
+    return nothing
+end
+
+@inline _require_cmos_readout_shape(::NullCMOSReadNoise,
+    ::Tuple{Int,Int}) = nothing
+
+function _require_cmos_readout_shape(model::CMOSReadNoiseMap,
+    frame_shape::Tuple{Int,Int})
+    size(model.sigma) == frame_shape || throw(DimensionMismatchError(
+        "CMOSReadNoiseMap sigma size must match detector frame size"))
+    return nothing
+end
+
+@inline _require_cmos_output_shape(::NullCMOSOutputModel,
+    ::Tuple{Int,Int}) = nothing
+
+function _require_cmos_output_shape(model::StaticCMOSOutputPattern,
+    frame_shape::Tuple{Int,Int})
+    length(model.gains) * model.output_cols >= frame_shape[2] ||
+        throw(DimensionMismatchError(
+            "StaticCMOSOutputPattern does not cover detector columns"))
+    return nothing
+end
+
+@inline _require_sensor_frame_shape(::FrameSensorType,
+    ::Tuple{Int,Int}) = nothing
+
+@inline function _require_sensor_frame_shape(sensor::CMOSSensor,
+    frame_shape::Tuple{Int,Int})
+    _require_cmos_readout_shape(sensor.readout_noise_model, frame_shape)
+    _require_cmos_output_shape(sensor.output_model, frame_shape)
+    return nothing
+end
+
+function _require_detector_output_configuration(det::Detector)
+    output = det.state.output_buffer
+    output_host = det.state.output_buffer_host
+    requires_output = det.params.output_type !== nothing ||
+        det.params.readout_window !== nothing
+    if requires_output
+        output === nothing && throw(InvalidConfiguration(
+            "Detector output type or readout window requires allocated output storage"))
+        output_host === nothing && throw(InvalidConfiguration(
+            "Detector output storage requires a prepared host output buffer"))
+        return nothing
+    end
+    output === nothing || throw(InvalidConfiguration(
+        "Detector output storage requires an output type or readout window"))
+    output_host === nothing || throw(InvalidConfiguration(
+        "Detector host output storage requires detector output storage"))
+    return nothing
+end
+
+function _require_prepared_detector_storage(det::Detector,
+    frame_shape::Tuple{Int,Int}, output_shape::Tuple{Int,Int})
+    size(det.state.frame) == frame_shape || throw(DimensionMismatchError(
+        "detector frame storage size must match prepared frame size"))
+    output = det.state.output_buffer
+    output === nothing && return nothing
+    size(output) == output_shape || throw(DimensionMismatchError(
+        "detector output storage size must match prepared readout size"))
+    output_host = det.state.output_buffer_host
+    output_host === nothing && throw(InvalidConfiguration(
+        "Detector output storage requires a prepared host output buffer"))
+    size(output_host) == output_shape || throw(DimensionMismatchError(
+        "detector host output storage size must match prepared readout size"))
+    return nothing
+end
+
+@inline _require_sensor_sampling_configuration(::FrameSensorType,
+    ::Tuple{Int,Int}, ::Union{Nothing,FrameWindow}, ::Real,
+    ::Type{<:AbstractFloat}) = nothing
+
+@inline function _require_sensor_sampling_configuration(
+    sensor::HgCdTeAvalancheArraySensor, frame_shape::Tuple{Int,Int},
+    window::Union{Nothing,FrameWindow}, exposure_time::Real,
+    ::Type{T}) where {T<:AbstractFloat}
+    return _require_hgcdte_sampling_configuration(sensor.sampling_mode,
+        sensor, frame_shape, window, exposure_time, T)
+end
+
+@inline _require_hgcdte_sampling_configuration(::FrameSamplingMode,
+    ::HgCdTeAvalancheArraySensor, ::Tuple{Int,Int},
+    ::Union{Nothing,FrameWindow}, ::Real, ::Type{<:AbstractFloat}) = nothing
+
+@inline function _require_hgcdte_sampling_configuration(
+    mode::UpTheRampSampling, sensor::HgCdTeAvalancheArraySensor,
+    frame_shape::Tuple{Int,Int}, window::Union{Nothing,FrameWindow},
+    exposure_time::Real, ::Type{T}) where {T<:AbstractFloat}
+    validate_up_the_ramp_schedule(sensor, frame_shape, window, mode,
+        exposure_time, T)
+    return nothing
+end
+
+@inline function _require_detector_configuration(det::Detector,
+    frame_shape::Tuple{Int,Int})
+    _require_detector_defect_shape(det.params.defect_model, frame_shape)
+    _require_background_flux_shape(det.background_flux, frame_shape)
+    _require_background_map_shape(det.background_map, frame_shape)
+    _require_sensor_frame_shape(det.params.sensor, frame_shape)
+    _require_detector_output_configuration(det)
+    _require_sensor_sampling_configuration(det.params.sensor, frame_shape,
+        det.params.readout_window, det.params.integration_time,
+        eltype(det.state.frame))
+    return nothing
+end
+
 """
     prepare_detector_acquisition(detector, map;
         normalized_to_photon_rate=nothing)
@@ -206,7 +373,12 @@ function prepare_detector_acquisition(det::Detector, map::IntensityMap;
         det.params.psf_sampling)
     quantum_efficiency = _prepared_quantum_efficiency(det,
         metadata.spectral, T)
+    frame_shape = detector_frame_shape(det, metadata.dimensions)
+    output_shape = detector_output_shape(det, metadata.dimensions)
+    _require_detector_configuration(det, frame_shape)
     prepare_detector_buffers!(det, metadata.dimensions)
+    _require_prepared_detector_storage(det, frame_shape, output_shape)
+    prepare_frame_readout_state!(det.params.sensor, det)
     return DetectorAcquisitionPlan(_DETECTOR_ACQUISITION_PLAN_TOKEN,
         det.params, det.state, det.state.frame, backend(det), metadata,
         map.values, rate_scale, quantum_efficiency)
@@ -230,9 +402,16 @@ end
     return nothing
 end
 
+@inline function _require_prepared_whole_acquisition(det::Detector,
+    map::IntensityMap, plan::DetectorAcquisitionPlan)
+    _require_prepared_acquisition(det, map, plan)
+    require_whole_capture_idle(det)
+    return nothing
+end
+
 function capture!(det::Detector, map::IntensityMap,
     plan::DetectorAcquisitionPlan, rng::AbstractRNG)
-    _require_prepared_acquisition(det, map, plan)
+    _require_prepared_whole_acquisition(det, map, plan)
     return capture_with_quantum_efficiency!(det, map.values,
         plan.quantum_efficiency * plan.rate_scale, rng)
 end

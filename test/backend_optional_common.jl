@@ -420,21 +420,79 @@ function run_optional_plane_product_checks(tel::Telescope,
         @test wrapper_map.metadata.device == field.metadata.device
     end
 
-    prepared = prepare_direct_psf(tel, wavefront, src, field)
-    compute_psf!(prepared.output, field, wavefront, prepared.plan,
-        prepared.workspace)
-    legacy_psf = copy(compute_psf!(tel, src; zero_padding=2))
-    @test prepared.output.values isa BackendArray
-    @test Array(prepared.output.values) ≈ Array(legacy_psf) atol=T(2e-5) rtol=T(2e-5)
+    prepared = prepare_direct_imaging(tel, wavefront, src;
+        zero_padding=2)
+    formed = form_direct_image!(prepared)
+    @test formed.values isa BackendArray
+    @test formed.metadata.device == wavefront.metadata.device
+    @test sum(Array(formed.values)) ≈
+        sum(Array(pupil_photon_rate_map(tel, src))) atol=T(2e-5) rtol=T(2e-5)
 
-    sum_output_values = similar(prepared.output.values)
-    first_sum_values = similar(prepared.output.values)
-    second_sum_values = similar(prepared.output.values)
+    off_axis_src = Source(band=:I, magnitude=zero(T),
+        coordinates=(T(0.08), T(90)), T=T)
+    off_axis = prepare_direct_imaging(tel, wavefront, off_axis_src;
+        zero_padding=2)
+    off_axis_map = form_direct_image!(off_axis)
+    @test off_axis_map.values isa BackendArray
+    @test off_axis_map.metadata.device == formed.metadata.device
+    @test off_axis.plan.shift_samples isa NTuple{2,Int}
+    @test off_axis.plan.shift_samples != (0, 0)
+    @test Array(off_axis_map.values) ≈ circshift(Array(formed.values),
+        off_axis.plan.shift_samples) rtol=T(2e-5) atol=T(2e-5)
+
+    spectral_src = with_spectrum(src,
+        SpectralBundle(T[0.7e-6, 0.9e-6], T[0.4, 0.6]; T=T))
+    spectral = prepare_direct_imaging(tel, wavefront, spectral_src;
+        zero_padding=2)
+    spectral_products = form_direct_image!(spectral)
+    @test spectral_products isa OpticalProductBundle
+    @test length(spectral_products) == 2
+    @test all(product -> product.values isa BackendArray,
+        spectral_products)
+    @test all(product -> product.metadata.device == formed.metadata.device,
+        spectral_products)
+    @test spectral_products[1].metadata.sampling !=
+        spectral_products[2].metadata.sampling
+
+    extended_src = with_extended_source(src,
+        GaussianDiskSourceModel(sigma_arcsec=T(0.02), n_side=5, T=T))
+    extended = prepare_direct_imaging(tel, wavefront,
+        extended_source_asterism(extended_src); zero_padding=1)
+    @test extended.components isa Vector
+    @test extended.products isa Vector
+    @test isconcretetype(eltype(extended.components))
+    @test isconcretetype(eltype(extended.products))
+    @test length(extended.components) == 25
+    extended_map = form_direct_image!(extended)
+    @test extended_map.values isa BackendArray
+    @test all(product -> product.values isa BackendArray,
+        extended.products)
+    @test all(product -> product.metadata.device == formed.metadata.device,
+        extended.products)
+    @test sum(Array(extended_map.values)) ≈
+        sum(Array(pupil_photon_rate_map(tel, src))) atol=T(2e-5) rtol=T(2e-5)
+
+    host_values = zeros(T, size(formed.values))
+    host_metadata = OpticalPlaneMetadata(FocalPlane(), host_values;
+        coordinate_domain=AngularCoordinates(),
+        sampling=formed.metadata.sampling,
+        origin=formed.metadata.origin,
+        spectral=formed.metadata.spectral,
+        normalization=PhotonRateNormalization(),
+        spatial_measure=CellIntegratedMeasure(),
+        coherence=IncoherentIntensityAddition())
+    host_output = IntensityMap(host_metadata, host_values)
+    @test_throws InvalidConfiguration prepare_direct_imaging(tel,
+        wavefront, src, prepared.field, host_output)
+
+    sum_output_values = similar(formed.values)
+    first_sum_values = similar(formed.values)
+    second_sum_values = similar(formed.values)
     fill!(first_sum_values, one(T))
     fill!(second_sum_values, T(2))
-    sum_output = IntensityMap(prepared.output.metadata, sum_output_values)
-    first_sum_input = IntensityMap(prepared.output.metadata, first_sum_values)
-    second_sum_input = IntensityMap(prepared.output.metadata, second_sum_values)
+    sum_output = IntensityMap(formed.metadata, sum_output_values)
+    first_sum_input = IntensityMap(formed.metadata, first_sum_values)
+    second_sum_input = IntensityMap(formed.metadata, second_sum_values)
     sum_plan = prepare_incoherent_sum(sum_output, first_sum_input,
         second_sum_input)
     accumulate_intensity!(sum_output,
@@ -462,6 +520,20 @@ function run_optional_plane_product_checks(tel::Telescope,
     @test identical_detector.state !== detector.state
     @test_throws InvalidConfiguration capture!(identical_detector,
         prepared.output, acquisition; rng=MersenneTwister(301))
+
+    long_detector = Detector(integration_time=T(1.0), noise=NoiseNone(),
+        qe=T(0.5), response_model=NullFrameResponse(), T=T,
+        backend=selector)
+    long_acquisition = prepare_detector_acquisition(long_detector,
+        prepared.output)
+    @test acquisition.input_values === prepared.output.values
+    @test long_acquisition.input_values === prepared.output.values
+    short_snapshot = copy(Array(detector_frame))
+    long_frame = capture!(long_detector, prepared.output,
+        long_acquisition; rng=MersenneTwister(307))
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(long_frame))
+    @test Array(long_frame) ≈ 2 .* short_snapshot atol=T(2e-5) rtol=T(2e-5)
 
     incremental_detector = Detector(integration_time=T(0.5),
         noise=NoiseNone(), qe=T(0.5), response_model=NullFrameResponse(),
@@ -925,6 +997,27 @@ end
 
 run_optional_backend_plan_checks(::Type{<:AdaptiveOpticsSim.GPUBackendTag}, tel, backend) = nothing
 
+function run_optional_lift_fallback_check(array_backend, ::Type{T}) where {T<:AbstractFloat}
+    H_host = T[1 0; 0 2; 1 1]
+    residual_host = T[2, -1, 0.5]
+    H = array_backend(H_host)
+    residual = array_backend(residual_host)
+    rhs = array_backend(zeros(T, 2))
+    damping = LiFTLevenbergMarquardt(lambda0=T(0.1),
+        growth=T(10), condition_rtol=T(1e-3))
+    normal = transpose(H_host) * H_host
+    λ = AdaptiveOpticsSim.damping_lambda(damping, normal)
+    expected = (normal + λ * I) \ (transpose(H_host) * residual_host)
+    diag = AdaptiveOpticsSim.LiFTDiagnostics(
+        T(NaN), T(NaN), T(NaN), T(NaN), zero(T), false, false)
+    AdaptiveOpticsSim.solve_lift_fallback!(
+        diag, rhs, H, residual, damping)
+    @test Array(rhs) ≈ expected rtol=T(1e-4) atol=T(1e-5)
+    @test diag.regularization == λ
+    @test diag.used_fallback
+    return nothing
+end
+
 function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}, tel, backend)
     T = Float32
     array_backend = AdaptiveOpticsSim._resolve_array_backend(backend)
@@ -1181,10 +1274,13 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
     lift = LiFT(lift_tel, lift_src, lift_basis, lift_det;
         diversity_opd=lift_diversity, iterations=2, img_resolution=8,
         solve_mode=LiFTSolveAuto())
-    lift_psf = compute_psf!(lift_tel, lift_src; zero_padding=1)
+    lift_direct = prepare_direct_imaging(lift_tel, PupilFunction(lift_tel),
+        lift_src; zero_padding=1)
+    lift_psf = intensity_values(form_direct_image!(lift_direct))
     lift_coeffs = reconstruct(lift, lift_psf, [1, 2])
     @test lift_coeffs isa array_backend
     @test all(isfinite, Array(lift_coeffs))
+    run_optional_lift_fallback_check(array_backend, T)
     return nothing
 end
 
@@ -1384,6 +1480,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
     @test isapprox(Array(AdaptiveOpticsSim.detector_read_cube(gpu_windowed_det)), AdaptiveOpticsSim.detector_read_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
     @test AdaptiveOpticsSim.detector_read_times(gpu_windowed_det) == AdaptiveOpticsSim.detector_read_times(cpu_windowed_det)
 
+    run_optional_lift_fallback_check(array_backend, T)
     return nothing
 end
 
@@ -1490,7 +1587,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         mode=Diffractive(), T=T, backend=selector)
     AdaptiveOpticsSim.sampled_spots_peak!(spectral_optical_sh, tel, poly)
     spectral_optical_spots = Array(spectral_optical_sh.state.spot_cube)
-    spectral_qe = SampledQuantumEfficiency(
+    spectral_qe = AdaptiveOpticsSim.SampledQuantumEfficiency(
         T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.2, 0.8])
     spectral_exposure = T(2.5)
     spectral_detector = Detector(noise=NoiseNone(), qe=spectral_qe,

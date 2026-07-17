@@ -20,10 +20,10 @@ function main()
     println("  slopes_length: ", length(slopes(ctx.scenario)))
 
     for _ in 1:n_steps
-        psf, sampling = hil_step!(ctx)
+        image, sampling = hil_step!(ctx)
         println("  step=", ctx.step_index,
             " slopes_l2=", sqrt(sum(abs2, slopes(ctx.scenario))),
-            " psf_shape=", size(psf),
+            " image_shape=", size(image),
             " science_sampling=", sampling)
     end
 end

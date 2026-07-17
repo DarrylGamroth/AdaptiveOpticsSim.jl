@@ -43,7 +43,7 @@ max_alloc_bytes = 0
 
 [[cards]]
 id = "G0-PERF-02"
-label = "direct PSF formation"
+label = "direct photon-arrival-rate image formation"
 kind = "direct_psf"
 resolution = 64
 zero_padding = 2
@@ -90,7 +90,7 @@ max_alloc_bytes = 0
 
 [[cards]]
 id = "G0-PERF-07"
-label = "direct science PSF with two detector acquisitions"
+label = "direct science rate image with two detector acquisitions"
 kind = "direct_science_two_detectors"
 resolution = 64
 zero_padding = 2

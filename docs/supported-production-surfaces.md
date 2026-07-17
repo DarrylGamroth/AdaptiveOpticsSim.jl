@@ -50,7 +50,8 @@ Current CPU-supported families:
   policy
 - source-aware runtime propagation with distinct WFS and science sources
 - allocation-free shared multi-arm CPU execution with one atmosphere advance
-  and shared same-arm science PSF formation
+  and one caller-owned same-arm photon-arrival-rate image reused by independent
+  detector acquisitions
 - grouped/runtime orchestration surfaces with committed validation artifacts
 - dense and factorized reconstruction operators, including allocation-free
   controller composition and backend-residency validation
@@ -83,10 +84,11 @@ Current AMDGPU-supported scope:
   accelerator-resident reconstructor storage
 - maintained high-accuracy post-command runtime-equivalence surfaces
 - maintained Shack-Hartmann exported-pixel parity surfaces
-- maintained distinct WFS/science-source runtime smoke
-- maintained shared multi-arm science-detector smoke
 - maintained composite low-order runtime surfaces
 - matched HEART RTC HIL runtime surfaces
+- prepared direct imaging with off-axis formation, spectral bundles, explicit
+  extended-source expansion, independent detector fan-out, and shared-arm
+  device residency
 
 Primary evidence:
 
@@ -150,9 +152,9 @@ Scientist-owned HEART boundary truth artifact:
 The following are outside the current support claim:
 
 - CUDA execution. The extension, dedicated test project, fail-fast hardware
-  target, and current manual WSL hardware evidence are available, but CUDA has
-  not yet been explicitly returned to the supported delivery scope or a routine
-  validation cadence.
+  target, and current manual WSL hardware evidence—including prepared direct
+  imaging—are available, but CUDA has not yet been explicitly returned to the
+  supported delivery scope or a routine validation cadence.
 - SPECULA pixel-level equivalence on the HEART Shack-Hartmann surface
 - Metal backend support
 - backend-audit surfaces that are not part of the maintained hardware targets

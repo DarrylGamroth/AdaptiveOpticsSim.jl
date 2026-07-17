@@ -26,7 +26,7 @@ export NormalizedTestSource, source_radiometry, source_radiometric_value
 export wavelength, photon_irradiance, optical_path, pupil_photon_rate_map
 export reset_opd!, apply_opd!, set_pupil!, set_pupil_reflectivity!
 export pupil_mask, pupil_reflectivity, apply_spiders!
-export compute_psf!, psf_pixel_scale_arcsec
+export focal_plane_pixel_scale_arcsec
 
 export SpectralSample, SpectralBundle, SpectralSource, with_spectrum
 export GaussianDiskSourceModel, PointCloudSourceModel, SampledImageSourceModel
@@ -56,7 +56,9 @@ export PupilFieldFormationPlan, prepare_pupil_field
 export fill_electric_field!, fill_electric_field_async!
 export FraunhoferPropagation, FresnelPropagation
 export propagation_output, propagate_field!, fraunhofer_intensity_from_field!
-export DirectPSFPlan, DirectPSFWorkspace, prepare_direct_psf
+export DirectImagingPlan, DirectImagingWorkspace
+export prepare_direct_imaging, form_direct_image!, direct_imaging_output
+export direct_imaging_components
 export GeometricAtmosphericPropagation, LayeredFresnelAtmosphericPropagation
 export AtmosphericFieldPropagation
 export propagate_atmosphere_field!, atmospheric_intensity!

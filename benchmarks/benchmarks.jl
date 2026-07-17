@@ -2,11 +2,12 @@ using AdaptiveOpticsSim
 using BenchmarkTools
 using Random
 
-function bench_psf()
+function bench_direct_imaging()
     tel = Telescope(resolution=64, diameter=8.0, central_obstruction=0.2)
     src = Source(band=:I, magnitude=0.0)
-    ws = AdaptiveOpticsSim.Workspace(128; T=Float64)
-    return @benchmark compute_psf!($tel, $src; zero_padding=2, ws=$ws)
+    prepared = prepare_direct_imaging(tel, PupilFunction(tel), src;
+        zero_padding=2)
+    return @benchmark form_direct_image!($prepared)
 end
 
 function bench_wfs()
@@ -163,8 +164,8 @@ function alloc_checks()
     println("  Closed-loop runtime step!: $(alloc_runtime) bytes")
 end
 
-println("PSF benchmark:")
-display(bench_psf())
+println("Direct-imaging benchmark:")
+display(bench_direct_imaging())
 
 println("WFS benchmark:")
 display(bench_wfs())

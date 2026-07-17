@@ -10,8 +10,7 @@ apply_signal_defects!(::NullDetectorDefectModel, det::Detector, exposure_time::R
 apply_dark_defects!(::NullDetectorDefectModel, det::Detector, exposure_time::Real) = det.state.frame
 
 function apply_signal_defects!(model::PixelResponseNonuniformity, det::Detector, exposure_time::Real)
-    size(model.gain_map) == size(det.state.frame) ||
-        throw(DimensionMismatchError("PixelResponseNonuniformity gain_map size must match detector frame size"))
+    _require_detector_defect_shape(model, size(det.state.frame))
     det.state.frame .*= model.gain_map
     return det.state.frame
 end
@@ -20,15 +19,13 @@ apply_dark_defects!(::PixelResponseNonuniformity, det::Detector, exposure_time::
 apply_signal_defects!(::DarkSignalNonuniformity, det::Detector, exposure_time::Real) = det.state.frame
 
 function apply_dark_defects!(model::DarkSignalNonuniformity, det::Detector, exposure_time::Real)
-    size(model.dark_map) == size(det.state.frame) ||
-        throw(DimensionMismatchError("DarkSignalNonuniformity dark_map size must match detector frame size"))
+    _require_detector_defect_shape(model, size(det.state.frame))
     det.state.frame .+= model.dark_map .* exposure_time
     return det.state.frame
 end
 
 function apply_signal_defects!(model::BadPixelMask, det::Detector, exposure_time::Real)
-    size(model.mask) == size(det.state.frame) ||
-        throw(DimensionMismatchError("BadPixelMask mask size must match detector frame size"))
+    _require_detector_defect_shape(model, size(det.state.frame))
     throughput = model.throughput
     throughput == one(throughput) && return det.state.frame
     det.state.frame .= ifelse.(model.mask, throughput .* det.state.frame, det.state.frame)
@@ -175,9 +172,7 @@ function apply_background_flux!(background::ScalarBackground, det::Detector, rng
 end
 
 function apply_background_flux!(background::BackgroundFrame, det::Detector, rng::AbstractRNG, exposure_time::Real)
-    if size(background.map) != size(det.state.frame)
-        throw(DimensionMismatchError("background_flux size must match detector frame size"))
-    end
+    _require_background_flux_shape(background, size(det.state.frame))
     copyto!(det.state.noise_buffer, background.map)
     det.state.noise_buffer .*= exposure_time
     poisson_noise_frame!(det, rng, det.state.noise_buffer)
@@ -325,9 +320,7 @@ function subtract_background_map!(background::ScalarBackground, det::Detector)
 end
 
 function subtract_background_map!(background::BackgroundFrame, det::Detector)
-    if size(background.map) != size(det.state.frame)
-        throw(DimensionMismatchError("background_map size must match detector frame size"))
-    end
+    _require_background_map_shape(background, size(det.state.frame))
     det.state.frame .-= background.map
     return det.state.frame
 end

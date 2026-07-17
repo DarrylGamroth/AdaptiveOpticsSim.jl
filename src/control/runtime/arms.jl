@@ -29,12 +29,19 @@ _validate_wfs_channels(::Tuple) =
     throw(InvalidConfiguration("shared optical-arm WFS consumers must be OpticalWFSChannel objects"))
 
 @inline _validate_science_detectors(::Tuple{}) = nothing
-@inline function _validate_science_detectors(detectors::Tuple{<:AbstractDetector,Vararg})
+@inline function _validate_science_detectors(detectors::Tuple{<:Detector,Vararg})
     _validate_science_detectors(Base.tail(detectors))
     return nothing
 end
+function _validate_science_detectors(
+    detectors::Tuple{<:AbstractDetector,Vararg})
+    throw(UnsupportedAlgorithm(
+        "shared-arm prepared science acquisition supports Detector frame " *
+        "consumers; got $(typeof(first(detectors)))"))
+end
 _validate_science_detectors(::Tuple) =
-    throw(InvalidConfiguration("shared optical-arm science consumers must be detector objects"))
+    throw(InvalidConfiguration(
+        "shared optical-arm science consumers must be Detector objects"))
 
 """
     SharedOpticalArm(label, source; wfs_channels=(), science_detectors=(),
@@ -42,7 +49,8 @@ _validate_science_detectors(::Tuple) =
 
 A source-specific optical branch with zero or more WFS consumers and zero or
 more science detectors. The pupil path is rendered once for the arm, and one
-computed PSF is shared by every science detector on that arm.
+prepared photon-arrival-rate image is shared by every science detector on
+that arm.
 """
 struct SharedOpticalArm{
     S<:AbstractSource,
@@ -100,11 +108,13 @@ struct SharedOpticalRuntime{
     RT<:ClosedLoopRuntime,
     A<:Tuple,
     R<:Tuple,
+    S<:Tuple,
     B<:AbstractArrayBackend,
 } <: AbstractControlSimulation
     runtime::RT
     arms::A
     atmosphere_renderers::R
+    science_stages::S
 end
 
 function _shared_arm_with_source(arm::SharedOpticalArm,
@@ -144,15 +154,21 @@ function SharedOpticalRuntime(runtime::ClosedLoopRuntime,
     selector = require_same_backend(runtime, frozen_arms...)
     renderers = map(arm -> prepare_runtime_atmosphere_path(
         runtime.atm, runtime.tel, arm.source), frozen_arms)
+    science_stages = map(frozen_arms) do arm
+        isempty(arm.science_detectors) && return nothing
+        _prepare_runtime_science_stage(runtime.tel, arm.source,
+            arm.science_detectors, arm.science_zero_padding)
+    end
     return SharedOpticalRuntime{typeof(runtime),typeof(frozen_arms),
-        typeof(renderers),typeof(selector)}(
+        typeof(renderers),typeof(science_stages),typeof(selector)}(
         runtime,
         frozen_arms,
         renderers,
+        science_stages,
     )
 end
 
-@inline backend(::SharedOpticalRuntime{<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline backend(::SharedOpticalRuntime{<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
 @inline primary_runtime(runtime::SharedOpticalRuntime) = runtime.runtime
 @inline optical_arms(runtime::SharedOpticalRuntime) = runtime.arms
 @inline wfs_source(runtime::SharedOpticalRuntime) = wfs_source(runtime.runtime)
@@ -220,51 +236,98 @@ end
     return nothing
 end
 
-@inline capture_shared_science_detectors!(::Tuple{}, psf,
-    source::AbstractSource, rng::AbstractRNG) = nothing
+@inline capture_shared_science_detectors!(::Tuple{}, ::Tuple{},
+    stage::PreparedRuntimeScienceStage, rng::AbstractRNG) = nothing
 
-@inline function capture_shared_science_detectors!(detectors::Tuple, psf,
-    source::AbstractSource, rng::AbstractRNG)
-    capture!(first(detectors), psf, source, rng)
-    capture_shared_science_detectors!(Base.tail(detectors), psf, source, rng)
+@inline function capture_shared_science_detectors!(detectors::Tuple,
+    acquisitions::Tuple, stage::PreparedRuntimeScienceStage,
+    rng::AbstractRNG)
+    capture!(first(detectors), stage.output, first(acquisitions), rng)
+    capture_shared_science_detectors!(Base.tail(detectors),
+        Base.tail(acquisitions), stage, rng)
     return nothing
 end
 
-@inline capture_shared_science_arm!(::Tuple{}, runtime::ClosedLoopRuntime,
+@inline capture_shared_science_arm!(::Nothing, runtime::ClosedLoopRuntime,
     arm::SharedOpticalArm) = nothing
 
-@inline function capture_shared_science_arm!(detectors::Tuple,
+@inline function capture_shared_science_arm!(
+    stage::PreparedRuntimeScienceStage,
     runtime::ClosedLoopRuntime, arm::SharedOpticalArm)
-    psf = compute_psf!(runtime.tel, arm.source;
-        zero_padding=arm.science_zero_padding)
-    capture_shared_science_detectors!(detectors, psf, arm.source, runtime.rng)
+    update_runtime_science_pupil!(stage, runtime.tel)
+    form_direct_image!(stage.imaging)
+    capture_shared_science_detectors!(arm.science_detectors,
+        stage.acquisition, stage, runtime.rng)
     return nothing
 end
 
 @inline function execute_shared_optical_arm!(runtime::ClosedLoopRuntime,
-    arm::SharedOpticalArm, atmosphere_renderer,
+    arm::SharedOpticalArm, atmosphere_renderer, science_stage,
     current_source::AbstractSource)
     prepare_shared_arm_path!(shared_arm_path_plan(current_source, arm.source),
         runtime, arm, atmosphere_renderer)
     sense_shared_wfs_channels!(arm.wfs_channels, runtime, arm.source)
-    capture_shared_science_arm!(arm.science_detectors, runtime, arm)
+    capture_shared_science_arm!(science_stage, runtime, arm)
     return arm.source
 end
 
-@inline execute_shared_optical_arms!(::Tuple{}, ::Tuple{},
+@inline execute_shared_optical_arms!(::Tuple{}, ::Tuple{}, ::Tuple{},
     runtime::ClosedLoopRuntime, current_source::AbstractSource) = current_source
 
 @inline function execute_shared_optical_arms!(
     arms::Tuple{<:SharedOpticalArm,Vararg}, renderers::Tuple,
+    science_stages::Tuple,
     runtime::ClosedLoopRuntime, current_source::AbstractSource)
     next_source = execute_shared_optical_arm!(runtime, first(arms),
-        first(renderers), current_source)
+        first(renderers), first(science_stages), current_source)
     return execute_shared_optical_arms!(Base.tail(arms),
-        Base.tail(renderers), runtime, next_source)
+        Base.tail(renderers), Base.tail(science_stages), runtime, next_source)
 end
 
 @inline primary_terminal_source(runtime::ClosedLoopRuntime) =
     requires_runtime_science_pixels(runtime) ? runtime.science_src : runtime.src
+
+@inline preflight_shared_science_detectors!(::Tuple{}, ::Tuple{},
+    ::PreparedRuntimeScienceStage) = nothing
+
+@inline function preflight_shared_science_detectors!(
+    detectors::Tuple{<:Detector,Vararg},
+    acquisitions::Tuple{<:DetectorAcquisitionPlan,Vararg},
+    stage::PreparedRuntimeScienceStage)
+    _require_prepared_whole_acquisition(first(detectors), stage.output,
+        first(acquisitions))
+    preflight_shared_science_detectors!(Base.tail(detectors),
+        Base.tail(acquisitions), stage)
+    return nothing
+end
+
+@inline preflight_shared_science_arm!(::Nothing,
+    ::SharedOpticalArm) = nothing
+
+@inline function preflight_shared_science_arm!(
+    stage::PreparedRuntimeScienceStage, arm::SharedOpticalArm)
+    preflight_shared_science_detectors!(arm.science_detectors,
+        stage.acquisition, stage)
+    return nothing
+end
+
+@inline preflight_shared_science_arms!(::Tuple{}, ::Tuple{}) = nothing
+
+@inline function preflight_shared_science_arms!(
+    stages::Tuple, arms::Tuple{<:SharedOpticalArm,Vararg})
+    preflight_shared_science_arm!(first(stages), first(arms))
+    preflight_shared_science_arms!(Base.tail(stages), Base.tail(arms))
+    return nothing
+end
+
+@inline validate_shared_science_apertures!(::Tuple{}, ::Telescope) = nothing
+
+@inline function validate_shared_science_apertures!(stages::Tuple,
+    tel::Telescope)
+    validate_runtime_science_aperture(first(stages), tel)
+    validate_shared_science_apertures!(Base.tail(stages), tel)
+    return nothing
+end
 
 function prepare!(runtime::SharedOpticalRuntime)
     prepare!(runtime.runtime)
@@ -278,11 +341,16 @@ end
 
 function sense!(runtime::SharedOpticalRuntime)
     primary = runtime.runtime
+    validate_runtime_science_aperture(primary.science_stage, primary.tel)
+    validate_shared_science_apertures!(runtime.science_stages, primary.tel)
+    preflight_runtime_science!(primary.science_stage,
+        primary.science_detector)
+    preflight_shared_science_arms!(runtime.science_stages, runtime.arms)
     advance_runtime_atmosphere!(primary.wfs, primary.atm, primary.tel,
         primary.atmosphere_step, primary.rng)
     sense_runtime!(ReuseAdvancedRuntimeAtmosphere(), primary)
     execute_shared_optical_arms!(runtime.arms, runtime.atmosphere_renderers,
-        primary,
+        runtime.science_stages, primary,
         primary_terminal_source(primary))
     return runtime
 end

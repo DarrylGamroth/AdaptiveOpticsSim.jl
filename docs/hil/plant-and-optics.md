@@ -62,8 +62,8 @@ An optical-path declaration owns immutable configuration:
 - propagation model, output plane, and sampling geometry
 - keys needed to prepare compatible shared results
 
-A prepared path executor owns its mutable OPD, field, PSF, FFT, and other
-scratch state. That workspace has one execution owner and is not stored in the
+A prepared path executor owns its mutable OPD, field, detector-facing optical
+product, FFT plan, and other scratch state. That workspace has one execution owner and is not stored in the
 immutable path declaration.
 
 An acquisition endpoint owns:
@@ -103,8 +103,9 @@ prepared telescope definition + explicitly advanced atmosphere epoch + optic sur
 Concrete product names follow the maintained
 [`glossary`](../glossary.md); the ownership boundary is normative. A prepared telescope definition owns aperture,
 reflectivity, spatial sampling, and geometry. It does not own temporal cadence,
-exposure duration, any path's current OPD or electric field, a focal-plane PSF
-result, or FFT/intensity scratch. Scenario, atmosphere, acquisition, and control
+exposure duration, any path's current OPD or electric field, a focal-plane
+photon-arrival-rate result, or FFT/intensity scratch. Transitional telescope
+OPD remains only for WFS families awaiting decomposition. Scenario, atmosphere, acquisition, and control
 owners receive explicit model times or durations instead of reading time from
 the telescope. Optical data products likewise do not own propagation plans or
 temporary arrays. Prepared workspaces own those plans and scratch arrays, have
@@ -149,17 +150,31 @@ renderer or path.
 
 A native direct-science front end consumes an explicit pupil function or field
 and writes a caller-owned focal-plane photon-arrival-rate `IntensityMap`. One
-compatible rate product may then feed several independent detectors with
-different exposure durations. Each applies its presampling response on the
+compatible rate product may then feed several detectors with independent state
+and exposure durations. Each applies its presampling response on the
 declared optical grid, integrates over physical pixels, applies QE and elapsed
 time exactly once, and then applies its coupling, stochastic response, and
-readout. Changing a
+readout. The transitional frame-step shared runtime draws detector noise
+sequentially from one runtime RNG, so tuple-order-independent stochastic streams
+are not yet claimed. It preflights every detector's exact prepared binding and
+idle state before advancing the atmosphere, but unforeseen execution failures
+are fail-stop rather than transactional rollback. Changing a
 detector exposure cannot change or recompute the optical result. A prepared
 external-optics result, including one produced through `Proper.jl`, enters at
 the same arrival-rate/acquisition boundary after declaring either photon
 irradiance or cell-integrated photon-rate units, or an explicit prepared
 conversion from its documented normalization; this does not make `Proper.jl` a
 required core dependency.
+
+The maintained native contract is prepared with `prepare_direct_imaging` and
+executed with `form_direct_image!`. Same-wavelength `Asterism` components form
+one compatible incoherent sum and remain individually accessible through
+`direct_imaging_components`; a `SpectralSource` retains wavelength-dependent
+grids in an `OpticalProductBundle`. An `ExtendedSource` is expanded explicitly
+with `extended_source_asterism` before preparation. The current off-axis model
+resolves a finite integer displacement during preparation, honors the focal
+grid's declared `:x`/`:y` axis order and signs, and applies a periodic shift;
+it does not claim subpixel interpolation or finite-field loss.
 
 Physical complex fields declare a normalization whose squared magnitude is a
 photon-arrival-rate product on the represented grid and state whether each
@@ -538,8 +553,8 @@ configuration and recorded in the run manifest.
 `AdaptiveOpticsSim.jl` is an AO-plant optical simulator, not only a timing
 shell. Its native scope includes telescope pupil, reflectivity and OPD;
 source-aware atmospheric propagation; controllable-surface formation;
-electric-field, Fraunhofer, and Fresnel propagation; WFS optics; direct PSF and
-intensity formation; spatial filtering; and detector response. Presampling
+electric-field, Fraunhofer, and Fresnel propagation; WFS optics; direct
+photon-arrival-rate image formation; spatial filtering; and detector response. Presampling
 detector response and charge-coupling effects remain detector models applied
 after the incident optical product has been formed. Its reported MTF is the
 interior, infinite-grid transfer magnitude of the realized discrete acquisition

@@ -14,18 +14,12 @@ struct TelescopeAperture{T<:AbstractFloat,
     origin_m::NTuple{2,T}
 end
 
-# Transitional storage used by simulation paths that have not yet migrated to
-# caller-owned optical products. Gate 0 removes these fields from `Telescope`
-# as the atmosphere and WFS families move to the explicit plane API.
+# Transitional OPD storage used by WFS paths that have not yet migrated to
+# caller-owned pupil products. Direct-science focal products and propagation
+# workspaces are path-owned and must never be stored here.
 mutable struct LegacyTelescopePathState{T<:AbstractFloat,
-    Aopd<:AbstractMatrix{T},
-    Apsf<:AbstractMatrix{T},
-    Spsf<:AbstractArray{T,3},
-    W<:Workspace}
+    Aopd<:AbstractMatrix{T}}
     opd::Aopd
-    psf::Apsf
-    psf_stack::Spsf
-    psf_workspace::W
     aperture_revision::UInt
 end
 
@@ -80,17 +74,8 @@ function Telescope(; resolution::Int,
     opd = backend{T}(undef, resolution, resolution)
     fill!(opd, zero(T))
 
-    psf = backend{T}(undef, resolution, resolution)
-    fill!(psf, zero(T))
-
-    psf_stack = backend{T}(undef, resolution, resolution, 0)
-    psf_workspace = Workspace(opd, resolution; T=T)
-    state = LegacyTelescopePathState{T,typeof(opd),typeof(psf),
-        typeof(psf_stack),typeof(psf_workspace)}(
+    state = LegacyTelescopePathState{T,typeof(opd)}(
         opd,
-        psf,
-        psf_stack,
-        psf_workspace,
         zero(UInt),
     )
     return Telescope{typeof(params),typeof(aperture),typeof(state),

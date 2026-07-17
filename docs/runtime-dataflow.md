@@ -116,8 +116,9 @@ prepared flow:
    endpoint requires one
 
 The telescope owns aperture, reflectivity, spatial sampling, and geometry; it
-does not own cadence/exposure duration, the path OPD/field, PSF result, FFT
-plans, or propagation scratch. Atmosphere advancement receives explicit model
+does not own cadence/exposure duration, a direct-science path's OPD/field or
+focal-plane result, FFT plans, or propagation scratch. Transitional telescope
+OPD remains for WFS families awaiting decomposition. Atmosphere advancement receives explicit model
 time; the telescope has no timing property. Source geometry and extended-source
 expansion are frozen or prepared per path rather than mutated in the shared
 atmosphere or source definition.
@@ -132,9 +133,32 @@ irradiance (photons·s⁻¹·m⁻²) or a cell-integrated photon rate
 the optical grid, integrates spatial-density samples over represented cells
 and then physical pixels, and applies QE and elapsed time exactly once.
 Incompatible spectral grids remain a bundle or require an explicit prepared
-mapping. Native direct science and prepared PROPER output meet at this same
-caller-owned photon-arrival-rate/acquisition boundary. These are concrete
+mapping. Native direct science uses `prepare_direct_imaging` and
+`form_direct_image!`: same-wavelength asterism components share a compatible
+incoherent output, differing spectral grids remain an `OpticalProductBundle`,
+and extended sources are explicitly expanded through
+`extended_source_asterism`. Its off-axis placement is resolved to a finite
+integer shift during preparation from the grid's declared `:x`/`:y` axis order
+and signs; it remains periodic, not subpixel interpolation or finite-field
+loss. Runtime-length asterism, extended-source, and spectral expansions use
+vector-backed prepared components, so quadrature length does not become part
+of a recursively specialized method type. Each native leaf still owns its FFT
+workspace; a future shared-propagation or convolution optimization must first
+declare the source-dependent pupil-field equivalence it relies on. Prepared PROPER output
+meets native imaging at the same caller-owned photon-arrival-rate/acquisition boundary. These are concrete
 products and functions, not a universal optical graph or resampling framework.
+
+The transitional `SharedOpticalRuntime` forms each arm's native rate image once
+and captures its detector tuple serially. Detector state and exposure are
+independent, but stochastic draws currently come from one runtime RNG in tuple
+order. The later event runtime may assign stable per-endpoint streams when
+order-invariant detector noise is required. Before advancing the atmosphere,
+the current runtime preflights every science detector's exact prepared binding
+and whole-exposure idle state. Detector acquisition preparation has already
+sized conventional multi-read products and rejected predictable shape and
+up-the-ramp schedule errors before changing detector storage. Unexpected
+backend, kernel, RNG, or concurrent external failures remain fail-stop rather
+than transactional rollback.
 
 The target then separates reusable optical paths from independently scheduled
 or triggered acquisition state, and schedules exposure, optical sampling,

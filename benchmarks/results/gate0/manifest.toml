@@ -2,3 +2,8 @@
 id = "PRE-HIL-GATE0-CPU-2026-07-15"
 purpose = "Clean-tree serial CPU latency and steady-state allocation baseline before Gate 0 optical ownership refactoring"
 path = "2026-07-15-pre-hil-gate0.toml"
+
+[[artifacts]]
+id = "PRE-HIL-GATE0-CPU-2026-07-16-SCIENCE-STAGE"
+purpose = "Clean-tree serial CPU latency and steady-state allocation evidence after prepared direct-science separation"
+path = "2026-07-16-pre-hil-06-science-stage.toml"

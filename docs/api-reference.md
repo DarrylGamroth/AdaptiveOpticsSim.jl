@@ -81,9 +81,15 @@ Change the aperture through `set_pupil!`, `set_pupil_reflectivity!`, or
 WFS reference calibration is invalidated coherently. Direct array or field
 mutation is unsupported because it bypasses that revision boundary.
 
-- Focal-plane photon-rate / PSF formation: `compute_psf!`,
-  `psf_pixel_scale_arcsec`; the telescope convenience matrix is a
-  source-scaled, cell-integrated photon-arrival-rate product before exposure
+- Prepared direct imaging: `prepare_direct_imaging`, `form_direct_image!`,
+  `direct_imaging_output`, `direct_imaging_components`, and
+  `focal_plane_pixel_scale_arcsec`. `DirectImagingPlan` and
+  `DirectImagingWorkspace` bind exact caller-owned pupil/field/output storage
+  and single-writer scratch. The output is a source-scaled, cell-integrated
+  photon-arrival-rate `IntensityMap` on focal-plane angular coordinates before
+  exposure; it is not implicitly a normalized PSF. Off-axis placement uses a
+  preparation-time-validated, rounded-sample periodic shift on the prepared
+  focal grid and respects its declared `:x`/`:y` axis order and signs
 - Spectral sources: `SpectralSample`, `SpectralBundle`, `SpectralSource`,
   `with_spectrum`; construct a `SpectralSource` through `with_spectrum` from a
   `Source` or `LGSSource` leaf rather than nesting source expansions. Bundle
@@ -91,7 +97,8 @@ mutation is unsupported because it bypasses that revision boundary.
   irradiance, not radiant-energy fractions
 - Extended sources: `GaussianDiskSourceModel`, `PointCloudSourceModel`,
   `SampledImageSourceModel`, `with_extended_source`,
-  `extended_source_asterism`
+  `extended_source_asterism`. For direct imaging, explicitly expand an
+  `ExtendedSource` with `extended_source_asterism` and prepare that `Asterism`
 - Optical products: `PupilFunction`, `ElectricField`, `IntensityMap`,
   `OpticalProductBundle`, `OpticalPlaneMetadata`; coordinates are declared
   with `MetricCoordinates` or `AngularCoordinates`
@@ -110,6 +117,11 @@ mutation is unsupported because it bypasses that revision boundary.
   `SpatialDensityMeasure`, or `CellIntegratedMeasure`; and
   `CoherentFieldCombination`, `IncoherentIntensityAddition`, or
   `NonCombinableProduct`
+- Direct imaging of a same-wavelength `Asterism` produces one compatible
+  incoherent output and exposes its leaf products with
+  `direct_imaging_components`. Direct imaging of a `SpectralSource` retains
+  wavelength-dependent grids in an `OpticalProductBundle`; there is no
+  implicit resampling or spectral sum
 - Compatible intensity accumulation: `PreparedIncoherentSum`,
   `prepare_incoherent_sum`, `accumulate_intensity!`
 - Fields/propagation: `FraunhoferPropagation`,

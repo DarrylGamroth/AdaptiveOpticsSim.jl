@@ -22,7 +22,8 @@ evidence includes:
   telescope-cadence fallback
 - analytic wind-offset checks over zero, unequal, and multi-step durations
 - independent caller-owned wavefronts/fields sharing one telescope definition
-  without shared OPD, PSF, propagation-workspace, or spatial-filter mutation
+  without shared path OPD, focal-plane result, propagation-workspace, or
+  spatial-filter mutation
 - prepared plane compatibility checks covering physical sampling,
   centering/orientation, wavelength/channel, units/normalization,
   coherence/combination policy, backend, and physical device

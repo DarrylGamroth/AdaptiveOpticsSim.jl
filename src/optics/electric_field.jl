@@ -1,20 +1,3 @@
-@kernel function fill_telescope_field_kernel!(out, pupil_reflectivity, opd, phase_shift, amp_scale,
-    opd_to_cycles, ox::Int, oy::Int, n::Int, n_pad::Int, center_even_grid::Bool)
-    i, j = @index(Global, NTuple)
-    if i <= n_pad && j <= n_pad
-        xi = i - ox
-        yj = j - oy
-        val = zero(eltype(out))
-        if 1 <= xi <= n && 1 <= yj <= n
-            @inbounds val = amp_scale * sqrt(pupil_reflectivity[xi, yj]) * cispi(opd_to_cycles * opd[xi, yj])
-        end
-        if center_even_grid
-            val *= cis(phase_shift * (i + j - 2))
-        end
-        @inbounds out[i, j] = val
-    end
-end
-
 @kernel function fill_pupil_field_kernel!(out, amplitude, opd, phase_shift,
     amplitude_scale, opd_to_cycles, ox::Int, oy::Int, n::Int, n_pad::Int,
     apply_centering::Bool)
@@ -210,8 +193,9 @@ function prepare_pupil_field(tel::Telescope, wavefront::PupilFunction,
     resolved_amplitude_scale = _resolve_pupil_amplitude_scale(
         source_radiometry(src), wavefront, field.metadata, src,
         pixel_area, amplitude_scale, T)
-    resolved_amplitude_scale >= zero(T) || throw(InvalidConfiguration(
-        "pupil-field amplitude scale must be non-negative"))
+    isfinite(resolved_amplitude_scale) &&
+        resolved_amplitude_scale >= zero(T) || throw(InvalidConfiguration(
+        "pupil-field amplitude scale must be finite and non-negative after conversion to $(T)"))
     return PupilFieldFormationPlan{
         T,typeof(wavefront.metadata),typeof(field.metadata),
     }(
@@ -306,7 +290,10 @@ end
 @inline function _default_pupil_amplitude_scale(
     ::PhysicalPhotonIrradianceSource, ::PupilFunction, src::AbstractSource,
     pixel_area, ::Type{T}) where {T<:AbstractFloat}
-    return sqrt(T(photon_irradiance(src) * pixel_area))
+    rate_per_sample = _converted_nonnegative_finite(
+        photon_irradiance(src) * pixel_area, T,
+        "pupil-field photon rate per sample")
+    return sqrt(rate_per_sample)
 end
 
 
@@ -316,84 +303,10 @@ function _default_pupil_amplitude_scale(::NormalizedTestSource,
     transmitted = T(sum(abs2, wavefront.amplitude))
     transmitted > zero(T) || throw(InvalidConfiguration(
         "normalized pupil field requires non-zero transmitting amplitude"))
-    return sqrt(T(source_radiometric_value(src)) / transmitted)
-end
-
-function fill_telescope_field!(out::AbstractMatrix{Complex{T}}, tel::Telescope, src::AbstractSource;
-    zero_padding::Int=1,
-    center_even_grid::Bool=true) where {T<:AbstractFloat}
-    zero_padding >= 1 || throw(InvalidConfiguration("zero_padding must be >= 1"))
-    n = tel.params.resolution
-    n_pad = n * zero_padding
-    size(out) == (n_pad, n_pad) ||
-        throw(DimensionMismatchError("electric field size must match telescope resolution * zero_padding"))
-
-    _fill_telescope_field!(execution_style(out), out, tel, src, zero_padding, center_even_grid)
-    return out
-end
-
-function fill_telescope_field_async!(out::AbstractMatrix{Complex{T}}, tel::Telescope, src::AbstractSource;
-    zero_padding::Int=1,
-    center_even_grid::Bool=true) where {T<:AbstractFloat}
-    zero_padding >= 1 || throw(InvalidConfiguration("zero_padding must be >= 1"))
-    n = tel.params.resolution
-    n_pad = n * zero_padding
-    size(out) == (n_pad, n_pad) ||
-        throw(DimensionMismatchError("electric field size must match telescope resolution * zero_padding"))
-    _fill_telescope_field_async!(execution_style(out), out, tel, src, zero_padding, center_even_grid)
-    return out
-end
-
-function _fill_telescope_field!(::ScalarCPUStyle, out::AbstractMatrix{Complex{T}}, tel::Telescope, src::AbstractSource,
-    zero_padding::Int, center_even_grid::Bool) where {T<:AbstractFloat}
-    n = tel.params.resolution
-    n_pad = n * zero_padding
-    fill!(out, zero(eltype(out)))
-    opd_to_cycles = T(2) / T(wavelength(src))
-    amp_scale = sqrt(T(photon_irradiance(src) *
-        (tel.params.diameter / tel.params.resolution)^2))
-    ox, oy = field_embedding_offsets(n, n_pad)
-    reflectivity = pupil_reflectivity(tel)
-    @views @. out[ox+1:ox+n, oy+1:oy+n] = amp_scale *
-        sqrt(reflectivity) * cispi(opd_to_cycles * tel.state.opd)
-    if center_even_grid && iseven(n_pad)
-        phase_shift = -T(pi) * (T(n_pad) + one(T)) / T(n_pad)
-        apply_centering_phase!(ScalarCPUStyle(), out, phase_shift)
-    end
-    return out
-end
-
-function _fill_telescope_field!(style::AcceleratorStyle, out::AbstractMatrix{Complex{T}}, tel::Telescope, src::AbstractSource,
-    zero_padding::Int, center_even_grid::Bool) where {T<:AbstractFloat}
-    n = tel.params.resolution
-    n_pad = n * zero_padding
-    opd_to_cycles = T(2) / T(wavelength(src))
-    amp_scale = sqrt(T(photon_irradiance(src) *
-        (tel.params.diameter / tel.params.resolution)^2))
-    ox, oy = field_embedding_offsets(n, n_pad)
-    phase_shift = center_even_grid && iseven(n_pad) ? -T(pi) * (T(n_pad) + one(T)) / T(n_pad) : zero(T)
-    launch_kernel!(style, fill_telescope_field_kernel!, out, pupil_reflectivity(tel), tel.state.opd, phase_shift,
-        amp_scale, opd_to_cycles, ox, oy, n, n_pad, center_even_grid && iseven(n_pad); ndrange=size(out))
-    return out
-end
-
-function _fill_telescope_field_async!(::ScalarCPUStyle, out::AbstractMatrix{Complex{T}}, tel::Telescope, src::AbstractSource,
-    zero_padding::Int, center_even_grid::Bool) where {T<:AbstractFloat}
-    return _fill_telescope_field!(ScalarCPUStyle(), out, tel, src, zero_padding, center_even_grid)
-end
-
-function _fill_telescope_field_async!(style::AcceleratorStyle, out::AbstractMatrix{Complex{T}}, tel::Telescope, src::AbstractSource,
-    zero_padding::Int, center_even_grid::Bool) where {T<:AbstractFloat}
-    n = tel.params.resolution
-    n_pad = n * zero_padding
-    opd_to_cycles = T(2) / T(wavelength(src))
-    amp_scale = sqrt(T(photon_irradiance(src) *
-        (tel.params.diameter / tel.params.resolution)^2))
-    ox, oy = field_embedding_offsets(n, n_pad)
-    phase_shift = center_even_grid && iseven(n_pad) ? -T(pi) * (T(n_pad) + one(T)) / T(n_pad) : zero(T)
-    launch_kernel_async!(style, fill_telescope_field_kernel!, out, pupil_reflectivity(tel), tel.state.opd, phase_shift,
-        amp_scale, opd_to_cycles, ox, oy, n, n_pad, center_even_grid && iseven(n_pad); ndrange=size(out))
-    return out
+    source_value = _converted_nonnegative_finite(
+        source_radiometric_value(src), T,
+        "normalized pupil-field source power")
+    return sqrt(source_value / transmitted)
 end
 
 function fill_electric_field!(field::ElectricField,

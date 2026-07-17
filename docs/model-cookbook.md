@@ -14,7 +14,7 @@ Use this together with:
 Each recipe is intentionally small. Start here, then grow the script toward your
 real instrument or benchmark surface.
 
-## Recipe 1: PSF From A Telescope And Source
+## Recipe 1: Direct Image From A Telescope And Source
 
 Use this when you want a minimal optics-only model.
 
@@ -24,17 +24,21 @@ using AdaptiveOpticsSim
 tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)
 pupil = PupilFunction(tel)
-field = ElectricField(pupil, src; zero_padding=2)
-prepared = prepare_direct_psf(tel, pupil, src, field)
+apply_opd!(pupil, opd_map(tel))
+imaging = prepare_direct_imaging(tel, pupil, src; zero_padding=2)
 
-compute_psf!(prepared.output, field, pupil, prepared.plan,
-    prepared.workspace)
-psf = intensity_values(prepared.output)
+form_direct_image!(imaging)
+photon_rate_image = intensity_values(direct_imaging_output(imaging))
 ```
 
-Keep `pupil`, `field`, `prepared.output`, and `prepared.workspace` owned by
-the path that writes them. Preparation allocates and plans once; repeated
-`compute_psf!` calls are fixed-shape and allocation-free after warmup.
+The output is a source-scaled, cell-integrated photon-arrival-rate
+`IntensityMap` on focal-plane angular coordinates, before detector exposure;
+it is not an implicitly normalized PSF. Keep `pupil`, the prepared products,
+and the single-writer workspace owned by the path that writes them. When the
+transitional telescope OPD changes, copy it explicitly with
+`apply_opd!(pupil, opd_map(tel))` before execution. Preparation allocates and
+plans once; repeated `form_direct_image!` calls are fixed-shape and
+allocation-free after warmup.
 
 Key objects:
 
@@ -43,8 +47,9 @@ Key objects:
 - `PupilFunction`
 - `ElectricField`
 - `IntensityMap`
-- `prepare_direct_psf`
-- `compute_psf!`
+- `prepare_direct_imaging`
+- `form_direct_image!`
+- `direct_imaging_output`
 
 ## Recipe 2: Atmosphere Plus Shack-Hartmann Sensing
 
@@ -242,9 +247,10 @@ step!(runtime)
 ```
 
 `SharedOpticalRuntime` advances the atmosphere once per step, renders each
-distinct source path in order, and shares one PSF calculation across all
-science detectors on an arm. Consecutive arms that use the same source object
-reuse the current pupil rendering. WFS signals remain owned by each
+distinct source path in order, and forms one caller-owned photon-arrival-rate
+image for all science detectors on an arm. Each detector then applies its own
+exposure and response. Consecutive arms that use the same source object reuse
+the current pupil rendering. WFS signals remain owned by each
 `OpticalWFSChannel`; assembling them into a joint reconstructor is a separate
 control-layer decision.
 
@@ -619,7 +625,7 @@ HIL work.
 Use this when AdaptiveOpticsSim should own the AO runtime or HIL boundary, but
 an external wave-optics package should own the science arm. This is the right
 shape for a coronagraph HIL model: AO commands and WFS outputs stay on the
-AdaptiveOpticsSim side, while the coronagraph PSF is evaluated in `Proper.jl`.
+AdaptiveOpticsSim side, while the coronagraph image is evaluated in `Proper.jl`.
 
 ```julia
 using AdaptiveOpticsSim
@@ -645,9 +651,9 @@ prepare!(scenario)
 
 # Use a typed payload at the package boundary. `Proper.jl` accepts ordinary
 # Julia keywords, so this does not need a Dict or PASSVALUE blob.
-struct CoronagraphPayload{P,M,T}
+struct CoronagraphPayload{P,A,T}
     opd_m::P
-    pupil_mask::M
+    pupil_amplitude::A
     diameter_m::T
     focal_length_m::T
     lyot_stop_norm::T
@@ -662,7 +668,7 @@ function hil_coronagraph_prescription(λm, n; payload::CoronagraphPayload)
 
     # Carry the exact AdaptiveOpticsSim pupil and residual OPD into the
     # external coronagraph model.
-    prop_multiply(wf, payload.pupil_mask)
+    prop_multiply(wf, payload.pupil_amplitude)
     prop_add_phase(wf, payload.opd_m)
 
     prop_lens(wf, payload.focal_length_m, "science arm")
@@ -689,6 +695,7 @@ science_model = prepare_model(
     tel.params.resolution;
     pool_size=1,
 )
+science_pupil = PupilFunction(sim.tel)
 
 for k in 1:10
     set_command!(scenario, (
@@ -697,20 +704,21 @@ for k in 1:10
     ))
     sense!(scenario)
 
-    # This is the integration seam: hand the current AO residual directly to
-    # the external coronagraph model. On CPU, this can be zero-copy.
+    # Transitional runtime OPD is copied into a caller-owned science-path
+    # product before the external handoff.
+    apply_opd!(science_pupil, opd_map(sim.tel))
     payload = CoronagraphPayload(
-        sim.tel.state.opd,
-        pupil_mask(sim.tel),
+        opd_map(science_pupil),
+        pupil_amplitude(science_pupil),
         sim.tel.params.diameter,
         80.0,
         0.9,
     )
 
-    coronagraph_psf, coronagraph_sampling = prop_run(science_model; payload=payload)
+    coronagraph_image, coronagraph_sampling = prop_run(science_model; payload=payload)
 
     rtc_slopes = slopes(scenario)
-    @show k length(rtc_slopes) size(coronagraph_psf) coronagraph_sampling
+    @show k length(rtc_slopes) size(coronagraph_image) coronagraph_sampling
 end
 ```
 
@@ -731,7 +739,7 @@ GPU variant:
 ```julia
 using AMDGPU
 
-proper_ctx = Proper.RunContext(typeof(sim.tel.state.opd))
+proper_ctx = Proper.RunContext(typeof(opd_map(science_pupil)))
 science_model_gpu = prepare_model(
     :hil_coronagraph_gpu,
     hil_coronagraph_prescription,
@@ -743,14 +751,15 @@ science_model_gpu = prepare_model(
 )
 
 sense!(scenario)
+apply_opd!(science_pupil, opd_map(sim.tel))
 payload_gpu = CoronagraphPayload(
-    sim.tel.state.opd,
-    pupil_mask(sim.tel),
+    opd_map(science_pupil),
+    pupil_amplitude(science_pupil),
     Float32(sim.tel.params.diameter),
     80.0f0,
     0.9f0,
 )
-psf_gpu, sampling_gpu = prop_run(science_model_gpu; payload=payload_gpu)
+image_gpu, sampling_gpu = prop_run(science_model_gpu; payload=payload_gpu)
 ```
 
 Practical notes:
@@ -759,14 +768,19 @@ Practical notes:
   `payload=payload`. `PASSVALUE` remains useful when porting upstream PROPER
   prescriptions or preserving an existing parity harness, but it is not the
   preferred interface for new Julia-native HIL code.
-- `sim.tel.state.opd` is the simplest advanced handoff for an external science
-  arm because it already contains the currently staged atmosphere plus optic
-  residual seen by the AO plant.
-- `pupil_mask(sim.tel)` is worth handing across too when the coronagraph model
-  should respect the exact telescope pupil rather than a simplified circular
-  aperture.
+- While WFS families still use transitional telescope OPD, copy its current
+  atmosphere-plus-optic residual into a caller-owned science `PupilFunction`.
+  A future path executor may write that product directly.
+- Pass `pupil_amplitude(science_pupil)` when reflectivity, spiders, segment
+  gaps, central obstruction, or another custom pupil matters.
+- Do not pass an undeclared Proper array directly to a physical detector.
+  Copy each result into a caller-owned `IntensityMap` with its actual grid and
+  normalization metadata. A physical photon-arrival-rate result needs no
+  scaling; a dimensionless result requires an explicit
+  `normalized_to_photon_rate` scale when preparing detector acquisition.
 - If both packages are on the same GPU backend, the payload arrays can stay on
-  device. Use a matching `Proper.RunContext(typeof(sim.tel.state.opd))` and
+  device. Use a matching
+  `Proper.RunContext(typeof(opd_map(science_pupil)))` and
   prepare the coronagraph model on that backend.
 - Only use `Array(...)` as an explicit host-transfer boundary when the AO plant
   and the coronagraph model intentionally live on different backends.
@@ -774,7 +788,7 @@ Practical notes:
   Only move to more elaborate prepared execution or asset pools if the
   coronagraph model itself becomes a throughput bottleneck.
 - The runnable seam benchmark currently shows that the AO step stays compact,
-  but `Proper.prop_run(...)` still allocates a fresh PSF on the science side.
+  but `Proper.prop_run(...)` still allocates a fresh image on the science side.
   Treat this recipe as the clean integration boundary first, then optimize the
   external science arm only if its allocations or throughput become the next
   bottleneck.
@@ -808,8 +822,9 @@ Pkg.develop(path="../proper.jl")
 
 Use:
 
-- subsystem functions such as `compute_psf!`, `advance_by!`,
-  `render_atmosphere!`, `propagate!`, and `measure!`
+- subsystem functions such as `prepare_direct_imaging`,
+  `form_direct_image!`, `advance_by!`, `render_atmosphere!`, `propagate!`,
+  and `measure!`
   - when you are studying one physical layer
 - `SingleControlLoopConfig` or `GroupedControlLoopConfig`
   - when you want the maintained public runtime/orchestration surface

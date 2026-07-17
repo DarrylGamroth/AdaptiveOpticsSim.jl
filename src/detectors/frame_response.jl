@@ -124,6 +124,7 @@ function ensure_buffers!(det::Detector, n_in::Int, m_in::Int, n_mid::Int,
     out_cols = window === nothing ? m_out : length(window.cols)
     if size(det.state.frame) != (n_out, m_out)
         det.state.frame = similar(det.state.frame, n_out, m_out)
+        fill!(det.state.frame, zero(eltype(det.state.frame)))
     end
     if size(det.state.presampling_buffer) != (n_in, m_in)
         det.state.presampling_buffer = similar(det.state.presampling_buffer,

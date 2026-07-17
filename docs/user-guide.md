@@ -25,7 +25,7 @@ Use those deeper docs only when you are:
 
 Choose one path:
 
-- optics and PSF work:
+- direct-imaging and optical-product work:
   - `examples/tutorials/image_formation.jl`
   - `examples/tutorials/ncpa.jl`
 - detector and WFS work:
@@ -73,7 +73,7 @@ Canonical verbs:
 
 Typical use:
 
-- PSF formation
+- direct photon-arrival-rate image formation
 - direct WFS studies
 - calibration internals
 - custom research scripts
@@ -125,14 +125,18 @@ For a compact recipe-first version of this guide, use [model-cookbook.md](model-
 
 ## Build A Model
 
-### Workflow 1: Optics-only PSF
+### Workflow 1: Optics-only direct image
 
 ```julia
 using AdaptiveOpticsSim
 
 tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)
-photon_rate_psf = compute_psf!(tel, src; zero_padding=2)
+pupil = PupilFunction(tel)
+apply_opd!(pupil, opd_map(tel))
+imaging = prepare_direct_imaging(tel, pupil, src; zero_padding=2)
+form_direct_image!(imaging)
+photon_rate_image = intensity_values(direct_imaging_output(imaging))
 ```
 
 Use this when you care about:
@@ -142,10 +146,13 @@ Use this when you care about:
 - image formation
 - simple aberration studies
 
-The matrix returned by this convenience path is a cell-integrated photon rate
-before detector exposure, not an inherently unit-normalized PSF. Use the
-explicit optical-product API when downstream code needs metadata-validated
-normalization and spatial-measure contracts.
+`direct_imaging_output(imaging)` is a caller-owned `IntensityMap` on focal-plane
+angular coordinates. Its values are source-scaled, cell-integrated photon
+arrival rates before detector exposure, not an inherently unit-normalized PSF.
+Preparation binds the pupil, work field, output storage, FFT workspace,
+numeric type, backend, and physical device. If transitional telescope OPD
+state changes, copy it explicitly into the prepared pupil before calling
+`form_direct_image!` again.
 
 ### Workflow 2: Atmosphere plus one WFS
 

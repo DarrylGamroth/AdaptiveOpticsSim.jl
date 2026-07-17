@@ -257,6 +257,40 @@ function prepared_detector_capture_allocations(det, map, plan, rng)
     return @allocated capture!(det, map, plan, rng)
 end
 
+function prepared_detector_readiness_allocations(det, map, plan)
+    AdaptiveOpticsSim._require_prepared_whole_acquisition(det, map, plan)
+    return @allocated AdaptiveOpticsSim._require_prepared_whole_acquisition(
+        det, map, plan)
+end
+
+function prepared_first_detector_capture_allocations(builder, map)
+    warm_detector = builder()
+    warm_plan = prepare_detector_acquisition(warm_detector, map)
+    capture!(warm_detector, map, warm_plan, Xoshiro(2400))
+
+    detector = builder()
+    plan = prepare_detector_acquisition(detector, map)
+    rng = Xoshiro(2401)
+    return @allocated capture!(detector, map, plan, rng)
+end
+
+function prepared_detector_exposed_storage_is_zero(det::Detector)
+    products = (
+        output_frame(det),
+        detector_reference_frame(det),
+        detector_signal_frame(det),
+        detector_combined_frame(det),
+        detector_reference_cube(det),
+        detector_signal_cube(det),
+        detector_read_cube(det),
+        detector_read_times(det),
+        detector_ramp_slope(det),
+        detector_ramp_intercept(det),
+    )
+    return all(product -> isnothing(product) || all(iszero, product),
+        products)
+end
+
 function prepared_incremental_capture_allocations(det, map, plan, rng,
     sample_time)
     capture!(det, map, plan; rng=rng, sample_time=sample_time)
@@ -489,6 +523,184 @@ end
         shared_rate)
     @test prepared_detector_capture_allocations(allocation_detector,
         shared_rate, allocation_plan, Xoshiro(205)) == 0
+    @test prepared_detector_readiness_allocations(allocation_detector,
+        shared_rate, allocation_plan) == 0
+
+    busy_prepared_detector = Detector(integration_time=2.0,
+        noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse())
+    busy_prepared_plan = prepare_detector_acquisition(
+        busy_prepared_detector, shared_rate)
+    capture!(busy_prepared_detector, shared_rate, busy_prepared_plan;
+        rng=MersenneTwister(2399), sample_time=0.25)
+    busy_integrated_time = busy_prepared_detector.state.integrated_time
+    busy_accumulation = copy(busy_prepared_detector.state.accum_buffer)
+    @test_throws InvalidConfiguration begin
+        AdaptiveOpticsSim._require_prepared_whole_acquisition(
+            busy_prepared_detector, shared_rate, busy_prepared_plan)
+    end
+    @test busy_prepared_detector.state.integrated_time == busy_integrated_time
+    @test busy_prepared_detector.state.accum_buffer == busy_accumulation
+
+    prepared_readout_rate = detector_test_intensity_map(ones(4, 4))
+    prepared_readout_builders = (
+        :skipper => (() -> Detector(integration_time=2.0,
+            noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
+            sensor=CCDSensor(sampling_mode=SkipperSampling(4)))),
+        :hgcdte_single => (() -> Detector(integration_time=2.0,
+            noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
+            sensor=HgCdTeAvalancheArraySensor())),
+        :hgcdte_ndr => (() -> Detector(integration_time=2.0,
+            noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
+            sensor=HgCdTeAvalancheArraySensor(
+                sampling_mode=AveragedNonDestructiveReads(4)))),
+        :hgcdte_cds => (() -> Detector(integration_time=2.0,
+            noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
+            sensor=HgCdTeAvalancheArraySensor(
+                sampling_mode=CorrelatedDoubleSampling()))),
+        :hgcdte_fowler => (() -> Detector(integration_time=2.0,
+            noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
+            sensor=HgCdTeAvalancheArraySensor(
+                sampling_mode=FowlerSampling(2)))),
+        :hgcdte_ramp => (() -> Detector(integration_time=2.0,
+            noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
+            sensor=HgCdTeAvalancheArraySensor(read_time=0.1,
+                sampling_mode=UpTheRampSampling(5)))),
+        :hgcdte_windowed_cds => (() -> Detector(integration_time=2.0,
+            noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
+            sensor=HgCdTeAvalancheArraySensor(
+                sampling_mode=CorrelatedDoubleSampling()),
+            readout_window=FrameWindow(2:3, 2:3))),
+    )
+    for (label, builder) in prepared_readout_builders
+        prepared_detector = builder()
+        prepare_detector_acquisition(prepared_detector,
+            prepared_readout_rate)
+        @test readout_products(prepared_detector) isa FrameReadoutProducts
+        @test !(readout_products(prepared_detector) isa
+            NoFrameReadoutProducts)
+        @test prepared_detector_exposed_storage_is_zero(prepared_detector)
+        prepared_metadata = detector_export_metadata(prepared_detector)
+        @test prepared_metadata.provides_signal_frame
+        @test prepared_metadata.provides_combined_frame
+        products = readout_products(prepared_detector)
+        if products isa MultiReadFrameReadoutProducts
+            @test isnothing(products.workspace_reference_cube) ||
+                all(iszero, products.workspace_reference_cube)
+            @test all(iszero, products.workspace_signal_cube)
+        elseif products isa UpTheRampReadoutProducts
+            @test all(iszero, products.workspace_slope)
+            @test all(iszero, products.workspace_intercept)
+            @test all(iszero, products.workspace_integrated)
+            @test all(iszero, products.workspace_cube)
+        end
+        if coverage_instrumented()
+            @test_skip "first prepared detector capture allocation assertion is disabled under coverage instrumentation: $label"
+        else
+            @test prepared_first_detector_capture_allocations(builder,
+                prepared_readout_rate) == 0
+        end
+    end
+
+    invalid_prepared_defect = Detector(noise=NoiseNone(),
+        response_model=NullFrameResponse(), sensor=CMOSSensor(),
+        defect_model=PixelResponseNonuniformity(ones(2, 2)))
+    invalid_prepared_defect_state = detector_state_snapshot(
+        invalid_prepared_defect)
+    @test_throws DimensionMismatchError prepare_detector_acquisition(
+        invalid_prepared_defect, prepared_readout_rate)
+    @test detector_state_matches_snapshot(invalid_prepared_defect,
+        invalid_prepared_defect_state)
+
+    invalid_prepared_flux = Detector(noise=NoiseNone(),
+        response_model=NullFrameResponse(), background_flux=ones(2, 2))
+    invalid_prepared_flux_state = detector_state_snapshot(
+        invalid_prepared_flux)
+    @test_throws DimensionMismatchError prepare_detector_acquisition(
+        invalid_prepared_flux, prepared_readout_rate)
+    @test detector_state_matches_snapshot(invalid_prepared_flux,
+        invalid_prepared_flux_state)
+
+    invalid_prepared_background = Detector(noise=NoiseNone(),
+        response_model=NullFrameResponse(), background_map=ones(2, 2))
+    invalid_prepared_background_state = detector_state_snapshot(
+        invalid_prepared_background)
+    @test_throws DimensionMismatchError prepare_detector_acquisition(
+        invalid_prepared_background, prepared_readout_rate)
+    @test detector_state_matches_snapshot(invalid_prepared_background,
+        invalid_prepared_background_state)
+
+    invalid_prepared_cmos_noise = Detector(noise=NoiseNone(),
+        response_model=NullFrameResponse(), sensor=CMOSSensor(
+            readout_noise_model=CMOSReadNoiseMap(ones(2, 2))))
+    invalid_prepared_cmos_noise_state = detector_state_snapshot(
+        invalid_prepared_cmos_noise)
+    @test_throws DimensionMismatchError prepare_detector_acquisition(
+        invalid_prepared_cmos_noise, prepared_readout_rate)
+    @test detector_state_matches_snapshot(invalid_prepared_cmos_noise,
+        invalid_prepared_cmos_noise_state)
+
+    invalid_prepared_cmos_output = Detector(noise=NoiseNone(),
+        response_model=NullFrameResponse(), sensor=CMOSSensor(
+            output_model=StaticCMOSOutputPattern(1, [1.0], [0.0])))
+    invalid_prepared_cmos_output_state = detector_state_snapshot(
+        invalid_prepared_cmos_output)
+    @test_throws DimensionMismatchError prepare_detector_acquisition(
+        invalid_prepared_cmos_output, prepared_readout_rate)
+    @test detector_state_matches_snapshot(invalid_prepared_cmos_output,
+        invalid_prepared_cmos_output_state)
+
+    invalid_prepared_ramp = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
+        sensor=HgCdTeAvalancheArraySensor(read_time=0.3,
+            sampling_mode=UpTheRampSampling(5)))
+    invalid_prepared_ramp_state = detector_state_snapshot(
+        invalid_prepared_ramp)
+    @test_throws InvalidConfiguration prepare_detector_acquisition(
+        invalid_prepared_ramp, prepared_readout_rate)
+    @test detector_state_matches_snapshot(invalid_prepared_ramp,
+        invalid_prepared_ramp_state)
+
+    full_cds = Detector(integration_time=2.0, noise=NoiseReadout(2.0),
+        qe=1.0, response_model=NullFrameResponse(),
+        sensor=HgCdTeAvalancheArraySensor(read_time=0.1,
+            sampling_mode=CorrelatedDoubleSampling()))
+    windowed_cds = Detector(integration_time=2.0,
+        noise=NoiseReadout(2.0), qe=1.0,
+        response_model=NullFrameResponse(),
+        sensor=HgCdTeAvalancheArraySensor(read_time=0.1,
+            sampling_mode=CorrelatedDoubleSampling()),
+        readout_window=FrameWindow(2:3, 2:3))
+    full_cds_plan = prepare_detector_acquisition(full_cds,
+        prepared_readout_rate)
+    windowed_cds_plan = prepare_detector_acquisition(windowed_cds,
+        prepared_readout_rate)
+    full_cds_frame = copy(capture!(full_cds, prepared_readout_rate,
+        full_cds_plan, MersenneTwister(2402)))
+    windowed_cds_frame = copy(capture!(windowed_cds,
+        prepared_readout_rate, windowed_cds_plan, MersenneTwister(2402)))
+    @test windowed_cds_frame == full_cds_frame[2:3, 2:3]
+    @test detector_reference_frame(windowed_cds) ==
+        detector_reference_frame(full_cds)[2:3, 2:3]
+    @test detector_signal_frame(windowed_cds) ==
+        detector_signal_frame(full_cds)[2:3, 2:3]
+    @test detector_combined_frame(windowed_cds) ==
+        detector_combined_frame(full_cds)[2:3, 2:3]
+    @test detector_reference_cube(windowed_cds) ==
+        detector_reference_cube(full_cds)[2:3, 2:3, :]
+    @test detector_signal_cube(windowed_cds) ==
+        detector_signal_cube(full_cds)[2:3, 2:3, :]
+    @test detector_read_cube(windowed_cds) ==
+        detector_read_cube(full_cds)[2:3, 2:3, :]
+
+    binned_ndr = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=1.0, binning=2, response_model=NullFrameResponse(),
+        sensor=HgCdTeAvalancheArraySensor(
+            sampling_mode=AveragedNonDestructiveReads(4)))
+    binned_ndr_plan = prepare_detector_acquisition(binned_ndr,
+        prepared_readout_rate)
+    @test capture!(binned_ndr, prepared_readout_rate, binned_ndr_plan,
+        MersenneTwister(2403)) == fill(4.0, 2, 2)
+
     replacement_storage = copy(shared_rate.values)
     replacement_storage_map = IntensityMap(shared_rate.metadata,
         replacement_storage)

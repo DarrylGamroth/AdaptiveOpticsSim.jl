@@ -839,10 +839,16 @@ end
 
     expected_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
         binning=1)
-    expected_psf = compute_psf!(expected_science_tel, science_src;
+    expected_pupil = PupilFunction(expected_science_tel)
+    apply_opd!(expected_pupil, opd_map(expected_science_tel))
+    expected_imaging = prepare_direct_imaging(expected_science_tel,
+        expected_pupil, science_src;
         zero_padding=runtime.science_zero_padding)
-    capture!(expected_det, expected_psf, science_src;
-        rng=MersenneTwister(20260713))
+    expected_image = form_direct_image!(expected_imaging)
+    expected_acquisition = prepare_detector_acquisition(expected_det,
+        expected_image)
+    capture!(expected_det, expected_image, expected_acquisition,
+        MersenneTwister(20260713))
     @test science_frame(runtime) ≈ output_frame(expected_det)
 
     curvature_tel = Telescope(resolution=16, diameter=8.0,
@@ -921,6 +927,15 @@ end
 
     @test primary_runtime(shared) === primary
     @test optical_arms(shared) === (arm,)
+    @test primary.science_stage === nothing
+    @test length(shared.science_stages) == 1
+    shared_science_stage = first(shared.science_stages)
+    @test shared_science_stage isa PreparedRuntimeScienceStage
+    @test shared_science_stage.output ===
+        direct_imaging_output(shared_science_stage.imaging)
+    @test length(shared_science_stage.acquisition) == 2
+    @test all(plan -> plan.input_values === shared_science_stage.output.values,
+        shared_science_stage.acquisition)
     @test runtime_execution_plan(shared) isa CPUHILExecutionPlan
     @test_throws InvalidConfiguration SharedOpticalArm(:empty, off_axis)
     @test_throws InvalidConfiguration SharedOpticalArm(:invalid_padding,
@@ -931,6 +946,26 @@ end
     atmosphere.advances = 0
     atmosphere.renders = 0
     model_time_before = AdaptiveOpticsSim.atmosphere_timeline(atmosphere).model_time
+    shared_rate_before = copy(shared_science_stage.output.values)
+    telescope_opd_before = copy(opd_map(tel))
+    primary_slopes_before = copy(slopes(primary_wfs))
+    auxiliary_slopes_before = copy(slopes(auxiliary_wfs))
+    detector_a_before = copy(output_frame(detector_a))
+    capture!(detector_b, shared_science_stage.output,
+        shared_science_stage.acquisition[2]; rng=MersenneTwister(97),
+        sample_time=0.5)
+    @test !readout_ready(detector_b)
+    @test_throws InvalidConfiguration sense!(shared)
+    @test atmosphere.advances == 0
+    @test atmosphere.renders == 0
+    @test AdaptiveOpticsSim.atmosphere_timeline(atmosphere).model_time ==
+        model_time_before
+    @test opd_map(tel) == telescope_opd_before
+    @test slopes(primary_wfs) == primary_slopes_before
+    @test slopes(auxiliary_wfs) == auxiliary_slopes_before
+    @test output_frame(detector_a) == detector_a_before
+    @test shared_science_stage.output.values == shared_rate_before
+    reset_integration!(detector_b)
     step!(shared)
     @test atmosphere.advances == 1
     @test atmosphere.renders == 2
@@ -1089,6 +1124,12 @@ end
     @test runtime_latency(runtime).measurement_delay_frames == 0
     @test AdaptiveOpticsSim.runtime_atmosphere_step(runtime) == 1e-3
     @test runtime.science_zero_padding == 2
+    @test runtime.science_stage isa PreparedRuntimeScienceStage
+    @test runtime.science_stage.output ===
+        direct_imaging_output(runtime.science_stage.imaging)
+    @test runtime.science_stage.acquisition.input_values ===
+        runtime.science_stage.output.values
+    @test runtime.science_stage.pupil.opd !== tel.state.opd
     @test wfs_source(runtime) === src
     @test science_source(runtime) === src
     @test runtime.science_path isa AdaptiveOpticsSim.ReuseSensedOpticalPath
@@ -1101,12 +1142,50 @@ end
         atmosphere_step=0.0)
     @test_throws InvalidConfiguration ClosedLoopRuntime(sim, recon;
         atmosphere_step=Inf)
+    @test_throws InvalidConfiguration ClosedLoopRuntime(sim, recon;
+        atmosphere_step=1e-3,
+        science_detector=Detector(noise=NoiseNone()),
+        science_zero_padding=0)
+    science_disabled = ClosedLoopRuntime(sim, recon;
+        atmosphere_step=1e-3,
+        science_detector=Detector(noise=NoiseNone()),
+        science_zero_padding=0,
+        outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=false,
+            science_pixels=false))
+    @test science_disabled.science_stage === nothing
+    @test_throws InvalidConfiguration ClosedLoopRuntime(sim, recon;
+        atmosphere_step=1e-3,
+        outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=false,
+            science_pixels=true))
+    spectral_science = with_spectrum(src,
+        SpectralBundle([wavelength(src), 1.1 * wavelength(src)], [0.5, 0.5]))
+    spectral_sim = AOSimulation(tel, src, atm, dm, wfs;
+        science_source=spectral_science)
+    @test_throws UnsupportedAlgorithm ClosedLoopRuntime(spectral_sim, recon;
+        atmosphere_step=1e-3,
+        science_detector=Detector(noise=NoiseNone()))
     @test_throws InvalidConfiguration SingleControlLoopConfig(
         atmosphere_step=-1e-3)
     @test_throws InvalidConfiguration GroupedControlLoopConfig((:a, :b);
         atmosphere_step=NaN)
 
+    primary_time_before = AdaptiveOpticsSim.atmosphere_timeline(atm).model_time
+    primary_opd_before = copy(opd_map(tel))
+    primary_slopes_before = copy(slopes(wfs))
+    primary_rate_before = copy(runtime.science_stage.output.values)
+    capture!(det, runtime.science_stage.output,
+        runtime.science_stage.acquisition; rng=MersenneTwister(98),
+        sample_time=0.5)
+    @test !readout_ready(det)
+    @test_throws InvalidConfiguration sense!(runtime)
+    @test AdaptiveOpticsSim.atmosphere_timeline(atm).model_time ==
+        primary_time_before
+    @test opd_map(tel) == primary_opd_before
+    @test slopes(wfs) == primary_slopes_before
+    @test runtime.science_stage.output.values == primary_rate_before
+    reset_integration!(det)
     step!(runtime)
+    @test runtime.science_stage.pupil.opd == tel.state.opd
     @test synchronize_runtime!(runtime) === runtime
     refreshed_runtime = AdaptiveOpticsSim.with_reconstructor(runtime, recon)
     @test runtime_execution_plan(refreshed_runtime) isa CPUHILExecutionPlan
@@ -1709,7 +1788,18 @@ end
     )
     @test runtime_profile(runtime4) isa HILRuntimeProfile
     @test runtime_execution_plan(runtime4) isa CPUHILExecutionPlan
-    @test runtime4.science_zero_padding == 0
+    @test runtime4.science_zero_padding == 1
+    @test runtime4.science_stage === nothing
+    hil_science_detector = Detector(noise=NoiseNone(), integration_time=1.0,
+        qe=1.0, binning=1)
+    hil_science_runtime = ClosedLoopRuntime(sim4, recon4;
+        atmosphere_step=1e-3,
+        rng=MersenneTwister(44),
+        profile=HILRuntimeProfile(),
+        execution_plan=CPUHILExecutionPlan(),
+        science_detector=hil_science_detector)
+    @test hil_science_runtime.science_zero_padding == 1
+    @test hil_science_runtime.science_stage isa PreparedRuntimeScienceStage
     slope_norms = Float64[]
     command_norms = Float64[]
     dm_norms = Float64[]

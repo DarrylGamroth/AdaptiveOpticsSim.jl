@@ -521,13 +521,6 @@ end
     @testset "Optics kernels" begin
         tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
         src = Source(band=:I, magnitude=0.0)
-        scalar_field = Matrix{ComplexF64}(undef, 16, 16)
-        ka_field = similar(scalar_field)
-        AdaptiveOpticsSim._fill_telescope_field!(SCALAR_CPU_STYLE, scalar_field, tel, src, 2, true)
-        AdaptiveOpticsSim._fill_telescope_field!(KA_CPU_STYLE, ka_field, tel, src, 2, true)
-        mark_ka_cpu_kernel!(:fill_telescope_field_kernel!)
-        @test ka_cpu_close(ka_field, scalar_field)
-
         wavefront = PupilFunction(tel)
         scalar_ef = ElectricField(wavefront, src; zero_padding=2)
         ka_ef = ElectricField(wavefront, src; zero_padding=2)
@@ -538,6 +531,7 @@ end
             wavefront, formation)
         mark_ka_cpu_kernel!(:fill_pupil_field_kernel!)
         @test ka_cpu_close(ka_ef.values, scalar_ef.values)
+        scalar_field = copy(scalar_ef.values)
         opd = reshape(collect(range(0.0, 1e-8; length=64)), 8, 8)
         phase = reshape(collect(range(0.0, 0.1; length=64)), 8, 8)
         amp = reshape(collect(range(0.9, 1.1; length=64)), 8, 8)

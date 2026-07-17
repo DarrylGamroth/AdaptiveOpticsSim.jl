@@ -210,9 +210,7 @@ apply_cmos_pixel_noise!(::NullCMOSReadNoise, det::Detector,
 
 function apply_cmos_pixel_noise!(model::CMOSReadNoiseMap, det::Detector,
     rng::AbstractRNG)
-    size(model.sigma) == size(det.state.frame) ||
-        throw(DimensionMismatchError(
-            "CMOSReadNoiseMap sigma size must match detector frame size"))
+    _require_cmos_readout_shape(model, size(det.state.frame))
     randn_frame_noise!(det, rng, det.state.noise_buffer)
     det.state.frame .+= model.sigma .* det.state.noise_buffer
     return det.state.frame
@@ -260,9 +258,7 @@ apply_output_model!(::ScalarCPUStyle, ::NullCMOSOutputModel, frame) = frame
 
 function apply_output_model!(::ScalarCPUStyle, model::StaticCMOSOutputPattern, frame)
     n, m = size(frame)
-    n_outputs = length(model.gains)
-    n_outputs * model.output_cols >= m ||
-        throw(DimensionMismatchError("StaticCMOSOutputPattern does not cover detector columns"))
+    _require_cmos_output_shape(model, size(frame))
     @inbounds for j in 1:m
         output_idx = cld(j, model.output_cols)
         gain = model.gains[output_idx]
@@ -276,8 +272,7 @@ end
 
 function apply_output_model!(style::AcceleratorStyle, model::StaticCMOSOutputPattern, frame)
     n, m = size(frame)
-    length(model.gains) * model.output_cols >= m ||
-        throw(DimensionMismatchError("StaticCMOSOutputPattern does not cover detector columns"))
+    _require_cmos_output_shape(model, size(frame))
     launch_kernel!(style, apply_cmos_output_pattern_kernel!, frame, model.gains, model.offsets, model.output_cols, n, m; ndrange=(n, m))
     return frame
 end

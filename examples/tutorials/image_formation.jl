@@ -4,18 +4,23 @@ function main(; resolution::Int=32, zero_padding::Int=2, n_modes::Int=12,
     mode_id::Int=6, amplitude::Real=80e-9)
     tel = base_telescope(resolution=resolution)
     src = base_source()
-    psf_nominal = copy(compute_psf!(tel, src; zero_padding=zero_padding))
+    pupil = PupilFunction(tel)
+    apply_opd!(pupil, opd_map(tel))
+    imaging = prepare_direct_imaging(tel, pupil, src;
+        zero_padding=zero_padding)
+    nominal_image = copy(intensity_values(form_direct_image!(imaging)))
 
     zb = ZernikeBasis(tel, n_modes)
     compute_zernike!(zb, tel)
     apply_opd!(tel, zb.modes[:, :, mode_id] .* amplitude)
-    psf_aberrated = copy(compute_psf!(tel, src; zero_padding=zero_padding))
-    pixel_scale = psf_pixel_scale_arcsec(tel, src, zero_padding)
+    apply_opd!(pupil, opd_map(tel))
+    aberrated_image = copy(intensity_values(form_direct_image!(imaging)))
+    pixel_scale = focal_plane_pixel_scale_arcsec(direct_imaging_output(imaging))
 
     @info "Image-formation tutorial complete" mode_id amplitude pixel_scale
     return (
-        psf_nominal=psf_nominal,
-        psf_aberrated=psf_aberrated,
+        nominal_image=nominal_image,
+        aberrated_image=aberrated_image,
         pixel_scale_arcsec=pixel_scale,
     )
 end

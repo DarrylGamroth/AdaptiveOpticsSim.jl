@@ -112,9 +112,23 @@ function ensure_skipper_products!(det::Detector, n_samples::Int)
     current = readout_products(det)
     _skipper_products_ready(current, det, n_samples) && return current
     mean_frame = similar(det.state.frame, readout_product_shape(det)...)
+    fill!(mean_frame, zero(eltype(mean_frame)))
     products = SkipperReadoutProducts(mean_frame, n_samples)
     det.state.readout_products = products
     return products
+end
+
+@inline function prepare_frame_readout_state!(sensor::CCDSensor,
+    det::Detector)
+    return prepare_ccd_readout_state!(sensor.sampling_mode, det)
+end
+
+@inline prepare_ccd_readout_state!(::SingleRead, det::Detector) = det
+
+@inline function prepare_ccd_readout_state!(mode::SkipperSampling,
+    det::Detector)
+    ensure_skipper_products!(det, mode.n_samples)
+    return det
 end
 
 function _finalize_capture!(sensor::CCDSensor, det::Detector,

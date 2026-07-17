@@ -9,12 +9,20 @@ function main(; resolution::Int=24, zero_padding::Int=2)
         base_source(coordinates=(1.0, 240.0)),
     )
     asterism = Asterism(collect(sources))
-    psf = copy(compute_psf!(tel, asterism; zero_padding=zero_padding))
+    pupil = PupilFunction(tel)
+    apply_opd!(pupil, opd_map(tel))
+    imaging = prepare_direct_imaging(tel, pupil, asterism;
+        zero_padding=zero_padding)
+    form_direct_image!(imaging)
+    combined = copy(intensity_values(direct_imaging_output(imaging)))
+    component_maps = map(direct_imaging_components(imaging)) do component
+        copy(intensity_values(direct_imaging_output(component)))
+    end
 
-    @info "Asterism tutorial complete" n_sources=length(asterism) psf_size=size(psf)
+    @info "Asterism tutorial complete" n_sources=length(asterism) image_size=size(combined)
     return (
-        combined_psf=psf,
-        per_source_psf=copy(tel.state.psf_stack),
+        combined_image=combined,
+        component_images=component_maps,
     )
 end
 

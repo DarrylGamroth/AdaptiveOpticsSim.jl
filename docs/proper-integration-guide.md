@@ -25,30 +25,34 @@ Keep the packages loosely coupled.
 - `AdaptiveOpticsSim.jl` should own common AO-path aberrations and sampled
   path-specific NCPA when they are represented on its native planes.
 - `Proper.jl` should receive the caller-owned path OPD/field and prepared pupil
-  geometry needed by the science prescription; it should not require mutable
-  telescope path state after the Gate 0 refactor.
+  geometry needed by the science prescription; it should not receive or retain
+  mutable telescope path storage.
 - Neither package should depend directly on the other for core functionality.
   Keep integration examples and benchmarks at the application boundary unless a
   stable shared package is justified.
 
-The preferred seam is:
+The preferred transitional seam copies the runtime residual into a
+caller-owned science-path product before calling Proper:
 
 ```julia
+science_pupil = PupilFunction(sim.tel)
+apply_opd!(science_pupil, opd_map(sim.tel))
+
 payload = CoronagraphPayload(
-    sim.tel.state.opd,
-    pupil_mask(sim.tel),
+    opd_map(science_pupil),
+    pupil_amplitude(science_pupil),
     sim.tel.params.diameter,
     focal_length_m,
     lyot_stop_norm,
 )
 
-psf, sampling = prop_run(science_model; payload=payload)
+external_image, sampling = prop_run(science_model; payload=payload)
 ```
 
-This snippet shows the currently implemented application handoff. The remaining
-Gate 0 science-path work builds the payload from an explicit caller-owned path
-product rather than `sim.tel.state.opd`. On return, the integration adapter must
-construct an `IntensityMap` whose metadata declares physical sampling,
+The explicit copy is required only while the runtime still stages residual OPD
+for unmigrated WFS families on the telescope; a later path executor can write
+`science_pupil` directly. On return, the integration adapter must construct a
+caller-owned `IntensityMap` whose metadata declares physical sampling,
 centering/orientation, wavelength, backend/device, normalization, spatial
 measure, and incoherent-addition policy. `prepare_detector_acquisition` accepts
 that result only when it is a photon-arrival-rate product, or when a
@@ -56,6 +60,8 @@ dimensionless result has an explicit prepared photon-rate scale. The current
 raw-array example is therefore an integration proving ground, not evidence that
 an undeclared PROPER array has physical detector units. Detector exposure
 duration is never folded into the payload, PROPER result, or conversion scale.
+If `prop_run` returns fresh storage, copy it into the prepared map; do not replace
+the map storage bound to its detector-acquisition plan.
 
 The `payload=...` keyword is preferred for new Julia-native integrations.
 `PASSVALUE` is a PROPER compatibility adapter and should be kept for upstream
@@ -90,10 +96,9 @@ already applied the DM, pass the total sampled OPD instead.
 
 Use the native `NCPA` or `OPDMap` model for a static or slowly varying
 aberration that is adequately represented as sampled pupil OPD. Apply it only
-to the branch that contains the aberration. The current `NCPA` application API
-updates telescope OPD, so a science-only integration must apply it to a
-science-local telescope or OPD workspace rather than mutate shared state later
-reused by a WFS path.
+to the branch that contains the aberration. Apply native sampled NCPA to a
+science-local `PupilFunction` or OPD workspace, not to shared transitional
+telescope OPD later reused by a WFS path.
 
 Keep the NCPA inside the `Proper.jl` prescription when its behavior depends on
 the detailed instrument relay, wavelength-dependent surfaces, amplitude
@@ -128,10 +133,11 @@ conventions with small deterministic cases:
   grid and the Proper wavefront grid.
 - **Orientation:** row/column orientation should be verified with asymmetric
   maps, not only circular pupils.
-- **Pupil ownership:** pass the actual `AdaptiveOpticsSim.jl` pupil mask when
-  spiders, segment gaps, central obstruction, or custom reflectivity matter.
+- **Pupil ownership:** pass the actual `AdaptiveOpticsSim.jl` pupil amplitude
+  when spiders, segment gaps, central obstruction, or custom reflectivity
+  matter.
 - **Backend ownership:** if both sides use the same GPU backend, keep arrays on
-  device and construct `Proper.RunContext(typeof(sim.tel.state.opd))`.
+  device and construct `Proper.RunContext(typeof(opd_map(science_pupil)))`.
 
 These are integration-contract checks, not optional polish. They prevent a
 model from looking numerically plausible while using the wrong sign or grid
@@ -192,6 +198,7 @@ Pkg.develop(path="../proper.jl")
 ## When Not To Use This Seam
 
 Use native `AdaptiveOpticsSim.jl` science products instead when the science arm
-is simple PSF generation or detector simulation already covered by the package.
+is direct photon-arrival-rate image formation or detector simulation already
+covered by the package.
 Use `Proper.jl` when the science prescription needs PROPER-compatible
 propagation, coronagraph masks, or a model already written in PROPER style.

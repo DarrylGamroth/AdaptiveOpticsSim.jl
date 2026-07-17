@@ -78,10 +78,15 @@ rng = deterministic_reference_rng(0x1234)
 
 - `Detector` noise uses the shared RNG and the noise model trait.
 - Deterministic baseline: `Detector(noise=NoiseNone())` creates `Detector{NoiseNone}`.
+- `SharedOpticalRuntime` currently gives its science-detector tuple sequential
+  draws from one runtime RNG. Reordering noisy detectors therefore changes
+  their random streams; use `NoiseNone()` for order-invariant optical fan-out
+  evidence. Per-endpoint streams belong to the later scheduled HIL runtime.
 
 ## Testing Approach
 
-- Unit test: two runs with identical seed produce equal PSF arrays.
+- Unit test: two runs with identical seed produce equal caller-owned direct
+  images or WFS products.
 - Regression test: compare stored reference outputs within tolerance.
 
 ## GPU Notes

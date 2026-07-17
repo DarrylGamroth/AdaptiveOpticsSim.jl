@@ -76,13 +76,6 @@ end
     return nothing
 end
 
-@inline function capture_science_core!(tel::Telescope, src::AbstractSource,
-    det::AbstractDetector, rng::AbstractRNG, zero_padding::Int)
-    psf = compute_psf!(tel, src; zero_padding=zero_padding)
-    capture!(det, psf, src; rng=rng)
-    return nothing
-end
-
 @inline prepare_science_path!(::ReuseSensedOpticalPath, atm::AbstractAtmosphere,
     tel::Telescope, optic::AbstractControllableOptic, src::AbstractSource) = tel
 
@@ -106,20 +99,54 @@ end
     return tel
 end
 
+@inline validate_runtime_science_aperture(::Nothing, ::Telescope) = nothing
+
+@inline preflight_runtime_science!(::Nothing, detector) = nothing
+
+@inline function preflight_runtime_science!(
+    stage::PreparedRuntimeScienceStage{<:Any,<:Any,<:Any,
+        <:DetectorAcquisitionPlan}, detector::Detector)
+    _require_prepared_whole_acquisition(detector, stage.output,
+        stage.acquisition)
+    return nothing
+end
+
+@inline function validate_runtime_science_aperture(
+    stage::PreparedRuntimeScienceStage, tel::Telescope)
+    aperture_revision(tel) == stage.aperture_revision || throw(
+        InvalidConfiguration(
+            "telescope aperture changed after science-stage preparation; " *
+            "reconstruct the runtime"))
+    return nothing
+end
+
+@inline function update_runtime_science_pupil!(
+    stage::PreparedRuntimeScienceStage, tel::Telescope)
+    validate_runtime_science_aperture(stage, tel)
+    copyto!(stage.pupil.opd, opd_map(tel))
+    return stage.pupil
+end
+
 @inline function capture_science_core!(plan::AbstractSciencePathPlan,
     atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
-    src::AbstractSource, det::AbstractDetector, rng::AbstractRNG,
-    zero_padding::Int)
+    src::AbstractSource, stage::PreparedRuntimeScienceStage,
+    det::Detector, rng::AbstractRNG)
     prepare_science_path!(plan, atm, tel, optic, src)
-    return capture_science_core!(tel, src, det, rng, zero_padding)
+    update_runtime_science_pupil!(stage, tel)
+    form_direct_image!(stage.imaging)
+    capture!(det, stage.output, stage.acquisition, rng)
+    return nothing
 end
 
 @inline function capture_science_core!(plan::AbstractSciencePathPlan,
     atmosphere_renderer, atm::AbstractAtmosphere, tel::Telescope,
     optic::AbstractControllableOptic, src::AbstractSource,
-    det::AbstractDetector, rng::AbstractRNG, zero_padding::Int)
+    stage::PreparedRuntimeScienceStage, det::Detector, rng::AbstractRNG)
     prepare_science_path!(plan, atmosphere_renderer, atm, tel, optic, src)
-    return capture_science_core!(tel, src, det, rng, zero_padding)
+    update_runtime_science_pupil!(stage, tel)
+    form_direct_image!(stage.imaging)
+    capture!(det, stage.output, stage.acquisition, rng)
+    return nothing
 end
 
 @inline _runtime_staging_barrier!(::CPUHILExecutionPlan, array) =
@@ -178,9 +205,9 @@ end
 
 Execute one full closed-loop update.
 
-`step_core!` is the hot-path composition of sensing, optional science capture,
-reconstruction, and DM command application. The various method overloads differ
-only in whether WFS and science detectors participate in the step.
+`step_core!` is the hot-path composition of sensing, reconstruction, and DM
+command application. Runtime science capture is a separately prepared stage.
+The method overloads differ only in whether a WFS detector participates.
 """
 @inline function step_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
     wfs::AbstractWFS, src::AbstractSource, reconstructor, command::AbstractVector{T},
@@ -197,30 +224,6 @@ end
     command::AbstractVector{T}, atmosphere_step::Real, rng::AbstractRNG,
     control_sign::T) where {T<:AbstractFloat}
     sense_core!(atm, tel, optic, wfs, src, wfs_detector, atmosphere_step, rng)
-    reconstruct!(command, reconstructor, slopes(wfs))
-    _stage_command!(optic, command, control_sign)
-    return nothing
-end
-
-@inline function step_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
-    wfs::AbstractWFS, src::AbstractSource, reconstructor, command::AbstractVector{T},
-    science_detector::AbstractDetector, atmosphere_step::Real,
-    rng::AbstractRNG, control_sign::T,
-    science_zero_padding::Int) where {T<:AbstractFloat}
-    sense_core!(atm, tel, optic, wfs, src, atmosphere_step, rng)
-    capture_science_core!(tel, src, science_detector, rng, science_zero_padding)
-    reconstruct!(command, reconstructor, slopes(wfs))
-    _stage_command!(optic, command, control_sign)
-    return nothing
-end
-
-@inline function step_core!(atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
-    wfs::AbstractWFS, src::AbstractSource, wfs_detector::AbstractDetector, reconstructor,
-    command::AbstractVector{T}, science_detector::AbstractDetector,
-    atmosphere_step::Real, rng::AbstractRNG,
-    control_sign::T, science_zero_padding::Int) where {T<:AbstractFloat}
-    sense_core!(atm, tel, optic, wfs, src, wfs_detector, atmosphere_step, rng)
-    capture_science_core!(tel, src, science_detector, rng, science_zero_padding)
     reconstruct!(command, reconstructor, slopes(wfs))
     _stage_command!(optic, command, control_sign)
     return nothing
@@ -298,12 +301,15 @@ end
 
 @inline function sense_runtime!(advance_policy::AbstractRuntimeAtmosphereStep,
     runtime::ClosedLoopRuntime)
+    validate_runtime_science_aperture(runtime.science_stage, runtime.tel)
+    preflight_runtime_science!(runtime.science_stage,
+        runtime.science_detector)
     sense_primary_core!(advance_policy, runtime)
     if requires_runtime_science_pixels(runtime)
         capture_science_core!(runtime.science_path,
             runtime.science_atmosphere_renderer, runtime.atm, runtime.tel,
-            runtime.optic, runtime.science_src, runtime.science_detector,
-            runtime.rng, runtime.science_zero_padding)
+            runtime.optic, runtime.science_src, runtime.science_stage,
+            runtime.science_detector, runtime.rng)
     end
     if requires_runtime_slopes(runtime)
         stage_sensed_slopes!(runtime)
