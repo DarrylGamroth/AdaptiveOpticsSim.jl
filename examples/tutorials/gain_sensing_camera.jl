@@ -54,11 +54,11 @@ function atmosphere_gsc_trace(
     atmosphere_step::Real=1e-3,
 )
     rng = tutorial_rng(seed)
-    H = zeros(Float64, length(wfs.state.slopes), size(basis, 3))
+    H = zeros(Float64, length(slopes(wfs)), size(basis, 3))
     for k in 1:size(basis, 3)
         apply_opd!(tel, calibration_amplitude .* view(basis, :, :, k))
         measure!(wfs, tel, ngs)
-        H[:, k] .= wfs.state.slopes
+        H[:, k] .= slopes(wfs)
     end
     reset_opd!(tel)
 
@@ -153,11 +153,11 @@ function main(; resolution::Int=24, pupil_samples::Int=4)
         -1.0e-8 1.25e-8 0.5e-8 -0.5e-8
         0.5e-8 -0.75e-8 1.0e-8 0.25e-8
     ]
-    H = zeros(Float64, length(wfs.state.slopes), size(basis, 3))
+    H = zeros(Float64, length(slopes(wfs)), size(basis, 3))
     for k in 1:size(basis, 3)
         apply_opd!(tel, 1e-9 .* view(basis, :, :, k))
         measure!(wfs, tel, src)
-        H[:, k] .= wfs.state.slopes
+        H[:, k] .= slopes(wfs)
     end
     reset_opd!(tel)
     recon = pinv(H)

@@ -349,7 +349,7 @@ function run_profile(; backend_name::AbstractString="cpu", model_name::AbstractS
     println("  pupil_samples: ", cfg.pupil_samples)
     println("  dm_grid_shape: ", (dm.params.n_act, dm.params.n_act))
     println("  dm_command_length: ", length(dm.state.coefs))
-    println("  slope_length: ", length(wfs.state.slopes))
+    println("  slope_length: ", length(slopes(wfs)))
     println("  source_band: ", src.params.band)
     println("  effective_sky_magnitude: ", src.params.magnitude)
     println("  effective_calibration_magnitude: ", calibration_source.params.magnitude)

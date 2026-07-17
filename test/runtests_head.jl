@@ -86,7 +86,7 @@ end
 function assert_wfs_interface(wfs, tel)
     @test applicable(update_valid_mask!, wfs, tel)
     @test applicable(measure!, wfs, tel)
-    @test slopes(wfs) === wfs.state.slopes
+    @test slopes(wfs) isa AbstractVector
     @test supports_valid_subaperture_mask(wfs) == !isnothing(valid_subaperture_mask(wfs))
     @test supports_reference_signal(wfs) == !isnothing(reference_signal(wfs))
     @test supports_camera_frame(wfs) == !isnothing(camera_frame(wfs))
@@ -293,7 +293,7 @@ function moving_wfs_slope_trace(;
         advance_by!(atm, atmosphere_step; rng=rng)
         propagate!(atm, tel)
         measure!(wfs, tel, src)
-        trace[i] = copy(wfs.state.slopes)
+        trace[i] = copy(slopes(wfs))
     end
     return trace
 end

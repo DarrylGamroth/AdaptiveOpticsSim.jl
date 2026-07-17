@@ -80,7 +80,9 @@ Examples:
 - caller-owned `PupilFunction`, `ElectricField`, and `IntensityMap`
   products with immutable `OpticalPlaneMetadata`, including normalization,
   spatial-measure, and coherent/incoherent combination policy
-- `ShackHartmannWFS` with `ShackHartmannWFSParams` and `ShackHartmannWFSState`
+- `ShackHartmannWFS` composed from immutable `MicrolensArrayParams`, a
+  `MicrolensArray`, prepared `MicrolensArrayWorkspace`, and distinct layout,
+  calibration, acquisition, and estimator state
 - `Detector` with `DetectorParams` and `DetectorState`
 - `DetectorAcquisitionPlan` as the cold-path compatibility and buffer contract
   between one frame detector and one immutable intensity-map description
@@ -100,13 +102,13 @@ This gives:
 - stable memory ownership
 - hot-path mutation without repeated allocation
 
-The generic WFS stage protocol now exists independently of the legacy
-`AbstractWFS` object layout. Direct geometric/reduced-order estimators declare
-`DirectMeasurementPath()` and do not carry absent stages as `nothing` or
-allocate placeholder products. Maintained Shack-Hartmann, Pyramid/BioEdge,
-Zernike/Curvature, and LiFT implementations remain internally coupled until
-their family-specific migration slices; do not infer family decomposition from
-the existence of the generic contract.
+The generic WFS stage protocol exists independently of the `AbstractWFS`
+object layout. Shack-Hartmann is its first physical family implementation and
+separates microlens formation, acquisition, and estimation over caller-owned
+products. Its geometric mode declares `DirectMeasurementPath()` and allocates
+no placeholder optical or acquisition workspace. Pyramid/BioEdge,
+Zernike/Curvature, and LiFT remain internally coupled until their
+family-specific migration slices.
 
 ## Execution Layers
 

@@ -26,7 +26,7 @@ for k in 1:n_iter
     copyto!(sim.tel.state.opd, atmosphere_output.opd)
     apply!(sim.optic, sim.tel, DMAdditive())
     measure!(sim.wfs, sim.tel)
-    reconstruct!(cmd, recon, sim.wfs.state.slopes)
+    reconstruct!(cmd, recon, slopes(sim.wfs))
     modulation = 1 + 0.2 * sin(2 * pi * k / n_iter)
     sim.optic.state.coefs .= -cmd .* modulation
 end

@@ -309,19 +309,20 @@ function legacy_reference_sh_index_grid_frame!(wfs::ShackHartmannWFS,
     tel::Telescope, src::SpectralSource)
     AdaptiveOpticsSim.prepare_sampling!(wfs, tel,
         AdaptiveOpticsSim.spectral_reference_source(src))
-    fill!(wfs.state.spot_cube_accum,
-        zero(eltype(wfs.state.spot_cube_accum)))
+    fill!(wfs.optical_workspace.spot_cube_accum,
+        zero(eltype(wfs.optical_workspace.spot_cube_accum)))
     total_irradiance = AdaptiveOpticsSim.photon_irradiance(src)
     @inbounds for sample in AdaptiveOpticsSim.spectral_bundle(src)
         variant = AdaptiveOpticsSim.source_with_wavelength_and_radiometric_value(
             src, sample.wavelength,
-            eltype(wfs.state.slopes)(total_irradiance * sample.weight))
+            eltype(slopes(wfs))(total_irradiance * sample.weight))
         AdaptiveOpticsSim.sampled_spots_peak!(
             AdaptiveOpticsSim.ScalarCPUStyle(), wfs, tel, variant)
-        wfs.state.spot_cube_accum .+= wfs.state.spot_cube
+        wfs.optical_workspace.spot_cube_accum .+= wfs.acquisition.spot_cube
     end
-    copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
-    return wfs.state.spot_cube
+    copyto!(wfs.acquisition.spot_cube,
+        wfs.optical_workspace.spot_cube_accum)
+    return wfs.acquisition.spot_cube
 end
 
 function build_reference_detector(cfg::AbstractDict{<:AbstractString,<:Any})
@@ -758,9 +759,9 @@ function reference_interaction_matrix(wfs::AbstractWFS, tel::Telescope, src::Abs
         @views @. tel.state.opd = Float64(amplitude) * basis[:, :, k]
         measure!(wfs, tel, src)
         if mat === nothing
-            mat = Matrix{Float64}(undef, length(wfs.state.slopes), n_modes)
+            mat = Matrix{Float64}(undef, length(slopes(wfs)), n_modes)
         end
-        mat[:, k] .= wfs.state.slopes
+        mat[:, k] .= slopes(wfs)
     end
     tel.state.opd .= opd_base
     mat === nothing && throw(InvalidConfiguration("reference interaction matrix requires at least one mode"))
@@ -1157,7 +1158,7 @@ function compute_reference_actual(case::ReferenceCase)
             AdaptiveOpticsSim.prepare_sampling!(wfs, tel, src)
             AdaptiveOpticsSim.sampled_spots_peak!(wfs, tel, src)
         end
-        @views return copy(wfs.state.spot_cube[1, :, :])
+        @views return copy(wfs.acquisition.spot_cube[1, :, :])
     elseif case.kind === :pyramid_frame
         tel = build_reference_telescope(case.config["telescope"])
         src = build_reference_measurement_source(case.config["source"])
@@ -1410,12 +1411,14 @@ function compute_reference_actual_ka_cpu(case::ReferenceCase)
             throw(InvalidConfiguration("KA CPU reference path currently supports only geometric Shack-Hartmann cases"))
         end
         update_valid_mask!(wfs, tel)
-        n_sub = wfs.params.n_lenslets
+        n_sub = microlens_array(wfs).params.n_lenslets
         sub = div(tel.params.resolution, n_sub)
         offset = n_sub * n_sub
-        slopes = similar(wfs.state.slopes)
+        slopes = similar(AdaptiveOpticsSim.slopes(wfs))
         style = AdaptiveOpticsSim.AcceleratorStyle(KernelAbstractions.CPU())
-        AdaptiveOpticsSim._geometric_slopes!(style, slopes, tel.state.opd, wfs.state.valid_mask, sub, n_sub, offset)
+        AdaptiveOpticsSim._geometric_slopes!(style, slopes, tel.state.opd,
+            AdaptiveOpticsSim.valid_subaperture_mask(wfs), sub, n_sub,
+            offset)
         return slopes
     end
     throw(InvalidConfiguration("KA CPU reference path not implemented for reference kind '$(case.kind)'"))
@@ -1495,7 +1498,7 @@ function specula_legacy_radiometric_factor(case::ReferenceCase)
         wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
         AdaptiveOpticsSim.prepare_sampling!(wfs, tel,
             AdaptiveOpticsSim.spectral_reference_source(src))
-        pad = size(wfs.state.fft_stack, 1)
+        pad = size(wfs.optical_workspace.fft_stack, 1)
         factor *= pad * pad
     end
     return factor

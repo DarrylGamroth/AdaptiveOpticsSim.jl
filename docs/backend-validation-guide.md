@@ -55,8 +55,10 @@ The reduced maintained smoke covers:
 - explicit atmosphere epochs and prepared, device-resident finite/infinite
   direction rendering into caller-owned pupil products
 - atmospheric field propagation
-- same-grid, multi-component spectral diffractive SH, plus fail-closed rejection
-  of distinct-wavelength angular grids
+- prepared physical Shack-Hartmann optical formation, detector acquisition,
+  and centroid estimation on device-resident arrays
+- same-grid legacy spectral diffractive SH plus prepared native-grid bundle
+  retention and fail-closed single-output rejection for distinct wavelengths
 - same-grid spectral SH detector acquisition with non-unit sampled QE and
   exposure scaling
 - deterministic diffractive SH detector/export equivalence against CPU
@@ -130,13 +132,12 @@ buffers; windowed readout-product construction retains its existing allocation
 behavior. Counting crosstalk and the rest of the maintained detector array math
 remain backend kernels.
 
-On the normal point-source and compatible spectral-stack paths, Shack-Hartmann
-field formation, FFTs, and spot sampling remain batched on the device. A
-diffractive spectral stack is compatible only when every component has the
-same wavelength, because its samples then share one prepared angular grid.
-Distinct wavelengths fail before execution until a flux-conserving
-native-to-detector grid mapping is prepared by the later Shack-Hartmann optical
-front-end decomposition.
+On the normal point-source path, prepared Shack-Hartmann field formation, FFTs,
+spot sampling, detector acquisition, and centroid estimation remain batched on
+the device. The explicit optical front end keeps distinct wavelengths as
+device-resident `OpticalProductBundle` leaves on their native angular grids;
+it does not index-add or implicitly resample them. The legacy single-product
+`measure!` convenience path remains restricted to a common wavelength grid.
 
 Centroid cutoff/statistics use the reusable host centroid workspace and copy the
 thresholded spot back to the device so exported pixels retain CPU semantics.

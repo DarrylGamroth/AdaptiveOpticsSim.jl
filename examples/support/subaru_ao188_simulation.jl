@@ -773,8 +773,8 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
         overlap_t,
         high_M2C,
         low_M2C,
-        VectorDelayLine(high_wfs.state.slopes, params.latency.high_measurement_delay_frames),
-        VectorDelayLine(low_wfs.state.slopes, params.latency.low_measurement_delay_frames),
+        VectorDelayLine(slopes(high_wfs), params.latency.high_measurement_delay_frames),
+        VectorDelayLine(slopes(low_wfs), params.latency.low_measurement_delay_frames),
         VectorDelayLine(command, params.latency.reconstruction_delay_frames),
         VectorDelayLine(command, params.latency.dm_delay_frames),
         branch_execution_state,
@@ -809,8 +809,8 @@ function step!(surrogate::AO188Simulation)
 
     _measure_branches!(surrogate.params.branch_execution, surrogate)
 
-    high_slopes = shift_delay!(surrogate.high_measurement_delay, surrogate.high_wfs.state.slopes)
-    low_slopes = shift_delay!(surrogate.low_measurement_delay, surrogate.low_wfs.state.slopes)
+    high_slopes = shift_delay!(surrogate.high_measurement_delay, slopes(surrogate.high_wfs))
+    low_slopes = shift_delay!(surrogate.low_measurement_delay, slopes(surrogate.low_wfs))
 
     reconstruct!(surrogate.high_command, surrogate.high_reconstructor, high_slopes)
     reconstruct!(surrogate.low_command, surrogate.low_reconstructor, low_slopes)
@@ -835,7 +835,7 @@ AdaptiveOpticsSim.simulation_readout(simulation::AO188Simulation) = ao188_readou
 function ao188_readout(simulation::AO188Simulation)
     return SimulationReadout(
         simulation.command,
-        (simulation.high_wfs.state.slopes, simulation.low_wfs.state.slopes),
+        (slopes(simulation.high_wfs), slopes(simulation.low_wfs)),
         (
             _high_order_wfs_frame(simulation),
             wfs_output_frame(simulation.low_wfs, simulation.low_detector),
@@ -874,18 +874,18 @@ function subaru_ao188_phase_timing(surrogate::AO188Simulation; warmup::Int=10, s
         else
             measure!(surrogate.high_wfs, surrogate.tel, surrogate.src, surrogate.high_detector; rng=surrogate.rng)
         end
-        synchronize_backend!(execution_style(surrogate.high_wfs.state.slopes))
+        synchronize_backend!(execution_style(slopes(surrogate.high_wfs)))
         t1 = time_ns()
         _downsample_low_order_opd!(surrogate)
         measure!(surrogate.low_wfs, surrogate.low_tel, surrogate.src, surrogate.low_detector; rng=surrogate.rng)
-        synchronize_backend!(execution_style(surrogate.low_wfs.state.slopes))
+        synchronize_backend!(execution_style(slopes(surrogate.low_wfs)))
         t2 = time_ns()
 
-        high_slopes = shift_delay!(surrogate.high_measurement_delay, surrogate.high_wfs.state.slopes)
+        high_slopes = shift_delay!(surrogate.high_measurement_delay, slopes(surrogate.high_wfs))
         reconstruct!(surrogate.high_command, surrogate.high_reconstructor, high_slopes)
         synchronize_backend!(execution_style(surrogate.high_command))
         t3 = time_ns()
-        low_slopes = shift_delay!(surrogate.low_measurement_delay, surrogate.low_wfs.state.slopes)
+        low_slopes = shift_delay!(surrogate.low_measurement_delay, slopes(surrogate.low_wfs))
         reconstruct!(surrogate.low_command, surrogate.low_reconstructor, low_slopes)
         synchronize_backend!(execution_style(surrogate.low_command))
         surrogate.combined_command .= surrogate.high_command .+ surrogate.low_command

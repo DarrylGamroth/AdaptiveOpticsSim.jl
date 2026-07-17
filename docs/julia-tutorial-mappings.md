@@ -83,7 +83,7 @@ epoch = advance_by!(atm, 1e-3; rng=rng)
 render_atmosphere!(atmosphere_pupil, renderer, atm, epoch)
 apply_opd!(tel, opd_map(atmosphere_pupil))
 measure!(wfs, tel, src)
-reconstruct!(cmd, recon, wfs.state.slopes)
+reconstruct!(cmd, recon, slopes(wfs))
 dm.state.coefs .= -cmd
 apply!(dm, tel, DMAdditive())
 ```

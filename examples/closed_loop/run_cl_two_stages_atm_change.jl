@@ -32,8 +32,8 @@ function run_segment!(atm, renderer, atmosphere_output, sim, dm_coarse,
         apply!(dm_coarse, sim.tel, DMAdditive())
         apply!(dm_fine, sim.tel, DMAdditive())
         measure!(sim.wfs, sim.tel)
-        reconstruct!(cmd_coarse, recon_coarse, sim.wfs.state.slopes)
-        reconstruct!(cmd_fine, recon_fine, sim.wfs.state.slopes)
+        reconstruct!(cmd_coarse, recon_coarse, slopes(sim.wfs))
+        reconstruct!(cmd_fine, recon_fine, slopes(sim.wfs))
         dm_coarse.state.coefs .= -cmd_coarse
         dm_fine.state.coefs .= -cmd_fine
     end

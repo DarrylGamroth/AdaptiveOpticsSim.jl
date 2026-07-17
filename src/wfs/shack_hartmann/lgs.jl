@@ -1,9 +1,9 @@
 function apply_lgs_elongation!(::LGSProfileNone, wfs::ShackHartmannWFS, ::Telescope, src::LGSSource, ::Int)
-    wfs.state.elongation_kernel = apply_elongation!(
-        wfs.state.intensity,
+    wfs.optical_workspace.elongation_kernel = apply_elongation!(
+        wfs.optical_workspace.intensity,
         lgs_elongation_factor(src),
-        wfs.state.temp,
-        wfs.state.elongation_kernel,
+        wfs.optical_workspace.temp,
+        wfs.optical_workspace.elongation_kernel,
     )
     return wfs
 end
@@ -11,45 +11,59 @@ end
 function apply_lgs_elongation!(::LGSProfileNaProfile, wfs::ShackHartmannWFS, tel::Telescope, src::LGSSource, idx::Int)
     ensure_lgs_kernels!(wfs, tel, src)
     apply_lgs_convolution!(
-        wfs.state.intensity,
-        wfs.state.lgs_kernel_fft,
-        wfs.state.fft_buffer,
-        wfs.state.fft_plan,
-        wfs.state.ifft_plan,
+        wfs.optical_workspace.intensity,
+        wfs.optical_workspace.lgs_kernel_fft,
+        wfs.optical_workspace.fft_buffer,
+        wfs.optical_workspace.fft_plan,
+        wfs.optical_workspace.ifft_plan,
         idx,
     )
     return wfs
 end
 
 function ensure_lgs_kernels!(wfs::ShackHartmannWFS, tel::Telescope, src::LGSSource)
+    dimensions = (tel.params.resolution, tel.params.resolution)
+    return ensure_lgs_kernels!(wfs, src, dimensions, tel.params.diameter,
+        tel.aperture.sampling_m, tel.aperture.origin_m, wavelength(src))
+end
+
+function ensure_lgs_kernels!(wfs::ShackHartmannWFS, src::LGSSource,
+    pupil_dimensions::NTuple{2,Int}, pupil_diameter::Real,
+    pupil_sampling::NTuple{2,<:Real}, pupil_origin::NTuple{2,<:Real},
+    wavelength_m::Real)
     na_profile = src.params.na_profile
     if na_profile === nothing
         return wfs
     end
-    pad = size(wfs.state.intensity, 1)
-    n_sub = wfs.params.n_lenslets
+    pad = size(wfs.optical_workspace.intensity, 1)
+    n_sub = n_lenslets(wfs)
     pixel_scale = lgs_pixel_scale(
-        tel.params.diameter / n_sub,
-        wfs.state.effective_padding,
-        wavelength(src),
+        pupil_diameter / n_sub,
+        wfs.optical_workspace.effective_padding,
+        wavelength_m,
     )
     tag = lgs_kernel_signature(
-        tel,
         src,
         pad,
         n_sub,
         pixel_scale,
-        eltype(wfs.state.intensity);
+        eltype(wfs.optical_workspace.intensity),
+        pupil_dimensions,
+        pupil_diameter,
+        pupil_sampling,
+        pupil_origin;
+        wavelength_m,
         model=:per_subaperture,
         threshold=wfs.params.threshold_convolution,
     )
-    if size(wfs.state.lgs_kernel_fft, 1) == pad &&
-        size(wfs.state.lgs_kernel_fft, 3) == n_sub * n_sub &&
-        wfs.state.lgs_kernel_tag == tag
+    if size(wfs.optical_workspace.lgs_kernel_fft, 1) == pad &&
+        size(wfs.optical_workspace.lgs_kernel_fft, 3) == n_sub * n_sub &&
+        wfs.optical_workspace.lgs_kernel_tag == tag
         return wfs
     end
-    wfs.state.lgs_kernel_fft = lgs_spot_kernels_fft(tel, wfs, src, pad)
-    wfs.state.lgs_kernel_tag = tag
+    wfs.optical_workspace.lgs_kernel_fft = lgs_spot_kernels_fft(
+        pupil_diameter, wfs, src, pad, wavelength_m)
+    wfs.optical_workspace.lgs_kernel_tag = tag
     return wfs
 end
 
@@ -64,37 +78,45 @@ function apply_lgs_convolution!(intensity::AbstractMatrix{T}, kernels_fft::Abstr
 end
 
 function lgs_spot_kernels_fft(tel::Telescope, wfs::ShackHartmannWFS, src::LGSSource, pad::Int)
-    T = eltype(wfs.state.intensity)
-    n_sub = wfs.params.n_lenslets
+    return lgs_spot_kernels_fft(tel.params.diameter, wfs, src, pad,
+        wavelength(src))
+end
+
+function lgs_spot_kernels_fft(pupil_diameter::Real,
+    wfs::ShackHartmannWFS, src::LGSSource, pad::Int, wavelength_m::Real)
+    T = eltype(wfs.optical_workspace.intensity)
+    n_sub = n_lenslets(wfs)
     na_profile = src.params.na_profile
     altitudes = na_profile[1, :]
     weights = na_profile[2, :]
     if length(altitudes) == 0
-        return similar(wfs.state.fft_buffer, Complex{T}, 0, 0, 0)
+        return similar(wfs.optical_workspace.fft_buffer, Complex{T}, 0, 0, 0)
     end
 
     pixel_scale = lgs_pixel_scale(
-        tel.params.diameter / wfs.params.n_lenslets,
-        wfs.state.effective_padding,
-        wavelength(src),
+        pupil_diameter / n_lenslets(wfs),
+        wfs.optical_workspace.effective_padding,
+        wavelength_m,
     )
     fwhm_px = src.params.fwhm_spot_up / pixel_scale
     sigma_px = fwhm_px / (2 * sqrt(2 * log(T(2))))
     center = (pad + 1) / 2
 
-    x_subap = range(-tel.params.diameter / 2, tel.params.diameter / 2; length=n_sub)
-    y_subap = range(-tel.params.diameter / 2, tel.params.diameter / 2; length=n_sub)
-    kernels_fft = similar(wfs.state.fft_buffer, Complex{T}, pad, pad, n_sub * n_sub)
+    x_subap = range(-pupil_diameter / 2, pupil_diameter / 2; length=n_sub)
+    y_subap = range(-pupil_diameter / 2, pupil_diameter / 2; length=n_sub)
+    kernels_fft = similar(wfs.optical_workspace.fft_buffer, Complex{T}, pad, pad, n_sub * n_sub)
 
     x0 = src.params.laser_coordinates[2]
     y0 = -src.params.laser_coordinates[1]
     ref_idx = Int(cld(length(altitudes), 2))
-    ref_vec = lgs_reference_vector(tel, x0, y0, altitudes[ref_idx])
+    ref_vec = lgs_reference_vector(pupil_diameter, x0, y0,
+        altitudes[ref_idx])
 
     idx = 1
     kernel = Matrix{T}(undef, pad, pad)
     for iy in 1:n_sub, ix in 1:n_sub
-        lgs_spot_kernel!(kernel, tel, src, altitudes, weights, pixel_scale, sigma_px, center,
+        lgs_spot_kernel!(kernel, pupil_diameter, src, altitudes, weights,
+            pixel_scale, sigma_px, center,
             x_subap[ix], y_subap[iy], ref_vec)
         peak = maximum(kernel)
         if peak > 0
@@ -109,10 +131,10 @@ function lgs_spot_kernels_fft(tel::Telescope, wfs::ShackHartmannWFS, src::LGSSou
                 kernel ./= total
             end
         end
-        fft_buffer = wfs.state.fft_buffer
+        fft_buffer = wfs.optical_workspace.fft_buffer
         _copy_host_real_kernel_to_complex!(execution_style(fft_buffer),
             fft_buffer, kernel)
-        execute_fft_plan!(fft_buffer, wfs.state.fft_plan)
+        execute_fft_plan!(fft_buffer, wfs.optical_workspace.fft_plan)
         @views kernels_fft[:, :, idx] .= fft_buffer
         idx += 1
     end

@@ -83,8 +83,8 @@ function _evaluate_ao188!(surrogate::AO188Simulation)
     fill!(surrogate.command, zero(eltype(surrogate.command)))
     _set_deterministic_opd!(surrogate.tel)
     SubaruAO188Simulation._measure_branches!(surrogate.params.branch_execution, surrogate)
-    reconstruct!(surrogate.high_command, surrogate.high_reconstructor, surrogate.high_wfs.state.slopes)
-    reconstruct!(surrogate.low_command, surrogate.low_reconstructor, surrogate.low_wfs.state.slopes)
+    reconstruct!(surrogate.high_command, surrogate.high_reconstructor, slopes(surrogate.high_wfs))
+    reconstruct!(surrogate.low_command, surrogate.low_reconstructor, slopes(surrogate.low_wfs))
     surrogate.combined_command .= surrogate.high_command .+ surrogate.low_command
     copyto!(surrogate.command, surrogate.combined_command)
     return surrogate
@@ -142,10 +142,10 @@ function _run_ao188_equivalence(::Type{B}, branch_mode::AbstractExecutionPolicy)
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(gpu.command))
 
     println("ao188_runtime_equivalence")
-    _assert_close("high_spot_cube", gpu.high_wfs.state.spot_cube, cpu.high_wfs.state.spot_cube)
-    _assert_close("low_spot_cube", gpu.low_wfs.state.spot_cube, cpu.low_wfs.state.spot_cube)
-    _assert_close("high_slopes", gpu.high_wfs.state.slopes, cpu.high_wfs.state.slopes)
-    _assert_close("low_slopes", gpu.low_wfs.state.slopes, cpu.low_wfs.state.slopes)
+    _assert_close("high_spot_cube", gpu.high_wfs.acquisition.spot_cube, cpu.high_wfs.acquisition.spot_cube)
+    _assert_close("low_spot_cube", gpu.low_wfs.acquisition.spot_cube, cpu.low_wfs.acquisition.spot_cube)
+    _assert_close("high_slopes", slopes(gpu.high_wfs), slopes(cpu.high_wfs))
+    _assert_close("low_slopes", slopes(gpu.low_wfs), slopes(cpu.low_wfs))
     _assert_max_abs("command", gpu.command, cpu.command; atol=1f-3)
 end
 
@@ -182,10 +182,10 @@ function _run_ao188_post_command_equivalence(::Type{B}, branch_mode::AbstractExe
 
     println("ao188_post_command_equivalence T=", T)
     _assert_close("tel_opd", gpu.tel.state.opd, cpu.tel.state.opd; rtol=T(1e-8), atol=T(1e-12))
-    _assert_close("post_high_spot_cube", gpu.high_wfs.state.spot_cube, cpu.high_wfs.state.spot_cube; rtol=T(1e-8), atol=T(1e-4))
-    _assert_close("post_low_spot_cube", gpu.low_wfs.state.spot_cube, cpu.low_wfs.state.spot_cube; rtol=T(1e-8), atol=T(1e-4))
-    _assert_close("post_high_slopes", gpu.high_wfs.state.slopes, cpu.high_wfs.state.slopes; rtol=T(1e-8), atol=T(1e-8))
-    _assert_close("post_low_slopes", gpu.low_wfs.state.slopes, cpu.low_wfs.state.slopes; rtol=T(1e-8), atol=T(1e-8))
+    _assert_close("post_high_spot_cube", gpu.high_wfs.acquisition.spot_cube, cpu.high_wfs.acquisition.spot_cube; rtol=T(1e-8), atol=T(1e-4))
+    _assert_close("post_low_spot_cube", gpu.low_wfs.acquisition.spot_cube, cpu.low_wfs.acquisition.spot_cube; rtol=T(1e-8), atol=T(1e-4))
+    _assert_close("post_high_slopes", slopes(gpu.high_wfs), slopes(cpu.high_wfs); rtol=T(1e-8), atol=T(1e-8))
+    _assert_close("post_low_slopes", slopes(gpu.low_wfs), slopes(cpu.low_wfs); rtol=T(1e-8), atol=T(1e-8))
 end
 
 function _na_profile(T::Type{<:AbstractFloat})
@@ -240,11 +240,11 @@ function _run_lgs_equivalence(::Type{B}, profile::Symbol) where {B<:AdaptiveOpti
 
     measure!(wfs_cpu, tel_cpu, src_cpu, det_cpu; rng=MersenneTwister(2))
     measure!(wfs_gpu, tel_gpu, src_gpu, det_gpu; rng=MersenneTwister(2))
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(wfs_gpu.state.slopes))
+    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(slopes(wfs_gpu)))
 
     println("lgs_sh_equivalence profile=", profile)
-    _assert_close("spot_cube", wfs_gpu.state.spot_cube, wfs_cpu.state.spot_cube)
-    _assert_close("slopes", wfs_gpu.state.slopes, wfs_cpu.state.slopes)
+    _assert_close("spot_cube", wfs_gpu.acquisition.spot_cube, wfs_cpu.acquisition.spot_cube)
+    _assert_close("slopes", slopes(wfs_gpu), slopes(wfs_cpu))
 end
 
 function _build_lgs_asterism_case(backend, ::Type{T}) where {T<:AbstractFloat}
@@ -293,11 +293,11 @@ function _run_lgs_asterism_equivalence(::Type{B}) where {B<:AdaptiveOpticsSim.GP
 
     measure!(wfs_cpu, tel_cpu, ast_cpu, det_cpu; rng=MersenneTwister(3))
     measure!(wfs_gpu, tel_gpu, ast_gpu, det_gpu; rng=MersenneTwister(3))
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(wfs_gpu.state.slopes))
+    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(slopes(wfs_gpu)))
 
     println("common_calibration_lgs_asterism_equivalence")
-    _assert_close("spot_cube", wfs_gpu.state.spot_cube, wfs_cpu.state.spot_cube)
-    _assert_close("slopes", wfs_gpu.state.slopes, wfs_cpu.state.slopes)
+    _assert_close("spot_cube", wfs_gpu.acquisition.spot_cube, wfs_cpu.acquisition.spot_cube)
+    _assert_close("slopes", slopes(wfs_gpu), slopes(wfs_cpu))
 end
 
 function _build_zernike_case(backend, ::Type{T}) where {T<:AbstractFloat}
@@ -326,12 +326,12 @@ function _run_zernike_equivalence(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBack
 
     measure!(wfs_cpu, tel_cpu, src_cpu, det_cpu; rng=MersenneTwister(4))
     measure!(wfs_gpu, tel_gpu, src_gpu, det_gpu; rng=MersenneTwister(4))
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(wfs_gpu.state.slopes))
+    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(slopes(wfs_gpu)))
 
     println("zernike_equivalence")
     _assert_close("camera_frame", wfs_gpu.state.camera_frame, wfs_cpu.state.camera_frame; rtol=1f-5, atol=8f0)
     _assert_close("reference_signal_2d", wfs_gpu.state.reference_signal_2d, wfs_cpu.state.reference_signal_2d; rtol=5f-5, atol=2f-6)
-    _assert_close("slopes", wfs_gpu.state.slopes, wfs_cpu.state.slopes; rtol=5f-5, atol=2f-6)
+    _assert_close("slopes", slopes(wfs_gpu), slopes(wfs_cpu); rtol=5f-5, atol=2f-6)
     _assert_close("detector_frame", output_frame(det_gpu), output_frame(det_cpu); rtol=1f-5, atol=1f-2)
 end
 

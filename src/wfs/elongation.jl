@@ -175,9 +175,12 @@ parameter used to build the cached kernel. In particular, profile values are
 hashed rather than identified by their array object so an in-place profile
 update invalidates the cache.
 """
-function lgs_kernel_signature(tel::Telescope, src::LGSSource, pad::Int,
-    n_subapertures::Int, pixel_scale::Real, kernel_eltype::Type;
-    model::Symbol, threshold::Union{Nothing,Real}=nothing)
+function lgs_kernel_signature(src::LGSSource, pad::Int,
+    n_subapertures::Int, pixel_scale::Real, kernel_eltype::Type,
+    pupil_dimensions::NTuple{2,Int}, pupil_diameter::Real,
+    pupil_sampling::NTuple{2,<:Real}, pupil_origin::NTuple{2,<:Real};
+    wavelength_m::Real=wavelength(src), model::Symbol,
+    threshold::Union{Nothing,Real}=nothing)
     params = src.params
     sig = hash(:lgs_sodium_profile_kernel_v1)
     sig = hash(model, sig)
@@ -186,13 +189,13 @@ function lgs_kernel_signature(tel::Telescope, src::LGSSource, pad::Int,
     sig = hash(n_subapertures, sig)
     sig = hash(pixel_scale, sig)
     sig = hash(threshold, sig)
-    sig = hash(params.wavelength, sig)
+    sig = hash(wavelength_m, sig)
     sig = hash(params.laser_coordinates, sig)
     sig = hash(params.fwhm_spot_up, sig)
-    sig = hash(tel.params.resolution, sig)
-    sig = hash(tel.params.diameter, sig)
-    sig = hash(tel.aperture.sampling_m, sig)
-    sig = hash(tel.aperture.origin_m, sig)
+    sig = hash(pupil_dimensions, sig)
+    sig = hash(pupil_diameter, sig)
+    sig = hash(pupil_sampling, sig)
+    sig = hash(pupil_origin, sig)
 
     profile = params.na_profile
     if profile === nothing
@@ -206,9 +209,21 @@ function lgs_kernel_signature(tel::Telescope, src::LGSSource, pad::Int,
     return sig
 end
 
-function lgs_reference_vector(tel::Telescope, x0::Real, y0::Real, altitude::Real)
-    T = promote_type(typeof(tel.params.diameter), typeof(x0), typeof(y0), typeof(altitude))
-    diameter = T(tel.params.diameter)
+function lgs_kernel_signature(tel::Telescope, src::LGSSource, pad::Int,
+    n_subapertures::Int, pixel_scale::Real, kernel_eltype::Type;
+    model::Symbol, threshold::Union{Nothing,Real}=nothing)
+    dimensions = (tel.params.resolution, tel.params.resolution)
+    return lgs_kernel_signature(src, pad, n_subapertures, pixel_scale,
+        kernel_eltype, dimensions, tel.params.diameter,
+        tel.aperture.sampling_m, tel.aperture.origin_m;
+        wavelength_m=wavelength(src), model, threshold)
+end
+
+function lgs_reference_vector(pupil_diameter::Real, x0::Real, y0::Real,
+    altitude::Real)
+    T = promote_type(typeof(pupil_diameter), typeof(x0), typeof(y0),
+        typeof(altitude))
+    diameter = T(pupil_diameter)
     x0_t = T(x0)
     y0_t = T(y0)
     altitude_t = T(altitude)
@@ -218,16 +233,25 @@ function lgs_reference_vector(tel::Telescope, x0::Real, y0::Real, altitude::Real
     return (x, y, z)
 end
 
-function lgs_spot_shift(vec::Tuple{T,T,T}, tel::Telescope, x_subap::Real, y_subap::Real,
+@inline lgs_reference_vector(tel::Telescope, x0::Real, y0::Real,
+    altitude::Real) = lgs_reference_vector(tel.params.diameter, x0, y0,
+    altitude)
+
+function lgs_spot_shift(vec::Tuple{T,T,T}, pupil_diameter::Real,
+    x_subap::Real, y_subap::Real,
     pixel_scale::Real) where {T<:Real}
-    dx0 = vec[1] * (4 / tel.params.diameter)
-    dy0 = vec[2] * (4 / tel.params.diameter)
-    dx1 = vec[3] * (sqrt(3) * (4 / tel.params.diameter)^2) * x_subap
-    dy1 = vec[3] * (sqrt(3) * (4 / tel.params.diameter)^2) * y_subap
+    dx0 = vec[1] * (4 / pupil_diameter)
+    dy0 = vec[2] * (4 / pupil_diameter)
+    dx1 = vec[3] * (sqrt(3) * (4 / pupil_diameter)^2) * x_subap
+    dy1 = vec[3] * (sqrt(3) * (4 / pupil_diameter)^2) * y_subap
     shift_x = ARCSEC_PER_RAD * (dx0 + dx1) / pixel_scale
     shift_y = ARCSEC_PER_RAD * (dy0 + dy1) / pixel_scale
     return shift_x, shift_y
 end
+
+@inline lgs_spot_shift(vec::Tuple{T,T,T}, tel::Telescope,
+    x_subap::Real, y_subap::Real, pixel_scale::Real) where {T<:Real} =
+    lgs_spot_shift(vec, tel.params.diameter, x_subap, y_subap, pixel_scale)
 
 function gaussian_shift!(kernel::AbstractMatrix{T}, sigma::Real, cx::Real, cy::Real,
     weight::Real) where {T<:AbstractFloat}
@@ -250,7 +274,8 @@ function gaussian_shift!(kernel::AbstractMatrix{T}, sigma::Real, cx::Real, cy::R
     return kernel
 end
 
-function lgs_spot_kernel!(kernel::AbstractMatrix{T}, tel::Telescope, src::LGSSource,
+function lgs_spot_kernel!(kernel::AbstractMatrix{T}, pupil_diameter::Real,
+    src::LGSSource,
     altitudes::AbstractVector, weights::AbstractVector, pixel_scale::Real, sigma_px::Real,
     center::Real, x_subap::Real, y_subap::Real,
     ref_vec::Tuple{<:Real,<:Real,<:Real}) where {T<:AbstractFloat}
@@ -258,9 +283,10 @@ function lgs_spot_kernel!(kernel::AbstractMatrix{T}, tel::Telescope, src::LGSSou
     x0 = src.params.laser_coordinates[2]
     y0 = -src.params.laser_coordinates[1]
     @inbounds for k in eachindex(altitudes)
-        vec = lgs_reference_vector(tel, x0, y0, altitudes[k])
+        vec = lgs_reference_vector(pupil_diameter, x0, y0, altitudes[k])
         vec = (vec[1] - ref_vec[1], vec[2] - ref_vec[2], vec[3] - ref_vec[3])
-        shift_x, shift_y = lgs_spot_shift(vec, tel, x_subap, y_subap, pixel_scale)
+        shift_x, shift_y = lgs_spot_shift(vec, pupil_diameter, x_subap,
+            y_subap, pixel_scale)
         gaussian_shift!(kernel, sigma_px, center + shift_x, center + shift_y, weights[k])
     end
     total = sum(kernel)
@@ -268,6 +294,15 @@ function lgs_spot_kernel!(kernel::AbstractMatrix{T}, tel::Telescope, src::LGSSou
         kernel ./= total
     end
     return kernel
+end
+
+
+@inline function lgs_spot_kernel!(kernel::AbstractMatrix{T}, tel::Telescope,
+    src::LGSSource, altitudes::AbstractVector, weights::AbstractVector,
+    pixel_scale::Real, sigma_px::Real, center::Real, x_subap::Real,
+    y_subap::Real, ref_vec::Tuple{<:Real,<:Real,<:Real}) where {T<:AbstractFloat}
+    return lgs_spot_kernel!(kernel, tel.params.diameter, src, altitudes,
+        weights, pixel_scale, sigma_px, center, x_subap, y_subap, ref_vec)
 end
 
 # `plan_ifft_backend!` follows the normalized AbstractFFTs inverse contract, so

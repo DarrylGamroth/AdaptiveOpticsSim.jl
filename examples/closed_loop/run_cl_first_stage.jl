@@ -26,7 +26,7 @@ for _ in 1:5
     copyto!(sim.tel.state.opd, atmosphere_output.opd)
     apply!(sim.optic, sim.tel, DMAdditive())
     measure!(sim.wfs, sim.tel)
-    reconstruct!(cmd, recon, sim.wfs.state.slopes)
+    reconstruct!(cmd, recon, slopes(sim.wfs))
     sim.optic.state.coefs .= 0
     sim.optic.state.coefs[1:n_half] .= -cmd[1:n_half]
 end

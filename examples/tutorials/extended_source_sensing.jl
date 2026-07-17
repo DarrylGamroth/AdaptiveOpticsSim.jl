@@ -24,15 +24,15 @@ function main(; resolution::Int=24)
     pyr_point_slopes = copy(measure!(pyr_point, tel, src))
     pyr_ext_slopes = copy(measure!(pyr_ext, tel, ext))
 
-    sh_delta = copy(sh_ext.state.spot_cube .- sh_point.state.spot_cube)
+    sh_delta = copy(sh_ext.acquisition.spot_cube .- sh_point.acquisition.spot_cube)
     pyramid_delta = copy(pyr_ext.state.intensity .- pyr_point.state.intensity)
-    sh_relative_morphology = norm(sh_delta) / norm(sh_point.state.spot_cube)
+    sh_relative_morphology = norm(sh_delta) / norm(sh_point.acquisition.spot_cube)
     pyramid_relative_morphology = norm(pyramid_delta) /
                                   norm(pyr_point.state.intensity)
     @info(
         "Extended-source sensing tutorial complete",
-        sh_rate_ratio=sum(sh_ext.state.spot_cube) /
-                      sum(sh_point.state.spot_cube),
+        sh_rate_ratio=sum(sh_ext.acquisition.spot_cube) /
+                      sum(sh_point.acquisition.spot_cube),
         pyramid_rate_ratio=sum(pyr_ext.state.intensity) /
                            sum(pyr_point.state.intensity),
         sh_relative_morphology=sh_relative_morphology,
@@ -43,8 +43,8 @@ function main(; resolution::Int=24)
         sh_extended_peak=ext_peak,
         sh_point_slopes=point_slopes,
         sh_extended_slopes=ext_slopes,
-        sh_point_rate=sum(sh_point.state.spot_cube),
-        sh_extended_rate=sum(sh_ext.state.spot_cube),
+        sh_point_rate=sum(sh_point.acquisition.spot_cube),
+        sh_extended_rate=sum(sh_ext.acquisition.spot_cube),
         sh_spot_delta=sh_delta,
         sh_relative_morphology=sh_relative_morphology,
         pyramid_point_slopes=pyr_point_slopes,

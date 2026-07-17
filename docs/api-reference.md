@@ -108,10 +108,11 @@ mutation is unsupported because it bypasses that revision boundary.
   accumulation. Detector acquisition is channel-specific and requires a
   monochromatic or integrated channel; sampled QE requires the monochromatic
   case
-- Diffractive Shack–Hartmann spectral execution accepts same-wavelength
-  components on one prepared angular grid. Distinct wavelengths are rejected
-  until an explicit flux-conserving native-to-detector mapping is available;
-  use separate channel products when independent processing is appropriate
+- Prepared diffractive Shack–Hartmann formation writes same-grid sources to
+  one rate mosaic and retains distinct wavelength grids as native-sampling
+  leaves in an `OpticalProductBundle`. Passing a distinct-grid source to one
+  output is rejected; the legacy single-product `measure!` path remains
+  restricted to a common wavelength grid
 - Product semantics: `PhotonRateNormalization` or
   `DimensionlessNormalization`; `PointSampledMeasure`,
   `SpatialDensityMeasure`, or `CellIntegratedMeasure`; and
@@ -270,9 +271,11 @@ peak sampled QE. Source-aware capture, `capture!(det, image, src; rng=...)`,
 evaluates the QE model at `wavelength(src)`. For `SpectralSource`, it uses the
 flux-weighted effective QE over the spectral bundle. Pyramid frame-detector
 paths specialize this boundary by applying sampled QE per wavelength before
-incoherent optical-rate accumulation. Diffractive Shack–Hartmann does the same
-for multiple contributions on one common wavelength grid; it rejects distinct
-wavelengths until an explicit native-to-detector grid mapping is available.
+incoherent optical-rate accumulation. Prepared diffractive Shack–Hartmann
+formation instead retains distinct wavelength-rate products in a bundle so
+acquisition can apply channel-specific QE without an implicit grid conversion;
+its legacy single-product path accumulates only contributions on one common
+grid.
 Other source-aware detector paths retain the effective-QE contract unless
 explicitly documented otherwise.
 
@@ -382,10 +385,14 @@ derived MTF, QE, charge multiplication, or detector noise.
   execution-time prepared-binding violations before mutation
 - WFS families: `ShackHartmannWFS`, `PyramidWFS`, `BioEdgeWFS`,
   `ZernikeWFS`, `CurvatureWFS`
+- Shack-Hartmann optical composition: `MicrolensArrayParams`,
+  `MicrolensArray`, `MicrolensArrayWorkspace`, `microlens_array`,
+  `ShackHartmannOpticalFrontEnd`, and `shack_hartmann_rate_map`
 - Curvature readout: `CurvatureReadoutModel`, `CurvatureCountingReadout`,
   `CurvatureBranchResponse`
 - Shack-Hartmann calibration and extraction: `FluxThresholdValidSubapertures`,
-  `CenterOfGravityExtraction`, `SubapertureLayout`,
+  `AbstractSlopeExtractionModel`, `CenterOfGravityExtraction`,
+  `SubapertureLayout`,
   `SubapertureCalibration`, `subaperture_layout`,
   `subaperture_calibration`, `slope_extraction_model`,
   `valid_subaperture_indices`, `n_valid_subapertures`

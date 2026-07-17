@@ -362,6 +362,20 @@ end
         @test fft_ast[2, 2, n_spots + 1] == 3.0 + 0.0im
         @test fft_ast[2, 2, 2] == 0.0 + 0.0im
 
+        explicit_amplitude = fill(0.5, n, n)
+        explicit_fft_ast = fill(99.0 + 0.0im, pad, pad,
+            2 * n_spots)
+        AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE,
+            AdaptiveOpticsSim.sh_explicit_pupil_asterism_stack_kernel!,
+            explicit_fft_ast, valid_mask, explicit_amplitude, opd, phasor,
+            amp_scales, opd_to_cycles, n_sub, sub, ox, oy, n, pad,
+            n_spots, length(amp_scales);
+            ndrange=(pad, pad, length(amp_scales), n_sub, n_sub))
+        mark_ka_cpu_kernel!(:sh_explicit_pupil_asterism_stack_kernel!)
+        @test explicit_fft_ast[2, 2, 1] == 1.0 + 0.0im
+        @test explicit_fft_ast[2, 2, n_spots + 1] == 1.5 + 0.0im
+        @test explicit_fft_ast[2, 2, 2] == 0.0 + 0.0im
+
         sample_input = reshape(collect(1.0:64.0), 4, 4, n_spots)
         sampled = fill(-1.0, n_spots, 2, 2)
         AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_sample_spot_stack_kernel!,
@@ -806,8 +820,8 @@ end
         @test ka_cpu_close(ka_phases, scalar_phases)
 
         intensity = reshape(collect(1.0:(4 * 4 * 4 * 4)), 16, 16)
-        scalar_slopes = similar(wfs.state.slopes)
-        ka_slopes = similar(wfs.state.slopes)
+        scalar_slopes = similar(slopes(wfs))
+        ka_slopes = similar(slopes(wfs))
         valid_mask = trues(4, 4)
         AdaptiveOpticsSim._pyramid_slopes!(SCALAR_CPU_STYLE, scalar_slopes, intensity, valid_mask, 2, 4, 16, 16,
             0, 0, 0, 8, 8, 0, 8, 8, (0, 0, 0, 0), (0, 0, 0, 0))
@@ -951,6 +965,9 @@ end
             :masked_sum2d_kernel!,
             :scaled_shifted_coord_stack_kernel!,
             :selected_covariance_block_kernel!,
+            :sh_explicit_field_stack_kernel!,
+            :sh_explicit_pupil_stack_kernel!,
+            :sh_unpack_mosaic_kernel!,
             :submatrix_extract_kernel!,
             :zernike_phasor_kernel!,
             :zernike_signal_kernel!,

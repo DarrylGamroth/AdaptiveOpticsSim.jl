@@ -16,7 +16,7 @@ end
     wfs = ZernikeWFS(tel; pupil_samples=8, diffraction_padding=2)
 
     @test size(wfs.state.camera_frame) == (8, 8)
-    @test length(wfs.state.slopes) == count(wfs.state.valid_mask)
+    @test length(slopes(wfs)) == count(wfs.state.valid_mask)
     @test_throws InvalidConfiguration measure!(wfs, tel)
     @test_throws InvalidConfiguration measure!(wfs, tel, Asterism([src, Source(band=:I, magnitude=0.0)]))
 
@@ -79,7 +79,7 @@ end
         zernike_signal!(wfs, tel, frame, src, normalization_scale)
         @test zernike_signal_allocations(wfs, tel, src, frame,
             normalization_scale) == 0
-        @test all(isfinite, wfs.state.slopes)
+        @test all(isfinite, slopes(wfs))
     end
 end
 
@@ -113,7 +113,7 @@ end
         zero_wfs = ZernikeWFS(tel; pupil_samples=8,
             normalization=normalization)
         @test all(iszero, measure!(zero_wfs, tel, zero_src))
-        @test all(isfinite, zero_wfs.state.slopes)
+        @test all(isfinite, slopes(zero_wfs))
     end
 end
 
@@ -274,7 +274,7 @@ end
     wfs = CurvatureWFS(tel; pupil_samples=8, defocus_rms_nm=500.0)
 
     @test size(wfs.state.camera_frame) == (16, 8)
-    @test length(wfs.state.slopes) == 64
+    @test length(slopes(wfs)) == 64
     @test_throws InvalidConfiguration measure!(wfs, tel)
     @test_throws InvalidConfiguration measure!(wfs, tel, Asterism([src, Source(band=:I, magnitude=0.0)]))
 
@@ -377,7 +377,7 @@ end
 
     ast = Asterism([src, Source(band=:I, magnitude=0.0, coordinates=(1.0, 90.0))])
     ast_slopes = copy(measure!(wfs, tel, ast, atm))
-    @test length(ast_slopes) == length(wfs.state.slopes)
+    @test length(ast_slopes) == length(slopes(wfs))
     @test all(isfinite, ast_slopes)
     @test norm(ast_slopes) > 0
 

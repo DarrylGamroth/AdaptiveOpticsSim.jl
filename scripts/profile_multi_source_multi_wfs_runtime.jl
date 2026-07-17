@@ -164,19 +164,19 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     sh = ShackHartmannWFS(tel; n_lenslets=cfg.asterism_wfs_samples, mode=Diffractive(), T=T, backend=backend_selector)
     sh_mean_ns, sh_p95_ns, sh_alloc_bytes = _timed_stats!(() -> begin
         measure!(sh, tel, ast, det; rng=rng)
-        _sync_backend!(backend_tag, sh.state.slopes)
+        _sync_backend!(backend_tag, slopes(sh))
     end; warmup=resolved_warmup, samples=resolved_samples)
 
     pyr = PyramidWFS(tel; pupil_samples=cfg.asterism_wfs_samples, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend_selector)
     pyr_mean_ns, pyr_p95_ns, pyr_alloc_bytes = _timed_stats!(() -> begin
         measure!(pyr, tel, ast, det; rng=rng)
-        _sync_backend!(backend_tag, pyr.state.slopes)
+        _sync_backend!(backend_tag, slopes(pyr))
     end; warmup=resolved_warmup, samples=resolved_samples)
 
     bio = BioEdgeWFS(tel; pupil_samples=cfg.asterism_wfs_samples, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend_selector)
     bio_mean_ns, bio_p95_ns, bio_alloc_bytes = _timed_stats!(() -> begin
         measure!(bio, tel, ast, det; rng=rng)
-        _sync_backend!(backend_tag, bio.state.slopes)
+        _sync_backend!(backend_tag, slopes(bio))
     end; warmup=resolved_warmup, samples=resolved_samples)
 
     compatible_branches = [_build_runtime_branch(T, backend_selector,

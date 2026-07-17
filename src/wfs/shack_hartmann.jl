@@ -10,9 +10,11 @@ include("shack_hartmann/measure.jl")
 include("shack_hartmann/stacks.jl")
 include("shack_hartmann/signals.jl")
 include("shack_hartmann/lgs.jl")
+include("shack_hartmann/stages.jl")
 
-@inline valid_subaperture_mask(wfs::ShackHartmannWFS) = wfs.state.valid_mask
-@inline reference_signal(wfs::ShackHartmannWFS) = wfs.state.reference_signal_2d
+@inline slopes(wfs::ShackHartmannWFS) = wfs.estimator.slopes
+@inline valid_subaperture_mask(wfs::ShackHartmannWFS) = wfs.layout.valid_mask
+@inline reference_signal(wfs::ShackHartmannWFS) = wfs.calibration.reference_signal_2d
 
 @kernel function shack_hartmann_detector_image_kernel!(image, spot_cube, n_sub::Int, n_y::Int, n_x::Int, gap::Int, gap_value)
     y, x = @index(Global, NTuple)
@@ -118,7 +120,7 @@ function _shack_hartmann_detector_image!(style::AcceleratorStyle{B}, ::Accelerat
 end
 
 @inline shack_hartmann_detector_image(wfs::ShackHartmannWFS; kwargs...) =
-    shack_hartmann_detector_image(sh_exported_spot_cube(wfs), wfs.params.n_lenslets; kwargs...)
+    shack_hartmann_detector_image(sh_exported_spot_cube(wfs), n_lenslets(wfs); kwargs...)
 @inline wfs_detector_image(wfs::ShackHartmannWFS; kwargs...) = shack_hartmann_detector_image(wfs; kwargs...)
 @inline wfs_detector_image(wfs::ShackHartmannWFS, ::Nothing; kwargs...) = shack_hartmann_detector_image(wfs; kwargs...)
 @inline wfs_detector_image(wfs::ShackHartmannWFS, det::AbstractDetector; kwargs...) =
@@ -184,6 +186,6 @@ end
 end
 
 @inline function set_runtime_wfs_output_policy!(wfs::ShackHartmannWFS{<:Diffractive}, outputs)
-    wfs.state.export_pixels_enabled = outputs.wfs_pixels
+    wfs.acquisition.export_pixels_enabled = outputs.wfs_pixels
     return wfs
 end

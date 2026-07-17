@@ -709,7 +709,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         imat = interaction_matrix(dm, wfs, cal_tel, src; amplitude=T(0.05))
         recon = ModalReconstructor(imat; gain=one(T))
         measure!(wfs, cal_tel, src)
-        cmds = reconstruct(recon, wfs.state.slopes)
+        cmds = reconstruct(recon, slopes(wfs))
         @assert imat.matrix isa BackendArray
         @assert cmds isa BackendArray
         return cmds
