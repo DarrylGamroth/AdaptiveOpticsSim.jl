@@ -21,6 +21,13 @@ struct ReferenceBundle
     cases::Vector{ReferenceCase}
 end
 
+const LEGACY_SH_INDEX_GRID_REFERENCE_ID =
+    "shack_hartmann_polychromatic_frame"
+
+@inline uses_legacy_sh_index_grid_reference(case::ReferenceCase) =
+    case.baseline === :specula &&
+    case.id == LEGACY_SH_INDEX_GRID_REFERENCE_ID
+
 abstract type ReferenceStorageConvention end
 
 struct JuliaColumnMajorStorage <: ReferenceStorageConvention end
@@ -212,7 +219,6 @@ function build_reference_telescope(cfg::AbstractDict{<:AbstractString,<:Any})
     return Telescope(
         resolution=Int(cfg["resolution"]),
         diameter=Float64(cfg["diameter"]),
-        sampling_time=Float64(cfg["sampling_time"]),
         central_obstruction=Float64(get(cfg, "central_obstruction", 0.0)),
         fov_arcsec=Float64(get(cfg, "fov_arcsec", 0.0)),
         pupil_reflectivity=Float64(get(cfg, "pupil_reflectivity", 1.0)),
@@ -245,6 +251,7 @@ function build_reference_source(cfg::AbstractDict{<:AbstractString,<:Any})
             laser_coordinates=laser_coordinates,
             fwhm_spot_up=Float64(get(cfg, "fwhm_spot_up", 0.0)),
             na_profile=na_profile,
+            photon_irradiance=1.0,
         )
     end
     throw(InvalidConfiguration("unknown source kind '$kind'"))
@@ -259,6 +266,35 @@ function build_reference_measurement_source(cfg::AbstractDict{<:AbstractString,<
         Float64.(spectrum_cfg["weights"]),
     )
     return with_spectrum(src, bundle)
+end
+
+"""
+    legacy_reference_sh_index_grid_frame!(wfs, tel, src)
+
+Reproduce the retired Shack-Hartmann spectral index-grid approximation solely
+to characterize frozen external reference data.  This adapter intentionally
+prepares one detector grid at the wrapped source wavelength and adds the
+per-channel sampled spots by array index.  Production Shack-Hartmann APIs must
+not use this helper: distinct-wavelength channels require an explicit
+native-to-detector grid mapping.
+"""
+function legacy_reference_sh_index_grid_frame!(wfs::ShackHartmannWFS,
+    tel::Telescope, src::SpectralSource)
+    AdaptiveOpticsSim.prepare_sampling!(wfs, tel,
+        AdaptiveOpticsSim.spectral_reference_source(src))
+    fill!(wfs.state.spot_cube_accum,
+        zero(eltype(wfs.state.spot_cube_accum)))
+    total_irradiance = AdaptiveOpticsSim.photon_irradiance(src)
+    @inbounds for sample in AdaptiveOpticsSim.spectral_bundle(src)
+        variant = AdaptiveOpticsSim.source_with_wavelength_and_radiometric_value(
+            src, sample.wavelength,
+            eltype(wfs.state.slopes)(total_irradiance * sample.weight))
+        AdaptiveOpticsSim.sampled_spots_peak!(
+            AdaptiveOpticsSim.ScalarCPUStyle(), wfs, tel, variant)
+        wfs.state.spot_cube_accum .+= wfs.state.spot_cube
+    end
+    copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
+    return wfs.state.spot_cube
 end
 
 function build_reference_detector(cfg::AbstractDict{<:AbstractString,<:Any})
@@ -1080,8 +1116,12 @@ function compute_reference_actual(case::ReferenceCase)
         if haskey(case.config, "opd")
             apply_reference_opd!(tel, case.config["opd"])
         end
-        AdaptiveOpticsSim.prepare_sampling!(wfs, tel, src)
-        AdaptiveOpticsSim.sampled_spots_peak!(wfs, tel, src)
+        if src isa SpectralSource && uses_legacy_sh_index_grid_reference(case)
+            legacy_reference_sh_index_grid_frame!(wfs, tel, src)
+        else
+            AdaptiveOpticsSim.prepare_sampling!(wfs, tel, src)
+            AdaptiveOpticsSim.sampled_spots_peak!(wfs, tel, src)
+        end
         @views return copy(wfs.state.spot_cube[1, :, :])
     elseif case.kind === :pyramid_frame
         tel = build_reference_telescope(case.config["telescope"])
@@ -1102,9 +1142,10 @@ function compute_reference_actual(case::ReferenceCase)
         atm = build_reference_atmosphere(case.config["atmosphere"], tel)
         advance_steps = Int(get(case.config["atmosphere"], "advance_steps", 1))
         advance_seed = Int(get(case.config["atmosphere"], "advance_seed", 1))
+        atmosphere_step = Float64(case.config["telescope"]["sampling_time"])
         rng = MersenneTwister(advance_seed)
         for _ in 1:advance_steps
-            advance_by!(atm, tel.params.sampling_time; rng=rng)
+            advance_by!(atm, atmosphere_step; rng=rng)
         end
         prop = AtmosphericFieldPropagation(
             atm,
@@ -1345,7 +1386,103 @@ function compute_reference_actual_ka_cpu(case::ReferenceCase)
     throw(InvalidConfiguration("KA CPU reference path not implemented for reference kind '$(case.kind)'"))
 end
 
+const OOPAO_LEGACY_OPTICAL_INTEGRATION_KINDS = (
+    :psf,
+    :gsc_modulation_frame,
+    :lift_interaction_matrix,
+)
+
+const SPECULA_LEGACY_OPTICAL_INTEGRATION_KINDS = (
+    :atmospheric_intensity,
+    :pyramid_frame,
+    :shack_hartmann_frame,
+)
+
+function legacy_reference_optical_duration(case::ReferenceCase, affected_kinds)
+    case.kind in affected_kinds || return nothing
+    telescope = get(case.config, "telescope", nothing)
+    telescope isa AbstractDict || throw(InvalidConfiguration(
+        "legacy $(case.baseline) reference '$(case.id)' requires a telescope table",
+    ))
+    haskey(telescope, "sampling_time") || throw(InvalidConfiguration(
+        "legacy $(case.baseline) reference '$(case.id)' requires telescope sampling_time",
+    ))
+    duration = Float64(telescope["sampling_time"])
+    if !isfinite(duration) || duration <= 0
+        throw(InvalidConfiguration(
+            "legacy $(case.baseline) optical duration must be finite and positive; got $(duration)",
+        ))
+    end
+    return duration
+end
+
+function oopao_legacy_radiometric_factor(case::ReferenceCase)
+    case.baseline === :oopao || return nothing
+    return legacy_reference_optical_duration(case, OOPAO_LEGACY_OPTICAL_INTEGRATION_KINDS)
+end
+
+function legacy_reference_spectral_weight_sum(case::ReferenceCase)
+    source = get(case.config, "source", nothing)
+    source isa AbstractDict || return 1.0
+    spectrum = get(source, "spectrum", nothing)
+    spectrum === nothing && return 1.0
+    spectrum isa AbstractDict || throw(InvalidConfiguration(
+        "legacy $(case.baseline) reference '$(case.id)' requires a spectrum table",
+    ))
+    weights_raw = get(spectrum, "weights", nothing)
+    weights_raw isa AbstractVector || throw(InvalidConfiguration(
+        "legacy $(case.baseline) reference '$(case.id)' requires spectral weights",
+    ))
+    weights = Float64.(weights_raw)
+    if isempty(weights) || any(weight -> !isfinite(weight) || weight < 0, weights)
+        throw(InvalidConfiguration(
+            "legacy $(case.baseline) spectral weights must be finite, nonnegative, and nonempty",
+        ))
+    end
+    weight_sum = sum(weights)
+    if !isfinite(weight_sum) || weight_sum <= 0
+        throw(InvalidConfiguration(
+            "legacy $(case.baseline) spectral-weight sum must be finite and positive; got $(weight_sum)",
+        ))
+    end
+    return weight_sum
+end
+
+function specula_legacy_radiometric_factor(case::ReferenceCase)
+    case.baseline === :specula || return nothing
+    duration = legacy_reference_optical_duration(case, SPECULA_LEGACY_OPTICAL_INTEGRATION_KINDS)
+    duration === nothing && return nothing
+    factor = duration * legacy_reference_spectral_weight_sum(case)
+    if case.kind === :shack_hartmann_frame &&
+            uses_legacy_sh_index_grid_reference(case)
+        tel = build_reference_telescope(case.config["telescope"])
+        src = build_reference_measurement_source(case.config["source"])
+        wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
+        AdaptiveOpticsSim.prepare_sampling!(wfs, tel,
+            AdaptiveOpticsSim.spectral_reference_source(src))
+        pad = size(wfs.state.fft_stack, 1)
+        factor *= pad * pad
+    end
+    return factor
+end
+
+function legacy_reference_radiometric_factor(case::ReferenceCase)
+    factor = oopao_legacy_radiometric_factor(case)
+    factor === nothing || return factor
+    return specula_legacy_radiometric_factor(case)
+end
+
 function adapt_reference_actual(case::ReferenceCase, actual)
+    # These frozen OOPAO and SPECULA products predate explicit radiometric
+    # ownership. They include one telescope sampling interval, some spectral
+    # frames include the unnormalized input-weight sum, and the SPECULA SH frame
+    # predates unitary FFT power normalization. Production optical products are
+    # now rates; preserve the historical convention only here.
+    legacy_factor = legacy_reference_radiometric_factor(case)
+    if legacy_factor !== nothing
+        actual = actual .* legacy_factor
+    end
+
     if case.kind === :tomography_model_wavefront
         return adapt_wavefront_map_to_pytomoao(actual, pytomoao_model_mask(case))
     elseif case.kind === :tomography_im_wavefront
@@ -1363,7 +1500,7 @@ end
 
 function validate_reference_case(case::ReferenceCase)
     expected = load_reference_array(case)
-    actual = adapt_reference_actual(case, compute_reference_actual(case))
+    actual = compute_reference_expected(case)
     if size(actual) != size(expected)
         return (ok=false, actual=actual, expected=expected, maxabs=Inf)
     end
@@ -1377,6 +1514,9 @@ function validate_reference_case(case::ReferenceCase)
     ok = isapprox(actual[finite_mask], expected[finite_mask]; atol=case.atol, rtol=case.rtol)
     return (ok=ok, actual=actual, expected=expected, maxabs=maxabs)
 end
+
+compute_reference_expected(case::ReferenceCase) =
+    adapt_reference_actual(case, compute_reference_actual(case))
 
 function write_reference_array(path::AbstractString, data)
     writedlm(path, vec(data))
@@ -1411,7 +1551,7 @@ function create_reference_fixture(root::AbstractString)
             "zero_padding" => 2,
         ),
     )
-    psf_ref = compute_reference_actual(parse_reference_case("psf_baseline", psf_case, root))
+    psf_ref = compute_reference_expected(parse_reference_case("psf_baseline", psf_case, root))
     write_reference_array(joinpath(root, psf_case["data"]), psf_ref)
     manifest["cases"]["psf_baseline"] = psf_case
 
@@ -1444,7 +1584,7 @@ function create_reference_fixture(root::AbstractString)
             "threshold" => 0.1,
         ),
     )
-    sh_ref = compute_reference_actual(parse_reference_case("shack_hartmann_slopes", sh_case, root))
+    sh_ref = compute_reference_expected(parse_reference_case("shack_hartmann_slopes", sh_case, root))
     write_reference_array(joinpath(root, sh_case["data"]), sh_ref)
     manifest["cases"]["shack_hartmann_slopes"] = sh_case
 
@@ -1460,7 +1600,7 @@ function create_reference_fixture(root::AbstractString)
             "loop_gains" => [0.2, 0.6],
         ),
     )
-    transfer_ref = compute_reference_actual(parse_reference_case("transfer_function_rejection", transfer_case, root))
+    transfer_ref = compute_reference_expected(parse_reference_case("transfer_function_rejection", transfer_case, root))
     write_reference_array(joinpath(root, transfer_case["data"]), transfer_ref)
     manifest["cases"]["transfer_function_rejection"] = transfer_case
 
@@ -1502,7 +1642,7 @@ function create_reference_fixture(root::AbstractString)
             "flux_norm" => 1.0,
         ),
     )
-    lift_ref = compute_reference_actual(parse_reference_case("lift_interaction_matrix", lift_case, root))
+    lift_ref = compute_reference_expected(parse_reference_case("lift_interaction_matrix", lift_case, root))
     write_reference_array(joinpath(root, lift_case["data"]), lift_ref)
     manifest["cases"]["lift_interaction_matrix"] = lift_case
 
@@ -1546,7 +1686,7 @@ function create_reference_fixture(root::AbstractString)
             ],
         ),
     )
-    closed_loop_ref = compute_reference_actual(parse_reference_case("closed_loop_trace", closed_loop_case, root))
+    closed_loop_ref = compute_reference_expected(parse_reference_case("closed_loop_trace", closed_loop_case, root))
     write_reference_array(joinpath(root, closed_loop_case["data"]), closed_loop_ref)
     manifest["cases"]["closed_loop_trace"] = closed_loop_case
 
@@ -1595,7 +1735,7 @@ function create_reference_fixture(root::AbstractString)
             ],
         ),
     )
-    gsc_closed_loop_ref = compute_reference_actual(parse_reference_case("gsc_closed_loop_trace", gsc_closed_loop_case, root))
+    gsc_closed_loop_ref = compute_reference_expected(parse_reference_case("gsc_closed_loop_trace", gsc_closed_loop_case, root))
     write_reference_array(joinpath(root, gsc_closed_loop_case["data"]), gsc_closed_loop_ref)
     manifest["cases"]["gsc_closed_loop_trace"] = gsc_closed_loop_case
 

@@ -143,7 +143,6 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=6, warmu
     tel = Telescope(
         resolution=phase_resolution,
         diameter=8.0,
-        sampling_time=1e-3,
         central_obstruction=0.0,
         T=T,
         backend=backend,

@@ -269,7 +269,7 @@ function specula_reference_cases()
             "atol" => 1e-10,
             "rtol" => 1e-10,
             "specula_test" => "test_poly_chrom_sh.py::TestPolyChromSH::test_polychrom_sh_basic",
-            "specula_contract" => "polychromatic Shack-Hartmann sensing yields a stable sampled detector-plane frame on the maintained Julia surface",
+            "specula_contract" => "the retired distinct-wavelength Shack-Hartmann index-grid approximation is preserved only as frozen external-reference characterization, not as a maintained production surface",
             "telescope" => Dict(
                 "resolution" => 120,
                 "diameter" => 8.0,
@@ -355,7 +355,7 @@ function build_specula_manifest(root::AbstractString)
         kind = Symbol(case_cfg["kind"])
         baseline = parse_reference_baseline(kind, case_cfg)
         case = ReferenceCase(id, kind, baseline, joinpath(root, case_cfg["data"]), (), 0.0, 0.0, case_cfg)
-        actual = compute_reference_actual(case)
+        actual = compute_reference_expected(case)
         case_cfg["shape"] = collect(size(actual))
         writedlm(joinpath(root, case_cfg["data"]), actual)
         manifest["cases"][id] = case_cfg

@@ -58,7 +58,7 @@
     @test_throws DimensionMismatchError AdaptiveOpticsSim.GSCClosedLoopTrace(zeros(2, 5))
     @test_throws DimensionMismatchError AdaptiveOpticsSim.GSCAtmosphereReplayTrace(zeros(2, 6))
 
-    tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     cfg = AdaptiveOpticsSim.snapshot_config(tel=tel, src=src)
     @test haskey(cfg, "tel")
@@ -68,6 +68,9 @@
     AdaptiveOpticsSim.write_config_toml(path, cfg)
     parsed = TOML.parsefile(path)
     @test parsed["tel"]["resolution"] == tel.params.resolution
+    @test parsed["src"]["radiometry"] == "physical_photon_irradiance"
+    @test parsed["src"]["radiometric_value"] ==
+        source_radiometric_value(src)
 end
 
 @testset "Reference compare conventions" begin
@@ -99,7 +102,7 @@ end
     @test parse_reference_storage_convention("numpy_row_major") isa NumPyRowMajorStorage
     @test_throws InvalidConfiguration parse_reference_storage_convention("weird")
 
-    tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     det = Detector(noise=NoiseNone(), psf_sampling=2, binning=1)
     @test reference_lift_img_resolution(tel, det, Dict{String,Any}()) == 16
     @test reference_lift_img_resolution(tel, det, Dict{String,Any}("img_resolution" => 12)) == 12
@@ -182,8 +185,14 @@ end
 
     extended = run_tutorial_example("extended_source_sensing.jl")
     @test extended.n_samples == 25
-    @test norm(extended.sh_spot_delta) > 1e-12
-    @test norm(extended.pyramid_intensity_delta) > 1e-12
+    @test extended.sh_extended_rate ≈ extended.sh_point_rate rtol=1e-12
+    @test extended.pyramid_extended_rate ≈
+        extended.pyramid_point_rate rtol=1e-12
+    @test extended.sh_extended_peak <= extended.sh_point_peak * (1 + 1e-12)
+    # Direct WFS propagation does not yet apply each quadrature component's
+    # angular offset to detector-plane morphology.
+    @test_broken extended.sh_relative_morphology > 1e-6
+    @test_broken extended.pyramid_relative_morphology > 1e-6
 
     sh_subaps = run_tutorial_example("shack_hartmann_subapertures.jl")
     @test sh_subaps.n_valid > 0

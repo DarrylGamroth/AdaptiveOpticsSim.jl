@@ -8,7 +8,7 @@ function dm_apply_allocations(dm, tel)
 end
 
 @testset "Deformable mirror and WFS" begin
-    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
     @test dm.state.modes isa AdaptiveOpticsSim.GaussianInfluenceOperator
     @test Base.summarysize(dm.state.modes) <
@@ -117,12 +117,12 @@ end
     tip_cmd = [5e-9, 0.0]
     dm_cmd = zeros(16)
 
-    tip_tel = Telescope(resolution=24, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tip_tel = Telescope(resolution=24, diameter=8.0, central_obstruction=0.0)
     tip_optic = TipTiltMirror(tip_tel; scale=1.0)
     set_command!(tip_optic, tip_cmd)
     apply!(tip_optic, tip_tel, DMReplace())
 
-    comp_tel = Telescope(resolution=24, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    comp_tel = Telescope(resolution=24, diameter=8.0, central_obstruction=0.0)
     comp_optic = CompositeControllableOptic(
         :tiptilt => TipTiltMirror(comp_tel; scale=1.0),
         :dm => DeformableMirror(comp_tel; n_act=4, influence_width=0.3),
@@ -133,7 +133,7 @@ end
     @test comp_tel.state.opd ≈ tip_tel.state.opd atol=0 rtol=0
     @test norm(comp_optic.optics[2].state.opd) == 0.0
 
-    selected_tel = Telescope(resolution=24, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    selected_tel = Telescope(resolution=24, diameter=8.0, central_obstruction=0.0)
     selected_optic = CompositeControllableOptic(
         :tiptilt => TipTiltMirror(selected_tel; scale=1.0),
         :dm => DeformableMirror(selected_tel; n_act=4, influence_width=0.3),
@@ -144,7 +144,7 @@ end
 end
 
 @testset "AOSimulation constructors" begin
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     science_src = Source(band=:K, magnitude=1.0, coordinates=(3.0, 45.0))
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
@@ -179,7 +179,8 @@ end
 @testset "Semantic backend descriptors" begin
     @test array_backend_type(CPUBackend()) === Array
 
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0, backend=CPUBackend())
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0,
+        backend=CPUBackend())
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, backend=CPUBackend())
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3, backend=CPUBackend())
     function_modal = ModalControllableOptic(tel,
@@ -236,7 +237,7 @@ end
     @test same_backend(tel, atm, dm, wfs, det)
     @test_throws InvalidConfiguration require_same_backend(tel, CUDABackend())
 
-    @test_throws TypeError Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, backend=Array)
+    @test_throws TypeError Telescope(resolution=8, diameter=8.0, backend=Array)
     @test_throws TypeError Detector(backend=Array)
 end
 
@@ -317,7 +318,7 @@ end
 function build_static_low_order_runtime(::Val{K}, low_order_cmd::AbstractVector{<:Real};
     dm_cmd::AbstractVector{<:Real}=fill(0.0, 16), seed::Integer=91,
     wfs_family::Symbol=:sh, detector_profile::Symbol=:null) where {K}
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     atm = build_static_runtime_atmosphere(tel)
     low_order = build_static_low_order_optic(tel, Val(K))
@@ -327,6 +328,7 @@ function build_static_low_order_runtime(::Val{K}, low_order_cmd::AbstractVector{
     det = build_runtime_detector(Val(detector_profile), Float64, CPUBackend())
     sim = AOSimulation(tel, src, atm, optic, wfs)
     runtime = ClosedLoopRuntime(sim, NullReconstructor();
+        atmosphere_step=1e-3,
         wfs_detector=det,
         outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false),
         rng=MersenneTwister(seed),
@@ -355,7 +357,7 @@ end
 
 function low_order_opd(::Val{K}, low_order_cmd::AbstractVector{<:Real};
     dm_cmd::AbstractVector{<:Real}=fill(0.0, 16), composite::Bool=false) where {K}
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     low_order = build_static_low_order_optic(tel, Val(K))
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
     fill!(tel.state.opd, 0.0)
@@ -399,7 +401,7 @@ function build_static_richer_runtime(spec::Val{S};
     seed::Integer=91,
     wfs_family::Symbol=:sh,
     detector_profile::Symbol=:null) where {S}
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     atm = build_static_runtime_atmosphere(tel)
     optic = if S === :tiptilt_focus_dm
@@ -422,6 +424,7 @@ function build_static_richer_runtime(spec::Val{S};
     sim = AOSimulation(tel, src, atm, optic, wfs)
     scenario = build_control_loop_scenario(
         SingleControlLoopConfig(
+            atmosphere_step=1e-3,
             name=Symbol(:richer_runtime_, S, :_, wfs_family, :_, detector_profile),
             branch_label=:main,
             outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false),
@@ -439,7 +442,7 @@ runtime_snapshot(scenario) = (
 )
 
 @testset "Calibration and control" begin
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     wfs = ShackHartmannWFS(tel; n_lenslets=2)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
@@ -496,8 +499,8 @@ runtime_snapshot(scenario) = (
     controlled = ControlledReconstructor(
         factorized,
         DiscreteIntegratorController(length(dm.state.coefs);
-            gain=1.0, tau=tel.params.sampling_time);
-        dt=tel.params.sampling_time,
+            gain=1.0, tau=1e-3);
+        dt=1e-3,
     )
     controlled_command = similar(dm.state.coefs)
     reconstruct!(controlled_command, controlled, wfs.state.slopes)
@@ -514,7 +517,7 @@ runtime_snapshot(scenario) = (
     @test_throws DimensionMismatchError ControlledReconstructor(
         factorized,
         DiscreteIntegratorController(length(dm.state.coefs) + 1);
-        dt=tel.params.sampling_time,
+        dt=1e-3,
     )
 
     control_matrix = ControlMatrix(imat.matrix; build_backend=AdaptiveOpticsSim.CPUBuildBackend())
@@ -531,10 +534,33 @@ end
     @test default_params.low_order_lenslets == 2
     @test default_params.low_order_resolution == 28
     @test default_params.n_low_order_modes == 4
+    @test default_params.atmosphere_step == 1f-3
+    @test default_params.high_detector.integration_time == 1f-3
+    @test default_params.low_detector.integration_time == 1f-3
     @test default_params.latency.high_measurement_delay_frames == 1
     @test default_params.high_detector.noise isa NoisePhotonReadout
     @test default_params.branch_execution isa SequentialExecution
     @test default_params.replay_mode isa DirectReplayMode
+
+    independent_timing = AO188SimulationParams(
+        atmosphere_step=2e-3,
+        high_detector_exposure=1e-3,
+        low_detector_exposure=4e-3,
+    )
+    @test independent_timing.atmosphere_step == 2f-3
+    @test independent_timing.high_detector.integration_time == 1f-3
+    @test independent_timing.low_detector.integration_time == 4f-3
+    @test_throws InvalidConfiguration AO188SimulationParams(atmosphere_step=0.0)
+    @test_throws InvalidConfiguration AO188SimulationParams(
+        T=Float32, atmosphere_step=1e-50)
+    @test_throws InvalidConfiguration AO188SimulationParams(
+        T=Float32, atmosphere_step=1e50)
+    for invalid_duration in (0.0, -1.0, Inf, NaN, 1e-50, 1e50)
+        @test_throws InvalidConfiguration AO188WFSDetectorConfig(
+            T=Float32, integration_time=invalid_duration)
+        @test_throws InvalidConfiguration AO188APDDetectorConfig(
+            T=Float32, integration_time=invalid_duration)
+    end
 
     params = AO188SimulationParams(
         T=Float32,
@@ -565,11 +591,11 @@ end
     @test surrogate.high_reconstructor.n_control_modes == params.n_control_modes
     @test surrogate.low_reconstructor.n_control_modes == params.n_low_order_modes
 
-    shifted = DeformableMirror(Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, T=Float32);
+    shifted = DeformableMirror(Telescope(resolution=32, diameter=8.0, T=Float32);
         n_act=8, T=Float32, misregistration=Misregistration(shift_x=0.01, shift_y=-0.02, T=Float32))
     @test !isnothing(shifted.state.separable_x)
 
-    rotated = DeformableMirror(Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, T=Float32);
+    rotated = DeformableMirror(Telescope(resolution=32, diameter=8.0, T=Float32);
         n_act=8, T=Float32, misregistration=Misregistration(rotation_deg=1.0, T=Float32))
     @test isnothing(rotated.state.separable_x)
 
@@ -668,6 +694,10 @@ end
     @test ao3k_sim.high_wfs isa PyramidWFS
     @test ao3k_sim.high_detector isa Detector
     @test ao3k_sim.high_detector.params.sensor isa HgCdTeAvalancheArraySensor
+    @test ao3k_sim.high_detector.params.sensor.sampling_mode isa
+        CorrelatedDoubleSampling
+    @test ao3k_sim.high_detector.params.correction_model isa
+        ReferencePixelCommonModeCorrection
     @test ao3k_params.high_detector.thermal_model isa FixedTemperature
     step!(ao3k_sim)
     @test length(ao3k_sim.command) == ao3k_params.n_act^2
@@ -683,7 +713,7 @@ end
 
 function closed_loop_runtime_allocations()
     rng = MersenneTwister(0)
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
@@ -691,7 +721,7 @@ function closed_loop_runtime_allocations()
     sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     recon = ModalReconstructor(imat; gain=0.5)
-    runtime = ClosedLoopRuntime(sim, recon; rng=rng)
+    runtime = ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=rng)
     step!(runtime)
     step!(runtime)
     return @allocated step!(runtime)
@@ -734,12 +764,6 @@ function AdaptiveOpticsSim.advance_by!(
     return AdaptiveOpticsSim.current_epoch(atmosphere)
 end
 
-function AdaptiveOpticsSim.advance!(atmosphere::SharedArmCountingAtmosphere, tel::Telescope,
-    rng::AbstractRNG)
-    AdaptiveOpticsSim.advance_by!(atmosphere, tel.params.sampling_time, rng)
-    return atmosphere
-end
-
 function AdaptiveOpticsSim.render_atmosphere_opd_impl!(dest::AbstractMatrix,
     renderer::AdaptiveOpticsSim.AtmosphereDirectionRenderer,
     atmosphere::SharedArmCountingAtmosphere)
@@ -763,7 +787,7 @@ function AdaptiveOpticsSim.propagate!(atmosphere::SharedArmCountingAtmosphere, t
 end
 
 @testset "Source-aware runtime optical paths" begin
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3,
+    tel = Telescope(resolution=16, diameter=8.0,
         central_obstruction=0.0)
     wfs_src = Source(band=:I, magnitude=0.0, coordinates=(8.0, 0.0))
     science_src = Source(band=:K, magnitude=1.0, coordinates=(8.0, 90.0))
@@ -782,6 +806,7 @@ end
     det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
         binning=1)
     runtime = ClosedLoopRuntime(sim, NullReconstructor();
+        atmosphere_step=1e-3,
         science_detector=det,
         outputs=RuntimeOutputRequirements(
             slopes=true,
@@ -797,7 +822,7 @@ end
     sense!(runtime)
 
     expected_wfs_tel = Telescope(resolution=16, diameter=8.0,
-        sampling_time=1e-3, central_obstruction=0.0)
+        central_obstruction=0.0)
     propagate!(atm, expected_wfs_tel, wfs_src)
     apply!(dm, expected_wfs_tel, DMAdditive())
     expected_slopes = similar(runtime.slopes)
@@ -806,7 +831,7 @@ end
     @test runtime.slopes ≈ expected_slopes
 
     expected_science_tel = Telescope(resolution=16, diameter=8.0,
-        sampling_time=1e-3, central_obstruction=0.0)
+        central_obstruction=0.0)
     propagate!(atm, expected_science_tel, science_src)
     apply!(dm, expected_science_tel, DMAdditive())
     @test tel.state.opd ≈ expected_science_tel.state.opd
@@ -821,7 +846,7 @@ end
     @test science_frame(runtime) ≈ output_frame(expected_det)
 
     curvature_tel = Telescope(resolution=16, diameter=8.0,
-        sampling_time=1e-3, central_obstruction=0.0)
+        central_obstruction=0.0)
     curvature_src = Source(band=:I, magnitude=0.0,
         coordinates=(6.0, 30.0))
     curvature_atm = MultiLayerAtmosphere(curvature_tel;
@@ -838,6 +863,7 @@ end
     curvature_sim = AOSimulation(curvature_tel, curvature_src, curvature_atm,
         curvature_dm, curvature_wfs)
     curvature_runtime = ClosedLoopRuntime(curvature_sim, NullReconstructor();
+        atmosphere_step=1e-3,
         outputs=RuntimeOutputRequirements(
             slopes=true,
             wfs_pixels=false,
@@ -847,7 +873,7 @@ end
     )
     sense!(curvature_runtime)
     expected_curvature_tel = Telescope(resolution=16, diameter=8.0,
-        sampling_time=1e-3, central_obstruction=0.0)
+        central_obstruction=0.0)
     propagate!(curvature_atm, expected_curvature_tel, curvature_src)
     apply!(curvature_dm, expected_curvature_tel, DMAdditive())
     @test curvature_tel.state.opd ≈ expected_curvature_tel.state.opd
@@ -855,7 +881,7 @@ end
 end
 
 @testset "Shared multi-arm optical runtime" begin
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3,
+    tel = Telescope(resolution=16, diameter=8.0,
         central_obstruction=0.0)
     guide = Source(band=:I, magnitude=0.0)
     off_axis = Source(band=:K, magnitude=1.0, coordinates=(4.0, 90.0))
@@ -876,12 +902,13 @@ end
         gain=0.5,
     )
     primary = ClosedLoopRuntime(simulation, reconstructor;
+        atmosphere_step=1e-3,
         rng=MersenneTwister(20260713))
 
     auxiliary_wfs = ShackHartmannWFS(tel; n_lenslets=4)
     detector_a = Detector(noise=NoiseNone(), integration_time=1.0,
         qe=1.0, binning=1)
-    detector_b = Detector(noise=NoiseNone(), integration_time=1.0,
+    detector_b = Detector(noise=NoiseNone(), integration_time=2.0,
         qe=1.0, binning=1)
     arm = SharedOpticalArm(
         :off_axis,
@@ -903,13 +930,19 @@ end
     prepare!(shared)
     atmosphere.advances = 0
     atmosphere.renders = 0
+    model_time_before = AdaptiveOpticsSim.atmosphere_timeline(atmosphere).model_time
     step!(shared)
     @test atmosphere.advances == 1
     @test atmosphere.renders == 2
+    @test AdaptiveOpticsSim.epoch_time(
+        AdaptiveOpticsSim.current_epoch(atmosphere)) ==
+        model_time_before + primary.atmosphere_step
+    @test AdaptiveOpticsSim.runtime_atmosphere_step(shared) ==
+        primary.atmosphere_step
     @test all(isfinite, first(wfs_signals(arm)))
     @test science_frames(arm)[1] === output_frame(detector_a)
     @test science_frames(arm)[2] === output_frame(detector_b)
-    @test science_frames(arm)[1] == science_frames(arm)[2]
+    @test science_frames(arm)[2] ≈ 2 .* science_frames(arm)[1]
     @test command(shared) === command(primary)
     @test synchronize_runtime!(shared) === shared
 
@@ -941,7 +974,7 @@ end
 
 @testset "Coarse simulation ensembles" begin
     function make_ensemble_runtime(seed)
-        tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3,
+        tel = Telescope(resolution=8, diameter=8.0,
             central_obstruction=0.0)
         src = Source(band=:I, magnitude=0.0)
         atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
@@ -956,6 +989,7 @@ end
         reconstructor = ModalReconstructor(InteractionMatrix(response, 0.1);
             gain=0.5)
         return ClosedLoopRuntime(sim, reconstructor;
+            atmosphere_step=1e-3,
             rng=MersenneTwister(seed))
     end
 
@@ -981,6 +1015,7 @@ end
     duplicate_runtime = ClosedLoopRuntime(
         shared_runtime.simulation,
         shared_runtime.reconstructor;
+        atmosphere_step=shared_runtime.atmosphere_step,
         rng=MersenneTwister(106),
     )
     @test_throws InvalidConfiguration SimulationEnsemble(
@@ -992,7 +1027,7 @@ end
         runtime_a.reconstructor,
         DiscreteIntegratorController(length(runtime_a.command);
             gain=0.5, tau=0.01);
-        dt=runtime_a.tel.params.sampling_time,
+        dt=runtime_a.atmosphere_step,
     )
     controlled_a = AdaptiveOpticsSim.with_reconstructor(runtime_a,
         shared_control)
@@ -1035,7 +1070,7 @@ end
 
 @testset "Closed-loop runtime" begin
     rng = MersenneTwister(0)
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
@@ -1044,13 +1079,15 @@ end
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     recon = ModalReconstructor(imat; gain=0.5)
     det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
-    runtime = ClosedLoopRuntime(sim, recon; rng=rng, science_detector=det)
+    runtime = ClosedLoopRuntime(sim, recon;
+        atmosphere_step=1e-3, rng=rng, science_detector=det)
     @test runtime isa AbstractControlSimulation
     @test !supports_prepared_runtime(runtime)
     @test supports_detector_output(runtime)
     @test runtime_profile(runtime) isa ScientificRuntimeProfile
     @test runtime_execution_plan(runtime) isa CPUHILExecutionPlan
     @test runtime_latency(runtime).measurement_delay_frames == 0
+    @test AdaptiveOpticsSim.runtime_atmosphere_step(runtime) == 1e-3
     @test runtime.science_zero_padding == 2
     @test wfs_source(runtime) === src
     @test science_source(runtime) === src
@@ -1058,12 +1095,23 @@ end
     @test !runtime.prepared
     @test AdaptiveOpticsSim.runtime_reconstructor_storage(recon) == (recon.reconstructor,)
     @test_throws InvalidConfiguration ClosedLoopRuntime(sim, recon;
+        atmosphere_step=1e-3,
         execution_plan=DeviceResidentExecutionPlan())
+    @test_throws InvalidConfiguration ClosedLoopRuntime(sim, recon;
+        atmosphere_step=0.0)
+    @test_throws InvalidConfiguration ClosedLoopRuntime(sim, recon;
+        atmosphere_step=Inf)
+    @test_throws InvalidConfiguration SingleControlLoopConfig(
+        atmosphere_step=-1e-3)
+    @test_throws InvalidConfiguration GroupedControlLoopConfig((:a, :b);
+        atmosphere_step=NaN)
 
     step!(runtime)
     @test synchronize_runtime!(runtime) === runtime
     refreshed_runtime = AdaptiveOpticsSim.with_reconstructor(runtime, recon)
     @test runtime_execution_plan(refreshed_runtime) isa CPUHILExecutionPlan
+    @test AdaptiveOpticsSim.runtime_atmosphere_step(refreshed_runtime) ==
+        AdaptiveOpticsSim.runtime_atmosphere_step(runtime)
     @test length(runtime.command) == length(dm.state.coefs)
     @test size(output_frame(det)) == (32, 32)
     if coverage_instrumented()
@@ -1084,7 +1132,7 @@ end
     @test science_frame(runtime) === science_frame(runtime)
     @test readout(runtime).science_frame === science_frame(runtime)
 
-    tel_ext = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel_ext = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src_ext = Source(band=:I, magnitude=0.0)
     atm_ext = KolmogorovAtmosphere(tel_ext; r0=0.2, L0=25.0)
     dm_ext = DeformableMirror(tel_ext; n_act=4, influence_width=0.3)
@@ -1102,6 +1150,7 @@ end
         rng=MersenneTwister(7),
     )
     external_cfg = SingleControlLoopConfig(
+        atmosphere_step=1e-3,
         name=:external_runtime_demo,
         branch_label=:external_branch,
         outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=true),
@@ -1134,7 +1183,7 @@ end
     @test command(boundary) == runtime.command
 
     rng2 = MersenneTwister(2)
-    tel2 = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel2 = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src2 = Source(band=:I, magnitude=0.0)
     atm2 = KolmogorovAtmosphere(tel2; r0=0.2, L0=25.0)
     dm2 = DeformableMirror(tel2; n_act=4, influence_width=0.3)
@@ -1143,7 +1192,8 @@ end
     imat2 = interaction_matrix(dm2, wfs2, tel2, src2; amplitude=0.1)
     recon2 = ModalReconstructor(imat2; gain=0.5)
     wfs_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
-    runtime2 = ClosedLoopRuntime(sim2, recon2; rng=rng2, wfs_detector=wfs_det)
+    runtime2 = ClosedLoopRuntime(sim2, recon2;
+        atmosphere_step=1e-3, rng=rng2, wfs_detector=wfs_det)
     @test supports_prepared_runtime(runtime2)
     prepare!(runtime2)
     @test runtime2.wfs.state.calibrated
@@ -1169,7 +1219,7 @@ end
     @test command(composite) == vcat(command(boundary), command(boundary2))
 
     rng2b = MersenneTwister(12)
-    tel2b = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel2b = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src2b = Source(band=:I, magnitude=0.0)
     atm2b = KolmogorovAtmosphere(tel2b; r0=0.2, L0=25.0)
     dm2b = DeformableMirror(tel2b; n_act=4, influence_width=0.3)
@@ -1178,7 +1228,8 @@ end
     imat2b = interaction_matrix(dm2b, wfs2b, tel2b, src2b; amplitude=0.1)
     recon2b = ModalReconstructor(imat2b; gain=0.5)
     wfs_det_b = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
-    runtime2b = ClosedLoopRuntime(sim2b, recon2b; rng=rng2b, wfs_detector=wfs_det_b)
+    runtime2b = ClosedLoopRuntime(sim2b, recon2b;
+        atmosphere_step=1e-3, rng=rng2b, wfs_detector=wfs_det_b)
     prepare!(runtime2b)
     step!(runtime2b)
     boundary2b = SimulationInterface(runtime2b)
@@ -1204,6 +1255,7 @@ end
     @test !isnothing(grouped_wfs_stack(grouped_stack_only))
 
     single_cfg = SingleControlLoopConfig(
+        atmosphere_step=1e-3,
         name=:single_runtime_demo,
         branch_label=:science_branch,
         outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=false, science_pixels=true),
@@ -1237,7 +1289,8 @@ end
 
     split_layout = RuntimeCommandLayout(:woofer => 8, :tweeter => 8)
     split_scenario = build_control_loop_scenario(
-        SingleControlLoopConfig(name=:split_runtime_demo, branch_label=:science_branch,
+        SingleControlLoopConfig(atmosphere_step=1e-3,
+            name=:split_runtime_demo, branch_label=:science_branch,
             outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=false, science_pixels=true)),
         ControlLoopBranch(:science_branch, sim, NullReconstructor();
             science_detector=det,
@@ -1257,7 +1310,8 @@ end
     combo_optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm_combo)
     combo_sim = AOSimulation(tel_ext, src_ext, atm_ext, combo_optic, wfs_ext)
     combo_scenario = build_control_loop_scenario(
-        SingleControlLoopConfig(name=:combo_runtime_demo, branch_label=:external_branch,
+        SingleControlLoopConfig(atmosphere_step=1e-3,
+            name=:combo_runtime_demo, branch_label=:external_branch,
             outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=true)),
         ControlLoopBranch(:external_branch, combo_sim, NullReconstructor();
             wfs_detector=det_ext,
@@ -1278,7 +1332,7 @@ end
     @test science_frame(combo_scenario) !== nothing
     @test wfs_frame(combo_scenario) !== nothing
 
-    tel_ext_b = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel_ext_b = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src_ext_b = Source(band=:I, magnitude=0.0)
     atm_ext_b = KolmogorovAtmosphere(tel_ext_b; r0=0.2, L0=25.0)
     tiptilt_b = TipTiltMirror(tel_ext_b; scale=0.1, label=:tiptilt)
@@ -1288,7 +1342,8 @@ end
     det_ext_b = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
     combo_sim_b = AOSimulation(tel_ext_b, src_ext_b, atm_ext_b, combo_optic_b, wfs_ext_b)
     combo_scenario_b = build_control_loop_scenario(
-        SingleControlLoopConfig(name=:combo_runtime_demo_b, branch_label=:external_branch,
+        SingleControlLoopConfig(atmosphere_step=1e-3,
+            name=:combo_runtime_demo_b, branch_label=:external_branch,
             outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=true)),
         ControlLoopBranch(:external_branch, combo_sim_b, NullReconstructor();
             wfs_detector=det_ext_b,
@@ -1319,7 +1374,8 @@ end
     @test isapprox(tip_plus.frame_sum, tip_minus.frame_sum; rtol=1e-12, atol=1e-6)
 
     steering_scenario = build_control_loop_scenario(
-        SingleControlLoopConfig(name=:steering_runtime_demo, branch_label=:external_branch,
+        SingleControlLoopConfig(atmosphere_step=1e-3,
+            name=:steering_runtime_demo, branch_label=:external_branch,
             outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
         ControlLoopBranch(:external_branch,
             AOSimulation(
@@ -1362,7 +1418,8 @@ end
     focus_optic = CompositeControllableOptic(:focus => focus, :dm => dm_focus)
     focus_sim = AOSimulation(tel_ext, src_ext, atm_ext, focus_optic, wfs_ext)
     focus_scenario = build_control_loop_scenario(
-        SingleControlLoopConfig(name=:focus_runtime_demo, branch_label=:external_branch,
+        SingleControlLoopConfig(atmosphere_step=1e-3,
+            name=:focus_runtime_demo, branch_label=:external_branch,
             outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
         ControlLoopBranch(:external_branch, focus_sim, NullReconstructor();
             wfs_detector=det_ext,
@@ -1512,6 +1569,7 @@ end
 
     grouped_cfg = GroupedControlLoopConfig(
         (:branch_a, :branch_b);
+        atmosphere_step=1e-3,
         name=:grouped_runtime_demo,
         outputs=GroupedRuntimeOutputRequirements(wfs_frames=true, science_frames=false, wfs_stack=true, science_stack=false),
     )
@@ -1523,6 +1581,8 @@ end
     @test grouped_scenario isa ControlLoopScenario
     @test control_loop_name(grouped_scenario) == :grouped_runtime_demo
     @test control_loop_branch_labels(grouped_scenario) == (:branch_a, :branch_b)
+    @test AdaptiveOpticsSim.runtime_atmosphere_step(grouped_scenario) ==
+        (1e-3, 1e-3)
     @test AdaptiveOpticsSim.simulation_interface(grouped_scenario) isa CompositeSimulationInterface
     @test all(plan -> plan isa CPUHILExecutionPlan,
         runtime_execution_plan(grouped_scenario))
@@ -1570,7 +1630,7 @@ end
     @test command(split_grouped_scenario) == vcat(fill(eltype(command(split_grouped_scenario))(0.05), 8), fill(eltype(command(split_grouped_scenario))(0.06), 8), fill(eltype(command(split_grouped_scenario))(0.07), 2), fill(eltype(command(split_grouped_scenario))(0.08), 14))
     @test !isnothing(grouped_wfs_stack(split_grouped_scenario))
 
-    grouped_tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    grouped_tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     grouped_pyr = PyramidWFS(grouped_tel; pupil_samples=4, modulation=1.0, mode=Diffractive())
     grouped_bio = BioEdgeWFS(grouped_tel; pupil_samples=4, modulation=1.0, mode=Diffractive())
     @test @inferred(AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(grouped_pyr.state.intensity), grouped_pyr)) isa AdaptiveOpticsSim.GroupedStackReducePlan
@@ -1581,6 +1641,7 @@ end
     runtime2_slopes_only = ClosedLoopRuntime(
         sim2,
         recon2;
+        atmosphere_step=1e-3,
         rng=MersenneTwister(22),
         wfs_detector=wfs_det,
         outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=false, science_pixels=false),
@@ -1602,7 +1663,7 @@ end
     @test phase_runtime.delay_mean_ns >= 0
 
     rng3 = MersenneTwister(3)
-    tel3 = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel3 = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src3 = Source(band=:I, magnitude=0.0)
     atm3 = KolmogorovAtmosphere(tel3; r0=0.2, L0=25.0)
     dm3 = DeformableMirror(tel3; n_act=4, influence_width=0.3)
@@ -1611,7 +1672,8 @@ end
     imat3 = interaction_matrix(dm3, wfs3, tel3, src3; amplitude=1e-8)
     recon3 = ModalReconstructor(imat3; gain=0.5)
     wfs_det3 = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
-    runtime3 = ClosedLoopRuntime(sim3, recon3; rng=rng3, wfs_detector=wfs_det3)
+    runtime3 = ClosedLoopRuntime(sim3, recon3;
+        atmosphere_step=1e-3, rng=rng3, wfs_detector=wfs_det3)
     @test supports_prepared_runtime(runtime3)
     @test supports_detector_output(runtime3)
     prepare!(runtime3)
@@ -1625,7 +1687,7 @@ end
     @test all(isfinite, slopes(runtime3))
 
     rng4 = MersenneTwister(4)
-    tel4 = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel4 = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src4 = Source(band=:I, magnitude=0.0)
     atm4 = KolmogorovAtmosphere(tel4; r0=0.2, L0=25.0)
     dm4 = DeformableMirror(tel4; n_act=4, influence_width=0.3)
@@ -1634,6 +1696,7 @@ end
     imat4 = interaction_matrix(dm4, wfs4, tel4; amplitude=0.1)
     recon4 = ModalReconstructor(imat4; gain=0.5)
     runtime4 = ClosedLoopRuntime(sim4, recon4;
+        atmosphere_step=1e-3,
         rng=rng4,
         profile=HILRuntimeProfile(),
         execution_plan=CPUHILExecutionPlan(),

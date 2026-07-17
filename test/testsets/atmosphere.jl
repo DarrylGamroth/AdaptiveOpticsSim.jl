@@ -17,8 +17,7 @@ function unmasked_atmosphere_opd(atm::AbstractTimedAtmosphere,
 end
 
 @testset "Explicit atmosphere epochs and prepared renderers" begin
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=9.0,
-        central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     onaxis = Source(band=:I, magnitude=0.0)
     offaxis = Source(band=:I, magnitude=0.0, coordinates=(5.0, 30.0))
     lgs = LGSSource(coordinates=(5.0, 30.0), altitude=90_000.0)
@@ -169,9 +168,9 @@ end
 end
 
 @testset "Atmosphere propagation" begin
-    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
-    advance_by!(atm, tel.params.sampling_time; rng=MersenneTwister(1))
+    advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(1))
     propagate!(atm, tel)
     @test size(atm.state.opd) == (32, 32)
     @test sum(abs.(tel.state.opd)) > 0
@@ -188,7 +187,7 @@ end
 end
 
 @testset "Infinite atmosphere boundary math" begin
-    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     @test AdaptiveOpticsSim.default_infinite_screen_resolution(tel.params.resolution) == 3 * tel.params.resolution
     @test AdaptiveOpticsSim.default_infinite_stencil_size(tel.params.resolution) >= 257
 
@@ -251,7 +250,7 @@ end
         stencil_size=35,
     )
     @test length(atm.layers) == 1
-    epoch = advance_by!(atm, tel.params.sampling_time; rng=MersenneTwister(1))
+    epoch = advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(1))
     rendered = rendered_atmosphere_opd(atm, tel)
     propagate!(atm, tel)
     @test size(atm.layers[1].screen.state.screen) == (35, 35)
@@ -271,7 +270,7 @@ end
 end
 
 @testset "Infinite atmosphere stepping regressions" begin
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
 
     normalized_correlation(a::AbstractMatrix, b::AbstractMatrix) =
         dot(vec(a), vec(b)) / sqrt(dot(vec(a), vec(a)) * dot(vec(b), vec(b)))
@@ -286,9 +285,9 @@ end
         screen_resolution=33,
         stencil_size=35,
     )
-    advance_by!(stationary, tel.params.sampling_time; rng=MersenneTwister(4))
+    advance_by!(stationary, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(4))
     stationary_snapshot = rendered_atmosphere_opd(stationary, tel)
-    advance_by!(stationary, tel.params.sampling_time; rng=MersenneTwister(5))
+    advance_by!(stationary, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(5))
     @test rendered_atmosphere_opd(stationary, tel) == stationary_snapshot
     @test stationary.layers[1].state.integer_shift_x == 0
     @test stationary.layers[1].state.integer_shift_y == 0
@@ -304,9 +303,9 @@ end
         stencil_size=35,
     )
     rng = MersenneTwister(6)
-    advance_by!(small_step, tel.params.sampling_time; rng=rng)
+    advance_by!(small_step, TEST_ATMOSPHERE_STEP; rng=rng)
     opd_1 = rendered_atmosphere_opd(small_step, tel)
-    advance_by!(small_step, tel.params.sampling_time; rng=rng)
+    advance_by!(small_step, TEST_ATMOSPHERE_STEP; rng=rng)
     opd_2 = rendered_atmosphere_opd(small_step, tel)
     corr = normalized_correlation(opd_1, opd_2)
     @test corr > 0.95
@@ -322,7 +321,7 @@ end
         screen_resolution=33,
         stencil_size=35,
     )
-    advance_by!(row_step, tel.params.sampling_time; rng=MersenneTwister(7))
+    advance_by!(row_step, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(7))
     @test row_step.layers[1].state.integer_shift_y == 1
     @test row_step.layers[1].state.integer_shift_x == 0
 
@@ -338,15 +337,15 @@ end
         stencil_size=35,
     )
     diagonal_rng = MersenneTwister(71)
-    advance_by!(diagonal_step, tel.params.sampling_time; rng=diagonal_rng)
-    advance_by!(diagonal_step, tel.params.sampling_time; rng=diagonal_rng)
+    advance_by!(diagonal_step, TEST_ATMOSPHERE_STEP; rng=diagonal_rng)
+    advance_by!(diagonal_step, TEST_ATMOSPHERE_STEP; rng=diagonal_rng)
     @test diagonal_step.layers[1].state.integer_shift_x == 1
     @test diagonal_step.layers[1].state.integer_shift_y == 1
     @test abs(diagonal_step.layers[1].state.offset_x) < 1e-10
     @test abs(diagonal_step.layers[1].state.offset_y) < 1e-10
 
     function infinite_trace(; seed::Integer=73, steps::Int=10)
-        tel_local = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+        tel_local = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
         src_local = Source(band=:I, magnitude=0.0, coordinates=(15.0, 30.0))
         atm = InfiniteMultiLayerAtmosphere(tel_local;
             r0=0.2,
@@ -361,7 +360,7 @@ end
         rng = MersenneTwister(seed)
         opd_trace = Matrix{Float64}[]
         for _ in 1:steps
-            advance_by!(atm, tel_local.params.sampling_time; rng=rng)
+            advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=rng)
             propagate!(atm, tel_local, src_local)
             push!(opd_trace, copy(Array(tel_local.state.opd)))
         end
@@ -374,7 +373,7 @@ end
     @test trace_a.screen == trace_b.screen
 
     function trajectory_std_windows(; seed::Integer=79, steps::Int=24)
-        tel_local = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+        tel_local = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
         atm = InfiniteMultiLayerAtmosphere(tel_local;
             r0=0.2,
             L0=25.0,
@@ -388,7 +387,7 @@ end
         rng = MersenneTwister(seed)
         stds = Float64[]
         for _ in 1:steps
-            advance_by!(atm, tel_local.params.sampling_time; rng=rng)
+            advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=rng)
             push!(stds, std(vec(Array(rendered_atmosphere_opd(atm,
                 tel_local)))))
         end
@@ -399,7 +398,7 @@ end
     early_std, late_std = trajectory_std_windows()
     @test isapprox(late_std, early_std; rtol=0.2)
 
-    wind_speed_px = tel.params.diameter / tel.params.resolution / tel.params.sampling_time
+    wind_speed_px = tel.params.diameter / tel.params.resolution / TEST_ATMOSPHERE_STEP
     finite = MultiLayerAtmosphere(tel;
         r0=0.2,
         L0=25.0,
@@ -420,21 +419,21 @@ end
     )
     finite_rng = MersenneTwister(8)
     infinite_rng = MersenneTwister(8)
-    advance_by!(finite, tel.params.sampling_time; rng=finite_rng)
-    advance_by!(infinite, tel.params.sampling_time; rng=infinite_rng)
+    advance_by!(finite, TEST_ATMOSPHERE_STEP; rng=finite_rng)
+    advance_by!(infinite, TEST_ATMOSPHERE_STEP; rng=infinite_rng)
     finite_snapshot = rendered_atmosphere_opd(finite, tel)
     infinite_snapshot = rendered_atmosphere_opd(infinite, tel)
     period = AdaptiveOpticsSim.moving_layer_screen_resolution(tel.params.resolution)
     for _ in 1:period
-        advance_by!(finite, tel.params.sampling_time; rng=finite_rng)
-        advance_by!(infinite, tel.params.sampling_time; rng=infinite_rng)
+        advance_by!(finite, TEST_ATMOSPHERE_STEP; rng=finite_rng)
+        advance_by!(infinite, TEST_ATMOSPHERE_STEP; rng=infinite_rng)
     end
     @test rendered_atmosphere_opd(finite, tel) == finite_snapshot
     @test !isapprox(rendered_atmosphere_opd(infinite, tel),
         infinite_snapshot; rtol=1e-8, atol=1e-8)
     for _ in 1:(2 * period)
-        advance_by!(finite, tel.params.sampling_time; rng=finite_rng)
-        advance_by!(infinite, tel.params.sampling_time; rng=infinite_rng)
+        advance_by!(finite, TEST_ATMOSPHERE_STEP; rng=finite_rng)
+        advance_by!(infinite, TEST_ATMOSPHERE_STEP; rng=infinite_rng)
     end
     @test rendered_atmosphere_opd(finite, tel) == finite_snapshot
     @test normalized_correlation(rendered_atmosphere_opd(infinite, tel),
@@ -442,7 +441,7 @@ end
 end
 
 @testset "Source-aware atmosphere extraction" begin
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     onaxis = Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0))
     offaxis = Source(band=:I, magnitude=0.0, coordinates=(100.0, 0.0))
     lgs = LGSSource(magnitude=0.0, coordinates=(100.0, 0.0), altitude=10_000.0)
@@ -472,7 +471,7 @@ end
             altitude=[5000.0],
             kwargs...,
         )
-        advance_by!(atm, tel.params.sampling_time; rng=MersenneTwister(seed))
+        advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(seed))
         if atm isa MultiLayerAtmosphere
             fill_x_ramp!(atm.layers[1].generator.state.opd)
             atm.layers[1].state.offset_x = 0.0
@@ -513,7 +512,7 @@ end
         offaxis_renderer = prepare_atmosphere_renderer(atm, tel, offaxis)
         onaxis_output = PupilFunction(tel)
         offaxis_output = PupilFunction(tel)
-        epoch = advance_by!(atm, tel.params.sampling_time; rng=rng)
+        epoch = advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=rng)
         render_atmosphere!(offaxis_output, offaxis_renderer, atm, epoch)
         render_atmosphere!(onaxis_output, onaxis_renderer, atm, epoch)
         reordered_onaxis = copy(onaxis_output.opd)
@@ -542,7 +541,7 @@ end
                 altitude=fill(0.0, length(fractions)),
                 kwargs...,
             )
-            advance_by!(atm, tel.params.sampling_time; rng=MersenneTwister(s))
+            advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(s))
             acc += std(vec(rendered_atmosphere_opd(atm, tel)))
         end
         return acc / nsamp
@@ -558,7 +557,7 @@ end
 end
 
 @testset "Sub-harmonic phase screens" begin
-    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     delta = tel.params.diameter / tel.params.resolution
     rng = MersenneTwister(11)
@@ -616,7 +615,7 @@ end
     fast_cal = ProfileBundle(ScientificProfile(); calibration=FastProfile())
     @test default_ncpa_basis(fast_cal).method isa KLDMModes
 
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.15, L0=200.0)
     scientific = ft_sh_phase_screen(atm, 16, 0.1; rng=MersenneTwister(3), profile=ScientificProfile())
     fast = ft_sh_phase_screen(atm, 16, 0.1; rng=MersenneTwister(3), profile=FastProfile())
@@ -631,9 +630,9 @@ end
 end
 
 @testset "Multi-layer atmosphere" begin
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     delta = tel.params.diameter / tel.params.resolution
-    one_pixel_speed = delta / tel.params.sampling_time
+    one_pixel_speed = delta / TEST_ATMOSPHERE_STEP
     quarter_pixel_speed = 0.25 * one_pixel_speed
 
     atm = MultiLayerAtmosphere(tel;
@@ -644,9 +643,9 @@ end
         wind_direction=[0.0],
         altitude=[0.0],
     )
-    advance_by!(atm, tel.params.sampling_time; rng=MersenneTwister(3))
+    advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(3))
     first = unmasked_atmosphere_opd(atm, tel)
-    advance_by!(atm, tel.params.sampling_time; rng=MersenneTwister(3))
+    advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(3))
     second = unmasked_atmosphere_opd(atm, tel)
     propagate!(atm, tel)
     @test size(second) == (16, 16)
@@ -661,9 +660,9 @@ end
         wind_direction=[0.0],
         altitude=[0.0],
     )
-    advance_by!(stationary, tel.params.sampling_time; rng=MersenneTwister(4))
+    advance_by!(stationary, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(4))
     static_first = rendered_atmosphere_opd(stationary, tel)
-    advance_by!(stationary, tel.params.sampling_time; rng=MersenneTwister(4))
+    advance_by!(stationary, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(4))
     @test rendered_atmosphere_opd(stationary, tel) ≈ static_first
 
     subpixel = MultiLayerAtmosphere(tel;
@@ -674,10 +673,10 @@ end
         wind_direction=[0.0],
         altitude=[0.0],
     )
-    advance_by!(subpixel, tel.params.sampling_time; rng=MersenneTwister(5))
+    advance_by!(subpixel, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(5))
     subpixel_first = unmasked_atmosphere_opd(subpixel, tel)
     for _ in 1:4
-        advance_by!(subpixel, tel.params.sampling_time; rng=MersenneTwister(5))
+        advance_by!(subpixel, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(5))
     end
     @test unmasked_atmosphere_opd(subpixel, tel)[:, 2:end] ≈
         subpixel_first[:, 1:end-1]
@@ -693,7 +692,7 @@ end
                 wind_direction=fill(0.0, length(fractions)),
                 altitude=fill(0.0, length(fractions)),
             )
-            advance_by!(atm_local, tel.params.sampling_time; rng=MersenneTwister(s))
+            advance_by!(atm_local, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(s))
             acc += std(vec(rendered_atmosphere_opd(atm_local, tel)))
         end
         return acc / nsamp

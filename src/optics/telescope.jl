@@ -1,7 +1,6 @@
 struct TelescopeParams{T<:AbstractFloat}
     resolution::Int
     diameter::T
-    sampling_time::T
     central_obstruction::T
     fov_arcsec::T
 end
@@ -27,6 +26,7 @@ mutable struct LegacyTelescopePathState{T<:AbstractFloat,
     psf::Apsf
     psf_stack::Spsf
     psf_workspace::W
+    aperture_revision::UInt
 end
 
 struct Telescope{P<:TelescopeParams,A<:TelescopeAperture,S<:LegacyTelescopePathState,
@@ -40,10 +40,15 @@ end
 @inline pupil_mask(tel::Telescope) = tel.aperture.pupil
 @inline pupil_reflectivity(tel::Telescope) = tel.aperture.reflectivity
 @inline opd_map(tel::Telescope) = tel.state.opd
+@inline aperture_revision(tel::Telescope) = tel.state.aperture_revision
+
+@inline function advance_aperture_revision!(tel::Telescope)
+    tel.state.aperture_revision += one(UInt)
+    return tel.state.aperture_revision
+end
 
 function Telescope(; resolution::Int,
     diameter::Real,
-    sampling_time::Real,
     central_obstruction::Real=0.0,
     fov_arcsec::Real=0.0,
     pupil_reflectivity::Union{Real,AbstractMatrix}=1.0,
@@ -56,7 +61,6 @@ function Telescope(; resolution::Int,
     params = TelescopeParams{T}(
         resolution,
         T(diameter),
-        T(sampling_time),
         T(central_obstruction),
         T(fov_arcsec),
     )
@@ -87,6 +91,7 @@ function Telescope(; resolution::Int,
         psf,
         psf_stack,
         psf_workspace,
+        zero(UInt),
     )
     return Telescope{typeof(params),typeof(aperture),typeof(state),
         typeof(selector)}(params, aperture, state)
@@ -115,7 +120,22 @@ function reset_opd!(tel::Telescope)
     return tel
 end
 
+@inline function _require_valid_pupil_reflectivity(value::Real)
+    isfinite(value) && zero(value) <= value <= one(value) || throw(
+        InvalidConfiguration(
+            "pupil_reflectivity must be finite and lie in [0, 1]"))
+    return nothing
+end
+
+function _require_valid_pupil_reflectivity(values::AbstractMatrix)
+    all(value -> isfinite(value) && zero(value) <= value <= one(value),
+        values) || throw(InvalidConfiguration(
+        "pupil_reflectivity values must be finite and lie in [0, 1]"))
+    return nothing
+end
+
 function initialize_reflectivity(pupil::AbstractMatrix{Bool}, reflectivity::Real, ::Type{T}, backend) where {T<:AbstractFloat}
+    _require_valid_pupil_reflectivity(reflectivity)
     out = backend{T}(undef, size(pupil)...)
     fill!(out, T(reflectivity))
     out .*= pupil
@@ -126,6 +146,7 @@ function initialize_reflectivity(pupil::AbstractMatrix{Bool}, reflectivity::Abst
     if size(reflectivity) != size(pupil)
         throw(DimensionMismatchError("pupil_reflectivity size does not match telescope resolution"))
     end
+    _require_valid_pupil_reflectivity(reflectivity)
     out = backend{T}(undef, size(pupil)...)
     copyto!(out, T.(reflectivity))
     out .*= pupil
@@ -146,12 +167,15 @@ function set_pupil!(tel::Telescope, pupil::AbstractMatrix{Bool})
     end
     pupil_mask(tel) .= pupil
     pupil_reflectivity(tel) .= pupil
+    advance_aperture_revision!(tel)
     return tel
 end
 
 function set_pupil_reflectivity!(tel::Telescope, reflectivity::Real)
+    _require_valid_pupil_reflectivity(reflectivity)
     fill!(pupil_reflectivity(tel), eltype(pupil_reflectivity(tel))(reflectivity))
     pupil_reflectivity(tel) .*= pupil_mask(tel)
+    advance_aperture_revision!(tel)
     return tel
 end
 
@@ -159,13 +183,18 @@ function set_pupil_reflectivity!(tel::Telescope, reflectivity::AbstractMatrix)
     if size(reflectivity) != size(pupil_reflectivity(tel))
         throw(DimensionMismatchError("pupil_reflectivity size does not match telescope resolution"))
     end
+    _require_valid_pupil_reflectivity(reflectivity)
     pupil_reflectivity(tel) .= reflectivity
     pupil_reflectivity(tel) .*= pupil_mask(tel)
+    advance_aperture_revision!(tel)
     return tel
 end
 
-function pupil_expected_photon_map(tel::Telescope, src::AbstractSource)
-    scale = photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
+function pupil_photon_rate_map(tel::Telescope, src::AbstractSource)
+    irradiance = _require_physical_photon_irradiance(src,
+        "pupil_photon_rate_map")
+    scale = irradiance *
+        (tel.params.diameter / tel.params.resolution)^2
     out = similar(pupil_reflectivity(tel))
     reflectivity = pupil_reflectivity(tel)
     @. out = scale * reflectivity
@@ -181,6 +210,7 @@ function apply_spiders!(tel::Telescope; thickness::Real, angles::AbstractVector,
     _apply_spiders!(pupil_mask(tel), angles, thickness_norm, offset_x_norm,
         offset_y_norm)
     pupil_reflectivity(tel) .*= pupil_mask(tel)
+    advance_aperture_revision!(tel)
     return tel
 end
 

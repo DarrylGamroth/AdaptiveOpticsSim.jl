@@ -45,15 +45,17 @@ payload = CoronagraphPayload(
 psf, sampling = prop_run(science_model; payload=payload)
 ```
 
-This snippet shows the currently implemented handoff. The Gate 0 target builds
-the payload from an explicit science-path product rather than
-`sim.tel.state.opd`. The returned product is accompanied by prepared plane
-metadata covering physical sampling, centering/orientation, wavelength,
-backend/device, and radiometric normalization. A PROPER result enters physical
-detector acquisition only when it is already a declared photon-arrival-rate
-product—photon irradiance or cell-integrated photon rate—or has an explicit
-prepared conversion from its documented normalization. Detector exposure
-duration is never folded into the payload or PROPER result.
+This snippet shows the currently implemented application handoff. The remaining
+Gate 0 science-path work builds the payload from an explicit caller-owned path
+product rather than `sim.tel.state.opd`. On return, the integration adapter must
+construct an `IntensityMap` whose metadata declares physical sampling,
+centering/orientation, wavelength, backend/device, normalization, spatial
+measure, and incoherent-addition policy. `prepare_detector_acquisition` accepts
+that result only when it is a photon-arrival-rate product, or when a
+dimensionless result has an explicit prepared photon-rate scale. The current
+raw-array example is therefore an integration proving ground, not evidence that
+an undeclared PROPER array has physical detector units. Detector exposure
+duration is never folded into the payload, PROPER result, or conversion scale.
 
 The `payload=...` keyword is preferred for new Julia-native integrations.
 `PASSVALUE` is a PROPER compatibility adapter and should be kept for upstream
@@ -112,8 +114,10 @@ conventions with small deterministic cases:
 - **Units:** the OPD handoff is in meters.
 - **Radiometry:** declare whether the returned array is photon irradiance,
   cell-integrated photon rate, normalized intensity, contrast, or another
-  quantity. Validate any conversion and photon conservation before detector
-  acquisition with a non-unit exposure.
+  quantity. Put that contract in `OpticalPlaneMetadata`; use an explicit
+  normalized-to-photon-rate scale only when the conversion is physically
+  defined. Validate conversion, represented cell measure, and photon
+  conservation before detector acquisition with a non-unit exposure.
 - **Spectral coordinates:** wavelength-dependent results may be summed by array
   index only when their physical focal grids are compatible and the declared
   combination is incoherent; otherwise retain a bundle or use an explicit
@@ -142,9 +146,13 @@ For repeated HIL execution:
 3. Reuse a typed payload whose arrays point at the current caller-owned science-
    path product and whose geometry/radiometry metadata was validated during
    preparation.
-4. Each frame, update the scenario command, run `sense!` or `step!`, then call
-   `prop_run(science_model; payload=payload)`.
-5. Benchmark the combined command-to-pixels path on each claimed backend.
+4. Prepare the returned intensity-map and detector-acquisition contract once;
+   retain incompatible wavelength grids as separate products unless an
+   explicit mapping is prepared.
+5. Each frame, update the scenario command, run `sense!` or `step!`, call
+   `prop_run(science_model; payload=payload)`, update the caller-owned map, and
+   execute the prepared detector acquisition.
+6. Benchmark the combined command-to-pixels path on each claimed backend.
 
 Avoid host transfers in the frame loop. Use `Array(...)` only as an explicit
 boundary when the AO runtime and science model intentionally live on different

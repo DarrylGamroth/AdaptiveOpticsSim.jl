@@ -132,9 +132,16 @@ end
 @inline _fill_dm_command!(coefs::AbstractVector{T}, phase::T) where {T<:AbstractFloat} =
     _fill_dm_command!(AdaptiveOpticsSim.execution_style(coefs), coefs, phase)
 
-function _phase_step!(runtime, backend_tag; phase_index::Int=1)
-    advance!(runtime.atm, runtime.tel; rng=runtime.rng)
-    propagate!(runtime.atm, runtime.tel)
+@inline function _advance_and_render_atmosphere!(runtime, atmosphere_step)
+    epoch = advance_by!(runtime.atm, atmosphere_step; rng=runtime.rng)
+    AdaptiveOpticsSim.render_atmosphere_opd!(runtime.tel.state.opd,
+        runtime.wfs_atmosphere_renderer, runtime.atm, epoch)
+    return epoch
+end
+
+function _phase_step!(runtime, backend_tag, atmosphere_step;
+    phase_index::Int=1)
+    _advance_and_render_atmosphere!(runtime, atmosphere_step)
     _fill_dm_command!(runtime.dm.state.coefs, eltype(runtime.dm.state.coefs)(phase_index))
     apply!(runtime.dm, runtime.tel, DMAdditive())
     sense!(runtime)
@@ -196,12 +203,13 @@ function run_profile(; backend_name::AbstractString="cpu", model_name::AbstractS
     cfg = _resolve_model(model_name)
     response_model, response_label = _resolve_response(response_name)
     T = Float32
+    acquisition_time = T(0.002)
+    atmosphere_step = T(0.002)
     cameras = _camera_specs(T)
 
     tel = Telescope(
         resolution=cfg.resolution,
         diameter=8.0,
-        sampling_time=0.002,
         central_obstruction=0.0,
         T=T,
         backend=backend,
@@ -235,19 +243,19 @@ function run_profile(; backend_name::AbstractString="cpu", model_name::AbstractS
     sim = AdaptiveOpticsSim.AOSimulation(tel, src, atm, dm, wfs)
 
     wfs_detector = _detector_from_spec(cameras.ixon;
-        integration_time=tel.params.sampling_time,
+        integration_time=acquisition_time,
         response_model=response_model,
         T=T,
         backend=backend,
     )
     gain_detector = _detector_from_spec(cameras.cs165cu;
-        integration_time=tel.params.sampling_time,
+        integration_time=acquisition_time,
         response_model=response_model,
         T=T,
         backend=backend,
     )
     science_detector = _detector_from_spec(cameras.cred2;
-        integration_time=tel.params.sampling_time,
+        integration_time=acquisition_time,
         response_model=response_model,
         T=T,
         backend=backend,
@@ -256,56 +264,58 @@ function run_profile(; backend_name::AbstractString="cpu", model_name::AbstractS
     t0 = time_ns()
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
     recon = ModalReconstructor(imat; gain=T(0.5))
-    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; rng=runtime_rng(0), wfs_detector=wfs_detector)
+    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon;
+        atmosphere_step=atmosphere_step, rng=runtime_rng(0),
+        wfs_detector=wfs_detector)
     prepare!(runtime)
-    _phase_step!(runtime, backend_tag; phase_index=1)
+    _phase_step!(runtime, backend_tag, atmosphere_step; phase_index=1)
     build_time_ns = time_ns() - t0
 
     phase_index = Ref(1)
     atmosphere_mean_ns, atmosphere_p95_ns = _timed_stats!(() -> begin
         phase_index[] += 1
-        advance!(runtime.atm, runtime.tel; rng=runtime.rng)
-        propagate!(runtime.atm, runtime.tel)
+        _advance_and_render_atmosphere!(runtime, atmosphere_step)
         _sync_backend!(backend_tag, runtime.tel.state.opd)
     end; warmup=warmup, samples=samples)
     dm_apply_mean_ns, dm_apply_p95_ns = _timed_stats!(() -> begin
         phase_index[] += 1
-        advance!(runtime.atm, runtime.tel; rng=runtime.rng)
-        propagate!(runtime.atm, runtime.tel)
+        _advance_and_render_atmosphere!(runtime, atmosphere_step)
         _fill_dm_command!(runtime.dm.state.coefs, T(phase_index[]))
         apply!(runtime.dm, runtime.tel, DMAdditive())
         _sync_backend!(backend_tag, runtime.tel.state.opd)
     end; warmup=warmup, samples=samples)
     sense_mean_ns, sense_p95_ns = _timed_stats!(() -> begin
         phase_index[] += 1
-        _phase_step!(runtime, backend_tag; phase_index=phase_index[])
+        _phase_step!(runtime, backend_tag, atmosphere_step;
+            phase_index=phase_index[])
     end; warmup=warmup, samples=samples)
     total_mean_ns, total_p95_ns = _timed_stats!(() -> begin
         phase_index[] += 1
-        _phase_step!(runtime, backend_tag; phase_index=phase_index[])
+        _phase_step!(runtime, backend_tag, atmosphere_step;
+            phase_index=phase_index[])
     end; warmup=warmup, samples=samples)
 
     atmosphere_alloc_bytes = _allocated_bytes(() -> begin
         phase_index[] += 1
-        advance!(runtime.atm, runtime.tel; rng=runtime.rng)
-        propagate!(runtime.atm, runtime.tel)
+        _advance_and_render_atmosphere!(runtime, atmosphere_step)
         _sync_backend!(backend_tag, runtime.tel.state.opd)
     end; warmup=warmup)
     dm_apply_alloc_bytes = _allocated_bytes(() -> begin
         phase_index[] += 1
-        advance!(runtime.atm, runtime.tel; rng=runtime.rng)
-        propagate!(runtime.atm, runtime.tel)
+        _advance_and_render_atmosphere!(runtime, atmosphere_step)
         _fill_dm_command!(runtime.dm.state.coefs, T(phase_index[]))
         apply!(runtime.dm, runtime.tel, DMAdditive())
         _sync_backend!(backend_tag, runtime.tel.state.opd)
     end; warmup=warmup)
     sense_alloc_bytes = _allocated_bytes(() -> begin
         phase_index[] += 1
-        _phase_step!(runtime, backend_tag; phase_index=phase_index[])
+        _phase_step!(runtime, backend_tag, atmosphere_step;
+            phase_index=phase_index[])
     end; warmup=warmup)
     total_alloc_bytes = _allocated_bytes(() -> begin
         phase_index[] += 1
-        _phase_step!(runtime, backend_tag; phase_index=phase_index[])
+        _phase_step!(runtime, backend_tag, atmosphere_step;
+            phase_index=phase_index[])
     end; warmup=warmup)
 
     wfs_metadata = detector_export_metadata(wfs_detector)
@@ -323,6 +333,7 @@ function run_profile(; backend_name::AbstractString="cpu", model_name::AbstractS
     println("  backend: ", backend_label)
     println("  model: ", cfg.label)
     println("  response_mode: ", response_label)
+    println("  atmosphere_step_s: ", atmosphere_step)
     println("  wfs_family: pyramid")
     println("  wfs_detector: ixon")
     println("  wfs_detector_sensor: ", wfs_metadata.sensor)

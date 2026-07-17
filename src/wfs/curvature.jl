@@ -47,15 +47,16 @@ end
     end
 end
 
-@kernel function curvature_branch_field_stack_kernel!(field_stack, pupil, opd, defocus_stack, phasor,
+@kernel function curvature_branch_field_stack_kernel!(field_stack, reflectivity, opd, defocus_stack, phasor,
     amp_scale, opd_to_cycles, ox::Int, oy::Int, n::Int, pad::Int)
     x, y, branch = @index(Global, NTuple)
     if x <= pad && y <= pad && branch <= size(field_stack, 3)
         xi = x - ox
         yi = y - oy
         val = zero(eltype(field_stack))
-        if 1 <= xi <= n && 1 <= yi <= n && @inbounds(pupil[xi, yi])
-            val = amp_scale * cispi(opd_to_cycles * @inbounds(opd[xi, yi]))
+        if 1 <= xi <= n && 1 <= yi <= n
+            val = amp_scale * sqrt(@inbounds(reflectivity[xi, yi])) *
+                cispi(opd_to_cycles * @inbounds(opd[xi, yi]))
         end
         @inbounds field_stack[x, y, branch] = val * defocus_stack[x, y, branch] * phasor[x, y]
     end
@@ -224,6 +225,7 @@ mutable struct CurvatureWFSState{
     effective_padding::Int
     calibrated::Bool
     calibration_wavelength::T
+    calibration_signature::UInt
     atmospheric_propagation::AP
     atmospheric_signature::UInt
 end
@@ -338,6 +340,7 @@ function CurvatureWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1, d
         diffraction_padding,
         false,
         zero(T),
+        zero(UInt),
         nothing,
         zero(UInt),
     )
@@ -394,6 +397,7 @@ function ensure_curvature_buffers!(wfs::CurvatureWFS, tel::Telescope)
         wfs.state.fft_stack_plan = plan_fft_backend!(wfs.state.field_stack, (1, 2))
         wfs.state.effective_padding = wfs.params.diffraction_padding
         wfs.state.calibrated = false
+        wfs.state.calibration_signature = zero(UInt)
         wfs.state.atmospheric_propagation = nothing
         wfs.state.atmospheric_signature = zero(UInt)
         build_curvature_phasor!(wfs.state.phasor)
@@ -556,6 +560,7 @@ function pack_curvature_readout!(style::AcceleratorStyle, ::CurvatureCountingRea
 end
 
 function curvature_intensity!(wfs::CurvatureWFS, tel::Telescope, src::AbstractSource)
+    require_leaf_source(src, "CurvatureWFS")
     return curvature_intensity!(execution_style(wfs.state.camera_frame), wfs, tel, src)
 end
 
@@ -567,12 +572,14 @@ function curvature_intensity!(::ScalarCPUStyle, wfs::CurvatureWFS, tel::Telescop
     oy = div(pad - n, 2)
     opd_to_cycles = eltype(wfs.state.frame_plus)(2) / wavelength(src)
     amp_scale = sqrt(eltype(wfs.state.frame_plus)(
-        photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
+        photon_irradiance(src) * (tel.params.diameter / tel.params.resolution)^2
     ))
+    reflectivity = pupil_reflectivity(tel)
     fill!(wfs.state.field_stack, zero(eltype(wfs.state.field_stack)))
     @inbounds for y in 1:n, x in 1:n
-        if pupil_mask(tel)[x, y]
-            val = amp_scale * cispi(opd_to_cycles * tel.state.opd[x, y])
+        if reflectivity[x, y] > zero(eltype(reflectivity))
+            val = amp_scale * sqrt(reflectivity[x, y]) *
+                cispi(opd_to_cycles * tel.state.opd[x, y])
             xx = ox + x
             yy = oy + y
             common = val * wfs.state.phasor[xx, yy]
@@ -592,10 +599,10 @@ function curvature_intensity!(style::AcceleratorStyle, wfs::CurvatureWFS, tel::T
     oy = div(pad - n, 2)
     opd_to_cycles = eltype(wfs.state.frame_plus)(2) / wavelength(src)
     amp_scale = sqrt(eltype(wfs.state.frame_plus)(
-        photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2
+        photon_irradiance(src) * (tel.params.diameter / tel.params.resolution)^2
     ))
     phase = begin_kernel_phase(style)
-    queue_kernel!(phase, curvature_branch_field_stack_kernel!, wfs.state.field_stack, pupil_mask(tel),
+    queue_kernel!(phase, curvature_branch_field_stack_kernel!, wfs.state.field_stack, pupil_reflectivity(tel),
         tel.state.opd, wfs.state.defocus_stack, wfs.state.phasor, amp_scale, opd_to_cycles, ox, oy, n, pad;
         ndrange=size(wfs.state.field_stack))
     finish_kernel_phase!(phase)
@@ -641,6 +648,7 @@ end
 function curvature_intensity!(wfs::CurvatureWFS, tel::Telescope, src::AbstractSource, atm::AbstractAtmosphere;
     propagation::Union{Nothing,AtmosphericFieldPropagation}=nothing,
     model::AbstractAtmosphericFieldModel=LayeredFresnelAtmosphericPropagation(T=eltype(wfs.state.frame_plus)))
+    require_leaf_source(src, "atmosphere-aware CurvatureWFS")
     prop = isnothing(propagation) ? ensure_curvature_atmospheric_propagation!(wfs, tel, src, atm, model) : propagation
     field = propagate_atmosphere_field!(prop, atm, tel, src)
     return curvature_intensity_from_field!(wfs, tel, field)
@@ -782,19 +790,29 @@ function curvature_signal!(style::AcceleratorStyle, ::CurvatureCountingReadout, 
 end
 
 function ensure_curvature_calibration!(wfs::CurvatureWFS, tel::Telescope, src::AbstractSource)
-    λ = calibration_wavelength(src, typeof(src.params.wavelength))
-    if calibration_matches(wfs.state.calibrated, wfs.state.calibration_wavelength, λ)
+    require_leaf_source(src, "CurvatureWFS calibration")
+    λ = calibration_wavelength(src, eltype(wfs.state.slopes))
+    sig = telescope_aperture_calibration_signature(tel,
+        calibration_signature(src))
+    if calibration_matches(wfs.state.calibrated,
+        wfs.state.calibration_wavelength, λ,
+        wfs.state.calibration_signature, sig)
         return wfs
     end
-    opd_saved = copy(tel.state.opd)
-    reset_opd!(tel)
     update_valid_mask!(wfs, tel)
-    curvature_intensity!(wfs, tel, src)
-    curvature_signal!(wfs, wfs.state.camera_frame)
-    copyto!(wfs.state.reference_signal_2d, wfs.state.signal_2d)
-    copyto!(tel.state.opd, opd_saved)
+    opd_saved = save_zero_opd!(tel)
+    try
+        curvature_intensity!(wfs, tel, src)
+        fill!(wfs.state.reference_signal_2d,
+            zero(eltype(wfs.state.reference_signal_2d)))
+        curvature_signal!(wfs, wfs.state.camera_frame)
+        copyto!(wfs.state.reference_signal_2d, wfs.state.signal_2d)
+    finally
+        restore_opd!(tel, opd_saved)
+    end
     wfs.state.calibrated = true
     wfs.state.calibration_wavelength = λ
+    wfs.state.calibration_signature = sig
     return wfs
 end
 
@@ -845,8 +863,8 @@ end
 
 function measure!(wfs::CurvatureWFS, tel::Telescope, ast::Asterism, atm::AbstractAtmosphere;
     model::AbstractAtmosphericFieldModel=LayeredFresnelAtmosphericPropagation(T=eltype(wfs.state.frame_plus)))
-    isempty(ast.sources) && throw(InvalidConfiguration("asterism must contain at least one source"))
-    ensure_curvature_calibration!(wfs, tel, ast.sources[1])
+    common_source = common_wfs_calibration_source(ast, "CurvatureWFS")
+    ensure_curvature_calibration!(wfs, tel, common_source)
     acc_plus = similar(wfs.state.frame_plus)
     acc_minus = similar(wfs.state.frame_minus)
     fill!(acc_plus, zero(eltype(acc_plus)))
@@ -865,8 +883,9 @@ end
 function measure!(wfs::CurvatureWFS, tel::Telescope, ast::Asterism, atm::AbstractAtmosphere, det::AbstractDetector;
     rng::AbstractRNG=Random.default_rng(),
     model::AbstractAtmosphericFieldModel=LayeredFresnelAtmosphericPropagation(T=eltype(wfs.state.frame_plus)))
+    common_source = common_wfs_calibration_source(ast, "CurvatureWFS")
     measure!(wfs, tel, ast, atm; model=model)
-    capture!(det, wfs.state.camera_frame; rng=rng)
+    capture!(det, wfs.state.camera_frame, common_source; rng=rng)
     return curvature_signal!(wfs, output_frame(det))
 end
 
@@ -913,13 +932,15 @@ end
 @inline wfs_output_metadata(::CurvatureCountingReadout, wfs::CurvatureWFS) =
     CountingReadoutMetadata(:branch_by_channel, size(wfs.state.camera_frame), length(wfs.state.camera_frame))
 
-@inline supports_prepared_runtime(::CurvatureWFS, ::AbstractSource) = true
+@inline supports_prepared_runtime(::CurvatureWFS, src::AbstractSource) =
+    is_leaf_source(src)
 @inline supports_detector_output(wfs::CurvatureWFS, det::AbstractDetector) = supports_detector_output(wfs.params.readout_model, det)
 @inline supports_detector_output(::CurvatureFrameReadout, ::AbstractDetector) = true
 @inline supports_detector_output(::CurvatureCountingReadout, ::AbstractDetector) = false
 @inline supports_detector_output(::CurvatureCountingReadout, ::AbstractCountingDetector) = true
 
 @inline function prepare_runtime_wfs!(wfs::CurvatureWFS, tel::Telescope, src::AbstractSource)
+    require_leaf_source(src, "CurvatureWFS runtime preparation")
     ensure_curvature_calibration!(wfs, tel, src)
     return wfs
 end

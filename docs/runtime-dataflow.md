@@ -27,6 +27,7 @@ The most important runtime-facing objects are:
   `InfiniteMultiLayerAtmosphere`
 - one or more WFS objects
 - optional `Detector` objects
+- optional prepared `DetectorAcquisitionPlan` objects for typed intensity maps
 - `DeformableMirror`
 - calibration/reconstructor objects
 - `ClosedLoopRuntime`
@@ -42,6 +43,7 @@ The build phase constructs long-lived simulation objects:
 3. create WFS models and detectors
 4. create DM and calibration/reconstruction objects
 5. build `ClosedLoopRuntime` with:
+   - explicit positive `atmosphere_step`
    - runtime profile
    - latency model
    - product requirements
@@ -66,6 +68,10 @@ happen inside the hot loop:
   identity across shared optical arms
 - prepare delay lines and runtime staging
 - ensure detector and WFS pipeline buffers exist
+- prepare compatible incoherent intensity accumulation or retain incompatible
+  products in an `OpticalProductBundle`
+- validate detector-facing map metadata and size acquisition buffers with
+  `prepare_detector_acquisition`
 
 The design goal is:
 
@@ -76,7 +82,7 @@ The design goal is:
 
 At a high level, one closed-loop step is:
 
-1. advance atmosphere
+1. advance atmosphere by the runtime's explicit `atmosphere_step`
 2. reset or update telescope OPD state
 3. apply DM command into telescope phase
 4. propagate source/field/atmosphere state to the sensing surface
@@ -90,10 +96,11 @@ At a high level, one closed-loop step is:
 
 This split is visible in runtime timing and benchmark surfaces.
 
-This is the current implemented single-step flow. Atmosphere evolution and
-direction rendering already use the first two explicit ownership boundaries
-below; the remaining Gate 0/2 work replaces shared telescope path scratch and
-finishes the full prepared flow:
+This is the current implemented single-step flow. Atmosphere evolution,
+direction rendering, rate formation, and the prepared frame-detector boundary
+provide the corresponding ownership foundations below; the remaining Gate 0/2
+work replaces shared telescope/WFS path state and finishes the fully composed
+prepared flow:
 
 1. advance one shared atmosphere epoch to explicit model time
 2. render each due direction through a path-local prepared renderer into a
@@ -108,7 +115,7 @@ finishes the full prepared flow:
 The telescope owns aperture, reflectivity, spatial sampling, and geometry; it
 does not own cadence/exposure duration, the path OPD/field, PSF result, FFT
 plans, or propagation scratch. Atmosphere advancement receives explicit model
-time rather than telescope sampling time. Source geometry and extended-source
+time; the telescope has no timing property. Source geometry and extended-source
 expansion are frozen or prepared per path rather than mutated in the shared
 atmosphere or source definition.
 
@@ -118,8 +125,9 @@ wavelength/channel, units/normalization, coherence/combination policy, backend,
 device compatibility, and whether values are spatial densities or integrated
 over represented cells. A physical detector-facing product is either photon
 irradiance (photons·s⁻¹·m⁻²) or a cell-integrated photon rate
-(photons·s⁻¹); detector acquisition applies elapsed time exactly once and
-preserves the declared spatial measure through response and pixel integration.
+(photons·s⁻¹). Prepared detector acquisition applies presampling response on
+the optical grid, integrates spatial-density samples over represented cells
+and then physical pixels, and applies QE and elapsed time exactly once.
 Incompatible spectral grids remain a bundle or require an explicit prepared
 mapping. Native direct science and prepared PROPER output meet at this same
 caller-owned photon-arrival-rate/acquisition boundary. These are concrete
@@ -195,10 +203,18 @@ Important distinctions:
 - grouped WFS intermediate stacks are not the same thing as archived or
   exported readouts
 
-For example, in diffractive Shack-Hartmann execution there is now a clearer
+For example, diffractive Shack–Hartmann compatible spectral, extended-source,
+and asterism components are accumulated into one optical-rate stack before a
+single detector acquisition. A spectral stack is compatible only when every
+component has the same wavelength and therefore the same prepared angular
+grid. Distinct wavelengths fail before preparation until the later
+Shack–Hartmann optical-front-end decomposition provides an explicit,
+flux-conserving native-to-detector grid mapping. Frozen references for the
+retired reference-wavelength index-grid approximation are test-only
+characterization data, not a production capability. There is now a clearer
 boundary between:
 
-- sampled pre-detector spot stacks
+- pre-detector optical-rate spot stacks
 - post-detector signal stacks
 - exported runtime pixel outputs
 
@@ -210,12 +226,23 @@ That separation matters for:
 
 ## Detector and WFS Dataflow
 
-The maintained detector/WFS pipeline now follows a more explicit shape:
+The prepared frame-detector path now follows this order:
 
-1. produce sampled optical signal
-2. apply detector/readout pipeline if configured
-3. reduce or extract slopes/signals
-4. snapshot only the runtime outputs that were requested
+1. produce a photon-arrival-rate intensity map or an explicitly normalized map
+   with a prepared physical scale
+2. apply the presampling detector response on the optical grid
+3. integrate represented cells into physical pixels
+4. apply wavelength-channel QE and explicit whole or incremental exposure time
+   exactly once
+5. apply charge-domain effects, stochastic response, binning/readout, and
+   publication
+6. reduce or estimate WFS signals where required
+7. snapshot only the runtime outputs that were requested
+
+Most WFS state types still compose several of these stages internally; the
+typed front-end/observation/estimator split is later Gate 0 work. Raw matrix
+detector entry remains a documented legacy cell-integrated-rate path, while
+`DetectorAcquisitionPlan` is the metadata-validated prepared boundary.
 
 The runtime output plan decides whether a given simulation step must produce:
 

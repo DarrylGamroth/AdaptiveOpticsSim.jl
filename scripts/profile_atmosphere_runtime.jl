@@ -115,15 +115,17 @@ function _allocated_bytes(f!::F; warmup::Int=2, gc_before::Bool=true) where {F<:
     return @allocated f!()
 end
 
-function _step_with_sync!(atm, tel, src, backend_tag, rng)
-    advance!(atm, tel; rng=rng)
-    propagate!(atm, tel, src)
-    _sync_array!(backend_tag, atm.state.opd)
-    _sync_array!(backend_tag, tel.state.opd)
-    return tel.state.opd
+function _step_with_sync!(atm, output, renderer, backend_tag,
+    atmosphere_step, rng)
+    epoch = advance_by!(atm, atmosphere_step; rng=rng)
+    render_atmosphere!(output, renderer, atm, epoch)
+    opd = opd_map(output)
+    _sync_array!(backend_tag, opd)
+    return opd
 end
 
-function _benchmark_model(model_name::Symbol, tel, src, backend_tag, backend, cfg, T)
+function _benchmark_model(model_name::Symbol, tel, src, backend_tag, backend,
+    cfg, atmosphere_step, T)
     rng_build = MersenneTwister(1)
     rng_step = MersenneTwister(2)
     t0 = time_ns()
@@ -154,11 +156,16 @@ function _benchmark_model(model_name::Symbol, tel, src, backend_tag, backend, cf
     else
         error("unsupported atmosphere model '$model_name'")
     end
-    _step_with_sync!(atm, tel, src, backend_tag, rng_build)
+    renderer = prepare_atmosphere_renderer(atm, tel, src)
+    output = PupilFunction(tel; T=T)
+    _step_with_sync!(atm, output, renderer, backend_tag, atmosphere_step,
+        rng_build)
     build_time_ns = time_ns() - t0
-    timing = runtime_timing(() -> _step_with_sync!(atm, tel, src, backend_tag, rng_step);
+    timing = runtime_timing(() -> _step_with_sync!(atm, output, renderer,
+            backend_tag, atmosphere_step, rng_step);
         warmup=cfg.warmup, samples=cfg.samples, gc_before=false)
-    alloc_bytes = _allocated_bytes(() -> _step_with_sync!(atm, tel, src, backend_tag, rng_step);
+    alloc_bytes = _allocated_bytes(() -> _step_with_sync!(atm, output,
+            renderer, backend_tag, atmosphere_step, rng_step);
         warmup=cfg.warmup, gc_before=false)
     return (
         build_time_ns=build_time_ns,
@@ -166,8 +173,8 @@ function _benchmark_model(model_name::Symbol, tel, src, backend_tag, backend, cf
         step_p95_ns=timing.p95_ns,
         frame_rate_hz=1.0e9 / timing.mean_ns,
         alloc_bytes=alloc_bytes,
-        sync_count_per_sample=backend_tag === nothing ? 0 : 2,
-        opd_std=std(vec(Array(atm.state.opd))),
+        sync_count_per_sample=backend_tag === nothing ? 0 : 1,
+        opd_std=std(vec(Array(opd_map(output)))),
         screen_shape=model_name === :finite ? size(atm.layers[1].generator.state.opd) : size(atm.layers[1].screen.state.screen),
     )
 end
@@ -177,16 +184,19 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     backend, backend_tag, backend_label = _resolve_backend(backend_name)
     cfg = _resolve_scale(scale_name)
     T = Float32
-    tel = Telescope(resolution=cfg.resolution, diameter=cfg.diameter, sampling_time=1.0f-3,
-        central_obstruction=0.0f0, T=T, backend=backend)
+    atmosphere_step = T(1e-3)
+    tel = Telescope(resolution=cfg.resolution, diameter=cfg.diameter, central_obstruction=0.0f0, T=T, backend=backend)
     src, source_label = _resolve_source(source_name, T)
-    finite = _benchmark_model(:finite, tel, src, backend_tag, backend, cfg, T)
-    infinite = _benchmark_model(:infinite, tel, src, backend_tag, backend, cfg, T)
+    finite = _benchmark_model(:finite, tel, src, backend_tag, backend, cfg,
+        atmosphere_step, T)
+    infinite = _benchmark_model(:infinite, tel, src, backend_tag, backend, cfg,
+        atmosphere_step, T)
 
     println("atmosphere_runtime_profile")
     println("  backend: ", backend_label)
     println("  scale: ", cfg.scale)
     println("  source: ", source_label)
+    println("  atmosphere_step_s: ", atmosphere_step)
     println("  pupil_resolution: ", cfg.resolution)
     println("  n_layers: ", length(cfg.fractional_cn2))
     println("  finite_screen_shape: ", finite.screen_shape)

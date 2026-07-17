@@ -40,8 +40,7 @@ function extended_source_cache_probe()
 end
 
 function sh_reference_probe()
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3,
-        central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     wfs.state.reference_signal_2d .= 0.25
     wfs.state.slopes_units = 2.0
@@ -53,8 +52,7 @@ function sh_reference_probe()
 end
 
 function subaperture_layout_probes()
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3,
-        central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
     layout = subaperture_layout(wfs)
     geometry_policy = AdaptiveOpticsSim.GeometryValidSubapertures(threshold=0.1)
@@ -75,8 +73,7 @@ function delay_line_probe()
 end
 
 function composite_apply_probe()
-    tel = Telescope(resolution=24, diameter=8.0, sampling_time=1e-3,
-        central_obstruction=0.0)
+    tel = Telescope(resolution=24, diameter=8.0, central_obstruction=0.0)
     optic = CompositeControllableOptic(
         :tiptilt => TipTiltMirror(tel; scale=1.0),
         :dm => DeformableMirror(tel; n_act=4, influence_width=0.3),
@@ -142,16 +139,14 @@ function batched_emccd_capture_probe()
 end
 
 function gaussian_dm_operator_probe()
-    tel = Telescope(resolution=128, diameter=8.0, sampling_time=1e-3,
-        central_obstruction=0.0)
+    tel = Telescope(resolution=128, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=32, influence_width=0.3)
     dm.state.coefs .= range(-1e-7, 1e-7; length=length(dm.state.coefs))
     return () -> AdaptiveOpticsSim.apply_opd!(dm, tel)
 end
 
 function shared_optical_runtime_probe()
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3,
-        central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     guide = Source(band=:I, magnitude=0.0)
     science = Source(band=:K, magnitude=1.0, coordinates=(4.0, 90.0))
     atmosphere = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
@@ -163,7 +158,7 @@ function shared_optical_runtime_probe()
         gain=0.5,
     )
     primary = AdaptiveOpticsSim.ClosedLoopRuntime(simulation, reconstructor;
-        rng=runtime_rng(17))
+        atmosphere_step=1e-3, rng=runtime_rng(17))
     arm = SharedOpticalArm(
         :science,
         science;

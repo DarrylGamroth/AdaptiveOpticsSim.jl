@@ -1,12 +1,13 @@
 function bioedge_intensity_core!(out::AbstractMatrix{T}, wfs::BioEdgeWFS, tel::Telescope,
     src::AbstractSource; apply_lgs::Bool=false) where {T<:AbstractFloat}
+    require_leaf_source(src, "BioEdgeWFS")
     prepare_bioedge_sampling!(wfs, tel)
     n = tel.params.resolution
     pad = size(wfs.state.field, 1)
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
     opd_to_cycles = T(2) / wavelength(src)
-    amp_scale = sqrt(T(photon_irradiance(src) * tel.params.sampling_time * (tel.params.diameter / tel.params.resolution)^2 /
+    amp_scale = sqrt(T(photon_irradiance(src) * (tel.params.diameter / tel.params.resolution)^2 /
         wfs.params.modulation_points))
 
     fill!(out, zero(T))
@@ -15,7 +16,7 @@ function bioedge_intensity_core!(out::AbstractMatrix{T}, wfs::BioEdgeWFS, tel::T
 
     @inbounds for p in 1:wfs.params.modulation_points
         fill!(wfs.state.field, zero(eltype(wfs.state.field)))
-        @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * $(pupil_mask(tel)) *
+        @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * sqrt($(pupil_reflectivity(tel))) *
             wfs.state.modulation_phases[:, :, p] * cispi(opd_to_cycles * tel.state.opd)
         copyto!(wfs.state.focal_field, wfs.state.field)
         if wfs.params.psf_centering
@@ -61,6 +62,7 @@ function measure!(mode::Geometric, wfs::BioEdgeWFS, tel::Telescope)
 end
 
 function measure!(::Geometric, wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource)
+    require_leaf_source(src, "geometric BioEdgeWFS")
     return measure!(Geometric(), wfs, tel)
 end
 
@@ -118,47 +120,47 @@ end
 
 function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource,
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
-    ensure_bioedge_calibration!(wfs, tel, src)
+    ensure_bioedge_calibration!(wfs, tel, src, det)
     bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
     intensity = sample_bioedge_intensity!(wfs, tel, wfs.state.intensity)
     frame = capture!(det, intensity, src; rng=rng)
-    resize_bioedge_signal_buffers!(wfs, size(frame, 1))
-    return bioedge_signal!(wfs, tel, frame, src)
+    resize_bioedge_signal_buffers!(wfs, size(frame, 1), det)
+    normalization_scale = wfs_detector_incidence_scale(det, src,
+        eltype(frame))
+    return bioedge_signal!(wfs, tel, frame, src, normalization_scale)
 end
 
 function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, src::LGSSource,
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
-    ensure_bioedge_calibration!(wfs, tel, src)
+    ensure_bioedge_calibration!(wfs, tel, src, det)
     bioedge_intensity!(wfs.state.intensity, wfs, tel, src)
     intensity = sample_bioedge_intensity!(wfs, tel, wfs.state.intensity)
     frame = capture!(det, intensity, src; rng=rng)
-    resize_bioedge_signal_buffers!(wfs, size(frame, 1))
-    return bioedge_signal!(wfs, tel, frame, src)
+    resize_bioedge_signal_buffers!(wfs, size(frame, 1), det)
+    normalization_scale = wfs_detector_incidence_scale(det, src,
+        eltype(frame))
+    return bioedge_signal!(wfs, tel, frame, src, normalization_scale)
 end
 
 function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, ast::Asterism)
     Base.require_one_based_indexing(tel.state.opd)
-    if isempty(ast.sources)
-        throw(InvalidConfiguration("asterism must contain at least one source"))
-    end
-    wavelength(ast)
-    ensure_bioedge_calibration!(wfs, tel, ast.sources[1])
+    common_source = common_wfs_calibration_source(ast, "BioEdgeWFS")
+    ensure_bioedge_calibration!(wfs, tel, common_source)
     accumulate_bioedge_asterism_intensity!(execution_style(wfs.state.intensity), wfs, tel, ast)
     intensity = sample_bioedge_intensity!(wfs, tel, wfs.state.intensity)
-    return bioedge_signal!(wfs, tel, intensity)
+    return bioedge_signal!(wfs, tel, intensity, ast)
 end
 
 function measure!(::Diffractive, wfs::BioEdgeWFS, tel::Telescope, ast::Asterism,
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
     Base.require_one_based_indexing(tel.state.opd)
-    if isempty(ast.sources)
-        throw(InvalidConfiguration("asterism must contain at least one source"))
-    end
-    wavelength(ast)
-    ensure_bioedge_calibration!(wfs, tel, ast.sources[1])
+    common_source = common_wfs_calibration_source(ast, "BioEdgeWFS")
+    ensure_bioedge_calibration!(wfs, tel, common_source, det)
     accumulate_bioedge_asterism_intensity!(execution_style(wfs.state.intensity), wfs, tel, ast)
     intensity = sample_bioedge_intensity!(wfs, tel, wfs.state.intensity)
-    frame = capture!(det, intensity; rng=rng)
-    resize_bioedge_signal_buffers!(wfs, size(frame, 1))
-    return bioedge_signal!(wfs, tel, frame)
+    frame = capture!(det, intensity, common_source; rng=rng)
+    resize_bioedge_signal_buffers!(wfs, size(frame, 1), det)
+    normalization_scale = wfs_detector_incidence_scale(det, common_source,
+        eltype(frame))
+    return bioedge_signal!(wfs, tel, frame, ast, normalization_scale)
 end

@@ -81,8 +81,7 @@ end
 
 function measure!(::Diffractive, wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource)
     Base.require_one_based_indexing(tel.state.opd)
-    ref = spectral_reference_source(src)
-    prepare_sampling!(wfs, tel, ref)
+    prepare_sampling!(wfs, tel, src)
     ensure_sh_calibration!(wfs, tel, src)
     peak = sampled_spots_peak!(wfs, tel, src)
     sync_exported_spots!(wfs)
@@ -118,8 +117,7 @@ end
 function measure!(::Diffractive, wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource,
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
     Base.require_one_based_indexing(tel.state.opd)
-    ref = spectral_reference_source(src)
-    prepare_sampling!(wfs, tel, ref)
+    prepare_sampling!(wfs, tel, src)
     ensure_sh_calibration!(wfs, tel, src)
     peak = sampled_spots_peak!(wfs, tel, src, det, rng)
     sync_exported_spots!(wfs)
@@ -129,12 +127,9 @@ end
 
 function measure!(::Diffractive, wfs::ShackHartmannWFS, tel::Telescope, ast::Asterism)
     Base.require_one_based_indexing(tel.state.opd)
-    if isempty(ast.sources)
-        throw(InvalidConfiguration("asterism must contain at least one source"))
-    end
-    wavelength(ast)
-    prepare_sampling!(wfs, tel, ast.sources[1])
-    ensure_sh_calibration!(wfs, tel, ast.sources[1])
+    common_source = common_wfs_calibration_source(ast, "ShackHartmannWFS")
+    prepare_sampling!(wfs, tel, common_source)
+    ensure_sh_calibration!(wfs, tel, common_source)
     n = tel.params.resolution
     n_sub = wfs.params.n_lenslets
     sub = div(n, n_sub)
@@ -158,12 +153,9 @@ end
 function measure!(::Diffractive, wfs::ShackHartmannWFS, tel::Telescope, ast::Asterism,
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
     Base.require_one_based_indexing(tel.state.opd)
-    if isempty(ast.sources)
-        throw(InvalidConfiguration("asterism must contain at least one source"))
-    end
-    wavelength(ast)
-    prepare_sampling!(wfs, tel, ast.sources[1])
-    ensure_sh_calibration!(wfs, tel, ast.sources[1])
+    common_source = common_wfs_calibration_source(ast, "ShackHartmannWFS")
+    prepare_sampling!(wfs, tel, common_source)
+    ensure_sh_calibration!(wfs, tel, common_source)
     n = tel.params.resolution
     n_sub = wfs.params.n_lenslets
     sub = div(n, n_sub)
@@ -190,164 +182,26 @@ end
 
 function measure_sh_asterism_diffractive!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Telescope,
     ast::Asterism, n::Int, n_sub::Int, sub::Int, pad::Int, ox::Int, oy::Int)
-    fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
-    idx = 1
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = min(i * sub, n)
-        ye = min(j * sub, n)
-        if wfs.state.valid_mask[i, j]
-            total_sum = zero(eltype(wfs.state.slopes))
-            sx_sum = zero(eltype(wfs.state.slopes))
-            sy_sum = zero(eltype(wfs.state.slopes))
-            for src in ast.sources
-                total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
-                total_sum += total
-                sx_sum += sx
-                sy_sum += sy
-                @views wfs.state.spot_cube_accum[idx, :, :] .+= wfs.state.spot_cube[idx, :, :]
-            end
-            if total_sum <= 0
-                wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
-                wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
-            else
-                nsrc = length(ast.sources)
-                wfs.state.slopes[idx] = ((sy_sum / nsrc) - wfs.state.reference_signal_2d[idx]) / wfs.state.slopes_units
-                wfs.state.slopes[idx + n_sub * n_sub] = ((sx_sum / nsrc) - wfs.state.reference_signal_2d[idx + n_sub * n_sub]) / wfs.state.slopes_units
-            end
-        else
-            wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
-            wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
-        end
-        idx += 1
-    end
-    copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
-    sync_exported_spots!(wfs)
-    zero_invalid_sh_slopes!(ScalarCPUStyle(), wfs.state.slopes, wfs.state.valid_mask)
-    return wfs.state.slopes
+    peak = accumulate_sh_asterism_spots!(ScalarCPUStyle(), wfs, tel, ast)
+    return finalize_sh_asterism_slopes!(wfs, peak)
 end
 
-function measure_sh_asterism_diffractive!(::AcceleratorStyle, wfs::ShackHartmannWFS, tel::Telescope,
+function measure_sh_asterism_diffractive!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel::Telescope,
     ast::Asterism, n::Int, n_sub::Int, sub::Int, pad::Int, ox::Int, oy::Int)
-    sh_refresh_valid_mask_host!(wfs)
-    host_slopes = wfs.state.slopes_host
-    fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
-    idx = 1
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = min(i * sub, n)
-        ye = min(j * sub, n)
-        if wfs.state.valid_mask_host[i, j]
-            total_sum = zero(eltype(host_slopes))
-            sx_sum = zero(eltype(host_slopes))
-            sy_sum = zero(eltype(host_slopes))
-            for src in ast.sources
-                total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx)
-                total_sum += total
-                sx_sum += sx
-                sy_sum += sy
-                @views wfs.state.spot_cube_accum[idx, :, :] .+= wfs.state.spot_cube[idx, :, :]
-            end
-            if total_sum <= 0
-                host_slopes[idx] = zero(eltype(host_slopes))
-                host_slopes[idx + n_sub * n_sub] = zero(eltype(host_slopes))
-            else
-                nsrc = length(ast.sources)
-                host_slopes[idx] = ((sy_sum / nsrc) - wfs.state.reference_signal_host[idx]) / wfs.state.slopes_units
-                host_slopes[idx + n_sub * n_sub] = ((sx_sum / nsrc) - wfs.state.reference_signal_host[idx + n_sub * n_sub]) / wfs.state.slopes_units
-            end
-        else
-            host_slopes[idx] = zero(eltype(host_slopes))
-            host_slopes[idx + n_sub * n_sub] = zero(eltype(host_slopes))
-        end
-        idx += 1
-    end
-    copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
-    sync_exported_spots!(wfs)
-    copyto!(wfs.state.slopes, host_slopes)
-    return wfs.state.slopes
+    peak = accumulate_sh_asterism_spots!(style, wfs, tel, ast)
+    return finalize_sh_asterism_slopes!(wfs, peak)
 end
 
 function measure_sh_asterism_diffractive!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Telescope,
     ast::Asterism, det::AbstractDetector, rng::AbstractRNG, n::Int, n_sub::Int, sub::Int, pad::Int, ox::Int, oy::Int)
-    fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
-    idx = 1
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = min(i * sub, n)
-        ye = min(j * sub, n)
-        if wfs.state.valid_mask[i, j]
-            total_sum = zero(eltype(wfs.state.slopes))
-            sx_sum = zero(eltype(wfs.state.slopes))
-            sy_sum = zero(eltype(wfs.state.slopes))
-            for src in ast.sources
-                total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx, det, rng)
-                total_sum += total
-                sx_sum += sx
-                sy_sum += sy
-                @views wfs.state.spot_cube_accum[idx, :, :] .+= wfs.state.spot_cube[idx, :, :]
-            end
-            if total_sum <= 0
-                wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
-                wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
-            else
-                nsrc = length(ast.sources)
-                wfs.state.slopes[idx] = ((sy_sum / nsrc) - wfs.state.reference_signal_2d[idx]) / wfs.state.slopes_units
-                wfs.state.slopes[idx + n_sub * n_sub] = ((sx_sum / nsrc) - wfs.state.reference_signal_2d[idx + n_sub * n_sub]) / wfs.state.slopes_units
-            end
-        else
-            wfs.state.slopes[idx] = zero(eltype(wfs.state.slopes))
-            wfs.state.slopes[idx + n_sub * n_sub] = zero(eltype(wfs.state.slopes))
-        end
-        idx += 1
-    end
-    copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
-    sync_exported_spots!(wfs)
-    zero_invalid_sh_slopes!(ScalarCPUStyle(), wfs.state.slopes, wfs.state.valid_mask)
-    return wfs.state.slopes
+    accumulate_sh_asterism_spots!(ScalarCPUStyle(), wfs, tel, ast)
+    peak = capture_sh_asterism_spots!(ScalarCPUStyle(), wfs, ast, det, rng)
+    return finalize_sh_asterism_slopes!(wfs, peak)
 end
 
-function measure_sh_asterism_diffractive!(::AcceleratorStyle, wfs::ShackHartmannWFS, tel::Telescope,
+function measure_sh_asterism_diffractive!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel::Telescope,
     ast::Asterism, det::AbstractDetector, rng::AbstractRNG, n::Int, n_sub::Int, sub::Int, pad::Int, ox::Int, oy::Int)
-    sh_refresh_valid_mask_host!(wfs)
-    host_slopes = wfs.state.slopes_host
-    fill!(wfs.state.spot_cube_accum, zero(eltype(wfs.state.spot_cube_accum)))
-    idx = 1
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = min(i * sub, n)
-        ye = min(j * sub, n)
-        if wfs.state.valid_mask_host[i, j]
-            total_sum = zero(eltype(host_slopes))
-            sx_sum = zero(eltype(host_slopes))
-            sy_sum = zero(eltype(host_slopes))
-            for src in ast.sources
-                total, sx, sy = centroid_sums!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub, pad, idx, det, rng)
-                total_sum += total
-                sx_sum += sx
-                sy_sum += sy
-                @views wfs.state.spot_cube_accum[idx, :, :] .+= wfs.state.spot_cube[idx, :, :]
-            end
-            if total_sum <= 0
-                host_slopes[idx] = zero(eltype(host_slopes))
-                host_slopes[idx + n_sub * n_sub] = zero(eltype(host_slopes))
-            else
-                nsrc = length(ast.sources)
-                host_slopes[idx] = ((sy_sum / nsrc) - wfs.state.reference_signal_host[idx]) / wfs.state.slopes_units
-                host_slopes[idx + n_sub * n_sub] = ((sx_sum / nsrc) - wfs.state.reference_signal_host[idx + n_sub * n_sub]) / wfs.state.slopes_units
-            end
-        else
-            host_slopes[idx] = zero(eltype(host_slopes))
-            host_slopes[idx + n_sub * n_sub] = zero(eltype(host_slopes))
-        end
-        idx += 1
-    end
-    copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
-    sync_exported_spots!(wfs)
-    copyto!(wfs.state.slopes, host_slopes)
-    return wfs.state.slopes
+    accumulate_sh_asterism_spots!(style, wfs, tel, ast)
+    peak = capture_sh_asterism_spots!(style, wfs, ast, det, rng)
+    return finalize_sh_asterism_slopes!(wfs, peak)
 end

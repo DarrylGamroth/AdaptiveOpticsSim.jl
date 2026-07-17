@@ -2,7 +2,7 @@ using AdaptiveOpticsSim
 using BenchmarkTools
 
 function bench_misregistration_wfs_ad_probe()
-    tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     wfs = ShackHartmannWFS(tel; n_lenslets=2)
     basis = modal_basis(dm, tel; n_modes=2).M2C[:, 1:2]

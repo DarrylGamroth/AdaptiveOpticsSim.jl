@@ -7,6 +7,7 @@ using TOML
 const OUTDIR = joinpath(@__DIR__, "..", "benchmarks", "results", "atmosphere")
 const OUTFILE = joinpath(OUTDIR, "2026-04-01-phase1-pvp02.toml")
 const MANIFEST = joinpath(OUTDIR, "manifest.toml")
+const ATMOSPHERE_STEP_S = 1.0e-3
 
 normalized_correlation(a::AbstractMatrix, b::AbstractMatrix) =
     dot(vec(a), vec(b)) / sqrt(dot(vec(a), vec(a)) * dot(vec(b), vec(b)))
@@ -23,14 +24,18 @@ function ensemble_std(tel::Telescope, constructor, fractions; nsamp::Int=16, kwa
             altitude=fill(0.0, length(fractions)),
             kwargs...,
         )
-        advance!(atm, tel; rng=MersenneTwister(s))
-        acc += std(vec(Array(atm.state.opd)))
+        renderer = prepare_atmosphere_renderer(atm, tel)
+        output = PupilFunction(tel)
+        epoch = advance_by!(atm, ATMOSPHERE_STEP_S;
+            rng=MersenneTwister(s))
+        render_atmosphere!(output, renderer, atm, epoch)
+        acc += std(vec(Array(opd_map(output))))
     end
     return acc / nsamp
 end
 
 function trajectory_std_windows(; seed::Integer=79, steps::Int=24)
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     atm = InfiniteMultiLayerAtmosphere(tel;
         r0=0.2,
         L0=25.0,
@@ -42,19 +47,23 @@ function trajectory_std_windows(; seed::Integer=79, steps::Int=24)
         stencil_size=35,
     )
     rng = MersenneTwister(seed)
+    renderer = prepare_atmosphere_renderer(atm, tel)
+    output = PupilFunction(tel)
     stds = Float64[]
     for _ in 1:steps
-        advance!(atm, tel; rng=rng)
-        push!(stds, std(vec(Array(atm.state.opd))))
+        epoch = advance_by!(atm, ATMOSPHERE_STEP_S; rng=rng)
+        render_atmosphere!(output, renderer, atm, epoch)
+        push!(stds, std(vec(Array(opd_map(output)))))
     end
     midpoint = steps ÷ 2
     return (; early=mean(@view(stds[1:midpoint])), late=mean(@view(stds[midpoint + 1:end])))
 end
 
 function periodicity_metrics()
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
+    atmosphere_step = ATMOSPHERE_STEP_S
     delta = tel.params.diameter / tel.params.resolution
-    wind_speed_px = delta / tel.params.sampling_time
+    wind_speed_px = delta / atmosphere_step
     finite = MultiLayerAtmosphere(tel;
         r0=0.2,
         L0=25.0,
@@ -75,27 +84,43 @@ function periodicity_metrics()
     )
     finite_rng = MersenneTwister(8)
     infinite_rng = MersenneTwister(8)
-    advance!(finite, tel; rng=finite_rng)
-    advance!(infinite, tel; rng=infinite_rng)
-    finite_snapshot = copy(Array(finite.state.opd))
-    infinite_snapshot = copy(Array(infinite.state.opd))
+    finite_renderer = prepare_atmosphere_renderer(finite, tel)
+    infinite_renderer = prepare_atmosphere_renderer(infinite, tel)
+    finite_output = PupilFunction(tel)
+    infinite_output = PupilFunction(tel)
+    finite_epoch = advance_by!(finite, atmosphere_step; rng=finite_rng)
+    infinite_epoch = advance_by!(infinite, atmosphere_step; rng=infinite_rng)
+    render_atmosphere!(finite_output, finite_renderer, finite, finite_epoch)
+    render_atmosphere!(infinite_output, infinite_renderer, infinite,
+        infinite_epoch)
+    finite_snapshot = copy(Array(opd_map(finite_output)))
+    infinite_snapshot = copy(Array(opd_map(infinite_output)))
     period = AdaptiveOpticsSim.moving_layer_screen_resolution(tel.params.resolution)
     for _ in 1:period
-        advance!(finite, tel; rng=finite_rng)
-        advance!(infinite, tel; rng=infinite_rng)
+        finite_epoch = advance_by!(finite, atmosphere_step; rng=finite_rng)
+        infinite_epoch = advance_by!(infinite, atmosphere_step;
+            rng=infinite_rng)
     end
-    infinite_period_corr = normalized_correlation(Array(infinite.state.opd), infinite_snapshot)
-    finite_period_exact = Array(finite.state.opd) == finite_snapshot
+    render_atmosphere!(finite_output, finite_renderer, finite, finite_epoch)
+    render_atmosphere!(infinite_output, infinite_renderer, infinite,
+        infinite_epoch)
+    infinite_period_corr = normalized_correlation(
+        Array(opd_map(infinite_output)), infinite_snapshot)
+    finite_period_exact = Array(opd_map(finite_output)) == finite_snapshot
     for _ in 1:(2 * period)
-        advance!(finite, tel; rng=finite_rng)
-        advance!(infinite, tel; rng=infinite_rng)
+        finite_epoch = advance_by!(finite, atmosphere_step; rng=finite_rng)
+        infinite_epoch = advance_by!(infinite, atmosphere_step;
+            rng=infinite_rng)
     end
-    infinite_long_corr = normalized_correlation(Array(infinite.state.opd), infinite_snapshot)
+    render_atmosphere!(infinite_output, infinite_renderer, infinite,
+        infinite_epoch)
+    infinite_long_corr = normalized_correlation(
+        Array(opd_map(infinite_output)), infinite_snapshot)
     return (; period, finite_period_exact, infinite_period_corr, infinite_long_corr)
 end
 
 function build_report()
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     finite_single = ensemble_std(tel, MultiLayerAtmosphere, [1.0])
     infinite_single = ensemble_std(tel, InfiniteMultiLayerAtmosphere, [1.0];
         screen_resolution=33, stencil_size=35)
@@ -114,7 +139,7 @@ function build_report()
             "infinite_model" => "InfiniteMultiLayerAtmosphere",
             "resolution" => 16,
             "diameter_m" => 8.0,
-            "sampling_time_s" => 1.0e-3,
+            "atmosphere_step_s" => ATMOSPHERE_STEP_S,
             "r0_m" => 0.2,
             "L0_m" => 25.0,
         ),

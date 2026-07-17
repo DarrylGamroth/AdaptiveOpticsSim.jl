@@ -13,12 +13,20 @@ struct DetectorHostMirrorPlan <: AbstractDetectorExecutionPlan end
 @inline photon_noise_enabled(::Detector{<:NoiseReadout}) = false
 @inline photon_noise_enabled(::Detector{<:NoisePhotonReadout}) = true
 
-@inline function prepare_signal_frame!(det::Detector, psf::AbstractMatrix, exposure_time::Real, qe=det.params.qe)
+@inline function prepare_signal_frame!(det::Detector, psf::AbstractMatrix,
+    exposure_time::Real, qe, apply_persistence::Bool,
+    persistence_exposure_time::Real)
     fill_frame!(det, psf, exposure_time, qe)
     apply_signal_defects!(det.params.defect_model, det, exposure_time)
-    apply_sensor_persistence!(det.params.sensor, det, exposure_time)
+    apply_persistence &&
+        apply_sensor_persistence!(det.params.sensor, det,
+            persistence_exposure_time)
     return det.state.frame
 end
+
+@inline prepare_signal_frame!(det::Detector, psf::AbstractMatrix,
+    exposure_time::Real, qe=det.params.qe) =
+    prepare_signal_frame!(det, psf, exposure_time, qe, true, exposure_time)
 
 function add_poisson_rate!(dest::AbstractMatrix{T}, det::Detector, rng::AbstractRNG, rate) where {T<:AbstractFloat}
     rate_t = T(rate)
@@ -37,10 +45,39 @@ function add_gaussian_noise!(dest::AbstractMatrix{T}, det::Detector, rng::Abstra
     return dest
 end
 
-function capture_signal_pipeline!(det::Detector, psf::AbstractMatrix, rng::AbstractRNG, exposure_time::Real, qe=det.params.qe)
-    prepare_signal_frame!(det, psf, exposure_time, qe)
+function capture_signal_pipeline!(det::Detector, psf::AbstractMatrix,
+    rng::AbstractRNG, exposure_time::Real, qe, apply_persistence::Bool,
+    persistence_exposure_time::Real)
+    prepare_signal_frame!(det, psf, exposure_time, qe, apply_persistence,
+        persistence_exposure_time)
     photon_noise_enabled(det) && poisson_noise_frame!(det, rng, det.state.frame)
     apply_background_flux!(det.background_flux, det, rng, exposure_time)
+    return det.state.frame
+end
+
+capture_signal_pipeline!(det::Detector, psf::AbstractMatrix,
+    rng::AbstractRNG, exposure_time::Real, qe=det.params.qe) =
+    capture_signal_pipeline!(det, psf, rng, exposure_time, qe, true,
+        exposure_time)
+
+@inline function apply_incremental_dark_current!(det::Detector,
+    rng::AbstractRNG, exposure_time::Real)
+    rate = effective_dark_current(det) * exposure_time
+    return add_poisson_rate!(det.state.frame, det, rng, rate)
+end
+
+@inline apply_incremental_sensor_statistics!(::FrameSensorType,
+    det::Detector, rng::AbstractRNG, exposure_time::Real) = det.state.frame
+
+@inline function accumulate_incremental_charge_generation!(det::Detector,
+    rng::AbstractRNG, exposure_time::Real)
+    # The current thermal state represents the start of this interval. Thermal
+    # evolution occurs after the interval is accumulated, so sample_time is the
+    # quadrature cadence for temperature-dependent generated charge.
+    apply_incremental_dark_current!(det, rng, exposure_time)
+    apply_dark_defects!(det.params.defect_model, det, exposure_time)
+    apply_incremental_sensor_statistics!(det.params.sensor, det, rng,
+        exposure_time)
     return det.state.frame
 end
 
@@ -48,7 +85,7 @@ function finalize_charge_generation!(det::Detector, rng::AbstractRNG,
     exposure_time::Real)
     apply_dark_current!(det, rng, exposure_time)
     apply_dark_defects!(det.params.defect_model, det, exposure_time)
-    apply_sensor_statistics!(det.params.sensor, det, rng)
+    apply_sensor_statistics!(det.params.sensor, det, rng, exposure_time)
     return det.state.frame
 end
 
@@ -76,8 +113,12 @@ function finalize_electronics!(det::Detector, rng::AbstractRNG,
 end
 
 function finalize_readout_pipeline!(det::Detector, rng::AbstractRNG,
-    exposure_time::Real)
-    finalize_charge_generation!(det, rng, exposure_time)
+    exposure_time::Real, charge_exposure_time::Real)
+    finalize_charge_generation!(det, rng, charge_exposure_time)
     finalize_charge_transport!(det, rng)
     return finalize_electronics!(det, rng, exposure_time)
 end
+
+finalize_readout_pipeline!(det::Detector, rng::AbstractRNG,
+    exposure_time::Real) =
+    finalize_readout_pipeline!(det, rng, exposure_time, exposure_time)

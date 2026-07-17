@@ -33,6 +33,14 @@ New detector families should implement the smallest family-owned methods needed
 to connect to the generic detector pipeline. If a feature can apply to multiple
 families, put it in a shared layer instead of copying it into each sensor.
 
+A custom frame-response model is not automatically eligible for
+detector-coupled WFS reference calibration. Its extension must provide an
+instance-complete
+`AdaptiveOpticsSim.detector_response_calibration_signature(model, seed)`
+method covering every parameter that can change the deterministic response.
+Without that method, WFS calibration fails closed rather than caching a
+reference by response type alone.
+
 Use `bits` for quantization depth and `output_type` for the Julia element type
 returned at a HIL/RTC boundary.
 
@@ -69,7 +77,7 @@ public execution boundary is:
 - `render_atmosphere!(destination, renderer, atmosphere, epoch)` for warmed,
   caller-owned output
 
-The timed atmosphere must not read telescope sampling time, detector cadence,
+The timed atmosphere must not read a telescope timing value, detector cadence,
 wall time, or a renderer to determine elapsed time. Rendering must not evolve
 the atmosphere or consume RNG. A stale epoch, renderer from another atmosphere,
 or incompatible output must fail before output mutation.

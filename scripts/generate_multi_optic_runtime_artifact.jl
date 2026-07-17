@@ -37,8 +37,7 @@ end
 
 function build_scenario(; seed::Integer=91)
     T = Float32
-    tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
-        central_obstruction=T(0.0), T=T, backend=CPUBackend())
+    tel = Telescope(resolution=16, diameter=T(8.0), central_obstruction=T(0.0), T=T, backend=CPUBackend())
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = KolmogorovAtmosphere(tel; r0=T(0.2), L0=T(25.0), T=T, backend=CPUBackend())
     tiptilt = TipTiltMirror(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:tiptilt)
@@ -48,7 +47,7 @@ function build_scenario(; seed::Integer=91)
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=CPUBackend())
     sim = AOSimulation(tel, src, atm, optic, wfs)
     scenario = build_control_loop_scenario(
-        SingleControlLoopConfig(name=:multi_optic_hil, branch_label=:main,
+        SingleControlLoopConfig(atmosphere_step=1e-3, name=:multi_optic_hil, branch_label=:main,
             outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
         ControlLoopBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(seed)),
     )
@@ -121,8 +120,7 @@ end
 function build_behavior_scenario(::Val{K}; seed::Integer=91, wfs_family::Symbol=:sh,
     detector_profile::Symbol=:null) where {K}
     T = Float32
-    tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
-        central_obstruction=T(0.0), T=T, backend=CPUBackend())
+    tel = Telescope(resolution=16, diameter=T(8.0), central_obstruction=T(0.0), T=T, backend=CPUBackend())
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = StaticAtmosphere(tel; T=T, backend=CPUBackend())
     optic = build_behavior_optic(tel, Val(K); T=T)
@@ -130,7 +128,7 @@ function build_behavior_scenario(::Val{K}; seed::Integer=91, wfs_family::Symbol=
     det = build_runtime_detector(Val(detector_profile), T, CPUBackend())
     sim = AOSimulation(tel, src, atm, optic, wfs)
     scenario = build_control_loop_scenario(
-        SingleControlLoopConfig(name=Symbol(:multi_optic_behavior_, K, :_, wfs_family, :_, detector_profile), branch_label=:main,
+        SingleControlLoopConfig(atmosphere_step=1e-3, name=Symbol(:multi_optic_behavior_, K, :_, wfs_family, :_, detector_profile), branch_label=:main,
             outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
         ControlLoopBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(seed)),
     )
@@ -175,8 +173,7 @@ end
 function build_richer_runtime(::Val{S}; seed::Integer=91, wfs_family::Symbol=:sh,
     detector_profile::Symbol=:null) where {S}
     T = Float32
-    tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
-        central_obstruction=T(0.0), T=T, backend=CPUBackend())
+    tel = Telescope(resolution=16, diameter=T(8.0), central_obstruction=T(0.0), T=T, backend=CPUBackend())
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = StaticAtmosphere(tel; T=T, backend=CPUBackend())
     optic = if S === :tiptilt_focus_dm
@@ -199,7 +196,7 @@ function build_richer_runtime(::Val{S}; seed::Integer=91, wfs_family::Symbol=:sh
     det = build_runtime_detector(Val(detector_profile), T, CPUBackend())
     sim = AOSimulation(tel, src, atm, optic, wfs)
     scenario = build_control_loop_scenario(
-        SingleControlLoopConfig(name=Symbol(:richer_runtime_, S, :_, wfs_family, :_, detector_profile), branch_label=:main,
+        SingleControlLoopConfig(atmosphere_step=1e-3, name=Symbol(:richer_runtime_, S, :_, wfs_family, :_, detector_profile), branch_label=:main,
             outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=false)),
         ControlLoopBranch(:main, sim, NullReconstructor(); wfs_detector=det, rng=MersenneTwister(seed)),
     )
@@ -216,8 +213,7 @@ runtime_snapshot(scenario) = Dict(
 function low_order_opd(::Val{K}, low_order_cmd::AbstractVector{<:AbstractFloat};
     dm_cmd::AbstractVector{<:AbstractFloat}=fill(Float32(0), 16), composite::Bool=false) where {K}
     T = Float32
-    tel = Telescope(resolution=16, diameter=T(8.0), sampling_time=T(1e-3),
-        central_obstruction=T(0.0), T=T, backend=CPUBackend())
+    tel = Telescope(resolution=16, diameter=T(8.0), central_obstruction=T(0.0), T=T, backend=CPUBackend())
     low_order = K === :tiptilt ? TipTiltMirror(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:tiptilt) :
         K === :steering ? ModalControllableOptic(tel, CartesianTiltBasis(; scale=T(0.1));
             labels=:steering, T=T, backend=CPUBackend()) :

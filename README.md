@@ -32,10 +32,14 @@ If you are working on validation, production support, or backend work, then use:
 ```julia
 using AdaptiveOpticsSim
 
-tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
+tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)
-psf = compute_psf!(tel, src; zero_padding=2)
+photon_rate_psf = compute_psf!(tel, src; zero_padding=2)
 ```
+
+The convenience result is a source-brightness-scaled, cell-integrated photon-
+arrival rate before detector exposure; it is not inherently a unit-normalized
+PSF.
 
 ### 2. Add atmosphere and a wavefront sensor
 
@@ -74,7 +78,8 @@ imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
 
 branch = ControlLoopBranch(:main, sim, recon; rng=rng)
-cfg = SingleControlLoopConfig(name=:demo, branch_label=:main)
+cfg = SingleControlLoopConfig(atmosphere_step=1e-3, name=:demo,
+    branch_label=:main)
 scenario = build_control_loop_scenario(cfg, branch)
 prepare!(scenario)
 
@@ -211,8 +216,10 @@ example:
 ```bash
 ADAPTIVEOPTICS_VALIDATE_EXAMPLES=1 ./scripts/run_release_validation.sh
 ADAPTIVEOPTICS_VALIDATE_AMDGPU=1 ./scripts/run_release_validation.sh
+ADAPTIVEOPTICS_VALIDATE_CUDA=1 ./scripts/run_release_validation.sh
 ```
 
-AMDGPU is the currently hardware-validated accelerator. The CUDA extension and
-validation target remain in-tree for restoration, but CUDA is not currently a
-production-supported backend because no CUDA validation device is available.
+AMDGPU and CUDA both have current hardware validation through their dedicated
+targets. AMDGPU remains the release-gated production accelerator; CUDA is
+validated manually on the WSL RTX host but is not yet release-gated because a
+continuously available CUDA CI runner has not been established.

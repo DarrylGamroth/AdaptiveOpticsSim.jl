@@ -125,6 +125,13 @@ default_runtime_latency(::HILRuntimeProfile) = RuntimeLatencyModel(
     dm_delay_frames=1,
 )
 
+@inline function _validated_atmosphere_step(::Type{T}, value::Real) where {T<:AbstractFloat}
+    step = T(value)
+    isfinite(step) && step > zero(T) ||
+        throw(InvalidConfiguration("atmosphere_step must be finite and > 0"))
+    return step
+end
+
 runtime_science_zero_padding(::ScientificRuntimeProfile) = 2
 runtime_science_zero_padding(::HILRuntimeProfile) = 0
 
@@ -209,13 +216,15 @@ supports_grouped_execution(::AbstractWFS, ::Any) = false
 init_execution_state(::AbstractExecutionPolicy, ref) = nothing
 
 """
-    ClosedLoopRuntime(simulation, reconstructor; ...)
+    ClosedLoopRuntime(simulation, reconstructor; atmosphere_step, ...)
 
 Create the executable closed-loop control runtime for an AO simulation.
 
 The runtime owns the mutable command vector, optional detector outputs, and the
 objects needed to execute repeated `sense!` and `step!` calls without
-reconstructing the simulation graph.
+reconstructing the simulation graph. `atmosphere_step` is the positive,
+finite elapsed model time in seconds advanced by each sensing cycle; detector
+exposure durations remain owned by their detector acquisition contracts.
 """
 mutable struct ClosedLoopRuntime{
     SIM<:AOSimulation,
@@ -271,6 +280,7 @@ mutable struct ClosedLoopRuntime{
     dm_delay::DD
     command_layout::CL
     science_path::SP
+    atmosphere_step::T
     control_sign::T
     science_zero_padding::Int
     prepared::Bool

@@ -13,6 +13,17 @@ AdaptiveOpticsSim.jl. Scientific term definitions follow the
 - `MetricCoordinates()` declares plane sampling and origin in metres.
 - `AngularCoordinates()` declares plane sampling and origin in radians.
 - Source `photon_irradiance` is in photons·s⁻¹·m⁻².
+- Atmosphere model time, `atmosphere_step`, and detector exposure durations are
+  in seconds; they are independent quantities owned by their respective model,
+  runtime, and acquisition contracts.
+- `PhotonRateNormalization()` with `SpatialDensityMeasure()` is a photon rate
+  per unit area of the declared coordinate domain. With metric coordinates it
+  is photons·s⁻¹·m⁻².
+- `PhotonRateNormalization()` with `CellIntegratedMeasure()` is photons·s⁻¹
+  per represented cell. `PointSampledMeasure()` includes no cell area and is
+  not directly detector-integrable.
+- `DimensionlessNormalization()` and `NormalizedTestSource()` do not claim a
+  physical photon rate without an explicit prepared conversion.
 - Pure internal angles and rotations are in radians.
 - Human-facing angular API inputs may remain in convenient units such as:
   - degrees for orientation-like quantities,

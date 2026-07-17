@@ -18,6 +18,14 @@ export AO188SimulationParams, AO188CurvatureSimulationParams
 export AO188Simulation, subaru_ao188_simulation, subaru_ao188_curvature_simulation
 export subaru_ao188_phase_timing, prepare_replay!, ao188_readout
 
+@inline function validated_ao188_duration(value::Real,
+    ::Type{T}, name::AbstractString) where {T<:AbstractFloat}
+    converted = T(value)
+    isfinite(converted) && converted > zero(T) || throw(
+        InvalidConfiguration("$(name) must convert to a finite value > 0"))
+    return converted
+end
+
 abstract type AO188ActuatorSupportModel end
 struct CircularActuatorSupport <: AO188ActuatorSupportModel end
 
@@ -57,8 +65,10 @@ end
 function AO188CurvatureSimulationParams(; kwargs...)
     nt = (; kwargs...)
     T0 = get(nt, :T, Float32)
-    sampling = get(nt, :sampling_time, 1e-3)
-    high_detector = get(nt, :high_detector, AO188APDDetectorConfig(T=T0, integration_time=sampling))
+    atmosphere_step = get(nt, :atmosphere_step, 1e-3)
+    high_detector_exposure = get(nt, :high_detector_exposure, atmosphere_step)
+    high_detector = get(nt, :high_detector,
+        AO188APDDetectorConfig(T=T0, integration_time=high_detector_exposure))
     rest = Base.structdiff(nt, (; high_order_sensor_model=nothing, source_band=nothing, high_detector=nothing))
     return AO188SimulationParams(; source_band=:I, high_order_sensor_model=AO188CurvatureModel(T=T0),
         high_detector=high_detector, rest...)
@@ -136,8 +146,10 @@ function AO188WFSDetectorConfig(;
     correction_model::FrameReadoutCorrectionModel=NullFrameReadoutCorrection(),
     thermal_model::Union{Nothing,AbstractDetectorThermalModel}=nothing,
 )
+    integration_time_t = validated_ao188_duration(integration_time, T,
+        "detector integration_time")
     return AO188WFSDetectorConfig{T,typeof(convert_noise(noise, T)),typeof(sensor),typeof(response_model),typeof(correction_model),typeof(thermal_model)}(
-        T(integration_time),
+        integration_time_t,
         T(qe),
         psf_sampling,
         binning,
@@ -175,8 +187,10 @@ function AO188APDDetectorConfig(;
     channel_gain_map=nothing,
     thermal_model::Union{Nothing,AbstractDetectorThermalModel}=nothing,
 )
+    integration_time_t = validated_ao188_duration(integration_time, T,
+        "APD integration_time")
     return AO188APDDetectorConfig{T,typeof(convert_noise(noise, T)),typeof(dead_time_model),typeof(channel_gain_map),typeof(thermal_model)}(
-        T(integration_time),
+        integration_time_t,
         T(qe),
         T(gain),
         T(dark_count_rate),
@@ -241,7 +255,7 @@ struct AO188SimulationParams{
     L,
 }
     diameter::T
-    sampling_time::T
+    atmosphere_step::T
     central_obstruction::T
     resolution::Int
     n_act::Int
@@ -274,7 +288,9 @@ end
 function AO188SimulationParams(;
     T::Type{<:AbstractFloat}=Float32,
     diameter::Real=8.2,
-    sampling_time::Real=1e-3,
+    atmosphere_step::Real=1e-3,
+    high_detector_exposure::Real=atmosphere_step,
+    low_detector_exposure::Real=atmosphere_step,
     central_obstruction::Real=0.30,
     resolution::Int=112,
     n_act::Int=64,
@@ -302,7 +318,7 @@ function AO188SimulationParams(;
     latency::AO188LatencyModel=AO188LatencyModel(),
     high_detector::Union{Nothing,AO188DetectorConfig}=AO188WFSDetectorConfig(
         T=T,
-        integration_time=sampling_time,
+        integration_time=high_detector_exposure,
         qe=0.9,
         psf_sampling=1,
         binning=1,
@@ -313,7 +329,7 @@ function AO188SimulationParams(;
     ),
     low_detector::AO188WFSDetectorConfig=AO188WFSDetectorConfig(
         T=T,
-        integration_time=sampling_time,
+        integration_time=low_detector_exposure,
         qe=0.95,
         psf_sampling=1,
         binning=1,
@@ -323,13 +339,19 @@ function AO188SimulationParams(;
         sensor=CCDSensor(),
     ),
 )
+    atmosphere_step_t = validated_ao188_duration(atmosphere_step, T,
+        "atmosphere_step")
+    validated_ao188_duration(high_detector_exposure, T,
+        "high_detector_exposure")
+    validated_ao188_duration(low_detector_exposure, T,
+        "low_detector_exposure")
     resolved_low_order_resolution = isnothing(low_order_resolution) ?
         default_ao188_low_order_resolution(resolution, low_order_lenslets) :
         low_order_resolution
 
     return AO188SimulationParams{T,typeof(profile),typeof(support_model),typeof(high_order_sensor_model),typeof(branch_execution),typeof(replay_mode),typeof(high_detector),typeof(low_detector)}(
         T(diameter),
-        T(sampling_time),
+        atmosphere_step_t,
         T(central_obstruction),
         resolution,
         n_act,
@@ -560,7 +582,6 @@ function _ao188_calibration_objects(params::AO188SimulationParams{T}) where {T<:
     tel = Telescope(
         resolution=params.resolution,
         diameter=params.diameter,
-        sampling_time=params.sampling_time,
         central_obstruction=params.central_obstruction,
         T=T,
         backend=CPUBackend(),
@@ -568,7 +589,6 @@ function _ao188_calibration_objects(params::AO188SimulationParams{T}) where {T<:
     low_tel = Telescope(
         resolution=params.low_order_resolution,
         diameter=params.diameter,
-        sampling_time=params.sampling_time,
         central_obstruction=params.central_obstruction,
         T=T,
         backend=CPUBackend(),
@@ -664,7 +684,6 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
     tel = Telescope(
         resolution=params.resolution,
         diameter=params.diameter,
-        sampling_time=params.sampling_time,
         central_obstruction=params.central_obstruction,
         T=T,
         backend=backend,
@@ -672,7 +691,6 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
     low_tel = Telescope(
         resolution=params.low_order_resolution,
         diameter=params.diameter,
-        sampling_time=params.sampling_time,
         central_obstruction=params.central_obstruction,
         T=T,
         backend=backend,
@@ -775,7 +793,7 @@ function subaru_ao188_curvature_simulation(; params::AO188SimulationParams=AO188
 end
 
 @inline function _advance_and_render_atmosphere!(surrogate::AO188Simulation)
-    epoch = advance_by!(surrogate.atm, surrogate.tel.params.sampling_time,
+    epoch = advance_by!(surrogate.atm, surrogate.params.atmosphere_step,
         surrogate.rng)
     AdaptiveOpticsSim.render_atmosphere_opd!(surrogate.tel.state.opd,
         surrogate.atmosphere_renderer, surrogate.atm, epoch)

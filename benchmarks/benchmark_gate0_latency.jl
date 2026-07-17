@@ -51,7 +51,7 @@ function make_gate0_card(raw::AbstractDict)
     operation = if kind == "electric_field"
         zero_padding = Int(raw["zero_padding"])
         tel = Telescope(resolution=resolution, diameter=8.0,
-            sampling_time=1e-3, central_obstruction=0.2)
+            central_obstruction=0.2)
         gate0_opd_ramp!(tel)
         src = Source(band=:I, magnitude=1.0)
         wavefront = PupilFunction(tel)
@@ -64,7 +64,7 @@ function make_gate0_card(raw::AbstractDict)
     elseif kind == "direct_psf"
         zero_padding = Int(raw["zero_padding"])
         tel = Telescope(resolution=resolution, diameter=8.0,
-            sampling_time=1e-3, central_obstruction=0.2)
+            central_obstruction=0.2)
         gate0_opd_ramp!(tel)
         src = Source(band=:I, magnitude=1.0)
         wavefront = PupilFunction(tel)
@@ -78,14 +78,17 @@ function make_gate0_card(raw::AbstractDict)
     elseif kind == "spatial_filter"
         zero_padding = Int(raw["zero_padding"])
         tel = Telescope(resolution=resolution, diameter=8.0,
-            sampling_time=1e-3, central_obstruction=0.0)
+            central_obstruction=0.0)
         gate0_opd_ramp!(tel)
         src = Source(band=:I, magnitude=1.0)
         spatial_filter = SpatialFilter(tel; shape=SquareFilter(),
             diameter=resolution / 3, zero_padding=zero_padding)
         wavefront = PupilFunction(tel)
         apply_opd!(wavefront, opd_map(tel))
-        field = ElectricField(wavefront, src; zero_padding=zero_padding)
+        field = ElectricField(wavefront, src; zero_padding=zero_padding,
+            normalization=DimensionlessNormalization(),
+            spatial_measure=PointSampledMeasure(),
+            coherence=CoherentFieldCombination())
         formation = prepare_pupil_field(tel, wavefront, src, field;
             center_even_grid=false, amplitude_scale=1)
         fill_electric_field!(field, wavefront, formation)
@@ -98,13 +101,13 @@ function make_gate0_card(raw::AbstractDict)
         end
     elseif kind == "atmosphere_direction"
         tel = Telescope(resolution=resolution, diameter=8.0,
-            sampling_time=1e-3, central_obstruction=0.0)
+            central_obstruction=0.0)
         atmosphere = MultiLayerAtmosphere(tel; r0=0.2, L0=25.0,
             fractional_cn2=[0.6, 0.4], wind_speed=[7.0, 13.0],
             wind_direction=[0.0, 120.0], altitude=[0.0, 6000.0])
         src = Source(band=:I, magnitude=0.0, coordinates=(3.0, 45.0))
         rng = runtime_rng(Int(raw["rng_seed"]))
-        duration = tel.params.sampling_time
+        duration = 1e-3
         renderer = prepare_atmosphere_renderer(atmosphere, tel, src)
         output = PupilFunction(tel)
         let atmosphere=atmosphere, renderer=renderer, output=output, rng=rng,
@@ -116,7 +119,7 @@ function make_gate0_card(raw::AbstractDict)
         end
     elseif kind == "shack_hartmann"
         tel = Telescope(resolution=resolution, diameter=8.0,
-            sampling_time=1e-3, central_obstruction=0.0)
+            central_obstruction=0.0)
         gate0_opd_ramp!(tel)
         src = Source(band=:I, magnitude=0.0)
         wfs = ShackHartmannWFS(tel; n_lenslets=Int(raw["n_lenslets"]),
@@ -126,7 +129,7 @@ function make_gate0_card(raw::AbstractDict)
         end
     elseif kind == "pyramid"
         tel = Telescope(resolution=resolution, diameter=8.0,
-            sampling_time=1e-3, central_obstruction=0.0)
+            central_obstruction=0.0)
         gate0_opd_ramp!(tel)
         src = Source(band=:I, magnitude=0.0)
         wfs = PyramidWFS(tel; pupil_samples=Int(raw["pupil_samples"]),
@@ -139,7 +142,7 @@ function make_gate0_card(raw::AbstractDict)
     elseif kind == "direct_science_two_detectors"
         zero_padding = Int(raw["zero_padding"])
         tel = Telescope(resolution=resolution, diameter=8.0,
-            sampling_time=1e-3, central_obstruction=0.2)
+            central_obstruction=0.2)
         gate0_opd_ramp!(tel)
         src = Source(band=:I, magnitude=1.0, coordinates=(0.08, 90.0))
         workspace = AdaptiveOpticsSim.Workspace(resolution * zero_padding;
@@ -162,7 +165,7 @@ function make_gate0_card(raw::AbstractDict)
         end
     elseif kind == "closed_loop_step"
         tel = Telescope(resolution=resolution, diameter=8.0,
-            sampling_time=1e-3, central_obstruction=0.0)
+            central_obstruction=0.0)
         src = Source(band=:I, magnitude=0.0)
         atmosphere = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
         dm = DeformableMirror(tel; n_act=Int(raw["n_actuators"]),
@@ -173,6 +176,7 @@ function make_gate0_card(raw::AbstractDict)
         interaction = interaction_matrix(dm, wfs, tel; amplitude=0.05)
         reconstructor = ModalReconstructor(interaction; gain=0.5)
         runtime = AdaptiveOpticsSim.ClosedLoopRuntime(simulation, reconstructor;
+            atmosphere_step=1e-3,
             rng=runtime_rng(Int(raw["rng_seed"])))
         let runtime=runtime
             () -> step!(runtime)

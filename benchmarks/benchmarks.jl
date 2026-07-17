@@ -3,14 +3,14 @@ using BenchmarkTools
 using Random
 
 function bench_psf()
-    tel = Telescope(resolution=64, diameter=8.0, sampling_time=1e-3, central_obstruction=0.2)
+    tel = Telescope(resolution=64, diameter=8.0, central_obstruction=0.2)
     src = Source(band=:I, magnitude=0.0)
     ws = AdaptiveOpticsSim.Workspace(128; T=Float64)
     return @benchmark compute_psf!($tel, $src; zero_padding=2, ws=$ws)
 end
 
 function bench_wfs()
-    tel = Telescope(resolution=64, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=64, diameter=8.0, central_obstruction=0.0)
     wfs = ShackHartmannWFS(tel; n_lenslets=8)
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
         tel.state.opd[i, j] = i
@@ -19,9 +19,9 @@ function bench_wfs()
 end
 
 function bench_wfs_lgs()
-    tel = Telescope(resolution=48, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=48, diameter=8.0, central_obstruction=0.0)
     wfs = ShackHartmannWFS(tel; n_lenslets=6, mode=Diffractive())
-    lgs = LGSSource(elongation_factor=1.3)
+    lgs = LGSSource(elongation_factor=1.3, photon_irradiance=1.0)
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
         tel.state.opd[i, j] = i - j
     end
@@ -29,7 +29,7 @@ function bench_wfs_lgs()
 end
 
 function bench_pyramid()
-    tel = Telescope(resolution=48, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=48, diameter=8.0, central_obstruction=0.0)
     wfs = PyramidWFS(tel; pupil_samples=6, modulation=3.0, modulation_points=4, mode=Diffractive())
     src = Source(band=:I, magnitude=0.0)
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
@@ -39,7 +39,7 @@ function bench_pyramid()
 end
 
 function bench_reconstructor()
-    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=4)
     wfs = ShackHartmannWFS(tel; n_lenslets=4)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
@@ -49,7 +49,7 @@ function bench_reconstructor()
 end
 
 function bench_reconstructor_inplace()
-    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=4)
     wfs = ShackHartmannWFS(tel; n_lenslets=4)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
@@ -61,7 +61,7 @@ end
 
 function bench_closed_loop_runtime()
     rng = runtime_rng(0)
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
@@ -69,14 +69,14 @@ function bench_closed_loop_runtime()
     sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     recon = ModalReconstructor(imat; gain=0.5)
-    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; rng=rng)
+    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=rng)
     step!(runtime)
     return @benchmark step!($runtime)
 end
 
 function bench_closed_loop_runtime_timing()
     rng = runtime_rng(0)
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
@@ -84,12 +84,12 @@ function bench_closed_loop_runtime_timing()
     sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     recon = ModalReconstructor(imat; gain=0.5)
-    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; rng=rng)
+    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=rng)
     return runtime_timing(runtime; warmup=10, samples=200, gc_before=false)
 end
 
 function bench_lift(numerical::Bool)
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     det = Detector(noise=NoiseNone(), psf_sampling=1)
     basis = rand(16, 16, 6)
@@ -101,7 +101,7 @@ function bench_lift(numerical::Bool)
 end
 
 function bench_lift_inplace(numerical::Bool)
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     det = Detector(noise=NoiseNone(), psf_sampling=1)
     basis = rand(16, 16, 6)
@@ -115,7 +115,7 @@ function bench_lift_inplace(numerical::Bool)
 end
 
 function alloc_checks()
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     det = Detector(noise=NoiseNone(), psf_sampling=1)
     basis = rand(16, 16, 6)
@@ -133,7 +133,7 @@ function alloc_checks()
     alloc_lift_a = @allocated AdaptiveOpticsSim.lift_interaction_matrix!(H_a, lift_a, coeffs, mode_ids)
     alloc_lift_n = @allocated AdaptiveOpticsSim.lift_interaction_matrix!(H_n, lift_n, coeffs, mode_ids)
 
-    tel_r = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel_r = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel_r; n_act=4)
     wfs = ShackHartmannWFS(tel_r; n_lenslets=4)
     imat = interaction_matrix(dm, wfs, tel_r; amplitude=0.1)
@@ -144,7 +144,7 @@ function alloc_checks()
     alloc_recon = @allocated reconstruct!(out, recon, slopes)
 
     rng = runtime_rng(0)
-    tel_rt = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel_rt = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src_rt = Source(band=:I, magnitude=0.0)
     atm_rt = KolmogorovAtmosphere(tel_rt; r0=0.2, L0=25.0)
     dm_rt = DeformableMirror(tel_rt; n_act=4, influence_width=0.3)
@@ -152,7 +152,7 @@ function alloc_checks()
     sim_rt = AOSimulation(tel_rt, src_rt, atm_rt, dm_rt, wfs_rt)
     imat_rt = interaction_matrix(dm_rt, wfs_rt, tel_rt; amplitude=0.1)
     recon_rt = ModalReconstructor(imat_rt; gain=0.5)
-    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim_rt, recon_rt; rng=rng)
+    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim_rt, recon_rt; atmosphere_step=1e-3, rng=rng)
     step!(runtime)
     alloc_runtime = @allocated step!(runtime)
 

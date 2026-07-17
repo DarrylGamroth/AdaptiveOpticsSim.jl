@@ -75,16 +75,18 @@ function AdaptiveOpticsSim.compute_intensity_safe!(
     # gather kernel that is not usable on this path. Copy the dense parents
     # through the direct transfer path, then slice on the host for this
     # deliberately conservative ROCm fallback.
-    pupil_host = @view Array(AdaptiveOpticsSim.pupil_mask(tel))[xs:xe, ys:ye]
+    reflectivity_host = @view Array(AdaptiveOpticsSim.pupil_reflectivity(tel))[xs:xe, ys:ye]
     opd_host = @view Array(tel.state.opd)[xs:xe, ys:ye]
     phasor_host = Array(wfs.state.phasor)
     opd_to_cycles = T(2) / AdaptiveOpticsSim.wavelength(src)
-    amp_scale = sqrt(T(AdaptiveOpticsSim.photon_irradiance(src) * tel.params.sampling_time *
+    amp_scale = sqrt(T(AdaptiveOpticsSim.photon_irradiance(src) *
         (tel.params.diameter / tel.params.resolution)^2))
     @views @. field_host[ox+1:ox+sub, oy+1:oy+sub] =
-        amp_scale * pupil_host * cispi(opd_to_cycles * opd_host)
+        amp_scale * sqrt(reflectivity_host) * cispi(opd_to_cycles * opd_host)
     @. field_host *= phasor_host
-    intensity_host = abs2.(AbstractFFTs.fft(field_host))
+    fft_host = AbstractFFTs.fft(field_host)
+    intensity_scale = AdaptiveOpticsSim.sh_fft_intensity_scale(T, size(field_host, 1))
+    intensity_host = @. abs2(fft_host) * intensity_scale
     copyto!(wfs.state.intensity, intensity_host)
     AMDGPU.synchronize()
     return wfs.state.intensity

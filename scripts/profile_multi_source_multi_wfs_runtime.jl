@@ -128,8 +128,7 @@ end
 
 function _build_runtime_branch(::Type{T}, backend_selector, resolution::Int, wfs_samples::Int, n_act::Int,
     seed::Integer; sensor::Symbol=:sh) where {T<:AbstractFloat}
-    tel = Telescope(resolution=resolution, diameter=T(8.0), sampling_time=T(1e-3),
-        central_obstruction=T(0.0), T=T, backend=backend_selector)
+    tel = Telescope(resolution=resolution, diameter=T(8.0), central_obstruction=T(0.0), T=T, backend=backend_selector)
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = KolmogorovAtmosphere(tel; r0=T(0.2), L0=T(25.0), T=T, backend=backend_selector)
     dm = DeformableMirror(tel; n_act=n_act, influence_width=T(0.3), T=T, backend=backend_selector)
@@ -156,8 +155,7 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     resolved_samples = something(samples, cfg.samples)
     resolved_warmup = something(warmup, cfg.warmup)
 
-    tel = Telescope(resolution=cfg.asterism_resolution, diameter=T(8.0), sampling_time=T(1e-3),
-        central_obstruction=T(0.0), T=T, backend=backend_selector)
+    tel = Telescope(resolution=cfg.asterism_resolution, diameter=T(8.0), central_obstruction=T(0.0), T=T, backend=backend_selector)
     ast = Asterism(_source_list(cfg.source_coords, T))
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend_selector)
 
@@ -193,11 +191,13 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     )
     compatible_cfg = GroupedControlLoopConfig(
         Tuple(map(branch -> branch.label, compatible_branches));
+        atmosphere_step=1e-3,
         name=:compatible_grouped_runtime,
         outputs=GroupedRuntimeOutputRequirements(wfs_frames=true, science_frames=false, wfs_stack=true, science_stack=false),
     )
     mixed_cfg = GroupedControlLoopConfig(
         Tuple(map(branch -> branch.label, mixed_branches));
+        atmosphere_step=1e-3,
         name=:mixed_grouped_runtime,
         outputs=GroupedRuntimeOutputRequirements(wfs_frames=true, science_frames=false, wfs_stack=false, science_stack=false),
     )

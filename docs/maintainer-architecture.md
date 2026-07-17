@@ -74,11 +74,15 @@ The dominant pattern is:
 Examples:
 
 - `Telescope` with immutable `TelescopeParams`, prepared `TelescopeAperture`,
-  and transitional `LegacyTelescopePathState`
+  and transitional `LegacyTelescopePathState`; telescope parameters contain
+  spatial geometry but no cadence or exposure duration
 - caller-owned `PupilFunction`, `ElectricField`, and `IntensityMap`
-  products with immutable `OpticalPlaneMetadata`
+  products with immutable `OpticalPlaneMetadata`, including normalization,
+  spatial-measure, and coherent/incoherent combination policy
 - `ShackHartmannWFS` with `ShackHartmannWFSParams` and `ShackHartmannWFSState`
 - `Detector` with `DetectorParams` and `DetectorState`
+- `DetectorAcquisitionPlan` as the cold-path compatibility and buffer contract
+  between one frame detector and one immutable intensity-map description
 - `ClosedLoopRuntime` with runtime profile, output plan, and prepared state
 
 This gives:
@@ -108,9 +112,10 @@ Timed atmosphere models have one evolution writer. Evolution publishes an
 immutable `AtmosphereEpoch`; prepared, path-local renderers consume only the
 current epoch and write caller-owned products. Atmosphere state therefore owns
 physical layers and timeline state, not a shared pupil-sized render target or a
-mutable last-source geometry cache. Telescope sampling time is never read by
-the timed atmosphere API; the current closed-loop adapter chooses an elapsed
-duration until the HIL scheduler owns that policy.
+mutable last-source geometry cache. The timed atmosphere API reads no telescope
+timing value. `ClosedLoopRuntime` and the single/grouped scenario
+configurations instead require an explicit positive `atmosphere_step` for each
+sensing update; that duration is independent of detector exposure.
 
 ### 2. Shared subsystem services
 
@@ -118,6 +123,7 @@ Examples:
 
 - detector pipeline helpers
 - grouped WFS execution helpers
+- prepared compatible-intensity accumulation and typed detector acquisition
 - runtime output planning
 - propagation contexts
 - backend reductions and random/noise services
@@ -153,6 +159,10 @@ The current runtime model is:
   source-specific arms own their WFS and science consumers
 - WFS and detector pipelines own their sampled/readout/intermediate products
   explicitly rather than relying on in-place aliasing
+- optical formation produces photon-arrival rates or explicitly dimensionless
+  products; prepared detector acquisition validates the metadata, applies
+  presampling response before physical-pixel integration, and integrates its
+  explicit exposure exactly once
 
 For the step-by-step view, see [`runtime-dataflow.md`](runtime-dataflow.md).
 

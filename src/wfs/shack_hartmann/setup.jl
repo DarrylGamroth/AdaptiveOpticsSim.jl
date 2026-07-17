@@ -275,6 +275,40 @@ sensing_mode(::ShackHartmannWFS{M}) where {M} = M()
 @inline slope_extraction_model(wfs::ShackHartmannWFS) = slope_extraction_model(subaperture_calibration(wfs))
 @inline centroid_threshold(wfs::ShackHartmannWFS) = slope_extraction_model(wfs).threshold
 
+@inline function sh_common_spectral_grid_wavelength(
+    wfs::ShackHartmannWFS, src::SpectralSource)
+    T = eltype(wfs.state.slopes)
+    samples = spectral_bundle(src).samples
+    isempty(samples) && return (false, zero(T))
+    wavelength_ref = T(first(samples).wavelength)
+    isfinite(wavelength_ref) && wavelength_ref > zero(T) ||
+        return (false, wavelength_ref)
+    @inbounds for i in 2:length(samples)
+        wavelength_i = T(samples[i].wavelength)
+        if !isfinite(wavelength_i) || wavelength_i <= zero(T) ||
+                wavelength_i != wavelength_ref
+            return (false, wavelength_ref)
+        end
+    end
+    return (true, wavelength_ref)
+end
+
+@inline function sh_has_common_spectral_grid(
+    wfs::ShackHartmannWFS, src::SpectralSource)
+    compatible, _ = sh_common_spectral_grid_wavelength(wfs, src)
+    return compatible
+end
+
+function require_sh_common_spectral_grid(
+    wfs::ShackHartmannWFS, src::SpectralSource)
+    compatible, wavelength_ref = sh_common_spectral_grid_wavelength(wfs, src)
+    compatible || throw(InvalidConfiguration(
+        "diffractive ShackHartmannWFS spectral samples must share one " *
+        "finite, positive wavelength on the WFS numerical grid; distinct " *
+        "wavelengths require an explicit native-to-detector sampling map"))
+    return wavelength_ref
+end
+
 abstract type AbstractShackHartmannWFSSensingPlan end
 struct ShackHartmannWFSScalarPlan <: AbstractShackHartmannWFSSensingPlan end
 struct ShackHartmannWFSBatchedPlan <: AbstractShackHartmannWFSSensingPlan end
@@ -423,21 +457,36 @@ This chooses the effective FFT padding, detector binning, and cropped spot size
 so that the propagated spot grid is consistent with the requested angular pixel
 scale. The result is cached in the WFS state and reused across measurements.
 """
-@inline function sh_pixel_scale_init(d_subap::Real, padding::Int, src::AbstractSource)
-    return lgs_pixel_scale(d_subap, padding, wavelength(src))
-end
+@inline sh_pixel_scale_init(d_subap::Real, padding::Int,
+    wavelength_m::Real) = lgs_pixel_scale(d_subap, padding, wavelength_m)
+
+@inline sh_pixel_scale_init(d_subap::Real, padding::Int,
+    src::AbstractSource) = sh_pixel_scale_init(d_subap, padding,
+    wavelength(src))
 
 function prepare_sampling!(wfs::ShackHartmannWFS, tel::Telescope, src::AbstractSource)
+    return prepare_sampling_wavelength!(wfs, tel, wavelength(src))
+end
+
+function prepare_sampling!(wfs::ShackHartmannWFS, tel::Telescope,
+    src::SpectralSource)
+    wavelength_ref = require_sh_common_spectral_grid(wfs, src)
+    return prepare_sampling_wavelength!(wfs, tel, wavelength_ref)
+end
+
+function prepare_sampling_wavelength!(wfs::ShackHartmannWFS,
+    tel::Telescope, wavelength_m::Real)
     sub = div(tel.params.resolution, wfs.params.n_lenslets)
     padding = wfs.params.diffraction_padding
     pixel_scale_req = wfs.params.pixel_scale
     d_subap = tel.params.diameter / wfs.params.n_lenslets
-    pixel_scale_init = sh_pixel_scale_init(d_subap, padding, src)
+    pixel_scale_init = sh_pixel_scale_init(d_subap, padding, wavelength_m)
 
     if pixel_scale_req !== nothing
         while pixel_scale_req / pixel_scale_init < 0.95
             padding += 1
-            pixel_scale_init = sh_pixel_scale_init(d_subap, padding, src)
+            pixel_scale_init = sh_pixel_scale_init(d_subap, padding,
+                wavelength_m)
         end
     end
 
@@ -454,7 +503,8 @@ function prepare_sampling!(wfs::ShackHartmannWFS, tel::Telescope, src::AbstractS
     while pad % binning_pixel_scale != 0
         padding += 1
         pad = sub * padding
-        pixel_scale_init = sh_pixel_scale_init(d_subap, padding, src)
+        pixel_scale_init = sh_pixel_scale_init(d_subap, padding,
+            wavelength_m)
         if pixel_scale_req !== nothing
             factor = pixel_scale_req / pixel_scale_init
             lower = max(1, floor(Int, factor))
@@ -510,9 +560,11 @@ end
     return wfs.state.spot_cube
 end
 
-@inline function capture_sampled_spot_stack!(wfs::ShackHartmannWFS, det::AbstractDetector, rng::AbstractRNG)
+@inline function capture_sampled_spot_stack!(wfs::ShackHartmannWFS,
+    src::AbstractSource, det::AbstractDetector, rng::AbstractRNG)
     copyto!(wfs.state.spot_cube, wfs.state.sampled_spot_cube)
-    capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube, rng)
+    capture_stack!(det, wfs.state.spot_cube, wfs.state.detector_noise_cube,
+        src, rng)
     return wfs.state.spot_cube
 end
 

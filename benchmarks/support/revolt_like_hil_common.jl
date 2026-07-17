@@ -148,7 +148,6 @@ function build_revolt_like_hil_context(; backend_name::AbstractString="cpu", con
     tel = Telescope(
         resolution=resolution,
         diameter=8.0,
-        sampling_time=1e-3,
         central_obstruction=0.0,
         T=T,
         backend=backend_cfg.selector,

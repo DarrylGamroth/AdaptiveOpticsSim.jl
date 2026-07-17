@@ -1,5 +1,5 @@
 @testset "OOPAO parity knobs" begin
-    tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
         tel.state.opd[i, j] = i + j / 10
@@ -38,6 +38,97 @@
     @test length(bio_gray_slopes) == 2 * 4 * 4
     @test all(isfinite, bio_gray_slopes)
 end
+
+@testset "WFS asterism calibration and pupil-image geometry" begin
+    tel = Telescope(resolution=20, diameter=8.0,
+        central_obstruction=0.0)
+
+    @test_throws InvalidConfiguration PyramidWFS(tel;
+        pupil_samples=5, binning=2, mode=Diffractive())
+    @test_throws InvalidConfiguration BioEdgeWFS(tel;
+        pupil_samples=5, binning=2, mode=Diffractive())
+    @test_throws InvalidConfiguration PyramidWFS(tel;
+        pupil_samples=0, mode=Diffractive())
+    @test_throws InvalidConfiguration BioEdgeWFS(tel;
+        pupil_samples=0, mode=Diffractive())
+
+    pyramid = PyramidWFS(tel; pupil_samples=4,
+        diffraction_padding=3, mode=Diffractive())
+    AdaptiveOpticsSim.prepare_pyramid_sampling!(pyramid, tel)
+    @test_throws InvalidConfiguration begin
+        AdaptiveOpticsSim.resize_pyramid_signal_buffers!(pyramid, 3)
+    end
+    @test_throws DimensionMismatchError begin
+        AdaptiveOpticsSim.pyramid_signal!(pyramid, tel, zeros(8, 6))
+    end
+
+    bioedge = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+    @test_throws InvalidConfiguration begin
+        AdaptiveOpticsSim.resize_bioedge_signal_buffers!(bioedge, 7, 1)
+    end
+    @test_throws DimensionMismatchError begin
+        AdaptiveOpticsSim.bioedge_signal!(bioedge, tel, zeros(8, 6))
+    end
+
+    compact_bioedge = BioEdgeWFS(tel; pupil_samples=2,
+        mode=Diffractive())
+    compact_bioedge.state.nominal_detector_resolution = 4
+    AdaptiveOpticsSim.resize_bioedge_signal_buffers!(compact_bioedge, 4)
+    fill!(compact_bioedge.state.valid_i4q, true)
+    AdaptiveOpticsSim.update_bioedge_valid_signal!(compact_bioedge)
+    AdaptiveOpticsSim.update_bioedge_valid_signal_indices!(compact_bioedge)
+    AdaptiveOpticsSim.resize_bioedge_slope_buffers!(compact_bioedge)
+    fill!(compact_bioedge.state.reference_signal_2d, 0.0)
+    compact_frame = [4.0 4.0 1.0 1.0;
+                     4.0 4.0 1.0 1.0;
+                     3.0 3.0 2.0 2.0;
+                     3.0 3.0 2.0 2.0]
+    compact_slopes = copy(AdaptiveOpticsSim.bioedge_signal!(
+        compact_bioedge, tel, compact_frame))
+
+    padded_bioedge = BioEdgeWFS(tel; pupil_samples=2,
+        mode=Diffractive())
+    padded_bioedge.state.nominal_detector_resolution = 4
+    AdaptiveOpticsSim.resize_bioedge_signal_buffers!(padded_bioedge, 8)
+    fill!(padded_bioedge.state.valid_i4q, true)
+    AdaptiveOpticsSim.update_bioedge_valid_signal!(padded_bioedge)
+    AdaptiveOpticsSim.update_bioedge_valid_signal_indices!(padded_bioedge)
+    AdaptiveOpticsSim.resize_bioedge_slope_buffers!(padded_bioedge)
+    fill!(padded_bioedge.state.reference_signal_2d, 0.0)
+    padded_frame = zeros(8, 8)
+    @views padded_frame[3:6, 3:6] .= compact_frame
+    @test AdaptiveOpticsSim.bioedge_signal!(padded_bioedge, tel,
+        padded_frame) ≈ compact_slopes
+
+    ngs = Source(wavelength=589e-9, photon_irradiance=1.0)
+    lgs = LGSSource(wavelength=589e-9, elongation_factor=1.4,
+        photon_irradiance=1.0)
+    heterogeneous = Asterism(AdaptiveOpticsSim.AbstractSource[ngs, lgs])
+    detector = Detector(noise=NoiseNone(), integration_time=1.0,
+        qe=1.0, binning=1)
+    sensors = (
+        ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive()),
+        PyramidWFS(tel; pupil_samples=4, mode=Diffractive()),
+        BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive()),
+    )
+    for wfs in sensors
+        @test_throws InvalidConfiguration measure!(wfs, tel,
+            heterogeneous)
+        @test_throws InvalidConfiguration measure!(wfs, tel,
+            heterogeneous, detector)
+        @test !wfs.state.calibrated
+    end
+
+    common_lgs = Asterism([
+        LGSSource(wavelength=589e-9, elongation_factor=1.4,
+            coordinates=(0.0, 0.0), photon_irradiance=1.0),
+        LGSSource(wavelength=589e-9, elongation_factor=1.4,
+            coordinates=(3.0, 90.0), photon_irradiance=2.0),
+    ])
+    @test AdaptiveOpticsSim.common_wfs_calibration_source(
+        common_lgs, "test WFS") === first(common_lgs.sources)
+end
+
 @testset "Control matrix and modal basis" begin
     D = rand(4, 3)
     control_matrix = ControlMatrix(D)
@@ -85,7 +176,7 @@ end
         sum(length,
             AdaptiveOpticsSim.runtime_reconstructor_storage(recon_factorized))
 
-    tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     basis = modal_basis(dm, tel; n_modes=2)
     @test size(basis.M2C, 2) == 2
@@ -104,7 +195,7 @@ end
 end
 
 @testset "OPD maps and NCPA" begin
-    tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     map = OPDMap(fill(1.0, 8, 8))
@@ -129,11 +220,14 @@ end
 end
 
 @testset "Spatial filter" begin
-    tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     sf = SpatialFilter(tel; shape=CircularFilter(), diameter=4, zero_padding=2)
     wavefront = PupilFunction(tel)
-    field = ElectricField(wavefront, src; zero_padding=2)
+    field = ElectricField(wavefront, src; zero_padding=2,
+        normalization=DimensionlessNormalization(),
+        spatial_measure=PointSampledMeasure(),
+        coherence=CoherentFieldCombination())
     formation = prepare_pupil_field(tel, wavefront, src, field;
         center_even_grid=false, amplitude_scale=1)
     fill_electric_field!(field, wavefront, formation)
@@ -182,7 +276,7 @@ end
 end
 
 @testset "LiFT" begin
-    tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     det = Detector(noise=NoiseNone(), psf_sampling=1)
     basis = rand(8, 8, 3)
@@ -257,7 +351,7 @@ end
 end
 
 @testset "Phase statistics" begin
-    tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     rho = [0.0, 1e-6, 0.1, 1.0]
     cov = phase_covariance(rho, atm)
@@ -279,7 +373,7 @@ end
     ensure_psd!(atm, delta)
     runtime_screen_rng = MersenneTwister(7)
     helper_screen_rng = MersenneTwister(7)
-    advance_by!(atm, tel.params.sampling_time; rng=runtime_screen_rng)
+    advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=runtime_screen_rng)
     helper_screen, helper_psd = ft_phase_screen(atm, tel.params.resolution, delta; rng=helper_screen_rng, return_psd=true)
     @test helper_screen ≈ atm.state.opd
     @test helper_psd ≈ atm.state.psd
@@ -297,7 +391,7 @@ end
 end
 
 @testset "Mis-registration identification" begin
-    tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     wfs = ShackHartmannWFS(tel; n_lenslets=2)
     basis = modal_basis(dm, tel; n_modes=2)
@@ -329,7 +423,7 @@ end
 end
 
 @testset "Interface conformance" begin
-    tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     lgs = LGSSource()
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
@@ -351,12 +445,14 @@ end
         factorized,
         DiscreteIntegratorController(length(dm.state.coefs);
             gain=0.1, tau=0.02);
-        dt=tel.params.sampling_time,
+        dt=TEST_ATMOSPHERE_STEP,
     )
     sim = AOSimulation(tel, src, atm, dm, wfs)
-    runtime = ClosedLoopRuntime(sim, modal; rng=MersenneTwister(9))
+    runtime = ClosedLoopRuntime(sim, modal; atmosphere_step=1e-3, rng=MersenneTwister(9))
     wfs_diffractive = ShackHartmannWFS(tel; n_lenslets=2, mode=Diffractive())
     poly = with_spectrum(src, SpectralBundle([wavelength(src), 1.1 * wavelength(src)], [0.7, 0.3]))
+    poly_common = with_spectrum(src, SpectralBundle(
+        fill(wavelength(src), 2), [0.7, 0.3]))
     pyr = PyramidWFS(tel; pupil_samples=2, mode=Diffractive())
     bio = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
     zwfs = ZernikeWFS(tel; pupil_samples=2)
@@ -471,6 +567,8 @@ end
     @test AdaptiveOpticsSim.simulation_interface(iface) === iface
     @test !supports_prepared_runtime(wfs, src)
     @test supports_prepared_runtime(wfs_diffractive, src)
+    @test !supports_prepared_runtime(wfs_diffractive, poly)
+    @test supports_prepared_runtime(wfs_diffractive, poly_common)
     @test supports_prepared_runtime(wfs_diffractive, ast)
     @test supports_prepared_runtime(zwfs, src)
     @test supports_prepared_runtime(curv, src)
@@ -486,9 +584,12 @@ end
     @test !supports_stacked_sources(wfs, src)
     @test supports_stacked_sources(wfs, ast)
     @test supports_stacked_sources(wfs_diffractive, ast)
+    @test !supports_stacked_sources(wfs_diffractive, poly)
+    @test supports_stacked_sources(wfs_diffractive, poly_common)
     @test !supports_grouped_execution(wfs_diffractive, src)
     @test supports_grouped_execution(wfs_diffractive, ast)
-    @test supports_grouped_execution(wfs_diffractive, poly)
+    @test !supports_grouped_execution(wfs_diffractive, poly)
+    @test supports_grouped_execution(wfs_diffractive, poly_common)
     @test supports_grouped_execution(pyr, ast)
     @test supports_grouped_execution(pyr, poly)
     @test supports_grouped_execution(bio, ast)
@@ -501,7 +602,7 @@ end
 end
 
 @testset "Calibration workflow contracts" begin
-    tel = Telescope(resolution=8, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+    tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)

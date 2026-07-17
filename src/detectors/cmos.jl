@@ -7,7 +7,8 @@ struct NullCMOSReadNoise <: AbstractCMOSReadNoiseModel end
 struct CMOSReadNoiseMap{T<:AbstractFloat,A<:AbstractMatrix{T}} <:
     AbstractCMOSReadNoiseModel
     sigma::A
-    function CMOSReadNoiseMap{T,A}(sigma::A) where
+    function CMOSReadNoiseMap{T,A}(::OwnedDetectorParameterToken,
+        sigma::A) where
         {T<:AbstractFloat,A<:AbstractMatrix{T}}
         host_sigma = Array(sigma)
         isempty(host_sigma) && throw(InvalidConfiguration(
@@ -18,6 +19,13 @@ struct CMOSReadNoiseMap{T<:AbstractFloat,A<:AbstractMatrix{T}} <:
             "CMOSReadNoiseMap sigma values must be finite"))
         return new{T,A}(sigma)
     end
+
+    function CMOSReadNoiseMap{T,A}(sigma::A) where
+        {T<:AbstractFloat,A<:AbstractMatrix{T}}
+        owned = copy(sigma)
+        return CMOSReadNoiseMap{T,typeof(owned)}(
+            OWNED_DETECTOR_PARAMETER, owned)
+    end
 end
 
 function CMOSReadNoiseMap(sigma::AbstractMatrix;
@@ -25,13 +33,31 @@ function CMOSReadNoiseMap(sigma::AbstractMatrix;
     backend::AbstractArrayBackend=CPUBackend())
     converted = _to_backend_matrix(T.(Array(sigma)), backend)
     return validate_cmos_read_noise_model(
-        CMOSReadNoiseMap{T,typeof(converted)}(converted))
+        CMOSReadNoiseMap{T,typeof(converted)}(
+            OWNED_DETECTOR_PARAMETER, converted))
 end
 
 struct StaticCMOSOutputPattern{T<:AbstractFloat,V1<:AbstractVector{T},V2<:AbstractVector{T}} <: AbstractCMOSOutputModel
     output_cols::Int
     gains::V1
     offsets::V2
+    function StaticCMOSOutputPattern{T,V1,V2}(
+        ::OwnedDetectorParameterToken, output_cols::Int, gains::V1,
+        offsets::V2) where {T<:AbstractFloat,V1<:AbstractVector{T},
+        V2<:AbstractVector{T}}
+        return new{T,V1,V2}(output_cols, gains, offsets)
+    end
+
+    function StaticCMOSOutputPattern{T,V1,V2}(output_cols::Int,
+        gains::V1, offsets::V2) where {
+        T<:AbstractFloat,V1<:AbstractVector{T},V2<:AbstractVector{T}}
+        owned_gains = copy(gains)
+        owned_offsets = copy(offsets)
+        return validate_cmos_output_model(
+            StaticCMOSOutputPattern{T,typeof(owned_gains),
+                typeof(owned_offsets)}(OWNED_DETECTOR_PARAMETER,
+                output_cols, owned_gains, owned_offsets))
+    end
 end
 
 function StaticCMOSOutputPattern(output_cols::Integer, gains::AbstractVector, offsets::AbstractVector;
@@ -40,7 +66,9 @@ function StaticCMOSOutputPattern(output_cols::Integer, gains::AbstractVector, of
     backend_gains = _to_backend_vector(T.(gains), backend)
     backend_offsets = _to_backend_vector(T.(offsets), backend)
     return validate_cmos_output_model(
-        StaticCMOSOutputPattern{T,typeof(backend_gains),typeof(backend_offsets)}(Int(output_cols), backend_gains, backend_offsets))
+        StaticCMOSOutputPattern{T,typeof(backend_gains),
+            typeof(backend_offsets)}(OWNED_DETECTOR_PARAMETER,
+            Int(output_cols), backend_gains, backend_offsets))
 end
 
 @kernel function apply_cmos_output_pattern_kernel!(frame, gains, offsets, output_cols::Int, n::Int, m::Int)
@@ -87,6 +115,19 @@ function CMOSSensor(; column_readout_sigma::Real=0.0,
         validated_output, validated_timing)
 end
 
+function owned_frame_sensor(sensor::CMOSSensor, ::Type{T},
+    backend::AbstractArrayBackend) where {T<:AbstractFloat}
+    return CMOSSensor(
+        column_readout_sigma=sensor.column_readout_sigma,
+        row_readout_sigma=sensor.row_readout_sigma,
+        readout_noise_model=sensor.readout_noise_model,
+        output_model=sensor.output_model,
+        timing_model=sensor.timing_model,
+        T=T,
+        backend=backend,
+    )
+end
+
 detector_sensor_symbol(::CMOSSensor) = :cmos
 supports_column_readout_noise(::CMOSSensor) = true
 supports_detector_defect_maps(::CMOSSensor) = true
@@ -104,7 +145,8 @@ convert_cmos_read_noise_model(::NullCMOSReadNoise, ::Type{T}, backend) where {T<
 
 function convert_cmos_read_noise_model(model::CMOSReadNoiseMap, ::Type{T}, backend) where {T<:AbstractFloat}
     sigma = _to_backend_matrix(T.(Array(model.sigma)), backend)
-    return CMOSReadNoiseMap{T,typeof(sigma)}(sigma)
+    return CMOSReadNoiseMap{T,typeof(sigma)}(
+        OWNED_DETECTOR_PARAMETER, sigma)
 end
 
 validate_cmos_read_noise_model(::NullCMOSReadNoise) = NullCMOSReadNoise()
@@ -115,7 +157,8 @@ convert_cmos_output_model(::NullCMOSOutputModel, ::Type{T}, backend) where {T<:A
 function convert_cmos_output_model(model::StaticCMOSOutputPattern, ::Type{T}, backend) where {T<:AbstractFloat}
     gains = _to_backend_vector(T.(Array(model.gains)), backend)
     offsets = _to_backend_vector(T.(Array(model.offsets)), backend)
-    return StaticCMOSOutputPattern{T,typeof(gains),typeof(offsets)}(model.output_cols, gains, offsets)
+    return StaticCMOSOutputPattern{T,typeof(gains),typeof(offsets)}(
+        OWNED_DETECTOR_PARAMETER, model.output_cols, gains, offsets)
 end
 
 validate_cmos_output_model(::NullCMOSOutputModel) = NullCMOSOutputModel()

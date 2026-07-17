@@ -69,17 +69,22 @@ end
     LayeredFresnelFieldAsyncPlan()
 
 function GeometricAtmosphericPropagation(; chromatic_reference_wavelength=nothing, T::Type{<:AbstractFloat}=Float64)
-    ref = isnothing(chromatic_reference_wavelength) ? nothing : T(chromatic_reference_wavelength)
+    ref = isnothing(chromatic_reference_wavelength) ? nothing :
+        _converted_positive_finite(chromatic_reference_wavelength, T,
+            "chromatic reference wavelength")
     return GeometricAtmosphericPropagation{T}(ref)
 end
 
 function LayeredFresnelAtmosphericPropagation(; band_limit_factor::Real=1.0,
     chromatic_reference_wavelength=nothing,
     T::Type{<:AbstractFloat}=Float64)
-    zero(T) <= band_limit_factor <= one(T) ||
+    factor = T(band_limit_factor)
+    isfinite(factor) && zero(T) <= factor <= one(T) ||
         throw(InvalidConfiguration("band_limit_factor must be between 0 and 1"))
-    ref = isnothing(chromatic_reference_wavelength) ? nothing : T(chromatic_reference_wavelength)
-    return LayeredFresnelAtmosphericPropagation{T}(T(band_limit_factor), ref)
+    ref = isnothing(chromatic_reference_wavelength) ? nothing :
+        _converted_positive_finite(chromatic_reference_wavelength, T,
+            "chromatic reference wavelength")
+    return LayeredFresnelAtmosphericPropagation{T}(factor, ref)
 end
 
 @inline atmospheric_model_wavelength(model::AbstractAtmosphericFieldModel) = model.chromatic_reference_wavelength
@@ -97,13 +102,15 @@ end
 
 function _build_field_slice(atm, tel::Telescope, src::AbstractSource, zero_padding::Int,
     ::Type{T}, model::GeometricAtmosphericPropagation{T}) where {T<:AbstractFloat}
+    λ = _converted_positive_finite(wavelength(src), T,
+        "atmospheric source wavelength")
     wavefront = PupilFunction(tel; T=T)
     copyto!(wavefront.opd, opd_map(tel))
     field = ElectricField(wavefront, src; zero_padding=zero_padding, T=T)
     formation_plan = prepare_pupil_field(tel, wavefront, src, field)
     phase_buffer = similar(wavefront.opd)
     fill!(phase_buffer, zero(T))
-    contexts = _build_layer_contexts(atm, tel, src, model, wavelength(src), T)
+    contexts = _build_layer_contexts(atm, tel, src, model, λ, T)
     return AtmosphericFieldSlice{
         T,typeof(src),typeof(wavefront),typeof(field),
         typeof(formation_plan),typeof(phase_buffer),Nothing,typeof(contexts),
@@ -112,6 +119,8 @@ end
 
 function _build_field_slice(atm, tel::Telescope, src::AbstractSource, zero_padding::Int,
     ::Type{T}, model::LayeredFresnelAtmosphericPropagation{T}) where {T<:AbstractFloat}
+    λ = _converted_positive_finite(wavelength(src), T,
+        "atmospheric source wavelength")
     wavefront = PupilFunction(tel; T=T)
     copyto!(wavefront.opd, opd_map(tel))
     field = ElectricField(wavefront, src; zero_padding=zero_padding, T=T)
@@ -123,7 +132,7 @@ function _build_field_slice(atm, tel::Telescope, src::AbstractSource, zero_paddi
         dist == zero(T) ? nothing : FresnelPropagation(field;
             distance_m=dist, output_kind=field.metadata.kind)
     end
-    contexts = _build_layer_contexts(atm, tel, src, model, wavelength(src), T)
+    contexts = _build_layer_contexts(atm, tel, src, model, λ, T)
     return AtmosphericFieldSlice{
         T,typeof(src),typeof(wavefront),typeof(field),
         typeof(formation_plan),typeof(phase_buffer),typeof(propagators),
@@ -142,14 +151,29 @@ end
 function _build_slices(atm, tel::Telescope, src::SpectralSource, zero_padding::Int,
     ::Type{T}, model::AbstractAtmosphericFieldModel) where {T<:AbstractFloat}
     bundle = spectral_bundle(src)
+    total_value = _converted_nonnegative_finite(
+        source_radiometric_value(src), T,
+        "spectral source radiometric value")
     first_sample = bundle.samples[1]
-    first_src = source_with_wavelength_and_irradiance(src, first_sample.wavelength, T(photon_irradiance(src) * first_sample.weight))
+    first_wavelength = _converted_positive_finite(first_sample.wavelength,
+        T, "spectral source wavelength")
+    first_value = _converted_nonnegative_finite(
+        total_value * first_sample.weight, T,
+        "spectral source radiometric value")
+    first_src = source_with_wavelength_and_radiometric_value(src,
+        first_wavelength, first_value)
     first_slice = _build_field_slice(atm, tel, first_src, zero_padding, T, model)
     slices = Vector{typeof(first_slice)}(undef, length(bundle))
     slices[1] = first_slice
     @inbounds for i in 2:length(bundle)
         sample = bundle.samples[i]
-        sample_src = source_with_wavelength_and_irradiance(src, sample.wavelength, T(photon_irradiance(src) * sample.weight))
+        sample_wavelength = _converted_positive_finite(sample.wavelength,
+            T, "spectral source wavelength")
+        sample_value = _converted_nonnegative_finite(
+            total_value * sample.weight, T,
+            "spectral source radiometric value")
+        sample_src = source_with_wavelength_and_radiometric_value(src,
+            sample_wavelength, sample_value)
         slices[i] = _build_field_slice(atm, tel, sample_src, zero_padding, T, model)
     end
     return slices
@@ -374,7 +398,7 @@ function _spectral_atmospheric_intensity_model!(::GeometricFieldSynchronousPlan,
     plan = GeometricFieldSynchronousPlan()
     @inbounds for slice in prop.state.slices
         _propagate_slice!(plan, slice, prop, atm)
-        accumulate_intensity!(out, slice.field)
+        _accumulate_field_intensity!(out, slice.field)
     end
     return out
 end
@@ -385,7 +409,7 @@ function _spectral_atmospheric_intensity_model!(::GeometricFieldAsyncPlan, out::
     plan = GeometricFieldAsyncPlan()
     @inbounds for slice in prop.state.slices
         _propagate_slice!(plan, slice, prop, atm)
-        accumulate_intensity_async!(out, slice.field)
+        _accumulate_field_intensity_async!(out, slice.field)
     end
     return out
 end
@@ -396,7 +420,7 @@ function _spectral_atmospheric_intensity_model!(::LayeredFresnelFieldSynchronous
     plan = LayeredFresnelFieldSynchronousPlan()
     @inbounds for slice in prop.state.slices
         _propagate_slice!(plan, slice, prop, atm)
-        accumulate_intensity!(out, slice.field)
+        _accumulate_field_intensity!(out, slice.field)
     end
     return out
 end
@@ -407,7 +431,7 @@ function _spectral_atmospheric_intensity_model!(::LayeredFresnelFieldAsyncPlan, 
     plan = LayeredFresnelFieldAsyncPlan()
     @inbounds for slice in prop.state.slices
         _propagate_slice!(plan, slice, prop, atm)
-        accumulate_intensity_async!(out, slice.field)
+        _accumulate_field_intensity_async!(out, slice.field)
     end
     return out
 end

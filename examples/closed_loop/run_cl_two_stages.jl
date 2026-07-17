@@ -3,8 +3,9 @@ using Random
 using Logging
 
 rng = MersenneTwister(5)
+atmosphere_step = 1e-3
 
-tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3)
+tel = Telescope(resolution=32, diameter=8.0)
 src = Source()
 atm = MultiLayerAtmosphere(tel; r0=0.2, L0=25.0, fractional_cn2=[1.0],
     wind_speed=[7.0], wind_direction=[10.0], altitude=[0.0])
@@ -25,7 +26,7 @@ cmd_coarse = similar(dm_coarse.state.coefs)
 cmd_fine = similar(dm_fine.state.coefs)
 
 for _ in 1:5
-    epoch = advance_by!(sim.atm, sim.tel.params.sampling_time; rng=rng)
+        epoch = advance_by!(sim.atm, atmosphere_step; rng=rng)
     render_atmosphere!(atmosphere_output, atmosphere_renderer, sim.atm, epoch)
     copyto!(sim.tel.state.opd, atmosphere_output.opd)
     apply!(dm_coarse, sim.tel, DMAdditive())

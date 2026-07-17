@@ -7,12 +7,11 @@ function tutorial_rng(seed::Integer=0)
     return MersenneTwister(seed)
 end
 
-function base_telescope(; resolution::Int=32, diameter::Real=8.0, sampling_time::Real=1e-3,
+function base_telescope(; resolution::Int=32, diameter::Real=8.0,
     central_obstruction::Real=0.1, fov_arcsec::Real=0.0)
     return Telescope(
         resolution=resolution,
         diameter=diameter,
-        sampling_time=sampling_time,
         central_obstruction=central_obstruction,
         fov_arcsec=fov_arcsec,
     )
@@ -56,7 +55,9 @@ function combine_modes(basis::AbstractArray{T,3}, coeffs::AbstractVector{<:Real}
 end
 
 function run_closed_loop_example(make_wfs::Function; n_iter::Int=4, seed::Integer=0,
-    resolution::Int=16, wfs_samples::Int=4, n_act::Int=3, amplitude::Real=1e-9, gain::Real=0.4)
+    resolution::Int=16, wfs_samples::Int=4, n_act::Int=3,
+    amplitude::Real=1e-9, gain::Real=0.4,
+    atmosphere_step::Real=1e-3)
     rng = tutorial_rng(seed)
     tel = base_telescope(resolution=resolution, central_obstruction=0.0)
     src = base_source()
@@ -72,7 +73,7 @@ function run_closed_loop_example(make_wfs::Function; n_iter::Int=4, seed::Intege
     atmosphere_output = PupilFunction(tel)
 
     for k in 1:n_iter
-        epoch = advance_by!(atm, tel.params.sampling_time; rng=rng)
+        epoch = advance_by!(atm, atmosphere_step; rng=rng)
         render_atmosphere!(atmosphere_output, atmosphere_renderer, atm, epoch)
         copyto!(tel.state.opd, atmosphere_output.opd)
         residual_before[k] = pupil_rms(tel.state.opd, pupil_mask(tel))

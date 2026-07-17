@@ -21,7 +21,7 @@ Use this when you want a minimal optics-only model.
 ```julia
 using AdaptiveOpticsSim
 
-tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
+tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)
 pupil = PupilFunction(tel)
 field = ElectricField(pupil, src; zero_padding=2)
@@ -53,7 +53,7 @@ Use this when you want a single-sensor atmospheric simulation.
 ```julia
 using AdaptiveOpticsSim
 
-tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
+tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)
 atm = MultiLayerAtmosphere(
     tel;
@@ -87,7 +87,7 @@ frames.
 using AdaptiveOpticsSim
 using Random
 
-tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
+tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)
 atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
 wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
@@ -149,7 +149,7 @@ isolated subsystem calls.
 using AdaptiveOpticsSim
 using Random
 
-tel = Telescope(resolution=32, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
 src = Source(band=:I, magnitude=0.0)
 atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
@@ -161,6 +161,7 @@ recon = ModalReconstructor(imat; gain=0.5)
 branch = ControlLoopBranch(:main, sim, recon; rng=runtime_rng(0))
 
 cfg = SingleControlLoopConfig(
+    atmosphere_step=1e-3,
     name=:closed_loop_demo,
     branch_label=:main,
     outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true),
@@ -191,7 +192,7 @@ recon = FactorizedReconstructor(imat; max_rank=12, gain=1.0)
 controller = DiscreteIntegratorController(
     length(dm.state.coefs); gain=0.5, tau=0.01)
 controlled = ControlledReconstructor(
-    recon, controller; dt=tel.params.sampling_time)
+    recon, controller; dt=1e-3)
 ```
 
 `storage` may instead be a compatible memory-mapped or backend-native
@@ -222,7 +223,7 @@ and controllable optic, attach typed auxiliary arms to one primary runtime
 instead of building independent closed loops:
 
 ```julia
-primary = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; rng=runtime_rng(1))
+primary = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=runtime_rng(1))
 
 off_axis_wfs = ShackHartmannWFS(tel; n_lenslets=4)
 science_a = Detector(noise=NoiseNone())
@@ -309,7 +310,7 @@ using AdaptiveOpticsSim
 using Random
 
 # Build the physical plant.
-tel = Telescope(resolution=16, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
+tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
 src = Source(band=:I, magnitude=0.0)
 atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
@@ -334,6 +335,7 @@ branch = ControlLoopBranch(
 )
 
 cfg = SingleControlLoopConfig(
+    atmosphere_step=1e-3,
     name=:single_runtime_demo,
     branch_label=:main,
     outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=true),
@@ -514,7 +516,6 @@ const GPU = AMDGPUBackend()
 tel = Telescope(
     resolution=16,
     diameter=8.0f0,
-    sampling_time=1f-3,
     central_obstruction=0.0f0,
     T=Float32,
     backend=GPU,
@@ -541,6 +542,7 @@ branch = ControlLoopBranch(
     rng=runtime_rng(1),
 )
 cfg = SingleControlLoopConfig(
+    atmosphere_step=1e-3,
     name=:hil_gpu,
     branch_label=:main,
     outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=true),
@@ -576,8 +578,9 @@ science_host = Array(science_img)
 
 Notes:
 
-- The in-tree CUDA selector and extension are retained, but CUDA is currently
-  unverified because no CUDA validation device is available.
+- The CUDA selector and extension have current manual hardware validation on
+  the WSL RTX host. CUDA is not yet release-gated because a continuously
+  available CUDA CI runner has not been established.
 - Keep `backend=GPU` on the long-lived plant objects so runtime buffers stay on
   device.
 - If you need a GPU-built internal reconstructor as well, build that
@@ -600,7 +603,7 @@ Use this only when you are manually assembling or testing a single runtime and
 do not need the full scenario/config layer.
 
 ```julia
-runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; rng=runtime_rng(0))
+runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=runtime_rng(0))
 interface = AdaptiveOpticsSim.simulation_interface(runtime)
 prepare!(interface)
 step!(interface)
@@ -624,7 +627,7 @@ using Proper
 using Random
 
 # Build the AO / HIL plant exactly as usual.
-tel = Telescope(resolution=256, diameter=8.0, sampling_time=1e-3, central_obstruction=0.1)
+tel = Telescope(resolution=256, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:H, magnitude=0.0)
 atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
 tiptilt = TipTiltMirror(tel; scale=0.05, label=:tiptilt)
@@ -634,7 +637,9 @@ wfs = PyramidWFS(tel; pupil_samples=32, modulation=3.0)
 sim = AOSimulation(tel, src, atm, optic, wfs)
 
 branch = ControlLoopBranch(:main, sim, NullReconstructor(); rng=runtime_rng(1))
-cfg = SingleControlLoopConfig(name=:hil_coronagraph, branch_label=:main, outputs=RuntimeOutputRequirements(slopes=true))
+cfg = SingleControlLoopConfig(atmosphere_step=1e-3,
+    name=:hil_coronagraph, branch_label=:main,
+    outputs=RuntimeOutputRequirements(slopes=true))
 scenario = build_control_loop_scenario(cfg, branch)
 prepare!(scenario)
 

@@ -37,12 +37,16 @@ end
 abstract type AbstractSpectralCoordinate end
 struct UnspecifiedSpectralCoordinate <: AbstractSpectralCoordinate end
 
+"""The product is explicitly independent of wavelength."""
+struct AchromaticSpectralCoordinate <: AbstractSpectralCoordinate end
+
 struct MonochromaticChannel{T<:AbstractFloat} <: AbstractSpectralCoordinate
     wavelength_m::T
 
     function MonochromaticChannel{T}(wavelength_m::T) where {T<:AbstractFloat}
-        wavelength_m > zero(T) || throw(InvalidConfiguration(
-            "optical-plane wavelength must be positive"))
+        isfinite(wavelength_m) && wavelength_m > zero(T) ||
+            throw(InvalidConfiguration(
+                "optical-plane wavelength must be finite and positive"))
         return new{T}(wavelength_m)
     end
 end
@@ -50,12 +54,62 @@ end
 MonochromaticChannel(wavelength_m::T) where {T<:AbstractFloat} =
     MonochromaticChannel{T}(wavelength_m)
 
-# These markers reserve the radiometric contract fields finalized by the later
-# Gate 0 radiometry work. They prevent an implicit default from being mistaken
-# for a physical normalization, spatial measure, or coherence policy.
-struct UnspecifiedNormalization end
-struct UnspecifiedSpatialMeasure end
-struct UnspecifiedCoherence end
+"""
+    IntegratedSpectralChannel(identifier)
+
+Declare that a product has already been integrated over an application-defined
+spectral channel. Products are compatible only when their identifiers match.
+The identifier names a passband contract owned by the application; it does not
+make a wavelength-dependent detector response safe to apply after integration.
+"""
+struct IntegratedSpectralChannel <: AbstractSpectralCoordinate
+    identifier::Symbol
+
+    function IntegratedSpectralChannel(identifier::Symbol)
+        isempty(String(identifier)) && throw(InvalidConfiguration(
+            "integrated spectral-channel identifier must not be empty"))
+        return new(identifier)
+    end
+end
+
+abstract type AbstractOpticalNormalization end
+
+"""Radiometry has not been declared and cannot enter physical acquisition."""
+struct UnspecifiedNormalization <: AbstractOpticalNormalization end
+
+"""Values, or `abs2` of field values, carry physical photon-arrival rate."""
+struct PhotonRateNormalization <: AbstractOpticalNormalization end
+
+"""Values carry explicitly dimensionless relative optical power."""
+struct DimensionlessNormalization <: AbstractOpticalNormalization end
+
+abstract type AbstractSpatialMeasure end
+
+"""The spatial interpretation of each sample has not been declared."""
+struct UnspecifiedSpatialMeasure <: AbstractSpatialMeasure end
+
+"""Samples are point values and do not include a represented cell measure."""
+struct PointSampledMeasure <: AbstractSpatialMeasure end
+
+"""Each value is a density per unit area of its declared coordinate domain."""
+struct SpatialDensityMeasure <: AbstractSpatialMeasure end
+
+"""Each value is integrated over its represented spatial cell."""
+struct CellIntegratedMeasure <: AbstractSpatialMeasure end
+
+abstract type AbstractCombinationPolicy end
+
+"""The product's coherent or incoherent combination policy is undeclared."""
+struct UnspecifiedCoherence <: AbstractCombinationPolicy end
+
+"""Complex fields may be combined coherently when all field contracts match."""
+struct CoherentFieldCombination <: AbstractCombinationPolicy end
+
+"""Intensity products may be accumulated elementwise after compatibility checks."""
+struct IncoherentIntensityAddition <: AbstractCombinationPolicy end
+
+"""The product must remain separate unless an explicit mapping is prepared."""
+struct NonCombinableProduct <: AbstractCombinationPolicy end
 
 abstract type AbstractPlaneDevice end
 struct HostPlaneDevice <: AbstractPlaneDevice end
@@ -69,6 +123,18 @@ end
 @inline plane_device(storage::AbstractArray) =
     plane_device(execution_style(storage), storage)
 @inline physical_device_identifier(::AbstractArray) = nothing
+@inline physical_device_identifier(storage::SubArray) =
+    physical_device_identifier(parent(storage))
+@inline physical_device_identifier(storage::Base.ReshapedArray) =
+    physical_device_identifier(parent(storage))
+@inline physical_device_identifier(storage::Base.ReinterpretArray) =
+    physical_device_identifier(parent(storage))
+@inline physical_device_identifier(storage::PermutedDimsArray) =
+    physical_device_identifier(parent(storage))
+@inline physical_device_identifier(storage::Transpose) =
+    physical_device_identifier(parent(storage))
+@inline physical_device_identifier(storage::Adjoint) =
+    physical_device_identifier(parent(storage))
 @inline plane_device(::ScalarCPUStyle, ::AbstractArray) = HostPlaneDevice()
 @inline plane_device(style::AcceleratorStyle, storage::AbstractArray) =
     AcceleratorPlaneDevice(style.backend,
@@ -80,9 +146,9 @@ struct OpticalPlaneMetadata{
     K<:AbstractOpticalPlaneKind,
     Q<:AbstractPlaneCoordinateDomain,
     S<:AbstractSpectralCoordinate,
-    N,
-    M,
-    C,
+    N<:AbstractOpticalNormalization,
+    M<:AbstractSpatialMeasure,
+    C<:AbstractCombinationPolicy,
     B<:AbstractArrayBackend,
     D<:AbstractPlaneDevice,
 }
@@ -124,11 +190,16 @@ function OpticalPlaneMetadata(kind::AbstractOpticalPlaneKind,
     ),
     orientation::PlaneAxisOrientation=PlaneAxisOrientation(),
     spectral::AbstractSpectralCoordinate=UnspecifiedSpectralCoordinate(),
-    normalization=UnspecifiedNormalization(),
-    spatial_measure=UnspecifiedSpatialMeasure(),
-    coherence=UnspecifiedCoherence(),
+    normalization::AbstractOpticalNormalization=UnspecifiedNormalization(),
+    spatial_measure::AbstractSpatialMeasure=UnspecifiedSpatialMeasure(),
+    coherence::AbstractCombinationPolicy=UnspecifiedCoherence(),
     device::AbstractPlaneDevice=plane_device(storage),
 ) where {T<:AbstractFloat,E}
+    all(value -> isfinite(value) && value > zero(T), sampling) ||
+        throw(InvalidConfiguration(
+            "optical-plane sampling must be finite and positive"))
+    all(isfinite, origin) || throw(InvalidConfiguration(
+        "optical-plane origin must be finite"))
     selector = backend(storage)
     return OpticalPlaneMetadata{
         T,E,typeof(kind),typeof(coordinate_domain),typeof(spectral),typeof(normalization),
@@ -199,6 +270,35 @@ function require_same_plane_grid(a::OpticalPlaneMetadata,
     return nothing
 end
 
+function require_compatible_radiometry(a::OpticalPlaneMetadata,
+    b::OpticalPlaneMetadata; label::AbstractString="optical products")
+    typeof(a.normalization) === typeof(b.normalization) ||
+        throw(InvalidConfiguration(
+            "$label have incompatible radiometric normalizations"))
+    typeof(a.spatial_measure) === typeof(b.spatial_measure) ||
+        throw(InvalidConfiguration(
+            "$label have incompatible spatial measures"))
+    return nothing
+end
+
+function require_incoherent_addition(a::OpticalPlaneMetadata,
+    b::OpticalPlaneMetadata; label::AbstractString="intensity products")
+    require_same_plane_grid(a, b; label=label)
+    require_compatible_radiometry(a, b; label=label)
+    _require_incoherent_policy(a.coherence, label)
+    _require_incoherent_policy(b.coherence, label)
+    return nothing
+end
+
+@inline _require_incoherent_policy(::IncoherentIntensityAddition,
+    ::AbstractString) = nothing
+
+function _require_incoherent_policy(::AbstractCombinationPolicy,
+    label::AbstractString)
+    throw(InvalidConfiguration(
+        "$label must declare incoherent intensity addition"))
+end
+
 function require_centered_plane_geometry(metadata::OpticalPlaneMetadata;
     label::AbstractString="optical plane")
     expected_centering = (
@@ -264,7 +364,11 @@ function PupilFunction(tel::Telescope;
         T(tel.aperture.sampling_m[2]))
     origin = (T(tel.aperture.origin_m[1]), T(tel.aperture.origin_m[2]))
     metadata = OpticalPlaneMetadata(PupilPlane(), opd;
-        coordinate_domain=MetricCoordinates(), sampling=sampling, origin=origin)
+        coordinate_domain=MetricCoordinates(), sampling=sampling, origin=origin,
+        spectral=AchromaticSpectralCoordinate(),
+        normalization=DimensionlessNormalization(),
+        spatial_measure=PointSampledMeasure(),
+        coherence=CoherentFieldCombination())
     validate_plane_storage(metadata, amplitude; label="pupil amplitude")
     return PupilFunction{
         typeof(metadata),typeof(amplitude),typeof(opd),typeof(selector),
@@ -364,4 +468,118 @@ function IntensityMap(metadata::OpticalPlaneMetadata,
     selector = backend(values)
     return IntensityMap{typeof(metadata),typeof(values),typeof(selector)}(
         metadata, values)
+end
+
+
+"""
+    OpticalProductBundle(products...)
+
+Preserve prepared optical products that cannot be combined on one physical
+grid. A bundle performs no implicit resampling or radiometric conversion.
+"""
+struct OpticalProductBundle{P<:Tuple}
+    products::P
+end
+
+OpticalProductBundle(products::Vararg{AbstractOpticalProduct,N}) where {N} =
+    OpticalProductBundle{typeof(products)}(products)
+
+Base.length(bundle::OpticalProductBundle) = length(bundle.products)
+Base.getindex(bundle::OpticalProductBundle, index::Int) = bundle.products[index]
+Base.iterate(bundle::OpticalProductBundle, state...) =
+    iterate(bundle.products, state...)
+
+struct _PreparedIncoherentSumToken end
+const _PREPARED_INCOHERENT_SUM_TOKEN = _PreparedIncoherentSumToken()
+
+struct PreparedIncoherentSum{O<:OpticalPlaneMetadata,I<:Tuple}
+    output_metadata::O
+    input_metadata::I
+
+    function PreparedIncoherentSum(::_PreparedIncoherentSumToken,
+        output_metadata::O, input_metadata::I) where {
+        O<:OpticalPlaneMetadata,I<:Tuple,
+    }
+        return new{O,I}(output_metadata, input_metadata)
+    end
+end
+
+function prepare_incoherent_sum(output::IntensityMap,
+    inputs::Vararg{IntensityMap,N}) where {N}
+    N > 0 || throw(InvalidConfiguration(
+        "incoherent accumulation requires at least one input"))
+    _require_declared_intensity_spectral(output.metadata.spectral,
+        "incoherent intensity output")
+    _require_nonaliasing_intensity_inputs(output.values, inputs)
+    metadata = ntuple(index -> begin
+        input = inputs[index]
+        _require_declared_intensity_spectral(input.metadata.spectral,
+            "incoherent intensity input")
+        require_incoherent_addition(output.metadata, input.metadata;
+            label="incoherent intensity accumulation")
+        input.metadata
+    end, N)
+    return PreparedIncoherentSum(_PREPARED_INCOHERENT_SUM_TOKEN,
+        output.metadata, metadata)
+end
+
+@inline _require_declared_intensity_spectral(::MonochromaticChannel,
+    ::AbstractString) = nothing
+
+@inline _require_declared_intensity_spectral(::AchromaticSpectralCoordinate,
+    ::AbstractString) = nothing
+
+@inline _require_declared_intensity_spectral(::IntegratedSpectralChannel,
+    ::AbstractString) = nothing
+
+function _require_declared_intensity_spectral(::AbstractSpectralCoordinate,
+    label::AbstractString)
+    throw(InvalidConfiguration(
+        "$label requires an explicit achromatic, monochromatic, or integrated spectral coordinate"))
+end
+
+function accumulate_intensity!(output::IntensityMap,
+    inputs::Tuple, plan::PreparedIncoherentSum)
+    output.metadata === plan.output_metadata || throw(InvalidConfiguration(
+        "intensity output does not match its prepared accumulation plan"))
+    length(inputs) == length(plan.input_metadata) ||
+        throw(DimensionMismatchError(
+            "intensity input count does not match its prepared accumulation plan"))
+    _require_prepared_intensity_inputs(output.values, inputs,
+        plan.input_metadata)
+    fill!(output.values, zero(eltype(output.values)))
+    _accumulate_prepared_intensity!(output.values, inputs)
+    return output
+end
+
+@inline _require_nonaliasing_intensity_inputs(::AbstractArray, ::Tuple{}) =
+    nothing
+
+@inline function _require_nonaliasing_intensity_inputs(output::AbstractArray,
+    inputs::Tuple)
+    input = first(inputs)
+    Base.mightalias(output, input.values) && throw(InvalidConfiguration(
+        "incoherent intensity output must not alias an input"))
+    return _require_nonaliasing_intensity_inputs(output, Base.tail(inputs))
+end
+
+@inline _require_prepared_intensity_inputs(::AbstractArray, ::Tuple{},
+    ::Tuple{}) = nothing
+
+@inline function _require_prepared_intensity_inputs(output::AbstractArray,
+    inputs::Tuple, metadata::Tuple)
+    input = first(inputs)
+    input.metadata === first(metadata) || throw(InvalidConfiguration(
+        "intensity input does not match its prepared accumulation plan"))
+    Base.mightalias(output, input.values) && throw(InvalidConfiguration(
+        "incoherent intensity output must not alias an input"))
+    return _require_prepared_intensity_inputs(output, Base.tail(inputs),
+        Base.tail(metadata))
+end
+
+@inline _accumulate_prepared_intensity!(output, ::Tuple{}) = output
+
+@inline function _accumulate_prepared_intensity!(output, inputs::Tuple)
+    output .+= first(inputs).values
+    return _accumulate_prepared_intensity!(output, Base.tail(inputs))
 end

@@ -1,4 +1,5 @@
 function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
+    atmosphere_step::Real,
     wfs_detector=nothing, science_detector=nothing, rng=runtime_rng(),
     profile::AbstractRuntimeProfile=default_runtime_profile(),
     execution_plan::Union{AbstractRuntimeExecutionPlan,Nothing}=nothing,
@@ -11,6 +12,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
     validate_runtime_execution_plan!(resolved_execution_plan, selector, reconstructor)
     outputs.slopes || throw(InvalidConfiguration("ClosedLoopRuntime requires slope outputs for reconstruction"))
     T = eltype(command_storage(simulation.optic))
+    resolved_atmosphere_step = _validated_atmosphere_step(T, atmosphere_step)
     command = similar(command_storage(simulation.optic))
     fill!(command, zero(T))
     reconstruct_buffer = similar(command)
@@ -89,6 +91,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
         dm_delay,
         resolved_command_layout,
         resolved_science_path,
+        resolved_atmosphere_step,
         T(control_sign),
         resolved_zero_padding,
         false,
@@ -224,6 +227,7 @@ function with_reconstructor(runtime::ClosedLoopRuntime, reconstructor)
     refreshed = ClosedLoopRuntime(
         runtime.simulation,
         reconstructor;
+        atmosphere_step=runtime.atmosphere_step,
         wfs_detector=runtime.wfs_detector,
         science_detector=runtime.science_detector,
         rng=runtime.rng,

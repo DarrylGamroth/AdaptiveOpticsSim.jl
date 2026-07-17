@@ -96,7 +96,6 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     tel = Telescope(
         resolution=cfg.resolution,
         diameter=8.0,
-        sampling_time=1e-3,
         central_obstruction=0.0,
         T=T,
         backend=backend,
@@ -109,7 +108,7 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     sim = AOSimulation(tel, src, atm, dm, wfs)
     imat = interaction_matrix(dm, wfs, tel, src; amplitude=cfg.interaction_amplitude)
     recon = ModalReconstructor(imat; gain=T(0.4))
-    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; rng=rng, wfs_detector=det)
+    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=rng, wfs_detector=det)
     interface = simulation_interface(runtime)
 
     t0 = time_ns()

@@ -88,8 +88,12 @@ function SampledQuantumEfficiency(wavelengths::AbstractVector, values::AbstractV
     out_of_band::Real=0.0, T::Type{<:AbstractFloat}=Float64)
     length(wavelengths) == length(values) ||
         throw(DimensionMismatchError("SampledQuantumEfficiency wavelengths and values must have the same length"))
+    owned_wavelengths = T.(wavelengths)
+    owned_values = T.(values)
     return validate_quantum_efficiency_model(
-        SampledQuantumEfficiency{T,Vector{T}}(T.(wavelengths), T.(values), T(out_of_band)))
+        SampledQuantumEfficiency{T,typeof(owned_wavelengths)}(
+            OWNED_DETECTOR_PARAMETER, owned_wavelengths, owned_values,
+            T(out_of_band)))
 end
 
 resolve_quantum_efficiency_model(qe::Real, ::Type{T}) where {T<:AbstractFloat} =
@@ -99,8 +103,13 @@ resolve_quantum_efficiency_model(qe::AbstractQuantumEfficiencyModel, ::Type{T}) 
 
 convert_quantum_efficiency_model(model::ScalarQuantumEfficiency, ::Type{T}) where {T<:AbstractFloat} =
     ScalarQuantumEfficiency{T}(T(model.value))
-convert_quantum_efficiency_model(model::SampledQuantumEfficiency, ::Type{T}) where {T<:AbstractFloat} =
-    SampledQuantumEfficiency{T,Vector{T}}(T.(model.wavelengths), T.(model.values), T(model.out_of_band))
+function convert_quantum_efficiency_model(model::SampledQuantumEfficiency,
+    ::Type{T}) where {T<:AbstractFloat}
+    wavelengths = T.(model.wavelengths)
+    values = T.(model.values)
+    return SampledQuantumEfficiency{T,typeof(wavelengths)}(
+        OWNED_DETECTOR_PARAMETER, wavelengths, values, T(model.out_of_band))
+end
 
 function validate_quantum_efficiency_model(model::ScalarQuantumEfficiency)
     zero(model.value) <= model.value <= one(model.value) ||
@@ -394,7 +403,8 @@ function background_model(map::AbstractMatrix; T::Type{<:AbstractFloat}, backend
     storage = _resolve_array_backend(backend)
     background = storage{T}(undef, size(map)...)
     copyto!(background, T.(map))
-    return BackgroundFrame{T, typeof(background)}(background)
+    return BackgroundFrame{T,typeof(background)}(
+        OWNED_DETECTOR_PARAMETER, background)
 end
 
 effective_readout_sigma(::FrameSensorType, sigma) = sigma
@@ -445,14 +455,16 @@ function convert_frame_response_model(model::GaussianPixelResponse, ::Type{T}, b
     array_backend = _resolve_array_backend(backend)
     kernel = array_backend{T}(undef, length(model.kernel))
     copyto!(kernel, T.(Array(model.kernel)))
-    return GaussianPixelResponse{T,typeof(kernel)}(T(model.response_width_px), kernel)
+    return GaussianPixelResponse{T,typeof(kernel)}(
+        OWNED_DETECTOR_PARAMETER, T(model.response_width_px), kernel)
 end
 
 function convert_frame_response_model(model::SampledFrameResponse, ::Type{T}, backend) where {T<:AbstractFloat}
     array_backend = _resolve_array_backend(backend)
     kernel = array_backend{T}(undef, size(model.kernel)...)
     copyto!(kernel, T.(Array(model.kernel)))
-    return SampledFrameResponse{T,typeof(kernel)}(kernel)
+    return SampledFrameResponse{T,typeof(kernel)}(
+        OWNED_DETECTOR_PARAMETER, kernel)
 end
 
 function convert_frame_response_model(model::RectangularPixelAperture, ::Type{T}, backend) where {T<:AbstractFloat}
@@ -462,7 +474,8 @@ function convert_frame_response_model(model::RectangularPixelAperture, ::Type{T}
     copyto!(kernel_x, T.(Array(model.kernel_x)))
     copyto!(kernel_y, T.(Array(model.kernel_y)))
     return RectangularPixelAperture{T,typeof(kernel_x),typeof(kernel_y)}(
-        T(model.pitch_x_px), T(model.pitch_y_px), T(model.fill_factor_x), T(model.fill_factor_y), kernel_x, kernel_y)
+        OWNED_DETECTOR_PARAMETER, T(model.pitch_x_px), T(model.pitch_y_px),
+        T(model.fill_factor_x), T(model.fill_factor_y), kernel_x, kernel_y)
 end
 
 convert_charge_coupling_model(::NullChargeCoupling, ::Type{T}, backend) where {T<:AbstractFloat} =
@@ -515,21 +528,26 @@ convert_detector_defect_model(::NullDetectorDefectModel, ::Type{T}, backend) whe
 
 function convert_detector_defect_model(model::PixelResponseNonuniformity, ::Type{T}, backend) where {T<:AbstractFloat}
     gain_map = _to_backend_matrix(T.(Array(model.gain_map)), backend)
-    return PixelResponseNonuniformity{T,typeof(gain_map)}(gain_map)
+    return PixelResponseNonuniformity{T,typeof(gain_map)}(
+        OWNED_DETECTOR_PARAMETER, gain_map)
 end
 
 function convert_detector_defect_model(model::DarkSignalNonuniformity, ::Type{T}, backend) where {T<:AbstractFloat}
     dark_map = _to_backend_matrix(T.(Array(model.dark_map)), backend)
-    return DarkSignalNonuniformity{T,typeof(dark_map)}(dark_map)
+    return DarkSignalNonuniformity{T,typeof(dark_map)}(
+        OWNED_DETECTOR_PARAMETER, dark_map)
 end
 
 function convert_detector_defect_model(model::BadPixelMask, ::Type{T}, backend) where {T<:AbstractFloat}
     mask = _to_backend_bool_matrix(Array(model.mask), backend)
-    return BadPixelMask{T,typeof(mask)}(mask, T(model.throughput))
+    return BadPixelMask{T,typeof(mask)}(OWNED_DETECTOR_PARAMETER, mask,
+        T(model.throughput))
 end
 
 function convert_detector_defect_model(model::CompositeDetectorDefectModel, ::Type{T}, backend) where {T<:AbstractFloat}
-    return CompositeDetectorDefectModel(tuple((convert_detector_defect_model(stage, T, backend) for stage in model.stages)...))
+    stages = map(stage -> convert_detector_defect_model(stage, T, backend),
+        model.stages)
+    return CompositeDetectorDefectModel(OWNED_DETECTOR_PARAMETER, stages)
 end
 
 validate_detector_defect_model(::NullDetectorDefectModel) = NullDetectorDefectModel()
@@ -556,7 +574,8 @@ function validate_detector_defect_model(model::BadPixelMask)
 end
 
 function validate_detector_defect_model(model::CompositeDetectorDefectModel)
-    return CompositeDetectorDefectModel(tuple((validate_detector_defect_model(stage) for stage in model.stages)...))
+    stages = map(validate_detector_defect_model, model.stages)
+    return CompositeDetectorDefectModel(OWNED_DETECTOR_PARAMETER, stages)
 end
 
 convert_frame_timing_model(::GlobalShutter, ::Type{T}) where {T<:AbstractFloat} = GlobalShutter()
@@ -599,6 +618,12 @@ function validate_readout_window(window::FrameWindow, n_out::Int, m_out::Int)
     last(window.cols) <= m_out || throw(DimensionMismatchError("FrameWindow cols must lie within detector output cols"))
     return window
 end
+
+# Built-in frame sensors other than CMOS contain only scalar or immutable
+# configuration. Sensor extensions that retain mutable sampled parameters must
+# overload this boundary and return run-owned storage.
+@inline owned_frame_sensor(sensor::FrameSensorType, ::Type{T},
+    ::AbstractArrayBackend) where {T<:AbstractFloat} = sensor
 
 validate_frame_detector_sensor(::FrameSensorType) = nothing
 
@@ -717,6 +742,10 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
     validate_frame_detector_sensor(sensor)
     selector = _resolve_backend_selector(backend)
     array_backend = _resolve_array_backend(backend)
+    run_sensor = owned_frame_sensor(sensor, T, selector)
+    integration_time_t = T(integration_time)
+    isfinite(integration_time_t) && integration_time_t > zero(T) ||
+        throw(InvalidConfiguration("Detector integration_time must be finite and > 0"))
     bits === nothing || (bits > 0 && bits <= 64) ||
         throw(InvalidConfiguration("Detector bits must lie in 1:64"))
     bits === nothing || full_well !== nothing ||
@@ -728,31 +757,41 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
     qe_scalar = reference_qe(qe_model, T)
     flux_model = background_model(background_flux; T=T, backend=selector)
     map_model = background_model(background_map; T=T, backend=selector)
-    resolved_response = resolve_response_model(sensor, response_model; T=T, backend=selector)
-    response = validate_detector_response(sensor,
+    resolved_response = resolve_response_model(run_sensor, response_model;
+        T=T, backend=selector)
+    response = validate_detector_response(run_sensor,
         validate_frame_response_model(convert_frame_response_model(resolved_response, T, backend)))
-    resolved_coupling = resolve_charge_coupling_model(sensor, charge_coupling_model;
+    resolved_coupling = resolve_charge_coupling_model(run_sensor,
+        charge_coupling_model;
         T=T, backend=selector)
     coupling = validate_charge_coupling_model(
         convert_charge_coupling_model(resolved_coupling, T, backend))
-    resolved_defect = resolve_detector_defect_model(sensor, defect_model; T=T, backend=selector)
-    defects = validate_detector_defect(sensor,
+    resolved_defect = resolve_detector_defect_model(run_sensor, defect_model;
+        T=T, backend=selector)
+    defects = validate_detector_defect(run_sensor,
         validate_detector_defect_model(convert_detector_defect_model(resolved_defect, T, backend)))
-    resolved_timing = resolve_frame_timing_model(sensor, timing_model; T=T)
-    timing = validate_frame_timing(sensor, validate_frame_timing_model(convert_frame_timing_model(resolved_timing, T)))
-    resolved_correction = resolve_correction_model(sensor, correction_model)
-    correction = validate_readout_correction(sensor, validate_readout_correction_model(resolved_correction))
-    resolved_nonlinearity = resolve_frame_nonlinearity_model(sensor, nonlinearity_model; T=T)
-    nonlinearity = validate_frame_nonlinearity(sensor,
+    resolved_timing = resolve_frame_timing_model(run_sensor, timing_model;
+        T=T)
+    timing = validate_frame_timing(run_sensor,
+        validate_frame_timing_model(
+            convert_frame_timing_model(resolved_timing, T)))
+    resolved_correction = resolve_correction_model(run_sensor,
+        correction_model)
+    correction = validate_readout_correction(run_sensor,
+        validate_readout_correction_model(resolved_correction))
+    resolved_nonlinearity = resolve_frame_nonlinearity_model(run_sensor,
+        nonlinearity_model; T=T)
+    nonlinearity = validate_frame_nonlinearity(run_sensor,
         validate_frame_nonlinearity_model(convert_frame_nonlinearity_model(resolved_nonlinearity, T)))
-    resolved_thermal = resolve_thermal_model(sensor, thermal_model; T=T)
+    resolved_thermal = resolve_thermal_model(run_sensor, thermal_model; T=T)
     thermal = validate_thermal_model(convert_thermal_model(resolved_thermal, T))
     output_type_t = resolve_output_type(bits, output_type)
     window = validate_readout_window(readout_window)
-    params = DetectorParams{T, typeof(sensor), typeof(qe_model), typeof(response),
+    params = DetectorParams{T,typeof(run_sensor),typeof(qe_model),
+        typeof(response),
         typeof(coupling), typeof(defects), typeof(timing), typeof(correction),
         typeof(nonlinearity), typeof(thermal)}(
-        T(integration_time),
+        integration_time_t,
         qe_scalar,
         psf_sampling,
         binning,
@@ -760,7 +799,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
         T(dark_current),
         bits,
         full_well_t,
-        sensor,
+        run_sensor,
         qe_model,
         response,
         coupling,
@@ -773,6 +812,8 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
         output_type_t,
     )
     frame = array_backend{T}(undef, 1, 1)
+    presampling_buffer = array_backend{T}(undef, 1, 1)
+    presampling_scratch = array_backend{T}(undef, 1, 1)
     response_buffer = array_backend{T}(undef, 1, 1)
     bin_buffer = array_backend{T}(undef, 1, 1)
     temporal_buffer = array_backend{T}(undef, 1, 1)
@@ -788,6 +829,8 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
     output_buffer_host = output_buffer === nothing ? nothing :
         Matrix{eltype(output_buffer)}(undef, 1, 1)
     fill!(frame, zero(T))
+    fill!(presampling_buffer, zero(T))
+    fill!(presampling_scratch, zero(T))
     fill!(response_buffer, zero(T))
     fill!(bin_buffer, zero(T))
     fill!(temporal_buffer, zero(T))
@@ -799,11 +842,13 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
     output_buffer_host === nothing || fill!(output_buffer_host,
         zero(eltype(output_buffer_host)))
     thermal_state = thermal_state_from_model(thermal, T)
-    readout_products_type = detector_readout_products_type(sensor, frame, T)
-    readout_products = initial_readout_products(sensor, frame, T)
+    readout_products_type = detector_readout_products_type(run_sensor, frame, T)
+    readout_products = initial_readout_products(run_sensor, frame, T)
     state = DetectorState{T, typeof(frame), typeof(output_buffer),
         typeof(output_buffer_host), readout_products_type, typeof(thermal_state)}(
         frame,
+        presampling_buffer,
+        presampling_scratch,
         response_buffer,
         bin_buffer,
         temporal_buffer,

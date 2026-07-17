@@ -94,17 +94,16 @@ end
 end
 
 @inline function advance_runtime_atmosphere!(wfs::AbstractWFS,
-    atm::AbstractAtmosphere, tel::Telescope, rng::AbstractRNG)
+    atm::AbstractAtmosphere, tel::Telescope, atmosphere_step::Real,
+    rng::AbstractRNG)
     advance!(atm, tel, rng)
     return nothing
 end
 
-# Transitional pre-HIL runtime adapter. The explicit atmosphere API itself has
-# no telescope cadence; this legacy loop remains responsible for choosing its
-# elapsed duration until the multi-rate scheduler replaces it.
 @inline function advance_runtime_atmosphere!(::AbstractWFS,
-    atm::AbstractTimedAtmosphere, tel::Telescope, rng::AbstractRNG)
-    advance_by!(atm, tel.params.sampling_time, rng)
+    atm::AbstractTimedAtmosphere, ::Telescope, atmosphere_step::Real,
+    rng::AbstractRNG)
+    advance_by!(atm, atmosphere_step, rng)
     return nothing
 end
 
@@ -125,8 +124,9 @@ end
 end
 
 @inline function prepropagate_runtime_wfs!(wfs::AbstractWFS, atm::AbstractAtmosphere,
-    tel::Telescope, optic::AbstractControllableOptic, src::AbstractSource, rng::AbstractRNG)
-    advance_runtime_atmosphere!(wfs, atm, tel, rng)
+    tel::Telescope, optic::AbstractControllableOptic, src::AbstractSource,
+    atmosphere_step::Real, rng::AbstractRNG)
+    advance_runtime_atmosphere!(wfs, atm, tel, atmosphere_step, rng)
     render_runtime_wfs_path!(wfs, atm, tel, optic, src)
     return nothing
 end

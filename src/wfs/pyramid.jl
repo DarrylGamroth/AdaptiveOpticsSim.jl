@@ -40,8 +40,8 @@ end
 end
 
 @inline function prepare_runtime_wfs!(wfs::PyramidWFS, tel::Telescope, ast::Asterism)
-    isempty(ast.sources) && throw(InvalidConfiguration("asterism must contain at least one source"))
+    common_source = common_wfs_calibration_source(ast, "PyramidWFS")
     prepare_pyramid_sampling!(wfs, tel)
-    ensure_pyramid_calibration!(wfs, tel, ast.sources[1])
+    ensure_pyramid_calibration!(wfs, tel, common_source)
     return wfs
 end

@@ -56,6 +56,7 @@ function _resolve_lgs(profile_name::AbstractString, T::Type{<:AbstractFloat})
             altitude=90000.0,
             elongation_factor=1.6,
             laser_coordinates=(5.0, 0.0),
+            photon_irradiance=one(T),
             T=T,
         )
         return src, "none"
@@ -68,6 +69,7 @@ function _resolve_lgs(profile_name::AbstractString, T::Type{<:AbstractFloat})
             laser_coordinates=(5.0, 0.0),
             na_profile=_na_profile(T),
             fwhm_spot_up=1.0,
+            photon_irradiance=one(T),
             T=T,
         )
         return src, "na_profile"
@@ -83,7 +85,6 @@ function run_profile(; backend_name::AbstractString="cpu", profile_name::Abstrac
     tel = Telescope(
         resolution=112,
         diameter=8.2,
-        sampling_time=1e-3,
         central_obstruction=0.30,
         T=T,
         backend=backend,

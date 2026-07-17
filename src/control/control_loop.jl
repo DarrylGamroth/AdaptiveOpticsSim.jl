@@ -55,11 +55,13 @@ struct SingleControlLoopConfig{RP<:AbstractRuntimeProfile,EP,PR<:RuntimeOutputRe
     execution_plan::EP
     outputs::PR
     latency::RuntimeLatencyModel
+    atmosphere_step::T
     control_sign::T
     science_zero_padding::Int
 end
 
 function SingleControlLoopConfig(;
+    atmosphere_step::Real,
     name::Symbol=:control_loop_runtime,
     branch_label::Symbol=:main,
     profile::AbstractRuntimeProfile=default_runtime_profile(),
@@ -69,7 +71,8 @@ function SingleControlLoopConfig(;
     control_sign::Real=1.0,
     science_zero_padding::Integer=runtime_science_zero_padding(profile),
 )
-    T = typeof(float(control_sign))
+    T = promote_type(typeof(float(control_sign)), typeof(float(atmosphere_step)))
+    resolved_atmosphere_step = _validated_atmosphere_step(T, atmosphere_step)
     return SingleControlLoopConfig{
         typeof(profile),
         typeof(execution_plan),
@@ -82,6 +85,7 @@ function SingleControlLoopConfig(;
         execution_plan,
         outputs,
         latency,
+        resolved_atmosphere_step,
         T(control_sign),
         Int(science_zero_padding),
     )
@@ -94,11 +98,13 @@ struct GroupedControlLoopConfig{N,RP<:AbstractRuntimeProfile,EP,PR<:GroupedRunti
     execution_plan::EP
     outputs::PR
     latency::RuntimeLatencyModel
+    atmosphere_step::T
     control_sign::T
     science_zero_padding::Int
 end
 
 function GroupedControlLoopConfig(branch_labels::NTuple{N,Symbol};
+    atmosphere_step::Real,
     name::Symbol=:grouped_control_loop_runtime,
     profile::AbstractRuntimeProfile=default_runtime_profile(),
     execution_plan::Union{AbstractRuntimeExecutionPlan,Nothing}=nothing,
@@ -107,7 +113,8 @@ function GroupedControlLoopConfig(branch_labels::NTuple{N,Symbol};
     control_sign::Real=1.0,
     science_zero_padding::Integer=runtime_science_zero_padding(profile),
 ) where {N}
-    T = typeof(float(control_sign))
+    T = promote_type(typeof(float(control_sign)), typeof(float(atmosphere_step)))
+    resolved_atmosphere_step = _validated_atmosphere_step(T, atmosphere_step)
     return GroupedControlLoopConfig{
         N,
         typeof(profile),
@@ -121,6 +128,7 @@ function GroupedControlLoopConfig(branch_labels::NTuple{N,Symbol};
         execution_plan,
         outputs,
         latency,
+        resolved_atmosphere_step,
         T(control_sign),
         Int(science_zero_padding),
     )
@@ -149,6 +157,8 @@ end
 @inline runtime_execution_plan(scenario::ControlLoopScenario) =
     runtime_execution_plan(control_loop_boundary(scenario))
 @inline runtime_latency(scenario::ControlLoopScenario) = control_loop_config(scenario).latency
+@inline runtime_atmosphere_step(scenario::ControlLoopScenario) =
+    runtime_atmosphere_step(control_loop_boundary(scenario))
 
 @inline function _branch_runtime_outputs(config::SingleControlLoopConfig, branch::ControlLoopBranch)
     isnothing(branch.outputs) || return branch.outputs
@@ -175,6 +185,7 @@ end
         execution_plan=config.execution_plan,
         outputs=_branch_runtime_outputs(config, branch),
         latency=config.latency,
+        atmosphere_step=config.atmosphere_step,
         control_sign=config.control_sign,
         science_zero_padding=config.science_zero_padding,
         command_layout=branch.command_layout,

@@ -76,6 +76,10 @@ function _prepare_direct_psf(tel::Telescope, wavefront::PupilFunction,
     formation = prepare_pupil_field(tel, wavefront, src, field)
     require_same_plane_grid(output.metadata, propagation.output_metadata;
         label="direct-PSF output", require_numeric_type=false)
+    require_compatible_radiometry(output.metadata,
+        propagation.output_metadata; label="direct-PSF output")
+    _require_incoherent_policy(output.metadata.coherence,
+        "direct-PSF output")
     scale_arcsec = propagation.params.output_sampling_rad *
         (180 / pi) * 3600
     coordinates = src.params.coordinates_xy_arcsec
@@ -111,6 +115,7 @@ function compute_psf!(output::IntensityMap, field::ElectricField,
 end
 
 function compute_psf_centered!(tel::Telescope, src::Source, ws::Workspace, zero_padding::Int=1)
+    _require_physical_photon_irradiance(src, "legacy telescope PSF")
     n = tel.params.resolution
     if zero_padding < 1
         throw(InvalidConfiguration("zero_padding must be >= 1"))
@@ -144,6 +149,7 @@ function compute_psf!(tel::Telescope, src::Source, ws::Workspace, zero_padding::
 end
 
 function compute_psf!(tel::Telescope, src::Source, zero_padding::Int)
+    _require_physical_photon_irradiance(src, "legacy telescope PSF")
     if zero_padding < 1
         throw(InvalidConfiguration("zero_padding must be >= 1"))
     end

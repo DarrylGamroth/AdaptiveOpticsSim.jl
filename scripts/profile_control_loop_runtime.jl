@@ -117,8 +117,7 @@ end
 
 function _runtime_components(::Type{T}, backend_selector, resolution::Int, wfs_samples::Int, n_act::Int;
     sensor::Symbol=:sh) where {T<:AbstractFloat}
-    tel = Telescope(resolution=resolution, diameter=T(8.0), sampling_time=T(1e-3),
-        central_obstruction=T(0.0), T=T, backend=backend_selector)
+    tel = Telescope(resolution=resolution, diameter=T(8.0), central_obstruction=T(0.0), T=T, backend=backend_selector)
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = KolmogorovAtmosphere(tel; r0=T(0.2), L0=T(25.0), T=T, backend=backend_selector)
     dm = DeformableMirror(tel; n_act=n_act, influence_width=T(0.3), T=T, backend=backend_selector)
@@ -164,7 +163,7 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     resolved_samples = something(samples, cfg.samples)
     resolved_warmup = something(warmup, cfg.warmup)
 
-    single_cfg = SingleControlLoopConfig(
+    single_cfg = SingleControlLoopConfig(atmosphere_step=1e-3,
         name=:single_control_loop_runtime,
         branch_label=:main,
         outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=true),
@@ -197,11 +196,13 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     )
     compatible_cfg = GroupedControlLoopConfig(
         compatible_branches...;
+        atmosphere_step=1e-3,
         name=:compatible_control_loop_runtime,
         outputs=GroupedRuntimeOutputRequirements(wfs_frames=true, science_frames=false, wfs_stack=true, science_stack=false),
     )
     mixed_cfg = GroupedControlLoopConfig(
         mixed_branches...;
+        atmosphere_step=1e-3,
         name=:mixed_control_loop_runtime,
         outputs=GroupedRuntimeOutputRequirements(wfs_frames=true, science_frames=false, wfs_stack=false, science_stack=false),
     )
