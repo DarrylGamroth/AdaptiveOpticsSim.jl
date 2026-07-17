@@ -22,6 +22,9 @@ AdaptiveOpticsSim.jl. Scientific term definitions follow the
 - `PhotonRateNormalization()` with `CellIntegratedMeasure()` is photons·s⁻¹
   per represented cell. `PointSampledMeasure()` includes no cell area and is
   not directly detector-integrable.
+- Native direct imaging produces a focal-plane `AngularCoordinates()` map with
+  `PhotonRateNormalization()` and `CellIntegratedMeasure()`; detector exposure
+  time is not part of that product.
 - `DimensionlessNormalization()` and `NormalizedTestSource()` do not claim a
   physical photon rate without an explicit prepared conversion.
 - Pure internal angles and rotations are in radians.

@@ -292,6 +292,7 @@ function IntensityMap(field::ElectricField,
     _require_coherent_field(field.metadata.coherence)
     T = real(eltype(field.values))
     values = similar(field.values, T, model.output_metadata.dimensions...)
+    fill!(values, zero(T))
     metadata = OpticalPlaneMetadata(model.output_metadata.kind, values;
         coordinate_domain=model.output_metadata.coordinate_domain,
         sampling=model.output_metadata.sampling,

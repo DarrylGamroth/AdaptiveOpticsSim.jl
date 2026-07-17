@@ -33,6 +33,15 @@ function prepared_gpu_field(tel::Telescope, src::AbstractSource;
     return (; wavefront, field, plan)
 end
 
+function gpu_direct_image(tel::Telescope, src::AbstractSource;
+    zero_padding::Int, T::Type{<:AbstractFloat})
+    pupil = PupilFunction(tel; T=T)
+    apply_opd!(pupil, opd_map(tel))
+    prepared = prepare_direct_imaging(tel, pupil, src;
+        zero_padding=zero_padding)
+    return form_direct_image!(prepared)
+end
+
 function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     disable_scalar_backend!(B)
     failures = String[]
@@ -50,10 +59,31 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
     spider_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
     apply_spiders!(spider_tel; thickness=0.5, angles=[0.0, 90.0])
 
-    record_gpu_smoke!(failures, "psf_source") do
-        psf = compute_psf!(tel, src; zero_padding=2)
-        @assert psf isa BackendArray
-        return psf
+    record_gpu_smoke!(failures, "direct_image_source") do
+        rate_map = gpu_direct_image(tel, src; zero_padding=2, T=T)
+        @assert rate_map.values isa BackendArray
+        return rate_map.values
+    end
+
+    record_gpu_smoke!(failures, "direct_image_off_axis_orientation") do
+        pupil = PupilFunction(tel; T=T)
+        apply_opd!(pupil, opd_map(tel))
+        on_axis = prepare_direct_imaging(tel, pupil, src;
+            zero_padding=2)
+        sample_arcsec = focal_plane_pixel_scale_arcsec(
+            direct_imaging_output(on_axis))
+        positive_x = Source(band=:I, magnitude=zero(T),
+            coordinates=(T(sample_arcsec), zero(T)), T=T)
+        off_axis = prepare_direct_imaging(tel, pupil, positive_x;
+            zero_padding=2)
+        @assert off_axis.plan.shift_samples == (1, 0)
+        reference = Array(intensity_values(form_direct_image!(on_axis)))
+        shifted = Array(intensity_values(form_direct_image!(off_axis)))
+        relative_error = maximum(abs.(shifted .-
+            circshift(reference, (1, 0)))) /
+            max(maximum(abs, reference), eps(Float64))
+        @assert relative_error < 2f-5
+        return off_axis.output.values
     end
 
     record_gpu_smoke!(failures, "electric_field_core") do
@@ -72,12 +102,12 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
 
         prepared2 = prepared_gpu_field(tel, src; zero_padding=2, T=T)
         field2 = prepared2.field
-        propagation = FraunhoferPropagation(field2)
-        psf_from_field = similar(field2.values, T)
-        AdaptiveOpticsSim.centered_psf_from_field!(psf_from_field, field2,
-            propagation)
-        psf = compute_psf!(tel, src; zero_padding=2)
-        rel = maximum(abs.(Array(psf_from_field) .- Array(psf))) / max(maximum(abs.(Array(psf))), eps(Float64))
+        direct_from_field = prepare_direct_imaging(src, field2)
+        rate_from_field = form_direct_image!(direct_from_field)
+        rate_map = gpu_direct_image(tel, src; zero_padding=2, T=T)
+        rel = maximum(abs.(Array(rate_from_field.values) .-
+            Array(rate_map.values))) /
+            max(maximum(abs.(Array(rate_map.values))), eps(Float64))
         @assert rel < 1f-5
         return intensity
     end
@@ -88,10 +118,12 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         fraunhofer = FraunhoferPropagation(field)
         propagated = propagation_output(field, fraunhofer)
         propagate_field!(propagated, field, fraunhofer)
-        psf_from_prop = similar(field.values, T)
-        @. psf_from_prop = abs2(propagated.values)
-        psf = compute_psf!(tel, src; zero_padding=2)
-        rel = maximum(abs.(Array(psf_from_prop) .- Array(psf))) / max(maximum(abs.(Array(psf))), eps(Float64))
+        rate_from_propagation = similar(field.values, T)
+        @. rate_from_propagation = abs2(propagated.values)
+        rate_map = gpu_direct_image(tel, src; zero_padding=2, T=T)
+        rel = maximum(abs.(Array(rate_from_propagation) .-
+            Array(rate_map.values))) /
+            max(maximum(abs.(Array(rate_map.values))), eps(Float64))
         @assert rel < 1f-5
 
         fresnel = FresnelPropagation(field; distance_m=T(10))
@@ -109,20 +141,20 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         return fresnel_out.values
     end
 
-    record_gpu_smoke!(failures, "psf_asterism") do
+    record_gpu_smoke!(failures, "direct_image_asterism") do
         ast = Asterism([
             Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0)),
             Source(band=:I, magnitude=0.0, coordinates=(1.0, 90.0)),
         ])
-        psf = compute_psf!(tel, ast; zero_padding=2)
-        @assert psf isa BackendArray
-        return psf
+        rate_map = gpu_direct_image(tel, ast; zero_padding=2, T=T)
+        @assert rate_map.values isa BackendArray
+        return rate_map.values
     end
 
-    record_gpu_smoke!(failures, "psf_source_spiders") do
-        psf = compute_psf!(spider_tel, src; zero_padding=2)
-        @assert psf isa BackendArray
-        return psf
+    record_gpu_smoke!(failures, "direct_image_source_spiders") do
+        rate_map = gpu_direct_image(spider_tel, src; zero_padding=2, T=T)
+        @assert rate_map.values isa BackendArray
+        return rate_map.values
     end
 
     record_gpu_smoke!(failures, "aperture_masks") do
@@ -141,18 +173,20 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
     end
 
     record_gpu_smoke!(failures, "detector_capture_none") do
-        psf = compute_psf!(tel, src; zero_padding=2)
+        rate_map = gpu_direct_image(tel, src; zero_padding=2, T=T)
         det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=2, T=T, backend=backend)
-        frame = capture!(det, psf; rng=rng)
+        acquisition = prepare_detector_acquisition(det, rate_map)
+        frame = capture!(det, rate_map, acquisition; rng=rng)
         @assert frame isa BackendArray
         return frame
     end
 
     record_gpu_smoke!(failures, "detector_capture_noise") do
-        psf = compute_psf!(tel, src; zero_padding=2)
+        rate_map = gpu_direct_image(tel, src; zero_padding=2, T=T)
         det = Detector(noise=(NoisePhoton(), NoiseReadout(T(1e-3))), integration_time=1.0, qe=1.0,
             binning=2, background_flux=T(0.5), dark_current=T(0.1), T=T, backend=backend)
-        frame = capture!(det, psf; rng=rng)
+        acquisition = prepare_detector_acquisition(det, rate_map)
+        frame = capture!(det, rate_map, acquisition; rng=rng)
         @assert frame isa BackendArray
         return frame
     end
@@ -579,8 +613,9 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         propagate!(atm, step_tel)
         apply!(dm, step_tel, DMAdditive())
         slopes = measure!(wfs, step_tel, src, det; rng=rng)
-        psf = compute_psf!(step_tel, src; zero_padding=2)
-        frame = capture!(det, psf; rng=rng)
+        rate_map = gpu_direct_image(step_tel, src; zero_padding=2, T=T)
+        acquisition = prepare_detector_acquisition(det, rate_map)
+        frame = capture!(det, rate_map, acquisition; rng=rng)
         @assert slopes isa BackendArray
         @assert frame isa BackendArray
         return frame
@@ -699,8 +734,9 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         det = Detector(NoiseNone(); psf_sampling=2, T=T, backend=backend)
         lift = LiFT(lift_tel, lift_src, basis, det; diversity_opd=diversity,
             iterations=2, img_resolution=32, solve_mode=LiFTSolveAuto())
-        psf = compute_psf!(lift_tel, lift_src; zero_padding=2)
-        coeffs = reconstruct(lift, psf, [1, 2])
+        rate_map = gpu_direct_image(lift_tel, lift_src;
+            zero_padding=2, T=T)
+        coeffs = reconstruct(lift, rate_map.values, [1, 2])
         @assert coeffs isa BackendArray
         return coeffs
     end

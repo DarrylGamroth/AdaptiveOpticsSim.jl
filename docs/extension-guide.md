@@ -222,7 +222,10 @@ plant. The dense `ModalReconstructor` remains the compatibility baseline.
 
 Runtime profiles and execution plans are orthogonal. A profile such as
 `HILRuntimeProfile` selects modeled delays and output fidelity. An execution
-plan selects storage and synchronization behavior:
+plan selects storage and synchronization behavior. The HIL profile uses the
+minimum valid direct-science zero-padding factor of `1` (no focal-grid
+oversampling) when science pixels are requested; omitting science pixels still
+prepares no science stage. The execution-plan choices are:
 
 - `CPUHILExecutionPlan` is the direct, host-resident low-latency path
 - `DeviceResidentExecutionPlan` keeps repeated simulation and control work on

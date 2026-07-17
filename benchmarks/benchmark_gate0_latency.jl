@@ -62,6 +62,8 @@ function make_gate0_card(raw::AbstractDict)
             () -> fill_electric_field!(field, wavefront, plan)
         end
     elseif kind == "direct_psf"
+        # `kind` is a stable historical benchmark-card identifier retained so
+        # post-refactor results remain comparable with the frozen pre-HIL run.
         zero_padding = Int(raw["zero_padding"])
         tel = Telescope(resolution=resolution, diameter=8.0,
             central_obstruction=0.2)
@@ -69,11 +71,10 @@ function make_gate0_card(raw::AbstractDict)
         src = Source(band=:I, magnitude=1.0)
         wavefront = PupilFunction(tel)
         apply_opd!(wavefront, opd_map(tel))
-        field = ElectricField(wavefront, src; zero_padding=zero_padding)
-        prepared = prepare_direct_psf(tel, wavefront, src, field)
-        let output=prepared.output, field=field, wavefront=wavefront,
-            plan=prepared.plan, workspace=prepared.workspace
-            () -> compute_psf!(output, field, wavefront, plan, workspace)
+        prepared = prepare_direct_imaging(tel, wavefront, src;
+            zero_padding=zero_padding)
+        let prepared=prepared
+            () -> form_direct_image!(prepared)
         end
     elseif kind == "spatial_filter"
         zero_padding = Int(raw["zero_padding"])
@@ -145,22 +146,26 @@ function make_gate0_card(raw::AbstractDict)
             central_obstruction=0.2)
         gate0_opd_ramp!(tel)
         src = Source(band=:I, magnitude=1.0, coordinates=(0.08, 90.0))
-        workspace = AdaptiveOpticsSim.Workspace(resolution * zero_padding;
-            T=Float64)
+        pupil = PupilFunction(tel)
+        apply_opd!(pupil, opd_map(tel))
+        imaging = prepare_direct_imaging(tel, pupil, src;
+            zero_padding=zero_padding)
+        rate_map = direct_imaging_output(imaging)
         detector_a = Detector(noise=NoiseNone(), integration_time=0.003,
             qe=0.8)
         detector_b = Detector(noise=NoiseNone(), integration_time=0.007,
             qe=0.8)
         rng_a = runtime_rng(Int(raw["rng_seed_a"]))
         rng_b = runtime_rng(Int(raw["rng_seed_b"]))
-        let tel=tel, src=src, workspace=workspace,
-            zero_padding=zero_padding, detector_a=detector_a,
-            detector_b=detector_b, rng_a=rng_a, rng_b=rng_b
+        acquisition_a = prepare_detector_acquisition(detector_a, rate_map)
+        acquisition_b = prepare_detector_acquisition(detector_b, rate_map)
+        let imaging=imaging, rate_map=rate_map, detector_a=detector_a,
+            detector_b=detector_b, acquisition_a=acquisition_a,
+            acquisition_b=acquisition_b, rng_a=rng_a, rng_b=rng_b
             () -> begin
-                psf = compute_psf!(tel, src; zero_padding=zero_padding,
-                    ws=workspace)
-                capture!(detector_a, psf, rng_a)
-                capture!(detector_b, psf, rng_b)
+                form_direct_image!(imaging)
+                capture!(detector_a, rate_map, acquisition_a, rng_a)
+                capture!(detector_b, rate_map, acquisition_b, rng_b)
             end
         end
     elseif kind == "closed_loop_step"
@@ -471,12 +476,17 @@ function run_gate0_latency_benchmarks()
         ))
     end
 
+    environment = gate0_environment()
+    if !isempty(GATE0_OUTPUT_PATH) && environment["git_dirty"]
+        error("refusing to write durable Gate 0 evidence from a dirty worktree")
+    end
     artifact = Dict{String,Any}(
         "schema_version" => 1,
         "benchmark" => String(contract["name"]),
         "evidence_class" => String(contract["evidence_class"]),
         "source_contract" => relpath(abspath(GATE0_CONTRACT_PATH), @__DIR__),
-        "characterized_source_revision" => String(contract["source_revision"]),
+        "characterized_source_revision" => environment["git_commit"],
+        "baseline_source_revision" => String(contract["source_revision"]),
         "configured_samples_per_run" => samples,
         "configured_runs" => runs_count,
         "configured_warmup_operations" => warmup,
@@ -492,7 +502,7 @@ function run_gate0_latency_benchmarks()
         "timer_recording_overhead" => timer_recording_overhead(
             min(samples, 100_000), lowest_ns, highest_ns,
             significant_figures),
-        "environment" => gate0_environment(),
+        "environment" => environment,
         "cards" => results,
         "all_gates_passed" => all_gates_passed,
     )

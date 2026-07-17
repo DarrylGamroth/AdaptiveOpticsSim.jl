@@ -17,6 +17,25 @@ AdaptiveOpticsSim.backend_fill(::Type{AdaptiveOpticsSim.CUDABackendTag}, value, 
 AdaptiveOpticsSim.physical_device_identifier(array::CUDA.CuArray) =
     CUDA.deviceid(CUDA.device(array))
 
+function AdaptiveOpticsSim.solve_lift_fallback!(
+    diag::AdaptiveOpticsSim.LiFTDiagnostics{T},
+    rhs::CUDA.AnyCuVector{T},
+    H::CUDA.AnyCuMatrix{T},
+    residual::CUDA.AnyCuVector{T},
+    damping::AdaptiveOpticsSim.LiFTDampingMode,
+) where {T<:AbstractFloat}
+    # CUSOLVER's SVD requires a dense CuMatrix rather than a wrapped view.
+    F = svd(CUDA.CuArray(H); full=false)
+    λ = AdaptiveOpticsSim.fallback_damping_lambda(damping, T, H)
+    work = CUDA.CuArray{T}(undef, length(F.S))
+    mul!(work, transpose(F.U), residual)
+    @. work = ifelse(iszero(F.S^2 + λ), zero(T), (F.S * work) / (F.S^2 + λ))
+    mul!(rhs, adjoint(F.Vt), work)
+    diag.regularization = λ
+    diag.used_fallback = true
+    return rhs
+end
+
 function AdaptiveOpticsSim.masked_sum2d_accelerator(
     ::AdaptiveOpticsSim.AcceleratorStyle{<:CUDA.CUDABackend},
     values_parent::CUDA.CuArray{T,2},

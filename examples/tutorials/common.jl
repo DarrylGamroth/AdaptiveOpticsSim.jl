@@ -84,11 +84,16 @@ function run_closed_loop_example(make_wfs::Function; n_iter::Int=4, seed::Intege
         residual_after[k] = pupil_rms(tel.state.opd, pupil_mask(tel))
     end
 
-    psf = copy(compute_psf!(tel, src; zero_padding=2))
+    science_pupil = PupilFunction(tel)
+    apply_opd!(science_pupil, opd_map(tel))
+    imaging = prepare_direct_imaging(tel, science_pupil, src;
+        zero_padding=2)
+    form_direct_image!(imaging)
+    image = copy(intensity_values(direct_imaging_output(imaging)))
     return (
         residual_before=residual_before,
         residual_after=residual_after,
-        final_psf=psf,
+        final_image=image,
         final_slopes=copy(wfs.state.slopes),
     )
 end

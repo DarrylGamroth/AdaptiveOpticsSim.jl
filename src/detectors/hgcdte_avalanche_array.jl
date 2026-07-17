@@ -162,6 +162,23 @@ function detector_readout_products_type(
     return Union{NoFrameReadoutProducts,UpTheRampReadoutProducts{A,cube_type,Vector{T}}}
 end
 
+@inline function prepare_frame_readout_state!(
+    sensor::HgCdTeAvalancheArraySensor, det::Detector)
+    return prepare_hgcdte_readout_state!(sensor.sampling_mode, sensor, det)
+end
+
+@inline function prepare_hgcdte_readout_state!(::FrameSamplingMode,
+    sensor::HgCdTeAvalancheArraySensor, det::Detector)
+    _ensure_multi_read_products!(sensor, det)
+    return det
+end
+
+@inline function prepare_hgcdte_readout_state!(mode::UpTheRampSampling,
+    sensor::HgCdTeAvalancheArraySensor, det::Detector)
+    ensure_up_the_ramp_products!(det, mode.n_reads)
+    return det
+end
+
 function finalize_readout_products!(sensor::HgCdTeAvalancheArraySensor,
     det::Detector, rng::AbstractRNG, exposure_time::Real)
     return finalize_hgcdte_readout_products!(sensor.sampling_mode, sensor, det,

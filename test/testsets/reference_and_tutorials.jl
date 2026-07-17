@@ -172,16 +172,16 @@ end
 
 @testset "Tutorial examples" begin
     image = run_tutorial_example("image_formation.jl")
-    @test size(image.psf_nominal) == size(image.psf_aberrated)
-    @test maximum(image.psf_nominal) > maximum(image.psf_aberrated)
+    @test size(image.nominal_image) == size(image.aberrated_image)
+    @test maximum(image.nominal_image) > maximum(image.aberrated_image)
 
     detector = run_tutorial_example("detector.jl")
-    @test sum(detector.frame_native) ≈ sum(detector.psf)
+    @test sum(detector.frame_native) ≈ sum(detector.photon_rate_image)
     @test size(detector.frame_sampled, 1) < size(detector.frame_native, 1)
 
     asterism = run_tutorial_example("asterism.jl")
-    @test size(asterism.per_source_psf, 3) == 4
-    @test sum(asterism.combined_psf) >= sum(@view asterism.per_source_psf[:, :, 1])
+    @test length(asterism.component_images) == 4
+    @test sum(asterism.combined_image) >= sum(first(asterism.component_images))
 
     extended = run_tutorial_example("extended_source_sensing.jl")
     @test extended.n_samples == 25
@@ -205,9 +205,9 @@ end
     @test all(isfinite, spatial.filtered_phase)
 
     ncpa = run_tutorial_example("ncpa.jl")
-    @test size(ncpa.psf, 1) == 2 * size(ncpa.ncpa_opd, 1)
-    @test size(ncpa.psf, 2) == 2 * size(ncpa.ncpa_opd, 2)
-    @test maximum(ncpa.psf) > 0
+    @test size(ncpa.image, 1) == 2 * size(ncpa.ncpa_opd, 1)
+    @test size(ncpa.image, 2) == 2 * size(ncpa.ncpa_opd, 2)
+    @test maximum(ncpa.image) > 0
 
     lift = run_tutorial_example("lift.jl")
     @test length(lift.coeffs_true) == length(lift.coeffs_fit)
@@ -240,8 +240,8 @@ end
         @test length(loop.residual_before) == length(loop.residual_after)
         @test all(isfinite, loop.residual_before)
         @test all(isfinite, loop.residual_after)
-        if hasproperty(loop, :final_psf)
-            @test maximum(loop.final_psf) > 0
+        if hasproperty(loop, :final_image)
+            @test maximum(loop.final_image) > 0
         else
             @test maximum(loop.final_frame) > 0
             @test all(isfinite, loop.final_slopes)

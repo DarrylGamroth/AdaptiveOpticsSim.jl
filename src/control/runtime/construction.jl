@@ -1,3 +1,83 @@
+@inline _require_runtime_science_detector(::Detector) = nothing
+
+function _require_runtime_science_detector(detector::AbstractDetector)
+    throw(UnsupportedAlgorithm(
+        "prepared runtime direct-science acquisition supports Detector " *
+        "frame consumers; got $(typeof(detector))"))
+end
+
+function _require_runtime_science_detector(detector)
+    throw(InvalidConfiguration(
+        "runtime science pixel output requires a Detector; got " *
+        "$(typeof(detector))"))
+end
+
+@inline function _require_runtime_science_configuration(
+    outputs::RuntimeOutputRequirements, science_detector)
+    outputs.science_pixels || return nothing
+    isnothing(science_detector) && throw(InvalidConfiguration(
+        "runtime science pixel output requires a Detector; got nothing"))
+    _require_runtime_science_detector(science_detector)
+    return nothing
+end
+
+@inline function _prepare_runtime_acquisition(detector::Detector,
+    output::IntensityMap)
+    return prepare_detector_acquisition(detector, output)
+end
+
+@inline _prepare_runtime_acquisitions(::Tuple{}, output::IntensityMap) = ()
+
+@inline function _prepare_runtime_acquisitions(
+    detectors::Tuple{<:Detector,Vararg}, output::IntensityMap)
+    return (
+        prepare_detector_acquisition(first(detectors), output),
+        _prepare_runtime_acquisitions(Base.tail(detectors), output)...,
+    )
+end
+
+function _prepared_runtime_science_stage(pupil::PupilFunction, imaging,
+    output::IntensityMap, detector::Detector, revision::UInt)
+    acquisition = _prepare_runtime_acquisition(detector, output)
+    return PreparedRuntimeScienceStage(pupil, imaging, output, acquisition,
+        revision)
+end
+
+function _prepared_runtime_science_stage(pupil::PupilFunction, imaging,
+    output::IntensityMap, detectors::Tuple, revision::UInt)
+    acquisition = _prepare_runtime_acquisitions(detectors, output)
+    return PreparedRuntimeScienceStage(pupil, imaging, output, acquisition,
+        revision)
+end
+
+function _prepared_runtime_science_stage(::PupilFunction, imaging,
+    ::OpticalProductBundle, detector_or_detectors, ::UInt)
+    throw(UnsupportedAlgorithm(
+        "runtime detector acquisition requires one integrated IntensityMap; " *
+        "bundled spectral direct-imaging output must be integrated onto an " *
+        "explicit common grid before runtime construction"))
+end
+
+function _prepare_runtime_science_stage(tel::Telescope,
+    source::AbstractSource, detector_or_detectors, zero_padding::Int)
+    zero_padding >= 1 || throw(InvalidConfiguration(
+        "runtime science_zero_padding must be >= 1 when science pixels are requested"))
+    pupil = PupilFunction(tel)
+    imaging = prepare_direct_imaging(tel, pupil, source;
+        zero_padding=zero_padding)
+    return _prepared_runtime_science_stage(pupil, imaging,
+        direct_imaging_output(imaging), detector_or_detectors,
+        aperture_revision(tel))
+end
+
+@inline function _prepare_primary_runtime_science_stage(
+    outputs::RuntimeOutputRequirements, tel::Telescope,
+    source::AbstractSource, detector, zero_padding::Int)
+    outputs.science_pixels && !isnothing(detector) || return nothing
+    return _prepare_runtime_science_stage(tel, source, detector,
+        zero_padding)
+end
+
 function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
     atmosphere_step::Real,
     wfs_detector=nothing, science_detector=nothing, rng=runtime_rng(),
@@ -7,6 +87,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
     latency::RuntimeLatencyModel=default_runtime_latency(profile),
     control_sign::Real=-1.0, science_zero_padding::Union{Int,Nothing}=nothing,
     command_layout::Union{RuntimeCommandLayout,Nothing}=nothing)
+    _require_runtime_science_configuration(outputs, science_detector)
     selector = require_same_backend(simulation, wfs_detector, science_detector)
     resolved_execution_plan = something(execution_plan, default_runtime_execution_plan(selector))
     validate_runtime_execution_plan!(resolved_execution_plan, selector, reconstructor)
@@ -30,6 +111,9 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
     runtime_source = freeze_source(wfs_source(simulation))
     runtime_science_source = science_source(simulation) === wfs_source(simulation) ?
         runtime_source : freeze_source(science_source(simulation))
+    science_stage = _prepare_primary_runtime_science_stage(outputs,
+        simulation.tel, runtime_science_source, science_detector,
+        resolved_zero_padding)
     resolved_science_path = science_path_plan(runtime_source,
         runtime_science_source)
     wfs_atmosphere_renderer = prepare_runtime_atmosphere_path(
@@ -52,6 +136,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
         typeof(slopes),
         typeof(wfs_detector),
         typeof(science_detector),
+        typeof(science_stage),
         typeof(rng),
         typeof(profile),
         typeof(resolved_execution_plan),
@@ -80,6 +165,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
         slopes,
         wfs_detector,
         science_detector,
+        science_stage,
         rng,
         profile,
         resolved_execution_plan,

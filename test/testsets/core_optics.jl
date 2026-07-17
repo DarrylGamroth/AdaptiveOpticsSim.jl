@@ -20,8 +20,9 @@ AdaptiveOpticsSim.source_composition_style(::TestExpandedSourceWrapper) =
     @test AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.CUDABackendTag) isa AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.CUDABackendTag}
 end
 
-function explicit_psf_cycle!(output, field, wavefront, plan, workspace)
-    compute_psf!(output, field, wavefront, plan, workspace)
+function explicit_direct_image_cycle!(output, field, wavefront, plan,
+    workspace)
+    form_direct_image!(output, wavefront, field, plan, workspace)
     return output
 end
 
@@ -101,7 +102,8 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :prepare_incoherent_sum)
     @test Base.isexported(AdaptiveOpticsSim, :accumulate_intensity!)
     @test Base.isexported(AdaptiveOpticsSim, :prepare_pupil_field)
-    @test Base.isexported(AdaptiveOpticsSim, :prepare_direct_psf)
+    @test Base.isexported(AdaptiveOpticsSim, :prepare_direct_imaging)
+    @test Base.isexported(AdaptiveOpticsSim, :form_direct_image!)
     @test Base.isexported(AdaptiveOpticsSim, :prepare_spatial_filter)
     @test Base.isexported(AdaptiveOpticsSim, :AtmosphereEpoch)
     @test Base.isexported(AdaptiveOpticsSim, :advance_by!)
@@ -264,18 +266,12 @@ end
 
     normalized_direct = IntensityMap(normalized_field,
         normalized_propagation)
-    normalized_direct_prepared = prepare_direct_psf(tel, wavefront,
+    @test_throws InvalidConfiguration prepare_direct_imaging(tel, wavefront,
         normalized_source, normalized_field, normalized_direct)
-    compute_psf!(normalized_direct, normalized_field, wavefront,
-        normalized_direct_prepared.plan,
-        normalized_direct_prepared.workspace)
-    @test normalized_direct.metadata.normalization isa
-        DimensionlessNormalization
-    @test sum(normalized_direct.values) ≈ 2.5
 
     @test_throws InvalidConfiguration pupil_photon_rate_map(tel,
         normalized_source)
-    @test_throws InvalidConfiguration compute_psf!(tel,
+    @test_throws InvalidConfiguration prepare_direct_imaging(tel, wavefront,
         normalized_source; zero_padding=2)
 
     float32_overflow = 2 * Float64(floatmax(Float32))
@@ -562,10 +558,11 @@ end
         Source(band=:custom, wavelength=1.0e-6, photon_irradiance=1.0),
         Source(band=:custom, wavelength=1.1e-6, photon_irradiance=1.0),
     ])
-    @test_throws InvalidConfiguration compute_psf!(tel, mixed_wavelengths)
+    @test_throws InvalidConfiguration prepare_direct_imaging(tel,
+        PupilFunction(tel), mixed_wavelengths)
 end
 
-@testset "Telescope and PSF" begin
+@testset "Telescope and direct imaging" begin
     for invalid_reflectivity in (-0.1, 1.1, Inf, NaN)
         @test_throws InvalidConfiguration Telescope(resolution=8,
             diameter=8.0, pupil_reflectivity=invalid_reflectivity)
@@ -587,23 +584,27 @@ end
     @test field.metadata.spectral == MonochromaticChannel(wavelength(src))
     fraunhofer = FraunhoferPropagation(field)
     @test fraunhofer.output_metadata.coordinate_domain isa AngularCoordinates
-    centered_psf = similar(field.values, Float64)
-    AdaptiveOpticsSim.centered_psf_from_field!(centered_psf, field,
-        fraunhofer)
-    psf = compute_psf!(tel, src; zero_padding=2)
-    @test size(psf) == (64, 64)
-    @test maximum(psf) > 0
-    @test isfinite(sum(psf))
-    @test centered_psf ≈ psf
-    @test tel.state.psf_workspace !== nothing
-    cached_ws = tel.state.psf_workspace
-    compute_psf!(tel, src; zero_padding=2)
-    @test tel.state.psf_workspace === cached_ws
+    centered_rate = similar(field.values, Float64)
+    fraunhofer_intensity_from_field!(centered_rate, field, fraunhofer)
+    direct = prepare_direct_imaging(tel, wavefront, src;
+        zero_padding=2)
+    rate_map = form_direct_image!(direct)
+    rate = intensity_values(rate_map)
+    @test size(rate) == (64, 64)
+    @test maximum(rate) > 0
+    @test isfinite(sum(rate))
+    @test centered_rate ≈ rate
+    @test !hasproperty(tel.state, :psf)
+    @test !hasproperty(tel.state, :psf_stack)
+    @test !hasproperty(tel.state, :psf_workspace)
 
     tel_dim = Telescope(resolution=32, diameter=8.0, central_obstruction=0.2,
         pupil_reflectivity=0.25)
-    psf_dim = compute_psf!(tel_dim, src; zero_padding=2)
-    @test sum(psf_dim) ≈ 0.25 * sum(psf)
+    dim_pupil = PupilFunction(tel_dim)
+    dim_direct = prepare_direct_imaging(tel_dim, dim_pupil, src;
+        zero_padding=2)
+    rate_dim = intensity_values(form_direct_image!(dim_direct))
+    @test sum(rate_dim) ≈ 0.25 * sum(rate)
     photon_rate = pupil_photon_rate_map(tel_dim, src)
     @test size(photon_rate) == size(pupil_mask(tel_dim))
     @test maximum(photon_rate) > 0
@@ -620,10 +621,6 @@ end
     formation_simple = prepare_pupil_field(tel_simple, wavefront_simple,
         src_simple, field_simple)
     fill_electric_field!(field_simple, wavefront_simple, formation_simple)
-    direct = similar(field_simple.values)
-    fill_telescope_field!(direct, tel_simple, src_simple; zero_padding=1)
-    @test direct == field_simple.values
-
     phase_map = fill(pi / 2, tel_simple.params.resolution, tel_simple.params.resolution)
     baseline = copy(field_simple.values)
     apply_phase!(field_simple, phase_map; units=:phase)
@@ -647,9 +644,9 @@ end
 
     propagated = propagation_output(field, fraunhofer)
     propagate_field!(propagated, field, fraunhofer)
-    propagated_psf = similar(propagated.values, Float64)
-    @. propagated_psf = abs2(propagated.values)
-    @test propagated_psf ≈ centered_psf atol=1e-10 rtol=1e-10
+    propagated_intensity = similar(propagated.values, Float64)
+    @. propagated_intensity = abs2(propagated.values)
+    @test propagated_intensity ≈ centered_rate atol=1e-10 rtol=1e-10
     @test fraunhofer.params.output_sampling_rad ≈ wavelength(src) /
         (field.metadata.dimensions[1] * field.metadata.sampling[1])
     @test propagated.metadata.kind isa FocalPlane
@@ -800,15 +797,17 @@ end
 
     reset_opd!(path_a)
     path_b_before_propagation = copy(path_b.opd)
-    telescope_psf_before = copy(tel.state.psf)
     field = ElectricField(path_a, src; zero_padding=2)
-    prepared = prepare_direct_psf(tel, path_a, src, field)
-    explicit_psf_cycle!(prepared.output, field, path_a, prepared.plan,
+    propagation = FraunhoferPropagation(field)
+    output = IntensityMap(field, propagation)
+    fill!(output.values, 0)
+    prepared = prepare_direct_imaging(tel, path_a, src, field, output)
+    explicit_direct_image_cycle!(output, field, path_a, prepared.plan,
         prepared.workspace)
-    @test @allocated(explicit_psf_cycle!(prepared.output, field, path_a,
+    @test @allocated(explicit_direct_image_cycle!(output, field, path_a,
         prepared.plan, prepared.workspace)) == 0
     @test path_b.opd == path_b_before_propagation
-    @test tel.state.psf == telescope_psf_before
+    @test !hasproperty(tel.state, :psf)
 
     spatial_filter = SpatialFilter(tel; shape=SquareFilter(), diameter=5,
         zero_padding=2)
@@ -924,7 +923,7 @@ end
         spectral=propagation.output_metadata.spectral)
     wrong_destination = IntensityMap(wrong_destination_metadata,
         wrong_destination_values)
-    @test_throws DimensionMismatchError prepare_direct_psf(tel, wavefront,
+    @test_throws DimensionMismatchError prepare_direct_imaging(tel, wavefront,
         src, field, wrong_destination)
 
     declared_device_metadata = OpticalPlaneMetadata(PupilPlane(), values;

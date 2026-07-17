@@ -4,6 +4,33 @@ using KernelAbstractions
 using LinearAlgebra
 using Random
 
+function prepare_reference_direct_imaging(tel::Telescope,
+    src::AbstractSource; zero_padding::Int=1)
+    pupil = PupilFunction(tel)
+    apply_opd!(pupil, opd_map(tel))
+    return prepare_direct_imaging(tel, pupil, src;
+        zero_padding=zero_padding)
+end
+
+function execute_reference_direct_imaging!(prepared, tel::Telescope)
+    components = direct_imaging_components(prepared)
+    pupil = first(components).input
+    pupil isa PupilFunction || throw(InvalidConfiguration(
+        "reference direct imaging requires a pupil-input stage"))
+    apply_opd!(pupil, opd_map(tel))
+    return form_direct_image!(prepared)
+end
+
+function reference_direct_image(tel::Telescope, src::AbstractSource;
+    zero_padding::Int=1)
+    prepared = prepare_reference_direct_imaging(tel, src;
+        zero_padding=zero_padding)
+    output = execute_reference_direct_imaging!(prepared, tel)
+    output isa IntensityMap || throw(UnsupportedAlgorithm(
+        "reference direct-image helper requires one compatible output grid"))
+    return intensity_values(output)
+end
+
 struct ReferenceCase
     id::String
     kind::Symbol
@@ -751,10 +778,11 @@ function closed_loop_trace(wfs::AbstractWFS, tel::Telescope, src::AbstractSource
     forcing_opd = zeros(Float64, size(tel.state.opd))
     correction_opd = similar(forcing_opd)
     residual_opd = similar(forcing_opd)
-    psf_ref = begin
-        reset_opd!(tel)
-        copy(compute_psf!(tel, src; zero_padding=psf_zero_padding))
-    end
+    reset_opd!(tel)
+    science = prepare_reference_direct_imaging(tel, src;
+        zero_padding=psf_zero_padding)
+    psf_ref = copy(intensity_values(
+        execute_reference_direct_imaging!(science, tel)))
     trace = Matrix{Float64}(undef, n_iter, 5)
 
     for iter in 1:n_iter
@@ -764,7 +792,8 @@ function closed_loop_trace(wfs::AbstractWFS, tel::Telescope, src::AbstractSource
         tel.state.opd .= residual_opd
         trace[iter, 1] = pupil_rms_nm(forcing_opd, pupil_mask(tel))
         trace[iter, 2] = pupil_rms_nm(residual_opd, pupil_mask(tel))
-        psf = compute_psf!(tel, src; zero_padding=psf_zero_padding)
+        psf = intensity_values(execute_reference_direct_imaging!(science,
+            tel))
         trace[iter, 3] = strehl_ratio(psf, psf_ref)
         slopes = measure!(wfs, tel, src)
         trace[iter, 4] = norm(slopes)
@@ -801,10 +830,11 @@ function gsc_closed_loop_trace(tel::Telescope, src::AbstractSource, wfs::Pyramid
     calibrate!(gsc, calibration_frame)
     frame = similar(calibration_frame)
     og_safe = similar(gsc.og)
-    psf_ref = begin
-        reset_opd!(tel)
-        copy(compute_psf!(tel, src; zero_padding=psf_zero_padding))
-    end
+    reset_opd!(tel)
+    science = prepare_reference_direct_imaging(tel, src;
+        zero_padding=psf_zero_padding)
+    psf_ref = copy(intensity_values(
+        execute_reference_direct_imaging!(science, tel)))
     trace = Matrix{Float64}(undef, n_iter, 6)
 
     for iter in 1:n_iter
@@ -814,7 +844,8 @@ function gsc_closed_loop_trace(tel::Telescope, src::AbstractSource, wfs::Pyramid
         tel.state.opd .= residual_opd
         trace[iter, 1] = pupil_rms_nm(forcing_opd, pupil_mask(tel))
         trace[iter, 2] = pupil_rms_nm(residual_opd, pupil_mask(tel))
-        psf = compute_psf!(tel, src; zero_padding=psf_zero_padding)
+        psf = intensity_values(execute_reference_direct_imaging!(science,
+            tel))
         trace[iter, 3] = strehl_ratio(psf, psf_ref)
         slopes = measure!(wfs, tel, src)
         trace[iter, 4] = norm(slopes)
@@ -872,14 +903,15 @@ function gsc_atmosphere_replay_trace(
     frame = similar(calibration_frame)
     og_safe = similar(gsc.og)
 
-    ngs_psf_ref = begin
-        reset_opd!(tel)
-        copy(compute_psf!(tel, ngs; zero_padding=psf_zero_padding))
-    end
-    sci_psf_ref = begin
-        reset_opd!(tel)
-        copy(compute_psf!(tel, sci; zero_padding=psf_zero_padding))
-    end
+    reset_opd!(tel)
+    ngs_science = prepare_reference_direct_imaging(tel, ngs;
+        zero_padding=psf_zero_padding)
+    sci_science = prepare_reference_direct_imaging(tel, sci;
+        zero_padding=psf_zero_padding)
+    ngs_psf_ref = copy(intensity_values(
+        execute_reference_direct_imaging!(ngs_science, tel)))
+    sci_psf_ref = copy(intensity_values(
+        execute_reference_direct_imaging!(sci_science, tel)))
 
     trace = Matrix{Float64}(undef, n_iter, 7)
     for iter in 1:n_iter
@@ -892,7 +924,8 @@ function gsc_atmosphere_replay_trace(
         apply_opd!(tel, residual_ngs)
         trace[iter, 1] = pupil_rms_nm(forcing_ngs_i, pupil_mask(tel))
         trace[iter, 2] = pupil_rms_nm(residual_ngs, pupil_mask(tel))
-        ngs_psf = compute_psf!(tel, ngs; zero_padding=psf_zero_padding)
+        ngs_psf = intensity_values(execute_reference_direct_imaging!(
+            ngs_science, tel))
         trace[iter, 4] = strehl_ratio(ngs_psf, ngs_psf_ref)
         slopes = measure!(wfs, tel, ngs)
         trace[iter, 6] = norm(slopes)
@@ -902,7 +935,8 @@ function gsc_atmosphere_replay_trace(
 
         apply_opd!(tel, residual_src)
         trace[iter, 3] = pupil_rms_nm(residual_src, pupil_mask(tel))
-        src_psf = compute_psf!(tel, sci; zero_padding=psf_zero_padding)
+        src_psf = intensity_values(execute_reference_direct_imaging!(
+            sci_science, tel))
         trace[iter, 5] = strehl_ratio(src_psf, sci_psf_ref)
 
         if frame_delay == 1
@@ -1086,7 +1120,8 @@ function compute_reference_actual(case::ReferenceCase)
             apply_reference_opd!(tel, case.config["opd"])
         end
         zero_padding = Int(get(case.config["compute"], "zero_padding", 2))
-        return copy(compute_psf!(tel, src; zero_padding=zero_padding))
+        return copy(reference_direct_image(tel, src;
+            zero_padding=zero_padding))
     elseif case.kind in (:shack_hartmann_slopes, :pyramid_slopes, :bioedge_slopes, :zernike_signal, :curvature_signal)
         tel = build_reference_telescope(case.config["telescope"])
         src = build_reference_measurement_source(case.config["source"])

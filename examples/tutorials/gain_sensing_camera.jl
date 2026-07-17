@@ -77,14 +77,15 @@ function atmosphere_gsc_trace(
     frame = similar(calibration_frame)
     og_safe = similar(gsc.og)
 
-    ngs_psf_ref = begin
-        reset_opd!(tel)
-        copy(compute_psf!(tel, ngs; zero_padding=psf_zero_padding))
-    end
-    sci_psf_ref = begin
-        reset_opd!(tel)
-        copy(compute_psf!(tel, sci; zero_padding=psf_zero_padding))
-    end
+    reset_opd!(tel)
+    science_pupil = PupilFunction(tel)
+    apply_opd!(science_pupil, opd_map(tel))
+    ngs_imaging = prepare_direct_imaging(tel, science_pupil, ngs;
+        zero_padding=psf_zero_padding)
+    sci_imaging = prepare_direct_imaging(tel, science_pupil, sci;
+        zero_padding=psf_zero_padding)
+    ngs_image_ref = copy(intensity_values(form_direct_image!(ngs_imaging)))
+    sci_image_ref = copy(intensity_values(form_direct_image!(sci_imaging)))
     atmosphere_renderer = prepare_atmosphere_renderer(atm, tel, ngs)
     atmosphere_output = PupilFunction(tel)
 
@@ -96,11 +97,12 @@ function atmosphere_gsc_trace(
         combine_modes!(correction_opd, basis, control_coeffs)
         @. residual_opd = forcing_opd - correction_opd
         apply_opd!(tel, residual_opd)
+        apply_opd!(science_pupil, opd_map(tel))
 
         trace[iter, 1] = pupil_rms(forcing_opd, pupil_mask(tel)) * 1e9
         trace[iter, 2] = pupil_rms(residual_opd, pupil_mask(tel)) * 1e9
-        ngs_psf = compute_psf!(tel, ngs; zero_padding=psf_zero_padding)
-        trace[iter, 4] = maximum(ngs_psf) / maximum(ngs_psf_ref)
+        ngs_image = intensity_values(form_direct_image!(ngs_imaging))
+        trace[iter, 4] = maximum(ngs_image) / maximum(ngs_image_ref)
         slopes = measure!(wfs, tel, ngs)
         trace[iter, 6] = norm(slopes)
         pyramid_modulation_frame!(frame, wfs, tel, ngs)
@@ -108,8 +110,8 @@ function atmosphere_gsc_trace(
         @. og_safe = max(abs(og), og_floor)
 
         trace[iter, 3] = pupil_rms(residual_opd, pupil_mask(tel)) * 1e9
-        sci_psf = compute_psf!(tel, sci; zero_padding=psf_zero_padding)
-        trace[iter, 5] = maximum(sci_psf) / maximum(sci_psf_ref)
+        sci_image = intensity_values(form_direct_image!(sci_imaging))
+        trace[iter, 5] = maximum(sci_image) / maximum(sci_image_ref)
 
         if frame_delay == 1
             delayed_slopes .= slopes
@@ -162,14 +164,19 @@ function main(; resolution::Int=24, pupil_samples::Int=4)
     delayed_slopes = zeros(Float64, size(H, 1))
     control_coeffs = zeros(Float64, size(basis, 3))
     trace = Matrix{Float64}(undef, size(forcing_coeffs, 1), 3)
-    psf_ref = copy(compute_psf!(tel, src; zero_padding=2))
+    science_pupil = PupilFunction(tel)
+    apply_opd!(science_pupil, opd_map(tel))
+    imaging = prepare_direct_imaging(tel, science_pupil, src;
+        zero_padding=2)
+    image_ref = copy(intensity_values(form_direct_image!(imaging)))
 
     for iter in 1:size(forcing_coeffs, 1)
         opd = combine_modes(basis, @view forcing_coeffs[iter, :]) .- combine_modes(basis, control_coeffs)
         apply_opd!(tel, opd)
+        apply_opd!(science_pupil, opd_map(tel))
         trace[iter, 1] = pupil_rms(tel.state.opd, pupil_mask(tel)) * 1e9
-        psf = compute_psf!(tel, src; zero_padding=2)
-        trace[iter, 2] = maximum(psf) / maximum(psf_ref)
+        image = intensity_values(form_direct_image!(imaging))
+        trace[iter, 2] = maximum(image) / maximum(image_ref)
         slopes = measure!(wfs, tel, src)
         pyramid_modulation_frame!(frame, wfs, tel, src)
         og = compute_optical_gains!(gsc, frame)

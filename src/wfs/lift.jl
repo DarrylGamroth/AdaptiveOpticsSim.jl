@@ -63,6 +63,21 @@ struct LiFTAdaptiveLevenbergMarquardt{T<:AbstractFloat} <: LiFTDampingMode
     condition_rtol::T
 end
 
+function LiFTLevenbergMarquardt(lambda0::Real, growth::Real, condition_rtol::Real)
+    lambda, promoted_growth, promoted_rtol = promote(
+        float(lambda0), float(growth), float(condition_rtol))
+    return LiFTLevenbergMarquardt{typeof(lambda)}(
+        lambda, promoted_growth, promoted_rtol)
+end
+
+function LiFTAdaptiveLevenbergMarquardt(lambda0::Real, growth::Real, shrink::Real,
+    min_lambda::Real, condition_rtol::Real)
+    lambda, promoted_growth, promoted_shrink, promoted_min_lambda, promoted_rtol = promote(
+        float(lambda0), float(growth), float(shrink), float(min_lambda), float(condition_rtol))
+    return LiFTAdaptiveLevenbergMarquardt{typeof(lambda)}(
+        lambda, promoted_growth, promoted_shrink, promoted_min_lambda, promoted_rtol)
+end
+
 LiFTLevenbergMarquardt(; lambda0::Real=1e-6, growth::Real=10.0, condition_rtol::Real=sqrt(eps(Float64))) =
     LiFTLevenbergMarquardt(float(lambda0), float(growth), float(condition_rtol))
 
@@ -184,7 +199,8 @@ function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::Ab
 
     zero_padding = det.params.psf_sampling
     if ang_pixel_arcsec !== nothing
-        scale = psf_pixel_scale_arcsec(tel, src, 1)
+        scale = (180 * 3600 / pi) * wavelength(src) /
+            tel.params.diameter
         zero_padding = max(1, round(Int, scale / ang_pixel_arcsec))
         @info "LiFT using angular sampling override", zero_padding
     end
@@ -377,11 +393,13 @@ function reconstruct!(coeffs::AbstractVector{T}, lift::LiFT, psf_in::AbstractMat
         current_opd = prepare_opd!(lift, coeffs)
         model_psf = psf_from_opd!(lift, current_opd)
         scale = one(T)
+        model_flux = zero(T)
         if optimize_norm == :sum
             denom = backend_sum_value(model_psf)
             if denom > 0
                 scale = backend_sum_value(psf_in) / denom
             end
+            model_flux = abs(denom * scale)
         elseif optimize_norm == :max
             denom = backend_maximum_value(model_psf)
             if denom > 0
@@ -391,15 +409,26 @@ function reconstruct!(coeffs::AbstractVector{T}, lift::LiFT, psf_in::AbstractMat
         if scale != one(T)
             model_psf .*= scale
         end
+        if optimize_norm != :sum
+            model_flux = abs(backend_sum_value(model_psf))
+        end
+        objective_scale = max(model_flux, one(T))
         copyto!(residual, vec(psf_in))
         residual .-= vec(model_psf)
         diag.residual_norm = norm(residual)
-        lift_interaction_matrix!(H, lift, coeffs, mode_ids; flux_norm=scale)
-
         update_weights!(sqrtw, mode, model_psf, lift.det)
+        # Generate the Jacobian in the normalized objective scale so a
+        # physically large photon rate cannot overflow before H'H is formed.
+        lift_interaction_matrix!(H, lift, coeffs, mode_ids;
+            flux_norm=scale / objective_scale)
+
         apply_row_weights!(H, sqrtw, n_modes)
         apply_vec_weights!(residual, sqrtw)
         diag.weighted_residual_norm = norm(residual)
+        # The same normalization on the residual leaves the unregularized
+        # least-squares update unchanged. Damping is evaluated on this
+        # normalized objective rather than on the raw photon-rate scale.
+        residual .*= inv(objective_scale)
         mul!(normal, adjoint(H), H)
         mul!(rhs, adjoint(H), residual)
         λ_state = update_damping_state(lift.params.damping, λ_state, prev_weighted_residual_norm,
@@ -451,7 +480,7 @@ function solve_lift_fallback!(diag::LiFTDiagnostics{T}, rhs::AbstractVector{T},
     work = similar(rhs)
     mul!(work, transpose(F.U), residual)
     @inbounds for i in eachindex(s)
-        denom = s[i]^2 + λ^2
+        denom = s[i]^2 + λ
         work[i] = iszero(denom) ? zero(T) : (s[i] * work[i]) / denom
     end
     mul!(rhs, F.V, work)
@@ -635,14 +664,14 @@ end
 @inline update_damping_state(::LiFTDampingNone, λ::T, ::T, ::T, ::AbstractMatrix{T}) where {T<:AbstractFloat} = λ
 @inline update_damping_state(::LiFTLevenbergMarquardt, λ::T, ::T, ::T, ::AbstractMatrix{T}) where {T<:AbstractFloat} = λ
 function update_damping_state(damping::LiFTAdaptiveLevenbergMarquardt, λ::T, prev_residual::T,
-    current_residual::T, normal::AbstractMatrix{T}) where {T<:AbstractFloat}
-    base = regularization_load(normal)
+    current_residual::T, ::AbstractMatrix{T}) where {T<:AbstractFloat}
+    min_lambda = T(damping.min_lambda)
     if !isfinite(prev_residual)
-        return max(T(damping.lambda0), T(damping.min_lambda), base)
+        return max(T(damping.lambda0), min_lambda)
     elseif current_residual > prev_residual * (one(T) + sqrt(eps(T)))
-        return max(λ * T(damping.growth), T(damping.min_lambda), base)
+        return max(λ * T(damping.growth), min_lambda)
     end
-    return max(λ / T(damping.shrink), T(damping.min_lambda), base)
+    return max(λ / T(damping.shrink), min_lambda)
 end
 
 @inline effective_damping(::LiFTDampingNone, ::T) where {T<:AbstractFloat} = LiFTDampingNone()

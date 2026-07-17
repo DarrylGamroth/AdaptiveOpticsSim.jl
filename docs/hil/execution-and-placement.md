@@ -19,15 +19,17 @@ direction-dependent layer footprints. Detectors on the same compatible path
 reuse the propagated field or photon-arrival-rate product before their independent
 detector integrations and pipelines run.
 
-The current shared-arm runtime mutates common telescope OPD/PSF state and an
-atmosphere render/cache buffer. It must not be parallelized by wrapping the arm
-loop in `Threads.@threads`. The required state split is:
+The current shared-arm runtime gives each direct-science arm a prepared pupil,
+field, photon-arrival-rate output, propagation workspace, and detector plans.
+It still stages common transitional telescope OPD for WFS families and executes
+the arm loop sequentially, so it must not be parallelized by wrapping that loop
+in `Threads.@threads`. The remaining required state split is:
 
 - shared immutable telescope parameters, pupil, and reflectivity
 - shared atmosphere layer state that is read-only for a published epoch
 - shared immutable optic parameters and an effective command snapshot
 - source-specific, precomputed propagation geometry
-- path-local OPD, electric-field, PSF, and FFT workspaces
+- path-local OPD, electric field, photon-arrival-rate output, and FFT workspace
 - acquisition-local WFS, detector-integration, readout, and publication state
 - destination-owned atmosphere rendering that does not use one shared render
   scratch buffer
@@ -90,7 +92,8 @@ Useful user constraints include:
 
 - required CPU worker set, NUMA node, GPU device, or memory domain
 - preferred or forbidden resources
-- groups that must be co-located to reuse a field, PSF, or prepared model
+- groups that must be co-located to reuse a field, photon-arrival-rate product,
+  or prepared model
 - required product-provider tier
 - latency-critical and optional work classes
 - required host/device boundaries for external integration
@@ -106,7 +109,7 @@ After satisfying hard constraints, constrained deterministic rules consider:
 - memory capacity and prepared workspace size
 - the complete simultaneous due-event pattern rather than average load
 - host/device and peer-device transfer cost
-- field, PSF, detector, and optical-model reuse
+- field, photon-arrival-rate product, detector, and optical-model reuse
 - CPU topology, NUMA locality, GPU locality, and reserved contexts
 - declared deadline headroom and bounded handoff capacity
 
@@ -187,7 +190,7 @@ deadlines permit it.
 
 Shared telescope parameters, atmosphere epochs, effective command snapshots,
 and deterministic RNG identities are replicated or published immutably across
-the participating resources. Large field, OPD, PSF, or frame arrays cross a
+the participating resources. Large field, OPD, photon-arrival-rate, or frame arrays cross a
 CPU/GPU boundary only at an explicit prepared handoff with bounded storage and
 a measured transfer budget. An ordinary optical path should not be split
 stage-by-stage across CPU and GPU merely to keep both busy.
@@ -219,7 +222,7 @@ A prepared multi-device plan needs:
   branch workspaces per device
 - static path placement based on measured cost and deadline utilization over
   the multi-rate schedule
-- co-location of consumers that reuse a field or PSF
+- co-location of consumers that reuse a field or photon-arrival-rate product
 - replication of static telescope, atmosphere, and optical-model data
 - broadcast of small epoch metadata and relevant effective command segments
 - local construction of controllable-surface maps on each consuming device

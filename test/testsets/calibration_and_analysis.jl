@@ -276,6 +276,39 @@ end
 end
 
 @testset "LiFT" begin
+    fixed_damping = LiFTLevenbergMarquardt(lambda0=Float32(1e-4))
+    @test fixed_damping isa LiFTLevenbergMarquardt{Float64}
+    @test fixed_damping.lambda0 == Float64(Float32(1e-4))
+    @test LiFTLevenbergMarquardt(Float32(1e-4), 10.0, Float32(1e-3)) isa
+        LiFTLevenbergMarquardt{Float64}
+    @test LiFTLevenbergMarquardt(lambda0=1f-4, growth=10f0,
+        condition_rtol=1f-3) isa LiFTLevenbergMarquardt{Float32}
+
+    adaptive_damping = LiFTAdaptiveLevenbergMarquardt(
+        lambda0=Float32(1e-4), min_lambda=Float32(1e-8))
+    @test adaptive_damping isa LiFTAdaptiveLevenbergMarquardt{Float64}
+    @test adaptive_damping.lambda0 == Float64(Float32(1e-4))
+    @test adaptive_damping.min_lambda == Float64(Float32(1e-8))
+    @test AdaptiveOpticsSim.effective_damping(adaptive_damping, 1f-4) isa
+        LiFTLevenbergMarquardt{Float64}
+
+    fallback_H = [1.0 0.0; 0.0 2.0; 1.0 1.0]
+    fallback_residual = [2.0, -1.0, 0.5]
+    fallback_policy = LiFTLevenbergMarquardt(
+        lambda0=0.1, growth=10.0, condition_rtol=1e-6)
+    fallback_lambda = AdaptiveOpticsSim.damping_lambda(
+        fallback_policy, transpose(fallback_H) * fallback_H)
+    expected_fallback = (transpose(fallback_H) * fallback_H +
+        fallback_lambda * I) \ (transpose(fallback_H) * fallback_residual)
+    fallback_rhs = zeros(2)
+    fallback_diagnostics = AdaptiveOpticsSim.LiFTDiagnostics(
+        NaN, NaN, NaN, NaN, 0.0, false, false)
+    AdaptiveOpticsSim.solve_lift_fallback!(fallback_diagnostics,
+        fallback_rhs, fallback_H, fallback_residual, fallback_policy)
+    @test fallback_rhs ≈ expected_fallback rtol=1e-12 atol=1e-12
+    @test fallback_diagnostics.regularization == fallback_lambda
+    @test fallback_diagnostics.used_fallback
+
     tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     det = Detector(noise=NoiseNone(), psf_sampling=1)
@@ -290,7 +323,7 @@ end
         img_resolution=8, numerical=false, object_kernel=kernel)
     H_analytic = lift_interaction_matrix(lift_analytic, zeros(3), [1, 2])
     @test size(H_analytic) == (64, 2)
-    psf = compute_psf!(tel, src; zero_padding=1)
+    psf = reference_direct_image(tel, src; zero_padding=1)
     coeffs = reconstruct(lift, psf, [1, 2])
     @test length(coeffs) == 2
     @test AdaptiveOpticsSim.effective_solve_mode(AdaptiveOpticsSim.ScalarCPUStyle(), LiFTSolveAuto()) isa LiFTSolveQR
@@ -306,6 +339,20 @@ end
     @test length(coeffs_normal) == 2
     @test all(isfinite, coeffs_normal)
     @test !diagnostics(lift_normal).used_qr
+
+    tel32 = Telescope(resolution=8, diameter=8f0,
+        central_obstruction=0f0, T=Float32)
+    src32 = Source(band=:I, magnitude=0f0, T=Float32)
+    det32 = Detector(noise=NoiseNone(), psf_sampling=1, T=Float32)
+    basis32 = rand(MersenneTwister(29), Float32, 8, 8, 3)
+    lift_normal32 = LiFT(tel32, src32, basis32, det32;
+        diversity_opd=zeros(Float32, 8, 8), iterations=2,
+        img_resolution=8, solve_mode=LiFTSolveNormalEquations())
+    psf32 = reference_direct_image(tel32, src32; zero_padding=1)
+    coeffs_normal32 = reconstruct(lift_normal32, psf32, [1, 2])
+    @test all(isfinite, coeffs_normal32)
+    @test all(isfinite, @view(lift_normal32.state.normal_buffer[1:2, 1:2]))
+
     lift_damped = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=2,
         img_resolution=8, numerical=true, damping=LiFTLevenbergMarquardt())
     coeffs_damped = reconstruct(lift_damped, psf, [1, 2])
@@ -318,6 +365,25 @@ end
     @test length(coeffs_adaptive) == 2
     @test all(isfinite, coeffs_adaptive)
     @test diagnostics(lift_adaptive).regularization >= 0
+
+    zernike = ZernikeBasis(tel, 4)
+    compute_zernike!(zernike, tel)
+    adaptive_basis = copy(@view zernike.modes[:, :, 2:3])
+    adaptive_diversity = 50e-9 .* @view(zernike.modes[:, :, 4])
+    adaptive_truth = [10e-9, -5e-9]
+    adaptive_truth_opd = adaptive_diversity .+
+        adaptive_truth[1] .* @view(adaptive_basis[:, :, 1]) .+
+        adaptive_truth[2] .* @view(adaptive_basis[:, :, 2])
+    lift_adaptive_truth = LiFT(tel, src, adaptive_basis, det;
+        diversity_opd=adaptive_diversity, iterations=3, img_resolution=8,
+        numerical=false, solve_mode=LiFTSolveNormalEquations(),
+        damping=LiFTAdaptiveLevenbergMarquardt())
+    adaptive_target = copy(AdaptiveOpticsSim.psf_from_opd!(
+        lift_adaptive_truth, adaptive_truth_opd))
+    adaptive_estimate = reconstruct(lift_adaptive_truth, adaptive_target,
+        [1, 2]; check_convergence=false)
+    @test adaptive_estimate ≈ adaptive_truth rtol=2e-3 atol=eps(Float64)
+
     det_binned = Detector(noise=NoiseNone(), psf_sampling=1, binning=2)
     frame_binned = capture!(det_binned, psf; rng=MersenneTwister(3))
     lift_binned = LiFT(tel, src, basis, det_binned; diversity_opd=diversity, iterations=2,
@@ -331,6 +397,17 @@ end
     coeffs_readout = reconstruct(lift_readout, psf, [1, 2])
     @test length(coeffs_readout) == 2
     @test all(isfinite, coeffs_readout)
+
+    lift_weighted = LiFT(tel, src, basis, det_readout;
+        diversity_opd=diversity, iterations=1, img_resolution=8,
+        numerical=false)
+    initial_model = copy(AdaptiveOpticsSim.psf_from_opd!(
+        lift_weighted, diversity))
+    initial_model .*= sum(psf) / sum(initial_model)
+    expected_weights = sqrt.(inv.(max.(initial_model .+ 1e-6, eps(Float64))))
+    reconstruct(lift_weighted, psf, [1, 2]; R_n=:model,
+        check_convergence=false)
+    @test lift_weighted.state.weight_buffer ≈ vec(expected_weights)
 
     sep_kernel = [1.0, 2.0, 1.0] * transpose([1.0, 0.5, 1.0])
     lift_sep = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=2,
@@ -643,7 +720,7 @@ end
     diversity = fill(eltype(tel.state.opd)(1e-9), size(tel.state.opd))
     lift_basis = basis_from_m2c(dm, tel, basis.M2C)
     lift = LiFT(tel, src, lift_basis, det; diversity_opd=diversity, iterations=2, img_resolution=8, numerical=true)
-    psf_in = compute_psf!(tel, src; zero_padding=1)
+    psf_in = reference_direct_image(tel, src; zero_padding=1)
     coeffs = zeros(eltype(psf_in), 2)
     reconstruct!(coeffs, lift, psf_in, [1, 2]; check_convergence=false)
     @test length(coeffs) == 2

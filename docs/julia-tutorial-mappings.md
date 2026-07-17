@@ -22,10 +22,10 @@ Each script exposes a `main()` function and logs a short completion summary with
 
 | OOPAO tutorial | Julia example | Coverage |
 | --- | --- | --- |
-| `tutorials/image_formation.py` | `examples/tutorials/image_formation.jl` | Telescope, source, PSF, Zernike aberrations |
+| `tutorials/image_formation.py` | `examples/tutorials/image_formation.jl` | Telescope, source-scaled direct image, Zernike aberrations |
 | `tutorials/how_to_detector.py` | `examples/tutorials/detector.jl` | Detector sampling, binning, noise model wiring |
 | `tutorials/how_to_multi_sources.py` | `examples/tutorials/asterism.jl` | Multiple sources combined through `Asterism` |
-| `tutorials/how_to_asterism.py` | `examples/tutorials/asterism.jl` | Per-source PSFs and combined field |
+| `tutorials/how_to_asterism.py` | `examples/tutorials/asterism.jl` | Per-source photon-arrival-rate images and their compatible incoherent sum |
 | `tutorials/how_to_spatial_filter.py` | `examples/tutorials/spatial_filter.jl` | Spatial filtering without baking optics into the telescope type |
 | `tutorials/how_to_NCPA.py` | `examples/tutorials/ncpa.jl` | Basis-driven NCPA synthesis and application |
 | `tutorials/how_to_LIFT.ipynb` | `examples/tutorials/lift.jl` | LiFT setup and coefficient recovery |
@@ -39,8 +39,9 @@ Each script exposes a `main()` function and logs a short completion summary with
 
 ## Julia patterns behind the mapping
 
-- OOPAO’s `ngs*tel*wfs` chain becomes explicit function calls such as
-  `compute_psf!(tel, src)` or `measure!(wfs, tel, src)`.
+- OOPAO’s `ngs*tel*wfs` chain becomes explicit preparation and execution such
+  as `prepare_direct_imaging` plus `form_direct_image!`, or
+  `measure!(wfs, tel, src)`.
 - WFS sensing mode is encoded in the WFS type parameter via
   `mode=Geometric()` or `mode=Diffractive()`, not a mutable string flag.
 - Detector noise is encoded by the detector’s `noise` type, for example
@@ -55,7 +56,11 @@ Each script exposes a `main()` function and logs a short completion summary with
 ```julia
 tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=10.0)
-psf = compute_psf!(tel, src; zero_padding=2)
+pupil = PupilFunction(tel)
+apply_opd!(pupil, opd_map(tel))
+imaging = prepare_direct_imaging(tel, pupil, src; zero_padding=2)
+form_direct_image!(imaging)
+photon_rate_image = intensity_values(direct_imaging_output(imaging))
 ```
 
 ### Diffractive WFS measurement

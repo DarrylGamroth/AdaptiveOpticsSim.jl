@@ -116,14 +116,19 @@ function gate0_radiometric_chain(case::ReferenceCase)
     photon_rate = pupil_photon_rate_map(tel, src)
     size(photon_rate) == size(field.values) || throw(DimensionMismatchError(
         "Gate 0 radiometric fixture requires zero_padding=1"))
-    psf_rate = copy(compute_psf!(tel, src; zero_padding=zero_padding))
+    prepared = prepare_reference_direct_imaging(tel, src;
+        zero_padding=zero_padding)
+    rate_map = execute_reference_direct_imaging!(prepared, tel)
+    image_rate = copy(intensity_values(rate_map))
     seed = Int(get(case.config["compute"], "seed", 1))
-    frames = [copy(capture!(detector, psf_rate;
+    acquisitions = [prepare_detector_acquisition(detector, rate_map)
+        for detector in detectors]
+    frames = [copy(capture!(detector, rate_map, acquisitions[index];
         rng=MersenneTwister(seed + index - 1)))
         for (index, detector) in enumerate(detectors)]
     duration = gate0_legacy_optical_duration(case)
     return cat(Array(photon_rate) .* duration,
-        abs2.(field.values) .* duration, Array(psf_rate) .* duration,
+        abs2.(field.values) .* duration, Array(image_rate) .* duration,
         (frame .* duration for frame in frames)...; dims=3)
 end
 
@@ -134,14 +139,18 @@ function gate0_spectral_psf(case::ReferenceCase)
     bundle = SpectralBundle(Float64.(cfg["wavelengths"]),
         Float64.(cfg["weights"]); T=Float64)
     zero_padding = Int(get(case.config["compute"], "zero_padding", 1))
+    spectral = with_spectrum(src, bundle)
+    prepared = prepare_reference_direct_imaging(tel, spectral;
+        zero_padding=zero_padding)
+    products = execute_reference_direct_imaging!(prepared, tel)
     n = tel.params.resolution * zero_padding
-    stack = Array{Float64}(undef, n, n, length(bundle) + 1)
+    stack = Array{Float64}(undef, n, n, length(products) + 1)
     combined = zeros(Float64, n, n)
-    for (index, sample) in enumerate(bundle)
-        sample_src = AdaptiveOpticsSim.source_with_wavelength_and_radiometric_value(src,
-            sample.wavelength, photon_irradiance(src) * sample.weight)
-        plane = compute_psf!(tel, sample_src; zero_padding=zero_padding)
+    for (index, product) in enumerate(products)
+        plane = intensity_values(product)
         @views stack[:, :, index] .= plane
+        # Frozen legacy characterization only. Production preserves these
+        # distinct wavelength grids in `products` rather than index-summing.
         combined .+= plane
     end
     @views stack[:, :, end] .= combined
@@ -157,15 +166,23 @@ function gate0_direct_science(case::ReferenceCase)
     zero_padding = Int(get(case.config["compute"], "zero_padding", 1))
     n = tel.params.resolution * zero_padding
     stack = Array{Float64}(undef, n, n, 5)
-    @views stack[:, :, 1] .= compute_psf!(tel, sources[1];
+    first_prepared = prepare_reference_direct_imaging(tel, sources[1];
         zero_padding=zero_padding)
-    @views stack[:, :, 2] .= compute_psf!(tel, sources[2];
+    second_prepared = prepare_reference_direct_imaging(tel, sources[2];
         zero_padding=zero_padding)
-    combined = copy(compute_psf!(tel, Asterism(sources);
-        zero_padding=zero_padding))
+    @views stack[:, :, 1] .= intensity_values(
+        execute_reference_direct_imaging!(first_prepared, tel))
+    @views stack[:, :, 2] .= intensity_values(
+        execute_reference_direct_imaging!(second_prepared, tel))
+    combined_prepared = prepare_reference_direct_imaging(tel,
+        Asterism(sources); zero_padding=zero_padding)
+    combined = intensity_values(execute_reference_direct_imaging!(
+        combined_prepared, tel))
+    component_products = map(direct_imaging_output,
+        direct_imaging_components(combined_prepared))
     @views begin
-        stack[:, :, 3] .= tel.state.psf_stack[:, :, 1]
-        stack[:, :, 4] .= tel.state.psf_stack[:, :, 2]
+        stack[:, :, 3] .= intensity_values(component_products[1])
+        stack[:, :, 4] .= intensity_values(component_products[2])
         stack[:, :, 5] .= combined
     end
     stack .*= gate0_legacy_optical_duration(case)
@@ -215,14 +232,31 @@ function compute_gate0_actual(case::ReferenceCase)
     throw(InvalidConfiguration("unsupported Gate 0 characterization kind '$(case.kind)'"))
 end
 
+function gate0_comparison_actual(case::ReferenceCase, actual)
+    case.kind === :gate0_direct_science || return actual
+
+    # The frozen pre-HIL fixture captured the retired row/column swap in the
+    # legacy off-axis shift. Keep that historical artifact immutable and adapt
+    # only its comparison view; production direct imaging follows the declared
+    # (:x, :y) axis order and is tested independently in direct_science.jl.
+    comparison = copy(actual)
+    @views begin
+        comparison[:, :, 2] .= permutedims(actual[:, :, 2], (2, 1))
+        comparison[:, :, 4] .= permutedims(actual[:, :, 4], (2, 1))
+        comparison[:, :, 5] .= comparison[:, :, 3] .+ comparison[:, :, 4]
+    end
+    return comparison
+end
+
 function validate_gate0_case(case::ReferenceCase)
     expected = load_reference_array(case)
     actual = compute_gate0_actual(case)
     if size(actual) != size(expected)
         return (ok=false, actual=actual, expected=expected, maxabs=Inf)
     end
-    delta = abs.(actual .- expected)
+    comparison = gate0_comparison_actual(case, actual)
+    delta = abs.(comparison .- expected)
     maxabs = isempty(delta) ? 0.0 : maximum(delta)
-    ok = isapprox(actual, expected; atol=case.atol, rtol=case.rtol)
+    ok = isapprox(comparison, expected; atol=case.atol, rtol=case.rtol)
     return (ok=ok, actual=actual, expected=expected, maxabs=maxabs)
 end

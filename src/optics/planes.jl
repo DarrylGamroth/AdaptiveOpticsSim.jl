@@ -477,12 +477,18 @@ end
 Preserve prepared optical products that cannot be combined on one physical
 grid. A bundle performs no implicit resampling or radiometric conversion.
 """
-struct OpticalProductBundle{P<:Tuple}
+struct OpticalProductBundle{P<:Union{Tuple,AbstractVector}}
     products::P
 end
 
 OpticalProductBundle(products::Vararg{AbstractOpticalProduct,N}) where {N} =
     OpticalProductBundle{typeof(products)}(products)
+
+function OpticalProductBundle(
+    products::AbstractVector{<:AbstractOpticalProduct})
+    owned = copy(products)
+    return OpticalProductBundle{typeof(owned)}(owned)
+end
 
 Base.length(bundle::OpticalProductBundle) = length(bundle.products)
 Base.getindex(bundle::OpticalProductBundle, index::Int) = bundle.products[index]
@@ -492,15 +498,20 @@ Base.iterate(bundle::OpticalProductBundle, state...) =
 struct _PreparedIncoherentSumToken end
 const _PREPARED_INCOHERENT_SUM_TOKEN = _PreparedIncoherentSumToken()
 
-struct PreparedIncoherentSum{O<:OpticalPlaneMetadata,I<:Tuple}
+struct PreparedIncoherentInputs{M,V}
+    metadata::M
+    values::V
+end
+
+struct PreparedIncoherentSum{O<:OpticalPlaneMetadata,I}
     output_metadata::O
-    input_metadata::I
+    inputs::I
 
     function PreparedIncoherentSum(::_PreparedIncoherentSumToken,
-        output_metadata::O, input_metadata::I) where {
-        O<:OpticalPlaneMetadata,I<:Tuple,
+        output_metadata::O, inputs::I) where {
+        O<:OpticalPlaneMetadata,I,
     }
-        return new{O,I}(output_metadata, input_metadata)
+        return new{O,I}(output_metadata, inputs)
     end
 end
 
@@ -519,8 +530,57 @@ function prepare_incoherent_sum(output::IntensityMap,
             label="incoherent intensity accumulation")
         input.metadata
     end, N)
+    values = ntuple(index -> inputs[index].values, N)
     return PreparedIncoherentSum(_PREPARED_INCOHERENT_SUM_TOKEN,
-        output.metadata, metadata)
+        output.metadata, PreparedIncoherentInputs(metadata, values))
+end
+
+function prepare_incoherent_sum(output::IntensityMap,
+    inputs::AbstractVector{<:IntensityMap})
+    isempty(inputs) && throw(InvalidConfiguration(
+        "incoherent accumulation requires at least one input"))
+    _require_declared_intensity_spectral(output.metadata.spectral,
+        "incoherent intensity output")
+    _require_nonaliasing_intensity_inputs(output.values, inputs)
+
+    first_input = first(inputs)
+    first_metadata = first_input.metadata
+    first_values = first_input.values
+    metadata = Vector{typeof(first_metadata)}(undef, length(inputs))
+    values = Vector{typeof(first_values)}(undef, length(inputs))
+    @inbounds for index in eachindex(inputs)
+        input = inputs[index]
+        _require_homogeneous_prepared_input(typeof(first_metadata),
+            typeof(input.metadata))
+        _require_homogeneous_prepared_values(typeof(first_values),
+            typeof(input.values))
+        _require_declared_intensity_spectral(input.metadata.spectral,
+            "incoherent intensity input")
+        require_incoherent_addition(output.metadata, input.metadata;
+            label="incoherent intensity accumulation")
+        metadata[index] = input.metadata
+        values[index] = input.values
+    end
+    return PreparedIncoherentSum(_PREPARED_INCOHERENT_SUM_TOKEN,
+        output.metadata, PreparedIncoherentInputs(metadata, values))
+end
+
+@inline function _require_homogeneous_prepared_input(
+    ::Type{R}, ::Type{I}) where {
+    R<:OpticalPlaneMetadata,I<:OpticalPlaneMetadata,
+}
+    R === I || throw(InvalidConfiguration(
+        "vector incoherent inputs must have one concrete metadata type; got " *
+        "$(R) and $(I)"))
+    return nothing
+end
+
+@inline function _require_homogeneous_prepared_values(
+    ::Type{R}, ::Type{I}) where {R<:AbstractArray,I<:AbstractArray}
+    R === I || throw(InvalidConfiguration(
+        "vector incoherent inputs must have one concrete storage type; got " *
+        "$(R) and $(I)"))
+    return nothing
 end
 
 @inline _require_declared_intensity_spectral(::MonochromaticChannel,
@@ -542,11 +602,26 @@ function accumulate_intensity!(output::IntensityMap,
     inputs::Tuple, plan::PreparedIncoherentSum)
     output.metadata === plan.output_metadata || throw(InvalidConfiguration(
         "intensity output does not match its prepared accumulation plan"))
-    length(inputs) == length(plan.input_metadata) ||
+    length(inputs) == length(plan.inputs.metadata) ||
         throw(DimensionMismatchError(
             "intensity input count does not match its prepared accumulation plan"))
     _require_prepared_intensity_inputs(output.values, inputs,
-        plan.input_metadata)
+        plan.inputs.metadata, plan.inputs.values)
+    fill!(output.values, zero(eltype(output.values)))
+    _accumulate_prepared_intensity!(output.values, inputs)
+    return output
+end
+
+
+function accumulate_intensity!(output::IntensityMap,
+    inputs::AbstractVector{<:IntensityMap}, plan::PreparedIncoherentSum)
+    output.metadata === plan.output_metadata || throw(InvalidConfiguration(
+        "intensity output does not match its prepared accumulation plan"))
+    length(inputs) == length(plan.inputs.metadata) ||
+        throw(DimensionMismatchError(
+            "intensity input count does not match its prepared accumulation plan"))
+    _require_prepared_intensity_inputs(output.values, inputs,
+        plan.inputs.metadata, plan.inputs.values)
     fill!(output.values, zero(eltype(output.values)))
     _accumulate_prepared_intensity!(output.values, inputs)
     return output
@@ -563,18 +638,46 @@ end
     return _require_nonaliasing_intensity_inputs(output, Base.tail(inputs))
 end
 
+
+function _require_nonaliasing_intensity_inputs(output::AbstractArray,
+    inputs::AbstractVector{<:IntensityMap})
+    @inbounds for input in inputs
+        Base.mightalias(output, input.values) && throw(InvalidConfiguration(
+            "incoherent intensity output must not alias an input"))
+    end
+    return nothing
+end
+
 @inline _require_prepared_intensity_inputs(::AbstractArray, ::Tuple{},
-    ::Tuple{}) = nothing
+    ::Tuple{}, ::Tuple{}) = nothing
 
 @inline function _require_prepared_intensity_inputs(output::AbstractArray,
-    inputs::Tuple, metadata::Tuple)
+    inputs::Tuple, metadata::Tuple, values::Tuple)
     input = first(inputs)
     input.metadata === first(metadata) || throw(InvalidConfiguration(
         "intensity input does not match its prepared accumulation plan"))
+    input.values === first(values) || throw(InvalidConfiguration(
+        "intensity input storage does not match its prepared accumulation plan"))
     Base.mightalias(output, input.values) && throw(InvalidConfiguration(
         "incoherent intensity output must not alias an input"))
     return _require_prepared_intensity_inputs(output, Base.tail(inputs),
-        Base.tail(metadata))
+        Base.tail(metadata), Base.tail(values))
+end
+
+
+function _require_prepared_intensity_inputs(output::AbstractArray,
+    inputs::AbstractVector{<:IntensityMap}, metadata::AbstractVector,
+    values::AbstractVector)
+    @inbounds for index in eachindex(inputs, metadata, values)
+        input = inputs[index]
+        input.metadata === metadata[index] || throw(InvalidConfiguration(
+            "intensity input does not match its prepared accumulation plan"))
+        input.values === values[index] || throw(InvalidConfiguration(
+            "intensity input storage does not match its prepared accumulation plan"))
+        Base.mightalias(output, input.values) && throw(InvalidConfiguration(
+            "incoherent intensity output must not alias an input"))
+    end
+    return nothing
 end
 
 @inline _accumulate_prepared_intensity!(output, ::Tuple{}) = output
@@ -582,4 +685,13 @@ end
 @inline function _accumulate_prepared_intensity!(output, inputs::Tuple)
     output .+= first(inputs).values
     return _accumulate_prepared_intensity!(output, Base.tail(inputs))
+end
+
+
+function _accumulate_prepared_intensity!(output,
+    inputs::AbstractVector{<:IntensityMap})
+    @inbounds for input in inputs
+        output .+= input.values
+    end
+    return output
 end

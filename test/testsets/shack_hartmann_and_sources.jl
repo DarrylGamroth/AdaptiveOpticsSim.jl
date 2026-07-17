@@ -470,7 +470,7 @@ end
     @test sum(wfs.state.intensity_stack) ≈ 3 * expected_rate atol=1e-10 rtol=1e-12
 end
 
-@testset "Asterism PSF" begin
+@testset "Asterism direct imaging" begin
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src1 = Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0))
     src2 = Source(band=:I, magnitude=0.0, coordinates=(1.0, 90.0))
@@ -478,10 +478,15 @@ end
     @test coordinates_xy_arcsec(src2)[1] ≈ 0.0 atol=1e-12
     @test coordinates_xy_arcsec(src2)[2] ≈ 1.0
     ast = Asterism([src1, src2])
-    psf = compute_psf!(tel, ast; zero_padding=2)
-    @test size(tel.state.psf_stack, 3) == 2
-    @test size(psf) == (32, 32)
-    @test sum(psf) >= sum(@view tel.state.psf_stack[:, :, 1])
+    prepared = prepare_direct_imaging(tel, PupilFunction(tel), ast;
+        zero_padding=2)
+    combined = form_direct_image!(prepared)
+    components = map(direct_imaging_output,
+        direct_imaging_components(prepared))
+    @test length(components) == 2
+    @test size(intensity_values(combined)) == (32, 32)
+    @test sum(intensity_values(combined)) >=
+        sum(intensity_values(components[1]))
 
     spectral = with_spectrum(src1,
         SpectralBundle([0.9 * wavelength(src1), 1.1 * wavelength(src1)],

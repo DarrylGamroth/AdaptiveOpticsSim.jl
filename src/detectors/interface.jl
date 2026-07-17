@@ -859,20 +859,33 @@ struct SampledFrameReadoutProducts{A<:AbstractMatrix,C} <: FrameReadoutProducts
     read_cube::Union{Nothing,C}
 end
 
-struct MultiReadFrameReadoutProducts{A<:AbstractMatrix,C,V} <: FrameReadoutProducts
-    reference_frame::Union{Nothing,A}
-    signal_frame::A
-    combined_frame::A
-    reference_cube::Union{Nothing,C}
-    signal_cube::Union{Nothing,C}
-    read_cube::Union{Nothing,C}
-    read_times::Union{Nothing,V}
+# The product bundle is detector state with stable identity. Keeping its buffer
+# bindings const preserves preparation invariants while avoiding repeated
+# boxing when the bundle is retrieved from DetectorState's concrete union.
+mutable struct MultiReadFrameReadoutProducts{A<:AbstractMatrix,C,V} <:
+    FrameReadoutProducts
+    const reference_frame::Union{Nothing,A}
+    const signal_frame::A
+    const combined_frame::A
+    const reference_cube::Union{Nothing,C}
+    const signal_cube::Union{Nothing,C}
+    const read_cube::Union{Nothing,C}
+    const read_times::Union{Nothing,V}
+    const workspace_reference_cube::Union{Nothing,C}
+    const workspace_signal_cube::Union{Nothing,C}
 
-    function MultiReadFrameReadoutProducts{A,C,V}(reference_frame::Union{Nothing,A}, signal_frame::A, combined_frame::A,
-        reference_cube::Union{Nothing,C}, signal_cube::Union{Nothing,C}, read_cube::Union{Nothing,C},
-        read_times::Union{Nothing,V}) where {A<:AbstractMatrix,C,V}
+    function MultiReadFrameReadoutProducts{A,C,V}(
+        reference_frame::Union{Nothing,A}, signal_frame::A,
+        combined_frame::A, reference_cube::Union{Nothing,C},
+        signal_cube::Union{Nothing,C}, read_cube::Union{Nothing,C},
+        read_times::Union{Nothing,V},
+        workspace_reference_cube::Union{Nothing,C},
+        workspace_signal_cube::Union{Nothing,C}) where {
+        A<:AbstractMatrix,C,V,
+    }
         return new{A,C,V}(reference_frame, signal_frame, combined_frame,
-            reference_cube, signal_cube, read_cube, read_times)
+            reference_cube, signal_cube, read_cube, read_times,
+            workspace_reference_cube, workspace_signal_cube)
     end
 end
 
@@ -907,12 +920,23 @@ end
     end
 end
 
-function MultiReadFrameReadoutProducts(reference_frame::Union{Nothing,A}, signal_frame::A, combined_frame::A,
-    reference_cube, signal_cube, read_cube, read_times) where {A<:AbstractMatrix}
+function MultiReadFrameReadoutProducts(reference_frame::Union{Nothing,A},
+    signal_frame::A, combined_frame::A, reference_cube, signal_cube,
+    read_cube, read_times) where {A<:AbstractMatrix}
+    return MultiReadFrameReadoutProducts(reference_frame, signal_frame,
+        combined_frame, reference_cube, signal_cube, read_cube, read_times,
+        reference_cube, signal_cube)
+end
+
+function MultiReadFrameReadoutProducts(reference_frame::Union{Nothing,A},
+    signal_frame::A, combined_frame::A, reference_cube, signal_cube,
+    read_cube, read_times, workspace_reference_cube,
+    workspace_signal_cube) where {A<:AbstractMatrix}
     C = _multi_read_cube_param(reference_cube, signal_cube, read_cube)
     V = typeof(read_times)
-    return MultiReadFrameReadoutProducts{A,C,V}(reference_frame, signal_frame, combined_frame,
-        reference_cube, signal_cube, read_cube, read_times)
+    return MultiReadFrameReadoutProducts{A,C,V}(reference_frame,
+        signal_frame, combined_frame, reference_cube, signal_cube, read_cube,
+        read_times, workspace_reference_cube, workspace_signal_cube)
 end
 
 const HgCdTeReadoutProducts = MultiReadFrameReadoutProducts

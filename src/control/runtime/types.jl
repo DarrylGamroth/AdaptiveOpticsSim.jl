@@ -50,6 +50,28 @@ abstract type AbstractSciencePathPlan end
 struct ReuseSensedOpticalPath <: AbstractSciencePathPlan end
 struct RepropagateScienceOpticalPath <: AbstractSciencePathPlan end
 
+"""
+    PreparedRuntimeScienceStage
+
+Concrete, run-immutable direct-science stage. The caller-owned pupil is the
+explicit bridge from transitional telescope OPD state into prepared direct
+imaging. `acquisition` is either the exact plan for a primary detector or a
+concrete tuple of exact plans for a shared-arm fanout.
+"""
+struct PreparedRuntimeScienceStage{
+    P<:PupilFunction,
+    I<:Union{PreparedDirectImaging,PreparedIncoherentDirectImaging},
+    M<:IntensityMap,
+    A<:Union{DetectorAcquisitionPlan,
+        Tuple{Vararg{DetectorAcquisitionPlan}}},
+}
+    pupil::P
+    imaging::I
+    output::M
+    acquisition::A
+    aperture_revision::UInt
+end
+
 @inline science_path_plan(wfs_src::AbstractSource, science_src::AbstractSource) =
     wfs_src === science_src ? ReuseSensedOpticalPath() : RepropagateScienceOpticalPath()
 
@@ -133,7 +155,7 @@ default_runtime_latency(::HILRuntimeProfile) = RuntimeLatencyModel(
 end
 
 runtime_science_zero_padding(::ScientificRuntimeProfile) = 2
-runtime_science_zero_padding(::HILRuntimeProfile) = 0
+runtime_science_zero_padding(::HILRuntimeProfile) = 1
 
 """
     VectorDelayLine(ref, delay_frames)
@@ -241,6 +263,7 @@ mutable struct ClosedLoopRuntime{
     SV,
     WD,
     SD,
+    SI,
     RNG,
     RP<:AbstractRuntimeProfile,
     EP<:AbstractRuntimeExecutionPlan,
@@ -269,6 +292,7 @@ mutable struct ClosedLoopRuntime{
     slopes::SV
     wfs_detector::WD
     science_detector::SD
+    science_stage::SI
     rng::RNG
     profile::RP
     execution_plan::EP

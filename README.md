@@ -27,19 +27,23 @@ If you are working on validation, production support, or backend work, then use:
 
 ## First Model
 
-### 1. Optics-only PSF
+### 1. Optics-only direct image
 
 ```julia
 using AdaptiveOpticsSim
 
 tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)
-photon_rate_psf = compute_psf!(tel, src; zero_padding=2)
+pupil = PupilFunction(tel)
+apply_opd!(pupil, opd_map(tel))
+imaging = prepare_direct_imaging(tel, pupil, src; zero_padding=2)
+form_direct_image!(imaging)
+photon_rate_image = intensity_values(direct_imaging_output(imaging))
 ```
 
-The convenience result is a source-brightness-scaled, cell-integrated photon-
-arrival rate before detector exposure; it is not inherently a unit-normalized
-PSF.
+The caller-owned result is a source-brightness-scaled, cell-integrated photon-
+arrival rate on focal-plane angular coordinates before detector exposure; it
+is not inherently a unit-normalized PSF.
 
 ### 2. Add atmosphere and a wavefront sensor
 

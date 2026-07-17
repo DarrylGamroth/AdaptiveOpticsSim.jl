@@ -402,8 +402,10 @@ function AdaptiveOpticsSim.solve_lift_fallback!(diag::AdaptiveOpticsSim.LiFTDiag
     λ = AdaptiveOpticsSim.fallback_damping_lambda(damping, T, H_mat)
     work = AMDGPU.ROCArray{T}(undef, length(svd_parts.S))
     mul!(work, transpose(svd_parts.U), residual)
-    @. work = ifelse(iszero(svd_parts.S^2 + λ^2), zero(T), (svd_parts.S * work) / (svd_parts.S^2 + λ^2))
+    @. work = ifelse(iszero(svd_parts.S^2 + λ), zero(T), (svd_parts.S * work) / (svd_parts.S^2 + λ))
     mul!(rhs, adjoint(svd_parts.Vt), work)
+    diag.regularization = λ
+    diag.used_fallback = true
     return rhs
 end
 

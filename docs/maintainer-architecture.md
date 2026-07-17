@@ -42,7 +42,8 @@ The codebase is organized into subsystem directories:
   - traits, errors, backend services, reduction/random helpers, shared low-level
     infrastructure
 - `src/optics`
-  - telescope, sources, electric fields, propagation, masks, DMs, PSFs
+  - telescope, sources, explicit optical products, propagation, masks, DMs,
+    and prepared direct imaging
 - `src/atmosphere`
   - Von Karman/Kolmogorov screens, multilayer atmospheres, infinite-screen
     evolution, atmosphere-field propagation support
@@ -83,6 +84,10 @@ Examples:
 - `Detector` with `DetectorParams` and `DetectorState`
 - `DetectorAcquisitionPlan` as the cold-path compatibility and buffer contract
   between one frame detector and one immutable intensity-map description
+- `DirectImagingPlan` and `DirectImagingWorkspace` as the fixed-storage,
+  single-writer native image-formation contract; composition returns concrete
+  prepared values accessed through `direct_imaging_output` and
+  `direct_imaging_components` rather than exposing telescope-owned focal state
 - caller-owned `WFSObservation` and `WFSMeasurement` products with explicit
   units, layout/kind, shape, numeric type, backend, and physical-device metadata
 - concrete prepared WFS optical-formation, acquisition, and estimation plans
@@ -168,7 +173,8 @@ The current runtime model is:
 - CPU HIL is a direct host-resident plan, while accelerator runtimes use a
   device-resident plan with explicit observation barriers
 - shared multi-arm runtimes own one atmosphere advance and command state while
-  source-specific arms own their WFS and science consumers
+  source-specific arms own their WFS consumers, prepared direct-imaging
+  products/workspace, and independent detector acquisitions
 - WFS and detector pipelines own their sampled/readout/intermediate products
   explicitly rather than relying on in-place aliasing
 - optical formation produces photon-arrival rates or explicitly dimensionless

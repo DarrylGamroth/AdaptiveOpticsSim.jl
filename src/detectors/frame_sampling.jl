@@ -22,7 +22,9 @@ end
 function _ensure_windowed_frame_buffer(current, det::Detector, full_frame::AbstractMatrix{T}) where {T}
     target_shape = readout_product_shape(det)
     if current === nothing || size(current) != target_shape
-        return similar(full_frame, target_shape...)
+        buffer = similar(full_frame, target_shape...)
+        fill!(buffer, zero(eltype(buffer)))
+        return buffer
     end
     return current
 end
@@ -30,14 +32,27 @@ end
 function _ensure_windowed_cube_buffer(current, det::Detector, full_frame::AbstractMatrix{T}, n_reads::Int) where {T}
     target_shape = (readout_product_shape(det)..., n_reads)
     if current === nothing || size(current) != target_shape
-        return similar(full_frame, target_shape...)
+        buffer = similar(full_frame, target_shape...)
+        fill!(buffer, zero(eltype(buffer)))
+        return buffer
+    end
+    return current
+end
+
+function _ensure_full_frame_cube_buffer(current, full_frame::AbstractMatrix,
+    n_reads::Int)
+    target_shape = (size(full_frame)..., n_reads)
+    if current === nothing || size(current) != target_shape
+        buffer = similar(full_frame, target_shape...)
+        fill!(buffer, zero(eltype(buffer)))
+        return buffer
     end
     return current
 end
 
 function _ensure_read_times_buffer(current, ::Type{T}, n_reads::Int) where {T<:AbstractFloat}
     if current === nothing || length(current) != n_reads || eltype(current) !== T
-        return Vector{T}(undef, n_reads)
+        return zeros(T, n_reads)
     end
     return current
 end
@@ -65,24 +80,40 @@ end
 _multi_read_products_ready(::FrameReadoutProducts, ::Detector,
     ::Int, ::Int, ::Int) = false
 
+@inline _multi_read_workspace_reference_cube(::FrameReadoutProducts) = nothing
+@inline _multi_read_workspace_reference_cube(
+    products::MultiReadFrameReadoutProducts) =
+    products.workspace_reference_cube
+@inline _multi_read_workspace_signal_cube(::FrameReadoutProducts) = nothing
+@inline _multi_read_workspace_signal_cube(
+    products::MultiReadFrameReadoutProducts) = products.workspace_signal_cube
+
 function _multi_read_products_ready(products::MultiReadFrameReadoutProducts,
     det::Detector, n_ref::Int, n_sig::Int, n_reads::Int)
-    frame_shape = readout_product_shape(det)
+    output_shape = readout_product_shape(det)
+    frame_shape = size(det.state.frame)
     reference_frame_ready = n_ref <= 0 ? products.reference_frame === nothing :
-        products.reference_frame !== nothing && size(products.reference_frame) == frame_shape
+        products.reference_frame !== nothing && size(products.reference_frame) == output_shape
     reference_cube_ready = n_ref <= 0 ? products.reference_cube === nothing :
-        products.reference_cube !== nothing && size(products.reference_cube) == (frame_shape..., n_ref)
+        products.reference_cube !== nothing && size(products.reference_cube) == (output_shape..., n_ref)
+    workspace_reference_ready = n_ref <= 0 ?
+        products.workspace_reference_cube === nothing :
+        products.workspace_reference_cube !== nothing &&
+        size(products.workspace_reference_cube) == (frame_shape..., n_ref)
+    workspace_signal_ready = products.workspace_signal_cube !== nothing &&
+        size(products.workspace_signal_cube) == (frame_shape..., n_sig)
     read_cube_ready = n_reads <= 1 ? products.read_cube === nothing :
-        products.read_cube !== nothing && size(products.read_cube) == (frame_shape..., n_reads)
+        products.read_cube !== nothing && size(products.read_cube) == (output_shape..., n_reads)
     read_times_ready = n_reads <= 1 ? products.read_times === nothing :
         products.read_times !== nothing && length(products.read_times) == n_reads &&
         eltype(products.read_times) === eltype(det.state.frame)
     return reference_frame_ready &&
-        size(products.signal_frame) == frame_shape &&
-        size(products.combined_frame) == frame_shape &&
+        size(products.signal_frame) == output_shape &&
+        size(products.combined_frame) == output_shape &&
         reference_cube_ready &&
         products.signal_cube !== nothing &&
-        size(products.signal_cube) == (frame_shape..., n_sig) &&
+        size(products.signal_cube) == (output_shape..., n_sig) &&
+        workspace_reference_ready && workspace_signal_ready &&
         read_cube_ready && read_times_ready
 end
 
@@ -92,7 +123,8 @@ function _ensure_multi_read_products!(sensor::FrameSensorType, det::Detector)
     n_ref = frame_sampling_reference_reads(sensor)
     n_sig = frame_sampling_signal_reads(sensor)
     n_reads = frame_sampling_reads(sensor)
-    _multi_read_products_ready(current, det, n_ref, n_sig, n_reads) && return current
+    _multi_read_products_ready(current, det, n_ref, n_sig, n_reads) &&
+        return det.state.readout_products
 
     reference_frame = detector_reference_frame(current)
     signal_frame = detector_signal_frame(current)
@@ -101,6 +133,8 @@ function _ensure_multi_read_products!(sensor::FrameSensorType, det::Detector)
     signal_cube = detector_signal_cube(current)
     read_cube = detector_read_cube(current)
     read_times = detector_read_times(current)
+    workspace_reference_cube = _multi_read_workspace_reference_cube(current)
+    workspace_signal_cube = _multi_read_workspace_signal_cube(current)
 
     reference_frame = n_ref <= 0 ? nothing : _ensure_windowed_frame_buffer(reference_frame, det, frame)
     signal_frame = _ensure_windowed_frame_buffer(signal_frame, det, frame)
@@ -111,11 +145,26 @@ function _ensure_multi_read_products!(sensor::FrameSensorType, det::Detector)
     T = eltype(frame)
     read_times = n_reads <= 1 ? nothing : _ensure_read_times_buffer(read_times, T, n_reads)
 
+    if det.params.readout_window === nothing
+        workspace_reference_cube = reference_cube
+        workspace_signal_cube = signal_cube
+    else
+        workspace_reference_cube = n_ref <= 0 ? nothing :
+            _ensure_full_frame_cube_buffer(workspace_reference_cube, frame,
+                n_ref)
+        workspace_signal_cube = _ensure_full_frame_cube_buffer(
+            workspace_signal_cube, frame, n_sig)
+    end
+
     products = MultiReadFrameReadoutProducts(reference_frame, signal_frame, combined_frame,
-        reference_cube, signal_cube, read_cube, read_times)
+        reference_cube, signal_cube, read_cube, read_times,
+        workspace_reference_cube, workspace_signal_cube)
     det.state.readout_products = products
-    return products
+    return det.state.readout_products
 end
+
+@inline prepare_frame_readout_state!(::FrameSensorType,
+    det::Detector) = det
 
 function sample_frame_read!(::FrameSensorType, det::Detector, target::AbstractMatrix, baseline::AbstractMatrix,
     sigma, rng::AbstractRNG)
@@ -226,53 +275,76 @@ function _sampling_read_times(sensor::FrameSensorType, det::Detector, n_reads::I
     return _sampling_read_times!(times, sensor, det, n_reads)
 end
 
-function finalize_multi_read_readout_products!(sensor::FrameSensorType, det::Detector, rng::AbstractRNG)
-    sigma = _raw_sampling_sigma(det)
-    if det.params.readout_window !== nothing
-        reference_cube_full = _sampling_reference_cube(sensor, det, sigma, rng)
-        signal_cube_full = _sampling_signal_cube(sensor, det, sigma, rng)
-        cube_full = _sampling_read_cube(sensor, reference_cube_full, signal_cube_full)
-        reference_full = isnothing(reference_cube_full) ? nothing : _sampling_average_cube(reference_cube_full)
-        signal_full = _sampling_average_cube(signal_cube_full)
-        combined_full = isnothing(reference_full) ? signal_full : signal_full .- reference_full
-        reference = isnothing(reference_full) ? nothing : _copy_windowed_frame(reference_full, det)
-        signal = _copy_windowed_frame(signal_full, det)
-        combined = _copy_windowed_frame(combined_full, det)
-        reference_cube = isnothing(reference_cube_full) ? nothing : _copy_windowed_cube(reference_cube_full, det)
-        signal_cube = _copy_windowed_cube(signal_cube_full, det)
-        cube = isnothing(cube_full) ? nothing : _copy_windowed_cube(cube_full, det)
-        read_times = isnothing(cube_full) ? nothing : _sampling_read_times(sensor, det, size(cube_full, 3))
-        det.state.frame .= combined_full
-        det.state.readout_products = MultiReadFrameReadoutProducts(reference, signal, combined, reference_cube, signal_cube, cube, read_times)
-        return det.state.readout_products
-    end
+@inline _require_multi_read_buffer(buffer, ::Symbol) = buffer
 
+function _require_multi_read_buffer(::Nothing, label::Symbol)
+    throw(InvalidConfiguration(
+        "prepared multi-read products require $(label) storage"))
+end
+
+function finalize_multi_read_readout_products!(sensor::FrameSensorType,
+    det::Detector, rng::AbstractRNG)
     products = _ensure_multi_read_products!(sensor, det)
+    return _finalize_multi_read_readout_products!(products, sensor, det, rng)
+end
+
+function _finalize_multi_read_readout_products!(::FrameReadoutProducts,
+    ::FrameSensorType, ::Detector, ::AbstractRNG)
+    throw(InvalidConfiguration(
+        "prepared detector is missing multi-read readout products"))
+end
+
+function _finalize_multi_read_readout_products!(
+    products::MultiReadFrameReadoutProducts, sensor::FrameSensorType,
+    det::Detector, rng::AbstractRNG)
+    sigma = _raw_sampling_sigma(det)
     baseline = det.state.response_buffer
     reference_average = det.state.accum_buffer
-    signal_average = det.state.bin_buffer
+    signal_average = det.state.response_buffer
+    workspace_reference_cube = products.workspace_reference_cube
+    workspace_signal_cube = _require_multi_read_buffer(
+        products.workspace_signal_cube, :workspace_signal_cube)
+    reference_frame = products.reference_frame
+    reference_cube = products.reference_cube
+    signal_cube = _require_multi_read_buffer(products.signal_cube,
+        :signal_cube)
 
-    if !isnothing(products.reference_cube)
-        _sampling_reference_cube!(products.reference_cube, sensor, det, sigma, rng, baseline)
-        _sampling_average_cube!(reference_average, products.reference_cube)
-        _copy_windowed_frame!(products.reference_frame, reference_average, det)
+    if !isnothing(workspace_reference_cube)
+        prepared_reference_frame = _require_multi_read_buffer(reference_frame,
+            :reference_frame)
+        prepared_reference_cube = _require_multi_read_buffer(reference_cube,
+            :reference_cube)
+        _sampling_reference_cube!(workspace_reference_cube, sensor,
+            det, sigma, rng, baseline)
+        _sampling_average_cube!(reference_average,
+            workspace_reference_cube)
+        _copy_windowed_frame!(prepared_reference_frame, reference_average, det)
+        prepared_reference_cube === workspace_reference_cube ||
+            _copy_windowed_cube!(prepared_reference_cube,
+                workspace_reference_cube, det)
     end
 
-    _sampling_signal_cube!(products.signal_cube, sensor, det, sigma, rng, baseline)
-    _sampling_average_cube!(signal_average, products.signal_cube)
+    _sampling_signal_cube!(workspace_signal_cube, sensor, det,
+        sigma, rng, baseline)
+    _sampling_average_cube!(signal_average, workspace_signal_cube)
     _copy_windowed_frame!(products.signal_frame, signal_average, det)
+    signal_cube === workspace_signal_cube ||
+        _copy_windowed_cube!(signal_cube, workspace_signal_cube, det)
 
-    if !isnothing(products.reference_frame)
-        products.combined_frame .= products.signal_frame .- products.reference_frame
+    if !isnothing(reference_frame)
+        products.combined_frame .= products.signal_frame .- reference_frame
         det.state.frame .= signal_average .- reference_average
     else
         copyto!(products.combined_frame, products.signal_frame)
         det.state.frame .= signal_average
     end
 
-    if !isnothing(products.read_cube)
-        _sampling_read_cube!(products.read_cube, sensor, products.reference_cube, products.signal_cube)
-        _sampling_read_times!(products.read_times, sensor, det, size(products.read_cube, 3))
+    read_cube = products.read_cube
+    if !isnothing(read_cube)
+        read_times = _require_multi_read_buffer(products.read_times,
+            :read_times)
+        _sampling_read_cube!(read_cube, sensor, reference_cube, signal_cube)
+        _sampling_read_times!(read_times, sensor, det, size(read_cube, 3))
     end
     return products
 end
@@ -323,19 +395,35 @@ function ensure_up_the_ramp_products!(det::Detector, n_reads::Int)
     products = UpTheRampReadoutProducts(slope_frame, intercept_frame,
         integrated_frame, read_cube, read_times, workspace_slope,
         workspace_intercept, workspace_integrated, workspace_cube)
+    fill!(slope_frame, zero(eltype(slope_frame)))
+    fill!(intercept_frame, zero(eltype(intercept_frame)))
+    fill!(integrated_frame, zero(eltype(integrated_frame)))
+    fill!(read_cube, zero(eltype(read_cube)))
+    fill!(read_times, zero(eltype(read_times)))
+    fill!(workspace_slope, zero(eltype(workspace_slope)))
+    fill!(workspace_intercept, zero(eltype(workspace_intercept)))
+    fill!(workspace_integrated, zero(eltype(workspace_integrated)))
+    fill!(workspace_cube, zero(eltype(workspace_cube)))
     det.state.readout_products = products
     return products
+end
+
+function validate_up_the_ramp_schedule(sensor::FrameSensorType,
+    frame_shape::Tuple{Int,Int}, window::Union{Nothing,FrameWindow},
+    mode::UpTheRampSampling, exposure_time::Real,
+    ::Type{T}) where {T<:AbstractFloat}
+    read_time = sampling_read_time(sensor, frame_shape, window, T)
+    read_spacing = T(exposure_time) / T(mode.n_reads - 1)
+    read_time <= read_spacing + eps(read_spacing) || throw(InvalidConfiguration(
+        "up-the-ramp read_time must not exceed the spacing between reads"))
+    return read_spacing
 end
 
 function validate_up_the_ramp_schedule(sensor::FrameSensorType, det::Detector,
     mode::UpTheRampSampling, exposure_time::Real)
     T = eltype(det.state.frame)
-    read_time = sampling_read_time(sensor, size(det.state.frame),
-        det.params.readout_window, T)
-    read_spacing = T(exposure_time) / T(mode.n_reads - 1)
-    read_time <= read_spacing + eps(read_spacing) || throw(InvalidConfiguration(
-        "up-the-ramp read_time must not exceed the spacing between reads"))
-    return read_spacing
+    return validate_up_the_ramp_schedule(sensor, size(det.state.frame),
+        det.params.readout_window, mode, exposure_time, T)
 end
 
 function _fill_up_the_ramp_times!(times::AbstractVector{T},
