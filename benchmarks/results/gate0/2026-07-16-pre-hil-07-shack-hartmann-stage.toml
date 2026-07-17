@@ -1,0 +1,1500 @@
+all_gates_passed = true
+baseline_source_revision = "7cf8564a63508ec94209dde41c7af0261abee592"
+benchmark = "pre_hil_gate0_cpu"
+characterized_source_revision = "0535f5646ccb3ee6e483a71d734cd9a009b45ddf"
+configured_runs = 3
+configured_samples_per_run = 10000
+configured_warmup_operations = 100
+evidence_class = "warmed in-process serial CPU service time"
+minimum_samples_for_p99_gate = 10000
+p99_gate_supported = true
+schema_version = 1
+scope_exclusions = ["package import and construction", "fixed-rate open-loop arrivals, queues, overload, and recovery", "external RTC transport and publication", "GPU execution and host-device transfer", "CPU affinity, isolation, governor control, and interrupt placement"]
+source_contract = "contracts/pre_hil_gate0.toml"
+
+[[cards]]
+first_use_ns = 89226757
+id = "G0-PERF-01"
+kind = "electric_field"
+label = "pupil electric-field formation"
+steady_alloc_bytes = 0
+
+    [cards.parameters]
+    kind = "electric_field"
+    resolution = 64
+    zero_padding = 2
+
+    [cards.regression]
+    absolute_p99_gate_evaluated = true
+    absolute_p99_gate_passed = true
+    absolute_p99_limit_ns = 1000000
+    absolute_p99_observed_ns = 330751
+    allocation_gate_passed = true
+    allocation_limit_bytes = 0
+    baseline_median_p99_ns = 276991
+    relative_p99_factor = 1.25
+    relative_p99_gate_evaluated = true
+    relative_p99_gate_passed = true
+    relative_p99_limit_ns = 346239
+    relative_p99_observed_ns = 312319
+
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAARB4nC2KMUsDQRCFd97sTdY1CecqR4pgLcHKIsgpiAoqNrY2gj/A3jYEKzmwsBE5rCyCgkQLKytBCKJioZ3kBwSFFBIsnRjnMTOPj696cDxpDE2Y0fD/J93Sz/q2WeqPwPUR2SRdnJ2fSSpxnN5Sm3ObcQ89HOKG2tSkjK5wET25R99wn3IfDfiVXzCgN2qgyX0+sR9RK8o5Qxd33OFv7qKFDuV0Smd0Tnu7axubK2m9Vk/npmtTISSVEEK56l0Q53xclKKHWDHi9Qq8iHexIIa3ZUU6UhQIHKwARkowsNYAEYx1Hm7oOAuA/1JQPKYitA0ZdoBlPABf2lexjwU8E8axhXdS5ZKsSpGmoPAXGLIyWg=="
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 596991
+    mean_ns = 262746.88
+    min_ns = 257152
+    monotonic_end_ns = 0x2ca4cfac2c42e9
+    monotonic_start_ns = 0x2ca4cf0f8a305c
+    p50_ns = 261119
+    p90_ns = 265471
+    p99_9_ns = 503295
+    p99_ns = 283903
+    samples = 10000
+    throughput_hz = 3805.3672221285474
+    wall_ns = 2627867277
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAcB4nC1RTWgTQRjd92U6GT6267BZ17AuIYQQlhLWnkIJoRYPcSkiEkQKgpQiIUgpJXgoHoKEHFSKxZ+DllKLeJCC0oNIEZEiUsSTiAcPnj177NEvxHnz/bzvwTBvJh49KTgOfjuTlftfITF9cnHJOf93MnixBZUnh5wou7Pe7c21ytWgfGmEYxzgxl3cyqolrrS7g16n3UoSa2e7Oxj8EfEelvZxSCc4wjM8xFMMhrjSSpvNbDFrVONS6Bet9bWrAtd6RjOzNcyuJ8kQK5dJWkeR0lppI7CsPBbVanZZh5K1b9j3vJDYNco3rktsPBUYDgPrVkIbFOM4imtJvVpP46TWmJ1fmGtnV5ur7fmbt9c613qb6PcfYBuDbTwWDLGDPXwTHOM99uXeh9jFa/zCV2FH+CLqZ/zAB/zEd3wUfiCTTxJ7eIdXctBbvJR+F8ub2Bihv7wxxNrqSqdzIVtZWGy3LtfTdCatl9IoSWZq5divRCGLERtxEBtbFAuRx2N7WoslV6Ado7SiydKUI+Lxb2hpZMv75IROqbyiqTFziAp0ZlymRTlLp2V8ih6BtkB5uk/0PK8LdI6u05sG/QMCDVh/"
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 6766591
+    mean_ns = 294978.2912
+    min_ns = 256000
+    monotonic_end_ns = 0x2ca4d08f5967fe
+    monotonic_start_ns = 0x2ca4cfdf74669f
+    p50_ns = 304383
+    p90_ns = 316927
+    p99_9_ns = 386815
+    p99_ns = 330751
+    samples = 10000
+    throughput_hz = 3388.65780887668
+    wall_ns = 2951020895
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAaR4nC1Rv2tUQRDe+d5kb27vZT1enucTz5PEQ6OciagXQhCUWJhGsLAIeJErBf0b5JBDUoRDUBRERCysRSRFsDgsrCwlraJgKRYSrMTvXdyPnZ87387sNoePZpyTL25/Jf+1cE//ubruLv3aD3wfCWqq5h2cAs6nlkKDeevsyEeMMcBneSvv5N7d/qYMdM+2wm97Udn2Y/2L5xjLraG8xNfkB3bxGnvyXkaystYeyhv5Kd9kl/qZDKTfW1q5/VBeyQifeGZTnsgH4rHcl+sPZEe2ZUt6Ny6vry6sLl/orfUvznc6rXNLcwvt5fmz7UYrnTvdOBGbeaudN4t6XsRGPWtYqyiyNM0yCxazWKqQhyLNzEzNgIDIUbyPgS41IgwcUzksR/QGD68uQBVJaaN8BXNQVwoEZcaYtBh9Pc0t1dR7xzLWBnqk1ClNyOcTdZqghkpJP6U4TjuZoDqxDhNVnILDIuVR3MQMrmAa1zDL+ElQPBX6VdzBGVbUaM2iO8mexyGiy7pFHESX/AwewQFs4BgvdPQr5Teye/bg1JVdJMz+A56cQg4="
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 625151
+    mean_ns = 263667.9616
+    min_ns = 252160
+    monotonic_end_ns = 0x2ca4d13bb7af9d
+    monotonic_start_ns = 0x2ca4d09e8841ed
+    p50_ns = 258943
+    p90_ns = 271103
+    p99_9_ns = 591871
+    p99_ns = 312319
+    samples = 10000
+    throughput_hz = 3791.999450263222
+    wall_ns = 2637131184
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+
+    [cards.summary]
+    median_p50_ns = 261119
+    median_p90_ns = 271103
+    median_p99_9_ns = 503295
+    median_p99_ns = 312319
+    median_throughput_hz = 3791.999450263222
+    worst_p99_9_ns = 591871
+    worst_p99_ns = 330751
+[[cards]]
+first_use_ns = 334606185
+id = "G0-PERF-02"
+kind = "direct_psf"
+label = "direct photon-arrival-rate image formation"
+steady_alloc_bytes = 0
+
+    [cards.parameters]
+    kind = "direct_psf"
+    resolution = 64
+    zero_padding = 2
+
+    [cards.regression]
+    absolute_p99_gate_evaluated = true
+    absolute_p99_gate_passed = true
+    absolute_p99_limit_ns = 2000000
+    absolute_p99_observed_ns = 428543
+    allocation_gate_passed = true
+    allocation_limit_bytes = 0
+    baseline_median_p99_ns = 404735
+    relative_p99_factor = 1.25
+    relative_p99_gate_evaluated = true
+    relative_p99_gate_passed = true
+    relative_p99_limit_ns = 505919
+    relative_p99_observed_ns = 422655
+
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAUB4nC1PPUsDQRDdefvhslyW89TziKeEgKnSmcpCUwQVsVNBgpWkEMEmppA0iqRMEQwoiHUqFe0tbWwkqIVKfkIKsRCLFO4ZB97Mm483zMSN9hhjVGJD4/+RHFI/y1ts8XNYaJ8TFNdCAAJMKyG0H0Q2W6h3aYA33hWX8l5eyVf5JTuqqXpyIPvyW/RFQz7zJ/7Am7zFe+jgFB90Q7fUoDM6pgtqUe2EdquVvVqlWi9XD5cqG9s75dW17ZVSsVQszi/kc/l8Ic6kw0wunS0EYRxGmcgh9OIoEwd+4AXGs3Z8RlttfWu0sdrzled7ShkjtGeYI1oxDeuu18Ko5AfFhGIK0IB0mRFKuq5wLjEGwZxTPInTmABGMIqEHoEnAqxjDo/AJA6QwjXhhfBOuCM3yMTU34jEPjYd3M5Zp/sF86A4lA=="
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 925183
+    mean_ns = 392574.8224
+    min_ns = 379392
+    monotonic_end_ns = 0x2ca4d29b8acd32
+    monotonic_start_ns = 0x2ca4d1b183a6b7
+    p50_ns = 389631
+    p90_ns = 400383
+    p99_9_ns = 794111
+    p99_ns = 422655
+    samples = 10000
+    throughput_hz = 2546.9030359862777
+    wall_ns = 3926337147
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAATB4nC2IMUsDQRCFd97Nbtb1PJZ4HCEcISRHBAkhhYhEUdBCCxEsFBGxTiUW4i8IYiEqERTEIlUKKysrERUEqyCCVhZiZSGYMqUrcYY3830vbpwMC0FF0R/v/5PLUG9+Tcx0+8XRGYGhYcLAZq32bWgDPxeEYRKXaoundEn7+MQFH/IX78sr+cQN2eWO/FYddZzaUy3Z4pZ3492ijR516ZneqIkPenf0Qg90Rw26pnM6cNuk3TbtbG2v1usbC1PrS+Ob09WkUquUyqNjldlkohxnk2o5k8sXCvl8LomrNhNFUZzORqG16UykIzZBaLRWvjVGKd8dJ+wrjbQ2bKA9BaUUSw3BnmFmoQEBlgqAh5RjwSkecOYQ0tlfhUGXIuYwgnvg1cOjxAqWMYkfwi/pwDbz"
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 906239
+    mean_ns = 392425.8304
+    min_ns = 378880
+    monotonic_end_ns = 0x2ca4d38f0dd44a
+    monotonic_start_ns = 0x2ca4d2a51dfb6f
+    p50_ns = 390143
+    p90_ns = 400127
+    p99_9_ns = 442111
+    p99_ns = 419071
+    samples = 10000
+    throughput_hz = 2547.89407258909
+    wall_ns = 3924809947
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAVx4nC1PQShEURR99/w7z/OZ7zcmRRM/pExsNGIxMUlIsvhZjJKNWUySKSmTLDTNSkJZiKUsLKysJAsLdkIWkmQ1rCRNs7CSO8Z9955z7um+xYnkd+uVooyqlPXPJBP8Hk2qwa+Ksb1HqGYFxWBo2DA63Br2YtkcLq0P6zxwFijxs/UgL2ft8Ann+ZBLXLBerScU8UlbOECBbulF5p7e6ZKu6IZ+KI8ileiRTumCjmmdzumINmmD1vKUTq9mU8lkdmlxYXl4KD0/O+MnesbiiaGUPzKVmPT74/5ENDEei3X1eO3NA11NkWjU64h4zQ2u6zohjjiuCYdCTsi2XcO2dmptuEZr2zGGDdiwlNbCWhmt2JF42oZkZBaQqEobhiUNaVlRJfHLV8Afo8xlVf5TcQKi5bgaouResFGWoKg6wRq0ICPeNdCHOQxiBW3oxbRYd4Q3oBv7hE78AumnQtE="
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 883711
+    mean_ns = 394162.7136
+    min_ns = 378880
+    monotonic_end_ns = 0x2ca4d481ff8f92
+    monotonic_start_ns = 0x2ca4d397061b13
+    p50_ns = 390655
+    p90_ns = 405503
+    p99_9_ns = 593407
+    p99_ns = 428543
+    samples = 10000
+    throughput_hz = 2536.643829777206
+    wall_ns = 3942216831
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+
+    [cards.summary]
+    median_p50_ns = 390143
+    median_p90_ns = 400383
+    median_p99_9_ns = 593407
+    median_p99_ns = 422655
+    median_throughput_hz = 2546.9030359862777
+    worst_p99_9_ns = 794111
+    worst_p99_ns = 428543
+[[cards]]
+first_use_ns = 364725599
+id = "G0-PERF-03"
+kind = "spatial_filter"
+label = "prepared square spatial filter"
+steady_alloc_bytes = 0
+
+    [cards.parameters]
+    kind = "spatial_filter"
+    resolution = 64
+    zero_padding = 2
+
+    [cards.regression]
+    absolute_p99_gate_evaluated = true
+    absolute_p99_gate_passed = true
+    absolute_p99_limit_ns = 2000000
+    absolute_p99_observed_ns = 354559
+    allocation_gate_passed = true
+    allocation_limit_bytes = 0
+    baseline_median_p99_ns = 322815
+    relative_p99_factor = 1.25
+    relative_p99_gate_evaluated = true
+    relative_p99_gate_passed = true
+    relative_p99_limit_ns = 403519
+    relative_p99_observed_ns = 336127
+
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAYp4nDVQMUgcURD98/7s+t3sreu6iphlOY4toshxhYgGUZDjLGyUhMMilWnT2VscViEJ0TQpRK44QURERFJJilSijYVIipQWYmWpKSTz/5k/u/Mfb96bYX628W1AKbpS3aOfb5K/9LCwoubuu8TFJqEXGgrwORwpz5cnZuuN5ocv9JX2qEO/6RR/cId7tPQT9vVPfahv9aVuc4u3+UhfuzjQN7qtz3CLH+jgI/7SNV3SuXT4TieCjiUO6Yr26ZcwHWrTBu1I5UDYLZm08onWl1bfNprN+upMvfKuMTY5NVHM16rjryqTtSJ/nY9VK1mWJUlRDOdDaZwlUTachCaNojiNo5DTPIijKAj8QNbwQxg2hhOO2fgcMMP4kB19AwNBoWRmBTaKObTLQ4Bkhucrq5An8YTT6LE+71liabjXUrbwQgJSHJBWTlWS6HVIPg/9zlYCW4fH0Ozagj1xe6KUq9tMoO3b54hBZ7Uae9ycN1iUPI33+ExYwwXhkbBLEN0yXmLUTf3v/gfvfEVB"
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 695295
+    mean_ns = 304725.2096
+    min_ns = 288256
+    monotonic_end_ns = 0x2ca4d56d700730
+    monotonic_start_ns = 0x2ca4d4b7c2d803
+    p50_ns = 301311
+    p90_ns = 314111
+    p99_9_ns = 630783
+    p99_ns = 354559
+    samples = 10000
+    throughput_hz = 3280.8120156456635
+    wall_ns = 3048025901
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAUF4nC1Pu0oDURC9c+5jN5vdZPNAYxIfhKioMQgqWEW0ifoFQTtLK1utU4ikMVoGKwkLEfEDUvgBFikkiI0gVlZiY0pnN95hZs6cc5h7b7F5nRGCGmJ85H8nTm9Ub4jt7zHRuyIkYUEoo4yfXV47bVELHxjKG3Wh2rqjAxOYW6trPVsvZmBGeqD7+kkF6k0+yE8MEeARP/RFrzSgJnWoS31q0yXdUYvu6eT8+OBwY3evVtuqVirl4ly1NJEvzZSLOX8hl0/7Zde1E04ibbJpPwHXsV1O47vGdozjKGVzQBlbcAGgJKRCCIywleAuIPnxsfALiAo3eEoaaFaRigyhh2etEFPxaJChORkKXrhO82JPFTCLHRwxNcVoE9P4BTJ4JyxhHj3CCtaxiALqmESMKQspvoydEdhHHKsMz1j7A6luMwk="
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 719871
+    mean_ns = 296782.0672
+    min_ns = 284160
+    monotonic_end_ns = 0x2ca4d6273d8c02
+    monotonic_start_ns = 0x2ca4d5764e576b
+    p50_ns = 294399
+    p90_ns = 301055
+    p99_9_ns = 624639
+    p99_ns = 324607
+    samples = 10000
+    throughput_hz = 3368.7426556420155
+    wall_ns = 2968466583
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAVt4nD1PPUsDQRDdfbs32Vzi5XIJyYnxDGpj8AMsAjZ6qCCIhYWFv8AmjWksBMEihCAiiJYSgrWChShYaZPKUvwVIQSxCBbByUXc3Xkz82bewivUrjJCyAsxOuovS46x/ta+WOuNiPtLqRViEFCA0kSFoLx9+CTr6OFDdVRLt3WT3umLXuiBWlS3XnWX+YY6VX18oyvvcIOOfEQdZ5xrzAwYB7LBcYsf+Smbsi3PZUNey4Oj453NvfXdcDUMt0vh4nKpHEwHRb84H/izOSdZ8HN+4Dt+1k16juMmbc/JGtu1HZeMR8Z4xhhBxhHaKFtoEuBnbIIgYaA12yBgSGq+FiA0G4sMAlyySUFMiMjvcMQ74GlCD3MCGLUZRBIWWFzpFENax/8FU0hzHUeKMcMrC4wneJZMxFDBBKrI87iKJbxJjPP2DGMFc4z56MsYJlkjsIGVaNXint8vNOs51w=="
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 687103
+    mean_ns = 298090.9056
+    min_ns = 284416
+    monotonic_end_ns = 0x2ca4d6e12607fb
+    monotonic_start_ns = 0x2ca4d62f6ea9c9
+    p50_ns = 295167
+    p90_ns = 303871
+    p99_9_ns = 618495
+    p99_ns = 336127
+    samples = 10000
+    throughput_hz = 3353.9214539647683
+    wall_ns = 2981584434
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+
+    [cards.summary]
+    median_p50_ns = 295167
+    median_p90_ns = 303871
+    median_p99_9_ns = 624639
+    median_p99_ns = 336127
+    median_throughput_hz = 3353.9214539647683
+    worst_p99_9_ns = 630783
+    worst_p99_ns = 354559
+[[cards]]
+first_use_ns = 737281654
+id = "G0-PERF-04"
+kind = "atmosphere_direction"
+label = "atmosphere advance and off-axis render"
+steady_alloc_bytes = 0
+
+    [cards.parameters]
+    kind = "atmosphere_direction"
+    resolution = 64
+    rng_seed = 71
+
+    [cards.regression]
+    absolute_p99_gate_evaluated = true
+    absolute_p99_gate_passed = true
+    absolute_p99_limit_ns = 5000000
+    absolute_p99_observed_ns = 69311
+    allocation_gate_passed = true
+    allocation_limit_bytes = 0
+    baseline_median_p99_ns = 54431
+    relative_p99_factor = 1.25
+    relative_p99_gate_evaluated = true
+    relative_p99_gate_passed = true
+    relative_p99_limit_ns = 68039
+    relative_p99_observed_ns = 55775
+
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAUh4nC1OMUgDQRC8ndvcf5LP+xqigp8EFBW1MISAISAGm1RaSqqQzsYijZ1YqHUKlWBlJWphYSUiFiIiYpnSWoJYiJUoWLj38ZZhd2eG2Qv3DtJK0abqP/3fSZD6rtXV0mefOFtnDrwEoNgrLZdKvmuGW23aqhYL4dTaC13yfayr7/BG1/ROO/jgdvLJ7wS92LO+wgNdoIdffcqv+pjb+hY9uqEvOqeOoEuPtH1IG81WY7XaPJLtRNR9qjfKOS8IPNcLwko5F4yPV4qF0dlwyHcTrmEFhiAOh5Vhhu8bJSQsbLN/dYwy0ShgGIgDyrjauLAmK0jTrCUkoRFHEiloKYxYPloziMmcRVaCMzLZGhNMQoQ80mKSbZoHMYNFOEJiQTgVBShEH7IHIPEYiJSkmOI8ITFYESGP+YiqYU6oPHa1nP9x8AfNoDUQ"
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 129535
+    mean_ns = 49340.3632
+    min_ns = 47744
+    monotonic_end_ns = 0x2ca4d748355cfd
+    monotonic_start_ns = 0x2ca4d72ac7b598
+    p50_ns = 49023
+    p90_ns = 50015
+    p99_9_ns = 75391
+    p99_ns = 53535
+    samples = 10000
+    throughput_hz = 20254.167892035384
+    wall_ns = 493725541
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAfJ4nD1Qv2sUURB+73uzc+9eNstms3csa1wex3GcxxGiRQg2goSojUWQKGIvqLUEtRC0kmARRcRS/AsCgjaCjYWkFgsR/wI58JArUjjvXeIs82b2m5lvfqw8fbGsFPbVXMyx1aKLs0s31IXJHHh/G8r51X5KoOKZ3sMP/ViPBmWz/V3PzNRM9Z3z1w71b3ylI/5rD9yXZGqO8AY/zcQcmtd4q2/ubO+807/0S717/7n+hG9m33zATE/0KxzoB7cuX+zv7OlH97bG1dCvbV5d91nFWVX1Gu/rzOdsiyLnjJg5d9bZXBE7VpQiLVPHJBGbkst63XK4trWxuTHu9ZpulaYuK7K86VqXOZ83xbnVQb9fe+8H3W61Upe+KsvusPHr49FoMByMxk1du9plpYNoUeeFdUIizFa6ZgAZIkVQFkSJaHSssWIlQgoKIsxQFDyiFmCZyTKxsk6RYQmwMIDgTLAME6pUKGFBJG4guwU4kBhEz+Dki1js05JxDJJYTvNQm2JOCwsSxiJOEk4JVQvtAP4n6ISnLaVJhIMEmrCfZAsa55PfThgCimUhxBXpmCaRNu3gLFHs1kI8wYI4SajpBCNQJzQJJwgnMcSRLaH54NIgkIWCJdyV3LP0J9wO1yXvDB7iM3Aay8J5BR+BJxr/ALU6QUA="
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 141567
+    mean_ns = 50407.8512
+    min_ns = 47968
+    monotonic_end_ns = 0x2ca4d76f338472
+    monotonic_start_ns = 0x2ca4d75122611b
+    p50_ns = 49215
+    p90_ns = 53503
+    p99_9_ns = 101567
+    p99_ns = 69311
+    samples = 10000
+    throughput_hz = 19823.977393656012
+    wall_ns = 504439639
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAZV4nC2NP0hbURTG7/nueTfx9fl8JtdnCI8YQ9XwKiEVhxCEBhVaQgcREUEnKREcREQ6dCht6SQdSuskRRyCLaWrq5NDcXRwLI6OjlJK23Oj53Lu+Z3v/Evef84rRSfqzvR9JPH+26cr6snNnfB1IwirzenWfLVobRIVQjachQkL9doH+kXv9F/+zr/xR3e9rjk113zJp3yhr/gL9nBGS6+W1xfndw7oI+2+OKZOe7nzScZ+UJeO6ID2aLZaK+VysS0nQVz0Kzbyw9gvWD+xYda3cdaGYdHPxeVntcZUK62klcm0lCs/LBWiOBpP6s9f/qQrfY5LfMMb3NA+HcqpY7qmMznxentzOpmaabe3dhb2aW2zMTvZbKaNtFVPKomNbMA2MMZYAzbwwQgUskYzK2F2Jj8UK2aPASENw9COJGWT6TGUUS5oAe0KTnJP9gBeb4FiD8hwBoO9Up84BlyjaxjFMLTxTB7oF+mBlAe5z12RlhFRMhhiDGFCkjGekME5EYexKtvGZP6xcB6PhN8S/hH+A/ynQes="
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 94719
+    mean_ns = 50268.7712
+    min_ns = 47744
+    monotonic_end_ns = 0x2ca4d7957e0b6a
+    monotonic_start_ns = 0x2ca4d777825cda
+    p50_ns = 49343
+    p90_ns = 52607
+    p99_9_ns = 74111
+    p99_ns = 55775
+    samples = 10000
+    throughput_hz = 19879.392204600103
+    wall_ns = 503033488
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+
+    [cards.summary]
+    median_p50_ns = 49215
+    median_p90_ns = 52607
+    median_p99_9_ns = 75391
+    median_p99_ns = 55775
+    median_throughput_hz = 19879.392204600103
+    worst_p99_9_ns = 101567
+    worst_p99_ns = 69311
+[[cards]]
+first_use_ns = 1244575552
+id = "G0-PERF-05"
+kind = "shack_hartmann"
+label = "diffractive Shack-Hartmann measurement"
+steady_alloc_bytes = 0
+
+    [cards.parameters]
+    kind = "shack_hartmann"
+    n_lenslets = 8
+    n_pix_subap = 8
+    resolution = 64
+
+    [cards.regression]
+    absolute_p99_gate_evaluated = true
+    absolute_p99_gate_passed = true
+    absolute_p99_limit_ns = 5000000
+    absolute_p99_observed_ns = 129855
+    allocation_gate_passed = true
+    allocation_limit_bytes = 0
+    baseline_median_p99_ns = 108415
+    relative_p99_factor = 1.25
+    relative_p99_gate_evaluated = true
+    relative_p99_gate_passed = true
+    relative_p99_limit_ns = 135519
+    relative_p99_observed_ns = 116991
+
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAh14nC1Qv2sUQRSe+ebtu8m6Wde9jR5nBAnJcTYiKPHwNyIRziuCprjqimh1RYoQJIWFxREkSBT8UUmwMVgF/wirVFEbC7GwtJBgpY36zZwzu2/mve97b773pkfP6sbgkxkv9/+0/Cd/3eybqwfjwIs1GK/iRbKyarcajZPTzXb3Uv9MZ/7GoLtlVx/ZXbtt39t9u42n7qv77Lbloey5l+4nvrtXspt8c/vuuXuMLWxgh3aEAzvCa/vD7tkvdgd/7AY+2nf2rV2/v2nvrfcXeoN+58rtzqDT6/ZWhisju2lX11YeLA6Hg+XFhWtL15dmuqdb5y50Gq35mfZsNlsW075ZaplXWVWUWVPKvMjzCmVRegartGgWzbRRlkVVZL4qKs+lZKZHUzLTIq1SrjxLfU6kUmUtzX0GYe+KXKAmzVWNgLiImkyQQiRPxShAnhFxhIyqdxBGxKk4EQPm0oPhFrLIDtxwVRoTfKggUbIC6mLOBBJxSIjFTxA2/VgRNUaMr9GfQFgJ6oTrPAkk4bGQiyM0tZB/jLwaYzEasiTG53AcU7EaEUxiQhOWj8UD2YeruqjQjHVhfBFWiM0Z0bEkSg9dqYl+Ch/khomphFbJ5Bg05EgcmAv5LjQsLMhZIVPPOccnfHzJBZFzCIJqOIyo7DJO4URo4g7O4y77+mDJnMIhqne0CXHHKo7DqOMsLuK35XELTyzeWPxN8A8qxkh9"
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 327679
+    mean_ns = 88379.008
+    min_ns = 82624
+    monotonic_end_ns = 0x2ca4d832ed572d
+    monotonic_start_ns = 0x2ca4d7fe37e05c
+    p50_ns = 86079
+    p90_ns = 91839
+    p99_9_ns = 190719
+    p99_ns = 129855
+    samples = 10000
+    throughput_hz = 11308.281490469722
+    wall_ns = 884307665
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAcl4nC1PPW8TQRDdfTs3t17fXS7kgMMxJjLRcSAhuTAniCJDYYRlpYooImRRuLAoKAChIOhAKSJBBRGKQKGOKCgpU+RHUFEjypQpKJg9Z9/ufLx5O7Pb3vm0pBQqNV/mzGs58emDLXX3ZE68f8k2ATnmLElbZba61u0+mj4eP/2svwn+6H3smxPsmh36bg6DveAvf2wchr/4Z3Bk/pljc2S+0K75jVN9rH/oF9uzjcFa1c/zIl/POyt5UZSd4l43KzqD3nqv6FXloOhPh8ON25ubT4aT6bMP+uFk+53e029ms/FoazwZjfr9qrpRlqtFp52ttNp53mrbxKbuQhJlLRdlNolcCsdRElF6LrURW2cpipgjJmVZ6AQSOsdKSHbyRZs4lm1NlLAjK5Wad2AQwVpFiohZ4jqwrKyFYTAxwKwIkA02Xl4vQ8q7QOADJXWCqVWGPCWNgjPfJK8iU9cohO83T4UXTUgNsX6IQQhagFipnPdOCkYgaUxNxJIGaGJJ7LJ/QShEDMkNLuOtxjXclNwLYiEMXcKiHFxEAwfAgcYr3BGJwhVcRd1ZHtcQLNedVT1hURD6ibjlr14X8XO8xoKo7+Mr8B//kz2L"
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 246783
+    mean_ns = 86785.9712
+    min_ns = 82304
+    monotonic_end_ns = 0x2ca4d86fadb6a3
+    monotonic_start_ns = 0x2ca4d83beb6ff9
+    p50_ns = 84927
+    p90_ns = 89855
+    p99_9_ns = 200191
+    p99_ns = 107263
+    samples = 10000
+    throughput_hz = 11515.827312753252
+    wall_ns = 868370090
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAhl4nC1QPWhTURS+57z7bm5ubl6uL88YY1RMYygOcbCDYFToYulQgoSQwaFIh1A6hQziUNJSQhdd/EGkQxCRLv5MDqWISBEnRwcnJxEp4uDQSfzui+9wzzn3O993znm3uvWgKAS/FtMv+B8JJ390oyeu/54CG0OplBRWamOMiyuztdlmo9WaX1jrjWg4oX16Sg/pBfXHtLb6nIa79IwmdAh8h/boLR3RhF/xN/5LH/kHjXiP//BO8Dj4xV/4J32mA7AO6St67NN92qYRDQ5ofUybNFheWr4zaM+3b15uXuveXlzod/rDbRrT3Qm9o136Tm9gn+gJvccOH2jd126tjKi7Rd1er7vaaS+2O3NLrfpcs16/UKuaRrlRrlWSUlyObcnpyDkXqcQ6Y512VR3bJC5FMU5UdrFWpcQl1lotjY6si62tGG1Bj6yMI62sUpEzSukzeCA8jzKGbawsMtQg0kopxl2jIjToQmphGWSW/lHhBQgCkQVboT2iFUvPELjAwXwXTwEHDh5BZtinMlWy8mkoAxP4G1DBPgsQBYdSpKK8dx6Fz8KmacC5lHUsxUNocp53irmAmOcM8AyqIW659BSAnEZWAJ72h53jq1Dn0FXwcdglcGYwGeEECtJ3RQeZTTVF3wf7ngcGIIdpV0DP8j1iiB8R5+UMpH6qL1/Emunvo2EINF3GL5CVBRnySQwvgv4y4LP8DzKkVE0="
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 231167
+    mean_ns = 88168.4
+    min_ns = 81984
+    monotonic_end_ns = 0x2ca4d8ac63100d
+    monotonic_start_ns = 0x2ca4d877cc48e3
+    p50_ns = 86335
+    p90_ns = 91711
+    p99_9_ns = 191999
+    p99_ns = 116991
+    samples = 10000
+    throughput_hz = 11334.056819426683
+    wall_ns = 882296618
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+
+    [cards.summary]
+    median_p50_ns = 86079
+    median_p90_ns = 91711
+    median_p99_9_ns = 191999
+    median_p99_ns = 116991
+    median_throughput_hz = 11334.056819426683
+    worst_p99_9_ns = 200191
+    worst_p99_ns = 129855
+[[cards]]
+first_use_ns = 1432155726
+id = "G0-PERF-06"
+kind = "pyramid"
+label = "modulated diffractive pyramid measurement"
+steady_alloc_bytes = 0
+
+    [cards.parameters]
+    kind = "pyramid"
+    modulation_points = 8
+    pupil_samples = 6
+    resolution = 48
+
+    [cards.regression]
+    absolute_p99_gate_evaluated = true
+    absolute_p99_gate_passed = true
+    absolute_p99_limit_ns = 10000000
+    absolute_p99_observed_ns = 1310719
+    allocation_gate_passed = true
+    allocation_limit_bytes = 0
+    baseline_median_p99_ns = 1174527
+    relative_p99_factor = 1.25
+    relative_p99_gate_evaluated = true
+    relative_p99_gate_passed = true
+    relative_p99_limit_ns = 1468159
+    relative_p99_observed_ns = 1193983
+
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAUZ4nC2Pv0tCURTH7/m+c5/X5w/sWS+TCEHSkIYIAgtBh6Bmp4KGEInoT2iKkAiCIAKHiAaREBqCiGYJaWgoEIeGaAyHhmgQx87LDtzPl++HM9wzXTuPK0VbajTWf5K8yHBtQxW/R+LmlmABCDDbim0o4zheynMTycVCuVo+pUt6pg71qE11eqIPqqOm2/pCX+kBd/hN9/WdbuhHbnKXP61DbllfGGCIHtq4RwvHaOCH+vROXWrRA11Tk17oQHL/iHb3Kjvbq5V8qVAt5VbWM/Mzc8mFTD7nplzPi7nJcdtxo4lYWMZEHRNzjAkbZoYxxpYUwCgD+Tg7MEKGgg047B8DhlRmJfSP9JsW55cAQn5Mioow4tKmWNtpcVqkzxDG/rYUsIwlBJEVkRURwIQwKCxiFnG2kJaGCM5I8pVk7cTCJn4B67g5ow=="
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 2099199
+    mean_ns = 1.0677372928e6
+    min_ns = 1027072
+    monotonic_end_ns = 0x2ca4dba1dc3daa
+    monotonic_start_ns = 0x2ca4d92566f99e
+    p50_ns = 1060863
+    p90_ns = 1091583
+    p99_9_ns = 1612799
+    p99_ns = 1172479
+    samples = 10000
+    throughput_hz = 936.5054451477715
+    wall_ns = 10677994508
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAWV4nC1QPUsDQRDdeTs51/M89YzhPIPEdIIECxUhinaKhUWwELGyCJgiIlqkSCGSIoidIhaiIimsVIJYWEiQ/AALf0SwCBYpREScS9yZx3y9tzATL50MKkUl1Xn6P5Kg92tpXS18dhpX98QaisGsDSwGJLONMY5xk3OLmWy2eEH751SsUIVqdIobnOEYR3hBGS39q2v8yA2uc1V/65qu85d+0q+6hR80UMcrrlEV5p0ontGkN2rSLX3Qu2QNeqCyoEKXVKIDOqT8ZiGf28qtrWwUMpnV5Mzy7ERyKpVKTSYn/EQi6gejfhAk/Fg8FndjgRd1HdvxvajneQ73247jsvFsF2zgWLZrwbaYGZaCZcGwtJUBww6XhbLEWUFcy9IK6BJDGCJShRYepl1G2oQBLGAYPSGrD0OCcXTLqDu8XviHRi8GpRyTrAdpjGAJvCPCPZFpYe9iWggRbGO+rU4LlPT+AEOxQXM="
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 2033663
+    mean_ns = 1.0710164736e6
+    min_ns = 1024000
+    monotonic_end_ns = 0x2ca4de291f071c
+    monotonic_start_ns = 0x2ca4dbaab38e21
+    p50_ns = 1061887
+    p90_ns = 1101823
+    p99_9_ns = 1813503
+    p99_ns = 1193983
+    samples = 10000
+    throughput_hz = 933.6277383133629
+    wall_ns = 10710907131
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAZ54nC1RO0hcURC9c+68+95+fIurrhtNTLL4g2wjiESL5yIEwUIsQrAIKSVVSCEWIaRKabEkIiKSWAQRGy2WVGKxhYEkhZWIVYoolmIlIuK5u/uGO3fmzJlzmXkPP3/tMEbOTPOzrVt42q6n583kZRP4visIYRQOBqoG0ChSzbpstrNv7OXrN+uyJWtSkw35KcdyJzdSxzYucYg6VlDTA7tvb+2yVnXDHtr/uELVnuKCtVX85vknt3IlF3Ii57JDjb9Sl2+yLvuyKXtSlR/UP5BtZkfyRVZYWaUtfVzaZLj4YVnefVp8u/B+9tX83FRl5nmSJJVKMjicTPSXJ8rl0SelQmepWOyJi/lCMe/iQj6OEEfp2GWdptNp54zjYE4juAiWYyLitGCgsBqqcS6ABpxcA9ZpyjUoE+6lnTn3EgKp5pYMDQ1v0EEgREB7ALqcNtoDX8ZTKDutC8kimPG9yGiuQQ815XWb1EDbvH4G/vXQA7y9N8ToWpovMIBHDJ7hMXpbVUq3o5uBf8C3dmGEfohE4I//r7+EjHHcAz5ISL8="
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 2095103
+    mean_ns = 1.0765800704e6
+    min_ns = 1024000
+    monotonic_end_ns = 0x2ca4e0b3254405
+    monotonic_start_ns = 0x2ca4de3167b6da
+    p50_ns = 1062911
+    p90_ns = 1113087
+    p99_9_ns = 1798143
+    p99_ns = 1310719
+    samples = 10000
+    throughput_hz = 928.7967766487559
+    wall_ns = 10766617899
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+
+    [cards.summary]
+    median_p50_ns = 1061887
+    median_p90_ns = 1101823
+    median_p99_9_ns = 1798143
+    median_p99_ns = 1193983
+    median_throughput_hz = 933.6277383133629
+    worst_p99_9_ns = 1813503
+    worst_p99_ns = 1310719
+[[cards]]
+first_use_ns = 486300650
+id = "G0-PERF-07"
+kind = "direct_science_two_detectors"
+label = "direct science rate image with two detector acquisitions"
+steady_alloc_bytes = 0
+
+    [cards.parameters]
+    kind = "direct_science_two_detectors"
+    resolution = 64
+    rng_seed_a = 81
+    rng_seed_b = 82
+    zero_padding = 2
+
+    [cards.regression]
+    absolute_p99_gate_evaluated = true
+    absolute_p99_gate_passed = true
+    absolute_p99_limit_ns = 5000000
+    absolute_p99_observed_ns = 432639
+    allocation_gate_passed = true
+    allocation_limit_bytes = 0
+    baseline_median_p99_ns = 440831
+    relative_p99_factor = 1.25
+    relative_p99_gate_evaluated = true
+    relative_p99_gate_passed = true
+    relative_p99_limit_ns = 551039
+    relative_p99_observed_ns = 431359
+
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAU54nC1Pvy9DYRT97vluv74+r/XoCy+8GISimujQoRGpRCRekIZEpIOYDP4Ek/hRYpBKkPgxmAyCwU4kDI3BZDCZDGJqxGQQcRvOvfecc++dTlDeSypFs+oP+l9JJv41VlLDH3+HuwNCExQrgDUry7IYNvstfuC5TjY8p0tc4RY1quCGtvGDKl9Ft6zH6EPkTa/pF5zrGp9EziKv/Knv9TdWdBXveMIxKniiZ6rQKZXpkHZpk/alltZouUxTC/Mzc4ujpTAcLxZGi5ODI7lcIcxnc5mhfG8mnc6kU0Fbl5/q6gi8zsD1PYGb8JsTzca1Eo7nOcZ1LMfybMcYtqRtmx1mm42Ssg0bzUKSiw0Ma6NEwcowI1o30AzJDY4Jx+r5AV3vRvlzEnGxDUBS6ILEr2p0oxUTYndIpAfTuCbEsEHol53bcQQMoA/rhF+V1jrb"
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 939007
+    mean_ns = 402613.2352
+    min_ns = 385280
+    monotonic_end_ns = 0x2ca4e1e4492512
+    monotonic_start_ns = 0x2ca4e0f4467b64
+    p50_ns = 400127
+    p90_ns = 410879
+    p99_9_ns = 733183
+    p99_ns = 432639
+    samples = 10000
+    throughput_hz = 2483.419234183789
+    wall_ns = 4026706350
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAVd4nC1QO0gDQRC9fbu32ZyXEzd38QgxSFATUPGDiY2gpBE/RYQgFkGw0M5Y2aUQsbKMoGBtYZXSWiQ2FmIRLSwtrpAUYmMqce7izA5v5vHeLrOZs4ukYbBDox/8HxlVore6Yyx/9YnXKwZICGkgCqmUsmxbZ1PWaPWSnfAHs212zA/R4QF+cSvaZku9x5uqJd9EgDu84BtPPOA3/JTfo8ueWcA+WY912Tk67Jo1qeqNWqNeOaht13Z31jerlaVyeWU2WyotzBf89MRUzk2ncv5YJlfQWe342ve1pbWT8l3XdSwtbcdxHWkp6UgpCCiVpSBtWwgpAcEVDCGjPUKIVuECHOERPNzNQAzCFGZIDcCkjFHHRZIwQRMJPBSJitHg4ZF+JU/dEX4Y9iPHOCEwQ5I49kg2RFnEGnUejsku8hjEHEbIZ2ADW5jGZHi5GKYHFsns4Q9I7TkY"
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 962559
+    mean_ns = 401922.9056
+    min_ns = 387840
+    monotonic_end_ns = 0x2ca4e2df26db90
+    monotonic_start_ns = 0x2ca4e1ef8cb9d8
+    p50_ns = 398335
+    p90_ns = 407551
+    p99_9_ns = 873471
+    p99_ns = 431359
+    samples = 10000
+    throughput_hz = 2487.6514227201883
+    wall_ns = 4019855800
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAUN4nC1Pv0tCURS+97vH633X9+ppYUJmZmJhUhQiLf3YXIyIhJpbgrYiIiioQaRBomgomvoLmpxCnJvdGoJ4Q0NENDg0NHTEzq/7nXO+D85N1m6GhJBrom/q/5Wc3k95W6x89wcvt5K0BikIGA0DS8YdIIqXarKJQH1QQBfUVi2cqzb96men4zw6D+HLUFN10EJd1SlQXdXFHd7kpwzku+zKBr4YPcl7eSWPa3KvIU8PD46qO5VqpbhYWV4tTs8ulDL5dD5XyBayqUwunfRj2XgqkfZNIh6LDVuXtDWGjHZ93/Zu0kRkiQcW2tIAGAFE4AINBbiCGUKTARcwnbek+Gvw4JEiwcwQogizxGOd6AU3EWxiCoN4VQznMAYHEyhjHiPYZ+k4ZxQzwC6zygwnWXSCDVxLrGMLIfYIRrGEM/wBbvI2rw=="
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 961535
+    mean_ns = 401399.1808
+    min_ns = 388352
+    monotonic_end_ns = 0x2ca4e3d6e4c8a5
+    monotonic_start_ns = 0x2ca4e2e79b646f
+    p50_ns = 398335
+    p90_ns = 406783
+    p99_9_ns = 793087
+    p99_ns = 431103
+    samples = 10000
+    throughput_hz = 2490.930270057299
+    wall_ns = 4014564406
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+
+    [cards.summary]
+    median_p50_ns = 398335
+    median_p90_ns = 407551
+    median_p99_9_ns = 793087
+    median_p99_ns = 431359
+    median_throughput_hz = 2487.6514227201883
+    worst_p99_9_ns = 873471
+    worst_p99_ns = 432639
+[[cards]]
+first_use_ns = 620848533
+id = "G0-PERF-08"
+kind = "closed_loop_step"
+label = "compact closed-loop runtime step"
+steady_alloc_bytes = 0
+
+    [cards.parameters]
+    kind = "closed_loop_step"
+    n_actuators = 4
+    n_lenslets = 4
+    resolution = 16
+    rng_seed = 91
+
+    [cards.regression]
+    absolute_p99_gate_evaluated = true
+    absolute_p99_gate_passed = true
+    absolute_p99_limit_ns = 5000000
+    absolute_p99_observed_ns = 3247
+    allocation_gate_passed = true
+    allocation_limit_bytes = 0
+    baseline_median_p99_ns = 3267
+    relative_p99_factor = 1.25
+    relative_p99_gate_evaluated = true
+    relative_p99_gate_passed = true
+    relative_p99_limit_ns = 4084
+    relative_p99_observed_ns = 3237
+
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAQp4nC1PrUsEcRDdefN7O4cf6K1yxeMQUTAYrMKKRTBZDsMhZpPBv8AgpmVB0aCI4VD84DAcF0UuGAyiQYNhg8F0zQ0iBkF/hzfDe294AzO88s7BSBBI0CvtadcY/F6qBQv5v3E2BQutz4atAkYDnHaMy1wrcWOcqcS8kRV+yhbfpCmsw9MVXoUN5MITTcFEH8GWdsBrzZS3mit/0FKmuu34ji/lqSaOHTScP+CnJvYdExz5rdyp/+DpXh6UdcnA9WPlqtfaBbjYBiczYeVFGLU9UmFhz2OTYdWqFtuMzdqEjVrJyj5CwSIfxVlYdEV0exlzGMMv8RSiH+fAPJ6H8GG4BA6BXcEfgpk8Fg=="
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 25167
+    mean_ns = 2987.7322
+    min_ns = 2724
+    monotonic_end_ns = 0x2ca4e41ad9120a
+    monotonic_start_ns = 0x2ca4e4190c5316
+    p50_ns = 2975
+    p90_ns = 3095
+    p99_9_ns = 3557
+    p99_ns = 3217
+    samples = 10000
+    throughput_hz = 331175.7893011939
+    wall_ns = 30195444
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAQx4nC2PsSuEcRzG3+/z+z59z4UOx3BeizApMsmAujolg0kmmUwGf4BkkMR2Lpsb9HZFuXTD3SWTbrKQLsORJLZT7yjd4JV7np7nqc/2+HvHfZ4nXluuvX+g63th1ZsL/0FlFAZTiyuT4HCcU93M+FyZ5NoSd+YZyAbzssmW5IQBasIiDsACsuAr7sAPvIGByzqWXcnxBw3HEA/KFqrKBkrKKt6VZQTKG1wpQ7lWPkrT8UnOlDl5cdyVouN2lPU6uHwLztTA8RNwpCn068JUQRi7EGJfqIdiW7ZoGZu1aUvZmPVa0hIWizxgnVGjB2lNR8+OgEFMYAj3HbgUfAnOFaeCiuCzH88J/AIxUD3J"
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 50943
+    mean_ns = 3006.706
+    min_ns = 2744
+    monotonic_end_ns = 0x2ca4e42576828b
+    monotonic_start_ns = 0x2ca4e423a6dac9
+    p50_ns = 2987
+    p90_ns = 3117
+    p99_9_ns = 3807
+    p99_ns = 3237
+    samples = 10000
+    throughput_hz = 329097.6924525459
+    wall_ns = 30386114
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAQN4nC2PPUsDYRCEb+fdyUI4vz+qw0KIWBxoYa+dTbDUK6wsRETQf2BhsAiHxRkUU4kghJSSQiSIYBMklZWVpVXAeJWk8g1xl2cHlpmFjSqXM0EQDIJRuX8Vz9jvZhKs90eL1xImYAWbtGlwvsjFkOWYySoPyzw4YVv22JGqMMWzMEMubCADP9ECu7h1zNF2/ELfsYfcse5qyg88qbc0lS84p090lXW8KXvix7t4X0saylQulFdyp9z3l5LMcbvquNUB44FwoQJGXsNHYfFBqDVPKrZrR7ZhyxbbmkW2ZLM2bqF/YUjBYDqFYRtKOPV65nBTwA9wjB3cK66BFXzP4Q91yDsx"
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 23375
+    mean_ns = 3016.1286
+    min_ns = 2756
+    monotonic_end_ns = 0x2ca4e4306cc7c3
+    monotonic_start_ns = 0x2ca4e42e9b97d3
+    p50_ns = 3007
+    p90_ns = 3127
+    p99_9_ns = 3597
+    p99_ns = 3247
+    samples = 10000
+    throughput_hz = 328013.90988906834
+    wall_ns = 30486512
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+
+    [cards.summary]
+    median_p50_ns = 2987
+    median_p90_ns = 3117
+    median_p99_9_ns = 3597
+    median_p99_ns = 3237
+    median_throughput_hz = 329097.6924525459
+    worst_p99_9_ns = 3807
+    worst_p99_ns = 3247
+
+[contract]
+absolute_gate_scope = "regression safety bound for these compact cards, not an RTC deadline or production-size capability claim"
+arrival_model = "the next operation starts after the previous operation and histogram recording complete"
+coordinated_omission_correction = false
+coordinated_omission_reason = "these cards measure serial service time and do not make a fixed-arrival-rate claim"
+correctness_oracle = "test/reference_data_gate0 plus maintained OOPAO and SPECULA reference bundles"
+first_use = "recorded separately after construction and before warmup; package import is excluded"
+load_model = "closed_loop"
+tail_claim = "p99 is gated with 100 expected observations beyond p99 per 10000-sample run; p99.9 is diagnostic"
+threading = "one Julia thread, one BLAS thread, one FFT provider thread"
+timed_boundary = "prepared input and workspace available through mutation of the declared output/state"
+timer = "time_ns; the final clock read is included, histogram recording is excluded from latency and included in achieved throughput"
+
+[environment]
+active_project = "/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/benchmarks/Project.toml"
+adaptive_optics_sim_version = "0.1.0"
+allowed_cpus = "0-15"
+architecture = "x86_64"
+blas_config = "LBTConfig([ILP64] libopenblas64_.so)"
+blas_threads = 1
+command = "julia --project=benchmarks benchmarks/benchmark_gate0_latency.jl"
+cpu_model = "AMD Ryzen 7 6800H with Radeon Graphics"
+cpu_target = "znver3"
+fft_threads = 1
+git_commit = "0535f5646ccb3ee6e483a71d734cd9a009b45ddf"
+git_dirty = false
+git_status_porcelain = ""
+hdrhistogram_version = "0.4.0"
+julia_cpu_target_env = "default"
+julia_threads = 1
+julia_version = "1.12.6"
+kernel = "Linux"
+kernel_release = "6.12.57+deb13-amd64"
+logical_cpu_threads = 16
+scaling_governor_cpu0 = "powersave"
+timestamp_utc = "2026-07-17T06:02:46.874"
+
+[histogram]
+highest_ns = 60000000000
+lowest_ns = 1
+significant_figures = 3
+
+[timer_recording_overhead]
+p50_clock_delta_ns = 20
+p99_clock_delta_ns = 30
+samples = 10000
+wall_ns_per_clock_pair_and_record = 44.652
