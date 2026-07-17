@@ -394,7 +394,7 @@ end
     sh_profile_slopes = measure!(sh_profile, tel, lgs_profile)
     @test all(isfinite, sh_profile_slopes)
 
-    sh_sampled = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
+    sh_sampled = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8)
     sh_sampled_slopes = measure!(sh_sampled, tel, ngs)
     @test length(sh_sampled_slopes) == 2 * 4 * 4
 
@@ -1028,7 +1028,7 @@ end
 @testset "Shack-Hartmann subapertures" begin
     tel = Telescope(resolution=24, diameter=8.0, central_obstruction=0.1)
     src = Source(band=:I, magnitude=0.0)
-    sh = ShackHartmannWFS(tel; n_lenslets=6, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8, threshold_cog=0.02)
+    sh = ShackHartmannWFS(tel; n_lenslets=6, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8, threshold_cog=0.02)
 
     layout = subaperture_layout(sh)
     calibration = subaperture_calibration(sh)
@@ -1045,7 +1045,7 @@ end
 
     prepare_runtime_wfs!(sh, tel, src)
     @test calibration.calibrated
-    @test calibration.slopes_units == sh.calibration.slopes_units
+    @test calibration.centroid_response == sh.calibration.centroid_response
     @test calibration.wavelength == sh.calibration.wavelength
     @test calibration.signature == sh.calibration.signature
     @test calibration.reference_signal_2d ===

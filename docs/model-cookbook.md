@@ -69,7 +69,7 @@ atm = MultiLayerAtmosphere(
     wind_direction=[0.0, 90.0],
     altitude=[0.0, 5000.0],
 )
-wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
+wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.1, n_pix_subap=6)
 
 rng = runtime_rng(0)
 renderer = prepare_atmosphere_renderer(atm, tel, src)
@@ -95,7 +95,7 @@ using Random
 tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)
 atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
-wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
+wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.1, n_pix_subap=6)
 det = Detector(
     noise=NoiseReadout(1.0),
     integration_time=1.0,

@@ -68,8 +68,9 @@ function AdaptiveOpticsSim.compute_intensity_safe!(
     src::AdaptiveOpticsSim.AbstractSource,
     xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int,
 )
-    T = eltype(wfs.state.intensity)
-    field_host = Matrix{Complex{T}}(undef, size(wfs.state.field)...)
+    propagation = wfs.optical_workspace
+    T = eltype(propagation.intensity)
+    field_host = Matrix{Complex{T}}(undef, size(propagation.field)...)
     fill!(field_host, zero(eltype(field_host)))
     # AMDGPU 2.7 routes host conversion of a ROCArray view through a generic
     # gather kernel that is not usable on this path. Copy the dense parents
@@ -77,7 +78,7 @@ function AdaptiveOpticsSim.compute_intensity_safe!(
     # deliberately conservative ROCm fallback.
     reflectivity_host = @view Array(AdaptiveOpticsSim.pupil_reflectivity(tel))[xs:xe, ys:ye]
     opd_host = @view Array(tel.state.opd)[xs:xe, ys:ye]
-    phasor_host = Array(wfs.state.phasor)
+    phasor_host = Array(propagation.phasor)
     opd_to_cycles = T(2) / AdaptiveOpticsSim.wavelength(src)
     amp_scale = sqrt(T(AdaptiveOpticsSim.photon_irradiance(src) *
         (tel.params.diameter / tel.params.resolution)^2))
@@ -87,9 +88,9 @@ function AdaptiveOpticsSim.compute_intensity_safe!(
     fft_host = AbstractFFTs.fft(field_host)
     intensity_scale = AdaptiveOpticsSim.sh_fft_intensity_scale(T, size(field_host, 1))
     intensity_host = @. abs2(fft_host) * intensity_scale
-    copyto!(wfs.state.intensity, intensity_host)
+    copyto!(propagation.intensity, intensity_host)
     AMDGPU.synchronize()
-    return wfs.state.intensity
+    return propagation.intensity
 end
 
 AdaptiveOpticsSim.detector_execution_plan(

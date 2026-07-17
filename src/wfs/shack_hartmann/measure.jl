@@ -1,5 +1,7 @@
-function sample_spot!(wfs::ShackHartmannWFS, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
-    binning = wfs.optical_workspace.binning_pixel_scale
+function sample_spot!(owner::ShackHartmannOpticalFormationOwner,
+    intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
+    propagation = sh_optical_propagation(owner)
+    binning = propagation.binning_pixel_scale
     spot_in = intensity
     if binning > 1
         pad = size(intensity, 1)
@@ -7,14 +9,15 @@ function sample_spot!(wfs::ShackHartmannWFS, intensity::AbstractMatrix{T}) where
             throw(InvalidConfiguration("lenslet sampling is not divisible by binning_pixel_scale"))
         end
         n_binned = div(pad, binning)
-        if size(wfs.optical_workspace.bin_buffer) != (n_binned, n_binned)
-            wfs.optical_workspace.bin_buffer = similar(wfs.optical_workspace.bin_buffer, n_binned, n_binned)
+        if size(propagation.bin_buffer) != (n_binned, n_binned)
+            propagation.bin_buffer = similar(propagation.bin_buffer,
+                n_binned, n_binned)
         end
-        bin2d!(wfs.optical_workspace.bin_buffer, intensity, binning)
-        spot_in = wfs.optical_workspace.bin_buffer
+        bin2d!(propagation.bin_buffer, intensity, binning)
+        spot_in = propagation.bin_buffer
     end
-    center_resize2d!(wfs.optical_workspace.spot, spot_in)
-    return wfs.optical_workspace.spot
+    center_resize2d!(propagation.spot, spot_in)
+    return propagation.spot
 end
 
 function measure!(mode::Geometric, wfs::ShackHartmannWFS, tel::Telescope)

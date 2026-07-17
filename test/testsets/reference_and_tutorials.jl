@@ -77,9 +77,14 @@ end
     convention = parse_reference_compare_convention(Dict(
         "convention" => "oopao_geometric_sh_signal_2d",
     ))
-    raw = Float64[1, 2, 3, 4]
+    # AdaptiveOpticsSim stores [axis 1; axis 2], with each 2-by-2 block in
+    # Julia column-major order. OOPAO stores [axis 2; axis 1], with each block
+    # in NumPy row-major order. Keep the fixture asymmetric so that this test
+    # detects both a block swap and an accidental transpose.
+    raw = Float64[1, 2, 3, 4, 11, 12, 13, 14]
     adapted = adapt_compare_convention(convention, raw)
-    @test adapted ≈ OOPAO_GEOMETRIC_SH_SLOPE_SCALE .* Float64[3, 4, 1, 2]
+    @test adapted ≈ OOPAO_GEOMETRIC_SH_SLOPE_SCALE .*
+        Float64[11, 13, 12, 14, 1, 3, 2, 4]
 
     legacy = parse_reference_compare_convention(Dict(
         "swap_halves" => true,
@@ -91,6 +96,8 @@ end
     @test_throws InvalidConfiguration parse_reference_compare_convention(Dict(
         "swap_halves" => true,
     ))
+    @test_throws InvalidConfiguration adapt_compare_convention(convention,
+        Float64[1, 2, 3, 4, 5, 6])
 end
 
 @testset "Reference storage and detector conventions" begin

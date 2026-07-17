@@ -27,7 +27,8 @@ function ensure_lgs_kernels!(wfs::ShackHartmannWFS, tel::Telescope, src::LGSSour
         tel.aperture.sampling_m, tel.aperture.origin_m, wavelength(src))
 end
 
-function ensure_lgs_kernels!(wfs::ShackHartmannWFS, src::LGSSource,
+function ensure_lgs_kernels!(wfs::ShackHartmannOpticalFormationOwner,
+    src::LGSSource,
     pupil_dimensions::NTuple{2,Int}, pupil_diameter::Real,
     pupil_sampling::NTuple{2,<:Real}, pupil_origin::NTuple{2,<:Real},
     wavelength_m::Real)
@@ -35,11 +36,12 @@ function ensure_lgs_kernels!(wfs::ShackHartmannWFS, src::LGSSource,
     if na_profile === nothing
         return wfs
     end
-    pad = size(wfs.optical_workspace.intensity, 1)
+    propagation = sh_optical_propagation(wfs)
+    pad = size(propagation.intensity, 1)
     n_sub = n_lenslets(wfs)
     pixel_scale = lgs_pixel_scale(
         pupil_diameter / n_sub,
-        wfs.optical_workspace.effective_padding,
+        propagation.effective_padding,
         wavelength_m,
     )
     tag = lgs_kernel_signature(
@@ -47,23 +49,23 @@ function ensure_lgs_kernels!(wfs::ShackHartmannWFS, src::LGSSource,
         pad,
         n_sub,
         pixel_scale,
-        eltype(wfs.optical_workspace.intensity),
+        eltype(propagation.intensity),
         pupil_dimensions,
         pupil_diameter,
         pupil_sampling,
         pupil_origin;
         wavelength_m,
         model=:per_subaperture,
-        threshold=wfs.params.threshold_convolution,
+        threshold=sh_threshold_convolution(wfs),
     )
-    if size(wfs.optical_workspace.lgs_kernel_fft, 1) == pad &&
-        size(wfs.optical_workspace.lgs_kernel_fft, 3) == n_sub * n_sub &&
-        wfs.optical_workspace.lgs_kernel_tag == tag
+    if size(propagation.lgs_kernel_fft, 1) == pad &&
+        size(propagation.lgs_kernel_fft, 3) == n_sub * n_sub &&
+        propagation.lgs_kernel_tag == tag
         return wfs
     end
-    wfs.optical_workspace.lgs_kernel_fft = lgs_spot_kernels_fft(
+    propagation.lgs_kernel_fft = lgs_spot_kernels_fft(
         pupil_diameter, wfs, src, pad, wavelength_m)
-    wfs.optical_workspace.lgs_kernel_tag = tag
+    propagation.lgs_kernel_tag = tag
     return wfs
 end
 
@@ -83,19 +85,21 @@ function lgs_spot_kernels_fft(tel::Telescope, wfs::ShackHartmannWFS, src::LGSSou
 end
 
 function lgs_spot_kernels_fft(pupil_diameter::Real,
-    wfs::ShackHartmannWFS, src::LGSSource, pad::Int, wavelength_m::Real)
-    T = eltype(wfs.optical_workspace.intensity)
+    wfs::ShackHartmannOpticalFormationOwner, src::LGSSource, pad::Int,
+    wavelength_m::Real)
+    propagation = sh_optical_propagation(wfs)
+    T = eltype(propagation.intensity)
     n_sub = n_lenslets(wfs)
     na_profile = src.params.na_profile
     altitudes = na_profile[1, :]
     weights = na_profile[2, :]
     if length(altitudes) == 0
-        return similar(wfs.optical_workspace.fft_buffer, Complex{T}, 0, 0, 0)
+        return similar(propagation.fft_buffer, Complex{T}, 0, 0, 0)
     end
 
     pixel_scale = lgs_pixel_scale(
         pupil_diameter / n_lenslets(wfs),
-        wfs.optical_workspace.effective_padding,
+        propagation.effective_padding,
         wavelength_m,
     )
     fwhm_px = src.params.fwhm_spot_up / pixel_scale
@@ -104,7 +108,8 @@ function lgs_spot_kernels_fft(pupil_diameter::Real,
 
     x_subap = range(-pupil_diameter / 2, pupil_diameter / 2; length=n_sub)
     y_subap = range(-pupil_diameter / 2, pupil_diameter / 2; length=n_sub)
-    kernels_fft = similar(wfs.optical_workspace.fft_buffer, Complex{T}, pad, pad, n_sub * n_sub)
+    kernels_fft = similar(propagation.fft_buffer, Complex{T}, pad, pad,
+        n_sub * n_sub)
 
     x0 = src.params.laser_coordinates[2]
     y0 = -src.params.laser_coordinates[1]
@@ -120,7 +125,7 @@ function lgs_spot_kernels_fft(pupil_diameter::Real,
             x_subap[ix], y_subap[iy], ref_vec)
         peak = maximum(kernel)
         if peak > 0
-            cutoff = wfs.params.threshold_convolution * peak
+            cutoff = sh_threshold_convolution(wfs) * peak
             @inbounds for j in axes(kernel, 2), i in axes(kernel, 1)
                 if kernel[i, j] < cutoff
                     kernel[i, j] = zero(T)
@@ -131,10 +136,10 @@ function lgs_spot_kernels_fft(pupil_diameter::Real,
                 kernel ./= total
             end
         end
-        fft_buffer = wfs.optical_workspace.fft_buffer
+        fft_buffer = propagation.fft_buffer
         _copy_host_real_kernel_to_complex!(execution_style(fft_buffer),
             fft_buffer, kernel)
-        execute_fft_plan!(fft_buffer, wfs.optical_workspace.fft_plan)
+        execute_fft_plan!(fft_buffer, propagation.fft_plan)
         @views kernels_fft[:, :, idx] .= fft_buffer
         idx += 1
     end

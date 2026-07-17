@@ -1,7 +1,5 @@
 include(normpath(joinpath(@__DIR__, "..", "..", "benchmarks", "support", "revolt_like_hil_common.jl")))
 
-coverage_instrumented() = Base.JLOptions().code_coverage != 0
-
 function dm_apply_allocations(dm, tel)
     apply_opd!(dm, tel)
     return @allocated apply_opd!(dm, tel)
@@ -18,10 +16,10 @@ end
     dense_reference = reshape(Array(dm.state.modes) * Array(dm.state.coefs),
         size(dm.state.opd))
     @test dm.state.opd ≈ dense_reference rtol=5e-14
-    if Base.JLOptions().code_coverage == 0
-        @test dm_apply_allocations(dm, tel) == 0
-    else
+    if coverage_instrumented()
         @test_skip "DM allocation assertions are disabled under coverage instrumentation"
+    else
+        @test dm_apply_allocations(dm, tel) == 0
     end
     dm.state.coefs .= 0.1
     apply!(dm, tel, DMReplace())
@@ -73,10 +71,10 @@ end
     masked_reference = reshape(Array(dm_masked.state.modes) *
         Array(dm_masked.state.coefs), size(dm_masked.state.opd))
     @test dm_masked.state.opd ≈ masked_reference rtol=5e-14
-    if Base.JLOptions().code_coverage == 0
-        @test dm_apply_allocations(dm_masked, tel) == 0
-    else
+    if coverage_instrumented()
         @test_skip "DM allocation assertions are disabled under coverage instrumentation"
+    else
+        @test dm_apply_allocations(dm_masked, tel) == 0
     end
 
     sampled_topology = SampledActuatorTopology(actuator_coordinates(dm)[:, 1:4];
@@ -1444,8 +1442,8 @@ end
     tilt_plus = low_order_response_metrics(build_static_low_order_runtime(Val(:tiptilt), [0.0, 0.0125]))
     tilt_minus = low_order_response_metrics(build_static_low_order_runtime(Val(:tiptilt), [0.0, -0.0125]))
     tip_zero = low_order_response_metrics(build_static_low_order_runtime(Val(:tiptilt), [0.0, 0.0]))
-    @test tip_plus.axis_1_norm < tip_plus.axis_2_norm
-    @test tilt_plus.axis_1_norm > tilt_plus.axis_2_norm
+    @test tip_plus.axis_1_norm > tip_plus.axis_2_norm
+    @test tilt_plus.axis_1_norm < tilt_plus.axis_2_norm
     @test norm(tip_plus.slopes .+ tip_minus.slopes) ≤ 2e-5
     @test norm(tilt_plus.slopes .+ tilt_minus.slopes) ≤ 2e-5
     @test norm(tip_plus.slopes .- tilt_plus.slopes) > 1.0
@@ -1486,7 +1484,7 @@ end
     steering_plus = low_order_response_metrics(build_static_low_order_runtime(Val(:steering), [0.0125, 0.0]))
     steering_minus = low_order_response_metrics(build_static_low_order_runtime(Val(:steering), [-0.0125, 0.0]))
     steering_zero = low_order_response_metrics(build_static_low_order_runtime(Val(:steering), [0.0, 0.0]))
-    @test steering_plus.axis_1_norm < steering_plus.axis_2_norm
+    @test steering_plus.axis_1_norm > steering_plus.axis_2_norm
     @test norm(steering_plus.slopes .+ steering_minus.slopes) ≤ 2e-5
     @test norm(steering_zero.slopes) ≤ 1e-12
     @test isapprox(steering_plus.frame_sum, steering_minus.frame_sum; rtol=1e-12, atol=1e-6)

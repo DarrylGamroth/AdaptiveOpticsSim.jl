@@ -58,7 +58,7 @@ atm = MultiLayerAtmosphere(
     altitude=[0.0, 5000.0],
 )
 
-wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
+wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.1, n_pix_subap=6)
 
 rng = runtime_rng(0)
 renderer = prepare_atmosphere_renderer(atm, tel, src)

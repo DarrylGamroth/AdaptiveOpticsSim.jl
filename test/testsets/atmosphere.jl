@@ -109,7 +109,7 @@ end
     @test all(==(17.0), onaxis_output.opd)
 
     render_atmosphere!(onaxis_output, onaxis_renderer, atm, epoch)
-    if Base.JLOptions().code_coverage != 0
+    if coverage_instrumented()
         @test_skip "allocation assertions are disabled under coverage instrumentation"
     else
         @test @allocated(render_atmosphere!(onaxis_output,
@@ -119,7 +119,7 @@ end
     field_renderer = AtmosphericFieldPropagation(atm, tel, offaxis)
     field = propagate_atmosphere_field!(field_renderer, atm, epoch)
     @test field.metadata == field_renderer.state.slices[1].field.metadata
-    if Base.JLOptions().code_coverage != 0
+    if coverage_instrumented()
         @test_skip "allocation assertions are disabled under coverage instrumentation"
     else
         @test @allocated(propagate_atmosphere_field!(field_renderer,

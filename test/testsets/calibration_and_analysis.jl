@@ -5,10 +5,10 @@
         tel.state.opd[i, j] = i + j / 10
     end
 
-    sh_plain = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
-    sh_shift = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8,
+    sh_plain = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8)
+    sh_shift = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8,
         half_pixel_shift=true)
-    sh_thresh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8,
+    sh_thresh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8,
         threshold_cog=0.2)
     @test measure!(sh_plain, tel, src) != measure!(sh_shift, tel, src)
     @test measure!(sh_plain, tel, src) != measure!(sh_thresh, tel, src)

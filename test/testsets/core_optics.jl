@@ -42,8 +42,13 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
     @test Base.isexported(AdaptiveOpticsSim, :MicrolensArray)
     @test Base.isexported(AdaptiveOpticsSim, :microlens_array)
+    @test Base.isexported(AdaptiveOpticsSim, :prepare_microlens_propagation)
+    @test !Base.isexported(AdaptiveOpticsSim,
+        :PreparedMicrolensPropagation)
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannOpticalFrontEnd)
     @test Base.isexported(AdaptiveOpticsSim, :shack_hartmann_rate_map)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :set_subaperture_calibration!)
     @test Base.isexported(AdaptiveOpticsSim, :Detector)
     @test Base.isexported(AdaptiveOpticsSim, :MKIDArrayDetector)
     @test Base.isexported(AdaptiveOpticsSim, :CMOSReadNoiseMap)

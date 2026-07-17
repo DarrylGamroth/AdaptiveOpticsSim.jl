@@ -129,8 +129,8 @@ export prepare_wfs_acquisition, acquire_wfs_observation!
 export prepare_wfs_estimation, estimate_wfs_measurement!
 export AbstractWFSMeasurementPath, AcquiredObservationPath
 export DirectMeasurementPath, wfs_measurement_path
-export MicrolensArrayParams, MicrolensArray, MicrolensArrayWorkspace
-export microlens_array
+export MicrolensArrayParams, MicrolensArray
+export microlens_array, prepare_microlens_propagation
 export ShackHartmannOpticalFrontEnd, shack_hartmann_rate_map
 export ShackHartmannWFS, PyramidWFS, BioEdgeWFS, ZernikeWFS, CurvatureWFS
 export CurvatureReadoutModel, CurvatureCountingReadout, CurvatureBranchResponse
@@ -138,6 +138,7 @@ export FluxThresholdValidSubapertures
 export AbstractSlopeExtractionModel, CenterOfGravityExtraction
 export SubapertureLayout, SubapertureCalibration
 export subaperture_layout, subaperture_calibration, slope_extraction_model
+export set_subaperture_calibration!
 export valid_subaperture_indices
 export MeanValidFluxNormalization, IncidenceFluxNormalization
 export measure!, pyramid_modulation_frame!

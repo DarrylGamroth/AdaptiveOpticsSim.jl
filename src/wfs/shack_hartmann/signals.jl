@@ -21,7 +21,7 @@ end
     sy = zero(T)
     n1 = size(intensity, 1)
     n2 = size(intensity, 2)
-    @inbounds for x in 1:n1, y in 1:n2
+    @inbounds for y in 1:n2, x in 1:n1
         val = intensity[x, y]
         if val < cutoff
             intensity[x, y] = zero(T)
@@ -112,7 +112,7 @@ function sh_signal_from_spots_calibrated_device_stats!(style::AcceleratorStyle, 
         wfs.layout.valid_mask, cutoff, n_sub, size(wfs.acquisition.spot_cube, 2),
         size(wfs.acquisition.spot_cube, 3); ndrange=(n_sub, n_sub))
     launch_kernel!(style, sh_finalize_spot_slopes_reference_scale_kernel!, wfs.estimator.slopes, wfs.estimator.spot_stats,
-        reference, wfs.layout.valid_mask, wfs.calibration.slopes_units, n_sub, offset;
+        reference, wfs.layout.valid_mask, wfs.calibration.centroid_response, n_sub, offset;
         ndrange=(n_sub, n_sub))
     return wfs.estimator.slopes
 end
@@ -174,7 +174,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
         oy = div(pad - sub, 2)
         peak = zero(eltype(wfs.estimator.slopes))
         idx = 1
-        @inbounds for i in 1:n_sub, j in 1:n_sub
+        @inbounds for j in 1:n_sub, i in 1:n_sub
             spot_view = sh_spot_view(wfs, idx)
             if wfs.layout.valid_mask_host[i, j]
                 xs = (i - 1) * sub + 1
@@ -289,7 +289,7 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Teles
     oy = div(pad - sub, 2)
     peak = zero(eltype(wfs.estimator.slopes))
     idx = 1
-    @inbounds for i in 1:n_sub, j in 1:n_sub
+    @inbounds for j in 1:n_sub, i in 1:n_sub
         spot_view = sh_spot_view(wfs, idx)
         if wfs.layout.valid_mask[i, j]
             xs = (i - 1) * sub + 1
@@ -353,7 +353,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
         oy = div(pad - sub, 2)
         peak = zero(eltype(wfs.estimator.slopes))
         idx = 1
-        @inbounds for i in 1:n_sub, j in 1:n_sub
+        @inbounds for j in 1:n_sub, i in 1:n_sub
             spot_view = sh_spot_view(wfs, idx)
             if wfs.layout.valid_mask_host[i, j]
                 xs = (i - 1) * sub + 1
@@ -478,7 +478,7 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Teles
     oy = div(pad - sub, 2)
     peak = zero(eltype(wfs.estimator.slopes))
     idx = 1
-    @inbounds for i in 1:n_sub, j in 1:n_sub
+    @inbounds for j in 1:n_sub, i in 1:n_sub
         spot_view = sh_spot_view(wfs, idx)
         if wfs.layout.valid_mask[i, j]
             xs = (i - 1) * sub + 1
@@ -562,15 +562,15 @@ end
 function sh_signal_from_spots!(::ScalarCPUStyle, wfs::ShackHartmannWFS, cutoff::T) where {T<:AbstractFloat}
     n_sub = n_lenslets(wfs)
     idx = 1
-    @inbounds for i in 1:n_sub, j in 1:n_sub
+    @inbounds for j in 1:n_sub, i in 1:n_sub
         if wfs.layout.valid_mask[i, j]
             total, sx, sy = centroid_from_spot_cube_cutoff!(wfs.acquisition.spot_cube, idx, cutoff)
             if total <= 0
                 wfs.estimator.slopes[idx] = zero(T)
                 wfs.estimator.slopes[idx + n_sub * n_sub] = zero(T)
             else
-                wfs.estimator.slopes[idx] = sy
-                wfs.estimator.slopes[idx + n_sub * n_sub] = sx
+                wfs.estimator.slopes[idx] = sx
+                wfs.estimator.slopes[idx + n_sub * n_sub] = sy
             end
         else
             wfs.estimator.slopes[idx] = zero(T)
@@ -588,15 +588,15 @@ function sh_signal_from_spots!(style::AcceleratorStyle, wfs::ShackHartmannWFS, c
         offset = n_sub * n_sub
         host_slopes = wfs.estimator.slopes_host
         idx = 1
-        @inbounds for i in 1:n_sub, j in 1:n_sub
+        @inbounds for j in 1:n_sub, i in 1:n_sub
             if wfs.layout.valid_mask_host[i, j]
                 total, sx, sy = centroid_from_spot_cutoff!(wfs, sh_spot_view(wfs, idx), cutoff)
                 if total <= 0
                     host_slopes[idx] = zero(T)
                     host_slopes[idx + offset] = zero(T)
                 else
-                    host_slopes[idx] = sy
-                    host_slopes[idx + offset] = sx
+                    host_slopes[idx] = sx
+                    host_slopes[idx + offset] = sy
                 end
             else
                 host_slopes[idx] = zero(T)
@@ -635,17 +635,17 @@ function sh_signal_from_spots_calibrated!(style::AcceleratorStyle, wfs::ShackHar
         offset = n_sub * n_sub
         host_slopes = wfs.estimator.slopes_host
         reference = wfs.calibration.reference_signal_host
-        inv_units = inv(wfs.calibration.slopes_units)
+        inv_units = inv(wfs.calibration.centroid_response)
         idx = 1
-        @inbounds for i in 1:n_sub, j in 1:n_sub
+        @inbounds for j in 1:n_sub, i in 1:n_sub
             if wfs.layout.valid_mask_host[i, j]
                 total, sx, sy = centroid_from_spot_cutoff!(wfs, sh_spot_view(wfs, idx), cutoff)
                 if total <= 0
                     host_slopes[idx] = -reference[idx] * inv_units
                     host_slopes[idx + offset] = -reference[idx + offset] * inv_units
                 else
-                    host_slopes[idx] = (sy - reference[idx]) * inv_units
-                    host_slopes[idx + offset] = (sx - reference[idx + offset]) * inv_units
+                    host_slopes[idx] = (sx - reference[idx]) * inv_units
+                    host_slopes[idx + offset] = (sy - reference[idx + offset]) * inv_units
                 end
             else
                 host_slopes[idx] = zero(T)
@@ -663,7 +663,7 @@ function sh_signal_from_spots_calibrated!(style::AcceleratorStyle, wfs::ShackHar
     offset = n_sub * n_sub
     reference = vec(wfs.calibration.reference_signal_2d)
     launch_kernel!(style, sh_spot_centroid_reference_scale_kernel!, wfs.estimator.slopes, wfs.acquisition.spot_cube,
-        reference, wfs.layout.valid_mask, cutoff, wfs.calibration.slopes_units, n_sub, offset,
+        reference, wfs.layout.valid_mask, cutoff, wfs.calibration.centroid_response, n_sub, offset,
         size(wfs.acquisition.spot_cube, 2), size(wfs.acquisition.spot_cube, 3);
         ndrange=(n_sub, n_sub))
     return wfs.estimator.slopes
@@ -673,7 +673,7 @@ end
     n_sub = size(valid_mask, 1)
     offset = n_sub * n_sub
     idx = 1
-    @inbounds for i in 1:n_sub, j in 1:n_sub
+    @inbounds for j in 1:n_sub, i in 1:n_sub
         if !valid_mask[i, j]
             slopes[idx] = zero(T)
             slopes[idx + offset] = zero(T)
@@ -727,7 +727,7 @@ end
     sy = zero(T)
     n1 = size(spot_cube, 2)
     n2 = size(spot_cube, 3)
-    @inbounds for x in 1:n1, y in 1:n2
+    @inbounds for y in 1:n2, x in 1:n1
         val = spot_cube[idx, x, y]
         if val < cutoff
             spot_cube[idx, x, y] = zero(T)
@@ -746,9 +746,9 @@ end
 @inline function zero_invalid_sh_spot_cube!(::ScalarCPUStyle, spot_cube::AbstractArray{T,3}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
     n_sub = size(valid_mask, 1)
     idx = 1
-    @inbounds for i in 1:n_sub, j in 1:n_sub
+    @inbounds for j in 1:n_sub, i in 1:n_sub
         if !valid_mask[i, j]
-            for x in axes(spot_cube, 2), y in axes(spot_cube, 3)
+            for y in axes(spot_cube, 3), x in axes(spot_cube, 2)
                 spot_cube[idx, x, y] = zero(T)
             end
         end
@@ -770,7 +770,7 @@ function subtract_reference_and_scale!(wfs::ShackHartmannWFS)
 end
 
 function subtract_reference_and_scale!(::ScalarCPUStyle, wfs::ShackHartmannWFS)
-    inv_units = inv(wfs.calibration.slopes_units)
+    inv_units = inv(wfs.calibration.centroid_response)
     ref = vec(wfs.calibration.reference_signal_2d)
     @inbounds for idx in eachindex(wfs.estimator.slopes, ref)
         wfs.estimator.slopes[idx] = (wfs.estimator.slopes[idx] - ref[idx]) * inv_units
@@ -779,7 +779,7 @@ function subtract_reference_and_scale!(::ScalarCPUStyle, wfs::ShackHartmannWFS)
 end
 
 function subtract_reference_and_scale!(::AcceleratorStyle, wfs::ShackHartmannWFS)
-    inv_units = inv(wfs.calibration.slopes_units)
+    inv_units = inv(wfs.calibration.centroid_response)
     ref = vec(wfs.calibration.reference_signal_2d)
     @. wfs.estimator.slopes = (wfs.estimator.slopes - ref) * inv_units
     return wfs.estimator.slopes
@@ -870,11 +870,12 @@ function ensure_sh_calibration!(wfs::ShackHartmannWFS, tel::Telescope, src::Abst
     end
     update_valid_mask!(wfs, tel)
     opd_saved = save_zero_opd!(tel)
+    T = eltype(wfs.estimator.slopes)
+    centroid_response = one(T)
     try
         sh_reference_signal!(wfs, tel, src)
         restore_opd!(tel, opd_saved)
 
-        T = eltype(wfs.estimator.slopes)
         n = tel.params.resolution
         pixel_scale_init = sh_pixel_scale_init(
             tel.params.diameter / n_lenslets(wfs),
@@ -888,23 +889,18 @@ function ensure_sh_calibration!(wfs::ShackHartmannWFS, tel::Telescope, src::Abst
         peak = sampled_spots_peak!(wfs, tel, src)
         sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
         subtract_reference!(wfs)
-        wfs.calibration.slopes_units = mean_valid_signal(wfs.estimator.slopes,
+        centroid_response = mean_valid_signal(wfs.estimator.slopes,
             wfs.layout.valid_mask)
-        if !isfinite(wfs.calibration.slopes_units) ||
-                wfs.calibration.slopes_units == zero(T)
-            wfs.calibration.slopes_units = one(T)
+        if !isfinite(centroid_response) || iszero(centroid_response)
+            centroid_response = one(T)
         end
     finally
         restore_opd!(tel, opd_saved)
     end
-    wfs.calibration.calibrated = true
-    wfs.calibration.wavelength = λ
-    wfs.calibration.signature = sig
-    set_calibration_state!(subaperture_calibration(wfs);
-        slopes_units=wfs.calibration.slopes_units,
-        calibrated=wfs.calibration.calibrated,
-        wavelength=wfs.calibration.wavelength,
-        signature=wfs.calibration.signature)
+    set_subaperture_calibration!(subaperture_calibration(wfs),
+        wfs.calibration.reference_signal_2d;
+        centroid_response, output_units=:pixel, wavelength=λ,
+        signature=sig)
     return wfs
 end
 

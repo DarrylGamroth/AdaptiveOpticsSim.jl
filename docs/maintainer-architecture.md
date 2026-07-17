@@ -81,8 +81,10 @@ Examples:
   products with immutable `OpticalPlaneMetadata`, including normalization,
   spatial-measure, and coherent/incoherent combination policy
 - `ShackHartmannWFS` composed from immutable `MicrolensArrayParams`, a
-  `MicrolensArray`, prepared `MicrolensArrayWorkspace`, and distinct layout,
-  calibration, acquisition, and estimator state
+  `MicrolensArray`, backend/grid-bound `PreparedMicrolensPropagation`, and
+  distinct layout, calibration, acquisition, and estimator state; the
+  component-only `ShackHartmannOpticalFrontEnd` borrows the optic, propagation,
+  and layout without retaining the whole WFS
 - `Detector` with `DetectorParams` and `DetectorState`
 - `DetectorAcquisitionPlan` as the cold-path compatibility and buffer contract
   between one frame detector and one immutable intensity-map description
@@ -105,8 +107,14 @@ This gives:
 The generic WFS stage protocol exists independently of the `AbstractWFS`
 object layout. Shack-Hartmann is its first physical family implementation and
 separates microlens formation, acquisition, and estimation over caller-owned
-products. Its geometric mode declares `DirectMeasurementPath()` and allocates
-no placeholder optical or acquisition workspace. Pyramid/BioEdge,
+products. Its geometric and diffractive signals share one explicit
+`[axis 1; axis 2]`, Julia-column-major lenslet convention; OOPAO row-major
+reference adaptation remains in the test harness. Its geometric mode declares
+`DirectMeasurementPath()` and allocates no placeholder optical or acquisition
+workspace. Microlens sampling, synchronized subaperture layout, and
+calibration are cold configuration: maintained mutation advances a revision,
+and prepared plans reject stale bindings while caller-owned product contents
+remain mutable. Pyramid/BioEdge,
 Zernike/Curvature, and LiFT remain internally coupled until their
 family-specific migration slices.
 

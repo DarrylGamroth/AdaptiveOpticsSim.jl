@@ -364,6 +364,8 @@ function run_optional_wfs_stage_contracts(
         n_pix_subap=2, mode=Diffractive(), T=T, backend=selector)
     physical_rate = shack_hartmann_rate_map(physical_wfs, pupil, src)
     physical_front_end = ShackHartmannOpticalFrontEnd(physical_wfs, src)
+    @test !hasfield(typeof(physical_front_end), :sensor)
+    @test physical_front_end.propagation.fft_stack isa BackendArray
     physical_optical_plan = prepare_wfs_optical_formation(
         physical_front_end, pupil, physical_rate)
     form_wfs_optical_products!(physical_rate, pupil, physical_optical_plan)
@@ -419,8 +421,37 @@ function run_optional_wfs_stage_contracts(
     @test sum(Array(physical_observation.storage)) ≈
         sum(Array(physical_rate.values)) * T(0.4) * T(0.5) rtol=T(2e-5)
 
-    fill!(physical_wfs.calibration.reference_signal_2d, zero(T))
-    physical_wfs.calibration.slopes_units = one(T)
+    cpu_tel = Telescope(resolution=4, diameter=T(2),
+        central_obstruction=zero(T), T=T)
+    cpu_wfs = ShackHartmannWFS(cpu_tel; n_lenslets=2,
+        n_pix_subap=2, mode=Diffractive(), T=T)
+    mixed_backend_rate = shack_hartmann_rate_map(cpu_wfs, pupil, src)
+    mixed_optical_error = try
+        prepare_wfs_optical_formation(
+            ShackHartmannOpticalFrontEnd(cpu_wfs, src), pupil,
+            mixed_backend_rate)
+        nothing
+    catch err
+        err
+    end
+    @test mixed_optical_error isa WFSPreparationError
+    @test mixed_optical_error.reason === :backend
+
+    cpu_observation = WFSObservation(zeros(T, size(physical_rate.values));
+        units=:electron_count, layout=:lenslet_mosaic)
+    gpu_measurement = WFSMeasurement(similar(slopes(physical_wfs));
+        units=:pixel, kind=:centroid_slopes)
+    @test_throws WFSPreparationError prepare_wfs_estimation(physical_wfs,
+        cpu_observation, gpu_measurement)
+    cpu_measurement = WFSMeasurement(zeros(T, length(slopes(physical_wfs)));
+        units=:pixel, kind=:centroid_slopes)
+    @test_throws WFSPreparationError prepare_wfs_estimation(physical_wfs,
+        physical_observation, cpu_measurement)
+
+    set_subaperture_calibration!(physical_wfs.calibration,
+        zeros(T, size(physical_wfs.calibration.reference_signal_2d));
+        centroid_response=one(T), wavelength=wavelength(src),
+        signature=UInt(0x50485953))
     physical_measurement = WFSMeasurement(similar(slopes(physical_wfs));
         units=:pixel, kind=:centroid_slopes)
     physical_estimator = prepare_wfs_estimation(physical_wfs,
@@ -1128,6 +1159,15 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
     @test typeof(AdaptiveOpticsSim.sh_sensing_execution_plan(
         AdaptiveOpticsSim.execution_style(slopes(sh_large)), sh_large)) ===
         AdaptiveOpticsSim.ShackHartmannWFSRocmHostStatsPlan
+    AdaptiveOpticsSim.prepare_sampling!(sh, tel, src)
+    sh_sub = div(tel.params.resolution, AdaptiveOpticsSim.n_lenslets(sh))
+    sh_pad = size(sh.optical_workspace.field, 1)
+    sh_offset = div(sh_pad - sh_sub, 2)
+    safe_intensity = AdaptiveOpticsSim.compute_intensity_safe!(
+        AdaptiveOpticsSim.execution_style(sh.optical_workspace.intensity),
+        sh, tel, src, 1, 1, sh_sub, sh_sub, sh_offset, sh_offset, sh_sub)
+    @test safe_intensity === sh.optical_workspace.intensity
+    @test all(isfinite, Array(safe_intensity))
     @test AdaptiveOpticsSim.detector_execution_plan(typeof(AdaptiveOpticsSim.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.DetectorHostMirrorPlan
     capture_psf = array_backend{T}(undef, 4, 4)
     fill!(capture_psf, T(10))

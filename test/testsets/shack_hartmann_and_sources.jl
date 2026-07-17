@@ -28,7 +28,7 @@ end
 @testset "Shack-Hartmann resized detector mosaic" begin
     tel = Telescope(resolution=64, diameter=8.0, central_obstruction=0.1)
     src = Source(band=:I, magnitude=7.0)
-    sh = ShackHartmannWFS(tel; n_lenslets=16, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
+    sh = ShackHartmannWFS(tel; n_lenslets=16, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8)
     prepare_runtime_wfs!(sh, tel, src)
     measure!(sh, tel, src)
     image = wfs_detector_image(sh)
@@ -81,6 +81,7 @@ end
     fill!(sh.layout.valid_mask_host, true)
     sh.layout.valid_mask[1, 3] = false
     sh.layout.valid_mask_host[1, 3] = false
+    invalid_index = LinearIndices(sh.layout.valid_mask)[1, 3]
     fill!(sh.acquisition.spot_cube, 0.0)
     sh.acquisition.spot_cube[1, 2, 3] = 10.0
     sh.acquisition.spot_cube[2, 1, 1] = 0.1
@@ -88,64 +89,66 @@ end
 
     scalar_slopes = AdaptiveOpticsSim.sh_signal_from_spots!(AdaptiveOpticsSim.ScalarCPUStyle(), sh, 0.5)
     offset = microlens_array(sh).params.n_lenslets * microlens_array(sh).params.n_lenslets
-    @test scalar_slopes[1] == 2.0
-    @test scalar_slopes[offset + 1] == 1.0
+    @test scalar_slopes[1] == 1.0
+    @test scalar_slopes[offset + 1] == 2.0
     @test scalar_slopes[2] == 0.0
     @test scalar_slopes[offset + 2] == 0.0
-    @test scalar_slopes[3] == 0.0
-    @test scalar_slopes[offset + 3] == 0.0
-    @test AdaptiveOpticsSim.sh_signal_from_spots!(sh, 10.0, 0.05)[1] == 2.0
-    @test AdaptiveOpticsSim.sh_signal_from_spots!(sh, 10.0, slope_extraction_model(sh))[1] == 2.0
+    @test scalar_slopes[invalid_index] == 0.0
+    @test scalar_slopes[offset + invalid_index] == 0.0
+    @test AdaptiveOpticsSim.sh_signal_from_spots!(sh, 10.0, 0.05)[1] == 1.0
+    @test AdaptiveOpticsSim.sh_signal_from_spots!(sh, 10.0, slope_extraction_model(sh))[1] == 1.0
 
     sh_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     fill!(sh_accel.layout.valid_mask, true)
     fill!(sh_accel.acquisition.spot_cube, 0.0)
     sh_accel.acquisition.spot_cube[1, 2, 3] = 10.0
     accel_slopes = copy(AdaptiveOpticsSim.sh_signal_from_spots!(KA_CPU_STYLE, sh_accel, 0.5))
-    @test accel_slopes[1] == 2.0
-    @test accel_slopes[offset + 1] == 1.0
+    @test accel_slopes[1] == 1.0
+    @test accel_slopes[offset + 1] == 2.0
 
-    sh.calibration.reference_signal_2d .= reshape(collect(range(0.1, 3.2; length=2 * offset)), 2 * microlens_array(sh).params.n_lenslets, :)
-    sh.calibration.slopes_units = 2.0
+    sh.calibration.reference_signal_2d .= reshape(
+        collect(range(0.1, 3.2; length=2 * offset)), offset, 2)
+    sh.calibration.centroid_response = 2.0
     fill!(sh.acquisition.spot_cube, 0.0)
     sh.acquisition.spot_cube[1, 2, 3] = 10.0
     calibrated = copy(AdaptiveOpticsSim.sh_signal_from_spots_calibrated!(AdaptiveOpticsSim.ScalarCPUStyle(), sh, 0.5))
     reference = vec(sh.calibration.reference_signal_2d)
-    @test calibrated[1] ≈ (2.0 - reference[1]) / 2
-    @test calibrated[offset + 1] ≈ (1.0 - reference[offset + 1]) / 2
-    @test calibrated[3] ≈ -reference[3] / 2
-    @test calibrated[offset + 3] ≈ -reference[offset + 3] / 2
+    @test calibrated[1] ≈ (1.0 - reference[1]) / 2
+    @test calibrated[offset + 1] ≈ (2.0 - reference[offset + 1]) / 2
+    @test calibrated[invalid_index] ≈ -reference[invalid_index] / 2
+    @test calibrated[offset + invalid_index] ≈
+        -reference[offset + invalid_index] / 2
     @test AdaptiveOpticsSim.sh_signal_from_spots_calibrated!(sh, 10.0, 0.05)[1] ≈
-          (2.0 - reference[1]) / 2
+          (1.0 - reference[1]) / 2
     @test AdaptiveOpticsSim.sh_signal_from_spots_calibrated!(sh, 10.0, slope_extraction_model(sh))[1] ≈
-          (2.0 - reference[1]) / 2
+          (1.0 - reference[1]) / 2
 
     sh_accel.calibration.reference_signal_2d .= 0.25
-    sh_accel.calibration.slopes_units = 2.0
+    sh_accel.calibration.centroid_response = 2.0
     fill!(sh_accel.acquisition.spot_cube, 0.0)
     sh_accel.acquisition.spot_cube[1, 2, 3] = 10.0
     accel_calibrated = copy(AdaptiveOpticsSim.sh_signal_from_spots_calibrated!(KA_CPU_STYLE, sh_accel, 0.5))
-    @test accel_calibrated[1] ≈ (2.0 - 0.25) / 2
-    @test accel_calibrated[offset + 1] ≈ (1.0 - 0.25) / 2
+    @test accel_calibrated[1] ≈ (1.0 - 0.25) / 2
+    @test accel_calibrated[offset + 1] ≈ (2.0 - 0.25) / 2
 
     slopes_for_invalid = ones(Float64, 2 * offset)
     AdaptiveOpticsSim.zero_invalid_sh_slopes!(AdaptiveOpticsSim.ScalarCPUStyle(), slopes_for_invalid, sh.layout.valid_mask)
-    @test slopes_for_invalid[3] == 0.0
-    @test slopes_for_invalid[offset + 3] == 0.0
+    @test slopes_for_invalid[invalid_index] == 0.0
+    @test slopes_for_invalid[offset + invalid_index] == 0.0
     @test slopes_for_invalid[1] == 1.0
     slopes_for_invalid_accel = ones(Float64, 2 * offset)
     AdaptiveOpticsSim.zero_invalid_sh_slopes!(KA_CPU_STYLE, slopes_for_invalid_accel, sh.layout.valid_mask)
-    @test slopes_for_invalid_accel[3] == 0.0
-    @test slopes_for_invalid_accel[offset + 3] == 0.0
+    @test slopes_for_invalid_accel[invalid_index] == 0.0
+    @test slopes_for_invalid_accel[offset + invalid_index] == 0.0
     @test slopes_for_invalid_accel[1] == 1.0
 
     cube_for_invalid = ones(Float64, offset, 2, 2)
     AdaptiveOpticsSim.zero_invalid_sh_spot_cube!(AdaptiveOpticsSim.ScalarCPUStyle(), cube_for_invalid, sh.layout.valid_mask)
-    @test all(iszero, cube_for_invalid[3, :, :])
+    @test all(iszero, cube_for_invalid[invalid_index, :, :])
     @test all(==(1.0), cube_for_invalid[1, :, :])
     cube_for_invalid_accel = ones(Float64, offset, 2, 2)
     AdaptiveOpticsSim.zero_invalid_sh_spot_cube!(KA_CPU_STYLE, cube_for_invalid_accel, sh.layout.valid_mask)
-    @test all(iszero, cube_for_invalid_accel[3, :, :])
+    @test all(iszero, cube_for_invalid_accel[invalid_index, :, :])
     @test all(==(1.0), cube_for_invalid_accel[1, :, :])
 
     mean_signal = collect(1.0:(2 * offset))
@@ -174,8 +177,8 @@ end
 
     sh_scalar.calibration.reference_signal_2d .= 0.25
     sh_ka.calibration.reference_signal_2d .= 0.25
-    sh_scalar.calibration.slopes_units = 2.0
-    sh_ka.calibration.slopes_units = 2.0
+    sh_scalar.calibration.centroid_response = 2.0
+    sh_ka.calibration.centroid_response = 2.0
     fill!(sh_scalar.acquisition.spot_cube, 0.0)
     fill!(sh_ka.acquisition.spot_cube, 0.0)
     sh_scalar.acquisition.spot_cube[1, 2, 3] = 10.0

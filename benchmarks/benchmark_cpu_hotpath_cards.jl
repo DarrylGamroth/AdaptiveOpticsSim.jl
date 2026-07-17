@@ -43,7 +43,7 @@ function sh_reference_probe()
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     wfs.calibration.reference_signal_2d .= 0.25
-    wfs.calibration.slopes_units = 2.0
+    wfs.calibration.centroid_response = 2.0
     return function ()
         fill!(slopes(wfs), 1.0)
         AdaptiveOpticsSim.subtract_reference_and_scale!(wfs)
