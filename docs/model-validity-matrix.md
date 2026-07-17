@@ -81,10 +81,12 @@ Across `MV-03` through `MV-09` and `MV-13`, the telescope now owns spatial
 geometry but no cadence. Runtime construction requires a positive explicit
 `atmosphere_step`, while optical formation produces a rate independent of both
 that step and detector exposure. Focused rate, unequal-exposure, density versus
-cell-integrated, compatible-sum, and typed-bundle tests provide CPU evidence for
-the new ownership boundary. The later HIL event scheduler is still required for
-independent multi-rate triggers and exposure events, and most WFS families
-still combine optical, detector, and estimator state internally.
+cell-integrated, compatible-sum, typed-bundle, and prepared WFS-stage tests
+provide CPU and representative CUDA/AMDGPU residency evidence for the ownership
+boundary. The stage fixtures establish composition semantics, not another WFS
+physics model or a fidelity promotion. The later HIL event scheduler is still
+required for independent multi-rate triggers and exposure events, and most WFS
+families still combine optical, detector, and estimator state internally.
 
 Elementwise spectral or source accumulation is valid only for compatible
 physical grids with declared incoherent-addition semantics. Incompatible

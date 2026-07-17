@@ -27,4 +27,11 @@ struct AtmosphereEpochError <: AdaptiveOpticsSimError
     msg::String
 end
 
+"""Prepared-contract violation at one semantic wavefront-sensor stage."""
+struct WFSPreparationError <: AdaptiveOpticsSimError
+    stage::Symbol
+    reason::Symbol
+    msg::String
+end
+
 Base.showerror(io::IO, e::AdaptiveOpticsSimError) = print(io, e.msg)

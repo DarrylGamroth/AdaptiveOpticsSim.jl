@@ -353,6 +353,21 @@ derived MTF, QE, charge multiplication, or detector noise.
 ## Wavefront Sensors
 
 - Sensing modes: `Diffractive`, `Geometric`
+- Prepared products: `WFSObservationMetadata`, `WFSMeasurementMetadata`,
+  `WFSObservation`, `WFSMeasurement`
+- Product accessors: `observation_storage`, `observation_units`,
+  `observation_metadata`, `measurement_storage`, `measurement_units`,
+  `measurement_metadata`
+- Prepared stage protocols: `prepare_wfs_optical_formation` /
+  `form_wfs_optical_products!`, `prepare_wfs_acquisition` /
+  `acquire_wfs_observation!`, and `prepare_wfs_estimation` /
+  `estimate_wfs_measurement!`
+- Estimation paths: `AbstractWFSMeasurementPath`,
+  `AcquiredObservationPath`, `DirectMeasurementPath`,
+  `wfs_measurement_path`
+- Contract failure: `WFSPreparationError`, whose `stage` and open
+  extension-defined `reason` fields identify rejected preparation contracts or
+  execution-time prepared-binding violations before mutation
 - WFS families: `ShackHartmannWFS`, `PyramidWFS`, `BioEdgeWFS`,
   `ZernikeWFS`, `CurvatureWFS`
 - Curvature readout: `CurvatureReadoutModel`, `CurvatureCountingReadout`,
@@ -375,6 +390,27 @@ The maintained HIL image boundary is `wfs_detector_image(...)`. For
 Shack-Hartmann sensors this returns a detector-like lenslet mosaic assembled
 from the spot cube; frame-style WFS families return their maintained camera or
 detector frame.
+
+The prepared stage API is a static composition protocol, not an optical graph.
+An optical front end accepts a caller-owned `PupilFunction` or pupil-plane
+`ElectricField` and writes one detector-plane photon-arrival-rate
+`IntensityMap`, a statically structured concrete tuple of them, or an
+`OpticalProductBundle`.
+Acquisition consumes those unchanged rates, owns its explicit duration and
+detector state, and writes one `WFSObservation` or a concrete tuple of them.
+Estimation writes a `WFSMeasurement`. Observation and measurement storage may
+be a host `Ref` or an array of any rank; multiple products use concrete tuples
+rather than an abstract container. Units are required and may be symbols or
+application-defined singleton values.
+
+Every concrete preparer validates all applicable shape, plane/radiometry,
+backend/device, duration, mapping, and estimator contracts before repeated
+execution. Mutating execution receives explicit caller-owned products and
+destinations and an explicit RNG at acquisition. A direct geometric or
+reduced-order estimator declares `DirectMeasurementPath()` and allocates no
+fictitious rate plane, observation, or detector workspace. The generic
+contract is implemented; the maintained WFS families remain internally
+coupled until their ordered migration PRs.
 
 ## Calibration And Reconstruction
 

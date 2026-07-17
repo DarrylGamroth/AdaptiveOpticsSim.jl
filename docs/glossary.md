@@ -17,7 +17,7 @@ defined here before they become public API.
   integrated, has been integrated per area, or has been integrated per sample.
 - Use *MTF* only for a frequency-domain modulation transfer function. A kernel
   applied to an image is a spatial-domain response model.
-- Use *WFS signal* for a sensor-independent measurement vector. Use *slope* only
+- Use *WFS signal* for a sensor-independent typed measurement. Use *slope* only
   when the values are wavefront gradients or calibrated centroid-equivalent
   slopes.
 
@@ -110,9 +110,11 @@ a channel detector and is not forced into an area-frame API.
 
 | Term | Project meaning |
 |---|---|
-| WFS optical front end | Physical propagation and optics that produce one or more detector-facing optical products. |
-| WFS observation | Acquired detector frame, frame bundle, or direct reduced-order observation before estimation. |
-| WFS signal | Generic estimator output supplied to calibration or reconstruction. |
+| WFS optical front end | Physical propagation and optics that consume an explicit pupil function or electric field and produce one or more detector-facing photon-arrival-rate products. Prepared implementations use `prepare_wfs_optical_formation` and `form_wfs_optical_products!`. |
+| WFS observation | Acquired detector scalar, vector, frame, stack, packed product, or concrete tuple of products before estimation. `WFSObservation` binds caller-owned storage to explicit units, layout, backend, and physical-device metadata. |
+| WFS measurement | Typed estimator output represented by `WFSMeasurement`, with declared semantic kind and units independently of storage rank. |
+| WFS signal | Generic WFS measurement supplied to calibration or reconstruction. |
+| Direct WFS measurement | An intentionally declared geometric or reduced-order path whose estimator consumes an explicit pupil function or electric field and produces a measurement without fictitious optical-rate or detector-observation products. Its prepared estimator returns `DirectMeasurementPath()`. |
 | WFS slopes | Gradient or centroid-equivalent slope signals where the sensor and calibration establish that meaning. The existing generic `slopes` accessor is transitional and must not be extended to new non-slope sensors. |
 | WFS flux normalization | Historical AO shorthand for normalization by summed detector signal or incident expected photon count. `MeanValidFluxNormalization` uses the mean measured valid-sample signal. `IncidenceFluxNormalization` uses expected incident signal per pupil sample; a detector-coupled measurement converts that denominator into the detector's deterministic signal units using exposure and detection efficiency, without applying stochastic detector effects to the calibration reference. Zero incident or detectable light returns a finite zero WFS signal. Existing `*FluxNormalization` names are transitional; they do not establish SI photon-flux units and should not be copied into new interfaces. |
 | Microlens array | An independent optical element that partitions and focuses a field. A Shack–Hartmann WFS composes it with acquisition and spot estimation. |

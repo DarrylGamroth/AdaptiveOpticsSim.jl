@@ -7,6 +7,10 @@ backend_label(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = "AMDGPU"
 backend_full_smoke_env(::Type{AdaptiveOpticsSim.CUDABackendTag}) = "ADAPTIVEOPTICS_TEST_FULL_CUDA"
 backend_full_smoke_env(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = "ADAPTIVEOPTICS_TEST_FULL_AMDGPU"
 
+if !isdefined(@__MODULE__, :ContractRateModel)
+    include(joinpath(@__DIR__, "wfs_stage_contract_fixtures.jl"))
+end
+
 backend_selector(::Type{AdaptiveOpticsSim.CUDABackendTag}) = AdaptiveOpticsSim.CUDABackend()
 backend_selector(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = AdaptiveOpticsSim.AMDGPUBackend()
 
@@ -231,6 +235,142 @@ function run_optional_zernike_normalization(
         AdaptiveOpticsSim.execution_style(zero_slopes))
     @test all(iszero, Array(zero_slopes))
     @test all(isfinite, Array(zero_slopes))
+    return nothing
+end
+
+function run_optional_wfs_stage_contracts(
+    ::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    selector = backend_selector(B)
+    T = Float32
+    tel = Telescope(resolution=4, diameter=T(2),
+        central_obstruction=zero(T), T=T, backend=selector)
+    src = Source(band=:custom, wavelength=T(0.75e-6),
+        photon_irradiance=T(4), T=T)
+    pupil = PupilFunction(tel; T=T, backend=selector)
+    fill!(pupil.opd, T(2e-9))
+    field = ElectricField(pupil, src; zero_padding=1, T=T)
+    field_formation = prepare_pupil_field(tel, pupil, src, field)
+    fill_electric_field!(field, pupil, field_formation)
+
+    rate_values = BackendArray(zeros(T, 4, 4))
+    rate_metadata = OpticalPlaneMetadata(DetectorPlane(), rate_values;
+        coordinate_domain=AngularCoordinates(),
+        sampling=(one(T), one(T)),
+        spectral=MonochromaticChannel(T(wavelength(src))),
+        normalization=PhotonRateNormalization(),
+        spatial_measure=CellIntegratedMeasure(),
+        coherence=IncoherentIntensityAddition())
+    rate = IntensityMap(rate_metadata, rate_values)
+    optical_model = ContractRateModel(T(3), T(1e6), rate.metadata)
+    optical_plan = prepare_wfs_optical_formation(optical_model, pupil, rate)
+
+    detector = Detector(noise=NoiseNone(), integration_time=T(0.4),
+        qe=T(0.5), response_model=NullFrameResponse(), T=T,
+        backend=selector)
+    binding = contract_detector_binding(detector, rate)
+    observation = binding.observation
+    acquisition_plan = prepare_wfs_acquisition(
+        ContractDetectorAcquisitionModel((binding,)), rate, observation)
+    measurement_values = similar(observation.storage)
+    measurement = WFSMeasurement(measurement_values;
+        units=:detector_signal, kind=:copied_detector_frame)
+    estimator_plan = prepare_wfs_estimation(ContractCopyEstimator(
+        :detector_signal, :copied_detector_frame),
+        observation, measurement)
+    rng = Xoshiro(0x574653)
+
+    @test @inferred(form_wfs_optical_products!(rate, pupil,
+        optical_plan)) === rate
+    @test @inferred(acquire_wfs_observation!(observation, rate,
+        acquisition_plan, rng)) === observation
+    @test @inferred(estimate_wfs_measurement!(measurement, observation,
+        estimator_plan)) === measurement
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(measurement.storage))
+    @test rate.values isa BackendArray
+    @test observation.storage isa BackendArray
+    @test measurement.storage isa BackendArray
+    @test observation.metadata.device == plane_device(observation.storage)
+    @test measurement.metadata.device == plane_device(measurement.storage)
+    @test Array(measurement.storage) == Array(observation.storage)
+    @test sum(Array(observation.storage)) ≈
+        sum(Array(rate.values)) * T(0.4) * T(0.5) rtol=T(2e-6)
+
+    direct_values = similar(rate.values)
+    direct_measurement = WFSMeasurement(direct_values;
+        units=:field_intensity, kind=:direct_field_measurement)
+    direct_plan = prepare_wfs_estimation(ContractDirectCopyEstimator(
+        :field_intensity, :direct_field_measurement), field,
+        direct_measurement)
+    @test wfs_measurement_path(direct_plan) isa DirectMeasurementPath
+    @test @inferred(estimate_wfs_measurement!(direct_measurement, field,
+        direct_plan)) === direct_measurement
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(direct_measurement.storage))
+    @test direct_measurement.storage isa BackendArray
+    @test Array(direct_measurement.storage) ≈ abs2.(Array(field.values))
+
+    second_values = BackendArray(zeros(T, 4, 4))
+    second_metadata = OpticalPlaneMetadata(DetectorPlane(), second_values;
+        coordinate_domain=AngularCoordinates(),
+        sampling=(T(0.5), T(0.5)),
+        spectral=MonochromaticChannel(T(0.9e-6)),
+        normalization=PhotonRateNormalization(),
+        spatial_measure=CellIntegratedMeasure(),
+        coherence=IncoherentIntensityAddition())
+    second_rate = IntensityMap(second_metadata, second_values)
+    bundle = OpticalProductBundle(rate, second_rate)
+    bundle_model = ContractBundleRateModel((
+        ContractRateModel(T(2), T(1e6), rate.metadata),
+        ContractRateModel(T(5), T(1e6), second_rate.metadata),
+    ))
+    bundle_plan = prepare_wfs_optical_formation(bundle_model, pupil, bundle)
+    form_wfs_optical_products!(bundle, pupil, bundle_plan)
+    second_detector = Detector(noise=NoiseNone(), integration_time=T(0.7),
+        qe=T(0.25), response_model=NullFrameResponse(), T=T,
+        backend=selector)
+    first_binding = contract_detector_binding(detector, rate)
+    second_binding = contract_detector_binding(second_detector, second_rate)
+    observations = (first_binding.observation, second_binding.observation)
+    multi_acquisition = prepare_wfs_acquisition(
+        ContractDetectorAcquisitionModel((first_binding, second_binding)),
+        bundle, observations)
+    @test @inferred(acquire_wfs_observation!(observations, bundle,
+        multi_acquisition, (Xoshiro(1), Xoshiro(2)))) === observations
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(second_binding.observation.storage))
+    @test first_binding.observation.storage isa BackendArray
+    @test second_binding.observation.storage isa BackendArray
+    @test first_binding.observation.metadata.device ==
+        second_binding.observation.metadata.device
+
+    packed_values = BackendArray(zeros(T, 8, 4))
+    regions = ((1:4, 1:4), (5:8, 1:4))
+    packed = WFSObservation(packed_values; units=:detector_signal,
+        layout=regions)
+    packed_plan = prepare_wfs_acquisition(
+        ContractPackedAcquisition(regions, T(0.2)), bundle, packed)
+    @test @inferred(acquire_wfs_observation!(packed, bundle, packed_plan,
+        Xoshiro(3))) === packed
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(packed.storage))
+    @test packed.storage isa BackendArray
+    packed_host = Array(packed.storage)
+    @test packed_host[1:4, :] ≈ Array(rate.values) .* T(0.2)
+    @test packed_host[5:8, :] ≈ Array(second_rate.values) .* T(0.2)
+
+    cpu_measurement = WFSMeasurement(zeros(T, 4, 4);
+        units=:detector_signal, kind=:cpu_copy)
+    mismatch = try
+        prepare_wfs_estimation(ContractCopyEstimator(
+            :detector_signal, :cpu_copy), observation,
+            cpu_measurement)
+        nothing
+    catch err
+        err
+    end
+    @test mismatch isa WFSPreparationError
+    @test mismatch.reason === :backend
     return nothing
 end
 
@@ -1270,6 +1410,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     run_optional_lgs_convolution_normalization(B)
     run_optional_sodium_profile_wfs(B, backend)
     run_optional_zernike_normalization(B, backend)
+    run_optional_wfs_stage_contracts(B, backend)
 
     if get(ENV, backend_full_smoke_env(B), "0") == "1"
         include(joinpath(dirname(@__DIR__), "scripts", "gpu_smoke_contract.jl"))

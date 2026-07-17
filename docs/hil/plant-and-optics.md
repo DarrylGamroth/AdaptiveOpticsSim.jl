@@ -189,12 +189,28 @@ stages without forcing the families into one concrete representation:
 ```text
 caller-owned pupil function or electric field
   -> WFS optical front end
-  -> detector-plane photon-arrival-rate intensity map or bundle
+  -> detector-plane photon-arrival-rate intensity map, static tuple, or bundle
   -> detector-owned temporal integration and acquisition
-  -> observation frame or bundle
+  -> WFS observation or concrete tuple of observations
   -> estimator and calibration
   -> WFS measurement
 ```
+
+The implemented generic protocol names this boundary directly:
+
+- `prepare_wfs_optical_formation` / `form_wfs_optical_products!`
+- `prepare_wfs_acquisition` / `acquire_wfs_observation!`
+- `prepare_wfs_estimation` / `estimate_wfs_measurement!`
+
+`WFSObservation` and `WFSMeasurement` bind caller-owned storage to explicit
+units and concrete layout/kind, backend, and device metadata. Multi-plane,
+spectral, and branch optical sets remain concrete tuples or
+`OpticalProductBundle` values. Detector observation sets use one
+`WFSObservation` or a concrete tuple of them; there is no runtime-selected
+universal graph.
+An estimator reports `AcquiredObservationPath()` or
+`DirectMeasurementPath()`. The latter intentionally omits optical/acquisition
+intermediates rather than representing absent stages with placeholders.
 
 The optical front end owns the sensor-specific propagation and physical optics.
 It may produce one detector plane, several simultaneous planes, or a prepared

@@ -33,7 +33,10 @@ end
 
 @testset "API export curation" begin
     exported = names(AdaptiveOpticsSim)
-    @test length(exported) <= 410
+    # Pre-HIL stage contracts intentionally add a small, documented public
+    # product/protocol seam. Keep headroom bounded so unrelated internals do
+    # not drift into the ordinary user namespace.
+    @test length(exported) <= 435
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
     @test Base.isexported(AdaptiveOpticsSim, :Detector)
