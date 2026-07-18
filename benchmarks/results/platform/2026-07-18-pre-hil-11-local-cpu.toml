@@ -1,0 +1,278 @@
+all_gates_passed = true
+backend = "cpu"
+baseline_artifact = "benchmarks/results/platform/2026-07-14-wsl-cuda-local-amdgpu.toml"
+benchmark = "pre_hil_backend_latency"
+characterized_source_revision = "51d8580cdfd91cf8e0f1a2395a11ad0d0f830c58"
+configured_runs = 3
+configured_samples_per_run = 500
+configured_warmup_operations = 100
+evidence_class = "warmed serial service-time characterization"
+host_class = "local"
+minimum_samples_for_p95_gate = 400
+p95_gate_supported = true
+placement = "local_cpu"
+schema_version = 1
+scope_exclusions = ["external RTC transport, frame grabbers, and RTC response processing", "fixed-rate arrivals, queueing, saturation, overload, and recovery", "cold Julia startup, package loading, compilation, and context construction", "CPU affinity, core isolation, and controlled mobile power or thermal state", "multi-thread, multi-process, and multi-GPU throughput"]
+source_contract = "benchmarks/contracts/pre_hil_backend_latency.toml"
+
+[[boundaries]]
+first_use_ns = 13433907
+id = "backend_ready"
+passed = true
+steady_alloc_bytes = 0
+
+    [boundaries.regression]
+    absolute_p95_gate_evaluated = true
+    absolute_p95_gate_passed = true
+    absolute_p95_limit_ns = 10000000
+    absolute_p95_observed_ns = 4759551
+    allocation_gate_passed = true
+    allocation_limit_bytes = 0
+    allocation_observed_bytes = 0
+    baseline_median_p95_ns = 4670146
+    relative_p95_factor = 1.25
+    relative_p95_gate_evaluated = true
+    relative_p95_gate_passed = true
+    relative_p95_limit_ns = 5837683
+    relative_p95_observed_ns = 4624383
+
+    [[boundaries.runs]]
+    completed_operations = 500
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAALh4nC2PwQ0CMQwEzWbPZ3zhhAJCCPGhAkrgSQt0w4cOqIM3VdALT57YB1ESJ9rZjbO/3Vci8pbfKP86i7X4nC9y+ivP1wwHHDFgDgELShSIIU80kLSK0ZVua7Na20bdfPRl3erOdURzjK01dVVaYKoGKOB0J5EJFIoz4lFhVK+RG04NhxIdkFR4kgtMpiaEhdkDu7wgZ8/UOKTCCUHi7OK5HvPEiw6x91NKzyFt+bEOK1zxIL5e6wyp"
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 6344703
+    mean_ns = 4.185368576e6
+    min_ns = 3858432
+    monotonic_end_ns = 0x2d264f7bf84bc2
+    monotonic_start_ns = 0x2d264eff3955a9
+    p50_ns = 4108287
+    p95_ns = 4624383
+    samples = 500
+    throughput_hz = 238.90414192291675
+    wall_ns = 2092889625
+
+        [boundaries.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[boundaries.runs]]
+    completed_operations = 500
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAMl4nC2PMXICMQxF5W8hhPA6O8vQpc8xUnIEuANHSJsbcCgqjpGKhg5KvnYjjS35WdaXP38vO5EyyGL1Pxau4XU4yfdjAc9bwRcEa2xQIaoKunlXj9Ya4GPrzacxzPo4mYf2mDwimFpvo5iGuzVrrhYwiImCFvRqlql6tp13S3ejBKhGLVGhCHXVqY5VkvlNchNUzbnyXBMvt5Xzkkm22c5zZ01Nwn8QY8VOW+yYJ+ffdMPKNWPFfu444AM/OOKMq+Je8FfwBspVDrE="
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 7966719
+    mean_ns = 4.230465536e6
+    min_ns = 3923968
+    monotonic_end_ns = 0x2d26502a91a221
+    monotonic_start_ns = 0x2d264fac7ad456
+    p50_ns = 4114431
+    p95_ns = 4759551
+    samples = 500
+    throughput_hz = 236.35927030941056
+    wall_ns = 2115423691
+
+        [boundaries.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[boundaries.runs]]
+    completed_operations = 500
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAJV4nC2NwQ0CQQwDs14T5aJlWfaOEw964UkLFEQHNMCfAqiCXnjyg0h3kaKxLVk+3e6jiDxkubwyxW+/l6ucP0vweydscAAzAWpWBKhG864szUy9tLma9qm2qbdQ7nM99hq05kWtOJqp1mi5ebWoR+xGWKGLkjQQlBBZKa4ajuGDGvMU5NjdY8AYKkOwwyvhmfAHC30MRA=="
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 5222399
+    mean_ns = 4.09481216e6
+    min_ns = 3932160
+    monotonic_end_ns = 0x2d2650aebcc53c
+    monotonic_start_ns = 0x2d265034b18884
+    p50_ns = 4075519
+    p95_ns = 4239359
+    samples = 500
+    throughput_hz = 244.1934709472029
+    wall_ns = 2047556792
+
+        [boundaries.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+
+    [boundaries.summary]
+    maximum_observed_ns = 7966719
+    median_mean_ns = 4.185368576e6
+    median_p50_ns = 4108287
+    median_p95_ns = 4624383
+    median_throughput_hz = 238.90414192291675
+    worst_p95_ns = 4759551
+
+[contract]
+arrival_model = "no independent arrival schedule"
+backend_ready_boundary = "reset pupil OPD; extrapolate and scatter the physical DM command; apply the DM; form the diffractive Shack-Hartmann optical product; perform noiseless CMOS acquisition; tile the 352x352 frame; synchronize every participating backend array"
+baseline_interpretation = "Relative p95 limits use the July 14 diagnostic artifact solely as a predeclared regression reference; the clean-revision artifacts produced by this contract become the maintained baseline."
+coordinated_omission_correction = false
+coordinated_omission_reason = "this contract measures serial service time, not response time under scheduled arrivals"
+first_use_interpretation = "first measured operation on the benchmark context after an untimed parity pass has compiled the path; cold package load, precompilation, and context construction are excluded"
+gpu_ready_interpretation = "backend-ready means the synchronized result is available in backend-native storage; it does not imply that every AMDGPU implementation detail avoided documented host-mirror compatibility boundaries"
+host_ready_boundary = "backend-ready boundary followed by a copy into one preallocated 352x352 host Matrix{Float32}"
+load_model = "one warmed serial operation starts only after the preceding operation completes"
+tail_interpretation = "With 500 observations per run, p50, p95, and max are reported; p95 has 25 expected exceedances and p99 is intentionally not claimed."
+timer = "time_ns; clock and histogram-recording overhead is reported and is not subtracted"
+transfer_only_boundary = "copy the already-complete backend frame into one preallocated 352x352 host Matrix{Float32}"
+workload = "REVOLT-like 277-command DM and 16x16 diffractive Shack-Hartmann acquisition exported as one 352x352 Float32 frame"
+
+[correctness]
+atol = 0.001
+backend_checksum = 3.275464198315e11
+cpu_checksum = 3.275464198315e11
+max_error_relative_to_cpu_peak = 0.0
+output_shape = [352, 352]
+passed = true
+relative_l2_error = 0.0
+rtol = 1.0e-5
+
+[environment]
+accelerator_package_version = "not applicable"
+accelerator_versioninfo = "not applicable"
+active_manifest = "/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/benchmarks/Manifest.toml"
+active_manifest_sha256 = "8ef816c835a25ecdb9c8094519bb6f0515785ec78de5e75a7bbb85a571781f80"
+active_manifest_status = """Status `~/workspaces/codex/AdaptiveOpticsSim.jl/benchmarks/Manifest.toml`\n  [621f4979] AbstractFFTs v1.5.0\n  [1520ce14] AbstractTrees v0.4.5\n  [6a4ca0a5] AcceleratedKernels v0.4.3\n  [7d9f7c33] Accessors v0.1.45\n  [79e6a3ab] Adapt v4.7.0\n  [002fb5eb] AdaptiveOpticsSim v0.1.0 `..`\n  [66dad0bd] AliasTables v1.1.3\n  [dce04be8] ArgCheck v2.5.0\n  [ec485272] ArnoldiMethod v0.4.0\n  [a9b6321e] Atomix v1.1.3\n  [6e4b80f9] BenchmarkTools v1.8.0\n  [944b1d66] CodecZlib v0.7.8\n  [38540f10] CommonSolve v0.2.11\n  [bbf7d656] CommonSubexpressions v0.3.1\n  [34da2185] Compat v4.18.1\n  [a33af91c] CompositionsBase v0.1.2\n  [187b0558] ConstructionBase v1.6.0\n  [d58978e5] Dagger v0.19.4\n  [9a962f9c] DataAPI v1.16.0\n⌃ [864edb3b] DataStructures v0.19.5\n  [163ba53b] DiffResults v1.1.0\n  [b552c78f] DiffRules v1.16.0\n  [fab6aee4] DistributedNext v1.3.1\n  [31c24e10] Distributions v0.25.129\n  [ffbed154] DocStringExtensions v0.9.5\n  [7a1cc6ca] FFTW v1.10.0\n  [1a297f60] FillArrays v1.16.0\n  [f6369f11] ForwardDiff v1.4.1\n  [46192b85] GPUArraysCore v0.2.0\n  [a0844989] Gamma v1.1.0\n  [86223c79] Graphs v1.14.0\n  [076d061b] HashArrayMappedTries v0.2.0\n  [d0b8ac25] HdrHistogram v0.4.0 `https://github.com/DarrylGamroth/HdrHistogram.jl.git#cd42987`\n  [34004b35] HypergeometricFunctions v0.3.29\n  [d25df0c9] Inflate v0.1.5\n  [3587e190] InverseFunctions v0.1.17\n  [92d709cd] IrrationalConstants v0.2.6\n  [692b3bcd] JLLWrappers v1.8.0\n  [682c06a0] JSON v1.6.1\n  [63c18a36] KernelAbstractions v0.9.42\n  [2ab3a3ac] LogExpFunctions v1.0.1\n  [1914dd2f] MacroTools v0.5.16\n⌃ [f9f48841] MemPool v0.4.16\n  [e1d29d7a] Missings v1.2.0\n  [77ba4419] NaNMath v1.1.4\n  [d37ed344] NextLA v0.2.3\n  [a15396b6] OnlineStats v1.7.4\n  [925886fa] OnlineStatsBase v1.7.3\n⌅ [bac558e1] OrderedCollections v1.8.2\n  [90014a1f] PDMats v0.11.40\n  [69de0a69] Parsers v2.8.6\n  [aea7be01] PrecompileTools v1.3.4\n  [21216c6a] Preferences v1.5.2\n  [43287f4e] PtrArrays v1.4.0\n  [1fd47b50] QuadGK v2.11.3\n  [3cdcf5f2] RecipesBase v1.3.4\n  [189a3867] Reexport v1.2.2\n  [ae029012] Requires v1.3.1\n  [79098fc4] Rmath v0.9.0\n⌃ [f2b01f46] Roots v3.0.4\n  [7e506255] ScopedValues v1.6.2\n  [699a6c99] SimpleTraits v0.9.6\n  [a2af1166] SortingAlgorithms v1.2.3\n  [276daf66] SpecialFunctions v2.8.0\n  [90137ffa] StaticArrays v1.9.18\n  [1e83bf80] StaticArraysCore v1.4.4\n  [10745b16] Statistics v1.11.1\n  [82ae8749] StatsAPI v1.8.0\n  [2913bbd2] StatsBase v0.34.12\n  [4c63d2b9] StatsFuns v2.2.0\n  [ec057cc2] StructUtils v2.8.2\n  [ed4db957] TaskLocalValues v0.1.3\n  [a526e669] TimespanLogging v0.1.1\n  [3bb67fe8] TranscodingStreams v0.11.3\n  [013be700] UnsafeAtomics v0.3.1\n  [f5851436] FFTW_jll v3.3.12+0\n  [1d5cc7b8] IntelOpenMP_jll v2025.2.0+0\n  [856f044c] MKL_jll v2025.2.0+0\n  [efe28fd5] OpenSpecFun_jll v0.5.6+0\n  [f50d1b31] Rmath_jll v0.5.1+0\n  [1317d2d5] oneTBB_jll v2022.3.0+0\n  [0dad84c5] ArgTools v1.1.2\n  [56f22d72] Artifacts v1.11.0\n  [2a0f44e3] Base64 v1.11.0\n  [ade2ca70] Dates v1.11.0\n  [8ba89e20] Distributed v1.11.0\n  [f43a241f] Downloads v1.7.0\n  [7b1f6079] FileWatching v1.11.0\n  [b77e0a4c] InteractiveUtils v1.11.0\n  [ac6e5ff7] JuliaSyntaxHighlighting v1.12.0\n  [4af54fe1] LazyArtifacts v1.11.0\n  [b27032c2] LibCURL v0.6.4\n  [76f85450] LibGit2 v1.11.0\n  [8f399da3] Libdl v1.11.0\n  [37e2e46d] LinearAlgebra v1.12.0\n  [56ddb016] Logging v1.11.0\n  [d6f4376e] Markdown v1.11.0\n  [a63ad114] Mmap v1.11.0\n  [ca575930] NetworkOptions v1.3.0\n  [44cfe95a] Pkg v1.12.1\n  [de0858da] Printf v1.11.0\n  [9abbd945] Profile v1.11.0\n  [9a3f8284] Random v1.11.0\n  [ea8e919c] SHA v0.7.0\n  [9e88b42a] Serialization v1.11.0\n  [1a1011a3] SharedArrays v1.11.0\n  [6462fe0b] Sockets v1.11.0\n  [2f01184e] SparseArrays v1.12.0\n  [f489334b] StyledStrings v1.11.0\n  [4607b0f0] SuiteSparse\n  [fa267f1f] TOML v1.0.3\n  [a4e569a6] Tar v1.10.0\n  [cf7118a7] UUIDs v1.11.0\n  [4ec0a83e] Unicode v1.11.0\n  [e66e0078] CompilerSupportLibraries_jll v1.3.0+1\n  [deac9b47] LibCURL_jll v8.15.0+0\n  [e37daf67] LibGit2_jll v1.9.0+0\n  [29816b5a] LibSSH2_jll v1.11.3+1\n  [14a3606d] MozillaCACerts_jll v2025.11.4\n  [4536629a] OpenBLAS_jll v0.3.29+0\n  [05823500] OpenLibm_jll v0.8.7+0\n  [458c3c95] OpenSSL_jll v3.5.4+0\n  [bea87d4a] SuiteSparse_jll v7.8.3+2\n  [83775a58] Zlib_jll v1.3.1+2\n  [8e850b90] libblastrampoline_jll v5.15.0+0\n  [8e850ede] nghttp2_jll v1.64.0+1\n  [3f19e933] p7zip_jll v17.7.0+0\nInfo Packages marked with ⌃ and ⌅ have new versions available. Those with ⌃ may be upgradable, but those with ⌅ are restricted by compatibility constraints from upgrading. To see why use `status --outdated -m`\n"""
+active_project = "/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/benchmarks/Project.toml"
+active_project_sha256 = "4f1d5337de70719a72d5ba2e535f37cbd7ffe38b14e08aac1fd5fcde976de157"
+adaptive_optics_sim_version = "0.1.0"
+allowed_cpus = "0-15"
+architecture = "x86_64"
+backend = "cpu"
+blas_config = "LBTConfig([ILP64] libopenblas64_.so)"
+blas_threads = 1
+command = "julia --startup-file=no --project=benchmarks benchmarks/benchmark_pre_hil_backend_latency.jl cpu local_cpu"
+cpu_model = "AMD Ryzen 7 6800H with Radeon Graphics"
+cpu_target = "znver3"
+fft_threads = 1
+git_branch = "codex/pre-hil-11-backend-evidence"
+git_commit = "51d8580cdfd91cf8e0f1a2395a11ad0d0f830c58"
+git_dirty = false
+git_status_porcelain = ""
+hdrhistogram_version = "0.4.0"
+host_name = "rtc-devel"
+julia_cpu_target_env = "default"
+julia_threads = 1
+julia_version = "1.12.6"
+kernel = "Linux"
+kernel_abstractions_version = "0.9.42"
+kernel_release = "6.12.57+deb13-amd64"
+logical_cpu_threads = 16
+placement = "local_cpu"
+scaling_governor_cpu0 = "powersave"
+timestamp_utc = "2026-07-18T21:34:30.876"
+
+[histogram]
+highest_ns = 60000000000
+lowest_ns = 1
+significant_figures = 3
+
+[residency]
+dm_coefficients = "Vector{Float32}"
+output_frame = "Matrix{Float32}"
+telescope_opd = "Matrix{Float32}"
+wfs_spot_cube = "Array{Float32, 3}"
+
+[timer_recording_overhead]
+p50_clock_delta_ns = 20
+p95_clock_delta_ns = 30
+samples = 500
+wall_ns_per_clock_pair_and_record = 44.324
+
+[workload]
+active_command_length = 277
+active_command_scale_m = 1.0e-7
+dm_grid_command_length = 361
+extrapolated_command_length = 277
+frame_bytes = 495616
+lenslets = 16
+noise = "none"
+numeric_type = "Float32"
+parity_atol = 0.001
+parity_rtol = 1.0e-5
+pupil_resolution = 352
+rng_seed = 20260718
+roi_size = 22
+sensor = "CMOS"
+tiled_frame_shape = [352, 352]

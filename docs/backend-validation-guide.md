@@ -70,6 +70,9 @@ The reduced maintained smoke covers:
   - `steering + dm`
   - `focus + dm`
 - curvature-through-atmosphere
+- prepared LiFT photon-rate formation, analytic interaction matrices,
+  rate/count/normalized observations, analytic and numerical reconstruction,
+  and dense/separable object convolution
 - MKID accumulated-count capture, source passband handling, and
   flux-conserving channel-crosstalk parity
 
@@ -181,9 +184,14 @@ julia --project=benchmarks benchmarks/benchmark_control_operators.jl
 julia --project=benchmarks benchmarks/benchmark_loop_order_simd.jl
 julia --project=benchmarks benchmarks/benchmark_detector_hil_latency.jl
 julia --project=benchmarks benchmarks/benchmark_gate0_latency.jl
+julia --project=benchmarks benchmarks/benchmark_pre_hil_backend_latency.jl cpu local_cpu
 
 julia --project=benchmarks/amdgpu -e 'using Pkg; Pkg.instantiate()'
 julia --project=benchmarks/amdgpu benchmarks/benchmark_amdgpu.jl
+julia --project=benchmarks/amdgpu benchmarks/benchmark_pre_hil_backend_latency.jl amdgpu local_amdgpu
+
+julia --project=benchmarks/cuda -e 'using Pkg; Pkg.instantiate()'
+julia --project=benchmarks/cuda benchmarks/benchmark_pre_hil_backend_latency.jl cuda wsl_cuda
 ```
 
 `benchmark_gate0_latency.jl` accepts `AOS_GATE0_CARD_IDS` as a comma-separated,
@@ -263,6 +271,51 @@ The current Julia 1.12.6 cross-host rerun, including WSL CPU/CUDA, local
 CPU/AMDGPU, a preallocated CUDA host-readout boundary, physical command parity,
 and all individual repetitions, is archived in
 [`2026-07-14-wsl-cuda-local-amdgpu.toml`](../benchmarks/results/platform/2026-07-14-wsl-cuda-local-amdgpu.toml).
+
+The final pre-HIL backend contract uses the same physical `277`-command,
+`352x352` REVOLT-like workload, but archives three 500-sample HdrHistogram
+runs, first use, steady-state allocations, CPU parity, maintained-array residency,
+and exact project/manifest hashes. GPU artifacts distinguish a synchronized
+backend-ready result from a preallocated host-ready copy and the transfer-only
+boundary. This remains serial service-time evidence: there is no independent
+arrival schedule, queue, overload test, or external RTC transport.
+
+Current clean-revision artifacts are:
+
+- [local CPU](../benchmarks/results/platform/2026-07-18-pre-hil-11-local-cpu.toml)
+- [WSL CPU](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cpu.toml)
+- [WSL CUDA](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cuda.toml)
+
+| Placement and boundary | Median p50 | Median p95 | Steady allocation |
+| --- | ---: | ---: | ---: |
+| local CPU, backend-ready | 4.108 ms | 4.624 ms | 0 B |
+| WSL CPU, backend-ready | 4.923 ms | 5.534 ms | 0 B |
+| WSL CUDA, backend-ready | 1.264 ms | 1.689 ms | 43,376 B |
+| WSL CUDA, host-ready | 1.432 ms | 1.833 ms | 42,816 B |
+| WSL CUDA, transfer-only | 0.112 ms | 0.143 ms | 96 B |
+
+All listed correctness, residency, allocation, absolute-p95, and relative-p95
+gates pass. The WSL target used CUDA.jl 6.2.1, KernelAbstractions.jl 0.9.42,
+and Julia 1.12.6. The maintained hardware targets passed `386/386` CUDA checks
+and `396/396` AMDGPU checks with scalar indexing disabled, including the shared
+LiFT matrix. The current local AMDGPU latency artifact remains the
+[July 14 cross-host characterization](../benchmarks/results/platform/2026-07-14-wsl-cuda-local-amdgpu.toml):
+the July 18 timing repetitions completed, but no replacement raw-histogram
+artifact was retained after the host's Julia 1.12.6 installation failed a
+package-independent GC check. This is not promoted into a new latency baseline.
+
+The final composed CPU Gate 0 run is preserved even though `G0-PERF-05` missed
+its relative p99 limit by 96 ns while every absolute and allocation gate
+passed. An immediate same-contract, same-revision, three-run Shack-Hartmann
+confirmation passed at 108.543 μs median p99 against the 130.399 μs limit:
+
+- [full Gate 0 catalog](../benchmarks/results/gate0/2026-07-18-pre-hil-11-full-backend-evidence.toml)
+- [Shack-Hartmann confirmation](../benchmarks/results/gate0/2026-07-18-pre-hil-11-shack-hartmann-confirmation.toml)
+
+`benchmark_gate0_latency.jl` accepts a comma-separated
+`AOS_GATE0_BASELINES` catalog. The artifact records every source path, SHA-256,
+source revision, and supplied card ID so staged baselines compose without
+silently replacing predecessor evidence.
 
 The AO188/AO3k CPU profile scripts accept an FFT thread count as their final
 argument, or through `AOS_FFT_THREADS`. Tune this per workload and host rather

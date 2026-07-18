@@ -34,3 +34,18 @@ path = "2026-07-13-loop-order-native-simd.toml"
 purpose = "cross-host CPU/CUDA and CPU/AMDGPU REVOLT-like latency comparison with physical command parity"
 id = "CROSS-HOST-CPU-GPU-2026-07-14"
 path = "2026-07-14-wsl-cuda-local-amdgpu.toml"
+
+[[artifacts]]
+purpose = "Clean-tree local CPU REVOLT-like service-time, allocation, correctness, and residency evidence for the final pre-HIL backend review"
+id = "PRE-HIL-BACKEND-LOCAL-CPU-2026-07-18"
+path = "2026-07-18-pre-hil-11-local-cpu.toml"
+
+[[artifacts]]
+purpose = "Clean-tree WSL CPU REVOLT-like service-time, allocation, correctness, and residency evidence for the final pre-HIL backend review"
+id = "PRE-HIL-BACKEND-WSL-CPU-2026-07-18"
+path = "2026-07-18-pre-hil-11-wsl-cpu.toml"
+
+[[artifacts]]
+purpose = "Clean-tree WSL CUDA REVOLT-like backend-ready, host-ready, transfer, correctness, and residency evidence for the final pre-HIL backend review"
+id = "PRE-HIL-BACKEND-WSL-CUDA-2026-07-18"
+path = "2026-07-18-pre-hil-11-wsl-cuda.toml"
