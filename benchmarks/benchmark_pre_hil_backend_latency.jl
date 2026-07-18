@@ -4,6 +4,8 @@ using Dates
 using HdrHistogram
 import KernelAbstractions
 using LinearAlgebra
+using Pkg
+using SHA
 using Statistics
 using TOML
 
@@ -60,6 +62,24 @@ function allowed_cpu_list()
     return "unknown"
 end
 
+function sha256_file(path::AbstractString)
+    isfile(path) || return "unavailable"
+    return bytes2hex(SHA.sha256(read(path)))
+end
+
+function active_manifest_path(project_path::AbstractString)
+    versioned = joinpath(dirname(project_path),
+        "Manifest-v$(VERSION.major).$(VERSION.minor).toml")
+    isfile(versioned) && return versioned
+    return joinpath(dirname(project_path), "Manifest.toml")
+end
+
+function manifest_status()
+    io = IOBuffer()
+    Pkg.status(; io, mode=Pkg.PKGMODE_MANIFEST)
+    return String(take!(io))
+end
+
 function configure_pre_hil_benchmark!()
     Threads.nthreads() == 1 || error(
         "pre-HIL backend latency evidence requires one Julia thread")
@@ -89,10 +109,17 @@ function source_environment()
     cpu = first(Sys.cpu_info())
     git_status = command_output(`git -C $PRE_HIL_ROOT status --porcelain=v1`)
     module_ref = backend_module()
+    project_path = something(Base.active_project(), "unknown")
+    manifest_path = project_path == "unknown" ? "unknown" :
+        active_manifest_path(project_path)
+    benchmark_project = PRE_HIL_BACKEND_NAME == "cpu" ? "benchmarks" :
+        "benchmarks/$PRE_HIL_BACKEND_NAME"
     return Dict{String,Any}(
         "timestamp_utc" => string(Dates.now(Dates.UTC)),
         "host_name" => command_output(`hostname`),
         "git_commit" => command_output(`git -C $PRE_HIL_ROOT rev-parse HEAD`),
+        "git_branch" => command_output(
+            `git -C $PRE_HIL_ROOT branch --show-current`),
         "git_dirty" => !isempty(git_status) && git_status != "unknown",
         "git_status_porcelain" => git_status,
         "julia_version" => string(VERSION),
@@ -102,7 +129,11 @@ function source_environment()
         "accelerator_package_version" => module_ref === nothing ?
             "not applicable" : string(Base.pkgversion(module_ref)),
         "accelerator_versioninfo" => backend_version_info(),
-        "active_project" => something(Base.active_project(), "unknown"),
+        "active_project" => project_path,
+        "active_project_sha256" => sha256_file(project_path),
+        "active_manifest" => manifest_path,
+        "active_manifest_sha256" => sha256_file(manifest_path),
+        "active_manifest_status" => manifest_status(),
         "kernel" => string(Sys.KERNEL),
         "kernel_release" => command_output(`uname -r`),
         "architecture" => string(Sys.ARCH),
@@ -119,8 +150,18 @@ function source_environment()
         "julia_cpu_target_env" => get(ENV, "JULIA_CPU_TARGET", "default"),
         "backend" => PRE_HIL_BACKEND_NAME,
         "placement" => PRE_HIL_PLACEMENT,
-        "command" => "julia --startup-file=no --project=<benchmark-project> benchmarks/benchmark_pre_hil_backend_latency.jl $PRE_HIL_BACKEND_NAME $PRE_HIL_PLACEMENT",
+        "command" => "julia --startup-file=no --project=$benchmark_project benchmarks/benchmark_pre_hil_backend_latency.jl $PRE_HIL_BACKEND_NAME $PRE_HIL_PLACEMENT",
     )
+end
+
+
+function require_clean_source_for_output!()
+    isempty(PRE_HIL_OUTPUT_PATH) && return nothing
+    git_status = command_output(
+        `git -C $PRE_HIL_ROOT status --porcelain=v1`)
+    isempty(git_status) || error(
+        "refusing to run durable pre-HIL backend evidence from a dirty worktree")
+    return nothing
 end
 
 function assert_backend_residency(ctx::RevoltLikeHILContext)
@@ -354,6 +395,7 @@ end
 
 function run_pre_hil_backend_latency()
     configure_pre_hil_benchmark!()
+    require_clean_source_for_output!()
     isempty(PRE_HIL_PLACEMENT) && error(
         "set AOS_PRE_HIL_PLACEMENT or pass the placement as the second argument")
     contract = TOML.parsefile(PRE_HIL_CONTRACT_PATH)
