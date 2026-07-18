@@ -491,14 +491,28 @@ end
 
 function _require_counting_wfs_spectral_match(
     metadata::OpticalPlaneMetadata, source::AbstractSource)
-    channel = metadata.spectral
-    channel isa MonochromaticChannel || throw(WFSPreparationError(
-        :acquisition, :plane_metadata,
-        "counting WFS acquisition requires a monochromatic rate product"))
+    return _require_counting_wfs_spectral_match(metadata.spectral, source)
+end
+
+function _require_counting_wfs_spectral_match(
+    channel::MonochromaticChannel, source::AbstractSource)
     channel.wavelength_m == wavelength(source) || throw(
         WFSPreparationError(:acquisition, :plane_metadata,
             "counting WFS source wavelength differs from its rate product"))
     return nothing
+end
+
+function _require_counting_wfs_spectral_match(
+    ::AbstractSpectralCoordinate, ::AbstractSource)
+    throw(WFSPreparationError(:acquisition, :plane_metadata,
+        "counting WFS acquisition requires a monochromatic rate product"))
+end
+
+@inline _require_counting_wfs_measure(::CellIntegratedMeasure) = nothing
+
+function _require_counting_wfs_measure(::AbstractSpatialMeasure)
+    throw(WFSPreparationError(:acquisition, :radiometry,
+        "counting WFS inputs must carry cell-integrated photon rate"))
 end
 
 function prepare_wfs_acquisition(detector::AbstractCountingDetector,
@@ -506,9 +520,7 @@ function prepare_wfs_acquisition(detector::AbstractCountingDetector,
     source=nothing)
     validate_wfs_optical_products(optical_product)
     validate_wfs_observation(observation)
-    optical_product.metadata.spatial_measure isa CellIntegratedMeasure ||
-        throw(WFSPreparationError(:acquisition, :radiometry,
-            "counting WFS inputs must carry cell-integrated photon rate"))
+    _require_counting_wfs_measure(optical_product.metadata.spatial_measure)
     observation.metadata.numeric_type <: Real || throw(
         WFSPreparationError(:acquisition, :numeric_type,
             "counting WFS observations require real sample storage"))

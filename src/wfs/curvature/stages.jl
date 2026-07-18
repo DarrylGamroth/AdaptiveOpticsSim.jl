@@ -98,20 +98,27 @@ end
 @inline _curvature_detector_duration(detector::AbstractCountingDetector) =
     counting_integration_time(detector)
 
+@inline _curvature_branch_durations(::Nothing, duration::T) where {
+    T<:AbstractFloat,
+} = (duration, duration)
+
+function _curvature_branch_durations(values::Tuple{A,B}, duration::T) where {
+    A<:Real,B<:Real,T<:AbstractFloat,
+}
+    return (T(values[1]), T(values[2]))
+end
+
+function _curvature_branch_durations(::Any, ::AbstractFloat)
+    throw(InvalidConfiguration(
+        "branch_durations must be a two-element tuple of real durations"))
+end
+
 function CurvaturePackedAcquisition(detector::AbstractDetector;
     readout_model::CurvatureReadoutModel=CurvatureFrameReadout(),
     source=nothing, branch_durations=nothing)
     duration = _curvature_detector_duration(detector)
     T = typeof(duration)
-    if branch_durations === nothing
-        durations = (duration, duration)
-    else
-        branch_durations isa Tuple && length(branch_durations) == 2 &&
-            all(value -> value isa Real, branch_durations) || throw(
-            InvalidConfiguration(
-                "branch_durations must be a two-element tuple of real durations"))
-        durations = (T(branch_durations[1]), T(branch_durations[2]))
-    end
+    durations = _curvature_branch_durations(branch_durations, duration)
     return CurvaturePackedAcquisition{typeof(detector),
         typeof(readout_model),typeof(source),T}(detector, readout_model,
         source, durations)
@@ -235,23 +242,49 @@ function _require_curvature_input_geometry(
     return nothing
 end
 
+@inline _require_curvature_rate_coordinates(
+    ::NormalizedPupilCoordinates, ::AbstractString) = nothing
+
+function _require_curvature_rate_coordinates(
+    ::AbstractPlaneCoordinateDomain, label::AbstractString)
+    throw(WFSPreparationError(:optical_formation, :plane_metadata,
+        "$label must use normalized pupil coordinates"))
+end
+
+@inline _require_curvature_rate_measure(
+    ::CellIntegratedMeasure, ::AbstractString) = nothing
+
+function _require_curvature_rate_measure(
+    ::AbstractSpatialMeasure, label::AbstractString)
+    throw(WFSPreparationError(:optical_formation, :radiometry,
+        "$label must carry cell-integrated photon rate"))
+end
+
+function _require_curvature_rate_wavelength(channel::MonochromaticChannel,
+    wavelength_m, label::AbstractString)
+    channel.wavelength_m == wavelength_m || throw(
+        WFSPreparationError(:optical_formation, :plane_metadata,
+            "$label wavelength differs from its input"))
+    return nothing
+end
+
+function _require_curvature_rate_wavelength(
+    ::AbstractSpectralCoordinate, ::Any, label::AbstractString)
+    throw(WFSPreparationError(:optical_formation, :plane_metadata,
+        "$label wavelength differs from its input"))
+end
+
 function _require_curvature_rate_product(product::IntensityMap,
     expected_dimensions, wavelength_m, label::AbstractString)
     validate_wfs_optical_products(product)
-    product.metadata.coordinate_domain isa NormalizedPupilCoordinates ||
-        throw(WFSPreparationError(:optical_formation, :plane_metadata,
-            "$label must use normalized pupil coordinates"))
-    product.metadata.spatial_measure isa CellIntegratedMeasure || throw(
-        WFSPreparationError(:optical_formation, :radiometry,
-            "$label must carry cell-integrated photon rate"))
+    _require_curvature_rate_coordinates(product.metadata.coordinate_domain,
+        label)
+    _require_curvature_rate_measure(product.metadata.spatial_measure, label)
     size(product.values) == expected_dimensions || throw(
         WFSPreparationError(:optical_formation, :shape,
             "$label has the wrong prepared dimensions"))
-    channel = product.metadata.spectral
-    channel isa MonochromaticChannel &&
-        channel.wavelength_m == wavelength_m || throw(
-        WFSPreparationError(:optical_formation, :plane_metadata,
-            "$label wavelength differs from its input"))
+    _require_curvature_rate_wavelength(product.metadata.spectral,
+        wavelength_m, label)
     return product
 end
 
@@ -540,6 +573,13 @@ function _curvature_packed_rate_map(products)
     return IntensityMap(packed_metadata, values)
 end
 
+@inline _require_curvature_counting_measure(::CellIntegratedMeasure) = nothing
+
+function _require_curvature_counting_measure(::AbstractSpatialMeasure)
+    throw(WFSPreparationError(:acquisition, :radiometry,
+        "packed counting Curvature inputs must carry cell-integrated photon rate"))
+end
+
 function prepare_wfs_acquisition(
     model::CurvaturePackedAcquisition{<:Detector,<:CurvatureFrameReadout},
     optical_products::Tuple{<:IntensityMap,<:IntensityMap},
@@ -567,10 +607,8 @@ function prepare_wfs_acquisition(
     validate_wfs_observation(observation)
     _require_curvature_branch_compatibility(optical_products)
     duration = _require_curvature_packed_duration(model)
-    optical_products[1].metadata.spatial_measure isa
-        CellIntegratedMeasure || throw(WFSPreparationError(:acquisition,
-        :radiometry,
-        "packed counting Curvature inputs must carry cell-integrated photon rate"))
+    _require_curvature_counting_measure(
+        optical_products[1].metadata.spatial_measure)
     isequal(observation.metadata.layout, :curvature_branch_channels) ||
         throw(WFSPreparationError(:acquisition, :detector_mapping,
             "packed counting Curvature observation requires :curvature_branch_channels layout"))
@@ -757,17 +795,19 @@ function _require_curvature_image_observation(sensor::CurvatureWFS,
     return div(dimensions[1], sensor.params.pupil_samples)
 end
 
-function _curvature_rate_scales(sensor::CurvatureWFS, values)
-    values isa Tuple && length(values) == 2 &&
-        all(value -> value isa Real, values) || throw(WFSPreparationError(
-        :estimation, :radiometry,
-        "Curvature branch rate scales must be a two-element tuple of real values"))
+function _curvature_rate_scales(sensor::CurvatureWFS,
+    values::Tuple{A,B}) where {A<:Real,B<:Real}
     T = eltype(sensor.estimator.state.slopes)
     scales = (T(values[1]), T(values[2]))
     all(value -> isfinite(value) && value > zero(T), scales) || throw(
         WFSPreparationError(:estimation, :radiometry,
             "Curvature branch rate scales must be finite and positive"))
     return scales
+end
+
+function _curvature_rate_scales(::CurvatureWFS, ::Any)
+    throw(WFSPreparationError(:estimation, :radiometry,
+        "Curvature branch rate scales must be a two-element tuple of real values"))
 end
 
 function prepare_wfs_estimation(sensor::CurvatureWFS,

@@ -84,23 +84,44 @@ end
 @inline _zernike_front_end_wavelength(::ZernikeOpticalFrontEnd,
     input::ElectricField) = modulated_input_wavelength(input)
 
+@inline _require_zernike_rate_coordinates(
+    ::NormalizedPupilCoordinates) = nothing
+
+function _require_zernike_rate_coordinates(::AbstractPlaneCoordinateDomain)
+    throw(WFSPreparationError(:optical_formation, :plane_metadata,
+        "Zernike detector output must use normalized pupil coordinates"))
+end
+
+@inline _require_zernike_rate_measure(::CellIntegratedMeasure) = nothing
+
+function _require_zernike_rate_measure(::AbstractSpatialMeasure)
+    throw(WFSPreparationError(:optical_formation, :radiometry,
+        "Zernike detector output must carry cell-integrated rate"))
+end
+
+function _require_zernike_rate_wavelength(channel::MonochromaticChannel,
+    wavelength_m)
+    channel.wavelength_m == wavelength_m || throw(
+        WFSPreparationError(:optical_formation, :plane_metadata,
+            "Zernike detector output wavelength differs from its input"))
+    return nothing
+end
+
+function _require_zernike_rate_wavelength(
+    ::AbstractSpectralCoordinate, ::Any)
+    throw(WFSPreparationError(:optical_formation, :plane_metadata,
+        "Zernike detector output wavelength differs from its input"))
+end
+
 function _require_zernike_rate_map(output::IntensityMap,
     expected_dimensions, wavelength_m)
     validate_wfs_optical_products(output)
-    output.metadata.coordinate_domain isa NormalizedPupilCoordinates ||
-        throw(WFSPreparationError(:optical_formation, :plane_metadata,
-            "Zernike detector output must use normalized pupil coordinates"))
-    output.metadata.spatial_measure isa CellIntegratedMeasure || throw(
-        WFSPreparationError(:optical_formation, :radiometry,
-            "Zernike detector output must carry cell-integrated rate"))
+    _require_zernike_rate_coordinates(output.metadata.coordinate_domain)
+    _require_zernike_rate_measure(output.metadata.spatial_measure)
     size(output.values) == expected_dimensions || throw(
         WFSPreparationError(:optical_formation, :shape,
             "Zernike detector output has the wrong prepared dimensions"))
-    channel = output.metadata.spectral
-    channel isa MonochromaticChannel &&
-        channel.wavelength_m == wavelength_m || throw(
-        WFSPreparationError(:optical_formation, :plane_metadata,
-            "Zernike detector output wavelength differs from its input"))
+    _require_zernike_rate_wavelength(output.metadata.spectral, wavelength_m)
     return output
 end
 
@@ -342,6 +363,31 @@ end
         T(zernike_normalization_count(sensor))
 end
 
+function _zernike_scalar_normalization(::MeanValidFluxNormalization,
+    sensor::ZernikeWFS, frame::AbstractMatrix, source,
+    normalization_scale::S) where {S<:AbstractFloat}
+    state = sensor.estimator.state
+    summed = zero(S)
+    @inbounds for j in axes(frame, 2), i in axes(frame, 1)
+        state.valid_mask[i, j] && (summed += S(frame[i, j]))
+    end
+    return max(summed / S(zernike_normalization_count(sensor)), eps(S))
+end
+
+function _zernike_scalar_normalization(::IncidenceFluxNormalization,
+    sensor::ZernikeWFS, frame::AbstractMatrix, source,
+    normalization_scale::S) where {S<:AbstractFloat}
+    state = sensor.estimator.state
+    summed = zero(S)
+    @inbounds for j in axes(state.normalization_frame, 2),
+            i in axes(state.normalization_frame, 1)
+        state.valid_mask[i, j] &&
+            (summed += state.normalization_frame[i, j])
+    end
+    return summed * _zernike_incidence_multiplier(sensor, source,
+        normalization_scale)
+end
+
 function _estimate_zernike_signal!(::ScalarCPUStyle, sensor::ZernikeWFS,
     frame::AbstractMatrix{F}, source, normalization_scale::S) where {
     F<:Real,S<:AbstractFloat,
@@ -350,22 +396,9 @@ function _estimate_zernike_signal!(::ScalarCPUStyle, sensor::ZernikeWFS,
     count = zernike_normalization_count(sensor)
     fill!(state.signal_2d, zero(S))
     count == 0 && (fill!(state.slopes, zero(S)); return state.slopes)
-    if sensor.params.normalization isa MeanValidFluxNormalization
-        summed = zero(S)
-        @inbounds for j in axes(frame, 2), i in axes(frame, 1)
-            state.valid_mask[i, j] && (summed += S(frame[i, j]))
-        end
-        normalization = max(summed / S(count), eps(S))
-    else
-        summed = zero(S)
-        @inbounds for j in axes(state.normalization_frame, 2),
-                i in axes(state.normalization_frame, 1)
-            state.valid_mask[i, j] &&
-                (summed += state.normalization_frame[i, j])
-        end
-        normalization = summed * _zernike_incidence_multiplier(sensor,
-            source, normalization_scale)
-    end
+    normalization = _zernike_scalar_normalization(
+        sensor.params.normalization, sensor, frame, source,
+        normalization_scale)
     usable = isfinite(normalization) && normalization > eps(S)
     if !usable
         fill!(state.slopes, zero(S))
