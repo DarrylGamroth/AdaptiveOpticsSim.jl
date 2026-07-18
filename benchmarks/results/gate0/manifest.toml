@@ -27,3 +27,13 @@ path = "2026-07-17-pre-hil-09-zernike-curvature-stage.toml"
 id = "PRE-HIL-GATE0-CPU-2026-07-18-LIFT"
 purpose = "Clean-tree serial CPU latency and steady-state allocation evidence for prepared LiFT forward-model, observation, and estimator separation"
 path = "2026-07-18-pre-hil-10-lift.toml"
+
+[[artifacts]]
+id = "PRE-HIL-GATE0-CPU-2026-07-18-FULL-BACKEND-EVIDENCE"
+purpose = "Full composable Gate 0 CPU catalog run; preserves one 96 ns relative-p99 miss for Shack-Hartmann while all absolute and allocation gates pass"
+path = "2026-07-18-pre-hil-11-full-backend-evidence.toml"
+
+[[artifacts]]
+id = "PRE-HIL-GATE0-CPU-2026-07-18-SHACK-HARTMANN-CONFIRMATION"
+purpose = "Immediate same-contract Shack-Hartmann confirmation after the full catalog's 96 ns relative-p99 miss"
+path = "2026-07-18-pre-hil-11-shack-hartmann-confirmation.toml"

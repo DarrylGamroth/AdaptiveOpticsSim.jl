@@ -1,0 +1,119 @@
+schema_version = 1
+name = "pre_hil_backend_latency"
+evidence_class = "warmed serial service-time characterization"
+baseline_artifact = "benchmarks/results/platform/2026-07-14-wsl-cuda-local-amdgpu.toml"
+samples_per_run = 500
+runs = 3
+warmup_operations = 100
+minimum_samples_for_p95_gate = 400
+histogram_lowest_ns = 1
+histogram_highest_ns = 60000000000
+histogram_significant_figures = 3
+relative_p95_factor = 1.25
+scope_exclusions = [
+    "external RTC transport, frame grabbers, and RTC response processing",
+    "fixed-rate arrivals, queueing, saturation, overload, and recovery",
+    "cold Julia startup, package loading, compilation, and context construction",
+    "CPU affinity, core isolation, and controlled mobile power or thermal state",
+    "multi-thread, multi-process, and multi-GPU throughput",
+]
+
+[contract]
+workload = "REVOLT-like 277-command DM and 16x16 diffractive Shack-Hartmann acquisition exported as one 352x352 Float32 frame"
+backend_ready_boundary = "reset pupil OPD; extrapolate and scatter the physical DM command; apply the DM; form the diffractive Shack-Hartmann optical product; perform noiseless CMOS acquisition; tile the 352x352 frame; synchronize every participating backend array"
+host_ready_boundary = "backend-ready boundary followed by a copy into one preallocated 352x352 host Matrix{Float32}"
+transfer_only_boundary = "copy the already-complete backend frame into one preallocated 352x352 host Matrix{Float32}"
+load_model = "one warmed serial operation starts only after the preceding operation completes"
+arrival_model = "no independent arrival schedule"
+coordinated_omission_correction = false
+coordinated_omission_reason = "this contract measures serial service time, not response time under scheduled arrivals"
+timer = "time_ns; clock and histogram-recording overhead is reported and is not subtracted"
+tail_interpretation = "With 500 observations per run, p50, p95, and max are reported; p95 has 25 expected exceedances and p99 is intentionally not claimed."
+first_use_interpretation = "first measured operation on the benchmark context after an untimed parity pass has compiled the path; cold package load, precompilation, and context construction are excluded"
+baseline_interpretation = "Relative p95 limits use the July 14 diagnostic artifact solely as a predeclared regression reference; the clean-revision artifacts produced by this contract become the maintained baseline."
+gpu_ready_interpretation = "backend-ready means the synchronized result is available in backend-native storage; it does not imply that every AMDGPU implementation detail avoided documented host-mirror compatibility boundaries"
+
+[workload]
+sensor = "CMOS"
+noise = "none"
+numeric_type = "Float32"
+active_command_scale_m = 1.0e-7
+active_command_length = 277
+extrapolated_command_length = 277
+dm_grid_command_length = 361
+pupil_resolution = 352
+lenslets = 16
+roi_size = 22
+tiled_frame_shape = [352, 352]
+frame_bytes = 495616
+rng_seed = 20260718
+parity_rtol = 1.0e-5
+parity_atol = 1.0e-3
+
+[placements.local_cpu]
+backend = "cpu"
+host_class = "local"
+boundaries = ["backend_ready"]
+
+[placements.local_cpu.backend_ready]
+absolute_p95_ns = 10000000
+baseline_median_p95_ns = 4670146
+relative_gate = true
+max_alloc_bytes = 0
+
+[placements.local_amdgpu]
+backend = "amdgpu"
+host_class = "local"
+boundaries = ["backend_ready", "host_ready", "transfer_only"]
+
+[placements.local_amdgpu.backend_ready]
+absolute_p95_ns = 1500000000
+baseline_median_p95_ns = 548456543
+relative_gate = true
+max_alloc_bytes = 3145728
+
+[placements.local_amdgpu.host_ready]
+absolute_p95_ns = 1600000000
+baseline_median_p95_ns = 0
+relative_gate = false
+max_alloc_bytes = 3276800
+
+[placements.local_amdgpu.transfer_only]
+absolute_p95_ns = 10000000
+baseline_median_p95_ns = 0
+relative_gate = false
+max_alloc_bytes = 131072
+
+[placements.wsl_cpu]
+backend = "cpu"
+host_class = "wsl"
+boundaries = ["backend_ready"]
+
+[placements.wsl_cpu.backend_ready]
+absolute_p95_ns = 15000000
+baseline_median_p95_ns = 6573259
+relative_gate = true
+max_alloc_bytes = 0
+
+[placements.wsl_cuda]
+backend = "cuda"
+host_class = "wsl"
+boundaries = ["backend_ready", "host_ready", "transfer_only"]
+
+[placements.wsl_cuda.backend_ready]
+absolute_p95_ns = 10000000
+baseline_median_p95_ns = 2278730
+relative_gate = true
+max_alloc_bytes = 196608
+
+[placements.wsl_cuda.host_ready]
+absolute_p95_ns = 15000000
+baseline_median_p95_ns = 3746056
+relative_gate = true
+max_alloc_bytes = 262144
+
+[placements.wsl_cuda.transfer_only]
+absolute_p95_ns = 10000000
+baseline_median_p95_ns = 0
+relative_gate = false
+max_alloc_bytes = 131072

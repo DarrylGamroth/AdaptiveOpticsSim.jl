@@ -567,9 +567,10 @@ end
     prepare_lift_forward_model(telescope, source, basis; diversity_opd, ...)
 
 Prepare the monochromatic LiFT focal-plane forward model independently of any
-detector acquisition. `basis[:, :, k]` is an OPD basis in metres. The telescope
-aperture and diversity are frozen into backend-resident arrays; no mutable
-telescope or source object is retained.
+detector acquisition. `basis[:, :, k]` is a dimensionless modal OPD shape;
+LiFT coefficients and `diversity_opd` are in metres, so their assembled sum is
+an OPD map in metres. The telescope aperture and diversity are frozen into
+backend-resident arrays; no mutable telescope or source object is retained.
 """
 function prepare_lift_forward_model(tel::Telescope,
     src::Union{Source,LGSSource}, basis::AbstractArray{T,3};

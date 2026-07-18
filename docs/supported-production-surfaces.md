@@ -69,6 +69,8 @@ Primary evidence:
 - the workflows in [`user-guide.md`](user-guide.md) and [`release-validation-runbook.md`](release-validation-runbook.md)
 - benchmark artifacts under `benchmarks/results/`
 - [conventional-detector CPU HIL latency baseline](../benchmarks/results/detectors/2026-07-14-detector-hil-latency.toml)
+- [final pre-HIL local CPU service-time evidence](../benchmarks/results/platform/2026-07-18-pre-hil-11-local-cpu.toml)
+- [final pre-HIL WSL CPU service-time evidence](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cpu.toml)
 - [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml)
 
 ### AMDGPU backend
@@ -97,12 +99,19 @@ Primary evidence:
 - [backend-validation-guide.md](backend-validation-guide.md)
 - [release-validation-runbook.md](release-validation-runbook.md)
 - benchmark artifacts under `benchmarks/results/`
+- [current CPU/CUDA/AMDGPU cross-host characterization](../benchmarks/results/platform/2026-07-14-wsl-cuda-local-amdgpu.toml)
 - [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-amdgpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-amdgpu.toml)
 
 Current expectation:
 
 - if a maintained AMDGPU surface regresses numerically against CPU, that is a
   release-blocking defect for the AMDGPU-supported scope
+
+The current Julia 1.12.6 AMDGPU hardware target passed all `396` maintained
+checks. A later local Julia installation failure prevented a replacement raw
+latency artifact, so the July 14 characterization remains the maintained AMD
+performance evidence; the failed host run does not broaden or weaken the
+functional support claim.
 
 ### GPU support-boundary rule
 
@@ -158,8 +167,10 @@ The following are outside the current support claim:
 
 - CUDA execution. The extension, dedicated test project, fail-fast hardware
   target, and current manual WSL hardware evidence—including prepared direct
-  imaging—are available, but CUDA has not yet been explicitly returned to the
-  supported delivery scope or a routine validation cadence.
+  imaging and the
+  [final pre-HIL CUDA artifact](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cuda.toml)—are
+  available, but CUDA has not yet been explicitly returned to the supported
+  delivery scope or a routine validation cadence.
 - SPECULA pixel-level equivalence on the HEART Shack-Hartmann surface
 - Metal backend support
 - backend-audit surfaces that are not part of the maintained hardware targets

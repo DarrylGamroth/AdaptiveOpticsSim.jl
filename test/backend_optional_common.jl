@@ -1552,6 +1552,152 @@ function run_optional_lift_fallback_check(array_backend, ::Type{T}) where {T<:Ab
     return nothing
 end
 
+function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
+    ::Type{T}) where {B<:AdaptiveOpticsSim.GPUBackendTag,T<:AbstractFloat}
+    selector = backend_selector(B)
+    lift_src = Source(band=:I, magnitude=zero(T), T=T)
+    cpu_tel = Telescope(resolution=8, diameter=T(8),
+        central_obstruction=zero(T), T=T, backend=CPUBackend())
+    lift_tel = Telescope(resolution=8, diameter=T(8),
+        central_obstruction=zero(T), T=T, backend=selector)
+    zernike = ZernikeBasis(cpu_tel, 5; T=T)
+    compute_zernike!(zernike, cpu_tel)
+    basis_host = copy(@view zernike.modes[:, :, 2:4])
+    diversity_host = T(30e-9) .* @view(zernike.modes[:, :, 5])
+    truth_coefficients = T[8e-9, -4e-9, 2e-9]
+    truth_opd_host = copy(diversity_host)
+    @inbounds for mode_id in eachindex(truth_coefficients)
+        @views @. truth_opd_host += truth_coefficients[mode_id] *
+            basis_host[:, :, mode_id]
+    end
+    lift_basis = array_backend(basis_host)
+    lift_diversity = array_backend(copy(diversity_host))
+    truth_opd = array_backend(truth_opd_host)
+    lift_object_kernel_host = T[0 1 0; 1 4 1; 0 1 0]
+    lift_object_kernel = array_backend(lift_object_kernel_host)
+
+    cpu_forward = prepare_lift_forward_model(cpu_tel, lift_src,
+        basis_host; diversity_opd=copy(diversity_host), focal_resolution=8,
+        object_kernel=lift_object_kernel_host)
+    lift_forward = prepare_lift_forward_model(lift_tel, lift_src,
+        lift_basis; diversity_opd=lift_diversity, focal_resolution=8,
+        object_kernel=lift_object_kernel)
+    cpu_rate = copy(intensity_values(evaluate_lift_forward!(cpu_forward,
+        truth_opd_host)))
+    lift_rate = copy(intensity_values(evaluate_lift_forward!(lift_forward,
+        truth_opd)))
+    @test lift_rate isa array_backend
+    @test Array(lift_rate) ≈ cpu_rate rtol=T(2e-4) atol=T(1e-3)
+
+    exposure = T(0.002)
+    quantum_efficiency = T(0.8)
+    rate_domain = LiFTPhotonRate(
+        noise_equivalent_exposure_s=exposure,
+        quantum_efficiency=quantum_efficiency)
+    count_domain = LiFTExpectedCounts(exposure;
+        quantum_efficiency=quantum_efficiency)
+    photon_rate_per_unit = T(sum(cpu_rate))
+    normalized_domain = LiFTNormalizedIntensity(photon_rate_per_unit;
+        noise_equivalent_exposure_s=exposure,
+        quantum_efficiency=quantum_efficiency)
+    count_values = similar(lift_rate)
+    normalized_values = similar(lift_rate)
+    @. count_values = lift_rate * exposure * quantum_efficiency
+    @. normalized_values = lift_rate / photon_rate_per_unit
+    rate_observation = LiFTObservation(lift_forward, lift_rate;
+        domain=rate_domain)
+    count_observation = LiFTObservation(lift_forward, count_values;
+        domain=count_domain)
+    normalized_observation = LiFTObservation(lift_forward,
+        normalized_values; domain=normalized_domain)
+
+    for numerical in (false, true)
+        rate_estimator = LiFT(lift_forward; iterations=2,
+            mode_ids=(1, 2), numerical,
+            solve_mode=LiFTSolveNormalEquations())
+        count_estimator = LiFT(lift_forward; iterations=2,
+            mode_ids=(1, 2), numerical,
+            solve_mode=LiFTSolveNormalEquations())
+        normalized_estimator = LiFT(lift_forward; iterations=2,
+            mode_ids=(1, 2), numerical,
+            solve_mode=LiFTSolveNormalEquations())
+        rate_coefficients = reconstruct(rate_estimator, rate_observation;
+            optimize_norm=:none, check_convergence=false)
+        count_coefficients = reconstruct(count_estimator,
+            count_observation; optimize_norm=:none,
+            check_convergence=false)
+        normalized_coefficients = reconstruct(normalized_estimator,
+            normalized_observation; optimize_norm=:none,
+            check_convergence=false)
+        @test rate_coefficients isa array_backend
+        @test all(isfinite, Array(rate_coefficients))
+        @test isapprox(Array(count_coefficients), Array(rate_coefficients);
+            rtol=T(5e-4), atol=T(1e-11))
+        @test isapprox(Array(normalized_coefficients),
+            Array(rate_coefficients); rtol=T(5e-4), atol=T(1e-11))
+    end
+
+    cpu_analytic = LiFT(cpu_forward; iterations=2, mode_ids=(1, 2),
+        solve_mode=LiFTSolveNormalEquations())
+    gpu_analytic = LiFT(lift_forward; iterations=2, mode_ids=(1, 2),
+        solve_mode=LiFTSolveNormalEquations())
+    cpu_H = AdaptiveOpticsSim.lift_interaction_matrix(cpu_analytic,
+        zeros(T, 3))
+    gpu_H = AdaptiveOpticsSim.lift_interaction_matrix(gpu_analytic,
+        array_backend(zeros(T, 3)))
+    @test Array(gpu_H) ≈ cpu_H rtol=T(5e-4) atol=T(1e3)
+
+    predicted_counts = similar(lift_rate)
+    predict_lift_observation!(predicted_counts, lift_forward, truth_opd,
+        count_domain)
+    @test isapprox(Array(predicted_counts), Array(count_values);
+        rtol=T(2e-5), atol=T(1e-3))
+    @test_throws InvalidConfiguration LiFTObservation(lift_forward,
+        Array(lift_rate))
+    @test_throws InvalidConfiguration prepare_lift_forward_model(lift_tel,
+        lift_src, basis_host; diversity_opd=lift_diversity,
+        focal_resolution=8)
+    @test_throws InvalidConfiguration reconstruct(gpu_analytic,
+        rate_observation; R_n=ones(T, 8, 8))
+    host_lift_coefficients = zeros(T, 3)
+    @test_throws InvalidConfiguration reconstruct!(host_lift_coefficients,
+        gpu_analytic, rate_observation)
+    @test host_lift_coefficients == zeros(T, 3)
+    device_lift_coefficients = similar(lift_basis, T, 3)
+    fill!(device_lift_coefficients, zero(T))
+    @test_throws InvalidConfiguration reconstruct!(device_lift_coefficients,
+        gpu_analytic, rate_observation; coeffs0=zeros(T, 3))
+    @test Array(device_lift_coefficients) == zeros(T, 3)
+
+    convolution_source_host = reshape(T.(1:64), 8, 8)
+    convolution_source = array_backend(convolution_source_host)
+    dense_convolution = similar(convolution_source)
+    dense_expected = similar(convolution_source_host)
+    AdaptiveOpticsSim.conv2d_same!(dense_convolution,
+        convolution_source, lift_object_kernel)
+    AdaptiveOpticsSim.conv2d_same!(dense_expected,
+        convolution_source_host, lift_object_kernel_host)
+    @test Array(dense_convolution) ≈ dense_expected rtol=T(1e-5) atol=T(1e-5)
+
+    row_kernel_host = T[1, 2, 1]
+    col_kernel_host = T[1, 0.5, 1]
+    row_kernel = array_backend(row_kernel_host)
+    col_kernel = array_backend(col_kernel_host)
+    separable_convolution = similar(convolution_source)
+    separable_scratch = similar(convolution_source)
+    separable_expected = similar(convolution_source_host)
+    separable_expected_scratch = similar(convolution_source_host)
+    AdaptiveOpticsSim.conv2d_same_separable!(separable_convolution,
+        separable_scratch, convolution_source, row_kernel, col_kernel)
+    AdaptiveOpticsSim.conv2d_same_separable!(separable_expected,
+        separable_expected_scratch, convolution_source_host,
+        row_kernel_host, col_kernel_host)
+    @test isapprox(Array(separable_convolution), separable_expected;
+        rtol=T(1e-5), atol=T(1e-5))
+    run_optional_lift_fallback_check(array_backend, T)
+    return nothing
+end
+
 function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}, tel, backend)
     T = Float32
     array_backend = AdaptiveOpticsSim._resolve_array_backend(backend)
@@ -1807,67 +1953,6 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
     @test optical_gains isa array_backend
     @test all(isfinite, Array(optical_gains))
 
-    lift_tel = Telescope(resolution=8, diameter=T(8),
-        central_obstruction=zero(T), T=T, backend=backend)
-    lift_src = Source(band=:I, magnitude=zero(T), T=T)
-    lift_basis = array_backend(rand(MersenneTwister(29), T, 8, 8, 3))
-    lift_diversity = array_backend(zeros(T, 8, 8))
-    lift_object_kernel_host = T[0 1 0; 1 4 1; 0 1 0]
-    lift_object_kernel = array_backend(lift_object_kernel_host)
-    lift_forward = prepare_lift_forward_model(lift_tel, lift_src,
-        lift_basis; diversity_opd=lift_diversity, focal_resolution=8,
-        object_kernel=lift_object_kernel)
-    lift = LiFT(lift_forward; iterations=2, mode_ids=(1, 2),
-        solve_mode=LiFTSolveAuto())
-    lift_direct = prepare_direct_imaging(lift_tel, PupilFunction(lift_tel),
-        lift_src; zero_padding=1)
-    lift_psf = intensity_values(form_direct_image!(lift_direct))
-    lift_observation = LiFTObservation(lift_forward, copy(lift_psf))
-    @test_throws InvalidConfiguration LiFTObservation(lift_forward,
-        Array(lift_psf))
-    @test_throws InvalidConfiguration prepare_lift_forward_model(lift_tel,
-        lift_src, Array(lift_basis); diversity_opd=lift_diversity,
-        focal_resolution=8)
-    @test_throws InvalidConfiguration reconstruct(lift, lift_observation;
-        R_n=ones(T, 8, 8))
-    host_lift_coefficients = zeros(T, 3)
-    @test_throws InvalidConfiguration reconstruct!(host_lift_coefficients,
-        lift, lift_observation)
-    @test host_lift_coefficients == zeros(T, 3)
-    device_lift_coefficients = similar(lift_basis, T, 3)
-    fill!(device_lift_coefficients, zero(T))
-    @test_throws InvalidConfiguration reconstruct!(device_lift_coefficients,
-        lift, lift_observation; coeffs0=zeros(T, 3))
-    @test Array(device_lift_coefficients) == zeros(T, 3)
-    lift_coeffs = reconstruct(lift, lift_observation)
-    @test lift_coeffs isa array_backend
-    @test all(isfinite, Array(lift_coeffs))
-
-    convolution_source_host = reshape(T.(1:64), 8, 8)
-    convolution_source = array_backend(convolution_source_host)
-    dense_convolution = similar(convolution_source)
-    dense_expected = similar(convolution_source_host)
-    AdaptiveOpticsSim.conv2d_same!(dense_convolution,
-        convolution_source, lift_object_kernel)
-    AdaptiveOpticsSim.conv2d_same!(dense_expected,
-        convolution_source_host, lift_object_kernel_host)
-    @test Array(dense_convolution) ≈ dense_expected rtol=1f-5 atol=1f-5
-
-    row_kernel_host = T[1, 2, 1]
-    col_kernel_host = T[1, 0.5, 1]
-    row_kernel = array_backend(row_kernel_host)
-    col_kernel = array_backend(col_kernel_host)
-    separable_convolution = similar(convolution_source)
-    separable_scratch = similar(convolution_source)
-    separable_expected = similar(convolution_source_host)
-    separable_expected_scratch = similar(convolution_source_host)
-    AdaptiveOpticsSim.conv2d_same_separable!(separable_convolution,
-        separable_scratch, convolution_source, row_kernel, col_kernel)
-    AdaptiveOpticsSim.conv2d_same_separable!(separable_expected,
-        separable_expected_scratch, convolution_source_host,
-        row_kernel_host, col_kernel_host)
-    @test Array(separable_convolution) ≈ separable_expected rtol=1f-5 atol=1f-5
-    run_optional_lift_fallback_check(array_backend, T)
     return nothing
 end
 
@@ -2067,7 +2152,6 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
     @test isapprox(Array(AdaptiveOpticsSim.detector_read_cube(gpu_windowed_det)), AdaptiveOpticsSim.detector_read_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
     @test AdaptiveOpticsSim.detector_read_times(gpu_windowed_det) == AdaptiveOpticsSim.detector_read_times(cpu_windowed_det)
 
-    run_optional_lift_fallback_check(array_backend, T)
     return nothing
 end
 
@@ -2248,6 +2332,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         Array(science_frames(shared_arm)[2]) atol=0 rtol=0
     @test synchronize_runtime!(shared_runtime) === shared_runtime
 
+    run_optional_lift_pipeline_checks(B, BackendArray, T)
     run_optional_backend_plan_checks(B, tel, selector)
     run_optional_composite_optic_parity(B, BackendArray)
     run_optional_scalable_reconstructor_checks(T, selector, BackendArray)

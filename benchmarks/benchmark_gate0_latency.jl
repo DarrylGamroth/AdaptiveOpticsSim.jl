@@ -4,6 +4,7 @@ using Dates
 using HdrHistogram
 using LinearAlgebra
 using Random
+using SHA
 using Statistics
 using TOML
 
@@ -417,10 +418,37 @@ function summarize_gate0_runs(runs::Vector{Dict{String,Any}})
     )
 end
 
-function load_gate0_baselines(path::AbstractString)
-    isempty(path) && return Dict{String,Any}()
-    artifact = TOML.parsefile(path)
-    return Dict(String(card["id"]) => card for card in artifact["cards"])
+function gate0_baseline_paths()
+    specification = get(ENV, "AOS_GATE0_BASELINES", GATE0_BASELINE_PATH)
+    isempty(strip(specification)) && return String[]
+    paths = String.(strip.(split(specification, ',')))
+    any(isempty, paths) && error(
+        "AOS_GATE0_BASELINES must contain comma-separated nonempty paths")
+    return paths
+end
+
+function load_gate0_baselines(paths::Vector{String})
+    baselines = Dict{String,Any}()
+    sources = Vector{Dict{String,Any}}()
+    for path in paths
+        artifact = TOML.parsefile(path)
+        card_ids = String[]
+        for card in artifact["cards"]
+            id = String(card["id"])
+            haskey(baselines, id) && error(
+                "duplicate Gate 0 baseline card '$id' across baseline artifacts")
+            baselines[id] = card
+            push!(card_ids, id)
+        end
+        push!(sources, Dict{String,Any}(
+            "path" => relpath(abspath(path), @__DIR__),
+            "sha256" => bytes2hex(SHA.sha256(read(path))),
+            "characterized_source_revision" => get(artifact,
+                "characterized_source_revision", "unknown"),
+            "card_ids" => card_ids,
+        ))
+    end
+    return baselines, sources
 end
 
 function gate0_regression(card::Gate0LatencyCard, summary,
@@ -582,7 +610,8 @@ function run_gate0_latency_benchmarks()
     highest_ns = Int64(contract["histogram_highest_ns"])
     significant_figures = Int(contract["histogram_significant_figures"])
     relative_factor = Float64(contract["relative_p99_factor"])
-    baselines = load_gate0_baselines(GATE0_BASELINE_PATH)
+    baseline_paths = gate0_baseline_paths()
+    baselines, baseline_sources = load_gate0_baselines(baseline_paths)
     all_cards = Tuple(make_gate0_card(raw) for raw in contract["cards"])
     cards, card_selection = select_gate0_cards(all_cards)
     results = Vector{Dict{String,Any}}()
@@ -596,6 +625,8 @@ function run_gate0_latency_benchmarks()
     println("  p99_relative_factor: ", relative_factor)
     println("  card_selection: ", card_selection)
     println("  card_ids: ", join((card.id for card in cards), ","))
+    println("  baseline_artifacts: ", isempty(baseline_paths) ? "none" :
+        join(baseline_paths, ','))
     if !p99_gate_supported
         println("  p99_gates: skipped (requires at least ",
             minimum_p99_samples, " samples per run)")
@@ -655,6 +686,7 @@ function run_gate0_latency_benchmarks()
         "configured_warmup_operations" => warmup,
         "configured_card_selection" => card_selection,
         "configured_card_ids" => [card.id for card in cards],
+        "baseline_artifacts" => baseline_sources,
         "minimum_samples_for_p99_gate" => minimum_p99_samples,
         "p99_gate_supported" => p99_gate_supported,
         "contract" => contract["contract"],

@@ -46,8 +46,11 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    separate propagation, acquisition, and estimation, including independent or
    packed Curvature detector planes; and LiFT now consumes independently
    acquired, explicitly normalized observations through a separately prepared
-   focal-plane model. Next, complete the cross-backend evidence and final Gate
-   0 API/physics review. Preserve CPU, CUDA, and AMDGPU correctness,
+   focal-plane model. Cross-backend correctness and residency evidence is now
+   complete on the maintained CPU, CUDA, and AMDGPU targets, with clean CPU and
+   CUDA service-time artifacts retained. Next, complete the final Gate 0
+   API/physics review and remove the remaining transitional ownership. Preserve
+   CPU, CUDA, and AMDGPU correctness,
    residency, allocation, and latency evidence throughout the twelve-PR
    migration.
 2. Compose the Gate 0 optical ownership primitives into immutable shared
