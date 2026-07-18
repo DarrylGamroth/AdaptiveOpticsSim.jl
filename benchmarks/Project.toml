@@ -4,6 +4,7 @@ AdaptiveOpticsSim = "002fb5eb-ad68-44a0-adbe-b299bfc2febc"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Dagger = "d58978e5-989f-55fb-8d15-ea34adc7bf54"
 HdrHistogram = "d0b8ac25-3072-4075-acf5-4a93ba78f71f"
+KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 
 [sources]
 AdaptiveOpticsSim = {path = ".."}
@@ -15,4 +16,5 @@ AdaptiveOpticsSim = "0.1"
 BenchmarkTools = "1"
 Dagger = "0.19"
 HdrHistogram = "0.4"
+KernelAbstractions = "0.9.42"
 julia = "1.12"
