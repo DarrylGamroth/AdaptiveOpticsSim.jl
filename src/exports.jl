@@ -35,6 +35,7 @@ export with_extended_source, extended_source_asterism
 export AbstractOpticalProduct, AbstractOpticalPlaneKind
 export PupilPlane, FocalPlane, IntermediatePlane, DetectorPlane
 export AbstractPlaneCoordinateDomain, MetricCoordinates, AngularCoordinates
+export NormalizedPupilCoordinates
 export PlaneCentering, SampleCentered, InterSampleCentered
 export PlaneAxisOrientation, UnspecifiedSpectralCoordinate
 export AchromaticSpectralCoordinate, MonochromaticChannel
@@ -129,9 +130,14 @@ export prepare_wfs_acquisition, acquire_wfs_observation!
 export prepare_wfs_estimation, estimate_wfs_measurement!
 export AbstractWFSMeasurementPath, AcquiredObservationPath
 export DirectMeasurementPath, wfs_measurement_path
+export AbstractFocalPlaneModulation, NoModulation, CircularModulation
+export SampledModulation
 export MicrolensArrayParams, MicrolensArray
 export microlens_array, prepare_microlens_propagation
 export ShackHartmannOpticalFrontEnd, shack_hartmann_rate_map
+export PyramidPhaseMask, PyramidOpticalFrontEnd, pyramid_rate_map
+export BioEdgeAmplitudeMask, BioEdgeOpticalFrontEnd, bioedge_rate_map
+export set_pyramid_calibration!, set_bioedge_calibration!
 export ShackHartmannWFS, PyramidWFS, BioEdgeWFS, ZernikeWFS, CurvatureWFS
 export CurvatureReadoutModel, CurvatureCountingReadout, CurvatureBranchResponse
 export FluxThresholdValidSubapertures
@@ -141,8 +147,9 @@ export subaperture_layout, subaperture_calibration, slope_extraction_model
 export set_subaperture_calibration!
 export valid_subaperture_indices
 export MeanValidFluxNormalization, IncidenceFluxNormalization
-export measure!, pyramid_modulation_frame!
+export measure!, pyramid_modulation_frame, pyramid_modulation_frame!
 export valid_subaperture_mask, camera_frame, wfs_detector_image
+export wfs_calibration_signature
 export shack_hartmann_detector_image, shack_hartmann_detector_image!
 export n_valid_subapertures
 export LiFT

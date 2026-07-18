@@ -1710,9 +1710,9 @@ end
     grouped_tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     grouped_pyr = PyramidWFS(grouped_tel; pupil_samples=4, modulation=1.0, mode=Diffractive())
     grouped_bio = BioEdgeWFS(grouped_tel; pupil_samples=4, modulation=1.0, mode=Diffractive())
-    @test @inferred(AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(grouped_pyr.state.intensity), grouped_pyr)) isa AdaptiveOpticsSim.GroupedStackReducePlan
-    @test @inferred(AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(grouped_bio.state.intensity), grouped_bio)) isa AdaptiveOpticsSim.GroupedStackReducePlan
-    @test AdaptiveOpticsSim.reduction_execution_plan(grouped_pyr.state.intensity) isa AdaptiveOpticsSim.DirectReductionPlan
+    @test @inferred(AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(grouped_pyr.front_end.propagation.intensity), grouped_pyr)) isa AdaptiveOpticsSim.GroupedStackReducePlan
+    @test @inferred(AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(grouped_bio.front_end.propagation.intensity), grouped_bio)) isa AdaptiveOpticsSim.GroupedStackReducePlan
+    @test AdaptiveOpticsSim.reduction_execution_plan(grouped_pyr.front_end.propagation.intensity) isa AdaptiveOpticsSim.DirectReductionPlan
     @test AdaptiveOpticsSim.runtime_export_plan(grouped) isa AdaptiveOpticsSim.CompositeRuntimeExportPlan
 
     runtime2_slopes_only = ClosedLoopRuntime(

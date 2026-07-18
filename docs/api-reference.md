@@ -436,15 +436,17 @@ backend/device, duration, mapping, and estimator contracts before repeated
 execution. Mutating execution receives explicit caller-owned products and
 destinations and an explicit RNG at acquisition. A direct geometric or
 reduced-order estimator declares `DirectMeasurementPath()` and allocates no
-fictitious rate plane, observation, or detector workspace. The generic
-  contract is implemented; the remaining WFS families stay internally coupled
-  until their ordered migration PRs.
+fictitious rate plane, observation, or detector workspace. Shack-Hartmann,
+Pyramid, and BioEdge implement the generic contract; the remaining WFS
+families stay internally coupled until their ordered migration PRs.
 
-The diffractive Shack-Hartmann acquisition contract accepts a real-valued
+The diffractive Shack-Hartmann staged path uses a real-valued
 `:lenslet_mosaic` observation whose element type exactly matches the prepared
-detector output. Its declared units describe that output and are not restricted
-to electrons: `:electron_count`, `:adu`, or an application-defined singleton
-are valid examples. The centroid estimator requires a
+detector output. The family-neutral detector-acquisition stage validates the
+detector-plane product and output storage; the Shack-Hartmann estimator then
+validates the `:lenslet_mosaic` layout. Its declared units describe that output
+and are not restricted to electrons: `:electron_count`, `:adu`, or an
+application-defined singleton are valid examples. The centroid estimator requires a
 `:centroid_slopes` measurement whose units match the installed calibration's
 `output_units`. Geometric Shack-Hartmann estimation requires a
 `:radian`/`:geometric_slopes` measurement. Physical estimator preparation also
@@ -452,6 +454,36 @@ requires an explicit finite calibration installed with
 `set_subaperture_calibration!`; the prepared estimator binds its revision,
 centroid response, output units, wavelength, signature, and reference storage
 and rejects later recalibration before mutating its output.
+
+`PyramidOpticalFrontEnd` and `BioEdgeOpticalFrontEnd` bind their distinct
+physical masks, a prepared `NoModulation`, `CircularModulation`, or
+`SampledModulation` policy, reusable propagation storage, and a source. Use
+`pyramid_rate_map` or `bioedge_rate_map` to allocate the caller-owned
+four-pupil rate product, then prepare and execute it with the generic optical
+stage functions. Spectral sources return an `OpticalProductBundle`. An
+`Asterism` or `ExtendedSource` requires one explicit pupil input per rendered
+direction and also returns a bundle; no direction-dependent pupils are added
+by array index. Install acquired-estimator references with
+`set_pyramid_calibration!` or `set_bioedge_calibration!`. The setters validate
+finite storage and advance a revision, so a prepared estimator must be rebuilt
+after recalibration. Acquired differential estimation requires a real, square
+`:four_pupil_mosaic` on the same backend and physical device as the estimator.
+The detector samples may be floating-point electron counts or integer ADU/count
+values; arithmetic is performed in the floating-point estimator precision so
+unsigned subtraction cannot wrap. Detector sampling and binning may reduce the
+mosaic while preserving complete pupil images. Prepared optical plans also bind
+the propagation-sampling revision and reject execution after a legacy sampling
+resize, before mutating the rate output. Geometric variants instead consume an
+explicit `PupilFunction` and report a floating-point
+`:metre`/`:geometric_slopes` direct measurement; they have no focal-plane or
+detector workspace.
+
+The legacy constructor keyword `calib_modulation` prepares the broader optical
+quadrature used only to select valid estimator support. A zero-aberration
+reference is formed with the operating modulation so it subtracts the static
+response of the sensor that will actually acquire data. A user-sampled
+modulation path is retained for both operations rather than replaced by a
+generated circle.
 
 Both geometric and centroid measurements use `[axis 1; axis 2]` block order.
 Each `n_lenslets`-by-`n_lenslets` block follows Julia column-major order, so

@@ -199,6 +199,31 @@ function _validate_wfs_storage(metadata, storage, stage::Symbol)
     return metadata
 end
 
+function _require_wfs_storage_domain(stage::Symbol, metadata, storage,
+    label::AbstractString)
+    typeof(metadata.backend) === typeof(backend(storage)) ||
+        throw(WFSPreparationError(stage, :backend,
+            "$label backend does not match the prepared WFS stage"))
+    metadata.device == plane_device(storage) ||
+        throw(WFSPreparationError(stage, :device,
+            "$label device does not match the prepared WFS stage"))
+    return nothing
+end
+
+function _require_real_square_wfs_observation(observation::WFSObservation,
+    label::AbstractString)
+    observation.metadata.numeric_type <: Real ||
+        throw(WFSPreparationError(:estimation, :numeric_type,
+            "$label observations require real detector samples"))
+    dimensions = observation.metadata.dimensions
+    length(dimensions) == 2 || throw(WFSPreparationError(:estimation, :shape,
+        "$label observations require a two-dimensional detector frame"))
+    dimensions[1] == dimensions[2] || throw(WFSPreparationError(
+        :estimation, :shape,
+        "$label observations require a square detector frame"))
+    return dimensions[1]
+end
+
 function validate_wfs_observation(observation::WFSObservation)
     _require_declared_wfs_units(observation.units, :acquisition)
     _require_declared_wfs_descriptor(observation.metadata.layout,
@@ -384,6 +409,47 @@ function prepare_wfs_acquisition(model, optical_products, observation)
 end
 
 function acquire_wfs_observation! end
+
+"""Prepared detector acquisition shared by detector-backed WFS families."""
+struct PreparedWFSDetectorAcquisition{D,P,O}
+    detector::D
+    detector_plan::P
+    observation::O
+end
+
+function prepare_wfs_acquisition(detector::Detector,
+    optical_product::IntensityMap, observation::WFSObservation)
+    validate_wfs_optical_products(optical_product)
+    validate_wfs_observation(observation)
+    observation.metadata.numeric_type <: Real ||
+        throw(WFSPreparationError(:acquisition, :numeric_type,
+            "WFS detector observations require real sample storage"))
+    plan = prepare_detector_acquisition(detector, optical_product)
+    size(observation.storage) == size(output_frame(detector)) ||
+        throw(WFSPreparationError(:acquisition, :shape,
+            "WFS observation storage must match the prepared detector output"))
+    observation.metadata.numeric_type === eltype(output_frame(detector)) ||
+        throw(WFSPreparationError(:acquisition, :numeric_type,
+            "WFS observation element type must match the detector output"))
+    typeof(backend(observation.storage)) === typeof(backend(detector)) ||
+        throw(WFSPreparationError(:acquisition, :backend,
+            "WFS observation and detector backends differ"))
+    plane_device(observation.storage) == plane_device(output_frame(detector)) ||
+        throw(WFSPreparationError(:acquisition, :device,
+            "WFS observation and detector output occupy different devices"))
+    return PreparedWFSDetectorAcquisition(detector, plan, observation)
+end
+
+function acquire_wfs_observation!(observation::WFSObservation,
+    optical_product::IntensityMap, plan::PreparedWFSDetectorAcquisition,
+    rng::AbstractRNG)
+    observation === plan.observation || throw(WFSPreparationError(
+        :acquisition, :prepared_binding,
+        "WFS observation does not match prepared storage"))
+    frame = capture!(plan.detector, optical_product, plan.detector_plan, rng)
+    copyto!(observation.storage, frame)
+    return observation
+end
 
 """
     prepare_wfs_estimation(model, input, measurement)

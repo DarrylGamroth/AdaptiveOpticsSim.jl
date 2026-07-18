@@ -830,29 +830,21 @@ end
     @testset "Pyramid kernels" begin
         tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
         wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, modulation_points=3, mode=Diffractive())
+        propagation = AdaptiveOpticsSim.pyramid_propagation(wfs)
 
-        scalar_phasor = similar(wfs.state.phasor)
-        ka_phasor = similar(wfs.state.phasor)
+        scalar_phasor = similar(propagation.phasor)
+        ka_phasor = similar(propagation.phasor)
         AdaptiveOpticsSim._build_pyramid_phasor!(SCALAR_CPU_STYLE, scalar_phasor)
         AdaptiveOpticsSim._build_pyramid_phasor!(KA_CPU_STYLE, ka_phasor)
         mark_ka_cpu_kernel!(:pyramid_phasor_kernel!)
         @test ka_cpu_close(ka_phasor, scalar_phasor)
 
-        scalar_mask = similar(wfs.state.pyramid_mask)
-        ka_mask = similar(wfs.state.pyramid_mask)
+        scalar_mask = similar(propagation.pyramid_mask)
+        ka_mask = similar(propagation.pyramid_mask)
         AdaptiveOpticsSim._build_pyramid_mask!(SCALAR_CPU_STYLE, scalar_mask, wfs, tel)
         AdaptiveOpticsSim._build_pyramid_mask!(KA_CPU_STYLE, ka_mask, wfs, tel)
         mark_ka_cpu_kernel!(:pyramid_mask_kernel!)
         @test ka_cpu_close(ka_mask, scalar_mask)
-
-        scalar_phases = similar(wfs.state.modulation_phases)
-        ka_phases = similar(wfs.state.modulation_phases)
-        AdaptiveOpticsSim._build_modulation_phases!(SCALAR_CPU_STYLE, scalar_phases, wfs.params.modulation,
-            (tel.params.resolution + 1) / 2, wfs.params.modulation_points, tel.params.resolution)
-        AdaptiveOpticsSim._build_modulation_phases!(KA_CPU_STYLE, ka_phases, wfs.params.modulation,
-            (tel.params.resolution + 1) / 2, wfs.params.modulation_points, tel.params.resolution)
-        mark_ka_cpu_kernel!(:modulation_phases_kernel!)
-        @test ka_cpu_close(ka_phases, scalar_phases)
 
         intensity = reshape(collect(1.0:(4 * 4 * 4 * 4)), 16, 16)
         scalar_slopes = similar(slopes(wfs))
@@ -869,23 +861,24 @@ end
     @testset "BioEdge kernels" begin
         tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
         wfs = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+        propagation = AdaptiveOpticsSim.bioedge_propagation(wfs)
 
-        scalar_edge_mask = similar(wfs.state.edge_mask)
-        ka_edge_mask = similar(wfs.state.edge_mask)
+        scalar_edge_mask = similar(wfs.estimator.state.edge_mask)
+        ka_edge_mask = similar(wfs.estimator.state.edge_mask)
         AdaptiveOpticsSim._update_edge_mask!(SCALAR_CPU_STYLE, scalar_edge_mask, pupil_mask(tel), tel.params.resolution)
         AdaptiveOpticsSim._update_edge_mask!(KA_CPU_STYLE, ka_edge_mask, pupil_mask(tel), tel.params.resolution)
         mark_ka_cpu_kernel!(:edge_mask_kernel!)
         @test ka_edge_mask == scalar_edge_mask
 
-        scalar_phasor = similar(wfs.state.phasor)
-        ka_phasor = similar(wfs.state.phasor)
+        scalar_phasor = similar(propagation.phasor)
+        ka_phasor = similar(propagation.phasor)
         AdaptiveOpticsSim._build_bioedge_phasor!(SCALAR_CPU_STYLE, scalar_phasor)
         AdaptiveOpticsSim._build_bioedge_phasor!(KA_CPU_STYLE, ka_phasor)
         mark_ka_cpu_kernel!(:bioedge_phasor_kernel!)
         @test ka_cpu_close(ka_phasor, scalar_phasor)
 
-        scalar_masks = similar(wfs.state.bioedge_masks)
-        ka_masks = similar(wfs.state.bioedge_masks)
+        scalar_masks = similar(propagation.bioedge_masks)
+        ka_masks = similar(propagation.bioedge_masks)
         AdaptiveOpticsSim._build_bioedge_masks!(SCALAR_CPU_STYLE, scalar_masks, Float64)
         AdaptiveOpticsSim._build_bioedge_masks!(KA_CPU_STYLE, ka_masks, Float64)
         mark_ka_cpu_kernel!(:bioedge_masks_kernel!)

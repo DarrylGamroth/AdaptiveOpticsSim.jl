@@ -9,13 +9,19 @@ include("pyramid/setup.jl")
 include("pyramid/measure.jl")
 include("pyramid/optics.jl")
 include("pyramid/signals.jl")
+include("pyramid/stages.jl")
 
-@inline valid_subaperture_mask(wfs::PyramidWFS) = wfs.state.valid_mask
-@inline reference_signal(wfs::PyramidWFS) = wfs.state.reference_signal_2d
-@inline camera_frame(wfs::PyramidWFS) = wfs.state.camera_frame
+@inline valid_subaperture_mask(wfs::PyramidWFS) = wfs.estimator.state.valid_mask
+@inline reference_signal(wfs::PyramidWFS) = wfs.estimator.state.reference_signal_2d
+@inline slopes(wfs::PyramidWFS) = wfs.estimator.state.slopes
+@inline camera_frame(wfs::PyramidWFS{<:Diffractive}) =
+    wfs.acquisition.state.camera_frame
+@inline camera_frame(::PyramidWFS{<:Geometric}) = nothing
 
-@inline wfs_output_frame_prototype(wfs::PyramidWFS, ::Nothing) = camera_frame(wfs)
-@inline wfs_output_frame_prototype(wfs::PyramidWFS, det::AbstractDetector) = camera_frame(wfs)
+@inline wfs_output_frame_prototype(wfs::PyramidWFS{<:Diffractive},
+    ::Nothing) = camera_frame(wfs)
+@inline wfs_output_frame_prototype(wfs::PyramidWFS{<:Diffractive},
+    det::AbstractDetector) = camera_frame(wfs)
 
 @inline supports_prepared_runtime(::PyramidWFS, ::AbstractSource) = true
 @inline supports_prepared_runtime(::PyramidWFS, ::Asterism) = true

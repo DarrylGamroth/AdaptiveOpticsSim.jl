@@ -133,12 +133,39 @@ function make_gate0_card(raw::AbstractDict)
             central_obstruction=0.0)
         gate0_opd_ramp!(tel)
         src = Source(band=:I, magnitude=0.0)
+        pupil = PupilFunction(tel)
+        apply_opd!(pupil, opd_map(tel))
         wfs = PyramidWFS(tel; pupil_samples=Int(raw["pupil_samples"]),
             modulation=3.0,
             modulation_points=Int(raw["modulation_points"]),
             mode=Diffractive())
-        let wfs=wfs, tel=tel, src=src
-            () -> measure!(wfs, tel, src)
+        front_end = PyramidOpticalFrontEnd(wfs, src)
+        rate = pyramid_rate_map(front_end, pupil)
+        optical_plan = prepare_wfs_optical_formation(front_end, pupil, rate)
+        detector = Detector(noise=NoiseNone(), integration_time=1.0,
+            qe=1.0, response_model=NullFrameResponse())
+        observation = WFSObservation(similar(rate.values);
+            units=:electron_count, layout=:four_pupil_mosaic)
+        acquisition_plan = prepare_wfs_acquisition(detector, rate,
+            observation)
+        set_pyramid_calibration!(wfs,
+            zeros(size(wfs.estimator.state.reference_signal_2d));
+            wavelength_m=wavelength(src), signature=UInt(0x47305036))
+        measurement = WFSMeasurement(similar(slopes(wfs));
+            units=:dimensionless, kind=:differential_slopes)
+        estimator_plan = prepare_wfs_estimation(wfs, observation,
+            measurement)
+        rng = runtime_rng(61)
+        let rate=rate, pupil=pupil, optical_plan=optical_plan,
+            observation=observation, acquisition_plan=acquisition_plan,
+            measurement=measurement, estimator_plan=estimator_plan, rng=rng
+            () -> begin
+                form_wfs_optical_products!(rate, pupil, optical_plan)
+                acquire_wfs_observation!(observation, rate,
+                    acquisition_plan, rng)
+                estimate_wfs_measurement!(measurement, observation,
+                    estimator_plan)
+            end
         end
     elseif kind == "direct_science_two_detectors"
         zero_padding = Int(raw["zero_padding"])

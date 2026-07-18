@@ -21,16 +21,16 @@ function _build_pyramid_phasor!(style::AcceleratorStyle, phasor::AbstractMatrix{
 end
 
 function build_pyramid_mask!(wfs::PyramidWFS, tel::Telescope)
-    mask = wfs.state.pyramid_mask
+    mask = wfs.front_end.propagation.pyramid_mask
     copyto!(mask, host_pyramid_mask(wfs, tel))
     return mask
 end
 
 function host_pyramid_mask(wfs::PyramidWFS, tel::Telescope)
-    n = size(wfs.state.pyramid_mask, 1)
-    T = eltype(wfs.state.slopes)
+    n = size(wfs.front_end.propagation.pyramid_mask, 1)
+    T = eltype(wfs.estimator.state.slopes)
     host = Matrix{Complex{T}}(undef, n, n)
-    if wfs.params.old_mask
+    if wfs.front_end.phase_mask.old_mask
         build_pyramid_mask_old_host!(host, wfs, tel)
     else
         build_pyramid_mask_new_host!(host, wfs, tel)
@@ -40,20 +40,20 @@ end
 
 function build_pyramid_mask_new_host!(mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, tel::Telescope) where {T<:AbstractFloat}
     n = size(mask, 1)
-    n_sub = wfs.params.pupil_samples
-    sep = wfs.params.n_pix_separation === nothing ? 0 : wfs.params.n_pix_separation
-    rooftop_pixels = wfs.params.rooftop * wfs.params.diffraction_padding / sqrt(T(2))
+    n_sub = wfs.estimator.params.pupil_samples
+    sep = wfs.front_end.phase_mask.n_pix_separation === nothing ? 0 : wfs.front_end.phase_mask.n_pix_separation
+    rooftop_pixels = wfs.front_end.phase_mask.rooftop * wfs.front_end.phase_mask.diffraction_padding / sqrt(T(2))
     norma = T(tel.params.resolution) / T(n_sub)
     lim = T(π)
-    if wfs.params.psf_centering
+    if wfs.front_end.phase_mask.psf_centering
         xvals = range(-lim * (one(T) - one(T) / T(n)), lim * (one(T) - one(T) / T(n)); length=n)
     else
         xvals = range(-lim, lim; length=n + 1)[1:n]
     end
-    r = (T(n_sub) + T(sep)) * wfs.params.mask_scale / 2
-    sx = wfs.state.shift_x
-    sy = wfs.state.shift_y
-    θ = wfs.params.theta_rotation
+    r = (T(n_sub) + T(sep)) * wfs.front_end.phase_mask.mask_scale / 2
+    sx = wfs.estimator.state.shift_x
+    sy = wfs.estimator.state.shift_y
+    θ = wfs.front_end.phase_mask.theta_rotation
     cθ = cos(θ)
     sθ = sin(θ)
     @inbounds for i in 1:n, j in 1:n
@@ -73,20 +73,20 @@ end
 
 function build_pyramid_mask_old_host!(mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, tel::Telescope) where {T<:AbstractFloat}
     n_tot = size(mask, 1)
-    n_sub = wfs.params.pupil_samples
-    sep = wfs.params.n_pix_separation === nothing ? 0 : wfs.params.n_pix_separation
-    sx = wfs.state.shift_x
-    sy = wfs.state.shift_y
+    n_sub = wfs.estimator.params.pupil_samples
+    sep = wfs.front_end.phase_mask.n_pix_separation === nothing ? 0 : wfs.front_end.phase_mask.n_pix_separation
+    sx = wfs.estimator.state.shift_x
+    sy = wfs.estimator.state.shift_y
     norma = (T(tel.params.resolution) / T(n_sub)) / 4
     fill!(mask, complex(zero(T), zero(T)))
-    if wfs.params.psf_centering
+    if wfs.front_end.phase_mask.psf_centering
         tip = centered_grid(T, n_tot ÷ 2, true)
         tilt = centered_grid(T, n_tot ÷ 2, true)
         Tip = repeat(tip', n_tot ÷ 2, 1)
         Tilt = repeat(tilt, 1, n_tot ÷ 2)
         Tip .-= mean(Tip)
         Tilt .-= mean(Tilt)
-        q = T(n_sub + sep) * wfs.params.mask_scale
+        q = T(n_sub + sep) * wfs.front_end.phase_mask.mask_scale
         @views begin
             mask[1:n_tot÷2, 1:n_tot÷2] .= cis.((Tip .* (q + sx[1]) .+ Tilt .* (q - sy[1])) .* norma)
             mask[1:n_tot÷2, n_tot÷2+1:end] .= cis.((-Tip .* (q - sx[2]) .+ Tilt .* (q - sy[2])) .* norma)
@@ -113,7 +113,7 @@ function build_pyramid_mask_old_host!(mask::AbstractMatrix{Complex{T}}, wfs::Pyr
         Tip2 .-= mean(Tip2); Tilt2 .-= mean(Tilt2)
         Tip3 .-= mean(Tip3); Tilt3 .-= mean(Tilt3)
         Tip4 .-= mean(Tip4); Tilt4 .-= mean(Tilt4)
-        q = T(n_sub + sep) * wfs.params.mask_scale
+        q = T(n_sub + sep) * wfs.front_end.phase_mask.mask_scale
         @views begin
             mask[1:n_tot÷2+1, 1:n_tot÷2+1] .= cis.((Tip1 .* (q + sx[1]) .+ Tilt1 .* (q - sy[1])) .* norma)
             mask[1:n_tot÷2+1, n_tot÷2:end] .= cis.((-Tip4 .* (q - sx[2]) .+ Tilt4 .* (q - sy[2])) .* norma)
@@ -136,13 +136,13 @@ end
 
 function _build_pyramid_mask!(::ScalarCPUStyle, mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, tel::Telescope) where {T<:AbstractFloat}
     n = size(mask, 1)
-    n_sub = wfs.params.pupil_samples
-    sep = wfs.params.n_pix_separation === nothing ? 0 : wfs.params.n_pix_separation
-    r = (T(n_sub) + T(sep)) * wfs.params.mask_scale / 2
+    n_sub = wfs.estimator.params.pupil_samples
+    sep = wfs.front_end.phase_mask.n_pix_separation === nothing ? 0 : wfs.front_end.phase_mask.n_pix_separation
+    r = (T(n_sub) + T(sep)) * wfs.front_end.phase_mask.mask_scale / 2
     pix_per_subap = T(tel.params.resolution) / T(n_sub)
     norma = pix_per_subap
     lim = T(pi)
-    x_vals = if wfs.params.psf_centering
+    x_vals = if wfs.front_end.phase_mask.psf_centering
         range(-lim * (one(T) - one(T) / T(n)), lim * (one(T) - one(T) / T(n)); length=n)
     else
         range(-lim, lim; length=n, endpoint=false)
@@ -162,81 +162,103 @@ end
 
 function _build_pyramid_mask!(style::AcceleratorStyle, mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, tel::Telescope) where {T<:AbstractFloat}
     n = size(mask, 1)
-    n_sub = wfs.params.pupil_samples
-    sep = wfs.params.n_pix_separation === nothing ? 0 : wfs.params.n_pix_separation
-    r = (T(n_sub) + T(sep)) * wfs.params.mask_scale / 2
+    n_sub = wfs.estimator.params.pupil_samples
+    sep = wfs.front_end.phase_mask.n_pix_separation === nothing ? 0 : wfs.front_end.phase_mask.n_pix_separation
+    r = (T(n_sub) + T(sep)) * wfs.front_end.phase_mask.mask_scale / 2
     norma = T(tel.params.resolution) / T(n_sub)
     lim = T(pi)
-    start = wfs.params.psf_centering ? -lim * (one(T) - one(T) / T(n)) : -lim
+    start = wfs.front_end.phase_mask.psf_centering ? -lim * (one(T) - one(T) / T(n)) : -lim
     step = T(2) * lim / T(n)
     launch_kernel!(style, pyramid_mask_kernel!, mask, r, norma, start, step, n; ndrange=size(mask))
     return mask
 end
 
-function accumulate_pyramid_focal_intensity!(out::AbstractMatrix, wfs::PyramidWFS)
-    if wfs.params.psf_centering
-        @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.phasor
-        execute_fft_plan!(wfs.state.focal_field, wfs.state.fft_plan)
-        @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.pyramid_mask
-        copyto!(wfs.state.pupil_field, wfs.state.focal_field)
-        execute_fft_plan!(wfs.state.pupil_field, wfs.state.ifft_plan)
+function accumulate_pyramid_focal_intensity!(out::AbstractMatrix,
+    front_end::PyramidOpticalFrontEnd)
+    propagation = front_end.propagation
+    if front_end.phase_mask.psf_centering
+        @. propagation.focal_field = propagation.focal_field * propagation.phasor
+        execute_fft_plan!(propagation.focal_field, propagation.fft_plan)
+        @. propagation.focal_field = propagation.focal_field * propagation.pyramid_mask
+        copyto!(propagation.pupil_field, propagation.focal_field)
+        execute_fft_plan!(propagation.pupil_field, propagation.ifft_plan)
     else
-        execute_fft_plan!(wfs.state.focal_field, wfs.state.fft_plan)
-        fftshift2d!(wfs.state.pupil_field, wfs.state.focal_field)
-        @. wfs.state.pupil_field = wfs.state.pupil_field * wfs.state.pyramid_mask
-        execute_fft_plan!(wfs.state.pupil_field, wfs.state.ifft_plan)
+        execute_fft_plan!(propagation.focal_field, propagation.fft_plan)
+        fftshift2d!(propagation.pupil_field, propagation.focal_field)
+        @. propagation.pupil_field = propagation.pupil_field * propagation.pyramid_mask
+        execute_fft_plan!(propagation.pupil_field, propagation.ifft_plan)
     end
-    @. wfs.state.temp = abs2(wfs.state.pupil_field)
-    out .+= wfs.state.temp
+    @. propagation.temp = abs2(propagation.pupil_field)
+    out .+= propagation.temp
     return out
 end
 
+@inline accumulate_pyramid_focal_intensity!(out::AbstractMatrix,
+    wfs::PyramidWFS{<:Diffractive}) =
+    accumulate_pyramid_focal_intensity!(out, wfs.front_end)
+
 function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS,
     tel::Telescope, src::AbstractSource) where {T<:AbstractFloat}
-    return pyramid_intensity_core!(execution_style(out), out, wfs, tel, src)
+    return pyramid_intensity_core!(out, wfs, tel, src,
+        pyramid_operating_modulation(wfs))
 end
 
-function pyramid_intensity_core!(::ScalarCPUStyle, out::AbstractMatrix{T}, wfs::PyramidWFS,
-    tel::Telescope, src::AbstractSource) where {T<:AbstractFloat}
+function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS,
+    tel::Telescope, src::AbstractSource,
+    modulation::PreparedFocalPlaneModulation) where {T<:AbstractFloat}
+    return pyramid_intensity_core!(execution_style(out), out, wfs, tel, src,
+        modulation)
+end
+
+function pyramid_intensity_core!(::ScalarCPUStyle,
+    out::AbstractMatrix{T}, wfs::PyramidWFS, tel::Telescope,
+    src::AbstractSource, modulation::PreparedFocalPlaneModulation) where {
+    T<:AbstractFloat,
+}
     prepare_pyramid_sampling!(wfs, tel)
     n = tel.params.resolution
-    pad = size(wfs.state.field, 1)
+    pad = size(wfs.front_end.propagation.field, 1)
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
     opd_to_cycles = T(2) / wavelength(src)
-    amp_scale = sqrt(T(photon_irradiance(src) * (tel.params.diameter / tel.params.resolution)^2 /
-        wfs.params.modulation_points))
+    amp_scale = sqrt(T(photon_irradiance(src) *
+        (tel.params.diameter / tel.params.resolution)^2))
 
     fill!(out, zero(T))
-    fill!(wfs.state.field, zero(eltype(wfs.state.field)))
-    @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * sqrt($(pupil_reflectivity(tel))) *
+    fill!(wfs.front_end.propagation.field, zero(eltype(wfs.front_end.propagation.field)))
+    @views @. wfs.front_end.propagation.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * sqrt($(pupil_reflectivity(tel))) *
         cispi(opd_to_cycles * tel.state.opd)
-    for p in 1:wfs.params.modulation_points
-        copyto!(wfs.state.focal_field, wfs.state.field)
-        @views @. wfs.state.focal_field[ox+1:ox+n, oy+1:oy+n] *=
-            wfs.state.modulation_phases[:, :, p]
+    for p in 1:modulation_point_count(modulation)
+        copyto!(wfs.front_end.propagation.focal_field, wfs.front_end.propagation.field)
+        @views @. wfs.front_end.propagation.focal_field[ox+1:ox+n, oy+1:oy+n] *=
+            modulation.amplitude_weights[p] * modulation.phases[:, :, p]
         accumulate_pyramid_focal_intensity!(out, wfs)
     end
     return out
 end
 
-function pyramid_intensity_core!(::AcceleratorStyle, out::AbstractMatrix{T}, wfs::PyramidWFS,
-    tel::Telescope, src::AbstractSource) where {T<:AbstractFloat}
+function pyramid_intensity_core!(::AcceleratorStyle,
+    out::AbstractMatrix{T}, wfs::PyramidWFS, tel::Telescope,
+    src::AbstractSource, modulation::PreparedFocalPlaneModulation) where {
+    T<:AbstractFloat,
+}
     prepare_pyramid_sampling!(wfs, tel)
     n = tel.params.resolution
-    pad = size(wfs.state.field, 1)
+    pad = size(wfs.front_end.propagation.field, 1)
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
     opd_to_cycles = T(2) / wavelength(src)
-    amp_scale = sqrt(T(photon_irradiance(src) * (tel.params.diameter / tel.params.resolution)^2 /
-        wfs.params.modulation_points))
+    amp_scale = sqrt(T(photon_irradiance(src) *
+        (tel.params.diameter / tel.params.resolution)^2))
 
     fill!(out, zero(T))
-    for p in 1:wfs.params.modulation_points
-        fill!(wfs.state.field, zero(eltype(wfs.state.field)))
-        @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * sqrt($(pupil_reflectivity(tel))) *
-            wfs.state.modulation_phases[:, :, p] * cispi(opd_to_cycles * tel.state.opd)
-        copyto!(wfs.state.focal_field, wfs.state.field)
+    for p in 1:modulation_point_count(modulation)
+        fill!(wfs.front_end.propagation.field, zero(eltype(wfs.front_end.propagation.field)))
+        amplitude_weight = modulation.amplitude_weights[p]
+        @views @. wfs.front_end.propagation.field[ox+1:ox+n, oy+1:oy+n] =
+            amp_scale * amplitude_weight * sqrt($(pupil_reflectivity(tel))) *
+            modulation.phases[:, :, p] * cispi(opd_to_cycles * tel.state.opd)
+        copyto!(wfs.front_end.propagation.focal_field, wfs.front_end.propagation.field)
         accumulate_pyramid_focal_intensity!(out, wfs)
     end
     return out
@@ -260,7 +282,7 @@ function pyramid_modulation_frame!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel:
     src::AbstractSource) where {T<:AbstractFloat}
     prepare_pyramid_sampling!(wfs, tel)
     n = tel.params.resolution
-    pad = size(wfs.state.field, 1)
+    pad = size(wfs.front_end.propagation.field, 1)
     fft_scale2 = inv(T(pad) * T(pad))
     if size(out) != (pad, pad)
         throw(DimensionMismatchError("modulation frame size must match pyramid sampling"))
@@ -268,38 +290,54 @@ function pyramid_modulation_frame!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel:
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
     opd_to_cycles = T(2) / wavelength(src)
-    amp_scale = sqrt(T(photon_irradiance(src) * (tel.params.diameter / tel.params.resolution)^2 /
-        wfs.params.modulation_points))
+    modulation = pyramid_operating_modulation(wfs)
+    amp_scale = sqrt(T(photon_irradiance(src) *
+        (tel.params.diameter / tel.params.resolution)^2))
 
     fill!(out, zero(T))
-    for p in 1:wfs.params.modulation_points
-        fill!(wfs.state.field, zero(eltype(wfs.state.field)))
-        @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * sqrt($(pupil_reflectivity(tel))) *
-            wfs.state.modulation_phases[:, :, p] * cispi(opd_to_cycles * tel.state.opd)
-        copyto!(wfs.state.focal_field, wfs.state.field)
-        if wfs.params.psf_centering
-            @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.phasor
-            execute_fft_plan!(wfs.state.focal_field, wfs.state.fft_plan)
+    for p in 1:modulation_point_count(modulation)
+        fill!(wfs.front_end.propagation.field, zero(eltype(wfs.front_end.propagation.field)))
+        amplitude_weight = modulation.amplitude_weights[p]
+        @views @. wfs.front_end.propagation.field[ox+1:ox+n, oy+1:oy+n] =
+            amp_scale * amplitude_weight * sqrt($(pupil_reflectivity(tel))) *
+            modulation.phases[:, :, p] * cispi(opd_to_cycles * tel.state.opd)
+        copyto!(wfs.front_end.propagation.focal_field, wfs.front_end.propagation.field)
+        if wfs.front_end.phase_mask.psf_centering
+            @. wfs.front_end.propagation.focal_field = wfs.front_end.propagation.focal_field * wfs.front_end.propagation.phasor
+            execute_fft_plan!(wfs.front_end.propagation.focal_field, wfs.front_end.propagation.fft_plan)
         else
-            execute_fft_plan!(wfs.state.focal_field, wfs.state.fft_plan)
-            @. wfs.state.intensity = abs2(wfs.state.focal_field) * fft_scale2
-            fftshift2d!(wfs.state.temp, wfs.state.intensity)
-            out .+= wfs.state.temp
+            execute_fft_plan!(wfs.front_end.propagation.focal_field, wfs.front_end.propagation.fft_plan)
+            @. wfs.front_end.propagation.intensity = abs2(wfs.front_end.propagation.focal_field) * fft_scale2
+            fftshift2d!(wfs.front_end.propagation.temp, wfs.front_end.propagation.intensity)
+            out .+= wfs.front_end.propagation.temp
             continue
         end
-        @. wfs.state.temp = abs2(wfs.state.focal_field) * fft_scale2
-        out .+= wfs.state.temp
+        @. wfs.front_end.propagation.temp = abs2(wfs.front_end.propagation.focal_field) * fft_scale2
+        out .+= wfs.front_end.propagation.temp
     end
     return out
 end
 
+"""
+    pyramid_modulation_frame(wfs, telescope, source)
+
+Allocate and form the focal-plane modulation-cycle intensity used by a
+gain-sensing camera. The returned array has the prepared Pyramid front end's
+native focal-plane sampling.
+"""
+function pyramid_modulation_frame(wfs::PyramidWFS{<:Diffractive},
+    tel::Telescope, src::AbstractSource)
+    out = similar(wfs.front_end.propagation.intensity)
+    return pyramid_modulation_frame!(out, wfs, tel, src)
+end
+
 function apply_lgs_elongation!(::LGSProfileNone, out::AbstractMatrix{T}, wfs::PyramidWFS,
     ::Telescope, src::LGSSource) where {T<:AbstractFloat}
-    wfs.state.elongation_kernel = apply_elongation!(
+    wfs.front_end.propagation.elongation_kernel = apply_elongation!(
         out,
         lgs_elongation_factor(src),
-        wfs.state.scratch,
-        wfs.state.elongation_kernel,
+        wfs.front_end.propagation.scratch,
+        wfs.front_end.propagation.elongation_kernel,
     )
     return wfs
 end
@@ -309,11 +347,11 @@ function apply_lgs_elongation!(::LGSProfileNaProfile, out::AbstractMatrix{T}, wf
     ensure_lgs_kernel!(wfs, tel, src)
     apply_lgs_convolution!(
         out,
-        wfs.state.lgs_kernel_fft,
-        wfs.state.focal_field,
-        wfs.state.fft_plan,
-        wfs.state.pupil_field,
-        wfs.state.ifft_plan,
+        wfs.front_end.propagation.lgs_kernel_fft,
+        wfs.front_end.propagation.focal_field,
+        wfs.front_end.propagation.fft_plan,
+        wfs.front_end.propagation.pupil_field,
+        wfs.front_end.propagation.ifft_plan,
     )
     return wfs
 end
@@ -323,95 +361,31 @@ function ensure_lgs_kernel!(wfs::PyramidWFS, tel::Telescope, src::LGSSource)
     if na_profile === nothing
         return wfs
     end
-    pad = size(wfs.state.intensity, 1)
-    padding = wfs.state.effective_resolution / tel.params.resolution
+    pad = size(wfs.front_end.propagation.intensity, 1)
+    padding = wfs.front_end.propagation.effective_resolution / tel.params.resolution
     pixel_scale = lgs_pixel_scale(tel.params.diameter, padding,
         wavelength(src))
     tag = lgs_kernel_signature(
         tel,
         src,
         pad,
-        wfs.params.pupil_samples,
+        wfs.estimator.params.pupil_samples,
         pixel_scale,
-        eltype(wfs.state.intensity);
+        eltype(wfs.front_end.propagation.intensity);
         model=:subaperture_average,
     )
-    if size(wfs.state.lgs_kernel_fft, 1) == pad && wfs.state.lgs_kernel_tag == tag
+    if size(wfs.front_end.propagation.lgs_kernel_fft, 1) == pad && wfs.front_end.propagation.lgs_kernel_tag == tag
         return wfs
     end
-    wfs.state.lgs_kernel_fft = lgs_average_kernel_fft(
+    wfs.front_end.propagation.lgs_kernel_fft = lgs_average_kernel_fft(
         tel,
         src,
         pad,
-        wfs.params.pupil_samples,
+        wfs.estimator.params.pupil_samples,
         pixel_scale,
-        wfs.state.focal_field,
-        wfs.state.fft_plan,
+        wfs.front_end.propagation.focal_field,
+        wfs.front_end.propagation.fft_plan,
     )
-    wfs.state.lgs_kernel_tag = tag
+    wfs.front_end.propagation.lgs_kernel_tag = tag
     return wfs
-end
-
-function build_modulation_phases!(wfs::PyramidWFS, tel::Telescope)
-    phases = wfs.state.modulation_phases
-    copyto!(phases, host_modulation_phases(eltype(wfs.state.slopes), tel, wfs.params.modulation,
-        wfs.params.modulation_points, wfs.params.delta_theta, wfs.params.user_modulation_path))
-    return phases
-end
-
-function host_modulation_phases(::Type{T}, tel::Telescope, modulation::T, n_pts::Int,
-    delta_theta::T, user_modulation_path) where {T<:AbstractFloat}
-    n = tel.params.resolution
-    phases = Array{Complex{T}}(undef, n, n, n_pts)
-    if n_pts == 1 && modulation == 0 && user_modulation_path === nothing
-        fill!(phases, complex(one(T), zero(T)))
-        return phases
-    end
-    tip_vals = range(-T(π), T(π); length=n)
-    Tilt = reshape(tip_vals, n, 1)
-    Tip = reshape(tip_vals, 1, n)
-    pupil = Array(pupil_mask(tel))
-    if user_modulation_path === nothing
-        @inbounds for p in 1:n_pts
-            θ = delta_theta + T(2 * π * (p - 1) / n_pts)
-            sθ, cθ = sincos(θ)
-            mx = modulation * cθ
-            my = modulation * sθ
-            for i in 1:n, j in 1:n
-                phase = pupil[i, j] ? (mx * Tip[j] + my * Tilt[i]) : zero(T)
-                phases[i, j, p] = cis(phase)
-            end
-        end
-    else
-        @inbounds for p in 1:n_pts
-            mx = T(user_modulation_path[p][1])
-            my = T(user_modulation_path[p][2])
-            for i in 1:n, j in 1:n
-                phase = pupil[i, j] ? (mx * Tip[j] + my * Tilt[i]) : zero(T)
-                phases[i, j, p] = cis(phase)
-            end
-        end
-    end
-    return phases
-end
-
-function _build_modulation_phases!(::ScalarCPUStyle, phases::AbstractArray{Complex{T},3}, mod, center, n_pts::Int, n::Int) where {T<:AbstractFloat}
-    x_coords = Vector{T}(undef, n)
-    for i in 1:n
-        x_coords[i] = (i - center) / n
-    end
-    @inbounds for p in 1:n_pts
-        angle = 2 * pi * (p - 1) / n_pts
-        s, c = sincos(angle)
-        for i in 1:n, j in 1:n
-            phase = 2 * pi * mod * (x_coords[i] * c + x_coords[j] * s)
-            phases[i, j, p] = cis(phase)
-        end
-    end
-    return phases
-end
-
-function _build_modulation_phases!(style::AcceleratorStyle, phases::AbstractArray{Complex{T},3}, mod, center, n_pts::Int, n::Int) where {T<:AbstractFloat}
-    launch_kernel!(style, modulation_phases_kernel!, phases, T(mod), T(center), n_pts, n; ndrange=size(phases))
-    return phases
 end

@@ -8,13 +8,19 @@
 include("bioedge/setup.jl")
 include("bioedge/measure.jl")
 include("bioedge/signals.jl")
+include("bioedge/stages.jl")
 
-@inline valid_subaperture_mask(wfs::BioEdgeWFS) = wfs.state.valid_mask
-@inline reference_signal(wfs::BioEdgeWFS) = wfs.state.reference_signal_2d
-@inline camera_frame(wfs::BioEdgeWFS) = wfs.state.camera_frame
+@inline valid_subaperture_mask(wfs::BioEdgeWFS) = wfs.estimator.state.valid_mask
+@inline reference_signal(wfs::BioEdgeWFS) = wfs.estimator.state.reference_signal_2d
+@inline slopes(wfs::BioEdgeWFS) = wfs.estimator.state.slopes
+@inline camera_frame(wfs::BioEdgeWFS{<:Diffractive}) =
+    wfs.acquisition.state.camera_frame
+@inline camera_frame(::BioEdgeWFS{<:Geometric}) = nothing
 
-@inline wfs_output_frame_prototype(wfs::BioEdgeWFS, ::Nothing) = camera_frame(wfs)
-@inline wfs_output_frame_prototype(wfs::BioEdgeWFS, det::AbstractDetector) = camera_frame(wfs)
+@inline wfs_output_frame_prototype(wfs::BioEdgeWFS{<:Diffractive},
+    ::Nothing) = camera_frame(wfs)
+@inline wfs_output_frame_prototype(wfs::BioEdgeWFS{<:Diffractive},
+    det::AbstractDetector) = camera_frame(wfs)
 
 @inline supports_detector_output(::BioEdgeWFS{<:Diffractive}, ::AbstractDetector) = true
 @inline supports_stacked_sources(::BioEdgeWFS, ::Asterism) = true

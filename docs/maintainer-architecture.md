@@ -105,18 +105,29 @@ This gives:
 - hot-path mutation without repeated allocation
 
 The generic WFS stage protocol exists independently of the `AbstractWFS`
-object layout. Shack-Hartmann is its first physical family implementation and
-separates microlens formation, acquisition, and estimation over caller-owned
-products. Its geometric and diffractive signals share one explicit
+object layout. Shack-Hartmann separates microlens formation, acquisition, and
+estimation over caller-owned products. Its geometric and diffractive signals
+share one explicit
 `[axis 1; axis 2]`, Julia-column-major lenslet convention; OOPAO row-major
 reference adaptation remains in the test harness. Its geometric mode declares
 `DirectMeasurementPath()` and allocates no placeholder optical or acquisition
 workspace. Microlens sampling, synchronized subaperture layout, and
 calibration are cold configuration: maintained mutation advances a revision,
 and prepared plans reject stale bindings while caller-owned product contents
-remain mutable. Pyramid/BioEdge,
-Zernike/Curvature, and LiFT remain internally coupled until their
-family-specific migration slices.
+remain mutable.
+
+Pyramid and BioEdge use separate `PyramidPhaseMask` and
+`BioEdgeAmplitudeMask` physical front ends. They share prepared focal-plane
+modulation only where the optical quadrature is identical; its normalized
+weights average intensity and never integrate detector time. Each front end
+writes a normalized-pupil-coordinate, cell-integrated photon-arrival-rate
+four-pupil mosaic or a typed spectral/path-local bundle. Generic detector
+acquisition applies response, QE, and duration afterward. Their differential
+estimators own valid support, normalization, reference subtraction, optical
+gain, and a calibration revision that invalidates stale prepared plans.
+Geometric Pyramid and BioEdge declare `DirectMeasurementPath()` and construct
+neither propagation nor acquisition workspace. Zernike/Curvature and LiFT
+remain internally coupled until their family-specific migration slices.
 
 ## Execution Layers
 
