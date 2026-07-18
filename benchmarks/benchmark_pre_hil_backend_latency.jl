@@ -18,9 +18,9 @@ const PRE_HIL_ROOT = normpath(joinpath(@__DIR__, ".."))
 const PRE_HIL_CONFIG_DIR = joinpath(@__DIR__, "assets", "revolt_like")
 
 if PRE_HIL_BACKEND_NAME == "cuda"
-    @eval using CUDA
+    @eval import CUDA
 elseif PRE_HIL_BACKEND_NAME == "amdgpu"
-    @eval using AMDGPU
+    @eval import AMDGPU
 elseif PRE_HIL_BACKEND_NAME != "cpu"
     error("unsupported AOS_PRE_HIL_BACKEND '$PRE_HIL_BACKEND_NAME'; use cpu, cuda, or amdgpu")
 end
