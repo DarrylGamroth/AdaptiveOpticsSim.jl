@@ -26,12 +26,6 @@ end
 @inline photon_irradiance(source::ShackHartmannSpectralComponent) =
     source.photon_rate_m2_s
 
-struct PreparedShackHartmannAcquisition{D,P,O}
-    detector::D
-    detector_plan::P
-    observation::O
-end
-
 struct PreparedShackHartmannEstimator{W,I,M,P<:AbstractWFSMeasurementPath,C}
     sensor::W
     input::I
@@ -794,28 +788,6 @@ function form_wfs_optical_products!(output::OpticalProductBundle, input,
     return output
 end
 
-function prepare_wfs_acquisition(detector::Detector,
-    optical_product::IntensityMap, observation::WFSObservation)
-    validate_wfs_optical_products(optical_product)
-    validate_wfs_observation(observation)
-    _require_sh_observation_semantics(observation)
-    _require_sh_real_observation(observation, :acquisition)
-    plan = prepare_detector_acquisition(detector, optical_product)
-    size(observation.storage) == size(output_frame(detector)) ||
-        throw(WFSPreparationError(:acquisition, :shape,
-            "WFS observation storage must match the prepared detector output"))
-    observation.metadata.numeric_type === eltype(output_frame(detector)) ||
-        throw(WFSPreparationError(:acquisition, :numeric_type,
-            "WFS observation element type must match the prepared detector output"))
-    typeof(backend(observation.storage)) === typeof(backend(detector)) ||
-        throw(WFSPreparationError(:acquisition, :backend,
-            "WFS observation and detector backends differ"))
-    plane_device(observation.storage) == plane_device(output_frame(detector)) ||
-        throw(WFSPreparationError(:acquisition, :device,
-            "WFS observation and detector output occupy different devices"))
-    return PreparedShackHartmannAcquisition(detector, plan, observation)
-end
-
 function _require_sh_observation_semantics(observation::WFSObservation)
     isequal(observation.metadata.layout, :lenslet_mosaic) ||
         throw(WFSPreparationError(:acquisition, :detector_mapping,
@@ -915,17 +887,6 @@ end
         throw(WFSPreparationError(:estimation, :prepared_binding,
             "Shack-Hartmann subaperture layout changed after estimator preparation"))
     return nothing
-end
-
-function acquire_wfs_observation!(observation::WFSObservation,
-    optical_product::IntensityMap,
-    plan::PreparedShackHartmannAcquisition, rng::AbstractRNG)
-    observation === plan.observation || throw(WFSPreparationError(
-        :acquisition, :prepared_binding,
-        "WFS observation does not match prepared storage"))
-    frame = capture!(plan.detector, optical_product, plan.detector_plan, rng)
-    copyto!(observation.storage, frame)
-    return observation
 end
 
 function prepare_wfs_estimation(sensor::ShackHartmannWFS{<:Diffractive},

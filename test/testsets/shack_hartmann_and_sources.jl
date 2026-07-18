@@ -349,8 +349,8 @@ end
     for (src, signature) in zip(
         (base, changed_geometry, changed_profile), signatures)
         AdaptiveOpticsSim.ensure_bioedge_calibration!(bioedge, tel, src)
-        @test bioedge.state.calibration_signature == signature
-        @test bioedge.state.calibrated
+        @test bioedge.estimator.state.calibration_signature == signature
+        @test bioedge.estimator.state.calibrated
     end
 end
 
@@ -433,7 +433,7 @@ end
     @test_throws InvalidConfiguration begin
         prepare_runtime_wfs!(prepared_mixed_pyramid, tel, mixed_wavelength)
     end
-    @test !prepared_mixed_pyramid.state.calibrated
+    @test !prepared_mixed_pyramid.estimator.state.calibrated
     for style in (ScalarCPUStyle(), KA_CPU_STYLE)
         mixed_wfs = ShackHartmannWFS(tel;
             n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
@@ -714,7 +714,7 @@ end
 
     pyr_det = Detector(noise=NoiseNone(), binning=1)
     pyr_det_slopes = measure!(pyr_broad, tel, poly_broad, pyr_det)
-    @test size(output_frame(pyr_det)) == size(pyr_broad.state.camera_frame)
+    @test size(output_frame(pyr_det)) == size(pyr_broad.acquisition.state.camera_frame)
     @test pyr_det_slopes ≈ broad_pyr_1 atol=1e-10 rtol=1e-10
 
     selective_bundle = SpectralBundle(
@@ -775,7 +775,7 @@ end
         selective_source, spectral_spad; rng=MersenneTwister(782))
     @test all(isfinite, spectral_spad_slopes)
     @test size(output_frame(spectral_spad)) ==
-        size(spectral_spad_pyramid.state.camera_frame)
+        size(spectral_spad_pyramid.acquisition.state.camera_frame)
 
     fill!(tel.state.opd, 0.0)
 end
@@ -908,10 +908,10 @@ end
     pyr_ext_point = PyramidWFS(tel; pupil_samples=8, mode=Diffractive(), modulation=1.0)
     pyr_ext = PyramidWFS(tel; pupil_samples=8, mode=Diffractive(), modulation=1.0)
     pyr_point_slopes = copy(measure!(pyr_point, tel, src))
-    pyramid_point_intensity = copy(pyr_point.state.intensity)
+    pyramid_point_intensity = copy(pyr_point.front_end.propagation.intensity)
     pyr_ext_point_slopes = copy(measure!(pyr_ext_point, tel, ext_point))
     pyr_ext_slopes_1 = copy(measure!(pyr_ext, tel, ext_gauss))
-    pyramid_extended_intensity = copy(pyr_ext.state.intensity)
+    pyramid_extended_intensity = copy(pyr_ext.front_end.propagation.intensity)
     pyr_ext_slopes_2 = copy(measure!(pyr_ext, tel, ext_gauss))
 
     @test pyr_ext_point_slopes ≈ pyr_point_slopes atol=1e-10 rtol=1e-10
@@ -929,7 +929,7 @@ end
 
     pyr_det = Detector(noise=NoiseNone(), binning=1)
     pyr_det_slopes = measure!(pyr_ext, tel, ext_gauss, pyr_det)
-    @test size(output_frame(pyr_det)) == size(pyr_ext.state.camera_frame)
+    @test size(output_frame(pyr_det)) == size(pyr_ext.acquisition.state.camera_frame)
     @test pyr_det_slopes ≈ pyr_ext_slopes_1 atol=1e-10 rtol=1e-10
 
     fill!(tel.state.opd, 0.0)
@@ -995,8 +995,8 @@ end
     initial_signature = telescope_aperture_calibration_signature(tel,
         calibration_signature(src))
     @test sh.calibration.signature == initial_signature
-    @test all(wfs.state.calibration_signature == initial_signature
-        for wfs in Base.tail(sensors))
+    @test all(wfs_calibration_signature(wfs) == initial_signature
+        for wfs in sensors)
 
     for wfs in sensors
         fill!(reference_signal(wfs), NaN)
@@ -1013,8 +1013,8 @@ end
         calibration_signature(src))
     @test reflectivity_signature != initial_signature
     @test sh.calibration.signature == reflectivity_signature
-    @test all(wfs.state.calibration_signature == reflectivity_signature
-        for wfs in Base.tail(sensors))
+    @test all(wfs_calibration_signature(wfs) == reflectivity_signature
+        for wfs in sensors)
     @test all(all(isfinite, reference_signal(wfs)) for wfs in sensors)
 
     for wfs in sensors
@@ -1032,7 +1032,7 @@ end
         calibration_signature(src))
     @test pupil_signature != reflectivity_signature
     @test sh.calibration.signature == pupil_signature
-    @test all(wfs.state.calibration_signature == pupil_signature
-        for wfs in Base.tail(sensors))
+    @test all(wfs_calibration_signature(wfs) == pupil_signature
+        for wfs in sensors)
     @test all(all(isfinite, reference_signal(wfs)) for wfs in sensors)
 end

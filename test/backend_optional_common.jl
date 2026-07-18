@@ -161,9 +161,10 @@ function run_optional_sodium_profile_wfs(::Type{B},
                 modulation=zero(T), T=T, backend=selector)
 
         AdaptiveOpticsSim.ensure_lgs_kernel!(wfs, tel, src)
-        @test wfs.state.lgs_kernel_fft isa BackendArray
-        original_tag = wfs.state.lgs_kernel_tag
-        original_kernel = Array(wfs.state.lgs_kernel_fft)
+        propagation = wfs.front_end.propagation
+        @test propagation.lgs_kernel_fft isa BackendArray
+        original_tag = propagation.lgs_kernel_tag
+        original_kernel = Array(propagation.lgs_kernel_fft)
         @test all(isfinite, original_kernel)
         slopes = measure!(wfs, tel, src)
         AdaptiveOpticsSim.synchronize_backend!(
@@ -173,8 +174,8 @@ function run_optional_sodium_profile_wfs(::Type{B},
 
         src.params.na_profile[2, :] .= T[0.8, 0.1, 0.1]
         AdaptiveOpticsSim.ensure_lgs_kernel!(wfs, tel, src)
-        @test wfs.state.lgs_kernel_tag != original_tag
-        @test !isapprox(Array(wfs.state.lgs_kernel_fft), original_kernel;
+        @test propagation.lgs_kernel_tag != original_tag
+        @test !isapprox(Array(propagation.lgs_kernel_fft), original_kernel;
             rtol=T(1e-5), atol=T(1e-6))
     end
     return nothing
@@ -462,6 +463,200 @@ function run_optional_wfs_stage_contracts(
         AdaptiveOpticsSim.execution_style(physical_measurement.storage))
     @test physical_measurement.storage isa BackendArray
     @test all(isfinite, Array(physical_measurement.storage))
+
+    four_pupil_cpu_tel = Telescope(resolution=4, diameter=T(2),
+        central_obstruction=zero(T), T=T, backend=CPUBackend())
+    four_pupil_cpu = PupilFunction(four_pupil_cpu_tel; T=T)
+    copyto!(four_pupil_cpu.opd, Array(pupil.opd))
+    for family in (:pyramid, :bioedge)
+        cpu_sensor = family === :pyramid ?
+            PyramidWFS(four_pupil_cpu_tel; pupil_samples=2,
+                mode=Diffractive(), modulation=0, T=T) :
+            BioEdgeWFS(four_pupil_cpu_tel; pupil_samples=2,
+                mode=Diffractive(), modulation=0, T=T)
+        gpu_sensor = family === :pyramid ?
+            PyramidWFS(tel; pupil_samples=2, mode=Diffractive(),
+                modulation=0, T=T, backend=selector) :
+            BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive(),
+                modulation=0, T=T, backend=selector)
+        cpu_front_end = family === :pyramid ?
+            PyramidOpticalFrontEnd(cpu_sensor, src) :
+            BioEdgeOpticalFrontEnd(cpu_sensor, src)
+        gpu_front_end = family === :pyramid ?
+            PyramidOpticalFrontEnd(gpu_sensor, src) :
+            BioEdgeOpticalFrontEnd(gpu_sensor, src)
+        cpu_rate = family === :pyramid ?
+            pyramid_rate_map(cpu_front_end, four_pupil_cpu) :
+            bioedge_rate_map(cpu_front_end, four_pupil_cpu)
+        gpu_rate = family === :pyramid ?
+            pyramid_rate_map(gpu_front_end, pupil) :
+            bioedge_rate_map(gpu_front_end, pupil)
+        cpu_plan = prepare_wfs_optical_formation(cpu_front_end,
+            four_pupil_cpu, cpu_rate)
+        gpu_plan = prepare_wfs_optical_formation(gpu_front_end, pupil,
+            gpu_rate)
+        form_wfs_optical_products!(cpu_rate, four_pupil_cpu, cpu_plan)
+        form_wfs_optical_products!(gpu_rate, pupil, gpu_plan)
+        AdaptiveOpticsSim.synchronize_backend!(
+            AdaptiveOpticsSim.execution_style(gpu_rate.values))
+        @test gpu_rate.values isa BackendArray
+        @test isapprox(Array(gpu_rate.values), cpu_rate.values;
+            rtol=T(3e-5), atol=T(3e-5))
+
+        field_sensor = family === :pyramid ?
+            PyramidWFS(tel; pupil_samples=2, mode=Diffractive(),
+                modulation=0, T=T, backend=selector) :
+            BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive(),
+                modulation=0, T=T, backend=selector)
+        field_front_end = family === :pyramid ?
+            PyramidOpticalFrontEnd(field_sensor) :
+            BioEdgeOpticalFrontEnd(field_sensor)
+        field_rate = family === :pyramid ?
+            pyramid_rate_map(field_front_end, field) :
+            bioedge_rate_map(field_front_end, field)
+        field_plan = prepare_wfs_optical_formation(field_front_end, field,
+            field_rate)
+        form_wfs_optical_products!(field_rate, field, field_plan)
+        AdaptiveOpticsSim.synchronize_backend!(
+            AdaptiveOpticsSim.execution_style(field_rate.values))
+        @test field_rate.values isa BackendArray
+        @test isapprox(Array(field_rate.values), Array(gpu_rate.values);
+            rtol=T(3e-5), atol=T(3e-5))
+
+        four_pupil_detector = Detector(noise=NoiseNone(),
+            integration_time=T(0.4), qe=T(0.5),
+            response_model=NullFrameResponse(), T=T, backend=selector)
+        four_pupil_observation = WFSObservation(similar(gpu_rate.values);
+            units=:electron_count, layout=:four_pupil_mosaic)
+        four_pupil_acquisition = prepare_wfs_acquisition(
+            four_pupil_detector, gpu_rate, four_pupil_observation)
+        acquire_wfs_observation!(four_pupil_observation, gpu_rate,
+            four_pupil_acquisition, Xoshiro(0x5042))
+        AdaptiveOpticsSim.synchronize_backend!(
+            AdaptiveOpticsSim.execution_style(
+                four_pupil_observation.storage))
+        @test four_pupil_observation.storage isa BackendArray
+        @test isapprox(Array(four_pupil_observation.storage),
+            Array(gpu_rate.values) .* T(0.2); rtol=T(3e-5), atol=T(3e-5))
+
+        reference = similar(gpu_sensor.estimator.state.reference_signal_2d)
+        fill!(reference, zero(T))
+        if family === :pyramid
+            set_pyramid_calibration!(gpu_sensor, reference;
+                wavelength_m=wavelength(src), signature=UInt(0x5042))
+        else
+            set_bioedge_calibration!(gpu_sensor, reference;
+                wavelength_m=wavelength(src), signature=UInt(0x5042))
+        end
+        four_pupil_measurement = WFSMeasurement(similar(slopes(gpu_sensor));
+            units=:dimensionless, kind=:differential_slopes)
+        four_pupil_estimator = prepare_wfs_estimation(gpu_sensor,
+            four_pupil_observation, four_pupil_measurement)
+        estimate_wfs_measurement!(four_pupil_measurement,
+            four_pupil_observation, four_pupil_estimator)
+        AdaptiveOpticsSim.synchronize_backend!(
+            AdaptiveOpticsSim.execution_style(
+                four_pupil_measurement.storage))
+        @test four_pupil_measurement.storage isa BackendArray
+        @test all(isfinite, Array(four_pupil_measurement.storage))
+
+        geometric = family === :pyramid ?
+            PyramidWFS(tel; pupil_samples=2, mode=Geometric(), T=T,
+                backend=selector) :
+            BioEdgeWFS(tel; pupil_samples=2, mode=Geometric(), T=T,
+                backend=selector)
+        geometric_measurement = WFSMeasurement(similar(slopes(geometric));
+            units=:metre, kind=:geometric_slopes)
+        geometric_plan = prepare_wfs_estimation(geometric, pupil,
+            geometric_measurement)
+        estimate_wfs_measurement!(geometric_measurement, pupil,
+            geometric_plan)
+        AdaptiveOpticsSim.synchronize_backend!(
+            AdaptiveOpticsSim.execution_style(
+                geometric_measurement.storage))
+        @test geometric_measurement.storage isa BackendArray
+        @test all(isfinite, Array(geometric_measurement.storage))
+
+        spectral_source = with_spectrum(src,
+            SpectralBundle(T[0.7e-6, 0.9e-6], T[0.25, 0.75]; T=T))
+        spectral_front_end = family === :pyramid ?
+            PyramidOpticalFrontEnd(gpu_sensor, spectral_source) :
+            BioEdgeOpticalFrontEnd(gpu_sensor, spectral_source)
+        spectral_rates = family === :pyramid ?
+            pyramid_rate_map(spectral_front_end, pupil) :
+            bioedge_rate_map(spectral_front_end, pupil)
+        spectral_plan = prepare_wfs_optical_formation(spectral_front_end,
+            pupil, spectral_rates)
+        form_wfs_optical_products!(spectral_rates, pupil, spectral_plan)
+        @test all(product -> product.values isa BackendArray,
+            spectral_rates)
+
+        path_source = Asterism([
+            Source(band=:custom, wavelength=wavelength(src),
+                photon_irradiance=T(1), T=T),
+            Source(band=:custom, wavelength=wavelength(src),
+                photon_irradiance=T(3), T=T),
+        ])
+        second_pupil = PupilFunction(tel; T=T, backend=selector)
+        copyto!(second_pupil.opd, pupil.opd)
+        path_front_end = family === :pyramid ?
+            PyramidOpticalFrontEnd(gpu_sensor, path_source) :
+            BioEdgeOpticalFrontEnd(gpu_sensor, path_source)
+        path_inputs = (pupil, second_pupil)
+        path_rates = family === :pyramid ?
+            pyramid_rate_map(path_front_end, path_inputs) :
+            bioedge_rate_map(path_front_end, path_inputs)
+        path_plan = prepare_wfs_optical_formation(path_front_end,
+            path_inputs, path_rates)
+        form_wfs_optical_products!(path_rates, path_inputs, path_plan)
+        @test all(product -> product.values isa BackendArray, path_rates)
+        @test isapprox(sum(Array(path_rates[1].values)) /
+            sum(Array(path_rates[2].values)), T(1 / 3); rtol=T(3e-5))
+
+        for lgs in (
+            LGSSource(wavelength=wavelength(src),
+                photon_irradiance=T(4), elongation_factor=T(1.8), T=T),
+            LGSSource(wavelength=wavelength(src),
+                photon_irradiance=T(4),
+                na_profile=T[80_000 90_000 100_000; 0.2 0.6 0.2],
+                laser_coordinates=(T(1), T(-0.5)),
+                fwhm_spot_up=T(0.8), T=T),
+        )
+            cpu_lgs_sensor = family === :pyramid ?
+                PyramidWFS(four_pupil_cpu_tel; pupil_samples=2,
+                    mode=Diffractive(), modulation=0, T=T) :
+                BioEdgeWFS(four_pupil_cpu_tel; pupil_samples=2,
+                    mode=Diffractive(), modulation=0, T=T)
+            gpu_lgs_sensor = family === :pyramid ?
+                PyramidWFS(tel; pupil_samples=2, mode=Diffractive(),
+                    modulation=0, T=T, backend=selector) :
+                BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive(),
+                    modulation=0, T=T, backend=selector)
+            cpu_lgs_front_end = family === :pyramid ?
+                PyramidOpticalFrontEnd(cpu_lgs_sensor, lgs) :
+                BioEdgeOpticalFrontEnd(cpu_lgs_sensor, lgs)
+            gpu_lgs_front_end = family === :pyramid ?
+                PyramidOpticalFrontEnd(gpu_lgs_sensor, lgs) :
+                BioEdgeOpticalFrontEnd(gpu_lgs_sensor, lgs)
+            cpu_lgs_rate = family === :pyramid ?
+                pyramid_rate_map(cpu_lgs_front_end, four_pupil_cpu) :
+                bioedge_rate_map(cpu_lgs_front_end, four_pupil_cpu)
+            gpu_lgs_rate = family === :pyramid ?
+                pyramid_rate_map(gpu_lgs_front_end, pupil) :
+                bioedge_rate_map(gpu_lgs_front_end, pupil)
+            cpu_lgs_plan = prepare_wfs_optical_formation(
+                cpu_lgs_front_end, four_pupil_cpu, cpu_lgs_rate)
+            gpu_lgs_plan = prepare_wfs_optical_formation(
+                gpu_lgs_front_end, pupil, gpu_lgs_rate)
+            form_wfs_optical_products!(cpu_lgs_rate, four_pupil_cpu,
+                cpu_lgs_plan)
+            form_wfs_optical_products!(gpu_lgs_rate, pupil, gpu_lgs_plan)
+            AdaptiveOpticsSim.synchronize_backend!(
+                AdaptiveOpticsSim.execution_style(gpu_lgs_rate.values))
+            @test isapprox(Array(gpu_lgs_rate.values), cpu_lgs_rate.values;
+                rtol=T(5e-5), atol=T(5e-5))
+        end
+    end
 
     cpu_measurement = WFSMeasurement(zeros(T, 4, 4);
         units=:detector_signal, kind=:cpu_copy)
@@ -1151,8 +1346,8 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
         model=LayeredFresnelAtmosphericPropagation(T=T),
         zero_padding=1,
         T=T)
-    @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(pyr.state.intensity), pyr) isa AdaptiveOpticsSim.GroupedStaged2DPlan
-    @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(bio.state.intensity), bio) isa AdaptiveOpticsSim.GroupedStaged2DPlan
+    @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(pyr.front_end.propagation.intensity), pyr) isa AdaptiveOpticsSim.GroupedStaged2DPlan
+    @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(bio.front_end.propagation.intensity), bio) isa AdaptiveOpticsSim.GroupedStaged2DPlan
     @test typeof(AdaptiveOpticsSim.sh_sensing_execution_plan(
         AdaptiveOpticsSim.execution_style(slopes(sh)), sh)) ===
         AdaptiveOpticsSim.ShackHartmannWFSRocmHostStatsPlan
@@ -1195,7 +1390,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
         ),
     )
     @test occursin("AdaptiveOpticsSimAMDGPUExt", String(poisson_method.file))
-    @test AdaptiveOpticsSim.reduction_execution_plan(pyr.state.intensity) isa AdaptiveOpticsSim.HostMirrorReductionPlan
+    @test AdaptiveOpticsSim.reduction_execution_plan(pyr.front_end.propagation.intensity) isa AdaptiveOpticsSim.HostMirrorReductionPlan
     @test AdaptiveOpticsSim.backend_sum_value(capture_psf) == T(160)
 
     phase_freqs = T[-0.2, -0.1, 0.1, 0.2]
@@ -1423,11 +1618,11 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
         model=LayeredFresnelAtmosphericPropagation(T=T),
         zero_padding=1,
         T=T)
-    @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(pyr.state.intensity), pyr) isa AdaptiveOpticsSim.GroupedStackReducePlan
-    @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(bio.state.intensity), bio) isa AdaptiveOpticsSim.GroupedStackReducePlan
+    @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(pyr.front_end.propagation.intensity), pyr) isa AdaptiveOpticsSim.GroupedStackReducePlan
+    @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(bio.front_end.propagation.intensity), bio) isa AdaptiveOpticsSim.GroupedStackReducePlan
     @test AdaptiveOpticsSim.sh_sensing_execution_plan(AdaptiveOpticsSim.execution_style(slopes(sh)), sh) isa AdaptiveOpticsSim.ShackHartmannWFSBatchedPlan
     @test AdaptiveOpticsSim.detector_execution_plan(typeof(AdaptiveOpticsSim.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.DetectorDirectPlan
-    @test AdaptiveOpticsSim.reduction_execution_plan(pyr.state.intensity) isa AdaptiveOpticsSim.DirectReductionPlan
+    @test AdaptiveOpticsSim.reduction_execution_plan(pyr.front_end.propagation.intensity) isa AdaptiveOpticsSim.DirectReductionPlan
     @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
         AdaptiveOpticsSim.execution_style(first(geom_prop.state.slices).field.values),
         geom_prop.params.model,

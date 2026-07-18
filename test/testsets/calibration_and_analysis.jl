@@ -14,25 +14,25 @@
     @test measure!(sh_plain, tel, src) != measure!(sh_thresh, tel, src)
 
     pyr_auto = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0)
-    @test size(pyr_auto.state.modulation_phases, 3) == 8
+    @test size(pyr_auto.front_end.modulation.phases, 3) == 8
 
     pyr_path = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=0.0,
         user_modulation_path=((1.0, 0.0), (0.0, 1.0)))
-    @test size(pyr_path.state.modulation_phases, 3) == 2
+    @test size(pyr_path.front_end.modulation.phases, 3) == 2
 
     pyr_default = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0)
     pyr_rooftop = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0,
         rooftop=0.5, theta_rotation=0.2)
     pyr_old = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0, old_mask=true)
-    @test pyr_default.state.pyramid_mask != pyr_rooftop.state.pyramid_mask
-    @test pyr_default.state.pyramid_mask != pyr_old.state.pyramid_mask
+    @test pyr_default.front_end.propagation.pyramid_mask != pyr_rooftop.front_end.propagation.pyramid_mask
+    @test pyr_default.front_end.propagation.pyramid_mask != pyr_old.front_end.propagation.pyramid_mask
 
     bio_plain = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0)
     bio_gray = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0,
         grey_width=0.5, grey_length=1.0)
-    amps = real.(bio_gray.state.bioedge_masks[:, :, 1])
+    amps = real.(bio_gray.front_end.propagation.bioedge_masks[:, :, 1])
     @test any(x -> 0 < x < 1, amps)
-    @test bio_plain.state.bioedge_masks != bio_gray.state.bioedge_masks
+    @test bio_plain.front_end.propagation.bioedge_masks != bio_gray.front_end.propagation.bioedge_masks
 
     bio_gray_slopes = measure!(bio_gray, tel, src)
     @test length(bio_gray_slopes) == 2 * 4 * 4
@@ -72,13 +72,13 @@ end
 
     compact_bioedge = BioEdgeWFS(tel; pupil_samples=2,
         mode=Diffractive())
-    compact_bioedge.state.nominal_detector_resolution = 4
+    compact_bioedge.acquisition.state.nominal_detector_resolution = 4
     AdaptiveOpticsSim.resize_bioedge_signal_buffers!(compact_bioedge, 4)
-    fill!(compact_bioedge.state.valid_i4q, true)
+    fill!(compact_bioedge.estimator.state.valid_i4q, true)
     AdaptiveOpticsSim.update_bioedge_valid_signal!(compact_bioedge)
     AdaptiveOpticsSim.update_bioedge_valid_signal_indices!(compact_bioedge)
     AdaptiveOpticsSim.resize_bioedge_slope_buffers!(compact_bioedge)
-    fill!(compact_bioedge.state.reference_signal_2d, 0.0)
+    fill!(compact_bioedge.estimator.state.reference_signal_2d, 0.0)
     compact_frame = [4.0 4.0 1.0 1.0;
                      4.0 4.0 1.0 1.0;
                      3.0 3.0 2.0 2.0;
@@ -88,13 +88,13 @@ end
 
     padded_bioedge = BioEdgeWFS(tel; pupil_samples=2,
         mode=Diffractive())
-    padded_bioedge.state.nominal_detector_resolution = 4
+    padded_bioedge.acquisition.state.nominal_detector_resolution = 4
     AdaptiveOpticsSim.resize_bioedge_signal_buffers!(padded_bioedge, 8)
-    fill!(padded_bioedge.state.valid_i4q, true)
+    fill!(padded_bioedge.estimator.state.valid_i4q, true)
     AdaptiveOpticsSim.update_bioedge_valid_signal!(padded_bioedge)
     AdaptiveOpticsSim.update_bioedge_valid_signal_indices!(padded_bioedge)
     AdaptiveOpticsSim.resize_bioedge_slope_buffers!(padded_bioedge)
-    fill!(padded_bioedge.state.reference_signal_2d, 0.0)
+    fill!(padded_bioedge.estimator.state.reference_signal_2d, 0.0)
     padded_frame = zeros(8, 8)
     @views padded_frame[3:6, 3:6] .= compact_frame
     @test AdaptiveOpticsSim.bioedge_signal!(padded_bioedge, tel,
@@ -118,8 +118,8 @@ end
             heterogeneous, detector)
     end
     @test !sensors[1].calibration.calibrated
-    @test !sensors[2].state.calibrated
-    @test !sensors[3].state.calibrated
+    @test !sensors[2].estimator.state.calibrated
+    @test !sensors[3].estimator.state.calibrated
 
     common_lgs = Asterism([
         LGSSource(wavelength=589e-9, elongation_factor=1.4,
@@ -603,12 +603,12 @@ end
     @test supports_camera_frame(curv)
     @test valid_subaperture_mask(wfs) === wfs.layout.valid_mask
     @test reference_signal(wfs) === wfs.calibration.reference_signal_2d
-    @test camera_frame(pyr) === pyr.state.camera_frame
-    @test camera_frame(bio) === bio.state.camera_frame
+    @test camera_frame(pyr) === pyr.acquisition.state.camera_frame
+    @test camera_frame(bio) === bio.acquisition.state.camera_frame
     @test camera_frame(zwfs) === zwfs.state.camera_frame
     @test camera_frame(curv) === curv.state.camera_frame
-    @test wfs_detector_image(pyr) === pyr.state.camera_frame
-    @test wfs_detector_image(bio) === bio.state.camera_frame
+    @test wfs_detector_image(pyr) === pyr.acquisition.state.camera_frame
+    @test wfs_detector_image(bio) === bio.acquisition.state.camera_frame
     @test wfs_detector_image(zwfs) === zwfs.state.camera_frame
     @test wfs_detector_image(curv) === curv.state.camera_frame
     sh_image = wfs_detector_image(wfs_diffractive; gap=1)

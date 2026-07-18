@@ -1,8 +1,8 @@
 function measure!(mode::Geometric, wfs::PyramidWFS, tel::Telescope)
-    geometric_slopes!(wfs.state.slopes, tel.state.opd, wfs.state.valid_mask)
-    gain = inv(1 + wfs.params.modulation)
-    @. wfs.state.slopes = gain * wfs.state.slopes * wfs.state.optical_gain
-    return wfs.state.slopes
+    geometric_slopes!(wfs.estimator.state.slopes, tel.state.opd, wfs.estimator.state.valid_mask)
+    gain = inv(1 + wfs.estimator.params.geometric_modulation_radius)
+    @. wfs.estimator.state.slopes = gain * wfs.estimator.state.slopes * wfs.estimator.state.optical_gain
+    return wfs.estimator.state.slopes
 end
 
 function measure!(::Geometric, wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
@@ -11,7 +11,7 @@ end
 
 function measure!(::Geometric, wfs::PyramidWFS, tel::Telescope, src::LGSSource)
     slopes = measure!(Geometric(), wfs, tel)
-    n_sub = wfs.params.pupil_samples
+    n_sub = wfs.estimator.params.pupil_samples
     factor = lgs_elongation_factor(src)
     @views slopes[n_sub * n_sub + 1:end] .*= factor
     return slopes
@@ -54,49 +54,49 @@ end
 
 function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
     ensure_pyramid_calibration!(wfs, tel, src)
-    pyramid_intensity!(wfs.state.intensity, wfs, tel, src)
-    intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
+    pyramid_intensity!(wfs.front_end.propagation.intensity, wfs, tel, src)
+    intensity = sample_pyramid_intensity!(wfs, tel, wfs.front_end.propagation.intensity)
     pyramid_signal!(wfs, tel, intensity, src)
-    @. wfs.state.slopes *= wfs.state.optical_gain
-    return wfs.state.slopes
+    @. wfs.estimator.state.slopes *= wfs.estimator.state.optical_gain
+    return wfs.estimator.state.slopes
 end
 
 function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::SpectralSource)
     ensure_pyramid_calibration!(wfs, tel, src)
-    accumulate_pyramid_spectral_intensity!(execution_style(wfs.state.intensity), wfs, tel, src)
-    intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
+    accumulate_pyramid_spectral_intensity!(execution_style(wfs.front_end.propagation.intensity), wfs, tel, src)
+    intensity = sample_pyramid_intensity!(wfs, tel, wfs.front_end.propagation.intensity)
     pyramid_signal!(wfs, tel, intensity, src)
-    @. wfs.state.slopes *= wfs.state.optical_gain
-    return wfs.state.slopes
+    @. wfs.estimator.state.slopes *= wfs.estimator.state.optical_gain
+    return wfs.estimator.state.slopes
 end
 
 function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::AbstractSource,
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
     ensure_pyramid_calibration!(wfs, tel, src, det)
-    pyramid_intensity!(wfs.state.intensity, wfs, tel, src)
-    intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
+    pyramid_intensity!(wfs.front_end.propagation.intensity, wfs, tel, src)
+    intensity = sample_pyramid_intensity!(wfs, tel, wfs.front_end.propagation.intensity)
     frame = capture!(det, intensity, src; rng=rng)
     resize_pyramid_signal_buffers!(wfs, size(frame, 1))
     normalization_scale = wfs_detector_incidence_scale(det, src,
         eltype(frame))
     pyramid_signal!(wfs, tel, frame, src, normalization_scale)
-    @. wfs.state.slopes *= wfs.state.optical_gain
-    return wfs.state.slopes
+    @. wfs.estimator.state.slopes *= wfs.estimator.state.optical_gain
+    return wfs.estimator.state.slopes
 end
 
 function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, src::SpectralSource,
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
     ensure_pyramid_calibration!(wfs, tel, src, det)
-    accumulate_pyramid_spectral_intensity!(execution_style(wfs.state.intensity),
+    accumulate_pyramid_spectral_intensity!(execution_style(wfs.front_end.propagation.intensity),
         wfs, tel, src)
-    intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
+    intensity = sample_pyramid_intensity!(wfs, tel, wfs.front_end.propagation.intensity)
     frame = capture!(det, intensity, src; rng=rng)
     resize_pyramid_signal_buffers!(wfs, size(frame, 1))
     normalization_scale = wfs_detector_incidence_scale(det, src,
         eltype(frame))
     pyramid_signal!(wfs, tel, frame, src, normalization_scale)
-    @. wfs.state.slopes *= wfs.state.optical_gain
-    return wfs.state.slopes
+    @. wfs.estimator.state.slopes *= wfs.estimator.state.optical_gain
+    return wfs.estimator.state.slopes
 end
 
 function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope,
@@ -104,28 +104,28 @@ function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope,
     rng::AbstractRNG=Random.default_rng())
     qe_model = quantum_efficiency_model(det)
     ensure_pyramid_calibration!(wfs, tel, src, det)
-    accumulate_pyramid_spectral_intensity!(execution_style(wfs.state.intensity),
+    accumulate_pyramid_spectral_intensity!(execution_style(wfs.front_end.propagation.intensity),
         wfs, tel, src, qe_model)
-    intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
+    intensity = sample_pyramid_intensity!(wfs, tel, wfs.front_end.propagation.intensity)
     frame = capture_with_quantum_efficiency!(det, intensity,
         one(eltype(intensity)), rng)
     resize_pyramid_signal_buffers!(wfs, size(frame, 1))
     normalization_scale = wfs_detector_incidence_scale(det, src,
         eltype(frame))
     pyramid_signal!(wfs, tel, frame, src, normalization_scale)
-    @. wfs.state.slopes *= wfs.state.optical_gain
-    return wfs.state.slopes
+    @. wfs.estimator.state.slopes *= wfs.estimator.state.optical_gain
+    return wfs.estimator.state.slopes
 end
 
 function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, ast::Asterism)
     Base.require_one_based_indexing(tel.state.opd)
     common_source = common_wfs_calibration_source(ast, "PyramidWFS")
     ensure_pyramid_calibration!(wfs, tel, common_source)
-    accumulate_pyramid_asterism_intensity!(execution_style(wfs.state.intensity), wfs, tel, ast)
-    intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
+    accumulate_pyramid_asterism_intensity!(execution_style(wfs.front_end.propagation.intensity), wfs, tel, ast)
+    intensity = sample_pyramid_intensity!(wfs, tel, wfs.front_end.propagation.intensity)
     pyramid_signal!(wfs, tel, intensity, ast)
-    @. wfs.state.slopes *= wfs.state.optical_gain
-    return wfs.state.slopes
+    @. wfs.estimator.state.slopes *= wfs.estimator.state.optical_gain
+    return wfs.estimator.state.slopes
 end
 
 function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, ast::Asterism,
@@ -133,13 +133,13 @@ function measure!(::Diffractive, wfs::PyramidWFS, tel::Telescope, ast::Asterism,
     Base.require_one_based_indexing(tel.state.opd)
     common_source = common_wfs_calibration_source(ast, "PyramidWFS")
     ensure_pyramid_calibration!(wfs, tel, common_source, det)
-    accumulate_pyramid_asterism_intensity!(execution_style(wfs.state.intensity), wfs, tel, ast)
-    intensity = sample_pyramid_intensity!(wfs, tel, wfs.state.intensity)
+    accumulate_pyramid_asterism_intensity!(execution_style(wfs.front_end.propagation.intensity), wfs, tel, ast)
+    intensity = sample_pyramid_intensity!(wfs, tel, wfs.front_end.propagation.intensity)
     frame = capture!(det, intensity, common_source; rng=rng)
     resize_pyramid_signal_buffers!(wfs, size(frame, 1))
     normalization_scale = wfs_detector_incidence_scale(det, common_source,
         eltype(frame))
     pyramid_signal!(wfs, tel, frame, ast, normalization_scale)
-    @. wfs.state.slopes *= wfs.state.optical_gain
-    return wfs.state.slopes
+    @. wfs.estimator.state.slopes *= wfs.estimator.state.optical_gain
+    return wfs.estimator.state.slopes
 end

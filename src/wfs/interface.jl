@@ -37,6 +37,24 @@ interface.
 @inline reference_signal(::AbstractWFS) = nothing
 
 """
+    wfs_calibration_signature(wfs::AbstractWFS)
+
+Return the optical calibration signature currently bound to a wavefront
+sensor. This accessor intentionally hides the family-specific ownership of
+calibration state.
+"""
+@inline wfs_calibration_signature(wfs::ShackHartmannWFS) =
+    wfs.calibration.signature
+@inline wfs_calibration_signature(wfs::PyramidWFS) =
+    wfs.estimator.state.calibration_signature
+@inline wfs_calibration_signature(wfs::BioEdgeWFS) =
+    wfs.estimator.state.calibration_signature
+@inline wfs_calibration_signature(wfs::ZernikeWFS) =
+    wfs.state.calibration_signature
+@inline wfs_calibration_signature(wfs::CurvatureWFS) =
+    wfs.state.calibration_signature
+
+"""
     camera_frame(wfs::AbstractWFS)
 
 Return the maintained internal camera/readout frame for detector-like WFS

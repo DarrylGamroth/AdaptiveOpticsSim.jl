@@ -385,6 +385,47 @@ end
 
 function acquire_wfs_observation! end
 
+"""Prepared detector acquisition shared by detector-backed WFS families."""
+struct PreparedWFSDetectorAcquisition{D,P,O}
+    detector::D
+    detector_plan::P
+    observation::O
+end
+
+function prepare_wfs_acquisition(detector::Detector,
+    optical_product::IntensityMap, observation::WFSObservation)
+    validate_wfs_optical_products(optical_product)
+    validate_wfs_observation(observation)
+    observation.metadata.numeric_type <: Real ||
+        throw(WFSPreparationError(:acquisition, :numeric_type,
+            "WFS detector observations require real sample storage"))
+    plan = prepare_detector_acquisition(detector, optical_product)
+    size(observation.storage) == size(output_frame(detector)) ||
+        throw(WFSPreparationError(:acquisition, :shape,
+            "WFS observation storage must match the prepared detector output"))
+    observation.metadata.numeric_type === eltype(output_frame(detector)) ||
+        throw(WFSPreparationError(:acquisition, :numeric_type,
+            "WFS observation element type must match the detector output"))
+    typeof(backend(observation.storage)) === typeof(backend(detector)) ||
+        throw(WFSPreparationError(:acquisition, :backend,
+            "WFS observation and detector backends differ"))
+    plane_device(observation.storage) == plane_device(output_frame(detector)) ||
+        throw(WFSPreparationError(:acquisition, :device,
+            "WFS observation and detector output occupy different devices"))
+    return PreparedWFSDetectorAcquisition(detector, plan, observation)
+end
+
+function acquire_wfs_observation!(observation::WFSObservation,
+    optical_product::IntensityMap, plan::PreparedWFSDetectorAcquisition,
+    rng::AbstractRNG)
+    observation === plan.observation || throw(WFSPreparationError(
+        :acquisition, :prepared_binding,
+        "WFS observation does not match prepared storage"))
+    frame = capture!(plan.detector, optical_product, plan.detector_plan, rng)
+    copyto!(observation.storage, frame)
+    return observation
+end
+
 """
     prepare_wfs_estimation(model, input, measurement)
     estimate_wfs_measurement!(measurement, input, prepared)

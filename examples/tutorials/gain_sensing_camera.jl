@@ -69,10 +69,9 @@ function atmosphere_gsc_trace(
     correction_opd = similar(forcing_opd)
     residual_opd = similar(forcing_opd)
 
-    gsc = GainSensingCamera(wfs.state.pyramid_mask, basis)
-    calibration_frame = similar(wfs.state.intensity)
+    gsc = GainSensingCamera(wfs, basis)
     reset_opd!(tel)
-    pyramid_modulation_frame!(calibration_frame, wfs, tel, ngs)
+    calibration_frame = pyramid_modulation_frame(wfs, tel, ngs)
     calibrate!(gsc, calibration_frame)
     frame = similar(calibration_frame)
     og_safe = similar(gsc.og)
@@ -134,11 +133,10 @@ function main(; resolution::Int=24, pupil_samples::Int=4)
         normalization=IncidenceFluxNormalization(),
         modulation_points=8, diffraction_padding=2, n_pix_separation=2, n_pix_edge=1)
     basis = cartesian_basis(tel, 4)
-    gsc = GainSensingCamera(wfs.state.pyramid_mask, basis)
+    gsc = GainSensingCamera(wfs, basis)
 
-    calibration_frame = similar(wfs.state.intensity)
     reset_opd!(tel)
-    pyramid_modulation_frame!(calibration_frame, wfs, tel, src)
+    calibration_frame = pyramid_modulation_frame(wfs, tel, src)
     calibrate!(gsc, calibration_frame)
 
     coeffs = [20e-9, -12e-9, 8e-9, 0.0]

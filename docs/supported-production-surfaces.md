@@ -44,7 +44,9 @@ Current CPU-supported families:
   model time, stable epochs, frozen direction preparation, and caller-owned
   rendering
 - detector-family execution on maintained detector surfaces
-- Shack-Hartmann, Pyramid, and BioEdge WFS on maintained validated surfaces
+- staged Shack-Hartmann, Pyramid, and BioEdge WFS optical formation,
+  detector acquisition, and estimation on maintained validated surfaces;
+  geometric variants use explicit direct-measurement paths
 - runtime and closed-loop execution on maintained local/runtime artifacts
 - direct `CPUHILExecutionPlan` execution as the default CPU runtime residency
   policy
@@ -135,6 +137,9 @@ Additional production-supported frozen OOPAO equivalence surfaces:
 
 - diffractive Pyramid ramp from the committed OOPAO reference bundle
 - diffractive BioEdge ramp from the committed OOPAO reference bundle
+- prepared Pyramid/BioEdge pupil-function and electric-field formation,
+  spectral and path-local source bundles, LGS elongation/sodium profiles,
+  exact-once detector exposure, and revision-bound differential estimation
 
 Primary evidence:
 

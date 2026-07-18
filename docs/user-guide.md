@@ -610,6 +610,17 @@ single-product `measure!` convenience path remains restricted to a common
 wavelength grid. Model bundled channels with independent acquisition mappings
 unless an application prepares an explicit flux-conserving resampler.
 
+Prepared Pyramid and BioEdge formation follows the same photon-arrival-rate
+boundary while retaining distinct physical masks. Their zero, circular, and
+sampled focal-plane modulation policies are optical cycle averages in λ/D;
+they contain no exposure time or trigger semantics. A spectral source produces
+one four-pupil `IntensityMap` per wavelength in an `OpticalProductBundle`.
+Directional `Asterism` and `ExtendedSource` inputs require a matching tuple or
+vector of path-rendered pupil functions and remain separate bundle products so
+direction-dependent atmosphere states are not silently combined. Apply an
+explicit compatible incoherent sum or detector mapping only when the intended
+instrument path requires it.
+
 A single diffractive Shack–Hartmann, Pyramid, BioEdge, or atmosphere-aware
 Curvature acquisition also requires every asterism leaf to share one optical
 calibration signature. In particular, mixed NGS/LGS lists and LGS leaves with
@@ -638,8 +649,13 @@ calibrated WFS paths.
     must be scheduled independently
 - `PyramidWFS`
   - pyramid sensing and modulation studies
+  - use `PyramidOpticalFrontEnd`, `pyramid_rate_map`, and
+    `set_pyramid_calibration!` when optical formation, acquisition, and
+    differential estimation must be scheduled independently
 - `BioEdgeWFS`
   - BioEdge variants
+  - use `BioEdgeOpticalFrontEnd`, `bioedge_rate_map`, and
+    `set_bioedge_calibration!` for the corresponding staged path
 - `CurvatureWFS`
   - curvature sensing
 - `ZernikeWFS`

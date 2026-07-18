@@ -14,6 +14,12 @@ struct MetricCoordinates <: AbstractPlaneCoordinateDomain end
 """Angular plane coordinates whose sampling and origin are expressed in radians."""
 struct AngularCoordinates <: AbstractPlaneCoordinateDomain end
 
+"""
+Coordinates on a re-imaged pupil mosaic, normalized by the entrance-pupil
+diameter. These are neither focal-plane angles nor physical detector metres.
+"""
+struct NormalizedPupilCoordinates <: AbstractPlaneCoordinateDomain end
+
 @enum PlaneCentering begin
     SampleCentered
     InterSampleCentered

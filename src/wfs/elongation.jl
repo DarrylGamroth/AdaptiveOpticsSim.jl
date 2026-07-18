@@ -391,7 +391,8 @@ function _copy_host_real_kernel_to_complex!(::AcceleratorStyle,
     return dest
 end
 
-function lgs_average_kernel_fft(tel::Telescope, src::LGSSource, pad::Int, n_subap::Int,
+function lgs_average_kernel_fft(pupil_diameter::Real, src::LGSSource,
+    pad::Int, n_subap::Int,
     pixel_scale::Real, fft_buffer::AbstractMatrix{Complex{T}}, fft_plan) where {T<:AbstractFloat}
     na_profile = src.params.na_profile
     if na_profile === nothing
@@ -407,8 +408,10 @@ function lgs_average_kernel_fft(tel::Telescope, src::LGSSource, pad::Int, n_suba
     sigma_px = fwhm_px / (2 * sqrt(2 * log(T(2))))
     center = (pad + 1) / 2
 
-    x_subap = range(-tel.params.diameter / 2, tel.params.diameter / 2; length=n_subap)
-    y_subap = range(-tel.params.diameter / 2, tel.params.diameter / 2; length=n_subap)
+    x_subap = range(-pupil_diameter / 2, pupil_diameter / 2;
+        length=n_subap)
+    y_subap = range(-pupil_diameter / 2, pupil_diameter / 2;
+        length=n_subap)
     kernel = Matrix{T}(undef, pad, pad)
     temp = similar(kernel)
     fill!(kernel, zero(T))
@@ -416,11 +419,13 @@ function lgs_average_kernel_fft(tel::Telescope, src::LGSSource, pad::Int, n_suba
     x0 = src.params.laser_coordinates[2]
     y0 = -src.params.laser_coordinates[1]
     ref_idx = Int(cld(length(altitudes), 2))
-    ref_vec = lgs_reference_vector(tel, x0, y0, altitudes[ref_idx])
+    ref_vec = lgs_reference_vector(pupil_diameter, x0, y0,
+        altitudes[ref_idx])
 
     @inbounds for iy in 1:n_subap, ix in 1:n_subap
-        lgs_spot_kernel!(temp, tel, src, altitudes, weights, pixel_scale, sigma_px, center,
-            x_subap[ix], y_subap[iy], ref_vec)
+        lgs_spot_kernel!(temp, pupil_diameter, src, altitudes, weights,
+            pixel_scale, sigma_px, center, x_subap[ix], y_subap[iy],
+            ref_vec)
         kernel .+= temp
     end
     kernel ./= max(n_subap * n_subap, 1)
@@ -431,4 +436,11 @@ function lgs_average_kernel_fft(tel::Telescope, src::LGSSource, pad::Int, n_suba
     kernel_fft = similar(fft_buffer, Complex{T}, pad, pad)
     copyto!(kernel_fft, fft_buffer)
     return kernel_fft
+end
+
+@inline function lgs_average_kernel_fft(tel::Telescope, src::LGSSource,
+    pad::Int, n_subap::Int, pixel_scale::Real,
+    fft_buffer::AbstractMatrix{Complex{T}}, fft_plan) where {T<:AbstractFloat}
+    return lgs_average_kernel_fft(tel.params.diameter, src, pad, n_subap,
+        pixel_scale, fft_buffer, fft_plan)
 end

@@ -37,7 +37,7 @@ end
     # Pre-HIL stage contracts intentionally add a small, documented public
     # product/protocol seam. Keep headroom bounded so unrelated internals do
     # not drift into the ordinary user namespace.
-    @test length(exported) <= 441
+    @test length(exported) <= 456
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
     @test Base.isexported(AdaptiveOpticsSim, :MicrolensArray)
@@ -47,6 +47,12 @@ end
         :PreparedMicrolensPropagation)
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannOpticalFrontEnd)
     @test Base.isexported(AdaptiveOpticsSim, :shack_hartmann_rate_map)
+    @test Base.isexported(AdaptiveOpticsSim, :PyramidOpticalFrontEnd)
+    @test Base.isexported(AdaptiveOpticsSim, :BioEdgeOpticalFrontEnd)
+    @test Base.isexported(AdaptiveOpticsSim, :CircularModulation)
+    @test Base.isexported(AdaptiveOpticsSim, :SampledModulation)
+    @test !Base.isexported(AdaptiveOpticsSim,
+        :PreparedFocalPlaneModulation)
     @test Base.isexported(AdaptiveOpticsSim,
         :set_subaperture_calibration!)
     @test Base.isexported(AdaptiveOpticsSim, :Detector)

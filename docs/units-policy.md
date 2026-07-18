@@ -12,6 +12,8 @@ AdaptiveOpticsSim.jl. Scientific term definitions follow the
 - Internal wavelength-dependent optical phase is in radians.
 - `MetricCoordinates()` declares plane sampling and origin in metres.
 - `AngularCoordinates()` declares plane sampling and origin in radians.
+- `NormalizedPupilCoordinates()` declares dimensionless sampling and origin in
+  entrance-pupil-diameter units; it does not declare detector pixel pitch.
 - Source `photon_irradiance` is in photons·s⁻¹·m⁻².
 - Atmosphere model time, `atmosphere_step`, and detector exposure durations are
   in seconds; they are independent quantities owned by their respective model,
