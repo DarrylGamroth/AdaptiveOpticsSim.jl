@@ -49,14 +49,6 @@ function ZernikeOpticalFrontEnd(sensor::ZernikeWFS, source=nothing)
         front_end.binning, source)
 end
 
-@inline function zernike_front_end_with_source(
-    front_end::ZernikeOpticalFrontEnd, source)
-    return ZernikeOpticalFrontEnd(front_end.phase_spot,
-        front_end.propagation, front_end.pupil_resolution,
-        front_end.pupil_diameter_m, front_end.pupil_samples,
-        front_end.binning, source)
-end
-
 @inline zernike_rate_dimensions(front_end::ZernikeOpticalFrontEnd) =
     (div(front_end.pupil_samples, front_end.binning),
         div(front_end.pupil_samples, front_end.binning))

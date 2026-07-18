@@ -71,6 +71,34 @@ end
     @test rate.metadata.normalization isa PhotonRateNormalization
     @test rate.metadata.spatial_measure isa CellIntegratedMeasure
     @test rate.metadata.coherence isa IncoherentIntensityAddition
+    sensor_rate = zernike_rate_map(sensor, pupil, source)
+    @test size(sensor_rate.values) == size(rate.values)
+    @test sensor_rate.metadata.spectral == rate.metadata.spectral
+
+    bad_zernike_rates = (
+        (contract_rate_map(copy(rate.values);
+            sampling=rate.metadata.sampling,
+            coordinate_domain=AngularCoordinates(),
+            spectral=rate.metadata.spectral), :plane_metadata),
+        (contract_rate_map(copy(rate.values);
+            sampling=rate.metadata.sampling,
+            coordinate_domain=NormalizedPupilCoordinates(),
+            spectral=rate.metadata.spectral,
+            spatial_measure=SpatialDensityMeasure()), :radiometry),
+        (contract_rate_map(copy(rate.values);
+            sampling=rate.metadata.sampling,
+            coordinate_domain=NormalizedPupilCoordinates(),
+            spectral=IntegratedSpectralChannel(:zernike_test)),
+            :plane_metadata),
+    )
+    for (bad_rate, reason) in bad_zernike_rates
+        err = contract_captured_error() do
+            prepare_wfs_optical_formation(front_end, pupil, bad_rate)
+        end
+        @test err isa WFSPreparationError
+        @test err.stage === :optical_formation
+        @test err.reason === reason
+    end
     optical_plan = prepare_wfs_optical_formation(front_end, pupil, rate)
     form_wfs_optical_products!(rate, pupil, optical_plan)
     @test pupil.opd == pupil_before
@@ -126,6 +154,28 @@ end
         observation.storage, source))
     estimate_wfs_measurement!(measurement, observation, estimator_plan)
     @test measurement.storage ≈ expected_signal rtol=T(2e-12) atol=T(2e-12)
+
+    incidence_sensor = ZernikeWFS(tel; pupil_samples=4, binning=1,
+        normalization=IncidenceFluxNormalization(), T=T)
+    set_zernike_calibration!(incidence_sensor,
+        zeros(T, size(incidence_sensor.estimator.state.reference_signal_2d));
+        wavelength_m=wavelength(source), signature=UInt(0x494e4349))
+    incidence_measurement = WFSMeasurement(similar(slopes(incidence_sensor));
+        units=:dimensionless, kind=:normalized_pupil_signal)
+    missing_incidence_source = contract_captured_error() do
+        prepare_wfs_estimation(incidence_sensor, observation,
+            incidence_measurement)
+    end
+    @test missing_incidence_source isa WFSPreparationError
+    @test missing_incidence_source.stage === :estimation
+    @test missing_incidence_source.reason === :radiometry
+    incidence_plan = prepare_wfs_estimation(incidence_sensor, observation,
+        incidence_measurement; source=source, normalization_scale=T(0.5))
+    @test wfs_measurement_path(incidence_plan) isa AcquiredObservationPath
+    estimate_wfs_measurement!(incidence_measurement, observation,
+        incidence_plan)
+    @test all(isfinite, incidence_measurement.storage)
+    @test any(!iszero, incidence_measurement.storage)
 
     integer_storage = reshape(UInt16.(1:16), 4, 4)
     integer_observation = WFSObservation(integer_storage;
@@ -201,6 +251,36 @@ end
     @test rates[1].metadata.normalization isa PhotonRateNormalization
     @test rates[1].metadata.spatial_measure isa CellIntegratedMeasure
     @test rates[1].metadata.coherence isa IncoherentIntensityAddition
+    sensor_rates = curvature_rate_maps(sensor, pupil, source)
+    @test size.(getfield.(sensor_rates, :values)) ==
+        size.(getfield.(rates, :values))
+    @test sensor_rates[1].metadata.spectral == rates[1].metadata.spectral
+
+    bad_curvature_products = (
+        ((contract_rate_map(copy(rates[1].values);
+              sampling=rates[1].metadata.sampling,
+              coordinate_domain=AngularCoordinates(),
+              spectral=rates[1].metadata.spectral), rates[2]),
+            :plane_metadata),
+        ((rates[1], contract_rate_map(copy(rates[2].values);
+              sampling=rates[2].metadata.sampling,
+              coordinate_domain=NormalizedPupilCoordinates(),
+              spectral=rates[2].metadata.spectral,
+              spatial_measure=SpatialDensityMeasure())), :radiometry),
+        ((contract_rate_map(copy(rates[1].values);
+              sampling=rates[1].metadata.sampling,
+              coordinate_domain=NormalizedPupilCoordinates(),
+              spectral=IntegratedSpectralChannel(:curvature_test)),
+            rates[2]), :plane_metadata),
+    )
+    for (bad_products, reason) in bad_curvature_products
+        err = contract_captured_error() do
+            prepare_wfs_optical_formation(front_end, pupil, bad_products)
+        end
+        @test err isa WFSPreparationError
+        @test err.stage === :optical_formation
+        @test err.reason === reason
+    end
     optical_plan = prepare_wfs_optical_formation(front_end, pupil, rates)
     form_wfs_optical_products!(rates, pupil, optical_plan)
     @test pupil.opd == pupil_before
@@ -280,6 +360,8 @@ end
     packed_detector = Detector(noise=NoiseNone(),
         integration_time=T(0.5), qe=T(0.4),
         response_model=NullFrameResponse(), T=T)
+    @test_throws InvalidConfiguration CurvaturePackedAcquisition(
+        packed_detector; branch_durations=:invalid)
     packed_model = CurvaturePackedAcquisition(packed_detector;
         branch_durations=(T(0.5), T(0.5)))
     packed_observation = WFSObservation(zeros(T, 8, 4);
@@ -303,6 +385,14 @@ end
         units=:photon_count, layout=:curvature_branch_channels)
     counting_plan = prepare_wfs_acquisition(counting_model, rates,
         counting_observation)
+    invalid_packed_model = CurvaturePackedAcquisition(spad;
+        readout_model=CurvatureFrameReadout(), source=source)
+    invalid_packed_error = contract_captured_error() do
+        prepare_wfs_acquisition(invalid_packed_model, rates,
+            counting_observation)
+    end
+    @test invalid_packed_error isa WFSPreparationError
+    @test invalid_packed_error.reason === :detector_mapping
     acquire_wfs_observation!(counting_observation, rates, counting_plan,
         rng)
     expected_channels = zeros(T, 2, 16)
@@ -324,6 +414,7 @@ end
         units=:dimensionless, kind=:curvature_signal)
     estimator_plan = prepare_wfs_estimation(sensor, observations,
         measurement; branch_rate_scales=(T(10), T(20 / 3)))
+    @test wfs_measurement_path(estimator_plan) isa AcquiredObservationPath
     estimate_wfs_measurement!(measurement, observations, estimator_plan)
     @test measurement.storage ≈ expected_signal rtol=T(2e-12) atol=T(2e-12)
 
@@ -443,6 +534,163 @@ end
             packed_observation, packed_estimator)) == 0
         @test @allocated(estimate_wfs_measurement!(counting_measurement,
             counting_observation, counting_estimator)) == 0
+    end
+end
+
+@testset "Prepared photon-counting WFS acquisition" begin
+    T = Float64
+    coverage_enabled = coverage_instrumented()
+    source = Source(band=:custom, wavelength=T(0.75e-6),
+        photon_irradiance=one(T), T=T)
+    rate_values = reshape(T.(1:6), 2, 3)
+    rate = contract_rate_map(copy(rate_values);
+        sampling=(T(0.25), T(0.25)),
+        coordinate_domain=NormalizedPupilCoordinates(),
+        spectral=MonochromaticChannel(T(wavelength(source))))
+
+    spad = SPADArrayDetector(integration_time=T(0.25), noise=NoiseNone(),
+        sensor=SPADArraySensor(pde=T(0.5), dark_count_rate=zero(T),
+            fill_factor=one(T), T=T), T=T)
+    observation = WFSObservation(zeros(T, size(rate_values));
+        units=:photon_count, layout=:counting_channels)
+    plan = prepare_wfs_acquisition(spad, rate, observation; source=source)
+    @test plan isa PreparedWFSCountingAcquisition
+    rate_before = copy(rate.values)
+    rng = Xoshiro(0x434f554e54)
+    acquire_wfs_observation!(observation, rate, plan, rng)
+    @test observation.storage == rate_values .* T(0.125)
+    @test rate.values == rate_before
+
+    source_free_spad = SPADArrayDetector(integration_time=T(0.5),
+        noise=NoiseNone(),
+        sensor=SPADArraySensor(pde=one(T), dark_count_rate=zero(T),
+            fill_factor=one(T), T=T), T=T)
+    source_free_observation = WFSObservation(zeros(T, size(rate_values));
+        units=:photon_count, layout=:counting_channels)
+    source_free_plan = prepare_wfs_acquisition(source_free_spad, rate,
+        source_free_observation)
+    acquire_wfs_observation!(source_free_observation, rate,
+        source_free_plan, rng)
+    @test source_free_observation.storage == rate_values .* T(0.5)
+
+    mkid = MKIDArrayDetector(integration_time=T(0.5), noise=NoiseNone(),
+        sensor=MKIDArraySensor(qe=one(T), dark_count_rate=zero(T),
+            fill_factor=one(T), wavelength_range_m=(T(0.5e-6), T(1e-6)),
+            T=T), T=T)
+    mkid_observation = WFSObservation(zeros(T, size(rate_values));
+        units=:photon_count, layout=:counting_channels)
+    missing_mkid_source = contract_captured_error() do
+        prepare_wfs_acquisition(mkid, rate, mkid_observation)
+    end
+    @test missing_mkid_source isa WFSPreparationError
+    @test missing_mkid_source.reason === :radiometry
+    mkid_plan = prepare_wfs_acquisition(mkid, rate, mkid_observation;
+        source=source)
+    acquire_wfs_observation!(mkid_observation, rate, mkid_plan, rng)
+    @test mkid_observation.storage == rate_values .* T(0.5)
+
+    invalid_source_error = contract_captured_error() do
+        prepare_wfs_acquisition(spad, rate, observation; source=(source,))
+    end
+    @test invalid_source_error isa WFSPreparationError
+    @test invalid_source_error.reason === :radiometry
+
+    mismatched_source = Source(band=:custom, wavelength=T(0.8e-6),
+        photon_irradiance=one(T), T=T)
+    wavelength_error = contract_captured_error() do
+        prepare_wfs_acquisition(spad, rate, observation;
+            source=mismatched_source)
+    end
+    @test wavelength_error isa WFSPreparationError
+    @test wavelength_error.reason === :plane_metadata
+
+    integrated_rate = contract_rate_map(copy(rate_values);
+        sampling=rate.metadata.sampling,
+        coordinate_domain=NormalizedPupilCoordinates(),
+        spectral=IntegratedSpectralChannel(:counting_test))
+    integrated_error = contract_captured_error() do
+        prepare_wfs_acquisition(spad, integrated_rate, observation;
+            source=source)
+    end
+    @test integrated_error isa WFSPreparationError
+    @test integrated_error.reason === :plane_metadata
+
+    density_rate = contract_rate_map(copy(rate_values);
+        sampling=rate.metadata.sampling,
+        coordinate_domain=NormalizedPupilCoordinates(),
+        spectral=rate.metadata.spectral,
+        spatial_measure=SpatialDensityMeasure())
+    density_error = contract_captured_error() do
+        prepare_wfs_acquisition(spad, density_rate, observation)
+    end
+    @test density_error isa WFSPreparationError
+    @test density_error.reason === :radiometry
+
+    complex_observation = WFSObservation(
+        zeros(Complex{T}, size(rate_values));
+        units=:photon_count, layout=:counting_channels)
+    complex_error = contract_captured_error() do
+        prepare_wfs_acquisition(spad, rate, complex_observation)
+    end
+    @test complex_error isa WFSPreparationError
+    @test complex_error.reason === :numeric_type
+
+    rate32_values = Float32.(rate_values)
+    rate32 = contract_rate_map(rate32_values;
+        sampling=(Float32(0.25), Float32(0.25)),
+        coordinate_domain=NormalizedPupilCoordinates(),
+        spectral=MonochromaticChannel(Float32(wavelength(source))))
+    precision_error = contract_captured_error() do
+        prepare_wfs_acquisition(spad, rate32, observation)
+    end
+    @test precision_error isa WFSPreparationError
+    @test precision_error.reason === :numeric_type
+
+    wrong_shape_observation = WFSObservation(zeros(T, 2, 2);
+        units=:photon_count, layout=:counting_channels)
+    shape_error = contract_captured_error() do
+        prepare_wfs_acquisition(spad, rate, wrong_shape_observation)
+    end
+    @test shape_error isa WFSPreparationError
+    @test shape_error.reason === :shape
+
+    integer_observation = WFSObservation(zeros(UInt16, size(rate_values));
+        units=:photon_count, layout=:counting_channels)
+    output_type_error = contract_captured_error() do
+        prepare_wfs_acquisition(spad, rate, integer_observation)
+    end
+    @test output_type_error isa WFSPreparationError
+    @test output_type_error.reason === :numeric_type
+
+    replacement_observation = WFSObservation(zeros(T, size(rate_values));
+        units=:photon_count, layout=:counting_channels)
+    replacement_rate = contract_rate_map(copy(rate_values);
+        sampling=rate.metadata.sampling,
+        coordinate_domain=NormalizedPupilCoordinates(),
+        spectral=rate.metadata.spectral)
+    replacement_before = copy(replacement_observation.storage)
+    @test_throws WFSPreparationError acquire_wfs_observation!(
+        replacement_observation, rate, plan, rng)
+    @test_throws WFSPreparationError acquire_wfs_observation!(
+        observation, replacement_rate, plan, rng)
+    @test replacement_observation.storage == replacement_before
+
+    ensure_buffers!(spad, (3, 2))
+    observation_before = copy(observation.storage)
+    stale_storage_error = contract_captured_error() do
+        acquire_wfs_observation!(observation, rate, plan, rng)
+    end
+    @test stale_storage_error isa WFSPreparationError
+    @test stale_storage_error.reason === :prepared_binding
+    @test observation.storage == observation_before
+
+    if coverage_enabled
+        @test_skip "counting acquisition allocation assertion is disabled under coverage instrumentation"
+    else
+        acquire_wfs_observation!(source_free_observation, rate,
+            source_free_plan, rng)
+        @test @allocated(acquire_wfs_observation!(source_free_observation,
+            rate, source_free_plan, rng)) == 0
     end
 end
 

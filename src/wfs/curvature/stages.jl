@@ -187,15 +187,6 @@ function CurvatureOpticalFrontEnd(sensor::CurvatureWFS, source=nothing)
         source)
 end
 
-@inline function curvature_front_end_with_source(
-    front_end::CurvatureOpticalFrontEnd, source)
-    return CurvatureOpticalFrontEnd(front_end.defocus_pair,
-        front_end.propagation, front_end.pupil_resolution,
-        front_end.pupil_samples, front_end.readout_crop_resolution,
-        front_end.readout_pixels_per_sample, front_end.branch_response,
-        source)
-end
-
 @inline function curvature_branch_dimensions(
     front_end::CurvatureOpticalFrontEnd)
     side = front_end.pupil_samples * front_end.readout_pixels_per_sample
