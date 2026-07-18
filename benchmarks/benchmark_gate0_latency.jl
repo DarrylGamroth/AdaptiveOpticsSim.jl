@@ -421,7 +421,7 @@ end
 function gate0_baseline_paths()
     specification = get(ENV, "AOS_GATE0_BASELINES", GATE0_BASELINE_PATH)
     isempty(strip(specification)) && return String[]
-    paths = strip.(split(specification, ','))
+    paths = String.(strip.(split(specification, ',')))
     any(isempty, paths) && error(
         "AOS_GATE0_BASELINES must contain comma-separated nonempty paths")
     return paths
