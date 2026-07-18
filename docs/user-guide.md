@@ -621,6 +621,12 @@ direction-dependent atmosphere states are not silently combined. Apply an
 explicit compatible incoherent sum or detector mapping only when the intended
 instrument path requires it.
 
+The acquired Pyramid/BioEdge estimator accepts a real, square
+`:four_pupil_mosaic`, including integer ADU/count frames. It converts samples to
+the estimator's floating-point precision before differential arithmetic, and
+preparation rejects incompatible frame geometry, backend, or physical device.
+Reprepare an optical plan after changing the front-end propagation sampling.
+
 A single diffractive Shack–Hartmann, Pyramid, BioEdge, or atmosphere-aware
 Curvature acquisition also requires every asterism leaf to share one optical
 calibration signature. In particular, mixed NGS/LGS lists and LGS leaves with

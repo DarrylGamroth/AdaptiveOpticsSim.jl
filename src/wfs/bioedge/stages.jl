@@ -7,6 +7,7 @@ struct PreparedBioEdgeOpticalFormation{F,I,O,L<:AbstractPreparedFourPupilLGS}
     input::I
     output::O
     lgs_model::L
+    propagation_revision::UInt
 end
 
 struct PreparedBioEdgeOpticalBundleFormation{P<:Tuple,I,O}
@@ -122,7 +123,7 @@ function prepare_wfs_optical_formation(front_end::BioEdgeOpticalFrontEnd,
             "BioEdge output precision differs from prepared propagation"))
     lgs_model = prepare_four_pupil_lgs(front_end.source, input, front_end)
     return PreparedBioEdgeOpticalFormation(front_end, input, output,
-        lgs_model)
+        lgs_model, front_end.propagation.revision)
 end
 
 function prepare_wfs_optical_formation(front_end::BioEdgeOpticalFrontEnd,
@@ -237,6 +238,9 @@ function form_wfs_optical_products!(output::IntensityMap,
     output === plan.output && input === plan.input ||
         throw(WFSPreparationError(:optical_formation, :prepared_binding,
             "BioEdge optical products do not match prepared storage"))
+    plan.front_end.propagation.revision == plan.propagation_revision ||
+        throw(WFSPreparationError(:optical_formation, :prepared_binding,
+            "BioEdge propagation sampling changed after preparation"))
     native = _bioedge_native_rate!(plan.front_end, input, plan.lgs_model)
     factor = bioedge_output_sampling_factor(plan.front_end,
         input.metadata.dimensions[1])
@@ -382,6 +386,23 @@ function _require_bioedge_calibration(sensor::BioEdgeWFS,
     return nothing
 end
 
+function _require_bioedge_estimation_geometry(sensor::BioEdgeWFS,
+    frame_size::Int)
+    iseven(frame_size) || throw(WFSPreparationError(:estimation, :shape,
+        "BioEdge observations require an even detector-frame size"))
+    nominal = sensor.acquisition.state.nominal_detector_resolution
+    binning = sensor.acquisition.binning
+    nominal > 0 || throw(WFSPreparationError(:estimation, :shape,
+        "BioEdge nominal detector resolution has not been prepared"))
+    nominal % binning == 0 || throw(WFSPreparationError(:estimation, :shape,
+        "BioEdge binning does not divide the nominal detector resolution"))
+    sampled_rows = binning == 1 ? 2 * nominal : div(nominal, binning)
+    sampled_rows % frame_size == 0 || throw(WFSPreparationError(
+        :estimation, :shape,
+        "detector sampling does not evenly divide the BioEdge frame"))
+    return div(sampled_rows, frame_size)
+end
+
 function prepare_wfs_estimation(sensor::BioEdgeWFS{<:Diffractive},
     observation::WFSObservation, measurement::WFSMeasurement;
     source=nothing, normalization_scale::Real=1)
@@ -396,10 +417,18 @@ function prepare_wfs_estimation(sensor::BioEdgeWFS{<:Diffractive},
     isequal(measurement.units, :dimensionless) ||
         throw(WFSPreparationError(:estimation, :units,
             "BioEdge differential slopes are dimensionless"))
+    frame_size = _require_real_square_wfs_observation(observation,
+        "BioEdge")
     measurement.metadata.numeric_type <: AbstractFloat ||
         throw(WFSPreparationError(:estimation, :numeric_type,
             "BioEdge measurement storage must be floating point"))
-    resize_bioedge_signal_buffers!(sensor, size(observation.storage, 1))
+    _require_wfs_storage_domain(:estimation, observation.metadata,
+        sensor.estimator.state.signal_2d, "BioEdge observation")
+    _require_wfs_storage_domain(:estimation, measurement.metadata,
+        sensor.estimator.state.slopes, "BioEdge measurement")
+    detector_reduction = _require_bioedge_estimation_geometry(sensor,
+        frame_size)
+    resize_bioedge_signal_buffers!(sensor, frame_size, detector_reduction)
     size(measurement.storage) == size(sensor.estimator.state.slopes) ||
         throw(WFSPreparationError(:estimation, :shape,
             "BioEdge measurement storage has the wrong slope shape"))
@@ -443,6 +472,13 @@ function prepare_wfs_estimation(sensor::BioEdgeWFS{<:Geometric},
     isequal(measurement.units, :metre) || throw(WFSPreparationError(
         :estimation, :units,
         "geometric BioEdge OPD differences are expressed in metres"))
+    measurement.metadata.numeric_type <: AbstractFloat ||
+        throw(WFSPreparationError(:estimation, :numeric_type,
+            "geometric BioEdge measurement storage must be floating point"))
+    _require_wfs_storage_domain(:estimation, input.metadata,
+        sensor.estimator.state.slopes, "geometric BioEdge input")
+    _require_wfs_storage_domain(:estimation, measurement.metadata,
+        sensor.estimator.state.slopes, "geometric BioEdge measurement")
     size(measurement.storage) == size(sensor.estimator.state.slopes) ||
         throw(WFSPreparationError(:estimation, :shape,
             "geometric BioEdge measurement has the wrong slope shape"))

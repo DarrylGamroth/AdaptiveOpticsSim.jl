@@ -3,49 +3,60 @@ function pyramid_slopes!(wfs::PyramidWFS, tel::Telescope)
     return pyramid_signal!(wfs, tel, wfs.acquisition.state.camera_frame)
 end
 
-function pyramid_slopes!(wfs::PyramidWFS, tel::Telescope, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
+function pyramid_slopes!(wfs::PyramidWFS, tel::Telescope,
+    intensity::AbstractMatrix{F}) where {F<:Real}
     return pyramid_signal!(wfs, tel, intensity)
 end
 
-function pyramid_signal!(wfs::PyramidWFS, tel::Telescope, frame::AbstractMatrix{T}) where {T<:AbstractFloat}
+function pyramid_signal!(wfs::PyramidWFS, tel::Telescope,
+    frame::AbstractMatrix{F}) where {F<:Real}
     return pyramid_signal!(wfs, tel, frame, nothing)
 end
 
-function pyramid_signal!(wfs::PyramidWFS, tel::Telescope, frame::AbstractMatrix{T},
-    src::Union{Nothing,AbstractSource}) where {T<:AbstractFloat}
-    return pyramid_signal!(wfs, tel, frame, src, one(T))
+function pyramid_signal!(wfs::PyramidWFS, tel::Telescope,
+    frame::AbstractMatrix{F},
+    src::Union{Nothing,AbstractSource}) where {F<:Real}
+    S = eltype(wfs.estimator.state.slopes)
+    return pyramid_signal!(wfs, tel, frame, src, one(S))
 end
 
-function pyramid_signal!(wfs::PyramidWFS, tel::Telescope, frame::AbstractMatrix{T},
-    src::Union{Nothing,AbstractSource}, normalization_scale::Real) where {T<:AbstractFloat}
+function pyramid_signal!(wfs::PyramidWFS, tel::Telescope,
+    frame::AbstractMatrix{F}, src::Union{Nothing,AbstractSource},
+    normalization_scale::Real) where {F<:Real}
+    S = eltype(wfs.estimator.state.slopes)
     return pyramid_signal!(execution_style(frame), wfs, tel, frame, src,
-        T(normalization_scale))
+        S(normalization_scale))
 end
 
-function pyramid_signal!(::ScalarCPUStyle, wfs::PyramidWFS, tel::Telescope, frame::AbstractMatrix{T},
-    src::Union{Nothing,AbstractSource}) where {T<:AbstractFloat}
-    return pyramid_signal!(ScalarCPUStyle(), wfs, tel, frame, src, one(T))
+function pyramid_signal!(::ScalarCPUStyle, wfs::PyramidWFS,
+    tel::Telescope, frame::AbstractMatrix{F},
+    src::Union{Nothing,AbstractSource}) where {F<:Real}
+    S = eltype(wfs.estimator.state.slopes)
+    return pyramid_signal!(ScalarCPUStyle(), wfs, tel, frame, src, one(S))
 end
 
 function pyramid_signal!(::ScalarCPUStyle, wfs::PyramidWFS, tel::Telescope,
-    frame::AbstractMatrix{T}, src::Union{Nothing,AbstractSource},
-    normalization_scale::T) where {T<:AbstractFloat}
+    frame::AbstractMatrix{F}, src::Union{Nothing,AbstractSource},
+    normalization_scale::S) where {F<:Real,S<:AbstractFloat}
     return pyramid_signal!(ScalarCPUStyle(), wfs, frame, src,
         normalization_scale)
 end
 
 function pyramid_signal!(::ScalarCPUStyle, wfs::PyramidWFS,
-    frame::AbstractMatrix{T}, src::Union{Nothing,AbstractSource},
-    normalization_scale::T) where {T<:AbstractFloat}
+    frame::AbstractMatrix{F}, src::Union{Nothing,AbstractSource},
+    normalization_scale::S) where {F<:Real,S<:AbstractFloat}
     center, n_extra = require_pyramid_frame_geometry(wfs, frame)
     n_pixels = size(wfs.estimator.state.signal_2d, 2)
     count = div(length(wfs.estimator.state.slopes), 2)
-    norma = zero(T)
+    norma = zero(S)
     @inbounds for j in 1:n_pixels, i in 1:n_pixels
-        q1 = frame[center - n_extra - n_pixels + i, center - n_extra - n_pixels + j]
-        q2 = frame[center - n_extra - n_pixels + i, center + n_extra + j]
-        q3 = frame[center + n_extra + i, center + n_extra + j]
-        q4 = frame[center + n_extra + i, center - n_extra - n_pixels + j]
+        q1 = S(frame[center - n_extra - n_pixels + i,
+            center - n_extra - n_pixels + j])
+        q2 = S(frame[center - n_extra - n_pixels + i,
+            center + n_extra + j])
+        q3 = S(frame[center + n_extra + i, center + n_extra + j])
+        q4 = S(frame[center + n_extra + i,
+            center - n_extra - n_pixels + j])
         if wfs.estimator.state.valid_i4q[i, j]
             norma += q1 + q2 + q3 + q4
         end
@@ -53,16 +64,19 @@ function pyramid_signal!(::ScalarCPUStyle, wfs::PyramidWFS,
     norma = pyramid_normalization(wfs.estimator.params.normalization, wfs, src,
         count, norma, normalization_scale)
     if !usable_wfs_normalization(norma)
-        fill!(wfs.estimator.state.signal_2d, zero(T))
-        fill!(wfs.estimator.state.slopes, zero(T))
+        fill!(wfs.estimator.state.signal_2d, zero(S))
+        fill!(wfs.estimator.state.slopes, zero(S))
         return wfs.estimator.state.slopes
     end
     idx = 1
     @inbounds for i in 1:n_pixels, j in 1:n_pixels
-        q1 = frame[center - n_extra - n_pixels + i, center - n_extra - n_pixels + j]
-        q2 = frame[center - n_extra - n_pixels + i, center + n_extra + j]
-        q3 = frame[center + n_extra + i, center + n_extra + j]
-        q4 = frame[center + n_extra + i, center - n_extra - n_pixels + j]
+        q1 = S(frame[center - n_extra - n_pixels + i,
+            center - n_extra - n_pixels + j])
+        q2 = S(frame[center - n_extra - n_pixels + i,
+            center + n_extra + j])
+        q3 = S(frame[center + n_extra + i, center + n_extra + j])
+        q4 = S(frame[center + n_extra + i,
+            center - n_extra - n_pixels + j])
         sx = (q1 - q2 + q4 - q3) / norma
         sy = (q1 - q4 + q2 - q3) / norma
         wfs.estimator.state.signal_2d[i, j] = sx - wfs.estimator.state.reference_signal_2d[i, j]
@@ -76,20 +90,23 @@ function pyramid_signal!(::ScalarCPUStyle, wfs::PyramidWFS,
     return wfs.estimator.state.slopes
 end
 
-function pyramid_signal!(style::AcceleratorStyle, wfs::PyramidWFS, tel::Telescope, frame::AbstractMatrix{T},
-    src::Union{Nothing,AbstractSource}) where {T<:AbstractFloat}
-    return pyramid_signal!(style, wfs, tel, frame, src, one(T))
+function pyramid_signal!(style::AcceleratorStyle, wfs::PyramidWFS,
+    tel::Telescope, frame::AbstractMatrix{F},
+    src::Union{Nothing,AbstractSource}) where {F<:Real}
+    S = eltype(wfs.estimator.state.slopes)
+    return pyramid_signal!(style, wfs, tel, frame, src, one(S))
 end
 
 function pyramid_signal!(style::AcceleratorStyle, wfs::PyramidWFS,
-    tel::Telescope, frame::AbstractMatrix{T},
-    src::Union{Nothing,AbstractSource}, normalization_scale::T) where {T<:AbstractFloat}
+    tel::Telescope, frame::AbstractMatrix{F},
+    src::Union{Nothing,AbstractSource},
+    normalization_scale::S) where {F<:Real,S<:AbstractFloat}
     return pyramid_signal!(style, wfs, frame, src, normalization_scale)
 end
 
 function pyramid_signal!(style::AcceleratorStyle, wfs::PyramidWFS,
-    frame::AbstractMatrix{T}, src::Union{Nothing,AbstractSource},
-    normalization_scale::T) where {T<:AbstractFloat}
+    frame::AbstractMatrix{F}, src::Union{Nothing,AbstractSource},
+    normalization_scale::S) where {F<:Real,S<:AbstractFloat}
     count = wfs.estimator.state.valid_signal_count
     center, n_extra = require_pyramid_frame_geometry(wfs, frame)
     n_pixels = size(wfs.estimator.state.signal_2d, 2)
@@ -106,17 +123,17 @@ function pyramid_signal!(style::AcceleratorStyle, wfs::PyramidWFS,
     refx = @view wfs.estimator.state.reference_signal_2d[1:n_pixels, :]
     refy = @view wfs.estimator.state.reference_signal_2d[n_pixels+1:2*n_pixels, :]
     i4q = @view wfs.estimator.state.flux_i4q[1:n_pixels, 1:n_pixels]
-    @. i4q = q1 + q2 + q3 + q4
+    @. i4q = S(q1) + S(q2) + S(q3) + S(q4)
     summed_i4q = pyramid_valid_flux_sum!(style, wfs, i4q)
     norma = pyramid_normalization(wfs.estimator.params.normalization, wfs, src,
         count, summed_i4q, normalization_scale)
     if !usable_wfs_normalization(norma)
-        fill!(wfs.estimator.state.signal_2d, zero(T))
-        fill!(wfs.estimator.state.slopes, zero(T))
+        fill!(wfs.estimator.state.signal_2d, zero(S))
+        fill!(wfs.estimator.state.slopes, zero(S))
         return wfs.estimator.state.slopes
     end
-    @. sx = (q1 - q2 + q4 - q3) / norma - refx
-    @. sy = (q1 - q4 + q2 - q3) / norma - refy
+    @. sx = (S(q1) - S(q2) + S(q4) - S(q3)) / norma - refx
+    @. sy = (S(q1) - S(q4) + S(q2) - S(q3)) / norma - refy
     launch_kernel!(style, gather_pyramid_slopes_kernel!, wfs.estimator.state.slopes,
         wfs.estimator.state.signal_2d, wfs.estimator.state.valid_signal_indices, count, n_pixels; ndrange=count)
     return wfs.estimator.state.slopes

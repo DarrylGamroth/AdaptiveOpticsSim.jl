@@ -4,50 +4,58 @@ function bioedge_slopes!(wfs::BioEdgeWFS, phase::AbstractMatrix, edge_mask::Abst
     return wfs.estimator.state.slopes
 end
 
-function bioedge_slopes_intensity!(wfs::BioEdgeWFS, tel::Telescope, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
+function bioedge_slopes_intensity!(wfs::BioEdgeWFS, tel::Telescope,
+    intensity::AbstractMatrix{F}) where {F<:Real}
     return bioedge_signal!(wfs, tel, intensity)
 end
 
-function bioedge_signal!(wfs::BioEdgeWFS, tel::Telescope, frame::AbstractMatrix{T}) where {T<:AbstractFloat}
+function bioedge_signal!(wfs::BioEdgeWFS, tel::Telescope,
+    frame::AbstractMatrix{F}) where {F<:Real}
     return bioedge_signal!(wfs, tel, frame, nothing)
 end
 
-function bioedge_signal!(wfs::BioEdgeWFS, tel::Telescope, frame::AbstractMatrix{T},
-    src::Union{Nothing,AbstractSource}) where {T<:AbstractFloat}
-    return bioedge_signal!(wfs, tel, frame, src, one(T))
+function bioedge_signal!(wfs::BioEdgeWFS, tel::Telescope,
+    frame::AbstractMatrix{F},
+    src::Union{Nothing,AbstractSource}) where {F<:Real}
+    S = eltype(wfs.estimator.state.slopes)
+    return bioedge_signal!(wfs, tel, frame, src, one(S))
 end
 
 function bioedge_signal!(wfs::BioEdgeWFS, tel::Telescope,
-    frame::AbstractMatrix{T}, src::Union{Nothing,AbstractSource},
-    normalization_scale::Real) where {T<:AbstractFloat}
+    frame::AbstractMatrix{F}, src::Union{Nothing,AbstractSource},
+    normalization_scale::Real) where {F<:Real}
+    S = eltype(wfs.estimator.state.slopes)
     return bioedge_signal!(execution_style(frame), wfs, tel, frame, src,
-        T(normalization_scale))
-end
-
-function bioedge_signal!(::ScalarCPUStyle, wfs::BioEdgeWFS, tel::Telescope, frame::AbstractMatrix{T},
-    src::Union{Nothing,AbstractSource}) where {T<:AbstractFloat}
-    return bioedge_signal!(ScalarCPUStyle(), wfs, tel, frame, src, one(T))
+        S(normalization_scale))
 end
 
 function bioedge_signal!(::ScalarCPUStyle, wfs::BioEdgeWFS,
-    tel::Telescope, frame::AbstractMatrix{T},
-    src::Union{Nothing,AbstractSource}, normalization_scale::T) where {T<:AbstractFloat}
+    tel::Telescope, frame::AbstractMatrix{F},
+    src::Union{Nothing,AbstractSource}) where {F<:Real}
+    S = eltype(wfs.estimator.state.slopes)
+    return bioedge_signal!(ScalarCPUStyle(), wfs, tel, frame, src, one(S))
+end
+
+function bioedge_signal!(::ScalarCPUStyle, wfs::BioEdgeWFS,
+    tel::Telescope, frame::AbstractMatrix{F},
+    src::Union{Nothing,AbstractSource},
+    normalization_scale::S) where {F<:Real,S<:AbstractFloat}
     return bioedge_signal!(ScalarCPUStyle(), wfs, frame, src,
         normalization_scale)
 end
 
 function bioedge_signal!(::ScalarCPUStyle, wfs::BioEdgeWFS,
-    frame::AbstractMatrix{T}, src::Union{Nothing,AbstractSource},
-    normalization_scale::T) where {T<:AbstractFloat}
+    frame::AbstractMatrix{F}, src::Union{Nothing,AbstractSource},
+    normalization_scale::S) where {F<:Real,S<:AbstractFloat}
     n_pixels = size(wfs.estimator.state.signal_2d, 2)
     center = require_bioedge_frame_geometry(wfs, frame)
     count = div(length(wfs.estimator.state.slopes), 2)
-    norma = zero(T)
+    norma = zero(S)
     @inbounds for j in 1:n_pixels, i in 1:n_pixels
-        q1 = frame[center - n_pixels + i, center - n_pixels + j]
-        q2 = frame[center - n_pixels + i, center + j]
-        q3 = frame[center + i, center + j]
-        q4 = frame[center + i, center - n_pixels + j]
+        q1 = S(frame[center - n_pixels + i, center - n_pixels + j])
+        q2 = S(frame[center - n_pixels + i, center + j])
+        q3 = S(frame[center + i, center + j])
+        q4 = S(frame[center + i, center - n_pixels + j])
         if wfs.estimator.state.valid_i4q[i, j]
             norma += q1 + q2 + q3 + q4
         end
@@ -55,16 +63,16 @@ function bioedge_signal!(::ScalarCPUStyle, wfs::BioEdgeWFS,
     norma = bioedge_normalization(wfs.estimator.params.normalization, wfs, src,
         count, norma, normalization_scale)
     if !usable_wfs_normalization(norma)
-        fill!(wfs.estimator.state.signal_2d, zero(T))
-        fill!(wfs.estimator.state.slopes, zero(T))
+        fill!(wfs.estimator.state.signal_2d, zero(S))
+        fill!(wfs.estimator.state.slopes, zero(S))
         return wfs.estimator.state.slopes
     end
     idx = 1
     @inbounds for i in 1:n_pixels, j in 1:n_pixels
-        q1 = frame[center - n_pixels + i, center - n_pixels + j]
-        q2 = frame[center - n_pixels + i, center + j]
-        q3 = frame[center + i, center + j]
-        q4 = frame[center + i, center - n_pixels + j]
+        q1 = S(frame[center - n_pixels + i, center - n_pixels + j])
+        q2 = S(frame[center - n_pixels + i, center + j])
+        q3 = S(frame[center + i, center + j])
+        q4 = S(frame[center + i, center - n_pixels + j])
         sx = (q1 - q2 + q4 - q3) / norma
         sy = (q1 - q4 + q2 - q3) / norma
         wfs.estimator.state.signal_2d[i, j] = sx - wfs.estimator.state.reference_signal_2d[i, j]
@@ -79,20 +87,23 @@ function bioedge_signal!(::ScalarCPUStyle, wfs::BioEdgeWFS,
     return wfs.estimator.state.slopes
 end
 
-function bioedge_signal!(style::AcceleratorStyle, wfs::BioEdgeWFS, tel::Telescope, frame::AbstractMatrix{T},
-    src::Union{Nothing,AbstractSource}) where {T<:AbstractFloat}
-    return bioedge_signal!(style, wfs, tel, frame, src, one(T))
+function bioedge_signal!(style::AcceleratorStyle, wfs::BioEdgeWFS,
+    tel::Telescope, frame::AbstractMatrix{F},
+    src::Union{Nothing,AbstractSource}) where {F<:Real}
+    S = eltype(wfs.estimator.state.slopes)
+    return bioedge_signal!(style, wfs, tel, frame, src, one(S))
 end
 
 function bioedge_signal!(style::AcceleratorStyle, wfs::BioEdgeWFS,
-    tel::Telescope, frame::AbstractMatrix{T},
-    src::Union{Nothing,AbstractSource}, normalization_scale::T) where {T<:AbstractFloat}
+    tel::Telescope, frame::AbstractMatrix{F},
+    src::Union{Nothing,AbstractSource},
+    normalization_scale::S) where {F<:Real,S<:AbstractFloat}
     return bioedge_signal!(style, wfs, frame, src, normalization_scale)
 end
 
 function bioedge_signal!(style::AcceleratorStyle, wfs::BioEdgeWFS,
-    frame::AbstractMatrix{T}, src::Union{Nothing,AbstractSource},
-    normalization_scale::T) where {T<:AbstractFloat}
+    frame::AbstractMatrix{F}, src::Union{Nothing,AbstractSource},
+    normalization_scale::S) where {F<:Real,S<:AbstractFloat}
     count = wfs.estimator.state.valid_signal_count
     n_pixels = size(wfs.estimator.state.signal_2d, 2)
     center = require_bioedge_frame_geometry(wfs, frame)
@@ -109,17 +120,17 @@ function bioedge_signal!(style::AcceleratorStyle, wfs::BioEdgeWFS,
     refx = @view wfs.estimator.state.reference_signal_2d[1:n_pixels, :]
     refy = @view wfs.estimator.state.reference_signal_2d[n_pixels+1:2*n_pixels, :]
     i4q = @view wfs.estimator.state.flux_i4q[1:n_pixels, 1:n_pixels]
-    @. i4q = q1 + q2 + q3 + q4
+    @. i4q = S(q1) + S(q2) + S(q3) + S(q4)
     summed_i4q = bioedge_valid_flux_sum!(style, wfs, i4q)
     norma = bioedge_normalization(wfs.estimator.params.normalization, wfs, src,
         count, summed_i4q, normalization_scale)
     if !usable_wfs_normalization(norma)
-        fill!(wfs.estimator.state.signal_2d, zero(T))
-        fill!(wfs.estimator.state.slopes, zero(T))
+        fill!(wfs.estimator.state.signal_2d, zero(S))
+        fill!(wfs.estimator.state.slopes, zero(S))
         return wfs.estimator.state.slopes
     end
-    @. sx = (q1 - q2 + q4 - q3) / norma - refx
-    @. sy = (q1 - q4 + q2 - q3) / norma - refy
+    @. sx = (S(q1) - S(q2) + S(q4) - S(q3)) / norma - refx
+    @. sy = (S(q1) - S(q4) + S(q2) - S(q3)) / norma - refy
     launch_kernel!(style, gather_bioedge_slopes_kernel!, wfs.estimator.state.slopes,
         wfs.estimator.state.signal_2d, wfs.estimator.state.valid_signal_indices, count, n_pixels; ndrange=count)
     @. wfs.estimator.state.slopes *= wfs.estimator.state.optical_gain

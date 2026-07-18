@@ -199,6 +199,31 @@ function _validate_wfs_storage(metadata, storage, stage::Symbol)
     return metadata
 end
 
+function _require_wfs_storage_domain(stage::Symbol, metadata, storage,
+    label::AbstractString)
+    typeof(metadata.backend) === typeof(backend(storage)) ||
+        throw(WFSPreparationError(stage, :backend,
+            "$label backend does not match the prepared WFS stage"))
+    metadata.device == plane_device(storage) ||
+        throw(WFSPreparationError(stage, :device,
+            "$label device does not match the prepared WFS stage"))
+    return nothing
+end
+
+function _require_real_square_wfs_observation(observation::WFSObservation,
+    label::AbstractString)
+    observation.metadata.numeric_type <: Real ||
+        throw(WFSPreparationError(:estimation, :numeric_type,
+            "$label observations require real detector samples"))
+    dimensions = observation.metadata.dimensions
+    length(dimensions) == 2 || throw(WFSPreparationError(:estimation, :shape,
+        "$label observations require a two-dimensional detector frame"))
+    dimensions[1] == dimensions[2] || throw(WFSPreparationError(
+        :estimation, :shape,
+        "$label observations require a square detector frame"))
+    return dimensions[1]
+end
+
 function validate_wfs_observation(observation::WFSObservation)
     _require_declared_wfs_units(observation.units, :acquisition)
     _require_declared_wfs_descriptor(observation.metadata.layout,

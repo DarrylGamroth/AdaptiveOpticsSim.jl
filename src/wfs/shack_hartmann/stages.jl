@@ -835,13 +835,7 @@ end
 
 function _require_sh_storage_domain(stage::Symbol, metadata, storage,
     label::AbstractString)
-    typeof(metadata.backend) === typeof(backend(storage)) ||
-        throw(WFSPreparationError(stage, :backend,
-            "$label backend does not match the Shack-Hartmann stage"))
-    metadata.device == plane_device(storage) ||
-        throw(WFSPreparationError(stage, :device,
-            "$label device does not match the Shack-Hartmann stage"))
-    return nothing
+    return _require_wfs_storage_domain(stage, metadata, storage, label)
 end
 
 function _prepare_sh_calibration_binding(sensor::ShackHartmannWFS)

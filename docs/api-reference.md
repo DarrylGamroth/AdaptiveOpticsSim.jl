@@ -466,9 +466,17 @@ direction and also returns a bundle; no direction-dependent pupils are added
 by array index. Install acquired-estimator references with
 `set_pyramid_calibration!` or `set_bioedge_calibration!`. The setters validate
 finite storage and advance a revision, so a prepared estimator must be rebuilt
-after recalibration. Geometric variants instead consume an explicit
-`PupilFunction` and report a `:metre`/`:geometric_slopes` direct measurement;
-they have no focal-plane or detector workspace.
+after recalibration. Acquired differential estimation requires a real, square
+`:four_pupil_mosaic` on the same backend and physical device as the estimator.
+The detector samples may be floating-point electron counts or integer ADU/count
+values; arithmetic is performed in the floating-point estimator precision so
+unsigned subtraction cannot wrap. Detector sampling and binning may reduce the
+mosaic while preserving complete pupil images. Prepared optical plans also bind
+the propagation-sampling revision and reject execution after a legacy sampling
+resize, before mutating the rate output. Geometric variants instead consume an
+explicit `PupilFunction` and report a floating-point
+`:metre`/`:geometric_slopes` direct measurement; they have no focal-plane or
+detector workspace.
 
 The legacy constructor keyword `calib_modulation` prepares the broader optical
 quadrature used only to select valid estimator support. A zero-aberration

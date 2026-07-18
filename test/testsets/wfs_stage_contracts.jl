@@ -53,6 +53,15 @@ function contract_direct_allocation_bytes(measurement, input, plan)
     return @allocated estimate_wfs_measurement!(measurement, input, plan)
 end
 
+function contract_captured_error(f)
+    try
+        f()
+        return nothing
+    catch err
+        return err
+    end
+end
+
 function contract_sampled_response(input::AbstractMatrix{T},
     kernel::AbstractMatrix{T}) where {T<:AbstractFloat}
     output = zeros(T, size(input))
@@ -118,6 +127,12 @@ end
     resize_bioedge_signal_buffers!(sensor,
         size(sensor.acquisition.state.camera_frame, 1), 2)
 end
+
+@inline contract_four_pupil_prepare_sampling!(::Val{:pyramid}, sensor,
+    telescope) = AdaptiveOpticsSim.prepare_pyramid_sampling!(sensor, telescope)
+
+@inline contract_four_pupil_prepare_sampling!(::Val{:bioedge}, sensor,
+    telescope) = AdaptiveOpticsSim.prepare_bioedge_sampling!(sensor, telescope)
 
 @testset "Prepared WFS stage products and protocols" begin
     @test Base.isexported(AdaptiveOpticsSim, :WFSObservation)
@@ -1182,12 +1197,85 @@ end
             initial_revision + UInt(1)
         measurement = WFSMeasurement(similar(slopes(staged));
             units=:dimensionless, kind=:differential_slopes)
+
+        vector_observation = WFSObservation(zeros(T, length(rate.values));
+            units=:electron_count, layout=:four_pupil_mosaic)
+        vector_error = contract_captured_error() do
+            prepare_wfs_estimation(staged, vector_observation, measurement)
+        end
+        @test vector_error isa WFSPreparationError
+        @test vector_error.reason === :shape
+
+        nonsquare_observation = WFSObservation(
+            zeros(T, size(rate.values, 1), size(rate.values, 2) + 2);
+            units=:electron_count, layout=:four_pupil_mosaic)
+        nonsquare_error = contract_captured_error() do
+            prepare_wfs_estimation(staged, nonsquare_observation, measurement)
+        end
+        @test nonsquare_error isa WFSPreparationError
+        @test nonsquare_error.reason === :shape
+
+        complex_observation = WFSObservation(complex.(observation.storage);
+            units=:electron_count, layout=:four_pupil_mosaic)
+        complex_error = contract_captured_error() do
+            prepare_wfs_estimation(staged, complex_observation, measurement)
+        end
+        @test complex_error isa WFSPreparationError
+        @test complex_error.reason === :numeric_type
+
+        device_observation = WFSObservation(ContractDeviceArray(
+            zeros(T, size(rate.values)), ContractPlaneDevice(1));
+            units=:electron_count, layout=:four_pupil_mosaic)
+        observation_device_error = contract_captured_error() do
+            prepare_wfs_estimation(staged, device_observation, measurement)
+        end
+        @test observation_device_error isa WFSPreparationError
+        @test observation_device_error.reason === :device
+
+        integer_measurement = WFSMeasurement(
+            zeros(Int, length(slopes(staged))); units=:dimensionless,
+            kind=:differential_slopes)
+        integer_measurement_error = contract_captured_error() do
+            prepare_wfs_estimation(staged, observation, integer_measurement)
+        end
+        @test integer_measurement_error isa WFSPreparationError
+        @test integer_measurement_error.reason === :numeric_type
+
+        device_measurement = WFSMeasurement(ContractDeviceArray(
+            zeros(T, length(slopes(staged))), ContractPlaneDevice(1));
+            units=:dimensionless, kind=:differential_slopes)
+        measurement_device_error = contract_captured_error() do
+            prepare_wfs_estimation(staged, observation, device_measurement)
+        end
+        @test measurement_device_error isa WFSPreparationError
+        @test measurement_device_error.reason === :device
+
         estimator_plan = prepare_wfs_estimation(staged, observation,
             measurement)
         @test wfs_measurement_path(estimator_plan) isa
             AcquiredObservationPath
         estimate_wfs_measurement!(measurement, observation, estimator_plan)
         @test all(isfinite, measurement.storage)
+
+        quantized_storage = reshape(
+            UInt16.(1:length(observation.storage)), size(observation.storage))
+        quantized_observation = WFSObservation(quantized_storage;
+            units=:adu, layout=:four_pupil_mosaic)
+        quantized_measurement = WFSMeasurement(similar(slopes(staged));
+            units=:dimensionless, kind=:differential_slopes)
+        quantized_plan = prepare_wfs_estimation(staged,
+            quantized_observation, quantized_measurement)
+        estimate_wfs_measurement!(quantized_measurement,
+            quantized_observation, quantized_plan)
+        floating_observation = WFSObservation(T.(quantized_storage);
+            units=:adu, layout=:four_pupil_mosaic)
+        floating_measurement = WFSMeasurement(similar(slopes(staged));
+            units=:dimensionless, kind=:differential_slopes)
+        floating_plan = prepare_wfs_estimation(staged, floating_observation,
+            floating_measurement)
+        estimate_wfs_measurement!(floating_measurement, floating_observation,
+            floating_plan)
+        @test quantized_measurement.storage == floating_measurement.storage
 
         measurement_before_recalibration = copy(measurement.storage)
         contract_four_pupil_set_calibration!(family, staged, reference;
@@ -1206,6 +1294,8 @@ end
                 rng)
             estimator_plan = prepare_wfs_estimation(staged, observation,
                 measurement)
+            quantized_plan = prepare_wfs_estimation(staged,
+                quantized_observation, quantized_measurement)
             estimate_wfs_measurement!(measurement, observation,
                 estimator_plan)
             @test @allocated(form_wfs_optical_products!(rate, pupil,
@@ -1214,6 +1304,10 @@ end
                 acquisition_plan, rng)) == 0
             @test @allocated(estimate_wfs_measurement!(measurement,
                 observation, estimator_plan)) == 0
+            estimate_wfs_measurement!(quantized_measurement,
+                quantized_observation, quantized_plan)
+            @test @allocated(estimate_wfs_measurement!(quantized_measurement,
+                quantized_observation, quantized_plan)) == 0
         end
 
 
@@ -1239,12 +1333,81 @@ end
         estimate_wfs_measurement!(direct, pupil, direct_plan)
         @test all(isfinite, direct.storage)
         @test any(!iszero, direct.storage)
+        integer_direct = WFSMeasurement(zeros(Int, length(slopes(geometric)));
+            units=:metre, kind=:geometric_slopes)
+        integer_direct_error = contract_captured_error() do
+            prepare_wfs_estimation(geometric, pupil, integer_direct)
+        end
+        @test integer_direct_error isa WFSPreparationError
+        @test integer_direct_error.reason === :numeric_type
+        device_direct = WFSMeasurement(ContractDeviceArray(
+            zeros(T, length(slopes(geometric))), ContractPlaneDevice(1));
+            units=:metre, kind=:geometric_slopes)
+        device_direct_error = contract_captured_error() do
+            prepare_wfs_estimation(geometric, pupil, device_direct)
+        end
+        @test device_direct_error isa WFSPreparationError
+        @test device_direct_error.reason === :device
         if coverage_enabled
             @test_skip "four-pupil direct allocation assertion is disabled under coverage instrumentation"
         else
             @test @allocated(estimate_wfs_measurement!(direct, pupil,
                 direct_plan)) == 0
         end
+    end
+
+    reduced_bioedge = BioEdgeWFS(tel; pupil_samples=4,
+        mode=Diffractive(), modulation=0, T=T)
+    reduced_front_end = BioEdgeOpticalFrontEnd(reduced_bioedge, source)
+    reduced_rate = bioedge_rate_map(reduced_front_end, pupil)
+    reduced_optical_plan = prepare_wfs_optical_formation(reduced_front_end,
+        pupil, reduced_rate)
+    form_wfs_optical_products!(reduced_rate, pupil, reduced_optical_plan)
+    reduced_detector = Detector(noise=NoiseNone(), integration_time=one(T),
+        qe=one(T), binning=2, response_model=NullFrameResponse(), T=T)
+    reduced_side = div(size(reduced_rate.values, 1), 2)
+    reduced_observation = WFSObservation(zeros(T, reduced_side, reduced_side);
+        units=:electron_count, layout=:four_pupil_mosaic)
+    reduced_acquisition = prepare_wfs_acquisition(reduced_detector,
+        reduced_rate, reduced_observation)
+    acquire_wfs_observation!(reduced_observation, reduced_rate,
+        reduced_acquisition, Xoshiro(0x42494f))
+    resize_bioedge_signal_buffers!(reduced_bioedge, reduced_side,
+        reduced_detector)
+    set_bioedge_calibration!(reduced_bioedge,
+        zeros(T, size(reduced_bioedge.estimator.state.reference_signal_2d));
+        wavelength_m=wavelength(source), signature=UInt(0x42494f))
+    reduced_revision = reduced_bioedge.estimator.state.calibration_revision
+    reduced_measurement = WFSMeasurement(similar(slopes(reduced_bioedge));
+        units=:dimensionless, kind=:differential_slopes)
+    reduced_estimator = prepare_wfs_estimation(reduced_bioedge,
+        reduced_observation, reduced_measurement)
+    @test reduced_bioedge.estimator.state.calibration_revision ==
+        reduced_revision
+    estimate_wfs_measurement!(reduced_measurement, reduced_observation,
+        reduced_estimator)
+    @test all(isfinite, reduced_measurement.storage)
+
+    alternate_telescope = Telescope(resolution=32, diameter=T(8),
+        central_obstruction=zero(T), T=T)
+    for family in (Val(:pyramid), Val(:bioedge))
+        stale_sensor = contract_four_pupil_sensor(family, tel;
+            pupil_samples=4, mode=Diffractive(), modulation=0, T=T)
+        stale_front_end = contract_four_pupil_front_end(family, stale_sensor,
+            source)
+        stale_rate = contract_four_pupil_rate_map(family, stale_front_end,
+            pupil)
+        stale_plan = prepare_wfs_optical_formation(stale_front_end, pupil,
+            stale_rate)
+        contract_four_pupil_prepare_sampling!(family, stale_sensor,
+            alternate_telescope)
+        stale_before = copy(stale_rate.values)
+        stale_error = contract_captured_error() do
+            form_wfs_optical_products!(stale_rate, pupil, stale_plan)
+        end
+        @test stale_error isa WFSPreparationError
+        @test stale_error.reason === :prepared_binding
+        @test stale_rate.values == stale_before
     end
 
     for family in (Val(:pyramid), Val(:bioedge))

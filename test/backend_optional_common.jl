@@ -548,6 +548,33 @@ function run_optional_wfs_stage_contracts(
             set_bioedge_calibration!(gpu_sensor, reference;
                 wavelength_m=wavelength(src), signature=UInt(0x5042))
         end
+
+        host_observation = WFSObservation(zeros(T, size(gpu_rate.values));
+            units=:electron_count, layout=:four_pupil_mosaic)
+        host_observation_error = try
+            prepare_wfs_estimation(gpu_sensor, host_observation,
+                WFSMeasurement(similar(slopes(gpu_sensor));
+                    units=:dimensionless, kind=:differential_slopes))
+            nothing
+        catch err
+            err
+        end
+        @test host_observation_error isa WFSPreparationError
+        @test host_observation_error.reason === :backend
+
+        host_measurement = WFSMeasurement(
+            zeros(T, length(slopes(gpu_sensor))); units=:dimensionless,
+            kind=:differential_slopes)
+        host_measurement_error = try
+            prepare_wfs_estimation(gpu_sensor, four_pupil_observation,
+                host_measurement)
+            nothing
+        catch err
+            err
+        end
+        @test host_measurement_error isa WFSPreparationError
+        @test host_measurement_error.reason === :backend
+
         four_pupil_measurement = WFSMeasurement(similar(slopes(gpu_sensor));
             units=:dimensionless, kind=:differential_slopes)
         four_pupil_estimator = prepare_wfs_estimation(gpu_sensor,
@@ -559,6 +586,42 @@ function run_optional_wfs_stage_contracts(
                 four_pupil_measurement.storage))
         @test four_pupil_measurement.storage isa BackendArray
         @test all(isfinite, Array(four_pupil_measurement.storage))
+
+        quantized_host = reshape(UInt16.(1:length(gpu_rate.values)),
+            size(gpu_rate.values))
+        quantized_storage = similar(gpu_rate.values, UInt16)
+        copyto!(quantized_storage, quantized_host)
+        quantized_observation = WFSObservation(quantized_storage;
+            units=:adu, layout=:four_pupil_mosaic)
+        quantized_measurement = WFSMeasurement(similar(slopes(gpu_sensor));
+            units=:dimensionless, kind=:differential_slopes)
+        quantized_estimator = prepare_wfs_estimation(gpu_sensor,
+            quantized_observation, quantized_measurement)
+        estimate_wfs_measurement!(quantized_measurement,
+            quantized_observation, quantized_estimator)
+        AdaptiveOpticsSim.synchronize_backend!(
+            AdaptiveOpticsSim.execution_style(quantized_measurement.storage))
+
+        cpu_reference = zeros(T,
+            size(cpu_sensor.estimator.state.reference_signal_2d))
+        if family === :pyramid
+            set_pyramid_calibration!(cpu_sensor, cpu_reference;
+                wavelength_m=wavelength(src), signature=UInt(0x5042))
+        else
+            set_bioedge_calibration!(cpu_sensor, cpu_reference;
+                wavelength_m=wavelength(src), signature=UInt(0x5042))
+        end
+        cpu_quantized_observation = WFSObservation(quantized_host;
+            units=:adu, layout=:four_pupil_mosaic)
+        cpu_quantized_measurement = WFSMeasurement(similar(slopes(cpu_sensor));
+            units=:dimensionless, kind=:differential_slopes)
+        cpu_quantized_estimator = prepare_wfs_estimation(cpu_sensor,
+            cpu_quantized_observation, cpu_quantized_measurement)
+        estimate_wfs_measurement!(cpu_quantized_measurement,
+            cpu_quantized_observation, cpu_quantized_estimator)
+        @test quantized_measurement.storage isa BackendArray
+        @test isapprox(Array(quantized_measurement.storage),
+            cpu_quantized_measurement.storage; rtol=T(3e-5), atol=T(3e-5))
 
         geometric = family === :pyramid ?
             PyramidWFS(tel; pupil_samples=2, mode=Geometric(), T=T,

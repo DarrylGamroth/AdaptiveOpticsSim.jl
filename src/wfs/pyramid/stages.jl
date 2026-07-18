@@ -7,6 +7,7 @@ struct PreparedPyramidOpticalFormation{F,I,O,L<:AbstractPreparedFourPupilLGS}
     input::I
     output::O
     lgs_model::L
+    propagation_revision::UInt
 end
 
 struct PreparedPyramidOpticalBundleFormation{P<:Tuple,I,O}
@@ -121,7 +122,7 @@ function prepare_wfs_optical_formation(front_end::PyramidOpticalFrontEnd,
             "pyramid output precision differs from prepared propagation"))
     lgs_model = prepare_four_pupil_lgs(front_end.source, input, front_end)
     return PreparedPyramidOpticalFormation(front_end, input, output,
-        lgs_model)
+        lgs_model, front_end.propagation.revision)
 end
 
 function prepare_wfs_optical_formation(front_end::PyramidOpticalFrontEnd,
@@ -244,6 +245,9 @@ function form_wfs_optical_products!(output::IntensityMap,
     output === plan.output && input === plan.input ||
         throw(WFSPreparationError(:optical_formation, :prepared_binding,
             "pyramid optical products do not match prepared storage"))
+    plan.front_end.propagation.revision == plan.propagation_revision ||
+        throw(WFSPreparationError(:optical_formation, :prepared_binding,
+            "pyramid propagation sampling changed after preparation"))
     native = _pyramid_native_rate!(plan.front_end, input)
     _apply_prepared_pyramid_lgs!(plan)
     factor = pyramid_output_sampling_factor(plan.front_end,
@@ -390,6 +394,39 @@ function _require_pyramid_calibration(sensor::PyramidWFS,
     return nothing
 end
 
+function _require_pyramid_estimation_geometry(sensor::PyramidWFS,
+    frame_size::Int)
+    iseven(frame_size) || throw(WFSPreparationError(:estimation, :shape,
+        "pyramid observations require an even detector-frame size"))
+    nominal = sensor.acquisition.state.nominal_detector_resolution
+    binning = sensor.acquisition.binning
+    nominal > 0 || throw(WFSPreparationError(:estimation, :shape,
+        "pyramid nominal detector resolution has not been prepared"))
+    nominal % binning == 0 || throw(WFSPreparationError(:estimation, :shape,
+        "pyramid binning does not divide the nominal detector resolution"))
+    sampled_size = div(nominal, binning)
+    sampled_size % frame_size == 0 || throw(WFSPreparationError(
+        :estimation, :shape,
+        "detector sampling does not evenly divide the pyramid frame"))
+    total_sampling = binning * div(sampled_size, frame_size)
+    n_pixels, half_separation, edge_padding = pyramid_sampled_geometry(
+        sensor.estimator.params.pupil_samples,
+        sensor.front_end.phase_mask.n_pix_separation,
+        sensor.front_end.phase_mask.n_pix_edge, total_sampling)
+    n_pixels >= 1 || throw(WFSPreparationError(:estimation, :shape,
+        "detector sampling removed every pyramid pupil sample"))
+    if sensor.front_end.phase_mask.n_pix_separation === nothing
+        frame_size >= 2 * n_pixels || throw(WFSPreparationError(
+            :estimation, :shape,
+            "pyramid frame does not contain four complete pupil images"))
+    else
+        frame_size == 2 * (n_pixels + half_separation + edge_padding) ||
+            throw(WFSPreparationError(:estimation, :shape,
+                "pyramid frame does not preserve the configured pupil geometry"))
+    end
+    return nothing
+end
+
 function prepare_wfs_estimation(sensor::PyramidWFS{<:Diffractive},
     observation::WFSObservation, measurement::WFSMeasurement;
     source=nothing, normalization_scale::Real=1)
@@ -404,10 +441,17 @@ function prepare_wfs_estimation(sensor::PyramidWFS{<:Diffractive},
     isequal(measurement.units, :dimensionless) ||
         throw(WFSPreparationError(:estimation, :units,
             "pyramid differential slopes are dimensionless"))
+    frame_size = _require_real_square_wfs_observation(observation,
+        "pyramid")
     measurement.metadata.numeric_type <: AbstractFloat ||
         throw(WFSPreparationError(:estimation, :numeric_type,
             "pyramid measurement storage must be floating point"))
-    resize_pyramid_signal_buffers!(sensor, size(observation.storage, 1))
+    _require_wfs_storage_domain(:estimation, observation.metadata,
+        sensor.estimator.state.signal_2d, "pyramid observation")
+    _require_wfs_storage_domain(:estimation, measurement.metadata,
+        sensor.estimator.state.slopes, "pyramid measurement")
+    _require_pyramid_estimation_geometry(sensor, frame_size)
+    resize_pyramid_signal_buffers!(sensor, frame_size)
     size(measurement.storage) == size(sensor.estimator.state.slopes) ||
         throw(WFSPreparationError(:estimation, :shape,
             "pyramid measurement storage has the wrong slope shape"))
@@ -452,6 +496,13 @@ function prepare_wfs_estimation(sensor::PyramidWFS{<:Geometric},
     isequal(measurement.units, :metre) || throw(WFSPreparationError(
         :estimation, :units,
         "geometric pyramid OPD differences are expressed in metres"))
+    measurement.metadata.numeric_type <: AbstractFloat ||
+        throw(WFSPreparationError(:estimation, :numeric_type,
+            "geometric pyramid measurement storage must be floating point"))
+    _require_wfs_storage_domain(:estimation, input.metadata,
+        sensor.estimator.state.slopes, "geometric pyramid input")
+    _require_wfs_storage_domain(:estimation, measurement.metadata,
+        sensor.estimator.state.slopes, "geometric pyramid measurement")
     size(measurement.storage) == size(sensor.estimator.state.slopes) ||
         throw(WFSPreparationError(:estimation, :shape,
             "geometric pyramid measurement has the wrong slope shape"))

@@ -149,6 +149,7 @@ mutable struct PreparedPyramidPropagation{T<:AbstractFloat,
     lgs_kernel_tag::UInt
     effective_resolution::Int
     asterism_capacity::Int
+    revision::UInt
 end
 
 """A physically distinct pyramid front end with prepared modulation."""
@@ -419,7 +420,7 @@ function _prepare_pyramid_diffractive_storage(backend, ::Type{T}, tel,
     propagation = PreparedPyramidPropagation(
         field, focal_field, pupil_field, mask, phasor, intensity, temp,
         scratch, asterism_stack, fft_plan, ifft_plan, elongation_kernel,
-        lgs_kernel_fft, UInt(0), pad, 1)
+        lgs_kernel_fft, UInt(0), pad, 1, UInt(0))
     modulation = prepare_focal_plane_modulation(operating_policy,
         tel.params.resolution, field, T)
     calibration_modulation = prepare_focal_plane_modulation(
@@ -475,6 +476,7 @@ end
 
 function ensure_pyramid_buffers!(wfs::PyramidWFS, pad::Int, tel::Telescope)
     if size(wfs.front_end.propagation.field) != (pad, pad)
+        wfs.front_end.propagation.revision += UInt(1)
         wfs.front_end.propagation.field = similar(wfs.front_end.propagation.field, pad, pad)
         wfs.front_end.propagation.focal_field = similar(wfs.front_end.propagation.focal_field, pad, pad)
         wfs.front_end.propagation.pupil_field = similar(wfs.front_end.propagation.pupil_field, pad, pad)
@@ -487,7 +489,9 @@ function ensure_pyramid_buffers!(wfs::PyramidWFS, pad::Int, tel::Telescope)
         wfs.front_end.propagation.asterism_stack = similar(wfs.front_end.propagation.asterism_stack, pad, pad, wfs.front_end.propagation.asterism_capacity)
         wfs.front_end.propagation.fft_plan = plan_fft_backend!(wfs.front_end.propagation.focal_field)
         wfs.front_end.propagation.ifft_plan = plan_ifft_backend!(wfs.front_end.propagation.pupil_field)
-        wfs.front_end.propagation.lgs_kernel_fft = similar(wfs.front_end.propagation.focal_field, Complex{eltype(wfs.front_end.propagation.focal_field)}, 0, 0)
+        wfs.front_end.propagation.lgs_kernel_fft = similar(
+            wfs.front_end.propagation.focal_field,
+            eltype(wfs.front_end.propagation.focal_field), 0, 0)
         wfs.front_end.propagation.lgs_kernel_tag = UInt(0)
         wfs.front_end.propagation.effective_resolution = pad
         wfs.estimator.state.calibrated = false

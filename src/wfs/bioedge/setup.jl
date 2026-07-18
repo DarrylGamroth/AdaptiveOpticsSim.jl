@@ -121,6 +121,7 @@ mutable struct PreparedBioEdgePropagation{T<:AbstractFloat,
     lgs_kernel_tag::UInt
     effective_resolution::Int
     asterism_capacity::Int
+    revision::UInt
 end
 
 """A physically distinct BioEdge front end with prepared modulation."""
@@ -348,7 +349,7 @@ function prepare_bioedge_mode(::Diffractive, backend, ::Type{T}, tel,
     propagation = PreparedBioEdgePropagation(field, focal_field, pupil_field,
         masks, phasor, intensity, temp, scratch, asterism_stack, fft_buffer,
         fft_plan, ifft_plan, elongation_kernel, lgs_kernel_fft, UInt(0), pad,
-        1)
+        1, UInt(0))
     prepared_modulation = prepare_focal_plane_modulation(operating_policy,
         tel.params.resolution, field, T)
     prepared_calibration = prepare_focal_plane_modulation(
@@ -576,6 +577,7 @@ end
 
 function ensure_bioedge_buffers!(wfs::BioEdgeWFS, pad::Int, tel::Telescope)
     if size(wfs.front_end.propagation.field) != (pad, pad)
+        wfs.front_end.propagation.revision += UInt(1)
         wfs.front_end.propagation.field = similar(wfs.front_end.propagation.field, pad, pad)
         wfs.front_end.propagation.focal_field = similar(wfs.front_end.propagation.focal_field, pad, pad)
         wfs.front_end.propagation.pupil_field = similar(wfs.front_end.propagation.pupil_field, pad, pad)
@@ -589,7 +591,9 @@ function ensure_bioedge_buffers!(wfs::BioEdgeWFS, pad::Int, tel::Telescope)
         wfs.front_end.propagation.fft_buffer = similar(wfs.front_end.propagation.fft_buffer, pad, pad)
         wfs.front_end.propagation.fft_plan = plan_fft_backend!(wfs.front_end.propagation.focal_field)
         wfs.front_end.propagation.ifft_plan = plan_ifft_backend!(wfs.front_end.propagation.pupil_field)
-        wfs.front_end.propagation.lgs_kernel_fft = similar(wfs.front_end.propagation.focal_field, Complex{eltype(wfs.front_end.propagation.focal_field)}, 0, 0)
+        wfs.front_end.propagation.lgs_kernel_fft = similar(
+            wfs.front_end.propagation.focal_field,
+            eltype(wfs.front_end.propagation.focal_field), 0, 0)
         wfs.front_end.propagation.lgs_kernel_tag = UInt(0)
         wfs.front_end.propagation.effective_resolution = pad
         wfs.estimator.state.calibrated = false
