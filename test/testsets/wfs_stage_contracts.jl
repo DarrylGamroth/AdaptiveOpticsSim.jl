@@ -877,7 +877,9 @@ end
 
     geometric = ShackHartmannWFS(tel; n_lenslets=4, mode=Geometric(),
         T=T)
-    @test microlens_array(geometric).params.n_lenslets == 4
+    @test microlens_array(geometric.front_end).params.n_lenslets == 4
+    @test !applicable(microlens_array, geometric)
+    @test !applicable(subaperture_layout, geometric)
     @test geometric.front_end isa ShackHartmannDirectFrontEnd
     @test !hasfield(typeof(geometric.front_end), :propagation)
     @test !hasfield(typeof(geometric), :microlens_array)
@@ -995,7 +997,9 @@ end
     staged = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(),
         n_pix_subap=4, T=T)
     @test staged.front_end isa ShackHartmannOpticalFrontEnd
-    @test microlens_array(staged) === staged.front_end.microlens_array
+    @test microlens_array(staged.front_end) === staged.front_end.microlens_array
+    @test !applicable(microlens_array, staged)
+    @test !applicable(subaperture_layout, staged)
     prepare_sampling!(legacy, tel, src)
     sampled_spots_peak!(legacy, tel, src)
     expected_rate = shack_hartmann_detector_image(

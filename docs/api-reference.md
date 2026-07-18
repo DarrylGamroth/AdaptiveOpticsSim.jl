@@ -401,7 +401,8 @@ derived MTF, QE, charge multiplication, or detector noise.
   propagation-free `ShackHartmannDirectFrontEnd` for geometric sensing and a
   `ShackHartmannOpticalFrontEnd` for diffractive sensing. The superseded
   top-level `microlens_array`, `optical_workspace`, and `layout` fields are not
-  emulated.
+  emulated, and `microlens_array` accepts the owning front end rather than the
+  whole sensor.
   The concrete `PreparedMicrolensPropagation` implementation type is
   intentionally qualified rather than exported; callers obtain it through the
   preparation function.
@@ -417,6 +418,8 @@ derived MTF, QE, charge multiplication, or detector noise.
   `subaperture_calibration`, `slope_extraction_model`,
   `set_subaperture_calibration!`, `valid_subaperture_indices`,
   `n_valid_subapertures`
+  (`subaperture_layout` likewise accepts the owning Shack-Hartmann front end,
+  not `ShackHartmannWFS`)
 - WFS normalization policies:
   `MeanValidFluxNormalization`, `IncidenceFluxNormalization`
 - Measurement and WFS images: `measure!`, `pyramid_modulation_frame!`,

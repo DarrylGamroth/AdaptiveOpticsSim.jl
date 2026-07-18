@@ -423,12 +423,8 @@ function _prepare_microlens_propagation(backend, ::Type{T},
 end
 
 sensing_mode(::ShackHartmannWFS{M}) where {M} = M()
-@inline microlens_array(wfs::ShackHartmannWFS) =
-    microlens_array(wfs.front_end)
 @inline n_lenslets(wfs::ShackHartmannWFS) =
-    microlens_array(wfs).params.n_lenslets
-@inline subaperture_layout(wfs::ShackHartmannWFS) =
-    subaperture_layout(wfs.front_end)
+    n_lenslets(wfs.front_end)
 @inline subaperture_calibration(wfs::ShackHartmannWFS) = wfs.calibration
 @inline valid_subaperture_policy(wfs::ShackHartmannWFS) = wfs.params.valid_subaperture_policy
 @inline slope_extraction_model(wfs::ShackHartmannWFS) = slope_extraction_model(subaperture_calibration(wfs))
@@ -523,13 +519,13 @@ function update_valid_mask!(wfs::ShackHartmannWFS, tel::Telescope)
 end
 
 function update_valid_mask!(wfs::ShackHartmannWFS, tel::Telescope, policy::GeometryValidSubapertures)
-    update_subaperture_layout!(subaperture_layout(wfs), pupil_mask(tel), policy)
+    update_subaperture_layout!(wfs.front_end.layout, pupil_mask(tel), policy)
     invalidate_sh_calibration!(wfs)
     return wfs
 end
 
 function update_valid_mask!(wfs::ShackHartmannWFS, tel::Telescope, policy::FluxThresholdValidSubapertures)
-    update_subaperture_layout!(subaperture_layout(wfs), pupil_reflectivity(tel), policy)
+    update_subaperture_layout!(wfs.front_end.layout, pupil_reflectivity(tel), policy)
     invalidate_sh_calibration!(wfs)
     return wfs
 end

@@ -1422,7 +1422,7 @@ function compute_reference_actual_ka_cpu(case::ReferenceCase)
             throw(InvalidConfiguration("KA CPU reference path currently supports only geometric Shack-Hartmann cases"))
         end
         update_valid_mask!(wfs, tel)
-        n_sub = microlens_array(wfs).params.n_lenslets
+        n_sub = n_lenslets(wfs.front_end)
         sub = div(tel.params.resolution, n_sub)
         offset = n_sub * n_sub
         slopes = similar(AdaptiveOpticsSim.slopes(wfs))

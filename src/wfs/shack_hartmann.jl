@@ -149,14 +149,18 @@ end
 @inline wfs_output_frame(wfs::ShackHartmannWFS{<:Diffractive}, det::AbstractDetector) = sh_exported_spot_cube(wfs)
 @inline wfs_output_frame_prototype(wfs::ShackHartmannWFS{<:Diffractive}, ::Nothing) = sh_exported_spot_cube(wfs)
 @inline wfs_output_frame_prototype(wfs::ShackHartmannWFS{<:Diffractive}, det::AbstractDetector) = sh_exported_spot_cube(wfs)
-@inline wfs_output_metadata(wfs::ShackHartmannWFS) = (
-    n_lenslets=subaperture_layout(wfs).n_subap,
-    n_valid_subap=n_valid_subapertures(subaperture_layout(wfs)),
-    subap_pixels=subaperture_layout(wfs).subap_pixels,
-    pitch_m=subaperture_layout(wfs).pitch_m,
-    centroid_response=subaperture_calibration(wfs).centroid_response,
-    calibrated=subaperture_calibration(wfs).calibrated,
-)
+@inline function wfs_output_metadata(wfs::ShackHartmannWFS)
+    layout = wfs.front_end.layout
+    calibration = subaperture_calibration(wfs)
+    return (
+        n_lenslets=layout.n_subap,
+        n_valid_subap=n_valid_subapertures(layout),
+        subap_pixels=layout.subap_pixels,
+        pitch_m=layout.pitch_m,
+        centroid_response=calibration.centroid_response,
+        calibrated=calibration.calibrated,
+    )
+end
 
 @inline supports_prepared_runtime(::ShackHartmannWFS{<:Diffractive}, ::AbstractSource) = true
 @inline supports_prepared_runtime(wfs::ShackHartmannWFS{<:Diffractive},

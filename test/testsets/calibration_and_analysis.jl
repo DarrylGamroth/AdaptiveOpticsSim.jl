@@ -614,10 +614,9 @@ end
     sh_image = wfs_detector_image(wfs_diffractive; gap=1)
     sh_cube = AdaptiveOpticsSim.sh_exported_spot_cube(wfs_diffractive)
     @test ndims(sh_image) == 2
-    @test size(sh_image) == (microlens_array(wfs_diffractive).params.n_lenslets * size(sh_cube, 2) +
-                             microlens_array(wfs_diffractive).params.n_lenslets - 1,
-                             microlens_array(wfs_diffractive).params.n_lenslets * size(sh_cube, 3) +
-                             microlens_array(wfs_diffractive).params.n_lenslets - 1)
+    n_lenslets = microlens_array(wfs_diffractive.front_end).params.n_lenslets
+    @test size(sh_image) == (n_lenslets * size(sh_cube, 2) + n_lenslets - 1,
+                             n_lenslets * size(sh_cube, 3) + n_lenslets - 1)
     # IF-DM
     assert_dm_interface(dm, tel)
     # IF-DET

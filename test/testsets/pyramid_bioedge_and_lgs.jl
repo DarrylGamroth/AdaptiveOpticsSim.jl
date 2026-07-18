@@ -363,7 +363,8 @@ end
     lgs = LGSSource(elongation_factor=2.0)
     slopes_ngs = measure!(sh, tel, ngs)
     slopes_lgs = measure!(sh, tel, lgs)
-    n = microlens_array(sh).params.n_lenslets * microlens_array(sh).params.n_lenslets
+    n_lenslets = microlens_array(sh.front_end).params.n_lenslets
+    n = n_lenslets * n_lenslets
     @test slopes_lgs[n+1:end] ≈ slopes_ngs[n+1:end] .* 2.0
 
     bio_lgs = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
@@ -1037,7 +1038,7 @@ end
     src = Source(band=:I, magnitude=0.0)
     sh = ShackHartmannWFS(tel; n_lenslets=6, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8, threshold_cog=0.02)
 
-    layout = subaperture_layout(sh)
+    layout = subaperture_layout(sh.front_end)
     calibration = subaperture_calibration(sh)
     @test layout isa SubapertureLayout
     @test calibration isa SubapertureCalibration

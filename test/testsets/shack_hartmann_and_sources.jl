@@ -88,7 +88,8 @@ end
     sh.acquisition.spot_cube[4, 4, 1] = 8.0
 
     scalar_slopes = AdaptiveOpticsSim.sh_signal_from_spots!(AdaptiveOpticsSim.ScalarCPUStyle(), sh, 0.5)
-    offset = microlens_array(sh).params.n_lenslets * microlens_array(sh).params.n_lenslets
+    n_lenslets = microlens_array(sh.front_end).params.n_lenslets
+    offset = n_lenslets * n_lenslets
     @test scalar_slopes[1] == 1.0
     @test scalar_slopes[offset + 1] == 2.0
     @test scalar_slopes[2] == 0.0

@@ -1284,7 +1284,8 @@ end
     @test all(wfs_frame(runtime2) .>= wfs2.acquisition.spot_cube)
     boundary2 = SimulationInterface(runtime2)
     @test ndims(wfs_frame(boundary2)) == 3
-    @test size(wfs_frame(boundary2), 1) == microlens_array(wfs2).params.n_lenslets^2
+    @test size(wfs_frame(boundary2), 1) ==
+        microlens_array(wfs2.front_end).params.n_lenslets^2
 
     composite = CompositeSimulationInterface(boundary, boundary2)
     @test supports_grouped_execution(composite)
