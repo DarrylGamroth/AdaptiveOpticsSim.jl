@@ -1,7 +1,7 @@
 all_gates_passed = true
 baseline_source_revision = "7cf8564a63508ec94209dde41c7af0261abee592"
 benchmark = "pre_hil_gate0_cpu"
-characterized_source_revision = "f8884b30f1bfda90a901fa0f23e5f6d4f159afb2"
+characterized_source_revision = "da391e757d8b238c712faa566703be1d864f5157"
 configured_card_ids = ["G0-PERF-09", "G0-PERF-10"]
 configured_card_selection = "explicit"
 configured_runs = 3
@@ -15,7 +15,7 @@ scope_exclusions = ["package import and construction", "fixed-rate open-loop arr
 source_contract = "contracts/pre_hil_gate0.toml"
 
 [[cards]]
-first_use_ns = 1016770911
+first_use_ns = 1040314752
 id = "G0-PERF-09"
 kind = "zernike"
 label = "staged Zernike rate, acquisition, and estimation"
@@ -31,7 +31,7 @@ steady_alloc_bytes = 0
     absolute_p99_gate_evaluated = true
     absolute_p99_gate_passed = true
     absolute_p99_limit_ns = 10000000
-    absolute_p99_observed_ns = 210047
+    absolute_p99_observed_ns = 205567
     allocation_gate_passed = true
     allocation_limit_bytes = 0
     relative_p99_gate_evaluated = false
@@ -40,20 +40,20 @@ steady_alloc_bytes = 0
     [[cards.runs]]
     completed_operations = 10000
     failed_operations = 0
-    histogram_base64 = "HISTFAAAAd14nC1PMWgUQRSd/+bv7Nxms17u1uPENSgeegGR48AQ1qAW55niiAEhSDoRUobjkBBEREVCihAELURSSBCrFCJiJWIhVkHEQtRKIUXKKyxsBP/M3gwz/8//77/3Jnv4uKoUFlSx9CiSnPG/V66ri8Oi8OM+MRtTtrYcHa838t7yA9qgd7SFLxjihX7FB3qb/+gPekc/0UPs4Sde4jPe4Ct28QyvsYVP2Kd9WscB/aL39E2mn9M67dIOfac9+ijVt5Jv01PapEfUX717uz+4c496K4PBrZW15f7qYndtfm52/tLCYndpJm8vXci7vVbens2nO628M9Nuduamz7bONBpZqzk52aw0Kqfq9VqSZFmclePE1NKknsaRTWtRmqRxatPIWpuUY2vkb7G1URRxwrGNa9aycafCcsuxYMtaUICCMQwgYA0O3BOKWUG7ogT4VAruLUuCYtd0PYdHCJiwSJVDlCBUOIJxlJgxxgiFF2OC8PyhzJUK+EhRibhil3Do2eF2wALyXQ4EFroBKRyCNtqDnT8R0H7QOZZO6P0Jv9Pj0+JBYP+AkziPm+LpMqQ0IfuaYM5hShg1qn7iKk7gsHSqIufdWmWdJMs9suREjxaucExGbghfgN/Af1j/Sm4="
+    histogram_base64 = "HISTFAAAAa14nC1RMWhUQRDdeTu32fvZfP9dLnpejpjiiOaCB4YIQQKKiB5WEk45QiAgB0pIcUgqsVCQgCIWl5BCxCJVmoiIhaVIChFsLCSksghiJZZX+jbnn787b968mWVnq083R42R32bw2f9euEb6N9rm8t8BsfdEgCGogQHUQ0NWnpiamLvS3ZXP8kv60sMBXtp9u6+ftKd9fa/v9Kf9oz/0C/0RvtpDPMYLHFF/IB9kS75zP5QdeS278kZeyVv5KD3ZJtqW7sO791cXlpeW1jrd1Q15Luudzq319oPl1vVma/5Rp71459rNZutSc2Gx3bo6O1drzNYnq/Vao14+16iVqvVKVknLoVL0J7PJUqkaQskXK2nq0xBcCFmWZt5574suZF59UA1JEuLFiNR551yCxHunGbxCAcOMRug4gLghYkrh4kwMI4vj6ZjEW8YGOgTj1NDFRA5mYIz5n4ClkSVFbY5rUB81hcjnMUJqmNDGMIfTMU3lMF/iDPE4TlGkBfbK0yi1GGMRLhDcxgqm8U1xHvcwQ4pFF9m4oOMsZWd3fFxOpzGKs+yVxzPBP9dpRSo="
     histogram_encoding = "HdrHistogram compressed V2 base64"
-    max_ns = 421887
-    mean_ns = 153946.7648
-    min_ns = 145024
-    monotonic_end_ns = 0x2cfcf8977be246
-    monotonic_start_ns = 0x2cfcf83baf693d
-    p50_ns = 150655
-    p90_ns = 159999
-    p99_9_ns = 345599
-    p99_ns = 210047
+    max_ns = 370687
+    mean_ns = 151055.424
+    min_ns = 142208
+    monotonic_end_ns = 0x2cfeb9294329e8
+    monotonic_start_ns = 0x2cfeb8cf3047aa
+    p50_ns = 148351
+    p90_ns = 156799
+    p99_9_ns = 331775
+    p99_ns = 178559
     samples = 10000
-    throughput_hz = 6492.971097444929
-    wall_ns = 1540126985
+    throughput_hz = 6617.314707111768
+    wall_ns = 1511187006
 
         [cards.runs.gc]
         allocd = 0
@@ -88,20 +88,20 @@ steady_alloc_bytes = 0
     [[cards.runs]]
     completed_operations = 10000
     failed_operations = 0
-    histogram_base64 = "HISTFAAAAah4nC1Qz0tUURS+53vnXa9v3tx5M46PSSX8SeFiUIgh3PSDImnRaoggVy5ksAQDCVcxwaxcCYoLEZRWLkVaiEgYhARBi/6CCoJo5UKiRYjfe3q49zvnfOe7P84Z6Kz1GCO/zKUFV164i/8ePTN3Ti+JL28FqgGMqtrYeY2i2sTjueVjOZV1nGBLf+tq+NOehbv2KNwJ/wffg4PgAB9wJifyV/7IVzmXT/KN2Tpxj/GW7MqGrMimHJJ9T+YzdcfEfenI0uJsqy3N1juZacubxaXX822ZedmR5dbTVvNB88n01PTd+41G/ebtW43x+mjfYKNeG63UB6rV4aR6vTbo0yQd9on3aer7kthzpVGtEltfjW1USeLIe28TB0YxbGSVPTmlSyyYIYudc7DOuohdO2uV7XMMgLMG6mCQYe6NGmtcAJpBgDygcWJZrpbYlasYhNoNdKOX8ywDQyhrCaSCXF2iroh+hMAYYRL3SBSoGsMPwQtWHuIGyY+CBdafo0uL9P24Rk3IazGSQXZNds5wl/MvZS+X8veN5mn2yQIPFtCDV9gGLgD3tUer"
+    histogram_base64 = "HISTFAAAAcJ4nC1QMWsUQRSe983b2cnc7DrurWc8L8uZgBaKhEsQjEVSRbHTQkRErrISKxGrgHKFiMVhLMUiRYqQlFqEgFdZWFv4A0TEKqQKFuKbueyy89737Zv3vu/1RpttpbCkpo8+iSRfcXzzvlo9nBKfXhIYUCyHswih7IbF5QcvJvST3mGk3+offMC/sr/mnxnnv7PXZpKN+bv+qsf6lT7CB3zDPrZxSH/oSO58pl3aoYmgLdqmEX2kjRE9e09vJB+ubzwZPn9669Hw9sPHa3fvrV9dGVwbLA8Wr/Q7K/2mU/W6/Wa+qZv5i0GObgjVbNOpO8F6X1W+DlVZ9YKvTTlrfe29LUWy9caAvSm54rp2pWMO4oZdaWxwbEoIULCwbGBtUA4umlUQ39ZpSQygp4xLq0jLMBlroyMrIK0opopjyqeAMwJnoKGnnZAj4wK5ifi05DHOpUszyJBKpYZztIRqy6tMgXORa8WuirUVmUmFAOkWeUiII1hu5fLeiWNiSQsXhM5wCUUEUgxcxyZJbEPUnceNOAJ7lOad5QUsSWmUIlaLODU1W5WfBRZOnORRpGIjK0hDk/g5sVIkK5fxhYT4D2qxPUs="
     histogram_encoding = "HdrHistogram compressed V2 base64"
-    max_ns = 400895
-    mean_ns = 152313.4592
-    min_ns = 144128
-    monotonic_end_ns = 0x2cfcf922ae64c5
-    monotonic_start_ns = 0x2cfcf8c7db9f0c
-    p50_ns = 149631
-    p90_ns = 157439
-    p99_9_ns = 336895
-    p99_ns = 178431
+    max_ns = 380159
+    mean_ns = 150591.104
+    min_ns = 142720
+    monotonic_end_ns = 0x2cfeb9b2b64bcd
+    monotonic_start_ns = 0x2cfeb958e9470b
+    p50_ns = 147583
+    p90_ns = 154623
+    p99_9_ns = 334847
+    p99_ns = 205567
     samples = 10000
-    throughput_hz = 6562.702016990092
-    wall_ns = 1523762617
+    throughput_hz = 6637.425171477315
+    wall_ns = 1506608322
 
         [cards.runs.gc]
         allocd = 0
@@ -136,20 +136,20 @@ steady_alloc_bytes = 0
     [[cards.runs]]
     completed_operations = 10000
     failed_operations = 0
-    histogram_base64 = "HISTFAAAAaZ4nC1QMUwUQRSd/+bPMLfsLXfHuhKyueKUK+QwZNmcxGwQKTSxvIpoQ2lhpIAQtDBAyGFBKNAQpaQkFsbKmGhpLIyxNoZQEisqolb+2XMyf+a/99+bmT/p9otRpehEDYb+v5NE9ffdRXXrfEB83CQAmgFGYF0U2yTutFrd3sLco7f0if7SLk5xrL/qPfPZvLRn5tgcmAs+5TP+wa/4i36nf4riDX7RN/pOH2iP1vu0TWsb9HDpOT3u076QR2XhPW3RIT1df9an1aX7vcXe9Px8URTdorg3u9DpZHneLVqzd/I8u55lc9m1/GZ3Okuvpu1mM22PN9vjjThOk7iZNGpjSdiIkyCKXS10HIWBtda5MG6ErhZJH2FkWfphjpyzEUc2dFaJwsKqMHBOOQ4gwPqFrWUXMBwUlGdUwBWRyp8I40OBNZzsbADDni3nkFTBFVbsMyP1OisRGGiPMILLqOCKZFUI8IZhTAr5BGX1Nl4T6oJHMYVlMdXFhj+EFVE+wAxG5DhdPmBwrSkzyKFimhJQxw1cktzfoHlYXjMBb6lih/APsClBZA=="
+    histogram_base64 = "HISTFAAAAWx4nC1QOy9EQRSe+ebs2WvMjpu1NuuR9SiWbDZrcz0iItcWG0RUWylEobG/QRSIWkGrEJEQUSgkVEqFhEqhUoqOUiXOtebMeeR833cmZwb2j7qV0geqfcx/1uKZ78VVNf/Vbtzuaigm+CDrs4FzORvavK809/SpftbH+MGZeaXr1CPf8w2/82n6nh9TV6kHeqEdujMn5s4cmksc4gpv+kNf6GOx1lZre2293txYWF5v1FeajdWl2dl6baZRjScr1VJ1pLwQRVGtNj09F0dxfW4mHquUyoVSZSwu9xVyUX6gODSUzxaLZUeFXM71kQtDy9aH3lv2eWstO3KBl8ISB6FTziqAPDtmoiBgSwRGIKs5KAuSJRVDMAoEEepfYGIrNEAlN/kII5SUNGAAyYokqoRAnUnPII00KepCRuoMqT9wsC3oEWsPSqQGw+glg06RKHRgVCTjMkfewFMaU9jEp5a6X9AeTOBc4xeAwzZL"
     histogram_encoding = "HdrHistogram compressed V2 base64"
-    max_ns = 360959
-    mean_ns = 151673.6
-    min_ns = 143232
-    monotonic_end_ns = 0x2cfcf985867c68
-    monotonic_start_ns = 0x2cfcf92b157738
-    p50_ns = 148991
-    p90_ns = 157567
-    p99_9_ns = 332543
-    p99_ns = 178815
+    max_ns = 367871
+    mean_ns = 149643.0848
+    min_ns = 142848
+    monotonic_end_ns = 0x2cfeba14bcedd6
+    monotonic_start_ns = 0x2cfeb9bb81f4d9
+    p50_ns = 147711
+    p90_ns = 155519
+    p99_9_ns = 208255
+    p99_ns = 171647
     samples = 10000
-    throughput_hz = 6590.409755932242
-    wall_ns = 1517356336
+    throughput_hz = 6679.861383497767
+    wall_ns = 1497037053
 
         [cards.runs.gc]
         allocd = 0
@@ -183,15 +183,15 @@ steady_alloc_bytes = 0
         total_time_to_safepoint = 0
 
     [cards.summary]
-    median_p50_ns = 149631
-    median_p90_ns = 157567
-    median_p99_9_ns = 336895
-    median_p99_ns = 178815
-    median_throughput_hz = 6562.702016990092
-    worst_p99_9_ns = 345599
-    worst_p99_ns = 210047
+    median_p50_ns = 147711
+    median_p90_ns = 155519
+    median_p99_9_ns = 331775
+    median_p99_ns = 178559
+    median_throughput_hz = 6637.425171477315
+    worst_p99_9_ns = 334847
+    worst_p99_ns = 205567
 [[cards]]
-first_use_ns = 849877247
+first_use_ns = 811246183
 id = "G0-PERF-10"
 kind = "curvature_two_detectors"
 label = "staged Curvature two-plane, two-detector measurement"
@@ -207,7 +207,7 @@ steady_alloc_bytes = 0
     absolute_p99_gate_evaluated = true
     absolute_p99_gate_passed = true
     absolute_p99_limit_ns = 10000000
-    absolute_p99_observed_ns = 204543
+    absolute_p99_observed_ns = 170623
     allocation_gate_passed = true
     allocation_limit_bytes = 0
     relative_p99_gate_evaluated = false
@@ -216,68 +216,20 @@ steady_alloc_bytes = 0
     [[cards.runs]]
     completed_operations = 10000
     failed_operations = 0
-    histogram_base64 = "HISTFAAAATp4nC1PPUsDQRDdeTu3t1kvl+NyioYQg2AQCaIQUgS/kIBdlFT5BVYpxMJaJQSUdIKFP8BKLCQ/wF8Q/AEWKYJYWolFCucSZ/bte/vmMbDF3n1eKTpR89L/TILs73FHHXzPjdtrglGMwMVJtd69eKcbjDHRUx57Q//L72cm9sN+2qF980feszfVP+jpAfoY0YQe6Ile6I5e6YoeaUCX3R6dt89uqHXaPOq09w9bzd1GbbPe2EiqhWppbbtWKZcrS5XyVsmFSam4XIyTMC5EpaQQR85FNrJBIBMXBtbC2jCyoRPTsAusM5YZQsoYw2wYMIFR4NkxrGUqnnwGbCDFqVJQVnP6RE6G0uktQW2QgU61QhYLqVgEfHhiAppzosTWWJ0FdgS+dE6whxXx2Ed+tlVLTHatC/0B080t4w=="
+    histogram_base64 = "HISTFAAAAWZ4nC2PzytEURTH7/2++8673rx5xhMmPRoWUn6kMT166SmEHouJzaRpmiQ/SpZ2SrGwsvEPWMnORpKUkmRlMclKdsrSCkvnmbn33HPu+Xy/99T1D09ahZB7or6MRpV80r9zJTH5VQc/+xICinS35/idueGR7jA/n58NF1c3r+WtfEANV8ap+lQ18818pHu6sd7p0jqiF/Pc/Fa/xrNxazzhCK/yUj7KM3ksd1ZLi0vbcVwtrVXL5d2VSqWyXpyKlwrFYjgTFeIwHI8KwWAQ9EdRMB7kJ4ZHsn2dOa/X99p97dqZbCbrup6jHd9xQZ5LRDZ3dobs5EqkleMqUpq0VkppRYLAAqBtoQT/RyuAFRIACQV2CsUCQ8BgBG2wqwlN/+4kDCQkrThZSEhSTTSjDWmMsdFCR4N2YQMMwXgLKW4+JIYwigOJC/CbPR41jQHOHCbvFObYYEHwkBb0MF3AncQy/gB9Jzoq"
     histogram_encoding = "HdrHistogram compressed V2 base64"
-    max_ns = 206207
-    mean_ns = 144420.48
-    min_ns = 139904
-    monotonic_end_ns = 0x2cfcfa75b7a830
-    monotonic_start_ns = 0x2cfcfa1f9ab0a3
-    p50_ns = 143231
-    p90_ns = 147839
-    p99_9_ns = 197759
-    p99_ns = 161919
-    samples = 10000
-    throughput_hz = 6921.665641774482
-    wall_ns = 1444738957
-
-        [cards.runs.gc]
-        allocd = 0
-        bigalloc = 0
-        collect = 0
-        deferred_alloc = 0
-        freecall = 0
-        freed = 0
-        full_sweep = 0
-        last_full_sweep = 0
-        last_incremental_sweep = 0
-        malloc = 0
-        mark_time = 0
-        max_memory = 0
-        max_pause = 0
-        max_time_to_safepoint = 0
-        pause = 0
-        poolalloc = 0
-        realloc = 0
-        stack_pool_sweep_time = 0
-        sweep_time = 0
-        time_to_safepoint = 0
-        total_allocd = 0
-        total_mark_time = 0
-        total_stack_pool_sweep_time = 0
-        total_sweep_free_mallocd_memory_time = 0
-        total_sweep_madvise_time = 0
-        total_sweep_page_walk_time = 0
-        total_sweep_time = 0
-        total_time = 0
-        total_time_to_safepoint = 0
-    [[cards.runs]]
-    completed_operations = 10000
-    failed_operations = 0
-    histogram_base64 = "HISTFAAAAbV4nC1Qv2tUQRDe/XZ2bm5ZN4/kDOdxyuMhJwhqlENCCMRCIzYa1EJE1NJWsbRIESws0lgJEcRCJEiqwzq9YGUh/gM2FiktFJzZc/ctM/N98+N7M955veQcrrn5Cf+t13fs9/V7buNoDvzd9ogAuDAPSreysvls27/zh/4jdvEqzMI+7cYj+hMP+YB/8C+e8V5vh7/HWdynb+El7YWv+IBP+OwP/Hv//MWD+w8fb95+cnV9a+vupZvd6nR6ebq+euVsu7Y2Od+201PDrhuNJpN2vNydbprlQTtqyqAMF8eiUUoyVL/kQc5NyYtMuSQWNZJFUgYJUcNEiUrmVMg8EceSkhMSKCDCDo6zOtDKoBBEy8BOeWZylqU2J9JMwCnSoyAECxAA88gImbMB2kY9VjzaFywRfQQjqU8UqeKaBywZgwVFHOxpYTCjVWHefQHosbOOKgomSC9LsBRYzME0Oq6jUTPJVVU20ZqpHhOhjEVkpxpAiCkhk1FRV0NWUafbuD7huCb2TGxfkRu4gwt6A87hDbCBpziJM/oiLuKtxwncqiNiXUSs+7GfNaE/PR7hC/APTcs1Jw=="
-    histogram_encoding = "HdrHistogram compressed V2 base64"
-    max_ns = 415231
-    mean_ns = 146578.1312
-    min_ns = 139136
-    monotonic_end_ns = 0x2cfcfad95e4e64
-    monotonic_start_ns = 0x2cfcfa81f6db6d
+    max_ns = 378111
+    mean_ns = 145469.4144
+    min_ns = 138752
+    monotonic_end_ns = 0x2cfebb01550037
+    monotonic_start_ns = 0x2cfebaaa97577e
     p50_ns = 143743
-    p90_ns = 150527
-    p99_9_ns = 325887
-    p99_ns = 204543
+    p90_ns = 149887
+    p99_9_ns = 321279
+    p99_ns = 164223
     samples = 10000
-    throughput_hz = 6819.433660068926
-    wall_ns = 1466397431
+    throughput_hz = 6871.576750963668
+    wall_ns = 1455270073
 
         [cards.runs.gc]
         allocd = 0
@@ -312,20 +264,68 @@ steady_alloc_bytes = 0
     [[cards.runs]]
     completed_operations = 10000
     failed_operations = 0
-    histogram_base64 = "HISTFAAAAVl4nC1PP0hCQRi/++7z3nVd+nzao8TEIUhCHiXyeIiUOJiFiIhIRISDg0NjNAaB0BrUEOHk3NTc1NAUTY3R2CTR2NDQ99QPjt/v+/057tLDmwRj/JzNRsyR01n63Ttkuz8z4eqSI41RypiM7ZXP7vgnH8GbeMWHyER+W2N1r76sJ2tovchHvMUPMRRj+OMT/s6f+cWIj/k17w8G3f6g3TvunvYaLe+kddBpHDU7pW6rvtMu+c16tdqp1fK5YMsPssWg6hc3i+VKxvMqFT8ICvlCft3L5tJp184mM45Jum4qZRvp6KjtRKXR2iht0MUVRHAkgC1RK62MVFJqlPT6KKJU2tFKah1qyEABsvBvDAUgAEiUVBUYQUAFRENA0EQgTFCFEURogeUpMIBQY+QIiFEsAjEkwiSDBVqtaY5SidCN4z7x7VmLfEHuImVWic3visMaJTfgHzI5M5I="
+    histogram_base64 = "HISTFAAAAW94nC1QsUoDQRDdfTs3t1nPJG5ChHCcikEsRERTpFC0UZsglmoRRIJgIyIWFjaKWlgFbK0EO7FQSGEhVv6Af2AhFhaiFimdS1x2Zt6+eft22Pj0sqCUvlG9Zf6rlujvLK+p+a8ecXasATJQzDaf9xO1xlFLt/W7vsK1+TRtagX3/Mst+xLehue2HX7zHZ8GH3RNz+YRHbzpJ32hD/caG1P1zfrsykZta2Xh4EQ3my29u32wv7a7sFpbWpqsjI9Xq9NxUkl8uRz7SqmYRImPx5LhOC4XfckX89kom/WRyxM5V2JnbeQteZb5wOzJEjM7CM3WOhfJxATnJDukOBVYxyxALitSFqRIdiSQSYkNIDKGEiBJIRDOsIERZZeAIQTyHRTKwaREjjIUyAiBiA1y6MMIBoCQw9Qk1dAgpCetAOsYlZrac/eFPolQshRG6qC6Lv1SB5DBkMQPBD4Q5rAovR3pFHqTZEQWYgavBn/G6jMh"
     histogram_encoding = "HdrHistogram compressed V2 base64"
-    max_ns = 213759
-    mean_ns = 145494.7712
-    min_ns = 139776
-    monotonic_end_ns = 0x2cfcfb38b28124
-    monotonic_start_ns = 0x2cfcfae1f093e5
-    p50_ns = 143359
-    p90_ns = 151935
-    p99_9_ns = 203391
-    p99_ns = 168319
+    max_ns = 396287
+    mean_ns = 145622.368
+    min_ns = 139648
+    monotonic_end_ns = 0x2cfebb65a456b3
+    monotonic_start_ns = 0x2cfebb0ecf036a
+    p50_ns = 143871
+    p90_ns = 149247
+    p99_9_ns = 319743
+    p99_ns = 170623
     samples = 10000
-    throughput_hz = 6870.256367511789
-    wall_ns = 1455549759
+    throughput_hz = 6864.2609859571185
+    wall_ns = 1456821065
+
+        [cards.runs.gc]
+        allocd = 0
+        bigalloc = 0
+        collect = 0
+        deferred_alloc = 0
+        freecall = 0
+        freed = 0
+        full_sweep = 0
+        last_full_sweep = 0
+        last_incremental_sweep = 0
+        malloc = 0
+        mark_time = 0
+        max_memory = 0
+        max_pause = 0
+        max_time_to_safepoint = 0
+        pause = 0
+        poolalloc = 0
+        realloc = 0
+        stack_pool_sweep_time = 0
+        sweep_time = 0
+        time_to_safepoint = 0
+        total_allocd = 0
+        total_mark_time = 0
+        total_stack_pool_sweep_time = 0
+        total_sweep_free_mallocd_memory_time = 0
+        total_sweep_madvise_time = 0
+        total_sweep_page_walk_time = 0
+        total_sweep_time = 0
+        total_time = 0
+        total_time_to_safepoint = 0
+    [[cards.runs]]
+    completed_operations = 10000
+    failed_operations = 0
+    histogram_base64 = "HISTFAAAAWh4nC1PvUsDMRTP/ZLLpddUrtcPrFZbq8j5QTkKdhBs9RAsDqLFQTqIOHQUcXIU6eDgZtGimxTR1cnZ0cG5f4A4d1OcfL02IXnv95Xwsq2bBGPGPRsuPqoGndjv1gGr9ofEz4UBC6aQfEzbUks3XS5unraNvtFBDx1+K1rmq9m12tab1bU+1JV6tD7ll/w2380/fs0v+TN6xpNxftY8agTB9mFzZ7cRrJ7UG8e1/fpysF6p1CpzxWLZ80t+2VssFPLzXsn3/Gzec6eTSe24eZ11nHRaOW7SscddPeFIF0pLW0GOKSm0sMEUIASIgZaKkAABEpWSDEwDUggJMkkMGkEOLkgCl2QFE6YkgjBTUeI4DU05mEAMfNQyxMM6FXKIiijlBgQXyBCYpCZCwWFihtw5Ek1i4ojQXiE+Q2ou1BOIYonuCBbwAqSwhjtOKYZq+N8s6XFggyKWsOhpmo+JFBkfDOwB/zD2MRs="
+    histogram_encoding = "HdrHistogram compressed V2 base64"
+    max_ns = 360191
+    mean_ns = 145622.3936
+    min_ns = 138752
+    monotonic_end_ns = 0x2cfebbc4f48364
+    monotonic_start_ns = 0x2cfebb6e1f6e4c
+    p50_ns = 143871
+    p90_ns = 149119
+    p99_9_ns = 321791
+    p99_ns = 167679
+    samples = 10000
+    throughput_hz = 6864.336003470345
+    wall_ns = 1456805144
 
         [cards.runs.gc]
         allocd = 0
@@ -359,13 +359,13 @@ steady_alloc_bytes = 0
         total_time_to_safepoint = 0
 
     [cards.summary]
-    median_p50_ns = 143359
-    median_p90_ns = 150527
-    median_p99_9_ns = 203391
-    median_p99_ns = 168319
-    median_throughput_hz = 6870.256367511789
-    worst_p99_9_ns = 325887
-    worst_p99_ns = 204543
+    median_p50_ns = 143871
+    median_p90_ns = 149247
+    median_p99_9_ns = 321279
+    median_p99_ns = 167679
+    median_throughput_hz = 6864.336003470345
+    worst_p99_9_ns = 321791
+    worst_p99_ns = 170623
 
 [contract]
 absolute_gate_scope = "regression safety bound for these compact cards, not an RTC deadline or production-size capability claim"
@@ -391,7 +391,7 @@ command = "julia --project=benchmarks benchmarks/benchmark_gate0_latency.jl"
 cpu_model = "AMD Ryzen 7 6800H with Radeon Graphics"
 cpu_target = "znver3"
 fft_threads = 1
-git_commit = "f8884b30f1bfda90a901fa0f23e5f6d4f159afb2"
+git_commit = "da391e757d8b238c712faa566703be1d864f5157"
 git_dirty = false
 git_status_porcelain = ""
 hdrhistogram_version = "0.4.0"
@@ -402,7 +402,7 @@ kernel = "Linux"
 kernel_release = "6.12.57+deb13-amd64"
 logical_cpu_threads = 16
 scaling_governor_cpu0 = "powersave"
-timestamp_utc = "2026-07-18T08:57:02.827"
+timestamp_utc = "2026-07-18T09:29:09.337"
 
 [histogram]
 highest_ns = 60000000000
@@ -413,4 +413,4 @@ significant_figures = 3
 p50_clock_delta_ns = 20
 p99_clock_delta_ns = 30
 samples = 10000
-wall_ns_per_clock_pair_and_record = 45.7355
+wall_ns_per_clock_pair_and_record = 44.9472
