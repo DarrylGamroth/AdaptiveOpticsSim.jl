@@ -433,8 +433,9 @@ function zernike_pupil_intensity!(wfs::ZernikeWFS, tel::Telescope, src::Abstract
     amp_scale = sqrt(eltype(wfs.acquisition.state.camera_frame)(
         photon_irradiance(src) * (tel.params.diameter / tel.params.resolution)^2
     ))
+    reflectivity = pupil_reflectivity(tel)
     fill!(wfs.front_end.propagation.field, zero(eltype(wfs.front_end.propagation.field)))
-    @views @. wfs.front_end.propagation.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * sqrt($(pupil_reflectivity(tel))) *
+    @views @. wfs.front_end.propagation.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * sqrt(reflectivity) *
         cispi(opd_to_cycles * tel.state.opd)
     copyto!(wfs.front_end.propagation.focal_field, wfs.front_end.propagation.field)
     @. wfs.front_end.propagation.focal_field = wfs.front_end.propagation.focal_field * wfs.front_end.propagation.phasor

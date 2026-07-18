@@ -94,6 +94,108 @@ end
         mark_ka_cpu_kernel!(:lift_sqrt_weights_kernel!)
         @test lift_weights == [1.0, 2.0, 3.0, 4.0]
 
+        lift_basis = reshape(collect(1.0:12.0), 2, 2, 3)
+        lift_base = reshape(collect(0.25:0.25:1.0), 2, 2)
+        scalar_lift_mode = similar(lift_base)
+        ka_lift_mode = similar(lift_base)
+        AdaptiveOpticsSim.lift_affine_basis_mode!(SCALAR_CPU_STYLE,
+            scalar_lift_mode, lift_base, lift_basis, 2, 0.5)
+        AdaptiveOpticsSim.lift_affine_basis_mode!(KA_CPU_STYLE,
+            ka_lift_mode, lift_base, lift_basis, 2, 0.5)
+        mark_ka_cpu_kernel!(:lift_affine_basis_mode_kernel!)
+        @test ka_lift_mode == scalar_lift_mode
+
+        scalar_lift_scaled = similar(lift_base)
+        ka_lift_scaled = similar(lift_base)
+        AdaptiveOpticsSim.lift_scaled_basis_mode!(SCALAR_CPU_STYLE,
+            scalar_lift_scaled, lift_base, lift_basis, 3, 2.0)
+        AdaptiveOpticsSim.lift_scaled_basis_mode!(KA_CPU_STYLE,
+            ka_lift_scaled, lift_base, lift_basis, 3, 2.0)
+        mark_ka_cpu_kernel!(:lift_scaled_basis_mode_kernel!)
+        @test ka_lift_scaled == scalar_lift_scaled
+
+        scalar_lift_jacobian = zeros(4, 2)
+        ka_lift_jacobian = zeros(4, 2)
+        AdaptiveOpticsSim.lift_copy_column!(SCALAR_CPU_STYLE,
+            scalar_lift_jacobian, 2, scalar_lift_scaled)
+        AdaptiveOpticsSim.lift_copy_column!(KA_CPU_STYLE,
+            ka_lift_jacobian, 2, ka_lift_scaled)
+        mark_ka_cpu_kernel!(:lift_copy_column_kernel!)
+        @test ka_lift_jacobian == scalar_lift_jacobian
+
+        lift_observation = reshape(collect(2.0:5.0), 2, 2)
+        lift_model = reshape(collect(0.5:0.5:2.0), 2, 2)
+        scalar_lift_residual = zeros(4)
+        ka_lift_residual = similar(scalar_lift_residual)
+        AdaptiveOpticsSim.lift_residual!(SCALAR_CPU_STYLE,
+            scalar_lift_residual, lift_observation, lift_model)
+        AdaptiveOpticsSim.lift_residual!(KA_CPU_STYLE,
+            ka_lift_residual, lift_observation, lift_model)
+        mark_ka_cpu_kernel!(:lift_residual_kernel!)
+        @test ka_lift_residual == scalar_lift_residual
+
+        lift_row_weights = [1.0, 2.0, 3.0, 4.0]
+        scalar_weighted_jacobian = reshape(collect(1.0:8.0), 4, 2)
+        ka_weighted_jacobian = copy(scalar_weighted_jacobian)
+        AdaptiveOpticsSim.apply_row_weights!(SCALAR_CPU_STYLE,
+            scalar_weighted_jacobian, lift_row_weights, 2)
+        AdaptiveOpticsSim.apply_row_weights!(KA_CPU_STYLE,
+            ka_weighted_jacobian, lift_row_weights, 2)
+        mark_ka_cpu_kernel!(:lift_row_weights_kernel!)
+        @test ka_weighted_jacobian == scalar_weighted_jacobian
+
+        scalar_inverse_variance = zeros(4)
+        ka_inverse_variance = similar(scalar_inverse_variance)
+        AdaptiveOpticsSim.lift_inverse_variance!(SCALAR_CPU_STYLE,
+            scalar_inverse_variance, lift_model, 2.0, 0.25)
+        AdaptiveOpticsSim.lift_inverse_variance!(KA_CPU_STYLE,
+            ka_inverse_variance, lift_model, 2.0, 0.25)
+        mark_ka_cpu_kernel!(:lift_inverse_variance_kernel!)
+        @test ka_inverse_variance == scalar_inverse_variance
+
+        scalar_lift_normal = reshape(collect(1.0:9.0), 3, 3)
+        ka_lift_normal = copy(scalar_lift_normal)
+        AdaptiveOpticsSim.add_lift_diagonal!(SCALAR_CPU_STYLE,
+            scalar_lift_normal, 0.5)
+        AdaptiveOpticsSim.add_lift_diagonal!(KA_CPU_STYLE,
+            ka_lift_normal, 0.5)
+        mark_ka_cpu_kernel!(:lift_add_diagonal_kernel!)
+        @test ka_lift_normal == scalar_lift_normal
+
+        lift_convolution_source = reshape(collect(1.0:25.0), 5, 5)
+        lift_dense_kernel = [0.0 1.0 0.0; 1.0 4.0 1.0; 0.0 1.0 0.0]
+        dense_inv_norm = inv(sum(lift_dense_kernel))
+        scalar_dense_convolution = similar(lift_convolution_source)
+        ka_dense_convolution = similar(lift_convolution_source)
+        AdaptiveOpticsSim.conv2d_same!(SCALAR_CPU_STYLE,
+            scalar_dense_convolution, lift_convolution_source,
+            lift_dense_kernel, dense_inv_norm)
+        AdaptiveOpticsSim.conv2d_same!(KA_CPU_STYLE,
+            ka_dense_convolution, lift_convolution_source,
+            lift_dense_kernel, dense_inv_norm)
+        mark_ka_cpu_kernel!(:lift_dense_convolution_kernel!)
+        @test ka_dense_convolution == scalar_dense_convolution
+
+        lift_row_kernel = [1.0, 2.0, 1.0]
+        lift_column_kernel = [1.0, 0.5, 1.0]
+        separable_inv_norm = inv(sum(lift_row_kernel) *
+            sum(lift_column_kernel))
+        scalar_separable_convolution = similar(lift_convolution_source)
+        scalar_separable_scratch = similar(lift_convolution_source)
+        ka_separable_convolution = similar(lift_convolution_source)
+        ka_separable_scratch = similar(lift_convolution_source)
+        AdaptiveOpticsSim.conv2d_same_separable!(SCALAR_CPU_STYLE,
+            scalar_separable_convolution, scalar_separable_scratch,
+            lift_convolution_source, lift_row_kernel, lift_column_kernel,
+            separable_inv_norm)
+        AdaptiveOpticsSim.conv2d_same_separable!(KA_CPU_STYLE,
+            ka_separable_convolution, ka_separable_scratch,
+            lift_convolution_source, lift_row_kernel, lift_column_kernel,
+            separable_inv_norm)
+        mark_ka_cpu_kernel!(:lift_row_convolution_kernel!,
+            :lift_column_convolution_kernel!)
+        @test ka_separable_convolution == scalar_separable_convolution
+
         modal_modes = reshape(collect(1.0:8.0), 4, 2)
         modal_coefs = [0.25, -0.5]
         modal_one = zeros(4)

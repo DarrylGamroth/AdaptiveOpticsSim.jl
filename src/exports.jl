@@ -158,7 +158,12 @@ export valid_subaperture_mask, camera_frame, wfs_detector_image
 export wfs_calibration_signature
 export shack_hartmann_detector_image, shack_hartmann_detector_image!
 export n_valid_subapertures
-export LiFT
+export LiFT, PreparedLiFTForwardModel, LiFTObservation
+export LiFTIdentityMapping, LiFTFrameMapping
+export LiFTPhotonRate, LiFTExpectedCounts, LiFTNormalizedIntensity
+export prepare_lift_forward_model, evaluate_lift_forward!
+export predict_lift_observation!, lift_forward_output
+export lift_observation_contract, diagnostics
 export LiFTSolveAuto, LiFTSolveQR, LiFTSolveNormalEquations
 export LiFTLevenbergMarquardt, LiFTAdaptiveLevenbergMarquardt
 

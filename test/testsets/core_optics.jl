@@ -37,8 +37,9 @@ end
     # Pre-HIL stage contracts intentionally add a small, documented public
     # product/protocol seam. Keep headroom bounded so unrelated internals do
     # not drift into the ordinary user namespace.
-    # Pre-HIL 9 adds eleven documented component/stage names and no aliases.
-    @test length(exported) <= 467
+    # Pre-HIL 10 adds thirteen documented LiFT preparation, observation, and
+    # radiometric-domain names and no compatibility aliases.
+    @test length(exported) <= 480
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
     @test Base.isexported(AdaptiveOpticsSim, :MicrolensArray)
@@ -57,6 +58,20 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :CurvatureDefocusPair)
     @test Base.isexported(AdaptiveOpticsSim, :CurvatureOpticalFrontEnd)
     @test Base.isexported(AdaptiveOpticsSim, :CurvaturePackedAcquisition)
+    @test Base.isexported(AdaptiveOpticsSim, :PreparedLiFTForwardModel)
+    @test Base.isexported(AdaptiveOpticsSim, :LiFTObservation)
+    @test Base.isexported(AdaptiveOpticsSim, :LiFTIdentityMapping)
+    @test Base.isexported(AdaptiveOpticsSim, :LiFTFrameMapping)
+    @test Base.isexported(AdaptiveOpticsSim, :LiFTPhotonRate)
+    @test Base.isexported(AdaptiveOpticsSim, :LiFTExpectedCounts)
+    @test Base.isexported(AdaptiveOpticsSim, :LiFTNormalizedIntensity)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :prepare_lift_forward_model)
+    @test Base.isexported(AdaptiveOpticsSim, :evaluate_lift_forward!)
+    @test Base.isexported(AdaptiveOpticsSim, :predict_lift_observation!)
+    @test Base.isexported(AdaptiveOpticsSim, :lift_forward_output)
+    @test Base.isexported(AdaptiveOpticsSim, :lift_observation_contract)
+    @test Base.isexported(AdaptiveOpticsSim, :diagnostics)
     @test Base.isexported(AdaptiveOpticsSim, :CircularModulation)
     @test Base.isexported(AdaptiveOpticsSim, :SampledModulation)
     @test !Base.isexported(AdaptiveOpticsSim,

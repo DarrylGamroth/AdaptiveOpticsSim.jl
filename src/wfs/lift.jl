@@ -1,8 +1,10 @@
 #
 # LiFT phase retrieval
 #
-# LiFT fits modal coefficients by matching a parameterized PSF model to an
-# observed detector image.
+# LiFT fits modal coefficients by matching a separately prepared focal-plane
+# forward model to a caller-owned observation. Optical formation never owns or
+# triggers a detector; acquisition timing, QE, and stochastic readout remain at
+# the detector boundary.
 #
 # Forward model:
 # 1. combine modal coefficients into an OPD map
@@ -35,6 +37,107 @@ end
     i = @index(Global, Linear)
     if i <= n
         @inbounds weights[i] = sqrt(weights[i])
+    end
+end
+
+@kernel function lift_affine_basis_mode_kernel!(dest, base, basis,
+    scale, mode_offset::Int, n::Int)
+    i = @index(Global, Linear)
+    if i <= n
+        @inbounds dest[i] = base[i] + scale * basis[i + mode_offset]
+    end
+end
+
+@kernel function lift_scaled_basis_mode_kernel!(dest, amplitude, basis,
+    scale, mode_offset::Int, n::Int)
+    i = @index(Global, Linear)
+    if i <= n
+        @inbounds dest[i] = amplitude[i] * scale * basis[i + mode_offset]
+    end
+end
+
+@kernel function lift_copy_column_kernel!(dest, column::Int, src, n::Int)
+    i = @index(Global, Linear)
+    if i <= n
+        @inbounds dest[i, column] = src[i]
+    end
+end
+
+@kernel function lift_residual_kernel!(dest, observation, model, n::Int)
+    i = @index(Global, Linear)
+    if i <= n
+        @inbounds dest[i] = observation[i] - model[i]
+    end
+end
+
+@kernel function lift_row_weights_kernel!(matrix, weights,
+    n_rows::Int, n_cols::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n_rows && j <= n_cols
+        @inbounds matrix[i, j] *= weights[i]
+    end
+end
+
+@kernel function lift_inverse_variance_kernel!(dest, values,
+    scale, offset, floor_value, n::Int)
+    i = @index(Global, Linear)
+    if i <= n
+        @inbounds dest[i] = inv(max(values[i] * scale + offset,
+            floor_value))
+    end
+end
+
+@kernel function lift_add_diagonal_kernel!(matrix, value, n::Int)
+    i = @index(Global, Linear)
+    if i <= n
+        @inbounds matrix[i, i] += value
+    end
+end
+
+@kernel function lift_dense_convolution_kernel!(dest, src, kernel,
+    inv_norm, n::Int, m::Int, kh::Int, kw::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= m
+        T = eltype(dest)
+        acc = zero(T)
+        cx = div(kh, 2)
+        cy = div(kw, 2)
+        @inbounds for ki in 1:kh, kj in 1:kw
+            ii = symm_index(i + ki - cx - 1, n)
+            jj = symm_index(j + kj - cy - 1, m)
+            acc += src[ii, jj] * kernel[ki, kj]
+        end
+        @inbounds dest[i, j] = acc * inv_norm
+    end
+end
+
+@kernel function lift_row_convolution_kernel!(dest, src, kernel,
+    n::Int, m::Int, nk::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= m
+        T = eltype(dest)
+        acc = zero(T)
+        center = div(nk, 2)
+        @inbounds for k in 1:nk
+            ii = symm_index(i + k - center - 1, n)
+            acc += src[ii, j] * kernel[k]
+        end
+        @inbounds dest[i, j] = acc
+    end
+end
+
+@kernel function lift_column_convolution_kernel!(dest, src, kernel,
+    inv_norm, n::Int, m::Int, nk::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= m
+        T = eltype(dest)
+        acc = zero(T)
+        center = div(nk, 2)
+        @inbounds for k in 1:nk
+            jj = symm_index(j + k - center - 1, m)
+            acc += src[i, jj] * kernel[k]
+        end
+        @inbounds dest[i, j] = acc * inv_norm
     end
 end
 
@@ -86,23 +189,155 @@ LiFTAdaptiveLevenbergMarquardt(; lambda0::Real=1e-6, growth::Real=10.0, shrink::
     LiFTAdaptiveLevenbergMarquardt(float(lambda0), float(growth), float(shrink), float(min_lambda),
         float(condition_rtol))
 
-struct LiFTParams{T<:AbstractFloat,A<:AbstractMatrix{T},K,S<:LiFTSolveMode,D<:LiFTDampingMode}
-    diversity_opd::A
+abstract type AbstractLiFTObservationMapping end
+
+"""No deterministic spatial mapping between focal-plane rate and observation."""
+struct LiFTIdentityMapping <: AbstractLiFTObservationMapping end
+
+"""
+    LiFTFrameMapping(; response=NullFrameResponse(), sampling=1, binning=1)
+
+Deterministic spatial preprocessing shared by a LiFT forward model and an
+acquisition path. `response` is applied first on the optical grid, followed by
+cell-summing `sampling` and `binning`. QE, exposure, noise, gain, readout
+windowing, and cadence are deliberately not part of this mapping.
+"""
+struct LiFTFrameMapping{R<:AbstractFrameResponse} <: AbstractLiFTObservationMapping
+    response::R
+    sampling::Int
+    binning::Int
+end
+
+function LiFTFrameMapping(; response::AbstractFrameResponse=NullFrameResponse(),
+    sampling::Int=1, binning::Int=1)
+    sampling >= 1 || throw(InvalidConfiguration(
+        "LiFT frame-mapping sampling must be >= 1"))
+    binning >= 1 || throw(InvalidConfiguration(
+        "LiFT frame-mapping binning must be >= 1"))
+    _require_prepared_response_sampling(response, sampling)
+    validate_frame_response_model(response)
+    return LiFTFrameMapping{typeof(response)}(response, sampling, binning)
+end
+
+abstract type AbstractLiFTObservationDomain end
+
+"""
+Photon-arrival-rate observations. The noise-equivalent exposure is used only
+when model-based Poisson weighting is requested; it does not scale the values.
+"""
+struct LiFTPhotonRate{T<:AbstractFloat} <: AbstractLiFTObservationDomain
+    noise_equivalent_exposure_s::T
+    quantum_efficiency::T
+end
+
+function LiFTPhotonRate(; noise_equivalent_exposure_s::Real=1.0,
+    quantum_efficiency::Real=1.0)
+    exposure, qe = promote(float(noise_equivalent_exposure_s),
+        float(quantum_efficiency))
+    _require_lift_exposure_qe(exposure, qe, "LiFT photon-rate observation")
+    return LiFTPhotonRate{typeof(exposure)}(exposure, qe)
+end
+
+"""Expected detected counts formed using an explicit exposure and QE."""
+struct LiFTExpectedCounts{T<:AbstractFloat} <: AbstractLiFTObservationDomain
+    exposure_time_s::T
+    quantum_efficiency::T
+end
+
+function LiFTExpectedCounts(exposure_time_s::Real;
+    quantum_efficiency::Real=1.0)
+    exposure, qe = promote(float(exposure_time_s), float(quantum_efficiency))
+    _require_lift_exposure_qe(exposure, qe, "LiFT expected-count observation")
+    return LiFTExpectedCounts{typeof(exposure)}(exposure, qe)
+end
+
+"""
+Dimensionless relative intensity with an explicit photon-rate value per native
+unit. The noise-equivalent exposure is used only for model-based weighting.
+"""
+struct LiFTNormalizedIntensity{T<:AbstractFloat} <: AbstractLiFTObservationDomain
+    photon_rate_per_unit::T
+    noise_equivalent_exposure_s::T
+    quantum_efficiency::T
+end
+
+function LiFTNormalizedIntensity(photon_rate_per_unit::Real;
+    noise_equivalent_exposure_s::Real=1.0,
+    quantum_efficiency::Real=1.0)
+    scale, exposure, qe = promote(float(photon_rate_per_unit),
+        float(noise_equivalent_exposure_s), float(quantum_efficiency))
+    isfinite(scale) && scale > zero(scale) || throw(InvalidConfiguration(
+        "LiFT normalized-intensity photon_rate_per_unit must be finite and > 0"))
+    _require_lift_exposure_qe(exposure, qe,
+        "LiFT normalized-intensity observation")
+    return LiFTNormalizedIntensity{typeof(scale)}(scale, exposure, qe)
+end
+
+@inline function _require_lift_exposure_qe(exposure::T, qe::T,
+    label::AbstractString) where {T<:AbstractFloat}
+    isfinite(exposure) && exposure > zero(T) || throw(InvalidConfiguration(
+        "$label exposure must be finite and > 0"))
+    isfinite(qe) && zero(T) < qe <= one(T) || throw(InvalidConfiguration(
+        "$label quantum efficiency must be finite and lie in (0, 1]"))
+    return nothing
+end
+
+@inline lift_observation_to_rate_scale(::LiFTPhotonRate,
+    ::Type{T}) where {T<:AbstractFloat} = one(T)
+@inline lift_observation_to_rate_scale(domain::LiFTExpectedCounts,
+    ::Type{T}) where {T<:AbstractFloat} =
+    inv(T(domain.exposure_time_s) * T(domain.quantum_efficiency))
+@inline lift_observation_to_rate_scale(domain::LiFTNormalizedIntensity,
+    ::Type{T}) where {T<:AbstractFloat} = T(domain.photon_rate_per_unit)
+
+@inline lift_shot_variance_rate_scale(domain::LiFTPhotonRate,
+    ::Type{T}) where {T<:AbstractFloat} =
+    inv(T(domain.noise_equivalent_exposure_s) * T(domain.quantum_efficiency))
+@inline lift_shot_variance_rate_scale(domain::LiFTExpectedCounts,
+    ::Type{T}) where {T<:AbstractFloat} =
+    inv(T(domain.exposure_time_s) * T(domain.quantum_efficiency))
+@inline lift_shot_variance_rate_scale(domain::LiFTNormalizedIntensity,
+    ::Type{T}) where {T<:AbstractFloat} =
+    inv(T(domain.noise_equivalent_exposure_s) * T(domain.quantum_efficiency))
+
+struct LiFTObservationContract{M<:OpticalPlaneMetadata,S}
+    rate_metadata::M
+    preprocessing_signature::S
+end
+
+struct LiFTObservationMetadata{T<:AbstractFloat,
+    C<:LiFTObservationContract,D<:AbstractLiFTObservationDomain,E,
+    B<:AbstractArrayBackend,PD<:AbstractPlaneDevice}
+    contract::C
+    domain::D
+    readout_noise_std::T
+    numeric_type::Type{E}
+    backend::B
+    device::PD
+end
+
+"""Caller-owned acquired data plus its explicit LiFT observation contract."""
+struct LiFTObservation{M<:LiFTObservationMetadata,A<:AbstractMatrix}
+    metadata::M
+    values::A
+end
+
+struct LiFTParams{S<:LiFTSolveMode,D<:LiFTDampingMode,I<:Tuple}
     iterations::Int
-    img_resolution::Int
-    zero_padding::Int
-    object_kernel::K
     solve_mode::S
     damping::D
+    mode_ids::I
 end
 
 struct LiFTDenseObjectKernel{T<:AbstractFloat,A<:AbstractMatrix{T}}
     kernel::A
+    inv_norm::T
 end
 
 struct LiFTSeparableObjectKernel{T<:AbstractFloat,V<:AbstractVector{T}}
     row::V
     col::V
+    inv_norm::T
 end
 
 mutable struct LiFTDiagnostics{T<:AbstractFloat}
@@ -115,23 +350,57 @@ mutable struct LiFTDiagnostics{T<:AbstractFloat}
     used_fallback::Bool
 end
 
-struct LiFTState{T<:AbstractFloat,
-    W<:Workspace,
-    B<:AbstractMatrix{T},
-    C<:AbstractMatrix{Complex{T}},
-    V<:AbstractVector{T},
-    I<:AbstractVector{Int}}
-    workspace::W
-    psf_buffer::B
-    amp_buffer::B
+struct LiFTForwardModel{T<:AbstractFloat,
+    PM<:AbstractMatrix{Bool},PA<:AbstractMatrix{T},B<:AbstractArray{T,3},
+    D<:AbstractMatrix{T},K,M<:AbstractLiFTObservationMapping,
+    C<:LiFTObservationContract}
+    pupil_mask::PM
+    pupil_amplitude::PA
+    basis::B
+    diversity_opd::D
+    wavelength_m::T
+    photon_irradiance::T
+    pupil_cell_area_m2::T
+    focal_resolution::Int
+    zero_padding::Int
+    object_kernel::K
+    mapping::M
+    observation_contract::C
+end
+
+struct LiFTForwardWorkspace{W<:Workspace,B<:AbstractMatrix,
+    C<:AbstractMatrix,RB,SB,OB,CB}
+    propagation::W
+    optical_rate_buffer::B
+    amplitude_buffer::B
     field_scratch::B
     focal_buffer::C
     mode_buffer::C
-    pd_buffer::C
-    conv_buffer::B
-    conv_aux_buffer::B
+    conjugate_field_buffer::C
+    response_buffer::RB
+    response_scratch::RB
+    sampling_buffer::SB
+    mapped_rate_buffer::OB
+    output_work_buffer::B
+    convolution_buffer::CB
+    convolution_scratch::CB
     opd_buffer::B
     opd_work_buffer::B
+end
+
+"""Run-immutable LiFT optical definition plus a single-writer workspace."""
+struct PreparedLiFTForwardModel{M<:LiFTForwardModel,
+    W<:LiFTForwardWorkspace,O<:IntensityMap}
+    model::M
+    workspace::W
+    output::O
+end
+
+struct LiFTState{T<:AbstractFloat,
+    B<:AbstractMatrix{T},
+    V<:AbstractVector{T},
+    I<:AbstractVector{Int}}
+    observation_rate_buffer::B
     residual_buffer::V
     weight_buffer::V
     H_buffer::B
@@ -142,11 +411,9 @@ struct LiFTState{T<:AbstractFloat,
     diagnostics::LiFTDiagnostics{T}
 end
 
-struct LiFT{M<:LiFTMode,P<:LiFTParams,S<:LiFTState,B<:AbstractArray{<:AbstractFloat,3},SRC<:AbstractSource,D<:AbstractDetector}
-    tel::Telescope
-    src::SRC
-    det::D
-    basis::B
+struct LiFT{M<:LiFTMode,F<:PreparedLiFTForwardModel,
+    P<:LiFTParams,S<:LiFTState}
+    forward::F
     params::P
     state::S
 end
@@ -175,77 +442,301 @@ function weight_mode(R_n::Symbol)
 end
 weight_mode(::Any) = throw(InvalidConfiguration("R_n must be :model, :iterative, a matrix, or nothing"))
 
-"""
-    LiFT(tel, src, basis, det; ...)
+@inline _lift_mapping_factors(::LiFTIdentityMapping) = (1, 1)
+@inline _lift_mapping_factors(mapping::LiFTFrameMapping) =
+    (mapping.sampling, mapping.binning)
 
-Construct a LiFT phase-retrieval model.
+@inline _lift_mapping_signature(::LiFTIdentityMapping) = (:identity,)
 
-`basis[:, :, k]` defines the modal OPD basis being estimated. The reconstruction
-iteratively matches those coefficients to the detector-plane PSF, optionally
-including diversity and object convolution.
-"""
-function LiFT(tel::Telescope, src::AbstractSource, basis::AbstractArray, det::AbstractDetector;
-    diversity_opd::AbstractMatrix, iterations::Int=5, img_resolution::Int=0,
-    numerical::Bool=false, ang_pixel_arcsec=nothing, object_kernel=nothing,
-    solve_mode::LiFTSolveMode=LiFTSolveAuto(), damping::LiFTDampingMode=LiFTDampingNone())
-    T = eltype(tel.state.opd)
-
-    if size(basis, 1) != tel.params.resolution || size(basis, 2) != tel.params.resolution
-        throw(InvalidConfiguration("basis resolution must match telescope resolution"))
+function _lift_array_signature(array::AbstractArray)
+    host = Array(array)
+    signature = hash(size(host), UInt(0))
+    @inbounds for value in host
+        signature = hash(value, signature)
     end
-    if size(diversity_opd) != size(tel.state.opd)
-        throw(InvalidConfiguration("diversity_opd must match telescope resolution"))
-    end
-
-    zero_padding = det.params.psf_sampling
-    if ang_pixel_arcsec !== nothing
-        scale = (180 * 3600 / pi) * wavelength(src) /
-            tel.params.diameter
-        zero_padding = max(1, round(Int, scale / ang_pixel_arcsec))
-        @info "LiFT using angular sampling override", zero_padding
-    end
-    if img_resolution <= 0
-        img_resolution = tel.params.resolution * zero_padding
-    end
-    kernel = object_kernel === nothing ? nothing : _lift_object_kernel(T.(object_kernel))
-    params = LiFTParams(float.(diversity_opd), iterations, img_resolution, zero_padding, kernel, solve_mode, damping)
-    oversampling = lift_oversampling(zero_padding)
-    ws = Workspace(tel.state.opd, lift_pad_size(tel.params.resolution, zero_padding); T=T)
-    psf_buffer = similar(tel.state.opd, T, img_resolution, img_resolution)
-    amp_buffer = similar(tel.state.opd, T, tel.params.resolution, tel.params.resolution)
-    focal_size = img_resolution * oversampling
-    field_scratch = similar(psf_buffer, T, focal_size, focal_size)
-    focal_buffer = similar(psf_buffer, Complex{eltype(psf_buffer)}, focal_size, focal_size)
-    mode_buffer = similar(focal_buffer)
-    pd_buffer = similar(focal_buffer)
-    conv_buffer = similar(psf_buffer)
-    conv_aux_buffer = similar(psf_buffer)
-    opd_buffer = similar(amp_buffer)
-    opd_work_buffer = similar(amp_buffer)
-    residual_buffer = similar(psf_buffer, eltype(psf_buffer), img_resolution * img_resolution)
-    weight_buffer = similar(residual_buffer)
-    H_buffer = similar(psf_buffer, eltype(psf_buffer), img_resolution * img_resolution, size(basis, 3))
-    normal_buffer = similar(psf_buffer, eltype(psf_buffer), size(basis, 3), size(basis, 3))
-    factor_buffer = similar(normal_buffer)
-    rhs_buffer = similar(residual_buffer, size(basis, 3))
-    mode_id_buffer = similar(rhs_buffer, Int, size(basis, 3))
-    diagnostics = LiFTDiagnostics(T(NaN), T(NaN), T(NaN), T(NaN), zero(T), false, false)
-    state = LiFTState(ws, psf_buffer, amp_buffer, field_scratch, focal_buffer, mode_buffer, pd_buffer, conv_buffer,
-        conv_aux_buffer,
-        opd_buffer, opd_work_buffer, residual_buffer, weight_buffer, H_buffer, normal_buffer, factor_buffer, rhs_buffer,
-        mode_id_buffer, diagnostics)
-    mode = numerical ? LiFTNumerical() : LiFTAnalytic()
-    return LiFT{typeof(mode), typeof(params), typeof(state), typeof(basis), typeof(src), typeof(det)}(
-        tel,
-        src,
-        det,
-        basis,
-        params,
-        state,
-    )
+    return signature
 end
 
+@inline _lift_response_signature(::NullFrameResponse) = (:none,)
+@inline _lift_response_signature(model::GaussianPixelResponse) =
+    (:gaussian, model.response_width_px, size(model.kernel),
+        _lift_array_signature(model.kernel))
+@inline _lift_response_signature(model::SampledFrameResponse) =
+    (:sampled, size(model.kernel), _lift_array_signature(model.kernel))
+@inline _lift_response_signature(model::RectangularPixelAperture) =
+    (:rectangular_aperture, model.pitch_x_px, model.pitch_y_px,
+        model.fill_factor_x, model.fill_factor_y, size(model.kernel_x),
+        size(model.kernel_y), _lift_array_signature(model.kernel_x),
+        _lift_array_signature(model.kernel_y))
+
+@inline function _lift_mapping_signature(mapping::LiFTFrameMapping)
+    return (:frame, mapping.sampling, mapping.binning,
+        _lift_response_signature(mapping.response))
+end
+
+@inline _lift_output_dimensions(focal_resolution::Int,
+    ::LiFTIdentityMapping) = (focal_resolution, focal_resolution)
+
+function _lift_output_dimensions(focal_resolution::Int,
+    mapping::LiFTFrameMapping)
+    divisor = mapping.sampling * mapping.binning
+    focal_resolution % divisor == 0 || throw(DimensionMismatchError(
+        "LiFT focal resolution must be divisible by sampling * binning"))
+    resolution = div(focal_resolution, divisor)
+    return (resolution, resolution)
+end
+
+@inline _lift_output_values(::LiFTIdentityMapping,
+    workspace::LiFTForwardWorkspace) = workspace.optical_rate_buffer
+@inline _lift_output_values(::LiFTFrameMapping,
+    workspace::LiFTForwardWorkspace) = workspace.mapped_rate_buffer
+
+@inline _require_lift_response_backend(::NullFrameResponse,
+    ::AbstractMatrix) = nothing
+
+function _require_lift_response_array(array::AbstractArray,
+    template::AbstractMatrix, ::Type{T}) where {T<:AbstractFloat}
+    eltype(array) === T || throw(InvalidConfiguration(
+        "LiFT response and forward model must use the same numeric type"))
+    typeof(backend(array)) === typeof(backend(template)) || throw(
+        InvalidConfiguration(
+            "LiFT response and forward model must use the same array backend"))
+    plane_device(array) == plane_device(template) || throw(
+        InvalidConfiguration(
+            "LiFT response and forward model must occupy the same physical device"))
+    return nothing
+end
+
+@inline function _require_lift_response_backend(model::GaussianPixelResponse,
+    template::AbstractMatrix{T}) where {T<:AbstractFloat}
+    return _require_lift_response_array(model.kernel, template, T)
+end
+
+@inline function _require_lift_response_backend(model::SampledFrameResponse,
+    template::AbstractMatrix{T}) where {T<:AbstractFloat}
+    return _require_lift_response_array(model.kernel, template, T)
+end
+
+@inline function _require_lift_response_backend(model::RectangularPixelAperture,
+    template::AbstractMatrix{T}) where {T<:AbstractFloat}
+    _require_lift_response_array(model.kernel_x, template, T)
+    return _require_lift_response_array(model.kernel_y, template, T)
+end
+
+@inline _require_lift_mapping_backend(::LiFTIdentityMapping,
+    ::AbstractMatrix) = nothing
+@inline _require_lift_mapping_backend(mapping::LiFTFrameMapping,
+    template::AbstractMatrix) =
+    _require_lift_response_backend(mapping.response, template)
+
+function _copy_lift_array(template::AbstractArray, input::AbstractArray,
+    ::Type{T}) where {T<:AbstractFloat}
+    output = similar(template, T, size(input)...)
+    copyto!(output, input)
+    return output
+end
+
+function _prepare_lift_object_kernel(object_kernel, template::AbstractMatrix,
+    ::Type{T}) where {T<:AbstractFloat}
+    object_kernel === nothing && return nothing
+    ndims(object_kernel) == 2 || throw(DimensionMismatchError(
+        "LiFT object kernel must be a matrix"))
+    host_kernel = T.(Array(object_kernel))
+    kernel = similar(template, T, size(host_kernel)...)
+    copyto!(kernel, host_kernel)
+    return _lift_object_kernel(kernel)
+end
+
+function _allocate_lift_mapping_buffers(template::AbstractMatrix{T},
+    focal_resolution::Int, ::LiFTIdentityMapping) where {T<:AbstractFloat}
+    return (nothing, nothing, nothing, nothing)
+end
+
+function _allocate_lift_mapping_buffers(template::AbstractMatrix{T},
+    focal_resolution::Int, mapping::LiFTFrameMapping) where {T<:AbstractFloat}
+    sampled_resolution = div(focal_resolution, mapping.sampling)
+    output_resolution = div(sampled_resolution, mapping.binning)
+    response = similar(template, T, focal_resolution, focal_resolution)
+    response_scratch = similar(response)
+    sampled = similar(template, T, sampled_resolution, sampled_resolution)
+    mapped = similar(template, T, output_resolution, output_resolution)
+    return (response, response_scratch, sampled, mapped)
+end
+
+"""
+    prepare_lift_forward_model(telescope, source, basis; diversity_opd, ...)
+
+Prepare the monochromatic LiFT focal-plane forward model independently of any
+detector acquisition. `basis[:, :, k]` is an OPD basis in metres. The telescope
+aperture and diversity are frozen into backend-resident arrays; no mutable
+telescope or source object is retained.
+"""
+function prepare_lift_forward_model(tel::Telescope,
+    src::Union{Source,LGSSource}, basis::AbstractArray{T,3};
+    diversity_opd::AbstractMatrix,
+    focal_resolution::Int=0, zero_padding::Int=1, object_kernel=nothing,
+    mapping::AbstractLiFTObservationMapping=LiFTIdentityMapping()) where {T<:AbstractFloat}
+    _require_physical_photon_irradiance(src, "LiFT forward model")
+    zero_padding >= 1 || throw(InvalidConfiguration(
+        "LiFT zero_padding must be >= 1"))
+    resolution = tel.params.resolution
+    focal_resolution = focal_resolution <= 0 ? resolution * zero_padding :
+        focal_resolution
+    focal_resolution >= 1 || throw(InvalidConfiguration(
+        "LiFT focal_resolution must be >= 1"))
+    focal_resolution * lift_oversampling(zero_padding) <=
+        lift_pad_size(resolution, zero_padding) || throw(DimensionMismatchError(
+            "LiFT focal resolution exceeds the prepared padded focal field"))
+    size(basis, 1) == resolution && size(basis, 2) == resolution || throw(
+        DimensionMismatchError(
+            "LiFT basis pupil dimensions must match telescope resolution"))
+    size(diversity_opd) == (resolution, resolution) || throw(
+        DimensionMismatchError(
+            "LiFT diversity OPD must match telescope resolution"))
+    eltype(opd_map(tel)) === T || throw(InvalidConfiguration(
+        "LiFT telescope and basis must use the same numeric type"))
+    typeof(backend(basis)) === typeof(backend(tel)) || throw(
+        InvalidConfiguration(
+            "LiFT telescope and basis must use the same array backend"))
+    plane_device(basis) == plane_device(opd_map(tel)) || throw(
+        InvalidConfiguration(
+            "LiFT telescope and basis must occupy the same physical device"))
+    typeof(backend(diversity_opd)) === typeof(backend(tel)) || throw(
+        InvalidConfiguration(
+            "LiFT diversity and telescope must use the same array backend"))
+    plane_device(diversity_opd) == plane_device(opd_map(tel)) || throw(
+        InvalidConfiguration(
+            "LiFT diversity and telescope must occupy the same physical device"))
+    _lift_output_dimensions(focal_resolution, mapping)
+    _require_lift_mapping_backend(mapping, opd_map(tel))
+
+    pupil = copy(pupil_mask(tel))
+    reflectivity = pupil_reflectivity(tel)
+    amplitude = similar(opd_map(tel), T, resolution, resolution)
+    @. amplitude = sqrt(reflectivity)
+    owned_basis = copy(basis)
+    diversity = _copy_lift_array(opd_map(tel), diversity_opd, T)
+    kernel = _prepare_lift_object_kernel(object_kernel, opd_map(tel), T)
+    oversampling = lift_oversampling(zero_padding)
+    propagation = Workspace(opd_map(tel),
+        lift_pad_size(resolution, zero_padding); T=T)
+    optical_rate = similar(opd_map(tel), T, focal_resolution,
+        focal_resolution)
+    pupil_amplitude = similar(opd_map(tel), T, resolution, resolution)
+    focal_size = focal_resolution * oversampling
+    field_scratch = similar(optical_rate, T, focal_size, focal_size)
+    focal = similar(optical_rate, Complex{T}, focal_size, focal_size)
+    mode = similar(focal)
+    conjugate_field = similar(focal)
+    response, response_scratch, sampled, mapped =
+        _allocate_lift_mapping_buffers(opd_map(tel), focal_resolution, mapping)
+    output_dimensions = _lift_output_dimensions(focal_resolution, mapping)
+    output_work = similar(opd_map(tel), T, output_dimensions...)
+    convolution = kernel === nothing ? nothing : similar(optical_rate)
+    convolution_scratch = kernel === nothing ? nothing : similar(optical_rate)
+    opd = similar(pupil_amplitude)
+    opd_work = similar(pupil_amplitude)
+
+    workspace = LiFTForwardWorkspace(propagation, optical_rate,
+        pupil_amplitude, field_scratch, focal, mode, conjugate_field,
+        response, response_scratch, sampled, mapped, output_work, convolution,
+        convolution_scratch, opd, opd_work)
+    output_values = _lift_output_values(mapping, workspace)
+    contract = LiFTObservationContract(
+        OpticalPlaneMetadata(FocalPlane(), output_values;
+            coordinate_domain=AngularCoordinates(),
+            sampling=(T(wavelength(src) /
+                (tel.params.diameter * zero_padding) *
+                prod(_lift_mapping_factors(mapping))),
+                T(wavelength(src) /
+                (tel.params.diameter * zero_padding) *
+                prod(_lift_mapping_factors(mapping)))),
+            spectral=MonochromaticChannel(T(wavelength(src))),
+            normalization=PhotonRateNormalization(),
+            spatial_measure=CellIntegratedMeasure(),
+            coherence=IncoherentIntensityAddition()),
+        _lift_mapping_signature(mapping))
+    model = LiFTForwardModel(pupil, amplitude, owned_basis, diversity,
+        T(wavelength(src)), T(photon_irradiance(src)),
+        T((tel.params.diameter / resolution)^2), focal_resolution,
+        zero_padding, kernel, mapping, contract)
+    output = IntensityMap(contract.rate_metadata, output_values)
+    return PreparedLiFTForwardModel(model, workspace, output)
+end
+
+"""Return the immutable observation-compatibility contract for `forward`."""
+@inline lift_observation_contract(forward::PreparedLiFTForwardModel) =
+    forward.model.observation_contract
+"""Return the caller-visible photon-arrival-rate output owned by `forward`."""
+@inline lift_forward_output(forward::PreparedLiFTForwardModel) = forward.output
+
+function LiFTObservation(contract::LiFTObservationContract,
+    values::AbstractMatrix{E};
+    domain::AbstractLiFTObservationDomain=LiFTPhotonRate(),
+    readout_noise_std::Real=0, validate_values::Bool=true) where {E<:Real}
+    rate_metadata = contract.rate_metadata
+    size(values) == rate_metadata.dimensions || throw(DimensionMismatchError(
+        "LiFT observation dimensions do not match its prepared contract"))
+    typeof(backend(values)) === typeof(rate_metadata.backend) || throw(
+        InvalidConfiguration(
+            "LiFT observation and forward model must use the same array backend"))
+    device = plane_device(values)
+    device == rate_metadata.device || throw(InvalidConfiguration(
+        "LiFT observation and forward model must occupy the same physical device"))
+    sigma = rate_metadata.numeric_type(readout_noise_std)
+    isfinite(sigma) && sigma >= zero(sigma) || throw(InvalidConfiguration(
+        "LiFT observation readout noise must be finite and nonnegative"))
+    validate_values && _require_finite_nonnegative_intensity(values)
+    metadata = LiFTObservationMetadata(contract, domain, sigma, E,
+        backend(values), device)
+    return LiFTObservation(metadata, values)
+end
+
+LiFTObservation(forward::PreparedLiFTForwardModel,
+    values::AbstractMatrix; kwargs...) =
+    LiFTObservation(lift_observation_contract(forward), values; kwargs...)
+
+"""Construct an iterative LiFT estimator over a prepared forward model."""
+function LiFT(forward::PreparedLiFTForwardModel; iterations::Int=5,
+    mode_ids=axes(forward.model.basis, 3),
+    numerical::Bool=false, solve_mode::LiFTSolveMode=LiFTSolveAuto(),
+    damping::LiFTDampingMode=LiFTDampingNone())
+    iterations >= 1 || throw(InvalidConfiguration(
+        "LiFT iterations must be >= 1"))
+    output = intensity_values(forward.output)
+    T = eltype(output)
+    prepared_mode_ids = Tuple(Int(mode_id) for mode_id in mode_ids)
+    isempty(prepared_mode_ids) && throw(InvalidConfiguration(
+        "LiFT mode_ids must not be empty"))
+    all(mode_id -> 1 <= mode_id <= size(forward.model.basis, 3),
+        prepared_mode_ids) || throw(DimensionMismatchError(
+            "LiFT mode ids must index the prepared modal basis"))
+    allunique(prepared_mode_ids) || throw(InvalidConfiguration(
+        "LiFT mode_ids must be unique"))
+    mode_count = length(prepared_mode_ids)
+    observation_rate = similar(output)
+    residual = similar(output, T, length(output))
+    weights = similar(residual)
+    H = similar(output, T, length(output), mode_count)
+    normal = similar(output, T, mode_count, mode_count)
+    factor = similar(normal)
+    rhs = similar(residual, mode_count)
+    mode_ids = similar(rhs, Int, mode_count)
+    copyto!(mode_ids, collect(prepared_mode_ids))
+    diag = LiFTDiagnostics(T(NaN), T(NaN), T(NaN), T(NaN), zero(T),
+        false, false)
+    state = LiFTState(observation_rate, residual, weights, H, normal,
+        factor, rhs, mode_ids, diag)
+    params = LiFTParams(iterations, solve_mode, damping, prepared_mode_ids)
+    mode = numerical ? LiFTNumerical() : LiFTAnalytic()
+    return LiFT{typeof(mode),typeof(forward),typeof(params),typeof(state)}(
+        forward, params, state)
+end
+
+"""Return the diagnostics from the most recent LiFT reconstruction."""
 diagnostics(lift::LiFT) = lift.state.diagnostics
+@inline _lift_model(lift::LiFT) = lift.forward.model
+@inline _lift_workspace(lift::LiFT) = lift.forward.workspace
 
 """
     prepare_opd!(lift, coeffs)
@@ -254,173 +745,395 @@ Assemble the current model OPD from the modal basis coefficients plus the fixed
 diversity OPD.
 """
 @inline function prepare_opd!(lift::LiFT, coeffs::AbstractVector)
-    combine_basis!(lift.state.opd_buffer, lift.basis, coeffs, pupil_mask(lift.tel))
-    @. lift.state.opd_buffer += lift.params.diversity_opd
-    return lift.state.opd_buffer
+    model = _lift_model(lift)
+    workspace = _lift_workspace(lift)
+    combine_basis!(workspace.opd_buffer, model.basis, coeffs,
+        model.pupil_mask)
+    @. workspace.opd_buffer += model.diversity_opd
+    return workspace.opd_buffer
+end
+
+@inline function lift_affine_basis_mode!(dest::AbstractMatrix{T},
+    base::AbstractMatrix{T}, basis::AbstractArray{T,3}, mode_id::Int,
+    scale::T) where {T<:AbstractFloat}
+    return lift_affine_basis_mode!(execution_style(dest), dest, base,
+        basis, mode_id, scale)
+end
+
+function lift_affine_basis_mode!(::ScalarCPUStyle, dest::AbstractMatrix{T},
+    base::AbstractMatrix{T}, basis::AbstractArray{T,3}, mode_id::Int,
+    scale::T) where {T<:AbstractFloat}
+    mode_offset = (mode_id - 1) * length(dest)
+    @inbounds @simd for i in eachindex(dest, base)
+        dest[i] = base[i] + scale * basis[i + mode_offset]
+    end
+    return dest
+end
+
+function lift_affine_basis_mode!(style::AcceleratorStyle,
+    dest::AbstractMatrix{T}, base::AbstractMatrix{T},
+    basis::AbstractArray{T,3}, mode_id::Int,
+    scale::T) where {T<:AbstractFloat}
+    n = length(dest)
+    mode_offset = (mode_id - 1) * n
+    launch_kernel!(style, lift_affine_basis_mode_kernel!, dest, base,
+        basis, scale, mode_offset, n; ndrange=n)
+    return dest
+end
+
+@inline function lift_scaled_basis_mode!(dest::AbstractMatrix{T},
+    amplitude::AbstractMatrix{T}, basis::AbstractArray{T,3},
+    mode_id::Int, scale::T) where {T<:AbstractFloat}
+    return lift_scaled_basis_mode!(execution_style(dest), dest, amplitude,
+        basis, mode_id, scale)
+end
+
+function lift_scaled_basis_mode!(::ScalarCPUStyle,
+    dest::AbstractMatrix{T}, amplitude::AbstractMatrix{T},
+    basis::AbstractArray{T,3}, mode_id::Int,
+    scale::T) where {T<:AbstractFloat}
+    mode_offset = (mode_id - 1) * length(dest)
+    @inbounds @simd for i in eachindex(dest, amplitude)
+        dest[i] = amplitude[i] * scale * basis[i + mode_offset]
+    end
+    return dest
+end
+
+function lift_scaled_basis_mode!(style::AcceleratorStyle,
+    dest::AbstractMatrix{T}, amplitude::AbstractMatrix{T},
+    basis::AbstractArray{T,3}, mode_id::Int,
+    scale::T) where {T<:AbstractFloat}
+    n = length(dest)
+    mode_offset = (mode_id - 1) * n
+    launch_kernel!(style, lift_scaled_basis_mode_kernel!, dest, amplitude,
+        basis, scale, mode_offset, n; ndrange=n)
+    return dest
+end
+
+@inline function lift_copy_column!(dest::AbstractMatrix,
+    column::Int, src::AbstractMatrix)
+    return lift_copy_column!(execution_style(dest), dest, column, src)
+end
+
+function lift_copy_column!(::ScalarCPUStyle, dest::AbstractMatrix{T},
+    column::Int, src::AbstractMatrix{T}) where {T}
+    @inbounds @simd for i in eachindex(src)
+        dest[i, column] = src[i]
+    end
+    return dest
+end
+
+function lift_copy_column!(style::AcceleratorStyle,
+    dest::AbstractMatrix, column::Int, src::AbstractMatrix)
+    launch_kernel!(style, lift_copy_column_kernel!, dest, column, src,
+        length(src); ndrange=length(src))
+    return dest
+end
+
+@inline function lift_residual!(dest::AbstractVector,
+    observation::AbstractMatrix, model::AbstractMatrix)
+    return lift_residual!(execution_style(dest), dest, observation, model)
+end
+
+function lift_residual!(::ScalarCPUStyle, dest::AbstractVector{T},
+    observation::AbstractMatrix{T}, model::AbstractMatrix{T}) where {T}
+    @inbounds @simd for i in eachindex(dest, observation, model)
+        dest[i] = observation[i] - model[i]
+    end
+    return dest
+end
+
+function lift_residual!(style::AcceleratorStyle, dest::AbstractVector,
+    observation::AbstractMatrix, model::AbstractMatrix)
+    launch_kernel!(style, lift_residual_kernel!, dest, observation, model,
+        length(dest); ndrange=length(dest))
+    return dest
+end
+
+@inline _apply_lift_mapping!(::LiFTIdentityMapping,
+    ::LiFTForwardWorkspace, optical_rate::AbstractMatrix) = optical_rate
+
+@inline function _apply_lift_response!(::NullFrameResponse,
+    workspace::LiFTForwardWorkspace, optical_rate::AbstractMatrix)
+    copyto!(workspace.response_buffer, optical_rate)
+    return workspace.response_buffer
+end
+
+@inline function _apply_lift_response!(response::AbstractFrameResponse,
+    workspace::LiFTForwardWorkspace, optical_rate::AbstractMatrix)
+    copyto!(workspace.response_buffer, optical_rate)
+    apply_response!(execution_style(workspace.response_buffer), response,
+        workspace.response_buffer, workspace.response_scratch)
+    return workspace.response_buffer
+end
+
+function _apply_lift_mapping!(mapping::LiFTFrameMapping,
+    workspace::LiFTForwardWorkspace, optical_rate::AbstractMatrix)
+    response_rate = _apply_lift_response!(mapping.response, workspace,
+        optical_rate)
+    if mapping.sampling > 1
+        bin2d!(workspace.sampling_buffer, response_rate,
+            mapping.sampling)
+    else
+        copyto!(workspace.sampling_buffer, response_rate)
+    end
+    if mapping.binning > 1
+        bin2d!(workspace.mapped_rate_buffer, workspace.sampling_buffer,
+            mapping.binning)
+    else
+        copyto!(workspace.mapped_rate_buffer, workspace.sampling_buffer)
+    end
+    return workspace.mapped_rate_buffer
 end
 
 """
-    lift_interaction_matrix!(H, lift, coefficients, mode_ids; flux_norm=1)
+    lift_interaction_matrix!(H, lift, coefficients; rate_scale=1)
 
-Fill the LiFT Jacobian matrix with derivatives of detector intensity with
-respect to the requested modal coefficients.
+Fill the LiFT Jacobian with derivatives of the prepared observation-domain
+photon-arrival rate with respect to the requested modal coefficients.
 
 - `LiFTNumerical` uses centered finite differences
 - `LiFTAnalytic` uses the field-derivative formulation
 """
-function lift_interaction_matrix!(H::AbstractMatrix, lift::LiFT{LiFTNumerical}, coefficients::AbstractVector,
-    mode_ids::AbstractVector; flux_norm::Real=1.0)
-    T = eltype(lift.state.psf_buffer)
+function lift_interaction_matrix!(H::AbstractMatrix,
+    lift::LiFT{LiFTNumerical}, coefficients::AbstractVector;
+    rate_scale::Real=1.0)
+    model = _lift_model(lift)
+    workspace = _lift_workspace(lift)
+    T = eltype(workspace.optical_rate_buffer)
+    mode_ids = lift.params.mode_ids
     n_modes = length(mode_ids)
-    psf_size = lift.params.img_resolution
-    if size(H, 1) < psf_size * psf_size || size(H, 2) < n_modes
+    output_size = length(lift.forward.output.values)
+    if size(H, 1) < output_size || size(H, 2) < n_modes
         throw(InvalidConfiguration("H buffer size does not match LiFT dimensions"))
     end
     delta = T(1e-9)
 
     initial_opd = prepare_opd!(lift, coefficients)
-    opd_work = lift.state.opd_work_buffer
+    opd_work = workspace.opd_work_buffer
     @inbounds for (idx, mode_id) in enumerate(mode_ids)
-        @views mode = lift.basis[:, :, mode_id]
-        @. opd_work = initial_opd + delta * mode
-        psf_p = psf_from_opd!(lift, opd_work; flux_norm=flux_norm)
-        copyto!(lift.state.conv_buffer, psf_p)
-        @. opd_work = initial_opd - delta * mode
-        psf_m = psf_from_opd!(lift, opd_work; flux_norm=flux_norm)
-        @. lift.state.psf_buffer = (lift.state.conv_buffer - psf_m) / (2 * delta)
-        maybe_object_convolve!(lift, lift.state.psf_buffer)
-        @views H[:, idx] .= reshape(lift.state.psf_buffer, :)
+        lift_affine_basis_mode!(opd_work, initial_opd, model.basis,
+            mode_id, delta)
+        rate_plus = _lift_rate_values_from_opd!(lift.forward, opd_work;
+            rate_scale=rate_scale)
+        copyto!(workspace.output_work_buffer, rate_plus)
+        lift_affine_basis_mode!(opd_work, initial_opd, model.basis,
+            mode_id, -delta)
+        rate_minus = _lift_rate_values_from_opd!(lift.forward, opd_work;
+            rate_scale=rate_scale)
+        @. rate_minus = (workspace.output_work_buffer - rate_minus) /
+            (2 * delta)
+        lift_copy_column!(H, idx, rate_minus)
     end
     return H
 end
 
-function lift_interaction_matrix!(H::AbstractMatrix, lift::LiFT{LiFTAnalytic}, coefficients::AbstractVector,
-    mode_ids::AbstractVector; flux_norm::Real=1.0)
-    T = eltype(lift.state.psf_buffer)
+function lift_interaction_matrix!(H::AbstractMatrix,
+    lift::LiFT{LiFTAnalytic}, coefficients::AbstractVector;
+    rate_scale::Real=1.0)
+    model = _lift_model(lift)
+    workspace = _lift_workspace(lift)
+    T = eltype(workspace.optical_rate_buffer)
+    mode_ids = lift.params.mode_ids
     n_modes = length(mode_ids)
-    psf_size = lift.params.img_resolution
-    if size(H, 1) < psf_size * psf_size || size(H, 2) < n_modes
+    output_size = length(lift.forward.output.values)
+    if size(H, 1) < output_size || size(H, 2) < n_modes
         throw(InvalidConfiguration("H buffer size does not match LiFT dimensions"))
     end
 
     initial_opd = prepare_opd!(lift, coefficients)
 
-    amp_scale = sqrt(T(photon_irradiance(lift.src) * flux_norm *
-        (lift.tel.params.diameter / lift.tel.params.resolution)^2))
-    @. lift.state.amp_buffer = ifelse($(pupil_mask(lift.tel)), amp_scale, zero(T))
+    amplitude_scale = sqrt(T(model.photon_irradiance * rate_scale *
+        model.pupil_cell_area_m2))
+    @. workspace.amplitude_buffer = model.pupil_amplitude * amplitude_scale
 
-    oversampling = focal_field_from_opd!(lift.state.focal_buffer, lift, lift.state.amp_buffer, initial_opd)
-    conjugate_field!(lift.state.pd_buffer, lift.state.focal_buffer)
-    Pd = lift.state.pd_buffer
+    oversampling = focal_field_from_opd!(workspace.focal_buffer,
+        lift.forward, workspace.amplitude_buffer, initial_opd)
+    conjugate_field!(workspace.conjugate_field_buffer,
+        workspace.focal_buffer)
+    conjugated_field = workspace.conjugate_field_buffer
 
-    k = T(2 * pi) / wavelength(lift.src)
+    wavenumber = T(2 * pi) / model.wavelength_m
     @inbounds for (idx, mode_id) in enumerate(mode_ids)
-        @views mode = lift.basis[:, :, mode_id]
-        @. lift.state.amp_buffer = ifelse($(pupil_mask(lift.tel)), amp_scale * mode, zero(T))
-        focal_field_from_opd!(lift.state.mode_buffer, lift, lift.state.amp_buffer, initial_opd)
-        field_derivative!(lift.state.psf_buffer, lift.state.mode_buffer, Pd, oversampling, 2 * k,
-            lift.state.field_scratch)
-        maybe_object_convolve!(lift, lift.state.psf_buffer)
-        @views H[:, idx] .= reshape(lift.state.psf_buffer, :)
+        lift_scaled_basis_mode!(workspace.amplitude_buffer,
+            model.pupil_amplitude, model.basis, mode_id, amplitude_scale)
+        focal_field_from_opd!(workspace.mode_buffer, lift.forward,
+            workspace.amplitude_buffer, initial_opd)
+        field_derivative!(workspace.optical_rate_buffer,
+            workspace.mode_buffer, conjugated_field, oversampling,
+            2 * wavenumber, workspace.field_scratch)
+        maybe_object_convolve!(lift.forward,
+            workspace.optical_rate_buffer)
+        mapped_derivative = _apply_lift_mapping!(model.mapping, workspace,
+            workspace.optical_rate_buffer)
+        lift_copy_column!(H, idx, mapped_derivative)
     end
     return H
 end
 
-function lift_interaction_matrix(lift::LiFT{LiFTNumerical}, coefficients::AbstractVector,
-    mode_ids::AbstractVector; flux_norm::Real=1.0)
-    T = eltype(lift.state.psf_buffer)
-    psf_size = lift.params.img_resolution
-    H = zeros(T, psf_size * psf_size, length(mode_ids))
-    return lift_interaction_matrix!(H, lift, coefficients, mode_ids; flux_norm=flux_norm)
+function lift_interaction_matrix(lift::LiFT,
+    coefficients::AbstractVector; rate_scale::Real=1.0)
+    output = lift.forward.output.values
+    H = similar(output, eltype(output), length(output),
+        length(lift.params.mode_ids))
+    return lift_interaction_matrix!(H, lift, coefficients;
+        rate_scale=rate_scale)
 end
 
-function lift_interaction_matrix(lift::LiFT{LiFTAnalytic}, coefficients::AbstractVector,
-    mode_ids::AbstractVector; flux_norm::Real=1.0)
-    T = eltype(lift.state.psf_buffer)
-    psf_size = lift.params.img_resolution
-    H = zeros(T, psf_size * psf_size, length(mode_ids))
-    return lift_interaction_matrix!(H, lift, coefficients, mode_ids; flux_norm=flux_norm)
+function _require_lift_observation(lift::LiFT,
+    observation::LiFTObservation)
+    observation.metadata.contract == lift_observation_contract(lift.forward) ||
+        throw(InvalidConfiguration(
+            "LiFT observation geometry, wavelength, or preprocessing does not match the prepared forward model"))
+    return observation
 end
 
-function reconstruct(lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVector;
+@inline _require_lift_weighting(::LiFTWeightingMode,
+    ::LiFTObservationMetadata, ::Type{<:AbstractFloat}) = nothing
+
+function _require_lift_weighting(mode::LiFTWeightMatrix,
+    metadata::LiFTObservationMetadata,
+    ::Type{T}) where {T<:AbstractFloat}
+    size(mode.R_n) == metadata.contract.rate_metadata.dimensions || throw(
+        DimensionMismatchError(
+            "LiFT observation covariance must match observation dimensions"))
+    eltype(mode.R_n) === T || throw(InvalidConfiguration(
+        "LiFT observation covariance must use the estimator numeric type"))
+    typeof(backend(mode.R_n)) === typeof(metadata.backend) || throw(
+        InvalidConfiguration(
+            "LiFT observation covariance must use the observation array backend"))
+    plane_device(mode.R_n) == metadata.device || throw(InvalidConfiguration(
+        "LiFT observation covariance must occupy the observation physical device"))
+    return nothing
+end
+
+function _require_lift_reconstruction(lift::LiFT,
+    observation::LiFTObservation, coeffs::AbstractVector{T},
+    mode::LiFTWeightingMode, optimize_norm::Symbol) where {T<:AbstractFloat}
+    _require_lift_observation(lift, observation)
+    model_values = intensity_values(lift.forward.output)
+    eltype(model_values) === T || throw(InvalidConfiguration(
+        "LiFT coefficient buffer must use the prepared numeric type"))
+    typeof(backend(coeffs)) === typeof(backend(model_values)) || throw(
+        InvalidConfiguration(
+            "LiFT coefficient buffer must use the prepared array backend"))
+    plane_device(coeffs) == plane_device(model_values) || throw(
+        InvalidConfiguration(
+            "LiFT coefficient buffer must occupy the prepared physical device"))
+    optimize_norm in (:sum, :max, :none) || throw(InvalidConfiguration(
+        "LiFT optimize_norm must be :sum, :max, or :none"))
+    length(coeffs) >= size(_lift_model(lift).basis, 3) || throw(
+        DimensionMismatchError(
+            "LiFT coefficient buffer must cover the prepared modal basis"))
+    _require_lift_weighting(mode, observation.metadata, T)
+    return nothing
+end
+
+@inline _require_lift_initial_coefficients(::AbstractVector,
+    ::Nothing) = nothing
+
+function _require_lift_initial_coefficients(dest::AbstractVector{T},
+    initial::AbstractVector) where {T<:AbstractFloat}
+    length(initial) == length(dest) || throw(DimensionMismatchError(
+        "LiFT initial coefficients must match the full coefficient buffer"))
+    eltype(initial) === T || throw(InvalidConfiguration(
+        "LiFT initial coefficients must use the prepared numeric type"))
+    typeof(backend(initial)) === typeof(backend(dest)) || throw(
+        InvalidConfiguration(
+            "LiFT initial coefficients must use the coefficient array backend"))
+    plane_device(initial) == plane_device(dest) || throw(InvalidConfiguration(
+        "LiFT initial coefficients must occupy the coefficient physical device"))
+    return nothing
+end
+
+_require_lift_initial_coefficients(::AbstractVector, initial) = throw(
+    InvalidConfiguration(
+        "LiFT initial coefficients must be an abstract vector or nothing"))
+
+function _copy_lift_observation_rate!(dest::AbstractMatrix{T},
+    observation::LiFTObservation) where {T<:AbstractFloat}
+    scale = lift_observation_to_rate_scale(observation.metadata.domain, T)
+    @. dest = observation.values * scale
+    return dest
+end
+
+function reconstruct(lift::LiFT, observation::LiFTObservation;
     coeffs0=nothing, R_n=nothing, optimize_norm::Symbol=:sum, check_convergence::Bool=true)
-    T = eltype(lift.state.psf_buffer)
-    coeffs = similar(lift.state.rhs_buffer, T, maximum(mode_ids))
-    if coeffs0 === nothing
-        fill!(coeffs, zero(T))
-    else
-        copyto!(coeffs, coeffs0)
-    end
-    reconstruct!(coeffs, lift, psf_in, mode_ids, weight_mode(R_n);
+    T = eltype(lift.state.observation_rate_buffer)
+    coeffs = similar(lift.state.rhs_buffer, T,
+        size(_lift_model(lift).basis, 3))
+    reconstruct!(coeffs, lift, observation; coeffs0=coeffs0, R_n=R_n,
         optimize_norm=optimize_norm, check_convergence=check_convergence)
-    mode_ids_buf = @view lift.state.mode_id_buffer[1:length(mode_ids)]
-    copyto!(mode_ids_buf, mode_ids)
-    out = similar(lift.state.rhs_buffer, T, length(mode_ids))
-    gather_selected_coefficients!(execution_style(coeffs), out, coeffs, mode_ids_buf, length(mode_ids))
+    mode_ids_buf = lift.state.mode_id_buffer
+    out = similar(lift.state.rhs_buffer, T, length(mode_ids_buf))
+    gather_selected_coefficients!(execution_style(coeffs), out, coeffs,
+        mode_ids_buf, length(mode_ids_buf))
     return out
 end
 
 """
-    reconstruct!(coeffs, lift, psf_in, mode_ids, weighting; ...)
+    reconstruct!(coeffs, lift, observation, weighting; ...)
 
 Run the LiFT iterative reconstruction in-place.
 
-Each iteration evaluates the current PSF model, builds/weights the Jacobian,
+Each iteration evaluates the current rate model, builds/weights the Jacobian,
 solves for a modal update, and scatters that update back into the full
 coefficient vector.
 """
-function reconstruct!(coeffs::AbstractVector{T}, lift::LiFT, psf_in::AbstractMatrix{T}, mode_ids::AbstractVector,
-    mode::LiFTWeightingMode; optimize_norm::Symbol=:sum, check_convergence::Bool=true) where {T<:AbstractFloat}
-    maximum(mode_ids) <= length(coeffs) ||
-        throw(DimensionMismatchError("coefficient buffer length must cover requested mode ids"))
-    n_modes = length(mode_ids)
+function reconstruct!(coeffs::AbstractVector{T}, lift::LiFT,
+    observation::LiFTObservation, mode::LiFTWeightingMode;
+    optimize_norm::Symbol=:sum,
+    check_convergence::Bool=true) where {T<:AbstractFloat}
+    _require_lift_reconstruction(lift, observation, coeffs, mode,
+        optimize_norm)
+    n_modes = length(lift.params.mode_ids)
+    observation_rate = _copy_lift_observation_rate!(
+        lift.state.observation_rate_buffer, observation)
 
     residual = lift.state.residual_buffer
     sqrtw = lift.state.weight_buffer
-    H = @view lift.state.H_buffer[:, 1:n_modes]
-    normal = @view lift.state.normal_buffer[1:n_modes, 1:n_modes]
-    factor = @view lift.state.factor_buffer[1:n_modes, 1:n_modes]
-    rhs = @view lift.state.rhs_buffer[1:n_modes]
-    mode_ids_buf = @view lift.state.mode_id_buffer[1:n_modes]
+    H = lift.state.H_buffer
+    normal = lift.state.normal_buffer
+    factor = lift.state.factor_buffer
+    rhs = lift.state.rhs_buffer
+    mode_ids_buf = lift.state.mode_id_buffer
     diag = lift.state.diagnostics
     style = execution_style(H)
     effective_mode = effective_solve_mode(style, lift.params.solve_mode)
     λ_state = initial_damping_state(lift.params.damping, T)
     prev_weighted_residual_norm = T(Inf)
-    copyto!(mode_ids_buf, mode_ids)
-    init_weights!(sqrtw, mode, psf_in, lift.det)
+    init_weights!(sqrtw, mode, observation_rate, observation.metadata)
     for iter in 1:lift.params.iterations
         current_opd = prepare_opd!(lift, coeffs)
-        model_psf = psf_from_opd!(lift, current_opd)
+        model_rate = _lift_rate_values_from_opd!(lift.forward, current_opd)
         scale = one(T)
-        model_flux = zero(T)
+        model_photon_rate = zero(T)
         if optimize_norm == :sum
-            denom = backend_sum_value(model_psf)
+            denom = backend_sum_value(model_rate)
             if denom > 0
-                scale = backend_sum_value(psf_in) / denom
+                scale = backend_sum_value(observation_rate) / denom
             end
-            model_flux = abs(denom * scale)
+            model_photon_rate = abs(denom * scale)
         elseif optimize_norm == :max
-            denom = backend_maximum_value(model_psf)
+            denom = backend_maximum_value(model_rate)
             if denom > 0
-                scale = backend_maximum_value(psf_in) / denom
+                scale = backend_maximum_value(observation_rate) / denom
             end
         end
         if scale != one(T)
-            model_psf .*= scale
+            model_rate .*= scale
         end
         if optimize_norm != :sum
-            model_flux = abs(backend_sum_value(model_psf))
+            model_photon_rate = abs(backend_sum_value(model_rate))
         end
-        objective_scale = max(model_flux, one(T))
-        copyto!(residual, vec(psf_in))
-        residual .-= vec(model_psf)
+        objective_scale = max(model_photon_rate, one(T))
+        lift_residual!(residual, observation_rate, model_rate)
         diag.residual_norm = norm(residual)
-        update_weights!(sqrtw, mode, model_psf, lift.det)
+        update_weights!(sqrtw, mode, model_rate, observation.metadata)
         # Generate the Jacobian in the normalized objective scale so a
         # physically large photon rate cannot overflow before H'H is formed.
-        lift_interaction_matrix!(H, lift, coeffs, mode_ids;
-            flux_norm=scale / objective_scale)
+        lift_interaction_matrix!(H, lift, coeffs;
+            rate_scale=scale / objective_scale)
 
         apply_row_weights!(H, sqrtw, n_modes)
         apply_vec_weights!(residual, sqrtw)
@@ -446,14 +1159,19 @@ function reconstruct!(coeffs::AbstractVector{T}, lift::LiFT, psf_in::AbstractMat
     return coeffs
 end
 
-function reconstruct!(coeffs::AbstractVector, lift::LiFT, psf_in::AbstractMatrix, mode_ids::AbstractVector;
+function reconstruct!(coeffs::AbstractVector, lift::LiFT,
+    observation::LiFTObservation;
     coeffs0=nothing, R_n=nothing, optimize_norm::Symbol=:sum, check_convergence::Bool=true)
+    mode = weight_mode(R_n)
+    _require_lift_reconstruction(lift, observation, coeffs, mode,
+        optimize_norm)
+    _require_lift_initial_coefficients(coeffs, coeffs0)
     if coeffs0 === nothing
         fill!(coeffs, zero(eltype(coeffs)))
     else
         copyto!(coeffs, coeffs0)
     end
-    return reconstruct!(coeffs, lift, psf_in, mode_ids, weight_mode(R_n);
+    return reconstruct!(coeffs, lift, observation, mode;
         optimize_norm=optimize_norm, check_convergence=check_convergence)
 end
 
@@ -462,9 +1180,27 @@ end
     return vec
 end
 
-@inline function apply_row_weights!(mat::AbstractMatrix{T}, weights::AbstractVector{T}, n_cols::Int) where {T<:AbstractFloat}
-    row_weights = reshape(weights, :, 1)
-    @views @. mat[:, 1:n_cols] *= row_weights
+@inline function apply_row_weights!(mat::AbstractMatrix{T},
+    weights::AbstractVector{T}, n_cols::Int) where {T<:AbstractFloat}
+    return apply_row_weights!(execution_style(mat), mat, weights, n_cols)
+end
+
+function apply_row_weights!(::ScalarCPUStyle, mat::AbstractMatrix{T},
+    weights::AbstractVector{T}, n_cols::Int) where {T<:AbstractFloat}
+    n_rows = size(mat, 1)
+    @inbounds for j in 1:n_cols
+        @simd for i in 1:n_rows
+            mat[i, j] *= weights[i]
+        end
+    end
+    return mat
+end
+
+function apply_row_weights!(style::AcceleratorStyle,
+    mat::AbstractMatrix, weights::AbstractVector, n_cols::Int)
+    n_rows = size(mat, 1)
+    launch_kernel!(style, lift_row_weights_kernel!, mat, weights,
+        n_rows, n_cols; ndrange=(n_rows, n_cols))
     return mat
 end
 
@@ -493,6 +1229,27 @@ fallback_damping_lambda(::LiFTDampingMode, ::Type{T}, H::AbstractMatrix{T}) wher
 fallback_damping_lambda(damping::LiFTLevenbergMarquardt, ::Type{T}, H::AbstractMatrix{T}) where {T<:AbstractFloat} =
     damping_lambda(damping, transpose(H) * H)
 
+@inline function add_lift_diagonal!(matrix::AbstractMatrix{T},
+    value::T) where {T<:AbstractFloat}
+    return add_lift_diagonal!(execution_style(matrix), matrix, value)
+end
+
+function add_lift_diagonal!(::ScalarCPUStyle,
+    matrix::AbstractMatrix{T}, value::T) where {T<:AbstractFloat}
+    @inbounds for i in 1:min(size(matrix, 1), size(matrix, 2))
+        matrix[i, i] += value
+    end
+    return matrix
+end
+
+function add_lift_diagonal!(style::AcceleratorStyle,
+    matrix::AbstractMatrix{T}, value::T) where {T<:AbstractFloat}
+    n = min(size(matrix, 1), size(matrix, 2))
+    launch_kernel!(style, lift_add_diagonal_kernel!, matrix, value, n;
+        ndrange=n)
+    return matrix
+end
+
 """
     solve_normal_system!(diag, rhs, factor, normal, H, residual, damping)
 
@@ -510,11 +1267,11 @@ function solve_normal_system!(diag::LiFTDiagnostics{T}, rhs::AbstractVector{T}, 
     λ = zero(T)
     if !issuccess(chol)
         λ = regularization_load(normal)
-        @views factor[diagind(factor)] .+= λ
+        add_lift_diagonal!(factor, λ)
         chol = cholesky!(Hermitian(factor), check=false)
         if !issuccess(chol)
             λ *= T(10)
-            @views factor[diagind(factor)] .+= λ
+            add_lift_diagonal!(factor, λ)
             chol = cholesky!(Hermitian(factor), check=false)
             if !issuccess(chol)
                 return solve_lift_fallback!(diag, rhs, H, residual, LiFTLevenbergMarquardt(lambda0=λ))
@@ -532,13 +1289,13 @@ function solve_normal_system!(diag::LiFTDiagnostics{T}, rhs::AbstractVector{T}, 
     copyto!(factor, normal)
     λ = damping_lambda(damping, normal)
     if λ > zero(T)
-        @views factor[diagind(factor)] .+= λ
+        add_lift_diagonal!(factor, λ)
     end
     chol = cholesky!(Hermitian(factor), check=false)
     while !issuccess(chol)
         λ = max(λ * T(damping.growth), regularization_load(normal))
         copyto!(factor, normal)
-        @views factor[diagind(factor)] .+= λ
+        add_lift_diagonal!(factor, λ)
         chol = cholesky!(Hermitian(factor), check=false)
         if λ > T(1e12)
             return solve_lift_fallback!(diag, rhs, H, residual, damping)
@@ -611,17 +1368,21 @@ end
 @inline function update_coefficients!(coeffs::AbstractVector, delta::AbstractVector, mode_ids::AbstractVector,
     ::LiFTSolveMode, style::AcceleratorStyle)
     launch_kernel!(style, lift_scatter_update_kernel!, coeffs, delta, mode_ids, length(mode_ids); ndrange=length(mode_ids))
-    synchronize_backend!(style)
     return coeffs
 end
 
-@inline gather_selected_coefficients!(::ScalarCPUStyle, out::AbstractVector, coeffs::AbstractVector,
-    mode_ids::AbstractVector, n_modes::Int) = copyto!(out, coeffs[mode_ids])
+@inline function gather_selected_coefficients!(::ScalarCPUStyle,
+    out::AbstractVector, coeffs::AbstractVector,
+    mode_ids::AbstractVector, n_modes::Int)
+    @inbounds @simd for i in 1:n_modes
+        out[i] = coeffs[mode_ids[i]]
+    end
+    return out
+end
 
 @inline function gather_selected_coefficients!(style::AcceleratorStyle, out::AbstractVector, coeffs::AbstractVector,
     mode_ids::AbstractVector, n_modes::Int)
     launch_kernel!(style, lift_gather_kernel!, out, coeffs, mode_ids, n_modes; ndrange=n_modes)
-    synchronize_backend!(style)
     return out
 end
 
@@ -697,10 +1458,25 @@ end
 @inline normal_condition_ratio(normal::AbstractMatrix{T}) where {T<:AbstractFloat} =
     normal_condition_ratio(reduction_execution_plan(normal), normal)
 
-function normal_condition_ratio(::DirectReductionPlan, normal::AbstractMatrix{T}) where {T<:AbstractFloat}
-    diagvals = abs.(@view normal[diagind(normal)])
-    maxabs = maximum(diagvals)
-    minabs = minimum(diagvals)
+function normal_condition_ratio(::DirectReductionPlan,
+    normal::Array{T,2}) where {T<:AbstractFloat}
+    maxabs = zero(T)
+    minabs = typemax(T)
+    @inbounds for i in axes(normal, 1)
+        value = abs(normal[i, i])
+        maxabs = max(maxabs, value)
+        minabs = min(minabs, value)
+    end
+    maxabs == zero(T) && return T(Inf)
+    return maxabs / max(minabs, eps(T))
+end
+
+
+function normal_condition_ratio(::DirectReductionPlan,
+    normal::AbstractMatrix{T}) where {T<:AbstractFloat}
+    diagonal = @view normal[diagind(normal)]
+    maxabs = maximum(abs, diagonal)
+    minabs = minimum(abs, diagonal)
     maxabs == zero(T) && return T(Inf)
     return maxabs / max(minabs, eps(T))
 end
@@ -712,25 +1488,27 @@ function normal_condition_ratio(::HostMirrorReductionPlan, normal::AbstractMatri
 end
 
 @inline function init_weights!(sqrtw::AbstractVector{T}, ::LiFTWeightingDynamic,
-    ::AbstractMatrix{T}, ::AbstractDetector) where {T<:AbstractFloat}
+    ::AbstractMatrix{T}, ::LiFTObservationMetadata) where {T<:AbstractFloat}
     return sqrtw
 end
 
 @inline function init_weights!(sqrtw::AbstractVector{T}, mode::LiFTWeightingStatic,
-    psf_in::AbstractMatrix{T}, det::AbstractDetector) where {T<:AbstractFloat}
-    weight_vector!(sqrtw, psf_in, mode, det)
+    observation_rate::AbstractMatrix{T},
+    metadata::LiFTObservationMetadata) where {T<:AbstractFloat}
+    weight_vector!(sqrtw, observation_rate, mode, metadata)
     sqrt_weights!(execution_style(sqrtw), sqrtw)
     return sqrtw
 end
 
 @inline function update_weights!(sqrtw::AbstractVector{T}, ::LiFTWeightingStatic,
-    ::AbstractMatrix{T}, ::AbstractDetector) where {T<:AbstractFloat}
+    ::AbstractMatrix{T}, ::LiFTObservationMetadata) where {T<:AbstractFloat}
     return sqrtw
 end
 
 @inline function update_weights!(sqrtw::AbstractVector{T}, mode::LiFTWeightingDynamic,
-    model_psf::AbstractMatrix{T}, det::AbstractDetector) where {T<:AbstractFloat}
-    weight_vector!(sqrtw, model_psf, mode, det)
+    model_rate::AbstractMatrix{T},
+    metadata::LiFTObservationMetadata) where {T<:AbstractFloat}
+    weight_vector!(sqrtw, model_rate, mode, metadata)
     sqrt_weights!(execution_style(sqrtw), sqrtw)
     return sqrtw
 end
@@ -749,61 +1527,138 @@ end
     return weights
 end
 
-function weight_vector!(out::AbstractVector{T}, psf::AbstractMatrix{T}, ::LiFTWeightModel,
-    det::AbstractDetector) where {T<:AbstractFloat}
-    σ = readout_noise(det)
-    σ2 = T(σ * σ)
-    vals = vec(psf)
-    @. out = inv(max(vals + σ2, eps(T)))
-    return out
+@inline function _lift_readout_variance_rate(
+    metadata::LiFTObservationMetadata, ::Type{T}) where {T<:AbstractFloat}
+    scale = lift_observation_to_rate_scale(metadata.domain, T)
+    sigma_rate = T(metadata.readout_noise_std) * scale
+    return sigma_rate * sigma_rate
 end
 
-function weight_vector!(out::AbstractVector{T}, psf::AbstractMatrix{T}, ::LiFTWeightIterative,
-    det::AbstractDetector) where {T<:AbstractFloat}
-    return weight_vector!(out, psf, LiFTWeightModel(), det)
+@inline function lift_inverse_variance!(dest::AbstractVector{T},
+    values::AbstractArray{T}, scale::T, offset::T) where {T<:AbstractFloat}
+    return lift_inverse_variance!(execution_style(dest), dest, values,
+        scale, offset)
+end
+
+function lift_inverse_variance!(::ScalarCPUStyle,
+    dest::AbstractVector{T}, values::AbstractArray{T}, scale::T,
+    offset::T) where {T<:AbstractFloat}
+    floor_value = eps(T)
+    @inbounds @simd for i in eachindex(dest, values)
+        dest[i] = inv(max(values[i] * scale + offset, floor_value))
+    end
+    return dest
+end
+
+function lift_inverse_variance!(style::AcceleratorStyle,
+    dest::AbstractVector{T}, values::AbstractArray{T}, scale::T,
+    offset::T) where {T<:AbstractFloat}
+    launch_kernel!(style, lift_inverse_variance_kernel!, dest, values,
+        scale, offset, eps(T), length(dest); ndrange=length(dest))
+    return dest
+end
+
+function weight_vector!(out::AbstractVector{T},
+    model_rate::AbstractMatrix{T}, ::LiFTWeightModel,
+    metadata::LiFTObservationMetadata) where {T<:AbstractFloat}
+    readout_variance = _lift_readout_variance_rate(metadata, T)
+    shot_scale = lift_shot_variance_rate_scale(metadata.domain, T)
+    return lift_inverse_variance!(out, model_rate, shot_scale,
+        readout_variance)
+end
+
+function weight_vector!(out::AbstractVector{T},
+    model_rate::AbstractMatrix{T}, ::LiFTWeightIterative,
+    metadata::LiFTObservationMetadata) where {T<:AbstractFloat}
+    return weight_vector!(out, model_rate, LiFTWeightModel(), metadata)
 end
 
 function weight_vector!(out::AbstractVector{T}, ::AbstractMatrix{T}, ::LiFTWeightNone,
-    det::AbstractDetector) where {T<:AbstractFloat}
-    σ = readout_noise(det)
-    σ2 = T(σ * σ)
-    fill!(out, T(1) / max(σ2, eps(T)))
+    metadata::LiFTObservationMetadata) where {T<:AbstractFloat}
+    readout_variance = _lift_readout_variance_rate(metadata, T)
+    fill!(out, one(T) / max(readout_variance, eps(T)))
     return out
 end
 
 function weight_vector!(out::AbstractVector{T}, ::AbstractMatrix{T}, mode::LiFTWeightMatrix,
-    ::AbstractDetector) where {T<:AbstractFloat}
-    vals = vec(mode.R_n)
-    @. out = inv(max(vals, eps(T)))
-    return out
+    metadata::LiFTObservationMetadata) where {T<:AbstractFloat}
+    variance_scale = lift_observation_to_rate_scale(metadata.domain, T)^2
+    return lift_inverse_variance!(out, mode.R_n, variance_scale, zero(T))
 end
 
-function weight_vector!(out::AbstractVector{T}, psf::AbstractMatrix{T}, R_n,
-    det::AbstractDetector) where {T<:AbstractFloat}
-    return weight_vector!(out, psf, weight_mode(R_n), det)
+function weight_vector!(out::AbstractVector{T}, model_rate::AbstractMatrix{T},
+    R_n, metadata::LiFTObservationMetadata) where {T<:AbstractFloat}
+    return weight_vector!(out, model_rate, weight_mode(R_n), metadata)
 end
 
-function weight_vector(psf::AbstractMatrix{T}, R_n, det::AbstractDetector) where {T<:AbstractFloat}
-    out = similar(psf, T, length(psf))
-    return weight_vector!(out, psf, weight_mode(R_n), det)
+function weight_vector(model_rate::AbstractMatrix{T}, R_n,
+    metadata::LiFTObservationMetadata) where {T<:AbstractFloat}
+    out = similar(model_rate, T, length(model_rate))
+    return weight_vector!(out, model_rate, weight_mode(R_n), metadata)
 end
 
 """
-    psf_from_opd!(lift, opd; flux_norm=1)
+    evaluate_lift_forward!(forward, opd; rate_scale=1)
 
-Evaluate the LiFT forward model PSF from an OPD map.
+Evaluate the prepared LiFT forward model from an OPD map in metres.
 
-This includes coherent propagation, intensity formation, detector-size
-resampling, and optional object convolution.
+The returned `IntensityMap` contains cell-integrated photon-arrival rate on the
+prepared observation grid after object convolution and deterministic spatial
+preprocessing. No exposure, QE, noise, or readout operation is applied.
 """
-function psf_from_opd!(lift::LiFT, opd::AbstractMatrix; flux_norm::Real=1.0)
-    amp_scale = sqrt(eltype(lift.state.psf_buffer)(photon_irradiance(lift.src) * flux_norm *
-        (lift.tel.params.diameter / lift.tel.params.resolution)^2))
-    @. lift.state.amp_buffer = ifelse($(pupil_mask(lift.tel)), amp_scale, zero(eltype(lift.state.amp_buffer)))
-    oversampling = focal_field_from_opd!(lift.state.focal_buffer, lift, lift.state.amp_buffer, opd)
-    field_intensity!(lift.state.psf_buffer, lift.state.focal_buffer, oversampling, lift.state.field_scratch)
-    maybe_object_convolve!(lift, lift.state.psf_buffer)
-    return lift.state.psf_buffer
+function _lift_rate_values_from_opd!(forward::PreparedLiFTForwardModel,
+    opd::AbstractMatrix; rate_scale::Real=1.0)
+    model = forward.model
+    workspace = forward.workspace
+    size(opd) == size(model.diversity_opd) || throw(DimensionMismatchError(
+        "LiFT forward OPD must match the prepared pupil dimensions"))
+    T = eltype(workspace.optical_rate_buffer)
+    scale = T(rate_scale)
+    isfinite(scale) && scale >= zero(T) || throw(InvalidConfiguration(
+        "LiFT forward rate_scale must be finite and nonnegative"))
+    amplitude_scale = sqrt(model.photon_irradiance * scale *
+        model.pupil_cell_area_m2)
+    @. workspace.amplitude_buffer = model.pupil_amplitude * amplitude_scale
+    oversampling = focal_field_from_opd!(workspace.focal_buffer, forward,
+        workspace.amplitude_buffer, opd)
+    field_intensity!(workspace.optical_rate_buffer, workspace.focal_buffer,
+        oversampling, workspace.field_scratch)
+    maybe_object_convolve!(forward, workspace.optical_rate_buffer)
+    return _apply_lift_mapping!(model.mapping, workspace,
+        workspace.optical_rate_buffer)
+end
+
+function evaluate_lift_forward!(forward::PreparedLiFTForwardModel,
+    opd::AbstractMatrix; rate_scale::Real=1.0)
+    values = _lift_rate_values_from_opd!(forward, opd;
+        rate_scale=rate_scale)
+    values === forward.output.values || throw(InvalidConfiguration(
+        "LiFT forward workspace output does not match its prepared contract"))
+    return forward.output
+end
+
+"""
+    predict_lift_observation!(dest, forward, opd, domain)
+
+Evaluate `forward` at `opd` and write values in the explicitly selected native
+observation `domain`. The caller owns `dest`; no detector is invoked.
+"""
+function predict_lift_observation!(dest::AbstractMatrix,
+    forward::PreparedLiFTForwardModel, opd::AbstractMatrix,
+    domain::AbstractLiFTObservationDomain)
+    size(dest) == size(forward.output.values) || throw(DimensionMismatchError(
+        "LiFT prediction destination must match the observation dimensions"))
+    typeof(backend(dest)) === typeof(backend(forward.output.values)) || throw(
+        InvalidConfiguration(
+            "LiFT prediction destination must use the prepared array backend"))
+    plane_device(dest) == plane_device(forward.output.values) || throw(
+        InvalidConfiguration(
+            "LiFT prediction destination must occupy the prepared physical device"))
+    rate = _lift_rate_values_from_opd!(forward, opd)
+    T = eltype(rate)
+    native_scale = inv(lift_observation_to_rate_scale(domain, T))
+    @. dest = rate * native_scale
+    return dest
 end
 
 function center_crop!(dest::AbstractMatrix, src::AbstractMatrix)
@@ -818,45 +1673,44 @@ function center_crop!(dest::AbstractMatrix, src::AbstractMatrix)
     return dest
 end
 
-function readout_noise(det::Detector{<:NoiseNone})
-    return 0.0
+@inline function maybe_object_convolve!(
+    forward::PreparedLiFTForwardModel, matrix::AbstractMatrix)
+    return _maybe_object_convolve!(forward.model.object_kernel,
+        forward.workspace, matrix)
 end
 
-function readout_noise(det::Detector{<:NoisePhoton})
-    return 0.0
+@inline _maybe_object_convolve!(::Nothing, ::LiFTForwardWorkspace,
+    matrix::AbstractMatrix) = matrix
+
+function _maybe_object_convolve!(kernel::LiFTDenseObjectKernel,
+    workspace::LiFTForwardWorkspace, matrix::AbstractMatrix)
+    conv2d_same!(workspace.convolution_buffer, matrix, kernel.kernel,
+        kernel.inv_norm)
+    copyto!(matrix, workspace.convolution_buffer)
+    return matrix
 end
 
-function readout_noise(det::Detector{<:NoiseReadout})
-    return det.noise.sigma
-end
-
-function readout_noise(det::Detector{<:NoisePhotonReadout})
-    return det.noise.sigma
-end
-
-function maybe_object_convolve!(lift::LiFT{<:LiFTMode,<:LiFTParams{<:AbstractFloat,<:AbstractMatrix,Nothing}}, mat::AbstractMatrix)
-    return mat
-end
-
-function maybe_object_convolve!(lift::LiFT{<:LiFTMode,<:LiFTParams{<:AbstractFloat,<:AbstractMatrix,<:LiFTDenseObjectKernel}}, mat::AbstractMatrix)
-    conv2d_same!(lift.state.conv_buffer, mat, lift.params.object_kernel.kernel)
-    copyto!(mat, lift.state.conv_buffer)
-    return mat
-end
-
-function maybe_object_convolve!(lift::LiFT{<:LiFTMode,<:LiFTParams{<:AbstractFloat,<:AbstractMatrix,<:LiFTSeparableObjectKernel}}, mat::AbstractMatrix)
-    conv2d_same_separable!(lift.state.conv_buffer, lift.state.conv_aux_buffer, mat,
-        lift.params.object_kernel.row, lift.params.object_kernel.col)
-    copyto!(mat, lift.state.conv_buffer)
-    return mat
+function _maybe_object_convolve!(kernel::LiFTSeparableObjectKernel,
+    workspace::LiFTForwardWorkspace, matrix::AbstractMatrix)
+    conv2d_same_separable!(workspace.convolution_buffer,
+        workspace.convolution_scratch, matrix, kernel.row, kernel.col,
+        kernel.inv_norm)
+    copyto!(matrix, workspace.convolution_buffer)
+    return matrix
 end
 
 function _lift_object_kernel(kernel::AbstractMatrix{T}) where {T<:AbstractFloat}
     row, col = _separable_kernel_factors(kernel)
     if row === nothing
-        return LiFTDenseObjectKernel{T,typeof(kernel)}(kernel)
+        norm = sum(Array(kernel))
+        inv_norm = iszero(norm) ? one(T) : inv(T(norm))
+        return LiFTDenseObjectKernel{T,typeof(kernel)}(kernel, inv_norm)
     end
-    return LiFTSeparableObjectKernel{T,typeof(row)}(row, col)
+    row_norm = sum(Array(row))
+    col_norm = sum(Array(col))
+    inv_norm = (iszero(row_norm) || iszero(col_norm)) ? one(T) :
+        inv(T(row_norm * col_norm))
+    return LiFTSeparableObjectKernel{T,typeof(row)}(row, col, inv_norm)
 end
 
 function _separable_kernel_factors(kernel::AbstractMatrix{T}) where {T<:AbstractFloat}
@@ -867,18 +1721,35 @@ function _separable_kernel_factors(kernel::AbstractMatrix{T}) where {T<:Abstract
     tol = sqrt(eps(T)) * max(one(T), σ1)
     σ2 <= tol || return nothing, nothing
     scale = sqrt(σ1)
-    row = T.(F.U[:, 1] .* scale)
-    col = T.(F.V[:, 1] .* scale)
+    host_row = T.(F.U[:, 1] .* scale)
+    host_col = T.(F.V[:, 1] .* scale)
+    row = similar(kernel, T, length(host_row))
+    col = similar(kernel, T, length(host_col))
+    copyto!(row, host_row)
+    copyto!(col, host_col)
     return row, col
 end
 
-function conv2d_same!(dest::AbstractMatrix{T}, src::AbstractMatrix{T}, kernel::AbstractMatrix) where {T<:AbstractFloat}
+function conv2d_same!(dest::AbstractMatrix{T}, src::AbstractMatrix{T},
+    kernel::AbstractMatrix) where {T<:AbstractFloat}
+    norm = backend_sum_value(kernel)
+    inv_norm = iszero(norm) ? one(T) : inv(T(norm))
+    return conv2d_same!(dest, src, kernel, inv_norm)
+end
+
+@inline function conv2d_same!(dest::AbstractMatrix{T},
+    src::AbstractMatrix{T}, kernel::AbstractMatrix,
+    inv_norm::T) where {T<:AbstractFloat}
+    return conv2d_same!(execution_style(dest), dest, src, kernel, inv_norm)
+end
+
+function conv2d_same!(::ScalarCPUStyle, dest::AbstractMatrix{T},
+    src::AbstractMatrix{T}, kernel::AbstractMatrix,
+    inv_norm::T) where {T<:AbstractFloat}
     n, m = size(src)
     kh, kw = size(kernel)
     cx = div(kh, 2)
     cy = div(kw, 2)
-    norm = sum(kernel)
-    inv_norm = norm == 0 ? one(T) : T(1) / T(norm)
     fill!(dest, zero(T))
     @inbounds for ki in 1:kh, kj in 1:kw
         offset_i = ki - cx - 1
@@ -898,16 +1769,45 @@ function conv2d_same!(dest::AbstractMatrix{T}, src::AbstractMatrix{T}, kernel::A
     return dest
 end
 
-function conv2d_same_separable!(dest::AbstractMatrix{T}, tmp::AbstractMatrix{T}, src::AbstractMatrix{T},
-    row_kernel::AbstractVector{T}, col_kernel::AbstractVector{T}) where {T<:AbstractFloat}
+function conv2d_same!(style::AcceleratorStyle,
+    dest::AbstractMatrix{T}, src::AbstractMatrix{T},
+    kernel::AbstractMatrix, inv_norm::T) where {T<:AbstractFloat}
+    n, m = size(src)
+    kh, kw = size(kernel)
+    launch_kernel!(style, lift_dense_convolution_kernel!, dest, src,
+        kernel, inv_norm, n, m, kh, kw; ndrange=(n, m))
+    return dest
+end
+
+function conv2d_same_separable!(dest::AbstractMatrix{T},
+    tmp::AbstractMatrix{T}, src::AbstractMatrix{T},
+    row_kernel::AbstractVector{T},
+    col_kernel::AbstractVector{T}) where {T<:AbstractFloat}
+    row_norm = backend_sum_value(row_kernel)
+    col_norm = backend_sum_value(col_kernel)
+    inv_norm = (iszero(row_norm) || iszero(col_norm)) ? one(T) :
+        inv(T(row_norm * col_norm))
+    return conv2d_same_separable!(dest, tmp, src, row_kernel,
+        col_kernel, inv_norm)
+end
+
+@inline function conv2d_same_separable!(dest::AbstractMatrix{T},
+    tmp::AbstractMatrix{T}, src::AbstractMatrix{T},
+    row_kernel::AbstractVector{T}, col_kernel::AbstractVector{T},
+    inv_norm::T) where {T<:AbstractFloat}
+    return conv2d_same_separable!(execution_style(dest), dest, tmp, src,
+        row_kernel, col_kernel, inv_norm)
+end
+
+function conv2d_same_separable!(::ScalarCPUStyle,
+    dest::AbstractMatrix{T}, tmp::AbstractMatrix{T},
+    src::AbstractMatrix{T}, row_kernel::AbstractVector{T},
+    col_kernel::AbstractVector{T}, inv_norm::T) where {T<:AbstractFloat}
     n, m = size(src)
     kr = length(row_kernel)
     kc = length(col_kernel)
     cx = div(kr, 2)
     cy = div(kc, 2)
-    row_norm = sum(row_kernel)
-    col_norm = sum(col_kernel)
-    inv_norm = (iszero(row_norm) || iszero(col_norm)) ? one(T) : inv(row_norm * col_norm)
     @inbounds for j in 1:m
         for i in 1:n
             acc = zero(T)
@@ -935,7 +1835,22 @@ function conv2d_same_separable!(dest::AbstractMatrix{T}, tmp::AbstractMatrix{T},
     return dest
 end
 
+function conv2d_same_separable!(style::AcceleratorStyle,
+    dest::AbstractMatrix{T}, tmp::AbstractMatrix{T},
+    src::AbstractMatrix{T}, row_kernel::AbstractVector{T},
+    col_kernel::AbstractVector{T}, inv_norm::T) where {T<:AbstractFloat}
+    n, m = size(src)
+    phase = begin_kernel_phase(style)
+    queue_kernel!(phase, lift_row_convolution_kernel!, tmp, src,
+        row_kernel, n, m, length(row_kernel); ndrange=(n, m))
+    queue_kernel!(phase, lift_column_convolution_kernel!, dest, tmp,
+        col_kernel, inv_norm, n, m, length(col_kernel); ndrange=(n, m))
+    finish_kernel_phase!(phase)
+    return dest
+end
+
 @inline function symm_index(i::Int, n::Int)
+    n == 1 && return 1
     while i < 1 || i > n
         if i < 1
             i = 2 - i
@@ -958,24 +1873,26 @@ end
     return resolution + 2 * pad_width
 end
 
-function focal_field_from_opd!(dest::AbstractMatrix{Complex{T}}, lift::LiFT,
+function focal_field_from_opd!(dest::AbstractMatrix{Complex{T}},
+    forward::PreparedLiFTForwardModel,
     amplitude::AbstractMatrix{T}, opd::AbstractMatrix) where {T<:AbstractFloat}
-    n = lift.tel.params.resolution
-    oversampling = lift_oversampling(lift.params.zero_padding)
-    n_pad = lift_pad_size(n, lift.params.zero_padding)
-    img_size = lift.params.img_resolution * oversampling
-    ws = lift.state.workspace
+    model = forward.model
+    n = size(model.pupil_mask, 1)
+    oversampling = lift_oversampling(model.zero_padding)
+    n_pad = lift_pad_size(n, model.zero_padding)
+    image_size = model.focal_resolution * oversampling
+    ws = forward.workspace.propagation
     ensure_psf_buffers!(ws, n_pad)
-    if size(dest) != (img_size, img_size)
+    if size(dest) != (image_size, image_size)
         throw(DimensionMismatchError("LiFT focal field buffer size must match oversampled image size"))
     end
 
-    opd_to_cycles = T(2) / wavelength(lift.src)
+    opd_to_cycles = T(2) / model.wavelength_m
     ox = cld(n_pad - n, 2)
     oy = cld(n_pad - n, 2)
     fill!(ws.pupil_field, zero(eltype(ws.pupil_field)))
     @views @. ws.pupil_field[ox+1:ox+n, oy+1:oy+n] = amplitude * cispi(opd_to_cycles * opd)
-    if iseven(lift.params.img_resolution)
+    if iseven(model.focal_resolution)
         phase_shift = -T(pi) * (T(n_pad) + one(T)) / T(n_pad)
         apply_centering_phase!(execution_style(ws.pupil_field), ws.pupil_field, phase_shift)
     end
@@ -984,15 +1901,15 @@ function focal_field_from_opd!(dest::AbstractMatrix{Complex{T}}, lift::LiFT,
     execute_fft_plan!(ws.fft_buffer, ws.fft_plan)
     ws.fft_buffer ./= T(n_pad)
 
-    shift_pix = if n_pad % 2 == img_size % 2
+    shift_pix = if n_pad % 2 == image_size % 2
         0
     elseif iseven(n_pad)
         1
     else
         -1
     end
-    start = Int(ceil(n_pad / 2)) - div(img_size, 2) + (1 - (n_pad % 2))
-    stop = Int(ceil(n_pad / 2)) + div(img_size, 2) + shift_pix
+    start = Int(ceil(n_pad / 2)) - div(image_size, 2) + (1 - (n_pad % 2))
+    stop = Int(ceil(n_pad / 2)) + div(image_size, 2) + shift_pix
     @views copyto!(dest, ws.fft_buffer[start:stop, start:stop])
     return oversampling
 end
@@ -1005,7 +1922,7 @@ function field_intensity!(dest::AbstractMatrix{T}, field::AbstractMatrix{Complex
     end
     n_out, m_out = size(dest)
     if size(field) != (n_out * oversampling, m_out * oversampling)
-        throw(DimensionMismatchError("LiFT field size does not match oversampled PSF dimensions"))
+        throw(DimensionMismatchError("LiFT field size does not match oversampled rate dimensions"))
     end
     if size(scratch) != size(field)
         throw(DimensionMismatchError("LiFT scratch buffer size must match oversampled field size"))

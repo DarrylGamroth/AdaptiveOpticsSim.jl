@@ -425,9 +425,15 @@ derived MTF, QE, charge multiplication, or detector noise.
 - Measurement and WFS images: `measure!`, `pyramid_modulation_frame!`,
   `valid_subaperture_mask`, `camera_frame`, `wfs_detector_image`,
   `shack_hartmann_detector_image`, `shack_hartmann_detector_image!`
-- LiFT: `LiFT`, `LiFTSolveAuto`, `LiFTSolveQR`,
-  `LiFTSolveNormalEquations`, `LiFTLevenbergMarquardt`,
-  `LiFTAdaptiveLevenbergMarquardt`
+- LiFT forward and observation contracts: `PreparedLiFTForwardModel`,
+  `prepare_lift_forward_model`, `lift_forward_output`,
+  `evaluate_lift_forward!`, `predict_lift_observation!`,
+  `LiFTObservation`, `lift_observation_contract`,
+  `LiFTIdentityMapping`, `LiFTFrameMapping`, `LiFTPhotonRate`,
+  `LiFTExpectedCounts`, and `LiFTNormalizedIntensity`
+- LiFT estimation: `LiFT`, `reconstruct!`, `reconstruct`, `diagnostics`,
+  `LiFTSolveAuto`, `LiFTSolveQR`, `LiFTSolveNormalEquations`,
+  `LiFTLevenbergMarquardt`, and `LiFTAdaptiveLevenbergMarquardt`
 
 The maintained HIL image boundary is `wfs_detector_image(...)`. For
 Shack-Hartmann sensors this returns a detector-like lenslet mosaic assembled
@@ -452,8 +458,15 @@ execution. Mutating execution receives explicit caller-owned products and
 destinations and an explicit RNG at acquisition. A direct geometric or
 reduced-order estimator declares `DirectMeasurementPath()` and allocates no
 fictitious rate plane, observation, or detector workspace. Shack-Hartmann,
-Pyramid, BioEdge, Zernike, and Curvature implement the generic contract; LiFT
-remains the next ordered migration.
+Pyramid, BioEdge, Zernike, and Curvature implement the generic contract. LiFT
+intentionally remains outside the ordinary `AbstractWFS` hierarchy: prepare
+its focal-plane model independently, bind caller-owned acquired values with
+`LiFTObservation`, and then run `reconstruct!`. Modal selection is a cold-path
+`LiFT(...; mode_ids=...)` choice rather than a per-frame argument. The forward
+output is a cell-integrated photon-arrival rate; count or normalized
+observations require an explicit observation-domain conversion. Neither
+forward evaluation nor estimation reads telescope cadence or invokes a
+detector.
 
 The diffractive Shack-Hartmann staged path uses a real-valued
 `:lenslet_mosaic` observation whose element type exactly matches the prepared

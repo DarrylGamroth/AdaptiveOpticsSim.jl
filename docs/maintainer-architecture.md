@@ -143,7 +143,10 @@ Curvature exposes a fixed positive-/negative-defocus rate tuple that can feed
 two independent detectors or an explicitly packed single-detector mapping.
 Convenience execution coordinates these same explicit component owners; no
 synthetic state view or monolithic optical-owner adapter is retained.
-LiFT remains internally coupled until its family-specific migration slice.
+LiFT separately owns a prepared focal-plane forward model, caller-provided
+`LiFTObservation`, and iterative estimator state. Its prepared modal subset and
+observation contract are cold-path bindings; repeated estimation neither owns
+nor triggers detector acquisition.
 
 ## Execution Layers
 

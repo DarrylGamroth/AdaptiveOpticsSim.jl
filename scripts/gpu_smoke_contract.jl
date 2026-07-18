@@ -731,12 +731,15 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         lift_src = Source(band=:I, magnitude=8.0, T=T)
         basis = backend_rand(B, T, 16, 16, 3)
         diversity = backend_zeros(B, T, 16, 16)
-        det = Detector(NoiseNone(); psf_sampling=2, T=T, backend=backend)
-        lift = LiFT(lift_tel, lift_src, basis, det; diversity_opd=diversity,
-            iterations=2, img_resolution=32, solve_mode=LiFTSolveAuto())
+        forward = prepare_lift_forward_model(lift_tel, lift_src, basis;
+            diversity_opd=diversity, focal_resolution=32,
+            zero_padding=2)
+        lift = LiFT(forward; iterations=2, mode_ids=(1, 2),
+            solve_mode=LiFTSolveAuto())
         rate_map = gpu_direct_image(lift_tel, lift_src;
             zero_padding=2, T=T)
-        coeffs = reconstruct(lift, rate_map.values, [1, 2])
+        observation = LiFTObservation(forward, rate_map.values)
+        coeffs = reconstruct(lift, observation)
         @assert coeffs isa BackendArray
         return coeffs
     end
