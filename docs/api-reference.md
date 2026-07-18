@@ -468,6 +468,10 @@ observations require an explicit observation-domain conversion. Neither
 forward evaluation nor estimation reads telescope cadence or invokes a
 detector.
 
+LiFT modal arrays are dimensionless OPD shapes. Reconstructed coefficients and
+the prepared diversity OPD are in metres; their assembled modal sum is the OPD
+map supplied to the focal-plane model.
+
 The diffractive Shack-Hartmann staged path uses a real-valued
 `:lenslet_mosaic` observation whose element type exactly matches the prepared
 detector output. The family-neutral detector-acquisition stage validates the
