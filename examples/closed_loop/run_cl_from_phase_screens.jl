@@ -30,7 +30,7 @@ for k in 1:length(screens)
     copyto!(sim.tel.state.opd, screens[k])
     apply!(sim.optic, sim.tel, DMAdditive())
     measure!(sim.wfs, sim.tel)
-    reconstruct!(cmd, recon, sim.wfs.state.slopes)
+    reconstruct!(cmd, recon, slopes(sim.wfs))
     sim.optic.state.coefs .= -cmd
 end
 

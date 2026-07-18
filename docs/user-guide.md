@@ -167,7 +167,7 @@ atm = MultiLayerAtmosphere(
     altitude=[0.0, 5000.0],
 )
 
-wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.1, n_pix_subap=6)
+wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.1, n_pix_subap=6)
 
 rng = runtime_rng(0)
 renderer = prepare_atmosphere_renderer(atm, tel, src)
@@ -220,10 +220,10 @@ For `Source`, detector capture evaluates the curve at `wavelength(src)`. The
 generic `capture!(det, image, spectral_source)` boundary uses the
 flux-weighted effective QE over the spectral bundle. Pyramid acquisition with
 a frame `Detector` instead folds the sampled QE into each wavelength's
-optical-rate contribution before the incoherent sum. Diffractive
-Shack–Hartmann applies the same ordering to multiple contributions on one
-common wavelength grid, and rejects distinct wavelengths until an explicit
-native-to-detector mapping is available. Matrix-only
+optical-rate contribution before the incoherent sum. Prepared diffractive
+Shack–Hartmann retains distinct wavelength-rate products in a bundle so each
+can use its channel-specific acquisition mapping; the legacy single-product
+path remains common-grid only. Matrix-only
 capture without a source uses the detector's scalar reference QE, which is the
 peak value of a sampled curve.
 The bare-matrix path treats its values as cell-integrated photon-arrival rates;
@@ -602,12 +602,13 @@ spectral-by-spatial-by-directional Cartesian quadrature, prepare the components
 explicitly and accumulate only metadata-compatible intensity products; there is
 not yet a nested convenience API for that product space.
 
-Diffractive Shack–Hartmann spectral components may be accumulated together only
-when they have the same wavelength and therefore share one prepared angular
-sampling grid. Distinct wavelengths fail during preparation until a later
-optical-front-end decomposition supplies an explicit, flux-conserving mapping
-from each native wavelength grid to the detector grid. Model such channels as
-separate products when independent processing is appropriate.
+Prepared diffractive Shack–Hartmann formation keeps distinct wavelength grids
+as separate native-sampling products in an `OpticalProductBundle`; it never
+index-adds or implicitly resamples them. A single output therefore accepts only
+a source compatible with its declared wavelength and sampling. The legacy
+single-product `measure!` convenience path remains restricted to a common
+wavelength grid. Model bundled channels with independent acquisition mappings
+unless an application prepares an explicit flux-conserving resampler.
 
 A single diffractive Shack–Hartmann, Pyramid, BioEdge, or atmosphere-aware
 Curvature acquisition also requires every asterism leaf to share one optical
@@ -630,6 +631,11 @@ calibrated WFS paths.
 
 - `ShackHartmannWFS`
   - general SH studies and HIL-style RTC surfaces
+  - composes an independent `MicrolensArray`, prepared optical workspace,
+    layout/calibration, detector acquisition, and estimator state
+  - use `ShackHartmannOpticalFrontEnd` and `shack_hartmann_rate_map` with the
+    prepared WFS stage API when optical formation, acquisition, and estimation
+    must be scheduled independently
 - `PyramidWFS`
   - pyramid sensing and modulation studies
 - `BioEdgeWFS`

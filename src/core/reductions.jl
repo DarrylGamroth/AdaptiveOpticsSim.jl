@@ -127,7 +127,7 @@ function packed_valid_pair_mean(::ScalarCPUStyle, signal::AbstractVector{T}, val
     acc = zero(T)
     count = 0
     idx = 1
-    @inbounds for i in 1:n_sub, j in 1:n_sub
+    @inbounds for j in 1:n_sub, i in 1:n_sub
         if valid_mask[i, j]
             acc += signal[idx]
             acc += signal[idx + offset]

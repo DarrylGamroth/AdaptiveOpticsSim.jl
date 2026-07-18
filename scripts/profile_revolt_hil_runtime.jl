@@ -158,7 +158,7 @@ function run_profile(; backend_name::AbstractString="cpu", config_dir::AbstractS
     println("  n_lenslets: ", ctx.n_lenslets)
     println("  roi_size: ", ctx.roi)
     println("  tiled_wfs_frame_shape: ", size(ctx.tiled_frame))
-    println("  spot_cube_shape: ", size(ctx.wfs.state.spot_cube))
+    println("  spot_cube_shape: ", size(ctx.wfs.acquisition.spot_cube))
     println("  build_time_ns: ", build_time_ns)
     println("  command_map_mean_ns: ", command_map_mean_ns)
     println("  command_map_p95_ns: ", command_map_p95_ns)

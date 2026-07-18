@@ -45,8 +45,8 @@ end
 
 function _sync_simulation!(::Type{B}, simulation) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(simulation.command))
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(simulation.high_wfs.state.slopes))
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(simulation.low_wfs.state.slopes))
+    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(slopes(simulation.high_wfs)))
+    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(slopes(simulation.low_wfs)))
     high_frame, low_frame = wfs_frame(simulation)
     isnothing(high_frame) || AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(high_frame))
     isnothing(low_frame) || AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(low_frame))

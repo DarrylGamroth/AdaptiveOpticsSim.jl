@@ -169,7 +169,7 @@ function build_revolt_like_hil_context(; backend_name::AbstractString="cpu", con
     tiled_frame = backend_cfg.array_backend{T}(undef, resolution, resolution)
 
     AdaptiveOpticsSim.ensure_sh_calibration!(wfs, tel, src)
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(wfs.state.slopes))
+    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(slopes(wfs)))
 
     return RevoltLikeHILContext(
         tel,
@@ -209,7 +209,7 @@ function revolt_like_sense!(ctx::RevoltLikeHILContext)
     revolt_scatter_active_command!(ctx.dm.state.coefs, ctx.extrapolated_command, ctx.active_indices_backend)
     apply!(ctx.dm, ctx.tel, DMReplace())
     measure!(ctx.wfs, ctx.tel, ctx.src, ctx.det; rng=ctx.rng)
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.wfs.state.spot_cube))
+    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.wfs.acquisition.spot_cube))
     return nothing
 end
 
@@ -218,7 +218,7 @@ function revolt_like_mosaic!(ctx::RevoltLikeHILContext)
     revolt_scatter_active_command!(ctx.dm.state.coefs, ctx.extrapolated_command, ctx.active_indices_backend)
     apply!(ctx.dm, ctx.tel, DMReplace())
     measure!(ctx.wfs, ctx.tel, ctx.src, ctx.det; rng=ctx.rng)
-    revolt_tile_spot_cube!(ctx.tiled_frame, ctx.wfs.state.spot_cube, ctx.n_lenslets, ctx.roi)
+    revolt_tile_spot_cube!(ctx.tiled_frame, ctx.wfs.acquisition.spot_cube, ctx.n_lenslets, ctx.roi)
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.tiled_frame))
     return nothing
 end
@@ -229,9 +229,9 @@ function revolt_like_step!(ctx::RevoltLikeHILContext)
     revolt_scatter_active_command!(ctx.dm.state.coefs, ctx.extrapolated_command, ctx.active_indices_backend)
     apply!(ctx.dm, ctx.tel, DMReplace())
     measure!(ctx.wfs, ctx.tel, ctx.src, ctx.det; rng=ctx.rng)
-    revolt_tile_spot_cube!(ctx.tiled_frame, ctx.wfs.state.spot_cube, ctx.n_lenslets, ctx.roi)
+    revolt_tile_spot_cube!(ctx.tiled_frame, ctx.wfs.acquisition.spot_cube, ctx.n_lenslets, ctx.roi)
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.dm.state.coefs))
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.wfs.state.spot_cube))
+    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.wfs.acquisition.spot_cube))
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.tiled_frame))
     return nothing
 end

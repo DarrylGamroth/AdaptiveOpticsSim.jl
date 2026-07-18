@@ -230,13 +230,13 @@ Important distinctions:
 - grouped WFS intermediate stacks are not the same thing as archived or
   exported readouts
 
-For example, diffractive Shack–Hartmann compatible spectral, extended-source,
-and asterism components are accumulated into one optical-rate stack before a
-single detector acquisition. A spectral stack is compatible only when every
-component has the same wavelength and therefore the same prepared angular
-grid. Distinct wavelengths fail before preparation until the later
-Shack–Hartmann optical-front-end decomposition provides an explicit,
-flux-conserving native-to-detector grid mapping. Frozen references for the
+For example, the prepared diffractive Shack–Hartmann front end accumulates a
+compatible same-wavelength asterism into one optical-rate mosaic and retains
+distinct wavelength grids as native-sampling leaves in an
+`OpticalProductBundle`. It does not index-add or implicitly resample those
+leaves; acquisition consumes each through its declared detector mapping.
+Extended-source expansion and the legacy single-product spectral convenience
+path retain their documented common-grid behavior. Frozen references for the
 retired reference-wavelength index-grid approximation are test-only
 characterization data, not a production capability. There is now a clearer
 boundary between:

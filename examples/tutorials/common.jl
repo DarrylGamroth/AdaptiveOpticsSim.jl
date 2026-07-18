@@ -78,7 +78,7 @@ function run_closed_loop_example(make_wfs::Function; n_iter::Int=4, seed::Intege
         copyto!(tel.state.opd, atmosphere_output.opd)
         residual_before[k] = pupil_rms(tel.state.opd, pupil_mask(tel))
         measure!(wfs, tel, src)
-        reconstruct!(cmd, recon, wfs.state.slopes)
+        reconstruct!(cmd, recon, slopes(wfs))
         dm.state.coefs .= -cmd
         apply!(dm, tel, DMAdditive())
         residual_after[k] = pupil_rms(tel.state.opd, pupil_mask(tel))
@@ -94,6 +94,6 @@ function run_closed_loop_example(make_wfs::Function; n_iter::Int=4, seed::Intege
         residual_before=residual_before,
         residual_after=residual_after,
         final_image=image,
-        final_slopes=copy(wfs.state.slopes),
+        final_slopes=copy(slopes(wfs)),
     )
 end

@@ -1,7 +1,5 @@
 include(normpath(joinpath(@__DIR__, "..", "..", "benchmarks", "support", "revolt_like_hil_common.jl")))
 
-coverage_instrumented() = Base.JLOptions().code_coverage != 0
-
 function dm_apply_allocations(dm, tel)
     apply_opd!(dm, tel)
     return @allocated apply_opd!(dm, tel)
@@ -18,10 +16,10 @@ end
     dense_reference = reshape(Array(dm.state.modes) * Array(dm.state.coefs),
         size(dm.state.opd))
     @test dm.state.opd ≈ dense_reference rtol=5e-14
-    if Base.JLOptions().code_coverage == 0
-        @test dm_apply_allocations(dm, tel) == 0
-    else
+    if coverage_instrumented()
         @test_skip "DM allocation assertions are disabled under coverage instrumentation"
+    else
+        @test dm_apply_allocations(dm, tel) == 0
     end
     dm.state.coefs .= 0.1
     apply!(dm, tel, DMReplace())
@@ -73,10 +71,10 @@ end
     masked_reference = reshape(Array(dm_masked.state.modes) *
         Array(dm_masked.state.coefs), size(dm_masked.state.opd))
     @test dm_masked.state.opd ≈ masked_reference rtol=5e-14
-    if Base.JLOptions().code_coverage == 0
-        @test dm_apply_allocations(dm_masked, tel) == 0
-    else
+    if coverage_instrumented()
         @test_skip "DM allocation assertions are disabled under coverage instrumentation"
+    else
+        @test dm_apply_allocations(dm_masked, tel) == 0
     end
 
     sampled_topology = SampledActuatorTopology(actuator_coordinates(dm)[:, 1:4];
@@ -208,7 +206,7 @@ end
     @test cartesian_modal.state.coefs isa Vector
     @test tt.state.coefs isa Vector
     @test focus.state.coefs isa Vector
-    @test wfs.state.slopes isa Vector
+    @test slopes(wfs) isa Vector
     @test det.state.frame isa Matrix
     @test sf.mask isa Matrix{ComplexF64}
     @test ef.values isa Matrix{ComplexF64}
@@ -446,7 +444,7 @@ runtime_snapshot(scenario) = (
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     wfs = ShackHartmannWFS(tel; n_lenslets=2)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
-    @test size(imat.matrix) == (length(wfs.state.slopes), length(dm.state.coefs))
+    @test size(imat.matrix) == (length(slopes(wfs)), length(dm.state.coefs))
 
     fill!(dm.state.coefs, 0.03)
     fill!(tel.state.opd, 0.02)
@@ -464,11 +462,11 @@ runtime_snapshot(scenario) = (
             size(imat_storage, 2)), dm, wfs, tel; amplitude=0.1)
 
     recon = ModalReconstructor(imat; gain=1.0)
-    cmd = reconstruct(recon, wfs.state.slopes)
+    cmd = reconstruct(recon, slopes(wfs))
     @test length(cmd) == length(dm.state.coefs)
 
     mapped = MappedReconstructor(Matrix{Float64}(I, length(dm.state.coefs), length(dm.state.coefs)), imat; gain=0.5)
-    mapped_cmd = reconstruct(mapped, wfs.state.slopes)
+    mapped_cmd = reconstruct(mapped, slopes(wfs))
     @test length(mapped_cmd) == length(dm.state.coefs)
     @test mapped.n_control_modes == length(dm.state.coefs)
 
@@ -485,12 +483,12 @@ runtime_snapshot(scenario) = (
     @test all(iszero, delayed21)
     @test all(==(1.0), delayed22)
 
-    ctrl = DiscreteIntegratorController(length(wfs.state.slopes); gain=0.1, tau=0.02)
-    dm_cmd = update!(ctrl, wfs.state.slopes, 0.01)
-    @test length(dm_cmd) == length(wfs.state.slopes)
+    ctrl = DiscreteIntegratorController(length(slopes(wfs)); gain=0.1, tau=0.02)
+    dm_cmd = update!(ctrl, slopes(wfs), 0.01)
+    @test length(dm_cmd) == length(slopes(wfs))
     @test_throws DimensionMismatchError update!(ctrl,
-        zeros(length(wfs.state.slopes) + 1), 0.01)
-    @test_throws InvalidConfiguration update!(ctrl, wfs.state.slopes, -0.01)
+        zeros(length(slopes(wfs)) + 1), 0.01)
+    @test_throws InvalidConfiguration update!(ctrl, slopes(wfs), -0.01)
     @test_throws InvalidConfiguration DiscreteIntegratorController(0)
     @test_throws InvalidConfiguration DiscreteIntegratorController(2;
         tau=0.0)
@@ -503,14 +501,14 @@ runtime_snapshot(scenario) = (
         dt=1e-3,
     )
     controlled_command = similar(dm.state.coefs)
-    reconstruct!(controlled_command, controlled, wfs.state.slopes)
+    reconstruct!(controlled_command, controlled, slopes(wfs))
     @test all(isfinite, controlled_command)
-    reconstruct!(controlled_command, controlled, wfs.state.slopes)
+    reconstruct!(controlled_command, controlled, slopes(wfs))
     if coverage_instrumented()
         @test_skip "allocation assertions are disabled under coverage instrumentation"
     else
         @test @allocated(reconstruct!(controlled_command, controlled,
-            wfs.state.slopes)) == 0
+            slopes(wfs))) == 0
     end
     @test reset_controller!(controlled) === controlled
     @test all(iszero, controller_output(controlled))
@@ -585,9 +583,9 @@ end
     @test size(surrogate.high_reconstructor.command_basis, 1) == params.n_act^2
     @test size(surrogate.high_reconstructor.command_basis, 2) == params.n_control_modes
     @test size(surrogate.high_reconstructor.reconstructor, 1) == params.n_control_modes
-    @test size(surrogate.high_reconstructor.reconstructor, 2) == length(surrogate.high_wfs.state.slopes)
+    @test size(surrogate.high_reconstructor.reconstructor, 2) == length(slopes(surrogate.high_wfs))
     @test size(surrogate.low_reconstructor.command_basis, 2) == params.n_low_order_modes
-    @test size(surrogate.low_reconstructor.reconstructor, 2) == length(surrogate.low_wfs.state.slopes)
+    @test size(surrogate.low_reconstructor.reconstructor, 2) == length(slopes(surrogate.low_wfs))
     @test surrogate.high_reconstructor.n_control_modes == params.n_control_modes
     @test surrogate.low_reconstructor.n_control_modes == params.n_low_order_modes
 
@@ -827,7 +825,7 @@ end
     apply!(dm, expected_wfs_tel, DMAdditive())
     expected_slopes = similar(runtime.slopes)
     AdaptiveOpticsSim.geometric_slopes!(expected_slopes,
-        expected_wfs_tel.state.opd, wfs.state.valid_mask)
+        expected_wfs_tel.state.opd, valid_subaperture_mask(wfs))
     @test runtime.slopes ≈ expected_slopes
 
     expected_science_tel = Telescope(resolution=16, diameter=8.0,
@@ -1219,7 +1217,7 @@ end
     sim_ext = AOSimulation(tel_ext, src_ext, atm_ext, dm_ext, wfs_ext)
     det_ext = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
     null_recon = NullReconstructor()
-    @test_throws InvalidConfiguration reconstruct!(similar(dm_ext.state.coefs), null_recon, wfs_ext.state.slopes)
+    @test_throws InvalidConfiguration reconstruct!(similar(dm_ext.state.coefs), null_recon, slopes(wfs_ext))
 
     external_branch = ControlLoopBranch(
         :external_branch,
@@ -1251,7 +1249,7 @@ end
     boundary = SimulationInterface(runtime)
     @test AdaptiveOpticsSim.runtime_export_plan(boundary) isa AdaptiveOpticsSim.DirectRuntimeExportPlan
     boundary_readout = readout(boundary)
-    @test length(slopes(boundary)) == length(wfs.state.slopes)
+    @test length(slopes(boundary)) == length(slopes(wfs))
     @test slopes(boundary_readout) === slopes(boundary)
     @test size(science_frame(boundary)) == size(output_frame(det))
     boundary_science_metadata = science_metadata(boundary)
@@ -1275,18 +1273,18 @@ end
         atmosphere_step=1e-3, rng=rng2, wfs_detector=wfs_det)
     @test supports_prepared_runtime(runtime2)
     prepare!(runtime2)
-    @test runtime2.wfs.state.calibrated
+    @test runtime2.wfs.calibration.calibrated
     @test supports_detector_output(runtime2)
     step!(runtime2)
-    @test wfs_frame(runtime2) === wfs2.state.exported_spot_cube
-    @test wfs_frame(runtime2) !== wfs2.state.spot_cube
-    @test wfs2.state.spot_cube !== wfs2.state.sampled_spot_cube
-    @test wfs_frame(runtime2) !== wfs2.state.sampled_spot_cube
-    @test size(wfs_frame(runtime2)) == size(wfs2.state.spot_cube)
-    @test all(wfs_frame(runtime2) .>= wfs2.state.spot_cube)
+    @test wfs_frame(runtime2) === wfs2.acquisition.exported_spot_cube
+    @test wfs_frame(runtime2) !== wfs2.acquisition.spot_cube
+    @test wfs2.acquisition.spot_cube !== wfs2.optical_workspace.sampled_spot_cube
+    @test wfs_frame(runtime2) !== wfs2.optical_workspace.sampled_spot_cube
+    @test size(wfs_frame(runtime2)) == size(wfs2.acquisition.spot_cube)
+    @test all(wfs_frame(runtime2) .>= wfs2.acquisition.spot_cube)
     boundary2 = SimulationInterface(runtime2)
     @test ndims(wfs_frame(boundary2)) == 3
-    @test size(wfs_frame(boundary2), 1) == wfs2.params.n_lenslets^2
+    @test size(wfs_frame(boundary2), 1) == microlens_array(wfs2).params.n_lenslets^2
 
     composite = CompositeSimulationInterface(boundary, boundary2)
     @test supports_grouped_execution(composite)
@@ -1444,8 +1442,8 @@ end
     tilt_plus = low_order_response_metrics(build_static_low_order_runtime(Val(:tiptilt), [0.0, 0.0125]))
     tilt_minus = low_order_response_metrics(build_static_low_order_runtime(Val(:tiptilt), [0.0, -0.0125]))
     tip_zero = low_order_response_metrics(build_static_low_order_runtime(Val(:tiptilt), [0.0, 0.0]))
-    @test tip_plus.axis_1_norm < tip_plus.axis_2_norm
-    @test tilt_plus.axis_1_norm > tilt_plus.axis_2_norm
+    @test tip_plus.axis_1_norm > tip_plus.axis_2_norm
+    @test tilt_plus.axis_1_norm < tilt_plus.axis_2_norm
     @test norm(tip_plus.slopes .+ tip_minus.slopes) ≤ 2e-5
     @test norm(tilt_plus.slopes .+ tilt_minus.slopes) ≤ 2e-5
     @test norm(tip_plus.slopes .- tilt_plus.slopes) > 1.0
@@ -1486,7 +1484,7 @@ end
     steering_plus = low_order_response_metrics(build_static_low_order_runtime(Val(:steering), [0.0125, 0.0]))
     steering_minus = low_order_response_metrics(build_static_low_order_runtime(Val(:steering), [-0.0125, 0.0]))
     steering_zero = low_order_response_metrics(build_static_low_order_runtime(Val(:steering), [0.0, 0.0]))
-    @test steering_plus.axis_1_norm < steering_plus.axis_2_norm
+    @test steering_plus.axis_1_norm > steering_plus.axis_2_norm
     @test norm(steering_plus.slopes .+ steering_minus.slopes) ≤ 2e-5
     @test norm(steering_zero.slopes) ≤ 1e-12
     @test isapprox(steering_plus.frame_sum, steering_minus.frame_sum; rtol=1e-12, atol=1e-6)
@@ -1728,7 +1726,7 @@ end
     prepare!(runtime2_slopes_only)
     @test runtime_outputs(runtime2_slopes_only).wfs_pixels == false
     @test !supports_detector_output(runtime2_slopes_only)
-    @test !runtime2_slopes_only.wfs.state.export_pixels_enabled
+    @test !runtime2_slopes_only.wfs.acquisition.export_pixels_enabled
     step!(runtime2_slopes_only)
     @test wfs_frame(runtime2_slopes_only) === nothing
     slopes_only_boundary = SimulationInterface(runtime2_slopes_only)

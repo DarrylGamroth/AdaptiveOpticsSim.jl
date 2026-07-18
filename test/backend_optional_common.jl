@@ -77,7 +77,7 @@ function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:
     @test zernike_modal.state.modes isa BackendArray
     @test cartesian_modal.state.coefs isa BackendArray
     @test cartesian_modal.state.modes isa BackendArray
-    @test wfs.state.slopes isa BackendArray
+    @test slopes(wfs) isa BackendArray
     @test det.state.frame isa BackendArray
     @test calibration_det.params.response_model.kernel isa BackendArray
     seed = UInt(0x51a7)
@@ -249,7 +249,8 @@ function run_optional_wfs_stage_contracts(
     pupil = PupilFunction(tel; T=T, backend=selector)
     fill!(pupil.opd, T(2e-9))
     field = ElectricField(pupil, src; zero_padding=1, T=T)
-    field_formation = prepare_pupil_field(tel, pupil, src, field)
+    field_formation = prepare_pupil_field(tel, pupil, src, field;
+        center_even_grid=false)
     fill_electric_field!(field, pupil, field_formation)
 
     rate_values = BackendArray(zeros(T, 4, 4))
@@ -358,6 +359,109 @@ function run_optional_wfs_stage_contracts(
     packed_host = Array(packed.storage)
     @test packed_host[1:4, :] ≈ Array(rate.values) .* T(0.2)
     @test packed_host[5:8, :] ≈ Array(second_rate.values) .* T(0.2)
+
+    physical_wfs = ShackHartmannWFS(tel; n_lenslets=2,
+        n_pix_subap=2, mode=Diffractive(), T=T, backend=selector)
+    physical_rate = shack_hartmann_rate_map(physical_wfs, pupil, src)
+    physical_front_end = ShackHartmannOpticalFrontEnd(physical_wfs, src)
+    @test !hasfield(typeof(physical_front_end), :sensor)
+    @test physical_front_end.propagation.fft_stack isa BackendArray
+    physical_optical_plan = prepare_wfs_optical_formation(
+        physical_front_end, pupil, physical_rate)
+    form_wfs_optical_products!(physical_rate, pupil, physical_optical_plan)
+    @test physical_rate.values isa BackendArray
+    @test all(isfinite, Array(physical_rate.values))
+    @test sum(Array(physical_rate.values)) > zero(T)
+
+    physical_field_wfs = ShackHartmannWFS(tel; n_lenslets=2,
+        n_pix_subap=2, mode=Diffractive(), T=T, backend=selector)
+    physical_field_rate = shack_hartmann_rate_map(physical_field_wfs, field)
+    physical_field_plan = prepare_wfs_optical_formation(
+        ShackHartmannOpticalFrontEnd(physical_field_wfs), field,
+        physical_field_rate)
+    form_wfs_optical_products!(physical_field_rate, field,
+        physical_field_plan)
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(physical_field_rate.values))
+    @test physical_field_rate.values isa BackendArray
+    @test isapprox(Array(physical_field_rate.values),
+        Array(physical_rate.values); rtol=T(2e-5), atol=T(2e-5))
+
+    physical_asterism = Asterism([
+        Source(band=:custom, wavelength=wavelength(src),
+            photon_irradiance=T(1), T=T),
+        Source(band=:custom, wavelength=wavelength(src),
+            photon_irradiance=T(3), T=T),
+    ])
+    physical_asterism_wfs = ShackHartmannWFS(tel; n_lenslets=2,
+        n_pix_subap=2, mode=Diffractive(), T=T, backend=selector)
+    physical_asterism_rate = shack_hartmann_rate_map(
+        physical_asterism_wfs, pupil, physical_asterism)
+    physical_asterism_plan = prepare_wfs_optical_formation(
+        ShackHartmannOpticalFrontEnd(physical_asterism_wfs,
+            physical_asterism), pupil, physical_asterism_rate)
+    form_wfs_optical_products!(physical_asterism_rate, pupil,
+        physical_asterism_plan)
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(physical_asterism_rate.values))
+    @test physical_asterism_rate.values isa BackendArray
+    @test isapprox(Array(physical_asterism_rate.values),
+        Array(physical_rate.values); rtol=T(2e-5), atol=T(2e-5))
+
+    physical_detector = Detector(noise=NoiseNone(), integration_time=T(0.4),
+        qe=T(0.5), response_model=NullFrameResponse(), T=T,
+        backend=selector)
+    physical_observation = WFSObservation(similar(physical_rate.values);
+        units=:electron_count, layout=:lenslet_mosaic)
+    physical_acquisition = prepare_wfs_acquisition(physical_detector,
+        physical_rate, physical_observation)
+    acquire_wfs_observation!(physical_observation, physical_rate,
+        physical_acquisition, Xoshiro(0x5348))
+    @test physical_observation.storage isa BackendArray
+    @test sum(Array(physical_observation.storage)) ≈
+        sum(Array(physical_rate.values)) * T(0.4) * T(0.5) rtol=T(2e-5)
+
+    cpu_tel = Telescope(resolution=4, diameter=T(2),
+        central_obstruction=zero(T), T=T)
+    cpu_wfs = ShackHartmannWFS(cpu_tel; n_lenslets=2,
+        n_pix_subap=2, mode=Diffractive(), T=T)
+    mixed_backend_rate = shack_hartmann_rate_map(cpu_wfs, pupil, src)
+    mixed_optical_error = try
+        prepare_wfs_optical_formation(
+            ShackHartmannOpticalFrontEnd(cpu_wfs, src), pupil,
+            mixed_backend_rate)
+        nothing
+    catch err
+        err
+    end
+    @test mixed_optical_error isa WFSPreparationError
+    @test mixed_optical_error.reason === :backend
+
+    cpu_observation = WFSObservation(zeros(T, size(physical_rate.values));
+        units=:electron_count, layout=:lenslet_mosaic)
+    gpu_measurement = WFSMeasurement(similar(slopes(physical_wfs));
+        units=:pixel, kind=:centroid_slopes)
+    @test_throws WFSPreparationError prepare_wfs_estimation(physical_wfs,
+        cpu_observation, gpu_measurement)
+    cpu_measurement = WFSMeasurement(zeros(T, length(slopes(physical_wfs)));
+        units=:pixel, kind=:centroid_slopes)
+    @test_throws WFSPreparationError prepare_wfs_estimation(physical_wfs,
+        physical_observation, cpu_measurement)
+
+    set_subaperture_calibration!(physical_wfs.calibration,
+        zeros(T, size(physical_wfs.calibration.reference_signal_2d));
+        centroid_response=one(T), wavelength=wavelength(src),
+        signature=UInt(0x50485953))
+    physical_measurement = WFSMeasurement(similar(slopes(physical_wfs));
+        units=:pixel, kind=:centroid_slopes)
+    physical_estimator = prepare_wfs_estimation(physical_wfs,
+        physical_observation, physical_measurement)
+    estimate_wfs_measurement!(physical_measurement, physical_observation,
+        physical_estimator)
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(physical_measurement.storage))
+    @test physical_measurement.storage isa BackendArray
+    @test all(isfinite, Array(physical_measurement.storage))
 
     cpu_measurement = WFSMeasurement(zeros(T, 4, 4);
         units=:detector_signal, kind=:cpu_copy)
@@ -1050,11 +1154,20 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
     @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(pyr.state.intensity), pyr) isa AdaptiveOpticsSim.GroupedStaged2DPlan
     @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(bio.state.intensity), bio) isa AdaptiveOpticsSim.GroupedStaged2DPlan
     @test typeof(AdaptiveOpticsSim.sh_sensing_execution_plan(
-        AdaptiveOpticsSim.execution_style(sh.state.slopes), sh)) ===
+        AdaptiveOpticsSim.execution_style(slopes(sh)), sh)) ===
         AdaptiveOpticsSim.ShackHartmannWFSRocmHostStatsPlan
     @test typeof(AdaptiveOpticsSim.sh_sensing_execution_plan(
-        AdaptiveOpticsSim.execution_style(sh_large.state.slopes), sh_large)) ===
+        AdaptiveOpticsSim.execution_style(slopes(sh_large)), sh_large)) ===
         AdaptiveOpticsSim.ShackHartmannWFSRocmHostStatsPlan
+    AdaptiveOpticsSim.prepare_sampling!(sh, tel, src)
+    sh_sub = div(tel.params.resolution, AdaptiveOpticsSim.n_lenslets(sh))
+    sh_pad = size(sh.optical_workspace.field, 1)
+    sh_offset = div(sh_pad - sh_sub, 2)
+    safe_intensity = AdaptiveOpticsSim.compute_intensity_safe!(
+        AdaptiveOpticsSim.execution_style(sh.optical_workspace.intensity),
+        sh, tel, src, 1, 1, sh_sub, sh_sub, sh_offset, sh_offset, sh_sub)
+    @test safe_intensity === sh.optical_workspace.intensity
+    @test all(isfinite, Array(safe_intensity))
     @test AdaptiveOpticsSim.detector_execution_plan(typeof(AdaptiveOpticsSim.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.DetectorHostMirrorPlan
     capture_psf = array_backend{T}(undef, 4, 4)
     fill!(capture_psf, T(10))
@@ -1312,7 +1425,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
         T=T)
     @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(pyr.state.intensity), pyr) isa AdaptiveOpticsSim.GroupedStackReducePlan
     @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(bio.state.intensity), bio) isa AdaptiveOpticsSim.GroupedStackReducePlan
-    @test AdaptiveOpticsSim.sh_sensing_execution_plan(AdaptiveOpticsSim.execution_style(sh.state.slopes), sh) isa AdaptiveOpticsSim.ShackHartmannWFSBatchedPlan
+    @test AdaptiveOpticsSim.sh_sensing_execution_plan(AdaptiveOpticsSim.execution_style(slopes(sh)), sh) isa AdaptiveOpticsSim.ShackHartmannWFSBatchedPlan
     @test AdaptiveOpticsSim.detector_execution_plan(typeof(AdaptiveOpticsSim.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.DetectorDirectPlan
     @test AdaptiveOpticsSim.reduction_execution_plan(pyr.state.intensity) isa AdaptiveOpticsSim.DirectReductionPlan
     @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
@@ -1351,17 +1464,17 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
         valid_subaperture_policy=FluxThresholdValidSubapertures(light_ratio=0.5f0))
     measure!(cpu_sh_stats, cpu_tel, cpu_src, cpu_det; rng=MersenneTwister(3))
     measure!(gpu_sh_stats, gpu_tel, gpu_src, gpu_det; rng=MersenneTwister(3))
-    cpu_peak = AdaptiveOpticsSim.sh_safe_peak_value(cpu_sh_stats.state.spot_cube)
+    cpu_peak = AdaptiveOpticsSim.sh_safe_peak_value(cpu_sh_stats.acquisition.spot_cube)
     cpu_cutoff = AdaptiveOpticsSim.centroid_threshold(cpu_sh_stats) * cpu_peak
     AdaptiveOpticsSim.sh_signal_from_spots!(cpu_sh_stats, cpu_cutoff)
-    gpu_peak = AdaptiveOpticsSim.sh_safe_peak_value(gpu_sh_stats.state.spot_cube)
+    gpu_peak = AdaptiveOpticsSim.sh_safe_peak_value(gpu_sh_stats.acquisition.spot_cube)
     gpu_cutoff = AdaptiveOpticsSim.centroid_threshold(gpu_sh_stats) * gpu_peak
     AdaptiveOpticsSim.sh_signal_from_spots_device_stats!(
-        AdaptiveOpticsSim.execution_style(gpu_sh_stats.state.slopes),
+        AdaptiveOpticsSim.execution_style(slopes(gpu_sh_stats)),
         gpu_sh_stats,
         gpu_cutoff,
     )
-    @test isapprox(Array(gpu_sh_stats.state.slopes), cpu_sh_stats.state.slopes; rtol=1f-5, atol=1f-4)
+    @test isapprox(Array(slopes(gpu_sh_stats)), slopes(cpu_sh_stats); rtol=1f-5, atol=1f-4)
 
     correction_models = (
         ReferencePixelCommonModeCorrection(1, 1),
@@ -1586,7 +1699,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     spectral_optical_sh = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), T=T, backend=selector)
     AdaptiveOpticsSim.sampled_spots_peak!(spectral_optical_sh, tel, poly)
-    spectral_optical_spots = Array(spectral_optical_sh.state.spot_cube)
+    spectral_optical_spots = Array(spectral_optical_sh.acquisition.spot_cube)
     spectral_qe = AdaptiveOpticsSim.SampledQuantumEfficiency(
         T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.2, 0.8])
     spectral_exposure = T(2.5)
@@ -1599,7 +1712,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         spectral_detector, MersenneTwister(149))
     expected_spectral_scale = spectral_exposure *
         T(AdaptiveOpticsSim.qe_at(spectral_qe, wavelength(src)))
-    @test Array(spectral_detector_sh.state.spot_cube) ≈
+    @test Array(spectral_detector_sh.acquisition.spot_cube) ≈
         spectral_optical_spots .* expected_spectral_scale rtol=5e-5
 
     distinct = with_spectrum(src, SpectralBundle(

@@ -10,33 +10,41 @@ include("shack_hartmann/measure.jl")
 include("shack_hartmann/stacks.jl")
 include("shack_hartmann/signals.jl")
 include("shack_hartmann/lgs.jl")
+include("shack_hartmann/stages.jl")
 
-@inline valid_subaperture_mask(wfs::ShackHartmannWFS) = wfs.state.valid_mask
-@inline reference_signal(wfs::ShackHartmannWFS) = wfs.state.reference_signal_2d
+@inline slopes(wfs::ShackHartmannWFS) = wfs.estimator.slopes
+@inline valid_subaperture_mask(wfs::ShackHartmannWFS) = wfs.layout.valid_mask
+@inline reference_signal(wfs::ShackHartmannWFS) = wfs.calibration.reference_signal_2d
 
-@kernel function shack_hartmann_detector_image_kernel!(image, spot_cube, n_sub::Int, n_y::Int, n_x::Int, gap::Int, gap_value)
-    y, x = @index(Global, NTuple)
-    pitch_y = n_y + gap
-    pitch_x = n_x + gap
-    tile_y = (y - 1) ÷ pitch_y + 1
-    tile_x = (x - 1) ÷ pitch_x + 1
-    local_y = (y - 1) % pitch_y + 1
-    local_x = (x - 1) % pitch_x + 1
-    if tile_y <= n_sub && tile_x <= n_sub && local_y <= n_y && local_x <= n_x
-        idx = (tile_y - 1) * n_sub + tile_x
-        @inbounds image[y, x] = detector_output_value(eltype(image), spot_cube[idx, local_y, local_x])
+@kernel function shack_hartmann_detector_image_kernel!(image, spot_cube,
+    n_sub::Int, n_axis_1::Int, n_axis_2::Int, gap::Int, gap_value)
+    axis_1_index, axis_2_index = @index(Global, NTuple)
+    pitch_1 = n_axis_1 + gap
+    pitch_2 = n_axis_2 + gap
+    lenslet_i = (axis_1_index - 1) ÷ pitch_1 + 1
+    lenslet_j = (axis_2_index - 1) ÷ pitch_2 + 1
+    local_i = (axis_1_index - 1) % pitch_1 + 1
+    local_j = (axis_2_index - 1) % pitch_2 + 1
+    if lenslet_i <= n_sub && lenslet_j <= n_sub &&
+            local_i <= n_axis_1 && local_j <= n_axis_2
+        idx = sh_lenslet_index(lenslet_i, lenslet_j, n_sub)
+        @inbounds image[axis_1_index, axis_2_index] =
+            detector_output_value(eltype(image),
+                spot_cube[idx, local_i, local_j])
     else
-        @inbounds image[y, x] = detector_output_value(eltype(image), gap_value)
+        @inbounds image[axis_1_index, axis_2_index] =
+            detector_output_value(eltype(image), gap_value)
     end
 end
 
 @kernel function shack_hartmann_detector_image_copy_kernel!(image, spot_cube,
-    n_sub::Int, n_y::Int, n_x::Int, gap::Int)
-    tile_y, tile_x, local_y, local_x = @index(Global, NTuple)
-    idx = (tile_y - 1) * n_sub + tile_x
-    y = (tile_y - 1) * (n_y + gap) + local_y
-    x = (tile_x - 1) * (n_x + gap) + local_x
-    @inbounds image[y, x] = spot_cube[idx, local_y, local_x]
+    n_sub::Int, n_axis_1::Int, n_axis_2::Int, gap::Int)
+    lenslet_i, lenslet_j, local_i, local_j = @index(Global, NTuple)
+    idx = sh_lenslet_index(lenslet_i, lenslet_j, n_sub)
+    axis_1_index = (lenslet_i - 1) * (n_axis_1 + gap) + local_i
+    axis_2_index = (lenslet_j - 1) * (n_axis_2 + gap) + local_j
+    @inbounds image[axis_1_index, axis_2_index] =
+        spot_cube[idx, local_i, local_j]
 end
 
 """
@@ -50,15 +58,16 @@ function shack_hartmann_detector_image(spot_cube::AbstractArray, n_lenslets::Int
     n_sub = Int(n_lenslets)
     n_sub > 0 || throw(ArgumentError("n_lenslets must be positive"))
     ndims(spot_cube) == 3 ||
-        throw(DimensionMismatch("spot cube must have shape (n_lenslets^2, n_pix_subap_y, n_pix_subap_x)"))
-    n_spots, n_y, n_x = size(spot_cube)
+        throw(DimensionMismatch("spot cube must have shape (n_lenslets^2, n_axis_1, n_axis_2)"))
+    n_spots, n_axis_1, n_axis_2 = size(spot_cube)
     n_spots == n_sub * n_sub ||
         throw(DimensionMismatch("spot cube first dimension must equal n_lenslets^2; got $n_spots for n_lenslets=$n_sub"))
     gap_px = Int(gap)
     gap_px >= 0 || throw(ArgumentError("gap must be non-negative"))
     T = output_type === nothing ? promote_type(eltype(spot_cube), typeof(gap_value)) : output_type
-    image = similar(spot_cube, T, n_sub * n_y + (n_sub - 1) * gap_px,
-        n_sub * n_x + (n_sub - 1) * gap_px)
+    image = similar(spot_cube, T,
+        n_sub * n_axis_1 + (n_sub - 1) * gap_px,
+        n_sub * n_axis_2 + (n_sub - 1) * gap_px)
     return shack_hartmann_detector_image!(image, spot_cube, n_sub; gap=gap_px, gap_value=gap_value)
 end
 
@@ -69,56 +78,67 @@ function shack_hartmann_detector_image!(image::AbstractMatrix, spot_cube::Abstra
     n_sub = Int(n_lenslets)
     n_sub > 0 || throw(ArgumentError("n_lenslets must be positive"))
     ndims(spot_cube) == 3 ||
-        throw(DimensionMismatch("spot cube must have shape (n_lenslets^2, n_pix_subap_y, n_pix_subap_x)"))
-    n_spots, n_y, n_x = size(spot_cube)
+        throw(DimensionMismatch("spot cube must have shape (n_lenslets^2, n_axis_1, n_axis_2)"))
+    n_spots, n_axis_1, n_axis_2 = size(spot_cube)
     n_spots == n_sub * n_sub ||
         throw(DimensionMismatch("spot cube first dimension must equal n_lenslets^2; got $n_spots for n_lenslets=$n_sub"))
     gap_px = Int(gap)
     gap_px >= 0 || throw(ArgumentError("gap must be non-negative"))
-    size(image) == (n_sub * n_y + (n_sub - 1) * gap_px, n_sub * n_x + (n_sub - 1) * gap_px) ||
+    size(image) == (
+        n_sub * n_axis_1 + (n_sub - 1) * gap_px,
+        n_sub * n_axis_2 + (n_sub - 1) * gap_px,
+    ) ||
         throw(DimensionMismatch("output image has size $(size(image)); expected " *
-                                 "$((n_sub * n_y + (n_sub - 1) * gap_px, n_sub * n_x + (n_sub - 1) * gap_px))"))
+            "$((n_sub * n_axis_1 + (n_sub - 1) * gap_px, n_sub * n_axis_2 + (n_sub - 1) * gap_px))"))
 
-    _shack_hartmann_detector_image!(image_style, spot_style, image, spot_cube, n_sub, n_y, n_x, gap_px, gap_value)
+    _shack_hartmann_detector_image!(image_style, spot_style, image,
+        spot_cube, n_sub, n_axis_1, n_axis_2, gap_px, gap_value)
     return image
 end
 
 function _shack_hartmann_detector_image!(::ExecutionStyle, ::ExecutionStyle, image::AbstractMatrix,
-    spot_cube::AbstractArray, n_sub::Int, n_y::Int, n_x::Int, gap::Int, gap_value)
+    spot_cube::AbstractArray, n_sub::Int, n_axis_1::Int, n_axis_2::Int,
+    gap::Int, gap_value)
     throw(InvalidConfiguration("Shack-Hartmann detector image output and spot cube must use the same execution backend"))
 end
 
 function _shack_hartmann_detector_image!(::ScalarCPUStyle, ::ScalarCPUStyle, image::AbstractMatrix,
-    spot_cube::AbstractArray, n_sub::Int, n_y::Int, n_x::Int, gap::Int, gap_value)
+    spot_cube::AbstractArray, n_sub::Int, n_axis_1::Int, n_axis_2::Int,
+    gap::Int, gap_value)
     T = eltype(image)
     fill!(image, detector_output_value(T, gap_value))
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        idx = (i - 1) * n_sub + j
-        y0 = (i - 1) * (n_y + gap) + 1
-        x0 = (j - 1) * (n_x + gap) + 1
-        for jj in 1:n_x, ii in 1:n_y
-            image[y0 + ii - 1, x0 + jj - 1] = detector_output_value(T, spot_cube[idx, ii, jj])
+    @inbounds for j in 1:n_sub, i in 1:n_sub
+        idx = sh_lenslet_index(i, j, n_sub)
+        axis_1_start = (i - 1) * (n_axis_1 + gap) + 1
+        axis_2_start = (j - 1) * (n_axis_2 + gap) + 1
+        for local_j in 1:n_axis_2, local_i in 1:n_axis_1
+            image[axis_1_start + local_i - 1,
+                axis_2_start + local_j - 1] = detector_output_value(T,
+                    spot_cube[idx, local_i, local_j])
         end
     end
     return image
 end
 
 function _shack_hartmann_detector_image!(style::AcceleratorStyle{B}, ::AcceleratorStyle{B},
-    image::AbstractMatrix, spot_cube::AbstractArray, n_sub::Int, n_y::Int, n_x::Int, gap::Int, gap_value) where {B}
+    image::AbstractMatrix, spot_cube::AbstractArray, n_sub::Int,
+    n_axis_1::Int, n_axis_2::Int, gap::Int, gap_value) where {B}
     output_gap_value = eltype(image)(gap_value)
     if eltype(image) === eltype(spot_cube)
         gap > 0 && fill!(image, output_gap_value)
         launch_kernel!(style, shack_hartmann_detector_image_copy_kernel!, image, spot_cube,
-            n_sub, n_y, n_x, gap; ndrange=(n_sub, n_sub, n_y, n_x))
+            n_sub, n_axis_1, n_axis_2, gap;
+            ndrange=(n_sub, n_sub, n_axis_1, n_axis_2))
     else
         launch_kernel!(style, shack_hartmann_detector_image_kernel!, image, spot_cube,
-            n_sub, n_y, n_x, gap, output_gap_value; ndrange=size(image))
+            n_sub, n_axis_1, n_axis_2, gap, output_gap_value;
+            ndrange=size(image))
     end
     return image
 end
 
 @inline shack_hartmann_detector_image(wfs::ShackHartmannWFS; kwargs...) =
-    shack_hartmann_detector_image(sh_exported_spot_cube(wfs), wfs.params.n_lenslets; kwargs...)
+    shack_hartmann_detector_image(sh_exported_spot_cube(wfs), n_lenslets(wfs); kwargs...)
 @inline wfs_detector_image(wfs::ShackHartmannWFS; kwargs...) = shack_hartmann_detector_image(wfs; kwargs...)
 @inline wfs_detector_image(wfs::ShackHartmannWFS, ::Nothing; kwargs...) = shack_hartmann_detector_image(wfs; kwargs...)
 @inline wfs_detector_image(wfs::ShackHartmannWFS, det::AbstractDetector; kwargs...) =
@@ -133,7 +153,7 @@ end
     n_valid_subap=n_valid_subapertures(subaperture_layout(wfs)),
     subap_pixels=subaperture_layout(wfs).subap_pixels,
     pitch_m=subaperture_layout(wfs).pitch_m,
-    slopes_units=subaperture_calibration(wfs).slopes_units,
+    centroid_response=subaperture_calibration(wfs).centroid_response,
     calibrated=subaperture_calibration(wfs).calibrated,
 )
 
@@ -184,6 +204,6 @@ end
 end
 
 @inline function set_runtime_wfs_output_policy!(wfs::ShackHartmannWFS{<:Diffractive}, outputs)
-    wfs.state.export_pixels_enabled = outputs.wfs_pixels
+    wfs.acquisition.export_pixels_enabled = outputs.wfs_pixels
     return wfs
 end

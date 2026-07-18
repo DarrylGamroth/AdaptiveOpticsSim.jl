@@ -98,10 +98,12 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
     fill!(command, zero(T))
     reconstruct_buffer = similar(command)
     fill!(reconstruct_buffer, zero(T))
-    slopes = similar(simulation.wfs.state.slopes)
+    slopes = similar(AdaptiveOpticsSim.slopes(simulation.wfs))
     fill!(slopes, zero(eltype(slopes)))
-    measurement_delay = VectorDelayLine(simulation.wfs.state.slopes, latency.measurement_delay_frames)
-    readout_delay = VectorDelayLine(simulation.wfs.state.slopes, latency.readout_delay_frames)
+    measurement_delay = VectorDelayLine(AdaptiveOpticsSim.slopes(
+        simulation.wfs), latency.measurement_delay_frames)
+    readout_delay = VectorDelayLine(AdaptiveOpticsSim.slopes(
+        simulation.wfs), latency.readout_delay_frames)
     reconstruction_delay = VectorDelayLine(command, latency.reconstruction_delay_frames)
     dm_delay = VectorDelayLine(command, latency.dm_delay_frames)
     resolved_zero_padding = something(science_zero_padding, runtime_science_zero_padding(profile))

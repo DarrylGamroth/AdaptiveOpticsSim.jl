@@ -32,7 +32,7 @@ end
 _sync_wfs!(::Nothing, _) = nothing
 
 function _sync_wfs!(::Type{B}, wfs) where {B<:AdaptiveOpticsSim.GPUBackendTag}
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(wfs.state.slopes))
+    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(slopes(wfs)))
     return nothing
 end
 
@@ -100,7 +100,7 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=20, warm
     println("  measure_mean_ns: ", timing.mean_ns)
     println("  measure_p95_ns: ", timing.p95_ns)
     println("  frame_rate_hz: ", 1.0e9 / timing.mean_ns)
-    println("  spot_cube_shape: ", size(wfs.state.spot_cube))
+    println("  spot_cube_shape: ", size(wfs.acquisition.spot_cube))
     return nothing
 end
 

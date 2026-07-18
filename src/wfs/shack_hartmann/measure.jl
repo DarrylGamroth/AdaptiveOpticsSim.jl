@@ -1,5 +1,7 @@
-function sample_spot!(wfs::ShackHartmannWFS, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
-    binning = wfs.state.binning_pixel_scale
+function sample_spot!(owner::ShackHartmannOpticalFormationOwner,
+    intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
+    propagation = sh_optical_propagation(owner)
+    binning = propagation.binning_pixel_scale
     spot_in = intensity
     if binning > 1
         pad = size(intensity, 1)
@@ -7,19 +9,20 @@ function sample_spot!(wfs::ShackHartmannWFS, intensity::AbstractMatrix{T}) where
             throw(InvalidConfiguration("lenslet sampling is not divisible by binning_pixel_scale"))
         end
         n_binned = div(pad, binning)
-        if size(wfs.state.bin_buffer) != (n_binned, n_binned)
-            wfs.state.bin_buffer = similar(wfs.state.bin_buffer, n_binned, n_binned)
+        if size(propagation.bin_buffer) != (n_binned, n_binned)
+            propagation.bin_buffer = similar(propagation.bin_buffer,
+                n_binned, n_binned)
         end
-        bin2d!(wfs.state.bin_buffer, intensity, binning)
-        spot_in = wfs.state.bin_buffer
+        bin2d!(propagation.bin_buffer, intensity, binning)
+        spot_in = propagation.bin_buffer
     end
-    center_resize2d!(wfs.state.spot, spot_in)
-    return wfs.state.spot
+    center_resize2d!(propagation.spot, spot_in)
+    return propagation.spot
 end
 
 function measure!(mode::Geometric, wfs::ShackHartmannWFS, tel::Telescope)
-    geometric_slopes!(wfs.state.slopes, tel.state.opd, wfs.state.valid_mask)
-    return wfs.state.slopes
+    geometric_slopes!(wfs.estimator.slopes, tel.state.opd, wfs.layout.valid_mask)
+    return wfs.estimator.slopes
 end
 
 function measure!(::Geometric, wfs::ShackHartmannWFS, tel::Telescope, src::AbstractSource)
@@ -28,7 +31,7 @@ end
 
 function measure!(::Geometric, wfs::ShackHartmannWFS, tel::Telescope, src::LGSSource)
     slopes = measure!(Geometric(), wfs, tel)
-    n_sub = wfs.params.n_lenslets
+    n_sub = n_lenslets(wfs)
     factor = lgs_elongation_factor(src)
     @views slopes[n_sub * n_sub + 1:end] .*= factor
     return slopes
@@ -76,7 +79,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, tel::Telescope, src::Abs
     peak = sampled_spots_peak!(wfs, tel, src)
     sync_exported_spots!(wfs)
     sh_signal_from_spots_calibrated!(wfs, peak, slope_extraction_model(wfs))
-    return wfs.state.slopes
+    return wfs.estimator.slopes
 end
 
 function measure!(::Diffractive, wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource)
@@ -86,7 +89,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, tel::Telescope, src::Spe
     peak = sampled_spots_peak!(wfs, tel, src)
     sync_exported_spots!(wfs)
     sh_signal_from_spots_calibrated!(wfs, peak, slope_extraction_model(wfs))
-    return wfs.state.slopes
+    return wfs.estimator.slopes
 end
 
 """
@@ -111,7 +114,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, tel::Telescope, src::Abs
     peak = sampled_spots_peak!(wfs, tel, src, det, rng)
     sync_exported_spots!(wfs)
     sh_signal_from_spots_calibrated!(wfs, peak, slope_extraction_model(wfs))
-    return wfs.state.slopes
+    return wfs.estimator.slopes
 end
 
 function measure!(::Diffractive, wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource,
@@ -122,7 +125,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, tel::Telescope, src::Spe
     peak = sampled_spots_peak!(wfs, tel, src, det, rng)
     sync_exported_spots!(wfs)
     sh_signal_from_spots_calibrated!(wfs, peak, slope_extraction_model(wfs))
-    return wfs.state.slopes
+    return wfs.estimator.slopes
 end
 
 function measure!(::Diffractive, wfs::ShackHartmannWFS, tel::Telescope, ast::Asterism)
@@ -131,19 +134,19 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, tel::Telescope, ast::Ast
     prepare_sampling!(wfs, tel, common_source)
     ensure_sh_calibration!(wfs, tel, common_source)
     n = tel.params.resolution
-    n_sub = wfs.params.n_lenslets
+    n_sub = n_lenslets(wfs)
     sub = div(n, n_sub)
-    pad = size(wfs.state.field, 1)
+    pad = size(wfs.optical_workspace.field, 1)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
     if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_plan(wfs)
-        peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.state.slopes), wfs, tel, ast)
+        peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.estimator.slopes), wfs, tel, ast)
         sync_exported_spots!(wfs)
         sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
         subtract_reference_and_scale!(wfs)
-        return wfs.state.slopes
+        return wfs.estimator.slopes
     end
-    style = execution_style(wfs.state.slopes)
+    style = execution_style(wfs.estimator.slopes)
     if sh_uses_accelerator_batched_sensing(style, wfs)
         return measure_sh_asterism_batched!(style, wfs, tel, ast)
     end
@@ -157,19 +160,19 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, tel::Telescope, ast::Ast
     prepare_sampling!(wfs, tel, common_source)
     ensure_sh_calibration!(wfs, tel, common_source)
     n = tel.params.resolution
-    n_sub = wfs.params.n_lenslets
+    n_sub = n_lenslets(wfs)
     sub = div(n, n_sub)
-    pad = size(wfs.state.field, 1)
+    pad = size(wfs.optical_workspace.field, 1)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
     if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_plan(wfs)
-        peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.state.slopes), wfs, tel, ast, det, rng)
+        peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.estimator.slopes), wfs, tel, ast, det, rng)
         sync_exported_spots!(wfs)
         sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
         subtract_reference_and_scale!(wfs)
-        return wfs.state.slopes
+        return wfs.estimator.slopes
     end
-    style = execution_style(wfs.state.slopes)
+    style = execution_style(wfs.estimator.slopes)
     if sh_uses_accelerator_batched_sensing(style, wfs)
         return measure_sh_asterism_batched!(style, wfs, tel, ast, det, rng)
     end

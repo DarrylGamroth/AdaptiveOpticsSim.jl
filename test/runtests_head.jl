@@ -13,6 +13,16 @@ AdaptiveOpticsSim.set_fft_provider_threads!(1)
 
 const TEST_ATMOSPHERE_STEP = 1e-3
 
+# `Pkg.test(coverage=true)` normally sets Julia's coverage option in the test
+# process. The explicit workflow flag keeps allocation gating deterministic if
+# that propagation changes while ordinary CPU CI continues to enforce it.
+@inline coverage_runner_flag(value::AbstractString) =
+    lowercase(strip(value)) in ("1", "true", "yes", "on")
+
+@inline coverage_instrumented() =
+    coverage_runner_flag(get(ENV, "ADAPTIVEOPTICS_TEST_COVERAGE", "false")) ||
+    Base.JLOptions().code_coverage != 0
+
 # The package exports only the user-facing API. The tests intentionally exercise
 # internal extension seams too, so make those names available without expanding
 # the public export list.
@@ -42,6 +52,12 @@ _rng_family(::AbstractRNG) = :other
     @test _rng_family(deterministic_reference_rng(1)) == :mersenne_twister
     @test rand(runtime_rng(42), UInt64) == rand(runtime_rng(42), UInt64)
     @test rand(deterministic_reference_rng(42), UInt64) == rand(deterministic_reference_rng(42), UInt64)
+    @test coverage_runner_flag("true")
+    @test coverage_runner_flag(" YES ")
+    @test !coverage_runner_flag("false")
+    @test coverage_instrumented() ==
+        (coverage_runner_flag(get(ENV, "ADAPTIVEOPTICS_TEST_COVERAGE",
+            "false")) || Base.JLOptions().code_coverage != 0)
 end
 
 function run_tutorial_example(name::AbstractString)
@@ -86,7 +102,7 @@ end
 function assert_wfs_interface(wfs, tel)
     @test applicable(update_valid_mask!, wfs, tel)
     @test applicable(measure!, wfs, tel)
-    @test slopes(wfs) === wfs.state.slopes
+    @test slopes(wfs) isa AbstractVector
     @test supports_valid_subaperture_mask(wfs) == !isnothing(valid_subaperture_mask(wfs))
     @test supports_reference_signal(wfs) == !isnothing(reference_signal(wfs))
     @test supports_camera_frame(wfs) == !isnothing(camera_frame(wfs))
@@ -293,7 +309,7 @@ function moving_wfs_slope_trace(;
         advance_by!(atm, atmosphere_step; rng=rng)
         propagate!(atm, tel)
         measure!(wfs, tel, src)
-        trace[i] = copy(wfs.state.slopes)
+        trace[i] = copy(slopes(wfs))
     end
     return trace
 end

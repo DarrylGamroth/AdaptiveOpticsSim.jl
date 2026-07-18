@@ -80,7 +80,11 @@ Examples:
 - caller-owned `PupilFunction`, `ElectricField`, and `IntensityMap`
   products with immutable `OpticalPlaneMetadata`, including normalization,
   spatial-measure, and coherent/incoherent combination policy
-- `ShackHartmannWFS` with `ShackHartmannWFSParams` and `ShackHartmannWFSState`
+- `ShackHartmannWFS` composed from immutable `MicrolensArrayParams`, a
+  `MicrolensArray`, backend/grid-bound `PreparedMicrolensPropagation`, and
+  distinct layout, calibration, acquisition, and estimator state; the
+  component-only `ShackHartmannOpticalFrontEnd` borrows the optic, propagation,
+  and layout without retaining the whole WFS
 - `Detector` with `DetectorParams` and `DetectorState`
 - `DetectorAcquisitionPlan` as the cold-path compatibility and buffer contract
   between one frame detector and one immutable intensity-map description
@@ -100,13 +104,19 @@ This gives:
 - stable memory ownership
 - hot-path mutation without repeated allocation
 
-The generic WFS stage protocol now exists independently of the legacy
-`AbstractWFS` object layout. Direct geometric/reduced-order estimators declare
-`DirectMeasurementPath()` and do not carry absent stages as `nothing` or
-allocate placeholder products. Maintained Shack-Hartmann, Pyramid/BioEdge,
-Zernike/Curvature, and LiFT implementations remain internally coupled until
-their family-specific migration slices; do not infer family decomposition from
-the existence of the generic contract.
+The generic WFS stage protocol exists independently of the `AbstractWFS`
+object layout. Shack-Hartmann is its first physical family implementation and
+separates microlens formation, acquisition, and estimation over caller-owned
+products. Its geometric and diffractive signals share one explicit
+`[axis 1; axis 2]`, Julia-column-major lenslet convention; OOPAO row-major
+reference adaptation remains in the test harness. Its geometric mode declares
+`DirectMeasurementPath()` and allocates no placeholder optical or acquisition
+workspace. Microlens sampling, synchronized subaperture layout, and
+calibration are cold configuration: maintained mutation advances a revision,
+and prepared plans reject stale bindings while caller-owned product contents
+remain mutable. Pyramid/BioEdge,
+Zernike/Curvature, and LiFT remain internally coupled until their
+family-specific migration slices.
 
 ## Execution Layers
 

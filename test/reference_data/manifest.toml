@@ -124,6 +124,9 @@ mode = "diffractive"
 pixel_scale = 5.9999999999999998e-02
 n_pix_subap = 8
 
+[cases.shack_hartmann_diffractive_ramp.compare]
+convention = "oopao_sh_signal_2d"
+
 [cases.shack_hartmann_diffractive_tip_mode]
 kind = "shack_hartmann_slopes"
 data = "shack_hartmann_diffractive_tip_mode.txt"
@@ -153,6 +156,9 @@ threshold = 0.0000000000000000e+00
 mode = "diffractive"
 pixel_scale = 5.9999999999999998e-02
 n_pix_subap = 8
+
+[cases.shack_hartmann_diffractive_tip_mode.compare]
+convention = "oopao_sh_signal_2d"
 
 [cases.shack_hartmann_diffractive_tip_mode.basis]
 kind = "cartesian_polynomials"
@@ -195,6 +201,9 @@ mode = "diffractive"
 pixel_scale = 5.9999999999999998e-02
 n_pix_subap = 8
 
+[cases.shack_hartmann_diffractive_tilt_mode.compare]
+convention = "oopao_sh_signal_2d"
+
 [cases.shack_hartmann_diffractive_tilt_mode.basis]
 kind = "cartesian_polynomials"
 n_modes = 2
@@ -230,6 +239,9 @@ threshold = 0.0000000000000000e+00
 mode = "diffractive"
 pixel_scale = 5.9999999999999998e-02
 n_pix_subap = 8
+
+[cases.shack_hartmann_diffractive_tiptilt_dm.compare]
+convention = "oopao_sh_signal_2d"
 
 [cases.shack_hartmann_diffractive_tiptilt_dm.controllable_optic]
 kind = "composite"

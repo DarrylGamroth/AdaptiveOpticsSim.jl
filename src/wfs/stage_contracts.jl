@@ -320,6 +320,17 @@ end
     return bundle
 end
 
+function validate_wfs_optical_products(
+    products::AbstractVector{<:AbstractOpticalProduct})
+    isempty(products) && throw(WFSPreparationError(:optical_formation,
+        :plane_count,
+        "WFS optical formation requires at least one detector-facing product"))
+    @inbounds for product in products
+        validate_wfs_optical_products(product)
+    end
+    return products
+end
+
 @inline validate_wfs_optical_products(::Tuple{}) = throw(WFSPreparationError(
     :optical_formation, :plane_count,
     "WFS optical formation requires at least one detector-facing product"))

@@ -112,17 +112,19 @@ end
         ensure_kernel! = family === :shack_hartmann ?
             AdaptiveOpticsSim.ensure_lgs_kernels! :
             AdaptiveOpticsSim.ensure_lgs_kernel!
+        kernel_state = family === :shack_hartmann ?
+            wfs.optical_workspace : wfs.state
 
         ensure_kernel!(wfs, tel, src)
-        original_tag = wfs.state.lgs_kernel_tag
-        original_kernel = copy(wfs.state.lgs_kernel_fft)
+        original_tag = kernel_state.lgs_kernel_tag
+        original_kernel = copy(kernel_state.lgs_kernel_fft)
         ensure_kernel!(wfs, tel, src)
-        @test wfs.state.lgs_kernel_tag == original_tag
+        @test kernel_state.lgs_kernel_tag == original_tag
 
         src.params.na_profile[2, :] .= [0.8, 0.1, 0.1]
         ensure_kernel!(wfs, tel, src)
-        @test wfs.state.lgs_kernel_tag != original_tag
-        @test !isapprox(wfs.state.lgs_kernel_fft, original_kernel;
+        @test kernel_state.lgs_kernel_tag != original_tag
+        @test !isapprox(kernel_state.lgs_kernel_fft, original_kernel;
             rtol=1e-12, atol=1e-14)
     end
 end
@@ -355,7 +357,7 @@ end
     lgs = LGSSource(elongation_factor=2.0)
     slopes_ngs = measure!(sh, tel, ngs)
     slopes_lgs = measure!(sh, tel, lgs)
-    n = sh.params.n_lenslets * sh.params.n_lenslets
+    n = microlens_array(sh).params.n_lenslets * microlens_array(sh).params.n_lenslets
     @test slopes_lgs[n+1:end] ≈ slopes_ngs[n+1:end] .* 2.0
 
     bio_lgs = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
@@ -392,7 +394,7 @@ end
     sh_profile_slopes = measure!(sh_profile, tel, lgs_profile)
     @test all(isfinite, sh_profile_slopes)
 
-    sh_sampled = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
+    sh_sampled = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8)
     sh_sampled_slopes = measure!(sh_sampled, tel, ngs)
     @test length(sh_sampled_slopes) == 2 * 4 * 4
 
@@ -468,23 +470,23 @@ end
     sh_ast_serial = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
     AdaptiveOpticsSim.prepare_sampling!(sh_ast_serial, tel, ast.sources[1])
     AdaptiveOpticsSim.ensure_sh_calibration!(sh_ast_serial, tel, ast.sources[1])
-    fill!(sh_ast_serial.state.detector_noise_cube, zero(eltype(sh_ast_serial.state.detector_noise_cube)))
+    fill!(sh_ast_serial.acquisition.detector_noise_cube, zero(eltype(sh_ast_serial.acquisition.detector_noise_cube)))
     for src in ast.sources
         AdaptiveOpticsSim.sampled_spots_peak!(sh_ast_serial, tel, src)
-        sh_ast_serial.state.detector_noise_cube .+= sh_ast_serial.state.spot_cube
+        sh_ast_serial.acquisition.detector_noise_cube .+= sh_ast_serial.acquisition.spot_cube
     end
-    copyto!(sh_ast_serial.state.spot_cube, sh_ast_serial.state.detector_noise_cube)
-    sh_ast_serial_peak = maximum(sh_ast_serial.state.spot_cube)
+    copyto!(sh_ast_serial.acquisition.spot_cube, sh_ast_serial.acquisition.detector_noise_cube)
+    sh_ast_serial_peak = maximum(sh_ast_serial.acquisition.spot_cube)
     AdaptiveOpticsSim.sh_signal_from_spots!(sh_ast_serial, sh_ast_serial_peak, slope_extraction_model(sh_ast_serial))
     AdaptiveOpticsSim.subtract_reference_and_scale!(sh_ast_serial)
-    sh_ast_serial_slopes = copy(sh_ast_serial.state.slopes)
+    sh_ast_serial_slopes = copy(slopes(sh_ast_serial))
     @test norm(sh_ast_slopes - sh_ast_serial_slopes) / norm(sh_ast_slopes) < 0.07
     mixed_ngs = Source(wavelength=wavelength(lgs_profile), magnitude=0.0, coordinates=(0.0, 0.0))
     mixed_ast = Asterism([mixed_ngs, lgs_profile])
     sh_mixed_det = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
     @test_throws InvalidConfiguration measure!(sh_mixed_det, tel,
         mixed_ast, det; rng=MersenneTwister(14))
-    @test !sh_mixed_det.state.calibrated
+    @test !sh_mixed_det.calibration.calibrated
     pyr_ast = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
     pyr_ast_slopes = copy(measure!(pyr_ast, tel, ast))
     @test length(pyr_ast_slopes) == 2 * 4 * 4
@@ -498,8 +500,8 @@ end
     end
     pyr_ast_intensity = AdaptiveOpticsSim.sample_pyramid_intensity!(pyr_ast_serial, tel, pyr_ast_serial.state.intensity)
     AdaptiveOpticsSim.pyramid_signal!(pyr_ast_serial, tel, pyr_ast_intensity)
-    @. pyr_ast_serial.state.slopes *= pyr_ast_serial.state.optical_gain
-    @test pyr_ast_slopes ≈ pyr_ast_serial.state.slopes
+    slopes(pyr_ast_serial) .*= pyr_ast_serial.state.optical_gain
+    @test pyr_ast_slopes ≈ slopes(pyr_ast_serial)
     bio_ast = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     bio_ast_slopes = copy(measure!(bio_ast, tel, ast))
     @test length(bio_ast_slopes) == 2 * 4 * 4
@@ -512,7 +514,7 @@ end
     end
     bio_ast_intensity = AdaptiveOpticsSim.sample_bioedge_intensity!(bio_ast_serial, tel, bio_ast_serial.state.binned_intensity)
     AdaptiveOpticsSim.bioedge_signal!(bio_ast_serial, tel, bio_ast_intensity)
-    @test bio_ast_slopes ≈ bio_ast_serial.state.slopes
+    @test bio_ast_slopes ≈ slopes(bio_ast_serial)
 
     pyr_ast_det = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
     pyr_ast_det_slopes = copy(measure!(pyr_ast_det, tel, ast, det))
@@ -529,8 +531,8 @@ end
         first(ast.sources); rng=MersenneTwister(12))
     AdaptiveOpticsSim.resize_pyramid_signal_buffers!(pyr_ast_det_serial, size(pyr_ast_det_frame, 1))
     AdaptiveOpticsSim.pyramid_signal!(pyr_ast_det_serial, tel, pyr_ast_det_frame)
-    @. pyr_ast_det_serial.state.slopes *= pyr_ast_det_serial.state.optical_gain
-    @test pyr_ast_det_slopes ≈ pyr_ast_det_serial.state.slopes
+    slopes(pyr_ast_det_serial) .*= pyr_ast_det_serial.state.optical_gain
+    @test pyr_ast_det_slopes ≈ slopes(pyr_ast_det_serial)
 
     bio_ast_det = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     bio_ast_det_slopes = copy(measure!(bio_ast_det, tel, ast, det; rng=MersenneTwister(13)))
@@ -546,7 +548,7 @@ end
         first(ast.sources); rng=MersenneTwister(13))
     AdaptiveOpticsSim.resize_bioedge_signal_buffers!(bio_ast_det_serial, size(bio_ast_det_frame, 1))
     AdaptiveOpticsSim.bioedge_signal!(bio_ast_det_serial, tel, bio_ast_det_frame)
-    @test bio_ast_det_slopes ≈ bio_ast_det_serial.state.slopes
+    @test bio_ast_det_slopes ≈ slopes(bio_ast_det_serial)
 
     common_qe_wavelength = 550e-9
     common_qe_ast = Asterism([
@@ -676,9 +678,9 @@ end
         zero_bioedge = BioEdgeWFS(tel; pupil_samples=4,
             mode=Diffractive(), normalization=normalization)
         @test all(iszero, measure!(zero_pyramid, tel, zero_src))
-        @test all(isfinite, zero_pyramid.state.slopes)
+        @test all(isfinite, slopes(zero_pyramid))
         @test all(iszero, measure!(zero_bioedge, tel, zero_src))
-        @test all(isfinite, zero_bioedge.state.slopes)
+        @test all(isfinite, slopes(zero_bioedge))
     end
     undetectable = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
         modulation=0.0, normalization=IncidenceFluxNormalization())
@@ -695,7 +697,7 @@ end
         mode=Diffractive(), modulation=1.0,
         normalization=IncidenceFluxNormalization())
     @test measure!(spectral_flat, flat_tel, spectral_lgs) ≈
-        zeros(length(spectral_flat.state.slopes)) atol=1e-12
+        zeros(length(slopes(spectral_flat))) atol=1e-12
 
     sampled_qe = SampledQuantumEfficiency(
         [0.50e-6, 0.57e-6, 0.61e-6, 0.70e-6],
@@ -706,7 +708,7 @@ end
         mode=Diffractive(), modulation=1.0,
         normalization=IncidenceFluxNormalization())
     @test measure!(spectral_detected, flat_tel, spectral_lgs,
-        spectral_detector) ≈ zeros(length(spectral_detected.state.slopes)) atol=1e-12
+        spectral_detector) ≈ zeros(length(slopes(spectral_detected))) atol=1e-12
     spectral_scale = wfs_detector_incidence_scale(spectral_detector,
         spectral_lgs, eltype(output_frame(spectral_detector)))
     @test pyramid_signal_allocation_bytes(spectral_detected, flat_tel,
@@ -1026,7 +1028,7 @@ end
 @testset "Shack-Hartmann subapertures" begin
     tel = Telescope(resolution=24, diameter=8.0, central_obstruction=0.1)
     src = Source(band=:I, magnitude=0.0)
-    sh = ShackHartmannWFS(tel; n_lenslets=6, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8, threshold_cog=0.02)
+    sh = ShackHartmannWFS(tel; n_lenslets=6, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8, threshold_cog=0.02)
 
     layout = subaperture_layout(sh)
     calibration = subaperture_calibration(sh)
@@ -1043,11 +1045,13 @@ end
 
     prepare_runtime_wfs!(sh, tel, src)
     @test calibration.calibrated
-    @test calibration.slopes_units == sh.state.slopes_units
-    @test calibration.wavelength == sh.state.calibration_wavelength
-    @test calibration.signature == sh.state.calibration_signature
-    @test calibration.reference_signal_2d === sh.state.reference_signal_2d
-    @test calibration.reference_signal_host === sh.state.reference_signal_host
+    @test calibration.centroid_response == sh.calibration.centroid_response
+    @test calibration.wavelength == sh.calibration.wavelength
+    @test calibration.signature == sh.calibration.signature
+    @test calibration.reference_signal_2d ===
+        sh.calibration.reference_signal_2d
+    @test calibration.reference_signal_host ===
+        sh.calibration.reference_signal_host
     @test length(valid_subaperture_indices(layout)) == n_valid_subapertures(layout)
 
     slopes = measure!(sh, tel, src)
@@ -1059,6 +1063,6 @@ end
 
     dm = DeformableMirror(tel; n_act=5)
     imat = interaction_matrix(dm, sh, tel, src; amplitude=1e-8)
-    @test size(imat.matrix, 1) == length(sh.state.slopes)
+    @test size(imat.matrix, 1) == length(AdaptiveOpticsSim.slopes(sh))
     @test size(imat.matrix, 2) == length(dm.state.coefs)
 end

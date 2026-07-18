@@ -64,7 +64,7 @@ abstract type ReferenceCompareConvention end
 
 struct IdentityCompareConvention <: ReferenceCompareConvention end
 
-struct OOPAOGeometricSHSignal2DConvention{T<:AbstractFloat} <: ReferenceCompareConvention
+struct OOPAOSHSignal2DConvention{T<:AbstractFloat} <: ReferenceCompareConvention
     slope_scale::T
 end
 
@@ -309,19 +309,20 @@ function legacy_reference_sh_index_grid_frame!(wfs::ShackHartmannWFS,
     tel::Telescope, src::SpectralSource)
     AdaptiveOpticsSim.prepare_sampling!(wfs, tel,
         AdaptiveOpticsSim.spectral_reference_source(src))
-    fill!(wfs.state.spot_cube_accum,
-        zero(eltype(wfs.state.spot_cube_accum)))
+    fill!(wfs.optical_workspace.spot_cube_accum,
+        zero(eltype(wfs.optical_workspace.spot_cube_accum)))
     total_irradiance = AdaptiveOpticsSim.photon_irradiance(src)
     @inbounds for sample in AdaptiveOpticsSim.spectral_bundle(src)
         variant = AdaptiveOpticsSim.source_with_wavelength_and_radiometric_value(
             src, sample.wavelength,
-            eltype(wfs.state.slopes)(total_irradiance * sample.weight))
+            eltype(slopes(wfs))(total_irradiance * sample.weight))
         AdaptiveOpticsSim.sampled_spots_peak!(
             AdaptiveOpticsSim.ScalarCPUStyle(), wfs, tel, variant)
-        wfs.state.spot_cube_accum .+= wfs.state.spot_cube
+        wfs.optical_workspace.spot_cube_accum .+= wfs.acquisition.spot_cube
     end
-    copyto!(wfs.state.spot_cube, wfs.state.spot_cube_accum)
-    return wfs.state.spot_cube
+    copyto!(wfs.acquisition.spot_cube,
+        wfs.optical_workspace.spot_cube_accum)
+    return wfs.acquisition.spot_cube
 end
 
 function build_reference_detector(cfg::AbstractDict{<:AbstractString,<:Any})
@@ -492,12 +493,15 @@ function parse_reference_compare_convention(raw)
         if !has_swap && !has_scale
             return IdentityCompareConvention()
         elseif has_swap && has_scale
-            return OOPAOGeometricSHSignal2DConvention(Float64(raw["scale"]))
+            return OOPAOSHSignal2DConvention(Float64(raw["scale"]))
         end
         throw(InvalidConfiguration("legacy compare adapters must specify both swap_halves=true and scale"))
     elseif convention_name == "oopao_geometric_sh_signal_2d"
         slope_scale = Float64(get(raw, "slope_scale", OOPAO_GEOMETRIC_SH_SLOPE_SCALE))
-        return OOPAOGeometricSHSignal2DConvention(slope_scale)
+        return OOPAOSHSignal2DConvention(slope_scale)
+    elseif convention_name == "oopao_sh_signal_2d"
+        slope_scale = Float64(get(raw, "slope_scale", 1.0))
+        return OOPAOSHSignal2DConvention(slope_scale)
     elseif convention_name == "identity"
         return IdentityCompareConvention()
     end
@@ -507,24 +511,34 @@ end
 adapt_compare_convention(::IdentityCompareConvention, actual) = actual
 
 function adapt_compare_convention(
-    convention::OOPAOGeometricSHSignal2DConvention,
+    convention::OOPAOSHSignal2DConvention,
     actual::AbstractVector,
 )
     isodd(length(actual)) &&
-        throw(InvalidConfiguration("OOPAO geometric SH compare convention requires an even-length slope vector"))
-    n = div(length(actual), 2)
+        throw(InvalidConfiguration("OOPAO SH compare convention requires an even-length slope vector"))
+    n_lenslet_values = div(length(actual), 2)
+    n_sub = isqrt(n_lenslet_values)
+    n_sub * n_sub == n_lenslet_values || throw(InvalidConfiguration(
+        "OOPAO SH compare convention requires two square lenslet blocks"))
     adapted = similar(actual)
-    @views adapted[1:n] .= actual[n+1:end]
-    @views adapted[n+1:end] .= actual[1:n]
+    # AdaptiveOpticsSim reports [axis 1; axis 2], with each n-by-n lenslet
+    # block flattened in Julia column-major order. OOPAO's signal_2D boolean
+    # selection reports [axis 2; axis 1] in NumPy row-major order.
+    @inbounds for j in 1:n_sub, i in 1:n_sub
+        julia_index = i + (j - 1) * n_sub
+        oopao_index = (i - 1) * n_sub + j
+        adapted[oopao_index] = actual[n_lenslet_values + julia_index]
+        adapted[n_lenslet_values + oopao_index] = actual[julia_index]
+    end
     adapted .*= convention.slope_scale
     return adapted
 end
 
 function adapt_compare_convention(
-    ::OOPAOGeometricSHSignal2DConvention,
+    ::OOPAOSHSignal2DConvention,
     actual,
 )
-    throw(InvalidConfiguration("OOPAO geometric SH compare convention requires a 1D slope vector"))
+    throw(InvalidConfiguration("OOPAO SH compare convention requires a 1D slope vector"))
 end
 
 function parse_reference_real(value)
@@ -758,9 +772,9 @@ function reference_interaction_matrix(wfs::AbstractWFS, tel::Telescope, src::Abs
         @views @. tel.state.opd = Float64(amplitude) * basis[:, :, k]
         measure!(wfs, tel, src)
         if mat === nothing
-            mat = Matrix{Float64}(undef, length(wfs.state.slopes), n_modes)
+            mat = Matrix{Float64}(undef, length(slopes(wfs)), n_modes)
         end
-        mat[:, k] .= wfs.state.slopes
+        mat[:, k] .= slopes(wfs)
     end
     tel.state.opd .= opd_base
     mat === nothing && throw(InvalidConfiguration("reference interaction matrix requires at least one mode"))
@@ -1019,7 +1033,7 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
                 half_pixel_shift=half_pixel_shift)
         elseif n_pix_subap === nothing
             return ShackHartmannWFS(tel; n_lenslets=n_lenslets, threshold=threshold, mode=mode,
-                pixel_scale=Float64(pixel_scale), threshold_cog=threshold_cog,
+                pixel_scale_arcsec=Float64(pixel_scale), threshold_cog=threshold_cog,
                 threshold_convolution=threshold_convolution, half_pixel_shift=half_pixel_shift)
         elseif pixel_scale === nothing
             return ShackHartmannWFS(tel; n_lenslets=n_lenslets, threshold=threshold, mode=mode,
@@ -1027,7 +1041,7 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
                 threshold_convolution=threshold_convolution, half_pixel_shift=half_pixel_shift)
         end
         return ShackHartmannWFS(tel; n_lenslets=n_lenslets, threshold=threshold, mode=mode,
-            pixel_scale=Float64(pixel_scale), n_pix_subap=Int(n_pix_subap),
+            pixel_scale_arcsec=Float64(pixel_scale), n_pix_subap=Int(n_pix_subap),
             threshold_cog=threshold_cog, threshold_convolution=threshold_convolution,
             half_pixel_shift=half_pixel_shift)
     elseif kind in (:pyramid_slopes, :pyramid_frame)
@@ -1157,7 +1171,7 @@ function compute_reference_actual(case::ReferenceCase)
             AdaptiveOpticsSim.prepare_sampling!(wfs, tel, src)
             AdaptiveOpticsSim.sampled_spots_peak!(wfs, tel, src)
         end
-        @views return copy(wfs.state.spot_cube[1, :, :])
+        @views return copy(wfs.acquisition.spot_cube[1, :, :])
     elseif case.kind === :pyramid_frame
         tel = build_reference_telescope(case.config["telescope"])
         src = build_reference_measurement_source(case.config["source"])
@@ -1410,12 +1424,14 @@ function compute_reference_actual_ka_cpu(case::ReferenceCase)
             throw(InvalidConfiguration("KA CPU reference path currently supports only geometric Shack-Hartmann cases"))
         end
         update_valid_mask!(wfs, tel)
-        n_sub = wfs.params.n_lenslets
+        n_sub = microlens_array(wfs).params.n_lenslets
         sub = div(tel.params.resolution, n_sub)
         offset = n_sub * n_sub
-        slopes = similar(wfs.state.slopes)
+        slopes = similar(AdaptiveOpticsSim.slopes(wfs))
         style = AdaptiveOpticsSim.AcceleratorStyle(KernelAbstractions.CPU())
-        AdaptiveOpticsSim._geometric_slopes!(style, slopes, tel.state.opd, wfs.state.valid_mask, sub, n_sub, offset)
+        AdaptiveOpticsSim._geometric_slopes!(style, slopes, tel.state.opd,
+            AdaptiveOpticsSim.valid_subaperture_mask(wfs), sub, n_sub,
+            offset)
         return slopes
     end
     throw(InvalidConfiguration("KA CPU reference path not implemented for reference kind '$(case.kind)'"))
@@ -1495,7 +1511,7 @@ function specula_legacy_radiometric_factor(case::ReferenceCase)
         wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
         AdaptiveOpticsSim.prepare_sampling!(wfs, tel,
             AdaptiveOpticsSim.spectral_reference_source(src))
-        pad = size(wfs.state.fft_stack, 1)
+        pad = size(wfs.optical_workspace.fft_stack, 1)
         factor *= pad * pad
     end
     return factor

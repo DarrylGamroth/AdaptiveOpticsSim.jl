@@ -5,10 +5,10 @@
         tel.state.opd[i, j] = i + j / 10
     end
 
-    sh_plain = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8)
-    sh_shift = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8,
+    sh_plain = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8)
+    sh_shift = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8,
         half_pixel_shift=true)
-    sh_thresh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale=0.06, n_pix_subap=8,
+    sh_thresh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8,
         threshold_cog=0.2)
     @test measure!(sh_plain, tel, src) != measure!(sh_shift, tel, src)
     @test measure!(sh_plain, tel, src) != measure!(sh_thresh, tel, src)
@@ -116,8 +116,10 @@ end
             heterogeneous)
         @test_throws InvalidConfiguration measure!(wfs, tel,
             heterogeneous, detector)
-        @test !wfs.state.calibrated
     end
+    @test !sensors[1].calibration.calibrated
+    @test !sensors[2].state.calibrated
+    @test !sensors[3].state.calibrated
 
     common_lgs = Asterism([
         LGSSource(wavelength=589e-9, elongation_factor=1.4,
@@ -517,7 +519,7 @@ end
     modal = ModalReconstructor(imat; gain=1.0)
     factorized = FactorizedReconstructor(imat; gain=1.0)
     mapped = MappedReconstructor(Matrix{Float64}(I, length(dm.state.coefs), length(dm.state.coefs)), imat; gain=0.5)
-    ctrl = DiscreteIntegratorController(length(wfs.state.slopes); gain=0.1, tau=0.02)
+    ctrl = DiscreteIntegratorController(length(slopes(wfs)); gain=0.1, tau=0.02)
     controlled = ControlledReconstructor(
         factorized,
         DiscreteIntegratorController(length(dm.state.coefs);
@@ -599,8 +601,8 @@ end
     @test supports_camera_frame(bio)
     @test supports_camera_frame(zwfs)
     @test supports_camera_frame(curv)
-    @test valid_subaperture_mask(wfs) === wfs.state.valid_mask
-    @test reference_signal(wfs) === wfs.state.reference_signal_2d
+    @test valid_subaperture_mask(wfs) === wfs.layout.valid_mask
+    @test reference_signal(wfs) === wfs.calibration.reference_signal_2d
     @test camera_frame(pyr) === pyr.state.camera_frame
     @test camera_frame(bio) === bio.state.camera_frame
     @test camera_frame(zwfs) === zwfs.state.camera_frame
@@ -612,10 +614,10 @@ end
     sh_image = wfs_detector_image(wfs_diffractive; gap=1)
     sh_cube = AdaptiveOpticsSim.sh_exported_spot_cube(wfs_diffractive)
     @test ndims(sh_image) == 2
-    @test size(sh_image) == (wfs_diffractive.params.n_lenslets * size(sh_cube, 2) +
-                             wfs_diffractive.params.n_lenslets - 1,
-                             wfs_diffractive.params.n_lenslets * size(sh_cube, 3) +
-                             wfs_diffractive.params.n_lenslets - 1)
+    @test size(sh_image) == (microlens_array(wfs_diffractive).params.n_lenslets * size(sh_cube, 2) +
+                             microlens_array(wfs_diffractive).params.n_lenslets - 1,
+                             microlens_array(wfs_diffractive).params.n_lenslets * size(sh_cube, 3) +
+                             microlens_array(wfs_diffractive).params.n_lenslets - 1)
     # IF-DM
     assert_dm_interface(dm, tel)
     # IF-DET
@@ -627,13 +629,13 @@ end
     assert_optical_element_interface(opd_map, tel)
     assert_optical_element_interface(ncpa, tel)
     # IF-REC
-    assert_reconstructor_interface(modal, wfs.state.slopes, length(dm.state.coefs))
-    assert_reconstructor_interface(factorized, wfs.state.slopes, length(dm.state.coefs))
-    assert_reconstructor_interface(mapped, wfs.state.slopes, length(dm.state.coefs))
-    assert_reconstructor_interface(controlled, wfs.state.slopes, length(dm.state.coefs))
+    assert_reconstructor_interface(modal, slopes(wfs), length(dm.state.coefs))
+    assert_reconstructor_interface(factorized, slopes(wfs), length(dm.state.coefs))
+    assert_reconstructor_interface(mapped, slopes(wfs), length(dm.state.coefs))
+    assert_reconstructor_interface(controlled, slopes(wfs), length(dm.state.coefs))
     @test reset_controller!(controlled) === controlled
     # IF-CTRL
-    assert_controller_interface(ctrl, wfs.state.slopes, 0.01)
+    assert_controller_interface(ctrl, slopes(wfs), 0.01)
     @test supports_controller_reset(ctrl)
     # IF-SIM
     iface = assert_control_simulation_interface(runtime)
@@ -671,7 +673,7 @@ end
     @test supports_grouped_execution(pyr, poly)
     @test supports_grouped_execution(bio, ast)
     prepare_runtime_wfs!(wfs_diffractive, tel, src)
-    @test wfs_diffractive.state.calibrated
+    @test wfs_diffractive.calibration.calibrated
     prepare_runtime_wfs!(zwfs, tel, src)
     @test zwfs.state.calibrated
     prepare_runtime_wfs!(curv, tel, src)
@@ -690,10 +692,10 @@ end
     assert_modal_basis_contract(basis, length(dm.state.coefs), 2)
 
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
-    assert_interaction_matrix_contract(imat, length(wfs.state.slopes), length(dm.state.coefs), 0.1)
+    assert_interaction_matrix_contract(imat, length(slopes(wfs)), length(dm.state.coefs), 0.1)
 
     imat_basis = interaction_matrix(dm, wfs, tel, basis.M2C; amplitude=0.1)
-    assert_interaction_matrix_contract(imat_basis, length(wfs.state.slopes), size(basis.M2C, 2), 0.1)
+    assert_interaction_matrix_contract(imat_basis, length(slopes(wfs)), size(basis.M2C, 2), 0.1)
 
     control_matrix = ControlMatrix(imat.matrix)
     assert_control_matrix_contract(control_matrix, imat.matrix)

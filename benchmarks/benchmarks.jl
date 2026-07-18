@@ -45,7 +45,7 @@ function bench_reconstructor()
     wfs = ShackHartmannWFS(tel; n_lenslets=4)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     recon = ModalReconstructor(imat; gain=1.0)
-    slopes = wfs.state.slopes
+    slopes = AdaptiveOpticsSim.slopes(wfs)
     return @benchmark reconstruct($recon, $slopes)
 end
 
@@ -55,7 +55,7 @@ function bench_reconstructor_inplace()
     wfs = ShackHartmannWFS(tel; n_lenslets=4)
     imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
     recon = ModalReconstructor(imat; gain=1.0)
-    slopes = wfs.state.slopes
+    slopes = AdaptiveOpticsSim.slopes(wfs)
     out = similar(slopes, size(recon.reconstructor, 1))
     return @benchmark reconstruct!($out, $recon, $slopes)
 end
@@ -139,7 +139,7 @@ function alloc_checks()
     wfs = ShackHartmannWFS(tel_r; n_lenslets=4)
     imat = interaction_matrix(dm, wfs, tel_r; amplitude=0.1)
     recon = ModalReconstructor(imat; gain=1.0)
-    slopes = wfs.state.slopes
+    slopes = AdaptiveOpticsSim.slopes(wfs)
     out = similar(slopes, size(recon.reconstructor, 1))
     reconstruct!(out, recon, slopes)
     alloc_recon = @allocated reconstruct!(out, recon, slopes)

@@ -154,8 +154,8 @@ function _profile_field_path(mode::Symbol, atmo_kind::Symbol, backend_name::Abst
         () -> begin
             advance_by!(atm, atmosphere_step; rng=rng)
             measure!(wfs, tel, src, atm)
-            _sync_array!(backend_tag, wfs.state.slopes)
-            return wfs.state.slopes
+            _sync_array!(backend_tag, slopes(wfs))
+            return slopes(wfs)
         end
     else
         () -> begin

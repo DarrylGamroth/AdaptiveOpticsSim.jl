@@ -108,10 +108,11 @@ mutation is unsupported because it bypasses that revision boundary.
   accumulation. Detector acquisition is channel-specific and requires a
   monochromatic or integrated channel; sampled QE requires the monochromatic
   case
-- Diffractive Shack–Hartmann spectral execution accepts same-wavelength
-  components on one prepared angular grid. Distinct wavelengths are rejected
-  until an explicit flux-conserving native-to-detector mapping is available;
-  use separate channel products when independent processing is appropriate
+- Prepared diffractive Shack–Hartmann formation writes same-grid sources to
+  one rate mosaic and retains distinct wavelength grids as native-sampling
+  leaves in an `OpticalProductBundle`. Passing a distinct-grid source to one
+  output is rejected; the legacy single-product `measure!` path remains
+  restricted to a common wavelength grid
 - Product semantics: `PhotonRateNormalization` or
   `DimensionlessNormalization`; `PointSampledMeasure`,
   `SpatialDensityMeasure`, or `CellIntegratedMeasure`; and
@@ -270,9 +271,11 @@ peak sampled QE. Source-aware capture, `capture!(det, image, src; rng=...)`,
 evaluates the QE model at `wavelength(src)`. For `SpectralSource`, it uses the
 flux-weighted effective QE over the spectral bundle. Pyramid frame-detector
 paths specialize this boundary by applying sampled QE per wavelength before
-incoherent optical-rate accumulation. Diffractive Shack–Hartmann does the same
-for multiple contributions on one common wavelength grid; it rejects distinct
-wavelengths until an explicit native-to-detector grid mapping is available.
+incoherent optical-rate accumulation. Prepared diffractive Shack–Hartmann
+formation instead retains distinct wavelength-rate products in a bundle so
+acquisition can apply channel-specific QE without an implicit grid conversion;
+its legacy single-product path accumulates only contributions on one common
+grid.
 Other source-aware detector paths retain the effective-QE contract unless
 explicitly documented otherwise.
 
@@ -382,13 +385,26 @@ derived MTF, QE, charge multiplication, or detector noise.
   execution-time prepared-binding violations before mutation
 - WFS families: `ShackHartmannWFS`, `PyramidWFS`, `BioEdgeWFS`,
   `ZernikeWFS`, `CurvatureWFS`
+- Shack-Hartmann optical composition: `MicrolensArrayParams`,
+  `MicrolensArray`, `prepare_microlens_propagation`, `microlens_array`,
+  `ShackHartmannOpticalFrontEnd`, and `shack_hartmann_rate_map`. The
+  microlens array is the immutable regular-array model and its numerical
+  sampling policy; prepared propagation holds only the backend/grid-bound FFT
+  plans and reusable optical scratch. A front end can be assembled directly
+  from that model, propagation state, and a
+  `SubapertureLayout` without constructing or retaining a `ShackHartmannWFS`.
+  The concrete `PreparedMicrolensPropagation` implementation type is
+  intentionally qualified rather than exported; callers obtain it through the
+  preparation function.
 - Curvature readout: `CurvatureReadoutModel`, `CurvatureCountingReadout`,
   `CurvatureBranchResponse`
 - Shack-Hartmann calibration and extraction: `FluxThresholdValidSubapertures`,
-  `CenterOfGravityExtraction`, `SubapertureLayout`,
+  `AbstractSlopeExtractionModel`, `CenterOfGravityExtraction`,
+  `SubapertureLayout`,
   `SubapertureCalibration`, `subaperture_layout`,
   `subaperture_calibration`, `slope_extraction_model`,
-  `valid_subaperture_indices`, `n_valid_subapertures`
+  `set_subaperture_calibration!`, `valid_subaperture_indices`,
+  `n_valid_subapertures`
 - WFS normalization policies (with transitional type names):
   `MeanValidFluxNormalization`, `IncidenceFluxNormalization`
 - Measurement and WFS images: `measure!`, `pyramid_modulation_frame!`,
@@ -421,8 +437,45 @@ execution. Mutating execution receives explicit caller-owned products and
 destinations and an explicit RNG at acquisition. A direct geometric or
 reduced-order estimator declares `DirectMeasurementPath()` and allocates no
 fictitious rate plane, observation, or detector workspace. The generic
-contract is implemented; the maintained WFS families remain internally
-coupled until their ordered migration PRs.
+  contract is implemented; the remaining WFS families stay internally coupled
+  until their ordered migration PRs.
+
+The diffractive Shack-Hartmann acquisition contract accepts a real-valued
+`:lenslet_mosaic` observation whose element type exactly matches the prepared
+detector output. Its declared units describe that output and are not restricted
+to electrons: `:electron_count`, `:adu`, or an application-defined singleton
+are valid examples. The centroid estimator requires a
+`:centroid_slopes` measurement whose units match the installed calibration's
+`output_units`. Geometric Shack-Hartmann estimation requires a
+`:radian`/`:geometric_slopes` measurement. Physical estimator preparation also
+requires an explicit finite calibration installed with
+`set_subaperture_calibration!`; the prepared estimator binds its revision,
+centroid response, output units, wavelength, signature, and reference storage
+and rejects later recalibration before mutating its output.
+
+Both geometric and centroid measurements use `[axis 1; axis 2]` block order.
+Each `n_lenslets`-by-`n_lenslets` block follows Julia column-major order, so
+`reshape(view(measurement, block), n_lenslets, n_lenslets)` has the same
+`(i, j)` indexing as the subaperture mask. Invalid subapertures are reported as
+zero. The calibration reference is an `n_lenslets^2`-by-2 table whose columns
+are the two centroid components in that same lenslet order. The maintained
+OOPAO reference harness performs the explicit axis-block and row-major adapter;
+the package API does not expose OOPAO's storage convention.
+
+Microlens sampling, the valid-subaperture layout, and centroid calibration are
+cold configuration. Updating a layout through the maintained mutation API
+advances its revision; prepared optical and estimator plans then reject reuse
+until they are prepared again. A layout update made through a complete
+`ShackHartmannWFS` also invalidates its calibration. Component-level users must
+install a calibration matching the new layout before preparing another
+estimator. Direct mutation of layout masks, host mirrors, calibration fields,
+or calibration reference storage is unsupported because it bypasses revision
+tracking. Caller-owned pupil values, rate destinations, observations, and
+measurements remain mutable between repeated executions of a compatible plan.
+
+`CenterOfGravityExtraction` currently implements thresholded, unwindowed
+centroiding. Supplying a window is rejected rather than silently ignored;
+windowed, correlation, and matched-filter estimators remain future policies.
 
 ## Calibration And Reconstruction
 
