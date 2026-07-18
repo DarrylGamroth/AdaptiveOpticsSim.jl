@@ -213,6 +213,87 @@ function make_gate0_card(raw::AbstractDict)
         let runtime=runtime
             () -> step!(runtime)
         end
+    elseif kind == "zernike"
+        tel = Telescope(resolution=resolution, diameter=8.0,
+            central_obstruction=0.0)
+        gate0_opd_ramp!(tel)
+        src = Source(band=:I, magnitude=0.0)
+        pupil = PupilFunction(tel)
+        apply_opd!(pupil, opd_map(tel))
+        wfs = ZernikeWFS(tel;
+            pupil_samples=Int(raw["pupil_samples"]))
+        front_end = ZernikeOpticalFrontEnd(wfs, src)
+        rate = zernike_rate_map(front_end, pupil)
+        optical_plan = prepare_wfs_optical_formation(front_end, pupil,
+            rate)
+        detector = Detector(noise=NoiseNone(), integration_time=1.0,
+            qe=1.0, response_model=NullFrameResponse())
+        observation = WFSObservation(similar(rate.values);
+            units=:electron_count, layout=:zernike_pupil_image)
+        acquisition_plan = prepare_wfs_acquisition(detector, rate,
+            observation)
+        set_zernike_calibration!(wfs,
+            zeros(size(wfs.estimator.state.reference_signal_2d));
+            wavelength_m=wavelength(src), signature=UInt(0x47305039))
+        measurement = WFSMeasurement(similar(slopes(wfs));
+            units=:dimensionless, kind=:normalized_pupil_signal)
+        estimator_plan = prepare_wfs_estimation(wfs, observation,
+            measurement; source=src)
+        rng = runtime_rng(Int(raw["rng_seed"]))
+        let rate=rate, pupil=pupil, optical_plan=optical_plan,
+            observation=observation, acquisition_plan=acquisition_plan,
+            measurement=measurement, estimator_plan=estimator_plan, rng=rng
+            () -> begin
+                form_wfs_optical_products!(rate, pupil, optical_plan)
+                acquire_wfs_observation!(observation, rate,
+                    acquisition_plan, rng)
+                estimate_wfs_measurement!(measurement, observation,
+                    estimator_plan)
+            end
+        end
+    elseif kind == "curvature_two_detectors"
+        tel = Telescope(resolution=resolution, diameter=8.0,
+            central_obstruction=0.0)
+        gate0_opd_ramp!(tel)
+        src = Source(band=:I, magnitude=0.0)
+        pupil = PupilFunction(tel)
+        apply_opd!(pupil, opd_map(tel))
+        wfs = CurvatureWFS(tel;
+            pupil_samples=Int(raw["pupil_samples"]))
+        front_end = CurvatureOpticalFrontEnd(wfs, src)
+        rates = curvature_rate_maps(front_end, pupil)
+        optical_plan = prepare_wfs_optical_formation(front_end, pupil,
+            rates)
+        plus_detector = Detector(noise=NoiseNone(), integration_time=0.5,
+            qe=1.0, response_model=NullFrameResponse())
+        minus_detector = Detector(noise=NoiseNone(), integration_time=1.0,
+            qe=1.0, response_model=NullFrameResponse())
+        plus_observation = WFSObservation(similar(rates[1].values);
+            units=:electron_count, layout=:curvature_branch_image)
+        minus_observation = WFSObservation(similar(rates[2].values);
+            units=:electron_count, layout=:curvature_branch_image)
+        observations = (plus_observation, minus_observation)
+        acquisition_plan = prepare_wfs_acquisition(
+            (plus_detector, minus_detector), rates, observations)
+        set_curvature_calibration!(wfs,
+            zeros(size(wfs.estimator.state.reference_signal_2d));
+            wavelength_m=wavelength(src), signature=UInt(0x4730503a))
+        measurement = WFSMeasurement(similar(slopes(wfs));
+            units=:dimensionless, kind=:curvature_signal)
+        estimator_plan = prepare_wfs_estimation(wfs, observations,
+            measurement; branch_rate_scales=(2.0, 1.0))
+        rng = runtime_rng(Int(raw["rng_seed"]))
+        let rates=rates, pupil=pupil, optical_plan=optical_plan,
+            observations=observations, acquisition_plan=acquisition_plan,
+            measurement=measurement, estimator_plan=estimator_plan, rng=rng
+            () -> begin
+                form_wfs_optical_products!(rates, pupil, optical_plan)
+                acquire_wfs_observation!(observations, rates,
+                    acquisition_plan, rng)
+                estimate_wfs_measurement!(measurement, observations,
+                    estimator_plan)
+            end
+        end
     else
         throw(ArgumentError("unsupported Gate 0 latency-card kind '$kind'"))
     end
@@ -431,6 +512,23 @@ function write_gate0_artifact(path::AbstractString, artifact)
     return nothing
 end
 
+function select_gate0_cards(cards::Tuple)
+    raw_ids = strip(get(ENV, "AOS_GATE0_CARD_IDS", ""))
+    isempty(raw_ids) && return cards, "all"
+
+    requested_ids = strip.(split(raw_ids, ','))
+    any(isempty, requested_ids) && error(
+        "AOS_GATE0_CARD_IDS must be a comma-separated list of nonempty card IDs")
+    length(unique(requested_ids)) == length(requested_ids) || error(
+        "AOS_GATE0_CARD_IDS must not contain duplicate card IDs")
+
+    cards_by_id = Dict(card.id => card for card in cards)
+    unknown_ids = filter(id -> !haskey(cards_by_id, id), requested_ids)
+    isempty(unknown_ids) || error(
+        "AOS_GATE0_CARD_IDS contains unknown card IDs: $(join(unknown_ids, ", "))")
+    return Tuple(cards_by_id[id] for id in requested_ids), "explicit"
+end
+
 function run_gate0_latency_benchmarks()
     configure_gate0_benchmark!()
     contract = TOML.parsefile(GATE0_CONTRACT_PATH)
@@ -450,7 +548,8 @@ function run_gate0_latency_benchmarks()
     significant_figures = Int(contract["histogram_significant_figures"])
     relative_factor = Float64(contract["relative_p99_factor"])
     baselines = load_gate0_baselines(GATE0_BASELINE_PATH)
-    cards = Tuple(make_gate0_card(raw) for raw in contract["cards"])
+    all_cards = Tuple(make_gate0_card(raw) for raw in contract["cards"])
+    cards, card_selection = select_gate0_cards(all_cards)
     results = Vector{Dict{String,Any}}()
     all_gates_passed = true
 
@@ -460,6 +559,8 @@ function run_gate0_latency_benchmarks()
     println("  runs: ", runs_count)
     println("  warmup_operations: ", warmup)
     println("  p99_relative_factor: ", relative_factor)
+    println("  card_selection: ", card_selection)
+    println("  card_ids: ", join((card.id for card in cards), ","))
     if !p99_gate_supported
         println("  p99_gates: skipped (requires at least ",
             minimum_p99_samples, " samples per run)")
@@ -517,6 +618,8 @@ function run_gate0_latency_benchmarks()
         "configured_samples_per_run" => samples,
         "configured_runs" => runs_count,
         "configured_warmup_operations" => warmup,
+        "configured_card_selection" => card_selection,
+        "configured_card_ids" => [card.id for card in cards],
         "minimum_samples_for_p99_gate" => minimum_p99_samples,
         "p99_gate_supported" => p99_gate_supported,
         "contract" => contract["contract"],

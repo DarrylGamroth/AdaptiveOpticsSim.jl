@@ -273,6 +273,23 @@ detectors as well as packed regions or channels on one detector. LiFT is not
 forced into the ordinary `AbstractWFS` hierarchy; its observation acquisition,
 forward model, and inverse estimator are independently composable.
 
+The maintained Curvature front end publishes a fixed tuple ordered as positive
+then negative defocus. Separate detector acquisitions may have different
+presampling response or MTF, physical-pixel integration, QE, exposure,
+stochastic response, and readout. A packed acquisition is an explicit mapping,
+not an implicit concatenation: both planes must agree in geometry, radiometry,
+numeric type, backend, and device, and both branches share the one detector's
+exposure. A packed frame uses spatial regions; a packed counting detector uses
+channels and requires cell-integrated photon rates. When branch exposures
+differ, the estimator receives their prepared inverse rate scales and the
+simulation uses separate detectors.
+
+The legacy Curvature branch throughput/background parameters remain an optical
+relay rate adjustment for compatibility with the frozen oracle. They can
+approximate unequal relay transmission or fixed stray-light offsets, but they
+are not a detector response or detector MTF. All detector effects remain after
+the branch rate planes and before estimation.
+
 Implementations use dispatch and traits with statically typed prepared
 composition. Immutable parameters remain separate from single-writer mutable
 workspace and calibration state. Repeated execution writes to caller-owned

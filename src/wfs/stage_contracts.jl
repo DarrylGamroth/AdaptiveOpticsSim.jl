@@ -418,7 +418,8 @@ struct PreparedWFSDetectorAcquisition{D,P,O}
 end
 
 function prepare_wfs_acquisition(detector::Detector,
-    optical_product::IntensityMap, observation::WFSObservation)
+    optical_product::IntensityMap, observation::WFSObservation;
+    source=nothing)
     validate_wfs_optical_products(optical_product)
     validate_wfs_observation(observation)
     observation.metadata.numeric_type <: Real ||
@@ -449,6 +450,180 @@ function acquire_wfs_observation!(observation::WFSObservation,
     frame = capture!(plan.detector, optical_product, plan.detector_plan, rng)
     copyto!(observation.storage, frame)
     return observation
+end
+
+"""Prepared acquisition for a channel-oriented photon-counting detector."""
+struct PreparedWFSCountingAcquisition{D,I,O,S,A,F}
+    detector::D
+    optical_product::I
+    observation::O
+    source::S
+    detector_input::A
+    detector_output::F
+end
+
+@inline _counting_wfs_source_required(::AbstractCountingDetector) = false
+@inline _counting_wfs_source_required(::MKIDArrayDetector) = true
+
+function _require_counting_wfs_source(detector::AbstractCountingDetector,
+    ::Nothing)
+    _counting_wfs_source_required(detector) && throw(WFSPreparationError(
+        :acquisition, :radiometry,
+        "wavelength-selective counting acquisition requires its source"))
+    return nothing
+end
+
+function _require_counting_wfs_source(::AbstractCountingDetector,
+    source::AbstractSource)
+    require_leaf_source(source, "counting WFS acquisition")
+    return source
+end
+
+function _require_counting_wfs_source(::AbstractCountingDetector, source)
+    throw(WFSPreparationError(:acquisition, :radiometry,
+        "counting WFS acquisition source must be a leaf source or nothing"))
+end
+
+function _require_counting_wfs_spectral_match(
+    metadata::OpticalPlaneMetadata, ::Nothing)
+    return nothing
+end
+
+function _require_counting_wfs_spectral_match(
+    metadata::OpticalPlaneMetadata, source::AbstractSource)
+    return _require_counting_wfs_spectral_match(metadata.spectral, source)
+end
+
+function _require_counting_wfs_spectral_match(
+    channel::MonochromaticChannel, source::AbstractSource)
+    channel.wavelength_m == wavelength(source) || throw(
+        WFSPreparationError(:acquisition, :plane_metadata,
+            "counting WFS source wavelength differs from its rate product"))
+    return nothing
+end
+
+function _require_counting_wfs_spectral_match(
+    ::AbstractSpectralCoordinate, ::AbstractSource)
+    throw(WFSPreparationError(:acquisition, :plane_metadata,
+        "counting WFS acquisition requires a monochromatic rate product"))
+end
+
+@inline _require_counting_wfs_measure(::CellIntegratedMeasure) = nothing
+
+function _require_counting_wfs_measure(::AbstractSpatialMeasure)
+    throw(WFSPreparationError(:acquisition, :radiometry,
+        "counting WFS inputs must carry cell-integrated photon rate"))
+end
+
+function prepare_wfs_acquisition(detector::AbstractCountingDetector,
+    optical_product::IntensityMap, observation::WFSObservation;
+    source=nothing)
+    validate_wfs_optical_products(optical_product)
+    validate_wfs_observation(observation)
+    _require_counting_wfs_measure(optical_product.metadata.spatial_measure)
+    observation.metadata.numeric_type <: Real || throw(
+        WFSPreparationError(:acquisition, :numeric_type,
+            "counting WFS observations require real sample storage"))
+    _require_counting_wfs_source(detector, source)
+    _require_counting_wfs_spectral_match(optical_product.metadata, source)
+    input = optical_product.values
+    eltype(input) === eltype(counting_array(detector)) || throw(
+        WFSPreparationError(:acquisition, :numeric_type,
+            "counting detector and WFS rate product precision differ"))
+    typeof(backend(detector)) === typeof(backend(input)) || throw(
+        WFSPreparationError(:acquisition, :backend,
+            "counting detector and WFS rate product backends differ"))
+    plane_device(counting_array(detector)) == plane_device(input) || throw(
+        WFSPreparationError(:acquisition, :device,
+            "counting detector and WFS rate product occupy different devices"))
+    ensure_buffers!(detector, size(input))
+    output = output_frame(detector)
+    size(observation.storage) == size(output) || throw(WFSPreparationError(
+        :acquisition, :shape,
+        "counting WFS observation storage must match detector output"))
+    observation.metadata.numeric_type === eltype(output) || throw(
+        WFSPreparationError(:acquisition, :numeric_type,
+            "counting WFS observation element type must match detector output"))
+    typeof(backend(observation.storage)) === typeof(backend(detector)) ||
+        throw(WFSPreparationError(:acquisition, :backend,
+            "counting WFS observation and detector backends differ"))
+    plane_device(observation.storage) == plane_device(output) || throw(
+        WFSPreparationError(:acquisition, :device,
+            "counting WFS observation and detector output occupy different devices"))
+    return PreparedWFSCountingAcquisition(detector, optical_product,
+        observation, source, counting_array(detector), output)
+end
+
+@inline function _capture_counting_wfs!(detector, input, ::Nothing, rng)
+    return capture!(detector, input, rng)
+end
+
+@inline function _capture_counting_wfs!(detector, input,
+    source::AbstractSource, rng)
+    return capture!(detector, input, source, rng)
+end
+
+function acquire_wfs_observation!(observation::WFSObservation,
+    optical_product::IntensityMap,
+    plan::PreparedWFSCountingAcquisition, rng::AbstractRNG)
+    observation === plan.observation &&
+        optical_product === plan.optical_product || throw(
+        WFSPreparationError(:acquisition, :prepared_binding,
+            "counting WFS storage does not match its prepared acquisition"))
+    counting_array(plan.detector) === plan.detector_input &&
+        output_frame(plan.detector) === plan.detector_output || throw(
+        WFSPreparationError(:acquisition, :prepared_binding,
+            "counting detector storage changed after WFS preparation"))
+    frame = _capture_counting_wfs!(plan.detector,
+        optical_product.values, plan.source, rng)
+    copyto!(observation.storage, frame)
+    return observation
+end
+
+"""Prepared static fan-out from a concrete product tuple to detector tuple."""
+struct PreparedWFSMultipleDetectorAcquisition{P,I,O}
+    plans::P
+    optical_products::I
+    observations::O
+end
+
+function prepare_wfs_acquisition(detectors::Tuple,
+    optical_products::Tuple, observations::Tuple; source=nothing)
+    isempty(detectors) && throw(WFSPreparationError(:acquisition,
+        :plane_count, "multiple-detector WFS acquisition must not be empty"))
+    length(detectors) == length(optical_products) == length(observations) ||
+        throw(WFSPreparationError(:acquisition, :plane_count,
+            "detector, optical-product, and observation counts must match"))
+    plans = map(detectors, optical_products, observations) do detector,
+            product, observation
+        prepare_wfs_acquisition(detector, product, observation;
+            source=source)
+    end
+    return PreparedWFSMultipleDetectorAcquisition(plans,
+        optical_products, observations)
+end
+
+@inline _acquire_multiple_wfs_observations!(::Tuple{}, ::Tuple{},
+    ::Tuple{}, ::AbstractRNG) = nothing
+
+@inline function _acquire_multiple_wfs_observations!(plans::Tuple,
+    observations::Tuple, optical_products::Tuple, rng::AbstractRNG)
+    acquire_wfs_observation!(first(observations), first(optical_products),
+        first(plans), rng)
+    return _acquire_multiple_wfs_observations!(Base.tail(plans),
+        Base.tail(observations), Base.tail(optical_products), rng)
+end
+
+function acquire_wfs_observation!(observations::Tuple,
+    optical_products::Tuple,
+    plan::PreparedWFSMultipleDetectorAcquisition, rng::AbstractRNG)
+    observations === plan.observations &&
+        optical_products === plan.optical_products || throw(
+        WFSPreparationError(:acquisition, :prepared_binding,
+            "multiple-detector WFS storage does not match its prepared acquisition"))
+    _acquire_multiple_wfs_observations!(plan.plans, observations,
+        optical_products, rng)
+    return observations
 end
 
 """

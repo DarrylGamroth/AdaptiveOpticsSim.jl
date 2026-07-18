@@ -80,11 +80,13 @@ Examples:
 - caller-owned `PupilFunction`, `ElectricField`, and `IntensityMap`
   products with immutable `OpticalPlaneMetadata`, including normalization,
   spatial-measure, and coherent/incoherent combination policy
-- `ShackHartmannWFS` composed from immutable `MicrolensArrayParams`, a
-  `MicrolensArray`, backend/grid-bound `PreparedMicrolensPropagation`, and
-  distinct layout, calibration, acquisition, and estimator state; the
-  component-only `ShackHartmannOpticalFrontEnd` borrows the optic, propagation,
-  and layout without retaining the whole WFS
+- `ShackHartmannWFS` composed through one explicit `front_end`, separate
+  calibration, acquisition, and estimator owners. The front end is a
+  propagation-free `ShackHartmannDirectFrontEnd` for geometric sensing or a
+  `ShackHartmannOpticalFrontEnd` containing the immutable `MicrolensArray`,
+  backend/grid-bound `PreparedMicrolensPropagation`, and layout for
+  diffractive sensing. There are no top-level optical field aliases or a
+  whole-WFS optical-owner union
 - `Detector` with `DetectorParams` and `DetectorState`
 - `DetectorAcquisitionPlan` as the cold-path compatibility and buffer contract
   between one frame detector and one immutable intensity-map description
@@ -116,6 +118,11 @@ calibration are cold configuration: maintained mutation advances a revision,
 and prepared plans reject stale bindings while caller-owned product contents
 remain mutable.
 
+This is a breaking refactor. Superseded public and internal representations are
+removed and callers are migrated directly; synthetic property forwarding,
+state views, deprecated aliases, and permanent compatibility adapters are not
+part of the maintained architecture.
+
 Pyramid and BioEdge use separate `PyramidPhaseMask` and
 `BioEdgeAmplitudeMask` physical front ends. They share prepared focal-plane
 modulation only where the optical quadrature is identical; its normalized
@@ -126,8 +133,17 @@ acquisition applies response, QE, and duration afterward. Their differential
 estimators own valid support, normalization, reference subtraction, optical
 gain, and a calibration revision that invalidates stale prepared plans.
 Geometric Pyramid and BioEdge declare `DirectMeasurementPath()` and construct
-neither propagation nor acquisition workspace. Zernike/Curvature and LiFT
-remain internally coupled until their family-specific migration slices.
+neither propagation nor acquisition workspace.
+
+Zernike and Curvature now follow the same ownership boundary. Their optical
+front ends own only physical descriptions and single-writer prepared
+propagation state; detector acquisition owns observation state; and estimators
+own valid support, reference state, normalization, and calibration revisions.
+Curvature exposes a fixed positive-/negative-defocus rate tuple that can feed
+two independent detectors or an explicitly packed single-detector mapping.
+Convenience execution coordinates these same explicit component owners; no
+synthetic state view or monolithic optical-owner adapter is retained.
+LiFT remains internally coupled until its family-specific migration slice.
 
 ## Execution Layers
 

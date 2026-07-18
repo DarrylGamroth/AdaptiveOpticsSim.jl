@@ -17,3 +17,8 @@ path = "2026-07-16-pre-hil-07-shack-hartmann-stage.toml"
 id = "PRE-HIL-GATE0-CPU-2026-07-17-PYRAMID-BIOEDGE-STAGE"
 purpose = "Clean-tree serial CPU latency and steady-state allocation evidence after prepared Pyramid and BioEdge stage separation"
 path = "2026-07-17-pre-hil-08-pyramid-bioedge-stage.toml"
+
+[[artifacts]]
+id = "PRE-HIL-GATE0-CPU-2026-07-17-ZERNIKE-CURVATURE-STAGE"
+purpose = "Clean-tree serial CPU latency and steady-state allocation evidence for prepared Zernike and Curvature stage separation"
+path = "2026-07-17-pre-hil-09-zernike-curvature-stage.toml"

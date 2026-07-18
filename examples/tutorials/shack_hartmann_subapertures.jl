@@ -12,7 +12,7 @@ function main(; resolution::Int=24)
     prepare_runtime_wfs!(sh, tel, src)
     slopes = copy(measure!(sh, tel, src))
 
-    layout = subaperture_layout(sh)
+    layout = subaperture_layout(sh.front_end)
     calibration = subaperture_calibration(sh)
     metadata = AdaptiveOpticsSim.wfs_output_metadata(sh)
 

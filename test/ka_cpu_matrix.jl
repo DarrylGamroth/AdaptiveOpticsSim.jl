@@ -118,6 +118,47 @@ end
         @test curvature_plus == curvature_camera[1:2, :]
         @test curvature_minus == curvature_camera[3:4, :]
 
+        pupil_amplitude = reshape(collect(1.0:4.0), 2, 2)
+        pupil_opd = zeros(2, 2)
+        branch_fields = zeros(ComplexF64, 4, 4, 2)
+        defocus_stack = ones(ComplexF64, 4, 4, 2)
+        curvature_phasor = ones(ComplexF64, 4, 4)
+        AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE,
+            AdaptiveOpticsSim.curvature_branch_field_from_pupil_kernel!,
+            branch_fields, pupil_amplitude, pupil_opd, defocus_stack,
+            curvature_phasor, 2.0, 1.0, 1, 1, 2, 4;
+            ndrange=size(branch_fields))
+        mark_ka_cpu_kernel!(:curvature_branch_field_from_pupil_kernel!)
+        @test branch_fields[2:3, 2:3, 1] == 2 .* pupil_amplitude
+        @test branch_fields[:, :, 1] == branch_fields[:, :, 2]
+
+        plus_input = reshape(collect(1.0:16.0), 4, 4)
+        minus_input = reverse(plus_input; dims=1)
+        reduced_plus = zeros(2, 2)
+        reduced_minus = zeros(2, 2)
+        AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE,
+            AdaptiveOpticsSim.curvature_reduce_observation_pair_kernel!,
+            reduced_plus, reduced_minus, plus_input, minus_input, 2, 2,
+            0.5, 0.25, 2; ndrange=(2, 2))
+        mark_ka_cpu_kernel!(:curvature_reduce_observation_pair_kernel!)
+        expected_plus = zeros(2, 2)
+        expected_minus = zeros(2, 2)
+        AdaptiveOpticsSim.bin2d!(expected_plus, plus_input, 2)
+        AdaptiveOpticsSim.bin2d!(expected_minus, minus_input, 2)
+        @test reduced_plus == expected_plus .* 0.5
+        @test reduced_minus == expected_minus .* 0.25
+
+        channel_pair = reshape(collect(1.0:8.0), 2, 4)
+        channel_plus = zeros(2, 2)
+        channel_minus = zeros(2, 2)
+        AdaptiveOpticsSim.launch_kernel!(KA_CPU_STYLE,
+            AdaptiveOpticsSim.curvature_unpack_channel_pair_kernel!,
+            channel_plus, channel_minus, channel_pair, 2.0, 3.0, 2;
+            ndrange=(2, 2))
+        mark_ka_cpu_kernel!(:curvature_unpack_channel_pair_kernel!)
+        @test channel_plus == [2.0 6.0; 10.0 14.0]
+        @test channel_minus == [6.0 12.0; 18.0 24.0]
+
         rng1 = MersenneTwister(11)
         rng2 = MersenneTwister(11)
         ka_randn_a = zeros(Float64, 8)

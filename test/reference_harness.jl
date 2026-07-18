@@ -309,8 +309,8 @@ function legacy_reference_sh_index_grid_frame!(wfs::ShackHartmannWFS,
     tel::Telescope, src::SpectralSource)
     AdaptiveOpticsSim.prepare_sampling!(wfs, tel,
         AdaptiveOpticsSim.spectral_reference_source(src))
-    fill!(wfs.optical_workspace.spot_cube_accum,
-        zero(eltype(wfs.optical_workspace.spot_cube_accum)))
+    fill!(wfs.front_end.propagation.spot_cube_accum,
+        zero(eltype(wfs.front_end.propagation.spot_cube_accum)))
     total_irradiance = AdaptiveOpticsSim.photon_irradiance(src)
     @inbounds for sample in AdaptiveOpticsSim.spectral_bundle(src)
         variant = AdaptiveOpticsSim.source_with_wavelength_and_radiometric_value(
@@ -318,10 +318,10 @@ function legacy_reference_sh_index_grid_frame!(wfs::ShackHartmannWFS,
             eltype(slopes(wfs))(total_irradiance * sample.weight))
         AdaptiveOpticsSim.sampled_spots_peak!(
             AdaptiveOpticsSim.ScalarCPUStyle(), wfs, tel, variant)
-        wfs.optical_workspace.spot_cube_accum .+= wfs.acquisition.spot_cube
+        wfs.front_end.propagation.spot_cube_accum .+= wfs.acquisition.spot_cube
     end
     copyto!(wfs.acquisition.spot_cube,
-        wfs.optical_workspace.spot_cube_accum)
+        wfs.front_end.propagation.spot_cube_accum)
     return wfs.acquisition.spot_cube
 end
 
@@ -1422,7 +1422,7 @@ function compute_reference_actual_ka_cpu(case::ReferenceCase)
             throw(InvalidConfiguration("KA CPU reference path currently supports only geometric Shack-Hartmann cases"))
         end
         update_valid_mask!(wfs, tel)
-        n_sub = microlens_array(wfs).params.n_lenslets
+        n_sub = n_lenslets(wfs.front_end)
         sub = div(tel.params.resolution, n_sub)
         offset = n_sub * n_sub
         slopes = similar(AdaptiveOpticsSim.slopes(wfs))
@@ -1509,7 +1509,7 @@ function specula_legacy_radiometric_factor(case::ReferenceCase)
         wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
         AdaptiveOpticsSim.prepare_sampling!(wfs, tel,
             AdaptiveOpticsSim.spectral_reference_source(src))
-        pad = size(wfs.optical_workspace.fft_stack, 1)
+        pad = size(wfs.front_end.propagation.fft_stack, 1)
         factor *= pad * pad
     end
     return factor

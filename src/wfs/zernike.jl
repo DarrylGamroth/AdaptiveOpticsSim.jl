@@ -13,7 +13,7 @@
 #
 # The exported 1-D `slopes` vector is therefore not a centroid slope field. It
 # is the normalized valid-pupil intensity signal used by the current runtime and
-# controller surfaces for compatibility with other WFS types.
+# controller's family-neutral WFS signal contract.
 #
 
 @kernel function zernike_phasor_kernel!(phasor, scale, n::Int)
@@ -31,7 +31,7 @@ end
         summed = zero(eltype(partials))
         @inbounds for j in 1:n2
             if valid_mask[i, j]
-                summed += frame[i, j]
+                summed += eltype(partials)(frame[i, j])
             end
         end
         @inbounds partials[i] = summed
@@ -63,7 +63,7 @@ end
         end
         usable = isfinite(normalization) && normalization > eps(T)
         @inbounds signal_2d[i, j] = valid_mask[i, j] && usable ?
-            frame[i, j] / normalization - reference_signal_2d[i, j] : zero(T)
+            T(frame[i, j]) / normalization - reference_signal_2d[i, j] : zero(T)
     end
 end
 
@@ -77,6 +77,8 @@ end
 
 struct ZernikeWFSParams{T<:AbstractFloat,N<:WFSNormalization}
     pupil_samples::Int
+    pupil_resolution::Int
+    pupil_diameter_m::T
     threshold::T
     phase_shift_pi::T
     spot_radius_lambda_over_d::T
@@ -85,19 +87,21 @@ struct ZernikeWFSParams{T<:AbstractFloat,N<:WFSNormalization}
     binning::Int
 end
 
-mutable struct ZernikeWFSState{
+"""Immutable focal-plane phase-shifting spot for a Zernike WFS."""
+struct ZernikePhaseSpot{T<:AbstractFloat}
+    phase_shift_pi::T
+    radius_lambda_over_d::T
+    diffraction_padding::Int
+end
+
+"""Single-writer FFT and pupil-relay workspace."""
+mutable struct PreparedZernikePropagation{
     T<:AbstractFloat,
-    A<:AbstractMatrix{Bool},
-    I<:AbstractVector{Int},
-    V<:AbstractVector{T},
     C<:AbstractMatrix{Complex{T}},
     R<:AbstractMatrix{T},
     Pf,
     Pi,
 }
-    valid_mask::A
-    valid_signal_indices::I
-    slopes::V
     field::C
     focal_field::C
     pupil_field::C
@@ -105,20 +109,59 @@ mutable struct ZernikeWFSState{
     phase_mask::C
     pupil_intensity::R
     nominal_frame::R
+    fft_plan::Pf
+    ifft_plan::Pi
+    effective_padding::Int
+    revision::UInt
+end
+
+"""Prepared Zernike phase spot and re-imaged-pupil optical front end."""
+struct ZernikeOpticalFrontEnd{T<:AbstractFloat,M,P,S}
+    phase_spot::M
+    propagation::P
+    pupil_resolution::Int
+    pupil_diameter_m::T
+    pupil_samples::Int
+    binning::Int
+    source::S
+end
+
+"""Mutable detector-facing frame storage owned by acquisition."""
+mutable struct ZernikeAcquisitionState{R<:AbstractMatrix}
     camera_frame::R
+end
+
+struct ZernikeDetectorAcquisition{S}
+    state::S
+end
+
+"""Mutable support, reference, and output storage owned by estimation."""
+mutable struct ZernikeEstimatorState{
+    T<:AbstractFloat,
+    A<:AbstractMatrix{Bool},
+    I<:AbstractVector{Int},
+    V<:AbstractVector{T},
+    R<:AbstractMatrix{T},
+    H<:AbstractVector{T},
+}
+    valid_mask::A
+    valid_signal_indices::I
+    slopes::V
     signal_2d::R
     reference_signal_2d::R
     reference_frame::R
     normalization_frame::R
     normalization_partials::V
     normalization_sum::V
-    normalization_sum_host::Vector{T}
-    fft_plan::Pf
-    ifft_plan::Pi
-    effective_padding::Int
+    normalization_sum_host::H
     calibrated::Bool
     calibration_wavelength::T
     calibration_signature::UInt
+    calibration_revision::UInt
+end
+
+struct ZernikePupilEstimator{S}
+    state::S
 end
 
 """
@@ -126,16 +169,19 @@ end
 
 Diffractive Zernike wavefront sensor with a circular focal-plane phase spot.
 
-The sensor stores the sampled pupil-intensity signal in `state.slopes` for
-runtime compatibility. For this sensor the vector represents a normalized pupil
-intensity signal, not geometric or centroid slopes.
+The estimator stores a normalized pupil-intensity signal, not geometric or
+centroid slopes. Access it through `slopes(sensor)` or
+`sensor.estimator.state.slopes`.
 """
-struct ZernikeWFS{P<:ZernikeWFSParams,S<:ZernikeWFSState,B<:AbstractArrayBackend} <: AbstractWFS
+struct ZernikeWFS{P<:ZernikeWFSParams,F,A,E,B<:AbstractArrayBackend} <:
+    AbstractWFS
     params::P
-    state::S
+    front_end::F
+    acquisition::A
+    estimator::E
 end
 
-@inline backend(::ZernikeWFS{<:Any,<:Any,B}) where {B} = B()
+@inline backend(::ZernikeWFS{<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
 
 """
     ZernikeWFS(tel; ...)
@@ -172,6 +218,8 @@ function ZernikeWFS(tel::Telescope; pupil_samples::Int,
     pad = tel.params.resolution * diffraction_padding
     params = ZernikeWFSParams{T,typeof(normalization)}(
         pupil_samples,
+        tel.params.resolution,
+        T(tel.params.diameter),
         T(threshold),
         T(phase_shift_pi),
         T(spot_radius_lambda_over_d),
@@ -203,19 +251,13 @@ function ZernikeWFS(tel::Telescope; pupil_samples::Int,
     normalization_sum_host = zeros(T, 1)
     fft_plan = plan_fft_backend!(focal_field)
     ifft_plan = plan_ifft_backend!(pupil_field)
-    state = ZernikeWFSState{
+    propagation = PreparedZernikePropagation{
         T,
-        typeof(valid_mask),
-        typeof(valid_signal_indices),
-        typeof(slopes),
         typeof(field),
-        typeof(camera_frame),
+        typeof(pupil_intensity),
         typeof(fft_plan),
         typeof(ifft_plan),
     }(
-        valid_mask,
-        valid_signal_indices,
-        slopes,
         field,
         focal_field,
         pupil_field,
@@ -223,7 +265,24 @@ function ZernikeWFS(tel::Telescope; pupil_samples::Int,
         phase_mask,
         pupil_intensity,
         nominal_frame,
-        camera_frame,
+        fft_plan,
+        ifft_plan,
+        diffraction_padding,
+        UInt(0),
+    )
+    acquisition = ZernikeDetectorAcquisition(
+        ZernikeAcquisitionState(camera_frame))
+    estimator_state = ZernikeEstimatorState{
+        T,
+        typeof(valid_mask),
+        typeof(valid_signal_indices),
+        typeof(slopes),
+        typeof(signal_2d),
+        typeof(normalization_sum_host),
+    }(
+        valid_mask,
+        valid_signal_indices,
+        slopes,
         signal_2d,
         reference_signal_2d,
         reference_frame,
@@ -231,16 +290,23 @@ function ZernikeWFS(tel::Telescope; pupil_samples::Int,
         normalization_partials,
         normalization_sum,
         normalization_sum_host,
-        fft_plan,
-        ifft_plan,
-        diffraction_padding,
         false,
         zero(T),
         UInt(0),
+        UInt(0),
     )
-    wfs = ZernikeWFS{typeof(params),typeof(state),typeof(selector)}(params, state)
+    estimator = ZernikePupilEstimator(estimator_state)
+    spot = ZernikePhaseSpot(params.phase_shift_pi,
+        params.spot_radius_lambda_over_d, params.diffraction_padding)
+    front_end = ZernikeOpticalFrontEnd(spot, propagation,
+        params.pupil_resolution, params.pupil_diameter_m,
+        params.pupil_samples, params.binning, nothing)
+    wfs = ZernikeWFS{
+        typeof(params),typeof(front_end),typeof(acquisition),
+        typeof(estimator),typeof(selector),
+    }(params, front_end, acquisition, estimator)
     update_valid_mask!(wfs, tel)
-    build_zernike_phasor!(wfs.state.phasor)
+    build_zernike_phasor!(wfs.front_end.propagation.phasor)
     build_zernike_phase_mask!(wfs, tel)
     return wfs
 end
@@ -252,13 +318,13 @@ function zernike_signal_resolution(wfs::ZernikeWFS)
 end
 
 function update_zernike_valid_indices!(wfs::ZernikeWFS)
-    valid_host = host_array(wfs.state.valid_mask)
+    valid_host = host_array(wfs.estimator.state.valid_mask)
     n_valid = count(valid_host)
-    if length(wfs.state.valid_signal_indices) != n_valid
-        wfs.state.valid_signal_indices = similar(wfs.state.valid_signal_indices, n_valid)
+    if length(wfs.estimator.state.valid_signal_indices) != n_valid
+        wfs.estimator.state.valid_signal_indices = similar(wfs.estimator.state.valid_signal_indices, n_valid)
     end
-    if length(wfs.state.slopes) != n_valid
-        wfs.state.slopes = similar(wfs.state.slopes, n_valid)
+    if length(wfs.estimator.state.slopes) != n_valid
+        wfs.estimator.state.slopes = similar(wfs.estimator.state.slopes, n_valid)
     end
     host_indices = Vector{Int}(undef, n_valid)
     idx = 1
@@ -268,13 +334,15 @@ function update_zernike_valid_indices!(wfs::ZernikeWFS)
             idx += 1
         end
     end
-    copyto!(wfs.state.valid_signal_indices, host_indices)
-    fill!(wfs.state.slopes, zero(eltype(wfs.state.slopes)))
+    copyto!(wfs.estimator.state.valid_signal_indices, host_indices)
+    fill!(wfs.estimator.state.slopes, zero(eltype(wfs.estimator.state.slopes)))
     return wfs
 end
 
 function update_valid_mask!(wfs::ZernikeWFS, tel::Telescope)
-    set_valid_subapertures!(wfs.state.valid_mask, pupil_mask(tel), wfs.params.threshold)
+    set_valid_subapertures!(wfs.estimator.state.valid_mask, pupil_mask(tel), wfs.params.threshold)
+    sample_zernike_frame!(wfs.estimator.state.normalization_frame,
+        wfs.front_end.propagation.nominal_frame, wfs, pupil_reflectivity(tel), tel)
     update_zernike_valid_indices!(wfs)
     return wfs
 end
@@ -282,17 +350,19 @@ end
 function ensure_zernike_buffers!(wfs::ZernikeWFS, tel::Telescope)
     n = tel.params.resolution
     pad = n * wfs.params.diffraction_padding
-    if size(wfs.state.field) != (pad, pad)
-        wfs.state.field = similar(wfs.state.field, pad, pad)
-        wfs.state.focal_field = similar(wfs.state.focal_field, pad, pad)
-        wfs.state.pupil_field = similar(wfs.state.pupil_field, pad, pad)
-        wfs.state.phasor = similar(wfs.state.phasor, pad, pad)
-        wfs.state.phase_mask = similar(wfs.state.phase_mask, pad, pad)
-        wfs.state.fft_plan = plan_fft_backend!(wfs.state.focal_field)
-        wfs.state.ifft_plan = plan_ifft_backend!(wfs.state.pupil_field)
-        wfs.state.effective_padding = wfs.params.diffraction_padding
-        wfs.state.calibrated = false
-        build_zernike_phasor!(wfs.state.phasor)
+    if size(wfs.front_end.propagation.field) != (pad, pad)
+        wfs.front_end.propagation.field = similar(wfs.front_end.propagation.field, pad, pad)
+        wfs.front_end.propagation.focal_field = similar(wfs.front_end.propagation.focal_field, pad, pad)
+        wfs.front_end.propagation.pupil_field = similar(wfs.front_end.propagation.pupil_field, pad, pad)
+        wfs.front_end.propagation.phasor = similar(wfs.front_end.propagation.phasor, pad, pad)
+        wfs.front_end.propagation.phase_mask = similar(wfs.front_end.propagation.phase_mask, pad, pad)
+        wfs.front_end.propagation.fft_plan = plan_fft_backend!(wfs.front_end.propagation.focal_field)
+        wfs.front_end.propagation.ifft_plan = plan_ifft_backend!(wfs.front_end.propagation.pupil_field)
+        wfs.front_end.propagation.effective_padding = wfs.params.diffraction_padding
+        wfs.front_end.propagation.revision += UInt(1)
+        wfs.estimator.state.calibrated = false
+        wfs.estimator.state.calibration_revision += UInt(1)
+        build_zernike_phasor!(wfs.front_end.propagation.phasor)
         build_zernike_phase_mask!(wfs, tel)
     end
     return wfs
@@ -320,8 +390,8 @@ end
 
 function host_zernike_phase_mask(wfs::ZernikeWFS, tel::Telescope)
     n = tel.params.resolution
-    pad = size(wfs.state.phase_mask, 1)
-    T = eltype(wfs.state.camera_frame)
+    pad = size(wfs.front_end.propagation.phase_mask, 1)
+    T = eltype(wfs.acquisition.state.camera_frame)
     host = Matrix{Complex{T}}(undef, pad, pad)
     center = T(pad) / 2
     radius = wfs.params.spot_radius_lambda_over_d * (T(pad) / T(n))
@@ -336,8 +406,8 @@ function host_zernike_phase_mask(wfs::ZernikeWFS, tel::Telescope)
 end
 
 function build_zernike_phase_mask!(wfs::ZernikeWFS, tel::Telescope)
-    copyto!(wfs.state.phase_mask, host_zernike_phase_mask(wfs, tel))
-    return wfs.state.phase_mask
+    copyto!(wfs.front_end.propagation.phase_mask, host_zernike_phase_mask(wfs, tel))
+    return wfs.front_end.propagation.phase_mask
 end
 
 function sample_zernike_frame!(out::AbstractMatrix{T}, nominal::AbstractMatrix{T}, wfs::ZernikeWFS,
@@ -356,24 +426,24 @@ function zernike_pupil_intensity!(wfs::ZernikeWFS, tel::Telescope, src::Abstract
     require_leaf_source(src, "ZernikeWFS")
     ensure_zernike_buffers!(wfs, tel)
     n = tel.params.resolution
-    pad = size(wfs.state.field, 1)
+    pad = size(wfs.front_end.propagation.field, 1)
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
-    opd_to_cycles = eltype(wfs.state.camera_frame)(2) / wavelength(src)
-    amp_scale = sqrt(eltype(wfs.state.camera_frame)(
+    opd_to_cycles = eltype(wfs.acquisition.state.camera_frame)(2) / wavelength(src)
+    amp_scale = sqrt(eltype(wfs.acquisition.state.camera_frame)(
         photon_irradiance(src) * (tel.params.diameter / tel.params.resolution)^2
     ))
-    fill!(wfs.state.field, zero(eltype(wfs.state.field)))
-    @views @. wfs.state.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * sqrt($(pupil_reflectivity(tel))) *
+    fill!(wfs.front_end.propagation.field, zero(eltype(wfs.front_end.propagation.field)))
+    @views @. wfs.front_end.propagation.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * sqrt($(pupil_reflectivity(tel))) *
         cispi(opd_to_cycles * tel.state.opd)
-    copyto!(wfs.state.focal_field, wfs.state.field)
-    @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.phasor
-    execute_fft_plan!(wfs.state.focal_field, wfs.state.fft_plan)
-    @. wfs.state.focal_field = wfs.state.focal_field * wfs.state.phase_mask
-    copyto!(wfs.state.pupil_field, wfs.state.focal_field)
-    execute_fft_plan!(wfs.state.pupil_field, wfs.state.ifft_plan)
-    @views @. wfs.state.pupil_intensity = abs2(wfs.state.pupil_field[ox+1:ox+n, oy+1:oy+n])
-    return wfs.state.pupil_intensity
+    copyto!(wfs.front_end.propagation.focal_field, wfs.front_end.propagation.field)
+    @. wfs.front_end.propagation.focal_field = wfs.front_end.propagation.focal_field * wfs.front_end.propagation.phasor
+    execute_fft_plan!(wfs.front_end.propagation.focal_field, wfs.front_end.propagation.fft_plan)
+    @. wfs.front_end.propagation.focal_field = wfs.front_end.propagation.focal_field * wfs.front_end.propagation.phase_mask
+    copyto!(wfs.front_end.propagation.pupil_field, wfs.front_end.propagation.focal_field)
+    execute_fft_plan!(wfs.front_end.propagation.pupil_field, wfs.front_end.propagation.ifft_plan)
+    @views @. wfs.front_end.propagation.pupil_intensity = abs2(wfs.front_end.propagation.pupil_field[ox+1:ox+n, oy+1:oy+n])
+    return wfs.front_end.propagation.pupil_intensity
 end
 
 function zernike_normalization(normalization::MeanValidFluxNormalization,
@@ -398,7 +468,7 @@ function zernike_normalization(normalization::IncidenceFluxNormalization,
 end
 
 @inline zernike_normalization_count(wfs::ZernikeWFS) =
-    length(wfs.state.valid_signal_indices)
+    length(wfs.estimator.state.valid_signal_indices)
 
 @inline function zernike_incidence_sample_scale(tel::Telescope,
     src::AbstractSource, normalization_scale::T) where {T<:AbstractFloat}
@@ -424,7 +494,7 @@ function zernike_normalization(::ScalarCPUStyle,
     frame::AbstractMatrix{T}, ::T) where {T<:AbstractFloat}
     count = zernike_normalization_count(wfs)
     count == 0 && return one(T)
-    summed = masked_sum2d(ScalarCPUStyle(), frame, wfs.state.valid_mask)
+    summed = masked_sum2d(ScalarCPUStyle(), frame, wfs.estimator.state.valid_mask)
     return finalize_zernike_normalization(normalization, summed,
         inv(T(count)))
 end
@@ -437,23 +507,23 @@ function zernike_normalization(::ScalarCPUStyle,
     count = zernike_normalization_count(wfs)
     count == 0 && return one(T)
     sample_binning = div(tel.params.resolution,
-        size(wfs.state.normalization_frame, 1))
-    bin2d!(wfs.state.normalization_frame, pupil_reflectivity(tel),
+        size(wfs.estimator.state.normalization_frame, 1))
+    bin2d!(wfs.estimator.state.normalization_frame, pupil_reflectivity(tel),
         sample_binning)
     summed = masked_sum2d(ScalarCPUStyle(),
-        wfs.state.normalization_frame, wfs.state.valid_mask)
+        wfs.estimator.state.normalization_frame, wfs.estimator.state.valid_mask)
     return finalize_zernike_normalization(normalization, summed,
         scale / T(count))
 end
 
 @inline function queue_zernike_masked_sum!(phase::KernelLaunchPhase,
     wfs::ZernikeWFS, frame::AbstractMatrix)
-    n1, n2 = size(wfs.state.valid_mask)
+    n1, n2 = size(wfs.estimator.state.valid_mask)
     queue_kernel!(phase, zernike_masked_row_sum_kernel!,
-        wfs.state.normalization_partials, frame, wfs.state.valid_mask,
+        wfs.estimator.state.normalization_partials, frame, wfs.estimator.state.valid_mask,
         n1, n2; ndrange=n1)
     queue_kernel!(phase, zernike_finalize_normalization_sum_kernel!,
-        wfs.state.normalization_sum, wfs.state.normalization_partials,
+        wfs.estimator.state.normalization_sum, wfs.estimator.state.normalization_partials,
         n1; ndrange=1)
     return nothing
 end
@@ -470,13 +540,13 @@ function queue_zernike_normalization!(phase::KernelLaunchPhase,
     src::AbstractSource, ::AbstractMatrix{T},
     normalization_scale::T) where {T<:AbstractFloat}
     sample_binning = div(tel.params.resolution,
-        size(wfs.state.normalization_frame, 1))
-    n1, n2 = size(wfs.state.normalization_frame)
-    queue_kernel!(phase, bin2d_kernel!, wfs.state.normalization_frame,
+        size(wfs.estimator.state.normalization_frame, 1))
+    n1, n2 = size(wfs.estimator.state.normalization_frame)
+    queue_kernel!(phase, bin2d_kernel!, wfs.estimator.state.normalization_frame,
         pupil_reflectivity(tel), sample_binning, n1, n2;
         ndrange=(n1, n2))
     queue_zernike_masked_sum!(phase, wfs,
-        wfs.state.normalization_frame)
+        wfs.estimator.state.normalization_frame)
     scale = zernike_incidence_sample_scale(tel, src,
         normalization_scale)
     return scale / T(zernike_normalization_count(wfs)), false
@@ -495,10 +565,10 @@ function zernike_normalization(style::AcceleratorStyle,
     multiplier, _ = queue_zernike_normalization!(phase, normalization,
         wfs, tel, src, frame, normalization_scale)
     finish_kernel_phase!(phase)
-    copyto!(wfs.state.normalization_sum_host,
-        wfs.state.normalization_sum)
+    copyto!(wfs.estimator.state.normalization_sum_host,
+        wfs.estimator.state.normalization_sum)
     return finalize_zernike_normalization(normalization,
-        wfs.state.normalization_sum_host[1], multiplier)
+        wfs.estimator.state.normalization_sum_host[1], multiplier)
 end
 
 function zernike_signal!(wfs::ZernikeWFS, tel::Telescope, frame::AbstractMatrix{T}, src::AbstractSource) where {T<:AbstractFloat}
@@ -519,25 +589,25 @@ end
 function zernike_signal!(::ScalarCPUStyle, wfs::ZernikeWFS,
     tel::Telescope, frame::AbstractMatrix{T}, src::AbstractSource,
     normalization_scale::T) where {T<:AbstractFloat}
-    if size(frame) != size(wfs.state.signal_2d)
+    if size(frame) != size(wfs.estimator.state.signal_2d)
         throw(DimensionMismatchError("ZernikeWFS frame size must match sampled camera frame"))
     end
     norm_factor = zernike_normalization(wfs.params.normalization, wfs, tel,
         src, frame, normalization_scale)
-    fill!(wfs.state.signal_2d, zero(T))
+    fill!(wfs.estimator.state.signal_2d, zero(T))
     if !usable_wfs_normalization(norm_factor)
-        fill!(wfs.state.slopes, zero(T))
-        return wfs.state.slopes
+        fill!(wfs.estimator.state.slopes, zero(T))
+        return wfs.estimator.state.slopes
     end
     @inbounds for j in axes(frame, 2), i in axes(frame, 1)
-        if wfs.state.valid_mask[i, j]
-            wfs.state.signal_2d[i, j] = frame[i, j] / norm_factor - wfs.state.reference_signal_2d[i, j]
+        if wfs.estimator.state.valid_mask[i, j]
+            wfs.estimator.state.signal_2d[i, j] = frame[i, j] / norm_factor - wfs.estimator.state.reference_signal_2d[i, j]
         end
     end
-    @inbounds for idx in eachindex(wfs.state.valid_signal_indices)
-        wfs.state.slopes[idx] = wfs.state.signal_2d[wfs.state.valid_signal_indices[idx]]
+    @inbounds for idx in eachindex(wfs.estimator.state.valid_signal_indices)
+        wfs.estimator.state.slopes[idx] = wfs.estimator.state.signal_2d[wfs.estimator.state.valid_signal_indices[idx]]
     end
-    return wfs.state.slopes
+    return wfs.estimator.state.slopes
 end
 
 function zernike_signal!(style::AcceleratorStyle, wfs::ZernikeWFS, tel::Telescope, frame::AbstractMatrix{T}, src::AbstractSource) where {T<:AbstractFloat}
@@ -547,59 +617,60 @@ end
 function zernike_signal!(style::AcceleratorStyle, wfs::ZernikeWFS,
     tel::Telescope, frame::AbstractMatrix{T}, src::AbstractSource,
     normalization_scale::T) where {T<:AbstractFloat}
-    if size(frame) != size(wfs.state.signal_2d)
+    if size(frame) != size(wfs.estimator.state.signal_2d)
         throw(DimensionMismatchError("ZernikeWFS frame size must match sampled camera frame"))
     end
     count = zernike_normalization_count(wfs)
     if count == 0
-        fill!(wfs.state.signal_2d, zero(T))
-        fill!(wfs.state.slopes, zero(T))
-        return wfs.state.slopes
+        fill!(wfs.estimator.state.signal_2d, zero(T))
+        fill!(wfs.estimator.state.slopes, zero(T))
+        return wfs.estimator.state.slopes
     end
     phase = begin_kernel_phase(style)
     normalization_multiplier, clamp_to_epsilon =
         queue_zernike_normalization!(phase, wfs.params.normalization,
             wfs, tel, src, frame, normalization_scale)
-    queue_kernel!(phase, zernike_signal_kernel!, wfs.state.signal_2d,
-        frame, wfs.state.valid_mask, wfs.state.reference_signal_2d,
-        wfs.state.normalization_sum, normalization_multiplier,
+    queue_kernel!(phase, zernike_signal_kernel!, wfs.estimator.state.signal_2d,
+        frame, wfs.estimator.state.valid_mask, wfs.estimator.state.reference_signal_2d,
+        wfs.estimator.state.normalization_sum, normalization_multiplier,
         clamp_to_epsilon, size(frame, 1), size(frame, 2);
         ndrange=size(frame))
-    queue_kernel!(phase, gather_zernike_signal_kernel!, wfs.state.slopes,
-        wfs.state.signal_2d, wfs.state.valid_signal_indices, count;
+    queue_kernel!(phase, gather_zernike_signal_kernel!, wfs.estimator.state.slopes,
+        wfs.estimator.state.signal_2d, wfs.estimator.state.valid_signal_indices, count;
         ndrange=count)
     finish_kernel_phase!(phase)
-    return wfs.state.slopes
+    return wfs.estimator.state.slopes
 end
 
 function ensure_zernike_calibration!(wfs::ZernikeWFS, tel::Telescope, src::AbstractSource)
-    λ = calibration_wavelength(src, eltype(wfs.state.slopes))
+    λ = calibration_wavelength(src, eltype(wfs.estimator.state.slopes))
     sig = telescope_aperture_calibration_signature(tel,
         calibration_signature(src))
-    if calibration_matches(wfs.state.calibrated,
-        wfs.state.calibration_wavelength, λ,
-        wfs.state.calibration_signature, sig)
+    if calibration_matches(wfs.estimator.state.calibrated,
+        wfs.estimator.state.calibration_wavelength, λ,
+        wfs.estimator.state.calibration_signature, sig)
         return wfs
     end
     update_valid_mask!(wfs, tel)
     opd_saved = save_zero_opd!(tel)
     try
         zernike_pupil_intensity!(wfs, tel, src)
-        sample_zernike_frame!(wfs.state.camera_frame,
-            wfs.state.nominal_frame, wfs, wfs.state.pupil_intensity, tel)
-        fill!(wfs.state.reference_signal_2d,
-            zero(eltype(wfs.state.reference_signal_2d)))
-        zernike_signal!(wfs, tel, wfs.state.camera_frame, src)
-        copyto!(wfs.state.reference_signal_2d, wfs.state.signal_2d)
-        copyto!(wfs.state.reference_frame, wfs.state.camera_frame)
-        fill!(wfs.state.signal_2d, zero(eltype(wfs.state.signal_2d)))
-        fill!(wfs.state.slopes, zero(eltype(wfs.state.slopes)))
+        sample_zernike_frame!(wfs.acquisition.state.camera_frame,
+            wfs.front_end.propagation.nominal_frame, wfs, wfs.front_end.propagation.pupil_intensity, tel)
+        fill!(wfs.estimator.state.reference_signal_2d,
+            zero(eltype(wfs.estimator.state.reference_signal_2d)))
+        zernike_signal!(wfs, tel, wfs.acquisition.state.camera_frame, src)
+        copyto!(wfs.estimator.state.reference_signal_2d, wfs.estimator.state.signal_2d)
+        copyto!(wfs.estimator.state.reference_frame, wfs.acquisition.state.camera_frame)
+        fill!(wfs.estimator.state.signal_2d, zero(eltype(wfs.estimator.state.signal_2d)))
+        fill!(wfs.estimator.state.slopes, zero(eltype(wfs.estimator.state.slopes)))
     finally
         restore_opd!(tel, opd_saved)
     end
-    wfs.state.calibrated = true
-    wfs.state.calibration_wavelength = λ
-    wfs.state.calibration_signature = sig
+    wfs.estimator.state.calibrated = true
+    wfs.estimator.state.calibration_wavelength = λ
+    wfs.estimator.state.calibration_signature = sig
+    wfs.estimator.state.calibration_revision += UInt(1)
     return wfs
 end
 
@@ -610,14 +681,14 @@ end
 
 function ensure_zernike_calibration!(wfs::ZernikeWFS, tel::Telescope,
     src::AbstractSource, det::Detector)
-    T = eltype(wfs.state.slopes)
+    T = eltype(wfs.estimator.state.slopes)
     λ = calibration_wavelength(src, T)
     sig = detector_calibration_signature(det,
         telescope_aperture_calibration_signature(tel,
             calibration_signature(src)))
-    if calibration_matches(wfs.state.calibrated,
-        wfs.state.calibration_wavelength, λ,
-        wfs.state.calibration_signature, sig)
+    if calibration_matches(wfs.estimator.state.calibrated,
+        wfs.estimator.state.calibration_wavelength, λ,
+        wfs.estimator.state.calibration_signature, sig)
         return wfs
     end
 
@@ -626,28 +697,29 @@ function ensure_zernike_calibration!(wfs::ZernikeWFS, tel::Telescope,
     opd_saved = save_zero_opd!(tel)
     try
         zernike_pupil_intensity!(wfs, tel, src)
-        sample_zernike_frame!(wfs.state.camera_frame,
-            wfs.state.nominal_frame, wfs, wfs.state.pupil_intensity, tel)
-        frame = detector_calibration_frame!(det, wfs.state.camera_frame, src)
-        size(frame) == size(wfs.state.signal_2d) || throw(
+        sample_zernike_frame!(wfs.acquisition.state.camera_frame,
+            wfs.front_end.propagation.nominal_frame, wfs, wfs.front_end.propagation.pupil_intensity, tel)
+        frame = detector_calibration_frame!(det, wfs.acquisition.state.camera_frame, src)
+        size(frame) == size(wfs.estimator.state.signal_2d) || throw(
             InvalidConfiguration(
                 "ZernikeWFS detector sampling and binning must preserve " *
                 "the sampled camera frame size"))
-        fill!(wfs.state.reference_signal_2d,
-            zero(eltype(wfs.state.reference_signal_2d)))
+        fill!(wfs.estimator.state.reference_signal_2d,
+            zero(eltype(wfs.estimator.state.reference_signal_2d)))
         normalization_scale = wfs_detector_incidence_scale(det, src,
             eltype(frame))
         zernike_signal!(wfs, tel, frame, src, normalization_scale)
-        copyto!(wfs.state.reference_signal_2d, wfs.state.signal_2d)
-        copyto!(wfs.state.reference_frame, frame)
-        fill!(wfs.state.signal_2d, zero(eltype(wfs.state.signal_2d)))
-        fill!(wfs.state.slopes, zero(eltype(wfs.state.slopes)))
+        copyto!(wfs.estimator.state.reference_signal_2d, wfs.estimator.state.signal_2d)
+        copyto!(wfs.estimator.state.reference_frame, frame)
+        fill!(wfs.estimator.state.signal_2d, zero(eltype(wfs.estimator.state.signal_2d)))
+        fill!(wfs.estimator.state.slopes, zero(eltype(wfs.estimator.state.slopes)))
     finally
         restore_opd!(tel, opd_saved)
     end
-    wfs.state.calibrated = true
-    wfs.state.calibration_wavelength = λ
-    wfs.state.calibration_signature = sig
+    wfs.estimator.state.calibrated = true
+    wfs.estimator.state.calibration_wavelength = λ
+    wfs.estimator.state.calibration_signature = sig
+    wfs.estimator.state.calibration_revision += UInt(1)
     return wfs
 end
 
@@ -680,17 +752,17 @@ end
 function measure!(::Diffractive, wfs::ZernikeWFS, tel::Telescope, src::AbstractSource)
     ensure_zernike_calibration!(wfs, tel, src)
     zernike_pupil_intensity!(wfs, tel, src)
-    sample_zernike_frame!(wfs.state.camera_frame, wfs.state.nominal_frame, wfs, wfs.state.pupil_intensity, tel)
-    return zernike_signal!(wfs, tel, wfs.state.camera_frame, src)
+    sample_zernike_frame!(wfs.acquisition.state.camera_frame, wfs.front_end.propagation.nominal_frame, wfs, wfs.front_end.propagation.pupil_intensity, tel)
+    return zernike_signal!(wfs, tel, wfs.acquisition.state.camera_frame, src)
 end
 
 function measure!(::Diffractive, wfs::ZernikeWFS, tel::Telescope, src::AbstractSource,
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
     ensure_zernike_calibration!(wfs, tel, src, det)
     zernike_pupil_intensity!(wfs, tel, src)
-    sample_zernike_frame!(wfs.state.camera_frame, wfs.state.nominal_frame, wfs, wfs.state.pupil_intensity, tel)
-    capture!(det, wfs.state.camera_frame, src; rng=rng)
-    size(output_frame(det)) == size(wfs.state.camera_frame) ||
+    sample_zernike_frame!(wfs.acquisition.state.camera_frame, wfs.front_end.propagation.nominal_frame, wfs, wfs.front_end.propagation.pupil_intensity, tel)
+    capture!(det, wfs.acquisition.state.camera_frame, src; rng=rng)
+    size(output_frame(det)) == size(wfs.acquisition.state.camera_frame) ||
         throw(InvalidConfiguration("ZernikeWFS detector output size must match the sampled camera frame"))
     frame = output_frame(det)
     normalization_scale = wfs_detector_incidence_scale(det, src,
@@ -698,9 +770,13 @@ function measure!(::Diffractive, wfs::ZernikeWFS, tel::Telescope, src::AbstractS
     return zernike_signal!(wfs, tel, frame, src, normalization_scale)
 end
 
-@inline valid_subaperture_mask(wfs::ZernikeWFS) = wfs.state.valid_mask
-@inline reference_signal(wfs::ZernikeWFS) = wfs.state.reference_signal_2d
-@inline camera_frame(wfs::ZernikeWFS) = wfs.state.camera_frame
+@inline slopes(wfs::ZernikeWFS) = wfs.estimator.state.slopes
+@inline valid_subaperture_mask(wfs::ZernikeWFS) =
+    wfs.estimator.state.valid_mask
+@inline reference_signal(wfs::ZernikeWFS) =
+    wfs.estimator.state.reference_signal_2d
+@inline camera_frame(wfs::ZernikeWFS) =
+    wfs.acquisition.state.camera_frame
 
 @inline wfs_output_frame(wfs::ZernikeWFS, ::Nothing) = camera_frame(wfs)
 @inline wfs_output_frame(wfs::ZernikeWFS, det::AbstractDetector) = camera_frame(wfs)
@@ -715,3 +791,5 @@ end
     ensure_zernike_calibration!(wfs, tel, src)
     return wfs
 end
+
+include("zernike/stages.jl")

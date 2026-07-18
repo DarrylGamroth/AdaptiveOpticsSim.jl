@@ -601,23 +601,22 @@ end
     @test supports_camera_frame(bio)
     @test supports_camera_frame(zwfs)
     @test supports_camera_frame(curv)
-    @test valid_subaperture_mask(wfs) === wfs.layout.valid_mask
+    @test valid_subaperture_mask(wfs) === wfs.front_end.layout.valid_mask
     @test reference_signal(wfs) === wfs.calibration.reference_signal_2d
     @test camera_frame(pyr) === pyr.acquisition.state.camera_frame
     @test camera_frame(bio) === bio.acquisition.state.camera_frame
-    @test camera_frame(zwfs) === zwfs.state.camera_frame
-    @test camera_frame(curv) === curv.state.camera_frame
+    @test camera_frame(zwfs) === zwfs.acquisition.state.camera_frame
+    @test camera_frame(curv) === curv.acquisition.state.camera_frame
     @test wfs_detector_image(pyr) === pyr.acquisition.state.camera_frame
     @test wfs_detector_image(bio) === bio.acquisition.state.camera_frame
-    @test wfs_detector_image(zwfs) === zwfs.state.camera_frame
-    @test wfs_detector_image(curv) === curv.state.camera_frame
+    @test wfs_detector_image(zwfs) === zwfs.acquisition.state.camera_frame
+    @test wfs_detector_image(curv) === curv.acquisition.state.camera_frame
     sh_image = wfs_detector_image(wfs_diffractive; gap=1)
     sh_cube = AdaptiveOpticsSim.sh_exported_spot_cube(wfs_diffractive)
     @test ndims(sh_image) == 2
-    @test size(sh_image) == (microlens_array(wfs_diffractive).params.n_lenslets * size(sh_cube, 2) +
-                             microlens_array(wfs_diffractive).params.n_lenslets - 1,
-                             microlens_array(wfs_diffractive).params.n_lenslets * size(sh_cube, 3) +
-                             microlens_array(wfs_diffractive).params.n_lenslets - 1)
+    n_lenslets = microlens_array(wfs_diffractive.front_end).params.n_lenslets
+    @test size(sh_image) == (n_lenslets * size(sh_cube, 2) + n_lenslets - 1,
+                             n_lenslets * size(sh_cube, 3) + n_lenslets - 1)
     # IF-DM
     assert_dm_interface(dm, tel)
     # IF-DET
@@ -675,9 +674,9 @@ end
     prepare_runtime_wfs!(wfs_diffractive, tel, src)
     @test wfs_diffractive.calibration.calibrated
     prepare_runtime_wfs!(zwfs, tel, src)
-    @test zwfs.state.calibrated
+    @test zwfs.estimator.state.calibrated
     prepare_runtime_wfs!(curv, tel, src)
-    @test curv.state.calibrated
+    @test curv.estimator.state.calibrated
 end
 
 @testset "Calibration workflow contracts" begin

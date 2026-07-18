@@ -16,6 +16,10 @@
 # - Follow SciML style conventions: https://docs.sciml.ai/SciMLStyle/stable/
 # - Use lower-case directory names; Julia type names may use CamelCase, but
 #   source tree directories should stay lower-case for portability and clarity.
+# - This package is undergoing a breaking refactor. Remove superseded APIs and
+#   update callers directly; do not add deprecated aliases, synthetic property
+#   forwarding, state views, or compatibility adapters unless the user
+#   explicitly requests a compatibility surface.
 #
 # Parallelism:
 # - Focus on coarse-grained parallelism (sources, time steps, sweeps).

@@ -237,6 +237,9 @@ function modulated_input_wavelength(input::PupilFunction, source)
     return wavelength(source)
 end
 
+@inline modulated_wfs_propagation_storage(front_end) =
+    front_end.propagation.field
+
 function require_modulated_wfs_domains(front_end, input, output::IntensityMap)
     typeof(input.metadata.backend) === typeof(output.metadata.backend) ||
         throw(WFSPreparationError(:optical_formation, :backend,
@@ -244,7 +247,7 @@ function require_modulated_wfs_domains(front_end, input, output::IntensityMap)
     input.metadata.device == output.metadata.device ||
         throw(WFSPreparationError(:optical_formation, :device,
             "modulated WFS input and output occupy different devices"))
-    storage = front_end.propagation.field
+    storage = modulated_wfs_propagation_storage(front_end)
     typeof(input.metadata.backend) === typeof(backend(storage)) ||
         throw(WFSPreparationError(:optical_formation, :backend,
             "modulated WFS input and propagation backends differ"))

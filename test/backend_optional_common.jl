@@ -201,8 +201,8 @@ function run_optional_zernike_normalization(
             normalization=normalization, T=T, backend=CPUBackend())
         gpu_wfs = ZernikeWFS(gpu_tel; pupil_samples=8, binning=2,
             normalization=normalization, T=T, backend=selector)
-        fill!(cpu_wfs.state.reference_signal_2d, zero(T))
-        fill!(gpu_wfs.state.reference_signal_2d, zero(T))
+        fill!(cpu_wfs.estimator.state.reference_signal_2d, zero(T))
+        fill!(gpu_wfs.estimator.state.reference_signal_2d, zero(T))
         frame = BackendArray(copy(frame_host))
 
         expected_normalization = AdaptiveOpticsSim.zernike_normalization(
@@ -219,7 +219,7 @@ function run_optional_zernike_normalization(
             frame, src, normalization_scale)
         AdaptiveOpticsSim.synchronize_backend!(
             AdaptiveOpticsSim.execution_style(actual))
-        @test gpu_wfs.state.normalization_sum isa BackendArray
+        @test gpu_wfs.estimator.state.normalization_sum isa BackendArray
         @test actual isa BackendArray
         @test Array(actual) ≈ expected rtol=T(2e-5) atol=T(2e-6)
     end
@@ -229,7 +229,7 @@ function run_optional_zernike_normalization(
     zero_wfs = ZernikeWFS(gpu_tel; pupil_samples=8, binning=2,
         normalization=IncidenceFluxNormalization(), T=T,
         backend=selector)
-    fill!(zero_wfs.state.reference_signal_2d, zero(T))
+    fill!(zero_wfs.estimator.state.reference_signal_2d, zero(T))
     zero_slopes = AdaptiveOpticsSim.zernike_signal!(zero_wfs, gpu_tel,
         BackendArray(copy(frame_host)), zero_src, one(T))
     AdaptiveOpticsSim.synchronize_backend!(
@@ -364,7 +364,8 @@ function run_optional_wfs_stage_contracts(
     physical_wfs = ShackHartmannWFS(tel; n_lenslets=2,
         n_pix_subap=2, mode=Diffractive(), T=T, backend=selector)
     physical_rate = shack_hartmann_rate_map(physical_wfs, pupil, src)
-    physical_front_end = ShackHartmannOpticalFrontEnd(physical_wfs, src)
+    physical_front_end = ShackHartmannOpticalFrontEnd(
+        physical_wfs.front_end, src)
     @test !hasfield(typeof(physical_front_end), :sensor)
     @test physical_front_end.propagation.fft_stack isa BackendArray
     physical_optical_plan = prepare_wfs_optical_formation(
@@ -378,7 +379,7 @@ function run_optional_wfs_stage_contracts(
         n_pix_subap=2, mode=Diffractive(), T=T, backend=selector)
     physical_field_rate = shack_hartmann_rate_map(physical_field_wfs, field)
     physical_field_plan = prepare_wfs_optical_formation(
-        ShackHartmannOpticalFrontEnd(physical_field_wfs), field,
+        physical_field_wfs.front_end, field,
         physical_field_rate)
     form_wfs_optical_products!(physical_field_rate, field,
         physical_field_plan)
@@ -399,7 +400,7 @@ function run_optional_wfs_stage_contracts(
     physical_asterism_rate = shack_hartmann_rate_map(
         physical_asterism_wfs, pupil, physical_asterism)
     physical_asterism_plan = prepare_wfs_optical_formation(
-        ShackHartmannOpticalFrontEnd(physical_asterism_wfs,
+        ShackHartmannOpticalFrontEnd(physical_asterism_wfs.front_end,
             physical_asterism), pupil, physical_asterism_rate)
     form_wfs_optical_products!(physical_asterism_rate, pupil,
         physical_asterism_plan)
@@ -429,7 +430,7 @@ function run_optional_wfs_stage_contracts(
     mixed_backend_rate = shack_hartmann_rate_map(cpu_wfs, pupil, src)
     mixed_optical_error = try
         prepare_wfs_optical_formation(
-            ShackHartmannOpticalFrontEnd(cpu_wfs, src), pupil,
+            ShackHartmannOpticalFrontEnd(cpu_wfs.front_end, src), pupil,
             mixed_backend_rate)
         nothing
     catch err
@@ -733,6 +734,177 @@ function run_optional_wfs_stage_contracts(
     end
     @test mismatch isa WFSPreparationError
     @test mismatch.reason === :backend
+    run_optional_zernike_curvature_stages(B, BackendArray)
+    return nothing
+end
+
+function run_optional_zernike_curvature_stages(
+    ::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    selector = backend_selector(B)
+    T = Float32
+    cpu_tel = Telescope(resolution=8, diameter=T(4),
+        central_obstruction=zero(T), T=T, backend=CPUBackend())
+    gpu_tel = Telescope(resolution=8, diameter=T(4),
+        central_obstruction=zero(T), T=T, backend=selector)
+    source = Source(band=:custom, wavelength=T(0.75e-6),
+        photon_irradiance=T(8), T=T)
+    cpu_pupil = PupilFunction(cpu_tel; T=T)
+    gpu_pupil = PupilFunction(gpu_tel; T=T, backend=selector)
+    opd = reshape(T.(1:64), 8, 8) .* T(1e-10)
+    copyto!(cpu_pupil.opd, opd)
+    copyto!(gpu_pupil.opd, opd)
+
+    cpu_zernike = ZernikeWFS(cpu_tel; pupil_samples=4, T=T)
+    gpu_zernike = ZernikeWFS(gpu_tel; pupil_samples=4, T=T,
+        backend=selector)
+    cpu_zernike_rate = zernike_rate_map(
+        ZernikeOpticalFrontEnd(cpu_zernike, source), cpu_pupil)
+    gpu_zernike_rate = zernike_rate_map(
+        ZernikeOpticalFrontEnd(gpu_zernike, source), gpu_pupil)
+    cpu_zernike_plan = prepare_wfs_optical_formation(
+        ZernikeOpticalFrontEnd(cpu_zernike, source), cpu_pupil,
+        cpu_zernike_rate)
+    gpu_zernike_plan = prepare_wfs_optical_formation(
+        ZernikeOpticalFrontEnd(gpu_zernike, source), gpu_pupil,
+        gpu_zernike_rate)
+    form_wfs_optical_products!(cpu_zernike_rate, cpu_pupil,
+        cpu_zernike_plan)
+    form_wfs_optical_products!(gpu_zernike_rate, gpu_pupil,
+        gpu_zernike_plan)
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(gpu_zernike_rate.values))
+    @test gpu_zernike_rate.values isa BackendArray
+    @test isapprox(Array(gpu_zernike_rate.values),
+        cpu_zernike_rate.values; rtol=T(4e-5), atol=T(4e-5))
+
+    zernike_detector = Detector(noise=NoiseNone(),
+        integration_time=T(0.25), qe=T(0.4),
+        response_model=NullFrameResponse(), T=T, backend=selector)
+    zernike_observation = WFSObservation(similar(gpu_zernike_rate.values);
+        units=:electron_count, layout=:zernike_pupil_image)
+    zernike_acquisition = prepare_wfs_acquisition(zernike_detector,
+        gpu_zernike_rate, zernike_observation)
+    acquire_wfs_observation!(zernike_observation, gpu_zernike_rate,
+        zernike_acquisition, Xoshiro(0x5a47))
+    zernike_reference = similar(gpu_zernike.estimator.state.signal_2d)
+    fill!(zernike_reference, zero(T))
+    set_zernike_calibration!(gpu_zernike, zernike_reference;
+        wavelength_m=wavelength(source), signature=UInt(0x5a47))
+    zernike_measurement = WFSMeasurement(similar(slopes(gpu_zernike));
+        units=:dimensionless, kind=:normalized_pupil_signal)
+    zernike_estimator = prepare_wfs_estimation(gpu_zernike,
+        zernike_observation, zernike_measurement; source=source)
+    estimate_wfs_measurement!(zernike_measurement, zernike_observation,
+        zernike_estimator)
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(zernike_measurement.storage))
+    @test zernike_observation.storage isa BackendArray
+    @test zernike_measurement.storage isa BackendArray
+    @test all(isfinite, Array(zernike_measurement.storage))
+
+    cpu_curvature = CurvatureWFS(cpu_tel; pupil_samples=4, T=T)
+    gpu_curvature = CurvatureWFS(gpu_tel; pupil_samples=4, T=T,
+        backend=selector)
+    cpu_rates = curvature_rate_maps(
+        CurvatureOpticalFrontEnd(cpu_curvature, source), cpu_pupil)
+    gpu_rates = curvature_rate_maps(
+        CurvatureOpticalFrontEnd(gpu_curvature, source), gpu_pupil)
+    cpu_curvature_plan = prepare_wfs_optical_formation(
+        CurvatureOpticalFrontEnd(cpu_curvature, source), cpu_pupil,
+        cpu_rates)
+    gpu_curvature_plan = prepare_wfs_optical_formation(
+        CurvatureOpticalFrontEnd(gpu_curvature, source), gpu_pupil,
+        gpu_rates)
+    form_wfs_optical_products!(cpu_rates, cpu_pupil, cpu_curvature_plan)
+    form_wfs_optical_products!(gpu_rates, gpu_pupil, gpu_curvature_plan)
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(gpu_rates[1].values))
+    @test all(rate -> rate.values isa BackendArray, gpu_rates)
+    @test isapprox(Array(gpu_rates[1].values), cpu_rates[1].values;
+        rtol=T(5e-5), atol=T(5e-5))
+    @test isapprox(Array(gpu_rates[2].values), cpu_rates[2].values;
+        rtol=T(5e-5), atol=T(5e-5))
+
+    plus_detector = Detector(noise=NoiseNone(),
+        integration_time=T(0.25), qe=T(0.4),
+        response_model=NullFrameResponse(), T=T, backend=selector)
+    minus_detector = Detector(noise=NoiseNone(),
+        integration_time=T(0.5), qe=T(0.5),
+        response_model=NullFrameResponse(), T=T, backend=selector)
+    plus_observation = WFSObservation(similar(gpu_rates[1].values);
+        units=:electron_count, layout=:curvature_branch_image)
+    minus_observation = WFSObservation(similar(gpu_rates[2].values);
+        units=:electron_count, layout=:curvature_branch_image)
+    observations = (plus_observation, minus_observation)
+    multiple_acquisition = prepare_wfs_acquisition(
+        (plus_detector, minus_detector), gpu_rates, observations;
+        source=source)
+    acquire_wfs_observation!(observations, gpu_rates,
+        multiple_acquisition, Xoshiro(0x4355))
+    @test isapprox(Array(plus_observation.storage),
+        Array(gpu_rates[1].values) .* T(0.1);
+        rtol=T(3e-5), atol=T(3e-5))
+    @test isapprox(Array(minus_observation.storage),
+        Array(gpu_rates[2].values) .* T(0.25);
+        rtol=T(3e-5), atol=T(3e-5))
+
+    packed_detector = Detector(noise=NoiseNone(),
+        integration_time=T(0.25), qe=T(0.5),
+        response_model=NullFrameResponse(), T=T, backend=selector)
+    packed_model = CurvaturePackedAcquisition(packed_detector)
+    packed_storage = similar(gpu_rates[1].values, T, 8, 4)
+    packed_observation = WFSObservation(packed_storage;
+        units=:electron_count, layout=:curvature_branch_regions)
+    packed_acquisition = prepare_wfs_acquisition(packed_model, gpu_rates,
+        packed_observation)
+    acquire_wfs_observation!(packed_observation, gpu_rates,
+        packed_acquisition, Xoshiro(0x4356))
+    packed_host = Array(packed_observation.storage)
+    @test packed_observation.storage isa BackendArray
+    @test isapprox(packed_host[1:4, :], Array(gpu_rates[1].values) .* T(0.125);
+        rtol=T(3e-5), atol=T(3e-5))
+    @test isapprox(packed_host[5:8, :], Array(gpu_rates[2].values) .* T(0.125);
+        rtol=T(3e-5), atol=T(3e-5))
+
+    spad = SPADArrayDetector(integration_time=T(0.25), noise=NoiseNone(),
+        sensor=SPADArraySensor(pde=T(0.5), dark_count_rate=zero(T),
+            fill_factor=one(T)), T=T, backend=selector)
+    counting_model = CurvaturePackedAcquisition(spad;
+        readout_model=CurvatureCountingReadout(), source=source)
+    counting_storage = similar(gpu_rates[1].values, T, 2, 16)
+    counting_observation = WFSObservation(counting_storage;
+        units=:photon_count, layout=:curvature_branch_channels)
+    counting_acquisition = prepare_wfs_acquisition(counting_model,
+        gpu_rates, counting_observation)
+    acquire_wfs_observation!(counting_observation, gpu_rates,
+        counting_acquisition, Xoshiro(0x4357))
+    @test counting_observation.storage isa BackendArray
+    @test all(isfinite, Array(counting_observation.storage))
+
+    curvature_reference = similar(gpu_curvature.estimator.state.signal_2d)
+    fill!(curvature_reference, zero(T))
+    set_curvature_calibration!(gpu_curvature, curvature_reference;
+        wavelength_m=wavelength(source), signature=UInt(0x4355))
+    curvature_measurement = WFSMeasurement(similar(slopes(gpu_curvature));
+        units=:dimensionless, kind=:curvature_signal)
+    curvature_estimator = prepare_wfs_estimation(gpu_curvature,
+        observations, curvature_measurement;
+        branch_rate_scales=(T(10), T(4)))
+    estimate_wfs_measurement!(curvature_measurement, observations,
+        curvature_estimator)
+    packed_measurement = WFSMeasurement(similar(slopes(gpu_curvature));
+        units=:dimensionless, kind=:curvature_signal)
+    packed_estimator = prepare_wfs_estimation(gpu_curvature,
+        packed_observation, packed_measurement;
+        branch_rate_scales=(T(8), T(8)))
+    estimate_wfs_measurement!(packed_measurement, packed_observation,
+        packed_estimator)
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(curvature_measurement.storage))
+    @test curvature_measurement.storage isa BackendArray
+    @test packed_measurement.storage isa BackendArray
+    @test isapprox(Array(curvature_measurement.storage),
+        Array(packed_measurement.storage); rtol=T(5e-5), atol=T(5e-5))
     return nothing
 end
 
@@ -1419,12 +1591,12 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
         AdaptiveOpticsSim.ShackHartmannWFSRocmHostStatsPlan
     AdaptiveOpticsSim.prepare_sampling!(sh, tel, src)
     sh_sub = div(tel.params.resolution, AdaptiveOpticsSim.n_lenslets(sh))
-    sh_pad = size(sh.optical_workspace.field, 1)
+    sh_pad = size(sh.front_end.propagation.field, 1)
     sh_offset = div(sh_pad - sh_sub, 2)
     safe_intensity = AdaptiveOpticsSim.compute_intensity_safe!(
-        AdaptiveOpticsSim.execution_style(sh.optical_workspace.intensity),
+        AdaptiveOpticsSim.execution_style(sh.front_end.propagation.intensity),
         sh, tel, src, 1, 1, sh_sub, sh_sub, sh_offset, sh_offset, sh_sub)
-    @test safe_intensity === sh.optical_workspace.intensity
+    @test safe_intensity === sh.front_end.propagation.intensity
     @test all(isfinite, Array(safe_intensity))
     @test AdaptiveOpticsSim.detector_execution_plan(typeof(AdaptiveOpticsSim.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.DetectorHostMirrorPlan
     capture_psf = array_backend{T}(undef, 4, 4)

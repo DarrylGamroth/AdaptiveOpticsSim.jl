@@ -109,3 +109,23 @@ n_actuators = 4
 rng_seed = 91
 absolute_p99_ns = 5000000
 max_alloc_bytes = 0
+
+[[cards]]
+id = "G0-PERF-09"
+label = "staged Zernike rate, acquisition, and estimation"
+kind = "zernike"
+resolution = 48
+pupil_samples = 6
+rng_seed = 101
+absolute_p99_ns = 10000000
+max_alloc_bytes = 0
+
+[[cards]]
+id = "G0-PERF-10"
+label = "staged Curvature two-plane, two-detector measurement"
+kind = "curvature_two_detectors"
+resolution = 48
+pupil_samples = 6
+rng_seed = 102
+absolute_p99_ns = 10000000
+max_alloc_bytes = 0
