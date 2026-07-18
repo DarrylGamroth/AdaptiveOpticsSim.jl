@@ -4,7 +4,6 @@ using Dates
 using HdrHistogram
 import KernelAbstractions
 using LinearAlgebra
-using Pkg
 using SHA
 using Statistics
 using TOML
@@ -74,12 +73,6 @@ function active_manifest_path(project_path::AbstractString)
     return joinpath(dirname(project_path), "Manifest.toml")
 end
 
-function manifest_status()
-    io = IOBuffer()
-    Pkg.status(; io, mode=Pkg.PKGMODE_MANIFEST)
-    return String(take!(io))
-end
-
 function configure_pre_hil_benchmark!()
     Threads.nthreads() == 1 || error(
         "pre-HIL backend latency evidence requires one Julia thread")
@@ -94,15 +87,27 @@ function backend_module()
     return nothing
 end
 
-function backend_version_info()
-    module_ref = backend_module()
-    module_ref === nothing && return "not applicable"
-    versioninfo = getproperty(module_ref, :versioninfo)
-    try
-        return sprint(io -> Base.invokelatest(versioninfo, io))
-    catch err
-        return "versioninfo unavailable: $(sprint(showerror, err))"
+function backend_environment_info()
+    PRE_HIL_BACKEND_NAME == "cpu" && return Dict{String,Any}(
+        "device" => "not applicable",
+    )
+    if PRE_HIL_BACKEND_NAME == "cuda"
+        device = CUDA.device()
+        return Dict{String,Any}(
+            "device" => CUDA.name(device),
+            "compute_capability" => string(CUDA.capability(device)),
+            "runtime_version" => string(CUDA.runtime_version()),
+            "driver_version" => string(CUDA.driver_version()),
+            "compiler_version" => string(CUDA.compiler_version()),
+        )
     end
+    device = AMDGPU.device()
+    return Dict{String,Any}(
+        "device" => AMDGPU.HIP.name(device),
+        "gcn_architecture" => AMDGPU.HIP.gcn_arch(device),
+        "wavefront_size" => Int(AMDGPU.HIP.wavefrontsize(device)),
+        "hip_runtime_version" => string(AMDGPU.HIP.runtime_version()),
+    )
 end
 
 function source_environment()
@@ -128,12 +133,11 @@ function source_environment()
         "kernel_abstractions_version" => string(Base.pkgversion(KernelAbstractions)),
         "accelerator_package_version" => module_ref === nothing ?
             "not applicable" : string(Base.pkgversion(module_ref)),
-        "accelerator_versioninfo" => backend_version_info(),
+        "accelerator" => backend_environment_info(),
         "active_project" => project_path,
         "active_project_sha256" => sha256_file(project_path),
         "active_manifest" => manifest_path,
         "active_manifest_sha256" => sha256_file(manifest_path),
-        "active_manifest_status" => manifest_status(),
         "kernel" => string(Sys.KERNEL),
         "kernel_release" => command_output(`uname -r`),
         "architecture" => string(Sys.ARCH),
@@ -148,6 +152,9 @@ function source_environment()
         "scaling_governor_cpu0" => optional_file(
             "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"),
         "julia_cpu_target_env" => get(ENV, "JULIA_CPU_TARGET", "default"),
+        "julia_depot_path_env" => get(ENV, "JULIA_DEPOT_PATH", "default"),
+        "julia_num_precompile_tasks_env" => get(
+            ENV, "JULIA_NUM_PRECOMPILE_TASKS", "default"),
         "backend" => PRE_HIL_BACKEND_NAME,
         "placement" => PRE_HIL_PLACEMENT,
         "command" => "julia --startup-file=no --project=$benchmark_project benchmarks/benchmark_pre_hil_backend_latency.jl $PRE_HIL_BACKEND_NAME $PRE_HIL_PLACEMENT",
@@ -423,6 +430,10 @@ function run_pre_hil_backend_latency()
     workload = contract["workload"]
     rtol = Float64(workload["parity_rtol"])
     atol = Float64(workload["parity_atol"])
+    environment = source_environment()
+    if !isempty(PRE_HIL_OUTPUT_PATH) && environment["git_dirty"]
+        error("refusing to write durable pre-HIL backend evidence from a dirty worktree")
+    end
 
     correctness = correctness_evidence(rtol, atol)
     ctx = build_benchmark_context()
@@ -481,8 +492,8 @@ function run_pre_hil_backend_latency()
         ))
     end
 
-    environment = source_environment()
-    if !isempty(PRE_HIL_OUTPUT_PATH) && environment["git_dirty"]
+    if !isempty(PRE_HIL_OUTPUT_PATH) &&
+        !isempty(command_output(`git -C $PRE_HIL_ROOT status --porcelain=v1`))
         error("refusing to write durable pre-HIL backend evidence from a dirty worktree")
     end
     artifact = Dict{String,Any}(
