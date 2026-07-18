@@ -41,12 +41,13 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    and separate direct-science photon-arrival-rate formation from detector-owned
    temporal integration and acquisition. Then decompose every maintained
    WFS into a prepared optical front end, detector acquisition, and estimator.
-   Extract the Shack-Hartmann microlens array; separate Pyramid/BioEdge
-   modulation and focal-plane optics; separate Zernike/Curvature propagation
-   and acquisition, including multiple Curvature detector planes; and let LiFT
-   consume independently acquired observations. Freeze current results first
-   and preserve CPU, CUDA, and AMDGPU correctness, residency, allocation, and
-   latency evidence throughout the twelve-PR migration.
+   Shack-Hartmann now has an independent microlens array; Pyramid/BioEdge have
+   separate physical optics over shared modulation; and Zernike/Curvature now
+   separate propagation, acquisition, and estimation, including independent or
+   packed Curvature detector planes. Next, let LiFT consume independently
+   acquired observations. Preserve CPU, CUDA, and AMDGPU correctness,
+   residency, allocation, and latency evidence throughout the twelve-PR
+   migration.
 2. Compose the Gate 0 optical ownership primitives into immutable shared
    atmosphere/telescope/path definitions, prepared branch-local executors, and
    independently scheduled or triggered acquisition state while retaining the

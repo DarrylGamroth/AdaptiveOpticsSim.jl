@@ -18,6 +18,434 @@ function contract_rate_map(values::AbstractMatrix{T};
     return IntensityMap(metadata, values)
 end
 
+function contract_captured_error(f)
+    try
+        f()
+        return nothing
+    catch err
+        return err
+    end
+end
+
+function contract_sampled_response(input::AbstractMatrix{T},
+    kernel::AbstractMatrix{T}) where {T<:AbstractFloat}
+    output = zeros(T, size(input))
+    radius_i = fld(size(kernel, 1), 2)
+    radius_j = fld(size(kernel, 2), 2)
+    @inbounds for ki in axes(kernel, 1), kj in axes(kernel, 2)
+        offset_i = ki - radius_i - 1
+        offset_j = kj - radius_j - 1
+        weight = kernel[ki, kj]
+        for j in axes(input, 2), i in axes(input, 1)
+            ii = i + offset_i
+            jj = j + offset_j
+            if checkbounds(Bool, input, ii, jj)
+                output[i, j] += weight * input[ii, jj]
+            end
+        end
+    end
+    return output
+end
+
+@testset "Prepared Zernike stages" begin
+    T = Float64
+    coverage_enabled = coverage_instrumented()
+    tel = Telescope(resolution=16, diameter=T(8),
+        central_obstruction=zero(T), T=T)
+    source = Source(band=:custom, wavelength=T(0.75e-6),
+        photon_irradiance=T(10), T=T)
+    pupil = PupilFunction(tel; T=T)
+    pupil.opd .= reshape(T.(1:256), 16, 16) .* T(1e-10)
+    pupil_before = copy(pupil.opd)
+    copyto!(tel.state.opd, pupil.opd)
+
+    sensor = ZernikeWFS(tel; pupil_samples=4, binning=1, T=T)
+    @test !hasfield(typeof(sensor), :state)
+    @test sensor.front_end.propagation !== sensor.acquisition.state
+    @test sensor.acquisition.state !== sensor.estimator.state
+    front_end = ZernikeOpticalFrontEnd(sensor, source)
+    @test front_end.phase_spot isa ZernikePhaseSpot{T}
+    @test front_end.source === source
+    rate = zernike_rate_map(front_end, pupil)
+    @test rate.metadata.coordinate_domain isa NormalizedPupilCoordinates
+    @test rate.metadata.normalization isa PhotonRateNormalization
+    @test rate.metadata.spatial_measure isa CellIntegratedMeasure
+    @test rate.metadata.coherence isa IncoherentIntensityAddition
+    optical_plan = prepare_wfs_optical_formation(front_end, pupil, rate)
+    form_wfs_optical_products!(rate, pupil, optical_plan)
+    @test pupil.opd == pupil_before
+
+    AdaptiveOpticsSim.zernike_pupil_intensity!(sensor, tel, source)
+    AdaptiveOpticsSim.sample_zernike_frame!(sensor.acquisition.state.camera_frame,
+        sensor.front_end.propagation.nominal_frame, sensor,
+        sensor.front_end.propagation.pupil_intensity,
+        tel)
+    @test rate.values ≈ sensor.acquisition.state.camera_frame rtol=T(2e-12) atol=T(2e-12)
+
+    field = ElectricField(pupil, source;
+        zero_padding=sensor.params.diffraction_padding, T=T)
+    field_plan = prepare_pupil_field(tel, pupil, source, field;
+        center_even_grid=false)
+    fill_electric_field!(field, pupil, field_plan)
+    field_sensor = ZernikeWFS(tel; pupil_samples=4, binning=1, T=T)
+    field_front_end = ZernikeOpticalFrontEnd(field_sensor)
+    field_rate = zernike_rate_map(field_front_end, field)
+    prepared_field = prepare_wfs_optical_formation(field_front_end, field,
+        field_rate)
+    form_wfs_optical_products!(field_rate, field, prepared_field)
+    @test field_rate.values ≈ rate.values rtol=T(2e-12) atol=T(2e-12)
+    @test_throws WFSPreparationError prepare_wfs_optical_formation(
+        ZernikeOpticalFrontEnd(field_sensor, source), field, field_rate)
+
+    replacement = zernike_rate_map(front_end, pupil)
+    replacement_before = copy(replacement.values)
+    @test_throws WFSPreparationError form_wfs_optical_products!(replacement,
+        pupil, optical_plan)
+    @test replacement.values == replacement_before
+
+    detector = Detector(noise=NoiseNone(), integration_time=T(0.25),
+        qe=T(0.4), response_model=NullFrameResponse(), T=T)
+    observation = WFSObservation(similar(rate.values);
+        units=:electron_count, layout=:zernike_pupil_image)
+    acquisition_plan = prepare_wfs_acquisition(detector, rate, observation)
+    rate_before_acquisition = copy(rate.values)
+    rng = Xoshiro(0x5a45524e)
+    acquire_wfs_observation!(observation, rate, acquisition_plan, rng)
+    @test observation.storage ≈ rate.values .* T(0.1) atol=0 rtol=0
+    @test rate.values == rate_before_acquisition
+
+    reference = zeros(T, size(sensor.estimator.state.reference_signal_2d))
+    set_zernike_calibration!(sensor, reference;
+        wavelength_m=wavelength(source), signature=UInt(0x5a45524e))
+    measurement = WFSMeasurement(similar(slopes(sensor));
+        units=:dimensionless, kind=:normalized_pupil_signal)
+    estimator_plan = prepare_wfs_estimation(sensor, observation,
+        measurement; source=source)
+    @test wfs_measurement_path(estimator_plan) isa AcquiredObservationPath
+    expected_signal = copy(AdaptiveOpticsSim.zernike_signal!(sensor, tel,
+        observation.storage, source))
+    estimate_wfs_measurement!(measurement, observation, estimator_plan)
+    @test measurement.storage ≈ expected_signal rtol=T(2e-12) atol=T(2e-12)
+
+    integer_storage = reshape(UInt16.(1:16), 4, 4)
+    integer_observation = WFSObservation(integer_storage;
+        units=:adu, layout=:zernike_pupil_image)
+    integer_measurement = WFSMeasurement(similar(slopes(sensor));
+        units=:dimensionless, kind=:normalized_pupil_signal)
+    integer_plan = prepare_wfs_estimation(sensor, integer_observation,
+        integer_measurement; source=source)
+    estimate_wfs_measurement!(integer_measurement, integer_observation,
+        integer_plan)
+    floating_observation = WFSObservation(T.(integer_storage);
+        units=:adu, layout=:zernike_pupil_image)
+    floating_measurement = WFSMeasurement(similar(slopes(sensor));
+        units=:dimensionless, kind=:normalized_pupil_signal)
+    floating_plan = prepare_wfs_estimation(sensor, floating_observation,
+        floating_measurement; source=source)
+    estimate_wfs_measurement!(floating_measurement, floating_observation,
+        floating_plan)
+    @test integer_measurement.storage == floating_measurement.storage
+
+    stale_before = copy(measurement.storage)
+    set_zernike_calibration!(sensor, reference;
+        wavelength_m=wavelength(source), signature=UInt(0x5a45524f))
+    @test_throws WFSPreparationError estimate_wfs_measurement!(measurement,
+        observation, estimator_plan)
+    @test measurement.storage == stale_before
+    estimator_plan = prepare_wfs_estimation(sensor, observation,
+        measurement; source=source)
+    integer_plan = prepare_wfs_estimation(sensor, integer_observation,
+        integer_measurement; source=source)
+
+    if coverage_enabled
+        @test_skip "Zernike stage allocation assertions are disabled under coverage instrumentation"
+    else
+        form_wfs_optical_products!(rate, pupil, optical_plan)
+        acquire_wfs_observation!(observation, rate, acquisition_plan, rng)
+        estimate_wfs_measurement!(measurement, observation, estimator_plan)
+        @test @allocated(form_wfs_optical_products!(rate, pupil,
+            optical_plan)) == 0
+        @test @allocated(acquire_wfs_observation!(observation, rate,
+            acquisition_plan, rng)) == 0
+        @test @allocated(estimate_wfs_measurement!(measurement,
+            observation, estimator_plan)) == 0
+        @test @allocated(estimate_wfs_measurement!(integer_measurement,
+            integer_observation, integer_plan)) == 0
+    end
+end
+
+@testset "Prepared Curvature stages" begin
+    T = Float64
+    coverage_enabled = coverage_instrumented()
+    tel = Telescope(resolution=16, diameter=T(8),
+        central_obstruction=zero(T), T=T)
+    source = Source(band=:custom, wavelength=T(0.75e-6),
+        photon_irradiance=T(10), T=T)
+    pupil = PupilFunction(tel; T=T)
+    pupil.opd .= reshape(T.(1:256), 16, 16) .* T(1e-10)
+    pupil_before = copy(pupil.opd)
+    copyto!(tel.state.opd, pupil.opd)
+
+    sensor = CurvatureWFS(tel; pupil_samples=4,
+        readout_pixels_per_sample=1, T=T)
+    @test !hasfield(typeof(sensor), :state)
+    @test sensor.front_end.propagation !== sensor.acquisition.state
+    @test sensor.acquisition.state !== sensor.estimator.state
+    front_end = CurvatureOpticalFrontEnd(sensor, source)
+    @test front_end.defocus_pair isa CurvatureDefocusPair{T}
+    @test front_end.source === source
+    rates = curvature_rate_maps(front_end, pupil)
+    @test rates isa Tuple{IntensityMap,IntensityMap}
+    @test rates[1].metadata.coordinate_domain isa
+        NormalizedPupilCoordinates
+    @test rates[1].metadata.normalization isa PhotonRateNormalization
+    @test rates[1].metadata.spatial_measure isa CellIntegratedMeasure
+    @test rates[1].metadata.coherence isa IncoherentIntensityAddition
+    optical_plan = prepare_wfs_optical_formation(front_end, pupil, rates)
+    form_wfs_optical_products!(rates, pupil, optical_plan)
+    @test pupil.opd == pupil_before
+
+    AdaptiveOpticsSim.curvature_intensity!(sensor, tel, source)
+    @test rates[1].values ≈ sensor.front_end.propagation.frame_plus rtol=T(2e-12) atol=T(2e-12)
+    @test rates[2].values ≈ sensor.front_end.propagation.frame_minus rtol=T(2e-12) atol=T(2e-12)
+
+    field = ElectricField(pupil, source;
+        zero_padding=sensor.params.diffraction_padding, T=T)
+    field_plan = prepare_pupil_field(tel, pupil, source, field;
+        center_even_grid=false)
+    fill_electric_field!(field, pupil, field_plan)
+    field_sensor = CurvatureWFS(tel; pupil_samples=4, T=T)
+    field_front_end = CurvatureOpticalFrontEnd(field_sensor)
+    field_rates = curvature_rate_maps(field_front_end, field)
+    prepared_field = prepare_wfs_optical_formation(field_front_end, field,
+        field_rates)
+    form_wfs_optical_products!(field_rates, field, prepared_field)
+    @test field_rates[1].values ≈ rates[1].values rtol=T(2e-12) atol=T(2e-12)
+    @test field_rates[2].values ≈ rates[2].values rtol=T(2e-12) atol=T(2e-12)
+
+    plus_detector = Detector(noise=NoiseNone(), integration_time=T(0.25),
+        qe=T(0.4), response_model=NullFrameResponse(), T=T)
+    minus_detector = Detector(noise=NoiseNone(), integration_time=T(0.75),
+        qe=T(0.2), response_model=NullFrameResponse(), T=T)
+    plus_observation = WFSObservation(similar(rates[1].values);
+        units=:electron_count, layout=:curvature_branch_image)
+    minus_observation = WFSObservation(similar(rates[2].values);
+        units=:electron_count, layout=:curvature_branch_image)
+    observations = (plus_observation, minus_observation)
+    acquisition_plan = prepare_wfs_acquisition(
+        (plus_detector, minus_detector), rates, observations; source=source)
+    rates_before_acquisition = (copy(rates[1].values),
+        copy(rates[2].values))
+    rng = Xoshiro(0x43555256)
+    acquire_wfs_observation!(observations, rates, acquisition_plan, rng)
+    @test plus_observation.storage ≈ rates[1].values .* T(0.1)
+    @test minus_observation.storage ≈ rates[2].values .* T(0.15)
+    @test rates[1].values == rates_before_acquisition[1]
+    @test rates[2].values == rates_before_acquisition[2]
+
+    plus_kernel = T[0 0 0; 0.1 0.2 0.7; 0 0 0]
+    minus_kernel = T[0 0 0; 0 0.6 0; 0 0.4 0]
+    plus_response_detector = Detector(noise=NoiseNone(),
+        integration_time=one(T), qe=one(T),
+        response_model=SampledFrameResponse(plus_kernel;
+            normalize=false, T=T), T=T)
+    minus_response_detector = Detector(noise=NoiseNone(),
+        integration_time=one(T), qe=one(T),
+        response_model=SampledFrameResponse(minus_kernel;
+            normalize=false, T=T), T=T)
+    plus_response_observation = WFSObservation(similar(rates[1].values);
+        units=:electron_count, layout=:curvature_branch_image)
+    minus_response_observation = WFSObservation(similar(rates[2].values);
+        units=:electron_count, layout=:curvature_branch_image)
+    response_observations = (plus_response_observation,
+        minus_response_observation)
+    response_plan = prepare_wfs_acquisition(
+        (plus_response_detector, minus_response_detector), rates,
+        response_observations)
+    acquire_wfs_observation!(response_observations, rates, response_plan,
+        rng)
+    @test plus_response_observation.storage ≈
+        contract_sampled_response(rates[1].values, plus_kernel)
+    @test minus_response_observation.storage ≈
+        contract_sampled_response(rates[2].values, minus_kernel)
+    @test !isapprox(plus_response_observation.storage,
+        contract_sampled_response(rates[1].values, minus_kernel);
+        rtol=T(1e-12), atol=T(1e-12))
+    @test !isapprox(minus_response_observation.storage,
+        contract_sampled_response(rates[2].values, plus_kernel);
+        rtol=T(1e-12), atol=T(1e-12))
+    @test detector_mtf(plus_response_detector, T(0.25), zero(T)) <
+        detector_mtf(minus_response_detector, T(0.25), zero(T))
+
+    packed_detector = Detector(noise=NoiseNone(),
+        integration_time=T(0.5), qe=T(0.4),
+        response_model=NullFrameResponse(), T=T)
+    packed_model = CurvaturePackedAcquisition(packed_detector;
+        branch_durations=(T(0.5), T(0.5)))
+    packed_observation = WFSObservation(zeros(T, 8, 4);
+        units=:electron_count, layout=:curvature_branch_regions)
+    packed_plan = prepare_wfs_acquisition(packed_model, rates,
+        packed_observation)
+    acquire_wfs_observation!(packed_observation, rates, packed_plan, rng)
+    @views begin
+        @test packed_observation.storage[1:4, :] ≈
+            rates[1].values .* T(0.2)
+        @test packed_observation.storage[5:8, :] ≈
+            rates[2].values .* T(0.2)
+    end
+
+    spad = SPADArrayDetector(integration_time=T(0.5), noise=NoiseNone(),
+        sensor=SPADArraySensor(pde=T(0.4), dark_count_rate=zero(T),
+            fill_factor=one(T)), T=T)
+    counting_model = CurvaturePackedAcquisition(spad;
+        readout_model=CurvatureCountingReadout(), source=source)
+    counting_observation = WFSObservation(zeros(T, 2, 16);
+        units=:photon_count, layout=:curvature_branch_channels)
+    counting_plan = prepare_wfs_acquisition(counting_model, rates,
+        counting_observation)
+    acquire_wfs_observation!(counting_observation, rates, counting_plan,
+        rng)
+    expected_channels = zeros(T, 2, 16)
+    @inbounds for i in 1:4, j in 1:4
+        index = (i - 1) * 4 + j
+        expected_channels[1, index] = rates[1].values[i, j] * T(0.2)
+        expected_channels[2, index] = rates[2].values[i, j] * T(0.2)
+    end
+    @test counting_observation.storage ≈ expected_channels
+
+    reference = zeros(T, size(sensor.estimator.state.reference_signal_2d))
+    set_curvature_calibration!(sensor, reference;
+        wavelength_m=wavelength(source), signature=UInt(0x43555256))
+    copyto!(sensor.estimator.state.reduced_plus, rates[1].values)
+    copyto!(sensor.estimator.state.reduced_minus, rates[2].values)
+    expected_signal = copy(
+        AdaptiveOpticsSim.curvature_signal_from_planes!(sensor))
+    measurement = WFSMeasurement(similar(slopes(sensor));
+        units=:dimensionless, kind=:curvature_signal)
+    estimator_plan = prepare_wfs_estimation(sensor, observations,
+        measurement; branch_rate_scales=(T(10), T(20 / 3)))
+    estimate_wfs_measurement!(measurement, observations, estimator_plan)
+    @test measurement.storage ≈ expected_signal rtol=T(2e-12) atol=T(2e-12)
+
+    packed_measurement = WFSMeasurement(similar(slopes(sensor));
+        units=:dimensionless, kind=:curvature_signal)
+    packed_estimator = prepare_wfs_estimation(sensor, packed_observation,
+        packed_measurement; branch_rate_scales=(T(5), T(5)))
+    estimate_wfs_measurement!(packed_measurement, packed_observation,
+        packed_estimator)
+    @test packed_measurement.storage ≈ expected_signal rtol=T(2e-12) atol=T(2e-12)
+
+    counting_measurement = WFSMeasurement(similar(slopes(sensor));
+        units=:dimensionless, kind=:curvature_signal)
+    counting_estimator = prepare_wfs_estimation(sensor,
+        counting_observation, counting_measurement;
+        branch_rate_scales=(T(5), T(5)))
+    estimate_wfs_measurement!(counting_measurement, counting_observation,
+        counting_estimator)
+    @test counting_measurement.storage ≈ expected_signal rtol=T(2e-12) atol=T(2e-12)
+
+    bad_geometry = (rates[1], contract_rate_map(copy(rates[2].values);
+        sampling=(T(0.5), T(0.25)),
+        coordinate_domain=NormalizedPupilCoordinates(),
+        spectral=rates[2].metadata.spectral))
+    geometry_error = contract_captured_error() do
+        prepare_wfs_acquisition(packed_model, bad_geometry,
+            packed_observation)
+    end
+    @test geometry_error isa WFSPreparationError
+    @test geometry_error.reason === :plane_metadata
+
+    bad_radiometry = (rates[1], contract_rate_map(
+        copy(rates[2].values);
+        sampling=rates[2].metadata.sampling,
+        coordinate_domain=NormalizedPupilCoordinates(),
+        spectral=rates[2].metadata.spectral,
+        spatial_measure=SpatialDensityMeasure()))
+    radiometry_error = contract_captured_error() do
+        prepare_wfs_acquisition(packed_model, bad_radiometry,
+            packed_observation)
+    end
+    @test radiometry_error isa WFSPreparationError
+    @test radiometry_error.reason === :radiometry
+
+    density_rates = (
+        contract_rate_map(copy(rates[1].values);
+            sampling=rates[1].metadata.sampling,
+            coordinate_domain=NormalizedPupilCoordinates(),
+            spectral=rates[1].metadata.spectral,
+            spatial_measure=SpatialDensityMeasure()),
+        contract_rate_map(copy(rates[2].values);
+            sampling=rates[2].metadata.sampling,
+            coordinate_domain=NormalizedPupilCoordinates(),
+            spectral=rates[2].metadata.spectral,
+            spatial_measure=SpatialDensityMeasure()))
+    counting_radiometry_error = contract_captured_error() do
+        prepare_wfs_acquisition(counting_model, density_rates,
+            counting_observation)
+    end
+    @test counting_radiometry_error isa WFSPreparationError
+    @test counting_radiometry_error.reason === :radiometry
+
+    duration_model = CurvaturePackedAcquisition(packed_detector;
+        branch_durations=(T(0.5), T(0.6)))
+    duration_error = contract_captured_error() do
+        prepare_wfs_acquisition(duration_model, rates, packed_observation)
+    end
+    @test duration_error isa WFSPreparationError
+    @test duration_error.reason === :duration
+
+    scale_error = contract_captured_error() do
+        prepare_wfs_estimation(sensor, observations, measurement;
+            branch_rate_scales=(one(T),))
+    end
+    @test scale_error isa WFSPreparationError
+    @test scale_error.reason === :radiometry
+
+    stale_before = copy(measurement.storage)
+    set_curvature_calibration!(sensor, reference;
+        wavelength_m=wavelength(source), signature=UInt(0x43555257))
+    @test_throws WFSPreparationError estimate_wfs_measurement!(measurement,
+        observations, estimator_plan)
+    @test measurement.storage == stale_before
+    estimator_plan = prepare_wfs_estimation(sensor, observations,
+        measurement; branch_rate_scales=(T(10), T(20 / 3)))
+    packed_estimator = prepare_wfs_estimation(sensor, packed_observation,
+        packed_measurement; branch_rate_scales=(T(5), T(5)))
+    counting_estimator = prepare_wfs_estimation(sensor,
+        counting_observation, counting_measurement;
+        branch_rate_scales=(T(5), T(5)))
+
+    if coverage_enabled
+        @test_skip "Curvature stage allocation assertions are disabled under coverage instrumentation"
+    else
+        form_wfs_optical_products!(rates, pupil, optical_plan)
+        acquire_wfs_observation!(observations, rates, acquisition_plan, rng)
+        acquire_wfs_observation!(packed_observation, rates, packed_plan, rng)
+        acquire_wfs_observation!(counting_observation, rates,
+            counting_plan, rng)
+        estimate_wfs_measurement!(measurement, observations,
+            estimator_plan)
+        estimate_wfs_measurement!(packed_measurement, packed_observation,
+            packed_estimator)
+        estimate_wfs_measurement!(counting_measurement,
+            counting_observation, counting_estimator)
+        @test @allocated(form_wfs_optical_products!(rates, pupil,
+            optical_plan)) == 0
+        @test @allocated(acquire_wfs_observation!(observations, rates,
+            acquisition_plan, rng)) == 0
+        @test @allocated(acquire_wfs_observation!(packed_observation,
+            rates, packed_plan, rng)) == 0
+        @test @allocated(acquire_wfs_observation!(counting_observation,
+            rates, counting_plan, rng)) == 0
+        @test @allocated(estimate_wfs_measurement!(measurement,
+            observations, estimator_plan)) == 0
+        @test @allocated(estimate_wfs_measurement!(packed_measurement,
+            packed_observation, packed_estimator)) == 0
+        @test @allocated(estimate_wfs_measurement!(counting_measurement,
+            counting_observation, counting_estimator)) == 0
+    end
+end
+
 function contract_pupil_function(pupil::PupilFunction;
     coordinate_domain::AbstractPlaneCoordinateDomain=MetricCoordinates(),
     orientation::PlaneAxisOrientation=PlaneAxisOrientation())
@@ -51,35 +479,6 @@ end
 function contract_direct_allocation_bytes(measurement, input, plan)
     estimate_wfs_measurement!(measurement, input, plan)
     return @allocated estimate_wfs_measurement!(measurement, input, plan)
-end
-
-function contract_captured_error(f)
-    try
-        f()
-        return nothing
-    catch err
-        return err
-    end
-end
-
-function contract_sampled_response(input::AbstractMatrix{T},
-    kernel::AbstractMatrix{T}) where {T<:AbstractFloat}
-    output = zeros(T, size(input))
-    radius_i = fld(size(kernel, 1), 2)
-    radius_j = fld(size(kernel, 2), 2)
-    @inbounds for ki in axes(kernel, 1), kj in axes(kernel, 2)
-        offset_i = ki - radius_i - 1
-        offset_j = kj - radius_j - 1
-        weight = kernel[ki, kj]
-        for j in axes(input, 2), i in axes(input, 1)
-            ii = i + offset_i
-            jj = j + offset_j
-            if checkbounds(Bool, input, ii, jj)
-                output[i, j] += weight * input[ii, jj]
-            end
-        end
-    end
-    return output
 end
 
 @inline contract_four_pupil_sensor(::Val{:pyramid}, tel; kwargs...) =
@@ -479,7 +878,11 @@ end
     geometric = ShackHartmannWFS(tel; n_lenslets=4, mode=Geometric(),
         T=T)
     @test microlens_array(geometric).params.n_lenslets == 4
-    @test geometric.optical_workspace === nothing
+    @test geometric.front_end isa ShackHartmannDirectFrontEnd
+    @test !hasfield(typeof(geometric.front_end), :propagation)
+    @test !hasfield(typeof(geometric), :microlens_array)
+    @test !hasfield(typeof(geometric), :optical_workspace)
+    @test !hasfield(typeof(geometric), :layout)
     @test geometric.acquisition === nothing
     measure!(geometric, tel)
     if coverage_enabled
@@ -497,9 +900,9 @@ end
     @test any(!iszero, direct_measurement.storage)
     raw_geometric = similar(direct_measurement.storage)
     AdaptiveOpticsSim.geometric_slopes!(raw_geometric, pupil.opd,
-        geometric.layout.valid_mask)
+        geometric.front_end.layout.valid_mask)
     n_geometric = length(raw_geometric) ÷ 2
-    valid_geometric = vec(Array(geometric.layout.valid_mask))
+    valid_geometric = vec(Array(geometric.front_end.layout.valid_mask))
     @views @test direct_measurement.storage[1:n_geometric][valid_geometric] ≈
         raw_geometric[1:n_geometric][valid_geometric] ./
         pupil.metadata.sampling[1]
@@ -507,10 +910,10 @@ end
         raw_geometric[n_geometric+1:end][valid_geometric] ./
         pupil.metadata.sampling[2]
     direct_layout_revision =
-        AdaptiveOpticsSim.subaperture_layout_revision(geometric.layout)
-    AdaptiveOpticsSim.update_subaperture_layout!(geometric.layout,
+        AdaptiveOpticsSim.subaperture_layout_revision(geometric.front_end.layout)
+    AdaptiveOpticsSim.update_subaperture_layout!(geometric.front_end.layout,
         pupil.amplitude .> zero(T))
-    @test AdaptiveOpticsSim.subaperture_layout_revision(geometric.layout) ==
+    @test AdaptiveOpticsSim.subaperture_layout_revision(geometric.front_end.layout) ==
         direct_layout_revision + UInt(1)
     @test_throws WFSPreparationError estimate_wfs_measurement!(
         direct_measurement, pupil, direct_plan)
@@ -526,7 +929,7 @@ end
     @inbounds for j in 1:4, i in 1:4
         axis_1_slope = coefficient_scale * T(i + 10j)
         axis_2_slope = coefficient_scale * T(100i + j)
-        if geometric.layout.valid_mask_host[i, j]
+        if geometric.front_end.layout.valid_mask_host[i, j]
             expected_axis_1[i, j] = axis_1_slope
             expected_axis_2[i, j] = axis_2_slope
         end
@@ -591,6 +994,8 @@ end
         n_pix_subap=4, T=T)
     staged = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(),
         n_pix_subap=4, T=T)
+    @test staged.front_end isa ShackHartmannOpticalFrontEnd
+    @test microlens_array(staged) === staged.front_end.microlens_array
     prepare_sampling!(legacy, tel, src)
     sampled_spots_peak!(legacy, tel, src)
     expected_rate = shack_hartmann_detector_image(
@@ -600,7 +1005,7 @@ end
         reshape(T.(1:16), 4, 4)
 
     rate = shack_hartmann_rate_map(staged, pupil, src)
-    front_end = ShackHartmannOpticalFrontEnd(staged, src)
+    front_end = ShackHartmannOpticalFrontEnd(staged.front_end, src)
     optical_plan = prepare_wfs_optical_formation(front_end, pupil, rate)
     form_wfs_optical_products!(rate, pupil, optical_plan)
     @test rate.values == expected_rate
@@ -720,7 +1125,7 @@ end
         mode=Diffractive(), n_pix_subap=4, T=T)
     field_rate = shack_hartmann_rate_map(field_sensor, field)
     field_plan = prepare_wfs_optical_formation(
-        ShackHartmannOpticalFrontEnd(field_sensor), field, field_rate)
+        field_sensor.front_end, field, field_rate)
     form_wfs_optical_products!(field_rate, field, field_plan)
     @test field_rate.values ≈ rate.values atol=T(2e-12) rtol=T(2e-12)
     if coverage_enabled
@@ -834,7 +1239,7 @@ end
         spot_j = mod(2i + j - 2, 4) + 1
         ordered_observation.storage[(i - 1) * 4 + spot_i,
             (j - 1) * 4 + spot_j] = one(T)
-        if staged.layout.valid_mask_host[i, j]
+        if staged.front_end.layout.valid_mask_host[i, j]
             ordered_centroid_axis_1[i, j] = T(spot_i - 1)
             ordered_centroid_axis_2[i, j] = T(spot_j - 1)
         end
@@ -875,10 +1280,10 @@ end
     end
 
     estimator_layout_revision =
-        AdaptiveOpticsSim.subaperture_layout_revision(staged.layout)
-    AdaptiveOpticsSim.update_subaperture_layout!(staged.layout,
+        AdaptiveOpticsSim.subaperture_layout_revision(staged.front_end.layout)
+    AdaptiveOpticsSim.update_subaperture_layout!(staged.front_end.layout,
         pupil.amplitude .> zero(T))
-    @test AdaptiveOpticsSim.subaperture_layout_revision(staged.layout) ==
+    @test AdaptiveOpticsSim.subaperture_layout_revision(staged.front_end.layout) ==
         estimator_layout_revision + UInt(1)
     measurement_before_layout_update = copy(measurement.storage)
     @test_throws WFSPreparationError estimate_wfs_measurement!(measurement,
@@ -910,7 +1315,7 @@ end
         photon_irradiance=4.0, T=Float64)
     mixed_rate = shack_hartmann_rate_map(mixed_sensor, mixed_pupil,
         mixed_source)
-    mixed_front_end = ShackHartmannOpticalFrontEnd(mixed_sensor,
+    mixed_front_end = ShackHartmannOpticalFrontEnd(mixed_sensor.front_end,
         mixed_source)
     mixed_plan = prepare_wfs_optical_formation(mixed_front_end, mixed_pupil,
         mixed_rate)
@@ -957,20 +1362,21 @@ end
     @test spectral_rates[1].metadata.sampling !=
         spectral_rates[2].metadata.sampling
     spectral_plan = prepare_wfs_optical_formation(
-        ShackHartmannOpticalFrontEnd(spectral_sensor, spectral), pupil,
+        ShackHartmannOpticalFrontEnd(spectral_sensor.front_end, spectral), pupil,
         spectral_rates)
     form_wfs_optical_products!(spectral_rates, pupil, spectral_plan)
     @test sum(spectral_rates[1].values) /
         sum(spectral_rates[2].values) ≈ T(2 / 3) rtol=T(2e-6)
     @test_throws WFSPreparationError prepare_wfs_optical_formation(
-        ShackHartmannOpticalFrontEnd(spectral_sensor, spectral), pupil,
+        ShackHartmannOpticalFrontEnd(spectral_sensor.front_end, spectral), pupil,
         spectral_rates[1])
     incompatible_spectral_sensor = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, pixel_scale_arcsec=T(0.04), T=T)
     incompatible_spectral_rates = shack_hartmann_rate_map(
         incompatible_spectral_sensor, pupil, spectral)
     @test_throws WFSPreparationError prepare_wfs_optical_formation(
-        ShackHartmannOpticalFrontEnd(incompatible_spectral_sensor, spectral),
+        ShackHartmannOpticalFrontEnd(
+            incompatible_spectral_sensor.front_end, spectral),
         pupil, incompatible_spectral_rates)
 
     lgs = LGSSource(wavelength=wavelength(src),
@@ -986,7 +1392,8 @@ end
         mode=Diffractive(), n_pix_subap=4, T=T)
     lgs_rate = shack_hartmann_rate_map(staged_lgs, pupil, lgs)
     lgs_plan = prepare_wfs_optical_formation(
-        ShackHartmannOpticalFrontEnd(staged_lgs, lgs), pupil, lgs_rate)
+        ShackHartmannOpticalFrontEnd(staged_lgs.front_end, lgs), pupil,
+        lgs_rate)
     form_wfs_optical_products!(lgs_rate, pupil, lgs_plan)
     @test lgs_rate.values ≈ expected_lgs rtol=T(2e-12) atol=T(2e-12)
 
@@ -1004,7 +1411,7 @@ end
         mode=Diffractive(), n_pix_subap=4, T=T)
     sodium_rate = shack_hartmann_rate_map(staged_sodium, pupil, sodium_lgs)
     sodium_plan = prepare_wfs_optical_formation(
-        ShackHartmannOpticalFrontEnd(staged_sodium, sodium_lgs), pupil,
+        ShackHartmannOpticalFrontEnd(staged_sodium.front_end, sodium_lgs), pupil,
         sodium_rate)
     form_wfs_optical_products!(sodium_rate, pupil, sodium_plan)
     @test sodium_rate.values ≈ expected_sodium rtol=T(2e-12) atol=T(2e-12)
@@ -1027,7 +1434,7 @@ end
     asterism_rate = shack_hartmann_rate_map(staged_asterism, pupil,
         asterism)
     asterism_plan = prepare_wfs_optical_formation(
-        ShackHartmannOpticalFrontEnd(staged_asterism, asterism), pupil,
+        ShackHartmannOpticalFrontEnd(staged_asterism.front_end, asterism), pupil,
         asterism_rate)
     form_wfs_optical_products!(asterism_rate, pupil, asterism_plan)
     @test asterism_rate.values ≈ expected_asterism rtol=T(2e-12) atol=T(2e-12)

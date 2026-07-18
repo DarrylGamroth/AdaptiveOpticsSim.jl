@@ -602,7 +602,7 @@ function _ao188_calibration_objects(params::AO188SimulationParams{T}) where {T<:
 end
 
 _high_order_wfs_frame(simulation::AO188Simulation) =
-    isnothing(simulation.high_detector) ? simulation.high_wfs.state.camera_frame :
+    isnothing(simulation.high_detector) ? camera_frame(simulation.high_wfs) :
     wfs_output_frame(simulation.high_wfs, simulation.high_detector)
 _high_order_wfs_metadata(simulation::AO188Simulation) =
     isnothing(simulation.high_detector) ? wfs_output_metadata(simulation.high_wfs) :

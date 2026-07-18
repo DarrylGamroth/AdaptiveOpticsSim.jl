@@ -134,12 +134,18 @@ export AbstractFocalPlaneModulation, NoModulation, CircularModulation
 export SampledModulation
 export MicrolensArrayParams, MicrolensArray
 export microlens_array, prepare_microlens_propagation
-export ShackHartmannOpticalFrontEnd, shack_hartmann_rate_map
+export ShackHartmannDirectFrontEnd, ShackHartmannOpticalFrontEnd
+export shack_hartmann_rate_map
 export PyramidPhaseMask, PyramidOpticalFrontEnd, pyramid_rate_map
 export BioEdgeAmplitudeMask, BioEdgeOpticalFrontEnd, bioedge_rate_map
 export set_pyramid_calibration!, set_bioedge_calibration!
+export ZernikePhaseSpot, ZernikeOpticalFrontEnd, zernike_rate_map
+export CurvatureDefocusPair, CurvatureOpticalFrontEnd, curvature_rate_maps
+export CurvaturePackedAcquisition
+export set_zernike_calibration!, set_curvature_calibration!
 export ShackHartmannWFS, PyramidWFS, BioEdgeWFS, ZernikeWFS, CurvatureWFS
-export CurvatureReadoutModel, CurvatureCountingReadout, CurvatureBranchResponse
+export CurvatureReadoutModel, CurvatureFrameReadout
+export CurvatureCountingReadout, CurvatureBranchResponse
 export FluxThresholdValidSubapertures
 export AbstractSlopeExtractionModel, CenterOfGravityExtraction
 export SubapertureLayout, SubapertureCalibration

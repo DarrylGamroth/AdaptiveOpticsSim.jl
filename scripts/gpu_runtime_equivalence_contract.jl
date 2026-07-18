@@ -329,8 +329,11 @@ function _run_zernike_equivalence(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBack
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(slopes(wfs_gpu)))
 
     println("zernike_equivalence")
-    _assert_close("camera_frame", wfs_gpu.state.camera_frame, wfs_cpu.state.camera_frame; rtol=1f-5, atol=8f0)
-    _assert_close("reference_signal_2d", wfs_gpu.state.reference_signal_2d, wfs_cpu.state.reference_signal_2d; rtol=5f-5, atol=2f-6)
+    _assert_close("camera_frame", camera_frame(wfs_gpu), camera_frame(wfs_cpu); rtol=1f-5, atol=8f0)
+    _assert_close("reference_signal_2d",
+        AdaptiveOpticsSim.reference_signal(wfs_gpu),
+        AdaptiveOpticsSim.reference_signal(wfs_cpu);
+        rtol=5f-5, atol=2f-6)
     _assert_close("slopes", slopes(wfs_gpu), slopes(wfs_cpu); rtol=5f-5, atol=2f-6)
     _assert_close("detector_frame", output_frame(det_gpu), output_frame(det_cpu); rtol=1f-5, atol=1f-2)
 end

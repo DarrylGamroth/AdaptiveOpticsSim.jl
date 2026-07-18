@@ -16,7 +16,7 @@ such as `ZernikeWFS` and `CurvatureWFS`, the maintained runtime contract still
 uses the `slopes` name even though the stored values represent normalized
 signal samples rather than geometric slopes.
 """
-@inline slopes(wfs::AbstractWFS) = wfs.state.slopes
+function slopes end
 
 """
     valid_subaperture_mask(wfs::AbstractWFS)
@@ -50,9 +50,9 @@ calibration state.
 @inline wfs_calibration_signature(wfs::BioEdgeWFS) =
     wfs.estimator.state.calibration_signature
 @inline wfs_calibration_signature(wfs::ZernikeWFS) =
-    wfs.state.calibration_signature
+    wfs.estimator.state.calibration_signature
 @inline wfs_calibration_signature(wfs::CurvatureWFS) =
-    wfs.state.calibration_signature
+    wfs.estimator.state.calibration_signature
 
 """
     camera_frame(wfs::AbstractWFS)

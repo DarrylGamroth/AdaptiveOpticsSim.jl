@@ -68,7 +68,7 @@ function AdaptiveOpticsSim.compute_intensity_safe!(
     src::AdaptiveOpticsSim.AbstractSource,
     xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int,
 )
-    propagation = wfs.optical_workspace
+    propagation = wfs.front_end.propagation
     T = eltype(propagation.intensity)
     field_host = Matrix{Complex{T}}(undef, size(propagation.field)...)
     fill!(field_host, zero(eltype(field_host)))
@@ -183,8 +183,8 @@ function AdaptiveOpticsSim._fill_phase_psd!(
 end
 
 # AMDGPU 2.7/GPUCompiler currently fails IR validation for the variable-trip
-# KernelAbstractions slope kernels on gfx1030. Keep these compatibility paths
-# explicit so other accelerator backends retain the device kernels.
+# KernelAbstractions slope kernels on gfx1030. Keep these backend-specific
+# fallbacks explicit so other accelerator backends retain the device kernels.
 function AdaptiveOpticsSim._geometric_slopes!(
     ::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
     slopes::AMDGPU.ROCArray{T,1},

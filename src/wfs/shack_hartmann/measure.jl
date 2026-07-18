@@ -1,6 +1,6 @@
-function sample_spot!(owner::ShackHartmannOpticalFormationOwner,
+function sample_spot!(front_end::ShackHartmannOpticalFrontEnd,
     intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
-    propagation = sh_optical_propagation(owner)
+    propagation = front_end.propagation
     binning = propagation.binning_pixel_scale
     spot_in = intensity
     if binning > 1
@@ -21,7 +21,8 @@ function sample_spot!(owner::ShackHartmannOpticalFormationOwner,
 end
 
 function measure!(mode::Geometric, wfs::ShackHartmannWFS, tel::Telescope)
-    geometric_slopes!(wfs.estimator.slopes, tel.state.opd, wfs.layout.valid_mask)
+    geometric_slopes!(wfs.estimator.slopes, tel.state.opd,
+        wfs.front_end.layout.valid_mask)
     return wfs.estimator.slopes
 end
 
@@ -136,7 +137,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, tel::Telescope, ast::Ast
     n = tel.params.resolution
     n_sub = n_lenslets(wfs)
     sub = div(n, n_sub)
-    pad = size(wfs.optical_workspace.field, 1)
+    pad = size(wfs.front_end.propagation.field, 1)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
     if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_plan(wfs)
@@ -162,7 +163,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, tel::Telescope, ast::Ast
     n = tel.params.resolution
     n_sub = n_lenslets(wfs)
     sub = div(n, n_sub)
-    pad = size(wfs.optical_workspace.field, 1)
+    pad = size(wfs.front_end.propagation.field, 1)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
     if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_plan(wfs)

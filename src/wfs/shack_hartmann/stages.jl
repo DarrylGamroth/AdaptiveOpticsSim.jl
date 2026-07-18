@@ -852,7 +852,8 @@ function _prepare_sh_calibration_binding(sensor::ShackHartmannWFS)
         throw(WFSPreparationError(:estimation, :estimator,
             "Shack-Hartmann calibration wavelength must be finite and positive"))
     return ShackHartmannCalibrationBinding(
-        subaperture_layout_revision(sensor.layout), calibration.revision,
+        subaperture_layout_revision(sensor.front_end.layout),
+        calibration.revision,
         calibration.wavelength, calibration.signature,
         calibration.centroid_response, calibration.output_units,
         calibration.reference_signal_2d)
@@ -861,7 +862,8 @@ end
 function _require_sh_calibration_binding(sensor::ShackHartmannWFS,
     binding::ShackHartmannCalibrationBinding)
     calibration = sensor.calibration
-    subaperture_layout_revision(sensor.layout) == binding.layout_revision &&
+    subaperture_layout_revision(sensor.front_end.layout) ==
+        binding.layout_revision &&
         calibration.calibrated &&
         calibration.revision == binding.revision &&
         isequal(calibration.wavelength, binding.wavelength_m) &&
@@ -877,7 +879,8 @@ end
 
 @inline function _require_sh_layout_binding(sensor::ShackHartmannWFS,
     binding::ShackHartmannLayoutBinding)
-    subaperture_layout_revision(sensor.layout) == binding.revision ||
+    subaperture_layout_revision(sensor.front_end.layout) ==
+        binding.revision ||
         throw(WFSPreparationError(:estimation, :prepared_binding,
             "Shack-Hartmann subaperture layout changed after estimator preparation"))
     return nothing
@@ -896,9 +899,9 @@ function prepare_wfs_estimation(sensor::ShackHartmannWFS{<:Diffractive},
     _require_sh_storage_domain(:estimation, measurement.metadata,
         sensor.estimator.slopes, "measurement")
     _require_sh_storage_domain(:estimation, observation.metadata,
-        sensor.layout.valid_mask, "observation/layout")
+        sensor.front_end.layout.valid_mask, "observation/layout")
     n_sub = n_lenslets(sensor)
-    n_pix = sensor.optical_workspace.sampled_n_pix_subap
+    n_pix = sensor.front_end.propagation.sampled_n_pix_subap
     size(observation.storage) == (n_sub * n_pix, n_sub * n_pix) ||
         throw(WFSPreparationError(:estimation, :shape,
             "Shack-Hartmann estimator requires a tiled lenslet mosaic"))
@@ -948,7 +951,7 @@ function estimate_wfs_measurement!(measurement::WFSMeasurement,
     sensor = plan.sensor
     _require_sh_calibration_binding(sensor, plan.calibration_binding)
     n_sub = n_lenslets(sensor)
-    n_pix = sensor.optical_workspace.sampled_n_pix_subap
+    n_pix = sensor.front_end.propagation.sampled_n_pix_subap
     style = execution_style(observation.storage)
     _unpack_sh_mosaic!(style, sensor.acquisition.spot_cube,
         observation.storage, n_sub, n_pix)
@@ -964,14 +967,15 @@ function prepare_wfs_estimation(sensor::ShackHartmannWFS{<:Geometric},
     validate_wfs_optical_input(input)
     validate_wfs_measurement(measurement)
     _require_sh_pupil_semantics(input, :estimation)
-    _require_sh_layout_geometry(sensor.layout, n_lenslets(sensor), input,
+    _require_sh_layout_geometry(sensor.front_end.layout,
+        n_lenslets(sensor), input,
         :estimation)
     _require_sh_measurement_semantics(sensor, measurement)
     _require_sh_floating_measurement(measurement)
     _require_sh_storage_domain(:estimation, input.metadata,
         sensor.estimator.slopes, "geometric input")
     _require_sh_storage_domain(:estimation, input.metadata,
-        sensor.layout.valid_mask, "geometric input/layout")
+        sensor.front_end.layout.valid_mask, "geometric input/layout")
     _require_sh_storage_domain(:estimation, measurement.metadata,
         sensor.estimator.slopes, "geometric measurement")
     size(measurement.storage) == size(sensor.estimator.slopes) ||
@@ -979,7 +983,7 @@ function prepare_wfs_estimation(sensor::ShackHartmannWFS{<:Geometric},
             "geometric Shack-Hartmann measurement storage has the wrong slope shape"))
     return PreparedShackHartmannEstimator(sensor, input, measurement,
         DirectMeasurementPath(), ShackHartmannLayoutBinding(
-            subaperture_layout_revision(sensor.layout)))
+            subaperture_layout_revision(sensor.front_end.layout)))
 end
 
 
@@ -999,7 +1003,7 @@ function estimate_wfs_measurement!(measurement::WFSMeasurement,
     sensor = plan.sensor
     _require_sh_layout_binding(sensor, plan.calibration_binding)
     geometric_wavefront_slopes!(sensor.estimator.slopes, input.opd,
-        sensor.layout.valid_mask, input.metadata.sampling)
+        sensor.front_end.layout.valid_mask, input.metadata.sampling)
     copyto!(measurement.storage, sensor.estimator.slopes)
     return measurement
 end
@@ -1015,7 +1019,8 @@ function shack_hartmann_rate_map(
     sensor::ShackHartmannWFS{<:Diffractive},
     input::Union{PupilFunction,ElectricField}, source::SpectralSource)
     return shack_hartmann_rate_map(
-        ShackHartmannOpticalFrontEnd(sensor, source), input, source)
+        ShackHartmannOpticalFrontEnd(sensor.front_end, source), input,
+        source)
 end
 
 function shack_hartmann_rate_map(
@@ -1045,8 +1050,8 @@ end
 
 function shack_hartmann_rate_map(sensor::ShackHartmannWFS{<:Diffractive},
     input::Union{PupilFunction,ElectricField}, source=nothing)
-    front_end = source === nothing ? ShackHartmannOpticalFrontEnd(sensor) :
-        ShackHartmannOpticalFrontEnd(sensor, source)
+    front_end = source === nothing ? sensor.front_end :
+        ShackHartmannOpticalFrontEnd(sensor.front_end, source)
     return shack_hartmann_rate_map(front_end, input)
 end
 

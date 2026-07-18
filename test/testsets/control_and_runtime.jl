@@ -1278,8 +1278,8 @@ end
     step!(runtime2)
     @test wfs_frame(runtime2) === wfs2.acquisition.exported_spot_cube
     @test wfs_frame(runtime2) !== wfs2.acquisition.spot_cube
-    @test wfs2.acquisition.spot_cube !== wfs2.optical_workspace.sampled_spot_cube
-    @test wfs_frame(runtime2) !== wfs2.optical_workspace.sampled_spot_cube
+    @test wfs2.acquisition.spot_cube !== wfs2.front_end.propagation.sampled_spot_cube
+    @test wfs_frame(runtime2) !== wfs2.front_end.propagation.sampled_spot_cube
     @test size(wfs_frame(runtime2)) == size(wfs2.acquisition.spot_cube)
     @test all(wfs_frame(runtime2) .>= wfs2.acquisition.spot_cube)
     boundary2 = SimulationInterface(runtime2)
@@ -1755,12 +1755,12 @@ end
     @test supports_detector_output(runtime3)
     prepare!(runtime3)
     @test runtime3.prepared
-    @test runtime3.wfs.state.calibrated
+    @test runtime3.wfs.estimator.state.calibrated
     step!(runtime3)
     @test length(runtime3.command) == length(dm3.state.coefs)
-    @test wfs_frame(runtime3) === wfs3.state.camera_frame
+    @test wfs_frame(runtime3) === camera_frame(wfs3)
     @test wfs_frame(runtime3) == output_frame(wfs_det3)
-    @test size(wfs_frame(runtime3)) == size(wfs3.state.camera_frame)
+    @test size(wfs_frame(runtime3)) == size(camera_frame(wfs3))
     @test all(isfinite, slopes(runtime3))
 
     rng4 = MersenneTwister(4)

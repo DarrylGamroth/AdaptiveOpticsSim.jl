@@ -385,19 +385,31 @@ derived MTF, QE, charge multiplication, or detector noise.
   execution-time prepared-binding violations before mutation
 - WFS families: `ShackHartmannWFS`, `PyramidWFS`, `BioEdgeWFS`,
   `ZernikeWFS`, `CurvatureWFS`
+- Zernike optical composition: `ZernikePhaseSpot`,
+  `ZernikeOpticalFrontEnd`, `zernike_rate_map`, and
+  `set_zernike_calibration!`
 - Shack-Hartmann optical composition: `MicrolensArrayParams`,
   `MicrolensArray`, `prepare_microlens_propagation`, `microlens_array`,
-  `ShackHartmannOpticalFrontEnd`, and `shack_hartmann_rate_map`. The
+  `ShackHartmannDirectFrontEnd`, `ShackHartmannOpticalFrontEnd`, and
+  `shack_hartmann_rate_map`. The
   microlens array is the immutable regular-array model and its numerical
   sampling policy; prepared propagation holds only the backend/grid-bound FFT
-  plans and reusable optical scratch. A front end can be assembled directly
-  from that model, propagation state, and a
+  plans and reusable optical scratch. A diffractive front end can be assembled
+  directly from that model, propagation state, and a
   `SubapertureLayout` without constructing or retaining a `ShackHartmannWFS`.
+  `ShackHartmannWFS.front_end` is the real composed component: it is a
+  propagation-free `ShackHartmannDirectFrontEnd` for geometric sensing and a
+  `ShackHartmannOpticalFrontEnd` for diffractive sensing. The superseded
+  top-level `microlens_array`, `optical_workspace`, and `layout` fields are not
+  emulated.
   The concrete `PreparedMicrolensPropagation` implementation type is
   intentionally qualified rather than exported; callers obtain it through the
   preparation function.
-- Curvature readout: `CurvatureReadoutModel`, `CurvatureCountingReadout`,
-  `CurvatureBranchResponse`
+- Curvature optical composition and readout: `CurvatureDefocusPair`,
+  `CurvatureOpticalFrontEnd`, `curvature_rate_maps`,
+  `CurvatureReadoutModel`, `CurvatureFrameReadout`,
+  `CurvatureCountingReadout`, `CurvaturePackedAcquisition`,
+  `CurvatureBranchResponse`, and `set_curvature_calibration!`
 - Shack-Hartmann calibration and extraction: `FluxThresholdValidSubapertures`,
   `AbstractSlopeExtractionModel`, `CenterOfGravityExtraction`,
   `SubapertureLayout`,
@@ -405,7 +417,7 @@ derived MTF, QE, charge multiplication, or detector noise.
   `subaperture_calibration`, `slope_extraction_model`,
   `set_subaperture_calibration!`, `valid_subaperture_indices`,
   `n_valid_subapertures`
-- WFS normalization policies (with transitional type names):
+- WFS normalization policies:
   `MeanValidFluxNormalization`, `IncidenceFluxNormalization`
 - Measurement and WFS images: `measure!`, `pyramid_modulation_frame!`,
   `valid_subaperture_mask`, `camera_frame`, `wfs_detector_image`,
@@ -437,8 +449,8 @@ execution. Mutating execution receives explicit caller-owned products and
 destinations and an explicit RNG at acquisition. A direct geometric or
 reduced-order estimator declares `DirectMeasurementPath()` and allocates no
 fictitious rate plane, observation, or detector workspace. Shack-Hartmann,
-Pyramid, and BioEdge implement the generic contract; the remaining WFS
-families stay internally coupled until their ordered migration PRs.
+Pyramid, BioEdge, Zernike, and Curvature implement the generic contract; LiFT
+remains the next ordered migration.
 
 The diffractive Shack-Hartmann staged path uses a real-valued
 `:lenslet_mosaic` observation whose element type exactly matches the prepared
@@ -484,6 +496,32 @@ reference is formed with the operating modulation so it subtracts the static
 response of the sensor that will actually acquire data. A user-sampled
 modulation path is retained for both operations rather than replaced by a
 generated circle.
+
+`ZernikeOpticalFrontEnd` separates the immutable phase-shifting
+`ZernikePhaseSpot` and prepared re-imaged-pupil propagation from detector
+acquisition and the referenced pupil estimator. `zernike_rate_map` allocates a
+caller-owned photon-arrival-rate plane; its acquired observation uses the
+`:zernike_pupil_image` layout. Estimation writes a dimensionless
+`:normalized_pupil_signal` and accepts real floating-point or integer detector
+samples. `set_zernike_calibration!` installs the reference, wavelength, and
+optical signature atomically; prepared estimators reject a later calibration
+revision before output mutation.
+
+`CurvatureOpticalFrontEnd` forms a fixed two-element tuple ordered as positive
+then negative defocus. Each product is a separate normalized-pupil-coordinate,
+cell-integrated photon-arrival-rate plane. A concrete pair of ordinary detector
+plans permits independent response models, QE, exposure durations, stochastic
+effects, and readout for the two branches. `CurvaturePackedAcquisition` instead
+maps both compatible branches to one detector: `CurvatureFrameReadout` uses a
+`:curvature_branch_regions` observation and `CurvatureCountingReadout` uses
+`:curvature_branch_channels`. Packed branches must have identical geometry,
+radiometry, backend, device, numeric type, and detector-owned exposure duration;
+different branch exposures require separate detectors. Estimator preparation
+accepts either representation and requires explicit `branch_rate_scales` when
+acquisition durations or deterministic gains must be removed before the
+calibrated branch difference. `CurvatureBranchResponse` is a legacy optical
+relay throughput/background approximation, not detector MTF or acquisition
+response; detector response remains downstream and branch specific.
 
 Both geometric and centroid measurements use `[axis 1; axis 2]` block order.
 Each `n_lenslets`-by-`n_lenslets` block follows Julia column-major order, so

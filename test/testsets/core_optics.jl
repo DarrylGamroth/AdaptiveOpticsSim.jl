@@ -37,7 +37,8 @@ end
     # Pre-HIL stage contracts intentionally add a small, documented public
     # product/protocol seam. Keep headroom bounded so unrelated internals do
     # not drift into the ordinary user namespace.
-    @test length(exported) <= 456
+    # Pre-HIL 9 adds eleven documented component/stage names and no aliases.
+    @test length(exported) <= 467
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
     @test Base.isexported(AdaptiveOpticsSim, :MicrolensArray)
@@ -45,10 +46,17 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :prepare_microlens_propagation)
     @test !Base.isexported(AdaptiveOpticsSim,
         :PreparedMicrolensPropagation)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :ShackHartmannDirectFrontEnd)
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannOpticalFrontEnd)
     @test Base.isexported(AdaptiveOpticsSim, :shack_hartmann_rate_map)
     @test Base.isexported(AdaptiveOpticsSim, :PyramidOpticalFrontEnd)
     @test Base.isexported(AdaptiveOpticsSim, :BioEdgeOpticalFrontEnd)
+    @test Base.isexported(AdaptiveOpticsSim, :ZernikePhaseSpot)
+    @test Base.isexported(AdaptiveOpticsSim, :ZernikeOpticalFrontEnd)
+    @test Base.isexported(AdaptiveOpticsSim, :CurvatureDefocusPair)
+    @test Base.isexported(AdaptiveOpticsSim, :CurvatureOpticalFrontEnd)
+    @test Base.isexported(AdaptiveOpticsSim, :CurvaturePackedAcquisition)
     @test Base.isexported(AdaptiveOpticsSim, :CircularModulation)
     @test Base.isexported(AdaptiveOpticsSim, :SampledModulation)
     @test !Base.isexported(AdaptiveOpticsSim,

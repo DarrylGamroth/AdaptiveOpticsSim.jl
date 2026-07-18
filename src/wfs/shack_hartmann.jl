@@ -13,7 +13,8 @@ include("shack_hartmann/lgs.jl")
 include("shack_hartmann/stages.jl")
 
 @inline slopes(wfs::ShackHartmannWFS) = wfs.estimator.slopes
-@inline valid_subaperture_mask(wfs::ShackHartmannWFS) = wfs.layout.valid_mask
+@inline valid_subaperture_mask(wfs::ShackHartmannWFS) =
+    wfs.front_end.layout.valid_mask
 @inline reference_signal(wfs::ShackHartmannWFS) = wfs.calibration.reference_signal_2d
 
 @kernel function shack_hartmann_detector_image_kernel!(image, spot_cube,

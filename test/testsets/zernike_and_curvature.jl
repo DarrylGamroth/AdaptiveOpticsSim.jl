@@ -15,21 +15,21 @@ end
     src = Source(band=:I, magnitude=0.0)
     wfs = ZernikeWFS(tel; pupil_samples=8, diffraction_padding=2)
 
-    @test size(wfs.state.camera_frame) == (8, 8)
-    @test length(slopes(wfs)) == count(wfs.state.valid_mask)
+    @test size(camera_frame(wfs)) == (8, 8)
+    @test length(slopes(wfs)) == count(valid_subaperture_mask(wfs))
     @test_throws InvalidConfiguration measure!(wfs, tel)
     @test_throws InvalidConfiguration measure!(wfs, tel, Asterism([src, Source(band=:I, magnitude=0.0)]))
 
     flat_slopes = copy(measure!(wfs, tel, src))
-    @test wfs.state.calibrated
+    @test wfs.estimator.state.calibrated
     @test all(isfinite, flat_slopes)
-    @test all(>=(0.0), wfs.state.camera_frame)
+    @test all(>=(0.0), camera_frame(wfs))
     @test flat_slopes ≈ zero.(flat_slopes) atol=1e-10
 
     det = Detector(noise=NoiseNone(), binning=1)
     det_slopes = copy(measure!(wfs, tel, src, det))
     @test det_slopes ≈ flat_slopes atol=1e-10
-    @test size(output_frame(det)) == size(wfs.state.camera_frame)
+    @test size(output_frame(det)) == size(camera_frame(wfs))
     @test wfs_detector_image(wfs, det) === output_frame(det)
 
     zb = ZernikeBasis(tel, 5)
@@ -58,14 +58,14 @@ end
             IncidenceFluxNormalization())
         wfs = ZernikeWFS(tel; pupil_samples=8,
             normalization=normalization)
-        fill!(wfs.state.reference_signal_2d, 0.0)
-        valid = Array(wfs.state.valid_mask)
+        fill!(reference_signal(wfs), 0.0)
+        valid = Array(valid_subaperture_mask(wfs))
         expected = if normalization isa MeanValidFluxNormalization
             max(sum(frame[valid]) / count(valid), eps(eltype(frame)))
         else
             photon_rate = pupil_photon_rate_map(tel, src)
-            nominal = similar(wfs.state.nominal_frame)
-            sampled = similar(wfs.state.normalization_frame)
+            nominal = similar(wfs.front_end.propagation.nominal_frame)
+            sampled = similar(wfs.estimator.state.normalization_frame)
             sample_zernike_frame!(sampled, nominal, wfs, photon_rate, tel)
             sum(sampled[valid]) / count(valid) * normalization_scale
         end
@@ -135,7 +135,7 @@ end
             response_model=response)
         flat = copy(measure!(wfs, tel, src, det))
         @test all(iszero, flat)
-        @test wfs.state.calibration_signature ==
+        @test wfs_calibration_signature(wfs) ==
             detector_calibration_signature(det,
                 telescope_aperture_calibration_signature(tel,
                     calibration_signature(src)))
@@ -162,7 +162,7 @@ end
     @test all(iszero, flat)
     @test all(iszero, measure!(wfs, tel, src, detector;
         rng=MersenneTwister(707)))
-    signature = wfs.state.calibration_signature
+    signature = wfs_calibration_signature(wfs)
 
     prnu.gain_map[1, 1] = 0.2
     bad_pixels.mask[end, end] = true
@@ -184,7 +184,7 @@ end
     @test replacement_signature != signature
     @test all(iszero, measure!(wfs, tel, src, replacement;
         rng=MersenneTwister(708)))
-    @test wfs.state.calibration_signature == replacement_signature
+    @test wfs_calibration_signature(wfs) == replacement_signature
 
     fill!(tel.state.opd, 1e-8)
     opd_before_failure = copy(tel.state.opd)
@@ -227,9 +227,9 @@ end
         diffraction_padding=2)
     zernike_pupil_intensity!(full_zernike, full_tel, src)
     zernike_pupil_intensity!(attenuated_zernike, attenuated_tel, src)
-    full_zernike_rate = sum(full_zernike.state.pupil_intensity)
+    full_zernike_rate = sum(full_zernike.front_end.propagation.pupil_intensity)
     @test full_zernike_rate > 0
-    @test sum(attenuated_zernike.state.pupil_intensity) ≈
+    @test sum(attenuated_zernike.front_end.propagation.pupil_intensity) ≈
         transmission * full_zernike_rate rtol=1e-12
 
     for style in (ScalarCPUStyle(), KA_CPU_STYLE)
@@ -239,9 +239,9 @@ end
             diffraction_padding=2)
         curvature_intensity!(style, full_curvature, full_tel, src)
         curvature_intensity!(style, attenuated_curvature, attenuated_tel, src)
-        full_curvature_rate = sum(full_curvature.state.camera_frame)
+        full_curvature_rate = sum(camera_frame(full_curvature))
         @test full_curvature_rate > 0
-        @test sum(attenuated_curvature.state.camera_frame) ≈
+        @test sum(camera_frame(attenuated_curvature)) ≈
             transmission * full_curvature_rate rtol=1e-12
     end
 end
@@ -257,13 +257,13 @@ end
         wfs = CurvatureWFS(tel; pupil_samples=2,
             diffraction_padding=padding)
         curvature_intensity!(style, wfs, tel, src)
-        @test sum(wfs.state.intensity_stack) ≈
+        @test sum(wfs.front_end.propagation.intensity_stack) ≈
             expected_two_branch_rate atol=1e-10 rtol=1e-12
         if padding == 1
-            @test sum(wfs.state.camera_frame) ≈
+            @test sum(camera_frame(wfs)) ≈
                 expected_two_branch_rate atol=1e-10 rtol=1e-12
         else
-            @test 0 < sum(wfs.state.camera_frame) <= expected_two_branch_rate
+            @test 0 < sum(camera_frame(wfs)) <= expected_two_branch_rate
         end
     end
 end
@@ -273,21 +273,21 @@ end
     src = Source(band=:I, magnitude=0.0)
     wfs = CurvatureWFS(tel; pupil_samples=8, defocus_rms_nm=500.0)
 
-    @test size(wfs.state.camera_frame) == (16, 8)
+    @test size(camera_frame(wfs)) == (16, 8)
     @test length(slopes(wfs)) == 64
     @test_throws InvalidConfiguration measure!(wfs, tel)
     @test_throws InvalidConfiguration measure!(wfs, tel, Asterism([src, Source(band=:I, magnitude=0.0)]))
 
     flat_slopes = copy(measure!(wfs, tel, src))
-    @test wfs.state.calibrated
+    @test wfs.estimator.state.calibrated
     @test all(isfinite, flat_slopes)
-    @test all(>=(0.0), wfs.state.camera_frame)
+    @test all(>=(0.0), camera_frame(wfs))
     @test flat_slopes ≈ zero.(flat_slopes) atol=1e-10
 
     det = Detector(noise=NoiseNone(), binning=1)
     det_slopes = copy(measure!(wfs, tel, src, det))
     @test det_slopes ≈ flat_slopes atol=1e-10
-    @test size(output_frame(det)) == size(wfs.state.camera_frame)
+    @test size(output_frame(det)) == size(camera_frame(wfs))
     @test wfs_detector_image(wfs, det) === output_frame(det)
 
     zb = ZernikeBasis(tel, 5)
@@ -305,13 +305,13 @@ end
 
     counting = CurvatureWFS(tel; pupil_samples=8, defocus_rms_nm=500.0, readout_model=CurvatureCountingReadout())
     counting_flat = copy(measure!(counting, tel, src))
-    @test size(counting.state.camera_frame) == (2, 64)
+    @test size(camera_frame(counting)) == (2, 64)
     @test counting_flat ≈ zero.(counting_flat) atol=1e-10
     @test_throws InvalidConfiguration measure!(counting, tel, src, det)
     apd = APDDetector(integration_time=1.0, qe=1.0, gain=1.0, dark_count_rate=0.0, noise=NoiseNone())
     counting_apd = copy(measure!(counting, tel, src, apd))
     @test counting_apd ≈ counting_flat atol=1e-10
-    @test detector_export_metadata(apd).readout.output_size == size(counting.state.camera_frame)
+    @test detector_export_metadata(apd).readout.output_size == size(camera_frame(counting))
     spad = SPADArrayDetector(
         integration_time=1.0,
         noise=NoiseNone(),
@@ -319,7 +319,7 @@ end
     )
     counting_spad = copy(measure!(counting, tel, src, spad))
     @test counting_spad ≈ counting_flat atol=1e-10
-    @test detector_export_metadata(spad).readout.output_size == size(counting.state.camera_frame)
+    @test detector_export_metadata(spad).readout.output_size == size(camera_frame(counting))
     mkid = MKIDArrayDetector(
         integration_time=1.0,
         noise=NoiseNone(),
@@ -345,16 +345,16 @@ end
     imbalanced = CurvatureWFS(tel; pupil_samples=8, defocus_rms_nm=500.0, branch_response=response)
     imbalanced_flat = copy(measure!(imbalanced, tel, src))
     @test imbalanced_flat ≈ zero.(imbalanced_flat) atol=1e-10
-    plus_mean = mean(@view imbalanced.state.camera_frame[1:imbalanced.params.pupil_samples, :])
-    minus_mean = mean(@view imbalanced.state.camera_frame[imbalanced.params.pupil_samples+1:end, :])
+    plus_mean = mean(@view camera_frame(imbalanced)[1:imbalanced.params.pupil_samples, :])
+    minus_mean = mean(@view camera_frame(imbalanced)[imbalanced.params.pupil_samples+1:end, :])
     @test plus_mean > minus_mean
     @test_throws InvalidConfiguration CurvatureBranchResponse(plus_throughput=-1.0)
 
     oversampled = CurvatureWFS(tel; pupil_samples=8, readout_crop_resolution=16, readout_pixels_per_sample=2)
     oversampled_flat = copy(measure!(oversampled, tel, src))
-    @test size(oversampled.state.camera_frame) == (32, 16)
-    @test size(oversampled.state.frame_plus) == (16, 16)
-    @test size(oversampled.state.reduced_plus) == (8, 8)
+    @test size(camera_frame(oversampled)) == (32, 16)
+    @test size(oversampled.front_end.propagation.frame_plus) == (16, 16)
+    @test size(oversampled.estimator.state.reduced_plus) == (8, 8)
     @test oversampled_flat ≈ zero.(oversampled_flat) atol=1e-10
     @test_throws InvalidConfiguration CurvatureWFS(tel; pupil_samples=8, readout_crop_resolution=18, readout_pixels_per_sample=2)
 

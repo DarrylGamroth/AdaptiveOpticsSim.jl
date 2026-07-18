@@ -156,8 +156,10 @@ end
 function _require_finite_nonnegative_intensity(values::AbstractMatrix)
     isempty(values) && throw(InvalidConfiguration(
         "detector intensity input must not be empty"))
-    minimum_value = minimum(values)
-    maximum_value = maximum(values)
+    # Preparation is allowed to synchronize. Validating through a host view
+    # avoids backend-specific reduction compilation in this fallible setup
+    # path and keeps repeated prepared acquisition device resident.
+    minimum_value, maximum_value = extrema(host_array(values))
     isfinite(minimum_value) && isfinite(maximum_value) &&
         minimum_value >= zero(minimum_value) || throw(InvalidConfiguration(
             "detector intensity input values must be finite and nonnegative"))
