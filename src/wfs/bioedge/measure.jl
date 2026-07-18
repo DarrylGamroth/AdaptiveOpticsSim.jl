@@ -56,6 +56,7 @@ function bioedge_intensity_core!(out::AbstractMatrix{T}, wfs::BioEdgeWFS,
     opd_to_cycles = T(2) / wavelength(src)
     amp_scale = sqrt(T(photon_irradiance(src) *
         (tel.params.diameter / tel.params.resolution)^2))
+    reflectivity = pupil_reflectivity(tel)
 
     fill!(out, zero(T))
     profile = apply_lgs ? lgs_profile(src) : LGSProfileNone()
@@ -65,7 +66,7 @@ function bioedge_intensity_core!(out::AbstractMatrix{T}, wfs::BioEdgeWFS,
         fill!(wfs.front_end.propagation.field, zero(eltype(wfs.front_end.propagation.field)))
         amplitude_weight = modulation.amplitude_weights[p]
         @views @. wfs.front_end.propagation.field[ox+1:ox+n, oy+1:oy+n] =
-            amp_scale * amplitude_weight * sqrt($(pupil_reflectivity(tel))) *
+            amp_scale * amplitude_weight * sqrt(reflectivity) *
             modulation.phases[:, :, p] * cispi(opd_to_cycles * tel.state.opd)
         copyto!(wfs.front_end.propagation.focal_field, wfs.front_end.propagation.field)
         if !apply_lgs

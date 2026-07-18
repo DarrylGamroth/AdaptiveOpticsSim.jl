@@ -42,10 +42,12 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    temporal integration and acquisition. Then decompose every maintained
    WFS into a prepared optical front end, detector acquisition, and estimator.
    Shack-Hartmann now has an independent microlens array; Pyramid/BioEdge have
-   separate physical optics over shared modulation; and Zernike/Curvature now
+   separate physical optics over shared modulation; Zernike/Curvature now
    separate propagation, acquisition, and estimation, including independent or
-   packed Curvature detector planes. Next, let LiFT consume independently
-   acquired observations. Preserve CPU, CUDA, and AMDGPU correctness,
+   packed Curvature detector planes; and LiFT now consumes independently
+   acquired, explicitly normalized observations through a separately prepared
+   focal-plane model. Next, complete the cross-backend evidence and final Gate
+   0 API/physics review. Preserve CPU, CUDA, and AMDGPU correctness,
    residency, allocation, and latency evidence throughout the twelve-PR
    migration.
 2. Compose the Gate 0 optical ownership primitives into immutable shared

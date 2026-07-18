@@ -1696,4 +1696,9 @@ struct Detector{N<:NoiseModel,P<:DetectorParams,S<:DetectorState,BF<:BackgroundM
     background_map::BM
 end
 
+@inline readout_noise(::Detector{<:NoiseNone}) = 0.0
+@inline readout_noise(::Detector{<:NoisePhoton}) = 0.0
+@inline readout_noise(det::Detector{<:NoiseReadout}) = det.noise.sigma
+@inline readout_noise(det::Detector{<:NoisePhotonReadout}) = det.noise.sigma
+
 @inline backend(::Detector{<:Any,<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()

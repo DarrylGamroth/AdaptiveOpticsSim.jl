@@ -62,19 +62,23 @@ function lift_profile()
     apply_opd!(pupil, opd_map(tel))
     imaging = prepare_direct_imaging(tel, pupil, src; zero_padding=2)
     psf = copy(intensity_values(form_direct_image!(imaging)))
-    det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, psf_sampling=2, binning=1)
     diversity = zeros(Float64, size(tel.state.opd))
     t0 = time_ns()
-    lift = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=3, numerical=false)
+    forward = prepare_lift_forward_model(tel, src, basis;
+        diversity_opd=diversity, zero_padding=2)
+    lift = LiFT(forward; iterations=3, mode_ids=1:length(coeffs_true),
+        numerical=false)
     build_time_ns = Int(time_ns() - t0)
 
-    mode_ids = collect(1:length(coeffs_true))
+    observation = LiFTObservation(forward, psf)
     coeffs_fit = zeros(Float64, length(coeffs_true))
-    reconstruct!(coeffs_fit, lift, psf, mode_ids; coeffs0=nothing, check_convergence=true)
-    timing = runtime_timing(() -> reconstruct!(coeffs_fit, lift, psf, mode_ids;
+    reconstruct!(coeffs_fit, lift, observation;
+        coeffs0=nothing, check_convergence=true)
+    timing = runtime_timing(() -> reconstruct!(coeffs_fit, lift, observation;
             coeffs0=nothing, check_convergence=true);
         warmup=3, samples=20, gc_before=false)
-    alloc_bytes = _alloc_bytes(() -> reconstruct!(coeffs_fit, lift, psf, mode_ids;
+    alloc_bytes = _alloc_bytes(() -> reconstruct!(coeffs_fit, lift,
+        observation;
         coeffs0=nothing, check_convergence=true))
     coeff_error = maximum(abs.(coeffs_fit .- coeffs_true))
 

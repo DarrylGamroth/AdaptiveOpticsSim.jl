@@ -1343,11 +1343,17 @@ function compute_reference_actual(case::ReferenceCase)
         img_resolution = reference_lift_img_resolution(tel, det, compute_cfg)
         numerical = Bool(get(compute_cfg, "numerical", false))
         mode_ids = Int.(get(compute_cfg, "mode_ids", collect(1:size(basis, 3))))
-        flux_norm = Float64(get(compute_cfg, "flux_norm", 1.0))
+        rate_scale = Float64(get(compute_cfg, "flux_norm", 1.0))
         coeffs = Float64.(get(compute_cfg, "coefficients", zeros(length(mode_ids))))
-        lift = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=Int(get(compute_cfg, "iterations", 3)),
-            img_resolution=img_resolution, numerical=numerical)
-        H = lift_interaction_matrix(lift, coeffs, mode_ids; flux_norm=flux_norm)
+        forward = prepare_lift_forward_model(tel, src, basis;
+            diversity_opd=diversity, focal_resolution=img_resolution,
+            zero_padding=det.params.psf_sampling)
+        lift = LiFT(forward;
+            iterations=Int(get(compute_cfg, "iterations", 3)),
+            mode_ids=mode_ids,
+            numerical=numerical)
+        H = lift_interaction_matrix(lift, coeffs;
+            rate_scale=rate_scale)
         stack = Array{Float64}(undef, img_resolution, img_resolution, length(mode_ids))
         for (idx, _) in pairs(mode_ids)
             @views stack[:, :, idx] .= reshape(H[:, idx], img_resolution, img_resolution)

@@ -223,10 +223,11 @@ function pyramid_intensity_core!(::ScalarCPUStyle,
     opd_to_cycles = T(2) / wavelength(src)
     amp_scale = sqrt(T(photon_irradiance(src) *
         (tel.params.diameter / tel.params.resolution)^2))
+    reflectivity = pupil_reflectivity(tel)
 
     fill!(out, zero(T))
     fill!(wfs.front_end.propagation.field, zero(eltype(wfs.front_end.propagation.field)))
-    @views @. wfs.front_end.propagation.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * sqrt($(pupil_reflectivity(tel))) *
+    @views @. wfs.front_end.propagation.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * sqrt(reflectivity) *
         cispi(opd_to_cycles * tel.state.opd)
     for p in 1:modulation_point_count(modulation)
         copyto!(wfs.front_end.propagation.focal_field, wfs.front_end.propagation.field)
@@ -250,13 +251,14 @@ function pyramid_intensity_core!(::AcceleratorStyle,
     opd_to_cycles = T(2) / wavelength(src)
     amp_scale = sqrt(T(photon_irradiance(src) *
         (tel.params.diameter / tel.params.resolution)^2))
+    reflectivity = pupil_reflectivity(tel)
 
     fill!(out, zero(T))
     for p in 1:modulation_point_count(modulation)
         fill!(wfs.front_end.propagation.field, zero(eltype(wfs.front_end.propagation.field)))
         amplitude_weight = modulation.amplitude_weights[p]
         @views @. wfs.front_end.propagation.field[ox+1:ox+n, oy+1:oy+n] =
-            amp_scale * amplitude_weight * sqrt($(pupil_reflectivity(tel))) *
+            amp_scale * amplitude_weight * sqrt(reflectivity) *
             modulation.phases[:, :, p] * cispi(opd_to_cycles * tel.state.opd)
         copyto!(wfs.front_end.propagation.focal_field, wfs.front_end.propagation.field)
         accumulate_pyramid_focal_intensity!(out, wfs)
@@ -293,13 +295,14 @@ function pyramid_modulation_frame!(out::AbstractMatrix{T}, wfs::PyramidWFS, tel:
     modulation = pyramid_operating_modulation(wfs)
     amp_scale = sqrt(T(photon_irradiance(src) *
         (tel.params.diameter / tel.params.resolution)^2))
+    reflectivity = pupil_reflectivity(tel)
 
     fill!(out, zero(T))
     for p in 1:modulation_point_count(modulation)
         fill!(wfs.front_end.propagation.field, zero(eltype(wfs.front_end.propagation.field)))
         amplitude_weight = modulation.amplitude_weights[p]
         @views @. wfs.front_end.propagation.field[ox+1:ox+n, oy+1:oy+n] =
-            amp_scale * amplitude_weight * sqrt($(pupil_reflectivity(tel))) *
+            amp_scale * amplitude_weight * sqrt(reflectivity) *
             modulation.phases[:, :, p] * cispi(opd_to_cycles * tel.state.opd)
         copyto!(wfs.front_end.propagation.focal_field, wfs.front_end.propagation.field)
         if wfs.front_end.phase_mask.psf_centering

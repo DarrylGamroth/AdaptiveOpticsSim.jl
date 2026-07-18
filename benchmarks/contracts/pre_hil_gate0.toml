@@ -129,3 +129,14 @@ pupil_samples = 6
 rng_seed = 102
 absolute_p99_ns = 10000000
 max_alloc_bytes = 0
+
+[[cards]]
+id = "G0-PERF-11"
+label = "prepared LiFT analytic reconstruction"
+kind = "lift_reconstruct"
+resolution = 24
+n_modes = 4
+iterations = 2
+rng_seed = 103
+absolute_p99_ns = 20000000
+max_alloc_bytes = 0

@@ -14,11 +14,13 @@ function main(; resolution::Int=24, zero_padding::Int=2)
     imaging = prepare_direct_imaging(tel, pupil, src;
         zero_padding=zero_padding)
     image = copy(intensity_values(form_direct_image!(imaging)))
-    det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, psf_sampling=zero_padding, binning=1)
     diversity = zeros(eltype(tel.state.opd), size(tel.state.opd))
-    lift = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=3, numerical=false)
-    coeffs_fit = AdaptiveOpticsSim.reconstruct(lift, image,
-        collect(1:length(coeffs_true)); coeffs0=zeros(4))
+    forward = prepare_lift_forward_model(tel, src, basis;
+        diversity_opd=diversity, zero_padding=zero_padding)
+    lift = LiFT(forward; iterations=3, numerical=false)
+    observation = LiFTObservation(forward, image)
+    coeffs_fit = AdaptiveOpticsSim.reconstruct(lift, observation;
+        coeffs0=zeros(4))
 
     @info "LiFT tutorial complete" n_modes=length(coeffs_true)
     return (

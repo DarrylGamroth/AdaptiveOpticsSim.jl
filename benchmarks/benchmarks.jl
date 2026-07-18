@@ -92,47 +92,50 @@ end
 function bench_lift(numerical::Bool)
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
-    det = Detector(noise=NoiseNone(), psf_sampling=1)
     basis = rand(16, 16, 6)
     diversity = zeros(16, 16)
-    lift = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=1,
-        img_resolution=16, numerical=numerical)
+    forward = prepare_lift_forward_model(tel, src, basis;
+        diversity_opd=diversity, focal_resolution=16)
+    lift = LiFT(forward; iterations=1, mode_ids=1:3,
+        numerical=numerical)
     coeffs = zeros(6)
-    return @benchmark AdaptiveOpticsSim.lift_interaction_matrix($lift, $coeffs, 1:3)
+    return @benchmark AdaptiveOpticsSim.lift_interaction_matrix($lift, $coeffs)
 end
 
 function bench_lift_inplace(numerical::Bool)
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
-    det = Detector(noise=NoiseNone(), psf_sampling=1)
     basis = rand(16, 16, 6)
     diversity = zeros(16, 16)
-    lift = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=1,
-        img_resolution=16, numerical=numerical)
+    forward = prepare_lift_forward_model(tel, src, basis;
+        diversity_opd=diversity, focal_resolution=16)
+    lift = LiFT(forward; iterations=1, mode_ids=1:3,
+        numerical=numerical)
     coeffs = zeros(6)
-    mode_ids = 1:3
-    H = @view lift.state.H_buffer[:, 1:length(mode_ids)]
-    return @benchmark AdaptiveOpticsSim.lift_interaction_matrix!($H, $lift, $coeffs, $mode_ids)
+    H = lift.state.H_buffer
+    return @benchmark AdaptiveOpticsSim.lift_interaction_matrix!($H, $lift, $coeffs)
 end
 
 function alloc_checks()
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
-    det = Detector(noise=NoiseNone(), psf_sampling=1)
     basis = rand(16, 16, 6)
     diversity = zeros(16, 16)
-    lift_a = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=1,
-        img_resolution=16, numerical=false)
-    lift_n = LiFT(tel, src, basis, det; diversity_opd=diversity, iterations=1,
-        img_resolution=16, numerical=true)
+    forward_a = prepare_lift_forward_model(tel, src, basis;
+        diversity_opd=diversity, focal_resolution=16)
+    forward_n = prepare_lift_forward_model(tel, src, basis;
+        diversity_opd=diversity, focal_resolution=16)
+    lift_a = LiFT(forward_a; iterations=1, mode_ids=1:3,
+        numerical=false)
+    lift_n = LiFT(forward_n; iterations=1, mode_ids=1:3,
+        numerical=true)
     coeffs = zeros(6)
-    mode_ids = 1:3
-    H_a = @view lift_a.state.H_buffer[:, 1:length(mode_ids)]
-    H_n = @view lift_n.state.H_buffer[:, 1:length(mode_ids)]
-    AdaptiveOpticsSim.lift_interaction_matrix!(H_a, lift_a, coeffs, mode_ids)
-    AdaptiveOpticsSim.lift_interaction_matrix!(H_n, lift_n, coeffs, mode_ids)
-    alloc_lift_a = @allocated AdaptiveOpticsSim.lift_interaction_matrix!(H_a, lift_a, coeffs, mode_ids)
-    alloc_lift_n = @allocated AdaptiveOpticsSim.lift_interaction_matrix!(H_n, lift_n, coeffs, mode_ids)
+    H_a = lift_a.state.H_buffer
+    H_n = lift_n.state.H_buffer
+    AdaptiveOpticsSim.lift_interaction_matrix!(H_a, lift_a, coeffs)
+    AdaptiveOpticsSim.lift_interaction_matrix!(H_n, lift_n, coeffs)
+    alloc_lift_a = @allocated AdaptiveOpticsSim.lift_interaction_matrix!(H_a, lift_a, coeffs)
+    alloc_lift_n = @allocated AdaptiveOpticsSim.lift_interaction_matrix!(H_n, lift_n, coeffs)
 
     tel_r = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel_r; n_act=4)
