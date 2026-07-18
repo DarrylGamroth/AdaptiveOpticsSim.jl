@@ -512,6 +512,23 @@ function write_gate0_artifact(path::AbstractString, artifact)
     return nothing
 end
 
+function select_gate0_cards(cards::Tuple)
+    raw_ids = strip(get(ENV, "AOS_GATE0_CARD_IDS", ""))
+    isempty(raw_ids) && return cards, "all"
+
+    requested_ids = strip.(split(raw_ids, ','))
+    any(isempty, requested_ids) && error(
+        "AOS_GATE0_CARD_IDS must be a comma-separated list of nonempty card IDs")
+    length(unique(requested_ids)) == length(requested_ids) || error(
+        "AOS_GATE0_CARD_IDS must not contain duplicate card IDs")
+
+    cards_by_id = Dict(card.id => card for card in cards)
+    unknown_ids = filter(id -> !haskey(cards_by_id, id), requested_ids)
+    isempty(unknown_ids) || error(
+        "AOS_GATE0_CARD_IDS contains unknown card IDs: $(join(unknown_ids, ", "))")
+    return Tuple(cards_by_id[id] for id in requested_ids), "explicit"
+end
+
 function run_gate0_latency_benchmarks()
     configure_gate0_benchmark!()
     contract = TOML.parsefile(GATE0_CONTRACT_PATH)
@@ -531,7 +548,8 @@ function run_gate0_latency_benchmarks()
     significant_figures = Int(contract["histogram_significant_figures"])
     relative_factor = Float64(contract["relative_p99_factor"])
     baselines = load_gate0_baselines(GATE0_BASELINE_PATH)
-    cards = Tuple(make_gate0_card(raw) for raw in contract["cards"])
+    all_cards = Tuple(make_gate0_card(raw) for raw in contract["cards"])
+    cards, card_selection = select_gate0_cards(all_cards)
     results = Vector{Dict{String,Any}}()
     all_gates_passed = true
 
@@ -541,6 +559,8 @@ function run_gate0_latency_benchmarks()
     println("  runs: ", runs_count)
     println("  warmup_operations: ", warmup)
     println("  p99_relative_factor: ", relative_factor)
+    println("  card_selection: ", card_selection)
+    println("  card_ids: ", join((card.id for card in cards), ","))
     if !p99_gate_supported
         println("  p99_gates: skipped (requires at least ",
             minimum_p99_samples, " samples per run)")
@@ -598,6 +618,8 @@ function run_gate0_latency_benchmarks()
         "configured_samples_per_run" => samples,
         "configured_runs" => runs_count,
         "configured_warmup_operations" => warmup,
+        "configured_card_selection" => card_selection,
+        "configured_card_ids" => [card.id for card in cards],
         "minimum_samples_for_p99_gate" => minimum_p99_samples,
         "p99_gate_supported" => p99_gate_supported,
         "contract" => contract["contract"],

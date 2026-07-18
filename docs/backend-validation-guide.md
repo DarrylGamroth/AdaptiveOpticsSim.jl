@@ -180,10 +180,17 @@ julia --project=benchmarks benchmarks/benchmark_cpu_hotpath_cards.jl
 julia --project=benchmarks benchmarks/benchmark_control_operators.jl
 julia --project=benchmarks benchmarks/benchmark_loop_order_simd.jl
 julia --project=benchmarks benchmarks/benchmark_detector_hil_latency.jl
+julia --project=benchmarks benchmarks/benchmark_gate0_latency.jl
 
 julia --project=benchmarks/amdgpu -e 'using Pkg; Pkg.instantiate()'
 julia --project=benchmarks/amdgpu benchmarks/benchmark_amdgpu.jl
 ```
+
+`benchmark_gate0_latency.jl` accepts `AOS_GATE0_CARD_IDS` as a comma-separated,
+predeclared subset. The artifact records the explicit selection mode and the
+ordered card IDs. Use this for incremental evidence owned by one PR so
+unrelated predecessor-card host jitter does not invalidate the new cards; do
+not omit an affected card after observing its result.
 
 `benchmark_detector_hil_latency.jl` is the conventional-detector latency card
 suite. It covers CMOS, CMOS with explicit presampling response and IPC, CCD,
