@@ -30,6 +30,10 @@ end
 
 struct UnsupportedPreparedPathModel end
 struct UnsupportedPreparedAcquisitionModel end
+struct InvalidPreparedPathModel end
+struct InvalidPreparedAcquisitionModel end
+
+struct UnsupportedPlantSource <: AbstractSource end
 
 for model in (
     DirectSciencePathModel,
@@ -38,10 +42,30 @@ for model in (
     ContractWFSPlantAcquisitionModel,
     UnsupportedPreparedPathModel,
     UnsupportedPreparedAcquisitionModel,
+    InvalidPreparedPathModel,
+    InvalidPreparedAcquisitionModel,
 )
     @eval AdaptiveOpticsSim.plant_model_definition_style(
         ::Type{<:$model},
     ) = ColdPlantModelDefinition()
+end
+
+function AdaptiveOpticsSim.prepare_path_executor(
+    ::InvalidPreparedPathModel,
+    ::OpticalPathDefinition,
+    ::AbstractSource,
+    ::Telescope,
+    ::PlantPreparationTestAtmosphere,
+)
+    return nothing
+end
+
+function AdaptiveOpticsSim.prepare_acquisition_owner(
+    ::InvalidPreparedAcquisitionModel,
+    ::AcquisitionDefinition,
+    ::PreparedPathExecutor,
+)
+    return nothing
 end
 
 function AdaptiveOpticsSim.prepare_path_executor(
@@ -179,6 +203,23 @@ function captured_plant_preparation_error(f)
     return nothing
 end
 
+function plant_preparation_intensity_map(values::AbstractArray;
+    kind=FocalPlane(), coordinate_domain=AngularCoordinates(),
+    spectral=MonochromaticChannel(convert(eltype(values), 1.0e-6)),
+    normalization=PhotonRateNormalization(),
+    spatial_measure=CellIntegratedMeasure(),
+    coherence=IncoherentIntensityAddition())
+    sampling = (one(eltype(values)), one(eltype(values)))
+    metadata = OpticalPlaneMetadata(kind, values;
+        coordinate_domain=coordinate_domain,
+        sampling=sampling,
+        spectral=spectral,
+        normalization=normalization,
+        spatial_measure=spatial_measure,
+        coherence=coherence)
+    return IntensityMap(metadata, values)
+end
+
 function assert_plant_preparation_error(f, component::Symbol,
     reason::Symbol)
     error = captured_plant_preparation_error(f)
@@ -269,6 +310,75 @@ end
     @test isequal(equivalent_key, science_path.key)
     @test hash(equivalent_key) == hash(science_path.key)
 
+    sodium_profile = T[80_000 90_000 100_000; 0.2 0.6 0.2]
+    lgs_source = LGSSource(wavelength=T(589e-9),
+        photon_irradiance=T(2), na_profile=sodium_profile,
+        laser_coordinates=(T(1), T(-0.5)), elongation_factor=T(1.2),
+        fwhm_spot_up=T(0.8), T=T)
+    lgs_geometry = AdaptiveOpticsSim.path_source_geometry_key(lgs_source)
+    @test lgs_geometry.kind === LGSSource
+    @test lgs_geometry.sodium_profile == sodium_profile
+    @test lgs_geometry.sodium_profile !== lgs_source.params.na_profile
+    @test only(AdaptiveOpticsSim.path_source_spectral_key(
+        lgs_source)).wavelength_m == wavelength(lgs_source)
+    @test AdaptiveOpticsSim.path_source_radiometry_key(
+        lgs_source).value == source_radiometric_value(lgs_source)
+
+    spectral_source = with_spectrum(science_source, SpectralBundle(
+        T[0.75e-6, 0.85e-6], T[0.4, 0.6]))
+    companion_source = Source(band=:custom, wavelength=wavelength(science_source),
+        photon_irradiance=T(2), coordinates=(T(0.2), T(30)), T=T)
+    asterism_source = Asterism([science_source, companion_source])
+    extended_source = with_extended_source(science_source,
+        PointCloudSourceModel([(T(0), T(0)), (T(0.1), T(-0.05))],
+            T[0.25, 0.75]))
+
+    @test AdaptiveOpticsSim.path_source_geometry_key(spectral_source) ==
+        AdaptiveOpticsSim.path_source_geometry_key(science_source)
+    @test length(AdaptiveOpticsSim.path_source_spectral_key(
+        spectral_source)) == 2
+    @test AdaptiveOpticsSim.path_source_radiometry_key(spectral_source) ==
+        AdaptiveOpticsSim.path_source_radiometry_key(science_source)
+    @test length(AdaptiveOpticsSim.path_source_geometry_key(
+        asterism_source)) == 2
+    @test length(AdaptiveOpticsSim.path_source_spectral_key(
+        asterism_source)) == 2
+    @test length(AdaptiveOpticsSim.path_source_radiometry_key(
+        asterism_source)) == 2
+    @test length(AdaptiveOpticsSim.path_source_geometry_key(
+        extended_source)) == 2
+    @test AdaptiveOpticsSim.path_source_spectral_key(extended_source) ==
+        AdaptiveOpticsSim.path_source_spectral_key(science_source)
+    @test length(AdaptiveOpticsSim.path_source_radiometry_key(
+        extended_source)) == 2
+
+    unsupported_source = UnsupportedPlantSource()
+    for (key_function, reason) in (
+        (AdaptiveOpticsSim.path_source_geometry_key, :source_geometry),
+        (AdaptiveOpticsSim.path_source_spectral_key, :spectral_sampling),
+        (AdaptiveOpticsSim.path_source_radiometry_key, :radiometry),
+    )
+        assert_plant_preparation_error(
+            () -> key_function(unsupported_source), :path, reason)
+    end
+
+    for (id, composite_source, revision) in (
+        (:spectral_science, spectral_source, UInt(11)),
+        (:asterism_science, asterism_source, UInt(12)),
+    )
+        composite_definition = OpticalPathDefinition(id, composite_source,
+            DirectSciencePathModel(2, revision))
+        composite_path = prepare_path_executor(composite_definition,
+            telescope, atmosphere)
+        @test execute_path!(composite_path) === composite_path.result
+        assert_plant_preparation_error(
+            () -> execute_path!(composite_path.result,
+                PupilFunction(telescope), composite_path.execution),
+            :path,
+            :prepared_binding,
+        )
+    end
+
     foreign_values = ContractDeviceArray(
         zeros(Complex{T}, size(science_path.input.opd)),
         ContractPlaneDevice(17),
@@ -298,6 +408,102 @@ end
         :path,
         :device,
     )
+
+    prepared_test_path = (input, result; execution=nothing) ->
+        PreparedPathExecutor(
+            science_definition,
+            science_path.source,
+            telescope,
+            input,
+            result,
+            execution;
+            optical_model=science_path.key.optical_model,
+            sampling_contract=science_path.key.sampling_contract,
+            propagation_model=science_path.key.propagation_model,
+            model_revisions=science_path.key.revisions.model,
+        )
+
+    invalid_outputs = (
+        (plant_preparation_intensity_map(zeros(T, 2, 2);
+            kind=PupilPlane(), coordinate_domain=MetricCoordinates()),
+            :output_plane),
+        (plant_preparation_intensity_map(zeros(T, 2, 2);
+            normalization=DimensionlessNormalization()), :radiometry),
+        (plant_preparation_intensity_map(zeros(T, 2, 2);
+            spatial_measure=PointSampledMeasure()), :radiometry),
+        (plant_preparation_intensity_map(zeros(T, 2, 2);
+            coherence=CoherentFieldCombination()), :radiometry),
+        (plant_preparation_intensity_map(zeros(T, 2, 2);
+            spectral=AchromaticSpectralCoordinate()), :spectral_sampling),
+    )
+    for (invalid_output, reason) in invalid_outputs
+        assert_plant_preparation_error(
+            () -> prepared_test_path(science_path.input, invalid_output),
+            :path,
+            reason,
+        )
+    end
+
+    density_integrated_result = plant_preparation_intensity_map(
+        zeros(T, 2, 2);
+        spectral=IntegratedSpectralChannel(:test_passband),
+        spatial_measure=SpatialDensityMeasure())
+    for reusable_result in (
+        (science_path.result,),
+        [science_path.result],
+        OpticalProductBundle(science_path.result),
+        density_integrated_result,
+    )
+        reusable_path = prepared_test_path(science_path.input,
+            reusable_result)
+        @test reusable_path.result === reusable_result
+    end
+
+    assert_plant_preparation_error(
+        () -> prepared_test_path(science_path.input, IntensityMap[]),
+        :path,
+        :output_plane,
+    )
+    assert_plant_preparation_error(
+        () -> prepared_test_path(science_path.input, ()),
+        :path,
+        :output_plane,
+    )
+    assert_plant_preparation_error(
+        () -> prepared_test_path(science_path.input, nothing),
+        :path,
+        :output_plane,
+    )
+    assert_plant_preparation_error(
+        () -> prepared_test_path((), science_path.result),
+        :path,
+        :input_plane,
+    )
+    assert_plant_preparation_error(
+        () -> prepared_test_path(nothing, science_path.result),
+        :path,
+        :input_plane,
+    )
+
+    pupil_field = ElectricField(science_path.input, science_path.source)
+    tuple_input = (science_path.input, pupil_field)
+    @test prepared_test_path(tuple_input, science_path.result).input ===
+        tuple_input
+
+    unbound_result = IntensityMap(science_path.result.metadata,
+        copy(science_path.result.values))
+    assert_plant_preparation_error(
+        () -> execute_path!(unbound_result, science_path.input,
+            science_path.execution),
+        :path,
+        :prepared_binding,
+    )
+    assert_plant_preparation_error(
+        () -> execute_path!(science_path.result, science_path.input, nothing),
+        :path,
+        :unsupported_execution,
+    )
+
     @test fast.path_result === science_path.result
     @test slow.path_result === science_path.result
     @test fast.path_key === science_path.key
@@ -328,6 +534,77 @@ end
     @test acquisition_measurement(wfs).storage[1] ≈
         T(0.5) * sum(wfs_path.result.values) atol=T(1e-12) rtol=T(1e-12)
     @test wfs_path.result.values == wfs_rate_before
+
+    detector = fast.execution.detector
+    detector_frame = output_frame(detector)
+    explicit_observation = similar(detector_frame)
+    fill!(explicit_observation, zero(T))
+    explicit_frame_execution = FrameAcquisitionExecution(detector,
+        science_path.result, explicit_observation)
+    explicit_frame_products = AcquisitionProducts(explicit_observation)
+    @test execute_acquisition!(explicit_frame_products, science_path.result,
+        explicit_frame_execution, Xoshiro(16)) === explicit_frame_products
+
+    invalid_observations = (
+        (zeros(T, 1, 1), :shape),
+        (zeros(Float32, size(detector_frame)), :numeric_type),
+        (ContractDeviceArray(zeros(T, size(detector_frame)),
+            ContractPlaneDevice(18)), :device),
+        (detector_frame, :ownership),
+    )
+    for (invalid_observation, reason) in invalid_observations
+        assert_plant_preparation_error(
+            () -> FrameAcquisitionExecution(detector, science_path.result,
+                invalid_observation),
+            :acquisition,
+            reason,
+        )
+    end
+
+    assert_plant_preparation_error(
+        () -> execute_acquisition!(
+            AcquisitionProducts(similar(explicit_observation)),
+            science_path.result,
+            explicit_frame_execution,
+            Xoshiro(17),
+        ),
+        :acquisition,
+        :prepared_binding,
+    )
+
+    observation_only_execution = WFSAcquisitionExecution(
+        wfs.execution.acquisition, wfs.execution.observation)
+    observation_only_products = AcquisitionProducts(
+        wfs.execution.observation)
+    @test execute_acquisition!(observation_only_products, wfs.path_result,
+        observation_only_execution, Xoshiro(18)) === observation_only_products
+    assert_plant_preparation_error(
+        () -> execute_acquisition!(
+            AcquisitionProducts(deepcopy(wfs.execution.observation)),
+            wfs.path_result,
+            observation_only_execution,
+            Xoshiro(19),
+        ),
+        :acquisition,
+        :prepared_binding,
+    )
+    assert_plant_preparation_error(
+        () -> execute_acquisition!(
+            AcquisitionProducts(wfs.products.observation,
+                deepcopy(wfs.products.measurement)),
+            wfs.path_result,
+            wfs.execution,
+            Xoshiro(20),
+        ),
+        :acquisition,
+        :prepared_binding,
+    )
+    assert_plant_preparation_error(
+        () -> execute_acquisition!(fast.products, fast.path_result, nothing,
+            Xoshiro(21)),
+        :acquisition,
+        :unsupported_execution,
+    )
 
     if coverage_instrumented()
         @test_skip "prepared-plant allocation assertions are disabled under coverage instrumentation"
@@ -362,6 +639,32 @@ end
         @test science_path.result.values == result_before_rejection
     end
 
+    additional_mismatches = (
+        (() -> require_path_result(science_path;
+            spectral_sampling=((wavelength_m=T(1), weight=T(1)),)),
+            :spectral_sampling),
+        (() -> require_path_result(science_path;
+            optical_model=:different_model), :optical_model),
+        (() -> require_path_result(science_path;
+            sampling_contract=:different_sampling), :sampling_contract),
+        (() -> require_path_result(science_path;
+            propagation_model=:different_propagation), :propagation_model),
+        (() -> require_path_result(science_path;
+            output_plane=(kind=:different_plane,)), :output_plane),
+    )
+    for (requirement, reason) in additional_mismatches
+        assert_plant_preparation_error(requirement, :acquisition, reason)
+    end
+
+    wrong_path_acquisition = AcquisitionDefinition(:wrong_path_binding,
+        :wfs, FramePlantAcquisitionModel(T(0.5), MatchingPlantPath()))
+    assert_plant_preparation_error(
+        () -> PreparedAcquisitionOwner(wrong_path_acquisition, science_path,
+            fast.execution, fast.products),
+        :acquisition,
+        :unknown_path,
+    )
+
     assert_plant_preparation_error(
         () -> prepared_path(plant, :missing),
         :path,
@@ -387,6 +690,21 @@ end
             science_path),
         :acquisition,
         :unsupported_model,
+    )
+
+    invalid_path = OpticalPathDefinition(:invalid_preparation, science_source,
+        InvalidPreparedPathModel())
+    assert_plant_preparation_error(
+        () -> prepare_path_executor(invalid_path, telescope, atmosphere),
+        :path,
+        :invalid_preparation,
+    )
+    invalid_acquisition = AcquisitionDefinition(:invalid_preparation,
+        :science, InvalidPreparedAcquisitionModel())
+    assert_plant_preparation_error(
+        () -> prepare_acquisition_owner(invalid_acquisition, science_path),
+        :acquisition,
+        :invalid_preparation,
     )
 
     stale_result = copy(science_path.result.values)
