@@ -10,10 +10,10 @@ const MISREGISTRATION_AD_FIELDS = (
 
 function _compute_meta_sensitivity_matrix_ad(tel::Telescope, dm::DeformableMirror, wfs::AbstractWFS,
     basis::AbstractMatrix; source=nothing,
-    misregistration_zero::Misregistration=Misregistration(T=eltype(tel.state.opd)),
+    misregistration_zero::Misregistration=Misregistration(T=eltype(pupil_reflectivity(tel))),
     epsilon::Misregistration=Misregistration(shift_x=1e-3, shift_y=1e-3, rotation_deg=1e-3, radial_scaling=1e-3,
-        tangential_scaling=1e-3, T=eltype(tel.state.opd)),
-    direction_epsilon::Real=sqrt(eps(eltype(tel.state.opd))),
+        tangential_scaling=1e-3, T=eltype(pupil_reflectivity(tel))),
+    direction_epsilon::Real=sqrt(eps(eltype(pupil_reflectivity(tel)))),
     n_mis_reg::Int=3, field_order=collect(MISREG_FIELDS),
     amplitude::Real=1e-9, cache_path::Union{Nothing,String}=nothing,
     save_sensitivity::Bool=true, recompute_sensitivity::Bool=false,
@@ -27,7 +27,8 @@ function _compute_meta_sensitivity_matrix_ad(tel::Telescope, dm::DeformableMirro
             "AD sensitivity supports DM misregistration only; use sensitivity=:finite_difference for WFS misregistration"))
     _require_cpu_ad_probe(tel, dm, wfs)
 
-    T = eltype(tel.state.opd)
+    T = eltype(pupil_reflectivity(tel))
+    pupil = PupilFunction(tel; T=T)
     fields = Tuple(collect(field_order)[1:min(n_mis_reg, length(field_order))])
     _validate_misregistration_ad_field_order(fields)
 
@@ -42,12 +43,14 @@ function _compute_meta_sensitivity_matrix_ad(tel::Telescope, dm::DeformableMirro
 
     dm0 = DeformableMirror(tel; topology=dm_topology, influence_model=dm_model,
         misregistration=misregistration_zero, T=T)
-    calib0 = _interaction_matrix_for_sensitivity(dm0, wfs, tel, basis, source, amplitude)
+    calib0 = _interaction_matrix_for_sensitivity(dm0, wfs, pupil, basis,
+        source, amplitude)
     calib0_control_matrix = ControlMatrix(calib0.matrix)
 
     d_modes = _gaussian_dm_mode_parameter_jacobians(tel, dm0, fields)
     base_modes = sampled_influence_matrix(dm0)
-    meta = _wfs_directional_meta_sensitivity(tel, wfs, basis, source, calib0.matrix,
+    meta = _wfs_directional_meta_sensitivity(pupil, wfs, basis, source,
+        calib0.matrix,
         base_modes, d_modes, T(amplitude), T(direction_epsilon))
 
     meta_control_matrix = ControlMatrix(meta)
@@ -63,7 +66,8 @@ function compute_meta_sensitivity_matrix_ad_probe(args...; kwargs...)
 end
 
 function _require_cpu_ad_probe(tel, dm, wfs=nothing)
-    _is_cpu_array(tel.state.opd) && _is_cpu_array(pupil_mask(tel)) && _is_cpu_array(dm.state.modes) ||
+    _is_cpu_array(pupil_reflectivity(tel)) &&
+        _is_cpu_array(pupil_mask(tel)) && _is_cpu_array(dm.state.modes) ||
         throw(UnsupportedAlgorithm(
             "ForwardDiff AD sensitivity is CPU-only; use sensitivity=:finite_difference for accelerator-backed arrays"))
     if wfs !== nothing
@@ -103,18 +107,21 @@ function _validate_misregistration_ad_field_order(fields::Tuple)
     return fields
 end
 
-function _interaction_matrix_for_sensitivity(dm, wfs, tel, basis, source, amplitude)
+function _interaction_matrix_for_sensitivity(dm, wfs,
+    pupil::PupilFunction, basis, source, amplitude)
     if source === nothing
-        return interaction_matrix(dm, wfs, tel, basis; amplitude=amplitude)
+        return interaction_matrix(dm, wfs, pupil, basis;
+            amplitude=amplitude)
     end
-    return interaction_matrix(dm, wfs, tel, basis, source; amplitude=amplitude)
+    return interaction_matrix(dm, wfs, pupil, basis, source;
+        amplitude=amplitude)
 end
 
-function _measure_for_sensitivity!(wfs, tel, source)
+function _measure_for_sensitivity!(wfs, pupil::PupilFunction, source)
     if source === nothing
-        return _measure_for_calibration!(wfs, tel, nothing)
+        return _measure_for_calibration!(wfs, pupil, nothing)
     end
-    return _measure_for_calibration!(wfs, tel, source)
+    return _measure_for_calibration!(wfs, pupil, source)
 end
 
 function _gaussian_dm_mode_parameter_jacobians(tel, dm, fields::Tuple)
@@ -135,19 +142,20 @@ function _gaussian_dm_mode_parameter_jacobians(tel, dm, fields::Tuple)
     return out
 end
 
-function _wfs_directional_meta_sensitivity(tel, wfs, basis, source, calib0::AbstractMatrix{T},
+function _wfs_directional_meta_sensitivity(pupil::PupilFunction, wfs,
+    basis, source, calib0::AbstractMatrix{T},
     modes::AbstractMatrix{T}, d_modes::AbstractVector, amplitude::T,
     direction_epsilon::T) where {T<:AbstractFloat}
     n_slopes, n_modes = size(calib0)
     n_elements = size(modes, 1)
     meta = zeros(T, length(calib0), length(d_modes))
-    base_opd = similar(tel.state.opd)
-    d_opd = similar(tel.state.opd)
+    base_opd = similar(pupil.opd)
+    d_opd = similar(pupil.opd)
     base_vec = reshape(base_opd, :)
     d_vec = reshape(d_opd, :)
     slopes_p = Vector{T}(undef, n_slopes)
     slopes_m = Vector{T}(undef, n_slopes)
-    saved_opd = copy(tel.state.opd)
+    saved_opd = copy(pupil.opd)
     try
         @inbounds for mode_index in 1:n_modes
             command = @view basis[:, mode_index]
@@ -157,12 +165,12 @@ function _wfs_directional_meta_sensitivity(tel, wfs, basis, source, calib0::Abst
                 mul!(d_vec, d_modes[field_index], command)
                 d_vec .*= amplitude
 
-                @. tel.state.opd = base_opd + direction_epsilon * d_opd
-                _measure_for_sensitivity!(wfs, tel, source)
+                @. pupil.opd = base_opd + direction_epsilon * d_opd
+                _measure_for_sensitivity!(wfs, pupil, source)
                 copyto!(slopes_p, slopes(wfs))
 
-                @. tel.state.opd = base_opd - direction_epsilon * d_opd
-                _measure_for_sensitivity!(wfs, tel, source)
+                @. pupil.opd = base_opd - direction_epsilon * d_opd
+                _measure_for_sensitivity!(wfs, pupil, source)
                 copyto!(slopes_m, slopes(wfs))
 
                 offset = (mode_index - 1) * n_slopes
@@ -171,9 +179,10 @@ function _wfs_directional_meta_sensitivity(tel, wfs, basis, source, calib0::Abst
             end
         end
     finally
-        copyto!(tel.state.opd, saved_opd)
+        copyto!(pupil.opd, saved_opd)
     end
-    n_elements == length(base_vec) || throw(DimensionMismatchError("DM modes do not match telescope OPD"))
+    n_elements == length(base_vec) || throw(DimensionMismatchError(
+        "DM modes do not match the calibration pupil dimensions"))
     return meta
 end
 

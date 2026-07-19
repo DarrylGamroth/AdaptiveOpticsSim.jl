@@ -594,45 +594,46 @@ function prepare_lift_forward_model(tel::Telescope,
     size(diversity_opd) == (resolution, resolution) || throw(
         DimensionMismatchError(
             "LiFT diversity OPD must match telescope resolution"))
-    eltype(opd_map(tel)) === T || throw(InvalidConfiguration(
+    prototype = pupil_reflectivity(tel)
+    eltype(prototype) === T || throw(InvalidConfiguration(
         "LiFT telescope and basis must use the same numeric type"))
     typeof(backend(basis)) === typeof(backend(tel)) || throw(
         InvalidConfiguration(
             "LiFT telescope and basis must use the same array backend"))
-    plane_device(basis) == plane_device(opd_map(tel)) || throw(
+    plane_device(basis) == plane_device(prototype) || throw(
         InvalidConfiguration(
             "LiFT telescope and basis must occupy the same physical device"))
     typeof(backend(diversity_opd)) === typeof(backend(tel)) || throw(
         InvalidConfiguration(
             "LiFT diversity and telescope must use the same array backend"))
-    plane_device(diversity_opd) == plane_device(opd_map(tel)) || throw(
+    plane_device(diversity_opd) == plane_device(prototype) || throw(
         InvalidConfiguration(
             "LiFT diversity and telescope must occupy the same physical device"))
     _lift_output_dimensions(focal_resolution, mapping)
-    _require_lift_mapping_backend(mapping, opd_map(tel))
+    _require_lift_mapping_backend(mapping, prototype)
 
     pupil = copy(pupil_mask(tel))
     reflectivity = pupil_reflectivity(tel)
-    amplitude = similar(opd_map(tel), T, resolution, resolution)
+    amplitude = similar(prototype, T, resolution, resolution)
     @. amplitude = sqrt(reflectivity)
     owned_basis = copy(basis)
-    diversity = _copy_lift_array(opd_map(tel), diversity_opd, T)
-    kernel = _prepare_lift_object_kernel(object_kernel, opd_map(tel), T)
+    diversity = _copy_lift_array(prototype, diversity_opd, T)
+    kernel = _prepare_lift_object_kernel(object_kernel, prototype, T)
     oversampling = lift_oversampling(zero_padding)
-    propagation = Workspace(opd_map(tel),
+    propagation = Workspace(prototype,
         lift_pad_size(resolution, zero_padding); T=T)
-    optical_rate = similar(opd_map(tel), T, focal_resolution,
+    optical_rate = similar(prototype, T, focal_resolution,
         focal_resolution)
-    pupil_amplitude = similar(opd_map(tel), T, resolution, resolution)
+    pupil_amplitude = similar(prototype, T, resolution, resolution)
     focal_size = focal_resolution * oversampling
     field_scratch = similar(optical_rate, T, focal_size, focal_size)
     focal = similar(optical_rate, Complex{T}, focal_size, focal_size)
     mode = similar(focal)
     conjugate_field = similar(focal)
     response, response_scratch, sampled, mapped =
-        _allocate_lift_mapping_buffers(opd_map(tel), focal_resolution, mapping)
+        _allocate_lift_mapping_buffers(prototype, focal_resolution, mapping)
     output_dimensions = _lift_output_dimensions(focal_resolution, mapping)
-    output_work = similar(opd_map(tel), T, output_dimensions...)
+    output_work = similar(prototype, T, output_dimensions...)
     convolution = kernel === nothing ? nothing : similar(optical_rate)
     convolution_scratch = kernel === nothing ? nothing : similar(optical_rate)
     opd = similar(pupil_amplitude)

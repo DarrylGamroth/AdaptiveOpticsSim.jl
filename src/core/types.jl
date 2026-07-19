@@ -1,7 +1,7 @@
 """Base type for optical elements."""
 abstract type AbstractOpticalElement end
 
-"""Telescopes provide the pupil/OPD reference surface for a simulation path."""
+"""Telescopes own immutable pupil geometry used to prepare optical paths."""
 abstract type AbstractTelescope <: AbstractOpticalElement end
 
 """Sources must provide wavelength(src)."""
@@ -21,8 +21,8 @@ abstract type AbstractTimedAtmosphere <: AbstractAtmosphere end
 function advance! end
 
 """
-Wavefront sensors implement `measure!(wfs, tel[, src])` and
-`update_valid_mask!(wfs, tel)`.
+Wavefront sensors implement `measure!(wfs, pupil[, src])` and
+`update_valid_mask!(wfs, pupil)`.
 
 Optional behavior such as detector-coupled measurement, runtime preparation,
 stacked-source support, and grouped execution is expressed through the
@@ -37,7 +37,7 @@ end
 """Detectors implement capture!(det, psf; rng)."""
 abstract type AbstractDetector <: AbstractOpticalElement end
 
-"""Controllable optics implement command staging and `apply!(optic, tel, mode)`."""
+"""Controllable optics form surfaces that are applied to explicit pupil paths."""
 abstract type AbstractControllableOptic <: AbstractOpticalElement end
 
 abstract type DMApplyMode end
@@ -92,5 +92,5 @@ command_segments(layout::RuntimeCommandLayout) = layout.segments
 command_segment_labels(layout::RuntimeCommandLayout) = map(seg -> seg.label, layout.segments)
 command_segment_range(seg::RuntimeCommandSegment) = seg.offset:(seg.offset + seg.length - 1)
 
-"""Deformable mirrors implement build_influence_functions!(dm, tel) and apply!(dm, tel, mode)."""
+"""Deformable mirrors implement prepared influence functions and surface formation."""
 abstract type AbstractDeformableMirror <: AbstractControllableOptic end

@@ -4,32 +4,34 @@ using KernelAbstractions
 using LinearAlgebra
 using Random
 
-function prepare_reference_direct_imaging(tel::Telescope,
+function prepare_reference_direct_imaging(pupil::PupilFunction,
     src::AbstractSource; zero_padding::Int=1)
-    pupil = PupilFunction(tel)
-    apply_opd!(pupil, opd_map(tel))
-    return prepare_direct_imaging(tel, pupil, src;
+    return prepare_direct_imaging(PupilFunction(pupil), src;
         zero_padding=zero_padding)
 end
 
-function execute_reference_direct_imaging!(prepared, tel::Telescope)
+function execute_reference_direct_imaging!(prepared, pupil::PupilFunction)
     components = direct_imaging_components(prepared)
-    pupil = first(components).input
-    pupil isa PupilFunction || throw(InvalidConfiguration(
+    input = first(components).input
+    input isa PupilFunction || throw(InvalidConfiguration(
         "reference direct imaging requires a pupil-input stage"))
-    apply_opd!(pupil, opd_map(tel))
+    apply_opd!(input, opd_map(pupil))
     return form_direct_image!(prepared)
 end
 
-function reference_direct_image(tel::Telescope, src::AbstractSource;
+function reference_direct_image(pupil::PupilFunction, src::AbstractSource;
     zero_padding::Int=1)
-    prepared = prepare_reference_direct_imaging(tel, src;
+    prepared = prepare_reference_direct_imaging(pupil, src;
         zero_padding=zero_padding)
-    output = execute_reference_direct_imaging!(prepared, tel)
+    output = execute_reference_direct_imaging!(prepared, pupil)
     output isa IntensityMap || throw(UnsupportedAlgorithm(
         "reference direct-image helper requires one compatible output grid"))
     return intensity_values(output)
 end
+
+reference_direct_image(tel::Telescope, src::AbstractSource;
+    zero_padding::Int=1) = reference_direct_image(PupilFunction(tel), src;
+    zero_padding)
 
 struct ReferenceCase
     id::String
@@ -296,7 +298,7 @@ function build_reference_measurement_source(cfg::AbstractDict{<:AbstractString,<
 end
 
 """
-    legacy_reference_sh_index_grid_frame!(wfs, tel, src)
+    legacy_reference_sh_index_grid_frame!(wfs, pupil, src)
 
 Reproduce the retired Shack-Hartmann spectral index-grid approximation solely
 to characterize frozen external reference data.  This adapter intentionally
@@ -306,8 +308,8 @@ not use this helper: distinct-wavelength channels require an explicit
 native-to-detector grid mapping.
 """
 function legacy_reference_sh_index_grid_frame!(wfs::ShackHartmannWFS,
-    tel::Telescope, src::SpectralSource)
-    AdaptiveOpticsSim.prepare_sampling!(wfs, tel,
+    pupil::PupilFunction, src::SpectralSource)
+    AdaptiveOpticsSim.prepare_sampling!(wfs, pupil,
         AdaptiveOpticsSim.spectral_reference_source(src))
     fill!(wfs.front_end.propagation.spot_cube_accum,
         zero(eltype(wfs.front_end.propagation.spot_cube_accum)))
@@ -317,7 +319,7 @@ function legacy_reference_sh_index_grid_frame!(wfs::ShackHartmannWFS,
             src, sample.wavelength,
             eltype(slopes(wfs))(total_irradiance * sample.weight))
         AdaptiveOpticsSim.sampled_spots_peak!(
-            AdaptiveOpticsSim.ScalarCPUStyle(), wfs, tel, variant)
+            AdaptiveOpticsSim.ScalarCPUStyle(), wfs, pupil, variant)
         wfs.front_end.propagation.spot_cube_accum .+= wfs.acquisition.spot_cube
     end
     copyto!(wfs.acquisition.spot_cube,
@@ -763,20 +765,21 @@ function strehl_ratio(psf::AbstractMatrix{T}, psf_ref::AbstractMatrix{T}) where 
     return 100.0 * sum(shifted) / sum(shifted_ref)
 end
 
-function reference_interaction_matrix(wfs::AbstractWFS, tel::Telescope, src::AbstractSource,
+function reference_interaction_matrix(wfs::AbstractWFS,
+    pupil::PupilFunction, src::AbstractSource,
     basis::AbstractArray{<:Real,3}; amplitude::Real)
     n_modes = size(basis, 3)
     mat = nothing
-    opd_base = copy(tel.state.opd)
+    opd_base = copy(pupil.opd)
     @inbounds for k in 1:n_modes
-        @views @. tel.state.opd = Float64(amplitude) * basis[:, :, k]
-        measure!(wfs, tel, src)
+        @views @. pupil.opd = Float64(amplitude) * basis[:, :, k]
+        measure!(wfs, pupil, src)
         if mat === nothing
             mat = Matrix{Float64}(undef, length(slopes(wfs)), n_modes)
         end
         mat[:, k] .= slopes(wfs)
     end
-    tel.state.opd .= opd_base
+    pupil.opd .= opd_base
     mat === nothing && throw(InvalidConfiguration("reference interaction matrix requires at least one mode"))
     return mat
 end
@@ -785,31 +788,33 @@ function closed_loop_trace(wfs::AbstractWFS, tel::Telescope, src::AbstractSource
     control_basis::AbstractArray{<:Real,3}, forcing_coeffs::AbstractMatrix{<:Real};
     gain::Real, frame_delay::Int, calibration_amplitude::Real, psf_zero_padding::Int)
     n_iter, n_modes = size(forcing_coeffs)
-    H = reference_interaction_matrix(wfs, tel, src, control_basis; amplitude=calibration_amplitude)
+    pupil = PupilFunction(tel)
+    H = reference_interaction_matrix(wfs, pupil, src, control_basis;
+        amplitude=calibration_amplitude)
     recon = pinv(H)
     control_coeffs = zeros(Float64, n_modes)
     delayed_slopes = zeros(Float64, size(H, 1))
-    forcing_opd = zeros(Float64, size(tel.state.opd))
+    forcing_opd = zeros(Float64, size(pupil.opd))
     correction_opd = similar(forcing_opd)
     residual_opd = similar(forcing_opd)
-    reset_opd!(tel)
-    science = prepare_reference_direct_imaging(tel, src;
+    reset_opd!(pupil)
+    science = prepare_reference_direct_imaging(pupil, src;
         zero_padding=psf_zero_padding)
     psf_ref = copy(intensity_values(
-        execute_reference_direct_imaging!(science, tel)))
+        execute_reference_direct_imaging!(science, pupil)))
     trace = Matrix{Float64}(undef, n_iter, 5)
 
     for iter in 1:n_iter
         @views combine_reference_modes!(forcing_opd, control_basis, forcing_coeffs[iter, :])
         combine_reference_modes!(correction_opd, control_basis, control_coeffs)
         @. residual_opd = forcing_opd - correction_opd
-        tel.state.opd .= residual_opd
+        pupil.opd .= residual_opd
         trace[iter, 1] = pupil_rms_nm(forcing_opd, pupil_mask(tel))
         trace[iter, 2] = pupil_rms_nm(residual_opd, pupil_mask(tel))
         psf = intensity_values(execute_reference_direct_imaging!(science,
-            tel))
+            pupil))
         trace[iter, 3] = strehl_ratio(psf, psf_ref)
-        slopes = measure!(wfs, tel, src)
+        slopes = measure!(wfs, pupil, src)
         trace[iter, 4] = norm(slopes)
         if frame_delay == 1
             delayed_slopes .= slopes
@@ -830,39 +835,41 @@ function gsc_closed_loop_trace(tel::Telescope, src::AbstractSource, wfs::Pyramid
     gain::Real, frame_delay::Int, calibration_amplitude::Real, psf_zero_padding::Int,
     og_floor::Real)
     n_iter, n_modes = size(forcing_coeffs)
-    H = reference_interaction_matrix(wfs, tel, src, control_basis; amplitude=calibration_amplitude)
+    pupil = PupilFunction(tel)
+    H = reference_interaction_matrix(wfs, pupil, src, control_basis;
+        amplitude=calibration_amplitude)
     recon = pinv(H)
     control_coeffs = zeros(Float64, n_modes)
     delayed_slopes = zeros(Float64, size(H, 1))
-    forcing_opd = zeros(Float64, size(tel.state.opd))
+    forcing_opd = zeros(Float64, size(pupil.opd))
     correction_opd = similar(forcing_opd)
     residual_opd = similar(forcing_opd)
     gsc = GainSensingCamera(wfs, control_basis)
-    reset_opd!(tel)
-    calibration_frame = pyramid_modulation_frame(wfs, tel, src)
+    reset_opd!(pupil)
+    calibration_frame = pyramid_modulation_frame(wfs, pupil, src)
     calibrate!(gsc, calibration_frame)
     frame = similar(calibration_frame)
     og_safe = similar(gsc.og)
-    reset_opd!(tel)
-    science = prepare_reference_direct_imaging(tel, src;
+    reset_opd!(pupil)
+    science = prepare_reference_direct_imaging(pupil, src;
         zero_padding=psf_zero_padding)
     psf_ref = copy(intensity_values(
-        execute_reference_direct_imaging!(science, tel)))
+        execute_reference_direct_imaging!(science, pupil)))
     trace = Matrix{Float64}(undef, n_iter, 6)
 
     for iter in 1:n_iter
         @views combine_reference_modes!(forcing_opd, control_basis, forcing_coeffs[iter, :])
         combine_reference_modes!(correction_opd, control_basis, control_coeffs)
         @. residual_opd = forcing_opd - correction_opd
-        tel.state.opd .= residual_opd
+        pupil.opd .= residual_opd
         trace[iter, 1] = pupil_rms_nm(forcing_opd, pupil_mask(tel))
         trace[iter, 2] = pupil_rms_nm(residual_opd, pupil_mask(tel))
         psf = intensity_values(execute_reference_direct_imaging!(science,
-            tel))
+            pupil))
         trace[iter, 3] = strehl_ratio(psf, psf_ref)
-        slopes = measure!(wfs, tel, src)
+        slopes = measure!(wfs, pupil, src)
         trace[iter, 4] = norm(slopes)
-        pyramid_modulation_frame!(frame, wfs, tel, src)
+        pyramid_modulation_frame!(frame, wfs, pupil, src)
         og = compute_optical_gains!(gsc, frame)
         @. og_safe = max(abs(og), og_floor)
         trace[iter, 5] = sum(og_safe) / length(og_safe)
@@ -896,34 +903,37 @@ function gsc_atmosphere_replay_trace(
 )
     size(forcing_ngs) == size(forcing_src) ||
         throw(DimensionMismatchError("forcing_ngs and forcing_src must have matching shapes"))
-    size(forcing_ngs, 1) == size(tel.state.opd, 1) == size(forcing_ngs, 2) == size(tel.state.opd, 2) ||
+    pupil = PupilFunction(tel)
+    size(forcing_ngs, 1) == size(pupil.opd, 1) == size(forcing_ngs, 2) ==
+        size(pupil.opd, 2) ||
         throw(DimensionMismatchError("forcing OPD stack must match telescope resolution"))
 
     n_iter = size(forcing_ngs, 3)
     n_modes = size(control_basis, 3)
-    H = reference_interaction_matrix(wfs, tel, ngs, control_basis; amplitude=calibration_amplitude)
+    H = reference_interaction_matrix(wfs, pupil, ngs, control_basis;
+        amplitude=calibration_amplitude)
     recon = pinv(H)
     control_coeffs = zeros(Float64, n_modes)
     delayed_slopes = zeros(Float64, size(H, 1))
-    correction_opd = zeros(Float64, size(tel.state.opd))
+    correction_opd = zeros(Float64, size(pupil.opd))
     residual_ngs = similar(correction_opd)
     residual_src = similar(correction_opd)
     gsc = GainSensingCamera(wfs, control_basis)
-    reset_opd!(tel)
-    calibration_frame = pyramid_modulation_frame(wfs, tel, ngs)
+    reset_opd!(pupil)
+    calibration_frame = pyramid_modulation_frame(wfs, pupil, ngs)
     calibrate!(gsc, calibration_frame)
     frame = similar(calibration_frame)
     og_safe = similar(gsc.og)
 
-    reset_opd!(tel)
-    ngs_science = prepare_reference_direct_imaging(tel, ngs;
+    reset_opd!(pupil)
+    ngs_science = prepare_reference_direct_imaging(pupil, ngs;
         zero_padding=psf_zero_padding)
-    sci_science = prepare_reference_direct_imaging(tel, sci;
+    sci_science = prepare_reference_direct_imaging(pupil, sci;
         zero_padding=psf_zero_padding)
     ngs_psf_ref = copy(intensity_values(
-        execute_reference_direct_imaging!(ngs_science, tel)))
+        execute_reference_direct_imaging!(ngs_science, pupil)))
     sci_psf_ref = copy(intensity_values(
-        execute_reference_direct_imaging!(sci_science, tel)))
+        execute_reference_direct_imaging!(sci_science, pupil)))
 
     trace = Matrix{Float64}(undef, n_iter, 7)
     for iter in 1:n_iter
@@ -933,22 +943,22 @@ function gsc_atmosphere_replay_trace(
         @. residual_ngs = forcing_ngs_i - correction_opd
         @. residual_src = forcing_src_i - correction_opd
 
-        apply_opd!(tel, residual_ngs)
+        apply_opd!(pupil, residual_ngs)
         trace[iter, 1] = pupil_rms_nm(forcing_ngs_i, pupil_mask(tel))
         trace[iter, 2] = pupil_rms_nm(residual_ngs, pupil_mask(tel))
         ngs_psf = intensity_values(execute_reference_direct_imaging!(
-            ngs_science, tel))
+            ngs_science, pupil))
         trace[iter, 4] = strehl_ratio(ngs_psf, ngs_psf_ref)
-        slopes = measure!(wfs, tel, ngs)
+        slopes = measure!(wfs, pupil, ngs)
         trace[iter, 6] = norm(slopes)
-        pyramid_modulation_frame!(frame, wfs, tel, ngs)
+        pyramid_modulation_frame!(frame, wfs, pupil, ngs)
         og = compute_optical_gains!(gsc, frame)
         @. og_safe = max(abs(og), og_floor)
 
-        apply_opd!(tel, residual_src)
+        apply_opd!(pupil, residual_src)
         trace[iter, 3] = pupil_rms_nm(residual_src, pupil_mask(tel))
         src_psf = intensity_values(execute_reference_direct_imaging!(
-            sci_science, tel))
+            sci_science, pupil))
         trace[iter, 5] = strehl_ratio(src_psf, sci_psf_ref)
 
         if frame_delay == 1
@@ -980,27 +990,30 @@ function transfer_functions(freq::AbstractVector{T}, loop_gain::T, Ti::T, Tau::T
     return H_er, H_cl, H_ol, H_n
 end
 
-function apply_reference_opd!(tel::Telescope, cfg::AbstractDict{<:AbstractString,<:Any})
+function apply_reference_opd!(pupil::PupilFunction,
+    cfg::AbstractDict{<:AbstractString,<:Any})
     kind = lowercase(String(get(cfg, "kind", "zeros")))
     if kind == "zeros"
-        reset_opd!(tel)
-        return tel
+        reset_opd!(pupil)
+        return pupil
     elseif kind == "ramp"
         scale_x = Float64(get(cfg, "scale_x", 0.0))
         scale_y = Float64(get(cfg, "scale_y", 0.0))
         bias = Float64(get(cfg, "bias", 0.0))
-        @inbounds for j in axes(tel.state.opd, 2), i in axes(tel.state.opd, 1)
-            tel.state.opd[i, j] = bias + scale_x * (i - 1) + scale_y * (j - 1)
+        @inbounds for j in axes(pupil.opd, 2), i in axes(pupil.opd, 1)
+            pupil.opd[i, j] =
+                bias + scale_x * (i - 1) + scale_y * (j - 1)
         end
-        return tel
+        return pupil
     elseif kind == "constant"
-        fill!(tel.state.opd, Float64(get(cfg, "value", 0.0)))
-        return tel
+        fill!(pupil.opd, Float64(get(cfg, "value", 0.0)))
+        return pupil
     end
     throw(InvalidConfiguration("unknown OPD initializer '$kind'"))
 end
 
-function apply_reference_opd!(tel::Telescope, cfg::AbstractDict{<:AbstractString,<:Any},
+function apply_reference_opd!(pupil::PupilFunction,
+    cfg::AbstractDict{<:AbstractString,<:Any},
     basis::AbstractArray{<:Real,3})
     kind = lowercase(String(get(cfg, "kind", "zeros")))
     if kind == "basis_mode"
@@ -1009,10 +1022,10 @@ function apply_reference_opd!(tel::Telescope, cfg::AbstractDict{<:AbstractString
         if !(1 <= mode_index <= size(basis, 3))
             throw(InvalidConfiguration("basis mode index $(mode_index) is out of bounds"))
         end
-        @views @. tel.state.opd = amplitude * basis[:, :, mode_index]
-        return tel
+        @views @. pupil.opd = amplitude * basis[:, :, mode_index]
+        return pupil
     end
-    return apply_reference_opd!(tel, cfg)
+    return apply_reference_opd!(pupil, cfg)
 end
 
 function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:Any}, tel::Telescope)
@@ -1127,65 +1140,74 @@ end
 function compute_reference_actual(case::ReferenceCase)
     if case.kind === :psf
         tel = build_reference_telescope(case.config["telescope"])
+        pupil = PupilFunction(tel)
         src = build_reference_source(case.config["source"])
         if haskey(case.config, "opd")
-            apply_reference_opd!(tel, case.config["opd"])
+            apply_reference_opd!(pupil, case.config["opd"])
         end
         zero_padding = Int(get(case.config["compute"], "zero_padding", 2))
-        return copy(reference_direct_image(tel, src;
+        return copy(reference_direct_image(pupil, src;
             zero_padding=zero_padding))
     elseif case.kind in (:shack_hartmann_slopes, :pyramid_slopes, :bioedge_slopes, :zernike_signal, :curvature_signal)
         tel = build_reference_telescope(case.config["telescope"])
+        pupil = PupilFunction(tel)
         src = build_reference_measurement_source(case.config["source"])
         wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
         residual = load_case_residual_opd(case)
         if residual !== nothing
-            apply_opd!(tel, residual)
+            apply_opd!(pupil, residual)
         elseif haskey(case.config, "controllable_optic")
             optic = build_reference_controllable_optic(case.config["controllable_optic"], tel)
             cmd = Float64.(get(case.config["controllable_optic"], "command", Float64[]))
             isempty(cmd) && throw(InvalidConfiguration("controllable_optic reference cases require a non-empty command"))
             set_command!(optic, cmd)
-            apply!(optic, tel, DMReplace())
+            update_surface!(optic)
+            apply_surface!(pupil, optic, DMReplace())
         elseif haskey(case.config, "opd")
             if haskey(case.config, "basis")
                 basis = build_reference_basis(case.config["basis"], tel)
-                apply_reference_opd!(tel, case.config["opd"], basis)
+                apply_reference_opd!(pupil, case.config["opd"], basis)
             else
-                apply_reference_opd!(tel, case.config["opd"])
+                apply_reference_opd!(pupil, case.config["opd"])
             end
         end
-        return copy(measure!(wfs, tel, src))
+        return copy(measure!(wfs, pupil, src))
     elseif case.kind === :shack_hartmann_frame
         tel = build_reference_telescope(case.config["telescope"])
+        pupil = PupilFunction(tel)
         src = build_reference_measurement_source(case.config["source"])
         wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
         if haskey(case.config, "opd")
-            apply_reference_opd!(tel, case.config["opd"])
+            apply_reference_opd!(pupil, case.config["opd"])
         end
         if src isa SpectralSource && uses_legacy_sh_index_grid_reference(case)
-            legacy_reference_sh_index_grid_frame!(wfs, tel, src)
+            legacy_reference_sh_index_grid_frame!(wfs, pupil, src)
         else
-            AdaptiveOpticsSim.prepare_sampling!(wfs, tel, src)
-            AdaptiveOpticsSim.sampled_spots_peak!(wfs, tel, src)
+            AdaptiveOpticsSim.prepare_sampling!(wfs, pupil, src)
+            AdaptiveOpticsSim.sampled_spots_peak!(wfs, pupil, src)
         end
         @views return copy(wfs.acquisition.spot_cube[1, :, :])
     elseif case.kind === :pyramid_frame
         tel = build_reference_telescope(case.config["telescope"])
+        pupil = PupilFunction(tel)
         src = build_reference_measurement_source(case.config["source"])
         wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
         if haskey(case.config, "opd")
-            apply_reference_opd!(tel, case.config["opd"])
+            apply_reference_opd!(pupil, case.config["opd"])
         end
         intensity = AdaptiveOpticsSim.pyramid_propagation(wfs).intensity
         if src isa SpectralSource
-            AdaptiveOpticsSim.accumulate_pyramid_spectral_intensity!(AdaptiveOpticsSim.execution_style(intensity), wfs, tel, src)
+            AdaptiveOpticsSim.accumulate_pyramid_spectral_intensity!(
+                AdaptiveOpticsSim.execution_style(intensity), wfs, pupil,
+                src)
         else
-            AdaptiveOpticsSim.pyramid_intensity!(intensity, wfs, tel, src)
+            AdaptiveOpticsSim.pyramid_intensity!(intensity, wfs, pupil, src)
         end
-        return copy(AdaptiveOpticsSim.sample_pyramid_intensity!(wfs, tel, intensity))
+        return copy(AdaptiveOpticsSim.sample_pyramid_intensity!(wfs, pupil,
+            intensity))
     elseif case.kind === :atmospheric_intensity
         tel = build_reference_telescope(case.config["telescope"])
+        pupil = PupilFunction(tel)
         src = build_reference_measurement_source(case.config["source"])
         atm = build_reference_atmosphere(case.config["atmosphere"], tel)
         advance_steps = Int(get(case.config["atmosphere"], "advance_steps", 1))
@@ -1197,44 +1219,46 @@ function compute_reference_actual(case::ReferenceCase)
         end
         prop = AtmosphericFieldPropagation(
             atm,
-            tel,
+            pupil,
             src;
             model=build_reference_atmospheric_model(case.config["propagation"]),
             zero_padding=Int(get(case.config["propagation"], "zero_padding", 1)),
             T=Float64,
         )
-        return copy(atmospheric_intensity!(prop, atm, tel, src))
+        return copy(atmospheric_intensity!(prop, atm, current_epoch(atm)))
     elseif case.kind === :gsc_optical_gains
         tel = build_reference_telescope(case.config["telescope"])
+        pupil = PupilFunction(tel)
         src = build_reference_source(case.config["source"])
         wfs = build_reference_wfs(:pyramid_slopes, case.config["wfs"], tel)
         basis = build_reference_basis(case.config["basis"], tel)
         gsc = GainSensingCamera(wfs, basis)
-        reset_opd!(tel)
-        calibration_frame = pyramid_modulation_frame(wfs, tel, src)
+        reset_opd!(pupil)
+        calibration_frame = pyramid_modulation_frame(wfs, pupil, src)
         calibrate!(gsc, calibration_frame)
         residual = load_case_residual_opd(case)
         if residual !== nothing
-            apply_opd!(tel, residual)
+            apply_opd!(pupil, residual)
         elseif haskey(case.config, "opd")
-            apply_reference_opd!(tel, case.config["opd"], basis)
+            apply_reference_opd!(pupil, case.config["opd"], basis)
         end
         frame = similar(calibration_frame)
-        pyramid_modulation_frame!(frame, wfs, tel, src)
+        pyramid_modulation_frame!(frame, wfs, pupil, src)
         return copy(compute_optical_gains!(gsc, frame))
     elseif case.kind === :gsc_modulation_frame
         tel = build_reference_telescope(case.config["telescope"])
+        pupil = PupilFunction(tel)
         src = build_reference_source(case.config["source"])
         wfs = build_reference_wfs(:pyramid_slopes, case.config["wfs"], tel)
         basis = build_reference_basis(case.config["basis"], tel)
         residual = load_case_residual_opd(case)
         if residual !== nothing
-            apply_opd!(tel, residual)
+            apply_opd!(pupil, residual)
         elseif haskey(case.config, "opd")
-            apply_reference_opd!(tel, case.config["opd"], basis)
+            apply_reference_opd!(pupil, case.config["opd"], basis)
         end
         frame = similar(AdaptiveOpticsSim.pyramid_propagation(wfs).intensity)
-        pyramid_modulation_frame!(frame, wfs, tel, src)
+        pyramid_modulation_frame!(frame, wfs, pupil, src)
         return copy(frame)
     elseif case.kind === :transfer_function_rejection
         compute_cfg = case.config["compute"]
@@ -1330,14 +1354,15 @@ function compute_reference_actual(case::ReferenceCase)
         end
     elseif case.kind === :lift_interaction_matrix
         tel = build_reference_telescope(case.config["telescope"])
+        pupil = PupilFunction(tel)
         src = build_reference_source(case.config["source"])
         basis = build_reference_basis(case.config["basis"], tel)
         det = build_reference_detector(case.config["detector"])
-        diversity = zeros(Float64, size(tel.state.opd))
+        diversity = zeros(Float64, size(pupil.opd))
         if haskey(case.config, "diversity")
-            apply_reference_opd!(tel, case.config["diversity"])
-            diversity .= tel.state.opd
-            reset_opd!(tel)
+            apply_reference_opd!(pupil, case.config["diversity"])
+            diversity .= pupil.opd
+            reset_opd!(pupil)
         end
         compute_cfg = case.config["compute"]
         img_resolution = reference_lift_img_resolution(tel, det, compute_cfg)
@@ -1417,8 +1442,9 @@ end
 
 function compute_reference_actual_ka_cpu(case::ReferenceCase)
     tel = build_reference_telescope(case.config["telescope"])
+    pupil = PupilFunction(tel)
     if haskey(case.config, "opd")
-        apply_reference_opd!(tel, case.config["opd"])
+        apply_reference_opd!(pupil, case.config["opd"])
     end
     if case.kind === :shack_hartmann_slopes
         src = build_reference_source(case.config["source"])
@@ -1427,13 +1453,13 @@ function compute_reference_actual_ka_cpu(case::ReferenceCase)
         if mode_name != "geometric"
             throw(InvalidConfiguration("KA CPU reference path currently supports only geometric Shack-Hartmann cases"))
         end
-        update_valid_mask!(wfs, tel)
+        update_valid_mask!(wfs, pupil)
         n_sub = n_lenslets(wfs.front_end)
         sub = div(tel.params.resolution, n_sub)
         offset = n_sub * n_sub
         slopes = similar(AdaptiveOpticsSim.slopes(wfs))
         style = AdaptiveOpticsSim.AcceleratorStyle(KernelAbstractions.CPU())
-        AdaptiveOpticsSim._geometric_slopes!(style, slopes, tel.state.opd,
+        AdaptiveOpticsSim._geometric_slopes!(style, slopes, pupil.opd,
             AdaptiveOpticsSim.valid_subaperture_mask(wfs), sub, n_sub,
             offset)
         return slopes
@@ -1513,7 +1539,7 @@ function specula_legacy_radiometric_factor(case::ReferenceCase)
         tel = build_reference_telescope(case.config["telescope"])
         src = build_reference_measurement_source(case.config["source"])
         wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
-        AdaptiveOpticsSim.prepare_sampling!(wfs, tel,
+        AdaptiveOpticsSim.prepare_sampling!(wfs, PupilFunction(tel),
             AdaptiveOpticsSim.spectral_reference_source(src))
         pad = size(wfs.front_end.propagation.fft_stack, 1)
         factor *= pad * pad

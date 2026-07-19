@@ -40,6 +40,9 @@ runtime and validation surfaces.
 
 Current CPU-supported families:
 
+- telescope-owned aperture geometry and reflectivity with caller-owned,
+  independent `PupilFunction` path products; the telescope owns no cadence,
+  path OPD, field, PSF, or propagation scratch
 - finite and infinite multilayer atmosphere with explicit elapsed/absolute
   model time, stable epochs, frozen direction preparation, and caller-owned
   rendering

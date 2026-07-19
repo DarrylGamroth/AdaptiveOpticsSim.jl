@@ -67,7 +67,7 @@ Canonical verbs:
 - `advance_by!` or `advance_to!`
 - `render_atmosphere!`
 - `propagate!`
-- `apply!`
+- `update_surface!` and `apply_surface!`
 - `measure!`
 - `capture!`
 
@@ -133,8 +133,7 @@ using AdaptiveOpticsSim
 tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)
 pupil = PupilFunction(tel)
-apply_opd!(pupil, opd_map(tel))
-imaging = prepare_direct_imaging(tel, pupil, src; zero_padding=2)
+imaging = prepare_direct_imaging(pupil, src; zero_padding=2)
 form_direct_image!(imaging)
 photon_rate_image = intensity_values(direct_imaging_output(imaging))
 ```
@@ -150,9 +149,11 @@ Use this when you care about:
 angular coordinates. Its values are source-scaled, cell-integrated photon
 arrival rates before detector exposure, not an inherently unit-normalized PSF.
 Preparation binds the pupil, work field, output storage, FFT workspace,
-numeric type, backend, and physical device. If transitional telescope OPD
-state changes, copy it explicitly into the prepared pupil before calling
-`form_direct_image!` again.
+numeric type, backend, and physical device. The `PupilFunction` owns the
+mutable path OPD and amplitude; update that same product with `apply_opd!`,
+`render_atmosphere!`, or `apply_surface!` before calling
+`form_direct_image!` again. `Telescope` owns aperture geometry, not a mutable
+optical path.
 
 ### Workflow 2: Atmosphere plus one WFS
 
@@ -171,11 +172,10 @@ wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec
 
 rng = runtime_rng(0)
 renderer = prepare_atmosphere_renderer(atm, tel, src)
-atmosphere_pupil = PupilFunction(tel)
+pupil = PupilFunction(tel)
 epoch = advance_by!(atm, 1e-3; rng=rng)
-render_atmosphere!(atmosphere_pupil, renderer, atm, epoch)
-apply_opd!(tel, opd_map(atmosphere_pupil))
-slopes = measure!(wfs, tel, src)
+render_atmosphere!(pupil, renderer, atm, epoch)
+slopes = measure!(wfs, pupil, src)
 ```
 
 Atmosphere time is explicit and belongs to the caller. A prepared renderer is
@@ -191,7 +191,7 @@ type used for the exported frame:
 ```julia
 det = Detector(noise=NoiseNone(), full_well=30_000.0, bits=12, output_type=UInt16)
 rng = runtime_rng(0)
-measure!(wfs, tel, src, det; rng=rng)
+measure!(wfs, pupil, src, det; rng=rng)
 adu = wfs_detector_image(wfs, det)
 ```
 
@@ -492,7 +492,8 @@ rng = runtime_rng(0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 sim = AOSimulation(tel, src, atm, dm, wfs)
 
-imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
+calibration_pupil = PupilFunction(tel)
+imat = interaction_matrix(dm, wfs, calibration_pupil, src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
 branch = ControlLoopBranch(:main, sim, recon; rng=rng)
 
@@ -706,7 +707,9 @@ For advanced utilities such as telemetry/config helpers and some backend policy
 helpers, use namespaced access. Examples:
 
 ```julia
-ws = AdaptiveOpticsSim.Workspace(tel; rng=deterministic_reference_rng(0))
+pupil = PupilFunction(tel)
+ws = AdaptiveOpticsSim.Workspace(pupil.opd, size(pupil.opd, 1);
+    rng=deterministic_reference_rng(0))
 sprint = AdaptiveOpticsSim.SPRINT(tel, dm, wfs, basis)
 ```
 

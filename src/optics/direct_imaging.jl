@@ -298,30 +298,29 @@ function _prepare_direct_imaging(input_plan::AbstractDirectImagingInputPlan,
 end
 
 """
-    prepare_direct_imaging(telescope, pupil, source, field, output)
+    prepare_direct_imaging(pupil, source, field, output)
 
 Prepare direct imaging from an explicit `PupilFunction`, using caller-owned
 `field` work storage and writing caller-owned focal-plane `output`. Physical
 sources only are accepted; optical formation applies no elapsed time.
 """
-function _prepare_direct_imaging(tel::Telescope, pupil::PupilFunction,
+function _prepare_direct_imaging(pupil::PupilFunction,
     src::Union{Source,LGSSource}, field::ElectricField,
     output::IntensityMap, propagation::FraunhoferPropagation)
     require_leaf_source(src, "direct-imaging source")
     _require_physical_photon_irradiance(src, "direct imaging")
-    formation = prepare_pupil_field(tel, pupil, src, field)
+    formation = prepare_pupil_field(pupil, src, field)
     input_plan = PreparedPupilImagingInput(formation, pupil.metadata,
         pupil.amplitude, pupil.opd)
     return _prepare_direct_imaging(input_plan, field, output, propagation,
         src)
 end
 
-function prepare_direct_imaging(tel::Telescope, pupil::PupilFunction,
+function prepare_direct_imaging(pupil::PupilFunction,
     src::Union{Source,LGSSource}, field::ElectricField,
     output::IntensityMap)
     propagation = FraunhoferPropagation(field)
-    return _prepare_direct_imaging(tel, pupil, src, field, output,
-        propagation)
+    return _prepare_direct_imaging(pupil, src, field, output, propagation)
 end
 
 """
@@ -461,13 +460,12 @@ function form_direct_image!(output::IntensityMap, field::ElectricField,
     return _form_direct_image!(output, field, plan, workspace)
 end
 
-function prepare_direct_imaging(tel::Telescope, pupil::PupilFunction,
+function prepare_direct_imaging(pupil::PupilFunction,
     src::Union{Source,LGSSource}; zero_padding::Int=1)
     field = ElectricField(pupil, src; zero_padding=zero_padding)
     propagation = FraunhoferPropagation(field)
     output = IntensityMap(field, propagation)
-    prepared = _prepare_direct_imaging(tel, pupil, src, field, output,
-        propagation)
+    prepared = _prepare_direct_imaging(pupil, src, field, output, propagation)
     return PreparedDirectImaging(pupil, field, output, prepared.plan,
         prepared.workspace)
 end
@@ -491,7 +489,7 @@ end
 
 function _widen_direct_components(components::Vector,
     sources::AbstractVector{<:AbstractSource}, mismatch_index::Int,
-    mismatch::PreparedDirectImaging, tel::Telescope, pupil::PupilFunction,
+    mismatch::PreparedDirectImaging, pupil::PupilFunction,
     zero_padding::Int)
     widened = Vector{PreparedDirectImaging}(undef, length(sources))
     @inbounds for index in 1:(mismatch_index - 1)
@@ -499,29 +497,29 @@ function _widen_direct_components(components::Vector,
     end
     widened[mismatch_index] = mismatch
     @inbounds for index in (mismatch_index + 1):length(sources)
-        widened[index] = prepare_direct_imaging(tel, pupil, sources[index];
+        widened[index] = prepare_direct_imaging(pupil, sources[index];
             zero_padding=zero_padding)
     end
     return widened
 end
 
-function _prepare_direct_components(tel::Telescope, pupil::PupilFunction,
+function _prepare_direct_components(pupil::PupilFunction,
     sources::AbstractVector{<:AbstractSource}, zero_padding::Int)
     isempty(sources) && throw(InvalidConfiguration(
         "direct-imaging composition must contain at least one source"))
     # Preserve exact per-leaf field formation and component products here.
     # Reusing one same-pupil/common-wavelength FFT plus prepared weighted shifts
     # is a separate optimization and requires its own fidelity/GPU contract.
-    first_component = prepare_direct_imaging(tel, pupil, first(sources);
+    first_component = prepare_direct_imaging(pupil, first(sources);
         zero_padding=zero_padding)
     components = Vector{typeof(first_component)}(undef, length(sources))
     components[1] = first_component
     @inbounds for index in 2:length(sources)
-        component = prepare_direct_imaging(tel, pupil, sources[index];
+        component = prepare_direct_imaging(pupil, sources[index];
             zero_padding=zero_padding)
         if !_store_direct_component!(components, index, component)
             return _widen_direct_components(components, sources, index, component,
-                tel, pupil, zero_padding)
+                pupil, zero_padding)
         end
     end
     return components
@@ -571,14 +569,13 @@ function _similar_direct_output(reference::IntensityMap)
     return IntensityMap(reference.metadata, values)
 end
 
-function prepare_direct_imaging(tel::Telescope, pupil::PupilFunction,
-    ast::Asterism; zero_padding::Int=1)
+function prepare_direct_imaging(pupil::PupilFunction, ast::Asterism;
+    zero_padding::Int=1)
     isempty(ast.sources) && throw(InvalidConfiguration(
         "direct-imaging asterism must contain at least one source"))
     wavelength(ast)
     frozen = freeze_source(ast)
-    components = _prepare_direct_components(tel, pupil, frozen.sources,
-        zero_padding)
+    components = _prepare_direct_components(pupil, frozen.sources, zero_padding)
     products = _direct_imaging_products(components)
     output = _similar_direct_output(first(products))
     accumulation = prepare_incoherent_sum(output, products)
@@ -611,19 +608,18 @@ function _spectral_leaf_sources(src::SpectralSource,
     return sources
 end
 
-function prepare_direct_imaging(tel::Telescope, pupil::PupilFunction,
-    src::SpectralSource; zero_padding::Int=1)
+function prepare_direct_imaging(pupil::PupilFunction, src::SpectralSource;
+    zero_padding::Int=1)
     frozen = freeze_source(src)
     sources = _spectral_leaf_sources(frozen, eltype(pupil.opd))
-    components = _prepare_direct_components(tel, pupil, sources,
-        zero_padding)
+    components = _prepare_direct_components(pupil, sources, zero_padding)
     products = _direct_imaging_products(components)
     output = OpticalProductBundle(products)
     return PreparedBundledDirectImaging(components, output)
 end
 
-function prepare_direct_imaging(::Telescope, ::PupilFunction,
-    src::AbstractSource; zero_padding::Int=1)
+function prepare_direct_imaging(::PupilFunction, src::AbstractSource;
+    zero_padding::Int=1)
     throw(UnsupportedAlgorithm(
         "direct imaging does not support source composition $(typeof(src)); " *
         "prepare its physical components explicitly"))

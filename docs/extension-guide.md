@@ -92,18 +92,11 @@ incompatibility and for execution-time prepared-binding rejection before any
 destination mutation. The protocol stages are `:optical_formation`,
 `:acquisition`, and `:estimation`; `reason` is an open extension identifier.
 
-The current maintained WFS families are being migrated incrementally. During
-that transition, a legacy `AbstractWFS` family also provides:
-
-- a concrete sensor type subtype of the package WFS abstraction
-- setup/precomputation methods owned by the WFS family
-- measurement methods that write into preallocated state
-- signal extraction methods for slopes, intensities, or family-specific
-  products
-- detector image formation if the sensor has a maintained detector-facing path
-
-The generic runtime and future family adapters call prepared seams or WFS-owned
-legacy seams through dispatch rather than branching on sensor families.
+Concrete WFS family types may provide a composed `measure!` workflow over the
+same prepared stages. That workflow is an ordinary high-level API, not a second
+ownership model: optical inputs remain caller-owned, stage workspaces remain
+sensor-owned and preallocated, and the implementation dispatches through the
+prepared seams rather than branching on sensor families.
 
 ## Runtime Source Roles
 
@@ -218,7 +211,7 @@ For large calibration/control surfaces:
 
 Rank selection is an optical/control validation decision. A benchmark win from
 truncation is not evidence that discarded modes are acceptable for a real
-plant. The dense `ModalReconstructor` remains the compatibility baseline.
+plant. The dense `ModalReconstructor` remains the full-rank accuracy baseline.
 
 Runtime profiles and execution plans are orthogonal. A profile such as
 `HILRuntimeProfile` selects modeled delays and output fidelity. An execution

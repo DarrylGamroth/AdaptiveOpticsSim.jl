@@ -8,13 +8,15 @@ function fitting_error(opd::AbstractMatrix{T}, projector::AbstractMatrix{T}, bas
 end
 
 function fitting_error_dm(opd::AbstractMatrix{T}, projector::AbstractMatrix{T},
-    tel::Telescope, dm::DeformableMirror, M2C::AbstractMatrix{T}) where {T<:AbstractFloat}
+    pupil::PupilFunction, dm::DeformableMirror,
+    M2C::AbstractMatrix{T}) where {T<:AbstractFloat}
     phi = reshape(opd, :)
     coeffs = M2C * (projector * phi)
     dm.state.coefs .= -coeffs
-    tel.state.opd .= opd
-    apply!(dm, tel, DMAdditive())
-    opd_fit = copy(tel.state.opd)
-    opd_corr = dm.state.opd .* pupil_mask(tel)
+    pupil.opd .= opd
+    update_surface!(dm)
+    apply_surface!(pupil, dm, DMAdditive())
+    opd_fit = copy(pupil.opd)
+    opd_corr = dm.state.opd .* pupil.support
     return opd_fit, opd_corr, copy(opd), coeffs
 end

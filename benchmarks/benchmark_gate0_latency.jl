@@ -25,13 +25,13 @@ end
 
 @inline run_gate0_card!(card::Gate0LatencyCard) = card.operation()
 
-function gate0_opd_ramp!(tel::Telescope)
-    n = tel.params.resolution
-    @inbounds for j in axes(tel.state.opd, 2), i in axes(tel.state.opd, 1)
-        tel.state.opd[i, j] = 8e-9 * (i - 1) / n -
+function gate0_opd_ramp!(pupil::PupilFunction)
+    n = size(pupil.opd, 1)
+    @inbounds for j in axes(pupil.opd, 2), i in axes(pupil.opd, 1)
+        pupil.opd[i, j] = 8e-9 * (i - 1) / n -
             5e-9 * (j - 1) / n
     end
-    return tel
+    return pupil
 end
 
 function gate0_card_parameters(raw::AbstractDict)
@@ -53,12 +53,11 @@ function make_gate0_card(raw::AbstractDict)
         zero_padding = Int(raw["zero_padding"])
         tel = Telescope(resolution=resolution, diameter=8.0,
             central_obstruction=0.2)
-        gate0_opd_ramp!(tel)
         src = Source(band=:I, magnitude=1.0)
         wavefront = PupilFunction(tel)
-        apply_opd!(wavefront, opd_map(tel))
+        gate0_opd_ramp!(wavefront)
         field = ElectricField(wavefront, src; zero_padding=zero_padding)
-        plan = prepare_pupil_field(tel, wavefront, src, field)
+        plan = prepare_pupil_field(wavefront, src, field)
         let field=field, wavefront=wavefront, plan=plan
             () -> fill_electric_field!(field, wavefront, plan)
         end
@@ -68,11 +67,10 @@ function make_gate0_card(raw::AbstractDict)
         zero_padding = Int(raw["zero_padding"])
         tel = Telescope(resolution=resolution, diameter=8.0,
             central_obstruction=0.2)
-        gate0_opd_ramp!(tel)
         src = Source(band=:I, magnitude=1.0)
         wavefront = PupilFunction(tel)
-        apply_opd!(wavefront, opd_map(tel))
-        prepared = prepare_direct_imaging(tel, wavefront, src;
+        gate0_opd_ramp!(wavefront)
+        prepared = prepare_direct_imaging(wavefront, src;
             zero_padding=zero_padding)
         let prepared=prepared
             () -> form_direct_image!(prepared)
@@ -81,17 +79,16 @@ function make_gate0_card(raw::AbstractDict)
         zero_padding = Int(raw["zero_padding"])
         tel = Telescope(resolution=resolution, diameter=8.0,
             central_obstruction=0.0)
-        gate0_opd_ramp!(tel)
         src = Source(band=:I, magnitude=1.0)
         spatial_filter = SpatialFilter(tel; shape=SquareFilter(),
             diameter=resolution / 3, zero_padding=zero_padding)
         wavefront = PupilFunction(tel)
-        apply_opd!(wavefront, opd_map(tel))
+        gate0_opd_ramp!(wavefront)
         field = ElectricField(wavefront, src; zero_padding=zero_padding,
             normalization=DimensionlessNormalization(),
             spatial_measure=PointSampledMeasure(),
             coherence=CoherentFieldCombination())
-        formation = prepare_pupil_field(tel, wavefront, src, field;
+        formation = prepare_pupil_field(wavefront, src, field;
             center_even_grid=false, amplitude_scale=1)
         fill_electric_field!(field, wavefront, formation)
         output = PupilFunction(tel)
@@ -122,20 +119,20 @@ function make_gate0_card(raw::AbstractDict)
     elseif kind == "shack_hartmann"
         tel = Telescope(resolution=resolution, diameter=8.0,
             central_obstruction=0.0)
-        gate0_opd_ramp!(tel)
         src = Source(band=:I, magnitude=0.0)
+        pupil = PupilFunction(tel)
+        gate0_opd_ramp!(pupil)
         wfs = ShackHartmannWFS(tel; n_lenslets=Int(raw["n_lenslets"]),
             n_pix_subap=Int(raw["n_pix_subap"]), mode=Diffractive())
-        let wfs=wfs, tel=tel, src=src
-            () -> measure!(wfs, tel, src)
+        let wfs=wfs, pupil=pupil, src=src
+            () -> measure!(wfs, pupil, src)
         end
     elseif kind == "pyramid"
         tel = Telescope(resolution=resolution, diameter=8.0,
             central_obstruction=0.0)
-        gate0_opd_ramp!(tel)
         src = Source(band=:I, magnitude=0.0)
         pupil = PupilFunction(tel)
-        apply_opd!(pupil, opd_map(tel))
+        gate0_opd_ramp!(pupil)
         wfs = PyramidWFS(tel; pupil_samples=Int(raw["pupil_samples"]),
             modulation=3.0,
             modulation_points=Int(raw["modulation_points"]),
@@ -172,12 +169,10 @@ function make_gate0_card(raw::AbstractDict)
         zero_padding = Int(raw["zero_padding"])
         tel = Telescope(resolution=resolution, diameter=8.0,
             central_obstruction=0.2)
-        gate0_opd_ramp!(tel)
         src = Source(band=:I, magnitude=1.0, coordinates=(0.08, 90.0))
         pupil = PupilFunction(tel)
-        apply_opd!(pupil, opd_map(tel))
-        imaging = prepare_direct_imaging(tel, pupil, src;
-            zero_padding=zero_padding)
+        gate0_opd_ramp!(pupil)
+        imaging = prepare_direct_imaging(pupil, src; zero_padding=zero_padding)
         rate_map = direct_imaging_output(imaging)
         detector_a = Detector(noise=NoiseNone(), integration_time=0.003,
             qe=0.8)
@@ -206,7 +201,8 @@ function make_gate0_card(raw::AbstractDict)
         wfs = ShackHartmannWFS(tel;
             n_lenslets=Int(raw["n_lenslets"]))
         simulation = AOSimulation(tel, src, atmosphere, dm, wfs)
-        interaction = interaction_matrix(dm, wfs, tel; amplitude=0.05)
+        interaction = interaction_matrix(dm, wfs, PupilFunction(tel);
+            amplitude=0.05)
         reconstructor = ModalReconstructor(interaction; gain=0.5)
         runtime = AdaptiveOpticsSim.ClosedLoopRuntime(simulation, reconstructor;
             atmosphere_step=1e-3,
@@ -217,10 +213,9 @@ function make_gate0_card(raw::AbstractDict)
     elseif kind == "zernike"
         tel = Telescope(resolution=resolution, diameter=8.0,
             central_obstruction=0.0)
-        gate0_opd_ramp!(tel)
         src = Source(band=:I, magnitude=0.0)
         pupil = PupilFunction(tel)
-        apply_opd!(pupil, opd_map(tel))
+        gate0_opd_ramp!(pupil)
         wfs = ZernikeWFS(tel;
             pupil_samples=Int(raw["pupil_samples"]))
         front_end = ZernikeOpticalFrontEnd(wfs, src)
@@ -255,10 +250,9 @@ function make_gate0_card(raw::AbstractDict)
     elseif kind == "curvature_two_detectors"
         tel = Telescope(resolution=resolution, diameter=8.0,
             central_obstruction=0.0)
-        gate0_opd_ramp!(tel)
         src = Source(band=:I, magnitude=0.0)
         pupil = PupilFunction(tel)
-        apply_opd!(pupil, opd_map(tel))
+        gate0_opd_ramp!(pupil)
         wfs = CurvatureWFS(tel;
             pupil_samples=Int(raw["pupil_samples"]))
         front_end = CurvatureOpticalFrontEnd(wfs, src)

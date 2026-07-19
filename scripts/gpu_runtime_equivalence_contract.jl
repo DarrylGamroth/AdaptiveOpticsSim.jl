@@ -39,9 +39,10 @@ end
 AdaptiveOpticsSim.advance!(atm::StaticAtmosphere, tel::Telescope, rng::AbstractRNG) = atm
 AdaptiveOpticsSim.advance!(atm::StaticAtmosphere, tel::Telescope; rng::AbstractRNG=Random.default_rng()) = atm
 
-function AdaptiveOpticsSim.propagate!(atm::StaticAtmosphere, tel::Telescope)
-    copyto!(tel.state.opd, atm.screen)
-    return tel
+function AdaptiveOpticsSim.propagate!(atm::StaticAtmosphere,
+    pupil::PupilFunction)
+    copyto!(pupil.opd, atm.screen)
+    return pupil
 end
 
 function _gpu_backend_selector(::Type{AdaptiveOpticsSim.CUDABackendTag})
@@ -70,9 +71,10 @@ function _ao188_noise_free_params(::Type{T}=Float32;
     )
 end
 
-function _set_deterministic_opd!(tel::Telescope)
-    copyto!(tel.state.opd, _deterministic_phase_screen(tel, eltype(tel.state.opd)))
-    return tel
+function _set_deterministic_opd!(pupil::PupilFunction, tel::Telescope)
+    copyto!(pupil.opd,
+        _deterministic_phase_screen(tel, eltype(pupil.opd)))
+    return pupil
 end
 
 function _evaluate_ao188!(surrogate::AO188Simulation)
@@ -81,7 +83,7 @@ function _evaluate_ao188!(surrogate::AO188Simulation)
     fill!(surrogate.low_command, zero(eltype(surrogate.low_command)))
     fill!(surrogate.combined_command, zero(eltype(surrogate.combined_command)))
     fill!(surrogate.command, zero(eltype(surrogate.command)))
-    _set_deterministic_opd!(surrogate.tel)
+    _set_deterministic_opd!(surrogate.pupil, surrogate.tel)
     SubaruAO188Simulation._measure_branches!(surrogate.params.branch_execution, surrogate)
     reconstruct!(surrogate.high_command, surrogate.high_reconstructor, slopes(surrogate.high_wfs))
     reconstruct!(surrogate.low_command, surrogate.low_reconstructor, slopes(surrogate.low_wfs))
@@ -155,10 +157,11 @@ function _post_command_observation!(surrogate::AO188Simulation, host_command::Ab
     fill!(surrogate.low_command, zero(eltype(surrogate.low_command)))
     fill!(surrogate.combined_command, zero(eltype(surrogate.combined_command)))
     fill!(surrogate.command, zero(eltype(surrogate.command)))
-    _set_deterministic_opd!(surrogate.tel)
+    _set_deterministic_opd!(surrogate.pupil, surrogate.tel)
     copyto!(surrogate.command, host_command)
     copyto!(surrogate.dm.state.coefs, host_command)
-    apply!(surrogate.dm, surrogate.tel, DMAdditive())
+    update_surface!(surrogate.dm)
+    apply_surface!(surrogate.pupil, surrogate.dm, DMAdditive())
     SubaruAO188Simulation._measure_branches!(SequentialExecution(), surrogate)
     return surrogate
 end
@@ -181,7 +184,8 @@ function _run_ao188_post_command_equivalence(::Type{B}, branch_mode::AbstractExe
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(gpu.command))
 
     println("ao188_post_command_equivalence T=", T)
-    _assert_close("tel_opd", gpu.tel.state.opd, cpu.tel.state.opd; rtol=T(1e-8), atol=T(1e-12))
+    _assert_close("pupil_opd", gpu.pupil.opd, cpu.pupil.opd;
+        rtol=T(1e-8), atol=T(1e-12))
     _assert_close("post_high_spot_cube", gpu.high_wfs.acquisition.spot_cube, cpu.high_wfs.acquisition.spot_cube; rtol=T(1e-8), atol=T(1e-4))
     _assert_close("post_low_spot_cube", gpu.low_wfs.acquisition.spot_cube, cpu.low_wfs.acquisition.spot_cube; rtol=T(1e-8), atol=T(1e-4))
     _assert_close("post_high_slopes", slopes(gpu.high_wfs), slopes(cpu.high_wfs); rtol=T(1e-8), atol=T(1e-8))
@@ -225,8 +229,9 @@ function _build_lgs_case(backend, ::Type{T}, profile::Symbol) where {T<:Abstract
     end
     wfs = ShackHartmannWFS(tel; n_lenslets=14, mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1e-3), qe=T(1), binning=1, T=T, backend=backend)
-    _set_deterministic_opd!(tel)
-    return tel, src, wfs, det
+    pupil = PupilFunction(tel; T=T, backend=backend)
+    _set_deterministic_opd!(pupil, tel)
+    return pupil, src, wfs, det
 end
 
 function _run_lgs_equivalence(::Type{B}, profile::Symbol) where {B<:AdaptiveOpticsSim.GPUBackendTag}
@@ -235,11 +240,11 @@ function _run_lgs_equivalence(::Type{B}, profile::Symbol) where {B<:AdaptiveOpti
     BackendArray === nothing && error("GPU backend $(B) is not available")
     T = Float32
 
-    tel_cpu, src_cpu, wfs_cpu, det_cpu = _build_lgs_case(CPUBackend(), T, profile)
-    tel_gpu, src_gpu, wfs_gpu, det_gpu = _build_lgs_case(_gpu_backend_selector(B), T, profile)
+    pupil_cpu, src_cpu, wfs_cpu, det_cpu = _build_lgs_case(CPUBackend(), T, profile)
+    pupil_gpu, src_gpu, wfs_gpu, det_gpu = _build_lgs_case(_gpu_backend_selector(B), T, profile)
 
-    measure!(wfs_cpu, tel_cpu, src_cpu, det_cpu; rng=MersenneTwister(2))
-    measure!(wfs_gpu, tel_gpu, src_gpu, det_gpu; rng=MersenneTwister(2))
+    measure!(wfs_cpu, pupil_cpu, src_cpu, det_cpu; rng=MersenneTwister(2))
+    measure!(wfs_gpu, pupil_gpu, src_gpu, det_gpu; rng=MersenneTwister(2))
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(slopes(wfs_gpu)))
 
     println("lgs_sh_equivalence profile=", profile)
@@ -278,8 +283,9 @@ function _build_lgs_asterism_case(backend, ::Type{T}) where {T<:AbstractFloat}
     ast = Asterism([lgs, second_lgs])
     wfs = ShackHartmannWFS(tel; n_lenslets=14, mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1e-3), qe=T(1), binning=1, T=T, backend=backend)
-    _set_deterministic_opd!(tel)
-    return tel, ast, wfs, det
+    pupil = PupilFunction(tel; T=T, backend=backend)
+    _set_deterministic_opd!(pupil, tel)
+    return pupil, ast, wfs, det
 end
 
 function _run_lgs_asterism_equivalence(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
@@ -288,11 +294,11 @@ function _run_lgs_asterism_equivalence(::Type{B}) where {B<:AdaptiveOpticsSim.GP
     BackendArray === nothing && error("GPU backend $(B) is not available")
     T = Float32
 
-    tel_cpu, ast_cpu, wfs_cpu, det_cpu = _build_lgs_asterism_case(CPUBackend(), T)
-    tel_gpu, ast_gpu, wfs_gpu, det_gpu = _build_lgs_asterism_case(_gpu_backend_selector(B), T)
+    pupil_cpu, ast_cpu, wfs_cpu, det_cpu = _build_lgs_asterism_case(CPUBackend(), T)
+    pupil_gpu, ast_gpu, wfs_gpu, det_gpu = _build_lgs_asterism_case(_gpu_backend_selector(B), T)
 
-    measure!(wfs_cpu, tel_cpu, ast_cpu, det_cpu; rng=MersenneTwister(3))
-    measure!(wfs_gpu, tel_gpu, ast_gpu, det_gpu; rng=MersenneTwister(3))
+    measure!(wfs_cpu, pupil_cpu, ast_cpu, det_cpu; rng=MersenneTwister(3))
+    measure!(wfs_gpu, pupil_gpu, ast_gpu, det_gpu; rng=MersenneTwister(3))
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(slopes(wfs_gpu)))
 
     println("common_calibration_lgs_asterism_equivalence")
@@ -311,8 +317,9 @@ function _build_zernike_case(backend, ::Type{T}) where {T<:AbstractFloat}
     src = Source(band=:I, magnitude=T(0), T=T)
     wfs = ZernikeWFS(tel; pupil_samples=8, diffraction_padding=2, T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1e-3), qe=T(1), binning=1, T=T, backend=backend)
-    _set_deterministic_opd!(tel)
-    return tel, src, wfs, det
+    pupil = PupilFunction(tel; T=T, backend=backend)
+    _set_deterministic_opd!(pupil, tel)
+    return pupil, src, wfs, det
 end
 
 function _run_zernike_equivalence(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
@@ -321,11 +328,11 @@ function _run_zernike_equivalence(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBack
     BackendArray === nothing && error("GPU backend $(B) is not available")
     T = Float32
 
-    tel_cpu, src_cpu, wfs_cpu, det_cpu = _build_zernike_case(CPUBackend(), T)
-    tel_gpu, src_gpu, wfs_gpu, det_gpu = _build_zernike_case(_gpu_backend_selector(B), T)
+    pupil_cpu, src_cpu, wfs_cpu, det_cpu = _build_zernike_case(CPUBackend(), T)
+    pupil_gpu, src_gpu, wfs_gpu, det_gpu = _build_zernike_case(_gpu_backend_selector(B), T)
 
-    measure!(wfs_cpu, tel_cpu, src_cpu, det_cpu; rng=MersenneTwister(4))
-    measure!(wfs_gpu, tel_gpu, src_gpu, det_gpu; rng=MersenneTwister(4))
+    measure!(wfs_cpu, pupil_cpu, src_cpu, det_cpu; rng=MersenneTwister(4))
+    measure!(wfs_gpu, pupil_gpu, src_gpu, det_gpu; rng=MersenneTwister(4))
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(slopes(wfs_gpu)))
 
     println("zernike_equivalence")

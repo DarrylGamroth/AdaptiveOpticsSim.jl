@@ -5,40 +5,30 @@ struct TelescopeParams{T<:AbstractFloat}
     fov_arcsec::T
 end
 
-struct TelescopeAperture{T<:AbstractFloat,
+mutable struct TelescopeAperture{T<:AbstractFloat,
     Amask<:AbstractMatrix{Bool},
     Aref<:AbstractMatrix{T}}
     pupil::Amask
     reflectivity::Aref
     sampling_m::NTuple{2,T}
     origin_m::NTuple{2,T}
+    revision::UInt
 end
 
-# Transitional OPD storage used by WFS paths that have not yet migrated to
-# caller-owned pupil products. Direct-science focal products and propagation
-# workspaces are path-owned and must never be stored here.
-mutable struct LegacyTelescopePathState{T<:AbstractFloat,
-    Aopd<:AbstractMatrix{T}}
-    opd::Aopd
-    aperture_revision::UInt
-end
-
-struct Telescope{P<:TelescopeParams,A<:TelescopeAperture,S<:LegacyTelescopePathState,
+struct Telescope{P<:TelescopeParams,A<:TelescopeAperture,
     B<:AbstractArrayBackend} <: AbstractTelescope
     params::P
     aperture::A
-    state::S
 end
 
-@inline backend(::Telescope{<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline backend(::Telescope{<:Any,<:Any,B}) where {B} = B()
 @inline pupil_mask(tel::Telescope) = tel.aperture.pupil
 @inline pupil_reflectivity(tel::Telescope) = tel.aperture.reflectivity
-@inline opd_map(tel::Telescope) = tel.state.opd
-@inline aperture_revision(tel::Telescope) = tel.state.aperture_revision
+@inline aperture_revision(tel::Telescope) = tel.aperture.revision
 
 @inline function advance_aperture_revision!(tel::Telescope)
-    tel.state.aperture_revision += one(UInt)
-    return tel.state.aperture_revision
+    tel.aperture.revision += one(UInt)
+    return tel.aperture.revision
 end
 
 function Telescope(; resolution::Int,
@@ -69,17 +59,10 @@ function Telescope(; resolution::Int,
         reflectivity,
         (sampling_m, sampling_m),
         (origin, origin),
-    )
-
-    opd = backend{T}(undef, resolution, resolution)
-    fill!(opd, zero(T))
-
-    state = LegacyTelescopePathState{T,typeof(opd)}(
-        opd,
         zero(UInt),
     )
-    return Telescope{typeof(params),typeof(aperture),typeof(state),
-        typeof(selector)}(params, aperture, state)
+    return Telescope{typeof(params),typeof(aperture),typeof(selector)}(
+        params, aperture)
 end
 
 function generate_pupil!(pupil::AbstractMatrix{Bool}, params::TelescopeParams)
@@ -98,11 +81,6 @@ function _generate_pupil!(style::AcceleratorStyle, pupil::AbstractMatrix{Bool}, 
     build_mask!(pupil, AnnularAperture(inner_radius=params.central_obstruction, outer_radius=one(params.diameter), T=typeof(params.diameter));
         grid=default_mask_grid(pupil; T=typeof(params.diameter)))
     return pupil
-end
-
-function reset_opd!(tel::Telescope)
-    fill!(tel.state.opd, zero(eltype(tel.state.opd)))
-    return tel
 end
 
 @inline function _require_valid_pupil_reflectivity(value::Real)
@@ -136,14 +114,6 @@ function initialize_reflectivity(pupil::AbstractMatrix{Bool}, reflectivity::Abst
     copyto!(out, T.(reflectivity))
     out .*= pupil
     return out
-end
-
-function apply_opd!(tel::Telescope, opd::AbstractMatrix)
-    if size(opd) != size(tel.state.opd)
-        throw(DimensionMismatchError("OPD size does not match telescope resolution"))
-    end
-    tel.state.opd .= opd
-    return tel
 end
 
 function set_pupil!(tel::Telescope, pupil::AbstractMatrix{Bool})

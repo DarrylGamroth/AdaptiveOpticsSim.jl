@@ -83,11 +83,12 @@ The design goal is:
 At a high level, one closed-loop step is:
 
 1. advance atmosphere by the runtime's explicit `atmosphere_step`
-2. reset or update telescope OPD state
-3. apply DM command into telescope phase
-4. propagate source/field/atmosphere state to the sensing surface
-5. run WFS measurement and optional detector readout
-6. extract required products:
+2. render the published epoch into the runtime-owned WFS `PupilFunction`
+3. form the current controllable-optic surface and apply it to that path
+4. run WFS optical formation, optional detector acquisition, and estimation
+5. reuse the sensed path or independently re-render the science path according
+   to its prepared propagation policy, then capture requested science products
+6. export required products:
    - slopes
    - WFS pixels
    - science pixels
@@ -96,11 +97,8 @@ At a high level, one closed-loop step is:
 
 This split is visible in runtime timing and benchmark surfaces.
 
-This is the current implemented single-step flow. Atmosphere evolution,
-direction rendering, rate formation, and the prepared frame-detector boundary
-provide the corresponding ownership foundations below; the remaining Gate 0/2
-work replaces shared telescope/WFS path state and finishes the fully composed
-prepared flow:
+This is the current implemented single-step flow and the ownership foundation
+for the later multi-rate event runtime:
 
 1. advance one shared atmosphere epoch to explicit model time
 2. render each due direction through a path-local prepared renderer into a
@@ -117,9 +115,10 @@ prepared flow:
 
 The telescope owns aperture, reflectivity, spatial sampling, and geometry; it
 does not own cadence/exposure duration, a direct-science path's OPD/field or
-focal-plane result, FFT plans, or propagation scratch. Transitional telescope
-OPD remains for WFS families awaiting decomposition. Atmosphere advancement receives explicit model
-time; the telescope has no timing property. Source geometry and extended-source
+focal-plane result, FFT plans, or propagation scratch. Every maintained WFS,
+calibration, atmosphere, and science path owns an explicit `PupilFunction` or
+field product. Atmosphere advancement receives explicit model time; the
+telescope has no timing property. Source geometry and extended-source
 expansion are frozen or prepared per path rather than mutated in the shared
 atmosphere or source definition.
 
@@ -148,7 +147,7 @@ declare the source-dependent pupil-field equivalence it relies on. Prepared PROP
 meets native imaging at the same caller-owned photon-arrival-rate/acquisition boundary. These are concrete
 products and functions, not a universal optical graph or resampling framework.
 
-The transitional `SharedOpticalRuntime` forms each arm's native rate image once
+The frame-step `SharedOpticalRuntime` forms each arm's native rate image once
 and captures its detector tuple serially. Detector state and exposure are
 independent, but stochastic draws currently come from one runtime RNG in tuple
 order. The later event runtime may assign stable per-endpoint streams when

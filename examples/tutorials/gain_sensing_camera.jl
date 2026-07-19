@@ -54,34 +54,33 @@ function atmosphere_gsc_trace(
     atmosphere_step::Real=1e-3,
 )
     rng = tutorial_rng(seed)
+    pupil = PupilFunction(tel)
     H = zeros(Float64, length(slopes(wfs)), size(basis, 3))
     for k in 1:size(basis, 3)
-        apply_opd!(tel, calibration_amplitude .* view(basis, :, :, k))
-        measure!(wfs, tel, ngs)
+        apply_opd!(pupil, calibration_amplitude .* view(basis, :, :, k))
+        measure!(wfs, pupil, ngs)
         H[:, k] .= slopes(wfs)
     end
-    reset_opd!(tel)
+    reset_opd!(pupil)
 
     recon = pinv(H)
     control_coeffs = zeros(Float64, size(basis, 3))
     delayed_slopes = zeros(Float64, size(H, 1))
-    forcing_opd = zeros(Float64, size(tel.state.opd))
+    forcing_opd = similar(pupil.opd)
     correction_opd = similar(forcing_opd)
     residual_opd = similar(forcing_opd)
 
     gsc = GainSensingCamera(wfs, basis)
-    reset_opd!(tel)
-    calibration_frame = pyramid_modulation_frame(wfs, tel, ngs)
+    reset_opd!(pupil)
+    calibration_frame = pyramid_modulation_frame(wfs, pupil, ngs)
     calibrate!(gsc, calibration_frame)
     frame = similar(calibration_frame)
     og_safe = similar(gsc.og)
 
-    reset_opd!(tel)
-    science_pupil = PupilFunction(tel)
-    apply_opd!(science_pupil, opd_map(tel))
-    ngs_imaging = prepare_direct_imaging(tel, science_pupil, ngs;
+    reset_opd!(pupil)
+    ngs_imaging = prepare_direct_imaging(pupil, ngs;
         zero_padding=psf_zero_padding)
-    sci_imaging = prepare_direct_imaging(tel, science_pupil, sci;
+    sci_imaging = prepare_direct_imaging(pupil, sci;
         zero_padding=psf_zero_padding)
     ngs_image_ref = copy(intensity_values(form_direct_image!(ngs_imaging)))
     sci_image_ref = copy(intensity_values(form_direct_image!(sci_imaging)))
@@ -95,20 +94,19 @@ function atmosphere_gsc_trace(
         forcing_opd .= atmosphere_output.opd
         combine_modes!(correction_opd, basis, control_coeffs)
         @. residual_opd = forcing_opd - correction_opd
-        apply_opd!(tel, residual_opd)
-        apply_opd!(science_pupil, opd_map(tel))
+        apply_opd!(pupil, residual_opd)
 
-        trace[iter, 1] = pupil_rms(forcing_opd, pupil_mask(tel)) * 1e9
-        trace[iter, 2] = pupil_rms(residual_opd, pupil_mask(tel)) * 1e9
+        trace[iter, 1] = pupil_rms(forcing_opd, pupil_support(pupil)) * 1e9
+        trace[iter, 2] = pupil_rms(residual_opd, pupil_support(pupil)) * 1e9
         ngs_image = intensity_values(form_direct_image!(ngs_imaging))
         trace[iter, 4] = maximum(ngs_image) / maximum(ngs_image_ref)
-        slopes = measure!(wfs, tel, ngs)
+        slopes = measure!(wfs, pupil, ngs)
         trace[iter, 6] = norm(slopes)
-        pyramid_modulation_frame!(frame, wfs, tel, ngs)
+        pyramid_modulation_frame!(frame, wfs, pupil, ngs)
         og = compute_optical_gains!(gsc, frame)
         @. og_safe = max(abs(og), og_floor)
 
-        trace[iter, 3] = pupil_rms(residual_opd, pupil_mask(tel)) * 1e9
+        trace[iter, 3] = pupil_rms(residual_opd, pupil_support(pupil)) * 1e9
         sci_image = intensity_values(form_direct_image!(sci_imaging))
         trace[iter, 5] = maximum(sci_image) / maximum(sci_image_ref)
 
@@ -134,15 +132,16 @@ function main(; resolution::Int=24, pupil_samples::Int=4)
         modulation_points=8, diffraction_padding=2, n_pix_separation=2, n_pix_edge=1)
     basis = cartesian_basis(tel, 4)
     gsc = GainSensingCamera(wfs, basis)
+    pupil = PupilFunction(tel)
 
-    reset_opd!(tel)
-    calibration_frame = pyramid_modulation_frame(wfs, tel, src)
+    reset_opd!(pupil)
+    calibration_frame = pyramid_modulation_frame(wfs, pupil, src)
     calibrate!(gsc, calibration_frame)
 
     coeffs = [20e-9, -12e-9, 8e-9, 0.0]
-    apply_opd!(tel, combine_modes(basis, coeffs))
+    apply_opd!(pupil, combine_modes(basis, coeffs))
     frame = similar(calibration_frame)
-    pyramid_modulation_frame!(frame, wfs, tel, src)
+    pyramid_modulation_frame!(frame, wfs, pupil, src)
     optical_gains = copy(compute_optical_gains!(gsc, frame))
 
     forcing_coeffs = [
@@ -153,30 +152,26 @@ function main(; resolution::Int=24, pupil_samples::Int=4)
     ]
     H = zeros(Float64, length(slopes(wfs)), size(basis, 3))
     for k in 1:size(basis, 3)
-        apply_opd!(tel, 1e-9 .* view(basis, :, :, k))
-        measure!(wfs, tel, src)
+        apply_opd!(pupil, 1e-9 .* view(basis, :, :, k))
+        measure!(wfs, pupil, src)
         H[:, k] .= slopes(wfs)
     end
-    reset_opd!(tel)
+    reset_opd!(pupil)
     recon = pinv(H)
     delayed_slopes = zeros(Float64, size(H, 1))
     control_coeffs = zeros(Float64, size(basis, 3))
     trace = Matrix{Float64}(undef, size(forcing_coeffs, 1), 3)
-    science_pupil = PupilFunction(tel)
-    apply_opd!(science_pupil, opd_map(tel))
-    imaging = prepare_direct_imaging(tel, science_pupil, src;
-        zero_padding=2)
+    imaging = prepare_direct_imaging(pupil, src; zero_padding=2)
     image_ref = copy(intensity_values(form_direct_image!(imaging)))
 
     for iter in 1:size(forcing_coeffs, 1)
         opd = combine_modes(basis, @view forcing_coeffs[iter, :]) .- combine_modes(basis, control_coeffs)
-        apply_opd!(tel, opd)
-        apply_opd!(science_pupil, opd_map(tel))
-        trace[iter, 1] = pupil_rms(tel.state.opd, pupil_mask(tel)) * 1e9
+        apply_opd!(pupil, opd)
+        trace[iter, 1] = pupil_rms(pupil.opd, pupil_support(pupil)) * 1e9
         image = intensity_values(form_direct_image!(imaging))
         trace[iter, 2] = maximum(image) / maximum(image_ref)
-        slopes = measure!(wfs, tel, src)
-        pyramid_modulation_frame!(frame, wfs, tel, src)
+        slopes = measure!(wfs, pupil, src)
+        pyramid_modulation_frame!(frame, wfs, pupil, src)
         og = compute_optical_gains!(gsc, frame)
         control_coeffs .+= 0.2 .* ((recon * delayed_slopes) ./ max.(abs.(og), 0.05))
         delayed_slopes .= slopes

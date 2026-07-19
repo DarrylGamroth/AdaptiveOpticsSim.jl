@@ -342,26 +342,38 @@ field-formation plan.
 """
 struct PupilFunction{
     M<:OpticalPlaneMetadata,
+    S<:AbstractMatrix{Bool},
     A<:AbstractMatrix,
     O<:AbstractMatrix,
     B<:AbstractArrayBackend,
 } <: AbstractOpticalProduct
     metadata::M
+    support::S
     amplitude::A
     opd::O
+    aperture_revision::UInt
 end
 
-@inline backend(::PupilFunction{<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline backend(::PupilFunction{<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline pupil_support(pupil::PupilFunction) = pupil.support
 @inline pupil_amplitude(pupil::PupilFunction) = pupil.amplitude
 @inline opd_map(pupil::PupilFunction) = pupil.opd
+@inline aperture_revision(pupil::PupilFunction) = pupil.aperture_revision
+@inline _pupil_resolution(pupil::PupilFunction) =
+    pupil.metadata.dimensions[1]
+@inline _pupil_cell_area(pupil::PupilFunction) =
+    pupil.metadata.sampling[1] * pupil.metadata.sampling[2]
+@inline _pupil_diameter_m(pupil::PupilFunction) =
+    pupil.metadata.sampling[1] * _pupil_resolution(pupil)
 
 function PupilFunction(tel::Telescope;
-    T::Type{<:AbstractFloat}=eltype(opd_map(tel)),
+    T::Type{<:AbstractFloat}=eltype(pupil_reflectivity(tel)),
     backend::AbstractArrayBackend=backend(tel))
     selector = require_same_backend(tel, _resolve_backend_selector(backend))
+    support = copy(pupil_mask(tel))
     amplitude = similar(pupil_reflectivity(tel), T,
         tel.params.resolution, tel.params.resolution)
-    opd = similar(opd_map(tel), T, tel.params.resolution,
+    opd = similar(pupil_reflectivity(tel), T, tel.params.resolution,
         tel.params.resolution)
     reflectivity = pupil_reflectivity(tel)
     @. amplitude = sqrt(reflectivity)
@@ -377,8 +389,20 @@ function PupilFunction(tel::Telescope;
         coherence=CoherentFieldCombination())
     validate_plane_storage(metadata, amplitude; label="pupil amplitude")
     return PupilFunction{
-        typeof(metadata),typeof(amplitude),typeof(opd),typeof(selector),
-    }(metadata, amplitude, opd)
+        typeof(metadata),typeof(support),typeof(amplitude),typeof(opd),
+        typeof(selector),
+    }(metadata, support, amplitude, opd, aperture_revision(tel))
+end
+
+"""Create an independent optical-path product on the same prepared pupil grid."""
+function PupilFunction(pupil::PupilFunction)
+    support = copy(pupil.support)
+    amplitude = copy(pupil.amplitude)
+    opd = copy(pupil.opd)
+    return PupilFunction{
+        typeof(pupil.metadata),typeof(support),typeof(amplitude),typeof(opd),
+        typeof(backend(pupil)),
+    }(pupil.metadata, support, amplitude, opd, pupil.aperture_revision)
 end
 
 function reset_opd!(pupil::PupilFunction)
@@ -412,7 +436,7 @@ end
 
 Apply an already formed optical-surface OPD to an explicit caller-owned pupil
 function. Controllable surfaces must first be formed with `update_surface!`;
-this operation never mutates telescope path state.
+this operation never mutates telescope aperture geometry or another path.
 """
 function apply_surface!(pupil::PupilFunction, surface, ::DMAdditive)
     surface_values = _validate_surface_application(pupil, surface)

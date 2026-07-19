@@ -79,18 +79,19 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=20, warm
     ast = Asterism([lgs, second_lgs])
     wfs = ShackHartmannWFS(tel; n_lenslets=14, mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1e-3), qe=T(1), binning=1, T=T, backend=backend)
+    pupil = PupilFunction(tel; T=T, backend=backend)
 
     rng = runtime_rng(1)
-    AdaptiveOpticsSim.randn_backend!(rng, tel.state.opd)
-    tel.state.opd .*= T(5e-8)
+    AdaptiveOpticsSim.randn_backend!(rng, pupil.opd)
+    pupil.opd .*= T(5e-8)
 
     t0 = time_ns()
-    measure!(wfs, tel, ast, det; rng=rng)
+    measure!(wfs, pupil, ast, det; rng=rng)
     _sync_wfs!(backend_tag, wfs)
     build_time_ns = time_ns() - t0
 
     timing = runtime_timing(() -> begin
-        measure!(wfs, tel, ast, det; rng=rng)
+        measure!(wfs, pupil, ast, det; rng=rng)
         _sync_wfs!(backend_tag, wfs)
     end; warmup=warmup, samples=samples, gc_before=false)
 

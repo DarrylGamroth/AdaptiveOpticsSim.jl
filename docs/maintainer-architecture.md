@@ -74,12 +74,14 @@ The dominant pattern is:
 
 Examples:
 
-- `Telescope` with immutable `TelescopeParams`, prepared `TelescopeAperture`,
-  and transitional `LegacyTelescopePathState`; telescope parameters contain
-  spatial geometry but no cadence or exposure duration
+- `Telescope` with immutable `TelescopeParams` and a revisioned prepared
+  `TelescopeAperture`; it owns spatial geometry and intensity reflectivity but
+  no mutable OPD, cadence, or exposure duration
 - caller-owned `PupilFunction`, `ElectricField`, and `IntensityMap`
   products with immutable `OpticalPlaneMetadata`, including normalization,
-  spatial-measure, and coherent/incoherent combination policy
+  spatial-measure, and coherent/incoherent combination policy. A
+  `PupilFunction` snapshots aperture support and field amplitude and owns the
+  mutable OPD for exactly one optical path
 - `ShackHartmannWFS` composed through one explicit `front_end`, separate
   calibration, acquisition, and estimator owners. The front end is a
   propagation-free `ShackHartmannDirectFrontEnd` for geometric sensing or a
@@ -158,9 +160,9 @@ Examples:
 
 - `advance_by!(atm, elapsed_seconds)` or `advance_to!(atm, model_time)`
 - `render_atmosphere!(pupil, renderer, atm, epoch)`
-- `propagate!(atm, tel, src)` as a transitional convenience adapter
-- `measure!(wfs, tel, src, det)`
-- `apply!(dm, tel, DMAdditive())`
+- `measure!(wfs, pupil, src, det)`
+- `update_surface!(optic)` followed by
+  `apply_surface!(pupil, optic, DMAdditive())`
 
 These functions should own local physics and algorithm behavior, but not broad
 backend policy.
@@ -215,6 +217,9 @@ The current runtime model is:
 - shared multi-arm runtimes own one atmosphere advance and command state while
   source-specific arms own their WFS consumers, prepared direct-imaging
   products/workspace, and independent detector acquisitions
+- the primary WFS path, science path, and auxiliary-arm paths own distinct
+  `PupilFunction` products; a path may explicitly copy a reusable residual
+  only when its propagation policy declares that reuse valid
 - WFS and detector pipelines own their sampled/readout/intermediate products
   explicitly rather than relying on in-place aliasing
 - optical formation produces photon-arrival rates or explicitly dimensionless

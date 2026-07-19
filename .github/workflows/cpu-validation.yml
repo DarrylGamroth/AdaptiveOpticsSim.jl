@@ -72,4 +72,4 @@ jobs:
         run: julia --project=test/schedulers --startup-file=no -e 'using Pkg; Pkg.instantiate()'
 
       - name: Run scheduler extension tests
-        run: julia --project=test/schedulers --startup-file=no test/schedulers/runtests.jl
+        run: julia --threads=4 --project=test/schedulers --startup-file=no test/schedulers/runtests.jl

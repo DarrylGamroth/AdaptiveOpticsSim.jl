@@ -127,14 +127,23 @@ function electric_field_wavelength(::AbstractSpectralCoordinate)
         "ElectricField must declare a monochromatic wavelength"))
 end
 
-function prepare_pupil_field(tel::Telescope, wavefront::PupilFunction,
-    src::AbstractSource, field::ElectricField;
+function prepare_pupil_field(wavefront::PupilFunction, src::AbstractSource,
+    field::ElectricField;
     center_even_grid::Bool=true,
     amplitude_scale::Union{Real,Nothing}=nothing)
     validate_plane_storage(wavefront.metadata, wavefront.amplitude;
         label="pupil-wavefront amplitude")
     validate_plane_storage(wavefront.metadata, wavefront.opd;
         label="pupil-wavefront OPD")
+    size(wavefront.support) == wavefront.metadata.dimensions || throw(
+        DimensionMismatchError(
+            "pupil-wavefront support dimensions must match its metadata"))
+    typeof(backend(wavefront.support)) === typeof(backend(wavefront)) ||
+        throw(InvalidConfiguration(
+            "pupil-wavefront support backend must match its optical storage"))
+    plane_device(wavefront.support) == wavefront.metadata.device || throw(
+        InvalidConfiguration(
+            "pupil-wavefront support must occupy the same physical device as its optical storage"))
     validate_plane_storage(field.metadata, field.values;
         label="electric field")
     require_centered_plane_geometry(wavefront.metadata;
@@ -151,15 +160,9 @@ function prepare_pupil_field(tel::Telescope, wavefront::PupilFunction,
     typeof(field.metadata.kind) === PupilPlane ||
         throw(InvalidConfiguration(
             "pupil-field formation requires a pupil-plane ElectricField"))
-    wavefront.metadata.dimensions == size(pupil_mask(tel)) ||
-        throw(DimensionMismatchError(
-            "PupilFunction dimensions must match telescope aperture"))
-    plane_device(pupil_mask(tel)) == wavefront.metadata.device ||
-        throw(InvalidConfiguration(
-            "telescope aperture and PupilFunction occupy different physical devices"))
-    typeof(backend(tel)) === typeof(backend(wavefront)) ===
-        typeof(backend(field)) || throw(InvalidConfiguration(
-            "telescope, PupilFunction, and ElectricField backends must match"))
+    typeof(backend(wavefront)) === typeof(backend(field)) || throw(
+        InvalidConfiguration(
+            "PupilFunction and ElectricField backends must match"))
     wavefront.metadata.device == field.metadata.device ||
         throw(InvalidConfiguration(
             "PupilFunction and ElectricField must occupy the same physical device"))

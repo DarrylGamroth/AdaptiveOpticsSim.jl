@@ -110,8 +110,9 @@ function _control_loop_scale_config(name::AbstractString)
     )
 end
 
-function _build_recon(dm, wfs, tel, src)
-    imat = interaction_matrix(dm, wfs, tel, src; amplitude=eltype(dm.state.coefs)(0.05))
+function _build_recon(dm, wfs, pupil, src)
+    imat = interaction_matrix(dm, wfs, pupil, src;
+        amplitude=eltype(dm.state.coefs)(0.05))
     return ModalReconstructor(imat; gain=eltype(dm.state.coefs)(0.5))
 end
 
@@ -129,7 +130,8 @@ function _runtime_components(::Type{T}, backend_selector, resolution::Int, wfs_s
         error("unsupported sensor '$sensor'")
     end
     sim = AdaptiveOpticsSim.AOSimulation(tel, src, atm, dm, wfs)
-    recon = _build_recon(dm, wfs, tel, src)
+    calibration_pupil = PupilFunction(tel; T=T, backend=backend_selector)
+    recon = _build_recon(dm, wfs, calibration_pupil, src)
     return sim, recon
 end
 

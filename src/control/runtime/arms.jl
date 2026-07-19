@@ -101,20 +101,23 @@ end
 
 Execute a primary closed-loop runtime and source-specific auxiliary optical
 arms against one atmosphere, telescope, controllable optic, command state, and
-RNG. Each `sense!` advances the atmosphere exactly once. Consecutive arms that
-reference the same source object reuse the already-rendered pupil path.
+RNG. Each `sense!` advances the atmosphere exactly once. Each arm is rendered
+into an explicit reusable pupil product; multiple consumers on that arm share
+the path when their propagation models permit it.
 """
 struct SharedOpticalRuntime{
     RT<:ClosedLoopRuntime,
     A<:Tuple,
     R<:Tuple,
     S<:Tuple,
+    P<:PupilFunction,
     B<:AbstractArrayBackend,
 } <: AbstractControlSimulation
     runtime::RT
     arms::A
     atmosphere_renderers::R
     science_stages::S
+    pupil::P
 end
 
 function _shared_arm_with_source(arm::SharedOpticalArm,
@@ -159,16 +162,20 @@ function SharedOpticalRuntime(runtime::ClosedLoopRuntime,
         _prepare_runtime_science_stage(runtime.tel, arm.source,
             arm.science_detectors, arm.science_zero_padding)
     end
+    pupil = PupilFunction(runtime.tel)
     return SharedOpticalRuntime{typeof(runtime),typeof(frozen_arms),
-        typeof(renderers),typeof(science_stages),typeof(selector)}(
+        typeof(renderers),typeof(science_stages),typeof(pupil),
+        typeof(selector)}(
         runtime,
         frozen_arms,
         renderers,
         science_stages,
+        pupil,
     )
 end
 
-@inline backend(::SharedOpticalRuntime{<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline backend(::SharedOpticalRuntime{
+    <:Any,<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
 @inline primary_runtime(runtime::SharedOpticalRuntime) = runtime.runtime
 @inline optical_arms(runtime::SharedOpticalRuntime) = runtime.arms
 @inline wfs_source(runtime::SharedOpticalRuntime) = wfs_source(runtime.runtime)
@@ -181,58 +188,50 @@ end
 @inline command_layout(runtime::SharedOpticalRuntime) = command_layout(runtime.runtime)
 @inline simulation_readout(runtime::SharedOpticalRuntime) = simulation_readout(runtime.runtime)
 
-abstract type AbstractSharedArmPathPlan end
-struct ReuseSharedArmPath <: AbstractSharedArmPathPlan end
-struct RenderSharedArmPath <: AbstractSharedArmPathPlan end
-
-@inline shared_arm_path_plan(current_source::AbstractSource,
-    target_source::AbstractSource) = current_source === target_source ?
-    ReuseSharedArmPath() : RenderSharedArmPath()
-
-@inline prepare_shared_arm_path!(::ReuseSharedArmPath,
+@inline function prepare_shared_arm_path!(
     runtime::ClosedLoopRuntime, arm::SharedOpticalArm,
-    atmosphere_renderer) = nothing
-
-@inline function prepare_shared_arm_path!(::RenderSharedArmPath,
-    runtime::ClosedLoopRuntime, arm::SharedOpticalArm,
-    atmosphere_renderer)
+    atmosphere_renderer, pupil::PupilFunction)
     render_prepared_atmosphere_path!(atmosphere_renderer, runtime.atm,
-        runtime.tel, arm.source)
-    apply!(runtime.optic, runtime.tel, DMAdditive())
+        pupil, arm.source)
+    update_surface!(runtime.optic)
+    apply_surface!(pupil, runtime.optic, DMAdditive())
     return nothing
 end
 
 @inline function sense_shared_wfs_channel!(
     channel::OpticalWFSChannel{<:AbstractWFS,Nothing},
-    runtime::ClosedLoopRuntime, source::AbstractSource)
-    prepare_shared_runtime_wfs!(channel.wfs, runtime.atm, runtime.tel,
+    runtime::ClosedLoopRuntime, pupil::PupilFunction,
+    source::AbstractSource)
+    prepare_shared_runtime_wfs!(channel.wfs, runtime.atm, pupil,
         runtime.optic, source)
-    measure_runtime_wfs!(channel.wfs, runtime.atm, runtime.tel, source,
+    measure_runtime_wfs!(channel.wfs, runtime.atm, pupil, source,
         runtime.rng)
-    finish_runtime_wfs_sensing!(channel.wfs, runtime.atm, runtime.tel,
+    finish_runtime_wfs_sensing!(channel.wfs, runtime.atm, pupil,
         runtime.optic, source)
     return nothing
 end
 
 @inline function sense_shared_wfs_channel!(
     channel::OpticalWFSChannel{<:AbstractWFS,<:AbstractDetector},
-    runtime::ClosedLoopRuntime, source::AbstractSource)
-    prepare_shared_runtime_wfs!(channel.wfs, runtime.atm, runtime.tel,
+    runtime::ClosedLoopRuntime, pupil::PupilFunction,
+    source::AbstractSource)
+    prepare_shared_runtime_wfs!(channel.wfs, runtime.atm, pupil,
         runtime.optic, source)
-    measure_runtime_wfs!(channel.wfs, runtime.atm, runtime.tel, source,
+    measure_runtime_wfs!(channel.wfs, runtime.atm, pupil, source,
         channel.detector, runtime.rng)
-    finish_runtime_wfs_sensing!(channel.wfs, runtime.atm, runtime.tel,
+    finish_runtime_wfs_sensing!(channel.wfs, runtime.atm, pupil,
         runtime.optic, source)
     return nothing
 end
 
 @inline sense_shared_wfs_channels!(::Tuple{}, runtime::ClosedLoopRuntime,
-    source::AbstractSource) = nothing
+    pupil::PupilFunction, source::AbstractSource) = nothing
 
 @inline function sense_shared_wfs_channels!(channels::Tuple,
-    runtime::ClosedLoopRuntime, source::AbstractSource)
-    sense_shared_wfs_channel!(first(channels), runtime, source)
-    sense_shared_wfs_channels!(Base.tail(channels), runtime, source)
+    runtime::ClosedLoopRuntime, pupil::PupilFunction,
+    source::AbstractSource)
+    sense_shared_wfs_channel!(first(channels), runtime, pupil, source)
+    sense_shared_wfs_channels!(Base.tail(channels), runtime, pupil, source)
     return nothing
 end
 
@@ -248,13 +247,25 @@ end
     return nothing
 end
 
+@inline shared_arm_science_path(::Tuple{}) = ReuseSensedOpticalPath()
+@inline shared_arm_science_path(channels::Tuple) =
+    shared_arm_science_path(first(channels).wfs, Base.tail(channels))
+@inline shared_arm_science_path(::AbstractWFS, channels::Tuple) =
+    shared_arm_science_path(channels)
+@inline shared_arm_science_path(::CurvatureWFS, ::Tuple) =
+    RepropagateScienceOpticalPath()
+
 @inline capture_shared_science_arm!(::Nothing, runtime::ClosedLoopRuntime,
-    arm::SharedOpticalArm) = nothing
+    arm::SharedOpticalArm, atmosphere_renderer,
+    pupil::PupilFunction) = nothing
 
 @inline function capture_shared_science_arm!(
     stage::PreparedRuntimeScienceStage,
-    runtime::ClosedLoopRuntime, arm::SharedOpticalArm)
-    update_runtime_science_pupil!(stage, runtime.tel)
+    runtime::ClosedLoopRuntime, arm::SharedOpticalArm,
+    atmosphere_renderer, pupil::PupilFunction)
+    prepare_science_path!(shared_arm_science_path(arm.wfs_channels),
+        atmosphere_renderer, runtime.atm, pupil, runtime.optic, arm.source,
+        stage)
     form_direct_image!(stage.imaging)
     capture_shared_science_detectors!(arm.science_detectors,
         stage.acquisition, stage, runtime.rng)
@@ -263,29 +274,26 @@ end
 
 @inline function execute_shared_optical_arm!(runtime::ClosedLoopRuntime,
     arm::SharedOpticalArm, atmosphere_renderer, science_stage,
-    current_source::AbstractSource)
-    prepare_shared_arm_path!(shared_arm_path_plan(current_source, arm.source),
-        runtime, arm, atmosphere_renderer)
-    sense_shared_wfs_channels!(arm.wfs_channels, runtime, arm.source)
-    capture_shared_science_arm!(science_stage, runtime, arm)
-    return arm.source
+    pupil::PupilFunction)
+    prepare_shared_arm_path!(runtime, arm, atmosphere_renderer, pupil)
+    sense_shared_wfs_channels!(arm.wfs_channels, runtime, pupil, arm.source)
+    capture_shared_science_arm!(science_stage, runtime, arm,
+        atmosphere_renderer, pupil)
+    return nothing
 end
 
 @inline execute_shared_optical_arms!(::Tuple{}, ::Tuple{}, ::Tuple{},
-    runtime::ClosedLoopRuntime, current_source::AbstractSource) = current_source
+    runtime::ClosedLoopRuntime, pupil::PupilFunction) = nothing
 
 @inline function execute_shared_optical_arms!(
     arms::Tuple{<:SharedOpticalArm,Vararg}, renderers::Tuple,
     science_stages::Tuple,
-    runtime::ClosedLoopRuntime, current_source::AbstractSource)
-    next_source = execute_shared_optical_arm!(runtime, first(arms),
-        first(renderers), first(science_stages), current_source)
+    runtime::ClosedLoopRuntime, pupil::PupilFunction)
+    execute_shared_optical_arm!(runtime, first(arms), first(renderers),
+        first(science_stages), pupil)
     return execute_shared_optical_arms!(Base.tail(arms),
-        Base.tail(renderers), Base.tail(science_stages), runtime, next_source)
+        Base.tail(renderers), Base.tail(science_stages), runtime, pupil)
 end
-
-@inline primary_terminal_source(runtime::ClosedLoopRuntime) =
-    requires_runtime_science_pixels(runtime) ? runtime.science_src : runtime.src
 
 @inline preflight_shared_science_detectors!(::Tuple{}, ::Tuple{},
     ::PreparedRuntimeScienceStage) = nothing
@@ -333,7 +341,7 @@ function prepare!(runtime::SharedOpticalRuntime)
     prepare!(runtime.runtime)
     @inbounds for arm in runtime.arms
         @inbounds for channel in arm.wfs_channels
-            prepare_runtime_wfs!(channel.wfs, runtime.runtime.tel, arm.source)
+            prepare_runtime_wfs!(channel.wfs, runtime.pupil, arm.source)
         end
     end
     return runtime
@@ -350,8 +358,7 @@ function sense!(runtime::SharedOpticalRuntime)
         primary.atmosphere_step, primary.rng)
     sense_runtime!(ReuseAdvancedRuntimeAtmosphere(), primary)
     execute_shared_optical_arms!(runtime.arms, runtime.atmosphere_renderers,
-        runtime.science_stages, primary,
-        primary_terminal_source(primary))
+        runtime.science_stages, primary, runtime.pupil)
     return runtime
 end
 

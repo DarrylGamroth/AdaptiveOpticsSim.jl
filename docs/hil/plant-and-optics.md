@@ -557,7 +557,7 @@ edges are modeled by the trigger topology in
 points through an RTC port.
 
 The existing `PyramidWFS` diffractive implementation averages a prepared set of
-modulation positions against one unchanged telescope OPD. That remains the
+modulation positions against one unchanged path-owned pupil OPD. That remains the
 fast baseline cycle-averaged fidelity policy. Its normalized quadrature weights
 form an optical average and do not supply an exposure-time factor; detector
 acquisition still integrates the resulting rate. A later, profile-driven
@@ -598,9 +598,9 @@ optical planes:
 
 The current `NCPA` model already synthesizes a static pupil OPD from KL,
 Zernike, or external modal-to-command bases and applies it additively or by
-replacement. It is a useful optical primitive, but applying it to the shared
-telescope state does not by itself express a non-common path. The multi-path
-runtime must attach that aberration to the selected science or WFS branch.
+replacement. It is a path-agnostic optical primitive; applying it to a
+caller-owned `PupilFunction` selects the affected path. A multi-path runtime
+must therefore attach that aberration to the selected science or WFS branch.
 Static sampled maps can also be represented directly with `OPDMap`.
 
 Detailed relay and instrument prescriptions remain outside the core. Use

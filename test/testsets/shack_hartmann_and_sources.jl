@@ -27,10 +27,11 @@ end
 
 @testset "Shack-Hartmann resized detector mosaic" begin
     tel = Telescope(resolution=64, diameter=8.0, central_obstruction=0.1)
+    pupil = PupilFunction(tel)
     src = Source(band=:I, magnitude=7.0)
     sh = ShackHartmannWFS(tel; n_lenslets=16, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8)
-    prepare_runtime_wfs!(sh, tel, src)
-    measure!(sh, tel, src)
+    prepare_runtime_wfs!(sh, pupil, src)
+    measure!(sh, pupil, src)
     image = wfs_detector_image(sh)
     @test size(image) == (128, 128)
     @test size(AdaptiveOpticsSim.sh_exported_spot_cube(sh)) == (16 * 16, 8, 8)
@@ -38,6 +39,7 @@ end
 
 @testset "Shack-Hartmann signal extraction branches" begin
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
+    pupil = PupilFunction(tel)
     src = Source(band=:I, magnitude=0.0)
 
     zero_intensity = zeros(Float64, 3, 3)
@@ -191,13 +193,15 @@ end
 
     det = Detector(noise=NoiseNone(), binning=1)
     sh_det = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    point_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_det, tel, src, det, MersenneTwister(21))
+    point_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_det, pupil,
+        src, det, MersenneTwister(21))
     point_spots = copy(sh_det.acquisition.spot_cube)
     @test isfinite(point_peak)
     @test point_peak > 0
     sh_det_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    AdaptiveOpticsSim.prepare_sampling!(sh_det_accel, tel, src)
-    point_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(KA_CPU_STYLE, sh_det_accel, tel, src, det, MersenneTwister(21))
+    AdaptiveOpticsSim.prepare_sampling!(sh_det_accel, pupil, src)
+    point_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(KA_CPU_STYLE,
+        sh_det_accel, pupil, src, det, MersenneTwister(21))
     @test point_peak_accel ≈ point_peak
 
     distinct_spectral = with_spectrum(src, SpectralBundle([
@@ -207,13 +211,13 @@ end
     sh_distinct = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4)
     @test_throws InvalidConfiguration AdaptiveOpticsSim.sampled_spots_peak!(
-        sh_distinct, tel, distinct_spectral, det, MersenneTwister(22))
-    AdaptiveOpticsSim.prepare_sampling!(sh_distinct, tel, src)
+        sh_distinct, pupil, distinct_spectral, det, MersenneTwister(22))
+    AdaptiveOpticsSim.prepare_sampling!(sh_distinct, pupil, src)
     @test_throws InvalidConfiguration AdaptiveOpticsSim.sampled_spots_peak!(
-        AdaptiveOpticsSim.ScalarCPUStyle(), sh_distinct, tel,
+        AdaptiveOpticsSim.ScalarCPUStyle(), sh_distinct, pupil,
         distinct_spectral, det, MersenneTwister(22))
     @test_throws InvalidConfiguration AdaptiveOpticsSim.sampled_spots_peak!(
-        KA_CPU_STYLE, sh_distinct, tel, distinct_spectral, det,
+        KA_CPU_STYLE, sh_distinct, pupil, distinct_spectral, det,
         MersenneTwister(22))
 
     common_spectral = with_spectrum(src, SpectralBundle([
@@ -222,7 +226,7 @@ end
     ]))
     sh_spectral = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4)
-    spectral_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_spectral, tel,
+    spectral_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_spectral, pupil,
         common_spectral, det, MersenneTwister(22))
     spectral_spots = copy(sh_spectral.acquisition.spot_cube)
     @test isfinite(spectral_peak)
@@ -231,49 +235,55 @@ end
     @test spectral_spots ≈ point_spots
     sh_spectral_accel = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4)
-    AdaptiveOpticsSim.prepare_sampling!(sh_spectral_accel, tel,
+    AdaptiveOpticsSim.prepare_sampling!(sh_spectral_accel, pupil,
         common_spectral)
     spectral_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(
-        KA_CPU_STYLE, sh_spectral_accel, tel, common_spectral, det,
+        KA_CPU_STYLE, sh_spectral_accel, pupil, common_spectral, det,
         MersenneTwister(22))
     @test spectral_peak_accel ≈ spectral_peak
     @test sh_spectral_accel.acquisition.spot_cube ≈ spectral_spots
 
     ext_single = with_extended_source(src, PointCloudSourceModel([(0.0, 0.0)], [1.0]))
     sh_ext_single = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    ext_single_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_ext_single, tel, ext_single, det, MersenneTwister(23))
+    ext_single_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_ext_single,
+        pupil, ext_single, det, MersenneTwister(23))
     @test ext_single_peak ≈ point_peak atol=1e-8 rtol=1e-8
     ext_double = with_extended_source(src, PointCloudSourceModel([(0.0, 0.0), (0.1, 0.0)], [0.5, 0.5]))
     sh_ext_double_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    AdaptiveOpticsSim.prepare_sampling!(sh_ext_double_accel, tel, src)
+    AdaptiveOpticsSim.prepare_sampling!(sh_ext_double_accel, pupil, src)
     ext_double_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(
-        KA_CPU_STYLE, sh_ext_double_accel, tel, ext_double, det, MersenneTwister(23))
+        KA_CPU_STYLE, sh_ext_double_accel, pupil, ext_double, det,
+        MersenneTwister(23))
     @test isfinite(ext_double_peak_accel)
     @test ext_double_peak_accel > 0
 
     ast_batched = Asterism([src, Source(band=:I, magnitude=0.0, coordinates=(0.1, 0.0))])
     sh_ast_batched = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    AdaptiveOpticsSim.prepare_sampling!(sh_ast_batched, tel, src)
-    AdaptiveOpticsSim.ensure_sh_calibration!(sh_ast_batched, tel, src)
-    ast_batched_slopes = AdaptiveOpticsSim.measure_sh_asterism_batched!(KA_CPU_STYLE, sh_ast_batched, tel, ast_batched)
+    AdaptiveOpticsSim.prepare_sampling!(sh_ast_batched, pupil, src)
+    AdaptiveOpticsSim.ensure_sh_calibration!(sh_ast_batched, pupil, src)
+    ast_batched_slopes = AdaptiveOpticsSim.measure_sh_asterism_batched!(
+        KA_CPU_STYLE, sh_ast_batched, pupil, ast_batched)
     @test length(ast_batched_slopes) == 2 * 4 * 4
     @test all(isfinite, ast_batched_slopes)
     sh_ast_batched_det = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    AdaptiveOpticsSim.prepare_sampling!(sh_ast_batched_det, tel, src)
-    AdaptiveOpticsSim.ensure_sh_calibration!(sh_ast_batched_det, tel, src)
+    AdaptiveOpticsSim.prepare_sampling!(sh_ast_batched_det, pupil, src)
+    AdaptiveOpticsSim.ensure_sh_calibration!(sh_ast_batched_det, pupil, src)
     ast_batched_det_slopes = AdaptiveOpticsSim.measure_sh_asterism_batched!(
-        KA_CPU_STYLE, sh_ast_batched_det, tel, ast_batched, det, MersenneTwister(26))
+        KA_CPU_STYLE, sh_ast_batched_det, pupil, ast_batched, det,
+        MersenneTwister(26))
     @test length(ast_batched_det_slopes) == 2 * 4 * 4
     @test all(isfinite, ast_batched_det_slopes)
 
     lgs = LGSSource(elongation_factor=1.3, photon_irradiance=1.0)
     sh_lgs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    lgs_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_lgs, tel, lgs, det, MersenneTwister(24))
+    lgs_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_lgs, pupil, lgs,
+        det, MersenneTwister(24))
     @test isfinite(lgs_peak)
     @test lgs_peak >= 0
     sh_lgs_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    AdaptiveOpticsSim.prepare_sampling!(sh_lgs_accel, tel, lgs)
-    lgs_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(KA_CPU_STYLE, sh_lgs_accel, tel, lgs, det, MersenneTwister(24))
+    AdaptiveOpticsSim.prepare_sampling!(sh_lgs_accel, pupil, lgs)
+    lgs_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(KA_CPU_STYLE,
+        sh_lgs_accel, pupil, lgs, det, MersenneTwister(24))
     @test isfinite(lgs_peak_accel)
     @test lgs_peak_accel >= 0
 
@@ -281,17 +291,22 @@ end
     lgs_profile = LGSSource(elongation_factor=1.2, na_profile=na_profile,
         fwhm_spot_up=1.0, photon_irradiance=1.0)
     sh_lgs_profile_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    AdaptiveOpticsSim.prepare_sampling!(sh_lgs_profile_accel, tel, lgs_profile)
-    @test AdaptiveOpticsSim.sampled_spots_peak!(KA_CPU_STYLE, sh_lgs_profile_accel, tel, lgs_profile) >= 0
+    AdaptiveOpticsSim.prepare_sampling!(sh_lgs_profile_accel, pupil,
+        lgs_profile)
+    @test AdaptiveOpticsSim.sampled_spots_peak!(KA_CPU_STYLE,
+        sh_lgs_profile_accel, pupil, lgs_profile) >= 0
     sh_lgs_profile_det_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    AdaptiveOpticsSim.prepare_sampling!(sh_lgs_profile_det_accel, tel, lgs_profile)
+    AdaptiveOpticsSim.prepare_sampling!(sh_lgs_profile_det_accel, pupil,
+        lgs_profile)
     @test AdaptiveOpticsSim.sampled_spots_peak!(
-        KA_CPU_STYLE, sh_lgs_profile_det_accel, tel, lgs_profile, det, MersenneTwister(25)) >= 0
+        KA_CPU_STYLE, sh_lgs_profile_det_accel, pupil, lgs_profile, det,
+        MersenneTwister(25)) >= 0
 end
 
 @testset "Shack-Hartmann LGS calibration cache identity" begin
     tel = Telescope(resolution=16, diameter=8.0,
         central_obstruction=0.0)
+    pupil = PupilFunction(tel)
     profile = [80000.0 90000.0 100000.0; 0.2 0.6 0.2]
     shifted_profile = [80000.0 90000.0 100000.0; 0.1 0.6 0.3]
     base = LGSSource(na_profile=profile, laser_coordinates=(0.0, 0.0),
@@ -332,16 +347,16 @@ end
         AdaptiveOpticsSim.calibration_signature(altitude_changed)
 
     signatures = map((base, changed_geometry, changed_profile)) do src
-        AdaptiveOpticsSim.telescope_aperture_calibration_signature(tel,
+        AdaptiveOpticsSim.pupil_aperture_calibration_signature(pupil,
             AdaptiveOpticsSim.calibration_signature(src))
     end
 
     wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(),
         n_pix_subap=4)
-    AdaptiveOpticsSim.prepare_sampling!(wfs, tel, base)
+    AdaptiveOpticsSim.prepare_sampling!(wfs, pupil, base)
     for (src, signature) in zip(
         (base, changed_geometry, changed_profile), signatures)
-        AdaptiveOpticsSim.ensure_sh_calibration!(wfs, tel, src)
+        AdaptiveOpticsSim.ensure_sh_calibration!(wfs, pupil, src)
         @test wfs.calibration.signature == signature
         @test wfs.calibration.calibrated
     end
@@ -349,7 +364,7 @@ end
     bioedge = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     for (src, signature) in zip(
         (base, changed_geometry, changed_profile), signatures)
-        AdaptiveOpticsSim.ensure_bioedge_calibration!(bioedge, tel, src)
+        AdaptiveOpticsSim.ensure_bioedge_calibration!(bioedge, pupil, src)
         @test bioedge.estimator.state.calibration_signature == signature
         @test bioedge.estimator.state.calibrated
     end
@@ -357,6 +372,7 @@ end
 
 @testset "Shack-Hartmann incoherent detector acquisition order" begin
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
+    pupil = PupilFunction(tel)
     src = Source(band=:I, magnitude=10.0)
     extended = with_extended_source(src,
         PointCloudSourceModel([(0.0, 0.0), (0.2, 0.0)], [0.5, 0.5]))
@@ -365,8 +381,8 @@ end
     for style in (ScalarCPUStyle(), KA_CPU_STYLE)
         expected_wfs = ShackHartmannWFS(tel;
             n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-        prepare_sampling!(expected_wfs, tel, src)
-        sampled_spots_peak!(style, expected_wfs, tel, extended)
+        prepare_sampling!(expected_wfs, pupil, src)
+        sampled_spots_peak!(style, expected_wfs, pupil, extended)
         expected_frame = copy(expected_wfs.acquisition.spot_cube)
         expected_detector = Detector(noise=NoiseReadout(0.25), qe=0.8,
             integration_time=0.01, binning=1)
@@ -377,10 +393,10 @@ end
 
         actual_wfs = ShackHartmannWFS(tel;
             n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-        prepare_sampling!(actual_wfs, tel, src)
+        prepare_sampling!(actual_wfs, pupil, src)
         actual_detector = Detector(noise=NoiseReadout(0.25), qe=0.8,
             integration_time=0.01, binning=1)
-        sampled_spots_peak!(style, actual_wfs, tel, extended,
+        sampled_spots_peak!(style, actual_wfs, pupil, extended,
             actual_detector, MersenneTwister(777))
 
         @test actual_wfs.acquisition.spot_cube ≈ expected_frame atol=1e-10 rtol=1e-12
@@ -390,7 +406,7 @@ end
         n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     saturation_detector = Detector(noise=NoiseNone(), qe=1.0,
         integration_time=1.0, binning=1, full_well=100.0)
-    sampled_spots_peak!(saturation_wfs, tel, extended,
+    sampled_spots_peak!(saturation_wfs, pupil, extended,
         saturation_detector, MersenneTwister(778))
     @test maximum(saturation_wfs.acquisition.spot_cube) == 100.0
 
@@ -401,18 +417,18 @@ end
     for style in (ScalarCPUStyle(), KA_CPU_STYLE)
         sampled_qe_wfs = ShackHartmannWFS(tel;
             n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-        prepare_sampling!(sampled_qe_wfs, tel, qe_source)
+        prepare_sampling!(sampled_qe_wfs, pupil, qe_source)
         sampled_qe_detector = Detector(noise=NoiseNone(), qe=sampled_qe,
             integration_time=1.0, binning=1)
-        sampled_spots_peak!(style, sampled_qe_wfs, tel, qe_source,
+        sampled_spots_peak!(style, sampled_qe_wfs, pupil, qe_source,
             sampled_qe_detector, MersenneTwister(779))
 
         scalar_qe_wfs = ShackHartmannWFS(tel;
             n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-        prepare_sampling!(scalar_qe_wfs, tel, qe_source)
+        prepare_sampling!(scalar_qe_wfs, pupil, qe_source)
         scalar_qe_detector = Detector(noise=NoiseNone(), qe=0.5,
             integration_time=1.0, binning=1)
-        sampled_spots_peak!(style, scalar_qe_wfs, tel, qe_source,
+        sampled_spots_peak!(style, scalar_qe_wfs, pupil, qe_source,
             scalar_qe_detector, MersenneTwister(779))
 
         @test sampled_qe_wfs.acquisition.spot_cube ≈
@@ -426,22 +442,24 @@ end
     prepared_mixed_wfs = ShackHartmannWFS(tel;
         n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     @test_throws InvalidConfiguration begin
-        prepare_runtime_wfs!(prepared_mixed_wfs, tel, mixed_wavelength)
+        prepare_runtime_wfs!(prepared_mixed_wfs, pupil, mixed_wavelength)
     end
     @test !prepared_mixed_wfs.calibration.calibrated
     prepared_mixed_pyramid = PyramidWFS(tel;
         pupil_samples=4, mode=Diffractive())
     @test_throws InvalidConfiguration begin
-        prepare_runtime_wfs!(prepared_mixed_pyramid, tel, mixed_wavelength)
+        prepare_runtime_wfs!(prepared_mixed_pyramid, pupil,
+            mixed_wavelength)
     end
     @test !prepared_mixed_pyramid.estimator.state.calibrated
     for style in (ScalarCPUStyle(), KA_CPU_STYLE)
         mixed_wfs = ShackHartmannWFS(tel;
             n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-        prepare_sampling!(mixed_wfs, tel, first(mixed_wavelength.sources))
+        prepare_sampling!(mixed_wfs, pupil,
+            first(mixed_wavelength.sources))
         @test_throws InvalidConfiguration begin
             AdaptiveOpticsSim.sampled_spots_peak_asterism_stacked!(
-                style, mixed_wfs, tel, mixed_wavelength)
+                style, mixed_wfs, pupil, mixed_wavelength)
         end
     end
 end
@@ -449,6 +467,7 @@ end
 @testset "Shack-Hartmann diffractive photon-rate conservation" begin
     tel = Telescope(resolution=16, diameter=8.0,
         central_obstruction=0.0, pupil_reflectivity=0.25)
+    pupil = PupilFunction(tel)
     src = Source(band=:custom, wavelength=0.75e-6,
         photon_irradiance=1.0)
     expected_rate = sum(pupil_photon_rate_map(tel, src))
@@ -456,8 +475,8 @@ end
     for style in (ScalarCPUStyle(), KA_CPU_STYLE), padding in (1, 2, 3)
         wfs = ShackHartmannWFS(tel; n_lenslets=1, mode=Diffractive(),
             n_pix_subap=16, diffraction_padding=padding)
-        prepare_sampling!(wfs, tel, src)
-        compute_intensity_stack!(style, wfs, tel, src)
+        prepare_sampling!(wfs, pupil, src)
+        compute_intensity_stack!(style, wfs, pupil, src)
         @test sum(wfs.front_end.propagation.intensity_stack) ≈ expected_rate atol=1e-10 rtol=1e-12
     end
 
@@ -468,8 +487,8 @@ end
     ])
     wfs = ShackHartmannWFS(tel; n_lenslets=1, mode=Diffractive(),
         n_pix_subap=16, diffraction_padding=2)
-    prepare_sampling!(wfs, tel, src)
-    compute_intensity_asterism_stack!(KA_CPU_STYLE, wfs, tel, ast)
+    prepare_sampling!(wfs, pupil, src)
+    compute_intensity_asterism_stack!(KA_CPU_STYLE, wfs, pupil, ast)
     @test sum(wfs.front_end.propagation.intensity_stack) ≈ 3 * expected_rate atol=1e-10 rtol=1e-12
 end
 
@@ -481,7 +500,7 @@ end
     @test coordinates_xy_arcsec(src2)[1] ≈ 0.0 atol=1e-12
     @test coordinates_xy_arcsec(src2)[2] ≈ 1.0
     ast = Asterism([src1, src2])
-    prepared = prepare_direct_imaging(tel, PupilFunction(tel), ast;
+    prepared = prepare_direct_imaging(PupilFunction(tel), ast;
         zero_padding=2)
     combined = form_direct_image!(prepared)
     components = map(direct_imaging_output,
@@ -505,6 +524,7 @@ end
 
 @testset "Polychromatic WFS" begin
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
+    pupil = PupilFunction(tel)
     src = Source(band=:I, magnitude=0.0)
     λ0 = wavelength(src)
     λshift = 1.05 * λ0
@@ -536,7 +556,7 @@ end
     zb = ZernikeBasis(tel, 5)
     compute_zernike!(zb, tel)
     focus = @view zb.modes[:, :, 5]
-    @. tel.state.opd = 5e-8 * focus
+    @. pupil.opd = 5e-8 * focus
 
     sh_mono = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive())
     sh_single = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive())
@@ -547,14 +567,14 @@ end
     sh_common = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive())
     sh_broad = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive())
 
-    mono_slopes = copy(measure!(sh_mono, tel, src))
-    single_slopes = copy(measure!(sh_single, tel, poly_single))
-    shifted_mono_slopes = copy(measure!(sh_shifted_mono, tel,
+    mono_slopes = copy(measure!(sh_mono, pupil, src))
+    single_slopes = copy(measure!(sh_single, pupil, poly_single))
+    shifted_mono_slopes = copy(measure!(sh_shifted_mono, pupil,
         shifted_mono))
-    shifted_single_slopes = copy(measure!(sh_shifted_single, tel,
+    shifted_single_slopes = copy(measure!(sh_shifted_single, pupil,
         poly_shifted_single))
-    common_slopes_1 = copy(measure!(sh_common, tel, poly_common))
-    common_slopes_2 = copy(measure!(sh_common, tel, poly_common))
+    common_slopes_1 = copy(measure!(sh_common, pupil, poly_common))
+    common_slopes_2 = copy(measure!(sh_common, pupil, poly_common))
 
     @test single_slopes ≈ mono_slopes atol=1e-10 rtol=1e-10
     @test shifted_single_slopes ≈ shifted_mono_slopes atol=1e-10 rtol=1e-10
@@ -578,16 +598,16 @@ end
     @test !supports_prepared_runtime(sh_broad, poly_broad)
     @test !supports_stacked_sources(sh_broad, poly_broad)
     @test !supports_grouped_execution(sh_broad, poly_broad)
-    @test_throws InvalidConfiguration measure!(sh_broad, tel, poly_broad)
+    @test_throws InvalidConfiguration measure!(sh_broad, pupil, poly_broad)
 
     pyr_mono = PyramidWFS(tel; pupil_samples=8, mode=Diffractive(), modulation=1.0)
     pyr_single = PyramidWFS(tel; pupil_samples=8, mode=Diffractive(), modulation=1.0)
     pyr_broad = PyramidWFS(tel; pupil_samples=8, mode=Diffractive(), modulation=1.0)
 
-    mono_pyr = copy(measure!(pyr_mono, tel, src))
-    single_pyr = copy(measure!(pyr_single, tel, poly_single))
-    broad_pyr_1 = copy(measure!(pyr_broad, tel, poly_broad))
-    broad_pyr_2 = copy(measure!(pyr_broad, tel, poly_broad))
+    mono_pyr = copy(measure!(pyr_mono, pupil, src))
+    single_pyr = copy(measure!(pyr_single, pupil, poly_single))
+    broad_pyr_1 = copy(measure!(pyr_broad, pupil, poly_broad))
+    broad_pyr_2 = copy(measure!(pyr_broad, pupil, poly_broad))
 
     @test single_pyr ≈ mono_pyr atol=1e-10 rtol=1e-10
     @test broad_pyr_1 ≈ broad_pyr_2 atol=1e-10 rtol=1e-10
@@ -595,7 +615,7 @@ end
     @test supports_stacked_sources(pyr_broad, poly_broad)
 
     det = Detector(noise=NoiseNone(), binning=1)
-    spectral_frame = copy(measure!(sh_common, tel, poly_common, det))
+    spectral_frame = copy(measure!(sh_common, pupil, poly_common, det))
     @test size(sh_common.acquisition.detector_noise_cube) ==
         size(sh_common.acquisition.spot_cube)
     @test spectral_frame ≈ common_slopes_1 atol=1e-10 rtol=1e-10
@@ -612,8 +632,8 @@ end
         spectral_detector = Detector(noise=NoiseNone(), qe=sampled_qe,
             integration_time=exposure, binning=1,
             response_model=NullFrameResponse())
-        prepare_sampling!(spectral_wfs, tel, poly_common)
-        sampled_spots_peak!(style, spectral_wfs, tel, poly_common,
+        prepare_sampling!(spectral_wfs, pupil, poly_common)
+        sampled_spots_peak!(style, spectral_wfs, pupil, poly_common,
             spectral_detector, MersenneTwister(793))
 
         monochromatic_wfs = ShackHartmannWFS(tel; n_lenslets=8,
@@ -621,14 +641,14 @@ end
         monochromatic_detector = Detector(noise=NoiseNone(), qe=sampled_qe,
             integration_time=exposure, binning=1,
             response_model=NullFrameResponse())
-        prepare_sampling!(monochromatic_wfs, tel, shifted_mono)
-        sampled_spots_peak!(style, monochromatic_wfs, tel, shifted_mono,
+        prepare_sampling!(monochromatic_wfs, pupil, shifted_mono)
+        sampled_spots_peak!(style, monochromatic_wfs, pupil, shifted_mono,
             monochromatic_detector, MersenneTwister(793))
 
         optical_wfs = ShackHartmannWFS(tel; n_lenslets=8,
             mode=Diffractive())
-        prepare_sampling!(optical_wfs, tel, shifted_mono)
-        sampled_spots_peak!(style, optical_wfs, tel, shifted_mono)
+        prepare_sampling!(optical_wfs, pupil, shifted_mono)
+        sampled_spots_peak!(style, optical_wfs, pupil, shifted_mono)
 
         @test spectral_wfs.acquisition.spot_cube ≈
             monochromatic_wfs.acquisition.spot_cube atol=1e-8 rtol=1e-11
@@ -650,11 +670,11 @@ end
         mode=Diffractive(), T=Float32)
     @test AdaptiveOpticsSim.sh_has_common_spectral_grid(mixed_scalar_wfs,
         mixed_source)
-    prepare_sampling!(mixed_scalar_wfs, tel, mixed_source)
-    prepare_sampling!(mixed_ka_wfs, tel, mixed_source)
-    sampled_spots_peak!(ScalarCPUStyle(), mixed_scalar_wfs, tel,
+    prepare_sampling!(mixed_scalar_wfs, pupil, mixed_source)
+    prepare_sampling!(mixed_ka_wfs, pupil, mixed_source)
+    sampled_spots_peak!(ScalarCPUStyle(), mixed_scalar_wfs, pupil,
         mixed_source)
-    sampled_spots_peak!(KA_CPU_STYLE, mixed_ka_wfs, tel, mixed_source)
+    sampled_spots_peak!(KA_CPU_STYLE, mixed_ka_wfs, pupil, mixed_source)
     @test mixed_ka_wfs.front_end.propagation.opd_to_cycles_host[1] ==
         mixed_ka_wfs.front_end.propagation.opd_to_cycles_host[2]
     @test mixed_ka_wfs.acquisition.spot_cube ≈
@@ -663,7 +683,7 @@ end
     guard_wfs = ShackHartmannWFS(tel; n_lenslets=8,
         mode=Diffractive())
     guard_detector = Detector(noise=NoisePhotonReadout(0.1), binning=1)
-    measure!(guard_wfs, tel, poly_common, guard_detector;
+    measure!(guard_wfs, pupil, poly_common, guard_detector;
         rng=MersenneTwister(791))
     guard_state_before = (
         slopes=copy(guard_wfs.estimator.slopes),
@@ -684,7 +704,7 @@ end
     detector_readout_ready_before = guard_detector.state.readout_ready
     rejection_rng = MersenneTwister(792)
     rejection_rng_reference = copy(rejection_rng)
-    @test_throws InvalidConfiguration measure!(guard_wfs, tel, poly_broad,
+    @test_throws InvalidConfiguration measure!(guard_wfs, pupil, poly_broad,
         guard_detector; rng=rejection_rng)
     @test isequal(guard_wfs.estimator.slopes, guard_state_before.slopes)
     @test isequal(guard_wfs.front_end.propagation.intensity, guard_state_before.intensity)
@@ -714,7 +734,7 @@ end
         rand(rejection_rng_reference, UInt64)
 
     pyr_det = Detector(noise=NoiseNone(), binning=1)
-    pyr_det_slopes = measure!(pyr_broad, tel, poly_broad, pyr_det)
+    pyr_det_slopes = measure!(pyr_broad, pupil, poly_broad, pyr_det)
     @test size(output_frame(pyr_det)) == size(pyr_broad.acquisition.state.camera_frame)
     @test pyr_det_slopes ≈ broad_pyr_1 atol=1e-10 rtol=1e-10
 
@@ -731,7 +751,7 @@ end
     for style in (ScalarCPUStyle(), KA_CPU_STYLE)
         selective_sh = ShackHartmannWFS(tel;
             n_lenslets=8, mode=Diffractive())
-        prepare_sampling!(selective_sh, tel, src)
+        prepare_sampling!(selective_sh, pupil, src)
         fill!(selective_sh.acquisition.spot_cube, 17.0)
         spot_cube_before = copy(selective_sh.acquisition.spot_cube)
         selective_detector = Detector(noise=NoiseNone(), qe=selective_qe,
@@ -740,7 +760,7 @@ end
         selective_rng = MersenneTwister(780)
         selective_rng_reference = copy(selective_rng)
         @test_throws InvalidConfiguration sampled_spots_peak!(style,
-            selective_sh, tel, selective_source, selective_detector,
+            selective_sh, pupil, selective_source, selective_detector,
             selective_rng)
         @test isequal(selective_sh.acquisition.spot_cube, spot_cube_before)
         @test rand(selective_rng, UInt64) ==
@@ -752,7 +772,7 @@ end
     selective_pyramid_detector = Detector(noise=NoiseNone(), qe=selective_qe,
         integration_time=1.0, binning=1,
         response_model=NullFrameResponse())
-    measure!(selective_pyramid, tel, selective_source,
+    measure!(selective_pyramid, pupil, selective_source,
         selective_pyramid_detector; rng=MersenneTwister(781))
     selective_pyramid_frame = copy(output_frame(selective_pyramid_detector))
 
@@ -761,7 +781,7 @@ end
     transmitted_pyramid_detector = Detector(noise=NoiseNone(), qe=1.0,
         integration_time=1.0, binning=1,
         response_model=NullFrameResponse())
-    measure!(transmitted_pyramid, tel, transmitted_source,
+    measure!(transmitted_pyramid, pupil, transmitted_source,
         transmitted_pyramid_detector; rng=MersenneTwister(781))
     @test selective_pyramid_frame ≈
         output_frame(transmitted_pyramid_detector) atol=1e-8 rtol=1e-11
@@ -772,13 +792,13 @@ end
         noise=NoiseNone(),
         sensor=SPADArraySensor(pde=1.0, dark_count_rate=0.0,
             fill_factor=1.0))
-    spectral_spad_slopes = measure!(spectral_spad_pyramid, tel,
+    spectral_spad_slopes = measure!(spectral_spad_pyramid, pupil,
         selective_source, spectral_spad; rng=MersenneTwister(782))
     @test all(isfinite, spectral_spad_slopes)
     @test size(output_frame(spectral_spad)) ==
         size(spectral_spad_pyramid.acquisition.state.camera_frame)
 
-    fill!(tel.state.opd, 0.0)
+    reset_opd!(pupil)
 end
 
 @testset "Extended-source model constructor validation" begin
@@ -843,6 +863,7 @@ end
 
 @testset "Extended-source WFS" begin
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
+    pupil = PupilFunction(tel)
     src = Source(band=:I, magnitude=0.0)
     point_model = PointCloudSourceModel([(0.0, 0.0)], [1.0])
     gaussian_model = GaussianDiskSourceModel(sigma_arcsec=0.35, n_side=5)
@@ -880,19 +901,20 @@ end
     zb = ZernikeBasis(tel, 5)
     compute_zernike!(zb, tel)
     focus = @view zb.modes[:, :, 5]
-    @. tel.state.opd = 5e-8 * focus
+    @. pupil.opd = 5e-8 * focus
 
     sh_point = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive())
     sh_ext_point = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive())
     sh_ext = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive())
-    point_slopes = copy(measure!(sh_point, tel, src))
-    ext_point_slopes = copy(measure!(sh_ext_point, tel, ext_point))
-    point_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_point, tel, src)
+    point_slopes = copy(measure!(sh_point, pupil, src))
+    ext_point_slopes = copy(measure!(sh_ext_point, pupil, ext_point))
+    point_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_point, pupil, src)
     point_spots = copy(sh_point.acquisition.spot_cube)
-    ext_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_ext, tel, ext_gauss)
+    ext_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_ext, pupil,
+        ext_gauss)
     extended_spots = copy(sh_ext.acquisition.spot_cube)
-    ext_slopes_1 = copy(measure!(sh_ext, tel, ext_gauss))
-    ext_slopes_2 = copy(measure!(sh_ext, tel, ext_gauss))
+    ext_slopes_1 = copy(measure!(sh_ext, pupil, ext_gauss))
+    ext_slopes_2 = copy(measure!(sh_ext, pupil, ext_gauss))
 
     @test ext_point_slopes ≈ point_slopes atol=1e-10 rtol=1e-10
     @test ext_slopes_1 ≈ ext_slopes_2 atol=1e-10 rtol=1e-10
@@ -908,12 +930,12 @@ end
     pyr_point = PyramidWFS(tel; pupil_samples=8, mode=Diffractive(), modulation=1.0)
     pyr_ext_point = PyramidWFS(tel; pupil_samples=8, mode=Diffractive(), modulation=1.0)
     pyr_ext = PyramidWFS(tel; pupil_samples=8, mode=Diffractive(), modulation=1.0)
-    pyr_point_slopes = copy(measure!(pyr_point, tel, src))
+    pyr_point_slopes = copy(measure!(pyr_point, pupil, src))
     pyramid_point_intensity = copy(pyr_point.front_end.propagation.intensity)
-    pyr_ext_point_slopes = copy(measure!(pyr_ext_point, tel, ext_point))
-    pyr_ext_slopes_1 = copy(measure!(pyr_ext, tel, ext_gauss))
+    pyr_ext_point_slopes = copy(measure!(pyr_ext_point, pupil, ext_point))
+    pyr_ext_slopes_1 = copy(measure!(pyr_ext, pupil, ext_gauss))
     pyramid_extended_intensity = copy(pyr_ext.front_end.propagation.intensity)
-    pyr_ext_slopes_2 = copy(measure!(pyr_ext, tel, ext_gauss))
+    pyr_ext_slopes_2 = copy(measure!(pyr_ext, pupil, ext_gauss))
 
     @test pyr_ext_point_slopes ≈ pyr_point_slopes atol=1e-10 rtol=1e-10
     @test pyr_ext_slopes_1 ≈ pyr_ext_slopes_2 atol=1e-10 rtol=1e-10
@@ -924,16 +946,16 @@ end
     @test supports_stacked_sources(pyr_ext, ext_gauss)
 
     det = Detector(noise=NoiseNone(), binning=1)
-    sh_det_slopes = measure!(sh_ext, tel, ext_gauss, det)
+    sh_det_slopes = measure!(sh_ext, pupil, ext_gauss, det)
     @test size(sh_ext.acquisition.detector_noise_cube) == size(sh_ext.acquisition.spot_cube)
     @test sh_det_slopes ≈ ext_slopes_1 atol=1e-10 rtol=1e-10
 
     pyr_det = Detector(noise=NoiseNone(), binning=1)
-    pyr_det_slopes = measure!(pyr_ext, tel, ext_gauss, pyr_det)
+    pyr_det_slopes = measure!(pyr_ext, pupil, ext_gauss, pyr_det)
     @test size(output_frame(pyr_det)) == size(pyr_ext.acquisition.state.camera_frame)
     @test pyr_det_slopes ≈ pyr_ext_slopes_1 atol=1e-10 rtol=1e-10
 
-    fill!(tel.state.opd, 0.0)
+    reset_opd!(pupil)
 end
 
 @testset "Pupil masks and misregistration" begin
@@ -986,14 +1008,15 @@ end
     zernike = ZernikeWFS(tel; pupil_samples=4)
     curvature = CurvatureWFS(tel; pupil_samples=4)
     sensors = (sh, pyramid, bioedge, zernike, curvature)
+    pupil = PupilFunction(tel)
 
-    prepare_sampling!(sh, tel, src)
-    ensure_sh_calibration!(sh, tel, src)
-    ensure_pyramid_calibration!(pyramid, tel, src)
-    ensure_bioedge_calibration!(bioedge, tel, src)
-    ensure_zernike_calibration!(zernike, tel, src)
-    ensure_curvature_calibration!(curvature, tel, src)
-    initial_signature = telescope_aperture_calibration_signature(tel,
+    prepare_sampling!(sh, pupil, src)
+    ensure_sh_calibration!(sh, pupil, src)
+    ensure_pyramid_calibration!(pyramid, pupil, src)
+    ensure_bioedge_calibration!(bioedge, pupil, src)
+    ensure_zernike_calibration!(zernike, pupil, src)
+    ensure_curvature_calibration!(curvature, pupil, src)
+    initial_signature = pupil_aperture_calibration_signature(pupil,
         calibration_signature(src))
     @test sh.calibration.signature == initial_signature
     @test all(wfs_calibration_signature(wfs) == initial_signature
@@ -1005,12 +1028,13 @@ end
     initial_revision = AdaptiveOpticsSim.aperture_revision(tel)
     set_pupil_reflectivity!(tel, 0.7)
     @test AdaptiveOpticsSim.aperture_revision(tel) == initial_revision + 1
-    ensure_sh_calibration!(sh, tel, src)
-    ensure_pyramid_calibration!(pyramid, tel, src)
-    ensure_bioedge_calibration!(bioedge, tel, src)
-    ensure_zernike_calibration!(zernike, tel, src)
-    ensure_curvature_calibration!(curvature, tel, src)
-    reflectivity_signature = telescope_aperture_calibration_signature(tel,
+    pupil = PupilFunction(tel)
+    ensure_sh_calibration!(sh, pupil, src)
+    ensure_pyramid_calibration!(pyramid, pupil, src)
+    ensure_bioedge_calibration!(bioedge, pupil, src)
+    ensure_zernike_calibration!(zernike, pupil, src)
+    ensure_curvature_calibration!(curvature, pupil, src)
+    reflectivity_signature = pupil_aperture_calibration_signature(pupil,
         calibration_signature(src))
     @test reflectivity_signature != initial_signature
     @test sh.calibration.signature == reflectivity_signature
@@ -1024,12 +1048,13 @@ end
     half_pupil = trues(16, 16)
     half_pupil[:, 9:end] .= false
     set_pupil!(tel, half_pupil)
-    ensure_sh_calibration!(sh, tel, src)
-    ensure_pyramid_calibration!(pyramid, tel, src)
-    ensure_bioedge_calibration!(bioedge, tel, src)
-    ensure_zernike_calibration!(zernike, tel, src)
-    ensure_curvature_calibration!(curvature, tel, src)
-    pupil_signature = telescope_aperture_calibration_signature(tel,
+    pupil = PupilFunction(tel)
+    ensure_sh_calibration!(sh, pupil, src)
+    ensure_pyramid_calibration!(pyramid, pupil, src)
+    ensure_bioedge_calibration!(bioedge, pupil, src)
+    ensure_zernike_calibration!(zernike, pupil, src)
+    ensure_curvature_calibration!(curvature, pupil, src)
+    pupil_signature = pupil_aperture_calibration_signature(pupil,
         calibration_signature(src))
     @test pupil_signature != reflectivity_signature
     @test sh.calibration.signature == pupil_signature

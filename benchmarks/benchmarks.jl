@@ -5,45 +5,47 @@ using Random
 function bench_direct_imaging()
     tel = Telescope(resolution=64, diameter=8.0, central_obstruction=0.2)
     src = Source(band=:I, magnitude=0.0)
-    prepared = prepare_direct_imaging(tel, PupilFunction(tel), src;
-        zero_padding=2)
+    prepared = prepare_direct_imaging(PupilFunction(tel), src; zero_padding=2)
     return @benchmark form_direct_image!($prepared)
 end
 
 function bench_wfs()
     tel = Telescope(resolution=64, diameter=8.0, central_obstruction=0.0)
     wfs = ShackHartmannWFS(tel; n_lenslets=8)
+    pupil = PupilFunction(tel)
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
-        tel.state.opd[i, j] = i
+        pupil.opd[i, j] = i
     end
-    return @benchmark measure!($wfs, $tel)
+    return @benchmark measure!($wfs, $pupil)
 end
 
 function bench_wfs_lgs()
     tel = Telescope(resolution=48, diameter=8.0, central_obstruction=0.0)
     wfs = ShackHartmannWFS(tel; n_lenslets=6, mode=Diffractive())
     lgs = LGSSource(elongation_factor=1.3, photon_irradiance=1.0)
+    pupil = PupilFunction(tel)
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
-        tel.state.opd[i, j] = i - j
+        pupil.opd[i, j] = i - j
     end
-    return @benchmark measure!($wfs, $tel, $lgs)
+    return @benchmark measure!($wfs, $pupil, $lgs)
 end
 
 function bench_pyramid()
     tel = Telescope(resolution=48, diameter=8.0, central_obstruction=0.0)
     wfs = PyramidWFS(tel; pupil_samples=6, modulation=3.0, modulation_points=4, mode=Diffractive())
     src = Source(band=:I, magnitude=0.0)
+    pupil = PupilFunction(tel)
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
-        tel.state.opd[i, j] = i + j
+        pupil.opd[i, j] = i + j
     end
-    return @benchmark measure!($wfs, $tel, $src)
+    return @benchmark measure!($wfs, $pupil, $src)
 end
 
 function bench_reconstructor()
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=4)
     wfs = ShackHartmannWFS(tel; n_lenslets=4)
-    imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
+    imat = interaction_matrix(dm, wfs, PupilFunction(tel); amplitude=0.1)
     recon = ModalReconstructor(imat; gain=1.0)
     slopes = AdaptiveOpticsSim.slopes(wfs)
     return @benchmark reconstruct($recon, $slopes)
@@ -53,7 +55,7 @@ function bench_reconstructor_inplace()
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=4)
     wfs = ShackHartmannWFS(tel; n_lenslets=4)
-    imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
+    imat = interaction_matrix(dm, wfs, PupilFunction(tel); amplitude=0.1)
     recon = ModalReconstructor(imat; gain=1.0)
     slopes = AdaptiveOpticsSim.slopes(wfs)
     out = similar(slopes, size(recon.reconstructor, 1))
@@ -68,7 +70,7 @@ function bench_closed_loop_runtime()
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
     wfs = ShackHartmannWFS(tel; n_lenslets=4)
     sim = AOSimulation(tel, src, atm, dm, wfs)
-    imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
+    imat = interaction_matrix(dm, wfs, PupilFunction(tel); amplitude=0.1)
     recon = ModalReconstructor(imat; gain=0.5)
     runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=rng)
     step!(runtime)
@@ -83,7 +85,7 @@ function bench_closed_loop_runtime_timing()
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
     wfs = ShackHartmannWFS(tel; n_lenslets=4)
     sim = AOSimulation(tel, src, atm, dm, wfs)
-    imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
+    imat = interaction_matrix(dm, wfs, PupilFunction(tel); amplitude=0.1)
     recon = ModalReconstructor(imat; gain=0.5)
     runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=rng)
     return runtime_timing(runtime; warmup=10, samples=200, gc_before=false)
@@ -140,7 +142,7 @@ function alloc_checks()
     tel_r = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel_r; n_act=4)
     wfs = ShackHartmannWFS(tel_r; n_lenslets=4)
-    imat = interaction_matrix(dm, wfs, tel_r; amplitude=0.1)
+    imat = interaction_matrix(dm, wfs, PupilFunction(tel_r); amplitude=0.1)
     recon = ModalReconstructor(imat; gain=1.0)
     slopes = AdaptiveOpticsSim.slopes(wfs)
     out = similar(slopes, size(recon.reconstructor, 1))
@@ -154,7 +156,8 @@ function alloc_checks()
     dm_rt = DeformableMirror(tel_rt; n_act=4, influence_width=0.3)
     wfs_rt = ShackHartmannWFS(tel_rt; n_lenslets=4)
     sim_rt = AOSimulation(tel_rt, src_rt, atm_rt, dm_rt, wfs_rt)
-    imat_rt = interaction_matrix(dm_rt, wfs_rt, tel_rt; amplitude=0.1)
+    imat_rt = interaction_matrix(dm_rt, wfs_rt, PupilFunction(tel_rt);
+        amplitude=0.1)
     recon_rt = ModalReconstructor(imat_rt; gain=0.5)
     runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim_rt, recon_rt; atmosphere_step=1e-3, rng=rng)
     step!(runtime)

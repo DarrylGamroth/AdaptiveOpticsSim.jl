@@ -75,12 +75,12 @@ function AO188CurvatureSimulationParams(; kwargs...)
 end
 
 function _build_high_order_wfs(::OperationalShackHartmannWFSModel, tel::Telescope, params; backend::AbstractArrayBackend=CPUBackend())
-    T = eltype(tel.state.opd)
+    T = eltype(pupil_reflectivity(tel))
     return ShackHartmannWFS(tel; n_lenslets=params.high_order_samples, mode=Diffractive(), T=T, backend=backend)
 end
 
 function _build_high_order_wfs(model::AO188CurvatureModel, tel::Telescope, params; backend::AbstractArrayBackend=CPUBackend())
-    T = eltype(tel.state.opd)
+    T = eltype(pupil_reflectivity(tel))
     readout_crop_resolution = ao188_curvature_readout_crop_resolution(
         tel.params.resolution, params.high_order_samples, model.crop_samples_per_pupil_sample)
     return CurvatureWFS(tel; pupil_samples=params.high_order_samples, defocus_rms_nm=model.defocus_rms_nm,
@@ -398,6 +398,8 @@ mutable struct AO188Simulation{
     P,
     TEL,
     LOWTEL,
+    PUPIL,
+    LOWPUPIL,
     ATM,
     SRC,
     ATMRENDERER,
@@ -424,6 +426,8 @@ mutable struct AO188Simulation{
     params::P
     tel::TEL
     low_tel::LOWTEL
+    pupil::PUPIL
+    low_pupil::LOWPUPIL
     atm::ATM
     src::SRC
     atmosphere_renderer::ATMRENDERER
@@ -610,24 +614,26 @@ _high_order_wfs_metadata(simulation::AO188Simulation) =
 
 function _measure_high!(surrogate::AO188Simulation, rng::AbstractRNG)
     if isnothing(surrogate.high_detector)
-        return measure!(surrogate.high_wfs, surrogate.tel, surrogate.src)
+        return measure!(surrogate.high_wfs, surrogate.pupil, surrogate.src)
     end
-    return measure!(surrogate.high_wfs, surrogate.tel, surrogate.src, surrogate.high_detector; rng=rng)
+    return measure!(surrogate.high_wfs, surrogate.pupil, surrogate.src,
+        surrogate.high_detector; rng=rng)
 end
 
 function _downsample_low_order_opd!(surrogate::AO188Simulation)
     high_res = surrogate.tel.params.resolution
     low_res = surrogate.low_tel.params.resolution
     factor = div(high_res, low_res)
-    bin2d!(surrogate.low_tel.state.opd, surrogate.tel.state.opd, factor)
-    surrogate.low_tel.state.opd .*= inv(eltype(surrogate.low_tel.state.opd)(factor * factor))
-    surrogate.low_tel.state.opd .*= pupil_mask(surrogate.low_tel)
-    return surrogate.low_tel
+    bin2d!(surrogate.low_pupil.opd, surrogate.pupil.opd, factor)
+    surrogate.low_pupil.opd .*= inv(eltype(surrogate.low_pupil.opd)(factor * factor))
+    surrogate.low_pupil.opd .*= pupil_support(surrogate.low_pupil)
+    return surrogate.low_pupil
 end
 
 function _measure_low!(surrogate::AO188Simulation, rng::AbstractRNG)
     _downsample_low_order_opd!(surrogate)
-    return measure!(surrogate.low_wfs, surrogate.low_tel, surrogate.src, surrogate.low_detector; rng=rng)
+    return measure!(surrogate.low_wfs, surrogate.low_pupil, surrogate.src,
+        surrogate.low_detector; rng=rng)
 end
 
 _child_frame_rng(::MersenneTwister, seed::UInt64) = MersenneTwister(seed)
@@ -663,9 +669,9 @@ function _measure_branches!(::BackendStreamExecution, simulation::AO188Simulatio
 end
 
 function prepare_replay!(simulation::AO188Simulation)
-    prepare_runtime_wfs!(simulation.high_wfs, simulation.tel, simulation.src)
-    prepare_sampling!(simulation.low_wfs, simulation.low_tel, simulation.src)
-    ensure_sh_calibration!(simulation.low_wfs, simulation.low_tel, simulation.src)
+    prepare_runtime_wfs!(simulation.high_wfs, simulation.pupil, simulation.src)
+    prepare_sampling!(simulation.low_wfs, simulation.low_pupil, simulation.src)
+    ensure_sh_calibration!(simulation.low_wfs, simulation.low_pupil, simulation.src)
     simulation.replay_prepared = true
     return simulation
 end
@@ -695,6 +701,8 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
         T=T,
         backend=backend,
     )
+    pupil = PupilFunction(tel)
+    low_pupil = PupilFunction(low_tel)
     src = Source(band=params.source_band, magnitude=params.source_magnitude, T=T)
     atm = KolmogorovAtmosphere(tel; r0=params.r0, L0=params.L0, T=T, backend=backend)
     atmosphere_renderer = prepare_atmosphere_renderer(atm, tel, src)
@@ -729,9 +737,13 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
     low_M2C = materialize_build(resolved_materialize_backend, dm.state.modes, low_M2C_host)
     policy = default_modal_inverse_policy(T)
 
-    high_imat = interaction_matrix(calibration_dm, calibration_high_wfs, calibration_tel, high_M2C_host,
+    calibration_pupil = PupilFunction(calibration_tel)
+    calibration_low_pupil = PupilFunction(calibration_low_tel)
+    high_imat = interaction_matrix(calibration_dm, calibration_high_wfs,
+        calibration_pupil, high_M2C_host,
         calibration_src; amplitude=params.interaction_amplitude)
-    low_imat = interaction_matrix(calibration_low_dm, calibration_low_wfs, calibration_low_tel, low_M2C_host,
+    low_imat = interaction_matrix(calibration_low_dm, calibration_low_wfs,
+        calibration_low_pupil, low_M2C_host,
         calibration_src; amplitude=params.interaction_amplitude)
     high_recon = _full_command_reconstructor(high_M2C_host, high_imat;
         gain=params.control_gain, policy=policy, inverse_build_backend=resolved_calibration_backend,
@@ -754,6 +766,8 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
         params,
         tel,
         low_tel,
+        pupil,
+        low_pupil,
         atm,
         src,
         atmosphere_renderer,
@@ -795,8 +809,8 @@ end
 @inline function _advance_and_render_atmosphere!(surrogate::AO188Simulation)
     epoch = advance_by!(surrogate.atm, surrogate.params.atmosphere_step,
         surrogate.rng)
-    AdaptiveOpticsSim.render_atmosphere_opd!(surrogate.tel.state.opd,
-        surrogate.atmosphere_renderer, surrogate.atm, epoch)
+    render_atmosphere!(surrogate.pupil, surrogate.atmosphere_renderer,
+        surrogate.atm, epoch)
     return epoch
 end
 
@@ -805,7 +819,8 @@ function step!(surrogate::AO188Simulation)
         prepare!(surrogate)
     end
     _advance_and_render_atmosphere!(surrogate)
-    apply!(surrogate.dm, surrogate.tel, DMAdditive())
+    update_surface!(surrogate.dm)
+    apply_surface!(surrogate.pupil, surrogate.dm, DMAdditive())
 
     _measure_branches!(surrogate.params.branch_execution, surrogate)
 
@@ -868,16 +883,19 @@ function subaru_ao188_phase_timing(surrogate::AO188Simulation; warmup::Int=10, s
     @inbounds for i in 1:samples
         t0 = time_ns()
         _advance_and_render_atmosphere!(surrogate)
-        apply!(surrogate.dm, surrogate.tel, DMAdditive())
+        update_surface!(surrogate.dm)
+        apply_surface!(surrogate.pupil, surrogate.dm, DMAdditive())
         if isnothing(surrogate.high_detector)
-            measure!(surrogate.high_wfs, surrogate.tel, surrogate.src)
+            measure!(surrogate.high_wfs, surrogate.pupil, surrogate.src)
         else
-            measure!(surrogate.high_wfs, surrogate.tel, surrogate.src, surrogate.high_detector; rng=surrogate.rng)
+            measure!(surrogate.high_wfs, surrogate.pupil, surrogate.src,
+                surrogate.high_detector; rng=surrogate.rng)
         end
         synchronize_backend!(execution_style(slopes(surrogate.high_wfs)))
         t1 = time_ns()
         _downsample_low_order_opd!(surrogate)
-        measure!(surrogate.low_wfs, surrogate.low_tel, surrogate.src, surrogate.low_detector; rng=surrogate.rng)
+        measure!(surrogate.low_wfs, surrogate.low_pupil, surrogate.src,
+            surrogate.low_detector; rng=surrogate.rng)
         synchronize_backend!(execution_style(slopes(surrogate.low_wfs)))
         t2 = time_ns()
 

@@ -10,9 +10,7 @@ function main(; resolution::Int=24, zero_padding::Int=2)
     )
     asterism = Asterism(collect(sources))
     pupil = PupilFunction(tel)
-    apply_opd!(pupil, opd_map(tel))
-    imaging = prepare_direct_imaging(tel, pupil, asterism;
-        zero_padding=zero_padding)
+    imaging = prepare_direct_imaging(pupil, asterism; zero_padding=zero_padding)
     form_direct_image!(imaging)
     combined = copy(intensity_values(direct_imaging_output(imaging)))
     component_maps = map(direct_imaging_components(imaging)) do component

@@ -59,19 +59,23 @@ end
     return command_storage(optic)
 end
 
-@inline function _apply_selected!(optic::AbstractControllableOptic, tel::Telescope, mode)
-    apply!(optic, tel, mode)
-    return tel
+@inline function _apply_selected!(optic::AbstractControllableOptic,
+    pupil::PupilFunction, mode)
+    update_surface!(optic)
+    apply_surface!(pupil, optic, mode)
+    return pupil
 end
 
-@inline function _apply_selected!(optic::AbstractControllableOptic, tel::Telescope, mode,
+@inline function _apply_selected!(optic::AbstractControllableOptic,
+    pupil::PupilFunction, mode,
     labels::Tuple{Vararg{Symbol}})
-    isempty(labels) || apply!(optic, tel, mode)
-    return tel
+    isempty(labels) || _apply_selected!(optic, pupil, mode)
+    return pupil
 end
 
-@inline _apply_selected!(optic::AbstractControllableOptic, tel::Telescope, mode,
-    label::Symbol) = _apply_selected!(optic, tel, mode, (label,))
+@inline _apply_selected!(optic::AbstractControllableOptic,
+    pupil::PupilFunction, mode, label::Symbol) =
+    _apply_selected!(optic, pupil, mode, (label,))
 
 function _backend_copy_matrix(host::AbstractMatrix{T}, backend::AbstractArrayBackend, ::Type{T}) where {T<:AbstractFloat}
     backend_array = _resolve_array_backend(backend)
@@ -403,28 +407,9 @@ end
     return _apply_modal_opd!(execution_style(optic.state.opd_vec), optic)
 end
 
-function update_surface!(optic::ModalControllableOptic, tel::Telescope)
-    size(optic.state.opd) == size(pupil_mask(tel)) ||
-        throw(DimensionMismatchError(
-            "modal-optic surface dimensions do not match telescope aperture"))
-    require_same_backend(optic, tel)
-    plane_device(optic.state.opd) == plane_device(pupil_mask(tel)) ||
-        throw(InvalidConfiguration(
-            "modal optic and telescope aperture occupy different physical devices"))
+function update_surface!(optic::ModalControllableOptic)
     _apply_modal_opd!(optic)
     return optic
-end
-
-@inline function apply!(optic::ModalControllableOptic, tel::Telescope, ::DMAdditive)
-    _apply_modal_opd!(optic)
-    tel.state.opd .+= optic.state.opd
-    return tel
-end
-
-@inline function apply!(optic::ModalControllableOptic, tel::Telescope, ::DMReplace)
-    _apply_modal_opd!(optic)
-    tel.state.opd .= optic.state.opd
-    return tel
 end
 
 struct CompositeControllableOptic{O,CV,CL,CR,B<:AbstractArrayBackend} <: AbstractControllableOptic
@@ -489,11 +474,24 @@ end
     return _set_child_commands!(Base.tail(optics), Base.tail(ranges), command)
 end
 
-@inline _apply_children!(::Tuple{}, tel::Telescope, mode) = tel
+@inline _update_child_surfaces!(::Tuple{}) = nothing
 
-@inline function _apply_children!(optics::Tuple, tel::Telescope, mode)
-    apply!(first(optics), tel, mode)
-    return _apply_children!(Base.tail(optics), tel, mode)
+@inline function _update_child_surfaces!(optics::Tuple)
+    update_surface!(first(optics))
+    return _update_child_surfaces!(Base.tail(optics))
+end
+
+function update_surface!(optic::CompositeControllableOptic)
+    _update_child_surfaces!(optic.optics)
+    return optic
+end
+
+@inline _apply_child_surfaces!(::Tuple{}, pupil::PupilFunction) = pupil
+
+@inline function _apply_child_surfaces!(optics::Tuple,
+    pupil::PupilFunction)
+    apply_surface!(pupil, first(optics), DMAdditive())
+    return _apply_child_surfaces!(Base.tail(optics), pupil)
 end
 
 @inline function set_command!(optic::CompositeControllableOptic, command::AbstractVector)
@@ -526,13 +524,15 @@ end
     return optic.command
 end
 
-@inline function apply!(optic::CompositeControllableOptic, tel::Telescope, ::DMAdditive)
-    return _apply_children!(optic.optics, tel, DMAdditive())
+@inline function apply_surface!(pupil::PupilFunction,
+    optic::CompositeControllableOptic, ::DMAdditive)
+    return _apply_child_surfaces!(optic.optics, pupil)
 end
 
-@inline function apply!(optic::CompositeControllableOptic, tel::Telescope, ::DMReplace)
-    fill!(tel.state.opd, zero(eltype(tel.state.opd)))
-    return _apply_children!(optic.optics, tel, DMAdditive())
+@inline function apply_surface!(pupil::PupilFunction,
+    optic::CompositeControllableOptic, ::DMReplace)
+    reset_opd!(pupil)
+    return _apply_child_surfaces!(optic.optics, pupil)
 end
 
 @inline _tuple_contains_label(::Tuple{}, ::Symbol) = false
@@ -553,23 +553,31 @@ end
            _any_selected_segment_for_range(Base.tail(segments), range, selected)
 end
 
-@inline _apply_selected_children!(::Tuple{}, ::Tuple{}, ::Tuple, tel::Telescope, ::Tuple) = tel
+@inline _apply_selected_children!(::Tuple{}, ::Tuple{}, ::Tuple,
+    pupil::PupilFunction, ::Tuple) = pupil
 
 @inline function _apply_selected_children!(optics::Tuple, ranges::Tuple, segments::Tuple,
-    tel::Telescope, labels::Tuple)
+    pupil::PupilFunction, labels::Tuple)
     if _any_selected_segment_for_range(segments, first(ranges), labels)
-        apply!(first(optics), tel, DMAdditive())
+        child = first(optics)
+        update_surface!(child)
+        apply_surface!(pupil, child, DMAdditive())
     end
-    return _apply_selected_children!(Base.tail(optics), Base.tail(ranges), segments, tel, labels)
+    return _apply_selected_children!(Base.tail(optics), Base.tail(ranges),
+        segments, pupil, labels)
 end
 
-@inline function _apply_selected!(optic::CompositeControllableOptic, tel::Telescope, ::DMAdditive,
+@inline function _apply_selected!(optic::CompositeControllableOptic,
+    pupil::PupilFunction, ::DMAdditive,
     labels::Tuple{Vararg{Symbol}})
-    return _apply_selected_children!(optic.optics, optic.child_ranges, command_segments(optic.layout), tel, labels)
+    return _apply_selected_children!(optic.optics, optic.child_ranges,
+        command_segments(optic.layout), pupil, labels)
 end
 
-@inline function _apply_selected!(optic::CompositeControllableOptic, tel::Telescope, ::DMReplace,
+@inline function _apply_selected!(optic::CompositeControllableOptic,
+    pupil::PupilFunction, ::DMReplace,
     labels::Tuple{Vararg{Symbol}})
-    fill!(tel.state.opd, zero(eltype(tel.state.opd)))
-    return _apply_selected_children!(optic.optics, optic.child_ranges, command_segments(optic.layout), tel, labels)
+    reset_opd!(pupil)
+    return _apply_selected_children!(optic.optics, optic.child_ranges,
+        command_segments(optic.layout), pupil, labels)
 end

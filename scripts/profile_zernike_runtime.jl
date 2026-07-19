@@ -32,10 +32,12 @@ end
 
 _sync_interface!(::Nothing, _) = nothing
 
-function _sync_interface!(::Type{B}, interface::SimulationInterface) where {B<:AdaptiveOpticsSim.GPUBackendTag}
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(interface.command))
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(interface.slopes))
-    frame = simulation_wfs_frame(interface)
+function _sync_interface!(::Type{B},
+    interface::AdaptiveOpticsSim.SimulationInterface,
+) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(command(interface)))
+    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(slopes(interface)))
+    frame = wfs_frame(interface)
     isnothing(frame) || AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(frame))
     return nothing
 end
@@ -106,10 +108,12 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     wfs = ZernikeWFS(tel; pupil_samples=cfg.pupil_samples, diffraction_padding=cfg.diffraction_padding, T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1), qe=T(1), binning=1, T=T, backend=backend)
     sim = AOSimulation(tel, src, atm, dm, wfs)
-    imat = interaction_matrix(dm, wfs, tel, src; amplitude=cfg.interaction_amplitude)
+    calibration_pupil = PupilFunction(tel; T=T, backend=backend)
+    imat = interaction_matrix(dm, wfs, calibration_pupil, src;
+        amplitude=cfg.interaction_amplitude)
     recon = ModalReconstructor(imat; gain=T(0.4))
     runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=rng, wfs_detector=det)
-    interface = simulation_interface(runtime)
+    interface = AdaptiveOpticsSim.simulation_interface(runtime)
 
     t0 = time_ns()
     prepare!(interface)
@@ -122,7 +126,8 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
         step!(interface)
         _sync_interface!(backend_tag, interface)
     end; warmup=resolved_warmup, samples=resolved_samples, gc_before=false)
-    phase = AdaptiveOpticsSim.runtime_phase_timing(interface; warmup=resolved_warmup, samples=resolved_samples, gc_before=false)
+    phase = AdaptiveOpticsSim.runtime_phase_timing(interface;
+        warmup=resolved_warmup, samples=resolved_samples, gc_before=false)
 
     println("zernike_runtime_profile")
     println("  backend: ", backend_label)
@@ -140,9 +145,9 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     println("  pupil_resolution: ", cfg.resolution)
     println("  pupil_samples: ", cfg.pupil_samples)
     println("  dm_n_act: ", cfg.n_act)
-    println("  wfs_frame_shape: ", size(simulation_wfs_frame(interface)))
-    println("  slope_length: ", length(simulation_slopes(interface)))
-    println("  command_length: ", length(simulation_command(interface)))
+    println("  wfs_frame_shape: ", size(wfs_frame(interface)))
+    println("  slope_length: ", length(slopes(interface)))
+    println("  command_length: ", length(command(interface)))
     return nothing
 end
 

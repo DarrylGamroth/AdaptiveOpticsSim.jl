@@ -9,8 +9,8 @@
 # - Zernike modes on the pupil
 # - externally supplied modal-to-command bases (`M2C`)
 #
-# The resulting OPD can either be applied additively on top of the current
-# telescope phase or replace it entirely, just like DM application modes.
+# The resulting OPD can either be applied additively to an explicit pupil path
+# or replace that path's OPD entirely, just like DM application modes.
 #
 abstract type NCPABasis end
 struct KLBasis{M<:KLBasisMethod} <: NCPABasis
@@ -58,7 +58,7 @@ function NCPA(tel::Telescope, dm::DeformableMirror, atm::AbstractAtmosphere;
     basis::NCPABasis=default_ncpa_basis(profile), coefficients=nothing, f2=nothing, seed::Integer=5,
     M2C::Union{Nothing,AbstractMatrix}=nothing)
 
-    T = eltype(tel.state.opd)
+    T = eltype(pupil_reflectivity(tel))
     if f2 === nothing
         if coefficients === nothing
             opd = copy(pupil_mask(tel))
@@ -171,20 +171,4 @@ function combine_basis(basis::AbstractArray{T,3}, coeffs::AbstractVector{T},
     n, m = size(basis, 1), size(basis, 2)
     opd = similar(basis, T, n, m)
     return combine_basis!(opd, basis, coeffs, pupil)
-end
-
-function apply!(ncpa::NCPA, tel::Telescope, ::DMAdditive)
-    if size(ncpa.opd) != size(tel.state.opd)
-        throw(DimensionMismatchError("NCPA OPD size does not match telescope resolution"))
-    end
-    tel.state.opd .+= ncpa.opd
-    return tel
-end
-
-function apply!(ncpa::NCPA, tel::Telescope, ::DMReplace)
-    if size(ncpa.opd) != size(tel.state.opd)
-        throw(DimensionMismatchError("NCPA OPD size does not match telescope resolution"))
-    end
-    tel.state.opd .= ncpa.opd
-    return tel
 end

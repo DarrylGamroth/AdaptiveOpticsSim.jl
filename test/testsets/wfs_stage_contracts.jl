@@ -57,7 +57,6 @@ end
     pupil = PupilFunction(tel; T=T)
     pupil.opd .= reshape(T.(1:256), 16, 16) .* T(1e-10)
     pupil_before = copy(pupil.opd)
-    copyto!(tel.state.opd, pupil.opd)
 
     sensor = ZernikeWFS(tel; pupil_samples=4, binning=1, T=T)
     @test !hasfield(typeof(sensor), :state)
@@ -103,16 +102,16 @@ end
     form_wfs_optical_products!(rate, pupil, optical_plan)
     @test pupil.opd == pupil_before
 
-    AdaptiveOpticsSim.zernike_pupil_intensity!(sensor, tel, source)
+    AdaptiveOpticsSim.zernike_pupil_intensity!(sensor, pupil, source)
     AdaptiveOpticsSim.sample_zernike_frame!(sensor.acquisition.state.camera_frame,
         sensor.front_end.propagation.nominal_frame, sensor,
         sensor.front_end.propagation.pupil_intensity,
-        tel)
+        pupil)
     @test rate.values ≈ sensor.acquisition.state.camera_frame rtol=T(2e-12) atol=T(2e-12)
 
     field = ElectricField(pupil, source;
         zero_padding=sensor.params.diffraction_padding, T=T)
-    field_plan = prepare_pupil_field(tel, pupil, source, field;
+    field_plan = prepare_pupil_field(pupil, source, field;
         center_even_grid=false)
     fill_electric_field!(field, pupil, field_plan)
     field_sensor = ZernikeWFS(tel; pupil_samples=4, binning=1, T=T)
@@ -150,7 +149,7 @@ end
     estimator_plan = prepare_wfs_estimation(sensor, observation,
         measurement; source=source)
     @test wfs_measurement_path(estimator_plan) isa AcquiredObservationPath
-    expected_signal = copy(AdaptiveOpticsSim.zernike_signal!(sensor, tel,
+    expected_signal = copy(AdaptiveOpticsSim.zernike_signal!(sensor, pupil,
         observation.storage, source))
     estimate_wfs_measurement!(measurement, observation, estimator_plan)
     @test measurement.storage ≈ expected_signal rtol=T(2e-12) atol=T(2e-12)
@@ -234,7 +233,6 @@ end
     pupil = PupilFunction(tel; T=T)
     pupil.opd .= reshape(T.(1:256), 16, 16) .* T(1e-10)
     pupil_before = copy(pupil.opd)
-    copyto!(tel.state.opd, pupil.opd)
 
     sensor = CurvatureWFS(tel; pupil_samples=4,
         readout_pixels_per_sample=1, T=T)
@@ -285,13 +283,13 @@ end
     form_wfs_optical_products!(rates, pupil, optical_plan)
     @test pupil.opd == pupil_before
 
-    AdaptiveOpticsSim.curvature_intensity!(sensor, tel, source)
+    AdaptiveOpticsSim.curvature_intensity!(sensor, pupil, source)
     @test rates[1].values ≈ sensor.front_end.propagation.frame_plus rtol=T(2e-12) atol=T(2e-12)
     @test rates[2].values ≈ sensor.front_end.propagation.frame_minus rtol=T(2e-12) atol=T(2e-12)
 
     field = ElectricField(pupil, source;
         zero_padding=sensor.params.diffraction_padding, T=T)
-    field_plan = prepare_pupil_field(tel, pupil, source, field;
+    field_plan = prepare_pupil_field(pupil, source, field;
         center_even_grid=false)
     fill_electric_field!(field, pupil, field_plan)
     field_sensor = CurvatureWFS(tel; pupil_samples=4, T=T)
@@ -709,9 +707,10 @@ function contract_pupil_function(pupil::PupilFunction;
         coherence=CoherentFieldCombination())
     selector = backend(pupil)
     return AdaptiveOpticsSim.PupilFunction{
-        typeof(metadata),typeof(pupil.amplitude),typeof(pupil.opd),
-        typeof(selector),
-    }(metadata, pupil.amplitude, pupil.opd)
+        typeof(metadata),typeof(pupil.support),typeof(pupil.amplitude),
+        typeof(pupil.opd),typeof(selector),
+    }(metadata, pupil.support, pupil.amplitude, pupil.opd,
+        aperture_revision(pupil))
 end
 
 function contract_stage_allocation_bytes(optical_output, optical_input,
@@ -749,11 +748,11 @@ end
 @inline contract_four_pupil_factor(::Val{:bioedge}, front_end, resolution) =
     AdaptiveOpticsSim.bioedge_output_sampling_factor(front_end, resolution)
 
-@inline contract_four_pupil_legacy!(::Val{:pyramid}, output, sensor, tel,
-    source) = AdaptiveOpticsSim.pyramid_intensity!(output, sensor, tel,
+@inline contract_four_pupil_native!(::Val{:pyramid}, output, sensor, pupil,
+    source) = AdaptiveOpticsSim.pyramid_intensity!(output, sensor, pupil,
     source)
-@inline contract_four_pupil_legacy!(::Val{:bioedge}, output, sensor, tel,
-    source) = AdaptiveOpticsSim.bioedge_intensity!(output, sensor, tel,
+@inline contract_four_pupil_native!(::Val{:bioedge}, output, sensor, pupil,
+    source) = AdaptiveOpticsSim.bioedge_intensity!(output, sensor, pupil,
     source)
 
 @inline contract_four_pupil_set_calibration!(::Val{:pyramid}, sensor,
@@ -776,10 +775,10 @@ end
 end
 
 @inline contract_four_pupil_prepare_sampling!(::Val{:pyramid}, sensor,
-    telescope) = AdaptiveOpticsSim.prepare_pyramid_sampling!(sensor, telescope)
+    pupil) = AdaptiveOpticsSim.prepare_pyramid_sampling!(sensor, pupil)
 
 @inline contract_four_pupil_prepare_sampling!(::Val{:bioedge}, sensor,
-    telescope) = AdaptiveOpticsSim.prepare_bioedge_sampling!(sensor, telescope)
+    pupil) = AdaptiveOpticsSim.prepare_bioedge_sampling!(sensor, pupil)
 
 @testset "Prepared WFS stage products and protocols" begin
     @test Base.isexported(AdaptiveOpticsSim, :WFSObservation)
@@ -920,13 +919,12 @@ end
     @test pupil.amplitude == pupil_amplitude
 
     original_rate = copy(rate.values)
-    tel.state.opd .= T(99)
     fill!(rate.values, zero(T))
     form_wfs_optical_products!(rate, pupil, plan)
     @test rate.values == original_rate
 
     field = ElectricField(pupil, src; zero_padding=1, T=T)
-    field_plan = prepare_pupil_field(tel, pupil, src, field)
+    field_plan = prepare_pupil_field(pupil, src, field)
     fill_electric_field!(field, pupil, field_plan)
     field_values = copy(field.values)
     field_rate = contract_rate_map(zeros(T, 4, 4))
@@ -1134,11 +1132,11 @@ end
     @test !hasfield(typeof(geometric), :optical_workspace)
     @test !hasfield(typeof(geometric), :layout)
     @test geometric.acquisition === nothing
-    measure!(geometric, tel)
+    measure!(geometric, pupil)
     if coverage_enabled
         @test_skip "geometric allocation assertion is disabled under coverage instrumentation"
     else
-        @test @allocated(measure!(geometric, tel)) == 0
+        @test @allocated(measure!(geometric, pupil)) == 0
     end
     direct_measurement = WFSMeasurement(similar(slopes(geometric));
         units=:radian, kind=:geometric_slopes)
@@ -1239,8 +1237,7 @@ end
     @test_throws WFSPreparationError prepare_wfs_estimation(geometric,
         pupil, wrong_direct_measurement)
 
-    copyto!(tel.state.opd, pupil.opd)
-    legacy = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(),
+    native = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(),
         n_pix_subap=4, T=T)
     staged = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(),
         n_pix_subap=4, T=T)
@@ -1248,10 +1245,10 @@ end
     @test microlens_array(staged.front_end) === staged.front_end.microlens_array
     @test !applicable(microlens_array, staged)
     @test !applicable(subaperture_layout, staged)
-    prepare_sampling!(legacy, tel, src)
-    sampled_spots_peak!(legacy, tel, src)
+    prepare_sampling!(native, pupil, src)
+    sampled_spots_peak!(native, pupil, src)
     expected_rate = shack_hartmann_detector_image(
-        AdaptiveOpticsSim.sh_sampled_spot_cube(legacy), 4)
+        AdaptiveOpticsSim.sh_sampled_spot_cube(native), 4)
     ordering_cube = reshape(T.(1:16), 16, 1, 1)
     @test shack_hartmann_detector_image(ordering_cube, 4) ==
         reshape(T.(1:16), 4, 4)
@@ -1370,7 +1367,7 @@ end
     end
 
     field = ElectricField(pupil, src; zero_padding=1, T=T)
-    field_formation = prepare_pupil_field(tel, pupil, src, field;
+    field_formation = prepare_pupil_field(pupil, src, field;
         center_even_grid=false)
     fill_electric_field!(field, pupil, field_formation)
     field_sensor = ShackHartmannWFS(tel; n_lenslets=4,
@@ -1388,7 +1385,6 @@ end
     end
 
     rate_before = copy(rate.values)
-    tel.state.opd .= T(99)
     form_wfs_optical_products!(rate, pupil, optical_plan)
     @test rate.values == rate_before
     @test pupil.opd == pupil_before
@@ -1633,13 +1629,12 @@ end
 
     lgs = LGSSource(wavelength=wavelength(src),
         photon_irradiance=T(6), elongation_factor=T(1.8), T=T)
-    copyto!(tel.state.opd, pupil.opd)
-    legacy_lgs = ShackHartmannWFS(tel; n_lenslets=4,
+    native_lgs = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
-    prepare_sampling!(legacy_lgs, tel, lgs)
-    AdaptiveOpticsSim.sampled_spots_peak!(legacy_lgs, tel, lgs)
+    prepare_sampling!(native_lgs, pupil, lgs)
+    AdaptiveOpticsSim.sampled_spots_peak!(native_lgs, pupil, lgs)
     expected_lgs = shack_hartmann_detector_image(
-        legacy_lgs.acquisition.spot_cube, 4)
+        native_lgs.acquisition.spot_cube, 4)
     staged_lgs = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
     lgs_rate = shack_hartmann_rate_map(staged_lgs, pupil, lgs)
@@ -1653,12 +1648,12 @@ end
         photon_irradiance=T(6),
         na_profile=T[80_000 90_000 100_000; 0.2 0.6 0.2],
         laser_coordinates=(T(1), T(-0.5)), fwhm_spot_up=T(0.8), T=T)
-    legacy_sodium = ShackHartmannWFS(tel; n_lenslets=4,
+    native_sodium = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
-    prepare_sampling!(legacy_sodium, tel, sodium_lgs)
-    AdaptiveOpticsSim.sampled_spots_peak!(legacy_sodium, tel, sodium_lgs)
+    prepare_sampling!(native_sodium, pupil, sodium_lgs)
+    AdaptiveOpticsSim.sampled_spots_peak!(native_sodium, pupil, sodium_lgs)
     expected_sodium = shack_hartmann_detector_image(
-        legacy_sodium.acquisition.spot_cube, 4)
+        native_sodium.acquisition.spot_cube, 4)
     staged_sodium = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
     sodium_rate = shack_hartmann_rate_map(staged_sodium, pupil, sodium_lgs)
@@ -1674,13 +1669,13 @@ end
         Source(band=:custom, wavelength=wavelength(src),
             photon_irradiance=T(7), T=T),
     ])
-    legacy_asterism = ShackHartmannWFS(tel; n_lenslets=4,
+    native_asterism = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
-    prepare_sampling!(legacy_asterism, tel, first(asterism.sources))
+    prepare_sampling!(native_asterism, pupil, first(asterism.sources))
     AdaptiveOpticsSim.sampled_spots_peak_asterism_stacked!(
-        AdaptiveOpticsSim.ScalarCPUStyle(), legacy_asterism, tel, asterism)
+        AdaptiveOpticsSim.ScalarCPUStyle(), native_asterism, pupil, asterism)
     expected_asterism = shack_hartmann_detector_image(
-        legacy_asterism.acquisition.spot_cube, 4)
+        native_asterism.acquisition.spot_cube, 4)
     staged_asterism = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
     asterism_rate = shack_hartmann_rate_map(staged_asterism, pupil,
@@ -1763,9 +1758,10 @@ end
     calibration_detector = Detector(noise=NoiseNone(),
         integration_time=one(T), qe=one(T), binning=1,
         sensor=CMOSSensor(T=T), T=T)
-    measure!(circular_pyramid, tel, source, calibration_detector)
+    flat_pupil = PupilFunction(tel; T=T)
+    measure!(circular_pyramid, flat_pupil, source, calibration_detector)
     @test norm(Array(slopes(circular_pyramid))) <= T(2e-2)
-    measure!(circular_bioedge, tel, source)
+    measure!(circular_bioedge, flat_pupil, source)
     @test norm(Array(slopes(circular_bioedge))) <= T(2e-2)
 
     for family in (Val(:pyramid), Val(:bioedge))
@@ -1782,9 +1778,8 @@ end
         @test rate.metadata.spatial_measure isa CellIntegratedMeasure
         @test rate.metadata.coherence isa IncoherentIntensityAddition
 
-        copyto!(tel.state.opd, pupil.opd)
         native_expected = similar(front_end.propagation.intensity)
-        contract_four_pupil_legacy!(family, native_expected, staged, tel,
+        contract_four_pupil_native!(family, native_expected, staged, pupil,
             source)
         expected_rate = similar(rate.values)
         factor = contract_four_pupil_factor(family, front_end,
@@ -1793,7 +1788,7 @@ end
         @test rate.values ≈ expected_rate rtol=T(2e-12) atol=T(2e-12)
 
         field = ElectricField(pupil, source; zero_padding=1, T=T)
-        field_plan = prepare_pupil_field(tel, pupil, source, field;
+        field_plan = prepare_pupil_field(pupil, source, field;
             center_even_grid=false)
         fill_electric_field!(field, pupil, field_plan)
         field_sensor = contract_four_pupil_sensor(family, tel;
@@ -2059,7 +2054,7 @@ end
         stale_plan = prepare_wfs_optical_formation(stale_front_end, pupil,
             stale_rate)
         contract_four_pupil_prepare_sampling!(family, stale_sensor,
-            alternate_telescope)
+            PupilFunction(alternate_telescope; T=T))
         stale_before = copy(stale_rate.values)
         stale_error = contract_captured_error() do
             form_wfs_optical_products!(stale_rate, pupil, stale_plan)
@@ -2184,9 +2179,8 @@ end
         rate = contract_four_pupil_rate_map(family, front_end, pupil)
         plan = prepare_wfs_optical_formation(front_end, pupil, rate)
         form_wfs_optical_products!(rate, pupil, plan)
-        copyto!(tel.state.opd, pupil.opd)
         native_expected = similar(front_end.propagation.intensity)
-        contract_four_pupil_legacy!(family, native_expected, sensor, tel,
+        contract_four_pupil_native!(family, native_expected, sensor, pupil,
             lgs)
         expected_rate = similar(rate.values)
         factor = contract_four_pupil_factor(family, front_end,
@@ -2450,7 +2444,7 @@ end
     @test all(iszero, integer_measurement.storage)
 
     field = ElectricField(pupil, src; zero_padding=1, T=T)
-    field_formation = prepare_pupil_field(tel, pupil, src, field)
+    field_formation = prepare_pupil_field(pupil, src, field)
     fill_electric_field!(field, pupil, field_formation)
     field_measurement = WFSMeasurement(zeros(T, 2);
         units=:field_sum, kind=:direct_field_signal)

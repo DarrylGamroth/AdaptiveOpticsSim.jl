@@ -100,31 +100,29 @@ function _layer_order_and_distances(atm, ::Type{T}) where {T<:AbstractFloat}
     return order, distances
 end
 
-function _build_field_slice(atm, tel::Telescope, src::AbstractSource, zero_padding::Int,
+function _build_field_slice(atm, input::PupilFunction, src::AbstractSource, zero_padding::Int,
     ::Type{T}, model::GeometricAtmosphericPropagation{T}) where {T<:AbstractFloat}
     λ = _converted_positive_finite(wavelength(src), T,
         "atmospheric source wavelength")
-    wavefront = PupilFunction(tel; T=T)
-    copyto!(wavefront.opd, opd_map(tel))
+    wavefront = input
     field = ElectricField(wavefront, src; zero_padding=zero_padding, T=T)
-    formation_plan = prepare_pupil_field(tel, wavefront, src, field)
+    formation_plan = prepare_pupil_field(wavefront, src, field)
     phase_buffer = similar(wavefront.opd)
     fill!(phase_buffer, zero(T))
-    contexts = _build_layer_contexts(atm, tel, src, model, λ, T)
+    contexts = _build_layer_contexts(atm, input, src, model, λ, T)
     return AtmosphericFieldSlice{
         T,typeof(src),typeof(wavefront),typeof(field),
         typeof(formation_plan),typeof(phase_buffer),Nothing,typeof(contexts),
     }(src, wavefront, field, formation_plan, phase_buffer, nothing, contexts)
 end
 
-function _build_field_slice(atm, tel::Telescope, src::AbstractSource, zero_padding::Int,
+function _build_field_slice(atm, input::PupilFunction, src::AbstractSource, zero_padding::Int,
     ::Type{T}, model::LayeredFresnelAtmosphericPropagation{T}) where {T<:AbstractFloat}
     λ = _converted_positive_finite(wavelength(src), T,
         "atmospheric source wavelength")
-    wavefront = PupilFunction(tel; T=T)
-    copyto!(wavefront.opd, opd_map(tel))
+    wavefront = input
     field = ElectricField(wavefront, src; zero_padding=zero_padding, T=T)
-    formation_plan = prepare_pupil_field(tel, wavefront, src, field)
+    formation_plan = prepare_pupil_field(wavefront, src, field)
     phase_buffer = similar(wavefront.opd)
     fill!(phase_buffer, zero(T))
     _, distances = _layer_order_and_distances(atm, T)
@@ -132,7 +130,7 @@ function _build_field_slice(atm, tel::Telescope, src::AbstractSource, zero_paddi
         dist == zero(T) ? nothing : FresnelPropagation(field;
             distance_m=dist, output_kind=field.metadata.kind)
     end
-    contexts = _build_layer_contexts(atm, tel, src, model, λ, T)
+    contexts = _build_layer_contexts(atm, input, src, model, λ, T)
     return AtmosphericFieldSlice{
         T,typeof(src),typeof(wavefront),typeof(field),
         typeof(formation_plan),typeof(phase_buffer),typeof(propagators),
@@ -140,15 +138,15 @@ function _build_field_slice(atm, tel::Telescope, src::AbstractSource, zero_paddi
     }(src, wavefront, field, formation_plan, phase_buffer, propagators, contexts)
 end
 
-function _build_slices(atm, tel::Telescope, src::AbstractSource, zero_padding::Int,
+function _build_slices(atm, input::PupilFunction, src::AbstractSource, zero_padding::Int,
     ::Type{T}, model::AbstractAtmosphericFieldModel) where {T<:AbstractFloat}
-    slice = _build_field_slice(atm, tel, src, zero_padding, T, model)
+    slice = _build_field_slice(atm, input, src, zero_padding, T, model)
     slices = Vector{typeof(slice)}(undef, 1)
     slices[1] = slice
     return slices
 end
 
-function _build_slices(atm, tel::Telescope, src::SpectralSource, zero_padding::Int,
+function _build_slices(atm, input::PupilFunction, src::SpectralSource, zero_padding::Int,
     ::Type{T}, model::AbstractAtmosphericFieldModel) where {T<:AbstractFloat}
     bundle = spectral_bundle(src)
     total_value = _converted_nonnegative_finite(
@@ -162,7 +160,7 @@ function _build_slices(atm, tel::Telescope, src::SpectralSource, zero_padding::I
         "spectral source radiometric value")
     first_src = source_with_wavelength_and_radiometric_value(src,
         first_wavelength, first_value)
-    first_slice = _build_field_slice(atm, tel, first_src, zero_padding, T, model)
+    first_slice = _build_field_slice(atm, input, first_src, zero_padding, T, model)
     slices = Vector{typeof(first_slice)}(undef, length(bundle))
     slices[1] = first_slice
     @inbounds for i in 2:length(bundle)
@@ -174,23 +172,26 @@ function _build_slices(atm, tel::Telescope, src::SpectralSource, zero_padding::I
             "spectral source radiometric value")
         sample_src = source_with_wavelength_and_radiometric_value(src,
             sample_wavelength, sample_value)
-        slices[i] = _build_field_slice(atm, tel, sample_src, zero_padding, T, model)
+        slices[i] = _build_field_slice(atm, input, sample_src, zero_padding, T, model)
     end
     return slices
 end
 
 function AtmosphericFieldPropagation(atm::AbstractTimedAtmosphere,
-    tel::Telescope, src;
-    model::AbstractAtmosphericFieldModel=GeometricAtmosphericPropagation(T=eltype(tel.state.opd)),
+    input::PupilFunction, src;
+    model::AbstractAtmosphericFieldModel=GeometricAtmosphericPropagation(
+        T=eltype(input.opd)),
     zero_padding::Int=1,
-    T::Type{<:AbstractFloat}=eltype(tel.state.opd))
+    T::Type{<:AbstractFloat}=eltype(input.opd))
     zero_padding >= 1 || throw(InvalidConfiguration("zero_padding must be >= 1"))
-    require_same_backend(atm, tel)
+    eltype(input.opd) === T || throw(InvalidConfiguration(
+        "atmospheric field numeric type must match its PupilFunction input"))
+    require_same_backend(atm, input)
     atmosphere_numeric_type(atm) === T || throw(InvalidConfiguration(
         "atmospheric field numeric type must match atmosphere layer storage"))
     frozen_source = freeze_source(src)
     order, distances = _layer_order_and_distances(atm, T)
-    slices = _build_slices(atm, tel, frozen_source, zero_padding, T, model)
+    slices = _build_slices(atm, input, frozen_source, zero_padding, T, model)
     intensity = similar(first(slices).field.values, T,
         size(first(slices).field.values)...)
     fill!(intensity, zero(T))
@@ -212,13 +213,14 @@ end
     return isnothing(ref) ? one(T) : T(ref / λ)
 end
 
-function _build_layer_contexts(atm, tel::Telescope, src::AbstractSource,
+function _build_layer_contexts(atm, input::PupilFunction, src::AbstractSource,
     model::AbstractAtmosphericFieldModel, λ::Real,
     ::Type{T}) where {T<:AbstractFloat}
     shift_scale = _chromatic_shift_scale(model, T(λ))
     contexts = Vector{LayerRenderContext{T}}(undef, length(atm.layers))
     @inbounds for i in eachindex(atm.layers)
-        ctx = layer_render_context(src, atm.layers[i], tel, T)
+        ctx = layer_render_context(src, layer_altitude(atm.layers[i]),
+            input.metadata.sampling, T)
         contexts[i] = LayerRenderContext{T}(
             ctx.shift_x * shift_scale,
             ctx.shift_y * shift_scale,
@@ -441,24 +443,3 @@ function atmospheric_intensity!(prop::AtmosphericFieldPropagation,
     atmospheric_intensity!(prop.state.intensity, prop, atm, epoch)
     return prop.state.intensity
 end
-
-# Transitional call shapes for optical consumers that have not yet migrated to
-# the explicit epoch executor. Preparation has already frozen telescope and
-# source state, so these arguments are intentionally not read on execution.
-@inline propagate_atmosphere_field!(prop::AtmosphericFieldPropagation,
-    atm::AbstractTimedAtmosphere, ::Telescope, ::AbstractSource) =
-    propagate_atmosphere_field!(prop, atm, current_epoch(atm))
-
-@inline propagate_atmosphere_field!(field::ElectricField,
-    prop::AtmosphericFieldPropagation, atm::AbstractTimedAtmosphere,
-    ::Telescope, ::AbstractSource) =
-    propagate_atmosphere_field!(field, prop, atm, current_epoch(atm))
-
-@inline atmospheric_intensity!(out::AbstractMatrix,
-    prop::AtmosphericFieldPropagation, atm::AbstractTimedAtmosphere,
-    ::Telescope, ::AbstractSource) =
-    atmospheric_intensity!(out, prop, atm, current_epoch(atm))
-
-@inline atmospheric_intensity!(prop::AtmosphericFieldPropagation,
-    atm::AbstractTimedAtmosphere, ::Telescope, ::AbstractSource) =
-    atmospheric_intensity!(prop, atm, current_epoch(atm))

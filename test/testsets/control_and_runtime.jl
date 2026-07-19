@@ -1,8 +1,8 @@
 include(normpath(joinpath(@__DIR__, "..", "..", "benchmarks", "support", "revolt_like_hil_common.jl")))
 
-function dm_apply_allocations(dm, tel)
-    apply_opd!(dm, tel)
-    return @allocated apply_opd!(dm, tel)
+function dm_surface_allocations(dm)
+    update_surface!(dm)
+    return @allocated update_surface!(dm)
 end
 
 @testset "Deformable mirror and WFS" begin
@@ -12,24 +12,42 @@ end
     @test Base.summarysize(dm.state.modes) <
         prod(size(dm.state.modes)) * sizeof(eltype(dm.state.modes)) ÷ 10
     dm.state.coefs .= range(-0.2, 0.3; length=length(dm.state.coefs))
-    apply_opd!(dm, tel)
+    update_surface!(dm)
     dense_reference = reshape(Array(dm.state.modes) * Array(dm.state.coefs),
         size(dm.state.opd))
     @test dm.state.opd ≈ dense_reference rtol=5e-14
+    refreshed_tel = Telescope(resolution=32, diameter=8.0,
+        central_obstruction=0.0)
+    refreshed_dm = DeformableMirror(refreshed_tel; n_act=4,
+        influence_width=0.3)
+    refreshed_support = trues(32, 32)
+    refreshed_support[:, 17:end] .= false
+    set_pupil!(refreshed_tel, refreshed_support)
+    AdaptiveOpticsSim.build_influence_functions!(refreshed_dm, refreshed_tel)
+    refreshed_dm.state.coefs .= range(-0.2, 0.3;
+        length=length(refreshed_dm.state.coefs))
+    update_surface!(refreshed_dm)
+    refreshed_reference = reshape(
+        Array(refreshed_dm.state.modes) * Array(refreshed_dm.state.coefs),
+        size(refreshed_dm.state.opd))
+    @test refreshed_dm.state.opd ≈ refreshed_reference rtol=5e-14
+    @test !hasproperty(refreshed_dm.params, :pupil)
     if coverage_instrumented()
         @test_skip "DM allocation assertions are disabled under coverage instrumentation"
     else
-        @test dm_apply_allocations(dm, tel) == 0
+        @test dm_surface_allocations(dm) == 0
     end
+    pupil = PupilFunction(tel)
     dm.state.coefs .= 0.1
-    apply!(dm, tel, DMReplace())
-    @test sum(abs.(tel.state.opd)) > 0
+    update_surface!(dm)
+    apply_surface!(pupil, dm, DMReplace())
+    @test sum(abs, pupil.opd) > 0
 
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
-        tel.state.opd[i, j] = i
+        pupil.opd[i, j] = i
     end
     wfs = ShackHartmannWFS(tel; n_lenslets=4)
-    slopes = measure!(wfs, tel)
+    slopes = measure!(wfs, pupil)
     @test length(slopes) == 2 * 4 * 4
     @test maximum(slopes) > 0
 
@@ -67,14 +85,14 @@ end
     @test isnothing(dm_masked.state.separable_x)
     dm_masked.state.coefs .= range(-0.1, 0.2;
         length=length(dm_masked.state.coefs))
-    apply_opd!(dm_masked, tel)
+    update_surface!(dm_masked)
     masked_reference = reshape(Array(dm_masked.state.modes) *
         Array(dm_masked.state.coefs), size(dm_masked.state.opd))
     @test dm_masked.state.opd ≈ masked_reference rtol=5e-14
     if coverage_instrumented()
         @test_skip "DM allocation assertions are disabled under coverage instrumentation"
     else
-        @test dm_apply_allocations(dm_masked, tel) == 0
+        @test dm_surface_allocations(dm_masked) == 0
     end
 
     sampled_topology = SampledActuatorTopology(actuator_coordinates(dm)[:, 1:4];
@@ -87,8 +105,8 @@ end
     test_cmd = [0.2, -0.1, 0.3, -0.2]
     dm_measured.state.coefs .= test_cmd
     dm_sampled_dense.state.coefs .= test_cmd
-    apply_opd!(dm_measured, tel)
-    apply_opd!(dm_sampled_dense, tel)
+    update_surface!(dm_measured)
+    update_surface!(dm_sampled_dense)
     @test dm_measured.state.opd ≈ dm_sampled_dense.state.opd atol=0 rtol=0
     @test topology_metadata(dm_measured) == (manufacturer=:alpao, source=:converted)
     @test influence_model(dm_measured).metadata == (manufacturer=:alpao,)
@@ -104,7 +122,7 @@ end
         influence_model=MeasuredInfluenceFunctions(measured_modes),
         actuator_model=clipped_health)
     dm_actuated.state.coefs .= [0.5, 0.1, -1.0, 0.1]
-    apply_opd!(dm_actuated, tel)
+    update_surface!(dm_actuated)
     @test dm_actuated.state.actuator_coefs ≈ [0.2, 0.0, -0.2, 0.1]
     @test_throws DimensionMismatchError DeformableMirror(tel; topology=sampled_topology,
         influence_model=MeasuredInfluenceFunctions(measured_modes),
@@ -116,29 +134,39 @@ end
     dm_cmd = zeros(16)
 
     tip_tel = Telescope(resolution=24, diameter=8.0, central_obstruction=0.0)
+    tip_pupil = PupilFunction(tip_tel)
     tip_optic = TipTiltMirror(tip_tel; scale=1.0)
     set_command!(tip_optic, tip_cmd)
-    apply!(tip_optic, tip_tel, DMReplace())
+    update_surface!(tip_optic)
+    apply_surface!(tip_pupil, tip_optic, DMReplace())
 
     comp_tel = Telescope(resolution=24, diameter=8.0, central_obstruction=0.0)
+    comp_pupil = PupilFunction(comp_tel)
     comp_optic = CompositeControllableOptic(
         :tiptilt => TipTiltMirror(comp_tel; scale=1.0),
         :dm => DeformableMirror(comp_tel; n_act=4, influence_width=0.3),
     )
     set_command!(comp_optic, vcat(tip_cmd, dm_cmd))
-    apply!(comp_optic, comp_tel, DMReplace())
+    update_surface!(comp_optic)
+    apply_surface!(comp_pupil, comp_optic, DMReplace())
 
-    @test comp_tel.state.opd ≈ tip_tel.state.opd atol=0 rtol=0
+    @test comp_pupil.opd ≈ tip_pupil.opd atol=0 rtol=0
     @test norm(comp_optic.optics[2].state.opd) == 0.0
 
     selected_tel = Telescope(resolution=24, diameter=8.0, central_obstruction=0.0)
+    selected_pupil = PupilFunction(selected_tel)
     selected_optic = CompositeControllableOptic(
         :tiptilt => TipTiltMirror(selected_tel; scale=1.0),
         :dm => DeformableMirror(selected_tel; n_act=4, influence_width=0.3),
     )
     set_command!(selected_optic, vcat(tip_cmd, fill(1e-8, 16)))
-    AdaptiveOpticsSim._apply_selected!(selected_optic, selected_tel, DMReplace(), (:tiptilt,))
-    @test selected_tel.state.opd ≈ tip_tel.state.opd atol=0 rtol=0
+    AdaptiveOpticsSim._apply_selected!(
+        selected_optic,
+        selected_pupil,
+        DMReplace(),
+        (:tiptilt,),
+    )
+    @test selected_pupil.opd ≈ tip_pupil.opd atol=0 rtol=0
 end
 
 @testset "AOSimulation constructors" begin
@@ -197,7 +225,7 @@ end
     wavefront = PupilFunction(tel; backend=CPUBackend())
     ef = ElectricField(wavefront, Source(band=:I, magnitude=0.0))
 
-    @test tel.state.opd isa Matrix
+    @test wavefront.opd isa Matrix
     @test atm.state.opd isa Matrix
     @test dm.state.coefs isa Vector
     @test function_modal.state.coefs isa Vector
@@ -229,9 +257,10 @@ end
     @test command_segment_labels(command_layout(matrix_modal)) == (:modal_optic,)
     @test command_segment_labels(command_layout(cartesian_modal)) == (:x_tilt, :y_tilt)
     set_command!(low_order, (zernike_2=[0.01], zernike_3=[-0.02]))
-    fill!(tel.state.opd, 0.0)
-    apply!(low_order, tel, DMAdditive())
-    @test norm(tel.state.opd) > 0
+    reset_opd!(wavefront)
+    update_surface!(low_order)
+    apply_surface!(wavefront, low_order, DMAdditive())
+    @test norm(wavefront.opd) > 0
     @test same_backend(tel, atm, dm, wfs, det)
     @test_throws InvalidConfiguration require_same_backend(tel, CUDABackend())
 
@@ -246,9 +275,10 @@ end
 AdaptiveOpticsSim.backend(::StaticRuntimeAtmosphere{<:Any,B}) where {B} = B()
 AdaptiveOpticsSim.advance!(atm::StaticRuntimeAtmosphere, tel::Telescope, rng::AbstractRNG) = atm
 AdaptiveOpticsSim.advance!(atm::StaticRuntimeAtmosphere, tel::Telescope; rng::AbstractRNG=Random.default_rng()) = atm
-function AdaptiveOpticsSim.propagate!(atm::StaticRuntimeAtmosphere, tel::Telescope)
-    copyto!(tel.state.opd, atm.screen)
-    return tel
+function AdaptiveOpticsSim.propagate!(atm::StaticRuntimeAtmosphere,
+    pupil::PupilFunction)
+    copyto!(pupil.opd, atm.screen)
+    return pupil
 end
 
 function build_static_runtime_atmosphere(tel::Telescope; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel))
@@ -356,21 +386,24 @@ end
 function low_order_opd(::Val{K}, low_order_cmd::AbstractVector{<:Real};
     dm_cmd::AbstractVector{<:Real}=fill(0.0, 16), composite::Bool=false) where {K}
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
+    pupil = PupilFunction(tel)
     low_order = build_static_low_order_optic(tel, Val(K))
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-    fill!(tel.state.opd, 0.0)
     if composite
         optic = CompositeControllableOptic(low_order_label(Val(K)) => low_order, :dm => dm)
         label = low_order_label(Val(K))
         set_command!(optic, NamedTuple{(label, :dm)}((collect(float.(low_order_cmd)), collect(float.(dm_cmd)))))
-        apply!(optic, tel, DMAdditive())
+        update_surface!(optic)
+        apply_surface!(pupil, optic, DMAdditive())
     else
         set_command!(low_order, collect(float.(low_order_cmd)))
         set_command!(dm, collect(float.(dm_cmd)))
-        apply!(low_order, tel, DMAdditive())
-        apply!(dm, tel, DMAdditive())
+        update_surface!(low_order)
+        apply_surface!(pupil, low_order, DMAdditive())
+        update_surface!(dm)
+        apply_surface!(pupil, dm, DMAdditive())
     end
-    return copy(tel.state.opd)
+    return copy(pupil.opd)
 end
 
 function response_delta_metrics(::Val{K}, low_order_cmd::AbstractVector{<:Real};
@@ -441,25 +474,26 @@ runtime_snapshot(scenario) = (
 
 @testset "Calibration and control" begin
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
+    pupil = PupilFunction(tel)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     wfs = ShackHartmannWFS(tel; n_lenslets=2)
-    imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
+    imat = interaction_matrix(dm, wfs, pupil; amplitude=0.1)
     @test size(imat.matrix) == (length(slopes(wfs)), length(dm.state.coefs))
 
     fill!(dm.state.coefs, 0.03)
-    fill!(tel.state.opd, 0.02)
+    fill!(pupil.opd, 0.02)
     coefs_before = copy(dm.state.coefs)
-    opd_before = copy(tel.state.opd)
+    opd_before = copy(pupil.opd)
     imat_storage = similar(imat.matrix)
-    imat_inplace = AdaptiveOpticsSim.interaction_matrix!(
-        imat_storage, dm, wfs, tel; amplitude=0.1)
+    imat_inplace = interaction_matrix!(
+        imat_storage, dm, wfs, pupil; amplitude=0.1)
     @test imat_inplace.matrix === imat_storage
     @test imat_inplace.matrix ≈ imat.matrix atol=0 rtol=0
     @test dm.state.coefs == coefs_before
-    @test tel.state.opd == opd_before
-    @test_throws DimensionMismatchError AdaptiveOpticsSim.interaction_matrix!(
+    @test pupil.opd == opd_before
+    @test_throws DimensionMismatchError interaction_matrix!(
         similar(imat_storage, size(imat_storage, 1) + 1,
-            size(imat_storage, 2)), dm, wfs, tel; amplitude=0.1)
+            size(imat_storage, 2)), dm, wfs, pupil; amplitude=0.1)
 
     recon = ModalReconstructor(imat; gain=1.0)
     cmd = reconstruct(recon, slopes(wfs))
@@ -717,7 +751,7 @@ function closed_loop_runtime_allocations()
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
     wfs = ShackHartmannWFS(tel; n_lenslets=4)
     sim = AOSimulation(tel, src, atm, dm, wfs)
-    imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
+    imat = interaction_matrix(dm, wfs, PupilFunction(tel); amplitude=0.1)
     recon = ModalReconstructor(imat; gain=0.5)
     runtime = ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=rng)
     step!(runtime)
@@ -770,20 +804,6 @@ function AdaptiveOpticsSim.render_atmosphere_opd_impl!(dest::AbstractMatrix,
         atmosphere.atmosphere)
 end
 
-function AdaptiveOpticsSim.propagate!(atmosphere::SharedArmCountingAtmosphere, tel::Telescope)
-    atmosphere.renders += 1
-    AdaptiveOpticsSim.propagate!(atmosphere.atmosphere, tel)
-    return tel
-end
-
-
-function AdaptiveOpticsSim.propagate!(atmosphere::SharedArmCountingAtmosphere, tel::Telescope,
-    source::AbstractSource)
-    atmosphere.renders += 1
-    AdaptiveOpticsSim.propagate!(atmosphere.atmosphere, tel, source)
-    return tel
-end
-
 @testset "Source-aware runtime optical paths" begin
     tel = Telescope(resolution=16, diameter=8.0,
         central_obstruction=0.0)
@@ -821,26 +841,37 @@ end
 
     expected_wfs_tel = Telescope(resolution=16, diameter=8.0,
         central_obstruction=0.0)
-    propagate!(atm, expected_wfs_tel, wfs_src)
-    apply!(dm, expected_wfs_tel, DMAdditive())
+    expected_wfs_pupil = PupilFunction(expected_wfs_tel)
+    expected_wfs_renderer = prepare_atmosphere_renderer(atm,
+        expected_wfs_tel, wfs_src)
+    render_atmosphere!(expected_wfs_pupil, expected_wfs_renderer, atm,
+        current_epoch(atm))
+    update_surface!(dm)
+    apply_surface!(expected_wfs_pupil, dm, DMAdditive())
     expected_slopes = similar(runtime.slopes)
     AdaptiveOpticsSim.geometric_slopes!(expected_slopes,
-        expected_wfs_tel.state.opd, valid_subaperture_mask(wfs))
+        expected_wfs_pupil.opd, valid_subaperture_mask(wfs))
     @test runtime.slopes ≈ expected_slopes
+    @test runtime.wfs_pupil.opd ≈ expected_wfs_pupil.opd
 
     expected_science_tel = Telescope(resolution=16, diameter=8.0,
         central_obstruction=0.0)
-    propagate!(atm, expected_science_tel, science_src)
-    apply!(dm, expected_science_tel, DMAdditive())
-    @test tel.state.opd ≈ expected_science_tel.state.opd
-    @test norm(expected_science_tel.state.opd - expected_wfs_tel.state.opd) > 0
+    expected_science_pupil = PupilFunction(expected_science_tel)
+    expected_science_renderer = prepare_atmosphere_renderer(atm,
+        expected_science_tel, science_src)
+    render_atmosphere!(expected_science_pupil, expected_science_renderer,
+        atm, current_epoch(atm))
+    update_surface!(dm)
+    apply_surface!(expected_science_pupil, dm, DMAdditive())
+    @test runtime.science_stage.pupil !== runtime.wfs_pupil
+    @test runtime.science_stage.pupil.opd ≈
+        expected_science_pupil.opd
+    @test norm(expected_science_pupil.opd - expected_wfs_pupil.opd) > 0
 
     expected_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
         binning=1)
-    expected_pupil = PupilFunction(expected_science_tel)
-    apply_opd!(expected_pupil, opd_map(expected_science_tel))
-    expected_imaging = prepare_direct_imaging(expected_science_tel,
-        expected_pupil, science_src;
+    expected_pupil = PupilFunction(expected_science_pupil)
+    expected_imaging = prepare_direct_imaging(expected_pupil, science_src;
         zero_padding=runtime.science_zero_padding)
     expected_image = form_direct_image!(expected_imaging)
     expected_acquisition = prepare_detector_acquisition(expected_det,
@@ -878,9 +909,16 @@ end
     sense!(curvature_runtime)
     expected_curvature_tel = Telescope(resolution=16, diameter=8.0,
         central_obstruction=0.0)
-    propagate!(curvature_atm, expected_curvature_tel, curvature_src)
-    apply!(curvature_dm, expected_curvature_tel, DMAdditive())
-    @test curvature_tel.state.opd ≈ expected_curvature_tel.state.opd
+    expected_curvature_pupil = PupilFunction(expected_curvature_tel)
+    update_surface!(curvature_dm)
+    apply_surface!(expected_curvature_pupil, curvature_dm, DMAdditive())
+    expected_curvature_wfs = CurvatureWFS(expected_curvature_tel;
+        pupil_samples=4)
+    expected_curvature_slopes = copy(measure!(expected_curvature_wfs,
+        expected_curvature_pupil, curvature_src, curvature_atm))
+    @test curvature_runtime.wfs_pupil.opd ≈
+        expected_curvature_pupil.opd
+    @test curvature_runtime.slopes ≈ expected_curvature_slopes
     @test all(isfinite, curvature_runtime.slopes)
 end
 
@@ -902,7 +940,8 @@ end
     primary_wfs = ShackHartmannWFS(tel; n_lenslets=4)
     simulation = AOSimulation(tel, guide, atmosphere, dm, primary_wfs)
     reconstructor = ModalReconstructor(
-        interaction_matrix(dm, primary_wfs, tel; amplitude=0.1);
+        interaction_matrix(dm, primary_wfs, PupilFunction(tel);
+            amplitude=0.1);
         gain=0.5,
     )
     primary = ClosedLoopRuntime(simulation, reconstructor;
@@ -945,7 +984,7 @@ end
     atmosphere.renders = 0
     model_time_before = AdaptiveOpticsSim.atmosphere_timeline(atmosphere).model_time
     shared_rate_before = copy(shared_science_stage.output.values)
-    telescope_opd_before = copy(opd_map(tel))
+    primary_pupil_opd_before = copy(primary.wfs_pupil.opd)
     primary_slopes_before = copy(slopes(primary_wfs))
     auxiliary_slopes_before = copy(slopes(auxiliary_wfs))
     detector_a_before = copy(output_frame(detector_a))
@@ -958,7 +997,7 @@ end
     @test atmosphere.renders == 0
     @test AdaptiveOpticsSim.atmosphere_timeline(atmosphere).model_time ==
         model_time_before
-    @test opd_map(tel) == telescope_opd_before
+    @test primary.wfs_pupil.opd == primary_pupil_opd_before
     @test slopes(primary_wfs) == primary_slopes_before
     @test slopes(auxiliary_wfs) == auxiliary_slopes_before
     @test output_frame(detector_a) == detector_a_before
@@ -1014,7 +1053,7 @@ end
         dm = DeformableMirror(tel; n_act=2, influence_width=0.3)
         wfs = ShackHartmannWFS(tel; n_lenslets=2)
         sim = AOSimulation(tel, src, atm, dm, wfs)
-        response = zeros(eltype(tel.state.opd), length(slopes(wfs)),
+        response = zeros(eltype(pupil_reflectivity(tel)), length(slopes(wfs)),
             length(dm.state.coefs))
         @inbounds for i in 1:min(size(response)...)
             response[i, i] = one(eltype(response))
@@ -1036,7 +1075,7 @@ end
     @test command(ensemble) == (command(runtime_a), command(runtime_b))
     @test prepare!(ensemble) === ensemble
     @test step!(ensemble) === ensemble
-    @test all(runtime -> any(!iszero, runtime.tel.state.opd),
+    @test all(runtime -> any(!iszero, runtime.wfs_pupil.opd),
         ensemble_members(ensemble))
     @test synchronize_runtime!(ensemble) === ensemble
 
@@ -1109,7 +1148,7 @@ end
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
     wfs = ShackHartmannWFS(tel; n_lenslets=4)
     sim = AOSimulation(tel, src, atm, dm, wfs)
-    imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
+    imat = interaction_matrix(dm, wfs, PupilFunction(tel); amplitude=0.1)
     recon = ModalReconstructor(imat; gain=0.5)
     det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
     runtime = ClosedLoopRuntime(sim, recon;
@@ -1127,7 +1166,7 @@ end
         direct_imaging_output(runtime.science_stage.imaging)
     @test runtime.science_stage.acquisition.input_values ===
         runtime.science_stage.output.values
-    @test runtime.science_stage.pupil.opd !== tel.state.opd
+    @test runtime.science_stage.pupil.opd !== runtime.wfs_pupil.opd
     @test wfs_source(runtime) === src
     @test science_source(runtime) === src
     @test runtime.science_path isa AdaptiveOpticsSim.ReuseSensedOpticalPath
@@ -1168,7 +1207,7 @@ end
         atmosphere_step=NaN)
 
     primary_time_before = AdaptiveOpticsSim.atmosphere_timeline(atm).model_time
-    primary_opd_before = copy(opd_map(tel))
+    primary_opd_before = copy(runtime.wfs_pupil.opd)
     primary_slopes_before = copy(slopes(wfs))
     primary_rate_before = copy(runtime.science_stage.output.values)
     capture!(det, runtime.science_stage.output,
@@ -1178,12 +1217,12 @@ end
     @test_throws InvalidConfiguration sense!(runtime)
     @test AdaptiveOpticsSim.atmosphere_timeline(atm).model_time ==
         primary_time_before
-    @test opd_map(tel) == primary_opd_before
+    @test runtime.wfs_pupil.opd == primary_opd_before
     @test slopes(wfs) == primary_slopes_before
     @test runtime.science_stage.output.values == primary_rate_before
     reset_integration!(det)
     step!(runtime)
-    @test runtime.science_stage.pupil.opd == tel.state.opd
+    @test runtime.science_stage.pupil.opd == runtime.wfs_pupil.opd
     @test synchronize_runtime!(runtime) === runtime
     refreshed_runtime = AdaptiveOpticsSim.with_reconstructor(runtime, recon)
     @test runtime_execution_plan(refreshed_runtime) isa CPUHILExecutionPlan
@@ -1266,7 +1305,8 @@ end
     dm2 = DeformableMirror(tel2; n_act=4, influence_width=0.3)
     wfs2 = ShackHartmannWFS(tel2; n_lenslets=4, mode=Diffractive())
     sim2 = AOSimulation(tel2, src2, atm2, dm2, wfs2)
-    imat2 = interaction_matrix(dm2, wfs2, tel2, src2; amplitude=0.1)
+    imat2 = interaction_matrix(dm2, wfs2, PupilFunction(tel2), src2;
+        amplitude=0.1)
     recon2 = ModalReconstructor(imat2; gain=0.5)
     wfs_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
     runtime2 = ClosedLoopRuntime(sim2, recon2;
@@ -1303,7 +1343,8 @@ end
     dm2b = DeformableMirror(tel2b; n_act=4, influence_width=0.3)
     wfs2b = ShackHartmannWFS(tel2b; n_lenslets=4, mode=Diffractive())
     sim2b = AOSimulation(tel2b, src2b, atm2b, dm2b, wfs2b)
-    imat2b = interaction_matrix(dm2b, wfs2b, tel2b, src2b; amplitude=0.1)
+    imat2b = interaction_matrix(dm2b, wfs2b, PupilFunction(tel2b), src2b;
+        amplitude=0.1)
     recon2b = ModalReconstructor(imat2b; gain=0.5)
     wfs_det_b = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
     runtime2b = ClosedLoopRuntime(sim2b, recon2b;
@@ -1747,7 +1788,8 @@ end
     dm3 = DeformableMirror(tel3; n_act=4, influence_width=0.3)
     wfs3 = ZernikeWFS(tel3; pupil_samples=4, diffraction_padding=2)
     sim3 = AOSimulation(tel3, src3, atm3, dm3, wfs3)
-    imat3 = interaction_matrix(dm3, wfs3, tel3, src3; amplitude=1e-8)
+    imat3 = interaction_matrix(dm3, wfs3, PupilFunction(tel3), src3;
+        amplitude=1e-8)
     recon3 = ModalReconstructor(imat3; gain=0.5)
     wfs_det3 = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
     runtime3 = ClosedLoopRuntime(sim3, recon3;
@@ -1771,7 +1813,8 @@ end
     dm4 = DeformableMirror(tel4; n_act=4, influence_width=0.3)
     wfs4 = ShackHartmannWFS(tel4; n_lenslets=4)
     sim4 = AOSimulation(tel4, src4, atm4, dm4, wfs4)
-    imat4 = interaction_matrix(dm4, wfs4, tel4; amplitude=0.1)
+    imat4 = interaction_matrix(dm4, wfs4, PupilFunction(tel4);
+        amplitude=0.1)
     recon4 = ModalReconstructor(imat4; gain=0.5)
     runtime4 = ClosedLoopRuntime(sim4, recon4;
         atmosphere_step=1e-3,

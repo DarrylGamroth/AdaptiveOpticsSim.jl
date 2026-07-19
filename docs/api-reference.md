@@ -70,9 +70,11 @@ The package intentionally distinguishes three tiers:
   `NormalizedTestSource`
 - Source accessors: `wavelength`, `photon_irradiance`, `source_radiometry`,
   `source_radiometric_value`, `optical_path`
-- Telescope mutation: `reset_opd!`, `apply_opd!`, `set_pupil!`,
-  `set_pupil_reflectivity!`
-- Pupil helpers: `pupil_mask`, `apply_spiders!`
+- Telescope aperture mutation: `set_pupil!`, `set_pupil_reflectivity!`,
+  `apply_spiders!`
+- Path-owned pupil products: `PupilFunction`, `pupil_support`,
+  `pupil_amplitude`, `opd_map`, `reset_opd!`, `apply_opd!`
+- Aperture helpers: `pupil_mask`, `pupil_reflectivity`
 
 `pupil_mask(telescope)` and `pupil_reflectivity(telescope)` are zero-copy
 read views of backend-resident aperture storage. Treat them as read-only.
@@ -80,6 +82,12 @@ Change the aperture through `set_pupil!`, `set_pupil_reflectivity!`, or
 `apply_spiders!`; these APIs advance the telescope aperture revision so every
 WFS reference calibration is invalidated coherently. Direct array or field
 mutation is unsupported because it bypasses that revision boundary.
+
+`PupilFunction(telescope)` snapshots the current aperture support and converts
+intensity reflectivity to field amplitude with its square root. Each optical
+path owns its mutable `PupilFunction`; the telescope contains no mutable OPD.
+Prepared propagation and sensing APIs accept that explicit product and reject
+incompatible geometry revisions, backends, or devices.
 
 - Prepared direct imaging: `prepare_direct_imaging`, `form_direct_image!`,
   `direct_imaging_output`, `direct_imaging_components`, and
@@ -154,7 +162,7 @@ error rather than an implicit unit conversion.
   `prepare_atmosphere_renderers`, `direction_renderers`
 - Caller-owned rendering: `render_atmosphere!`
 - Field execution: `propagate_atmosphere_field!`, `atmospheric_intensity!`
-- Transitional/static extension verbs: `advance!`, `propagate!`
+- Static extension verbs: `advance!`, `propagate!`
 
 Timed atmosphere implementations mutate physical layer state only during an
 explicit advance and publish a stable epoch. A prepared single-direction
@@ -163,11 +171,10 @@ renderer consumes the current epoch, writes a compatible caller-owned
 plural preparation API expands an `Asterism` or `ExtendedSource`; the singular
 API rejects multi-direction sources.
 
-`propagate!(atmosphere, telescope, source)` remains a transitional convenience
-that prepares a renderer on each call. Repeated and HIL-sensitive paths should
-prepare once and call `render_atmosphere!`. `advance!` remains the extension
-verb for source-independent untimed/static atmosphere models; maintained timed
-models use `advance_by!` or `advance_to!`.
+Maintained timed atmospheres require prepared renderers and
+`render_atmosphere!`. `propagate!(atmosphere, pupil[, source])` and `advance!`
+remain extension verbs for source-independent untimed/static atmosphere
+models; maintained timed models use `advance_by!` or `advance_to!`.
 
 ## Deformable Mirrors And Controllable Optics
 
@@ -179,11 +186,17 @@ models use `advance_by!` or `advance_to!`.
 - Main DM type: `DeformableMirror`
 - DM accessors: `influence_model`, `influence_width`,
   `mechanical_coupling`, `n_actuators`
-- Mutating application: `apply!`, `update_command!`
+- Surface formation and path application: `update_surface!`, `apply_surface!`,
+  `update_command!`
 - Modal optics: `FunctionModalBasis`, `MatrixModalBasis`,
   `ZernikeOpticBasis`, `CartesianTiltBasis`, `ModalControllableOptic`,
   `TipTiltMirror`, `FocusStage`, `CompositeControllableOptic`
 - Application modes: `DMAdditive`, `DMReplace`
+
+`update_surface!(optic)` materializes the optic's current surface into
+optic-owned storage. `apply_surface!(pupil, optic, mode)` then adds or replaces
+the OPD of one explicit path. This separation lets one surface feed multiple
+independently owned paths without using telescope state as shared scratch.
 
 The normal DM constructor supports concise Gaussian keywords. Use explicit
 topology, influence, and actuator-model objects when modeling measured

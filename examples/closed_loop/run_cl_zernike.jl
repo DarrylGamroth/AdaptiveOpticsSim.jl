@@ -13,7 +13,7 @@ wfs = ZernikeWFS(tel; pupil_samples=8, diffraction_padding=2)
 det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
 sim = AOSimulation(tel, src, atm, dm, wfs)
 
-imat = interaction_matrix(dm, wfs, tel, src; amplitude=1e-8)
+imat = interaction_matrix(dm, wfs, PupilFunction(tel), src; amplitude=1e-8)
 recon = ModalReconstructor(imat; gain=0.5)
 branch = ControlLoopBranch(:main, sim, recon; rng=rng, wfs_detector=det)
 cfg = SingleControlLoopConfig(atmosphere_step=1e-3,

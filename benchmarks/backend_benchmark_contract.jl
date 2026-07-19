@@ -74,7 +74,8 @@ function _runtime_case(target::BenchmarkExecutionTarget; resolution::Int, n_lens
     dm = DeformableMirror(tel; n_act=n_act, influence_width=0.3, T=T, backend=backend)
     wfs = ShackHartmannWFS(tel; n_lenslets=n_lenslets, mode=Diffractive(), T=T, backend=backend)
     sim = AOSimulation(tel, src, atm, dm, wfs)
-    imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
+    imat = interaction_matrix(dm, wfs, PupilFunction(tel), src;
+        amplitude=T(0.05))
     recon = ModalReconstructor(imat; gain=T(0.5))
     runtime = ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=rng)
     step!(runtime)

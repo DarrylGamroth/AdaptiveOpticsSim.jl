@@ -74,13 +74,15 @@ end
 
 function composite_apply_probe()
     tel = Telescope(resolution=24, diameter=8.0, central_obstruction=0.0)
+    pupil = PupilFunction(tel)
     optic = CompositeControllableOptic(
         :tiptilt => TipTiltMirror(tel; scale=1.0),
         :dm => DeformableMirror(tel; n_act=4, influence_width=0.3),
     )
     command = vcat([1e-8, -2e-8], fill(1e-8, 16))
     set_command!(optic, command)
-    return () -> AdaptiveOpticsSim._apply_selected!(optic, tel, DMReplace(), (:tiptilt,))
+    return () -> AdaptiveOpticsSim._apply_selected!(
+        optic, pupil, DMReplace(), (:tiptilt,))
 end
 
 function sampled_frame_response_probe()
@@ -142,7 +144,7 @@ function gaussian_dm_operator_probe()
     tel = Telescope(resolution=128, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=32, influence_width=0.3)
     dm.state.coefs .= range(-1e-7, 1e-7; length=length(dm.state.coefs))
-    return () -> AdaptiveOpticsSim.apply_opd!(dm, tel)
+    return () -> update_surface!(dm)
 end
 
 function shared_optical_runtime_probe()
@@ -154,7 +156,7 @@ function shared_optical_runtime_probe()
     wfs = ShackHartmannWFS(tel; n_lenslets=4)
     simulation = AOSimulation(tel, guide, atmosphere, dm, wfs)
     reconstructor = ModalReconstructor(
-        interaction_matrix(dm, wfs, tel; amplitude=0.1);
+        interaction_matrix(dm, wfs, PupilFunction(tel); amplitude=0.1);
         gain=0.5,
     )
     primary = AdaptiveOpticsSim.ClosedLoopRuntime(simulation, reconstructor;

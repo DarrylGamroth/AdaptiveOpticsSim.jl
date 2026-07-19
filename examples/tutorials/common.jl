@@ -33,11 +33,12 @@ function base_atmosphere(tel::Telescope; r0::Real=0.15, L0::Real=25.0)
     )
 end
 
-function apply_demo_ramp!(tel::Telescope; scale_x::Real=0.0, scale_y::Real=0.0, bias::Real=0.0)
-    @inbounds for j in axes(tel.state.opd, 2), i in axes(tel.state.opd, 1)
-        tel.state.opd[i, j] = bias + scale_x * (i - 1) + scale_y * (j - 1)
+function apply_demo_ramp!(pupil::PupilFunction; scale_x::Real=0.0,
+    scale_y::Real=0.0, bias::Real=0.0)
+    @inbounds for j in axes(pupil.opd, 2), i in axes(pupil.opd, 1)
+        pupil.opd[i, j] = bias + scale_x * (i - 1) + scale_y * (j - 1)
     end
-    return tel
+    return pupil
 end
 
 function pupil_rms(opd::AbstractMatrix, pupil::AbstractMatrix{Bool})
@@ -64,30 +65,28 @@ function run_closed_loop_example(make_wfs::Function; n_iter::Int=4, seed::Intege
     atm = base_atmosphere(tel)
     dm = DeformableMirror(tel; n_act=n_act, influence_width=0.35)
     wfs = make_wfs(tel, wfs_samples)
-    imat = interaction_matrix(dm, wfs, tel, src; amplitude=amplitude)
+    pupil = PupilFunction(tel)
+    imat = interaction_matrix(dm, wfs, pupil, src; amplitude=amplitude)
     recon = ModalReconstructor(imat; gain=gain)
     cmd = similar(dm.state.coefs)
     residual_before = zeros(Float64, n_iter)
     residual_after = similar(residual_before)
     atmosphere_renderer = prepare_atmosphere_renderer(atm, tel, src)
-    atmosphere_output = PupilFunction(tel)
 
     for k in 1:n_iter
         epoch = advance_by!(atm, atmosphere_step; rng=rng)
-        render_atmosphere!(atmosphere_output, atmosphere_renderer, atm, epoch)
-        copyto!(tel.state.opd, atmosphere_output.opd)
-        residual_before[k] = pupil_rms(tel.state.opd, pupil_mask(tel))
-        measure!(wfs, tel, src)
+        render_atmosphere!(pupil, atmosphere_renderer, atm, epoch)
+        residual_before[k] = pupil_rms(pupil.opd, pupil_support(pupil))
+        measure!(wfs, pupil, src)
         reconstruct!(cmd, recon, slopes(wfs))
         dm.state.coefs .= -cmd
-        apply!(dm, tel, DMAdditive())
-        residual_after[k] = pupil_rms(tel.state.opd, pupil_mask(tel))
+        update_surface!(dm)
+        apply_surface!(pupil, dm, DMAdditive())
+        residual_after[k] = pupil_rms(pupil.opd, pupil_support(pupil))
     end
 
-    science_pupil = PupilFunction(tel)
-    apply_opd!(science_pupil, opd_map(tel))
-    imaging = prepare_direct_imaging(tel, science_pupil, src;
-        zero_padding=2)
+    science_pupil = PupilFunction(pupil)
+    imaging = prepare_direct_imaging(science_pupil, src; zero_padding=2)
     form_direct_image!(imaging)
     image = copy(intensity_values(direct_imaging_output(imaging)))
     return (

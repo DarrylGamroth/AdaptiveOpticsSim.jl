@@ -33,8 +33,9 @@ external-RTC HIL development, following the maintained specifications indexed
 by [`hil-package-boundary.md`](hil-package-boundary.md) and tracking completion
 in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
 
-1. Complete HIL prerequisite Gate 0 before implementing the proposed general
-   HIL runtime: separate telescope aperture/geometry from caller-owned optical
+1. Preserve the completed HIL prerequisite Gate 0 while implementing the
+   proposed general HIL runtime. Gate 0 separates telescope aperture/geometry
+   from caller-owned optical
    planes and propagation workspaces; separate shared atmosphere evolution from
    path-local NGS/LGS/source rendering; remove temporal cadence from the
    telescope; define plane geometry/radiometry and safe spectral combination;
@@ -48,10 +49,11 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    acquired, explicitly normalized observations through a separately prepared
    focal-plane model. Cross-backend correctness and residency evidence is now
    complete on the maintained CPU, CUDA, and AMDGPU targets, with clean CPU and
-   CUDA service-time artifacts retained. Next, complete the final Gate 0
-   API/physics review and remove the remaining transitional ownership. Preserve
-   CPU, CUDA, and AMDGPU correctness,
-   residency, allocation, and latency evidence throughout the twelve-PR
+   CUDA service-time artifacts retained. The final Gate 0 ownership review
+   removes telescope-owned mutable optical-path state: each maintained WFS,
+   science, calibration, atmosphere, and controllable-optic path now consumes
+   an explicit `PupilFunction` or field product. Preserve CPU, CUDA, and AMDGPU
+   correctness, residency, allocation, and latency evidence throughout the HIL
    migration.
 2. Compose the Gate 0 optical ownership primitives into immutable shared
    atmosphere/telescope/path definitions, prepared branch-local executors, and

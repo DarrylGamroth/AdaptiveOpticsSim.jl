@@ -183,7 +183,9 @@ function ao_step!(ctx::ProperHILCoronagraphContext)
 end
 
 function science_step!(ctx::ProperHILCoronagraphContext)
-    apply_opd!(ctx.science_pupil, opd_map(ctx.sim.tel))
+    sensed_pupil = ctx.scenario.boundary.runtime.wfs_pupil
+    copyto!(ctx.science_pupil.amplitude, sensed_pupil.amplitude)
+    copyto!(ctx.science_pupil.opd, sensed_pupil.opd)
     return prop_run(ctx.science_model; payload=ctx.payload)
 end
 

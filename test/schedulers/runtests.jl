@@ -29,6 +29,17 @@ AdaptiveOpticsSim.sense!(counter::SchedulerCounter) =
     @test sense!(ensemble) === ensemble
     @test all(counter -> counter.count == 11,
         AdaptiveOpticsSim.ensemble_members(ensemble))
+
+    single_task = SimulationEnsemble(
+        ntuple(_ -> SchedulerCounter(0), 2);
+        policy=AcceleratedKernelsExecution(
+            max_tasks=1,
+            min_members_per_task=1,
+        ),
+    )
+    @test step!(single_task) === single_task
+    @test all(counter -> counter.count == 1,
+        AdaptiveOpticsSim.ensemble_members(single_task))
 end
 
 @testset "Dagger ensemble extension" begin

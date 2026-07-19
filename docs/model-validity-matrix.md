@@ -90,8 +90,11 @@ preserve both the observed 96 ns relative-p99 miss and the immediate passing
 repeat. No new AMD latency baseline is claimed after the host Julia
 installation failed before retaining a raw histogram.
 
-Across `MV-03` through `MV-09` and `MV-13`, the telescope now owns spatial
-geometry but no cadence. Runtime construction requires a positive explicit
+Across `MV-03` through `MV-09` and `MV-13`, the telescope owns aperture
+geometry and reflectivity but no cadence or mutable wavefront product. Each
+optical arm owns an explicit `PupilFunction`, and controllable surfaces are
+assembled independently before being applied to a selected path. Runtime
+construction requires a positive explicit
 `atmosphere_step`, while optical formation produces a rate independent of both
 that step and detector exposure. Focused rate, unequal-exposure, density versus
 cell-integrated, compatible-sum, typed-bundle, and prepared WFS-stage tests
@@ -104,8 +107,9 @@ detector state and exposure are independent, but noisy detector tuple order
 still determines draws from its single runtime RNG. The stage fixtures
 establish composition semantics, not another WFS physics model or a fidelity
 promotion. The later HIL event scheduler is still
-required for independent multi-rate triggers and exposure events, and most WFS
-families still combine optical, detector, and estimator state internally.
+required for independent multi-rate triggers and exposure events. Composed WFS
+objects may retain their prepared optical, acquisition, and estimation
+workspaces, but those stages have explicit products and single-writer ownership.
 
 Elementwise spectral or source accumulation is valid only for compatible
 physical grids with declared incoherent-addition semantics. Incompatible

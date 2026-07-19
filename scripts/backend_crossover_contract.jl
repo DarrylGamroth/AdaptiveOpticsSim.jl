@@ -56,7 +56,9 @@ function _runtime_case(target::SweepExecutionTarget; resolution::Int, n_lenslets
     dm = DeformableMirror(tel; n_act=n_act, influence_width=0.3, T=T, backend=backend)
     wfs = ShackHartmannWFS(tel; n_lenslets=n_lenslets, mode=Diffractive(), T=T, backend=backend)
     sim = AOSimulation(tel, src, atm, dm, wfs)
-    imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
+    imat = interaction_matrix(dm, wfs,
+        PupilFunction(tel; T=T, backend=backend), src;
+        amplitude=T(0.05))
     recon = ModalReconstructor(imat; gain=T(0.5))
     runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=rng)
     step!(runtime)
@@ -181,7 +183,9 @@ function _timed_builder_case(target::SweepExecutionTarget; label::AbstractString
     modal_resolution = 4 * n_lenslet
     modal_act = max(4, n_lenslet + 2)
     runtime = _runtime_case(target; resolution=modal_resolution, n_lenslets=n_lenslet, n_act=modal_act)
-    imat = interaction_matrix(runtime.optic, runtime.wfs, runtime.tel, runtime.src;
+    calibration_pupil = PupilFunction(runtime.tel)
+    imat = interaction_matrix(runtime.optic, runtime.wfs,
+        calibration_pupil, runtime.src;
         amplitude=eltype(runtime.command)(0.05))
     ModalReconstructor(imat; build_backend=p.build_backend)
     modal_build_ns, modal_recon = _time_block_ns() do

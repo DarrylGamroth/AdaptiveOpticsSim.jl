@@ -33,21 +33,21 @@ include("pyramid/stages.jl")
 @inline supports_grouped_execution(::PyramidWFS{<:Diffractive}, ::SpectralSource) = true
 @inline supports_grouped_execution(::PyramidWFS{<:Diffractive}, ::ExtendedSource) = true
 
-@inline function prepare_runtime_wfs!(wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
-    prepare_pyramid_sampling!(wfs, tel)
-    ensure_pyramid_calibration!(wfs, tel, src)
+@inline function prepare_runtime_wfs!(wfs::PyramidWFS, pupil::PupilFunction, src::AbstractSource)
+    prepare_pyramid_sampling!(wfs, pupil)
+    ensure_pyramid_calibration!(wfs, pupil, src)
     return wfs
 end
 
-@inline function prepare_runtime_wfs!(wfs::PyramidWFS, tel::Telescope, src::SpectralSource)
-    prepare_pyramid_sampling!(wfs, tel)
-    ensure_pyramid_calibration!(wfs, tel, src)
+@inline function prepare_runtime_wfs!(wfs::PyramidWFS, pupil::PupilFunction, src::SpectralSource)
+    prepare_pyramid_sampling!(wfs, pupil)
+    ensure_pyramid_calibration!(wfs, pupil, src)
     return wfs
 end
 
-@inline function prepare_runtime_wfs!(wfs::PyramidWFS, tel::Telescope, ast::Asterism)
+@inline function prepare_runtime_wfs!(wfs::PyramidWFS, pupil::PupilFunction, ast::Asterism)
     common_source = common_wfs_calibration_source(ast, "PyramidWFS")
-    prepare_pyramid_sampling!(wfs, tel)
-    ensure_pyramid_calibration!(wfs, tel, common_source)
+    prepare_pyramid_sampling!(wfs, pupil)
+    ensure_pyramid_calibration!(wfs, pupil, common_source)
     return wfs
 end

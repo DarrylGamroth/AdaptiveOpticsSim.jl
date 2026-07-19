@@ -311,8 +311,7 @@ function BioEdgeWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1,
         typeof(mode),typeof(front_end),typeof(acquisition),typeof(estimator),
         typeof(selector),
     }(front_end, acquisition, estimator)
-    update_valid_mask!(wfs, tel)
-    update_edge_mask!(wfs, tel)
+    initialize_bioedge_masks!(wfs, tel)
     prepare_bioedge_front_end!(mode, wfs)
     return wfs
 end
@@ -397,14 +396,29 @@ end
 
 sensing_mode(::BioEdgeWFS{M}) where {M} = M()
 
-function update_valid_mask!(wfs::BioEdgeWFS, tel::Telescope)
-    set_valid_subapertures!(wfs.estimator.state.valid_mask, pupil_mask(tel), wfs.estimator.params.threshold)
+function initialize_bioedge_masks!(wfs::BioEdgeWFS,
+    tel::Telescope)
+    set_valid_subapertures!(wfs.estimator.state.valid_mask,
+        pupil_mask(tel), wfs.estimator.params.threshold)
+    Base.require_one_based_indexing(wfs.estimator.state.edge_mask,
+        pupil_mask(tel))
+    _update_edge_mask!(execution_style(wfs.estimator.state.edge_mask),
+        wfs.estimator.state.edge_mask, pupil_mask(tel),
+        tel.params.resolution)
     return wfs
 end
 
-function update_edge_mask!(wfs::BioEdgeWFS, tel::Telescope)
-    Base.require_one_based_indexing(wfs.estimator.state.edge_mask, pupil_mask(tel))
-    _update_edge_mask!(execution_style(wfs.estimator.state.edge_mask), wfs.estimator.state.edge_mask, pupil_mask(tel), tel.params.resolution)
+function update_valid_mask!(wfs::BioEdgeWFS, pupil::PupilFunction)
+    set_valid_subapertures!(wfs.estimator.state.valid_mask,
+        pupil.support, wfs.estimator.params.threshold)
+    return wfs
+end
+
+function update_edge_mask!(wfs::BioEdgeWFS, pupil::PupilFunction)
+    Base.require_one_based_indexing(wfs.estimator.state.edge_mask, pupil.support)
+    _update_edge_mask!(execution_style(wfs.estimator.state.edge_mask),
+        wfs.estimator.state.edge_mask, pupil.support,
+        _pupil_resolution(pupil))
     return wfs
 end
 
@@ -439,10 +453,10 @@ function _update_edge_mask!(style::AcceleratorStyle, mask::AbstractMatrix{Bool},
     return mask
 end
 
-@inline ensure_bioedge_lgs_kernel!(::LGSProfileNone, wfs::BioEdgeWFS, tel::Telescope, src::LGSSource) = wfs
-@inline ensure_bioedge_lgs_kernel!(::LGSProfileNaProfile, wfs::BioEdgeWFS, tel::Telescope, src::LGSSource) =
-    ensure_lgs_kernel!(wfs, tel, src)
-@inline ensure_bioedge_lgs_kernel!(profile, wfs::BioEdgeWFS, tel::Telescope, src::LGSSource) = wfs
+@inline ensure_bioedge_lgs_kernel!(::LGSProfileNone, wfs::BioEdgeWFS, pupil::PupilFunction, src::LGSSource) = wfs
+@inline ensure_bioedge_lgs_kernel!(::LGSProfileNaProfile, wfs::BioEdgeWFS, pupil::PupilFunction, src::LGSSource) =
+    ensure_lgs_kernel!(wfs, pupil, src)
+@inline ensure_bioedge_lgs_kernel!(profile, wfs::BioEdgeWFS, pupil::PupilFunction, src::LGSSource) = wfs
 
 @inline function apply_bioedge_lgs_profile!(::LGSProfileNone, wfs::BioEdgeWFS, src::LGSSource,
     lgs_fft_buffer, lgs_ifft_buffer)
@@ -575,7 +589,7 @@ function _build_bioedge_masks!(style::AcceleratorStyle, masks::AbstractArray{Com
     return masks
 end
 
-function ensure_bioedge_buffers!(wfs::BioEdgeWFS, pad::Int, tel::Telescope)
+function ensure_bioedge_buffers!(wfs::BioEdgeWFS, pad::Int, pupil::PupilFunction)
     if size(wfs.front_end.propagation.field) != (pad, pad)
         wfs.front_end.propagation.revision += UInt(1)
         wfs.front_end.propagation.field = similar(wfs.front_end.propagation.field, pad, pad)
@@ -618,40 +632,40 @@ end
 
 @inline grouped_staging_buffer(wfs::BioEdgeWFS, out::AbstractMatrix) = wfs.front_end.propagation.intensity
 
-function accumulate_bioedge_asterism_intensity!(::ScalarCPUStyle, wfs::BioEdgeWFS, tel::Telescope, ast::Asterism)
+function accumulate_bioedge_asterism_intensity!(::ScalarCPUStyle, wfs::BioEdgeWFS, pupil::PupilFunction, ast::Asterism)
     count = length(ast.sources)
     stack = grouped_stack_view(ensure_bioedge_asterism_stack!(wfs, count), count)
-    return accumulate_grouped_sources!(ScalarCPUStyle(), wfs, wfs.front_end.propagation.intensity, stack, ast.sources, bioedge_intensity!, wfs, tel)
+    return accumulate_grouped_sources!(ScalarCPUStyle(), wfs, wfs.front_end.propagation.intensity, stack, ast.sources, bioedge_intensity!, wfs, pupil)
 end
 
-function accumulate_bioedge_asterism_intensity!(style::AcceleratorStyle, wfs::BioEdgeWFS, tel::Telescope, ast::Asterism)
+function accumulate_bioedge_asterism_intensity!(style::AcceleratorStyle, wfs::BioEdgeWFS, pupil::PupilFunction, ast::Asterism)
     count = length(ast.sources)
     stack = grouped_stack_view(ensure_bioedge_asterism_stack!(wfs, count), count)
-    return accumulate_grouped_sources!(style, wfs, wfs.front_end.propagation.intensity, stack, ast.sources, bioedge_intensity!, wfs, tel)
+    return accumulate_grouped_sources!(style, wfs, wfs.front_end.propagation.intensity, stack, ast.sources, bioedge_intensity!, wfs, pupil)
 end
 
-function prepare_bioedge_sampling!(wfs::BioEdgeWFS, tel::Telescope)
+function prepare_bioedge_sampling!(wfs::BioEdgeWFS, pupil::PupilFunction)
     binning = wfs.acquisition.binning
     if binning < 1
         throw(InvalidConfiguration("binning must be >= 1"))
     end
     n_sub = wfs.estimator.params.pupil_samples
-    pad = tel.params.resolution * wfs.front_end.amplitude_mask.diffraction_padding
+    pad = _pupil_resolution(pupil) * wfs.front_end.amplitude_mask.diffraction_padding
     if wfs.front_end.amplitude_mask.n_pix_separation !== nothing
         edge = wfs.front_end.amplitude_mask.n_pix_edge === nothing ? div(wfs.front_end.amplitude_mask.n_pix_separation, 2) : wfs.front_end.amplitude_mask.n_pix_edge
-        pad = Int(round((n_sub * 2 + wfs.front_end.amplitude_mask.n_pix_separation + 2 * edge) * tel.params.resolution / n_sub))
+        pad = Int(round((n_sub * 2 + wfs.front_end.amplitude_mask.n_pix_separation + 2 * edge) * _pupil_resolution(pupil) / n_sub))
     end
-    if pad < tel.params.resolution
+    if pad < _pupil_resolution(pupil)
         throw(InvalidConfiguration("bioedge padding must be >= telescope resolution"))
     end
     if pad % binning != 0
         throw(InvalidConfiguration("bioedge binning must evenly divide padded resolution"))
     end
-    n = tel.params.resolution
+    n = _pupil_resolution(pupil)
     if n % binning != 0
         throw(InvalidConfiguration("binning must evenly divide telescope resolution"))
     end
-    ensure_bioedge_buffers!(wfs, pad, tel)
+    ensure_bioedge_buffers!(wfs, pad, pupil)
     n_binned = div(n, binning)
     if n_binned != wfs.estimator.state.binned_resolution
         wfs.estimator.state.binned_phase = similar(wfs.estimator.state.binned_phase, n_binned, n_binned)
@@ -774,8 +788,8 @@ end
     return div(n_rows, 2)
 end
 
-function sample_bioedge_intensity!(wfs::BioEdgeWFS, tel::Telescope, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
-    sub = div(tel.params.resolution, wfs.estimator.params.pupil_samples)
+function sample_bioedge_intensity!(wfs::BioEdgeWFS, pupil::PupilFunction, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
+    sub = div(_pupil_resolution(pupil), wfs.estimator.params.pupil_samples)
     if size(intensity, 1) % sub != 0
         throw(InvalidConfiguration("bioedge intensity size must be divisible by telescope pixels per subaperture"))
     end
@@ -784,7 +798,7 @@ function sample_bioedge_intensity!(wfs::BioEdgeWFS, tel::Telescope, intensity::A
         wfs.acquisition.state.camera_frame = similar(wfs.acquisition.state.camera_frame, n_camera, n_camera)
     end
     frame = wfs.acquisition.state.camera_frame
-    wfs.acquisition.state.nominal_detector_resolution = round(Int, wfs.estimator.params.pupil_samples * wfs.front_end.propagation.effective_resolution / tel.params.resolution)
+    wfs.acquisition.state.nominal_detector_resolution = round(Int, wfs.estimator.params.pupil_samples * wfs.front_end.propagation.effective_resolution / _pupil_resolution(pupil))
     if wfs.acquisition.binning != 1
         target = div(wfs.acquisition.state.nominal_detector_resolution, wfs.acquisition.binning)
         factor = div(size(frame, 1), target)

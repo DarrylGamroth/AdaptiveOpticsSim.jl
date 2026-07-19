@@ -31,12 +31,17 @@ Keep the packages loosely coupled.
   Keep integration examples and benchmarks at the application boundary unless a
   stable shared package is justified.
 
-The preferred transitional seam copies the runtime residual into a
-caller-owned science-path product before calling Proper:
+The preferred seam renders the current published atmosphere epoch and visible
+optic surfaces into a caller-owned science-path product before calling Proper:
 
 ```julia
 science_pupil = PupilFunction(sim.tel)
-apply_opd!(science_pupil, opd_map(sim.tel))
+science_renderer = prepare_atmosphere_renderer(
+    sim.atm, sim.tel, science_source(sim))
+render_atmosphere!(science_pupil, science_renderer, sim.atm,
+    current_epoch(sim.atm))
+update_surface!(sim.optic)
+apply_surface!(science_pupil, sim.optic, DMAdditive())
 
 payload = CoronagraphPayload(
     opd_map(science_pupil),
@@ -49,9 +54,9 @@ payload = CoronagraphPayload(
 external_image, sampling = prop_run(science_model; payload=payload)
 ```
 
-The explicit copy is required only while the runtime still stages residual OPD
-for unmigrated WFS families on the telescope; a later path executor can write
-`science_pupil` directly. On return, the integration adapter must construct a
+This does not advance atmosphere time and may use a different prepared source
+direction from the WFS path. A later HIL path executor can own and update the
+same `science_pupil` directly. On return, the integration adapter must construct a
 caller-owned `IntensityMap` whose metadata declares physical sampling,
 centering/orientation, wavelength, backend/device, normalization, spatial
 measure, and incoherent-addition policy. `prepare_detector_acquisition` accepts
@@ -97,8 +102,8 @@ already applied the DM, pass the total sampled OPD instead.
 Use the native `NCPA` or `OPDMap` model for a static or slowly varying
 aberration that is adequately represented as sampled pupil OPD. Apply it only
 to the branch that contains the aberration. Apply native sampled NCPA to a
-science-local `PupilFunction` or OPD workspace, not to shared transitional
-telescope OPD later reused by a WFS path.
+science-local `PupilFunction` or OPD workspace, not to path storage later
+reused by a WFS path.
 
 Keep the NCPA inside the `Proper.jl` prescription when its behavior depends on
 the detailed instrument relay, wavelength-dependent surfaces, amplitude

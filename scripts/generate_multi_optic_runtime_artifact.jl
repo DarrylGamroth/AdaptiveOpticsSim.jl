@@ -15,9 +15,10 @@ end
 AdaptiveOpticsSim.backend(::StaticAtmosphere{<:Any,B}) where {B} = B()
 AdaptiveOpticsSim.advance!(atm::StaticAtmosphere, tel::Telescope, rng::AbstractRNG) = atm
 AdaptiveOpticsSim.advance!(atm::StaticAtmosphere, tel::Telescope; rng::AbstractRNG=Random.default_rng()) = atm
-function AdaptiveOpticsSim.propagate!(atm::StaticAtmosphere, tel::Telescope)
-    copyto!(tel.state.opd, atm.screen)
-    return tel
+function AdaptiveOpticsSim.propagate!(atm::StaticAtmosphere,
+    pupil::PupilFunction)
+    copyto!(pupil.opd, atm.screen)
+    return pupil
 end
 
 function deterministic_phase_screen(tel::Telescope, ::Type{T}) where {T<:AbstractFloat}
@@ -219,18 +220,21 @@ function low_order_opd(::Val{K}, low_order_cmd::AbstractVector{<:AbstractFloat};
             labels=:steering, T=T, backend=CPUBackend()) :
         FocusStage(tel; scale=T(0.1), T=T, backend=CPUBackend(), label=:focus)
     dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T, backend=CPUBackend())
-    fill!(tel.state.opd, zero(T))
+    pupil = PupilFunction(tel; T=T, backend=CPUBackend())
     if composite
         optic = CompositeControllableOptic(low_order_label(Val(K)) => low_order, :dm => dm)
         set_command!(optic, NamedTuple{(low_order_label(Val(K)), :dm)}((collect(Float32.(low_order_cmd)), collect(Float32.(dm_cmd)))))
-        apply!(optic, tel, DMAdditive())
+        update_surface!(optic)
+        apply_surface!(pupil, optic, DMAdditive())
     else
         set_command!(low_order, collect(Float32.(low_order_cmd)))
         set_command!(dm, collect(Float32.(dm_cmd)))
-        apply!(low_order, tel, DMAdditive())
-        apply!(dm, tel, DMAdditive())
+        update_surface!(low_order)
+        apply_surface!(pupil, low_order, DMAdditive())
+        update_surface!(dm)
+        apply_surface!(pupil, dm, DMAdditive())
     end
-    return copy(Array(tel.state.opd))
+    return copy(Array(pupil.opd))
 end
 
 function vector_stats(x)

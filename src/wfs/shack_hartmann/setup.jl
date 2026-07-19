@@ -323,7 +323,7 @@ function ShackHartmannWFS(tel::Telescope; n_lenslets::Int, threshold::Real=0.1,
         typeof(mode),typeof(params),typeof(front_end),typeof(acquisition),
         typeof(estimator),typeof(calibration),typeof(selector),
     }(params, front_end, acquisition, estimator, calibration)
-    update_valid_mask!(wfs, tel)
+    initialize_valid_mask!(wfs, tel, policy)
     return wfs
 end
 
@@ -513,24 +513,45 @@ end
     return layout.valid_mask_host
 end
 
-function update_valid_mask!(wfs::ShackHartmannWFS, tel::Telescope)
-    update_valid_mask!(wfs, tel, valid_subaperture_policy(wfs))
-    return wfs
-end
-
-function update_valid_mask!(wfs::ShackHartmannWFS, tel::Telescope, policy::GeometryValidSubapertures)
-    update_subaperture_layout!(wfs.front_end.layout, pupil_mask(tel), policy)
+function initialize_valid_mask!(wfs::ShackHartmannWFS,
+    tel::Telescope, policy::GeometryValidSubapertures)
+    update_subaperture_layout!(wfs.front_end.layout, pupil_mask(tel),
+        policy)
     invalidate_sh_calibration!(wfs)
     return wfs
 end
 
-function update_valid_mask!(wfs::ShackHartmannWFS, tel::Telescope, policy::FluxThresholdValidSubapertures)
-    update_subaperture_layout!(wfs.front_end.layout, pupil_reflectivity(tel), policy)
+function initialize_valid_mask!(wfs::ShackHartmannWFS,
+    tel::Telescope, policy::FluxThresholdValidSubapertures)
+    update_subaperture_layout!(wfs.front_end.layout,
+        pupil_reflectivity(tel), policy)
     invalidate_sh_calibration!(wfs)
     return wfs
 end
 
-function update_valid_mask!(::ShackHartmannWFS, ::Telescope, policy)
+function update_valid_mask!(wfs::ShackHartmannWFS,
+    pupil::PupilFunction)
+    update_valid_mask!(wfs, pupil, valid_subaperture_policy(wfs))
+    return wfs
+end
+
+function update_valid_mask!(wfs::ShackHartmannWFS,
+    pupil::PupilFunction, policy::GeometryValidSubapertures)
+    update_subaperture_layout!(wfs.front_end.layout, pupil.amplitude,
+        policy)
+    invalidate_sh_calibration!(wfs)
+    return wfs
+end
+
+function update_valid_mask!(wfs::ShackHartmannWFS,
+    pupil::PupilFunction, policy::FluxThresholdValidSubapertures)
+    update_subaperture_layout_from_amplitude!(wfs.front_end.layout,
+        pupil.amplitude, policy)
+    invalidate_sh_calibration!(wfs)
+    return wfs
+end
+
+function update_valid_mask!(::ShackHartmannWFS, ::PupilFunction, policy)
     throw(UnsupportedAlgorithm("unsupported valid subaperture policy $(typeof(policy))"))
 end
 
@@ -635,7 +656,7 @@ function build_sh_phasor!(front_end::ShackHartmannOpticalFrontEnd,
 end
 
 """
-    prepare_sampling!(wfs, tel, src)
+    prepare_sampling!(wfs, pupil, src)
 
 Resolve the diffractive lenslet sampling for a source/wavelength pair.
 
@@ -651,20 +672,21 @@ measurements.
     src::AbstractSource) = sh_pixel_scale_init(d_subap, padding,
     wavelength(src))
 
-function prepare_sampling!(wfs::ShackHartmannWFS, tel::Telescope, src::AbstractSource)
-    return prepare_sampling_wavelength!(wfs, tel, wavelength(src))
+function prepare_sampling!(wfs::ShackHartmannWFS,
+    pupil::PupilFunction, src::AbstractSource)
+    return prepare_sampling_wavelength!(wfs, pupil, wavelength(src))
 end
 
-function prepare_sampling!(wfs::ShackHartmannWFS, tel::Telescope,
+function prepare_sampling!(wfs::ShackHartmannWFS, pupil::PupilFunction,
     src::SpectralSource)
     wavelength_ref = require_sh_common_spectral_grid(wfs, src)
-    return prepare_sampling_wavelength!(wfs, tel, wavelength_ref)
+    return prepare_sampling_wavelength!(wfs, pupil, wavelength_ref)
 end
 
 function prepare_sampling_wavelength!(wfs::ShackHartmannWFS,
-    tel::Telescope, wavelength_m::Real)
-    return prepare_sampling_wavelength!(wfs, tel.params.resolution,
-        tel.params.diameter, wavelength_m)
+    pupil::PupilFunction, wavelength_m::Real)
+    return prepare_sampling_wavelength!(wfs, _pupil_resolution(pupil),
+        _pupil_diameter_m(pupil), wavelength_m)
 end
 
 function prepare_sampling_wavelength!(wfs::ShackHartmannWFS,

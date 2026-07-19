@@ -134,18 +134,16 @@ end
 
 @inline function _advance_and_render_atmosphere!(runtime, atmosphere_step)
     epoch = advance_by!(runtime.atm, atmosphere_step; rng=runtime.rng)
-    AdaptiveOpticsSim.render_atmosphere_opd!(runtime.tel.state.opd,
+    render_atmosphere!(runtime.wfs_pupil,
         runtime.wfs_atmosphere_renderer, runtime.atm, epoch)
     return epoch
 end
 
-function _phase_step!(runtime, backend_tag, atmosphere_step;
-    phase_index::Int=1)
-    _advance_and_render_atmosphere!(runtime, atmosphere_step)
-    _fill_dm_command!(runtime.dm.state.coefs, eltype(runtime.dm.state.coefs)(phase_index))
-    apply!(runtime.dm, runtime.tel, DMAdditive())
+function _phase_step!(runtime, backend_tag; phase_index::Int=1)
+    _fill_dm_command!(runtime.optic.state.coefs,
+        eltype(runtime.optic.state.coefs)(phase_index))
     sense!(runtime)
-    _sync_backend!(backend_tag, simulation_wfs_frame(runtime))
+    _sync_backend!(backend_tag, wfs_frame(runtime))
     return nothing
 end
 
@@ -158,7 +156,7 @@ function _camera_specs(::Type{T}) where {T<:AbstractFloat}
             qe=T(0.95),
             dark_current=T(20.0),
             readout_noise=T(1.0),
-            sensor=EMCCDSensor(T=T),
+            sensor=EMCCDSensor(output_path=ConventionalOutput(), T=T),
         ),
         cred2=(
             resolution=480,
@@ -181,15 +179,21 @@ function _camera_specs(::Type{T}) where {T<:AbstractFloat}
     )
 end
 
-function _detector_from_spec(spec; integration_time, response_model, T::Type{<:AbstractFloat}, backend)
+function _detector_from_spec(spec;
+    integration_time,
+    response_model,
+    calibration_compatible::Bool=false,
+    T::Type{<:AbstractFloat},
+    backend,
+)
     return Detector(
         NoisePhotonReadout(spec.readout_noise);
         integration_time=T(integration_time),
         qe=spec.qe,
         gain=T(1.0),
         dark_current=spec.dark_current,
-        bits=spec.bits,
-        full_well=spec.full_well,
+        bits=calibration_compatible ? nothing : spec.bits,
+        full_well=calibration_compatible ? nothing : spec.full_well,
         sensor=spec.sensor,
         response_model=response_model,
         T=T,
@@ -205,6 +209,7 @@ function run_profile(; backend_name::AbstractString="cpu", model_name::AbstractS
     T = Float32
     acquisition_time = T(0.002)
     atmosphere_step = T(0.002)
+    calibration_amplitude = T(5e-9)
     cameras = _camera_specs(T)
 
     tel = Telescope(
@@ -245,6 +250,7 @@ function run_profile(; backend_name::AbstractString="cpu", model_name::AbstractS
     wfs_detector = _detector_from_spec(cameras.ixon;
         integration_time=acquisition_time,
         response_model=response_model,
+        calibration_compatible=true,
         T=T,
         backend=backend,
     )
@@ -262,82 +268,92 @@ function run_profile(; backend_name::AbstractString="cpu", model_name::AbstractS
     )
 
     t0 = time_ns()
-    imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
+    imat = interaction_matrix(dm, wfs,
+        PupilFunction(tel; T=T, backend=backend), calibration_source;
+        amplitude=calibration_amplitude)
+    all(isfinite, imat.matrix) || throw(InvalidConfiguration(
+        "REVOLT PWFS interaction matrix contains non-finite values"))
     recon = ModalReconstructor(imat; gain=T(0.5))
     runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon;
         atmosphere_step=atmosphere_step, rng=runtime_rng(0),
         wfs_detector=wfs_detector)
     prepare!(runtime)
-    _phase_step!(runtime, backend_tag, atmosphere_step; phase_index=1)
+    _phase_step!(runtime, backend_tag; phase_index=1)
     build_time_ns = time_ns() - t0
 
     phase_index = Ref(1)
     atmosphere_mean_ns, atmosphere_p95_ns = _timed_stats!(() -> begin
         phase_index[] += 1
         _advance_and_render_atmosphere!(runtime, atmosphere_step)
-        _sync_backend!(backend_tag, runtime.tel.state.opd)
+        _sync_backend!(backend_tag, runtime.wfs_pupil.opd)
     end; warmup=warmup, samples=samples)
     dm_apply_mean_ns, dm_apply_p95_ns = _timed_stats!(() -> begin
         phase_index[] += 1
         _advance_and_render_atmosphere!(runtime, atmosphere_step)
-        _fill_dm_command!(runtime.dm.state.coefs, T(phase_index[]))
-        apply!(runtime.dm, runtime.tel, DMAdditive())
-        _sync_backend!(backend_tag, runtime.tel.state.opd)
+        _fill_dm_command!(runtime.optic.state.coefs, T(phase_index[]))
+        update_surface!(runtime.optic)
+        apply_surface!(runtime.wfs_pupil, runtime.optic, DMAdditive())
+        _sync_backend!(backend_tag, runtime.wfs_pupil.opd)
     end; warmup=warmup, samples=samples)
     sense_mean_ns, sense_p95_ns = _timed_stats!(() -> begin
         phase_index[] += 1
-        _phase_step!(runtime, backend_tag, atmosphere_step;
+        _phase_step!(runtime, backend_tag;
             phase_index=phase_index[])
     end; warmup=warmup, samples=samples)
     total_mean_ns, total_p95_ns = _timed_stats!(() -> begin
         phase_index[] += 1
-        _phase_step!(runtime, backend_tag, atmosphere_step;
+        _phase_step!(runtime, backend_tag;
             phase_index=phase_index[])
     end; warmup=warmup, samples=samples)
 
     atmosphere_alloc_bytes = _allocated_bytes(() -> begin
         phase_index[] += 1
         _advance_and_render_atmosphere!(runtime, atmosphere_step)
-        _sync_backend!(backend_tag, runtime.tel.state.opd)
+        _sync_backend!(backend_tag, runtime.wfs_pupil.opd)
     end; warmup=warmup)
     dm_apply_alloc_bytes = _allocated_bytes(() -> begin
         phase_index[] += 1
         _advance_and_render_atmosphere!(runtime, atmosphere_step)
-        _fill_dm_command!(runtime.dm.state.coefs, T(phase_index[]))
-        apply!(runtime.dm, runtime.tel, DMAdditive())
-        _sync_backend!(backend_tag, runtime.tel.state.opd)
+        _fill_dm_command!(runtime.optic.state.coefs, T(phase_index[]))
+        update_surface!(runtime.optic)
+        apply_surface!(runtime.wfs_pupil, runtime.optic, DMAdditive())
+        _sync_backend!(backend_tag, runtime.wfs_pupil.opd)
     end; warmup=warmup)
     sense_alloc_bytes = _allocated_bytes(() -> begin
         phase_index[] += 1
-        _phase_step!(runtime, backend_tag, atmosphere_step;
+        _phase_step!(runtime, backend_tag;
             phase_index=phase_index[])
     end; warmup=warmup)
     total_alloc_bytes = _allocated_bytes(() -> begin
         phase_index[] += 1
-        _phase_step!(runtime, backend_tag, atmosphere_step;
+        _phase_step!(runtime, backend_tag;
             phase_index=phase_index[])
     end; warmup=warmup)
 
     wfs_metadata = detector_export_metadata(wfs_detector)
     gain_metadata = detector_export_metadata(gain_detector)
     science_metadata = detector_export_metadata(science_detector)
-    wfs_frame = simulation_wfs_frame(runtime)
-    wfs_reference_frame = detector_reference_frame(wfs_detector)
-    wfs_signal_frame = detector_signal_frame(wfs_detector)
-    wfs_combined_frame = detector_combined_frame(wfs_detector)
-    wfs_reference_cube = detector_reference_cube(wfs_detector)
-    wfs_signal_cube = detector_signal_cube(wfs_detector)
-    wfs_read_cube = detector_read_cube(wfs_detector)
+    runtime_wfs_frame = wfs_frame(runtime)
+    wfs_reference_frame = AdaptiveOpticsSim.detector_reference_frame(wfs_detector)
+    wfs_signal_frame = AdaptiveOpticsSim.detector_signal_frame(wfs_detector)
+    wfs_combined_frame = AdaptiveOpticsSim.detector_combined_frame(wfs_detector)
+    wfs_reference_cube = AdaptiveOpticsSim.detector_reference_cube(wfs_detector)
+    wfs_signal_cube = AdaptiveOpticsSim.detector_signal_cube(wfs_detector)
+    wfs_read_cube = AdaptiveOpticsSim.detector_read_cube(wfs_detector)
 
     println("revolt_pwfs_runtime_profile")
     println("  backend: ", backend_label)
     println("  model: ", cfg.label)
     println("  response_mode: ", response_label)
     println("  atmosphere_step_s: ", atmosphere_step)
+    println("  calibration_amplitude_m: ", calibration_amplitude)
     println("  wfs_family: pyramid")
     println("  wfs_detector: ixon")
     println("  wfs_detector_sensor: ", wfs_metadata.sensor)
     println("  wfs_detector_nominal_resolution: ", cameras.ixon.resolution)
+    println("  wfs_detector_output_path: conventional_for_calibration")
+    println("  wfs_detector_quantization: disabled_for_calibration")
+    println("  wfs_detector_saturation: disabled_for_calibration")
     println("  wfs_frame_response: ", wfs_metadata.frame_response)
     println("  science_detector: cred2")
     println("  science_detector_sensor: ", science_metadata.sensor)
@@ -353,7 +369,7 @@ function run_profile(; backend_name::AbstractString="cpu", model_name::AbstractS
     println("  source_band: ", src.params.band)
     println("  effective_sky_magnitude: ", src.params.magnitude)
     println("  effective_calibration_magnitude: ", calibration_source.params.magnitude)
-    println("  wfs_frame_shape: ", size(wfs_frame))
+    println("  wfs_frame_shape: ", size(runtime_wfs_frame))
     println("  detector_output_shape: ", size(output_frame(wfs_detector)))
     println("  wfs_reference_frame_shape: ", isnothing(wfs_reference_frame) ? nothing : size(wfs_reference_frame))
     println("  wfs_signal_frame_shape: ", isnothing(wfs_signal_frame) ? nothing : size(wfs_signal_frame))

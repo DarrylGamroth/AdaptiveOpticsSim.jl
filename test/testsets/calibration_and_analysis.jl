@@ -12,9 +12,10 @@ end
 
 @testset "OOPAO parity knobs" begin
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
+    pupil = PupilFunction(tel)
     src = Source(band=:I, magnitude=0.0)
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
-        tel.state.opd[i, j] = i + j / 10
+        pupil.opd[i, j] = i + j / 10
     end
 
     sh_plain = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8)
@@ -22,8 +23,8 @@ end
         half_pixel_shift=true)
     sh_thresh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8,
         threshold_cog=0.2)
-    @test measure!(sh_plain, tel, src) != measure!(sh_shift, tel, src)
-    @test measure!(sh_plain, tel, src) != measure!(sh_thresh, tel, src)
+    @test measure!(sh_plain, pupil, src) != measure!(sh_shift, pupil, src)
+    @test measure!(sh_plain, pupil, src) != measure!(sh_thresh, pupil, src)
 
     pyr_auto = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0)
     @test size(pyr_auto.front_end.modulation.phases, 3) == 8
@@ -46,7 +47,7 @@ end
     @test any(x -> 0 < x < 1, amps)
     @test bio_plain.front_end.propagation.bioedge_masks != bio_gray.front_end.propagation.bioedge_masks
 
-    bio_gray_slopes = measure!(bio_gray, tel, src)
+    bio_gray_slopes = measure!(bio_gray, pupil, src)
     @test length(bio_gray_slopes) == 2 * 4 * 4
     @test all(isfinite, bio_gray_slopes)
 end
@@ -54,6 +55,7 @@ end
 @testset "WFS asterism calibration and pupil-image geometry" begin
     tel = Telescope(resolution=20, diameter=8.0,
         central_obstruction=0.0)
+    pupil = PupilFunction(tel)
 
     @test_throws InvalidConfiguration PyramidWFS(tel;
         pupil_samples=5, binning=2, mode=Diffractive())
@@ -66,12 +68,12 @@ end
 
     pyramid = PyramidWFS(tel; pupil_samples=4,
         diffraction_padding=3, mode=Diffractive())
-    AdaptiveOpticsSim.prepare_pyramid_sampling!(pyramid, tel)
+    AdaptiveOpticsSim.prepare_pyramid_sampling!(pyramid, pupil)
     @test_throws InvalidConfiguration begin
         AdaptiveOpticsSim.resize_pyramid_signal_buffers!(pyramid, 3)
     end
     @test_throws DimensionMismatchError begin
-        AdaptiveOpticsSim.pyramid_signal!(pyramid, tel, zeros(8, 6))
+        AdaptiveOpticsSim.pyramid_signal!(pyramid, pupil, zeros(8, 6))
     end
 
     bioedge = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
@@ -79,7 +81,7 @@ end
         AdaptiveOpticsSim.resize_bioedge_signal_buffers!(bioedge, 7, 1)
     end
     @test_throws DimensionMismatchError begin
-        AdaptiveOpticsSim.bioedge_signal!(bioedge, tel, zeros(8, 6))
+        AdaptiveOpticsSim.bioedge_signal!(bioedge, pupil, zeros(8, 6))
     end
 
     compact_bioedge = BioEdgeWFS(tel; pupil_samples=2,
@@ -96,7 +98,7 @@ end
                      3.0 3.0 2.0 2.0;
                      3.0 3.0 2.0 2.0]
     compact_slopes = copy(AdaptiveOpticsSim.bioedge_signal!(
-        compact_bioedge, tel, compact_frame))
+        compact_bioedge, pupil, compact_frame))
 
     padded_bioedge = BioEdgeWFS(tel; pupil_samples=2,
         mode=Diffractive())
@@ -109,7 +111,7 @@ end
     fill!(padded_bioedge.estimator.state.reference_signal_2d, 0.0)
     padded_frame = zeros(8, 8)
     @views padded_frame[3:6, 3:6] .= compact_frame
-    @test AdaptiveOpticsSim.bioedge_signal!(padded_bioedge, tel,
+    @test AdaptiveOpticsSim.bioedge_signal!(padded_bioedge, pupil,
         padded_frame) ≈ compact_slopes
 
     ngs = Source(wavelength=589e-9, photon_irradiance=1.0)
@@ -124,9 +126,9 @@ end
         BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive()),
     )
     for wfs in sensors
-        @test_throws InvalidConfiguration measure!(wfs, tel,
+        @test_throws InvalidConfiguration measure!(wfs, pupil,
             heterogeneous)
-        @test_throws InvalidConfiguration measure!(wfs, tel,
+        @test_throws InvalidConfiguration measure!(wfs, pupil,
             heterogeneous, detector)
     end
     @test !sensors[1].calibration.calibrated
@@ -213,8 +215,9 @@ end
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     map = OPDMap(fill(1.0, 8, 8))
-    apply!(map, tel, DMReplace())
-    @test sum(tel.state.opd) ≈ 64.0
+    pupil = PupilFunction(tel)
+    apply_surface!(pupil, map, DMReplace())
+    @test sum(pupil.opd) ≈ 64.0
 
     basis_default = AdaptiveOpticsSim.ncpa_basis(KLBasis(), tel, dm, atm; n_modes=2)
     basis_hht = AdaptiveOpticsSim.ncpa_basis(KLBasis(KLHHtPSD()), tel, dm, atm; n_modes=2)
@@ -242,7 +245,7 @@ end
         normalization=DimensionlessNormalization(),
         spatial_measure=PointSampledMeasure(),
         coherence=CoherentFieldCombination())
-    formation = prepare_pupil_field(tel, wavefront, src, field;
+    formation = prepare_pupil_field(wavefront, src, field;
         center_even_grid=false, amplitude_scale=1)
     fill_electric_field!(field, wavefront, formation)
     filtered = PupilFunction(tel)
@@ -651,6 +654,68 @@ end
     end
 end
 
+@testset "Interaction-matrix WFS output finalization" begin
+    T = Float32
+    tel = Telescope(
+        resolution=480,
+        diameter=8.0,
+        central_obstruction=0.0,
+        T=T,
+    )
+    src = Source(band=:R, magnitude=3.0, T=T)
+    dm = DeformableMirror(tel; n_act=2, influence_width=T(0.2), T=T)
+    wfs = PyramidWFS(
+        tel;
+        pupil_samples=20,
+        threshold=T(0.1),
+        modulation=zero(T),
+        modulation_points=1,
+        light_ratio=T(0.1),
+        n_pix_separation=4,
+        n_pix_edge=2,
+        psf_centering=true,
+        mode=Diffractive(),
+        T=T,
+    )
+    initial_rows = length(slopes(wfs))
+    imat = interaction_matrix(
+        dm,
+        wfs,
+        PupilFunction(tel; T=T),
+        src;
+        amplitude=T(5e-9),
+    )
+
+    @test length(slopes(wfs)) < initial_rows
+    @test size(imat.matrix) ==
+        (length(slopes(wfs)), length(dm.state.coefs))
+    @test all(isfinite, imat.matrix)
+
+    stale_wfs = PyramidWFS(
+        tel;
+        pupil_samples=20,
+        threshold=T(0.1),
+        modulation=zero(T),
+        modulation_points=1,
+        light_ratio=T(0.1),
+        n_pix_separation=4,
+        n_pix_edge=2,
+        psf_centering=true,
+        mode=Diffractive(),
+        T=T,
+    )
+    stale_out = zeros(T, initial_rows, length(dm.state.coefs))
+    @test_throws DimensionMismatchError interaction_matrix!(
+        stale_out,
+        dm,
+        stale_wfs,
+        PupilFunction(tel; T=T),
+        src;
+        amplitude=T(5e-9),
+    )
+    @test length(slopes(stale_wfs)) == size(imat.matrix, 1)
+end
+
 @testset "Mis-registration identification" begin
     tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
@@ -685,6 +750,7 @@ end
 
 @testset "Interface conformance" begin
     tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
+    pupil = PupilFunction(tel)
     src = Source(band=:I, magnitude=0.0)
     lgs = LGSSource()
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
@@ -695,9 +761,9 @@ end
     spad = SPADArrayDetector(noise=NoisePhoton())
     mkid = MKIDArrayDetector(noise=NoisePhoton())
     psf = fill(1.0, 8, 8)
-    opd_map = OPDMap(fill(0.1, size(tel.state.opd)))
+    opd_map = OPDMap(fill(0.1, size(pupil.opd)))
     ncpa = NCPA(tel, dm, atm; coefficients=[0.01, -0.02])
-    imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
+    imat = interaction_matrix(dm, wfs, pupil; amplitude=0.1)
     modal = ModalReconstructor(imat; gain=1.0)
     factorized = FactorizedReconstructor(imat; gain=1.0)
     mapped = MappedReconstructor(Matrix{Float64}(I, length(dm.state.coefs), length(dm.state.coefs)), imat; gain=0.5)
@@ -764,8 +830,12 @@ end
     assert_source_interface(lgs)
     # IF-ATM
     assert_atmosphere_interface(atm, tel)
-    @test applicable(propagate!, moving_atm, tel, src)
-    @test applicable(propagate!, infinite_atm, tel, src)
+    assert_atmosphere_interface(moving_atm, tel)
+    assert_atmosphere_interface(infinite_atm, tel)
+    @test prepare_atmosphere_renderer(moving_atm, tel, src) isa
+        AtmosphereDirectionRenderer
+    @test prepare_atmosphere_renderer(infinite_atm, tel, src) isa
+        AtmosphereDirectionRenderer
     assert_atmosphere_layer_interface(moving_atm.layers[1], tel, MersenneTwister(11), src)
     assert_atmosphere_layer_interface(infinite_atm.layers[1], tel, MersenneTwister(12), src)
     # IF-WFS
@@ -853,16 +923,17 @@ end
     @test supports_grouped_execution(pyr, ast)
     @test supports_grouped_execution(pyr, poly)
     @test supports_grouped_execution(bio, ast)
-    prepare_runtime_wfs!(wfs_diffractive, tel, src)
+    prepare_runtime_wfs!(wfs_diffractive, pupil, src)
     @test wfs_diffractive.calibration.calibrated
-    prepare_runtime_wfs!(zwfs, tel, src)
+    prepare_runtime_wfs!(zwfs, pupil, src)
     @test zwfs.estimator.state.calibrated
-    prepare_runtime_wfs!(curv, tel, src)
+    prepare_runtime_wfs!(curv, pupil, src)
     @test curv.estimator.state.calibrated
 end
 
 @testset "Calibration workflow contracts" begin
     tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
+    pupil = PupilFunction(tel)
     src = Source(band=:I, magnitude=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
@@ -872,10 +943,11 @@ end
     basis = modal_basis(dm, tel; n_modes=2)
     assert_modal_basis_contract(basis, length(dm.state.coefs), 2)
 
-    imat = interaction_matrix(dm, wfs, tel; amplitude=0.1)
+    imat = interaction_matrix(dm, wfs, pupil; amplitude=0.1)
     assert_interaction_matrix_contract(imat, length(slopes(wfs)), length(dm.state.coefs), 0.1)
 
-    imat_basis = interaction_matrix(dm, wfs, tel, basis.M2C; amplitude=0.1)
+    imat_basis = interaction_matrix(dm, wfs, pupil, basis.M2C;
+        amplitude=0.1)
     assert_interaction_matrix_contract(imat_basis, length(slopes(wfs)), size(basis.M2C, 2), 0.1)
 
     control_matrix = ControlMatrix(imat.matrix)
@@ -900,7 +972,7 @@ end
     est = AdaptiveOpticsSim.estimate!(sprint, meta.calib0.D)
     @test est isa Misregistration
 
-    diversity = fill(eltype(tel.state.opd)(1e-9), size(tel.state.opd))
+    diversity = fill(eltype(pupil.opd)(1e-9), size(pupil.opd))
     lift_basis = basis_from_m2c(dm, tel, basis.M2C)
     lift_forward = prepare_lift_forward_model(tel, src, lift_basis;
         diversity_opd=diversity, focal_resolution=8)
