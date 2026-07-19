@@ -68,7 +68,7 @@ function SpatialFilter(tel::Telescope;
     shape::SpatialFilterShape=CircularFilter(),
     diameter::Real=tel.params.resolution / 2,
     zero_padding::Int=2,
-    T::Type{<:AbstractFloat}=eltype(opd_map(tel)),
+    T::Type{<:AbstractFloat}=eltype(pupil_reflectivity(tel)),
     backend::AbstractArrayBackend=backend(tel))
     zero_padding >= 1 || throw(InvalidConfiguration(
         "spatial-filter zero_padding must be >= 1"))

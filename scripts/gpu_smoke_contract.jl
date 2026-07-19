@@ -26,9 +26,8 @@ end
 function prepared_gpu_field(tel::Telescope, src::AbstractSource;
     zero_padding::Int, T::Type{<:AbstractFloat})
     wavefront = PupilFunction(tel; T=T)
-    apply_opd!(wavefront, opd_map(tel))
     field = ElectricField(wavefront, src; zero_padding=zero_padding, T=T)
-    plan = prepare_pupil_field(tel, wavefront, src, field)
+    plan = prepare_pupil_field(wavefront, src, field)
     fill_electric_field!(field, wavefront, plan)
     return (; wavefront, field, plan)
 end
@@ -36,9 +35,7 @@ end
 function gpu_direct_image(tel::Telescope, src::AbstractSource;
     zero_padding::Int, T::Type{<:AbstractFloat})
     pupil = PupilFunction(tel; T=T)
-    apply_opd!(pupil, opd_map(tel))
-    prepared = prepare_direct_imaging(tel, pupil, src;
-        zero_padding=zero_padding)
+    prepared = prepare_direct_imaging(pupil, src; zero_padding=zero_padding)
     return form_direct_image!(prepared)
 end
 
@@ -58,6 +55,8 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         laser_coordinates=(0.0, 0.0), photon_irradiance=one(T), T=T)
     spider_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
     apply_spiders!(spider_tel; thickness=0.5, angles=[0.0, 90.0])
+    pupil = PupilFunction(tel; T=T, backend=backend)
+    spider_pupil = PupilFunction(spider_tel; T=T, backend=backend)
 
     record_gpu_smoke!(failures, "direct_image_source") do
         rate_map = gpu_direct_image(tel, src; zero_padding=2, T=T)
@@ -66,15 +65,13 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
     end
 
     record_gpu_smoke!(failures, "direct_image_off_axis_orientation") do
-        pupil = PupilFunction(tel; T=T)
-        apply_opd!(pupil, opd_map(tel))
-        on_axis = prepare_direct_imaging(tel, pupil, src;
-            zero_padding=2)
+        image_pupil = PupilFunction(tel; T=T)
+        on_axis = prepare_direct_imaging(image_pupil, src; zero_padding=2)
         sample_arcsec = focal_plane_pixel_scale_arcsec(
             direct_imaging_output(on_axis))
         positive_x = Source(band=:I, magnitude=zero(T),
             coordinates=(T(sample_arcsec), zero(T)), T=T)
-        off_axis = prepare_direct_imaging(tel, pupil, positive_x;
+        off_axis = prepare_direct_imaging(image_pupil, positive_x;
             zero_padding=2)
         @assert off_axis.plan.shift_samples == (1, 0)
         reference = Array(intensity_values(form_direct_image!(on_axis)))
@@ -94,7 +91,8 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         intensity!(intensity, field)
         @assert intensity isa BackendArray
 
-        amplitude = similar(tel.state.opd, T, tel.params.resolution, tel.params.resolution)
+        amplitude = similar(prepared.wavefront.opd, T,
+            tel.params.resolution, tel.params.resolution)
         fill!(amplitude, T(0.5))
         apply_amplitude!(field, amplitude, prepared.plan)
         intensity!(intensity, field)
@@ -193,10 +191,12 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
 
     record_gpu_smoke!(failures, "atmosphere_step") do
         atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=backend)
-        advance_by!(atm, atmosphere_step; rng=rng)
-        propagate!(atm, tel)
-        @assert tel.state.opd isa BackendArray
-        return tel.state.opd
+        output = PupilFunction(tel; T=T, backend=backend)
+        renderer = prepare_atmosphere_renderer(atm, tel)
+        epoch = advance_by!(atm, atmosphere_step; rng=rng)
+        render_atmosphere!(output, renderer, atm, epoch)
+        @assert output.opd isa BackendArray
+        return output.opd
     end
 
     record_gpu_smoke!(failures, "atmosphere_multilayer_step") do
@@ -210,11 +210,13 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
             T=T,
             backend=backend,
         )
-        advance_by!(atm, atmosphere_step; rng=rng)
-        propagate!(atm, tel)
+        output = PupilFunction(tel; T=T, backend=backend)
+        renderer = prepare_atmosphere_renderer(atm, tel)
+        epoch = advance_by!(atm, atmosphere_step; rng=rng)
+        render_atmosphere!(output, renderer, atm, epoch)
         @assert atm.layers[1].generator.state.opd isa BackendArray
-        @assert tel.state.opd isa BackendArray
-        return tel.state.opd
+        @assert output.opd isa BackendArray
+        return output.opd
     end
 
     record_gpu_smoke!(failures, "atmosphere_multilayer_step_spiders") do
@@ -228,11 +230,13 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
             T=T,
             backend=backend,
         )
-        advance_by!(atm, atmosphere_step; rng=rng)
-        propagate!(atm, spider_tel, src)
+        output = PupilFunction(spider_tel; T=T, backend=backend)
+        renderer = prepare_atmosphere_renderer(atm, spider_tel, src)
+        epoch = advance_by!(atm, atmosphere_step; rng=rng)
+        render_atmosphere!(output, renderer, atm, epoch)
         @assert atm.layers[1].generator.state.opd isa BackendArray
-        @assert spider_tel.state.opd isa BackendArray
-        return spider_tel.state.opd
+        @assert output.opd isa BackendArray
+        return output.opd
     end
 
     record_gpu_smoke!(failures, "atmosphere_infinite_multilayer_step") do
@@ -248,12 +252,14 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
             T=T,
             backend=backend,
         )
-        advance_by!(atm, atmosphere_step; rng=rng)
-        propagate!(atm, tel, src)
-        @assert tel.state.opd isa BackendArray
+        output = PupilFunction(tel; T=T, backend=backend)
+        renderer = prepare_atmosphere_renderer(atm, tel, src)
+        epoch = advance_by!(atm, atmosphere_step; rng=rng)
+        render_atmosphere!(output, renderer, atm, epoch)
+        @assert output.opd isa BackendArray
         @assert atm.layers[1].screen.state.screen isa BackendArray
         @assert atm.layers[1].screen.state.screen_scratch isa BackendArray
-        return tel.state.opd
+        return output.opd
     end
 
     record_gpu_smoke!(failures, "atmosphere_infinite_multilayer_step_spiders") do
@@ -269,10 +275,12 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
             T=T,
             backend=backend,
         )
-        advance_by!(atm, atmosphere_step; rng=rng)
-        propagate!(atm, spider_tel, src)
-        @assert spider_tel.state.opd isa BackendArray
-        return spider_tel.state.opd
+        output = PupilFunction(spider_tel; T=T, backend=backend)
+        renderer = prepare_atmosphere_renderer(atm, spider_tel, src)
+        epoch = advance_by!(atm, atmosphere_step; rng=rng)
+        render_atmosphere!(output, renderer, atm, epoch)
+        @assert output.opd isa BackendArray
+        return output.opd
     end
 
     record_gpu_smoke!(failures, "atmospheric_field_geometric") do
@@ -286,14 +294,15 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
             T=T,
             backend=backend,
         )
-        advance_by!(atm, atmosphere_step; rng=rng)
-        prop = AtmosphericFieldPropagation(atm, tel, src;
+        field_pupil = PupilFunction(tel; T=T, backend=backend)
+        epoch = advance_by!(atm, atmosphere_step; rng=rng)
+        prop = AtmosphericFieldPropagation(atm, field_pupil, src;
             model=GeometricAtmosphericPropagation(T=T),
             zero_padding=2,
             T=T)
-        field = propagate_atmosphere_field!(prop, atm, tel, src)
+        field = propagate_atmosphere_field!(prop, atm, epoch)
         @assert field.values isa BackendArray
-        intensity = atmospheric_intensity!(prop, atm, tel, src)
+        intensity = atmospheric_intensity!(prop, atm, epoch)
         @assert intensity isa BackendArray
         return intensity
     end
@@ -309,12 +318,13 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
             T=T,
             backend=backend,
         )
-        advance_by!(atm, atmosphere_step; rng=rng)
-        prop = AtmosphericFieldPropagation(atm, tel, src;
+        field_pupil = PupilFunction(tel; T=T, backend=backend)
+        epoch = advance_by!(atm, atmosphere_step; rng=rng)
+        prop = AtmosphericFieldPropagation(atm, field_pupil, src;
             model=LayeredFresnelAtmosphericPropagation(T=T),
             zero_padding=2,
             T=T)
-        field = propagate_atmosphere_field!(prop, atm, tel, src)
+        field = propagate_atmosphere_field!(prop, atm, epoch)
         @assert field.values isa BackendArray
         return field.values
     end
@@ -335,14 +345,17 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
                 T=T,
                 backend=backend,
             )
+            local_pupil = PupilFunction(local_tel; T=T, backend=backend)
+            renderer = prepare_atmosphere_renderer(local_atm, local_tel,
+                local_src)
             local_rng = MersenneTwister(21)
             stds = Float64[]
             corrs = Float64[]
             previous = nothing
             for _ in 1:steps
-                advance_by!(local_atm, atmosphere_step; rng=local_rng)
-                propagate!(local_atm, local_tel, local_src)
-                opd = Array(local_tel.state.opd)
+                epoch = advance_by!(local_atm, atmosphere_step; rng=local_rng)
+                render_atmosphere!(local_pupil, renderer, local_atm, epoch)
+                opd = Array(local_pupil.opd)
                 push!(stds, std(vec(opd)))
                 if previous !== nothing
                     push!(corrs, dot(vec(previous), vec(opd)) / sqrt(dot(vec(previous), vec(previous)) * dot(vec(opd), vec(opd))))
@@ -396,22 +409,24 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
 
     record_gpu_smoke!(failures, "dm_apply") do
         dm = DeformableMirror(tel; n_act=4, influence_width=0.3, T=T, backend=backend)
+        dm_pupil = PupilFunction(tel; T=T, backend=backend)
         fill!(dm.state.coefs, T(0.05))
-        apply!(dm, tel, DMReplace())
-        @assert tel.state.opd isa BackendArray
-        return tel.state.opd
+        update_surface!(dm)
+        apply_surface!(dm_pupil, dm, DMReplace())
+        @assert dm_pupil.opd isa BackendArray
+        return dm_pupil.opd
     end
 
     record_gpu_smoke!(failures, "measure_shack_geometric") do
         wfs = ShackHartmannWFS(tel; n_lenslets=4, T=T, backend=backend)
-        slopes = measure!(wfs, tel)
+        slopes = measure!(wfs, pupil)
         @assert slopes isa BackendArray
         return slopes
     end
 
     record_gpu_smoke!(failures, "measure_shack_diffractive") do
         wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, tel, src)
+        slopes = measure!(wfs, pupil, src)
         @assert slopes isa BackendArray
         return slopes
     end
@@ -420,7 +435,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         bundle = SpectralBundle(fill(wavelength(src), 2), T[0.4, 0.6]; T=T)
         spectral = with_spectrum(src, bundle)
         wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, tel, spectral)
+        slopes = measure!(wfs, pupil, spectral)
         @assert slopes isa BackendArray
         return slopes
     end
@@ -434,7 +449,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
             T=T, backend=backend)
         rejected = false
         try
-            measure!(wfs, tel, spectral)
+            measure!(wfs, pupil, spectral)
         catch err
             err isa InvalidConfiguration || rethrow()
             rejected = true
@@ -447,21 +462,21 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         model = GaussianDiskSourceModel(sigma_arcsec=T(0.35), n_side=5, T=T)
         ext = with_extended_source(src, model)
         wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, tel, ext)
+        slopes = measure!(wfs, pupil, ext)
         @assert slopes isa BackendArray
         return slopes
     end
 
     record_gpu_smoke!(failures, "measure_shack_diffractive_spiders") do
         wfs = ShackHartmannWFS(spider_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, spider_tel, src)
+        slopes = measure!(wfs, spider_pupil, src)
         @assert slopes isa BackendArray
         return slopes
     end
 
     record_gpu_smoke!(failures, "measure_shack_lgs") do
         wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, tel, lgs)
+        slopes = measure!(wfs, pupil, lgs)
         @assert slopes isa BackendArray
         return slopes
     end
@@ -472,7 +487,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
             Source(band=:I, magnitude=0.0, coordinates=(1.0, 45.0), T=T),
         ])
         wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, tel, ast)
+        slopes = measure!(wfs, pupil, ast)
         @assert slopes isa BackendArray
         return slopes
     end
@@ -484,7 +499,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         ])
         wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
         det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1, T=T, backend=backend)
-        slopes = measure!(wfs, tel, ast, det; rng=rng)
+        slopes = measure!(wfs, pupil, ast, det; rng=rng)
         @assert slopes isa BackendArray
         return slopes
     end
@@ -501,8 +516,10 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         gpu_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
             sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=backend)
 
-        measure!(cpu_wfs, cpu_tel, cpu_src, cpu_det; rng=rng)
-        measure!(gpu_wfs, gpu_tel, gpu_src, gpu_det; rng=rng)
+        cpu_pupil = PupilFunction(cpu_tel; T=T, backend=CPUBackend())
+        gpu_pupil = PupilFunction(gpu_tel; T=T, backend=backend)
+        measure!(cpu_wfs, cpu_pupil, cpu_src, cpu_det; rng=rng)
+        measure!(gpu_wfs, gpu_pupil, gpu_src, gpu_det; rng=rng)
 
         cpu_export = Array(AdaptiveOpticsSim.sh_exported_spot_cube(cpu_wfs))
         gpu_export = Array(AdaptiveOpticsSim.sh_exported_spot_cube(gpu_wfs))
@@ -518,14 +535,14 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
 
     record_gpu_smoke!(failures, "measure_pyramid_geometric") do
         wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, T=T, backend=backend)
-        slopes = measure!(wfs, tel)
+        slopes = measure!(wfs, pupil)
         @assert slopes isa BackendArray
         return slopes
     end
 
     record_gpu_smoke!(failures, "measure_pyramid_diffractive") do
         wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, tel, src)
+        slopes = measure!(wfs, pupil, src)
         @assert slopes isa BackendArray
         return slopes
     end
@@ -534,7 +551,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         bundle = SpectralBundle(T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.4, 0.6]; T=T)
         poly = with_spectrum(src, bundle)
         wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, tel, poly)
+        slopes = measure!(wfs, pupil, poly)
         @assert slopes isa BackendArray
         return slopes
     end
@@ -543,7 +560,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         model = GaussianDiskSourceModel(sigma_arcsec=T(0.35), n_side=5, T=T)
         ext = with_extended_source(src, model)
         wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, tel, ext)
+        slopes = measure!(wfs, pupil, ext)
         @assert slopes isa BackendArray
         return slopes
     end
@@ -551,28 +568,28 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
     record_gpu_smoke!(failures, "measure_pyramid_detector") do
         wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, mode=Diffractive(), T=T, backend=backend)
         det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1, T=T, backend=backend)
-        slopes = measure!(wfs, tel, src, det; rng=rng)
+        slopes = measure!(wfs, pupil, src, det; rng=rng)
         @assert slopes isa BackendArray
         return slopes
     end
 
     record_gpu_smoke!(failures, "measure_bioedge_geometric") do
         wfs = BioEdgeWFS(tel; pupil_samples=4, modulation=0.0, T=T, backend=backend)
-        slopes = measure!(wfs, tel)
+        slopes = measure!(wfs, pupil)
         @assert slopes isa BackendArray
         return slopes
     end
 
     record_gpu_smoke!(failures, "measure_bioedge_diffractive") do
         wfs = BioEdgeWFS(tel; pupil_samples=4, modulation=2.0, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, tel, src)
+        slopes = measure!(wfs, pupil, src)
         @assert slopes isa BackendArray
         return slopes
     end
 
     record_gpu_smoke!(failures, "measure_zernike_diffractive") do
         wfs = ZernikeWFS(tel; pupil_samples=4, T=T, backend=backend)
-        slopes = measure!(wfs, tel, src)
+        slopes = measure!(wfs, pupil, src)
         @assert slopes isa BackendArray
         return slopes
     end
@@ -580,7 +597,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
     record_gpu_smoke!(failures, "measure_zernike_detector") do
         wfs = ZernikeWFS(tel; pupil_samples=4, T=T, backend=backend)
         det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1, T=T, backend=backend)
-        slopes = measure!(wfs, tel, src, det; rng=rng)
+        slopes = measure!(wfs, pupil, src, det; rng=rng)
         @assert slopes isa BackendArray
         return slopes
     end
@@ -598,7 +615,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         )
         advance_by!(atm, atmosphere_step; rng=rng)
         wfs = CurvatureWFS(tel; pupil_samples=4, T=T, backend=backend)
-        slopes = measure!(wfs, tel, src, atm)
+        slopes = measure!(wfs, pupil, src, atm)
         @assert slopes isa BackendArray
         return slopes
     end
@@ -609,11 +626,15 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         dm = DeformableMirror(step_tel; n_act=4, influence_width=0.3, T=T, backend=backend)
         wfs = ShackHartmannWFS(step_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
         det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1, T=T, backend=backend)
-        advance_by!(atm, atmosphere_step; rng=rng)
-        propagate!(atm, step_tel)
-        apply!(dm, step_tel, DMAdditive())
-        slopes = measure!(wfs, step_tel, src, det; rng=rng)
-        rate_map = gpu_direct_image(step_tel, src; zero_padding=2, T=T)
+        step_pupil = PupilFunction(step_tel; T=T, backend=backend)
+        renderer = prepare_atmosphere_renderer(atm, step_tel, src)
+        epoch = advance_by!(atm, atmosphere_step; rng=rng)
+        render_atmosphere!(step_pupil, renderer, atm, epoch)
+        update_surface!(dm)
+        apply_surface!(step_pupil, dm, DMAdditive())
+        slopes = measure!(wfs, step_pupil, src, det; rng=rng)
+        imaging = prepare_direct_imaging(step_pupil, src; zero_padding=2)
+        rate_map = form_direct_image!(imaging)
         acquisition = prepare_detector_acquisition(det, rate_map)
         frame = capture!(det, rate_map, acquisition; rng=rng)
         @assert slopes isa BackendArray
@@ -628,7 +649,8 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         rt_dm = DeformableMirror(rt_tel; n_act=4, influence_width=0.3, T=T, backend=backend)
         rt_wfs = ShackHartmannWFS(rt_tel; n_lenslets=4, T=T, backend=backend)
         rt_sim = AdaptiveOpticsSim.AOSimulation(rt_tel, rt_src, rt_atm, rt_dm, rt_wfs)
-        rt_imat = interaction_matrix(rt_dm, rt_wfs, rt_tel; amplitude=T(0.05))
+        rt_imat = interaction_matrix(rt_dm, rt_wfs,
+            PupilFunction(rt_tel; T=T, backend=backend); amplitude=T(0.05))
         rt_recon = ModalReconstructor(rt_imat; gain=T(0.5))
         runtime = AdaptiveOpticsSim.ClosedLoopRuntime(rt_sim, rt_recon;
             atmosphere_step=atmosphere_step, rng=rng)
@@ -646,7 +668,8 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         rt_wfs = ShackHartmannWFS(rt_tel; n_lenslets=4, T=T, backend=backend)
         rt_det = Detector(NoiseNone(); psf_sampling=2, T=T, backend=backend)
         rt_sim = AdaptiveOpticsSim.AOSimulation(rt_tel, rt_src, rt_atm, rt_dm, rt_wfs)
-        rt_imat = interaction_matrix(rt_dm, rt_wfs, rt_tel; amplitude=T(0.05))
+        rt_imat = interaction_matrix(rt_dm, rt_wfs,
+            PupilFunction(rt_tel; T=T, backend=backend); amplitude=T(0.05))
         rt_recon = ModalReconstructor(rt_imat; gain=T(0.5))
         runtime = AdaptiveOpticsSim.ClosedLoopRuntime(rt_sim, rt_recon;
             atmosphere_step=atmosphere_step, rng=rng,
@@ -664,7 +687,9 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         rt1_dm = DeformableMirror(rt1_tel; n_act=4, influence_width=0.3, T=T, backend=backend)
         rt1_wfs = ShackHartmannWFS(rt1_tel; n_lenslets=4, T=T, backend=backend)
         rt1_sim = AdaptiveOpticsSim.AOSimulation(rt1_tel, rt1_src, rt1_atm, rt1_dm, rt1_wfs)
-        rt1_recon = ModalReconstructor(interaction_matrix(rt1_dm, rt1_wfs, rt1_tel; amplitude=T(0.05)); gain=T(0.5))
+        rt1_recon = ModalReconstructor(interaction_matrix(rt1_dm, rt1_wfs,
+            PupilFunction(rt1_tel; T=T, backend=backend);
+            amplitude=T(0.05)); gain=T(0.5))
         rt1 = AdaptiveOpticsSim.ClosedLoopRuntime(rt1_sim, rt1_recon;
             atmosphere_step=atmosphere_step, rng=rng)
 
@@ -674,7 +699,9 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         rt2_dm = DeformableMirror(rt2_tel; n_act=4, influence_width=0.3, T=T, backend=backend)
         rt2_wfs = PyramidWFS(rt2_tel; pupil_samples=4, mode=Geometric(), T=T, backend=backend)
         rt2_sim = AdaptiveOpticsSim.AOSimulation(rt2_tel, rt2_src, rt2_atm, rt2_dm, rt2_wfs)
-        rt2_recon = ModalReconstructor(interaction_matrix(rt2_dm, rt2_wfs, rt2_tel; amplitude=T(0.05)); gain=T(0.5))
+        rt2_recon = ModalReconstructor(interaction_matrix(rt2_dm, rt2_wfs,
+            PupilFunction(rt2_tel; T=T, backend=backend);
+            amplitude=T(0.05)); gain=T(0.5))
         rt2 = AdaptiveOpticsSim.ClosedLoopRuntime(rt2_sim, rt2_recon;
             atmosphere_step=atmosphere_step, rng=rng)
 
@@ -692,7 +719,8 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         rt_dm = DeformableMirror(rt_tel; n_act=4, influence_width=0.3, T=T, backend=backend)
         rt_wfs = ShackHartmannWFS(rt_tel; n_lenslets=4, T=T, backend=backend)
         rt_sim = AdaptiveOpticsSim.AOSimulation(rt_tel, rt_src, rt_atm, rt_dm, rt_wfs)
-        rt_imat = interaction_matrix(rt_dm, rt_wfs, rt_tel; amplitude=T(0.05))
+        rt_imat = interaction_matrix(rt_dm, rt_wfs,
+            PupilFunction(rt_tel; T=T, backend=backend); amplitude=T(0.05))
         runtime = AdaptiveOpticsSim.ClosedLoopRuntime(rt_sim,
             ModalReconstructor(rt_imat; gain=T(0.5));
             atmosphere_step=atmosphere_step, rng=rng)
@@ -706,9 +734,11 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
         cal_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
         dm = DeformableMirror(cal_tel; n_act=4, influence_width=0.3, T=T, backend=backend)
         wfs = ShackHartmannWFS(cal_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
-        imat = interaction_matrix(dm, wfs, cal_tel, src; amplitude=T(0.05))
+        calibration_pupil = PupilFunction(cal_tel; T=T, backend=backend)
+        imat = interaction_matrix(dm, wfs, calibration_pupil, src;
+            amplitude=T(0.05))
         recon = ModalReconstructor(imat; gain=one(T))
-        measure!(wfs, cal_tel, src)
+        measure!(wfs, calibration_pupil, src)
         cmds = reconstruct(recon, slopes(wfs))
         @assert imat.matrix isa BackendArray
         @assert cmds isa BackendArray

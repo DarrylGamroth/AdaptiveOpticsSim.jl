@@ -41,7 +41,8 @@ Example:
 ```julia
 rng = runtime_rng(0x1234)
 epoch = advance_by!(atm, 1e-3; rng=rng)
-measure!(wfs, tel, src, det; rng=rng)
+render_atmosphere!(pupil, renderer, atm, epoch)
+measure!(wfs, pupil, src, det; rng=rng)
 ```
 
 Rendering a published `AtmosphereEpoch` is deterministic and does not consume

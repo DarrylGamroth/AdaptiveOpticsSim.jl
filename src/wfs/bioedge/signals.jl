@@ -4,40 +4,40 @@ function bioedge_slopes!(wfs::BioEdgeWFS, phase::AbstractMatrix, edge_mask::Abst
     return wfs.estimator.state.slopes
 end
 
-function bioedge_slopes_intensity!(wfs::BioEdgeWFS, tel::Telescope,
+function bioedge_slopes_intensity!(wfs::BioEdgeWFS, pupil::PupilFunction,
     intensity::AbstractMatrix{F}) where {F<:Real}
-    return bioedge_signal!(wfs, tel, intensity)
+    return bioedge_signal!(wfs, pupil, intensity)
 end
 
-function bioedge_signal!(wfs::BioEdgeWFS, tel::Telescope,
+function bioedge_signal!(wfs::BioEdgeWFS, pupil::PupilFunction,
     frame::AbstractMatrix{F}) where {F<:Real}
-    return bioedge_signal!(wfs, tel, frame, nothing)
+    return bioedge_signal!(wfs, pupil, frame, nothing)
 end
 
-function bioedge_signal!(wfs::BioEdgeWFS, tel::Telescope,
+function bioedge_signal!(wfs::BioEdgeWFS, pupil::PupilFunction,
     frame::AbstractMatrix{F},
     src::Union{Nothing,AbstractSource}) where {F<:Real}
     S = eltype(wfs.estimator.state.slopes)
-    return bioedge_signal!(wfs, tel, frame, src, one(S))
+    return bioedge_signal!(wfs, pupil, frame, src, one(S))
 end
 
-function bioedge_signal!(wfs::BioEdgeWFS, tel::Telescope,
+function bioedge_signal!(wfs::BioEdgeWFS, pupil::PupilFunction,
     frame::AbstractMatrix{F}, src::Union{Nothing,AbstractSource},
     normalization_scale::Real) where {F<:Real}
     S = eltype(wfs.estimator.state.slopes)
-    return bioedge_signal!(execution_style(frame), wfs, tel, frame, src,
+    return bioedge_signal!(execution_style(frame), wfs, pupil, frame, src,
         S(normalization_scale))
 end
 
 function bioedge_signal!(::ScalarCPUStyle, wfs::BioEdgeWFS,
-    tel::Telescope, frame::AbstractMatrix{F},
+    pupil::PupilFunction, frame::AbstractMatrix{F},
     src::Union{Nothing,AbstractSource}) where {F<:Real}
     S = eltype(wfs.estimator.state.slopes)
-    return bioedge_signal!(ScalarCPUStyle(), wfs, tel, frame, src, one(S))
+    return bioedge_signal!(ScalarCPUStyle(), wfs, pupil, frame, src, one(S))
 end
 
 function bioedge_signal!(::ScalarCPUStyle, wfs::BioEdgeWFS,
-    tel::Telescope, frame::AbstractMatrix{F},
+    pupil::PupilFunction, frame::AbstractMatrix{F},
     src::Union{Nothing,AbstractSource},
     normalization_scale::S) where {F<:Real,S<:AbstractFloat}
     return bioedge_signal!(ScalarCPUStyle(), wfs, frame, src,
@@ -88,14 +88,14 @@ function bioedge_signal!(::ScalarCPUStyle, wfs::BioEdgeWFS,
 end
 
 function bioedge_signal!(style::AcceleratorStyle, wfs::BioEdgeWFS,
-    tel::Telescope, frame::AbstractMatrix{F},
+    pupil::PupilFunction, frame::AbstractMatrix{F},
     src::Union{Nothing,AbstractSource}) where {F<:Real}
     S = eltype(wfs.estimator.state.slopes)
-    return bioedge_signal!(style, wfs, tel, frame, src, one(S))
+    return bioedge_signal!(style, wfs, pupil, frame, src, one(S))
 end
 
 function bioedge_signal!(style::AcceleratorStyle, wfs::BioEdgeWFS,
-    tel::Telescope, frame::AbstractMatrix{F},
+    pupil::PupilFunction, frame::AbstractMatrix{F},
     src::Union{Nothing,AbstractSource},
     normalization_scale::S) where {F<:Real,S<:AbstractFloat}
     return bioedge_signal!(style, wfs, frame, src, normalization_scale)
@@ -138,14 +138,14 @@ function bioedge_signal!(style::AcceleratorStyle, wfs::BioEdgeWFS,
 end
 
 function bioedge_normalization(normalization::MeanValidFluxNormalization,
-    wfs::BioEdgeWFS, tel::Telescope, src::Union{Nothing,AbstractSource},
+    wfs::BioEdgeWFS, pupil::PupilFunction, src::Union{Nothing,AbstractSource},
     count::Int, summed_i4q)
     return bioedge_normalization(normalization, wfs, src, count,
         summed_i4q, one(typeof(summed_i4q)))
 end
 
 function bioedge_normalization(normalization::MeanValidFluxNormalization,
-    wfs::BioEdgeWFS, ::Telescope, src::Union{Nothing,AbstractSource},
+    wfs::BioEdgeWFS, ::PupilFunction, src::Union{Nothing,AbstractSource},
     count::Int, summed_i4q, normalization_scale::Real)
     return bioedge_normalization(normalization, wfs, src, count,
         summed_i4q, normalization_scale)
@@ -159,14 +159,14 @@ function bioedge_normalization(::MeanValidFluxNormalization, ::BioEdgeWFS,
 end
 
 function bioedge_normalization(normalization::IncidenceFluxNormalization,
-    wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource, count::Int,
+    wfs::BioEdgeWFS, pupil::PupilFunction, src::AbstractSource, count::Int,
     summed_i4q)
     return bioedge_normalization(normalization, wfs, src, count,
         summed_i4q, one(typeof(summed_i4q)))
 end
 
 function bioedge_normalization(normalization::IncidenceFluxNormalization,
-    wfs::BioEdgeWFS, ::Telescope, src::AbstractSource, count::Int,
+    wfs::BioEdgeWFS, ::PupilFunction, src::AbstractSource, count::Int,
     summed_i4q, normalization_scale::Real)
     return bioedge_normalization(normalization, wfs, src, count, summed_i4q,
         normalization_scale)
@@ -182,14 +182,14 @@ function bioedge_normalization(::IncidenceFluxNormalization,
         T(normalization_scale)
 end
 
-function bioedge_normalization(::IncidenceFluxNormalization, ::BioEdgeWFS, ::Telescope,
+function bioedge_normalization(::IncidenceFluxNormalization, ::BioEdgeWFS, ::PupilFunction,
     ::Nothing, ::Int, summed_i4q)
     return one(typeof(summed_i4q))
 end
 
 
 function bioedge_normalization(::IncidenceFluxNormalization, ::BioEdgeWFS,
-    ::Telescope, ::Nothing, ::Int, summed_i4q, ::Real)
+    ::PupilFunction, ::Nothing, ::Int, summed_i4q, ::Real)
     return one(typeof(summed_i4q))
 end
 
@@ -319,23 +319,23 @@ function select_bioedge_valid_i4q_from_frame!(::AcceleratorStyle,
     return wfs
 end
 
-function select_bioedge_valid_i4q!(wfs::BioEdgeWFS, tel::Telescope,
+function select_bioedge_valid_i4q!(wfs::BioEdgeWFS, pupil::PupilFunction,
     src::AbstractSource, det::Detector)
-    bioedge_intensity_core!(wfs.front_end.propagation.intensity, wfs, tel,
+    bioedge_intensity_core!(wfs.front_end.propagation.intensity, wfs, pupil,
         src, bioedge_calibration_modulation(wfs);
         apply_lgs=src isa LGSSource)
-    sampled = sample_bioedge_intensity!(wfs, tel, wfs.front_end.propagation.intensity)
+    sampled = sample_bioedge_intensity!(wfs, pupil, wfs.front_end.propagation.intensity)
     frame = detector_calibration_frame!(det, sampled, src)
     resize_bioedge_signal_buffers!(wfs, size(frame, 1), det)
     return select_bioedge_valid_i4q_from_frame!(execution_style(frame), wfs,
         frame)
 end
 
-function select_bioedge_valid_i4q!(wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource)
-    return select_bioedge_valid_i4q!(execution_style(wfs.estimator.state.valid_i4q), wfs, tel, src)
+function select_bioedge_valid_i4q!(wfs::BioEdgeWFS, pupil::PupilFunction, src::AbstractSource)
+    return select_bioedge_valid_i4q!(execution_style(wfs.estimator.state.valid_i4q), wfs, pupil, src)
 end
 
-function select_bioedge_valid_i4q!(::ScalarCPUStyle, wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource)
+function select_bioedge_valid_i4q!(::ScalarCPUStyle, wfs::BioEdgeWFS, pupil::PupilFunction, src::AbstractSource)
     n_pixels = max(1, round(Int, wfs.acquisition.state.nominal_detector_resolution / (2 * wfs.acquisition.binning)))
     if size(wfs.estimator.state.valid_i4q) != (n_pixels, n_pixels)
         wfs.estimator.state.valid_i4q = similar(wfs.estimator.state.valid_i4q, n_pixels, n_pixels)
@@ -362,10 +362,10 @@ function select_bioedge_valid_i4q!(::ScalarCPUStyle, wfs::BioEdgeWFS, tel::Teles
         return wfs
     end
 
-    bioedge_intensity_core!(wfs.front_end.propagation.intensity, wfs, tel,
+    bioedge_intensity_core!(wfs.front_end.propagation.intensity, wfs, pupil,
         src, bioedge_calibration_modulation(wfs);
         apply_lgs=src isa LGSSource)
-    frame = sample_bioedge_intensity!(wfs, tel, wfs.front_end.propagation.intensity)
+    frame = sample_bioedge_intensity!(wfs, pupil, wfs.front_end.propagation.intensity)
 
     center = require_bioedge_frame_geometry(wfs, frame)
     max_i4q = zero(eltype(frame))
@@ -393,7 +393,7 @@ function select_bioedge_valid_i4q!(::ScalarCPUStyle, wfs::BioEdgeWFS, tel::Teles
     return wfs
 end
 
-function select_bioedge_valid_i4q!(::AcceleratorStyle, wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource)
+function select_bioedge_valid_i4q!(::AcceleratorStyle, wfs::BioEdgeWFS, pupil::PupilFunction, src::AbstractSource)
     n_pixels = max(1, round(Int, wfs.acquisition.state.nominal_detector_resolution / (2 * wfs.acquisition.binning)))
     if size(wfs.estimator.state.valid_i4q) != (n_pixels, n_pixels)
         wfs.estimator.state.valid_i4q = similar(wfs.estimator.state.valid_i4q, n_pixels, n_pixels)
@@ -420,10 +420,10 @@ function select_bioedge_valid_i4q!(::AcceleratorStyle, wfs::BioEdgeWFS, tel::Tel
         return wfs
     end
 
-    bioedge_intensity_core!(wfs.front_end.propagation.intensity, wfs, tel,
+    bioedge_intensity_core!(wfs.front_end.propagation.intensity, wfs, pupil,
         src, bioedge_calibration_modulation(wfs);
         apply_lgs=src isa LGSSource)
-    frame = sample_bioedge_intensity!(wfs, tel, wfs.front_end.propagation.intensity)
+    frame = sample_bioedge_intensity!(wfs, pupil, wfs.front_end.propagation.intensity)
 
     center = require_bioedge_frame_geometry(wfs, frame)
     rows_lo = center - n_pixels + 1:center
@@ -444,28 +444,28 @@ function select_bioedge_valid_i4q!(::AcceleratorStyle, wfs::BioEdgeWFS, tel::Tel
     return wfs
 end
 
-function ensure_bioedge_calibration!(wfs::BioEdgeWFS, tel::Telescope, src::AbstractSource)
+function ensure_bioedge_calibration!(wfs::BioEdgeWFS, pupil::PupilFunction, src::AbstractSource)
     λ = calibration_wavelength(src, eltype(wfs.estimator.state.slopes))
-    sig = telescope_aperture_calibration_signature(tel,
+    sig = pupil_aperture_calibration_signature(pupil,
         calibration_signature(src))
     if calibration_matches(wfs.estimator.state.calibrated,
         wfs.estimator.state.calibration_wavelength, λ,
         wfs.estimator.state.calibration_signature, sig)
         return wfs
     end
-    update_valid_mask!(wfs, tel)
-    opd_saved = save_zero_opd!(tel)
+    update_valid_mask!(wfs, pupil)
+    opd_saved = save_zero_opd!(pupil)
     try
-        select_bioedge_valid_i4q!(wfs, tel, src)
-        bioedge_intensity!(wfs.front_end.propagation.intensity, wfs, tel, src)
-        frame = sample_bioedge_intensity!(wfs, tel, wfs.front_end.propagation.intensity)
+        select_bioedge_valid_i4q!(wfs, pupil, src)
+        bioedge_intensity!(wfs.front_end.propagation.intensity, wfs, pupil, src)
+        frame = sample_bioedge_intensity!(wfs, pupil, wfs.front_end.propagation.intensity)
         fill!(wfs.estimator.state.reference_signal_2d,
             zero(eltype(wfs.estimator.state.reference_signal_2d)))
-        bioedge_signal!(wfs, tel, frame, src)
+        bioedge_signal!(wfs, pupil, frame, src)
         store_reference_signal!(wfs.estimator.state.reference_signal_2d,
             wfs.estimator.state.signal_2d, wfs.estimator.state.slopes)
     finally
-        restore_opd!(tel, opd_saved)
+        restore_opd!(pupil, opd_saved)
     end
     wfs.estimator.state.calibrated = true
     wfs.estimator.state.calibration_wavelength = λ
@@ -475,16 +475,16 @@ function ensure_bioedge_calibration!(wfs::BioEdgeWFS, tel::Telescope, src::Abstr
 end
 
 @inline function ensure_bioedge_calibration!(wfs::BioEdgeWFS,
-    tel::Telescope, src::AbstractSource, ::AbstractDetector)
-    return ensure_bioedge_calibration!(wfs, tel, src)
+    pupil::PupilFunction, src::AbstractSource, ::AbstractDetector)
+    return ensure_bioedge_calibration!(wfs, pupil, src)
 end
 
-function ensure_bioedge_calibration!(wfs::BioEdgeWFS, tel::Telescope,
+function ensure_bioedge_calibration!(wfs::BioEdgeWFS, pupil::PupilFunction,
     src::AbstractSource, det::Detector)
     T = eltype(wfs.estimator.state.slopes)
     λ = calibration_wavelength(src, T)
     sig = detector_calibration_signature(det,
-        telescope_aperture_calibration_signature(tel,
+        pupil_aperture_calibration_signature(pupil,
             calibration_signature(src)))
     if calibration_matches(wfs.estimator.state.calibrated,
         wfs.estimator.state.calibration_wavelength, λ,
@@ -493,14 +493,14 @@ function ensure_bioedge_calibration!(wfs::BioEdgeWFS, tel::Telescope,
     end
 
     require_whole_capture_idle(det)
-    update_valid_mask!(wfs, tel)
-    opd_saved = save_zero_opd!(tel)
+    update_valid_mask!(wfs, pupil)
+    opd_saved = save_zero_opd!(pupil)
     try
         if !iszero(wfs.estimator.params.light_ratio)
-            select_bioedge_valid_i4q!(wfs, tel, src, det)
+            select_bioedge_valid_i4q!(wfs, pupil, src, det)
         end
-        bioedge_intensity!(wfs.front_end.propagation.intensity, wfs, tel, src)
-        sampled = sample_bioedge_intensity!(wfs, tel, wfs.front_end.propagation.intensity)
+        bioedge_intensity!(wfs.front_end.propagation.intensity, wfs, pupil, src)
+        sampled = sample_bioedge_intensity!(wfs, pupil, wfs.front_end.propagation.intensity)
         frame = detector_calibration_frame!(det, sampled, src)
         resize_bioedge_signal_buffers!(wfs, size(frame, 1), det)
         if iszero(wfs.estimator.params.light_ratio)
@@ -513,11 +513,11 @@ function ensure_bioedge_calibration!(wfs::BioEdgeWFS, tel::Telescope,
             zero(eltype(wfs.estimator.state.reference_signal_2d)))
         normalization_scale = wfs_detector_incidence_scale(det, src,
             eltype(frame))
-        bioedge_signal!(wfs, tel, frame, src, normalization_scale)
+        bioedge_signal!(wfs, pupil, frame, src, normalization_scale)
         store_reference_signal!(wfs.estimator.state.reference_signal_2d,
             wfs.estimator.state.signal_2d, wfs.estimator.state.slopes)
     finally
-        restore_opd!(tel, opd_saved)
+        restore_opd!(pupil, opd_saved)
     end
     wfs.estimator.state.calibrated = true
     wfs.estimator.state.calibration_wavelength = λ
@@ -527,7 +527,7 @@ function ensure_bioedge_calibration!(wfs::BioEdgeWFS, tel::Telescope,
 end
 
 function apply_lgs_elongation!(::LGSProfileNone, intensity::AbstractMatrix{T}, wfs::BioEdgeWFS,
-    ::Telescope, src::LGSSource) where {T<:AbstractFloat}
+    ::PupilFunction, src::LGSSource) where {T<:AbstractFloat}
     wfs.front_end.propagation.elongation_kernel = apply_elongation!(
         intensity,
         lgs_elongation_factor(src),
@@ -538,8 +538,8 @@ function apply_lgs_elongation!(::LGSProfileNone, intensity::AbstractMatrix{T}, w
 end
 
 function apply_lgs_elongation!(::LGSProfileNaProfile, intensity::AbstractMatrix{T}, wfs::BioEdgeWFS,
-    tel::Telescope, src::LGSSource) where {T<:AbstractFloat}
-    ensure_lgs_kernel!(wfs, tel, src)
+    pupil::PupilFunction, src::LGSSource) where {T<:AbstractFloat}
+    ensure_lgs_kernel!(wfs, pupil, src)
     apply_lgs_convolution!(
         intensity,
         wfs.front_end.propagation.lgs_kernel_fft,
@@ -551,17 +551,17 @@ function apply_lgs_elongation!(::LGSProfileNaProfile, intensity::AbstractMatrix{
     return wfs
 end
 
-function ensure_lgs_kernel!(wfs::BioEdgeWFS, tel::Telescope, src::LGSSource)
+function ensure_lgs_kernel!(wfs::BioEdgeWFS, pupil::PupilFunction, src::LGSSource)
     na_profile = src.params.na_profile
     if na_profile === nothing
         return wfs
     end
     pad = size(wfs.front_end.propagation.fft_buffer, 1)
-    padding = wfs.front_end.propagation.effective_resolution / tel.params.resolution
-    pixel_scale = lgs_pixel_scale(tel.params.diameter, padding,
+    padding = wfs.front_end.propagation.effective_resolution / _pupil_resolution(pupil)
+    pixel_scale = lgs_pixel_scale(_pupil_diameter_m(pupil), padding,
         wavelength(src))
     tag = lgs_kernel_signature(
-        tel,
+        pupil,
         src,
         pad,
         wfs.estimator.params.pupil_samples,
@@ -573,7 +573,7 @@ function ensure_lgs_kernel!(wfs::BioEdgeWFS, tel::Telescope, src::LGSSource)
         return wfs
     end
     wfs.front_end.propagation.lgs_kernel_fft = lgs_average_kernel_fft(
-        tel,
+        pupil,
         src,
         pad,
         wfs.estimator.params.pupil_samples,

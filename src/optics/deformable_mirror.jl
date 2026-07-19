@@ -169,6 +169,8 @@ end
     execution_style(operator.pupil_backend)
 @inline backend(operator::GaussianInfluenceOperator) =
     backend(operator.pupil_backend)
+@inline _separable_surface_support(operator::GaussianInfluenceOperator) =
+    operator.pupil_backend
 
 Base.similar(operator::GaussianInfluenceOperator, ::Type{S},
     dims::Dims) where {S} = similar(operator.pupil_backend, S, dims)
@@ -587,8 +589,10 @@ function DeformableMirror(tel::Telescope; n_act::Union{Nothing,Int}=nothing,
         misregistration=misregistration,
     )
     resolved_actuator_model = _resolve_dm_actuator_model(actuator_model, T, backend, n_commands)
-    params = DeformableMirrorParams{T,typeof(resolved_model),typeof(resolved_topology),typeof(resolved_actuator_model)}(
-        topology_axis_count(resolved_topology), resolved_topology, resolved_model, resolved_actuator_model, misregistration)
+    params = DeformableMirrorParams{T,typeof(resolved_model),
+        typeof(resolved_topology),typeof(resolved_actuator_model)}(
+        topology_axis_count(resolved_topology), resolved_topology,
+        resolved_model, resolved_actuator_model, misregistration)
     opd = backend{T}(undef, n, n)
     fill!(opd, zero(T))
     opd_vec = reshape(opd, :)
@@ -924,19 +928,8 @@ function LinearAlgebra.mul!(y::AbstractVector{T},
     return mul!(y, operator, x, one(T), zero(T))
 end
 
-function apply!(dm::DeformableMirror, tel::Telescope, ::DMAdditive)
-    apply_opd!(dm, tel)
-    tel.state.opd .+= dm.state.opd
-    return tel
-end
-
-function apply!(dm::DeformableMirror, tel::Telescope, ::DMReplace)
-    apply_opd!(dm, tel)
-    tel.state.opd .= dm.state.opd
-    return tel
-end
-
-@inline function _apply_opd_separable!(::ScalarCPUStyle, dm::DeformableMirror, tel::Telescope)
+@inline function _apply_opd_separable!(::ScalarCPUStyle,
+    dm::DeformableMirror)
     xbasis = dm.state.separable_x::typeof(dm.state.opd)
     ybasis_t = dm.state.separable_y_t::typeof(dm.state.opd)
     tmp = dm.state.separable_tmp::typeof(dm.state.opd)
@@ -944,11 +937,12 @@ end
     coefs_grid === nothing && throw(InvalidConfiguration("separable DM application requires a grid-backed command buffer"))
     mul!(tmp, xbasis, coefs_grid)
     mul!(dm.state.opd, tmp, ybasis_t)
-    dm.state.opd .*= pupil_mask(tel)
+    dm.state.opd .*= _separable_surface_support(dm.state.modes)
     return dm.state.opd
 end
 
-@inline function _apply_opd_separable!(style::AcceleratorStyle, dm::DeformableMirror, tel::Telescope)
+@inline function _apply_opd_separable!(style::AcceleratorStyle,
+    dm::DeformableMirror)
     xbasis = dm.state.separable_x::typeof(dm.state.opd)
     ybasis_t = dm.state.separable_y_t::typeof(dm.state.opd)
     tmp = dm.state.separable_tmp::typeof(dm.state.opd)
@@ -956,56 +950,32 @@ end
     coefs_grid === nothing && throw(InvalidConfiguration("separable DM application requires a grid-backed command buffer"))
     mul!(tmp, xbasis, coefs_grid)
     mul!(dm.state.opd, tmp, ybasis_t)
-    launch_kernel!(style, dm_apply_pupil_kernel!, dm.state.opd, pupil_mask(tel);
+    launch_kernel!(style, dm_apply_pupil_kernel!, dm.state.opd,
+        _separable_surface_support(dm.state.modes);
         ndrange=size(dm.state.opd))
     return dm.state.opd
 end
 
-@inline function apply_dense!(dm::DeformableMirror, tel::Telescope, ::DMAdditive)
-    prepare_actuator_commands!(dm)
-    mul!(dm.state.opd_vec, dm.state.modes, dm.state.actuator_coefs)
-    tel.state.opd .+= dm.state.opd
-    return tel
-end
-
-@inline function apply_dense!(dm::DeformableMirror, tel::Telescope, ::DMReplace)
-    prepare_actuator_commands!(dm)
-    mul!(dm.state.opd_vec, dm.state.modes, dm.state.actuator_coefs)
-    tel.state.opd .= dm.state.opd
-    return tel
-end
-
-@inline function apply_opd!(dm::DeformableMirror, tel::Telescope)
+@inline function _update_dm_surface!(dm::DeformableMirror)
     prepare_actuator_commands!(dm)
     if !isnothing(dm.state.separable_x)
-        return apply_opd_separable!(dm, tel)
+        return _apply_opd_separable!(execution_style(dm.state.opd), dm)
     end
     mul!(dm.state.opd_vec, dm.state.modes, dm.state.actuator_coefs)
     return dm.state.opd
 end
 
-function update_surface!(dm::DeformableMirror, tel::Telescope)
-    size(dm.state.opd) == size(pupil_mask(tel)) ||
-        throw(DimensionMismatchError(
-            "DM surface dimensions do not match telescope aperture"))
-    require_same_backend(dm, tel)
-    plane_device(dm.state.opd) == plane_device(pupil_mask(tel)) ||
-        throw(InvalidConfiguration(
-            "DM and telescope aperture occupy different physical devices"))
-    apply_opd!(dm, tel)
-    return dm
-end
-
 """
-    apply_opd!(dm, tel)
+    update_surface!(dm)
 
-Assemble the DM OPD from the current actuator coefficients without mutating the
-telescope OPD.
+Assemble the DM OPD from the current actuator coefficients without mutating a
+path product.
 
 This chooses the separable `X * C * Y'` path when available and otherwise
 applies the stored operator: fused matrix-free evaluation for analytic Gaussian
 layouts or dense matrix-vector application for sampled/measured influence data.
 """
-@inline function apply_opd_separable!(dm::DeformableMirror, tel::Telescope)
-    return _apply_opd_separable!(execution_style(dm.state.opd), dm, tel)
+function update_surface!(dm::DeformableMirror)
+    _update_dm_surface!(dm)
+    return dm
 end

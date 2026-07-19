@@ -75,33 +75,43 @@ function assert_source_interface(src)
 end
 
 function assert_atmosphere_interface(atm, tel)
-    test_time = one(eltype(opd_map(tel)))
+    pupil = PupilFunction(tel)
+    test_time = one(eltype(pupil.opd))
     @test applicable(advance_by!, atm, test_time)
     @test applicable(advance_to!, atm, test_time)
     @test applicable(prepare_atmosphere_renderer, atm, tel)
-    @test applicable(propagate!, atm, tel)
+    renderer = prepare_atmosphere_renderer(atm, tel)
+    epoch = advance_by!(atm, zero(test_time); rng=MersenneTwister(0))
+    @test applicable(render_atmosphere!, pupil, renderer, atm,
+        epoch)
 end
 
 function assert_atmosphere_layer_interface(layer, tel, rng, src)
+    pupil = PupilFunction(tel)
     @test layer isa AdaptiveOpticsSim.AbstractAtmosphereLayer
-    @test applicable(AdaptiveOpticsSim.render_layer!, similar(tel.state.opd), layer, zero(eltype(tel.state.opd)),
-        zero(eltype(tel.state.opd)), one(eltype(tel.state.opd)))
-    @test applicable(AdaptiveOpticsSim.render_layer_accumulate!, similar(tel.state.opd), layer, zero(eltype(tel.state.opd)),
-        zero(eltype(tel.state.opd)), one(eltype(tel.state.opd)))
+    @test applicable(AdaptiveOpticsSim.render_layer!, similar(pupil.opd),
+        layer, zero(eltype(pupil.opd)), zero(eltype(pupil.opd)),
+        one(eltype(pupil.opd)))
+    @test applicable(AdaptiveOpticsSim.render_layer_accumulate!,
+        similar(pupil.opd), layer, zero(eltype(pupil.opd)),
+        zero(eltype(pupil.opd)), one(eltype(pupil.opd)))
     altitude = AdaptiveOpticsSim.layer_altitude(layer)
-    shift_x, shift_y, footprint_scale = AdaptiveOpticsSim.layer_source_geometry(src, altitude, tel, eltype(tel.state.opd))
-    sample = similar(tel.state.opd)
+    shift_x, shift_y, footprint_scale =
+        AdaptiveOpticsSim.layer_source_geometry(src, altitude, tel,
+            eltype(pupil.opd))
+    sample = similar(pupil.opd)
     fill!(sample, zero(eltype(sample)))
     AdaptiveOpticsSim.render_layer!(sample, layer, shift_x, shift_y, footprint_scale)
-    @test size(sample) == size(tel.state.opd)
+    @test size(sample) == size(pupil.opd)
     fill!(sample, zero(eltype(sample)))
     AdaptiveOpticsSim.render_layer_accumulate!(sample, layer, shift_x, shift_y, footprint_scale)
-    @test size(sample) == size(tel.state.opd)
+    @test size(sample) == size(pupil.opd)
 end
 
 function assert_wfs_interface(wfs, tel)
-    @test applicable(update_valid_mask!, wfs, tel)
-    @test applicable(measure!, wfs, tel)
+    pupil = PupilFunction(tel)
+    @test applicable(update_valid_mask!, wfs, pupil)
+    @test applicable(measure!, wfs, pupil)
     @test slopes(wfs) isa AbstractVector
     @test supports_valid_subaperture_mask(wfs) == !isnothing(valid_subaperture_mask(wfs))
     @test supports_reference_signal(wfs) == !isnothing(reference_signal(wfs))
@@ -113,16 +123,21 @@ function assert_detector_interface(det, psf)
 end
 
 function assert_dm_interface(dm, tel)
+    pupil = PupilFunction(tel)
     @test applicable(build_influence_functions!, dm, tel)
-    @test applicable(apply!, dm, tel, DMAdditive())
+    @test applicable(update_surface!, dm)
+    @test applicable(apply_surface!, pupil, dm, DMAdditive())
     @test topology_command_count(topology(dm)) == length(dm.state.coefs)
     @test size(actuator_coordinates(dm), 2) == length(dm.state.coefs)
     @test length(valid_actuator_mask(dm)) >= length(dm.state.coefs)
 end
 
 function assert_optical_element_interface(element, tel)
-    @test applicable(apply!, element, tel, DMAdditive())
-    @test applicable(apply!, element, tel, DMReplace())
+    pupil = PupilFunction(tel)
+    @test element isa AbstractOpticalElement
+    @test applicable(surface_opd, element)
+    @test applicable(apply_surface!, pupil, element, DMAdditive())
+    @test applicable(apply_surface!, pupil, element, DMReplace())
 end
 
 function assert_reconstructor_interface(recon, slopes, expected_length::Int)
@@ -277,11 +292,13 @@ function moving_atmosphere_trace(;
         altitude=altitude,
     )
     rng = MersenneTwister(seed)
+    pupil = PupilFunction(tel)
+    renderer = prepare_atmosphere_renderer(atm, tel)
     trace = Matrix{Float64}[]
     for _ in 1:steps
         advance_by!(atm, atmosphere_step; rng=rng)
-        propagate!(atm, tel)
-        push!(trace, copy(tel.state.opd))
+        render_atmosphere!(pupil, renderer, atm, current_epoch(atm))
+        push!(trace, copy(pupil.opd))
     end
     return trace
 end
@@ -303,12 +320,14 @@ function moving_wfs_slope_trace(;
         altitude=[0.0, 5000.0],
     )
     wfs = ShackHartmannWFS(tel; n_lenslets=4)
+    pupil = PupilFunction(tel)
+    renderer = prepare_atmosphere_renderer(atm, tel, src)
     rng = MersenneTwister(seed)
     trace = Vector{Vector{Float64}}(undef, steps)
     for i in 1:steps
         advance_by!(atm, atmosphere_step; rng=rng)
-        propagate!(atm, tel)
-        measure!(wfs, tel, src)
+        render_atmosphere!(pupil, renderer, atm, current_epoch(atm))
+        measure!(wfs, pupil, src)
         trace[i] = copy(slopes(wfs))
     end
     return trace
@@ -333,7 +352,9 @@ function moving_closed_loop_trace(;
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
     wfs = ZernikeWFS(tel; pupil_samples=4, diffraction_padding=2)
     sim = AOSimulation(tel, src, atm, dm, wfs)
-    imat = interaction_matrix(dm, wfs, tel, src; amplitude=1e-8)
+    calibration_pupil = PupilFunction(tel)
+    imat = interaction_matrix(dm, wfs, calibration_pupil, src;
+        amplitude=1e-8)
     recon = ModalReconstructor(imat; gain=0.2)
     wfs_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
     science_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)

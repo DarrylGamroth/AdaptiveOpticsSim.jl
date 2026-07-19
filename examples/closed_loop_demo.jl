@@ -11,7 +11,7 @@ wfs = ShackHartmannWFS(tel; n_lenslets=4)
 src = Source(band=:I, magnitude=0.0)
 sim = AOSimulation(tel, src, atm, dm, wfs)
 
-imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
+imat = interaction_matrix(dm, wfs, PupilFunction(tel), src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
 branch = ControlLoopBranch(:main, sim, recon; rng=rng)
 cfg = SingleControlLoopConfig(atmosphere_step=1e-3, name=:closed_loop_demo, branch_label=:main)

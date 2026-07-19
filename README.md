@@ -35,8 +35,7 @@ using AdaptiveOpticsSim
 tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)
 pupil = PupilFunction(tel)
-apply_opd!(pupil, opd_map(tel))
-imaging = prepare_direct_imaging(tel, pupil, src; zero_padding=2)
+imaging = prepare_direct_imaging(pupil, src; zero_padding=2)
 form_direct_image!(imaging)
 photon_rate_image = intensity_values(direct_imaging_output(imaging))
 ```
@@ -62,11 +61,10 @@ wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec
 
 rng = runtime_rng(0)
 renderer = prepare_atmosphere_renderer(atm, tel, src)
-atmosphere_pupil = PupilFunction(tel)
+pupil = PupilFunction(tel)
 epoch = advance_by!(atm, 1e-3; rng=rng)
-render_atmosphere!(atmosphere_pupil, renderer, atm, epoch)
-apply_opd!(tel, opd_map(atmosphere_pupil))
-slopes = measure!(wfs, tel, src)
+render_atmosphere!(pupil, renderer, atm, epoch)
+slopes = measure!(wfs, pupil, src)
 ```
 
 ### 3. Build a closed-loop AO model
@@ -78,7 +76,7 @@ rng = runtime_rng(0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 sim = AOSimulation(tel, src, atm, dm, wfs)
 
-imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
+imat = interaction_matrix(dm, wfs, PupilFunction(tel), src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
 
 branch = ControlLoopBranch(:main, sim, recon; rng=rng)
@@ -156,7 +154,7 @@ det = Detector(
 )
 
 rng = runtime_rng(0)
-measure!(wfs, tel, src, det; rng=rng)
+measure!(wfs, pupil, src, det; rng=rng)
 adu = wfs_detector_image(wfs, det)
 ```
 

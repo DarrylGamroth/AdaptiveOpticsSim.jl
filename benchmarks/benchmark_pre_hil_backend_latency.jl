@@ -173,7 +173,7 @@ end
 
 function assert_backend_residency(ctx::RevoltLikeHILContext)
     arrays = Dict(
-        "telescope_opd" => ctx.tel.state.opd,
+        "pupil_opd" => ctx.pupil.opd,
         "dm_coefficients" => ctx.dm.state.coefs,
         "wfs_spot_cube" => ctx.wfs.acquisition.spot_cube,
         "output_frame" => ctx.tiled_frame,

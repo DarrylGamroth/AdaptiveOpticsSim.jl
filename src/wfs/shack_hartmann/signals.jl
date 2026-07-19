@@ -140,33 +140,33 @@ end
         T(sample.wavelength), T(radiometric_value))
 end
 
-function sampled_spots_peak!(wfs::ShackHartmannWFS, tel::Telescope, src::AbstractSource)
-    prepare_sampling!(wfs, tel, src)
-    return sampled_spots_peak!(execution_style(wfs.front_end.layout.valid_mask), wfs, tel, src)
+function sampled_spots_peak!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::AbstractSource)
+    prepare_sampling!(wfs, pupil, src)
+    return sampled_spots_peak!(execution_style(wfs.front_end.layout.valid_mask), wfs, pupil, src)
 end
 
-function sampled_spots_peak!(wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource)
-    prepare_sampling!(wfs, tel, src)
-    return sampled_spots_peak!(execution_style(wfs.front_end.layout.valid_mask), wfs, tel, src)
+function sampled_spots_peak!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::SpectralSource)
+    prepare_sampling!(wfs, pupil, src)
+    return sampled_spots_peak!(execution_style(wfs.front_end.layout.valid_mask), wfs, pupil, src)
 end
 
-function sampled_spots_peak!(wfs::ShackHartmannWFS, tel::Telescope, src::ExtendedSource)
+function sampled_spots_peak!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::ExtendedSource)
     ast = extended_source_asterism(src)
-    prepare_sampling!(wfs, tel, ast.sources[1])
-    return sampled_spots_peak!(execution_style(wfs.front_end.layout.valid_mask), wfs, tel, src)
+    prepare_sampling!(wfs, pupil, ast.sources[1])
+    return sampled_spots_peak!(execution_style(wfs.front_end.layout.valid_mask), wfs, pupil, src)
 end
 
-function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Telescope, src::AbstractSource)
-    compute_intensity_stack!(ScalarCPUStyle(), wfs, tel, src)
+function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::AbstractSource)
+    compute_intensity_stack!(ScalarCPUStyle(), wfs, pupil, src)
     sample_spot_stack!(ScalarCPUStyle(), wfs.front_end)
     sync_signal_spots_from_sampled!(wfs)
     return sh_safe_peak_value(wfs.acquisition.spot_cube)
 end
 
-function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel::Telescope, src::AbstractSource)
+function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::AbstractSource)
     if sh_uses_rocm_safe_sensing_plan(wfs)
         sh_refresh_valid_mask_host!(wfs)
-        n = tel.params.resolution
+        n = _pupil_resolution(pupil)
         n_sub = n_lenslets(wfs)
         sub = div(n, n_sub)
         pad = size(wfs.front_end.propagation.field, 1)
@@ -181,7 +181,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
                 ys = (j - 1) * sub + 1
                 xe = min(i * sub, n)
                 ye = min(j * sub, n)
-                compute_intensity_safe!(style, wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+                compute_intensity_safe!(style, wfs, pupil, src, xs, ys, xe, ye, ox, oy, sub)
                 sample_spot!(wfs.front_end, wfs.front_end.propagation.intensity)
                 sync_sh_staged_spot!(style, wfs.front_end.propagation.spot)
                 copyto!(spot_view, wfs.front_end.propagation.spot)
@@ -194,13 +194,13 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
         end
         return peak
     end
-    compute_intensity_stack!(style, wfs, tel, src)
+    compute_intensity_stack!(style, wfs, pupil, src)
     sample_spot_stack!(style, wfs.front_end)
     sync_signal_spots_from_sampled!(wfs)
     return sh_safe_peak_value(wfs.acquisition.spot_cube)
 end
 
-function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource)
+function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::SpectralSource)
     require_sh_common_spectral_grid(wfs, src)
     fill!(wfs.front_end.propagation.spot_cube_accum, zero(eltype(wfs.front_end.propagation.spot_cube_accum)))
     peak = zero(eltype(wfs.estimator.slopes))
@@ -208,14 +208,14 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Teles
     @inbounds for sample in src.bundle.samples
         variant = sh_spectral_source_variant(wfs, src, sample,
             total_irradiance * sample.weight)
-        peak = max(peak, sampled_spots_peak!(ScalarCPUStyle(), wfs, tel, variant))
+        peak = max(peak, sampled_spots_peak!(ScalarCPUStyle(), wfs, pupil, variant))
         wfs.front_end.propagation.spot_cube_accum .+= wfs.acquisition.spot_cube
     end
     copyto!(wfs.acquisition.spot_cube, wfs.front_end.propagation.spot_cube_accum)
     return max(peak, sh_safe_peak_value(wfs.acquisition.spot_cube))
 end
 
-function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource)
+function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::SpectralSource)
     require_sh_common_spectral_grid(wfs, src)
     if sh_uses_rocm_safe_sensing_plan(wfs)
         fill!(wfs.front_end.propagation.spot_cube_accum, zero(eltype(wfs.front_end.propagation.spot_cube_accum)))
@@ -224,7 +224,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
         @inbounds for sample in src.bundle.samples
             variant = sh_spectral_source_variant(wfs, src, sample,
                 total_irradiance * sample.weight)
-            peak = max(peak, sampled_spots_peak!(style, wfs, tel, variant))
+            peak = max(peak, sampled_spots_peak!(style, wfs, pupil, variant))
             @. wfs.front_end.propagation.spot_cube_accum = wfs.front_end.propagation.spot_cube_accum + wfs.acquisition.spot_cube
         end
         copyto!(wfs.acquisition.spot_cube, wfs.front_end.propagation.spot_cube_accum)
@@ -237,51 +237,51 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
         @inbounds for sample in src.bundle.samples
             variant = sh_spectral_source_variant(wfs, src, sample,
                 total_irradiance * sample.weight)
-            peak = max(peak, sampled_spots_peak!(style, wfs, tel, variant))
+            peak = max(peak, sampled_spots_peak!(style, wfs, pupil, variant))
             @. wfs.front_end.propagation.spot_cube_accum = wfs.front_end.propagation.spot_cube_accum + wfs.acquisition.spot_cube
         end
         copyto!(wfs.acquisition.spot_cube, wfs.front_end.propagation.spot_cube_accum)
         return max(peak, sh_safe_peak_value(wfs.acquisition.spot_cube))
     end
-    compute_intensity_spectral_stack!(style, wfs, tel, src)
+    compute_intensity_spectral_stack!(style, wfs, pupil, src)
     sample_spot_stack!(style, wfs.front_end)
     sync_signal_spots_from_sampled!(wfs)
     return sh_safe_peak_value(wfs.acquisition.spot_cube)
 end
 
-function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Telescope, src::ExtendedSource)
+function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::ExtendedSource)
     ast = extended_source_asterism(src)
     if length(ast.sources) == 1
-        return sampled_spots_peak!(ScalarCPUStyle(), wfs, tel, ast.sources[1])
+        return sampled_spots_peak!(ScalarCPUStyle(), wfs, pupil, ast.sources[1])
     end
-    return sampled_spots_peak_asterism_stacked!(ScalarCPUStyle(), wfs, tel, ast)
+    return sampled_spots_peak_asterism_stacked!(ScalarCPUStyle(), wfs, pupil, ast)
 end
 
-function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel::Telescope, src::ExtendedSource)
+function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::ExtendedSource)
     ast = extended_source_asterism(src)
     if length(ast.sources) == 1
-        return sampled_spots_peak!(style, wfs, tel, ast.sources[1])
+        return sampled_spots_peak!(style, wfs, pupil, ast.sources[1])
     end
     if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_plan(wfs)
-        return sampled_spots_peak_asterism_stacked!(style, wfs, tel, ast)
+        return sampled_spots_peak_asterism_stacked!(style, wfs, pupil, ast)
     end
     fill!(wfs.front_end.propagation.spot_cube_accum, zero(eltype(wfs.front_end.propagation.spot_cube_accum)))
     peak = zero(eltype(wfs.estimator.slopes))
     @inbounds for sample in ast.sources
-        peak = max(peak, sampled_spots_peak!(style, wfs, tel, sample))
+        peak = max(peak, sampled_spots_peak!(style, wfs, pupil, sample))
         @. wfs.front_end.propagation.spot_cube_accum = wfs.front_end.propagation.spot_cube_accum + wfs.acquisition.spot_cube
     end
     copyto!(wfs.acquisition.spot_cube, wfs.front_end.propagation.spot_cube_accum)
     return max(peak, sh_safe_peak_value(wfs.acquisition.spot_cube))
 end
 
-function sampled_spots_peak!(wfs::ShackHartmannWFS, tel::Telescope, src::LGSSource)
-    prepare_sampling!(wfs, tel, src)
-    return sampled_spots_peak!(execution_style(wfs.front_end.layout.valid_mask), wfs, tel, src)
+function sampled_spots_peak!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource)
+    prepare_sampling!(wfs, pupil, src)
+    return sampled_spots_peak!(execution_style(wfs.front_end.layout.valid_mask), wfs, pupil, src)
 end
 
-function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Telescope, src::LGSSource)
-    n = tel.params.resolution
+function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource)
+    n = _pupil_resolution(pupil)
     n_sub = n_lenslets(wfs)
     sub = div(n, n_sub)
     pad = size(wfs.front_end.propagation.field, 1)
@@ -296,8 +296,8 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Teles
             ys = (j - 1) * sub + 1
             xe = min(i * sub, n)
             ye = min(j * sub, n)
-            compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
-            apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
+            compute_intensity!(wfs, pupil, src, xs, ys, xe, ye, ox, oy, sub)
+            apply_lgs_elongation!(lgs_profile(src), wfs, pupil, src, idx)
             sample_spot!(wfs.front_end, wfs.front_end.propagation.intensity)
             copyto!(spot_view, wfs.front_end.propagation.spot)
             peak = max(peak, sh_safe_peak_value(spot_view))
@@ -309,43 +309,43 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Teles
     return peak
 end
 
-function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel::Telescope, src::LGSSource)
-    return sampled_spots_peak_lgs!(lgs_profile(src), style, wfs, tel, src)
+function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource)
+    return sampled_spots_peak_lgs!(lgs_profile(src), style, wfs, pupil, src)
 end
 
-function sampled_spots_peak!(wfs::ShackHartmannWFS, tel::Telescope, src::AbstractSource,
+function sampled_spots_peak!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::AbstractSource,
     det::AbstractDetector, rng::AbstractRNG)
-    prepare_sampling!(wfs, tel, src)
-    return sampled_spots_peak!(execution_style(wfs.front_end.layout.valid_mask), wfs, tel, src, det, rng)
+    prepare_sampling!(wfs, pupil, src)
+    return sampled_spots_peak!(execution_style(wfs.front_end.layout.valid_mask), wfs, pupil, src, det, rng)
 end
 
-function sampled_spots_peak!(wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource,
+function sampled_spots_peak!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::SpectralSource,
     det::AbstractDetector, rng::AbstractRNG)
-    prepare_sampling!(wfs, tel, src)
-    return sampled_spots_peak!(execution_style(wfs.front_end.layout.valid_mask), wfs, tel, src, det, rng)
+    prepare_sampling!(wfs, pupil, src)
+    return sampled_spots_peak!(execution_style(wfs.front_end.layout.valid_mask), wfs, pupil, src, det, rng)
 end
 
-function sampled_spots_peak!(wfs::ShackHartmannWFS, tel::Telescope, src::ExtendedSource,
+function sampled_spots_peak!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::ExtendedSource,
     det::AbstractDetector, rng::AbstractRNG)
     ast = extended_source_asterism(src)
-    prepare_sampling!(wfs, tel, ast.sources[1])
-    return sampled_spots_peak!(execution_style(wfs.front_end.layout.valid_mask), wfs, tel, src, det, rng)
+    prepare_sampling!(wfs, pupil, ast.sources[1])
+    return sampled_spots_peak!(execution_style(wfs.front_end.layout.valid_mask), wfs, pupil, src, det, rng)
 end
 
-function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Telescope, src::AbstractSource,
+function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::AbstractSource,
     det::AbstractDetector, rng::AbstractRNG)
-    compute_intensity_stack!(ScalarCPUStyle(), wfs, tel, src)
+    compute_intensity_stack!(ScalarCPUStyle(), wfs, pupil, src)
     sample_spot_stack!(ScalarCPUStyle(), wfs.front_end)
     capture_sampled_spot_stack!(wfs, src, det, rng)
     zero_invalid_sh_spot_cube!(ScalarCPUStyle(), wfs.acquisition.spot_cube, wfs.front_end.layout.valid_mask)
     return sh_safe_peak_value(wfs.acquisition.spot_cube)
 end
 
-function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel::Telescope, src::AbstractSource,
+function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::AbstractSource,
     det::AbstractDetector, rng::AbstractRNG)
     if sh_uses_rocm_safe_sensing_plan(wfs)
         sh_refresh_valid_mask_host!(wfs)
-        n = tel.params.resolution
+        n = _pupil_resolution(pupil)
         n_sub = n_lenslets(wfs)
         sub = div(n, n_sub)
         pad = size(wfs.front_end.propagation.field, 1)
@@ -360,7 +360,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
                 ys = (j - 1) * sub + 1
                 xe = min(i * sub, n)
                 ye = min(j * sub, n)
-                compute_intensity_safe!(style, wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+                compute_intensity_safe!(style, wfs, pupil, src, xs, ys, xe, ye, ox, oy, sub)
                 sample_spot!(wfs.front_end, wfs.front_end.propagation.intensity)
                 sync_sh_staged_spot!(style, wfs.front_end.propagation.spot)
                 frame = capture!(det, wfs.front_end.propagation.spot, src; rng=rng)
@@ -375,7 +375,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
         end
         return peak
     end
-    compute_intensity_stack!(style, wfs, tel, src)
+    compute_intensity_stack!(style, wfs, pupil, src)
     sample_spot_stack!(style, wfs.front_end)
     n_sub = n_lenslets(wfs)
     capture_sampled_spot_stack!(wfs, src, det, rng)
@@ -385,7 +385,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
     return sh_safe_peak_value(wfs.acquisition.spot_cube)
 end
 
-function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource,
+function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::SpectralSource,
     det::AbstractDetector, rng::AbstractRNG)
     require_sh_common_spectral_grid(wfs, src)
     fill!(wfs.front_end.propagation.spot_cube_accum, zero(eltype(wfs.front_end.propagation.spot_cube_accum)))
@@ -395,14 +395,14 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Teles
         channel_qe = qe_at(qe_model, sample.wavelength)
         variant = sh_spectral_source_variant(wfs, src, sample,
             total_irradiance * sample.weight * channel_qe)
-        sampled_spots_peak!(ScalarCPUStyle(), wfs, tel, variant)
+        sampled_spots_peak!(ScalarCPUStyle(), wfs, pupil, variant)
         wfs.front_end.propagation.spot_cube_accum .+= wfs.acquisition.spot_cube
     end
     copyto!(wfs.acquisition.spot_cube, wfs.front_end.propagation.spot_cube_accum)
     return capture_sh_qe_weighted_spots!(ScalarCPUStyle(), wfs, det, rng)
 end
 
-function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel::Telescope, src::SpectralSource,
+function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::SpectralSource,
     det::AbstractDetector, rng::AbstractRNG)
     require_sh_common_spectral_grid(wfs, src)
     if sh_uses_rocm_safe_sensing_plan(wfs)
@@ -413,7 +413,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
             channel_qe = qe_at(qe_model, sample.wavelength)
             variant = sh_spectral_source_variant(wfs, src, sample,
                 total_irradiance * sample.weight * channel_qe)
-            sampled_spots_peak!(style, wfs, tel, variant)
+            sampled_spots_peak!(style, wfs, pupil, variant)
             @. wfs.front_end.propagation.spot_cube_accum = wfs.front_end.propagation.spot_cube_accum + wfs.acquisition.spot_cube
         end
         copyto!(wfs.acquisition.spot_cube, wfs.front_end.propagation.spot_cube_accum)
@@ -427,50 +427,50 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel
             channel_qe = qe_at(qe_model, sample.wavelength)
             variant = sh_spectral_source_variant(wfs, src, sample,
                 total_irradiance * sample.weight * channel_qe)
-            sampled_spots_peak!(style, wfs, tel, variant)
+            sampled_spots_peak!(style, wfs, pupil, variant)
             @. wfs.front_end.propagation.spot_cube_accum = wfs.front_end.propagation.spot_cube_accum + wfs.acquisition.spot_cube
         end
         copyto!(wfs.acquisition.spot_cube, wfs.front_end.propagation.spot_cube_accum)
         return capture_sh_qe_weighted_spots!(style, wfs, det, rng)
     end
-    compute_intensity_spectral_stack!(style, wfs, tel, src,
+    compute_intensity_spectral_stack!(style, wfs, pupil, src,
         quantum_efficiency_model(det))
     sample_spot_stack!(style, wfs.front_end)
     sync_signal_spots_from_sampled!(wfs)
     return capture_sh_qe_weighted_spots!(style, wfs, det, rng)
 end
 
-function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Telescope, src::ExtendedSource,
+function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::ExtendedSource,
     det::AbstractDetector, rng::AbstractRNG)
     ast = extended_source_asterism(src)
     if length(ast.sources) == 1
-        return sampled_spots_peak!(ScalarCPUStyle(), wfs, tel, ast.sources[1], det, rng)
+        return sampled_spots_peak!(ScalarCPUStyle(), wfs, pupil, ast.sources[1], det, rng)
     end
-    return sampled_spots_peak_asterism_stacked!(ScalarCPUStyle(), wfs, tel, ast, det, rng)
+    return sampled_spots_peak_asterism_stacked!(ScalarCPUStyle(), wfs, pupil, ast, det, rng)
 end
 
-function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel::Telescope, src::ExtendedSource,
+function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::ExtendedSource,
     det::AbstractDetector, rng::AbstractRNG)
     ast = extended_source_asterism(src)
     if length(ast.sources) == 1
-        return sampled_spots_peak!(style, wfs, tel, ast.sources[1], det, rng)
+        return sampled_spots_peak!(style, wfs, pupil, ast.sources[1], det, rng)
     end
     if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_plan(wfs)
-        return sampled_spots_peak_asterism_stacked!(style, wfs, tel, ast, det, rng)
+        return sampled_spots_peak_asterism_stacked!(style, wfs, pupil, ast, det, rng)
     end
-    accumulate_sh_asterism_spots!(style, wfs, tel, ast)
+    accumulate_sh_asterism_spots!(style, wfs, pupil, ast)
     return capture_sh_asterism_spots!(style, wfs, ast, det, rng)
 end
 
-function sampled_spots_peak!(wfs::ShackHartmannWFS, tel::Telescope, src::LGSSource,
+function sampled_spots_peak!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource,
     det::AbstractDetector, rng::AbstractRNG)
-    prepare_sampling!(wfs, tel, src)
-    return sampled_spots_peak!(execution_style(wfs.front_end.layout.valid_mask), wfs, tel, src, det, rng)
+    prepare_sampling!(wfs, pupil, src)
+    return sampled_spots_peak!(execution_style(wfs.front_end.layout.valid_mask), wfs, pupil, src, det, rng)
 end
 
-function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Telescope, src::LGSSource,
+function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource,
     det::AbstractDetector, rng::AbstractRNG)
-    n = tel.params.resolution
+    n = _pupil_resolution(pupil)
     n_sub = n_lenslets(wfs)
     sub = div(n, n_sub)
     pad = size(wfs.front_end.propagation.field, 1)
@@ -485,8 +485,8 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Teles
             ys = (j - 1) * sub + 1
             xe = min(i * sub, n)
             ye = min(j * sub, n)
-            compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
-            apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
+            compute_intensity!(wfs, pupil, src, xs, ys, xe, ye, ox, oy, sub)
+            apply_lgs_elongation!(lgs_profile(src), wfs, pupil, src, idx)
             sample_spot!(wfs.front_end, wfs.front_end.propagation.intensity)
             frame = capture!(det, wfs.front_end.propagation.spot, src; rng=rng)
             copyto!(spot_view, frame)
@@ -499,13 +499,13 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, tel::Teles
     return peak
 end
 
-function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, tel::Telescope, src::LGSSource,
+function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource,
     det::AbstractDetector, rng::AbstractRNG)
-    return sampled_spots_peak_lgs!(lgs_profile(src), style, wfs, tel, src, det, rng)
+    return sampled_spots_peak_lgs!(lgs_profile(src), style, wfs, pupil, src, det, rng)
 end
 
-function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs::ShackHartmannWFS, tel::Telescope, src::LGSSource)
-    compute_intensity_stack!(style, wfs, tel, src)
+function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource)
+    compute_intensity_stack!(style, wfs, pupil, src)
     tmp_view = @view wfs.front_end.propagation.intensity_tmp_stack[:, :, 1:size(wfs.front_end.propagation.intensity_stack, 3)]
     apply_elongation_stack!(wfs.front_end.propagation.intensity_stack, lgs_elongation_factor(src),
         tmp_view, wfs.front_end.propagation.elongation_kernel)
@@ -514,9 +514,9 @@ function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs:
     return sh_safe_peak_value(wfs.acquisition.spot_cube)
 end
 
-function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs::ShackHartmannWFS, tel::Telescope, src::LGSSource,
+function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource,
     det::AbstractDetector, rng::AbstractRNG)
-    compute_intensity_stack!(style, wfs, tel, src)
+    compute_intensity_stack!(style, wfs, pupil, src)
     tmp_view = @view wfs.front_end.propagation.intensity_tmp_stack[:, :, 1:size(wfs.front_end.propagation.intensity_stack, 3)]
     apply_elongation_stack!(wfs.front_end.propagation.intensity_stack, lgs_elongation_factor(src),
         tmp_view, wfs.front_end.propagation.elongation_kernel)
@@ -529,10 +529,10 @@ function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs:
     return sh_safe_peak_value(wfs.acquisition.spot_cube)
 end
 
-function sampled_spots_peak_lgs!(::LGSProfileNaProfile, style::AcceleratorStyle, wfs::ShackHartmannWFS, tel::Telescope, src::LGSSource)
+function sampled_spots_peak_lgs!(::LGSProfileNaProfile, style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource)
     n_sub = n_lenslets(wfs)
-    compute_intensity_stack!(style, wfs, tel, src)
-    ensure_lgs_kernels!(wfs, tel, src)
+    compute_intensity_stack!(style, wfs, pupil, src)
+    ensure_lgs_kernels!(wfs, pupil, src)
     apply_lgs_convolution_stack!(wfs.front_end.propagation.intensity_stack, wfs.front_end.propagation.lgs_kernel_fft,
         wfs.front_end.propagation.fft_stack, wfs.front_end.propagation.fft_stack_plan, wfs.front_end.propagation.ifft_stack_plan)
     sample_spot_stack!(style, wfs.front_end)
@@ -540,11 +540,11 @@ function sampled_spots_peak_lgs!(::LGSProfileNaProfile, style::AcceleratorStyle,
     return sh_safe_peak_value(wfs.acquisition.spot_cube)
 end
 
-function sampled_spots_peak_lgs!(::LGSProfileNaProfile, style::AcceleratorStyle, wfs::ShackHartmannWFS, tel::Telescope, src::LGSSource,
+function sampled_spots_peak_lgs!(::LGSProfileNaProfile, style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource,
     det::AbstractDetector, rng::AbstractRNG)
     n_sub = n_lenslets(wfs)
-    compute_intensity_stack!(style, wfs, tel, src)
-    ensure_lgs_kernels!(wfs, tel, src)
+    compute_intensity_stack!(style, wfs, pupil, src)
+    ensure_lgs_kernels!(wfs, pupil, src)
     apply_lgs_convolution_stack!(wfs.front_end.propagation.intensity_stack, wfs.front_end.propagation.lgs_kernel_fft,
         wfs.front_end.propagation.fft_stack, wfs.front_end.propagation.fft_stack_plan, wfs.front_end.propagation.ifft_stack_plan)
     sample_spot_stack!(style, wfs.front_end)
@@ -815,78 +815,78 @@ function fill_calibration_ramp!(style::AcceleratorStyle, opd::AbstractMatrix{T},
     return opd
 end
 
-function centroid_sums!(wfs::ShackHartmannWFS, tel::Telescope, src::AbstractSource,
+function centroid_sums!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::AbstractSource,
     xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int, pad::Int, idx::Int)
-    compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+    compute_intensity!(wfs, pupil, src, xs, ys, xe, ye, ox, oy, sub)
     spot = sample_spot!(wfs.front_end, wfs.front_end.propagation.intensity)
     copyto!(sh_spot_view(wfs, idx), spot)
     return centroid_from_spot!(wfs, spot)
 end
 
-function centroid_sums!(wfs::ShackHartmannWFS, tel::Telescope, src::LGSSource,
+function centroid_sums!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource,
     xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int, pad::Int, idx::Int)
-    compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
-    apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
+    compute_intensity!(wfs, pupil, src, xs, ys, xe, ye, ox, oy, sub)
+    apply_lgs_elongation!(lgs_profile(src), wfs, pupil, src, idx)
     spot = sample_spot!(wfs.front_end, wfs.front_end.propagation.intensity)
     copyto!(sh_spot_view(wfs, idx), spot)
     return centroid_from_spot!(wfs, spot)
 end
 
-function centroid_sums!(wfs::ShackHartmannWFS, tel::Telescope, src::AbstractSource,
+function centroid_sums!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::AbstractSource,
     xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int, ::Int, idx::Int,
     det::AbstractDetector, rng::AbstractRNG)
-    compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
+    compute_intensity!(wfs, pupil, src, xs, ys, xe, ye, ox, oy, sub)
     spot = sample_spot!(wfs.front_end, wfs.front_end.propagation.intensity)
     frame = capture!(det, spot, src; rng=rng)
     copyto!(sh_spot_view(wfs, idx), frame)
     return centroid_from_spot!(wfs, frame)
 end
 
-function centroid_sums!(wfs::ShackHartmannWFS, tel::Telescope, src::LGSSource,
+function centroid_sums!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource,
     xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int, ::Int, idx::Int,
     det::AbstractDetector, rng::AbstractRNG)
-    compute_intensity!(wfs, tel, src, xs, ys, xe, ye, ox, oy, sub)
-    apply_lgs_elongation!(lgs_profile(src), wfs, tel, src, idx)
+    compute_intensity!(wfs, pupil, src, xs, ys, xe, ye, ox, oy, sub)
+    apply_lgs_elongation!(lgs_profile(src), wfs, pupil, src, idx)
     spot = sample_spot!(wfs.front_end, wfs.front_end.propagation.intensity)
     frame = capture!(det, spot, src; rng=rng)
     copyto!(sh_spot_view(wfs, idx), frame)
     return centroid_from_spot!(wfs, frame)
 end
 
-function sh_reference_signal!(wfs::ShackHartmannWFS, tel::Telescope, src::AbstractSource)
-    peak = sampled_spots_peak!(wfs, tel, src)
+function sh_reference_signal!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::AbstractSource)
+    peak = sampled_spots_peak!(wfs, pupil, src)
     sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
     set_reference_signal!(subaperture_calibration(wfs), reshape(wfs.estimator.slopes, size(wfs.calibration.reference_signal_2d)))
     return wfs
 end
 
-function ensure_sh_calibration!(wfs::ShackHartmannWFS, tel::Telescope, src::AbstractSource)
+function ensure_sh_calibration!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::AbstractSource)
     λ = sh_calibration_wavelength(wfs, src)
-    sig = telescope_aperture_calibration_signature(tel,
+    sig = pupil_aperture_calibration_signature(pupil,
         calibration_signature(src))
     if calibration_matches(wfs.calibration.calibrated, wfs.calibration.wavelength, λ,
         wfs.calibration.signature, sig)
         return wfs
     end
-    update_valid_mask!(wfs, tel)
-    opd_saved = save_zero_opd!(tel)
+    update_valid_mask!(wfs, pupil)
+    opd_saved = save_zero_opd!(pupil)
     T = eltype(wfs.estimator.slopes)
     centroid_response = one(T)
     try
-        sh_reference_signal!(wfs, tel, src)
-        restore_opd!(tel, opd_saved)
+        sh_reference_signal!(wfs, pupil, src)
+        restore_opd!(pupil, opd_saved)
 
-        n = tel.params.resolution
+        n = _pupil_resolution(pupil)
         pixel_scale_init = sh_pixel_scale_init(
-            tel.params.diameter / n_lenslets(wfs),
+            _pupil_diameter_m(pupil) / n_lenslets(wfs),
             wfs.front_end.propagation.effective_padding, λ)
         pixel_scale = T(wfs.front_end.propagation.binning_pixel_scale) * pixel_scale_init
         rad2arcsec = T(180 * 3600 / π)
-        scale = T(T(tel.params.diameter) * pixel_scale /
+        scale = T(T(_pupil_diameter_m(pupil)) * pixel_scale /
             (T(2π) * rad2arcsec))
-        fill_calibration_ramp!(execution_style(tel.state.opd), tel.state.opd,
+        fill_calibration_ramp!(execution_style(pupil.opd), pupil.opd,
             scale, n)
-        peak = sampled_spots_peak!(wfs, tel, src)
+        peak = sampled_spots_peak!(wfs, pupil, src)
         sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
         subtract_reference!(wfs)
         centroid_response = mean_valid_signal(wfs.estimator.slopes,
@@ -895,7 +895,7 @@ function ensure_sh_calibration!(wfs::ShackHartmannWFS, tel::Telescope, src::Abst
             centroid_response = one(T)
         end
     finally
-        restore_opd!(tel, opd_saved)
+        restore_opd!(pupil, opd_saved)
     end
     set_subaperture_calibration!(subaperture_calibration(wfs),
         wfs.calibration.reference_signal_2d;

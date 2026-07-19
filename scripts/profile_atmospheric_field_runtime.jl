@@ -141,10 +141,11 @@ function _profile_field_path(mode::Symbol, atmo_kind::Symbol, backend_name::Abst
     tel = Telescope(resolution=cfg.resolution, diameter=cfg.diameter, central_obstruction=0.0f0, T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
     atm = _make_atmosphere(atmo_kind, tel, cfg, T, backend)
+    pupil = PupilFunction(tel; T=T, backend=backend)
     rng = runtime_rng(3)
     advance_by!(atm, atmosphere_step; rng=rng)
 
-    prop = AtmosphericFieldPropagation(atm, tel, src;
+    prop = AtmosphericFieldPropagation(atm, pupil, src;
         model=mode === :geometric ? GeometricAtmosphericPropagation(T=T) : LayeredFresnelAtmosphericPropagation(T=T),
         zero_padding=2,
         T=T)
@@ -153,14 +154,15 @@ function _profile_field_path(mode::Symbol, atmo_kind::Symbol, backend_name::Abst
     step! = if mode === :curvature
         () -> begin
             advance_by!(atm, atmosphere_step; rng=rng)
-            measure!(wfs, tel, src, atm)
+            measure!(wfs, pupil, src, atm)
             _sync_array!(backend_tag, slopes(wfs))
             return slopes(wfs)
         end
     else
         () -> begin
-            advance_by!(atm, atmosphere_step; rng=rng)
-            field = AdaptiveOpticsSim.propagate_atmosphere_field!(prop, atm, tel, src)
+            epoch = advance_by!(atm, atmosphere_step; rng=rng)
+            field = AdaptiveOpticsSim.propagate_atmosphere_field!(prop, atm,
+                epoch)
             _sync_array!(backend_tag, field.values)
             return field.values
         end

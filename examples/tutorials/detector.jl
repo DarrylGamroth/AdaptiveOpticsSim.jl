@@ -4,9 +4,7 @@ function main(; resolution::Int=24, zero_padding::Int=2)
     tel = base_telescope(resolution=resolution)
     src = base_source()
     pupil = PupilFunction(tel)
-    apply_opd!(pupil, opd_map(tel))
-    imaging = prepare_direct_imaging(tel, pupil, src;
-        zero_padding=zero_padding)
+    imaging = prepare_direct_imaging(pupil, src; zero_padding=zero_padding)
     rate_map = form_direct_image!(imaging)
 
     native = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, psf_sampling=1, binning=1)

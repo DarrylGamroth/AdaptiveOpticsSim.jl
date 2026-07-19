@@ -14,7 +14,7 @@ end
     field = ElectricField(pupil, src; zero_padding=2)
     propagation = FraunhoferPropagation(field)
     output = IntensityMap(field, propagation)
-    prepared = prepare_direct_imaging(tel, pupil, src, field, output)
+    prepared = prepare_direct_imaging(pupil, src, field, output)
 
     formed = @inferred form_direct_image!(output, pupil, field,
         prepared.plan, prepared.workspace)
@@ -57,13 +57,13 @@ end
         replacement_pupil, field, prepared.plan, prepared.workspace)
     @test output.values == output_before
 
-    other_stage = prepare_direct_imaging(tel, pupil, src;
+    other_stage = prepare_direct_imaging(pupil, src;
         zero_padding=2)
     @test_throws InvalidConfiguration form_direct_image!(output, pupil,
         field, prepared.plan, other_stage.workspace)
     @test output.values == output_before
 
-    formation = prepare_pupil_field(tel, pupil, src, field)
+    formation = prepare_pupil_field(pupil, src, field)
     fill_electric_field!(field, pupil, formation)
     preformed_output = IntensityMap(field, FraunhoferPropagation(field))
     preformed = prepare_direct_imaging(src, field, preformed_output)
@@ -78,7 +78,7 @@ end
     normalized_field = ElectricField(pupil, normalized; zero_padding=2)
     normalized_output = IntensityMap(normalized_field,
         FraunhoferPropagation(normalized_field))
-    @test_throws InvalidConfiguration prepare_direct_imaging(tel, pupil,
+    @test_throws InvalidConfiguration prepare_direct_imaging(pupil,
         normalized, normalized_field, normalized_output)
 
     one_sample_arcsec = focal_plane_pixel_scale_arcsec(output)
@@ -88,10 +88,10 @@ end
     positive_y = Source(band=:custom, wavelength=wavelength(src),
         photon_irradiance=photon_irradiance(src),
         coordinates=(one_sample_arcsec, 90.0))
-    on_axis = prepare_direct_imaging(tel, pupil, src; zero_padding=2)
-    x_shifted = prepare_direct_imaging(tel, pupil, positive_x;
+    on_axis = prepare_direct_imaging(pupil, src; zero_padding=2)
+    x_shifted = prepare_direct_imaging(pupil, positive_x;
         zero_padding=2)
-    y_shifted = prepare_direct_imaging(tel, pupil, positive_y;
+    y_shifted = prepare_direct_imaging(pupil, positive_y;
         zero_padding=2)
     on_axis_values = copy(intensity_values(form_direct_image!(on_axis)))
     x_values = intensity_values(form_direct_image!(x_shifted))
@@ -164,7 +164,7 @@ end
         photon_irradiance=1.0, coordinates=(one_pixel_arcsec, 0.0))
     pupil = PupilFunction(tel)
 
-    asterism = prepare_direct_imaging(tel, pupil,
+    asterism = prepare_direct_imaging(pupil,
         Asterism([on_axis, off_axis]); zero_padding=2)
     @test asterism.components isa Vector
     @test asterism.products isa Vector
@@ -190,7 +190,7 @@ end
     mixed_lgs = LGSSource(wavelength=wavelength_m,
         photon_irradiance=0.5, coordinates=(one_pixel_arcsec, 90.0))
     mixed_sources = AdaptiveOpticsSim.AbstractSource[on_axis, mixed_lgs]
-    mixed = prepare_direct_imaging(tel, pupil, Asterism(mixed_sources);
+    mixed = prepare_direct_imaging(pupil, Asterism(mixed_sources);
         zero_padding=2)
     @test mixed.components isa Vector
     @test isconcretetype(eltype(mixed.components))
@@ -206,18 +206,18 @@ end
     extended = with_extended_source(on_axis,
         PointCloudSourceModel([(0.0, 0.0), (one_pixel_arcsec, 0.0)],
             [0.25, 0.75]))
-    extended_prepared = prepare_direct_imaging(tel, pupil,
+    extended_prepared = prepare_direct_imaging(pupil,
         extended_source_asterism(extended); zero_padding=2)
     extended_output = form_direct_image!(extended_prepared)
     @test sum(intensity_values(extended_output)) ≈
         sum(pupil_photon_rate_map(tel, on_axis))
-    @test_throws UnsupportedAlgorithm prepare_direct_imaging(tel, pupil,
+    @test_throws UnsupportedAlgorithm prepare_direct_imaging(pupil,
         extended; zero_padding=2)
 
     gaussian = with_extended_source(on_axis,
         GaussianDiskSourceModel(sigma_arcsec=one_pixel_arcsec,
             n_side=5))
-    gaussian_prepared = prepare_direct_imaging(tel, pupil,
+    gaussian_prepared = prepare_direct_imaging(pupil,
         extended_source_asterism(gaussian); zero_padding=2)
     @test gaussian_prepared.components isa Vector
     @test gaussian_prepared.products isa Vector
@@ -241,8 +241,8 @@ end
         photon_irradiance=1.0)
     dense_model = GaussianDiskSourceModel(sigma_arcsec=0.1, n_side=11)
     dense_source = with_extended_source(tiny_source, dense_model)
-    dense_prepared = prepare_direct_imaging(tiny_tel,
-        PupilFunction(tiny_tel), extended_source_asterism(dense_source);
+    dense_prepared = prepare_direct_imaging(PupilFunction(tiny_tel),
+        extended_source_asterism(dense_source);
         zero_padding=1)
     @test dense_prepared.components isa Vector
     @test isconcretetype(eltype(dense_prepared.components))
@@ -258,14 +258,14 @@ end
     zero_off_axis = Source(band=:custom, wavelength=wavelength_m,
         photon_irradiance=0.0,
         coordinates=(one_pixel_arcsec, 0.0))
-    zero_asterism = prepare_direct_imaging(tel, pupil,
+    zero_asterism = prepare_direct_imaging(pupil,
         Asterism([zero_source, zero_off_axis]); zero_padding=2)
     @test all(iszero, form_direct_image!(zero_asterism).values)
     @test prepared_direct_image_allocations(zero_asterism) == 0
 
     spectral_source = with_spectrum(on_axis,
         SpectralBundle([0.7e-6, 0.9e-6], [0.4, 0.6]))
-    spectral = prepare_direct_imaging(tel, pupil, spectral_source;
+    spectral = prepare_direct_imaging(pupil, spectral_source;
         zero_padding=2)
     @test spectral.components isa Vector
     @test isconcretetype(eltype(spectral.components))
@@ -283,7 +283,7 @@ end
         sum(pupil_photon_rate_map(tel, on_axis))
     @test prepared_direct_image_allocations(spectral) == 0
 
-    zero_spectral = prepare_direct_imaging(tel, pupil,
+    zero_spectral = prepare_direct_imaging(pupil,
         with_spectrum(zero_source,
             SpectralBundle([0.7e-6, 0.9e-6], [0.4, 0.6]));
         zero_padding=2)
@@ -299,8 +299,8 @@ end
     high_flux_spectral = with_spectrum(high_flux,
         SpectralBundle(Float32[0.7e-6, 0.9e-6], Float32[0.5, 0.5];
             T=Float32))
-    high_flux_prepared = prepare_direct_imaging(float32_tel,
-        PupilFunction(float32_tel), high_flux_spectral; zero_padding=1)
+    high_flux_prepared = prepare_direct_imaging(PupilFunction(float32_tel),
+        high_flux_spectral; zero_padding=1)
     high_flux_products = form_direct_image!(high_flux_prepared)
     @test all(product -> all(isfinite, intensity_values(product)),
         high_flux_products)
@@ -311,12 +311,12 @@ end
     excessive_spectral = with_spectrum(excessive_flux,
         SpectralBundle(Float32[0.7e-6, 0.9e-6], Float32[0.5, 0.5];
             T=Float32))
-    @test_throws InvalidConfiguration prepare_direct_imaging(float32_tel,
+    @test_throws InvalidConfiguration prepare_direct_imaging(
         PupilFunction(float32_tel), excessive_spectral; zero_padding=1)
 
     leaf_excessive = Source(band=:custom, wavelength=0.8e-6,
         photon_irradiance=floatmax(Float64))
-    @test_throws InvalidConfiguration prepare_direct_imaging(float32_tel,
+    @test_throws InvalidConfiguration prepare_direct_imaging(
         PupilFunction(float32_tel), leaf_excessive; zero_padding=1)
 end
 
@@ -324,7 +324,7 @@ end
     tel = Telescope(resolution=8, diameter=4.0, central_obstruction=0.0)
     src = Source(band=:custom, wavelength=0.8e-6,
         photon_irradiance=1.0)
-    imaging = prepare_direct_imaging(tel, PupilFunction(tel), src;
+    imaging = prepare_direct_imaging(PupilFunction(tel), src;
         zero_padding=1)
     rate_map = form_direct_image!(imaging)
     rate_before = copy(rate_map.values)

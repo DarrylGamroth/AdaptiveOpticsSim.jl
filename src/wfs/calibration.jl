@@ -27,8 +27,8 @@ end
 @inline calibration_signature(src::AbstractSource) =
     lgs_optical_signature(src, source_measurement_signature(src))
 
-@inline telescope_aperture_calibration_signature(tel::Telescope,
-    sig::UInt) = hash(aperture_revision(tel), sig)
+@inline pupil_aperture_calibration_signature(pupil::PupilFunction,
+    sig::UInt) = hash(aperture_revision(pupil), sig)
 
 """
     common_wfs_calibration_source(asterism, sensor_name)
@@ -464,15 +464,16 @@ end
 @inline calibration_matches(calibrated::Bool, stored_λ, λ, stored_sig::UInt, sig::UInt) =
     calibrated && stored_λ == λ && stored_sig == sig
 
-function save_zero_opd!(tel::Telescope)
-    saved = copy(tel.state.opd)
-    fill!(tel.state.opd, zero(eltype(tel.state.opd)))
+function save_zero_opd!(pupil::PupilFunction)
+    saved = copy(pupil.opd)
+    reset_opd!(pupil)
     return saved
 end
 
-@inline function restore_opd!(tel::Telescope, saved_opd::AbstractMatrix)
-    copyto!(tel.state.opd, saved_opd)
-    return tel
+@inline function restore_opd!(pupil::PupilFunction,
+    saved_opd::AbstractMatrix)
+    copyto!(pupil.opd, saved_opd)
+    return pupil
 end
 
 @inline function store_reference_signal!(reference::AbstractMatrix, signal::AbstractMatrix, slopes::AbstractVector)

@@ -29,6 +29,19 @@ end
     end
 end
 
+@kernel function bin2d_abs2_kernel!(out, input, binning::Int,
+    n_out::Int, m_out::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n_out && j <= m_out
+        acc = zero(eltype(out))
+        @inbounds for ii in 1:binning, jj in 1:binning
+            acc += abs2(input[(i - 1) * binning + ii,
+                (j - 1) * binning + jj])
+        end
+        @inbounds out[i, j] = acc
+    end
+end
+
 @kernel function fftfreq_kernel!(dest, n::Int, val, offset)
     i = @index(Global, Linear)
     if i <= n
@@ -266,6 +279,39 @@ end
 
 function _bin2d!(style::AcceleratorStyle, out::AbstractMatrix, input::AbstractMatrix, binning::Int)
     launch_kernel!(style, bin2d_kernel!, out, input, binning, size(out, 1), size(out, 2); ndrange=size(out))
+    return out
+end
+
+function bin2d_abs2!(out::AbstractMatrix, input::AbstractMatrix,
+    binning::Int)
+    Base.require_one_based_indexing(out, input)
+    binning >= 1 || throw(InvalidConfiguration("binning must be >= 1"))
+    n_out = div(size(input, 1), binning)
+    m_out = div(size(input, 2), binning)
+    size(out) == (n_out, m_out) || throw(DimensionMismatchError(
+        "output size does not match binned dimensions"))
+    _bin2d_abs2!(execution_style(out), out, input, binning)
+    return out
+end
+
+function _bin2d_abs2!(::ScalarCPUStyle, out::AbstractMatrix,
+    input::AbstractMatrix, binning::Int)
+    n_out, m_out = size(out)
+    fill!(out, zero(eltype(out)))
+    @inbounds for ii in 1:binning, jj in 1:binning
+        for j in 1:m_out, i in 1:n_out
+            out[i, j] += abs2(input[(i - 1) * binning + ii,
+                (j - 1) * binning + jj])
+        end
+    end
+    return out
+end
+
+
+function _bin2d_abs2!(style::AcceleratorStyle, out::AbstractMatrix,
+    input::AbstractMatrix, binning::Int)
+    launch_kernel!(style, bin2d_abs2_kernel!, out, input, binning,
+        size(out, 1), size(out, 2); ndrange=size(out))
     return out
 end
 

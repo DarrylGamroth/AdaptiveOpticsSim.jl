@@ -22,7 +22,7 @@ function make_runtime(seed::Integer, resolution::Int)
     simulation = AOSimulation(tel, src, atm, dm, wfs)
 
     response = zeros(
-        eltype(tel.state.opd),
+        eltype(pupil_reflectivity(tel)),
         length(slopes(wfs)),
         length(dm.state.coefs),
     )

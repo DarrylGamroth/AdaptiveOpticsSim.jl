@@ -6,7 +6,7 @@
 #
 # The core runtime step is:
 # 1. advance and propagate the atmosphere
-# 2. apply the current DM command to the telescope OPD
+# 2. apply the current controllable-optic command to the runtime-owned pupil
 # 3. measure WFS outputs, optionally through a detector
 # 4. reconstruct a new command from the sensed slopes
 # 5. apply the signed command back to the DM coefficient vector
@@ -54,8 +54,8 @@ struct RepropagateScienceOpticalPath <: AbstractSciencePathPlan end
     PreparedRuntimeScienceStage
 
 Concrete, run-immutable direct-science stage. The caller-owned pupil is the
-explicit bridge from transitional telescope OPD state into prepared direct
-imaging. `acquisition` is either the exact plan for a primary detector or a
+explicit optical-path input to prepared direct imaging. `acquisition` is
+either the exact plan for a primary detector or a
 concrete tuple of exact plans for a shared-arm fanout.
 """
 struct PreparedRuntimeScienceStage{
@@ -74,6 +74,10 @@ end
 
 @inline science_path_plan(wfs_src::AbstractSource, science_src::AbstractSource) =
     wfs_src === science_src ? ReuseSensedOpticalPath() : RepropagateScienceOpticalPath()
+@inline science_path_plan(::AbstractWFS, wfs_src::AbstractSource,
+    science_src::AbstractSource) = science_path_plan(wfs_src, science_src)
+@inline science_path_plan(::CurvatureWFS, ::AbstractSource,
+    ::AbstractSource) = RepropagateScienceOpticalPath()
 
 struct RuntimeLatencyModel
     measurement_delay_frames::Int
@@ -251,6 +255,7 @@ exposure durations remain owned by their detector acquisition contracts.
 mutable struct ClosedLoopRuntime{
     SIM<:AOSimulation,
     TEL,
+    WP<:PupilFunction,
     A,
     AR,
     ASR,
@@ -279,6 +284,7 @@ mutable struct ClosedLoopRuntime{
 } <: AbstractControlSimulation
     simulation::SIM
     tel::TEL
+    wfs_pupil::WP
     atm::A
     wfs_atmosphere_renderer::AR
     science_atmosphere_renderer::ASR

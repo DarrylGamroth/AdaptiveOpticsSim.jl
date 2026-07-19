@@ -6,8 +6,8 @@ abstract type AbstractAtmosphereLayer end
 # Static or extension-defined atmospheres without directional geometry retain
 # their ordinary propagation semantics when a runtime supplies a source.
 # Timed atmosphere models override this with the prepared-renderer path below.
-@inline propagate!(atm::AbstractAtmosphere, tel::Telescope,
-    ::AbstractSource) = propagate!(atm, tel)
+@inline propagate!(atm::AbstractAtmosphere, pupil::PupilFunction,
+    ::AbstractSource) = propagate!(atm, pupil)
 
 """Per-atmosphere identity shared by its epoch values and prepared renderers."""
 mutable struct AtmosphereIdentity end
@@ -274,7 +274,7 @@ Prepare immutable geometry for one frozen source direction. Use
 """
 function prepare_atmosphere_renderer(atm::AbstractTimedAtmosphere,
     tel::Telescope, src::Union{AbstractSource,Nothing}=nothing;
-    T::Type{<:AbstractFloat}=eltype(opd_map(tel)))
+    T::Type{<:AbstractFloat}=eltype(pupil_reflectivity(tel)))
     require_same_backend(atm, tel)
     atmosphere_numeric_type(atm) === T || throw(InvalidConfiguration(
         "atmosphere renderer numeric type must match atmosphere layer storage"))
@@ -341,7 +341,7 @@ source. Access the result with `direction_renderers`.
 """
 function prepare_atmosphere_renderers(atm::AbstractTimedAtmosphere,
     tel::Telescope, src::AbstractSource;
-    T::Type{<:AbstractFloat}=eltype(opd_map(tel)))
+    T::Type{<:AbstractFloat}=eltype(pupil_reflectivity(tel)))
     frozen = freeze_source(src)
     renderer = prepare_atmosphere_renderer(atm, tel, frozen; T=T)
     return PreparedAtmosphereDirections(frozen, (renderer,))
@@ -349,7 +349,7 @@ end
 
 function prepare_atmosphere_renderers(atm::AbstractTimedAtmosphere,
     tel::Telescope, ast::Asterism;
-    T::Type{<:AbstractFloat}=eltype(opd_map(tel)))
+    T::Type{<:AbstractFloat}=eltype(pupil_reflectivity(tel)))
     frozen = freeze_source(ast)
     renderers = map(src -> prepare_atmosphere_renderer(atm, tel, src; T=T),
         frozen.sources)
@@ -358,7 +358,7 @@ end
 
 function prepare_atmosphere_renderers(atm::AbstractTimedAtmosphere,
     tel::Telescope, src::ExtendedSource;
-    T::Type{<:AbstractFloat}=eltype(opd_map(tel)))
+    T::Type{<:AbstractFloat}=eltype(pupil_reflectivity(tel)))
     frozen = freeze_source(src)
     asterism = extended_source_asterism(frozen)
     renderers = _prepare_renderer_vector(atm, tel, asterism.sources; T=T)
@@ -455,21 +455,3 @@ function render_atmosphere!(dest::PupilFunction,
     render_atmosphere_opd_impl!(opd, renderer, atm)
     return dest
 end
-
-# Transitional convenience for paths not yet migrated to explicit optical
-# products. It allocates a renderer but never mutates atmosphere render state.
-function _propagate_timed_atmosphere!(atm::AbstractTimedAtmosphere,
-    tel::Telescope, src::Union{AbstractSource,Nothing})
-    renderer = prepare_atmosphere_renderer(atm, tel, src)
-    render_atmosphere_opd!(opd_map(tel), renderer, atm, current_epoch(atm))
-    return tel
-end
-
-@inline propagate!(atm::AbstractTimedAtmosphere, tel::Telescope,
-    src::AbstractSource) = _propagate_timed_atmosphere!(atm, tel, src)
-
-@inline propagate!(atm::AbstractTimedAtmosphere, tel::Telescope,
-    ::Nothing) = _propagate_timed_atmosphere!(atm, tel, nothing)
-
-@inline propagate!(atm::AbstractTimedAtmosphere, tel::Telescope) =
-    _propagate_timed_atmosphere!(atm, tel, nothing)

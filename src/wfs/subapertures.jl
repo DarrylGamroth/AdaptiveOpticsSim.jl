@@ -208,6 +208,34 @@ function update_subaperture_layout!(layout::SubapertureLayout, pupil::AbstractMa
     return layout
 end
 
+function update_subaperture_layout!(layout::SubapertureLayout,
+    support_map::AbstractMatrix{T},
+    policy::GeometryValidSubapertures) where {T<:Real}
+    n_sub = layout.n_subap
+    sub = layout.subap_pixels
+    size(support_map) == (n_sub * sub, n_sub * sub) ||
+        throw(DimensionMismatchError(
+            "support map size must match subaperture layout"))
+    support_host = _host_support_map(execution_style(support_map),
+        support_map)
+    threshold = convert(Float64, policy.threshold)
+    denominator = sub * sub
+    @inbounds for j in 1:n_sub, i in 1:n_sub
+        xs = (i - 1) * sub + 1
+        ys = (j - 1) * sub + 1
+        xe = i * sub
+        ye = j * sub
+        illuminated = count(!iszero,
+            @view support_host[xs:xe, ys:ye])
+        layout.valid_mask_host[i, j] =
+            illuminated / denominator >= threshold
+    end
+    copyto!(layout.valid_mask, layout.valid_mask_host)
+    _refresh_valid_indices_host!(layout)
+    _advance_subaperture_layout_revision!(layout)
+    return layout
+end
+
 @inline _host_support_map(::ScalarCPUStyle, support_map::AbstractMatrix) = support_map
 @inline _host_support_map(::ExecutionStyle, support_map::AbstractMatrix) = Array(support_map)
 
@@ -234,6 +262,40 @@ function update_subaperture_layout!(layout::SubapertureLayout, support_map::Abst
         xe = i * sub
         ye = j * sub
         layout.valid_mask_host[i, j] = sum(@view support_host[xs:xe, ys:ye]) >= cutoff
+    end
+    copyto!(layout.valid_mask, layout.valid_mask_host)
+    _refresh_valid_indices_host!(layout)
+    _advance_subaperture_layout_revision!(layout)
+    return layout
+end
+
+function update_subaperture_layout_from_amplitude!(
+    layout::SubapertureLayout, amplitude::AbstractMatrix{T},
+    policy::FluxThresholdValidSubapertures) where {T<:Real}
+    n_sub = layout.n_subap
+    sub = layout.subap_pixels
+    size(amplitude) == (n_sub * sub, n_sub * sub) ||
+        throw(DimensionMismatchError(
+            "pupil amplitude size must match subaperture layout"))
+    amplitude_host = _host_support_map(execution_style(amplitude),
+        amplitude)
+    peak = zero(eltype(amplitude_host))
+    @inbounds for j in 1:n_sub, i in 1:n_sub
+        xs = (i - 1) * sub + 1
+        ys = (j - 1) * sub + 1
+        xe = i * sub
+        ye = j * sub
+        total = sum(abs2, @view amplitude_host[xs:xe, ys:ye])
+        peak = max(peak, total)
+    end
+    cutoff = convert(eltype(amplitude_host), policy.light_ratio) * peak
+    @inbounds for j in 1:n_sub, i in 1:n_sub
+        xs = (i - 1) * sub + 1
+        ys = (j - 1) * sub + 1
+        xe = i * sub
+        ye = j * sub
+        layout.valid_mask_host[i, j] =
+            sum(abs2, @view amplitude_host[xs:xe, ys:ye]) >= cutoff
     end
     copyto!(layout.valid_mask, layout.valid_mask_host)
     _refresh_valid_indices_host!(layout)

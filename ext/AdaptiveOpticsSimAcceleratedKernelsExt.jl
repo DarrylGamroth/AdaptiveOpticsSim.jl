@@ -25,6 +25,12 @@ function AdaptiveOpticsSim.execute_ensemble!(
     f!,
     members::Tuple,
 )
+    if length(state.partitioner) == 1
+        @inbounds for i in eachindex(members)
+            AdaptiveOpticsSim._run_ensemble_member!(f!, members[i])
+        end
+        return members
+    end
     AcceleratedKernels.task_partition(state.partitioner) do member_indices
         @inbounds for i in member_indices
             AdaptiveOpticsSim._run_ensemble_member!(f!, members[i])

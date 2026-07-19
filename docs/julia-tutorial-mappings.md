@@ -41,7 +41,7 @@ Each script exposes a `main()` function and logs a short completion summary with
 
 - OOPAO’s `ngs*tel*wfs` chain becomes explicit preparation and execution such
   as `prepare_direct_imaging` plus `form_direct_image!`, or
-  `measure!(wfs, tel, src)`.
+  `measure!(wfs, pupil, src)`.
 - WFS sensing mode is encoded in the WFS type parameter via
   `mode=Geometric()` or `mode=Diffractive()`, not a mutable string flag.
 - Detector noise is encoded by the detector’s `noise` type, for example
@@ -57,8 +57,7 @@ Each script exposes a `main()` function and logs a short completion summary with
 tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=10.0)
 pupil = PupilFunction(tel)
-apply_opd!(pupil, opd_map(tel))
-imaging = prepare_direct_imaging(tel, pupil, src; zero_padding=2)
+imaging = prepare_direct_imaging(pupil, src; zero_padding=2)
 form_direct_image!(imaging)
 photon_rate_image = intensity_values(direct_imaging_output(imaging))
 ```
@@ -67,25 +66,27 @@ photon_rate_image = intensity_values(direct_imaging_output(imaging))
 
 ```julia
 wfs = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0, modulation_points=4)
-slopes = measure!(wfs, tel, src)
+pupil = PupilFunction(tel)
+slopes = measure!(wfs, pupil, src)
 ```
 
 ### Closed loop
 
 ```julia
-imat = interaction_matrix(dm, wfs, tel, src; amplitude=1e-9)
+calibration_pupil = PupilFunction(tel)
+imat = interaction_matrix(dm, wfs, calibration_pupil, src; amplitude=1e-9)
 recon = ModalReconstructor(imat; gain=0.4)
 cmd = similar(dm.state.coefs)
 renderer = prepare_atmosphere_renderer(atm, tel, src)
-atmosphere_pupil = PupilFunction(tel)
+pupil = PupilFunction(tel)
 
 epoch = advance_by!(atm, 1e-3; rng=rng)
-render_atmosphere!(atmosphere_pupil, renderer, atm, epoch)
-apply_opd!(tel, opd_map(atmosphere_pupil))
-measure!(wfs, tel, src)
+render_atmosphere!(pupil, renderer, atm, epoch)
+measure!(wfs, pupil, src)
 reconstruct!(cmd, recon, slopes(wfs))
 dm.state.coefs .= -cmd
-apply!(dm, tel, DMAdditive())
+update_surface!(dm)
+apply_surface!(pupil, dm, DMAdditive())
 ```
 
 ## Logging in examples

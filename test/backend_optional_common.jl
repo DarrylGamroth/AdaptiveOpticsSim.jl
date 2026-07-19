@@ -29,9 +29,10 @@ function optional_detector_calibration_signature_allocation_bytes(
         det, seed)
 end
 
-function AdaptiveOpticsSim.propagate!(atm::OptionalStaticAtmosphere, tel::Telescope)
-    copyto!(tel.state.opd, atm.screen)
-    return tel
+function AdaptiveOpticsSim.propagate!(atm::OptionalStaticAtmosphere,
+    pupil::PupilFunction)
+    copyto!(pupil.opd, atm.screen)
+    return pupil
 end
 
 function OptionalStaticAtmosphere(tel::Telescope; T::Type{<:AbstractFloat}=Float32, backend::AbstractArrayBackend=backend(tel))
@@ -64,7 +65,8 @@ function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:
     calibration_det = Detector(noise=NoiseNone(), integration_time=T(1),
         qe=sampled_qe, response_model=sampled_response, T=T,
         backend=selector)
-    @test tel.state.opd isa BackendArray
+    pupil = PupilFunction(tel; T=T, backend=selector)
+    @test pupil.opd isa BackendArray
     @test dm.state.coefs isa BackendArray
     @test dm.state.modes isa AdaptiveOpticsSim.GaussianInfluenceOperator
     @test typeof(backend(dm.state.modes)) === typeof(selector)
@@ -145,6 +147,7 @@ function run_optional_sodium_profile_wfs(::Type{B},
     T = Float32
     tel = Telescope(resolution=16, diameter=T(8),
         central_obstruction=zero(T), T=T, backend=selector)
+    pupil = PupilFunction(tel; T=T, backend=selector)
 
     for family in (:pyramid, :bioedge)
         src = LGSSource(
@@ -160,20 +163,20 @@ function run_optional_sodium_profile_wfs(::Type{B},
             BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
                 modulation=zero(T), T=T, backend=selector)
 
-        AdaptiveOpticsSim.ensure_lgs_kernel!(wfs, tel, src)
+        AdaptiveOpticsSim.ensure_lgs_kernel!(wfs, pupil, src)
         propagation = wfs.front_end.propagation
         @test propagation.lgs_kernel_fft isa BackendArray
         original_tag = propagation.lgs_kernel_tag
         original_kernel = Array(propagation.lgs_kernel_fft)
         @test all(isfinite, original_kernel)
-        slopes = measure!(wfs, tel, src)
+        slopes = measure!(wfs, pupil, src)
         AdaptiveOpticsSim.synchronize_backend!(
             AdaptiveOpticsSim.execution_style(slopes))
         @test slopes isa BackendArray
         @test all(isfinite, Array(slopes))
 
         src.params.na_profile[2, :] .= T[0.8, 0.1, 0.1]
-        AdaptiveOpticsSim.ensure_lgs_kernel!(wfs, tel, src)
+        AdaptiveOpticsSim.ensure_lgs_kernel!(wfs, pupil, src)
         @test propagation.lgs_kernel_tag != original_tag
         @test !isapprox(Array(propagation.lgs_kernel_fft), original_kernel;
             rtol=T(1e-5), atol=T(1e-6))
@@ -189,6 +192,8 @@ function run_optional_zernike_normalization(
         central_obstruction=zero(T), T=T, backend=CPUBackend())
     gpu_tel = Telescope(resolution=16, diameter=T(8),
         central_obstruction=zero(T), T=T, backend=selector)
+    cpu_pupil = PupilFunction(cpu_tel; T=T, backend=CPUBackend())
+    gpu_pupil = PupilFunction(gpu_tel; T=T, backend=selector)
     src = Source(band=:custom, wavelength=T(0.75e-6),
         photon_irradiance=T(10), T=T)
     normalization_scale = T(0.375)
@@ -206,16 +211,16 @@ function run_optional_zernike_normalization(
         frame = BackendArray(copy(frame_host))
 
         expected_normalization = AdaptiveOpticsSim.zernike_normalization(
-            normalization, cpu_wfs, cpu_tel, src, frame_host,
+            normalization, cpu_wfs, cpu_pupil, src, frame_host,
             normalization_scale)
         actual_normalization = AdaptiveOpticsSim.zernike_normalization(
-            normalization, gpu_wfs, gpu_tel, src, frame,
+            normalization, gpu_wfs, gpu_pupil, src, frame,
             normalization_scale)
         @test actual_normalization ≈ expected_normalization rtol=T(2e-5)
 
         expected = copy(AdaptiveOpticsSim.zernike_signal!(cpu_wfs,
-            cpu_tel, frame_host, src, normalization_scale))
-        actual = AdaptiveOpticsSim.zernike_signal!(gpu_wfs, gpu_tel,
+            cpu_pupil, frame_host, src, normalization_scale))
+        actual = AdaptiveOpticsSim.zernike_signal!(gpu_wfs, gpu_pupil,
             frame, src, normalization_scale)
         AdaptiveOpticsSim.synchronize_backend!(
             AdaptiveOpticsSim.execution_style(actual))
@@ -230,7 +235,7 @@ function run_optional_zernike_normalization(
         normalization=IncidenceFluxNormalization(), T=T,
         backend=selector)
     fill!(zero_wfs.estimator.state.reference_signal_2d, zero(T))
-    zero_slopes = AdaptiveOpticsSim.zernike_signal!(zero_wfs, gpu_tel,
+    zero_slopes = AdaptiveOpticsSim.zernike_signal!(zero_wfs, gpu_pupil,
         BackendArray(copy(frame_host)), zero_src, one(T))
     AdaptiveOpticsSim.synchronize_backend!(
         AdaptiveOpticsSim.execution_style(zero_slopes))
@@ -250,7 +255,7 @@ function run_optional_wfs_stage_contracts(
     pupil = PupilFunction(tel; T=T, backend=selector)
     fill!(pupil.opd, T(2e-9))
     field = ElectricField(pupil, src; zero_padding=1, T=T)
-    field_formation = prepare_pupil_field(tel, pupil, src, field;
+    field_formation = prepare_pupil_field(pupil, src, field;
         center_even_grid=false)
     fill_electric_field!(field, pupil, field_formation)
 
@@ -913,9 +918,8 @@ function run_optional_plane_product_checks(tel::Telescope,
     selector::AdaptiveOpticsSim.AbstractArrayBackend, BackendArray,
     ::Type{T}) where {T<:AbstractFloat}
     wavefront = PupilFunction(tel; T=T, backend=selector)
-    apply_opd!(wavefront, opd_map(tel))
     field = ElectricField(wavefront, src; zero_padding=2, T=T)
-    formation = prepare_pupil_field(tel, wavefront, src, field)
+    formation = prepare_pupil_field(wavefront, src, field)
     fill_electric_field!(field, wavefront, formation)
     @test wavefront.amplitude isa BackendArray
     @test wavefront.opd isa BackendArray
@@ -954,8 +958,7 @@ function run_optional_plane_product_checks(tel::Telescope,
         @test wrapper_map.metadata.device == field.metadata.device
     end
 
-    prepared = prepare_direct_imaging(tel, wavefront, src;
-        zero_padding=2)
+    prepared = prepare_direct_imaging(wavefront, src; zero_padding=2)
     formed = form_direct_image!(prepared)
     @test formed.values isa BackendArray
     @test formed.metadata.device == wavefront.metadata.device
@@ -964,8 +967,7 @@ function run_optional_plane_product_checks(tel::Telescope,
 
     off_axis_src = Source(band=:I, magnitude=zero(T),
         coordinates=(T(0.08), T(90)), T=T)
-    off_axis = prepare_direct_imaging(tel, wavefront, off_axis_src;
-        zero_padding=2)
+    off_axis = prepare_direct_imaging(wavefront, off_axis_src; zero_padding=2)
     off_axis_map = form_direct_image!(off_axis)
     @test off_axis_map.values isa BackendArray
     @test off_axis_map.metadata.device == formed.metadata.device
@@ -976,8 +978,7 @@ function run_optional_plane_product_checks(tel::Telescope,
 
     spectral_src = with_spectrum(src,
         SpectralBundle(T[0.7e-6, 0.9e-6], T[0.4, 0.6]; T=T))
-    spectral = prepare_direct_imaging(tel, wavefront, spectral_src;
-        zero_padding=2)
+    spectral = prepare_direct_imaging(wavefront, spectral_src; zero_padding=2)
     spectral_products = form_direct_image!(spectral)
     @test spectral_products isa OpticalProductBundle
     @test length(spectral_products) == 2
@@ -990,7 +991,7 @@ function run_optional_plane_product_checks(tel::Telescope,
 
     extended_src = with_extended_source(src,
         GaussianDiskSourceModel(sigma_arcsec=T(0.02), n_side=5, T=T))
-    extended = prepare_direct_imaging(tel, wavefront,
+    extended = prepare_direct_imaging(wavefront,
         extended_source_asterism(extended_src); zero_padding=1)
     @test extended.components isa Vector
     @test extended.products isa Vector
@@ -1016,7 +1017,7 @@ function run_optional_plane_product_checks(tel::Telescope,
         spatial_measure=CellIntegratedMeasure(),
         coherence=IncoherentIntensityAddition())
     host_output = IntensityMap(host_metadata, host_values)
-    @test_throws InvalidConfiguration prepare_direct_imaging(tel,
+    @test_throws InvalidConfiguration prepare_direct_imaging(
         wavefront, src, prepared.field, host_output)
 
     sum_output_values = similar(formed.values)
@@ -1173,7 +1174,7 @@ function run_optional_plane_product_checks(tel::Telescope,
         normalization=DimensionlessNormalization(),
         spatial_measure=PointSampledMeasure(),
         coherence=CoherentFieldCombination())
-    spatial_formation = prepare_pupil_field(tel, wavefront, src, spatial_field;
+    spatial_formation = prepare_pupil_field(wavefront, src, spatial_field;
         center_even_grid=false, amplitude_scale=1)
     fill_electric_field!(spatial_field, wavefront, spatial_formation)
     filtered = PupilFunction(tel; T=T, backend=selector)
@@ -1187,14 +1188,15 @@ function run_optional_plane_product_checks(tel::Telescope,
     @test all(isfinite, Array(filtered.opd))
     @test all(isfinite, Array(filtered.amplitude))
 
-    telescope_opd = copy(Array(opd_map(tel)))
+    independent_path = PupilFunction(tel; T=T, backend=selector)
+    independent_opd = copy(Array(independent_path.opd))
     dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T,
         backend=selector)
     fill!(dm.state.coefs, T(1e-8))
-    update_surface!(dm, tel)
+    update_surface!(dm)
     apply_surface!(wavefront, dm, DMReplace())
     @test Array(wavefront.opd) ≈ Array(surface_opd(dm)) atol=zero(T) rtol=zero(T)
-    @test Array(opd_map(tel)) == telescope_opd
+    @test Array(independent_path.opd) == independent_opd
     return nothing
 end
 
@@ -1209,7 +1211,8 @@ function build_optional_control_loop_branch(::Type{T}, backend, label::Symbol; s
         PyramidWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend)
     sim = AOSimulation(tel, src, atm, dm, wfs)
-    imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
+    pupil = PupilFunction(tel; T=T, backend=backend)
+    imat = interaction_matrix(dm, wfs, pupil, src; amplitude=T(0.05))
     recon = ModalReconstructor(imat; gain=T(0.5))
     return ControlLoopBranch(label, sim, recon; wfs_detector=det, rng=MersenneTwister(seed))
 end
@@ -1709,6 +1712,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
     det_capture = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, bits=12, full_well=T(100),
         sensor=CMOSSensor(T=T), T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
+    pupil = PupilFunction(tel; T=T, backend=backend)
     atm = MultiLayerAtmosphere(tel;
         r0=T(0.2),
         L0=T(25.0),
@@ -1719,11 +1723,11 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
         T=T,
         backend=backend,
     )
-    geom_prop = AtmosphericFieldPropagation(atm, tel, src;
+    geom_prop = AtmosphericFieldPropagation(atm, pupil, src;
         model=GeometricAtmosphericPropagation(T=T),
         zero_padding=1,
         T=T)
-    fresnel_prop = AtmosphericFieldPropagation(atm, tel, src;
+    fresnel_prop = AtmosphericFieldPropagation(atm, pupil, src;
         model=LayeredFresnelAtmosphericPropagation(T=T),
         zero_padding=1,
         T=T)
@@ -1735,13 +1739,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
     @test typeof(AdaptiveOpticsSim.sh_sensing_execution_plan(
         AdaptiveOpticsSim.execution_style(slopes(sh_large)), sh_large)) ===
         AdaptiveOpticsSim.ShackHartmannWFSRocmHostStatsPlan
-    AdaptiveOpticsSim.prepare_sampling!(sh, tel, src)
+    AdaptiveOpticsSim.prepare_sampling!(sh, pupil, src)
     sh_sub = div(tel.params.resolution, AdaptiveOpticsSim.n_lenslets(sh))
     sh_pad = size(sh.front_end.propagation.field, 1)
     sh_offset = div(sh_pad - sh_sub, 2)
     safe_intensity = AdaptiveOpticsSim.compute_intensity_safe!(
         AdaptiveOpticsSim.execution_style(sh.front_end.propagation.intensity),
-        sh, tel, src, 1, 1, sh_sub, sh_sub, sh_offset, sh_offset, sh_sub)
+        sh, pupil, src, 1, 1, sh_sub, sh_sub, sh_offset, sh_offset,
+        sh_sub)
     @test safe_intensity === sh.front_end.propagation.intensity
     @test all(isfinite, Array(safe_intensity))
     @test AdaptiveOpticsSim.detector_execution_plan(typeof(AdaptiveOpticsSim.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.DetectorHostMirrorPlan
@@ -1964,6 +1969,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
     bio = BioEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, sensor=HgCdTeAvalancheArraySensor(T=T), T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
+    pupil = PupilFunction(tel; T=T, backend=backend)
     atm = MultiLayerAtmosphere(tel;
         r0=T(0.2),
         L0=T(25.0),
@@ -1974,11 +1980,11 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
         T=T,
         backend=backend,
     )
-    geom_prop = AtmosphericFieldPropagation(atm, tel, src;
+    geom_prop = AtmosphericFieldPropagation(atm, pupil, src;
         model=GeometricAtmosphericPropagation(T=T),
         zero_padding=1,
         T=T)
-    fresnel_prop = AtmosphericFieldPropagation(atm, tel, src;
+    fresnel_prop = AtmosphericFieldPropagation(atm, pupil, src;
         model=LayeredFresnelAtmosphericPropagation(T=T),
         zero_padding=1,
         T=T)
@@ -2007,8 +2013,10 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
         sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=CPUBackend())
     gpu_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
         sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=backend)
-    measure!(cpu_sh, cpu_tel, cpu_src, cpu_det; rng=MersenneTwister(3))
-    measure!(gpu_sh, gpu_tel, gpu_src, gpu_det; rng=MersenneTwister(3))
+    cpu_pupil = PupilFunction(cpu_tel; T=T, backend=CPUBackend())
+    gpu_pupil = PupilFunction(gpu_tel; T=T, backend=backend)
+    measure!(cpu_sh, cpu_pupil, cpu_src, cpu_det; rng=MersenneTwister(3))
+    measure!(gpu_sh, gpu_pupil, gpu_src, gpu_det; rng=MersenneTwister(3))
     cpu_export = Array(AdaptiveOpticsSim.sh_exported_spot_cube(cpu_sh))
     gpu_export = Array(AdaptiveOpticsSim.sh_exported_spot_cube(gpu_sh))
     cpu_frame = Array(AdaptiveOpticsSim.wfs_output_frame(cpu_sh, cpu_det))
@@ -2021,8 +2029,8 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
         valid_subaperture_policy=FluxThresholdValidSubapertures(light_ratio=0.5f0))
     gpu_sh_stats = ShackHartmannWFS(gpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend,
         valid_subaperture_policy=FluxThresholdValidSubapertures(light_ratio=0.5f0))
-    measure!(cpu_sh_stats, cpu_tel, cpu_src, cpu_det; rng=MersenneTwister(3))
-    measure!(gpu_sh_stats, gpu_tel, gpu_src, gpu_det; rng=MersenneTwister(3))
+    measure!(cpu_sh_stats, cpu_pupil, cpu_src, cpu_det; rng=MersenneTwister(3))
+    measure!(gpu_sh_stats, gpu_pupil, gpu_src, gpu_det; rng=MersenneTwister(3))
     cpu_peak = AdaptiveOpticsSim.sh_safe_peak_value(cpu_sh_stats.acquisition.spot_cube)
     cpu_cutoff = AdaptiveOpticsSim.centroid_threshold(cpu_sh_stats) * cpu_peak
     AdaptiveOpticsSim.sh_signal_from_spots!(cpu_sh_stats, cpu_cutoff)
@@ -2218,7 +2226,8 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     render_atmosphere!(atmosphere_output, renderer, atm, epoch)
     @test atm.layers[1].generator.state.opd isa BackendArray
     @test atmosphere_output.opd isa BackendArray
-    copyto!(tel.state.opd, atmosphere_output.opd)
+    pupil = PupilFunction(tel; T=T, backend=selector)
+    copyto!(pupil.opd, atmosphere_output.opd)
 
     inf_atm = InfiniteMultiLayerAtmosphere(tel;
         r0=T(0.2),
@@ -2239,7 +2248,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     @test inf_atm.layers[1].screen.state.screen isa BackendArray
     @test atmosphere_output.opd isa BackendArray
 
-    prop = AtmosphericFieldPropagation(atm, tel, src;
+    prop = AtmosphericFieldPropagation(atm, pupil, src;
         model=GeometricAtmosphericPropagation(T=T),
         zero_padding=2,
         T=T)
@@ -2251,12 +2260,12 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     bundle = SpectralBundle(fill(wavelength(src), 2), T[0.4, 0.6]; T=T)
     poly = with_spectrum(src, bundle)
     sh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=selector)
-    slopes = measure!(sh, tel, poly)
+    slopes = measure!(sh, pupil, poly)
     @test slopes isa BackendArray
 
     spectral_optical_sh = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), T=T, backend=selector)
-    AdaptiveOpticsSim.sampled_spots_peak!(spectral_optical_sh, tel, poly)
+    AdaptiveOpticsSim.sampled_spots_peak!(spectral_optical_sh, pupil, poly)
     spectral_optical_spots = Array(spectral_optical_sh.acquisition.spot_cube)
     spectral_qe = AdaptiveOpticsSim.SampledQuantumEfficiency(
         T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.2, 0.8])
@@ -2266,7 +2275,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         response_model=NullFrameResponse(), T=T, backend=selector)
     spectral_detector_sh = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), T=T, backend=selector)
-    AdaptiveOpticsSim.sampled_spots_peak!(spectral_detector_sh, tel, poly,
+    AdaptiveOpticsSim.sampled_spots_peak!(spectral_detector_sh, pupil, poly,
         spectral_detector, MersenneTwister(149))
     expected_spectral_scale = spectral_exposure *
         T(AdaptiveOpticsSim.qe_at(spectral_qe, wavelength(src)))
@@ -2276,7 +2285,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     distinct = with_spectrum(src, SpectralBundle(
         T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.4, 0.6];
         T=T))
-    @test_throws InvalidConfiguration measure!(sh, tel, distinct)
+    @test_throws InvalidConfiguration measure!(sh, pupil, distinct)
 
     science_src = Source(band=:K, magnitude=1.0, coordinates=(4.0, 90.0), T=T)
     split_dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T,
@@ -2338,7 +2347,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     run_optional_scalable_reconstructor_checks(T, selector, BackendArray)
 
     curv = CurvatureWFS(tel; pupil_samples=4, T=T, backend=selector)
-    curv_slopes = measure!(curv, tel, src, atm)
+    curv_slopes = measure!(curv, pupil, src, atm)
     @test curv_slopes isa BackendArray
 
     single_control_loop = build_control_loop_scenario(

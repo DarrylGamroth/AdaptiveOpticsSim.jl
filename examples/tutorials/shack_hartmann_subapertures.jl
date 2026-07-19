@@ -6,11 +6,12 @@ function main(; resolution::Int=24)
 
     zb = ZernikeBasis(tel, 4)
     compute_zernike!(zb, tel)
-    @. tel.state.opd = 3e-8 * zb.modes[:, :, 4]
+    pupil = PupilFunction(tel)
+    @. pupil.opd = 3e-8 * zb.modes[:, :, 4]
 
     sh = ShackHartmannWFS(tel; n_lenslets=6, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8)
-    prepare_runtime_wfs!(sh, tel, src)
-    slopes = copy(measure!(sh, tel, src))
+    prepare_runtime_wfs!(sh, pupil, src)
+    slopes = copy(measure!(sh, pupil, src))
 
     layout = subaperture_layout(sh.front_end)
     calibration = subaperture_calibration(sh)

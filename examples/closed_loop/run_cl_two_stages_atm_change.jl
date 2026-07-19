@@ -15,23 +15,25 @@ sim = AOSimulation(tel, src, atm, dm, wfs)
 
 dm_coarse = DeformableMirror(sim.tel; n_act=2, influence_width=0.6)
 dm_fine = sim.optic
+pupil = PupilFunction(sim.tel)
 
-imat_coarse = interaction_matrix(dm_coarse, sim.wfs, sim.tel; amplitude=0.1)
-imat_fine = interaction_matrix(dm_fine, sim.wfs, sim.tel; amplitude=0.1)
+imat_coarse = interaction_matrix(dm_coarse, sim.wfs, pupil; amplitude=0.1)
+imat_fine = interaction_matrix(dm_fine, sim.wfs, pupil; amplitude=0.1)
 recon_coarse = ModalReconstructor(imat_coarse; gain=0.3)
 recon_fine = ModalReconstructor(imat_fine; gain=0.5)
 cmd_coarse = similar(dm_coarse.state.coefs)
 cmd_fine = similar(dm_fine.state.coefs)
 
-function run_segment!(atm, renderer, atmosphere_output, sim, dm_coarse,
+function run_segment!(atm, renderer, pupil, sim, dm_coarse,
     dm_fine, recon_coarse, recon_fine, cmd_coarse, cmd_fine, rng, n_iter)
     for _ in 1:n_iter
         epoch = advance_by!(atm, atmosphere_step; rng=rng)
-        render_atmosphere!(atmosphere_output, renderer, atm, epoch)
-        copyto!(sim.tel.state.opd, atmosphere_output.opd)
-        apply!(dm_coarse, sim.tel, DMAdditive())
-        apply!(dm_fine, sim.tel, DMAdditive())
-        measure!(sim.wfs, sim.tel)
+        render_atmosphere!(pupil, renderer, atm, epoch)
+        update_surface!(dm_coarse)
+        update_surface!(dm_fine)
+        apply_surface!(pupil, dm_coarse, DMAdditive())
+        apply_surface!(pupil, dm_fine, DMAdditive())
+        measure!(sim.wfs, pupil)
         reconstruct!(cmd_coarse, recon_coarse, slopes(sim.wfs))
         reconstruct!(cmd_fine, recon_fine, slopes(sim.wfs))
         dm_coarse.state.coefs .= -cmd_coarse
@@ -40,15 +42,14 @@ function run_segment!(atm, renderer, atmosphere_output, sim, dm_coarse,
     return nothing
 end
 
-atmosphere_output = PupilFunction(sim.tel)
 renderer = prepare_atmosphere_renderer(sim.atm, sim.tel, sim.src)
-run_segment!(sim.atm, renderer, atmosphere_output, sim, dm_coarse, dm_fine,
+run_segment!(sim.atm, renderer, pupil, sim, dm_coarse, dm_fine,
     recon_coarse, recon_fine, cmd_coarse, cmd_fine, rng, 3)
 
 changed_atm = KolmogorovAtmosphere(sim.tel; r0=0.1, L0=25.0)
 changed_renderer = prepare_atmosphere_renderer(changed_atm, sim.tel, sim.src)
 @info "Atmosphere r0 updated to 0.1"
-run_segment!(changed_atm, changed_renderer, atmosphere_output, sim, dm_coarse,
+run_segment!(changed_atm, changed_renderer, pupil, sim, dm_coarse,
     dm_fine, recon_coarse, recon_fine, cmd_coarse, cmd_fine, rng, 3)
 
 @info "Closed-loop two stages with atmosphere change complete"

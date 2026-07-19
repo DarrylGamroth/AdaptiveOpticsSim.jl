@@ -21,11 +21,13 @@ detector integrations and pipelines run.
 
 The current shared-arm runtime gives each direct-science arm a prepared pupil,
 field, photon-arrival-rate output, propagation workspace, and detector plans.
-It still stages common transitional telescope OPD for WFS families and executes
-the arm loop sequentially, so it must not be parallelized by wrapping that loop
-in `Threads.@threads`. The remaining required state split is:
+Its primary WFS, primary science, and auxiliary-arm paths also own distinct
+`PupilFunction` products. It still executes the arm loop sequentially, so it
+must not be parallelized by wrapping that loop in `Threads.@threads`. The
+remaining event-runtime ownership requirements are:
 
-- shared immutable telescope parameters, pupil, and reflectivity
+- shared immutable telescope parameters plus revisioned aperture support and
+  reflectivity
 - shared atmosphere layer state that is read-only for a published epoch
 - shared immutable optic parameters and an effective command snapshot
 - source-specific, precomputed propagation geometry

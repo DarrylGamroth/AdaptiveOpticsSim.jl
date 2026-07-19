@@ -14,8 +14,9 @@ const REVOLT_COMMAND_SCALE_M = 1e-7
     end
 end
 
-struct RevoltLikeHILContext{TEL,SRC,DM,WFS,DET,AI,AC,EC,EB,TF,RNG}
+struct RevoltLikeHILContext{TEL,PUPIL,SRC,DM,WFS,DET,AI,AC,EC,EB,TF,RNG}
     tel::TEL
+    pupil::PUPIL
     src::SRC
     dm::DM
     wfs::WFS
@@ -152,6 +153,7 @@ function build_revolt_like_hil_context(; backend_name::AbstractString="cpu", con
         T=T,
         backend=backend_cfg.selector,
     )
+    pupil = PupilFunction(tel)
     src = Source(band=:I, magnitude=0.0, T=T)
     dm = DeformableMirror(tel; n_act=n_act, influence_width=0.3, T=T, backend=backend_cfg.selector)
     wfs = ShackHartmannWFS(tel; n_lenslets=n_lenslets, mode=Diffractive(), n_pix_subap=roi,
@@ -168,11 +170,12 @@ function build_revolt_like_hil_context(; backend_name::AbstractString="cpu", con
     revolt_fill_active_command!(active_command)
     tiled_frame = backend_cfg.array_backend{T}(undef, resolution, resolution)
 
-    AdaptiveOpticsSim.ensure_sh_calibration!(wfs, tel, src)
+    AdaptiveOpticsSim.ensure_sh_calibration!(wfs, pupil, src)
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(slopes(wfs)))
 
     return RevoltLikeHILContext(
         tel,
+        pupil,
         src,
         dm,
         wfs,
@@ -189,7 +192,7 @@ function build_revolt_like_hil_context(; backend_name::AbstractString="cpu", con
 end
 
 function revolt_like_command_map!(ctx::RevoltLikeHILContext)
-    reset_opd!(ctx.tel)
+    reset_opd!(ctx.pupil)
     mul!(ctx.extrapolated_command, ctx.extrapolation_backend, ctx.active_command)
     revolt_scatter_active_command!(ctx.dm.state.coefs, ctx.extrapolated_command, ctx.active_indices_backend)
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.dm.state.coefs))
@@ -199,16 +202,18 @@ end
 function revolt_like_dm_apply!(ctx::RevoltLikeHILContext)
     mul!(ctx.extrapolated_command, ctx.extrapolation_backend, ctx.active_command)
     revolt_scatter_active_command!(ctx.dm.state.coefs, ctx.extrapolated_command, ctx.active_indices_backend)
-    apply!(ctx.dm, ctx.tel, DMReplace())
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.tel.state.opd))
+    update_surface!(ctx.dm)
+    apply_surface!(ctx.pupil, ctx.dm, DMReplace())
+    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.pupil.opd))
     return nothing
 end
 
 function revolt_like_sense!(ctx::RevoltLikeHILContext)
     mul!(ctx.extrapolated_command, ctx.extrapolation_backend, ctx.active_command)
     revolt_scatter_active_command!(ctx.dm.state.coefs, ctx.extrapolated_command, ctx.active_indices_backend)
-    apply!(ctx.dm, ctx.tel, DMReplace())
-    measure!(ctx.wfs, ctx.tel, ctx.src, ctx.det; rng=ctx.rng)
+    update_surface!(ctx.dm)
+    apply_surface!(ctx.pupil, ctx.dm, DMReplace())
+    measure!(ctx.wfs, ctx.pupil, ctx.src, ctx.det; rng=ctx.rng)
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.wfs.acquisition.spot_cube))
     return nothing
 end
@@ -216,19 +221,21 @@ end
 function revolt_like_mosaic!(ctx::RevoltLikeHILContext)
     mul!(ctx.extrapolated_command, ctx.extrapolation_backend, ctx.active_command)
     revolt_scatter_active_command!(ctx.dm.state.coefs, ctx.extrapolated_command, ctx.active_indices_backend)
-    apply!(ctx.dm, ctx.tel, DMReplace())
-    measure!(ctx.wfs, ctx.tel, ctx.src, ctx.det; rng=ctx.rng)
+    update_surface!(ctx.dm)
+    apply_surface!(ctx.pupil, ctx.dm, DMReplace())
+    measure!(ctx.wfs, ctx.pupil, ctx.src, ctx.det; rng=ctx.rng)
     revolt_tile_spot_cube!(ctx.tiled_frame, ctx.wfs.acquisition.spot_cube, ctx.n_lenslets, ctx.roi)
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.tiled_frame))
     return nothing
 end
 
 function revolt_like_step!(ctx::RevoltLikeHILContext)
-    reset_opd!(ctx.tel)
+    reset_opd!(ctx.pupil)
     mul!(ctx.extrapolated_command, ctx.extrapolation_backend, ctx.active_command)
     revolt_scatter_active_command!(ctx.dm.state.coefs, ctx.extrapolated_command, ctx.active_indices_backend)
-    apply!(ctx.dm, ctx.tel, DMReplace())
-    measure!(ctx.wfs, ctx.tel, ctx.src, ctx.det; rng=ctx.rng)
+    update_surface!(ctx.dm)
+    apply_surface!(ctx.pupil, ctx.dm, DMReplace())
+    measure!(ctx.wfs, ctx.pupil, ctx.src, ctx.det; rng=ctx.rng)
     revolt_tile_spot_cube!(ctx.tiled_frame, ctx.wfs.acquisition.spot_cube, ctx.n_lenslets, ctx.roi)
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.dm.state.coefs))
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.wfs.acquisition.spot_cube))

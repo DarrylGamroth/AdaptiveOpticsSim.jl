@@ -24,8 +24,7 @@ using AdaptiveOpticsSim
 tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)
 pupil = PupilFunction(tel)
-apply_opd!(pupil, opd_map(tel))
-imaging = prepare_direct_imaging(tel, pupil, src; zero_padding=2)
+imaging = prepare_direct_imaging(pupil, src; zero_padding=2)
 
 form_direct_image!(imaging)
 photon_rate_image = intensity_values(direct_imaging_output(imaging))
@@ -34,11 +33,11 @@ photon_rate_image = intensity_values(direct_imaging_output(imaging))
 The output is a source-scaled, cell-integrated photon-arrival-rate
 `IntensityMap` on focal-plane angular coordinates, before detector exposure;
 it is not an implicitly normalized PSF. Keep `pupil`, the prepared products,
-and the single-writer workspace owned by the path that writes them. When the
-transitional telescope OPD changes, copy it explicitly with
-`apply_opd!(pupil, opd_map(tel))` before execution. Preparation allocates and
-plans once; repeated `form_direct_image!` calls are fixed-shape and
-allocation-free after warmup.
+and the single-writer workspace owned by the path that writes them. Update the
+path-owned pupil with `apply_opd!`, `render_atmosphere!`, or `apply_surface!`
+before execution. `Telescope` owns aperture geometry, not mutable path OPD.
+Preparation allocates and plans once; repeated `form_direct_image!` calls are
+fixed-shape and allocation-free after warmup.
 
 Key objects:
 
@@ -73,11 +72,10 @@ wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec
 
 rng = runtime_rng(0)
 renderer = prepare_atmosphere_renderer(atm, tel, src)
-atmosphere_pupil = PupilFunction(tel)
+pupil = PupilFunction(tel)
 epoch = advance_by!(atm, 1e-3; rng=rng)
-render_atmosphere!(atmosphere_pupil, renderer, atm, epoch)
-apply_opd!(tel, opd_map(atmosphere_pupil))
-slopes = measure!(wfs, tel, src)
+render_atmosphere!(pupil, renderer, atm, epoch)
+slopes = measure!(wfs, pupil, src)
 ```
 
 Swap `ShackHartmannWFS(...)` for `PyramidWFS(...)`, `BioEdgeWFS(...)`,
@@ -105,11 +103,10 @@ det = Detector(
 
 rng = runtime_rng(0)
 renderer = prepare_atmosphere_renderer(atm, tel, src)
-atmosphere_pupil = PupilFunction(tel)
+pupil = PupilFunction(tel)
 epoch = advance_by!(atm, 1e-3; rng=rng)
-render_atmosphere!(atmosphere_pupil, renderer, atm, epoch)
-apply_opd!(tel, opd_map(atmosphere_pupil))
-measure!(wfs, tel, src, det; rng=rng)
+render_atmosphere!(pupil, renderer, atm, epoch)
+measure!(wfs, pupil, src, det; rng=rng)
 frame = output_frame(det)
 ```
 
@@ -130,7 +127,7 @@ spad = SPADArrayDetector(
     noise=NoiseNone(),
     sensor=SPADArraySensor(pde=0.5, fill_factor=0.8, dark_count_rate=0.0),
 )
-slopes = measure!(counting_wfs, tel, src, spad; rng=runtime_rng(0))
+slopes = measure!(counting_wfs, pupil, src, spad; rng=runtime_rng(0))
 counts = output_frame(spad)
 ```
 
@@ -161,7 +158,8 @@ dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
 sim = AOSimulation(tel, src, atm, dm, wfs)
 
-imat = interaction_matrix(dm, wfs, tel, src; amplitude=0.1)
+calibration_pupil = PupilFunction(tel)
+imat = interaction_matrix(dm, wfs, calibration_pupil, src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
 branch = ControlLoopBranch(:main, sim, recon; rng=runtime_rng(0))
 
@@ -191,7 +189,7 @@ compact validated control rank:
 storage = Matrix{Float64}(undef,
     length(slopes(wfs)), length(dm.state.coefs))
 imat = AdaptiveOpticsSim.interaction_matrix!(
-    storage, dm, wfs, tel, src; amplitude=0.1)
+    storage, dm, wfs, calibration_pupil, src; amplitude=0.1)
 
 recon = FactorizedReconstructor(imat; max_rank=12, gain=1.0)
 controller = DiscreteIntegratorController(
@@ -696,6 +694,7 @@ science_model = prepare_model(
     pool_size=1,
 )
 science_pupil = PupilFunction(sim.tel)
+science_renderer = prepare_atmosphere_renderer(sim.atm, sim.tel, sim.src)
 
 for k in 1:10
     set_command!(scenario, (
@@ -704,9 +703,12 @@ for k in 1:10
     ))
     sense!(scenario)
 
-    # Transitional runtime OPD is copied into a caller-owned science-path
-    # product before the external handoff.
-    apply_opd!(science_pupil, opd_map(sim.tel))
+    # Render the already-published atmosphere epoch into this independent
+    # science path, then apply the current controllable-optic surface.
+    render_atmosphere!(science_pupil, science_renderer, sim.atm,
+        current_epoch(sim.atm))
+    update_surface!(optic)
+    apply_surface!(science_pupil, optic, DMAdditive())
     payload = CoronagraphPayload(
         opd_map(science_pupil),
         pupil_amplitude(science_pupil),
@@ -751,7 +753,10 @@ science_model_gpu = prepare_model(
 )
 
 sense!(scenario)
-apply_opd!(science_pupil, opd_map(sim.tel))
+render_atmosphere!(science_pupil, science_renderer, sim.atm,
+    current_epoch(sim.atm))
+update_surface!(optic)
+apply_surface!(science_pupil, optic, DMAdditive())
 payload_gpu = CoronagraphPayload(
     opd_map(science_pupil),
     pupil_amplitude(science_pupil),
@@ -768,9 +773,9 @@ Practical notes:
   `payload=payload`. `PASSVALUE` remains useful when porting upstream PROPER
   prescriptions or preserving an existing parity harness, but it is not the
   preferred interface for new Julia-native HIL code.
-- While WFS families still use transitional telescope OPD, copy its current
-  atmosphere-plus-optic residual into a caller-owned science `PupilFunction`.
-  A future path executor may write that product directly.
+- Prepare a renderer for each science direction, render the current published
+  atmosphere epoch without advancing it, and apply the current optic surfaces
+  to that path-owned `PupilFunction` before the external handoff.
 - Pass `pupil_amplitude(science_pupil)` when reflectivity, spiders, segment
   gaps, central obstruction, or another custom pupil matters.
 - Do not pass an undeclared Proper array directly to a physical detector.
@@ -845,7 +850,7 @@ The maintained plotting surface there is:
 The plotting package is intentionally built on maintained accessors like:
 
 - `pupil_mask(tel)`
-- `AdaptiveOpticsSim.opd_map(tel)`
+- `opd_map(pupil)`
 - `AdaptiveOpticsSim.surface_opd(optic)`
 - `output_frame(det)`
 - `camera_frame(wfs)`

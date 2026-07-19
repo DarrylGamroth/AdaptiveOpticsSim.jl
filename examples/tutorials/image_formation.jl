@@ -5,15 +5,12 @@ function main(; resolution::Int=32, zero_padding::Int=2, n_modes::Int=12,
     tel = base_telescope(resolution=resolution)
     src = base_source()
     pupil = PupilFunction(tel)
-    apply_opd!(pupil, opd_map(tel))
-    imaging = prepare_direct_imaging(tel, pupil, src;
-        zero_padding=zero_padding)
+    imaging = prepare_direct_imaging(pupil, src; zero_padding=zero_padding)
     nominal_image = copy(intensity_values(form_direct_image!(imaging)))
 
     zb = ZernikeBasis(tel, n_modes)
     compute_zernike!(zb, tel)
-    apply_opd!(tel, zb.modes[:, :, mode_id] .* amplitude)
-    apply_opd!(pupil, opd_map(tel))
+    apply_opd!(pupil, zb.modes[:, :, mode_id] .* amplitude)
     aberrated_image = copy(intensity_values(form_direct_image!(imaging)))
     pixel_scale = focal_plane_pixel_scale_arcsec(direct_imaging_output(imaging))
 

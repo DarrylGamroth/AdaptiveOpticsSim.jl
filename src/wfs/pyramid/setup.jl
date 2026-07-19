@@ -373,7 +373,7 @@ function PyramidWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1, mod
         typeof(mode),typeof(front_end),typeof(acquisition),typeof(estimator),
         typeof(selector),
     }(front_end, acquisition, estimator)
-    update_valid_mask!(wfs, tel)
+    initialize_pyramid_valid_mask!(wfs, tel)
     prepare_pyramid_front_end!(mode, wfs, tel)
     return wfs
 end
@@ -442,7 +442,7 @@ end
 function prepare_pyramid_front_end!(::Diffractive, wfs::PyramidWFS,
     tel::Telescope)
     build_pyramid_phasor!(pyramid_propagation(wfs).phasor)
-    build_pyramid_mask!(wfs, tel)
+    build_pyramid_mask!(wfs, PupilFunction(tel))
     return nothing
 end
 
@@ -469,12 +469,20 @@ end
 
 sensing_mode(::PyramidWFS{M}) where {M} = M()
 
-function update_valid_mask!(wfs::PyramidWFS, tel::Telescope)
-    set_valid_subapertures!(wfs.estimator.state.valid_mask, pupil_mask(tel), wfs.estimator.params.threshold)
+function initialize_pyramid_valid_mask!(wfs::PyramidWFS,
+    tel::Telescope)
+    set_valid_subapertures!(wfs.estimator.state.valid_mask,
+        pupil_mask(tel), wfs.estimator.params.threshold)
     return wfs
 end
 
-function ensure_pyramid_buffers!(wfs::PyramidWFS, pad::Int, tel::Telescope)
+function update_valid_mask!(wfs::PyramidWFS, pupil::PupilFunction)
+    set_valid_subapertures!(wfs.estimator.state.valid_mask,
+        pupil.support, wfs.estimator.params.threshold)
+    return wfs
+end
+
+function ensure_pyramid_buffers!(wfs::PyramidWFS, pad::Int, pupil::PupilFunction)
     if size(wfs.front_end.propagation.field) != (pad, pad)
         wfs.front_end.propagation.revision += UInt(1)
         wfs.front_end.propagation.field = similar(wfs.front_end.propagation.field, pad, pad)
@@ -497,7 +505,7 @@ function ensure_pyramid_buffers!(wfs::PyramidWFS, pad::Int, tel::Telescope)
         wfs.estimator.state.calibrated = false
         wfs.estimator.state.calibration_revision += UInt(1)
         build_pyramid_phasor!(wfs.front_end.propagation.phasor)
-        build_pyramid_mask!(wfs, tel)
+        build_pyramid_mask!(wfs, pupil)
     end
     return wfs
 end
@@ -516,16 +524,16 @@ end
 
 @inline grouped_staging_buffer(wfs::PyramidWFS, out::AbstractMatrix) = wfs.front_end.propagation.intensity
 
-function accumulate_pyramid_asterism_intensity!(::ScalarCPUStyle, wfs::PyramidWFS, tel::Telescope, ast::Asterism)
+function accumulate_pyramid_asterism_intensity!(::ScalarCPUStyle, wfs::PyramidWFS, pupil::PupilFunction, ast::Asterism)
     count = length(ast.sources)
     stack = grouped_stack_view(ensure_pyramid_asterism_stack!(wfs, count), count)
-    return accumulate_grouped_sources!(ScalarCPUStyle(), wfs, wfs.front_end.propagation.intensity, stack, ast.sources, pyramid_intensity!, wfs, tel)
+    return accumulate_grouped_sources!(ScalarCPUStyle(), wfs, wfs.front_end.propagation.intensity, stack, ast.sources, pyramid_intensity!, wfs, pupil)
 end
 
-function accumulate_pyramid_asterism_intensity!(style::AcceleratorStyle, wfs::PyramidWFS, tel::Telescope, ast::Asterism)
+function accumulate_pyramid_asterism_intensity!(style::AcceleratorStyle, wfs::PyramidWFS, pupil::PupilFunction, ast::Asterism)
     count = length(ast.sources)
     stack = grouped_stack_view(ensure_pyramid_asterism_stack!(wfs, count), count)
-    return accumulate_grouped_sources!(style, wfs, wfs.front_end.propagation.intensity, stack, ast.sources, pyramid_intensity!, wfs, tel)
+    return accumulate_grouped_sources!(style, wfs, wfs.front_end.propagation.intensity, stack, ast.sources, pyramid_intensity!, wfs, pupil)
 end
 
 @inline pyramid_spectral_component_qe(::Nothing, sample,
@@ -536,7 +544,7 @@ end
     T(qe_at(model, sample.wavelength))
 
 function accumulate_pyramid_spectral_intensity!(style::ExecutionStyle,
-    wfs::PyramidWFS, tel::Telescope, src::SpectralSource,
+    wfs::PyramidWFS, pupil::PupilFunction, src::SpectralSource,
     qe_model::Union{Nothing,AbstractQuantumEfficiencyModel},
     modulation=pyramid_operating_modulation(wfs))
     count = length(src.bundle.samples)
@@ -547,34 +555,34 @@ function accumulate_pyramid_spectral_intensity!(style::ExecutionStyle,
         channel_qe = pyramid_spectral_component_qe(qe_model, sample, T)
         variant = source_with_wavelength_and_radiometric_value(src, sample.wavelength,
             T(total_irradiance * sample.weight * channel_qe))
-        pyramid_intensity_core!(@view(stack[:, :, sample_idx]), wfs, tel,
+        pyramid_intensity_core!(@view(stack[:, :, sample_idx]), wfs, pupil,
             variant, modulation)
     end
     return reduce_grouped_stack!(style, wfs.front_end.propagation.intensity, stack, count)
 end
 
 accumulate_pyramid_spectral_intensity!(style::ExecutionStyle,
-    wfs::PyramidWFS, tel::Telescope, src::SpectralSource) =
-    accumulate_pyramid_spectral_intensity!(style, wfs, tel, src, nothing)
+    wfs::PyramidWFS, pupil::PupilFunction, src::SpectralSource) =
+    accumulate_pyramid_spectral_intensity!(style, wfs, pupil, src, nothing)
 
 @inline function pyramid_support_selection_intensity!(out::AbstractMatrix,
-    wfs::PyramidWFS, tel::Telescope, src::AbstractSource, ::Nothing)
-    return pyramid_intensity_core!(out, wfs, tel, src,
+    wfs::PyramidWFS, pupil::PupilFunction, src::AbstractSource, ::Nothing)
+    return pyramid_intensity_core!(out, wfs, pupil, src,
         pyramid_calibration_modulation(wfs))
 end
 
 @inline function pyramid_support_selection_intensity!(out::AbstractMatrix,
-    wfs::PyramidWFS, tel::Telescope, src::SpectralSource, ::Nothing)
-    accumulate_pyramid_spectral_intensity!(execution_style(out), wfs, tel,
+    wfs::PyramidWFS, pupil::PupilFunction, src::SpectralSource, ::Nothing)
+    accumulate_pyramid_spectral_intensity!(execution_style(out), wfs, pupil,
         src, nothing, pyramid_calibration_modulation(wfs))
     out === wfs.front_end.propagation.intensity || copyto!(out, wfs.front_end.propagation.intensity)
     return out
 end
 
 @inline function pyramid_support_selection_intensity!(out::AbstractMatrix,
-    wfs::PyramidWFS, tel::Telescope, src::SpectralSource,
+    wfs::PyramidWFS, pupil::PupilFunction, src::SpectralSource,
     qe_model::AbstractQuantumEfficiencyModel)
-    accumulate_pyramid_spectral_intensity!(execution_style(out), wfs, tel, src,
+    accumulate_pyramid_spectral_intensity!(execution_style(out), wfs, pupil, src,
         qe_model, pyramid_calibration_modulation(wfs))
     out === wfs.front_end.propagation.intensity || copyto!(out, wfs.front_end.propagation.intensity)
     return out
@@ -584,14 +592,14 @@ end
 # valid support. A zero-aberration reference must use the operating modulation
 # so that subtracting it removes the actual sensor's static response.
 @inline function pyramid_calibration_intensity!(out::AbstractMatrix,
-    wfs::PyramidWFS, tel::Telescope, src::AbstractSource, ::Nothing)
-    return pyramid_intensity_core!(out, wfs, tel, src,
+    wfs::PyramidWFS, pupil::PupilFunction, src::AbstractSource, ::Nothing)
+    return pyramid_intensity_core!(out, wfs, pupil, src,
         pyramid_operating_modulation(wfs))
 end
 
 @inline function pyramid_calibration_intensity!(out::AbstractMatrix,
-    wfs::PyramidWFS, tel::Telescope, src::SpectralSource, ::Nothing)
-    accumulate_pyramid_spectral_intensity!(execution_style(out), wfs, tel,
+    wfs::PyramidWFS, pupil::PupilFunction, src::SpectralSource, ::Nothing)
+    accumulate_pyramid_spectral_intensity!(execution_style(out), wfs, pupil,
         src, nothing, pyramid_operating_modulation(wfs))
     out === wfs.front_end.propagation.intensity ||
         copyto!(out, wfs.front_end.propagation.intensity)
@@ -599,9 +607,9 @@ end
 end
 
 @inline function pyramid_calibration_intensity!(out::AbstractMatrix,
-    wfs::PyramidWFS, tel::Telescope, src::SpectralSource,
+    wfs::PyramidWFS, pupil::PupilFunction, src::SpectralSource,
     qe_model::AbstractQuantumEfficiencyModel)
-    accumulate_pyramid_spectral_intensity!(execution_style(out), wfs, tel,
+    accumulate_pyramid_spectral_intensity!(execution_style(out), wfs, pupil,
         src, qe_model, pyramid_operating_modulation(wfs))
     out === wfs.front_end.propagation.intensity ||
         copyto!(out, wfs.front_end.propagation.intensity)
@@ -609,46 +617,46 @@ end
 end
 
 function accumulate_pyramid_extended_intensity!(::ScalarCPUStyle, out::AbstractMatrix, wfs::PyramidWFS,
-    tel::Telescope, src::ExtendedSource)
+    pupil::PupilFunction, src::ExtendedSource)
     ast = extended_source_asterism(src)
     if length(ast.sources) == 1
-        return pyramid_intensity!(out, wfs, tel, ast.sources[1])
+        return pyramid_intensity!(out, wfs, pupil, ast.sources[1])
     end
     count = length(ast.sources)
     stack = grouped_stack_view(ensure_pyramid_asterism_stack!(wfs, count), count)
-    return accumulate_grouped_sources!(ScalarCPUStyle(), wfs, out, stack, ast.sources, pyramid_intensity!, wfs, tel)
+    return accumulate_grouped_sources!(ScalarCPUStyle(), wfs, out, stack, ast.sources, pyramid_intensity!, wfs, pupil)
 end
 
 function accumulate_pyramid_extended_intensity!(style::AcceleratorStyle, out::AbstractMatrix, wfs::PyramidWFS,
-    tel::Telescope, src::ExtendedSource)
+    pupil::PupilFunction, src::ExtendedSource)
     ast = extended_source_asterism(src)
     if length(ast.sources) == 1
-        return pyramid_intensity!(out, wfs, tel, ast.sources[1])
+        return pyramid_intensity!(out, wfs, pupil, ast.sources[1])
     end
     count = length(ast.sources)
     stack = grouped_stack_view(ensure_pyramid_asterism_stack!(wfs, count), count)
-    return accumulate_grouped_sources!(style, wfs, out, stack, ast.sources, pyramid_intensity!, wfs, tel)
+    return accumulate_grouped_sources!(style, wfs, out, stack, ast.sources, pyramid_intensity!, wfs, pupil)
 end
 
-function prepare_pyramid_sampling!(wfs::PyramidWFS, tel::Telescope)
+function prepare_pyramid_sampling!(wfs::PyramidWFS, pupil::PupilFunction)
     n_sub = wfs.estimator.params.pupil_samples
-    pad = tel.params.resolution * wfs.front_end.phase_mask.diffraction_padding
+    pad = _pupil_resolution(pupil) * wfs.front_end.phase_mask.diffraction_padding
     if wfs.front_end.phase_mask.n_pix_separation !== nothing
-        pixels_per_pupil_sample = div(tel.params.resolution, n_sub)
+        pixels_per_pupil_sample = div(_pupil_resolution(pupil), n_sub)
         pad = pyramid_native_frame_size(n_sub,
             wfs.front_end.phase_mask.n_pix_separation, wfs.front_end.phase_mask.n_pix_edge) *
               pixels_per_pupil_sample
     end
-    if pad < tel.params.resolution
+    if pad < _pupil_resolution(pupil)
         throw(InvalidConfiguration("pyramid padding must be >= telescope resolution"))
     end
     if pad % wfs.acquisition.binning != 0
         throw(InvalidConfiguration("pyramid binning must evenly divide padded resolution"))
     end
-    if tel.params.resolution % wfs.acquisition.binning != 0
+    if _pupil_resolution(pupil) % wfs.acquisition.binning != 0
         throw(InvalidConfiguration("pyramid binning must evenly divide telescope resolution"))
     end
-    ensure_pyramid_buffers!(wfs, pad, tel)
+    ensure_pyramid_buffers!(wfs, pad, pupil)
     return wfs
 end
 
@@ -880,12 +888,12 @@ function select_pyramid_valid_i4q_from_frame!(::AcceleratorStyle,
     return wfs
 end
 
-function select_pyramid_valid_i4q!(wfs::PyramidWFS, tel::Telescope,
+function select_pyramid_valid_i4q!(wfs::PyramidWFS, pupil::PupilFunction,
     src::AbstractSource,
     qe_model::Union{Nothing,AbstractQuantumEfficiencyModel}, det::Detector)
     pyramid_support_selection_intensity!(wfs.front_end.propagation.temp,
-        wfs, tel, src, qe_model)
-    sampled = sample_pyramid_intensity!(wfs, tel, wfs.front_end.propagation.temp)
+        wfs, pupil, src, qe_model)
+    sampled = sample_pyramid_intensity!(wfs, pupil, wfs.front_end.propagation.temp)
     frame = detector_calibration_frame!(det, sampled,
         pyramid_detector_calibration_qe(src, det, eltype(det.state.frame)))
     resize_pyramid_signal_buffers!(wfs, size(frame, 1))
@@ -893,25 +901,25 @@ function select_pyramid_valid_i4q!(wfs::PyramidWFS, tel::Telescope,
         frame)
 end
 
-function select_pyramid_valid_i4q!(wfs::PyramidWFS, tel::Telescope,
+function select_pyramid_valid_i4q!(wfs::PyramidWFS, pupil::PupilFunction,
     src::AbstractSource)
-    return select_pyramid_valid_i4q!(wfs, tel, src, nothing)
+    return select_pyramid_valid_i4q!(wfs, pupil, src, nothing)
 end
 
-function select_pyramid_valid_i4q!(wfs::PyramidWFS, tel::Telescope,
+function select_pyramid_valid_i4q!(wfs::PyramidWFS, pupil::PupilFunction,
     src::AbstractSource,
     qe_model::Union{Nothing,AbstractQuantumEfficiencyModel})
     return select_pyramid_valid_i4q!(execution_style(wfs.estimator.state.valid_i4q),
-        wfs, tel, src, qe_model)
+        wfs, pupil, src, qe_model)
 end
 
 function select_pyramid_valid_i4q!(style::ScalarCPUStyle,
-    wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
-    return select_pyramid_valid_i4q!(style, wfs, tel, src, nothing)
+    wfs::PyramidWFS, pupil::PupilFunction, src::AbstractSource)
+    return select_pyramid_valid_i4q!(style, wfs, pupil, src, nothing)
 end
 
 function select_pyramid_valid_i4q!(::ScalarCPUStyle, wfs::PyramidWFS,
-    tel::Telescope, src::AbstractSource,
+    pupil::PupilFunction, src::AbstractSource,
     qe_model::Union{Nothing,AbstractQuantumEfficiencyModel})
     n_pixels = div(wfs.estimator.params.pupil_samples, wfs.acquisition.binning)
     if size(wfs.estimator.state.valid_i4q) != (n_pixels, n_pixels)
@@ -926,8 +934,8 @@ function select_pyramid_valid_i4q!(::ScalarCPUStyle, wfs::PyramidWFS,
     end
 
     pyramid_support_selection_intensity!(wfs.front_end.propagation.temp,
-        wfs, tel, src, qe_model)
-    frame = sample_pyramid_intensity!(wfs, tel, wfs.front_end.propagation.temp)
+        wfs, pupil, src, qe_model)
+    frame = sample_pyramid_intensity!(wfs, pupil, wfs.front_end.propagation.temp)
 
     center, n_extra = require_pyramid_frame_geometry(wfs, frame)
     max_i4q = zero(eltype(frame))
@@ -956,12 +964,12 @@ function select_pyramid_valid_i4q!(::ScalarCPUStyle, wfs::PyramidWFS,
 end
 
 function select_pyramid_valid_i4q!(style::AcceleratorStyle,
-    wfs::PyramidWFS, tel::Telescope, src::AbstractSource)
-    return select_pyramid_valid_i4q!(style, wfs, tel, src, nothing)
+    wfs::PyramidWFS, pupil::PupilFunction, src::AbstractSource)
+    return select_pyramid_valid_i4q!(style, wfs, pupil, src, nothing)
 end
 
 function select_pyramid_valid_i4q!(::AcceleratorStyle,
-    wfs::PyramidWFS, tel::Telescope, src::AbstractSource,
+    wfs::PyramidWFS, pupil::PupilFunction, src::AbstractSource,
     qe_model::Union{Nothing,AbstractQuantumEfficiencyModel})
     n_pixels = div(wfs.estimator.params.pupil_samples, wfs.acquisition.binning)
     if size(wfs.estimator.state.valid_i4q) != (n_pixels, n_pixels)
@@ -976,8 +984,8 @@ function select_pyramid_valid_i4q!(::AcceleratorStyle,
     end
 
     pyramid_support_selection_intensity!(wfs.front_end.propagation.temp,
-        wfs, tel, src, qe_model)
-    frame = sample_pyramid_intensity!(wfs, tel, wfs.front_end.propagation.temp)
+        wfs, pupil, src, qe_model)
+    frame = sample_pyramid_intensity!(wfs, pupil, wfs.front_end.propagation.temp)
 
     center, n_extra = require_pyramid_frame_geometry(wfs, frame)
     rows_lo = center - n_extra - n_pixels + 1:center - n_extra
@@ -998,9 +1006,9 @@ function select_pyramid_valid_i4q!(::AcceleratorStyle,
     return wfs
 end
 
-function sample_pyramid_intensity!(wfs::PyramidWFS, tel::Telescope, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
+function sample_pyramid_intensity!(wfs::PyramidWFS, pupil::PupilFunction, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
     binning = wfs.acquisition.binning
-    sub = div(tel.params.resolution, wfs.estimator.params.pupil_samples)
+    sub = div(_pupil_resolution(pupil), wfs.estimator.params.pupil_samples)
     if size(intensity, 1) % sub != 0
         throw(InvalidConfiguration("pyramid intensity size must be divisible by telescope pixels per subaperture"))
     end

@@ -7,12 +7,16 @@ has_gate0_reference_bundle(root::AbstractString=default_gate0_reference_root()) 
 load_gate0_reference_bundle(root::AbstractString=default_gate0_reference_root()) =
     load_reference_bundle(root)
 
-function gate0_telescope(case::ReferenceCase)
-    tel = build_reference_telescope(case.config["telescope"])
+gate0_telescope(case::ReferenceCase) =
+    build_reference_telescope(case.config["telescope"])
+
+function gate0_pupil(case::ReferenceCase, tel::Telescope=gate0_telescope(case);
+    T::Type{<:AbstractFloat}=Float64)
+    pupil = PupilFunction(tel; T)
     if haskey(case.config, "opd")
-        apply_reference_opd!(tel, case.config["opd"])
+        apply_reference_opd!(pupil, case.config["opd"])
     end
-    return tel
+    return pupil
 end
 
 # Frozen Gate 0 optical references predate rate-based optical products. Keep
@@ -30,10 +34,11 @@ end
 
 function gate0_telescope_planes(case::ReferenceCase)
     tel = gate0_telescope(case)
+    pupil = gate0_pupil(case, tel)
     return cat(
         Float64.(pupil_mask(tel)),
         Array(pupil_reflectivity(tel)),
-        Array(tel.state.opd);
+        Array(pupil.opd);
         dims=3,
     )
 end
@@ -42,11 +47,10 @@ function gate0_electric_field(case::ReferenceCase)
     tel = gate0_telescope(case)
     src = build_reference_source(case.config["source"])
     zero_padding = Int(get(case.config["compute"], "zero_padding", 1))
-    wavefront = PupilFunction(tel; T=Float64)
-    apply_opd!(wavefront, opd_map(tel))
+    wavefront = gate0_pupil(case, tel; T=Float64)
     field = ElectricField(wavefront, src; zero_padding=zero_padding,
         T=Float64)
-    plan = prepare_pupil_field(tel, wavefront, src, field)
+    plan = prepare_pupil_field(wavefront, src, field)
     fill_electric_field!(field, wavefront, plan)
     duration = gate0_legacy_optical_duration(case)
     amplitude_duration_scale = sqrt(duration)
@@ -65,14 +69,13 @@ function gate0_spatial_filter(case::ReferenceCase)
         zero_padding=Int(get(cfg, "zero_padding", 2)),
         T=Float64,
     )
-    wavefront = PupilFunction(tel; T=Float64)
-    apply_opd!(wavefront, opd_map(tel))
+    wavefront = gate0_pupil(case, tel; T=Float64)
     field = ElectricField(wavefront, src;
         zero_padding=sf.params.zero_padding, T=Float64,
         normalization=DimensionlessNormalization(),
         spatial_measure=PointSampledMeasure(),
         coherence=CoherentFieldCombination())
-    formation = prepare_pupil_field(tel, wavefront, src, field;
+    formation = prepare_pupil_field(wavefront, src, field;
         center_even_grid=false, amplitude_scale=1)
     fill_electric_field!(field, wavefront, formation)
     output = PupilFunction(tel; T=Float64)
@@ -85,6 +88,7 @@ end
 
 function gate0_optic_surface(case::ReferenceCase)
     tel = gate0_telescope(case)
+    pupil = gate0_pupil(case, tel)
     cfg = case.config["controllable_optic"]
     optic = build_reference_controllable_optic(cfg, tel)
     command = Float64.(cfg["command"])
@@ -97,8 +101,9 @@ function gate0_optic_surface(case::ReferenceCase)
     else
         throw(InvalidConfiguration("unknown Gate 0 optic application '$application'"))
     end
-    apply!(optic, tel, mode)
-    return Array(tel.state.opd)
+    update_surface!(optic)
+    apply_surface!(pupil, optic, mode)
+    return Array(pupil.opd)
 end
 
 function gate0_radiometric_chain(case::ReferenceCase)
@@ -107,18 +112,17 @@ function gate0_radiometric_chain(case::ReferenceCase)
     detectors = [build_reference_detector(cfg) for cfg in
         case.config["detectors"]]
     zero_padding = Int(get(case.config["compute"], "zero_padding", 1))
-    wavefront = PupilFunction(tel; T=Float64)
-    apply_opd!(wavefront, opd_map(tel))
+    wavefront = gate0_pupil(case, tel; T=Float64)
     field = ElectricField(wavefront, src; zero_padding=zero_padding,
         T=Float64)
-    formation = prepare_pupil_field(tel, wavefront, src, field)
+    formation = prepare_pupil_field(wavefront, src, field)
     fill_electric_field!(field, wavefront, formation)
     photon_rate = pupil_photon_rate_map(tel, src)
     size(photon_rate) == size(field.values) || throw(DimensionMismatchError(
         "Gate 0 radiometric fixture requires zero_padding=1"))
-    prepared = prepare_reference_direct_imaging(tel, src;
+    prepared = prepare_reference_direct_imaging(wavefront, src;
         zero_padding=zero_padding)
-    rate_map = execute_reference_direct_imaging!(prepared, tel)
+    rate_map = execute_reference_direct_imaging!(prepared, wavefront)
     image_rate = copy(intensity_values(rate_map))
     seed = Int(get(case.config["compute"], "seed", 1))
     acquisitions = [prepare_detector_acquisition(detector, rate_map)
@@ -134,15 +138,16 @@ end
 
 function gate0_spectral_psf(case::ReferenceCase)
     tel = gate0_telescope(case)
+    pupil = gate0_pupil(case, tel)
     src = build_reference_source(case.config["source"])
     cfg = case.config["spectrum"]
     bundle = SpectralBundle(Float64.(cfg["wavelengths"]),
         Float64.(cfg["weights"]); T=Float64)
     zero_padding = Int(get(case.config["compute"], "zero_padding", 1))
     spectral = with_spectrum(src, bundle)
-    prepared = prepare_reference_direct_imaging(tel, spectral;
+    prepared = prepare_reference_direct_imaging(pupil, spectral;
         zero_padding=zero_padding)
-    products = execute_reference_direct_imaging!(prepared, tel)
+    products = execute_reference_direct_imaging!(prepared, pupil)
     n = tel.params.resolution * zero_padding
     stack = Array{Float64}(undef, n, n, length(products) + 1)
     combined = zeros(Float64, n, n)
@@ -159,6 +164,7 @@ function gate0_spectral_psf(case::ReferenceCase)
 end
 function gate0_direct_science(case::ReferenceCase)
     tel = gate0_telescope(case)
+    pupil = gate0_pupil(case, tel)
     source_cfgs = case.config["sources"]
     sources = [build_reference_source(cfg) for cfg in source_cfgs]
     length(sources) == 2 || throw(InvalidConfiguration(
@@ -166,18 +172,18 @@ function gate0_direct_science(case::ReferenceCase)
     zero_padding = Int(get(case.config["compute"], "zero_padding", 1))
     n = tel.params.resolution * zero_padding
     stack = Array{Float64}(undef, n, n, 5)
-    first_prepared = prepare_reference_direct_imaging(tel, sources[1];
+    first_prepared = prepare_reference_direct_imaging(pupil, sources[1];
         zero_padding=zero_padding)
-    second_prepared = prepare_reference_direct_imaging(tel, sources[2];
+    second_prepared = prepare_reference_direct_imaging(pupil, sources[2];
         zero_padding=zero_padding)
     @views stack[:, :, 1] .= intensity_values(
-        execute_reference_direct_imaging!(first_prepared, tel))
+        execute_reference_direct_imaging!(first_prepared, pupil))
     @views stack[:, :, 2] .= intensity_values(
-        execute_reference_direct_imaging!(second_prepared, tel))
-    combined_prepared = prepare_reference_direct_imaging(tel,
+        execute_reference_direct_imaging!(second_prepared, pupil))
+    combined_prepared = prepare_reference_direct_imaging(pupil,
         Asterism(sources); zero_padding=zero_padding)
     combined = intensity_values(execute_reference_direct_imaging!(
-        combined_prepared, tel))
+        combined_prepared, pupil))
     component_products = map(direct_imaging_output,
         direct_imaging_components(combined_prepared))
     @views begin
@@ -200,22 +206,30 @@ function gate0_atmosphere_directions(case::ReferenceCase)
     for _ in 1:steps
         advance_by!(atmosphere, step_duration; rng=rng)
     end
-    T = eltype(tel.state.opd)
+    pupil = gate0_pupil(case, tel)
+    T = eltype(pupil.opd)
     shifts = zeros(T, length(atmosphere.layers))
     scales = ones(T, length(atmosphere.layers))
-    epoch_device = similar(tel.state.opd)
+    epoch_device = similar(pupil.opd)
     AdaptiveOpticsSim.accumulate_rendered_layers!(epoch_device,
         atmosphere.layers, shifts, shifts, scales)
     epoch = copy(Array(epoch_device))
     onaxis = build_reference_source(case.config["onaxis_source"])
     offaxis = build_reference_source(case.config["offaxis_source"])
     lgs = build_reference_source(case.config["lgs_source"])
-    propagate!(atmosphere, tel, onaxis)
-    onaxis_opd = copy(Array(tel.state.opd))
-    propagate!(atmosphere, tel, offaxis)
-    offaxis_opd = copy(Array(tel.state.opd))
-    propagate!(atmosphere, tel, lgs)
-    lgs_opd = copy(Array(tel.state.opd))
+    atmosphere_epoch = current_epoch(atmosphere)
+    render_atmosphere!(pupil,
+        prepare_atmosphere_renderer(atmosphere, tel, onaxis), atmosphere,
+        atmosphere_epoch)
+    onaxis_opd = copy(Array(pupil.opd))
+    render_atmosphere!(pupil,
+        prepare_atmosphere_renderer(atmosphere, tel, offaxis), atmosphere,
+        atmosphere_epoch)
+    offaxis_opd = copy(Array(pupil.opd))
+    render_atmosphere!(pupil,
+        prepare_atmosphere_renderer(atmosphere, tel, lgs), atmosphere,
+        atmosphere_epoch)
+    lgs_opd = copy(Array(pupil.opd))
     return cat(epoch, onaxis_opd, offaxis_opd, lgs_opd; dims=3)
 end
 

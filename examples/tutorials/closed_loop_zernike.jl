@@ -10,7 +10,8 @@ function main(; n_iter::Int=4)
     wfs = ZernikeWFS(tel; pupil_samples=4, diffraction_padding=2)
     det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
     sim = AOSimulation(tel, src, atm, dm, wfs)
-    imat = interaction_matrix(dm, wfs, tel, src; amplitude=1e-8)
+    imat = interaction_matrix(dm, wfs, PupilFunction(tel), src;
+        amplitude=1e-8)
     recon = ModalReconstructor(imat; gain=0.4)
     branch = ControlLoopBranch(:main, sim, recon; rng=rng, wfs_detector=det)
     cfg = SingleControlLoopConfig(atmosphere_step=1e-3,
@@ -21,13 +22,16 @@ function main(; n_iter::Int=4)
     scenario = build_control_loop_scenario(cfg, branch)
 
     prepare!(scenario)
+    runtime_pupil = scenario.boundary.runtime.wfs_pupil
     residual_before = zeros(Float64, n_iter)
     residual_after = similar(residual_before)
 
     for k in 1:n_iter
-        residual_before[k] = pupil_rms(tel.state.opd, pupil_mask(tel))
+        residual_before[k] = pupil_rms(runtime_pupil.opd,
+            pupil_support(runtime_pupil))
         step!(scenario)
-        residual_after[k] = pupil_rms(tel.state.opd, pupil_mask(tel))
+        residual_after[k] = pupil_rms(runtime_pupil.opd,
+            pupil_support(runtime_pupil))
     end
 
     rt = readout(scenario)

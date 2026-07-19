@@ -7,14 +7,12 @@ function main(; resolution::Int=24, zero_padding::Int=2)
     compute_zernike!(zb, tel)
     basis = zb.modes[:, :, 1:4]
     coeffs_true = [25e-9, -10e-9, 5e-9, 0.0]
-    apply_opd!(tel, combine_modes(basis, coeffs_true))
-
     pupil = PupilFunction(tel)
-    apply_opd!(pupil, opd_map(tel))
-    imaging = prepare_direct_imaging(tel, pupil, src;
-        zero_padding=zero_padding)
+    apply_opd!(pupil, combine_modes(basis, coeffs_true))
+    imaging = prepare_direct_imaging(pupil, src; zero_padding=zero_padding)
     image = copy(intensity_values(form_direct_image!(imaging)))
-    diversity = zeros(eltype(tel.state.opd), size(tel.state.opd))
+    diversity = similar(pupil.opd)
+    fill!(diversity, zero(eltype(diversity)))
     forward = prepare_lift_forward_model(tel, src, basis;
         diversity_opd=diversity, zero_padding=zero_padding)
     lift = LiFT(forward; iterations=3, numerical=false)

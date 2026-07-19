@@ -166,11 +166,11 @@ end
 end
 
 """
-    lgs_kernel_signature(telescope, source, pad, n_subapertures,
+    lgs_kernel_signature(pupil, source, pad, n_subapertures,
         pixel_scale, kernel_eltype; model, threshold=nothing)
 
 Return the content-based identity of an LGS sodium-profile convolution kernel.
-The signature includes every source, telescope, sampling-grid, and numerical
+The signature includes every source, pupil-grid, and numerical
 parameter used to build the cached kernel. In particular, profile values are
 hashed rather than identified by their array object so an in-place profile
 update invalidates the cache.
@@ -209,13 +209,12 @@ function lgs_kernel_signature(src::LGSSource, pad::Int,
     return sig
 end
 
-function lgs_kernel_signature(tel::Telescope, src::LGSSource, pad::Int,
+function lgs_kernel_signature(pupil::PupilFunction, src::LGSSource, pad::Int,
     n_subapertures::Int, pixel_scale::Real, kernel_eltype::Type;
     model::Symbol, threshold::Union{Nothing,Real}=nothing)
-    dimensions = (tel.params.resolution, tel.params.resolution)
     return lgs_kernel_signature(src, pad, n_subapertures, pixel_scale,
-        kernel_eltype, dimensions, tel.params.diameter,
-        tel.aperture.sampling_m, tel.aperture.origin_m;
+        kernel_eltype, pupil.metadata.dimensions, _pupil_diameter_m(pupil),
+        pupil.metadata.sampling, pupil.metadata.origin;
         wavelength_m=wavelength(src), model, threshold)
 end
 
@@ -233,10 +232,6 @@ function lgs_reference_vector(pupil_diameter::Real, x0::Real, y0::Real,
     return (x, y, z)
 end
 
-@inline lgs_reference_vector(tel::Telescope, x0::Real, y0::Real,
-    altitude::Real) = lgs_reference_vector(tel.params.diameter, x0, y0,
-    altitude)
-
 function lgs_spot_shift(vec::Tuple{T,T,T}, pupil_diameter::Real,
     x_subap::Real, y_subap::Real,
     pixel_scale::Real) where {T<:Real}
@@ -248,10 +243,6 @@ function lgs_spot_shift(vec::Tuple{T,T,T}, pupil_diameter::Real,
     shift_y = ARCSEC_PER_RAD * (dy0 + dy1) / pixel_scale
     return shift_x, shift_y
 end
-
-@inline lgs_spot_shift(vec::Tuple{T,T,T}, tel::Telescope,
-    x_subap::Real, y_subap::Real, pixel_scale::Real) where {T<:Real} =
-    lgs_spot_shift(vec, tel.params.diameter, x_subap, y_subap, pixel_scale)
 
 function gaussian_shift!(kernel::AbstractMatrix{T}, sigma::Real, cx::Real, cy::Real,
     weight::Real) where {T<:AbstractFloat}
@@ -294,15 +285,6 @@ function lgs_spot_kernel!(kernel::AbstractMatrix{T}, pupil_diameter::Real,
         kernel ./= total
     end
     return kernel
-end
-
-
-@inline function lgs_spot_kernel!(kernel::AbstractMatrix{T}, tel::Telescope,
-    src::LGSSource, altitudes::AbstractVector, weights::AbstractVector,
-    pixel_scale::Real, sigma_px::Real, center::Real, x_subap::Real,
-    y_subap::Real, ref_vec::Tuple{<:Real,<:Real,<:Real}) where {T<:AbstractFloat}
-    return lgs_spot_kernel!(kernel, tel.params.diameter, src, altitudes,
-        weights, pixel_scale, sigma_px, center, x_subap, y_subap, ref_vec)
 end
 
 # `plan_ifft_backend!` follows the normalized AbstractFFTs inverse contract, so
@@ -438,9 +420,9 @@ function lgs_average_kernel_fft(pupil_diameter::Real, src::LGSSource,
     return kernel_fft
 end
 
-@inline function lgs_average_kernel_fft(tel::Telescope, src::LGSSource,
+@inline function lgs_average_kernel_fft(pupil::PupilFunction, src::LGSSource,
     pad::Int, n_subap::Int, pixel_scale::Real,
     fft_buffer::AbstractMatrix{Complex{T}}, fft_plan) where {T<:AbstractFloat}
-    return lgs_average_kernel_fft(tel.params.diameter, src, pad, n_subap,
-        pixel_scale, fft_buffer, fft_plan)
+    return lgs_average_kernel_fft(_pupil_diameter_m(pupil), src, pad,
+        n_subap, pixel_scale, fft_buffer, fft_plan)
 end

@@ -70,9 +70,9 @@ CPU grid-backed Gaussian DM misregistration uses ForwardDiff by default. Use
 WFS misregistration.
 """
 function compute_meta_sensitivity_matrix(tel::Telescope, dm::DeformableMirror, wfs::AbstractWFS,
-    basis::AbstractMatrix; misregistration_zero::Misregistration=Misregistration(T=eltype(tel.state.opd)),
+    basis::AbstractMatrix; misregistration_zero::Misregistration=Misregistration(T=eltype(pupil_reflectivity(tel))),
     epsilon::Misregistration=Misregistration(shift_x=1e-3, shift_y=1e-3, rotation_deg=1e-3, radial_scaling=1e-3,
-        tangential_scaling=1e-3, T=eltype(tel.state.opd)),
+        tangential_scaling=1e-3, T=eltype(pupil_reflectivity(tel))),
     n_mis_reg::Int=3, field_order=collect(MISREG_FIELDS),
     cache_path::Union{Nothing,String}=nothing, save_sensitivity::Bool=true, recompute_sensitivity::Bool=false,
     wfs_mis_registered::Bool=false, sensitivity::Symbol=:ad, source=nothing)
@@ -105,9 +105,9 @@ end
 
 function _compute_meta_sensitivity_matrix_fd(tel::Telescope, dm::DeformableMirror, wfs::AbstractWFS,
     basis::AbstractMatrix; source=nothing,
-    misregistration_zero::Misregistration=Misregistration(T=eltype(tel.state.opd)),
+    misregistration_zero::Misregistration=Misregistration(T=eltype(pupil_reflectivity(tel))),
     epsilon::Misregistration=Misregistration(shift_x=1e-3, shift_y=1e-3, rotation_deg=1e-3, radial_scaling=1e-3,
-        tangential_scaling=1e-3, T=eltype(tel.state.opd)),
+        tangential_scaling=1e-3, T=eltype(pupil_reflectivity(tel))),
     n_mis_reg::Int=3, field_order=collect(MISREG_FIELDS),
     cache_path::Union{Nothing,String}=nothing, save_sensitivity::Bool=true, recompute_sensitivity::Bool=false,
     wfs_mis_registered::Bool=false, amplitude::Real=1e-9)
@@ -116,7 +116,8 @@ function _compute_meta_sensitivity_matrix_fd(tel::Telescope, dm::DeformableMirro
         return deserialize(cache_path)
     end
 
-    T = eltype(tel.state.opd)
+    T = eltype(pupil_reflectivity(tel))
+    pupil = PupilFunction(tel; T=T)
     fields = collect(field_order)[1:min(n_mis_reg, length(field_order))]
     dm_model = influence_model(dm)
 
@@ -125,7 +126,8 @@ function _compute_meta_sensitivity_matrix_fd(tel::Telescope, dm::DeformableMirro
 
     dm0 = DeformableMirror(tel; topology=topology(dm), influence_model=dm_model,
         misregistration=misregistration_zero, T=T)
-    calib0 = _interaction_matrix_for_sensitivity(dm0, wfs, tel, basis, source, amplitude)
+    calib0 = _interaction_matrix_for_sensitivity(dm0, wfs, pupil, basis,
+        source, amplitude)
     calib0_control_matrix = ControlMatrix(calib0.matrix)
 
     n_elements = length(calib0.matrix)
@@ -142,11 +144,13 @@ function _compute_meta_sensitivity_matrix_fd(tel::Telescope, dm::DeformableMirro
             sx = field == :shift_x ? (misregistration_zero.shift_x + eps_val) : misregistration_zero.shift_x
             sy = field == :shift_y ? (misregistration_zero.shift_y + eps_val) : misregistration_zero.shift_y
             apply_shift_wfs!(wfs; sx=sx, sy=sy)
-            imat_p = _interaction_matrix_for_sensitivity(dm, wfs, tel, basis, source, amplitude)
+            imat_p = _interaction_matrix_for_sensitivity(dm, wfs, pupil,
+                basis, source, amplitude)
             sx = field == :shift_x ? (misregistration_zero.shift_x - eps_val) : misregistration_zero.shift_x
             sy = field == :shift_y ? (misregistration_zero.shift_y - eps_val) : misregistration_zero.shift_y
             apply_shift_wfs!(wfs; sx=sx, sy=sy)
-            imat_n = _interaction_matrix_for_sensitivity(dm, wfs, tel, basis, source, amplitude)
+            imat_n = _interaction_matrix_for_sensitivity(dm, wfs, pupil,
+                basis, source, amplitude)
             apply_shift_wfs!(wfs; sx=0, sy=0)
         else
             base_val = misregistration_component(misregistration_zero, field)
@@ -157,8 +161,10 @@ function _compute_meta_sensitivity_matrix_fd(tel::Telescope, dm::DeformableMirro
                 misregistration=mis_p, T=T)
             dm_n = DeformableMirror(tel; topology=topology(dm), influence_model=dm_model,
                 misregistration=mis_n, T=T)
-            imat_p = _interaction_matrix_for_sensitivity(dm_p, wfs, tel, basis, source, amplitude)
-            imat_n = _interaction_matrix_for_sensitivity(dm_n, wfs, tel, basis, source, amplitude)
+            imat_p = _interaction_matrix_for_sensitivity(dm_p, wfs, pupil,
+                basis, source, amplitude)
+            imat_n = _interaction_matrix_for_sensitivity(dm_n, wfs, pupil,
+                basis, source, amplitude)
         end
         meta[:, idx] .= vec((imat_p.matrix .- imat_n.matrix) ./ (2 * eps_val))
     end
@@ -208,9 +214,9 @@ This first computes the meta-sensitivity matrix and then packages it together
 with the zero-point and persistence options used by later `estimate!` calls.
 """
 function SPRINT(tel::Telescope, dm::DeformableMirror, wfs::AbstractWFS, basis::AbstractMatrix;
-    misregistration_zero::Misregistration=Misregistration(T=eltype(tel.state.opd)),
+    misregistration_zero::Misregistration=Misregistration(T=eltype(pupil_reflectivity(tel))),
     epsilon::Misregistration=Misregistration(shift_x=1e-3, shift_y=1e-3, rotation_deg=1e-3, radial_scaling=1e-3,
-        tangential_scaling=1e-3, T=eltype(tel.state.opd)),
+        tangential_scaling=1e-3, T=eltype(pupil_reflectivity(tel))),
     n_mis_reg::Int=3, field_order=collect(MISREG_FIELDS),
     cache_path::Union{Nothing,String}=nothing, save_sensitivity::Bool=true, recompute_sensitivity::Bool=false,
     wfs_mis_registered::Bool=false, sensitivity::Symbol=:ad)

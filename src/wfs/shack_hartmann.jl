@@ -177,35 +177,35 @@ end
     src::SpectralSource) = sh_has_common_spectral_grid(wfs, src)
 @inline supports_grouped_execution(::ShackHartmannWFS{<:Diffractive}, ::ExtendedSource) = true
 
-@inline function prepare_runtime_wfs!(wfs::ShackHartmannWFS{<:Diffractive}, tel::Telescope, src::AbstractSource)
-    prepare_sampling!(wfs, tel, src)
-    ensure_sh_calibration!(wfs, tel, src)
+@inline function prepare_runtime_wfs!(wfs::ShackHartmannWFS{<:Diffractive}, pupil::PupilFunction, src::AbstractSource)
+    prepare_sampling!(wfs, pupil, src)
+    ensure_sh_calibration!(wfs, pupil, src)
     return wfs
 end
 
-@inline function prepare_runtime_wfs!(wfs::ShackHartmannWFS{<:Diffractive}, tel::Telescope, src::SpectralSource)
-    prepare_sampling!(wfs, tel, src)
-    ensure_sh_calibration!(wfs, tel, src)
+@inline function prepare_runtime_wfs!(wfs::ShackHartmannWFS{<:Diffractive}, pupil::PupilFunction, src::SpectralSource)
+    prepare_sampling!(wfs, pupil, src)
+    ensure_sh_calibration!(wfs, pupil, src)
     return wfs
 end
 
-@inline function prepare_runtime_wfs!(wfs::ShackHartmannWFS{<:Diffractive}, tel::Telescope, ast::Asterism)
+@inline function prepare_runtime_wfs!(wfs::ShackHartmannWFS{<:Diffractive}, pupil::PupilFunction, ast::Asterism)
     common_source = common_wfs_calibration_source(ast, "ShackHartmannWFS")
-    prepare_sampling!(wfs, tel, common_source)
-    ensure_sh_calibration!(wfs, tel, common_source)
+    prepare_sampling!(wfs, pupil, common_source)
+    ensure_sh_calibration!(wfs, pupil, common_source)
     return wfs
 end
 
-@inline function _measure_for_calibration!(wfs::ShackHartmannWFS{<:Diffractive}, tel::Telescope, src::AbstractSource)
-    prepare_sampling!(wfs, tel, src)
-    ensure_sh_calibration!(wfs, tel, src)
-    return measure!(wfs, tel, src)
+@inline function _measure_for_calibration!(wfs::ShackHartmannWFS{<:Diffractive}, pupil::PupilFunction, src::AbstractSource)
+    prepare_sampling!(wfs, pupil, src)
+    ensure_sh_calibration!(wfs, pupil, src)
+    return measure!(wfs, pupil, src)
 end
 
-@inline function _measure_for_calibration!(wfs::ShackHartmannWFS{<:Diffractive}, tel::Telescope, src::SpectralSource)
-    prepare_sampling!(wfs, tel, src)
-    ensure_sh_calibration!(wfs, tel, src)
-    return measure!(wfs, tel, src)
+@inline function _measure_for_calibration!(wfs::ShackHartmannWFS{<:Diffractive}, pupil::PupilFunction, src::SpectralSource)
+    prepare_sampling!(wfs, pupil, src)
+    ensure_sh_calibration!(wfs, pupil, src)
+    return measure!(wfs, pupil, src)
 end
 
 @inline function set_runtime_wfs_output_policy!(wfs::ShackHartmannWFS{<:Diffractive}, outputs)

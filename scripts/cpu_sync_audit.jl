@@ -28,7 +28,9 @@ function run_cpu_sync_audit()
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3, T=T, backend=CPUBackend())
     wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=CPUBackend())
     sim = AOSimulation(tel, src, atm, dm, wfs)
-    imat = interaction_matrix(dm, wfs, tel, src; amplitude=T(0.05))
+    imat = interaction_matrix(dm, wfs,
+        PupilFunction(tel; T=T, backend=CPUBackend()), src;
+        amplitude=T(0.05))
     recon = ModalReconstructor(imat; gain=T(0.5))
     runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=rng)
     step!(runtime)

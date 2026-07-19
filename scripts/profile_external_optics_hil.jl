@@ -159,7 +159,7 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=6, warmu
 
     function _step!()
         _scatter_active_command!(dm.state.coefs, active_command, active_indices_backend)
-        apply_opd!(dm, tel)
+        update_surface!(dm)
         _export_phase_crop!(export_phase, dm.state.opd)
         _sync_backend!(backend_tag, dm.state.opd)
         _sync_backend!(backend_tag, export_phase)
@@ -172,12 +172,12 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=6, warmu
     end; warmup=warmup, samples=samples)
     dm_phase_mean_ns, dm_phase_p95_ns = _timed_stats!(() -> begin
         _scatter_active_command!(dm.state.coefs, active_command, active_indices_backend)
-        apply_opd!(dm, tel)
+        update_surface!(dm)
         _sync_backend!(backend_tag, dm.state.opd)
     end; warmup=warmup, samples=samples)
     export_mean_ns, export_p95_ns = _timed_stats!(() -> begin
         _scatter_active_command!(dm.state.coefs, active_command, active_indices_backend)
-        apply_opd!(dm, tel)
+        update_surface!(dm)
         _export_phase_crop!(export_phase, dm.state.opd)
         _sync_backend!(backend_tag, export_phase)
     end; warmup=warmup, samples=samples)
@@ -188,12 +188,12 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=6, warmu
     end; warmup=warmup)
     dm_phase_alloc_bytes = _allocated_bytes(() -> begin
         _scatter_active_command!(dm.state.coefs, active_command, active_indices_backend)
-        apply_opd!(dm, tel)
+        update_surface!(dm)
         _sync_backend!(backend_tag, dm.state.opd)
     end; warmup=warmup)
     export_alloc_bytes = _allocated_bytes(() -> begin
         _scatter_active_command!(dm.state.coefs, active_command, active_indices_backend)
-        apply_opd!(dm, tel)
+        update_surface!(dm)
         _export_phase_crop!(export_phase, dm.state.opd)
         _sync_backend!(backend_tag, export_phase)
     end; warmup=warmup)

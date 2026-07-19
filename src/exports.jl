@@ -48,7 +48,7 @@ export AbstractCombinationPolicy, CoherentFieldCombination
 export IncoherentIntensityAddition, NonCombinableProduct
 export UnspecifiedNormalization, UnspecifiedSpatialMeasure, UnspecifiedCoherence
 export OpticalPlaneMetadata, plane_metadata, plane_device
-export PupilFunction, pupil_amplitude, opd_map
+export PupilFunction, pupil_support, pupil_amplitude, opd_map
 export surface_opd, update_surface!, apply_surface!
 export ElectricField, field_values, IntensityMap, intensity_values
 export OpticalProductBundle, PreparedIncoherentSum
@@ -80,7 +80,7 @@ export render_atmosphere!
 export ActuatorGridTopology, SampledActuatorTopology
 export GaussianInfluenceWidth, GaussianMechanicalCoupling, DenseInfluenceMatrix, MeasuredInfluenceFunctions
 export ClippedActuators, ActuatorHealthMap, CompositeDMActuatorModel
-export DeformableMirror, apply!
+export DeformableMirror
 export influence_model, influence_width
 export mechanical_coupling, n_actuators
 export FunctionModalBasis, MatrixModalBasis, ZernikeOpticBasis, CartesianTiltBasis

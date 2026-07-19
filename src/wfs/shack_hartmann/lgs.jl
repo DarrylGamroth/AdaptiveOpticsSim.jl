@@ -1,4 +1,5 @@
-function apply_lgs_elongation!(::LGSProfileNone, wfs::ShackHartmannWFS, ::Telescope, src::LGSSource, ::Int)
+function apply_lgs_elongation!(::LGSProfileNone,
+    wfs::ShackHartmannWFS, ::PupilFunction, src::LGSSource, ::Int)
     wfs.front_end.propagation.elongation_kernel = apply_elongation!(
         wfs.front_end.propagation.intensity,
         lgs_elongation_factor(src),
@@ -8,8 +9,8 @@ function apply_lgs_elongation!(::LGSProfileNone, wfs::ShackHartmannWFS, ::Telesc
     return wfs
 end
 
-function apply_lgs_elongation!(::LGSProfileNaProfile, wfs::ShackHartmannWFS, tel::Telescope, src::LGSSource, idx::Int)
-    ensure_lgs_kernels!(wfs, tel, src)
+function apply_lgs_elongation!(::LGSProfileNaProfile, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource, idx::Int)
+    ensure_lgs_kernels!(wfs, pupil, src)
     apply_lgs_convolution!(
         wfs.front_end.propagation.intensity,
         wfs.front_end.propagation.lgs_kernel_fft,
@@ -21,11 +22,11 @@ function apply_lgs_elongation!(::LGSProfileNaProfile, wfs::ShackHartmannWFS, tel
     return wfs
 end
 
-function ensure_lgs_kernels!(wfs::ShackHartmannWFS, tel::Telescope, src::LGSSource)
-    dimensions = (tel.params.resolution, tel.params.resolution)
+function ensure_lgs_kernels!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource)
+    dimensions = (_pupil_resolution(pupil), _pupil_resolution(pupil))
     ensure_lgs_kernels!(wfs.front_end, src, dimensions,
-        tel.params.diameter,
-        tel.aperture.sampling_m, tel.aperture.origin_m, wavelength(src))
+        _pupil_diameter_m(pupil),
+        pupil.metadata.sampling, pupil.metadata.origin, wavelength(src))
     return wfs
 end
 
@@ -81,8 +82,8 @@ function apply_lgs_convolution!(intensity::AbstractMatrix{T}, kernels_fft::Abstr
     return intensity
 end
 
-function lgs_spot_kernels_fft(tel::Telescope, wfs::ShackHartmannWFS, src::LGSSource, pad::Int)
-    return lgs_spot_kernels_fft(tel.params.diameter, wfs.front_end, src,
+function lgs_spot_kernels_fft(pupil::PupilFunction, wfs::ShackHartmannWFS, src::LGSSource, pad::Int)
+    return lgs_spot_kernels_fft(_pupil_diameter_m(pupil), wfs.front_end, src,
         pad,
         wavelength(src))
 end

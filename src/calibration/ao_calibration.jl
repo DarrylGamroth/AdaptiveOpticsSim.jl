@@ -37,6 +37,7 @@ builds a `ControlMatrix` inverse from the result.
 function ao_calibration(tel::Telescope, dm::DeformableMirror, wfs::AbstractWFS;
     n_modes::Int=size(dm.state.modes, 2), amplitude::Real=1e-9,
     projector::Bool=true, basis::Union{Nothing,ModalBasis}=nothing,
+    pupil::PupilFunction=PupilFunction(tel),
     method::KLBasisMethod=KLDMModes(), atm::Union{Nothing,AbstractAtmosphere}=nothing,
     build_backend::BuildBackend=default_runtime_calibration_build_backend(dm.state.coefs))
 
@@ -44,7 +45,8 @@ function ao_calibration(tel::Telescope, dm::DeformableMirror, wfs::AbstractWFS;
         basis = modal_basis(dm, tel; n_modes=n_modes, projector=projector, method=method, atm=atm)
     end
 
-    imat = interaction_matrix(dm, wfs, tel, basis.M2C; amplitude=amplitude)
+    imat = interaction_matrix(dm, wfs, pupil, basis.M2C;
+        amplitude=amplitude)
     calib = ControlMatrix(imat.matrix; build_backend=build_backend)
     return AOCalibration(basis.basis, basis.projector, basis.M2C, calib)
 end

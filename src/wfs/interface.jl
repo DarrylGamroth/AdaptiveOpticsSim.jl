@@ -87,10 +87,8 @@ end
 @inline supports_reference_signal(wfs::AbstractWFS) = !isnothing(reference_signal(wfs))
 @inline supports_camera_frame(wfs::AbstractWFS) = !isnothing(camera_frame(wfs))
 
-@inline propagate_runtime_atmosphere!(atm::AbstractAtmosphere, tel::Telescope,
-    src::AbstractSource) = propagate!(atm, tel, src)
-@inline propagate_runtime_atmosphere!(atm::AbstractAtmosphere, tel::Telescope,
-    ::Asterism) = propagate!(atm, tel)
+@inline propagate_runtime_atmosphere!(atm::AbstractAtmosphere,
+    pupil::PupilFunction, src::AbstractSource) = propagate!(atm, pupil, src)
 
 @inline prepare_runtime_atmosphere_path(::AbstractAtmosphere,
     ::Telescope, ::AbstractSource) = nothing
@@ -100,15 +98,14 @@ end
     prepare_atmosphere_renderer(atm, tel, src)
 
 @inline render_prepared_atmosphere_path!(::Nothing,
-    atm::AbstractAtmosphere, tel::Telescope, src::AbstractSource) =
-    propagate_runtime_atmosphere!(atm, tel, src)
+    atm::AbstractAtmosphere, pupil::PupilFunction, src::AbstractSource) =
+    propagate_runtime_atmosphere!(atm, pupil, src)
 
 @inline function render_prepared_atmosphere_path!(
     renderer::AtmosphereDirectionRenderer,
-    atm::AbstractTimedAtmosphere, tel::Telescope, ::AbstractSource)
-    render_atmosphere_opd!(opd_map(tel), renderer, atm,
-        current_epoch(atm))
-    return tel
+    atm::AbstractTimedAtmosphere, pupil::PupilFunction, ::AbstractSource)
+    render_atmosphere!(pupil, renderer, atm, current_epoch(atm))
+    return pupil
 end
 
 @inline function advance_runtime_atmosphere!(wfs::AbstractWFS,
@@ -126,45 +123,51 @@ end
 end
 
 @inline function render_runtime_wfs_path!(wfs::AbstractWFS,
-    atm::AbstractAtmosphere, tel::Telescope, optic::AbstractControllableOptic,
+    atm::AbstractAtmosphere, pupil::PupilFunction,
+    optic::AbstractControllableOptic,
     src::AbstractSource)
-    propagate_runtime_atmosphere!(atm, tel, src)
-    apply!(optic, tel, DMAdditive())
+    propagate_runtime_atmosphere!(atm, pupil, src)
+    update_surface!(optic)
+    apply_surface!(pupil, optic, DMAdditive())
     return nothing
 end
 
 @inline function render_runtime_wfs_path!(renderer, wfs::AbstractWFS,
-    atm::AbstractAtmosphere, tel::Telescope,
+    atm::AbstractAtmosphere, pupil::PupilFunction,
     optic::AbstractControllableOptic, src::AbstractSource)
-    render_prepared_atmosphere_path!(renderer, atm, tel, src)
-    apply!(optic, tel, DMAdditive())
+    render_prepared_atmosphere_path!(renderer, atm, pupil, src)
+    update_surface!(optic)
+    apply_surface!(pupil, optic, DMAdditive())
     return nothing
 end
 
 @inline function prepropagate_runtime_wfs!(wfs::AbstractWFS, atm::AbstractAtmosphere,
-    tel::Telescope, optic::AbstractControllableOptic, src::AbstractSource,
-    atmosphere_step::Real, rng::AbstractRNG)
+    tel::Telescope, pupil::PupilFunction, optic::AbstractControllableOptic,
+    src::AbstractSource, atmosphere_step::Real, rng::AbstractRNG)
     advance_runtime_atmosphere!(wfs, atm, tel, atmosphere_step, rng)
-    render_runtime_wfs_path!(wfs, atm, tel, optic, src)
+    render_runtime_wfs_path!(wfs, atm, pupil, optic, src)
     return nothing
 end
 
 @inline prepare_shared_runtime_wfs!(wfs::AbstractWFS, atm::AbstractAtmosphere,
-    tel::Telescope, optic::AbstractControllableOptic, src::AbstractSource) = nothing
+    pupil::PupilFunction, optic::AbstractControllableOptic,
+    src::AbstractSource) = nothing
 
 @inline function measure_runtime_wfs!(wfs::AbstractWFS, atm::AbstractAtmosphere,
-    tel::Telescope, src::AbstractSource, rng::AbstractRNG)
-    measure!(wfs, tel, src)
+    pupil::PupilFunction, src::AbstractSource, rng::AbstractRNG)
+    measure!(wfs, pupil, src)
     return nothing
 end
 
 @inline function measure_runtime_wfs!(wfs::AbstractWFS, atm::AbstractAtmosphere,
-    tel::Telescope, src::AbstractSource, det::AbstractDetector, rng::AbstractRNG)
-    measure!(wfs, tel, src, det; rng=rng)
+    pupil::PupilFunction, src::AbstractSource, det::AbstractDetector,
+    rng::AbstractRNG)
+    measure!(wfs, pupil, src, det; rng=rng)
     return nothing
 end
 
 @inline function finish_runtime_wfs_sensing!(wfs::AbstractWFS, atm::AbstractAtmosphere,
-    tel::Telescope, optic::AbstractControllableOptic, src::AbstractSource)
+    pupil::PupilFunction, optic::AbstractControllableOptic,
+    src::AbstractSource)
     return nothing
 end

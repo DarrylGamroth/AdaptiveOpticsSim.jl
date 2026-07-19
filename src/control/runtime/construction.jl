@@ -63,7 +63,7 @@ function _prepare_runtime_science_stage(tel::Telescope,
     zero_padding >= 1 || throw(InvalidConfiguration(
         "runtime science_zero_padding must be >= 1 when science pixels are requested"))
     pupil = PupilFunction(tel)
-    imaging = prepare_direct_imaging(tel, pupil, source;
+    imaging = prepare_direct_imaging(pupil, source;
         zero_padding=zero_padding)
     return _prepared_runtime_science_stage(pupil, imaging,
         direct_imaging_output(imaging), detector_or_detectors,
@@ -113,11 +113,12 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
     runtime_source = freeze_source(wfs_source(simulation))
     runtime_science_source = science_source(simulation) === wfs_source(simulation) ?
         runtime_source : freeze_source(science_source(simulation))
+    wfs_pupil = PupilFunction(simulation.tel)
     science_stage = _prepare_primary_runtime_science_stage(outputs,
         simulation.tel, runtime_science_source, science_detector,
         resolved_zero_padding)
-    resolved_science_path = science_path_plan(runtime_source,
-        runtime_science_source)
+    resolved_science_path = science_path_plan(simulation.wfs,
+        runtime_source, runtime_science_source)
     wfs_atmosphere_renderer = prepare_runtime_atmosphere_path(
         simulation.atm, simulation.tel, runtime_source)
     science_atmosphere_renderer = runtime_science_source === runtime_source ?
@@ -126,6 +127,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
     runtime = ClosedLoopRuntime{
         typeof(simulation),
         typeof(simulation.tel),
+        typeof(wfs_pupil),
         typeof(simulation.atm),
         typeof(wfs_atmosphere_renderer),
         typeof(science_atmosphere_renderer),
@@ -154,6 +156,7 @@ function ClosedLoopRuntime(simulation::AOSimulation, reconstructor;
     }(
         simulation,
         simulation.tel,
+        wfs_pupil,
         simulation.atm,
         wfs_atmosphere_renderer,
         science_atmosphere_renderer,
@@ -201,12 +204,13 @@ simulation_interface(interface::SimulationInterface) = interface
 simulation_interface(interface::CompositeSimulationInterface) = interface
 
 """
-    prepare_runtime_wfs!(wfs, tel, src)
+    prepare_runtime_wfs!(wfs, pupil, src)
 
 Run any WFS-specific runtime precomputation needed before repeated `step!`
 calls. The default implementation is a no-op and returns `wfs`.
 """
-@inline function prepare_runtime_wfs!(wfs::AbstractWFS, tel::Telescope, src)
+@inline function prepare_runtime_wfs!(wfs::AbstractWFS,
+    pupil::PupilFunction, src)
     return wfs
 end
 
@@ -218,7 +222,7 @@ supports_stacked_sources(runtime::ClosedLoopRuntime) = supports_stacked_sources(
 supports_grouped_execution(::CompositeSimulationInterface) = true
 
 function prepare!(runtime::ClosedLoopRuntime)
-    prepare_runtime_wfs!(runtime.wfs, runtime.tel, runtime.src)
+    prepare_runtime_wfs!(runtime.wfs, runtime.wfs_pupil, runtime.src)
     set_runtime_wfs_output_policy!(runtime.wfs, runtime.outputs)
     runtime.prepared = true
     return runtime
@@ -330,6 +334,8 @@ function with_reconstructor(runtime::ClosedLoopRuntime, reconstructor)
     copyto!(refreshed.command, runtime.command)
     copyto!(refreshed.reconstruct_buffer, runtime.reconstruct_buffer)
     copyto!(refreshed.slopes, runtime.slopes)
+    copyto!(refreshed.wfs_pupil.amplitude, runtime.wfs_pupil.amplitude)
+    copyto!(refreshed.wfs_pupil.opd, runtime.wfs_pupil.opd)
     set_command!(refreshed.optic, command_storage(runtime.optic))
     refreshed.prepared = runtime.prepared
     return refreshed

@@ -230,7 +230,7 @@ end
         photon_irradiance=3.0)
     physical_field = ElectricField(wavefront, physical_source;
         zero_padding=2)
-    physical_formation = prepare_pupil_field(tel, wavefront,
+    physical_formation = prepare_pupil_field(wavefront,
         physical_source, physical_field)
     fill_electric_field!(physical_field, wavefront, physical_formation)
     expected_rate = photon_irradiance(physical_source) *
@@ -258,7 +258,7 @@ end
         normalized_power=2.5)
     normalized_field = ElectricField(wavefront, normalized_source;
         zero_padding=2)
-    normalized_formation = prepare_pupil_field(tel, wavefront,
+    normalized_formation = prepare_pupil_field(wavefront,
         normalized_source, normalized_field)
     fill_electric_field!(normalized_field, wavefront, normalized_formation)
     @test source_radiometry(normalized_source) isa NormalizedTestSource
@@ -304,12 +304,12 @@ end
 
     normalized_direct = IntensityMap(normalized_field,
         normalized_propagation)
-    @test_throws InvalidConfiguration prepare_direct_imaging(tel, wavefront,
+    @test_throws InvalidConfiguration prepare_direct_imaging(wavefront,
         normalized_source, normalized_field, normalized_direct)
 
     @test_throws InvalidConfiguration pupil_photon_rate_map(tel,
         normalized_source)
-    @test_throws InvalidConfiguration prepare_direct_imaging(tel, wavefront,
+    @test_throws InvalidConfiguration prepare_direct_imaging(wavefront,
         normalized_source; zero_padding=2)
 
     float32_overflow = 2 * Float64(floatmax(Float32))
@@ -431,14 +431,14 @@ end
         normalization=DimensionlessNormalization(),
         spatial_measure=SpatialDensityMeasure(),
         coherence=CoherentFieldCombination())
-    @test_throws InvalidConfiguration prepare_pupil_field(tel, wavefront,
+    @test_throws InvalidConfiguration prepare_pupil_field(wavefront,
         physical_source, density_field; amplitude_scale=1.0)
 
     noncombinable_field = ElectricField(wavefront, physical_source;
         normalization=DimensionlessNormalization(),
         spatial_measure=CellIntegratedMeasure(),
         coherence=NonCombinableProduct())
-    @test_throws InvalidConfiguration prepare_pupil_field(tel, wavefront,
+    @test_throws InvalidConfiguration prepare_pupil_field(wavefront,
         physical_source, noncombinable_field; amplitude_scale=1.0)
     noncombinable_propagation = FraunhoferPropagation(noncombinable_field)
     @test_throws InvalidConfiguration IntensityMap(noncombinable_field,
@@ -596,7 +596,7 @@ end
         Source(band=:custom, wavelength=1.0e-6, photon_irradiance=1.0),
         Source(band=:custom, wavelength=1.1e-6, photon_irradiance=1.0),
     ])
-    @test_throws InvalidConfiguration prepare_direct_imaging(tel,
+    @test_throws InvalidConfiguration prepare_direct_imaging(
         PupilFunction(tel), mixed_wavelengths)
 end
 
@@ -613,9 +613,8 @@ end
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.2)
     src = Source(band=:I, magnitude=0.0)
     wavefront = PupilFunction(tel)
-    apply_opd!(wavefront, opd_map(tel))
     field = ElectricField(wavefront, src; zero_padding=2)
-    formation = prepare_pupil_field(tel, wavefront, src, field)
+    formation = prepare_pupil_field(wavefront, src, field)
     fill_electric_field!(field, wavefront, formation)
     @test size(field.values) == (64, 64)
     @test field.metadata.coordinate_domain isa MetricCoordinates
@@ -624,7 +623,7 @@ end
     @test fraunhofer.output_metadata.coordinate_domain isa AngularCoordinates
     centered_rate = similar(field.values, Float64)
     fraunhofer_intensity_from_field!(centered_rate, field, fraunhofer)
-    direct = prepare_direct_imaging(tel, wavefront, src;
+    direct = prepare_direct_imaging(wavefront, src;
         zero_padding=2)
     rate_map = form_direct_image!(direct)
     rate = intensity_values(rate_map)
@@ -632,14 +631,12 @@ end
     @test maximum(rate) > 0
     @test isfinite(sum(rate))
     @test centered_rate ≈ rate
-    @test !hasproperty(tel.state, :psf)
-    @test !hasproperty(tel.state, :psf_stack)
-    @test !hasproperty(tel.state, :psf_workspace)
+    @test !hasproperty(tel, :state)
 
     tel_dim = Telescope(resolution=32, diameter=8.0, central_obstruction=0.2,
         pupil_reflectivity=0.25)
     dim_pupil = PupilFunction(tel_dim)
-    dim_direct = prepare_direct_imaging(tel_dim, dim_pupil, src;
+    dim_direct = prepare_direct_imaging(dim_pupil, src;
         zero_padding=2)
     rate_dim = intensity_values(form_direct_image!(dim_direct))
     @test sum(rate_dim) ≈ 0.25 * sum(rate)
@@ -656,7 +653,7 @@ end
     wavefront_simple = PupilFunction(tel_simple)
     field_simple = ElectricField(wavefront_simple, src_simple;
         zero_padding=1)
-    formation_simple = prepare_pupil_field(tel_simple, wavefront_simple,
+    formation_simple = prepare_pupil_field(wavefront_simple,
         src_simple, field_simple)
     fill_electric_field!(field_simple, wavefront_simple, formation_simple)
     phase_map = fill(pi / 2, tel_simple.params.resolution, tel_simple.params.resolution)
@@ -665,7 +662,9 @@ end
     @test field_simple.values ≈ baseline .* cis.(phase_map)
 
     fill_electric_field!(field_simple, wavefront_simple, formation_simple)
-    quarter_wave_opd = fill(eltype(tel_simple.state.opd)(wavelength(src_simple) / 4), tel_simple.params.resolution, tel_simple.params.resolution)
+    quarter_wave_opd = fill(eltype(wavefront_simple.opd)(
+        wavelength(src_simple) / 4), tel_simple.params.resolution,
+        tel_simple.params.resolution)
     baseline = copy(field_simple.values)
     apply_phase!(field_simple, quarter_wave_opd; units=:opd)
     @test field_simple.values ≈ baseline .* cispi.(2 .* quarter_wave_opd ./ wavelength(src_simple))
@@ -716,7 +715,8 @@ end
         altitude=[0.0, 5000.0],
     )
     advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(1))
-    geom_prop = AtmosphericFieldPropagation(atm, atm_tel, atm_src;
+    atm_pupil = PupilFunction(atm_tel)
+    geom_prop = AtmosphericFieldPropagation(atm, atm_pupil, atm_src;
         model=GeometricAtmosphericPropagation(T=Float64),
         zero_padding=1,
         T=Float64)
@@ -724,13 +724,15 @@ end
         AdaptiveOpticsSim.execution_style(first(geom_prop.state.slices).field.values),
         geom_prop.params.model,
     ) isa AdaptiveOpticsSim.GeometricFieldSynchronousPlan
-    geom_field = propagate_atmosphere_field!(geom_prop, atm, atm_tel, atm_src)
+    geom_field = propagate_atmosphere_field!(geom_prop, atm,
+        current_epoch(atm))
     tel_geom = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
-    propagate!(atm, tel_geom, atm_src)
     collapsed_wavefront = PupilFunction(tel_geom)
-    apply_opd!(collapsed_wavefront, opd_map(tel_geom))
+    collapsed_renderer = prepare_atmosphere_renderer(atm, tel_geom, atm_src)
+    render_atmosphere!(collapsed_wavefront, collapsed_renderer, atm,
+        current_epoch(atm))
     collapsed = ElectricField(collapsed_wavefront, atm_src; zero_padding=1)
-    collapsed_plan = prepare_pupil_field(tel_geom, collapsed_wavefront,
+    collapsed_plan = prepare_pupil_field(collapsed_wavefront,
         atm_src, collapsed)
     fill_electric_field!(collapsed, collapsed_wavefront, collapsed_plan)
     @test geom_field.values ≈ collapsed.values atol=1e-8 rtol=1e-8
@@ -744,7 +746,8 @@ end
         altitude=[0.0],
     )
     advance_by!(fresnel_atm, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(2))
-    fresnel_prop = AtmosphericFieldPropagation(fresnel_atm, atm_tel, atm_src;
+    fresnel_prop = AtmosphericFieldPropagation(fresnel_atm, atm_pupil,
+        atm_src;
         model=LayeredFresnelAtmosphericPropagation(T=Float64),
         zero_padding=1,
         T=Float64)
@@ -752,31 +755,38 @@ end
         AdaptiveOpticsSim.execution_style(first(fresnel_prop.state.slices).field.values),
         fresnel_prop.params.model,
     ) isa AdaptiveOpticsSim.LayeredFresnelFieldSynchronousPlan
-    fresnel_field = propagate_atmosphere_field!(fresnel_prop, fresnel_atm, atm_tel, atm_src)
-    geom_single = AtmosphericFieldPropagation(fresnel_atm, atm_tel, atm_src;
+    fresnel_field = propagate_atmosphere_field!(fresnel_prop, fresnel_atm,
+        current_epoch(fresnel_atm))
+    geom_single = AtmosphericFieldPropagation(fresnel_atm, atm_pupil,
+        atm_src;
         model=GeometricAtmosphericPropagation(T=Float64),
         zero_padding=1,
         T=Float64)
-    geom_single_field = propagate_atmosphere_field!(geom_single, fresnel_atm, atm_tel, atm_src)
+    geom_single_field = propagate_atmosphere_field!(geom_single, fresnel_atm,
+        current_epoch(fresnel_atm))
     @test fresnel_field.values ≈ geom_single_field.values atol=1e-8 rtol=1e-8
 
     spectral = with_spectrum(atm_src, SpectralBundle([wavelength(atm_src), 1.1 * wavelength(atm_src)], [0.75, 0.25]))
-    spectral_prop = AtmosphericFieldPropagation(atm, atm_tel, spectral;
+    spectral_prop = AtmosphericFieldPropagation(atm, atm_pupil, spectral;
         model=GeometricAtmosphericPropagation(T=Float64),
         zero_padding=2,
         T=Float64)
-    spectral_intensity = atmospheric_intensity!(spectral_prop, atm, atm_tel, spectral)
-    mono_prop = AtmosphericFieldPropagation(atm, atm_tel, atm_src;
+    spectral_intensity = atmospheric_intensity!(spectral_prop, atm,
+        current_epoch(atm))
+    mono_prop = AtmosphericFieldPropagation(atm, atm_pupil, atm_src;
         model=GeometricAtmosphericPropagation(T=Float64),
         zero_padding=2,
         T=Float64)
-    mono_intensity = atmospheric_intensity!(mono_prop, atm, atm_tel, atm_src)
+    mono_intensity = atmospheric_intensity!(mono_prop, atm,
+        current_epoch(atm))
     single_spectral = with_spectrum(atm_src, SpectralBundle([wavelength(atm_src)], [1.0]))
-    single_spectral_prop = AtmosphericFieldPropagation(atm, atm_tel, single_spectral;
+    single_spectral_prop = AtmosphericFieldPropagation(atm, atm_pupil,
+        single_spectral;
         model=GeometricAtmosphericPropagation(T=Float64),
         zero_padding=2,
         T=Float64)
-    @test atmospheric_intensity!(single_spectral_prop, atm, atm_tel, single_spectral) ≈ mono_intensity atol=1e-8 rtol=1e-8
+    @test atmospheric_intensity!(single_spectral_prop, atm,
+        current_epoch(atm)) ≈ mono_intensity atol=1e-8 rtol=1e-8
     @test size(spectral_intensity) == size(mono_intensity)
     @test sum(spectral_intensity) > 0
 
@@ -785,7 +795,7 @@ end
     normalized_spectral = with_spectrum(normalized_atm_src,
         SpectralBundle([wavelength(atm_src), 1.1 * wavelength(atm_src)],
             [0.75, 0.25]))
-    normalized_spectral_prop = AtmosphericFieldPropagation(atm, atm_tel,
+    normalized_spectral_prop = AtmosphericFieldPropagation(atm, atm_pupil,
         normalized_spectral;
         model=GeometricAtmosphericPropagation(T=Float64),
         zero_padding=1,
@@ -794,14 +804,13 @@ end
         DimensionlessNormalization for slice in
         normalized_spectral_prop.state.slices)
     normalized_spectral_intensity = atmospheric_intensity!(
-        normalized_spectral_prop, atm, atm_tel, normalized_spectral)
+        normalized_spectral_prop, atm, current_epoch(atm))
     @test sum(normalized_spectral_intensity) ≈ 2.0 rtol=1e-10
 end
 
 @testset "Explicit optical products and surfaces" begin
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.1)
     src = Source(band=:I, magnitude=0.0)
-    telescope_opd_before = copy(opd_map(tel))
     aperture_before = copy(pupil_mask(tel))
     reflectivity_before = copy(pupil_reflectivity(tel))
 
@@ -811,7 +820,6 @@ end
     apply_surface!(path_a, static_map, DMAdditive())
     @test path_a.opd == static_map.opd
     @test all(iszero, path_b.opd)
-    @test opd_map(tel) == telescope_opd_before
 
     ncpa = NCPA(fill(3e-9, 16, 16), nothing, nothing)
     apply_surface!(path_b, ncpa, DMReplace())
@@ -819,19 +827,18 @@ end
 
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
     set_command!(dm, fill(1e-8, n_actuators(dm)))
-    update_surface!(dm, tel)
+    update_surface!(dm)
     apply_surface!(path_a, dm, DMReplace())
     @test path_a.opd == surface_opd(dm)
 
     modal = TipTiltMirror(tel; scale=1e-8)
     set_command!(modal, [0.25, -0.5])
-    update_surface!(modal, tel)
+    update_surface!(modal)
     reset_opd!(path_b)
     apply_surface!(path_b, modal, DMAdditive())
     @test path_b.opd == surface_opd(modal)
     @test pupil_mask(tel) == aperture_before
     @test pupil_reflectivity(tel) == reflectivity_before
-    @test opd_map(tel) == telescope_opd_before
 
     reset_opd!(path_a)
     path_b_before_propagation = copy(path_b.opd)
@@ -839,13 +846,13 @@ end
     propagation = FraunhoferPropagation(field)
     output = IntensityMap(field, propagation)
     fill!(output.values, 0)
-    prepared = prepare_direct_imaging(tel, path_a, src, field, output)
+    prepared = prepare_direct_imaging(path_a, src, field, output)
     explicit_direct_image_cycle!(output, field, path_a, prepared.plan,
         prepared.workspace)
     @test @allocated(explicit_direct_image_cycle!(output, field, path_a,
         prepared.plan, prepared.workspace)) == 0
     @test path_b.opd == path_b_before_propagation
-    @test !hasproperty(tel.state, :psf)
+    @test !hasproperty(tel, :state)
 
     spatial_filter = SpatialFilter(tel; shape=SquareFilter(), diameter=5,
         zero_padding=2)
@@ -853,7 +860,7 @@ end
         normalization=DimensionlessNormalization(),
         spatial_measure=PointSampledMeasure(),
         coherence=CoherentFieldCombination())
-    spatial_formation = prepare_pupil_field(tel, path_a, src, spatial_field;
+    spatial_formation = prepare_pupil_field(path_a, src, spatial_field;
         center_even_grid=false, amplitude_scale=1)
     fill_electric_field!(spatial_field, path_a, spatial_formation)
     spatial_output = PupilFunction(tel)
@@ -877,7 +884,7 @@ end
         coordinate_domain=field.metadata.coordinate_domain,
         sampling=(2.0, 2.0), spectral=field.metadata.spectral)
     sampling_field = ElectricField(sampling_metadata, values)
-    @test_throws InvalidConfiguration prepare_pupil_field(tel, wavefront,
+    @test_throws InvalidConfiguration prepare_pupil_field(wavefront,
         src, sampling_field)
 
     coordinate_metadata = OpticalPlaneMetadata(PupilPlane(), values;
@@ -885,7 +892,7 @@ end
         sampling=field.metadata.sampling, origin=field.metadata.origin,
         spectral=field.metadata.spectral)
     coordinate_field = ElectricField(coordinate_metadata, values)
-    @test_throws InvalidConfiguration prepare_pupil_field(tel, wavefront,
+    @test_throws InvalidConfiguration prepare_pupil_field(wavefront,
         src, coordinate_field)
     @test_throws InvalidConfiguration FraunhoferPropagation(coordinate_field)
     spatial_filter = SpatialFilter(tel; zero_padding=1)
@@ -897,7 +904,7 @@ end
         sampling=field.metadata.sampling, origin=field.metadata.origin,
         spectral=field.metadata.spectral)
     kind_field = ElectricField(kind_metadata, values)
-    @test_throws InvalidConfiguration prepare_pupil_field(tel, wavefront,
+    @test_throws InvalidConfiguration prepare_pupil_field(wavefront,
         src, kind_field)
 
     origin_metadata = OpticalPlaneMetadata(PupilPlane(), values;
@@ -905,7 +912,7 @@ end
         sampling=field.metadata.sampling, origin=(0.0, 0.0),
         spectral=field.metadata.spectral)
     origin_field = ElectricField(origin_metadata, values)
-    @test_throws InvalidConfiguration prepare_pupil_field(tel, wavefront,
+    @test_throws InvalidConfiguration prepare_pupil_field(wavefront,
         src, origin_field)
 
     centering_metadata = OpticalPlaneMetadata(PupilPlane(), values;
@@ -914,7 +921,7 @@ end
         centering=(SampleCentered, SampleCentered),
         spectral=field.metadata.spectral)
     centering_field = ElectricField(centering_metadata, values)
-    @test_throws InvalidConfiguration prepare_pupil_field(tel, wavefront,
+    @test_throws InvalidConfiguration prepare_pupil_field(wavefront,
         src, centering_field)
 
     orientation_metadata = OpticalPlaneMetadata(PupilPlane(), values;
@@ -923,7 +930,7 @@ end
         orientation=PlaneAxisOrientation((:y, :x)),
         spectral=field.metadata.spectral)
     orientation_field = ElectricField(orientation_metadata, values)
-    @test_throws InvalidConfiguration prepare_pupil_field(tel, wavefront,
+    @test_throws InvalidConfiguration prepare_pupil_field(wavefront,
         src, orientation_field)
 
     spectral_metadata = OpticalPlaneMetadata(PupilPlane(), values;
@@ -931,7 +938,7 @@ end
         sampling=field.metadata.sampling, origin=field.metadata.origin,
         spectral=MonochromaticChannel(1.1 * wavelength(src)))
     spectral_field = ElectricField(spectral_metadata, values)
-    @test_throws InvalidConfiguration prepare_pupil_field(tel, wavefront,
+    @test_throws InvalidConfiguration prepare_pupil_field(wavefront,
         src, spectral_field)
 
     float32_values = Matrix{ComplexF32}(undef, size(values))
@@ -940,7 +947,7 @@ end
         sampling=field.metadata.sampling, origin=field.metadata.origin,
         spectral=field.metadata.spectral)
     numeric_field = ElectricField(numeric_metadata, float32_values)
-    @test_throws InvalidConfiguration prepare_pupil_field(tel, wavefront,
+    @test_throws InvalidConfiguration prepare_pupil_field(wavefront,
         src, numeric_field)
 
     wrong_size_values = Matrix{ComplexF64}(undef, 9, 9)
@@ -949,7 +956,7 @@ end
         sampling=field.metadata.sampling,
         spectral=field.metadata.spectral)
     dimension_field = ElectricField(dimension_metadata, wrong_size_values)
-    @test_throws DimensionMismatchError prepare_pupil_field(tel, wavefront,
+    @test_throws DimensionMismatchError prepare_pupil_field(wavefront,
         src, dimension_field)
 
     propagation = FraunhoferPropagation(field)
@@ -961,7 +968,7 @@ end
         spectral=propagation.output_metadata.spectral)
     wrong_destination = IntensityMap(wrong_destination_metadata,
         wrong_destination_values)
-    @test_throws DimensionMismatchError prepare_direct_imaging(tel, wavefront,
+    @test_throws DimensionMismatchError prepare_direct_imaging(wavefront,
         src, field, wrong_destination)
 
     declared_device_metadata = OpticalPlaneMetadata(PupilPlane(), values;

@@ -10,19 +10,20 @@ function main(; resolution::Int=24)
 
     zb = ZernikeBasis(tel, 5)
     compute_zernike!(zb, tel)
-    @. tel.state.opd = 5e-8 * zb.modes[:, :, 5]
+    pupil = PupilFunction(tel)
+    @. pupil.opd = 5e-8 * zb.modes[:, :, 5]
 
     sh_point = ShackHartmannWFS(tel; n_lenslets=6, mode=Diffractive())
     sh_ext = ShackHartmannWFS(tel; n_lenslets=6, mode=Diffractive())
-    point_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_point, tel, src)
-    ext_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_ext, tel, ext)
-    point_slopes = copy(measure!(sh_point, tel, src))
-    ext_slopes = copy(measure!(sh_ext, tel, ext))
+    point_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_point, pupil, src)
+    ext_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_ext, pupil, ext)
+    point_slopes = copy(measure!(sh_point, pupil, src))
+    ext_slopes = copy(measure!(sh_ext, pupil, ext))
 
     pyr_point = PyramidWFS(tel; pupil_samples=6, mode=Diffractive(), modulation=1.0)
     pyr_ext = PyramidWFS(tel; pupil_samples=6, mode=Diffractive(), modulation=1.0)
-    pyr_point_slopes = copy(measure!(pyr_point, tel, src))
-    pyr_ext_slopes = copy(measure!(pyr_ext, tel, ext))
+    pyr_point_slopes = copy(measure!(pyr_point, pupil, src))
+    pyr_ext_slopes = copy(measure!(pyr_ext, pupil, ext))
 
     sh_delta = copy(sh_ext.acquisition.spot_cube .- sh_point.acquisition.spot_cube)
     pyramid_delta = copy(pyr_ext.front_end.propagation.intensity .- pyr_point.front_end.propagation.intensity)

@@ -108,18 +108,19 @@ function _multi_source_scale_config(name::AbstractString)
     )
 end
 
-function _build_recon(dm, wfs, tel, src)
-    imat = interaction_matrix(dm, wfs, tel, src; amplitude=eltype(dm.state.coefs)(0.05))
+function _build_recon(dm, wfs, pupil, src)
+    imat = interaction_matrix(dm, wfs, pupil, src;
+        amplitude=eltype(dm.state.coefs)(0.05))
     return ModalReconstructor(imat; gain=eltype(dm.state.coefs)(0.5))
 end
 
-function _seed_opd!(tel::Telescope{<:Any,<:Any}, ::Type{T}) where {T<:AbstractFloat}
-    host = Matrix{T}(undef, tel.params.resolution, tel.params.resolution)
-    @inbounds for i in 1:tel.params.resolution, j in 1:tel.params.resolution
+function _seed_opd!(pupil::PupilFunction, ::Type{T}) where {T<:AbstractFloat}
+    host = Matrix{T}(undef, size(pupil.opd))
+    @inbounds for i in axes(host, 1), j in axes(host, 2)
         host[i, j] = T(i + j / 10)
     end
-    copyto!(tel.state.opd, host)
-    return tel.state.opd
+    copyto!(pupil.opd, host)
+    return pupil.opd
 end
 
 function _source_list(coords, T::Type{<:AbstractFloat})
@@ -137,10 +138,11 @@ function _build_runtime_branch(::Type{T}, backend_selector, resolution::Int, wfs
         PyramidWFS(tel; pupil_samples=wfs_samples, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend_selector)
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend_selector)
     sim = AdaptiveOpticsSim.AOSimulation(tel, src, atm, dm, wfs)
+    calibration_pupil = PupilFunction(tel; T=T, backend=backend_selector)
     return ControlLoopBranch(
         Symbol("branch_", seed),
         sim,
-        _build_recon(dm, wfs, tel, src);
+        _build_recon(dm, wfs, calibration_pupil, src);
         wfs_detector=det,
         rng=MersenneTwister(seed),
     )
@@ -158,24 +160,25 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     tel = Telescope(resolution=cfg.asterism_resolution, diameter=T(8.0), central_obstruction=T(0.0), T=T, backend=backend_selector)
     ast = Asterism(_source_list(cfg.source_coords, T))
     det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1, T=T, backend=backend_selector)
+    pupil = PupilFunction(tel; T=T, backend=backend_selector)
 
-    _seed_opd!(tel, T)
+    _seed_opd!(pupil, T)
 
     sh = ShackHartmannWFS(tel; n_lenslets=cfg.asterism_wfs_samples, mode=Diffractive(), T=T, backend=backend_selector)
     sh_mean_ns, sh_p95_ns, sh_alloc_bytes = _timed_stats!(() -> begin
-        measure!(sh, tel, ast, det; rng=rng)
+        measure!(sh, pupil, ast, det; rng=rng)
         _sync_backend!(backend_tag, slopes(sh))
     end; warmup=resolved_warmup, samples=resolved_samples)
 
     pyr = PyramidWFS(tel; pupil_samples=cfg.asterism_wfs_samples, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend_selector)
     pyr_mean_ns, pyr_p95_ns, pyr_alloc_bytes = _timed_stats!(() -> begin
-        measure!(pyr, tel, ast, det; rng=rng)
+        measure!(pyr, pupil, ast, det; rng=rng)
         _sync_backend!(backend_tag, slopes(pyr))
     end; warmup=resolved_warmup, samples=resolved_samples)
 
     bio = BioEdgeWFS(tel; pupil_samples=cfg.asterism_wfs_samples, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend_selector)
     bio_mean_ns, bio_p95_ns, bio_alloc_bytes = _timed_stats!(() -> begin
-        measure!(bio, tel, ast, det; rng=rng)
+        measure!(bio, pupil, ast, det; rng=rng)
         _sync_backend!(backend_tag, slopes(bio))
     end; warmup=resolved_warmup, samples=resolved_samples)
 

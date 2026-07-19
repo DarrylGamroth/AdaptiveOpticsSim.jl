@@ -13,7 +13,8 @@ dm = DeformableMirror(tel; n_act=4, influence_width=0.2)
 wfs = ShackHartmannWFS(tel; n_lenslets=4)
 sim = AOSimulation(tel, src, atm, dm, wfs)
 
-imat = interaction_matrix(sim.optic, sim.wfs, sim.tel; amplitude=0.1)
+imat = interaction_matrix(sim.optic, sim.wfs, PupilFunction(sim.tel);
+    amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
 branch = ControlLoopBranch(:main, sim, recon; rng=rng)
 cfg = SingleControlLoopConfig(atmosphere_step=1e-3, name=:run_cl_demo, branch_label=:main)

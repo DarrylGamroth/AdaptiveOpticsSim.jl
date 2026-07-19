@@ -10,7 +10,7 @@ end
 function unmasked_atmosphere_opd(atm::AbstractTimedAtmosphere,
     tel::Telescope)
     renderer = prepare_atmosphere_renderer(atm, tel)
-    output = similar(tel.state.opd)
+    output = similar(pupil_reflectivity(tel))
     AdaptiveOpticsSim.accumulate_rendered_layers!(output, atm.layers,
         renderer.shift_x, renderer.shift_y, renderer.footprint_scale)
     return output
@@ -38,8 +38,8 @@ end
     @test_throws AtmosphereEpochError current_epoch(atm)
     @test_throws InvalidConfiguration prepare_atmosphere_renderer(atm, tel,
         onaxis; T=Float32)
-    @test_throws InvalidConfiguration AtmosphericFieldPropagation(atm, tel,
-        onaxis; T=Float32)
+    @test_throws InvalidConfiguration AtmosphericFieldPropagation(atm,
+        PupilFunction(tel), onaxis; T=Float32)
     @test !hasfield(typeof(atm.state), :opd)
     @test !hasfield(typeof(atm.state), :source_geometry)
 
@@ -116,7 +116,8 @@ end
             onaxis_renderer, atm, epoch)) == 0
     end
 
-    field_renderer = AtmosphericFieldPropagation(atm, tel, offaxis)
+    field_pupil = PupilFunction(tel)
+    field_renderer = AtmosphericFieldPropagation(atm, field_pupil, offaxis)
     field = propagate_atmosphere_field!(field_renderer, atm, epoch)
     @test field.metadata == field_renderer.state.slices[1].field.metadata
     if coverage_instrumented()
@@ -156,7 +157,8 @@ end
     weights = [0.4, 0.6]
     spectral = with_spectrum(onaxis,
         SpectralBundle(wavelengths, weights))
-    spectral_renderer = AtmosphericFieldPropagation(atm, tel, spectral)
+    spectral_renderer = AtmosphericFieldPropagation(atm, field_pupil,
+        spectral)
     wavelengths .= 1.0
     weights .= 0.0
     spectral.bundle.samples[1] = SpectralSample(2.0, 1.0)
@@ -171,9 +173,11 @@ end
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(1))
-    propagate!(atm, tel)
+    pupil = PupilFunction(tel)
+    renderer = prepare_atmosphere_renderer(atm, tel)
+    render_atmosphere!(pupil, renderer, atm, current_epoch(atm))
     @test size(atm.state.opd) == (32, 32)
-    @test sum(abs.(tel.state.opd)) > 0
+    @test sum(abs, pupil.opd) > 0
 
     delta = tel.params.diameter / tel.params.resolution
     ensure_psd!(atm, delta)
@@ -252,14 +256,16 @@ end
     @test length(atm.layers) == 1
     epoch = advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(1))
     rendered = rendered_atmosphere_opd(atm, tel)
-    propagate!(atm, tel)
+    pupil = PupilFunction(tel)
+    renderer = prepare_atmosphere_renderer(atm, tel)
+    render_atmosphere!(pupil, renderer, atm, epoch)
     @test size(atm.layers[1].screen.state.screen) == (35, 35)
     @test atm.layers[1].screen.state.initialized
     @test atm.layers[1].state.integer_shift_x == 0
     @test atm.layers[1].state.integer_shift_y == 0
     @test epoch == current_epoch(atm)
     @test size(rendered) == (32, 32)
-    @test tel.state.opd == rendered
+    @test pupil.opd == rendered
 
     @test_throws InvalidConfiguration AdaptiveOpticsSim.infinite_boundary_stencil(4, 0.25;
         stencil_size=8,
@@ -358,11 +364,13 @@ end
             stencil_size=35,
         )
         rng = MersenneTwister(seed)
+        pupil = PupilFunction(tel_local)
+        renderer = prepare_atmosphere_renderer(atm, tel_local, src_local)
         opd_trace = Matrix{Float64}[]
         for _ in 1:steps
             advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=rng)
-            propagate!(atm, tel_local, src_local)
-            push!(opd_trace, copy(Array(tel_local.state.opd)))
+            render_atmosphere!(pupil, renderer, atm, current_epoch(atm))
+            push!(opd_trace, copy(Array(pupil.opd)))
         end
         return (; opd_trace, screen=copy(Array(atm.layers[1].screen.state.screen)))
     end
@@ -481,12 +489,19 @@ end
             atm.layers[1].state.offset_x = 0.0
             atm.layers[1].state.offset_y = 0.0
         end
-        propagate!(atm, tel, onaxis)
-        onaxis_opd = copy(tel.state.opd)
-        propagate!(atm, tel, offaxis)
-        offaxis_opd = copy(tel.state.opd)
-        propagate!(atm, tel, lgs)
-        lgs_opd = copy(tel.state.opd)
+        onaxis_pupil = PupilFunction(tel)
+        offaxis_pupil = PupilFunction(tel)
+        lgs_pupil = PupilFunction(tel)
+        epoch = current_epoch(atm)
+        render_atmosphere!(onaxis_pupil,
+            prepare_atmosphere_renderer(atm, tel, onaxis), atm, epoch)
+        render_atmosphere!(offaxis_pupil,
+            prepare_atmosphere_renderer(atm, tel, offaxis), atm, epoch)
+        render_atmosphere!(lgs_pupil,
+            prepare_atmosphere_renderer(atm, tel, lgs), atm, epoch)
+        onaxis_opd = copy(onaxis_pupil.opd)
+        offaxis_opd = copy(offaxis_pupil.opd)
+        lgs_opd = copy(lgs_pupil.opd)
         return (; onaxis_opd, offaxis_opd, lgs_opd)
     end
 
@@ -625,8 +640,8 @@ end
     coeffs = zeros(4)
     ncpa_fast = NCPA(tel, dm, atm; profile=FastProfile(), coefficients=coeffs)
     ncpa_scientific = NCPA(tel, dm, atm; profile=ScientificProfile(), coefficients=coeffs)
-    @test size(ncpa_fast.opd) == size(tel.state.opd)
-    @test size(ncpa_scientific.opd) == size(tel.state.opd)
+    @test size(ncpa_fast.opd) == size(pupil_reflectivity(tel))
+    @test size(ncpa_scientific.opd) == size(pupil_reflectivity(tel))
 end
 
 @testset "Multi-layer atmosphere" begin
@@ -647,9 +662,11 @@ end
     first = unmasked_atmosphere_opd(atm, tel)
     advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(3))
     second = unmasked_atmosphere_opd(atm, tel)
-    propagate!(atm, tel)
+    pupil = PupilFunction(tel)
+    renderer = prepare_atmosphere_renderer(atm, tel)
+    render_atmosphere!(pupil, renderer, atm, current_epoch(atm))
     @test size(second) == (16, 16)
-    @test sum(abs.(tel.state.opd)) > 0
+    @test sum(abs, pupil.opd) > 0
     @test second[:, 2:end] ≈ first[:, 1:end-1]
 
     stationary = MultiLayerAtmosphere(tel;

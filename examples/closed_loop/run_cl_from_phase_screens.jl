@@ -13,23 +13,24 @@ dm = DeformableMirror(tel; n_act=4, influence_width=0.2)
 wfs = ShackHartmannWFS(tel; n_lenslets=4)
 sim = AOSimulation(tel, src, atm, dm, wfs)
 atmosphere_renderer = prepare_atmosphere_renderer(sim.atm, sim.tel, sim.src)
-atmosphere_output = PupilFunction(sim.tel)
+pupil = PupilFunction(sim.tel)
 
 screens = Vector{Matrix{Float64}}(undef, 5)
 for k in 1:5
     epoch = advance_by!(sim.atm, atmosphere_step; rng=rng)
-    render_atmosphere!(atmosphere_output, atmosphere_renderer, sim.atm, epoch)
-    screens[k] = copy(atmosphere_output.opd)
+    render_atmosphere!(pupil, atmosphere_renderer, sim.atm, epoch)
+    screens[k] = copy(pupil.opd)
 end
 
-imat = interaction_matrix(sim.optic, sim.wfs, sim.tel; amplitude=0.1)
+imat = interaction_matrix(sim.optic, sim.wfs, pupil; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
 cmd = similar(sim.optic.state.coefs)
 
 for k in 1:length(screens)
-    copyto!(sim.tel.state.opd, screens[k])
-    apply!(sim.optic, sim.tel, DMAdditive())
-    measure!(sim.wfs, sim.tel)
+    copyto!(pupil.opd, screens[k])
+    update_surface!(sim.optic)
+    apply_surface!(pupil, sim.optic, DMAdditive())
+    measure!(sim.wfs, pupil)
     reconstruct!(cmd, recon, slopes(sim.wfs))
     sim.optic.state.coefs .= -cmd
 end

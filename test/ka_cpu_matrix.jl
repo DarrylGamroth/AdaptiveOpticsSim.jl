@@ -57,6 +57,16 @@ end
         mark_ka_cpu_kernel!(:bin2d_kernel!)
         @test ka_bin == scalar_bin
 
+        complex_src = complex.(src, reverse(src; dims=1))
+        scalar_abs2_bin = similar(scalar_bin)
+        ka_abs2_bin = similar(scalar_bin)
+        AdaptiveOpticsSim._bin2d_abs2!(SCALAR_CPU_STYLE,
+            scalar_abs2_bin, complex_src, 2)
+        AdaptiveOpticsSim._bin2d_abs2!(KA_CPU_STYLE, ka_abs2_bin,
+            complex_src, 2)
+        mark_ka_cpu_kernel!(:bin2d_abs2_kernel!)
+        @test ka_abs2_bin == scalar_abs2_bin
+
         scalar_freqs = Vector{Float64}(undef, 8)
         ka_freqs = similar(scalar_freqs)
         AdaptiveOpticsSim._fftfreq!(SCALAR_CPU_STYLE, scalar_freqs, 8, 0.25, 0.0)
@@ -716,7 +726,7 @@ end
         wavefront = PupilFunction(tel)
         scalar_ef = ElectricField(wavefront, src; zero_padding=2)
         ka_ef = ElectricField(wavefront, src; zero_padding=2)
-        formation = prepare_pupil_field(tel, wavefront, src, scalar_ef)
+        formation = prepare_pupil_field(wavefront, src, scalar_ef)
         AdaptiveOpticsSim._fill_electric_field!(SCALAR_CPU_STYLE,
             scalar_ef, wavefront, formation)
         AdaptiveOpticsSim._fill_electric_field!(KA_CPU_STYLE, ka_ef,
@@ -814,8 +824,8 @@ end
         dm_ka.state.coefs .= dm_scalar.state.coefs
         AdaptiveOpticsSim.prepare_actuator_commands!(dm_scalar)
         AdaptiveOpticsSim.prepare_actuator_commands!(dm_ka)
-        AdaptiveOpticsSim._apply_opd_separable!(SCALAR_CPU_STYLE, dm_scalar, tel)
-        AdaptiveOpticsSim._apply_opd_separable!(KA_CPU_STYLE, dm_ka, tel)
+        AdaptiveOpticsSim._apply_opd_separable!(SCALAR_CPU_STYLE, dm_scalar)
+        AdaptiveOpticsSim._apply_opd_separable!(KA_CPU_STYLE, dm_ka)
         mark_ka_cpu_kernel!(:dm_apply_pupil_kernel!)
         @test ka_cpu_close(dm_ka.state.opd, dm_scalar.state.opd)
     end
@@ -984,8 +994,11 @@ end
 
         scalar_mask = similar(propagation.pyramid_mask)
         ka_mask = similar(propagation.pyramid_mask)
-        AdaptiveOpticsSim._build_pyramid_mask!(SCALAR_CPU_STYLE, scalar_mask, wfs, tel)
-        AdaptiveOpticsSim._build_pyramid_mask!(KA_CPU_STYLE, ka_mask, wfs, tel)
+        pupil = PupilFunction(tel)
+        AdaptiveOpticsSim._build_pyramid_mask!(SCALAR_CPU_STYLE,
+            scalar_mask, wfs, pupil)
+        AdaptiveOpticsSim._build_pyramid_mask!(KA_CPU_STYLE, ka_mask, wfs,
+            pupil)
         mark_ka_cpu_kernel!(:pyramid_mask_kernel!)
         @test ka_cpu_close(ka_mask, scalar_mask)
 

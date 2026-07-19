@@ -35,7 +35,8 @@ defined here before they become public API.
 | Normalized pupil coordinates | Dimensionless coordinates normalized to the entrance-pupil diameter, represented by `NormalizedPupilCoordinates()`. For a re-imaged-pupil detector mosaic they describe the optical relay sampling, not a manufactured detector's physical pixel pitch. |
 | Sample-centered | A geometric origin lies on a stored sample. |
 | Inter-sample-centered | A geometric origin lies between stored samples. This is not necessarily an inter-pixel convention. |
-| Pupil function | The complex pupil transmission in Fourier optics. `PupilFunction` stores its wavelength-independent amplitude and OPD ingredients; field formation realizes the wavelength-specific complex pupil. |
+| Telescope aperture | The revisioned support, intensity reflectivity, diameter, and spatial sampling prepared by `TelescopeAperture`. It is geometry shared while paths are prepared; it is not a mutable wavefront or OPD buffer. |
+| Pupil function | The complex pupil transmission in Fourier optics. `PupilFunction` snapshots one telescope-aperture revision, stores its wavelength-independent support and field amplitude, and owns the mutable OPD for one path; field formation realizes the wavelength-specific complex pupil. |
 | Pupil reflectivity | The finite dimensionless intensity-throughput fraction in `[0, 1]` stored by `TelescopeAperture`. Optical field formation applies its square root as an amplitude transmission. It is not an amplitude coefficient itself. |
 | Electric field | In this package, a scalar complex optical field envelope/phasor sampled on a declared plane. `ElectricField` is not an SI vector electromagnetic field in V/m unless its metadata explicitly establishes such a normalization. |
 | Intensity | The computational quantity `abs2(E)`. Its physical units and normalization follow the field and metadata; the word alone does not assert radiometric irradiance. |
