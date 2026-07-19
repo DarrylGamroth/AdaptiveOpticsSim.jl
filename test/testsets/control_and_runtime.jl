@@ -1016,7 +1016,7 @@ end
     detector_a_before = copy(output_frame(detector_a))
     capture!(detector_b, shared_science_stage.output,
         shared_science_stage.acquisition[2]; rng=MersenneTwister(97),
-        sample_time=0.5)
+        integration_duration=0.5)
     @test !readout_ready(detector_b)
     @test_throws InvalidConfiguration sense!(shared)
     @test atmosphere.advances == 0
@@ -1238,7 +1238,7 @@ end
     primary_rate_before = copy(runtime.science_stage.output.values)
     capture!(det, runtime.science_stage.output,
         runtime.science_stage.acquisition; rng=MersenneTwister(98),
-        sample_time=0.5)
+        integration_duration=0.5)
     @test !readout_ready(det)
     @test_throws InvalidConfiguration sense!(runtime)
     @test AdaptiveOpticsSim.atmosphere_timeline(atm).model_time ==

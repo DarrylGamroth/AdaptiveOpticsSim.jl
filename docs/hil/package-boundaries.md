@@ -49,8 +49,9 @@ be mistaken for the final asynchronous scheduling model.
   fallback
 - calibration, prepared control-command routing, detector-metadata, and
   misregistration contracts
-- canonical virtual-time command events, bounded validation/admission, device
-  application, hold behavior, and terminal model outcomes
+- canonical virtual-time plant commands and semantic payload schemas, bounded
+  validation/admission, device application, hold behavior, and terminal model
+  dispositions
 - deterministic trigger-source, distribution-link, and detector-acquisition
   semantics, including physical trigger faults distinct from timestamp labels
 - deterministic event stepping independent of wall clock and transport
@@ -65,21 +66,24 @@ be mistaken for the final asynchronous scheduling model.
 - preparation and wall-clock pacing of the core's modeled trigger topology
 - pacing and recording of calibration-source state events when a user scenario
   declares them, without assigning their control authority
-- `Clocks.jl` clock selection, cached-clock ownership, and deterministic HIL
-  scheduler test clocks
+- `Clocks.jl` clock selection from the first serial vertical slice, including
+  deterministic test clocks and a monotonic production clock; later hardening
+  adds cached-clock ownership and external-domain mapping
 - canonical command-submission, command-completion, and complete-product
   acquisition-completion ports
-- prepared canonical command/acquisition schemas, boundary command descriptors,
-  terminal command outcomes, product leases, endpoint identifiers, external
-  timing metadata, and outcome-credit ownership
+- prepared boundary command/acquisition descriptor schemas, command-submission
+  descriptors, correlated command outcomes, product leases, endpoint
+  identifiers, external timing metadata, and outcome-credit ownership
 - configure, prepare, arm, run, and bounded stop/fail lifecycle
-- per-endpoint modeled command-age and operational ingress-liveness watchdog
-  policy without transport-specific health assumptions
+- per-endpoint operational ingress-liveness watchdog policy without transport-
+  specific health assumptions; modeled plant-time command age remains core
 - resource-specific full, close, drain, reclamation, and recovery policies
 - cache-line-padded lock-free SPSC descriptor rings and bounded acquisition/
   command payload-buffer pools behind those ports
-- long-lived CPU/GPU execution owners, per-owner due/completion paths, and a
-  bounded pool of immutable epoch snapshots
+- long-lived CPU/GPU execution owners, per-owner due/completion paths, and
+  bounded slots for materialized atmospheric path products plus model-specific
+  retained atmosphere-state snapshots where cross-timestamp rendering requires
+  them
 - deterministic in-memory integration harnesses, port conformance tests, and
   distinct canonical scenario, boundary-traffic, and decision/event replay
   records with in-memory source/sink seams
@@ -132,8 +136,8 @@ be mistaken for the final asynchronous scheduling model.
 ### Split responsibilities
 
 - Core defines optical-path reuse plus detector timing and incremental
-  integration semantics; the HIL companion schedules acquisition events against
-  wall clock.
+  integration semantics; the HIL companion paces the core's deterministic
+  acquisition events against its injected execution clock.
 - Core defines detector physics, acquisition timing, and when a complete
   product becomes ready. The HIL companion publishes one bounded product lease;
   user integration owns any progressive presentation, packetization, pacing,
@@ -154,11 +158,12 @@ be mistaken for the final asynchronous scheduling model.
   physical acquisition events and keeps reported labels separate. The HIL
   companion paces those realized plant events with its execution clock; it
   does not inject a detector-trigger fault by corrupting the execution clock.
-- Core defines controllable-optic state, virtual-time validation/admission,
-  response, application, and terminal model outcomes. The HIL companion maps
-  and transfers descriptors under a prepared canonical command schema into
-  that surface and publishes correlated completion outcomes; user code
-  transports and decodes them.
+- Core defines the semantic plant command schema, controllable-optic state,
+  virtual-time validation/admission, response, application, and terminal model
+  disposition. The HIL companion maps and transfers its own boundary submission
+  descriptors into that surface and publishes correlated command outcomes;
+  user code transports and decodes them. Core does not depend on descriptor,
+  lease, port, or outcome-credit types from the HIL package.
 - Core models sampled device feedback as an ordinary scalar, vector, or image
   acquisition. The HIL companion publishes that acquisition independently of
   command outcomes; user integration maps it to the RTC's feedback transport.
@@ -166,7 +171,8 @@ be mistaken for the final asynchronous scheduling model.
   buffer lifetime; user integration owns everything beyond that boundary.
 - In-process stages use direct calls or SPSC ownership handoffs. An optional
   iceoryx2 adapter belongs at a deliberate process boundary and does not replace
-  path-local workspace ownership or immutable in-process epoch publication.
+  path-local workspace ownership, current-epoch materialization, or bounded
+  retained-state ownership.
 - Core defines backend/device identity, supported execution seams, and prepared
   group requirements; the HIL companion resolves the static placement policy
   and owns CPU and GPU execution agents.
@@ -175,7 +181,10 @@ be mistaken for the final asynchronous scheduling model.
 - Core defines calibration data meaning. The HIL manifest records the stable
   calibration identity and compatibility metadata used by a run; user
   integration or an optional artifact companion owns serialization, storage,
-  selection, and campaign lifecycle.
+  selection, and campaign lifecycle. Existing core `cache_path` and
+  `write_config_toml` conveniences are transitional and do not become part of
+  the plant or HIL API; their replacements return structured data to an
+  extension or caller-owned persistence policy.
 - Core owns AO-plant optics and native sampled aberrations; `Proper.jl` owns a
   selected detailed relay, coronagraph, or instrument prescription. The HIL
   companion schedules a generic prepared external-optics executor; a

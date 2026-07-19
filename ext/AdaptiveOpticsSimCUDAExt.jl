@@ -36,23 +36,4 @@ function AdaptiveOpticsSim.solve_lift_fallback!(
     return rhs
 end
 
-function AdaptiveOpticsSim.masked_sum2d_accelerator(
-    ::AdaptiveOpticsSim.AcceleratorStyle{<:CUDA.CUDABackend},
-    values_parent::CUDA.CuArray{T,2},
-    valid_mask::CUDA.CuArray{Bool,2},
-    scalar_buffer::AbstractVector{T},
-    scalar_host::AbstractVector{T},
-    host_parent::AbstractMatrix{T},
-    row_offset::Int,
-    col_offset::Int,
-    n_rows::Int,
-    n_cols::Int,
-) where {T<:AbstractFloat}
-    rows = (row_offset + 1):(row_offset + n_rows)
-    cols = (col_offset + 1):(col_offset + n_cols)
-    values_view = @view values_parent[rows, cols]
-    total = LinearAlgebra.dot(vec(values_view), vec(T.(valid_mask)))
-    return total, host_parent
-end
-
 end

@@ -72,8 +72,9 @@ end
 @inline function accumulate_incremental_charge_generation!(det::Detector,
     rng::AbstractRNG, exposure_time::Real)
     # The current thermal state represents the start of this interval. Thermal
-    # evolution occurs after the interval is accumulated, so sample_time is the
-    # quadrature cadence for temperature-dependent generated charge.
+    # Evolution occurs after the interval is accumulated, so the elapsed
+    # integration duration is the quadrature interval for temperature-dependent
+    # generated charge.
     apply_incremental_dark_current!(det, rng, exposure_time)
     apply_dark_defects!(det.params.defect_model, det, exposure_time)
     apply_incremental_sensor_statistics!(det.params.sensor, det, rng,

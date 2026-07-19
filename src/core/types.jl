@@ -12,7 +12,7 @@ abstract type AbstractAtmosphere <: AbstractOpticalElement end
 
 """
 Atmospheres whose shared evolution is advanced with explicit model time and
-published as immutable epoch identities.
+published as immutable current-state epoch identity tokens.
 """
 abstract type AbstractTimedAtmosphere <: AbstractAtmosphere end
 

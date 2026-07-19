@@ -20,6 +20,10 @@ evidence includes:
 - one atmosphere selection/advance to explicit model time per sampled plant
   timestamp with identical epoch visibility across all due directions and no
   telescope-cadence fallback
+- rejection of stale `AtmosphereEpoch` tokens, serial materialization of every
+  due path input before the next advance, and parallel lifetime tests proving
+  that mutable layers are never advanced under an unmaterialized reader;
+  plans that retain older state additionally prove bounded slot accounting
 - analytic wind-offset checks over zero, unequal, and multi-step durations
 - independent caller-owned wavefronts/fields sharing one telescope definition
   without shared path OPD, focal-plane result, propagation-workspace, or
@@ -41,8 +45,9 @@ evidence includes:
   paths at different cadences
 - on-axis, off-axis NGS, and finite-height LGS direction geometry
 - mixed NGS/LGS path scheduling against one atmosphere epoch
-- detector integration, rolling shutter, frame-transfer timing, and
-  up-the-ramp nondestructive reads where supported
+- detector integration, rolling shutter, frame-transfer timing, and actual
+  event-time up-the-ramp nondestructive reads where supported; the existing
+  post-exposure synthesized ramp is tested and claimed separately
 - presampling detector response and charge-coupling stages remain in their declared order when
   acquisition is split across scheduled events
 - multiple schedules with different periods and phases on one plant timeline
@@ -101,6 +106,9 @@ evidence includes:
 - prepared acquisition/trigger/shutter/calibration/safe-state transitions that
   do not mutate topology, schema, capacity, placement, or provider fidelity
 - serial versus CPU-parallel and CPU versus GPU parity within tolerance
+- stable RNG-owner identities and derivation versioning, including endpoint
+  reorder, changed execution-group order, and applicable CPU/GPU placement
+  cases that preserve each physical event's random domain
 - constrained deterministic and fully explicit placement resolving to
   reproducible, inspectable prepared plans
 - rejection of conflicting, unsupported, memory-infeasible, and
@@ -117,14 +125,18 @@ evidence includes:
 - zero warmed steady-state heap allocation on maintained CPU HIL paths
 - same-process adapter/telemetry allocation and GC soak evidence or explicit
   isolation of allocating integration in another process
+- bounded preparation/compilation latency and generated-code growth as path and
+  endpoint registries scale, preventing whole-instrument topology from becoming
+  one unbounded recursively specialized type
 
 ## Minimal Vertical-Slice Evidence
 
 The first RTC-facing evidence uses one serial CPU owner, one scheduled
 acquisition, one command-responsive optic, an injected clock, and an in-memory
-fake RTC. It exercises the canonical command schema, command/outcome pair,
-complete-product lease, adapter-readiness precondition, and release accounting
-without worker queues, GPU submission, placement planning, or a real transport.
+fake RTC. It exercises the core plant command schema, HIL submission descriptor
+and command/outcome pair, complete-product lease, adapter-readiness precondition,
+and release accounting without worker queues, GPU submission, placement
+planning, or a real transport.
 
 The fake RTC must perform meaningful work: consume the declared pixel, slope,
 or other sensor product; calculate a command through a pinned reference

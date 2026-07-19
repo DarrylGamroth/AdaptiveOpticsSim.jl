@@ -28,13 +28,17 @@ remaining event-runtime ownership requirements are:
 
 - shared immutable telescope parameters plus revisioned aperture support and
   reflectivity
-- shared atmosphere layer state that is read-only for a published epoch
+- shared atmosphere layer state that is read-only while its current epoch
+  readers are active; an epoch token does not retain those layers
 - shared immutable optic parameters and an effective command snapshot
 - source-specific, precomputed propagation geometry
 - path-local OPD, electric field, photon-arrival-rate output, and FFT workspace
 - acquisition-local WFS, detector-integration, readout, and publication state
 - destination-owned atmosphere rendering that does not use one shared render
   scratch buffer
+- bounded caller-owned materialized atmospheric path products, plus optional
+  model-specific retained state only when a plan permits cross-timestamp
+  rendering
 
 Preparation owns allocation, FFT planning, path grouping, worker placement,
 and cache construction. The warmed event path mutates prepared state without
@@ -52,16 +56,20 @@ The coordinator fans out compact due-work descriptors through direct calls or
 one bounded SPSC ring per execution owner. Each owner processes its ordered
 stream and returns completion through an owner-specific bounded path; the
 design does not introduce one contended global work queue. A fixed pool of
-versioned epoch snapshots permits bounded overlap across independent paths or
-timestamps. Per-acquisition integration remains single-writer and ordered even
+materialized atmospheric path-product slots permits downstream overlap without
+retaining mutable layer state. A model may additionally prepare a bounded pool
+of retained atmosphere-state snapshots when it must render after the writer
+advances. Per-acquisition integration remains single-writer and ordered even
 when other acquisitions progress concurrently.
 
 Required WFS work does not wait for unrelated science work merely because both
-share a plant timestamp. Preparation either assigns enough independent
-resources and snapshot depth for their declared overlap or gives optional work
-an explicit shed, coalescing, or fail policy. Snapshot exhaustion, worker lag,
-or a full due-work ring follows that prepared policy rather than creating an
-unbounded backlog.
+share a plant timestamp. The atmosphere writer does wait only until every
+unmaterialized reader of its current layers has completed. After path inputs
+are materialized, preparation either assigns enough independent resources and
+slot depth for their declared downstream overlap or gives optional work an
+explicit shed, coalescing, or fail policy. Materialization/snapshot exhaustion,
+worker lag, or a full due-work ring follows that prepared policy rather than
+creating an unbounded backlog.
 
 ### Prepared static placement
 
@@ -70,6 +78,15 @@ direction-dependent optical path and its compatible acquisition consumers. It
 does not ask users to place individual Julia tasks, kernels, or functions.
 Preparation resolves every group to one execution owner and memory domain.
 The resulting plan is immutable for the run.
+
+Small fixed stage pipelines within one group may remain concretely typed for
+specialization. A large instrument's endpoint and path registry MUST NOT be
+encoded solely as one recursively specialized tuple or `NamedTuple` whose type
+grows with topology size. Preparation instead uses homogeneous registries or
+prepared executor handles behind function barriers where needed. Validation
+records preparation/compilation latency and generated-code size versus endpoint
+count so low steady-state latency is not purchased with unbounded startup or
+code growth.
 
 The initial implementation supports two configuration modes with the same
 prepared-plan representation:
@@ -190,8 +207,9 @@ placing high-rate or computationally expensive optical paths on GPU owners.
 CPU and GPU groups may run concurrently when their prepared dependencies and
 deadlines permit it.
 
-Shared telescope parameters, atmosphere epochs, effective command snapshots,
-and deterministic RNG identities are replicated or published immutably across
+Shared telescope parameters, atmosphere epoch tokens or retained/materialized
+state, effective command snapshots, and deterministic RNG identities are
+replicated or published with explicit lifetimes across
 the participating resources. Large field, OPD, photon-arrival-rate, or frame arrays cross a
 CPU/GPU boundary only at an explicit prepared handoff with bounded storage and
 a measured transfer budget. An ordinary optical path should not be split
@@ -233,10 +251,12 @@ A prepared multi-device plan needs:
 
 Full atmosphere-screen copies should not cross PCIe on every tick. Static
 screen state should be replicated during preparation, while evolution uses
-shared epoch counters and deterministic per-layer random streams. If an
-atmosphere model injects stochastic state, its random values must be derivable
-from stable identifiers such as run seed, layer, epoch, and element so that
-each device reproduces the same physical realization.
+shared epoch counters and deterministic per-layer random domains. If an
+atmosphere model injects stochastic state, its random values must be
+addressable from stable identifiers such as run seed, derivation version,
+layer identity, epoch, and element so that each device reproduces the same
+physical realization. Sequential host seed consumption in device-launch order
+does not satisfy this multi-device contract.
 
 Initial production validation should target homogeneous CUDA/CUDA and then
 AMDGPU/AMDGPU configurations. The abstraction may permit mixed backends, but a
@@ -260,8 +280,9 @@ A future distributed HIL placement must statically shard complete path groups
 and additionally define:
 
 - one authoritative plant timeline and measured inter-host clock mapping
-- replication or publication of atmosphere epochs, effective commands, RNG
-  identities, and configuration revisions
+- replication or publication of atmosphere epoch tokens, required retained or
+  materialized state, effective commands, RNG identities, and configuration
+  revisions
 - bounded transport capacity, ordering, loss, retry, and reconnect semantics
 - ownership and reclamation of cross-process product buffers
 - host, process, NIC, interrupt, and failure-domain placement

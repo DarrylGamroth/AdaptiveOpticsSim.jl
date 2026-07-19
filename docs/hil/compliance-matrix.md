@@ -40,9 +40,9 @@ matrix is the canonical state ledger:
 
 | Requirement family | Normative specification |
 |---|---|
-| `HIL-PLANE`, `HIL-ATM`, `HIL-SRC`, `HIL-RAD`, `HIL-SCI` | [`plant-and-optics.md`](plant-and-optics.md) and [`validation.md`](validation.md) |
+| `HIL-PLANE`, `HIL-ATM`, `HIL-SRC`, `HIL-RAD`, `HIL-SCI`, `HIL-API` | [`plant-and-optics.md`](plant-and-optics.md), [`package-boundaries.md`](package-boundaries.md), and [`validation.md`](validation.md) |
 | `HIL-WFS` | [`plant-and-optics.md`](plant-and-optics.md) and [`validation.md`](validation.md) |
-| `HIL-ORACLE`, `HIL-OBS`, `HIL-REPLAY` | [`time-and-scheduling.md`](time-and-scheduling.md) and [`validation.md`](validation.md) |
+| `HIL-ORACLE`, `HIL-RNG`, `HIL-OBS`, `HIL-REPLAY` | [`../deterministic-simulation.md`](../deterministic-simulation.md), [`time-and-scheduling.md`](time-and-scheduling.md), [`execution-and-placement.md`](execution-and-placement.md), and [`validation.md`](validation.md) |
 | `HIL-PLANT`, `HIL-PATH`, `HIL-DET`, `HIL-FID` | [`plant-and-optics.md`](plant-and-optics.md), [`time-and-scheduling.md`](time-and-scheduling.md), and [`validation.md`](validation.md) |
 | `HIL-CAL` | [`plant-and-optics.md`](plant-and-optics.md), [`package-boundaries.md`](package-boundaries.md), and [`validation.md`](validation.md) |
 | `HIL-CMD`, `HIL-OPT` | [`plant-and-optics.md`](plant-and-optics.md) and [`time-and-scheduling.md`](time-and-scheduling.md) |
@@ -79,36 +79,46 @@ PRs update the links and states together when behavior or evidence changes.
 | HIL-WFS-007 | 0 | LiFT consumes an independently acquired observation and separates its focal-plane forward model from iterative estimation without being forced into the ordinary WFS type hierarchy | Core | implemented | validated | [`PreparedLiFTForwardModel`](../../src/wfs/lift.jl) freezes the pupil transmission, modal basis, diversity, source photon irradiance, object kernel, deterministic frame mapping, geometry/radiometry, backend, and device without retaining a telescope, source, or detector. `LiFTObservation` binds caller-owned photon-rate, expected-count, or normalized-intensity values to that contract; `LiFT` owns only the prepared forward model, prepared modal subset, solve policy, and iterative workspace. [`calibration_and_analysis.jl`](../../test/testsets/calibration_and_analysis.jl) covers independent observation storage, analytic/numerical Jacobians, count/rate equivalence, deterministic preprocessing, mismatch rejection, frozen interaction-matrix norms, and zero warmed allocation for the normal-equation path. The shared optional matrix and maintained `386/386` CUDA and `396/396` AMDGPU hardware targets now validate device-resident forward formation, dense/separable convolution, analytic interaction matrices, rate/count/normalized observations, and analytic/numerical reconstruction with scalar indexing disabled. |
 | HIL-WFS-008 | 0 | Geometric and reduced-order WFS policies avoid unused diffractive workspace and declare whether they produce an approximate photon-arrival-rate product for detector processing or intentionally produce a direct measurement | Core | implemented | validated | `AcquiredObservationPath()` and `DirectMeasurementPath()` establish the acquired-observation versus intentional-direct-measurement distinction, and every maintained prepared estimator exposes that decision through `wfs_measurement_path`. Geometric Shack–Hartmann, Pyramid, and BioEdge preparation creates neither diffractive-front-end nor detector-acquisition workspace and intentionally returns direct measurements; maintained diffractive policies use acquired photon-rate observations. [`wfs_stage_contracts.jl`](../../test/testsets/wfs_stage_contracts.jl) verifies the cross-family declarations, absence of placeholder workspace, explicit-pupil execution, and zero warmed CPU allocation. New reduced-order policies must choose one of these contracts rather than silently imitating detector data. |
 | HIL-WFS-009 | 0 | Every migrated stage preserves deterministic CPU results, maintained CUDA and AMDGPU parity, device residency, warmed allocation budgets, and comparable steady-state latency within predeclared absolute and relative gates | Core | implemented | validated | Prepared Shack–Hartmann, Pyramid, BioEdge, Zernike, and Curvature optical, acquisition, and estimation stages preserve their frozen CPU behavior and are allocation-free after warmup; geometric construction omits unused diffractive and acquisition storage. LiFT now preserves its frozen analytic/numerical interaction-matrix norms, uses device-safe buffer and object-convolution kernels, and is zero-allocation after warmup for analytic or numerical Jacobian construction and in-place normal-equation reconstruction. CPU `LiFTSolveQR` remains the accuracy-first automatic choice and has a small factorization-wrapper allocation; the explicitly prepared normal-equation path is the zero-allocation low-latency surface. The shared [optional backend matrix](../../test/backend_optional_common.jl) directly executes all physical families plus LiFT and its dense/separable object kernels on device-resident CUDA and AMDGPU arrays with scalar indexing disabled. The committed [Pre-HIL 7 Gate 0 artifact](../../benchmarks/results/gate0/2026-07-16-pre-hil-07-shack-hartmann-stage.toml) records passing absolute and relative latency gates for `G0-PERF-05`. The [Pre-HIL 8 Gate 0 artifact](../../benchmarks/results/gate0/2026-07-17-pre-hil-08-pyramid-bioedge-stage.toml) records zero warmed allocation and passing absolute and relative gates for staged Pyramid `G0-PERF-06`. The [Pre-HIL 9 Gate 0 artifact](../../benchmarks/results/gate0/2026-07-17-pre-hil-09-zernike-curvature-stage.toml) adds predeclared zero-allocation and absolute p99 gates for staged Zernike `G0-PERF-09` and two-plane/two-detector Curvature `G0-PERF-10`; these cards have no predecessor measurement, so their relative gates begin with this artifact rather than being retroactively evaluated. `G0-PERF-11` adds the prepared LiFT reconstruction contract and begins its relative baseline with this migration. The complete maintained hardware pass is `386/386` on CUDA and `396/396` on AMDGPU. The [full final Gate 0 catalog](../../benchmarks/results/gate0/2026-07-18-pre-hil-11-full-backend-evidence.toml) preserves one 96 ns Shack-Hartmann relative-p99 miss while every absolute and allocation gate passes; the immediate [same-contract confirmation](../../benchmarks/results/gate0/2026-07-18-pre-hil-11-shack-hartmann-confirmation.toml) passes at 108.543 μs median p99 against the 130.399 μs limit. Clean [local CPU](../../benchmarks/results/platform/2026-07-18-pre-hil-11-local-cpu.toml), [WSL CPU](../../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cpu.toml), and [WSL CUDA](../../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cuda.toml) service-time artifacts pass their declared correctness, residency, allocation, absolute-p95, and relative-p95 gates; AMD performance remains scoped to the earlier maintained artifact because the later host Julia installation failed before a new raw histogram was retained. |
-| HIL-ORACLE-001 | 1 | Single-threaded deterministic execution is the numerical and event-order oracle | Core | partial | partial | [`reference_harness.jl`](../../test/reference_harness.jl) and the [determinism policy](../deterministic-simulation.md); multi-rate/placed-optic cases remain a gap |
-| HIL-PLANT-001 | 2 | One coherent telescope and atmosphere epoch feeds every due path | Core | partial | partial | [`runtime/arms.jl`](../../src/control/runtime/arms.jl) now advances once and renders every arm from the same published epoch with a path-owned renderer; [shared-runtime tests](../../test/testsets/control_and_runtime.jl) verify this and zero warmed CPU allocation. A general due-path scheduler and immutable full-plant snapshot remain gaps. |
-| HIL-PATH-001 | 2 | Prepared paths own mutable propagation workspace; acquisitions separately own WFS, detector, readout, and publication state | Core | partial | partial | Direction renderers and [`AtmosphericFieldPropagation`](../../src/optics/atmospheric_field_propagation.jl) now freeze source/geometry and own prepared path workspaces, while runtime arms own their renderers separately from detector state. Full WFS/science front-end and acquisition decomposition remains Gate 2 work. |
+| HIL-ORACLE-001 | 1 | Single-threaded deterministic execution is the numerical and event-order oracle for every capability implemented at the current gate; future multi-rate and placed-optic cases acquire their oracle when their defining gate is implemented | Core | implemented | validated | [`reference_harness.jl`](../../test/reference_harness.jl), the [determinism policy](../deterministic-simulation.md), the Gate 0 characterization suite, and maintained CPU/backend evidence establish the current numerical oracle without making later-gate behavior a Gate 1 prerequisite. |
+| HIL-PLANT-001 | 2 | One coherent telescope and current atmosphere epoch token feeds every due path, and every atmosphere-dependent path input is materialized under a valid lifetime before mutable atmosphere state advances | Core | partial | partial | [`runtime/arms.jl`](../../src/control/runtime/arms.jl) now advances once and renders every arm from the same published epoch with a path-owned renderer; [shared-runtime tests](../../test/testsets/control_and_runtime.jl) verify this and zero warmed CPU allocation. A general due-path materialization plan and scheduler remain gaps; an `AtmosphereEpoch` token is explicitly not a retained snapshot. |
+| HIL-PATH-001 | 2 | Prepared paths own mutable propagation workspace; acquisitions separately own WFS, detector, readout, and publication state | Core | partial | partial | Direction renderers and [`AtmosphericFieldPropagation`](../../src/optics/atmospheric_field_propagation.jl) freeze source/geometry and own prepared path workspaces; every maintained WFS and direct-science path now has staged optical/acquisition ownership. A general plant registry, reusable compatible-path grouping, and independently scheduled acquisition/readout/publication state remain Gate 2 work. |
 | HIL-PATH-002 | 2 | Immutable optical-path definitions are separate from independently scheduled or triggered acquisition state | Core | planned | missing | Enables propagation reuse across cameras and cadences |
-| HIL-FID-001 | 2 | Each acquisition binds one run-immutable prepared full-optical, command-responsive reduced-order, or synthetic/replay product provider while preserving one shape, type, sequence, timestamp, lease, port, and overload contract | Core | partial | missing | [`sensing_modes.jl`](../../src/wfs/sensing_modes.jl) and geometric WFS implementations provide reduced slope foundations; full optics exist, but the generic provider seam, synthetic/replay source, and cross-provider conformance evidence are missing |
+| HIL-API-001 | 2 | The core plant API separates run-immutable definitions, prepared plans, mutable single-writer state/workspaces, and caller-owned products without extending transitional OOPAO/frame-step abstractions or imposing HIL-only names on core models | Core | partial | partial | Gate 0 optical/WFS products already follow this split. General plant/path/acquisition definitions and prepared execution replace, rather than grow, `AOSimulation`, `ClosedLoopRuntime`, `CompositeControllableOptic`, and `RuntimeCommandLayout`; the [architecture index](../hil-package-boundary.md) and [plant specification](plant-and-optics.md) define the breaking target. |
+| HIL-API-002 | 2 | Core plant and calibration APIs exchange structured data without owning path-based cache policy, serialization codecs, or hard-coded configuration file formats | Core + optional extension/user integration | partial | missing | [`config_dict`](../../src/core/config.jl) and calibration results already expose structured data. Current [`cache_path`/`Serialization`](../../src/calibration/misregistration_identification.jl) and [`write_config_toml`](../../src/core/config.jl) conveniences are transitional. Gate 2 removes them from the target core surface and leaves artifact persistence to an extension or caller. |
+| HIL-ATM-003 | 2 | A serial plant materializes each due path's atmosphere-dependent OPD, field, or model-specific input before the atmosphere writer advances; stale epoch tokens are rejected and are never treated as retained layer storage | Core | planned | missing | Phase-only paths may materialize caller-owned OPD. Layer-aware propagation may require a model-specific materialization operation; cross-timestamp retained state belongs to `HIL-ATM-004`. |
+| HIL-RNG-001 | 2 | Preparation derives run-unique stable RNG owner identities and per-owner streams from a central seed and versioned scheme so endpoint/path order does not change stochastic results in the serial plant | Core | planned | missing | Owners include atmosphere layers, trigger sources/links, product providers, detector acquisitions, and device models; tuple position, task, thread, ring cursor, and device ordinal are forbidden identities. |
+| HIL-FID-001 | 2 | Each acquisition binds one run-immutable prepared full-optical, command-responsive reduced-order, or synthetic/replay product provider while preserving one logical product shape, type, geometry/radiometry, metadata, and provider-result contract | Core | partial | missing | [`sensing_modes.jl`](../../src/wfs/sensing_modes.jl) and geometric WFS implementations provide reduced slope foundations; full optics exist, but the generic provider seam, synthetic/replay source, and logical cross-provider conformance evidence are missing. HIL descriptors, leases, ports, and overload conformance arrive at Gate 4A/10A. |
 | HIL-CAL-001 | 2 | Calibration illumination composes through ordinary source/path or detector-input seams with user-declared typed entry, visibility, timing, state, and combination semantics; core assumes no instrument topology, source physics, propagation bypass, or control authority | Core + user model | partial | partial | [`source.jl`](../../src/optics/source.jl), [`spectrum.jl`](../../src/optics/spectrum.jl), [`extended_source.jl`](../../src/optics/extended_source.jl), and [temporal detector sources](../../src/detectors/interface.jl) have maintained [source](../../test/testsets/shack_hartmann_and_sources.jl) and [detector](../../test/testsets/detectors.jl) evidence; a generic internal path-entry seam remains missing |
-| HIL-PATH-003 | 3 | Acquisitions over native NGS, finite-height LGS, and direct-science paths use independent virtual-time schedules | Core | partial | partial | [`source_geometry.jl`](../../src/atmosphere/source_geometry.jl) and [`runtime/arms.jl`](../../src/control/runtime/arms.jl) provide frozen NGS/LGS directions and one stable epoch for independent WFS/science paths; atmosphere and runtime tests cover distinct geometry. Common multi-rate virtual-time orchestration remains a gap. |
+| HIL-PATH-003 | 3 | Acquisitions over native NGS, finite-height LGS, and direct-science paths use independent virtual-time schedules | Core | partial | partial | [`source_geometry.jl`](../../src/atmosphere/source_geometry.jl) and [`runtime/arms.jl`](../../src/control/runtime/arms.jl) provide frozen NGS/LGS directions and one current-state epoch token for independent WFS/science paths; atmosphere and runtime tests cover distinct geometry. Common multi-rate virtual-time orchestration remains a gap. |
 | HIL-DET-001 | 3 | Exposure, optical samples, rolling shutter, frame transfer, nondestructive reads, readout, presampling detector response, charge coupling, and complete-product publication have explicit composable event semantics; the realized response has a validated interior MTF where supported and explicit finite-frame boundary behavior | Core | partial | partial | [`detectors/interface.jl`](../../src/detectors/interface.jl) and [detector tests](../../test/testsets/detectors.jl); scheduled plant integration remains a gap |
+| HIL-DET-002 | 3 | Scheduled up-the-ramp operation samples evolving accumulated charge at explicit nondestructive-read events without ending integration; the post-exposure synthesized ramp remains a separately declared lower-fidelity convenience and cannot establish time-resolved behavior | Core | planned | missing | Current [`frame_sampling.jl`](../../src/detectors/frame_sampling.jl) synthesizes fractional reads after final integration. Gate 3 adds event-driven read storage and exact atmosphere/command boundary tests. |
 | HIL-TIME-001 | 3 | Integer canonical plant time and stable ordinals determine all equal-time event ordering | Core | planned | missing | Includes half-open exposure semantics |
 | HIL-TRIG-001 | 3 | A prepared trigger-source and distribution topology maps nominal edges to per-acquisition delivery times with explicit phase/skew, jitter, dropped/duplicate-edge policies, and separate physical exposure and timestamp-label semantics | Core | planned | missing | Camera-internal oscillator models are optional; the baseline covers externally visible trigger behavior |
 | HIL-SCHED-001 | 3 | A fixed-capacity scheduler jumps to due timestamps without base-tick polling, run-length-sized event materialization, or warmed allocation | Core | planned | missing | A prepared linear scan is the baseline; a stable array heap requires measured scale evidence |
 | HIL-CMD-001 | 4 | Every independently timed controllable optic or segment has an independent virtual-time command endpoint | Core | planned | missing | Replaces composite command packing; the minimal HIL port arrives in Gate 4A |
-| HIL-CMD-002 | 4 | Validation, admission, effective time, application, hold, and terminal outcome are distinct | Core | planned | missing | Atomic multi-optic latch is explicit, never inferred from placement |
-| HIL-CMD-003 | 4 | Future, late, rejected, and superseded commands use bounded explicit policies and never backdate plant state | Core | planned | missing | Every displaced or rejected command has a terminal outcome |
-| HIL-CMD-004 | 4 | Every endpoint prepares a versioned canonical payload schema covering type/shape, units, basis/calibration, absolute or incremental semantics, range policy, session epoch, and duplicate/reordering behavior | Core + HIL | planned | missing | Transport decoding maps into this schema before semantic admission |
-| HIL-CMD-005 | 4 | Every endpoint declares command-silence behavior, separating replayable plant-time hold/safe/fail policy from an optional execution-time ingress-liveness failure | Core + HIL | planned | missing | Safe state and watchdog storage are prepared; no watchdog callback allocates or invokes transport code |
+| HIL-CMD-002 | 4 | Validation, admission, effective time, application, hold, and terminal model disposition are distinct | Core | planned | missing | Atomic multi-optic latch is explicit, never inferred from placement |
+| HIL-CMD-003 | 4 | Future, late, rejected, and superseded commands use bounded explicit policies and never backdate plant state | Core | planned | missing | Every displaced or rejected command has a terminal model disposition |
+| HIL-CMD-004 | 4 | Every endpoint prepares a versioned core plant command schema covering payload type/shape, units, basis/calibration, absolute or incremental semantics, bounds, plant-effective-time policy, and duplicate/reordering behavior | Core | planned | missing | This row was split during the pre-HIL architecture review: core owns semantic command interpretation and model disposition; HIL boundary descriptors, session correlation, timestamp mapping, leases, and outcome credit are tracked by `HIL-PORT-005`. |
+| HIL-CMD-005 | 4 | Every endpoint declares replayable plant-time command-silence hold/safe/fail behavior, including the age origin and exact equal-time reset policy | Core | planned | missing | Safe state and modeled command-age storage are prepared; no transition allocates or invokes user or transport code. The separate operational ingress-liveness failure is tracked by `HIL-LIFE-002`. |
 | HIL-FID-003 | 4 | A reduced-order plant evolves time-correlated disturbances and maps correctly timed effective optic commands through calibrated path and sensor operators so commands causally change later products and a matched reference controller can close the loop | Core | partial | missing | [`interaction_matrix.jl`](../../src/calibration/interaction_matrix.jl), [`reconstructors.jl`](../../src/control/reconstructors.jl), geometric WFS modes, and tomography primitives are foundations; the prepared reduced-order plant and acceptance evidence are missing |
 | HIL-OPT-001 | 4 | Co-conjugated DMs remain independent devices even when prepared as one optical execution group | Core | partial | partial | [`controllable_optics.jl`](../../src/optics/controllable_optics.jl) and [runtime tests](../../test/testsets/control_and_runtime.jl) cover additive composites only |
 | HIL-OPT-004 | 4 | Autonomous periodic optical devices use trigger-relative waveform state and bounded setpoint commands rather than one RTC message per waveform point | Core | partial | partial | [`PyramidWFS`](../../src/wfs/pyramid/setup.jl) and its [modulation optics](../../src/wfs/pyramid/optics.jl) provide the baseline cycle-averaged foundation; physical trigger relation remains missing and time-resolved fidelity is profile-driven |
 | HIL-VSLICE-001 | 4A | A serial CPU vertical slice connects one scheduled acquisition and one command-responsive optic to a deterministic in-memory fake RTC through the canonical complete-product and command/outcome boundary with an injected clock and fixed-arrival evidence | HIL + Core | planned | missing | Proves the external contract before worker, GPU, multi-path, or transport-specific optimization |
+| HIL-TIME-003 | 4A | The first HIL vertical slice injects a `Clocks.jl` deterministic test clock and monotonic production clock while core remains wall-clock independent | HIL | planned | missing | Gate 8 hardens cached-clock ownership, staleness evidence, lifecycle, and external-domain mappings; it does not introduce clock injection again. |
 | HIL-PORT-001 | 4A | Canonical command-submission, command-completion/outcome, and acquisition-completion ports are transport-neutral | HIL | planned | missing | Successful ring enqueue transfers ownership but is not semantic command admission |
+| HIL-PORT-005 | 4A | A prepared HIL command-submission descriptor schema maps endpoint/session correlation, external timing metadata, payload-lease ownership, and outcome credit into a compatible core plant command schema without making HIL types dependencies of core | HIL | planned | missing | The paired HIL command outcome wraps the core terminal model disposition with boundary timing and returns the submission credit. |
 | HIL-PORT-003 | 4A | External integration declares adapter readiness, complete-product-to-first-observation lead time, and maximum lease hold time without promoting progressive fragments into canonical simulation events | HIL + user integration | planned | missing | First-packet timing remains an external-delivery claim |
 | HIL-PORT-004 | 4A | Sampled optic/device feedback uses ordinary acquisition endpoints and remains distinct from correlated command outcomes | Core + HIL | planned | missing | Supports scalar, vector, surface, encoder, and health products without an instrument-specific API |
 | HIL-BUF-001 | 4A | Large acquisition and command payloads use bounded pools and explicit generation-checked leases rather than ring-resident payload copies | HIL + user integration | planned | missing | Memory domain, generation, terminal-outcome/release ownership, and reuse are explicit; return-credit hardening follows in Gate 8 |
 | HIL-OPT-002 | 5 | Common MCAO and path-specific MOAO planes support NGS and finite-height LGS footprints | Core | planned | missing | Requires placement and visibility traits |
 | HIL-OPT-003 | 5 | Common and path-specific sampled aberrations, including NCPA, have explicit visibility | Core | partial | partial | [`ncpa.jl`](../../src/optics/ncpa.jl), [`opd_map.jl`](../../src/optics/opd_map.jl), and [model tests](../../test/testsets/calibration_and_analysis.jl); path visibility remains a gap |
 | HIL-CPU-001 | 6 | Prepared CPU execution groups have single-writer workspaces, explicit thread budgets, independently callable executor seams, and a deterministic serial fallback | Core | planned | missing | Long-lived HIL agents and their rings arrive in Gate 8 |
+| HIL-ATM-004 | 6 | Parallel execution either holds the atmosphere writer while same-epoch readers materialize or uses bounded model-specific retained atmosphere-state snapshots; it never uses an epoch token as retained storage and accounts for every materialization/snapshot slot | Core + HIL | planned | missing | Downstream path work may overlap after consuming only caller-owned materialized products. Snapshot representation is atmosphere-model specific rather than an unconditional full-layer copy. |
+| HIL-EXEC-006 | 6 | Prepared execution keeps small fixed stage pipelines specialized while representing large path/endpoint registries with bounded compilation and code growth verified against topology scale | Core | planned | missing | Avoids encoding a MORFEO-scale topology solely as one recursively specialized tuple or `NamedTuple`; preparation latency and generated-code size are evidence surfaces. |
 | HIL-GPU-001 | 7 | Physical device identity, prepared direction batching, and device-resident state are explicit | Core | partial | partial | [CUDA](../../ext/AdaptiveOpticsSimCUDAExt.jl), [AMDGPU](../../ext/AdaptiveOpticsSimAMDGPUExt.jl), and [backend tests](../../test/backend_optional_common.jl) now validate device-resident epoch rendering and prepared atmospheric fields with physical-device compatibility checks; prepared batching and physical multi-device planning remain gaps. |
 | HIL-TIME-002 | 8 | External timestamp domains map into plant time with versioned offset, drift, uncertainty, and no retroactive remapping | HIL | planned | missing | User integration supplies synchronization observations |
 | HIL-LIFE-001 | 8 | Configure, prepare, arm, run, and stop/fail phases preserve ownership, adapter-readiness preconditions, prepared nonstructural state transitions, and bounded shutdown | HIL | planned | missing | Topology, schema, capacity, placement, and provider changes require another prepare/arm cycle |
+| HIL-LIFE-002 | 8 | An optional execution-clock RTC-ingress-liveness watchdog resets only after semantic command admission, fails the run without silently changing optic state, and remains distinct from replayable plant-time command-silence behavior | HIL | planned | missing | Threshold, reset/recovery rules, clock identity, and exact-boundary behavior are recorded and tested; malformed traffic cannot keep a run alive. |
 | HIL-PORT-002 | 8 | Every port, schedule, pool, lease, and tap has resource-specific full, close, drain, and recovery semantics | HIL | planned | missing | Silent backlog, unread-slot overwrite, and lease loss are forbidden |
 | HIL-RING-001 | 8 | Each hot ownership handoff uses a bounded SPSC descriptor ring with release/acquire publication and isolated cursors | HIL | planned | missing | Requires layout, generated-code, concurrency, saturation, and recovery evidence |
 | HIL-BUF-002 | 8 | Each return path reserves usable credit for every lease its consumer can hold, so a valid first release cannot encounter ordinary full backpressure | HIL | planned | missing | Pool accounting covers free, producer-owned, completion-queued, consumer-leased, and return-queued states |
@@ -119,6 +129,7 @@ PRs update the links and states together when behavior or evidence changes.
 | HIL-EXEC-002 | 9A | Fully explicit and constrained deterministic placement resolve to one inspectable immutable plan | HIL | planned | missing | Conservative rules may fill unassigned groups; they do not override hard user placement |
 | HIL-EXEC-003 | 9A | Preparation validates constraints, capability, memory, transfers, burst utilization, and reserved contexts and records its rationale | HIL | planned | missing | Infeasible plans fail structurally; runtime migration is excluded |
 | HIL-GPU-002 | 9B | Static multi-GPU placement preserves epoch, command, detector, RNG, and sequence consistency | Core + HIL | planned | missing | Homogeneous multi-GPU validation follows single-resource and mixed CPU/GPU evidence |
+| HIL-RNG-002 | 9B | Replicated or reordered multi-device stochastic work uses addressable random domains derived from run seed, derivation version, stable owner, event/epoch, and element/sample identities rather than sequential host seed consumption in launch order | Core + HIL | planned | missing | Required for replicated atmosphere evolution and placement-independent detector/provider randomness; numerical output comparison remains tolerance-based across backends. |
 | HIL-EXEC-005 | Future | A calibrated fully automatic cost-model planner may assign complete groups while preserving the same immutable plan and admission contract | HIL | planned | missing | Requires representative real-profile measurements before implementation |
 | HIL-CPU-002 | 10B | Optional affinity records verified CPU, SMT, NUMA, FFT, BLAS, device-agent, and interrupt placement | HIL | planned | missing | `ThreadPinning.jl` is deployment policy |
 | HIL-PATH-004 | 10B | A prepared external optical executor, including `Proper.jl`, runs at its acquisition cadence without gating an independently placed required WFS path | HIL + optical companion | partial | partial | [Integration example](../../examples/integrations/proper_hil_coronagraph.jl), [benchmark](../../scripts/profile_proper_hil_coronagraph.jl), and sibling proving ground exist; canonical asynchronous HIL integration remains a gap |
@@ -135,8 +146,8 @@ PRs update the links and states together when behavior or evidence changes.
 
 | Gate | Capability outcome | State |
 |---:|---|---|
-| 0 | Optical planes/radiometry, explicit atmosphere time, direct-science acquisition, and WFS stages decomposed and validated | partial |
-| 1 | Contracts and correctness oracles frozen | partial |
+| 0 | Optical planes/radiometry, explicit atmosphere time, direct-science acquisition, and WFS stages decomposed and validated | complete |
+| 1 | Contracts and correctness oracles frozen | complete |
 | 2 | Shared plant, acquisition workspace, product providers, and source-entry seams separated | planned |
 | 3 | Deterministic multi-rate virtual-time event engine | planned |
 | 4 | Independent controllable-optic and meaningful reduced-order command semantics | planned |
@@ -165,6 +176,14 @@ closes the former telescope-path-state gap in `HIL-PLANE-001`; these artifacts
 still do not claim external-RTC response time or replace the earlier maintained
 AMD latency characterization.
 
+The pre-HIL architecture review closes Gate 1 by reconciling package and type
+ownership, atmosphere-token/materialization lifetime, detector event semantics,
+stable RNG ownership, execution-clock sequencing, and the breaking target API.
+`HIL-ORACLE-001` applies to capabilities implemented at the current gate;
+later multi-rate, placed-optic, parallel, and multi-device requirements carry
+their own oracle and evidence obligations rather than making Gate 1 depend on
+future gates.
+
 ## Capability Gates
 
 The target advances through durable capability gates. A PR may satisfy part or
@@ -175,9 +194,8 @@ independent-optic refactor; superseded surfaces are removed rather than kept as
 permanent adapters.
 
 No implementation of the proposed general `AdaptiveOpticsHIL.jl` companion
-runtime begins until Gate 0 is complete. Existing integration proving grounds
-remain valid, and HIL architecture and interface design may continue while
-this prerequisite is implemented. The ordered work is tracked by
+runtime begins until Gates 0 and 1 are complete. Existing integration proving
+grounds remain valid. The ordered work is tracked by
 [Gate 0 issue #1](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/1),
 and final review and closure are tracked by
 [issue #9](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/9).
@@ -246,17 +264,33 @@ before Gate 1 implementation work proceeds.
 - freeze temporary numerical references for current composite-optic cases
 - define canonical timestamps, equal-time ordering, sequence domains, output
   ownership, and performance-boundary terminology
+- distinguish current-state atmosphere epoch tokens, materialized path products,
+  and optional retained atmosphere-state snapshots
+- define stable RNG owner identities, derivation versioning, and the
+  stateful-versus-addressable policy without requiring its later-gate executor
+- distinguish frame-step incremental detector convenience from scheduled event
+  operations and time-resolved nondestructive reads
+- split core plant commands/model dispositions from HIL boundary descriptors,
+  leases, outcome credit, and command outcomes
+- freeze the breaking definition/prepared-plan/mutable-state/product API policy
+  without preserving the original OOPAO or frame-step object layout
 - retain the direct single-threaded CPU runtime as the numerical oracle
 
 Acceptance: every changed physical surface has a deterministic reference or an
-explicitly tracked evidence gap; current correctness, allocation, and backend
-targets remain green.
+explicitly tracked later-gate requirement; current correctness, allocation, and
+backend targets remain green. No acceptance condition depends on behavior first
+introduced by a later gate.
 
 ### Gate 2: Separate shared plant models from path and acquisition state
 
+- introduce the breaking core definition/prepared-plan/mutable-state/product
+  API without extending `AOSimulation` or `ClosedLoopRuntime`
+- remove path-based cache and hard-coded configuration serialization from the
+  target core surface; extensions or callers persist returned structured data
 - separate immutable path definitions from independently scheduled or
   triggered acquisition endpoints
-- render atmosphere state into caller-owned destinations
+- render/materialize every due atmosphere-dependent path input into caller-
+  owned destinations before the mutable atmosphere writer advances
 - precompute source geometry and compatible-result keys per prepared path
 - separate telescope parameters and pupil from path-local propagation workspace
   and acquisition-local WFS, detector, readout, and publication state
@@ -264,12 +298,16 @@ targets remain green.
   prepared mutating acquisition-product seam using dispatch and traits
 - expose a narrow prepared calibration-illumination seam at supported typed
   path entries or detector inputs, leaving physical integration to user models
+- prepare stable per-owner RNG streams from a central run seed, versioned
+  derivation scheme, and declared component identities
 - keep the first executor serial to isolate ownership correctness
 
 Acceptance: frozen outputs remain within declared tolerances, every due path
-sees one atmosphere epoch, path reuse does not couple acquisition state, and
-every applicable provider preserves the acquisition's shape, type, sequence,
-timestamp, lease, port, and overload contract. Reduced-order providers declare
+sees one current atmosphere epoch token and has materialized its required input
+before the next advance, path reuse does not couple acquisition state, endpoint
+or path reorder does not change per-owner stochastic results, and every
+applicable provider preserves the logical acquisition product's shape, type,
+geometry/radiometry, metadata, and provider result. Reduced-order providers declare
 their validity envelope; static/replay providers are explicitly nonresponsive;
 and the selected provider remains immutable until another prepare/arm cycle.
 A native and a user-provided calibration source preserve declared visibility,
@@ -277,7 +315,8 @@ timing, deterministic state, and composition without a calibration-role branch
 or implicit bypass. Unsupported entry payloads and source combinations fail
 during preparation. The warmed serial oracle meets its declared allocation
 budget. Comparable latency is archived as a baseline; no subjective latency
-gate is used.
+gate is used. HIL port descriptors, leases, queue capacity, and overload
+conformance are not Gate 2 acceptance criteria.
 
 ### Gate 3: Add deterministic multi-rate virtual-time execution
 
@@ -293,19 +332,25 @@ gate is used.
   after measured generator-count evidence justifies it
 - schedule optical samples, rolling-shutter bands, nondestructive reads,
   readout completion, and frame publication independently per acquisition
+- replace floating-tolerance completion authority with explicit scheduler-owned
+  begin, accumulate, read, close, readout, and readiness events; retain the
+  current auto-finalizing incremental call only as a frame-step convenience
 - preserve presampling detector response, charge-coupling, and readout-pipeline ordering when
   acquisition is split into scheduled events
 - accept explicit simulation timestamps without reading wall clock in core
 - expose due/readiness products without transport dependencies
 
-Acceptance: exact-boundary tests cover commands and acquisition events sharing
-a timestamp. Trigger tests distinguish nominal source edges, delivered edges,
+Acceptance: exact-boundary tests cover atmosphere evolution, trigger delivery,
+exposure/row-band boundaries, optical samples, nondestructive reads, readout,
+and publication sharing a timestamp. Trigger tests distinguish nominal source edges, delivered edges,
 physical exposure boundaries, reported labels, and execution time; cover fixed
 skew, correlated and independent jitter, phase steps, and dropped/duplicate
 edges; and prove that faults affect only their declared downstream branches.
 Representative CMOS rolling/global shutter, CCD, frame-transfer EMCCD, and
 HgCdTe nondestructive-read cases preserve their frozen detector products,
-including configured response/coupling behavior. Mixed rates produce the expected
+including configured response/coupling behavior. HgCdTe scheduled ramp reads
+sample evolving accumulated charge; the post-exposure synthesized convenience
+is validated and labeled separately. Mixed rates produce the expected
 sequences, long runs use storage proportional to active generators rather than
 event count, and long-period schedules do not iterate empty base ticks.
 Scheduler cost is archived across the maintained generator-count range, and
@@ -316,18 +361,21 @@ warmed execution meets its allocation budget.
 - replace the single `AOSimulation.optic` field with a named registry of
   individual controllable optics
 - introduce one independently timed endpoint per optic or latched segment
-- prepare a versioned canonical command schema per endpoint, including units,
-  basis/calibration revision, payload semantics, bounds, run epoch, and
-  duplicate/reordering policy
+- prepare a versioned core plant command schema per endpoint, including units,
+  basis/calibration revision, payload semantics, bounds, effective-time policy,
+  and duplicate/reordering policy; boundary session/timestamp/lease metadata
+  follows in Gate 4A
 - separate validation, admission, effective time, application, hold, and
-  terminal outcome in the virtual-time core; add enqueue in Gate 4A
+  terminal model disposition in the virtual-time core; add enqueue and HIL
+  command outcomes in Gate 4A
 - define bounded future-command and explicit late/supersession policies
 - define command-silence hold/safe/fail behavior in plant time, distinct from
   any operational execution-time ingress-liveness failure
 - support explicit atomic multi-optic transactions without inferring atomicity
   from plane placement or packed vectors
-- remove `CompositeControllableOptic` and split `RuntimeCommandLayout` into
-  prepared core routing, canonical HIL descriptors, and user transport schemas
+- remove `CompositeControllableOptic` and replace `RuntimeCommandLayout` with
+  prepared core endpoint routing; canonical HIL descriptors follow in Gate 4A,
+  while user transport schemas remain outside both packages
 - split detector integration correctly when a command becomes effective
 - add a prepared reduced-order plant whose time-correlated disturbances,
   path/sensor operators, and effective commands produce causally correct slopes
@@ -337,24 +385,29 @@ warmed execution meets its allocation budget.
   defer time-resolved modulation until a profile requires it
 
 Acceptance: deterministic timelines cover early, equal-time, future, late,
-rejected, superseded, and atomic commands; every submitted virtual-time command
-has one terminal outcome, and every admitted command is applied once or ends in
-a declared failure; schema/session/shape/sequence mismatches and both watchdog
-clock domains have exact-boundary tests; independent optics update without an
-internal RTC; the cycle-averaged pyramid model preserves its frozen reference
-and trigger relationship; a matched reference controller closes the
+rejected, superseded, and atomic plant commands; every command presented to the
+virtual-time core receives one terminal model disposition, and every admitted
+command is applied once or ends in a declared failure; schema, shape,
+calibration-revision, sequence, and plant-time command-silence boundaries have
+exact tests; independent optics update without an internal RTC; the
+cycle-averaged pyramid model preserves its frozen reference and trigger
+relationship; a matched reference controller closes the
 reduced-order loop and reduces its declared residual while wrong-sign, delayed, stale, and
-mismatched-calibration cases degrade as expected; and frozen physical outputs
-remain within tolerance.
+mismatched-calibration cases degrade as expected; commands and acquisition
+events sharing a timestamp follow the Gate 3 stable phase order; and frozen
+physical outputs remain within tolerance.
 
 ### Gate 4A: Prove a minimal serial HIL vertical slice
 
 - create the transport-free `AdaptiveOpticsHIL.jl` package boundary with only
   the canonical types needed by one serial path
-- inject a deterministic test clock and a monotonic production clock without
-  adding wall-clock reads to core
+- depend on `Clocks.jl` and inject a deterministic test clock plus a monotonic
+  production clock without adding wall-clock reads to core
 - connect one scheduled acquisition to a complete-product completion port and
   one command-responsive optic to a submission/outcome pair
+- map one HIL submission descriptor schema, including session correlation,
+  external timing metadata, payload lease, and outcome credit, into the core
+  plant command schema without making core depend on HIL types
 - use the intended bounded SPSC descriptor and generation-checked lease model,
   but defer cache-line/generated-code and multi-owner hardening to Gate 8
 - run the deterministic serial core directly; do not introduce worker queues,
@@ -396,13 +449,20 @@ equivalent; NCPA and MOAO commands affect only selected paths.
 - co-locate compatible consumers for field or photon-arrival-rate-product reuse
 - expose allocation-free `!` executor seams that accept explicit epoch and
   command snapshots without creating tasks or queues
+- hold the atmosphere writer until same-epoch materializers finish or use a
+  bounded model-specific retained state; downstream overlap consumes only
+  caller-owned materialized path products
 - preserve a deterministic single-threaded fallback
 - declare Julia, FFT, and BLAS thread ownership and avoid nested parallelism
 - expose stable worker placement and NUMA requirements
+- keep small stage pipelines specialized while bounding preparation,
+  compilation, and generated-code growth as path/endpoint registry size grows
 
 Acceptance: each group is independently callable under a validation harness;
-serial/grouped parity and allocation gates pass; and declared thread budgets do
-not oversubscribe Julia, FFT, or BLAS execution. Any performance promotion
+serial/grouped parity, atmosphere lifetime/accounting, and allocation gates
+pass; declared thread budgets do not oversubscribe Julia, FFT, or BLAS
+execution; and compile/code-size evidence remains inside its declared topology
+envelope. Any performance promotion
 satisfies a predeclared absolute contract and relative baseline gate with
 repeated-run dispersion on controlled hardware.
 
@@ -421,11 +481,14 @@ under the same fixed-arrival absolute and relative evidence contract.
 
 - retain `AdaptiveOpticsHIL.jl` without transport dependencies and generalize
   the Gate 4A boundary without changing its canonical schemas
-- inject `Clocks.jl` sources and versioned external-domain mappings while
+- harden the Gate 4A `Clocks.jl` seam with cached-clock ownership, measured
+  staleness, lifecycle behavior, and versioned external-domain mappings while
   keeping execution-clock pacing separate from modeled trigger delivery
 - complete configure, prepare, arm, run, and bounded stop/fail lifecycle,
   including adapter-readiness preconditions and prepared nonstructural
   acquisition, trigger, shutter/calibration, and safe/hold transitions
+- add the optional execution-clock RTC-ingress-liveness watchdog without
+  changing optic state or conflating it with plant-time command silence
 - instantiate long-lived execution owners from prepared CPU groups and a single
   submission owner for each selected GPU
 - harden the canonical command-submission, command-completion/outcome, and
@@ -433,8 +496,9 @@ under the same fixed-arrival absolute and relative evidence contract.
 - assign one prepared command authority per endpoint or explicit atomic latch
   group; keep competing-producer arbitration outside the canonical data plane
 - implement padded bounded SPSC descriptor rings and bounded product pools
-- use one due-work/completion path per owner and a fixed pool of versioned epoch
-  snapshots rather than a contended global queue
+- use one due-work/completion path per owner and fixed pools of materialized
+  atmospheric path products plus model-specific retained state where required,
+  rather than a contended global queue or token-as-snapshot assumption
 - define resource-specific full, close, drain, lease, and recovery semantics
 - reserve one usable return credit for every lease a consumer can hold and
   continuously check the complete pool-accounting invariant
@@ -445,7 +509,8 @@ under the same fixed-arrival absolute and relative evidence contract.
   isolation rule for adapters or telemetry that cannot meet them
 - provide deterministic in-memory adapters and port conformance tests
 
-Acceptance: exact execution-clock and external-domain mapping tests pass;
+Acceptance: exact execution-clock, ingress-liveness, and external-domain
+mapping tests pass; malformed traffic cannot reset the ingress watchdog;
 every transferred command produces one correlated terminal outcome; port
 enqueue is distinct from semantic command admission; every full policy
 preserves ownership; and ring layout, generated code, memory ordering,

@@ -33,8 +33,8 @@ external-RTC HIL development, following the maintained specifications indexed
 by [`hil-package-boundary.md`](hil-package-boundary.md) and tracking completion
 in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
 
-1. Preserve the completed HIL prerequisite Gate 0 while implementing the
-   proposed general HIL runtime. Gate 0 separates telescope aperture/geometry
+1. Preserve the completed HIL prerequisite Gates 0 and 1 while implementing
+   the proposed general HIL runtime. Gate 0 separates telescope aperture/geometry
    from caller-owned optical
    planes and propagation workspaces; separate shared atmosphere evolution from
    path-local NGS/LGS/source rendering; remove temporal cadence from the
@@ -54,11 +54,16 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    science, calibration, atmosphere, and controllable-optic path now consumes
    an explicit `PupilFunction` or field product. Preserve CPU, CUDA, and AMDGPU
    correctness, residency, allocation, and latency evidence throughout the HIL
-   migration.
+   migration. Gate 1 freezes the breaking plant-oriented API, package/type
+   boundaries, atmosphere token/materialization lifetime, deterministic RNG
+   ownership, detector event semantics, clock sequencing, and command boundary
+   before implementation begins.
 2. Compose the Gate 0 optical ownership primitives into immutable shared
    atmosphere/telescope/path definitions, prepared branch-local executors, and
    independently scheduled or triggered acquisition state while retaining the
-   direct serial CPU oracle. Introduce one prepared
+   direct serial CPU oracle. Materialize every due atmosphere-dependent path
+   input before advancing mutable layers, and derive stable per-owner RNG
+   streams independently of endpoint order. Introduce one prepared
    acquisition-product seam for full optical, command-responsive reduced-order,
    and synthetic/replay providers without changing the RTC boundary. The
    reduced-order provider must retain time-correlated disturbances, calibrated
@@ -67,15 +72,19 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    narrow typed path-entry seam for user-defined calibration illumination
    without introducing instrument topology or source assumptions in core.
 3. Add deterministic multi-rate integer-time events with explicit equal-time
-   command, trigger-distribution, optical-sample, detector-readout, and
-   publication semantics before adding wall-clock pacing. Keep physical
+   trigger-distribution, exposure/row-band, optical-sample, nondestructive-read,
+   detector-readout, and publication semantics before adding command timing or
+   wall-clock pacing. Keep physical
    trigger faults separate from timestamp-label faults and execution lateness.
 4. Replace the single-optic and `CompositeControllableOptic` runtime model with
-   individually placed optics, prepared command schemas, bounded timing and
-   silence/watchdog semantics, sampled device-feedback acquisitions, and
-   prepared plane groups as a deliberate breaking change.
+   individually placed optics, prepared core plant command schemas, bounded
+   timing and replayable plant-time command-silence semantics, sampled device-
+   feedback acquisitions, and prepared plane groups as a deliberate breaking
+   change. Operational execution-clock ingress liveness belongs to the later
+   HIL lifecycle boundary.
 5. Immediately prove a minimal serial CPU HIL vertical slice: one scheduled
-   acquisition, one command-responsive optic, an injected clock, canonical
+   acquisition, one command-responsive optic, an injected `Clocks.jl` clock,
+   HIL submission descriptors mapped into core plant commands, canonical
    complete-product and command/outcome ports, bounded SPSC/lease ownership, a
    deterministic fake RTC, and fixed-arrival evidence. Do this before worker,
    GPU, transport-specific, or placement-planner complexity.

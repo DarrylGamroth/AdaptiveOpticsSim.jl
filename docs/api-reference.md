@@ -165,9 +165,10 @@ error rather than an implicit unit conversion.
 - Static extension verbs: `advance!`, `propagate!`
 
 Timed atmosphere implementations mutate physical layer state only during an
-explicit advance and publish a stable epoch. A prepared single-direction
-renderer consumes the current epoch, writes a compatible caller-owned
-`PupilFunction`, and neither advances the atmosphere nor consumes RNG. The
+explicit advance and publish a stable current-state epoch token. The token does
+not retain layer storage and becomes stale after the next advance. A prepared
+single-direction renderer consumes the current epoch, writes a compatible
+caller-owned `PupilFunction`, and neither advances the atmosphere nor consumes RNG. The
 plural preparation API expands an `Asterism` or `ExtendedSource`; the singular
 API rejects multi-direction sources.
 
@@ -271,6 +272,12 @@ influence basis already includes the print-through structure.
 - Prepared intensity-map acquisition: `DetectorAcquisitionPlan`,
   `prepare_detector_acquisition`
 
+`capture!(...; integration_duration=seconds)` and `capture_incremental!` are the
+current frame-step incremental convenience surface. `integration_duration` is a
+positive integration duration, not an absolute timestamp. The planned
+virtual-time detector API uses explicit scheduler-owned exposure/read events
+rather than floating accumulated duration as its completion authority.
+
 Use `bits` for detector quantization depth and `output_type` for the Julia
 element type exported to an RTC/HIL boundary. A detector with `bits` must also
 provide a fixed positive `full_well`; per-frame peak normalization is not an
@@ -368,8 +375,11 @@ their products after warmup.
 
 The current ramp model assumes linear accumulation and independent per-read
 Gaussian read noise. It shares the exposure's photon/dark realization across
-the ramp and does not yet provide cosmic-ray segmentation, saturation-aware
-fitting, or correlated 1/f-noise estimation.
+the ramp by synthesizing fractional reads from the completed frame. It is a
+post-exposure lower-fidelity convenience, not a time-resolved simulation of an
+evolving charge ramp. The scheduled detector path will instead record actual
+nondestructive-read events. The current model also does not provide cosmic-ray
+segmentation, saturation-aware fitting, or correlated 1/f-noise estimation.
 
 `EMCCDSensor(...; acquisition_mode=FrameTransferAcquisition(...))` models frame
 transfer as timing only. With `readout_rate_hz` configured, metadata reports

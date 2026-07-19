@@ -44,8 +44,8 @@ Current CPU-supported families:
   independent `PupilFunction` path products; the telescope owns no cadence,
   path OPD, field, PSF, or propagation scratch
 - finite and infinite multilayer atmosphere with explicit elapsed/absolute
-  model time, stable epochs, frozen direction preparation, and caller-owned
-  rendering
+  model time, current-state epoch tokens, frozen direction preparation, and
+  caller-owned rendering
 - detector-family execution on maintained detector surfaces
 - staged Shack-Hartmann, Pyramid, and BioEdge WFS optical formation,
   detector acquisition, and estimation on maintained validated surfaces;
