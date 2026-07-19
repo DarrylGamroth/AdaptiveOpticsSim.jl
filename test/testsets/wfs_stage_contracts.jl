@@ -1349,6 +1349,23 @@ end
     @test_throws DimensionMismatchError AdaptiveOpticsSim.update_subaperture_layout_from_amplitude!(
         independent_layout, ones(T, 16, 15),
         FluxThresholdValidSubapertures(T=T))
+    flux_amplitude = zeros(T, 16, 16)
+    flux_amplitude[1:4, 1:4] .= one(T)
+    flux_amplitude[5:8, 1:4] .= T(0.5)
+    flux_revision = AdaptiveOpticsSim.subaperture_layout_revision(
+        independent_layout)
+    @test AdaptiveOpticsSim.update_subaperture_layout_from_amplitude!(
+        independent_layout, flux_amplitude,
+        FluxThresholdValidSubapertures(light_ratio=T(0.5), T=T)) ===
+        independent_layout
+    expected_flux_mask = fill(false, 4, 4)
+    expected_flux_mask[1, 1] = true
+    @test independent_layout.valid_mask == expected_flux_mask
+    @test independent_layout.valid_mask_host == expected_flux_mask
+    @test valid_subaperture_indices(independent_layout) ==
+        CartesianIndex{2}[CartesianIndex(1, 1)]
+    @test AdaptiveOpticsSim.subaperture_layout_revision(independent_layout) ==
+        flux_revision + UInt(1)
     AdaptiveOpticsSim.update_subaperture_layout!(independent_layout,
         pupil.amplitude .> zero(T), GeometryValidSubapertures(
             threshold=T(0.1), T=T))
