@@ -292,18 +292,18 @@ function prepared_detector_exposed_storage_is_zero(det::Detector)
 end
 
 function prepared_incremental_capture_allocations(det, map, plan, rng,
-    sample_time)
-    capture!(det, map, plan; rng=rng, sample_time=sample_time)
+    sample_duration)
+    capture!(det, map, plan; rng=rng, sample_duration=sample_duration)
     return @allocated capture!(det, map, plan; rng=rng,
-        sample_time=sample_time)
+        sample_duration=sample_duration)
 end
 
 function prepared_first_incremental_capture_allocations(det, map, plan, rng,
-    sample_time)
-    capture!(det, map, plan; rng=rng, sample_time=sample_time)
+    sample_duration)
+    capture!(det, map, plan; rng=rng, sample_duration=sample_duration)
     reset_integration!(det)
     return @allocated capture!(det, map, plan; rng=rng,
-        sample_time=sample_time)
+        sample_duration=sample_duration)
 end
 
 function fixed_stack_capture_allocations(det, cube, scratch, rng)
@@ -531,7 +531,7 @@ end
     busy_prepared_plan = prepare_detector_acquisition(
         busy_prepared_detector, shared_rate)
     capture!(busy_prepared_detector, shared_rate, busy_prepared_plan;
-        rng=MersenneTwister(2399), sample_time=0.25)
+        rng=MersenneTwister(2399), sample_duration=0.25)
     busy_integrated_time = busy_prepared_detector.state.integrated_time
     busy_accumulation = copy(busy_prepared_detector.state.accum_buffer)
     @test_throws InvalidConfiguration begin
@@ -734,14 +734,14 @@ end
     incremental_detector = Detector(integration_time=1.0,
         noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse())
     capture!(incremental_detector, ones(2, 2); rng=MersenneTwister(206),
-        sample_time=0.6)
+        sample_duration=0.6)
     @test_throws InvalidConfiguration capture!(incremental_detector,
-        ones(2, 2); rng=MersenneTwister(206), sample_time=0.5)
+        ones(2, 2); rng=MersenneTwister(206), sample_duration=0.5)
     @test incremental_detector.state.integrated_time == 0.6
     @test !readout_ready(incremental_detector)
     incremental_pending_accum = copy(incremental_detector.state.accum_buffer)
     @test_throws DimensionMismatchError capture!(incremental_detector,
-        ones(4, 4); rng=MersenneTwister(206), sample_time=0.1)
+        ones(4, 4); rng=MersenneTwister(206), sample_duration=0.1)
     @test incremental_detector.state.integrated_time == 0.6
     @test !readout_ready(incremental_detector)
     @test incremental_detector.state.accum_buffer == incremental_pending_accum
@@ -763,7 +763,7 @@ end
     end)
 
     capture!(transition_detector, transition_map, transition_plan;
-        rng=MersenneTwister(208), sample_time=0.25)
+        rng=MersenneTwister(208), sample_duration=0.25)
     pending_time = transition_detector.state.integrated_time
     pending_frame = copy(transition_detector.state.frame)
     pending_accum = copy(transition_detector.state.accum_buffer)
@@ -811,7 +811,7 @@ end
     @test transition_detector.state.accum_buffer == pending_accum
 
     capture!(transition_detector, transition_map, transition_plan;
-        rng=MersenneTwister(214), sample_time=0.75)
+        rng=MersenneTwister(214), sample_duration=0.75)
     @test readout_ready(transition_detector)
     @test iszero(transition_detector.state.integrated_time)
     @test all(iszero, transition_detector.state.accum_buffer)
@@ -1045,9 +1045,9 @@ end
     capture!(skipper_transition, ones(2, 2); rng=MersenneTwister(92))
     @test all(==(2.0), skipper_transition.state.accum_buffer)
     capture!(skipper_transition, zeros(2, 2); rng=MersenneTwister(93),
-        sample_time=0.5)
+        sample_duration=0.5)
     skipper_incremental_frame = copy(capture!(skipper_transition,
-        zeros(2, 2); rng=MersenneTwister(94), sample_time=0.5))
+        zeros(2, 2); rng=MersenneTwister(94), sample_duration=0.5))
     @test all(iszero, skipper_incremental_frame)
     @test readout_ready(skipper_transition)
     det_emccd_cic = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
@@ -1068,9 +1068,9 @@ end
     emccd_cic_whole_frame = copy(capture!(emccd_cic_whole, zero_psf;
         rng=MersenneTwister(130)))
     capture!(emccd_cic_split, zero_psf; rng=MersenneTwister(130),
-        sample_time=0.5)
+        sample_duration=0.5)
     emccd_cic_split_frame = copy(capture!(emccd_cic_split, zero_psf;
-        rng=MersenneTwister(130), sample_time=0.5))
+        rng=MersenneTwister(130), sample_duration=0.5))
     @test emccd_cic_split_frame == emccd_cic_whole_frame
     det_emccd_sat = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=5.0, sensor=EMCCDSensor(register_full_well=100.0))
@@ -1325,9 +1325,9 @@ end
     persistence_whole_frame = copy(capture!(persistence_whole,
         persistence_dark; rng=MersenneTwister(124)))
     persistence_partial_frame = copy(capture!(persistence_split,
-        persistence_dark; rng=MersenneTwister(124), sample_time=0.5))
+        persistence_dark; rng=MersenneTwister(124), sample_duration=0.5))
     persistence_split_frame = copy(capture!(persistence_split,
-        persistence_dark; rng=MersenneTwister(124), sample_time=0.5))
+        persistence_dark; rng=MersenneTwister(124), sample_duration=0.5))
     @test persistence_partial_frame == persistence_whole_frame
     @test persistence_split_frame == persistence_whole_frame
     @test persistence_split.state.latent_buffer ==
@@ -1352,10 +1352,10 @@ end
         persistence_prepared_whole, persistence_rate_map,
         persistence_whole_plan; rng=MersenneTwister(126)))
     capture!(persistence_prepared_split, persistence_rate_map,
-        persistence_split_plan; rng=MersenneTwister(126), sample_time=0.5)
+        persistence_split_plan; rng=MersenneTwister(126), sample_duration=0.5)
     persistence_prepared_split_frame = copy(capture!(
         persistence_prepared_split, persistence_rate_map,
-        persistence_split_plan; rng=MersenneTwister(126), sample_time=0.5))
+        persistence_split_plan; rng=MersenneTwister(126), sample_duration=0.5))
     @test persistence_prepared_split_frame ==
         persistence_prepared_whole_frame
     @test persistence_prepared_split.state.latent_buffer ==
@@ -1489,9 +1489,9 @@ end
     static_rate_whole_frame = copy(capture!(static_rate_whole,
         incremental_rate_input; rng=MersenneTwister(25)))
     capture!(static_rate_split, incremental_rate_input;
-        rng=MersenneTwister(26), sample_time=0.5)
+        rng=MersenneTwister(26), sample_duration=0.5)
     static_rate_split_frame = copy(capture!(static_rate_split,
-        incremental_rate_input; rng=MersenneTwister(27), sample_time=0.5))
+        incremental_rate_input; rng=MersenneTwister(27), sample_duration=0.5))
     static_rate_expected = evaluate_temperature_law(incremental_rate_law,
         100.0, 250.0)
     @test mean(static_rate_whole_frame) ≈ static_rate_expected rtol=0.01
@@ -1517,9 +1517,9 @@ end
     dynamic_rate_whole_frame = copy(capture!(dynamic_rate_whole,
         incremental_rate_input; rng=MersenneTwister(28)))
     capture!(dynamic_rate_split, incremental_rate_input;
-        rng=MersenneTwister(29), sample_time=0.5)
+        rng=MersenneTwister(29), sample_duration=0.5)
     dynamic_rate_split_frame = copy(capture!(dynamic_rate_split,
-        incremental_rate_input; rng=MersenneTwister(30), sample_time=0.5))
+        incremental_rate_input; rng=MersenneTwister(30), sample_duration=0.5))
     half_exposure_temperature = 120.0 + 180.0 * exp(-0.5)
     dynamic_whole_expected = evaluate_temperature_law(
         incremental_rate_law, 100.0, 300.0)
@@ -1545,9 +1545,9 @@ end
         thermal_model=incremental_glow_model,
         sensor=InGaAsSensor(glow_rate=100.0))
     capture!(dynamic_glow_split, incremental_rate_input;
-        rng=MersenneTwister(31), sample_time=0.5)
+        rng=MersenneTwister(31), sample_duration=0.5)
     dynamic_glow_frame = copy(capture!(dynamic_glow_split,
-        incremental_rate_input; rng=MersenneTwister(32), sample_time=0.5))
+        incremental_rate_input; rng=MersenneTwister(32), sample_duration=0.5))
     @test mean(dynamic_glow_frame) ≈ dynamic_split_expected rtol=0.01
 
     hgcdte_glow_sensor = HgCdTeAvalancheArraySensor(glow_rate=60.0,
@@ -1561,9 +1561,9 @@ end
     hgcdte_glow_whole_frame = copy(capture!(hgcdte_glow_whole,
         incremental_rate_input; rng=MersenneTwister(33)))
     capture!(hgcdte_glow_split, incremental_rate_input;
-        rng=MersenneTwister(34), sample_time=0.5)
+        rng=MersenneTwister(34), sample_duration=0.5)
     hgcdte_glow_split_frame = copy(capture!(hgcdte_glow_split,
-        incremental_rate_input; rng=MersenneTwister(35), sample_time=0.5))
+        incremental_rate_input; rng=MersenneTwister(35), sample_duration=0.5))
     hgcdte_glow_expected = (40.0 + 60.0) * (1.0 + 2 * 0.1)
     @test mean(hgcdte_glow_whole_frame) ≈ hgcdte_glow_expected rtol=0.01
     @test mean(hgcdte_glow_split_frame) ≈ hgcdte_glow_expected rtol=0.01
@@ -2527,10 +2527,10 @@ end
     @test detector_temperature(apd_dynamic) < 120.0 + 180.0 * exp(-1.0)
 
     det_buffered = Detector(integration_time=2.0, noise=NoiseNone(), qe=1.0, binning=1)
-    frame_partial = copy(capture!(det_buffered, fill(1.0, 4, 4); rng=MersenneTwister(2), sample_time=1.0))
+    frame_partial = copy(capture!(det_buffered, fill(1.0, 4, 4); rng=MersenneTwister(2), sample_duration=1.0))
     @test !readout_ready(det_buffered)
     @test sum(frame_partial) == 16.0
-    frame_buffered = copy(capture!(det_buffered, fill(1.0, 4, 4); rng=MersenneTwister(2), sample_time=1.0))
+    frame_buffered = copy(capture!(det_buffered, fill(1.0, 4, 4); rng=MersenneTwister(2), sample_duration=1.0))
     @test readout_ready(det_buffered)
     @test sum(frame_buffered) == 32.0
     reset_integration!(det_buffered)

@@ -116,6 +116,12 @@ clock-update ownership must be captured in run metadata. `Clocks.jl` belongs in
 the operational HIL companion; the simulation kernel exposes explicit virtual-
 time seams so it does not acquire a wall-clock dependency.
 
+The minimal Gate 4A HIL package already depends on `Clocks.jl` and validates a
+deterministic test clock plus a monotonic production clock. Gate 8 does not
+introduce clock injection again; it hardens cached-clock ownership, measured
+staleness, lifecycle behavior, and versioned external-domain mappings without
+changing the Gate 4A execution-clock seam.
+
 The injected `Clocks.jl` source is the **execution clock** used to pace and
 measure the simulator. Simulated trigger generation, trigger distribution, and
 timestamp-label faults are model events evaluated on the canonical plant
@@ -142,7 +148,7 @@ The timing model separates these concepts:
 | Trigger distribution link | A prepared relationship from one trigger source to a detector, modulator, or other event consumer | Core owns realized delivery times and fault semantics |
 | External timestamp domain | RTC, camera, or device timestamp coordinates plus offset/drift mapping into plant time | User integration supplies external timestamps and synchronization observations; HIL owns the configured mapping into plant time |
 | Periodic schedule | Period and phase for simulator-paced events such as exposure samples and readout | Core semantics; HIL companion performs wall-clock pacing |
-| Command endpoint | Bounded asynchronous command events for one independently timed optic or segment, with receive and effective times | Core owns validation, bounded admission, device state, and virtual-time application; HIL owns ingress, timestamp mapping, pacing, and outcome publication; user integration owns transport and decoding |
+| Command endpoint | Bounded asynchronous command events for one independently timed optic or segment, with receive and effective times | Core owns the semantic plant command schema, validation, bounded admission, device state, and virtual-time application; HIL owns submission descriptors, ingress, timestamp mapping, pacing, outcome credit, and outcome publication; user integration owns transport and decoding |
 
 Illustrative target configuration is:
 
@@ -257,6 +263,18 @@ The simulator controls detector acquisition. Detector timing must distinguish:
 - acquisition-completion-port publication time
 - first-frame latency and steady-state frame period
 
+The core event surface separates begin exposure, accumulate one half-open
+optical interval, take a nondestructive read, close exposure, complete readout,
+and publish readiness. Integer plant timestamps determine when these
+operations occur. Detector physics receives the exact positive interval
+duration in seconds or a prepared integration weight; it does not decide event
+completion by comparing accumulated floating-point duration with a tolerance.
+
+The existing frame-step `capture!(...; sample_duration=...)` convenience API
+may accumulate and auto-finalize at the configured exposure duration, but it
+is not the scheduler contract. Its `sample_duration` name deliberately states
+that the argument is a duration rather than an absolute timestamp.
+
 Progressive delivery to an RTC is a user transport operation over the complete
 leased product, not a sequence of simulation events. Its packet schedule,
 first/last-packet timestamps, fragmentation, and transport backpressure are
@@ -280,10 +298,15 @@ acquires an implicit unbounded event slot.
 
 Frame period and optical sampling period are not necessarily equal. A slow
 science detector may accumulate many evolving optical samples during one
-exposure. An up-the-ramp detector may publish several nondestructive samples
-from one integration. Rolling shutter requires row or row-band timing. Frame
-transfer changes acquisition/readout overlap and timing, while the optical
-surface model remains unchanged.
+exposure. An up-the-ramp detector may create several nondestructive read
+products from one continuing integration. Each scheduled read observes the
+charge accumulated through its event time without resetting the integration;
+intra-exposure atmosphere, source, and effective-command changes therefore
+affect subsequent reads. The existing whole-exposure implementation that
+synthesizes fractional reads from one final frame is a lower-fidelity
+post-exposure convenience and cannot support that time-resolved claim. Rolling
+shutter requires row or row-band timing. Frame transfer changes acquisition/
+readout overlap and timing, while the optical surface model remains unchanged.
 
 Each physical optical sample is a declared photon-arrival-rate product, not a frame
 already scaled by a telescope step. The prepared acquisition quadrature owns
@@ -353,12 +376,15 @@ RTC sends commands when it chooses. Each command contains or acquires:
 - modeled effective timestamp after any configured boundary delay and device
   latency
 
-The endpoint's prepared schema supplies the payload shape, element type, units,
-command basis and calibration revision, absolute or incremental semantics,
-range policy, run/session epoch, and duplicate/reordering policy defined in
-[`rtc-ports.md`](rtc-ports.md). These are configuration facts rather than
-per-command dynamic dispatch. Shape, schema, session, and sequence validation
-occurs before semantic admission.
+The core endpoint's prepared plant command schema supplies payload shape,
+element type, units, command basis and calibration revision, absolute or
+incremental semantics, range policy, and duplicate/reordering policy. The HIL
+submission descriptor separately supplies the run/session epoch, correlation,
+source timestamp domain and mapping version, and payload-lease/outcome-credit
+metadata defined in [`rtc-ports.md`](rtc-ports.md). These are configuration
+facts rather than per-command dynamic dispatch. Boundary/session validation
+and mapping precede core shape/schema/sequence validation and semantic
+admission.
 
 Each controllable optic holds its last effective command between updates.
 Device models may additionally impose minimum update intervals, settling,
@@ -422,30 +448,37 @@ phases in order:
 2. apply all admitted commands with effective time at or before `t`, ordered by
    effective time, endpoint sequence, and scheduler ordinal, then apply any
    still-due modeled command-age watchdog transition at `t`
-3. process any due atmosphere-evolution event and select one atmosphere epoch
-   for every optical sample due at `t`
-4. publish the effective-command snapshot and, when sampled, the immutable
-   atmosphere epoch
+3. process any due atmosphere-evolution event and select one current
+   `AtmosphereEpoch` token for every optical sample due at `t`
+4. publish the effective-command snapshot and establish the atmosphere
+   materialization/read lifetime for the due path set; an epoch token alone is
+   not retained layer state
 5. close exposure or row-band intervals ending at `t`, including declared
    trigger-driven transitions, and snapshot nondestructive reads due at `t`;
    these contain accumulated samples strictly before `t`
 6. open exposure or row-band intervals beginning at `t`, including declared
    trigger-driven transitions
-7. render each unique optical path needed by sample events at `t`, evaluate any
+7. materialize the atmosphere-dependent input of each unique optical path
+   needed by sample events at `t`, evaluate the remaining path and any
    autonomous waveform at its trigger-relative phase, and accumulate those
    samples only into intervals containing `t`
 8. complete due detector-readout events, assign a product stream sequence, and
    attempt bounded complete-product publication
 9. publish bounded counters and fault records outside model hot loops
 
-These phases define logical causality, not a mandatory global execution barrier.
-The serial oracle executes them directly. A prepared parallel executor may
-overlap independent path groups or timestamps only through immutable versioned
-snapshots and a bounded number of in-flight epoch slots. It preserves each
-acquisition's state dependencies and does not reuse a snapshot until every
-dispatched consumer acknowledges it. Unrelated optional science work therefore
-need not gate a required WFS path; it is shed or fails according to its prepared
-policy when its bounded slots are exhausted.
+These phases define logical causality, not a mandatory global execution
+barrier. The serial oracle executes them directly and materializes every due
+atmospheric path input before the writer advances to a later timestamp. A
+prepared parallel executor may let same-epoch renderers read the current layers
+concurrently while the atmosphere writer is held, or may overlap later
+timestamps only after consumers depend solely on bounded materialized path
+products or on an explicitly retained model-specific atmosphere-state
+snapshot. It preserves each acquisition's state dependencies and does not
+reuse either kind of slot until every dispatched consumer acknowledges it. An
+`AtmosphereEpoch` token is never treated as retained storage. Unrelated
+optional science work therefore need not gate a required WFS path after its
+atmospheric input is materialized; it is shed or fails according to its
+prepared policy when its bounded slots are exhausted.
 
 All events sharing `t` use prepared ordinals for shared state transitions, so
 tuple iteration, task completion, and device completion order cannot change
@@ -542,8 +575,12 @@ support claim.
 The existing deterministic policy remains authoritative for strict reference
 generation. Parallel HIL reproducibility additionally requires:
 
-- a central run seed expanded into stable per-layer, path, detector, and device
-  streams
+- a central run seed, derivation-version identifier, and run-unique stable RNG
+  owner identities for every stochastic atmosphere layer, trigger source/link,
+  path/provider, detector acquisition, and device model
+- stateful streams only under one prepared writer, and addressable random keys
+  including owner identity plus event/epoch and element/sample identity when
+  work may be reordered, replicated, batched, or executed on several devices
 - fixed source/path grouping and static device placement recorded in the run
 - stable event ordering for simultaneous detector and command events
 - timestamps, arrival records, timestamp-mapping observations/coefficients and
@@ -552,6 +589,14 @@ generation. Parallel HIL reproducibility additionally requires:
   gaps, fault and overload decisions, configuration, and effective command
   history captured for replay
 - tolerance-based rather than bitwise CPU/GPU and cross-device comparison
+
+RNG identities derive from declared physical topology, never tuple position,
+task, thread, ring cursor, completion order, or physical device ordinal.
+Preparation rejects duplicate identities. Reordering independent endpoints or
+moving one prepared group between compatible resources therefore cannot change
+which random values belong to its modeled events. The canonical
+[`determinism policy`](../deterministic-simulation.md) defines the recorded
+identity map and stream/addressing rules.
 
 Replay claims use three distinct terms:
 

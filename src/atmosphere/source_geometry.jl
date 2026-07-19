@@ -15,9 +15,11 @@ mutable struct AtmosphereIdentity end
 """
     AtmosphereEpoch
 
-Immutable identity of one published, read-only atmosphere state. `model_time`
-is expressed in seconds in the atmosphere's numeric type; `sequence` advances
-once for every newly published state.
+Immutable identity token for one published atmosphere state. `model_time` is
+expressed in seconds in the atmosphere's numeric type; `sequence` advances
+once for every newly published state. The token does not retain layer storage:
+the current renderer contract accepts it only while that state remains the
+atmosphere's current publication.
 """
 struct AtmosphereEpoch{T<:AbstractFloat,I<:AtmosphereIdentity}
     identity::I

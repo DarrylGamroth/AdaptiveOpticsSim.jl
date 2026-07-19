@@ -22,6 +22,16 @@ These documents describe a target architecture. Current support claims remain
 defined by [`supported-production-surfaces.md`](supported-production-surfaces.md)
 and require maintained functional and hardware evidence before expansion.
 
+## Specification Authority And Normative Language
+
+The subsystem specifications define behavior; the compliance matrix assigns
+stable requirement IDs and records implementation and evidence state. In this
+specification set, **MUST** denotes a requirement whose absence is a compliance
+gap, **SHOULD** denotes the required default unless an alternative has recorded
+rationale and equivalent evidence, and **MAY** denotes optional behavior that
+remains inside the contract when implemented. Informative examples and
+candidate Julia names do not create public API commitments.
+
 ## Subsystem Specifications
 
 | Specification | Scope |
@@ -57,6 +67,29 @@ The external RTC owns reconstruction, controller state, and the production of
 commands. Simple internal reconstructors and controllers remain useful as
 correctness oracles, calibration tools, examples, and stand-alone smoke tests;
 they do not define the product's RTC scope.
+
+### Target API position
+
+The target core API models an adaptive-optics plant; it is not an OOPAO object
+compatibility layer and it is not HIL-only. HIL, deterministic virtual-time,
+offline, and device-resident execution consume the same scientific plant
+definitions and prepared model operations. Core plant types therefore SHOULD
+use plant, path, acquisition, product, and preparation terminology rather than
+an `HIL` prefix or the class layout of the original Python port.
+
+The API separates four semantic roles:
+
+- run-immutable definitions describing topology and physical parameters
+- prepared plans binding shapes, algorithms, capacities, backends, and devices
+- mutable single-writer model state and workspaces
+- caller-owned products passed through explicit mutating operations
+
+The existing `AOSimulation`, `ClosedLoopRuntime`,
+`CompositeControllableOptic`, `RuntimeCommandLayout`, and generic `slopes`
+surface are transitional characterization/oracle APIs. New HIL architecture
+MUST NOT extend those abstractions merely to preserve source compatibility.
+Their replacements are introduced gate by gate, and superseded surfaces are
+removed once their numerical oracles have migrated.
 
 Primary use cases include:
 
@@ -101,10 +134,10 @@ authoritative. This table is only an orientation to the principal transitions:
 |---|---|---|
 | Optical planes and workspaces | `TelescopeAperture` owns revisioned geometry and intensity reflectivity; every maintained WFS, science, calibration, atmosphere, and controllable-optic path uses caller- or runtime-owned `PupilFunction`, `ElectricField`, and `IntensityMap` products, and the telescope owns no OPD, cadence, exposure, or focal result | Preserve this ownership boundary while adding independently scheduled prepared paths and acquisitions |
 | Time and radiometry | Timed atmospheres receive explicit elapsed or absolute model time; runtime and control-loop configuration require a positive `atmosphere_step`. Optical formation produces declared photon-rate or dimensionless products without elapsed time, and a prepared detector acquisition applies its explicit exposure once | Add independent trigger/exposure scheduling while preserving the separate atmosphere-step, optical-rate, and detector-exposure contracts |
-| Atmosphere and source rendering | One writer publishes an explicit stable atmosphere epoch; path-local prepared renderers freeze NGS/LGS/spectral/extended-source descriptions and write caller-owned products without shared render/cache state | Carry this boundary into the multi-rate scheduler and immutable plant snapshots |
-| WFS composition | Shack–Hartmann separates microlens optics, layout/calibration, acquisition, and estimation. Pyramid and BioEdge expose physically distinct focal-plane front ends over shared prepared modulation. Zernike separates its phase spot and pupil relay; Curvature separates its two branch planes and supports independent or packed detector acquisition. LiFT separately prepares its focal-plane forward model, explicit observation domain, and iterative estimator without detector ownership or `AbstractWFS` inheritance | Complete the cross-backend evidence and final Gate 0 surface review |
-| Shared plant and paths | One telescope/atmosphere with sequential shared arms | Immutable event snapshots, path-local propagation workspace, and reusable optical paths separated from acquisition state |
-| Detector acquisition | Detector families, incremental accumulation, rolling shutter, frame transfer, and supported nondestructive reads; `DetectorAcquisitionPlan` validates a typed rate product and prepares response/pixel-integration buffers before allocation-free repeated capture | Independent scheduled acquisition and readout/publication events with explicit equal-time semantics, preserving the prepared rate boundary and detector ordering |
+| Atmosphere and source rendering | One writer publishes an explicit current-state atmosphere epoch token; path-local prepared renderers freeze NGS/LGS/spectral/extended-source descriptions and write caller-owned products without shared render/cache state | Materialize every due path input before advancing mutable atmosphere state, or bind a model-specific retained state snapshot when cross-timestamp rendering is required |
+| WFS composition | Shack–Hartmann separates microlens optics, layout/calibration, acquisition, and estimation. Pyramid and BioEdge expose physically distinct focal-plane front ends over shared prepared modulation. Zernike separates its phase spot and pupil relay; Curvature separates its two branch planes and supports independent or packed detector acquisition. LiFT separately prepares its focal-plane forward model, explicit observation domain, and iterative estimator without detector ownership or `AbstractWFS` inheritance | Preserve the completed Gate 0 staged contract while composing independently scheduled acquisitions |
+| Shared plant and paths | One telescope/atmosphere with sequential shared arms | Current epoch tokens with explicit materialization lifetime, caller-owned path products, optional retained model state, path-local propagation workspace, and reusable optical paths separated from acquisition state |
+| Detector acquisition | Detector families, incremental accumulation, rolling shutter, frame transfer, and a post-exposure synthesized up-the-ramp convenience; `DetectorAcquisitionPlan` validates a typed rate product and prepares response/pixel-integration buffers before allocation-free repeated capture | Independent begin/accumulate/nondestructive-read/close/readout/publication events with explicit equal-time semantics and actual evolving-charge ramp samples, preserving the prepared rate boundary and detector ordering |
 | Guide stars and AO modes | NGS, finite-height LGS, elongation, tomography, co-conjugated additive optics | Mixed NGS/LGS scheduling, independent co-conjugated devices, altitude-conjugated MCAO, and path-specific MOAO |
 | Controllable optics | One runtime optic or packed composite at the pupil | Named placed optics with independent command endpoints, effective times, visibility, and bounded late/future policies |
 | Science optics and NCPA | Prepared direct imaging owns explicit pupil/field/output/workspace products, supports same-grid incoherent composition and spectral bundles, and reuses one rate image across independent detector acquisitions; sampled NCPA primitives and an asynchronous prepared PROPER handoff remain | Caller-owned native or explicitly converted external photon-arrival-rate products feed independently scheduled detector acquisition; later path composition adds explicit NCPA visibility and external-executor scheduling |
@@ -128,8 +161,9 @@ When refining this architecture:
 - keep telescope/aperture definitions separate from caller-owned path products
   and keep optical products separate from propagation plans and scratch
 - keep telescope spatial sampling separate from model time; advance shared
-  atmosphere state explicitly once per epoch and render directions through
-  prepared path-local source/geometry workspaces
+  atmosphere state explicitly once per epoch, hold its mutable layer state
+  through due-path materialization, and render directions through prepared
+  path-local source/geometry workspaces
 - attach run-immutable plane geometry, wavelength/channel, radiometric,
   density-versus-cell-integrated measure, combination, backend, and device
   metadata and reject incompatible handoffs during preparation
@@ -143,8 +177,9 @@ When refining this architecture:
 - use direct calls within one owner and bounded SPSC ports only at ownership
   boundaries
 - keep iceoryx2 and other middleware at explicit process or external-RTC
-  boundaries; do not replace immutable in-process epoch sharing or path-local
-  workspace ownership with publish/subscribe
+  boundaries; do not replace direct current-epoch materialization,
+  caller-owned path products, or path-local workspace ownership with
+  publish/subscribe
 - require lock-free release/acquire publication, cache-line-isolated cursors,
   and explicit full-capacity behavior for HIL data-plane rings
 - do not use `Base.Channel` as a HIL data-plane port implementation
@@ -156,8 +191,8 @@ When refining this architecture:
   tests
 - distinguish execution-clock time, nominal and delivered detector triggers,
   physical exposure boundaries, and reported detector timestamps
-- distinguish ring enqueue, semantic admission, physical effective time, and
-  terminal outcome
+- distinguish ring enqueue, core validation/admission, physical effective time,
+  core model disposition, and the correlated HIL terminal outcome
 - define full and recovery behavior per resource rather than one generic
   overload policy
 - prepare immutable HIL placement; do not migrate work opportunistically

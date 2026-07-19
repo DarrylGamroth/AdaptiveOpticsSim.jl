@@ -22,7 +22,7 @@ they are not committed public API names.
 ```julia
 ground_plane = AtmosphericConjugate(0.0)
 
-plant = HILPlant(
+plant = PlantDefinition(
     telescope=tel,
     atmosphere=atm,
     optics=(
@@ -33,27 +33,38 @@ plant = HILPlant(
         tiptilt=PlacedControllableOptic(ttm, PupilConjugate()),
     ),
     paths=(
-        lgs1=OpticalPath(lgs1_source; train=lgs_train),
-        ngs=OpticalPath(ngs_source; train=ngs_train),
-        science=OpticalPath(science_source; train=science_train),
+        lgs1=OpticalPathDefinition(lgs1_source; train=lgs_train),
+        ngs=OpticalPathDefinition(ngs_source; train=ngs_train),
+        science=OpticalPathDefinition(science_source; train=science_train),
     ),
     acquisitions=(
-        lgs1_wfs=AcquisitionEndpoint(:lgs1, lgs1_wfs;
+        lgs1_wfs=AcquisitionDefinition(:lgs1, lgs1_wfs;
             detector=lgs1_detector,
             schedule=PeriodicSchedule(period_ns=2_000_000)),
-        ngs_wfs=AcquisitionEndpoint(:ngs, ngs_wfs;
+        ngs_wfs=AcquisitionDefinition(:ngs, ngs_wfs;
             detector=ngs_detector,
             schedule=PeriodicSchedule(period_ns=1_000_000)),
-        science=AcquisitionEndpoint(:science, science_detector;
+        science=AcquisitionDefinition(:science, science_detector;
             schedule=PeriodicSchedule(period_ns=10_000_000)),
     ),
 )
 ```
 
-`OpticalPath`, `AcquisitionEndpoint`, and `PeriodicSchedule` are illustrative
-configuration concepts. An acquisition endpoint does not itself prescribe a
-cross-owner handoff. The HIL data-plane boundary uses ports backed by the
-sequenced SPSC rings specified in [`rtc-ports.md`](rtc-ports.md).
+`PlantDefinition`, `OpticalPathDefinition`, `AcquisitionDefinition`, and
+`PeriodicSchedule` are illustrative names for semantic roles, not committed
+public API. Core definitions do not carry an `HIL` prefix because the same
+plant runs in deterministic virtual time, offline, or behind the HIL
+companion. An acquisition definition does not itself prescribe a cross-owner
+handoff. The HIL data-plane boundary uses ports backed by the sequenced SPSC
+rings specified in [`rtc-ports.md`](rtc-ports.md).
+
+Preparation turns immutable definitions into backend-, device-, shape-, and
+capacity-bound plans plus explicitly owned mutable state and workspaces.
+Repeated execution calls mutating operations over those prepared owners and
+caller-owned products. The target API does not grow `AOSimulation` or
+`ClosedLoopRuntime` into a universal object, retain the OOPAO class hierarchy,
+or hide scheduling inside optical elements. Those types remain temporary
+numerical oracles until their replacement gates delete them.
 
 An optical-path declaration owns immutable configuration:
 
@@ -63,18 +74,23 @@ An optical-path declaration owns immutable configuration:
 - keys needed to prepare compatible shared results
 
 A prepared path executor owns its mutable OPD, field, detector-facing optical
-product, FFT plan, and other scratch state. That workspace has one execution owner and is not stored in the
-immutable path declaration.
+product, FFT plan, and other scratch state. That workspace has one execution
+owner and is not stored in the immutable path declaration.
 
-An acquisition endpoint owns:
+A prepared core acquisition owns:
 
 - its WFS and/or detector state
 - exposure, optical-sample, nondestructive-read, readout, and publication
-  schedule or trigger binding
-- product sequence, readiness, and acquisition timing metadata
-- its output port and buffer-pool policy
-- a deterministic RNG stream derived from the central run seed and stable
-  endpoint identity
+  readiness schedule or trigger binding in plant time
+- physical acquisition sequence, readiness, and acquisition timing metadata
+- a deterministic RNG owner identity derived from the central run seed and
+  stable declared endpoint identity; its stream or addressable random domain
+  is prepared separately
+
+The HIL companion binds that core acquisition to a boundary endpoint identity,
+completion stream sequence, output port, payload pool/lease policy, external
+timing metadata, and resource-specific full behavior. Those boundary owners do
+not become fields of the core optical or detector model.
 
 Its declared product geometry may be an area frame, a channel vector, or a
 scalar. The schedule and completion-port contracts therefore do not assume an
@@ -101,16 +117,18 @@ prepared telescope definition + explicitly advanced atmosphere epoch + optic sur
 ```
 
 Concrete product names follow the maintained
-[`glossary`](../glossary.md); the ownership boundary is normative. A prepared telescope definition owns aperture,
-reflectivity, spatial sampling, and geometry. It does not own temporal cadence,
-exposure duration, any path's current OPD or electric field, a focal-plane
-photon-arrival-rate result, or FFT/intensity scratch. Transitional telescope
-OPD remains only for WFS families awaiting decomposition. Scenario, atmosphere, acquisition, and control
-owners receive explicit model times or durations instead of reading time from
-the telescope. Optical data products likewise do not own propagation plans or
-temporary arrays. Prepared workspaces own those plans and scratch arrays, have
-one execution writer, and remain fixed in shape, numeric type, backend, and
-physical device for a prepared run.
+[`glossary`](../glossary.md); the ownership boundary is normative. A prepared
+telescope definition owns aperture, reflectivity, spatial sampling, and
+geometry. It does not own temporal cadence, exposure duration, any path's
+current OPD or electric field, a focal-plane photon-arrival-rate result, or
+FFT/intensity scratch. Every maintained WFS, science, calibration, atmosphere,
+and controllable-optic path now consumes an explicit path product; there is no
+transitional telescope-owned OPD. Scenario, atmosphere, acquisition, and
+control owners receive explicit model times or durations instead of reading
+time from the telescope. Optical data products likewise do not own propagation
+plans or temporary arrays. Prepared workspaces own those plans and scratch
+arrays, have one execution writer, and remain fixed in shape, numeric type,
+backend, and physical device for a prepared run.
 
 Every prepared optical product carries run-immutable compatibility metadata.
 The metadata declares plane kind, coordinate domain, dimensions, sampling,
@@ -135,18 +153,33 @@ and does not resize buffers, rebuild masks, or create FFT plans during repeated
 execution.
 
 Atmosphere evolution also remains separate from direction rendering. One
-writer advances shared layers to an explicit model time and publishes a stable
-epoch identity. Advancement never infers a duration from telescope sampling,
-detector cadence, or wall clock. Prepared path-local renderers own mutable
-single-writer propagation workspace where required, plus frozen source
-descriptions and precomputed direction shifts and finite-height footprint
-scales. Direction renderers write caller-owned pupil products; field renderers
-own their reusable field scratch. Several NGS, LGS, spectral, or extended-source
-renderers may consume the same frozen epoch in any order without mutating shared
-output, RNG, or geometry-cache state. Source definitions are run-immutable
-execution descriptions; mutable user profile/image inputs are frozen during
-preparation, and extended-source quadrature expansion belongs to the prepared
-renderer or path.
+writer advances shared layers to an explicit model time and publishes an
+`AtmosphereEpoch` token for the current state. Advancement never infers a
+duration from telescope sampling, detector cadence, or wall clock. The token
+is identity and time metadata, not retained layer storage: the current
+renderers reject it after the same atmosphere advances.
+
+Prepared path-local renderers own mutable single-writer propagation workspace
+where required, plus frozen source descriptions and precomputed direction
+shifts and finite-height footprint scales. Direction renderers write
+caller-owned pupil products; field renderers own their reusable field scratch.
+Several NGS, LGS, spectral, or extended-source renderers may consume the same
+current epoch in any order without mutating shared output, RNG, or geometry-
+cache state. The serial scheduled executor therefore materializes every due
+path's atmosphere-dependent OPD, field, or model-specific input before the
+atmosphere writer advances to a later timestamp. Downstream optical and
+detector work may outlive that epoch once it reads only the materialized
+caller-owned product.
+
+A path that must render from older mutable layer state requires a separately
+prepared, bounded retained atmosphere-state snapshot whose representation is
+chosen by the atmosphere model. A parallel executor may instead hold the
+writer at one epoch while same-epoch readers finish. It MUST NOT treat an
+`AtmosphereEpoch` token as an immutable copy, and it MUST NOT advance the
+writer while an unmaterialized consumer still reads the current layers.
+Source definitions are run-immutable execution descriptions; mutable user
+profile/image inputs are frozen during preparation, and extended-source
+quadrature expansion belongs to the prepared renderer or path.
 
 A native direct-science front end consumes an explicit pupil function or field
 and writes a caller-owned focal-plane photon-arrival-rate `IntensityMap`. One
@@ -155,10 +188,13 @@ and exposure durations. Each applies its presampling response on the
 declared optical grid, integrates over physical pixels, applies QE and elapsed
 time exactly once, and then applies its coupling, stochastic response, and
 readout. The transitional frame-step shared runtime draws detector noise
-sequentially from one runtime RNG, so tuple-order-independent stochastic streams
-are not yet claimed. It preflights every detector's exact prepared binding and
-idle state before advancing the atmosphere, but unforeseen execution failures
-are fail-stop rather than transactional rollback. Changing a
+sequentially from one runtime RNG, so tuple-order-independent stochastic
+streams are not yet claimed. The scheduled plant instead prepares one stable
+RNG owner identity per stochastic component as specified by the
+[`determinism policy`](../deterministic-simulation.md). The frame-step runtime
+preflights every detector's exact prepared binding and idle state before
+advancing the atmosphere, but unforeseen execution failures are fail-stop
+rather than transactional rollback. Changing a
 detector exposure cannot change or recompute the optical result. A prepared
 external-optics result, including one produced through `Proper.jl`, enters at
 the same arrival-rate/acquisition boundary after declaring either photon
@@ -247,6 +283,25 @@ channels of one detector without assuming that every WFS has one two-dimensional
 camera. Presampling response, physical-pixel integration, QE and elapsed-time
 integration therefore remain downstream of optical spot or pupil-image
 formation and upstream of the estimator.
+
+The current `capture!(...; sample_duration=...)` and
+`capture_incremental!` methods are frame-step convenience APIs. Their duration
+is expressed in seconds; it is not an absolute sample timestamp. They
+accumulate until the configured exposure duration is reached and then finalize
+automatically using floating-point tolerance. The virtual-time event engine
+does not use that tolerance as its completion authority. It prepares explicit
+begin-exposure, accumulate-interval, nondestructive-read, close-exposure,
+readout-complete, and publish operations, with integer plant timestamps owned
+by the scheduler and exact interval durations supplied to detector physics.
+
+The existing `UpTheRampSampling` whole-exposure path synthesizes its read cube
+after final integration by scaling the completed frame and applying per-read
+noise. It is retained as a declared post-exposure, lower-fidelity convenience
+and frozen oracle. A scheduled up-the-ramp acquisition instead snapshots the
+evolving accumulated charge at each nondestructive-read event without ending
+the integration, so atmosphere, source, and effective-command changes inside
+the exposure affect the applicable reads. Only that event-driven path supports
+time-resolved nondestructive-read claims.
 
 The estimator consumes acquired observations and owns reference subtraction,
 normalization, calibration, masking, centroiding, correlation, differential
@@ -639,13 +694,26 @@ than retained as a compatibility wrapper. Its responsibilities separate into:
 
 No new aggregate type should combine all of those responsibilities again.
 `RuntimeCommandLayout` should also leave the physical optic API. Its legitimate
-responsibilities split into prepared control-output routing in core and a
-canonical command descriptor in the HIL companion, with transport packing in
-user integration code. None of those responsibilities implies physical
-grouping, atomic application, an endpoint, or timing. During implementation the
-current composite scenarios remain short-lived numerical references. The
-replacement stage deletes `CompositeControllableOptic` and replaces
-`RuntimeCommandLayout` rather than retaining either for source compatibility.
+responsibilities split into prepared control-output routing and a plant command
+schema in core, a command-submission descriptor schema in the HIL companion,
+and transport packing in user integration code. None of those responsibilities
+implies physical grouping, atomic application, an endpoint, or timing. During
+implementation the current composite scenarios remain short-lived numerical
+references. The replacement stage deletes `CompositeControllableOptic` and
+replaces `RuntimeCommandLayout` rather than retaining either for source
+compatibility.
+
+The core plant command schema defines only the semantic payload: target,
+numeric type and shape, physical units, basis/calibration identity, absolute or
+incremental meaning, bounds, plant-effective time, and model policies. Core
+owns validation, bounded admission, application, held state, and the terminal
+model disposition. The HIL command-submission descriptor wraps a mapped plant
+command with run/session correlation, source timestamp-domain and mapping
+metadata, payload-lease ownership, and outcome credit. Its paired command
+outcome wraps the core disposition with boundary timing and returns that
+credit. Enqueue, semantic admission, physical application, and boundary
+completion therefore remain separate observable operations, and core never
+imports a HIL descriptor or lease type.
 
 Every DM is an independent controllable optic. Its actuator pitch, influence
 functions, stroke, spatial bandwidth, misregistration, dynamics, command

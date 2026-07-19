@@ -3,9 +3,12 @@
 [![CPU Validation](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/actions/workflows/cpu-validation.yml/badge.svg)](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/actions/workflows/cpu-validation.yml)
 [![Coverage](https://codecov.io/gh/DarrylGamroth/AdaptiveOpticsSim.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/DarrylGamroth/AdaptiveOpticsSim.jl)
 
-Julia adaptive optics simulation toolkit. The package keeps the OOPAO modeling
-surface recognizable, but uses idiomatic Julia design for performance,
-reproducibility, and backend portability.
+Julia adaptive-optics plant simulation toolkit for external-RTC HIL development,
+deterministic validation, and offline CPU/GPU studies. OOPAO remains an
+important source of scientific reference cases and tutorial mappings, but its
+class layout and API are not compatibility constraints. The maintained design
+uses idiomatic Julia dispatch, explicit optical products, prepared workspaces,
+and backend-portable algorithms.
 
 Requires Julia 1.12 or newer. The package relies on current Julia atomics and
 backend behavior for maintained CPU/GPU execution paths.

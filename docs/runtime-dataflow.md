@@ -34,6 +34,13 @@ The most important runtime-facing objects are:
 
 The orchestration layer is in `src/control`.
 
+`AOSimulation`, `ClosedLoopRuntime`, `CompositeControllableOptic`, and
+`RuntimeCommandLayout` describe the current frame-step characterization
+runtime. They are not the target multi-rate plant API and will be removed after
+their numerical oracles migrate. New HIL work uses the definition/prepared-
+plan/mutable-state/product split in the maintained HIL specifications rather
+than extending these types for source compatibility.
+
 ## Build Phase
 
 The build phase constructs long-lived simulation objects:
@@ -150,8 +157,9 @@ products and functions, not a universal optical graph or resampling framework.
 The frame-step `SharedOpticalRuntime` forms each arm's native rate image once
 and captures its detector tuple serially. Detector state and exposure are
 independent, but stochastic draws currently come from one runtime RNG in tuple
-order. The later event runtime may assign stable per-endpoint streams when
-order-invariant detector noise is required. Before advancing the atmosphere,
+order. The scheduled plant assigns stable RNG owner identities and per-owner
+streams or addressable random domains; endpoint order and static placement do
+not select random values. Before advancing the atmosphere,
 the current runtime preflights every science detector's exact prepared binding
 and whole-exposure idle state. Detector acquisition preparation has already
 sized conventional multi-read products and rejected predictable shape and
@@ -207,11 +215,14 @@ schemas belong to user integration outside the general HIL package. They map to
 canonical command transactions submitted through the HIL ports and carry no
 physical grouping, clock, or atomicity semantics of their own.
 
-Each canonical command endpoint prepares its payload type/shape, units, basis
-and calibration revision, absolute or incremental semantics, limits, session
-epoch, sequence behavior, and silence/watchdog policy. Sampled actuator or
-device feedback returns through an ordinary acquisition endpoint rather than
-being conflated with the terminal outcome of a command.
+Each core command endpoint prepares its payload type/shape, units, basis and
+calibration revision, absolute or incremental semantics, limits, plant-
+effective-time and sequence policies, and replayable plant-time command-
+silence behavior. The HIL submission descriptor separately carries session,
+external-time mapping, payload-lease, and outcome-credit metadata. Sampled
+actuator or device feedback returns through an ordinary acquisition endpoint
+rather than being conflated with either the core model disposition or the HIL
+command outcome.
 
 The maintained target architecture is indexed by
 [`hil-package-boundary.md`](hil-package-boundary.md); durable capability IDs,
@@ -267,9 +278,9 @@ The prepared frame-detector path now follows this order:
 
 `WFSObservation`, `WFSMeasurement`, and the generic prepared
 formation/acquisition/estimation protocols now establish this static boundary.
-Most maintained WFS state types still compose several stages internally; their
-adoption of the contract remains later Gate 0 family work. Raw matrix detector
-entry remains a documented legacy cell-integrated-rate path, while
+Every maintained WFS family now adopts the contract while retaining its own
+concrete stage composition. Raw matrix detector entry remains a documented
+legacy cell-integrated-rate path, while
 `DetectorAcquisitionPlan` is the metadata-validated prepared frame boundary.
 
 The runtime output plan decides whether a given simulation step must produce:

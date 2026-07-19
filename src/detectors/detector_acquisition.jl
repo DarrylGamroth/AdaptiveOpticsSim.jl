@@ -420,9 +420,9 @@ end
 
 function capture!(det::Detector, map::IntensityMap,
     plan::DetectorAcquisitionPlan; rng::AbstractRNG=Random.default_rng(),
-    sample_time::Union{Nothing,Real}=nothing)
-    sample_time === nothing && return capture!(det, map, plan, rng)
+    sample_duration::Union{Nothing,Real}=nothing)
+    sample_duration === nothing && return capture!(det, map, plan, rng)
     _require_prepared_acquisition(det, map, plan)
-    return capture_incremental!(det, map.values, rng, sample_time,
+    return capture_incremental!(det, map.values, rng, sample_duration,
         plan.quantum_efficiency * plan.rate_scale)
 end

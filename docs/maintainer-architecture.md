@@ -168,11 +168,14 @@ These functions should own local physics and algorithm behavior, but not broad
 backend policy.
 
 Timed atmosphere models have one evolution writer. Evolution publishes an
-immutable `AtmosphereEpoch`; prepared, path-local renderers consume only the
-current epoch and write caller-owned products. Atmosphere state therefore owns
-physical layers and timeline state, not a shared pupil-sized render target or a
-mutable last-source geometry cache. The timed atmosphere API reads no telescope
-timing value. `ClosedLoopRuntime` and the single/grouped scenario
+immutable `AtmosphereEpoch` token for the current mutable layer state;
+prepared, path-local renderers consume only that current epoch and write
+caller-owned products. The token is not retained layer storage. A scheduled
+executor must materialize due path inputs before the writer advances or bind a
+model-specific retained state. Atmosphere state therefore owns physical layers
+and timeline state, not a shared pupil-sized render target or a mutable last-
+source geometry cache. The timed atmosphere API reads no telescope timing
+value. `ClosedLoopRuntime` and the single/grouped scenario
 configurations instead require an explicit positive `atmosphere_step` for each
 sensing update; that duration is independent of detector exposure.
 

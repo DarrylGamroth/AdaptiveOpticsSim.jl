@@ -1,8 +1,8 @@
 @kernel function masked_sum2d_kernel!(out, values_parent, valid_mask, row_offset::Int, col_offset::Int, n_rows::Int, n_cols::Int)
     i, j = @index(Global, NTuple)
     if i <= n_rows && j <= n_cols && @inbounds(valid_mask[i, j])
-        T = eltype(out)
-        @atomic out[1] += T(@inbounds values_parent[i + row_offset, j + col_offset])
+        value = @inbounds values_parent[i + row_offset, j + col_offset]
+        KernelAbstractions.@atomic out[1] += value
     end
 end
 

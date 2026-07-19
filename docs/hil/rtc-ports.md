@@ -19,7 +19,8 @@ Each hot mutable resource has one writer. The target ownership model is:
 | Resource | Writer | Readers or consumer | Handoff |
 |---|---|---|---|
 | Simulation clock and due-event sequence | HIL coordinator | device/path agents | Prepared bounded event slots |
-| Atmosphere epoch | Atmosphere owner | due optical paths | Immutable epoch or replicated counter state |
+| Atmosphere epoch token and current layers | Atmosphere owner | due path materializers | Direct same-epoch read while the writer is held; the token is metadata, not retained storage |
+| Materialized atmospheric path product or retained state snapshot | Assigned path/snapshot owner | downstream optical path | Direct ownership or one bounded acknowledged slot |
 | Effective optic state | Command/application owner | due optical paths | Versioned snapshot after scheduled application |
 | Branch workspace | Assigned CPU/GPU agent | detector pipeline on that branch | Direct ownership, no shared mutation |
 | Detector integration state | Detector executor | readout publisher | Direct call within one owner or bounded ready marker |
@@ -65,6 +66,15 @@ The names are not committed API. The required operations are nonblocking
 `try_submit!`, `try_take!`, bounded `poll!`, and explicit `release!` operations
 that return ordinary success, full, empty, closed, or stale-lease statuses.
 
+These boundary types are not core plant-command types. Core owns the prepared
+semantic payload schema, mapped plant-effective timestamp, validation,
+admission, application, and terminal model disposition. A HIL submission
+descriptor adds endpoint/session correlation, external timestamp-domain and
+mapping metadata, payload-lease ownership, and one terminal-outcome credit. A
+HIL command outcome wraps the core disposition with boundary timing and returns
+that credit. Core therefore never imports a HIL port, descriptor, lease, or
+outcome-credit type.
+
 Measured actuator position, encoder state, local-controller state, health, and
 other device feedback use ordinary acquisition endpoints with their own
 schedule, schema, sequence, and criticality. They are not command-completion
@@ -72,15 +82,18 @@ outcomes: a command outcome reports what happened to one submitted command,
 whereas feedback is a sampled plant product that may exist without a new
 command.
 
-### Prepared command schemas
+### Prepared boundary descriptors and plant command schemas
 
-Every command endpoint has an immutable schema resolved during preparation.
-User integration converts its wire representation into this canonical schema;
-the HIL data plane does not inspect transport-specific bytes. The schema
-declares at least:
+Every command endpoint has two compatible immutable contracts resolved during
+preparation. The core plant command schema declares semantic payload meaning,
+while the HIL submission descriptor schema declares boundary correlation,
+timestamp mapping, ownership, and credit. User integration converts its wire
+representation into the HIL descriptor; the data plane does not inspect
+transport-specific bytes.
 
-- endpoint identity, schema version, run/session epoch, and accepted source
-  timestamp domain
+The core plant command schema declares at least:
+
+- semantic target identity and schema version
 - payload element type, dimensions, units, sign convention, and actuator,
   modal, or other command basis
 - calibration/configuration revision needed to interpret that basis
@@ -88,7 +101,19 @@ declares at least:
 - finite-value, range, stroke, slew, and shape validation plus whether an
   invalid value is clipped, rejected, or fails the run
 - sequence policy for duplicate, stale, reordered, and skipped commands
-- effective-time, late-command, supersession, and watchdog policies
+- effective-time, late-command, supersession, and plant-time command-silence
+  policies
+
+The HIL submission descriptor schema declares at least:
+
+- boundary endpoint identity, descriptor-schema version, and run/session epoch
+- submission/correlation sequence and accepted source timestamp domain
+- source timestamp, mapping version, mapped plant receive/effective time, and
+  applicable synchronization metadata
+- compatible core plant command schema identity
+- inline payload or generation-checked payload-lease reference
+- paired terminal-outcome credit and boundary failure policy
+- optional execution-clock ingress-liveness deadline and reset policy
 
 Small fixed-size command payloads may be inline. Large command vectors use
 prepared bounded payload storage or generation-checked immutable leases; they
@@ -104,8 +129,9 @@ A successful `try_submit!` claims both an ingress slot and terminal-outcome
 credit, then transfers descriptor ownership into the ingress ring. It does not
 mean that the command passed validation or was admitted to the future-effective
 schedule. The completion port later returns the correlated terminal outcome.
-Enqueue, validation, admission, effective time, application, and outcome use
-distinct terms throughout the API and telemetry.
+Enqueue, timestamp mapping, core validation, admission, effective time,
+application, model disposition, and HIL outcome use distinct terms throughout
+the API and telemetry.
 
 The submission producer derives available outcome credit from its paired
 completion-consumer sequence: queued outcomes plus commands still in flight can
@@ -124,9 +150,10 @@ common-denominator transport interface.
 Inside one Julia process, consecutive stages with the same owner use direct
 calls and actual ownership changes use SPSC rings. `Iceoryx2.jl` is not used as
 an internal task scheduler or as fan-out between ordinary optical arms:
-atmosphere epochs and effective-command snapshots are immutable shared state,
-while each arm owns its propagation workspace. Replacing these relationships
-with publish/subscribe would add service discovery, FFI, shared-memory loan,
+atmosphere epoch tokens identify current state, materialized atmospheric path
+products and effective-command snapshots have explicit bounded lifetimes, and
+each arm owns its propagation workspace. Replacing these relationships with
+publish/subscribe would add service discovery, FFI, shared-memory loan,
 reference-count, and subscriber-overload semantics without removing an
 in-process payload copy.
 
@@ -283,7 +310,7 @@ Full behavior is resource-specific:
 | Acquisition-completion ring | Drop the newly completed product, explicitly coalesce only a latest-value product, or fail according to endpoint policy | Preserve the assigned stream-sequence gap and reclaim the product buffer |
 | Product-buffer pool | At the declared lease-acquisition boundary, drop the acquisition or fail according to endpoint policy | Do not start mutating an unowned buffer or allocate a replacement on the warmed path |
 | Lease-return ring | Capacity is reserved for every valid outstanding consumer lease; `full` is an invariant failure | Caller retains the lease, the run fails explicitly, and accounting identifies the missing credit; ordinary release never waits or retries |
-| Epoch snapshot or due-work slots | Shed undispatched optional work or fail the required acquisition according to prepared criticality | Never mutate or reuse a snapshot until every dispatched consumer acknowledges it |
+| Materialized path-product, retained atmosphere-state, or due-work slots | Shed undispatched optional work or fail the required acquisition according to prepared criticality | Never mutate or reuse a slot until every dispatched consumer acknowledges it; an epoch token alone never occupies a retained-state slot |
 | Deterministic event slots | Reject during preparation | A fixed periodic schedule cannot overflow while running |
 
 Raw WFS or science frames are not implicitly latest-value products, so
