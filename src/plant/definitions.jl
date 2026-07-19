@@ -74,6 +74,59 @@ function _require_declared_topology_value(::Nothing, component::Symbol,
         "$component $label must be declared"))
 end
 
+"""
+    ColdPlantModelDefinition()
+
+Accepted result of `plant_model_definition_style` for a configuration-only
+optical-path or acquisition model definition.
+"""
+struct ColdPlantModelDefinition end
+struct _UnsupportedPlantModelDefinition end
+
+"""
+    plant_model_definition_style(::Type{T})
+
+Trait for values stored as the optical or acquisition model in a plant
+definition. The default rejects the type. A cold, immutable model-definition
+type opts in by returning `ColdPlantModelDefinition()`:
+
+```julia
+AdaptiveOpticsSim.plant_model_definition_style(::Type{MyModelDefinition}) =
+    ColdPlantModelDefinition()
+```
+
+Opting in asserts that instances contain configuration only: no prepared
+workspace, mutable simulation or detector state, schedule, RNG stream, queue,
+transport, or HIL descriptor. Preparation may use the declaration to construct
+separately owned plans, state, and workspaces.
+"""
+plant_model_definition_style(::Type) = _UnsupportedPlantModelDefinition()
+
+@inline function _require_cold_plant_model_definition(model,
+    component::Symbol, label::AbstractString)
+    style = plant_model_definition_style(typeof(model))
+    return _require_cold_plant_model_definition(style, model, component,
+        label)
+end
+
+@inline _require_cold_plant_model_definition(::ColdPlantModelDefinition,
+    model, ::Symbol, ::AbstractString) = model
+
+function _require_cold_plant_model_definition(
+    ::_UnsupportedPlantModelDefinition, model, component::Symbol,
+    label::AbstractString)
+    throw(PlantDefinitionError(component, :unsupported_model_definition,
+        "$component $label type $(typeof(model)) has not declared the cold " *
+        "plant-model-definition contract"))
+end
+
+function _require_cold_plant_model_definition(style, model,
+    component::Symbol, label::AbstractString)
+    throw(PlantDefinitionError(component, :invalid_model_definition_style,
+        "plant_model_definition_style($(typeof(model))) must return " *
+        "ColdPlantModelDefinition(); got $(typeof(style))"))
+end
+
 @inline _require_path_source(::AbstractSource) = nothing
 
 function _require_path_source(value)
@@ -89,7 +142,8 @@ end
 Immutable declaration of one reusable optical path. `id` is explicit physical
 identity; tuple or named-tuple position is never identity. `source` and
 `optical_model` are cold model declarations. They own no prepared propagation
-workspace or mutable acquisition state.
+workspace or mutable acquisition state. The concrete optical-model type must
+opt in through `plant_model_definition_style`.
 """
 struct OpticalPathDefinition{S,M}
     id::OpticalPathID
@@ -103,6 +157,8 @@ struct OpticalPathDefinition{S,M}
         _require_path_source(source)
         _require_declared_topology_value(optical_model, :path,
             :missing_model, "optical model")
+        _require_cold_plant_model_definition(optical_model, :path,
+            "optical model")
         return new{S,M}(id, source, optical_model)
     end
 end
@@ -121,7 +177,9 @@ OpticalPathDefinition(id, source; optical_model) =
 
 Immutable declaration of one independently invocable acquisition. `path`
 references an `OpticalPathID`; acquisition preparation, detector/WFS mutable
-state, timing, RNG, and publication ownership are deliberately absent.
+state, timing, RNG, and publication ownership are deliberately absent. The
+concrete acquisition-model type must opt in through
+`plant_model_definition_style`.
 """
 struct AcquisitionDefinition{M}
     id::AcquisitionID
@@ -132,6 +190,8 @@ struct AcquisitionDefinition{M}
         acquisition_model::M) where {M}
         _require_declared_topology_value(acquisition_model, :acquisition,
             :missing_model, "model")
+        _require_cold_plant_model_definition(acquisition_model, :acquisition,
+            "model")
         return new{M}(id, path, acquisition_model)
     end
 end

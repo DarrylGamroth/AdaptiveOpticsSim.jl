@@ -37,13 +37,16 @@ end
     # Pre-HIL stage contracts intentionally add a small, documented public
     # product/protocol seam. Keep headroom bounded so unrelated internals do
     # not drift into the ordinary user namespace.
-    # Gate 2 topology adds eighteen documented definition, identity, lookup,
-    # and structured-error names and no execution or compatibility aliases.
-    @test length(exported) <= 498
+    # Gate 2 topology adds twenty documented definition, identity, lookup,
+    # trait, and structured-error names and no execution or compatibility
+    # aliases.
+    @test length(exported) <= 500
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :PlantDefinitionError)
     @test Base.isexported(AdaptiveOpticsSim, :OpticalPathID)
     @test Base.isexported(AdaptiveOpticsSim, :AcquisitionID)
+    @test Base.isexported(AdaptiveOpticsSim, :ColdPlantModelDefinition)
+    @test Base.isexported(AdaptiveOpticsSim, :plant_model_definition_style)
     @test Base.isexported(AdaptiveOpticsSim, :OpticalPathDefinition)
     @test Base.isexported(AdaptiveOpticsSim, :AcquisitionDefinition)
     @test Base.isexported(AdaptiveOpticsSim, :PlantDefinition)

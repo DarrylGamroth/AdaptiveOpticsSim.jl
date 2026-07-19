@@ -8,6 +8,20 @@ struct PlantTopologyTestAcquisitionModel
     label::Symbol
 end
 
+struct PlantTopologyTestInvalidDefinitionStyle end
+
+AdaptiveOpticsSim.plant_model_definition_style(
+    ::Type{PlantTopologyTestOpticalModel},
+) = ColdPlantModelDefinition()
+
+AdaptiveOpticsSim.plant_model_definition_style(
+    ::Type{PlantTopologyTestAcquisitionModel},
+) = ColdPlantModelDefinition()
+
+AdaptiveOpticsSim.plant_model_definition_style(
+    ::Type{PlantTopologyTestInvalidDefinitionStyle},
+) = nothing
+
 function captured_plant_definition_error(f)
     try
         f()
@@ -70,6 +84,10 @@ end
 
     @test OpticalPathID(:science) == path_id(science_path)
     @test AcquisitionID(:fast_camera) == acquisition_id(fast_camera)
+    @test isequal(OpticalPathID(:science), OpticalPathID(:science))
+    @test !isequal(OpticalPathID(:science), OpticalPathID(:ngs))
+    @test isequal(AcquisitionID(:fast_camera), AcquisitionID(:fast_camera))
+    @test !isequal(AcquisitionID(:fast_camera), AcquisitionID(:slow_camera))
     @test acquisition_path_id(fast_camera) == OpticalPathID(:science)
     @test path_source(science_path) === science_source
     @test path_model(science_path).label === :science_relay
@@ -121,6 +139,16 @@ end
     @test acquisition_path_id(
         acquisition_definition(reordered, :slow_camera),
     ) == OpticalPathID(:science)
+
+    named_positional = PlantDefinition(
+        telescope,
+        atmosphere,
+        (ngs=ngs_path, science=science_path),
+        (fast_camera=fast_camera, slow_camera=slow_camera, ngs_wfs=ngs_wfs),
+    )
+    @test path_definitions(named_positional) === (ngs_path, science_path)
+    @test acquisition_definitions(named_positional) ===
+        (fast_camera, slow_camera, ngs_wfs)
 
     empty_plant = PlantDefinition(
         telescope=telescope,
@@ -194,6 +222,32 @@ end
         () -> AcquisitionDefinition(:bad, :ngs, nothing),
         :acquisition,
         :missing_model,
+    )
+    assert_plant_definition_error(
+        () -> OpticalPathDefinition(:bad, ngs, Ref(:live_state)),
+        :path,
+        :unsupported_model_definition,
+    )
+    assert_plant_definition_error(
+        () -> AcquisitionDefinition(:bad, :ngs, Ref(:live_state)),
+        :acquisition,
+        :unsupported_model_definition,
+    )
+    live_detector = Detector()
+    @test Base.ismutable(live_detector.state)
+    assert_plant_definition_error(
+        () -> AcquisitionDefinition(:bad, :ngs, live_detector),
+        :acquisition,
+        :unsupported_model_definition,
+    )
+    assert_plant_definition_error(
+        () -> OpticalPathDefinition(
+            :bad,
+            ngs,
+            PlantTopologyTestInvalidDefinitionStyle(),
+        ),
+        :path,
+        :invalid_model_definition_style,
     )
 
     duplicate_ngs_path = OpticalPathDefinition(

@@ -79,9 +79,12 @@ Examples:
 
 - `PlantDefinition` with explicit `OpticalPathID` and `AcquisitionID` values,
   immutable path/acquisition topology bindings, and no prepared workspace,
-  schedule, RNG stream, queue, transport, or HIL descriptor. Its telescope,
-  atmosphere, and model references retain their own established ownership;
-  structural immutability of the definition is not a deep-freeze claim
+  schedule, RNG stream, queue, transport, or HIL descriptor. Path and
+  acquisition model types must explicitly opt in to the configuration-only
+  `plant_model_definition_style` contract; live detector/runtime owners fail
+  closed. Its separately owned telescope and atmosphere retain their
+  established state semantics, so structural immutability of the plant is not
+  a deep-freeze claim for those owners
 - `Telescope` with immutable `TelescopeParams` and a revisioned prepared
   `TelescopeAperture`; it owns spatial geometry and intensity reflectivity but
   no mutable OPD, cadence, or exposure duration

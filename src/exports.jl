@@ -169,6 +169,7 @@ export LiFTSolveAuto, LiFTSolveQR, LiFTSolveNormalEquations
 export LiFTLevenbergMarquardt, LiFTAdaptiveLevenbergMarquardt
 
 export OpticalPathID, AcquisitionID
+export ColdPlantModelDefinition, plant_model_definition_style
 export OpticalPathDefinition, AcquisitionDefinition, PlantDefinition
 export path_id, acquisition_id, acquisition_path_id
 export path_source, path_model, acquisition_model

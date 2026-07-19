@@ -20,6 +20,22 @@ Controllable-optic placement and acquisition scheduling remain later gates;
 neither is hidden in these definitions. Separating a path from its acquisitions
 prevents a second camera or readout cadence from forcing duplicate propagation.
 
+Optical and acquisition model declarations fail closed until their concrete
+types explicitly assert the cold configuration contract:
+
+```julia
+AdaptiveOpticsSim.plant_model_definition_style(
+    ::Type{InstrumentOpticalModelDefinition},
+) = ColdPlantModelDefinition()
+AdaptiveOpticsSim.plant_model_definition_style(
+    ::Type{InstrumentAcquisitionModelDefinition},
+) = ColdPlantModelDefinition()
+```
+
+The assertion excludes prepared plans and workspaces, mutable simulation or
+detector state, schedules, RNG streams, queues, transport, and HIL descriptors.
+It is intentionally opt-in instead of a shallow mutability heuristic.
+
 ```julia
 plant = PlantDefinition(
     telescope=tel,
@@ -51,19 +67,22 @@ plant = PlantDefinition(
 ```
 
 `PlantDefinition`, `OpticalPathDefinition`, `AcquisitionDefinition`,
-`OpticalPathID`, and `AcquisitionID` are committed public core names. A symbol
-passed as an identity is normalized to the corresponding typed ID. A tuple or
-named tuple is only declaration organization: every definition carries its own
-explicit identity, a named-tuple key must agree with it, and reordering cannot
-change a reference. Multiple acquisitions may reference the same path, as the
-two science acquisitions do above.
+`OpticalPathID`, `AcquisitionID`, `plant_model_definition_style`, and
+`ColdPlantModelDefinition` are committed public core names. A symbol passed as
+an identity is normalized to the corresponding typed ID. A tuple or named tuple
+is only declaration organization: every definition carries its own explicit
+identity, a named-tuple key must agree with it, and reordering cannot change a
+reference. Multiple acquisitions may reference the same path, as the two
+science acquisitions do above.
 
 These Julia structs are immutable topology records: their field bindings
-cannot be reassigned. They do not claim that every referenced scientific model
-is deeply immutable. In particular, the atmosphere remains a separately owned
-stateful model with one evolution writer. Preparation is responsible for
-freezing compatible configuration and separating prepared plans from mutable
-single-writer workspaces and acquisition state.
+cannot be reassigned. The model-definition trait makes path and acquisition
+model ownership an explicit extension contract; unrecognized types, including
+live detectors and mutable wrappers, are rejected. The telescope and atmosphere
+remain separately owned scientific models with their documented state
+semantics; in particular, the atmosphere has one evolution writer. Preparation
+freezes compatible configuration and constructs separately owned plans,
+single-writer workspaces, and acquisition state.
 
 The definitions contain no schedule, trigger binding, RNG stream, propagation
 workspace, queue, transport, or HIL descriptor. Those concepts are attached by
