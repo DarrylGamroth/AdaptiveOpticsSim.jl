@@ -272,8 +272,8 @@ influence basis already includes the print-through structure.
 - Prepared intensity-map acquisition: `DetectorAcquisitionPlan`,
   `prepare_detector_acquisition`
 
-`capture!(...; sample_duration=seconds)` and `capture_incremental!` are the
-current frame-step incremental convenience surface. `sample_duration` is a
+`capture!(...; integration_duration=seconds)` and `capture_incremental!` are the
+current frame-step incremental convenience surface. `integration_duration` is a
 positive integration duration, not an absolute timestamp. The planned
 virtual-time detector API uses explicit scheduler-owned exposure/read events
 rather than floating accumulated duration as its completion authority.

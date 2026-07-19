@@ -1077,11 +1077,11 @@ function run_optional_plane_product_checks(tel::Telescope,
         incremental_detector, prepared.output)
     capture!(incremental_detector, prepared.output,
         incremental_acquisition; rng=MersenneTwister(305),
-        sample_duration=T(0.2))
+        integration_duration=T(0.2))
     @test !readout_ready(incremental_detector)
     incremental_frame = capture!(incremental_detector, prepared.output,
         incremental_acquisition; rng=MersenneTwister(306),
-        sample_duration=T(0.3))
+        integration_duration=T(0.3))
     AdaptiveOpticsSim.synchronize_backend!(
         AdaptiveOpticsSim.execution_style(incremental_frame))
     @test incremental_frame isa BackendArray

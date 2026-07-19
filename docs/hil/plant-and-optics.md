@@ -284,7 +284,7 @@ camera. Presampling response, physical-pixel integration, QE and elapsed-time
 integration therefore remain downstream of optical spot or pupil-image
 formation and upstream of the estimator.
 
-The current `capture!(...; sample_duration=...)` and
+The current `capture!(...; integration_duration=...)` and
 `capture_incremental!` methods are frame-step convenience APIs. Their duration
 is expressed in seconds; it is not an absolute sample timestamp. They
 accumulate until the configured exposure duration is reached and then finalize

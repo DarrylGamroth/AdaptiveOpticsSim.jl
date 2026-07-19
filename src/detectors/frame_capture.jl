@@ -725,7 +725,7 @@ end
     iszero(det.state.integrated_time) && det.state.readout_ready ||
         throw(InvalidConfiguration(
             "cannot start a whole detector exposure while an incremental " *
-            "exposure is pending; complete it with sample_duration or call " *
+            "exposure is pending; complete it with integration_duration or call " *
             "reset_integration!"))
     return nothing
 end
@@ -790,17 +790,17 @@ function capture!(det::Detector, source::AbstractTemporalFrameSource; rng::Abstr
 end
 
 """
-    capture_incremental!(detector, photon_rate, rng, sample_duration,
+    capture_incremental!(detector, photon_rate, rng, integration_duration,
         quantum_efficiency=detector.params.qe)
 
-Accumulate one positive `sample_duration` in seconds from a cell-integrated
+Accumulate one positive `integration_duration` in seconds from a cell-integrated
 photon-arrival-rate matrix. This frame-step convenience finalizes automatically
-when the configured integration duration is reached. `sample_duration` is not
-an absolute timestamp; scheduled detector events own their timestamps and
-completion semantics separately.
+when the configured integration duration is reached. `integration_duration`
+is neither an absolute timestamp nor the period between consecutive samples;
+scheduled detector events own their timestamps and completion semantics.
 """
 function capture_incremental!(det::Detector, photon_rate::AbstractMatrix,
-    rng::AbstractRNG, sample_duration::Real, qe=det.params.qe)
+    rng::AbstractRNG, integration_duration::Real, qe=det.params.qe)
     if !iszero(det.state.integrated_time) || !det.state.readout_ready
         size(photon_rate) == size(det.state.presampling_buffer) ||
             throw(DimensionMismatchError(
@@ -809,14 +809,15 @@ function capture_incremental!(det::Detector, photon_rate::AbstractMatrix,
     end
     prepare_detector_buffers!(det, size(photon_rate))
     T = eltype(det.state.frame)
-    dt = T(sample_duration)
+    dt = T(integration_duration)
     isfinite(dt) && dt > zero(T) || throw(InvalidConfiguration(
-        "sample_duration must be finite and > 0"))
+        "integration_duration must be finite and > 0"))
     remaining = det.params.integration_time - det.state.integrated_time
     tolerance = T(8) * eps(det.params.integration_time) *
         max(one(T), abs(det.params.integration_time))
     dt <= remaining + tolerance || throw(InvalidConfiguration(
-        "sample_duration exceeds the remaining detector integration duration"))
+        "integration_duration exceeds the remaining detector integration " *
+        "duration"))
     dt = min(dt, remaining)
 
     exposure_start = iszero(det.state.integrated_time)
@@ -841,9 +842,9 @@ end
 
 function capture!(det::Detector, photon_rate::AbstractMatrix{T};
     rng::AbstractRNG=Random.default_rng(),
-    sample_duration::Union{Nothing,Real}=nothing) where {T}
-    if sample_duration === nothing
+    integration_duration::Union{Nothing,Real}=nothing) where {T}
+    if integration_duration === nothing
         return capture!(det, photon_rate, rng)
     end
-    return capture_incremental!(det, photon_rate, rng, sample_duration)
+    return capture_incremental!(det, photon_rate, rng, integration_duration)
 end

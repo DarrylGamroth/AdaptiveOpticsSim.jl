@@ -270,10 +270,11 @@ operations occur. Detector physics receives the exact positive interval
 duration in seconds or a prepared integration weight; it does not decide event
 completion by comparing accumulated floating-point duration with a tolerance.
 
-The existing frame-step `capture!(...; sample_duration=...)` convenience API
+The existing frame-step `capture!(...; integration_duration=...)` convenience API
 may accumulate and auto-finalize at the configured exposure duration, but it
-is not the scheduler contract. Its `sample_duration` name deliberately states
-that the argument is a duration rather than an absolute timestamp.
+is not the scheduler contract. Its `integration_duration` names the detector
+integration contributed by that optical interval; it is neither an absolute
+timestamp nor the period between consecutive samples.
 
 Progressive delivery to an RTC is a user transport operation over the complete
 leased product, not a sequence of simulation events. Its packet schedule,
