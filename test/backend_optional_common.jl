@@ -18,6 +18,63 @@ struct OptionalStaticAtmosphere{A,B<:AbstractArrayBackend} <: AdaptiveOpticsSim.
     screen::A
 end
 
+struct OptionalPreparedDirectPathModel
+    zero_padding::Int
+end
+
+struct OptionalPreparedFrameAcquisitionModel{T<:AbstractFloat}
+    exposure::T
+end
+
+AdaptiveOpticsSim.plant_model_definition_style(
+    ::Type{OptionalPreparedDirectPathModel}) = ColdPlantModelDefinition()
+
+AdaptiveOpticsSim.plant_model_definition_style(
+    ::Type{<:OptionalPreparedFrameAcquisitionModel}) =
+    ColdPlantModelDefinition()
+
+function AdaptiveOpticsSim.prepare_path_executor(
+    model::OptionalPreparedDirectPathModel,
+    definition::OpticalPathDefinition,
+    source::AdaptiveOpticsSim.AbstractSource,
+    telescope::Telescope,
+    ::OptionalStaticAtmosphere,
+)
+    T = eltype(pupil_reflectivity(telescope))
+    pupil = PupilFunction(telescope; T=T, backend=backend(telescope))
+    imaging = prepare_direct_imaging(pupil, source;
+        zero_padding=model.zero_padding)
+    return AdaptiveOpticsSim.PreparedPathExecutor(
+        definition,
+        source,
+        telescope,
+        pupil,
+        direct_imaging_output(imaging),
+        imaging;
+        optical_model=(kind=:direct_imaging,
+            zero_padding=model.zero_padding),
+        propagation_model=:fraunhofer_fft,
+        model_revisions=UInt(1),
+    )
+end
+
+function AdaptiveOpticsSim.prepare_acquisition_owner(
+    model::OptionalPreparedFrameAcquisitionModel,
+    definition::AcquisitionDefinition,
+    path::AdaptiveOpticsSim.PreparedPathExecutor,
+)
+    AdaptiveOpticsSim.require_path_result(path)
+    result = path_result(path)
+    T = eltype(result.values)
+    detector = Detector(integration_time=T(model.exposure),
+        noise=NoiseNone(), qe=one(T), response_model=NullFrameResponse(),
+        T=T, backend=path_result_key(path).backend)
+    execution = AdaptiveOpticsSim.FrameAcquisitionExecution(detector, result)
+    products = AdaptiveOpticsSim.AcquisitionProducts(execution.observation)
+    return AdaptiveOpticsSim.PreparedAcquisitionOwner(
+        definition, path, execution, products)
+end
+
 AdaptiveOpticsSim.backend(::OptionalStaticAtmosphere{<:Any,B}) where {B} = B()
 AdaptiveOpticsSim.advance!(atm::OptionalStaticAtmosphere, tel::Telescope, rng::AbstractRNG) = atm
 AdaptiveOpticsSim.advance!(atm::OptionalStaticAtmosphere, tel::Telescope; rng::AbstractRNG=Random.default_rng()) = atm
@@ -43,6 +100,57 @@ function OptionalStaticAtmosphere(tel::Telescope; T::Type{<:AbstractFloat}=Float
     screen = array_backend{T}(undef, size(host)...)
     copyto!(screen, host)
     return OptionalStaticAtmosphere{typeof(screen),typeof(selector)}(screen)
+end
+
+function run_optional_prepared_plant_checks(::Type{B},
+    BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    selector = backend_selector(B)
+    T = Float32
+    telescope = Telescope(resolution=8, diameter=T(4),
+        central_obstruction=zero(T), T=T, backend=selector)
+    atmosphere = OptionalStaticAtmosphere(telescope; T=T, backend=selector)
+    source = Source(band=:custom, wavelength=T(0.8e-6),
+        photon_irradiance=T(3), T=T)
+    path_definition = OpticalPathDefinition(:science, source,
+        OptionalPreparedDirectPathModel(2))
+    fast_definition = AcquisitionDefinition(:fast_science, :science,
+        OptionalPreparedFrameAcquisitionModel(T(0.25)))
+    slow_definition = AcquisitionDefinition(:slow_science, :science,
+        OptionalPreparedFrameAcquisitionModel(T(0.75)))
+    definition = PlantDefinition(; telescope, atmosphere,
+        paths=(science=path_definition,),
+        acquisitions=(fast_science=fast_definition,
+            slow_science=slow_definition))
+
+    plant = prepare_plant(definition)
+    path = prepared_path(plant, :science)
+    fast = prepared_acquisition(plant, :fast_science)
+    slow = prepared_acquisition(plant, :slow_science)
+    @test path_result(path).values isa BackendArray
+    @test acquisition_observation(fast) isa BackendArray
+    @test acquisition_observation(slow) isa BackendArray
+    @test path_result_key(path).device ==
+        plane_device(acquisition_observation(fast))
+    @test acquisition_observation(fast) !== acquisition_observation(slow)
+
+    @test @inferred(execute_path!(path)) === path_result(path)
+    fast_products = @inferred execute_acquisition!(fast, Xoshiro(0x6101))
+    slow_products = @inferred execute_acquisition!(slow, Xoshiro(0x6102))
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(path_result(path).values))
+    @test fast_products === acquisition_products(fast)
+    @test slow_products === acquisition_products(slow)
+    fast_host = Array(acquisition_observation(fast))
+    slow_host = Array(acquisition_observation(slow))
+    @test all(isfinite, fast_host)
+    @test sum(fast_host) > zero(T)
+    @test slow_host ≈ T(3) .* fast_host rtol=T(3e-5) atol=T(3e-5)
+
+    @test_throws PlantPreparationError AdaptiveOpticsSim.require_path_result(
+        path; backend=CPUBackend())
+    @test_throws PlantPreparationError AdaptiveOpticsSim.require_path_result(
+        path; device=AdaptiveOpticsSim.HostPlaneDevice())
+    return nothing
 end
 
 function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
@@ -2187,6 +2295,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     run_optional_sodium_profile_wfs(B, backend)
     run_optional_zernike_normalization(B, backend)
     run_optional_wfs_stage_contracts(B, backend)
+    run_optional_prepared_plant_checks(B, backend)
 
     if get(ENV, backend_full_smoke_env(B), "0") == "1"
         include(joinpath(dirname(@__DIR__), "scripts", "gpu_smoke_contract.jl"))

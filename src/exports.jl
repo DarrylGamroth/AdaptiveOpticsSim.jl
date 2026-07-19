@@ -8,7 +8,7 @@ export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError
 export UnsupportedAlgorithm, NumericalConditionError
 export AtmosphereTimeError, AtmosphereEpochError
 export WFSPreparationError
-export PlantDefinitionError
+export PlantDefinitionError, PlantPreparationError
 
 export FidelityProfile, ScientificProfile, FastProfile, default_fidelity_profile
 export runtime_rng, deterministic_reference_rng
@@ -176,6 +176,12 @@ export path_source, path_model, acquisition_model
 export plant_telescope, plant_atmosphere
 export path_definitions, acquisition_definitions
 export path_definition, acquisition_definition
+export PreparedPlant, prepare_plant
+export execute_path!, execute_acquisition!
+export path_result_key, path_input, path_result
+export acquisition_products, acquisition_observation
+export acquisition_measurement, prepared_paths, prepared_acquisitions
+export prepared_path, prepared_acquisition
 
 export InteractionMatrix, interaction_matrix
 export ControlMatrix

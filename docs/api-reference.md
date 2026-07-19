@@ -150,11 +150,11 @@ requires explicit photon irradiance to claim a physical rate; its default is a
 normalized source. Calling `photon_irradiance` on a normalized source is an
 error rather than an implicit unit conversion.
 
-## Plant Topology
+## Plant Topology And Preparation
 
 The Gate 2 core topology API declares one shared telescope and atmosphere,
-reusable optical paths, and independent acquisitions without adding execution
-or timing:
+reusable optical paths, and independent acquisitions. Preparation adds concrete
+single-writer owners without adding scheduling or atmosphere advancement:
 
 - Stable identities: `OpticalPathID`, `AcquisitionID`
 - Definitions: `OpticalPathDefinition`, `AcquisitionDefinition`,
@@ -165,6 +165,17 @@ or timing:
   `acquisition_path_id`, `path_source`, `path_model`, `acquisition_model`
 - Plant accessors: `plant_telescope`, `plant_atmosphere`, `path_definitions`,
   `acquisition_definitions`, `path_definition`, `acquisition_definition`
+- Ordinary prepared boundary: `PreparedPlant`, `prepare_plant`,
+  `execute_path!`, `execute_acquisition!`
+- Prepared accessors: `prepared_paths`, `prepared_acquisitions`,
+  `prepared_path`, `prepared_acquisition`, `path_input`, `path_result`,
+  `path_result_key`, `acquisition_products`, `acquisition_observation`,
+  `acquisition_measurement`
+- Qualified model-extension boundary: `PreparedPathExecutor`,
+  `PreparedAcquisitionOwner`, `AcquisitionProducts`, `PathResultKey`,
+  `AbstractOpticalSamplingContract`, `InstantaneousOpticalSample`,
+  `require_path_result`, `prepare_path_executor`, and
+  `prepare_acquisition_owner`
 
 Every path and acquisition carries an explicit typed identity. Tuples and
 named tuples organize declarations but do not define identity; named keys must
@@ -176,6 +187,17 @@ by returning `ColdPlantModelDefinition()` from
 instances contain configuration only. Preparation workspaces, mutable
 simulation or acquisition state, schedules, RNG streams, queues, transport,
 and HIL descriptors are intentionally absent.
+
+`prepare_plant` freezes each path source and dispatches on the concrete cold
+model types to build backend-, physical-device-, shape-, and revision-bound
+owners. A `PathResultKey` records source geometry, spectral sampling,
+radiometry, optical and propagation model keys, instantaneous-sample semantics,
+output-plane contract, revisions, backend, and device. Several acquisitions may
+borrow the exact same read-only path result while retaining distinct detector,
+readout, WFS estimator, observation, and measurement state. Individual warmed
+calls remain direct dispatch; the caller still supplies the RNG and decides
+which path or acquisition runs. Selected-set execution, atmosphere epochs,
+cadence, triggers, and ports belong to later gates.
 
 ## Atmosphere
 

@@ -97,7 +97,7 @@ backend-only validation by setting
 `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
 
 The CUDA track has a current manual WSL validation host and passed the maintained
-`386/386` hardware target on Julia 1.12.6 with CUDA.jl 6.2.1. The matching
+`399/399` hardware target on Julia 1.12.6 with CUDA.jl 6.2.1. The matching
 [backend evidence](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cuda.toml)
 archives CPU parity, residency, service-time histograms, and backend-ready,
 host-ready, and transfer-only boundaries. CUDA is still outside the present
@@ -121,7 +121,7 @@ installed in the root package environment. The archived `amdgpu` track defaults
 to backend-only validation by setting
 `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
 
-The current Julia 1.12.6 target passed `396/396` maintained checks with
+The current Julia 1.12.6 target passed `409/409` maintained checks with
 AMDGPU.jl 2.7.0 and KernelAbstractions.jl 0.9.42. The maintained AMD latency
 baseline remains the
 [July 14 cross-host artifact](../benchmarks/results/platform/2026-07-14-wsl-cuda-local-amdgpu.toml).

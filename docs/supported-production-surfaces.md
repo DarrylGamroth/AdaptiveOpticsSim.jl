@@ -96,6 +96,8 @@ Current AMDGPU-supported scope:
 - prepared direct imaging with off-axis formation, spectral bundles, explicit
   extended-source expansion, independent detector fan-out, and shared-arm
   device residency
+- schedule-free `PreparedPlant` direct-science execution with one device-
+  resident optical result shared by independent unequal-exposure acquisitions
 
 Primary evidence:
 
@@ -110,7 +112,7 @@ Current expectation:
 - if a maintained AMDGPU surface regresses numerically against CPU, that is a
   release-blocking defect for the AMDGPU-supported scope
 
-The current Julia 1.12.6 AMDGPU hardware target passed all `396` maintained
+The current Julia 1.12.6 AMDGPU hardware target passed all `409` maintained
 checks. A later local Julia installation failure prevented a replacement raw
 latency artifact, so the July 14 characterization remains the maintained AMD
 performance evidence; the failed host run does not broaden or weaken the
@@ -168,8 +170,8 @@ Scientist-owned HEART boundary truth artifact:
 
 The following are outside the current support claim:
 
-- CUDA execution. The extension, dedicated test project, fail-fast hardware
-  target, and current manual WSL hardware evidence—including prepared direct
+- CUDA execution. The extension, dedicated test project, fail-fast `399/399`
+  hardware target, and current manual WSL hardware evidence—including prepared direct
   imaging and the
   [final pre-HIL CUDA artifact](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cuda.toml)—are
   available, but CUDA has not yet been explicitly returned to the supported

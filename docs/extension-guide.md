@@ -34,6 +34,79 @@ owned prepared runtime objects. Types that do not opt in fail closed with
 `PlantDefinitionError`; do not opt live detector, WFS, atmosphere, or runtime
 owner types into this trait.
 
+Preparation then dispatches on those same concrete model types. A path method
+receives the exact definition, its run-owned frozen source, the plant telescope,
+and atmosphere, and returns a `PreparedPathExecutor`:
+
+```julia
+function AdaptiveOpticsSim.prepare_path_executor(
+    model::MyOpticalModelDefinition,
+    definition::AdaptiveOpticsSim.OpticalPathDefinition,
+    source::AdaptiveOpticsSim.AbstractSource,
+    telescope::AdaptiveOpticsSim.AbstractTelescope,
+    atmosphere::AdaptiveOpticsSim.AbstractAtmosphere,
+)
+    input, result, execution = prepare_my_optics(
+        model, source, telescope, atmosphere)
+    return AdaptiveOpticsSim.PreparedPathExecutor(
+        definition, source, telescope, input, result, execution;
+        optical_model=my_exact_model_key(model),
+        propagation_model=my_exact_propagation_key(model),
+        model_revisions=my_revision_key(model),
+    )
+end
+```
+
+`input` is a path-local `PupilFunction`, pupil-plane `ElectricField`, or a
+concrete tuple of them. `result` is an acquisition-facing photon-rate
+`IntensityMap` or a concrete tuple/`OpticalProductBundle` of such maps. The
+custom telescope must implement the aperture revision, reflectivity, backend,
+and physical-device interfaces consumed by those products. Every leaf in a
+multi-input or multi-result path must share that backend and physical device.
+The model and propagation keys must be value-comparable and cover every setting
+that can alter the result. Do not encode IDs, dimensions, rates, timestamps, or
+device ordinals as type parameters. `InstantaneousOpticalSample()` is the
+current default and states that the rate product samples one plant instant; it
+does not imply a cadence or exposure duration.
+
+A custom `AbstractSource` used in a prepared plant also implements the
+qualified `AdaptiveOpticsSim.path_source_geometry_key`,
+`AdaptiveOpticsSim.path_source_spectral_key`, and
+`AdaptiveOpticsSim.path_source_radiometry_key` methods. Return run-owned,
+value-comparable descriptions covering every source property that can change a
+path result. If the source contains mutable profile/image storage,
+`freeze_source` must copy it before these keys are built.
+
+An acquisition method first calls `require_path_result` for any stricter cold
+requirements, then constructs independent detector/WFS state and caller-owned
+products:
+
+```julia
+function AdaptiveOpticsSim.prepare_acquisition_owner(
+    model::MyAcquisitionDefinition,
+    definition::AdaptiveOpticsSim.AcquisitionDefinition,
+    path::AdaptiveOpticsSim.PreparedPathExecutor,
+)
+    AdaptiveOpticsSim.require_path_result(
+        path; optical_model=model.required_optical_model)
+    execution, observation, measurement = prepare_my_acquisition(model, path)
+    products = AdaptiveOpticsSim.AcquisitionProducts(
+        observation, measurement)
+    return AdaptiveOpticsSim.PreparedAcquisitionOwner(
+        definition, path, execution, products)
+end
+```
+
+Use qualified `AdaptiveOpticsSim.WFSOpticalPathExecution` to adapt an existing
+Gate 0 WFS optical plan, `AdaptiveOpticsSim.FrameAcquisitionExecution` for a
+frame detector plus a distinct caller-owned observation, and
+`AdaptiveOpticsSim.WFSAcquisitionExecution` to compose already prepared WFS
+acquisition and estimator plans. A different concrete execution type extends
+the three-argument `execute_path!` or four-argument `execute_acquisition!`
+dispatch. Do not store a `Function`, abstract executor vector, schedule, RNG,
+queue, or transport in these owners. Preparation may allocate; warmed execution
+must retain the allocation contract of its underlying stages.
+
 ## Detectors
 
 Physical detector families live in `src/detectors/`.

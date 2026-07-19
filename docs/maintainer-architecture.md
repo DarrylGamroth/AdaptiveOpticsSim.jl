@@ -85,6 +85,13 @@ Examples:
   closed. Its separately owned telescope and atmosphere retain their
   established state semantics, so structural immutability of the plant is not
   a deep-freeze claim for those owners
+- `PreparedPlant` as a schedule-free concrete tuple of
+  `PreparedPathExecutor` and `PreparedAcquisitionOwner` values. Each path owns
+  one explicit input/result pair and prepared optical workspace; acquisitions
+  borrow that exact result read-only while owning independent detector/WFS
+  execution state and `AcquisitionProducts`. `PathResultKey` performs cold
+  source/optics/output/revision/backend/device compatibility checks without
+  putting IDs, shapes, rates, or device ordinals in type parameters
 - `Telescope` with immutable `TelescopeParams` and a revisioned prepared
   `TelescopeAperture`; it owns spatial geometry and intensity reflectivity but
   no mutable OPD, cadence, or exposure duration
@@ -111,6 +118,9 @@ Examples:
   units, layout/kind, shape, numeric type, backend, and physical-device metadata
 - concrete prepared WFS optical-formation, acquisition, and estimation plans
   connected through six dispatch functions rather than a universal stage graph
+- direct `execute_path!` and `execute_acquisition!` dispatch over concrete
+  prepared owners; there is no abstract executor collection, closure field,
+  queue, task, or scheduler at this boundary
 - `ClosedLoopRuntime` with runtime profile, output plan, and prepared state
 
 This gives:
