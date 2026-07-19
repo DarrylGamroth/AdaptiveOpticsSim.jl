@@ -37,10 +37,18 @@ end
     # Pre-HIL stage contracts intentionally add a small, documented public
     # product/protocol seam. Keep headroom bounded so unrelated internals do
     # not drift into the ordinary user namespace.
-    # Pre-HIL 10 adds thirteen documented LiFT preparation, observation, and
-    # radiometric-domain names and no compatibility aliases.
-    @test length(exported) <= 480
+    # Gate 2 topology adds eighteen documented definition, identity, lookup,
+    # and structured-error names and no execution or compatibility aliases.
+    @test length(exported) <= 498
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
+    @test Base.isexported(AdaptiveOpticsSim, :PlantDefinitionError)
+    @test Base.isexported(AdaptiveOpticsSim, :OpticalPathID)
+    @test Base.isexported(AdaptiveOpticsSim, :AcquisitionID)
+    @test Base.isexported(AdaptiveOpticsSim, :OpticalPathDefinition)
+    @test Base.isexported(AdaptiveOpticsSim, :AcquisitionDefinition)
+    @test Base.isexported(AdaptiveOpticsSim, :PlantDefinition)
+    @test Base.isexported(AdaptiveOpticsSim, :path_definition)
+    @test Base.isexported(AdaptiveOpticsSim, :acquisition_definition)
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
     @test Base.isexported(AdaptiveOpticsSim, :MicrolensArray)
     @test Base.isexported(AdaptiveOpticsSim, :microlens_array)

@@ -50,6 +50,9 @@ The codebase is organized into subsystem directories:
 - `src/wfs`
   - Shack-Hartmann, Pyramid, BioEdge, Curvature, Zernike, grouped execution,
     calibration scaffolding
+- `src/plant`
+  - immutable plant, optical-path, and acquisition topology declarations;
+    prepared execution and mutable owners remain separate layers
 - `src/detectors`
   - frame/counting detectors, response models, thermal models, readout pipeline
 - `src/calibration`
@@ -74,6 +77,11 @@ The dominant pattern is:
 
 Examples:
 
+- `PlantDefinition` with explicit `OpticalPathID` and `AcquisitionID` values,
+  immutable path/acquisition topology bindings, and no prepared workspace,
+  schedule, RNG stream, queue, transport, or HIL descriptor. Its telescope,
+  atmosphere, and model references retain their own established ownership;
+  structural immutability of the definition is not a deep-freeze claim
 - `Telescope` with immutable `TelescopeParams` and a revisioned prepared
   `TelescopeAperture`; it owns spatial geometry and intensity reflectivity but
   no mutable OPD, cadence, or exposure duration

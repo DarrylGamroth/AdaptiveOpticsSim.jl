@@ -8,6 +8,7 @@ export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError
 export UnsupportedAlgorithm, NumericalConditionError
 export AtmosphereTimeError, AtmosphereEpochError
 export WFSPreparationError
+export PlantDefinitionError
 
 export FidelityProfile, ScientificProfile, FastProfile, default_fidelity_profile
 export runtime_rng, deterministic_reference_rng
@@ -166,6 +167,14 @@ export predict_lift_observation!, lift_forward_output
 export lift_observation_contract, diagnostics
 export LiFTSolveAuto, LiFTSolveQR, LiFTSolveNormalEquations
 export LiFTLevenbergMarquardt, LiFTAdaptiveLevenbergMarquardt
+
+export OpticalPathID, AcquisitionID
+export OpticalPathDefinition, AcquisitionDefinition, PlantDefinition
+export path_id, acquisition_id, acquisition_path_id
+export path_source, path_model, acquisition_model
+export plant_telescope, plant_atmosphere
+export path_definitions, acquisition_definitions
+export path_definition, acquisition_definition
 
 export InteractionMatrix, interaction_matrix
 export ControlMatrix
