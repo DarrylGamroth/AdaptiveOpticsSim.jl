@@ -804,6 +804,32 @@ function AdaptiveOpticsSim.render_atmosphere_opd_impl!(dest::AbstractMatrix,
         atmosphere.atmosphere)
 end
 
+@testset "Runtime pupil-path copy contracts" begin
+    tel = Telescope(resolution=16, diameter=8.0,
+        central_obstruction=0.0)
+    source = PupilFunction(tel)
+    destination = PupilFunction(tel)
+    source.amplitude .*= 0.5
+    source.opd .= reshape(range(0.0, 1e-8; length=length(source.opd)),
+        size(source.opd))
+
+    @test AdaptiveOpticsSim.copy_pupil_path!(destination, source) ===
+        destination
+    @test destination.amplitude == source.amplitude
+    @test destination.opd == source.opd
+
+    different_grid = PupilFunction(Telescope(resolution=8, diameter=8.0,
+        central_obstruction=0.0))
+    @test_throws DimensionMismatchError AdaptiveOpticsSim.copy_pupil_path!(
+        different_grid, source)
+
+    stale_pupil = PupilFunction(tel)
+    set_pupil_reflectivity!(tel, 0.5)
+    revised_pupil = PupilFunction(tel)
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.copy_pupil_path!(
+        revised_pupil, stale_pupil)
+end
+
 @testset "Source-aware runtime optical paths" begin
     tel = Telescope(resolution=16, diameter=8.0,
         central_obstruction=0.0)

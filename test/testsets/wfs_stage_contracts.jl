@@ -1328,6 +1328,22 @@ end
         T(0.1), fill(false, 3, 3), fill(false, 3, 3))
     @test_throws DimensionMismatchError SubapertureLayout(4, 16, T(8),
         T(0.1), fill(false, 3, 3), fill(false, 3, 3))
+    @test_throws InvalidConfiguration SubapertureLayout(0, 16, T(8),
+        T(0.1), fill(false, 0, 0), fill(false, 0, 0))
+    @test_throws InvalidConfiguration SubapertureLayout(4, 0, T(8),
+        T(0.1), fill(false, 4, 4), fill(false, 4, 4))
+    @test_throws DimensionMismatchError SubapertureLayout(4, 16, T(8),
+        T(0.1), fill(false, 4, 4), fill(false, 3, 3))
+    @test_throws InvalidConfiguration SubapertureLayout(4, 16, T(0),
+        T(0.1), fill(false, 4, 4), fill(false, 4, 4))
+    @test_throws InvalidConfiguration SubapertureLayout(4, 16, T(8),
+        T(1.1), fill(false, 4, 4), fill(false, 4, 4))
+    @test_throws DimensionMismatchError AdaptiveOpticsSim.update_subaperture_layout!(
+        independent_layout, ones(T, 15, 16),
+        GeometryValidSubapertures(T=T))
+    @test_throws DimensionMismatchError AdaptiveOpticsSim.update_subaperture_layout_from_amplitude!(
+        independent_layout, ones(T, 16, 15),
+        FluxThresholdValidSubapertures(T=T))
     AdaptiveOpticsSim.update_subaperture_layout!(independent_layout,
         pupil.amplitude .> zero(T), GeometryValidSubapertures(
             threshold=T(0.1), T=T))
@@ -1359,6 +1375,12 @@ end
         zeros(T, 8, 4), zeros(T, 32))
     @test_throws DimensionMismatchError SubapertureCalibration(
         zeros(T, 15, 2), zeros(T, 30))
+    @test_throws DimensionMismatchError SubapertureCalibration(
+        zeros(T, 16, 2), zeros(T, 31))
+    nonfinite_reference = zeros(T, 16, 2)
+    nonfinite_reference[1] = T(NaN)
+    @test_throws InvalidConfiguration SubapertureCalibration(
+        nonfinite_reference, zeros(T, 32))
     if coverage_enabled
         @test_skip "optical-stage allocation assertion is disabled under coverage instrumentation"
     else
