@@ -1116,6 +1116,11 @@ end
     configured_extraction = CenterOfGravityExtraction(T(0.125); T=T)
     @test_throws UnsupportedAlgorithm CenterOfGravityExtraction(T(0.125);
         window=ones(T, 3, 3), T=T)
+    @test_throws InvalidConfiguration CenterOfGravityExtraction(T(NaN); T=T)
+    @test_throws InvalidConfiguration GeometryValidSubapertures(
+        threshold=T(-0.1), T=T)
+    @test_throws InvalidConfiguration FluxThresholdValidSubapertures(
+        light_ratio=T(1.1), T=T)
     configured_sensor = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4,
         slope_extraction=configured_extraction, T=T)
@@ -1381,6 +1386,17 @@ end
     nonfinite_reference[1] = T(NaN)
     @test_throws InvalidConfiguration SubapertureCalibration(
         nonfinite_reference, zeros(T, 32))
+    replacement_reference = fill(T(0.25), 16, 2)
+    reference_revision = independent_calibration.revision
+    @test AdaptiveOpticsSim.set_reference_signal!(independent_calibration,
+        replacement_reference) === independent_calibration
+    @test independent_calibration.reference_signal_2d == replacement_reference
+    @test independent_calibration.reference_signal_host ==
+        vec(replacement_reference)
+    @test !independent_calibration.calibrated
+    @test independent_calibration.revision == reference_revision + UInt(1)
+    @test_throws DimensionMismatchError AdaptiveOpticsSim.set_reference_signal!(
+        independent_calibration, zeros(T, 15, 2))
     if coverage_enabled
         @test_skip "optical-stage allocation assertion is disabled under coverage instrumentation"
     else
