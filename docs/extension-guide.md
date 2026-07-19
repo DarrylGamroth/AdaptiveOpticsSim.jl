@@ -15,6 +15,25 @@ Use lower-case directory names for new source-tree locations. Julia type names
 may use CamelCase, but package directories should remain lower-case subsystem
 names such as `src/wfs`, `src/detectors`, `src/optics`, or `src/control`.
 
+## Plant Model Definitions
+
+`OpticalPathDefinition` and `AcquisitionDefinition` accept only explicitly
+declared cold model-definition types. A third-party definition opts in through
+dispatch:
+
+```julia
+AdaptiveOpticsSim.plant_model_definition_style(::Type{MyModelDefinition}) =
+    ColdPlantModelDefinition()
+```
+
+This method is an ownership assertion, not a recursive mutability test. An
+opted-in value must contain configuration only. It must not retain a prepared
+plan or workspace, mutable simulation or detector state, a schedule, RNG
+stream, queue, transport, or HIL descriptor. Keep those values in separately
+owned prepared runtime objects. Types that do not opt in fail closed with
+`PlantDefinitionError`; do not opt live detector, WFS, atmosphere, or runtime
+owner types into this trait.
+
 ## Detectors
 
 Physical detector families live in `src/detectors/`.

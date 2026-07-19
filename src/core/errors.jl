@@ -34,4 +34,11 @@ struct WFSPreparationError <: AdaptiveOpticsSimError
     msg::String
 end
 
+"""Invalid immutable plant, optical-path, or acquisition declaration."""
+struct PlantDefinitionError <: AdaptiveOpticsSimError
+    component::Symbol
+    reason::Symbol
+    msg::String
+end
+
 Base.showerror(io::IO, e::AdaptiveOpticsSimError) = print(io, e.msg)

@@ -12,51 +12,86 @@ boundary and document map.
 
 ## Plant, Path, And Acquisition Model
 
-A plant declaration contains one telescope and atmosphere, independently
-placed controllable optics, reusable optical-path definitions, and
-independently scheduled or triggered acquisition endpoints. Separating a path
-from its acquisitions prevents a second camera or readout cadence from forcing
-duplicate propagation. The names below illustrate the intended decomposition;
-they are not committed public API names.
+A plant ultimately contains one telescope and atmosphere, independently placed
+controllable optics, reusable optical paths, and independently scheduled or
+triggered acquisitions. The implemented Gate 2 declaration boundary currently
+commits the telescope, atmosphere, path, and acquisition topology only.
+Controllable-optic placement and acquisition scheduling remain later gates;
+neither is hidden in these definitions. Separating a path from its acquisitions
+prevents a second camera or readout cadence from forcing duplicate propagation.
+
+Optical and acquisition model declarations fail closed until their concrete
+types explicitly assert the cold configuration contract:
 
 ```julia
-ground_plane = AtmosphericConjugate(0.0)
+AdaptiveOpticsSim.plant_model_definition_style(
+    ::Type{InstrumentOpticalModelDefinition},
+) = ColdPlantModelDefinition()
+AdaptiveOpticsSim.plant_model_definition_style(
+    ::Type{InstrumentAcquisitionModelDefinition},
+) = ColdPlantModelDefinition()
+```
 
+The assertion excludes prepared plans and workspaces, mutable simulation or
+detector state, schedules, RNG streams, queues, transport, and HIL descriptors.
+It is intentionally opt-in instead of a shallow mutability heuristic.
+
+```julia
 plant = PlantDefinition(
     telescope=tel,
     atmosphere=atm,
-    optics=(
-        low_order=PlacedControllableOptic(dm_low, ground_plane),
-        high_order=PlacedControllableOptic(dm_high, ground_plane),
-        high_altitude=PlacedControllableOptic(dm8k,
-            AtmosphericConjugate(8_000.0)),
-        tiptilt=PlacedControllableOptic(ttm, PupilConjugate()),
-    ),
     paths=(
-        lgs1=OpticalPathDefinition(lgs1_source; train=lgs_train),
-        ngs=OpticalPathDefinition(ngs_source; train=ngs_train),
-        science=OpticalPathDefinition(science_source; train=science_train),
+        lgs1=OpticalPathDefinition(:lgs1, lgs1_source, lgs_train),
+        ngs=OpticalPathDefinition(:ngs, ngs_source, ngs_train),
+        science=OpticalPathDefinition(
+            :science,
+            science_source,
+            science_train,
+        ),
     ),
     acquisitions=(
-        lgs1_wfs=AcquisitionDefinition(:lgs1, lgs1_wfs;
-            detector=lgs1_detector,
-            schedule=PeriodicSchedule(period_ns=2_000_000)),
-        ngs_wfs=AcquisitionDefinition(:ngs, ngs_wfs;
-            detector=ngs_detector,
-            schedule=PeriodicSchedule(period_ns=1_000_000)),
-        science=AcquisitionDefinition(:science, science_detector;
-            schedule=PeriodicSchedule(period_ns=10_000_000)),
+        lgs1_wfs=AcquisitionDefinition(:lgs1_wfs, :lgs1, lgs1_acquisition),
+        ngs_wfs=AcquisitionDefinition(:ngs_wfs, :ngs, ngs_acquisition),
+        fast_science=AcquisitionDefinition(
+            :fast_science,
+            :science,
+            fast_science_acquisition,
+        ),
+        slow_science=AcquisitionDefinition(
+            :slow_science,
+            :science,
+            slow_science_acquisition,
+        ),
     ),
 )
 ```
 
-`PlantDefinition`, `OpticalPathDefinition`, `AcquisitionDefinition`, and
-`PeriodicSchedule` are illustrative names for semantic roles, not committed
-public API. Core definitions do not carry an `HIL` prefix because the same
-plant runs in deterministic virtual time, offline, or behind the HIL
-companion. An acquisition definition does not itself prescribe a cross-owner
-handoff. The HIL data-plane boundary uses ports backed by the sequenced SPSC
-rings specified in [`rtc-ports.md`](rtc-ports.md).
+`PlantDefinition`, `OpticalPathDefinition`, `AcquisitionDefinition`,
+`OpticalPathID`, `AcquisitionID`, `plant_model_definition_style`, and
+`ColdPlantModelDefinition` are committed public core names. A symbol passed as
+an identity is normalized to the corresponding typed ID. A tuple or named tuple
+is only declaration organization: every definition carries its own explicit
+identity, a named-tuple key must agree with it, and reordering cannot change a
+reference. Multiple acquisitions may reference the same path, as the two
+science acquisitions do above.
+
+These Julia structs are immutable topology records: their field bindings
+cannot be reassigned. The model-definition trait makes path and acquisition
+model ownership an explicit extension contract; unrecognized types, including
+live detectors and mutable wrappers, are rejected. The telescope and atmosphere
+remain separately owned scientific models with their documented state
+semantics; in particular, the atmosphere has one evolution writer. Preparation
+freezes compatible configuration and constructs separately owned plans,
+single-writer workspaces, and acquisition state.
+
+The definitions contain no schedule, trigger binding, RNG stream, propagation
+workspace, queue, transport, or HIL descriptor. Those concepts are attached by
+their assigned preparation, scheduling, and HIL-boundary layers. Core names do
+not carry an `HIL` prefix because the same plant can run in deterministic
+virtual time, offline, or behind the HIL companion. An acquisition definition
+does not itself prescribe a cross-owner handoff. The HIL data-plane boundary
+uses ports backed by the sequenced SPSC rings specified in
+[`rtc-ports.md`](rtc-ports.md).
 
 Preparation turns immutable definitions into backend-, device-, shape-, and
 capacity-bound plans plus explicitly owned mutable state and workspaces.

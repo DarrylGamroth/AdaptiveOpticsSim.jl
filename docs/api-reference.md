@@ -45,7 +45,8 @@ The package intentionally distinguishes three tiers:
 
 - Errors: `AdaptiveOpticsSimError`, `InvalidConfiguration`,
   `DimensionMismatchError`, `UnsupportedAlgorithm`, `NumericalConditionError`,
-  `AtmosphereTimeError`, `AtmosphereEpochError`
+  `AtmosphereTimeError`, `AtmosphereEpochError`, `WFSPreparationError`,
+  `PlantDefinitionError`
 - Profiles and RNG: `FidelityProfile`, `ScientificProfile`, `FastProfile`,
   `default_fidelity_profile`, `runtime_rng`, `deterministic_reference_rng`
 - Backend selectors: `CPUBackend`, `CUDABackend`, `AMDGPUBackend`,
@@ -148,6 +149,33 @@ A custom-band source is a normalized test source unless it supplies
 requires explicit photon irradiance to claim a physical rate; its default is a
 normalized source. Calling `photon_irradiance` on a normalized source is an
 error rather than an implicit unit conversion.
+
+## Plant Topology
+
+The Gate 2 core topology API declares one shared telescope and atmosphere,
+reusable optical paths, and independent acquisitions without adding execution
+or timing:
+
+- Stable identities: `OpticalPathID`, `AcquisitionID`
+- Definitions: `OpticalPathDefinition`, `AcquisitionDefinition`,
+  `PlantDefinition`
+- Cold-model trait: `plant_model_definition_style`,
+  `ColdPlantModelDefinition`
+- Identity and model accessors: `path_id`, `acquisition_id`,
+  `acquisition_path_id`, `path_source`, `path_model`, `acquisition_model`
+- Plant accessors: `plant_telescope`, `plant_atmosphere`, `path_definitions`,
+  `acquisition_definitions`, `path_definition`, `acquisition_definition`
+
+Every path and acquisition carries an explicit typed identity. Tuples and
+named tuples organize declarations but do not define identity; named keys must
+match the IDs they contain. `PlantDefinition` rejects duplicates and unknown
+path references with `PlantDefinitionError`. Optical-path and acquisition model
+types are rejected by default and must opt in to the cold-definition contract
+by returning `ColdPlantModelDefinition()` from
+`plant_model_definition_style(::Type{MyDefinition})`. That opt-in asserts that
+instances contain configuration only. Preparation workspaces, mutable
+simulation or acquisition state, schedules, RNG streams, queues, transport,
+and HIL descriptors are intentionally absent.
 
 ## Atmosphere
 
