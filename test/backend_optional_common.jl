@@ -38,7 +38,7 @@ function AdaptiveOpticsSim.prepare_path_executor(
     definition::OpticalPathDefinition,
     source::AdaptiveOpticsSim.AbstractSource,
     telescope::Telescope,
-    ::OptionalStaticAtmosphere,
+    atmosphere::AdaptiveOpticsSim.AbstractAtmosphere,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T=T, backend=backend(telescope))
@@ -48,15 +48,32 @@ function AdaptiveOpticsSim.prepare_path_executor(
         definition,
         source,
         telescope,
+        atmosphere,
         pupil,
         direct_imaging_output(imaging),
         imaging;
+        materialization=optional_path_materialization(atmosphere, telescope,
+            source, pupil),
         optical_model=(kind=:direct_imaging,
             zero_padding=model.zero_padding),
         propagation_model=:fraunhofer_fft,
         model_revisions=UInt(1),
     )
 end
+
+@inline optional_path_materialization(
+    ::OptionalStaticAtmosphere,
+    ::Telescope,
+    ::AdaptiveOpticsSim.AbstractSource,
+    ::PupilFunction,
+) = AdaptiveOpticsSim.AtmosphereIndependentPath()
+
+@inline optional_path_materialization(
+    atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere,
+    telescope::Telescope,
+    source::AdaptiveOpticsSim.AbstractSource,
+    pupil::PupilFunction,
+) = prepare_pupil_opd_materialization(atmosphere, telescope, source, pupil)
 
 function AdaptiveOpticsSim.prepare_acquisition_owner(
     model::OptionalPreparedFrameAcquisitionModel,
@@ -108,7 +125,16 @@ function run_optional_prepared_plant_checks(::Type{B},
     T = Float32
     telescope = Telescope(resolution=8, diameter=T(4),
         central_obstruction=zero(T), T=T, backend=selector)
-    atmosphere = OptionalStaticAtmosphere(telescope; T=T, backend=selector)
+    atmosphere = MultiLayerAtmosphere(telescope;
+        r0=T(0.2),
+        L0=T(25),
+        fractional_cn2=T[0.7, 0.3],
+        wind_speed=T[8, 4],
+        wind_direction=T[0, 90],
+        altitude=T[0, 5_000],
+        T=T,
+        backend=selector,
+    )
     source = Source(band=:custom, wavelength=T(0.8e-6),
         photon_irradiance=T(3), T=T)
     path_definition = OpticalPathDefinition(:science, source,
@@ -133,9 +159,15 @@ function run_optional_prepared_plant_checks(::Type{B},
         plane_device(acquisition_observation(fast))
     @test acquisition_observation(fast) !== acquisition_observation(slow)
 
-    @test @inferred(execute_path!(path)) === path_result(path)
-    fast_products = @inferred execute_acquisition!(fast, Xoshiro(0x6101))
-    slow_products = @inferred execute_acquisition!(slow, Xoshiro(0x6102))
+    selection = prepare_acquisition_selection(plant,
+        (:slow_science, :fast_science))
+    acquisition_rngs = (Xoshiro(0x6101), Xoshiro(0x6102))
+    @test @inferred(execute_acquisition_selection_at!(selection, T(1e-3),
+        Xoshiro(0x6100), acquisition_rngs)) === selection
+    fast_products = acquisition_products(fast)
+    slow_products = acquisition_products(slow)
+    @test epoch_time(current_epoch(atmosphere)) == T(1e-3)
+    @test path_input(path).opd isa BackendArray
     AdaptiveOpticsSim.synchronize_backend!(
         AdaptiveOpticsSim.execution_style(path_result(path).values))
     @test fast_products === acquisition_products(fast)

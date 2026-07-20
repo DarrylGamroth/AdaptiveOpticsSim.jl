@@ -177,11 +177,14 @@ export plant_telescope, plant_atmosphere
 export path_definitions, acquisition_definitions
 export path_definition, acquisition_definition
 export PreparedPlant, prepare_plant
+export prepare_pupil_opd_materialization, materialize_path_input!
 export execute_path!, execute_acquisition!
 export path_result_key, path_input, path_result
 export acquisition_products, acquisition_observation
 export acquisition_measurement, prepared_paths, prepared_acquisitions
 export prepared_path, prepared_acquisition
+export prepare_acquisition_selection
+export execute_acquisition_selection!, execute_acquisition_selection_at!
 
 export InteractionMatrix, interaction_matrix
 export ControlMatrix
