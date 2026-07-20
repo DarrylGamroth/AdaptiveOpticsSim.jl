@@ -82,12 +82,15 @@ continues to implement its ordinary `initialize_atmosphere!` and
 `evolve_atmosphere!` methods against `AbstractRNG`; the prepared plant supplies
 the exact owner-bound RNG to those methods.
 
-`input` is a path-local `PupilFunction`, pupil-plane `ElectricField`, or a
-concrete tuple of them. `result` is an acquisition-facing photon-rate
-`IntensityMap` or a concrete tuple/`OpticalProductBundle` of such maps. The
-custom telescope must implement the aperture revision, reflectivity, backend,
-and physical-device interfaces consumed by those products. Every leaf in a
-multi-input or multi-result path must share that backend and physical device.
+`input` is a path-local `PupilFunction`, a declared-plane `ElectricField` or
+`IntensityMap`, or a concrete tuple of them. The prepared execution determines
+which input planes and products it can consume; there is no implicit
+resampling or propagation between entry and execution. `result` is an
+acquisition-facing photon-rate `IntensityMap` or a concrete
+tuple/`OpticalProductBundle` of such maps. The custom telescope must implement
+the aperture revision, reflectivity, backend, and physical-device interfaces
+consumed by those products. Every leaf in a multi-input or multi-result path
+must share that backend and physical device.
 The model and propagation keys must be value-comparable and cover every setting
 that can alter the result. Do not encode IDs, dimensions, rates, timestamps, or
 device ordinals as type parameters. `InstantaneousOpticalSample()` is the
@@ -206,6 +209,112 @@ without granting another writer access to those streams.
 Reduced-order and synthetic/replay selections do not form an otherwise unused
 full-optical path. Provider style is fixed by preparation and cannot change in
 a prepared plant.
+
+## Calibration Illumination Evaluators
+
+Calibration is a scenario role; do not add a calibration source superclass,
+global mode, instrument selector, or propagation-bypass flag. Bind a prepared
+evaluator to the ordinary path input with `prepare_illumination_entry`, then
+pass that entry as the `materialization` of `PreparedPathExecutor`. The path's
+normal execution and acquisition provider remain unchanged.
+
+The containing optical model's `optical_model` and revision key must still
+cover the entry boundary and every evaluator parameter that can change the
+path result. Do not put evolving evaluator state, model time, RNG state, or
+backend arrays in that key.
+
+The maintained entry tags accept these products:
+
+| Entry tag | Accepted caller-owned payload |
+|---|---|
+| `PupilFunctionIlluminationEntry()` | `PupilFunction` with fully declared metadata |
+| `ElectricFieldIlluminationEntry()` | `ElectricField` on its declared optical plane |
+| `IntensityMapIlluminationEntry()` | `IntensityMap` on its declared optical plane |
+| `ExternalOpticsResultIlluminationEntry()` | `ElectricField` or `IntensityMap` already formed by a prepared external executor |
+| `DetectorInputIlluminationEntry()` | focal- or detector-plane `IntensityMap` with declared spectrum, photon-rate or dimensionless normalization, spatial-density or cell-integrated measure, and incoherent semantics |
+
+An immutable user definition prepares an immutable evaluator wrapper. Mutable
+single-writer state and backend-native workspace may be referenced by that
+wrapper, but remain separate objects. Implement these qualified methods:
+
+```julia
+struct MyIlluminationDefinition{T}
+    level::T
+end
+
+mutable struct MyIlluminationState{T}
+    evaluations::Int
+    last_time_s::T
+end
+
+struct PreparedMyIllumination{P,S,B,D}
+    params::P
+    state::S
+    backend::B
+    device::D
+end
+
+AdaptiveOpticsSim.illumination_combination(
+    ::Type{<:PreparedMyIllumination}) = SingleIllumination()
+
+function AdaptiveOpticsSim.prepare_illumination_evaluator(
+    definition::MyIlluminationDefinition,
+    destination::IntensityMap,
+    ::DetectorInputIlluminationEntry,
+)
+    state = MyIlluminationState(0, zero(eltype(destination.values)))
+    return PreparedMyIllumination(definition, state,
+        backend(destination), plane_device(destination.values))
+end
+
+function AdaptiveOpticsSim.validate_illumination_evaluator_binding(
+    evaluator::PreparedMyIllumination,
+    destination::IntensityMap,
+    ::DetectorInputIlluminationEntry,
+    contract,
+)
+    AdaptiveOpticsSim.validate_illumination_payload_contract(
+        destination, contract)
+    return nothing
+end
+
+function AdaptiveOpticsSim.evaluate_illumination!(
+    destination::IntensityMap,
+    evaluator::PreparedMyIllumination,
+    model_time,
+    rng::AbstractRNG,
+)
+    evaluator.state.evaluations += 1
+    evaluator.state.last_time_s = model_time
+    fill!(destination.values, evaluator.params.level)
+    return destination
+end
+```
+
+The evaluator receives explicit plant time and its path-owned `:illumination`
+RNG stream and must mutate and return the exact destination without allocating
+after warmup. It declares one of `SingleIllumination()`,
+`ExclusiveIlluminationSelection()`, `CoherentFieldCombination()`, or
+`IncoherentIntensityAddition()` through dispatch; core never guesses how
+contributions combine. The `visibility` value supplied to
+`prepare_illumination_entry` is a required, defensively snapshotted application
+description. Keep it configuration-only rather than storing live state,
+workspace, a closure, or transport ownership. Core records but does not
+interpret its topology.
+
+The warmed wrapper revalidates product identity, metadata, shape, numeric type,
+backend, device, and combination semantics. It deliberately does not scan a
+device array for finite or nonnegative samples on every evaluation. A custom
+evaluator therefore owns that numerical invariant; downstream prepared stages
+may rely on it. The native uniform model enforces a finite nonnegative level at
+construction.
+
+The native `UniformIntensityIllumination(value; combination)` is useful for a
+spatially uniform intensity entry. Its value is expressed in the destination
+map's already declared normalization and spatial measure; it does not perform a
+radiometric conversion or invent a spectrum. Detector-input entries still pass
+through ordinary detector response, quantum efficiency, exposure, readout, and
+product-provider semantics.
 
 ## Detectors
 

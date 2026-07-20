@@ -62,6 +62,12 @@ Current CPU-supported families:
   invariant caller-owned product contracts, unused-path bypass, and zero
   warmed provider allocation. This is boundary-semantic support, not an
   external-RTC performance or synthetic optical-fidelity claim
+- the schedule-free calibration-illumination entry boundary: typed
+  pupil/field/intensity/external-result/detector-input products, explicit
+  visibility and combination declarations, exact caller-owned destinations,
+  stable time/RNG ownership, ordinary downstream path/acquisition execution,
+  and zero warmed evaluator allocation. This is boundary-semantic support, not
+  a claim about a physical calibration unit or scheduled control protocol
 - grouped/runtime orchestration surfaces with committed validation artifacts
 - dense and factorized reconstruction operators, including allocation-free
   controller composition and backend-residency validation
@@ -103,6 +109,9 @@ Current AMDGPU-supported scope:
   device residency
 - schedule-free `PreparedPlant` direct-science execution with one device-
   resident optical result shared by independent unequal-exposure acquisitions
+- schedule-free native uniform calibration illumination entering a
+  device-resident detector-input path and passing through ordinary detector
+  acquisition with scalar indexing disabled
 
 Primary evidence:
 
@@ -175,7 +184,7 @@ Scientist-owned HEART boundary truth artifact:
 
 The following are outside the current support claim:
 
-- CUDA execution. The extension, dedicated test project, fail-fast `406/406`
+- CUDA execution. The extension, dedicated test project, fail-fast `412/412`
   hardware target, and current manual WSL hardware evidence—including prepared direct
   imaging and the
   [final pre-HIL CUDA artifact](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cuda.toml)—are
@@ -196,6 +205,12 @@ The following are outside the current support claim:
   tomography, stability, or optical accuracy
 - RTC latency, capacity, transport, cache-residency, or production-shaped
   payload claims inferred from unchanged, copied, or cyclic replay providers
+- physical fidelity claims for a user-defined calibration source, relay,
+  coherence/spectral prescription, insertion mechanism, or instrument profile;
+  the maintained illumination surface validates the typed execution boundary
+  only
+- scheduled calibration triggers, setpoint/control authority, HIL descriptors,
+  or calibration transport protocols
 
 ## Release Interpretation
 

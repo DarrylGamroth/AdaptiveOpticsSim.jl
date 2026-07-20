@@ -68,9 +68,11 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    and synthetic/replay providers without changing the RTC boundary. The
    reduced-order provider must retain time-correlated disturbances, calibrated
    path/sensor response, effective-command causality, and meaningful external-
-   RTC loop closure rather than acting as a changing frame generator. Expose a
-   narrow typed path-entry seam for user-defined calibration illumination
-   without introducing instrument topology or source assumptions in core.
+   RTC loop closure rather than acting as a changing frame generator. The
+   schedule-free slice now exposes a narrow typed path-entry seam for native
+   and user-defined calibration illumination without introducing instrument
+   topology or source assumptions in core; trigger/setpoint scheduling remains
+   with the later event gates.
 3. Add deterministic multi-rate integer-time events with explicit equal-time
    trigger-distribution, exposure/row-band, optical-sample, nondestructive-read,
    detector-readout, and publication semantics before adding command timing or

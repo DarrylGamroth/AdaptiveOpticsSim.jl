@@ -226,13 +226,19 @@ end
 """Qualified extension seam for extra stateful path/provider RNG roles."""
 @inline additional_path_rng_owner_roles(execution) = ()
 
+"""Qualified extension seam for extra path-input materialization RNG roles."""
+@inline additional_path_materialization_rng_owner_roles(materialization) = ()
+
 """Qualified extension seam for extra stateful acquisition/device RNG roles."""
 @inline additional_acquisition_rng_owner_roles(execution) = ()
 
-@inline function _path_rng_owner_roles(execution)
-    additional = _require_additional_rng_roles(
+@inline function _path_rng_owner_roles(execution, materialization)
+    execution_roles = _require_additional_rng_roles(
         additional_path_rng_owner_roles(execution), :path)
-    return (:provider, additional...)
+    materialization_roles = _require_additional_rng_roles(
+        additional_path_materialization_rng_owner_roles(materialization),
+        :path)
+    return (:provider, materialization_roles..., execution_roles...)
 end
 
 @inline function _acquisition_rng_owner_roles(execution)

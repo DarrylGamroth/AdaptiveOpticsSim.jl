@@ -66,10 +66,12 @@ The implemented schedule-free serial plant requires one central `run_seed`, a
 positive `RNGDerivationVersion`, and stable `RNGOwnerIdentity` values.
 Preparation assigns separate stateful streams to explicitly named atmosphere
 layers, every path/provider, every acquisition/detector, and any additional
-device roles declared by a model extension. Identities come from declared
-component names and remain stable when path, acquisition, selection, or
-atmosphere-layer order changes. Duplicate or missing required identities are a
-`PlantPreparationError`.
+path-materialization or device roles declared by a model extension. A prepared
+illumination entry declares an additional `:illumination` path role and passes
+that exact stream plus explicit epoch time to its evaluator. Identities come
+from declared component names and remain stable when path, acquisition,
+selection, or atmosphere-layer order changes. Duplicate or missing required
+identities are a `PlantPreparationError`.
 
 ```julia
 plant = prepare_plant(definition;
@@ -113,6 +115,11 @@ The prepared plant supplies those per-owner values; individual
 models do not look up a global registry in their hot path. Addressable GPU
 kernels receive prepared keys/counters directly rather than consuming one
 host RNG seed in launch order.
+
+The maintained illumination tests replay a user-defined stateful pupil
+evaluator under reversed path/acquisition declarations and obtain identical
+per-path products. This is evidence for serial prepared-stream ownership, not
+for the still-planned addressable multi-device random domain.
 
 ## Deterministic Configuration
 

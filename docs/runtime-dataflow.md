@@ -217,6 +217,17 @@ a special runtime mode. User or companion code declares the supported entry
 boundary, downstream visibility, source evaluator, state timing, and any
 combination rule. Core executes that prepared evaluator and the ordinary
 acquisition pipeline; a calibration label alone never changes propagation.
+The implemented boundary accepts caller-owned pupil functions, declared-plane
+fields and intensity maps, typed external-optics results, and constrained
+detector-input intensity maps. `PreparedIlluminationEntry` snapshots the
+payload contract and visibility description, retains one immutable evaluator
+wrapper with separate single-writer state/workspace, and receives explicit
+epoch time plus a stable path-owned `:illumination` RNG stream. The evaluator
+must return its exact destination; path execution then consumes that product
+without any `is_calibration`, upstream-bypass, or instrument branch. This is a
+schedule-free materialization contract: trigger cadence, setpoint ownership,
+publication, transport, and control authority remain later HIL or application
+concerns.
 
 The current `AOSimulation` stores one controllable optic, so existing
 multi-surface plants use `CompositeControllableOptic` as a packed-command and

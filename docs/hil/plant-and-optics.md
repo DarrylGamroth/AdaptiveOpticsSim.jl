@@ -676,6 +676,22 @@ The generic contract records only what the simulator must execute:
 - explicit combination semantics when more than one illumination contribution
   is active at the same boundary
 
+That schedule-free contract is now implemented by
+`prepare_illumination_entry` and the typed
+`PupilFunctionIlluminationEntry`, `ElectricFieldIlluminationEntry`,
+`IntensityMapIlluminationEntry`, `ExternalOpticsResultIlluminationEntry`, and
+`DetectorInputIlluminationEntry` tags. A `PreparedIlluminationEntry` is an
+ordinary path materializer: it receives the selected atmosphere epoch's plant
+time and a stable path-owned `:illumination` RNG, writes one exact caller-owned
+product, and hands that product to the path's normal prepared execution.
+`SingleIllumination`, `ExclusiveIlluminationSelection`,
+`CoherentFieldCombination`, and `IncoherentIntensityAddition` are explicit
+declarations rather than inferred behavior. The small native
+`UniformIntensityIllumination` model has CPU and maintained accelerator-path
+evidence through ordinary detector acquisition; a user-defined stateful pupil
+model separately covers explicit time/RNG use and normal downstream optical
+formation on CPU.
+
 There is no global `is_calibration` propagation branch and no collection of
 `bypass_atmosphere`, `bypass_telescope`, or instrument-selection flags. If a
 calibration unit enters downstream of those elements, its path simply begins
@@ -700,6 +716,12 @@ This is intentionally an incremental extension seam, not a universal optical
 graph introduced solely for calibration. New entry-plane payloads are added
 only for demonstrated source/path models. Instrument configurations and bench
 procedures remain in user code or companion profile packages.
+
+This implementation does not yet add HIL scheduling, triggers, calibration
+setpoint commands, sequence/timestamp descriptors, transport, or a source-state
+mode manager. Those remain in their owning later gates; the evaluator's
+explicit plant time and state are sufficient for deterministic schedule-free
+execution without assigning control authority to core.
 
 ## Pyramid-WFS Modulation
 

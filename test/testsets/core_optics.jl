@@ -39,7 +39,7 @@ end
     # not drift into the ordinary user namespace.
     # Gate 2 adds a bounded documented topology/preparation surface; internal
     # validation and source-key helpers remain qualified implementation detail.
-    @test length(exported) <= 537
+    @test length(exported) <= 552
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :PlantDefinitionError)
     @test Base.isexported(AdaptiveOpticsSim, :PlantPreparationError)
@@ -67,6 +67,34 @@ end
         :execute_acquisition_selection_at!)
     @test Base.isexported(AdaptiveOpticsSim, :execute_path!)
     @test Base.isexported(AdaptiveOpticsSim, :execute_acquisition!)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :PupilFunctionIlluminationEntry)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :ElectricFieldIlluminationEntry)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :IntensityMapIlluminationEntry)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :ExternalOpticsResultIlluminationEntry)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :DetectorInputIlluminationEntry)
+    @test Base.isexported(AdaptiveOpticsSim, :SingleIllumination)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :ExclusiveIlluminationSelection)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :UniformIntensityIllumination)
+    @test Base.isexported(AdaptiveOpticsSim, :prepare_illumination_entry)
+    @test Base.isexported(AdaptiveOpticsSim, :evaluate_illumination!)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :illumination_entry_boundary)
+    @test Base.isexported(AdaptiveOpticsSim, :illumination_evaluator)
+    @test Base.isexported(AdaptiveOpticsSim, :illumination_destination)
+    @test Base.isexported(AdaptiveOpticsSim, :illumination_combination)
+    @test Base.isexported(AdaptiveOpticsSim, :illumination_visibility)
+    @test !Base.isexported(AdaptiveOpticsSim, :PreparedIlluminationEntry)
+    @test !Base.isexported(AdaptiveOpticsSim,
+        :prepare_illumination_evaluator)
+    @test !Base.isexported(AdaptiveOpticsSim,
+        :validate_illumination_evaluator_binding)
     @test Base.isexported(AdaptiveOpticsSim, :FullOpticalProviderStyle)
     @test Base.isexported(AdaptiveOpticsSim,
         :CommandResponsiveReducedOrderProviderStyle)
