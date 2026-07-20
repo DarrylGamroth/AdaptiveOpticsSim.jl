@@ -57,6 +57,11 @@ Current CPU-supported families:
 - allocation-free shared multi-arm CPU execution with one atmosphere advance
   and one caller-owned same-arm photon-arrival-rate image reused by independent
   detector acquisitions
+- the schedule-free acquisition product-provider boundary: run-immutable
+  full-optical or nonresponsive unchanged/copy/bounded-replay selection,
+  invariant caller-owned product contracts, unused-path bypass, and zero
+  warmed provider allocation. This is boundary-semantic support, not an
+  external-RTC performance or synthetic optical-fidelity claim
 - grouped/runtime orchestration surfaces with committed validation artifacts
 - dense and factorized reconstruction operators, including allocation-free
   controller composition and backend-residency validation
@@ -170,7 +175,7 @@ Scientist-owned HEART boundary truth artifact:
 
 The following are outside the current support claim:
 
-- CUDA execution. The extension, dedicated test project, fail-fast `401/401`
+- CUDA execution. The extension, dedicated test project, fail-fast `406/406`
   hardware target, and current manual WSL hardware evidence—including prepared direct
   imaging and the
   [final pre-HIL CUDA artifact](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cuda.toml)—are
@@ -185,6 +190,12 @@ The following are outside the current support claim:
 - cross-package grouped/platform equivalence beyond the currently normalized
   contracts
 - full optical or on-sky instrument-truth alignment beyond the maintained boundary artifact
+- a production reduced-order AO surrogate. The maintained test extension
+  proves provider dispatch and command causality only; it does not establish a
+  validated disturbance/command/sensor envelope, scheduled loop closure,
+  tomography, stability, or optical accuracy
+- RTC latency, capacity, transport, cache-residency, or production-shaped
+  payload claims inferred from unchanged, copied, or cyclic replay providers
 
 ## Release Interpretation
 

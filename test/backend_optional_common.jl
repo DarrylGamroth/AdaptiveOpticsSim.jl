@@ -75,7 +75,7 @@ end
     pupil::PupilFunction,
 ) = prepare_pupil_opd_materialization(atmosphere, telescope, source, pupil)
 
-function AdaptiveOpticsSim.prepare_acquisition_owner(
+function AdaptiveOpticsSim.prepare_acquisition_provider(
     model::OptionalPreparedFrameAcquisitionModel,
     definition::AcquisitionDefinition,
     path::AdaptiveOpticsSim.PreparedPathExecutor,
@@ -87,9 +87,12 @@ function AdaptiveOpticsSim.prepare_acquisition_owner(
         noise=NoiseNone(), qe=one(T), response_model=NullFrameResponse(),
         T=T, backend=path_result_key(path).backend)
     execution = AdaptiveOpticsSim.FrameAcquisitionExecution(detector, result)
-    products = AdaptiveOpticsSim.AcquisitionProducts(execution.observation)
-    return AdaptiveOpticsSim.PreparedAcquisitionOwner(
-        definition, path, execution, products)
+    metadata = (kind=:detector_frame, units=:detected_electrons,
+        geometry=result.metadata,
+        detector=detector_export_metadata(detector))
+    products = AdaptiveOpticsSim.AcquisitionProducts(execution.observation;
+        metadata)
+    return prepare_full_optical_provider(execution, products)
 end
 
 AdaptiveOpticsSim.backend(::OptionalStaticAtmosphere{<:Any,B}) where {B} = B()
@@ -177,6 +180,43 @@ function run_optional_prepared_plant_checks(::Type{B},
     @test all(isfinite, fast_host)
     @test sum(fast_host) > zero(T)
     @test slow_host ≈ T(3) .* fast_host rtol=T(3e-5) atol=T(3e-5)
+
+    synthetic_metadata = acquisition_product_metadata(fast)
+    copied_destination = AdaptiveOpticsSim.AcquisitionProducts(
+        similar(acquisition_observation(fast));
+        metadata=synthetic_metadata)
+    copied_source = AdaptiveOpticsSim.AcquisitionProducts(
+        similar(acquisition_observation(fast));
+        metadata=synthetic_metadata)
+    fill!(copied_source.observation, T(9))
+    copied_provider = prepare_copied_synthetic_provider(
+        copied_destination, copied_source)
+    @test AdaptiveOpticsSim.execute_acquisition_provider!(copied_provider,
+        path_result(path), Xoshiro(0x6110)) === copied_destination
+    replay_destination = AdaptiveOpticsSim.AcquisitionProducts(
+        similar(acquisition_observation(fast));
+        metadata=synthetic_metadata)
+    replay_first = AdaptiveOpticsSim.AcquisitionProducts(
+        similar(acquisition_observation(fast));
+        metadata=synthetic_metadata)
+    replay_second = AdaptiveOpticsSim.AcquisitionProducts(
+        similar(acquisition_observation(fast));
+        metadata=synthetic_metadata)
+    fill!(replay_first.observation, T(10))
+    fill!(replay_second.observation, T(11))
+    replay_provider = prepare_cyclic_replay_provider(replay_destination,
+        (replay_first, replay_second))
+    @test AdaptiveOpticsSim.execute_acquisition_provider!(replay_provider,
+        path_result(path), Xoshiro(0x6111)) === replay_destination
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(copied_destination.observation))
+    @test all(==(T(9)), Array(copied_destination.observation))
+    @test all(==(T(10)), Array(replay_destination.observation))
+    AdaptiveOpticsSim.execute_acquisition_provider!(replay_provider,
+        path_result(path), Xoshiro(0x6112))
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(replay_destination.observation))
+    @test all(==(T(11)), Array(replay_destination.observation))
 
     @test_throws PlantPreparationError AdaptiveOpticsSim.require_path_result(
         path; backend=CPUBackend())

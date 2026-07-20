@@ -334,7 +334,7 @@ function AdaptiveOpticsSim.prepare_path_executor(
     return nothing
 end
 
-function AdaptiveOpticsSim.prepare_acquisition_owner(
+function AdaptiveOpticsSim.prepare_acquisition_provider(
     ::InvalidPreparedAcquisitionModel,
     ::AcquisitionDefinition,
     ::PreparedPathExecutor,
@@ -461,7 +461,7 @@ end
     path::PreparedPathExecutor) = require_path_result(path;
         device=ContractPlaneDevice(404))
 
-function AdaptiveOpticsSim.prepare_acquisition_owner(
+function AdaptiveOpticsSim.prepare_acquisition_provider(
     model::FramePlantAcquisitionModel,
     definition::AcquisitionDefinition,
     path::PreparedPathExecutor,
@@ -472,11 +472,14 @@ function AdaptiveOpticsSim.prepare_acquisition_owner(
         noise=NoiseNone(), qe=one(T), response_model=NullFrameResponse(),
         T=T, backend=path.key.backend)
     execution = FrameAcquisitionExecution(detector, path.result)
-    products = AcquisitionProducts(execution.observation)
-    return PreparedAcquisitionOwner(definition, path, execution, products)
+    metadata = (kind=:detector_frame, units=:detected_electrons,
+        geometry=path.result.metadata,
+        detector=detector_export_metadata(detector))
+    products = AcquisitionProducts(execution.observation; metadata)
+    return prepare_full_optical_provider(execution, products)
 end
 
-function AdaptiveOpticsSim.prepare_acquisition_owner(
+function AdaptiveOpticsSim.prepare_acquisition_provider(
     model::ContractWFSPlantAcquisitionModel,
     definition::AcquisitionDefinition,
     path::PreparedPathExecutor,
@@ -499,8 +502,13 @@ function AdaptiveOpticsSim.prepare_acquisition_owner(
     )
     execution = WFSAcquisitionExecution(acquisition, estimator,
         observation, measurement)
-    products = AcquisitionProducts(observation, measurement)
-    return PreparedAcquisitionOwner(definition, path, execution, products)
+    metadata = (kind=:wfs_observation_and_measurement,
+        observation=(units=observation.units,
+            metadata=observation.metadata),
+        measurement=(units=measurement.units,
+            metadata=measurement.metadata))
+    products = AcquisitionProducts(observation, measurement; metadata)
+    return prepare_full_optical_provider(execution, products)
 end
 
 function captured_plant_preparation_error(f)
@@ -561,6 +569,8 @@ end
 @inline plant_test_observation_values(values::AbstractArray) = values
 @inline plant_test_observation_values(observation::WFSObservation) =
     observation.storage
+@inline plant_full_execution(owner::PreparedAcquisitionOwner) =
+    acquisition_provider(owner).implementation.execution
 
 @testset "Prepared plant paths and acquisition owners" begin
     T = Float64
@@ -891,20 +901,28 @@ end
     @test slow.path_result === science_path.result
     @test fast.path_key === science_path.key
     @test slow.path_key === science_path.key
-    @test fast.execution.detector.state !== slow.execution.detector.state
+    fast_execution = plant_full_execution(fast)
+    slow_execution = plant_full_execution(slow)
+    wfs_execution = plant_full_execution(wfs)
+    @test fast_execution.detector.state !== slow_execution.detector.state
     @test acquisition_observation(fast) !== acquisition_observation(slow)
     @test !Base.mightalias(acquisition_observation(fast),
         acquisition_observation(slow))
     @test acquisition_measurement(fast) === nothing
-    @test acquisition_products(fast) === fast.products
+    @test acquisition_products(fast) === fast.provider.products
+    @test acquisition_product_metadata(fast) ===
+        acquisition_products(fast).metadata
+    @test acquisition_provider_style(fast) isa FullOpticalProviderStyle
+    @test acquisition_provider_payload_work(fast) ===
+        :full_optical_evaluation
 
     formed_science = @inferred execute_path!(science_path)
     @test formed_science === science_path.result
     science_before = copy(science_path.result.values)
     fast_products = @inferred execute_acquisition!(fast, Xoshiro(11))
     slow_products = @inferred execute_acquisition!(slow, Xoshiro(12))
-    @test fast_products === fast.products
-    @test slow_products === slow.products
+    @test fast_products === acquisition_products(fast)
+    @test slow_products === acquisition_products(slow)
     @test acquisition_observation(slow) ≈
         T(3) .* acquisition_observation(fast) atol=0 rtol=0
     @test science_path.result.values == science_before
@@ -913,18 +931,19 @@ end
     @test formed_wfs === wfs_path.result
     wfs_rate_before = copy(wfs_path.result.values)
     wfs_products = @inferred execute_acquisition!(wfs, Xoshiro(13))
-    @test wfs_products === wfs.products
+    @test wfs_products === acquisition_products(wfs)
     @test acquisition_measurement(wfs).storage[1] ≈
         T(0.5) * sum(wfs_path.result.values) atol=T(1e-12) rtol=T(1e-12)
     @test wfs_path.result.values == wfs_rate_before
 
-    detector = fast.execution.detector
+    detector = fast_execution.detector
     detector_frame = output_frame(detector)
     explicit_observation = similar(detector_frame)
     fill!(explicit_observation, zero(T))
     explicit_frame_execution = FrameAcquisitionExecution(detector,
         science_path.result, explicit_observation)
-    explicit_frame_products = AcquisitionProducts(explicit_observation)
+    explicit_frame_products = AcquisitionProducts(explicit_observation;
+        metadata=acquisition_product_metadata(fast))
     @test execute_acquisition!(explicit_frame_products, science_path.result,
         explicit_frame_execution, Xoshiro(16)) === explicit_frame_products
 
@@ -953,7 +972,8 @@ end
 
     assert_plant_preparation_error(
         () -> execute_acquisition!(
-            AcquisitionProducts(similar(explicit_observation)),
+            AcquisitionProducts(similar(explicit_observation);
+                metadata=acquisition_product_metadata(fast)),
             science_path.result,
             explicit_frame_execution,
             Xoshiro(17),
@@ -963,30 +983,38 @@ end
     )
 
     observation_only_execution = WFSAcquisitionExecution(
-        wfs.execution.acquisition, wfs.execution.observation)
+        wfs_execution.acquisition, wfs_execution.observation)
     observation_only_products = AcquisitionProducts(
-        wfs.execution.observation)
+        wfs_execution.observation;
+        metadata=(kind=:wfs_observation,
+            units=wfs_execution.observation.units,
+            product=wfs_execution.observation.metadata))
     @test execute_acquisition!(observation_only_products, wfs.path_result,
         observation_only_execution, Xoshiro(18)) === observation_only_products
 
-    mismatched_wfs_observation = deepcopy(wfs.execution.observation)
+    mismatched_wfs_observation = deepcopy(wfs_execution.observation)
     mismatched_wfs_execution = WFSAcquisitionExecution(
-        wfs.execution.acquisition, mismatched_wfs_observation)
+        wfs_execution.acquisition, mismatched_wfs_observation)
     @test_throws WFSPreparationError PreparedAcquisitionOwner(
-        wfs_acquisition_definition, wfs_path, mismatched_wfs_execution,
-        AcquisitionProducts(mismatched_wfs_observation))
+        wfs_acquisition_definition, wfs_path,
+        prepare_full_optical_provider(mismatched_wfs_execution,
+            AcquisitionProducts(mismatched_wfs_observation;
+                metadata=observation_only_products.metadata)))
 
-    mismatched_wfs_measurement = deepcopy(wfs.execution.measurement)
+    mismatched_wfs_measurement = deepcopy(wfs_execution.measurement)
     mismatched_estimator_execution = WFSAcquisitionExecution(
-        wfs.execution.acquisition, wfs.execution.estimator,
-        wfs.execution.observation, mismatched_wfs_measurement)
+        wfs_execution.acquisition, wfs_execution.estimator,
+        wfs_execution.observation, mismatched_wfs_measurement)
     @test_throws WFSPreparationError PreparedAcquisitionOwner(
-        wfs_acquisition_definition, wfs_path, mismatched_estimator_execution,
-        AcquisitionProducts(wfs.execution.observation,
-            mismatched_wfs_measurement))
+        wfs_acquisition_definition, wfs_path,
+        prepare_full_optical_provider(mismatched_estimator_execution,
+            AcquisitionProducts(wfs_execution.observation,
+                mismatched_wfs_measurement;
+                metadata=acquisition_product_metadata(wfs))))
     assert_plant_preparation_error(
         () -> execute_acquisition!(
-            AcquisitionProducts(deepcopy(wfs.execution.observation)),
+            AcquisitionProducts(deepcopy(wfs_execution.observation);
+                metadata=observation_only_products.metadata),
             wfs.path_result,
             observation_only_execution,
             Xoshiro(19),
@@ -996,24 +1024,26 @@ end
     )
     assert_plant_preparation_error(
         () -> execute_acquisition!(
-            AcquisitionProducts(wfs.products.observation,
-                deepcopy(wfs.products.measurement)),
+            AcquisitionProducts(acquisition_observation(wfs),
+                deepcopy(acquisition_measurement(wfs));
+                metadata=acquisition_product_metadata(wfs)),
             wfs.path_result,
-            wfs.execution,
+            wfs_execution,
             Xoshiro(20),
         ),
         :acquisition,
         :prepared_binding,
     )
     assert_plant_preparation_error(
-        () -> execute_acquisition!(fast.products, fast.path_result, nothing,
+        () -> execute_acquisition!(acquisition_products(fast),
+            fast.path_result, nothing,
             Xoshiro(21)),
         :acquisition,
         :unsupported_execution,
     )
 
     @test !applicable(PreparedAcquisitionOwner, fast.definition,
-        fast.path_key, fast.path_result, fast.execution, fast.products)
+        fast.path_key, fast.path_result, fast.provider)
     @test !applicable(PreparedPlant, plant.definition, plant.paths,
         plant.acquisitions)
 
@@ -1071,7 +1101,7 @@ end
         :wfs, FramePlantAcquisitionModel(T(0.5), MatchingPlantPath()))
     assert_plant_preparation_error(
         () -> PreparedAcquisitionOwner(wrong_path_acquisition, science_path,
-            fast.execution, fast.products),
+            fast.provider),
         :acquisition,
         :unknown_path,
     )

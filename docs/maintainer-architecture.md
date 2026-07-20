@@ -87,9 +87,13 @@ Examples:
   a deep-freeze claim for those owners
 - `PreparedPlant` as a schedule-free concrete tuple of
   `PreparedPathExecutor` and `PreparedAcquisitionOwner` values. Each path owns
-  one explicit input/result pair and prepared optical workspace; acquisitions
-  borrow that exact result read-only while owning independent detector/WFS
-  execution state and `AcquisitionProducts`. The plant also owns exact
+  one explicit input/result pair and prepared optical workspace; each
+  acquisition borrows that exact result read-only and binds one immutable
+  `PreparedAcquisitionProvider` choice. Full-optical providers own independent
+  detector/WFS execution state, reduced-order providers own their declared
+  parameter/state split, and synthetic/replay providers own fixed payload
+  snapshots or bounded replay state. Every style writes one caller-owned
+  `AcquisitionProducts` contract. The plant also owns exact
   stateful RNG groups derived from its required run seed, derivation version,
   and stable owner identities; selected execution references those groups
   directly. `PathResultKey` performs cold source/optics/output/revision/backend/
