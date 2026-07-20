@@ -60,17 +60,38 @@ For reference-data refreshes:
 rng = deterministic_reference_rng(0x1234)
 ```
 
-## Scheduled-Plant RNG Topology
+## Prepared-Plant RNG Topology
 
-The multi-rate plant uses one central run seed plus a versioned derivation
-scheme and stable RNG owner identities. Preparation assigns an identity to
-every stochastic atmosphere layer, trigger source or link, optical or reduced-
-order provider, detector acquisition, and device model. Identities come from
-the declared plant topology and remain stable when prepared execution groups
-are reordered or moved between CPU and GPU resources. Duplicate owner
-identities are a preparation error.
+The implemented schedule-free serial plant requires one central `run_seed`, a
+positive `RNGDerivationVersion`, and stable `RNGOwnerIdentity` values.
+Preparation assigns separate stateful streams to explicitly named atmosphere
+layers, every path/provider, every acquisition/detector, and any additional
+device roles declared by a model extension. Identities come from declared
+component names and remain stable when path, acquisition, selection, or
+atmosphere-layer order changes. Duplicate or missing required identities are a
+`PlantPreparationError`.
 
-Each owner uses one of two prepared policies:
+```julia
+plant = prepare_plant(definition;
+    run_seed=0x1234,
+    rng_derivation_version=RNGDerivationVersion(1),
+)
+selection = prepare_acquisition_selection(plant, (:wfs, :science))
+execute_acquisition_selection_at!(selection, 0.001)
+replay = rng_replay_metadata(plant)
+```
+
+The maintained derivation encodes the run seed and version as little-endian
+`UInt64` values and each owner symbol as a little-endian `UInt64` UTF-8 byte
+length followed by those bytes. It applies the recorded
+`fnv1a_splitmix64_v1` algorithm and seeds one `Xoshiro` per owner. It never uses
+Julia's process-randomized `hash`. `rng_replay_metadata` returns a canonical
+structured identity-to-derived-seed map and the derivation and stream
+algorithm identifiers. It does not expose mutable stream state or create a
+second writer. Multilayer atmospheres used by `prepare_plant` declare
+`layer_ids`, because altitude or tuple position is not an owner identity.
+
+The complete target distinguishes two prepared policies:
 
 - a stateful stream with exactly one execution writer when its draw order is
   part of the model; or
@@ -81,11 +102,14 @@ Each owner uses one of two prepared policies:
 A task ID, `Threads.threadid()`, tuple position, physical device ordinal, ring
 cursor, or completion order is never an RNG identity. Changing static
 placement must not change which random values belong to a physical event.
-Scenario replay records the run seed, derivation version, owner-identity map,
-and any stateful-stream checkpoints needed by the selected model.
+The current serial slice implements the single-writer stateful policy. The
+addressable policy for replicated, reordered, or multi-device element work
+remains `HIL-RNG-002`. Scenario replay from the start records the run seed,
+derivation version, derivation and stream algorithms, and owner-identity map;
+resumable mid-run checkpoints remain model/integration work where required.
 
 Existing stochastic APIs continue to accept explicit `AbstractRNG` values.
-The scheduled plant prepares and supplies those per-owner values; individual
+The prepared plant supplies those per-owner values; individual
 models do not look up a global registry in their hot path. Addressable GPU
 kernels receive prepared keys/counters directly rather than consuming one
 host RNG seed in launch order.

@@ -62,13 +62,15 @@ struct MultiLayerParams{T<:AbstractFloat,
     V3<:AbstractVector{T},
     V4<:AbstractVector{T},
     V5<:AbstractVector{T},
-    V6<:AbstractVector{T}}
+    V6<:AbstractVector{T},
+    I<:Tuple}
     cn2_fractions::V1
     wind_speed::V2
     wind_direction::V3
     altitude::V4
     wind_velocity_x::V5
     wind_velocity_y::V6
+    layer_ids::I
     r0::T
     L0::T
 end
@@ -354,6 +356,7 @@ function MultiLayerAtmosphere(tel::Telescope;
     wind_speed::AbstractVector,
     wind_direction::AbstractVector,
     altitude::AbstractVector,
+    layer_ids=nothing,
     T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=backend(tel))
 
@@ -366,6 +369,7 @@ function MultiLayerAtmosphere(tel::Telescope;
     all(>=(0), fractional_cn2) || throw(InvalidConfiguration("fractional_cn2 must be non-negative"))
     isapprox(sum(fractional_cn2), 1; atol=1e-6, rtol=1e-6) ||
         throw(InvalidConfiguration("fractional_cn2 must sum to 1"))
+    prepared_layer_ids = _prepare_atmosphere_layer_ids(layer_ids, n_layers)
 
     params = MultiLayerParams(
         T.(fractional_cn2),
@@ -374,6 +378,7 @@ function MultiLayerAtmosphere(tel::Telescope;
         T.(altitude),
         T[T(wind_speed[i]) * cosd(T(wind_direction[i])) for i in 1:n_layers],
         T[T(wind_speed[i]) * sind(T(wind_direction[i])) for i in 1:n_layers],
+        prepared_layer_ids,
         T(r0),
         T(L0),
     )

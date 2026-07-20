@@ -73,6 +73,7 @@ export CircularFilter, SquareFilter, FoucaultFilter
 export prepare_spatial_filter, filter!
 
 export KolmogorovAtmosphere, MultiLayerAtmosphere, InfinitePhaseScreen, InfiniteMultiLayerAtmosphere
+export AtmosphereLayerID
 export AtmosphereEpoch, epoch_time, epoch_sequence, current_epoch
 export prepare_atmosphere_renderer, prepare_atmosphere_renderers, direction_renderers
 export advance!, advance_by!, advance_to!, propagate!
@@ -169,6 +170,7 @@ export LiFTSolveAuto, LiFTSolveQR, LiFTSolveNormalEquations
 export LiFTLevenbergMarquardt, LiFTAdaptiveLevenbergMarquardt
 
 export OpticalPathID, AcquisitionID
+export RNGDerivationVersion, RNGOwnerIdentity, rng_replay_metadata
 export ColdPlantModelDefinition, plant_model_definition_style
 export OpticalPathDefinition, AcquisitionDefinition, PlantDefinition
 export path_id, acquisition_id, acquisition_path_id

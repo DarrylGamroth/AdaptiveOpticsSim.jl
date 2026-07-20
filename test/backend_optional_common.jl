@@ -132,6 +132,7 @@ function run_optional_prepared_plant_checks(::Type{B},
         wind_speed=T[8, 4],
         wind_direction=T[0, 90],
         altitude=T[0, 5_000],
+        layer_ids=(:ground, :high),
         T=T,
         backend=selector,
     )
@@ -148,7 +149,7 @@ function run_optional_prepared_plant_checks(::Type{B},
         acquisitions=(fast_science=fast_definition,
             slow_science=slow_definition))
 
-    plant = prepare_plant(definition)
+    plant = prepare_plant(definition; run_seed=0x6100)
     path = prepared_path(plant, :science)
     fast = prepared_acquisition(plant, :fast_science)
     slow = prepared_acquisition(plant, :slow_science)
@@ -161,9 +162,8 @@ function run_optional_prepared_plant_checks(::Type{B},
 
     selection = prepare_acquisition_selection(plant,
         (:slow_science, :fast_science))
-    acquisition_rngs = (Xoshiro(0x6101), Xoshiro(0x6102))
-    @test @inferred(execute_acquisition_selection_at!(selection, T(1e-3),
-        Xoshiro(0x6100), acquisition_rngs)) === selection
+    @test @inferred(execute_acquisition_selection_at!(selection,
+        T(1e-3))) === selection
     fast_products = acquisition_products(fast)
     slow_products = acquisition_products(slow)
     @test epoch_time(current_epoch(atmosphere)) == T(1e-3)

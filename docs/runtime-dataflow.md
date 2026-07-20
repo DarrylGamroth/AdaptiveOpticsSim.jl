@@ -157,9 +157,11 @@ products and functions, not a universal optical graph or resampling framework.
 The frame-step `SharedOpticalRuntime` forms each arm's native rate image once
 and captures its detector tuple serially. Detector state and exposure are
 independent, but stochastic draws currently come from one runtime RNG in tuple
-order. The scheduled plant assigns stable RNG owner identities and per-owner
-streams or addressable random domains; endpoint order and static placement do
-not select random values. Before advancing the atmosphere,
+order. The schedule-free prepared plant now assigns stable RNG owner identities
+and independent stateful streams, so path, acquisition, selection, and named
+atmosphere-layer order do not select random values. The later placed or
+multi-device plant adds addressable random domains where execution can reorder
+element work. Before advancing the atmosphere,
 the current runtime preflights every science detector's exact prepared binding
 and whole-exposure idle state. Detector acquisition preparation has already
 sized conventional multi-read products and rejected predictable shape and

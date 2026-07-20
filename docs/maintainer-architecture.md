@@ -89,9 +89,12 @@ Examples:
   `PreparedPathExecutor` and `PreparedAcquisitionOwner` values. Each path owns
   one explicit input/result pair and prepared optical workspace; acquisitions
   borrow that exact result read-only while owning independent detector/WFS
-  execution state and `AcquisitionProducts`. `PathResultKey` performs cold
-  source/optics/output/revision/backend/device compatibility checks without
-  putting IDs, shapes, rates, or device ordinals in type parameters
+  execution state and `AcquisitionProducts`. The plant also owns exact
+  stateful RNG groups derived from its required run seed, derivation version,
+  and stable owner identities; selected execution references those groups
+  directly. `PathResultKey` performs cold source/optics/output/revision/backend/
+  device compatibility checks without putting IDs, shapes, rates, or device
+  ordinals in type parameters
 - `Telescope` with immutable `TelescopeParams` and a revisioned prepared
   `TelescopeAperture`; it owns spatial geometry and intensity reflectivity but
   no mutable OPD, cadence, or exposure duration

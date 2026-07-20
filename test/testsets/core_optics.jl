@@ -39,12 +39,16 @@ end
     # not drift into the ordinary user namespace.
     # Gate 2 adds a bounded documented topology/preparation surface; internal
     # validation and source-key helpers remain qualified implementation detail.
-    @test length(exported) <= 520
+    @test length(exported) <= 524
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :PlantDefinitionError)
     @test Base.isexported(AdaptiveOpticsSim, :PlantPreparationError)
     @test Base.isexported(AdaptiveOpticsSim, :OpticalPathID)
     @test Base.isexported(AdaptiveOpticsSim, :AcquisitionID)
+    @test Base.isexported(AdaptiveOpticsSim, :AtmosphereLayerID)
+    @test Base.isexported(AdaptiveOpticsSim, :RNGDerivationVersion)
+    @test Base.isexported(AdaptiveOpticsSim, :RNGOwnerIdentity)
+    @test Base.isexported(AdaptiveOpticsSim, :rng_replay_metadata)
     @test Base.isexported(AdaptiveOpticsSim, :ColdPlantModelDefinition)
     @test Base.isexported(AdaptiveOpticsSim, :plant_model_definition_style)
     @test Base.isexported(AdaptiveOpticsSim, :OpticalPathDefinition)
@@ -67,6 +71,8 @@ end
     @test !Base.isexported(AdaptiveOpticsSim, :PreparedAcquisitionOwner)
     @test !Base.isexported(AdaptiveOpticsSim,
         :PreparedAcquisitionSelection)
+    @test !Base.isexported(AdaptiveOpticsSim, :PreparedPlantRNGs)
+    @test !Base.isexported(AdaptiveOpticsSim, :PreparedOwnerRNGs)
     @test !Base.isexported(AdaptiveOpticsSim,
         :PreparedPupilOPDMaterialization)
     @test !Base.isexported(AdaptiveOpticsSim,

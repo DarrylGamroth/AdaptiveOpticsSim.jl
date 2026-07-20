@@ -156,7 +156,9 @@ The Gate 2 core topology API declares one shared telescope and atmosphere,
 reusable optical paths, and independent acquisitions. Preparation adds concrete
 single-writer owners without adding scheduling or atmosphere advancement:
 
-- Stable identities: `OpticalPathID`, `AcquisitionID`
+- Stable identities: `AtmosphereLayerID`, `OpticalPathID`, `AcquisitionID`,
+  `RNGOwnerIdentity`
+- RNG derivation and replay: `RNGDerivationVersion`, `rng_replay_metadata`
 - Definitions: `OpticalPathDefinition`, `AcquisitionDefinition`,
   `PlantDefinition`
 - Cold-model trait: `plant_model_definition_style`,
@@ -183,7 +185,10 @@ single-writer owners without adding scheduling or atmosphere advancement:
   `prepare_acquisition_owner`, `validate_path_execution_binding`,
   `validate_path_materialization_binding`,
   `validate_path_materialization`, `validate_atmosphere_rendering`, and
-  `validate_acquisition_execution_binding`
+  `validate_acquisition_execution_binding`; RNG extensions use qualified
+  `additional_path_rng_owner_roles`,
+  `additional_acquisition_rng_owner_roles`, `execute_path_rngs!`,
+  `execute_acquisition_rngs!`, and `rng_stream_state`
 
 Every path and acquisition carries an explicit typed identity. Tuples and
 named tuples organize declarations but do not define identity; named keys must
@@ -196,18 +201,27 @@ instances contain configuration only. Preparation workspaces, mutable
 simulation or acquisition state, schedules, RNG streams, queues, transport,
 and HIL descriptors are intentionally absent.
 
-`prepare_plant` freezes each path source and dispatches on the concrete cold
-model types to build backend-, physical-device-, shape-, and revision-bound
-owners. A `PathResultKey` records source geometry, spectral sampling,
-radiometry, optical and propagation model keys, instantaneous-sample semantics,
-output-plane contract, revisions, backend, and device. Its descriptive values
-are defensively snapshotted, and its value equality/hash contract is intended
-for cold compatibility lookup rather than warmed execution. Prepared owner
-constructors validate that concrete execution plans retain their exact input,
-result, atmosphere materialization, detector, observation, and estimator
-storage. Several acquisitions may borrow the exact same read-only path result
-while retaining distinct detector, readout, WFS estimator, observation, and
-measurement state.
+`prepare_plant` requires one explicit `run_seed`, accepts a versioned
+`rng_derivation_version`, freezes each path source, and dispatches on the
+concrete cold model types to build backend-, physical-device-, shape-, and
+revision-bound owners. A `PathResultKey` records source geometry, spectral
+sampling, radiometry, optical and propagation model keys, instantaneous-sample
+semantics, output-plane contract, revisions, backend, and device. Its
+descriptive values are defensively snapshotted, and its value equality/hash
+contract is intended for cold compatibility lookup rather than warmed
+execution. Prepared owner constructors validate that concrete execution plans
+retain their exact input, result, atmosphere materialization, detector,
+observation, and estimator storage. Several acquisitions may borrow the exact
+same read-only path result while retaining distinct detector, readout, WFS
+estimator, observation, and measurement state. Preparation also derives
+separate stateful streams for each declared atmosphere layer, path/provider,
+acquisition/detector, and extension-declared device role. Multilayer
+atmospheres used by a prepared plant therefore require explicit `layer_ids`;
+duplicate owner identities fail before execution.
+`rng_replay_metadata(plant)` returns the run seed, derivation
+version, derivation and stream algorithms, and canonical
+owner-to-derived-seed records without exposing mutable RNG state. RNG
+derivation does not use Julia's `hash`.
 
 `prepare_acquisition_selection` resolves caller-supplied acquisition IDs once,
 deduplicates their referenced paths, and stores both tuples in stable-ID order
@@ -216,12 +230,14 @@ independent of declaration and caller-selection order.
 `AtmosphereEpoch` before mutation, materializes all unique path inputs, forms
 each result once, and then runs the selected acquisitions. The `_at!` variant
 first advances the shared atmosphere to an explicit absolute model time.
-Caller-owned acquisition RNGs are supplied as a tuple in the order returned by
-`prepared_acquisitions(selection)`; stable per-owner streams arrive in the
-next Gate 2 slice. Neither method introduces cadence, triggers, a scheduler,
-ports, or a retained atmosphere snapshot. The warmed successful serial call is
-allocation-free on the maintained Julia version; cold selection/preparation
-and exceptional paths are outside that budget.
+Both methods use exact owner-bound streams retained by the prepared plant; they
+do not accept tuple-position-dependent caller RNGs. Low-level stochastic model
+APIs continue to receive an explicit `AbstractRNG`, while prepared execution
+supplies it directly rather than performing a registry lookup. Neither method
+introduces cadence, triggers, a scheduler, ports, or a retained atmosphere
+snapshot. The warmed successful serial call is allocation-free on the
+maintained Julia version; cold selection/preparation, metadata construction,
+compilation, and exceptional paths are outside that budget.
 
 ## Atmosphere
 
