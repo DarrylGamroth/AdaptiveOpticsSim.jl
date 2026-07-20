@@ -721,20 +721,45 @@ end
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     wfs = ShackHartmannWFS(tel; n_lenslets=2)
     basis = modal_basis(dm, tel; n_modes=2)
-    meta = AdaptiveOpticsSim.compute_meta_sensitivity_matrix(tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
+    fields = collect(AdaptiveOpticsSim.MISREG_FIELDS)
+    meta, meta_fd, meta_ad = mktempdir() do root
+        cd(root) do
+            @test isempty(readdir())
+            local_meta = AdaptiveOpticsSim.compute_meta_sensitivity_matrix(
+                tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
+            local_fd = AdaptiveOpticsSim.compute_meta_sensitivity_matrix(
+                tel, dm, wfs, basis.M2C[:, 1:2];
+                n_mis_reg=length(fields), field_order=fields,
+                sensitivity=:finite_difference)
+            local_ad = AdaptiveOpticsSim.compute_meta_sensitivity_matrix(
+                tel, dm, wfs, basis.M2C[:, 1:2];
+                n_mis_reg=length(fields), field_order=fields)
+            @test isempty(readdir())
+            return local_meta, local_fd, local_ad
+        end
+    end
     est = AdaptiveOpticsSim.estimate_misregistration(meta, meta.calib0.D; misregistration_zero=Misregistration())
     @test est.shift_x ≈ 0.0
     @test est.shift_y ≈ 0.0
 
-    fields = collect(AdaptiveOpticsSim.MISREG_FIELDS)
-    meta_fd = AdaptiveOpticsSim.compute_meta_sensitivity_matrix(
-        tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=length(fields), field_order=fields,
-        sensitivity=:finite_difference)
-    meta_ad = AdaptiveOpticsSim.compute_meta_sensitivity_matrix(
-        tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=length(fields), field_order=fields)
     @test meta_ad.field_order == fields
     @test isapprox(meta_ad.calib0.D, meta_fd.calib0.D; rtol=1e-12, atol=1e-12)
     @test isapprox(meta_ad.meta.D, meta_fd.meta.D; rtol=2e-3, atol=1e-9)
+
+    mktempdir() do root
+        cache_path = joinpath(root, "meta-sensitivity.bin")
+        @test_throws MethodError AdaptiveOpticsSim.compute_meta_sensitivity_matrix(
+            tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2,
+            cache_path=cache_path)
+        @test_throws MethodError AdaptiveOpticsSim.SPRINT(
+            tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2,
+            save_sensitivity=false)
+        @test_throws MethodError AdaptiveOpticsSim.SPRINT(
+            tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2,
+            recompute_sensitivity=true)
+        @test !ispath(cache_path)
+        @test isempty(readdir(root))
+    end
 
     sampled_topology = SampledActuatorTopology(actuator_coordinates(dm)[:, 1:2])
     measured_dm = DeformableMirror(tel; topology=sampled_topology,
@@ -969,8 +994,21 @@ end
 
     sprint = AdaptiveOpticsSim.SPRINT(tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
     @test sprint.meta isa AdaptiveOpticsSim.MetaSensitivity
+    @test !hasfield(typeof(sprint), :cache_path)
+    @test !hasfield(typeof(sprint), :save_sensitivity)
+    @test !hasfield(typeof(sprint), :recompute_sensitivity)
     est = AdaptiveOpticsSim.estimate!(sprint, meta.calib0.D)
     @test est isa Misregistration
+    mktempdir() do root
+        cd(root) do
+            refreshed = AdaptiveOpticsSim.estimate!(sprint, meta.calib0.D;
+                n_update_zero_point=1, tel=tel, dm=dm, wfs=wfs,
+                basis=basis.M2C[:, 1:2])
+            @test refreshed isa Misregistration
+            @test sprint.meta isa AdaptiveOpticsSim.MetaSensitivity
+            @test isempty(readdir())
+        end
+    end
 
     diversity = fill(eltype(pupil.opd)(1e-9), size(pupil.opd))
     lift_basis = basis_from_m2c(dm, tel, basis.M2C)

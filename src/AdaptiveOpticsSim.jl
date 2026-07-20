@@ -8,11 +8,9 @@ using KernelAbstractions
 using LinearAlgebra
 using Logging
 using Random
-using Serialization
 using SparseArrays
 using SpecialFunctions
 using Statistics
-import TOML
 
 import Base: filter!
 

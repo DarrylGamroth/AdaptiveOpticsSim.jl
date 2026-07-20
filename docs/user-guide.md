@@ -718,6 +718,12 @@ default for grid-backed Gaussian mirrors. Use `sensitivity=:finite_difference`
 for validation runs, supported WFS-misregistration finite differences, or
 accelerator-backed arrays.
 
+`compute_meta_sensitivity_matrix` returns a structured `MetaSensitivity`, and
+`snapshot_config` returns an ordinary string-keyed dictionary. Core neither
+reads nor writes a sensitivity cache and does not choose a configuration file
+format. If a workflow needs persistence, serialize these returned values
+explicitly in application code or through an optional format extension.
+
 ## Determinism
 
 - Use a fixed RNG and pass it into `advance_by!`/`advance_to!`, detector calls, or runtime

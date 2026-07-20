@@ -60,17 +60,29 @@
 
     tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
-    cfg = AdaptiveOpticsSim.snapshot_config(tel=tel, src=src)
+    cfg = mktempdir() do root
+        cd(root) do
+            @test isempty(readdir())
+            result = AdaptiveOpticsSim.snapshot_config(tel=tel, src=src)
+            @test isempty(readdir())
+            return result
+        end
+    end
     @test haskey(cfg, "tel")
     @test haskey(cfg, "src")
-    path, io = mktemp()
-    close(io)
-    AdaptiveOpticsSim.write_config_toml(path, cfg)
-    parsed = TOML.parsefile(path)
-    @test parsed["tel"]["resolution"] == tel.params.resolution
-    @test parsed["src"]["radiometry"] == "physical_photon_irradiance"
-    @test parsed["src"]["radiometric_value"] ==
+    @test cfg["tel"]["resolution"] == tel.params.resolution
+    @test cfg["src"]["radiometry"] == "physical_photon_irradiance"
+    @test cfg["src"]["radiometric_value"] ==
         source_radiometric_value(src)
+    @test !isdefined(AdaptiveOpticsSim, :write_config_toml)
+
+    project = TOML.parsefile(joinpath(pkgdir(AdaptiveOpticsSim),
+        "Project.toml"))
+    @test !haskey(project["deps"], "Serialization")
+    @test !haskey(project["deps"], "TOML")
+    @test !haskey(project["compat"], "Serialization")
+    @test haskey(project["extras"], "TOML")
+    @test "TOML" in project["targets"]["test"]
 end
 
 @testset "Reference compare conventions" begin

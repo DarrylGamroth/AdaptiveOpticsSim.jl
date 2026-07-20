@@ -5,8 +5,8 @@ function main(; resolution::Int=16)
     dm = DeformableMirror(tel; n_act=3, influence_width=0.35)
     wfs = ShackHartmannWFS(tel; n_lenslets=2, mode=Geometric())
     basis = modal_basis(dm, tel; n_modes=3).M2C
-    sprint = AdaptiveOpticsSim.SPRINT(tel, dm, wfs, basis; n_mis_reg=2, field_order=[:shift_x, :shift_y],
-        save_sensitivity=false)
+    sprint = AdaptiveOpticsSim.SPRINT(tel, dm, wfs, basis;
+        n_mis_reg=2, field_order=[:shift_x, :shift_y])
 
     injected = Misregistration(shift_x=5e-4, shift_y=-5e-4, T=Float64)
     dm_in = DeformableMirror(tel; n_act=dm.params.n_act, influence_model=influence_model(dm),

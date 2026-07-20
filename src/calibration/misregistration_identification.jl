@@ -52,9 +52,6 @@ mutable struct SPRINT{T<:AbstractFloat}
     meta::MetaSensitivity{T}
     misregistration_zero::Misregistration{T}
     misregistration_out::Misregistration{T}
-    cache_path::Union{Nothing,String}
-    save_sensitivity::Bool
-    recompute_sensitivity::Bool
     wfs_mis_registered::Bool
     sensitivity::Symbol
 end
@@ -67,14 +64,14 @@ parameters.
 
 CPU grid-backed Gaussian DM misregistration uses ForwardDiff by default. Use
 `sensitivity=:finite_difference` for validation, accelerator-backed arrays, or
-WFS misregistration.
+WFS misregistration. The result is a caller-owned `MetaSensitivity`; this
+operation performs no cache lookup, serialization, or filesystem I/O.
 """
 function compute_meta_sensitivity_matrix(tel::Telescope, dm::DeformableMirror, wfs::AbstractWFS,
     basis::AbstractMatrix; misregistration_zero::Misregistration=Misregistration(T=eltype(pupil_reflectivity(tel))),
     epsilon::Misregistration=Misregistration(shift_x=1e-3, shift_y=1e-3, rotation_deg=1e-3, radial_scaling=1e-3,
         tangential_scaling=1e-3, T=eltype(pupil_reflectivity(tel))),
     n_mis_reg::Int=3, field_order=collect(MISREG_FIELDS),
-    cache_path::Union{Nothing,String}=nothing, save_sensitivity::Bool=true, recompute_sensitivity::Bool=false,
     wfs_mis_registered::Bool=false, sensitivity::Symbol=:ad, source=nothing)
 
     if sensitivity === :ad
@@ -84,9 +81,6 @@ function compute_meta_sensitivity_matrix(tel::Telescope, dm::DeformableMirror, w
             epsilon=epsilon,
             n_mis_reg=n_mis_reg,
             field_order=field_order,
-            cache_path=cache_path,
-            save_sensitivity=save_sensitivity,
-            recompute_sensitivity=recompute_sensitivity,
             wfs_mis_registered=wfs_mis_registered)
     elseif sensitivity === :finite_difference || sensitivity === :fd
         return _compute_meta_sensitivity_matrix_fd(tel, dm, wfs, basis;
@@ -95,9 +89,6 @@ function compute_meta_sensitivity_matrix(tel::Telescope, dm::DeformableMirror, w
             epsilon=epsilon,
             n_mis_reg=n_mis_reg,
             field_order=field_order,
-            cache_path=cache_path,
-            save_sensitivity=save_sensitivity,
-            recompute_sensitivity=recompute_sensitivity,
             wfs_mis_registered=wfs_mis_registered)
     end
     throw(InvalidConfiguration("sensitivity must be :ad or :finite_difference"))
@@ -109,12 +100,7 @@ function _compute_meta_sensitivity_matrix_fd(tel::Telescope, dm::DeformableMirro
     epsilon::Misregistration=Misregistration(shift_x=1e-3, shift_y=1e-3, rotation_deg=1e-3, radial_scaling=1e-3,
         tangential_scaling=1e-3, T=eltype(pupil_reflectivity(tel))),
     n_mis_reg::Int=3, field_order=collect(MISREG_FIELDS),
-    cache_path::Union{Nothing,String}=nothing, save_sensitivity::Bool=true, recompute_sensitivity::Bool=false,
     wfs_mis_registered::Bool=false, amplitude::Real=1e-9)
-
-    if cache_path !== nothing && !recompute_sensitivity && isfile(cache_path)
-        return deserialize(cache_path)
-    end
 
     T = eltype(pupil_reflectivity(tel))
     pupil = PupilFunction(tel; T=T)
@@ -170,11 +156,8 @@ function _compute_meta_sensitivity_matrix_fd(tel::Telescope, dm::DeformableMirro
     end
 
     meta_control_matrix = ControlMatrix(meta)
-    out = MetaSensitivity(meta_control_matrix, calib0_control_matrix, epsilon, fields)
-    if cache_path !== nothing && save_sensitivity
-        serialize(cache_path, out)
-    end
-    return out
+    return MetaSensitivity(meta_control_matrix, calib0_control_matrix,
+        epsilon, fields)
 end
 
 """
@@ -211,14 +194,13 @@ end
 Construct the iterative misregistration estimator around a chosen zero point.
 
 This first computes the meta-sensitivity matrix and then packages it together
-with the zero-point and persistence options used by later `estimate!` calls.
+with the zero-point and model choices used by later `estimate!` calls.
 """
 function SPRINT(tel::Telescope, dm::DeformableMirror, wfs::AbstractWFS, basis::AbstractMatrix;
     misregistration_zero::Misregistration=Misregistration(T=eltype(pupil_reflectivity(tel))),
     epsilon::Misregistration=Misregistration(shift_x=1e-3, shift_y=1e-3, rotation_deg=1e-3, radial_scaling=1e-3,
         tangential_scaling=1e-3, T=eltype(pupil_reflectivity(tel))),
     n_mis_reg::Int=3, field_order=collect(MISREG_FIELDS),
-    cache_path::Union{Nothing,String}=nothing, save_sensitivity::Bool=true, recompute_sensitivity::Bool=false,
     wfs_mis_registered::Bool=false, sensitivity::Symbol=:ad)
 
     meta = compute_meta_sensitivity_matrix(tel, dm, wfs, basis;
@@ -226,13 +208,10 @@ function SPRINT(tel::Telescope, dm::DeformableMirror, wfs::AbstractWFS, basis::A
         epsilon=epsilon,
         n_mis_reg=n_mis_reg,
         field_order=field_order,
-        cache_path=cache_path,
-        save_sensitivity=save_sensitivity,
-        recompute_sensitivity=recompute_sensitivity,
         wfs_mis_registered=wfs_mis_registered,
         sensitivity=sensitivity)
-    return SPRINT(meta, misregistration_zero, misregistration_zero, cache_path, save_sensitivity,
-        recompute_sensitivity, wfs_mis_registered, sensitivity)
+    return SPRINT(meta, misregistration_zero, misregistration_zero,
+        wfs_mis_registered, sensitivity)
 end
 
 """
@@ -264,9 +243,6 @@ function estimate!(sprint::SPRINT, calib_in::AbstractMatrix; precision::Int=3, g
                 epsilon=sprint.meta.epsilon,
                 n_mis_reg=length(sprint.meta.field_order),
                 field_order=sprint.meta.field_order,
-                cache_path=sprint.cache_path,
-                save_sensitivity=sprint.save_sensitivity,
-                recompute_sensitivity=true,
                 wfs_mis_registered=sprint.wfs_mis_registered,
                 sensitivity=sprint.sensitivity)
         end
