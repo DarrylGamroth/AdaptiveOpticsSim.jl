@@ -17,6 +17,12 @@ subsystem specifications.
 Every capability gate keeps a serial correctness oracle. Required functional
 evidence includes:
 
+- a clean Gate 2 serial-plant artifact with raw mergeable histograms, exact
+  workload/seed/environment metadata, deterministic declaration-order replay,
+  one shared atmosphere advanced to explicit model time, distinct science/NGS/
+  LGS path materialization, detector fan-out, and a zero warmed allocation gate;
+  this is self-paced service-time evidence, not external-RTC latency or
+  fixed-arrival capacity evidence
 - one atmosphere selection/advance to explicit model time per sampled plant
   timestamp with identical epoch visibility across all due directions and no
   telescope-cadence fallback

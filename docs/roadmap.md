@@ -24,6 +24,9 @@ hardware-validated GPU workflows. The core package now has:
 - measured column-major/native-SIMD CPU kernels for LiFT convolution and LGS
   elongation, without adding an explicit SIMD dependency
 - committed reference data and regression tests for core WFS and detector paths
+- a completed schedule-free Gate 2 plant boundary with stable path/acquisition
+  ownership, per-owner RNGs, fidelity-provider and calibration-illumination
+  seams, and a clean serial CPU service-time baseline
 - a compact docs set with one extension guide instead of subsystem plan sprawl
 
 ## Near-Term Priorities
@@ -58,21 +61,16 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    boundaries, atmosphere token/materialization lifetime, deterministic RNG
    ownership, detector event semantics, clock sequencing, and command boundary
    before implementation begins.
-2. Compose the Gate 0 optical ownership primitives into immutable shared
-   atmosphere/telescope/path definitions, prepared branch-local executors, and
-   independently scheduled or triggered acquisition state while retaining the
-   direct serial CPU oracle. Materialize every due atmosphere-dependent path
-   input before advancing mutable layers, and derive stable per-owner RNG
-   streams independently of endpoint order. Introduce one prepared
-   acquisition-product seam for full optical, command-responsive reduced-order,
-   and synthetic/replay providers without changing the RTC boundary. The
-   reduced-order provider must retain time-correlated disturbances, calibrated
-   path/sensor response, effective-command causality, and meaningful external-
-   RTC loop closure rather than acting as a changing frame generator. The
-   schedule-free slice now exposes a narrow typed path-entry seam for native
-   and user-defined calibration illumination without introducing instrument
-   topology or source assumptions in core; trigger/setpoint scheduling remains
-   with the later event gates.
+2. Preserve the completed Gate 2 schedule-free plant boundary. It composes
+   immutable shared atmosphere/telescope/path definitions, prepared branch-
+   local executors, independent acquisition owners, stable per-owner RNGs, and
+   full-optical/reduced-order/synthetic provider semantics. Native and
+   user-defined calibration illumination enter through typed products without
+   instrument-topology assumptions. The clean
+   [serial plant artifact](../benchmarks/results/gate2/2026-07-20-serial-plant.toml)
+   covers science, NGS Shack-Hartmann, and LGS pyramid directions plus detector
+   fan-out with zero warmed allocation; it is a self-paced CPU service-time
+   baseline, not an external-RTC latency or fixed-rate capacity claim.
 3. Add deterministic multi-rate integer-time events with explicit equal-time
    trigger-distribution, exposure/row-band, optical-sample, nondestructive-read,
    detector-readout, and publication semantics before adding command timing or
