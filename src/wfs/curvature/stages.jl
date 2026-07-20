@@ -362,6 +362,11 @@ function _require_curvature_optical_binding(
     return nothing
 end
 
+@inline validate_wfs_optical_formation_binding(
+    output::Tuple{<:IntensityMap,<:IntensityMap}, input,
+    plan::PreparedCurvatureOpticalFormation) =
+    _require_curvature_optical_binding(plan, input, output)
+
 function _form_curvature_branch_fields!(::ScalarCPUStyle,
     front_end::CurvatureOpticalFrontEnd, input::PupilFunction)
     propagation = front_end.propagation
@@ -491,7 +496,7 @@ function form_wfs_optical_products!(
     output::Tuple{<:IntensityMap,<:IntensityMap},
     input::Union{PupilFunction,ElectricField},
     plan::PreparedCurvatureOpticalFormation)
-    _require_curvature_optical_binding(plan, input, output)
+    validate_wfs_optical_formation_binding(output, input, plan)
     style = execution_style(output[1].values)
     _form_curvature_branch_fields!(style, plan.front_end, input)
     propagation = plan.front_end.propagation
@@ -683,14 +688,7 @@ end
 function acquire_wfs_observation!(observation::WFSObservation,
     optical_products::Tuple{<:IntensityMap,<:IntensityMap},
     plan::PreparedCurvaturePackedFrameAcquisition, rng::AbstractRNG)
-    observation === plan.observation &&
-        optical_products === plan.optical_products || throw(
-        WFSPreparationError(:acquisition, :prepared_binding,
-            "packed Curvature frame storage does not match its plan"))
-    _curvature_detector_duration(plan.model.detector) ==
-        plan.detector_duration || throw(WFSPreparationError(:acquisition,
-        :prepared_binding,
-        "packed Curvature detector duration changed after preparation"))
+    validate_wfs_acquisition_binding(observation, optical_products, plan)
     _pack_curvature_regions!(execution_style(plan.packed_rate.values),
         plan.packed_rate.values, optical_products[1].values,
         optical_products[2].values)
@@ -699,9 +697,38 @@ function acquire_wfs_observation!(observation::WFSObservation,
     return observation
 end
 
+function validate_wfs_acquisition_binding(observation::WFSObservation,
+    optical_products::Tuple{<:IntensityMap,<:IntensityMap},
+    plan::PreparedCurvaturePackedFrameAcquisition)
+    observation === plan.observation &&
+        optical_products === plan.optical_products || throw(
+        WFSPreparationError(:acquisition, :prepared_binding,
+            "packed Curvature frame storage does not match its plan"))
+    _curvature_detector_duration(plan.model.detector) ==
+        plan.detector_duration || throw(WFSPreparationError(:acquisition,
+        :prepared_binding,
+        "packed Curvature detector duration changed after preparation"))
+    validate_wfs_acquisition_binding(observation, plan.packed_rate,
+        plan.detector_plan)
+    return nothing
+end
+
 function acquire_wfs_observation!(observation::WFSObservation,
     optical_products::Tuple{<:IntensityMap,<:IntensityMap},
     plan::PreparedCurvaturePackedCountingAcquisition, rng::AbstractRNG)
+    validate_wfs_acquisition_binding(observation, optical_products, plan)
+    detector = plan.model.detector
+    _pack_curvature_channels!(execution_style(plan.channels), plan.channels,
+        optical_products[1].values, optical_products[2].values)
+    frame = _capture_counting_wfs!(detector, plan.channels,
+        plan.model.source, rng)
+    copyto!(observation.storage, frame)
+    return observation
+end
+
+function validate_wfs_acquisition_binding(observation::WFSObservation,
+    optical_products::Tuple{<:IntensityMap,<:IntensityMap},
+    plan::PreparedCurvaturePackedCountingAcquisition)
     observation === plan.observation &&
         optical_products === plan.optical_products || throw(
         WFSPreparationError(:acquisition, :prepared_binding,
@@ -714,12 +741,7 @@ function acquire_wfs_observation!(observation::WFSObservation,
     _curvature_detector_duration(detector) == plan.detector_duration ||
         throw(WFSPreparationError(:acquisition, :prepared_binding,
             "packed Curvature detector duration changed after preparation"))
-    _pack_curvature_channels!(execution_style(plan.channels), plan.channels,
-        optical_products[1].values, optical_products[2].values)
-    frame = _capture_counting_wfs!(detector, plan.channels,
-        plan.model.source, rng)
-    copyto!(observation.storage, frame)
-    return observation
+    return nothing
 end
 
 function _curvature_calibration_binding(sensor::CurvatureWFS)
@@ -940,6 +962,14 @@ function estimate_wfs_measurement!(measurement::WFSMeasurement, input,
     _estimate_curvature_from_reduced!(style, sensor)
     copyto!(measurement.storage, sensor.estimator.state.slopes)
     return measurement
+end
+
+function validate_wfs_estimation_binding(measurement::WFSMeasurement, input,
+    plan::PreparedCurvatureEstimator)
+    measurement === plan.measurement && input === plan.input || throw(
+        WFSPreparationError(:estimation, :prepared_binding,
+            "Curvature estimator storage does not match its plan"))
+    return nothing
 end
 
 @inline _estimate_curvature_from_reduced!(::ScalarCPUStyle,

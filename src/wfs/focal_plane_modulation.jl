@@ -410,6 +410,18 @@ end
     return form_four_pupil_bundle!(output, input, Base.tail(plans))
 end
 
+@inline validate_four_pupil_bundle_binding(output, input, ::Tuple{}) = nothing
+
+@inline function validate_four_pupil_bundle_binding(output, input,
+    plans::Tuple{P,Vararg{Any,N}}) where {P,N}
+    index = length(output) - N
+    component_input = four_pupil_bundle_input(input, index)
+    validate_wfs_optical_formation_binding(output[index], component_input,
+        first(plans))
+    return validate_four_pupil_bundle_binding(output, input,
+        Base.tail(plans))
+end
+
 @inline four_pupil_path_sources(source::Asterism) = source.sources
 @inline four_pupil_path_sources(source::ExtendedSource) =
     extended_source_asterism(source).sources

@@ -433,6 +433,10 @@ end
     return nothing
 end
 
+@inline validate_wfs_optical_formation_binding(output::IntensityMap, input,
+    plan::PreparedShackHartmannOpticalFormation) =
+    _require_sh_optical_binding(output, input, plan)
+
 @kernel function sh_explicit_pupil_stack_kernel!(fft_stack, valid_mask,
     amplitude, opd, phasor, amp_scale, opd_to_cycles, n_sub::Int, sub::Int,
     ox::Int, oy::Int, n::Int, pad::Int)
@@ -779,13 +783,24 @@ end
 
 function form_wfs_optical_products!(output::OpticalProductBundle, input,
     plan::PreparedShackHartmannOpticalBundleFormation)
-    output === plan.output && input === plan.input ||
-        throw(WFSPreparationError(:optical_formation, :prepared_binding,
-            "spectral Shack-Hartmann products do not match prepared storage"))
+    validate_wfs_optical_formation_binding(output, input, plan)
     @inbounds for index in eachindex(plan.plans)
         form_wfs_optical_products!(output[index], input, plan.plans[index])
     end
     return output
+end
+
+function validate_wfs_optical_formation_binding(
+    output::OpticalProductBundle, input,
+    plan::PreparedShackHartmannOpticalBundleFormation)
+    output === plan.output && input === plan.input ||
+        throw(WFSPreparationError(:optical_formation, :prepared_binding,
+            "spectral Shack-Hartmann products do not match prepared storage"))
+    @inbounds for index in eachindex(plan.plans)
+        validate_wfs_optical_formation_binding(output[index], input,
+            plan.plans[index])
+    end
+    return nothing
 end
 
 function _require_sh_observation_semantics(observation::WFSObservation)
@@ -960,6 +975,14 @@ function estimate_wfs_measurement!(measurement::WFSMeasurement,
         slope_extraction_model(sensor))
     copyto!(measurement.storage, sensor.estimator.slopes)
     return measurement
+end
+
+function validate_wfs_estimation_binding(measurement::WFSMeasurement, input,
+    plan::PreparedShackHartmannEstimator)
+    measurement === plan.measurement && input === plan.input || throw(
+        WFSPreparationError(:estimation, :prepared_binding,
+            "Shack-Hartmann estimator storage does not match its plan"))
+    return nothing
 end
 
 function prepare_wfs_estimation(sensor::ShackHartmannWFS{<:Geometric},

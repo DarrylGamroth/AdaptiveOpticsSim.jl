@@ -174,8 +174,9 @@ single-writer owners without adding scheduling or atmosphere advancement:
 - Qualified model-extension boundary: `PreparedPathExecutor`,
   `PreparedAcquisitionOwner`, `AcquisitionProducts`, `PathResultKey`,
   `AbstractOpticalSamplingContract`, `InstantaneousOpticalSample`,
-  `require_path_result`, `prepare_path_executor`, and
-  `prepare_acquisition_owner`
+  `require_path_result`, `prepare_path_executor`,
+  `prepare_acquisition_owner`, `validate_path_execution_binding`, and
+  `validate_acquisition_execution_binding`
 
 Every path and acquisition carries an explicit typed identity. Tuples and
 named tuples organize declarations but do not define identity; named keys must
@@ -192,7 +193,11 @@ and HIL descriptors are intentionally absent.
 model types to build backend-, physical-device-, shape-, and revision-bound
 owners. A `PathResultKey` records source geometry, spectral sampling,
 radiometry, optical and propagation model keys, instantaneous-sample semantics,
-output-plane contract, revisions, backend, and device. Several acquisitions may
+output-plane contract, revisions, backend, and device. Its descriptive values
+are defensively snapshotted, and its value equality/hash contract is intended
+for cold compatibility lookup rather than warmed execution. Prepared owner
+constructors validate that concrete execution plans retain their exact input,
+result, detector, observation, and estimator storage. Several acquisitions may
 borrow the exact same read-only path result while retaining distinct detector,
 readout, WFS estimator, observation, and measurement state. Individual warmed
 calls remain direct dispatch; the caller still supplies the RNG and decides

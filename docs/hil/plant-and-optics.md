@@ -99,12 +99,15 @@ uses ports backed by the sequenced SPSC rings specified in
 Preparation turns immutable definitions into backend-, device-, shape-, and
 capacity-bound plans plus explicitly owned mutable state and workspaces.
 Repeated execution calls mutating operations over those prepared owners and
-caller-owned products. The implemented preparation freezes every path source,
-builds a concrete tuple of path executors, resolves acquisitions by stable ID,
-and builds a concrete tuple of separate acquisition owners. Model construction
-is multiple dispatch on the opted-in cold type; there is no central registry,
-universal optical graph, abstract executor vector, or stored closure. The target
-API does not grow `AOSimulation` or
+caller-owned products. Owner construction validates every concrete execution
+plan against the exact input, result, detector state, observation, and optional
+estimator storage it retains; warmed calls reject a stale or substituted
+binding before mutation. The implemented preparation freezes every path
+source, builds a concrete tuple of path executors, resolves acquisitions by
+stable ID, and builds a concrete tuple of separate acquisition owners. Model
+construction is multiple dispatch on the opted-in cold type; there is no
+central registry, universal optical graph, abstract executor vector, or stored
+closure. The target API does not grow `AOSimulation` or
 `ClosedLoopRuntime` into a universal object, retain the OOPAO class hierarchy,
 or hide scheduling inside optical elements. Those types remain temporary
 numerical oracles until their replacement gates delete them.
@@ -264,6 +267,12 @@ with `extended_source_asterism` before preparation. The current off-axis model
 resolves a finite integer displacement during preparation, honors the focal
 grid's declared `:x`/`:y` axis order and signs, and applies a periodic shift;
 it does not claim subpixel interpolation or finite-field loss.
+
+An `OpticalProductBundle` fixes its product membership when constructed while
+leaving each product leaf's numerical array mutable for its single prepared
+writer. A prepared owner therefore cannot silently substitute, reorder, append,
+or remove acquisition-facing branches after its compatibility contract is
+built.
 
 Physical complex fields declare a normalization whose squared magnitude is a
 photon-arrival-rate product on the represented grid and state whether each

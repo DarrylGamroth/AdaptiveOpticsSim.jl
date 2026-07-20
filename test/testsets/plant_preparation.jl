@@ -33,7 +33,27 @@ struct UnsupportedPreparedAcquisitionModel end
 struct InvalidPreparedPathModel end
 struct InvalidPreparedAcquisitionModel end
 
+struct PlantBindingOnlyExecution{I,R}
+    input::I
+    result::R
+end
+
 struct UnsupportedPlantSource <: AbstractSource end
+
+function AdaptiveOpticsSim.validate_path_execution_binding(
+    execution::PlantBindingOnlyExecution, input, result)
+    execution.input === input && execution.result === result || throw(
+        PlantPreparationError(:path, :prepared_binding,
+            "test path execution does not match its prepared products"))
+    return nothing
+end
+
+function AdaptiveOpticsSim.execute_path!(result, input,
+    execution::PlantBindingOnlyExecution)
+    AdaptiveOpticsSim.validate_path_execution_binding(execution, input,
+        result)
+    return result
+end
 
 for model in (
     DirectSciencePathModel,
@@ -323,6 +343,26 @@ end
         lgs_source)).wavelength_m == wavelength(lgs_source)
     @test AdaptiveOpticsSim.path_source_radiometry_key(
         lgs_source).value == source_radiometric_value(lgs_source)
+    lgs_key = AdaptiveOpticsSim.PathResultKey(
+        lgs_geometry,
+        AdaptiveOpticsSim.path_source_spectral_key(lgs_source),
+        AdaptiveOpticsSim.path_source_radiometry_key(lgs_source),
+        science_path.key.optical_model,
+        science_path.key.sampling_contract,
+        science_path.key.propagation_model,
+        science_path.key.output_plane,
+        science_path.key.revisions,
+        science_path.key.backend,
+        science_path.key.device,
+    )
+    lgs_hash = hash(lgs_key)
+    keyed_results = Dict(lgs_key => :prepared)
+    exposed_profile = lgs_key.source_geometry.sodium_profile
+    exposed_profile[1, 1] = -one(T)
+    lgs_geometry.sodium_profile[1, 1] = -T(2)
+    @test hash(lgs_key) == lgs_hash
+    @test keyed_results[lgs_key] === :prepared
+    @test lgs_key.source_geometry.sodium_profile == sodium_profile
 
     spectral_source = with_spectrum(science_source, SpectralBundle(
         T[0.75e-6, 0.85e-6], T[0.4, 0.6]))
@@ -409,7 +449,8 @@ end
         :device,
     )
 
-    prepared_test_path = (input, result; execution=nothing) ->
+    prepared_test_path = (input, result;
+            execution=PlantBindingOnlyExecution(input, result)) ->
         PreparedPathExecutor(
             science_definition,
             science_path.source,
@@ -450,7 +491,6 @@ end
         spatial_measure=SpatialDensityMeasure())
     for reusable_result in (
         (science_path.result,),
-        [science_path.result],
         OpticalProductBundle(science_path.result),
         density_integrated_result,
     )
@@ -458,6 +498,25 @@ end
             reusable_result)
         @test reusable_path.result === reusable_result
     end
+
+
+    source_products = AdaptiveOpticsSim.AbstractOpticalProduct[
+        science_path.result]
+    vector_bundle = OpticalProductBundle(source_products)
+    source_products[1] = density_integrated_result
+    @test only(vector_bundle.products) === science_path.result
+    @test vector_bundle.products isa AbstractVector
+    @test !(vector_bundle.products isa Vector)
+    @test_throws MethodError push!(vector_bundle.products,
+        density_integrated_result)
+    @test_throws Base.CanonicalIndexError vector_bundle.products[1] =
+        density_integrated_result
+
+    assert_plant_preparation_error(
+        () -> prepared_test_path(science_path.input, [science_path.result]),
+        :path,
+        :output_plane,
+    )
 
     assert_plant_preparation_error(
         () -> prepared_test_path(science_path.input, IntensityMap[]),
@@ -504,6 +563,25 @@ end
         :unsupported_execution,
     )
 
+    unbound_wfs_result = IntensityMap(wfs_path.result.metadata,
+        copy(wfs_path.result.values))
+    @test_throws WFSPreparationError PreparedPathExecutor(
+        wfs_definition,
+        wfs_path.source,
+        telescope,
+        wfs_path.input,
+        unbound_wfs_result,
+        wfs_path.execution;
+        optical_model=wfs_path.key.optical_model,
+        sampling_contract=wfs_path.key.sampling_contract,
+        propagation_model=wfs_path.key.propagation_model,
+        model_revisions=wfs_path.key.revisions.model,
+    )
+
+    @test !applicable(PreparedPathExecutor, science_path.definition,
+        science_path.source, science_path.telescope, science_path.input,
+        science_path.result, science_path.execution, science_path.key)
+
     @test fast.path_result === science_path.result
     @test slow.path_result === science_path.result
     @test fast.path_key === science_path.key
@@ -545,6 +623,13 @@ end
     @test execute_acquisition!(explicit_frame_products, science_path.result,
         explicit_frame_execution, Xoshiro(16)) === explicit_frame_products
 
+    raw_frame_plan = prepare_detector_acquisition(detector,
+        science_path.result)
+    @test !applicable(FrameAcquisitionExecution, detector, raw_frame_plan,
+        detector_frame)
+    @test_throws MethodError FrameAcquisitionExecution(detector,
+        raw_frame_plan, detector_frame)
+
     invalid_observations = (
         (zeros(T, 1, 1), :shape),
         (zeros(Float32, size(detector_frame)), :numeric_type),
@@ -578,6 +663,22 @@ end
         wfs.execution.observation)
     @test execute_acquisition!(observation_only_products, wfs.path_result,
         observation_only_execution, Xoshiro(18)) === observation_only_products
+
+    mismatched_wfs_observation = deepcopy(wfs.execution.observation)
+    mismatched_wfs_execution = WFSAcquisitionExecution(
+        wfs.execution.acquisition, mismatched_wfs_observation)
+    @test_throws WFSPreparationError PreparedAcquisitionOwner(
+        wfs_acquisition_definition, wfs_path, mismatched_wfs_execution,
+        AcquisitionProducts(mismatched_wfs_observation))
+
+    mismatched_wfs_measurement = deepcopy(wfs.execution.measurement)
+    mismatched_estimator_execution = WFSAcquisitionExecution(
+        wfs.execution.acquisition, wfs.execution.estimator,
+        wfs.execution.observation, mismatched_wfs_measurement)
+    @test_throws WFSPreparationError PreparedAcquisitionOwner(
+        wfs_acquisition_definition, wfs_path, mismatched_estimator_execution,
+        AcquisitionProducts(wfs.execution.observation,
+            mismatched_wfs_measurement))
     assert_plant_preparation_error(
         () -> execute_acquisition!(
             AcquisitionProducts(deepcopy(wfs.execution.observation)),
@@ -605,6 +706,11 @@ end
         :acquisition,
         :unsupported_execution,
     )
+
+    @test !applicable(PreparedAcquisitionOwner, fast.definition,
+        fast.path_key, fast.path_result, fast.execution, fast.products)
+    @test !applicable(PreparedPlant, plant.definition, plant.paths,
+        plant.acquisitions)
 
     if coverage_instrumented()
         @test_skip "prepared-plant allocation assertions are disabled under coverage instrumentation"

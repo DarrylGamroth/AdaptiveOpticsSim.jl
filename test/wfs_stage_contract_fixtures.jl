@@ -100,6 +100,12 @@ function AdaptiveOpticsSim.form_wfs_optical_products!(output::IntensityMap,
     return output
 end
 
+function AdaptiveOpticsSim.validate_wfs_optical_formation_binding(
+    output::IntensityMap, input, plan::ContractRatePlan)
+    _contract_require_rate_binding(output, input, plan)
+    return nothing
+end
+
 struct ContractBundleRateModel{M<:Tuple}
     models::M
 end
@@ -153,6 +159,20 @@ function AdaptiveOpticsSim.form_wfs_optical_products!(
             "contract fixture optical bundle does not match its prepared leaves"))
     _contract_form_rate_plans!(plan.plans, output.products, input)
     return output
+end
+
+function AdaptiveOpticsSim.validate_wfs_optical_formation_binding(
+    output::OpticalProductBundle, input, plan::ContractBundleRatePlan)
+    output.products === plan.output.products || throw(WFSPreparationError(
+        :optical_formation, :prepared_binding,
+        "contract fixture optical bundle does not match its prepared leaves"))
+    @inbounds for index in eachindex(plan.plans)
+        component_input = AdaptiveOpticsSim.four_pupil_bundle_input(input,
+            index)
+        AdaptiveOpticsSim.validate_wfs_optical_formation_binding(
+            output[index], component_input, plan.plans[index])
+    end
+    return nothing
 end
 
 struct ContractDetectorBinding{D,I,P,O}
@@ -371,6 +391,14 @@ function AdaptiveOpticsSim.acquire_wfs_observation!(observations,
     return observations
 end
 
+function AdaptiveOpticsSim.validate_wfs_acquisition_binding(observations,
+    optical_products, plan::ContractDetectorAcquisitionPlan)
+    _contract_require_binding_inputs(plan.bindings, optical_products)
+    _contract_require_binding_outputs(plan.bindings, observations)
+    _contract_require_live_detector_outputs(plan.bindings)
+    return nothing
+end
+
 struct ContractSumEstimator{U,K}
     units::U
     kind::K
@@ -556,6 +584,13 @@ end
 AdaptiveOpticsSim.wfs_measurement_path(::ContractSumEstimatorPlan) =
     AcquiredObservationPath()
 
+function AdaptiveOpticsSim.validate_wfs_estimation_binding(
+    measurement::WFSMeasurement, input, plan::ContractSumEstimatorPlan)
+    _contract_require_observation_storage(input, plan.input)
+    _contract_require_measurement_storage(measurement, plan.measurement)
+    return nothing
+end
+
 struct ContractCopyEstimator{U,K}
     units::U
     kind::K
@@ -597,6 +632,13 @@ end
 
 AdaptiveOpticsSim.wfs_measurement_path(::ContractCopyEstimatorPlan) =
     AcquiredObservationPath()
+
+function AdaptiveOpticsSim.validate_wfs_estimation_binding(
+    measurement::WFSMeasurement, input, plan::ContractCopyEstimatorPlan)
+    _contract_require_observation_storage(input, plan.input)
+    _contract_require_measurement_storage(measurement, plan.measurement)
+    return nothing
+end
 
 struct ContractDirectEstimator{T<:AbstractFloat,U,K}
     scale::T
@@ -687,6 +729,13 @@ end
 AdaptiveOpticsSim.wfs_measurement_path(::ContractDirectEstimatorPlan) =
     DirectMeasurementPath()
 
+function AdaptiveOpticsSim.validate_wfs_estimation_binding(
+    measurement::WFSMeasurement, input, plan::ContractDirectEstimatorPlan)
+    _contract_require_direct_input(input, plan.input)
+    _contract_require_measurement_storage(measurement, plan.measurement)
+    return nothing
+end
+
 struct ContractDirectCopyEstimator{U,K}
     units::U
     kind::K
@@ -727,6 +776,13 @@ end
 
 AdaptiveOpticsSim.wfs_measurement_path(::ContractDirectCopyEstimatorPlan) =
     DirectMeasurementPath()
+
+function AdaptiveOpticsSim.validate_wfs_estimation_binding(
+    measurement::WFSMeasurement, input, plan::ContractDirectCopyEstimatorPlan)
+    _contract_require_direct_input(input, plan.input)
+    _contract_require_measurement_storage(measurement, plan.measurement)
+    return nothing
+end
 
 struct ContractPackedAcquisition{R,T<:AbstractFloat}
     regions::R
@@ -843,6 +899,23 @@ end
 function AdaptiveOpticsSim.acquire_wfs_observation!(
     observation::WFSObservation, optical_products,
     plan::ContractPackedAcquisitionPlan, rng)
+    AdaptiveOpticsSim.validate_wfs_acquisition_binding(observation,
+        optical_products, plan)
+    inputs = _contract_two_products(optical_products)
+    first_view = first(plan.views)
+    second_view = first(Base.tail(plan.views))
+    first_values = first(inputs).values
+    second_values = first(Base.tail(inputs)).values
+    duration = plan.model.duration
+    @. first_view = first_values * duration
+    @. second_view = second_values * duration
+    return observation
+end
+
+
+function AdaptiveOpticsSim.validate_wfs_acquisition_binding(
+    observation::WFSObservation, optical_products,
+    plan::ContractPackedAcquisitionPlan)
     inputs = _contract_two_products(optical_products)
     first(inputs).values === first(plan.inputs).values &&
         first(Base.tail(inputs)).values ===
@@ -853,14 +926,7 @@ function AdaptiveOpticsSim.acquire_wfs_observation!(
         observation.metadata === plan.observation.metadata ||
         throw(WFSPreparationError(:acquisition, :prepared_binding,
             "packed observation storage was replaced"))
-    first_view = first(plan.views)
-    second_view = first(Base.tail(plan.views))
-    first_values = first(inputs).values
-    second_values = first(Base.tail(inputs)).values
-    duration = plan.model.duration
-    @. first_view = first_values * duration
-    @. second_view = second_values * duration
-    return observation
+    return nothing
 end
 
 function run_contract_stages!(optical_output, optical_input, optical_plan,

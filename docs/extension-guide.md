@@ -69,6 +69,12 @@ device ordinals as type parameters. `InstantaneousOpticalSample()` is the
 current default and states that the rate product samples one plant instant; it
 does not imply a cadence or exposure duration.
 
+`PreparedPathExecutor` snapshots those value descriptions when it builds its
+`PathResultKey`. Keep descriptions compact and configuration-only; do not put
+live workspaces, device arrays, detector state, or other mutable execution
+owners in a key. Key equality and hashing are cold compatibility operations,
+not part of warmed optical execution.
+
 A custom `AbstractSource` used in a prepared plant also implements the
 qualified `AdaptiveOpticsSim.path_source_geometry_key`,
 `AdaptiveOpticsSim.path_source_spectral_key`, and
@@ -101,11 +107,16 @@ Use qualified `AdaptiveOpticsSim.WFSOpticalPathExecution` to adapt an existing
 Gate 0 WFS optical plan, `AdaptiveOpticsSim.FrameAcquisitionExecution` for a
 frame detector plus a distinct caller-owned observation, and
 `AdaptiveOpticsSim.WFSAcquisitionExecution` to compose already prepared WFS
-acquisition and estimator plans. A different concrete execution type extends
-the three-argument `execute_path!` or four-argument `execute_acquisition!`
-dispatch. Do not store a `Function`, abstract executor vector, schedule, RNG,
-queue, or transport in these owners. Preparation may allocate; warmed execution
-must retain the allocation contract of its underlying stages.
+acquisition and estimator plans. A different concrete path execution type must
+extend both the three-argument `execute_path!` dispatch and the qualified
+`AdaptiveOpticsSim.validate_path_execution_binding(execution, input, result)`
+seam. A different acquisition execution type similarly extends the
+four-argument `execute_acquisition!` dispatch and
+`AdaptiveOpticsSim.validate_acquisition_execution_binding(execution,
+path_result, products)`. Each validator must reject mismatched exact storage or
+state before mutation. Do not store a `Function`, abstract executor vector,
+schedule, RNG, queue, or transport in these owners. Preparation may allocate;
+warmed execution must retain the allocation contract of its underlying stages.
 
 ## Detectors
 
@@ -162,7 +173,9 @@ from a `PupilFunction` or pupil-plane `ElectricField`. It must declare
 observation storage. `WFSObservation` supports scalar `Ref` storage and arrays
 of any rank, as does `WFSMeasurement`; use concrete tuples for multiple
 observations. Preserve incompatible spectral or branch rate products in
-`OpticalProductBundle`.
+`OpticalProductBundle`. Bundle membership is fixed at construction; the arrays
+owned by its product leaves remain mutable destinations for prepared optical
+formation.
 
 Extensions should call the qualified validation seams
 `AdaptiveOpticsSim.validate_wfs_optical_input`,
@@ -170,8 +183,16 @@ Extensions should call the qualified validation seams
 `AdaptiveOpticsSim.validate_wfs_observation` or
 `AdaptiveOpticsSim.validate_wfs_observations`, and
 `AdaptiveOpticsSim.validate_wfs_measurement` as applicable before returning a
-prepared plan. These remain qualified extension APIs rather than ordinary
-exported workflow names.
+prepared plan. Every new prepared plan also implements its corresponding exact
+binding validator:
+
+- `AdaptiveOpticsSim.validate_wfs_optical_formation_binding`
+- `AdaptiveOpticsSim.validate_wfs_acquisition_binding`
+- `AdaptiveOpticsSim.validate_wfs_estimation_binding`
+
+The containing plant owner calls these validators during construction, and the
+stage calls them again before mutation. They remain qualified extension APIs
+rather than ordinary exported workflow names.
 
 Prepared types should contain concrete immutable plans/params and separately
 typed single-writer workspace, detector, calibration, and RNG state. Bind exact

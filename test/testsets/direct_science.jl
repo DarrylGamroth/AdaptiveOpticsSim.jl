@@ -271,7 +271,8 @@ end
     @test isconcretetype(eltype(spectral.components))
     products = @inferred form_direct_image!(spectral)
     @test products isa OpticalProductBundle
-    @test products.products isa Vector
+    @test products.products isa AbstractVector
+    @test !(products.products isa Vector)
     @test isconcretetype(eltype(products.products))
     @test length(products) == 2
     @test products[1].metadata.sampling != products[2].metadata.sampling

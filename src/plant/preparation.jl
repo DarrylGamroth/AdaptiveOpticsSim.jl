@@ -12,6 +12,9 @@ abstract type AbstractOpticalSamplingContract end
 """The path result is a photon-arrival-rate sample at one plant instant."""
 struct InstantaneousOpticalSample <: AbstractOpticalSamplingContract end
 
+struct _PathResultKeyToken end
+const _PATH_RESULT_KEY_TOKEN = _PathResultKeyToken()
+
 """
     PathResultKey
 
@@ -33,29 +36,88 @@ struct PathResultKey{G,S,R,M,C,P,O,V,B<:AbstractArrayBackend,
     revisions::V
     backend::B
     device::D
+
+    function PathResultKey(::_PathResultKeyToken, source_geometry,
+        spectral_sampling, radiometry, optical_model, sampling_contract,
+        propagation_model, output_plane, revisions,
+        backend::B, device::D) where {
+        B<:AbstractArrayBackend,D<:AbstractPlaneDevice,
+    }
+        geometry_snapshot = deepcopy(source_geometry)
+        spectral_snapshot = deepcopy(spectral_sampling)
+        radiometry_snapshot = deepcopy(radiometry)
+        optical_snapshot = deepcopy(optical_model)
+        sampling_snapshot = deepcopy(sampling_contract)
+        propagation_snapshot = deepcopy(propagation_model)
+        output_snapshot = deepcopy(output_plane)
+        revision_snapshot = deepcopy(revisions)
+        return new{
+            typeof(geometry_snapshot),typeof(spectral_snapshot),
+            typeof(radiometry_snapshot),typeof(optical_snapshot),
+            typeof(sampling_snapshot),typeof(propagation_snapshot),
+            typeof(output_snapshot),typeof(revision_snapshot),B,D,
+        }(geometry_snapshot, spectral_snapshot, radiometry_snapshot,
+            optical_snapshot, sampling_snapshot, propagation_snapshot,
+            output_snapshot, revision_snapshot, backend, device)
+    end
+end
+
+function PathResultKey(source_geometry, spectral_sampling, radiometry,
+    optical_model, sampling_contract, propagation_model, output_plane,
+    revisions, backend::AbstractArrayBackend, device::AbstractPlaneDevice)
+    return PathResultKey(_PATH_RESULT_KEY_TOKEN, source_geometry,
+        spectral_sampling, radiometry, optical_model, sampling_contract,
+        propagation_model, output_plane, revisions, backend, device)
+end
+
+const _PATH_RESULT_KEY_SNAPSHOT_FIELDS = (
+    :source_geometry,
+    :spectral_sampling,
+    :radiometry,
+    :optical_model,
+    :sampling_contract,
+    :propagation_model,
+    :output_plane,
+    :revisions,
+)
+
+"""Return defensive copies for value descriptions retained by the key."""
+function Base.getproperty(key::PathResultKey, name::Symbol)
+    name in _PATH_RESULT_KEY_SNAPSHOT_FIELDS &&
+        return deepcopy(getfield(key, name))
+    return getfield(key, name)
 end
 
 function Base.isequal(left::PathResultKey, right::PathResultKey)
-    return isequal(left.source_geometry, right.source_geometry) &&
-        isequal(left.spectral_sampling, right.spectral_sampling) &&
-        isequal(left.radiometry, right.radiometry) &&
-        isequal(left.optical_model, right.optical_model) &&
-        isequal(left.sampling_contract, right.sampling_contract) &&
-        isequal(left.propagation_model, right.propagation_model) &&
-        isequal(left.output_plane, right.output_plane) &&
-        isequal(left.revisions, right.revisions) &&
-        typeof(left.backend) === typeof(right.backend) &&
-        isequal(left.device, right.device)
+    return isequal(getfield(left, :source_geometry),
+            getfield(right, :source_geometry)) &&
+        isequal(getfield(left, :spectral_sampling),
+            getfield(right, :spectral_sampling)) &&
+        isequal(getfield(left, :radiometry), getfield(right, :radiometry)) &&
+        isequal(getfield(left, :optical_model),
+            getfield(right, :optical_model)) &&
+        isequal(getfield(left, :sampling_contract),
+            getfield(right, :sampling_contract)) &&
+        isequal(getfield(left, :propagation_model),
+            getfield(right, :propagation_model)) &&
+        isequal(getfield(left, :output_plane),
+            getfield(right, :output_plane)) &&
+        isequal(getfield(left, :revisions), getfield(right, :revisions)) &&
+        typeof(getfield(left, :backend)) ===
+            typeof(getfield(right, :backend)) &&
+        isequal(getfield(left, :device), getfield(right, :device))
 end
 
 Base.:(==)(left::PathResultKey, right::PathResultKey) =
     isequal(left, right)
 
 function Base.hash(key::PathResultKey, seed::UInt)
-    return hash((key.source_geometry, key.spectral_sampling, key.radiometry,
-        key.optical_model, key.sampling_contract, key.propagation_model,
-        key.output_plane, key.revisions, typeof(key.backend), key.device),
-        seed)
+    return hash((getfield(key, :source_geometry),
+        getfield(key, :spectral_sampling), getfield(key, :radiometry),
+        getfield(key, :optical_model), getfield(key, :sampling_contract),
+        getfield(key, :propagation_model), getfield(key, :output_plane),
+        getfield(key, :revisions), typeof(getfield(key, :backend)),
+        getfield(key, :device)), seed)
 end
 
 @inline function _leaf_source_geometry_key(src::Source)
@@ -216,7 +278,7 @@ end
 @inline _path_output_contract(products::Tuple) =
     map(_path_output_contract, products)
 
-function _path_output_contract(products::AbstractVector)
+function _path_output_contract(products::_FixedOpticalProductVector)
     isempty(products) && throw(PlantPreparationError(:path, :output_plane,
         "prepared optical-path result bundle must not be empty"))
     return map(_path_output_contract, products)
@@ -233,7 +295,7 @@ end
 @inline _first_path_result(products::Tuple{<:Any,Vararg}) =
     _first_path_result(first(products))
 
-function _first_path_result(products::AbstractVector)
+function _first_path_result(products::_FixedOpticalProductVector)
     isempty(products) && throw(PlantPreparationError(:path, :output_plane,
         "prepared optical-path result bundle must not be empty"))
     return _first_path_result(first(products))
@@ -268,7 +330,7 @@ end
     return _require_path_result_domain(Base.tail(products), selector, device)
 end
 
-function _require_path_result_domain(products::AbstractVector,
+function _require_path_result_domain(products::_FixedOpticalProductVector,
     selector::AbstractArrayBackend, device::AbstractPlaneDevice)
     @inbounds for product in products
         _require_path_result_domain(product, selector, device)
@@ -362,6 +424,15 @@ end
 @inline _require_path_input_revisions(input, revision::UInt) =
     _require_path_input_revision(input, revision)
 
+"""Qualified extension seam for cold path execution-binding validation."""
+function validate_path_execution_binding(execution, input, result)
+    throw(PlantPreparationError(:path, :unsupported_binding_validation,
+        "prepared path execution type $(typeof(execution)) does not validate its input/result binding"))
+end
+
+struct _PreparedPathExecutorToken end
+const _PREPARED_PATH_EXECUTOR_TOKEN = _PreparedPathExecutorToken()
+
 """
     PreparedPathExecutor
 
@@ -377,6 +448,13 @@ struct PreparedPathExecutor{D,S,T,I,R,E,K<:PathResultKey}
     result::R
     execution::E
     key::K
+
+    function PreparedPathExecutor(::_PreparedPathExecutorToken,
+        definition::D, source::S, telescope::T, input::I, result::R,
+        execution::E, key::K) where {D,S,T,I,R,E,K<:PathResultKey}
+        return new{D,S,T,I,R,E,K}(definition, source, telescope, input,
+            result, execution, key)
+    end
 end
 
 function PreparedPathExecutor(definition::OpticalPathDefinition,
@@ -402,6 +480,7 @@ function PreparedPathExecutor(definition::OpticalPathDefinition,
             "prepared path and telescope occupy different physical devices"))
     revision = aperture_revision(telescope)
     _require_path_input_revisions(input, revision)
+    validate_path_execution_binding(execution, input, result)
     revisions = (telescope=revision, model=model_revisions)
     key = PathResultKey(
         path_source_geometry_key(source),
@@ -415,10 +494,8 @@ function PreparedPathExecutor(definition::OpticalPathDefinition,
         selector,
         device,
     )
-    return PreparedPathExecutor{typeof(definition),typeof(source),
-        typeof(telescope),typeof(input),typeof(result),typeof(execution),
-        typeof(key)}(definition, source, telescope, input, result, execution,
-        key)
+    return PreparedPathExecutor(_PREPARED_PATH_EXECUTOR_TOKEN, definition,
+        source, telescope, input, result, execution, key)
 end
 
 @inline path_input(path::PreparedPathExecutor) = path.input
@@ -426,7 +503,7 @@ end
 @inline path_result_key(path::PreparedPathExecutor) = path.key
 
 function _require_current_path_revision(path::PreparedPathExecutor)
-    revision = path.key.revisions.telescope
+    revision = getfield(getfield(path.key, :revisions), :telescope)
     aperture_revision(path.telescope) == revision || throw(
         PlantPreparationError(:path, :revision,
             "telescope aperture changed after path preparation"))
@@ -466,16 +543,29 @@ end
 function execute_path!(result, input, prepared::Union{
     PreparedDirectImaging,PreparedIncoherentDirectImaging,
     PreparedBundledDirectImaging})
+    validate_path_execution_binding(prepared, input, result)
+    return form_direct_image!(prepared)
+end
+
+function validate_path_execution_binding(prepared::Union{
+    PreparedDirectImaging,PreparedIncoherentDirectImaging,
+    PreparedBundledDirectImaging}, input, result)
     direct_imaging_output(prepared) === result || throw(
         PlantPreparationError(:path, :prepared_binding,
             "direct-imaging output does not match its prepared path"))
     _require_direct_path_input(prepared, input)
-    return form_direct_image!(prepared)
+    return nothing
 end
 
 """Adapter from a Gate 0 prepared WFS optical plan to a plant path."""
 struct WFSOpticalPathExecution{P}
     plan::P
+end
+
+@inline function validate_path_execution_binding(
+    execution::WFSOpticalPathExecution, input, result)
+    return validate_wfs_optical_formation_binding(result, input,
+        execution.plan)
 end
 
 @inline function execute_path!(result, input,
@@ -492,11 +582,19 @@ end
 @inline AcquisitionProducts(observation) =
     AcquisitionProducts(observation, nothing)
 
+struct _FrameAcquisitionExecutionToken end
+const _FRAME_ACQUISITION_EXECUTION_TOKEN = _FrameAcquisitionExecutionToken()
+
 """Prepared detector capture and copy into a distinct caller-owned frame."""
 struct FrameAcquisitionExecution{D,P,F}
     detector::D
     plan::P
     observation::F
+
+    function FrameAcquisitionExecution(::_FrameAcquisitionExecutionToken,
+        detector::D, plan::P, observation::F) where {D,P,F}
+        return new{D,P,F}(detector, plan, observation)
+    end
 end
 
 function FrameAcquisitionExecution(detector::Detector,
@@ -515,6 +613,13 @@ end
 
 function _frame_acquisition_execution(detector::Detector, plan,
     observation::AbstractArray)
+    _require_frame_acquisition_observation(detector, observation)
+    return FrameAcquisitionExecution(_FRAME_ACQUISITION_EXECUTION_TOKEN,
+        detector, plan, observation)
+end
+
+function _require_frame_acquisition_observation(detector::Detector,
+    observation::AbstractArray)
     frame = output_frame(detector)
     size(observation) == size(frame) || throw(PlantPreparationError(
         :acquisition, :shape,
@@ -531,9 +636,11 @@ function _frame_acquisition_execution(detector::Detector, plan,
     Base.mightalias(observation, frame) && throw(PlantPreparationError(
         :acquisition, :ownership,
         "caller-owned acquisition observation must not alias detector state"))
-    return FrameAcquisitionExecution{typeof(detector),typeof(plan),
-        typeof(observation)}(detector, plan, observation)
+    return nothing
 end
+
+struct _WFSAcquisitionExecutionToken end
+const _WFS_ACQUISITION_EXECUTION_TOKEN = _WFSAcquisitionExecutionToken()
 
 """Prepared Gate 0 WFS acquisition and optional estimator composition."""
 struct WFSAcquisitionExecution{A,E,O,M}
@@ -541,17 +648,94 @@ struct WFSAcquisitionExecution{A,E,O,M}
     estimator::E
     observation::O
     measurement::M
+
+    function WFSAcquisitionExecution(::_WFSAcquisitionExecutionToken,
+        acquisition::A, estimator::E, observation::O,
+        measurement::M) where {A,E,O,M}
+        return new{A,E,O,M}(acquisition, estimator, observation, measurement)
+    end
 end
 
 @inline WFSAcquisitionExecution(acquisition, observation) =
-    WFSAcquisitionExecution(acquisition, nothing, observation, nothing)
+    WFSAcquisitionExecution(_WFS_ACQUISITION_EXECUTION_TOKEN, acquisition,
+        nothing, observation, nothing)
 
 function WFSAcquisitionExecution(acquisition, estimator,
     observation, measurement::WFSMeasurement)
-    return WFSAcquisitionExecution{typeof(acquisition),typeof(estimator),
-        typeof(observation),typeof(measurement)}(acquisition, estimator,
-        observation, measurement)
+    return WFSAcquisitionExecution(_WFS_ACQUISITION_EXECUTION_TOKEN,
+        acquisition, estimator, observation, measurement)
 end
+
+"""Qualified extension seam for cold acquisition execution validation."""
+function validate_acquisition_execution_binding(execution, path_result,
+    products::AcquisitionProducts)
+    throw(PlantPreparationError(:acquisition,
+        :unsupported_binding_validation,
+        "prepared acquisition execution type $(typeof(execution)) does not validate its path/product binding"))
+end
+
+function validate_acquisition_execution_binding(
+    execution::FrameAcquisitionExecution,
+    path_result::IntensityMap,
+    products::AcquisitionProducts{<:AbstractArray,Nothing})
+    products.observation === execution.observation || throw(
+        PlantPreparationError(:acquisition, :prepared_binding,
+            "acquisition observation does not match its prepared storage"))
+    _require_frame_acquisition_observation(execution.detector,
+        execution.observation)
+    plan = execution.plan
+    path_result.metadata === plan.input_metadata &&
+        path_result.values === plan.input_values || throw(
+        PlantPreparationError(:acquisition, :prepared_binding,
+            "acquisition path result does not match its detector plan"))
+    execution.detector.params === plan.detector_params &&
+        execution.detector.state === plan.detector_state &&
+        execution.detector.state.frame === plan.detector_frame || throw(
+        PlantPreparationError(:acquisition, :prepared_binding,
+            "acquisition detector storage changed after preparation"))
+    return nothing
+end
+
+@inline _require_acquired_wfs_estimator(::AcquiredObservationPath) = nothing
+
+function _require_acquired_wfs_estimator(::DirectMeasurementPath)
+    throw(PlantPreparationError(:acquisition, :estimator,
+        "WFS acquisition composition requires an acquired-observation estimator"))
+end
+
+function _require_acquired_wfs_estimator(path)
+    throw(PlantPreparationError(:acquisition, :estimator,
+        "WFS estimator declared unsupported measurement path $(typeof(path))"))
+end
+
+function validate_acquisition_execution_binding(
+    execution::WFSAcquisitionExecution{A,Nothing,O,Nothing}, path_result,
+    products::AcquisitionProducts{O,Nothing}) where {A,O}
+    products.observation === execution.observation || throw(
+        PlantPreparationError(:acquisition, :prepared_binding,
+            "WFS observation does not match its prepared acquisition"))
+    validate_wfs_acquisition_binding(products.observation, path_result,
+        execution.acquisition)
+    return nothing
+end
+
+function validate_acquisition_execution_binding(
+    execution::WFSAcquisitionExecution{A,E,O,M}, path_result,
+    products::AcquisitionProducts{O,M}) where {A,E,O,M<:WFSMeasurement}
+    products.observation === execution.observation &&
+        products.measurement === execution.measurement || throw(
+        PlantPreparationError(:acquisition, :prepared_binding,
+            "WFS products do not match their prepared acquisition"))
+    validate_wfs_acquisition_binding(products.observation, path_result,
+        execution.acquisition)
+    _require_acquired_wfs_estimator(wfs_measurement_path(execution.estimator))
+    validate_wfs_estimation_binding(products.measurement,
+        products.observation, execution.estimator)
+    return nothing
+end
+
+struct _PreparedAcquisitionOwnerToken end
+const _PREPARED_ACQUISITION_OWNER_TOKEN = _PreparedAcquisitionOwnerToken()
 
 """
     PreparedAcquisitionOwner
@@ -566,6 +750,13 @@ struct PreparedAcquisitionOwner{D,K<:PathResultKey,R,E,P}
     path_result::R
     execution::E
     products::P
+
+    function PreparedAcquisitionOwner(::_PreparedAcquisitionOwnerToken,
+        definition::D, path_key::K, path_result::R, execution::E,
+        products::P) where {D,K<:PathResultKey,R,E,P}
+        return new{D,K,R,E,P}(definition, path_key, path_result, execution,
+            products)
+    end
 end
 
 @inline acquisition_products(owner::PreparedAcquisitionOwner) = owner.products
@@ -576,22 +767,32 @@ end
 
 function _path_key_mismatch_reason(actual::PathResultKey,
     expected::PathResultKey)
-    !isequal(actual.source_geometry, expected.source_geometry) &&
+    !isequal(getfield(actual, :source_geometry),
+        getfield(expected, :source_geometry)) &&
         return :source_geometry
-    !isequal(actual.spectral_sampling, expected.spectral_sampling) &&
+    !isequal(getfield(actual, :spectral_sampling),
+        getfield(expected, :spectral_sampling)) &&
         return :spectral_sampling
-    !isequal(actual.radiometry, expected.radiometry) && return :radiometry
-    !isequal(actual.optical_model, expected.optical_model) &&
+    !isequal(getfield(actual, :radiometry),
+        getfield(expected, :radiometry)) && return :radiometry
+    !isequal(getfield(actual, :optical_model),
+        getfield(expected, :optical_model)) &&
         return :optical_model
-    !isequal(actual.sampling_contract, expected.sampling_contract) &&
+    !isequal(getfield(actual, :sampling_contract),
+        getfield(expected, :sampling_contract)) &&
         return :sampling_contract
-    !isequal(actual.propagation_model, expected.propagation_model) &&
+    !isequal(getfield(actual, :propagation_model),
+        getfield(expected, :propagation_model)) &&
         return :propagation_model
-    !isequal(actual.output_plane, expected.output_plane) &&
+    !isequal(getfield(actual, :output_plane),
+        getfield(expected, :output_plane)) &&
         return :output_plane
-    !isequal(actual.revisions, expected.revisions) && return :revision
-    typeof(actual.backend) === typeof(expected.backend) || return :backend
-    !isequal(actual.device, expected.device) && return :device
+    !isequal(getfield(actual, :revisions), getfield(expected, :revisions)) &&
+        return :revision
+    typeof(getfield(actual, :backend)) ===
+        typeof(getfield(expected, :backend)) || return :backend
+    !isequal(getfield(actual, :device), getfield(expected, :device)) &&
+        return :device
     return :compatibility
 end
 
@@ -612,16 +813,16 @@ retain the prepared path's value. This is a preparation-time extension seam,
 not a hot-path lookup.
 """
 function require_path_result(path::PreparedPathExecutor;
-    source_geometry=path.key.source_geometry,
-    spectral_sampling=path.key.spectral_sampling,
-    radiometry=path.key.radiometry,
-    optical_model=path.key.optical_model,
-    sampling_contract=path.key.sampling_contract,
-    propagation_model=path.key.propagation_model,
-    output_plane=path.key.output_plane,
-    revisions=path.key.revisions,
-    backend::AbstractArrayBackend=path.key.backend,
-    device::AbstractPlaneDevice=path.key.device)
+    source_geometry=getfield(path.key, :source_geometry),
+    spectral_sampling=getfield(path.key, :spectral_sampling),
+    radiometry=getfield(path.key, :radiometry),
+    optical_model=getfield(path.key, :optical_model),
+    sampling_contract=getfield(path.key, :sampling_contract),
+    propagation_model=getfield(path.key, :propagation_model),
+    output_plane=getfield(path.key, :output_plane),
+    revisions=getfield(path.key, :revisions),
+    backend::AbstractArrayBackend=getfield(path.key, :backend),
+    device::AbstractPlaneDevice=getfield(path.key, :device))
     required = PathResultKey(source_geometry, spectral_sampling, radiometry,
         optical_model, sampling_contract, propagation_model, output_plane,
         revisions, backend, device)
@@ -630,14 +831,12 @@ function require_path_result(path::PreparedPathExecutor;
 end
 
 function PreparedAcquisitionOwner(definition::AcquisitionDefinition,
-    path::PreparedPathExecutor, execution, products::AcquisitionProducts;
-    required_key::PathResultKey=path.key)
+    path::PreparedPathExecutor, execution, products::AcquisitionProducts)
     acquisition_path_id(definition) == path_id(path.definition) || throw(
         PlantPreparationError(:acquisition, :unknown_path,
             "acquisition $(definition.id) does not reference prepared path $(path.definition.id)"))
-    _require_path_result_key(path.key, required_key)
-    return PreparedAcquisitionOwner{typeof(definition),typeof(path.key),
-        typeof(path.result),typeof(execution),typeof(products)}(
+    validate_acquisition_execution_binding(execution, path.result, products)
+    return PreparedAcquisitionOwner(_PREPARED_ACQUISITION_OWNER_TOKEN,
         definition, path.key, path.result, execution, products)
 end
 
@@ -655,9 +854,7 @@ end
 function execute_acquisition!(products::AcquisitionProducts{<:AbstractArray,
     Nothing}, path_result::IntensityMap,
     execution::FrameAcquisitionExecution, rng::AbstractRNG)
-    products.observation === execution.observation || throw(
-        PlantPreparationError(:acquisition, :prepared_binding,
-            "acquisition observation does not match its prepared storage"))
+    validate_acquisition_execution_binding(execution, path_result, products)
     frame = capture!(execution.detector, path_result, execution.plan, rng)
     copyto!(products.observation, frame)
     return products
@@ -666,9 +863,7 @@ end
 function execute_acquisition!(products::AcquisitionProducts{O,Nothing},
     path_result,
     execution::WFSAcquisitionExecution{A,Nothing,O,Nothing}, rng) where {A,O}
-    products.observation === execution.observation || throw(
-        PlantPreparationError(:acquisition, :prepared_binding,
-            "WFS observation does not match its prepared acquisition"))
+    validate_acquisition_execution_binding(execution, path_result, products)
     acquire_wfs_observation!(products.observation, path_result,
         execution.acquisition, rng)
     return products
@@ -679,10 +874,7 @@ function execute_acquisition!(products::AcquisitionProducts{O,M},
     execution::WFSAcquisitionExecution{A,E,O,M}, rng) where {
     A,E,O,M<:WFSMeasurement,
 }
-    products.observation === execution.observation &&
-        products.measurement === execution.measurement || throw(
-        PlantPreparationError(:acquisition, :prepared_binding,
-            "WFS products do not match their prepared acquisition"))
+    validate_acquisition_execution_binding(execution, path_result, products)
     acquire_wfs_observation!(products.observation, path_result,
         execution.acquisition, rng)
     estimate_wfs_measurement!(products.measurement, products.observation,
@@ -690,11 +882,19 @@ function execute_acquisition!(products::AcquisitionProducts{O,M},
     return products
 end
 
+struct _PreparedPlantToken end
+const _PREPARED_PLANT_TOKEN = _PreparedPlantToken()
+
 """Prepared, schedule-free plant with concrete path and acquisition tuples."""
 struct PreparedPlant{D,P<:Tuple,A<:Tuple}
     definition::D
     paths::P
     acquisitions::A
+
+    function PreparedPlant(::_PreparedPlantToken, definition::D, paths::P,
+        acquisitions::A) where {D,P<:Tuple,A<:Tuple}
+        return new{D,P,A}(definition, paths, acquisitions)
+    end
 end
 
 @inline prepared_paths(plant::PreparedPlant) = plant.paths
@@ -740,6 +940,8 @@ function _require_prepared_path_executor(prepared::PreparedPathExecutor,
     prepared.telescope === telescope || throw(PlantPreparationError(:path,
         :prepared_binding,
         "prepared path does not retain its plant telescope"))
+    validate_path_execution_binding(prepared.execution, prepared.input,
+        prepared.result)
     return prepared
 end
 
@@ -777,6 +979,8 @@ function _require_prepared_acquisition_owner(
     prepared.path_result === path.result || throw(PlantPreparationError(
         :acquisition, :prepared_binding,
         "prepared acquisition does not retain the exact path result"))
+    validate_acquisition_execution_binding(prepared.execution,
+        prepared.path_result, prepared.products)
     return prepared
 end
 
@@ -837,5 +1041,6 @@ function prepare_plant(definition::PlantDefinition)
         plant_telescope(definition), plant_atmosphere(definition))
     acquisitions = _prepare_acquisition_owners(
         acquisition_definitions(definition), paths)
-    return PreparedPlant(definition, paths, acquisitions)
+    return PreparedPlant(_PREPARED_PLANT_TOKEN, definition, paths,
+        acquisitions)
 end
