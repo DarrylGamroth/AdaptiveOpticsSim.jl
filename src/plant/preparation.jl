@@ -430,6 +430,118 @@ function validate_path_execution_binding(execution, input, result)
         "prepared path execution type $(typeof(execution)) does not validate its input/result binding"))
 end
 
+"""
+    AtmosphereIndependentPath()
+
+Explicit materialization policy for a path whose prepared input does not read
+the plant atmosphere. This is an assertion by the optical-model extension, not
+a fallback for an unsupported atmosphere-dependent input.
+"""
+struct AtmosphereIndependentPath end
+
+"""
+    PreparedPupilOPDMaterialization
+
+Prepared binding from one timed atmosphere direction to the exact path-local
+`PupilFunction` whose OPD is materialized before optical-path execution.
+Construct it with `prepare_pupil_opd_materialization`.
+"""
+struct PreparedPupilOPDMaterialization{R,P,S}
+    renderer::R
+    destination::P
+    source::S
+end
+
+"""
+    prepare_pupil_opd_materialization(atmosphere, telescope, source, pupil)
+
+Prepare current-epoch atmospheric OPD materialization for one frozen path
+source and exact caller-owned pupil input.
+"""
+function prepare_pupil_opd_materialization(
+    atmosphere::AbstractTimedAtmosphere,
+    telescope::Telescope,
+    source::AbstractSource,
+    pupil::PupilFunction,
+)
+    renderer = prepare_atmosphere_renderer(atmosphere, telescope, source;
+        T=eltype(pupil.opd))
+    _validate_atmosphere_renderer_binding(renderer, atmosphere)
+    _validate_atmosphere_destination(pupil, renderer)
+    return PreparedPupilOPDMaterialization(renderer, pupil, source)
+end
+
+"""Qualified extension seam for prepared materialization-binding validation."""
+function validate_path_materialization_binding(materialization, input,
+    atmosphere, source)
+    throw(PlantPreparationError(:path,
+        :unsupported_materialization_binding,
+        "prepared path materialization type $(typeof(materialization)) does not validate its atmosphere/input binding"))
+end
+
+@inline validate_path_materialization_binding(
+    ::AtmosphereIndependentPath, input, atmosphere, source) = nothing
+
+function validate_path_materialization_binding(
+    materialization::PreparedPupilOPDMaterialization,
+    input::PupilFunction,
+    atmosphere::AbstractTimedAtmosphere,
+    source::AbstractSource,
+)
+    materialization.destination === input || throw(PlantPreparationError(
+        :path, :prepared_binding,
+        "pupil-OPD materialization does not retain the exact path input"))
+    materialization.source === source || throw(PlantPreparationError(
+        :path, :prepared_binding,
+        "pupil-OPD materialization does not retain the exact frozen source"))
+    _validate_atmosphere_renderer_binding(materialization.renderer,
+        atmosphere)
+    _validate_atmosphere_destination(input, materialization.renderer)
+    return nothing
+end
+
+"""Qualified extension seam for mutation-free current-epoch preflight."""
+function validate_path_materialization(materialization, input, atmosphere,
+    epoch)
+    throw(PlantPreparationError(:path, :unsupported_materialization,
+        "prepared path materialization type $(typeof(materialization)) does not validate current-epoch materialization"))
+end
+
+@inline validate_path_materialization(
+    ::AtmosphereIndependentPath, input, atmosphere, epoch) = input
+
+function validate_path_materialization(
+    materialization::PreparedPupilOPDMaterialization,
+    input::PupilFunction,
+    atmosphere::AbstractTimedAtmosphere,
+    epoch::AtmosphereEpoch,
+)
+    validate_path_materialization_binding(materialization, input,
+        atmosphere, materialization.source)
+    validate_atmosphere_rendering(input, materialization.renderer,
+        atmosphere, epoch)
+    return input
+end
+
+"""Qualified extension seam for materializing one validated path input."""
+function materialize_path_input!(materialization, input, atmosphere, epoch)
+    throw(PlantPreparationError(:path, :unsupported_materialization,
+        "prepared path materialization type $(typeof(materialization)) does not implement materialize_path_input!"))
+end
+
+@inline materialize_path_input!(
+    ::AtmosphereIndependentPath, input, atmosphere, epoch) = input
+
+function materialize_path_input!(
+    materialization::PreparedPupilOPDMaterialization,
+    input::PupilFunction,
+    atmosphere::AbstractTimedAtmosphere,
+    epoch::AtmosphereEpoch,
+)
+    return render_atmosphere!(input, materialization.renderer, atmosphere,
+        epoch)
+end
+
 struct _PreparedPathExecutorToken end
 const _PREPARED_PATH_EXECUTOR_TOKEN = _PreparedPathExecutorToken()
 
@@ -437,29 +549,35 @@ const _PREPARED_PATH_EXECUTOR_TOKEN = _PreparedPathExecutorToken()
     PreparedPathExecutor
 
 Concrete single-writer owner for one prepared optical path. `input` and
-`result` are explicit path-local products, while `execution` owns or references
-the concrete prepared propagation/front-end workspace used to update `result`.
+`result` are explicit path-local products, `materialization` binds the path's
+atmosphere-dependent input operation, and `execution` owns or references the
+concrete prepared propagation/front-end workspace used to update `result`.
 """
-struct PreparedPathExecutor{D,S,T,I,R,E,K<:PathResultKey}
+struct PreparedPathExecutor{D,S,T,A,I,R,M,E,K<:PathResultKey}
     definition::D
     source::S
     telescope::T
+    atmosphere::A
     input::I
     result::R
+    materialization::M
     execution::E
     key::K
 
     function PreparedPathExecutor(::_PreparedPathExecutorToken,
-        definition::D, source::S, telescope::T, input::I, result::R,
-        execution::E, key::K) where {D,S,T,I,R,E,K<:PathResultKey}
-        return new{D,S,T,I,R,E,K}(definition, source, telescope, input,
-            result, execution, key)
+        definition::D, source::S, telescope::T, atmosphere::A, input::I,
+        result::R, materialization::M, execution::E, key::K) where {
+        D,S,T,A,I,R,M,E,K<:PathResultKey,
+    }
+        return new{D,S,T,A,I,R,M,E,K}(definition, source, telescope,
+            atmosphere, input, result, materialization, execution, key)
     end
 end
 
 function PreparedPathExecutor(definition::OpticalPathDefinition,
-    source::AbstractSource, telescope::AbstractTelescope, input, result,
-    execution;
+    source::AbstractSource, telescope::AbstractTelescope,
+    atmosphere::AbstractAtmosphere, input, result, execution;
+    materialization,
     optical_model,
     sampling_contract::AbstractOpticalSamplingContract=
         InstantaneousOpticalSample(),
@@ -480,6 +598,8 @@ function PreparedPathExecutor(definition::OpticalPathDefinition,
             "prepared path and telescope occupy different physical devices"))
     revision = aperture_revision(telescope)
     _require_path_input_revisions(input, revision)
+    validate_path_materialization_binding(materialization, input,
+        atmosphere, source)
     validate_path_execution_binding(execution, input, result)
     revisions = (telescope=revision, model=model_revisions)
     key = PathResultKey(
@@ -495,12 +615,15 @@ function PreparedPathExecutor(definition::OpticalPathDefinition,
         device,
     )
     return PreparedPathExecutor(_PREPARED_PATH_EXECUTOR_TOKEN, definition,
-        source, telescope, input, result, execution, key)
+        source, telescope, atmosphere, input, result, materialization,
+        execution, key)
 end
 
 @inline path_input(path::PreparedPathExecutor) = path.input
 @inline path_result(path::PreparedPathExecutor) = path.result
 @inline path_result_key(path::PreparedPathExecutor) = path.key
+@inline path_materialization(path::PreparedPathExecutor) =
+    path.materialization
 
 function _require_current_path_revision(path::PreparedPathExecutor)
     revision = getfield(getfield(path.key, :revisions), :telescope)
@@ -511,9 +634,43 @@ function _require_current_path_revision(path::PreparedPathExecutor)
     return nothing
 end
 
+function _require_current_path_binding(path::PreparedPathExecutor)
+    _require_current_path_revision(path)
+    validate_path_materialization_binding(path.materialization, path.input,
+        path.atmosphere, path.source)
+    validate_path_execution_binding(path.execution, path.input, path.result)
+    return nothing
+end
+
+@inline _require_timed_path_atmosphere(
+    atmosphere::AbstractTimedAtmosphere) = atmosphere
+
+function _require_timed_path_atmosphere(atmosphere::AbstractAtmosphere)
+    throw(PlantPreparationError(:path, :untimed_atmosphere,
+        "current-epoch path materialization requires a timed atmosphere"))
+end
+
+"""
+    materialize_path_input!(path, epoch)
+
+Materialize one path's atmosphere-dependent input from the explicitly supplied
+current epoch. This operation never advances the atmosphere.
+"""
+function materialize_path_input!(path::PreparedPathExecutor,
+    epoch::AtmosphereEpoch)
+    _require_current_path_binding(path)
+    atmosphere = _require_timed_path_atmosphere(path.atmosphere)
+    _validate_epoch_identity(atmosphere_identity(atmosphere), atmosphere,
+        epoch)
+    validate_path_materialization(path.materialization, path.input,
+        atmosphere, epoch)
+    return materialize_path_input!(path.materialization, path.input,
+        atmosphere, epoch)
+end
+
 """Execute one already prepared path without selecting or advancing time."""
 function execute_path!(path::PreparedPathExecutor)
-    _require_current_path_revision(path)
+    _require_current_path_binding(path)
     return execute_path!(path.result, path.input, path.execution)
 end
 
@@ -925,12 +1082,12 @@ function prepare_path_executor(definition::OpticalPathDefinition,
     prepared = prepare_path_executor(path_model(definition), definition,
         source, telescope, atmosphere)
     return _require_prepared_path_executor(prepared, definition, source,
-        telescope)
+        telescope, atmosphere)
 end
 
 function _require_prepared_path_executor(prepared::PreparedPathExecutor,
     definition::OpticalPathDefinition, source::AbstractSource,
-    telescope::AbstractTelescope)
+    telescope::AbstractTelescope, atmosphere::AbstractAtmosphere)
     prepared.definition === definition || throw(PlantPreparationError(
         :path, :prepared_binding,
         "prepared path does not retain its exact definition"))
@@ -940,6 +1097,11 @@ function _require_prepared_path_executor(prepared::PreparedPathExecutor,
     prepared.telescope === telescope || throw(PlantPreparationError(:path,
         :prepared_binding,
         "prepared path does not retain its plant telescope"))
+    prepared.atmosphere === atmosphere || throw(PlantPreparationError(:path,
+        :prepared_binding,
+        "prepared path does not retain its plant atmosphere"))
+    validate_path_materialization_binding(prepared.materialization,
+        prepared.input, prepared.atmosphere, prepared.source)
     validate_path_execution_binding(prepared.execution, prepared.input,
         prepared.result)
     return prepared
@@ -947,7 +1109,8 @@ end
 
 
 function _require_prepared_path_executor(prepared,
-    ::OpticalPathDefinition, ::AbstractSource, ::AbstractTelescope)
+    ::OpticalPathDefinition, ::AbstractSource, ::AbstractTelescope,
+    ::AbstractAtmosphere)
     throw(PlantPreparationError(
         :path, :invalid_preparation,
         "path model preparation must return PreparedPathExecutor; got $(typeof(prepared))"))
@@ -1043,4 +1206,272 @@ function prepare_plant(definition::PlantDefinition)
         acquisition_definitions(definition), paths)
     return PreparedPlant(_PREPARED_PLANT_TOKEN, definition, paths,
         acquisitions)
+end
+
+struct _PreparedAcquisitionSelectionToken end
+const _PREPARED_ACQUISITION_SELECTION_TOKEN =
+    _PreparedAcquisitionSelectionToken()
+
+"""
+    PreparedAcquisitionSelection
+
+Cold, canonical selection of acquisition owners and their unique optical
+paths. The selected paths and acquisitions use stable-ID order regardless of
+declaration or caller-selection order. This value owns no schedule or RNG
+streams.
+"""
+struct PreparedAcquisitionSelection{P,S<:Tuple,A<:Tuple}
+    plant::P
+    paths::S
+    acquisitions::A
+
+    function PreparedAcquisitionSelection(
+        ::_PreparedAcquisitionSelectionToken,
+        plant::P,
+        paths::S,
+        acquisitions::A,
+    ) where {P,S<:Tuple,A<:Tuple}
+        return new{P,S,A}(plant, paths, acquisitions)
+    end
+end
+
+@inline prepared_paths(selection::PreparedAcquisitionSelection) =
+    selection.paths
+@inline prepared_acquisitions(selection::PreparedAcquisitionSelection) =
+    selection.acquisitions
+
+@inline _selected_acquisition_id(id::AcquisitionID) = id
+@inline _selected_acquisition_id(name::Symbol) = AcquisitionID(name)
+
+function _selected_acquisition_id(value)
+    throw(PlantPreparationError(:acquisition, :invalid_selection,
+        "selected acquisition identity must be a Symbol or AcquisitionID; got $(typeof(value))"))
+end
+
+function _requested_acquisition_ids(ids)
+    isempty(ids) && throw(PlantPreparationError(:acquisition,
+        :empty_selection, "an acquisition selection must not be empty"))
+    requested = Set{AcquisitionID}()
+    for value in ids
+        id = _selected_acquisition_id(value)
+        id in requested && throw(PlantPreparationError(:acquisition,
+            :duplicate_selection,
+            "acquisition selection contains duplicate identity $id"))
+        push!(requested, id)
+    end
+    return requested
+end
+
+function _canonical_selected_acquisitions(plant::PreparedPlant, requested)
+    selected = Any[]
+    for acquisition in plant.acquisitions
+        acquisition_id(acquisition.definition) in requested &&
+            push!(selected, acquisition)
+    end
+    length(selected) == length(requested) || begin
+        for id in requested
+            prepared_acquisition(plant, id)
+        end
+        throw(PlantPreparationError(:acquisition, :unknown_id,
+            "acquisition selection contains an unknown identity"))
+    end
+    sort!(selected; by=acquisition ->
+        acquisition_id(acquisition.definition).name)
+    return Tuple(selected)
+end
+
+function _canonical_selected_paths(plant::PreparedPlant, acquisitions::Tuple)
+    requested = Set{OpticalPathID}()
+    for acquisition in acquisitions
+        push!(requested, acquisition_path_id(acquisition.definition))
+    end
+    selected = Any[]
+    for path in plant.paths
+        path_id(path.definition) in requested && push!(selected, path)
+    end
+    length(selected) == length(requested) || throw(PlantPreparationError(
+        :path, :prepared_binding,
+        "selected acquisitions do not resolve to their prepared paths"))
+    sort!(selected; by=path -> path_id(path.definition).name)
+    return Tuple(selected)
+end
+
+function _prepare_acquisition_selection(plant::PreparedPlant, ids)
+    requested = _requested_acquisition_ids(ids)
+    acquisitions = _canonical_selected_acquisitions(plant, requested)
+    paths = _canonical_selected_paths(plant, acquisitions)
+    return PreparedAcquisitionSelection(
+        _PREPARED_ACQUISITION_SELECTION_TOKEN, plant, paths, acquisitions)
+end
+
+"""
+    prepare_acquisition_selection(plant, ids)
+
+Resolve a nonempty tuple or vector of acquisition identities to a canonical,
+deduplicated path set and exact acquisition owners. Duplicate and unknown
+identities are rejected during this cold operation.
+"""
+prepare_acquisition_selection(plant::PreparedPlant, ids::Tuple) =
+    _prepare_acquisition_selection(plant, ids)
+
+prepare_acquisition_selection(plant::PreparedPlant, ids::AbstractVector) =
+    _prepare_acquisition_selection(plant, ids)
+
+prepare_acquisition_selection(plant::PreparedPlant,
+    id::Union{Symbol,AcquisitionID}) =
+    _prepare_acquisition_selection(plant, (id,))
+
+function prepare_acquisition_selection(plant::PreparedPlant, ids)
+    throw(PlantPreparationError(:acquisition, :invalid_selection,
+        "acquisition selection must be one identity, a Tuple, or an AbstractVector; got $(typeof(ids))"))
+end
+
+@inline _require_selected_path_bindings(::Tuple{}, atmosphere) = nothing
+
+@inline function _require_selected_path_bindings(paths::Tuple, atmosphere)
+    path = first(paths)
+    path.atmosphere === atmosphere || throw(PlantPreparationError(:path,
+        :prepared_binding,
+        "selected path does not retain the prepared plant atmosphere"))
+    _require_current_path_binding(path)
+    return _require_selected_path_bindings(Base.tail(paths), atmosphere)
+end
+
+@inline _require_selected_acquisition_bindings(::Tuple{}) = nothing
+
+@inline function _require_selected_acquisition_bindings(
+    acquisitions::Tuple)
+    acquisition = first(acquisitions)
+    validate_acquisition_execution_binding(acquisition.execution,
+        acquisition.path_result, acquisition.products)
+    return _require_selected_acquisition_bindings(Base.tail(acquisitions))
+end
+
+function _require_selection_bindings(selection::PreparedAcquisitionSelection)
+    atmosphere = plant_atmosphere(selection.plant.definition)
+    _require_selected_path_bindings(selection.paths, atmosphere)
+    _require_selected_acquisition_bindings(selection.acquisitions)
+    return atmosphere
+end
+
+@inline _require_acquisition_rng(::AbstractRNG) = nothing
+
+function _require_acquisition_rng(rng)
+    throw(PlantPreparationError(:acquisition, :invalid_rng,
+        "selected acquisition RNGs must implement AbstractRNG; got $(typeof(rng))"))
+end
+
+@inline _require_acquisition_rngs(::Tuple{}) = nothing
+
+@inline function _require_acquisition_rngs(rngs::Tuple)
+    _require_acquisition_rng(first(rngs))
+    return _require_acquisition_rngs(Base.tail(rngs))
+end
+
+function _require_selected_rngs(selection::PreparedAcquisitionSelection,
+    rngs::Tuple)
+    length(rngs) == length(selection.acquisitions) || throw(
+        PlantPreparationError(:acquisition, :rng_count,
+            "selected acquisition RNG count must match the canonical acquisition count"))
+    _require_acquisition_rngs(rngs)
+    return nothing
+end
+
+@inline _validate_selected_materializations(
+    ::Tuple{}, atmosphere, epoch) = nothing
+
+@inline function _validate_selected_materializations(paths::Tuple,
+    atmosphere, epoch)
+    path = first(paths)
+    validate_path_materialization(path.materialization, path.input,
+        atmosphere, epoch)
+    return _validate_selected_materializations(Base.tail(paths),
+        atmosphere, epoch)
+end
+
+@inline _materialize_selected_paths!(::Tuple{}, atmosphere, epoch) = nothing
+
+@inline function _materialize_selected_paths!(paths::Tuple, atmosphere,
+    epoch)
+    path = first(paths)
+    materialize_path_input!(path.materialization, path.input, atmosphere,
+        epoch)
+    return _materialize_selected_paths!(Base.tail(paths), atmosphere, epoch)
+end
+
+@inline _execute_selected_paths!(::Tuple{}) = nothing
+
+@inline function _execute_selected_paths!(paths::Tuple)
+    execute_path!(first(paths))
+    return _execute_selected_paths!(Base.tail(paths))
+end
+
+@inline _execute_selected_acquisitions!(::Tuple{}, ::Tuple{}) = nothing
+
+@inline function _execute_selected_acquisitions!(acquisitions::Tuple,
+    rngs::Tuple)
+    execute_acquisition!(first(acquisitions), first(rngs))
+    return _execute_selected_acquisitions!(Base.tail(acquisitions),
+        Base.tail(rngs))
+end
+
+@inline _require_selection_atmosphere(
+    atmosphere::AbstractTimedAtmosphere) = atmosphere
+
+function _require_selection_atmosphere(atmosphere::AbstractAtmosphere)
+    throw(PlantPreparationError(:plant, :untimed_atmosphere,
+        "selected current-epoch execution requires a timed plant atmosphere"))
+end
+
+function _validate_selection_epoch!(selection::PreparedAcquisitionSelection,
+    atmosphere::AbstractTimedAtmosphere, epoch::AtmosphereEpoch)
+    _validate_epoch_identity(atmosphere_identity(atmosphere), atmosphere,
+        epoch)
+    _validate_selected_materializations(selection.paths, atmosphere, epoch)
+    return epoch
+end
+
+function _execute_selected_epoch!(selection::PreparedAcquisitionSelection,
+    atmosphere::AbstractTimedAtmosphere, epoch::AtmosphereEpoch, rngs::Tuple)
+    _materialize_selected_paths!(selection.paths, atmosphere, epoch)
+    _execute_selected_paths!(selection.paths)
+    _execute_selected_acquisitions!(selection.acquisitions, rngs)
+    return selection
+end
+
+"""
+    execute_acquisition_selection!(selection, epoch, acquisition_rngs)
+
+Materialize every unique selected path from one explicit current atmosphere
+epoch, then form each path exactly once and execute the canonical acquisition
+tuple. `acquisition_rngs` is a tuple aligned with `prepared_acquisitions`;
+stable owner-derived RNGs are a separate preparation layer.
+"""
+function execute_acquisition_selection!(
+    selection::PreparedAcquisitionSelection,
+    epoch::AtmosphereEpoch, rngs::Tuple)
+    _require_selected_rngs(selection, rngs)
+    atmosphere = _require_selection_atmosphere(
+        _require_selection_bindings(selection))
+    _validate_selection_epoch!(selection, atmosphere, epoch)
+    return _execute_selected_epoch!(selection, atmosphere, epoch, rngs)
+end
+
+"""
+    execute_acquisition_selection_at!(selection, model_time, atmosphere_rng,
+        acquisition_rngs)
+
+Preflight all selected owner bindings, advance the one shared atmosphere to an
+explicit absolute model time, and execute the selection from the newly current
+epoch. Equal-time execution reuses the current publication.
+"""
+function execute_acquisition_selection_at!(
+    selection::PreparedAcquisitionSelection,
+    model_time::Real, atmosphere_rng::AbstractRNG, rngs::Tuple)
+    _require_selected_rngs(selection, rngs)
+    atmosphere = _require_selection_atmosphere(
+        _require_selection_bindings(selection))
+    epoch = advance_to!(atmosphere, model_time, atmosphere_rng)
+    _validate_selection_epoch!(selection, atmosphere, epoch)
+    return _execute_selected_epoch!(selection, atmosphere, epoch, rngs)
 end

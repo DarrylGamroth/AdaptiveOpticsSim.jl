@@ -52,10 +52,25 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :PlantDefinition)
     @test Base.isexported(AdaptiveOpticsSim, :PreparedPlant)
     @test Base.isexported(AdaptiveOpticsSim, :prepare_plant)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :prepare_pupil_opd_materialization)
+    @test Base.isexported(AdaptiveOpticsSim, :materialize_path_input!)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :prepare_acquisition_selection)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :execute_acquisition_selection!)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :execute_acquisition_selection_at!)
     @test Base.isexported(AdaptiveOpticsSim, :execute_path!)
     @test Base.isexported(AdaptiveOpticsSim, :execute_acquisition!)
     @test !Base.isexported(AdaptiveOpticsSim, :PreparedPathExecutor)
     @test !Base.isexported(AdaptiveOpticsSim, :PreparedAcquisitionOwner)
+    @test !Base.isexported(AdaptiveOpticsSim,
+        :PreparedAcquisitionSelection)
+    @test !Base.isexported(AdaptiveOpticsSim,
+        :PreparedPupilOPDMaterialization)
+    @test !Base.isexported(AdaptiveOpticsSim,
+        :validate_atmosphere_rendering)
     @test !Base.isexported(AdaptiveOpticsSim, :require_path_result)
     @test Base.isexported(AdaptiveOpticsSim, :path_definition)
     @test Base.isexported(AdaptiveOpticsSim, :acquisition_definition)

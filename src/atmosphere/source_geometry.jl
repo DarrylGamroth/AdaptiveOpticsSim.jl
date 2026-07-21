@@ -404,6 +404,48 @@ function _validate_atmosphere_destination(dest::PupilFunction,
     return dest.opd
 end
 
+function _validate_atmosphere_renderer_binding(
+    renderer::AtmosphereDirectionRenderer,
+    atm::AbstractTimedAtmosphere,
+)
+    renderer.identity === atmosphere_identity(atm) || throw(
+        AtmosphereEpochError(
+            "prepared renderer belongs to a different atmosphere"))
+    n_layers = length(atmosphere_layers(atm))
+    (length(renderer.shift_x) == n_layers &&
+        length(renderer.shift_y) == n_layers &&
+        length(renderer.footprint_scale) == n_layers) || throw(
+        AtmosphereEpochError(
+            "atmosphere layer shape changed after renderer preparation"))
+    metadata = renderer.output_metadata
+    size(renderer.pupil) == metadata.dimensions || throw(
+        AtmosphereEpochError(
+            "prepared renderer pupil shape changed after preparation"))
+    typeof(backend(renderer.pupil)) === typeof(metadata.backend) || throw(
+        AtmosphereEpochError(
+            "prepared renderer pupil backend changed after preparation"))
+    plane_device(renderer.pupil) == metadata.device || throw(
+        AtmosphereEpochError(
+            "prepared renderer pupil device changed after preparation"))
+    return renderer
+end
+
+"""
+    validate_atmosphere_rendering(destination, renderer, atmosphere, epoch)
+
+Validate the complete current-epoch rendering binding without mutating the
+destination. Serial plant execution uses this preflight operation for every
+selected path before materializing any path input.
+"""
+function validate_atmosphere_rendering(dest,
+    renderer::AtmosphereDirectionRenderer, atm::AbstractTimedAtmosphere,
+    epoch::AtmosphereEpoch)
+    _validate_epoch_identity(renderer.identity, atm, epoch)
+    _validate_atmosphere_renderer_binding(renderer, atm)
+    _validate_atmosphere_destination(dest, renderer)
+    return dest
+end
+
 function accumulate_rendered_layers!(opd::AbstractMatrix,
     layers, shift_x::AbstractVector, shift_y::AbstractVector,
     footprint_scale::AbstractVector)
@@ -420,9 +462,6 @@ end
 function render_atmosphere_opd_impl!(dest::AbstractMatrix,
     renderer::AtmosphereDirectionRenderer, atm::AbstractTimedAtmosphere)
     layers = atmosphere_layers(atm)
-    length(layers) == length(renderer.shift_x) ||
-        throw(AtmosphereEpochError(
-            "atmosphere layer shape changed after renderer preparation"))
     accumulate_rendered_layers!(dest, layers, renderer.shift_x,
         renderer.shift_y, renderer.footprint_scale)
     dest .*= renderer.pupil
@@ -438,8 +477,7 @@ and physical-device compatibility are checked before output mutation.
 function render_atmosphere_opd!(dest::AbstractMatrix,
     renderer::AtmosphereDirectionRenderer, atm::AbstractTimedAtmosphere,
     epoch::AtmosphereEpoch)
-    _validate_epoch_identity(renderer.identity, atm, epoch)
-    _validate_atmosphere_destination(dest, renderer)
+    validate_atmosphere_rendering(dest, renderer, atm, epoch)
     return render_atmosphere_opd_impl!(dest, renderer, atm)
 end
 
@@ -452,8 +490,8 @@ caller-owned `PupilFunction`. Validation completes before output mutation.
 function render_atmosphere!(dest::PupilFunction,
     renderer::AtmosphereDirectionRenderer, atm::AbstractTimedAtmosphere,
     epoch::AtmosphereEpoch)
-    _validate_epoch_identity(renderer.identity, atm, epoch)
-    opd = _validate_atmosphere_destination(dest, renderer)
+    validate_atmosphere_rendering(dest, renderer, atm, epoch)
+    opd = dest.opd
     render_atmosphere_opd_impl!(opd, renderer, atm)
     return dest
 end

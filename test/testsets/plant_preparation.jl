@@ -5,9 +5,238 @@ struct DirectSciencePathModel{R}
     revision::R
 end
 
+function run_selected_acquisition_materialization_tests()
+@testset "Selected acquisition atmosphere materialization" begin
+    T = Float64
+    telescope = Telescope(resolution=8, diameter=T(4),
+        central_obstruction=zero(T), T=T)
+    atmosphere = MultiLayerAtmosphere(telescope;
+        r0=T(0.2),
+        L0=T(25),
+        fractional_cn2=T[0.65, 0.35],
+        wind_speed=T[7, 3],
+        wind_direction=T[15, 110],
+        altitude=T[0, 6_000],
+        T=T,
+    )
+    science_source = Source(band=:custom, wavelength=T(0.8e-6),
+        photon_irradiance=T(3), T=T)
+    ngs_source = Source(band=:custom, wavelength=T(0.7e-6),
+        photon_irradiance=T(4), coordinates=(T(2), T(35)), T=T)
+    lgs_source = LGSSource(wavelength=T(589e-9),
+        photon_irradiance=T(5), coordinates=(T(4), T(120)),
+        altitude=T(90_000), T=T)
+
+    science_path_definition = OpticalPathDefinition(:science,
+        science_source, CountedDirectSciencePathModel(2, UInt(21)))
+    ngs_path_definition = OpticalPathDefinition(:ngs, ngs_source,
+        ShackHartmannPlantPathModel(2, 4, UInt(22)))
+    lgs_path_definition = OpticalPathDefinition(:lgs, lgs_source,
+        DirectSciencePathModel(2, UInt(23)))
+    slow_definition = AcquisitionDefinition(:slow_science, :science,
+        FramePlantAcquisitionModel(T(0.75), MatchingPlantPath()))
+    ngs_definition = AcquisitionDefinition(:ngs_frame, :ngs,
+        ContractWFSPlantAcquisitionModel(T(0.5)))
+    fast_definition = AcquisitionDefinition(:fast_science, :science,
+        FramePlantAcquisitionModel(T(0.25), MatchingPlantPath()))
+    lgs_definition = AcquisitionDefinition(:lgs_frame, :lgs,
+        FramePlantAcquisitionModel(T(0.5), MatchingPlantPath()))
+
+    definition = PlantDefinition(; telescope, atmosphere,
+        paths=(science_path_definition, ngs_path_definition,
+            lgs_path_definition),
+        acquisitions=(slow_definition, ngs_definition, fast_definition,
+            lgs_definition))
+    plant = prepare_plant(definition)
+    selection = prepare_acquisition_selection(plant,
+        (:lgs_frame, :fast_science, :ngs_frame, :slow_science))
+    ordered_selection = prepare_acquisition_selection(plant,
+        [:slow_science, :ngs_frame, :fast_science, :lgs_frame])
+
+    @test selection isa AdaptiveOpticsSim.PreparedAcquisitionSelection
+    @test map(path -> path_id(path.definition), prepared_paths(selection)) ==
+        (OpticalPathID(:lgs), OpticalPathID(:ngs), OpticalPathID(:science))
+    @test map(owner -> acquisition_id(owner.definition),
+        prepared_acquisitions(selection)) == (
+        AcquisitionID(:fast_science),
+        AcquisitionID(:lgs_frame),
+        AcquisitionID(:ngs_frame),
+        AcquisitionID(:slow_science),
+    )
+    @test prepared_paths(selection) == prepared_paths(ordered_selection)
+    @test prepared_acquisitions(selection) ==
+        prepared_acquisitions(ordered_selection)
+
+    assert_plant_preparation_error(
+        () -> prepare_acquisition_selection(plant, ()),
+        :acquisition, :empty_selection)
+    assert_plant_preparation_error(
+        () -> prepare_acquisition_selection(plant,
+            (:fast_science, :fast_science)),
+        :acquisition, :duplicate_selection)
+    assert_plant_preparation_error(
+        () -> prepare_acquisition_selection(plant, (:missing,)),
+        :acquisition, :unknown_id)
+    assert_plant_preparation_error(
+        () -> prepare_acquisition_selection(plant, Set([:fast_science])),
+        :acquisition, :invalid_selection)
+
+    for path in prepared_paths(selection)
+        fill!(path_input(path).opd, T(17))
+    end
+    rngs = (Xoshiro(0x701), Xoshiro(0x702), Xoshiro(0x703),
+        Xoshiro(0x704))
+    @test @inferred(execute_acquisition_selection_at!(selection, T(0.01),
+        Xoshiro(0x700), rngs)) === selection
+    epoch = current_epoch(atmosphere)
+    @test epoch_time(epoch) == T(0.01)
+    @test epoch_sequence(epoch) == UInt64(1)
+
+    science_path = prepared_path(plant, :science)
+    ngs_path = prepared_path(plant, :ngs)
+    lgs_path = prepared_path(plant, :lgs)
+    @test science_path.execution.executions[] == 1
+    @test all(path -> !all(==(T(17)), path_input(path).opd),
+        prepared_paths(selection))
+    @test path_input(science_path).opd != path_input(ngs_path).opd
+    @test path_input(ngs_path).opd != path_input(lgs_path).opd
+
+    slow = prepared_acquisition(plant, :slow_science)
+    fast = prepared_acquisition(plant, :fast_science)
+    @test slow.path_result === fast.path_result === path_result(science_path)
+    @test acquisition_observation(slow) ≈
+        T(3) .* acquisition_observation(fast) atol=T(1e-11) rtol=T(1e-11)
+
+    reordered_definition = PlantDefinition(; telescope, atmosphere,
+        paths=(lgs_path_definition, ngs_path_definition,
+            science_path_definition),
+        acquisitions=(lgs_definition, fast_definition, ngs_definition,
+            slow_definition))
+    reordered_plant = prepare_plant(reordered_definition)
+    reordered_selection = prepare_acquisition_selection(reordered_plant,
+        (:ngs_frame, :slow_science, :lgs_frame, :fast_science))
+    @test map(path -> path_id(path.definition),
+        prepared_paths(reordered_selection)) == map(
+        path -> path_id(path.definition), prepared_paths(selection))
+    @test map(owner -> acquisition_id(owner.definition),
+        prepared_acquisitions(reordered_selection)) == map(
+        owner -> acquisition_id(owner.definition),
+        prepared_acquisitions(selection))
+    reordered_rngs = (Xoshiro(0x711), Xoshiro(0x712), Xoshiro(0x713),
+        Xoshiro(0x714))
+    execute_acquisition_selection!(reordered_selection, epoch,
+        reordered_rngs)
+    for id in (:fast_science, :lgs_frame, :ngs_frame, :slow_science)
+        @test plant_test_observation_values(acquisition_observation(
+            prepared_acquisition(reordered_plant, id))) ≈
+            plant_test_observation_values(acquisition_observation(
+                prepared_acquisition(plant, id)))
+    end
+    @test acquisition_measurement(
+        prepared_acquisition(reordered_plant, :ngs_frame)).storage ≈
+        acquisition_measurement(
+            prepared_acquisition(plant, :ngs_frame)).storage
+
+    materialized_epoch_one = map(
+        path -> copy(path_input(path).opd), prepared_paths(selection))
+    epoch_two = advance_to!(atmosphere, T(0.02), Xoshiro(0x705))
+    @test epoch_sequence(epoch_two) == UInt64(2)
+    @test map(path -> path_input(path).opd,
+        prepared_paths(selection)) == materialized_epoch_one
+
+    path_results_before = map(
+        path -> copy(path_result(path).values), prepared_paths(selection))
+    observations_before = map(
+        owner -> copy(plant_test_observation_values(
+            acquisition_observation(owner))),
+        prepared_acquisitions(selection))
+    @test_throws AtmosphereEpochError execute_acquisition_selection!(
+        selection, epoch,
+        rngs)
+    @test map(path -> path_input(path).opd,
+        prepared_paths(selection)) == materialized_epoch_one
+    @test map(path -> path_result(path).values,
+        prepared_paths(selection)) == path_results_before
+    @test map(owner -> plant_test_observation_values(
+        acquisition_observation(owner)),
+        prepared_acquisitions(selection)) == observations_before
+
+    other_atmosphere = MultiLayerAtmosphere(telescope;
+        r0=T(0.2),
+        L0=T(25),
+        fractional_cn2=T[0.65, 0.35],
+        wind_speed=T[7, 3],
+        wind_direction=T[15, 110],
+        altitude=T[0, 6_000],
+        T=T,
+    )
+    other_epoch = advance_to!(other_atmosphere, T(0.02), Xoshiro(0x706))
+    @test_throws AtmosphereEpochError execute_acquisition_selection!(selection,
+        other_epoch, rngs)
+    @test map(path -> path_input(path).opd,
+        prepared_paths(selection)) == materialized_epoch_one
+
+    assert_plant_preparation_error(
+        () -> execute_acquisition_selection!(selection, epoch_two,
+            (Xoshiro(1),)),
+        :acquisition, :rng_count)
+    @test @inferred(execute_acquisition_selection!(selection, epoch_two,
+        rngs)) ===
+        selection
+    @test science_path.execution.executions[] == 2
+    selected_path_tuple = prepared_paths(selection)
+    @test any(
+        index -> path_input(selected_path_tuple[index]).opd !=
+            materialized_epoch_one[index],
+        eachindex(selected_path_tuple),
+    )
+
+    sequence_before_equal_time = epoch_sequence(current_epoch(atmosphere))
+    execute_acquisition_selection_at!(ordered_selection, T(0.02),
+        Xoshiro(0x707), rngs)
+    @test epoch_sequence(current_epoch(atmosphere)) ==
+        sequence_before_equal_time
+    @test science_path.execution.executions[] == 3
+
+    if coverage_instrumented()
+        @test_skip "selected-execution allocation assertion is disabled under coverage instrumentation"
+    else
+        allocation_epoch = current_epoch(atmosphere)
+        @test prepared_selection_execution_allocations(selection,
+            allocation_epoch, rngs) == 0
+    end
+
+    retained_inputs = map(
+        path -> copy(path_input(path).opd), prepared_paths(selection))
+    retained_results = map(
+        path -> copy(path_result(path).values), prepared_paths(selection))
+    retained_observations = map(
+        owner -> copy(plant_test_observation_values(
+            acquisition_observation(owner))),
+        prepared_acquisitions(selection))
+    set_pupil_reflectivity!(telescope, T(0.9))
+    assert_plant_preparation_error(
+        () -> execute_acquisition_selection!(selection,
+            current_epoch(atmosphere), rngs),
+        :path, :revision)
+    @test map(path -> path_input(path).opd,
+        prepared_paths(selection)) == retained_inputs
+    @test map(path -> path_result(path).values,
+        prepared_paths(selection)) == retained_results
+    @test map(owner -> plant_test_observation_values(
+        acquisition_observation(owner)),
+        prepared_acquisitions(selection)) == retained_observations
+end
+end
+
 struct ShackHartmannPlantPathModel{R}
     n_lenslets::Int
     n_pix_subap::Int
+    revision::R
+end
+
+struct CountedDirectSciencePathModel{R}
+    zero_padding::Int
     revision::R
 end
 
@@ -38,6 +267,11 @@ struct PlantBindingOnlyExecution{I,R}
     result::R
 end
 
+struct CountedDirectImagingExecution{E,C}
+    imaging::E
+    executions::C
+end
+
 struct UnsupportedPlantSource <: AbstractSource end
 
 function AdaptiveOpticsSim.validate_path_execution_binding(
@@ -55,8 +289,24 @@ function AdaptiveOpticsSim.execute_path!(result, input,
     return result
 end
 
+function AdaptiveOpticsSim.validate_path_execution_binding(
+    execution::CountedDirectImagingExecution, input, result)
+    return AdaptiveOpticsSim.validate_path_execution_binding(
+        execution.imaging, input, result)
+end
+
+function AdaptiveOpticsSim.execute_path!(result, input,
+    execution::CountedDirectImagingExecution)
+    AdaptiveOpticsSim.validate_path_execution_binding(execution, input,
+        result)
+    execution.executions[] += 1
+    return AdaptiveOpticsSim.execute_path!(result, input,
+        execution.imaging)
+end
+
 for model in (
     DirectSciencePathModel,
+    CountedDirectSciencePathModel,
     ShackHartmannPlantPathModel,
     FramePlantAcquisitionModel,
     ContractWFSPlantAcquisitionModel,
@@ -69,6 +319,20 @@ for model in (
         ::Type{<:$model},
     ) = ColdPlantModelDefinition()
 end
+
+@inline plant_test_path_materialization(
+    ::PlantPreparationTestAtmosphere,
+    ::Telescope,
+    ::AbstractSource,
+    ::PupilFunction,
+) = AdaptiveOpticsSim.AtmosphereIndependentPath()
+
+@inline plant_test_path_materialization(
+    atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere,
+    telescope::Telescope,
+    source::AbstractSource,
+    pupil::PupilFunction,
+) = prepare_pupil_opd_materialization(atmosphere, telescope, source, pupil)
 
 function AdaptiveOpticsSim.prepare_path_executor(
     ::InvalidPreparedPathModel,
@@ -93,7 +357,7 @@ function AdaptiveOpticsSim.prepare_path_executor(
     definition::OpticalPathDefinition,
     source::AbstractSource,
     telescope::Telescope,
-    ::PlantPreparationTestAtmosphere,
+    atmosphere::AdaptiveOpticsSim.AbstractAtmosphere,
 )
     pupil = PupilFunction(telescope)
     imaging = prepare_direct_imaging(pupil, source;
@@ -102,10 +366,42 @@ function AdaptiveOpticsSim.prepare_path_executor(
         definition,
         source,
         telescope,
+        atmosphere,
         pupil,
         direct_imaging_output(imaging),
         imaging;
+        materialization=plant_test_path_materialization(atmosphere,
+            telescope, source, pupil),
         optical_model=(kind=:direct_imaging,
+            zero_padding=model.zero_padding),
+        propagation_model=:fraunhofer_fft,
+        model_revisions=model.revision,
+    )
+end
+
+
+function AdaptiveOpticsSim.prepare_path_executor(
+    model::CountedDirectSciencePathModel,
+    definition::OpticalPathDefinition,
+    source::AbstractSource,
+    telescope::Telescope,
+    atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere,
+)
+    pupil = PupilFunction(telescope)
+    imaging = prepare_direct_imaging(pupil, source;
+        zero_padding=model.zero_padding)
+    execution = CountedDirectImagingExecution(imaging, Ref(0))
+    return PreparedPathExecutor(
+        definition,
+        source,
+        telescope,
+        atmosphere,
+        pupil,
+        direct_imaging_output(imaging),
+        execution;
+        materialization=prepare_pupil_opd_materialization(atmosphere,
+            telescope, source, pupil),
+        optical_model=(kind=:counted_direct_imaging,
             zero_padding=model.zero_padding),
         propagation_model=:fraunhofer_fft,
         model_revisions=model.revision,
@@ -117,7 +413,7 @@ function AdaptiveOpticsSim.prepare_path_executor(
     definition::OpticalPathDefinition,
     source::AbstractSource,
     telescope::Telescope,
-    ::PlantPreparationTestAtmosphere,
+    atmosphere::AdaptiveOpticsSim.AbstractAtmosphere,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T=T)
@@ -135,9 +431,12 @@ function AdaptiveOpticsSim.prepare_path_executor(
         definition,
         source,
         telescope,
+        atmosphere,
         pupil,
         output,
         execution;
+        materialization=plant_test_path_materialization(atmosphere,
+            telescope, source, pupil),
         optical_model=(kind=:shack_hartmann,
             n_lenslets=model.n_lenslets,
             n_pix_subap=model.n_pix_subap),
@@ -262,6 +561,16 @@ function prepared_acquisition_execution_allocations(
     execute_acquisition!(owner, rng)
     return @allocated execute_acquisition!(owner, rng)
 end
+
+function prepared_selection_execution_allocations(selection,
+    epoch::AtmosphereEpoch, rngs::Tuple)
+    execute_acquisition_selection!(selection, epoch, rngs)
+    return @allocated execute_acquisition_selection!(selection, epoch, rngs)
+end
+
+@inline plant_test_observation_values(values::AbstractArray) = values
+@inline plant_test_observation_values(observation::WFSObservation) =
+    observation.storage
 
 @testset "Prepared plant paths and acquisition owners" begin
     T = Float64
@@ -437,9 +746,11 @@ end
             science_definition,
             science_path.source,
             telescope,
+            atmosphere,
             (science_path.input, foreign_field),
             science_path.result,
             science_path.execution;
+            materialization=AdaptiveOpticsSim.AtmosphereIndependentPath(),
             optical_model=science_path.key.optical_model,
             sampling_contract=science_path.key.sampling_contract,
             propagation_model=science_path.key.propagation_model,
@@ -455,9 +766,11 @@ end
             science_definition,
             science_path.source,
             telescope,
+            atmosphere,
             input,
             result,
             execution;
+            materialization=AdaptiveOpticsSim.AtmosphereIndependentPath(),
             optical_model=science_path.key.optical_model,
             sampling_contract=science_path.key.sampling_contract,
             propagation_model=science_path.key.propagation_model,
@@ -569,9 +882,11 @@ end
         wfs_definition,
         wfs_path.source,
         telescope,
+        atmosphere,
         wfs_path.input,
         unbound_wfs_result,
         wfs_path.execution;
+        materialization=AdaptiveOpticsSim.AtmosphereIndependentPath(),
         optical_model=wfs_path.key.optical_model,
         sampling_contract=wfs_path.key.sampling_contract,
         propagation_model=wfs_path.key.propagation_model,
@@ -822,3 +1137,5 @@ end
     )
     @test science_path.result.values == stale_result
 end
+
+run_selected_acquisition_materialization_tests()

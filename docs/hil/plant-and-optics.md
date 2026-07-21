@@ -103,9 +103,15 @@ caller-owned products. Owner construction validates every concrete execution
 plan against the exact input, result, detector state, observation, and optional
 estimator storage it retains; warmed calls reject a stale or substituted
 binding before mutation. The implemented preparation freezes every path
-source, builds a concrete tuple of path executors, resolves acquisitions by
-stable ID, and builds a concrete tuple of separate acquisition owners. Model
-construction is multiple dispatch on the opted-in cold type; there is no
+source, builds a concrete tuple of path executors with exact atmosphere-input
+materialization bindings, resolves acquisitions by stable ID, and builds a
+concrete tuple of separate acquisition owners. A cold acquisition selection
+canonicalizes caller-selected IDs to stable-ID order and deduplicates their
+referenced paths. Its serial executor preflights every path, acquisition,
+revision, RNG count, and current epoch before output mutation, materializes all
+unique path inputs, forms each path result once, and only then executes each
+acquisition. Model construction is multiple dispatch on the opted-in cold
+type; there is no
 central registry, universal optical graph, abstract executor vector, or stored
 closure. The target API does not grow `AOSimulation` or
 `ClosedLoopRuntime` into a universal object, retain the OOPAO class hierarchy,
@@ -120,8 +126,9 @@ An optical-path declaration owns immutable configuration:
 - keys needed to prepare compatible shared results
 
 A prepared path executor owns its mutable OPD, field, detector-facing optical
-product, FFT plan, and other scratch state. That workspace has one execution
-owner and is not stored in the immutable path declaration.
+product, atmosphere-materialization binding, FFT plan, and other scratch
+state. That workspace has one execution owner and is not stored in the
+immutable path declaration.
 
 A prepared core acquisition in the current schedule-free slice owns:
 
@@ -226,6 +233,14 @@ path's atmosphere-dependent OPD, field, or model-specific input before the
 atmosphere writer advances to a later timestamp. Downstream optical and
 detector work may outlive that epoch once it reads only the materialized
 caller-owned product.
+
+The implemented schedule-free serial seam prepares an explicit acquisition
+selection and executes it from either a caller-supplied current
+`AtmosphereEpoch` or an explicit absolute atmosphere model time. It resolves
+each referenced path once and performs a complete mutation-free preflight over
+the selection before writing the first input. It does not decide which
+acquisitions are due, infer time, retain old atmosphere layers, or introduce a
+scheduler. The later event scheduler supplies its due set to this boundary.
 
 A path that must render from older mutable layer state requires a separately
 prepared, bounded retained atmosphere-state snapshot whose representation is

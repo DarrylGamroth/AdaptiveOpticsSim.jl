@@ -166,16 +166,23 @@ single-writer owners without adding scheduling or atmosphere advancement:
 - Plant accessors: `plant_telescope`, `plant_atmosphere`, `path_definitions`,
   `acquisition_definitions`, `path_definition`, `acquisition_definition`
 - Ordinary prepared boundary: `PreparedPlant`, `prepare_plant`,
-  `execute_path!`, `execute_acquisition!`
+  `prepare_pupil_opd_materialization`, `materialize_path_input!`,
+  `prepare_acquisition_selection`, `execute_acquisition_selection!`,
+  `execute_acquisition_selection_at!`, `execute_path!`, and
+  `execute_acquisition!`
 - Prepared accessors: `prepared_paths`, `prepared_acquisitions`,
   `prepared_path`, `prepared_acquisition`, `path_input`, `path_result`,
   `path_result_key`, `acquisition_products`, `acquisition_observation`,
   `acquisition_measurement`
 - Qualified model-extension boundary: `PreparedPathExecutor`,
   `PreparedAcquisitionOwner`, `AcquisitionProducts`, `PathResultKey`,
+  `PreparedAcquisitionSelection`, `PreparedPupilOPDMaterialization`,
+  `AtmosphereIndependentPath`,
   `AbstractOpticalSamplingContract`, `InstantaneousOpticalSample`,
   `require_path_result`, `prepare_path_executor`,
-  `prepare_acquisition_owner`, `validate_path_execution_binding`, and
+  `prepare_acquisition_owner`, `validate_path_execution_binding`,
+  `validate_path_materialization_binding`,
+  `validate_path_materialization`, `validate_atmosphere_rendering`, and
   `validate_acquisition_execution_binding`
 
 Every path and acquisition carries an explicit typed identity. Tuples and
@@ -197,12 +204,24 @@ output-plane contract, revisions, backend, and device. Its descriptive values
 are defensively snapshotted, and its value equality/hash contract is intended
 for cold compatibility lookup rather than warmed execution. Prepared owner
 constructors validate that concrete execution plans retain their exact input,
-result, detector, observation, and estimator storage. Several acquisitions may
-borrow the exact same read-only path result while retaining distinct detector,
-readout, WFS estimator, observation, and measurement state. Individual warmed
-calls remain direct dispatch; the caller still supplies the RNG and decides
-which path or acquisition runs. Selected-set execution, atmosphere epochs,
-cadence, triggers, and ports belong to later gates.
+result, atmosphere materialization, detector, observation, and estimator
+storage. Several acquisitions may borrow the exact same read-only path result
+while retaining distinct detector, readout, WFS estimator, observation, and
+measurement state.
+
+`prepare_acquisition_selection` resolves caller-supplied acquisition IDs once,
+deduplicates their referenced paths, and stores both tuples in stable-ID order
+independent of declaration and caller-selection order.
+`execute_acquisition_selection!` preflights every owner and current
+`AtmosphereEpoch` before mutation, materializes all unique path inputs, forms
+each result once, and then runs the selected acquisitions. The `_at!` variant
+first advances the shared atmosphere to an explicit absolute model time.
+Caller-owned acquisition RNGs are supplied as a tuple in the order returned by
+`prepared_acquisitions(selection)`; stable per-owner streams arrive in the
+next Gate 2 slice. Neither method introduces cadence, triggers, a scheduler,
+ports, or a retained atmosphere snapshot. The warmed successful serial call is
+allocation-free on the maintained Julia version; cold selection/preparation
+and exceptional paths are outside that budget.
 
 ## Atmosphere
 

@@ -48,14 +48,30 @@ function AdaptiveOpticsSim.prepare_path_executor(
 )
     input, result, execution = prepare_my_optics(
         model, source, telescope, atmosphere)
+    materialization = AdaptiveOpticsSim.prepare_pupil_opd_materialization(
+        atmosphere, telescope, source, input)
     return AdaptiveOpticsSim.PreparedPathExecutor(
-        definition, source, telescope, input, result, execution;
+        definition, source, telescope, atmosphere, input, result, execution;
+        materialization,
         optical_model=my_exact_model_key(model),
         propagation_model=my_exact_propagation_key(model),
         model_revisions=my_revision_key(model),
     )
 end
 ```
+
+The example uses the maintained phase-only path operation, which writes the
+current atmosphere OPD into the exact path-local `PupilFunction`. A genuinely
+atmosphere-independent model instead passes the qualified
+`AdaptiveOpticsSim.AtmosphereIndependentPath()` marker. Do not use that marker
+as a fallback for an unsupported atmospheric field or layer-aware model.
+Those models provide a concrete materialization owner and extend the qualified
+`validate_path_materialization_binding`, `validate_path_materialization`, and
+four-argument `materialize_path_input!` dispatches. The validator must check
+the exact atmosphere, destination, source, backend, device, shape, and any
+model-specific revision without mutating output. The mutating method may then
+write only its bound caller-owned path input. This two-phase contract lets a
+selection reject every invalid path before materializing the first one.
 
 `input` is a path-local `PupilFunction`, pupil-plane `ElectricField`, or a
 concrete tuple of them. `result` is an acquisition-facing photon-rate
@@ -117,6 +133,15 @@ path_result, products)`. Each validator must reject mismatched exact storage or
 state before mutation. Do not store a `Function`, abstract executor vector,
 schedule, RNG, queue, or transport in these owners. Preparation may allocate;
 warmed execution must retain the allocation contract of its underlying stages.
+
+Callers prepare a fixed acquisition subset with
+`prepare_acquisition_selection(plant, ids)`. Its unique paths and acquisition
+owners are available through the existing `prepared_paths` and
+`prepared_acquisitions` accessors. Repeated execution supplies either one
+explicit current `AtmosphereEpoch` to `execute_acquisition_selection!` or one
+absolute atmosphere model time to `execute_acquisition_selection_at!`. The
+latter accepts a separate atmosphere RNG; both currently accept an acquisition
+RNG tuple aligned with the canonical prepared acquisition order.
 
 ## Detectors
 
