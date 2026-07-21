@@ -37,11 +37,24 @@ end
     transformed = copy(original)
     fft_plan = AdaptiveOpticsSim.plan_fft_backend!(transformed)
     ifft_plan = AdaptiveOpticsSim.plan_ifft_backend!(transformed)
-    @test parentmodule(typeof(fft_plan)) === FFTW
-    @test occursin("FFTW", string(typeof(ifft_plan)))
+    apple_fft_extension =
+        Base.get_extension(AppleAccelerate, :AppleAccelerateAbstractFFTsExt)
+    @test apple_fft_extension !== nothing
+    @test parentmodule(typeof(fft_plan)) === apple_fft_extension
+    @test occursin("VDSPInplaceFFTPlan", string(typeof(fft_plan)))
+    @test occursin("VDSPInplaceBFFTPlan", string(typeof(ifft_plan)))
     AdaptiveOpticsSim.execute_fft_plan!(transformed, fft_plan)
     AdaptiveOpticsSim.execute_fft_plan!(transformed, ifft_plan)
     @test transformed ≈ original
+
+    # vDSP is deliberately selected only inside its documented capability
+    # envelope. FFTW preserves arbitrary-size and 3D+ package behavior.
+    arbitrary_size = zeros(ComplexF64, 6, 8)
+    higher_dimensional = zeros(ComplexF64, 4, 4, 2)
+    @test parentmodule(typeof(
+        AdaptiveOpticsSim.plan_fft_backend!(arbitrary_size))) === FFTW
+    @test parentmodule(typeof(
+        AdaptiveOpticsSim.plan_fft_backend!(higher_dimensional))) === FFTW
 
     println("AppleAccelerate version: ", Base.pkgversion(AppleAccelerate))
     println("BLAS/LAPACK config: ", BLAS.get_config())

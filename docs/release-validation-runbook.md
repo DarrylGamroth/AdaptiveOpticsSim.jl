@@ -86,8 +86,8 @@ Silicon, the hosted CPU workflow additionally instantiates
 [`test/appleaccelerate`](../test/appleaccelerate), proves that normal package
 loading does not load AppleAccelerate, then loads AppleAccelerate explicitly and
 runs the full CPU suite. The target verifies that representative BLAS and
-LAPACK symbols route through Accelerate and that AdaptiveOpticsSim CPU FFT plans
-remain FFTW plans.
+LAPACK symbols route through Accelerate, supported power-of-two 1D/2D CPU FFTs
+use vDSP plans, and unsupported shapes retain FFTW fallback plans.
 
 To reproduce this target on a macOS 15 or newer Apple Silicon host:
 

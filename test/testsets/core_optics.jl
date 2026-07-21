@@ -1,3 +1,5 @@
+import AbstractFFTs
+
 struct TestExpandedSourceWrapper{S<:AdaptiveOpticsSim.AbstractSource} <:
     AdaptiveOpticsSim.AbstractSource
     source::S
@@ -5,6 +7,22 @@ end
 
 AdaptiveOpticsSim.source_composition_style(::TestExpandedSourceWrapper) =
     AdaptiveOpticsSim.ExpandedSourceComposition()
+
+# DenseArray is deliberately broad enough to reproduce the dispatch category
+# used by accelerator array packages without depending on a GPU runtime.
+struct TestBackendFFTArray{T,N} <: DenseArray{T,N}
+    storage::Array{T,N}
+end
+
+Base.size(array::TestBackendFFTArray) = size(array.storage)
+Base.getindex(array::TestBackendFFTArray, indices...) =
+    getindex(array.storage, indices...)
+Base.setindex!(array::TestBackendFFTArray, value, indices...) =
+    setindex!(array.storage, value, indices...)
+AbstractFFTs.plan_fft!(::TestBackendFFTArray) = :backend_fft
+AbstractFFTs.plan_fft!(::TestBackendFFTArray, dims) = (:backend_fft, dims)
+AbstractFFTs.plan_ifft!(::TestBackendFFTArray) = :backend_ifft
+AbstractFFTs.plan_ifft!(::TestBackendFFTArray, dims) = (:backend_ifft, dims)
 
 @testset "GPU backend registry" begin
     @test !gpu_backend_loaded(AdaptiveOpticsSim.CUDABackendTag)
@@ -20,15 +38,15 @@ AdaptiveOpticsSim.source_composition_style(::TestExpandedSourceWrapper) =
     @test AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.CUDABackendTag) isa AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.CUDABackendTag}
 end
 
-@testset "Explicit CPU FFT provider" begin
+@testset "CPU FFT provider dispatch" begin
     for T in (ComplexF32, ComplexF64)
         original = T.(reshape(1:64, 8, 8))
 
         full = copy(original)
         full_fft = AdaptiveOpticsSim.plan_fft_backend!(full)
         full_ifft = AdaptiveOpticsSim.plan_ifft_backend!(full)
-        @test parentmodule(typeof(full_fft)) === FFTW
-        @test occursin("FFTW", string(typeof(full_ifft)))
+        @test full_fft isa AbstractFFTs.Plan
+        @test full_ifft isa AbstractFFTs.Plan
         AdaptiveOpticsSim.execute_fft_plan!(full, full_fft)
         AdaptiveOpticsSim.execute_fft_plan!(full, full_ifft)
         @test full ≈ original
@@ -36,12 +54,20 @@ end
         first_dimension = copy(original)
         dim_fft = AdaptiveOpticsSim.plan_fft_backend!(first_dimension, 1)
         dim_ifft = AdaptiveOpticsSim.plan_ifft_backend!(first_dimension, 1)
-        @test parentmodule(typeof(dim_fft)) === FFTW
-        @test occursin("FFTW", string(typeof(dim_ifft)))
+        @test dim_fft isa AbstractFFTs.Plan
+        @test dim_ifft isa AbstractFFTs.Plan
         AdaptiveOpticsSim.execute_fft_plan!(first_dimension, dim_fft)
         AdaptiveOpticsSim.execute_fft_plan!(first_dimension, dim_ifft)
         @test first_dimension ≈ original
     end
+
+    backend_array = TestBackendFFTArray(zeros(ComplexF32, 4, 4))
+    @test AdaptiveOpticsSim.plan_fft_backend!(backend_array) === :backend_fft
+    @test AdaptiveOpticsSim.plan_ifft_backend!(backend_array) === :backend_ifft
+    @test AdaptiveOpticsSim.plan_fft_backend!(backend_array, (1, 2)) ==
+        (:backend_fft, (1, 2))
+    @test AdaptiveOpticsSim.plan_ifft_backend!(backend_array, (1, 2)) ==
+        (:backend_ifft, (1, 2))
 end
 
 function explicit_direct_image_cycle!(output, field, wavefront, plan,

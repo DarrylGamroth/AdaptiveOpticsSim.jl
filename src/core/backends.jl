@@ -159,10 +159,11 @@ end
 
 allocate_array(backend, ::Type{T}, dims::Vararg{Int,N}) where {T,N} = _resolve_array_backend(backend){T}(undef, dims...)
 
-# Keep the CPU FFT provider explicit. Optional packages may add more-specific
-# AbstractFFTs methods for ordinary Arrays; selecting those methods by load order
-# would silently change the prepared plan family. Accelerator arrays continue to
-# use their backend's AbstractFFTs dispatch.
+# Let an application-selected AbstractFFTs provider handle the 1D and 2D
+# power-of-two CPU transforms it supports. In particular, loading
+# AppleAccelerate on Apple Silicon selects its vDSP plans. FFTW remains the
+# explicit fallback for arbitrary sizes and higher-dimensional CPU transforms;
+# accelerator arrays continue to use their backend's AbstractFFTs dispatch.
 @inline function _plan_fftw_fft!(buffer::StridedArray{T,N}, dims) where {
     T<:Union{ComplexF32,ComplexF64},N}
     return invoke(plan_fft!, Tuple{StridedArray{T,N},Any}, buffer, dims)
@@ -176,23 +177,31 @@ end
 @inline _fft_region_length(buffer, dim::Integer) = size(buffer, dim)
 @inline _fft_region_length(buffer, dims) = prod(size(buffer, dim) for dim in dims)
 
-function plan_fft_backend!(buffer::StridedArray{T,N}) where {
+@inline _supports_selected_cpu_fft(buffer::Vector) =
+    !isempty(buffer) && ispow2(length(buffer))
+@inline _supports_selected_cpu_fft(buffer::Matrix) =
+    !isempty(buffer) && ispow2(size(buffer, 1)) && ispow2(size(buffer, 2))
+@inline _supports_selected_cpu_fft(::Array) = false
+
+function plan_fft_backend!(buffer::Array{T,N}) where {
     T<:Union{ComplexF32,ComplexF64},N}
-    return _plan_fftw_fft!(buffer, ntuple(identity, N))
+    return plan_fft_backend!(buffer, ntuple(identity, N))
 end
 
-function plan_fft_backend!(buffer::StridedArray{T,N}, dims) where {
+function plan_fft_backend!(buffer::Array{T,N}, dims) where {
     T<:Union{ComplexF32,ComplexF64},N}
+    _supports_selected_cpu_fft(buffer) && return plan_fft!(buffer, dims)
     return _plan_fftw_fft!(buffer, dims)
 end
 
-function plan_ifft_backend!(buffer::StridedArray{T,N}) where {
+function plan_ifft_backend!(buffer::Array{T,N}) where {
     T<:Union{ComplexF32,ComplexF64},N}
     return plan_ifft_backend!(buffer, ntuple(identity, N))
 end
 
-function plan_ifft_backend!(buffer::StridedArray{T,N}, dims) where {
+function plan_ifft_backend!(buffer::Array{T,N}, dims) where {
     T<:Union{ComplexF32,ComplexF64},N}
+    _supports_selected_cpu_fft(buffer) && return plan_ifft!(buffer, dims)
     scale = one(real(T)) / _fft_region_length(buffer, dims)
     return scale * _plan_fftw_bfft!(buffer, dims)
 end

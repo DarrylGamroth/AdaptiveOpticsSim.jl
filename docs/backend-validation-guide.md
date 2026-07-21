@@ -128,15 +128,16 @@ fresh processes establish distinct facts:
 - loading AdaptiveOpticsSim normally does not load AppleAccelerate and leaves
   provider choice to the application
 - loading AppleAccelerate explicitly routes representative ILP64 BLAS and
-  LAPACK symbols through Accelerate, selects its single-threaded mode, preserves
-  FFTW as AdaptiveOpticsSim's explicit CPU FFT plan provider, and passes the
-  full CPU suite
+  LAPACK symbols through Accelerate, selects its single-threaded mode, selects
+  vDSP plans for supported package FFTs, preserves FFTW fallback for unsupported
+  shapes, and passes the full CPU suite
 
-AppleAccelerate also exposes its own FFT APIs and an AbstractFFTs extension.
-Those are a separate application choice. Package CPU planning deliberately
-selects FFTW rather than allowing another package's more-specific Array method
-to change the plan family through load order. This preserves the existing
-arbitrary-size and multidimensional FFT support boundary.
+AppleAccelerate's AbstractFFTs extension supports non-empty, power-of-two 1D and
+2D complex transforms. AdaptiveOpticsSim deliberately uses those vDSP plans when
+the application has loaded AppleAccelerate, while explicitly selecting FFTW for
+arbitrary-size and three-or-more-dimensional CPU transforms. Loading the package
+therefore improves the supported Apple Silicon path without narrowing the
+existing CPU FFT shape boundary.
 
 The full GPU smoke matrix now also pins the exact batched Shack-Hartmann
 detector/export surface that previously regressed on CUDA:
@@ -416,7 +417,7 @@ Current intent:
     Windows hosted runners
   - runs a separate Apple Silicon job that proves backend-neutral normal load,
     then explicitly selects AppleAccelerate BLAS/LAPACK and reruns the full CPU
-    suite while retaining FFTW plans
+    suite with supported vDSP FFT plans and FFTW fallback plans
   - runs the isolated AcceleratedKernels/Dagger scheduler extension tests on a
     four-thread Linux job
 - CUDA workflow:
