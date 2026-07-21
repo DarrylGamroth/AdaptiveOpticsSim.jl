@@ -120,7 +120,8 @@ clean environment.
 ### Apple Silicon BLAS/LAPACK selection
 
 AppleAccelerate.jl is validated as an explicit application-level linear-algebra
-provider, not as an AdaptiveOpticsSim dependency or array backend. The isolated
+provider recognized through an AdaptiveOpticsSim weak-dependency extension, not
+as a core dependency or array backend. The isolated
 [`test/appleaccelerate`](../test/appleaccelerate) project resolves the current
 maintained AppleAccelerate 0.7 line on a `macos-15` Apple Silicon runner. Two
 fresh processes establish distinct facts:
@@ -133,11 +134,13 @@ fresh processes establish distinct facts:
   shapes, and passes the full CPU suite
 
 AppleAccelerate's AbstractFFTs extension supports non-empty, power-of-two 1D and
-2D complex transforms. AdaptiveOpticsSim deliberately uses those vDSP plans when
-the application has loaded AppleAccelerate, while explicitly selecting FFTW for
-arbitrary-size and three-or-more-dimensional CPU transforms. Loading the package
-therefore improves the supported Apple Silicon path without narrowing the
-existing CPU FFT shape boundary.
+2D complex transforms, but its generic in-place plan adapter allocates temporary
+split-complex arrays. AdaptiveOpticsSim's optional extension instead prepares a
+reusable vDSP setup with package-owned work buffers, retaining allocation-free
+repeated optical propagation. It selects FFTW for partial-dimension,
+arbitrary-size, and three-or-more-dimensional CPU transforms. Loading the
+package therefore improves the supported Apple Silicon path without narrowing
+the existing CPU FFT shape boundary or weakening hot-path allocation contracts.
 
 The full GPU smoke matrix now also pins the exact batched Shack-Hartmann
 detector/export surface that previously regressed on CUDA:

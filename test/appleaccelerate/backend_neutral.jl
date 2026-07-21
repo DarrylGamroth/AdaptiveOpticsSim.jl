@@ -19,7 +19,11 @@ import FFTW
     project = TOML.parsefile(joinpath(pkgdir(AdaptiveOpticsSim),
         "Project.toml"))
     @test !haskey(project["deps"], "AppleAccelerate")
-    @test !haskey(project["weakdeps"], "AppleAccelerate")
+    @test haskey(project["weakdeps"], "AppleAccelerate")
+    @test project["extensions"]["AdaptiveOpticsSimAppleAccelerateExt"] ==
+        "AppleAccelerate"
+    @test Base.get_extension(AdaptiveOpticsSim,
+        :AdaptiveOpticsSimAppleAccelerateExt) === nothing
 
     buffer = zeros(ComplexF64, 8, 8)
     plan = AdaptiveOpticsSim.plan_fft_backend!(buffer)

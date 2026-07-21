@@ -82,9 +82,10 @@ evidence-gated per host and workload; direct `CPUHILExecutionPlan` stepping
 remains the production baseline.
 
 On Apple Silicon, application-owned AppleAccelerate 0.7 BLAS/LAPACK selection
-is a maintained CPU-provider variant. It is not a package dependency or a new
-array backend. The dedicated hosted target proves backend-neutral package load,
-active Accelerate forwarding under explicit opt-in, vDSP FFT plans for supported
+is a maintained optional CPU-provider variant exposed through a weak-dependency
+extension; it is not a core dependency or a new array backend. The dedicated
+hosted target proves backend-neutral package load, active Accelerate forwarding
+under explicit opt-in, allocation-free vDSP FFT plans for supported full
 power-of-two 1D/2D transforms, FFTW fallback outside that capability envelope,
 and the full CPU correctness surface.
 

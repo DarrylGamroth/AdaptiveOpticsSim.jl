@@ -10,6 +10,12 @@ function accelerate_backing_library(symbol::AbstractString)
     return info.libname
 end
 
+function apple_fft_cycle!(buffer, fft_plan, ifft_plan)
+    AdaptiveOpticsSim.execute_fft_plan!(buffer, fft_plan)
+    AdaptiveOpticsSim.execute_fft_plan!(buffer, ifft_plan)
+    return buffer
+end
+
 @testset "Explicit AppleAccelerate selection" begin
     @test Sys.isapple()
     @test Sys.ARCH === :aarch64
@@ -37,14 +43,19 @@ end
     transformed = copy(original)
     fft_plan = AdaptiveOpticsSim.plan_fft_backend!(transformed)
     ifft_plan = AdaptiveOpticsSim.plan_ifft_backend!(transformed)
-    apple_fft_extension =
-        Base.get_extension(AppleAccelerate, :AppleAccelerateAbstractFFTsExt)
+    apple_fft_extension = Base.get_extension(AdaptiveOpticsSim,
+        :AdaptiveOpticsSimAppleAccelerateExt)
     @test apple_fft_extension !== nothing
     @test parentmodule(typeof(fft_plan)) === apple_fft_extension
-    @test occursin("VDSPInplaceFFTPlan", string(typeof(fft_plan)))
-    @test occursin("VDSPInplaceBFFTPlan", string(typeof(ifft_plan)))
-    AdaptiveOpticsSim.execute_fft_plan!(transformed, fft_plan)
-    AdaptiveOpticsSim.execute_fft_plan!(transformed, ifft_plan)
+    @test occursin("AdaptiveOpticsVDSPPlan", string(typeof(fft_plan)))
+    @test occursin("VDSPForward", string(typeof(fft_plan)))
+    @test occursin("VDSPInverse", string(typeof(ifft_plan)))
+    apple_fft_cycle!(transformed, fft_plan, ifft_plan)
+    @test transformed ≈ original
+    transformed .= original
+    apple_fft_cycle!(transformed, fft_plan, ifft_plan)
+    @test @allocated(apple_fft_cycle!(
+        transformed, fft_plan, ifft_plan)) == 0
     @test transformed ≈ original
 
     # vDSP is deliberately selected only inside its documented capability
