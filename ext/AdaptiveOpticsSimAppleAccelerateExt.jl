@@ -7,26 +7,30 @@ using LinearAlgebra
 
 @static if Sys.isapple()
 
-abstract type VDSPTransformDirection end
-struct VDSPForward <: VDSPTransformDirection end
-struct VDSPInverse <: VDSPTransformDirection end
+abstract type AppleFFTDirection end
+struct AppleFFTForward <: AppleFFTDirection end
+struct AppleFFTInverse <: AppleFFTDirection end
 
 """
-Reusable Apple vDSP FFT setup with package-owned split-complex work buffers.
+Type-stable Apple FFT plan with a vDSP fast path and an FFTW shape fallback.
 
 AppleAccelerate 0.7's general AbstractFFTs adapter allocates split-complex arrays
 while executing an in-place plan. AdaptiveOpticsSim owns these buffers in the
-prepared plan so repeated optical propagation remains allocation-free.
+prepared plan so repeated optical propagation remains allocation-free. The
+concrete fallback field also lets resized prepared state cross the vDSP shape
+boundary without changing its Julia field type.
 """
-struct AdaptiveOpticsVDSPPlan{
-    T<:Union{Float32,Float64},N,D<:VDSPTransformDirection,
+struct AdaptiveOpticsAppleFFTPlan{
+    T<:Union{Float32,Float64},N,D<:AppleFFTDirection,P,
 } <: AbstractFFTs.Plan{Complex{T}}
-    setup::AppleAccelerate.FFTSetup{T}
+    setup::Union{Nothing,AppleAccelerate.FFTSetup{T}}
     real_buffer::Array{T,N}
     imag_buffer::Array{T,N}
+    fftw_plan::Union{Nothing,P}
+    shape::NTuple{N,Int}
 end
 
-Base.size(plan::AdaptiveOpticsVDSPPlan) = size(plan.real_buffer)
+Base.size(plan::AdaptiveOpticsAppleFFTPlan) = plan.shape
 
 @inline _vdsp_shape_supported(buffer::Vector) =
     !isempty(buffer) && ispow2(length(buffer))
@@ -38,14 +42,33 @@ Base.size(plan::AdaptiveOpticsVDSPPlan) = size(plan.real_buffer)
     return Tuple(dims) == ntuple(identity, N)
 end
 
-function _prepare_vdsp_plan(
-    ::Type{D}, buffer::Array{Complex{T},N},
-) where {T<:Union{Float32,Float64},N,D<:VDSPTransformDirection}
-    setup = AppleAccelerate.plan_fft(buffer)
-    real_buffer = Array{T,N}(undef, size(buffer))
+@inline function _fallback_plan(
+    ::Type{AppleFFTForward}, buffer::Array{Complex{T},N}, dims,
+) where {T,N}
+    return AdaptiveOpticsSim._plan_fftw_fft!(buffer, dims)
+end
+
+@inline function _fallback_plan(
+    ::Type{AppleFFTInverse}, buffer::Array{Complex{T},N}, dims,
+) where {T,N}
+    scale = one(T) / AdaptiveOpticsSim._fft_region_length(buffer, dims)
+    return scale * AdaptiveOpticsSim._plan_fftw_bfft!(buffer, dims)
+end
+
+function _prepare_apple_fft_plan(
+    ::Type{D}, buffer::Array{Complex{T},N}, dims, use_vdsp::Bool,
+) where {T<:Union{Float32,Float64},N,D<:AppleFFTDirection}
+    # Preparing the concrete fallback provides a type witness that keeps this
+    # wrapper stable when optical state is resized across the vDSP capability
+    # boundary. Supported transforms do not retain or execute that FFTW plan.
+    fallback_plan = _fallback_plan(D, buffer, dims)
+    fftw_plan = use_vdsp ? nothing : fallback_plan
+    setup = use_vdsp ? AppleAccelerate.plan_fft(buffer) : nothing
+    buffer_shape = use_vdsp ? size(buffer) : ntuple(_ -> 0, N)
+    real_buffer = Array{T,N}(undef, buffer_shape)
     imag_buffer = similar(real_buffer)
-    return AdaptiveOpticsVDSPPlan{T,N,D}(
-        setup, real_buffer, imag_buffer)
+    return AdaptiveOpticsAppleFFTPlan{T,N,D,typeof(fallback_plan)}(
+        setup, real_buffer, imag_buffer, fftw_plan, size(buffer))
 end
 
 function _plan_forward(buffer::Array{Complex{T},N}, dims) where {
@@ -53,9 +76,9 @@ function _plan_forward(buffer::Array{Complex{T},N}, dims) where {
 }
     if _vdsp_shape_supported(buffer) &&
             _full_transform_region(dims, Val(N))
-        return _prepare_vdsp_plan(VDSPForward, buffer)
+        return _prepare_apple_fft_plan(AppleFFTForward, buffer, dims, true)
     end
-    return AdaptiveOpticsSim._plan_fftw_fft!(buffer, dims)
+    return _prepare_apple_fft_plan(AppleFFTForward, buffer, dims, false)
 end
 
 function _plan_inverse(buffer::Array{Complex{T},N}, dims) where {
@@ -63,10 +86,9 @@ function _plan_inverse(buffer::Array{Complex{T},N}, dims) where {
 }
     if _vdsp_shape_supported(buffer) &&
             _full_transform_region(dims, Val(N))
-        return _prepare_vdsp_plan(VDSPInverse, buffer)
+        return _prepare_apple_fft_plan(AppleFFTInverse, buffer, dims, true)
     end
-    scale = one(T) / AdaptiveOpticsSim._fft_region_length(buffer, dims)
-    return scale * AdaptiveOpticsSim._plan_fftw_bfft!(buffer, dims)
+    return _prepare_apple_fft_plan(AppleFFTInverse, buffer, dims, false)
 end
 
 function AdaptiveOpticsSim.plan_fft_backend!(
@@ -117,17 +139,17 @@ function AdaptiveOpticsSim.plan_ifft_backend!(
     return _plan_inverse(buffer, dims)
 end
 
-@inline _vdsp_direction(::AdaptiveOpticsVDSPPlan{T,N,VDSPForward}) where {T,N} =
+@inline _vdsp_direction(::AdaptiveOpticsAppleFFTPlan{T,N,AppleFFTForward}) where {T,N} =
     AppleAccelerate.FFT_FORWARD
-@inline _vdsp_direction(::AdaptiveOpticsVDSPPlan{T,N,VDSPInverse}) where {T,N} =
+@inline _vdsp_direction(::AdaptiveOpticsAppleFFTPlan{T,N,AppleFFTInverse}) where {T,N} =
     AppleAccelerate.FFT_INVERSE
-@inline _output_scale(::AdaptiveOpticsVDSPPlan{T,N,VDSPForward}) where {T,N} =
+@inline _output_scale(::AdaptiveOpticsAppleFFTPlan{T,N,AppleFFTForward}) where {T,N} =
     one(T)
-@inline _output_scale(plan::AdaptiveOpticsVDSPPlan{T,N,VDSPInverse}) where {T,N} =
+@inline _output_scale(plan::AdaptiveOpticsAppleFFTPlan{T,N,AppleFFTInverse}) where {T,N} =
     one(T) / length(plan.real_buffer)
 
 @inline function _load_split_buffers!(
-    plan::AdaptiveOpticsVDSPPlan{T,N}, buffer::Array{Complex{T},N},
+    plan::AdaptiveOpticsAppleFFTPlan{T,N}, buffer::Array{Complex{T},N},
 ) where {T,N}
     real_buffer = plan.real_buffer
     imag_buffer = plan.imag_buffer
@@ -140,7 +162,7 @@ end
 end
 
 @inline function _store_split_buffers!(
-    buffer::Array{Complex{T},N}, plan::AdaptiveOpticsVDSPPlan{T,N},
+    buffer::Array{Complex{T},N}, plan::AdaptiveOpticsAppleFFTPlan{T,N},
 ) where {T,N}
     real_buffer = plan.real_buffer
     imag_buffer = plan.imag_buffer
@@ -153,11 +175,11 @@ end
 end
 
 @inline function _execute_vdsp!(
-    plan::AdaptiveOpticsVDSPPlan{Float32,1},
+    plan::AdaptiveOpticsAppleFFTPlan{Float32,1},
 )
     real_buffer = plan.real_buffer
     imag_buffer = plan.imag_buffer
-    setup = plan.setup
+    setup = plan.setup::AppleAccelerate.FFTSetup{Float32}
     GC.@preserve real_buffer imag_buffer setup begin
         split = AppleAccelerate.DSPSplitComplex(
             pointer(real_buffer), pointer(imag_buffer))
@@ -169,11 +191,11 @@ end
 end
 
 @inline function _execute_vdsp!(
-    plan::AdaptiveOpticsVDSPPlan{Float64,1},
+    plan::AdaptiveOpticsAppleFFTPlan{Float64,1},
 )
     real_buffer = plan.real_buffer
     imag_buffer = plan.imag_buffer
-    setup = plan.setup
+    setup = plan.setup::AppleAccelerate.FFTSetup{Float64}
     GC.@preserve real_buffer imag_buffer setup begin
         split = AppleAccelerate.DSPDoubleSplitComplex(
             pointer(real_buffer), pointer(imag_buffer))
@@ -185,11 +207,11 @@ end
 end
 
 @inline function _execute_vdsp!(
-    plan::AdaptiveOpticsVDSPPlan{Float32,2},
+    plan::AdaptiveOpticsAppleFFTPlan{Float32,2},
 )
     real_buffer = plan.real_buffer
     imag_buffer = plan.imag_buffer
-    setup = plan.setup
+    setup = plan.setup::AppleAccelerate.FFTSetup{Float32}
     rows, columns = size(real_buffer)
     GC.@preserve real_buffer imag_buffer setup begin
         split = AppleAccelerate.DSPSplitComplex(
@@ -203,11 +225,11 @@ end
 end
 
 @inline function _execute_vdsp!(
-    plan::AdaptiveOpticsVDSPPlan{Float64,2},
+    plan::AdaptiveOpticsAppleFFTPlan{Float64,2},
 )
     real_buffer = plan.real_buffer
     imag_buffer = plan.imag_buffer
-    setup = plan.setup
+    setup = plan.setup::AppleAccelerate.FFTSetup{Float64}
     rows, columns = size(real_buffer)
     GC.@preserve real_buffer imag_buffer setup begin
         split = AppleAccelerate.DSPDoubleSplitComplex(
@@ -221,28 +243,34 @@ end
 end
 
 @inline function _execute_plan!(
-    buffer::Array{Complex{T},N}, plan::AdaptiveOpticsVDSPPlan{T,N},
+    buffer::Array{Complex{T},N}, plan::AdaptiveOpticsAppleFFTPlan{T,N},
 ) where {T,N}
     size(buffer) == size(plan) || throw(DimensionMismatch(
-        "vDSP FFT plan size $(size(plan)) does not match buffer size $(size(buffer))"))
+        "Apple FFT plan size $(size(plan)) does not match buffer size $(size(buffer))"))
+    if isnothing(plan.setup)
+        fallback_plan = plan.fftw_plan
+        isnothing(fallback_plan) && throw(ArgumentError(
+            "Apple FFT plan has neither a vDSP setup nor an FFTW fallback"))
+        return AdaptiveOpticsSim.execute_fft_plan!(buffer, fallback_plan)
+    end
     _load_split_buffers!(plan, buffer)
     _execute_vdsp!(plan)
     return _store_split_buffers!(buffer, plan)
 end
 
 function AdaptiveOpticsSim.execute_fft_plan!(
-    buffer::Array{Complex{T},N}, plan::AdaptiveOpticsVDSPPlan{T,N},
+    buffer::Array{Complex{T},N}, plan::AdaptiveOpticsAppleFFTPlan{T,N},
 ) where {T,N}
     return _execute_plan!(buffer, plan)
 end
 
 function LinearAlgebra.mul!(
     destination::Array{Complex{T},N},
-    plan::AdaptiveOpticsVDSPPlan{T,N},
+    plan::AdaptiveOpticsAppleFFTPlan{T,N},
     source::Array{Complex{T},N},
 ) where {T,N}
     size(source) == size(plan) || throw(DimensionMismatch(
-        "vDSP FFT plan size $(size(plan)) does not match source size $(size(source))"))
+        "Apple FFT plan size $(size(plan)) does not match source size $(size(source))"))
     destination === source || copyto!(destination, source)
     return _execute_plan!(destination, plan)
 end
