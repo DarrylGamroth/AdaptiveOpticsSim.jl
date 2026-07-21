@@ -14,7 +14,8 @@ TestSuiteSpec(name::AbstractString, paths::AbstractString...;
 # Registry order is the full-suite execution order. Keep it stable so bare
 # `Pkg.test()` remains the deterministic composition gate.
 const TEST_SUITE_SPECS = (
-    TestSuiteSpec("ka-cpu", "ka_cpu_matrix.jl"),
+    TestSuiteSpec("ka-cpu", "ka_cpu_matrix.jl";
+        fixtures=("ka_cpu_style_fixture.jl",)),
     TestSuiteSpec("tomography", "tomography.jl"),
     TestSuiteSpec("quality", "testsets/quality.jl"),
     TestSuiteSpec("core-optics", "testsets/core_optics.jl"),
@@ -31,7 +32,10 @@ const TEST_SUITE_SPECS = (
         "testsets/shack_hartmann_and_sources.jl",
         "testsets/pyramid_bioedge_and_lgs.jl",
         "testsets/zernike_and_curvature.jl",
-        fixtures=("wfs_stage_contract_fixtures.jl",),
+        fixtures=(
+            "ka_cpu_style_fixture.jl",
+            "wfs_stage_contract_fixtures.jl",
+        ),
     ),
     TestSuiteSpec("plant-preparation", "testsets/plant_preparation.jl";
         fixtures=("wfs_stage_contract_fixtures.jl",)),
