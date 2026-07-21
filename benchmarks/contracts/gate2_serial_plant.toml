@@ -1,0 +1,77 @@
+schema_version = 1
+name = "gate2_serial_plant_cpu"
+evidence_class = "warmed in-process serial CPU plant service time"
+samples_per_run = 10000
+runs = 3
+warmup_operations = 100
+minimum_samples_for_p99 = 10000
+histogram_lowest_ns = 1
+histogram_highest_ns = 60000000000
+histogram_significant_figures = 3
+relative_p99_factor = 1.25
+max_alloc_bytes = 0
+
+scope_exclusions = [
+    "package import, plant preparation, and first-use compilation",
+    "fixed-rate open-loop arrivals, queues, overload, and recovery",
+    "external RTC transport, response time, and publication",
+    "Gate 3 event scheduling, exposure integration, and command application",
+    "parallel execution, GPU execution, and host-device transfer",
+    "CPU affinity, isolation, governor control, and interrupt placement",
+    "production instrument scale or model-specific throughput claims",
+]
+
+[contract]
+question = "For this fixed compact Gate 2 workload, does the warmed serial prepared-plant selection execute without Julia heap allocation, preserve deterministic declaration-order replay, and provide a reproducible service-time distribution for future comparison?"
+load_model = "closed-loop self-paced arrival model; this is not an AO control loop"
+arrival_model = "the next operation starts after the previous operation and histogram recording complete"
+coordinated_omission_correction = false
+coordinated_omission_reason = "this benchmark measures serial service time and makes no fixed-arrival-rate latency claim"
+timed_boundary = "increment the explicit absolute model time, validate prepared ownership, advance the shared atmosphere, materialize three selected directions, form each path once, and execute four selected detector acquisitions"
+timer = "time_ns; the final clock read is included, histogram recording is excluded from latency and included in achieved throughput"
+correctness_oracle = "same-seed declaration-order replay, distinct NGS/LGS/science paths, exact shared-science path identity, detector exposure scaling, finite positive products, and the maintained Gate 2 test matrix"
+threading = "one Julia thread, one BLAS thread, one FFT provider thread"
+first_use = "recorded immediately after construction and before replay validation or warmup; package import and preparation are excluded"
+tail_claim = "p99 is reported with 100 expected observations beyond p99 per 10000-sample run; p99.9 is diagnostic"
+latency_gate = "this run establishes a comparable baseline; no subjective or external-RTC latency threshold is asserted"
+allocation_gate = "zero Julia heap bytes for one warmed timed-boundary operation"
+
+[workload]
+backend = "CPUBackend"
+numeric_type = "Float64"
+resolution = 16
+diameter_m = 8.0
+central_obstruction = 0.14
+r0_m = 0.2
+outer_scale_m = 25.0
+fractional_cn2 = [0.65, 0.35]
+wind_speed_m_per_s = [7.0, 13.0]
+wind_direction_deg = [15.0, 110.0]
+layer_altitude_m = [0.0, 6000.0]
+layer_ids = ["ground", "high"]
+science_wavelength_m = 8.0e-7
+science_photon_irradiance = 3.0
+science_radius_arcsec = 0.2
+science_azimuth_deg = 90.0
+ngs_wavelength_m = 6.5e-7
+ngs_photon_irradiance = 5.0
+ngs_radius_arcsec = 4.0
+ngs_azimuth_deg = 35.0
+lgs_wavelength_m = 5.89e-7
+lgs_photon_irradiance = 6.0
+lgs_radius_arcsec = 8.0
+lgs_azimuth_deg = 120.0
+lgs_altitude_m = 90000.0
+science_zero_padding = 2
+sh_n_lenslets = 4
+sh_n_pix_subap = 4
+pyramid_pupil_samples = 4
+pyramid_modulation_lambda_over_d = 3.0
+pyramid_modulation_points = 4
+science_fast_exposure_s = 0.003
+science_slow_exposure_s = 0.009
+wfs_exposure_s = 0.001
+quantum_efficiency = 0.8
+model_step_s = 0.001
+run_seed = 33792
+rng_derivation_version = 1

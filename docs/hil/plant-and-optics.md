@@ -20,6 +20,15 @@ Controllable-optic placement and acquisition scheduling remain later gates;
 neither is hidden in these definitions. Separating a path from its acquisitions
 prevents a second camera or readout cadence from forcing duplicate propagation.
 
+Gate 2 is validated by the focused topology, preparation, provider, RNG, and
+illumination testsets plus the clean [serial plant CPU
+artifact](../../benchmarks/results/gate2/2026-07-21-serial-plant.toml). The
+artifact composes science, off-axis NGS Shack-Hartmann, and finite-height LGS
+pyramid directions with four acquisitions and one shared science result. Its
+zero-allocation and HdrHistogram results characterize warmed, self-paced,
+in-process service time only; event scheduling, external RTC response, and
+fixed-rate load remain later gates.
+
 Optical and acquisition model declarations fail closed until their concrete
 types explicitly assert the cold configuration contract:
 

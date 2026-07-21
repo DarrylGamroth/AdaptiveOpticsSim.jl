@@ -79,6 +79,29 @@ This is the baseline production gate.
 
 The CPU full suite may be skipped only when `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1` is set explicitly. That mode is intended for backend-host validation runs that are paired with separately archived CPU/full-suite evidence for the same candidate commit or an explicitly identified release ancestor.
 
+### Apple Silicon / AppleAccelerate
+
+The default CPU package remains linear-algebra-provider neutral. On Apple
+Silicon, the hosted CPU workflow additionally instantiates
+[`test/appleaccelerate`](../test/appleaccelerate), proves that normal package
+loading does not load AppleAccelerate, then loads AppleAccelerate explicitly and
+runs the full CPU suite. The target verifies that representative BLAS and
+LAPACK symbols route through Accelerate, supported power-of-two 1D/2D CPU FFTs
+use allocation-free reusable vDSP plans, and unsupported shapes retain FFTW
+fallback plans.
+
+To reproduce this target on a macOS 15 or newer Apple Silicon host:
+
+```bash
+julia --project=test/appleaccelerate --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+julia --project=test/appleaccelerate --startup-file=no test/appleaccelerate/backend_neutral.jl
+julia --project=test/appleaccelerate --startup-file=no test/appleaccelerate/runtests.jl
+```
+
+Applications opt in by depending on and loading AppleAccelerate themselves;
+AdaptiveOpticsSim declares only a weak dependency and does not auto-load it or
+include it in the root environment.
+
 ### CUDA
 
 Enabled with:

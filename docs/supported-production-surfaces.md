@@ -57,6 +57,10 @@ Current CPU-supported families:
 - allocation-free shared multi-arm CPU execution with one atmosphere advance
   and one caller-owned same-arm photon-arrival-rate image reused by independent
   detector acquisitions
+- schedule-free serial `PreparedPlant` execution across independent science,
+  NGS Shack-Hartmann, and finite-height LGS pyramid directions, with canonical
+  selected ownership, deterministic declaration-order replay, one shared
+  science result feeding unequal-exposure detectors, and zero warmed allocation
 - the schedule-free acquisition product-provider boundary: run-immutable
   full-optical or nonresponsive unchanged/copy/bounded-replay selection,
   invariant caller-owned product contracts, unused-path bypass, and zero
@@ -77,6 +81,14 @@ surfaces, but are not part of the CPU HIL latency claim. Scheduler choice is
 evidence-gated per host and workload; direct `CPUHILExecutionPlan` stepping
 remains the production baseline.
 
+On Apple Silicon, application-owned AppleAccelerate 0.7 BLAS/LAPACK selection
+is a maintained optional CPU-provider variant exposed through a weak-dependency
+extension; it is not a core dependency or a new array backend. The dedicated
+hosted target proves backend-neutral package load, active Accelerate forwarding
+under explicit opt-in, allocation-free vDSP FFT plans for supported full
+power-of-two 1D/2D transforms, FFTW fallback outside that capability envelope,
+and the full CPU correctness surface.
+
 Primary evidence:
 
 - [model-validity-matrix.md](model-validity-matrix.md)
@@ -85,6 +97,7 @@ Primary evidence:
 - [conventional-detector CPU HIL latency baseline](../benchmarks/results/detectors/2026-07-14-detector-hil-latency.toml)
 - [final pre-HIL local CPU service-time evidence](../benchmarks/results/platform/2026-07-18-pre-hil-11-local-cpu.toml)
 - [final pre-HIL WSL CPU service-time evidence](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cpu.toml)
+- [Gate 2 serial plant CPU service-time evidence](../benchmarks/results/gate2/2026-07-21-serial-plant.toml)
 - [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml)
 
 ### AMDGPU backend
@@ -126,7 +139,7 @@ Current expectation:
 - if a maintained AMDGPU surface regresses numerically against CPU, that is a
   release-blocking defect for the AMDGPU-supported scope
 
-The current Julia 1.12.6 AMDGPU hardware target passed all `411` maintained
+The current Julia 1.12.6 AMDGPU hardware target passed all `422` maintained
 checks. A later local Julia installation failure prevented a replacement raw
 latency artifact, so the July 14 characterization remains the maintained AMD
 performance evidence; the failed host run does not broaden or weaken the

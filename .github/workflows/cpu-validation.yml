@@ -73,3 +73,59 @@ jobs:
 
       - name: Run scheduler extension tests
         run: julia --threads=4 --project=test/schedulers --startup-file=no test/schedulers/runtests.jl
+
+  apple-accelerate:
+    name: Apple Silicon / AppleAccelerate
+    runs-on: macos-15
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      JULIA_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      VECLIB_MAXIMUM_THREADS: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.12"
+
+      - name: Cache Julia artifacts
+        uses: julia-actions/cache@v3
+
+      - name: Verify Apple Silicon runner
+        run: julia --startup-file=no -e 'using InteractiveUtils; Sys.isapple() && Sys.ARCH === :aarch64 || error("AppleAccelerate validation requires Apple Silicon"); versioninfo()'
+
+      - name: Instantiate AppleAccelerate test environment
+        run: julia --project=test/appleaccelerate --startup-file=no -e 'using Pkg; Pkg.instantiate(); Pkg.status()'
+
+      - name: Verify backend-neutral package load
+        run: julia --project=test/appleaccelerate --startup-file=no test/appleaccelerate/backend_neutral.jl
+
+      - name: Run full CPU suite with AppleAccelerate
+        run: julia --project=test/appleaccelerate --startup-file=no test/appleaccelerate/runtests.jl
+
+      - name: Run Apple FFT coverage
+        env:
+          ADAPTIVEOPTICS_APPLE_FOCUSED_ONLY: "true"
+        run: julia --project=test/appleaccelerate --startup-file=no --code-coverage=user test/appleaccelerate/runtests.jl
+
+      - name: Process Apple FFT coverage
+        uses: julia-actions/julia-processcoverage@v1
+        with:
+          directories: ext
+
+      - name: Upload Apple FFT coverage to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          files: lcov.info
+          disable_search: true
+          fail_ci_if_error: true
+          name: adaptiveopticssim-apple-accelerate
+          use_oidc: true

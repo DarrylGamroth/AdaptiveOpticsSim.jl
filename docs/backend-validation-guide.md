@@ -117,6 +117,31 @@ package as a path source, keeping accelerator packages out of normal
 `Pkg.test()` while still resolving the full checkout dependency graph in a
 clean environment.
 
+### Apple Silicon BLAS/LAPACK selection
+
+AppleAccelerate.jl is validated as an explicit application-level linear-algebra
+provider recognized through an AdaptiveOpticsSim weak-dependency extension, not
+as a core dependency or array backend. The isolated
+[`test/appleaccelerate`](../test/appleaccelerate) project resolves the current
+maintained AppleAccelerate 0.7 line on a `macos-15` Apple Silicon runner. Two
+fresh processes establish distinct facts:
+
+- loading AdaptiveOpticsSim normally does not load AppleAccelerate and leaves
+  provider choice to the application
+- loading AppleAccelerate explicitly routes representative ILP64 BLAS and
+  LAPACK symbols through Accelerate, selects its single-threaded mode, selects
+  vDSP plans for supported package FFTs, preserves FFTW fallback for unsupported
+  shapes, and passes the full CPU suite
+
+AppleAccelerate's AbstractFFTs extension supports non-empty, power-of-two 1D and
+2D complex transforms, but its generic in-place plan adapter allocates temporary
+split-complex arrays. AdaptiveOpticsSim's optional extension instead prepares a
+reusable vDSP setup with package-owned work buffers, retaining allocation-free
+repeated optical propagation. It selects FFTW for partial-dimension,
+arbitrary-size, and three-or-more-dimensional CPU transforms. Loading the
+package therefore improves the supported Apple Silicon path without narrowing
+the existing CPU FFT shape boundary or weakening hot-path allocation contracts.
+
 The full GPU smoke matrix now also pins the exact batched Shack-Hartmann
 detector/export surface that previously regressed on CUDA:
 
@@ -391,7 +416,11 @@ Checked-in CI automation now exists in:
 Current intent:
 
 - CPU workflow:
-  - runs the normal `Pkg.test()` suite on a hosted runner
+  - runs the normal `Pkg.test()` suite on Linux, Apple Silicon macOS, and
+    Windows hosted runners
+  - runs a separate Apple Silicon job that proves backend-neutral normal load,
+    then explicitly selects AppleAccelerate BLAS/LAPACK and reruns the full CPU
+    suite with supported vDSP FFT plans and FFTW fallback plans
   - runs the isolated AcceleratedKernels/Dagger scheduler extension tests on a
     four-thread Linux job
 - CUDA workflow:

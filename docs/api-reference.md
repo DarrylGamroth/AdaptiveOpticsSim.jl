@@ -282,6 +282,15 @@ snapshot. The warmed successful serial call is allocation-free on the
 maintained Julia version; cold selection/preparation, metadata construction,
 compilation, and exceptional paths are outside that budget.
 
+The maintained [Gate 2 serial plant
+artifact](../benchmarks/results/gate2/2026-07-21-serial-plant.toml) composes
+science, off-axis NGS Shack-Hartmann, and finite-height LGS pyramid paths with
+four detector acquisitions, including two unequal-exposure acquisitions sharing
+one science result. It records deterministic declaration-order replay, zero
+warmed allocation, raw HdrHistogram distributions, and exact environment
+metadata. This is self-paced in-process CPU service time; it does not establish
+an event-scheduler, external-RTC, transport, or fixed-arrival latency claim.
+
 ## Atmosphere
 
 - `AbstractAtmosphere`
