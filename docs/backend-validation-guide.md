@@ -35,8 +35,9 @@ Bare `Pkg.test()` runs every registered suite in
 - core optics, direct science, and atmosphere
 - control and runtime
 - detectors and WFS
-- plant topology, canonical time, deterministic scheduling, preparation,
-  product providers, RNG ownership, and calibration illumination
+- plant topology, canonical time, deterministic scheduling and trigger
+  distribution, preparation, product providers, RNG ownership, and calibration
+  illumination
 - calibration and analysis
 - reference, tutorial, and Gate 0 regression
 
@@ -95,6 +96,20 @@ This is warmed, self-paced in-process scheduler service-cost evidence. It does
 not include detector or optical work, wall-clock pacing, queues, overload,
 transport, or an external RTC, and therefore establishes neither fixed-arrival
 latency nor production instrument capacity.
+
+The focused deterministic trigger-distribution suite is:
+
+```sh
+julia --project=. --startup-file=no -e \
+  'using Pkg; Pkg.test(test_args=["plant-triggers"])'
+```
+
+It covers exact finite fault traces, canonical nested fan-out, source/link fault
+scope, nominal/delivered/reported timestamp separation, chronology, conservative
+capacity rejection, 100,000-cycle constant storage, inference, and zero warmed
+allocation with caller-owned delivery slots. It is a serial CPU semantic gate,
+not a detector-transition, stochastic-jitter, external-RTC, transport, or GPU
+performance claim.
 
 ### Optional backend smoke in `Pkg.test()`
 

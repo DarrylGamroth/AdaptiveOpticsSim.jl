@@ -49,19 +49,51 @@ PlantDuration(nanoseconds::Integer) = PlantDuration(
     _checked_plant_nanoseconds(nanoseconds, :plant_duration),
     _PLANT_TIME_TOKEN)
 
-@inline plant_nanoseconds(value::Union{PlantTimestamp,PlantDuration}) =
+@inline function _checked_plant_offset_nanoseconds(value::Integer)
+    typemin(Int64) <= value <= typemax(Int64) || throw(PlantTimeError(
+        :plant_time_offset, :overflow,
+        "plant time offset nanoseconds exceed Int64 range"))
+    return Int64(value)
+end
+
+@inline _checked_plant_offset_nanoseconds(::Bool) = throw(PlantTimeError(
+    :plant_time_offset, :invalid_type,
+    "plant time offset nanoseconds must be an integer count, not Bool"))
+
+"""
+    PlantTimeOffset(nanoseconds)
+
+One signed displacement between a nominal and realized plant instant. Unlike
+[`PlantDuration`](@ref), an offset may be negative; applying it to a timestamp
+still must produce a representable nonnegative plant instant.
+"""
+struct PlantTimeOffset
+    nanoseconds::Int64
+
+    PlantTimeOffset(nanoseconds::Int64, ::_PlantTimeToken) = new(nanoseconds)
+end
+
+PlantTimeOffset(nanoseconds::Integer) = PlantTimeOffset(
+    _checked_plant_offset_nanoseconds(nanoseconds), _PLANT_TIME_TOKEN)
+
+@inline plant_nanoseconds(value::Union{
+    PlantTimestamp,PlantDuration,PlantTimeOffset}) =
     value.nanoseconds
 
 Base.zero(::Type{PlantTimestamp}) = PlantTimestamp(0, _PLANT_TIME_TOKEN)
 Base.zero(::PlantTimestamp) = zero(PlantTimestamp)
 Base.zero(::Type{PlantDuration}) = PlantDuration(0, _PLANT_TIME_TOKEN)
 Base.zero(::PlantDuration) = zero(PlantDuration)
-Base.iszero(value::Union{PlantTimestamp,PlantDuration}) =
+Base.zero(::Type{PlantTimeOffset}) = PlantTimeOffset(0, _PLANT_TIME_TOKEN)
+Base.zero(::PlantTimeOffset) = zero(PlantTimeOffset)
+Base.iszero(value::Union{PlantTimestamp,PlantDuration,PlantTimeOffset}) =
     iszero(value.nanoseconds)
 
 Base.:(==)(left::PlantTimestamp, right::PlantTimestamp) =
     left.nanoseconds == right.nanoseconds
 Base.:(==)(left::PlantDuration, right::PlantDuration) =
+    left.nanoseconds == right.nanoseconds
+Base.:(==)(left::PlantTimeOffset, right::PlantTimeOffset) =
     left.nanoseconds == right.nanoseconds
 Base.isless(left::PlantTimestamp, right::PlantTimestamp) =
     isless(left.nanoseconds, right.nanoseconds)
@@ -77,6 +109,8 @@ Base.hash(value::PlantTimestamp, seed::UInt) =
     hash(value.nanoseconds, hash(:PlantTimestamp, seed))
 Base.hash(value::PlantDuration, seed::UInt) =
     hash(value.nanoseconds, hash(:PlantDuration, seed))
+Base.hash(value::PlantTimeOffset, seed::UInt) =
+    hash(value.nanoseconds, hash(:PlantTimeOffset, seed))
 
 function Base.show(io::IO, value::PlantTimestamp)
     print(io, "PlantTimestamp(", value.nanoseconds, " ns)")
@@ -84,6 +118,11 @@ end
 
 function Base.show(io::IO, value::PlantDuration)
     print(io, "PlantDuration(", value.nanoseconds, " ns)")
+end
+
+
+function Base.show(io::IO, value::PlantTimeOffset)
+    print(io, "PlantTimeOffset(", value.nanoseconds, " ns)")
 end
 
 @inline function _checked_plant_add(left::Int64, right::Int64,
@@ -98,6 +137,21 @@ end
     left >= right || throw(PlantTimeError(operation, :negative_result,
         "plant-time subtraction would produce a negative value"))
     return left - right
+end
+
+
+@inline function _checked_plant_offset_add(left::Int64, right::Int64,
+    operation::Symbol)
+    if right > 0
+        left <= typemax(Int64) - right || throw(PlantTimeError(
+            operation, :overflow,
+            "plant-time offset addition exceeds Int64 range"))
+    elseif right < 0
+        left >= typemin(Int64) - right || throw(PlantTimeError(
+            operation, :overflow,
+            "plant-time offset addition exceeds Int64 range"))
+    end
+    return left + right
 end
 
 @inline function _checked_plant_scale(value::Int64, factor::Integer,
@@ -152,6 +206,35 @@ end
 end
 
 Base.:*(factor::Integer, duration::PlantDuration) = duration * factor
+
+
+@inline function Base.:+(left::PlantTimeOffset, right::PlantTimeOffset)
+    return PlantTimeOffset(_checked_plant_offset_add(left.nanoseconds,
+        right.nanoseconds, :offset_add), _PLANT_TIME_TOKEN)
+end
+
+
+@inline function Base.:-(left::PlantTimeOffset, right::PlantTimeOffset)
+    right.nanoseconds == typemin(Int64) && throw(PlantTimeError(
+        :offset_subtract, :overflow,
+        "plant-time offset subtraction exceeds Int64 range"))
+    return left + PlantTimeOffset(-right.nanoseconds, _PLANT_TIME_TOKEN)
+end
+
+
+@inline function Base.:+(timestamp::PlantTimestamp,
+    offset::PlantTimeOffset)
+    nanoseconds = _checked_plant_offset_add(timestamp.nanoseconds,
+        offset.nanoseconds, :timestamp_offset)
+    nanoseconds >= 0 || throw(PlantTimeError(:timestamp_offset,
+        :negative_result,
+        "applying plant time offset would produce a negative timestamp"))
+    return PlantTimestamp(nanoseconds, _PLANT_TIME_TOKEN)
+end
+
+
+Base.:+(offset::PlantTimeOffset, timestamp::PlantTimestamp) =
+    timestamp + offset
 
 @inline function plant_time_seconds(value::PlantTimestamp,
     ::Type{T}=Float64) where {T<:AbstractFloat}

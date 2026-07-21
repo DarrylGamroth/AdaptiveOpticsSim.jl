@@ -229,15 +229,32 @@ canonical plant timeline
         └── detector exposure trigger
 ```
 
-The topology is a prepared, finite acyclic graph. Each trigger source and link
-retains only its sequence, fault state, deterministic RNG identity where
-needed, and next realized plant deadline; simulating skew or jitter does not
-materialize a run-length-sized event list.
+The implemented Gate 3 topology is a prepared, finite acyclic fan-out in which
+every link has exactly one parent and every consumer binds to one source or
+link. Preparation canonicalizes stable source, link, consumer, trace, and fault
+identities independently of declaration order. Mutable state retains one
+sequence and cumulative phase offset per source, one cumulative phase offset
+per link, and a fixed-capacity pending-delivery calendar; it does not
+materialize a run-length-sized edge list.
 
-The Gate 3 baseline requires each ordinary link's delivered edges to remain
+The initial deterministic fault model is an exact finite trace keyed by the
+one-based sequence of its root source. A trace entry's phase step persists,
+while its jitter and timestamp-label offset apply only to that sequence. Drop
+and duplicate actions are explicit, and a duplicate declares its nonnegative
+delay. A source entry remains correlated through every surviving branch; a
+link entry affects only that link and its descendants. Centrally derived random
+streams may be added behind the same prepared bounded contract, but are not
+claimed by this exact-trace implementation. One prepared topology currently
+supports at most 64 distinct fault identities in its compact delivery fault
+set; exceeding that declared support boundary fails preparation.
+
+The Gate 3 baseline requires each ordinary consumer's delivered edges to remain
 strictly ordered by source sequence after its bounded delay and jitter are
-applied. Preparation rejects bounds that permit ordinary edges to overtake or
-require more than the declared in-flight capacity. A requested duplicate is a
+applied. Preparation evaluates every exact trace discontinuity and its adjacent
+steady sequences, rejects negative physical link delay or ordinary overtaking,
+and computes a conservative required in-flight capacity from minimum realized
+source spacing, maximum path latency, and structural duplicate multiplicity. A
+declaration below that requirement is rejected. A requested duplicate is a
 separate explicit occurrence with deterministic order at its delivery
 timestamp; it does not relax capacity or silently reorder later source edges.
 More general reordering requires a separately specified bounded device model
@@ -259,22 +276,23 @@ collapsed into one timestamp offset:
 | Timestamp-label offset or drift | Does not move the physical exposure | Changes metadata presented to the RTC |
 | Phase step, dropped trigger, or duplicate trigger | Alters only not-yet-delivered edges under an explicit fault policy | Records the resulting discontinuity and fault identity |
 
-Nominal trigger time, realized trigger-delivery time, resulting physical
-exposure boundaries, and reported timestamp remain separate fields. This
+`NominalTriggerEdge`, `DeliveredTriggerEdge`, and
+`ReportedTriggerTimestamp` are separate records. Resulting physical exposure
+boundaries remain the detector transition layer's separate responsibility. This
 permits an RTC test to distinguish a genuinely misphased detector from a
 correctly triggered detector whose metadata is wrong.
 
-A trigger mapping or fault update never retimestamps an edge that has already
-been delivered. Its configuration declares whether it applies at the next
-source edge or the next delivered edge. If an update would place a
-not-yet-emitted edge at or before the current plant time,
-the configured policy records a missed edge, emits an explicit duplicate where
-that fault is requested, or fails the run; the scheduler does not silently
-backdate or manufacture an unbounded catch-up burst. Equal-time updates use a
-prepared ordinal, and a trigger update effective at `t` affects a not-yet-emitted
-edge delivered at `t`.
+A realized source may not advance past an earlier pending delivery, and a
+delivery may not be removed while an earlier or equal-time source remains due.
+This enforces source-before-delivery causality at equal time and prevents an
+already observed delivery from being silently backdated. Fixed pending storage
+fails structurally if a caller violates the prepared chronological draining
+contract; it never manufactures an unbounded catch-up burst. Dynamic live fault
+updates remain a later bounded-command concern rather than being inferred from
+mutation of a prepared exact trace.
 
-Deterministic tests use fixed fault traces or centrally derived RNG streams.
+Deterministic tests currently use fixed exact fault traces. A future stochastic
+model must use centrally derived RNG streams and preserve the same bounds.
 Run metadata records the trigger topology, link and fault versions, seeds or
 trace identities, nominal and delivered edges, resulting exposure boundaries,
 timestamp labels, and synchronization residuals required for replay.
