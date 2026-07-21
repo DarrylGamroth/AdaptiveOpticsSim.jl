@@ -69,6 +69,14 @@ end
     @test event_generator_handle(scheduler, OpticalSamplePhase, 7) isa
         EventGeneratorHandle
 
+    vector_definitions = [periodic_definition, inactive_definition]
+    vector_scheduler = prepare_event_scheduler(vector_definitions;
+        capacity=4)
+    vector_definitions[1] = inactive_definition
+    @test event_generator_count(vector_scheduler) == 2
+    @test event_generator_phase(getfield(
+        vector_scheduler, :definitions)[1]) == OpticalSamplePhase
+
     same_ordinal_other_phase = EventGeneratorDefinition(
         PlantTimestamp(1), ExposureOpenPhase, 7)
     @test event_generator_count(prepare_event_scheduler(
@@ -161,6 +169,8 @@ end
 
     first_claim = claim_next_event!(workspace, scheduler, state)
     @test claimed_event_key(first_claim) == scanned[1]
+    @test event_generator_handle(first_claim) == event_generator_handle(
+        scheduler, ExposureOpenPhase, 3)
     @test scheduler_timestamp(state) == PlantTimestamp(10)
     reschedule_event!(scheduler, state, first_claim, PlantTimestamp(50))
     second_claim = claim_next_event!(workspace, scheduler, state)
