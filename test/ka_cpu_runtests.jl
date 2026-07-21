@@ -1,7 +1,6 @@
 using Test
 using AdaptiveOpticsSim
 using FFTW
-using KernelAbstractions
 using LinearAlgebra
 using Random
 using SpecialFunctions
@@ -21,4 +20,5 @@ for name in names(AdaptiveOpticsSim; all=true)
 end
 
 include("reference_harness.jl")
+include("ka_cpu_style_fixture.jl")
 include("ka_cpu_matrix.jl")
