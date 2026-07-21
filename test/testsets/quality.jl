@@ -65,6 +65,16 @@ end
         readdir(@__DIR__; join=true),
     ))
     @test registered_testset_paths() == normpath.(actual_testsets)
+    @test registered_test_fixture_paths() == [normpath(joinpath(
+        dirname(@__DIR__), "wfs_stage_contract_fixtures.jl"))]
+    fixture_users = Tuple(spec.name for spec in TEST_SUITE_SPECS
+        if !isempty(spec.fixtures))
+    @test fixture_users == (
+        "detectors-wfs",
+        "plant-preparation",
+        "plant-providers",
+        "backend-smoke",
+    )
 end
 
 @testset "Aqua" begin

@@ -55,7 +55,9 @@ julia --project=. --startup-file=no -e \
 
 The first command runs one fine-grained suite; the second runs the broader
 plant group. Multiple selectors form a de-duplicated union in canonical suite
-order. List the current suites and groups with:
+order. Shared test-only protocol fixtures are declared as suite dependencies,
+loaded once, and do not rely on a preceding suite's include side effects. List
+the current suites and groups with:
 
 ```sh
 julia --project=. --startup-file=no -e \
