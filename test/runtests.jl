@@ -1,20 +1,14 @@
-include("runtests_head.jl")
+include("test_selection.jl")
 
-include("testsets/core_optics.jl")
-include("testsets/direct_science.jl")
-include("testsets/atmosphere.jl")
-include("testsets/plant_topology.jl")
-include("testsets/plant_time.jl")
-include("testsets/control_and_runtime.jl")
-include("testsets/detectors_and_wfs.jl")
-include("testsets/plant_preparation.jl")
-include("testsets/plant_providers.jl")
-include("testsets/plant_rng.jl")
-include("testsets/plant_illumination.jl")
-include("testsets/calibration_and_analysis.jl")
-include("testsets/reference_and_tutorials.jl")
-include("testsets/gate0_characterization.jl")
-
-include("backend_optional_common.jl")
-include("optional_amdgpu_backends.jl")
-include("optional_cuda_backends.jl")
+requested_suites = resolve_test_suites()
+if requested_suites === nothing
+    print_test_suite_help()
+else
+    include("runtests_head.jl")
+    for suite in requested_suites
+        @info "Running test suite" suite=suite.name
+        for path in suite.paths
+            include(path)
+        end
+    end
+end

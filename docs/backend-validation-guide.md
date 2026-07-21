@@ -26,17 +26,45 @@ For current release/support scope, use:
 
 ### Functional and subsystem tests
 
-These run unconditionally in [`runtests.jl`](../test/runtests.jl) through the
-grouped testsets under [`test/testsets`](../test/testsets):
+Bare `Pkg.test()` runs every registered suite in
+[`runtests.jl`](../test/runtests.jl) through the grouped testsets under
+[`test/testsets`](../test/testsets):
 
-- core optics
-- atmosphere
+- quality, API, and deterministic RNG policy
+- KernelAbstractions CPU parity and tomography
+- core optics, direct science, and atmosphere
 - control and runtime
 - detectors and WFS
+- plant topology, preparation, product providers, RNG ownership, and
+  calibration illumination
 - calibration and analysis
-- reference and tutorial regression
+- reference, tutorial, and Gate 0 regression
 
 These are normal correctness tests, not backend throughput checks.
+
+For a development edit/test loop, pass one or more stable suite or group names
+through Julia's `test_args` interface. For example:
+
+```sh
+julia --project=. --startup-file=no -e \
+  'using Pkg; Pkg.test(test_args=["plant-time"])'
+
+julia --project=. --startup-file=no -e \
+  'using Pkg; Pkg.test(test_args=["plant"])'
+```
+
+The first command runs one fine-grained suite; the second runs the broader
+plant group. Multiple selectors form a de-duplicated union in canonical suite
+order. List the current suites and groups with:
+
+```sh
+julia --project=. --startup-file=no -e \
+  'using Pkg; Pkg.test(test_args=["--list"])'
+```
+
+An unknown selector fails rather than silently running no tests. Selective
+runs are development evidence only: bare `Pkg.test()` remains the complete CPU
+composition and release gate, and CI continues to run it.
 
 ### Optional backend smoke in `Pkg.test()`
 

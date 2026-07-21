@@ -1,5 +1,4 @@
 using Test
-using Aqua
 using AdaptiveOpticsSim
 using LinearAlgebra
 using Random
@@ -40,25 +39,6 @@ using .SubaruAO3kSimulation
 
 include("reference_harness.jl")
 include("gate0_characterization_harness.jl")
-include("ka_cpu_matrix.jl")
-include("tomography.jl")
-
-_rng_family(::Xoshiro) = :xoshiro
-_rng_family(::MersenneTwister) = :mersenne_twister
-_rng_family(::AbstractRNG) = :other
-
-@testset "RNG policy helpers" begin
-    @test _rng_family(runtime_rng(1)) == :xoshiro
-    @test _rng_family(deterministic_reference_rng(1)) == :mersenne_twister
-    @test rand(runtime_rng(42), UInt64) == rand(runtime_rng(42), UInt64)
-    @test rand(deterministic_reference_rng(42), UInt64) == rand(deterministic_reference_rng(42), UInt64)
-    @test coverage_runner_flag("true")
-    @test coverage_runner_flag(" YES ")
-    @test !coverage_runner_flag("false")
-    @test coverage_instrumented() ==
-        (coverage_runner_flag(get(ENV, "ADAPTIVEOPTICS_TEST_COVERAGE",
-            "false")) || Base.JLOptions().code_coverage != 0)
-end
 
 function run_tutorial_example(name::AbstractString)
     path = joinpath(dirname(@__DIR__), "examples", "tutorials", name)
@@ -380,13 +360,4 @@ function moving_closed_loop_trace(;
     end
 
     return (; slope_norms, command_norms, wfs_energy, science_energy)
-end
-
-@test AdaptiveOpticsSim.PROJECT_STATUS == :in_development
-
-@testset "Aqua" begin
-    Aqua.test_all(
-        AdaptiveOpticsSim;
-        undocumented_names=false,
-    )
 end
