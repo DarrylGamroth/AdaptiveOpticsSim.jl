@@ -1,4 +1,4 @@
-import AbstractFFTs
+const TestAbstractFFTs = AdaptiveOpticsSim.AbstractFFTs
 
 struct TestExpandedSourceWrapper{S<:AdaptiveOpticsSim.AbstractSource} <:
     AdaptiveOpticsSim.AbstractSource
@@ -19,10 +19,10 @@ Base.getindex(array::TestBackendFFTArray, indices...) =
     getindex(array.storage, indices...)
 Base.setindex!(array::TestBackendFFTArray, value, indices...) =
     setindex!(array.storage, value, indices...)
-AbstractFFTs.plan_fft!(::TestBackendFFTArray) = :backend_fft
-AbstractFFTs.plan_fft!(::TestBackendFFTArray, dims) = (:backend_fft, dims)
-AbstractFFTs.plan_ifft!(::TestBackendFFTArray) = :backend_ifft
-AbstractFFTs.plan_ifft!(::TestBackendFFTArray, dims) = (:backend_ifft, dims)
+TestAbstractFFTs.plan_fft!(::TestBackendFFTArray) = :backend_fft
+TestAbstractFFTs.plan_fft!(::TestBackendFFTArray, dims) = (:backend_fft, dims)
+TestAbstractFFTs.plan_ifft!(::TestBackendFFTArray) = :backend_ifft
+TestAbstractFFTs.plan_ifft!(::TestBackendFFTArray, dims) = (:backend_ifft, dims)
 
 @testset "GPU backend registry" begin
     @test !gpu_backend_loaded(AdaptiveOpticsSim.CUDABackendTag)
@@ -45,8 +45,8 @@ end
         full = copy(original)
         full_fft = AdaptiveOpticsSim.plan_fft_backend!(full)
         full_ifft = AdaptiveOpticsSim.plan_ifft_backend!(full)
-        @test full_fft isa AbstractFFTs.Plan
-        @test full_ifft isa AbstractFFTs.Plan
+        @test full_fft isa TestAbstractFFTs.Plan
+        @test full_ifft isa TestAbstractFFTs.Plan
         AdaptiveOpticsSim.execute_fft_plan!(full, full_fft)
         AdaptiveOpticsSim.execute_fft_plan!(full, full_ifft)
         @test full ≈ original
@@ -54,8 +54,8 @@ end
         first_dimension = copy(original)
         dim_fft = AdaptiveOpticsSim.plan_fft_backend!(first_dimension, 1)
         dim_ifft = AdaptiveOpticsSim.plan_ifft_backend!(first_dimension, 1)
-        @test dim_fft isa AbstractFFTs.Plan
-        @test dim_ifft isa AbstractFFTs.Plan
+        @test dim_fft isa TestAbstractFFTs.Plan
+        @test dim_ifft isa TestAbstractFFTs.Plan
         AdaptiveOpticsSim.execute_fft_plan!(first_dimension, dim_fft)
         AdaptiveOpticsSim.execute_fft_plan!(first_dimension, dim_ifft)
         @test first_dimension ≈ original
