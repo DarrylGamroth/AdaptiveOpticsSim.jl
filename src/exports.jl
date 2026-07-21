@@ -182,6 +182,14 @@ export PreparedPlant, prepare_plant
 export prepare_pupil_opd_materialization, materialize_path_input!
 export execute_path!, execute_acquisition!
 export path_result_key, path_input, path_result
+export PupilFunctionIlluminationEntry, ElectricFieldIlluminationEntry
+export IntensityMapIlluminationEntry, ExternalOpticsResultIlluminationEntry
+export DetectorInputIlluminationEntry
+export SingleIllumination, ExclusiveIlluminationSelection
+export UniformIntensityIllumination, prepare_illumination_entry
+export evaluate_illumination!, illumination_entry_boundary
+export illumination_evaluator, illumination_destination
+export illumination_combination, illumination_visibility
 export FullOpticalProviderStyle
 export CommandResponsiveReducedOrderProviderStyle
 export SyntheticReplayProviderStyle, acquisition_provider_style

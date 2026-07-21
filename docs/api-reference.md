@@ -172,6 +172,15 @@ single-writer owners without adding scheduling or atmosphere advancement:
   `prepare_acquisition_selection`, `execute_acquisition_selection!`,
   `execute_acquisition_selection_at!`, `execute_path!`, and
   `execute_acquisition!`
+- Calibration-illumination entry boundary:
+  `PupilFunctionIlluminationEntry`, `ElectricFieldIlluminationEntry`,
+  `IntensityMapIlluminationEntry`, `ExternalOpticsResultIlluminationEntry`,
+  `DetectorInputIlluminationEntry`, `SingleIllumination`,
+  `ExclusiveIlluminationSelection`, `UniformIntensityIllumination`,
+  `prepare_illumination_entry`, `evaluate_illumination!`, and the
+  `illumination_*` accessors. Coherent-field and incoherent-intensity
+  combination reuse `CoherentFieldCombination` and
+  `IncoherentIntensityAddition`
 - Prepared accessors: `prepared_paths`, `prepared_acquisitions`,
   `prepared_path`, `prepared_acquisition`, `path_input`, `path_result`,
   `path_result_key`, `acquisition_provider`, `acquisition_products`,
@@ -190,7 +199,7 @@ single-writer owners without adding scheduling or atmosphere advancement:
   `PreparedAcquisitionOwner`, `PreparedAcquisitionProvider`,
   `AcquisitionProducts`, `AcquisitionProductContract`, `PathResultKey`,
   `PreparedAcquisitionSelection`, `PreparedPupilOPDMaterialization`,
-  `AtmosphereIndependentPath`,
+  `PreparedIlluminationEntry`, `AtmosphereIndependentPath`,
   `AbstractOpticalSamplingContract`, `InstantaneousOpticalSample`,
   `require_path_result`, `prepare_path_executor`,
   `prepare_acquisition_provider`, `validate_path_execution_binding`,
@@ -201,8 +210,20 @@ single-writer owners without adding scheduling or atmosphere advancement:
   `execute_acquisition_provider!`, and, for custom copied products,
   `copy_acquisition_product!`. RNG extensions use qualified
   `additional_path_rng_owner_roles`,
+  `additional_path_materialization_rng_owner_roles`,
   `additional_acquisition_rng_owner_roles`, `execute_path_rngs!`,
   `execute_acquisition_rngs!`, and `rng_stream_state`
+
+An illumination entry is a prepared path-input materializer, not a calibration
+mode or a second acquisition API. It binds one exact caller-owned optical
+product, an explicit downstream-visibility description, immutable evaluator
+parameters, separate single-writer state/workspace, combination semantics,
+backend/device, plant time, and a path-owned `:illumination` RNG stream. The
+ordinary path execution and acquisition provider consume the resulting product.
+`UniformIntensityIllumination` is the only native source definition in this
+gate; unusual source physics extend the qualified evaluator seams described in
+the extension guide. Entry tags do not infer a lamp, relay, instrument, control
+authority, or upstream propagation bypass.
 
 Every path and acquisition carries an explicit typed identity. Tuples and
 named tuples organize declarations but do not define identity; named keys must

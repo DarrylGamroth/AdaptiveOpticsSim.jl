@@ -350,11 +350,14 @@ function _validate_path_input(input::PupilFunction)
 end
 
 function _validate_path_input(input::ElectricField)
-    typeof(input.metadata.kind) === PupilPlane || throw(
-        PlantPreparationError(:path, :input_plane,
-            "prepared path ElectricField input must be on a pupil plane"))
     validate_plane_storage(input.metadata, input.values;
         label="prepared path electric field")
+    return input
+end
+
+function _validate_path_input(input::IntensityMap)
+    validate_plane_storage(input.metadata, input.values;
+        label="prepared path intensity map")
     return input
 end
 
@@ -376,14 +379,15 @@ end
 
 function _validate_path_input(input)
     throw(PlantPreparationError(:path, :input_plane,
-        "prepared path input must be a pupil function, pupil-plane electric field, or concrete tuple of them; got $(typeof(input))"))
+        "prepared path input must be a PupilFunction, ElectricField, IntensityMap, or concrete tuple of them; got $(typeof(input))"))
 end
 
 @inline _path_input_storage(input::PupilFunction) = input.opd
 @inline _path_input_storage(input::ElectricField) = input.values
+@inline _path_input_storage(input::IntensityMap) = input.values
 
 @inline function _require_path_input_domain(
-    input::Union{PupilFunction,ElectricField},
+    input::Union{PupilFunction,ElectricField,IntensityMap},
     selector::AbstractArrayBackend,
     device::AbstractPlaneDevice,
 )
@@ -406,6 +410,7 @@ end
 end
 
 @inline _require_path_input_revision(::ElectricField, ::UInt) = nothing
+@inline _require_path_input_revision(::IntensityMap, ::UInt) = nothing
 
 function _require_path_input_revision(input::PupilFunction, revision::UInt)
     aperture_revision(input) == revision || throw(PlantPreparationError(
@@ -532,6 +537,19 @@ end
 @inline materialize_path_input!(
     ::AtmosphereIndependentPath, input, atmosphere, epoch) = input
 
+@inline function materialize_path_input!(materialization, input,
+    atmosphere, epoch, ::AbstractRNG)
+    return materialize_path_input!(materialization, input, atmosphere,
+        epoch)
+end
+
+"""Qualified materialization seam with one exact prepared path RNG group."""
+@inline function materialize_path_input_rngs!(materialization, input,
+    atmosphere, epoch, ::PreparedOwnerRNGs)
+    return materialize_path_input!(materialization, input, atmosphere,
+        epoch)
+end
+
 function materialize_path_input!(
     materialization::PreparedPupilOPDMaterialization,
     input::PupilFunction,
@@ -552,6 +570,8 @@ Concrete single-writer owner for one prepared optical path. `input` and
 `result` are explicit path-local products, `materialization` binds the path's
 atmosphere-dependent input operation, and `execution` owns or references the
 concrete prepared propagation/front-end workspace used to update `result`.
+An input may begin at a declared pupil-function, electric-field, or intensity
+entry boundary; it need not represent the entrance pupil.
 """
 struct PreparedPathExecutor{D,S,T,A,I,R,M,E,K<:PathResultKey}
     definition::D
@@ -671,6 +691,19 @@ function materialize_path_input!(path::PreparedPathExecutor,
         atmosphere, epoch)
     return materialize_path_input!(path.materialization, path.input,
         atmosphere, epoch)
+end
+
+"""Materialize one path input at an explicit epoch with a caller-owned RNG."""
+function materialize_path_input!(path::PreparedPathExecutor,
+    epoch::AtmosphereEpoch, rng::AbstractRNG)
+    _require_current_path_binding(path)
+    atmosphere = _require_timed_path_atmosphere(path.atmosphere)
+    _validate_epoch_identity(atmosphere_identity(atmosphere), atmosphere,
+        epoch)
+    validate_path_materialization(path.materialization, path.input,
+        atmosphere, epoch)
+    return materialize_path_input!(path.materialization, path.input,
+        atmosphere, epoch, rng)
 end
 
 """Execute one already prepared path without selecting or advancing time."""
@@ -1286,7 +1319,7 @@ end
     path = first(paths)
     bindings = _rng_owner_bindings(path, :path,
         path_id(path.definition).name,
-        _path_rng_owner_roles(path.execution))
+        _path_rng_owner_roles(path.execution, path.materialization))
     return (bindings, _path_rng_owner_bindings(Base.tail(paths))...)
 end
 
@@ -1593,14 +1626,16 @@ end
         atmosphere, epoch)
 end
 
-@inline _materialize_selected_paths!(::Tuple{}, atmosphere, epoch) = nothing
+@inline _materialize_selected_paths!(::Tuple{}, ::Tuple{}, atmosphere,
+    epoch) = nothing
 
-@inline function _materialize_selected_paths!(paths::Tuple, atmosphere,
-    epoch)
+@inline function _materialize_selected_paths!(paths::Tuple, rngs::Tuple,
+    atmosphere, epoch)
     path = first(paths)
-    materialize_path_input!(path.materialization, path.input, atmosphere,
-        epoch)
-    return _materialize_selected_paths!(Base.tail(paths), atmosphere, epoch)
+    materialize_path_input_rngs!(path.materialization, path.input,
+        atmosphere, epoch, first(rngs))
+    return _materialize_selected_paths!(Base.tail(paths), Base.tail(rngs),
+        atmosphere, epoch)
 end
 
 @inline _execute_selected_paths!(::Tuple{}, ::Tuple{}) = nothing
@@ -1637,7 +1672,8 @@ end
 
 function _execute_selected_epoch!(selection::PreparedAcquisitionSelection,
     atmosphere::AbstractTimedAtmosphere, epoch::AtmosphereEpoch)
-    _materialize_selected_paths!(selection.paths, atmosphere, epoch)
+    _materialize_selected_paths!(selection.paths, selection.path_rngs,
+        atmosphere, epoch)
     _execute_selected_paths!(selection.paths, selection.path_rngs)
     _execute_selected_acquisitions!(selection.acquisitions,
         selection.acquisition_rngs)

@@ -22,16 +22,43 @@ struct OptionalPreparedDirectPathModel
     zero_padding::Int
 end
 
+struct OptionalPreparedIlluminationPathModel{T<:AbstractFloat}
+    photon_rate::T
+end
+
 struct OptionalPreparedFrameAcquisitionModel{T<:AbstractFloat}
     exposure::T
+end
+
+struct OptionalIlluminationIdentityExecution{P}
+    product::P
 end
 
 AdaptiveOpticsSim.plant_model_definition_style(
     ::Type{OptionalPreparedDirectPathModel}) = ColdPlantModelDefinition()
 
 AdaptiveOpticsSim.plant_model_definition_style(
+    ::Type{<:OptionalPreparedIlluminationPathModel}) =
+    ColdPlantModelDefinition()
+
+AdaptiveOpticsSim.plant_model_definition_style(
     ::Type{<:OptionalPreparedFrameAcquisitionModel}) =
     ColdPlantModelDefinition()
+
+function AdaptiveOpticsSim.validate_path_execution_binding(
+    execution::OptionalIlluminationIdentityExecution, input, result)
+    execution.product === input && input === result || throw(
+        PlantPreparationError(:path, :prepared_binding,
+            "optional illumination identity binding changed"))
+    return nothing
+end
+
+function AdaptiveOpticsSim.execute_path!(result, input,
+    execution::OptionalIlluminationIdentityExecution)
+    AdaptiveOpticsSim.validate_path_execution_binding(execution, input,
+        result)
+    return result
+end
 
 function AdaptiveOpticsSim.prepare_path_executor(
     model::OptionalPreparedDirectPathModel,
@@ -57,6 +84,48 @@ function AdaptiveOpticsSim.prepare_path_executor(
         optical_model=(kind=:direct_imaging,
             zero_padding=model.zero_padding),
         propagation_model=:fraunhofer_fft,
+        model_revisions=UInt(1),
+    )
+end
+
+function AdaptiveOpticsSim.prepare_path_executor(
+    model::OptionalPreparedIlluminationPathModel,
+    definition::OpticalPathDefinition,
+    source::AdaptiveOpticsSim.AbstractSource,
+    telescope::Telescope,
+    atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere,
+)
+    T = eltype(pupil_reflectivity(telescope))
+    values = similar(pupil_reflectivity(telescope), T,
+        telescope.params.resolution, telescope.params.resolution)
+    fill!(values, zero(T))
+    metadata = OpticalPlaneMetadata(DetectorPlane(), values;
+        coordinate_domain=MetricCoordinates(),
+        sampling=(one(T), one(T)),
+        spectral=MonochromaticChannel(T(wavelength(source))),
+        normalization=PhotonRateNormalization(),
+        spatial_measure=CellIntegratedMeasure(),
+        coherence=IncoherentIntensityAddition())
+    destination = IntensityMap(metadata, values)
+    entry = prepare_illumination_entry(
+        UniformIntensityIllumination(model.photon_rate;
+            combination=SingleIllumination()),
+        destination, DetectorInputIlluminationEntry();
+        visibility=(downstream_path=path_id(definition),
+            starts_at=:detector_input))
+    execution = OptionalIlluminationIdentityExecution(destination)
+    return AdaptiveOpticsSim.PreparedPathExecutor(
+        definition,
+        source,
+        telescope,
+        atmosphere,
+        destination,
+        destination,
+        execution;
+        materialization=entry,
+        optical_model=(kind=:uniform_detector_illumination,
+            photon_rate=T(model.photon_rate)),
+        propagation_model=:detector_input_identity,
         model_revisions=UInt(1),
     )
 end
@@ -143,28 +212,39 @@ function run_optional_prepared_plant_checks(::Type{B},
         photon_irradiance=T(3), T=T)
     path_definition = OpticalPathDefinition(:science, source,
         OptionalPreparedDirectPathModel(2))
+    illumination_path_definition = OpticalPathDefinition(:illumination,
+        source, OptionalPreparedIlluminationPathModel(T(8)))
     fast_definition = AcquisitionDefinition(:fast_science, :science,
         OptionalPreparedFrameAcquisitionModel(T(0.25)))
     slow_definition = AcquisitionDefinition(:slow_science, :science,
         OptionalPreparedFrameAcquisitionModel(T(0.75)))
+    illumination_definition = AcquisitionDefinition(:illumination_frame,
+        :illumination, OptionalPreparedFrameAcquisitionModel(T(0.125)))
     definition = PlantDefinition(; telescope, atmosphere,
-        paths=(science=path_definition,),
+        paths=(science=path_definition,
+            illumination=illumination_path_definition),
         acquisitions=(fast_science=fast_definition,
-            slow_science=slow_definition))
+            slow_science=slow_definition,
+            illumination_frame=illumination_definition))
 
     plant = prepare_plant(definition; run_seed=0x6100)
     path = prepared_path(plant, :science)
+    illumination_path = prepared_path(plant, :illumination)
     fast = prepared_acquisition(plant, :fast_science)
     slow = prepared_acquisition(plant, :slow_science)
+    illumination = prepared_acquisition(plant, :illumination_frame)
     @test path_result(path).values isa BackendArray
+    @test path_input(illumination_path).values isa BackendArray
+    @test path_input(illumination_path) === path_result(illumination_path)
     @test acquisition_observation(fast) isa BackendArray
     @test acquisition_observation(slow) isa BackendArray
+    @test acquisition_observation(illumination) isa BackendArray
     @test path_result_key(path).device ==
         plane_device(acquisition_observation(fast))
     @test acquisition_observation(fast) !== acquisition_observation(slow)
 
     selection = prepare_acquisition_selection(plant,
-        (:slow_science, :fast_science))
+        (:slow_science, :illumination_frame, :fast_science))
     @test @inferred(execute_acquisition_selection_at!(selection,
         T(1e-3))) === selection
     fast_products = acquisition_products(fast)
@@ -177,9 +257,15 @@ function run_optional_prepared_plant_checks(::Type{B},
     @test slow_products === acquisition_products(slow)
     fast_host = Array(acquisition_observation(fast))
     slow_host = Array(acquisition_observation(slow))
+    illumination_host = Array(acquisition_observation(illumination))
     @test all(isfinite, fast_host)
     @test sum(fast_host) > zero(T)
     @test slow_host ≈ T(3) .* fast_host rtol=T(3e-5) atol=T(3e-5)
+    @test all(==(one(T)), illumination_host)
+    @test all(==(T(8)), Array(path_result(illumination_path).values))
+    @test illumination_entry_boundary(
+        AdaptiveOpticsSim.path_materialization(illumination_path)) isa
+        DetectorInputIlluminationEntry
 
     synthetic_metadata = acquisition_product_metadata(fast)
     copied_destination = AdaptiveOpticsSim.AcquisitionProducts(

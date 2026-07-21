@@ -73,6 +73,9 @@ The reduced maintained smoke covers:
 - prepared LiFT photon-rate formation, analytic interaction matrices,
   rate/count/normalized observations, analytic and numerical reconstruction,
   and dense/separable object convolution
+- prepared native uniform calibration illumination through a typed
+  detector-input path, stable materialization RNG ownership, and ordinary
+  detector acquisition without host scalar indexing
 - MKID accumulated-count capture, source passband handling, and
   flux-conserving channel-crosstalk parity
 
@@ -296,8 +299,8 @@ Current clean-revision artifacts are:
 
 All listed correctness, residency, allocation, absolute-p95, and relative-p95
 gates pass. The WSL target used CUDA.jl 6.2.1, KernelAbstractions.jl 0.9.42,
-and Julia 1.12.6. The current maintained hardware targets passed `406/406` CUDA
-checks and `416/416` AMDGPU checks with scalar indexing disabled, including the
+and Julia 1.12.6. The current maintained hardware targets passed `412/412` CUDA
+checks and `422/422` AMDGPU checks with scalar indexing disabled, including the
 shared LiFT matrix and device-resident schedule-free atmosphere
 materialization, direct-science formation, and detector fan-out. The
 current local AMDGPU latency artifact remains the
