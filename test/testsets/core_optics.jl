@@ -39,7 +39,7 @@ end
     # not drift into the ordinary user namespace.
     # Gate 2 adds a bounded documented topology/preparation surface; internal
     # validation and source-key helpers remain qualified implementation detail.
-    @test length(exported) <= 524
+    @test length(exported) <= 537
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :PlantDefinitionError)
     @test Base.isexported(AdaptiveOpticsSim, :PlantPreparationError)
@@ -67,6 +67,27 @@ end
         :execute_acquisition_selection_at!)
     @test Base.isexported(AdaptiveOpticsSim, :execute_path!)
     @test Base.isexported(AdaptiveOpticsSim, :execute_acquisition!)
+    @test Base.isexported(AdaptiveOpticsSim, :FullOpticalProviderStyle)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :CommandResponsiveReducedOrderProviderStyle)
+    @test Base.isexported(AdaptiveOpticsSim, :SyntheticReplayProviderStyle)
+    @test Base.isexported(AdaptiveOpticsSim, :acquisition_provider_style)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :prepare_full_optical_provider)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :prepare_unchanged_synthetic_provider)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :prepare_copied_synthetic_provider)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :prepare_cyclic_replay_provider)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :validate_acquisition_product_contract)
+    @test !Base.isexported(AdaptiveOpticsSim,
+        :PreparedAcquisitionProvider)
+    @test !Base.isexported(AdaptiveOpticsSim,
+        :AcquisitionProductContract)
+    @test !Base.isexported(AdaptiveOpticsSim,
+        :prepare_acquisition_provider)
     @test !Base.isexported(AdaptiveOpticsSim, :PreparedPathExecutor)
     @test !Base.isexported(AdaptiveOpticsSim, :PreparedAcquisitionOwner)
     @test !Base.isexported(AdaptiveOpticsSim,

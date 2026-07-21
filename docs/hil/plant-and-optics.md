@@ -71,7 +71,8 @@ plant = PlantDefinition(
 `RNGDerivationVersion`, `plant_model_definition_style`, and
 `ColdPlantModelDefinition` are committed public declaration names.
 `PreparedPlant`, `PreparedPathExecutor`, `PreparedAcquisitionOwner`,
-`AcquisitionProducts`, `PathResultKey`, `prepare_plant`,
+`PreparedAcquisitionProvider`, `AcquisitionProducts`,
+`AcquisitionProductContract`, `PathResultKey`, `prepare_plant`,
 `rng_replay_metadata`, `execute_path!`, and `execute_acquisition!` are the
 corresponding schedule-free prepared boundary.
 A symbol passed as an identity is normalized to the corresponding typed ID. A
@@ -135,9 +136,11 @@ immutable path declaration.
 
 A prepared core acquisition in the current schedule-free slice owns:
 
-- its WFS and/or detector state
-- its detector/readout configuration and state
-- caller-owned observation and optional measurement products
+- one run-immutable full-optical, command-responsive reduced-order, or
+  nonresponsive synthetic/replay provider
+- that provider's WFS/detector, reduced-order, payload, or replay state
+- caller-owned observation and optional measurement products with required
+  logical metadata and one prepared compatibility contract
 - an exact read-only binding to one prepared path result and compatibility key
 
 The low-level acquisition receives an explicit RNG when
@@ -461,8 +464,10 @@ maintained WFS or independent optical use justifies them.
 
 RTC latency and throughput work must not require the full optical plant when
 the physical result is not under test. Fidelity is therefore a prepared
-per-acquisition product-provider policy, not one global `fast` flag. The names
-below describe semantic tiers rather than committed public API types:
+per-acquisition product-provider policy, not one global `fast` flag. The
+implemented trait values are `FullOpticalProviderStyle`,
+`CommandResponsiveReducedOrderProviderStyle`, and
+`SyntheticReplayProviderStyle`:
 
 | Provider tier | Prepared work | Claims it can support |
 |---|---|---|
@@ -479,6 +484,15 @@ immutable parameters remain separate from single-writer mutable state. The
 runtime must not select providers through an `isa` ladder or allocate a new
 product object on every event.
 
+The core implementation binds one `PreparedAcquisitionProvider` into each
+immutable `PreparedAcquisitionOwner`. `AcquisitionProductContract` snapshots
+the observation and measurement shape, numeric type, backend/device, typed
+units and metadata, and required acquisition-level metadata. Providers mutate
+and return the exact caller-owned `AcquisitionProducts` value; incompatible
+shape, numeric type, memory domain, units, or metadata fails during
+preparation. A selected reduced-order or synthetic/replay acquisition does not
+cause its referenced full-optical path to execute.
+
 A synthetic source declares how it treats its payload: reuse unchanged
 contents, touch or regenerate selected elements, copy a prepared product, or
 replay a bounded sequence. Its prepared corpus size, rotation, and reuse
@@ -488,6 +502,12 @@ raw-pixel RTC throughput claim requires production-shaped buffers in the
 correct memory domain and representative payload reads, writes, copies, and
 transport; merely rotating descriptors through a ring does not establish pixel
 throughput.
+
+Core maintains unchanged-reuse, owned-snapshot copy, and fixed-size cyclic
+completed-product replay implementations. The replay corpus has fixed capacity
+and a separate mutable single-writer cursor. Provider payload-work metadata
+records `:reuse_unchanged`, `:copy_prepared_product`, or
+`:bounded_cyclic_replay`; these declarations are not RTC load evidence.
 
 A reduced-order provider remains responsive to effective optic commands. It
 may use existing geometric WFS measurements for slope products, a calibrated

@@ -182,6 +182,16 @@ export PreparedPlant, prepare_plant
 export prepare_pupil_opd_materialization, materialize_path_input!
 export execute_path!, execute_acquisition!
 export path_result_key, path_input, path_result
+export FullOpticalProviderStyle
+export CommandResponsiveReducedOrderProviderStyle
+export SyntheticReplayProviderStyle, acquisition_provider_style
+export acquisition_provider_payload_work
+export prepare_full_optical_provider
+export prepare_unchanged_synthetic_provider
+export prepare_copied_synthetic_provider, prepare_cyclic_replay_provider
+export acquisition_product_contract
+export validate_acquisition_product_contract
+export acquisition_provider, acquisition_product_metadata
 export acquisition_products, acquisition_observation
 export acquisition_measurement, prepared_paths, prepared_acquisitions
 export prepared_path, prepared_acquisition

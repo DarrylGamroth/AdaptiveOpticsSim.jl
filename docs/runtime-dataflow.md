@@ -194,6 +194,16 @@ an RTC adapter can be tested at production rate without paying for optics that
 are outside the test boundary. Fidelity is mixed per acquisition and never
 changes during a run; another fidelity tier requires another prepare/arm cycle.
 
+The schedule-free core portion is implemented: provider-style trait dispatch,
+one run-immutable provider per prepared acquisition, required logical product
+metadata and compatibility snapshots, exact caller-owned result semantics,
+and unchanged/copy/bounded-cyclic-replay synthetic implementations. A selected
+reduced-order or synthetic/replay provider bypasses otherwise unused
+full-optical path execution; all declared topology is still prepared by this
+gate. Sequence, timestamp, lease, port, and overload invariants remain
+the responsibility of their later HIL gates rather than being synthesized by
+this core seam.
+
 The reduced-order provider remains a causal AO plant: it advances a seeded or
 replayed time-correlated disturbance, projects it into each sensing direction,
 subtracts the response of commands that are physically effective at the sample

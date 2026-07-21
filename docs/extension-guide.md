@@ -108,12 +108,15 @@ value-comparable descriptions covering every source property that can change a
 path result. If the source contains mutable profile/image storage,
 `freeze_source` must copy it before these keys are built.
 
-An acquisition method first calls `require_path_result` for any stricter cold
-requirements, then constructs independent detector/WFS state and caller-owned
-products:
+An acquisition model implements the qualified `prepare_acquisition_provider`
+seam. It first calls `require_path_result` for any stricter cold requirements,
+then constructs independent detector/WFS state and caller-owned products. The
+product metadata is required and run-immutable; include every geometry,
+radiometry, unit, layout, or semantic declaration not already carried by the
+typed observation or measurement:
 
 ```julia
-function AdaptiveOpticsSim.prepare_acquisition_owner(
+function AdaptiveOpticsSim.prepare_acquisition_provider(
     model::MyAcquisitionDefinition,
     definition::AdaptiveOpticsSim.AcquisitionDefinition,
     path::AdaptiveOpticsSim.PreparedPathExecutor,
@@ -122,11 +125,15 @@ function AdaptiveOpticsSim.prepare_acquisition_owner(
         path; optical_model=model.required_optical_model)
     execution, observation, measurement = prepare_my_acquisition(model, path)
     products = AdaptiveOpticsSim.AcquisitionProducts(
-        observation, measurement)
-    return AdaptiveOpticsSim.PreparedAcquisitionOwner(
-        definition, path, execution, products)
+        observation, measurement;
+        metadata=my_product_metadata(model, path, observation, measurement))
+    return prepare_full_optical_provider(execution, products)
 end
 ```
+
+Core constructs the `PreparedAcquisitionOwner` after validating the returned
+provider against the exact path result. An acquisition extension does not
+construct or return the owner itself.
 
 Use qualified `AdaptiveOpticsSim.WFSOpticalPathExecution` to adapt an existing
 Gate 0 WFS optical plan, `AdaptiveOpticsSim.FrameAcquisitionExecution` for a
@@ -140,11 +147,13 @@ receives its prepared provider `AbstractRNG`. If it needs additional
 independent device streams, extend qualified
 `additional_path_rng_owner_roles` and `execute_path_rngs!`, then obtain each
 declared stream directly with `rng_stream_state(group, Val(:role))`. A
-different acquisition execution type similarly extends the
+different full-optical acquisition execution type similarly extends the
 four-argument `execute_acquisition!` dispatch and
 `AdaptiveOpticsSim.validate_acquisition_execution_binding(execution,
 path_result, products)`. Extra acquisition/device streams use qualified
 `additional_acquisition_rng_owner_roles` and `execute_acquisition_rngs!`.
+The full-optical provider wrapper delegates these seams to the acquisition
+execution object.
 Role tuples and their `Val` lookups are prepared once; models never consult a
 global RNG registry in the hot path. Each validator must reject mismatched exact
 storage or state before mutation. Do not store a `Function`, abstract executor
@@ -152,9 +161,41 @@ vector, schedule, RNG registry, queue, or transport in model execution owners.
 Preparation may allocate; warmed execution must retain the allocation contract
 of its underlying stages.
 
+A custom reduced-order provider instead returns qualified
+`AdaptiveOpticsSim.PreparedAcquisitionProvider(implementation, products)` and
+implements four qualified methods:
+
+- `acquisition_provider_style(::Type{MyProvider})` returns
+  `CommandResponsiveReducedOrderProviderStyle()`
+- `acquisition_provider_payload_work(::Type{MyProvider})` returns a nonempty
+  symbol describing its principal payload work
+- `validate_acquisition_provider_binding(implementation, path_result,
+  products)` rejects provider-specific incompatible bindings; core validates
+  the products against its private prepared contract first
+- `execute_acquisition_provider!(products, path_result, implementation,
+  rngs)` mutates and returns the exact `products` value
+
+Keep immutable reduced-order parameters separate from a mutable single-writer
+state object. The provider must remain causally responsive to effective optic
+commands; replaying completed products is not a reduced-order AO plant.
+`acquisition_product_contract` and
+`validate_acquisition_product_contract` cover standard arrays,
+`IntensityMap`, `WFSObservation`, `WFSMeasurement`, `Ref`, `nothing`, and
+concrete tuples. Custom wrappers extend the qualified leaf contract,
+validation, and `copy_acquisition_product!` methods.
+
+Core supplies three nonresponsive synthetic implementations:
+`prepare_unchanged_synthetic_provider` republishes unchanged destination
+contents, `prepare_copied_synthetic_provider` copies one preparation-owned
+snapshot, and `prepare_cyclic_replay_provider` cycles through a fixed-size
+preparation-owned corpus. These methods validate the full logical contract
+before returning. Their payload-work declarations describe execution only;
+they do not establish RTC latency, capacity, cache-residency, or optical
+evidence.
+
 Callers prepare a fixed acquisition subset with
-`prepare_acquisition_selection(plant, ids)`. Its unique paths and acquisition
-owners are available through the existing `prepared_paths` and
+`prepare_acquisition_selection(plant, ids)`. Its required full-optical paths
+and acquisition owners are available through `prepared_paths` and
 `prepared_acquisitions` accessors. Repeated execution supplies either one
 explicit current `AtmosphereEpoch` to `execute_acquisition_selection!` or one
 absolute atmosphere model time to `execute_acquisition_selection_at!`.
@@ -162,6 +203,9 @@ absolute atmosphere model time to `execute_acquisition_selection_at!`.
 streams, so neither selected-execution method accepts an RNG argument.
 `rng_replay_metadata(plant)` provides structured replay identity and seed data
 without granting another writer access to those streams.
+Reduced-order and synthetic/replay selections do not form an otherwise unused
+full-optical path. Provider style is fixed by preparation and cannot change in
+a prepared plant.
 
 ## Detectors
 

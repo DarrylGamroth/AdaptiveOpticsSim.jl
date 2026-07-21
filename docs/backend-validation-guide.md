@@ -296,8 +296,8 @@ Current clean-revision artifacts are:
 
 All listed correctness, residency, allocation, absolute-p95, and relative-p95
 gates pass. The WSL target used CUDA.jl 6.2.1, KernelAbstractions.jl 0.9.42,
-and Julia 1.12.6. The current maintained hardware targets passed `401/401` CUDA
-checks and `411/411` AMDGPU checks with scalar indexing disabled, including the
+and Julia 1.12.6. The current maintained hardware targets passed `406/406` CUDA
+checks and `416/416` AMDGPU checks with scalar indexing disabled, including the
 shared LiFT matrix and device-resident schedule-free atmosphere
 materialization, direct-science formation, and detector fan-out. The
 current local AMDGPU latency artifact remains the

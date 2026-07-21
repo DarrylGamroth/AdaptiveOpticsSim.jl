@@ -174,18 +174,32 @@ single-writer owners without adding scheduling or atmosphere advancement:
   `execute_acquisition!`
 - Prepared accessors: `prepared_paths`, `prepared_acquisitions`,
   `prepared_path`, `prepared_acquisition`, `path_input`, `path_result`,
-  `path_result_key`, `acquisition_products`, `acquisition_observation`,
-  `acquisition_measurement`
+  `path_result_key`, `acquisition_provider`, `acquisition_products`,
+  `acquisition_observation`, `acquisition_measurement`, and
+  `acquisition_product_metadata`
+- Product-provider contract: `FullOpticalProviderStyle`,
+  `CommandResponsiveReducedOrderProviderStyle`,
+  `SyntheticReplayProviderStyle`, `acquisition_provider_style`,
+  `acquisition_provider_payload_work`, `acquisition_product_contract`,
+  `validate_acquisition_product_contract`,
+  `prepare_full_optical_provider`,
+  `prepare_unchanged_synthetic_provider`,
+  `prepare_copied_synthetic_provider`, and
+  `prepare_cyclic_replay_provider`
 - Qualified model-extension boundary: `PreparedPathExecutor`,
-  `PreparedAcquisitionOwner`, `AcquisitionProducts`, `PathResultKey`,
+  `PreparedAcquisitionOwner`, `PreparedAcquisitionProvider`,
+  `AcquisitionProducts`, `AcquisitionProductContract`, `PathResultKey`,
   `PreparedAcquisitionSelection`, `PreparedPupilOPDMaterialization`,
   `AtmosphereIndependentPath`,
   `AbstractOpticalSamplingContract`, `InstantaneousOpticalSample`,
   `require_path_result`, `prepare_path_executor`,
-  `prepare_acquisition_owner`, `validate_path_execution_binding`,
+  `prepare_acquisition_provider`, `validate_path_execution_binding`,
   `validate_path_materialization_binding`,
   `validate_path_materialization`, `validate_atmosphere_rendering`, and
-  `validate_acquisition_execution_binding`; RNG extensions use qualified
+  `validate_acquisition_execution_binding`; custom providers also extend
+  qualified `validate_acquisition_provider_binding`,
+  `execute_acquisition_provider!`, and, for custom copied products,
+  `copy_acquisition_product!`. RNG extensions use qualified
   `additional_path_rng_owner_roles`,
   `additional_acquisition_rng_owner_roles`, `execute_path_rngs!`,
   `execute_acquisition_rngs!`, and `rng_stream_state`
@@ -210,10 +224,16 @@ semantics, output-plane contract, revisions, backend, and device. Its
 descriptive values are defensively snapshotted, and its value equality/hash
 contract is intended for cold compatibility lookup rather than warmed
 execution. Prepared owner constructors validate that concrete execution plans
-retain their exact input, result, atmosphere materialization, detector,
-observation, and estimator storage. Several acquisitions may borrow the exact
-same read-only path result while retaining distinct detector, readout, WFS
-estimator, observation, and measurement state. Preparation also derives
+retain their exact input, result, atmosphere materialization, provider,
+detector, observation, estimator, and product storage. Each acquisition has
+one run-immutable full-optical, command-responsive reduced-order, or
+nonresponsive synthetic/replay provider. All providers write and return the
+same caller-owned `AcquisitionProducts` logical contract for that acquisition;
+required metadata captures any geometry, radiometry, units, layout, or
+semantics not already present in its typed products. Several acquisitions may
+borrow the exact same read-only path result while retaining distinct provider,
+detector, readout, WFS estimator, observation, and measurement state.
+Preparation also derives
 separate stateful streams for each declared atmosphere layer, path/provider,
 acquisition/detector, and extension-declared device role. Multilayer
 atmospheres used by a prepared plant therefore require explicit `layer_ids`;
@@ -224,8 +244,10 @@ owner-to-derived-seed records without exposing mutable RNG state. RNG
 derivation does not use Julia's `hash`.
 
 `prepare_acquisition_selection` resolves caller-supplied acquisition IDs once,
-deduplicates their referenced paths, and stores both tuples in stable-ID order
-independent of declaration and caller-selection order.
+deduplicates only the full-optical paths those providers require, and stores
+both tuples in stable-ID order independent of declaration and caller-selection
+order. Reduced-order and synthetic/replay providers bypass otherwise unused
+full-optical path execution.
 `execute_acquisition_selection!` preflights every owner and current
 `AtmosphereEpoch` before mutation, materializes all unique path inputs, forms
 each result once, and then runs the selected acquisitions. The `_at!` variant

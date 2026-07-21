@@ -101,7 +101,7 @@ function AdaptiveOpticsSim.execute_acquisition_rngs!(products, path_result,
     return products
 end
 
-function AdaptiveOpticsSim.prepare_acquisition_owner(
+function AdaptiveOpticsSim.prepare_acquisition_provider(
     model::RNGTestAcquisitionModel,
     definition::AcquisitionDefinition,
     path::PreparedPathExecutor,
@@ -114,8 +114,11 @@ function AdaptiveOpticsSim.prepare_acquisition_owner(
         backend=path.key.backend)
     frame = FrameAcquisitionExecution(detector, path.result)
     execution = RNGTestAcquisitionExecution(frame)
-    products = AcquisitionProducts(frame.observation)
-    return PreparedAcquisitionOwner(definition, path, execution, products)
+    metadata = (kind=:detector_frame, units=:detected_electrons,
+        geometry=path.result.metadata,
+        detector=detector_export_metadata(detector))
+    products = AcquisitionProducts(frame.observation; metadata)
+    return prepare_full_optical_provider(execution, products)
 end
 
 function rng_test_definition(;

@@ -754,15 +754,6 @@ end
     return form_wfs_optical_products!(result, input, execution.plan)
 end
 
-"""Caller-owned products published by one prepared acquisition."""
-struct AcquisitionProducts{O,M}
-    observation::O
-    measurement::M
-end
-
-@inline AcquisitionProducts(observation) =
-    AcquisitionProducts(observation, nothing)
-
 struct _FrameAcquisitionExecutionToken end
 const _FRAME_ACQUISITION_EXECUTION_TOKEN = _FrameAcquisitionExecutionToken()
 
@@ -915,40 +906,71 @@ function validate_acquisition_execution_binding(
     return nothing
 end
 
+function _validate_acquisition_provider_binding(
+    provider::PreparedFullOpticalProvider, path_result,
+    products::AcquisitionProducts, contract::AcquisitionProductContract)
+    return validate_acquisition_execution_binding(provider.execution,
+        path_result, products)
+end
+
+function execute_acquisition_provider!(products::AcquisitionProducts,
+    path_result, provider::PreparedFullOpticalProvider,
+    rngs::PreparedOwnerRNGs)
+    return execute_acquisition_rngs!(products, path_result,
+        provider.execution, rngs)
+end
+
+function execute_acquisition_provider!(products::AcquisitionProducts,
+    path_result, provider::PreparedFullOpticalProvider,
+    rng::AbstractRNG)
+    return execute_acquisition!(products, path_result,
+        provider.execution, rng)
+end
+
 struct _PreparedAcquisitionOwnerToken end
 const _PREPARED_ACQUISITION_OWNER_TOKEN = _PreparedAcquisitionOwnerToken()
 
 """
     PreparedAcquisitionOwner
 
-Concrete single-writer owner for detector/readout and optional WFS estimator
-state. It borrows one exact prepared path result as read-only input and owns
-separate caller-visible observation/measurement products.
+Concrete single-writer owner for one run-immutable acquisition provider. It
+borrows one exact prepared path result as read-only input and owns separate
+caller-visible observation/measurement products plus the provider's detector,
+WFS, reduced-order, payload, or replay state.
 """
-struct PreparedAcquisitionOwner{D,K<:PathResultKey,R,E,P}
+struct PreparedAcquisitionOwner{D,K<:PathResultKey,R,P}
     definition::D
     path_key::K
     path_result::R
     rng_token::RNGOwnerToken
-    execution::E
-    products::P
+    provider::P
 
     function PreparedAcquisitionOwner(::_PreparedAcquisitionOwnerToken,
-        definition::D, path_key::K, path_result::R, execution::E,
-        products::P) where {D,K<:PathResultKey,R,E,P}
-        return new{D,K,R,E,P}(definition, path_key, path_result,
-            RNGOwnerToken(), execution, products)
+        definition::D, path_key::K, path_result::R,
+        provider::P) where {D,K<:PathResultKey,R,P}
+        return new{D,K,R,P}(definition, path_key, path_result,
+            RNGOwnerToken(), provider)
     end
 end
 
 @inline _rng_owner_binding_token(owner::PreparedAcquisitionOwner) =
     owner.rng_token
 
-@inline acquisition_products(owner::PreparedAcquisitionOwner) = owner.products
+@inline acquisition_provider(owner::PreparedAcquisitionOwner) = owner.provider
+@inline acquisition_provider_style(owner::PreparedAcquisitionOwner) =
+    acquisition_provider_style(owner.provider)
+@inline acquisition_provider_payload_work(owner::PreparedAcquisitionOwner) =
+    acquisition_provider_payload_work(owner.provider)
+@inline acquisition_product_contract(owner::PreparedAcquisitionOwner) =
+    acquisition_product_contract(owner.provider)
+@inline acquisition_products(owner::PreparedAcquisitionOwner) =
+    owner.provider.products
 @inline acquisition_observation(owner::PreparedAcquisitionOwner) =
-    owner.products.observation
+    owner.provider.products.observation
 @inline acquisition_measurement(owner::PreparedAcquisitionOwner) =
-    owner.products.measurement
+    owner.provider.products.measurement
+@inline acquisition_product_metadata(owner::PreparedAcquisitionOwner) =
+    owner.provider.products.metadata
 
 function _path_key_mismatch_reason(actual::PathResultKey,
     expected::PathResultKey)
@@ -1016,26 +1038,27 @@ function require_path_result(path::PreparedPathExecutor;
 end
 
 function PreparedAcquisitionOwner(definition::AcquisitionDefinition,
-    path::PreparedPathExecutor, execution, products::AcquisitionProducts)
+    path::PreparedPathExecutor, provider::PreparedAcquisitionProvider)
     acquisition_path_id(definition) == path_id(path.definition) || throw(
         PlantPreparationError(:acquisition, :unknown_path,
             "acquisition $(definition.id) does not reference prepared path $(path.definition.id)"))
-    validate_acquisition_execution_binding(execution, path.result, products)
+    validate_acquisition_provider_binding(provider, path.result)
     return PreparedAcquisitionOwner(_PREPARED_ACQUISITION_OWNER_TOKEN,
-        definition, path.key, path.result, execution, products)
+        definition, path.key, path.result, provider)
 end
 
-"""Execute one acquisition from its already formed path result."""
-@inline function execute_acquisition!(owner::PreparedAcquisitionOwner, rng)
-    return execute_acquisition!(owner.products, owner.path_result,
-        owner.execution, rng)
+"""Execute one acquisition provider into its caller-owned products."""
+@inline function execute_acquisition!(owner::PreparedAcquisitionOwner,
+    rng::AbstractRNG)
+    return execute_acquisition_provider!(owner.provider, owner.path_result,
+        rng)
 end
 
 function execute_acquisition!(owner::PreparedAcquisitionOwner,
     rngs::PreparedOwnerRNGs)
     _require_rng_owner_binding(rngs, owner)
-    return execute_acquisition_rngs!(owner.products, owner.path_result,
-        owner.execution, rngs)
+    return execute_acquisition_provider!(owner.provider, owner.path_result,
+        rngs)
 end
 
 """Qualified extension seam for acquisition execution with prepared RNG owners."""
@@ -1174,9 +1197,12 @@ end
 
 function prepare_acquisition_owner(definition::AcquisitionDefinition,
     path::PreparedPathExecutor)
-    prepared = prepare_acquisition_owner(acquisition_model(definition),
+    provider = prepare_acquisition_provider(acquisition_model(definition),
         definition, path)
-    return _require_prepared_acquisition_owner(prepared, definition, path)
+    prepared = _require_prepared_acquisition_provider(provider, definition,
+        path)
+    owner = PreparedAcquisitionOwner(definition, path, prepared)
+    return _require_prepared_acquisition_owner(owner, definition, path)
 end
 
 function _require_prepared_acquisition_owner(
@@ -1191,8 +1217,8 @@ function _require_prepared_acquisition_owner(
     prepared.path_result === path.result || throw(PlantPreparationError(
         :acquisition, :prepared_binding,
         "prepared acquisition does not retain the exact path result"))
-    validate_acquisition_execution_binding(prepared.execution,
-        prepared.path_result, prepared.products)
+    validate_acquisition_provider_binding(prepared.provider,
+        prepared.path_result)
     return prepared
 end
 
@@ -1200,13 +1226,27 @@ function _require_prepared_acquisition_owner(prepared,
     ::AcquisitionDefinition, ::PreparedPathExecutor)
     throw(PlantPreparationError(
         :acquisition, :invalid_preparation,
-        "acquisition model preparation must return PreparedAcquisitionOwner; got $(typeof(prepared))"))
+        "acquisition owner construction must return PreparedAcquisitionOwner; got $(typeof(prepared))"))
 end
 
-function prepare_acquisition_owner(model,
+function _require_prepared_acquisition_provider(
+    prepared::PreparedAcquisitionProvider,
+    ::AcquisitionDefinition, path::PreparedPathExecutor)
+    validate_acquisition_provider_binding(prepared, path.result)
+    return prepared
+end
+
+function _require_prepared_acquisition_provider(prepared,
+    ::AcquisitionDefinition, ::PreparedPathExecutor)
+    throw(PlantPreparationError(:acquisition, :invalid_preparation,
+        "acquisition model preparation must return PreparedAcquisitionProvider; got $(typeof(prepared))"))
+end
+
+"""Qualified cold preparation seam for one acquisition product provider."""
+function prepare_acquisition_provider(model,
     definition::AcquisitionDefinition, path::PreparedPathExecutor)
     throw(PlantPreparationError(:acquisition, :unsupported_model,
-        "acquisition model $(typeof(model)) does not implement prepare_acquisition_owner"))
+        "acquisition model $(typeof(model)) does not implement prepare_acquisition_provider"))
 end
 
 @inline _prepare_path_executors(::Tuple{}, telescope, atmosphere) = ()
@@ -1256,7 +1296,8 @@ end
     acquisition = first(acquisitions)
     bindings = _rng_owner_bindings(acquisition, :acquisition,
         acquisition_id(acquisition.definition).name,
-        _acquisition_rng_owner_roles(acquisition.execution))
+        _acquisition_rng_owner_roles(
+            acquisition.provider.implementation))
     return (bindings,
         _acquisition_rng_owner_bindings(Base.tail(acquisitions))...)
 end
@@ -1317,11 +1358,12 @@ const _PREPARED_ACQUISITION_SELECTION_TOKEN =
 """
     PreparedAcquisitionSelection
 
-Cold, canonical selection of acquisition owners and their unique optical
-paths. The selected paths and acquisitions use stable-ID order regardless of
-declaration or caller-selection order. This value owns no schedule or
-independent RNG state; it retains exact references to the selected plant-owned
-RNG groups.
+Cold, canonical selection of acquisition owners and the unique optical paths
+required by their full-optical providers. Reduced-order and synthetic/replay
+providers do not select an otherwise unused path. The selected paths and
+acquisitions use stable-ID order regardless of declaration or caller-selection
+order. This value owns no schedule or independent RNG state; it retains exact
+references to the selected plant-owned RNG groups.
 """
 struct PreparedAcquisitionSelection{P,S<:Tuple,A<:Tuple,
     R<:Tuple,Q<:Tuple}
@@ -1392,7 +1434,8 @@ end
 function _canonical_selected_paths(plant::PreparedPlant, acquisitions::Tuple)
     requested = Set{OpticalPathID}()
     for acquisition in acquisitions
-        push!(requested, acquisition_path_id(acquisition.definition))
+        _request_provider_path!(requested, acquisition,
+            acquisition_provider_style(acquisition))
     end
     selected = Any[]
     for path in plant.paths
@@ -1404,6 +1447,19 @@ function _canonical_selected_paths(plant::PreparedPlant, acquisitions::Tuple)
     sort!(selected; by=path -> path_id(path.definition).name)
     return Tuple(selected)
 end
+
+@inline function _request_provider_path!(requested,
+    acquisition::PreparedAcquisitionOwner, ::FullOpticalProviderStyle)
+    push!(requested, acquisition_path_id(acquisition.definition))
+    return requested
+end
+
+@inline _request_provider_path!(requested,
+    ::PreparedAcquisitionOwner,
+    ::CommandResponsiveReducedOrderProviderStyle) = requested
+
+@inline _request_provider_path!(requested,
+    ::PreparedAcquisitionOwner, ::SyntheticReplayProviderStyle) = requested
 
 function _prepared_path_rngs(plant::PreparedPlant,
     path::PreparedPathExecutor)
@@ -1488,8 +1544,8 @@ end
 @inline function _require_selected_acquisition_bindings(
     acquisitions::Tuple)
     acquisition = first(acquisitions)
-    validate_acquisition_execution_binding(acquisition.execution,
-        acquisition.path_result, acquisition.products)
+    validate_acquisition_provider_binding(acquisition.provider,
+        acquisition.path_result)
     return _require_selected_acquisition_bindings(Base.tail(acquisitions))
 end
 
