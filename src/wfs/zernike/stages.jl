@@ -201,6 +201,10 @@ function _require_zernike_optical_binding(
     return nothing
 end
 
+@inline validate_wfs_optical_formation_binding(output::IntensityMap, input,
+    plan::PreparedZernikeOpticalFormation) =
+    _require_zernike_optical_binding(plan, input, output)
+
 function _form_zernike_input_field!(front_end::ZernikeOpticalFrontEnd,
     input::PupilFunction)
     propagation = front_end.propagation
@@ -254,7 +258,7 @@ end
 function form_wfs_optical_products!(output::IntensityMap,
     input::Union{PupilFunction,ElectricField},
     plan::PreparedZernikeOpticalFormation)
-    _require_zernike_optical_binding(plan, input, output)
+    validate_wfs_optical_formation_binding(output, input, plan)
     _form_zernike_rate!(output.values, plan.front_end, input)
     return output
 end
@@ -462,6 +466,14 @@ function estimate_wfs_measurement!(measurement::WFSMeasurement,
         observation.storage, plan.source, plan.normalization_scale)
     copyto!(measurement.storage, sensor.estimator.state.slopes)
     return measurement
+end
+
+function validate_wfs_estimation_binding(measurement::WFSMeasurement, input,
+    plan::PreparedZernikeEstimator)
+    measurement === plan.measurement && input === plan.input || throw(
+        WFSPreparationError(:estimation, :prepared_binding,
+            "Zernike estimator storage does not match its plan"))
+    return nothing
 end
 
 function set_zernike_calibration!(sensor::ZernikeWFS,

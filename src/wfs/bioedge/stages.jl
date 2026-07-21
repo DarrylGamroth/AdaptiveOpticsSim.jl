@@ -235,12 +235,7 @@ end
 function form_wfs_optical_products!(output::IntensityMap,
     input::Union{PupilFunction,ElectricField},
     plan::PreparedBioEdgeOpticalFormation)
-    output === plan.output && input === plan.input ||
-        throw(WFSPreparationError(:optical_formation, :prepared_binding,
-            "BioEdge optical products do not match prepared storage"))
-    plan.front_end.propagation.revision == plan.propagation_revision ||
-        throw(WFSPreparationError(:optical_formation, :prepared_binding,
-            "BioEdge propagation sampling changed after preparation"))
+    validate_wfs_optical_formation_binding(output, input, plan)
     native = _bioedge_native_rate!(plan.front_end, input, plan.lgs_model)
     factor = bioedge_output_sampling_factor(plan.front_end,
         input.metadata.dimensions[1])
@@ -248,12 +243,32 @@ function form_wfs_optical_products!(output::IntensityMap,
     return output
 end
 
+function validate_wfs_optical_formation_binding(output::IntensityMap,
+    input::Union{PupilFunction,ElectricField},
+    plan::PreparedBioEdgeOpticalFormation)
+    output === plan.output && input === plan.input ||
+        throw(WFSPreparationError(:optical_formation, :prepared_binding,
+            "BioEdge optical products do not match prepared storage"))
+    plan.front_end.propagation.revision == plan.propagation_revision ||
+        throw(WFSPreparationError(:optical_formation, :prepared_binding,
+            "BioEdge propagation sampling changed after preparation"))
+    return nothing
+end
+
 function form_wfs_optical_products!(output::OpticalProductBundle, input,
+    plan::PreparedBioEdgeOpticalBundleFormation)
+    validate_wfs_optical_formation_binding(output, input, plan)
+    return form_four_pupil_bundle!(output, input, plan.plans)
+end
+
+function validate_wfs_optical_formation_binding(
+    output::OpticalProductBundle, input,
     plan::PreparedBioEdgeOpticalBundleFormation)
     output === plan.output && input === plan.input ||
         throw(WFSPreparationError(:optical_formation, :prepared_binding,
             "BioEdge spectral products do not match prepared storage"))
-    return form_four_pupil_bundle!(output, input, plan.plans)
+    validate_four_pupil_bundle_binding(output, input, plan.plans)
+    return nothing
 end
 
 function bioedge_rate_map(sensor::BioEdgeWFS{<:Diffractive},
@@ -456,6 +471,14 @@ function estimate_wfs_measurement!(measurement::WFSMeasurement,
         observation.storage, plan.source, plan.normalization_scale)
     copyto!(measurement.storage, sensor.estimator.state.slopes)
     return measurement
+end
+
+function validate_wfs_estimation_binding(measurement::WFSMeasurement, input,
+    plan::PreparedBioEdgeEstimator)
+    measurement === plan.measurement && input === plan.input || throw(
+        WFSPreparationError(:estimation, :prepared_binding,
+            "BioEdge estimator storage does not match its plan"))
+    return nothing
 end
 
 function prepare_wfs_estimation(sensor::BioEdgeWFS{<:Geometric},

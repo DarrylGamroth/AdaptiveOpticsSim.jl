@@ -395,6 +395,20 @@ end
 function form_wfs_optical_products! end
 
 """
+    validate_wfs_optical_formation_binding(output, input, prepared)
+
+Validate without mutation that a prepared WFS optical plan is bound to the
+exact input and output supplied by a containing prepared plant path. WFS
+extensions that provide a prepared optical plan must implement this qualified
+extension seam alongside `form_wfs_optical_products!`.
+"""
+function validate_wfs_optical_formation_binding(output, input, prepared)
+    throw(WFSPreparationError(:optical_formation,
+        :unsupported_binding_validation,
+        "$(typeof(prepared)) does not validate its prepared optical binding"))
+end
+
+"""
     prepare_wfs_acquisition(model, optical_products, observation)
     acquire_wfs_observation!(observation, optical_products, prepared, rng)
 
@@ -409,6 +423,19 @@ function prepare_wfs_acquisition(model, optical_products, observation)
 end
 
 function acquire_wfs_observation! end
+
+"""
+    validate_wfs_acquisition_binding(observation, optical_products, prepared)
+
+Validate without mutation that a prepared WFS acquisition is bound to the
+exact optical products and observation supplied by a containing plant owner.
+"""
+function validate_wfs_acquisition_binding(observation, optical_products,
+    prepared)
+    throw(WFSPreparationError(:acquisition,
+        :unsupported_binding_validation,
+        "$(typeof(prepared)) does not validate its prepared acquisition binding"))
+end
 
 """Prepared detector acquisition shared by detector-backed WFS families."""
 struct PreparedWFSDetectorAcquisition{D,P,O}
@@ -444,12 +471,27 @@ end
 function acquire_wfs_observation!(observation::WFSObservation,
     optical_product::IntensityMap, plan::PreparedWFSDetectorAcquisition,
     rng::AbstractRNG)
-    observation === plan.observation || throw(WFSPreparationError(
-        :acquisition, :prepared_binding,
-        "WFS observation does not match prepared storage"))
+    validate_wfs_acquisition_binding(observation, optical_product, plan)
     frame = capture!(plan.detector, optical_product, plan.detector_plan, rng)
     copyto!(observation.storage, frame)
     return observation
+end
+
+function validate_wfs_acquisition_binding(observation::WFSObservation,
+    optical_product::IntensityMap, plan::PreparedWFSDetectorAcquisition)
+    observation === plan.observation || throw(WFSPreparationError(
+        :acquisition, :prepared_binding,
+        "WFS observation does not match prepared storage"))
+    optical_product.metadata === plan.detector_plan.input_metadata &&
+        optical_product.values === plan.detector_plan.input_values || throw(
+        WFSPreparationError(:acquisition, :prepared_binding,
+            "WFS optical product does not match its prepared detector input"))
+    plan.detector.params === plan.detector_plan.detector_params &&
+        plan.detector.state === plan.detector_plan.detector_state &&
+        plan.detector.state.frame === plan.detector_plan.detector_frame ||
+        throw(WFSPreparationError(:acquisition, :prepared_binding,
+            "WFS detector storage changed after preparation"))
+    return nothing
 end
 
 """Prepared acquisition for a channel-oriented photon-counting detector."""
@@ -566,6 +608,15 @@ end
 function acquire_wfs_observation!(observation::WFSObservation,
     optical_product::IntensityMap,
     plan::PreparedWFSCountingAcquisition, rng::AbstractRNG)
+    validate_wfs_acquisition_binding(observation, optical_product, plan)
+    frame = _capture_counting_wfs!(plan.detector,
+        optical_product.values, plan.source, rng)
+    copyto!(observation.storage, frame)
+    return observation
+end
+
+function validate_wfs_acquisition_binding(observation::WFSObservation,
+    optical_product::IntensityMap, plan::PreparedWFSCountingAcquisition)
     observation === plan.observation &&
         optical_product === plan.optical_product || throw(
         WFSPreparationError(:acquisition, :prepared_binding,
@@ -574,10 +625,7 @@ function acquire_wfs_observation!(observation::WFSObservation,
         output_frame(plan.detector) === plan.detector_output || throw(
         WFSPreparationError(:acquisition, :prepared_binding,
             "counting detector storage changed after WFS preparation"))
-    frame = _capture_counting_wfs!(plan.detector,
-        optical_product.values, plan.source, rng)
-    copyto!(observation.storage, frame)
-    return observation
+    return nothing
 end
 
 """Prepared static fan-out from a concrete product tuple to detector tuple."""
@@ -617,13 +665,33 @@ end
 function acquire_wfs_observation!(observations::Tuple,
     optical_products::Tuple,
     plan::PreparedWFSMultipleDetectorAcquisition, rng::AbstractRNG)
+    validate_wfs_acquisition_binding(observations, optical_products, plan)
+    _acquire_multiple_wfs_observations!(plan.plans, observations,
+        optical_products, rng)
+    return observations
+end
+
+@inline _validate_multiple_wfs_acquisition_bindings(::Tuple{}, ::Tuple{},
+    ::Tuple{}) = nothing
+
+@inline function _validate_multiple_wfs_acquisition_bindings(plans::Tuple,
+    observations::Tuple, optical_products::Tuple)
+    validate_wfs_acquisition_binding(first(observations),
+        first(optical_products), first(plans))
+    return _validate_multiple_wfs_acquisition_bindings(Base.tail(plans),
+        Base.tail(observations), Base.tail(optical_products))
+end
+
+function validate_wfs_acquisition_binding(observations::Tuple,
+    optical_products::Tuple,
+    plan::PreparedWFSMultipleDetectorAcquisition)
     observations === plan.observations &&
         optical_products === plan.optical_products || throw(
         WFSPreparationError(:acquisition, :prepared_binding,
             "multiple-detector WFS storage does not match its prepared acquisition"))
-    _acquire_multiple_wfs_observations!(plan.plans, observations,
-        optical_products, rng)
-    return observations
+    _validate_multiple_wfs_acquisition_bindings(plan.plans, observations,
+        optical_products)
+    return nothing
 end
 
 """
@@ -641,6 +709,18 @@ function prepare_wfs_estimation(model, input, measurement)
 end
 
 function estimate_wfs_measurement! end
+
+"""
+    validate_wfs_estimation_binding(measurement, input, prepared)
+
+Validate without mutation that a prepared WFS estimator is bound to the exact
+input observation and measurement supplied by a containing plant owner.
+"""
+function validate_wfs_estimation_binding(measurement, input, prepared)
+    throw(WFSPreparationError(:estimation,
+        :unsupported_binding_validation,
+        "$(typeof(prepared)) does not validate its prepared estimator binding"))
+end
 
 abstract type AbstractWFSMeasurementPath end
 

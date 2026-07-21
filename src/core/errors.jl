@@ -41,4 +41,11 @@ struct PlantDefinitionError <: AdaptiveOpticsSimError
     msg::String
 end
 
+"""Invalid preparation or prepared binding for a plant component."""
+struct PlantPreparationError <: AdaptiveOpticsSimError
+    component::Symbol
+    reason::Symbol
+    msg::String
+end
+
 Base.showerror(io::IO, e::AdaptiveOpticsSimError) = print(io, e.msg)

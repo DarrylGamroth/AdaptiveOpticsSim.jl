@@ -242,12 +242,7 @@ end
 function form_wfs_optical_products!(output::IntensityMap,
     input::Union{PupilFunction,ElectricField},
     plan::PreparedPyramidOpticalFormation)
-    output === plan.output && input === plan.input ||
-        throw(WFSPreparationError(:optical_formation, :prepared_binding,
-            "pyramid optical products do not match prepared storage"))
-    plan.front_end.propagation.revision == plan.propagation_revision ||
-        throw(WFSPreparationError(:optical_formation, :prepared_binding,
-            "pyramid propagation sampling changed after preparation"))
+    validate_wfs_optical_formation_binding(output, input, plan)
     native = _pyramid_native_rate!(plan.front_end, input)
     _apply_prepared_pyramid_lgs!(plan)
     factor = pyramid_output_sampling_factor(plan.front_end,
@@ -256,12 +251,32 @@ function form_wfs_optical_products!(output::IntensityMap,
     return output
 end
 
+function validate_wfs_optical_formation_binding(output::IntensityMap,
+    input::Union{PupilFunction,ElectricField},
+    plan::PreparedPyramidOpticalFormation)
+    output === plan.output && input === plan.input ||
+        throw(WFSPreparationError(:optical_formation, :prepared_binding,
+            "pyramid optical products do not match prepared storage"))
+    plan.front_end.propagation.revision == plan.propagation_revision ||
+        throw(WFSPreparationError(:optical_formation, :prepared_binding,
+            "pyramid propagation sampling changed after preparation"))
+    return nothing
+end
+
 function form_wfs_optical_products!(output::OpticalProductBundle, input,
+    plan::PreparedPyramidOpticalBundleFormation)
+    validate_wfs_optical_formation_binding(output, input, plan)
+    return form_four_pupil_bundle!(output, input, plan.plans)
+end
+
+function validate_wfs_optical_formation_binding(
+    output::OpticalProductBundle, input,
     plan::PreparedPyramidOpticalBundleFormation)
     output === plan.output && input === plan.input ||
         throw(WFSPreparationError(:optical_formation, :prepared_binding,
             "pyramid spectral products do not match prepared storage"))
-    return form_four_pupil_bundle!(output, input, plan.plans)
+    validate_four_pupil_bundle_binding(output, input, plan.plans)
+    return nothing
 end
 
 function pyramid_rate_map(sensor::PyramidWFS{<:Diffractive},
@@ -480,6 +495,14 @@ function estimate_wfs_measurement!(measurement::WFSMeasurement,
     @. sensor.estimator.state.slopes *= sensor.estimator.state.optical_gain
     copyto!(measurement.storage, sensor.estimator.state.slopes)
     return measurement
+end
+
+function validate_wfs_estimation_binding(measurement::WFSMeasurement, input,
+    plan::PreparedPyramidEstimator)
+    measurement === plan.measurement && input === plan.input || throw(
+        WFSPreparationError(:estimation, :prepared_binding,
+            "pyramid estimator storage does not match its plan"))
+    return nothing
 end
 
 function prepare_wfs_estimation(sensor::PyramidWFS{<:Geometric},

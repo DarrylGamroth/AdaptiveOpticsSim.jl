@@ -37,12 +37,12 @@ end
     # Pre-HIL stage contracts intentionally add a small, documented public
     # product/protocol seam. Keep headroom bounded so unrelated internals do
     # not drift into the ordinary user namespace.
-    # Gate 2 topology adds twenty documented definition, identity, lookup,
-    # trait, and structured-error names and no execution or compatibility
-    # aliases.
-    @test length(exported) <= 500
+    # Gate 2 adds a bounded documented topology/preparation surface; internal
+    # validation and source-key helpers remain qualified implementation detail.
+    @test length(exported) <= 520
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :PlantDefinitionError)
+    @test Base.isexported(AdaptiveOpticsSim, :PlantPreparationError)
     @test Base.isexported(AdaptiveOpticsSim, :OpticalPathID)
     @test Base.isexported(AdaptiveOpticsSim, :AcquisitionID)
     @test Base.isexported(AdaptiveOpticsSim, :ColdPlantModelDefinition)
@@ -50,6 +50,13 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :OpticalPathDefinition)
     @test Base.isexported(AdaptiveOpticsSim, :AcquisitionDefinition)
     @test Base.isexported(AdaptiveOpticsSim, :PlantDefinition)
+    @test Base.isexported(AdaptiveOpticsSim, :PreparedPlant)
+    @test Base.isexported(AdaptiveOpticsSim, :prepare_plant)
+    @test Base.isexported(AdaptiveOpticsSim, :execute_path!)
+    @test Base.isexported(AdaptiveOpticsSim, :execute_acquisition!)
+    @test !Base.isexported(AdaptiveOpticsSim, :PreparedPathExecutor)
+    @test !Base.isexported(AdaptiveOpticsSim, :PreparedAcquisitionOwner)
+    @test !Base.isexported(AdaptiveOpticsSim, :require_path_result)
     @test Base.isexported(AdaptiveOpticsSim, :path_definition)
     @test Base.isexported(AdaptiveOpticsSim, :acquisition_definition)
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)

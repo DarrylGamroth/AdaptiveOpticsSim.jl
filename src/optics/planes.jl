@@ -501,23 +501,60 @@ function IntensityMap(metadata::OpticalPlaneMetadata,
 end
 
 
+# Owned fixed-membership storage for dynamically sized optical bundles.
+struct _FixedOpticalProductVector{
+    T<:AbstractOpticalProduct,V<:AbstractVector{T},
+} <: AbstractVector{T}
+    _storage::V
+end
+
+Base.size(products::_FixedOpticalProductVector) = size(getfield(products,
+    :_storage))
+Base.axes(products::_FixedOpticalProductVector) = axes(getfield(products,
+    :_storage))
+Base.length(products::_FixedOpticalProductVector) = length(getfield(products,
+    :_storage))
+Base.getindex(products::_FixedOpticalProductVector, index::Int) =
+    @inbounds getfield(products, :_storage)[index]
+Base.IndexStyle(::Type{<:_FixedOpticalProductVector}) = IndexLinear()
+Base.iterate(products::_FixedOpticalProductVector, state...) =
+    iterate(getfield(products, :_storage), state...)
+Base.copy(products::_FixedOpticalProductVector) = copy(getfield(products,
+    :_storage))
+
+function Base.getproperty(products::_FixedOpticalProductVector, name::Symbol)
+    name === :_storage && return copy(getfield(products, :_storage))
+    return getfield(products, name)
+end
+
+struct _OpticalProductBundleToken end
+const _OPTICAL_PRODUCT_BUNDLE_TOKEN = _OpticalProductBundleToken()
+
 """
     OpticalProductBundle(products...)
 
 Preserve prepared optical products that cannot be combined on one physical
-grid. A bundle performs no implicit resampling or radiometric conversion.
+grid. A bundle performs no implicit resampling or radiometric conversion. Its
+membership is fixed at construction, while each product's caller-owned array
+storage remains mutable.
 """
-struct OpticalProductBundle{P<:Union{Tuple,AbstractVector}}
+struct OpticalProductBundle{P<:Union{Tuple,_FixedOpticalProductVector}}
     products::P
+
+    function OpticalProductBundle(::_OpticalProductBundleToken,
+        products::P) where {P<:Union{Tuple,_FixedOpticalProductVector}}
+        return new{P}(products)
+    end
 end
 
 OpticalProductBundle(products::Vararg{AbstractOpticalProduct,N}) where {N} =
-    OpticalProductBundle{typeof(products)}(products)
+    OpticalProductBundle(_OPTICAL_PRODUCT_BUNDLE_TOKEN, products)
 
 function OpticalProductBundle(
     products::AbstractVector{<:AbstractOpticalProduct})
     owned = copy(products)
-    return OpticalProductBundle{typeof(owned)}(owned)
+    fixed = _FixedOpticalProductVector{eltype(owned),typeof(owned)}(owned)
+    return OpticalProductBundle(_OPTICAL_PRODUCT_BUNDLE_TOKEN, fixed)
 end
 
 Base.length(bundle::OpticalProductBundle) = length(bundle.products)
