@@ -1,0 +1,8 @@
+[[artifacts]]
+id = "GATE3-EVENT-SCHEDULER-CPU-2026-07-21"
+purpose = "Clean-tree fixed-capacity deterministic event-scheduler correctness, storage, allocation, and linear-scan generator-count evidence"
+path = "2026-07-21-event-scheduler.toml"
+sha256 = "f37cd7bdd996cea5684ae8453970836d4395c16bd24cd55d69c4fc89d3236183"
+source_contract = "../../contracts/gate3_event_scheduler.toml"
+characterized_source_revision = "d01b15bdec632a3513cb0dac8b5ad50537779149"
+all_gates_passed = true
