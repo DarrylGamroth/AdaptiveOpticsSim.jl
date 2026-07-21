@@ -906,10 +906,9 @@ function validate_acquisition_execution_binding(
     return nothing
 end
 
-function validate_acquisition_provider_binding(
+function _validate_acquisition_provider_binding(
     provider::PreparedFullOpticalProvider, path_result,
     products::AcquisitionProducts, contract::AcquisitionProductContract)
-    validate_acquisition_product_contract(products, contract)
     return validate_acquisition_execution_binding(provider.execution,
         path_result, products)
 end
@@ -1227,7 +1226,7 @@ function _require_prepared_acquisition_owner(prepared,
     ::AcquisitionDefinition, ::PreparedPathExecutor)
     throw(PlantPreparationError(
         :acquisition, :invalid_preparation,
-        "acquisition model preparation must return PreparedAcquisitionOwner; got $(typeof(prepared))"))
+        "acquisition owner construction must return PreparedAcquisitionOwner; got $(typeof(prepared))"))
 end
 
 function _require_prepared_acquisition_provider(

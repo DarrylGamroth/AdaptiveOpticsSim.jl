@@ -170,7 +170,8 @@ implements four qualified methods:
 - `acquisition_provider_payload_work(::Type{MyProvider})` returns a nonempty
   symbol describing its principal payload work
 - `validate_acquisition_provider_binding(implementation, path_result,
-  products, contract)` rejects incompatible bindings during preparation
+  products)` rejects provider-specific incompatible bindings; core validates
+  the products against its private prepared contract first
 - `execute_acquisition_provider!(products, path_result, implementation,
   rngs)` mutates and returns the exact `products` value
 

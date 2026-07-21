@@ -151,6 +151,10 @@ end
 
 struct _AbsentProductContract end
 
+struct _AcquisitionProductContractToken end
+const _ACQUISITION_PRODUCT_CONTRACT_TOKEN =
+    _AcquisitionProductContractToken()
+
 """
     AcquisitionProductContract
 
@@ -163,6 +167,15 @@ struct AcquisitionProductContract{O,M,D}
     observation::O
     measurement::M
     metadata::D
+
+    function AcquisitionProductContract(
+        ::_AcquisitionProductContractToken,
+        observation::O,
+        measurement::M,
+        metadata::D,
+    ) where {O,M,D}
+        return new{O,M,D}(observation, measurement, metadata)
+    end
 end
 
 @inline function _array_product_contract(storage::AbstractArray)
@@ -237,7 +250,7 @@ end
 
 """Return a defensive compatibility snapshot for caller-owned products."""
 function acquisition_product_contract(products::AcquisitionProducts)
-    return AcquisitionProductContract(
+    return AcquisitionProductContract(_ACQUISITION_PRODUCT_CONTRACT_TOKEN,
         acquisition_product_contract(products.observation),
         acquisition_product_contract(products.measurement),
         deepcopy(products.metadata),
@@ -403,6 +416,10 @@ Prepared provider implementation, exact caller-owned destination products,
 and their run-immutable compatibility contract. Provider implementations are
 selected during preparation and cannot be replaced in a prepared plant.
 """
+struct _PreparedAcquisitionProviderToken end
+const _PREPARED_ACQUISITION_PROVIDER_TOKEN =
+    _PreparedAcquisitionProviderToken()
+
 struct PreparedAcquisitionProvider{I,P<:AcquisitionProducts,
     C<:AcquisitionProductContract,S}
     implementation::I
@@ -410,6 +427,26 @@ struct PreparedAcquisitionProvider{I,P<:AcquisitionProducts,
     contract::C
     style::S
     payload_work::Symbol
+
+    function PreparedAcquisitionProvider(
+        ::_PreparedAcquisitionProviderToken,
+        implementation::I,
+        products::P,
+        contract::C,
+        style::S,
+        payload_work::Symbol,
+    ) where {
+        I,P<:AcquisitionProducts,C<:AcquisitionProductContract,S,
+    }
+        return new{I,P,C,S}(implementation, products, contract, style,
+            payload_work)
+    end
+end
+
+function Base.getproperty(provider::PreparedAcquisitionProvider,
+    name::Symbol)
+    name === :contract && return deepcopy(getfield(provider, :contract))
+    return getfield(provider, name)
 end
 
 function PreparedAcquisitionProvider(implementation,
@@ -418,8 +455,8 @@ function PreparedAcquisitionProvider(implementation,
     payload_work = _require_provider_payload_work(implementation)
     contract = acquisition_product_contract(products)
     validate_acquisition_product_contract(products, contract)
-    return PreparedAcquisitionProvider(implementation, products, contract,
-        style, payload_work)
+    return PreparedAcquisitionProvider(_PREPARED_ACQUISITION_PROVIDER_TOKEN,
+        implementation, products, contract, style, payload_work)
 end
 
 @inline acquisition_provider_style(provider::PreparedAcquisitionProvider) =
@@ -429,7 +466,7 @@ end
 @inline acquisition_products(provider::PreparedAcquisitionProvider) =
     provider.products
 @inline acquisition_product_contract(provider::PreparedAcquisitionProvider) =
-    provider.contract
+    deepcopy(getfield(provider, :contract))
 @inline acquisition_product_metadata(provider::PreparedAcquisitionProvider) =
     provider.products.metadata
 
@@ -554,18 +591,31 @@ function prepare_cyclic_replay_provider(products::AcquisitionProducts,
     return PreparedAcquisitionProvider(implementation, products)
 end
 
-"""Qualified preparation-time binding-validation seam for providers."""
+"""
+    validate_acquisition_provider_binding(implementation, path_result, products)
+
+Qualified provider-specific binding-validation seam. Core validates `products`
+against its private prepared contract before calling this method; extensions
+validate only their additional path, parameter, state, and storage bindings.
+"""
 function validate_acquisition_provider_binding(implementation, path_result,
-    products::AcquisitionProducts, contract::AcquisitionProductContract)
+    products::AcquisitionProducts)
     throw(PlantPreparationError(:acquisition,
         :unsupported_provider_validation,
         "acquisition provider type $(typeof(implementation)) does not validate its path/product binding"))
 end
 
+@inline function _validate_acquisition_provider_binding(implementation,
+    path_result, products::AcquisitionProducts,
+    ::AcquisitionProductContract)
+    return validate_acquisition_provider_binding(implementation, path_result,
+        products)
+end
+
 function validate_acquisition_provider_binding(
     provider::PreparedAcquisitionProvider, path_result)
     validate_acquisition_product_contract(provider.products,
-        provider.contract)
+        getfield(provider, :contract))
     style = _prepared_acquisition_provider_style(provider.implementation)
     typeof(style) === typeof(provider.style) || throw(
         PlantPreparationError(:acquisition, :provider_style,
@@ -574,29 +624,26 @@ function validate_acquisition_provider_binding(
         provider.payload_work || throw(PlantPreparationError(:acquisition,
             :payload_work,
             "prepared provider payload-work declaration changed"))
-    return validate_acquisition_provider_binding(provider.implementation,
-        path_result, provider.products, provider.contract)
+    return _validate_acquisition_provider_binding(provider.implementation,
+        path_result, provider.products, getfield(provider, :contract))
 end
 
-function validate_acquisition_provider_binding(
+@inline function _validate_acquisition_provider_binding(
     implementation::PreparedUnchangedSyntheticProvider, path_result,
     products::AcquisitionProducts, contract::AcquisitionProductContract)
-    validate_acquisition_product_contract(products, contract)
     return nothing
 end
 
-function validate_acquisition_provider_binding(
+function _validate_acquisition_provider_binding(
     implementation::PreparedCopiedSyntheticProvider, path_result,
     products::AcquisitionProducts, contract::AcquisitionProductContract)
-    validate_acquisition_product_contract(products, contract)
     validate_acquisition_product_contract(implementation.source, contract)
     return nothing
 end
 
-function validate_acquisition_provider_binding(
+function _validate_acquisition_provider_binding(
     implementation::PreparedCyclicReplayProvider, path_result,
     products::AcquisitionProducts, contract::AcquisitionProductContract)
-    validate_acquisition_product_contract(products, contract)
     implementation.params.corpus_size == length(implementation.corpus) ||
         throw(PlantPreparationError(:acquisition, :replay_topology,
             "prepared cyclic replay corpus size changed"))

@@ -111,9 +111,7 @@ function AdaptiveOpticsSim.validate_acquisition_provider_binding(
     ::TestCommandResponsiveReducedProvider,
     path_result,
     products::AcquisitionProducts,
-    contract::AcquisitionProductContract,
 )
-    validate_acquisition_product_contract(products, contract)
     size(products.observation) == size(path_result.values) || throw(
         PlantPreparationError(:acquisition, :shape,
             "test reduced-order product shape must match its declared path"))
@@ -168,9 +166,7 @@ function AdaptiveOpticsSim.validate_acquisition_provider_binding(
     ::InvalidProviderResult,
     path_result,
     products::AcquisitionProducts,
-    contract::AcquisitionProductContract,
 )
-    validate_acquisition_product_contract(products, contract)
     return nothing
 end
 
@@ -299,6 +295,30 @@ end
 
     @test !ismutabletype(typeof(reduced))
     @test !ismutabletype(typeof(acquisition_provider(reduced)))
+
+    mutable_contract_products = AcquisitionProducts(zeros(T, 2, 2);
+        metadata=(labels=Int[1, 2],))
+    defensive_provider = prepare_unchanged_synthetic_provider(
+        mutable_contract_products)
+    contract_snapshot = acquisition_product_contract(defensive_provider)
+    contract_snapshot.metadata.labels[1] = 99
+    @test acquisition_product_contract(defensive_provider).metadata.labels ==
+        [1, 2]
+    property_snapshot = defensive_provider.contract
+    property_snapshot.metadata.labels[2] = 99
+    @test acquisition_product_contract(defensive_provider).metadata.labels ==
+        [1, 2]
+    @test validate_acquisition_provider_binding(defensive_provider,
+        nothing) === nothing
+    @test !applicable(validate_acquisition_provider_binding,
+        reduced_implementation, path.result,
+        acquisition_products(reduced), full_contract)
+    @test !applicable(AcquisitionProductContract,
+        nothing, nothing, nothing)
+    @test !applicable(PreparedAcquisitionProvider,
+        PreparedUnchangedSyntheticProvider(), mutable_contract_products,
+        contract_snapshot, SyntheticReplayProviderStyle(),
+        :reuse_unchanged)
 
     valid_metadata = (kind=:contract, units=:count,
         geometry=(dimensions=(2, 2), layout=:dense),
