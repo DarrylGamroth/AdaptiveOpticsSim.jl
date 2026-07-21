@@ -3,6 +3,47 @@ abstract type AbstractAtmosphereLayer end
 
 @inline layer_altitude(layer::AbstractAtmosphereLayer) = layer.params.altitude
 
+"""Stable declared identity of one stochastic atmosphere layer."""
+struct AtmosphereLayerID
+    name::Symbol
+
+    function AtmosphereLayerID(name::Symbol)
+        isempty(String(name)) && throw(InvalidConfiguration(
+            "atmosphere layer identity must not be empty"))
+        return new(name)
+    end
+end
+
+Base.:(==)(left::AtmosphereLayerID, right::AtmosphereLayerID) =
+    left.name == right.name
+Base.isequal(left::AtmosphereLayerID, right::AtmosphereLayerID) =
+    isequal(left.name, right.name)
+Base.hash(id::AtmosphereLayerID, seed::UInt) =
+    hash(id.name, hash(AtmosphereLayerID, seed))
+
+function Base.show(io::IO, id::AtmosphereLayerID)
+    print(io, "AtmosphereLayerID(", repr(id.name), ")")
+end
+
+@inline _as_atmosphere_layer_id(id::AtmosphereLayerID) = id
+@inline _as_atmosphere_layer_id(name::Symbol) = AtmosphereLayerID(name)
+
+function _as_atmosphere_layer_id(value)
+    throw(InvalidConfiguration(
+        "atmosphere layer identity must be a Symbol or AtmosphereLayerID; " *
+        "got $(typeof(value))"))
+end
+
+@inline _prepare_atmosphere_layer_ids(::Nothing, n_layers::Int) =
+    ntuple(_ -> nothing, n_layers)
+
+function _prepare_atmosphere_layer_ids(layer_ids, n_layers::Int)
+    length(layer_ids) == n_layers || throw(InvalidConfiguration(
+        "layer_ids length must match the atmosphere layer count"))
+    return ntuple(index -> _as_atmosphere_layer_id(layer_ids[index]),
+        n_layers)
+end
+
 # Static or extension-defined atmospheres without directional geometry retain
 # their ordinary propagation semantics when a runtime supplies a source.
 # Timed atmosphere models override this with the prepared-renderer path below.
@@ -101,8 +142,8 @@ the newly published epoch. The first call initializes the stochastic state;
 thereafter a zero duration returns the existing epoch without consuming RNG or
 changing its sequence.
 """
-function advance_by!(atm::AbstractTimedAtmosphere, duration::Real,
-    rng::AbstractRNG)
+function _advance_by_with_rng!(atm::AbstractTimedAtmosphere,
+    duration::Real, rng)
     timeline = atmosphere_timeline(atm)
     T = typeof(timeline.model_time)
     dt = _explicit_atmosphere_duration(duration, T)
@@ -130,6 +171,11 @@ function advance_by!(atm::AbstractTimedAtmosphere, duration::Real,
     return current_epoch(atm)
 end
 
+@inline function advance_by!(atm::AbstractTimedAtmosphere, duration::Real,
+    rng::AbstractRNG)
+    return _advance_by_with_rng!(atm, duration, rng)
+end
+
 function advance_by!(atm::AbstractTimedAtmosphere, duration::Real;
     rng::AbstractRNG=Random.default_rng())
     return advance_by!(atm, duration, rng)
@@ -141,14 +187,19 @@ end
 Advance to an explicit absolute model time. Equal-time calls are no-ops after
 initialization. Backward targets fail before atmosphere state is mutated.
 """
-function advance_to!(atm::AbstractTimedAtmosphere, target_time::Real,
-    rng::AbstractRNG)
+function _advance_to_with_rng!(atm::AbstractTimedAtmosphere,
+    target_time::Real, rng)
     timeline = atmosphere_timeline(atm)
     T = typeof(timeline.model_time)
     target = _explicit_atmosphere_target(target_time, T)
     target < timeline.model_time && throw(AtmosphereTimeError(
         "atmosphere target model time $target precedes current time $(timeline.model_time)"))
-    return advance_by!(atm, target - timeline.model_time, rng)
+    return _advance_by_with_rng!(atm, target - timeline.model_time, rng)
+end
+
+@inline function advance_to!(atm::AbstractTimedAtmosphere,
+    target_time::Real, rng::AbstractRNG)
+    return _advance_to_with_rng!(atm, target_time, rng)
 end
 
 function advance_to!(atm::AbstractTimedAtmosphere, target_time::Real;

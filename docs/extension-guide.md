@@ -73,6 +73,15 @@ model-specific revision without mutating output. The mutating method may then
 write only its bound caller-owned path input. This two-phase contract lets a
 selection reject every invalid path before materializing the first one.
 
+A `MultiLayerAtmosphere` or `InfiniteMultiLayerAtmosphere` used by
+`prepare_plant` declares one stable `AtmosphereLayerID` per layer through its
+`layer_ids` keyword. The ordinary atmosphere constructors still permit omitted
+IDs for non-plant numerical work, but plant preparation rejects missing or
+duplicate stochastic-owner identities. A custom single-owner timed atmosphere
+continues to implement its ordinary `initialize_atmosphere!` and
+`evolve_atmosphere!` methods against `AbstractRNG`; the prepared plant supplies
+the exact owner-bound RNG to those methods.
+
 `input` is a path-local `PupilFunction`, pupil-plane `ElectricField`, or a
 concrete tuple of them. `result` is an acquisition-facing photon-rate
 `IntensityMap` or a concrete tuple/`OpticalProductBundle` of such maps. The
@@ -123,25 +132,36 @@ Use qualified `AdaptiveOpticsSim.WFSOpticalPathExecution` to adapt an existing
 Gate 0 WFS optical plan, `AdaptiveOpticsSim.FrameAcquisitionExecution` for a
 frame detector plus a distinct caller-owned observation, and
 `AdaptiveOpticsSim.WFSAcquisitionExecution` to compose already prepared WFS
-acquisition and estimator plans. A different concrete path execution type must
-extend both the three-argument `execute_path!` dispatch and the qualified
+acquisition and estimator plans. A deterministic concrete path execution type
+must extend both the three-argument `execute_path!` dispatch and the qualified
 `AdaptiveOpticsSim.validate_path_execution_binding(execution, input, result)`
-seam. A different acquisition execution type similarly extends the
+seam. A stateful stochastic path can instead extend the four-argument form that
+receives its prepared provider `AbstractRNG`. If it needs additional
+independent device streams, extend qualified
+`additional_path_rng_owner_roles` and `execute_path_rngs!`, then obtain each
+declared stream directly with `rng_stream_state(group, Val(:role))`. A
+different acquisition execution type similarly extends the
 four-argument `execute_acquisition!` dispatch and
 `AdaptiveOpticsSim.validate_acquisition_execution_binding(execution,
-path_result, products)`. Each validator must reject mismatched exact storage or
-state before mutation. Do not store a `Function`, abstract executor vector,
-schedule, RNG, queue, or transport in these owners. Preparation may allocate;
-warmed execution must retain the allocation contract of its underlying stages.
+path_result, products)`. Extra acquisition/device streams use qualified
+`additional_acquisition_rng_owner_roles` and `execute_acquisition_rngs!`.
+Role tuples and their `Val` lookups are prepared once; models never consult a
+global RNG registry in the hot path. Each validator must reject mismatched exact
+storage or state before mutation. Do not store a `Function`, abstract executor
+vector, schedule, RNG registry, queue, or transport in model execution owners.
+Preparation may allocate; warmed execution must retain the allocation contract
+of its underlying stages.
 
 Callers prepare a fixed acquisition subset with
 `prepare_acquisition_selection(plant, ids)`. Its unique paths and acquisition
 owners are available through the existing `prepared_paths` and
 `prepared_acquisitions` accessors. Repeated execution supplies either one
 explicit current `AtmosphereEpoch` to `execute_acquisition_selection!` or one
-absolute atmosphere model time to `execute_acquisition_selection_at!`. The
-latter accepts a separate atmosphere RNG; both currently accept an acquisition
-RNG tuple aligned with the canonical prepared acquisition order.
+absolute atmosphere model time to `execute_acquisition_selection_at!`.
+`prepare_plant(definition; run_seed, rng_derivation_version)` owns all stateful
+streams, so neither selected-execution method accepts an RNG argument.
+`rng_replay_metadata(plant)` provides structured replay identity and seed data
+without granting another writer access to those streams.
 
 ## Detectors
 

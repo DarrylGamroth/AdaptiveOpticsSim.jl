@@ -67,11 +67,13 @@ plant = PlantDefinition(
 ```
 
 `PlantDefinition`, `OpticalPathDefinition`, `AcquisitionDefinition`,
-`OpticalPathID`, `AcquisitionID`, `plant_model_definition_style`, and
+`AtmosphereLayerID`, `OpticalPathID`, `AcquisitionID`, `RNGOwnerIdentity`,
+`RNGDerivationVersion`, `plant_model_definition_style`, and
 `ColdPlantModelDefinition` are committed public declaration names.
 `PreparedPlant`, `PreparedPathExecutor`, `PreparedAcquisitionOwner`,
-`AcquisitionProducts`, `PathResultKey`, `prepare_plant`, `execute_path!`, and
-`execute_acquisition!` are the corresponding schedule-free prepared boundary.
+`AcquisitionProducts`, `PathResultKey`, `prepare_plant`,
+`rng_replay_metadata`, `execute_path!`, and `execute_acquisition!` are the
+corresponding schedule-free prepared boundary.
 A symbol passed as an identity is normalized to the corresponding typed ID. A
 tuple or named tuple is only declaration organization: every definition carries
 its own explicit identity, a named-tuple key must agree with it, and reordering
@@ -97,7 +99,8 @@ uses ports backed by the sequenced SPSC rings specified in
 [`rtc-ports.md`](rtc-ports.md).
 
 Preparation turns immutable definitions into backend-, device-, shape-, and
-capacity-bound plans plus explicitly owned mutable state and workspaces.
+capacity-bound plans plus explicitly owned mutable state, workspaces, and
+stateful RNG streams derived from a required central run seed and version.
 Repeated execution calls mutating operations over those prepared owners and
 caller-owned products. Owner construction validates every concrete execution
 plan against the exact input, result, detector state, observation, and optional
@@ -108,9 +111,9 @@ materialization bindings, resolves acquisitions by stable ID, and builds a
 concrete tuple of separate acquisition owners. A cold acquisition selection
 canonicalizes caller-selected IDs to stable-ID order and deduplicates their
 referenced paths. Its serial executor preflights every path, acquisition,
-revision, RNG count, and current epoch before output mutation, materializes all
-unique path inputs, forms each path result once, and only then executes each
-acquisition. Model construction is multiple dispatch on the opted-in cold
+revision, exact RNG binding, and current epoch before output mutation,
+materializes all unique path inputs, forms each path result once, and only then
+executes each acquisition. Model construction is multiple dispatch on the opted-in cold
 type; there is no
 central registry, universal optical graph, abstract executor vector, or stored
 closure. The target API does not grow `AOSimulation` or
@@ -137,8 +140,12 @@ A prepared core acquisition in the current schedule-free slice owns:
 - caller-owned observation and optional measurement products
 - an exact read-only binding to one prepared path result and compatibility key
 
-The acquisition receives an explicit RNG when `execute_acquisition!` is called.
-Stable per-owner RNG derivation is added by the subsequent Gate 2 slice.
+The low-level acquisition receives an explicit RNG when
+`execute_acquisition!` is called. Selected serial execution instead supplies
+the exact acquisition/detector stream prepared from its stable identity; path
+providers and extension-declared device roles have independent streams. The
+selection references those plant-owned streams and does not create another RNG
+writer.
 Exposure sampling events, nondestructive-read events, readiness, publication,
 and trigger bindings are Gate 3 or later concerns and are not hidden in this
 owner.
@@ -258,11 +265,14 @@ compatible rate product may then feed several detectors with independent state
 and exposure durations. Each applies its presampling response on the
 declared optical grid, integrates over physical pixels, applies QE and elapsed
 time exactly once, and then applies its coupling, stochastic response, and
-readout. The transitional frame-step shared runtime draws detector noise
-sequentially from one runtime RNG, so tuple-order-independent stochastic
-streams are not yet claimed. The scheduled plant instead prepares one stable
-RNG owner identity per stochastic component as specified by the
-[`determinism policy`](../deterministic-simulation.md). The frame-step runtime
+readout. The transitional frame-step shared runtime still draws detector noise
+sequentially from one runtime RNG, so it does not claim tuple-order-independent
+stochastic streams. The schedule-free prepared plant requires a run seed and
+derivation version, binds stable identities to atmosphere layers, providers,
+detectors, and declared device roles, and supplies their independent streams as
+specified by the [`determinism policy`](../deterministic-simulation.md).
+Multilayer plant atmospheres require explicit layer identities so reordering
+layers does not reassign their streams. The frame-step runtime
 preflights every detector's exact prepared binding and idle state before
 advancing the atmosphere, but unforeseen execution failures are fail-stop
 rather than transactional rollback. Changing a

@@ -112,7 +112,7 @@ Current expectation:
 - if a maintained AMDGPU surface regresses numerically against CPU, that is a
   release-blocking defect for the AMDGPU-supported scope
 
-The current Julia 1.12.6 AMDGPU hardware target passed all `409` maintained
+The current Julia 1.12.6 AMDGPU hardware target passed all `411` maintained
 checks. A later local Julia installation failure prevented a replacement raw
 latency artifact, so the July 14 characterization remains the maintained AMD
 performance evidence; the failed host run does not broaden or weaken the

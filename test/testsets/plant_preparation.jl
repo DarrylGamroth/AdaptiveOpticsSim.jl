@@ -17,6 +17,7 @@ function run_selected_acquisition_materialization_tests()
         wind_speed=T[7, 3],
         wind_direction=T[15, 110],
         altitude=T[0, 6_000],
+        layer_ids=(:ground, :high),
         T=T,
     )
     science_source = Source(band=:custom, wavelength=T(0.8e-6),
@@ -47,7 +48,7 @@ function run_selected_acquisition_materialization_tests()
             lgs_path_definition),
         acquisitions=(slow_definition, ngs_definition, fast_definition,
             lgs_definition))
-    plant = prepare_plant(definition)
+    plant = prepare_plant(definition; run_seed=0x6000)
     selection = prepare_acquisition_selection(plant,
         (:lgs_frame, :fast_science, :ngs_frame, :slow_science))
     ordered_selection = prepare_acquisition_selection(plant,
@@ -84,10 +85,8 @@ function run_selected_acquisition_materialization_tests()
     for path in prepared_paths(selection)
         fill!(path_input(path).opd, T(17))
     end
-    rngs = (Xoshiro(0x701), Xoshiro(0x702), Xoshiro(0x703),
-        Xoshiro(0x704))
-    @test @inferred(execute_acquisition_selection_at!(selection, T(0.01),
-        Xoshiro(0x700), rngs)) === selection
+    @test @inferred(execute_acquisition_selection_at!(selection,
+        T(0.01))) === selection
     epoch = current_epoch(atmosphere)
     @test epoch_time(epoch) == T(0.01)
     @test epoch_sequence(epoch) == UInt64(1)
@@ -112,7 +111,8 @@ function run_selected_acquisition_materialization_tests()
             science_path_definition),
         acquisitions=(lgs_definition, fast_definition, ngs_definition,
             slow_definition))
-    reordered_plant = prepare_plant(reordered_definition)
+    reordered_plant = prepare_plant(reordered_definition;
+        run_seed=0x6000)
     reordered_selection = prepare_acquisition_selection(reordered_plant,
         (:ngs_frame, :slow_science, :lgs_frame, :fast_science))
     @test map(path -> path_id(path.definition),
@@ -122,10 +122,7 @@ function run_selected_acquisition_materialization_tests()
         prepared_acquisitions(reordered_selection)) == map(
         owner -> acquisition_id(owner.definition),
         prepared_acquisitions(selection))
-    reordered_rngs = (Xoshiro(0x711), Xoshiro(0x712), Xoshiro(0x713),
-        Xoshiro(0x714))
-    execute_acquisition_selection!(reordered_selection, epoch,
-        reordered_rngs)
+    execute_acquisition_selection!(reordered_selection, epoch)
     for id in (:fast_science, :lgs_frame, :ngs_frame, :slow_science)
         @test plant_test_observation_values(acquisition_observation(
             prepared_acquisition(reordered_plant, id))) ≈
@@ -151,8 +148,7 @@ function run_selected_acquisition_materialization_tests()
             acquisition_observation(owner))),
         prepared_acquisitions(selection))
     @test_throws AtmosphereEpochError execute_acquisition_selection!(
-        selection, epoch,
-        rngs)
+        selection, epoch)
     @test map(path -> path_input(path).opd,
         prepared_paths(selection)) == materialized_epoch_one
     @test map(path -> path_result(path).values,
@@ -172,16 +168,11 @@ function run_selected_acquisition_materialization_tests()
     )
     other_epoch = advance_to!(other_atmosphere, T(0.02), Xoshiro(0x706))
     @test_throws AtmosphereEpochError execute_acquisition_selection!(selection,
-        other_epoch, rngs)
+        other_epoch)
     @test map(path -> path_input(path).opd,
         prepared_paths(selection)) == materialized_epoch_one
 
-    assert_plant_preparation_error(
-        () -> execute_acquisition_selection!(selection, epoch_two,
-            (Xoshiro(1),)),
-        :acquisition, :rng_count)
-    @test @inferred(execute_acquisition_selection!(selection, epoch_two,
-        rngs)) ===
+    @test @inferred(execute_acquisition_selection!(selection, epoch_two)) ===
         selection
     @test science_path.execution.executions[] == 2
     selected_path_tuple = prepared_paths(selection)
@@ -192,8 +183,7 @@ function run_selected_acquisition_materialization_tests()
     )
 
     sequence_before_equal_time = epoch_sequence(current_epoch(atmosphere))
-    execute_acquisition_selection_at!(ordered_selection, T(0.02),
-        Xoshiro(0x707), rngs)
+    execute_acquisition_selection_at!(ordered_selection, T(0.02))
     @test epoch_sequence(current_epoch(atmosphere)) ==
         sequence_before_equal_time
     @test science_path.execution.executions[] == 3
@@ -203,7 +193,7 @@ function run_selected_acquisition_materialization_tests()
     else
         allocation_epoch = current_epoch(atmosphere)
         @test prepared_selection_execution_allocations(selection,
-            allocation_epoch, rngs) == 0
+            allocation_epoch) == 0
     end
 
     retained_inputs = map(
@@ -217,7 +207,7 @@ function run_selected_acquisition_materialization_tests()
     set_pupil_reflectivity!(telescope, T(0.9))
     assert_plant_preparation_error(
         () -> execute_acquisition_selection!(selection,
-            current_epoch(atmosphere), rngs),
+            current_epoch(atmosphere)),
         :path, :revision)
     @test map(path -> path_input(path).opd,
         prepared_paths(selection)) == retained_inputs
@@ -563,9 +553,9 @@ function prepared_acquisition_execution_allocations(
 end
 
 function prepared_selection_execution_allocations(selection,
-    epoch::AtmosphereEpoch, rngs::Tuple)
-    execute_acquisition_selection!(selection, epoch, rngs)
-    return @allocated execute_acquisition_selection!(selection, epoch, rngs)
+    epoch::AtmosphereEpoch)
+    execute_acquisition_selection!(selection, epoch)
+    return @allocated execute_acquisition_selection!(selection, epoch)
 end
 
 @inline plant_test_observation_values(values::AbstractArray) = values
@@ -601,7 +591,7 @@ end
             wfs_frame=wfs_acquisition_definition),
     )
 
-    plant = prepare_plant(definition)
+    plant = prepare_plant(definition; run_seed=0x5000)
     @test plant isa PreparedPlant
     @test prepared_paths(plant) isa Tuple
     @test prepared_acquisitions(plant) isa Tuple
