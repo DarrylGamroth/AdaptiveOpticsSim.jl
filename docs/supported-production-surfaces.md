@@ -81,6 +81,12 @@ surfaces, but are not part of the CPU HIL latency claim. Scheduler choice is
 evidence-gated per host and workload; direct `CPUHILExecutionPlan` stepping
 remains the production baseline.
 
+On Apple Silicon, application-owned AppleAccelerate 0.7 BLAS/LAPACK selection
+is a maintained CPU-provider variant. It is not a package dependency or a new
+array backend. The dedicated hosted target proves backend-neutral package load,
+active Accelerate forwarding under explicit opt-in, retained FFTW package
+plans, and the full CPU correctness surface.
+
 Primary evidence:
 
 - [model-validity-matrix.md](model-validity-matrix.md)
@@ -89,7 +95,7 @@ Primary evidence:
 - [conventional-detector CPU HIL latency baseline](../benchmarks/results/detectors/2026-07-14-detector-hil-latency.toml)
 - [final pre-HIL local CPU service-time evidence](../benchmarks/results/platform/2026-07-18-pre-hil-11-local-cpu.toml)
 - [final pre-HIL WSL CPU service-time evidence](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cpu.toml)
-- [Gate 2 serial plant CPU service-time evidence](../benchmarks/results/gate2/2026-07-20-serial-plant.toml)
+- [Gate 2 serial plant CPU service-time evidence](../benchmarks/results/gate2/2026-07-21-serial-plant.toml)
 - [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml)
 
 ### AMDGPU backend

@@ -1,4 +1,0 @@
-[[artifacts]]
-id = "GATE2-SERIAL-PLANT-CPU-2026-07-20"
-purpose = "Clean-tree Gate 2 serial prepared-plant correctness, warmed allocation, and self-paced CPU service-time baseline"
-path = "2026-07-20-serial-plant.toml"

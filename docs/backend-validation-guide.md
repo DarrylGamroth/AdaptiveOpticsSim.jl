@@ -117,6 +117,27 @@ package as a path source, keeping accelerator packages out of normal
 `Pkg.test()` while still resolving the full checkout dependency graph in a
 clean environment.
 
+### Apple Silicon BLAS/LAPACK selection
+
+AppleAccelerate.jl is validated as an explicit application-level linear-algebra
+provider, not as an AdaptiveOpticsSim dependency or array backend. The isolated
+[`test/appleaccelerate`](../test/appleaccelerate) project resolves the current
+maintained AppleAccelerate 0.7 line on a `macos-15` Apple Silicon runner. Two
+fresh processes establish distinct facts:
+
+- loading AdaptiveOpticsSim normally does not load AppleAccelerate and leaves
+  provider choice to the application
+- loading AppleAccelerate explicitly routes representative ILP64 BLAS and
+  LAPACK symbols through Accelerate, selects its single-threaded mode, preserves
+  FFTW as AdaptiveOpticsSim's explicit CPU FFT plan provider, and passes the
+  full CPU suite
+
+AppleAccelerate also exposes its own FFT APIs and an AbstractFFTs extension.
+Those are a separate application choice. Package CPU planning deliberately
+selects FFTW rather than allowing another package's more-specific Array method
+to change the plan family through load order. This preserves the existing
+arbitrary-size and multidimensional FFT support boundary.
+
 The full GPU smoke matrix now also pins the exact batched Shack-Hartmann
 detector/export surface that previously regressed on CUDA:
 
@@ -391,7 +412,11 @@ Checked-in CI automation now exists in:
 Current intent:
 
 - CPU workflow:
-  - runs the normal `Pkg.test()` suite on a hosted runner
+  - runs the normal `Pkg.test()` suite on Linux, Apple Silicon macOS, and
+    Windows hosted runners
+  - runs a separate Apple Silicon job that proves backend-neutral normal load,
+    then explicitly selects AppleAccelerate BLAS/LAPACK and reruns the full CPU
+    suite while retaining FFTW plans
   - runs the isolated AcceleratedKernels/Dagger scheduler extension tests on a
     four-thread Linux job
 - CUDA workflow:

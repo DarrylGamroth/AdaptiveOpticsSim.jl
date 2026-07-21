@@ -20,6 +20,30 @@ AdaptiveOpticsSim.source_composition_style(::TestExpandedSourceWrapper) =
     @test AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.CUDABackendTag) isa AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.CUDABackendTag}
 end
 
+@testset "Explicit CPU FFT provider" begin
+    for T in (ComplexF32, ComplexF64)
+        original = T.(reshape(1:64, 8, 8))
+
+        full = copy(original)
+        full_fft = AdaptiveOpticsSim.plan_fft_backend!(full)
+        full_ifft = AdaptiveOpticsSim.plan_ifft_backend!(full)
+        @test parentmodule(typeof(full_fft)) === FFTW
+        @test occursin("FFTW", string(typeof(full_ifft)))
+        AdaptiveOpticsSim.execute_fft_plan!(full, full_fft)
+        AdaptiveOpticsSim.execute_fft_plan!(full, full_ifft)
+        @test full ≈ original
+
+        first_dimension = copy(original)
+        dim_fft = AdaptiveOpticsSim.plan_fft_backend!(first_dimension, 1)
+        dim_ifft = AdaptiveOpticsSim.plan_ifft_backend!(first_dimension, 1)
+        @test parentmodule(typeof(dim_fft)) === FFTW
+        @test occursin("FFTW", string(typeof(dim_ifft)))
+        AdaptiveOpticsSim.execute_fft_plan!(first_dimension, dim_fft)
+        AdaptiveOpticsSim.execute_fft_plan!(first_dimension, dim_ifft)
+        @test first_dimension ≈ original
+    end
+end
+
 function explicit_direct_image_cycle!(output, field, wavefront, plan,
     workspace)
     form_direct_image!(output, wavefront, field, plan, workspace)

@@ -283,7 +283,7 @@ maintained Julia version; cold selection/preparation, metadata construction,
 compilation, and exceptional paths are outside that budget.
 
 The maintained [Gate 2 serial plant
-artifact](../benchmarks/results/gate2/2026-07-20-serial-plant.toml) composes
+artifact](../benchmarks/results/gate2/2026-07-21-serial-plant.toml) composes
 science, off-axis NGS Shack-Hartmann, and finite-height LGS pyramid paths with
 four detector acquisitions, including two unequal-exposure acquisitions sharing
 one science result. It records deterministic declaration-order replay, zero

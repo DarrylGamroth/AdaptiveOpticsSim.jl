@@ -724,6 +724,32 @@ reads nor writes a sensitivity cache and does not choose a configuration file
 format. If a workflow needs persistence, serialize these returned values
 explicitly in application code or through an optional format extension.
 
+## Apple Silicon Linear Algebra
+
+AppleAccelerate.jl is an application-owned opt-in on Apple Silicon, not a root
+dependency or weak dependency of AdaptiveOpticsSim.jl. Add it to the
+application environment and load it explicitly before constructing the
+simulation:
+
+```julia
+using AppleAccelerate
+using AdaptiveOpticsSim
+```
+
+This process-wide selection forwards supported Julia BLAS and LAPACK calls to
+Apple's Accelerate framework while retaining OpenBLAS as the fallback chosen by
+AppleAccelerate.jl. AdaptiveOpticsSim keeps its CPU FFT plan provider explicitly
+on FFTW; loading AppleAccelerate does not silently replace prepared package FFT
+plans with the separate AppleAccelerate FFT interface. Control Accelerate and
+FFTW threading independently, and keep both at one thread for deterministic
+validation or when coarse Julia tasks own CPU parallelism.
+
+The maintained Apple Silicon target uses the isolated
+[`test/appleaccelerate`](../test/appleaccelerate) environment. It first proves
+that a normal package load does not load AppleAccelerate, then verifies active
+Accelerate BLAS and LAPACK forwarding and runs the full CPU suite under that
+explicit selection.
+
 ## Determinism
 
 - Use a fixed RNG and pass it into `advance_by!`/`advance_to!`, detector calls, or runtime

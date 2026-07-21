@@ -67,7 +67,7 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    full-optical/reduced-order/synthetic provider semantics. Native and
    user-defined calibration illumination enter through typed products without
    instrument-topology assumptions. The clean
-   [serial plant artifact](../benchmarks/results/gate2/2026-07-20-serial-plant.toml)
+   [serial plant artifact](../benchmarks/results/gate2/2026-07-21-serial-plant.toml)
    covers science, NGS Shack-Hartmann, and LGS pyramid directions plus detector
    fan-out with zero warmed allocation; it is a self-paced CPU service-time
    baseline, not an external-RTC latency or fixed-rate capacity claim.

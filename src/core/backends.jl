@@ -159,6 +159,44 @@ end
 
 allocate_array(backend, ::Type{T}, dims::Vararg{Int,N}) where {T,N} = _resolve_array_backend(backend){T}(undef, dims...)
 
+# Keep the CPU FFT provider explicit. Optional packages may add more-specific
+# AbstractFFTs methods for ordinary Arrays; selecting those methods by load order
+# would silently change the prepared plan family. Accelerator arrays continue to
+# use their backend's AbstractFFTs dispatch.
+@inline function _plan_fftw_fft!(buffer::StridedArray{T,N}, dims) where {
+    T<:Union{ComplexF32,ComplexF64},N}
+    return invoke(plan_fft!, Tuple{StridedArray{T,N},Any}, buffer, dims)
+end
+
+@inline function _plan_fftw_bfft!(buffer::StridedArray{T,N}, dims) where {
+    T<:Union{ComplexF32,ComplexF64},N}
+    return invoke(plan_bfft!, Tuple{StridedArray{T,N},Any}, buffer, dims)
+end
+
+@inline _fft_region_length(buffer, dim::Integer) = size(buffer, dim)
+@inline _fft_region_length(buffer, dims) = prod(size(buffer, dim) for dim in dims)
+
+function plan_fft_backend!(buffer::StridedArray{T,N}) where {
+    T<:Union{ComplexF32,ComplexF64},N}
+    return _plan_fftw_fft!(buffer, ntuple(identity, N))
+end
+
+function plan_fft_backend!(buffer::StridedArray{T,N}, dims) where {
+    T<:Union{ComplexF32,ComplexF64},N}
+    return _plan_fftw_fft!(buffer, dims)
+end
+
+function plan_ifft_backend!(buffer::StridedArray{T,N}) where {
+    T<:Union{ComplexF32,ComplexF64},N}
+    return plan_ifft_backend!(buffer, ntuple(identity, N))
+end
+
+function plan_ifft_backend!(buffer::StridedArray{T,N}, dims) where {
+    T<:Union{ComplexF32,ComplexF64},N}
+    scale = one(real(T)) / _fft_region_length(buffer, dims)
+    return scale * _plan_fftw_bfft!(buffer, dims)
+end
+
 plan_fft_backend!(buffer) = plan_fft!(buffer)
 plan_fft_backend!(buffer, dims) = plan_fft!(buffer, dims)
 plan_ifft_backend!(buffer) = plan_ifft!(buffer)
