@@ -399,7 +399,7 @@ end
 
 """Qualified preparation-time evaluator binding-validation seam."""
 function validate_illumination_evaluator_binding(evaluator, destination,
-    boundary, contract)
+    boundary)
     throw(PlantPreparationError(:illumination,
         :unsupported_evaluator_validation,
         "illumination evaluator type $(typeof(evaluator)) does not validate its prepared binding"))
@@ -421,6 +421,10 @@ declaration, downstream-visibility description, and payload contract. The
 evaluator may contain a separate mutable single-writer state/workspace object;
 the evaluator wrapper itself must be immutable.
 """
+struct _PreparedIlluminationEntryToken end
+const _PREPARED_ILLUMINATION_ENTRY_TOKEN =
+    _PreparedIlluminationEntryToken()
+
 struct PreparedIlluminationEntry{B,E,D,C,V,K}
     boundary::B
     evaluator::E
@@ -428,10 +432,24 @@ struct PreparedIlluminationEntry{B,E,D,C,V,K}
     combination::C
     visibility::V
     contract::K
+
+    function PreparedIlluminationEntry(
+        ::_PreparedIlluminationEntryToken,
+        boundary::B,
+        evaluator::E,
+        destination::D,
+        combination::C,
+        visibility::V,
+        contract::K,
+    ) where {B,E,D,C,V,K}
+        return new{B,E,D,C,V,K}(boundary, evaluator, destination,
+            combination, visibility, contract)
+    end
 end
 
 function Base.getproperty(entry::PreparedIlluminationEntry, name::Symbol)
     name === :visibility && return deepcopy(getfield(entry, :visibility))
+    name === :contract && return deepcopy(getfield(entry, :contract))
     return getfield(entry, name)
 end
 
@@ -456,13 +474,15 @@ function PreparedIlluminationEntry(boundary, evaluator, destination;
         "prepared illumination evaluator wrappers must be immutable and retain mutable state separately"))
     validate_illumination_entry_payload(boundary, destination)
     contract = illumination_payload_contract(destination)
+    validate_illumination_payload_contract(destination, contract)
     combination = _prepared_illumination_combination(evaluator,
         destination)
     visibility_snapshot = deepcopy(visibility)
     validate_illumination_evaluator_binding(evaluator, destination,
-        boundary, contract)
-    return PreparedIlluminationEntry(boundary, evaluator, destination,
-        combination, visibility_snapshot, contract)
+        boundary)
+    return PreparedIlluminationEntry(_PREPARED_ILLUMINATION_ENTRY_TOKEN,
+        boundary, evaluator, destination, combination, visibility_snapshot,
+        contract)
 end
 
 """Prepare and bind one illumination evaluator to an exact typed destination."""
@@ -493,7 +513,7 @@ function validate_illumination_entry_binding(
         PlantPreparationError(:illumination, :combination,
             "illumination evaluator combination semantics changed"))
     validate_illumination_evaluator_binding(getfield(entry, :evaluator),
-        destination, getfield(entry, :boundary), getfield(entry, :contract))
+        destination, getfield(entry, :boundary))
     return entry
 end
 
@@ -598,8 +618,7 @@ end
 
 function validate_illumination_evaluator_binding(
     evaluator::PreparedUniformIntensityIllumination,
-    destination::IntensityMap, boundary, contract)
-    validate_illumination_payload_contract(destination, contract)
+    destination::IntensityMap, boundary)
     typeof(backend(destination)) === typeof(evaluator.backend) || throw(
         PlantPreparationError(:illumination, :backend,
             "uniform illumination evaluator and destination backends differ"))

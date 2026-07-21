@@ -271,10 +271,13 @@ function AdaptiveOpticsSim.validate_illumination_evaluator_binding(
     evaluator::PreparedMyIllumination,
     destination::IntensityMap,
     ::DetectorInputIlluminationEntry,
-    contract,
 )
-    AdaptiveOpticsSim.validate_illumination_payload_contract(
-        destination, contract)
+    typeof(backend(destination)) === typeof(evaluator.backend) ||
+        throw(PlantPreparationError(:illumination, :backend,
+            "prepared illumination backend changed"))
+    plane_device(destination.values) == evaluator.device ||
+        throw(PlantPreparationError(:illumination, :device,
+            "prepared illumination device changed"))
     return nothing
 end
 
@@ -291,9 +294,13 @@ function AdaptiveOpticsSim.evaluate_illumination!(
 end
 ```
 
-The evaluator receives explicit plant time and its path-owned `:illumination`
-RNG stream and must mutate and return the exact destination without allocating
-after warmup. It declares one of `SingleIllumination()`,
+Core validates the destination against its private prepared payload contract
+before invoking the evaluator-specific binding validator; extension methods
+validate only their additional parameter, state, workspace, backend, device,
+and boundary bindings. The evaluator receives explicit plant time and its
+path-owned `:illumination` RNG stream and must mutate and return the exact
+destination without allocating after warmup. It declares one of
+`SingleIllumination()`,
 `ExclusiveIlluminationSelection()`, `CoherentFieldCombination()`, or
 `IncoherentIntensityAddition()` through dispatch; core never guesses how
 contributions combine. The `visibility` value supplied to

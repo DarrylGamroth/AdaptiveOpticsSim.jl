@@ -16,12 +16,10 @@ function AdaptiveOpticsSim.prepare_illumination_evaluator(
 end
 
 function AdaptiveOpticsSim.validate_illumination_evaluator_binding(
-    evaluator::TestIlluminationEvaluator, destination, boundary, contract)
+    evaluator::TestIlluminationEvaluator, destination, boundary)
     evaluator.destination === destination || throw(PlantPreparationError(
         :illumination, :prepared_binding,
         "test illumination evaluator lost its destination binding"))
-    AdaptiveOpticsSim.validate_illumination_payload_contract(destination,
-        contract)
     return nothing
 end
 
@@ -41,7 +39,7 @@ AdaptiveOpticsSim.prepare_illumination_evaluator(
 
 function AdaptiveOpticsSim.validate_illumination_evaluator_binding(
     evaluator::MissingCombinationIlluminationEvaluator, destination,
-    boundary, contract)
+    boundary)
     return nothing
 end
 
@@ -56,8 +54,8 @@ AdaptiveOpticsSim.prepare_illumination_evaluator(
 AdaptiveOpticsSim.illumination_combination(
     ::Type{<:InvalidResultIlluminationEvaluator}) = SingleIllumination()
 AdaptiveOpticsSim.validate_illumination_evaluator_binding(
-    evaluator::InvalidResultIlluminationEvaluator, destination, boundary,
-    contract) = nothing
+    evaluator::InvalidResultIlluminationEvaluator, destination,
+    boundary) = nothing
 AdaptiveOpticsSim.evaluate_illumination!(destination,
     evaluator::InvalidResultIlluminationEvaluator, model_time,
     rng::AbstractRNG) = nothing
@@ -114,7 +112,7 @@ end
 
 function AdaptiveOpticsSim.validate_illumination_evaluator_binding(
     evaluator::PreparedTimedPupilIllumination,
-    destination::PupilFunction, ::PupilFunctionIlluminationEntry, contract)
+    destination::PupilFunction, ::PupilFunctionIlluminationEntry)
     typeof(backend(destination)) === typeof(evaluator.backend) || throw(
         PlantPreparationError(:illumination, :backend,
             "timed pupil evaluator backend changed"))
@@ -410,6 +408,24 @@ end
         :downstream_path => :science, :surface => :detector_input)
     @test visibility_entry.visibility == Dict(
         :downstream_path => :science, :surface => :detector_input)
+
+    contract_snapshot = visibility_entry.contract
+    @test contract_snapshot.metadata == payloads.intensity.metadata
+    @test AdaptiveOpticsSim.validate_illumination_entry_binding(
+        visibility_entry, payloads.intensity) === visibility_entry
+    @test !applicable(AdaptiveOpticsSim.PreparedIlluminationEntry,
+        illumination_entry_boundary(visibility_entry),
+        illumination_evaluator(visibility_entry),
+        illumination_destination(visibility_entry),
+        illumination_combination(visibility_entry),
+        illumination_visibility(visibility_entry),
+        contract_snapshot)
+    @test !applicable(
+        AdaptiveOpticsSim.validate_illumination_evaluator_binding,
+        illumination_evaluator(visibility_entry),
+        illumination_destination(visibility_entry),
+        illumination_entry_boundary(visibility_entry),
+        contract_snapshot)
 
     native_models = (
         alpha=NativeDetectorIlluminationPathModel(T(8)),
