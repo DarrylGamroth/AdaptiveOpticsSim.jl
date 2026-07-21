@@ -351,8 +351,12 @@ function select_bioedge_valid_i4q!(::ScalarCPUStyle, wfs::BioEdgeWFS, pupil::Pup
     if size(wfs.estimator.state.signal_2d) != (2 * n_pixels, n_pixels)
         wfs.estimator.state.signal_2d = similar(wfs.estimator.state.signal_2d, 2 * n_pixels, n_pixels)
         wfs.estimator.state.reference_signal_2d = similar(wfs.estimator.state.reference_signal_2d, 2 * n_pixels, n_pixels)
+        fill!(wfs.estimator.state.reference_signal_2d,
+            zero(eltype(wfs.estimator.state.reference_signal_2d)))
     elseif size(wfs.estimator.state.reference_signal_2d) != (2 * n_pixels, n_pixels)
         wfs.estimator.state.reference_signal_2d = similar(wfs.estimator.state.reference_signal_2d, 2 * n_pixels, n_pixels)
+        fill!(wfs.estimator.state.reference_signal_2d,
+            zero(eltype(wfs.estimator.state.reference_signal_2d)))
     end
     if iszero(wfs.estimator.params.light_ratio)
         fill!(wfs.estimator.state.valid_i4q, true)
@@ -409,8 +413,12 @@ function select_bioedge_valid_i4q!(::AcceleratorStyle, wfs::BioEdgeWFS, pupil::P
     if size(wfs.estimator.state.signal_2d) != (2 * n_pixels, n_pixels)
         wfs.estimator.state.signal_2d = similar(wfs.estimator.state.signal_2d, 2 * n_pixels, n_pixels)
         wfs.estimator.state.reference_signal_2d = similar(wfs.estimator.state.reference_signal_2d, 2 * n_pixels, n_pixels)
+        fill!(wfs.estimator.state.reference_signal_2d,
+            zero(eltype(wfs.estimator.state.reference_signal_2d)))
     elseif size(wfs.estimator.state.reference_signal_2d) != (2 * n_pixels, n_pixels)
         wfs.estimator.state.reference_signal_2d = similar(wfs.estimator.state.reference_signal_2d, 2 * n_pixels, n_pixels)
+        fill!(wfs.estimator.state.reference_signal_2d,
+            zero(eltype(wfs.estimator.state.reference_signal_2d)))
     end
     if iszero(wfs.estimator.params.light_ratio)
         fill!(wfs.estimator.state.valid_i4q, true)

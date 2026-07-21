@@ -1880,6 +1880,7 @@ end
 
         reference = zeros(T,
             size(staged.estimator.state.reference_signal_2d))
+        @test all(iszero, staged.estimator.state.reference_signal_2d)
         initial_revision = staged.estimator.state.calibration_revision
         invalid_reference = copy(reference)
         invalid_reference[1] = T(NaN)

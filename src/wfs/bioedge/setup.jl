@@ -263,6 +263,7 @@ function BioEdgeWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1,
     valid_signal_indices_host = Vector{Int}(undef, length(valid_signal_indices))
     signal_2d = backend{T}(undef, 2 * n_pix_signal, n_pix_signal)
     reference_signal_2d = similar(signal_2d)
+    fill!(reference_signal_2d, zero(T))
     valid_flux_sum_buffer = backend{T}(undef, 1)
     valid_flux_sum_host = Vector{T}(undef, 1)
     valid_flux_i4q_host = Matrix{T}(undef, n_pix_signal, n_pix_signal)
@@ -759,9 +760,13 @@ function resize_bioedge_signal_buffers!(wfs::BioEdgeWFS, frame_rows::Int,
     if size(wfs.estimator.state.signal_2d) != (2 * n_pixels, n_pixels)
         wfs.estimator.state.signal_2d = similar(wfs.estimator.state.signal_2d, 2 * n_pixels, n_pixels)
         wfs.estimator.state.reference_signal_2d = similar(wfs.estimator.state.reference_signal_2d, 2 * n_pixels, n_pixels)
+        fill!(wfs.estimator.state.reference_signal_2d,
+            zero(eltype(wfs.estimator.state.reference_signal_2d)))
         calibration_storage_changed = true
     elseif size(wfs.estimator.state.reference_signal_2d) != (2 * n_pixels, n_pixels)
         wfs.estimator.state.reference_signal_2d = similar(wfs.estimator.state.reference_signal_2d, 2 * n_pixels, n_pixels)
+        fill!(wfs.estimator.state.reference_signal_2d,
+            zero(eltype(wfs.estimator.state.reference_signal_2d)))
         calibration_storage_changed = true
     end
     if size(wfs.acquisition.state.camera_frame) != (frame_rows, frame_rows)

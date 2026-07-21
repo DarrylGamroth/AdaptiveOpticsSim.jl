@@ -333,6 +333,7 @@ function PyramidWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1, mod
     flux_i4q = backend{T}(undef, n_pix_signal, n_pix_signal)
     signal_2d = backend{T}(undef, 2 * n_pix_signal, n_pix_signal)
     reference_signal_2d = similar(signal_2d)
+    fill!(reference_signal_2d, zero(T))
     optical_gain = similar(slopes)
     fill!(optical_gain, one(T))
     estimator_state = PyramidEstimatorState{
@@ -708,9 +709,13 @@ function resize_pyramid_signal_buffers!(wfs::PyramidWFS, frame_size::Int)
     if size(wfs.estimator.state.signal_2d) != (2 * n_pixels, n_pixels)
         wfs.estimator.state.signal_2d = similar(wfs.estimator.state.signal_2d, 2 * n_pixels, n_pixels)
         wfs.estimator.state.reference_signal_2d = similar(wfs.estimator.state.reference_signal_2d, 2 * n_pixels, n_pixels)
+        fill!(wfs.estimator.state.reference_signal_2d,
+            zero(eltype(wfs.estimator.state.reference_signal_2d)))
         calibration_storage_changed = true
     elseif size(wfs.estimator.state.reference_signal_2d) != (2 * n_pixels, n_pixels)
         wfs.estimator.state.reference_signal_2d = similar(wfs.estimator.state.reference_signal_2d, 2 * n_pixels, n_pixels)
+        fill!(wfs.estimator.state.reference_signal_2d,
+            zero(eltype(wfs.estimator.state.reference_signal_2d)))
         calibration_storage_changed = true
     end
     if size(wfs.acquisition.state.camera_frame) != (frame_size, frame_size)
