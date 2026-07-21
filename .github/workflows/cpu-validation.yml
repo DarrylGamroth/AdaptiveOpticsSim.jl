@@ -97,7 +97,7 @@ jobs:
         uses: julia-actions/cache@v3
 
       - name: Verify Apple Silicon runner
-        run: julia --startup-file=no -e 'Sys.isapple() && Sys.ARCH === :aarch64 || error("AppleAccelerate validation requires Apple Silicon"); versioninfo()'
+        run: julia --startup-file=no -e 'using InteractiveUtils; Sys.isapple() && Sys.ARCH === :aarch64 || error("AppleAccelerate validation requires Apple Silicon"); versioninfo()'
 
       - name: Instantiate AppleAccelerate test environment
         run: julia --project=test/appleaccelerate --startup-file=no -e 'using Pkg; Pkg.instantiate(); Pkg.status()'
