@@ -7,6 +7,7 @@
 export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError
 export UnsupportedAlgorithm, NumericalConditionError
 export AtmosphereTimeError, AtmosphereEpochError
+export PlantTimeError, PlantScheduleError
 export WFSPreparationError
 export PlantDefinitionError, PlantPreparationError
 
@@ -170,6 +171,9 @@ export LiFTSolveAuto, LiFTSolveQR, LiFTSolveNormalEquations
 export LiFTLevenbergMarquardt, LiFTAdaptiveLevenbergMarquardt
 
 export OpticalPathID, AcquisitionID
+export PlantTimestamp, PlantDuration, PeriodicSchedule
+export plant_nanoseconds, plant_time_seconds, plant_duration_seconds
+export schedule_period, schedule_phase, schedule_timestamp
 export RNGDerivationVersion, RNGOwnerIdentity, rng_replay_metadata
 export ColdPlantModelDefinition, plant_model_definition_style
 export OpticalPathDefinition, AcquisitionDefinition, PlantDefinition

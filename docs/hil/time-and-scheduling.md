@@ -142,7 +142,7 @@ The timing model separates these concepts:
 
 | Concept | Meaning | Owner |
 |---|---|---|
-| Plant timeline | Canonical ordered event time, represented as integer nanoseconds in core | Core receives it explicitly; HIL coordinator advances or samples it |
+| Plant timeline | Canonical ordered event time, represented by nonnegative integer-nanosecond `PlantTimestamp` values in core | Core receives it explicitly; HIL coordinator advances or samples it |
 | Execution clock | Monotonic host time used to pace work and measure deadline performance | HIL companion owns the injected `Clocks.jl` source |
 | Modeled trigger source | A periodic or externally scripted sequence of nominal trigger edges on plant time | Core owns deterministic event semantics; HIL prepares the scenario |
 | Trigger distribution link | A prepared relationship from one trigger source to a detector, modulator, or other event consumer | Core owns realized delivery times and fault semantics |
@@ -150,12 +150,29 @@ The timing model separates these concepts:
 | Periodic schedule | Period and phase for simulator-paced events such as exposure samples and readout | Core semantics; HIL companion performs wall-clock pacing |
 | Command endpoint | Bounded asynchronous command events for one independently timed optic or segment, with receive and effective times | Core owns the semantic plant command schema, validation, bounded admission, device state, and virtual-time application; HIL owns submission descriptors, ingress, timestamp mapping, pacing, outcome credit, and outcome publication; user integration owns transport and decoding |
 
-Illustrative target configuration is:
+Core distinguishes an instant (`PlantTimestamp`) from an elapsed interval
+(`PlantDuration`). Both use nonnegative integer nanoseconds relative to the
+run-local plant origin. Addition, subtraction, periodic advancement, and
+timestamp conversion use checked arithmetic and reject overflow instead of
+wrapping. Conversion to floating-point seconds occurs only at a physical-model
+boundary such as atmosphere evolution or detector integration; the integer
+timestamp remains the scheduling and equal-time authority.
+
+A periodic schedule has a strictly positive `PlantDuration` period and a
+nonnegative phase relative to its run origin. Construction rejects an invalid
+period or phase. Later scheduler preparation rejects a horizon that cannot be
+represented and a requested quantization that lacks an explicit fidelity
+policy. The schedule definition is immutable; separately prepared cursor state
+owns the next occurrence and sequence so several acquisitions can reuse equal
+schedule parameters without sharing mutable timing state.
+
+The committed periodic-schedule vocabulary can be used alongside illustrative
+future command-endpoint configuration:
 
 ```julia
 schedules = (
-    wfs=PeriodicSchedule(domain=:plant, period_ns=500_000),
-    science=PeriodicSchedule(domain=:plant, period_ns=10_000_000),
+    wfs=PeriodicSchedule(period_ns=500_000),
+    science=PeriodicSchedule(period_ns=10_000_000),
 )
 
 commands = (
@@ -166,7 +183,8 @@ commands = (
 )
 ```
 
-The names are illustrative, not committed API. Both DMs above receive
+`CommandEndpoint` and `DeviceTiming` remain illustrative rather than committed
+API. Both DMs above receive
 timestamps from the same RTC domain but accept independent event sequences.
 Neither endpoint needs a declared period. If a physical driver only latches on
 fixed boundaries, its `DeviceTiming` may include an explicit periodic latch
@@ -215,6 +233,15 @@ The topology is a prepared, finite acyclic graph. Each trigger source and link
 retains only its sequence, fault state, deterministic RNG identity where
 needed, and next realized plant deadline; simulating skew or jitter does not
 materialize a run-length-sized event list.
+
+The Gate 3 baseline requires each ordinary link's delivered edges to remain
+strictly ordered by source sequence after its bounded delay and jitter are
+applied. Preparation rejects bounds that permit ordinary edges to overtake or
+require more than the declared in-flight capacity. A requested duplicate is a
+separate explicit occurrence with deterministic order at its delivery
+timestamp; it does not relax capacity or silently reorder later source edges.
+More general reordering requires a separately specified bounded device model
+and is not inferred from a large delay or phase step.
 
 Because the simulator owns detector pacing, this fan-out is a deterministic
 scheduler relationship, not an RTC command and not one SPSC message per trigger
@@ -309,6 +336,12 @@ post-exposure convenience and cannot support that time-resolved claim. Rolling
 shutter requires row or row-band timing. Frame transfer changes acquisition/
 readout overlap and timing, while the optical surface model remains unchanged.
 
+The timestamp of a nondestructive-read event is the charge-snapshot boundary.
+A configured physical read duration constrains legal spacing and may affect a
+later readout-ready event, but it does not silently move the snapshot instant.
+A higher-fidelity detector whose read operation itself perturbs or blocks
+integration must declare that behavior as part of its prepared event model.
+
 Each physical optical sample is a declared photon-arrival-rate product, not a frame
 already scaled by a telescope step. The prepared acquisition quadrature owns
 the sample duration or weight used to integrate that rate over the half-open
@@ -322,6 +355,13 @@ Preparation creates bounded event generators with one next deadline and stable
 tie-break ordinal per active acquisition, command latch, atmosphere evolution,
 or other event source. Rolling rows/bands and nondestructive reads advance a
 generator cursor; the runtime does not materialize every event in a long run.
+
+The total logical key is plant timestamp, causal event phase, prepared
+scheduler ordinal, and per-generator occurrence. The occurrence distinguishes
+an explicitly duplicated edge or another same-generator event without deriving
+identity from runtime container order. Prepared ordinals are unique within a
+phase for independently owned generators; runtime task or device completion
+order never participates in this key.
 
 Execution jumps directly to the minimum timestamp and processes every due
 event; it does not poll every base tick. A prepared allocation-free linear scan

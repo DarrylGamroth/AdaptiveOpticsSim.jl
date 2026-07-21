@@ -46,7 +46,8 @@ The package intentionally distinguishes three tiers:
 - Errors: `AdaptiveOpticsSimError`, `InvalidConfiguration`,
   `DimensionMismatchError`, `UnsupportedAlgorithm`, `NumericalConditionError`,
   `AtmosphereTimeError`, `AtmosphereEpochError`, `WFSPreparationError`,
-  `PlantDefinitionError`
+  `PlantTimeError`, `PlantScheduleError`, `PlantDefinitionError`,
+  `PlantPreparationError`
 - Profiles and RNG: `FidelityProfile`, `ScientificProfile`, `FastProfile`,
   `default_fidelity_profile`, `runtime_rng`, `deterministic_reference_rng`
 - Backend selectors: `CPUBackend`, `CUDABackend`, `AMDGPUBackend`,
@@ -150,11 +151,19 @@ requires explicit photon irradiance to claim a physical rate; its default is a
 normalized source. Calling `photon_irradiance` on a normalized source is an
 error rather than an implicit unit conversion.
 
-## Plant Topology And Preparation
+## Plant Time, Topology, And Preparation
 
-The Gate 2 core topology API declares one shared telescope and atmosphere,
-reusable optical paths, and independent acquisitions. Preparation adds concrete
-single-writer owners without adding scheduling or atmosphere advancement:
+The first Gate 3 core vocabulary defines canonical plant instants, elapsed
+durations, and nominal periodic recurrence without adding scheduler execution,
+mutable cursor state, or wall-clock pacing. The completed Gate 2 topology API
+declares one shared telescope and atmosphere, reusable optical paths, and
+independent acquisitions. Preparation adds concrete single-writer owners
+without adding scheduling or atmosphere advancement:
+
+- Canonical plant-time values: `PlantTimestamp`, `PlantDuration`,
+  `plant_nanoseconds`, `plant_time_seconds`, and `plant_duration_seconds`
+- Nominal recurrence: `PeriodicSchedule`, `schedule_period`, `schedule_phase`,
+  and `schedule_timestamp`
 
 - Stable identities: `AtmosphereLayerID`, `OpticalPathID`, `AcquisitionID`,
   `RNGOwnerIdentity`
@@ -213,6 +222,13 @@ single-writer owners without adding scheduling or atmosphere advancement:
   `additional_path_materialization_rng_owner_roles`,
   `additional_acquisition_rng_owner_roles`, `execute_path_rngs!`,
   `execute_acquisition_rngs!`, and `rng_stream_state`
+
+`PlantTimestamp` and `PlantDuration` are distinct, checked integer-nanosecond
+values: one identifies an instant relative to the run origin and the other an
+elapsed interval. `PeriodicSchedule` describes only a positive nominal period
+and a nonnegative phase. These values do not execute events, own mutable cursor
+state, read wall time, or imply detector timing. Fixed-capacity scheduler state
+and detector event transitions are later Gate 3 contracts.
 
 An illumination entry is a prepared path-input materializer, not a calibration
 mode or a second acquisition API. It binds one exact caller-owned optical
