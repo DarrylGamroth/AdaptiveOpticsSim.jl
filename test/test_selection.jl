@@ -24,6 +24,7 @@ const TEST_SUITE_SPECS = (
     TestSuiteSpec("plant-topology", "testsets/plant_topology.jl"),
     TestSuiteSpec("plant-time", "testsets/plant_time.jl"),
     TestSuiteSpec("plant-scheduler", "testsets/plant_scheduler.jl"),
+    TestSuiteSpec("plant-triggers", "testsets/plant_triggers.jl"),
     TestSuiteSpec("runtime", "testsets/control_and_runtime.jl"),
     TestSuiteSpec(
         "detectors-wfs",
@@ -67,6 +68,7 @@ const TEST_GROUP_SPECS = (
         "plant-topology",
         "plant-time",
         "plant-scheduler",
+        "plant-triggers",
         "plant-preparation",
         "plant-providers",
         "plant-rng",

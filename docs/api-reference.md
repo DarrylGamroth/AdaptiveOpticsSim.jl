@@ -159,8 +159,9 @@ pacing. The completed Gate 2 topology API declares one shared telescope and
 atmosphere, reusable optical paths, and independent acquisitions. Preparation
 adds concrete single-writer owners without implicit atmosphere advancement:
 
-- Canonical plant-time values: `PlantTimestamp`, `PlantDuration`,
-  `plant_nanoseconds`, `plant_time_seconds`, and `plant_duration_seconds`
+- Canonical plant-time values: `PlantTimestamp`, `PlantDuration`, qualified
+  `PlantTimeOffset`, `plant_nanoseconds`, `plant_time_seconds`, and
+  `plant_duration_seconds`
 - Nominal recurrence: `PeriodicSchedule`, `schedule_period`, `schedule_phase`,
   and `schedule_timestamp`
 
@@ -176,6 +177,25 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `claimed_event_key`, `reschedule_event!`,
   `reschedule_periodic_event!`, `activate_event_generator!`, and
   `deactivate_event_generator!`
+- Qualified trigger declarations: `TriggerSourceID`, `TriggerLinkID`,
+  `TriggerConsumerID`, `TriggerFaultID`, `TriggerSourceDefinition`,
+  `TriggerLinkDefinition`, `TriggerConsumerDefinition`,
+  `TriggerFaultTraceEntry`, `TriggerFaultTrace`, and `TriggerEdgeAction`
+- Qualified trigger preparation and state: `prepare_trigger_topology`,
+  `PreparedTriggerTopology`, `TriggerTopologyState`,
+  `TriggerTopologyWorkspace`, `trigger_source_handle`,
+  `trigger_source_count`, `trigger_link_count`, `trigger_consumer_count`,
+  `trigger_in_flight_capacity`, and
+  `required_trigger_in_flight_capacity`
+- Qualified trigger execution: `next_trigger_source`,
+  `realize_next_trigger_source!`, `next_trigger_delivery`,
+  `next_trigger_delivery_timestamp`, `pop_next_trigger_delivery!`,
+  `pending_trigger_delivery_count`, `contains_trigger_fault`, and the
+  `trigger_fault_observation_count`, `trigger_fault_observation`,
+  `trigger_fault_id`, and `trigger_fault_location` accessors. Delivery records
+  retain distinct
+  `NominalTriggerEdge`, `DeliveredTriggerEdge`, and
+  `ReportedTriggerTimestamp` values
 
 - Stable identities: `AtmosphereLayerID`, `OpticalPathID`, `AcquisitionID`,
   `RNGOwnerIdentity`
@@ -235,11 +255,13 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `additional_acquisition_rng_owner_roles`, `execute_path_rngs!`,
   `execute_acquisition_rngs!`, and `rng_stream_state`
 
-`PlantTimestamp` and `PlantDuration` are distinct, checked integer-nanosecond
-values: one identifies an instant relative to the run origin and the other an
-elapsed interval. `PeriodicSchedule` describes only a positive nominal period
-and a nonnegative phase. These values do not execute events, own mutable cursor
-state, read wall time, or imply detector timing.
+`PlantTimestamp`, `PlantDuration`, and qualified `PlantTimeOffset` are distinct,
+checked integer-nanosecond values: they represent a nonnegative run-local
+instant, a nonnegative elapsed interval, and a signed displacement between
+nominal and realized instants. Applying an offset must still produce a
+representable nonnegative timestamp. `PeriodicSchedule` describes only a
+positive nominal period and a nonnegative phase. These values do not execute
+events, own mutable cursor state, read wall time, or imply detector timing.
 
 The scheduler surface remains qualified developer API while Gate 3 composes
 trigger and detector transitions. Preparation copies definitions into a flat,
@@ -250,6 +272,25 @@ outstanding at a time and must be resolved by rescheduling or deactivation.
 Equal-timestamp rescheduling remains legal only when the incremented occurrence
 makes the complete key strictly later. The scheduler has no callback, product,
 detector, transport, task, execution-clock, or pacing responsibility.
+
+The trigger surface is likewise qualified while detector transition semantics
+remain under construction. Preparation canonicalizes explicit source, link,
+consumer, trace, and fault identities into a flat finite fan-out; checks exact
+finite phase-step, jitter, drop, duplicate, label-offset, non-overtaking, and
+capacity behavior; and allocates fixed propagation, realization, observation,
+and pending-delivery storage. Runtime owns one source sequence and phase offset
+per source, one phase offset per link, and no run-length edge list. Source
+faults remain correlated through every surviving branch, while a link fault
+affects only that link and its descendants. Equal-time source realization
+precedes delivery removal, and neither operation may silently backdate the
+other. One prepared topology supports at most 64 distinct fault identities in
+its compact delivery fault set. The record-returning `next_trigger_delivery`
+and two-argument
+`pop_next_trigger_delivery!` are inspection conveniences; latency-sensitive
+code uses `next_trigger_delivery_timestamp` and the caller-owned
+`Ref{TriggerDelivery}` overload of `pop_next_trigger_delivery!` to avoid boxing
+identity-bearing records. This layer assigns no detector meaning to an edge and
+owns no RTC command, wall clock, task, ring, transport, or GPU work.
 
 An illumination entry is a prepared path-input materializer, not a calibration
 mode or a second acquisition API. It binds one exact caller-owned optical
