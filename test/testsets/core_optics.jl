@@ -87,12 +87,24 @@ end
     # Pre-HIL stage contracts intentionally add a small, documented public
     # product/protocol seam. Keep headroom bounded so unrelated internals do
     # not drift into the ordinary user namespace.
-    # Gate 2 adds a bounded documented topology/preparation surface; internal
-    # validation and source-key helpers remain qualified implementation detail.
-    @test length(exported) <= 552
+    # Gate 2 adds a bounded documented topology/preparation surface. Gate 3's
+    # first slice adds eleven public time/schedule names; its event-ordering
+    # vocabulary remains qualified implementation detail.
+    @test length(exported) <= 563
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :PlantDefinitionError)
     @test Base.isexported(AdaptiveOpticsSim, :PlantPreparationError)
+    @test Base.isexported(AdaptiveOpticsSim, :PlantTimeError)
+    @test Base.isexported(AdaptiveOpticsSim, :PlantScheduleError)
+    @test Base.isexported(AdaptiveOpticsSim, :PlantTimestamp)
+    @test Base.isexported(AdaptiveOpticsSim, :PlantDuration)
+    @test Base.isexported(AdaptiveOpticsSim, :PeriodicSchedule)
+    @test Base.isexported(AdaptiveOpticsSim, :plant_nanoseconds)
+    @test Base.isexported(AdaptiveOpticsSim, :plant_time_seconds)
+    @test Base.isexported(AdaptiveOpticsSim, :plant_duration_seconds)
+    @test Base.isexported(AdaptiveOpticsSim, :schedule_period)
+    @test Base.isexported(AdaptiveOpticsSim, :schedule_phase)
+    @test Base.isexported(AdaptiveOpticsSim, :schedule_timestamp)
     @test Base.isexported(AdaptiveOpticsSim, :OpticalPathID)
     @test Base.isexported(AdaptiveOpticsSim, :AcquisitionID)
     @test Base.isexported(AdaptiveOpticsSim, :AtmosphereLayerID)

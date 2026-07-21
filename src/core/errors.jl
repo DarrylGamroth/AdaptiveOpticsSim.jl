@@ -27,6 +27,20 @@ struct AtmosphereEpochError <: AdaptiveOpticsSimError
     msg::String
 end
 
+"""Invalid canonical plant timestamp, duration, conversion, or arithmetic."""
+struct PlantTimeError <: AdaptiveOpticsSimError
+    operation::Symbol
+    reason::Symbol
+    msg::String
+end
+
+"""Invalid periodic schedule or deterministic plant-event ordering value."""
+struct PlantScheduleError <: AdaptiveOpticsSimError
+    component::Symbol
+    reason::Symbol
+    msg::String
+end
+
 """Prepared-contract violation at one semantic wavefront-sensor stage."""
 struct WFSPreparationError <: AdaptiveOpticsSimError
     stage::Symbol
