@@ -1,5 +1,4 @@
 using DelimitedFiles
-using FFTW
 using KernelAbstractions
 using LinearAlgebra
 using Random
@@ -750,12 +749,18 @@ function center_crop(src::AbstractMatrix, size_out::Int)
     return @view src[sx:sx+size_out-1, sy:sy+size_out-1]
 end
 
+function reference_fft(values::AbstractMatrix{T}) where {T<:AbstractFloat}
+    buffer = Complex{T}.(values)
+    plan = AdaptiveOpticsSim.plan_fft_backend!(buffer)
+    return AdaptiveOpticsSim.execute_fft_plan!(buffer, plan)
+end
+
 function strehl_ratio(psf::AbstractMatrix{T}, psf_ref::AbstractMatrix{T}) where {T<:AbstractFloat}
     size_min = min(size(psf, 1), size(psf_ref, 1))
     psf_crop = center_crop(psf, size_min)
     ref_crop = center_crop(psf_ref, size_min)
-    otf = abs.(fft(psf_crop))
-    otf_ref = abs.(fft(ref_crop))
+    otf = abs.(reference_fft(psf_crop))
+    otf_ref = abs.(reference_fft(ref_crop))
     shifted = similar(otf)
     shifted_ref = similar(otf_ref)
     AdaptiveOpticsSim.fftshift2d!(shifted, otf)
