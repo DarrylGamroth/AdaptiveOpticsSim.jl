@@ -1,0 +1,42 @@
+schema_version = 1
+name = "gate3_event_scheduler_cpu"
+generator_counts = [1, 8, 32, 128, 256]
+samples_per_run = 20000
+runs = 3
+warmup_operations = 1000
+minimum_samples_for_p99 = 10000
+histogram_lowest_ns = 1
+histogram_highest_ns = 1000000000
+histogram_significant_figures = 3
+max_alloc_bytes = 0
+
+scope_exclusions = [
+    "package import, scheduler preparation, construction, and first-use compilation",
+    "fixed-rate arrivals, wall-clock pacing, queues, overload, and recovery",
+    "detector, trigger, command, optical-path, publication, or transport work",
+    "parallel execution, GPU execution, and host-device transfer",
+    "CPU affinity, isolation, governor control, NUMA placement, and interrupt placement",
+    "external-RTC latency, production instrument capacity, or heap-policy crossover claims",
+]
+
+[contract]
+question = "Across the maintained 1-to-256 active-generator range, does the fixed-capacity serial linear-scan scheduler preserve exact event order, keep storage proportional to prepared capacity rather than event count, and execute one warmed scan/claim/reschedule cycle without Julia heap allocation?"
+load_model = "closed-loop self-paced serial service-cost characterization; this is not an AO control loop or HIL pacing test"
+arrival_model = "the next scheduler operation starts after the prior operation and histogram recording complete"
+coordinated_omission_correction = false
+coordinated_omission_reason = "the benchmark characterizes unpaced scheduler service cost and makes no fixed-arrival latency claim"
+timed_boundary = "linearly scan the fixed active registry, claim the minimum logical plant event, compute its next timestamp by checked integer-duration addition, and reschedule the same generator"
+timer = "time_ns; the final clock read is included, while histogram recording is excluded from latency and included in achieved throughput"
+correctness_oracle = "exact timestamp, ordinal, and occurrence sequence; declaration-order-independent simultaneous-event scan; fixed registry/cursor/due-slot lengths; and the maintained plant-scheduler unit suite"
+threading = "one Julia thread, one BLAS thread, and one FFT provider thread"
+tail_claim = "p99 is reported with at least 100 expected observations beyond p99 per run; p99.9 is diagnostic"
+latency_gate = "descriptive generator-count scaling evidence only; no external-RTC or production latency threshold is asserted"
+allocation_gate = "zero Julia heap bytes for one warmed timed-boundary operation"
+
+[workload]
+backend = "CPUBackend"
+numeric_time_unit = "integer nanoseconds"
+event_phase = "OpticalSamplePhase"
+initial_deadlines = "one distinct timestamp per generator in 0:(generator_count-1)"
+recurrence = "each claimed generator is rescheduled by generator_count nanoseconds"
+simultaneous_oracle = "all definitions share timestamp zero and are supplied in reverse ordinal order"

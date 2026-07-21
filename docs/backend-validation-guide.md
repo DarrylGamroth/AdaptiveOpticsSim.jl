@@ -35,8 +35,8 @@ Bare `Pkg.test()` runs every registered suite in
 - core optics, direct science, and atmosphere
 - control and runtime
 - detectors and WFS
-- plant topology, preparation, product providers, RNG ownership, and
-  calibration illumination
+- plant topology, canonical time, deterministic scheduling, preparation,
+  product providers, RNG ownership, and calibration illumination
 - calibration and analysis
 - reference, tutorial, and Gate 0 regression
 
@@ -65,6 +65,34 @@ julia --project=. --startup-file=no -e \
 An unknown selector fails rather than silently running no tests. Selective
 runs are development evidence only: bare `Pkg.test()` remains the complete CPU
 composition and release gate, and CI continues to run it.
+
+### Deterministic event-scheduler evidence
+
+Run the focused Gate 3 scheduler correctness and allocation suite with:
+
+```sh
+julia --project=. --startup-file=no -e \
+  'using Pkg; Pkg.test(test_args=["plant-scheduler"])'
+```
+
+The maintained generator-count characterization uses the benchmark-only
+HdrHistogram dependency and one Julia/BLAS/FFT thread:
+
+```sh
+julia --threads=1 --project=benchmarks --startup-file=no \
+  benchmarks/benchmark_gate3_event_scheduler.jl
+```
+
+Its versioned contract is
+[`gate3_event_scheduler.toml`](../benchmarks/contracts/gate3_event_scheduler.toml),
+and the current raw-histogram artifact is
+[`2026-07-21-event-scheduler.toml`](../benchmarks/results/gate3/2026-07-21-event-scheduler.toml).
+The timed boundary is one serial linear scan, claim, checked integer next-time
+calculation, and reschedule across 1, 8, 32, 128, and 256 active generators.
+This is warmed, self-paced in-process scheduler service-cost evidence. It does
+not include detector or optical work, wall-clock pacing, queues, overload,
+transport, or an external RTC, and therefore establishes neither fixed-arrival
+latency nor production instrument capacity.
 
 ### Optional backend smoke in `Pkg.test()`
 
