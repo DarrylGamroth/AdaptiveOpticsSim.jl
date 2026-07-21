@@ -1,0 +1,314 @@
+all_gates_passed = true
+benchmark = "gate2_serial_plant_cpu"
+characterized_source_revision = "73fbee6a1983cf577c9cd262fc3e12245a2e08b4"
+configured_runs = 3
+configured_samples_per_run = 10000
+configured_warmup_operations = 100
+evidence_class = "warmed in-process serial CPU plant service time"
+first_use_ns = 20291743947
+minimum_samples_for_p99 = 10000
+p99_claim_supported = true
+schema_version = 1
+scope_exclusions = ["package import, plant preparation, and first-use compilation", "fixed-rate open-loop arrivals, queues, overload, and recovery", "external RTC transport, response time, and publication", "Gate 3 event scheduling, exposure integration, and command application", "parallel execution, GPU execution, and host-device transfer", "CPU affinity, isolation, governor control, and interrupt placement", "production instrument scale or model-specific throughput claims"]
+source_contract = "contracts/gate2_serial_plant.toml"
+steady_alloc_bytes = 0
+
+[baseline_artifact]
+
+[contract]
+allocation_gate = "zero Julia heap bytes for one warmed timed-boundary operation"
+arrival_model = "the next operation starts after the previous operation and histogram recording complete"
+coordinated_omission_correction = false
+coordinated_omission_reason = "this benchmark measures serial service time and makes no fixed-arrival-rate latency claim"
+correctness_oracle = "same-seed declaration-order replay, distinct NGS/LGS/science paths, exact shared-science path identity, detector exposure scaling, finite positive products, and the maintained Gate 2 test matrix"
+first_use = "recorded immediately after construction and before replay validation or warmup; package import and preparation are excluded"
+latency_gate = "this run establishes a comparable baseline; no subjective or external-RTC latency threshold is asserted"
+load_model = "closed-loop self-paced arrival model; this is not an AO control loop"
+question = "For this fixed compact Gate 2 workload, does the warmed serial prepared-plant selection execute without Julia heap allocation, preserve deterministic declaration-order replay, and provide a reproducible service-time distribution for future comparison?"
+tail_claim = "p99 is reported with 100 expected observations beyond p99 per 10000-sample run; p99.9 is diagnostic"
+threading = "one Julia thread, one BLAS thread, one FFT provider thread"
+timed_boundary = "increment the explicit absolute model time, validate prepared ownership, advance the shared atmosphere, materialize three selected directions, form each path once, and execute four selected detector acquisitions"
+timer = "time_ns; the final clock read is included, histogram recording is excluded from latency and included in achieved throughput"
+
+[correctness]
+acquisition_count = 4
+canonical_acquisition_ids = ["lgs_frame", "ngs_frame", "science_fast", "science_slow"]
+canonical_path_ids = ["lgs_pyramid", "ngs_shack_hartmann", "science"]
+declaration_reordering_replay = true
+observation_sha256 = ["82c4afdf7f2b4d3ddd032ee498918988ff650b66cbd6a8377b550bd3990dfee6", "5aca315bee019213257ac1fc8490041eed65b7de2af9fd687601cacc204c0b03", "e7157280c7ed697ff0b7284f970942d652dde3c57b2667d1f07cc2b3c4bb5d3f", "b6fbe1c09c88c6c0d200d4e47853d57a195556066e0297d7bf4791ab6ec0de34"]
+science_exposure_ratio = 2.9999999999999996
+science_path_reused = true
+unique_path_count = 3
+
+[environment]
+active_project = "/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl/benchmarks/Project.toml"
+adaptive_optics_sim_version = "0.1.0"
+allowed_cpus = "0-15"
+architecture = "x86_64"
+blas_config = "LBTConfig([ILP64] libopenblas64_.so)"
+blas_threads = 1
+command = "julia --threads=1 --project=benchmarks benchmarks/benchmark_gate2_serial_plant.jl"
+cpu_model = "AMD Ryzen 7 6800H with Radeon Graphics"
+cpu_target = "znver3"
+fft_threads = 1
+git_commit = "73fbee6a1983cf577c9cd262fc3e12245a2e08b4"
+git_dirty = false
+git_status_porcelain = ""
+hdrhistogram_version = "0.4.0"
+julia_cpu_target_env = "default"
+julia_depot_path = "default"
+julia_threads = 1
+julia_version = "1.12.6"
+kernel = "Linux"
+kernel_release = "6.12.57+deb13-amd64"
+logical_cpu_threads = 16
+manifest_sha256 = "8ef816c835a25ecdb9c8094519bb6f0515785ec78de5e75a7bbb85a571781f80"
+scaling_governor_cpu0 = "powersave"
+timestamp_utc = "2026-07-21T05:53:21.379"
+
+[final_observations]
+epoch_sequence = 30102
+model_time_s = 30.102
+
+    [[final_observations.acquisitions]]
+    id = "lgs_frame"
+    maximum = 0.006672081197090789
+    minimum = 0.0010666021297873213
+    sha256 = "f9628cf0ac851a3eb1fd911f14daa98cdd841f3d021781f5de67789dd38ba9e5"
+    shape = [8, 8]
+    sum = 0.2448
+    [[final_observations.acquisitions]]
+    id = "ngs_frame"
+    maximum = 0.0008287152528548374
+    minimum = 1.3145840016213106e-7
+    sha256 = "8be5bf06bab5d39861ccb27e85e51641d04a84e1185582b96ff0718120fd28c7"
+    shape = [16, 16]
+    sum = 0.04301955569449418
+    [[final_observations.acquisitions]]
+    id = "science_fast"
+    maximum = 0.0023532605087896955
+    minimum = 7.461801043803937e-7
+    sha256 = "9bc2fe6375ded5ef1bab6768011423847d9095ddd42734f6cd5050d113b1fbdd"
+    shape = [32, 32]
+    sum = 0.36719999999999997
+    [[final_observations.acquisitions]]
+    id = "science_slow"
+    maximum = 0.007059781526369085
+    minimum = 2.2385403131411808e-6
+    sha256 = "f3466365c5caa2f014be050ae62f1fb7e394fa76946ca70ad5a81d1c7b4d2de7"
+    shape = [32, 32]
+    sum = 1.1016000000000001
+
+[histogram]
+highest_ns = 60000000000
+lowest_ns = 1
+significant_figures = 3
+
+[regression]
+absolute_latency_gate_evaluated = false
+absolute_latency_gate_passed = true
+allocation_gate_passed = true
+allocation_limit_bytes = 0
+allocation_observed_bytes = 0
+relative_p99_gate_evaluated = false
+relative_p99_gate_passed = true
+
+[[runs]]
+completed_operations = 10000
+failed_operations = 0
+histogram_base64 = "HISTFAAAAWp4nC2PO0seQRSGZ989e/Z847gO6zqYZb0wbBYJ8tmY9YKg2Cj+AhH8GRZ2FhZWIWAn1qms0gSshPwDy/AhBMQ6pEqZs+o5M+fyvO8U01xezxqTfDNvkb73RO/0v4Njs/vnDfw+A0hcCO1K32+2dVv7sNnFumlPLpJJ8iud0KV8z2/zL6Mnvs//8lP+Is/5I9/x1+yFrtIHPCY3yVWy18eu5CJWVWCvg/V+vnNVvdw0oWirtooxhsVx3X7q+rpf3dnZXz+M69t7R9urMY6b+W6lbpwPZdUsF6F2pSwGFucCeWeZqXTOkSsLscRWw/mCrQiXIt4VlrSLVSd5dsJihQmiD0WrflCEGMpYmNkZC0tgLYYBAzaq0kCYyJAAajcCQ1DIQzVkR6oN6NWf6axYF1XNkBjpMjUAPTmMpERTCrNXU0aDlNO07hlyTVoaADCHGSxgV8fPOEWKWazhIzbwAVv4CZzjB/AfYR0t0w=="
+histogram_encoding = "HdrHistogram compressed V2 base64"
+max_ns = 188031
+mean_ns = 92535.392
+min_ns = 89152
+monotonic_end_ns = 0x2ddeb1e6515a4f
+monotonic_start_ns = 0x2ddeb1af1fc992
+p50_ns = 91583
+p90_ns = 95807
+p99_9_ns = 126655
+p99_ns = 106431
+samples = 10000
+throughput_hz = 10799.192082634529
+wall_ns = 925995197
+
+    [runs.gc]
+    allocd = 0
+    bigalloc = 0
+    collect = 0
+    deferred_alloc = 0
+    freecall = 0
+    freed = 0
+    full_sweep = 0
+    last_full_sweep = 0
+    last_incremental_sweep = 0
+    malloc = 0
+    mark_time = 0
+    max_memory = 0
+    max_pause = 0
+    max_time_to_safepoint = 0
+    pause = 0
+    poolalloc = 0
+    realloc = 0
+    stack_pool_sweep_time = 0
+    sweep_time = 0
+    time_to_safepoint = 0
+    total_allocd = 0
+    total_mark_time = 0
+    total_stack_pool_sweep_time = 0
+    total_sweep_free_mallocd_memory_time = 0
+    total_sweep_madvise_time = 0
+    total_sweep_page_walk_time = 0
+    total_sweep_time = 0
+    total_time = 0
+    total_time_to_safepoint = 0
+[[runs]]
+completed_operations = 10000
+failed_operations = 0
+histogram_base64 = "HISTFAAAAbB4nC2Pv2sUQRTHZ7775u1kMpmMm004L2cM4QwamxXOQCCSK44YREg4FjnkSJMj6CEWQQs7ixBExcb8CRYprPwPtEgRUgg2goWtNmIlIha+vbjMvh/f72ce8xr7r6eU0t/V2Zf8z1r+id83e2rt55nw9THIs3XUiFkemvWFpfV+Y65YanXuHern+p1+ir/4SAfml/mWvuWD9KX5bI74yBybEz6lN/QDH/BHP9OD5dXYvNwq2uvNXvtR2X24vfdguNvf17uDV7rsDQd3y872xqCztdEu++3u7XK4d6db9m+tFsVi0VqM83O1Rhbr9Zr30YWsNp9Ha23k3OfsOUSuueBDFnyeOWtDDJnPZqyPHGPObO2MC5F8bmO0LrKTpRyz94Ja2Y4BZwERAYIl8iLxKFgnpgeRIzIWnBAzJDNBLikBSIKSLpGCxJARiqqDClGUSIQhNeoqLBVQuopOMI4KFp8NpmCEScQZH7FjUs9SKmoq1Xnxz0lt8EKL8AQ3cAFXBbqILxqfNK5gR+odXMMmruMSVqoZSobLC2Q7gwlMy8VU8qzMSgR5r+k+JrGGf5T3PVI="
+histogram_encoding = "HdrHistogram compressed V2 base64"
+max_ns = 240639
+mean_ns = 93359.4528
+min_ns = 89088
+monotonic_end_ns = 0x2ddeb24f560901
+monotonic_start_ns = 0x2ddeb217a5e3c5
+p50_ns = 91711
+p90_ns = 95999
+p99_9_ns = 208511
+p99_ns = 109119
+samples = 10000
+throughput_hz = 10703.306247446646
+wall_ns = 934290748
+
+    [runs.gc]
+    allocd = 0
+    bigalloc = 0
+    collect = 0
+    deferred_alloc = 0
+    freecall = 0
+    freed = 0
+    full_sweep = 0
+    last_full_sweep = 0
+    last_incremental_sweep = 0
+    malloc = 0
+    mark_time = 0
+    max_memory = 0
+    max_pause = 0
+    max_time_to_safepoint = 0
+    pause = 0
+    poolalloc = 0
+    realloc = 0
+    stack_pool_sweep_time = 0
+    sweep_time = 0
+    time_to_safepoint = 0
+    total_allocd = 0
+    total_mark_time = 0
+    total_stack_pool_sweep_time = 0
+    total_sweep_free_mallocd_memory_time = 0
+    total_sweep_madvise_time = 0
+    total_sweep_page_walk_time = 0
+    total_sweep_time = 0
+    total_time = 0
+    total_time_to_safepoint = 0
+[[runs]]
+completed_operations = 10000
+failed_operations = 0
+histogram_base64 = "HISTFAAAAV54nDVQsW4UMRD1vp0dz40c4/gWa7NZnVarKC0iHxDKlNBE4g+Q0vMBSFQoHVQpUiYNBQWiS39Far4iQiiKUMrM3pGxPTN+z+9JnuHz16Vz1Q+3jfp/rezsPJ68d2/+boGbj2A4wHGNTSWi3I6p66eDg+Fw1fVpGIcQxuN3t9VDdV6vm9/No//m//j7xXf/Ty79F38lD3zp17xu7uhXfYGf1dnZNAxtyZo5JUlFMseWQ0olZAkxa4xtjF2b21Bi1w19P7ZH06qXaYz9KndZgwwllpT7qQulqAYKJViotko5JUpiXjFHLqJRhcWKZFISlaQIyomVWUDGCpiZHDtlikQMwx0xCez7ACnmDCJHmDNqaowxzebmjHPmRc8jksbeQdxMGjOPzvKsgxCrybeGDh4LMdTsYHsBeJq52hZ2N80s93hp/RJvsW/oC+zNOuwAH/Cpwiu8xjWMPMUTxfEpdw=="
+histogram_encoding = "HdrHistogram compressed V2 base64"
+max_ns = 166271
+mean_ns = 92285.9616
+min_ns = 88000
+monotonic_end_ns = 0x2ddeb28fb1d18d
+monotonic_start_ns = 0x2ddeb258a62c27
+p50_ns = 91455
+p90_ns = 95039
+p99_9_ns = 121855
+p99_ns = 107199
+samples = 10000
+throughput_hz = 10828.251694368551
+wall_ns = 923510118
+
+    [runs.gc]
+    allocd = 0
+    bigalloc = 0
+    collect = 0
+    deferred_alloc = 0
+    freecall = 0
+    freed = 0
+    full_sweep = 0
+    last_full_sweep = 0
+    last_incremental_sweep = 0
+    malloc = 0
+    mark_time = 0
+    max_memory = 0
+    max_pause = 0
+    max_time_to_safepoint = 0
+    pause = 0
+    poolalloc = 0
+    realloc = 0
+    stack_pool_sweep_time = 0
+    sweep_time = 0
+    time_to_safepoint = 0
+    total_allocd = 0
+    total_mark_time = 0
+    total_stack_pool_sweep_time = 0
+    total_sweep_free_mallocd_memory_time = 0
+    total_sweep_madvise_time = 0
+    total_sweep_page_walk_time = 0
+    total_sweep_time = 0
+    total_time = 0
+    total_time_to_safepoint = 0
+
+[summary]
+median_p50_ns = 91583
+median_p90_ns = 95807
+median_p99_9_ns = 126655
+median_p99_ns = 107199
+median_throughput_hz = 10799.192082634529
+worst_p99_9_ns = 208511
+worst_p99_ns = 109119
+
+[timer_recording_overhead]
+p50_clock_delta_ns = 20
+p99_clock_delta_ns = 30
+samples = 10000
+wall_ns_per_clock_pair_and_record = 43.6727
+
+[workload]
+backend = "CPUBackend"
+central_obstruction = 0.14
+diameter_m = 8.0
+fractional_cn2 = [0.65, 0.35]
+layer_altitude_m = [0.0, 6000.0]
+layer_ids = ["ground", "high"]
+lgs_altitude_m = 90000.0
+lgs_azimuth_deg = 120.0
+lgs_photon_irradiance = 6.0
+lgs_radius_arcsec = 8.0
+lgs_wavelength_m = 5.89e-7
+model_step_s = 0.001
+ngs_azimuth_deg = 35.0
+ngs_photon_irradiance = 5.0
+ngs_radius_arcsec = 4.0
+ngs_wavelength_m = 6.5e-7
+numeric_type = "Float64"
+outer_scale_m = 25.0
+pyramid_modulation_lambda_over_d = 3.0
+pyramid_modulation_points = 4
+pyramid_pupil_samples = 4
+quantum_efficiency = 0.8
+r0_m = 0.2
+resolution = 16
+rng_derivation_version = 1
+run_seed = 33792
+science_azimuth_deg = 90.0
+science_fast_exposure_s = 0.003
+science_photon_irradiance = 3.0
+science_radius_arcsec = 0.2
+science_slow_exposure_s = 0.009
+science_wavelength_m = 8.0e-7
+science_zero_padding = 2
+sh_n_lenslets = 4
+sh_n_pix_subap = 4
+wfs_exposure_s = 0.001
+wind_direction_deg = [15.0, 110.0]
+wind_speed_m_per_s = [7.0, 13.0]

@@ -1,0 +1,8 @@
+[[artifacts]]
+id = "GATE2-SERIAL-PLANT-CPU-2026-07-21"
+purpose = "Clean-tree Gate 2 serial prepared-plant correctness, warmed allocation, and self-paced CPU service-time baseline"
+path = "2026-07-21-serial-plant.toml"
+sha256 = "cb4a53fdcb32c92feda2d48bf7dc9cc5f2f84cb0c245b784833ceafb5c329e67"
+source_contract = "../../contracts/gate2_serial_plant.toml"
+characterized_source_revision = "73fbee6a1983cf577c9cd262fc3e12245a2e08b4"
+all_gates_passed = true
