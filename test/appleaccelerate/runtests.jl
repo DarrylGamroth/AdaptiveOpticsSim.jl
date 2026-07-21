@@ -4,6 +4,8 @@ using AppleAccelerate
 using AdaptiveOpticsSim
 import FFTW
 
+const APPLE_ACCELERATE_COVERAGE = Base.JLOptions().code_coverage != 0
+
 function accelerate_backing_library(symbol::AbstractString)
     info = BLAS.lbt_find_backing_library(symbol, :ilp64)
     info === nothing && return nothing
@@ -57,8 +59,12 @@ function validate_apple_fft_case(
     transformed .= original
     apple_fft_cycle!(transformed, fft_plan, ifft_plan)
     transformed .= original
-    @test @allocated(apple_fft_cycle!(
-        transformed, fft_plan, ifft_plan)) == 0
+    if APPLE_ACCELERATE_COVERAGE
+        @test_skip "allocation assertions are disabled under coverage instrumentation"
+    else
+        @test @allocated(apple_fft_cycle!(
+            transformed, fft_plan, ifft_plan)) == 0
+    end
     @test isapprox(transformed, original;
         rtol=fft_rtol(T), atol=fft_rtol(T))
     return nothing
@@ -128,12 +134,52 @@ end
     arbitrary_size .= arbitrary_original
     apple_fft_cycle!(arbitrary_size, arbitrary_plan, arbitrary_inverse_plan)
     arbitrary_size .= arbitrary_original
-    @test @allocated(apple_fft_cycle!(
-        arbitrary_size, arbitrary_plan, arbitrary_inverse_plan)) == 0
+    if APPLE_ACCELERATE_COVERAGE
+        @test_skip "allocation assertions are disabled under coverage instrumentation"
+    else
+        @test @allocated(apple_fft_cycle!(
+            arbitrary_size, arbitrary_plan, arbitrary_inverse_plan)) == 0
+    end
+
+    partial_original = deterministic_fft_input(Float64, (8, 8))
+    partial_size = copy(partial_original)
+    partial_plan = AdaptiveOpticsSim.plan_fft_backend!(partial_size, (1,))
+    partial_inverse_plan = AdaptiveOpticsSim.plan_ifft_backend!(partial_size, (1,))
+    @test partial_plan.setup === nothing
+    @test partial_inverse_plan.setup === nothing
+    apple_fft_cycle!(partial_size, partial_plan, partial_inverse_plan)
+    @test isapprox(partial_size, partial_original;
+        rtol=fft_rtol(Float64), atol=fft_rtol(Float64))
+
+    vector_buffer = deterministic_fft_input(Float64, (16,))
+    @test AdaptiveOpticsSim.plan_fft_backend!(vector_buffer, 1).setup !== nothing
+
+    source = deterministic_fft_input(Float64, (8, 8))
+    destination = similar(source)
+    expected = copy(source)
+    expected_plan = AdaptiveOpticsSim._plan_fftw_fft!(expected, (1, 2))
+    AdaptiveOpticsSim.execute_fft_plan!(expected, expected_plan)
+    mul!(destination, supported_plan, source)
+    @test isapprox(destination, expected;
+        rtol=fft_rtol(Float64), atol=fft_rtol(Float64))
+    @test source != destination
+
+    wrong_shape = zeros(ComplexF64, 4, 8)
+    @test_throws DimensionMismatch AdaptiveOpticsSim.execute_fft_plan!(
+        wrong_shape, supported_plan)
+    @test_throws DimensionMismatch mul!(destination, supported_plan, wrong_shape)
+
+    empty_real = Array{Float64}(undef, 0, 0)
+    invalid_plan = typeof(supported_plan)(
+        nothing, empty_real, similar(empty_real), nothing, size(supported_plan))
+    @test_throws ArgumentError AdaptiveOpticsSim.execute_fft_plan!(
+        source, invalid_plan)
 
     println("AppleAccelerate version: ", Base.pkgversion(AppleAccelerate))
     println("BLAS/LAPACK config: ", BLAS.get_config())
     println("AdaptiveOpticsSim FFT plan: ", typeof(supported_plan))
 end
 
-include(joinpath(dirname(@__DIR__), "runtests.jl"))
+if get(ENV, "ADAPTIVEOPTICS_APPLE_FOCUSED_ONLY", "false") != "true"
+    include(joinpath(dirname(@__DIR__), "runtests.jl"))
+end

@@ -78,6 +78,9 @@ jobs:
     name: Apple Silicon / AppleAccelerate
     runs-on: macos-15
     timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
     env:
       JULIA_NUM_THREADS: "1"
       OPENBLAS_NUM_THREADS: "1"
@@ -107,3 +110,22 @@ jobs:
 
       - name: Run full CPU suite with AppleAccelerate
         run: julia --project=test/appleaccelerate --startup-file=no test/appleaccelerate/runtests.jl
+
+      - name: Run Apple FFT coverage
+        env:
+          ADAPTIVEOPTICS_APPLE_FOCUSED_ONLY: "true"
+        run: julia --project=test/appleaccelerate --startup-file=no --code-coverage=user test/appleaccelerate/runtests.jl
+
+      - name: Process Apple FFT coverage
+        uses: julia-actions/julia-processcoverage@v1
+        with:
+          directories: ext
+
+      - name: Upload Apple FFT coverage to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          files: lcov.info
+          disable_search: true
+          fail_ci_if_error: true
+          name: adaptiveopticssim-apple-accelerate
+          use_oidc: true
