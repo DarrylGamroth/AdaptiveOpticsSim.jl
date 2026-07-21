@@ -1,5 +1,3 @@
-include(joinpath(@__DIR__, "..", "wfs_stage_contract_fixtures.jl"))
-
 function contract_rate_map(values::AbstractMatrix{T};
     sampling::NTuple{2,T}=(one(T), one(T)),
     origin::NTuple{2,T}=AdaptiveOpticsSim.centered_grid_origin(size(values),

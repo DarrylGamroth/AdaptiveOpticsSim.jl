@@ -1,6 +1,3 @@
-using KernelAbstractions
-
-const KA_CPU_STYLE = AdaptiveOpticsSim.AcceleratorStyle(KernelAbstractions.CPU())
 const SCALAR_CPU_STYLE = AdaptiveOpticsSim.ScalarCPUStyle()
 const KA_CPU_EXERCISED_KERNELS = Set{Symbol}()
 

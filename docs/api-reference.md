@@ -153,17 +153,29 @@ error rather than an implicit unit conversion.
 
 ## Plant Time, Topology, And Preparation
 
-The first Gate 3 core vocabulary defines canonical plant instants, elapsed
-durations, and nominal periodic recurrence without adding scheduler execution,
-mutable cursor state, or wall-clock pacing. The completed Gate 2 topology API
-declares one shared telescope and atmosphere, reusable optical paths, and
-independent acquisitions. Preparation adds concrete single-writer owners
-without adding scheduling or atmosphere advancement:
+Gate 3 defines canonical plant instants, elapsed durations, nominal periodic
+recurrence, and a fixed-capacity serial event calendar without adding wall-clock
+pacing. The completed Gate 2 topology API declares one shared telescope and
+atmosphere, reusable optical paths, and independent acquisitions. Preparation
+adds concrete single-writer owners without implicit atmosphere advancement:
 
 - Canonical plant-time values: `PlantTimestamp`, `PlantDuration`,
   `plant_nanoseconds`, `plant_time_seconds`, and `plant_duration_seconds`
 - Nominal recurrence: `PeriodicSchedule`, `schedule_period`, `schedule_phase`,
   and `schedule_timestamp`
+
+- Qualified scheduler definitions and ownership: `EventGeneratorDefinition`,
+  `PreparedEventScheduler`, `EventSchedulerState`,
+  `EventSchedulerWorkspace`, `EventGeneratorHandle`, and `EventClaim`
+- Qualified scheduler preparation and inspection: `prepare_event_scheduler`,
+  `event_generator_handle`, `event_generator_count`,
+  `event_scheduler_capacity`, `scheduler_timestamp`,
+  `scan_due_events!`, `due_event_count`, `due_event_timestamp`, and
+  `due_event_key`
+- Qualified scheduler transitions: `claim_next_event!`,
+  `claimed_event_key`, `reschedule_event!`,
+  `reschedule_periodic_event!`, `activate_event_generator!`, and
+  `deactivate_event_generator!`
 
 - Stable identities: `AtmosphereLayerID`, `OpticalPathID`, `AcquisitionID`,
   `RNGOwnerIdentity`
@@ -227,8 +239,17 @@ without adding scheduling or atmosphere advancement:
 values: one identifies an instant relative to the run origin and the other an
 elapsed interval. `PeriodicSchedule` describes only a positive nominal period
 and a nonnegative phase. These values do not execute events, own mutable cursor
-state, read wall time, or imply detector timing. Fixed-capacity scheduler state
-and detector event transitions are later Gate 3 contracts.
+state, read wall time, or imply detector timing.
+
+The scheduler surface remains qualified developer API while Gate 3 composes
+trigger and detector transitions. Preparation copies definitions into a flat,
+canonical, fixed-length registry and allocates no run-length event list.
+`EventSchedulerState` is the single writer for compact cursors;
+`EventSchedulerWorkspace` owns fixed due slots. One `EventClaim` may be
+outstanding at a time and must be resolved by rescheduling or deactivation.
+Equal-timestamp rescheduling remains legal only when the incremented occurrence
+makes the complete key strictly later. The scheduler has no callback, product,
+detector, transport, task, execution-clock, or pacing responsibility.
 
 An illumination entry is a prepared path-input materializer, not a calibration
 mode or a second acquisition API. It binds one exact caller-owned optical

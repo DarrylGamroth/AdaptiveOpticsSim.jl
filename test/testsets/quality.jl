@@ -33,6 +33,7 @@ end
     @test Tuple(spec.name for spec in resolve_test_suites(["plant"])) == (
         "plant-topology",
         "plant-time",
+        "plant-scheduler",
         "plant-preparation",
         "plant-providers",
         "plant-rng",
@@ -42,6 +43,7 @@ end
         ["plant", "plant-topology", "plant"])) == (
         "plant-topology",
         "plant-time",
+        "plant-scheduler",
         "plant-preparation",
         "plant-providers",
         "plant-rng",
@@ -63,6 +65,19 @@ end
         readdir(@__DIR__; join=true),
     ))
     @test registered_testset_paths() == normpath.(actual_testsets)
+    @test registered_test_fixture_paths() == sort!(normpath.([
+        joinpath(dirname(@__DIR__), "ka_cpu_style_fixture.jl"),
+        joinpath(dirname(@__DIR__), "wfs_stage_contract_fixtures.jl"),
+    ]))
+    fixture_users = Tuple(spec.name for spec in TEST_SUITE_SPECS
+        if !isempty(spec.fixtures))
+    @test fixture_users == (
+        "ka-cpu",
+        "detectors-wfs",
+        "plant-preparation",
+        "plant-providers",
+        "backend-smoke",
+    )
 end
 
 @testset "Aqua" begin

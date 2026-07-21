@@ -372,6 +372,47 @@ only when its period and storage are explicitly bounded. Times that cannot be
 represented at the declared resolution are rejected or quantized under an
 explicit fidelity policy recorded in the manifest.
 
+### Fixed-capacity serial scheduler core
+
+The initial core implementation prepares a finite flat registry. Each
+run-immutable generator definition supplies its first timestamp, causal phase,
+unique within-phase ordinal, first occurrence, and initial active state.
+Preparation copies and canonicalizes those definitions by phase and ordinal,
+rejects duplicate ordinals and capacity overflow, and allocates fixed-length
+`Memory` storage rather than a resizable event collection. Separately owned
+single-writer state retains one compact cursor per definition, and caller-owned
+workspace retains at most the declared number of due slots. Registry, cursor,
+and due-slot lengths do not change during execution.
+
+A due scan examines active cursors and selects the minimum timestamp directly.
+Because registry order is canonical and each generator retains only one next
+cursor, filtering simultaneous cursors preserves the full phase/ordinal order
+without a runtime sort. Claiming advances plant time to the first complete
+logical key at that timestamp. The serial owner permits exactly one outstanding
+claim; that claim must be resolved by publishing one checked next timestamp or
+by deactivating the generator before another claim. A claim from another
+prepared scheduler, a copied claim after resolution, or a due scan observed
+after state mutation is rejected as foreign or stale.
+
+Rescheduling increments the generator occurrence with checked arithmetic. A
+strictly later timestamp is ordinary recurrence. The same timestamp is legal
+only when the resulting complete key is later than the last claimed key, which
+allows an explicitly bounded duplicate occurrence without reordering another
+generator. A timestamp or equal-time phase/ordinal position at or before the
+last claimed key is rejected; the scheduler never backdates state. Explicit
+activation and deactivation operate only on definitions reserved at
+preparation, so they cannot grow the registry or manufacture unbounded work.
+
+This core calendar owns no callback, detector transition, trigger fault,
+command, optical product, task, queue, execution clock, or wall-clock pacing.
+Those owners retain a prepared generator handle and interpret the claimed key
+in their own later Gate 3 layers. The maintained CPU characterization covers
+the allocation-free linear-scan policy from 1 through 256 active generators;
+it is unpaced service-cost evidence, not an external-RTC latency or production
+instrument-capacity claim. A heap policy remains deferred until measured
+generator-count evidence on a representative composed plant justifies its
+extra mutation and validation surface.
+
 ### Autonomous periodic optical devices
 
 Some optical devices execute a continuous local waveform rather than waiting

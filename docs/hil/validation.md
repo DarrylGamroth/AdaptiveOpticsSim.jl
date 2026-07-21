@@ -57,6 +57,11 @@ evidence includes:
 - presampling detector response and charge-coupling stages remain in their declared order when
   acquisition is split across scheduled events
 - multiple schedules with different periods and phases on one plant timeline
+- fixed-capacity event scheduling that visits only due timestamps, preserves
+  declaration-order-independent simultaneous-event order, rejects stale and
+  foreign claims plus backward rescheduling, retains constant storage over a
+  long run, and allocates zero warmed heap bytes across the maintained linear-
+  scan generator range
 - common-source detector triggers with fixed per-link phase/skew, correlated
   source jitter, independent link jitter, and deterministic phase-step faults
 - dropped and duplicate detector triggers without hidden event catch-up or

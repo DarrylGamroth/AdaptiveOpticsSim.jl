@@ -34,7 +34,7 @@ struct PlantTimeError <: AdaptiveOpticsSimError
     msg::String
 end
 
-"""Invalid periodic schedule or deterministic plant-event ordering value."""
+"""Invalid periodic schedule, event generator, or deterministic scheduler operation."""
 struct PlantScheduleError <: AdaptiveOpticsSimError
     component::Symbol
     reason::Symbol
