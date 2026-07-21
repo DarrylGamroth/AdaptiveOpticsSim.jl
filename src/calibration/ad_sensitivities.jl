@@ -15,13 +15,8 @@ function _compute_meta_sensitivity_matrix_ad(tel::Telescope, dm::DeformableMirro
         tangential_scaling=1e-3, T=eltype(pupil_reflectivity(tel))),
     direction_epsilon::Real=sqrt(eps(eltype(pupil_reflectivity(tel)))),
     n_mis_reg::Int=3, field_order=collect(MISREG_FIELDS),
-    amplitude::Real=1e-9, cache_path::Union{Nothing,String}=nothing,
-    save_sensitivity::Bool=true, recompute_sensitivity::Bool=false,
+    amplitude::Real=1e-9,
     wfs_mis_registered::Bool=false)
-
-    if cache_path !== nothing && !recompute_sensitivity && isfile(cache_path)
-        return deserialize(cache_path)
-    end
     wfs_mis_registered &&
         throw(UnsupportedAlgorithm(
             "AD sensitivity supports DM misregistration only; use sensitivity=:finite_difference for WFS misregistration"))
@@ -54,11 +49,8 @@ function _compute_meta_sensitivity_matrix_ad(tel::Telescope, dm::DeformableMirro
         base_modes, d_modes, T(amplitude), T(direction_epsilon))
 
     meta_control_matrix = ControlMatrix(meta)
-    out = MetaSensitivity(meta_control_matrix, calib0_control_matrix, epsilon, collect(fields))
-    if cache_path !== nothing && save_sensitivity
-        serialize(cache_path, out)
-    end
-    return out
+    return MetaSensitivity(meta_control_matrix, calib0_control_matrix,
+        epsilon, collect(fields))
 end
 
 function compute_meta_sensitivity_matrix_ad_probe(args...; kwargs...)

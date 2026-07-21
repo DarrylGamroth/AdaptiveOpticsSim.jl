@@ -181,10 +181,10 @@ be mistaken for the final asynchronous scheduling model.
 - Core defines calibration data meaning. The HIL manifest records the stable
   calibration identity and compatibility metadata used by a run; user
   integration or an optional artifact companion owns serialization, storage,
-  selection, and campaign lifecycle. Existing core `cache_path` and
-  `write_config_toml` conveniences are transitional and do not become part of
-  the plant or HIL API; their replacements return structured data to an
-  extension or caller-owned persistence policy.
+  selection, and campaign lifecycle. Core calibration and configuration APIs
+  return structured data without accepting cache paths, reading or writing
+  artifacts, or selecting a file format. An extension or caller maps those
+  values into its own persistence policy.
 - Core owns AO-plant optics and native sampled aberrations; `Proper.jl` owns a
   selected detailed relay, coronagraph, or instrument prescription. The HIL
   companion schedules a generic prepared external-optics executor; a

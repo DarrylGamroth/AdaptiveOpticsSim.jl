@@ -51,14 +51,6 @@ function snapshot_config(; kwargs...)
     return Dict(string(k) => config_dict(v) for (k, v) in pairs(kwargs))
 end
 
-function write_config_toml(path::AbstractString, config)
-    cfg = config_dict(config)
-    open(path, "w") do io
-        TOML.print(io, cfg)
-    end
-    return path
-end
-
 function write_config_json(args...; kwargs...)
     throw(InvalidConfiguration("JSON3.jl not available; load JSON3 to enable write_config_json."))
 end

@@ -733,12 +733,28 @@ windowed, correlation, and matched-filter estimators remain future policies.
 - AO calibration: `AOCalibration`, `ao_calibration`, `control_matrix`
 - Error and optical-gain calibration: `fitting_error`, `GainSensingCamera`,
   `calibrate!`, `compute_optical_gains!`
+- Misregistration identification uses the qualified
+  `AdaptiveOpticsSim.MetaSensitivity`,
+  `AdaptiveOpticsSim.compute_meta_sensitivity_matrix`,
+  `AdaptiveOpticsSim.estimate_misregistration`, `AdaptiveOpticsSim.SPRINT`,
+  and `AdaptiveOpticsSim.estimate!` APIs. `MetaSensitivity` is the structured
+  result: it retains the reference interaction matrix, sensitivity operator,
+  finite-difference validation steps, and ordered parameter names
+- Structured configuration snapshots use qualified
+  `AdaptiveOpticsSim.config_dict` and `AdaptiveOpticsSim.snapshot_config`
 - Reconstructors: `NullReconstructor`, `ModalReconstructor`,
   `FactorizedReconstructor`, `MappedReconstructor`,
   `ControlledReconstructor`, `reconstruct!`, `reconstruct`
 - Controller: `DiscreteIntegratorController`. `ControlledReconstructor`
   composes a reconstructor and stateful controller without adding a runtime
   branch.
+
+Core calibration and configuration APIs perform no implicit filesystem I/O.
+They accept no cache path or serialization policy and do not select a file
+format. Persist a returned `MetaSensitivity`, estimate, or configuration
+dictionary explicitly in caller code or through an optional format extension.
+The optional JSON3 extension is one such policy; it is not a core dependency or
+the canonical representation of these results.
 
 ## Runtime And HIL
 
