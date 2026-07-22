@@ -88,10 +88,11 @@ end
     # product/protocol seam. Keep headroom bounded so unrelated internals do
     # not drift into the ordinary user namespace.
     # Gate 2 adds a bounded documented topology/preparation surface. Gate 3's
-    # first slice adds eleven public time/schedule names. Detector-event
+    # first slice adds eleven public time/schedule names. Gate 4's first slice
+    # adds nine public controllable-optic topology names. Detector-event
     # transitions remain qualified, while their structured error joins the
     # public exception surface.
-    @test length(exported) <= 564
+    @test length(exported) <= 573
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :PlantDefinitionError)
     @test Base.isexported(AdaptiveOpticsSim, :PlantPreparationError)
@@ -109,6 +110,8 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :schedule_timestamp)
     @test Base.isexported(AdaptiveOpticsSim, :OpticalPathID)
     @test Base.isexported(AdaptiveOpticsSim, :AcquisitionID)
+    @test Base.isexported(AdaptiveOpticsSim, :ControllableOpticID)
+    @test Base.isexported(AdaptiveOpticsSim, :CommandEndpointID)
     @test Base.isexported(AdaptiveOpticsSim, :AtmosphereLayerID)
     @test Base.isexported(AdaptiveOpticsSim, :RNGDerivationVersion)
     @test Base.isexported(AdaptiveOpticsSim, :RNGOwnerIdentity)
@@ -117,6 +120,7 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :plant_model_definition_style)
     @test Base.isexported(AdaptiveOpticsSim, :OpticalPathDefinition)
     @test Base.isexported(AdaptiveOpticsSim, :AcquisitionDefinition)
+    @test Base.isexported(AdaptiveOpticsSim, :ControllableOpticDefinition)
     @test Base.isexported(AdaptiveOpticsSim, :PlantDefinition)
     @test Base.isexported(AdaptiveOpticsSim, :PreparedPlant)
     @test Base.isexported(AdaptiveOpticsSim, :prepare_plant)
@@ -191,6 +195,14 @@ end
     @test !Base.isexported(AdaptiveOpticsSim,
         :validate_atmosphere_rendering)
     @test !Base.isexported(AdaptiveOpticsSim, :require_path_result)
+    @test Base.isexported(AdaptiveOpticsSim, :controllable_optic_id)
+    @test Base.isexported(AdaptiveOpticsSim, :controllable_optic_model)
+    @test Base.isexported(AdaptiveOpticsSim, :command_endpoint_ids)
+    @test Base.isexported(AdaptiveOpticsSim, :command_endpoint_owner)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :controllable_optic_definitions)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :controllable_optic_definition)
     @test Base.isexported(AdaptiveOpticsSim, :path_definition)
     @test Base.isexported(AdaptiveOpticsSim, :acquisition_definition)
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
