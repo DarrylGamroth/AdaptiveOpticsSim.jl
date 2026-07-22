@@ -104,8 +104,8 @@ At a high level, one closed-loop step is:
 
 This split is visible in runtime timing and benchmark surfaces.
 
-This is the current implemented single-step flow and the ownership foundation
-for the later multi-rate event runtime:
+This is the current implemented frame-step flow and the ownership foundation
+also consumed by the multi-rate event runtime:
 
 1. advance one shared atmosphere epoch to explicit model time
 2. render each due direction through a path-local prepared renderer into a
@@ -169,14 +169,14 @@ up-the-ramp schedule errors before changing detector storage. Unexpected
 backend, kernel, RNG, or concurrent external failures remain fail-stop rather
 than transactional rollback.
 
-The target then separates reusable optical paths from independently scheduled
-or triggered acquisition state, and schedules exposure, optical sampling,
-readout, and publication as separate events. Commands arrive from an external
-RTC and become effective independently of detector cadence.
+The implemented serial plant-event loop separates reusable optical paths from
+independently scheduled or triggered acquisition state, and schedules exposure,
+optical sampling, readout, and complete-product readiness as separate events.
 Acquisitions may follow independent schedules or delivered edges from a common
 trigger source with per-detector delay, skew, jitter, and explicit dropped or
 duplicate-edge faults. Physical exposure timing, reported detector timestamps,
-and HIL execution-clock lateness remain distinct.
+and eventual HIL execution-clock lateness remain distinct. External RTC command
+arrival/effective-time semantics and wall-clock pacing are later gates.
 
 That target admits heterogeneous NGS/LGS WFS paths, direct science cameras,
 PROPER-backed coronagraph paths, common MCAO planes, and path-specific MOAO
@@ -194,15 +194,16 @@ an RTC adapter can be tested at production rate without paying for optics that
 are outside the test boundary. Fidelity is mixed per acquisition and never
 changes during a run; another fidelity tier requires another prepare/arm cycle.
 
-The schedule-free core portion is implemented: provider-style trait dispatch,
+The schedule-free provider seam is implemented: provider-style trait dispatch,
 one run-immutable provider per prepared acquisition, required logical product
 metadata and compatibility snapshots, exact caller-owned result semantics,
 and unchanged/copy/bounded-cyclic-replay synthetic implementations. A selected
 reduced-order or synthetic/replay provider bypasses otherwise unused
-full-optical path execution; all declared topology is still prepared by this
-gate. Sequence, timestamp, lease, port, and overload invariants remain
-the responsibility of their later HIL gates rather than being synthesized by
-this core seam.
+full-optical path execution; all declared topology is still prepared. The
+current event composition binds full-optical frame acquisitions and records
+complete-product sequence and readiness state. General scheduled provider
+styles, leases, ports, overload, and publication ownership remain later HIL
+work rather than being synthesized by this core seam.
 
 The reduced-order provider remains a causal AO plant: it advances a seeded or
 replayed time-correlated disturbance, projects it into each sensing direction,
@@ -305,13 +306,17 @@ Every maintained WFS family now adopts the contract while retaining its own
 concrete stage composition. Raw matrix detector entry remains a documented
 legacy cell-integrated-rate path, while
 `DetectorAcquisitionPlan` is the metadata-validated prepared frame boundary.
-The qualified global-shutter event layer binds that same plan to an immutable
-exposure/readout/readiness definition and separately owned single-writer state.
-It accumulates contiguous half-open intervals through the existing detector
-pipeline, snapshots evolving charge at scheduled nondestructive reads, and
-uses integer plant timestamps—not floating accumulated-time tolerance—as its
-transition authority. The event layer does not itself schedule, pace, publish,
-or transport the resulting frame.
+The qualified detector-event layers bind that same plan to immutable global-
+shutter, rolling-shutter, or frame-transfer lifecycle definitions and
+separately owned single-writer state. They accumulate contiguous half-open
+intervals through the existing detector pipeline, snapshot evolving charge at
+scheduled nondestructive reads, advance bounded rolling row-band cursors, and
+model one-frame image/storage overlap for frame-transfer EMCCDs. Integer plant
+timestamps—not floating accumulated-time tolerance—are their transition
+authority. The lifecycle layers do not schedule, pace, publish, or transport
+the resulting frame; `PreparedPlantEventLoop` composes those transitions with
+the common fixed-capacity scheduler and exposes complete-product sequence and
+readiness state without taking HIL-port ownership.
 
 The runtime output plan decides whether a given simulation step must produce:
 

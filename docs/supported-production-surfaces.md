@@ -61,6 +61,14 @@ Current CPU-supported families:
   NGS Shack-Hartmann, and finite-height LGS pyramid directions, with canonical
   selected ownership, deterministic declaration-order replay, one shared
   science result feeding unequal-exposure detectors, and zero warmed allocation
+- deterministic serial `PreparedPlantEventLoop` execution across independently
+  periodic science/NGS/LGS paths and periodic or delivered-trigger detector
+  starts, including global CMOS/CCD, rolling CMOS, frame-transfer EMCCD, and
+  HgCdTe up-the-ramp lifecycles. The scheduler and warmed direct detector
+  kernels are allocation-free; heterogeneous orchestration has a bounded
+  2 KiB-per-processed-timestamp CPU allocation budget. This is virtual-time
+  correctness support, not wall-clock HIL latency, fixed-arrival capacity,
+  parallel placement, or production instrument-scale evidence
 - the schedule-free acquisition product-provider boundary: run-immutable
   full-optical or nonresponsive unchanged/copy/bounded-replay selection,
   invariant caller-owned product contracts, unused-path bypass, and zero
@@ -128,6 +136,9 @@ Current AMDGPU-supported scope:
 - exact global-shutter detector-event accumulation and scheduled windowed
   HgCdTe up-the-ramp snapshots/fitting with device-resident products and scalar
   indexing disabled
+- direct rolling-shutter row-band and frame-transfer image/storage detector
+  lifecycles with device-resident state and scalar indexing disabled; the
+  integrated multi-rate event loop remains a serial CPU oracle
 
 Primary evidence:
 

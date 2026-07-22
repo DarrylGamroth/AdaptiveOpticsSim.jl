@@ -123,6 +123,22 @@ detector parity and MTF preservation, time-resolved up-the-ramp reads, and
 warmed inference/allocation checks. Accelerator residency is exercised in the
 optional hardware matrix rather than this CPU suite.
 
+The focused composed multi-rate event suite is:
+
+```sh
+julia --project=. --startup-file=no -e \
+  'using Pkg; Pkg.test(test_args=["plant-event-composition"])'
+```
+
+It covers exact rolling-exposure/global-reset row bands, frame-transfer
+image/storage overlap, independent science/NGS/LGS sample periods, periodic
+and delivered-trigger acquisition starts, same-time causal ordering,
+declaration-order replay, fixed storage through a long horizon, zero-allocation
+warmed detector kernels, and the bounded heterogeneous-orchestration allocation
+budget. It is a serial virtual-time correctness suite, not the composed
+topology benchmark, wall-clock HIL latency, fixed-arrival capacity, or an
+integrated multi-device claim.
+
 ### Optional backend smoke in `Pkg.test()`
 
 These run after the functional testsets and skip cleanly if the backend package
@@ -163,6 +179,9 @@ The reduced maintained smoke covers:
   detector acquisition without host scalar indexing
 - exact global-shutter detector-event accumulation plus windowed scheduled
   up-the-ramp snapshots/fitting on evolving charge, with detector products
+  remaining device resident and scalar indexing disabled
+- direct rolling-shutter row-band integration and frame-transfer image/storage
+  lifecycle checks with detector products and the prepared storage frame
   remaining device resident and scalar indexing disabled
 - MKID accumulated-count capture, source passband handling, and
   flux-conserving channel-crosstalk parity

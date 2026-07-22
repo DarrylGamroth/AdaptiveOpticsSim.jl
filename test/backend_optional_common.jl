@@ -1864,6 +1864,92 @@ function run_optional_detector_event_checks(::Type{B}, BackendArray) where
         dims=3)
     @test Array(detector_ramp_slope(ramp_detector)) == fill(T(2), 2, 2)
     @test Array(ramp_output) == fill(T(2), 2, 2)
+
+    rolling_values = BackendArray(fill(T(2), 8, 8))
+    rolling_map = optional_detector_event_map(rolling_values)
+    rolling_detector = Detector(integration_time=one(T), qe=one(T),
+        noise=NoiseNone(), response_model=NullFrameResponse(),
+        sensor=CMOSSensor(timing_model=RollingShutter(T(0.1);
+            row_group_size=2), T=T), T=T, backend=selector)
+    rolling_prepared =
+        AdaptiveOpticsSim.prepare_rolling_shutter_acquisition(
+            rolling_detector, rolling_map,
+            AdaptiveOpticsSim.RollingShutterAcquisitionDefinition(
+                PlantDuration(1_000_000_000)))
+    rolling_state = AdaptiveOpticsSim.RollingShutterAcquisitionState(
+        rolling_prepared)
+    AdaptiveOpticsSim.begin_exposure!(rolling_prepared, rolling_state,
+        start)
+    while true
+        next_open = AdaptiveOpticsSim.next_rolling_band_open_timestamp(
+            rolling_prepared, rolling_state)
+        next_close = AdaptiveOpticsSim.next_rolling_band_close_timestamp(
+            rolling_prepared, rolling_state)
+        next_open === nothing && next_close === nothing && break
+        timestamp = next_open === nothing ? next_close :
+            next_close === nothing ? next_open : min(next_open, next_close)
+        if AdaptiveOpticsSim.integrated_through_timestamp(rolling_state) <
+                timestamp &&
+                AdaptiveOpticsSim.rolling_opened_band_count(rolling_state) >
+                    AdaptiveOpticsSim.rolling_closed_band_count(rolling_state)
+            AdaptiveOpticsSim.accumulate_rolling_exposure_interval!(
+                rolling_prepared, rolling_state,
+                AdaptiveOpticsSim.integrated_through_timestamp(
+                    rolling_state), timestamp, rng)
+        end
+        next_close == timestamp &&
+            AdaptiveOpticsSim.close_next_rolling_band!(rolling_prepared,
+                rolling_state, timestamp)
+        next_open == timestamp &&
+            AdaptiveOpticsSim.open_next_rolling_band!(rolling_prepared,
+                rolling_state, timestamp)
+    end
+    rolling_output = AdaptiveOpticsSim.complete_readout!(rolling_prepared,
+        rolling_state,
+        AdaptiveOpticsSim.readout_complete_timestamp(rolling_state), rng)
+    AdaptiveOpticsSim.mark_acquisition_ready!(rolling_prepared,
+        rolling_state,
+        AdaptiveOpticsSim.acquisition_readiness_timestamp(rolling_state))
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(rolling_output))
+    @test rolling_output isa BackendArray
+    @test Array(rolling_output) == fill(T(2), 8, 8)
+
+    transfer_values = BackendArray(fill(T(3), 8, 8))
+    transfer_map = optional_detector_event_map(transfer_values)
+    transfer_detector = Detector(integration_time=one(T), qe=one(T),
+        gain=one(T), noise=NoiseNone(), response_model=NullFrameResponse(),
+        sensor=EMCCDSensor(acquisition_mode=FrameTransferAcquisition(
+            transfer_time=T(0.1)), T=T), T=T, backend=selector)
+    transfer_prepared =
+        AdaptiveOpticsSim.prepare_frame_transfer_acquisition(
+            transfer_detector, transfer_map,
+            AdaptiveOpticsSim.FrameTransferAcquisitionDefinition(
+                PlantDuration(1_000_000_000);
+                readout_duration=PlantDuration(200_000_000)))
+    transfer_state = AdaptiveOpticsSim.FrameTransferAcquisitionState(
+        transfer_prepared)
+    AdaptiveOpticsSim.begin_exposure!(transfer_prepared, transfer_state,
+        start)
+    transfer_close = AdaptiveOpticsSim.exposure_close_timestamp(
+        transfer_state)
+    AdaptiveOpticsSim.accumulate_exposure_interval!(transfer_prepared,
+        transfer_state, start, transfer_close, rng)
+    AdaptiveOpticsSim.close_exposure!(transfer_prepared, transfer_state,
+        transfer_close)
+    transfer_complete = AdaptiveOpticsSim.frame_transfer_complete_timestamp(
+        transfer_state)
+    AdaptiveOpticsSim.complete_frame_transfer!(transfer_prepared,
+        transfer_state, transfer_complete)
+    transfer_readout = AdaptiveOpticsSim.readout_complete_timestamp(
+        transfer_state)
+    transfer_output = AdaptiveOpticsSim.complete_readout!(transfer_prepared,
+        transfer_state, transfer_readout, rng)
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(transfer_output))
+    @test transfer_prepared.storage_frame isa BackendArray
+    @test transfer_output isa BackendArray
+    @test Array(transfer_output) == fill(T(3), 8, 8)
     return nothing
 end
 

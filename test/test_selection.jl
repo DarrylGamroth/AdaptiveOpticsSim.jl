@@ -27,6 +27,8 @@ const TEST_SUITE_SPECS = (
     TestSuiteSpec("plant-triggers", "testsets/plant_triggers.jl"),
     TestSuiteSpec("plant-detector-transitions",
         "testsets/plant_detector_transitions.jl"),
+    TestSuiteSpec("plant-event-composition",
+        "testsets/plant_event_composition.jl"),
     TestSuiteSpec("runtime", "testsets/control_and_runtime.jl"),
     TestSuiteSpec(
         "detectors-wfs",
@@ -72,6 +74,7 @@ const TEST_GROUP_SPECS = (
         "plant-scheduler",
         "plant-triggers",
         "plant-detector-transitions",
+        "plant-event-composition",
         "plant-preparation",
         "plant-providers",
         "plant-rng",
