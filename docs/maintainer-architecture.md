@@ -86,9 +86,19 @@ Examples:
   configuration-only `plant_model_definition_style` contract; live
   optic/detector/runtime owners fail closed. Its separately owned telescope and
   atmosphere retain their established state semantics, so structural
-  immutability of the plant is not a deep-freeze claim for those owners. The
-  first two Gate 4 declaration slices reject nonempty optic topology at
-  `prepare_plant` until mutable prepared endpoint ownership is implemented
+  immutability of the plant is not a deep-freeze claim for those owners.
+  `prepare_plant` still rejects nonempty optic topology until effective optic
+  application and plant-event composition are implemented
+- `PreparedCommandEndpoint` as one run-immutable schema/capacity/window/
+  ordinal/backend binding, with separate single-writer `CommandEndpointState`
+  and caller-owned `CommandDispositionWorkspace`. Endpoint-owned payload slots,
+  one array staging slot, a flat sorted future calendar, and modulo accepted-
+  sequence history are fixed at preparation. Admission copies caller payloads,
+  never backdates, and assigns one presentation identity whose eventual
+  terminal disposition is rejected, superseded, applied, or failed. One isbits
+  application-ready claim may be outstanding. This standalone layer owns no
+  optic mutation, held/safe state, silence watchdog, atomic transaction, plant
+  event phase, wall clock, task, ring, lease, or transport
 - `PreparedPlant` as a schedule-free concrete tuple of
   `PreparedPathExecutor` and `PreparedAcquisitionOwner` values. Each path owns
   one explicit input/result pair and prepared optical workspace; each

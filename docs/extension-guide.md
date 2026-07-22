@@ -50,10 +50,26 @@ Use `validate_plant_command_payload` for non-mutating presentation
 compatibility. It deliberately does not clip, admit, sequence, schedule, or
 apply a command. Extend neither the schema nor an optic-model definition with
 session, external-clock, payload-lease, transport, or HIL descriptor metadata;
-that belongs to the later boundary contract. During the first two Gate 4
-slices, `prepare_plant` rejects a nonempty controllable-optic set until the
-mutable prepared endpoint contract is implemented rather than silently
-ignoring it.
+that belongs to the later boundary contract.
+
+`prepare_command_endpoint` now binds one exact schema to fixed payload-slot,
+accepted-sequence-window, future-calendar, ordinal, and backend capacity. Its
+separately owned, qualified `CommandEndpointState` and
+`CommandDispositionWorkspace` support warmed `admit_plant_command!`, one
+outstanding application-ready claim, and explicit applied/failed/pending-drain
+completion without callbacks or run-length storage. Admission copies caller
+payloads; array endpoints reserve one additional staging payload so a failed
+copy or presentation-time clip cannot corrupt a pending command. Consume and
+clear every disposition before reusing its workspace. Give endpoints stable,
+unique ordinals when their order keys will be composed.
+
+This is a standalone core endpoint, not yet an optic-model extension hook.
+Application-stage state-dependent bounds, effective optic mutation, silence,
+safe values, atomic multi-optic latch, and `PreparedPlant` event composition
+remain later Gate 4 slices. `prepare_plant` therefore still rejects nonempty
+controllable-optic topology rather than silently ignoring it. An incremental
+schema must preserve pending deltas; only absolute commands may select
+`SupersedeOlderPendingCommands`.
 
 Preparation then dispatches on those same concrete model types. A path method
 receives the exact definition, its run-owned frozen source, the plant telescope,

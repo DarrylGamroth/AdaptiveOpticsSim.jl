@@ -523,13 +523,34 @@ The core endpoint's `PlantCommandSchema` supplies exact scalar or array shape,
 element type, units and sign convention, command basis and revision, absolute
 or incremental semantics, value/range policy, and duplicate/reordering policy.
 Its cold `validate_plant_command_payload` operation checks only presentation
-compatibility; mutable admission and application remain distinct. The HIL
-submission descriptor separately supplies the run/session epoch, correlation,
-source timestamp domain and mapping version, and payload-lease/outcome-credit
-metadata defined in [`rtc-ports.md`](rtc-ports.md). These are configuration
-facts rather than per-command dynamic dispatch. Boundary/session validation
-and mapping precede core shape/schema/sequence validation and semantic
-admission.
+compatibility. `prepare_command_endpoint` binds that schema to positive active
+capacity, a positive accepted-sequence window, one stable ordering ordinal, and
+one array backend. Its separate single-writer state owns fixed payload slots,
+compact metadata, and a sorted future calendar; caller-owned fixed disposition
+storage cannot be overwritten until it is explicitly cleared.
+
+`PlantCommand` carries the core endpoint/schema/version identities, endpoint-
+local sequence, requested plant-effective timestamp, and payload. Every call to
+`admit_plant_command!` that passes endpoint ownership and lifecycle
+preconditions assigns a distinct presentation identity. Successful admission
+copies the payload and enters the sequence into a fixed modulo
+history; the first success establishes the endpoint baseline. Rejection for
+time or capacity does not enter that history, so the same endpoint sequence may
+be retried as a new presentation. Duplicate, stale, reordered, and skipped
+classification is therefore based on successfully admitted commands, not
+malformed or overloaded traffic.
+
+Core decision precedence is exact endpoint/schema/payload validation, sequence
+policy, effective-time policy, supersession/capacity, then transactional
+payload storage. An earlier rejection or failure does not fall through to a
+later reason. This ordering is part of deterministic replay.
+
+The HIL submission descriptor separately supplies the run/session epoch,
+correlation, source timestamp domain and mapping version, and payload-lease/
+outcome-credit metadata defined in [`rtc-ports.md`](rtc-ports.md). These are
+configuration facts rather than per-command dynamic dispatch. Boundary/session
+validation and mapping precede core shape/schema/sequence validation and
+semantic admission.
 
 Each controllable optic holds its last effective command between updates.
 Device models may additionally impose minimum update intervals, settling,
@@ -566,7 +587,19 @@ A command that is already late at ingress follows one configured endpoint
 policy: reject it, apply it at the current plant event while recording
 lateness, or fail the run. The scheduler never backdates plant state. A
 superseding or coalescing policy is legal only when explicitly declared for
-that endpoint and every displaced command receives an outcome.
+that endpoint and every displaced command receives an outcome. The implemented
+standalone endpoint supports replacement-style supersession only for absolute
+commands; it rejects that policy for incremental deltas rather than silently
+changing their sum.
+
+The endpoint's next application-ready claim removes the earliest due command
+using scheduled time, endpoint-local sequence, and stable endpoint ordinal as
+the total key. Only one claim may be outstanding. Its payload remains endpoint-
+owned and is borrowed read-only until the single writer reports applied or
+failed exactly once. A bounded failure drain terminates all unclaimed pending
+commands in calendar order. These transitions publish core dispositions but do
+not yet mutate an optic, enforce state-dependent application bounds, implement
+silence/held state, or define an atomic multi-optic transaction.
 
 If a command becomes effective during an exposure, optical samples before and
 after that event observe the appropriate old and new states. A lower-fidelity

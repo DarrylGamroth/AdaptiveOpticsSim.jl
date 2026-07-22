@@ -15,13 +15,15 @@ boundary and document map.
 A plant ultimately contains one telescope and atmosphere, independently placed
 controllable optics, reusable optical paths, and independently scheduled or
 triggered acquisitions. The implemented Gate 2 declaration boundary commits
-the telescope, atmosphere, path, and acquisition topology. The first two Gate 4
-slices additionally declare every physical controllable optic and one immutable
-versioned semantic schema for each independently timed or latched command
-endpoint. Mutable command admission/application state, controllable-optic
-placement, and acquisition scheduling remain their assigned later slices; none
-is hidden in an identity or schema. Separating a path from its acquisitions
-prevents a second camera or readout cadence from forcing duplicate propagation.
+the telescope, atmosphere, path, and acquisition topology. The first three
+Gate 4 slices additionally declare every physical controllable optic, define
+one immutable versioned semantic schema for each independently timed or
+latched command endpoint, and provide a standalone bounded admission owner.
+Effective optic mutation, held/safe state, command silence, controllable-optic
+placement, and plant-level command/event composition remain their assigned
+later slices; none is hidden in an identity or schema. Separating a path from
+its acquisitions prevents a second camera or readout cadence from forcing
+duplicate propagation.
 
 Gate 2 is validated by the focused topology, preparation, provider, RNG, and
 illumination testsets plus the clean [serial plant CPU
@@ -181,10 +183,12 @@ behind the HIL companion. An acquisition definition does not itself prescribe
 a cross-owner handoff. The HIL data-plane boundary uses ports backed by the
 sequenced SPSC rings specified in [`rtc-ports.md`](rtc-ports.md).
 
-The first two Gate 4 declaration slices are deliberately fail-closed at
-preparation: `prepare_plant` rejects a nonempty controllable-optic set until
-mutable prepared endpoint owners are implemented. It never returns a prepared
-plant that silently omits a declared physical device or schema.
+The third Gate 4 slice prepares a standalone `PreparedCommandEndpoint` with
+fixed payload slots, accepted-sequence history, future calendar, and terminal-
+disposition storage. It is deliberately not attached to a physical optic or
+`PreparedPlant` yet. `prepare_plant` therefore still rejects a nonempty
+controllable-optic set and never returns a plant that silently omits a declared
+physical device or schema.
 
 Preparation turns immutable definitions into backend-, device-, shape-, and
 capacity-bound plans plus explicitly owned mutable state, workspaces, and
@@ -926,7 +930,7 @@ references. The replacement stage deletes `CompositeControllableOptic` and
 replaces `RuntimeCommandLayout` rather than retaining either for source
 compatibility.
 
-The implemented `PlantCommandSchema` defines only semantic interpretation:
+The implemented `PlantCommandSchema` defines semantic interpretation:
 stable schema/version and endpoint identities, exact scalar or backend-neutral
 array element type and dimensions, physical-unit and sign-convention
 identities, basis and revision, absolute or incremental meaning, uniform or
@@ -937,14 +941,38 @@ that depend on the currently effective state are application-stage device
 rules. `validate_plant_command_payload` checks presentation compatibility
 without mutation, clipping, admission, sequencing, scheduling, or application.
 
-Core's later endpoint layers own bounded admission, application, held state,
-and terminal model disposition. The HIL command-submission descriptor wraps a
-mapped plant command with run/session correlation, source timestamp-domain and
-mapping metadata, payload-lease ownership, and outcome credit. Its paired
-command outcome wraps the core disposition with boundary timing and returns
-that credit. Enqueue, payload validation, semantic admission, physical
-application, and boundary completion therefore remain separate observable
-operations, and core never imports a HIL descriptor or lease type.
+Core now represents one mapped presentation with `PlantCommand` and prepares a
+standalone `PreparedCommandEndpoint`. Its separately owned state uses fixed
+endpoint-owned payload slots, a fixed accepted-sequence window, and a flat
+time-ordered future calendar. Successful admission copies the caller payload;
+only that success enters sequence history. A full or time-rejected command can
+therefore retry the same endpoint sequence as a new presentation identity.
+Presentation-time clipping occurs only in transactional staging storage. An
+array copy or clip failure cannot corrupt an existing pending payload.
+
+Duplicate, stale, reordered, skipped, future, late, full-capacity, and absolute-
+command supersession decisions are explicit. Pending incremental deltas may not
+be discarded by the supersession policy. Late apply-now retains the requested
+timestamp, schedules at the current plant timestamp, and records lateness; no
+transition backdates plant state. Calendar order is scheduled plant time,
+endpoint-local command sequence, then stable prepared endpoint ordinal. Every
+admission rejection and displaced pending command writes one terminal
+disposition into caller-owned fixed storage.
+
+The single writer may claim at most one application-ready command, borrow its
+endpoint-owned payload read-only, and then report applied or failed exactly
+once. A bounded drain fails all still-pending commands in calendar order. This
+claim/report lifecycle does not itself mutate an optic, enforce a bound that
+depends on effective device state, implement silence/hold, or compose an atomic
+multi-optic latch; those remain the next core slices.
+
+The HIL command-submission descriptor wraps a mapped plant command with
+run/session correlation, source timestamp-domain and mapping metadata, payload-
+lease ownership, and outcome credit. Its paired command outcome wraps the core
+disposition with boundary timing and returns that credit. Enqueue, payload
+validation, semantic admission, physical application, and boundary completion
+therefore remain separate observable operations, and core never imports a HIL
+descriptor or lease type.
 
 Every DM is an independent controllable optic. Its actuator pitch, influence
 functions, stroke, spatial bandwidth, misregistration, dynamics, command
