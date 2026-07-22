@@ -8,9 +8,11 @@ using Statistics
 using TOML
 
 include(joinpath(@__DIR__, "support", "gate3_multi_rate_plant.jl"))
+include(joinpath(@__DIR__, "support", "hdr_histogram_artifact.jl"))
 
 const AOS = AdaptiveOpticsSim
 const Gate3Plant = Gate3MultiRatePlantBenchmark
+const HdrArtifact = HdrHistogramArtifact
 const GATE3_MULTI_RATE_CONTRACT_PATH = get(ENV,
     "AOS_GATE3_MULTI_RATE_CONTRACT",
     joinpath(@__DIR__, "contracts", "gate3_multi_rate_plant.toml"))
@@ -37,14 +39,10 @@ end
 function histogram_summary(histogram::HdrHistogram.Histogram,
     wall_start_ns::UInt64, wall_end_ns::UInt64, samples::Int, gc_counters,
     simulated_start_ns::Int64, simulated_end_ns::Int64,
-    product_sequence_delta::Vector{UInt64})
-    encoded = HdrHistogram.encode_into_compressed_byte_buffer(histogram)
-    decoded = HdrHistogram.decode_from_compressed_byte_buffer(encoded)
-    HdrHistogram.total_count(decoded) == samples || error(
-        "encoded Gate 3 multi-rate histogram lost samples")
-    HdrHistogram.value_at_percentile(decoded, 99.0) ==
-        HdrHistogram.value_at_percentile(histogram, 99.0) || error(
-        "encoded Gate 3 multi-rate histogram changed p99")
+    product_sequence_delta::Vector{UInt64}, lowest_ns::Int64,
+    highest_ns::Int64, significant_figures::Int)
+    encoded = HdrArtifact.verified_sparse_histogram(histogram, lowest_ns,
+        highest_ns, significant_figures, samples)
     wall_ns = Int64(wall_end_ns - wall_start_ns)
     return Dict{String,Any}(
         "samples" => samples,
@@ -66,8 +64,7 @@ function histogram_summary(histogram::HdrHistogram.Histogram,
         "p99_9_ns" => HdrHistogram.value_at_percentile(histogram, 99.9),
         "max_ns" => max(histogram),
         "gc" => gc_counters,
-        "histogram_encoding" => "HdrHistogram compressed V2 base64",
-        "histogram_base64" => base64encode(encoded),
+        encoded...,
     )
 end
 
@@ -95,7 +92,8 @@ function measure_run!(operation::Gate3Plant.MultiRatePlantOperation,
         gc_delta(gc_before, gc_after),
         AOS.plant_nanoseconds(simulated_start),
         AOS.plant_nanoseconds(simulated_end),
-        sequences_after .- sequences_before)
+        sequences_after .- sequences_before, lowest_ns, highest_ns,
+        significant_figures)
 end
 
 median_integer(values) = round(Int64, median(collect(values)))
