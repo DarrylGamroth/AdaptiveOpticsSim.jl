@@ -62,4 +62,11 @@ struct PlantPreparationError <: AdaptiveOpticsSimError
     msg::String
 end
 
+"""Invalid prepared detector-acquisition event or lifecycle transition."""
+struct DetectorAcquisitionError <: AdaptiveOpticsSimError
+    component::Symbol
+    reason::Symbol
+    msg::String
+end
+
 Base.showerror(io::IO, e::AdaptiveOpticsSimError) = print(io, e.msg)

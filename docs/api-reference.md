@@ -47,7 +47,7 @@ The package intentionally distinguishes three tiers:
   `DimensionMismatchError`, `UnsupportedAlgorithm`, `NumericalConditionError`,
   `AtmosphereTimeError`, `AtmosphereEpochError`, `WFSPreparationError`,
   `PlantTimeError`, `PlantScheduleError`, `PlantDefinitionError`,
-  `PlantPreparationError`
+  `PlantPreparationError`, `DetectorAcquisitionError`
 - Profiles and RNG: `FidelityProfile`, `ScientificProfile`, `FastProfile`,
   `default_fidelity_profile`, `runtime_rng`, `deterministic_reference_rng`
 - Backend selectors: `CPUBackend`, `CUDABackend`, `AMDGPUBackend`,
@@ -196,6 +196,21 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   retain distinct
   `NominalTriggerEdge`, `DeliveredTriggerEdge`, and
   `ReportedTriggerTimestamp` values
+- Qualified global-shutter event acquisition:
+  `GlobalShutterAcquisitionDefinition`,
+  `PreparedGlobalShutterAcquisition`, `GlobalShutterAcquisitionState`,
+  `DetectorAcquisitionStatus`, `detector_acquisition_status`,
+  `detector_acquisition_sequence`, `exposure_start_timestamp`,
+  `exposure_close_timestamp`, `integrated_through_timestamp`,
+  `readout_complete_timestamp`, `acquisition_readiness_timestamp`,
+  `nondestructive_read_count`, `nondestructive_read_offset`,
+  `next_nondestructive_read_timestamp`,
+  `prepare_global_shutter_acquisition`, `begin_exposure!`,
+  `accumulate_exposure_interval!`, `take_nondestructive_read!`,
+  `close_exposure!`, `complete_readout!`, and
+  `mark_acquisition_ready!`. Integer plant timestamps own all transitions;
+  the separately owned state rejects busy retriggers and intervals that cross
+  exposure close or a pending scheduled ramp read
 
 - Stable identities: `AtmosphereLayerID`, `OpticalPathID`, `AcquisitionID`,
   `RNGOwnerIdentity`
@@ -493,10 +508,12 @@ influence basis already includes the print-through structure.
   `prepare_detector_acquisition`
 
 `capture!(...; integration_duration=seconds)` and `capture_incremental!` are the
-current frame-step incremental convenience surface. `integration_duration` is a
-positive integration duration, not an absolute timestamp. The planned
-virtual-time detector API uses explicit scheduler-owned exposure/read events
-rather than floating accumulated duration as its completion authority.
+frame-step incremental convenience surface. `integration_duration` is a
+positive integration duration, not an absolute timestamp. Event-driven global-
+shutter acquisition instead uses the qualified plant API above, with exact
+scheduler-owned exposure/read timestamps rather than floating accumulated
+duration as completion authority. Rolling-shutter rows/bands and frame-transfer
+overlap are not part of this initial event surface.
 
 Use `bits` for detector quantization depth and `output_type` for the Julia
 element type exported to an RTC/HIL boundary. A detector with `bits` must also

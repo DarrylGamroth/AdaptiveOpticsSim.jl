@@ -231,6 +231,54 @@ function _copy_sampling_plane!(::AcceleratorStyle, target::AbstractArray{T,3},
     return target
 end
 
+function _copy_windowed_sampling_plane!(target::AbstractArray{T,3},
+    target_index::Int, source::AbstractArray{T,3}, source_index::Int,
+    det::Detector) where {T}
+    return _copy_windowed_sampling_plane!(execution_style(target), target,
+        target_index, source, source_index, det.params.readout_window)
+end
+
+function _copy_windowed_sampling_plane!(::ScalarCPUStyle,
+    target::AbstractArray{T,3}, target_index::Int,
+    source::AbstractArray{T,3}, source_index::Int,
+    ::Nothing) where {T}
+    return _copy_sampling_plane!(ScalarCPUStyle(), target, target_index,
+        source, source_index)
+end
+
+function _copy_windowed_sampling_plane!(::ScalarCPUStyle,
+    target::AbstractArray{T,3}, target_index::Int,
+    source::AbstractArray{T,3}, source_index::Int,
+    window::FrameWindow) where {T}
+    row_first = first(window.rows)
+    col_first = first(window.cols)
+    @inbounds for j in axes(target, 2), i in axes(target, 1)
+        target[i, j, target_index] = source[
+            row_first + i - firstindex(target, 1),
+            col_first + j - firstindex(target, 2),
+            source_index,
+        ]
+    end
+    return target
+end
+
+function _copy_windowed_sampling_plane!(::AcceleratorStyle,
+    target::AbstractArray{T,3}, target_index::Int,
+    source::AbstractArray{T,3}, source_index::Int,
+    ::Nothing) where {T}
+    return _copy_sampling_plane!(execution_style(target), target, target_index,
+        source, source_index)
+end
+
+function _copy_windowed_sampling_plane!(::AcceleratorStyle,
+    target::AbstractArray{T,3}, target_index::Int,
+    source::AbstractArray{T,3}, source_index::Int,
+    window::FrameWindow) where {T}
+    @views copyto!(target[:, :, target_index],
+        source[window.rows, window.cols, source_index])
+    return target
+end
+
 function _sampling_read_cube!(cube::AbstractArray{T,3}, ::FrameSensorType,
     ::Nothing, signal_cube::AbstractArray{T,3}) where {T}
     for read_idx in axes(signal_cube, 3)
@@ -521,6 +569,87 @@ function _fit_up_the_ramp!(style::AcceleratorStyle,
         cube, dt, mean_time, inv_denominator, inv_n_reads, exposure, n_reads,
         n, m; ndrange=(n, m))
     return integrated
+end
+
+function _scheduled_up_the_ramp_fit_coefficients(
+    read_times::AbstractVector{T}, exposure_time::Real) where {T<:AbstractFloat}
+    n_reads = length(read_times)
+    sum_time = zero(T)
+    @inbounds for read_index in eachindex(read_times)
+        sum_time += read_times[read_index]
+    end
+    inv_n_reads = inv(T(n_reads))
+    mean_time = sum_time * inv_n_reads
+    denominator = zero(T)
+    @inbounds for read_index in eachindex(read_times)
+        centered_time = read_times[read_index] - mean_time
+        denominator = muladd(centered_time, centered_time, denominator)
+    end
+    return mean_time, inv(denominator), inv_n_reads, T(exposure_time)
+end
+
+function _fit_scheduled_up_the_ramp!(::ScalarCPUStyle,
+    integrated::AbstractMatrix{T}, slope::AbstractMatrix{T},
+    intercept::AbstractMatrix{T}, cube::AbstractArray{T,3},
+    read_times::AbstractVector{T}, exposure_time::Real) where {T<:AbstractFloat}
+    mean_time, inv_denominator, inv_n_reads, exposure =
+        _scheduled_up_the_ramp_fit_coefficients(read_times, exposure_time)
+    @inbounds for j in axes(slope, 2), i in axes(slope, 1)
+        sum_y = zero(T)
+        centered_dot = zero(T)
+        for read_index in eachindex(read_times)
+            value = cube[i, j, read_index]
+            sum_y += value
+            centered_dot = muladd(read_times[read_index] - mean_time, value,
+                centered_dot)
+        end
+        fitted_slope = centered_dot * inv_denominator
+        slope[i, j] = fitted_slope
+        intercept[i, j] = sum_y * inv_n_reads - fitted_slope * mean_time
+        integrated[i, j] = fitted_slope * exposure
+    end
+    return integrated
+end
+
+function _fit_scheduled_up_the_ramp!(::AcceleratorStyle,
+    integrated::AbstractMatrix{T}, slope::AbstractMatrix{T},
+    intercept::AbstractMatrix{T}, cube::AbstractArray{T,3},
+    read_times::AbstractVector{T}, exposure_time::Real) where {T<:AbstractFloat}
+    mean_time, inv_denominator, inv_n_reads, exposure =
+        _scheduled_up_the_ramp_fit_coefficients(read_times, exposure_time)
+    fill!(slope, zero(T))
+    fill!(intercept, zero(T))
+    @inbounds for read_index in eachindex(read_times)
+        centered_time = read_times[read_index] - mean_time
+        @views @. slope = muladd(centered_time,
+            cube[:, :, read_index], slope)
+        @views @. intercept = intercept + cube[:, :, read_index]
+    end
+    @. slope *= inv_denominator
+    @. intercept = intercept * inv_n_reads - slope * mean_time
+    @. integrated = slope * exposure
+    return integrated
+end
+
+function finalize_scheduled_up_the_ramp_readout_products!(
+    products::UpTheRampReadoutProducts, det::Detector,
+    exposure_time::Real)
+    _fit_scheduled_up_the_ramp!(execution_style(products.workspace_integrated),
+        products.workspace_integrated, products.workspace_slope,
+        products.workspace_intercept, products.workspace_cube,
+        products.read_times, exposure_time)
+
+    if det.params.readout_window !== nothing
+        _copy_windowed_frame!(products.slope_frame, products.workspace_slope,
+            det)
+        _copy_windowed_frame!(products.intercept_frame,
+            products.workspace_intercept, det)
+        _copy_windowed_frame!(products.integrated_frame,
+            products.workspace_integrated, det)
+    end
+
+    copyto!(det.state.frame, products.workspace_integrated)
+    return products
 end
 
 function finalize_up_the_ramp_readout_products!(mode::UpTheRampSampling,

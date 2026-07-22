@@ -125,6 +125,9 @@ Current AMDGPU-supported scope:
 - schedule-free native uniform calibration illumination entering a
   device-resident detector-input path and passing through ordinary detector
   acquisition with scalar indexing disabled
+- exact global-shutter detector-event accumulation and scheduled windowed
+  HgCdTe up-the-ramp snapshots/fitting with device-resident products and scalar
+  indexing disabled
 
 Primary evidence:
 

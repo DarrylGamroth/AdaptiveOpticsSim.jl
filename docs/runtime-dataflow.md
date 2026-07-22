@@ -305,6 +305,13 @@ Every maintained WFS family now adopts the contract while retaining its own
 concrete stage composition. Raw matrix detector entry remains a documented
 legacy cell-integrated-rate path, while
 `DetectorAcquisitionPlan` is the metadata-validated prepared frame boundary.
+The qualified global-shutter event layer binds that same plan to an immutable
+exposure/readout/readiness definition and separately owned single-writer state.
+It accumulates contiguous half-open intervals through the existing detector
+pipeline, snapshots evolving charge at scheduled nondestructive reads, and
+uses integer plant timestamps—not floating accumulated-time tolerance—as its
+transition authority. The event layer does not itself schedule, pace, publish,
+or transport the resulting frame.
 
 The runtime output plan decides whether a given simulation step must produce:
 
