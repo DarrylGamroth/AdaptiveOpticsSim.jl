@@ -759,6 +759,13 @@ or apply a command.
     return payload
 end
 
+function validate_plant_command_payload(
+    schema::PlantCommandSchema{T,0}, ::AbstractArray) where {T}
+    throw(PlantCommandError(:payload, :shape,
+        "command endpoint $(schema.endpoint): array payload does not match " *
+        "scalar command schema"))
+end
+
 @inline function validate_plant_command_payload(
     schema::PlantCommandSchema{T,N},
     payload::AbstractArray) where {T,N}

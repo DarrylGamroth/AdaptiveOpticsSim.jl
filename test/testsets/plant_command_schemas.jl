@@ -229,6 +229,11 @@ end
         :payload,
         :shape,
     )
+    _assert_command_error(
+        () -> validate_plant_command_payload(scalar, fill(0.25)),
+        :payload,
+        :shape,
+    )
 
     payload = Float32[-2, -1, 0, 1]
     @test @inferred(validate_plant_command_payload(schema, payload)) === payload
