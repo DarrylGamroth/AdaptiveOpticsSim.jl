@@ -120,8 +120,8 @@ backend-only validation by setting
 `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
 
 The CUDA track has a current manual WSL validation host and passed the maintained
-`424/424` hardware target on Julia 1.12.6 with CUDA.jl 6.2.1. The matching
-[backend evidence](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cuda.toml)
+`424/424` hardware target on Julia 1.12.6 with CUDA.jl 6.2.1. The separate
+[final pre-HIL backend evidence](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cuda.toml)
 archives CPU parity, residency, service-time histograms, and backend-ready,
 host-ready, and transfer-only boundaries. CUDA is still outside the present
 production support claim until it is explicitly restored to the supported

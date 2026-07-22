@@ -65,8 +65,14 @@ function verified_sparse_histogram(histogram::HdrHistogram.Histogram,
     encoded = encode_sparse_histogram(histogram)
     decoded = decode_sparse_histogram(encoded["histogram_base64"],
         lowest_ns, highest_ns, significant_figures)
+    reencoded = encode_sparse_histogram(decoded)
     HdrHistogram.total_count(decoded) == expected_samples || error(
         "sparse HdrHistogram round trip lost samples")
+    reencoded["histogram_recorded_bins"] ==
+        encoded["histogram_recorded_bins"] || error(
+        "sparse HdrHistogram round trip changed the recorded-bin count")
+    reencoded["histogram_base64"] == encoded["histogram_base64"] || error(
+        "sparse HdrHistogram round trip changed recorded bin values or counts")
     HdrHistogram.value_at_percentile(decoded, 99.0) ==
         HdrHistogram.value_at_percentile(histogram, 99.0) || error(
         "sparse HdrHistogram round trip changed p99")
