@@ -90,13 +90,17 @@ Examples:
   `prepare_plant` still rejects nonempty optic topology until effective optic
   application and plant-event composition are implemented
 - `PreparedCommandEndpoint` as one run-immutable schema/capacity/window/
-  ordinal/backend binding, with separate single-writer `CommandEndpointState`
+  ordinal/payload-storage-backend binding, with separate single-writer
+  `CommandEndpointState`
   and caller-owned `CommandDispositionWorkspace`. Endpoint-owned payload slots,
   one array staging slot, a flat sorted future calendar, and modulo accepted-
   sequence history are fixed at preparation. Admission copies caller payloads,
   never backdates, and assigns one presentation identity whose eventual
-  terminal disposition is rejected, superseded, applied, or failed. One isbits
-  application-ready claim may be outstanding. This standalone layer owns no
+  terminal disposition is rejected, superseded, applied, or failed. Scalar
+  payload slots are host-resident; array slots use their prepared backend. One
+  opaque isbits application-ready claim may be outstanding and is revalidated
+  against endpoint-owned metadata before payload access or completion. This
+  standalone layer owns no
   optic mutation, held/safe state, silence watchdog, atomic transaction, plant
   event phase, wall clock, task, ring, lease, or transport
 - `PreparedPlant` as a schedule-free concrete tuple of

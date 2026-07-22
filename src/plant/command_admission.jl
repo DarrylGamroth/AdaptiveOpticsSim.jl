@@ -138,9 +138,9 @@ function _as_command_disposition_reason(value)
 end
 
 """
-    PlantCommand(schema, sequence, effective_timestamp, payload)
+    PlantCommand(schema, sequence, requested_effective_timestamp, payload)
     PlantCommand(endpoint, schema_id, schema_version, sequence,
-        effective_timestamp, payload)
+        requested_effective_timestamp, payload)
 
 Immutable core command presented to one prepared endpoint. The payload remains
 caller-owned only until admission returns; successful admission copies it into
@@ -152,49 +152,51 @@ struct PlantCommand{P}
     schema_id::PlantCommandSchemaID
     schema_version::PlantCommandSchemaVersion
     sequence::PlantCommandSequence
-    effective_timestamp::PlantTimestamp
+    requested_effective_timestamp::PlantTimestamp
     payload::P
 end
 
 function PlantCommand(endpoint, schema_id, schema_version, sequence,
-    effective_timestamp::PlantTimestamp, payload)
+    requested_effective_timestamp::PlantTimestamp, payload)
     return PlantCommand(
         _as_schema_command_endpoint_id(endpoint),
         _as_plant_command_schema_id(schema_id),
         _as_command_schema_version(schema_version),
         _as_plant_command_sequence(sequence),
-        effective_timestamp,
+        requested_effective_timestamp,
         payload,
     )
 end
 
 function PlantCommand(schema::PlantCommandSchema, sequence,
-    effective_timestamp::PlantTimestamp, payload)
+    requested_effective_timestamp::PlantTimestamp, payload)
     return PlantCommand(command_endpoint_id(schema), command_schema_id(schema),
-        command_schema_version(schema), sequence, effective_timestamp,
+        command_schema_version(schema), sequence, requested_effective_timestamp,
         payload)
 end
 
-function PlantCommand(::PlantCommandSchema, sequence, effective_timestamp,
-    payload)
+function PlantCommand(::PlantCommandSchema, sequence,
+    requested_effective_timestamp, payload)
     _command_admission_error(:command, :invalid_effective_timestamp,
-        "plant-command effective timestamp must be a PlantTimestamp; got " *
-        "$(typeof(effective_timestamp))")
+        "plant-command requested effective timestamp must be a " *
+        "PlantTimestamp; got " *
+        "$(typeof(requested_effective_timestamp))")
 end
 
 function PlantCommand(endpoint, schema_id, schema_version, sequence,
-    effective_timestamp, payload)
+    requested_effective_timestamp, payload)
     _command_admission_error(:command, :invalid_effective_timestamp,
-        "plant-command effective timestamp must be a PlantTimestamp; got " *
-        "$(typeof(effective_timestamp))")
+        "plant-command requested effective timestamp must be a " *
+        "PlantTimestamp; got " *
+        "$(typeof(requested_effective_timestamp))")
 end
 
 @inline command_endpoint_id(command::PlantCommand) = command.endpoint
 @inline command_schema_id(command::PlantCommand) = command.schema_id
 @inline command_schema_version(command::PlantCommand) = command.schema_version
 @inline command_sequence(command::PlantCommand) = command.sequence
-@inline command_effective_timestamp(command::PlantCommand) =
-    command.effective_timestamp
+@inline command_requested_effective_timestamp(command::PlantCommand) =
+    command.requested_effective_timestamp
 @inline command_payload(command::PlantCommand) = command.payload
 
 @enum CommandSequenceClass::UInt8 begin
@@ -221,41 +223,43 @@ end
 """
 Total deterministic order key for application-ready plant commands.
 
-Commands order by scheduled plant time, then endpoint-local command sequence,
-then the stable prepared endpoint ordinal. A late apply-now command retains its
+Commands order by scheduled plant time, then stable prepared endpoint ordinal,
+then endpoint-local command sequence. A late apply-now command retains its
 original requested timestamp separately and uses its admission time here.
 """
 struct PlantCommandOrderKey
-    timestamp::PlantTimestamp
-    sequence::PlantCommandSequence
+    scheduled_timestamp::PlantTimestamp
     endpoint_ordinal::UInt32
+    sequence::PlantCommandSequence
 end
 
 Base.:(==)(left::PlantCommandOrderKey, right::PlantCommandOrderKey) =
-    left.timestamp == right.timestamp && left.sequence == right.sequence &&
-    left.endpoint_ordinal == right.endpoint_ordinal
+    left.scheduled_timestamp == right.scheduled_timestamp &&
+    left.endpoint_ordinal == right.endpoint_ordinal &&
+    left.sequence == right.sequence
 Base.isequal(left::PlantCommandOrderKey, right::PlantCommandOrderKey) =
-    isequal(left.timestamp, right.timestamp) &&
-    isequal(left.sequence, right.sequence) &&
-    isequal(left.endpoint_ordinal, right.endpoint_ordinal)
+    isequal(left.scheduled_timestamp, right.scheduled_timestamp) &&
+    isequal(left.endpoint_ordinal, right.endpoint_ordinal) &&
+    isequal(left.sequence, right.sequence)
 Base.hash(key::PlantCommandOrderKey, seed::UInt) = hash(
-    (key.timestamp, key.sequence, key.endpoint_ordinal), seed)
+    (key.scheduled_timestamp, key.endpoint_ordinal, key.sequence), seed)
 
 function Base.isless(left::PlantCommandOrderKey,
     right::PlantCommandOrderKey)
-    left.timestamp == right.timestamp ||
-        return left.timestamp < right.timestamp
-    left.sequence == right.sequence ||
-        return left.sequence.value < right.sequence.value
-    return left.endpoint_ordinal < right.endpoint_ordinal
+    left.scheduled_timestamp == right.scheduled_timestamp ||
+        return left.scheduled_timestamp < right.scheduled_timestamp
+    left.endpoint_ordinal == right.endpoint_ordinal ||
+        return left.endpoint_ordinal < right.endpoint_ordinal
+    return left.sequence.value < right.sequence.value
 end
 
 function Base.show(io::IO, key::PlantCommandOrderKey)
-    print(io, "PlantCommandOrderKey(", repr(key.timestamp), ", ",
-        repr(key.sequence), ", ", key.endpoint_ordinal, ")")
+    print(io, "PlantCommandOrderKey(", repr(key.scheduled_timestamp), ", ",
+        key.endpoint_ordinal, ", ", repr(key.sequence), ")")
 end
 
-@inline command_effective_timestamp(key::PlantCommandOrderKey) = key.timestamp
+@inline command_scheduled_timestamp(key::PlantCommandOrderKey) =
+    key.scheduled_timestamp
 @inline command_sequence(key::PlantCommandOrderKey) = key.sequence
 @inline command_endpoint_ordinal(key::PlantCommandOrderKey) =
     key.endpoint_ordinal
@@ -314,8 +318,10 @@ mutable struct _CommandEndpointBinding end
 Run-immutable plan for one bounded command endpoint.
 
 The plan binds one exact schema, positive calendar capacity, positive accepted-
-sequence window, stable endpoint ordinal, and array backend. Mutable slot,
-calendar, and sequence state live in `CommandEndpointState`.
+sequence window, stable endpoint ordinal, and payload-storage backend. Scalar
+payload slots are host-resident; fixed-shape array slots use the selected array
+backend. Mutable slot, calendar, and sequence state live in
+`CommandEndpointState`.
 """
 struct PreparedCommandEndpoint{S<:PlantCommandSchema,
     B<:AbstractArrayBackend}
@@ -400,7 +406,14 @@ function _checked_command_endpoint_ordinal(value)
 end
 
 @inline _validate_command_storage_backend(
-    ::PlantCommandSchema{T,0}, ::AbstractArrayBackend) where {T} = nothing
+    ::PlantCommandSchema{T,0}, ::CPUBackend) where {T} = nothing
+
+function _validate_command_storage_backend(
+    ::PlantCommandSchema{T,0}, backend::AbstractArrayBackend) where {T}
+    _command_admission_error(:preparation, :unsupported_scalar_backend,
+        "scalar command payload slots are host-resident; use CPUBackend() " *
+        "instead of $(typeof(backend))")
+end
 
 function _validate_command_storage_backend(
     ::PlantCommandSchema{T,N}, backend::AbstractArrayBackend) where {T,N}
@@ -426,8 +439,9 @@ end
     prepare_command_endpoint(schema; capacity, sequence_window=capacity,
         ordinal, backend=CPUBackend())
 
-Prepare immutable bounds and storage policy for one command endpoint. Creating
-its separate `CommandEndpointState` allocates exactly `capacity` active payload
+Prepare immutable bounds and storage policy for one command endpoint. Scalar
+payload slots require `CPUBackend()` and remain host-resident. Creating the
+separate `CommandEndpointState` allocates exactly `capacity` active payload
 slots plus one transactional staging slot for array payloads. No run-length-
 sized storage, optic mutation, callback, clock, queue, or transport is added.
 """
@@ -758,7 +772,7 @@ end
     reason::CommandDispositionReason,
     sequence_class::Union{Nothing,CommandSequenceClass})
     disposition = _command_disposition(presentation_id, endpoint,
-        command.sequence, kind, reason, command.effective_timestamp,
+        command.sequence, kind, reason, command.requested_effective_timestamp,
         timestamp)
     workspace.dispositions[1] = disposition
     workspace.count = 1
@@ -839,8 +853,8 @@ end
 @inline function _command_slot_key(endpoint::PreparedCommandEndpoint,
     metadata::_CommandSlotMetadata)
     return PlantCommandOrderKey(metadata.scheduled_timestamp,
-        PlantCommandSequence(metadata.sequence, _PLANT_COMMAND_COUNTER_TOKEN),
-        endpoint.ordinal)
+        endpoint.ordinal,
+        PlantCommandSequence(metadata.sequence, _PLANT_COMMAND_COUNTER_TOKEN))
 end
 
 function next_command_order_key(endpoint::PreparedCommandEndpoint,
@@ -1107,7 +1121,7 @@ function admit_plant_command!(workspace::CommandDispositionWorkspace,
         workspace, endpoint, state, command, timestamp, presentation_id,
         sequence_class, sequence_action)
 
-    requested = command.effective_timestamp
+    requested = command.requested_effective_timestamp
     scheduled = requested
     if timestamp < requested
         endpoint.schema.effective_time_policy.future == RejectFutureCommand &&
@@ -1183,6 +1197,9 @@ function admit_plant_command!(workspace::CommandDispositionWorkspace,
     return PlantCommandAdmission(presentation_id, status, sequence_class, key)
 end
 
+struct _PlantCommandClaimToken end
+const _PLANT_COMMAND_CLAIM_TOKEN = _PlantCommandClaimToken()
+
 struct PlantCommandApplicationClaim
     binding_id::UInt64
     slot::UInt32
@@ -1192,6 +1209,18 @@ struct PlantCommandApplicationClaim
     requested_effective_timestamp::PlantTimestamp
     admission_timestamp::PlantTimestamp
     ready_timestamp::PlantTimestamp
+
+    function PlantCommandApplicationClaim(binding_id::UInt64, slot::UInt32,
+        generation::UInt64, presentation_id::CommandPresentationID,
+        key::PlantCommandOrderKey,
+        requested_effective_timestamp::PlantTimestamp,
+        admission_timestamp::PlantTimestamp,
+        ready_timestamp::PlantTimestamp,
+        ::_PlantCommandClaimToken)
+        return new(binding_id, slot, generation, presentation_id, key,
+            requested_effective_timestamp, admission_timestamp,
+            ready_timestamp)
+    end
 end
 
 @inline command_presentation_id(value::PlantCommandApplicationClaim) =
@@ -1199,11 +1228,13 @@ end
 @inline command_order_key(value::PlantCommandApplicationClaim) = value.key
 @inline command_sequence(value::PlantCommandApplicationClaim) =
     value.key.sequence
+@inline command_scheduled_timestamp(value::PlantCommandApplicationClaim) =
+    command_scheduled_timestamp(value.key)
 @inline command_requested_effective_timestamp(
     value::PlantCommandApplicationClaim) = value.requested_effective_timestamp
 @inline command_admission_timestamp(value::PlantCommandApplicationClaim) =
     value.admission_timestamp
-@inline command_application_timestamp(value::PlantCommandApplicationClaim) =
+@inline command_ready_timestamp(value::PlantCommandApplicationClaim) =
     value.ready_timestamp
 @inline command_lateness(value::PlantCommandApplicationClaim) =
     _command_lateness(value.ready_timestamp,
@@ -1254,6 +1285,7 @@ function claim_next_application_ready_command!(
         metadata.requested_effective_timestamp,
         metadata.admission_timestamp,
         timestamp,
+        _PLANT_COMMAND_CLAIM_TOKEN,
     )
 end
 
@@ -1278,6 +1310,13 @@ end
         metadata.presentation == claim.presentation_id.value ||
         _command_admission_error(:application, :stale_claim,
             "application-ready command no longer matches endpoint state")
+    claim.key == _command_slot_key(endpoint, metadata) &&
+        claim.requested_effective_timestamp ==
+            metadata.requested_effective_timestamp &&
+        claim.admission_timestamp == metadata.admission_timestamp &&
+        claim.ready_timestamp == state.current_timestamp ||
+        _command_admission_error(:application, :stale_claim,
+            "application-ready claim metadata no longer matches endpoint state")
     return slot, metadata
 end
 
@@ -1313,9 +1352,17 @@ function _finish_command_application!(
     _require_command_endpoint_binding(endpoint, workspace)
     _require_empty_command_dispositions(workspace)
     slot, metadata = _require_current_command_claim(endpoint, state, claim)
-    disposition = _command_disposition(claim.presentation_id, endpoint,
-        claim.key.sequence, kind, reason,
-        metadata.requested_effective_timestamp, claim.ready_timestamp)
+    disposition = _command_disposition(
+        CommandPresentationID(metadata.presentation,
+            _PLANT_COMMAND_COUNTER_TOKEN),
+        endpoint,
+        PlantCommandSequence(metadata.sequence,
+            _PLANT_COMMAND_COUNTER_TOKEN),
+        kind,
+        reason,
+        metadata.requested_effective_timestamp,
+        state.current_timestamp,
+    )
     workspace.dispositions[1] = disposition
     workspace.count = 1
     _release_claimed_command_slot!(state, slot, metadata)

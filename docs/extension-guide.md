@@ -53,15 +53,18 @@ session, external-clock, payload-lease, transport, or HIL descriptor metadata;
 that belongs to the later boundary contract.
 
 `prepare_command_endpoint` now binds one exact schema to fixed payload-slot,
-accepted-sequence-window, future-calendar, ordinal, and backend capacity. Its
-separately owned, qualified `CommandEndpointState` and
+accepted-sequence-window, future-calendar, ordinal, and payload-storage
+capacity. Scalar payload slots require `CPUBackend()` and remain host-resident;
+fixed-shape array slots use the selected array backend. Its separately owned,
+qualified `CommandEndpointState` and
 `CommandDispositionWorkspace` support warmed `admit_plant_command!`, one
 outstanding application-ready claim, and explicit applied/failed/pending-drain
 completion without callbacks or run-length storage. Admission copies caller
 payloads; array endpoints reserve one additional staging payload so a failed
 copy or presentation-time clip cannot corrupt a pending command. Consume and
 clear every disposition before reusing its workspace. Give endpoints stable,
-unique ordinals when their order keys will be composed.
+unique ordinals when their order keys will be composed; equal scheduled times
+order by endpoint ordinal before the endpoint-local sequence.
 
 This is a standalone core endpoint, not yet an optic-model extension hook.
 Application-stage state-dependent bounds, effective optic mutation, silence,

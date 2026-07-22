@@ -525,9 +525,11 @@ or incremental semantics, value/range policy, and duplicate/reordering policy.
 Its cold `validate_plant_command_payload` operation checks only presentation
 compatibility. `prepare_command_endpoint` binds that schema to positive active
 capacity, a positive accepted-sequence window, one stable ordering ordinal, and
-one array backend. Its separate single-writer state owns fixed payload slots,
-compact metadata, and a sorted future calendar; caller-owned fixed disposition
-storage cannot be overwritten until it is explicitly cleared.
+a payload-storage backend. Scalar payload slots require `CPUBackend()` and
+remain host-resident; fixed-shape array slots use the selected array backend.
+Its separate single-writer state owns fixed payload slots, compact metadata,
+and a sorted future calendar; caller-owned fixed disposition storage cannot be
+overwritten until it is explicitly cleared.
 
 `PlantCommand` carries the core endpoint/schema/version identities, endpoint-
 local sequence, requested plant-effective timestamp, and payload. Every call to
@@ -593,13 +595,17 @@ commands; it rejects that policy for incremental deltas rather than silently
 changing their sum.
 
 The endpoint's next application-ready claim removes the earliest due command
-using scheduled time, endpoint-local sequence, and stable endpoint ordinal as
-the total key. Only one claim may be outstanding. Its payload remains endpoint-
-owned and is borrowed read-only until the single writer reports applied or
-failed exactly once. A bounded failure drain terminates all unclaimed pending
-commands in calendar order. These transitions publish core dispositions but do
-not yet mutate an optic, enforce state-dependent application bounds, implement
-silence/held state, or define an atomic multi-optic transaction.
+using scheduled time, stable endpoint ordinal, and endpoint-local sequence as
+the total key. Comparing endpoint ordinal before local sequence prevents
+unrelated command history on one endpoint from changing cross-endpoint order.
+Only one opaque claim may be outstanding. Its identity, key, and requested,
+admission, and ready timestamps must continue to match endpoint-owned state.
+Its payload remains endpoint-owned and is borrowed read-only until the single
+writer reports applied or failed exactly once. A bounded failure drain
+terminates all unclaimed pending commands in calendar order. These transitions
+publish core dispositions but do not yet mutate an optic, enforce state-
+dependent application bounds, implement silence/held state, or define an
+atomic multi-optic transaction.
 
 If a command becomes effective during an exposure, optical samples before and
 after that event observe the appropriate old and new states. A lower-fidelity
@@ -627,8 +633,8 @@ phases retain their reserved causal positions until their assigned gates:
 1. apply trigger-source, distribution-link, and synchronization-fault updates
    effective at or before `t`, recompute only not-yet-delivered edges, and
    record any explicit dropped or duplicate edge
-2. apply all admitted commands with effective time at or before `t`, ordered by
-   effective time, endpoint sequence, and scheduler ordinal, then apply any
+2. apply all admitted commands with scheduled time at or before `t`, ordered by
+   scheduled time, endpoint ordinal, and endpoint-local sequence, then apply any
    still-due modeled command-age watchdog transition at `t`
 3. process any due atmosphere-evolution event and select one current
    `AtmosphereEpoch` token for every optical sample due at `t`

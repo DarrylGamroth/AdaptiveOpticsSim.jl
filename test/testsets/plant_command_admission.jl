@@ -90,6 +90,109 @@ function _array_command_cycle!(workspace, endpoint, state, payload, sequence,
     return nothing
 end
 
+function _multi_entry_command_cycle!(workspace, endpoint, state,
+    first_sequence, base_timestamp)
+    schema = command_schema(endpoint)
+    timestamp_10 = base_timestamp + PlantDuration(10)
+    timestamp_20 = base_timestamp + PlantDuration(20)
+    timestamp_30 = base_timestamp + PlantDuration(30)
+    admit_plant_command!(workspace, endpoint, state,
+        PlantCommand(schema, first_sequence, timestamp_30, 0.3),
+        base_timestamp)
+    admit_plant_command!(workspace, endpoint, state,
+        PlantCommand(schema, first_sequence + 1, timestamp_10, 0.1),
+        base_timestamp)
+    admit_plant_command!(workspace, endpoint, state,
+        PlantCommand(schema, first_sequence + 2, timestamp_20, 0.2),
+        base_timestamp)
+    for timestamp in (timestamp_10, timestamp_20, timestamp_30)
+        claim = claim_next_application_ready_command!(endpoint, state,
+            timestamp)
+        claimed_command_payload(endpoint, state, claim)
+        mark_plant_command_applied!(workspace, endpoint, state, claim)
+        clear_command_dispositions!(workspace)
+    end
+    return nothing
+end
+
+function _supersession_command_cycle!(workspace, endpoint, state,
+    first_sequence, base_timestamp)
+    schema = command_schema(endpoint)
+    timestamp_20 = base_timestamp + PlantDuration(20)
+    timestamp_25 = base_timestamp + PlantDuration(25)
+    timestamp_30 = base_timestamp + PlantDuration(30)
+    admit_plant_command!(workspace, endpoint, state,
+        PlantCommand(schema, first_sequence + 1, timestamp_30, 0.3),
+        base_timestamp)
+    admit_plant_command!(workspace, endpoint, state,
+        PlantCommand(schema, first_sequence, timestamp_20, 0.2),
+        base_timestamp)
+    admit_plant_command!(workspace, endpoint, state,
+        PlantCommand(schema, first_sequence + 2, timestamp_25, 0.25),
+        base_timestamp)
+    clear_command_dispositions!(workspace)
+    claim = claim_next_application_ready_command!(endpoint, state,
+        timestamp_25)
+    claimed_command_payload(endpoint, state, claim)
+    mark_plant_command_applied!(workspace, endpoint, state, claim)
+    clear_command_dispositions!(workspace)
+    return nothing
+end
+
+function _capacity_rejection_command_cycle!(workspace, endpoint, state,
+    first_sequence, base_timestamp)
+    schema = command_schema(endpoint)
+    timestamp_10 = base_timestamp + PlantDuration(10)
+    timestamp_20 = base_timestamp + PlantDuration(20)
+    admit_plant_command!(workspace, endpoint, state,
+        PlantCommand(schema, first_sequence, timestamp_10, 0.1),
+        base_timestamp)
+    admit_plant_command!(workspace, endpoint, state,
+        PlantCommand(schema, first_sequence + 1, timestamp_20, 0.2),
+        base_timestamp)
+    clear_command_dispositions!(workspace)
+    claim = claim_next_application_ready_command!(endpoint, state,
+        timestamp_10)
+    claimed_command_payload(endpoint, state, claim)
+    mark_plant_command_applied!(workspace, endpoint, state, claim)
+    clear_command_dispositions!(workspace)
+    return nothing
+end
+
+function _failure_drain_command_cycle!(workspace, endpoint, state,
+    first_sequence, base_timestamp)
+    schema = command_schema(endpoint)
+    for (sequence_offset, time_offset) in ((0, 30), (1, 10), (2, 20))
+        admit_plant_command!(workspace, endpoint, state,
+            PlantCommand(schema, first_sequence + sequence_offset,
+                base_timestamp + PlantDuration(time_offset), 0.0),
+            base_timestamp)
+    end
+    fail_pending_plant_commands!(workspace, endpoint, state,
+        base_timestamp + PlantDuration(5))
+    clear_command_dispositions!(workspace)
+    return nothing
+end
+
+function _rebuilt_application_claim(claim;
+    key=command_order_key(claim),
+    requested=command_requested_effective_timestamp(claim),
+    admission=command_admission_timestamp(claim),
+    ready=command_ready_timestamp(claim),
+)
+    return PlantCommandApplicationClaim(
+        getfield(claim, :binding_id),
+        getfield(claim, :slot),
+        getfield(claim, :generation),
+        command_presentation_id(claim),
+        key,
+        requested,
+        admission,
+        ready,
+        AdaptiveOpticsSim._PLANT_COMMAND_CLAIM_TOKEN,
+    )
+end
+
 struct AdmissionValidationFailureVector{T} <: AbstractVector{T} end
 
 Base.size(::AdmissionValidationFailureVector) = (3,)
@@ -130,6 +233,10 @@ Base.copyto!(::Vector{T}, ::AdmissionStagingFailureVector{T}) where {T} =
         :mark_plant_command_applied!,
         :fail_plant_command_application!,
         :fail_pending_plant_commands!,
+        :command_requested_effective_timestamp,
+        :command_scheduled_timestamp,
+        :command_ready_timestamp,
+        :command_terminal_timestamp,
     )
         @test Base.isexported(AdaptiveOpticsSim, name)
     end
@@ -203,7 +310,7 @@ Base.copyto!(::Vector{T}, ::AdmissionStagingFailureVector{T}) where {T} =
     @test command_schema_id(command) == PlantCommandSchemaID(:dm_schema)
     @test command_schema_version(command) == PlantCommandSchemaVersion(1)
     @test command_sequence(command) == sequence
-    @test command_effective_timestamp(command) == PlantTimestamp(20)
+    @test command_requested_effective_timestamp(command) == PlantTimestamp(20)
     @test command_payload(command) === payload
     @test validate_plant_command(endpoint, command) === command
 
@@ -225,6 +332,9 @@ Base.copyto!(::Vector{T}, ::AdmissionStagingFailureVector{T}) where {T} =
             :invalid_sequence_window),
         (() -> prepare_command_endpoint(schema; capacity=1, ordinal=false),
             :preparation, :invalid_ordinal),
+        (() -> prepare_command_endpoint(scalar_schema; capacity=1, ordinal=1,
+            backend=CUDABackend()), :preparation,
+            :unsupported_scalar_backend),
         (() -> command_disposition(workspace, 1), :disposition,
             :invalid_index),
         (() -> command_disposition(workspace, 1.0), :disposition,
@@ -439,8 +549,66 @@ end
         Float32[-1, 0.25, 1]
     @test command_requested_effective_timestamp(claim) == PlantTimestamp(10)
     @test command_admission_timestamp(claim) == PlantTimestamp(10)
-    @test command_application_timestamp(claim) == PlantTimestamp(10)
+    @test command_scheduled_timestamp(claim) == PlantTimestamp(10)
+    @test command_ready_timestamp(claim) == PlantTimestamp(10)
     @test iszero(command_lateness(claim))
+    @test !applicable(
+        PlantCommandApplicationClaim,
+        getfield(claim, :binding_id),
+        getfield(claim, :slot),
+        getfield(claim, :generation),
+        command_presentation_id(claim),
+        command_order_key(claim),
+        command_requested_effective_timestamp(claim),
+        command_admission_timestamp(claim),
+        command_ready_timestamp(claim),
+    )
+    forged_claims = (
+        _rebuilt_application_claim(
+            claim;
+            key=PlantCommandOrderKey(
+                PlantTimestamp(0),
+                UInt32(99),
+                PlantCommandSequence(999),
+            ),
+        ),
+        _rebuilt_application_claim(
+            claim;
+            requested=PlantTimestamp(0),
+        ),
+        _rebuilt_application_claim(
+            claim;
+            admission=PlantTimestamp(0),
+        ),
+        _rebuilt_application_claim(
+            claim;
+            ready=PlantTimestamp(0),
+        ),
+    )
+    _assert_command_admission_error(
+        () -> mark_plant_command_applied!(
+            clip_workspace,
+            clip_endpoint,
+            clip_state,
+            forged_claims[1],
+        ),
+        :application,
+        :stale_claim,
+    )
+    @test command_disposition_count(clip_workspace) == 0
+    @test active_command_count(clip_state) == 1
+    for index in 2:length(forged_claims)
+        forged_claim = forged_claims[index]
+        _assert_command_admission_error(
+            () -> claimed_command_payload(
+                clip_endpoint,
+                clip_state,
+                forged_claim,
+            ),
+            :application,
+            :stale_claim,
+        )
+    end
     disposition = @inferred mark_plant_command_applied!(
         clip_workspace,
         clip_endpoint,
@@ -510,7 +678,7 @@ end
             zeros(Float32, 3)),
         PlantTimestamp(1))
     @test command_admission_status(pending) == CommandAdmittedPending
-    @test command_effective_timestamp(command_order_key(pending)) ==
+    @test command_scheduled_timestamp(command_order_key(pending)) ==
         PlantTimestamp(10)
     @test claim_next_application_ready_command!(future_endpoint,
         future_state, PlantTimestamp(5)) === nothing
@@ -582,13 +750,14 @@ end
             zeros(Float32, 3)),
         PlantTimestamp(10))
     @test command_admission_status(late_now) == CommandAdmittedReady
-    @test command_effective_timestamp(command_order_key(late_now)) ==
+    @test command_scheduled_timestamp(command_order_key(late_now)) ==
         PlantTimestamp(10)
     late_claim = claim_next_application_ready_command!(late_now_endpoint,
         late_now_state, PlantTimestamp(10))
     @test command_requested_effective_timestamp(late_claim) ==
         PlantTimestamp(5)
-    @test command_application_timestamp(late_claim) == PlantTimestamp(10)
+    @test command_scheduled_timestamp(late_claim) == PlantTimestamp(10)
+    @test command_ready_timestamp(late_claim) == PlantTimestamp(10)
     @test command_lateness(late_claim) == PlantDuration(5)
     mark_plant_command_applied!(late_now_workspace, late_now_endpoint,
         late_now_state, late_claim)
@@ -841,9 +1010,10 @@ end
         state_b, PlantCommand(schema_b, 1, PlantTimestamp(25), 0.0),
         PlantTimestamp(0)))
     key_a = command_order_key(admit_plant_command!(workspace_a, endpoint_a,
-        state_a, PlantCommand(schema_a, 1, PlantTimestamp(25), 0.0),
+        state_a, PlantCommand(schema_a, 100, PlantTimestamp(25), 0.0),
         PlantTimestamp(0)))
     @test isless(key_a, key_b)
+    @test !isless(key_b, key_a)
     @test command_endpoint_ordinal(key_a) == UInt32(1)
     @test command_endpoint_ordinal(key_b) == UInt32(2)
 
@@ -978,6 +1148,83 @@ end
     @test @inferred(_array_command_cycle!(array_workspace, array_endpoint,
         array_state, array_payload, 1, PlantTimestamp(1))) === nothing
 
+    multi_entry_schema = _admission_schema(
+        Float64;
+        id=:multi_entry_hot_schema,
+        endpoint=:multi_entry_hot_command,
+        dimensions=(),
+        bounds=UniformCommandBounds(-1.0, 1.0),
+    )
+    multi_entry_endpoint = prepare_command_endpoint(
+        multi_entry_schema;
+        capacity=3,
+        ordinal=3,
+    )
+    multi_entry_state = CommandEndpointState(multi_entry_endpoint)
+    multi_entry_workspace = CommandDispositionWorkspace(multi_entry_endpoint)
+    @test @inferred(_multi_entry_command_cycle!(multi_entry_workspace,
+        multi_entry_endpoint, multi_entry_state, 1,
+        PlantTimestamp(10))) === nothing
+
+    supersession_schema = _admission_schema(
+        Float64;
+        id=:supersession_hot_schema,
+        endpoint=:supersession_hot_command,
+        dimensions=(),
+        bounds=UniformCommandBounds(-1.0, 1.0),
+        sequence_policy=CommandSequencePolicy(reordered=AcceptSequence),
+        effective_time_policy=CommandEffectiveTimePolicy(
+            supersession=SupersedeOlderPendingCommands,
+        ),
+    )
+    supersession_endpoint = prepare_command_endpoint(
+        supersession_schema;
+        capacity=3,
+        ordinal=4,
+    )
+    supersession_state = CommandEndpointState(supersession_endpoint)
+    supersession_workspace = CommandDispositionWorkspace(
+        supersession_endpoint)
+    @test @inferred(_supersession_command_cycle!(supersession_workspace,
+        supersession_endpoint, supersession_state, 1,
+        PlantTimestamp(10))) === nothing
+
+    capacity_schema = _admission_schema(
+        Float64;
+        id=:capacity_hot_schema,
+        endpoint=:capacity_hot_command,
+        dimensions=(),
+        bounds=UniformCommandBounds(-1.0, 1.0),
+    )
+    capacity_endpoint = prepare_command_endpoint(
+        capacity_schema;
+        capacity=1,
+        ordinal=5,
+    )
+    capacity_state = CommandEndpointState(capacity_endpoint)
+    capacity_workspace = CommandDispositionWorkspace(capacity_endpoint)
+    @test @inferred(_capacity_rejection_command_cycle!(capacity_workspace,
+        capacity_endpoint, capacity_state, 1,
+        PlantTimestamp(10))) === nothing
+
+    drain_schema = _admission_schema(
+        Float64;
+        id=:drain_hot_schema,
+        endpoint=:drain_hot_command,
+        dimensions=(),
+        bounds=UniformCommandBounds(-1.0, 1.0),
+    )
+    drain_endpoint = prepare_command_endpoint(
+        drain_schema;
+        capacity=3,
+        ordinal=6,
+    )
+    drain_state = CommandEndpointState(drain_endpoint)
+    drain_workspace = CommandDispositionWorkspace(drain_endpoint)
+    @test @inferred(_failure_drain_command_cycle!(drain_workspace,
+        drain_endpoint, drain_state, 1,
+        PlantTimestamp(10))) === nothing
+
     if coverage_instrumented()
         @test_skip "command-admission allocation assertions disabled under coverage"
     else
@@ -986,6 +1233,18 @@ end
         @test @allocated(_array_command_cycle!(array_workspace,
             array_endpoint, array_state, array_payload, 2,
             PlantTimestamp(2))) == 0
+        @test @allocated(_multi_entry_command_cycle!(multi_entry_workspace,
+            multi_entry_endpoint, multi_entry_state, 4,
+            PlantTimestamp(50))) == 0
+        @test @allocated(_supersession_command_cycle!(
+            supersession_workspace, supersession_endpoint,
+            supersession_state, 4, PlantTimestamp(50))) == 0
+        @test @allocated(_capacity_rejection_command_cycle!(
+            capacity_workspace, capacity_endpoint, capacity_state, 2,
+            PlantTimestamp(50))) == 0
+        @test @allocated(_failure_drain_command_cycle!(drain_workspace,
+            drain_endpoint, drain_state, 4,
+            PlantTimestamp(50))) == 0
     end
 
     scalar_slot_count = length(getfield(scalar_state, :slots))

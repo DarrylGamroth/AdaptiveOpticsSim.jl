@@ -285,7 +285,11 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `fail_plant_command_application!`, and `fail_pending_plant_commands!`.
   `CommandSequenceClass`, `CommandAdmissionStatus`, `CommandTerminalKind`,
   and their exported values provide the result vocabulary; the exported
-  `command_*` accessors inspect admissions, claims, and dispositions
+  `command_*` accessors inspect admissions, claims, and dispositions.
+  `command_requested_effective_timestamp`, `command_scheduled_timestamp`,
+  `command_admission_timestamp`, `command_ready_timestamp`, and
+  `command_terminal_timestamp` keep the distinct command lifecycle instants
+  explicit
 - Qualified command-endpoint mutable storage:
   `AdaptiveOpticsSim.CommandEndpointState` and
   `AdaptiveOpticsSim.CommandDispositionWorkspace`. These remain explicit

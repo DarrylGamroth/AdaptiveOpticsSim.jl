@@ -955,16 +955,19 @@ command supersession decisions are explicit. Pending incremental deltas may not
 be discarded by the supersession policy. Late apply-now retains the requested
 timestamp, schedules at the current plant timestamp, and records lateness; no
 transition backdates plant state. Calendar order is scheduled plant time,
-endpoint-local command sequence, then stable prepared endpoint ordinal. Every
+stable prepared endpoint ordinal, then endpoint-local command sequence. Every
 admission rejection and displaced pending command writes one terminal
 disposition into caller-owned fixed storage.
 
-The single writer may claim at most one application-ready command, borrow its
-endpoint-owned payload read-only, and then report applied or failed exactly
-once. A bounded drain fails all still-pending commands in calendar order. This
-claim/report lifecycle does not itself mutate an optic, enforce a bound that
-depends on effective device state, implement silence/hold, or compose an atomic
-multi-optic latch; those remain the next core slices.
+The single writer may claim at most one opaque application-ready command,
+borrow its endpoint-owned payload read-only, and then report applied or failed
+exactly once. Claim completion revalidates its identity, order key, and
+timestamps against endpoint-owned state, and terminal records are constructed
+from that state rather than caller-supplied claim fields. A bounded drain fails
+all still-pending commands in calendar order. This claim/report lifecycle does
+not itself mutate an optic, enforce a bound that depends on effective device
+state, implement silence/hold, or compose an atomic multi-optic latch; those
+remain the next core slices.
 
 The HIL command-submission descriptor wraps a mapped plant command with
 run/session correlation, source timestamp-domain and mapping metadata, payload-
