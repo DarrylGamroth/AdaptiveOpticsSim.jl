@@ -14,6 +14,60 @@ end
 backend_selector(::Type{AdaptiveOpticsSim.CUDABackendTag}) = AdaptiveOpticsSim.CUDABackend()
 backend_selector(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = AdaptiveOpticsSim.AMDGPUBackend()
 
+function run_optional_command_application_checks(::Type{B}, BackendArray) where {
+    B<:AdaptiveOpticsSim.GPUBackendTag}
+    T = Float32
+    selector = backend_selector(B)
+    schema = PlantCommandSchema(
+        T,
+        (3,);
+        id=:optional_command_application_schema,
+        version=1,
+        endpoint=:optional_command_application,
+        units=:metre,
+        sign_convention=:positive_surface_increases_opd,
+        basis=CommandBasis(:actuator, :optional_command_application),
+        basis_revision=1,
+        semantics=IncrementalCommand,
+        bounds=UniformCommandBounds(T(-1), T(1)),
+        value_policy=CommandValuePolicy(
+            out_of_range=ClipInvalidCommand,
+            range_stage=EnforceOnApplication,
+        ),
+        sequence_policy=CommandSequencePolicy(),
+        effective_time_policy=CommandEffectiveTimePolicy(),
+        silence_policy=CommandSilencePolicy(
+            ApplySafeCommand,
+            AgeFromApplication;
+            timeout=PlantDuration(10),
+        ),
+    )
+    endpoint = prepare_command_endpoint(schema;
+        capacity=1, ordinal=1, backend=selector)
+    endpoint_state = AdaptiveOpticsSim.CommandEndpointState(endpoint)
+    initial = BackendArray(zeros(T, 3))
+    safe = BackendArray(fill(T(-0.25), 3))
+    application_state = AdaptiveOpticsSim.CommandApplicationState(
+        endpoint, endpoint_state, initial; safe_command=safe)
+    workspace = AdaptiveOpticsSim.CommandDispositionWorkspace(endpoint)
+    payload = BackendArray(T[2, 0.25, -2])
+    admit_plant_command!(workspace, endpoint, endpoint_state,
+        PlantCommand(schema, 1, PlantTimestamp(1), payload),
+        PlantTimestamp(1))
+    claim = claim_next_application_ready_command!(endpoint, endpoint_state,
+        PlantTimestamp(1))
+    apply_claimed_plant_command!(workspace, endpoint, endpoint_state,
+        application_state, claim)
+    @test effective_command(application_state) isa BackendArray
+    @test Array(effective_command(application_state)) == T[1, 0.25, -1]
+    clear_command_dispositions!(workspace)
+    transition = apply_command_silence_transition!(workspace, endpoint,
+        endpoint_state, application_state, PlantTimestamp(11))
+    @test command_silence_action(transition) == ApplySafeCommand
+    @test Array(effective_command(application_state)) == fill(T(-0.25), 3)
+    return nothing
+end
+
 struct OptionalStaticAtmosphere{A,B<:AbstractArrayBackend} <: AdaptiveOpticsSim.AbstractAtmosphere
     screen::A
 end
@@ -2628,6 +2682,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     run_optional_wfs_stage_contracts(B, backend)
     run_optional_prepared_plant_checks(B, backend)
     run_optional_detector_event_checks(B, backend)
+    run_optional_command_application_checks(B, backend)
 
     if get(ENV, backend_full_smoke_env(B), "0") == "1"
         include(joinpath(dirname(@__DIR__), "scripts", "gpu_smoke_contract.jl"))

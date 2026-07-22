@@ -290,8 +290,16 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `command_admission_timestamp`, `command_ready_timestamp`, and
   `command_terminal_timestamp` keep the distinct command lifecycle instants
   explicit
+- Standalone effective-command application: `effective_command`,
+  `last_command_application_timestamp`, `apply_claimed_plant_command!`,
+  `next_command_silence_timestamp`, and
+  `apply_command_silence_transition!`. `PlantCommandSilenceTransition` and
+  its `command_silence_*` accessors describe the exact replayable safe/fail
+  transition; `command_endpoint_failed` and
+  `last_command_admission_timestamp` expose endpoint lifecycle state
 - Qualified command-endpoint mutable storage:
   `AdaptiveOpticsSim.CommandEndpointState` and
+  `AdaptiveOpticsSim.CommandApplicationState`, plus the caller-owned
   `AdaptiveOpticsSim.CommandDispositionWorkspace`. These remain explicit
   state/workspace containers rather than exported model types
 - Plant accessors: `plant_telescope`, `plant_atmosphere`,
@@ -408,7 +416,7 @@ one or more immutable `PlantCommandSchema` values, while preparation workspaces,
 mutable optic/simulation/acquisition and command state, schedules, RNG streams,
 queues, transport, and HIL descriptors are intentionally absent.
 
-The first three Gate 4 slices record controllable-optic/endpoint ownership,
+The first four Gate 4 slices record controllable-optic/endpoint ownership,
 versioned semantic payload contracts, and a standalone prepared endpoint with
 fixed payload slots, accepted-sequence history, a bounded future calendar,
 application-ready claims, and terminal dispositions. Successful admission
@@ -418,12 +426,29 @@ Only successful admission enters sequence history, so capacity/time rejection
 is retryable as a new presentation. Incremental endpoints cannot use the
 lossy older-pending supersession policy.
 
-Physical optic mutation, application-stage state-dependent bounds, held/safe
-state, command silence, multi-optic atomicity, and plant event composition are
-not part of this standalone slice. Consequently `prepare_plant` still rejects
-a nonempty optic set with `PlantPreparationError`; a declared device or schema
-is never ignored. HIL session, external-clock, lease, ring, completion-credit,
-and transport metadata remain outside core command values.
+Exactly one separately owned `CommandApplicationState` binds an explicit
+initial held value and, when configured, a copied safe value to one exact
+endpoint-state owner before its first successful admission.
+`apply_claimed_plant_command!` transactionally applies absolute replacement or
+incremental addition, checks the resulting finite value, enforces declared
+application-stage bounds, requires the immutable scheduled timestamp to equal
+the claim/application timestamp, and records one terminal disposition.
+Rejected or failed application leaves the held value unchanged. Array
+application uses preallocated backend-resident staging and buffer exchange.
+Before the first qualifying command event, the endpoint's configured initial
+timestamp is the silence-age baseline. Thereafter successful admission rebases
+`AgeFromAdmission`, while successful effective application rebases
+`AgeFromApplication`. A non-hold silence policy produces one exact safe/fail
+transition per unchanged age origin, and a due command at the same timestamp
+must be resolved first.
+
+Physical optic mutation, model-specific stroke/slew/settling dynamics,
+multi-optic atomicity, and plant event composition are not part of this
+standalone layer. Consequently `prepare_plant` still rejects a nonempty optic
+set with `PlantPreparationError`; a declared device or schema is never
+ignored. HIL session, external-clock, lease, ring, completion-credit, and
+transport metadata remain outside core command values. Execution-clock ingress
+liveness is distinct from replayable plant-time command silence.
 
 Package-emitted disposition reasons are stable nonempty symbols. Admission may
 emit `:endpoint_mismatch`, `:schema_mismatch`,
@@ -432,8 +457,12 @@ emit `:endpoint_mismatch`, `:schema_mismatch`,
 `:reordered_sequence`, `:skipped_sequence`, `:future_command`,
 `:late_command`, `:calendar_capacity`, `:payload_storage_failure`, or
 `:superseded_by_newer_sequence`; successful reporting emits `:applied`.
-Application failure and pending-drain callers may supply another nonempty
-`CommandDispositionReason`.
+Effective-command application may additionally emit `:applied_clipped`,
+`:nonfinite_rejected`, `:nonfinite_failure`, `:out_of_range_rejected`,
+`:out_of_range_failure`, `:missed_application_timestamp`, or
+`:application_storage_failure`. A fail-on-silence drain emits
+`:command_silence`; other application-failure and pending-drain callers may
+supply another nonempty `CommandDispositionReason`.
 
 `prepare_plant` requires one explicit `run_seed`, accepts a versioned
 `rng_derivation_version`, freezes each path source, and dispatches on the

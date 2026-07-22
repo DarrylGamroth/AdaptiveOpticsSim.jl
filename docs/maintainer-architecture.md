@@ -87,7 +87,7 @@ Examples:
   optic/detector/runtime owners fail closed. Its separately owned telescope and
   atmosphere retain their established state semantics, so structural
   immutability of the plant is not a deep-freeze claim for those owners.
-  `prepare_plant` still rejects nonempty optic topology until effective optic
+  `prepare_plant` still rejects nonempty optic topology until physical optic
   application and plant-event composition are implemented
 - `PreparedCommandEndpoint` as one run-immutable schema/capacity/window/
   ordinal/payload-storage-backend binding, with separate single-writer
@@ -99,10 +99,19 @@ Examples:
   terminal disposition is rejected, superseded, applied, or failed. Scalar
   payload slots are host-resident; array slots use their prepared backend. One
   opaque isbits application-ready claim may be outstanding and is revalidated
-  against endpoint-owned metadata before payload access or completion. This
-  standalone layer owns no
-  optic mutation, held/safe state, silence watchdog, atomic transaction, plant
-  event phase, wall clock, task, ring, lease, or transport
+  against endpoint-owned metadata before payload access or completion
+- qualified `CommandApplicationState` as the unique separate single-writer
+  owner bound to one exact endpoint-state instance before first successful
+  admission, with an explicit initial/effective command, preallocated array
+  staging, optional copied safe command, application timestamp, and replayable
+  silence latch. `apply_claimed_plant_command!` transactionally implements
+  absolute or incremental semantics, finite/range policy, and exactly one
+  terminal disposition. Safe/fail silence transitions use exact plant-time
+  deadlines; equal-time commands take precedence. This standalone layer owns
+  no physical optic mutation, device response dynamics, multi-optic atomic
+  transaction,
+  plant event phase, execution-clock liveness, wall clock, task, ring, lease,
+  or transport
 - `PreparedPlant` as a schedule-free concrete tuple of
   `PreparedPathExecutor` and `PreparedAcquisitionOwner` values. Each path owns
   one explicit input/result pair and prepared optical workspace; each

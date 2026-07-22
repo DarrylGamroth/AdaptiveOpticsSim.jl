@@ -15,15 +15,15 @@ boundary and document map.
 A plant ultimately contains one telescope and atmosphere, independently placed
 controllable optics, reusable optical paths, and independently scheduled or
 triggered acquisitions. The implemented Gate 2 declaration boundary commits
-the telescope, atmosphere, path, and acquisition topology. The first three
+the telescope, atmosphere, path, and acquisition topology. The first four
 Gate 4 slices additionally declare every physical controllable optic, define
 one immutable versioned semantic schema for each independently timed or
-latched command endpoint, and provide a standalone bounded admission owner.
-Effective optic mutation, held/safe state, command silence, controllable-optic
-placement, and plant-level command/event composition remain their assigned
-later slices; none is hidden in an identity or schema. Separating a path from
-its acquisitions prevents a second camera or readout cadence from forcing
-duplicate propagation.
+latched command endpoint, and provide standalone bounded admission and
+effective-command state owners. Physical optic mutation, device response,
+controllable-optic placement, and plant-level command/event composition remain
+their assigned later slices; none is hidden in an identity or schema.
+Separating a path from its acquisitions prevents a second camera or readout
+cadence from forcing duplicate propagation.
 
 Gate 2 is validated by the focused topology, preparation, provider, RNG, and
 illumination testsets plus the clean [serial plant CPU
@@ -964,10 +964,35 @@ borrow its endpoint-owned payload read-only, and then report applied or failed
 exactly once. Claim completion revalidates its identity, order key, and
 timestamps against endpoint-owned state, and terminal records are constructed
 from that state rather than caller-supplied claim fields. A bounded drain fails
-all still-pending commands in calendar order. This claim/report lifecycle does
-not itself mutate an optic, enforce a bound that depends on effective device
-state, implement silence/hold, or compose an atomic multi-optic latch; those
-remain the next core slices.
+all still-pending commands in calendar order.
+
+The qualified `CommandApplicationState` now separately owns the endpoint's
+explicit initial/effective command, preallocated application staging, optional
+copied safe command, last application time, and command-silence latch.
+`apply_claimed_plant_command!` transactionally replaces an absolute value or
+adds an incremental delta, rejects any nonfinite result, enforces the declared
+application-stage bound action, requires application at the command's
+immutable scheduled timestamp, and publishes exactly one disposition. A
+missed timestamp fails the presentation instead of backdating state. Rejected
+or failed candidates do not change the effective command. Array
+storage remains on the endpoint's prepared backend and commits by exchanging
+the effective and staging buffers.
+
+Before the first qualifying command event, the endpoint's configured initial
+timestamp is the common silence-age origin. Thereafter a successful admission
+rebases `AgeFromAdmission`, while successful effective application rebases
+`AgeFromApplication`. Indefinite hold schedules no transition. Safe and fail
+policies schedule one exact transition for each new selected origin. A due
+command at the same timestamp must be applied or failed first. The safe action
+copies the prepared safe value into effective state without manufacturing a
+command disposition; the fail action drains all pending presentations and
+marks the endpoint terminally failed. The returned
+`PlantCommandSilenceTransition` is the replayable state/fault record.
+
+This standalone application layer does not itself mutate a physical optic,
+model stroke/slew/settling or other device dynamics beyond the declared
+effective-value policy, compose a plant event, or define an atomic multi-optic
+latch; those remain later core slices.
 
 The HIL command-submission descriptor wraps a mapped plant command with
 run/session correlation, source timestamp-domain and mapping metadata, payload-

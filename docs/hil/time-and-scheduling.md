@@ -554,30 +554,36 @@ configuration facts rather than per-command dynamic dispatch. Boundary/session
 validation and mapping precede core shape/schema/sequence validation and
 semantic admission.
 
-Each controllable optic holds its last effective command between updates.
-Device models may additionally impose minimum update intervals, settling,
-bandwidth, slew, hysteresis, saturation, or other physical response. Timing is
-generic over `AbstractControllableOptic`; it is not a DM-only feature.
+The standalone endpoint application layer holds its last effective command
+between updates. Absolute commands replace that value; incremental commands
+add to it without hidden replacement. Device models may additionally impose
+minimum update intervals, settling, bandwidth, slew, hysteresis, saturation,
+or other physical response when the endpoint is bound to a physical optic.
+Timing is generic over controllable optics; it is not a DM-only feature.
 
 Command silence has an explicit per-endpoint `CommandSilencePolicy`. The
-baseline is indefinite hold, but a prepared device model may instead apply a
-preallocated safe/flat command after a positive plant-time command-age limit or
-fail after that limit. `AgeFromAdmission` and `AgeFromApplication` make the age
-origin explicit. This is
-a modeled plant transition and is replayable in virtual time. Separately, a HIL
+baseline is indefinite hold, but `CommandApplicationState` may instead bind a
+preallocated safe command or fail after a positive plant-time command-age
+limit. `AgeFromAdmission` and `AgeFromApplication` make the age origin
+explicit. Before the first qualifying event, the endpoint's configured initial
+timestamp is the common age baseline; thereafter the selected successful
+admission or effective application rebases it. This is a modeled plant
+transition and is replayable in virtual time. Separately, a HIL
 deployment may declare an execution-clock ingress-liveness deadline that fails
 the run when the external RTC stops delivering commands; that operational
 watchdog does not silently alter optic state. Both clocks, thresholds, safe
-state, and reset/recovery rules are recorded. A watchdog transition emits a
-bounded fault/state record and cannot allocate, invoke user code, or create an
-unbounded command burst.
+state, and reset/recovery rules are recorded. A modeled transition returns a
+bounded `PlantCommandSilenceTransition` record and its warmed operation does
+not log, invoke user code, or create an unbounded command burst.
 
 The modeled policy declares whether its age is measured from valid admission
 or effective application; the operational watchdog resets only after semantic
 admission, so malformed traffic cannot keep the run alive. At an equal plant
 timestamp, an admitted command becoming effective at `t` is applied before a
-watchdog expiration at `t` and resets that expiration under the prepared
-policy. Stable endpoint ordinals order any remaining simultaneous transitions.
+modeled silence expiration at `t` and resets that expiration when the prepared
+origin is `AgeFromApplication`. A successful admission resets an
+`AgeFromAdmission` deadline. Stable endpoint ordinals order any remaining
+simultaneous transitions.
 
 After ingress validation, a command's canonical timestamp and mapping version
 are immutable. A later clock-synchronization update must not reorder or
@@ -602,10 +608,17 @@ Only one opaque claim may be outstanding. Its identity, key, and requested,
 admission, and ready timestamps must continue to match endpoint-owned state.
 Its payload remains endpoint-owned and is borrowed read-only until the single
 writer reports applied or failed exactly once. A bounded failure drain
-terminates all unclaimed pending commands in calendar order. These transitions
-publish core dispositions but do not yet mutate an optic, enforce state-
-dependent application bounds, implement silence/held state, or define an
-atomic multi-optic transaction.
+terminates all unclaimed pending commands in calendar order.
+`apply_claimed_plant_command!` now transactionally updates the separately held
+effective value at the claim's exact immutable scheduled timestamp, including
+application-stage finite/range enforcement, and then publishes the terminal
+disposition. A claim made after that timestamp fails rather than backdating
+state. `next_command_silence_timestamp` and
+`apply_command_silence_transition!` implement exact one-shot safe/fail
+transitions per unchanged age origin; fail drains pending presentations and
+terminally fails the endpoint. These transitions do not yet mutate a physical
+optic, model device-specific response dynamics, compose the plant event
+calendar, or define an atomic multi-optic transaction.
 
 If a command becomes effective during an exposure, optical samples before and
 after that event observe the appropriate old and new states. A lower-fidelity
@@ -633,9 +646,10 @@ phases retain their reserved causal positions until their assigned gates:
 1. apply trigger-source, distribution-link, and synchronization-fault updates
    effective at or before `t`, recompute only not-yet-delivered edges, and
    record any explicit dropped or duplicate edge
-2. apply all admitted commands with scheduled time at or before `t`, ordered by
-   scheduled time, endpoint ordinal, and endpoint-local sequence, then apply any
-   still-due modeled command-age watchdog transition at `t`
+2. apply all admitted commands scheduled exactly at `t`, ordered by endpoint
+   ordinal and endpoint-local sequence; an unprocessed earlier timestamp is a
+   structural failure rather than a backdated application. Then apply any
+   still-due modeled command-silence transition at `t`
 3. process any due atmosphere-evolution event and select one current
    `AtmosphereEpoch` token for every optical sample due at `t`
 4. publish the effective-command snapshot and establish the atmosphere
