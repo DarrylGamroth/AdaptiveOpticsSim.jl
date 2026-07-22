@@ -396,12 +396,60 @@ read_cube = detector_ramp_cube(ramp_detector)
 read_times = detector_ramp_times(ramp_detector)
 ```
 
-Reads are evenly spaced from zero through the integration time. The returned
+This direct `capture!` workflow is the lower-fidelity post-exposure convenience:
+it synthesizes evenly spaced reads by scaling one completed frame. The returned
 frame is `slope * integration_time`, while the fitted slope, intercept, read
-cube, and timestamps remain in detector-owned reusable products. The read time
-must not exceed the spacing between ramp samples. This linear estimator does
-not yet perform cosmic-ray segmentation, saturation-aware fitting, or
-correlated-noise estimation.
+cube, and timestamps remain in detector-owned reusable products. It does not
+represent changing atmosphere, source, or optic state during the exposure.
+
+For a time-resolved ramp, first prepare an `IntensityMap` as `rate_map`, then use
+the qualified event surface. The producer may update the bound `rate_map.values`
+between intervals; each read observes charge accumulated through its exact
+event timestamp without resetting integration:
+
+```julia
+rate_map = direct_imaging_output(imaging)
+rng = runtime_rng(6)
+event_ramp_detector = Detector(
+    integration_time=1.0,
+    noise=NoisePhotonReadout(8.0),
+    sensor=HgCdTeAvalancheArraySensor(
+        avalanche_gain=1.0,
+        read_time=20e-3,
+        sampling_mode=UpTheRampSampling(3),
+    ),
+)
+timing = AdaptiveOpticsSim.GlobalShutterAcquisitionDefinition(
+    PlantDuration(1_000_000_000);
+    readout_duration=PlantDuration(20_000_000),
+)
+events = AdaptiveOpticsSim.prepare_global_shutter_acquisition(
+    event_ramp_detector, rate_map, timing)
+state = AdaptiveOpticsSim.GlobalShutterAcquisitionState(events)
+
+t0 = PlantTimestamp(0)
+t1 = PlantTimestamp(500_000_000)
+t2 = PlantTimestamp(1_000_000_000)
+AdaptiveOpticsSim.begin_exposure!(events, state, t0)
+AdaptiveOpticsSim.take_nondestructive_read!(events, state, t0, rng)
+AdaptiveOpticsSim.accumulate_exposure_interval!(events, state, t0, t1, rng)
+# Update rate_map.values here after forming the next optical sample.
+AdaptiveOpticsSim.take_nondestructive_read!(events, state, t1, rng)
+AdaptiveOpticsSim.accumulate_exposure_interval!(events, state, t1, t2, rng)
+AdaptiveOpticsSim.close_exposure!(events, state, t2)
+AdaptiveOpticsSim.take_nondestructive_read!(events, state, t2, rng)
+AdaptiveOpticsSim.complete_readout!(events, state,
+    t2 + PlantDuration(20_000_000), rng)
+frame = AdaptiveOpticsSim.mark_acquisition_ready!(events, state,
+    t2 + PlantDuration(20_000_000))
+```
+
+The prepared read time must not exceed the spacing between ramp samples or the
+declared readout duration. Read instants span zero through exposure close; when
+equal spacing is not exactly representable in integer nanoseconds, interior
+instants use documented floor quantization while retaining both endpoints. The
+current linear estimator does not perform cosmic-ray segmentation,
+saturation-aware fitting, or correlated-noise estimation.
 
 For a linear-mode single-element APD, use `LinearAPDDetector`. Its channel
 storage is a vector rather than a fake 1×1 image. `SingleElementAPD()` accepts

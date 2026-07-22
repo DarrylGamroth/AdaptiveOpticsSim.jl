@@ -35,9 +35,9 @@ Bare `Pkg.test()` runs every registered suite in
 - core optics, direct science, and atmosphere
 - control and runtime
 - detectors and WFS
-- plant topology, canonical time, deterministic scheduling and trigger
-  distribution, preparation, product providers, RNG ownership, and calibration
-  illumination
+- plant topology, canonical time, deterministic scheduling, trigger
+  distribution, detector transitions, preparation, product providers, RNG
+  ownership, and calibration illumination
 - calibration and analysis
 - reference, tutorial, and Gate 0 regression
 
@@ -111,6 +111,18 @@ allocation with caller-owned delivery slots. It is a serial CPU semantic gate,
 not a detector-transition, stochastic-jitter, external-RTC, transport, or GPU
 performance claim.
 
+The focused global-shutter detector-transition suite is:
+
+```sh
+julia --project=. --startup-file=no -e \
+  'using Pkg; Pkg.test(test_args=["plant-detector-transitions"])'
+```
+
+It covers exact lifecycle boundaries, transition-error atomicity, whole-frame
+detector parity and MTF preservation, time-resolved up-the-ramp reads, and
+warmed inference/allocation checks. Accelerator residency is exercised in the
+optional hardware matrix rather than this CPU suite.
+
 ### Optional backend smoke in `Pkg.test()`
 
 These run after the functional testsets and skip cleanly if the backend package
@@ -149,6 +161,9 @@ The reduced maintained smoke covers:
 - prepared native uniform calibration illumination through a typed
   detector-input path, stable materialization RNG ownership, and ordinary
   detector acquisition without host scalar indexing
+- exact global-shutter detector-event accumulation plus windowed scheduled
+  up-the-ramp snapshots/fitting on evolving charge, with detector products
+  remaining device resident and scalar indexing disabled
 - MKID accumulated-count capture, source passband handling, and
   flux-conserving channel-crosstalk parity
 

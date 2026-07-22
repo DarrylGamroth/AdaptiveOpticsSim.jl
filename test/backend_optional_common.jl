@@ -1780,6 +1780,93 @@ function run_optional_avalanche_detector_parity(::Type{B}, BackendArray) where {
     return nothing
 end
 
+function optional_detector_event_map(
+    values::AbstractMatrix{T}) where {T<:AbstractFloat}
+    metadata = OpticalPlaneMetadata(DetectorPlane(), values;
+        coordinate_domain=AngularCoordinates(),
+        sampling=(one(T), one(T)),
+        normalization=PhotonRateNormalization(),
+        spatial_measure=CellIntegratedMeasure(),
+        coherence=IncoherentIntensityAddition(),
+        spectral=MonochromaticChannel(T(0.8e-6)))
+    return IntensityMap(metadata, values)
+end
+
+function run_optional_detector_event_checks(::Type{B}, BackendArray) where
+    {B<:AdaptiveOpticsSim.GPUBackendTag}
+    T = Float32
+    selector = backend_selector(B)
+    definition = AdaptiveOpticsSim.GlobalShutterAcquisitionDefinition(
+        PlantDuration(1_000_000_000))
+    rng = MersenneTwister(2030)
+
+    values = BackendArray(fill(T(2), 8, 8))
+    map = optional_detector_event_map(values)
+    detector = Detector(integration_time=one(T), qe=T(0.5),
+        noise=NoiseNone(), response_model=NullFrameResponse(), T=T,
+        backend=selector)
+    prepared = AdaptiveOpticsSim.prepare_global_shutter_acquisition(detector,
+        map, definition)
+    state = AdaptiveOpticsSim.GlobalShutterAcquisitionState(prepared)
+    start = PlantTimestamp(0)
+    middle = PlantTimestamp(400_000_000)
+    close = PlantTimestamp(1_000_000_000)
+    AdaptiveOpticsSim.begin_exposure!(prepared, state, start)
+    AdaptiveOpticsSim.accumulate_exposure_interval!(prepared, state, start,
+        middle, rng)
+    AdaptiveOpticsSim.accumulate_exposure_interval!(prepared, state, middle,
+        close, rng)
+    AdaptiveOpticsSim.close_exposure!(prepared, state, close)
+    output = AdaptiveOpticsSim.complete_readout!(prepared, state, close, rng)
+    AdaptiveOpticsSim.mark_acquisition_ready!(prepared, state, close)
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(output))
+    @test output isa BackendArray
+    @test Array(output) == fill(one(T), 8, 8)
+
+    ramp_values = BackendArray(fill(one(T), 4, 4))
+    ramp_map = optional_detector_event_map(ramp_values)
+    ramp_detector = Detector(integration_time=one(T), qe=one(T),
+        noise=NoiseNone(),
+        sensor=HgCdTeAvalancheArraySensor(read_time=zero(T),
+            sampling_mode=UpTheRampSampling(3), T=T),
+        response_model=NullFrameResponse(),
+        readout_window=AdaptiveOpticsSim.FrameWindow(2:3, 2:3), T=T,
+        backend=selector)
+    ramp_prepared = AdaptiveOpticsSim.prepare_global_shutter_acquisition(
+        ramp_detector, ramp_map, definition)
+    ramp_state = AdaptiveOpticsSim.GlobalShutterAcquisitionState(
+        ramp_prepared)
+    ramp_middle = PlantTimestamp(500_000_000)
+    AdaptiveOpticsSim.begin_exposure!(ramp_prepared, ramp_state, start)
+    AdaptiveOpticsSim.take_nondestructive_read!(ramp_prepared, ramp_state,
+        start, rng)
+    AdaptiveOpticsSim.accumulate_exposure_interval!(ramp_prepared, ramp_state,
+        start, ramp_middle, rng)
+    AdaptiveOpticsSim.take_nondestructive_read!(ramp_prepared, ramp_state,
+        ramp_middle, rng)
+    fill!(ramp_values, T(3))
+    AdaptiveOpticsSim.accumulate_exposure_interval!(ramp_prepared, ramp_state,
+        ramp_middle, close, rng)
+    AdaptiveOpticsSim.take_nondestructive_read!(ramp_prepared, ramp_state,
+        close, rng)
+    AdaptiveOpticsSim.close_exposure!(ramp_prepared, ramp_state, close)
+    ramp_output = AdaptiveOpticsSim.complete_readout!(ramp_prepared,
+        ramp_state, close, rng)
+    AdaptiveOpticsSim.mark_acquisition_ready!(ramp_prepared, ramp_state,
+        close)
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(ramp_output))
+    @test ramp_output isa BackendArray
+    @test detector_ramp_cube(ramp_detector) isa BackendArray
+    @test Array(detector_ramp_cube(ramp_detector)) == cat(
+        fill(zero(T), 2, 2), fill(T(0.5), 2, 2), fill(T(2), 2, 2);
+        dims=3)
+    @test Array(detector_ramp_slope(ramp_detector)) == fill(T(2), 2, 2)
+    @test Array(ramp_output) == fill(T(2), 2, 2)
+    return nothing
+end
+
 function import_backend_package!(::Type{AdaptiveOpticsSim.CUDABackendTag})
     @eval import CUDA
     return nothing
@@ -2454,6 +2541,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     run_optional_zernike_normalization(B, backend)
     run_optional_wfs_stage_contracts(B, backend)
     run_optional_prepared_plant_checks(B, backend)
+    run_optional_detector_event_checks(B, backend)
 
     if get(ENV, backend_full_smoke_env(B), "0") == "1"
         include(joinpath(dirname(@__DIR__), "scripts", "gpu_smoke_contract.jl"))

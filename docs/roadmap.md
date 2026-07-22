@@ -74,8 +74,11 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
 3. Add deterministic multi-rate integer-time events with explicit equal-time
    trigger-distribution, exposure/row-band, optical-sample, nondestructive-read,
    detector-readout, and publication semantics before adding command timing or
-   wall-clock pacing. Keep physical
-   trigger faults separate from timestamp-label faults and execution lateness.
+   wall-clock pacing. Canonical time, the fixed-capacity event calendar, trigger
+   distribution, and the exact global-shutter lifecycle with evolving-charge
+   HgCdTe ramp reads are implemented; rolling rows, frame-transfer overlap, and
+   their common scheduler composition remain. Keep physical trigger faults
+   separate from timestamp-label faults and execution lateness.
 4. Replace the single-optic and `CompositeControllableOptic` runtime model with
    individually placed optics, prepared core plant command schemas, bounded
    timing and replayable plant-time command-silence semantics, sampled device-

@@ -10,6 +10,7 @@ export AtmosphereTimeError, AtmosphereEpochError
 export PlantTimeError, PlantScheduleError
 export WFSPreparationError
 export PlantDefinitionError, PlantPreparationError
+export DetectorAcquisitionError
 
 export FidelityProfile, ScientificProfile, FastProfile, default_fidelity_profile
 export runtime_rng, deterministic_reference_rng

@@ -387,19 +387,25 @@ The current `capture!(...; integration_duration=...)` and
 `capture_incremental!` methods are frame-step convenience APIs. Their duration
 is expressed in seconds; it is not an absolute sample timestamp. They
 accumulate until the configured exposure duration is reached and then finalize
-automatically using floating-point tolerance. The virtual-time event engine
-does not use that tolerance as its completion authority. It prepares explicit
+automatically using floating-point tolerance. The virtual-time event layer
+does not use that tolerance as its completion authority. Its initial global-
+shutter implementation prepares explicit
 begin-exposure, accumulate-interval, nondestructive-read, close-exposure,
 readout-complete, and publish operations, with integer plant timestamps owned
 by the scheduler and exact interval durations supplied to detector physics.
+The prepared definition and separately owned state reject busy retriggers,
+noncontiguous intervals, exposure-boundary crossings, missed ramp reads, and
+out-of-order close/readout/readiness transitions before detector mutation.
 
 The existing `UpTheRampSampling` whole-exposure path synthesizes its read cube
 after final integration by scaling the completed frame and applying per-read
 noise. It is retained as a declared post-exposure, lower-fidelity convenience
-and frozen oracle. A scheduled up-the-ramp acquisition instead snapshots the
+and frozen oracle. A scheduled up-the-ramp acquisition now snapshots the
 evolving accumulated charge at each nondestructive-read event without ending
-the integration, so atmosphere, source, and effective-command changes inside
-the exposure affect the applicable reads. Only that event-driven path supports
+the integration. Stochastic avalanche response is applied to each newly
+generated charge interval and retained in later reads rather than redrawn for
+previously observed charge. Atmosphere, source, and effective-command changes
+inside the exposure therefore affect the applicable reads. Only that path supports
 time-resolved nondestructive-read claims.
 
 The estimator consumes acquired observations and owns reference subtraction,

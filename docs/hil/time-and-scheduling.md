@@ -308,12 +308,19 @@ The simulator controls detector acquisition. Detector timing must distinguish:
 - acquisition-completion-port publication time
 - first-frame latency and steady-state frame period
 
-The core event surface separates begin exposure, accumulate one half-open
+The implemented global-shutter core event surface separates begin exposure,
+accumulate one half-open
 optical interval, take a nondestructive read, close exposure, complete readout,
 and publish readiness. Integer plant timestamps determine when these
 operations occur. Detector physics receives the exact positive interval
 duration in seconds or a prepared integration weight; it does not decide event
 completion by comparing accumulated floating-point duration with a tolerance.
+`GlobalShutterAcquisitionDefinition` is immutable, while
+`GlobalShutterAcquisitionState` is a separately owned single-writer lifecycle.
+Preparation binds the exact detector, typed rate product, backend/device,
+exposure, readout, readiness, and any fixed up-the-ramp read offsets. The
+initial retrigger policy is explicit rejection; rolling rows/bands and frame-
+transfer overlap remain later event models rather than compatibility modes.
 
 The existing frame-step `capture!(...; integration_duration=...)` convenience API
 may accumulate and auto-finalize at the configured exposure duration, but it
@@ -337,10 +344,11 @@ oscillator error is optional device fidelity, separate from trigger-source and
 distribution-link error.
 
 A delivered edge that reaches a detector while an acquisition is already
-active follows that detector's prepared retrigger policy: ignore, restart,
-queue only when a physically bounded device model supports it, overlap only
-when the detector architecture permits it, or fail. A duplicate trigger never
-acquires an implicit unbounded event slot.
+active follows that detector's prepared retrigger policy. The implemented
+global-shutter baseline fails structurally; future device models may declare
+ignore, restart, a physically bounded queue, or overlap only when the detector
+architecture permits it. A duplicate trigger never acquires an implicit
+unbounded event slot.
 
 Frame period and optical sampling period are not necessarily equal. A slow
 science detector may accumulate many evolving optical samples during one
