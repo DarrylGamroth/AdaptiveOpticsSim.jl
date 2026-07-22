@@ -91,9 +91,11 @@ end
     # first slice adds eleven public time/schedule names. Gate 4's first slice
     # adds nine public controllable-optic topology names. Gate 4's second slice
     # adds the typed command-schema/policy vocabulary and ordinary accessors.
+    # Gate 4's third slice adds the bounded command-admission vocabulary,
+    # lifecycle operations, and read-only disposition accessors.
     # Detector-event transitions remain qualified, while their structured
     # error joins the public exception surface.
-    @test length(exported) <= 637
+    @test length(exported) <= 694
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :PlantDefinitionError)
     @test Base.isexported(AdaptiveOpticsSim, :PlantCommandError)

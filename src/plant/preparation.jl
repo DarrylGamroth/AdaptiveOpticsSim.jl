@@ -1367,11 +1367,11 @@ them. Model-specific construction dispatches on the cold model-definition
 types. Preparation may allocate and perform fallible backend/device/revision
 validation. It also derives exact stateful RNG streams from the required run
 seed, derivation version, and stable owner identities. Repeated execution uses
-the concrete tuples stored in the result. The first two Gate 4 declaration
-slices accept independent controllable-optic topology and immutable semantic
-command schemas, but preparation rejects a nonempty optic set until the mutable
-prepared command-endpoint owner is available; it never silently omits a
-declared physical device or schema.
+the concrete tuples stored in the result. Gate 4 provides independent
+controllable-optic topology, immutable semantic command schemas, and a
+standalone bounded command-endpoint owner. Plant-level optic/application
+composition remains a later slice, so this function still rejects a nonempty
+optic set rather than silently omitting a declared physical device or schema.
 """
 function prepare_plant(definition::PlantDefinition;
     run_seed,
@@ -1381,8 +1381,9 @@ function prepare_plant(definition::PlantDefinition;
     isempty(controllable_optic_definitions(definition)) || throw(
         PlantPreparationError(:controllable_optic,
             :unsupported_preparation,
-            "controllable-optic preparation is not available in the " *
-            "current Gate 4 schema slice"))
+            "standalone command-endpoint admission is available, but " *
+            "controllable-optic application is not yet composed by " *
+            "prepare_plant"))
     paths = _prepare_path_executors(path_definitions(definition),
         plant_telescope(definition), plant_atmosphere(definition))
     acquisitions = _prepare_acquisition_owners(

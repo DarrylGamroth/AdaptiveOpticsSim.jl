@@ -24,6 +24,8 @@ const TEST_SUITE_SPECS = (
     TestSuiteSpec("plant-topology", "testsets/plant_topology.jl"),
     TestSuiteSpec("plant-command-schemas",
         "testsets/plant_command_schemas.jl"),
+    TestSuiteSpec("plant-command-admission",
+        "testsets/plant_command_admission.jl"),
     TestSuiteSpec("plant-time", "testsets/plant_time.jl"),
     TestSuiteSpec("plant-scheduler", "testsets/plant_scheduler.jl"),
     TestSuiteSpec("plant-triggers", "testsets/plant_triggers.jl"),
@@ -73,6 +75,7 @@ const TEST_GROUP_SPECS = (
     "plant" => (
         "plant-topology",
         "plant-command-schemas",
+        "plant-command-admission",
         "plant-time",
         "plant-scheduler",
         "plant-triggers",

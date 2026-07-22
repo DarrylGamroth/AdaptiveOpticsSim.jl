@@ -55,7 +55,7 @@ struct PlantDefinitionError <: AdaptiveOpticsSimError
     msg::String
 end
 
-"""Invalid plant-command schema or payload compatibility."""
+"""Invalid plant-command schema, payload, admission, or lifecycle transition."""
 struct PlantCommandError <: AdaptiveOpticsSimError
     stage::Symbol
     reason::Symbol

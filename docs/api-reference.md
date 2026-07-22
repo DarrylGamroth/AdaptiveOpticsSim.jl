@@ -255,7 +255,10 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `OpticalPathDefinition`, `AcquisitionDefinition`, `PlantDefinition`
 - Plant-command value types: `PlantCommandSchemaVersion`,
   `CommandBasisRevision`, `CommandUnit`, `CommandSignConvention`,
-  `CommandBasis`, `UnboundedCommandValues`, `UniformCommandBounds`
+  `CommandBasis`, `UnboundedCommandValues`, `UniformCommandBounds`,
+  `PlantCommandSequence`, `CommandPresentationID`, `PlantCommand`,
+  `PlantCommandOrderKey`, `PlantCommandAdmission`,
+  `PlantCommandDisposition`, and `CommandDispositionReason`
 - Plant-command policies: `CommandValueSemantics`, `InvalidCommandAction`,
   `CommandRangeStage`, `CommandSequenceAction`, `FutureCommandPolicy`,
   `LateCommandPolicy`, `CommandSupersessionPolicy`, `CommandSilenceAction`,
@@ -275,6 +278,22 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `command_bounds`, `command_value_policy`, `command_sequence_policy`,
   `command_effective_time_policy`, `command_silence_policy`,
   `validate_plant_command_payload`
+- Standalone bounded command admission: `PreparedCommandEndpoint`,
+  `prepare_command_endpoint`, `validate_plant_command`,
+  `admit_plant_command!`, `claim_next_application_ready_command!`,
+  `claimed_command_payload`, `mark_plant_command_applied!`,
+  `fail_plant_command_application!`, and `fail_pending_plant_commands!`.
+  `CommandSequenceClass`, `CommandAdmissionStatus`, `CommandTerminalKind`,
+  and their exported values provide the result vocabulary; the exported
+  `command_*` accessors inspect admissions, claims, and dispositions.
+  `command_requested_effective_timestamp`, `command_scheduled_timestamp`,
+  `command_admission_timestamp`, `command_ready_timestamp`, and
+  `command_terminal_timestamp` keep the distinct command lifecycle instants
+  explicit
+- Qualified command-endpoint mutable storage:
+  `AdaptiveOpticsSim.CommandEndpointState` and
+  `AdaptiveOpticsSim.CommandDispositionWorkspace`. These remain explicit
+  state/workspace containers rather than exported model types
 - Plant accessors: `plant_telescope`, `plant_atmosphere`,
   `controllable_optic_definitions`, `path_definitions`,
   `acquisition_definitions`, `controllable_optic_definition`,
@@ -389,13 +408,32 @@ one or more immutable `PlantCommandSchema` values, while preparation workspaces,
 mutable optic/simulation/acquisition and command state, schedules, RNG streams,
 queues, transport, and HIL descriptors are intentionally absent.
 
-The first two Gate 4 slices record controllable-optic/endpoint ownership and
-versioned semantic payload contracts but do not yet prepare mutable endpoints.
-`validate_plant_command_payload` accepts exact scalars or backend-neutral
-`AbstractArray` storage, checks presentation compatibility without mutation,
-and is distinct from later admission and application. `prepare_plant` rejects a
-nonempty optic set with `PlantPreparationError` until the prepared endpoint
-owner is added; a declared device or schema is never ignored.
+The first three Gate 4 slices record controllable-optic/endpoint ownership,
+versioned semantic payload contracts, and a standalone prepared endpoint with
+fixed payload slots, accepted-sequence history, a bounded future calendar,
+application-ready claims, and terminal dispositions. Successful admission
+copies caller payload storage. Late apply-now commands retain their requested
+time but schedule at the current plant time; the endpoint never backdates.
+Only successful admission enters sequence history, so capacity/time rejection
+is retryable as a new presentation. Incremental endpoints cannot use the
+lossy older-pending supersession policy.
+
+Physical optic mutation, application-stage state-dependent bounds, held/safe
+state, command silence, multi-optic atomicity, and plant event composition are
+not part of this standalone slice. Consequently `prepare_plant` still rejects
+a nonempty optic set with `PlantPreparationError`; a declared device or schema
+is never ignored. HIL session, external-clock, lease, ring, completion-credit,
+and transport metadata remain outside core command values.
+
+Package-emitted disposition reasons are stable nonempty symbols. Admission may
+emit `:endpoint_mismatch`, `:schema_mismatch`,
+`:schema_version_mismatch`, payload-validation reason symbols,
+`:payload_validation_failure`, `:duplicate_sequence`, `:stale_sequence`,
+`:reordered_sequence`, `:skipped_sequence`, `:future_command`,
+`:late_command`, `:calendar_capacity`, `:payload_storage_failure`, or
+`:superseded_by_newer_sequence`; successful reporting emits `:applied`.
+Application failure and pending-drain callers may supply another nonempty
+`CommandDispositionReason`.
 
 `prepare_plant` requires one explicit `run_seed`, accepts a versioned
 `rng_derivation_version`, freezes each path source, and dispatches on the
