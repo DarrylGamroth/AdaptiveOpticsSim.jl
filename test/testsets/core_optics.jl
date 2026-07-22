@@ -88,14 +88,16 @@ end
     # product/protocol seam. Keep headroom bounded so unrelated internals do
     # not drift into the ordinary user namespace.
     # Gate 2 adds a bounded documented topology/preparation surface. Gate 3's
-    # first slice adds eleven public time/schedule names; its event-ordering
-    # vocabulary remains qualified implementation detail.
-    @test length(exported) <= 563
+    # first slice adds eleven public time/schedule names. Detector-event
+    # transitions remain qualified, while their structured error joins the
+    # public exception surface.
+    @test length(exported) <= 564
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :PlantDefinitionError)
     @test Base.isexported(AdaptiveOpticsSim, :PlantPreparationError)
     @test Base.isexported(AdaptiveOpticsSim, :PlantTimeError)
     @test Base.isexported(AdaptiveOpticsSim, :PlantScheduleError)
+    @test Base.isexported(AdaptiveOpticsSim, :DetectorAcquisitionError)
     @test Base.isexported(AdaptiveOpticsSim, :PlantTimestamp)
     @test Base.isexported(AdaptiveOpticsSim, :PlantDuration)
     @test Base.isexported(AdaptiveOpticsSim, :PeriodicSchedule)
