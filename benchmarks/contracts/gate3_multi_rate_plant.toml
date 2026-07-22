@@ -1,0 +1,114 @@
+schema_version = 1
+name = "gate3_multi_rate_plant_cpu"
+evidence_class = "warmed in-process serial CPU multi-rate plant timestamp service time"
+samples_per_run = 10000
+runs = 3
+warmup_timestamps = 2000
+allocation_timestamps = 1000
+minimum_samples_for_p99 = 10000
+histogram_lowest_ns = 1
+histogram_highest_ns = 60000000000
+histogram_significant_figures = 3
+max_alloc_bytes_per_timestamp = 2048
+long_run_horizon_ns = 25000000000
+max_long_run_timestamps = 10000
+direct_jump_period_multiplier = 1000000
+
+scope_exclusions = [
+    "package import, plant preparation, construction, and first-use compilation",
+    "fixed-rate open-loop arrivals, wall-clock pacing, queues, overload, and recovery",
+    "external RTC transport, response latency, command application, and publication",
+    "parallel execution, GPU execution of the serial orchestration loop, and host-device transfer",
+    "CPU affinity, isolation, governor control, NUMA placement, and interrupt placement",
+    "production instrument scale, model-specific capacity, or external-RTC latency claims",
+]
+
+[contract]
+question = "For one representative mixed science/NGS/LGS Gate 3 plant, does the warmed serial event loop preserve deterministic multi-rate detector and trigger behavior, retain fixed prepared storage, jump directly between logical timestamps, and keep bounded Julia heap allocation while providing a reproducible per-timestamp service-time distribution?"
+load_model = "closed-loop self-paced serial service-cost characterization; this is not an AO control loop or HIL pacing test"
+arrival_model = "the next canonical plant timestamp starts after the prior timestamp and histogram recording complete"
+coordinated_omission_correction = false
+coordinated_omission_reason = "the benchmark characterizes unpaced service cost and makes no fixed-arrival latency claim"
+timed_boundary = "process every trigger, detector-lifecycle, and due optical-path event at one next canonical timestamp, including batched atmosphere advance/materialization and any product publication at that timestamp"
+timer = "time_ns; the final clock read is included, while histogram recording is excluded from per-timestamp latency and included in achieved throughput"
+correctness_oracle = "same-seed declaration-order replay; exact representative product sequences and readiness timestamps; shared science-path identity; integrated trigger drop, phase-step, jitter, duplicate, and fan-out outcomes; fixed prepared storage; long-period direct jumps; and the maintained Gate 3 unit matrices"
+threading = "one Julia thread, one BLAS thread, and one FFT provider thread"
+first_use = "recorded immediately after construction and before correctness validation or warmup; package import and preparation are excluded"
+tail_claim = "p99 is reported with 100 expected observations beyond p99 per 10000-sample run; p99.9 is diagnostic"
+latency_gate = "this run establishes a comparable composed-plant baseline; no absolute or external-RTC latency threshold is asserted"
+allocation_gate = "the warmed heterogeneous orchestration boundary may use at most 2048 Julia heap bytes per processed timestamp over a 1000-timestamp window; detector and optical kernels retain their separate zero-allocation gates"
+
+[workload]
+backend = "CPUBackend"
+numeric_type = "Float64"
+resolution = 16
+diameter_m = 8.0
+central_obstruction = 0.14
+r0_m = 0.2
+outer_scale_m = 25.0
+fractional_cn2 = [0.65, 0.35]
+wind_speed_m_per_s = [7.0, 13.0]
+wind_direction_deg = [15.0, 110.0]
+layer_altitude_m = [0.0, 6000.0]
+layer_ids = ["ground", "high"]
+science_wavelength_m = 8.0e-7
+science_photon_irradiance = 3.0
+science_radius_arcsec = 0.2
+science_azimuth_deg = 90.0
+ngs_wavelength_m = 6.5e-7
+ngs_photon_irradiance = 5.0
+ngs_radius_arcsec = 4.0
+ngs_azimuth_deg = 35.0
+lgs_wavelength_m = 5.89e-7
+lgs_photon_irradiance = 6.0
+lgs_radius_arcsec = 8.0
+lgs_azimuth_deg = 120.0
+lgs_altitude_m = 90000.0
+science_zero_padding = 2
+sh_n_lenslets = 4
+sh_n_pix_subap = 4
+pyramid_pupil_samples = 4
+pyramid_modulation_lambda_over_d = 3.0
+pyramid_modulation_points = 4
+quantum_efficiency = 0.8
+run_seed = 34560
+rng_derivation_version = 1
+science_sample_period_ns = 100000000
+science_sample_phase_ns = 0
+ngs_sample_period_ns = 125000000
+ngs_sample_phase_ns = 50000000
+lgs_sample_period_ns = 200000000
+lgs_sample_phase_ns = 25000000
+trigger_period_ns = 600000000
+trigger_phase_ns = 50000000
+trigger_in_flight_capacity = 8
+science_trigger_delay_ns = 20000000
+ngs_trigger_delay_ns = 0
+science_cmos_exposure_ns = 200000000
+science_cmos_readout_ns = 20000000
+science_cmos_readiness_ns = 10000000
+science_ccd_exposure_ns = 300000000
+science_ccd_period_ns = 600000000
+science_ccd_phase_ns = 50000000
+science_rolling_exposure_ns = 150000000
+science_rolling_line_ns = 5000000
+science_rolling_row_group_size = 2
+science_rolling_period_ns = 500000000
+science_rolling_phase_ns = 250000000
+ngs_saphira_exposure_ns = 200000000
+ngs_saphira_readout_ns = 10000000
+ngs_saphira_reads = 3
+lgs_emccd_exposure_ns = 200000000
+lgs_emccd_transfer_ns = 20000000
+lgs_emccd_readout_ns = 300000000
+lgs_emccd_period_ns = 350000000
+lgs_emccd_phase_ns = 25000000
+replay_horizon_ns = 1500000000
+fault_horizon_ns = 3000000000
+fault_drop_sequence = 2
+fault_shift_sequence = 3
+fault_phase_step_ns = 20000000
+fault_jitter_ns = 10000000
+fault_label_offset_ns = 7000000
+fault_duplicate_sequence = 4
+fault_duplicate_delay_ns = 250000000
