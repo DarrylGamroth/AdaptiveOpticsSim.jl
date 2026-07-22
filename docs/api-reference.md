@@ -211,6 +211,41 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `mark_acquisition_ready!`. Integer plant timestamps own all transitions;
   the separately owned state rejects busy retriggers and intervals that cross
   exposure close or a pending scheduled ramp read
+- Qualified rolling-shutter event acquisition:
+  `RollingShutterAcquisitionDefinition`,
+  `PreparedRollingShutterAcquisition`, `RollingShutterAcquisitionState`,
+  `rolling_band_count`, `rolling_band_rows`,
+  `rolling_band_open_timestamp`, `rolling_band_close_timestamp`,
+  `rolling_opened_band_count`, `rolling_closed_band_count`,
+  `next_rolling_band_open_timestamp`,
+  `next_rolling_band_close_timestamp`, and
+  `prepare_rolling_shutter_acquisition`. The detector's `RollingShutter`
+  timing model supplies line time, row-group size, and rolling-exposure or
+  global-reset semantics; the ordinary event transition functions above are
+  specialized for the prepared rolling lifecycle
+- Qualified frame-transfer event acquisition:
+  `FrameTransferAcquisitionDefinition`,
+  `PreparedFrameTransferAcquisition`, `FrameTransferAcquisitionState`,
+  `frame_transfer_storage_capacity`, `frame_transfer_image_sequence`,
+  `frame_transfer_storage_sequence`, `frame_transfer_product_sequence`,
+  `frame_transfer_complete_timestamp`, `frame_transfer_image_ready`,
+  `frame_transfer_storage_empty`, `frame_transfer_readout_pending`,
+  `prepare_frame_transfer_acquisition`, and `complete_frame_transfer!`.
+  One prepared device-resident storage frame permits image-area integration
+  to overlap storage-area readout when the declared timing fits that capacity
+- Qualified plant-event composition: `PeriodicAcquisitionStart`,
+  `TriggeredAcquisitionStart`, `OpticalSampleDefinition`,
+  `DetectorEventDefinition`, `PlantEventLoopDefinition`,
+  `PreparedPlantEventLoop`, `PlantEventLoopState`,
+  `PlantEventLoopWorkspace`, `prepare_plant_event_loop`,
+  `plant_event_path_count`, `plant_event_acquisition_count`,
+  `plant_event_generator_count`, `next_plant_event_timestamp`,
+  `step_plant_events!`, `run_plant_events_until!`,
+  `acquisition_product_sequence`, and
+  `acquisition_product_ready_timestamp`. This HIL-neutral serial oracle
+  composes exact periodic or delivered-trigger acquisition starts with
+  independently periodic optical paths and complete detector products; it
+  owns no wall clock, task, queue, port, transport, or RTC protocol
 
 - Stable identities: `AtmosphereLayerID`, `OpticalPathID`, `AcquisitionID`,
   `RNGOwnerIdentity`
@@ -510,10 +545,12 @@ influence basis already includes the print-through structure.
 `capture!(...; integration_duration=seconds)` and `capture_incremental!` are the
 frame-step incremental convenience surface. `integration_duration` is a
 positive integration duration, not an absolute timestamp. Event-driven global-
-shutter acquisition instead uses the qualified plant API above, with exact
-scheduler-owned exposure/read timestamps rather than floating accumulated
-duration as completion authority. Rolling-shutter rows/bands and frame-transfer
-overlap are not part of this initial event surface.
+shutter, rolling-shutter, and frame-transfer acquisition instead use the
+qualified plant API above, with exact scheduler-owned exposure/read timestamps
+rather than floating accumulated duration as completion authority. The
+composed event loop publishes complete-product sequence/readiness state only;
+leases, ports, progressive transport delivery, and wall-clock pacing remain
+outside this core surface.
 
 Use `bits` for detector quantization depth and `output_type` for the Julia
 element type exported to an RTC/HIL boundary. A detector with `bits` must also

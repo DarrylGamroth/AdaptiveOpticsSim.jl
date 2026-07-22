@@ -1,5 +1,9 @@
 const _DETECTOR_ACQUISITION_EVENT_COMPONENT = :detector_acquisition_events
 
+abstract type AbstractDetectorAcquisitionEventDefinition end
+abstract type AbstractPreparedDetectorAcquisition end
+abstract type AbstractDetectorAcquisitionEventState end
+
 @noinline function _detector_acquisition_event_error(reason::Symbol,
     message::String)
     throw(DetectorAcquisitionError(_DETECTOR_ACQUISITION_EVENT_COMPONENT,
@@ -17,7 +21,8 @@ places readout completion after exposure close, and `readiness_delay` places the
 next-acquisition readiness transition after readout completion. The initial
 event model rejects a trigger received while the detector is not ready.
 """
-struct GlobalShutterAcquisitionDefinition
+struct GlobalShutterAcquisitionDefinition <:
+    AbstractDetectorAcquisitionEventDefinition
     exposure_duration::PlantDuration
     readout_duration::PlantDuration
     readiness_delay::PlantDuration
@@ -66,7 +71,7 @@ struct PreparedGlobalShutterAcquisition{
     RP<:FrameReadoutProducts,
     R<:_DetectorEventReadoutStyle,
     T<:AbstractFloat,
-}
+} <: AbstractPreparedDetectorAcquisition
     binding::_GlobalShutterAcquisitionBinding
     detector::D
     plan::P
@@ -101,7 +106,8 @@ end
 end
 
 """Separately owned, single-writer state for one prepared acquisition."""
-mutable struct GlobalShutterAcquisitionState
+mutable struct GlobalShutterAcquisitionState <:
+    AbstractDetectorAcquisitionEventState
     binding::_GlobalShutterAcquisitionBinding
     status::DetectorAcquisitionStatus
     sequence::UInt64
@@ -176,18 +182,19 @@ function _even_detector_read_offsets(exposure::PlantDuration, n_reads::Int)
     return offsets
 end
 
-function _quantized_plant_duration(seconds::Real)
+function _quantized_plant_duration(seconds::Real, label::AbstractString,
+    invalid_reason::Symbol, unrepresentable_reason::Symbol)
     isfinite(seconds) && seconds >= zero(seconds) ||
-        _detector_acquisition_event_error(:invalid_read_duration,
-            "detector read duration must be finite and nonnegative")
+        _detector_acquisition_event_error(invalid_reason,
+            "$label must be finite and nonnegative")
     scaled = big(seconds) * big(_PLANT_NANOSECONDS_PER_SECOND)
-    scaled <= typemax(Int64) || _detector_acquisition_event_error(
-        :unrepresentable_read_duration,
-        "detector read duration exceeds the plant-time range")
+    scaled <= typemax(Int64) ||
+        _detector_acquisition_event_error(unrepresentable_reason,
+            "$label exceeds the plant-time range")
     nanoseconds = round(Int64, scaled, RoundNearest)
     seconds > zero(seconds) && iszero(nanoseconds) &&
-        _detector_acquisition_event_error(:unrepresentable_read_duration,
-            "positive detector read duration is below plant-time resolution")
+        _detector_acquisition_event_error(unrepresentable_reason,
+            "positive $label is below plant-time resolution")
     return PlantDuration(nanoseconds)
 end
 
@@ -204,8 +211,11 @@ function _prepare_detector_read_offsets(::_ScheduledUpTheRampReadout,
     offsets = _even_detector_read_offsets(definition.exposure_duration,
         mode.n_reads)
     T = eltype(det.state.frame)
-    physical_read_duration = _quantized_plant_duration(sampling_read_time(sensor,
-        size(det.state.frame), det.params.readout_window, T))
+    physical_read_duration = _quantized_plant_duration(
+        sampling_read_time(sensor, size(det.state.frame),
+            det.params.readout_window, T),
+        "detector read duration", :invalid_read_duration,
+        :unrepresentable_read_duration)
     @inbounds for read_index in 2:length(offsets)
         spacing = offsets[read_index] - offsets[read_index - 1]
         physical_read_duration <= spacing ||

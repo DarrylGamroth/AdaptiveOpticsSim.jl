@@ -308,19 +308,28 @@ The simulator controls detector acquisition. Detector timing must distinguish:
 - acquisition-completion-port publication time
 - first-frame latency and steady-state frame period
 
-The implemented global-shutter core event surface separates begin exposure,
-accumulate one half-open
-optical interval, take a nondestructive read, close exposure, complete readout,
-and publish readiness. Integer plant timestamps determine when these
-operations occur. Detector physics receives the exact positive interval
-duration in seconds or a prepared integration weight; it does not decide event
-completion by comparing accumulated floating-point duration with a tolerance.
-`GlobalShutterAcquisitionDefinition` is immutable, while
-`GlobalShutterAcquisitionState` is a separately owned single-writer lifecycle.
-Preparation binds the exact detector, typed rate product, backend/device,
-exposure, readout, readiness, and any fixed up-the-ramp read offsets. The
-initial retrigger policy is explicit rejection; rolling rows/bands and frame-
-transfer overlap remain later event models rather than compatibility modes.
+The implemented detector-event surfaces are separate prepared lifecycles:
+
+- global shutter separates begin exposure, contiguous half-open integration,
+  nondestructive reads, close, readout completion, and readiness
+- rolling shutter uses bounded row-band open and close cursors; rolling
+  exposure staggers both boundaries, while global reset opens every row at the
+  frame start and staggers only row-band close
+- frame-transfer EMCCD acquisition separates image-area integration,
+  image-to-storage transfer, storage-area readout, and complete-product
+  readiness; one prepared storage frame permits the next image-area exposure
+  to overlap the previous storage readout only when the exact schedule fits
+  that capacity
+
+Integer plant timestamps determine when these operations occur. Detector
+physics receives the exact positive interval duration in seconds or a prepared
+integration weight; it does not decide event completion by comparing
+accumulated floating-point duration with a tolerance. Each immutable lifecycle
+definition has separately owned single-writer state. Preparation binds the
+exact detector, typed rate product, backend/device, exposure, readout,
+readiness, row-band timing or transfer timing, and any fixed up-the-ramp read
+offsets. The initial retrigger policy is explicit rejection except for the
+declared one-frame image/storage overlap of a frame-transfer device.
 
 The existing frame-step `capture!(...; integration_duration=...)` convenience API
 may accumulate and auto-finalize at the configured exposure duration, but it
@@ -344,9 +353,11 @@ oscillator error is optional device fidelity, separate from trigger-source and
 distribution-link error.
 
 A delivered edge that reaches a detector while an acquisition is already
-active follows that detector's prepared retrigger policy. The implemented
-global-shutter baseline fails structurally; future device models may declare
-ignore, restart, a physically bounded queue, or overlap only when the detector
+active follows that detector's prepared retrigger policy. Global and rolling
+shutter lifecycles fail structurally. Frame transfer accepts another exposure
+only after its image area is available and only if the next transfer cannot
+overwrite occupied storage. Future device models may declare ignore, restart,
+a physically bounded queue, or another overlap only when the detector
 architecture permits it. A duplicate trigger never acquires an implicit
 unbounded event slot.
 
@@ -429,13 +440,26 @@ last claimed key is rejected; the scheduler never backdates state. Explicit
 activation and deactivation operate only on definitions reserved at
 preparation, so they cannot grow the registry or manufacture unbounded work.
 
-This core calendar owns no callback, detector transition, trigger fault,
+The core calendar itself owns no callback, detector transition, trigger fault,
 command, optical product, task, queue, execution clock, or wall-clock pacing.
-Those owners retain a prepared generator handle and interpret the claimed key
-in their own later Gate 3 layers. The maintained CPU characterization covers
-the allocation-free linear-scan policy from 1 through 256 active generators;
-it is unpaced service-cost evidence, not an external-RTC latency or production
-instrument-capacity claim. A heap policy remains deferred until measured
+The HIL-neutral `PreparedPlantEventLoop` now binds its generator handles to
+periodic optical sampling, periodic or delivered-trigger acquisition starts,
+global/rolling/frame-transfer detector transitions, and complete-product
+readiness. At each optical-sample timestamp it first identifies every due path,
+integrates their active detector consumers through that boundary, advances the
+shared atmosphere once, materializes every due path input, and only then forms
+the path results. This preserves one coherent atmosphere epoch and prevents
+declaration order from selecting path state. The composed loop retains fixed
+storage and jumps directly between due timestamps; it still owns no task,
+port, lease, transport, command endpoint, execution clock, or wall-clock
+pacing.
+
+The scheduler kernel is allocation-free and its maintained CPU
+characterization covers the linear-scan policy from 1 through 256 active
+generators. Heterogeneous serial composition deliberately uses bounded dynamic
+dispatch at the owner boundary and has a separate per-processed-timestamp
+allocation budget. Neither is external-RTC latency or production
+instrument-capacity evidence. A heap policy remains deferred until measured
 generator-count evidence on a representative composed plant justifies its
 extra mutation and validation surface.
 
@@ -547,8 +571,10 @@ owner maps the command timestamp, then invokes the deterministic core's bounded
 validation/admission surface. Every transferred command retains one terminal-
 outcome credit until the correlated completion is consumed.
 
-For each canonical plant timestamp `t`, the prepared scheduler performs these
-phases in order:
+For each canonical plant timestamp `t`, the complete target performs these
+phases in order. The Gate 3 serial loop implements the trigger, atmosphere,
+detector, optical-sample, readout, and readiness subset; command and HIL-port
+phases retain their reserved causal positions until their assigned gates:
 
 1. apply trigger-source, distribution-link, and synchronization-fault updates
    effective at or before `t`, recompute only not-yet-delivered edges, and
@@ -571,7 +597,8 @@ phases in order:
    autonomous waveform at its trigger-relative phase, and accumulate those
    samples only into intervals containing `t`
 8. complete due detector-readout events, assign a product stream sequence, and
-   attempt bounded complete-product publication
+   mark the complete product ready; a later HIL owner attempts bounded port
+   publication without changing the plant event timestamp
 9. publish bounded counters and fault records outside model hot loops
 
 These phases define logical causality, not a mandatory global execution
