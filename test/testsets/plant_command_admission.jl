@@ -211,6 +211,24 @@ Base.getindex(values::AdmissionStagingFailureVector, index::Int) =
 Base.copyto!(::Vector{T}, ::AdmissionStagingFailureVector{T}) where {T} =
     error("declared staging failure")
 
+struct AdmissionValidationInterruptVector{T} <: AbstractVector{T} end
+
+Base.size(::AdmissionValidationInterruptVector) = (3,)
+Base.IndexStyle(::Type{<:AdmissionValidationInterruptVector}) = IndexLinear()
+Base.getindex(::AdmissionValidationInterruptVector, ::Int) =
+    throw(InterruptException())
+
+struct AdmissionStagingInterruptVector{T} <: AbstractVector{T}
+    values::Vector{T}
+end
+
+Base.size(values::AdmissionStagingInterruptVector) = size(values.values)
+Base.IndexStyle(::Type{<:AdmissionStagingInterruptVector}) = IndexLinear()
+Base.getindex(values::AdmissionStagingInterruptVector, index::Int) =
+    values.values[index]
+Base.copyto!(::Vector{T}, ::AdmissionStagingInterruptVector{T}) where {T} =
+    throw(InterruptException())
+
 @testset "Bounded plant-command admission API" begin
     for name in (
         :PlantCommandSequence,
@@ -296,8 +314,23 @@ Base.copyto!(::Vector{T}, ::AdmissionStagingFailureVector{T}) where {T} =
     @test sequence == PlantCommandSequence(4)
     @test presentation == CommandPresentationID(9)
     @test reason == CommandDispositionReason(:late_command)
+    @test isequal(sequence, PlantCommandSequence(4))
+    @test isequal(presentation, CommandPresentationID(9))
+    @test isequal(reason, CommandDispositionReason(:late_command))
     @test length(Set((sequence, PlantCommandSequence(4)))) == 1
+    @test length(Set((reason, CommandDispositionReason(:late_command)))) == 1
     @test sprint(show, sequence) == "PlantCommandSequence(4)"
+    @test sprint(show, presentation) == "CommandPresentationID(9)"
+    @test sprint(show, reason) ==
+        "CommandDispositionReason(:late_command)"
+    order_key = PlantCommandOrderKey(PlantTimestamp(20), UInt32(7), sequence)
+    matching_order_key = PlantCommandOrderKey(
+        PlantTimestamp(20), UInt32(7), PlantCommandSequence(4))
+    @test order_key == matching_order_key
+    @test isequal(order_key, matching_order_key)
+    @test length(Set((order_key, matching_order_key))) == 1
+    @test sprint(show, order_key) ==
+        "PlantCommandOrderKey(PlantTimestamp(20 ns), 7, PlantCommandSequence(4))"
     @test isbitstype(PlantCommandSequence)
     @test isbitstype(CommandPresentationID)
     @test isbitstype(PlantCommandOrderKey)
@@ -317,28 +350,52 @@ Base.copyto!(::Vector{T}, ::AdmissionStagingFailureVector{T}) where {T} =
     for (operation, stage, failure_reason) in (
         (() -> PlantCommandSequence(0), :command, :invalid_sequence),
         (() -> PlantCommandSequence(true), :command, :invalid_sequence),
+        (() -> PlantCommandSequence(1.0), :command, :invalid_sequence),
         (() -> CommandPresentationID(-1), :command,
+            :invalid_presentation),
+        (() -> CommandPresentationID(:first), :command,
             :invalid_presentation),
         (() -> CommandDispositionReason(Symbol("")), :disposition,
             :empty_reason),
+        (() -> CommandDispositionReason("late_command"), :disposition,
+            :invalid_reason),
+        (() -> PlantCommand(schema, 1.0, PlantTimestamp(20), payload),
+            :command, :invalid_sequence),
         (() -> PlantCommand(schema, 1, 1, payload), :command,
             :invalid_effective_timestamp),
+        (() -> PlantCommand(:dm_command, :dm_schema, 1, 1, 1, payload),
+            :command, :invalid_effective_timestamp),
         (() -> prepare_command_endpoint(schema; capacity=0, ordinal=1),
             :preparation, :invalid_capacity),
         (() -> prepare_command_endpoint(schema; capacity=true, ordinal=1),
             :preparation, :invalid_capacity),
+        (() -> prepare_command_endpoint(schema; capacity=1.0, ordinal=1),
+            :preparation, :invalid_capacity),
         (() -> prepare_command_endpoint(schema; capacity=1,
             sequence_window=0, ordinal=1), :preparation,
             :invalid_sequence_window),
+        (() -> prepare_command_endpoint(schema; capacity=1,
+            sequence_window=true, ordinal=1), :preparation,
+            :invalid_sequence_window),
+        (() -> prepare_command_endpoint(schema; capacity=1,
+            sequence_window=1.0, ordinal=1), :preparation,
+            :invalid_sequence_window),
         (() -> prepare_command_endpoint(schema; capacity=1, ordinal=false),
+            :preparation, :invalid_ordinal),
+        (() -> prepare_command_endpoint(schema; capacity=1, ordinal=1.0),
             :preparation, :invalid_ordinal),
         (() -> prepare_command_endpoint(scalar_schema; capacity=1, ordinal=1,
             backend=CUDABackend()), :preparation,
             :unsupported_scalar_backend),
         (() -> command_disposition(workspace, 1), :disposition,
             :invalid_index),
+        (() -> command_disposition(workspace, true), :disposition,
+            :invalid_index),
         (() -> command_disposition(workspace, 1.0), :disposition,
             :invalid_index),
+        (() -> fail_pending_plant_commands!(workspace, endpoint, state,
+            PlantTimestamp(10); reason=1.0), :disposition,
+            :invalid_reason),
     )
         _assert_command_admission_error(operation, stage, failure_reason)
     end
@@ -428,6 +485,33 @@ end
     _assert_single_disposition(validation_failure_workspace, FailedCommand,
         :payload_validation_failure)
 
+    validation_interrupt_endpoint = prepare_command_endpoint(
+        schema;
+        capacity=1,
+        ordinal=11,
+    )
+    validation_interrupt_state = CommandEndpointState(
+        validation_interrupt_endpoint)
+    validation_interrupt_workspace = CommandDispositionWorkspace(
+        validation_interrupt_endpoint)
+    validation_interrupt_command = PlantCommand(
+        schema,
+        1,
+        PlantTimestamp(1),
+        AdmissionValidationInterruptVector{Float32}(),
+    )
+    @test_throws InterruptException admit_plant_command!(
+        validation_interrupt_workspace,
+        validation_interrupt_endpoint,
+        validation_interrupt_state,
+        validation_interrupt_command,
+        PlantTimestamp(1),
+    )
+    @test command_disposition_count(validation_interrupt_workspace) == 0
+    @test active_command_count(validation_interrupt_state) == 0
+    @test command_endpoint_timestamp(validation_interrupt_state) ==
+        PlantTimestamp(0)
+
     staging_failure_endpoint = prepare_command_endpoint(
         schema;
         capacity=2,
@@ -470,6 +554,83 @@ end
     @test command_sequence_class(retried) == InOrderCommandSequence
     @test command_presentation_id(retried) == CommandPresentationID(3)
     @test pending_command_count(staging_failure_state) == 2
+
+    staging_interrupt_endpoint = prepare_command_endpoint(
+        schema;
+        capacity=1,
+        ordinal=12,
+    )
+    staging_interrupt_state = CommandEndpointState(staging_interrupt_endpoint)
+    staging_interrupt_workspace = CommandDispositionWorkspace(
+        staging_interrupt_endpoint)
+    staging_interrupt_command = PlantCommand(
+        schema,
+        1,
+        PlantTimestamp(1),
+        AdmissionStagingInterruptVector(Float32[0.1, 0.2, 0.3]),
+    )
+    @test_throws InterruptException admit_plant_command!(
+        staging_interrupt_workspace,
+        staging_interrupt_endpoint,
+        staging_interrupt_state,
+        staging_interrupt_command,
+        PlantTimestamp(1),
+    )
+    @test command_disposition_count(staging_interrupt_workspace) == 0
+    @test active_command_count(staging_interrupt_state) == 0
+    @test command_endpoint_timestamp(staging_interrupt_state) ==
+        PlantTimestamp(0)
+
+    unbounded_scalar_schema = _admission_schema(
+        Float64;
+        id=:unbounded_scalar_schema,
+        endpoint=:unbounded_scalar_command,
+        dimensions=(),
+        basis=CommandBasis(:rigid_body, :focus),
+        bounds=UnboundedCommandValues(),
+    )
+    unbounded_scalar_endpoint = prepare_command_endpoint(
+        unbounded_scalar_schema;
+        capacity=1,
+        ordinal=13,
+    )
+    unbounded_scalar_state = CommandEndpointState(unbounded_scalar_endpoint)
+    unbounded_scalar_workspace = CommandDispositionWorkspace(
+        unbounded_scalar_endpoint)
+    admit_plant_command!(unbounded_scalar_workspace,
+        unbounded_scalar_endpoint, unbounded_scalar_state,
+        PlantCommand(unbounded_scalar_schema, 1, PlantTimestamp(1), 2.5),
+        PlantTimestamp(1))
+    unbounded_scalar_claim = claim_next_application_ready_command!(
+        unbounded_scalar_endpoint, unbounded_scalar_state, PlantTimestamp(1))
+    @test claimed_command_payload(unbounded_scalar_endpoint,
+        unbounded_scalar_state, unbounded_scalar_claim) == 2.5
+
+    unbounded_array_schema = _admission_schema(
+        Float32;
+        id=:unbounded_array_schema,
+        endpoint=:unbounded_array_command,
+        bounds=UnboundedCommandValues(),
+    )
+    unbounded_array_endpoint = prepare_command_endpoint(
+        unbounded_array_schema;
+        capacity=1,
+        ordinal=14,
+    )
+    unbounded_array_state = CommandEndpointState(unbounded_array_endpoint)
+    unbounded_array_workspace = CommandDispositionWorkspace(
+        unbounded_array_endpoint)
+    unbounded_array_payload = Float32[-2, 0.25, 2]
+    admit_plant_command!(unbounded_array_workspace, unbounded_array_endpoint,
+        unbounded_array_state,
+        PlantCommand(unbounded_array_schema, 1, PlantTimestamp(1),
+            unbounded_array_payload),
+        PlantTimestamp(1))
+    unbounded_array_claim = claim_next_application_ready_command!(
+        unbounded_array_endpoint, unbounded_array_state, PlantTimestamp(1))
+    @test claimed_command_payload(unbounded_array_endpoint,
+        unbounded_array_state, unbounded_array_claim) ==
+        unbounded_array_payload
 
     fail_schema = _admission_schema(
         Float32;
@@ -814,6 +975,61 @@ end
         PlantTimestamp(0))
     @test command_sequence_class(stale) == StaleCommandSequence
     _assert_single_disposition(workspace, RejectedCommand, :stale_sequence)
+
+    skipped_schema = _admission_schema(
+        Float32;
+        id=:skipped_sequence_schema,
+        endpoint=:skipped_sequence_command,
+        sequence_policy=CommandSequencePolicy(skipped=RejectSequence),
+    )
+    skipped_endpoint = prepare_command_endpoint(
+        skipped_schema;
+        capacity=2,
+        ordinal=2,
+    )
+    skipped_state = CommandEndpointState(skipped_endpoint)
+    skipped_workspace = CommandDispositionWorkspace(skipped_endpoint)
+    admit_plant_command!(skipped_workspace, skipped_endpoint, skipped_state,
+        PlantCommand(skipped_schema, 10, PlantTimestamp(100), payload),
+        PlantTimestamp(0))
+    skipped = admit_plant_command!(skipped_workspace, skipped_endpoint,
+        skipped_state,
+        PlantCommand(skipped_schema, 12, PlantTimestamp(100), payload),
+        PlantTimestamp(0))
+    @test command_sequence_class(skipped) == SkippedCommandSequence
+    _assert_single_disposition(skipped_workspace, RejectedCommand,
+        :skipped_sequence)
+
+    reordered_schema = _admission_schema(
+        Float32;
+        id=:reordered_sequence_schema,
+        endpoint=:reordered_sequence_command,
+        sequence_policy=CommandSequencePolicy(
+            reordered=RejectSequence,
+            skipped=AcceptSequence,
+        ),
+    )
+    reordered_endpoint = prepare_command_endpoint(
+        reordered_schema;
+        capacity=3,
+        ordinal=3,
+    )
+    reordered_state = CommandEndpointState(reordered_endpoint)
+    reordered_workspace = CommandDispositionWorkspace(reordered_endpoint)
+    for sequence in (10, 12)
+        admit_plant_command!(reordered_workspace, reordered_endpoint,
+            reordered_state,
+            PlantCommand(reordered_schema, sequence, PlantTimestamp(100),
+                payload),
+            PlantTimestamp(0))
+    end
+    reordered = admit_plant_command!(reordered_workspace, reordered_endpoint,
+        reordered_state,
+        PlantCommand(reordered_schema, 11, PlantTimestamp(100), payload),
+        PlantTimestamp(0))
+    @test command_sequence_class(reordered) == ReorderedCommandSequence
+    _assert_single_disposition(reordered_workspace, RejectedCommand,
+        :reordered_sequence)
 
     sequence_fail_schema = _admission_schema(
         Float32;
