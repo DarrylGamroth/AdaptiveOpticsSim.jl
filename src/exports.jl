@@ -171,17 +171,20 @@ export lift_observation_contract, diagnostics
 export LiFTSolveAuto, LiFTSolveQR, LiFTSolveNormalEquations
 export LiFTLevenbergMarquardt, LiFTAdaptiveLevenbergMarquardt
 
-export OpticalPathID, AcquisitionID
+export OpticalPathID, AcquisitionID, ControllableOpticID, CommandEndpointID
 export PlantTimestamp, PlantDuration, PeriodicSchedule
 export plant_nanoseconds, plant_time_seconds, plant_duration_seconds
 export schedule_period, schedule_phase, schedule_timestamp
 export RNGDerivationVersion, RNGOwnerIdentity, rng_replay_metadata
 export ColdPlantModelDefinition, plant_model_definition_style
-export OpticalPathDefinition, AcquisitionDefinition, PlantDefinition
-export path_id, acquisition_id, acquisition_path_id
-export path_source, path_model, acquisition_model
+export OpticalPathDefinition, AcquisitionDefinition
+export ControllableOpticDefinition, PlantDefinition
+export path_id, acquisition_id, controllable_optic_id, acquisition_path_id
+export path_source, path_model, acquisition_model, controllable_optic_model
+export command_endpoint_ids, command_endpoint_owner
 export plant_telescope, plant_atmosphere
-export path_definitions, acquisition_definitions
+export controllable_optic_definitions, path_definitions
+export acquisition_definitions, controllable_optic_definition
 export path_definition, acquisition_definition
 export PreparedPlant, prepare_plant
 export prepare_pupil_opd_materialization, materialize_path_input!

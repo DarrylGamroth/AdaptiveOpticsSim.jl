@@ -15,10 +15,13 @@ boundary and document map.
 A plant ultimately contains one telescope and atmosphere, independently placed
 controllable optics, reusable optical paths, and independently scheduled or
 triggered acquisitions. The implemented Gate 2 declaration boundary currently
-commits the telescope, atmosphere, path, and acquisition topology only.
-Controllable-optic placement and acquisition scheduling remain later gates;
-neither is hidden in these definitions. Separating a path from its acquisitions
-prevents a second camera or readout cadence from forcing duplicate propagation.
+commits the telescope, atmosphere, path, and acquisition topology. The first
+Gate 4 slice additionally declares every physical controllable optic and the
+stable identities of its independently timed or latched command endpoints.
+Endpoint payload schemas, prepared command state, controllable-optic placement,
+and acquisition scheduling remain their assigned later slices; none is hidden
+in these identity records. Separating a path from its acquisitions prevents a
+second camera or readout cadence from forcing duplicate propagation.
 
 Gate 2 is validated by the focused topology, preparation, provider, RNG, and
 illumination testsets plus the clean [serial plant CPU
@@ -49,6 +52,18 @@ It is intentionally opt-in instead of a shallow mutability heuristic.
 plant = PlantDefinition(
     telescope=tel,
     atmosphere=atm,
+    controllable_optics=(
+        woofer=ControllableOpticDefinition(
+            :woofer,
+            woofer_model;
+            command_endpoint_ids=(:woofer_command,),
+        ),
+        tweeter=ControllableOpticDefinition(
+            :tweeter,
+            tweeter_model;
+            command_endpoint_ids=(:tweeter_command,),
+        ),
+    ),
     paths=(
         lgs1=OpticalPathDefinition(:lgs1, lgs1_source, lgs_train),
         ngs=OpticalPathDefinition(:ngs, ngs_source, ngs_train),
@@ -75,8 +90,9 @@ plant = PlantDefinition(
 )
 ```
 
-`PlantDefinition`, `OpticalPathDefinition`, `AcquisitionDefinition`,
-`AtmosphereLayerID`, `OpticalPathID`, `AcquisitionID`, `RNGOwnerIdentity`,
+`PlantDefinition`, `ControllableOpticDefinition`, `OpticalPathDefinition`,
+`AcquisitionDefinition`, `AtmosphereLayerID`, `ControllableOpticID`,
+`CommandEndpointID`, `OpticalPathID`, `AcquisitionID`, `RNGOwnerIdentity`,
 `RNGDerivationVersion`, `plant_model_definition_style`, and
 `ColdPlantModelDefinition` are committed public declaration names.
 `PreparedPlant`, `PreparedPathExecutor`, `PreparedAcquisitionOwner`,
@@ -87,26 +103,36 @@ corresponding schedule-free prepared boundary.
 A symbol passed as an identity is normalized to the corresponding typed ID. A
 tuple or named tuple is only declaration organization: every definition carries
 its own explicit identity, a named-tuple key must agree with it, and reordering
-cannot change a reference. Multiple acquisitions may reference the same path,
-as the two science acquisitions do above.
+cannot change a reference. Every command-endpoint identity has exactly one
+physical optic owner. One optic may name several independently latched
+endpoints, but endpoint identity alone implies neither packed layout nor atomic
+application. Multiple acquisitions may reference the same path, as the two
+science acquisitions do above; sampled device feedback likewise remains an
+ordinary acquisition rather than a command outcome.
 
 These Julia structs are immutable topology records: their field bindings
-cannot be reassigned. The model-definition trait makes path and acquisition
-model ownership an explicit extension contract; unrecognized types, including
-live detectors and mutable wrappers, are rejected. The telescope and atmosphere
-remain separately owned scientific models with their documented state
-semantics; in particular, the atmosphere has one evolution writer. Preparation
-freezes compatible configuration and constructs separately owned plans,
-single-writer workspaces, and acquisition state.
+cannot be reassigned. The model-definition trait makes controllable-optic,
+path, and acquisition model ownership an explicit extension contract;
+unrecognized types, including live controllable optics, detectors, and mutable
+wrappers, are rejected. The telescope and atmosphere remain separately owned
+scientific models with their documented state semantics; in particular, the
+atmosphere has one evolution writer. Preparation freezes compatible
+configuration and constructs separately owned plans, single-writer workspaces,
+and state for the components supported by the current gate.
 
-The definitions contain no schedule, trigger binding, RNG stream, propagation
-workspace, queue, transport, or HIL descriptor. Those concepts are attached by
-their assigned preparation, scheduling, and HIL-boundary layers. Core names do
-not carry an `HIL` prefix because the same plant can run in deterministic
-virtual time, offline, or behind the HIL companion. An acquisition definition
-does not itself prescribe a cross-owner handoff. The HIL data-plane boundary
-uses ports backed by the sequenced SPSC rings specified in
-[`rtc-ports.md`](rtc-ports.md).
+The definitions contain no command payload schema or state, schedule, trigger
+binding, RNG stream, propagation workspace, queue, transport, or HIL
+descriptor. Those concepts are attached by their assigned preparation,
+scheduling, and HIL-boundary layers. Core names do not carry an `HIL` prefix
+because the same plant can run in deterministic virtual time, offline, or
+behind the HIL companion. An acquisition definition does not itself prescribe
+a cross-owner handoff. The HIL data-plane boundary uses ports backed by the
+sequenced SPSC rings specified in [`rtc-ports.md`](rtc-ports.md).
+
+The initial Gate 4 topology slice is deliberately fail-closed at preparation:
+`prepare_plant` rejects a nonempty controllable-optic set until prepared command
+schemas and endpoint owners are implemented. It never returns a prepared plant
+that silently omits a declared physical device.
 
 Preparation turns immutable definitions into backend-, device-, shape-, and
 capacity-bound plans plus explicitly owned mutable state, workspaces, and

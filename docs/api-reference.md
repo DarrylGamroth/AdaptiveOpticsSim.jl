@@ -247,17 +247,21 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   independently periodic optical paths and complete detector products; it
   owns no wall clock, task, queue, port, transport, or RTC protocol
 
-- Stable identities: `AtmosphereLayerID`, `OpticalPathID`, `AcquisitionID`,
-  `RNGOwnerIdentity`
+- Stable identities: `AtmosphereLayerID`, `ControllableOpticID`,
+  `CommandEndpointID`, `OpticalPathID`, `AcquisitionID`, `RNGOwnerIdentity`
 - RNG derivation and replay: `RNGDerivationVersion`, `rng_replay_metadata`
-- Definitions: `OpticalPathDefinition`, `AcquisitionDefinition`,
-  `PlantDefinition`
+- Definitions: `ControllableOpticDefinition`, `OpticalPathDefinition`,
+  `AcquisitionDefinition`, `PlantDefinition`
 - Cold-model trait: `plant_model_definition_style`,
   `ColdPlantModelDefinition`
-- Identity and model accessors: `path_id`, `acquisition_id`,
-  `acquisition_path_id`, `path_source`, `path_model`, `acquisition_model`
-- Plant accessors: `plant_telescope`, `plant_atmosphere`, `path_definitions`,
-  `acquisition_definitions`, `path_definition`, `acquisition_definition`
+- Identity and model accessors: `controllable_optic_id`,
+  `command_endpoint_ids`, `path_id`, `acquisition_id`,
+  `acquisition_path_id`, `controllable_optic_model`, `path_source`,
+  `path_model`, `acquisition_model`
+- Plant accessors: `plant_telescope`, `plant_atmosphere`,
+  `controllable_optic_definitions`, `path_definitions`,
+  `acquisition_definitions`, `controllable_optic_definition`,
+  `command_endpoint_owner`, `path_definition`, `acquisition_definition`
 - Ordinary prepared boundary: `PreparedPlant`, `prepare_plant`,
   `prepare_pupil_opd_materialization`, `materialize_path_input!`,
   `prepare_acquisition_selection`, `execute_acquisition_selection!`,
@@ -352,16 +356,23 @@ gate; unusual source physics extend the qualified evaluator seams described in
 the extension guide. Entry tags do not infer a lamp, relay, instrument, control
 authority, or upstream propagation bypass.
 
-Every path and acquisition carries an explicit typed identity. Tuples and
-named tuples organize declarations but do not define identity; named keys must
-match the IDs they contain. `PlantDefinition` rejects duplicates and unknown
-path references with `PlantDefinitionError`. Optical-path and acquisition model
+Every controllable optic, command endpoint, path, and acquisition carries an
+explicit typed identity. Tuples and named tuples organize declarations but do
+not define identity; named keys must match the IDs they contain.
+`PlantDefinition` rejects duplicate optic/path/acquisition identities, command
+endpoints with more than one optic owner, and unknown path references with
+`PlantDefinitionError`. Controllable-optic, optical-path, and acquisition model
 types are rejected by default and must opt in to the cold-definition contract
 by returning `ColdPlantModelDefinition()` from
 `plant_model_definition_style(::Type{MyDefinition})`. That opt-in asserts that
 instances contain configuration only. Preparation workspaces, mutable
-simulation or acquisition state, schedules, RNG streams, queues, transport,
-and HIL descriptors are intentionally absent.
+optic/simulation/acquisition state, command schemas and state, schedules, RNG
+streams, queues, transport, and HIL descriptors are intentionally absent.
+
+The first Gate 4 topology slice records controllable-optic and endpoint
+ownership but does not yet prepare it. `prepare_plant` rejects a nonempty optic
+set with `PlantPreparationError` until the prepared endpoint owner is added; a
+declared device is never ignored.
 
 `prepare_plant` requires one explicit `run_seed`, accepts a versioned
 `rng_derivation_version`, freezes each path source, and dispatches on the
