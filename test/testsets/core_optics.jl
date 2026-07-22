@@ -89,12 +89,14 @@ end
     # not drift into the ordinary user namespace.
     # Gate 2 adds a bounded documented topology/preparation surface. Gate 3's
     # first slice adds eleven public time/schedule names. Gate 4's first slice
-    # adds nine public controllable-optic topology names. Detector-event
-    # transitions remain qualified, while their structured error joins the
-    # public exception surface.
-    @test length(exported) <= 573
+    # adds nine public controllable-optic topology names. Gate 4's second slice
+    # adds the typed command-schema/policy vocabulary and ordinary accessors.
+    # Detector-event transitions remain qualified, while their structured
+    # error joins the public exception surface.
+    @test length(exported) <= 637
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :PlantDefinitionError)
+    @test Base.isexported(AdaptiveOpticsSim, :PlantCommandError)
     @test Base.isexported(AdaptiveOpticsSim, :PlantPreparationError)
     @test Base.isexported(AdaptiveOpticsSim, :PlantTimeError)
     @test Base.isexported(AdaptiveOpticsSim, :PlantScheduleError)
@@ -112,6 +114,35 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :AcquisitionID)
     @test Base.isexported(AdaptiveOpticsSim, :ControllableOpticID)
     @test Base.isexported(AdaptiveOpticsSim, :CommandEndpointID)
+    for name in (
+        :PlantCommandSchemaID,
+        :PlantCommandSchemaVersion,
+        :CommandBasisRevision,
+        :CommandUnit,
+        :CommandSignConvention,
+        :CommandBasis,
+        :CommandValueSemantics,
+        :AbsoluteCommand,
+        :IncrementalCommand,
+        :InvalidCommandAction,
+        :CommandRangeStage,
+        :CommandSequenceAction,
+        :FutureCommandPolicy,
+        :LateCommandPolicy,
+        :CommandSupersessionPolicy,
+        :CommandSilenceAction,
+        :CommandAgeOrigin,
+        :UnboundedCommandValues,
+        :UniformCommandBounds,
+        :CommandValuePolicy,
+        :CommandSequencePolicy,
+        :CommandEffectiveTimePolicy,
+        :CommandSilencePolicy,
+        :PlantCommandSchema,
+        :validate_plant_command_payload,
+    )
+        @test Base.isexported(AdaptiveOpticsSim, name)
+    end
     @test Base.isexported(AdaptiveOpticsSim, :AtmosphereLayerID)
     @test Base.isexported(AdaptiveOpticsSim, :RNGDerivationVersion)
     @test Base.isexported(AdaptiveOpticsSim, :RNGOwnerIdentity)
@@ -197,6 +228,9 @@ end
     @test !Base.isexported(AdaptiveOpticsSim, :require_path_result)
     @test Base.isexported(AdaptiveOpticsSim, :controllable_optic_id)
     @test Base.isexported(AdaptiveOpticsSim, :controllable_optic_model)
+    @test Base.isexported(AdaptiveOpticsSim, :command_schemas)
+    @test Base.isexported(AdaptiveOpticsSim, :command_schema)
+    @test Base.isexported(AdaptiveOpticsSim, :plant_command_schema)
     @test Base.isexported(AdaptiveOpticsSim, :command_endpoint_ids)
     @test Base.isexported(AdaptiveOpticsSim, :command_endpoint_owner)
     @test Base.isexported(AdaptiveOpticsSim,

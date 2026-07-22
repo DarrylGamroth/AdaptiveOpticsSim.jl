@@ -90,11 +90,11 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    individually placed optics, prepared core plant command schemas, bounded
    timing and replayable plant-time command-silence semantics, sampled device-
    feedback acquisitions, and prepared plane groups as a deliberate breaking
-   change. The first Gate 4 slice now records stable physical-optic and
-   independently latched endpoint identities in `PlantDefinition`, while
-   failing preparation explicitly until endpoint schemas and owners are added.
-   Operational execution-clock ingress liveness belongs to the later HIL
-   lifecycle boundary.
+   change. The first two Gate 4 slices now record stable physical-optic and
+   independently latched endpoint identities plus immutable versioned semantic
+   payload schemas in `PlantDefinition`, while failing preparation explicitly
+   until mutable endpoint owners are added. Operational execution-clock ingress
+   liveness belongs to the later HIL lifecycle boundary.
 5. Immediately prove a minimal serial CPU HIL vertical slice: one scheduled
    acquisition, one command-responsive optic, an injected `Clocks.jl` clock,
    HIL submission descriptors mapped into core plant commands, canonical

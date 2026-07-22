@@ -1,118 +1,10 @@
 #
 # Immutable plant topology declarations
 #
-# These values describe stable physical identity and topology only. Backend-
-# bound preparation, mutable state/workspace ownership, execution, and timing
-# belong to later layers.
+# These values describe stable physical identity, topology, and cold semantic
+# command contracts only. Backend-bound preparation, mutable state/workspace
+# ownership, execution, and timing belong to later layers.
 #
-
-@inline function _require_component_name(name::Symbol, component::Symbol)
-    isempty(String(name)) && throw(PlantDefinitionError(component, :empty_id,
-        "$component identity must not be empty"))
-    return name
-end
-
-"""Stable declared identity of one reusable optical path."""
-struct OpticalPathID
-    name::Symbol
-
-    function OpticalPathID(name::Symbol)
-        return new(_require_component_name(name, :path))
-    end
-end
-
-"""Stable declared identity of one independently invocable acquisition."""
-struct AcquisitionID
-    name::Symbol
-
-    function AcquisitionID(name::Symbol)
-        return new(_require_component_name(name, :acquisition))
-    end
-end
-
-"""Stable declared identity of one physical controllable optic."""
-struct ControllableOpticID
-    name::Symbol
-
-    function ControllableOpticID(name::Symbol)
-        return new(_require_component_name(name, :controllable_optic))
-    end
-end
-
-"""Stable declared identity of one independently timed command endpoint."""
-struct CommandEndpointID
-    name::Symbol
-
-    function CommandEndpointID(name::Symbol)
-        return new(_require_component_name(name, :command_endpoint))
-    end
-end
-
-Base.:(==)(left::OpticalPathID, right::OpticalPathID) =
-    left.name == right.name
-Base.:(==)(left::AcquisitionID, right::AcquisitionID) =
-    left.name == right.name
-Base.:(==)(left::ControllableOpticID, right::ControllableOpticID) =
-    left.name == right.name
-Base.:(==)(left::CommandEndpointID, right::CommandEndpointID) =
-    left.name == right.name
-Base.isequal(left::OpticalPathID, right::OpticalPathID) =
-    isequal(left.name, right.name)
-Base.isequal(left::AcquisitionID, right::AcquisitionID) =
-    isequal(left.name, right.name)
-Base.isequal(left::ControllableOpticID, right::ControllableOpticID) =
-    isequal(left.name, right.name)
-Base.isequal(left::CommandEndpointID, right::CommandEndpointID) =
-    isequal(left.name, right.name)
-Base.hash(id::OpticalPathID, seed::UInt) =
-    hash(id.name, hash(OpticalPathID, seed))
-Base.hash(id::AcquisitionID, seed::UInt) =
-    hash(id.name, hash(AcquisitionID, seed))
-Base.hash(id::ControllableOpticID, seed::UInt) =
-    hash(id.name, hash(ControllableOpticID, seed))
-Base.hash(id::CommandEndpointID, seed::UInt) =
-    hash(id.name, hash(CommandEndpointID, seed))
-
-function Base.show(io::IO, id::Union{OpticalPathID,AcquisitionID,
-    ControllableOpticID,CommandEndpointID})
-    print(io, nameof(typeof(id)), "(", repr(id.name), ")")
-end
-
-@inline _as_optical_path_id(id::OpticalPathID) = id
-@inline _as_optical_path_id(name::Symbol) = OpticalPathID(name)
-
-function _as_optical_path_id(value)
-    throw(PlantDefinitionError(:path, :invalid_id,
-        "optical-path identity must be a Symbol or OpticalPathID; got " *
-        "$(typeof(value))"))
-end
-
-@inline _as_acquisition_id(id::AcquisitionID) = id
-@inline _as_acquisition_id(name::Symbol) = AcquisitionID(name)
-
-function _as_acquisition_id(value)
-    throw(PlantDefinitionError(:acquisition, :invalid_id,
-        "acquisition identity must be a Symbol or AcquisitionID; got " *
-        "$(typeof(value))"))
-end
-
-@inline _as_controllable_optic_id(id::ControllableOpticID) = id
-@inline _as_controllable_optic_id(name::Symbol) = ControllableOpticID(name)
-
-function _as_controllable_optic_id(value)
-    throw(PlantDefinitionError(:controllable_optic, :invalid_id,
-        "controllable-optic identity must be a Symbol or " *
-        "ControllableOpticID; got $(typeof(value))"))
-end
-
-@inline _as_command_endpoint_id(id::CommandEndpointID) = id
-@inline _as_command_endpoint_id(name::Symbol) = CommandEndpointID(name)
-
-function _as_command_endpoint_id(value)
-    throw(PlantDefinitionError(:command_endpoint, :invalid_id,
-        "command-endpoint identity must be a Symbol or CommandEndpointID; " *
-        "got $(typeof(value))"))
-end
 
 @inline _require_declared_topology_value(value, ::Symbol, ::Symbol,
     ::AbstractString) = value
@@ -127,7 +19,7 @@ end
     ColdPlantModelDefinition()
 
 Accepted result of `plant_model_definition_style` for a configuration-only
-optical-path or acquisition model definition.
+controllable-optic, optical-path, or acquisition model definition.
 """
 struct ColdPlantModelDefinition end
 struct _UnsupportedPlantModelDefinition end
@@ -253,63 +145,104 @@ end
 AcquisitionDefinition(id, path; acquisition_model) =
     AcquisitionDefinition(id, path, acquisition_model)
 
-function _normalize_command_endpoint_ids(endpoints::Tuple)
-    isempty(endpoints) && throw(PlantDefinitionError(:controllable_optic,
-        :missing_endpoint,
-        "a controllable optic must declare at least one command endpoint"))
-    normalized = map(_as_command_endpoint_id, endpoints)
+@inline _require_command_schema(::PlantCommandSchema) = nothing
+
+function _require_command_schema(value)
+    throw(PlantDefinitionError(:command_schema, :invalid_definition,
+        "controllable-optic command schemas must contain " *
+        "PlantCommandSchema values; got $(typeof(value))"))
+end
+
+function _require_named_command_schema_identity(key::Symbol,
+    schema::PlantCommandSchema)
+    key == command_endpoint_id(schema).name || throw(PlantDefinitionError(
+        :command_schema, :identity_mismatch,
+        "named command-schema key $(repr(key)) does not match endpoint " *
+        "$(command_endpoint_id(schema))"))
+    return nothing
+end
+
+function _require_unique_command_schemas(schemas::Tuple)
     seen = Set{CommandEndpointID}()
-    for endpoint in normalized
+    seen_schemas = Set{PlantCommandSchemaID}()
+    for schema in schemas
+        endpoint = command_endpoint_id(schema)
         endpoint in seen && throw(PlantDefinitionError(:command_endpoint,
             :duplicate_id,
             "duplicate command-endpoint identity $endpoint in one " *
             "controllable-optic declaration"))
         push!(seen, endpoint)
+        id = command_schema_id(schema)
+        id in seen_schemas && throw(PlantDefinitionError(:command_schema,
+            :duplicate_id,
+            "duplicate plant-command schema identity $id in one " *
+            "controllable-optic declaration"))
+        push!(seen_schemas, id)
     end
+    return nothing
+end
+
+function _normalize_command_schemas(schemas::Tuple)
+    isempty(schemas) && throw(PlantDefinitionError(:controllable_optic,
+        :missing_schema,
+        "a controllable optic must declare at least one command schema"))
+    foreach(_require_command_schema, schemas)
+    _require_unique_command_schemas(schemas)
+    return schemas
+end
+
+function _normalize_command_schemas(schemas::NamedTuple)
+    normalized = values(schemas)
+    isempty(normalized) && throw(PlantDefinitionError(:controllable_optic,
+        :missing_schema,
+        "a controllable optic must declare at least one command schema"))
+    foreach(_require_command_schema, normalized)
+    foreach(_require_named_command_schema_identity, keys(schemas), normalized)
+    _require_unique_command_schemas(normalized)
     return normalized
 end
 
-function _normalize_command_endpoint_ids(endpoints)
-    throw(PlantDefinitionError(:command_endpoint, :invalid_container,
-        "controllable-optic command endpoints must be a Tuple; got " *
-        "$(typeof(endpoints))"))
+function _normalize_command_schemas(schemas)
+    throw(PlantDefinitionError(:command_schema, :invalid_container,
+        "controllable-optic command schemas must be a Tuple or NamedTuple; " *
+        "got $(typeof(schemas))"))
 end
 
 """
-    ControllableOpticDefinition(id, optic_model, command_endpoint_ids)
-    ControllableOpticDefinition(id, optic_model; command_endpoint_ids)
+    ControllableOpticDefinition(id, optic_model, command_schemas)
+    ControllableOpticDefinition(id, optic_model; command_schemas)
 
 Immutable declaration of one physical controllable optic and the stable
-identities of its independently timed or latched command endpoints. The optic
-model is cold configuration and must opt in through
-`plant_model_definition_style`. Endpoint payload schemas, mutable command
-state, timing, placement, path visibility, and prepared optical grouping are
-deliberately absent from this topology record.
+semantic schemas of its independently timed or latched command endpoints. The
+optic model is cold configuration and must opt in through
+`plant_model_definition_style`. Mutable command state, timing, placement, path
+visibility, and prepared optical grouping are deliberately absent from this
+topology record.
 """
-struct ControllableOpticDefinition{M,E<:Tuple}
+struct ControllableOpticDefinition{M,S<:Tuple}
     id::ControllableOpticID
     optic_model::M
-    command_endpoint_ids::E
+    command_schemas::S
 
     function ControllableOpticDefinition(id::ControllableOpticID,
-        optic_model::M, command_endpoint_ids::Tuple) where {M}
+        optic_model::M, command_schemas::Tuple) where {M}
         _require_declared_topology_value(optic_model, :controllable_optic,
             :missing_model, "model")
         _require_cold_plant_model_definition(optic_model,
             :controllable_optic, "model")
-        endpoints = _normalize_command_endpoint_ids(command_endpoint_ids)
-        return new{M,typeof(endpoints)}(id, optic_model, endpoints)
+        schemas = _normalize_command_schemas(command_schemas)
+        return new{M,typeof(schemas)}(id, optic_model, schemas)
     end
 end
 
-function ControllableOpticDefinition(id, optic_model, command_endpoint_ids)
-    endpoints = _normalize_command_endpoint_ids(command_endpoint_ids)
+function ControllableOpticDefinition(id, optic_model, command_schemas)
+    schemas = _normalize_command_schemas(command_schemas)
     return ControllableOpticDefinition(_as_controllable_optic_id(id),
-        optic_model, endpoints)
+        optic_model, schemas)
 end
 
-ControllableOpticDefinition(id, optic_model; command_endpoint_ids) =
-    ControllableOpticDefinition(id, optic_model, command_endpoint_ids)
+ControllableOpticDefinition(id, optic_model; command_schemas) =
+    ControllableOpticDefinition(id, optic_model, command_schemas)
 
 @inline path_id(path::OpticalPathDefinition) = path.id
 @inline acquisition_id(acquisition::AcquisitionDefinition) = acquisition.id
@@ -322,8 +255,19 @@ ControllableOpticDefinition(id, optic_model; command_endpoint_ids) =
     acquisition.acquisition_model
 @inline controllable_optic_model(optic::ControllableOpticDefinition) =
     optic.optic_model
+@inline command_schemas(optic::ControllableOpticDefinition) =
+    optic.command_schemas
 @inline command_endpoint_ids(optic::ControllableOpticDefinition) =
-    optic.command_endpoint_ids
+    map(command_endpoint_id, optic.command_schemas)
+
+function command_schema(optic::ControllableOpticDefinition, id)
+    resolved = _as_command_endpoint_id(id)
+    for schema in optic.command_schemas
+        command_endpoint_id(schema) == resolved && return schema
+    end
+    throw(PlantDefinitionError(:command_endpoint, :unknown_id,
+        "controllable optic $(optic.id) has no command endpoint $resolved"))
+end
 
 @inline _require_path_definition(::OpticalPathDefinition) = nothing
 
@@ -480,12 +424,27 @@ end
 function _require_unique_command_endpoint_owners(optics::Tuple)
     seen = Set{CommandEndpointID}()
     for optic in optics
-        for endpoint in command_endpoint_ids(optic)
+        for schema in command_schemas(optic)
+            endpoint = command_endpoint_id(schema)
             endpoint in seen && throw(PlantDefinitionError(
                 :command_endpoint, :duplicate_owner,
                 "command endpoint $endpoint is owned by more than one " *
                 "controllable optic"))
             push!(seen, endpoint)
+        end
+    end
+    return nothing
+end
+
+function _require_unique_plant_command_schema_ids(optics::Tuple)
+    seen = Set{PlantCommandSchemaID}()
+    for optic in optics
+        for schema in command_schemas(optic)
+            id = command_schema_id(schema)
+            id in seen && throw(PlantDefinitionError(:command_schema,
+                :duplicate_id,
+                "duplicate plant-command schema identity $id"))
+            push!(seen, id)
         end
     end
     return nothing
@@ -516,10 +475,10 @@ end
 
 Immutable declared topology for one telescope and atmosphere, reusable optical
 paths, independent acquisitions, and independently identified controllable
-optics and command endpoints. Tuples and named tuples are accepted as cold
-organization only; every component carries its own stable identity. This value
-is not prepared execution state and owns no schedule, queue, transport, RNG
-stream, or HIL descriptor.
+optics with versioned semantic command schemas. Tuples and named tuples are
+accepted as cold organization only; every component carries its own stable
+identity. This value is not prepared execution state and owns no mutable
+command state, schedule, queue, transport, RNG stream, or HIL descriptor.
 """
 struct PlantDefinition{T,A,O<:Tuple,P<:Tuple,Q<:Tuple}
     telescope::T
@@ -539,6 +498,7 @@ struct PlantDefinition{T,A,O<:Tuple,P<:Tuple,Q<:Tuple}
         foreach(_require_acquisition_definition, acquisitions)
         _require_unique_controllable_optic_ids(controllable_optics)
         _require_unique_command_endpoint_owners(controllable_optics)
+        _require_unique_plant_command_schema_ids(controllable_optics)
         _require_unique_path_ids(paths)
         _require_unique_acquisition_ids(acquisitions)
         _require_acquisition_paths(paths, acquisitions)
@@ -604,8 +564,47 @@ end
 function command_endpoint_owner(plant::PlantDefinition, id)
     resolved = _as_command_endpoint_id(id)
     for optic in plant.controllable_optics
-        resolved in command_endpoint_ids(optic) && return optic
+        for schema in command_schemas(optic)
+            command_endpoint_id(schema) == resolved && return optic
+        end
     end
     throw(PlantDefinitionError(:command_endpoint, :unknown_id,
         "plant has no command endpoint $resolved"))
+end
+
+
+function command_schema(plant::PlantDefinition, id)
+    resolved = _as_command_endpoint_id(id)
+    for optic in plant.controllable_optics
+        for schema in command_schemas(optic)
+            command_endpoint_id(schema) == resolved && return schema
+        end
+    end
+    throw(PlantDefinitionError(:command_endpoint, :unknown_id,
+        "plant has no command endpoint $resolved"))
+end
+
+@inline _as_plant_command_schema_lookup_id(id::PlantCommandSchemaID) = id
+
+function _as_plant_command_schema_lookup_id(name::Symbol)
+    isempty(String(name)) && throw(PlantDefinitionError(:command_schema,
+        :empty_id, "plant-command schema identity must not be empty"))
+    return PlantCommandSchemaID(name)
+end
+
+function _as_plant_command_schema_lookup_id(value)
+    throw(PlantDefinitionError(:command_schema, :invalid_id,
+        "plant-command schema identity must be a Symbol or " *
+        "PlantCommandSchemaID; got $(typeof(value))"))
+end
+
+function plant_command_schema(plant::PlantDefinition, id)
+    resolved = _as_plant_command_schema_lookup_id(id)
+    for optic in plant.controllable_optics
+        for schema in command_schemas(optic)
+            command_schema_id(schema) == resolved && return schema
+        end
+    end
+    throw(PlantDefinitionError(:command_schema, :unknown_id,
+        "plant has no plant-command schema $resolved"))
 end

@@ -47,7 +47,7 @@ The package intentionally distinguishes three tiers:
   `DimensionMismatchError`, `UnsupportedAlgorithm`, `NumericalConditionError`,
   `AtmosphereTimeError`, `AtmosphereEpochError`, `WFSPreparationError`,
   `PlantTimeError`, `PlantScheduleError`, `PlantDefinitionError`,
-  `PlantPreparationError`, `DetectorAcquisitionError`
+  `PlantCommandError`, `PlantPreparationError`, `DetectorAcquisitionError`
 - Profiles and RNG: `FidelityProfile`, `ScientificProfile`, `FastProfile`,
   `default_fidelity_profile`, `runtime_rng`, `deterministic_reference_rng`
 - Backend selectors: `CPUBackend`, `CUDABackend`, `AMDGPUBackend`,
@@ -248,20 +248,38 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   owns no wall clock, task, queue, port, transport, or RTC protocol
 
 - Stable identities: `AtmosphereLayerID`, `ControllableOpticID`,
-  `CommandEndpointID`, `OpticalPathID`, `AcquisitionID`, `RNGOwnerIdentity`
+  `CommandEndpointID`, `PlantCommandSchemaID`, `OpticalPathID`,
+  `AcquisitionID`, `RNGOwnerIdentity`
 - RNG derivation and replay: `RNGDerivationVersion`, `rng_replay_metadata`
-- Definitions: `ControllableOpticDefinition`, `OpticalPathDefinition`,
-  `AcquisitionDefinition`, `PlantDefinition`
+- Definitions: `ControllableOpticDefinition`, `PlantCommandSchema`,
+  `OpticalPathDefinition`, `AcquisitionDefinition`, `PlantDefinition`
+- Plant-command value types: `PlantCommandSchemaVersion`,
+  `CommandBasisRevision`, `CommandUnit`, `CommandSignConvention`,
+  `CommandBasis`, `UnboundedCommandValues`, `UniformCommandBounds`
+- Plant-command policies: `CommandValueSemantics`, `InvalidCommandAction`,
+  `CommandRangeStage`, `CommandSequenceAction`, `FutureCommandPolicy`,
+  `LateCommandPolicy`, `CommandSupersessionPolicy`, `CommandSilenceAction`,
+  `CommandAgeOrigin`, `CommandValuePolicy`, `CommandSequencePolicy`,
+  `CommandEffectiveTimePolicy`, and `CommandSilencePolicy`; the corresponding
+  enum values form the exported configuration vocabulary
 - Cold-model trait: `plant_model_definition_style`,
   `ColdPlantModelDefinition`
 - Identity and model accessors: `controllable_optic_id`,
-  `command_endpoint_ids`, `path_id`, `acquisition_id`,
+  `command_schemas`, `command_endpoint_ids`, `command_schema_id`,
+  `command_schema_version`, `command_endpoint_id`, `path_id`, `acquisition_id`,
   `acquisition_path_id`, `controllable_optic_model`, `path_source`,
   `path_model`, `acquisition_model`
+- Command-schema accessors and validation: `command_numeric_type`,
+  `command_dimensions`, `command_units`, `command_sign_convention`,
+  `command_basis`, `command_basis_revision`, `command_semantics`,
+  `command_bounds`, `command_value_policy`, `command_sequence_policy`,
+  `command_effective_time_policy`, `command_silence_policy`,
+  `validate_plant_command_payload`
 - Plant accessors: `plant_telescope`, `plant_atmosphere`,
   `controllable_optic_definitions`, `path_definitions`,
   `acquisition_definitions`, `controllable_optic_definition`,
-  `command_endpoint_owner`, `path_definition`, `acquisition_definition`
+  `command_endpoint_owner`, `command_schema`, `plant_command_schema`,
+  `path_definition`, `acquisition_definition`
 - Ordinary prepared boundary: `PreparedPlant`, `prepare_plant`,
   `prepare_pupil_opd_materialization`, `materialize_path_input!`,
   `prepare_acquisition_selection`, `execute_acquisition_selection!`,
@@ -359,20 +377,25 @@ authority, or upstream propagation bypass.
 Every controllable optic, command endpoint, path, and acquisition carries an
 explicit typed identity. Tuples and named tuples organize declarations but do
 not define identity; named keys must match the IDs they contain.
-`PlantDefinition` rejects duplicate optic/path/acquisition identities, command
-endpoints with more than one optic owner, and unknown path references with
-`PlantDefinitionError`. Controllable-optic, optical-path, and acquisition model
+`PlantDefinition` rejects duplicate optic/path/acquisition identities,
+duplicate active schema identities, command endpoints with more than one optic
+owner, and unknown path references with `PlantDefinitionError`.
+Controllable-optic, optical-path, and acquisition model
 types are rejected by default and must opt in to the cold-definition contract
 by returning `ColdPlantModelDefinition()` from
 `plant_model_definition_style(::Type{MyDefinition})`. That opt-in asserts that
-instances contain configuration only. Preparation workspaces, mutable
-optic/simulation/acquisition state, command schemas and state, schedules, RNG
-streams, queues, transport, and HIL descriptors are intentionally absent.
+instances contain configuration only. Each controllable-optic definition owns
+one or more immutable `PlantCommandSchema` values, while preparation workspaces,
+mutable optic/simulation/acquisition and command state, schedules, RNG streams,
+queues, transport, and HIL descriptors are intentionally absent.
 
-The first Gate 4 topology slice records controllable-optic and endpoint
-ownership but does not yet prepare it. `prepare_plant` rejects a nonempty optic
-set with `PlantPreparationError` until the prepared endpoint owner is added; a
-declared device is never ignored.
+The first two Gate 4 slices record controllable-optic/endpoint ownership and
+versioned semantic payload contracts but do not yet prepare mutable endpoints.
+`validate_plant_command_payload` accepts exact scalars or backend-neutral
+`AbstractArray` storage, checks presentation compatibility without mutation,
+and is distinct from later admission and application. `prepare_plant` rejects a
+nonempty optic set with `PlantPreparationError` until the prepared endpoint
+owner is added; a declared device or schema is never ignored.
 
 `prepare_plant` requires one explicit `run_seed`, accepts a versioned
 `rng_derivation_version`, freezes each path source, and dispatches on the

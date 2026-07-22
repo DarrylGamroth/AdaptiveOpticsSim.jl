@@ -30,6 +30,13 @@ AdaptiveOpticsSim.jl. Scientific term definitions follow the
 - `DimensionlessNormalization()` and `NormalizedTestSource()` do not claim a
   physical photon rate without an explicit prepared conversion.
 - Pure internal angles and rotations are in radians.
+- A plant-command schema carries an explicit `CommandUnit` identity and a
+  separate `CommandSignConvention`; neither is inferred from the target optic,
+  numeric type, or basis. Core intentionally does not add a units-package
+  dependency. Integrations should use stable unambiguous symbols such as
+  `:metre`, `:radian`, `:volt`, or `:dimensionless`, validate any external-unit
+  conversion before presentation, and advance the schema version when the
+  interpretation changes.
 - Human-facing angular API inputs may remain in convenient units such as:
   - degrees for orientation-like quantities,
   - arcseconds for sky offsets and field-of-view quantities.

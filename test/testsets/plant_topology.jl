@@ -31,6 +31,30 @@ AdaptiveOpticsSim.plant_model_definition_style(
     ::Type{PlantTopologyTestInvalidDefinitionStyle},
 ) = nothing
 
+@inline _topology_endpoint_name(endpoint::Symbol) = endpoint
+@inline _topology_endpoint_name(endpoint::CommandEndpointID) = endpoint.name
+
+function topology_command_schema(endpoint;
+    id=Symbol(_topology_endpoint_name(endpoint), :_schema))
+    return PlantCommandSchema(
+        Float32,
+        (1,);
+        id,
+        version=1,
+        endpoint,
+        units=:metre,
+        sign_convention=:positive_surface_increases_opd,
+        basis=CommandBasis(:actuator, :test_actuator),
+        basis_revision=1,
+        semantics=AbsoluteCommand,
+        bounds=UniformCommandBounds(-1f0, 1f0),
+        value_policy=CommandValuePolicy(),
+        sequence_policy=CommandSequencePolicy(),
+        effective_time_policy=CommandEffectiveTimePolicy(),
+        silence_policy=CommandSilencePolicy(),
+    )
+end
+
 function captured_plant_definition_error(f)
     try
         f()
@@ -58,7 +82,10 @@ end
         :ControllableOpticDefinition,
         :controllable_optic_id,
         :controllable_optic_model,
+        :command_schemas,
         :command_endpoint_ids,
+        :command_schema,
+        :plant_command_schema,
         :controllable_optic_definitions,
         :controllable_optic_definition,
         :command_endpoint_owner,
@@ -112,24 +139,35 @@ end
     woofer = ControllableOpticDefinition(
         :woofer,
         PlantTopologyTestControllableOpticModel(:woofer, :pupil);
-        command_endpoint_ids=(:woofer_command,),
+        command_schemas=(
+            woofer_command=topology_command_schema(:woofer_command),
+        ),
+    )
+    tweeter_schema = topology_command_schema(
+        CommandEndpointID(:tweeter_command),
     )
     tweeter = ControllableOpticDefinition(
         ControllableOpticID(:tweeter),
         PlantTopologyTestControllableOpticModel(:tweeter, :pupil),
-        (CommandEndpointID(:tweeter_command),),
+        (tweeter_schema,),
+    )
+    inferred_tweeter_schema = topology_command_schema(
+        CommandEndpointID(:inferred_tweeter_command),
     )
     inferred_tweeter = @inferred ControllableOpticDefinition(
         ControllableOpticID(:inferred_tweeter),
         PlantTopologyTestControllableOpticModel(:inferred_tweeter, :pupil),
-        (CommandEndpointID(:inferred_tweeter_command),),
+        (inferred_tweeter_schema,),
     )
     @test @inferred(command_endpoint_ids(inferred_tweeter)) ===
         (CommandEndpointID(:inferred_tweeter_command),)
     segmented = ControllableOpticDefinition(
         :segmented,
         PlantTopologyTestControllableOpticModel(:segmented, :pupil),
-        (:segment_a, :segment_b),
+        (
+            topology_command_schema(:segment_a),
+            topology_command_schema(:segment_b),
+        ),
     )
 
     @test OpticalPathID(:science) == path_id(science_path)
@@ -139,6 +177,8 @@ end
         (CommandEndpointID(:woofer_command),)
     @test command_endpoint_ids(segmented) ==
         (CommandEndpointID(:segment_a), CommandEndpointID(:segment_b))
+    @test command_schema(woofer, :woofer_command) ===
+        only(command_schemas(woofer))
     @test isequal(OpticalPathID(:science), OpticalPathID(:science))
     @test !isequal(OpticalPathID(:science), OpticalPathID(:ngs))
     @test isequal(AcquisitionID(:fast_camera), AcquisitionID(:fast_camera))
@@ -202,6 +242,9 @@ end
         ControllableOpticID(:tweeter),
     ) === tweeter
     @test command_endpoint_owner(plant, :woofer_command) === woofer
+    @test command_schema(plant, :tweeter_command) === tweeter_schema
+    @test plant_command_schema(plant, :tweeter_command_schema) ===
+        tweeter_schema
     @test command_endpoint_owner(
         plant,
         CommandEndpointID(:segment_b),
@@ -226,6 +269,9 @@ end
     )
     @test controllable_optic_definition(reordered, :woofer) === woofer
     @test command_endpoint_owner(reordered, :tweeter_command) === tweeter
+    @test command_schema(reordered, :tweeter_command) === tweeter_schema
+    @test plant_command_schema(reordered, :tweeter_command_schema) ===
+        tweeter_schema
     @test path_definition(reordered, :science) === science_path
     @test acquisition_path_id(
         acquisition_definition(reordered, :fast_camera),
@@ -314,11 +360,15 @@ end
         :path,
         :invalid_id,
     )
+    generic_command_schema = topology_command_schema(
+        :command;
+        id=:generic_command_schema,
+    )
     assert_plant_definition_error(
         () -> ControllableOpticDefinition(
             1,
             PlantTopologyTestControllableOpticModel(:x, :pupil),
-            (:command,),
+            (generic_command_schema,),
         ),
         :controllable_optic,
         :invalid_id,
@@ -329,8 +379,8 @@ end
             PlantTopologyTestControllableOpticModel(:x, :pupil),
             (1,),
         ),
-        :command_endpoint,
-        :invalid_id,
+        :command_schema,
+        :invalid_definition,
     )
     assert_plant_definition_error(
         () -> OpticalPathDefinition(:bad, nothing,
@@ -355,7 +405,11 @@ end
         :missing_model,
     )
     assert_plant_definition_error(
-        () -> ControllableOpticDefinition(:bad, nothing, (:command,)),
+        () -> ControllableOpticDefinition(
+            :bad,
+            nothing,
+            (generic_command_schema,),
+        ),
         :controllable_optic,
         :missing_model,
     )
@@ -373,7 +427,7 @@ end
         () -> ControllableOpticDefinition(
             :bad,
             Ref(:live_state),
-            (:command,),
+            (generic_command_schema,),
         ),
         :controllable_optic,
         :unsupported_model_definition,
@@ -398,7 +452,7 @@ end
         () -> ControllableOpticDefinition(
             :bad,
             PlantTopologyTestInvalidDefinitionStyle(),
-            (:command,),
+            (generic_command_schema,),
         ),
         :controllable_optic,
         :invalid_model_definition_style,
@@ -410,31 +464,56 @@ end
             (),
         ),
         :controllable_optic,
-        :missing_endpoint,
+        :missing_schema,
     )
     assert_plant_definition_error(
         () -> ControllableOpticDefinition(
             :bad,
             PlantTopologyTestControllableOpticModel(:bad, :pupil),
-            [:command],
+            [generic_command_schema],
         ),
-        :command_endpoint,
+        :command_schema,
         :invalid_container,
     )
+    duplicate_endpoint_a = topology_command_schema(
+        :duplicate_endpoint;
+        id=:duplicate_endpoint_a,
+    )
+    duplicate_endpoint_b = topology_command_schema(
+        :duplicate_endpoint;
+        id=:duplicate_endpoint_b,
+    )
     assert_plant_definition_error(
         () -> ControllableOpticDefinition(
             :bad,
             PlantTopologyTestControllableOpticModel(:bad, :pupil),
-            (:command, :command),
+            (duplicate_endpoint_a, duplicate_endpoint_b),
         ),
         :command_endpoint,
+        :duplicate_id,
+    )
+    duplicate_schema_a = topology_command_schema(
+        :schema_endpoint_a;
+        id=:duplicate_schema,
+    )
+    duplicate_schema_b = topology_command_schema(
+        :schema_endpoint_b;
+        id=:duplicate_schema,
+    )
+    assert_plant_definition_error(
+        () -> ControllableOpticDefinition(
+            :bad_schema,
+            PlantTopologyTestControllableOpticModel(:bad, :pupil),
+            (duplicate_schema_a, duplicate_schema_b),
+        ),
+        :command_schema,
         :duplicate_id,
     )
 
     duplicate_woofer = ControllableOpticDefinition(
         :woofer,
         PlantTopologyTestControllableOpticModel(:duplicate, :pupil),
-        (:duplicate_command,),
+        (topology_command_schema(:duplicate_command),),
     )
     assert_plant_definition_error(
         () -> PlantDefinition(
@@ -450,7 +529,10 @@ end
     shared_endpoint_optic = ControllableOpticDefinition(
         :shared_endpoint_optic,
         PlantTopologyTestControllableOpticModel(:shared, :pupil),
-        (:woofer_command,),
+        (topology_command_schema(
+            :woofer_command;
+            id=:shared_endpoint_schema,
+        ),),
     )
     assert_plant_definition_error(
         () -> PlantDefinition(
@@ -620,6 +702,16 @@ end
     assert_plant_definition_error(
         () -> command_endpoint_owner(plant, 1),
         :command_endpoint,
+        :invalid_id,
+    )
+    assert_plant_definition_error(
+        () -> plant_command_schema(plant, :unknown),
+        :command_schema,
+        :unknown_id,
+    )
+    assert_plant_definition_error(
+        () -> plant_command_schema(plant, 1),
+        :command_schema,
         :invalid_id,
     )
 
