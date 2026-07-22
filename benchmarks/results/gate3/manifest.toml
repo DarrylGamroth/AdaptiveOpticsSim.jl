@@ -6,3 +6,12 @@ sha256 = "f37cd7bdd996cea5684ae8453970836d4395c16bd24cd55d69c4fc89d3236183"
 source_contract = "../../contracts/gate3_event_scheduler.toml"
 characterized_source_revision = "d01b15bdec632a3513cb0dac8b5ad50537779149"
 all_gates_passed = true
+
+[[artifacts]]
+id = "GATE3-EVENT-SCHEDULER-CPU-2026-07-21-CLOSURE"
+purpose = "Clean-tree Gate 3 closure rerun of the fixed-capacity scheduler correctness, storage, allocation, and 1-to-256 generator-count matrix"
+path = "2026-07-21-event-scheduler-gate3-closure.toml"
+sha256 = "4d462e75a7efd3e01a086586027956e10c561e1c53cb34a37994a8690d4b3744"
+source_contract = "../../contracts/gate3_event_scheduler.toml"
+characterized_source_revision = "459ac5a7528c09ecf295c094a0046c12f26cf131"
+all_gates_passed = true
