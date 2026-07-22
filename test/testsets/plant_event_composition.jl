@@ -298,6 +298,17 @@ end
         definition)
     state = RollingShutterAcquisitionState(prepared)
 
+    tiny_line_detector = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
+        sensor=CMOSSensor(timing_model=RollingShutter(1.0e-12;
+            row_group_size=2)))
+    tiny_line_error = event_test_error() do
+        prepare_rolling_shutter_acquisition(tiny_line_detector, map,
+            definition)
+    end
+    @test tiny_line_error isa DetectorAcquisitionError
+    @test tiny_line_error.reason == :unrepresentable_line_duration
+
     @test rolling_band_count(prepared) == 3
     @test rolling_band_rows(prepared, 1) == 1:2
     @test rolling_band_rows(prepared, 2) == 3:4
@@ -385,6 +396,18 @@ end
     state = FrameTransferAcquisitionState(prepared)
     rng = Xoshiro(710)
     mtf_before = detector_mtf(detector, 0.2, 0.1)
+
+    tiny_transfer_detector = Detector(integration_time=1.0,
+        noise=NoiseNone(), qe=1.0, gain=1.0,
+        response_model=NullFrameResponse(),
+        sensor=EMCCDSensor(acquisition_mode=FrameTransferAcquisition(
+            transfer_time=1.0e-12)))
+    tiny_transfer_error = event_test_error() do
+        prepare_frame_transfer_acquisition(tiny_transfer_detector, map,
+            FrameTransferAcquisitionDefinition(PlantDuration(1_000_000_000)))
+    end
+    @test tiny_transfer_error isa DetectorAcquisitionError
+    @test tiny_transfer_error.reason == :unrepresentable_transfer_duration
 
     @test frame_transfer_storage_capacity(prepared) == 1
     @test !Base.mightalias(prepared.storage_frame, detector.state.frame)

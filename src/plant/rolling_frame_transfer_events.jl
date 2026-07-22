@@ -230,7 +230,9 @@ function prepare_rolling_shutter_acquisition(det::Detector,
     isequal(det.params.integration_time, exposure_seconds) ||
         _detector_acquisition_event_error(:exposure_duration,
             "detector integration time must exactly match the prepared rolling-shutter duration")
-    line_duration = _quantized_plant_duration(timing.line_time)
+    line_duration = _quantized_plant_duration(timing.line_time,
+        "rolling-shutter line duration", :invalid_line_duration,
+        :unrepresentable_line_duration)
     row_count = size(det.state.frame, 1)
     band_count = cld(row_count, timing.row_group_size)
     detection_efficiency = plan.rate_scale * plan.quantum_efficiency
@@ -600,7 +602,9 @@ function prepare_frame_transfer_acquisition(det::Detector,
     isequal(det.params.integration_time, exposure_seconds) ||
         _detector_acquisition_event_error(:exposure_duration,
             "detector integration time must exactly match the prepared frame-transfer duration")
-    transfer_duration = _quantized_plant_duration(mode.transfer_time)
+    transfer_duration = _quantized_plant_duration(mode.transfer_time,
+        "frame-transfer duration", :invalid_transfer_duration,
+        :unrepresentable_transfer_duration)
     storage_frame = similar(det.state.frame)
     fill!(storage_frame, zero(eltype(storage_frame)))
     for aliased in (det.state.frame, det.state.accum_buffer,
