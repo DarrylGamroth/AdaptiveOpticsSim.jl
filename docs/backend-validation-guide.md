@@ -89,7 +89,7 @@ julia --threads=1 --project=benchmarks --startup-file=no \
 Its versioned contract is
 [`gate3_event_scheduler.toml`](../benchmarks/contracts/gate3_event_scheduler.toml),
 and the current raw-histogram artifact is
-[`2026-07-21-event-scheduler.toml`](../benchmarks/results/gate3/2026-07-21-event-scheduler.toml).
+[`2026-07-21-event-scheduler-gate3-closure.toml`](../benchmarks/results/gate3/2026-07-21-event-scheduler-gate3-closure.toml).
 The timed boundary is one serial linear scan, claim, checked integer next-time
 calculation, and reschedule across 1, 8, 32, 128, and 256 active generators.
 This is warmed, self-paced in-process scheduler service-cost evidence. It does
@@ -138,6 +138,31 @@ warmed detector kernels, and the bounded heterogeneous-orchestration allocation
 budget. It is a serial virtual-time correctness suite, not the composed
 topology benchmark, wall-clock HIL latency, fixed-arrival capacity, or an
 integrated multi-device claim.
+
+The maintained composed-plant characterization uses the same single-threaded
+execution policy:
+
+```sh
+julia --threads=1 --project=benchmarks --startup-file=no \
+  benchmarks/benchmark_gate3_multi_rate_plant.jl
+```
+
+Its [versioned contract](../benchmarks/contracts/gate3_multi_rate_plant.toml)
+and [clean artifact](../benchmarks/results/gate3/2026-07-21-multi-rate-plant.toml)
+cover one direct-science path, an off-axis NGS Shack–Hartmann path, a
+finite-height LGS pyramid path, five independent conventional detector
+acquisitions, common-trigger fan-out and faults, declaration reordering, fixed
+storage, direct long-period jumps, and a bounded allocation window. The timed
+boundary is one heterogeneous canonical plant timestamp. The three 10,000-
+sample runs are self-paced service-cost distributions; they are not fixed-rate
+HIL latency or capacity measurements.
+
+Gate 3 artifacts store each HdrHistogram as a lossless sparse stream of
+big-endian `Int64` value/count pairs in base64. The histogram range and
+significant figures remain in the artifact, and
+[`hdr_histogram_artifact.jl`](../benchmarks/support/hdr_histogram_artifact.jl)
+round-trips the stream before publication. Encoding stays outside the timed
+boundary and avoids depending on a particular compressed-wire encoder.
 
 ### Optional backend smoke in `Pkg.test()`
 

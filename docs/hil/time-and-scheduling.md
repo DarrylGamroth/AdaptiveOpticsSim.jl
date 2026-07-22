@@ -463,6 +463,17 @@ instrument-capacity evidence. A heap policy remains deferred until measured
 generator-count evidence on a representative composed plant justifies its
 extra mutation and validation surface.
 
+The clean Gate 3 [scheduler artifact](../../benchmarks/results/gate3/2026-07-21-event-scheduler-gate3-closure.toml)
+records zero warmed allocation at 1, 8, 32, 128, and 256 generators. The
+[composed artifact](../../benchmarks/results/gate3/2026-07-21-multi-rate-plant.toml)
+binds 29 generators to mixed science/NGS/LGS optical work, common trigger
+fan-out, global and rolling CMOS, CCD, frame-transfer EMCCD, and HgCdTe
+up-the-ramp lifecycles. It validates fixed storage, a million-fold long-period
+direct jump, deterministic declaration reordering, faulted fan-out, and the
+declared 2 KiB-per-timestamp allocation ceiling. Its HdrHistogram runs are
+closed-loop, self-paced logical-timestamp service costs, not wall-clock HIL
+latency or fixed-arrival capacity.
+
 ### Autonomous periodic optical devices
 
 Some optical devices execute a continuous local waveform rather than waiting

@@ -27,6 +27,10 @@ hardware-validated GPU workflows. The core package now has:
 - a completed schedule-free Gate 2 plant boundary with stable path/acquisition
   ownership, per-owner RNGs, fidelity-provider and calibration-illumination
   seams, and a clean serial CPU service-time baseline
+- a completed Gate 3 deterministic multi-rate virtual-time engine with one
+  canonical plant timeline, bounded trigger fan-out and faults, conventional
+  detector lifecycles, fixed prepared storage, and clean scheduler/composed-
+  plant CPU evidence
 - a compact docs set with one extension guide instead of subsystem plan sprawl
 
 ## Near-Term Priorities
@@ -71,15 +75,17 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    covers science, NGS Shack-Hartmann, and LGS pyramid directions plus detector
    fan-out with zero warmed allocation; it is a self-paced CPU service-time
    baseline, not an external-RTC latency or fixed-rate capacity claim.
-3. Add deterministic multi-rate integer-time events with explicit equal-time
-   trigger-distribution, exposure/row-band, optical-sample, nondestructive-read,
+3. Preserve the completed deterministic multi-rate integer-time engine with
+   explicit equal-time trigger-distribution, exposure/row-band, optical-sample, nondestructive-read,
    detector-readout, and publication semantics before adding command timing or
    wall-clock pacing. Canonical time, the fixed-capacity event calendar, trigger
    distribution, exact global/rolling/frame-transfer lifecycles, evolving-charge
    HgCdTe ramp reads, and their common serial scheduler composition are
-   implemented. Gate closure still requires the composed-topology benchmark and
-   support-boundary audit. Keep physical trigger faults separate from
-   timestamp-label faults and execution lateness.
+   implemented and validated. The clean [scheduler](../benchmarks/results/gate3/2026-07-21-event-scheduler-gate3-closure.toml)
+   and [composed multi-rate plant](../benchmarks/results/gate3/2026-07-21-multi-rate-plant.toml)
+   artifacts close the gate without claiming wall-clock pacing, external-RTC
+   latency, or production instrument capacity. Keep physical trigger faults
+   separate from timestamp-label faults and execution lateness.
 4. Replace the single-optic and `CompositeControllableOptic` runtime model with
    individually placed optics, prepared core plant command schemas, bounded
    timing and replayable plant-time command-silence semantics, sampled device-

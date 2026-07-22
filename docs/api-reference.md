@@ -153,7 +153,7 @@ error rather than an implicit unit conversion.
 
 ## Plant Time, Topology, And Preparation
 
-Gate 3 defines canonical plant instants, elapsed durations, nominal periodic
+The completed Gate 3 API defines canonical plant instants, elapsed durations, nominal periodic
 recurrence, and a fixed-capacity serial event calendar without adding wall-clock
 pacing. The completed Gate 2 topology API declares one shared telescope and
 atmosphere, reusable optical paths, and independent acquisitions. Preparation
@@ -313,8 +313,8 @@ representable nonnegative timestamp. `PeriodicSchedule` describes only a
 positive nominal period and a nonnegative phase. These values do not execute
 events, own mutable cursor state, read wall time, or imply detector timing.
 
-The scheduler surface remains qualified developer API while Gate 3 composes
-trigger and detector transitions. Preparation copies definitions into a flat,
+The scheduler surface remains qualified developer API after Gate 3 closure.
+Preparation copies definitions into a flat,
 canonical, fixed-length registry and allocates no run-length event list.
 `EventSchedulerState` is the single writer for compact cursors;
 `EventSchedulerWorkspace` owns fixed due slots. One `EventClaim` may be
@@ -323,8 +323,7 @@ Equal-timestamp rescheduling remains legal only when the incremented occurrence
 makes the complete key strictly later. The scheduler has no callback, product,
 detector, transport, task, execution-clock, or pacing responsibility.
 
-The trigger surface is likewise qualified while detector transition semantics
-remain under construction. Preparation canonicalizes explicit source, link,
+The trigger surface is likewise qualified. Preparation canonicalizes explicit source, link,
 consumer, trace, and fault identities into a flat finite fan-out; checks exact
 finite phase-step, jitter, drop, duplicate, label-offset, non-overtaking, and
 capacity behavior; and allocates fixed propagation, realization, observation,
@@ -418,6 +417,14 @@ one science result. It records deterministic declaration-order replay, zero
 warmed allocation, raw HdrHistogram distributions, and exact environment
 metadata. This is self-paced in-process CPU service time; it does not establish
 an event-scheduler, external-RTC, transport, or fixed-arrival latency claim.
+
+The maintained Gate 3 [scheduler](../benchmarks/results/gate3/2026-07-21-event-scheduler-gate3-closure.toml)
+and [composed multi-rate plant](../benchmarks/results/gate3/2026-07-21-multi-rate-plant.toml)
+artifacts add current-revision generator scaling, exact science/NGS/LGS replay,
+trigger-fault fan-out, conventional detector lifecycle, fixed-storage,
+direct-jump, allocation, and service-cost evidence. These qualified APIs remain
+the deterministic serial virtual-time oracle; they do not expose a wall clock,
+RTC transport, port, task, command endpoint, or parallel placement policy.
 
 ## Atmosphere
 

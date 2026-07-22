@@ -23,6 +23,13 @@ evidence includes:
   LGS path materialization, detector fan-out, and a zero warmed allocation gate;
   this is self-paced service-time evidence, not external-RTC latency or
   fixed-arrival capacity evidence
+- clean Gate 3 scheduler and composed-plant artifacts with raw reconstructable
+  HdrHistogram counts, exact environment and source revisions, the 1-to-256
+  generator matrix, science/NGS/LGS declaration-order replay, trigger-fault
+  fan-out, conventional detector lifecycles, fixed prepared storage,
+  direct long-period jumps, and the declared warmed allocation budgets; these
+  remain self-paced serial service-cost evidence rather than wall-clock HIL
+  latency or fixed-arrival capacity evidence
 - one atmosphere selection/advance to explicit model time per sampled plant
   timestamp with identical epoch visibility across all due directions and no
   telescope-cadence fallback

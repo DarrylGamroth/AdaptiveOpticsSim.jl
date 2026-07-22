@@ -197,7 +197,10 @@ end
 
 function validate_scheduler_evidence(path::AbstractString)
     manifest = TOML.parsefile(path)
-    entries = manifest["artifacts"]
+    entries = filter(manifest["artifacts"]) do entry
+        endswith(String(entry["source_contract"]),
+            "gate3_event_scheduler.toml")
+    end
     isempty(entries) && error("Gate 3 scheduler evidence manifest is empty")
     entry = last(entries)
     artifact_path = normpath(joinpath(dirname(path), entry["path"]))

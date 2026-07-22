@@ -106,6 +106,8 @@ Primary evidence:
 - [final pre-HIL local CPU service-time evidence](../benchmarks/results/platform/2026-07-18-pre-hil-11-local-cpu.toml)
 - [final pre-HIL WSL CPU service-time evidence](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cpu.toml)
 - [Gate 2 serial plant CPU service-time evidence](../benchmarks/results/gate2/2026-07-21-serial-plant.toml)
+- [Gate 3 scheduler CPU evidence](../benchmarks/results/gate3/2026-07-21-event-scheduler-gate3-closure.toml)
+- [Gate 3 composed multi-rate CPU evidence](../benchmarks/results/gate3/2026-07-21-multi-rate-plant.toml)
 - [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml)
 
 ### AMDGPU backend
