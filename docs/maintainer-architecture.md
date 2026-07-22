@@ -77,14 +77,17 @@ The dominant pattern is:
 
 Examples:
 
-- `PlantDefinition` with explicit `OpticalPathID` and `AcquisitionID` values,
-  immutable path/acquisition topology bindings, and no prepared workspace,
-  schedule, RNG stream, queue, transport, or HIL descriptor. Path and
-  acquisition model types must explicitly opt in to the configuration-only
-  `plant_model_definition_style` contract; live detector/runtime owners fail
-  closed. Its separately owned telescope and atmosphere retain their
+- `PlantDefinition` with explicit `ControllableOpticID`, `CommandEndpointID`,
+  `OpticalPathID`, and `AcquisitionID` values, immutable optic/path/acquisition
+  topology bindings, and no command schema/state, prepared workspace, schedule,
+  RNG stream, queue, transport, or HIL descriptor. Controllable-optic, path,
+  and acquisition model types must explicitly opt in to the configuration-only
+  `plant_model_definition_style` contract; live optic/detector/runtime owners
+  fail closed. Its separately owned telescope and atmosphere retain their
   established state semantics, so structural immutability of the plant is not
-  a deep-freeze claim for those owners
+  a deep-freeze claim for those owners. The initial Gate 4 topology slice
+  rejects nonempty optic topology at `prepare_plant` until prepared endpoint
+  ownership is implemented
 - `PreparedPlant` as a schedule-free concrete tuple of
   `PreparedPathExecutor` and `PreparedAcquisitionOwner` values. Each path owns
   one explicit input/result pair and prepared optical workspace; each

@@ -8,6 +8,11 @@ struct PlantTopologyTestAcquisitionModel
     label::Symbol
 end
 
+struct PlantTopologyTestControllableOpticModel
+    label::Symbol
+    conjugate::Symbol
+end
+
 struct PlantTopologyTestInvalidDefinitionStyle end
 
 AdaptiveOpticsSim.plant_model_definition_style(
@@ -16,6 +21,10 @@ AdaptiveOpticsSim.plant_model_definition_style(
 
 AdaptiveOpticsSim.plant_model_definition_style(
     ::Type{PlantTopologyTestAcquisitionModel},
+) = ColdPlantModelDefinition()
+
+AdaptiveOpticsSim.plant_model_definition_style(
+    ::Type{PlantTopologyTestControllableOpticModel},
 ) = ColdPlantModelDefinition()
 
 AdaptiveOpticsSim.plant_model_definition_style(
@@ -43,6 +52,20 @@ function assert_plant_definition_error(f, component::Symbol, reason::Symbol)
 end
 
 @testset "Immutable plant topology" begin
+    for name in (
+        :ControllableOpticID,
+        :CommandEndpointID,
+        :ControllableOpticDefinition,
+        :controllable_optic_id,
+        :controllable_optic_model,
+        :command_endpoint_ids,
+        :controllable_optic_definitions,
+        :controllable_optic_definition,
+        :command_endpoint_owner,
+    )
+        @test Base.isexported(AdaptiveOpticsSim, name)
+    end
+
     telescope = Telescope(
         resolution=8,
         diameter=8.0,
@@ -81,40 +104,108 @@ end
         :ngs,
         PlantTopologyTestAcquisitionModel(:wfs),
     )
+    woofer_feedback = AcquisitionDefinition(
+        :woofer_feedback,
+        :science,
+        PlantTopologyTestAcquisitionModel(:device_feedback),
+    )
+    woofer = ControllableOpticDefinition(
+        :woofer,
+        PlantTopologyTestControllableOpticModel(:woofer, :pupil);
+        command_endpoint_ids=(:woofer_command,),
+    )
+    tweeter = ControllableOpticDefinition(
+        ControllableOpticID(:tweeter),
+        PlantTopologyTestControllableOpticModel(:tweeter, :pupil),
+        (CommandEndpointID(:tweeter_command),),
+    )
+    inferred_tweeter = @inferred ControllableOpticDefinition(
+        ControllableOpticID(:inferred_tweeter),
+        PlantTopologyTestControllableOpticModel(:inferred_tweeter, :pupil),
+        (CommandEndpointID(:inferred_tweeter_command),),
+    )
+    @test @inferred(command_endpoint_ids(inferred_tweeter)) ===
+        (CommandEndpointID(:inferred_tweeter_command),)
+    segmented = ControllableOpticDefinition(
+        :segmented,
+        PlantTopologyTestControllableOpticModel(:segmented, :pupil),
+        (:segment_a, :segment_b),
+    )
 
     @test OpticalPathID(:science) == path_id(science_path)
     @test AcquisitionID(:fast_camera) == acquisition_id(fast_camera)
+    @test ControllableOpticID(:woofer) == controllable_optic_id(woofer)
+    @test command_endpoint_ids(woofer) ==
+        (CommandEndpointID(:woofer_command),)
+    @test command_endpoint_ids(segmented) ==
+        (CommandEndpointID(:segment_a), CommandEndpointID(:segment_b))
     @test isequal(OpticalPathID(:science), OpticalPathID(:science))
     @test !isequal(OpticalPathID(:science), OpticalPathID(:ngs))
     @test isequal(AcquisitionID(:fast_camera), AcquisitionID(:fast_camera))
     @test !isequal(AcquisitionID(:fast_camera), AcquisitionID(:slow_camera))
+    @test isequal(ControllableOpticID(:woofer),
+        ControllableOpticID(:woofer))
+    @test !isequal(ControllableOpticID(:woofer),
+        ControllableOpticID(:tweeter))
+    @test isequal(CommandEndpointID(:woofer_command),
+        CommandEndpointID(:woofer_command))
     @test acquisition_path_id(fast_camera) == OpticalPathID(:science)
     @test path_source(science_path) === science_source
     @test path_model(science_path).label === :science_relay
     @test acquisition_model(fast_camera).label === :fast_detector
+    @test controllable_optic_model(woofer).label === :woofer
+    @test controllable_optic_model(woofer).conjugate === :pupil
     @test sprint(show, OpticalPathID(:science)) ==
         "OpticalPathID(:science)"
     @test sprint(show, AcquisitionID(:fast_camera)) ==
         "AcquisitionID(:fast_camera)"
+    @test sprint(show, ControllableOpticID(:woofer)) ==
+        "ControllableOpticID(:woofer)"
+    @test sprint(show, CommandEndpointID(:woofer_command)) ==
+        "CommandEndpointID(:woofer_command)"
     @test length(Set((OpticalPathID(:science), OpticalPathID(:science)))) == 1
     @test length(Set((OpticalPathID(:science), AcquisitionID(:science)))) == 2
+    @test length(Set((
+        OpticalPathID(:shared),
+        AcquisitionID(:shared),
+        ControllableOpticID(:shared),
+        CommandEndpointID(:shared),
+    ))) == 4
 
     plant = PlantDefinition(
         telescope=telescope,
         atmosphere=atmosphere,
+        controllable_optics=(
+            woofer=woofer,
+            tweeter=tweeter,
+            segmented=segmented,
+        ),
         paths=(ngs=ngs_path, science=science_path),
         acquisitions=(
             fast_camera=fast_camera,
             slow_camera=slow_camera,
             ngs_wfs=ngs_wfs,
+            woofer_feedback=woofer_feedback,
         ),
     )
 
     @test plant_telescope(plant) === telescope
     @test plant_atmosphere(plant) === atmosphere
+    @test controllable_optic_definitions(plant) ===
+        (woofer, tweeter, segmented)
     @test path_definitions(plant) === (ngs_path, science_path)
     @test acquisition_definitions(plant) ===
-        (fast_camera, slow_camera, ngs_wfs)
+        (fast_camera, slow_camera, ngs_wfs, woofer_feedback)
+    @test controllable_optic_definition(plant, :woofer) === woofer
+    @test controllable_optic_definition(
+        plant,
+        ControllableOpticID(:tweeter),
+    ) === tweeter
+    @test command_endpoint_owner(plant, :woofer_command) === woofer
+    @test command_endpoint_owner(
+        plant,
+        CommandEndpointID(:segment_b),
+    ) === segmented
     @test path_definition(plant, :science) === science_path
     @test path_definition(plant, OpticalPathID(:ngs)) === ngs_path
     @test acquisition_definition(plant, :fast_camera) === fast_camera
@@ -123,15 +214,18 @@ end
         AcquisitionID(:slow_camera),
     ) === slow_camera
 
-    # Declarations are organization, not identity. Reordering paths and
-    # acquisitions preserves every explicit reference, and two independent
+    # Declarations are organization, not identity. Reordering optics, paths,
+    # and acquisitions preserves every explicit reference, and two independent
     # acquisitions may reference one reusable optical path.
     reordered = PlantDefinition(
         telescope,
         atmosphere,
+        (segmented, tweeter, woofer),
         (science_path, ngs_path),
-        (ngs_wfs, slow_camera, fast_camera),
+        (woofer_feedback, ngs_wfs, slow_camera, fast_camera),
     )
+    @test controllable_optic_definition(reordered, :woofer) === woofer
+    @test command_endpoint_owner(reordered, :tweeter_command) === tweeter
     @test path_definition(reordered, :science) === science_path
     @test acquisition_path_id(
         acquisition_definition(reordered, :fast_camera),
@@ -143,12 +237,16 @@ end
     named_positional = PlantDefinition(
         telescope,
         atmosphere,
+        (woofer=woofer, tweeter=tweeter, segmented=segmented),
         (ngs=ngs_path, science=science_path),
-        (fast_camera=fast_camera, slow_camera=slow_camera, ngs_wfs=ngs_wfs),
+        (fast_camera=fast_camera, slow_camera=slow_camera, ngs_wfs=ngs_wfs,
+            woofer_feedback=woofer_feedback),
     )
+    @test controllable_optic_definitions(named_positional) ===
+        (woofer, tweeter, segmented)
     @test path_definitions(named_positional) === (ngs_path, science_path)
     @test acquisition_definitions(named_positional) ===
-        (fast_camera, slow_camera, ngs_wfs)
+        (fast_camera, slow_camera, ngs_wfs, woofer_feedback)
 
     empty_plant = PlantDefinition(
         telescope=telescope,
@@ -156,12 +254,16 @@ end
     )
     @test isempty(path_definitions(empty_plant))
     @test isempty(acquisition_definitions(empty_plant))
+    @test isempty(controllable_optic_definitions(empty_plant))
 
     for value in (
         OpticalPathID(:science),
         AcquisitionID(:fast_camera),
+        ControllableOpticID(:woofer),
+        CommandEndpointID(:woofer_command),
         ngs_path,
         fast_camera,
+        woofer,
         plant,
     )
         @test !Base.ismutable(value)
@@ -177,6 +279,7 @@ end
     )
         @test !hasproperty(ngs_path, absent)
         @test !hasproperty(fast_camera, absent)
+        @test !hasproperty(woofer, absent)
         @test !hasproperty(plant, absent)
     end
 
@@ -191,6 +294,16 @@ end
         :empty_id,
     )
     assert_plant_definition_error(
+        () -> ControllableOpticID(Symbol("")),
+        :controllable_optic,
+        :empty_id,
+    )
+    assert_plant_definition_error(
+        () -> CommandEndpointID(Symbol("")),
+        :command_endpoint,
+        :empty_id,
+    )
+    assert_plant_definition_error(
         () -> OpticalPathDefinition(1, ngs, PlantTopologyTestOpticalModel(:x)),
         :path,
         :invalid_id,
@@ -199,6 +312,24 @@ end
         () -> AcquisitionDefinition(:camera, 1,
             PlantTopologyTestAcquisitionModel(:x)),
         :path,
+        :invalid_id,
+    )
+    assert_plant_definition_error(
+        () -> ControllableOpticDefinition(
+            1,
+            PlantTopologyTestControllableOpticModel(:x, :pupil),
+            (:command,),
+        ),
+        :controllable_optic,
+        :invalid_id,
+    )
+    assert_plant_definition_error(
+        () -> ControllableOpticDefinition(
+            :bad,
+            PlantTopologyTestControllableOpticModel(:x, :pupil),
+            (1,),
+        ),
+        :command_endpoint,
         :invalid_id,
     )
     assert_plant_definition_error(
@@ -224,6 +355,11 @@ end
         :missing_model,
     )
     assert_plant_definition_error(
+        () -> ControllableOpticDefinition(:bad, nothing, (:command,)),
+        :controllable_optic,
+        :missing_model,
+    )
+    assert_plant_definition_error(
         () -> OpticalPathDefinition(:bad, ngs, Ref(:live_state)),
         :path,
         :unsupported_model_definition,
@@ -231,6 +367,15 @@ end
     assert_plant_definition_error(
         () -> AcquisitionDefinition(:bad, :ngs, Ref(:live_state)),
         :acquisition,
+        :unsupported_model_definition,
+    )
+    assert_plant_definition_error(
+        () -> ControllableOpticDefinition(
+            :bad,
+            Ref(:live_state),
+            (:command,),
+        ),
+        :controllable_optic,
         :unsupported_model_definition,
     )
     live_detector = Detector()
@@ -249,6 +394,75 @@ end
         :path,
         :invalid_model_definition_style,
     )
+    assert_plant_definition_error(
+        () -> ControllableOpticDefinition(
+            :bad,
+            PlantTopologyTestInvalidDefinitionStyle(),
+            (:command,),
+        ),
+        :controllable_optic,
+        :invalid_model_definition_style,
+    )
+    assert_plant_definition_error(
+        () -> ControllableOpticDefinition(
+            :bad,
+            PlantTopologyTestControllableOpticModel(:bad, :pupil),
+            (),
+        ),
+        :controllable_optic,
+        :missing_endpoint,
+    )
+    assert_plant_definition_error(
+        () -> ControllableOpticDefinition(
+            :bad,
+            PlantTopologyTestControllableOpticModel(:bad, :pupil),
+            [:command],
+        ),
+        :command_endpoint,
+        :invalid_container,
+    )
+    assert_plant_definition_error(
+        () -> ControllableOpticDefinition(
+            :bad,
+            PlantTopologyTestControllableOpticModel(:bad, :pupil),
+            (:command, :command),
+        ),
+        :command_endpoint,
+        :duplicate_id,
+    )
+
+    duplicate_woofer = ControllableOpticDefinition(
+        :woofer,
+        PlantTopologyTestControllableOpticModel(:duplicate, :pupil),
+        (:duplicate_command,),
+    )
+    assert_plant_definition_error(
+        () -> PlantDefinition(
+            telescope,
+            atmosphere,
+            (woofer, duplicate_woofer),
+            (),
+            (),
+        ),
+        :controllable_optic,
+        :duplicate_id,
+    )
+    shared_endpoint_optic = ControllableOpticDefinition(
+        :shared_endpoint_optic,
+        PlantTopologyTestControllableOpticModel(:shared, :pupil),
+        (:woofer_command,),
+    )
+    assert_plant_definition_error(
+        () -> PlantDefinition(
+            telescope,
+            atmosphere,
+            (woofer, shared_endpoint_optic),
+            (),
+            (),
+        ),
+        :command_endpoint,
+        :duplicate_owner,
+    )
 
     duplicate_ngs_path = OpticalPathDefinition(
         :ngs,
@@ -259,6 +473,7 @@ end
         () -> PlantDefinition(
             telescope,
             atmosphere,
+            (),
             (ngs_path, duplicate_ngs_path),
             (),
         ),
@@ -274,6 +489,7 @@ end
         () -> PlantDefinition(
             telescope,
             atmosphere,
+            (),
             (ngs_path, science_path),
             (fast_camera, duplicate_fast_camera),
         ),
@@ -289,6 +505,7 @@ end
         () -> PlantDefinition(
             telescope,
             atmosphere,
+            (),
             (ngs_path,),
             (unknown_path_acquisition,),
         ),
@@ -296,6 +513,15 @@ end
         :unknown_path,
     )
 
+    assert_plant_definition_error(
+        () -> PlantDefinition(
+            telescope=telescope,
+            atmosphere=atmosphere,
+            controllable_optics=(wrong_name=woofer,),
+        ),
+        :controllable_optic,
+        :identity_mismatch,
+    )
     assert_plant_definition_error(
         () -> PlantDefinition(
             telescope=telescope,
@@ -316,32 +542,43 @@ end
         :identity_mismatch,
     )
     assert_plant_definition_error(
-        () -> PlantDefinition(telescope, atmosphere, [ngs_path], ()),
+        () -> PlantDefinition(telescope, atmosphere, (), [ngs_path], ()),
         :path,
         :invalid_container,
     )
     assert_plant_definition_error(
-        () -> PlantDefinition(telescope, atmosphere, (ngs_path,), [ngs_wfs]),
+        () -> PlantDefinition(telescope, atmosphere, (), (ngs_path,),
+            [ngs_wfs]),
         :acquisition,
         :invalid_container,
     )
     assert_plant_definition_error(
-        () -> PlantDefinition(telescope, atmosphere, (1,), ()),
+        () -> PlantDefinition(telescope, atmosphere, [woofer], (), ()),
+        :controllable_optic,
+        :invalid_container,
+    )
+    assert_plant_definition_error(
+        () -> PlantDefinition(telescope, atmosphere, (1,), (), ()),
+        :controllable_optic,
+        :invalid_definition,
+    )
+    assert_plant_definition_error(
+        () -> PlantDefinition(telescope, atmosphere, (), (1,), ()),
         :path,
         :invalid_definition,
     )
     assert_plant_definition_error(
-        () -> PlantDefinition(telescope, atmosphere, (ngs_path,), (1,)),
+        () -> PlantDefinition(telescope, atmosphere, (), (ngs_path,), (1,)),
         :acquisition,
         :invalid_definition,
     )
     assert_plant_definition_error(
-        () -> PlantDefinition(nothing, atmosphere, (), ()),
+        () -> PlantDefinition(nothing, atmosphere, (), (), ()),
         :plant,
         :invalid_telescope,
     )
     assert_plant_definition_error(
-        () -> PlantDefinition(telescope, nothing, (), ()),
+        () -> PlantDefinition(telescope, nothing, (), (), ()),
         :plant,
         :invalid_atmosphere,
     )
@@ -365,4 +602,37 @@ end
         :acquisition,
         :invalid_id,
     )
+    assert_plant_definition_error(
+        () -> controllable_optic_definition(plant, :unknown),
+        :controllable_optic,
+        :unknown_id,
+    )
+    assert_plant_definition_error(
+        () -> controllable_optic_definition(plant, 1),
+        :controllable_optic,
+        :invalid_id,
+    )
+    assert_plant_definition_error(
+        () -> command_endpoint_owner(plant, :unknown),
+        :command_endpoint,
+        :unknown_id,
+    )
+    assert_plant_definition_error(
+        () -> command_endpoint_owner(plant, 1),
+        :command_endpoint,
+        :invalid_id,
+    )
+
+    preparation_error = captured_plant_definition_error() do
+        prepare_plant(PlantDefinition(
+            telescope=telescope,
+            atmosphere=atmosphere,
+            controllable_optics=(woofer,),
+        ); run_seed=0x1234)
+    end
+    @test preparation_error isa PlantPreparationError
+    if preparation_error isa PlantPreparationError
+        @test preparation_error.component === :controllable_optic
+        @test preparation_error.reason === :unsupported_preparation
+    end
 end

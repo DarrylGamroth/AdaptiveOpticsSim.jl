@@ -17,9 +17,9 @@ names such as `src/wfs`, `src/detectors`, `src/optics`, or `src/control`.
 
 ## Plant Model Definitions
 
-`OpticalPathDefinition` and `AcquisitionDefinition` accept only explicitly
-declared cold model-definition types. A third-party definition opts in through
-dispatch:
+`ControllableOpticDefinition`, `OpticalPathDefinition`, and
+`AcquisitionDefinition` accept only explicitly declared cold model-definition
+types. A third-party definition opts in through dispatch:
 
 ```julia
 AdaptiveOpticsSim.plant_model_definition_style(::Type{MyModelDefinition}) =
@@ -28,11 +28,20 @@ AdaptiveOpticsSim.plant_model_definition_style(::Type{MyModelDefinition}) =
 
 This method is an ownership assertion, not a recursive mutability test. An
 opted-in value must contain configuration only. It must not retain a prepared
-plan or workspace, mutable simulation or detector state, a schedule, RNG
-stream, queue, transport, or HIL descriptor. Keep those values in separately
-owned prepared runtime objects. Types that do not opt in fail closed with
-`PlantDefinitionError`; do not opt live detector, WFS, atmosphere, or runtime
-owner types into this trait.
+plan or workspace, mutable optic, simulation, or detector state, a command
+schema or endpoint state, schedule, RNG stream, queue, transport, or HIL
+descriptor. Keep those values in separately owned prepared runtime objects.
+Types that do not opt in fail closed with `PlantDefinitionError`; do not opt
+live controllable optics, detectors, WFSs, atmospheres, or runtime owners into
+this trait.
+
+One cold controllable-optic declaration names one physical device and one or
+more explicit `CommandEndpointID` values through `command_endpoint_ids`. These
+identities state ownership only: they do not define payload shape, command
+timing, packed controller layout, atomic application, placement, visibility, or
+an optical execution group. During the first Gate 4 topology slice,
+`prepare_plant` rejects a nonempty controllable-optic set until the prepared
+endpoint contract is implemented rather than silently ignoring it.
 
 Preparation then dispatches on those same concrete model types. A path method
 receives the exact definition, its run-owned frozen source, the plant telescope,
