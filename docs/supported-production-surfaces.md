@@ -106,6 +106,8 @@ Primary evidence:
 - [final pre-HIL local CPU service-time evidence](../benchmarks/results/platform/2026-07-18-pre-hil-11-local-cpu.toml)
 - [final pre-HIL WSL CPU service-time evidence](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cpu.toml)
 - [Gate 2 serial plant CPU service-time evidence](../benchmarks/results/gate2/2026-07-21-serial-plant.toml)
+- [Gate 3 scheduler CPU evidence](../benchmarks/results/gate3/2026-07-21-event-scheduler-gate3-closure.toml)
+- [Gate 3 composed multi-rate CPU evidence](../benchmarks/results/gate3/2026-07-21-multi-rate-plant.toml)
 - [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml)
 
 ### AMDGPU backend
@@ -153,7 +155,7 @@ Current expectation:
 - if a maintained AMDGPU surface regresses numerically against CPU, that is a
   release-blocking defect for the AMDGPU-supported scope
 
-The current Julia 1.12.6 AMDGPU hardware target passed all `422` maintained
+The current Julia 1.12.6 AMDGPU hardware target passed all `434` maintained
 checks. A later local Julia installation failure prevented a replacement raw
 latency artifact, so the July 14 characterization remains the maintained AMD
 performance evidence; the failed host run does not broaden or weaken the
@@ -211,7 +213,7 @@ Scientist-owned HEART boundary truth artifact:
 
 The following are outside the current support claim:
 
-- CUDA execution. The extension, dedicated test project, fail-fast `412/412`
+- CUDA execution. The extension, dedicated test project, fail-fast `424/424`
   hardware target, and current manual WSL hardware evidence—including prepared direct
   imaging and the
   [final pre-HIL CUDA artifact](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cuda.toml)—are

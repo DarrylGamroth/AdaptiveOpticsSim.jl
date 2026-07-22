@@ -89,7 +89,7 @@ julia --threads=1 --project=benchmarks --startup-file=no \
 Its versioned contract is
 [`gate3_event_scheduler.toml`](../benchmarks/contracts/gate3_event_scheduler.toml),
 and the current raw-histogram artifact is
-[`2026-07-21-event-scheduler.toml`](../benchmarks/results/gate3/2026-07-21-event-scheduler.toml).
+[`2026-07-21-event-scheduler-gate3-closure.toml`](../benchmarks/results/gate3/2026-07-21-event-scheduler-gate3-closure.toml).
 The timed boundary is one serial linear scan, claim, checked integer next-time
 calculation, and reschedule across 1, 8, 32, 128, and 256 active generators.
 This is warmed, self-paced in-process scheduler service-cost evidence. It does
@@ -138,6 +138,31 @@ warmed detector kernels, and the bounded heterogeneous-orchestration allocation
 budget. It is a serial virtual-time correctness suite, not the composed
 topology benchmark, wall-clock HIL latency, fixed-arrival capacity, or an
 integrated multi-device claim.
+
+The maintained composed-plant characterization uses the same single-threaded
+execution policy:
+
+```sh
+julia --threads=1 --project=benchmarks --startup-file=no \
+  benchmarks/benchmark_gate3_multi_rate_plant.jl
+```
+
+Its [versioned contract](../benchmarks/contracts/gate3_multi_rate_plant.toml)
+and [clean artifact](../benchmarks/results/gate3/2026-07-21-multi-rate-plant.toml)
+cover one direct-science path, an off-axis NGS Shack–Hartmann path, a
+finite-height LGS pyramid path, five independent conventional detector
+acquisitions, common-trigger fan-out and faults, declaration reordering, fixed
+storage, direct long-period jumps, and a bounded allocation window. The timed
+boundary is one heterogeneous canonical plant timestamp. The three 10,000-
+sample runs are self-paced service-cost distributions; they are not fixed-rate
+HIL latency or capacity measurements.
+
+Gate 3 artifacts store each HdrHistogram as a lossless sparse stream of
+big-endian `Int64` value/count pairs in base64. The histogram range and
+significant figures remain in the artifact, and
+[`hdr_histogram_artifact.jl`](../benchmarks/support/hdr_histogram_artifact.jl)
+round-trips the stream before publication. Encoding stays outside the timed
+boundary and avoids depending on a particular compressed-wire encoder.
 
 ### Optional backend smoke in `Pkg.test()`
 
@@ -431,8 +456,8 @@ Current clean-revision artifacts are:
 
 All listed correctness, residency, allocation, absolute-p95, and relative-p95
 gates pass. The WSL target used CUDA.jl 6.2.1, KernelAbstractions.jl 0.9.42,
-and Julia 1.12.6. The current maintained hardware targets passed `412/412` CUDA
-checks and `422/422` AMDGPU checks with scalar indexing disabled, including the
+and Julia 1.12.6. The current maintained hardware targets passed `424/424` CUDA
+checks and `434/434` AMDGPU checks with scalar indexing disabled, including the
 shared LiFT matrix and device-resident schedule-free atmosphere
 materialization, direct-science formation, and detector fan-out. The
 current local AMDGPU latency artifact remains the
@@ -440,6 +465,15 @@ current local AMDGPU latency artifact remains the
 the July 18 timing repetitions completed, but no replacement raw-histogram
 artifact was retained after the host's Julia 1.12.6 installation failed a
 package-independent GC check. This is not promoted into a new latency baseline.
+
+The Gate 3 closure code revision `871f76a` passed the full CPU suite, the
+`424/424` CUDA target on an RTX 3050 Ti under WSL, and the `434/434` AMDGPU
+target on a local gfx1030 device, all with Julia 1.12.6. CUDA used CUDA.jl 6.2.1;
+AMDGPU used AMDGPU.jl 2.7.0; both used KernelAbstractions.jl 0.9.42. The
+integrated multi-rate plant remains a deterministic serial CPU oracle. The GPU
+targets validate maintained device-resident optical surfaces and direct
+detector lifecycles; they do not claim an integrated GPU scheduler, external
+RTC latency, or fixed-arrival capacity.
 
 The final composed CPU Gate 0 run is preserved even though `G0-PERF-05` missed
 its relative p99 limit by 96 ns while every absolute and allocation gate

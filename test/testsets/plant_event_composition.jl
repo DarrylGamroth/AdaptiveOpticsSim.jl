@@ -167,7 +167,8 @@ function AdaptiveOpticsSim.prepare_acquisition_provider(
 end
 
 function event_composition_fixture(; reverse_order::Bool=false,
-    unbound_trigger_consumer::Bool=false)
+    unbound_trigger_consumer::Bool=false,
+    faulted_trigger_fanout::Bool=false)
     T = Float64
     telescope = Telescope(resolution=4, diameter=T(4),
         central_obstruction=zero(T), T=T)
@@ -206,18 +207,36 @@ function event_composition_fixture(; reverse_order::Bool=false,
         paths, acquisitions);
         run_seed=0x7900)
 
+    trigger_faults = faulted_trigger_fanout ? TriggerFaultTrace(
+        TriggerFaultTraceEntry(2, :common_trigger_drop;
+            action=DropTriggerEdge),
+        TriggerFaultTraceEntry(3, :common_trigger_phase_error;
+            phase_step=PlantTimeOffset(20_000_000),
+            jitter=PlantTimeOffset(10_000_000),
+            timestamp_label_offset=PlantTimeOffset(7_000_000)),
+        TriggerFaultTraceEntry(4, :common_trigger_duplicate;
+            action=DuplicateTriggerEdge,
+            duplicate_delay=PlantDuration(250_000_000)),
+    ) : TriggerFaultTrace()
     trigger_source = TriggerSourceDefinition(:ngs_camera_trigger,
-        PeriodicSchedule(period_ns=400_000_000, phase_ns=50_000_000))
+        PeriodicSchedule(
+            period_ns=faulted_trigger_fanout ? 600_000_000 : 400_000_000,
+            phase_ns=50_000_000); faults=trigger_faults)
     trigger_consumer = TriggerConsumerDefinition(:ngs_camera,
         TriggerSourceID(:ngs_camera_trigger))
-    trigger_consumers = unbound_trigger_consumer ? (
+    trigger_consumers = faulted_trigger_fanout ? (
+        trigger_consumer,
+        TriggerConsumerDefinition(:science_camera,
+            TriggerSourceID(:ngs_camera_trigger)),
+    ) : unbound_trigger_consumer ? (
         trigger_consumer,
         TriggerConsumerDefinition(:unbound_camera,
             TriggerSourceID(:ngs_camera_trigger)),
     ) : (trigger_consumer,)
     trigger_topology = prepare_trigger_topology((trigger_source,), (),
         trigger_consumers;
-        in_flight_capacity=unbound_trigger_consumer ? 2 : 1)
+        in_flight_capacity=(unbound_trigger_consumer ||
+            faulted_trigger_fanout) ? 8 : 1)
     samples = (
         OpticalSampleDefinition(:science,
             PeriodicSchedule(period_ns=100_000_000, phase_ns=0)),
@@ -231,8 +250,10 @@ function event_composition_fixture(; reverse_order::Bool=false,
             GlobalShutterAcquisitionDefinition(PlantDuration(200_000_000);
                 readout_duration=PlantDuration(20_000_000),
                 readiness_delay=PlantDuration(10_000_000)),
-            PeriodicAcquisitionStart(PeriodicSchedule(
-                period_ns=500_000_000, phase_ns=0))),
+            faulted_trigger_fanout ?
+                TriggeredAcquisitionStart(:science_camera) :
+                PeriodicAcquisitionStart(PeriodicSchedule(
+                    period_ns=500_000_000, phase_ns=0))),
         DetectorEventDefinition(:science_ccd,
             GlobalShutterAcquisitionDefinition(PlantDuration(300_000_000)),
             PeriodicAcquisitionStart(PeriodicSchedule(
@@ -598,4 +619,22 @@ end
     @test event_composition_storage_signature(prepared, state, workspace) ==
         storage_before
     @test plant_event_generator_count(prepared) == 29
+
+    faulted_plant, faulted, faulted_state, faulted_workspace =
+        event_composition_fixture(faulted_trigger_fanout=true)
+    faulted_timestamp_count = run_plant_events_until!(faulted,
+        faulted_state, faulted_workspace, PlantTimestamp(3_000_000_000))
+    @test faulted_timestamp_count > 0
+    @test acquisition_product_sequence(faulted, faulted_state,
+        :science_cmos) == 5
+    @test acquisition_product_sequence(faulted, faulted_state,
+        :ngs_saphira) == 5
+    @test acquisition_product_ready_timestamp(faulted, faulted_state,
+        :science_cmos) == PlantTimestamp(2_690_000_000)
+    @test acquisition_product_ready_timestamp(faulted, faulted_state,
+        :ngs_saphira) == PlantTimestamp(2_680_000_000)
+    @test all(isfinite, acquisition_observation(prepared_acquisition(
+        faulted_plant, :science_cmos)))
+    @test all(isfinite, acquisition_observation(prepared_acquisition(
+        faulted_plant, :ngs_saphira)))
 end
