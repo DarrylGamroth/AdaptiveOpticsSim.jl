@@ -14,14 +14,14 @@ boundary and document map.
 
 A plant ultimately contains one telescope and atmosphere, independently placed
 controllable optics, reusable optical paths, and independently scheduled or
-triggered acquisitions. The implemented Gate 2 declaration boundary currently
-commits the telescope, atmosphere, path, and acquisition topology. The first
-Gate 4 slice additionally declares every physical controllable optic and the
-stable identities of its independently timed or latched command endpoints.
-Endpoint payload schemas, prepared command state, controllable-optic placement,
-and acquisition scheduling remain their assigned later slices; none is hidden
-in these identity records. Separating a path from its acquisitions prevents a
-second camera or readout cadence from forcing duplicate propagation.
+triggered acquisitions. The implemented Gate 2 declaration boundary commits
+the telescope, atmosphere, path, and acquisition topology. The first two Gate 4
+slices additionally declare every physical controllable optic and one immutable
+versioned semantic schema for each independently timed or latched command
+endpoint. Mutable command admission/application state, controllable-optic
+placement, and acquisition scheduling remain their assigned later slices; none
+is hidden in an identity or schema. Separating a path from its acquisitions
+prevents a second camera or readout cadence from forcing duplicate propagation.
 
 Gate 2 is validated by the focused topology, preparation, provider, RNG, and
 illumination testsets plus the clean [serial plant CPU
@@ -49,6 +49,42 @@ detector state, schedules, RNG streams, queues, transport, and HIL descriptors.
 It is intentionally opt-in instead of a shallow mutability heuristic.
 
 ```julia
+function dm_command_schema(id, endpoint, actuator_count)
+    return PlantCommandSchema(
+        Float32,
+        (actuator_count,);
+        id,
+        version=1,
+        endpoint,
+        units=:metre,
+        sign_convention=:positive_surface_increases_opd,
+        basis=CommandBasis(:actuator, id),
+        basis_revision=1,
+        semantics=AbsoluteCommand,
+        bounds=UniformCommandBounds(-5f-6, 5f-6),
+        value_policy=CommandValuePolicy(
+            RejectInvalidCommand,
+            RejectInvalidCommand,
+            ValidateOnPresentation,
+        ),
+        sequence_policy=CommandSequencePolicy(
+            RejectSequence,
+            RejectSequence,
+            RejectSequence,
+            AcceptSequence,
+        ),
+        effective_time_policy=CommandEffectiveTimePolicy(
+            AllowFutureCommand,
+            RejectLateCommand,
+            PreservePendingCommands,
+        ),
+        silence_policy=CommandSilencePolicy(
+            HoldLastCommand,
+            AgeFromApplication,
+        ),
+    )
+end
+
 plant = PlantDefinition(
     telescope=tel,
     atmosphere=atm,
@@ -56,12 +92,24 @@ plant = PlantDefinition(
         woofer=ControllableOpticDefinition(
             :woofer,
             woofer_model;
-            command_endpoint_ids=(:woofer_command,),
+            command_schemas=(
+                woofer_command=dm_command_schema(
+                    :woofer_v1,
+                    :woofer_command,
+                    97,
+                ),
+            ),
         ),
         tweeter=ControllableOpticDefinition(
             :tweeter,
             tweeter_model;
-            command_endpoint_ids=(:tweeter_command,),
+            command_schemas=(
+                tweeter_command=dm_command_schema(
+                    :tweeter_v1,
+                    :tweeter_command,
+                    2_041,
+                ),
+            ),
         ),
     ),
     paths=(
@@ -90,9 +138,10 @@ plant = PlantDefinition(
 )
 ```
 
-`PlantDefinition`, `ControllableOpticDefinition`, `OpticalPathDefinition`,
-`AcquisitionDefinition`, `AtmosphereLayerID`, `ControllableOpticID`,
-`CommandEndpointID`, `OpticalPathID`, `AcquisitionID`, `RNGOwnerIdentity`,
+`PlantDefinition`, `ControllableOpticDefinition`, `PlantCommandSchema`,
+`OpticalPathDefinition`, `AcquisitionDefinition`, `AtmosphereLayerID`,
+`ControllableOpticID`, `CommandEndpointID`, `PlantCommandSchemaID`,
+`OpticalPathID`, `AcquisitionID`, `RNGOwnerIdentity`,
 `RNGDerivationVersion`, `plant_model_definition_style`, and
 `ColdPlantModelDefinition` are committed public declaration names.
 `PreparedPlant`, `PreparedPathExecutor`, `PreparedAcquisitionOwner`,
@@ -103,10 +152,12 @@ corresponding schedule-free prepared boundary.
 A symbol passed as an identity is normalized to the corresponding typed ID. A
 tuple or named tuple is only declaration organization: every definition carries
 its own explicit identity, a named-tuple key must agree with it, and reordering
-cannot change a reference. Every command-endpoint identity has exactly one
-physical optic owner. One optic may name several independently latched
-endpoints, but endpoint identity alone implies neither packed layout nor atomic
-application. Multiple acquisitions may reference the same path, as the two
+cannot change a reference. A named command-schema key must match its target
+endpoint. Every command-endpoint identity and every active schema identity is
+unique in one plant, and each endpoint has exactly one physical optic owner.
+One optic may carry several independently latched endpoint schemas, but shared
+optic ownership implies neither packed layout nor atomic application. Multiple
+acquisitions may reference the same path, as the two
 science acquisitions do above; sampled device feedback likewise remains an
 ordinary acquisition rather than a command outcome.
 
@@ -120,19 +171,20 @@ atmosphere has one evolution writer. Preparation freezes compatible
 configuration and constructs separately owned plans, single-writer workspaces,
 and state for the components supported by the current gate.
 
-The definitions contain no command payload schema or state, schedule, trigger
-binding, RNG stream, propagation workspace, queue, transport, or HIL
-descriptor. Those concepts are attached by their assigned preparation,
-scheduling, and HIL-boundary layers. Core names do not carry an `HIL` prefix
+The definitions contain immutable command payload schemas but no mutable
+command state, admission calendar, trigger binding, RNG stream, propagation
+workspace, queue, transport, or HIL descriptor. Those mutable and boundary
+concepts are attached by their assigned preparation, scheduling, and
+HIL-boundary layers. Core names do not carry an `HIL` prefix
 because the same plant can run in deterministic virtual time, offline, or
 behind the HIL companion. An acquisition definition does not itself prescribe
 a cross-owner handoff. The HIL data-plane boundary uses ports backed by the
 sequenced SPSC rings specified in [`rtc-ports.md`](rtc-ports.md).
 
-The initial Gate 4 topology slice is deliberately fail-closed at preparation:
-`prepare_plant` rejects a nonempty controllable-optic set until prepared command
-schemas and endpoint owners are implemented. It never returns a prepared plant
-that silently omits a declared physical device.
+The first two Gate 4 declaration slices are deliberately fail-closed at
+preparation: `prepare_plant` rejects a nonempty controllable-optic set until
+mutable prepared endpoint owners are implemented. It never returns a prepared
+plant that silently omits a declared physical device or schema.
 
 Preparation turns immutable definitions into backend-, device-, shape-, and
 capacity-bound plans plus explicitly owned mutable state, workspaces, and
@@ -856,7 +908,8 @@ than retained as a compatibility wrapper. Its responsibilities separate into:
 
 - a named tuple or registry of individual controllable optics
 - placement and path-visibility traits for each optic
-- one bounded command endpoint per independently timed optic or segment
+- one immutable semantic command schema per independently timed optic or
+  segment, followed by one bounded prepared endpoint owner
 - prepared, internal plane groups derived solely for optical execution
 - explicit multi-optic transactions when hardware really requires atomic latch
 - a user-integration command schema when an external protocol uses packed
@@ -873,17 +926,25 @@ references. The replacement stage deletes `CompositeControllableOptic` and
 replaces `RuntimeCommandLayout` rather than retaining either for source
 compatibility.
 
-The core plant command schema defines only the semantic payload: target,
-numeric type and shape, physical units, basis/calibration identity, absolute or
-incremental meaning, bounds, plant-effective time, and model policies. Core
-owns validation, bounded admission, application, held state, and the terminal
-model disposition. The HIL command-submission descriptor wraps a mapped plant
-command with run/session correlation, source timestamp-domain and mapping
-metadata, payload-lease ownership, and outcome credit. Its paired command
-outcome wraps the core disposition with boundary timing and returns that
-credit. Enqueue, semantic admission, physical application, and boundary
-completion therefore remain separate observable operations, and core never
-imports a HIL descriptor or lease type.
+The implemented `PlantCommandSchema` defines only semantic interpretation:
+stable schema/version and endpoint identities, exact scalar or backend-neutral
+array element type and dimensions, physical-unit and sign-convention
+identities, basis and revision, absolute or incremental meaning, uniform or
+unbounded values, and explicit value, sequence, effective-time, supersession,
+and plant-time-silence policy vocabulary. A complete fixed-shape replacement
+uses absolute semantics; it is not a third semantic mode. Stroke or slew checks
+that depend on the currently effective state are application-stage device
+rules. `validate_plant_command_payload` checks presentation compatibility
+without mutation, clipping, admission, sequencing, scheduling, or application.
+
+Core's later endpoint layers own bounded admission, application, held state,
+and terminal model disposition. The HIL command-submission descriptor wraps a
+mapped plant command with run/session correlation, source timestamp-domain and
+mapping metadata, payload-lease ownership, and outcome credit. Its paired
+command outcome wraps the core disposition with boundary timing and returns
+that credit. Enqueue, payload validation, semantic admission, physical
+application, and boundary completion therefore remain separate observable
+operations, and core never imports a HIL descriptor or lease type.
 
 Every DM is an independent controllable optic. Its actuator pitch, influence
 functions, stroke, spatial bandwidth, misregistration, dynamics, command

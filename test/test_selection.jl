@@ -22,6 +22,8 @@ const TEST_SUITE_SPECS = (
     TestSuiteSpec("direct-science", "testsets/direct_science.jl"),
     TestSuiteSpec("atmosphere", "testsets/atmosphere.jl"),
     TestSuiteSpec("plant-topology", "testsets/plant_topology.jl"),
+    TestSuiteSpec("plant-command-schemas",
+        "testsets/plant_command_schemas.jl"),
     TestSuiteSpec("plant-time", "testsets/plant_time.jl"),
     TestSuiteSpec("plant-scheduler", "testsets/plant_scheduler.jl"),
     TestSuiteSpec("plant-triggers", "testsets/plant_triggers.jl"),
@@ -70,6 +72,7 @@ const TEST_GROUP_SPECS = (
     "core" => ("core-optics", "direct-science", "atmosphere"),
     "plant" => (
         "plant-topology",
+        "plant-command-schemas",
         "plant-time",
         "plant-scheduler",
         "plant-triggers",

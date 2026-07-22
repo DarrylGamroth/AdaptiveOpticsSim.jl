@@ -55,6 +55,13 @@ struct PlantDefinitionError <: AdaptiveOpticsSimError
     msg::String
 end
 
+"""Invalid plant-command schema or payload compatibility."""
+struct PlantCommandError <: AdaptiveOpticsSimError
+    stage::Symbol
+    reason::Symbol
+    msg::String
+end
+
 """Invalid preparation or prepared binding for a plant component."""
 struct PlantPreparationError <: AdaptiveOpticsSimError
     component::Symbol

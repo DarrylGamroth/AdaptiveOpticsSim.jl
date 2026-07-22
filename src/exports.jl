@@ -9,7 +9,7 @@ export UnsupportedAlgorithm, NumericalConditionError
 export AtmosphereTimeError, AtmosphereEpochError
 export PlantTimeError, PlantScheduleError
 export WFSPreparationError
-export PlantDefinitionError, PlantPreparationError
+export PlantDefinitionError, PlantCommandError, PlantPreparationError
 export DetectorAcquisitionError
 
 export FidelityProfile, ScientificProfile, FastProfile, default_fidelity_profile
@@ -172,6 +172,24 @@ export LiFTSolveAuto, LiFTSolveQR, LiFTSolveNormalEquations
 export LiFTLevenbergMarquardt, LiFTAdaptiveLevenbergMarquardt
 
 export OpticalPathID, AcquisitionID, ControllableOpticID, CommandEndpointID
+export PlantCommandSchemaID, PlantCommandSchemaVersion
+export CommandBasisRevision, CommandUnit, CommandSignConvention, CommandBasis
+export CommandValueSemantics, AbsoluteCommand, IncrementalCommand
+export InvalidCommandAction, RejectInvalidCommand, ClipInvalidCommand
+export FailOnInvalidCommand, CommandRangeStage, ValidateOnPresentation
+export EnforceOnApplication
+export CommandSequenceAction, AcceptSequence, RejectSequence, FailOnSequence
+export FutureCommandPolicy, AllowFutureCommand, RejectFutureCommand
+export LateCommandPolicy, RejectLateCommand, ApplyLateCommandNow
+export FailOnLateCommand
+export CommandSupersessionPolicy, PreservePendingCommands
+export SupersedeOlderPendingCommands
+export CommandSilenceAction, HoldLastCommand, ApplySafeCommand
+export FailOnCommandSilence, CommandAgeOrigin, AgeFromAdmission
+export AgeFromApplication
+export UnboundedCommandValues, UniformCommandBounds
+export CommandValuePolicy, CommandSequencePolicy
+export CommandEffectiveTimePolicy, CommandSilencePolicy, PlantCommandSchema
 export PlantTimestamp, PlantDuration, PeriodicSchedule
 export plant_nanoseconds, plant_time_seconds, plant_duration_seconds
 export schedule_period, schedule_phase, schedule_timestamp
@@ -181,7 +199,14 @@ export OpticalPathDefinition, AcquisitionDefinition
 export ControllableOpticDefinition, PlantDefinition
 export path_id, acquisition_id, controllable_optic_id, acquisition_path_id
 export path_source, path_model, acquisition_model, controllable_optic_model
-export command_endpoint_ids, command_endpoint_owner
+export command_schema_id, command_schema_version, command_endpoint_id
+export command_numeric_type, command_dimensions, command_units
+export command_sign_convention, command_basis, command_basis_revision
+export command_semantics, command_bounds, command_value_policy
+export command_sequence_policy, command_effective_time_policy
+export command_silence_policy, validate_plant_command_payload
+export command_schemas, command_endpoint_ids, command_schema
+export plant_command_schema, command_endpoint_owner
 export plant_telescope, plant_atmosphere
 export controllable_optic_definitions, path_definitions
 export acquisition_definitions, controllable_optic_definition

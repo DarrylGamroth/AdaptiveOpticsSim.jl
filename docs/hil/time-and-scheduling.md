@@ -519,9 +519,11 @@ RTC sends commands when it chooses. Each command contains or acquires:
 - modeled effective timestamp after any configured boundary delay and device
   latency
 
-The core endpoint's prepared plant command schema supplies payload shape,
-element type, units, command basis and calibration revision, absolute or
-incremental semantics, range policy, and duplicate/reordering policy. The HIL
+The core endpoint's `PlantCommandSchema` supplies exact scalar or array shape,
+element type, units and sign convention, command basis and revision, absolute
+or incremental semantics, value/range policy, and duplicate/reordering policy.
+Its cold `validate_plant_command_payload` operation checks only presentation
+compatibility; mutable admission and application remain distinct. The HIL
 submission descriptor separately supplies the run/session epoch, correlation,
 source timestamp domain and mapping version, and payload-lease/outcome-credit
 metadata defined in [`rtc-ports.md`](rtc-ports.md). These are configuration
@@ -534,9 +536,11 @@ Device models may additionally impose minimum update intervals, settling,
 bandwidth, slew, hysteresis, saturation, or other physical response. Timing is
 generic over `AbstractControllableOptic`; it is not a DM-only feature.
 
-Command silence has an explicit per-endpoint policy. The baseline is indefinite
-hold, but a prepared device model may instead apply a preallocated safe/flat
-command after a plant-time command-age limit or fail after that limit. This is
+Command silence has an explicit per-endpoint `CommandSilencePolicy`. The
+baseline is indefinite hold, but a prepared device model may instead apply a
+preallocated safe/flat command after a positive plant-time command-age limit or
+fail after that limit. `AgeFromAdmission` and `AgeFromApplication` make the age
+origin explicit. This is
 a modeled plant transition and is replayable in virtual time. Separately, a HIL
 deployment may declare an execution-clock ingress-liveness deadline that fails
 the run when the external RTC stops delivering commands; that operational

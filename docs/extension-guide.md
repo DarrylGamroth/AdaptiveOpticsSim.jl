@@ -35,13 +35,25 @@ Types that do not opt in fail closed with `PlantDefinitionError`; do not opt
 live controllable optics, detectors, WFSs, atmospheres, or runtime owners into
 this trait.
 
-One cold controllable-optic declaration names one physical device and one or
-more explicit `CommandEndpointID` values through `command_endpoint_ids`. These
-identities state ownership only: they do not define payload shape, command
-timing, packed controller layout, atomic application, placement, visibility, or
-an optical execution group. During the first Gate 4 topology slice,
-`prepare_plant` rejects a nonempty controllable-optic set until the prepared
-endpoint contract is implemented rather than silently ignoring it.
+One cold controllable-optic declaration names one physical device and owns one
+or more explicit `PlantCommandSchema` values through `command_schemas`. Each
+schema targets one `CommandEndpointID` and fixes the exact scalar or
+backend-neutral array element type and dimensions, units/sign convention,
+basis/revision, absolute or incremental meaning, bounds, and policy vocabulary.
+`command_endpoint_ids` is a derived identity view. A named schema key must match
+its endpoint identity, and schema/endpoint identities must remain unique in the
+plant. These declarations still do not own mutable sequencing, an admission
+calendar, applied values, packed controller layout, atomic application,
+placement, visibility, or an optical execution group.
+
+Use `validate_plant_command_payload` for non-mutating presentation
+compatibility. It deliberately does not clip, admit, sequence, schedule, or
+apply a command. Extend neither the schema nor an optic-model definition with
+session, external-clock, payload-lease, transport, or HIL descriptor metadata;
+that belongs to the later boundary contract. During the first two Gate 4
+slices, `prepare_plant` rejects a nonempty controllable-optic set until the
+mutable prepared endpoint contract is implemented rather than silently
+ignoring it.
 
 Preparation then dispatches on those same concrete model types. A path method
 receives the exact definition, its run-owned frozen source, the plant telescope,

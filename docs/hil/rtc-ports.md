@@ -97,9 +97,11 @@ The core plant command schema declares at least:
 - payload element type, dimensions, units, sign convention, and actuator,
   modal, or other command basis
 - calibration/configuration revision needed to interpret that basis
-- absolute, incremental, or replacement semantics
-- finite-value, range, stroke, slew, and shape validation plus whether an
-  invalid value is clipped, rejected, or fails the run
+- absolute or incremental semantics; complete fixed-shape replacement is an
+  absolute command, while partial/sparse update requires another payload schema
+- finite-value, bounds, and shape validation plus whether an invalid value is
+  clipped, rejected, or fails the run; state-dependent physical stroke, slew,
+  settling, and dynamics checks belong to the prepared device/application layer
 - sequence policy for duplicate, stale, reordered, and skipped commands
 - effective-time, late-command, supersession, and plant-time command-silence
   policies
