@@ -456,8 +456,8 @@ Current clean-revision artifacts are:
 
 All listed correctness, residency, allocation, absolute-p95, and relative-p95
 gates pass. The WSL target used CUDA.jl 6.2.1, KernelAbstractions.jl 0.9.42,
-and Julia 1.12.6. The current maintained hardware targets passed `412/412` CUDA
-checks and `422/422` AMDGPU checks with scalar indexing disabled, including the
+and Julia 1.12.6. The current maintained hardware targets passed `424/424` CUDA
+checks and `434/434` AMDGPU checks with scalar indexing disabled, including the
 shared LiFT matrix and device-resident schedule-free atmosphere
 materialization, direct-science formation, and detector fan-out. The
 current local AMDGPU latency artifact remains the
@@ -465,6 +465,15 @@ current local AMDGPU latency artifact remains the
 the July 18 timing repetitions completed, but no replacement raw-histogram
 artifact was retained after the host's Julia 1.12.6 installation failed a
 package-independent GC check. This is not promoted into a new latency baseline.
+
+The Gate 3 closure code revision `871f76a` passed the full CPU suite, the
+`424/424` CUDA target on an RTX 3050 Ti under WSL, and the `434/434` AMDGPU
+target on a local gfx1030 device, all with Julia 1.12.6. CUDA used CUDA.jl 6.2.1;
+AMDGPU used AMDGPU.jl 2.7.0; both used KernelAbstractions.jl 0.9.42. The
+integrated multi-rate plant remains a deterministic serial CPU oracle. The GPU
+targets validate maintained device-resident optical surfaces and direct
+detector lifecycles; they do not claim an integrated GPU scheduler, external
+RTC latency, or fixed-arrival capacity.
 
 The final composed CPU Gate 0 run is preserved even though `G0-PERF-05` missed
 its relative p99 limit by 96 ns while every absolute and allocation gate
