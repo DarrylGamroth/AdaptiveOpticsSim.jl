@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Plant
 using Base64
 using Dates
 using HdrHistogram
@@ -11,6 +12,7 @@ include(joinpath(@__DIR__, "support", "gate3_multi_rate_plant.jl"))
 include(joinpath(@__DIR__, "support", "hdr_histogram_artifact.jl"))
 
 const AOS = AdaptiveOpticsSim
+const AOSPlant = AdaptiveOpticsSim.Plant
 const Gate3Plant = Gate3MultiRatePlantBenchmark
 const HdrArtifact = HdrHistogramArtifact
 const GATE3_MULTI_RATE_CONTRACT_PATH = get(ENV,
@@ -74,7 +76,7 @@ function measure_run!(operation::Gate3Plant.MultiRatePlantOperation,
     histogram = HdrHistogram.Histogram(lowest_ns, highest_ns,
         significant_figures)
     sequences_before = Gate3Plant.product_sequence_vector(operation)
-    simulated_start = AOS.scheduler_timestamp(operation.state.scheduler)
+    simulated_start = AOSPlant.scheduler_timestamp(operation.state.scheduler)
     simulated_end = simulated_start
     GC.gc()
     gc_before = Base.gc_num()
@@ -90,8 +92,8 @@ function measure_run!(operation::Gate3Plant.MultiRatePlantOperation,
     sequences_after = Gate3Plant.product_sequence_vector(operation)
     return histogram_summary(histogram, wall_start, wall_end, samples,
         gc_delta(gc_before, gc_after),
-        AOS.plant_nanoseconds(simulated_start),
-        AOS.plant_nanoseconds(simulated_end),
+        AOSPlant.plant_nanoseconds(simulated_start),
+        AOSPlant.plant_nanoseconds(simulated_end),
         sequences_after .- sequences_before, lowest_ns, highest_ns,
         significant_figures)
 end

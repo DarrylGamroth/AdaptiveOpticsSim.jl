@@ -189,7 +189,7 @@ function _rebuilt_application_claim(claim;
         requested,
         admission,
         ready,
-        AdaptiveOpticsSim._PLANT_COMMAND_CLAIM_TOKEN,
+        Plant._PLANT_COMMAND_CLAIM_TOKEN,
     )
 end
 
@@ -232,9 +232,20 @@ Base.copyto!(::Vector{T}, ::AdmissionStagingInterruptVector{T}) where {T} =
 @testset "Bounded plant-command admission API" begin
     for name in (
         :PlantCommandSequence,
+        :PlantCommand,
+        :prepare_command_endpoint,
+        :admit_plant_command!,
+        :claim_next_application_ready_command!,
+        :mark_plant_command_applied!,
+        :fail_plant_command_application!,
+        :fail_pending_plant_commands!,
+    )
+        @test Base.isexported(Plant, name)
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+    end
+    for name in (
         :CommandPresentationID,
         :CommandDispositionReason,
-        :PlantCommand,
         :CommandSequenceClass,
         :CommandAdmissionStatus,
         :CommandTerminalKind,
@@ -243,23 +254,21 @@ Base.copyto!(::Vector{T}, ::AdmissionStagingInterruptVector{T}) where {T} =
         :PlantCommandDisposition,
         :PreparedCommandEndpoint,
         :PlantCommandApplicationClaim,
-        :prepare_command_endpoint,
         :validate_plant_command,
-        :admit_plant_command!,
-        :claim_next_application_ready_command!,
         :claimed_command_payload,
-        :mark_plant_command_applied!,
-        :fail_plant_command_application!,
-        :fail_pending_plant_commands!,
         :command_requested_effective_timestamp,
         :command_scheduled_timestamp,
         :command_ready_timestamp,
         :command_terminal_timestamp,
     )
-        @test Base.isexported(AdaptiveOpticsSim, name)
+        @test Base.ispublic(Plant, name)
+        @test !Base.isexported(Plant, name)
+        @test !Base.isexported(AdaptiveOpticsSim, name)
     end
-    @test !Base.isexported(AdaptiveOpticsSim, :CommandEndpointState)
-    @test !Base.isexported(AdaptiveOpticsSim, :CommandDispositionWorkspace)
+    @test Base.ispublic(Plant, :CommandEndpointState)
+    @test Base.ispublic(Plant, :CommandDispositionWorkspace)
+    @test !Base.isexported(Plant, :CommandEndpointState)
+    @test !Base.isexported(Plant, :CommandDispositionWorkspace)
 
     schema = _admission_schema()
     endpoint = @inferred prepare_command_endpoint(

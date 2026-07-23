@@ -142,15 +142,15 @@ The timing model separates these concepts:
 
 | Concept | Meaning | Owner |
 |---|---|---|
-| Plant timeline | Canonical ordered event time, represented by nonnegative integer-nanosecond `PlantTimestamp` values in core | Core receives it explicitly; HIL coordinator advances or samples it |
+| Plant timeline | Canonical ordered event time, represented by nonnegative integer-nanosecond `PlantTimestamp` values in `AdaptiveOpticsSim.Plant` | The `Plant` namespace receives it explicitly; HIL coordinator advances or samples it |
 | Execution clock | Monotonic host time used to pace work and measure deadline performance | HIL companion owns the injected `Clocks.jl` source |
-| Modeled trigger source | A periodic or externally scripted sequence of nominal trigger edges on plant time | Core owns deterministic event semantics; HIL prepares the scenario |
-| Trigger distribution link | A prepared relationship from one trigger source to a detector, modulator, or other event consumer | Core owns realized delivery times and fault semantics |
+| Modeled trigger source | A periodic or externally scripted sequence of nominal trigger edges on plant time | `Plant` owns deterministic event semantics; HIL prepares the scenario |
+| Trigger distribution link | A prepared relationship from one trigger source to a detector, modulator, or other event consumer | `Plant` owns realized delivery times and fault semantics |
 | External timestamp domain | RTC, camera, or device timestamp coordinates plus offset/drift mapping into plant time | User integration supplies external timestamps and synchronization observations; HIL owns the configured mapping into plant time |
-| Periodic schedule | Period and phase for simulator-paced events such as exposure samples and readout | Core semantics; HIL companion performs wall-clock pacing |
-| Command endpoint | Bounded asynchronous command events for one independently timed optic or segment, with receive and effective times | Core owns the semantic plant command schema, validation, bounded admission, device state, and virtual-time application; HIL owns submission descriptors, ingress, timestamp mapping, pacing, outcome credit, and outcome publication; user integration owns transport and decoding |
+| Periodic schedule | Period and phase for simulator-paced events such as exposure samples and readout | `Plant` owns model semantics; HIL companion performs wall-clock pacing |
+| Command endpoint | Bounded asynchronous command events for one independently timed optic or segment, with receive and effective times | `Plant` owns the semantic command schema, validation, bounded admission, device state, and virtual-time application; HIL owns submission descriptors, ingress, timestamp mapping, pacing, outcome credit, and outcome publication; user integration owns transport and decoding |
 
-Core distinguishes an instant (`PlantTimestamp`) from an elapsed interval
+`AdaptiveOpticsSim.Plant` distinguishes an instant (`PlantTimestamp`) from an elapsed interval
 (`PlantDuration`). Both use nonnegative integer nanoseconds relative to the
 run-local plant origin. Addition, subtraction, periodic advancement, and
 timestamp conversion use checked arithmetic and reject overflow instead of
@@ -170,9 +170,11 @@ The committed periodic-schedule vocabulary can be used alongside illustrative
 future command-endpoint configuration:
 
 ```julia
+using AdaptiveOpticsSim.Plant
+
 schedules = (
-    wfs=PeriodicSchedule(period_ns=500_000),
-    science=PeriodicSchedule(period_ns=10_000_000),
+    wfs=PeriodicSchedule(PlantDuration(500_000)),
+    science=PeriodicSchedule(PlantDuration(10_000_000)),
 )
 
 commands = (

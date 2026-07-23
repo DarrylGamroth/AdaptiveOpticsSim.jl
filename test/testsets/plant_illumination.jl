@@ -7,15 +7,15 @@ struct TestIlluminationEvaluator{D,C}
     combination::C
 end
 
-@inline AdaptiveOpticsSim.illumination_combination(
+@inline Plant.illumination_combination(
     evaluator::TestIlluminationEvaluator) = evaluator.combination
 
-function AdaptiveOpticsSim.prepare_illumination_evaluator(
+function Plant.prepare_illumination_evaluator(
     definition::TestIlluminationDefinition, destination, boundary)
     return TestIlluminationEvaluator(destination, definition.combination)
 end
 
-function AdaptiveOpticsSim.validate_illumination_evaluator_binding(
+function Plant.validate_illumination_evaluator_binding(
     evaluator::TestIlluminationEvaluator, destination, boundary)
     evaluator.destination === destination || throw(PlantPreparationError(
         :illumination, :prepared_binding,
@@ -23,7 +23,7 @@ function AdaptiveOpticsSim.validate_illumination_evaluator_binding(
     return nothing
 end
 
-@inline function AdaptiveOpticsSim.evaluate_illumination!(destination,
+@inline function Plant.evaluate_illumination!(destination,
     evaluator::TestIlluminationEvaluator, model_time, rng::AbstractRNG)
     return destination
 end
@@ -33,11 +33,11 @@ struct MissingCombinationIlluminationEvaluator{D}
     destination::D
 end
 
-AdaptiveOpticsSim.prepare_illumination_evaluator(
+Plant.prepare_illumination_evaluator(
     ::MissingCombinationIlluminationDefinition, destination, boundary) =
     MissingCombinationIlluminationEvaluator(destination)
 
-function AdaptiveOpticsSim.validate_illumination_evaluator_binding(
+function Plant.validate_illumination_evaluator_binding(
     evaluator::MissingCombinationIlluminationEvaluator, destination,
     boundary)
     return nothing
@@ -48,15 +48,15 @@ struct InvalidResultIlluminationEvaluator{D}
     destination::D
 end
 
-AdaptiveOpticsSim.prepare_illumination_evaluator(
+Plant.prepare_illumination_evaluator(
     ::InvalidResultIlluminationDefinition, destination, boundary) =
     InvalidResultIlluminationEvaluator(destination)
-AdaptiveOpticsSim.illumination_combination(
+Plant.illumination_combination(
     ::Type{<:InvalidResultIlluminationEvaluator}) = SingleIllumination()
-AdaptiveOpticsSim.validate_illumination_evaluator_binding(
+Plant.validate_illumination_evaluator_binding(
     evaluator::InvalidResultIlluminationEvaluator, destination,
     boundary) = nothing
-AdaptiveOpticsSim.evaluate_illumination!(destination,
+Plant.evaluate_illumination!(destination,
     evaluator::InvalidResultIlluminationEvaluator, model_time,
     rng::AbstractRNG) = nothing
 
@@ -70,7 +70,7 @@ mutable struct MutableIlluminationEvaluator{D}
     destination::D
 end
 
-AdaptiveOpticsSim.prepare_illumination_evaluator(
+Plant.prepare_illumination_evaluator(
     ::MutableEvaluatorIlluminationDefinition, destination, boundary) =
     MutableIlluminationEvaluator(destination)
 
@@ -94,11 +94,11 @@ struct PreparedTimedPupilIllumination{P,S,B,D}
     device::D
 end
 
-AdaptiveOpticsSim.illumination_combination(
+Plant.illumination_combination(
     ::Type{<:PreparedTimedPupilIllumination}) =
     ExclusiveIlluminationSelection()
 
-function AdaptiveOpticsSim.prepare_illumination_evaluator(
+function Plant.prepare_illumination_evaluator(
     definition::TimedPupilIllumination, destination::PupilFunction,
     ::PupilFunctionIlluminationEntry)
     T = eltype(destination.opd)
@@ -110,7 +110,7 @@ function AdaptiveOpticsSim.prepare_illumination_evaluator(
         backend(destination), destination.metadata.device)
 end
 
-function AdaptiveOpticsSim.validate_illumination_evaluator_binding(
+function Plant.validate_illumination_evaluator_binding(
     evaluator::PreparedTimedPupilIllumination,
     destination::PupilFunction, ::PupilFunctionIlluminationEntry)
     typeof(backend(destination)) === typeof(evaluator.backend) || throw(
@@ -128,7 +128,7 @@ function AdaptiveOpticsSim.validate_illumination_evaluator_binding(
     return nothing
 end
 
-function AdaptiveOpticsSim.evaluate_illumination!(
+function Plant.evaluate_illumination!(
     destination::PupilFunction,
     evaluator::PreparedTimedPupilIllumination, model_time,
     rng::AbstractRNG)
@@ -164,11 +164,11 @@ end
 
 for model in (NativeDetectorIlluminationPathModel,
     TimedPupilIlluminationPathModel, IlluminationFrameAcquisitionModel)
-    @eval AdaptiveOpticsSim.plant_model_definition_style(
+    @eval Plant.plant_model_definition_style(
         ::Type{<:$model}) = ColdPlantModelDefinition()
 end
 
-function AdaptiveOpticsSim.validate_path_execution_binding(
+function Plant.validate_path_execution_binding(
     execution::IlluminationIdentityExecution, input, result)
     execution.product === input === result || throw(PlantPreparationError(
         :path, :prepared_binding,
@@ -176,9 +176,9 @@ function AdaptiveOpticsSim.validate_path_execution_binding(
     return nothing
 end
 
-function AdaptiveOpticsSim.execute_path!(result, input,
+function Plant.execute_path!(result, input,
     execution::IlluminationIdentityExecution)
-    AdaptiveOpticsSim.validate_path_execution_binding(execution, input,
+    Plant.validate_path_execution_binding(execution, input,
         result)
     return result
 end
@@ -199,7 +199,7 @@ function illumination_detector_input(telescope::Telescope,
     return IntensityMap(metadata, values)
 end
 
-function AdaptiveOpticsSim.prepare_path_executor(
+function Plant.prepare_path_executor(
     model::NativeDetectorIlluminationPathModel,
     definition::OpticalPathDefinition, source::AbstractSource,
     telescope::Telescope,
@@ -221,7 +221,7 @@ function AdaptiveOpticsSim.prepare_path_executor(
         model_revisions=UInt(1))
 end
 
-function AdaptiveOpticsSim.prepare_path_executor(
+function Plant.prepare_path_executor(
     model::TimedPupilIlluminationPathModel,
     definition::OpticalPathDefinition, source::AbstractSource,
     telescope::Telescope,
@@ -244,7 +244,7 @@ function AdaptiveOpticsSim.prepare_path_executor(
         model_revisions=UInt(1))
 end
 
-function AdaptiveOpticsSim.prepare_acquisition_provider(
+function Plant.prepare_acquisition_provider(
     model::IlluminationFrameAcquisitionModel,
     definition::AcquisitionDefinition, path::PreparedPathExecutor)
     require_path_result(path)
@@ -252,12 +252,12 @@ function AdaptiveOpticsSim.prepare_acquisition_provider(
     detector = Detector(integration_time=T(model.exposure_s),
         noise=NoiseNone(), qe=T(model.quantum_efficiency),
         response_model=NullFrameResponse(), T=T, backend=path.key.backend)
-    execution = AdaptiveOpticsSim.FrameAcquisitionExecution(detector,
+    execution = Plant.FrameAcquisitionExecution(detector,
         path.result)
     metadata = (kind=:detector_frame, units=:detected_electrons,
         geometry=path.result.metadata,
         detector=detector_export_metadata(detector))
-    products = AdaptiveOpticsSim.AcquisitionProducts(
+    products = Plant.AcquisitionProducts(
         execution.observation; metadata)
     return prepare_full_optical_provider(execution, products)
 end
@@ -293,7 +293,7 @@ function illumination_test_plant(path_models::NamedTuple;
 end
 
 function illumination_materialization(path::PreparedPathExecutor)
-    return AdaptiveOpticsSim.path_materialization(path)
+    return Plant.path_materialization(path)
 end
 
 function illumination_test_payloads(telescope, source)
@@ -411,9 +411,9 @@ end
 
     contract_snapshot = visibility_entry.contract
     @test contract_snapshot.metadata == payloads.intensity.metadata
-    @test AdaptiveOpticsSim.validate_illumination_entry_binding(
+    @test Plant.validate_illumination_entry_binding(
         visibility_entry, payloads.intensity) === visibility_entry
-    @test !applicable(AdaptiveOpticsSim.PreparedIlluminationEntry,
+    @test !applicable(Plant.PreparedIlluminationEntry,
         illumination_entry_boundary(visibility_entry),
         illumination_evaluator(visibility_entry),
         illumination_destination(visibility_entry),
@@ -421,7 +421,7 @@ end
         illumination_visibility(visibility_entry),
         contract_snapshot)
     @test !applicable(
-        AdaptiveOpticsSim.validate_illumination_evaluator_binding,
+        Plant.validate_illumination_evaluator_binding,
         illumination_evaluator(visibility_entry),
         illumination_destination(visibility_entry),
         illumination_entry_boundary(visibility_entry),
@@ -627,7 +627,7 @@ end
     @test prepare_illumination_entry(
         TestIlluminationDefinition(SingleIllumination()), normalized_input,
         DetectorInputIlluminationEntry(); visibility=(consumer=:x,)) isa
-        AdaptiveOpticsSim.PreparedIlluminationEntry
+        Plant.PreparedIlluminationEntry
 
     uniform_entry = prepare_illumination_entry(
         UniformIntensityIllumination(T(7);

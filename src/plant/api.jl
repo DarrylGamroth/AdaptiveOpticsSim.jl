@@ -1,0 +1,243 @@
+# Curated `AdaptiveOpticsSim.Plant` API. Routine construction and execution
+# vocabulary is exported; stable advanced contracts are qualified-public; all
+# other bindings remain implementation details.
+
+# Errors and virtual-time vocabulary.
+export PlantTimeError, PlantScheduleError, PlantDefinitionError
+export PlantCommandError, PlantPreparationError, DetectorAcquisitionError
+export PlantTimestamp, PlantDuration, PlantTimeOffset, PeriodicSchedule
+export plant_nanoseconds, plant_time_seconds, plant_duration_seconds
+export schedule_period, schedule_phase, schedule_timestamp
+
+# Stable plant identities and cold definitions.
+export OpticalPathID, AcquisitionID, ControllableOpticID, CommandEndpointID
+export PlantCommandSchemaID, PlantCommandSchemaVersion
+export CommandBasisRevision, CommandUnit, CommandSignConvention, CommandBasis
+export PlantCommandSchema
+export OpticalPathDefinition, AcquisitionDefinition
+export ControllableOpticDefinition, PlantDefinition
+
+# Prepared plant construction and ordinary execution.
+export PreparedPlant, prepare_plant
+export prepare_acquisition_selection
+export execute_acquisition_selection!, execute_acquisition_selection_at!
+
+# Command presentation and lifecycle operations. Policy vocabulary remains
+# qualified so uncommon choices do not enter the ordinary user namespace.
+export PlantCommandSequence, PlantCommand
+export prepare_command_endpoint, admit_plant_command!
+export claim_next_application_ready_command!, apply_claimed_plant_command!
+export mark_plant_command_applied!, fail_plant_command_application!
+export fail_pending_plant_commands!
+
+# Trigger and detector-event construction used to assemble a virtual plant.
+export TriggerSourceID, TriggerLinkID, TriggerConsumerID, TriggerFaultID
+export TriggerFaultTraceEntry, TriggerFaultTrace
+export TriggerSourceDefinition, TriggerLinkDefinition, TriggerConsumerDefinition
+export prepare_trigger_topology
+export GlobalShutterAcquisitionDefinition
+export RollingShutterAcquisitionDefinition, FrameTransferAcquisitionDefinition
+export PeriodicAcquisitionStart, TriggeredAcquisitionStart
+export OpticalSampleDefinition, DetectorEventDefinition
+export PlantEventLoopDefinition, prepare_plant_event_loop
+export next_plant_event_timestamp, step_plant_events!, run_plant_events_until!
+
+# Illumination entry tags, native definitions, and acquisition-provider
+# constructors are ordinary composition vocabulary. Combination policies,
+# provider traits, prepared owners, and validation seams remain
+# qualified-public.
+export PupilFunctionIlluminationEntry, ElectricFieldIlluminationEntry
+export IntensityMapIlluminationEntry, ExternalOpticsResultIlluminationEntry
+export DetectorInputIlluminationEntry
+export UniformIntensityIllumination, prepare_illumination_entry
+export evaluate_illumination!
+export prepare_full_optical_provider, prepare_unchanged_synthetic_provider
+export prepare_copied_synthetic_provider, prepare_cyclic_replay_provider
+
+# Stable qualified API: policies, records, mutable state/workspace owners,
+# extension traits, low-level lifecycle operations, and inspection accessors.
+public AbstractAcquisitionStartDefinition, AbstractCommandBounds
+public AbstractDetectorAcquisitionEventDefinition
+public AbstractDetectorAcquisitionEventState, AbstractOpticalSamplingContract
+public AbstractPreparedDetectorAcquisition
+public AbsoluteCommand, IncrementalCommand, CommandValueSemantics
+public InvalidCommandAction, RejectInvalidCommand, ClipInvalidCommand
+public FailOnInvalidCommand, CommandRangeStage, ValidateOnPresentation
+public EnforceOnApplication
+public CommandSequenceAction, AcceptSequence, RejectSequence, FailOnSequence
+public FutureCommandPolicy, AllowFutureCommand, RejectFutureCommand
+public LateCommandPolicy, RejectLateCommand, ApplyLateCommandNow
+public FailOnLateCommand
+public CommandSupersessionPolicy, PreservePendingCommands
+public SupersedeOlderPendingCommands
+public CommandSilenceAction, HoldLastCommand, ApplySafeCommand
+public FailOnCommandSilence, CommandAgeOrigin, AgeFromAdmission
+public AgeFromApplication
+public UnboundedCommandValues, UniformCommandBounds
+public CommandValuePolicy, CommandSequencePolicy
+public CommandEffectiveTimePolicy, CommandSilencePolicy
+public validate_plant_command_payload
+
+public CommandPresentationID, CommandDispositionReason
+public CommandSequenceClass, InOrderCommandSequence
+public DuplicateCommandSequence, StaleCommandSequence
+public ReorderedCommandSequence, SkippedCommandSequence
+public CommandAdmissionStatus, CommandAdmittedPending
+public CommandAdmittedReady, CommandTerminatedOnAdmission
+public CommandTerminalKind, RejectedCommand, SupersededCommand
+public AppliedCommand, FailedCommand
+public PlantCommandOrderKey, PlantCommandAdmission, PlantCommandDisposition
+public PreparedCommandEndpoint, PlantCommandApplicationClaim
+public CommandEndpointState, CommandDispositionWorkspace
+public CommandApplicationState, PlantCommandSilenceTransition
+public validate_plant_command, command_sequence, command_payload
+public command_presentation_id, command_admission_status
+public command_sequence_class, command_order_key
+public command_terminal_kind, command_disposition_reason
+public command_requested_effective_timestamp, command_scheduled_timestamp
+public command_admission_timestamp, command_ready_timestamp
+public command_terminal_timestamp, command_lateness
+public superseding_command_presentation_id
+public command_endpoint_capacity, command_sequence_window
+public command_endpoint_ordinal, pending_command_count, active_command_count
+public command_endpoint_timestamp, next_command_order_key
+public command_disposition_count, command_disposition
+public clear_command_dispositions!, claimed_command_payload
+public command_endpoint_failed, last_command_admission_timestamp
+public effective_command, last_command_application_timestamp
+public next_command_silence_timestamp, apply_command_silence_transition!
+public command_silence_action, command_silence_age_origin
+public command_silence_origin_timestamp, command_silence_deadline
+public command_silence_transition_timestamp, command_silence_age
+
+public ColdPlantModelDefinition, plant_model_definition_style
+public path_id, acquisition_id, controllable_optic_id, acquisition_path_id
+public path_source, path_model, acquisition_model, controllable_optic_model
+public command_schema_id, command_schema_version, command_endpoint_id
+public command_numeric_type, command_dimensions, command_units
+public command_sign_convention, command_basis, command_basis_revision
+public command_semantics, command_bounds, command_value_policy
+public command_sequence_policy, command_effective_time_policy
+public command_silence_policy
+public command_schemas, command_endpoint_ids, command_schema
+public plant_command_schema, command_endpoint_owner
+public plant_telescope, plant_atmosphere
+public controllable_optic_definitions, path_definitions
+public acquisition_definitions, controllable_optic_definition
+public path_definition, acquisition_definition
+
+public RNGDerivationVersion, RNGOwnerIdentity, RNGOwnerToken, RNGOwnerBinding
+public PreparedRNGStream, PreparedOwnerRNGs, PreparedAtmosphereRNGs
+public PreparedPlantRNGs, rng_stream, rng_stream_state, rng_replay_metadata
+public additional_path_rng_owner_roles
+public additional_path_materialization_rng_owner_roles
+public additional_acquisition_rng_owner_roles
+public execute_path_rngs!, materialize_path_input_rngs!
+public execute_acquisition_rngs!, validate_atmosphere_rng_binding
+
+public PathResultKey, PreparedPupilOPDMaterialization
+public PreparedPathExecutor, PreparedAcquisitionOwner
+public PreparedAcquisitionProvider, PreparedAcquisitionSelection
+public AcquisitionProductContract, AcquisitionProducts
+public AtmosphereIndependentPath, InstantaneousOpticalSample
+public WFSOpticalPathExecution, WFSAcquisitionExecution
+public FrameAcquisitionExecution
+public prepare_pupil_opd_materialization, materialize_path_input!
+public prepare_path_executor, prepare_acquisition_owner
+public prepare_acquisition_provider
+public execute_path!, execute_acquisition!, execute_acquisition_provider!
+public path_result_key, path_input, path_result, path_materialization
+public path_source_geometry_key, path_source_spectral_key
+public path_source_radiometry_key, require_path_result
+public acquisition_provider_style, acquisition_provider_payload_work
+public acquisition_product_contract, validate_acquisition_product_contract
+public acquisition_provider, acquisition_product_metadata
+public acquisition_products, acquisition_observation, acquisition_measurement
+public prepared_paths, prepared_acquisitions
+public prepared_path, prepared_acquisition
+public validate_path_execution_binding, validate_acquisition_execution_binding
+public validate_path_materialization_binding, validate_path_materialization
+public validate_acquisition_provider_binding, copy_acquisition_product!
+
+public PreparedIlluminationEntry, PreparedUniformIntensityIllumination
+public SingleIllumination, ExclusiveIlluminationSelection
+public prepare_illumination_evaluator, illumination_entry_boundary
+public illumination_evaluator, illumination_destination
+public illumination_combination, illumination_visibility
+public illumination_payload_contract
+public validate_illumination_entry_binding, validate_illumination_entry_payload
+public validate_illumination_evaluator_binding
+public validate_illumination_payload_contract
+
+public CyclicReplayProviderParams, CyclicReplayProviderState
+public FullOpticalProviderStyle
+public CommandResponsiveReducedOrderProviderStyle
+public SyntheticReplayProviderStyle
+public PreparedFullOpticalProvider, PreparedUnchangedSyntheticProvider
+public PreparedCopiedSyntheticProvider, PreparedCyclicReplayProvider
+
+public PlantEventPhase, TriggerUpdatePhase, AtmosphereEvolutionPhase
+public OpticalSamplePhase, CommandApplicationPhase, ExposureOpenPhase
+public IntegrationBoundaryPhase, ReadoutCompletionPhase
+public AcquisitionReadyPhase, PlantEventKey
+public EventGeneratorDefinition, EventGeneratorCursor, EventGeneratorHandle
+public PreparedEventScheduler, EventSchedulerState, EventSchedulerWorkspace
+public EventClaim, prepare_event_scheduler, event_generator_handle
+public event_generator_count, event_scheduler_capacity
+public scheduler_timestamp, event_generator_ordinal, event_generator_phase
+public initially_active, first_event_timestamp, first_event_occurrence
+public scan_due_events!, due_event_count, due_event_key, due_event_timestamp
+public claim_next_event!, claimed_event_key, reschedule_event!
+public reschedule_periodic_event!, deactivate_event_generator!
+public activate_event_generator!
+
+public TriggerEdgeAction, PassTriggerEdge, DropTriggerEdge
+public DuplicateTriggerEdge, TriggerFaultSet
+public PreparedTriggerTopology, TriggerSourceHandle
+public NominalTriggerEdge, DeliveredTriggerEdge, ReportedTriggerTimestamp
+public TriggerDelivery, TriggerSourcePreview, TriggerSourceRealization
+public TriggerFaultObservation, TriggerTopologyState, TriggerTopologyWorkspace
+public trigger_source_handle, contains_trigger_fault
+public next_trigger_source, next_trigger_delivery
+public next_trigger_delivery_timestamp, realize_next_trigger_source!
+public pop_next_trigger_delivery!, trigger_fault_observation
+public trigger_fault_id, trigger_fault_location
+public trigger_source_id, trigger_link_id, trigger_consumer_id
+public trigger_parent_id, trigger_source_count, trigger_link_count
+public trigger_consumer_count, trigger_in_flight_capacity
+public required_trigger_in_flight_capacity, pending_trigger_delivery_count
+public nominal_trigger_edge, realized_trigger_source_timestamp
+public realized_trigger_delivery_count, trigger_delivery_consumer
+public delivered_trigger_edge, reported_trigger_timestamp
+public trigger_delivery_faults, trigger_fault_observation_count
+
+public DetectorAcquisitionStatus, DetectorExposureActive
+public DetectorReadoutPending, DetectorReadoutComplete
+public DetectorAcquisitionReady
+public PreparedGlobalShutterAcquisition, GlobalShutterAcquisitionState
+public PreparedRollingShutterAcquisition, RollingShutterAcquisitionState
+public PreparedFrameTransferAcquisition, FrameTransferAcquisitionState
+public prepare_global_shutter_acquisition, prepare_rolling_shutter_acquisition
+public prepare_frame_transfer_acquisition
+public begin_exposure!, accumulate_exposure_interval!, close_exposure!
+public take_nondestructive_read!, complete_readout!, mark_acquisition_ready!
+public open_next_rolling_band!, accumulate_rolling_exposure_interval!
+public close_next_rolling_band!, complete_frame_transfer!
+public detector_acquisition_status, detector_acquisition_sequence
+public exposure_start_timestamp, exposure_close_timestamp
+public integrated_through_timestamp, readout_complete_timestamp
+public acquisition_readiness_timestamp, nondestructive_read_count
+public nondestructive_read_offset, next_nondestructive_read_timestamp
+public rolling_band_count, rolling_band_rows, rolling_opened_band_count
+public rolling_closed_band_count, rolling_band_open_timestamp
+public rolling_band_close_timestamp, next_rolling_band_open_timestamp
+public next_rolling_band_close_timestamp
+public frame_transfer_storage_capacity, frame_transfer_storage_empty
+public frame_transfer_image_ready, frame_transfer_readout_pending
+public frame_transfer_storage_sequence, frame_transfer_image_sequence
+public frame_transfer_product_sequence, frame_transfer_complete_timestamp
+
+public PreparedPlantEventLoop, PlantEventLoopState, PlantEventLoopWorkspace
+public acquisition_product_sequence, acquisition_product_ready_timestamp
+public plant_event_generator_count, plant_event_path_count
+public plant_event_acquisition_count

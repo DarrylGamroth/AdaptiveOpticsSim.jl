@@ -54,7 +54,7 @@ function run_selected_acquisition_materialization_tests()
     ordered_selection = prepare_acquisition_selection(plant,
         [:slow_science, :ngs_frame, :fast_science, :lgs_frame])
 
-    @test selection isa AdaptiveOpticsSim.PreparedAcquisitionSelection
+    @test selection isa Plant.PreparedAcquisitionSelection
     @test map(path -> path_id(path.definition), prepared_paths(selection)) ==
         (OpticalPathID(:lgs), OpticalPathID(:ngs), OpticalPathID(:science))
     @test map(owner -> acquisition_id(owner.definition),
@@ -264,7 +264,7 @@ end
 
 struct UnsupportedPlantSource <: AbstractSource end
 
-function AdaptiveOpticsSim.validate_path_execution_binding(
+function Plant.validate_path_execution_binding(
     execution::PlantBindingOnlyExecution, input, result)
     execution.input === input && execution.result === result || throw(
         PlantPreparationError(:path, :prepared_binding,
@@ -272,25 +272,25 @@ function AdaptiveOpticsSim.validate_path_execution_binding(
     return nothing
 end
 
-function AdaptiveOpticsSim.execute_path!(result, input,
+function Plant.execute_path!(result, input,
     execution::PlantBindingOnlyExecution)
-    AdaptiveOpticsSim.validate_path_execution_binding(execution, input,
+    Plant.validate_path_execution_binding(execution, input,
         result)
     return result
 end
 
-function AdaptiveOpticsSim.validate_path_execution_binding(
+function Plant.validate_path_execution_binding(
     execution::CountedDirectImagingExecution, input, result)
-    return AdaptiveOpticsSim.validate_path_execution_binding(
+    return Plant.validate_path_execution_binding(
         execution.imaging, input, result)
 end
 
-function AdaptiveOpticsSim.execute_path!(result, input,
+function Plant.execute_path!(result, input,
     execution::CountedDirectImagingExecution)
-    AdaptiveOpticsSim.validate_path_execution_binding(execution, input,
+    Plant.validate_path_execution_binding(execution, input,
         result)
     execution.executions[] += 1
-    return AdaptiveOpticsSim.execute_path!(result, input,
+    return Plant.execute_path!(result, input,
         execution.imaging)
 end
 
@@ -305,7 +305,7 @@ for model in (
     InvalidPreparedPathModel,
     InvalidPreparedAcquisitionModel,
 )
-    @eval AdaptiveOpticsSim.plant_model_definition_style(
+    @eval Plant.plant_model_definition_style(
         ::Type{<:$model},
     ) = ColdPlantModelDefinition()
 end
@@ -315,7 +315,7 @@ end
     ::Telescope,
     ::AbstractSource,
     ::PupilFunction,
-) = AdaptiveOpticsSim.AtmosphereIndependentPath()
+) = Plant.AtmosphereIndependentPath()
 
 @inline plant_test_path_materialization(
     atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere,
@@ -324,7 +324,7 @@ end
     pupil::PupilFunction,
 ) = prepare_pupil_opd_materialization(atmosphere, telescope, source, pupil)
 
-function AdaptiveOpticsSim.prepare_path_executor(
+function Plant.prepare_path_executor(
     ::InvalidPreparedPathModel,
     ::OpticalPathDefinition,
     ::AbstractSource,
@@ -334,7 +334,7 @@ function AdaptiveOpticsSim.prepare_path_executor(
     return nothing
 end
 
-function AdaptiveOpticsSim.prepare_acquisition_provider(
+function Plant.prepare_acquisition_provider(
     ::InvalidPreparedAcquisitionModel,
     ::AcquisitionDefinition,
     ::PreparedPathExecutor,
@@ -342,7 +342,7 @@ function AdaptiveOpticsSim.prepare_acquisition_provider(
     return nothing
 end
 
-function AdaptiveOpticsSim.prepare_path_executor(
+function Plant.prepare_path_executor(
     model::DirectSciencePathModel,
     definition::OpticalPathDefinition,
     source::AbstractSource,
@@ -370,7 +370,7 @@ function AdaptiveOpticsSim.prepare_path_executor(
 end
 
 
-function AdaptiveOpticsSim.prepare_path_executor(
+function Plant.prepare_path_executor(
     model::CountedDirectSciencePathModel,
     definition::OpticalPathDefinition,
     source::AbstractSource,
@@ -398,7 +398,7 @@ function AdaptiveOpticsSim.prepare_path_executor(
     )
 end
 
-function AdaptiveOpticsSim.prepare_path_executor(
+function Plant.prepare_path_executor(
     model::ShackHartmannPlantPathModel,
     definition::OpticalPathDefinition,
     source::AbstractSource,
@@ -461,7 +461,7 @@ end
     path::PreparedPathExecutor) = require_path_result(path;
         device=ContractPlaneDevice(404))
 
-function AdaptiveOpticsSim.prepare_acquisition_provider(
+function Plant.prepare_acquisition_provider(
     model::FramePlantAcquisitionModel,
     definition::AcquisitionDefinition,
     path::PreparedPathExecutor,
@@ -479,7 +479,7 @@ function AdaptiveOpticsSim.prepare_acquisition_provider(
     return prepare_full_optical_provider(execution, products)
 end
 
-function AdaptiveOpticsSim.prepare_acquisition_provider(
+function Plant.prepare_acquisition_provider(
     model::ContractWFSPlantAcquisitionModel,
     definition::AcquisitionDefinition,
     path::PreparedPathExecutor,
@@ -620,10 +620,10 @@ end
     @test path_result(science_path) === science_path.result
     @test path_result_key(science_path) === science_path.key
     @test science_path.key.sampling_contract isa
-        AdaptiveOpticsSim.InstantaneousOpticalSample
+        Plant.InstantaneousOpticalSample
     @test science_path.key.backend isa CPUBackend
     @test science_path.key.device == AdaptiveOpticsSim.HostPlaneDevice()
-    equivalent_key = AdaptiveOpticsSim.PathResultKey(
+    equivalent_key = Plant.PathResultKey(
         science_path.key.source_geometry,
         science_path.key.spectral_sampling,
         science_path.key.radiometry,
@@ -644,18 +644,18 @@ end
         photon_irradiance=T(2), na_profile=sodium_profile,
         laser_coordinates=(T(1), T(-0.5)), elongation_factor=T(1.2),
         fwhm_spot_up=T(0.8), T=T)
-    lgs_geometry = AdaptiveOpticsSim.path_source_geometry_key(lgs_source)
+    lgs_geometry = Plant.path_source_geometry_key(lgs_source)
     @test lgs_geometry.kind === LGSSource
     @test lgs_geometry.sodium_profile == sodium_profile
     @test lgs_geometry.sodium_profile !== lgs_source.params.na_profile
-    @test only(AdaptiveOpticsSim.path_source_spectral_key(
+    @test only(Plant.path_source_spectral_key(
         lgs_source)).wavelength_m == wavelength(lgs_source)
-    @test AdaptiveOpticsSim.path_source_radiometry_key(
+    @test Plant.path_source_radiometry_key(
         lgs_source).value == source_radiometric_value(lgs_source)
-    lgs_key = AdaptiveOpticsSim.PathResultKey(
+    lgs_key = Plant.PathResultKey(
         lgs_geometry,
-        AdaptiveOpticsSim.path_source_spectral_key(lgs_source),
-        AdaptiveOpticsSim.path_source_radiometry_key(lgs_source),
+        Plant.path_source_spectral_key(lgs_source),
+        Plant.path_source_radiometry_key(lgs_source),
         science_path.key.optical_model,
         science_path.key.sampling_contract,
         science_path.key.propagation_model,
@@ -682,30 +682,30 @@ end
         PointCloudSourceModel([(T(0), T(0)), (T(0.1), T(-0.05))],
             T[0.25, 0.75]))
 
-    @test AdaptiveOpticsSim.path_source_geometry_key(spectral_source) ==
-        AdaptiveOpticsSim.path_source_geometry_key(science_source)
-    @test length(AdaptiveOpticsSim.path_source_spectral_key(
+    @test Plant.path_source_geometry_key(spectral_source) ==
+        Plant.path_source_geometry_key(science_source)
+    @test length(Plant.path_source_spectral_key(
         spectral_source)) == 2
-    @test AdaptiveOpticsSim.path_source_radiometry_key(spectral_source) ==
-        AdaptiveOpticsSim.path_source_radiometry_key(science_source)
-    @test length(AdaptiveOpticsSim.path_source_geometry_key(
+    @test Plant.path_source_radiometry_key(spectral_source) ==
+        Plant.path_source_radiometry_key(science_source)
+    @test length(Plant.path_source_geometry_key(
         asterism_source)) == 2
-    @test length(AdaptiveOpticsSim.path_source_spectral_key(
+    @test length(Plant.path_source_spectral_key(
         asterism_source)) == 2
-    @test length(AdaptiveOpticsSim.path_source_radiometry_key(
+    @test length(Plant.path_source_radiometry_key(
         asterism_source)) == 2
-    @test length(AdaptiveOpticsSim.path_source_geometry_key(
+    @test length(Plant.path_source_geometry_key(
         extended_source)) == 2
-    @test AdaptiveOpticsSim.path_source_spectral_key(extended_source) ==
-        AdaptiveOpticsSim.path_source_spectral_key(science_source)
-    @test length(AdaptiveOpticsSim.path_source_radiometry_key(
+    @test Plant.path_source_spectral_key(extended_source) ==
+        Plant.path_source_spectral_key(science_source)
+    @test length(Plant.path_source_radiometry_key(
         extended_source)) == 2
 
     unsupported_source = UnsupportedPlantSource()
     for (key_function, reason) in (
-        (AdaptiveOpticsSim.path_source_geometry_key, :source_geometry),
-        (AdaptiveOpticsSim.path_source_spectral_key, :spectral_sampling),
-        (AdaptiveOpticsSim.path_source_radiometry_key, :radiometry),
+        (Plant.path_source_geometry_key, :source_geometry),
+        (Plant.path_source_spectral_key, :spectral_sampling),
+        (Plant.path_source_radiometry_key, :radiometry),
     )
         assert_plant_preparation_error(
             () -> key_function(unsupported_source), :path, reason)
@@ -750,7 +750,7 @@ end
             (science_path.input, foreign_field),
             science_path.result,
             science_path.execution;
-            materialization=AdaptiveOpticsSim.AtmosphereIndependentPath(),
+            materialization=Plant.AtmosphereIndependentPath(),
             optical_model=science_path.key.optical_model,
             sampling_contract=science_path.key.sampling_contract,
             propagation_model=science_path.key.propagation_model,
@@ -770,7 +770,7 @@ end
             input,
             result,
             execution;
-            materialization=AdaptiveOpticsSim.AtmosphereIndependentPath(),
+            materialization=Plant.AtmosphereIndependentPath(),
             optical_model=science_path.key.optical_model,
             sampling_contract=science_path.key.sampling_contract,
             propagation_model=science_path.key.propagation_model,
@@ -886,7 +886,7 @@ end
         wfs_path.input,
         unbound_wfs_result,
         wfs_path.execution;
-        materialization=AdaptiveOpticsSim.AtmosphereIndependentPath(),
+        materialization=Plant.AtmosphereIndependentPath(),
         optical_model=wfs_path.key.optical_model,
         sampling_contract=wfs_path.key.sampling_contract,
         propagation_model=wfs_path.key.propagation_model,

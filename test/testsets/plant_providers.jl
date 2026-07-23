@@ -44,41 +44,41 @@ for model in (
     ProviderCopiedModel,
     ProviderReplayModel,
 )
-    @eval AdaptiveOpticsSim.plant_model_definition_style(
+    @eval Plant.plant_model_definition_style(
         ::Type{<:$model}) = ColdPlantModelDefinition()
 end
 
-AdaptiveOpticsSim.acquisition_provider_style(
+Plant.acquisition_provider_style(
     ::Type{<:TestCommandResponsiveReducedProvider}) =
     CommandResponsiveReducedOrderProviderStyle()
-AdaptiveOpticsSim.acquisition_provider_payload_work(
+Plant.acquisition_provider_payload_work(
     ::Type{<:TestCommandResponsiveReducedProvider}) =
     :regenerate_reduced_order_product
 
-AdaptiveOpticsSim.acquisition_provider_style(
+Plant.acquisition_provider_style(
     ::Type{InvalidProviderStyle}) = :invalid
-AdaptiveOpticsSim.acquisition_provider_style(
+Plant.acquisition_provider_style(
     ::Type{MissingPayloadWorkProvider}) = SyntheticReplayProviderStyle()
-AdaptiveOpticsSim.acquisition_provider_style(
+Plant.acquisition_provider_style(
     ::Type{EmptyPayloadWorkProvider}) = SyntheticReplayProviderStyle()
-AdaptiveOpticsSim.acquisition_provider_payload_work(
+Plant.acquisition_provider_payload_work(
     ::Type{EmptyPayloadWorkProvider}) = Symbol("")
-AdaptiveOpticsSim.acquisition_provider_style(
+Plant.acquisition_provider_style(
     ::Type{InvalidPayloadWorkProvider}) = SyntheticReplayProviderStyle()
-AdaptiveOpticsSim.acquisition_provider_payload_work(
+Plant.acquisition_provider_payload_work(
     ::Type{InvalidPayloadWorkProvider}) = "not-a-symbol"
-AdaptiveOpticsSim.acquisition_provider_style(
+Plant.acquisition_provider_style(
     ::Type{UnsupportedProviderValidation}) = SyntheticReplayProviderStyle()
-AdaptiveOpticsSim.acquisition_provider_payload_work(
+Plant.acquisition_provider_payload_work(
     ::Type{UnsupportedProviderValidation}) = :unsupported_validation
-AdaptiveOpticsSim.acquisition_provider_style(
+Plant.acquisition_provider_style(
     ::Type{UnsupportedProviderExecution}) = SyntheticReplayProviderStyle()
-AdaptiveOpticsSim.acquisition_provider_payload_work(
+Plant.acquisition_provider_payload_work(
     ::Type{UnsupportedProviderExecution}) = :unsupported_execution
-AdaptiveOpticsSim.acquisition_provider_style(
+Plant.acquisition_provider_style(
     ::Type{InvalidProviderResult}) =
     CommandResponsiveReducedOrderProviderStyle()
-AdaptiveOpticsSim.acquisition_provider_payload_work(
+Plant.acquisition_provider_payload_work(
     ::Type{InvalidProviderResult}) = :regenerate_invalid_result
 
 function provider_test_metadata(path::PreparedPathExecutor)
@@ -98,7 +98,7 @@ function provider_test_products(path::PreparedPathExecutor, value)
         metadata=provider_test_metadata(path))
 end
 
-function AdaptiveOpticsSim.prepare_acquisition_provider(
+function Plant.prepare_acquisition_provider(
     model::ProviderFullModel,
     ::AcquisitionDefinition,
     path::PreparedPathExecutor,
@@ -114,7 +114,7 @@ function AdaptiveOpticsSim.prepare_acquisition_provider(
     return prepare_full_optical_provider(execution, products)
 end
 
-function AdaptiveOpticsSim.prepare_acquisition_provider(
+function Plant.prepare_acquisition_provider(
     model::ProviderReducedModel,
     ::AcquisitionDefinition,
     path::PreparedPathExecutor,
@@ -127,7 +127,7 @@ function AdaptiveOpticsSim.prepare_acquisition_provider(
         TestCommandResponsiveReducedProvider(state), products)
 end
 
-function AdaptiveOpticsSim.validate_acquisition_provider_binding(
+function Plant.validate_acquisition_provider_binding(
     ::TestCommandResponsiveReducedProvider,
     path_result,
     products::AcquisitionProducts,
@@ -138,7 +138,7 @@ function AdaptiveOpticsSim.validate_acquisition_provider_binding(
     return nothing
 end
 
-function AdaptiveOpticsSim.execute_acquisition_provider!(
+function Plant.execute_acquisition_provider!(
     products::AcquisitionProducts,
     path_result,
     provider::TestCommandResponsiveReducedProvider,
@@ -149,7 +149,7 @@ function AdaptiveOpticsSim.execute_acquisition_provider!(
     return products
 end
 
-function AdaptiveOpticsSim.prepare_acquisition_provider(
+function Plant.prepare_acquisition_provider(
     model::ProviderUnchangedModel,
     ::AcquisitionDefinition,
     path::PreparedPathExecutor,
@@ -159,7 +159,7 @@ function AdaptiveOpticsSim.prepare_acquisition_provider(
         provider_test_products(path, model.value))
 end
 
-function AdaptiveOpticsSim.prepare_acquisition_provider(
+function Plant.prepare_acquisition_provider(
     model::ProviderCopiedModel,
     ::AcquisitionDefinition,
     path::PreparedPathExecutor,
@@ -170,7 +170,7 @@ function AdaptiveOpticsSim.prepare_acquisition_provider(
     return prepare_copied_synthetic_provider(destination, source)
 end
 
-function AdaptiveOpticsSim.prepare_acquisition_provider(
+function Plant.prepare_acquisition_provider(
     model::ProviderReplayModel,
     ::AcquisitionDefinition,
     path::PreparedPathExecutor,
@@ -182,7 +182,7 @@ function AdaptiveOpticsSim.prepare_acquisition_provider(
     return prepare_cyclic_replay_provider(destination, corpus)
 end
 
-function AdaptiveOpticsSim.validate_acquisition_provider_binding(
+function Plant.validate_acquisition_provider_binding(
     ::InvalidProviderResult,
     path_result,
     products::AcquisitionProducts,
@@ -190,11 +190,11 @@ function AdaptiveOpticsSim.validate_acquisition_provider_binding(
     return nothing
 end
 
-AdaptiveOpticsSim.execute_acquisition_provider!(
+Plant.execute_acquisition_provider!(
     products::AcquisitionProducts, path_result,
     ::InvalidProviderResult, rngs) = nothing
 
-function AdaptiveOpticsSim.validate_acquisition_provider_binding(
+function Plant.validate_acquisition_provider_binding(
     ::UnsupportedProviderExecution,
     path_result,
     products::AcquisitionProducts,
@@ -458,7 +458,7 @@ end
         composite_destination, composite_source)
     @test acquisition_product_metadata(composite_destination) ===
         composite_metadata
-    @test AdaptiveOpticsSim.execute_acquisition_provider!(
+    @test Plant.execute_acquisition_provider!(
         composite_provider, nothing, Xoshiro(0x7303)) ===
         composite_destination
     @test all(==(T(21)), intensity_destination.values)
@@ -490,7 +490,7 @@ end
             :unsupported; metadata=(kind=:unsupported,))),
         :acquisition, :unsupported_product)
     assert_plant_preparation_error(
-        () -> AdaptiveOpticsSim.copy_acquisition_product!(1, 2),
+        () -> Plant.copy_acquisition_product!(1, 2),
         :acquisition, :unsupported_product_copy)
 
     owned_source = AcquisitionProducts(fill(T(12), 2, 2);
@@ -498,7 +498,7 @@ end
     owned_copy = prepare_copied_synthetic_provider(valid_destination,
         owned_source)
     fill!(owned_source.observation, T(13))
-    AdaptiveOpticsSim.execute_acquisition_provider!(owned_copy, nothing,
+    Plant.execute_acquisition_provider!(owned_copy, nothing,
         Xoshiro(0x7301))
     @test all(==(T(12)), valid_destination.observation)
 
@@ -511,7 +511,7 @@ end
         replay_sources)
     empty!(replay_sources)
     fill!(replay_source_a.observation, T(16))
-    AdaptiveOpticsSim.execute_acquisition_provider!(owned_replay, nothing,
+    Plant.execute_acquisition_provider!(owned_replay, nothing,
         Xoshiro(0x7302))
     @test all(==(T(14)), valid_destination.observation)
     assert_plant_preparation_error(
@@ -552,7 +552,7 @@ end
     unsupported_execution = PreparedAcquisitionProvider(
         UnsupportedProviderExecution(), valid_destination)
     assert_plant_preparation_error(
-        () -> AdaptiveOpticsSim.execute_acquisition_provider!(
+        () -> Plant.execute_acquisition_provider!(
             unsupported_execution, nothing, Xoshiro(0x7304)),
         :acquisition, :unsupported_provider_execution)
 

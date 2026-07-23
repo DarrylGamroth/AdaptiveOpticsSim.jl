@@ -9,6 +9,12 @@ controllers, and reconstructors.
 Prefer small concrete types plus multiple dispatch. Do not add central
 type-switching registries for new families.
 
+Plant extension seams are owned by `AdaptiveOpticsSim.Plant`. Extend the
+qualified function in that module; do not define a root-package forwarding
+method. Routine plant constructors may be imported with
+`using AdaptiveOpticsSim.Plant`, while the advanced seams below remain
+qualified deliberately.
+
 ## Source Layout
 
 Use lower-case directory names for new source-tree locations. Julia type names
@@ -22,8 +28,8 @@ names such as `src/wfs`, `src/detectors`, `src/optics`, or `src/control`.
 types. A third-party definition opts in through dispatch:
 
 ```julia
-AdaptiveOpticsSim.plant_model_definition_style(::Type{MyModelDefinition}) =
-    ColdPlantModelDefinition()
+AdaptiveOpticsSim.Plant.plant_model_definition_style(::Type{MyModelDefinition}) =
+    AdaptiveOpticsSim.Plant.ColdPlantModelDefinition()
 ```
 
 This method is an ownership assertion, not a recursive mutability test. An
@@ -89,18 +95,18 @@ receives the exact definition, its run-owned frozen source, the plant telescope,
 and atmosphere, and returns a `PreparedPathExecutor`:
 
 ```julia
-function AdaptiveOpticsSim.prepare_path_executor(
+function AdaptiveOpticsSim.Plant.prepare_path_executor(
     model::MyOpticalModelDefinition,
-    definition::AdaptiveOpticsSim.OpticalPathDefinition,
+    definition::AdaptiveOpticsSim.Plant.OpticalPathDefinition,
     source::AdaptiveOpticsSim.AbstractSource,
     telescope::AdaptiveOpticsSim.AbstractTelescope,
     atmosphere::AdaptiveOpticsSim.AbstractAtmosphere,
 )
     input, result, execution = prepare_my_optics(
         model, source, telescope, atmosphere)
-    materialization = AdaptiveOpticsSim.prepare_pupil_opd_materialization(
+    materialization = AdaptiveOpticsSim.Plant.prepare_pupil_opd_materialization(
         atmosphere, telescope, source, input)
-    return AdaptiveOpticsSim.PreparedPathExecutor(
+    return AdaptiveOpticsSim.Plant.PreparedPathExecutor(
         definition, source, telescope, atmosphere, input, result, execution;
         materialization,
         optical_model=my_exact_model_key(model),
@@ -113,7 +119,7 @@ end
 The example uses the maintained phase-only path operation, which writes the
 current atmosphere OPD into the exact path-local `PupilFunction`. A genuinely
 atmosphere-independent model instead passes the qualified
-`AdaptiveOpticsSim.AtmosphereIndependentPath()` marker. Do not use that marker
+`AdaptiveOpticsSim.Plant.AtmosphereIndependentPath()` marker. Do not use that marker
 as a fallback for an unsupported atmospheric field or layer-aware model.
 Those models provide a concrete materialization owner and extend the qualified
 `validate_path_materialization_binding`, `validate_path_materialization`, and
@@ -154,9 +160,9 @@ owners in a key. Key equality and hashing are cold compatibility operations,
 not part of warmed optical execution.
 
 A custom `AbstractSource` used in a prepared plant also implements the
-qualified `AdaptiveOpticsSim.path_source_geometry_key`,
-`AdaptiveOpticsSim.path_source_spectral_key`, and
-`AdaptiveOpticsSim.path_source_radiometry_key` methods. Return run-owned,
+qualified `AdaptiveOpticsSim.Plant.path_source_geometry_key`,
+`AdaptiveOpticsSim.Plant.path_source_spectral_key`, and
+`AdaptiveOpticsSim.Plant.path_source_radiometry_key` methods. Return run-owned,
 value-comparable descriptions covering every source property that can change a
 path result. If the source contains mutable profile/image storage,
 `freeze_source` must copy it before these keys are built.
@@ -169,15 +175,15 @@ radiometry, unit, layout, or semantic declaration not already carried by the
 typed observation or measurement:
 
 ```julia
-function AdaptiveOpticsSim.prepare_acquisition_provider(
+function AdaptiveOpticsSim.Plant.prepare_acquisition_provider(
     model::MyAcquisitionDefinition,
-    definition::AdaptiveOpticsSim.AcquisitionDefinition,
-    path::AdaptiveOpticsSim.PreparedPathExecutor,
+    definition::AdaptiveOpticsSim.Plant.AcquisitionDefinition,
+    path::AdaptiveOpticsSim.Plant.PreparedPathExecutor,
 )
-    AdaptiveOpticsSim.require_path_result(
+    AdaptiveOpticsSim.Plant.require_path_result(
         path; optical_model=model.required_optical_model)
     execution, observation, measurement = prepare_my_acquisition(model, path)
-    products = AdaptiveOpticsSim.AcquisitionProducts(
+    products = AdaptiveOpticsSim.Plant.AcquisitionProducts(
         observation, measurement;
         metadata=my_product_metadata(model, path, observation, measurement))
     return prepare_full_optical_provider(execution, products)
@@ -188,13 +194,13 @@ Core constructs the `PreparedAcquisitionOwner` after validating the returned
 provider against the exact path result. An acquisition extension does not
 construct or return the owner itself.
 
-Use qualified `AdaptiveOpticsSim.WFSOpticalPathExecution` to adapt an existing
-Gate 0 WFS optical plan, `AdaptiveOpticsSim.FrameAcquisitionExecution` for a
+Use qualified `AdaptiveOpticsSim.Plant.WFSOpticalPathExecution` to adapt an existing
+Gate 0 WFS optical plan, `AdaptiveOpticsSim.Plant.FrameAcquisitionExecution` for a
 frame detector plus a distinct caller-owned observation, and
-`AdaptiveOpticsSim.WFSAcquisitionExecution` to compose already prepared WFS
+`AdaptiveOpticsSim.Plant.WFSAcquisitionExecution` to compose already prepared WFS
 acquisition and estimator plans. A deterministic concrete path execution type
 must extend both the three-argument `execute_path!` dispatch and the qualified
-`AdaptiveOpticsSim.validate_path_execution_binding(execution, input, result)`
+`AdaptiveOpticsSim.Plant.validate_path_execution_binding(execution, input, result)`
 seam. A stateful stochastic path can instead extend the four-argument form that
 receives its prepared provider `AbstractRNG`. If it needs additional
 independent device streams, extend qualified
@@ -202,7 +208,7 @@ independent device streams, extend qualified
 declared stream directly with `rng_stream_state(group, Val(:role))`. A
 different full-optical acquisition execution type similarly extends the
 four-argument `execute_acquisition!` dispatch and
-`AdaptiveOpticsSim.validate_acquisition_execution_binding(execution,
+`AdaptiveOpticsSim.Plant.validate_acquisition_execution_binding(execution,
 path_result, products)`. Extra acquisition/device streams use qualified
 `additional_acquisition_rng_owner_roles` and `execute_acquisition_rngs!`.
 The full-optical provider wrapper delegates these seams to the acquisition
@@ -215,7 +221,7 @@ Preparation may allocate; warmed execution must retain the allocation contract
 of its underlying stages.
 
 A custom reduced-order provider instead returns qualified
-`AdaptiveOpticsSim.PreparedAcquisitionProvider(implementation, products)` and
+`AdaptiveOpticsSim.Plant.PreparedAcquisitionProvider(implementation, products)` and
 implements four qualified methods:
 
 - `acquisition_provider_style(::Type{MyProvider})` returns
@@ -304,10 +310,11 @@ struct PreparedMyIllumination{P,S,B,D}
     device::D
 end
 
-AdaptiveOpticsSim.illumination_combination(
-    ::Type{<:PreparedMyIllumination}) = SingleIllumination()
+AdaptiveOpticsSim.Plant.illumination_combination(
+    ::Type{<:PreparedMyIllumination}) =
+    AdaptiveOpticsSim.Plant.SingleIllumination()
 
-function AdaptiveOpticsSim.prepare_illumination_evaluator(
+function AdaptiveOpticsSim.Plant.prepare_illumination_evaluator(
     definition::MyIlluminationDefinition,
     destination::IntensityMap,
     ::DetectorInputIlluminationEntry,
@@ -317,7 +324,7 @@ function AdaptiveOpticsSim.prepare_illumination_evaluator(
         backend(destination), plane_device(destination.values))
 end
 
-function AdaptiveOpticsSim.validate_illumination_evaluator_binding(
+function AdaptiveOpticsSim.Plant.validate_illumination_evaluator_binding(
     evaluator::PreparedMyIllumination,
     destination::IntensityMap,
     ::DetectorInputIlluminationEntry,
@@ -331,7 +338,7 @@ function AdaptiveOpticsSim.validate_illumination_evaluator_binding(
     return nothing
 end
 
-function AdaptiveOpticsSim.evaluate_illumination!(
+function AdaptiveOpticsSim.Plant.evaluate_illumination!(
     destination::IntensityMap,
     evaluator::PreparedMyIllumination,
     model_time,
@@ -350,8 +357,9 @@ validate only their additional parameter, state, workspace, backend, device,
 and boundary bindings. The evaluator receives explicit plant time and its
 path-owned `:illumination` RNG stream and must mutate and return the exact
 destination without allocating after warmup. It declares one of
-`SingleIllumination()`,
-`ExclusiveIlluminationSelection()`, `CoherentFieldCombination()`, or
+`AdaptiveOpticsSim.Plant.SingleIllumination()`,
+`AdaptiveOpticsSim.Plant.ExclusiveIlluminationSelection()`,
+`CoherentFieldCombination()`, or
 `IncoherentIntensityAddition()` through dispatch; core never guesses how
 contributions combine. The `visibility` value supplied to
 `prepare_illumination_entry` is a required, defensively snapshotted application

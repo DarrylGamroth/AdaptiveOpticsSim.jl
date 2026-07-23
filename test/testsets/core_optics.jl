@@ -83,167 +83,85 @@ function explicit_spatial_filter_cycle!(output, field, spatial_filter, plan,
 end
 
 @testset "API export curation" begin
-    exported = filter(name -> Base.isexported(AdaptiveOpticsSim, name),
+    root_exported = filter(name -> Base.isexported(AdaptiveOpticsSim, name),
         names(AdaptiveOpticsSim))
-    # Pre-HIL stage contracts intentionally add a small, documented public
-    # product/protocol seam. Keep headroom bounded so unrelated internals do
-    # not drift into the ordinary user namespace.
-    # Gate 2 adds a bounded documented topology/preparation surface. Gate 3's
-    # first slice adds eleven public time/schedule names. Gate 4's first slice
-    # adds nine public controllable-optic topology names. Gate 4's second slice
-    # adds the typed command-schema/policy vocabulary and ordinary accessors.
-    # Gate 4's third slice adds the bounded command-admission vocabulary,
-    # lifecycle operations, and read-only disposition accessors. Its fourth
-    # slice is an advanced qualified seam and therefore adds public names but
-    # no ordinary exports.
-    # Detector-event transitions remain qualified, while their structured
-    # error joins the public exception surface.
-    @test length(exported) <= 694
+    plant_exported = filter(name -> Base.isexported(Plant, name),
+        names(Plant))
+
+    # The root package exposes the domain module, while the domain itself
+    # distinguishes routine unqualified vocabulary from stable qualified API.
+    @test length(root_exported) <= 500
+    @test length(plant_exported) <= 100
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
-    @test Base.isexported(AdaptiveOpticsSim, :PlantDefinitionError)
-    @test Base.isexported(AdaptiveOpticsSim, :PlantCommandError)
-    @test Base.isexported(AdaptiveOpticsSim, :PlantPreparationError)
-    @test Base.isexported(AdaptiveOpticsSim, :PlantTimeError)
-    @test Base.isexported(AdaptiveOpticsSim, :PlantScheduleError)
-    @test Base.isexported(AdaptiveOpticsSim, :DetectorAcquisitionError)
-    @test Base.isexported(AdaptiveOpticsSim, :PlantTimestamp)
-    @test Base.isexported(AdaptiveOpticsSim, :PlantDuration)
-    @test Base.isexported(AdaptiveOpticsSim, :PeriodicSchedule)
-    @test Base.isexported(AdaptiveOpticsSim, :plant_nanoseconds)
-    @test Base.isexported(AdaptiveOpticsSim, :plant_time_seconds)
-    @test Base.isexported(AdaptiveOpticsSim, :plant_duration_seconds)
-    @test Base.isexported(AdaptiveOpticsSim, :schedule_period)
-    @test Base.isexported(AdaptiveOpticsSim, :schedule_phase)
-    @test Base.isexported(AdaptiveOpticsSim, :schedule_timestamp)
-    @test Base.isexported(AdaptiveOpticsSim, :OpticalPathID)
-    @test Base.isexported(AdaptiveOpticsSim, :AcquisitionID)
-    @test Base.isexported(AdaptiveOpticsSim, :ControllableOpticID)
-    @test Base.isexported(AdaptiveOpticsSim, :CommandEndpointID)
-    for name in (
-        :PlantCommandSchemaID,
-        :PlantCommandSchemaVersion,
-        :CommandBasisRevision,
-        :CommandUnit,
-        :CommandSignConvention,
-        :CommandBasis,
-        :CommandValueSemantics,
-        :AbsoluteCommand,
-        :IncrementalCommand,
-        :InvalidCommandAction,
-        :CommandRangeStage,
-        :CommandSequenceAction,
-        :FutureCommandPolicy,
-        :LateCommandPolicy,
-        :CommandSupersessionPolicy,
-        :CommandSilenceAction,
-        :CommandAgeOrigin,
-        :UnboundedCommandValues,
-        :UniformCommandBounds,
-        :CommandValuePolicy,
-        :CommandSequencePolicy,
-        :CommandEffectiveTimePolicy,
-        :CommandSilencePolicy,
-        :PlantCommandSchema,
-        :validate_plant_command_payload,
-    )
-        @test Base.isexported(AdaptiveOpticsSim, name)
+    @test Base.isexported(AdaptiveOpticsSim, :Plant)
+    @test Base.ispublic(AdaptiveOpticsSim, :Plant)
+    @test AdaptiveOpticsSim.Plant === Plant
+
+    # Every supported Plant-owned binding has one canonical owner. The root
+    # module exposes only the domain module, never forwarding compatibility
+    # bindings for exported or qualified-public Plant API.
+    for name in names(Plant; imported=false)
+        name === :Plant && continue
+        @test !isdefined(AdaptiveOpticsSim, name)
     end
-    @test Base.isexported(AdaptiveOpticsSim, :AtmosphereLayerID)
-    @test Base.isexported(AdaptiveOpticsSim, :RNGDerivationVersion)
-    @test Base.isexported(AdaptiveOpticsSim, :RNGOwnerIdentity)
-    @test Base.isexported(AdaptiveOpticsSim, :rng_replay_metadata)
-    @test Base.isexported(AdaptiveOpticsSim, :ColdPlantModelDefinition)
-    @test Base.isexported(AdaptiveOpticsSim, :plant_model_definition_style)
-    @test Base.isexported(AdaptiveOpticsSim, :OpticalPathDefinition)
-    @test Base.isexported(AdaptiveOpticsSim, :AcquisitionDefinition)
-    @test Base.isexported(AdaptiveOpticsSim, :ControllableOpticDefinition)
-    @test Base.isexported(AdaptiveOpticsSim, :PlantDefinition)
-    @test Base.isexported(AdaptiveOpticsSim, :PreparedPlant)
-    @test Base.isexported(AdaptiveOpticsSim, :prepare_plant)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :prepare_pupil_opd_materialization)
-    @test Base.isexported(AdaptiveOpticsSim, :materialize_path_input!)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :prepare_acquisition_selection)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :execute_acquisition_selection!)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :execute_acquisition_selection_at!)
-    @test Base.isexported(AdaptiveOpticsSim, :execute_path!)
-    @test Base.isexported(AdaptiveOpticsSim, :execute_acquisition!)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :PupilFunctionIlluminationEntry)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :ElectricFieldIlluminationEntry)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :IntensityMapIlluminationEntry)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :ExternalOpticsResultIlluminationEntry)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :DetectorInputIlluminationEntry)
-    @test Base.isexported(AdaptiveOpticsSim, :SingleIllumination)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :ExclusiveIlluminationSelection)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :UniformIntensityIllumination)
-    @test Base.isexported(AdaptiveOpticsSim, :prepare_illumination_entry)
-    @test Base.isexported(AdaptiveOpticsSim, :evaluate_illumination!)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :illumination_entry_boundary)
-    @test Base.isexported(AdaptiveOpticsSim, :illumination_evaluator)
-    @test Base.isexported(AdaptiveOpticsSim, :illumination_destination)
-    @test Base.isexported(AdaptiveOpticsSim, :illumination_combination)
-    @test Base.isexported(AdaptiveOpticsSim, :illumination_visibility)
-    @test !Base.isexported(AdaptiveOpticsSim, :PreparedIlluminationEntry)
-    @test !Base.isexported(AdaptiveOpticsSim,
-        :prepare_illumination_evaluator)
-    @test !Base.isexported(AdaptiveOpticsSim,
-        :validate_illumination_evaluator_binding)
-    @test Base.isexported(AdaptiveOpticsSim, :FullOpticalProviderStyle)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :CommandResponsiveReducedOrderProviderStyle)
-    @test Base.isexported(AdaptiveOpticsSim, :SyntheticReplayProviderStyle)
-    @test Base.isexported(AdaptiveOpticsSim, :acquisition_provider_style)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :prepare_full_optical_provider)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :prepare_unchanged_synthetic_provider)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :prepare_copied_synthetic_provider)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :prepare_cyclic_replay_provider)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :validate_acquisition_product_contract)
-    @test !Base.isexported(AdaptiveOpticsSim,
-        :PreparedAcquisitionProvider)
-    @test !Base.isexported(AdaptiveOpticsSim,
-        :AcquisitionProductContract)
-    @test !Base.isexported(AdaptiveOpticsSim,
-        :prepare_acquisition_provider)
-    @test !Base.isexported(AdaptiveOpticsSim, :PreparedPathExecutor)
-    @test !Base.isexported(AdaptiveOpticsSim, :PreparedAcquisitionOwner)
-    @test !Base.isexported(AdaptiveOpticsSim,
-        :PreparedAcquisitionSelection)
-    @test !Base.isexported(AdaptiveOpticsSim, :PreparedPlantRNGs)
-    @test !Base.isexported(AdaptiveOpticsSim, :PreparedOwnerRNGs)
-    @test !Base.isexported(AdaptiveOpticsSim,
-        :PreparedPupilOPDMaterialization)
-    @test !Base.isexported(AdaptiveOpticsSim,
-        :validate_atmosphere_rendering)
-    @test !Base.isexported(AdaptiveOpticsSim, :require_path_result)
-    @test Base.isexported(AdaptiveOpticsSim, :controllable_optic_id)
-    @test Base.isexported(AdaptiveOpticsSim, :controllable_optic_model)
-    @test Base.isexported(AdaptiveOpticsSim, :command_schemas)
-    @test Base.isexported(AdaptiveOpticsSim, :command_schema)
-    @test Base.isexported(AdaptiveOpticsSim, :plant_command_schema)
-    @test Base.isexported(AdaptiveOpticsSim, :command_endpoint_ids)
-    @test Base.isexported(AdaptiveOpticsSim, :command_endpoint_owner)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :controllable_optic_definitions)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :controllable_optic_definition)
-    @test Base.isexported(AdaptiveOpticsSim, :path_definition)
-    @test Base.isexported(AdaptiveOpticsSim, :acquisition_definition)
+
+    for name in (
+        :PlantTimestamp,
+        :PlantDuration,
+        :PeriodicSchedule,
+        :OpticalPathID,
+        :AcquisitionID,
+        :ControllableOpticID,
+        :CommandEndpointID,
+        :PlantCommandSchema,
+        :PlantCommand,
+        :PlantDefinition,
+        :PreparedPlant,
+        :prepare_plant,
+        :prepare_acquisition_selection,
+        :execute_acquisition_selection!,
+        :PlantEventLoopDefinition,
+        :prepare_plant_event_loop,
+    )
+        @test !isdefined(AdaptiveOpticsSim, name)
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+        @test Base.isexported(Plant, name)
+        @test Base.ispublic(Plant, name)
+    end
+
+    for name in (
+        :CommandValuePolicy,
+        :CommandEndpointState,
+        :CommandApplicationState,
+        :PreparedPathExecutor,
+        :PreparedTriggerTopology,
+        :EventSchedulerWorkspace,
+        :PlantEventKey,
+        :RNGOwnerIdentity,
+        :SingleIllumination,
+        :FullOpticalProviderStyle,
+        :validate_path_execution_binding,
+    )
+        @test !isdefined(AdaptiveOpticsSim, name)
+        @test !Base.isexported(Plant, name)
+        @test Base.ispublic(Plant, name)
+    end
+
+    for name in (
+        :_PreparedTriggerSource,
+        :_PLANT_COMMAND_CLAIM_TOKEN,
+        :_PreparedPlantToken,
+    )
+        @test isdefined(Plant, name)
+        @test !Base.isexported(Plant, name)
+        @test !Base.ispublic(Plant, name)
+    end
+
+    @test parentmodule(Plant.PlantCommand) === Plant
+    @test parentmodule(Plant.PlantTimestamp) === Plant
+    @test parentmodule(Plant.PlantDefinitionError) === Plant
+    @test Plant.advance_to! === AdaptiveOpticsSim.advance_to!
+    @test Plant.backend === AdaptiveOpticsSim.backend
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
     @test Base.isexported(AdaptiveOpticsSim, :MicrolensArray)
     @test Base.isexported(AdaptiveOpticsSim, :microlens_array)

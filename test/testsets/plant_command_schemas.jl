@@ -4,7 +4,7 @@ struct CommandSchemaTestOpticModel
     name::Symbol
 end
 
-AdaptiveOpticsSim.plant_model_definition_style(
+Plant.plant_model_definition_style(
     ::Type{CommandSchemaTestOpticModel},
 ) = ColdPlantModelDefinition()
 
@@ -72,6 +72,12 @@ end
         :CommandUnit,
         :CommandSignConvention,
         :CommandBasis,
+        :PlantCommandSchema,
+    )
+        @test Base.isexported(Plant, name)
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+    end
+    for name in (
         :CommandValueSemantics,
         :AbsoluteCommand,
         :IncrementalCommand,
@@ -81,7 +87,6 @@ end
         :CommandSequencePolicy,
         :CommandEffectiveTimePolicy,
         :CommandSilencePolicy,
-        :PlantCommandSchema,
         :command_schema_id,
         :command_schema_version,
         :command_endpoint_id,
@@ -92,7 +97,9 @@ end
         :plant_command_schema,
         :validate_plant_command_payload,
     )
-        @test Base.isexported(AdaptiveOpticsSim, name)
+        @test Base.ispublic(Plant, name)
+        @test !Base.isexported(Plant, name)
+        @test !Base.isexported(AdaptiveOpticsSim, name)
     end
 
     value_policy = CommandValuePolicy(

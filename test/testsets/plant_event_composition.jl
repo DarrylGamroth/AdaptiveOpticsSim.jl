@@ -83,27 +83,27 @@ struct EventCompositionAcquisitionModel{
     kind::K
 end
 
-AdaptiveOpticsSim.plant_model_definition_style(
+Plant.plant_model_definition_style(
     ::Type{<:EventCompositionPathModel}) = ColdPlantModelDefinition()
-AdaptiveOpticsSim.plant_model_definition_style(
+Plant.plant_model_definition_style(
     ::Type{<:EventCompositionAcquisitionModel}) = ColdPlantModelDefinition()
 
-function AdaptiveOpticsSim.validate_path_execution_binding(
+function Plant.validate_path_execution_binding(
     execution::EventCompositionPathExecution, input, result)
-    return AdaptiveOpticsSim.validate_path_execution_binding(
+    return Plant.validate_path_execution_binding(
         execution.imaging, input, result)
 end
 
-function AdaptiveOpticsSim.execute_path!(result, input,
+function Plant.execute_path!(result, input,
     execution::EventCompositionPathExecution)
-    AdaptiveOpticsSim.validate_path_execution_binding(execution, input,
+    Plant.validate_path_execution_binding(execution, input,
         result)
     execution.executions[] += 1
-    return AdaptiveOpticsSim.execute_path!(result, input,
+    return Plant.execute_path!(result, input,
         execution.imaging)
 end
 
-function AdaptiveOpticsSim.prepare_path_executor(
+function Plant.prepare_path_executor(
     model::EventCompositionPathModel,
     definition::OpticalPathDefinition,
     source::AbstractSource,
@@ -146,7 +146,7 @@ end
     HgCdTeAvalancheArraySensor(sampling_mode=UpTheRampSampling(3),
         read_time=zero(T), T=T)
 
-function AdaptiveOpticsSim.prepare_acquisition_provider(
+function Plant.prepare_acquisition_provider(
     model::EventCompositionAcquisitionModel,
     ::AcquisitionDefinition,
     path::PreparedPathExecutor,

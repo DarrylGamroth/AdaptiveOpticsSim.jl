@@ -16,31 +16,31 @@ struct RNGTestAcquisitionExecution{E}
     frame::E
 end
 
-AdaptiveOpticsSim.plant_model_definition_style(
+Plant.plant_model_definition_style(
     ::Type{<:RNGTestPathModel}) = ColdPlantModelDefinition()
-AdaptiveOpticsSim.plant_model_definition_style(
+Plant.plant_model_definition_style(
     ::Type{<:RNGTestAcquisitionModel}) = ColdPlantModelDefinition()
 
-AdaptiveOpticsSim.additional_path_rng_owner_roles(
+Plant.additional_path_rng_owner_roles(
     ::RNGTestPathExecution) = (:path_device,)
-AdaptiveOpticsSim.additional_acquisition_rng_owner_roles(
+Plant.additional_acquisition_rng_owner_roles(
     ::RNGTestAcquisitionExecution) = (:device_model,)
 
-function AdaptiveOpticsSim.validate_path_execution_binding(
+function Plant.validate_path_execution_binding(
     execution::RNGTestPathExecution, input, result)
-    return AdaptiveOpticsSim.validate_path_execution_binding(
+    return Plant.validate_path_execution_binding(
         execution.imaging, input, result)
 end
 
-function AdaptiveOpticsSim.execute_path_rngs!(result, input,
+function Plant.execute_path_rngs!(result, input,
     execution::RNGTestPathExecution,
-    rngs::AdaptiveOpticsSim.PreparedOwnerRNGs)
-    AdaptiveOpticsSim.validate_path_execution_binding(execution, input,
+    rngs::Plant.PreparedOwnerRNGs)
+    Plant.validate_path_execution_binding(execution, input,
         result)
-    AdaptiveOpticsSim.execute_path!(result, input, execution.imaging)
-    provider_rng = AdaptiveOpticsSim.rng_stream_state(rngs,
+    Plant.execute_path!(result, input, execution.imaging)
+    provider_rng = Plant.rng_stream_state(rngs,
         Val(:provider))
-    device_rng = AdaptiveOpticsSim.rng_stream_state(rngs,
+    device_rng = Plant.rng_stream_state(rngs,
         Val(:path_device))
     T = eltype(result.values)
     scale = one(T) + T(1e-3) * randn(provider_rng, T) +
@@ -49,7 +49,7 @@ function AdaptiveOpticsSim.execute_path_rngs!(result, input,
     return result
 end
 
-function AdaptiveOpticsSim.prepare_path_executor(
+function Plant.prepare_path_executor(
     model::RNGTestPathModel,
     definition::OpticalPathDefinition,
     source::AbstractSource,
@@ -78,30 +78,30 @@ function AdaptiveOpticsSim.prepare_path_executor(
     )
 end
 
-function AdaptiveOpticsSim.validate_acquisition_execution_binding(
+function Plant.validate_acquisition_execution_binding(
     execution::RNGTestAcquisitionExecution, path_result,
     products::AcquisitionProducts)
-    return AdaptiveOpticsSim.validate_acquisition_execution_binding(
+    return Plant.validate_acquisition_execution_binding(
         execution.frame, path_result, products)
 end
 
-function AdaptiveOpticsSim.execute_acquisition_rngs!(products, path_result,
+function Plant.execute_acquisition_rngs!(products, path_result,
     execution::RNGTestAcquisitionExecution,
-    rngs::AdaptiveOpticsSim.PreparedOwnerRNGs)
-    AdaptiveOpticsSim.validate_acquisition_execution_binding(execution,
+    rngs::Plant.PreparedOwnerRNGs)
+    Plant.validate_acquisition_execution_binding(execution,
         path_result, products)
-    detector_rng = AdaptiveOpticsSim.rng_stream_state(rngs,
+    detector_rng = Plant.rng_stream_state(rngs,
         Val(:detector))
-    device_rng = AdaptiveOpticsSim.rng_stream_state(rngs,
+    device_rng = Plant.rng_stream_state(rngs,
         Val(:device_model))
-    AdaptiveOpticsSim.execute_acquisition!(products, path_result,
+    Plant.execute_acquisition!(products, path_result,
         execution.frame, detector_rng)
     T = eltype(products.observation)
     products.observation .+= T(1e-3) * randn(device_rng, T)
     return products
 end
 
-function AdaptiveOpticsSim.prepare_acquisition_provider(
+function Plant.prepare_acquisition_provider(
     model::RNGTestAcquisitionModel,
     definition::AcquisitionDefinition,
     path::PreparedPathExecutor,
@@ -255,22 +255,22 @@ end
     @test metadata.derivation_algorithm === :fnv1a_splitmix64_v1
     @test metadata.stream_algorithm === :xoshiro
     @test length(metadata.owners) == 8
-    @test issorted(metadata.owners; by=AdaptiveOpticsSim._rng_metadata_order)
+    @test issorted(metadata.owners; by=Plant._rng_metadata_order)
     @test length(unique(map(owner -> owner.derived_seed,
         metadata.owners))) == length(metadata.owners)
 
     quiet_group = rng_test_group(plant, :quiet_frame)
     noisy_group = rng_test_group(plant, :noisy)
-    quiet_before = copy(AdaptiveOpticsSim.rng_stream_state(quiet_group,
+    quiet_before = copy(Plant.rng_stream_state(quiet_group,
         Val(:detector)))
-    noisy_before = copy(AdaptiveOpticsSim.rng_stream_state(noisy_group,
+    noisy_before = copy(Plant.rng_stream_state(noisy_group,
         Val(:detector)))
     @test @inferred(execute_acquisition_selection_at!(selection,
         0.01)) === selection
     observations = rng_test_observations(plant)
-    quiet_after = copy(AdaptiveOpticsSim.rng_stream_state(quiet_group,
+    quiet_after = copy(Plant.rng_stream_state(quiet_group,
         Val(:detector)))
-    noisy_after = copy(AdaptiveOpticsSim.rng_stream_state(noisy_group,
+    noisy_after = copy(Plant.rng_stream_state(noisy_group,
         Val(:detector)))
     @test quiet_before == quiet_after
     @test noisy_before != noisy_after

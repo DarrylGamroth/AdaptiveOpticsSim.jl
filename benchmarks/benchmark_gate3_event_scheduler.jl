@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Plant
 using Base64
 using Dates
 using HdrHistogram
@@ -10,6 +11,7 @@ using TOML
 include(joinpath(@__DIR__, "support", "hdr_histogram_artifact.jl"))
 
 const AOS = AdaptiveOpticsSim
+const AOSPlant = AdaptiveOpticsSim.Plant
 const HdrArtifact = HdrHistogramArtifact
 const GATE3_SCHEDULER_CONTRACT_PATH = get(ENV,
     "AOS_GATE3_SCHEDULER_CONTRACT",
@@ -18,19 +20,19 @@ const GATE3_SCHEDULER_OUTPUT_PATH = get(ENV,
     "AOS_GATE3_SCHEDULER_OUTPUT", "")
 
 struct SchedulerBenchmarkOperation
-    scheduler::AOS.PreparedEventScheduler
-    state::AOS.EventSchedulerState
-    workspace::AOS.EventSchedulerWorkspace
+    scheduler::AOSPlant.PreparedEventScheduler
+    state::AOSPlant.EventSchedulerState
+    workspace::AOSPlant.EventSchedulerWorkspace
     recurrence::PlantDuration
 end
 
 @inline function (operation::SchedulerBenchmarkOperation)()
-    claim = AOS.claim_next_event!(operation.workspace,
+    claim = AOSPlant.claim_next_event!(operation.workspace,
         operation.scheduler, operation.state)
     claim === nothing && error("scheduler benchmark exhausted active events")
-    next_timestamp = AOS.claimed_event_key(claim).timestamp +
+    next_timestamp = AOSPlant.claimed_event_key(claim).timestamp +
         operation.recurrence
-    return AOS.reschedule_event!(operation.scheduler, operation.state,
+    return AOSPlant.reschedule_event!(operation.scheduler, operation.state,
         claim, next_timestamp)
 end
 
@@ -44,16 +46,16 @@ end
 
 function prepare_scheduler_operation(generator_count::Int)
     generator_count > 0 || error("generator count must be positive")
-    definitions = Vector{AOS.EventGeneratorDefinition}(
+    definitions = Vector{AOSPlant.EventGeneratorDefinition}(
         undef, generator_count)
     for index in 1:generator_count
-        definitions[index] = AOS.EventGeneratorDefinition(
-            PlantTimestamp(index - 1), AOS.OpticalSamplePhase, index)
+        definitions[index] = AOSPlant.EventGeneratorDefinition(
+            PlantTimestamp(index - 1), AOSPlant.OpticalSamplePhase, index)
     end
-    scheduler = AOS.prepare_event_scheduler(definitions;
+    scheduler = AOSPlant.prepare_event_scheduler(definitions;
         capacity=generator_count)
-    state = AOS.EventSchedulerState(scheduler)
-    workspace = AOS.EventSchedulerWorkspace(scheduler)
+    state = AOSPlant.EventSchedulerState(scheduler)
+    workspace = AOSPlant.EventSchedulerWorkspace(scheduler)
     return SchedulerBenchmarkOperation(scheduler, state, workspace,
         PlantDuration(generator_count))
 end
@@ -62,10 +64,10 @@ function validate_scheduler_sequence(generator_count::Int)
     operation = prepare_scheduler_operation(generator_count)
     event_count = 4 * generator_count
     for event_index in 1:event_count
-        claim = AOS.claim_next_event!(operation.workspace,
+        claim = AOSPlant.claim_next_event!(operation.workspace,
             operation.scheduler, operation.state)
         claim === nothing && error("scheduler sequence ended early")
-        key = AOS.claimed_event_key(claim)
+        key = AOSPlant.claimed_event_key(claim)
         expected_timestamp = PlantTimestamp(event_index - 1)
         expected_ordinal = UInt32(mod(event_index - 1, generator_count) + 1)
         expected_occurrence = UInt64(fld(event_index - 1,
@@ -76,28 +78,28 @@ function validate_scheduler_sequence(generator_count::Int)
             "scheduler ordinal sequence mismatch")
         key.occurrence == expected_occurrence || error(
             "scheduler occurrence sequence mismatch")
-        AOS.reschedule_event!(operation.scheduler, operation.state, claim,
+        AOSPlant.reschedule_event!(operation.scheduler, operation.state, claim,
             key.timestamp + operation.recurrence)
     end
     return true
 end
 
 function validate_simultaneous_order(generator_count::Int)
-    definitions = Vector{AOS.EventGeneratorDefinition}(
+    definitions = Vector{AOSPlant.EventGeneratorDefinition}(
         undef, generator_count)
     for index in 1:generator_count
         ordinal = generator_count - index + 1
-        definitions[index] = AOS.EventGeneratorDefinition(
-            PlantTimestamp(0), AOS.OpticalSamplePhase, ordinal)
+        definitions[index] = AOSPlant.EventGeneratorDefinition(
+            PlantTimestamp(0), AOSPlant.OpticalSamplePhase, ordinal)
     end
-    scheduler = AOS.prepare_event_scheduler(definitions;
+    scheduler = AOSPlant.prepare_event_scheduler(definitions;
         capacity=generator_count)
-    state = AOS.EventSchedulerState(scheduler)
-    workspace = AOS.EventSchedulerWorkspace(scheduler)
-    AOS.scan_due_events!(workspace, scheduler, state) == generator_count ||
+    state = AOSPlant.EventSchedulerState(scheduler)
+    workspace = AOSPlant.EventSchedulerWorkspace(scheduler)
+    AOSPlant.scan_due_events!(workspace, scheduler, state) == generator_count ||
         error("simultaneous due count mismatch")
     for index in 1:generator_count
-        key = AOS.due_event_key(workspace, scheduler, state, index)
+        key = AOSPlant.due_event_key(workspace, scheduler, state, index)
         key.timestamp == PlantTimestamp(0) || error(
             "simultaneous timestamp mismatch")
         key.ordinal == UInt32(index) || error(
@@ -318,7 +320,7 @@ function run_gate3_event_scheduler_benchmark()
             operation.state, operation.workspace))
         results[result_index] = Dict{String,Any}(
             "generator_count" => generator_count,
-            "capacity" => AOS.event_scheduler_capacity(operation.scheduler),
+            "capacity" => AOSPlant.event_scheduler_capacity(operation.scheduler),
             "registry_length" => length(getfield(operation.scheduler,
                 :definitions)),
             "cursor_length" => length(operation.state.cursors),

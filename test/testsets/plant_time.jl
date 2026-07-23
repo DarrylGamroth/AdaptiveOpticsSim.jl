@@ -40,10 +40,10 @@ end
 @testset "Canonical plant-time values" begin
     @test isbitstype(PlantTimestamp)
     @test isbitstype(PlantDuration)
-    @test isbitstype(AdaptiveOpticsSim.PlantTimeOffset)
+    @test isbitstype(Plant.PlantTimeOffset)
     @test sizeof(PlantTimestamp) == sizeof(Int64)
     @test sizeof(PlantDuration) == sizeof(Int64)
-    @test sizeof(AdaptiveOpticsSim.PlantTimeOffset) == sizeof(Int64)
+    @test sizeof(Plant.PlantTimeOffset) == sizeof(Int64)
 
     timestamp = PlantTimestamp(1_250_000_000)
     duration = PlantDuration(UInt32(250_000_000))
@@ -57,23 +57,23 @@ end
     @test iszero(zero(duration))
     @test sprint(show, timestamp) == "PlantTimestamp(1250000000 ns)"
     @test sprint(show, duration) == "PlantDuration(250000000 ns)"
-    offset = AdaptiveOpticsSim.PlantTimeOffset(-250_000_000)
+    offset = Plant.PlantTimeOffset(-250_000_000)
     @test plant_nanoseconds(offset) == -250_000_000
     @test sprint(show, offset) == "PlantTimeOffset(-250000000 ns)"
     @test timestamp + offset == PlantTimestamp(1_000_000_000)
     @test offset + timestamp == PlantTimestamp(1_000_000_000)
-    @test offset + AdaptiveOpticsSim.PlantTimeOffset(50_000_000) ==
-        AdaptiveOpticsSim.PlantTimeOffset(-200_000_000)
-    @test offset - AdaptiveOpticsSim.PlantTimeOffset(-50_000_000) ==
-        AdaptiveOpticsSim.PlantTimeOffset(-200_000_000)
-    @test zero(offset) == AdaptiveOpticsSim.PlantTimeOffset(0)
+    @test offset + Plant.PlantTimeOffset(50_000_000) ==
+        Plant.PlantTimeOffset(-200_000_000)
+    @test offset - Plant.PlantTimeOffset(-50_000_000) ==
+        Plant.PlantTimeOffset(-200_000_000)
+    @test zero(offset) == Plant.PlantTimeOffset(0)
     @test_throws PlantTimeError PlantTimestamp(0) +
-        AdaptiveOpticsSim.PlantTimeOffset(-1)
+        Plant.PlantTimeOffset(-1)
     @test_throws PlantTimeError PlantTimestamp(typemax(Int64)) +
-        AdaptiveOpticsSim.PlantTimeOffset(1)
-    @test_throws PlantTimeError AdaptiveOpticsSim.PlantTimeOffset(
+        Plant.PlantTimeOffset(1)
+    @test_throws PlantTimeError Plant.PlantTimeOffset(
         big(typemax(Int64)) + 1)
-    @test_throws PlantTimeError AdaptiveOpticsSim.PlantTimeOffset(true)
+    @test_throws PlantTimeError Plant.PlantTimeOffset(true)
 
     @test PlantTimestamp(1) < PlantTimestamp(2)
     @test PlantTimestamp(1) <= PlantTimestamp(1)
@@ -283,8 +283,10 @@ end
         :invalid_occurrence,
     )
 
-    @test !Base.isexported(AdaptiveOpticsSim, :PlantEventPhase)
-    @test !Base.isexported(AdaptiveOpticsSim, :PlantEventKey)
+    @test Base.ispublic(Plant, :PlantEventPhase)
+    @test Base.ispublic(Plant, :PlantEventKey)
+    @test !Base.isexported(Plant, :PlantEventPhase)
+    @test !Base.isexported(Plant, :PlantEventKey)
 end
 
 @testset "Plant-time hot operations" begin

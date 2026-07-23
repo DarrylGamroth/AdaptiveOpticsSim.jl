@@ -1,11 +1,13 @@
 module Gate3MultiRatePlantBenchmark
 
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Plant
 using SHA
 
 include(joinpath(@__DIR__, "gate2_serial_plant.jl"))
 
 const AOS = AdaptiveOpticsSim
+const AOSPlant = AdaptiveOpticsSim.Plant
 const Gate2 = Gate2SerialPlantBenchmark
 
 abstract type MultiRateSensorKind end
@@ -26,8 +28,8 @@ struct MultiRateAcquisitionModel{
     nondestructive_reads::Int
 end
 
-AOS.plant_model_definition_style(::Type{<:MultiRateAcquisitionModel}) =
-    AOS.ColdPlantModelDefinition()
+AOSPlant.plant_model_definition_style(::Type{<:MultiRateAcquisitionModel}) =
+    AOSPlant.ColdPlantModelDefinition()
 
 @inline function multi_rate_sensor(model::MultiRateAcquisitionModel{
     T,<:GlobalCMOSKind}) where {T}
@@ -59,13 +61,13 @@ end
         read_time=zero(T), T=T)
 end
 
-function AOS.prepare_acquisition_provider(
+function AOSPlant.prepare_acquisition_provider(
     model::MultiRateAcquisitionModel,
-    ::AOS.AcquisitionDefinition,
-    path::AOS.PreparedPathExecutor,
+    ::AOSPlant.AcquisitionDefinition,
+    path::AOSPlant.PreparedPathExecutor,
 )
-    AOS.require_path_result(path)
-    T = eltype(AOS._first_path_result(path.result).values)
+    AOSPlant.require_path_result(path)
+    T = eltype(AOSPlant._first_path_result(path.result).values)
     detector = AOS.Detector(
         integration_time=T(model.exposure_s),
         noise=AOS.NoiseNone(),
@@ -76,7 +78,7 @@ function AOS.prepare_acquisition_provider(
         T=T,
         backend=path.key.backend,
     )
-    execution = AOS.FrameAcquisitionExecution(detector, path.result)
+    execution = AOSPlant.FrameAcquisitionExecution(detector, path.result)
     metadata = (
         kind=:gate3_multi_rate_frame,
         units=:detected_electrons,
@@ -84,8 +86,8 @@ function AOS.prepare_acquisition_provider(
         detector=AOS.detector_export_metadata(detector),
         semantics=:complete_acquisition,
     )
-    products = AOS.AcquisitionProducts(execution.observation; metadata)
-    return AOS.prepare_full_optical_provider(execution, products)
+    products = AOSPlant.AcquisitionProducts(execution.observation; metadata)
+    return AOSPlant.prepare_full_optical_provider(execution, products)
 end
 
 mutable struct MultiRatePlantOperation{P,S,W}
@@ -96,7 +98,7 @@ mutable struct MultiRatePlantOperation{P,S,W}
 end
 
 @inline function (operation::MultiRatePlantOperation)()
-    timestamp = AOS.step_plant_events!(operation.prepared, operation.state,
+    timestamp = AOSPlant.step_plant_events!(operation.prepared, operation.state,
         operation.workspace)
     timestamp === nothing && error("Gate 3 multi-rate plant exhausted events")
     operation.processed_timestamps += UInt64(1)
@@ -106,7 +108,7 @@ end
 function run_timestamp_window!(operation::MultiRatePlantOperation,
     timestamps::Int)
     timestamps >= 0 || error("timestamp window must be nonnegative")
-    last_timestamp = zero(AOS.PlantTimestamp)
+    last_timestamp = zero(AOSPlant.PlantTimestamp)
     @inbounds for _ in 1:timestamps
         last_timestamp = operation()
     end
@@ -159,13 +161,13 @@ function multi_rate_plant_definition(raw::AbstractDict;
         T=T,
     )
     paths = (
-        AOS.OpticalPathDefinition(:science, science_source,
+        AOSPlant.OpticalPathDefinition(:science, science_source,
             Gate2.DirectSciencePathModel(
                 Int(raw["science_zero_padding"]), UInt(1))),
-        AOS.OpticalPathDefinition(:ngs_shack_hartmann, ngs_source,
+        AOSPlant.OpticalPathDefinition(:ngs_shack_hartmann, ngs_source,
             Gate2.ShackHartmannPathModel(Int(raw["sh_n_lenslets"]),
                 Int(raw["sh_n_pix_subap"]), UInt(2))),
-        AOS.OpticalPathDefinition(:lgs_pyramid, lgs_source,
+        AOSPlant.OpticalPathDefinition(:lgs_pyramid, lgs_source,
             Gate2.PyramidPathModel(Int(raw["pyramid_pupil_samples"]),
                 T(raw["pyramid_modulation_lambda_over_d"]),
                 Int(raw["pyramid_modulation_points"]), UInt(3))),
@@ -173,26 +175,26 @@ function multi_rate_plant_definition(raw::AbstractDict;
     qe = T(raw["quantum_efficiency"])
     zero_s = zero(T)
     acquisitions = (
-        AOS.AcquisitionDefinition(:science_cmos, :science,
+        AOSPlant.AcquisitionDefinition(:science_cmos, :science,
             MultiRateAcquisitionModel(
                 ns_seconds(raw["science_cmos_exposure_ns"]), qe,
                 GlobalCMOSKind(), zero_s, 1, zero_s, 1)),
-        AOS.AcquisitionDefinition(:science_ccd, :science,
+        AOSPlant.AcquisitionDefinition(:science_ccd, :science,
             MultiRateAcquisitionModel(
                 ns_seconds(raw["science_ccd_exposure_ns"]), qe,
                 CCDKind(), zero_s, 1, zero_s, 1)),
-        AOS.AcquisitionDefinition(:science_rolling, :science,
+        AOSPlant.AcquisitionDefinition(:science_rolling, :science,
             MultiRateAcquisitionModel(
                 ns_seconds(raw["science_rolling_exposure_ns"]), qe,
                 RollingCMOSKind(),
                 ns_seconds(raw["science_rolling_line_ns"]),
                 Int(raw["science_rolling_row_group_size"]), zero_s, 1)),
-        AOS.AcquisitionDefinition(:ngs_saphira, :ngs_shack_hartmann,
+        AOSPlant.AcquisitionDefinition(:ngs_saphira, :ngs_shack_hartmann,
             MultiRateAcquisitionModel(
                 ns_seconds(raw["ngs_saphira_exposure_ns"]), qe,
                 HgCdTeRampKind(), zero_s, 1, zero_s,
                 Int(raw["ngs_saphira_reads"]))),
-        AOS.AcquisitionDefinition(:lgs_emccd, :lgs_pyramid,
+        AOSPlant.AcquisitionDefinition(:lgs_emccd, :lgs_pyramid,
             MultiRateAcquisitionModel(
                 ns_seconds(raw["lgs_emccd_exposure_ns"]), qe,
                 FrameTransferEMCCDKind(), zero_s, 1,
@@ -201,7 +203,7 @@ function multi_rate_plant_definition(raw::AbstractDict;
     ordered_paths = reverse_declarations ? reverse(paths) : paths
     ordered_acquisitions = reverse_declarations ? reverse(acquisitions) :
         acquisitions
-    return AOS.PlantDefinition(; telescope, atmosphere,
+    return AOSPlant.PlantDefinition(; telescope, atmosphere,
         paths=ordered_paths, acquisitions=ordered_acquisitions)
 end
 
@@ -211,44 +213,44 @@ end
 function trigger_topology(raw::AbstractDict; faulted::Bool=false,
     period_multiplier::Int=1)
     source_faults = if faulted
-        AOS.TriggerFaultTrace(
-            AOS.TriggerFaultTraceEntry(raw["fault_drop_sequence"],
-                :common_trigger_drop; action=AOS.DropTriggerEdge),
-            AOS.TriggerFaultTraceEntry(raw["fault_shift_sequence"],
+        AOSPlant.TriggerFaultTrace(
+            AOSPlant.TriggerFaultTraceEntry(raw["fault_drop_sequence"],
+                :common_trigger_drop; action=AOSPlant.DropTriggerEdge),
+            AOSPlant.TriggerFaultTraceEntry(raw["fault_shift_sequence"],
                 :common_trigger_phase_error;
-                phase_step=AOS.PlantTimeOffset(
+                phase_step=AOSPlant.PlantTimeOffset(
                     raw["fault_phase_step_ns"]),
-                jitter=AOS.PlantTimeOffset(raw["fault_jitter_ns"]),
-                timestamp_label_offset=AOS.PlantTimeOffset(
+                jitter=AOSPlant.PlantTimeOffset(raw["fault_jitter_ns"]),
+                timestamp_label_offset=AOSPlant.PlantTimeOffset(
                     raw["fault_label_offset_ns"])),
-            AOS.TriggerFaultTraceEntry(raw["fault_duplicate_sequence"],
+            AOSPlant.TriggerFaultTraceEntry(raw["fault_duplicate_sequence"],
                 :common_trigger_duplicate;
-                action=AOS.DuplicateTriggerEdge,
-                duplicate_delay=AOS.PlantDuration(
+                action=AOSPlant.DuplicateTriggerEdge,
+                duplicate_delay=AOSPlant.PlantDuration(
                     raw["fault_duplicate_delay_ns"])),
         )
     else
-        AOS.TriggerFaultTrace()
+        AOSPlant.TriggerFaultTrace()
     end
-    source = AOS.TriggerSourceDefinition(:camera_trigger,
-        AOS.PeriodicSchedule(
+    source = AOSPlant.TriggerSourceDefinition(:camera_trigger,
+        AOSPlant.PeriodicSchedule(
             period_ns=scaled_period(raw, "trigger_period_ns",
                 period_multiplier),
             phase_ns=Int64(raw["trigger_phase_ns"]));
         faults=source_faults)
-    source_id = AOS.TriggerSourceID(:camera_trigger)
-    science_link = AOS.TriggerLinkDefinition(:science_camera_link,
-        source_id; propagation_delay=AOS.PlantDuration(
+    source_id = AOSPlant.TriggerSourceID(:camera_trigger)
+    science_link = AOSPlant.TriggerLinkDefinition(:science_camera_link,
+        source_id; propagation_delay=AOSPlant.PlantDuration(
             raw["science_trigger_delay_ns"]))
-    ngs_link = AOS.TriggerLinkDefinition(:ngs_camera_link, source_id;
-        propagation_delay=AOS.PlantDuration(raw["ngs_trigger_delay_ns"]))
+    ngs_link = AOSPlant.TriggerLinkDefinition(:ngs_camera_link, source_id;
+        propagation_delay=AOSPlant.PlantDuration(raw["ngs_trigger_delay_ns"]))
     consumers = (
-        AOS.TriggerConsumerDefinition(:science_camera,
-            AOS.TriggerLinkID(:science_camera_link)),
-        AOS.TriggerConsumerDefinition(:ngs_camera,
-            AOS.TriggerLinkID(:ngs_camera_link)),
+        AOSPlant.TriggerConsumerDefinition(:science_camera,
+            AOSPlant.TriggerLinkID(:science_camera_link)),
+        AOSPlant.TriggerConsumerDefinition(:ngs_camera,
+            AOSPlant.TriggerLinkID(:ngs_camera_link)),
     )
-    return AOS.prepare_trigger_topology((source,),
+    return AOSPlant.prepare_trigger_topology((source,),
         (science_link, ngs_link), consumers;
         in_flight_capacity=Int(raw["trigger_in_flight_capacity"]))
 end
@@ -256,59 +258,59 @@ end
 function multi_rate_event_definition(raw::AbstractDict;
     reverse_declarations::Bool=false, faulted::Bool=false,
     period_multiplier::Int=1)
-    schedule(period, phase) = AOS.PeriodicSchedule(
+    schedule(period, phase) = AOSPlant.PeriodicSchedule(
         period_ns=Int64(period) * period_multiplier,
         phase_ns=Int64(phase))
     samples = (
-        AOS.OpticalSampleDefinition(:science,
+        AOSPlant.OpticalSampleDefinition(:science,
             schedule(raw["science_sample_period_ns"],
                 raw["science_sample_phase_ns"])),
-        AOS.OpticalSampleDefinition(:ngs_shack_hartmann,
+        AOSPlant.OpticalSampleDefinition(:ngs_shack_hartmann,
             schedule(raw["ngs_sample_period_ns"],
                 raw["ngs_sample_phase_ns"])),
-        AOS.OpticalSampleDefinition(:lgs_pyramid,
+        AOSPlant.OpticalSampleDefinition(:lgs_pyramid,
             schedule(raw["lgs_sample_period_ns"],
                 raw["lgs_sample_phase_ns"])),
     )
     events = (
-        AOS.DetectorEventDefinition(:science_cmos,
-            AOS.GlobalShutterAcquisitionDefinition(AOS.PlantDuration(
+        AOSPlant.DetectorEventDefinition(:science_cmos,
+            AOSPlant.GlobalShutterAcquisitionDefinition(AOSPlant.PlantDuration(
                 raw["science_cmos_exposure_ns"]);
-                readout_duration=AOS.PlantDuration(
+                readout_duration=AOSPlant.PlantDuration(
                     raw["science_cmos_readout_ns"]),
-                readiness_delay=AOS.PlantDuration(
+                readiness_delay=AOSPlant.PlantDuration(
                     raw["science_cmos_readiness_ns"])),
-            AOS.TriggeredAcquisitionStart(:science_camera)),
-        AOS.DetectorEventDefinition(:science_ccd,
-            AOS.GlobalShutterAcquisitionDefinition(AOS.PlantDuration(
+            AOSPlant.TriggeredAcquisitionStart(:science_camera)),
+        AOSPlant.DetectorEventDefinition(:science_ccd,
+            AOSPlant.GlobalShutterAcquisitionDefinition(AOSPlant.PlantDuration(
                 raw["science_ccd_exposure_ns"])),
-            AOS.PeriodicAcquisitionStart(schedule(
+            AOSPlant.PeriodicAcquisitionStart(schedule(
                 raw["science_ccd_period_ns"],
                 raw["science_ccd_phase_ns"]))),
-        AOS.DetectorEventDefinition(:science_rolling,
-            AOS.RollingShutterAcquisitionDefinition(AOS.PlantDuration(
+        AOSPlant.DetectorEventDefinition(:science_rolling,
+            AOSPlant.RollingShutterAcquisitionDefinition(AOSPlant.PlantDuration(
                 raw["science_rolling_exposure_ns"])),
-            AOS.PeriodicAcquisitionStart(schedule(
+            AOSPlant.PeriodicAcquisitionStart(schedule(
                 raw["science_rolling_period_ns"],
                 raw["science_rolling_phase_ns"]))),
-        AOS.DetectorEventDefinition(:ngs_saphira,
-            AOS.GlobalShutterAcquisitionDefinition(AOS.PlantDuration(
+        AOSPlant.DetectorEventDefinition(:ngs_saphira,
+            AOSPlant.GlobalShutterAcquisitionDefinition(AOSPlant.PlantDuration(
                 raw["ngs_saphira_exposure_ns"]);
-                readout_duration=AOS.PlantDuration(
+                readout_duration=AOSPlant.PlantDuration(
                     raw["ngs_saphira_readout_ns"])),
-            AOS.TriggeredAcquisitionStart(:ngs_camera)),
-        AOS.DetectorEventDefinition(:lgs_emccd,
-            AOS.FrameTransferAcquisitionDefinition(AOS.PlantDuration(
+            AOSPlant.TriggeredAcquisitionStart(:ngs_camera)),
+        AOSPlant.DetectorEventDefinition(:lgs_emccd,
+            AOSPlant.FrameTransferAcquisitionDefinition(AOSPlant.PlantDuration(
                 raw["lgs_emccd_exposure_ns"]);
-                readout_duration=AOS.PlantDuration(
+                readout_duration=AOSPlant.PlantDuration(
                     raw["lgs_emccd_readout_ns"])),
-            AOS.PeriodicAcquisitionStart(schedule(
+            AOSPlant.PeriodicAcquisitionStart(schedule(
                 raw["lgs_emccd_period_ns"],
                 raw["lgs_emccd_phase_ns"]))),
     )
     ordered_samples = reverse_declarations ? reverse(samples) : samples
     ordered_events = reverse_declarations ? reverse(events) : events
-    return AOS.PlantEventLoopDefinition(ordered_samples, ordered_events;
+    return AOSPlant.PlantEventLoopDefinition(ordered_samples, ordered_events;
         trigger_topology=trigger_topology(raw; faulted,
             period_multiplier))
 end
@@ -317,14 +319,14 @@ function prepare_multi_rate_operation(raw::AbstractDict;
     reverse_declarations::Bool=false, faulted::Bool=false,
     period_multiplier::Int=1)
     definition = multi_rate_plant_definition(raw; reverse_declarations)
-    plant = AOS.prepare_plant(definition;
+    plant = AOSPlant.prepare_plant(definition;
         run_seed=UInt64(raw["run_seed"]),
         rng_derivation_version=Int(raw["rng_derivation_version"]))
     event_definition = multi_rate_event_definition(raw;
         reverse_declarations, faulted, period_multiplier)
-    prepared = AOS.prepare_plant_event_loop(plant, event_definition)
-    state = AOS.PlantEventLoopState(prepared)
-    workspace = AOS.PlantEventLoopWorkspace(prepared)
+    prepared = AOSPlant.prepare_plant_event_loop(plant, event_definition)
+    state = AOSPlant.PlantEventLoopState(prepared)
+    workspace = AOSPlant.PlantEventLoopWorkspace(prepared)
     return plant, MultiRatePlantOperation(prepared, state, workspace,
         UInt64(0))
 end
@@ -338,8 +340,8 @@ const ACQUISITION_IDS = (
 )
 
 function observation_array(plant, id::Symbol)
-    observation = AOS.acquisition_observation(
-        AOS.prepared_acquisition(plant, id))
+    observation = AOSPlant.acquisition_observation(
+        AOSPlant.prepared_acquisition(plant, id))
     values = observation isa AOS.WFSObservation ? observation.storage :
         observation
     return Array(values)
@@ -354,9 +356,9 @@ function product_snapshot(plant, operation::MultiRatePlantOperation)
     return map(ACQUISITION_IDS) do id
         (
             id=id,
-            sequence=AOS.acquisition_product_sequence(operation.prepared,
+            sequence=AOSPlant.acquisition_product_sequence(operation.prepared,
                 operation.state, id),
-            ready_timestamp=AOS.acquisition_product_ready_timestamp(
+            ready_timestamp=AOSPlant.acquisition_product_ready_timestamp(
                 operation.prepared, operation.state, id),
             observation_sha256=observation_sha256(plant, id),
         )
@@ -364,7 +366,7 @@ function product_snapshot(plant, operation::MultiRatePlantOperation)
 end
 
 function product_sequence_vector(operation::MultiRatePlantOperation)
-    return UInt64[AOS.acquisition_product_sequence(operation.prepared,
+    return UInt64[AOSPlant.acquisition_product_sequence(operation.prepared,
         operation.state, id) for id in ACQUISITION_IDS]
 end
 
@@ -391,8 +393,8 @@ function storage_signature(operation::MultiRatePlantOperation)
     )
 end
 
-@inline timestamp_ns(timestamp::AOS.PlantTimestamp) =
-    AOS.plant_nanoseconds(timestamp)
+@inline timestamp_ns(timestamp::AOSPlant.PlantTimestamp) =
+    AOSPlant.plant_nanoseconds(timestamp)
 @inline timestamp_ns(::Nothing) = nothing
 
 function snapshot_dict(snapshot)
@@ -412,10 +414,10 @@ function validate_replay_and_reordering(raw::AbstractDict)
     canonical_plant, canonical = prepare_multi_rate_operation(raw)
     reordered_plant, reordered = prepare_multi_rate_operation(raw;
         reverse_declarations=true)
-    horizon = AOS.PlantTimestamp(raw["replay_horizon_ns"])
-    canonical_count = AOS.run_plant_events_until!(canonical.prepared,
+    horizon = AOSPlant.PlantTimestamp(raw["replay_horizon_ns"])
+    canonical_count = AOSPlant.run_plant_events_until!(canonical.prepared,
         canonical.state, canonical.workspace, horizon)
-    reordered_count = AOS.run_plant_events_until!(reordered.prepared,
+    reordered_count = AOSPlant.run_plant_events_until!(reordered.prepared,
         reordered.state, reordered.workspace, horizon)
     canonical_snapshot = product_snapshot(canonical_plant, canonical)
     reordered_snapshot = product_snapshot(reordered_plant, reordered)
@@ -442,7 +444,7 @@ function validate_replay_and_reordering(raw::AbstractDict)
 
     science_owners = map((:science_cmos, :science_ccd,
         :science_rolling)) do id
-        AOS.prepared_acquisition(canonical_plant, id)
+        AOSPlant.prepared_acquisition(canonical_plant, id)
     end
     all(owner -> owner.path_result === first(science_owners).path_result,
         science_owners) || error(
@@ -463,10 +465,10 @@ function validate_replay_and_reordering(raw::AbstractDict)
     return Dict{String,Any}(
         "declaration_reordering_replay" => true,
         "processed_timestamp_count" => canonical_count,
-        "path_count" => AOS.plant_event_path_count(canonical.prepared),
-        "acquisition_count" => AOS.plant_event_acquisition_count(
+        "path_count" => AOSPlant.plant_event_path_count(canonical.prepared),
+        "acquisition_count" => AOSPlant.plant_event_acquisition_count(
             canonical.prepared),
-        "generator_count" => AOS.plant_event_generator_count(
+        "generator_count" => AOSPlant.plant_event_generator_count(
             canonical.prepared),
         "science_path_reused" => true,
         "atmosphere_model_time_s" => AOS.epoch_time(epoch),
@@ -477,8 +479,8 @@ end
 
 function validate_faulted_trigger_fanout(raw::AbstractDict)
     plant, operation = prepare_multi_rate_operation(raw; faulted=true)
-    horizon = AOS.PlantTimestamp(raw["fault_horizon_ns"])
-    timestamp_count = AOS.run_plant_events_until!(operation.prepared,
+    horizon = AOSPlant.PlantTimestamp(raw["fault_horizon_ns"])
+    timestamp_count = AOSPlant.run_plant_events_until!(operation.prepared,
         operation.state, operation.workspace, horizon)
     snapshot = product_snapshot(plant, operation)
     sequence_by_id = Dict(entry.id => entry.sequence for entry in snapshot)
@@ -507,12 +509,12 @@ end
 function validate_fixed_storage(raw::AbstractDict, horizon_ns::Integer,
     max_timestamps::Integer)
     _, operation = prepare_multi_rate_operation(raw)
-    AOS.run_plant_events_until!(operation.prepared, operation.state,
-        operation.workspace, AOS.PlantTimestamp(2_000_000_000))
+    AOSPlant.run_plant_events_until!(operation.prepared, operation.state,
+        operation.workspace, AOSPlant.PlantTimestamp(2_000_000_000))
     before = storage_signature(operation)
-    timestamp_count = AOS.run_plant_events_until!(operation.prepared,
+    timestamp_count = AOSPlant.run_plant_events_until!(operation.prepared,
         operation.state, operation.workspace,
-        AOS.PlantTimestamp(horizon_ns))
+        AOSPlant.PlantTimestamp(horizon_ns))
     after = storage_signature(operation)
     before == after || error(
         "Gate 3 prepared storage changed with simulated run length")
@@ -532,12 +534,12 @@ function validate_direct_jump(raw::AbstractDict, multiplier::Int)
     multiplier > 1 || error("direct-jump multiplier must exceed one")
     _, operation = prepare_multi_rate_operation(raw;
         period_multiplier=multiplier)
-    processed = AOS.run_plant_events_until!(operation.prepared,
+    processed = AOSPlant.run_plant_events_until!(operation.prepared,
         operation.state, operation.workspace,
-        AOS.PlantTimestamp(1_000_000_000))
-    next_timestamp = AOS.next_plant_event_timestamp(operation.prepared,
+        AOSPlant.PlantTimestamp(1_000_000_000))
+    next_timestamp = AOSPlant.next_plant_event_timestamp(operation.prepared,
         operation.state, operation.workspace)
-    expected = AOS.PlantTimestamp(scaled_period(raw,
+    expected = AOSPlant.PlantTimestamp(scaled_period(raw,
         "science_sample_period_ns", multiplier))
     next_timestamp == expected || error(
         "Gate 3 long-period schedule did not jump to the next event")

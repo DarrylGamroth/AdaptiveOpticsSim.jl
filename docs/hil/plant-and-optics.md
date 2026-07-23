@@ -38,12 +38,14 @@ Optical and acquisition model declarations fail closed until their concrete
 types explicitly assert the cold configuration contract:
 
 ```julia
-AdaptiveOpticsSim.plant_model_definition_style(
+const Plant = AdaptiveOpticsSim.Plant
+
+Plant.plant_model_definition_style(
     ::Type{InstrumentOpticalModelDefinition},
-) = ColdPlantModelDefinition()
-AdaptiveOpticsSim.plant_model_definition_style(
+) = Plant.ColdPlantModelDefinition()
+Plant.plant_model_definition_style(
     ::Type{InstrumentAcquisitionModelDefinition},
-) = ColdPlantModelDefinition()
+) = Plant.ColdPlantModelDefinition()
 ```
 
 The assertion excludes prepared plans and workspaces, mutable simulation or
@@ -52,7 +54,7 @@ It is intentionally opt-in instead of a shallow mutability heuristic.
 
 ```julia
 function dm_command_schema(id, endpoint, actuator_count)
-    return PlantCommandSchema(
+    return Plant.PlantCommandSchema(
         Float32,
         (actuator_count,);
         id,
@@ -60,38 +62,38 @@ function dm_command_schema(id, endpoint, actuator_count)
         endpoint,
         units=:metre,
         sign_convention=:positive_surface_increases_opd,
-        basis=CommandBasis(:actuator, id),
+        basis=Plant.CommandBasis(:actuator, id),
         basis_revision=1,
-        semantics=AbsoluteCommand,
-        bounds=UniformCommandBounds(-5f-6, 5f-6),
-        value_policy=CommandValuePolicy(
-            RejectInvalidCommand,
-            RejectInvalidCommand,
-            ValidateOnPresentation,
+        semantics=Plant.AbsoluteCommand,
+        bounds=Plant.UniformCommandBounds(-5f-6, 5f-6),
+        value_policy=Plant.CommandValuePolicy(
+            Plant.RejectInvalidCommand,
+            Plant.RejectInvalidCommand,
+            Plant.ValidateOnPresentation,
         ),
-        sequence_policy=CommandSequencePolicy(
-            RejectSequence,
-            RejectSequence,
-            RejectSequence,
-            AcceptSequence,
+        sequence_policy=Plant.CommandSequencePolicy(
+            Plant.RejectSequence,
+            Plant.RejectSequence,
+            Plant.RejectSequence,
+            Plant.AcceptSequence,
         ),
-        effective_time_policy=CommandEffectiveTimePolicy(
-            AllowFutureCommand,
-            RejectLateCommand,
-            PreservePendingCommands,
+        effective_time_policy=Plant.CommandEffectiveTimePolicy(
+            Plant.AllowFutureCommand,
+            Plant.RejectLateCommand,
+            Plant.PreservePendingCommands,
         ),
-        silence_policy=CommandSilencePolicy(
-            HoldLastCommand,
-            AgeFromApplication,
+        silence_policy=Plant.CommandSilencePolicy(
+            Plant.HoldLastCommand,
+            Plant.AgeFromApplication,
         ),
     )
 end
 
-plant = PlantDefinition(
+plant = Plant.PlantDefinition(
     telescope=tel,
     atmosphere=atm,
     controllable_optics=(
-        woofer=ControllableOpticDefinition(
+        woofer=Plant.ControllableOpticDefinition(
             :woofer,
             woofer_model;
             command_schemas=(
@@ -102,7 +104,7 @@ plant = PlantDefinition(
                 ),
             ),
         ),
-        tweeter=ControllableOpticDefinition(
+        tweeter=Plant.ControllableOpticDefinition(
             :tweeter,
             tweeter_model;
             command_schemas=(
@@ -115,23 +117,25 @@ plant = PlantDefinition(
         ),
     ),
     paths=(
-        lgs1=OpticalPathDefinition(:lgs1, lgs1_source, lgs_train),
-        ngs=OpticalPathDefinition(:ngs, ngs_source, ngs_train),
-        science=OpticalPathDefinition(
+        lgs1=Plant.OpticalPathDefinition(:lgs1, lgs1_source, lgs_train),
+        ngs=Plant.OpticalPathDefinition(:ngs, ngs_source, ngs_train),
+        science=Plant.OpticalPathDefinition(
             :science,
             science_source,
             science_train,
         ),
     ),
     acquisitions=(
-        lgs1_wfs=AcquisitionDefinition(:lgs1_wfs, :lgs1, lgs1_acquisition),
-        ngs_wfs=AcquisitionDefinition(:ngs_wfs, :ngs, ngs_acquisition),
-        fast_science=AcquisitionDefinition(
+        lgs1_wfs=Plant.AcquisitionDefinition(
+            :lgs1_wfs, :lgs1, lgs1_acquisition),
+        ngs_wfs=Plant.AcquisitionDefinition(
+            :ngs_wfs, :ngs, ngs_acquisition),
+        fast_science=Plant.AcquisitionDefinition(
             :fast_science,
             :science,
             fast_science_acquisition,
         ),
-        slow_science=AcquisitionDefinition(
+        slow_science=Plant.AcquisitionDefinition(
             :slow_science,
             :science,
             slow_science_acquisition,
@@ -140,7 +144,9 @@ plant = PlantDefinition(
 )
 ```
 
-`PlantDefinition`, `ControllableOpticDefinition`, `PlantCommandSchema`,
+These declarations are owned by `AdaptiveOpticsSim.Plant`; the root package
+provides no forwarding aliases. `PlantDefinition`,
+`ControllableOpticDefinition`, `PlantCommandSchema`,
 `OpticalPathDefinition`, `AcquisitionDefinition`, `AtmosphereLayerID`,
 `ControllableOpticID`, `CommandEndpointID`, `PlantCommandSchemaID`,
 `OpticalPathID`, `AcquisitionID`, `RNGOwnerIdentity`,

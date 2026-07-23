@@ -44,12 +44,12 @@ function run_optional_command_application_checks(::Type{B}, BackendArray) where 
     )
     endpoint = prepare_command_endpoint(schema;
         capacity=1, ordinal=1, backend=selector)
-    endpoint_state = AdaptiveOpticsSim.CommandEndpointState(endpoint)
+    endpoint_state = Plant.CommandEndpointState(endpoint)
     initial = BackendArray(zeros(T, 3))
     safe = BackendArray(fill(T(-0.25), 3))
-    application_state = AdaptiveOpticsSim.CommandApplicationState(
+    application_state = Plant.CommandApplicationState(
         endpoint, endpoint_state, initial; safe_command=safe)
-    workspace = AdaptiveOpticsSim.CommandDispositionWorkspace(endpoint)
+    workspace = Plant.CommandDispositionWorkspace(endpoint)
     payload = BackendArray(T[2, 0.25, -2])
     admit_plant_command!(workspace, endpoint, endpoint_state,
         PlantCommand(schema, 1, PlantTimestamp(1), payload),
@@ -88,18 +88,18 @@ struct OptionalIlluminationIdentityExecution{P}
     product::P
 end
 
-AdaptiveOpticsSim.plant_model_definition_style(
+Plant.plant_model_definition_style(
     ::Type{OptionalPreparedDirectPathModel}) = ColdPlantModelDefinition()
 
-AdaptiveOpticsSim.plant_model_definition_style(
+Plant.plant_model_definition_style(
     ::Type{<:OptionalPreparedIlluminationPathModel}) =
     ColdPlantModelDefinition()
 
-AdaptiveOpticsSim.plant_model_definition_style(
+Plant.plant_model_definition_style(
     ::Type{<:OptionalPreparedFrameAcquisitionModel}) =
     ColdPlantModelDefinition()
 
-function AdaptiveOpticsSim.validate_path_execution_binding(
+function Plant.validate_path_execution_binding(
     execution::OptionalIlluminationIdentityExecution, input, result)
     execution.product === input && input === result || throw(
         PlantPreparationError(:path, :prepared_binding,
@@ -107,14 +107,14 @@ function AdaptiveOpticsSim.validate_path_execution_binding(
     return nothing
 end
 
-function AdaptiveOpticsSim.execute_path!(result, input,
+function Plant.execute_path!(result, input,
     execution::OptionalIlluminationIdentityExecution)
-    AdaptiveOpticsSim.validate_path_execution_binding(execution, input,
+    Plant.validate_path_execution_binding(execution, input,
         result)
     return result
 end
 
-function AdaptiveOpticsSim.prepare_path_executor(
+function Plant.prepare_path_executor(
     model::OptionalPreparedDirectPathModel,
     definition::OpticalPathDefinition,
     source::AdaptiveOpticsSim.AbstractSource,
@@ -125,7 +125,7 @@ function AdaptiveOpticsSim.prepare_path_executor(
     pupil = PupilFunction(telescope; T=T, backend=backend(telescope))
     imaging = prepare_direct_imaging(pupil, source;
         zero_padding=model.zero_padding)
-    return AdaptiveOpticsSim.PreparedPathExecutor(
+    return Plant.PreparedPathExecutor(
         definition,
         source,
         telescope,
@@ -142,7 +142,7 @@ function AdaptiveOpticsSim.prepare_path_executor(
     )
 end
 
-function AdaptiveOpticsSim.prepare_path_executor(
+function Plant.prepare_path_executor(
     model::OptionalPreparedIlluminationPathModel,
     definition::OpticalPathDefinition,
     source::AdaptiveOpticsSim.AbstractSource,
@@ -168,7 +168,7 @@ function AdaptiveOpticsSim.prepare_path_executor(
         visibility=(downstream_path=path_id(definition),
             starts_at=:detector_input))
     execution = OptionalIlluminationIdentityExecution(destination)
-    return AdaptiveOpticsSim.PreparedPathExecutor(
+    return Plant.PreparedPathExecutor(
         definition,
         source,
         telescope,
@@ -189,7 +189,7 @@ end
     ::Telescope,
     ::AdaptiveOpticsSim.AbstractSource,
     ::PupilFunction,
-) = AdaptiveOpticsSim.AtmosphereIndependentPath()
+) = Plant.AtmosphereIndependentPath()
 
 @inline optional_path_materialization(
     atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere,
@@ -198,22 +198,22 @@ end
     pupil::PupilFunction,
 ) = prepare_pupil_opd_materialization(atmosphere, telescope, source, pupil)
 
-function AdaptiveOpticsSim.prepare_acquisition_provider(
+function Plant.prepare_acquisition_provider(
     model::OptionalPreparedFrameAcquisitionModel,
     definition::AcquisitionDefinition,
-    path::AdaptiveOpticsSim.PreparedPathExecutor,
+    path::Plant.PreparedPathExecutor,
 )
-    AdaptiveOpticsSim.require_path_result(path)
+    Plant.require_path_result(path)
     result = path_result(path)
     T = eltype(result.values)
     detector = Detector(integration_time=T(model.exposure),
         noise=NoiseNone(), qe=one(T), response_model=NullFrameResponse(),
         T=T, backend=path_result_key(path).backend)
-    execution = AdaptiveOpticsSim.FrameAcquisitionExecution(detector, result)
+    execution = Plant.FrameAcquisitionExecution(detector, result)
     metadata = (kind=:detector_frame, units=:detected_electrons,
         geometry=result.metadata,
         detector=detector_export_metadata(detector))
-    products = AdaptiveOpticsSim.AcquisitionProducts(execution.observation;
+    products = Plant.AcquisitionProducts(execution.observation;
         metadata)
     return prepare_full_optical_provider(execution, products)
 end
@@ -318,49 +318,49 @@ function run_optional_prepared_plant_checks(::Type{B},
     @test all(==(one(T)), illumination_host)
     @test all(==(T(8)), Array(path_result(illumination_path).values))
     @test illumination_entry_boundary(
-        AdaptiveOpticsSim.path_materialization(illumination_path)) isa
+        Plant.path_materialization(illumination_path)) isa
         DetectorInputIlluminationEntry
 
     synthetic_metadata = acquisition_product_metadata(fast)
-    copied_destination = AdaptiveOpticsSim.AcquisitionProducts(
+    copied_destination = Plant.AcquisitionProducts(
         similar(acquisition_observation(fast));
         metadata=synthetic_metadata)
-    copied_source = AdaptiveOpticsSim.AcquisitionProducts(
+    copied_source = Plant.AcquisitionProducts(
         similar(acquisition_observation(fast));
         metadata=synthetic_metadata)
     fill!(copied_source.observation, T(9))
     copied_provider = prepare_copied_synthetic_provider(
         copied_destination, copied_source)
-    @test AdaptiveOpticsSim.execute_acquisition_provider!(copied_provider,
+    @test Plant.execute_acquisition_provider!(copied_provider,
         path_result(path), Xoshiro(0x6110)) === copied_destination
-    replay_destination = AdaptiveOpticsSim.AcquisitionProducts(
+    replay_destination = Plant.AcquisitionProducts(
         similar(acquisition_observation(fast));
         metadata=synthetic_metadata)
-    replay_first = AdaptiveOpticsSim.AcquisitionProducts(
+    replay_first = Plant.AcquisitionProducts(
         similar(acquisition_observation(fast));
         metadata=synthetic_metadata)
-    replay_second = AdaptiveOpticsSim.AcquisitionProducts(
+    replay_second = Plant.AcquisitionProducts(
         similar(acquisition_observation(fast));
         metadata=synthetic_metadata)
     fill!(replay_first.observation, T(10))
     fill!(replay_second.observation, T(11))
     replay_provider = prepare_cyclic_replay_provider(replay_destination,
         (replay_first, replay_second))
-    @test AdaptiveOpticsSim.execute_acquisition_provider!(replay_provider,
+    @test Plant.execute_acquisition_provider!(replay_provider,
         path_result(path), Xoshiro(0x6111)) === replay_destination
     AdaptiveOpticsSim.synchronize_backend!(
         AdaptiveOpticsSim.execution_style(copied_destination.observation))
     @test all(==(T(9)), Array(copied_destination.observation))
     @test all(==(T(10)), Array(replay_destination.observation))
-    AdaptiveOpticsSim.execute_acquisition_provider!(replay_provider,
+    Plant.execute_acquisition_provider!(replay_provider,
         path_result(path), Xoshiro(0x6112))
     AdaptiveOpticsSim.synchronize_backend!(
         AdaptiveOpticsSim.execution_style(replay_destination.observation))
     @test all(==(T(11)), Array(replay_destination.observation))
 
-    @test_throws PlantPreparationError AdaptiveOpticsSim.require_path_result(
+    @test_throws PlantPreparationError Plant.require_path_result(
         path; backend=CPUBackend())
-    @test_throws PlantPreparationError AdaptiveOpticsSim.require_path_result(
+    @test_throws PlantPreparationError Plant.require_path_result(
         path; device=AdaptiveOpticsSim.HostPlaneDevice())
     return nothing
 end
@@ -1850,7 +1850,7 @@ function run_optional_detector_event_checks(::Type{B}, BackendArray) where
     {B<:AdaptiveOpticsSim.GPUBackendTag}
     T = Float32
     selector = backend_selector(B)
-    definition = AdaptiveOpticsSim.GlobalShutterAcquisitionDefinition(
+    definition = Plant.GlobalShutterAcquisitionDefinition(
         PlantDuration(1_000_000_000))
     rng = MersenneTwister(2030)
 
@@ -1859,20 +1859,20 @@ function run_optional_detector_event_checks(::Type{B}, BackendArray) where
     detector = Detector(integration_time=one(T), qe=T(0.5),
         noise=NoiseNone(), response_model=NullFrameResponse(), T=T,
         backend=selector)
-    prepared = AdaptiveOpticsSim.prepare_global_shutter_acquisition(detector,
+    prepared = Plant.prepare_global_shutter_acquisition(detector,
         map, definition)
-    state = AdaptiveOpticsSim.GlobalShutterAcquisitionState(prepared)
+    state = Plant.GlobalShutterAcquisitionState(prepared)
     start = PlantTimestamp(0)
     middle = PlantTimestamp(400_000_000)
     close = PlantTimestamp(1_000_000_000)
-    AdaptiveOpticsSim.begin_exposure!(prepared, state, start)
-    AdaptiveOpticsSim.accumulate_exposure_interval!(prepared, state, start,
+    Plant.begin_exposure!(prepared, state, start)
+    Plant.accumulate_exposure_interval!(prepared, state, start,
         middle, rng)
-    AdaptiveOpticsSim.accumulate_exposure_interval!(prepared, state, middle,
+    Plant.accumulate_exposure_interval!(prepared, state, middle,
         close, rng)
-    AdaptiveOpticsSim.close_exposure!(prepared, state, close)
-    output = AdaptiveOpticsSim.complete_readout!(prepared, state, close, rng)
-    AdaptiveOpticsSim.mark_acquisition_ready!(prepared, state, close)
+    Plant.close_exposure!(prepared, state, close)
+    output = Plant.complete_readout!(prepared, state, close, rng)
+    Plant.mark_acquisition_ready!(prepared, state, close)
     AdaptiveOpticsSim.synchronize_backend!(
         AdaptiveOpticsSim.execution_style(output))
     @test output isa BackendArray
@@ -1887,27 +1887,27 @@ function run_optional_detector_event_checks(::Type{B}, BackendArray) where
         response_model=NullFrameResponse(),
         readout_window=AdaptiveOpticsSim.FrameWindow(2:3, 2:3), T=T,
         backend=selector)
-    ramp_prepared = AdaptiveOpticsSim.prepare_global_shutter_acquisition(
+    ramp_prepared = Plant.prepare_global_shutter_acquisition(
         ramp_detector, ramp_map, definition)
-    ramp_state = AdaptiveOpticsSim.GlobalShutterAcquisitionState(
+    ramp_state = Plant.GlobalShutterAcquisitionState(
         ramp_prepared)
     ramp_middle = PlantTimestamp(500_000_000)
-    AdaptiveOpticsSim.begin_exposure!(ramp_prepared, ramp_state, start)
-    AdaptiveOpticsSim.take_nondestructive_read!(ramp_prepared, ramp_state,
+    Plant.begin_exposure!(ramp_prepared, ramp_state, start)
+    Plant.take_nondestructive_read!(ramp_prepared, ramp_state,
         start, rng)
-    AdaptiveOpticsSim.accumulate_exposure_interval!(ramp_prepared, ramp_state,
+    Plant.accumulate_exposure_interval!(ramp_prepared, ramp_state,
         start, ramp_middle, rng)
-    AdaptiveOpticsSim.take_nondestructive_read!(ramp_prepared, ramp_state,
+    Plant.take_nondestructive_read!(ramp_prepared, ramp_state,
         ramp_middle, rng)
     fill!(ramp_values, T(3))
-    AdaptiveOpticsSim.accumulate_exposure_interval!(ramp_prepared, ramp_state,
+    Plant.accumulate_exposure_interval!(ramp_prepared, ramp_state,
         ramp_middle, close, rng)
-    AdaptiveOpticsSim.take_nondestructive_read!(ramp_prepared, ramp_state,
+    Plant.take_nondestructive_read!(ramp_prepared, ramp_state,
         close, rng)
-    AdaptiveOpticsSim.close_exposure!(ramp_prepared, ramp_state, close)
-    ramp_output = AdaptiveOpticsSim.complete_readout!(ramp_prepared,
+    Plant.close_exposure!(ramp_prepared, ramp_state, close)
+    ramp_output = Plant.complete_readout!(ramp_prepared,
         ramp_state, close, rng)
-    AdaptiveOpticsSim.mark_acquisition_ready!(ramp_prepared, ramp_state,
+    Plant.mark_acquisition_ready!(ramp_prepared, ramp_state,
         close)
     AdaptiveOpticsSim.synchronize_backend!(
         AdaptiveOpticsSim.execution_style(ramp_output))
@@ -1926,44 +1926,44 @@ function run_optional_detector_event_checks(::Type{B}, BackendArray) where
         sensor=CMOSSensor(timing_model=RollingShutter(T(0.1);
             row_group_size=2), T=T), T=T, backend=selector)
     rolling_prepared =
-        AdaptiveOpticsSim.prepare_rolling_shutter_acquisition(
+        Plant.prepare_rolling_shutter_acquisition(
             rolling_detector, rolling_map,
-            AdaptiveOpticsSim.RollingShutterAcquisitionDefinition(
+            Plant.RollingShutterAcquisitionDefinition(
                 PlantDuration(1_000_000_000)))
-    rolling_state = AdaptiveOpticsSim.RollingShutterAcquisitionState(
+    rolling_state = Plant.RollingShutterAcquisitionState(
         rolling_prepared)
-    AdaptiveOpticsSim.begin_exposure!(rolling_prepared, rolling_state,
+    Plant.begin_exposure!(rolling_prepared, rolling_state,
         start)
     while true
-        next_open = AdaptiveOpticsSim.next_rolling_band_open_timestamp(
+        next_open = Plant.next_rolling_band_open_timestamp(
             rolling_prepared, rolling_state)
-        next_close = AdaptiveOpticsSim.next_rolling_band_close_timestamp(
+        next_close = Plant.next_rolling_band_close_timestamp(
             rolling_prepared, rolling_state)
         next_open === nothing && next_close === nothing && break
         timestamp = next_open === nothing ? next_close :
             next_close === nothing ? next_open : min(next_open, next_close)
-        if AdaptiveOpticsSim.integrated_through_timestamp(rolling_state) <
+        if Plant.integrated_through_timestamp(rolling_state) <
                 timestamp &&
-                AdaptiveOpticsSim.rolling_opened_band_count(rolling_state) >
-                    AdaptiveOpticsSim.rolling_closed_band_count(rolling_state)
-            AdaptiveOpticsSim.accumulate_rolling_exposure_interval!(
+                Plant.rolling_opened_band_count(rolling_state) >
+                    Plant.rolling_closed_band_count(rolling_state)
+            Plant.accumulate_rolling_exposure_interval!(
                 rolling_prepared, rolling_state,
-                AdaptiveOpticsSim.integrated_through_timestamp(
+                Plant.integrated_through_timestamp(
                     rolling_state), timestamp, rng)
         end
         next_close == timestamp &&
-            AdaptiveOpticsSim.close_next_rolling_band!(rolling_prepared,
+            Plant.close_next_rolling_band!(rolling_prepared,
                 rolling_state, timestamp)
         next_open == timestamp &&
-            AdaptiveOpticsSim.open_next_rolling_band!(rolling_prepared,
+            Plant.open_next_rolling_band!(rolling_prepared,
                 rolling_state, timestamp)
     end
-    rolling_output = AdaptiveOpticsSim.complete_readout!(rolling_prepared,
+    rolling_output = Plant.complete_readout!(rolling_prepared,
         rolling_state,
-        AdaptiveOpticsSim.readout_complete_timestamp(rolling_state), rng)
-    AdaptiveOpticsSim.mark_acquisition_ready!(rolling_prepared,
+        Plant.readout_complete_timestamp(rolling_state), rng)
+    Plant.mark_acquisition_ready!(rolling_prepared,
         rolling_state,
-        AdaptiveOpticsSim.acquisition_readiness_timestamp(rolling_state))
+        Plant.acquisition_readiness_timestamp(rolling_state))
     AdaptiveOpticsSim.synchronize_backend!(
         AdaptiveOpticsSim.execution_style(rolling_output))
     @test rolling_output isa BackendArray
@@ -1976,28 +1976,28 @@ function run_optional_detector_event_checks(::Type{B}, BackendArray) where
         sensor=EMCCDSensor(acquisition_mode=FrameTransferAcquisition(
             transfer_time=T(0.1)), T=T), T=T, backend=selector)
     transfer_prepared =
-        AdaptiveOpticsSim.prepare_frame_transfer_acquisition(
+        Plant.prepare_frame_transfer_acquisition(
             transfer_detector, transfer_map,
-            AdaptiveOpticsSim.FrameTransferAcquisitionDefinition(
+            Plant.FrameTransferAcquisitionDefinition(
                 PlantDuration(1_000_000_000);
                 readout_duration=PlantDuration(200_000_000)))
-    transfer_state = AdaptiveOpticsSim.FrameTransferAcquisitionState(
+    transfer_state = Plant.FrameTransferAcquisitionState(
         transfer_prepared)
-    AdaptiveOpticsSim.begin_exposure!(transfer_prepared, transfer_state,
+    Plant.begin_exposure!(transfer_prepared, transfer_state,
         start)
-    transfer_close = AdaptiveOpticsSim.exposure_close_timestamp(
+    transfer_close = Plant.exposure_close_timestamp(
         transfer_state)
-    AdaptiveOpticsSim.accumulate_exposure_interval!(transfer_prepared,
+    Plant.accumulate_exposure_interval!(transfer_prepared,
         transfer_state, start, transfer_close, rng)
-    AdaptiveOpticsSim.close_exposure!(transfer_prepared, transfer_state,
+    Plant.close_exposure!(transfer_prepared, transfer_state,
         transfer_close)
-    transfer_complete = AdaptiveOpticsSim.frame_transfer_complete_timestamp(
+    transfer_complete = Plant.frame_transfer_complete_timestamp(
         transfer_state)
-    AdaptiveOpticsSim.complete_frame_transfer!(transfer_prepared,
+    Plant.complete_frame_transfer!(transfer_prepared,
         transfer_state, transfer_complete)
-    transfer_readout = AdaptiveOpticsSim.readout_complete_timestamp(
+    transfer_readout = Plant.readout_complete_timestamp(
         transfer_state)
-    transfer_output = AdaptiveOpticsSim.complete_readout!(transfer_prepared,
+    transfer_output = Plant.complete_readout!(transfer_prepared,
         transfer_state, transfer_readout, rng)
     AdaptiveOpticsSim.synchronize_backend!(
         AdaptiveOpticsSim.execution_style(transfer_output))
