@@ -62,7 +62,7 @@ rng = deterministic_reference_rng(0x1234)
 
 ## Prepared-Plant RNG Topology
 
-The implemented schedule-free serial plant requires one central `run_seed`, a
+The implemented prepared Plant requires one central `run_seed`, a
 positive `RNGDerivationVersion`, and stable `RNGOwnerIdentity` values.
 Preparation assigns separate stateful streams to explicitly named atmosphere
 layers, every path/provider, every acquisition/detector, and any additional
@@ -145,11 +145,11 @@ for the still-planned addressable multi-device random domain.
 
 - `Detector` noise uses the explicitly supplied RNG and the noise model trait.
 - Deterministic baseline: `Detector(noise=NoiseNone())` creates `Detector{NoiseNone}`.
-- `SharedOpticalRuntime` currently gives its science-detector tuple sequential
-  draws from one runtime RNG. Reordering noisy detectors therefore changes
-  their random streams; use `NoiseNone()` for order-invariant optical fan-out
-  evidence. This is a documented limitation of the transitional frame-step
-  runtime, not the target scheduled-plant contract.
+- An explicit model loop that deliberately shares one RNG across several noisy
+  detectors remains call-order dependent; use separate caller-owned RNGs or
+  `NoiseNone()` when order invariance is required.
+- A prepared Plant derives stable per-owner streams so declaration and
+  acquisition-selection order do not select random values.
 
 ## Testing Approach
 

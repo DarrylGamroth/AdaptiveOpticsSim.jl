@@ -2,6 +2,8 @@ using AdaptiveOpticsSim
 using BenchmarkTools
 using Random
 
+include(joinpath(@__DIR__, "support", "closed_loop_workload.jl"))
+
 for name in names(AdaptiveOpticsSim; all=true)
     s = String(name)
     if Base.isidentifier(s) && !startswith(s, "#") && !isdefined(@__MODULE__, name)
@@ -62,25 +64,22 @@ function _configure_benchmarks!()
     return nothing
 end
 
-function _runtime_case(target::BenchmarkExecutionTarget; resolution::Int, n_lenslets::Int, n_act::Int)
+function _closed_loop_case(target::BenchmarkExecutionTarget;
+    resolution::Int, n_lenslets::Int, n_act::Int)
     policy = _benchmark_policy(target)
     T = AdaptiveOpticsSim.gpu_runtime_type(policy)
     backend = _benchmark_backend_array(target)
     _require_benchmark_gpu_backend(target)
-    rng = runtime_rng(1)
-    tel = Telescope(resolution=resolution, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
-    src = Source(band=:I, magnitude=0.0, T=T)
-    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=backend)
-    dm = DeformableMirror(tel; n_act=n_act, influence_width=0.3, T=T, backend=backend)
-    wfs = ShackHartmannWFS(tel; n_lenslets=n_lenslets, mode=Diffractive(), T=T, backend=backend)
-    sim = AOSimulation(tel, src, atm, dm, wfs)
-    imat = interaction_matrix(dm, wfs, PupilFunction(tel), src;
-        amplitude=T(0.05))
-    recon = ModalReconstructor(imat; gain=T(0.5))
-    runtime = ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=rng)
-    step!(runtime)
-    _sync_target!(target, runtime.command)
-    return runtime
+    workload = prepare_closed_loop_workload(
+        ;
+        resolution=resolution,
+        n_lenslets=n_lenslets,
+        n_act=n_act,
+        T=T,
+        backend=backend,
+    )
+    _sync_target!(target, workload.command)
+    return workload
 end
 
 function _tomography_case_params(target::BenchmarkExecutionTarget; n_lenslet::Int, n_lgs::Int, n_fit_src::Int, n_dm::Int)
@@ -179,10 +178,15 @@ end
 function _canonical_suite(target::BenchmarkExecutionTarget)
     _configure_benchmarks!()
 
-    runtime = _runtime_case(target; resolution=16, n_lenslets=4, n_act=4)
-    runtime_trial = run(@benchmarkable begin
-        step!($runtime)
-        _sync_target!($target, $runtime.command)
+    closed_loop = _closed_loop_case(
+        target;
+        resolution=16,
+        n_lenslets=4,
+        n_act=4,
+    )
+    closed_loop_trial = run(@benchmarkable begin
+        step_closed_loop_workload!($closed_loop)
+        _sync_target!($target, $closed_loop.command)
     end)
 
     p = _tomography_case_params(target; n_lenslet=3, n_lgs=2, n_fit_src=2, n_dm=2)
@@ -191,7 +195,7 @@ function _canonical_suite(target::BenchmarkExecutionTarget)
 
     return (
         backend=_backend_name(target),
-        runtime_trial=runtime_trial,
+        closed_loop_trial=closed_loop_trial,
         builder_label=builder_label,
         builder_trial=builder_trial,
         builder_high_accuracy_label=builder_high_accuracy_label,
@@ -253,7 +257,7 @@ end
 function run_backend_benchmark_suite(target::BenchmarkExecutionTarget)
     suite = _canonical_suite(target)
     println("backend_benchmark_suite backend=", suite.backend)
-    _print_trial("runtime_step", suite.runtime_trial)
+    _print_trial("closed_loop_workload", suite.closed_loop_trial)
     _print_trial(suite.builder_label, suite.builder_trial)
     _print_trial(suite.builder_high_accuracy_label, suite.builder_high_accuracy_trial)
     return suite

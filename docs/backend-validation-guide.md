@@ -33,7 +33,7 @@ Bare `Pkg.test()` runs every registered suite in
 - quality, API, and deterministic RNG policy
 - KernelAbstractions CPU parity and tomography
 - core optics, direct science, and atmosphere
-- control and runtime
+- control primitives and explicit model compositions
 - detectors and WFS
 - plant topology, canonical time, deterministic scheduling, trigger
   distribution, detector transitions, preparation, product providers, RNG
@@ -188,13 +188,9 @@ The reduced maintained smoke covers:
 - same-grid spectral SH detector acquisition with non-unit sampled QE and
   exposure scaling
 - deterministic diffractive SH detector/export equivalence against CPU
-- deterministic composite-optic low-order runtime parity against CPU:
-  - `tiptilt + dm`
-    - `ShackHartmannWFS`
-    - `Pyramid`
-    - `BioEdge`
-  - `steering + dm`
-  - `focus + dm`
+- independent DM and modal/low-order optic formation and application parity
+- prepared controller-output routing with a device-resident view and explicit
+  host/backend mismatch rejection
 - curvature-through-atmosphere
 - prepared LiFT photon-rate formation, analytic interaction matrices,
   rate/count/normalized observations, analytic and numerical reconstruction,
@@ -211,13 +207,10 @@ The reduced maintained smoke covers:
 - MKID accumulated-count capture, source passband handling, and
   flux-conserving channel-crosstalk parity
 
-For the maintained low-order composite surfaces, optional backend smoke now also
-checks:
-
-- short command-sequence correctness after `set_command!` / `update_command!`
-- command-isolation failure paths
-- backend replay determinism through repeated GPU execution on the runtime
-  equivalence contracts
+For independent controllable optics, optional backend smoke checks command
+isolation and additive application without a packed aggregate. Controller
+routing separately verifies that a borrowed GPU view retains exact endpoint
+backend/device compatibility and that host storage fails preparation.
 
 For broader backend-audit coverage, use:
 
@@ -231,8 +224,8 @@ not by itself define the supported GPU surface. The supported GPU surface is
 defined by the dedicated hardware-backed validation targets below.
 
 For explicit hardware-backed backend validation targets that combine the
-optional backend smoke with the maintained runtime-equivalence contracts,
-including the high-accuracy post-command equivalence pass, run:
+optional backend matrix with the GPU builder and maintained REVOLT-like
+production-shaped smoke, run:
 
 - `julia --project=test/amdgpu --startup-file=no test/runtests_amdgpu.jl`
 - `julia --project=test/cuda --startup-file=no test/runtests_cuda.jl`
@@ -281,7 +274,7 @@ detector/export surface that previously regressed on CUDA:
 - CPU vs GPU comparison of:
   - the Shack-Hartmann exported spot-cube path in
     [`shack_hartmann.jl`](../src/wfs/shack_hartmann.jl)
-  - [`wfs_output_frame`](../src/control/runtime/construction.jl)
+  - the family-neutral [`wfs_output_frame`](../src/wfs/interface.jl) helper
 
 This keeps the public exported-pixel surface under backend parity coverage, not
 just the slope output.
@@ -328,8 +321,7 @@ Representative runtime evidence should be gathered with maintained profile or
 benchmark scripts such as:
 
 - [`profile_ao3k_runtime.jl`](../scripts/profile_ao3k_runtime.jl)
-- [`profile_control_loop_runtime.jl`](../scripts/profile_control_loop_runtime.jl)
-- [`profile_multi_source_multi_wfs_runtime.jl`](../scripts/profile_multi_source_multi_wfs_runtime.jl)
+- [`profile_revolt_hil_runtime.jl`](../scripts/profile_revolt_hil_runtime.jl)
 - [`run_cross_package_benchmarks.jl`](../scripts/run_cross_package_benchmarks.jl)
 - [`benchmarks/`](../benchmarks)
 
@@ -511,7 +503,8 @@ julia --threads=8 --project=benchmarks benchmarks/benchmark_ensemble_schedulers.
 This is offline throughput evidence, not an external-RTC latency result.
 Dagger is intended for task graphs, locality, and process/node scaling; AK is
 intended for reusable local task partitioning on sufficiently large many-core
-workloads. Keep direct sequential runtime stepping as the HIL baseline.
+workloads. Keep direct serial Plant event execution as the HIL-neutral
+baseline.
 The current local-host comparison is archived in
 [`2026-07-13-ensemble-schedulers.toml`](../benchmarks/results/platform/2026-07-13-ensemble-schedulers.toml);
 rebaseline it on an EPYC or Threadripper target before enabling a site policy.
@@ -570,24 +563,16 @@ Current intent:
   - runs the maintained CUDA hardware target whenever a matching self-hosted
     runner is online; the current manual WSL validation host is not a
     continuously available release runner
-  - runtime equivalence includes the composite-optic low-order HIL surfaces:
-    - `tiptilt + dm`
-      - `ShackHartmannWFS`
-      - `Pyramid`
-      - `BioEdge`
-    - `steering + dm`
-    - `focus + dm`
+  - exercises the optional numerical/backend matrix, independent optic
+    application, prepared Plant controller routing, GPU builder, and
+    REVOLT-like production-shaped WFS smoke
 - AMDGPU workflow:
   - targets a self-hosted runner labeled `self-hosted`, `linux`, `amdgpu`
   - instantiates [`test/amdgpu`](../test/amdgpu)
   - runs the maintained AMDGPU hardware target
-  - runtime equivalence includes the composite-optic low-order HIL surfaces:
-    - `tiptilt + dm`
-      - `ShackHartmannWFS`
-      - `Pyramid`
-      - `BioEdge`
-    - `steering + dm`
-    - `focus + dm`
+  - exercises the same optional numerical/backend matrix, independent optic
+    application, prepared Plant controller routing, GPU builder, and
+    REVOLT-like production-shaped WFS smoke
 
 The CPU and AMDGPU workflows are the continuously available validation paths.
 The CUDA workflow and manual WSL target exercise the same fail-fast hardware

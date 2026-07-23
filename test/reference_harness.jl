@@ -459,16 +459,56 @@ function build_reference_controllable_optic(cfg::AbstractDict{<:AbstractString,<
     elseif kind == "composite"
         components = get(cfg, "components", nothing)
         components isa AbstractVector || throw(InvalidConfiguration("composite controllable optic requires components"))
-        pairs = Pair{Symbol,AbstractControllableOptic}[]
+        isempty(components) && throw(InvalidConfiguration(
+            "composite controllable optic requires at least one component"))
+        optics = AbstractControllableOptic[]
         for raw_component in components
             component = raw_component isa AbstractDict{<:AbstractString,<:Any} ? raw_component :
                 throw(InvalidConfiguration("composite controllable optic components must be tables"))
-            component_label = Symbol(get(component, "label", "component"))
-            push!(pairs, component_label => build_reference_controllable_optic(component, tel))
+            optic = build_reference_controllable_optic(component, tel)
+            optic isa AbstractControllableOptic || throw(
+                InvalidConfiguration(
+                    "nested composite controllable optics are not supported " *
+                    "by the frozen-reference adapter"))
+            push!(optics, optic)
         end
-        return CompositeControllableOptic(pairs...)
+        return Tuple(optics)
     end
     throw(InvalidConfiguration("unknown controllable optic kind '$kind'"))
+end
+
+@inline reference_controllable_optics(optic::AbstractControllableOptic) =
+    (optic,)
+@inline reference_controllable_optics(optics::Tuple) = optics
+
+function set_reference_controllable_commands!(optic_or_optics,
+    command::AbstractVector)
+    optics = reference_controllable_optics(optic_or_optics)
+    expected = sum(n_control_dofs, optics)
+    length(command) == expected || throw(DimensionMismatchError(
+        "reference command length must equal the sum of independent optic " *
+        "command lengths"))
+    offset = 1
+    for optic in optics
+        n = n_control_dofs(optic)
+        set_command!(optic, @view(command[offset:(offset + n - 1)]))
+        offset += n
+    end
+    return optic_or_optics
+end
+
+@inline _reset_reference_pupil!(pupil::PupilFunction, ::DMAdditive) = pupil
+@inline _reset_reference_pupil!(pupil::PupilFunction, ::DMReplace) =
+    reset_opd!(pupil)
+
+function apply_reference_controllable_optics!(pupil::PupilFunction,
+    optic_or_optics, mode::DMApplyMode)
+    _reset_reference_pupil!(pupil, mode)
+    for optic in reference_controllable_optics(optic_or_optics)
+        update_surface!(optic)
+        apply_surface!(pupil, optic, DMAdditive())
+    end
+    return pupil
 end
 
 function matrix_from_rows(rows)
@@ -1165,9 +1205,8 @@ function compute_reference_actual(case::ReferenceCase)
             optic = build_reference_controllable_optic(case.config["controllable_optic"], tel)
             cmd = Float64.(get(case.config["controllable_optic"], "command", Float64[]))
             isempty(cmd) && throw(InvalidConfiguration("controllable_optic reference cases require a non-empty command"))
-            set_command!(optic, cmd)
-            update_surface!(optic)
-            apply_surface!(pupil, optic, DMReplace())
+            set_reference_controllable_commands!(optic, cmd)
+            apply_reference_controllable_optics!(pupil, optic, DMReplace())
         elseif haskey(case.config, "opd")
             if haskey(case.config, "basis")
                 basis = build_reference_basis(case.config["basis"], tel)

@@ -178,7 +178,11 @@ Examples:
 - direct `execute_path!` and `execute_acquisition!` dispatch over concrete
   prepared owners; there is no abstract executor collection, closure field,
   queue, task, or scheduler at this boundary
-- `ClosedLoopRuntime` with runtime profile, output plan, and prepared state
+- `AdaptiveOpticsSim.Plant` with cold definitions, prepared owners,
+  independently timed command/acquisition endpoints, and one bounded serial
+  virtual-time event loop
+- prepared controller-output routing that borrows named controller products
+  and binds them to exact endpoints without packing or timing semantics
 
 This gives:
 
@@ -253,60 +257,64 @@ executor must materialize due path inputs before the writer advances or bind a
 model-specific retained state. Atmosphere state therefore owns physical layers
 and timeline state, not a shared pupil-sized render target or a mutable last-
 source geometry cache. The timed atmosphere API reads no telescope timing
-value. `ClosedLoopRuntime` and the single/grouped scenario
-configurations instead require an explicit positive `atmosphere_step` for each
-sensing update; that duration is independent of detector exposure.
+value. Explicit model loops pass an elapsed duration directly; the Plant event
+loop converts its canonical timestamp to model time at the physical-model
+boundary. Atmosphere advancement remains independent of detector exposure and
+sample period.
 
 ### 2. Shared subsystem services
 
 Examples:
 
 - detector pipeline helpers
-- grouped WFS execution helpers
 - prepared compatible-intensity accumulation and typed detector acquisition
-- runtime output planning
 - propagation contexts
 - backend reductions and random/noise services
 
 These shared services reduce duplicated orchestration logic across SH, Pyramid,
-BioEdge, detectors, and runtime.
+BioEdge, detectors, explicit model loops, and Plant implementations.
 
-### 3. Simulation/runtime orchestration
+### 3. Plant and model orchestration
 
 Examples:
 
-- `ClosedLoopRuntime`
-- `SimulationInterface`
-- `prepare!`
-- `runtime_profile`
-- `simulation_readout`
+- `PlantDefinition` and `prepare_plant`
+- `prepare_plant_event_loop`, `step_plant_events!`, and
+  `run_plant_events_until!`
+- prepared controller-output routing
+- model-specific `prepare!`, `step!`, and `readout` methods for a fixed offline
+  composition
+- `SimulationEnsemble` for coarse independent work
 
-This layer coordinates prepared objects, latency staging, exported outputs,
-and detector/wfs/science readout ownership.
+Core Plant coordinates virtual-time prepared owners without owning wall-clock
+pacing or RTC transport. A model-specific loop may coordinate the same
+numerical primitives but is not a generic package runtime.
 
 ## Runtime Ownership Model
 
-The current runtime model is:
+The maintained ownership model is:
 
-- product requirements are explicit
-- exported outputs are distinct from scratch buffers
-- prepared runtime state is separated from per-step mutation
-- runtime profiles model delays/output fidelity independently of execution
-  residency
-- CPU HIL is a direct host-resident plan, while accelerator runtimes use a
-  device-resident plan with explicit observation barriers
-- shared multi-arm runtimes own one atmosphere advance and command state while
-  source-specific arms own their WFS consumers, prepared direct-imaging
-  products/workspace, and independent detector acquisitions
-- the primary WFS path, science path, and auxiliary-arm paths own distinct
-  `PupilFunction` products; a path may explicitly copy a reusable residual
-  only when its propagation policy declares that reuse valid
+- cold definitions are separate from prepared plans and mutable state
+- every mutable endpoint, optic, path workspace, acquisition, and RNG owner has
+  one writer
+- exported products are distinct from scratch buffers
+- command endpoints own independent schema, sequence, effective-time, silence,
+  bounded calendar, and effective-command state
+- controller-output routing borrows exact named products; successful admission
+  is the boundary that copies a payload into endpoint-owned storage
+- WFS, science, calibration, and coronagraph paths own distinct
+  `PupilFunction` or field products; path reuse requires an explicit prepared
+  compatibility contract
 - WFS and detector pipelines own their sampled/readout/intermediate products
   explicitly rather than relying on in-place aliasing
 - optical formation produces photon-arrival rates or explicitly dimensionless
-  products; prepared detector acquisition validates the metadata, applies
+  products; prepared detector acquisition validates metadata, applies
   presampling response before physical-pixel integration, and integrates its
   explicit exposure exactly once
+- CPU and accelerator placement is fixed during preparation; synchronization
+  occurs only at explicit dependencies or observation/transport boundaries
+- the serial Plant event loop is the deterministic HIL-neutral oracle;
+  `SimulationEnsemble` and task-graph policies stay outside its deadline path
 
 For the step-by-step view, see [`runtime-dataflow.md`](runtime-dataflow.md).
 

@@ -15,6 +15,57 @@
 abstract type AbstractController end
 
 """
+    VectorDelayLine(reference, delay_samples)
+
+Preallocated fixed-length delay for vector-valued control signals. The delay
+line owns `delay_samples` historical vectors and returns its internal scratch
+vector from [`shift_delay!`](@ref).
+"""
+mutable struct VectorDelayLine{A<:AbstractMatrix,V<:AbstractVector}
+    buffer::A
+    scratch::V
+    head::Int
+end
+
+function VectorDelayLine(reference::AbstractVector{T},
+    delay_samples::Integer) where {T<:AbstractFloat}
+    delay_samples >= 0 ||
+        throw(InvalidConfiguration("delay_samples must be >= 0"))
+    n_delay = Int(delay_samples)
+    buffer = similar(reference, T, length(reference), n_delay)
+    fill!(buffer, zero(T))
+    scratch = similar(reference, T, length(reference))
+    fill!(scratch, zero(T))
+    return VectorDelayLine{typeof(buffer),typeof(scratch)}(
+        buffer,
+        scratch,
+        1,
+    )
+end
+
+"""
+    shift_delay!(line, sample)
+
+Insert `sample` and return the vector leaving the delay line. The returned
+vector aliases `line.scratch` and remains valid only until the next call.
+"""
+function shift_delay!(line::VectorDelayLine, sample::AbstractVector)
+    length(sample) == length(line.scratch) ||
+        throw(DimensionMismatchError(
+            "delay-line sample length must match its reference length"))
+    n_delay = size(line.buffer, 2)
+    if n_delay == 0
+        copyto!(line.scratch, sample)
+        return line.scratch
+    end
+    head = line.head
+    copyto!(line.scratch, @view(line.buffer[:, head]))
+    copyto!(@view(line.buffer[:, head]), sample)
+    line.head = head == n_delay ? 1 : head + 1
+    return line.scratch
+end
+
+"""
     controller_output(ctrl)
 
 Return the current command-like output state of a controller.

@@ -1,46 +1,14 @@
 include(joinpath(@__DIR__, "common.jl"))
-using LinearAlgebra
-
 function main(; n_iter::Int=4)
-    rng = tutorial_rng(5)
-    tel = base_telescope(resolution=16, central_obstruction=0.0)
-    src = base_source()
-    atm = base_atmosphere(tel)
-    dm = DeformableMirror(tel; n_act=3, influence_width=0.35)
-    wfs = ZernikeWFS(tel; pupil_samples=4, diffraction_padding=2)
-    det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
-    sim = AOSimulation(tel, src, atm, dm, wfs)
-    imat = interaction_matrix(dm, wfs, PupilFunction(tel), src;
-        amplitude=1e-8)
-    recon = ModalReconstructor(imat; gain=0.4)
-    branch = ControlLoopBranch(:main, sim, recon; rng=rng, wfs_detector=det)
-    cfg = SingleControlLoopConfig(atmosphere_step=1e-3,
-        name=:tutorial_closed_loop_zernike,
-        branch_label=:main,
-        outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true),
-    )
-    scenario = build_control_loop_scenario(cfg, branch)
-
-    prepare!(scenario)
-    runtime_pupil = scenario.boundary.runtime.wfs_pupil
-    residual_before = zeros(Float64, n_iter)
-    residual_after = similar(residual_before)
-
-    for k in 1:n_iter
-        residual_before[k] = pupil_rms(runtime_pupil.opd,
-            pupil_support(runtime_pupil))
-        step!(scenario)
-        residual_after[k] = pupil_rms(runtime_pupil.opd,
-            pupil_support(runtime_pupil))
-    end
-
-    rt = readout(scenario)
-    result = (
-        residual_before=residual_before,
-        residual_after=residual_after,
-        final_frame=copy(wfs_frame(rt)),
-        final_slopes=copy(slopes(rt)),
-        final_command=copy(command(rt)),
+    result = run_closed_loop_example(
+        (tel, pupil_samples) -> ZernikeWFS(
+            tel;
+            pupil_samples=pupil_samples,
+            diffraction_padding=2,
+        );
+        n_iter=n_iter,
+        seed=5,
+        amplitude=1e-8,
     )
     @info "Closed-loop ZernikeWFS tutorial complete" final_residual=result.residual_after[end]
     return result

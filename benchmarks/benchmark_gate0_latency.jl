@@ -8,6 +8,8 @@ using SHA
 using Statistics
 using TOML
 
+include(joinpath(@__DIR__, "support", "closed_loop_workload.jl"))
+
 const GATE0_CONTRACT_PATH = get(ENV, "AOS_GATE0_CONTRACT",
     joinpath(@__DIR__, "contracts", "pre_hil_gate0.toml"))
 const GATE0_BASELINE_PATH = get(ENV, "AOS_GATE0_BASELINE", "")
@@ -192,23 +194,18 @@ function make_gate0_card(raw::AbstractDict)
             end
         end
     elseif kind == "closed_loop_step"
-        tel = Telescope(resolution=resolution, diameter=8.0,
-            central_obstruction=0.0)
-        src = Source(band=:I, magnitude=0.0)
-        atmosphere = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
-        dm = DeformableMirror(tel; n_act=Int(raw["n_actuators"]),
-            influence_width=0.3)
-        wfs = ShackHartmannWFS(tel;
-            n_lenslets=Int(raw["n_lenslets"]))
-        simulation = AOSimulation(tel, src, atmosphere, dm, wfs)
-        interaction = interaction_matrix(dm, wfs, PupilFunction(tel);
-            amplitude=0.05)
-        reconstructor = ModalReconstructor(interaction; gain=0.5)
-        runtime = AdaptiveOpticsSim.ClosedLoopRuntime(simulation, reconstructor;
-            atmosphere_step=1e-3,
-            rng=runtime_rng(Int(raw["rng_seed"])))
-        let runtime=runtime
-            () -> step!(runtime)
+        # `kind` is a frozen card identifier. The maintained operation is an
+        # explicit benchmark-owned composition of independent subsystems.
+        workload = prepare_closed_loop_workload(
+            ;
+            resolution=resolution,
+            n_lenslets=Int(raw["n_lenslets"]),
+            n_act=Int(raw["n_actuators"]),
+            T=Float64,
+            seed=Int(raw["rng_seed"]),
+        )
+        let workload=workload
+            () -> step_closed_loop_workload!(workload)
         end
     elseif kind == "zernike"
         tel = Telescope(resolution=resolution, diameter=8.0,

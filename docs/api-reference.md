@@ -303,6 +303,16 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `command_bounds`, `command_value_policy`, `command_sequence_policy`,
   `command_effective_time_policy`, `command_silence_policy`,
   `validate_plant_command_payload`
+- Prepared controller-output routing: exported `ControllerOutputRoute` and
+  `prepare_controller_output_routing`; qualified
+  `PreparedControllerOutputRoute`, `PreparedControllerOutputRouting`,
+  `prepared_controller_output_routes`, `controller_output_route`,
+  `controller_output_product`, `controller_output_endpoint`,
+  `controller_output_schema`, and `controller_output_payload`. Preparation
+  binds every named borrowed controller product to one distinct prepared
+  endpoint and validates exact numeric type, shape, backend, and physical
+  device. Routing adds no command timing, admission, transaction, queue, or
+  transport semantics
 - Standalone bounded command admission: `PreparedCommandEndpoint`,
   `prepare_command_endpoint`, `validate_plant_command`,
   `admit_plant_command!`, `claim_next_application_ready_command!`,
@@ -647,11 +657,11 @@ models; maintained timed models use `advance_by!` or `advance_to!`.
 - Main DM type: `DeformableMirror`
 - DM accessors: `influence_model`, `influence_width`,
   `mechanical_coupling`, `n_actuators`
-- Surface formation and path application: `update_surface!`, `apply_surface!`,
-  `update_command!`
+- Command and surface application: `set_command!`, `update_surface!`,
+  `apply_surface!`
 - Modal optics: `FunctionModalBasis`, `MatrixModalBasis`,
   `ZernikeOpticBasis`, `CartesianTiltBasis`, `ModalControllableOptic`,
-  `TipTiltMirror`, `FocusStage`, `CompositeControllableOptic`
+  `TipTiltMirror`, `FocusStage`
 - Application modes: `DMAdditive`, `DMReplace`
 
 `update_surface!(optic)` materializes the optic's current surface into
@@ -1089,50 +1099,32 @@ the canonical representation of these results.
 
 ## Runtime And HIL
 
-- Simulation/runtime types: `AbstractControlSimulation`,
-  `AbstractExecutionPolicy`, `SimulationReadout`, `AOSimulation`,
-  `SequentialExecution`, `ThreadedExecution`, `BackendStreamExecution`,
-  `DeterministicExecution`, `AcceleratedKernelsExecution`, `DaggerExecution`
-- Optical-path sources: `wfs_source`, `science_source`. `AOSimulation` uses its
-  WFS source for atmosphere/WFS sensing and may carry a distinct science source
-  for science-camera propagation.
-- Runtime profiles and outputs: `ScientificRuntimeProfile`,
-  `HILRuntimeProfile`, `RuntimeOutputRequirements`,
-  `GroupedRuntimeOutputRequirements`
-- Runtime residency: `CPUHILExecutionPlan`,
-  `DeviceResidentExecutionPlan`, `runtime_execution_plan`,
-  `synchronize_runtime!`
-- Shared optical arms: `OpticalWFSChannel`, `SharedOpticalArm`,
-  `SharedOpticalRuntime`, `primary_runtime`, `optical_arms`,
-  `science_frames`, `wfs_signals`
-- Delay lines: `VectorDelayLine`, `shift_delay!`
-- Runtime setup and commands: `prepare!`, `prepare_runtime_wfs!`,
-  `set_command!`, `command_segments`, `command_segment_range`
-- Orchestration: `ControlLoopBranch`, `SingleControlLoopConfig`,
-  `GroupedControlLoopConfig`, `ControlLoopScenario`,
-  `build_control_loop_scenario`, `control_loop_name`,
-  `control_loop_branch_labels`
-- Coarse ensembles: `SimulationEnsemble`; `prepare!`, `sense!`, and `step!`
-  apply to every member. Qualified advanced access is available through
-  `AdaptiveOpticsSim.run_ensemble!`, `ensemble_members`, `execution_policy`,
-  and `ensemble_readouts`.
-- Runtime execution: `sense!`, `step!`
-- Readout accessors: `readout`, `command`, `slopes`, `wfs_frame`,
-  `science_frame`, `grouped_wfs_stack`, `runtime_timing`,
-  `runtime_atmosphere_step`
+- HIL-neutral orchestration: the `AdaptiveOpticsSim.Plant` definitions,
+  prepared owners, command lifecycle, triggers, detector lifecycles, and event
+  loop documented above
+- Independent control primitives: `VectorDelayLine`, `shift_delay!`,
+  `DiscreteIntegratorController`, `reconstruct!`, and `set_command!`
+- WFS preparation helper: `prepare_runtime_wfs!` prepares the retained WFS
+  family-specific scratch required by explicit model loops
+- Generic timing helper: `runtime_timing`
+- Execution policies: `AbstractExecutionPolicy`, `SequentialExecution`,
+  `ThreadedExecution`, `BackendStreamExecution`, `DeterministicExecution`,
+  `AcceleratedKernelsExecution`, and `DaggerExecution`
+- Coarse independent work: `SimulationEnsemble`; qualified access through
+  `AdaptiveOpticsSim.run_ensemble!`, `ensemble_members`,
+  `execution_policy`, `ensemble_ownership_roots`,
+  `init_ensemble_scheduler`, and `execute_ensemble!`
 
-`ControlLoopScenario` is the preferred public assembly surface for normal
-single-plant closed-loop and HIL simulations. `SharedOpticalRuntime` is the
-typed surface when auxiliary source/WFS/science arms share that plant.
-Single and grouped control-loop configurations require an explicit positive
-`atmosphere_step`; it advances model time for one sensing update and is
-independent of detector exposure.
-`SimulationEnsemble` owns independent plants for offline sweeps and ensemble
-simulation. Direct `step!` calls remain the CPU HIL path; Dagger and
-AcceleratedKernels are optional coarse schedulers, not inner-loop runtime
-plans.
-Lower-level runtime construction remains
-available as qualified advanced API for tests and specialized tooling.
+Model-specific packages may define their own `prepare!`, `step!`, and `readout`
+methods for a fixed offline composition. Core does not provide a generic
+single-optic or packed-command closed-loop runtime. Independent physical optics
+remain independent Plant command endpoints; use prepared controller-output
+routing when one RTC buffer supplies several endpoints.
+
+`SimulationEnsemble` is for independent offline sweeps or model instances.
+Dagger, AcceleratedKernels, Julia threads, and backend streams are explicit
+coarse policies, not the HIL event-loop scheduler.
+
 For external Proper science-arm integration, use
 [`proper-integration-guide.md`](./proper-integration-guide.md).
 

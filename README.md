@@ -73,32 +73,28 @@ slopes = measure!(wfs, pupil, src)
 ### 3. Build a closed-loop AO model
 
 ```julia
-using Random
-
-rng = runtime_rng(0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-sim = AOSimulation(tel, src, atm, dm, wfs)
-
 imat = interaction_matrix(dm, wfs, PupilFunction(tel), src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
-
-branch = ControlLoopBranch(:main, sim, recon; rng=rng)
-cfg = SingleControlLoopConfig(atmosphere_step=1e-3, name=:demo,
-    branch_label=:main)
-scenario = build_control_loop_scenario(cfg, branch)
-prepare!(scenario)
+pupil = PupilFunction(tel)
+renderer = prepare_atmosphere_renderer(atm, tel, src)
+command = similar(dm.state.coefs)
 
 for _ in 1:5
-    step!(scenario)
+    epoch = advance_by!(atm, 1e-3; rng=rng)
+    render_atmosphere!(pupil, renderer, atm, epoch)
+    update_surface!(dm)
+    apply_surface!(pupil, dm, DMAdditive())
+    measure!(wfs, pupil, src)
+    reconstruct!(command, recon, slopes(wfs))
+    @. command = -command
+    set_command!(dm, command)
 end
-
-rt = readout(scenario)
-cmd = command(rt)
-frame = wfs_frame(rt)
 ```
 
-`prepare!(...)` performs one-time runtime/WFS precomputation. `step!(...)`
-runs the full closed-loop update: sense + reconstruct + apply.
+This explicit loop shows the numerical building blocks. Model packages may
+wrap their composition in model-specific `prepare!`, `step!`, and `readout`
+functions.
 
 The main modeling objects are:
 
@@ -106,10 +102,13 @@ The main modeling objects are:
 - `MultiLayerAtmosphere` or `KolmogorovAtmosphere` for turbulence
 - `ShackHartmannWFS`, `PyramidWFS`, `BioEdgeWFS`, `CurvatureWFS`, `ZernikeWFS` for sensing
 - `DeformableMirror` plus a reconstructor for control
-- `ControlLoopScenario` when you want the maintained step-wise AO simulation surface
+- `AdaptiveOpticsSim.Plant` definitions, prepared owners, and the event loop
+  when you need independent commands, acquisitions, triggers, and virtual time
 
-For external-control / HIL paths, use `NullReconstructor()` plus
-`set_command!(scenario, cmd)` and `sense!(scenario)`.
+For external-control or HIL paths, prepare independent plant command endpoints.
+`prepare_controller_output_routing` can bind named views of an RTC-owned output
+buffer to those endpoints without imposing packed-command timing or transport
+semantics.
 
 For advanced controllable-optic and DM modeling, see:
 

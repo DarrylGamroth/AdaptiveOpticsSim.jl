@@ -11,24 +11,23 @@ atm = MultiLayerAtmosphere(tel; r0=0.2, L0=25.0, fractional_cn2=[1.0],
     wind_speed=[6.0], wind_direction=[30.0], altitude=[0.0])
 dm = DeformableMirror(tel; n_act=4, influence_width=0.2)
 wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0)
-sim = AOSimulation(tel, src, atm, dm, wfs)
-atmosphere_renderer = prepare_atmosphere_renderer(sim.atm, sim.tel, sim.src)
-pupil = PupilFunction(sim.tel)
+atmosphere_renderer = prepare_atmosphere_renderer(atm, tel, src)
+pupil = PupilFunction(tel)
 
-imat = interaction_matrix(sim.optic, sim.wfs, pupil; amplitude=0.1)
+imat = interaction_matrix(dm, wfs, pupil, src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.4)
-cmd = similar(sim.optic.state.coefs)
+cmd = similar(dm.state.coefs)
 
 n_iter = 6
 for k in 1:n_iter
-    epoch = advance_by!(sim.atm, atmosphere_step; rng=rng)
-    render_atmosphere!(pupil, atmosphere_renderer, sim.atm, epoch)
-    update_surface!(sim.optic)
-    apply_surface!(pupil, sim.optic, DMAdditive())
-    measure!(sim.wfs, pupil)
-    reconstruct!(cmd, recon, slopes(sim.wfs))
+    epoch = advance_by!(atm, atmosphere_step; rng=rng)
+    render_atmosphere!(pupil, atmosphere_renderer, atm, epoch)
+    update_surface!(dm)
+    apply_surface!(pupil, dm, DMAdditive())
+    measure!(wfs, pupil, src)
+    reconstruct!(cmd, recon, slopes(wfs))
     modulation = 1 + 0.2 * sin(2 * pi * k / n_iter)
-    sim.optic.state.coefs .= -cmd .* modulation
+    @. dm.state.coefs = -cmd * modulation
 end
 
 @info "Closed-loop sinusoidal modulation complete"

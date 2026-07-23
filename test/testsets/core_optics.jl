@@ -211,7 +211,6 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :detector_ramp_cube)
     @test Base.isexported(AdaptiveOpticsSim, :detector_ramp_times)
     @test Base.isexported(AdaptiveOpticsSim, :InterpixelCapacitance)
-    @test Base.isexported(AdaptiveOpticsSim, :ControlLoopScenario)
     @test Base.isexported(AdaptiveOpticsSim, :SimulationEnsemble)
     @test Base.isexported(AdaptiveOpticsSim, :FactorizedReconstructor)
     @test Base.isexported(AdaptiveOpticsSim, :ControlledReconstructor)
@@ -225,17 +224,7 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :CurvatureWFS)
     @test Base.isexported(AdaptiveOpticsSim, :influence_model)
     @test Base.isexported(AdaptiveOpticsSim, :prepare_runtime_wfs!)
-    @test Base.isexported(AdaptiveOpticsSim, :wfs_source)
-    @test Base.isexported(AdaptiveOpticsSim, :science_source)
     @test Base.isexported(AdaptiveOpticsSim, :photon_irradiance)
-    @test Base.isexported(AdaptiveOpticsSim, :CPUHILExecutionPlan)
-    @test Base.isexported(AdaptiveOpticsSim, :DeviceResidentExecutionPlan)
-    @test Base.isexported(AdaptiveOpticsSim, :runtime_execution_plan)
-    @test Base.isexported(AdaptiveOpticsSim, :synchronize_runtime!)
-    @test Base.isexported(AdaptiveOpticsSim, :OpticalWFSChannel)
-    @test Base.isexported(AdaptiveOpticsSim, :SharedOpticalArm)
-    @test Base.isexported(AdaptiveOpticsSim, :SharedOpticalRuntime)
-    @test Base.isexported(AdaptiveOpticsSim, :optical_arms)
     @test Base.isexported(AdaptiveOpticsSim, :subaperture_layout)
     @test Base.isexported(AdaptiveOpticsSim, :OpticalPlaneMetadata)
     @test Base.isexported(AdaptiveOpticsSim, :MetricCoordinates)
@@ -290,6 +279,26 @@ end
     @test !Base.isexported(AdaptiveOpticsSim, :CUDABackendTag)
     @test !Base.isexported(AdaptiveOpticsSim, :MetalBackendTag)
     @test !Base.isexported(AdaptiveOpticsSim, :AMDGPUBackendTag)
+    for removed_name in (
+        :RuntimeCommandLayout,
+        :RuntimeCommandSegment,
+        :CompositeControllableOptic,
+        :update_command!,
+        :AbstractControlSimulation,
+        :AOSimulation,
+        :ClosedLoopRuntime,
+        :ControlLoopScenario,
+        :CPUHILExecutionPlan,
+        :DeviceResidentExecutionPlan,
+        :RuntimeOutputRequirements,
+        :SharedOpticalRuntime,
+        :wfs_source,
+        :science_source,
+        :synchronize_runtime!,
+    )
+        @test !isdefined(AdaptiveOpticsSim, removed_name)
+        @test !Base.isexported(AdaptiveOpticsSim, removed_name)
+    end
     @test AdaptiveOpticsSim.CPUBuildBackend() isa AdaptiveOpticsSim.BuildBackend
 end
 

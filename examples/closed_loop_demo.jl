@@ -9,18 +9,23 @@ atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 wfs = ShackHartmannWFS(tel; n_lenslets=4)
 src = Source(band=:I, magnitude=0.0)
-sim = AOSimulation(tel, src, atm, dm, wfs)
 
 imat = interaction_matrix(dm, wfs, PupilFunction(tel), src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
-branch = ControlLoopBranch(:main, sim, recon; rng=rng)
-cfg = SingleControlLoopConfig(atmosphere_step=1e-3, name=:closed_loop_demo, branch_label=:main)
-scenario = build_control_loop_scenario(cfg, branch)
-prepare!(scenario)
+pupil = PupilFunction(tel)
+renderer = prepare_atmosphere_renderer(atm, tel, src)
+command = similar(dm.state.coefs)
 
 n_iter = 5
 for k in 1:n_iter
-    step!(scenario)
+    epoch = advance_by!(atm, 1e-3; rng=rng)
+    render_atmosphere!(pupil, renderer, atm, epoch)
+    update_surface!(dm)
+    apply_surface!(pupil, dm, DMAdditive())
+    measure!(wfs, pupil, src)
+    reconstruct!(command, recon, slopes(wfs))
+    @. command = -command
+    set_command!(dm, command)
 end
 
-println("Closed-loop demo complete, command_norm=$(norm(command(readout(scenario))))")
+println("Closed-loop demo complete, command_norm=$(norm(command))")

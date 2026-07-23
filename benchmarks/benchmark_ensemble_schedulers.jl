@@ -5,62 +5,54 @@ using LinearAlgebra
 using Random
 using Statistics
 
+include(joinpath(@__DIR__, "support", "closed_loop_workload.jl"))
+
 BLAS.set_num_threads(1)
 AdaptiveOpticsSim.set_fft_provider_threads!(1)
 
-function make_runtime(seed::Integer, resolution::Int)
-    tel = Telescope(
-        resolution=resolution,
-        diameter=8.0,
-        central_obstruction=0.0,
-    )
-    src = Source(band=:I, magnitude=0.0)
-    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+function make_workload(seed::Integer, resolution::Int)
     n_act = max(2, resolution ÷ 4)
-    dm = DeformableMirror(tel; n_act=n_act, influence_width=0.3)
-    wfs = ShackHartmannWFS(tel; n_lenslets=n_act)
-    simulation = AOSimulation(tel, src, atm, dm, wfs)
-
-    response = zeros(
-        eltype(pupil_reflectivity(tel)),
-        length(slopes(wfs)),
-        length(dm.state.coefs),
+    return prepare_closed_loop_workload(
+        ;
+        resolution=resolution,
+        n_lenslets=n_act,
+        n_act=n_act,
+        T=Float64,
+        seed=seed,
     )
-    @inbounds for i in 1:min(size(response)...)
-        response[i, i] = one(eltype(response))
-    end
-    reconstructor = ModalReconstructor(InteractionMatrix(response, 0.1);
-        gain=0.5)
-    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(
-        simulation,
-        reconstructor;
-        atmosphere_step=1e-3,
-        rng=MersenneTwister(seed),
-        profile=HILRuntimeProfile(),
-    )
-    prepare!(runtime)
-    return runtime
 end
 
 function make_ensemble(policy, members::Int, resolution::Int)
-    runtimes = ntuple(i -> make_runtime(0x5eed + i, resolution), members)
-    return SimulationEnsemble(runtimes; policy=policy)
+    workloads = ntuple(
+        i -> make_workload(0x5eed + i, resolution),
+        members,
+    )
+    return SimulationEnsemble(workloads; policy=policy)
 end
 
 function measure_scheduler(policy, members::Int, resolution::Int;
     warmup::Int, samples::Int)
     ensemble = make_ensemble(policy, members, resolution)
     for _ in 1:warmup
-        step!(ensemble)
+        AdaptiveOpticsSim.run_ensemble!(
+            step_closed_loop_workload!,
+            ensemble,
+        )
     end
     GC.gc()
     latencies_ns = Vector{UInt64}(undef, samples)
     @inbounds for i in eachindex(latencies_ns)
         start_ns = time_ns()
-        step!(ensemble)
+        AdaptiveOpticsSim.run_ensemble!(
+            step_closed_loop_workload!,
+            ensemble,
+        )
         latencies_ns[i] = time_ns() - start_ns
     end
-    allocated_bytes = @allocated step!(ensemble)
+    allocated_bytes = @allocated AdaptiveOpticsSim.run_ensemble!(
+        step_closed_loop_workload!,
+        ensemble,
+    )
     values = Float64.(latencies_ns)
     return (
         policy=string(nameof(typeof(policy))),

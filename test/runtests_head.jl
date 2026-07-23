@@ -41,9 +41,8 @@ for name in names(Plant; all=true)
     end
 end
 
-include(joinpath(dirname(@__DIR__), "examples", "support", "subaru_ao188_simulation.jl"))
 include(joinpath(dirname(@__DIR__), "examples", "support", "subaru_ao3k_simulation.jl"))
-using .SubaruAO188Simulation
+using .SubaruAO3kSimulation.SubaruAO188Simulation
 using .SubaruAO3kSimulation
 
 include("reference_harness.jl")
@@ -157,20 +156,6 @@ function assert_controller_interface(ctrl, input, dt::Real)
         reset_controller!(ctrl)
         @test all(iszero, controller_output(ctrl))
     end
-end
-
-function assert_control_simulation_interface(sim)
-    @test sim isa AbstractControlSimulation
-    @test applicable(step!, sim)
-    @test applicable(AdaptiveOpticsSim.simulation_interface, sim)
-    @test applicable(readout, sim)
-    iface = AdaptiveOpticsSim.simulation_interface(sim)
-    sim_readout = readout(sim)
-    iface_readout = readout(iface)
-    @test command(sim_readout) === command(sim)
-    @test slopes(sim_readout) === slopes(sim)
-    @test command(iface_readout) === command(iface)
-    return iface
 end
 
 function assert_interaction_matrix_contract(imat, expected_rows::Int, expected_cols::Int, amplitude::Real)
@@ -340,16 +325,19 @@ function moving_closed_loop_trace(;
     )
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
     wfs = ZernikeWFS(tel; pupil_samples=4, diffraction_padding=2)
-    sim = AOSimulation(tel, src, atm, dm, wfs)
     calibration_pupil = PupilFunction(tel)
     imat = interaction_matrix(dm, wfs, calibration_pupil, src;
         amplitude=1e-8)
     recon = ModalReconstructor(imat; gain=0.2)
     wfs_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
-    science_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
-    runtime = ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=MersenneTwister(seed), wfs_detector=wfs_det, science_detector=science_det)
-    prepare!(runtime)
-    delay = VectorDelayLine(runtime.command, 1)
+    pupil = PupilFunction(tel)
+    atmosphere_renderer = prepare_atmosphere_renderer(atm, tel, src)
+    prepare_runtime_wfs!(wfs, pupil, src)
+    science_imaging = prepare_direct_imaging(pupil, src; zero_padding=1)
+    command = similar(command_storage(dm))
+    fill!(command, zero(eltype(command)))
+    delay = VectorDelayLine(command, 1)
+    rng = MersenneTwister(seed)
 
     slope_norms = zeros(Float64, steps)
     command_norms = zeros(Float64, steps)
@@ -357,15 +345,20 @@ function moving_closed_loop_trace(;
     science_energy = zeros(Float64, steps)
 
     for i in 1:steps
-        sense!(runtime)
-        reconstruct!(runtime)
-        delayed = copy(shift_delay!(delay, runtime.command))
-        copyto!(runtime.command, delayed)
-        AdaptiveOpticsSim.apply_runtime_command!(runtime)
-        slope_norms[i] = norm(slopes(runtime))
-        command_norms[i] = norm(command(runtime))
-        wfs_energy[i] = sum(abs, wfs_frame(runtime))
-        science_energy[i] = sum(abs, science_frame(runtime))
+        epoch = advance_by!(atm, atmosphere_step; rng=rng)
+        render_atmosphere!(pupil, atmosphere_renderer, atm, epoch)
+        update_surface!(dm)
+        apply_surface!(pupil, dm, DMAdditive())
+        measure!(wfs, pupil, src, wfs_det; rng=rng)
+        reconstruct!(command, recon, slopes(wfs))
+        delayed = shift_delay!(delay, command)
+        @. command_storage(dm) = -delayed
+        science = form_direct_image!(science_imaging)
+
+        slope_norms[i] = norm(slopes(wfs))
+        command_norms[i] = norm(command_storage(dm))
+        wfs_energy[i] = sum(abs, output_frame(wfs_det))
+        science_energy[i] = sum(abs, intensity_values(science))
     end
 
     return (; slope_norms, command_norms, wfs_energy, science_energy)

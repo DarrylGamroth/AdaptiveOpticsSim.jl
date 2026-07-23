@@ -44,53 +44,5 @@ abstract type DMApplyMode end
 struct DMAdditive <: DMApplyMode end
 struct DMReplace <: DMApplyMode end
 
-struct RuntimeCommandSegment{L}
-    label::L
-    offset::Int
-    length::Int
-    function RuntimeCommandSegment(label, offset::Integer, length::Integer)
-        offset >= 1 || throw(InvalidConfiguration("command segment offset must be >= 1"))
-        length >= 0 || throw(InvalidConfiguration("command segment length must be >= 0"))
-        return new{typeof(label)}(label, Int(offset), Int(length))
-    end
-end
-
-struct RuntimeCommandLayout{S}
-    segments::S
-    total_length::Int
-    function RuntimeCommandLayout(segments::Tuple)
-        total = 0
-        for seg in segments
-            total = validate_runtime_command_segment(seg, total)
-        end
-        return new{typeof(segments)}(segments, total)
-    end
-end
-
-validate_runtime_command_segment(seg::RuntimeCommandSegment, total::Int) = begin
-    seg.offset == total + 1 ||
-        throw(InvalidConfiguration("RuntimeCommandLayout segments must be contiguous and 1-based"))
-    total + seg.length
-end
-
-validate_runtime_command_segment(seg, total::Int) =
-    throw(InvalidConfiguration("RuntimeCommandLayout segments must be RuntimeCommandSegment values"))
-
-RuntimeCommandLayout(segments::RuntimeCommandSegment...) = RuntimeCommandLayout(tuple(segments...))
-RuntimeCommandLayout(specs::Pair...) = begin
-    offset = 1
-    segments = map(specs) do spec
-        length = Int(spec.second)
-        seg = RuntimeCommandSegment(spec.first, offset, length)
-        offset += length
-        seg
-    end
-    RuntimeCommandLayout(Tuple(segments))
-end
-RuntimeCommandLayout() = RuntimeCommandLayout(())
-command_segments(layout::RuntimeCommandLayout) = layout.segments
-command_segment_labels(layout::RuntimeCommandLayout) = map(seg -> seg.label, layout.segments)
-command_segment_range(seg::RuntimeCommandSegment) = seg.offset:(seg.offset + seg.length - 1)
-
 """Deformable mirrors implement prepared influence functions and surface formation."""
 abstract type AbstractDeformableMirror <: AbstractControllableOptic end

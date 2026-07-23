@@ -11,8 +11,8 @@ git history if old plan details are needed.
 AdaptiveOpticsSim.jl is usable for maintained CPU workflows and selected
 hardware-validated GPU workflows. The core package now has:
 
-- typed AO model objects for optics, atmosphere, WFS, detectors, DMs, control,
-  and runtime orchestration
+- typed AO model objects for optics, atmosphere, WFS, detectors, DMs, and
+  control, plus the HIL-neutral `AdaptiveOpticsSim.Plant` runtime
 - CPU tests across Linux, macOS, and Windows
 - an active AMDGPU release gate and a retained CUDA hardware target with current
   manual WSL evidence; CUDA remains outside the release gate
@@ -90,8 +90,8 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    artifacts close the gate without claiming wall-clock pacing, external-RTC
    latency, or production instrument capacity. Keep physical trigger faults
    separate from timestamp-label faults and execution lateness.
-4. Replace the single-optic and `CompositeControllableOptic` runtime model with
-   individually placed optics, prepared core plant command schemas, bounded
+4. Complete the individually owned controllable-optic and command-endpoint
+   model with prepared core plant command schemas, bounded
    timing and replayable plant-time command-silence semantics, sampled device-
    feedback acquisitions, and prepared plane groups as a deliberate breaking
    change. The first five Gate 4 slices now record stable physical-optic and
@@ -103,10 +103,12 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    now binds every declared endpoint to an independently timed physical optic;
    the serial event loop composes right-continuous command application,
    half-open detector exposure, additive co-conjugated surfaces, and explicit
-   all-or-none multi-optic transactions. The remaining Gate 4 slices migrate
-   the legacy packed runtime onto these individual owners, remove superseded
-   compatibility-free APIs, and validate reduced-order command-responsive
-   execution. Explicit conjugate placement and path visibility remain Gate 5.
+   all-or-none multi-optic transactions. Named controller products now bind
+   zero-copy to exact prepared endpoints, and the superseded packed
+   single-optic runtime has been removed without compatibility adapters. The
+   remaining Gate 4 slices validate reduced-order command-responsive execution
+   and close cross-backend evidence. Explicit conjugate placement and path
+   visibility remain Gate 5.
    Operational execution-clock ingress liveness belongs to the later HIL
    lifecycle boundary.
 5. Immediately prove a minimal serial CPU HIL vertical slice: one scheduled

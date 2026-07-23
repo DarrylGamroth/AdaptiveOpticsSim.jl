@@ -87,87 +87,34 @@ end
 @inline supports_reference_signal(wfs::AbstractWFS) = !isnothing(reference_signal(wfs))
 @inline supports_camera_frame(wfs::AbstractWFS) = !isnothing(camera_frame(wfs))
 
-@inline propagate_runtime_atmosphere!(atm::AbstractAtmosphere,
-    pupil::PupilFunction, src::AbstractSource) = propagate!(atm, pupil, src)
+@inline wfs_output_frame(wfs::AbstractWFS, ::Nothing) = camera_frame(wfs)
+@inline wfs_output_frame(::AbstractWFS, detector::AbstractDetector) =
+    output_frame(detector)
+@inline wfs_output_frame_prototype(wfs::AbstractWFS, detector) =
+    wfs_output_frame(wfs, detector)
+@inline wfs_output_metadata(::AbstractWFS) = nothing
 
-@inline prepare_runtime_atmosphere_path(::AbstractAtmosphere,
-    ::Telescope, ::AbstractSource) = nothing
+"""
+    supports_prepared_runtime(wfs, source)
 
-@inline prepare_runtime_atmosphere_path(atm::AbstractTimedAtmosphere,
-    tel::Telescope, src::AbstractSource) =
-    prepare_atmosphere_renderer(atm, tel, src)
+Return whether a WFS/source pairing provides meaningful preparation for
+repeated measurement.
+"""
+@inline supports_prepared_runtime(::AbstractWFS, ::Any) = false
 
-@inline render_prepared_atmosphere_path!(::Nothing,
-    atm::AbstractAtmosphere, pupil::PupilFunction, src::AbstractSource) =
-    propagate_runtime_atmosphere!(atm, pupil, src)
+"""Return whether `wfs` supports detector-coupled measurement with `detector`."""
+@inline supports_detector_output(::AbstractWFS, ::AbstractDetector) = false
 
-@inline function render_prepared_atmosphere_path!(
-    renderer::AtmosphereDirectionRenderer,
-    atm::AbstractTimedAtmosphere, pupil::PupilFunction, ::AbstractSource)
-    render_atmosphere!(pupil, renderer, atm, current_epoch(atm))
-    return pupil
-end
+"""Return whether `wfs` supports a source represented by stacked components."""
+@inline supports_stacked_sources(::AbstractWFS, ::Any) = false
 
-@inline function advance_runtime_atmosphere!(wfs::AbstractWFS,
-    atm::AbstractAtmosphere, tel::Telescope, atmosphere_step::Real,
-    rng::AbstractRNG)
-    advance!(atm, tel, rng)
-    return nothing
-end
+"""Return whether `wfs` provides grouped execution for `source`."""
+@inline supports_grouped_execution(::AbstractWFS, ::Any) = false
 
-@inline function advance_runtime_atmosphere!(::AbstractWFS,
-    atm::AbstractTimedAtmosphere, ::Telescope, atmosphere_step::Real,
-    rng::AbstractRNG)
-    advance_by!(atm, atmosphere_step, rng)
-    return nothing
-end
+"""
+    prepare_runtime_wfs!(wfs, pupil, source)
 
-@inline function render_runtime_wfs_path!(wfs::AbstractWFS,
-    atm::AbstractAtmosphere, pupil::PupilFunction,
-    optic::AbstractControllableOptic,
-    src::AbstractSource)
-    propagate_runtime_atmosphere!(atm, pupil, src)
-    update_surface!(optic)
-    apply_surface!(pupil, optic, DMAdditive())
-    return nothing
-end
-
-@inline function render_runtime_wfs_path!(renderer, wfs::AbstractWFS,
-    atm::AbstractAtmosphere, pupil::PupilFunction,
-    optic::AbstractControllableOptic, src::AbstractSource)
-    render_prepared_atmosphere_path!(renderer, atm, pupil, src)
-    update_surface!(optic)
-    apply_surface!(pupil, optic, DMAdditive())
-    return nothing
-end
-
-@inline function prepropagate_runtime_wfs!(wfs::AbstractWFS, atm::AbstractAtmosphere,
-    tel::Telescope, pupil::PupilFunction, optic::AbstractControllableOptic,
-    src::AbstractSource, atmosphere_step::Real, rng::AbstractRNG)
-    advance_runtime_atmosphere!(wfs, atm, tel, atmosphere_step, rng)
-    render_runtime_wfs_path!(wfs, atm, pupil, optic, src)
-    return nothing
-end
-
-@inline prepare_shared_runtime_wfs!(wfs::AbstractWFS, atm::AbstractAtmosphere,
-    pupil::PupilFunction, optic::AbstractControllableOptic,
-    src::AbstractSource) = nothing
-
-@inline function measure_runtime_wfs!(wfs::AbstractWFS, atm::AbstractAtmosphere,
-    pupil::PupilFunction, src::AbstractSource, rng::AbstractRNG)
-    measure!(wfs, pupil, src)
-    return nothing
-end
-
-@inline function measure_runtime_wfs!(wfs::AbstractWFS, atm::AbstractAtmosphere,
-    pupil::PupilFunction, src::AbstractSource, det::AbstractDetector,
-    rng::AbstractRNG)
-    measure!(wfs, pupil, src, det; rng=rng)
-    return nothing
-end
-
-@inline function finish_runtime_wfs_sensing!(wfs::AbstractWFS, atm::AbstractAtmosphere,
-    pupil::PupilFunction, optic::AbstractControllableOptic,
-    src::AbstractSource)
-    return nothing
-end
+Perform WFS-specific preparation for repeated measurement. The default is a
+no-op. This is a WFS preparation hook, not a simulation-runtime constructor.
+"""
+@inline prepare_runtime_wfs!(wfs::AbstractWFS, ::PupilFunction, source) = wfs
