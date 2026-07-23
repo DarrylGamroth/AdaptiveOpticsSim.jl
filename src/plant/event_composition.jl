@@ -152,12 +152,13 @@ mutable struct _PlantEventLoopBinding end
 
 @enum _PlantEventActionKind::UInt8 begin
     _TriggerTopologyAction = 0x01
-    _AcquisitionBoundaryAction = 0x02
-    _AcquisitionStartAction = 0x03
-    _RollingBandOpenAction = 0x04
-    _OpticalPathSampleAction = 0x05
-    _AcquisitionReadoutAction = 0x06
-    _AcquisitionReadinessAction = 0x07
+    _CommandEndpointAction = 0x02
+    _AcquisitionBoundaryAction = 0x03
+    _AcquisitionStartAction = 0x04
+    _RollingBandOpenAction = 0x05
+    _OpticalPathSampleAction = 0x06
+    _AcquisitionReadoutAction = 0x07
+    _AcquisitionReadinessAction = 0x08
 end
 
 struct _PlantEventAction
@@ -188,6 +189,89 @@ struct _PreparedPlantEventAcquisition
     readiness_handle::EventGeneratorHandle
 end
 
+struct _PreparedPlantEventCommandEndpoint{
+    B<:_PreparedPlantCommandEndpoint}
+    binding::B
+    handle::EventGeneratorHandle
+end
+
+"""
+Explicit atomic command submission for two or more distinct endpoints.
+
+All members request one common effective plant timestamp. Construction alone
+does not admit commands, assign transaction identity, group optical surfaces,
+or imply a transport encoding.
+"""
+struct _PlantCommandTransactionToken end
+const _PLANT_COMMAND_TRANSACTION_TOKEN = _PlantCommandTransactionToken()
+
+struct PlantCommandTransaction{C<:Tuple}
+    commands::C
+
+    PlantCommandTransaction(commands::C,
+        ::_PlantCommandTransactionToken) where {C<:Tuple} =
+        new{C}(commands)
+end
+
+function PlantCommandTransaction(
+    commands::Vararg{PlantCommand,N}) where {N}
+    N >= 2 || _command_admission_error(:transaction,
+        :invalid_member_count,
+        "an atomic command transaction requires at least two commands")
+    first_timestamp = command_requested_effective_timestamp(first(commands))
+    @inbounds for right in 2:N
+        command = commands[right]
+        command_requested_effective_timestamp(command) == first_timestamp ||
+            _command_admission_error(:transaction,
+                :effective_timestamp_mismatch,
+                "every atomic transaction member must request the same " *
+                "effective plant timestamp")
+        endpoint = command_endpoint_id(command)
+        for left in 1:(right - 1)
+            command_endpoint_id(commands[left]) == endpoint &&
+                _command_admission_error(:transaction,
+                    :duplicate_endpoint,
+                    "atomic transaction contains command endpoint $endpoint " *
+                    "more than once")
+        end
+    end
+    return PlantCommandTransaction(commands, _PLANT_COMMAND_TRANSACTION_TOKEN)
+end
+
+"""Immediate all-member result of one atomic transaction admission."""
+struct PlantCommandTransactionAdmission
+    transaction::UInt64
+    status::CommandAdmissionStatus
+    member_count::UInt32
+    scheduled_timestamp::Union{Nothing,PlantTimestamp}
+end
+
+@inline command_admission_status(
+    admission::PlantCommandTransactionAdmission) = admission.status
+@inline command_transaction_member_count(
+    admission::PlantCommandTransactionAdmission) =
+    admission.member_count
+@inline function command_transaction_id(
+    admission::PlantCommandTransactionAdmission)
+    iszero(admission.transaction) && return nothing
+    return admission.transaction
+end
+@inline command_scheduled_timestamp(
+    admission::PlantCommandTransactionAdmission) =
+    admission.scheduled_timestamp
+
+struct _CommandTransactionAdmissionPlan
+    presentation::CommandPresentationID
+    sequence_class::CommandSequenceClass
+    scheduled_timestamp::PlantTimestamp
+    slot::UInt32
+    generation::UInt64
+end
+
+struct _CommandTransactionPolicyFailure <: Exception
+    error::PlantCommandError
+end
+
 """Run-immutable, fixed-capacity deterministic plant-event composition."""
 struct PreparedPlantEventLoop{A<:AbstractTimedAtmosphere,R,T}
     binding::_PlantEventLoopBinding
@@ -195,6 +279,8 @@ struct PreparedPlantEventLoop{A<:AbstractTimedAtmosphere,R,T}
     atmosphere_rng::R
     scheduler::PreparedEventScheduler
     actions::Memory{_PlantEventAction}
+    optics::Memory{PreparedControllableOptic}
+    command_endpoints::Memory{_PreparedPlantEventCommandEndpoint}
     paths::Memory{_PreparedPlantEventPath}
     acquisitions::Memory{_PreparedPlantEventAcquisition}
     trigger_topology::T
@@ -206,6 +292,10 @@ end
     length(prepared.acquisitions)
 @inline plant_event_generator_count(prepared::PreparedPlantEventLoop) =
     event_generator_count(prepared.scheduler)
+@inline plant_event_controllable_optic_count(
+    prepared::PreparedPlantEventLoop) = length(prepared.optics)
+@inline plant_event_command_endpoint_count(
+    prepared::PreparedPlantEventLoop) = length(prepared.command_endpoints)
 
 @inline function _event_frame_execution(
     provider::PreparedFullOpticalProvider{<:FrameAcquisitionExecution})
@@ -463,11 +553,16 @@ function _initial_trigger_timestamp(topology::PreparedTriggerTopology)
 end
 
 function _append_event_generator_definitions!(definitions,
-    sample_definitions, acquisition_definitions, trigger_topology)
+    sample_definitions, acquisition_definitions, command_endpoints,
+    trigger_topology)
     if trigger_topology !== nothing
         push!(definitions, EventGeneratorDefinition(
             _initial_trigger_timestamp(trigger_topology),
             TriggerUpdatePhase, 1))
+    end
+    for (index, _) in enumerate(command_endpoints)
+        push!(definitions, EventGeneratorDefinition(zero(PlantTimestamp),
+            CommandApplicationPhase, index; active=false))
     end
     for (index, _) in enumerate(acquisition_definitions)
         push!(definitions, EventGeneratorDefinition(zero(PlantTimestamp),
@@ -495,6 +590,9 @@ end
 @inline _event_action_for_definition(
     ::Val{TriggerUpdatePhase}, ordinal::UInt32) =
     _PlantEventAction(_TriggerTopologyAction, ordinal)
+@inline _event_action_for_definition(
+    ::Val{CommandApplicationPhase}, ordinal::UInt32) =
+    _PlantEventAction(_CommandEndpointAction, ordinal)
 @inline _event_action_for_definition(
     ::Val{IntegrationBoundaryPhase}, ordinal::UInt32) =
     _PlantEventAction(_AcquisitionBoundaryAction, ordinal)
@@ -530,6 +628,28 @@ function _prepared_event_actions(scheduler::PreparedEventScheduler)
             scheduler.definitions[index])
     end
     return actions
+end
+
+function _prepare_event_controllable_optics(plant::PreparedPlant)
+    source = getfield(plant, :controllable_optics)
+    optics = Memory{PreparedControllableOptic}(undef, length(source))
+    @inbounds for index in eachindex(source)
+        optics[index] = source[index]
+    end
+    return optics
+end
+
+function _prepare_event_command_endpoints(plant::PreparedPlant,
+    scheduler::PreparedEventScheduler)
+    source = getfield(plant, :command_endpoints)
+    endpoints = Memory{_PreparedPlantEventCommandEndpoint}(
+        undef, length(source))
+    @inbounds for index in eachindex(source)
+        endpoints[index] = _PreparedPlantEventCommandEndpoint(source[index],
+            event_generator_handle(scheduler, CommandApplicationPhase,
+                index))
+    end
+    return endpoints
 end
 
 function _prepare_event_paths(plant::PreparedPlant, definitions,
@@ -606,10 +726,11 @@ end
 """
     prepare_plant_event_loop(plant, definition)
 
-Bind a Gate 2 prepared plant to a flat deterministic scheduler, exact
+Bind a prepared plant to a flat deterministic scheduler, exact
 owner-derived RNG streams, bounded detector lifecycle state, and an optional
-prepared trigger topology. Preparation allocates; repeated stepping does not
-grow the registry or materialize future events.
+prepared trigger topology. Prepared controllable optics and independently
+timed command endpoints join the reserved command phase. Preparation allocates;
+repeated stepping does not grow the registry or materialize future events.
 """
 function prepare_plant_event_loop(plant::PreparedPlant,
     definition::PlantEventLoopDefinition)
@@ -627,10 +748,13 @@ function prepare_plant_event_loop(plant::PreparedPlant,
     generator_definitions = EventGeneratorDefinition[]
     _append_event_generator_definitions!(generator_definitions,
         sample_definitions, acquisition_definitions,
+        getfield(plant, :command_endpoints),
         definition.trigger_topology)
     scheduler = prepare_event_scheduler(generator_definitions;
         capacity=length(generator_definitions))
     actions = _prepared_event_actions(scheduler)
+    optics = _prepare_event_controllable_optics(plant)
+    command_endpoints = _prepare_event_command_endpoints(plant, scheduler)
     paths = _prepare_event_paths(plant, sample_definitions, scheduler)
     acquisitions = _prepare_event_acquisitions(acquisition_definitions,
         owners, lifecycles, rngs, path_slots, scheduler)
@@ -639,17 +763,22 @@ function prepare_plant_event_loop(plant::PreparedPlant,
     atmosphere_rng = _prepared_atmosphere_rng(atmosphere,
         getfield(getfield(plant, :rngs), :atmosphere))
     return PreparedPlantEventLoop(_PlantEventLoopBinding(), atmosphere,
-        atmosphere_rng, scheduler, actions, paths, acquisitions,
-        _prepared_trigger_topology(definition.trigger_topology))
+        atmosphere_rng, scheduler, actions, optics, command_endpoints, paths,
+        acquisitions, _prepared_trigger_topology(definition.trigger_topology))
 end
 
 mutable struct PlantEventLoopState{T}
     binding::_PlantEventLoopBinding
     scheduler::EventSchedulerState
+    command_endpoints::Memory{CommandEndpointState}
+    command_applications::Memory{CommandApplicationState}
+    command_shadow_transactions::Memory{UInt64}
+    controllable_optics::Memory{Any}
     acquisitions::Memory{_DetectorEventLifecycleState}
     path_sampled::Memory{Bool}
     product_sequences::Memory{UInt64}
     product_ready_timestamps::Memory{PlantTimestamp}
+    command_transaction_sequence::UInt64
     trigger::T
 end
 
@@ -668,7 +797,60 @@ end
 @inline _event_trigger_state(topology::PreparedTriggerTopology) =
     TriggerTopologyState(topology)
 
+function _event_command_states(prepared::PreparedPlantEventLoop,
+    initial_timestamp::PlantTimestamp)
+    endpoints = Memory{CommandEndpointState}(undef,
+        length(prepared.command_endpoints))
+    applications = Memory{CommandApplicationState}(undef,
+        length(prepared.command_endpoints))
+    @inbounds for index in eachindex(prepared.command_endpoints)
+        binding = prepared.command_endpoints[index].binding
+        endpoint = binding.endpoint
+        endpoint_state = CommandEndpointState(endpoint;
+            initial_timestamp)
+        endpoints[index] = endpoint_state
+        applications[index] = CommandApplicationState(endpoint,
+            endpoint_state, binding.initial_command;
+            safe_command=binding.safe_command)
+    end
+    return endpoints, applications
+end
+
+function _event_optic_endpoint_initials(
+    prepared::PreparedPlantEventLoop,
+    optic::PreparedControllableOptic)
+    ids = map(optic.endpoint_slots) do slot
+        command_endpoint_id(
+            prepared.command_endpoints[Int(slot)].binding)
+    end
+    commands = map(optic.endpoint_slots) do slot
+        binding = prepared.command_endpoints[Int(slot)].binding
+        _copy_prepared_effective_command(binding.endpoint,
+            binding.initial_command, "initial physical command")
+    end
+    return ids, commands
+end
+
+function _event_controllable_optic_states(
+    prepared::PreparedPlantEventLoop)
+    states = Memory{Any}(undef, length(prepared.optics))
+    @inbounds for index in eachindex(prepared.optics)
+        optic = prepared.optics[index]
+        ids, commands = _event_optic_endpoint_initials(prepared, optic)
+        states[index] = prepare_controllable_optic_state(
+            optic.implementation, optic.definition, ids, commands)
+    end
+    return states
+end
+
 function PlantEventLoopState(prepared::PreparedPlantEventLoop)
+    scheduler = EventSchedulerState(prepared.scheduler)
+    command_endpoints, command_applications = _event_command_states(
+        prepared, scheduler_timestamp(scheduler))
+    command_shadow_transactions = Memory{UInt64}(undef,
+        length(prepared.command_endpoints))
+    fill!(command_shadow_transactions, UInt64(0))
+    controllable_optics = _event_controllable_optic_states(prepared)
     acquisition_states = Memory{_DetectorEventLifecycleState}(undef,
         length(prepared.acquisitions))
     @inbounds for index in eachindex(acquisition_states)
@@ -684,14 +866,29 @@ function PlantEventLoopState(prepared::PreparedPlantEventLoop)
         length(prepared.acquisitions))
     fill!(product_ready_timestamps, zero(PlantTimestamp))
     trigger = _event_trigger_state(prepared.trigger_topology)
-    return PlantEventLoopState(prepared.binding,
-        EventSchedulerState(prepared.scheduler), acquisition_states,
-        path_sampled, product_sequences, product_ready_timestamps, trigger)
+    state = PlantEventLoopState(prepared.binding,
+        scheduler, command_endpoints, command_applications,
+        command_shadow_transactions, controllable_optics,
+        acquisition_states, path_sampled,
+        product_sequences, product_ready_timestamps, UInt64(0), trigger)
+    @inbounds for index in eachindex(prepared.command_endpoints)
+        _schedule_event_command_endpoint!(prepared, state, index)
+    end
+    return state
 end
 
 mutable struct PlantEventLoopWorkspace{T}
     binding::_PlantEventLoopBinding
     scheduler::EventSchedulerWorkspace
+    command_endpoints::Memory{CommandDispositionWorkspace}
+    controllable_optics::Memory{Any}
+    command_dispositions::Memory{PlantCommandDisposition}
+    command_disposition_count::Int
+    transaction_endpoint_slots::Memory{UInt32}
+    transaction_admissions::Memory{_CommandTransactionAdmissionPlan}
+    transaction_claims::Memory{PlantCommandApplicationClaim}
+    transaction_staged::Memory{_StagedCommandApplication}
+    transaction_count::Int
     due_paths::Memory{Bool}
     trigger::T
     delivery::Base.RefValue{TriggerDelivery}
@@ -703,10 +900,32 @@ end
     TriggerTopologyWorkspace(topology)
 
 function PlantEventLoopWorkspace(prepared::PreparedPlantEventLoop)
+    command_endpoints = Memory{CommandDispositionWorkspace}(undef,
+        length(prepared.command_endpoints))
+    disposition_capacity = 0
+    @inbounds for index in eachindex(prepared.command_endpoints)
+        endpoint = prepared.command_endpoints[index].binding.endpoint
+        command_endpoints[index] = CommandDispositionWorkspace(endpoint)
+        disposition_capacity += command_endpoint_capacity(endpoint)
+    end
+    controllable_optics = Memory{Any}(undef, length(prepared.optics))
+    @inbounds for index in eachindex(prepared.optics)
+        controllable_optics[index] =
+            prepare_controllable_optic_workspace(
+                prepared.optics[index].implementation)
+    end
+    endpoint_count = length(prepared.command_endpoints)
     due_paths = Memory{Bool}(undef, length(prepared.paths))
     fill!(due_paths, false)
     return PlantEventLoopWorkspace(prepared.binding,
-        EventSchedulerWorkspace(prepared.scheduler), due_paths,
+        EventSchedulerWorkspace(prepared.scheduler), command_endpoints,
+        controllable_optics,
+        Memory{PlantCommandDisposition}(undef, disposition_capacity), 0,
+        Memory{UInt32}(undef, endpoint_count),
+        Memory{_CommandTransactionAdmissionPlan}(undef, endpoint_count),
+        Memory{PlantCommandApplicationClaim}(undef, endpoint_count),
+        Memory{_StagedCommandApplication}(undef, endpoint_count), 0,
+        due_paths,
         _event_trigger_workspace(prepared.trigger_topology),
         Ref{TriggerDelivery}())
 end
@@ -717,7 +936,13 @@ end
         :foreign_state,
         "plant event-loop state belongs to another prepared loop")
     _require_scheduler_binding(prepared.scheduler, state.scheduler)
-    length(state.acquisitions) == length(prepared.acquisitions) &&
+    length(state.command_endpoints) == length(prepared.command_endpoints) &&
+        length(state.command_applications) ==
+            length(prepared.command_endpoints) &&
+        length(state.command_shadow_transactions) ==
+            length(prepared.command_endpoints) &&
+        length(state.controllable_optics) == length(prepared.optics) &&
+        length(state.acquisitions) == length(prepared.acquisitions) &&
         length(state.path_sampled) == length(prepared.paths) &&
         length(state.product_sequences) == length(prepared.acquisitions) &&
         length(state.product_ready_timestamps) ==
@@ -733,6 +958,19 @@ end
         :foreign_workspace,
         "plant event-loop workspace belongs to another prepared loop")
     _require_scheduler_binding(prepared.scheduler, workspace.scheduler)
+    length(workspace.command_endpoints) ==
+        length(prepared.command_endpoints) &&
+        length(workspace.controllable_optics) == length(prepared.optics) &&
+        length(workspace.transaction_endpoint_slots) ==
+            length(prepared.command_endpoints) &&
+        length(workspace.transaction_admissions) ==
+            length(prepared.command_endpoints) &&
+        length(workspace.transaction_claims) ==
+            length(prepared.command_endpoints) &&
+        length(workspace.transaction_staged) ==
+            length(prepared.command_endpoints) ||
+        _plant_event_loop_error(:prepared_binding,
+            "plant event-loop workspace command capacity changed after preparation")
     length(workspace.due_paths) == length(prepared.paths) ||
         _plant_event_loop_error(:prepared_binding,
             "plant event-loop workspace capacity changed after preparation")
@@ -764,6 +1002,949 @@ function acquisition_product_ready_timestamp(
     slot = _event_acquisition_slot(prepared, _as_acquisition_id(id))
     @inbounds iszero(state.product_sequences[slot]) && return nothing
     return @inbounds state.product_ready_timestamps[slot]
+end
+
+function _event_command_endpoint_slot(prepared::PreparedPlantEventLoop,
+    id::CommandEndpointID)
+    @inbounds for index in eachindex(prepared.command_endpoints)
+        command_endpoint_id(prepared.command_endpoints[index].binding) == id &&
+            return index
+    end
+    _plant_event_loop_error(:unknown_command_endpoint,
+        "prepared plant event loop has no command endpoint $id")
+end
+
+function effective_command(prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState, id)
+    _require_plant_event_loop_binding(prepared, state)
+    slot = _event_command_endpoint_slot(prepared,
+        _as_command_endpoint_id(id))
+    return effective_command(state.command_applications[slot])
+end
+
+@inline _event_command_endpoint(
+    prepared::PreparedPlantEventLoop, slot::Integer) =
+    @inbounds prepared.command_endpoints[Int(slot)]
+@inline _event_command_endpoint_state(
+    state::PlantEventLoopState, slot::Integer) =
+    @inbounds state.command_endpoints[Int(slot)]
+@inline _event_command_application_state(
+    state::PlantEventLoopState, slot::Integer) =
+    @inbounds state.command_applications[Int(slot)]
+@inline _event_command_workspace(
+    workspace::PlantEventLoopWorkspace, slot::Integer) =
+    @inbounds workspace.command_endpoints[Int(slot)]
+
+@inline command_disposition_count(
+    workspace::PlantEventLoopWorkspace) =
+    workspace.command_disposition_count
+
+function command_disposition(workspace::PlantEventLoopWorkspace,
+    index::Integer)
+    1 <= index <= workspace.command_disposition_count ||
+        _plant_event_loop_error(:invalid_disposition_index,
+            "command disposition index must be within the current event-loop records")
+    return @inbounds workspace.command_dispositions[Int(index)]
+end
+
+@inline command_disposition(::PlantEventLoopWorkspace, ::Bool) =
+    _plant_event_loop_error(:invalid_disposition_index,
+        "command disposition index must be an integer count, not Bool")
+
+function clear_command_dispositions!(
+    workspace::PlantEventLoopWorkspace)
+    workspace.command_disposition_count = 0
+    return workspace
+end
+
+@inline function _require_empty_event_command_dispositions(
+    workspace::PlantEventLoopWorkspace)
+    iszero(workspace.command_disposition_count) ||
+        _plant_event_loop_error(:unconsumed_command_dispositions,
+            "clear event-loop command dispositions before the next " *
+            "command admission")
+    return nothing
+end
+
+function _append_event_command_dispositions!(
+    workspace::PlantEventLoopWorkspace,
+    endpoint_workspace::CommandDispositionWorkspace)
+    count = command_disposition_count(endpoint_workspace)
+    first = workspace.command_disposition_count + 1
+    last = workspace.command_disposition_count + count
+    last <= length(workspace.command_dispositions) ||
+        _plant_event_loop_error(:command_disposition_capacity,
+            "plant event-loop command disposition capacity was exceeded")
+    @inbounds for source in 1:count
+        workspace.command_dispositions[first + source - 1] =
+            command_disposition(endpoint_workspace, source)
+    end
+    workspace.command_disposition_count = last
+    clear_command_dispositions!(endpoint_workspace)
+    return count
+end
+
+function _next_event_command_timestamp(prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState, slot::Integer)
+    binding = _event_command_endpoint(prepared, slot).binding
+    endpoint = binding.endpoint
+    endpoint_state = _event_command_endpoint_state(state, slot)
+    application_state = _event_command_application_state(state, slot)
+    key = next_command_order_key(endpoint, endpoint_state)
+    command_timestamp = key === nothing ? nothing :
+        command_scheduled_timestamp(key)
+    silence_timestamp = next_command_silence_timestamp(endpoint,
+        endpoint_state, application_state)
+    command_timestamp === nothing && return silence_timestamp
+    silence_timestamp === nothing && return command_timestamp
+    return min(command_timestamp, silence_timestamp)
+end
+
+function _schedule_event_command_endpoint!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    slot::Integer)
+    event_endpoint = _event_command_endpoint(prepared, slot)
+    handle = event_endpoint.handle
+    desired = _next_event_command_timestamp(prepared, state, slot)
+    cursor = state.scheduler.cursors[Int(handle.slot)]
+    if desired === nothing
+        cursor.status == _ScheduledEventGenerator &&
+            deactivate_event_generator!(prepared.scheduler,
+                state.scheduler, handle)
+        return nothing
+    end
+    if cursor.status == _InactiveEventGenerator
+        activate_event_generator!(prepared.scheduler, state.scheduler,
+            handle, desired)
+        return desired
+    end
+    cursor.status == _ScheduledEventGenerator ||
+        _plant_event_loop_error(:command_generator_state,
+            "command endpoint generator cannot be changed while claimed")
+    cursor.next_timestamp == desired && return desired
+    deactivate_event_generator!(prepared.scheduler, state.scheduler, handle)
+    activate_event_generator!(prepared.scheduler, state.scheduler, handle,
+        desired)
+    return desired
+end
+
+function _resolve_event_command_claim!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    claim::EventClaim,
+    slot::Integer)
+    desired = _next_event_command_timestamp(prepared, state, slot)
+    if desired === nothing
+        deactivate_event_generator!(prepared.scheduler, state.scheduler,
+            claim)
+    else
+        reschedule_event!(prepared.scheduler, state.scheduler, claim,
+            desired)
+    end
+    return desired
+end
+
+@inline function _require_routed_command_admission_timestamp(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    timestamp::PlantTimestamp)
+    scheduler_state = state.scheduler
+    current = scheduler_timestamp(scheduler_state)
+    timestamp < current &&
+        _plant_event_loop_error(:command_admission_time_regression,
+            "command admission timestamp precedes the current plant-event " *
+            "timestamp")
+    timestamp == current && scheduler_state.has_last_key &&
+        _plant_event_loop_error(:command_admission_time_elapsed,
+            "command admission timestamp has already been processed by the " *
+            "plant event loop")
+    count = scan_due_events!(workspace.scheduler, prepared.scheduler,
+        scheduler_state)
+    if !iszero(count)
+        next_due = workspace.scheduler.due_timestamp
+        next_due < timestamp &&
+            _plant_event_loop_error(:command_admission_overtakes_event,
+                "command admission timestamp follows the next unprocessed " *
+                "plant event at $next_due")
+    end
+    return nothing
+end
+
+"""
+Route one command into its exact event-loop-owned endpoint and arm the reserved
+command-phase generator. Any admission-time terminal dispositions are copied
+into the event-loop's bounded disposition ledger.
+"""
+function admit_plant_command!(prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState, workspace::PlantEventLoopWorkspace,
+    command::PlantCommand, timestamp::PlantTimestamp)
+    _require_plant_event_loop_binding(prepared, state)
+    _require_plant_event_loop_binding(prepared, workspace)
+    _require_empty_event_command_dispositions(workspace)
+    _require_routed_command_admission_timestamp(prepared, state, workspace,
+        timestamp)
+    slot = _event_command_endpoint_slot(prepared,
+        command_endpoint_id(command))
+    event_endpoint = _event_command_endpoint(prepared, slot)
+    endpoint_state = _event_command_endpoint_state(state, slot)
+    endpoint_workspace = _event_command_workspace(workspace, slot)
+    admission = try
+        admit_plant_command!(endpoint_workspace,
+            event_endpoint.binding.endpoint,
+            endpoint_state, command, timestamp)
+    catch
+        _append_event_command_dispositions!(workspace, endpoint_workspace)
+        _schedule_event_command_endpoint!(prepared, state, slot)
+        rethrow()
+    end
+    _append_event_command_dispositions!(workspace, endpoint_workspace)
+    _schedule_event_command_endpoint!(prepared, state, slot)
+    return admission
+end
+
+@inline function _next_command_transaction_sequence(
+    state::PlantEventLoopState)
+    state.command_transaction_sequence != typemax(UInt64) ||
+        _command_admission_error(:transaction, :transaction_overflow,
+            "plant command transaction identity exceeds UInt64 range")
+    return state.command_transaction_sequence + UInt64(1)
+end
+
+function _transaction_command_for_endpoint(
+    transaction::PlantCommandTransaction, id::CommandEndpointID)
+    for command in transaction.commands
+        command_endpoint_id(command) == id && return command
+    end
+    return nothing
+end
+
+function _prepare_transaction_member_slots!(
+    prepared::PreparedPlantEventLoop,
+    workspace::PlantEventLoopWorkspace,
+    transaction::PlantCommandTransaction)
+    count = 0
+    @inbounds for endpoint_slot in eachindex(prepared.command_endpoints)
+        binding = prepared.command_endpoints[endpoint_slot].binding
+        command = _transaction_command_for_endpoint(transaction,
+            command_endpoint_id(binding))
+        command === nothing && continue
+        for prior in 1:count
+            prior_binding = prepared.command_endpoints[
+                Int(workspace.transaction_endpoint_slots[prior])].binding
+            prior_binding.optic_slot == binding.optic_slot &&
+                _command_admission_error(:transaction,
+                    :duplicate_physical_optic,
+                    "atomic multi-optic transaction contains more than one " *
+                    "endpoint owned by controllable optic " *
+                    "$(controllable_optic_id(prepared.optics[
+                        Int(binding.optic_slot)].definition))")
+        end
+        count += 1
+        workspace.transaction_endpoint_slots[count] = UInt32(endpoint_slot)
+    end
+    count == length(transaction.commands) ||
+        _command_admission_error(:transaction, :unknown_endpoint,
+            "atomic transaction references a command endpoint that is not " *
+            "owned by this prepared plant event loop")
+    workspace.transaction_count = count
+    return count
+end
+
+function _require_no_equal_time_command(
+    state::CommandEndpointState, timestamp::PlantTimestamp)
+    @inbounds for index in 1:state.pending_count
+        metadata = state.slots[Int(state.calendar[index])]
+        metadata.scheduled_timestamp == timestamp &&
+            _command_admission_error(:transaction,
+                :equal_time_endpoint_conflict,
+                "an atomic transaction member endpoint already has a " *
+                "command scheduled at $timestamp")
+    end
+    return nothing
+end
+
+function _preflight_command_transaction_member!(
+    endpoint::PreparedCommandEndpoint,
+    endpoint_state::CommandEndpointState,
+    endpoint_workspace::CommandDispositionWorkspace,
+    command::PlantCommand,
+    timestamp::PlantTimestamp)
+    _require_command_endpoint_binding(endpoint, endpoint_state)
+    _require_command_endpoint_binding(endpoint, endpoint_workspace)
+    _require_operational_command_endpoint(endpoint_state)
+    _require_empty_command_dispositions(endpoint_workspace)
+    _require_idle_command_endpoint(endpoint_state)
+    _require_forward_command_timestamp(endpoint_state, timestamp)
+    command_effective_time_policy(command_schema(endpoint)).supersession ==
+        PreservePendingCommands || _command_admission_error(:transaction,
+        :unsupported_supersession,
+        "atomic transaction endpoints must preserve pending commands")
+    validate_plant_command(endpoint, command)
+    sequence_class = _classify_command_sequence(endpoint, endpoint_state,
+        command.sequence)
+    sequence_action = _command_sequence_action(
+        command_sequence_policy(command_schema(endpoint)), sequence_class)
+    if sequence_action != AcceptSequence
+        reason = _command_sequence_reason(sequence_class)
+        message = "atomic transaction member sequence policy " *
+            (sequence_action == FailOnSequence ?
+                "requires structural failure" : "rejected the command")
+        error = PlantCommandError(:transaction, reason.name, message)
+        sequence_action == FailOnSequence &&
+            throw(_CommandTransactionPolicyFailure(error))
+        throw(error)
+    end
+
+    requested = command.requested_effective_timestamp
+    scheduled = requested
+    policy = command_effective_time_policy(command_schema(endpoint))
+    if timestamp < requested
+        policy.future == AllowFutureCommand ||
+            _command_admission_error(:transaction, :future_command,
+                "atomic transaction member rejects future commands")
+    elseif requested < timestamp
+        if policy.late == FailOnLateCommand
+            throw(_CommandTransactionPolicyFailure(PlantCommandError(
+                :transaction, :late_command,
+                "atomic transaction member late-command policy requires " *
+                "structural failure")))
+        end
+        policy.late == ApplyLateCommandNow ||
+            _command_admission_error(:transaction, :late_command,
+                "atomic transaction member rejects late commands")
+        scheduled = timestamp
+    end
+    endpoint_state.active_count < endpoint.capacity ||
+        _command_admission_error(:transaction, :calendar_capacity,
+            "atomic transaction member endpoint is at calendar capacity")
+    _require_no_equal_time_command(endpoint_state, scheduled)
+
+    slot = _find_free_command_slot(endpoint_state)
+    metadata = endpoint_state.slots[Int(slot)]
+    generation = _next_command_counter(metadata.generation,
+        :slot_generation_overflow, "command payload-slot generation")
+    _stage_command_payload!(endpoint_state.payloads, endpoint.schema,
+        command.payload)
+    return _CommandTransactionAdmissionPlan(
+        _next_command_presentation(endpoint_state), sequence_class,
+        scheduled, slot, generation)
+end
+
+function _commit_command_transaction_member!(
+    endpoint::PreparedCommandEndpoint,
+    endpoint_state::CommandEndpointState,
+    command::PlantCommand,
+    timestamp::PlantTimestamp,
+    transaction::UInt64,
+    member_count::UInt32,
+    plan::_CommandTransactionAdmissionPlan)
+    slot = Int(plan.slot)
+    _commit_staged_command_payload!(endpoint_state.payloads, slot, nothing)
+    endpoint_state.slots[slot] = _CommandSlotMetadata(
+        plan.presentation.value,
+        command.sequence.value,
+        command.requested_effective_timestamp,
+        plan.scheduled_timestamp,
+        timestamp,
+        transaction,
+        member_count,
+        plan.generation,
+        _PendingCommandSlot,
+    )
+    _insert_pending_command_slot!(endpoint, endpoint_state, plan.slot)
+    endpoint_state.active_count += 1
+    _record_accepted_command_sequence!(endpoint, endpoint_state,
+        command.sequence)
+    endpoint_state.presentation_sequence = plan.presentation.value
+    endpoint_state.current_timestamp = timestamp
+    endpoint_state.last_admission_timestamp = timestamp
+    endpoint_state.has_admission = true
+    return nothing
+end
+
+function _terminate_event_command_transaction_admission!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    transaction::PlantCommandTransaction,
+    timestamp::PlantTimestamp,
+    kind::CommandTerminalKind,
+    reason::CommandDispositionReason)
+    count = workspace.transaction_count
+    @inbounds for index in 1:count
+        endpoint_slot = Int(workspace.transaction_endpoint_slots[index])
+        binding = _event_command_endpoint(prepared, endpoint_slot).binding
+        endpoint = binding.endpoint
+        endpoint_state = _event_command_endpoint_state(state, endpoint_slot)
+        endpoint_workspace = _event_command_workspace(workspace,
+            endpoint_slot)
+        command = _transaction_command_for_endpoint(transaction,
+            command_endpoint_id(binding))
+        _finish_terminal_admission!(endpoint_workspace, endpoint,
+            endpoint_state, command, timestamp,
+            _next_command_presentation(endpoint_state), kind,
+            reason, nothing)
+        _append_event_command_dispositions!(workspace, endpoint_workspace)
+        _schedule_event_command_endpoint!(prepared, state, endpoint_slot)
+    end
+    workspace.transaction_count = 0
+    return PlantCommandTransactionAdmission(UInt64(0),
+        CommandTerminatedOnAdmission, UInt32(count), nothing)
+end
+
+@noinline function _handle_transaction_preflight_failure!(
+    ::PreparedPlantEventLoop,
+    ::PlantEventLoopState,
+    ::PlantEventLoopWorkspace,
+    ::PlantCommandTransaction,
+    ::PlantTimestamp,
+    error::InterruptException)
+    throw(error)
+end
+
+@noinline function _transaction_preflight_reason(error)
+    return CommandDispositionReason(:transaction_preflight_failure)
+end
+
+@noinline function _handle_transaction_preflight_failure!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    transaction::PlantCommandTransaction,
+    timestamp::PlantTimestamp,
+    failure::_CommandTransactionPolicyFailure)
+    error = failure.error
+    reason = CommandDispositionReason(Symbol(:atomic_transaction_aborted_,
+        error.reason))
+    _terminate_event_command_transaction_admission!(prepared, state,
+        workspace, transaction, timestamp, FailedCommand, reason)
+    throw(error)
+end
+
+@noinline function _handle_transaction_preflight_failure!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    transaction::PlantCommandTransaction,
+    timestamp::PlantTimestamp,
+    error::PlantCommandError)
+    reason = CommandDispositionReason(Symbol(:atomic_transaction_aborted_,
+        error.reason))
+    kind = _validation_terminal_kind(error)
+    admission = _terminate_event_command_transaction_admission!(prepared,
+        state, workspace, transaction, timestamp, kind, reason)
+    kind == FailedCommand && throw(error)
+    return admission
+end
+
+@noinline function _handle_transaction_preflight_failure!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    transaction::PlantCommandTransaction,
+    timestamp::PlantTimestamp,
+    error)
+    reason = _transaction_preflight_reason(error)
+    _terminate_event_command_transaction_admission!(prepared, state,
+        workspace, transaction, timestamp, FailedCommand, reason)
+    _command_admission_error(:transaction, reason.name,
+        "atomic transaction preflight failed unexpectedly " *
+        "($(typeof(error)))")
+end
+
+"""
+Atomically admit a bounded multi-optic command transaction. Every member is
+validated and staged before any endpoint calendar is mutated. A normal member
+rejection terminates every member with the same explicit transaction-abort
+reason; successful admission assigns one transaction identity carried by every
+member command.
+"""
+function admit_plant_command_transaction!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    transaction::PlantCommandTransaction,
+    timestamp::PlantTimestamp)
+    _require_plant_event_loop_binding(prepared, state)
+    _require_plant_event_loop_binding(prepared, workspace)
+    _require_empty_event_command_dispositions(workspace)
+    _require_routed_command_admission_timestamp(prepared, state, workspace,
+        timestamp)
+    count = _prepare_transaction_member_slots!(prepared, workspace,
+        transaction)
+    scheduled = zero(PlantTimestamp)
+    has_scheduled = false
+    failure = nothing
+    @inbounds for index in 1:count
+        endpoint_slot = Int(workspace.transaction_endpoint_slots[index])
+        binding = _event_command_endpoint(prepared, endpoint_slot).binding
+        command = _transaction_command_for_endpoint(transaction,
+            command_endpoint_id(binding))
+        plan = try
+            _preflight_command_transaction_member!(binding.endpoint,
+                _event_command_endpoint_state(state, endpoint_slot),
+                _event_command_workspace(workspace, endpoint_slot),
+                command, timestamp)
+        catch error
+            failure = error
+            break
+        end
+        if has_scheduled && plan.scheduled_timestamp != scheduled
+            failure = PlantCommandError(:transaction,
+                :scheduled_timestamp_mismatch,
+                "atomic transaction members resolved to different " *
+                "scheduled plant timestamps")
+            break
+        end
+        scheduled = plan.scheduled_timestamp
+        has_scheduled = true
+        workspace.transaction_admissions[index] = plan
+    end
+    if failure !== nothing
+        return _handle_transaction_preflight_failure!(prepared, state,
+            workspace, transaction, timestamp, failure)
+    end
+
+    transaction_id = _next_command_transaction_sequence(state)
+    member_count = UInt32(count)
+    @inbounds for index in 1:count
+        endpoint_slot = Int(workspace.transaction_endpoint_slots[index])
+        binding = _event_command_endpoint(prepared, endpoint_slot).binding
+        command = _transaction_command_for_endpoint(transaction,
+            command_endpoint_id(binding))
+        _commit_command_transaction_member!(binding.endpoint,
+            _event_command_endpoint_state(state, endpoint_slot),
+            command, timestamp, transaction_id, member_count,
+            workspace.transaction_admissions[index])
+    end
+    state.command_transaction_sequence = transaction_id
+    @inbounds for index in 1:count
+        _schedule_event_command_endpoint!(prepared, state,
+            workspace.transaction_endpoint_slots[index])
+    end
+    workspace.transaction_count = 0
+    status = scheduled <= timestamp ?
+        CommandAdmittedReady : CommandAdmittedPending
+    return PlantCommandTransactionAdmission(transaction_id, status,
+        member_count, scheduled)
+end
+
+@inline function _event_controllable_optic_parts(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    endpoint_slot::Integer)
+    binding = _event_command_endpoint(prepared, endpoint_slot).binding
+    optic_slot = Int(binding.optic_slot)
+    optic = @inbounds prepared.optics[optic_slot]
+    optic_state = @inbounds state.controllable_optics[optic_slot]
+    optic_workspace = @inbounds workspace.controllable_optics[optic_slot]
+    return binding, optic, optic_state, optic_workspace
+end
+
+@inline function _stage_event_controllable_optic_command!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    endpoint_slot::Integer)
+    binding, optic, optic_state, optic_workspace =
+        _event_controllable_optic_parts(prepared, state, workspace,
+            endpoint_slot)
+    application_state =
+        _event_command_application_state(state, endpoint_slot)
+    stage_controllable_optic_command!(optic.implementation, optic_state,
+        optic_workspace, command_endpoint_id(binding),
+        _staged_effective_command(application_state))
+    return nothing
+end
+
+@inline function _commit_event_controllable_optic_command!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    endpoint_slot::Integer)
+    binding, optic, optic_state, optic_workspace =
+        _event_controllable_optic_parts(prepared, state, workspace,
+            endpoint_slot)
+    commit_controllable_optic_command!(optic.implementation, optic_state,
+        optic_workspace, command_endpoint_id(binding))
+    return nothing
+end
+
+@noinline function _fail_composed_command_staging!(
+    endpoint_workspace::CommandDispositionWorkspace,
+    endpoint::PreparedCommandEndpoint,
+    endpoint_state::CommandEndpointState,
+    claim::PlantCommandApplicationClaim,
+    error::InterruptException)
+    throw(error)
+end
+
+@noinline function _fail_composed_command_staging!(
+    endpoint_workspace::CommandDispositionWorkspace,
+    endpoint::PreparedCommandEndpoint,
+    endpoint_state::CommandEndpointState,
+    claim::PlantCommandApplicationClaim,
+    error::PlantCommandError)
+    _finish_command_application!(endpoint_workspace, endpoint,
+        endpoint_state, claim, FailedCommand,
+        CommandDispositionReason(error.reason))
+    throw(error)
+end
+
+@noinline function _fail_composed_command_staging!(
+    endpoint_workspace::CommandDispositionWorkspace,
+    endpoint::PreparedCommandEndpoint,
+    endpoint_state::CommandEndpointState,
+    claim::PlantCommandApplicationClaim,
+    error)
+    _finish_command_application!(endpoint_workspace, endpoint,
+        endpoint_state, claim, FailedCommand,
+        CommandDispositionReason(:physical_application_failure))
+    _command_admission_error(:physical_application,
+        :physical_application_failure,
+        "failed to stage a physical controllable-optic command " *
+        "($(typeof(error)))")
+end
+
+function _apply_event_command_claim_parts!(
+    binding::_PreparedPlantCommandEndpoint,
+    endpoint_state::CommandEndpointState,
+    application_state::CommandApplicationState,
+    endpoint_workspace::CommandDispositionWorkspace,
+    optic::PreparedControllableOptic,
+    optic_state,
+    optic_workspace,
+    claim::PlantCommandApplicationClaim)
+    endpoint = binding.endpoint
+    staged = try
+        result = _stage_claimed_plant_command!(endpoint, endpoint_state,
+            application_state, claim)
+        if result.decision == _AcceptCommandCandidate
+            stage_controllable_optic_command!(optic.implementation,
+                optic_state, optic_workspace, command_endpoint_id(binding),
+                _staged_effective_command(application_state))
+        end
+        result
+    catch error
+        _fail_composed_command_staging!(endpoint_workspace, endpoint,
+            endpoint_state, claim, error)
+    end
+    decision = staged.decision
+    reason = staged.reason
+    if decision == _AcceptCommandCandidate
+        commit_controllable_optic_command!(optic.implementation, optic_state,
+            optic_workspace, command_endpoint_id(binding))
+        _commit_staged_application!(application_state, endpoint_state)
+        _finish_command_application!(endpoint_workspace, endpoint,
+            endpoint_state, claim, AppliedCommand, reason)
+    else
+        kind = decision == _FailCommandCandidate ?
+            FailedCommand : RejectedCommand
+        _finish_command_application!(endpoint_workspace, endpoint,
+            endpoint_state, claim, kind, reason)
+    end
+    return staged
+end
+
+function _apply_event_command_claim!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    endpoint_slot::Integer,
+    claim::PlantCommandApplicationClaim)
+    binding, optic, optic_state, optic_workspace =
+        _event_controllable_optic_parts(prepared, state, workspace,
+            endpoint_slot)
+    endpoint_state = _event_command_endpoint_state(state, endpoint_slot)
+    application_state =
+        _event_command_application_state(state, endpoint_slot)
+    endpoint_workspace = _event_command_workspace(workspace, endpoint_slot)
+    staged = try
+        _apply_event_command_claim_parts!(binding, endpoint_state,
+            application_state, endpoint_workspace, optic, optic_state,
+            optic_workspace, claim)
+    catch
+        _append_event_command_dispositions!(workspace, endpoint_workspace)
+        rethrow()
+    end
+    _append_event_command_dispositions!(workspace, endpoint_workspace)
+    staged.decision == _FailCommandCandidate && _command_admission_error(
+        :application, staged.reason.name,
+        "application-stage command policy requires structural failure")
+    return nothing
+end
+
+function _apply_event_command_silence!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    endpoint_slot::Integer,
+    timestamp::PlantTimestamp)
+    binding = _event_command_endpoint(prepared, endpoint_slot).binding
+    endpoint = binding.endpoint
+    endpoint_state = _event_command_endpoint_state(state, endpoint_slot)
+    application_state =
+        _event_command_application_state(state, endpoint_slot)
+    endpoint_workspace = _event_command_workspace(workspace, endpoint_slot)
+    policy = command_silence_policy(command_schema(endpoint))
+    if policy.action != ApplySafeCommand
+        transition = apply_command_silence_transition!(endpoint_workspace,
+            endpoint, endpoint_state, application_state, timestamp)
+        _append_event_command_dispositions!(workspace, endpoint_workspace)
+        return transition
+    end
+
+    expected = next_command_silence_timestamp(endpoint, endpoint_state,
+        application_state)
+    expected == timestamp || _command_admission_error(
+        :silence, :unexpected_silence_timestamp,
+        "command silence transition expected at $expected; got $timestamp")
+    key = next_command_order_key(endpoint, endpoint_state)
+    key !== nothing && command_scheduled_timestamp(key) <= timestamp &&
+        _command_admission_error(:silence, :commands_due,
+            "resolve application-ready commands before an equal-time " *
+            "command-silence transition")
+    origin = _command_silence_origin_timestamp(policy.age_origin,
+        endpoint_state, application_state)
+    try
+        _stage_safe_command!(application_state.values)
+        _stage_event_controllable_optic_command!(prepared, state,
+            workspace, endpoint_slot)
+    catch error
+        _handle_safe_command_staging_error(error)
+    end
+    _commit_event_controllable_optic_command!(prepared, state, workspace,
+        endpoint_slot)
+    _commit_application_candidate!(application_state.values)
+    endpoint_state.current_timestamp = timestamp
+    application_state.last_silence_origin_timestamp = origin
+    application_state.has_silence_transition = true
+    return PlantCommandSilenceTransition(command_endpoint_id(endpoint),
+        policy.action, policy.age_origin, origin, expected, timestamp)
+end
+
+function _claim_event_command_transaction!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    first_endpoint_slot::Integer,
+    first_claim::PlantCommandApplicationClaim,
+    timestamp::PlantTimestamp)
+    transaction = _command_transaction_id(first_claim)
+    expected = Int(_command_transaction_member_count(first_claim))
+    workspace.transaction_count = 1
+    workspace.transaction_endpoint_slots[1] = UInt32(first_endpoint_slot)
+    workspace.transaction_claims[1] = first_claim
+    @inbounds for endpoint_slot in eachindex(prepared.command_endpoints)
+        endpoint_slot == first_endpoint_slot && continue
+        binding = prepared.command_endpoints[endpoint_slot].binding
+        endpoint_state = state.command_endpoints[endpoint_slot]
+        member_transaction, member_count =
+            _next_command_transaction_metadata(binding.endpoint,
+                endpoint_state)
+        member_transaction == transaction || continue
+        Int(member_count) == expected ||
+            _plant_event_loop_error(:command_transaction_invariant,
+                "atomic transaction members disagree about member count")
+        key = next_command_order_key(binding.endpoint, endpoint_state)
+        key !== nothing &&
+            command_scheduled_timestamp(key) == timestamp ||
+            _plant_event_loop_error(:command_transaction_invariant,
+                "atomic transaction member is not ready at its common timestamp")
+        member_claim = claim_next_application_ready_command!(
+            binding.endpoint, endpoint_state, timestamp)
+        member_claim === nothing &&
+            _plant_event_loop_error(:command_transaction_invariant,
+                "atomic transaction member did not produce a command claim")
+        workspace.transaction_count += 1
+        index = workspace.transaction_count
+        workspace.transaction_endpoint_slots[index] = UInt32(endpoint_slot)
+        workspace.transaction_claims[index] = member_claim
+        iszero(state.command_shadow_transactions[endpoint_slot]) ||
+            _plant_event_loop_error(:command_transaction_invariant,
+                "command endpoint already owns an unconsumed transaction event")
+        state.command_shadow_transactions[endpoint_slot] = transaction
+    end
+    workspace.transaction_count == expected ||
+        _plant_event_loop_error(:command_transaction_invariant,
+            "atomic transaction did not yield every declared member")
+    return expected
+end
+
+@inline _transaction_application_failure_reason(error::PlantCommandError) =
+    CommandDispositionReason(error.reason)
+@inline _transaction_application_failure_reason(error::InterruptException) =
+    throw(error)
+
+@noinline function _transaction_application_failure_reason(error)
+    return CommandDispositionReason(:physical_application_failure)
+end
+
+@noinline function _fail_event_command_transaction!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    reason::CommandDispositionReason,
+    error)
+    count = workspace.transaction_count
+    @inbounds for index in 1:count
+        endpoint_slot = Int(workspace.transaction_endpoint_slots[index])
+        binding = _event_command_endpoint(prepared, endpoint_slot).binding
+        endpoint_workspace = _event_command_workspace(workspace,
+            endpoint_slot)
+        _finish_command_application!(endpoint_workspace, binding.endpoint,
+            _event_command_endpoint_state(state, endpoint_slot),
+            workspace.transaction_claims[index], FailedCommand, reason)
+        _append_event_command_dispositions!(workspace, endpoint_workspace)
+    end
+    workspace.transaction_count = 0
+    _command_admission_error(:transaction, reason.name,
+        "atomic command transaction application failed ($(typeof(error)))")
+end
+
+function _finish_rejected_event_command_transaction!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace)
+    count = workspace.transaction_count
+    failure_reason = nothing
+    @inbounds for index in 1:count
+        endpoint_slot = Int(workspace.transaction_endpoint_slots[index])
+        binding = _event_command_endpoint(prepared, endpoint_slot).binding
+        staged = workspace.transaction_staged[index]
+        endpoint_workspace = _event_command_workspace(workspace,
+            endpoint_slot)
+        if staged.decision == _AcceptCommandCandidate
+            kind = RejectedCommand
+            reason = CommandDispositionReason(:atomic_transaction_aborted)
+        else
+            kind = staged.decision == _FailCommandCandidate ?
+                FailedCommand : RejectedCommand
+            reason = staged.reason
+            kind == FailedCommand && (failure_reason = reason)
+        end
+        _finish_command_application!(endpoint_workspace, binding.endpoint,
+            _event_command_endpoint_state(state, endpoint_slot),
+            workspace.transaction_claims[index], kind, reason)
+        _append_event_command_dispositions!(workspace, endpoint_workspace)
+    end
+    workspace.transaction_count = 0
+    failure_reason === nothing || _command_admission_error(
+        :transaction, failure_reason.name,
+        "atomic transaction member application policy requires structural failure")
+    return nothing
+end
+
+function _apply_event_command_transaction!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    first_endpoint_slot::Integer,
+    first_claim::PlantCommandApplicationClaim,
+    timestamp::PlantTimestamp)
+    count = _claim_event_command_transaction!(prepared, state, workspace,
+        first_endpoint_slot, first_claim, timestamp)
+    @inbounds for index in 1:count
+        endpoint_slot = Int(workspace.transaction_endpoint_slots[index])
+        binding = _event_command_endpoint(prepared, endpoint_slot).binding
+        staged = try
+            _stage_claimed_plant_command!(binding.endpoint,
+                _event_command_endpoint_state(state, endpoint_slot),
+                _event_command_application_state(state, endpoint_slot),
+                workspace.transaction_claims[index])
+        catch error
+            reason = _transaction_application_failure_reason(error)
+            _fail_event_command_transaction!(prepared, state, workspace,
+                reason, error)
+        end
+        workspace.transaction_staged[index] = staged
+    end
+    @inbounds for index in 1:count
+        if workspace.transaction_staged[index].decision !=
+                _AcceptCommandCandidate
+            return _finish_rejected_event_command_transaction!(prepared,
+                state, workspace)
+        end
+    end
+    @inbounds for index in 1:count
+        endpoint_slot = Int(workspace.transaction_endpoint_slots[index])
+        try
+            _stage_event_controllable_optic_command!(prepared, state,
+                workspace, endpoint_slot)
+        catch error
+            reason = _transaction_application_failure_reason(error)
+            _fail_event_command_transaction!(prepared, state, workspace,
+                reason, error)
+        end
+    end
+    @inbounds for index in 1:count
+        _commit_event_controllable_optic_command!(prepared, state,
+            workspace, workspace.transaction_endpoint_slots[index])
+    end
+    @inbounds for index in 1:count
+        endpoint_slot = Int(workspace.transaction_endpoint_slots[index])
+        binding = _event_command_endpoint(prepared, endpoint_slot).binding
+        endpoint_state = _event_command_endpoint_state(state, endpoint_slot)
+        application_state =
+            _event_command_application_state(state, endpoint_slot)
+        endpoint_workspace = _event_command_workspace(workspace,
+            endpoint_slot)
+        staged = workspace.transaction_staged[index]
+        _commit_staged_application!(application_state, endpoint_state)
+        _finish_command_application!(endpoint_workspace, binding.endpoint,
+            endpoint_state, workspace.transaction_claims[index],
+            AppliedCommand, staged.reason)
+        _append_event_command_dispositions!(workspace, endpoint_workspace)
+    end
+    workspace.transaction_count = 0
+    return nothing
+end
+
+function _process_command_endpoint!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    claim::EventClaim,
+    action::_PlantEventAction)
+    endpoint_slot = Int(action.owner_slot)
+    timestamp = claimed_event_key(claim).timestamp
+    binding = _event_command_endpoint(prepared, endpoint_slot).binding
+    endpoint = binding.endpoint
+    endpoint_state = _event_command_endpoint_state(state, endpoint_slot)
+    shadow = state.command_shadow_transactions[endpoint_slot]
+    if !iszero(shadow)
+        state.command_shadow_transactions[endpoint_slot] = UInt64(0)
+        _resolve_event_command_claim!(prepared, state, claim, endpoint_slot)
+        return nothing
+    end
+    key = next_command_order_key(endpoint, endpoint_state)
+    if key !== nothing && command_scheduled_timestamp(key) <= timestamp
+        command_claim = claim_next_application_ready_command!(endpoint,
+            endpoint_state, timestamp)
+        command_claim === nothing &&
+            _plant_event_loop_error(:missing_command_claim,
+                "due command endpoint did not produce an application claim")
+        if iszero(_command_transaction_id(command_claim))
+            _apply_event_command_claim!(prepared, state, workspace,
+                endpoint_slot, command_claim)
+        else
+            _apply_event_command_transaction!(prepared, state, workspace,
+                endpoint_slot, command_claim, timestamp)
+        end
+    else
+        silence = next_command_silence_timestamp(endpoint, endpoint_state,
+            _event_command_application_state(state, endpoint_slot))
+        silence == timestamp ||
+            _plant_event_loop_error(:stale_command_event,
+                "command generator has no due command or silence transition")
+        _apply_event_command_silence!(prepared, state, workspace,
+            endpoint_slot, timestamp)
+    end
+    _resolve_event_command_claim!(prepared, state, claim, endpoint_slot)
+    return nothing
 end
 
 @inline function _event_action(prepared::PreparedPlantEventLoop,
@@ -1459,6 +2640,23 @@ function _materialize_due_paths!(prepared::PreparedPlantEventLoop,
     return nothing
 end
 
+function _apply_due_controllable_optics!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    due_paths::Memory{Bool})
+    isempty(prepared.optics) && return nothing
+    @inbounds for path_index in eachindex(prepared.paths)
+        due_paths[path_index] || continue
+        input = prepared.paths[path_index].path.input
+        for optic_index in eachindex(prepared.optics)
+            optic = prepared.optics[optic_index]
+            apply_controllable_optic_surface!(input, optic.implementation,
+                state.controllable_optics[optic_index])
+        end
+    end
+    return nothing
+end
+
 function _execute_due_paths!(prepared::PreparedPlantEventLoop,
     state::PlantEventLoopState, due_paths::Memory{Bool})
     @inbounds for index in eachindex(prepared.paths)
@@ -1511,6 +2709,7 @@ function _process_optical_path_batch!(prepared::PreparedPlantEventLoop,
         atmosphere, epoch)
     _materialize_due_paths!(prepared, workspace.due_paths, atmosphere,
         epoch)
+    _apply_due_controllable_optics!(prepared, state, workspace.due_paths)
     _execute_due_paths!(prepared, state, workspace.due_paths)
     _resolve_due_path_claims!(prepared, state, workspace, timestamp)
     return nothing
@@ -1522,6 +2721,9 @@ function _process_ordinary_event!(prepared::PreparedPlantEventLoop,
     kind = action.kind
     kind == _TriggerTopologyAction &&
         return _process_trigger_topology!(prepared, state, workspace, claim)
+    kind == _CommandEndpointAction &&
+        return _process_command_endpoint!(prepared, state, workspace, claim,
+            action)
     kind == _AcquisitionBoundaryAction &&
         return _process_acquisition_boundary!(prepared, state, claim, action)
     kind == _AcquisitionStartAction &&

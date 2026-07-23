@@ -95,9 +95,7 @@ Examples:
   configuration-only `plant_model_definition_style` contract; live
   optic/detector/runtime owners fail closed. Its separately owned telescope and
   atmosphere retain their established state semantics, so structural
-  immutability of the plant is not a deep-freeze claim for those owners.
-  `prepare_plant` still rejects nonempty optic topology until physical optic
-  application and plant-event composition are implemented
+  immutability of the plant is not a deep-freeze claim for those owners
 - `PreparedCommandEndpoint` as one run-immutable schema/capacity/window/
   ordinal/payload-storage-backend binding, with separate single-writer
   `CommandEndpointState`
@@ -116,15 +114,22 @@ Examples:
   silence latch. `apply_claimed_plant_command!` transactionally implements
   absolute or incremental semantics, finite/range policy, and exactly one
   terminal disposition. Safe/fail silence transitions use exact plant-time
-  deadlines; equal-time commands take precedence. This standalone layer owns
-  no physical optic mutation, device response dynamics, multi-optic atomic
-  transaction,
-  plant event phase, execution-clock liveness, wall clock, task, ring, lease,
-  or transport
+  deadlines; equal-time commands take precedence. Direct use owns no physical
+  optic mutation, while the prepared event loop stages this state together
+  with the model-specific physical response
+- qualified `PreparedControllableOptic` as the immutable model-specific
+  preparation plus independent endpoint-slot binding for one physical device.
+  Its separately constructed state owns visible and staged physical response;
+  its workspace owns scratch. Staging is fallible, while commit is a bounded,
+  nonthrowing publication step so explicit multi-optic transactions cannot
+  become partially visible
 - `PreparedPlant` as a schedule-free concrete tuple of
-  `PreparedPathExecutor` and `PreparedAcquisitionOwner` values. Each path owns
-  one explicit input/result pair and prepared optical workspace; each
-  acquisition borrows that exact result read-only and binds one immutable
+  `PreparedControllableOptic`, prepared command-endpoint,
+  `PreparedPathExecutor`, and `PreparedAcquisitionOwner` values. Every declared
+  endpoint has one explicit `CommandEndpointConfiguration`; canonical identity
+  determines endpoint ordinals and optic order. Each path owns one explicit
+  input/result pair and prepared optical workspace; each acquisition borrows
+  that exact result read-only and binds one immutable
   `PreparedAcquisitionProvider` choice. Full-optical providers own independent
   detector/WFS execution state, reduced-order providers own their declared
   parameter/state split, and synthetic/replay providers own fixed payload
@@ -135,6 +140,15 @@ Examples:
   directly. `PathResultKey` performs cold source/optics/output/revision/backend/
   device compatibility checks without putting IDs, shapes, rates, or device
   ordinals in type parameters
+- `PreparedPlantEventLoop` as the HIL-neutral serial virtual-time composition
+  of independent endpoint command generators, detector events, optical sample
+  schedules, one atmosphere timeline, and canonical physical-optic
+  application. Plant state is right-continuous and exposure intervals are
+  half-open. Explicit `PlantCommandTransaction` values provide all-or-none
+  admission and physical publication across distinct optics; equal time or
+  placement alone does not. The current Gate 4 surface operation treats every
+  prepared optic as one common co-conjugated group on every path, pending
+  explicit placement and visibility
 - `Telescope` with immutable `TelescopeParams` and a revisioned prepared
   `TelescopeAperture`; it owns spatial geometry and intensity reflectivity but
   no mutable OPD, cadence, or exposure duration

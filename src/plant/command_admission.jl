@@ -463,6 +463,7 @@ abstract type _AbstractCommandPayloadSlots end
 
 struct _ScalarCommandPayloadSlots{T} <: _AbstractCommandPayloadSlots
     values::Memory{T}
+    staging::Memory{T}
 end
 
 struct _ArrayCommandPayloadSlots{A<:AbstractArray} <:
@@ -473,7 +474,8 @@ end
 
 function _prepare_command_payload_slots(schema::PlantCommandSchema{T,0},
     ::AbstractArrayBackend, capacity::Int) where {T}
-    return _ScalarCommandPayloadSlots(Memory{T}(undef, capacity))
+    return _ScalarCommandPayloadSlots(Memory{T}(undef, capacity),
+        Memory{T}(undef, 1))
 end
 
 function _prepare_command_payload_slots(schema::PlantCommandSchema{T,N},
@@ -500,13 +502,16 @@ struct _CommandSlotMetadata
     requested_effective_timestamp::PlantTimestamp
     scheduled_timestamp::PlantTimestamp
     admission_timestamp::PlantTimestamp
+    transaction::UInt64
+    transaction_member_count::UInt32
     generation::UInt64
     status::_CommandSlotStatus
 end
 
 @inline _empty_command_slot_metadata() = _CommandSlotMetadata(
     UInt64(0), UInt64(0), zero(PlantTimestamp), zero(PlantTimestamp),
-    zero(PlantTimestamp), UInt64(0), _FreeCommandSlot)
+    zero(PlantTimestamp), UInt64(0), UInt32(0), UInt64(0),
+    _FreeCommandSlot)
 
 mutable struct _CommandEndpointStateBinding end
 
@@ -890,6 +895,28 @@ function next_command_order_key(endpoint::PreparedCommandEndpoint,
     return _command_slot_key(endpoint, state.slots[slot])
 end
 
+function _next_command_transaction_metadata(
+    endpoint::PreparedCommandEndpoint,
+    state::CommandEndpointState)
+    _require_command_endpoint_binding(endpoint, state)
+    iszero(state.pending_count) && return (UInt64(0), UInt32(0))
+    metadata = state.slots[Int(state.calendar[1])]
+    return (metadata.transaction, metadata.transaction_member_count)
+end
+
+function _has_pending_command_transaction_at(
+    endpoint::PreparedCommandEndpoint,
+    state::CommandEndpointState,
+    timestamp::PlantTimestamp)
+    _require_command_endpoint_binding(endpoint, state)
+    @inbounds for index in 1:state.pending_count
+        metadata = state.slots[Int(state.calendar[index])]
+        !iszero(metadata.transaction) &&
+            metadata.scheduled_timestamp == timestamp && return true
+    end
+    return false
+end
+
 @inline function _should_supersede_pending_command(
     endpoint::PreparedCommandEndpoint,
     metadata::_CommandSlotMetadata,
@@ -940,11 +967,12 @@ end
 end
 
 @inline function _stage_command_payload!(
-    ::_ScalarCommandPayloadSlots,
+    payloads::_ScalarCommandPayloadSlots,
     schema::PlantCommandSchema,
     payload)
-    return _stage_scalar_command_payload(payload, schema.bounds,
+    payloads.staging[1] = _stage_scalar_command_payload(payload, schema.bounds,
         _presentation_range_clipping(schema))
+    return nothing
 end
 
 function _stage_command_payload!(payloads::_ArrayCommandPayloadSlots,
@@ -966,8 +994,8 @@ end
 end
 
 @inline function _commit_staged_command_payload!(
-    payloads::_ScalarCommandPayloadSlots, slot::Int, staged)
-    payloads.values[slot] = staged
+    payloads::_ScalarCommandPayloadSlots, slot::Int, ::Nothing)
+    payloads.values[slot] = payloads.staging[1]
     return nothing
 end
 
@@ -1052,7 +1080,8 @@ function _remove_superseded_pending_commands!(
             state.slots[slot] = _CommandSlotMetadata(
                 UInt64(0), UInt64(0), zero(PlantTimestamp),
                 zero(PlantTimestamp), zero(PlantTimestamp),
-                metadata.generation, _FreeCommandSlot)
+                UInt64(0), UInt32(0), metadata.generation,
+                _FreeCommandSlot)
             removed += 1
         else
             write_index += 1
@@ -1124,6 +1153,24 @@ function admit_plant_command!(workspace::CommandDispositionWorkspace,
     state::CommandEndpointState,
     command::PlantCommand,
     timestamp::PlantTimestamp)
+    return _admit_plant_command!(workspace, endpoint, state, command,
+        timestamp, UInt64(0), UInt32(0))
+end
+
+function _admit_plant_command!(workspace::CommandDispositionWorkspace,
+    endpoint::PreparedCommandEndpoint,
+    state::CommandEndpointState,
+    command::PlantCommand,
+    timestamp::PlantTimestamp,
+    transaction::UInt64,
+    transaction_member_count::UInt32)
+    iszero(transaction) == iszero(transaction_member_count) ||
+        _command_admission_error(:transaction, :invalid_metadata,
+            "transaction identity and member count must either both be zero " *
+            "or both be nonzero")
+    iszero(transaction) || transaction_member_count >= UInt32(2) ||
+        _command_admission_error(:transaction, :invalid_member_count,
+            "an atomic command transaction requires at least two members")
     _require_command_endpoint_binding(endpoint, state)
     _require_command_endpoint_binding(endpoint, workspace)
     _require_operational_command_endpoint(state)
@@ -1171,6 +1218,14 @@ function admit_plant_command!(workspace::CommandDispositionWorkspace,
         scheduled = timestamp
     end
 
+    if iszero(transaction) &&
+            _has_pending_command_transaction_at(endpoint, state, scheduled)
+        return _finish_terminal_admission!(workspace, endpoint, state, command,
+            timestamp, presentation_id, RejectedCommand,
+            CommandDispositionReason(:equal_time_endpoint_conflict),
+            sequence_class)
+    end
+
     superseded_count, first_superseded_slot =
         _superseded_pending_commands(endpoint, state, command.sequence)
     resulting_active = state.active_count - superseded_count + 1
@@ -1209,6 +1264,8 @@ function admit_plant_command!(workspace::CommandDispositionWorkspace,
         requested,
         scheduled,
         timestamp,
+        transaction,
+        transaction_member_count,
         generation,
         _PendingCommandSlot,
     )
@@ -1237,6 +1294,8 @@ struct PlantCommandApplicationClaim
     requested_effective_timestamp::PlantTimestamp
     admission_timestamp::PlantTimestamp
     ready_timestamp::PlantTimestamp
+    transaction::UInt64
+    transaction_member_count::UInt32
 
     function PlantCommandApplicationClaim(binding_id::UInt64, slot::UInt32,
         generation::UInt64, presentation_id::CommandPresentationID,
@@ -1244,10 +1303,12 @@ struct PlantCommandApplicationClaim
         requested_effective_timestamp::PlantTimestamp,
         admission_timestamp::PlantTimestamp,
         ready_timestamp::PlantTimestamp,
+        transaction::UInt64,
+        transaction_member_count::UInt32,
         ::_PlantCommandClaimToken)
         return new(binding_id, slot, generation, presentation_id, key,
             requested_effective_timestamp, admission_timestamp,
-            ready_timestamp)
+            ready_timestamp, transaction, transaction_member_count)
     end
 end
 
@@ -1267,6 +1328,10 @@ end
 @inline command_lateness(value::PlantCommandApplicationClaim) =
     _command_lateness(value.ready_timestamp,
         value.requested_effective_timestamp)
+@inline _command_transaction_id(value::PlantCommandApplicationClaim) =
+    value.transaction
+@inline _command_transaction_member_count(
+    value::PlantCommandApplicationClaim) = value.transaction_member_count
 
 """
     claim_next_application_ready_command!(endpoint, state, timestamp)
@@ -1300,6 +1365,8 @@ function claim_next_application_ready_command!(
         metadata.requested_effective_timestamp,
         metadata.scheduled_timestamp,
         metadata.admission_timestamp,
+        metadata.transaction,
+        metadata.transaction_member_count,
         metadata.generation,
         _ApplicationReadyCommandSlot,
     )
@@ -1314,6 +1381,8 @@ function claim_next_application_ready_command!(
         metadata.requested_effective_timestamp,
         metadata.admission_timestamp,
         timestamp,
+        metadata.transaction,
+        metadata.transaction_member_count,
         _PLANT_COMMAND_CLAIM_TOKEN,
     )
 end
@@ -1343,7 +1412,10 @@ end
         claim.requested_effective_timestamp ==
             metadata.requested_effective_timestamp &&
         claim.admission_timestamp == metadata.admission_timestamp &&
-        claim.ready_timestamp == state.current_timestamp ||
+        claim.ready_timestamp == state.current_timestamp &&
+        claim.transaction == metadata.transaction &&
+        claim.transaction_member_count ==
+            metadata.transaction_member_count ||
         _command_admission_error(:application, :stale_claim,
             "application-ready claim metadata no longer matches endpoint state")
     return slot, metadata
@@ -1365,7 +1437,8 @@ end
     slot::Int, metadata::_CommandSlotMetadata)
     state.slots[slot] = _CommandSlotMetadata(
         UInt64(0), UInt64(0), zero(PlantTimestamp), zero(PlantTimestamp),
-        zero(PlantTimestamp), metadata.generation, _FreeCommandSlot)
+        zero(PlantTimestamp), UInt64(0), UInt32(0), metadata.generation,
+        _FreeCommandSlot)
     state.active_count -= 1
     state.outstanding_slot = UInt32(0)
     return nothing
@@ -1463,8 +1536,8 @@ function fail_pending_plant_commands!(
         )
         state.slots[slot] = _CommandSlotMetadata(
             UInt64(0), UInt64(0), zero(PlantTimestamp),
-            zero(PlantTimestamp), zero(PlantTimestamp), metadata.generation,
-            _FreeCommandSlot)
+            zero(PlantTimestamp), zero(PlantTimestamp), UInt64(0),
+            UInt32(0), metadata.generation, _FreeCommandSlot)
     end
     state.pending_count = 0
     state.active_count = 0

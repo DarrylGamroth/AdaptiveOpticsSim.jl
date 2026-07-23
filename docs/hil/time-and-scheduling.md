@@ -602,6 +602,14 @@ standalone endpoint supports replacement-style supersession only for absolute
 commands; it rejects that policy for incremental deltas rather than silently
 changing their sum.
 
+The composed event-loop admission call is bounded by the next unprocessed plant
+event. It may use the initial timestamp or a later unprocessed instant no later
+than that event, which permits ingress between scheduled events. It may not
+cross an older pending event or reuse a timestamp after any event phase at that
+timestamp has run. Future-effective intent remains the command's requested
+effective timestamp and occupies the bounded endpoint calendar after
+admission.
+
 The endpoint's next application-ready claim removes the earliest due command
 using scheduled time, stable endpoint ordinal, and endpoint-local sequence as
 the total key. Comparing endpoint ordinal before local sequence prevents
@@ -618,9 +626,13 @@ disposition. A claim made after that timestamp fails rather than backdating
 state. `next_command_silence_timestamp` and
 `apply_command_silence_transition!` implement exact one-shot safe/fail
 transitions per unchanged age origin; fail drains pending presentations and
-terminally fails the endpoint. These transitions do not yet mutate a physical
-optic, model device-specific response dynamics, compose the plant event
-calendar, or define an atomic multi-optic transaction.
+terminally fails the endpoint. Direct endpoint use does not mutate a physical
+optic. The prepared event loop now stages the effective command and
+model-specific physical response together, composes their command-phase
+generators into the common calendar, and publishes an explicit
+`PlantCommandTransaction` all-or-none across distinct physical optics. It does
+not infer a transaction from equal timestamps or co-conjugation and does not
+itself supply device-specific response dynamics.
 
 If a command becomes effective during an exposure, optical samples before and
 after that event observe the appropriate old and new states. A lower-fidelity
@@ -641,9 +653,10 @@ validation/admission surface. Every transferred command retains one terminal-
 outcome credit until the correlated completion is consumed.
 
 For each canonical plant timestamp `t`, the complete target performs these
-phases in order. The Gate 3 serial loop implements the trigger, atmosphere,
-detector, optical-sample, readout, and readiness subset; command and HIL-port
-phases retain their reserved causal positions until their assigned gates:
+phases in order. The Gate 4 serial loop implements the trigger, core-command,
+atmosphere, detector, optical-sample, readout, and readiness phases. HIL ingress
+and publication retain their reserved causal positions until the HIL boundary
+is implemented:
 
 1. apply trigger-source, distribution-link, and synchronization-fault updates
    effective at or before `t`, recompute only not-yet-delivered edges, and

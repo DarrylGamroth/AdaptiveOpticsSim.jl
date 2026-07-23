@@ -19,9 +19,13 @@ the telescope, atmosphere, path, and acquisition topology. The first four
 Gate 4 slices additionally declare every physical controllable optic, define
 one immutable versioned semantic schema for each independently timed or
 latched command endpoint, and provide standalone bounded admission and
-effective-command state owners. Physical optic mutation, device response,
-controllable-optic placement, and plant-level command/event composition remain
-their assigned later slices; none is hidden in an identity or schema.
+effective-command state owners. The fifth slice prepares every declared optic
+and endpoint, composes physical command publication into the serial event
+loop, and provides explicit all-or-none transactions across distinct optics.
+The current physical composition is deliberately limited to one common
+co-conjugated group applied to every path. Device-specific dynamics, explicit
+conjugate placement, and path visibility remain their assigned later slices;
+none is hidden in an identity or schema.
 Separating a path from its acquisitions prevents a second camera or readout
 cadence from forcing duplicate propagation.
 
@@ -190,12 +194,13 @@ behind the HIL companion. An acquisition definition does not itself prescribe
 a cross-owner handoff. The HIL data-plane boundary uses ports backed by the
 sequenced SPSC rings specified in [`rtc-ports.md`](rtc-ports.md).
 
-The third Gate 4 slice prepares a standalone `PreparedCommandEndpoint` with
-fixed payload slots, accepted-sequence history, future calendar, and terminal-
-disposition storage. It is deliberately not attached to a physical optic or
-`PreparedPlant` yet. `prepare_plant` therefore still rejects a nonempty
-controllable-optic set and never returns a plant that silently omits a declared
-physical device or schema.
+The third and fourth Gate 4 slices prepare standalone endpoint admission and
+effective-command owners with fixed payload slots, accepted-sequence history,
+future calendar, terminal-disposition storage, and replayable silence policy.
+The fifth slice attaches those owners to prepared physical optics and the
+virtual-time event loop. `prepare_plant` now requires one
+`CommandEndpointConfiguration` for every declared endpoint and fails rather
+than silently omitting a physical device or schema.
 
 Preparation turns immutable definitions into backend-, device-, shape-, and
 capacity-bound plans plus explicitly owned mutable state, workspaces, and
@@ -204,10 +209,11 @@ Repeated execution calls mutating operations over those prepared owners and
 caller-owned products. Owner construction validates every concrete execution
 plan against the exact input, result, detector state, observation, and optional
 estimator storage it retains; warmed calls reject a stale or substituted
-binding before mutation. The implemented preparation freezes every path
-source, builds a concrete tuple of path executors with exact atmosphere-input
-materialization bindings, resolves acquisitions by stable ID, and builds a
-concrete tuple of separate acquisition owners. A cold acquisition selection
+binding before mutation. The implemented preparation canonicalizes every
+optic and endpoint, freezes every path source, builds a concrete tuple of path
+executors with exact atmosphere-input materialization bindings, resolves
+acquisitions by stable ID, and builds a concrete tuple of separate acquisition
+owners. A cold acquisition selection
 canonicalizes caller-selected IDs to stable-ID order and deduplicates their
 referenced paths. Its serial executor preflights every path, acquisition,
 revision, exact RNG binding, and current epoch before output mutation,
@@ -996,10 +1002,15 @@ command disposition; the fail action drains all pending presentations and
 marks the endpoint terminally failed. The returned
 `PlantCommandSilenceTransition` is the replayable state/fault record.
 
-This standalone application layer does not itself mutate a physical optic,
-model stroke/slew/settling or other device dynamics beyond the declared
-effective-value policy, compose a plant event, or define an atomic multi-optic
-latch; those remain later core slices.
+Direct use of the standalone application layer does not itself mutate a
+physical optic or model stroke, slew, settling, hysteresis, or other dynamics
+beyond the declared effective-value policy. The composed event loop now binds
+each endpoint to one prepared physical optic: it stages effective-command and
+physical state before bounded publication and applies visible surfaces before
+path execution. `PlantCommandTransaction` explicitly provides all-or-none
+admission and publication for endpoints on distinct optics at one common
+timestamp. Atomicity is not inferred from placement, equal time, or packed
+storage.
 
 The HIL command-submission descriptor wraps a mapped plant command with
 run/session correlation, source timestamp-domain and mapping metadata, payload-

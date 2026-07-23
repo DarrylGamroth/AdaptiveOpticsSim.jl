@@ -82,13 +82,92 @@ effective storage remain on the endpoint backend. Its silence operations
 schedule exact safe/fail transitions from admission or application age, with a
 due equal-time command resolved first.
 
-This remains a standalone core endpoint layer, not yet an optic-model extension
-hook. Physical optic mutation, device-specific slew/settling/dynamics, atomic
-multi-optic latch, and `PreparedPlant` event composition remain later Gate 4
-slices. `prepare_plant` therefore still rejects nonempty controllable-optic
-topology rather than silently ignoring it. An incremental schema must preserve
-pending deltas; only absolute commands may select
+`CommandEndpointConfiguration` supplies each declared endpoint's run-specific
+capacities, initial effective value, optional safe value, and storage backend.
+Pass exactly one configuration per declared endpoint through
+`prepare_plant(...; command_endpoints=configurations)`. Plant preparation
+canonicalizes endpoint and optic order by stable identity, prepares every
+declared device, and rejects missing or extra configurations.
+
+A controllable-optic extension separates immutable preparation, mutable
+single-writer physical state, and scratch:
+
+```julia
+const Plant = AdaptiveOpticsSim.Plant
+
+function Plant.prepare_controllable_optic(
+    model::MyOpticDefinition,
+    definition::Plant.ControllableOpticDefinition,
+    telescope::AdaptiveOpticsSim.AbstractTelescope,
+    atmosphere::AdaptiveOpticsSim.AbstractAtmosphere,
+)
+    return prepare_my_immutable_optic_plan(
+        model, definition, telescope, atmosphere)
+end
+
+function Plant.prepare_controllable_optic_state(
+    plan::MyPreparedOptic,
+    definition::Plant.ControllableOpticDefinition,
+    endpoint_ids::Tuple,
+    initial_commands::Tuple,
+)
+    return MyOpticState(plan, endpoint_ids, initial_commands)
+end
+
+Plant.prepare_controllable_optic_workspace(plan::MyPreparedOptic) =
+    MyOpticWorkspace(plan)
+
+function Plant.stage_controllable_optic_command!(
+    plan::MyPreparedOptic,
+    state::MyOpticState,
+    workspace::MyOpticWorkspace,
+    endpoint::Plant.CommandEndpointID,
+    effective_command,
+)
+    stage_complete_physical_response!(
+        workspace, plan, state, endpoint, effective_command)
+    return nothing
+end
+
+function Plant.commit_controllable_optic_command!(
+    plan::MyPreparedOptic,
+    state::MyOpticState,
+    workspace::MyOpticWorkspace,
+    endpoint::Plant.CommandEndpointID,
+)
+    publish_staged_physical_response!(state, workspace, endpoint)
+    return nothing
+end
+
+function Plant.apply_controllable_optic_surface!(
+    input::MyPathInput,
+    plan::MyPreparedOptic,
+    state::MyOpticState,
+)
+    apply_visible_surface!(input, plan, state)
+    return input
+end
+```
+
+`prepare_controllable_optic` must return immutable data; keep all evolving
+response state in the separately constructed state. Every array in
+`initial_commands` is a fresh state-owned copy, so the state constructor may
+retain and mutate it; it must not substitute caller or prepared-plan storage.
+Staging may reject or fail before publication. After staging succeeds, commit
+must be bounded and nonthrowing so an explicit `PlantCommandTransaction`
+cannot expose only part of a multi-optic update. Do not infer transaction
+membership from placement, equal timestamps, or packed command storage. Every
+endpoint participating in a transaction must use
+`PreservePendingCommands`. Outside transactions, an incremental schema must
+preserve pending deltas; only absolute commands may select
 `SupersedeOlderPendingCommands`.
+
+The current Gate 4 event loop applies all prepared optics to every due
+materialized path as one common co-conjugated execution group in canonical
+optic-identity order. Extend only path-input types for which the device has a
+well-defined surface operation. Explicit conjugate placement, geometric
+transforms, and per-path visibility remain later contracts; do not encode
+those assumptions in endpoint identity.
 
 Preparation then dispatches on those same concrete model types. A path method
 receives the exact definition, its run-owned frozen source, the plant telescope,

@@ -13,6 +13,7 @@ abstract type _AbstractCommandApplicationValues end
 mutable struct _ScalarCommandApplicationValues{T,S} <:
     _AbstractCommandApplicationValues
     effective::T
+    staging::T
     safe::S
 end
 
@@ -136,7 +137,7 @@ function _prepare_command_application_values(
         "initial effective command")
     safe = safe_command === nothing ? nothing :
         _validate_effective_seed(schema, safe_command, "safe command")
-    return _ScalarCommandApplicationValues(initial, safe)
+    return _ScalarCommandApplicationValues(initial, initial, safe)
 end
 
 function _prepare_command_application_values(
@@ -205,6 +206,11 @@ end
     _FailCommandCandidate = 0x03
 end
 
+struct _StagedCommandApplication
+    decision::_CommandCandidateDecision
+    reason::CommandDispositionReason
+end
+
 @inline function _invalid_candidate_decision(action::InvalidCommandAction)
     action == FailOnInvalidCommand && return _FailCommandCandidate
     return _RejectCommandCandidate
@@ -256,10 +262,15 @@ end
     candidate = command_semantics(schema) == AbsoluteCommand ?
         payload : values.effective + payload
     finite_result = _validate_application_candidate_finite(schema, candidate)
-    finite_result === nothing || return (
-        finite_result[1], finite_result[2], candidate)
-    return _validate_scalar_application_candidate_range(schema, candidate,
-        command_bounds(schema))
+    if finite_result !== nothing
+        values.staging = candidate
+        return _StagedCommandApplication(finite_result[1], finite_result[2])
+    end
+    decision, reason, staged =
+        _validate_scalar_application_candidate_range(schema, candidate,
+            command_bounds(schema))
+    values.staging = staged
+    return _StagedCommandApplication(decision, reason)
 end
 
 @inline function _stage_array_application_candidate!(
@@ -303,34 +314,62 @@ end
         payload, command_semantics(schema))
     finite_result = _validate_application_candidate_finite(schema,
         values.staging)
-    finite_result === nothing || return finite_result
-    return _validate_array_application_candidate_range!(schema,
+    finite_result === nothing || return _StagedCommandApplication(
+        finite_result[1], finite_result[2])
+    decision, reason = _validate_array_application_candidate_range!(schema,
         values.staging, command_bounds(schema))
+    return _StagedCommandApplication(decision, reason)
 end
 
 @inline function _commit_application_candidate!(
-    values::_ScalarCommandApplicationValues, candidate)
-    values.effective = candidate
+    values::_ScalarCommandApplicationValues)
+    values.effective = values.staging
     return nothing
 end
 
 @inline function _commit_application_candidate!(
-    values::_ArrayCommandApplicationValues, ::Nothing)
+    values::_ArrayCommandApplicationValues)
     values.effective, values.staging = values.staging, values.effective
     return nothing
 end
 
+@inline _staged_effective_command(values::_ScalarCommandApplicationValues) =
+    values.staging
+@inline _staged_effective_command(values::_ArrayCommandApplicationValues) =
+    values.staging
+
 @inline function _commit_staged_application!(
-    values::_ScalarCommandApplicationValues, staged)
-    _commit_application_candidate!(values, staged[3])
+    state::CommandApplicationState,
+    endpoint_state::CommandEndpointState)
+    _commit_application_candidate!(state.values)
+    state.last_application_timestamp =
+        command_endpoint_timestamp(endpoint_state)
     return nothing
 end
 
-@inline function _commit_staged_application!(
-    values::_ArrayCommandApplicationValues, staged)
-    _commit_application_candidate!(values, nothing)
-    return nothing
+function _stage_claimed_plant_command!(
+    endpoint::PreparedCommandEndpoint,
+    endpoint_state::CommandEndpointState,
+    application_state::CommandApplicationState,
+    claim::PlantCommandApplicationClaim)
+    _require_command_endpoint_binding(endpoint, endpoint_state)
+    _require_command_application_binding(endpoint, endpoint_state,
+        application_state)
+    _require_operational_command_endpoint(endpoint_state)
+    slot, metadata = _require_current_command_claim(
+        endpoint, endpoint_state, claim)
+    metadata.scheduled_timestamp == endpoint_state.current_timestamp ||
+        _command_admission_error(:application,
+            :missed_application_timestamp,
+            "application-ready command was claimed after its immutable " *
+            "scheduled plant timestamp")
+    payload = _claimed_command_payload(endpoint_state.payloads, slot)
+    return _stage_application_candidate!(application_state.values,
+        command_schema(endpoint), payload)
 end
+
+@inline _staged_effective_command(state::CommandApplicationState) =
+    _staged_effective_command(state.values)
 
 @noinline function _handle_command_application_staging_error!(
     workspace::CommandDispositionWorkspace,
@@ -384,31 +423,19 @@ function apply_claimed_plant_command!(
     endpoint_state::CommandEndpointState,
     application_state::CommandApplicationState,
     claim::PlantCommandApplicationClaim)
-    _require_command_endpoint_binding(endpoint, endpoint_state)
     _require_command_endpoint_binding(endpoint, workspace)
-    _require_command_application_binding(endpoint, endpoint_state,
-        application_state)
-    _require_operational_command_endpoint(endpoint_state)
     _require_empty_command_dispositions(workspace)
-    slot, metadata = _require_current_command_claim(
-        endpoint, endpoint_state, claim)
-    metadata.scheduled_timestamp == endpoint_state.current_timestamp ||
-        _fail_missed_command_application_timestamp!(workspace, endpoint,
-            endpoint_state, claim)
-    payload = _claimed_command_payload(endpoint_state.payloads, slot)
     staged = try
-        _stage_application_candidate!(application_state.values,
-            command_schema(endpoint), payload)
+        _stage_claimed_plant_command!(endpoint, endpoint_state,
+            application_state, claim)
     catch error
-        return _handle_command_application_staging_error!(workspace, endpoint,
+        return _handle_staged_command_application_error!(workspace, endpoint,
             endpoint_state, claim, error)
     end
-    decision = staged[1]
-    reason = staged[2]
+    decision = staged.decision
+    reason = staged.reason
     if decision == _AcceptCommandCandidate
-        _commit_staged_application!(application_state.values, staged)
-        application_state.last_application_timestamp =
-            command_endpoint_timestamp(endpoint_state)
+        _commit_staged_application!(application_state, endpoint_state)
         return _finish_command_application!(workspace, endpoint,
             endpoint_state, claim, AppliedCommand, reason)
     end
@@ -481,7 +508,8 @@ end
 
 @inline function _stage_safe_command!(
     values::_ScalarCommandApplicationValues)
-    return values.safe
+    values.staging = values.safe
+    return nothing
 end
 
 @inline function _stage_safe_command!(values::_ArrayCommandApplicationValues)
@@ -495,6 +523,29 @@ end
 @noinline function _handle_safe_command_staging_error(error)
     _command_admission_error(:silence, :safe_storage_failure,
         "failed to stage the prepared safe command ($(typeof(error)))")
+end
+
+@noinline function _handle_staged_command_application_error!(
+    workspace::CommandDispositionWorkspace,
+    endpoint::PreparedCommandEndpoint,
+    endpoint_state::CommandEndpointState,
+    claim::PlantCommandApplicationClaim,
+    error::PlantCommandError)
+    error.reason === :missed_application_timestamp &&
+        return _fail_missed_command_application_timestamp!(workspace,
+            endpoint, endpoint_state, claim)
+    return _handle_command_application_staging_error!(workspace, endpoint,
+        endpoint_state, claim, error)
+end
+
+@noinline function _handle_staged_command_application_error!(
+    workspace::CommandDispositionWorkspace,
+    endpoint::PreparedCommandEndpoint,
+    endpoint_state::CommandEndpointState,
+    claim::PlantCommandApplicationClaim,
+    error)
+    return _handle_command_application_staging_error!(workspace, endpoint,
+        endpoint_state, claim, error)
 end
 
 """
@@ -544,7 +595,7 @@ function apply_command_silence_transition!(
         catch error
             _handle_safe_command_staging_error(error)
         end
-        _commit_application_candidate!(application_state.values, staged)
+        _commit_application_candidate!(application_state.values)
         endpoint_state.current_timestamp = timestamp
     else
         fail_pending_plant_commands!(workspace, endpoint, endpoint_state,
