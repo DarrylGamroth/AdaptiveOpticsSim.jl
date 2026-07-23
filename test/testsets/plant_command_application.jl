@@ -120,9 +120,17 @@ end
         :command_silence_transition_timestamp,
         :command_silence_age,
     )
-        @test Base.isexported(AdaptiveOpticsSim, name)
+        @test Base.ispublic(AdaptiveOpticsSim, name)
+        @test !Base.isexported(AdaptiveOpticsSim, name)
     end
-    @test !Base.isexported(AdaptiveOpticsSim, :CommandApplicationState)
+    for name in (
+        :CommandEndpointState,
+        :CommandDispositionWorkspace,
+        :CommandApplicationState,
+    )
+        @test Base.ispublic(AdaptiveOpticsSim, name)
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+    end
 
     schema = _command_application_schema()
     endpoint = prepare_command_endpoint(schema; capacity=2, ordinal=1)

@@ -1,8 +1,9 @@
-# Curated public API exported by `using AdaptiveOpticsSim`.
+# Curated package API.
 #
-# Advanced and developer-facing names remain accessible as
-# `AdaptiveOpticsSim.name`. Add names here only when they are part of ordinary
-# user workflows, maintained examples, or stable extension seams.
+# Export only names used routinely after `using AdaptiveOpticsSim`. Declare
+# stable advanced and developer-facing seams `public` so callers can use
+# `AdaptiveOpticsSim.name` or import them explicitly without adding them to the
+# ordinary user namespace.
 
 export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError
 export UnsupportedAlgorithm, NumericalConditionError
@@ -216,7 +217,6 @@ export CommandTerminalKind, RejectedCommand, SupersededCommand
 export AppliedCommand, FailedCommand
 export PlantCommandOrderKey, PlantCommandAdmission, PlantCommandDisposition
 export PreparedCommandEndpoint, PlantCommandApplicationClaim
-export PlantCommandSilenceTransition
 export prepare_command_endpoint, validate_plant_command, admit_plant_command!
 export command_sequence, command_payload
 export command_presentation_id, command_admission_status
@@ -228,18 +228,21 @@ export command_terminal_timestamp
 export command_lateness, superseding_command_presentation_id
 export command_endpoint_capacity, command_sequence_window
 export command_endpoint_ordinal, pending_command_count, active_command_count
-export command_endpoint_timestamp, command_endpoint_failed
-export last_command_admission_timestamp, next_command_order_key
+export command_endpoint_timestamp, next_command_order_key
 export command_disposition_count, command_disposition
 export clear_command_dispositions!, claim_next_application_ready_command!
 export claimed_command_payload, mark_plant_command_applied!
 export fail_plant_command_application!, fail_pending_plant_commands!
-export effective_command, last_command_application_timestamp
-export apply_claimed_plant_command!, next_command_silence_timestamp
-export apply_command_silence_transition!
-export command_silence_action, command_silence_age_origin
-export command_silence_origin_timestamp, command_silence_deadline
-export command_silence_transition_timestamp, command_silence_age
+
+public CommandEndpointState, CommandDispositionWorkspace
+public CommandApplicationState, PlantCommandSilenceTransition
+public command_endpoint_failed, last_command_admission_timestamp
+public effective_command, last_command_application_timestamp
+public apply_claimed_plant_command!, next_command_silence_timestamp
+public apply_command_silence_transition!
+public command_silence_action, command_silence_age_origin
+public command_silence_origin_timestamp, command_silence_deadline
+public command_silence_transition_timestamp, command_silence_age
 export command_schemas, command_endpoint_ids, command_schema
 export plant_command_schema, command_endpoint_owner
 export plant_telescope, plant_atmosphere

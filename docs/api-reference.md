@@ -10,14 +10,15 @@ Related guides:
 - [`extension-guide.md`](extension-guide.md)
 - [`runtime-dataflow.md`](runtime-dataflow.md)
 
-This document describes the maintained public API surface exposed by
-`using AdaptiveOpticsSim`. Advanced methods and support utilities may still be
-used as `AdaptiveOpticsSim.name`, but they are not part of the ordinary
-top-level namespace unless listed here.
+This document describes both the ordinary API imported by
+`using AdaptiveOpticsSim` and the stable qualified API used as
+`AdaptiveOpticsSim.name`. Qualified public names are maintained but do not
+enter the caller's ordinary namespace.
 
 ## Public API Policy
 
-The exported API is curated in [`../src/exports.jl`](../src/exports.jl).
+Exported and qualified-public names are curated in
+[`../src/exports.jl`](../src/exports.jl).
 Export a name only when it is one of these:
 
 - a normal user-facing constructor or workflow function
@@ -25,7 +26,8 @@ Export a name only when it is one of these:
 - a common mutating operation such as `measure!`, `propagate!`, or `step!`
 - a stable extension seam documented in [`extension-guide.md`](extension-guide.md)
 
-Keep these names qualified as `AdaptiveOpticsSim.name`:
+Declare a stable name `public` but keep it qualified as
+`AdaptiveOpticsSim.name` when it is one of these:
 
 - low-level state and workspace containers
 - backend launch/allocation helpers
@@ -37,7 +39,8 @@ Keep these names qualified as `AdaptiveOpticsSim.name`:
 The package intentionally distinguishes three tiers:
 
 - **Stable exported API:** ordinary modeling, calibration, runtime, and HIL use.
-- **Advanced documented API:** maintained but usually qualified.
+- **Advanced documented API:** declared public, maintained, and usually
+  qualified.
 - **Developer support API:** available for package internals, tests, and
   validation tooling, but not promised as the normal user surface.
 
@@ -290,14 +293,15 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `command_admission_timestamp`, `command_ready_timestamp`, and
   `command_terminal_timestamp` keep the distinct command lifecycle instants
   explicit
-- Standalone effective-command application: `effective_command`,
+- Qualified public standalone effective-command application:
+  `effective_command`,
   `last_command_application_timestamp`, `apply_claimed_plant_command!`,
   `next_command_silence_timestamp`, and
   `apply_command_silence_transition!`. `PlantCommandSilenceTransition` and
   its `command_silence_*` accessors describe the exact replayable safe/fail
   transition; `command_endpoint_failed` and
   `last_command_admission_timestamp` expose endpoint lifecycle state
-- Qualified command-endpoint mutable storage:
+- Qualified public command-endpoint mutable storage:
   `AdaptiveOpticsSim.CommandEndpointState` and
   `AdaptiveOpticsSim.CommandApplicationState`, plus the caller-owned
   `AdaptiveOpticsSim.CommandDispositionWorkspace`. These remain explicit

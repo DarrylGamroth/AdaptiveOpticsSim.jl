@@ -56,7 +56,7 @@ that belongs to the later boundary contract.
 accepted-sequence-window, future-calendar, ordinal, and payload-storage
 capacity. Scalar payload slots require `CPUBackend()` and remain host-resident;
 fixed-shape array slots use the selected array backend. Its separately owned,
-qualified `CommandEndpointState` and
+qualified public `CommandEndpointState` and
 `CommandDispositionWorkspace` support warmed `admit_plant_command!`, one
 outstanding application-ready claim, and explicit applied/failed/pending-drain
 completion without callbacks or run-length storage. Admission copies caller
@@ -66,7 +66,7 @@ clear every disposition before reusing its workspace. Give endpoints stable,
 unique ordinals when their order keys will be composed; equal scheduled times
 order by endpoint ordinal before the endpoint-local sequence.
 
-The separately owned qualified `CommandApplicationState` binds one explicit
+The separately owned qualified public `CommandApplicationState` binds one explicit
 initial effective command and any required copied safe command to one exact
 endpoint-state owner before its first successful admission.
 `apply_claimed_plant_command!` transactionally implements absolute
