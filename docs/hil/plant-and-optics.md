@@ -221,10 +221,10 @@ materializes all unique path inputs, forms each path result once, and only then
 executes each acquisition. Model construction is multiple dispatch on the opted-in cold
 type; there is no
 central registry, universal optical graph, abstract executor vector, or stored
-closure. The target API does not grow `AOSimulation` or
-`ClosedLoopRuntime` into a universal object, retain the OOPAO class hierarchy,
-or hide scheduling inside optical elements. Those types remain temporary
-numerical oracles until their replacement gates delete them.
+closure. The target API does not reintroduce the removed generic frame-step
+runtime as a universal object, retain the OOPAO class hierarchy, or hide
+scheduling inside optical elements. Frozen numerical oracles remain in the
+test harness rather than in the production API.
 
 An optical-path declaration owns immutable configuration:
 
@@ -320,8 +320,9 @@ Static aberrations and controllable optics form or expose optical surfaces that
 apply to an explicit caller-owned path product. They do not mutate a shared
 telescope scratch plane. This boundary permits independent paths to share one
 telescope definition and permits co-conjugated optics to remain independent;
-the later HIL gates still define placement, visibility, command timing, and
-effective-state semantics.
+Gate 4 defines independent endpoint command timing and effective-state
+semantics. Later HIL gates still define physical placement, path visibility,
+device dynamics, and boundary pacing.
 
 Reusable propagating optics follow the same split. In particular, a spatial
 filter owns its prepared mask definition separately from its single-writer FFT
@@ -372,17 +373,14 @@ compatible rate product may then feed several detectors with independent state
 and exposure durations. Each applies its presampling response on the
 declared optical grid, integrates over physical pixels, applies QE and elapsed
 time exactly once, and then applies its coupling, stochastic response, and
-readout. The transitional frame-step shared runtime still draws detector noise
-sequentially from one runtime RNG, so it does not claim tuple-order-independent
-stochastic streams. The schedule-free prepared plant requires a run seed and
-derivation version, binds stable identities to atmosphere layers, providers,
-detectors, and declared device roles, and supplies their independent streams as
-specified by the [`determinism policy`](../deterministic-simulation.md).
-Multilayer plant atmospheres require explicit layer identities so reordering
-layers does not reassign their streams. The frame-step runtime
-preflights every detector's exact prepared binding and idle state before
-advancing the atmosphere, but unforeseen execution failures are fail-stop
-rather than transactional rollback. Changing a
+readout. The schedule-free prepared plant requires a run seed and derivation
+version, binds stable identities to atmosphere layers, providers, detectors,
+and declared device roles, and supplies their independent streams as specified
+by the [`determinism policy`](../deterministic-simulation.md). Multilayer plant
+atmospheres require explicit layer identities so reordering layers does not
+reassign their streams. The selected serial execution performs the binding and
+epoch preflights described above before product mutation; unforeseen execution
+failures remain fail-stop rather than transactional rollback. Changing a
 detector exposure cannot change or recompute the optical result. A prepared
 external-optics result, including one produced through `Proper.jl`, enters at
 the same arrival-rate/acquisition boundary after declaring either photon
@@ -912,16 +910,14 @@ WFS deadline.
 
 ## Conjugated And General Controllable Optics
 
-The current composite-optic behavior sums child OPD surfaces at the telescope
-pupil. That numerical behavior remains appropriate for multiple co-conjugated
-DMs and low-order pupil-plane optics, but the type also reflects the current
-`AOSimulation` constraint that exactly one `AbstractControllableOptic` is
-stored. It conflates physical collection, optical application, and command
-payload packing, and it cannot represent multi-conjugate placement or
-independent timing cleanly.
+Co-conjugated DM and low-order OPD surfaces still add at the applicable pupil
+plane, but physical collection, optical application, and command payload
+mapping are separate concerns. The former aggregate optic and generic
+single-optic runtime conflated those responsibilities and could not represent
+multi-conjugate placement or independent timing cleanly.
 
-`CompositeControllableOptic` is therefore removed from the target design rather
-than retained as a compatibility wrapper. Its responsibilities separate into:
+The aggregate optic has been removed rather than retained as a compatibility
+wrapper. Its responsibilities are now separated into:
 
 - a named tuple or registry of individual controllable optics
 - placement and path-visibility traits for each optic
@@ -932,16 +928,22 @@ than retained as a compatibility wrapper. Its responsibilities separate into:
 - a user-integration command schema when an external protocol uses packed
   vectors
 
-No new aggregate type should combine all of those responsibilities again.
-`RuntimeCommandLayout` should also leave the physical optic API. Its legitimate
-responsibilities split into prepared control-output routing and a plant command
-schema in core, a command-submission descriptor schema in the HIL companion,
-and transport packing in user integration code. None of those responsibilities
-implies physical grouping, atomic application, an endpoint, or timing. During
-implementation the current composite scenarios remain short-lived numerical
-references. The replacement stage deletes `CompositeControllableOptic` and
-replaces `RuntimeCommandLayout` rather than retaining either for source
-compatibility.
+No new aggregate type should combine all of those responsibilities again. The
+former packed command-layout API has also left the physical-optic surface. Its
+legitimate responsibilities are split into implemented prepared controller-
+output routing and plant command schemas in core, a later command-submission
+descriptor schema in the HIL companion, and transport packing in user
+integration code. None implies physical grouping, atomic application, an
+endpoint, or timing. Frozen composite cases remain test-only numerical
+references; no compatibility adapter is retained.
+
+`ControllerOutputRoute` and `prepare_controller_output_routing` now bind every
+named caller-owned controller product to one distinct prepared endpoint.
+Products may be views into a larger controller output and are borrowed without
+packing or copying. Preparation validates exact numeric type, shape, backend,
+and physical device. Each integration layer then constructs an independent
+`PlantCommand` with its endpoint-local sequence and requested effective
+timestamp; successful admission is the bounded payload-copy boundary.
 
 The implemented `PlantCommandSchema` defines semantic interpretation:
 stable schema/version and endpoint identities, exact scalar or backend-neutral

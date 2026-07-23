@@ -26,6 +26,7 @@ export execute_acquisition_selection!, execute_acquisition_selection_at!
 # qualified so uncommon choices do not enter the ordinary user namespace.
 export PlantCommandSequence, PlantCommand
 export CommandEndpointConfiguration
+export ControllerOutputRoute, prepare_controller_output_routing
 export prepare_command_endpoint, admit_plant_command!
 export claim_next_application_ready_command!, apply_claimed_plant_command!
 export mark_plant_command_applied!, fail_plant_command_application!
@@ -117,12 +118,16 @@ public command_silence_transition_timestamp, command_silence_age
 
 public ColdPlantModelDefinition, plant_model_definition_style
 public PreparedControllableOptic
+public PreparedControllerOutputRoute, PreparedControllerOutputRouting
 public prepare_controllable_optic, prepare_controllable_optic_state
 public prepare_controllable_optic_workspace
 public stage_controllable_optic_command!
 public commit_controllable_optic_command!
 public apply_controllable_optic_surface!
 public controllable_optic_implementation
+public controller_output_product, controller_output_endpoint
+public controller_output_schema, controller_output_payload
+public controller_output_route, prepared_controller_output_routes
 public path_id, acquisition_id, controllable_optic_id, acquisition_path_id
 public path_source, path_model, acquisition_model, controllable_optic_model
 public command_schema_id, command_schema_version, command_endpoint_id

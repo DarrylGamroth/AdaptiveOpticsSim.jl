@@ -553,11 +553,12 @@ ownership model: optical inputs remain caller-owned, stage workspaces remain
 sensor-owned and preallocated, and the implementation dispatches through the
 prepared seams rather than branching on sensor families.
 
-## Runtime Source Roles
+## Optical-Path Source Roles
 
-`AOSimulation` keeps WFS and science sources as separate typed roles. Extension
-code should use `wfs_source(simulation)` and `science_source(simulation)` rather
-than assuming one source serves both paths.
+Each `OpticalPathDefinition` owns its explicit frozen source. Do not assume one
+source serves every WFS and science path, and do not infer source roles from
+tuple position. A prepared plant may contain several NGS/LGS sensing
+directions, science sources, calibration sources, and coronagraph paths.
 
 Maintained timed atmospheres separate evolution from direction rendering. Their
 public execution boundary is:
@@ -591,14 +592,11 @@ silently treated as its reference direction. A custom source that owns mutable
 profile data should specialize the qualified `AdaptiveOpticsSim.freeze_source`
 seam and return a run-owned copy.
 
-Shared multi-arm execution advances once and stores one prepared atmosphere
-renderer per source arm. Runtime construction freezes mutable source inputs and
-preserves source identity across arms so identical paths can still be reused. A
-custom WFS that needs special pupil preparation when consuming an
-already-rendered shared arm should extend
-`prepare_shared_runtime_wfs!`; the default is a no-op. The Curvature WFS uses
-this seam to establish its measurement path and then restores the normal
-source path in `finish_runtime_wfs_sensing!`.
+Plant preparation freezes mutable source inputs, retains one prepared
+atmosphere renderer per full-optical direction, and preserves explicit path
+identity. A WFS extension consumes the path's declared `PupilFunction` or
+`ElectricField` through the ordinary prepared WFS stage contracts; it must not
+depend on a hidden shared-runtime hook.
 
 ## Deformable Mirrors
 
@@ -635,13 +633,14 @@ Common examples:
 - Zernike-mode control surfaces
 - calibration or NCPA compensation surfaces
 
-Keep command application explicit and ordered in the plant. Runtime code should
-operate on the generic controllable-optic interface.
+Keep command application explicit and ordered in the plant. Every physical
+optic retains independent endpoint state and timing, even when several
+co-conjugated surfaces add on the same path.
 
 ## Controllers And Reconstructors
 
-Controllers own temporal behavior. Reconstructors own slopes-to-command or
-measurement-to-command operators.
+Controllers own temporal behavior. Reconstructors own measurement-to-command
+operators.
 
 Use this split:
 
@@ -649,7 +648,8 @@ Use this split:
   calibration or validation
 - controllers own integrator state, gains, leakage, saturation, or future
   temporal filters
-- runtime code calls generic accessors and `!` methods
+- model-specific loops or HIL integration call generic accessors and `!`
+  methods
 
 Prefer concrete state and workspace fields. Avoid hidden allocations in the
 per-step control path.
@@ -662,31 +662,19 @@ For large calibration/control surfaces:
 - use `FactorizedReconstructor` when a validated truncated SVD rank can bound
   runtime storage and compute without materializing the dense inverse
 - use `ControlledReconstructor` to compose temporal state with any maintained
-  reconstructor while preserving the existing runtime contract
+  reconstructor while preserving the control-storage contract
 
 Rank selection is an optical/control validation decision. A benchmark win from
 truncation is not evidence that discarded modes are acceptable for a real
 plant. The dense `ModalReconstructor` remains the full-rank accuracy baseline.
 
-Runtime profiles and execution plans are orthogonal. A profile such as
-`HILRuntimeProfile` selects modeled delays and output fidelity. An execution
-plan selects storage and synchronization behavior. The HIL profile uses the
-minimum valid direct-science zero-padding factor of `1` (no focal-grid
-oversampling) when science pixels are requested; omitting science pixels still
-prepares no science stage. The execution-plan choices are:
-
-- `CPUHILExecutionPlan` is the direct, host-resident low-latency path
-- `DeviceResidentExecutionPlan` keeps repeated simulation and control work on
-  one accelerator and synchronizes at explicit observation/export boundaries
-
-The runtime chooses the plan from the simulation backend unless one is
-provided explicitly. Accelerator reconstructors must implement
+Accelerator reconstructors must implement
 `AdaptiveOpticsSim.runtime_reconstructor_storage(reconstructor)` and return a tuple containing
-their hot-path control matrices and workspaces. This lets construction reject
-mixed host/device control paths before the first step. Return `()` only for a
-truly backend-agnostic operator. Use `synchronize_runtime!` before direct host
-observation; `SimulationInterface` snapshots already provide an export
-boundary.
+their hot-path control matrices and workspaces. A model or Plant extension uses
+this contract to reject mixed host/device control paths during preparation.
+Return `()` only for a truly backend-agnostic operator. Synchronize at an
+explicit observation, transport, or measurement boundary rather than inside an
+otherwise device-resident chain.
 
 Stateful reconstructors should additionally implement
 `AdaptiveOpticsSim.runtime_reconstructor_ownership_roots(reconstructor)` and
@@ -698,10 +686,9 @@ roots by default.
 
 ## Ensemble Scheduling
 
-`SimulationEnsemble` schedules independent simulation boundaries at coarse
-granularity. Keep it outside an external-RTC HIL loop: the direct scalar CPU
-runtime has tighter and more predictable latency than task creation or task
-graph scheduling.
+`SimulationEnsemble` schedules independent model boundaries at coarse
+granularity. Keep it outside an external-RTC HIL loop: the Plant event loop and
+its single-writer owners must not acquire task-creation or task-graph jitter.
 
 Available policies have deliberately different scopes:
 
@@ -723,12 +710,14 @@ one remote `step!` at a time. Use AK only after measuring a representative
 member size and count on the target many-core host; its scheduling overhead can
 outweigh gains on small local workloads.
 
-Ensemble construction rejects shared mutable plant ownership. A custom wrapper
-around another runtime should implement
-`AdaptiveOpticsSim.ensemble_ownership_roots(wrapper)` and return the mutable
-plant/state objects that cannot safely be updated by another member at the
-same time. The scheduler operation passed to `run_ensemble!` must mutate and
-return normally only after the member is safe for the next coarse operation.
+Ensemble construction rejects shared mutable ownership. A mutable member owns
+itself by default. An immutable or mutable wrapper around shared state should
+implement `AdaptiveOpticsSim.ensemble_ownership_roots(wrapper)` and return the
+mutable plant/state objects that cannot safely be updated by another member at
+the same time. Immutable values with no mutable owners, such as scalar sweep
+points, require no extension. The scheduler operation passed to
+`run_ensemble!` must mutate and return normally only after the member is safe
+for the next coarse operation.
 
 Avoid nested parallelism. When using a threaded ensemble policy, normally keep
 BLAS and FFT-provider thread counts at one and let the ensemble own the coarse

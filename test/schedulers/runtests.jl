@@ -3,13 +3,13 @@ using AdaptiveOpticsSim
 using Dagger
 using Test
 
-mutable struct SchedulerCounter <: AbstractControlSimulation
+mutable struct SchedulerCounter
     count::Int
 end
 
-AdaptiveOpticsSim.step!(counter::SchedulerCounter) =
+increment!(counter::SchedulerCounter) =
     (counter.count += 1; counter)
-AdaptiveOpticsSim.sense!(counter::SchedulerCounter) =
+increment_ten!(counter::SchedulerCounter) =
     (counter.count += 10; counter)
 
 @testset "AcceleratedKernels ensemble extension" begin
@@ -23,10 +23,11 @@ AdaptiveOpticsSim.sense!(counter::SchedulerCounter) =
             max_tasks=min(4, Threads.nthreads()),
             min_members_per_task=1,
         ))
-    @test step!(ensemble) === ensemble
+    @test AdaptiveOpticsSim.run_ensemble!(increment!, ensemble) === ensemble
     @test all(counter -> counter.count == 1,
         AdaptiveOpticsSim.ensemble_members(ensemble))
-    @test sense!(ensemble) === ensemble
+    @test AdaptiveOpticsSim.run_ensemble!(increment_ten!, ensemble) ===
+        ensemble
     @test all(counter -> counter.count == 11,
         AdaptiveOpticsSim.ensemble_members(ensemble))
 
@@ -37,7 +38,8 @@ AdaptiveOpticsSim.sense!(counter::SchedulerCounter) =
             min_members_per_task=1,
         ),
     )
-    @test step!(single_task) === single_task
+    @test AdaptiveOpticsSim.run_ensemble!(increment!, single_task) ===
+        single_task
     @test all(counter -> counter.count == 1,
         AdaptiveOpticsSim.ensemble_members(single_task))
 end
@@ -49,10 +51,11 @@ end
     ))
     counters = ntuple(_ -> SchedulerCounter(0), 4)
     ensemble = SimulationEnsemble(counters; policy=DaggerExecution())
-    @test step!(ensemble) === ensemble
+    @test AdaptiveOpticsSim.run_ensemble!(increment!, ensemble) === ensemble
     @test all(counter -> counter.count == 1,
         AdaptiveOpticsSim.ensemble_members(ensemble))
-    @test sense!(ensemble) === ensemble
+    @test AdaptiveOpticsSim.run_ensemble!(increment_ten!, ensemble) ===
+        ensemble
     @test all(counter -> counter.count == 11,
         AdaptiveOpticsSim.ensemble_members(ensemble))
 
@@ -61,7 +64,7 @@ end
         ntuple(_ -> SchedulerCounter(0), 2);
         policy=DaggerExecution(scope=local_scope),
     )
-    @test step!(scoped) === scoped
+    @test AdaptiveOpticsSim.run_ensemble!(increment!, scoped) === scoped
     @test all(counter -> counter.count == 1,
         AdaptiveOpticsSim.ensemble_members(scoped))
 end

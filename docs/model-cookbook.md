@@ -2,21 +2,12 @@
 
 Status: active
 
-This cookbook is the shortest path from "I want to model X" to a working
-AdaptiveOpticsSim.jl script.
-
-Use this together with:
-
-- [../README.md](../README.md)
-- [user-guide.md](user-guide.md)
-- [api-reference.md](api-reference.md)
-
-Each recipe is intentionally small. Start here, then grow the script toward your
-real instrument or benchmark surface.
+This cookbook is the shortest path from “I want to model X” to a working
+AdaptiveOpticsSim.jl script. Start with one recipe, then move to the
+[`user-guide.md`](user-guide.md) or
+[`api-reference.md`](api-reference.md) when the model needs more detail.
 
 ## Recipe 1: Direct Image From A Telescope And Source
-
-Use this when you want a minimal optics-only model.
 
 ```julia
 using AdaptiveOpticsSim
@@ -27,32 +18,18 @@ pupil = PupilFunction(tel)
 imaging = prepare_direct_imaging(pupil, src; zero_padding=2)
 
 form_direct_image!(imaging)
-photon_rate_image = intensity_values(direct_imaging_output(imaging))
+photon_rate_image = direct_imaging_output(imaging)
 ```
 
 The output is a source-scaled, cell-integrated photon-arrival-rate
-`IntensityMap` on focal-plane angular coordinates, before detector exposure;
-it is not an implicitly normalized PSF. Keep `pupil`, the prepared products,
-and the single-writer workspace owned by the path that writes them. Update the
-path-owned pupil with `apply_opd!`, `render_atmosphere!`, or `apply_surface!`
-before execution. `Telescope` owns aperture geometry, not mutable path OPD.
-Preparation allocates and plans once; repeated `form_direct_image!` calls are
-fixed-shape and allocation-free after warmup.
+`IntensityMap` on focal-plane angular coordinates before detector exposure. It
+is not an implicitly normalized PSF. Keep `pupil`, the prepared output, and
+workspace owned by the path that writes them.
 
-Key objects:
+Update the path-owned pupil with `apply_opd!`, `render_atmosphere!`, or
+`apply_surface!` before the next `form_direct_image!`.
 
-- `Telescope`
-- `Source`
-- `PupilFunction`
-- `ElectricField`
-- `IntensityMap`
-- `prepare_direct_imaging`
-- `form_direct_image!`
-- `direct_imaging_output`
-
-## Recipe 2: Atmosphere Plus Shack-Hartmann Sensing
-
-Use this when you want a single-sensor atmospheric simulation.
+## Recipe 2: Atmosphere Plus Shack–Hartmann Sensing
 
 ```julia
 using AdaptiveOpticsSim
@@ -68,806 +45,260 @@ atm = MultiLayerAtmosphere(
     wind_direction=[0.0, 90.0],
     altitude=[0.0, 5000.0],
 )
-wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.1, n_pix_subap=6)
+wfs = ShackHartmannWFS(
+    tel;
+    n_lenslets=4,
+    mode=Diffractive(),
+    pixel_scale_arcsec=0.1,
+    n_pix_subap=6,
+)
 
 rng = runtime_rng(0)
 renderer = prepare_atmosphere_renderer(atm, tel, src)
 pupil = PupilFunction(tel)
-epoch = advance_by!(atm, 1e-3; rng=rng)
+epoch = advance_by!(atm, 1e-3; rng)
 render_atmosphere!(pupil, renderer, atm, epoch)
-slopes = measure!(wfs, pupil, src)
+signal = measure!(wfs, pupil, src)
 ```
 
-Swap `ShackHartmannWFS(...)` for `PyramidWFS(...)`, `BioEdgeWFS(...)`,
-`CurvatureWFS(...)`, or `ZernikeWFS(...)` when the sensing family changes.
+Use `PyramidWFS`, `BioEdgeWFS`, `CurvatureWFS`, or `ZernikeWFS` when the
+sensing physics changes. A `ShackHartmannWFS` composes a `MicrolensArray`;
+optical formation, detector acquisition, and estimation remain distinct
+stages.
 
 ## Recipe 3: Detector-Backed Sensing
 
-Use this when the sensor path should include detector physics and exported
-frames.
-
 ```julia
 using AdaptiveOpticsSim
-using Random
 
-tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
-src = Source(band=:I, magnitude=8.0)
-atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
-wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.1, n_pix_subap=6)
-det = Detector(
+detector = Detector(
     noise=NoiseReadout(1.0),
     integration_time=1.0,
     qe=1.0,
     binning=1,
 )
 
-rng = runtime_rng(0)
-renderer = prepare_atmosphere_renderer(atm, tel, src)
-pupil = PupilFunction(tel)
-epoch = advance_by!(atm, 1e-3; rng=rng)
-render_atmosphere!(pupil, renderer, atm, epoch)
-measure!(wfs, pupil, src, det; rng=rng)
-frame = output_frame(det)
+measure!(wfs, pupil, src, detector; rng)
+frame = output_frame(detector)
 ```
 
-Use this pattern when you care about:
+Use the generic frame detector for CCD, EMCCD, CMOS, sCMOS, configured
+quantitative low-noise CMOS, HgCdTe avalanche-array, and Skipper-CCD models.
+Choose the sensor and sampling/readout model independently of the optical
+front end. `detector_mtf` reports the realized discrete presampling response's
+normalized interior MTF.
 
-- readout behavior
-- exported pixels
-- detector-backed WFS comparisons
-
-For counting-detector paths, keep the detector family explicit rather than
-using the generic frame-detector surface. For example, curvature sensing with a
-SPAD imaging array can use:
+Counting and channel detectors remain explicit:
 
 ```julia
-counting_wfs = CurvatureWFS(tel; pupil_samples=8, readout_model=CurvatureCountingReadout())
+counting_wfs = CurvatureWFS(
+    tel;
+    pupil_samples=8,
+    readout_model=CurvatureCountingReadout(),
+)
 spad = SPADArrayDetector(
     integration_time=1.0,
     noise=NoiseNone(),
-    sensor=SPADArraySensor(pde=0.5, fill_factor=0.8, dark_count_rate=0.0),
+    sensor=SPADArraySensor(
+        pde=0.5,
+        fill_factor=0.8,
+        dark_count_rate=0.0,
+    ),
 )
-slopes = measure!(counting_wfs, pupil, src, spad; rng=runtime_rng(0))
+signal = measure!(counting_wfs, pupil, src, spad; rng)
 counts = output_frame(spad)
 ```
 
-Use `LinearAPDDetector(...)` for analog single-element or fixed-bank APD
-channels, `APDDetector(...)` for Geiger-mode channel counting, and
-`SPADArrayDetector(...)` for accumulated-count imaging arrays. Use
-`MKIDArrayDetector(...)` when the downstream HIL boundary should receive an
-accumulated photon-count image plus MKID energy-resolution and timing metadata,
-rather than a frame-detector readout or a per-photon event stream. Configure an
-inclusive passband in meters with
-`MKIDArraySensor(wavelength_range_m=(0.8e-6, 1.4e-6))` and pass the source to
-`capture!` when that passband should be applied. A matrix-only capture is
-treated as already spectrally filtered.
+Use `LinearAPDDetector` for analog single-element or fixed-bank APD channels,
+`APDDetector` for Geiger-mode channel counting, `SPADArrayDetector` for
+accumulated-count images, and `MKIDArrayDetector` for accumulated count images
+with MKID energy-resolution and timing metadata.
 
-## Recipe 4: Closed-Loop AO Model
+For event-driven detector timing, prepare the appropriate global-shutter,
+rolling-shutter, or frame-transfer acquisition definition. Nondestructive reads
+and up-the-ramp sampling are scheduled detector events; frame transfer changes
+acquisition timing, not optical performance or MTF.
 
-Use this when you want the maintained public AO runtime surface rather than
-isolated subsystem calls.
+## Recipe 4: Explicit Closed-Loop Composition
+
+Use a direct loop when you want the reusable numerical and control primitives
+without HIL scheduling:
 
 ```julia
 using AdaptiveOpticsSim
-using Random
 
-tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
-src = Source(band=:I, magnitude=0.0)
-atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
-sim = AOSimulation(tel, src, atm, dm, wfs)
-
-calibration_pupil = PupilFunction(tel)
-imat = interaction_matrix(dm, wfs, calibration_pupil, src; amplitude=0.1)
-recon = ModalReconstructor(imat; gain=0.5)
-branch = ControlLoopBranch(:main, sim, recon; rng=runtime_rng(0))
-
-cfg = SingleControlLoopConfig(
-    atmosphere_step=1e-3,
-    name=:closed_loop_demo,
-    branch_label=:main,
-    outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true),
+interaction = interaction_matrix(
+    dm,
+    wfs,
+    PupilFunction(tel),
+    src;
+    amplitude=0.1,
 )
+reconstructor = ModalReconstructor(interaction; gain=0.5)
+command = similar(dm.state.coefs)
 
-scenario = build_control_loop_scenario(cfg, branch)
-prepare!(scenario)
-
-for _ in 1:5
-    step!(scenario)
+for _ in 1:100
+    epoch = advance_by!(atm, 1e-3; rng)
+    render_atmosphere!(pupil, renderer, atm, epoch)
+    update_surface!(dm)
+    apply_surface!(pupil, dm, DMAdditive())
+    measure!(wfs, pupil, src)
+    reconstruct!(command, reconstructor, slopes(wfs))
+    @. command = -command
+    set_command!(dm, command)
 end
-
-rt = readout(scenario)
-cmd = command(rt)
-slopes_vec = slopes(rt)
 ```
 
-For a large calibration, the caller can own the matrix storage and choose a
-compact validated control rank:
+Model packages may wrap a fixed composition in model-specific `prepare!`,
+`step!`, and `readout` functions. The Subaru AO188/AO3k example modules use
+that pattern.
+
+Use `VectorDelayLine`, `DiscreteIntegratorController`, or a custom controller
+between reconstruction and `set_command!` when the numerical experiment needs
+latency or control dynamics.
+
+## Recipe 5: Independent Controllable Optics
+
+Represent a woofer/tweeter pair as independent optics, even when both are
+conjugated to the same altitude:
 
 ```julia
-storage = Matrix{Float64}(undef,
-    length(slopes(wfs)), length(dm.state.coefs))
-imat = AdaptiveOpticsSim.interaction_matrix!(
-    storage, dm, wfs, calibration_pupil, src; amplitude=0.1)
+woofer = DeformableMirror(tel; n_act=4, influence_width=0.5)
+tweeter = DeformableMirror(tel; n_act=8, influence_width=0.2)
 
-recon = FactorizedReconstructor(imat; max_rank=12, gain=1.0)
-controller = DiscreteIntegratorController(
-    length(dm.state.coefs); gain=0.5, tau=0.01)
-controlled = ControlledReconstructor(
-    recon, controller; dt=1e-3)
+set_command!(woofer, woofer_command)
+set_command!(tweeter, tweeter_command)
+
+update_surface!(woofer)
+update_surface!(tweeter)
+apply_surface!(pupil, woofer, DMAdditive())
+apply_surface!(pupil, tweeter, DMAdditive())
 ```
 
-`storage` may instead be a compatible memory-mapped or backend-native
-`AbstractMatrix`; file-format ownership stays outside the core package.
-Validate `max_rank` against residual error, stability, and optical performance
-before using it on a real plant. Omit it to retain every nonzero inverse factor.
+Each optic retains its own command basis, state, response, cadence, and
+event-loop endpoint. Optical addition does not imply synchronized command
+application. Apply the same rule to low-order steering stages, focus stages,
+several MCAO DMs, or path-specific MOAO DMs.
 
-The five-argument constructor uses the same source for WFS sensing and science
-capture. When those optical paths differ, attach the science source explicitly:
+## Recipe 6: Prepared HIL Command Routing
 
-```julia
-guide = Source(band=:R, magnitude=8.0, coordinates=(10.0, 0.0))
-science = Source(band=:K, magnitude=10.0, coordinates=(3.0, 90.0))
-sim = AOSimulation(tel, guide, atm, dm, wfs; science_source=science)
-```
+The HIL-neutral runtime lives in `AdaptiveOpticsSim.Plant`. A model or companion
+package declares a `PlantDefinition`, prepares it with a run seed and one
+`CommandEndpointConfiguration` per endpoint, then prepares the event loop.
 
-The runtime advances the atmosphere once, senses through `wfs_source(sim)`,
-then re-renders the same published atmosphere epoch through
-`science_source(sim)` before science-camera capture. No second atmosphere time
-step is introduced. A timed-atmosphere branch is one prepared source direction;
-an `Asterism` or `ExtendedSource` must be expanded with
-`prepare_atmosphere_renderers`. Use the shared optical-arm surface below when
-each direction needs an independently rendered atmospheric path without
-duplicating the plant or advancing its atmosphere again.
-
-When several physical WFS or science arms share one telescope, atmosphere,
-and controllable optic, attach typed auxiliary arms to one primary runtime
-instead of building independent closed loops:
-
-```julia
-primary = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=runtime_rng(1))
-
-off_axis_wfs = ShackHartmannWFS(tel; n_lenslets=4)
-science_a = Detector(noise=NoiseNone())
-science_b = Detector(noise=NoiseNone())
-
-arm = SharedOpticalArm(
-    :off_axis,
-    science;
-    wfs_channels=OpticalWFSChannel(off_axis_wfs),
-    science_detectors=(science_a, science_b),
-    science_zero_padding=1,
-)
-runtime = SharedOpticalRuntime(primary, arm)
-prepare!(runtime)
-step!(runtime)
-```
-
-`SharedOpticalRuntime` advances the atmosphere once per step, renders each
-distinct source path in order, and forms one caller-owned photon-arrival-rate
-image for all science detectors on an arm. Each detector then applies its own
-exposure and response. Consecutive arms that use the same source object reuse
-the current pupil rendering. WFS signals remain owned by each
-`OpticalWFSChannel`; assembling them into a joint reconstructor is a separate
-control-layer decision.
-
-For DM setup, the common public inputs remain:
-
-- `influence_width=...`
-- `mechanical_coupling=...`
-
-For advanced cases you can also pass an explicit model object:
-
-- `influence_model=GaussianInfluenceWidth(0.3)`
-- `influence_model=GaussianMechanicalCoupling(0.08)`
-- `influence_model=DenseInfluenceMatrix(modes)`
-- `influence_model=MeasuredInfluenceFunctions(modes; metadata=(manufacturer=:alpao,))`
-
-For richer DM layout and command behavior, you can also compose:
-
-- `topology=ActuatorGridTopology(16)`
-- `topology=SampledActuatorTopology(coords; valid_actuators=mask, metadata=meta)`
-- `actuator_model=ClippedActuators(-0.2, 0.2)`
-- `actuator_model=ActuatorHealthMap(gains)`
-- `actuator_model=CompositeDMActuatorModel(...)`
-
-For example, a measured manufacturer-style basis should be represented as:
-
-```julia
-coords = measured_coords_2xn
-modes = measured_sampled_modes
-top = SampledActuatorTopology(coords; metadata=(manufacturer=:alpao, source=:converted))
-dm = DeformableMirror(
-    tel;
-    topology=top,
-    influence_model=MeasuredInfluenceFunctions(modes; metadata=(manufacturer=:alpao,)),
-)
-```
-
-Keep external file-format conversion outside core. Convert vendor artifacts such
-as FITS influence files into a package-native sampled topology plus sampled
-influence basis first, then construct the DM from those native objects.
-The built-in analytic Gaussian models remain lazy and allocation-free during
-steady-state application; use an explicit dense or measured model only when the
-sampled columns carry information that the analytic operator cannot represent.
-Actuator print-through is currently supported through this measured/sampled
-influence path: include the print-through structure in the columns passed to
-`DenseInfluenceMatrix` or `MeasuredInfluenceFunctions`. The built-in Gaussian
-DM models do not add a separate analytic print-through term.
-
-Use this pattern when you need:
-
-- loop stepping
-- runtime latency products
-- command/slopes/frame export from one maintained runtime boundary
-
-## Recipe 5: HIL / RTC Boundary Simulation
-
-Use this when the simulation should behave like a hardware-in-the-loop or RTC
-boundary surface: commands in, wfs/science outputs out.
-
-For a single-branch RTC-style runtime with an external command source:
+If an RTC computes one flat vector, expose semantic views and route them to
+independent endpoints:
 
 ```julia
 using AdaptiveOpticsSim
-using Random
+using AdaptiveOpticsSim.Plant
 
-# Build the physical plant.
-tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
-src = Source(band=:I, magnitude=0.0)
-atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
-dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
-sim = AOSimulation(tel, src, atm, dm, wfs)
-
-# Use NullReconstructor() when the controller lives outside the package and
-# commands are injected explicitly through set_command!(...).
-recon = NullReconstructor()
-
-# Attach detectors when the external interface should export pixel outputs.
-wfs_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
-science_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
-
-branch = ControlLoopBranch(
-    :main,
-    sim,
-    recon;
-    wfs_detector=wfs_det,
-    science_detector=science_det,
-    rng=runtime_rng(1),
+rtc_output = zeros(Float32, 5)
+products = (
+    woofer=@view(rtc_output[1:2]),
+    tweeter=@view(rtc_output[3:5]),
 )
 
-cfg = SingleControlLoopConfig(
-    atmosphere_step=1e-3,
-    name=:single_runtime_demo,
-    branch_label=:main,
-    outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=true),
+routing = prepare_controller_output_routing(
+    plant,
+    products,
+    ControllerOutputRoute(:woofer, :woofer_command),
+    ControllerOutputRoute(:tweeter, :tweeter_command),
 )
 
-scenario = build_control_loop_scenario(cfg, branch)
-
-# `prepare!` performs one-time runtime/WFS precomputation and enables the
-# requested export surfaces before repeated `sense!` or `step!` calls.
-prepare!(scenario)
-
-# Inspect the external command contract before wiring in a controller.
-# For this single-DM plant the boundary is one flat command vector.
-n_command = length(command(scenario))
-external_command = zeros(eltype(command(scenario)), n_command)
-
-# Typical HIL / plant-facing flow per control step:
-#   1. get a command from the external controller
-#   2. inject it into the simulated plant
-#   3. run only the sensing side of the package
-#   4. read the exported outputs that go back to the controller
-for k in 1:3
-    fill!(external_command, 0)
-    external_command[1] = 0.05 * k
-
-    set_command!(scenario, external_command)
-    sense!(scenario)
-
-    command_vec = command(scenario)
-    slopes_vec = slopes(scenario)
-    wfs_img = wfs_frame(scenario)
-    science_img = science_frame(scenario)
-    wfs_meta = AdaptiveOpticsSim.wfs_metadata(scenario)
-    science_meta = AdaptiveOpticsSim.science_metadata(scenario)
-
-    @show k length(command_vec) length(slopes_vec)
-    @show size(wfs_img) size(science_img)
-    @show wfs_meta.sensor science_meta.output_size
-end
-
-# If the plant itself contains several controllable surfaces, make them explicit
-# in the optic model and still drive them through one packed RTC boundary.
-tiptilt = TipTiltMirror(tel; scale=0.1, label=:tiptilt)
-high_order_dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-composite_optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => high_order_dm)
-composite_sim = AOSimulation(tel, src, atm, composite_optic, wfs)
-
-composite_branch = ControlLoopBranch(
-    :main,
-    composite_sim,
-    recon;
-    wfs_detector=wfs_det,
-    science_detector=science_det,
-    rng=runtime_rng(2),
+route = Plant.controller_output_route(routing, Val(:woofer_command))
+command = PlantCommand(
+    Plant.controller_output_schema(route),
+    42,
+    PlantTimestamp(1_000_000),
+    Plant.controller_output_payload(route),
 )
-composite_scenario = build_control_loop_scenario(cfg, composite_branch)
-prepare!(composite_scenario)
-set_command!(composite_scenario, (
-    tiptilt=fill(0.01, 2),
-    dm=fill(0.02, 16),
-))
-sense!(composite_scenario)
-
-# For a configurable modal surface, prefer an explicit basis spec. This example
-# groups piston, tip, tilt, and focus-like Zernike commands into one segment.
-pttf = ModalControllableOptic(
-    tel,
-    ZernikeOpticBasis([1, 2, 3, 4]; scale=0.02);
-    labels=:pttf,
-)
-
-# A steering-style two-axis low-order optic can be spelled directly too.
-steering = ModalControllableOptic(tel, CartesianTiltBasis(scale=0.1); labels=:steering)
-
-# Partial updates do not require manual slice math either. Here only the
-# tip/tilt segment changes; the DM segment remains staged in-place.
-update_command!(composite_scenario, (
-    tiptilt=fill(0.015, 2),
-))
-sense!(composite_scenario)
-
-# If a runtime boundary only needs a logical split over one existing optic, you
-# can still provide an explicit command layout without changing the plant.
-split_branch = ControlLoopBranch(
-    :main,
-    sim,
-    recon;
-    science_detector=science_det,
-    rng=runtime_rng(3),
-    command_layout=AdaptiveOpticsSim.RuntimeCommandLayout(:woofer => 8, :tweeter => 8),
-)
-split_scenario = build_control_loop_scenario(cfg, split_branch)
-prepare!(split_scenario)
-set_command!(split_scenario, (
-    woofer=fill(0.01, 8),
-    tweeter=fill(0.02, 8),
-))
-sense!(split_scenario)
-
-# Export semantics for the single-branch `scenario` above:
-# - `command(scenario)` is one packed command vector
-# - `slopes(scenario)` is one packed slopes vector
-# - `wfs_frame(scenario)` is one WFS frame, or `nothing`
-# - `science_frame(scenario)` is one science frame, or `nothing`
-# - detector metadata describes the pixel contract seen by the controller
 ```
 
-Use `step!(scenario)` only when you want the package to perform its own
-reconstruction and command update. For an external RTC or HIL controller,
-prefer the explicit `set_command!(scenario, cmd)` plus `sense!(scenario)` flow
-above.
+Preparation validates exact type, shape, backend, and physical device. The
+route is zero-copy; successful command admission performs the bounded endpoint
+copy. Construct a separate `PlantCommand` for each due endpoint so its sequence
+and requested effective timestamp remain independent.
 
-The exported science frame is the configured science detector's `output_frame`,
-so its shape and element type are detector-defined. Inspect
-`AdaptiveOpticsSim.science_metadata(scenario)` to learn the exact science
-camera export contract for:
+Use `PlantCommandTransaction` only when all-or-none application is a real
+physical requirement. Flat-buffer adjacency, equal timestamps, and common
+conjugation do not create transaction semantics.
 
-- `output_size`
-- `output_type`
-- `binning`
-- `window_rows` / `window_cols`
-- `bits` / `full_well`
+Transport is application-owned. TCP, UDP, Aeron, iceoryx2, ZeroMQ, shared
+memory, and server/client roles do not change the core command or acquisition
+contracts.
 
-The WFS frame shape is WFS-family specific. For Shack-Hartmann this is the
-exported spot cube or mosaic returned by `wfs_frame(scenario)` or
-`wfs_detector_image(...)`; the detector metadata attached to the WFS describes
-the detector model used by that path, not necessarily the assembled
-Shack-Hartmann image-product shape.
+## Recipe 7: Mixed Fidelity And Acquisition Rates
 
-For grouped RTC boundaries, keep the outer structure branch-oriented and nest
-structured commands per branch when needed:
+One prepared plant may declare several paths and acquisitions:
 
-```julia
-set_command!(grouped_scenario, (
-    high_order=(; woofer=woofer_cmd, tweeter=tweeter_cmd),
-    low_order=(; steering=tt_cmd, dm=ho_cmd),
-))
-```
+- NGS and LGS WFS paths in different directions
+- science cameras
+- native or PROPER-backed coronagraph paths
+- calibration-illumination paths
+- full-optical, reduced-order, synthetic, or bounded-replay providers
 
-Grouped output semantics differ from the single-branch case:
+Each acquisition owns its schedule or trigger relationship, detector lifecycle,
+product contract, and provider. A fast synthetic WFS can therefore exercise RTC
+latency while a slower science arm retains full optical propagation.
 
-- `command(grouped_scenario)` and `slopes(grouped_scenario)` are still one
-  packed vector each, aggregated across branches.
-- `wfs_frame(grouped_scenario)` and `science_frame(grouped_scenario)` become
-  per-branch frame collections when those grouped frame outputs are enabled.
-- `grouped_wfs_stack(grouped_scenario)` and
-  `AdaptiveOpticsSim.grouped_science_stack(grouped_scenario)` provide stacked
-  array forms when the grouped contract requests them.
+Fidelity is fixed during preparation. Re-prepare instead of changing provider
+shape or semantics during a run.
 
-That lets an external HIL client validate the runtime boundary before wiring the
-frame into another controller, transport layer, or logging path.
+## Recipe 8: GPU-Resident Work
 
-For grouped or multi-branch RTC-style composition, start from:
-
-- [control_loop_grouped_runtime.jl](../examples/closed_loop/control_loop_grouped_runtime.jl)
-- [control_loop_single_runtime.jl](../examples/closed_loop/control_loop_single_runtime.jl)
-
-Use this pattern when you need:
-
-- a clear input/output simulation boundary
-- exported WFS or science frames per step
-- grouped runtime outputs
-- HIL-style benchmarking or controller integration
-
-## Recipe 6: GPU HIL Runtime
-
-Use this when the plant should run on AMDGPU and the external
-controller still talks to the same HIL runtime boundary.
+Choose the backend when constructing every owner:
 
 ```julia
-using AdaptiveOpticsSim
-using AMDGPU
-using Random
+import CUDA
 
-const GPU = AMDGPUBackend()
-
-# Choose backend and precision once near the top of the script.
-tel = Telescope(
-    resolution=16,
+backend = CUDABackend()
+tel_gpu = Telescope(
+    resolution=128,
     diameter=8.0f0,
-    central_obstruction=0.0f0,
+    central_obstruction=0.1f0,
     T=Float32,
-    backend=GPU,
+    backend=backend,
 )
-src = Source(band=:I, magnitude=0.0f0, T=Float32)
-atm = KolmogorovAtmosphere(tel; r0=0.2f0, L0=25.0f0, T=Float32, backend=GPU)
-
-# Multi-surface plants work on GPU too.
-tiptilt = TipTiltMirror(tel; scale=0.1f0, label=:tiptilt, T=Float32, backend=GPU)
-dm = DeformableMirror(tel; n_act=4, influence_width=0.3f0, T=Float32, backend=GPU)
-optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm)
-
-wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=Float32, backend=GPU)
-wfs_det = Detector(noise=NoiseNone(), integration_time=1.0f0, qe=1.0f0, binning=1; T=Float32, backend=GPU)
-science_det = Detector(noise=NoiseNone(), integration_time=1.0f0, qe=1.0f0, binning=1; T=Float32, backend=GPU)
-
-sim = AOSimulation(tel, src, atm, optic, wfs)
-branch = ControlLoopBranch(
-    :main,
-    sim,
-    NullReconstructor();
-    wfs_detector=wfs_det,
-    science_detector=science_det,
-    rng=runtime_rng(1),
-)
-cfg = SingleControlLoopConfig(
-    atmosphere_step=1e-3,
-    name=:hil_gpu,
-    branch_label=:main,
-    outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true, science_pixels=true),
-)
-
-scenario = build_control_loop_scenario(cfg, branch)
-
-# `prepare!` performs one-time runtime/WFS precomputation and enables the
-# requested export surfaces before repeated `sense!` or `step!` calls.
-prepare!(scenario)
-
-# The external controller can still send structured commands by segment.
-set_command!(scenario, (
-    tiptilt=Float32[0.01, -0.01],
-    dm=fill(0.02f0, 16),
-))
-sense!(scenario)
-
-# These products stay backend-native until you explicitly copy them to CPU.
-slopes_vec = slopes(scenario)
-wfs_img = wfs_frame(scenario)
-science_img = science_frame(scenario)
-
-@show typeof(slopes_vec)
-@show typeof(wfs_img)
-@show typeof(science_img)
-
-# Only copy to CPU when another process or transport layer really needs host
-# memory.
-wfs_host = Array(wfs_img)
-science_host = Array(science_img)
+pupil_gpu = PupilFunction(tel_gpu; T=Float32, backend=backend)
 ```
 
-Notes:
+Use `AMDGPUBackend()` on ROCm hardware. Keep the atmosphere, optics, WFS,
+detectors, reconstruction storage, controller-output products, and command
+endpoints on the same backend and physical device. Copy to host only at a
+deliberate transport or inspection boundary.
 
-- The CUDA selector and extension have current manual hardware validation on
-  the WSL RTX host. CUDA is not yet release-gated because a continuously
-  available CUDA CI runner has not been established.
-- Keep `backend=GPU` on the long-lived plant objects so runtime buffers stay on
-  device.
-- If you need a GPU-built internal reconstructor as well, build that
-  calibration surface intentionally with `AdaptiveOpticsSim.GPUArrayBuildBackend(...)`.
-- `set_command!` accepts ordinary CPU vectors or tuples; the runtime stages the
-  command into the backend-native optic state before `sense!(...)`.
-- `CPUBackend()` is the default public constructor surface. Use `CUDABackend()` or
-  `AMDGPUBackend()` to move the plant onto a GPU.
+For a device-resident offline simulation, synchronize only when a dependency or
+measurement requires it. For CPU-paced HIL, measure host-ready and device-ready
+latency separately.
 
-Use this pattern when you need:
+## Recipe 9: External Coronagraph Model With Proper.jl
 
-- external-control / HIL semantics on GPU
-- backend-native WFS and science exports
-- realistic AMDGPU runtime profiling
-- plant models with several controllable surfaces on one RTC boundary
+Detailed coronagraph propagation belongs at the prepared external-optics seam,
+not in a second coronagraph implementation in core. A typical composition:
 
-## Recipe 7: Advanced Direct Runtime Interface
+1. form the corrected, path-specific pupil field in AdaptiveOpticsSim.jl
+2. pass a typed caller-owned field and immutable prescription parameters to a
+   prepared Proper.jl model
+3. return a declared photon-arrival-rate `IntensityMap`
+4. apply the ordinary detector acquisition path
 
-Use this only when you are manually assembling or testing a single runtime and
-do not need the full scenario/config layer.
+See
+[`examples/support/proper_hil_coronagraph_common.jl`](../examples/support/proper_hil_coronagraph_common.jl)
+for the maintained integration example. NCPA and path-specific static surfaces
+are applied on the branch where they physically occur.
 
-```julia
-runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=runtime_rng(0))
-interface = AdaptiveOpticsSim.simulation_interface(runtime)
-prepare!(interface)
-step!(interface)
-rt = readout(interface)
-```
-
-This is a maintained advanced surface, but it is not the default public runtime
-assembly path. Prefer `build_control_loop_scenario(...)` for normal closed-loop and
-HIL work.
-
-## Recipe 8: External Coronagraph Science Model With Proper.jl
-
-Use this when AdaptiveOpticsSim should own the AO runtime or HIL boundary, but
-an external wave-optics package should own the science arm. This is the right
-shape for a coronagraph HIL model: AO commands and WFS outputs stay on the
-AdaptiveOpticsSim side, while the coronagraph image is evaluated in `Proper.jl`.
-
-```julia
-using AdaptiveOpticsSim
-using Proper
-using Random
-
-# Build the AO / HIL plant exactly as usual.
-tel = Telescope(resolution=256, diameter=8.0, central_obstruction=0.1)
-src = Source(band=:H, magnitude=0.0)
-atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
-tiptilt = TipTiltMirror(tel; scale=0.05, label=:tiptilt)
-dm = DeformableMirror(tel; n_act=16, influence_width=0.3)
-optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm)
-wfs = PyramidWFS(tel; pupil_samples=32, modulation=3.0)
-sim = AOSimulation(tel, src, atm, optic, wfs)
-
-branch = ControlLoopBranch(:main, sim, NullReconstructor(); rng=runtime_rng(1))
-cfg = SingleControlLoopConfig(atmosphere_step=1e-3,
-    name=:hil_coronagraph, branch_label=:main,
-    outputs=RuntimeOutputRequirements(slopes=true))
-scenario = build_control_loop_scenario(cfg, branch)
-prepare!(scenario)
-
-# Use a typed payload at the package boundary. `Proper.jl` accepts ordinary
-# Julia keywords, so this does not need a Dict or PASSVALUE blob.
-struct CoronagraphPayload{P,A,T}
-    opd_m::P
-    pupil_amplitude::A
-    diameter_m::T
-    focal_length_m::T
-    lyot_stop_norm::T
-end
-
-# External coronagraph science arm. `prop_run(...)` receives wavelength in
-# microns, but the prescription itself receives wavelength in meters.
-function hil_coronagraph_prescription(λm, n; payload::CoronagraphPayload)
-    wf = prop_begin(payload.diameter_m, λm, n; beam_diam_fraction=1.0)
-    prop_circular_aperture(wf, payload.diameter_m / 2)
-    prop_define_entrance(wf)
-
-    # Carry the exact AdaptiveOpticsSim pupil and residual OPD into the
-    # external coronagraph model.
-    prop_multiply(wf, payload.pupil_amplitude)
-    prop_add_phase(wf, payload.opd_m)
-
-    prop_lens(wf, payload.focal_length_m, "science arm")
-    prop_propagate(wf, payload.focal_length_m, "focal plane mask")
-    prop_8th_order_mask(wf, 4.0; circular=true)
-
-    prop_propagate(wf, payload.focal_length_m, "lyot relay")
-    prop_lens(wf, payload.focal_length_m, "lyot relay")
-    prop_propagate(wf, 2payload.focal_length_m, "lyot stop")
-    prop_circular_aperture(wf, payload.lyot_stop_norm; NORM=true)
-
-    prop_propagate(wf, payload.focal_length_m, "science camera")
-    prop_lens(wf, payload.focal_length_m, "science camera")
-    prop_propagate(wf, payload.focal_length_m, "final focus")
-    return prop_end(wf)
-end
-
-# Prepare the coronagraph model once and reuse it on every AO step.
-science_λ_um = 1.65
-science_model = prepare_model(
-    :hil_coronagraph,
-    hil_coronagraph_prescription,
-    science_λ_um,
-    tel.params.resolution;
-    pool_size=1,
-)
-science_pupil = PupilFunction(sim.tel)
-science_renderer = prepare_atmosphere_renderer(sim.atm, sim.tel, sim.src)
-
-for k in 1:10
-    set_command!(scenario, (
-        tiptilt=[0.005 * sin(0.1 * k), -0.005 * cos(0.1 * k)],
-        dm=fill(5e-9 * k, 256),
-    ))
-    sense!(scenario)
-
-    # Render the already-published atmosphere epoch into this independent
-    # science path, then apply the current controllable-optic surface.
-    render_atmosphere!(science_pupil, science_renderer, sim.atm,
-        current_epoch(sim.atm))
-    update_surface!(optic)
-    apply_surface!(science_pupil, optic, DMAdditive())
-    payload = CoronagraphPayload(
-        opd_map(science_pupil),
-        pupil_amplitude(science_pupil),
-        sim.tel.params.diameter,
-        80.0,
-        0.9,
-    )
-
-    coronagraph_image, coronagraph_sampling = prop_run(science_model; payload=payload)
-
-    rtc_slopes = slopes(scenario)
-    @show k length(rtc_slopes) size(coronagraph_image) coronagraph_sampling
-end
-```
-
-This pattern gives you two clean boundaries:
-
-- `AdaptiveOpticsSim` owns the fast AO plant, commands, WFS outputs, and HIL runtime contract.
-- `Proper.jl` owns the external science arm and coronagraph propagation.
-
-For repeated HIL use, keep the integration seam explicit:
-
-- hand off the current residual pupil OPD when the external coronagraph should
-  see the full post-AO residual wavefront
-- hand off DM maps or commands instead when the external science model should
-  own its own DM surfaces internally through `prop_dm(...)`
-
-GPU variant:
-
-```julia
-using AMDGPU
-
-proper_ctx = Proper.RunContext(typeof(opd_map(science_pupil)))
-science_model_gpu = prepare_model(
-    :hil_coronagraph_gpu,
-    hil_coronagraph_prescription,
-    science_λ_um,
-    tel.params.resolution;
-    context=proper_ctx,
-    precision=Float32,
-    pool_size=1,
-)
-
-sense!(scenario)
-render_atmosphere!(science_pupil, science_renderer, sim.atm,
-    current_epoch(sim.atm))
-update_surface!(optic)
-apply_surface!(science_pupil, optic, DMAdditive())
-payload_gpu = CoronagraphPayload(
-    opd_map(science_pupil),
-    pupil_amplitude(science_pupil),
-    Float32(sim.tel.params.diameter),
-    80.0f0,
-    0.9f0,
-)
-image_gpu, sampling_gpu = prop_run(science_model_gpu; payload=payload_gpu)
-```
-
-Practical notes:
-
-- Prefer ordinary Julia keywords for new integrations, as shown with
-  `payload=payload`. `PASSVALUE` remains useful when porting upstream PROPER
-  prescriptions or preserving an existing parity harness, but it is not the
-  preferred interface for new Julia-native HIL code.
-- Prepare a renderer for each science direction, render the current published
-  atmosphere epoch without advancing it, and apply the current optic surfaces
-  to that path-owned `PupilFunction` before the external handoff.
-- Pass `pupil_amplitude(science_pupil)` when reflectivity, spiders, segment
-  gaps, central obstruction, or another custom pupil matters.
-- Do not pass an undeclared Proper array directly to a physical detector.
-  Copy each result into a caller-owned `IntensityMap` with its actual grid and
-  normalization metadata. A physical photon-arrival-rate result needs no
-  scaling; a dimensionless result requires an explicit
-  `normalized_to_photon_rate` scale when preparing detector acquisition.
-- If both packages are on the same GPU backend, the payload arrays can stay on
-  device. Use a matching
-  `Proper.RunContext(typeof(opd_map(science_pupil)))` and
-  prepare the coronagraph model on that backend.
-- Only use `Array(...)` as an explicit host-transfer boundary when the AO plant
-  and the coronagraph model intentionally live on different backends.
-- Start with plain `prop_run(...)` or `prepare_model(...)` in `Proper.jl`.
-  Only move to more elaborate prepared execution or asset pools if the
-  coronagraph model itself becomes a throughput bottleneck.
-- The runnable seam benchmark currently shows that the AO step stays compact,
-  but `Proper.prop_run(...)` still allocates a fresh image on the science side.
-  Treat this recipe as the clean integration boundary first, then optimize the
-  external science arm only if its allocations or throughput become the next
-  bottleneck.
-
-Use this pattern when you need:
-
-- a clean Julia-native HIL coronagraph boundary
-- HIL AO control with an external coronagraph science path
-- explicit separation between RTC-facing plant logic and science propagation
-- reuse of an existing PROPER/Proper.jl prescription without forcing it into
-  the AO runtime layer
-
-Runnable companion files:
-
-- executable example:
-  [proper_hil_coronagraph.jl](../examples/integrations/proper_hil_coronagraph.jl)
-- shared setup helper:
-  [proper_hil_coronagraph_common.jl](../examples/support/proper_hil_coronagraph_common.jl)
-- seam benchmark:
-  [profile_proper_hil_coronagraph.jl](../scripts/profile_proper_hil_coronagraph.jl)
-
-Install `Proper.jl` into the active environment before running them. For a
-local sibling checkout, the simplest path is:
-
-```julia
-using Pkg
-Pkg.develop(path="../proper.jl")
-```
-
-## How To Choose The Right Entry Surface
+## Choosing The Entry Surface
 
 Use:
 
-- subsystem functions such as `prepare_direct_imaging`,
-  `form_direct_image!`, `advance_by!`, `render_atmosphere!`, `propagate!`,
-  and `measure!`
-  - when you are studying one physical layer
-- `SingleControlLoopConfig` or `GroupedControlLoopConfig`
-  - when you want the maintained public runtime/orchestration surface
-- `ClosedLoopRuntime` plus `AdaptiveOpticsSim.simulation_interface(...)`
-  - only when you are manually assembling or testing one low-level runtime
+- subsystem functions for optical or detector experiments
+- an explicit model-specific loop for one fixed offline AO model
+- `AdaptiveOpticsSim.Plant` for independent virtual-time commands,
+  acquisitions, triggers, detector lifecycles, and HIL-neutral execution
+- `SimulationEnsemble` for coarse independent sweeps, not a HIL deadline path
 
-## Visualization Companion
-
-Use `../AdaptiveOpticsSimPlots.jl` when you want plotting without adding
-plotting dependencies to the simulation core.
-
-The maintained plotting surface there is:
-
-- a package-owned `aoplot(obj, selector)` multiple-dispatch entrypoint
-- selector types such as `Pupil()`, `OPD()`, `PSF()`, `DetectorFrame()`,
-  `WFSFrame()`, `Commands()`, `Signal()`, and `RuntimeTimeseries()`
-
-The plotting package is intentionally built on maintained accessors like:
-
-- `pupil_mask(tel)`
-- `opd_map(pupil)`
-- `AdaptiveOpticsSim.surface_opd(optic)`
-- `output_frame(det)`
-- `camera_frame(wfs)`
-- `slopes(x)`
-- `wfs_frame(x)`
-- `science_frame(x)`
-
-That keeps visualization optional and avoids coupling plotting code to
-subsystem internals.
-
-## Next Step
-
-After the first working script:
-
-1. move constants into a small `build_scenario(...)` helper
-2. make RNG setup explicit when reproducibility matters
-3. add detector realism only when the study needs it
-4. move to [user-guide.md](user-guide.md) for broader workflow guidance
-5. move to [api-reference.md](api-reference.md) when you need the full public
-   surface
+See [`runtime-dataflow.md`](runtime-dataflow.md) for ownership and execution
+order, and [`hil-package-boundary.md`](hil-package-boundary.md) for the
+core-versus-integration boundary.

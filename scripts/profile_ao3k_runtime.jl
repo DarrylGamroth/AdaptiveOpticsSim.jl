@@ -19,7 +19,11 @@ end
 
 include(joinpath(dirname(@__DIR__), "examples", "support", "subaru_ao3k_simulation.jl"))
 using .SubaruAO3kSimulation
-using .SubaruAO3kSimulation.SubaruAO188Simulation: AO188WFSDetectorConfig, subaru_ao188_phase_timing
+using .SubaruAO3kSimulation.SubaruAO188Simulation:
+    AO188WFSDetectorConfig,
+    readout,
+    step!,
+    subaru_ao188_phase_timing
 
 function _resolve_backend(name::AbstractString)
     lowered = lowercase(name)
@@ -47,7 +51,7 @@ function _sync_simulation!(::Type{B}, simulation) where {B<:AdaptiveOpticsSim.GP
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(simulation.command))
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(slopes(simulation.high_wfs)))
     AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(slopes(simulation.low_wfs)))
-    high_frame, low_frame = wfs_frame(simulation)
+    high_frame, low_frame = readout(simulation).wfs_frames
     isnothing(high_frame) || AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(high_frame))
     isnothing(low_frame) || AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(low_frame))
     return nothing
@@ -216,8 +220,8 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     phase = subaru_ao188_phase_timing(simulation; warmup=resolved_warmup, samples=resolved_samples, gc_before=false)
     simulation_output = readout(simulation)
     high_metadata, low_metadata = simulation_output.wfs_metadata
-    high_frame, low_frame = simulation_output.wfs_frame
-    high_slopes, low_slopes = simulation_output.slopes
+    high_frame, low_frame = simulation_output.wfs_frames
+    high_slopes, low_slopes = simulation_output.signals
     high_detector = simulation.high_detector
     high_reference_frame = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.detector_reference_frame(high_detector)
     high_signal_frame = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.detector_signal_frame(high_detector)
@@ -255,7 +259,7 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     println("  low_frame_shape: ", isnothing(low_frame) ? nothing : size(low_frame))
     println("  high_slopes_length: ", length(high_slopes))
     println("  low_slopes_length: ", length(low_slopes))
-    println("  command_length: ", length(command(simulation)))
+    println("  command_length: ", length(simulation.command))
     println("  high_response_family: ", isnothing(high_metadata) ? nothing : high_metadata.frame_response)
     println("  low_response_family: ", isnothing(low_metadata) ? nothing : low_metadata.frame_response)
     println("  high_sensor: ", isnothing(high_metadata) ? nothing : high_metadata.sensor)

@@ -36,7 +36,7 @@ Use these supporting docs together:
 ### CPU baseline
 
 The primary production baseline is the typed Julia CPU path on maintained
-runtime and validation surfaces.
+numerical, control, and Plant validation surfaces.
 
 Current CPU-supported families:
 
@@ -54,13 +54,11 @@ Current CPU-supported families:
 - staged Shack-Hartmann, Pyramid, and BioEdge WFS optical formation,
   detector acquisition, and estimation on maintained validated surfaces;
   geometric variants use explicit direct-measurement paths
-- runtime and closed-loop execution on maintained local/runtime artifacts
-- direct `CPUHILExecutionPlan` execution as the default CPU runtime residency
-  policy
-- source-aware runtime propagation with distinct WFS and science sources
-- allocation-free shared multi-arm CPU execution with one atmosphere advance
-  and one caller-owned same-arm photon-arrival-rate image reused by independent
-  detector acquisitions
+- explicit closed-loop numerical composition and the model-specific AO188/AO3k
+  example/profile surfaces
+- independent control primitives, dense/factorized reconstruction, and
+  caller-owned command storage
+- source-aware prepared paths with distinct WFS and science sources
 - schedule-free serial `PreparedPlant` execution across independent science,
   NGS Shack-Hartmann, and finite-height LGS pyramid directions, with canonical
   selected ownership, deterministic declaration-order replay, one shared
@@ -84,14 +82,16 @@ Current CPU-supported families:
   stable time/RNG ownership, ordinary downstream path/acquisition execution,
   and zero warmed evaluator allocation. This is boundary-semantic support, not
   a claim about a physical calibration unit or scheduled control protocol
-- grouped/runtime orchestration surfaces with committed validation artifacts
+- prepared controller-output routing from named caller-owned products to exact
+  independent Plant endpoints, including zero-copy views and zero-allocation
+  warmed payload access. This is a preparation/ownership contract, not an RTC
+  transport or latency claim
 - dense and factorized reconstruction operators, including allocation-free
   controller composition and backend-residency validation
 
 Optional AK and Dagger ensemble policies are maintained offline orchestration
-surfaces, but are not part of the CPU HIL latency claim. Scheduler choice is
-evidence-gated per host and workload; direct `CPUHILExecutionPlan` stepping
-remains the production baseline.
+surfaces, but are not part of the CPU HIL latency claim. The deterministic
+serial Plant event loop remains the HIL-neutral timing oracle.
 
 On Apple Silicon, application-owned AppleAccelerate 0.7 BLAS/LAPACK selection
 is a maintained optional CPU-provider variant exposed through a weak-dependency
@@ -124,13 +124,10 @@ covered by the dedicated hardware validation target:
 Current AMDGPU-supported scope:
 
 - maintained optional backend functional/parity checks
-- maintained runtime-equivalence surfaces
-- default `DeviceResidentExecutionPlan` runtime construction with validated
-  accelerator-resident reconstructor storage
-- maintained high-accuracy post-command runtime-equivalence surfaces
+- accelerator-resident reconstructor and controller storage
 - maintained Shack-Hartmann exported-pixel parity surfaces
-- maintained composite low-order runtime surfaces
-- matched HEART RTC HIL runtime surfaces
+- independent DM and modal/low-order optic application
+- maintained REVOLT-like production-shaped WFS frame smoke
 - prepared direct imaging with off-axis formation, spectral bundles, explicit
   extended-source expansion, independent detector fan-out, and shared-arm
   device residency
@@ -159,11 +156,13 @@ Current expectation:
 - if a maintained AMDGPU surface regresses numerically against CPU, that is a
   release-blocking defect for the AMDGPU-supported scope
 
-The current Julia 1.12.6 AMDGPU hardware target passed all `434` maintained
-checks. A later local Julia installation failure prevented a replacement raw
-latency artifact, so the July 14 characterization remains the maintained AMD
-performance evidence; the failed host run does not broaden or weaken the
-functional support claim.
+The most recent Julia 1.12.6 AMDGPU hardware target before the packed-runtime
+removal passed all `434` checks. The retained numerical surfaces remain the
+support baseline; the newly added controller-routing hardware check must pass
+the final Gate 4 backend closure before accelerator routing is support-claimed.
+A later local Julia installation failure prevented a replacement raw latency
+artifact, so the July 14 characterization remains the maintained AMD
+performance evidence.
 
 ### GPU support-boundary rule
 
@@ -227,6 +226,8 @@ The following are outside the current support claim:
 - Metal backend support
 - backend-audit surfaces that are not part of the maintained hardware targets
   and release-validation cadence
+- controller-output routing on CUDA or AMDGPU until the current-revision
+  hardware targets close Gate 4
 - broad claims about every detector/wfs/backend combination outside the
   maintained evidence surfaces
 - cross-package grouped/platform equivalence beyond the currently normalized

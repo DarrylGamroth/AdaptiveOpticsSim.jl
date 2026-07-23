@@ -1,5 +1,13 @@
 abstract type AbstractExecutionPolicy end
 
+"""
+    init_execution_state(policy, reference)
+
+Optional extension seam for execution-policy state associated with storage
+like `reference`. Core policies require no additional state.
+"""
+init_execution_state(::AbstractExecutionPolicy, reference) = nothing
+
 """Execute coarse work directly on the calling task."""
 struct SequentialExecution <: AbstractExecutionPolicy end
 

@@ -207,8 +207,3 @@ end
     ensure_sh_calibration!(wfs, pupil, src)
     return measure!(wfs, pupil, src)
 end
-
-@inline function set_runtime_wfs_output_policy!(wfs::ShackHartmannWFS{<:Diffractive}, outputs)
-    wfs.acquisition.export_pixels_enabled = outputs.wfs_pixels
-    return wfs
-end

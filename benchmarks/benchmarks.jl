@@ -2,6 +2,8 @@ using AdaptiveOpticsSim
 using BenchmarkTools
 using Random
 
+include(joinpath(@__DIR__, "support", "closed_loop_workload.jl"))
+
 function bench_direct_imaging()
     tel = Telescope(resolution=64, diameter=8.0, central_obstruction=0.2)
     src = Source(band=:I, magnitude=0.0)
@@ -62,33 +64,19 @@ function bench_reconstructor_inplace()
     return @benchmark reconstruct!($out, $recon, $slopes)
 end
 
-function bench_closed_loop_runtime()
-    rng = runtime_rng(0)
-    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
-    src = Source(band=:I, magnitude=0.0)
-    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
-    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-    wfs = ShackHartmannWFS(tel; n_lenslets=4)
-    sim = AOSimulation(tel, src, atm, dm, wfs)
-    imat = interaction_matrix(dm, wfs, PupilFunction(tel); amplitude=0.1)
-    recon = ModalReconstructor(imat; gain=0.5)
-    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=rng)
-    step!(runtime)
-    return @benchmark step!($runtime)
+function bench_closed_loop_workload()
+    workload = prepare_closed_loop_workload(T=Float64, seed=0)
+    return @benchmark step_closed_loop_workload!($workload)
 end
 
-function bench_closed_loop_runtime_timing()
-    rng = runtime_rng(0)
-    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
-    src = Source(band=:I, magnitude=0.0)
-    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
-    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-    wfs = ShackHartmannWFS(tel; n_lenslets=4)
-    sim = AOSimulation(tel, src, atm, dm, wfs)
-    imat = interaction_matrix(dm, wfs, PupilFunction(tel); amplitude=0.1)
-    recon = ModalReconstructor(imat; gain=0.5)
-    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim, recon; atmosphere_step=1e-3, rng=rng)
-    return runtime_timing(runtime; warmup=10, samples=200, gc_before=false)
+function bench_closed_loop_workload_timing()
+    workload = prepare_closed_loop_workload(T=Float64, seed=0)
+    return runtime_timing(
+        () -> step_closed_loop_workload!(workload);
+        warmup=10,
+        samples=200,
+        gc_before=false,
+    )
 end
 
 function bench_lift(numerical::Bool)
@@ -149,25 +137,15 @@ function alloc_checks()
     reconstruct!(out, recon, slopes)
     alloc_recon = @allocated reconstruct!(out, recon, slopes)
 
-    rng = runtime_rng(0)
-    tel_rt = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
-    src_rt = Source(band=:I, magnitude=0.0)
-    atm_rt = KolmogorovAtmosphere(tel_rt; r0=0.2, L0=25.0)
-    dm_rt = DeformableMirror(tel_rt; n_act=4, influence_width=0.3)
-    wfs_rt = ShackHartmannWFS(tel_rt; n_lenslets=4)
-    sim_rt = AOSimulation(tel_rt, src_rt, atm_rt, dm_rt, wfs_rt)
-    imat_rt = interaction_matrix(dm_rt, wfs_rt, PupilFunction(tel_rt);
-        amplitude=0.1)
-    recon_rt = ModalReconstructor(imat_rt; gain=0.5)
-    runtime = AdaptiveOpticsSim.ClosedLoopRuntime(sim_rt, recon_rt; atmosphere_step=1e-3, rng=rng)
-    step!(runtime)
-    alloc_runtime = @allocated step!(runtime)
+    workload = prepare_closed_loop_workload(T=Float64, seed=0)
+    alloc_closed_loop =
+        @allocated step_closed_loop_workload!(workload)
 
     println("Allocation checks:")
     println("  LiFT analytic (in-place): $(alloc_lift_a) bytes")
     println("  LiFT numerical (in-place): $(alloc_lift_n) bytes")
     println("  Reconstructor! (in-place): $(alloc_recon) bytes")
-    println("  Closed-loop runtime step!: $(alloc_runtime) bytes")
+    println("  Closed-loop workload: $(alloc_closed_loop) bytes")
 end
 
 println("Direct-imaging benchmark:")
@@ -188,11 +166,11 @@ display(bench_reconstructor())
 println("Reconstructor in-place benchmark:")
 display(bench_reconstructor_inplace())
 
-println("Closed-loop runtime benchmark:")
-display(bench_closed_loop_runtime())
+println("Closed-loop workload benchmark:")
+display(bench_closed_loop_workload())
 
-println("Closed-loop runtime timing:")
-display(bench_closed_loop_runtime_timing())
+println("Closed-loop workload timing:")
+display(bench_closed_loop_workload_timing())
 
 println("LiFT analytic benchmark:")
 display(bench_lift(false))

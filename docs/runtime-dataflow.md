@@ -4,403 +4,231 @@ Status: active
 
 ## Purpose
 
-This document explains the end-to-end runtime and dataflow of the maintained
-simulation stack.
+This guide describes the maintained execution and ownership model. The
+canonical HIL-neutral runtime is `AdaptiveOpticsSim.Plant`; application and
+model-specific code composes the independent numerical optics and control
+primitives around that boundary.
 
-It is not a symbol reference. It is the operational picture of:
-
-- what gets built
-- what gets prepared
-- what mutates each step
-- which products are exported
-- where validation and benchmark evidence attach
-
-For the broader package/platform picture, start with
-[`maintainer-architecture.md`](maintainer-architecture.md).
-
-## Main Runtime Objects
-
-The most important runtime-facing objects are:
-
-- `Telescope`
-- atmosphere model such as `MultiLayerAtmosphere` or
-  `InfiniteMultiLayerAtmosphere`
-- one or more WFS objects
-- optional `Detector` objects
-- optional prepared `DetectorAcquisitionPlan` objects for typed intensity maps
-- `DeformableMirror`
-- calibration/reconstructor objects
-- `ClosedLoopRuntime`
-
-The orchestration layer is in `src/control`.
-
-`AOSimulation`, `ClosedLoopRuntime`, `CompositeControllableOptic`, and
-`RuntimeCommandLayout` describe the current frame-step characterization
-runtime. They are not the target multi-rate plant API and will be removed after
-their numerical oracles migrate. New HIL work uses the definition/prepared-
-plan/mutable-state/product split in the maintained HIL specifications rather
-than extending these types for source compatibility.
-
-## Build Phase
-
-The build phase constructs long-lived simulation objects:
-
-1. create telescope and source geometry
-2. create atmosphere model and persistent screen state
-3. create WFS models and detectors
-4. create DM and calibration/reconstruction objects
-5. build `ClosedLoopRuntime` with:
-   - explicit positive `atmosphere_step`
-   - runtime profile
-   - latency model
-   - product requirements
-   - execution policy
-
-Outputs of this phase should be stable objects with owned buffers, not
-ad hoc temporary arrays.
-
-## Prepare Phase
-
-`prepare!` and subsystem-specific preparation do the work that should not
-happen inside the hot loop:
-
-- allocate exported readout and metadata surfaces
-- precompute calibration products
-- prepare grouped execution stacks
-- bind each acquisition to a full-optical, reduced-order, or synthetic/replay
-  product provider with preallocated state
-- prepare any user-declared illumination evaluator at its supported typed path
-  entry or detector input
-- freeze mutable source/profile inputs while preserving intentional source
-  identity across shared optical arms
-- prepare delay lines and runtime staging
-- ensure detector and WFS pipeline buffers exist
-- prepare compatible incoherent intensity accumulation or retain incompatible
-  products in an `OpticalProductBundle`
-- validate detector-facing map metadata and size acquisition buffers with
-  `prepare_detector_acquisition`
-
-The design goal is:
-
-- construction is allowed to be heavier
-- the step path should only mutate prepared state
-
-## Per-Step Flow
-
-At a high level, one closed-loop step is:
-
-1. advance atmosphere by the runtime's explicit `atmosphere_step`
-2. render the published epoch into the runtime-owned WFS `PupilFunction`
-3. form the current controllable-optic surface and apply it to that path
-4. run WFS optical formation, optional detector acquisition, and estimation
-5. reuse the sensed path or independently re-render the science path according
-   to its prepared propagation policy, then capture requested science products
-6. export required products:
-   - slopes
-   - WFS pixels
-   - science pixels
-7. run reconstruction/controller update
-8. stage delayed commands or delayed readout products as needed
-
-This split is visible in runtime timing and benchmark surfaces.
-
-This is the current implemented frame-step flow and the ownership foundation
-also consumed by the multi-rate event runtime:
-
-1. advance one shared atmosphere epoch to explicit model time
-2. render each due direction through a path-local prepared renderer into a
-   caller-owned pupil function or electric field
-3. apply visible static and controllable surfaces to that path product
-4. call `form_wfs_optical_products!` to form one WFS photon-arrival-rate
-   `IntensityMap`, a concrete tuple of them, or an `OpticalProductBundle`
-   through a prepared optical front end
-5. call `acquire_wfs_observation!` to integrate each compatible detector's
-   explicit sample/exposure duration independently without mutating the
-   prepared arrival-rate storage or its immutable metadata/binding
-6. call `estimate_wfs_measurement!` to write a typed `WFSMeasurement` where the
-   endpoint requires one
-
-The telescope owns aperture, reflectivity, spatial sampling, and geometry; it
-does not own cadence/exposure duration, a direct-science path's OPD/field or
-focal-plane result, FFT plans, or propagation scratch. Every maintained WFS,
-calibration, atmosphere, and science path owns an explicit `PupilFunction` or
-field product. Atmosphere advancement receives explicit model time; the
-telescope has no timing property. Source geometry and extended-source
-expansion are frozen or prepared per path rather than mutated in the shared
-atmosphere or source definition.
-
-Every prepared plane declares coordinate domain and sampling,
-centering/orientation,
-wavelength/channel, units/normalization, coherence/combination policy, backend,
-device compatibility, and whether values are spatial densities or integrated
-over represented cells. A physical detector-facing product is either photon
-irradiance (photons·s⁻¹·m⁻²) or a cell-integrated photon rate
-(photons·s⁻¹). Prepared detector acquisition applies presampling response on
-the optical grid, integrates spatial-density samples over represented cells
-and then physical pixels, and applies QE and elapsed time exactly once.
-Incompatible spectral grids remain a bundle or require an explicit prepared
-mapping. Native direct science uses `prepare_direct_imaging` and
-`form_direct_image!`: same-wavelength asterism components share a compatible
-incoherent output, differing spectral grids remain an `OpticalProductBundle`,
-and extended sources are explicitly expanded through
-`extended_source_asterism`. Its off-axis placement is resolved to a finite
-integer shift during preparation from the grid's declared `:x`/`:y` axis order
-and signs; it remains periodic, not subpixel interpolation or finite-field
-loss. Runtime-length asterism, extended-source, and spectral expansions use
-vector-backed prepared components, so quadrature length does not become part
-of a recursively specialized method type. Each native leaf still owns its FFT
-workspace; a future shared-propagation or convolution optimization must first
-declare the source-dependent pupil-field equivalence it relies on. Prepared PROPER output
-meets native imaging at the same caller-owned photon-arrival-rate/acquisition boundary. These are concrete
-products and functions, not a universal optical graph or resampling framework.
-
-The frame-step `SharedOpticalRuntime` forms each arm's native rate image once
-and captures its detector tuple serially. Detector state and exposure are
-independent, but stochastic draws currently come from one runtime RNG in tuple
-order. The schedule-free prepared plant now assigns stable RNG owner identities
-and independent stateful streams, so path, acquisition, selection, and named
-atmosphere-layer order do not select random values. The later placed or
-multi-device plant adds addressable random domains where execution can reorder
-element work. Before advancing the atmosphere,
-the current runtime preflights every science detector's exact prepared binding
-and whole-exposure idle state. Detector acquisition preparation has already
-sized conventional multi-read products and rejected predictable shape and
-up-the-ramp schedule errors before changing detector storage. Unexpected
-backend, kernel, RNG, or concurrent external failures remain fail-stop rather
-than transactional rollback.
-
-The implemented serial plant-event loop separates reusable optical paths from
-independently scheduled or triggered acquisition state, and schedules exposure,
-optical sampling, readout, and complete-product readiness as separate events.
-Acquisitions may follow independent schedules or delivered edges from a common
-trigger source with per-detector delay, skew, jitter, and explicit dropped or
-duplicate-edge faults. Physical exposure timing, reported detector timestamps,
-and eventual HIL execution-clock lateness remain distinct. The serial plant
-event loop now admits mapped core plant commands and applies them at exact
-virtual timestamps before equal-time optical samples. External RTC arrival,
-timestamp mapping, payload leases, and wall-clock pacing remain later gates.
-
-That target admits heterogeneous NGS/LGS WFS paths, direct science cameras,
-PROPER-backed coronagraph paths, common MCAO planes, and path-specific MOAO
-planes while preserving independently commanded co-conjugated optics. Sampled
-NCPA belongs to the selected native branch; detailed instrument and
-coronagraph propagation remains at the prepared PROPER seam.
-
-The target also decouples acquisition scheduling and publication from product
-generation fidelity. A prepared acquisition may use the full optical path, a
-command-responsive geometric/linear/reduced-resolution provider, or a
-preallocated synthetic/replay source. All providers produce the same declared
-shape, type, geometry/radiometry, metadata, sequence, complete-product lease,
-and port behavior, so
-an RTC adapter can be tested at production rate without paying for optics that
-are outside the test boundary. Fidelity is mixed per acquisition and never
-changes during a run; another fidelity tier requires another prepare/arm cycle.
-
-The schedule-free provider seam is implemented: provider-style trait dispatch,
-one run-immutable provider per prepared acquisition, required logical product
-metadata and compatibility snapshots, exact caller-owned result semantics,
-and unchanged/copy/bounded-cyclic-replay synthetic implementations. A selected
-reduced-order or synthetic/replay provider bypasses otherwise unused
-full-optical path execution; all declared topology is still prepared. The
-current event composition binds full-optical frame acquisitions and records
-complete-product sequence and readiness state. General scheduled provider
-styles, leases, ports, overload, and publication ownership remain later HIL
-work rather than being synthesized by this core seam.
-
-The reduced-order provider remains a causal AO plant: it advances a seeded or
-replayed time-correlated disturbance, projects it into each sensing direction,
-subtracts the response of commands that are physically effective at the sample
-time, and emits calibrated slopes or approximate pixels with selected noise and
-detector timing. The external RTC still performs its normal reconstruction,
-tomography, controller, command-splitting, and recovery work; only the expensive
-optical evaluation is replaced by a validated surrogate.
-
-Calibration illumination follows the same path machinery rather than entering
-a special runtime mode. User or companion code declares the supported entry
-boundary, downstream visibility, source evaluator, state timing, and any
-combination rule. Core executes that prepared evaluator and the ordinary
-acquisition pipeline; a calibration label alone never changes propagation.
-The implemented boundary accepts caller-owned pupil functions, declared-plane
-fields and intensity maps, typed external-optics results, and constrained
-detector-input intensity maps. `PreparedIlluminationEntry` snapshots the
-payload contract and visibility description, retains one immutable evaluator
-wrapper with separate single-writer state/workspace, and receives explicit
-epoch time plus a stable path-owned `:illumination` RNG stream. The evaluator
-must return its exact destination; path execution then consumes that product
-without any `is_calibration`, upstream-bypass, or instrument branch. This is a
-schedule-free materialization contract: trigger cadence, setpoint ownership,
-publication, transport, and control authority remain later HIL or application
-concerns.
-
-The legacy `AOSimulation` stores one controllable optic, so its characterized
-multi-surface scenarios still use `CompositeControllableOptic` as a
-packed-command and additive-application adapter. The new prepared plant path
-instead registers each optic and independently timed endpoint explicitly.
-`CommandEndpointConfiguration` supplies bounded run state, and model-specific
-preparation separates immutable plans, mutable physical response, and scratch.
-The serial event loop stages effective command and physical state together,
-then applies visible co-conjugated surfaces additively before path execution.
-The current Gate 4 implementation treats all prepared optics as one common
-all-path group; explicit placement and visibility are later work.
-
-Packed transport schemas belong to user integration outside the general HIL
-package. A user may map one packed submission into an explicit
-`PlantCommandTransaction`, whose distinct physical-optic members are admitted
-and published all-or-none at one plant timestamp. Packed storage, equal time,
-or co-conjugation alone carries no atomicity semantics. The later HIL boundary
-will correlate core dispositions with transport completion credit.
-
-Each core command endpoint prepares its payload type/shape, units, basis and
-calibration revision, absolute or incremental semantics, limits, plant-
-effective-time and sequence policies, and replayable plant-time command-
-silence behavior. The HIL submission descriptor separately carries session,
-external-time mapping, payload-lease, and outcome-credit metadata. Sampled
-actuator or device feedback returns through an ordinary acquisition endpoint
-rather than being conflated with either the core model disposition or the HIL
-command outcome.
-
-The maintained target architecture is indexed by
-[`hil-package-boundary.md`](hil-package-boundary.md); durable capability IDs,
-states, and acceptance gates are tracked in
+For package structure, see
+[`maintainer-architecture.md`](maintainer-architecture.md). For normative HIL
+requirements, see
+[`hil-package-boundary.md`](hil-package-boundary.md) and
 [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
 
-## Product Ownership
+## Ownership Layers
 
-The package now makes product ownership more explicit than before.
+The runtime is intentionally split into four layers:
 
-Important distinctions:
+1. Cold definitions describe stable identities, optical topology, acquisition
+   topology, command schemas, timing policies, and model choices.
+2. Preparation validates the complete binding and constructs typed plans,
+   backend-resident storage, bounded capacities, workspaces, and deterministic
+   RNG owners.
+3. Mutable state has a single writer. The prepared plant event loop owns the
+   virtual-time scheduler, command lifecycle, detector lifecycle, controllable-
+   optic state, and product-readiness state.
+4. Products are explicit caller-visible values such as a `PupilFunction`,
+   `IntensityMap`, `WFSObservation`, `WFSMeasurement`, or
+   `AcquisitionProducts`.
 
-- scratch buffers are not exported outputs
-- sampled detector inputs are not the same thing as detector outputs
-- grouped WFS intermediate stacks are not the same thing as archived or
-  exported readouts
+The telescope owns revisioned aperture geometry, intensity reflectivity,
+diameter, and spatial sampling. It owns neither a path's mutable OPD or electric
+field nor detector cadence, exposure, FFT scratch, or atmosphere model time.
 
-For example, the prepared diffractive Shack–Hartmann front end accumulates a
-compatible same-wavelength asterism into one optical-rate mosaic and retains
-distinct wavelength grids as native-sampling leaves in an
-`OpticalProductBundle`. It does not index-add or implicitly resample those
-leaves; acquisition consumes each through its declared detector mapping.
-Extended-source expansion and the legacy single-product spectral convenience
-path retain their documented common-grid behavior. Frozen references for the
-retired reference-wavelength index-grid approximation are test-only
-characterization data, not a production capability. There is now a clearer
-boundary between:
+## Definition And Preparation
 
-- pre-detector optical-rate spot stacks
-- post-detector signal stacks
-- exported runtime pixel outputs
+A plant starts from `PlantDefinition`. It may declare:
 
-That separation matters for:
+- one telescope and atmosphere
+- named optical paths
+- independent acquisition endpoints
+- independent controllable optics
+- one or more command schemas per optic
 
-- correctness
-- GPU layout ownership
-- benchmarked allocation behavior
+`prepare_plant` requires an explicit run seed and, for every command endpoint,
+a `CommandEndpointConfiguration`. Preparation:
 
-## Detector and WFS Dataflow
+- canonicalizes stable identities
+- prepares path and acquisition implementations
+- allocates backend- and device-compatible destinations
+- copies initial and optional safe commands into endpoint-owned storage
+- constructs independent RNG streams from stable owner identities
+- validates all run-immutable bindings
 
-The prepared frame-detector path now follows this order:
+Preparation may allocate and fail. Repeated execution mutates only prepared
+state and caller-owned products.
 
-1. produce a photon-arrival-rate intensity map or an explicitly normalized map
-   with a prepared physical scale
-2. apply the presampling detector response on the optical grid
+## Controller Output Routing
+
+An RTC or controller often computes one flat vector even though the plant owns
+several independently timed command endpoints. The maintained bridge is
+prepared controller-output routing:
+
+```julia
+using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Plant
+
+controller_buffer = zeros(Float32, 5)
+products = (
+    woofer=@view(controller_buffer[1:2]),
+    tweeter=@view(controller_buffer[3:5]),
+)
+
+routing = prepare_controller_output_routing(
+    plant,
+    products,
+    ControllerOutputRoute(:woofer, :woofer_command),
+    ControllerOutputRoute(:tweeter, :tweeter_command),
+)
+```
+
+Each named product is borrowed without packing or copying. Preparation requires
+an exact match with its prepared endpoint's numeric type, shape, array backend,
+and physical device. Scalar products use assigned `Ref` storage.
+
+Routing owns no sequence number, effective timestamp, admission, transaction,
+queue, transport, or optical-grouping semantics. Integration code obtains a
+payload with `controller_output_payload` and constructs a separate
+`PlantCommand` for each due endpoint. Plant-command admission then copies the
+presented payload into that endpoint's bounded storage. Co-conjugated optics,
+flat-buffer adjacency, and equal timestamps do not imply atomic application;
+explicit `PlantCommandTransaction` membership does.
+
+## Virtual-Time Event Flow
+
+`prepare_plant_event_loop` composes a finite prepared plant with:
+
+- command endpoint generators
+- periodic optical samples
+- periodic or delivered-trigger acquisition starts
+- detector lifecycle transitions
+- one shared atmosphere timeline
+- controllable-optic application
+
+`step_plant_events!` processes all work at the next canonical
+`PlantTimestamp`; `run_plant_events_until!` advances through all due timestamps
+up to a limit. Equal-time ordering follows stable causal phase, prepared owner
+ordinal, and occurrence—not task completion or tuple iteration.
+
+At a due command timestamp the loop:
+
+1. claims the next application-ready command
+2. applies endpoint value policy and stages physical-optic state
+3. commits the visible physical state
+4. records a bounded disposition
+
+Commands due at the same timestamp are applied before optical samples. Each
+endpoint retains independent sequence, effective-time, silence, and capacity
+policy. The loop owns plant time only; wall-clock pacing, external timestamp
+mapping, payload leases, transport, and RTC protocol belong to the HIL
+integration layer.
+
+## Optical Sample Flow
+
+For each due full-optical path, execution:
+
+1. advances the shared atmosphere to explicit model time
+2. renders the published epoch through a path-local prepared direction
+   renderer into caller-owned path storage
+3. applies the visible static and controllable surfaces
+4. executes the prepared optical model into its exact path result
+5. executes each due acquisition provider into its own
+   `AcquisitionProducts`
+
+The current common controllable-optic execution applies independently
+commanded co-conjugated surfaces additively. Explicit altitude placement and
+path visibility are later HIL gates; no packed or composite optic object
+couples their cadence.
+
+Native direct science uses `prepare_direct_imaging` and
+`form_direct_image!`. Prepared PROPER integration meets native optics at the
+same declared photon-arrival-rate/acquisition boundary. NGS and LGS WFS paths,
+science cameras, calibration paths, NCPA branches, and coronagraph paths remain
+separate declared paths when their propagation differs.
+
+## WFS And Detector Flow
+
+The maintained WFS stage contract is:
+
+1. `form_wfs_optical_products!` produces one or more detector-facing
+   photon-arrival-rate products.
+2. `acquire_wfs_observation!` applies detector acquisition into a typed
+   `WFSObservation`.
+3. `estimate_wfs_measurement!` writes a typed `WFSMeasurement`.
+
+The optical front end, detector acquisition, and estimator are independent
+components. For example, a Shack–Hartmann optical front end composes a
+`MicrolensArray`; it does not make the microlens optic part of detector or
+centroid state.
+
+Prepared frame acquisition applies operations in this order:
+
+1. validate the photon-arrival-rate product and its spatial measure
+2. apply presampling detector response on the optical grid
 3. integrate represented cells into physical pixels
-4. apply wavelength-channel QE and explicit whole or incremental exposure time
-   exactly once
-5. apply charge-domain effects, stochastic response, binning/readout, and
-   publication
-6. reduce or estimate WFS signals where required
-7. snapshot only the runtime outputs that were requested
+4. apply wavelength-dependent QE and explicit exposure time exactly once
+5. apply charge-domain effects, stochastic response, binning, and readout
+6. publish a complete product at the detector lifecycle's readiness event
 
-`WFSObservation`, `WFSMeasurement`, and the generic prepared
-formation/acquisition/estimation protocols now establish this static boundary.
-Every maintained WFS family now adopts the contract while retaining its own
-concrete stage composition. Raw matrix detector entry remains a documented
-legacy cell-integrated-rate path, while
-`DetectorAcquisitionPlan` is the metadata-validated prepared frame boundary.
-The qualified detector-event layers bind that same plan to immutable global-
-shutter, rolling-shutter, or frame-transfer lifecycle definitions and
-separately owned single-writer state. They accumulate contiguous half-open
-intervals through the existing detector pipeline, snapshot evolving charge at
-scheduled nondestructive reads, advance bounded rolling row-band cursors, and
-model one-frame image/storage overlap for frame-transfer EMCCDs. Integer plant
-timestamps—not floating accumulated-time tolerance—are their transition
-authority. The lifecycle layers do not schedule, pace, publish, or transport
-the resulting frame; `PreparedPlantEventLoop` composes those transitions with
-the common fixed-capacity scheduler and exposes complete-product sequence and
-readiness state without taking HIL-port ownership.
+Global shutter, rolling shutter, frame transfer, nondestructive reads, and
+up-the-ramp sampling retain separate virtual-time lifecycle definitions.
+Exposure, readout completion, product readiness, and re-arming are distinct
+events.
 
-The runtime output plan decides whether a given simulation step must produce:
+## Acquisition Fidelity
 
-- slopes only
-- slopes plus WFS pixels
-- science pixels
-- metadata surfaces
+Every prepared acquisition binds one run-immutable provider:
 
-For grouped composite execution, exported outputs can additionally include:
+- full optical
+- command-responsive reduced order
+- synthetic or bounded replay
 
-- per-branch grouped WFS frames
-- per-branch grouped science frames
-- compatible-shape grouped WFS stacks
-- compatible-shape grouped science stacks
+All provider styles write the same prepared logical product contract. This
+allows one plant to combine high-fidelity paths with fast causal surrogates for
+RTC throughput and latency testing. Fidelity does not change during a run; a
+different provider requires another preparation.
 
-This keeps slopes-only runs from paying unnecessary export costs.
+Calibration illumination uses the ordinary path and acquisition machinery.
+The user or companion model declares where it enters, which paths see it, and
+how its state evolves. Core does not infer a special calibration mode from a
+label.
 
-For synthetic load tests, the output plan also declares whether payloads are
-reused, touched, generated, copied, replayed, and consumed. Descriptor-only
-tests measure descriptor throughput; production-shaped pixel tests retain the
-representative payload and memory traffic needed for an RTC pixel-processing
-claim.
+## Explicit Model Loops
 
-## Backend Flow
+Package examples such as the Subaru AO188/AO3k model may expose their own
+`prepare!`, `step!`, and `readout` functions. These are explicit model
+compositions used for numerical examples and benchmarks; they are not a second
+generic runtime API. A simple closed loop can likewise compose:
 
-The intended backend execution model is:
+- `advance_by!` and `render_atmosphere!`
+- `set_command!` and `apply!`
+- the three WFS stages
+- `reconstruct!`
+- `VectorDelayLine` and `DiscreteIntegratorController`
 
-- model code calls shared backend services
-- shared services select CPU / CUDA / AMDGPU behavior
-- optional backend extensions refine behavior without rewriting the public API
+This keeps reusable numerical/control primitives independent of HIL scheduling.
 
-Backend validation is attached at three levels:
+## Backend And Parallel Execution
 
-- optional backend test coverage
-- smoke scripts
-- benchmark evidence
+Prepared storage is parameterized by numeric type, backend, and physical
+device. Optical and detector kernels reject implicit host/device mixing and
+avoid GPU scalar indexing. Same-owner stages call directly; future ownership
+boundaries may exchange bounded descriptors.
 
-Independent runtime plants may be collected into `SimulationEnsemble` for
-coarse sweeps. Sequential execution remains the default. Julia threads,
-AcceleratedKernels task partitioning, and Dagger task graphs are explicit
-policies above each runtime; they do not replace the runtime's CPU-HIL or
-device-resident execution plan. The current CPU HIL baseline calls one plant
-directly. The target HIL companion drives one immutable prepared plant plan
-through its owned CPU/GPU agents and canonical ports; it does not schedule that
-deadline path as a `SimulationEnsemble`.
+`SimulationEnsemble` remains a coarse-grained facility for independent model
+runs, sources, time-series sweeps, or offline studies. It is not the
+deadline-path HIL scheduler. Sequential execution is the default; Julia
+threads, AcceleratedKernels, Dagger, and backend streams are explicit policies
+whose use must avoid nested oversubscription.
 
-Within one HIL process, same-owner stages call directly and owner changes use
-bounded SPSC descriptors. Iceoryx2 or another middleware is reserved for a
-deliberate process or external-RTC boundary; it is not the fan-out mechanism
-for ordinary in-process optical arms.
+## Validation And Performance Evidence
 
-Representative performance evidence is intentionally kept out of `Pkg.test()`.
+Functional support is recorded in
+[`model-validity-matrix.md`](model-validity-matrix.md). Production-surface
+qualification is recorded in
+[`supported-production-surfaces.md`](supported-production-surfaces.md).
 
-## Benchmarks and Evidence
-
-There are two relevant evidence layers:
-
-### Functional/validation evidence
-
-- [`model-validity-matrix.md`](model-validity-matrix.md)
-- frozen OOPAO and SPECULA reference bundles
-
-### Runtime/engineering evidence
-
-- benchmark artifacts under `benchmarks/results/`
-- profile scripts under `scripts/`
-
-## How to Use This Guide
-
-When debugging or extending runtime behavior:
-
-1. use this doc to identify the layer that owns the behavior
-2. use [`maintainer-architecture.md`](maintainer-architecture.md) for the
-   package-level composition picture
-3. use [`extension-guide.md`](extension-guide.md) for new subsystem families
-4. use [`api-reference.md`](api-reference.md) for specific symbols
+Benchmark workloads under `benchmarks/` own their explicit loop composition;
+they do not introduce a package runtime abstraction. Representative performance
+artifacts live under `benchmarks/results/` and remain outside ordinary
+`Pkg.test()`.

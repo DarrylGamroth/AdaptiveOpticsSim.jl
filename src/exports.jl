@@ -87,8 +87,8 @@ export DeformableMirror
 export influence_model, influence_width
 export mechanical_coupling, n_actuators
 export FunctionModalBasis, MatrixModalBasis, ZernikeOpticBasis, CartesianTiltBasis
-export CompositeControllableOptic, ModalControllableOptic, TipTiltMirror, FocusStage
-export update_command!
+export ModalControllableOptic, TipTiltMirror, FocusStage
+export set_command!
 export DMAdditive, DMReplace
 
 export Detector, APDDetector, LinearAPDDetector, SPADArrayDetector, MKIDArrayDetector
@@ -158,7 +158,8 @@ export valid_subaperture_indices
 export MeanValidFluxNormalization, IncidenceFluxNormalization
 export measure!, pyramid_modulation_frame, pyramid_modulation_frame!
 export valid_subaperture_mask, camera_frame, wfs_detector_image
-export wfs_calibration_signature
+export slopes, wfs_calibration_signature
+export prepare_runtime_wfs!
 export shack_hartmann_detector_image, shack_hartmann_detector_image!
 export n_valid_subapertures
 export LiFT, PreparedLiFTForwardModel, LiFTObservation
@@ -181,27 +182,20 @@ export GainSensingCamera, calibrate!, compute_optical_gains!
 export NullReconstructor, ModalReconstructor, FactorizedReconstructor, MappedReconstructor
 export ControlledReconstructor
 export reconstruct!, reconstruct
-export DiscreteIntegratorController
+export DiscreteIntegratorController, VectorDelayLine, shift_delay!
 
-export AbstractControlSimulation, AbstractExecutionPolicy, SimulationReadout
-export AOSimulation, wfs_source, science_source
+export AbstractExecutionPolicy
 export SequentialExecution, ThreadedExecution, BackendStreamExecution
 export DeterministicExecution, AcceleratedKernelsExecution, DaggerExecution
-export ScientificRuntimeProfile, HILRuntimeProfile, RuntimeOutputRequirements, GroupedRuntimeOutputRequirements
-export CPUHILExecutionPlan, DeviceResidentExecutionPlan, runtime_execution_plan
-export synchronize_runtime!
-export OpticalWFSChannel, SharedOpticalArm, SharedOpticalRuntime
-export primary_runtime, optical_arms, science_frames, wfs_signals
-export VectorDelayLine, shift_delay!
-export prepare!, prepare_runtime_wfs!
-export command_segments, command_segment_range
-export ControlLoopBranch, SingleControlLoopConfig, GroupedControlLoopConfig, ControlLoopScenario
-export build_control_loop_scenario, control_loop_name, control_loop_branch_labels
 export SimulationEnsemble
-export sense!, step!, set_command!
-export readout, command, slopes, wfs_frame, science_frame, grouped_wfs_stack
 export runtime_timing
-export runtime_atmosphere_step
+
+public controller_output, reset_controller!, supports_controller_reset
+public run_ensemble!, ensemble_members, execution_policy
+public ensemble_ownership_roots, init_ensemble_scheduler, execute_ensemble!
+public supports_prepared_runtime, supports_detector_output
+public supports_stacked_sources, supports_grouped_execution
+public init_execution_state
 
 export TomographyAtmosphereParams, LGSAsterismParams, LGSWFSParams
 export TomographyParams, TomographyDMParams

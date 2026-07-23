@@ -20,15 +20,23 @@ struct CoronagraphPayload{P,A,T}
     lyot_stop_norm::T
 end
 
-mutable struct ProperHILCoronagraphContext{SC,SM,PM,P,SP,CB,R1,R2,T}
-    scenario::SC
-    sim::SM
+mutable struct ProperHILCoronagraphContext{
+    TEL,S,A,R,P,O1,O2,W,PM,CP,SP,C1,C2,RNG,T,
+}
+    telescope::TEL
+    source::S
+    atmosphere::A
+    atmosphere_renderer::R
+    wfs_pupil::P
+    tiptilt::O1
+    dm::O2
+    wfs::W
     science_model::PM
-    payload::P
+    payload::CP
     science_pupil::SP
-    command_buffer::CB
-    tiptilt_range::R1
-    dm_range::R2
+    tiptilt_command::C1
+    dm_command::C2
+    rng::RNG
     step_index::Int
     wavelength_um::T
 end
@@ -75,13 +83,6 @@ function hil_coronagraph_prescription(λm, n; payload::CoronagraphPayload)
     return prop_end(wf)
 end
 
-function _segment_range(layout::AdaptiveOpticsSim.RuntimeCommandLayout, label::Symbol)
-    for seg in command_segments(layout)
-        seg.label == label && return command_segment_range(seg)
-    end
-    throw(InvalidConfiguration("missing command segment '$label' in runtime command layout"))
-end
-
 function _build_wfs(tel::Telescope; T::Type{<:AbstractFloat}, backend::AbstractArrayBackend)
     return ShackHartmannWFS(tel; n_lenslets=16, mode=Diffractive(), threshold=T(0), T=T, backend=backend)
 end
@@ -108,20 +109,11 @@ function build_proper_hil_context(;
     atm = KolmogorovAtmosphere(tel; r0=T(0.2), L0=T(25.0))
     tiptilt = TipTiltMirror(tel; scale=T(0.05), T=T, backend=selector, label=:tiptilt)
     dm = DeformableMirror(tel; n_act=16, influence_width=T(0.3), T=T, backend=selector)
-    optic = CompositeControllableOptic(:tiptilt => tiptilt, :dm => dm)
     wfs = _build_wfs(tel; T=T, backend=selector)
-    sim = AOSimulation(tel, src, atm, optic, wfs)
-
-    branch = ControlLoopBranch(:main, sim, NullReconstructor(); rng=runtime_rng(rng_seed))
-    cfg = SingleControlLoopConfig(atmosphere_step=1e-3,
-        name=:proper_hil,
-        branch_label=:main,
-        outputs=RuntimeOutputRequirements(slopes=true),
-    )
-    scenario = build_control_loop_scenario(cfg, branch)
-    prepare!(scenario)
-
-    science_pupil = PupilFunction(sim.tel)
+    wfs_pupil = PupilFunction(tel)
+    prepare_runtime_wfs!(wfs, wfs_pupil, src)
+    atmosphere_renderer = prepare_atmosphere_renderer(atm, tel, src)
+    science_pupil = PupilFunction(tel)
     proper_ctx = Proper.RunContext(typeof(opd_map(science_pupil)))
     science_model = prepare_model(
         :proper_hil_coronagraph,
@@ -136,26 +128,31 @@ function build_proper_hil_context(;
     payload = CoronagraphPayload(
         opd_map(science_pupil),
         pupil_amplitude(science_pupil),
-        T(sim.tel.params.diameter),
+        T(tel.params.diameter),
         T(focal_length_m),
         T(lyot_stop_norm),
     )
 
-    command_buffer = similar(command(scenario))
-    copyto!(command_buffer, command(scenario))
-    layout = AdaptiveOpticsSim.command_layout(scenario)
-    tiptilt_range = _segment_range(layout, :tiptilt)
-    dm_range = _segment_range(layout, :dm)
+    tiptilt_command = similar(tiptilt.state.coefs)
+    dm_command = similar(dm.state.coefs)
+    fill!(tiptilt_command, zero(T))
+    fill!(dm_command, zero(T))
 
     return ProperHILCoronagraphContext(
-        scenario,
-        sim,
+        tel,
+        src,
+        atm,
+        atmosphere_renderer,
+        wfs_pupil,
+        tiptilt,
+        dm,
+        wfs,
         science_model,
         payload,
         science_pupil,
-        command_buffer,
-        tiptilt_range,
-        dm_range,
+        tiptilt_command,
+        dm_command,
+        runtime_rng(rng_seed),
         0,
         T(science_wavelength_um),
     )
@@ -163,29 +160,38 @@ end
 
 function _stage_command!(ctx::ProperHILCoronagraphContext)
     ctx.step_index += 1
-    T = eltype(ctx.command_buffer)
+    T = eltype(ctx.dm_command)
     tstep = T(ctx.step_index)
-    @views begin
-        tiptilt = ctx.command_buffer[ctx.tiptilt_range]
-        dm = ctx.command_buffer[ctx.dm_range]
-        tiptilt[1] = T(5e-3) * sin(T(0.1) * tstep)
-        tiptilt[2] = -T(5e-3) * cos(T(0.1) * tstep)
-        fill!(dm, T(5e-9) * tstep)
-    end
-    set_command!(ctx.scenario, ctx.command_buffer)
-    return ctx.command_buffer
+    ctx.tiptilt_command .= (
+        T(5e-3) * sin(T(0.1) * tstep),
+        -T(5e-3) * cos(T(0.1) * tstep),
+    )
+    fill!(ctx.dm_command, T(5e-9) * tstep)
+    set_command!(ctx.tiptilt, ctx.tiptilt_command)
+    set_command!(ctx.dm, ctx.dm_command)
+    return (tiptilt=ctx.tiptilt_command, dm=ctx.dm_command)
 end
 
 function ao_step!(ctx::ProperHILCoronagraphContext)
     _stage_command!(ctx)
-    sense!(ctx.scenario)
-    return slopes(ctx.scenario)
+    epoch = advance_by!(ctx.atmosphere, 1e-3; rng=ctx.rng)
+    render_atmosphere!(
+        ctx.wfs_pupil,
+        ctx.atmosphere_renderer,
+        ctx.atmosphere,
+        epoch,
+    )
+    for optic in (ctx.tiptilt, ctx.dm)
+        update_surface!(optic)
+        apply_surface!(ctx.wfs_pupil, optic, DMAdditive())
+    end
+    measure!(ctx.wfs, ctx.wfs_pupil, ctx.source)
+    return slopes(ctx.wfs)
 end
 
 function science_step!(ctx::ProperHILCoronagraphContext)
-    sensed_pupil = ctx.scenario.boundary.runtime.wfs_pupil
-    copyto!(ctx.science_pupil.amplitude, sensed_pupil.amplitude)
-    copyto!(ctx.science_pupil.opd, sensed_pupil.opd)
+    copyto!(ctx.science_pupil.amplitude, ctx.wfs_pupil.amplitude)
+    copyto!(ctx.science_pupil.opd, ctx.wfs_pupil.opd)
     return prop_run(ctx.science_model; payload=ctx.payload)
 end
 

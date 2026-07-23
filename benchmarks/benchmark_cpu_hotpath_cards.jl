@@ -3,18 +3,18 @@ using BenchmarkTools
 using LinearAlgebra
 
 const CPU_HOTPATH_CARDS = (
-    ("CPU-PERF-01", "extended-source cached asterism", :extended_source_cache),
+    ("CPU-PERF-01", "extended-source stored quadrature", :extended_source_quadrature),
     ("CPU-PERF-02", "Shack-Hartmann reference subtraction", :sh_reference),
     ("CPU-PERF-03", "subaperture valid-index reuse", :subaperture_layout),
     ("CPU-PERF-04", "VectorDelayLine ring buffer", :delay_line),
-    ("CPU-PERF-05", "composite selected apply without Set allocation", :composite_apply),
+    ("CPU-PERF-05", "independent tip-tilt surface application", :independent_optic_apply),
     ("CPU-PERF-06", "SAPHIRA sampled frame response", :sampled_frame_response),
     ("CPU-PERF-07", "batched SAPHIRA sampled frame response", :batched_sampled_frame_response),
     ("CPU-PERF-08", "detector frame binning", :detector_binning),
     ("CPU-PERF-09", "separable Gaussian frame response", :gaussian_frame_response),
     ("CPU-PERF-10", "batched EMCCD capture", :batched_emccd_capture),
     ("CPU-PERF-11", "lazy Gaussian DM operator application", :gaussian_dm_operator),
-    ("CPU-PERF-12", "shared multi-arm optical runtime", :shared_optical_runtime),
+    ("CPU-PERF-12", "shared science product detector fanout", :science_detector_fanout),
 )
 
 function configure_cpu_hotpath_benchmarks!()
@@ -28,15 +28,15 @@ function configure_cpu_hotpath_benchmarks!()
     return nothing
 end
 
-function extended_source_cache_probe()
+function extended_source_quadrature_probe()
     src = Source(band=:I, magnitude=0.0)
     model = SampledImageSourceModel(
         [0.0 1.0 0.0; 1.0 2.0 1.0; 0.0 1.0 0.0],
         pixel_scale_arcsec=0.2,
     )
     ext = with_extended_source(src, model)
-    AdaptiveOpticsSim._cached_extended_source_asterism(ext)
-    return () -> AdaptiveOpticsSim._cached_extended_source_asterism(ext)
+    extended_source_asterism(ext)
+    return () -> extended_source_asterism(ext)
 end
 
 function sh_reference_probe()
@@ -54,7 +54,7 @@ end
 function subaperture_layout_probes()
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
-    layout = subaperture_layout(wfs)
+    layout = subaperture_layout(wfs.front_end)
     geometry_policy = AdaptiveOpticsSim.GeometryValidSubapertures(threshold=0.1)
     flux_policy = FluxThresholdValidSubapertures(light_ratio=0.5)
     support = Float64.(pupil_mask(tel))
@@ -72,17 +72,16 @@ function delay_line_probe()
     return () -> shift_delay!(line, sample)
 end
 
-function composite_apply_probe()
+function independent_optic_apply_probe()
     tel = Telescope(resolution=24, diameter=8.0, central_obstruction=0.0)
     pupil = PupilFunction(tel)
-    optic = CompositeControllableOptic(
-        :tiptilt => TipTiltMirror(tel; scale=1.0),
-        :dm => DeformableMirror(tel; n_act=4, influence_width=0.3),
-    )
-    command = vcat([1e-8, -2e-8], fill(1e-8, 16))
+    optic = TipTiltMirror(tel; scale=1.0)
+    command = [1e-8, -2e-8]
     set_command!(optic, command)
-    return () -> AdaptiveOpticsSim._apply_selected!(
-        optic, pupil, DMReplace(), (:tiptilt,))
+    return function ()
+        update_surface!(optic)
+        apply_surface!(pupil, optic, DMReplace())
+    end
 end
 
 function sampled_frame_response_probe()
@@ -147,35 +146,30 @@ function gaussian_dm_operator_probe()
     return () -> update_surface!(dm)
 end
 
-function shared_optical_runtime_probe()
+function science_detector_fanout_probe()
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
-    guide = Source(band=:I, magnitude=0.0)
     science = Source(band=:K, magnitude=1.0, coordinates=(4.0, 90.0))
-    atmosphere = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
-    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-    wfs = ShackHartmannWFS(tel; n_lenslets=4)
-    simulation = AOSimulation(tel, guide, atmosphere, dm, wfs)
-    reconstructor = ModalReconstructor(
-        interaction_matrix(dm, wfs, PupilFunction(tel); amplitude=0.1);
-        gain=0.5,
+    pupil = PupilFunction(tel)
+    imaging = prepare_direct_imaging(pupil, science; zero_padding=1)
+    rate = direct_imaging_output(imaging)
+    detector_a = Detector(
+        noise=NoiseNone(),
+        integration_time=0.001,
     )
-    primary = AdaptiveOpticsSim.ClosedLoopRuntime(simulation, reconstructor;
-        atmosphere_step=1e-3, rng=runtime_rng(17))
-    arm = SharedOpticalArm(
-        :science,
-        science;
-        wfs_channels=OpticalWFSChannel(
-            ShackHartmannWFS(tel; n_lenslets=4)),
-        science_detectors=(
-            Detector(noise=NoiseNone()),
-            Detector(noise=NoiseNone()),
-        ),
-        science_zero_padding=1,
+    detector_b = Detector(
+        noise=NoiseNone(),
+        integration_time=0.002,
     )
-    runtime = SharedOpticalRuntime(primary, arm)
-    prepare!(runtime)
-    sense!(runtime)
-    return () -> sense!(runtime)
+    acquisition_a = prepare_detector_acquisition(detector_a, rate)
+    acquisition_b = prepare_detector_acquisition(detector_b, rate)
+    rng_a = runtime_rng(17)
+    rng_b = runtime_rng(18)
+    return function ()
+        form_direct_image!(imaging)
+        capture!(detector_a, rate, acquisition_a, rng_a)
+        capture!(detector_b, rate, acquisition_b, rng_b)
+        return rate
+    end
 end
 
 function run_probe(card_id::AbstractString, label::AbstractString, f)
@@ -195,19 +189,19 @@ function run_cpu_hotpath_card_benchmarks()
     configure_cpu_hotpath_benchmarks!()
     geometry_probe, flux_probe = subaperture_layout_probes()
     probes = (
-        ("CPU-PERF-01", "extended_source_cache", extended_source_cache_probe()),
+        ("CPU-PERF-01", "extended_source_quadrature", extended_source_quadrature_probe()),
         ("CPU-PERF-02", "sh_reference", sh_reference_probe()),
         ("CPU-PERF-03a", "subaperture_geometry", geometry_probe),
         ("CPU-PERF-03b", "subaperture_flux", flux_probe),
         ("CPU-PERF-04", "delay_line", delay_line_probe()),
-        ("CPU-PERF-05", "composite_apply", composite_apply_probe()),
+        ("CPU-PERF-05", "independent_optic_apply", independent_optic_apply_probe()),
         ("CPU-PERF-06", "sampled_frame_response", sampled_frame_response_probe()),
         ("CPU-PERF-07", "batched_sampled_frame_response", batched_sampled_frame_response_probe()),
         ("CPU-PERF-08", "detector_binning", detector_binning_probe()),
         ("CPU-PERF-09", "gaussian_frame_response", gaussian_frame_response_probe()),
         ("CPU-PERF-10", "batched_emccd_capture", batched_emccd_capture_probe()),
         ("CPU-PERF-11", "gaussian_dm_operator", gaussian_dm_operator_probe()),
-        ("CPU-PERF-12", "shared_optical_runtime", shared_optical_runtime_probe()),
+        ("CPU-PERF-12", "science_detector_fanout", science_detector_fanout_probe()),
     )
     results = map(probe -> run_probe(probe...), probes)
     println("recommendation")

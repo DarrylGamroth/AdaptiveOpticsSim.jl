@@ -5,8 +5,6 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 examples=(
     "examples/closed_loop_demo.jl"
-    "examples/closed_loop/control_loop_single_runtime.jl"
-    "examples/closed_loop/control_loop_grouped_runtime.jl"
     "examples/closed_loop/run_cl.jl"
     "examples/closed_loop/run_cl_first_stage.jl"
     "examples/closed_loop/run_cl_from_phase_screens.jl"

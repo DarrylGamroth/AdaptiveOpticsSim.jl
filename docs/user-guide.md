@@ -49,9 +49,11 @@ The package is organized around a small set of modeling objects:
 - atmosphere objects such as `KolmogorovAtmosphere` and `MultiLayerAtmosphere`
 - sensing objects such as `ShackHartmannWFS`, `PyramidWFS`, and `BioEdgeWFS`
 - `Detector` when the sensing path needs explicit detector physics
-- controllable optics such as `DeformableMirror`, `ModalControllableOptic`, `TipTiltMirror`, `FocusStage`, and `CompositeControllableOptic`
+- independent controllable optics such as `DeformableMirror`,
+  `ModalControllableOptic`, `TipTiltMirror`, and `FocusStage`
 - modal-optic basis specs such as `CartesianTiltBasis`, `ZernikeOpticBasis`, and `MatrixModalBasis` when you want to choose controlled modes explicitly
-- `ControlLoopScenario` when you want the maintained step-wise AO or HIL simulation surface
+- `AdaptiveOpticsSim.Plant` when you need independent virtual-time commands,
+  acquisitions, triggers, and detector lifecycles
 
 ## Three Execution Layers
 
@@ -78,48 +80,45 @@ Typical use:
 - calibration internals
 - custom research scripts
 
-### 2. Runtime execution layer
+### 2. Explicit model-composition layer
 
-Use this layer when you want repeated AO execution with a stable command/input
-and readout/output boundary.
+Use this layer for one fixed offline model or benchmark. Compose the primitive
+operations in a concrete `step!` function and store its buffers in a
+model-specific state type.
 
-Canonical verbs and accessors:
+Typical operations:
 
-- `prepare!`
-- `sense!`
-- `step!`
-- `set_command!`
-- `update_command!`
-- `readout`
-- `command`, `slopes`, `wfs_frame`, `science_frame`
+- advance and render one atmosphere epoch
+- apply each independent controllable optic
+- execute WFS optical formation, acquisition, and estimation
+- reconstruct and update controller state
+- return a model-specific `NamedTuple` or typed readout
 
-Semantics:
+Model-specific `prepare!`, `step!`, and `readout` methods are appropriate when
+the composition is stable, as in the Subaru AO188/AO3k example modules. They do
+not define a second generic package runtime.
 
-- `prepare!(...)` performs one-time runtime/WFS precomputation
-- `sense!(...)` runs only the plant/sensor side
-- `step!(...)` runs the full closed-loop update
+`SimulationEnsemble` may schedule several independent model instances for
+coarse offline work.
 
-### 3. Orchestration layer
+### 3. Plant execution layer
 
-Use this as the default public runtime assembly surface.
+Use `AdaptiveOpticsSim.Plant` when the model needs explicit HIL-neutral
+ownership and virtual time.
 
-Canonical types and builder:
+The layer provides:
 
-- `ControlLoopBranch`
-- `SingleControlLoopConfig`
-- `GroupedControlLoopConfig`
-- `ControlLoopScenario`
-- `build_control_loop_scenario(...)`
+- `PlantDefinition` and `prepare_plant`
+- independent optical paths, acquisitions, controllable optics, and command
+  endpoints
+- command schemas, admission, application, silence, and transactions
+- schedules, trigger distribution, and detector lifecycle events
+- `prepare_plant_event_loop`, `step_plant_events!`, and
+  `run_plant_events_until!`
+- prepared controller-output routing for named RTC-owned products
 
-This layer is the recommended path for:
-
-- normal closed-loop examples
-- HIL / RTC-boundary simulations
-- grouped or multi-branch runtime composition
-
-The lower-level `ClosedLoopRuntime` + `AdaptiveOpticsSim.simulation_interface(...)` path remains
-available, but it is an advanced single-runtime surface rather than the default
-user entry point.
+Transport, wall-clock pacing, external timestamp mapping, and RTC protocol
+remain application or companion-package responsibilities.
 
 For a compact recipe-first version of this guide, use [model-cookbook.md](model-cookbook.md).
 
@@ -536,35 +535,28 @@ Use this when you care about:
 ### Workflow 3: Closed-loop AO simulation
 
 ```julia
-using Random
-
 rng = runtime_rng(0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-sim = AOSimulation(tel, src, atm, dm, wfs)
-
 calibration_pupil = PupilFunction(tel)
 imat = interaction_matrix(dm, wfs, calibration_pupil, src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)
-branch = ControlLoopBranch(:main, sim, recon; rng=rng)
-
-cfg = SingleControlLoopConfig(
-    atmosphere_step=1e-3,
-    name=:closed_loop_demo,
-    branch_label=:main,
-    outputs=RuntimeOutputRequirements(slopes=true, wfs_pixels=true),
-)
-
-scenario = build_control_loop_scenario(cfg, branch)
-prepare!(scenario)
+pupil = PupilFunction(tel)
+renderer = prepare_atmosphere_renderer(atm, tel, src)
+command = similar(dm.state.coefs)
 
 for _ in 1:5
-    step!(scenario)
+    epoch = advance_by!(atm, 1e-3; rng)
+    render_atmosphere!(pupil, renderer, atm, epoch)
+    update_surface!(dm)
+    apply_surface!(pupil, dm, DMAdditive())
+    measure!(wfs, pupil, src)
+    reconstruct!(command, recon, slopes(wfs))
+    @. command = -command
+    set_command!(dm, command)
 end
 
-rt = readout(scenario)
-cmd = command(rt)
-slopes_vec = slopes(rt)
-frame = wfs_frame(rt)
+slopes_vec = slopes(wfs)
+frame = camera_frame(wfs)
 ```
 
 `DeformableMirror` keeps the concise public Gaussian inputs:
@@ -614,15 +606,13 @@ separate print-through model.
 
 Use this when you care about:
 
-- loop staging
-- latency
-- exported runtime outputs
-- HIL-style or detector-backed sensing paths
+- an explicit offline control loop
+- numerical controller or delay-line experiments
+- model-specific profiling
 
-`prepare!(...)` performs any wfs/runtime precomputation once before repeated
-`step!(...)` or `sense!(...)` calls. `step!(...)` runs the full closed-loop
-update, while `sense!(...)` runs only the plant/sensor side and is the right
-entry point when commands come from an external controller.
+For HIL-style independent commands and acquisitions, lift the same physical
+components into `AdaptiveOpticsSim.Plant`. Do not pack several physical optics
+into one command object merely because one RTC produces a flat buffer.
 
 ### Workflow 4: Field propagation and diffractive optics
 

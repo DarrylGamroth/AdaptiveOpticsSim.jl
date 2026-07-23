@@ -5,10 +5,10 @@ using LinearAlgebra
 using Random
 using Statistics
 
-import AdaptiveOpticsSim: step!, readout, runtime_timing, convert_noise, validate_noise, materialize_build,
-    execution_style, synchronize_backend!, bin2d!, apply_command!, prepare_sampling!,
-    ensure_sh_calibration!, wfs_output_frame, prepare!, prepare_runtime_wfs!, supports_prepared_runtime,
-    supports_detector_output, supports_grouped_execution, wfs_output_metadata, init_execution_state
+import AdaptiveOpticsSim: runtime_timing, convert_noise, validate_noise, materialize_build,
+    execution_style, synchronize_backend!, bin2d!, prepare_sampling!,
+    ensure_sh_calibration!, wfs_output_frame, prepare_runtime_wfs!,
+    wfs_output_metadata, init_execution_state
 
 export AO188ActuatorSupportModel, CircularActuatorSupport
 export SubaruHighOrderWFSModel, OperationalShackHartmannWFSModel, AO188CurvatureModel
@@ -17,6 +17,7 @@ export AO188LatencyModel, AO188DetectorConfig, AO188WFSDetectorConfig, AO188APDD
 export AO188SimulationParams, AO188CurvatureSimulationParams
 export AO188Simulation, subaru_ao188_simulation, subaru_ao188_curvature_simulation
 export subaru_ao188_phase_timing, prepare_replay!, ao188_readout
+export prepare!, step!, readout
 
 @inline function validated_ao188_duration(value::Real,
     ::Type{T}, name::AbstractString) where {T<:AbstractFloat}
@@ -422,7 +423,7 @@ mutable struct AO188Simulation{
     DLD,
     BESTATE,
     RNG,
-} <: AbstractControlSimulation
+}
     params::P
     tel::TEL
     low_tel::LOWTEL
@@ -833,36 +834,32 @@ function step!(surrogate::AO188Simulation)
     delayed_recon = shift_delay!(surrogate.reconstruction_delay, surrogate.combined_command)
     copyto!(surrogate.command, delayed_recon)
     delayed_dm = shift_delay!(surrogate.dm_delay, surrogate.command)
-    apply_command!(surrogate.dm.state.coefs, delayed_dm, surrogate.params.control_sign)
+    @. surrogate.dm.state.coefs =
+        surrogate.params.control_sign * delayed_dm
     return surrogate.command
 end
 
 runtime_timing(surrogate::AO188Simulation; kwargs...) = runtime_timing(() -> step!(surrogate); kwargs...)
 
 prepare!(simulation::AO188Simulation) = prepare_replay!(simulation)
-supports_prepared_runtime(::Type{<:AO188Simulation}) = true
-supports_detector_output(::Type{<:AO188Simulation}) = true
-supports_grouped_execution(::Type{<:AO188Simulation}) = true
 
 readout(simulation::AO188Simulation) = ao188_readout(simulation)
-AdaptiveOpticsSim.simulation_readout(simulation::AO188Simulation) = ao188_readout(simulation)
 
 function ao188_readout(simulation::AO188Simulation)
-    return SimulationReadout(
-        simulation.command,
-        (slopes(simulation.high_wfs), slopes(simulation.low_wfs)),
-        (
+    return (
+        command=simulation.command,
+        signals=(
+            slopes(simulation.high_wfs),
+            slopes(simulation.low_wfs),
+        ),
+        wfs_frames=(
             _high_order_wfs_frame(simulation),
             wfs_output_frame(simulation.low_wfs, simulation.low_detector),
         ),
-        nothing,
-        (
+        wfs_metadata=(
             _high_order_wfs_metadata(simulation),
             detector_export_metadata(simulation.low_detector),
         ),
-        nothing,
-        nothing,
-        nothing,
     )
 end
 
@@ -915,7 +912,8 @@ function subaru_ao188_phase_timing(surrogate::AO188Simulation; warmup::Int=10, s
         delayed_dm = shift_delay!(surrogate.dm_delay, surrogate.command)
         t5 = time_ns()
 
-        apply_command!(surrogate.dm.state.coefs, delayed_dm, surrogate.params.control_sign)
+        @. surrogate.dm.state.coefs =
+            surrogate.params.control_sign * delayed_dm
         synchronize_backend!(execution_style(surrogate.dm.state.coefs))
         t6 = time_ns()
         high_sense_times[i] = t1 - t0

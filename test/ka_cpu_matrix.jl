@@ -1116,7 +1116,6 @@ end
         deferred = Set([
             :accumulate_selected_block_kernel!,
             :accumulate_selected_block_transpose_kernel!,
-            :apply_command_kernel!,
             :calibration_ramp_kernel!,
             :covariance_matrix_kernel!,
             :curvature_abs2_stack_kernel!,

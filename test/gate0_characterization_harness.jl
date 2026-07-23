@@ -92,7 +92,7 @@ function gate0_optic_surface(case::ReferenceCase)
     cfg = case.config["controllable_optic"]
     optic = build_reference_controllable_optic(cfg, tel)
     command = Float64.(cfg["command"])
-    set_command!(optic, command)
+    set_reference_controllable_commands!(optic, command)
     application = lowercase(String(get(cfg, "application", "additive")))
     mode = if application == "additive"
         DMAdditive()
@@ -101,8 +101,7 @@ function gate0_optic_surface(case::ReferenceCase)
     else
         throw(InvalidConfiguration("unknown Gate 0 optic application '$application'"))
     end
-    update_surface!(optic)
-    apply_surface!(pupil, optic, mode)
+    apply_reference_controllable_optics!(pupil, optic, mode)
     return Array(pupil.opd)
 end
 

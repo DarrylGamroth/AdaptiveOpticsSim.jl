@@ -799,8 +799,6 @@ end
             gain=0.1, tau=0.02);
         dt=TEST_ATMOSPHERE_STEP,
     )
-    sim = AOSimulation(tel, src, atm, dm, wfs)
-    runtime = ClosedLoopRuntime(sim, modal; atmosphere_step=1e-3, rng=MersenneTwister(9))
     wfs_diffractive = ShackHartmannWFS(tel; n_lenslets=2, mode=Diffractive())
     poly = with_spectrum(src, SpectralBundle([wavelength(src), 1.1 * wavelength(src)], [0.7, 0.3]))
     poly_common = with_spectrum(src, SpectralBundle(
@@ -913,13 +911,7 @@ end
     # IF-CTRL
     assert_controller_interface(ctrl, slopes(wfs), 0.01)
     @test supports_controller_reset(ctrl)
-    # IF-SIM
-    iface = assert_control_simulation_interface(runtime)
-    @test !supports_prepared_runtime(runtime)
-    @test !supports_detector_output(runtime)
-    @test !supports_stacked_sources(runtime)
-    @test !supports_grouped_execution(runtime)
-    @test AdaptiveOpticsSim.simulation_interface(iface) === iface
+    # WFS execution capabilities
     @test !supports_prepared_runtime(wfs, src)
     @test supports_prepared_runtime(wfs_diffractive, src)
     @test !supports_prepared_runtime(wfs_diffractive, poly)
