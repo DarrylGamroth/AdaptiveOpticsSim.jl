@@ -15,19 +15,19 @@ end
 
 struct PlantTopologyTestInvalidDefinitionStyle end
 
-AdaptiveOpticsSim.plant_model_definition_style(
+Plant.plant_model_definition_style(
     ::Type{PlantTopologyTestOpticalModel},
 ) = ColdPlantModelDefinition()
 
-AdaptiveOpticsSim.plant_model_definition_style(
+Plant.plant_model_definition_style(
     ::Type{PlantTopologyTestAcquisitionModel},
 ) = ColdPlantModelDefinition()
 
-AdaptiveOpticsSim.plant_model_definition_style(
+Plant.plant_model_definition_style(
     ::Type{PlantTopologyTestControllableOpticModel},
 ) = ColdPlantModelDefinition()
 
-AdaptiveOpticsSim.plant_model_definition_style(
+Plant.plant_model_definition_style(
     ::Type{PlantTopologyTestInvalidDefinitionStyle},
 ) = nothing
 
@@ -80,6 +80,11 @@ end
         :ControllableOpticID,
         :CommandEndpointID,
         :ControllableOpticDefinition,
+    )
+        @test Base.isexported(Plant, name)
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+    end
+    for name in (
         :controllable_optic_id,
         :controllable_optic_model,
         :command_schemas,
@@ -90,7 +95,9 @@ end
         :controllable_optic_definition,
         :command_endpoint_owner,
     )
-        @test Base.isexported(AdaptiveOpticsSim, name)
+        @test Base.ispublic(Plant, name)
+        @test !Base.isexported(Plant, name)
+        @test !Base.isexported(AdaptiveOpticsSim, name)
     end
 
     telescope = Telescope(

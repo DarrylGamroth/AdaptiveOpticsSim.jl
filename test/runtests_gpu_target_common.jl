@@ -1,7 +1,19 @@
 using Test
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim: Plant
+using AdaptiveOpticsSim.Plant
 using LinearAlgebra
 using Random
+
+# Hardware targets exercise qualified-public and internal plant contracts in
+# addition to the routine exported workflow.
+for name in names(Plant; all=true)
+    s = String(name)
+    if Base.isidentifier(s) && !startswith(s, "#") && !isdefined(@__MODULE__, name)
+        @eval const $(name) = getfield(Plant, $(QuoteNode(name)))
+    end
+end
+
 include("backend_optional_common.jl")
 include(normpath(joinpath(@__DIR__, "..", "benchmarks", "support", "revolt_like_hil_common.jl")))
 include(normpath(joinpath(@__DIR__, "..", "scripts", "gpu_builder_contract.jl")))

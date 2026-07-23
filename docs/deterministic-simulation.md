@@ -74,6 +74,8 @@ selection, or atmosphere-layer order changes. Duplicate or missing required
 identities are a `PlantPreparationError`.
 
 ```julia
+using AdaptiveOpticsSim.Plant
+
 plant = prepare_plant(definition;
     run_seed=0x1234,
     rng_derivation_version=RNGDerivationVersion(1),

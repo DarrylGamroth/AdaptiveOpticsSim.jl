@@ -31,6 +31,10 @@ hardware-validated GPU workflows. The core package now has:
   canonical plant timeline, bounded trigger fan-out and faults, conventional
   detector lifecycles, fixed prepared storage, and clean scheduler/composed-
   plant CPU evidence
+- a canonical `AdaptiveOpticsSim.Plant` owner for HIL-neutral plant time,
+  topology, commands, acquisition events, providers, preparation, and event
+  composition, with a bounded root export surface and explicit Julia 1.12 API
+  tiers
 - a compact docs set with one extension guide instead of subsystem plan sprawl
 
 ## Near-Term Priorities

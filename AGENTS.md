@@ -20,6 +20,10 @@
 #   update callers directly; do not add deprecated aliases, synthetic property
 #   forwarding, state views, or compatibility adapters unless the user
 #   explicitly requests a compatibility surface.
+# - Keep the root export surface for routine cross-domain workflows and
+#   canonical domain modules. Dense domain APIs belong to their real owner
+#   module: export routine vocabulary there, mark stable advanced seams
+#   `public`, and leave implementation details unmarked.
 #
 # Parallelism:
 # - Focus on coarse-grained parallelism (sources, time steps, sweeps).

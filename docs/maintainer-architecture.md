@@ -51,8 +51,10 @@ The codebase is organized into subsystem directories:
   - Shack-Hartmann, Pyramid, BioEdge, Curvature, Zernike, grouped execution,
     calibration scaffolding
 - `src/plant`
-  - immutable plant, optical-path, and acquisition topology declarations;
-    prepared execution and mutable owners remain separate layers
+  - the real `AdaptiveOpticsSim.Plant` submodule, with explicit imports from
+    already-loaded core, optics, atmosphere, detector, and WFS domains;
+    immutable topology, prepared execution, virtual time/events, commands,
+    providers, and mutable single-writer owners remain separate layers
 - `src/detectors`
   - frame/counting detectors, response models, thermal models, readout pipeline
 - `src/calibration`
@@ -66,6 +68,13 @@ The codebase is organized into subsystem directories:
   - compact simulation assembly types and maintained scenario-builder helpers
 - `ext`
   - optional backend or ecosystem integrations
+
+The root package exports `Plant` but no forwarding aliases for plant-owned
+bindings. `src/plant/api.jl` exports routine construction/execution vocabulary,
+marks stable advanced records, policies, state/workspace owners, traits, and
+accessors `public`, and leaves underscore-prefixed implementation machinery
+unmarked. Extensions add methods to the canonical `AdaptiveOpticsSim.Plant`
+function rather than introducing a second root function identity.
 
 ## Main Data Model
 

@@ -71,11 +71,14 @@ they do not define the product's RTC scope.
 ### Target API position
 
 The target core API models an adaptive-optics plant; it is not an OOPAO object
-compatibility layer and it is not HIL-only. HIL, deterministic virtual-time,
-offline, and device-resident execution consume the same scientific plant
-definitions and prepared model operations. Core plant types therefore SHOULD
-use plant, path, acquisition, product, and preparation terminology rather than
-an `HIL` prefix or the class layout of the original Python port.
+compatibility layer and it is not HIL-only. The implemented HIL-neutral plant
+surface is owned by the real `AdaptiveOpticsSim.Plant` submodule; the root
+exports that module without forwarding its contents. HIL, deterministic
+virtual-time, offline, and device-resident execution consume the same
+scientific plant definitions and prepared model operations. Plant types
+therefore SHOULD use plant, path, acquisition, product, and preparation
+terminology rather than an `HIL` prefix or the class layout of the original
+Python port.
 
 The API separates four semantic roles:
 

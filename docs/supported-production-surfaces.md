@@ -40,6 +40,10 @@ runtime and validation surfaces.
 
 Current CPU-supported families:
 
+- the canonical `AdaptiveOpticsSim.Plant` namespace for HIL-neutral plant
+  definitions, virtual time, commands, acquisition events, providers,
+  preparation, and serial event composition; root-level compatibility aliases
+  are not supported
 - telescope-owned aperture geometry and reflectivity with caller-owned,
   independent `PupilFunction` path products; the telescope owns no cadence,
   path OPD, field, PSF, or propagation scratch

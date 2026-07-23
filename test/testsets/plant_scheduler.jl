@@ -119,12 +119,18 @@ end
         :time_regression,
     )
 
-    @test !Base.isexported(AdaptiveOpticsSim, :EventGeneratorDefinition)
-    @test !Base.isexported(AdaptiveOpticsSim, :PreparedEventScheduler)
-    @test !Base.isexported(AdaptiveOpticsSim, :EventSchedulerState)
-    @test !Base.isexported(AdaptiveOpticsSim, :EventSchedulerWorkspace)
-    @test !Base.isexported(AdaptiveOpticsSim, :EventClaim)
-    @test !Base.isexported(AdaptiveOpticsSim, :prepare_event_scheduler)
+    for name in (
+        :EventGeneratorDefinition,
+        :PreparedEventScheduler,
+        :EventSchedulerState,
+        :EventSchedulerWorkspace,
+        :EventClaim,
+        :prepare_event_scheduler,
+    )
+        @test Base.ispublic(Plant, name)
+        @test !Base.isexported(Plant, name)
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+    end
 end
 
 @testset "Deterministic scheduler scan and equal-time ordering" begin

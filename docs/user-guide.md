@@ -408,6 +408,8 @@ between intervals; each read observes charge accumulated through its exact
 event timestamp without resetting integration:
 
 ```julia
+using AdaptiveOpticsSim.Plant
+
 rate_map = direct_imaging_output(imaging)
 rng = runtime_rng(6)
 event_ramp_detector = Detector(
@@ -419,28 +421,28 @@ event_ramp_detector = Detector(
         sampling_mode=UpTheRampSampling(3),
     ),
 )
-timing = AdaptiveOpticsSim.GlobalShutterAcquisitionDefinition(
+timing = AdaptiveOpticsSim.Plant.GlobalShutterAcquisitionDefinition(
     PlantDuration(1_000_000_000);
     readout_duration=PlantDuration(20_000_000),
 )
-events = AdaptiveOpticsSim.prepare_global_shutter_acquisition(
+events = AdaptiveOpticsSim.Plant.prepare_global_shutter_acquisition(
     event_ramp_detector, rate_map, timing)
-state = AdaptiveOpticsSim.GlobalShutterAcquisitionState(events)
+state = AdaptiveOpticsSim.Plant.GlobalShutterAcquisitionState(events)
 
 t0 = PlantTimestamp(0)
 t1 = PlantTimestamp(500_000_000)
 t2 = PlantTimestamp(1_000_000_000)
-AdaptiveOpticsSim.begin_exposure!(events, state, t0)
-AdaptiveOpticsSim.take_nondestructive_read!(events, state, t0, rng)
-AdaptiveOpticsSim.accumulate_exposure_interval!(events, state, t0, t1, rng)
+AdaptiveOpticsSim.Plant.begin_exposure!(events, state, t0)
+AdaptiveOpticsSim.Plant.take_nondestructive_read!(events, state, t0, rng)
+AdaptiveOpticsSim.Plant.accumulate_exposure_interval!(events, state, t0, t1, rng)
 # Update rate_map.values here after forming the next optical sample.
-AdaptiveOpticsSim.take_nondestructive_read!(events, state, t1, rng)
-AdaptiveOpticsSim.accumulate_exposure_interval!(events, state, t1, t2, rng)
-AdaptiveOpticsSim.close_exposure!(events, state, t2)
-AdaptiveOpticsSim.take_nondestructive_read!(events, state, t2, rng)
-AdaptiveOpticsSim.complete_readout!(events, state,
+AdaptiveOpticsSim.Plant.take_nondestructive_read!(events, state, t1, rng)
+AdaptiveOpticsSim.Plant.accumulate_exposure_interval!(events, state, t1, t2, rng)
+AdaptiveOpticsSim.Plant.close_exposure!(events, state, t2)
+AdaptiveOpticsSim.Plant.take_nondestructive_read!(events, state, t2, rng)
+AdaptiveOpticsSim.Plant.complete_readout!(events, state,
     t2 + PlantDuration(20_000_000), rng)
-frame = AdaptiveOpticsSim.mark_acquisition_ready!(events, state,
+frame = AdaptiveOpticsSim.Plant.mark_acquisition_ready!(events, state,
     t2 + PlantDuration(20_000_000))
 ```
 

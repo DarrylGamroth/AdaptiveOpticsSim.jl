@@ -32,8 +32,9 @@ definition. The default rejects the type. A cold, immutable model-definition
 type opts in by returning `ColdPlantModelDefinition()`:
 
 ```julia
-AdaptiveOpticsSim.plant_model_definition_style(::Type{MyModelDefinition}) =
-    ColdPlantModelDefinition()
+AdaptiveOpticsSim.Plant.plant_model_definition_style(
+    ::Type{MyModelDefinition},
+) = AdaptiveOpticsSim.Plant.ColdPlantModelDefinition()
 ```
 
 Opting in asserts that instances contain configuration only: no prepared

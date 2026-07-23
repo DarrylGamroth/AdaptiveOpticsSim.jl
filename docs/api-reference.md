@@ -10,15 +10,19 @@ Related guides:
 - [`extension-guide.md`](extension-guide.md)
 - [`runtime-dataflow.md`](runtime-dataflow.md)
 
-This document describes both the ordinary API imported by
-`using AdaptiveOpticsSim` and the stable qualified API used as
-`AdaptiveOpticsSim.name`. Qualified public names are maintained but do not
-enter the caller's ordinary namespace.
+This document describes the ordinary package API imported by
+`using AdaptiveOpticsSim`, the routine plant workflow imported by
+`using AdaptiveOpticsSim.Plant`, and the stable qualified APIs addressed as
+`AdaptiveOpticsSim.name` or `AdaptiveOpticsSim.Plant.name`. Qualified public
+names are maintained but do not enter the caller's ordinary namespace. The
+root package exports the `Plant` module, not compatibility bindings for its
+contents.
 
 ## Public API Policy
 
-Exported and qualified-public names are curated in
-[`../src/exports.jl`](../src/exports.jl).
+Root exported and qualified-public names are curated in
+[`../src/exports.jl`](../src/exports.jl); the canonical plant surface is
+curated separately in [`../src/plant/api.jl`](../src/plant/api.jl).
 Export a name only when it is one of these:
 
 - a normal user-facing constructor or workflow function
@@ -26,8 +30,8 @@ Export a name only when it is one of these:
 - a common mutating operation such as `measure!`, `propagate!`, or `step!`
 - a stable extension seam documented in [`extension-guide.md`](extension-guide.md)
 
-Declare a stable name `public` but keep it qualified as
-`AdaptiveOpticsSim.name` when it is one of these:
+Declare a stable name `public` but keep it qualified under its owning module
+when it is one of these:
 
 - low-level state and workspace containers
 - backend launch/allocation helpers
@@ -38,7 +42,8 @@ Declare a stable name `public` but keep it qualified as
 
 The package intentionally distinguishes three tiers:
 
-- **Stable exported API:** ordinary modeling, calibration, runtime, and HIL use.
+- **Stable exported API:** ordinary modeling, calibration, runtime, and plant
+  construction/execution use.
 - **Advanced documented API:** declared public, maintained, and usually
   qualified.
 - **Developer support API:** available for package internals, tests, and
@@ -48,9 +53,7 @@ The package intentionally distinguishes three tiers:
 
 - Errors: `AdaptiveOpticsSimError`, `InvalidConfiguration`,
   `DimensionMismatchError`, `UnsupportedAlgorithm`, `NumericalConditionError`,
-  `AtmosphereTimeError`, `AtmosphereEpochError`, `WFSPreparationError`,
-  `PlantTimeError`, `PlantScheduleError`, `PlantDefinitionError`,
-  `PlantCommandError`, `PlantPreparationError`, `DetectorAcquisitionError`
+  `AtmosphereTimeError`, `AtmosphereEpochError`, and `WFSPreparationError`
 - Profiles and RNG: `FidelityProfile`, `ScientificProfile`, `FastProfile`,
   `default_fidelity_profile`, `runtime_rng`, `deterministic_reference_rng`
 - Backend selectors: `CPUBackend`, `CUDABackend`, `AMDGPUBackend`,
@@ -154,7 +157,25 @@ requires explicit photon irradiance to claim a physical rate; its default is a
 normalized source. Calling `photon_irradiance` on a normalized source is an
 error rather than an implicit unit conversion.
 
-## Plant Time, Topology, And Preparation
+## `AdaptiveOpticsSim.Plant`
+
+`AdaptiveOpticsSim.Plant` is the canonical owner of virtual plant time,
+scheduling and trigger distribution, detector-acquisition events, plant
+definitions and preparation, illumination and providers, command lifecycle,
+and serial event composition. Use:
+
+```julia
+using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Plant
+```
+
+Routine construction and execution vocabulary is then available unqualified.
+Policies, mutable state/workspace owners, low-level transitions, traits, and
+inspection accessors are stable qualified API such as
+`Plant.CommandValuePolicy` and `Plant.EventSchedulerState`. Plant-specific
+errors are owned and exported here: `PlantTimeError`, `PlantScheduleError`,
+`PlantDefinitionError`, `PlantCommandError`, `PlantPreparationError`, and
+`DetectorAcquisitionError`.
 
 The completed Gate 3 API defines canonical plant instants, elapsed durations, nominal periodic
 recurrence, and a fixed-capacity serial event calendar without adding wall-clock
@@ -162,7 +183,7 @@ pacing. The completed Gate 2 topology API declares one shared telescope and
 atmosphere, reusable optical paths, and independent acquisitions. Preparation
 adds concrete single-writer owners without implicit atmosphere advancement:
 
-- Canonical plant-time values: `PlantTimestamp`, `PlantDuration`, qualified
+- Canonical plant-time values: `PlantTimestamp`, `PlantDuration`,
   `PlantTimeOffset`, `plant_nanoseconds`, `plant_time_seconds`, and
   `plant_duration_seconds`
 - Nominal recurrence: `PeriodicSchedule`, `schedule_period`, `schedule_phase`,
@@ -180,11 +201,12 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `claimed_event_key`, `reschedule_event!`,
   `reschedule_periodic_event!`, `activate_event_generator!`, and
   `deactivate_event_generator!`
-- Qualified trigger declarations: `TriggerSourceID`, `TriggerLinkID`,
+- Trigger declarations: `TriggerSourceID`, `TriggerLinkID`,
   `TriggerConsumerID`, `TriggerFaultID`, `TriggerSourceDefinition`,
   `TriggerLinkDefinition`, `TriggerConsumerDefinition`,
-  `TriggerFaultTraceEntry`, `TriggerFaultTrace`, and `TriggerEdgeAction`
-- Qualified trigger preparation and state: `prepare_trigger_topology`,
+  `TriggerFaultTraceEntry`, and `TriggerFaultTrace`; `TriggerEdgeAction` and
+  its values remain qualified
+- Trigger preparation and qualified state: `prepare_trigger_topology`,
   `PreparedTriggerTopology`, `TriggerTopologyState`,
   `TriggerTopologyWorkspace`, `trigger_source_handle`,
   `trigger_source_count`, `trigger_link_count`, `trigger_consumer_count`,
@@ -199,7 +221,7 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   retain distinct
   `NominalTriggerEdge`, `DeliveredTriggerEdge`, and
   `ReportedTriggerTimestamp` values
-- Qualified global-shutter event acquisition:
+- Global-shutter definition and qualified event lifecycle:
   `GlobalShutterAcquisitionDefinition`,
   `PreparedGlobalShutterAcquisition`, `GlobalShutterAcquisitionState`,
   `DetectorAcquisitionStatus`, `detector_acquisition_status`,
@@ -214,7 +236,7 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `mark_acquisition_ready!`. Integer plant timestamps own all transitions;
   the separately owned state rejects busy retriggers and intervals that cross
   exposure close or a pending scheduled ramp read
-- Qualified rolling-shutter event acquisition:
+- Rolling-shutter definition and qualified event lifecycle:
   `RollingShutterAcquisitionDefinition`,
   `PreparedRollingShutterAcquisition`, `RollingShutterAcquisitionState`,
   `rolling_band_count`, `rolling_band_rows`,
@@ -226,7 +248,7 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   timing model supplies line time, row-group size, and rolling-exposure or
   global-reset semantics; the ordinary event transition functions above are
   specialized for the prepared rolling lifecycle
-- Qualified frame-transfer event acquisition:
+- Frame-transfer definition and qualified event lifecycle:
   `FrameTransferAcquisitionDefinition`,
   `PreparedFrameTransferAcquisition`, `FrameTransferAcquisitionState`,
   `frame_transfer_storage_capacity`, `frame_transfer_image_sequence`,
@@ -236,10 +258,10 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `prepare_frame_transfer_acquisition`, and `complete_frame_transfer!`.
   One prepared device-resident storage frame permits image-area integration
   to overlap storage-area readout when the declared timing fits that capacity
-- Qualified plant-event composition: `PeriodicAcquisitionStart`,
+- Plant-event composition: `PeriodicAcquisitionStart`,
   `TriggeredAcquisitionStart`, `OpticalSampleDefinition`,
   `DetectorEventDefinition`, `PlantEventLoopDefinition`,
-  `PreparedPlantEventLoop`, `PlantEventLoopState`,
+  qualified `PreparedPlantEventLoop`, `PlantEventLoopState`,
   `PlantEventLoopWorkspace`, `prepare_plant_event_loop`,
   `plant_event_path_count`, `plant_event_acquisition_count`,
   `plant_event_generator_count`, `next_plant_event_timestamp`,
@@ -262,12 +284,12 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `PlantCommandSequence`, `CommandPresentationID`, `PlantCommand`,
   `PlantCommandOrderKey`, `PlantCommandAdmission`,
   `PlantCommandDisposition`, and `CommandDispositionReason`
-- Plant-command policies: `CommandValueSemantics`, `InvalidCommandAction`,
+- Qualified plant-command policies: `CommandValueSemantics`, `InvalidCommandAction`,
   `CommandRangeStage`, `CommandSequenceAction`, `FutureCommandPolicy`,
   `LateCommandPolicy`, `CommandSupersessionPolicy`, `CommandSilenceAction`,
   `CommandAgeOrigin`, `CommandValuePolicy`, `CommandSequencePolicy`,
-  `CommandEffectiveTimePolicy`, and `CommandSilencePolicy`; the corresponding
-  enum values form the exported configuration vocabulary
+  `CommandEffectiveTimePolicy`, and `CommandSilencePolicy`; their corresponding
+  enum values are also stable qualified configuration vocabulary
 - Cold-model trait: `plant_model_definition_style`,
   `ColdPlantModelDefinition`
 - Identity and model accessors: `controllable_optic_id`,
@@ -287,8 +309,8 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `claimed_command_payload`, `mark_plant_command_applied!`,
   `fail_plant_command_application!`, and `fail_pending_plant_commands!`.
   `CommandSequenceClass`, `CommandAdmissionStatus`, `CommandTerminalKind`,
-  and their exported values provide the result vocabulary; the exported
-  `command_*` accessors inspect admissions, claims, and dispositions.
+  and their values provide qualified result vocabulary; qualified `command_*`
+  accessors inspect admissions, claims, and dispositions.
   `command_requested_effective_timestamp`, `command_scheduled_timestamp`,
   `command_admission_timestamp`, `command_ready_timestamp`, and
   `command_terminal_timestamp` keep the distinct command lifecycle instants
@@ -302,9 +324,9 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   transition; `command_endpoint_failed` and
   `last_command_admission_timestamp` expose endpoint lifecycle state
 - Qualified public command-endpoint mutable storage:
-  `AdaptiveOpticsSim.CommandEndpointState` and
-  `AdaptiveOpticsSim.CommandApplicationState`, plus the caller-owned
-  `AdaptiveOpticsSim.CommandDispositionWorkspace`. These remain explicit
+  `AdaptiveOpticsSim.Plant.CommandEndpointState` and
+  `AdaptiveOpticsSim.Plant.CommandApplicationState`, plus the caller-owned
+  `AdaptiveOpticsSim.Plant.CommandDispositionWorkspace`. These remain explicit
   state/workspace containers rather than exported model types
 - Plant accessors: `plant_telescope`, `plant_atmosphere`,
   `controllable_optic_definitions`, `path_definitions`,
@@ -312,27 +334,30 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `command_endpoint_owner`, `command_schema`, `plant_command_schema`,
   `path_definition`, `acquisition_definition`
 - Ordinary prepared boundary: `PreparedPlant`, `prepare_plant`,
+  `prepare_acquisition_selection`, `execute_acquisition_selection!`, and
+  `execute_acquisition_selection_at!`. Qualified extension/execution seams are
   `prepare_pupil_opd_materialization`, `materialize_path_input!`,
-  `prepare_acquisition_selection`, `execute_acquisition_selection!`,
-  `execute_acquisition_selection_at!`, `execute_path!`, and
-  `execute_acquisition!`
+  `execute_path!`, and `execute_acquisition!`
 - Calibration-illumination entry boundary:
   `PupilFunctionIlluminationEntry`, `ElectricFieldIlluminationEntry`,
   `IntensityMapIlluminationEntry`, `ExternalOpticsResultIlluminationEntry`,
-  `DetectorInputIlluminationEntry`, `SingleIllumination`,
-  `ExclusiveIlluminationSelection`, `UniformIntensityIllumination`,
-  `prepare_illumination_entry`, `evaluate_illumination!`, and the
-  `illumination_*` accessors. Coherent-field and incoherent-intensity
-  combination reuse `CoherentFieldCombination` and
+  `DetectorInputIlluminationEntry`, `UniformIntensityIllumination`,
+  `prepare_illumination_entry` and `evaluate_illumination!`. The combination
+  policies `Plant.SingleIllumination` and
+  `Plant.ExclusiveIlluminationSelection`, like the `illumination_*`
+  accessors, remain qualified. Coherent-field and incoherent-intensity
+  combination reuse the root optical policies `CoherentFieldCombination` and
   `IncoherentIntensityAddition`
 - Prepared accessors: `prepared_paths`, `prepared_acquisitions`,
   `prepared_path`, `prepared_acquisition`, `path_input`, `path_result`,
   `path_result_key`, `acquisition_provider`, `acquisition_products`,
   `acquisition_observation`, `acquisition_measurement`, and
   `acquisition_product_metadata`
-- Product-provider contract: `FullOpticalProviderStyle`,
-  `CommandResponsiveReducedOrderProviderStyle`,
-  `SyntheticReplayProviderStyle`, `acquisition_provider_style`,
+- Product-provider contract: qualified traits
+  `Plant.FullOpticalProviderStyle`,
+  `Plant.CommandResponsiveReducedOrderProviderStyle`, and
+  `Plant.SyntheticReplayProviderStyle`; qualified
+  `acquisition_provider_style`,
   `acquisition_provider_payload_work`, `acquisition_product_contract`,
   `validate_acquisition_product_contract`,
   `prepare_full_optical_provider`,

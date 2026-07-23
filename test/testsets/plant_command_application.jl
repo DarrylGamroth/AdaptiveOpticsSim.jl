@@ -110,7 +110,6 @@ end
         :last_command_admission_timestamp,
         :last_command_application_timestamp,
         :command_endpoint_failed,
-        :apply_claimed_plant_command!,
         :next_command_silence_timestamp,
         :apply_command_silence_transition!,
         :command_silence_action,
@@ -120,15 +119,20 @@ end
         :command_silence_transition_timestamp,
         :command_silence_age,
     )
-        @test Base.ispublic(AdaptiveOpticsSim, name)
+        @test Base.ispublic(Plant, name)
+        @test !Base.isexported(Plant, name)
         @test !Base.isexported(AdaptiveOpticsSim, name)
     end
+    @test Base.isexported(Plant, :apply_claimed_plant_command!)
+    @test !Base.isexported(AdaptiveOpticsSim,
+        :apply_claimed_plant_command!)
     for name in (
         :CommandEndpointState,
         :CommandDispositionWorkspace,
         :CommandApplicationState,
     )
-        @test Base.ispublic(AdaptiveOpticsSim, name)
+        @test Base.ispublic(Plant, name)
+        @test !Base.isexported(Plant, name)
         @test !Base.isexported(AdaptiveOpticsSim, name)
     end
 

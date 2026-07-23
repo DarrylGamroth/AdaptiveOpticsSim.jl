@@ -1,9 +1,11 @@
 module Gate2SerialPlantBenchmark
 
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Plant
 using SHA
 
 const AOS = AdaptiveOpticsSim
+const AOSPlant = AdaptiveOpticsSim.Plant
 
 struct DirectSciencePathModel{R}
     zero_padding::Int
@@ -34,13 +36,13 @@ for model in (
     PyramidPathModel,
     FrameAcquisitionModel,
 )
-    @eval AOS.plant_model_definition_style(::Type{<:$model}) =
-        AOS.ColdPlantModelDefinition()
+    @eval AOSPlant.plant_model_definition_style(::Type{<:$model}) =
+        AOSPlant.ColdPlantModelDefinition()
 end
 
-function AOS.prepare_path_executor(
+function AOSPlant.prepare_path_executor(
     model::DirectSciencePathModel,
-    definition::AOS.OpticalPathDefinition,
+    definition::AOSPlant.OpticalPathDefinition,
     source::AOS.AbstractSource,
     telescope::AOS.Telescope,
     atmosphere::AOS.AbstractTimedAtmosphere,
@@ -48,7 +50,7 @@ function AOS.prepare_path_executor(
     pupil = AOS.PupilFunction(telescope)
     imaging = AOS.prepare_direct_imaging(pupil, source;
         zero_padding=model.zero_padding)
-    return AOS.PreparedPathExecutor(
+    return AOSPlant.PreparedPathExecutor(
         definition,
         source,
         telescope,
@@ -56,7 +58,7 @@ function AOS.prepare_path_executor(
         pupil,
         AOS.direct_imaging_output(imaging),
         imaging;
-        materialization=AOS.prepare_pupil_opd_materialization(
+        materialization=AOSPlant.prepare_pupil_opd_materialization(
             atmosphere, telescope, source, pupil),
         optical_model=(kind=:direct_imaging,
             zero_padding=model.zero_padding),
@@ -65,9 +67,9 @@ function AOS.prepare_path_executor(
     )
 end
 
-function AOS.prepare_path_executor(
+function AOSPlant.prepare_path_executor(
     model::ShackHartmannPathModel,
-    definition::AOS.OpticalPathDefinition,
+    definition::AOSPlant.OpticalPathDefinition,
     source::AOS.AbstractSource,
     telescope::AOS.Telescope,
     atmosphere::AOS.AbstractTimedAtmosphere,
@@ -84,8 +86,8 @@ function AOS.prepare_path_executor(
     front_end = AOS.ShackHartmannOpticalFrontEnd(sensor.front_end, source)
     result = AOS.shack_hartmann_rate_map(front_end, pupil)
     plan = AOS.prepare_wfs_optical_formation(front_end, pupil, result)
-    execution = AOS.WFSOpticalPathExecution(plan)
-    return AOS.PreparedPathExecutor(
+    execution = AOSPlant.WFSOpticalPathExecution(plan)
+    return AOSPlant.PreparedPathExecutor(
         definition,
         source,
         telescope,
@@ -93,7 +95,7 @@ function AOS.prepare_path_executor(
         pupil,
         result,
         execution;
-        materialization=AOS.prepare_pupil_opd_materialization(
+        materialization=AOSPlant.prepare_pupil_opd_materialization(
             atmosphere, telescope, source, pupil),
         optical_model=(kind=:shack_hartmann,
             n_lenslets=model.n_lenslets,
@@ -104,9 +106,9 @@ function AOS.prepare_path_executor(
     )
 end
 
-function AOS.prepare_path_executor(
+function AOSPlant.prepare_path_executor(
     model::PyramidPathModel,
-    definition::AOS.OpticalPathDefinition,
+    definition::AOSPlant.OpticalPathDefinition,
     source::AOS.AbstractSource,
     telescope::AOS.Telescope,
     atmosphere::AOS.AbstractTimedAtmosphere,
@@ -124,8 +126,8 @@ function AOS.prepare_path_executor(
     front_end = AOS.PyramidOpticalFrontEnd(sensor, source)
     result = AOS.pyramid_rate_map(front_end, pupil)
     plan = AOS.prepare_wfs_optical_formation(front_end, pupil, result)
-    execution = AOS.WFSOpticalPathExecution(plan)
-    return AOS.PreparedPathExecutor(
+    execution = AOSPlant.WFSOpticalPathExecution(plan)
+    return AOSPlant.PreparedPathExecutor(
         definition,
         source,
         telescope,
@@ -133,7 +135,7 @@ function AOS.prepare_path_executor(
         pupil,
         result,
         execution;
-        materialization=AOS.prepare_pupil_opd_materialization(
+        materialization=AOSPlant.prepare_pupil_opd_materialization(
             atmosphere, telescope, source, pupil),
         optical_model=(kind=:pyramid,
             pupil_samples=model.pupil_samples,
@@ -144,13 +146,13 @@ function AOS.prepare_path_executor(
     )
 end
 
-function AOS.prepare_acquisition_provider(
+function AOSPlant.prepare_acquisition_provider(
     model::FrameAcquisitionModel,
-    ::AOS.AcquisitionDefinition,
-    path::AOS.PreparedPathExecutor,
+    ::AOSPlant.AcquisitionDefinition,
+    path::AOSPlant.PreparedPathExecutor,
 )
-    AOS.require_path_result(path)
-    T = eltype(AOS._first_path_result(path.result).values)
+    AOSPlant.require_path_result(path)
+    T = eltype(AOSPlant._first_path_result(path.result).values)
     detector = AOS.Detector(
         integration_time=T(model.exposure_s),
         noise=AOS.NoiseNone(),
@@ -159,7 +161,7 @@ function AOS.prepare_acquisition_provider(
         T=T,
         backend=path.key.backend,
     )
-    execution = AOS.FrameAcquisitionExecution(detector, path.result)
+    execution = AOSPlant.FrameAcquisitionExecution(detector, path.result)
     metadata = (
         kind=:detector_frame,
         units=:detected_electrons,
@@ -167,8 +169,8 @@ function AOS.prepare_acquisition_provider(
         detector=AOS.detector_export_metadata(detector),
         semantics=:complete_acquisition,
     )
-    products = AOS.AcquisitionProducts(execution.observation; metadata)
-    return AOS.prepare_full_optical_provider(execution, products)
+    products = AOSPlant.AcquisitionProducts(execution.observation; metadata)
+    return AOSPlant.prepare_full_optical_provider(execution, products)
 end
 
 mutable struct SerialPlantOperation{S,T<:AbstractFloat}
@@ -180,7 +182,7 @@ end
 @inline function (operation::SerialPlantOperation)()
     operation.step_index += UInt64(1)
     next_model_time_s = operation.step_index * operation.model_step_s
-    AOS.execute_acquisition_selection_at!(operation.selection,
+    AOSPlant.execute_acquisition_selection_at!(operation.selection,
         next_model_time_s)
     return nothing
 end
@@ -232,46 +234,46 @@ function serial_plant_definition(raw::AbstractDict;
     )
 
     paths = (
-        AOS.OpticalPathDefinition(:science, science_source,
+        AOSPlant.OpticalPathDefinition(:science, science_source,
             DirectSciencePathModel(Int(raw["science_zero_padding"]),
                 UInt(1))),
-        AOS.OpticalPathDefinition(:ngs_shack_hartmann, ngs_source,
+        AOSPlant.OpticalPathDefinition(:ngs_shack_hartmann, ngs_source,
             ShackHartmannPathModel(Int(raw["sh_n_lenslets"]),
                 Int(raw["sh_n_pix_subap"]), UInt(2))),
-        AOS.OpticalPathDefinition(:lgs_pyramid, lgs_source,
+        AOSPlant.OpticalPathDefinition(:lgs_pyramid, lgs_source,
             PyramidPathModel(Int(raw["pyramid_pupil_samples"]),
                 T(raw["pyramid_modulation_lambda_over_d"]),
                 Int(raw["pyramid_modulation_points"]), UInt(3))),
     )
     acquisitions = (
-        AOS.AcquisitionDefinition(:science_fast, :science,
+        AOSPlant.AcquisitionDefinition(:science_fast, :science,
             FrameAcquisitionModel(T(raw["science_fast_exposure_s"]),
                 T(raw["quantum_efficiency"]))),
-        AOS.AcquisitionDefinition(:science_slow, :science,
+        AOSPlant.AcquisitionDefinition(:science_slow, :science,
             FrameAcquisitionModel(T(raw["science_slow_exposure_s"]),
                 T(raw["quantum_efficiency"]))),
-        AOS.AcquisitionDefinition(:ngs_frame, :ngs_shack_hartmann,
+        AOSPlant.AcquisitionDefinition(:ngs_frame, :ngs_shack_hartmann,
             FrameAcquisitionModel(T(raw["wfs_exposure_s"]),
                 T(raw["quantum_efficiency"]))),
-        AOS.AcquisitionDefinition(:lgs_frame, :lgs_pyramid,
+        AOSPlant.AcquisitionDefinition(:lgs_frame, :lgs_pyramid,
             FrameAcquisitionModel(T(raw["wfs_exposure_s"]),
                 T(raw["quantum_efficiency"]))),
     )
     ordered_paths = reverse_declarations ? reverse(paths) : paths
     ordered_acquisitions = reverse_declarations ? reverse(acquisitions) :
         acquisitions
-    return AOS.PlantDefinition(; telescope, atmosphere,
+    return AOSPlant.PlantDefinition(; telescope, atmosphere,
         paths=ordered_paths, acquisitions=ordered_acquisitions)
 end
 
 function prepare_serial_plant_operation(raw::AbstractDict;
     reverse_declarations::Bool=false)
     definition = serial_plant_definition(raw; reverse_declarations)
-    plant = AOS.prepare_plant(definition;
+    plant = AOSPlant.prepare_plant(definition;
         run_seed=UInt64(raw["run_seed"]),
         rng_derivation_version=Int(raw["rng_derivation_version"]),
     )
-    selection = AOS.prepare_acquisition_selection(plant,
+    selection = AOSPlant.prepare_acquisition_selection(plant,
         (:lgs_frame, :science_slow, :ngs_frame, :science_fast))
     model_step_s = Float64(raw["model_step_s"])
     return SerialPlantOperation(selection, UInt64(0), model_step_s)
@@ -282,9 +284,9 @@ end
     observation.storage
 
 function observation_snapshot(operation::SerialPlantOperation)
-    acquisitions = AOS.prepared_acquisitions(operation.selection)
+    acquisitions = AOSPlant.prepared_acquisitions(operation.selection)
     return map(acquisitions) do owner
-        values = observation_values(AOS.acquisition_observation(owner))
+        values = observation_values(AOSPlant.acquisition_observation(owner))
         Array(values)
     end
 end
@@ -300,21 +302,21 @@ function validate_replay_and_reordering(raw::AbstractDict)
     canonical_snapshot == reordered_snapshot || error(
         "Gate 2 serial plant changed outputs after declaration reordering")
 
-    canonical_paths = AOS.prepared_paths(canonical.selection)
+    canonical_paths = AOSPlant.prepared_paths(canonical.selection)
     path_ids = collect(map(
-        path -> String(AOS.path_id(path.definition).name), canonical_paths))
+        path -> String(AOSPlant.path_id(path.definition).name), canonical_paths))
     length(unique(path_ids)) == 3 || error(
         "Gate 2 serial plant must materialize three unique optical paths")
-    science_fast = AOS.prepared_acquisition(canonical.selection.plant,
+    science_fast = AOSPlant.prepared_acquisition(canonical.selection.plant,
         :science_fast)
-    science_slow = AOS.prepared_acquisition(canonical.selection.plant,
+    science_slow = AOSPlant.prepared_acquisition(canonical.selection.plant,
         :science_slow)
     science_fast.path_result === science_slow.path_result || error(
         "Gate 2 science acquisitions must reuse one optical result")
     exposure_ratio = Float64(raw["science_slow_exposure_s"]) /
         Float64(raw["science_fast_exposure_s"])
-    fast = observation_values(AOS.acquisition_observation(science_fast))
-    slow = observation_values(AOS.acquisition_observation(science_slow))
+    fast = observation_values(AOSPlant.acquisition_observation(science_fast))
+    slow = observation_values(AOSPlant.acquisition_observation(science_slow))
     isapprox(slow, exposure_ratio .* fast; rtol=1e-12, atol=1e-12) ||
         error("Gate 2 science detector fan-out changed exposure scaling")
     all(values -> all(isfinite, values) && sum(values) > 0,
@@ -325,11 +327,11 @@ function validate_replay_and_reordering(raw::AbstractDict)
         "declaration_reordering_replay" => true,
         "unique_path_count" => length(canonical_paths),
         "acquisition_count" => length(
-            AOS.prepared_acquisitions(canonical.selection)),
+            AOSPlant.prepared_acquisitions(canonical.selection)),
         "canonical_path_ids" => path_ids,
         "canonical_acquisition_ids" => collect(map(owner -> String(
-                AOS.acquisition_id(owner.definition).name),
-            AOS.prepared_acquisitions(canonical.selection))),
+                AOSPlant.acquisition_id(owner.definition).name),
+            AOSPlant.prepared_acquisitions(canonical.selection))),
         "science_path_reused" => true,
         "science_exposure_ratio" => exposure_ratio,
         "observation_sha256" => collect(map(canonical_snapshot) do values
@@ -339,17 +341,17 @@ function validate_replay_and_reordering(raw::AbstractDict)
 end
 
 function final_observation_summary(operation::SerialPlantOperation)
-    acquisitions = AOS.prepared_acquisitions(operation.selection)
-    atmosphere = AOS.plant_atmosphere(operation.selection.plant.definition)
+    acquisitions = AOSPlant.prepared_acquisitions(operation.selection)
+    atmosphere = AOSPlant.plant_atmosphere(operation.selection.plant.definition)
     return Dict{String,Any}(
         "model_time_s" => AOS.epoch_time(AOS.current_epoch(atmosphere)),
         "epoch_sequence" => Int(AOS.epoch_sequence(
             AOS.current_epoch(atmosphere))),
         "acquisitions" => collect(map(acquisitions) do owner
             values = Array(observation_values(
-                AOS.acquisition_observation(owner)))
+                AOSPlant.acquisition_observation(owner)))
             Dict{String,Any}(
-                "id" => String(AOS.acquisition_id(owner.definition).name),
+                "id" => String(AOSPlant.acquisition_id(owner.definition).name),
                 "shape" => collect(size(values)),
                 "sum" => sum(values),
                 "minimum" => minimum(values),

@@ -1,5 +1,7 @@
 using Test
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim: Plant
+using AdaptiveOpticsSim.Plant
 using LinearAlgebra
 using Random
 using SpecialFunctions
@@ -29,6 +31,13 @@ for name in names(AdaptiveOpticsSim; all=true)
     s = String(name)
     if Base.isidentifier(s) && !startswith(s, "#") && !isdefined(@__MODULE__, name)
         @eval const $(name) = getfield(AdaptiveOpticsSim, $(QuoteNode(name)))
+    end
+end
+
+for name in names(Plant; all=true)
+    s = String(name)
+    if Base.isidentifier(s) && !startswith(s, "#") && !isdefined(@__MODULE__, name)
+        @eval const $(name) = getfield(Plant, $(QuoteNode(name)))
     end
 end
 

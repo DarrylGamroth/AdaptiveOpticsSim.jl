@@ -1,4 +1,4 @@
-const AOSTrigger = AdaptiveOpticsSim
+const AOSTrigger = Plant
 
 function assert_trigger_topology_error(f, reason::Symbol)
     try
@@ -116,9 +116,11 @@ end
     @test getfield(topology, :consumers) isa
         Memory{AOSTrigger._PreparedTriggerConsumer}
 
-    @test !Base.isexported(AdaptiveOpticsSim, :PreparedTriggerTopology)
+    @test Base.ispublic(Plant, :PreparedTriggerTopology)
+    @test !Base.isexported(Plant, :PreparedTriggerTopology)
+    @test Base.isexported(Plant, :TriggerSourceDefinition)
+    @test Base.isexported(Plant, :prepare_trigger_topology)
     @test !Base.isexported(AdaptiveOpticsSim, :TriggerSourceDefinition)
-    @test !Base.isexported(AdaptiveOpticsSim, :prepare_trigger_topology)
 
     state = AOSTrigger.TriggerTopologyState(topology)
     workspace = AOSTrigger.TriggerTopologyWorkspace(topology)
