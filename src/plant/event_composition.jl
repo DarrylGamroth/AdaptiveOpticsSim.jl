@@ -824,7 +824,9 @@ function _event_optic_endpoint_initials(
             prepared.command_endpoints[Int(slot)].binding)
     end
     commands = map(optic.endpoint_slots) do slot
-        prepared.command_endpoints[Int(slot)].binding.initial_command
+        binding = prepared.command_endpoints[Int(slot)].binding
+        _copy_prepared_effective_command(binding.endpoint,
+            binding.initial_command, "initial physical command")
     end
     return ids, commands
 end
@@ -1143,6 +1145,33 @@ function _resolve_event_command_claim!(
     return desired
 end
 
+@inline function _require_routed_command_admission_timestamp(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    timestamp::PlantTimestamp)
+    scheduler_state = state.scheduler
+    current = scheduler_timestamp(scheduler_state)
+    timestamp < current &&
+        _plant_event_loop_error(:command_admission_time_regression,
+            "command admission timestamp precedes the current plant-event " *
+            "timestamp")
+    timestamp == current && scheduler_state.has_last_key &&
+        _plant_event_loop_error(:command_admission_time_elapsed,
+            "command admission timestamp has already been processed by the " *
+            "plant event loop")
+    count = scan_due_events!(workspace.scheduler, prepared.scheduler,
+        scheduler_state)
+    if !iszero(count)
+        next_due = workspace.scheduler.due_timestamp
+        next_due < timestamp &&
+            _plant_event_loop_error(:command_admission_overtakes_event,
+                "command admission timestamp follows the next unprocessed " *
+                "plant event at $next_due")
+    end
+    return nothing
+end
+
 """
 Route one command into its exact event-loop-owned endpoint and arm the reserved
 command-phase generator. Any admission-time terminal dispositions are copied
@@ -1154,21 +1183,12 @@ function admit_plant_command!(prepared::PreparedPlantEventLoop,
     _require_plant_event_loop_binding(prepared, state)
     _require_plant_event_loop_binding(prepared, workspace)
     _require_empty_event_command_dispositions(workspace)
-    timestamp < scheduler_timestamp(state.scheduler) &&
-        _plant_event_loop_error(:command_time_regression,
-            "command admission precedes the current plant-event timestamp")
+    _require_routed_command_admission_timestamp(prepared, state, workspace,
+        timestamp)
     slot = _event_command_endpoint_slot(prepared,
         command_endpoint_id(command))
     event_endpoint = _event_command_endpoint(prepared, slot)
     endpoint_state = _event_command_endpoint_state(state, slot)
-    requested = command_requested_effective_timestamp(command)
-    candidate_timestamp = requested < timestamp ? timestamp : requested
-    _has_pending_command_transaction_at(event_endpoint.binding.endpoint,
-        endpoint_state, candidate_timestamp) &&
-        _command_admission_error(:transaction,
-            :equal_time_endpoint_conflict,
-            "an independently admitted command cannot share an endpoint " *
-            "and scheduled timestamp with an atomic transaction member")
     endpoint_workspace = _event_command_workspace(workspace, slot)
     admission = try
         admit_plant_command!(endpoint_workspace,
@@ -1450,9 +1470,8 @@ function admit_plant_command_transaction!(
     _require_plant_event_loop_binding(prepared, state)
     _require_plant_event_loop_binding(prepared, workspace)
     _require_empty_event_command_dispositions(workspace)
-    timestamp < scheduler_timestamp(state.scheduler) &&
-        _plant_event_loop_error(:command_time_regression,
-            "command transaction admission precedes the current plant-event timestamp")
+    _require_routed_command_admission_timestamp(prepared, state, workspace,
+        timestamp)
     count = _prepare_transaction_member_slots!(prepared, workspace,
         transaction)
     scheduled = zero(PlantTimestamp)

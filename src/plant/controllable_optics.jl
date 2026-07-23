@@ -178,7 +178,13 @@ function prepare_controllable_optic(model,
         "prepare_controllable_optic"))
 end
 
-"""Construct the single-writer physical state for one prepared optic."""
+"""
+Construct the single-writer physical state for one prepared optic.
+
+Every array in `initial_commands` is a fresh state-owned copy rather than
+prepared-plan or caller storage. Implementations may retain and mutate those
+arrays as part of the returned physical state.
+"""
 function prepare_controllable_optic_state(implementation,
     ::ControllableOpticDefinition, endpoint_ids::Tuple,
     initial_commands::Tuple)

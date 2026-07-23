@@ -602,6 +602,14 @@ standalone endpoint supports replacement-style supersession only for absolute
 commands; it rejects that policy for incremental deltas rather than silently
 changing their sum.
 
+The composed event-loop admission call is bounded by the next unprocessed plant
+event. It may use the initial timestamp or a later unprocessed instant no later
+than that event, which permits ingress between scheduled events. It may not
+cross an older pending event or reuse a timestamp after any event phase at that
+timestamp has run. Future-effective intent remains the command's requested
+effective timestamp and occupies the bounded endpoint calendar after
+admission.
+
 The endpoint's next application-ready claim removes the earliest due command
 using scheduled time, stable endpoint ordinal, and endpoint-local sequence as
 the total key. Comparing endpoint ordinal before local sequence prevents

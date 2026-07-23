@@ -9,22 +9,39 @@ struct CommandCompositionAcquisitionModel{T<:AbstractFloat}
     exposure::T
 end
 
+struct ArrayInitialCommandOpticModel end
+
 struct PreparedCommandCompositionOptic{T<:AbstractFloat,
     A<:AbstractMatrix{T}}
     endpoint::CommandEndpointID
     pattern::A
 end
 
+struct PreparedArrayInitialCommandOptic{T<:AbstractFloat}
+    endpoint::CommandEndpointID
+    command_count::Int
+end
+
 mutable struct CommandCompositionOpticState{T<:AbstractFloat}
     visible::T
+end
+
+mutable struct ArrayInitialCommandOpticState{A<:AbstractVector}
+    visible::A
 end
 
 mutable struct CommandCompositionOpticWorkspace{T<:AbstractFloat}
     staged::T
 end
 
+mutable struct ArrayInitialCommandOpticWorkspace{T<:AbstractFloat}
+    staged::Vector{T}
+end
+
 Plant.plant_model_definition_style(
     ::Type{<:CommandCompositionOpticModel}) = ColdPlantModelDefinition()
+Plant.plant_model_definition_style(
+    ::Type{ArrayInitialCommandOpticModel}) = ColdPlantModelDefinition()
 Plant.plant_model_definition_style(
     ::Type{CommandCompositionPathModel}) = ColdPlantModelDefinition()
 Plant.plant_model_definition_style(
@@ -57,6 +74,22 @@ function Plant.prepare_controllable_optic(
     return PreparedCommandCompositionOptic(endpoint, pattern)
 end
 
+function Plant.prepare_controllable_optic(
+    ::ArrayInitialCommandOpticModel,
+    definition::ControllableOpticDefinition,
+    ::Telescope,
+    ::AdaptiveOpticsSim.AbstractAtmosphere,
+)
+    schema = only(command_schemas(definition))
+    T = command_numeric_type(schema)
+    dimensions = command_dimensions(schema)
+    length(dimensions) == 1 || throw(PlantPreparationError(
+        :controllable_optic, :invalid_dimensions,
+        "array-initial test optic requires one-dimensional commands"))
+    return PreparedArrayInitialCommandOptic{T}(
+        command_endpoint_id(schema), only(dimensions))
+end
+
 function Plant.prepare_controllable_optic_state(
     prepared::PreparedCommandCompositionOptic{T},
     ::ControllableOpticDefinition,
@@ -69,9 +102,31 @@ function Plant.prepare_controllable_optic_state(
     return CommandCompositionOpticState(T(only(initial_commands)))
 end
 
+function Plant.prepare_controllable_optic_state(
+    prepared::PreparedArrayInitialCommandOptic{T},
+    ::ControllableOpticDefinition,
+    endpoint_ids::Tuple,
+    initial_commands::Tuple,
+) where {T}
+    only(endpoint_ids) == prepared.endpoint ||
+        throw(PlantPreparationError(:controllable_optic,
+            :prepared_binding, "array-initial test endpoint binding changed"))
+    initial = only(initial_commands)
+    length(initial) == prepared.command_count ||
+        throw(PlantPreparationError(:controllable_optic,
+            :prepared_binding, "array-initial test command size changed"))
+    return ArrayInitialCommandOpticState(initial)
+end
+
 function Plant.prepare_controllable_optic_workspace(
     ::PreparedCommandCompositionOptic{T}) where {T}
     return CommandCompositionOpticWorkspace(zero(T))
+end
+
+function Plant.prepare_controllable_optic_workspace(
+    prepared::PreparedArrayInitialCommandOptic{T}) where {T}
+    return ArrayInitialCommandOpticWorkspace(
+        Vector{T}(undef, prepared.command_count))
 end
 
 function Plant.stage_controllable_optic_command!(
@@ -92,6 +147,19 @@ function Plant.stage_controllable_optic_command!(
     return nothing
 end
 
+function Plant.stage_controllable_optic_command!(
+    prepared::PreparedArrayInitialCommandOptic,
+    ::ArrayInitialCommandOpticState,
+    workspace::ArrayInitialCommandOpticWorkspace,
+    endpoint::CommandEndpointID,
+    command::AbstractVector)
+    endpoint == prepared.endpoint ||
+        throw(PlantCommandError(:physical_application,
+            :endpoint_mismatch, "array-initial test received another endpoint"))
+    copyto!(workspace.staged, command)
+    return nothing
+end
+
 function Plant.commit_controllable_optic_command!(
     ::PreparedCommandCompositionOptic{T},
     state::CommandCompositionOpticState{T},
@@ -102,11 +170,29 @@ function Plant.commit_controllable_optic_command!(
     return nothing
 end
 
+function Plant.commit_controllable_optic_command!(
+    ::PreparedArrayInitialCommandOptic,
+    state::ArrayInitialCommandOpticState,
+    workspace::ArrayInitialCommandOpticWorkspace,
+    ::CommandEndpointID)
+    copyto!(state.visible, workspace.staged)
+    return nothing
+end
+
 function Plant.apply_controllable_optic_surface!(
     input::PupilFunction,
     prepared::PreparedCommandCompositionOptic,
     state::CommandCompositionOpticState)
     @. input.opd += state.visible * prepared.pattern
+    return input
+end
+
+function Plant.apply_controllable_optic_surface!(
+    input::PupilFunction,
+    ::PreparedArrayInitialCommandOptic,
+    state::ArrayInitialCommandOpticState)
+    offset = sum(state.visible)
+    @. input.opd += offset
     return input
 end
 
@@ -234,6 +320,69 @@ function command_composition_fixture(; reverse_order::Bool=false,
         PlantEventLoopWorkspace(prepared), first_schema, second_schema
 end
 
+function array_initial_command_fixture()
+    T = Float64
+    telescope = Telescope(resolution=8, diameter=T(8),
+        central_obstruction=zero(T), T=T)
+    atmosphere = MultiLayerAtmosphere(telescope; r0=T(0.2), L0=T(25),
+        fractional_cn2=T[1], wind_speed=T[0], wind_direction=T[0],
+        altitude=T[0], layer_ids=(:ground,), T=T)
+    source = Source(band=:custom, wavelength=T(0.8e-6),
+        photon_irradiance=T(100), T=T)
+    path = OpticalPathDefinition(:science, source,
+        CommandCompositionPathModel())
+    acquisition = AcquisitionDefinition(:camera, :science,
+        CommandCompositionAcquisitionModel(T(0.3)))
+    schema = PlantCommandSchema(
+        T,
+        (2,);
+        id=:array_initial_schema,
+        version=1,
+        endpoint=:array_initial,
+        units=:metre,
+        sign_convention=:positive_surface_increases_opd,
+        basis=CommandBasis(:modal, :array_initial),
+        basis_revision=1,
+        semantics=AbsoluteCommand,
+        bounds=UniformCommandBounds(T(-1), T(1)),
+        value_policy=CommandValuePolicy(),
+        sequence_policy=CommandSequencePolicy(),
+        effective_time_policy=CommandEffectiveTimePolicy(
+            supersession=PreservePendingCommands),
+        silence_policy=CommandSilencePolicy(),
+    )
+    optic = ControllableOpticDefinition(:array_initial_optic,
+        ArrayInitialCommandOpticModel(), (schema,))
+    definition = PlantDefinition(; telescope, atmosphere,
+        controllable_optics=(optic,), paths=(path,),
+        acquisitions=(acquisition,))
+    initial = T[0.1, -0.2]
+    plant = prepare_plant(definition; run_seed=0x7a01,
+        command_endpoints=(
+            CommandEndpointConfiguration(:array_initial, initial;
+                capacity=2),
+        ))
+    loop_definition = PlantEventLoopDefinition(
+        (OpticalSampleDefinition(:science,
+            PeriodicSchedule(period_ns=100_000_000, phase_ns=0)),),
+        (DetectorEventDefinition(:camera,
+            GlobalShutterAcquisitionDefinition(
+                PlantDuration(300_000_000)),
+            PeriodicAcquisitionStart(PeriodicSchedule(
+                period_ns=1_000_000_000, phase_ns=0))),),
+    )
+    return initial, plant, prepare_plant_event_loop(plant, loop_definition)
+end
+
+function captured_command_composition_error(f)
+    try
+        f()
+    catch error
+        return error
+    end
+    return nothing
+end
+
 function command_composition_submit!(prepared, state, workspace, schema,
     sequence, effective_ns, value)
     return admit_plant_command!(prepared, state, workspace,
@@ -303,6 +452,12 @@ end
     result = command_composition_run_independent()
     @test plant_event_controllable_optic_count(result.prepared) == 2
     @test plant_event_command_endpoint_count(result.prepared) == 2
+    @test length(Plant.prepared_controllable_optics(result.plant)) == 2
+    @test length(Plant.prepared_command_endpoints(result.plant)) == 2
+    @test Plant.prepared_controllable_optic(result.plant, :woofer) ===
+        Plant.prepared_controllable_optics(result.plant)[2]
+    @test Plant.prepared_command_endpoint(result.plant, :a_woofer) ===
+        Plant.prepared_command_endpoints(result.plant)[1]
     @test command_disposition_count(result.workspace) == 2
     @test all(index -> command_terminal_kind(
             command_disposition(result.workspace, index)) ==
@@ -318,6 +473,115 @@ end
     @test reordered.first_rate == result.first_rate
     @test reordered.second_rate == result.second_rate
     @test reordered.observation == result.observation
+end
+
+@testset "Prepared configuration and physical-state ownership" begin
+    plant, _, _, _, _, _ = command_composition_fixture()
+    definition = plant.definition
+
+    duplicate_error = captured_command_composition_error() do
+        prepare_plant(definition; run_seed=0x7a02,
+            command_endpoints=(
+                CommandEndpointConfiguration(:a_woofer, 0.0; capacity=2),
+                CommandEndpointConfiguration(:a_woofer, 0.0; capacity=2),
+            ))
+    end
+    @test duplicate_error isa PlantPreparationError
+    @test duplicate_error.reason == :duplicate_configuration
+
+    missing_error = captured_command_composition_error() do
+        prepare_plant(definition; run_seed=0x7a03,
+            command_endpoints=(
+                CommandEndpointConfiguration(:a_woofer, 0.0; capacity=2),
+                CommandEndpointConfiguration(:extra, 0.0; capacity=2),
+            ))
+    end
+    @test missing_error isa PlantPreparationError
+    @test missing_error.reason == :missing_configuration
+
+    named_error = captured_command_composition_error() do
+        prepare_plant(definition; run_seed=0x7a04,
+            command_endpoints=(
+                wrong=CommandEndpointConfiguration(
+                    :a_woofer, 0.0; capacity=2),
+                b_tweeter=CommandEndpointConfiguration(
+                    :b_tweeter, 0.0; capacity=2),
+            ))
+    end
+    @test named_error isa PlantPreparationError
+    @test named_error.reason == :identity_mismatch
+
+    _, timed, timed_state, timed_workspace, timed_first, timed_second =
+        command_composition_fixture()
+    overtake_admission_error = captured_command_composition_error() do
+        admit_plant_command!(timed, timed_state, timed_workspace,
+            PlantCommand(timed_first, 1, PlantTimestamp(100_000_000), 0.1),
+            PlantTimestamp(1))
+    end
+    @test overtake_admission_error isa PlantScheduleError
+    @test overtake_admission_error.reason ==
+        :command_admission_overtakes_event
+    @test command_disposition_count(timed_workspace) == 0
+    overtake_transaction_error = captured_command_composition_error() do
+        Plant.admit_plant_command_transaction!(timed, timed_state,
+            timed_workspace, Plant.PlantCommandTransaction(
+                PlantCommand(timed_first, 1,
+                    PlantTimestamp(100_000_000), 0.1),
+                PlantCommand(timed_second, 1,
+                    PlantTimestamp(100_000_000), -0.1),
+            ), PlantTimestamp(1))
+    end
+    @test overtake_transaction_error isa PlantScheduleError
+    @test overtake_transaction_error.reason ==
+        :command_admission_overtakes_event
+    @test command_disposition_count(timed_workspace) == 0
+    @test next_plant_event_timestamp(timed, timed_state, timed_workspace) ==
+        PlantTimestamp(0)
+    @test step_plant_events!(timed, timed_state, timed_workspace) ==
+        PlantTimestamp(0)
+
+    elapsed_admission_error = captured_command_composition_error() do
+        admit_plant_command!(timed, timed_state, timed_workspace,
+            PlantCommand(timed_first, 1, PlantTimestamp(100_000_000), 0.1),
+            PlantTimestamp(0))
+    end
+    @test elapsed_admission_error isa PlantScheduleError
+    @test elapsed_admission_error.reason == :command_admission_time_elapsed
+    @test command_disposition_count(timed_workspace) == 0
+    between_event_admission = admit_plant_command!(
+        timed, timed_state, timed_workspace,
+        PlantCommand(timed_first, 1, PlantTimestamp(100_000_000), 0.1),
+        PlantTimestamp(1))
+    @test command_admission_status(between_event_admission) ==
+        CommandAdmittedPending
+    @test command_scheduled_timestamp(
+        command_order_key(between_event_admission)) ==
+        PlantTimestamp(100_000_000)
+    @test step_plant_events!(timed, timed_state, timed_workspace) ==
+        PlantTimestamp(100_000_000)
+    @test command_disposition_count(timed_workspace) == 1
+    clear_command_dispositions!(timed_workspace)
+    regressed_admission_error = captured_command_composition_error() do
+        admit_plant_command!(timed, timed_state, timed_workspace,
+            PlantCommand(timed_first, 2, PlantTimestamp(200_000_000), 0.2),
+            PlantTimestamp(50_000_000))
+    end
+    @test regressed_admission_error isa PlantScheduleError
+    @test regressed_admission_error.reason ==
+        :command_admission_time_regression
+    @test command_disposition_count(timed_workspace) == 0
+
+    initial, _, prepared = array_initial_command_fixture()
+    initial .= 0.8
+    first_state = PlantEventLoopState(prepared)
+    second_state = PlantEventLoopState(prepared)
+    first_visible = first_state.controllable_optics[1].visible
+    second_visible = second_state.controllable_optics[1].visible
+    @test first_visible == [0.1, -0.2]
+    @test second_visible == [0.1, -0.2]
+    @test first_visible !== second_visible
+    first_visible[1] = 0.7
+    @test second_visible == [0.1, -0.2]
 end
 
 @testset "Equal-time right continuity and explicit atomic transactions" begin
@@ -344,6 +608,18 @@ end
     @test command_admission_status(admission) == CommandAdmittedPending
     @test Plant.command_transaction_id(admission) !== nothing
     @test Plant.command_transaction_member_count(admission) == 2
+    collision = admit_plant_command!(atomic, atomic_state, atomic_workspace,
+        PlantCommand(atomic_first, 2, PlantTimestamp(100_000_000), 0.5),
+        PlantTimestamp(0))
+    @test command_admission_status(collision) ==
+        CommandTerminatedOnAdmission
+    @test command_disposition_count(atomic_workspace) == 1
+    @test command_terminal_kind(
+        command_disposition(atomic_workspace, 1)) == RejectedCommand
+    @test command_disposition_reason(
+        command_disposition(atomic_workspace, 1)).name ==
+        :equal_time_endpoint_conflict
+    clear_command_dispositions!(atomic_workspace)
     @test step_plant_events!(atomic, atomic_state, atomic_workspace) ==
         PlantTimestamp(0)
     @test step_plant_events!(atomic, atomic_state, atomic_workspace) ==
@@ -416,6 +692,8 @@ end
         PlantCommand(failed_first, 1, PlantTimestamp(0), 0.2),
         PlantCommand(failed_second, 1, PlantTimestamp(0), -0.2),
     )
+    @test step_plant_events!(failed, failed_state, failed_workspace) ==
+        PlantTimestamp(0)
     failure = try
         Plant.admit_plant_command_transaction!(failed, failed_state,
             failed_workspace, failed_transaction, PlantTimestamp(1))
@@ -437,6 +715,8 @@ end
 
     _, late, late_state, late_workspace, late_first, _ =
         command_composition_fixture(first_effective_time_policy=fail_late)
+    @test step_plant_events!(late, late_state, late_workspace) ==
+        PlantTimestamp(0)
     late_failure = try
         admit_plant_command!(late, late_state, late_workspace,
             PlantCommand(late_first, 1, PlantTimestamp(0), 0.2),

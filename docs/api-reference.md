@@ -458,7 +458,9 @@ from typed identities rather than declaration position.
 `prepare_controllable_optic` returns immutable model-specific preparation
 data. `prepare_controllable_optic_state` and
 `prepare_controllable_optic_workspace` separately construct mutable physical
-state and scratch. During command application,
+state and scratch. Array-valued initial commands passed to each state
+constructor are fresh state-owned copies rather than caller or prepared-plan
+storage. During command application,
 `stage_controllable_optic_command!` validates and stages one complete
 effective endpoint value without changing the visible surface. After a
 successful stage, `commit_controllable_optic_command!` must be a bounded,
@@ -488,16 +490,23 @@ transition per unchanged age origin, and a due command at the same timestamp
 must be resolved first.
 
 The routed `admit_plant_command!` overload selects the exact event-loop-owned
-endpoint and arms its command-phase generator. `PlantCommandTransaction`
-explicitly groups two or more endpoints on distinct physical optics at one
-common requested timestamp; every member endpoint must use
-`PreservePendingCommands`. `admit_plant_command_transaction!` preflights and
-stages every payload before changing any endpoint calendar. At application,
-every effective command and physical response is staged before any member is
-published. A rejected or failed member leaves every transaction member's held
-command and visible physical state unchanged. Equal timestamps, shared
-placement, and packed payloads never imply atomicity. A transaction terminated
-during admission has neither a transaction identity nor a scheduled timestamp.
+endpoint and arms its command-phase generator. Its admission timestamp may be
+the initial timestamp or an unprocessed instant after the current scheduler
+timestamp, but it must not follow the next unprocessed plant event. Once any
+phase at a timestamp has run, routed admission cannot reuse that timestamp.
+This frontier prevents ingress from changing endpoint state across an older
+pending plant event while permitting command ingress between scheduled events.
+`PlantCommandTransaction` explicitly groups two or more endpoints on distinct
+physical optics at one common requested timestamp; every member endpoint must
+use `PreservePendingCommands`. `admit_plant_command_transaction!` has the same
+frontier precondition and preflights and stages every payload before changing
+any endpoint calendar.
+At application, every effective command and physical response is staged before
+any member is published. A rejected or failed member leaves every transaction
+member's held command and visible physical state unchanged. Equal timestamps,
+shared placement, and packed payloads never imply atomicity. A transaction
+terminated during admission has neither a transaction identity nor a scheduled
+timestamp.
 
 Plant state is right-continuous: a command effective at `t` affects an optical
 sample at `t`. Detector exposure intervals are half-open, so accumulation
@@ -521,8 +530,9 @@ emit `:endpoint_mismatch`, `:schema_mismatch`,
 `:schema_version_mismatch`, payload-validation reason symbols,
 `:payload_validation_failure`, `:duplicate_sequence`, `:stale_sequence`,
 `:reordered_sequence`, `:skipped_sequence`, `:future_command`,
-`:late_command`, `:calendar_capacity`, `:payload_storage_failure`, or
-`:superseded_by_newer_sequence`; successful reporting emits `:applied`.
+`:late_command`, `:equal_time_endpoint_conflict`, `:calendar_capacity`,
+`:payload_storage_failure`, or `:superseded_by_newer_sequence`; successful
+reporting emits `:applied`.
 Effective-command application may additionally emit `:applied_clipped`,
 `:nonfinite_rejected`, `:nonfinite_failure`, `:out_of_range_rejected`,
 `:out_of_range_failure`, `:missed_application_timestamp`, or

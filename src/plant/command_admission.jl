@@ -1218,6 +1218,14 @@ function _admit_plant_command!(workspace::CommandDispositionWorkspace,
         scheduled = timestamp
     end
 
+    if iszero(transaction) &&
+            _has_pending_command_transaction_at(endpoint, state, scheduled)
+        return _finish_terminal_admission!(workspace, endpoint, state, command,
+            timestamp, presentation_id, RejectedCommand,
+            CommandDispositionReason(:equal_time_endpoint_conflict),
+            sequence_class)
+    end
+
     superseded_count, first_superseded_slot =
         _superseded_pending_commands(endpoint, state, command.sequence)
     resulting_active = state.active_count - superseded_count + 1

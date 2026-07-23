@@ -150,14 +150,17 @@ end
 ```
 
 `prepare_controllable_optic` must return immutable data; keep all evolving
-response state in the separately constructed state. Staging may reject or fail
-before publication. After staging succeeds, commit must be bounded and
-nonthrowing so an explicit `PlantCommandTransaction` cannot expose only part
-of a multi-optic update. Do not infer transaction membership from placement,
-equal timestamps, or packed command storage. Every endpoint participating in a
-transaction must use `PreservePendingCommands`. Outside transactions, an
-incremental schema must preserve pending deltas; only absolute commands may
-select `SupersedeOlderPendingCommands`.
+response state in the separately constructed state. Every array in
+`initial_commands` is a fresh state-owned copy, so the state constructor may
+retain and mutate it; it must not substitute caller or prepared-plan storage.
+Staging may reject or fail before publication. After staging succeeds, commit
+must be bounded and nonthrowing so an explicit `PlantCommandTransaction`
+cannot expose only part of a multi-optic update. Do not infer transaction
+membership from placement, equal timestamps, or packed command storage. Every
+endpoint participating in a transaction must use
+`PreservePendingCommands`. Outside transactions, an incremental schema must
+preserve pending deltas; only absolute commands may select
+`SupersedeOlderPendingCommands`.
 
 The current Gate 4 event loop applies all prepared optics to every due
 materialized path as one common co-conjugated execution group in canonical
