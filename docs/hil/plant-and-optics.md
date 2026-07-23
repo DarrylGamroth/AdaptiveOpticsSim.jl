@@ -147,11 +147,12 @@ plant = Plant.PlantDefinition(
 These declarations are owned by `AdaptiveOpticsSim.Plant`; the root package
 provides no forwarding aliases. `PlantDefinition`,
 `ControllableOpticDefinition`, `PlantCommandSchema`,
-`OpticalPathDefinition`, `AcquisitionDefinition`, `AtmosphereLayerID`,
-`ControllableOpticID`, `CommandEndpointID`, `PlantCommandSchemaID`,
-`OpticalPathID`, `AcquisitionID`, `RNGOwnerIdentity`,
-`RNGDerivationVersion`, `plant_model_definition_style`, and
-`ColdPlantModelDefinition` are committed public declaration names.
+`OpticalPathDefinition`, `AcquisitionDefinition`, `ControllableOpticID`,
+`CommandEndpointID`, `PlantCommandSchemaID`, `OpticalPathID`,
+`AcquisitionID`, `RNGOwnerIdentity`, `RNGDerivationVersion`,
+`plant_model_definition_style`, and `ColdPlantModelDefinition` are committed
+public declaration names. The atmosphere-owned `AtmosphereLayerID` remains in
+the root scientific API.
 `PreparedPlant`, `PreparedPathExecutor`, `PreparedAcquisitionOwner`,
 `PreparedAcquisitionProvider`, `AcquisitionProducts`,
 `AcquisitionProductContract`, `PathResultKey`, `prepare_plant`,
