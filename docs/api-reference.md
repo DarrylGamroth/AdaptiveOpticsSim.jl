@@ -258,9 +258,19 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `prepare_frame_transfer_acquisition`, and `complete_frame_transfer!`.
   One prepared device-resident storage frame permits image-area integration
   to overlap storage-area readout when the declared timing fits that capacity
+- Direct-measurement definition and qualified lifecycle:
+  `DirectMeasurementAcquisitionDefinition`,
+  `PreparedDirectMeasurementAcquisition`,
+  `DirectMeasurementAcquisitionState`,
+  `prepare_direct_measurement_acquisition`, and
+  `accumulate_direct_measurement_interval!`. This intentional
+  non-detector lifecycle time-averages the held instantaneous
+  `WFSMeasurement` over a half-open exposure, then follows explicit readout
+  completion and readiness delays. It creates no observation or implicit
+  detector physics
 - Plant-event composition: `PeriodicAcquisitionStart`,
   `TriggeredAcquisitionStart`, `OpticalSampleDefinition`,
-  `DetectorEventDefinition`, `PlantEventLoopDefinition`,
+  `AcquisitionEventDefinition`, `PlantEventLoopDefinition`,
   qualified `PreparedPlantEventLoop`, `PlantEventLoopState`,
   `PlantEventLoopWorkspace`, `prepare_plant_event_loop`,
   `plant_event_path_count`, `plant_event_acquisition_count`,
@@ -269,7 +279,7 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `acquisition_product_sequence`, and
   `acquisition_product_ready_timestamp`. This HIL-neutral serial oracle
   composes exact periodic or delivered-trigger acquisition starts with
-  independently periodic optical paths and complete detector products; it
+  independently periodic optical paths and complete acquisition products; it
   owns no wall clock, task, queue, port, transport, or RTC protocol
 
 - Stable identities: `AtmosphereLayerID`, `ControllableOpticID`,
@@ -599,9 +609,38 @@ do not accept tuple-position-dependent caller RNGs. Low-level stochastic model
 APIs continue to receive an explicit `AbstractRNG`, while prepared execution
 supplies it directly rather than performing a registry lookup. Neither method
 introduces cadence, triggers, a scheduler, ports, or a retained atmosphere
-snapshot. The warmed successful serial call is allocation-free on the
+snapshot. A provider that requires effective-command and exposure state may
+reject this schedule-free execution boundary. In particular, the built-in
+linear reduced-order provider must run through `prepare_plant_event_loop` with
+a `DirectMeasurementAcquisitionDefinition`; it does not invent initial
+commands for `execute_acquisition_selection!`. The warmed successful serial
+call is allocation-free on the
 maintained Julia version; cold selection/preparation, metadata construction,
 compilation, and exceptional paths are outside that budget.
+
+The qualified reduced-order construction vocabulary is:
+
+- `HarmonicDisturbanceModel`, a deterministic explicit-plant-time modal
+  disturbance
+- `ReducedOrderCommandResponse`, one calibrated endpoint-to-residual operator
+  with exact command units, sign convention, basis, and basis revision
+- `LinearReducedOrderAcquisitionModel`, which composes a path projection,
+  every currently visible endpoint response, and a sensor operator into one
+  direct `WFSMeasurement`
+- `reduced_order_disturbance`, `reduced_order_residual`,
+  `reduced_order_sample_timestamp`, and `reduced_order_residual_rms` for
+  validation inspection
+
+Preparation copies numerical operators to the path backend, validates command
+schemas and memory domains, records a positive calibration revision, mandatory
+operating envelope, residual metric, and omitted effects, and resolves
+endpoint identities to fixed slots. At each path sample the event loop first
+integrates the prior held measurement through the sample timestamp, then
+evaluates the disturbance and current effective commands. A command therefore
+affects only later integration intervals. Reduced-order-only paths do not
+advance or execute their otherwise unused full-optical path. The maintained
+implementation publishes exposure-averaged direct measurements; approximate
+raw pixels are not yet a supported reduced-order surface.
 
 The maintained [Gate 2 serial plant
 artifact](../benchmarks/results/gate2/2026-07-21-serial-plant.toml) composes

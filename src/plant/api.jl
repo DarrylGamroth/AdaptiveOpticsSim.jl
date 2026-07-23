@@ -32,15 +32,16 @@ export claim_next_application_ready_command!, apply_claimed_plant_command!
 export mark_plant_command_applied!, fail_plant_command_application!
 export fail_pending_plant_commands!
 
-# Trigger and detector-event construction used to assemble a virtual plant.
+# Trigger and acquisition-event construction used to assemble a virtual plant.
 export TriggerSourceID, TriggerLinkID, TriggerConsumerID, TriggerFaultID
 export TriggerFaultTraceEntry, TriggerFaultTrace
 export TriggerSourceDefinition, TriggerLinkDefinition, TriggerConsumerDefinition
 export prepare_trigger_topology
 export GlobalShutterAcquisitionDefinition
 export RollingShutterAcquisitionDefinition, FrameTransferAcquisitionDefinition
+export DirectMeasurementAcquisitionDefinition
 export PeriodicAcquisitionStart, TriggeredAcquisitionStart
-export OpticalSampleDefinition, DetectorEventDefinition
+export OpticalSampleDefinition, AcquisitionEventDefinition
 export PlantEventLoopDefinition, prepare_plant_event_loop
 export next_plant_event_timestamp, step_plant_events!, run_plant_events_until!
 
@@ -59,9 +60,12 @@ export prepare_copied_synthetic_provider, prepare_cyclic_replay_provider
 # Stable qualified API: policies, records, mutable state/workspace owners,
 # extension traits, low-level lifecycle operations, and inspection accessors.
 public AbstractAcquisitionStartDefinition, AbstractCommandBounds
-public AbstractDetectorAcquisitionEventDefinition
-public AbstractDetectorAcquisitionEventState, AbstractOpticalSamplingContract
-public AbstractPreparedDetectorAcquisition
+public AbstractAcquisitionLifecycleDefinition
+public AbstractPreparedAcquisitionLifecycle, AbstractAcquisitionLifecycleState
+public AbstractDetectorAcquisitionLifecycleDefinition
+public AbstractDetectorAcquisitionLifecycleState
+public AbstractPreparedDetectorAcquisitionLifecycle
+public AbstractOpticalSamplingContract
 public AbsoluteCommand, IncrementalCommand, CommandValueSemantics
 public InvalidCommandAction, RejectInvalidCommand, ClipInvalidCommand
 public FailOnInvalidCommand, CommandRangeStage, ValidateOnPresentation
@@ -194,6 +198,10 @@ public CommandResponsiveReducedOrderProviderStyle
 public SyntheticReplayProviderStyle
 public PreparedFullOpticalProvider, PreparedUnchangedSyntheticProvider
 public PreparedCopiedSyntheticProvider, PreparedCyclicReplayProvider
+public HarmonicDisturbanceModel, ReducedOrderCommandResponse
+public LinearReducedOrderAcquisitionModel
+public reduced_order_disturbance, reduced_order_residual
+public reduced_order_sample_timestamp, reduced_order_residual_rms
 
 public PlantEventPhase, TriggerUpdatePhase, AtmosphereEvolutionPhase
 public OpticalSamplePhase, CommandApplicationPhase, ExposureOpenPhase
@@ -236,12 +244,19 @@ public DetectorAcquisitionReady
 public PreparedGlobalShutterAcquisition, GlobalShutterAcquisitionState
 public PreparedRollingShutterAcquisition, RollingShutterAcquisitionState
 public PreparedFrameTransferAcquisition, FrameTransferAcquisitionState
+public PreparedDirectMeasurementAcquisition
+public DirectMeasurementAcquisitionState
+public DirectMeasurementAcquisitionStatus
+public DirectMeasurementReady, DirectMeasurementExposureActive
+public DirectMeasurementReadoutPending, DirectMeasurementReadoutComplete
 public prepare_global_shutter_acquisition, prepare_rolling_shutter_acquisition
 public prepare_frame_transfer_acquisition
+public prepare_direct_measurement_acquisition
 public begin_exposure!, accumulate_exposure_interval!, close_exposure!
 public take_nondestructive_read!, complete_readout!, mark_acquisition_ready!
 public open_next_rolling_band!, accumulate_rolling_exposure_interval!
 public close_next_rolling_band!, complete_frame_transfer!
+public accumulate_direct_measurement_interval!
 public detector_acquisition_status, detector_acquisition_sequence
 public exposure_start_timestamp, exposure_close_timestamp
 public integrated_through_timestamp, readout_complete_timestamp
@@ -255,6 +270,8 @@ public frame_transfer_storage_capacity, frame_transfer_storage_empty
 public frame_transfer_image_ready, frame_transfer_readout_pending
 public frame_transfer_storage_sequence, frame_transfer_image_sequence
 public frame_transfer_product_sequence, frame_transfer_complete_timestamp
+public direct_measurement_acquisition_status
+public direct_measurement_acquisition_sequence
 
 public PreparedPlantEventLoop, PlantEventLoopState, PlantEventLoopWorkspace
 public acquisition_product_sequence, acquisition_product_ready_timestamp

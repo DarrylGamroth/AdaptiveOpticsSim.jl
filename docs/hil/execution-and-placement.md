@@ -159,8 +159,8 @@ permits it.
 
 CPU HIL execution should use direct calls or long-lived prepared workers with
 static or deadline-aware branch ownership. It should not create a new task graph
-for every detector event. Parallelism remains coarse over due paths; FFT, BLAS,
-and Julia worker counts must be configured together to avoid nested
+for every acquisition event. Parallelism remains coarse over due paths; FFT,
+BLAS, and Julia worker counts must be configured together to avoid nested
 parallelism and oversubscription.
 
 On large EPYC or Threadripper systems, placement should account for NUMA nodes,

@@ -8,7 +8,7 @@ end
 
 abstract type AbstractAcquisitionStartDefinition end
 
-"""Periodic frame-start recurrence for one detector acquisition owner."""
+"""Periodic start recurrence for one acquisition owner."""
 struct PeriodicAcquisitionStart <: AbstractAcquisitionStartDefinition
     schedule::PeriodicSchedule
     origin::PlantTimestamp
@@ -18,20 +18,22 @@ PeriodicAcquisitionStart(schedule::PeriodicSchedule;
     origin::PlantTimestamp=zero(PlantTimestamp)) =
     PeriodicAcquisitionStart(schedule, origin)
 
-"""Binding from one delivered trigger consumer to a detector frame start."""
+"""Binding from one delivered trigger consumer to an acquisition start."""
 struct TriggeredAcquisitionStart <: AbstractAcquisitionStartDefinition
     consumer::TriggerConsumerID
 end
 
-const _PreparedDetectorEventLifecycle = Union{
+const _PreparedAcquisitionEventLifecycle = Union{
     PreparedGlobalShutterAcquisition,
     PreparedRollingShutterAcquisition,
     PreparedFrameTransferAcquisition,
+    PreparedDirectMeasurementAcquisition,
 }
-const _DetectorEventLifecycleState = Union{
+const _AcquisitionEventLifecycleState = Union{
     GlobalShutterAcquisitionState,
     RollingShutterAcquisitionState,
     FrameTransferAcquisitionState,
+    DirectMeasurementAcquisitionState,
 }
 const _AcquisitionStartDefinition = Union{
     PeriodicAcquisitionStart,
@@ -53,24 +55,24 @@ OpticalSampleDefinition(path, schedule::PeriodicSchedule;
     OpticalSampleDefinition(_as_optical_path_id(path), schedule, origin)
 
 """
-Detector lifecycle and start-source declaration for one prepared Gate 2
-acquisition owner.
+Lifecycle and start-source declaration for one prepared acquisition owner.
 """
-struct DetectorEventDefinition{D<:AbstractDetectorAcquisitionEventDefinition,
+struct AcquisitionEventDefinition{D<:AbstractAcquisitionLifecycleDefinition,
     S<:AbstractAcquisitionStartDefinition}
     acquisition::AcquisitionID
     lifecycle::D
     start::S
 end
 
-DetectorEventDefinition(acquisition,
-    lifecycle::AbstractDetectorAcquisitionEventDefinition,
-    start::AbstractAcquisitionStartDefinition) = DetectorEventDefinition(
+AcquisitionEventDefinition(acquisition,
+    lifecycle::AbstractAcquisitionLifecycleDefinition,
+    start::AbstractAcquisitionStartDefinition) = AcquisitionEventDefinition(
     _as_acquisition_id(acquisition), lifecycle, start)
 
 @inline _require_optical_sample_definition(value::OpticalSampleDefinition) =
     value
-@inline _require_detector_event_definition(value::DetectorEventDefinition) =
+@inline _require_acquisition_event_definition(
+    value::AcquisitionEventDefinition) =
     value
 
 function _require_optical_sample_definition(value)
@@ -78,9 +80,9 @@ function _require_optical_sample_definition(value)
         "optical sample entries must be OpticalSampleDefinition values; got $(typeof(value))")
 end
 
-function _require_detector_event_definition(value)
+function _require_acquisition_event_definition(value)
     _plant_event_loop_error(:invalid_definition,
-        "detector event entries must be DetectorEventDefinition values; got $(typeof(value))")
+        "acquisition event entries must be AcquisitionEventDefinition values; got $(typeof(value))")
 end
 
 function _event_definition_tuple(values::Tuple, validator)
@@ -116,30 +118,30 @@ function _require_prepared_trigger_topology(topology)
 end
 
 """
-    PlantEventLoopDefinition(optical_samples, detector_events;
+    PlantEventLoopDefinition(optical_samples, acquisition_events;
         trigger_topology=nothing)
 
 Cold, finite declaration of periodic path samples and independently periodic or
-trigger-driven detector lifecycles. Preparation flattens these values into one
-fixed-capacity serial scheduler; the declaration stores no mutable cursor,
-detector state, or run-length event list.
+trigger-driven acquisition lifecycles. Preparation flattens these values into
+one fixed-capacity serial scheduler; the declaration stores no mutable cursor,
+acquisition state, or run-length event list.
 """
 struct PlantEventLoopDefinition
     optical_samples::Tuple
-    detector_events::Tuple
+    acquisition_events::Tuple
     trigger_topology::Union{Nothing,PreparedTriggerTopology}
 end
 
-function PlantEventLoopDefinition(optical_samples, detector_events;
+function PlantEventLoopDefinition(optical_samples, acquisition_events;
     trigger_topology=nothing)
     samples = _event_definition_tuple(optical_samples,
         _require_optical_sample_definition)
-    events = _event_definition_tuple(detector_events,
-        _require_detector_event_definition)
+    events = _event_definition_tuple(acquisition_events,
+        _require_acquisition_event_definition)
     isempty(samples) && _plant_event_loop_error(:empty_paths,
         "plant event loop requires at least one optical sample definition")
     isempty(events) && _plant_event_loop_error(:empty_acquisitions,
-        "plant event loop requires at least one detector event definition")
+        "plant event loop requires at least one acquisition event definition")
     topology = _require_prepared_trigger_topology(trigger_topology)
     return PlantEventLoopDefinition(samples, events, topology)
 end
@@ -173,12 +175,14 @@ struct _PreparedPlantEventPath
     schedule::PeriodicSchedule
     origin::PlantTimestamp
     handle::EventGeneratorHandle
+    requires_full_optical::Bool
 end
 
 struct _PreparedPlantEventAcquisition
     id::AcquisitionID
-    lifecycle::_PreparedDetectorEventLifecycle
-    observation::AbstractArray
+    lifecycle::_PreparedAcquisitionEventLifecycle
+    product::Union{AbstractArray,WFSMeasurement}
+    sample_provider::Union{Nothing,PreparedLinearReducedOrderEventProvider}
     rng::Xoshiro
     start::_AcquisitionStartDefinition
     path_slot::UInt32
@@ -345,13 +349,13 @@ function _sorted_optical_sample_definitions(
     return values
 end
 
-function _sorted_detector_event_definitions(definitions::Tuple)
+function _sorted_acquisition_event_definitions(definitions::Tuple)
     values = Any[definitions...]
     sort!(values; by=definition -> definition.acquisition.name)
     @inbounds for index in 2:length(values)
         values[index - 1].acquisition == values[index].acquisition &&
             _plant_event_loop_error(:duplicate_acquisition,
-                "acquisition $(values[index].acquisition) has more than one detector lifecycle")
+                "acquisition $(values[index].acquisition) has more than one lifecycle")
     end
     return values
 end
@@ -404,7 +408,7 @@ function _event_path_slot(paths, id::OpticalPathID)
         paths[index].id == id && return index
     end
     _plant_event_loop_error(:missing_path_schedule,
-        "detector acquisition references path $id without an optical sample schedule")
+        "acquisition references path $id without an optical sample schedule")
 end
 
 function _event_path_slot_from_definitions(definitions, id::OpticalPathID)
@@ -412,7 +416,7 @@ function _event_path_slot_from_definitions(definitions, id::OpticalPathID)
         definitions[index].path == id && return index
     end
     _plant_event_loop_error(:missing_path_schedule,
-        "detector acquisition references path $id without an optical sample schedule")
+        "acquisition references path $id without an optical sample schedule")
 end
 
 function _trigger_consumer_exists(topology::PreparedTriggerTopology,
@@ -468,7 +472,7 @@ function _require_bound_trigger_consumers(definitions,
             end
         end
         bound || _plant_event_loop_error(:unbound_trigger_consumer,
-            "trigger consumer $(consumer.id) has no detector acquisition binding")
+            "trigger consumer $(consumer.id) has no acquisition binding")
     end
     return nothing
 end
@@ -504,7 +508,7 @@ end
     ExposureOpenPhase, ordinal; active=false)
 
 @inline function _require_periodic_start_spacing(
-    ::AbstractPreparedDetectorAcquisition,
+    ::AbstractPreparedAcquisitionLifecycle,
     ::TriggeredAcquisitionStart)
     return nothing
 end
@@ -518,6 +522,18 @@ function _require_periodic_start_spacing(
     schedule_period(start.schedule) > occupied ||
         _plant_event_loop_error(:acquisition_period,
             "global-shutter period must be strictly later than acquisition readiness")
+    return nothing
+end
+
+function _require_periodic_start_spacing(
+    prepared::PreparedDirectMeasurementAcquisition,
+    start::PeriodicAcquisitionStart)
+    occupied = prepared.definition.exposure_duration +
+        prepared.definition.readout_duration +
+        prepared.definition.readiness_delay
+    schedule_period(start.schedule) > occupied ||
+        _plant_event_loop_error(:acquisition_period,
+            "direct-measurement period must be strictly later than acquisition readiness")
     return nothing
 end
 
@@ -652,7 +668,38 @@ function _prepare_event_command_endpoints(plant::PreparedPlant,
     return endpoints
 end
 
-function _prepare_event_paths(plant::PreparedPlant, definitions,
+@inline _provider_requires_full_optical(::FullOpticalProviderStyle) = true
+@inline _provider_requires_full_optical(
+    ::CommandResponsiveReducedOrderProviderStyle) = false
+@inline _provider_requires_full_optical(::SyntheticReplayProviderStyle) =
+    false
+
+function _event_path_requires_full_optical(id::OpticalPathID, owners)
+    @inbounds for owner in owners
+        acquisition_path_id(owner.definition) == id || continue
+        _provider_requires_full_optical(acquisition_provider_style(owner)) &&
+            return true
+    end
+    return false
+end
+
+@inline _require_linear_reduced_order_provider(
+    implementation::PreparedLinearReducedOrderProvider) = implementation
+
+function _require_linear_reduced_order_provider(implementation)
+    _plant_event_loop_error(:unsupported_acquisition,
+        "event composition currently supports the built-in linear reduced-order provider; got $(typeof(implementation))")
+end
+
+@inline _require_direct_event_measurement(
+    measurement::WFSMeasurement) = measurement
+
+function _require_direct_event_measurement(measurement)
+    _plant_event_loop_error(:unsupported_acquisition,
+        "linear reduced-order event acquisition requires a WFSMeasurement product; got $(typeof(measurement))")
+end
+
+function _prepare_event_paths(plant::PreparedPlant, definitions, owners,
     scheduler::PreparedEventScheduler)
     Base.@nospecialize plant
     paths = Memory{_PreparedPlantEventPath}(undef, length(definitions))
@@ -663,9 +710,61 @@ function _prepare_event_paths(plant::PreparedPlant, definitions,
         _require_rng_owner_binding(rngs, path)
         handle = event_generator_handle(scheduler, OpticalSamplePhase, index)
         paths[index] = _PreparedPlantEventPath(definition.path, path, rngs,
-            definition.schedule, definition.origin, handle)
+            definition.schedule, definition.origin, handle,
+            _event_path_requires_full_optical(definition.path, owners))
     end
     return paths
+end
+
+function _prepare_event_acquisition_lifecycle(
+    plant::PreparedPlant,
+    owner::PreparedAcquisitionOwner,
+    definition::AbstractDetectorAcquisitionLifecycleDefinition,
+    ::FullOpticalProviderStyle)
+    execution = _event_frame_execution(owner)
+    lifecycle = _prepare_detector_event_lifecycle(execution,
+        owner.path_result, definition)
+    return lifecycle, acquisition_observation(owner), nothing
+end
+
+function _prepare_event_acquisition_lifecycle(
+    plant::PreparedPlant,
+    owner::PreparedAcquisitionOwner,
+    definition::DirectMeasurementAcquisitionDefinition,
+    ::CommandResponsiveReducedOrderProviderStyle)
+    implementation = _require_linear_reduced_order_provider(
+        owner.provider.implementation)
+    measurement = _require_direct_event_measurement(
+        acquisition_measurement(owner))
+    lifecycle = prepare_direct_measurement_acquisition(measurement,
+        definition)
+    sample_provider = prepare_linear_reduced_order_event_provider(
+        implementation, getfield(plant, :command_endpoints))
+    return lifecycle, measurement, sample_provider
+end
+
+function _prepare_event_acquisition_lifecycle(
+    ::PreparedPlant, owner::PreparedAcquisitionOwner,
+    definition::AbstractAcquisitionLifecycleDefinition,
+    ::CommandResponsiveReducedOrderProviderStyle)
+    _plant_event_loop_error(:unsupported_acquisition,
+        "command-responsive reduced-order acquisition $(acquisition_id(owner.definition)) requires DirectMeasurementAcquisitionDefinition; got $(typeof(definition))")
+end
+
+function _prepare_event_acquisition_lifecycle(
+    ::PreparedPlant, owner::PreparedAcquisitionOwner,
+    definition::AbstractAcquisitionLifecycleDefinition,
+    ::SyntheticReplayProviderStyle)
+    _plant_event_loop_error(:unsupported_acquisition,
+        "scheduled synthetic/replay acquisition lifecycles are not supported")
+end
+
+function _prepare_event_acquisition_lifecycle(
+    ::PreparedPlant, owner::PreparedAcquisitionOwner,
+    definition::DirectMeasurementAcquisitionDefinition,
+    ::FullOpticalProviderStyle)
+    _plant_event_loop_error(:unsupported_acquisition,
+        "full-optical acquisition $(acquisition_id(owner.definition)) requires a detector lifecycle, not DirectMeasurementAcquisitionDefinition")
 end
 
 function _prepare_event_acquisition_parts(plant::PreparedPlant,
@@ -673,35 +772,40 @@ function _prepare_event_acquisition_parts(plant::PreparedPlant,
     Base.@nospecialize plant
     owners = Any[]
     lifecycles = Any[]
+    products = Any[]
+    sample_providers = Any[]
     rngs = Any[]
     path_slots = Int[]
     for definition in definitions
         _require_start_trigger_topology(definition.start, topology)
         owner = _event_prepared_acquisition(plant, definition.acquisition)
-        execution = _event_frame_execution(owner)
-        lifecycle = _prepare_detector_event_lifecycle(execution,
-            owner.path_result, definition.lifecycle)
+        lifecycle, product, sample_provider =
+            _prepare_event_acquisition_lifecycle(plant, owner,
+                definition.lifecycle, acquisition_provider_style(owner))
         _require_periodic_start_spacing(lifecycle, definition.start)
         acquisition_rngs = _prepared_event_acquisition_rngs(plant, owner)
         _require_rng_owner_binding(acquisition_rngs, owner)
         push!(owners, owner)
         push!(lifecycles, lifecycle)
+        push!(products, product)
+        push!(sample_providers, sample_provider)
         push!(rngs, rng_stream_state(acquisition_rngs, Val(:detector)))
         push!(path_slots, _event_path_slot_from_definitions(path_definitions,
             acquisition_path_id(owner.definition)))
     end
-    return owners, lifecycles, rngs, path_slots
+    return owners, lifecycles, products, sample_providers, rngs, path_slots
 end
 
-function _prepare_event_acquisitions(definitions, owners, lifecycles, rngs,
-    path_slots, scheduler::PreparedEventScheduler)
+function _prepare_event_acquisitions(definitions, lifecycles, products,
+    sample_providers, rngs, path_slots,
+    scheduler::PreparedEventScheduler)
     acquisitions = Memory{_PreparedPlantEventAcquisition}(undef,
         length(definitions))
     @inbounds for index in eachindex(definitions)
         definition = definitions[index]
         acquisitions[index] = _PreparedPlantEventAcquisition(
             definition.acquisition, lifecycles[index],
-            acquisition_observation(owners[index]), rngs[index],
+            products[index], sample_providers[index], rngs[index],
             definition.start, UInt32(path_slots[index]),
             event_generator_handle(scheduler, ExposureOpenPhase,
                 2index - 1),
@@ -737,12 +841,12 @@ function prepare_plant_event_loop(plant::PreparedPlant,
     Base.@nospecialize plant
     sample_definitions = _sorted_optical_sample_definitions(
         definition.optical_samples)
-    acquisition_definitions = _sorted_detector_event_definitions(
-        definition.detector_events)
+    acquisition_definitions = _sorted_acquisition_event_definitions(
+        definition.acquisition_events)
     _require_unique_trigger_consumers(acquisition_definitions)
     _require_bound_trigger_consumers(acquisition_definitions,
         definition.trigger_topology)
-    owners, lifecycles, rngs, path_slots =
+    owners, lifecycles, products, sample_providers, rngs, path_slots =
         _prepare_event_acquisition_parts(plant, acquisition_definitions,
             sample_definitions, definition.trigger_topology)
     generator_definitions = EventGeneratorDefinition[]
@@ -755,9 +859,10 @@ function prepare_plant_event_loop(plant::PreparedPlant,
     actions = _prepared_event_actions(scheduler)
     optics = _prepare_event_controllable_optics(plant)
     command_endpoints = _prepare_event_command_endpoints(plant, scheduler)
-    paths = _prepare_event_paths(plant, sample_definitions, scheduler)
+    paths = _prepare_event_paths(plant, sample_definitions, owners,
+        scheduler)
     acquisitions = _prepare_event_acquisitions(acquisition_definitions,
-        owners, lifecycles, rngs, path_slots, scheduler)
+        lifecycles, products, sample_providers, rngs, path_slots, scheduler)
     atmosphere = _require_selection_atmosphere(
         plant_atmosphere(getfield(plant, :definition)))
     atmosphere_rng = _prepared_atmosphere_rng(atmosphere,
@@ -774,7 +879,7 @@ mutable struct PlantEventLoopState{T}
     command_applications::Memory{CommandApplicationState}
     command_shadow_transactions::Memory{UInt64}
     controllable_optics::Memory{Any}
-    acquisitions::Memory{_DetectorEventLifecycleState}
+    acquisitions::Memory{_AcquisitionEventLifecycleState}
     path_sampled::Memory{Bool}
     product_sequences::Memory{UInt64}
     product_ready_timestamps::Memory{PlantTimestamp}
@@ -791,6 +896,9 @@ end
 @inline _event_acquisition_state(
     prepared::PreparedFrameTransferAcquisition) =
     FrameTransferAcquisitionState(prepared)
+@inline _event_acquisition_state(
+    prepared::PreparedDirectMeasurementAcquisition) =
+    DirectMeasurementAcquisitionState(prepared)
 
 @inline _event_trigger_state(::_NoPreparedTriggerTopology) =
     _NoTriggerTopologyState()
@@ -851,7 +959,7 @@ function PlantEventLoopState(prepared::PreparedPlantEventLoop)
         length(prepared.command_endpoints))
     fill!(command_shadow_transactions, UInt64(0))
     controllable_optics = _event_controllable_optic_states(prepared)
-    acquisition_states = Memory{_DetectorEventLifecycleState}(undef,
+    acquisition_states = Memory{_AcquisitionEventLifecycleState}(undef,
         length(prepared.acquisitions))
     @inbounds for index in eachindex(acquisition_states)
         acquisition_states[index] = _event_acquisition_state(
@@ -2030,7 +2138,7 @@ end
         claim)
 end
 
-@inline function _first_detector_boundary_timestamp(
+@inline function _first_acquisition_boundary_timestamp(
     prepared::PreparedGlobalShutterAcquisition,
     state::GlobalShutterAcquisitionState)
     next_read = next_nondestructive_read_timestamp(prepared, state)
@@ -2038,7 +2146,7 @@ end
     return min(next_read, state.exposure_close)
 end
 
-@inline function _initial_detector_boundary_timestamp(
+@inline function _initial_acquisition_boundary_timestamp(
     prepared::PreparedGlobalShutterAcquisition,
     timestamp::PlantTimestamp)
     isempty(prepared.read_offsets) &&
@@ -2050,59 +2158,59 @@ end
         prepared.definition.exposure_duration)
 end
 
-@inline function _initial_detector_boundary_timestamp(
+@inline function _initial_acquisition_boundary_timestamp(
     prepared::PreparedRollingShutterAcquisition,
     timestamp::PlantTimestamp)
     return timestamp + prepared.definition.exposure_duration
 end
 
-@inline function _initial_detector_boundary_timestamp(
+@inline function _initial_acquisition_boundary_timestamp(
     prepared::PreparedFrameTransferAcquisition,
     timestamp::PlantTimestamp)
     return timestamp + prepared.definition.exposure_duration
 end
 
-@inline function _first_detector_boundary_timestamp(
+@inline function _first_acquisition_boundary_timestamp(
     prepared::PreparedRollingShutterAcquisition,
     state::RollingShutterAcquisitionState)
     return next_rolling_band_close_timestamp(prepared, state)
 end
 
-@inline function _first_detector_boundary_timestamp(
+@inline function _first_acquisition_boundary_timestamp(
     ::PreparedFrameTransferAcquisition,
     state::FrameTransferAcquisitionState)
     return state.exposure_close
 end
 
-@inline _first_detector_band_open_timestamp(
+@inline _first_acquisition_band_open_timestamp(
     ::PreparedGlobalShutterAcquisition,
     ::GlobalShutterAcquisitionState) = nothing
-@inline _first_detector_band_open_timestamp(
+@inline _first_acquisition_band_open_timestamp(
     ::PreparedFrameTransferAcquisition,
     ::FrameTransferAcquisitionState) = nothing
-@inline function _first_detector_band_open_timestamp(
+@inline function _first_acquisition_band_open_timestamp(
     prepared::PreparedRollingShutterAcquisition,
     state::RollingShutterAcquisitionState)
     return next_rolling_band_open_timestamp(prepared, state)
 end
 
-@inline _initial_detector_band_open_timestamp(
+@inline _initial_acquisition_band_open_timestamp(
     ::PreparedGlobalShutterAcquisition, ::PlantTimestamp) = nothing
-@inline _initial_detector_band_open_timestamp(
+@inline _initial_acquisition_band_open_timestamp(
     ::PreparedFrameTransferAcquisition, ::PlantTimestamp) = nothing
-@inline function _initial_detector_band_open_timestamp(
+@inline function _initial_acquisition_band_open_timestamp(
     prepared::PreparedRollingShutterAcquisition{
         <:Any,<:Any,<:Any,<:_RollingExposureEventMode},
     timestamp::PlantTimestamp)
     prepared.band_count == 1 && return nothing
     return timestamp + prepared.line_duration
 end
-@inline _initial_detector_band_open_timestamp(
+@inline _initial_acquisition_band_open_timestamp(
     ::PreparedRollingShutterAcquisition{
         <:Any,<:Any,<:Any,<:_GlobalResetEventMode},
     ::PlantTimestamp) = nothing
 
-@inline function _take_initial_detector_snapshot!(
+@inline function _take_initial_acquisition_snapshot!(
     prepared::PreparedGlobalShutterAcquisition,
     state::GlobalShutterAcquisitionState, timestamp::PlantTimestamp,
     rng::AbstractRNG)
@@ -2112,13 +2220,38 @@ end
     return nothing
 end
 
-@inline _take_initial_detector_snapshot!(
+@inline _take_initial_acquisition_snapshot!(
     ::PreparedRollingShutterAcquisition,
     ::RollingShutterAcquisitionState, ::PlantTimestamp,
     ::AbstractRNG) = nothing
-@inline _take_initial_detector_snapshot!(
+@inline _take_initial_acquisition_snapshot!(
     ::PreparedFrameTransferAcquisition,
     ::FrameTransferAcquisitionState, ::PlantTimestamp,
+    ::AbstractRNG) = nothing
+
+@inline function _initial_acquisition_boundary_timestamp(
+    prepared::PreparedDirectMeasurementAcquisition,
+    timestamp::PlantTimestamp)
+    return timestamp + prepared.definition.exposure_duration
+end
+
+@inline function _first_acquisition_boundary_timestamp(
+    ::PreparedDirectMeasurementAcquisition,
+    state::DirectMeasurementAcquisitionState)
+    return state.exposure_close
+end
+
+@inline _first_acquisition_band_open_timestamp(
+    ::PreparedDirectMeasurementAcquisition,
+    ::DirectMeasurementAcquisitionState) = nothing
+
+@inline _initial_acquisition_band_open_timestamp(
+    ::PreparedDirectMeasurementAcquisition,
+    ::PlantTimestamp) = nothing
+
+@inline _take_initial_acquisition_snapshot!(
+    ::PreparedDirectMeasurementAcquisition,
+    ::DirectMeasurementAcquisitionState, ::PlantTimestamp,
     ::AbstractRNG) = nothing
 
 @inline function _require_event_path_available(
@@ -2150,23 +2283,23 @@ function _process_acquisition_start!(prepared::PreparedPlantEventLoop,
         _require_forward_event_key(state.scheduler, next_key)
     end
 
-    boundary_timestamp = _initial_detector_boundary_timestamp(
+    boundary_timestamp = _initial_acquisition_boundary_timestamp(
         acquisition.lifecycle, timestamp)
     _require_inactive_event_generator(prepared, state,
         acquisition.boundary_handle, boundary_timestamp)
-    band_open_timestamp = _initial_detector_band_open_timestamp(
+    band_open_timestamp = _initial_acquisition_band_open_timestamp(
         acquisition.lifecycle, timestamp)
     band_open_timestamp === nothing || _require_inactive_event_generator(
         prepared, state, acquisition.band_open_handle, band_open_timestamp)
 
     begin_exposure!(acquisition.lifecycle, acquisition_state, timestamp)
-    _take_initial_detector_snapshot!(acquisition.lifecycle,
+    _take_initial_acquisition_snapshot!(acquisition.lifecycle,
         acquisition_state, timestamp, acquisition.rng)
-    boundary_timestamp == _first_detector_boundary_timestamp(
+    boundary_timestamp == _first_acquisition_boundary_timestamp(
         acquisition.lifecycle, acquisition_state) ||
         _plant_event_loop_error(:prepared_binding,
-            "detector boundary changed after acquisition start")
-    band_open_timestamp == _first_detector_band_open_timestamp(
+            "acquisition boundary changed after acquisition start")
+    band_open_timestamp == _first_acquisition_band_open_timestamp(
         acquisition.lifecycle, acquisition_state) ||
         _plant_event_loop_error(:prepared_binding,
             "rolling row-band schedule changed after acquisition start")
@@ -2224,17 +2357,31 @@ end
         state.integrated_through, timestamp, rng)
 end
 
-@enum _DetectorBoundaryDisposition::UInt8 begin
-    _RescheduleDetectorBoundary = 0x01
-    _ScheduleDetectorReadout = 0x02
+@inline function _integrate_event_acquisition_to!(
+    prepared::PreparedDirectMeasurementAcquisition,
+    state::DirectMeasurementAcquisitionState,
+    timestamp::PlantTimestamp,
+    ::AbstractRNG)
+    state.status == DirectMeasurementExposureActive || return nothing
+    state.integrated_through <= timestamp ||
+        _plant_event_loop_error(:time_regression,
+            "direct-measurement integration target precedes acquisition progress")
+    state.integrated_through == timestamp && return nothing
+    return accumulate_direct_measurement_interval!(prepared, state,
+        state.integrated_through, timestamp)
 end
 
-struct _DetectorBoundaryResult
-    disposition::_DetectorBoundaryDisposition
+@enum _AcquisitionBoundaryDisposition::UInt8 begin
+    _RescheduleAcquisitionBoundary = 0x01
+    _ScheduleAcquisitionReadout = 0x02
+end
+
+struct _AcquisitionBoundaryResult
+    disposition::_AcquisitionBoundaryDisposition
     timestamp::PlantTimestamp
 end
 
-function _process_detector_boundary!(
+function _process_acquisition_lifecycle_boundary!(
     prepared::PreparedGlobalShutterAcquisition,
     state::GlobalShutterAcquisitionState, timestamp::PlantTimestamp,
     rng::AbstractRNG)
@@ -2245,39 +2392,51 @@ function _process_detector_boundary!(
         following_read = next_nondestructive_read_timestamp(prepared, state)
         following = following_read === nothing ? state.exposure_close :
             min(following_read, state.exposure_close)
-        return _DetectorBoundaryResult(_RescheduleDetectorBoundary,
+        return _AcquisitionBoundaryResult(_RescheduleAcquisitionBoundary,
             following)
     end
     close_exposure!(prepared, state, timestamp)
-    return _DetectorBoundaryResult(_ScheduleDetectorReadout,
+    return _AcquisitionBoundaryResult(_ScheduleAcquisitionReadout,
         state.readout_complete)
 end
 
-function _process_detector_boundary!(
+function _process_acquisition_lifecycle_boundary!(
     prepared::PreparedRollingShutterAcquisition,
     state::RollingShutterAcquisitionState, timestamp::PlantTimestamp,
     rng::AbstractRNG)
     _integrate_event_acquisition_to!(prepared, state, timestamp, rng)
     close_next_rolling_band!(prepared, state, timestamp)
     following = next_rolling_band_close_timestamp(prepared, state)
-    following === nothing && return _DetectorBoundaryResult(
-        _ScheduleDetectorReadout, state.readout_complete)
-    return _DetectorBoundaryResult(_RescheduleDetectorBoundary, following)
+    following === nothing && return _AcquisitionBoundaryResult(
+        _ScheduleAcquisitionReadout, state.readout_complete)
+    return _AcquisitionBoundaryResult(_RescheduleAcquisitionBoundary,
+        following)
 end
 
-function _process_detector_boundary!(
+function _process_acquisition_lifecycle_boundary!(
     prepared::PreparedFrameTransferAcquisition,
     state::FrameTransferAcquisitionState, timestamp::PlantTimestamp,
     rng::AbstractRNG)
     if state.image_status == _FrameTransferImageActive
         _integrate_event_acquisition_to!(prepared, state, timestamp, rng)
         close_exposure!(prepared, state, timestamp)
-        return _DetectorBoundaryResult(_RescheduleDetectorBoundary,
+        return _AcquisitionBoundaryResult(_RescheduleAcquisitionBoundary,
             state.transfer_complete)
     end
     complete_frame_transfer!(prepared, state, timestamp)
-    return _DetectorBoundaryResult(_ScheduleDetectorReadout,
+    return _AcquisitionBoundaryResult(_ScheduleAcquisitionReadout,
         state.storage_readout_complete)
+end
+
+function _process_acquisition_lifecycle_boundary!(
+    prepared::PreparedDirectMeasurementAcquisition,
+    state::DirectMeasurementAcquisitionState,
+    timestamp::PlantTimestamp,
+    rng::AbstractRNG)
+    _integrate_event_acquisition_to!(prepared, state, timestamp, rng)
+    close_exposure!(prepared, state, timestamp)
+    return _AcquisitionBoundaryResult(_ScheduleAcquisitionReadout,
+        state.readout_complete)
 end
 
 function _process_acquisition_boundary!(prepared::PreparedPlantEventLoop,
@@ -2285,9 +2444,10 @@ function _process_acquisition_boundary!(prepared::PreparedPlantEventLoop,
     action::_PlantEventAction)
     acquisition = _event_acquisition_binding(prepared, action.owner_slot)
     acquisition_state = _event_acquisition_state(state, action.owner_slot)
-    result = _process_detector_boundary!(acquisition.lifecycle,
+    result = _process_acquisition_lifecycle_boundary!(
+        acquisition.lifecycle,
         acquisition_state, claim.key.timestamp, acquisition.rng)
-    if result.disposition == _RescheduleDetectorBoundary
+    if result.disposition == _RescheduleAcquisitionBoundary
         reschedule_event!(prepared.scheduler, state.scheduler, claim,
             result.timestamp)
     else
@@ -2328,6 +2488,8 @@ end
     ::PreparedRollingShutterAcquisition) = true
 @inline _event_requires_readiness(
     ::PreparedFrameTransferAcquisition) = false
+@inline _event_requires_readiness(
+    ::PreparedDirectMeasurementAcquisition) = true
 
 @inline _event_readiness_timestamp(
     ::PreparedGlobalShutterAcquisition,
@@ -2335,6 +2497,9 @@ end
 @inline _event_readiness_timestamp(
     ::PreparedRollingShutterAcquisition,
     state::RollingShutterAcquisitionState) = state.readiness
+@inline _event_readiness_timestamp(
+    ::PreparedDirectMeasurementAcquisition,
+    state::DirectMeasurementAcquisitionState) = state.readiness
 
 @inline _event_product_sequence(
     state::GlobalShutterAcquisitionState) = state.sequence
@@ -2342,23 +2507,26 @@ end
     state::RollingShutterAcquisitionState) = state.sequence
 @inline _event_product_sequence(
     state::FrameTransferAcquisitionState) = state.product_sequence
+@inline _event_product_sequence(
+    state::DirectMeasurementAcquisitionState) = state.sequence
 
 function _publish_acquisition_product!(prepared::PreparedPlantEventLoop,
     state::PlantEventLoopState, slot::UInt32, output)
     acquisition = _event_acquisition_binding(prepared, slot)
-    observation = acquisition.observation
-    copyto!(observation, output)
+    product = acquisition.product
+    product === output ||
+        copy_acquisition_product!(product, output)
     index = Int(slot)
     sequence = _event_product_sequence(
         _event_acquisition_state(state, slot))
     previous_sequence = @inbounds state.product_sequences[index]
     sequence > previous_sequence ||
         _plant_event_loop_error(:product_sequence,
-            "detector product sequence did not advance")
+            "acquisition product sequence did not advance")
     @inbounds state.product_sequences[index] = sequence
     @inbounds state.product_ready_timestamps[index] =
         state.scheduler.current_timestamp
-    return observation
+    return product
 end
 
 function _process_acquisition_readout!(prepared::PreparedPlantEventLoop,
@@ -2487,14 +2655,22 @@ end
 
 function _preflight_event_acquisition(
     acquisition::_PreparedPlantEventAcquisition,
-    state::_DetectorEventLifecycleState)
+    state::_AcquisitionEventLifecycleState)
     _require_event_lifecycle_binding(acquisition.lifecycle, state)
     return nothing
 end
 
 @inline function _require_event_lifecycle_binding(
-    prepared::_PreparedDetectorEventLifecycle,
-    state::_DetectorEventLifecycleState)
+    prepared::Union{
+        PreparedGlobalShutterAcquisition,
+        PreparedRollingShutterAcquisition,
+        PreparedFrameTransferAcquisition,
+    },
+    state::Union{
+        GlobalShutterAcquisitionState,
+        RollingShutterAcquisitionState,
+        FrameTransferAcquisitionState,
+    })
     getfield(state, :binding) === getfield(prepared, :binding) ||
         _plant_event_loop_error(:foreign_state,
             "detector lifecycle state belongs to another prepared acquisition")
@@ -2507,6 +2683,25 @@ end
         typeof(backend(det)) === typeof(plan.detector_backend) ||
         _plant_event_loop_error(:prepared_binding,
             "detector lifecycle storage changed after event-loop preparation")
+    return nothing
+end
+
+@inline function _require_event_lifecycle_binding(
+    prepared::PreparedDirectMeasurementAcquisition,
+    state::DirectMeasurementAcquisitionState)
+    _require_direct_measurement_binding(prepared, state)
+    measurement = prepared.measurement
+    storage = measurement_storage(measurement)
+    length(storage) == length(prepared.instantaneous_sample) ==
+        length(prepared.integrated_sample) ||
+        _plant_event_loop_error(:prepared_binding,
+            "direct-measurement lifecycle storage changed after event-loop preparation")
+    typeof(backend(storage)) ===
+        typeof(backend(prepared.instantaneous_sample)) &&
+        plane_device(storage) ==
+            plane_device(prepared.instantaneous_sample) ||
+        _plant_event_loop_error(:prepared_binding,
+            "direct-measurement lifecycle memory domain changed after preparation")
     return nothing
 end
 
@@ -2523,6 +2718,21 @@ end
         _detector_acquisition_event_error(:interval_after_close,
             "integration interval extends beyond exposure close")
     _require_interval_before_next_read(prepared, state, timestamp)
+    return nothing
+end
+
+@inline function _preflight_event_integration_to(
+    prepared::PreparedDirectMeasurementAcquisition,
+    state::DirectMeasurementAcquisitionState,
+    timestamp::PlantTimestamp)
+    state.status == DirectMeasurementExposureActive || return nothing
+    state.integrated_through <= timestamp ||
+        _plant_event_loop_error(:time_regression,
+            "direct-measurement integration target precedes acquisition progress")
+    state.integrated_through == timestamp && return nothing
+    timestamp <= state.exposure_close ||
+        _direct_measurement_event_error(:interval_after_close,
+            "direct-measurement integration extends beyond exposure close")
     return nothing
 end
 
@@ -2621,7 +2831,9 @@ function _validate_due_path_materializations!(
     epoch)
     @inbounds for index in eachindex(prepared.paths)
         due_paths[index] || continue
-        path = prepared.paths[index].path
+        binding = prepared.paths[index]
+        binding.requires_full_optical || continue
+        path = binding.path
         validate_path_materialization(path.materialization, path.input,
             atmosphere, epoch)
     end
@@ -2633,6 +2845,7 @@ function _materialize_due_paths!(prepared::PreparedPlantEventLoop,
     @inbounds for index in eachindex(prepared.paths)
         due_paths[index] || continue
         binding = prepared.paths[index]
+        binding.requires_full_optical || continue
         path = binding.path
         materialize_path_input_rngs!(path.materialization, path.input,
             atmosphere, epoch, binding.rngs)
@@ -2647,7 +2860,9 @@ function _apply_due_controllable_optics!(
     isempty(prepared.optics) && return nothing
     @inbounds for path_index in eachindex(prepared.paths)
         due_paths[path_index] || continue
-        input = prepared.paths[path_index].path.input
+        path = prepared.paths[path_index]
+        path.requires_full_optical || continue
+        input = path.path.input
         for optic_index in eachindex(prepared.optics)
             optic = prepared.optics[optic_index]
             apply_controllable_optic_surface!(input, optic.implementation,
@@ -2658,14 +2873,57 @@ function _apply_due_controllable_optics!(
 end
 
 function _execute_due_paths!(prepared::PreparedPlantEventLoop,
-    state::PlantEventLoopState, due_paths::Memory{Bool})
+    due_paths::Memory{Bool})
     @inbounds for index in eachindex(prepared.paths)
         due_paths[index] || continue
         binding = prepared.paths[index]
+        binding.requires_full_optical || continue
         execute_path!(binding.path, binding.rngs)
-        state.path_sampled[index] = true
     end
     return nothing
+end
+
+@inline function _evaluate_event_sample!(
+    ::Nothing, ::AbstractPreparedAcquisitionLifecycle,
+    ::PlantTimestamp, command_applications)
+    return nothing
+end
+
+@inline function _evaluate_event_sample!(
+    provider::PreparedLinearReducedOrderEventProvider,
+    lifecycle::PreparedDirectMeasurementAcquisition,
+    timestamp::PlantTimestamp, command_applications)
+    return evaluate_linear_reduced_order_sample!(
+        lifecycle.instantaneous_sample, provider, timestamp,
+        command_applications)
+end
+
+function _evaluate_due_reduced_order_samples!(
+    prepared::PreparedPlantEventLoop, state::PlantEventLoopState,
+    due_paths::Memory{Bool}, timestamp::PlantTimestamp)
+    @inbounds for acquisition in prepared.acquisitions
+        due_paths[Int(acquisition.path_slot)] || continue
+        _evaluate_event_sample!(acquisition.sample_provider,
+            acquisition.lifecycle, timestamp, state.command_applications)
+    end
+    return nothing
+end
+
+function _mark_due_paths_sampled!(state::PlantEventLoopState,
+    due_paths::Memory{Bool})
+    @inbounds for index in eachindex(due_paths)
+        due_paths[index] && (state.path_sampled[index] = true)
+    end
+    return nothing
+end
+
+function _due_full_optical_path(
+    prepared::PreparedPlantEventLoop, due_paths::Memory{Bool})
+    @inbounds for index in eachindex(prepared.paths)
+        due_paths[index] &&
+            prepared.paths[index].requires_full_optical && return true
+    end
+    return false
 end
 
 function _resolve_due_path_claims!(prepared::PreparedPlantEventLoop,
@@ -2699,18 +2957,25 @@ function _process_optical_path_batch!(prepared::PreparedPlantEventLoop,
         workspace.due_paths[index] || continue
         _preflight_event_path(prepared.paths[index], atmosphere)
     end
-    target_time = _preflight_atmosphere_time(atmosphere, timestamp)
     _preflight_due_path_consumers(prepared, state, workspace.due_paths,
         timestamp)
     _integrate_due_path_consumers!(prepared, state, workspace.due_paths,
         timestamp)
-    epoch = advance_to!(atmosphere, target_time, prepared.atmosphere_rng)
-    _validate_due_path_materializations!(prepared, workspace.due_paths,
-        atmosphere, epoch)
-    _materialize_due_paths!(prepared, workspace.due_paths, atmosphere,
-        epoch)
-    _apply_due_controllable_optics!(prepared, state, workspace.due_paths)
-    _execute_due_paths!(prepared, state, workspace.due_paths)
+    if _due_full_optical_path(prepared, workspace.due_paths)
+        target_time = _preflight_atmosphere_time(atmosphere, timestamp)
+        epoch = advance_to!(atmosphere, target_time,
+            prepared.atmosphere_rng)
+        _validate_due_path_materializations!(prepared,
+            workspace.due_paths, atmosphere, epoch)
+        _materialize_due_paths!(prepared, workspace.due_paths, atmosphere,
+            epoch)
+        _apply_due_controllable_optics!(prepared, state,
+            workspace.due_paths)
+        _execute_due_paths!(prepared, workspace.due_paths)
+    end
+    _evaluate_due_reduced_order_samples!(prepared, state,
+        workspace.due_paths, timestamp)
+    _mark_due_paths_sampled!(state, workspace.due_paths)
     _resolve_due_path_claims!(prepared, state, workspace, timestamp)
     return nothing
 end

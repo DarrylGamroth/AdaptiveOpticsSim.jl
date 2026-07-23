@@ -645,6 +645,17 @@ Each command-response operator includes the calibrated sign convention; the
 formula does not assume whether positive RTC coefficients produce positive or
 negative optical correction.
 
+Core implements this linear form for intentional direct measurements.
+`HarmonicDisturbanceModel` supplies exactly replayable explicit-time
+disturbance coordinates, `ReducedOrderCommandResponse` binds every currently
+visible endpoint to an operator and exact command-schema semantics, and
+`LinearReducedOrderAcquisitionModel` supplies the path projection and sensor
+operator. `DirectMeasurementAcquisitionDefinition` exposure-averages the held
+instantaneous `WFSMeasurement` and retains ordinary periodic or delivered
+trigger start, readout-completion, readiness, product-sequence, and
+right-continuous effective-command timing. Reduced-order-only samples bypass
+unused full-optical path and atmosphere execution.
+
 The exact implementation may instead use geometric sensing, a nonlinear local
 surrogate, or a reduced-resolution model. In every case a prepared reduced-
 order scenario declares:
@@ -668,11 +679,14 @@ effective correction is applied afterward. Replaying completed sensor products
 is not command-responsive and belongs to the synthetic boundary tier.
 
 For a slope boundary, the product can be computed directly with geometric or
-calibrated response operators. For a raw-pixel boundary, a geometric spot model
-or a base image plus modal-response images can produce approximate pixels
-before the selected detector pipeline. The RTC then still performs its real
-pixel calibration, slope extraction, reconstruction, tomography, control law,
-command splitting or offload, and fault handling.
+calibrated response operators. For a future raw-pixel boundary, a geometric
+spot model or a base image plus modal-response images could produce
+approximate pixels before the selected detector pipeline. The maintained
+built-in linear provider currently supports direct measurement vectors only;
+it does not claim approximate raw-pixel or detector behavior. When such a
+model is added, the RTC can still perform its real pixel calibration, slope
+extraction, reconstruction, tomography, control law, command splitting or
+offload, and fault handling.
 
 An accepted command affects only sensor samples whose physical integration
 includes the resulting effective optic state. A known stabilizing reference
@@ -686,6 +700,14 @@ sensitivity, multi-rate control, tomography, and recovery claims inside its
 validated envelope. It does not establish diffraction, aliasing, pyramid
 optical-gain, coronagraph, detector-physics, or science-performance behavior
 that the selected surrogate omits.
+
+The maintained acceptance fixture currently establishes deterministic modal
+loop closure, independent endpoint timing, clipping through the ordinary
+command layer, and expected degradation under wrong sign, excess delay, stale
+feedback, dropped updates, and a response-calibration mismatch. It does not
+yet establish tomography, raw-pixel processing, external-RTC behavior,
+instrument-scale capacity, integrated GPU event-loop execution, or comparison
+to a full-optical reference.
 
 Different acquisitions may deliberately use different tiers in one plant. For
 example, full-sized synthetic LGS frames can load an RTC while a reduced-order

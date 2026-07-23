@@ -316,6 +316,21 @@ implements four qualified methods:
 Keep immutable reduced-order parameters separate from a mutable single-writer
 state object. The provider must remain causally responsive to effective optic
 commands; replaying completed products is not a reduced-order AO plant.
+Those four methods establish the schedule-free provider boundary only. They do
+not grant a custom provider access to composed effective-command state.
+
+For the maintained scheduled linear model, construct qualified
+`HarmonicDisturbanceModel`, one `ReducedOrderCommandResponse` per currently
+visible prepared endpoint, and `LinearReducedOrderAcquisitionModel`, then bind
+the acquisition with `DirectMeasurementAcquisitionDefinition`. Event-loop
+preparation validates exact command type, dimensions, units, sign convention,
+basis, basis revision, backend, and device before resolving fixed endpoint
+slots. The lifecycle integrates the held direct measurement over exposure and
+publishes it after the declared readout delay. A reduced-order-only path does
+not execute its unused full-optical path. Custom scheduled reduced-order
+providers remain unsupported until a bounded event-sampling extension contract
+is specified; extensions must not reach into event-loop internals to imitate
+one.
 `acquisition_product_contract` and
 `validate_acquisition_product_contract` cover standard arrays,
 `IntensityMap`, `WFSObservation`, `WFSMeasurement`, `Ref`, `nothing`, and

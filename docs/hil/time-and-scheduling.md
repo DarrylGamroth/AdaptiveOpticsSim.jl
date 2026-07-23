@@ -45,7 +45,7 @@ A benchmark or support claim records:
 - detector periods, phases, exposure windows, optical-sample cadence,
   simultaneous due-event pattern, modeled trigger-source and distribution-link
   topology, and command-arrival process
-- nominal and realized detector event times, physical trigger-distribution
+- nominal and realized acquisition event times, physical trigger-distribution
   errors, reported-timestamp errors, and every active synchronization-fault
   policy
 - source directions, wavelengths, resolutions, detector products, prepared

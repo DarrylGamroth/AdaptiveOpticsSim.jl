@@ -71,6 +71,12 @@ Current CPU-supported families:
   2 KiB-per-processed-timestamp CPU allocation budget. This is virtual-time
   correctness support, not wall-clock HIL latency, fixed-arrival capacity,
   parallel placement, or production instrument-scale evidence
+- deterministic linear modal reduced-order direct measurements with explicit
+  harmonic disturbance, path, command-response, and sensor operators; exact
+  command-schema binding; periodic or delivered-trigger acquisition timing;
+  matched loop closure; declared residual metric, operating envelope, and
+  omitted effects; and unused full-optical path bypass. Support is limited to
+  the maintained CPU validity envelope in `MV-26`
 - the schedule-free acquisition product-provider boundary: run-immutable
   full-optical or nonresponsive unchanged/copy/bounded-replay selection,
   invariant caller-owned product contracts, unused-path bypass, and zero
@@ -233,10 +239,12 @@ The following are outside the current support claim:
 - cross-package grouped/platform equivalence beyond the currently normalized
   contracts
 - full optical or on-sky instrument-truth alignment beyond the maintained boundary artifact
-- a production reduced-order AO surrogate. The maintained test extension
-  proves provider dispatch and command causality only; it does not establish a
-  validated disturbance/command/sensor envelope, scheduled loop closure,
-  tomography, stability, or optical accuracy
+- reduced-order behavior outside the maintained deterministic linear modal
+  direct-measurement envelope. The supported model validates exact scheduled
+  command causality, exposure averaging, schema bindings, and a matched
+  reference loop; it does not claim raw pixels, detector physics, tomography,
+  external-RTC integration, integrated GPU event-loop execution, full-optical
+  equivalence, general control stability, or instrument-scale performance
 - RTC latency, capacity, transport, cache-residency, or production-shaped
   payload claims inferred from unchanged, copied, or cyclic replay providers
 - physical fidelity claims for a user-defined calibration source, relay,
