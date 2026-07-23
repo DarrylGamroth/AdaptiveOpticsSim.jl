@@ -667,14 +667,31 @@ function _evaluate_harmonic_disturbance!(
     return state.modes
 end
 
+@noinline function _apply_reduced_order_scalar_application!(
+    residual, workspace, operator::AbstractVector,
+    application::CommandApplicationState{<:_ScalarCommandApplicationValues})
+    command = effective_command(application)
+    @. workspace = operator * command
+    residual .+= workspace
+    return residual
+end
+
+@noinline function _apply_reduced_order_array_application!(
+    residual, workspace, operator::AbstractMatrix,
+    application::CommandApplicationState{<:_ArrayCommandApplicationValues})
+    command = effective_command(application)
+    mul!(workspace, operator, vec(command))
+    residual .+= workspace
+    return residual
+end
+
 @inline function _apply_reduced_order_response!(
     residual, workspace,
     response::_PreparedScalarReducedOrderEventResponse,
     command_applications)
-    command = effective_command(
-        @inbounds command_applications[Int(response.endpoint_slot)])
-    @. workspace = response.response.operator * command
-    residual .+= workspace
+    application = @inbounds command_applications[Int(response.endpoint_slot)]
+    _apply_reduced_order_scalar_application!(residual, workspace,
+        response.response.operator, application)
     return residual
 end
 
@@ -682,10 +699,9 @@ end
     residual, workspace,
     response::_PreparedArrayReducedOrderEventResponse,
     command_applications)
-    command = effective_command(
-        @inbounds command_applications[Int(response.endpoint_slot)])
-    mul!(workspace, response.response.operator, vec(command))
-    residual .+= workspace
+    application = @inbounds command_applications[Int(response.endpoint_slot)]
+    _apply_reduced_order_array_application!(residual, workspace,
+        response.response.operator, application)
     return residual
 end
 

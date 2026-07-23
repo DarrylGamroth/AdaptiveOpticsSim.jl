@@ -122,6 +122,7 @@ end
 
 function reduced_order_test_schema(endpoint::Symbol;
     T::Type{<:AbstractFloat}=Float64,
+    dimensions=(2,),
     units=:metre,
     sign_convention=:positive_command_increases_residual,
     basis=CommandBasis(:modal, endpoint),
@@ -129,7 +130,7 @@ function reduced_order_test_schema(endpoint::Symbol;
     bounds=UniformCommandBounds(T(-20), T(20)))
     return PlantCommandSchema(
         T,
-        (2,);
+        dimensions;
         id=Symbol(endpoint, :_schema),
         version=1,
         endpoint,
@@ -482,6 +483,52 @@ end
         @test error.component == :reduced_order
         @test error.reason == reason
     end
+
+    scalar_schema = reduced_order_test_schema(:focus; dimensions=())
+    scalar_endpoint = prepare_command_endpoint(scalar_schema;
+        capacity=1, ordinal=1)
+    scalar_binding = Plant._PreparedPlantCommandEndpoint(scalar_endpoint,
+        UInt32(1), 0.25, nothing)
+    scalar_response = reduced_order_test_response(scalar_schema, [2.0, -1.0])
+    prepared_scalar_response = Plant._prepare_reduced_order_event_response(
+        Plant._prepare_reduced_order_response(scalar_response, CPUBackend()),
+        (scalar_binding,))
+    scalar_endpoint_state = CommandEndpointState(scalar_endpoint)
+    scalar_application = CommandApplicationState(scalar_endpoint,
+        scalar_endpoint_state, 0.25)
+    scalar_applications = Memory{CommandApplicationState}(undef, 1)
+    scalar_applications[1] = scalar_application
+    scalar_residual = [1.0, 1.0]
+    scalar_workspace = zeros(2)
+    @test Plant._apply_reduced_order_response!(scalar_residual,
+        scalar_workspace, prepared_scalar_response,
+        scalar_applications) === scalar_residual
+    @test scalar_residual == [1.5, 0.75]
+
+    matrix_schema = reduced_order_test_schema(:segmented_dm;
+        dimensions=(1, 2))
+    matrix_endpoint = prepare_command_endpoint(matrix_schema;
+        capacity=1, ordinal=1)
+    matrix_initial = reshape([0.25, -0.5], 1, 2)
+    matrix_binding = Plant._PreparedPlantCommandEndpoint(matrix_endpoint,
+        UInt32(1), matrix_initial, nothing)
+    matrix_response = reduced_order_test_response(matrix_schema,
+        [1.0 2.0; -1.0 0.5])
+    prepared_matrix_response = Plant._prepare_reduced_order_event_response(
+        Plant._prepare_reduced_order_response(matrix_response, CPUBackend()),
+        (matrix_binding,))
+    matrix_endpoint_state = CommandEndpointState(matrix_endpoint)
+    matrix_application = CommandApplicationState(matrix_endpoint,
+        matrix_endpoint_state, matrix_initial)
+    matrix_applications = Memory{CommandApplicationState}(undef, 1)
+    matrix_applications[1] = matrix_application
+    matrix_residual = [1.0, 1.0]
+    matrix_workspace = zeros(2)
+    @test Plant._apply_reduced_order_response!(matrix_residual,
+        matrix_workspace, prepared_matrix_response,
+        matrix_applications) === matrix_residual
+    @test matrix_residual == [0.25, 0.5]
+
     @test_throws PlantPreparationError Plant.LinearReducedOrderAcquisitionModel(
         Plant.HarmonicDisturbanceModel([1.0], [1.0]),
         ones(1, 1), ones(1, 1),
@@ -524,6 +571,15 @@ end
 @testset "Reduced-order event-loop allocation budget" begin
     fixture = reduced_order_test_fixture()
     run_to_reduced_order_product!(fixture, 6)
+    acquisition = fixture.prepared.acquisitions[1]
+    destination = acquisition.lifecycle.instantaneous_sample
+    provider = acquisition.sample_provider
+    applications = fixture.state.command_applications
+    timestamp = Plant.reduced_order_sample_timestamp(provider.provider)
+    Plant.evaluate_linear_reduced_order_sample!(destination, provider,
+        timestamp, applications)
+    sample_allocated = @allocated Plant.evaluate_linear_reduced_order_sample!(
+        destination, provider, timestamp, applications)
     maximum_allocated = 0
     for _ in 1:8
         maximum_allocated = max(maximum_allocated,
@@ -531,8 +587,10 @@ end
                 fixture.workspace))
     end
     if coverage_instrumented()
+        @test sample_allocated >= 0
         @test maximum_allocated >= 0
     else
+        @test sample_allocated == 0
         @test maximum_allocated <= 2048
     end
 end
